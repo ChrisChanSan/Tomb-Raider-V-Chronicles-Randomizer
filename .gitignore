@@ -1,0 +1,30 @@
+# Build outputs
+TOMB5 Code/Build/
+TOMB5 Code/Win32/
+TOMB5 Code/x64/
+release/
+*.obj
+*.pdb
+*.ilk
+*.exe
+*.log
+*.tlog
+*.lastbuildstate
+*.idb
+*.iobj
+*.ipdb
+
+# Game data (large binary assets, not source)
+Tomb5 Steam Version/audio/
+Tomb5 Steam Version/movie/
+Tomb5 Steam Version/screens/
+Tomb5 Steam Version/data/
+Tomb5 Steam Version/*.dll
+Tomb5 Steam Version/*.exe
+Tomb5 Steam Version/*.dat
+Tomb5 Steam Version/*.tag
+Tomb5 Steam Version/log.txt
+
+# VS user/local files
+*.vcxproj.user
+.vs/

@@ -1,0 +1,93 @@
+# TOMB5 native Windows 11 port (drop dgVoodoo2, D3D9 + XAudio2)
+
+## Context
+
+The user runs an open-source decompiled build of TOMB5 (Tomb Raider V's engine) via dgVoodoo2, needed to scale the game to 2K (native resolution doesn't work) and to keep the game from crashing on modern hardware (an RTX 5080) at all. Two problems surfaced this session:
+
+1. **Graphics**: without dgVoodoo2, the game's legacy DirectDraw4 + Direct3D3 (fixed-function, ~1999) renderer crashes specifically when opening the in-game menu on the RTX 5080 (FMVs and initial load are fine). dgVoodoo2 papers over this by translating the legacy calls, but is a third-party, closed-source dependency the user would rather not need.
+2. **Audio**: sound effects never play through one specific playback endpoint (a "MMX 300" headset output, vs. a working "Boxen" speaker output — both are the same physical Realtek HD Audio codec, just different jacks), while music plays fine everywhere. Extensive live debugging this session (real DirectSound error logging added to the engine, side-by-side "broken" vs "working" log capture, Windows Sound Panel checks for exclusive mode/format/spatial sound/audio enhancements, ruling out dgVoodoo2 itself since it doesn't even ship a `dsound.dll`) conclusively showed every DirectSound API call in the pipeline reports success — the failure is invisible to the game's own error reporting and to every Windows-level knob checked. This is a legacy DirectSound/driver interaction too deep to chase further with settings alone.
+
+The user pointed to **TR2Main** (github.com/Arsunt/TR2Main) as precedent: that project took Tomb Raider II's decompiled source (an even older, more primitive engine) and replaced its legacy renderer with a modern one, achieving native compatibility. We have the exact same starting position for TOMB5 — full, buildable decompiled source at `C:\Cloude AI\Two gun test\TOMB5 Code`.
+
+**To avoid risking the user's currently-working (dgVoodoo2-based) setup, this port happens in a brand new, separate project**, not in the existing tree. Two Explore/Plan research passes this session mapped the exact scope (file lists, call counts, structural risks) — the findings below are already verified against the real source, not speculative.
+
+## New project location
+
+- Full copy of `C:\Cloude AI\Two gun test\TOMB5 Code` → **`C:\Cloude AI\Tomb5 Native win 11 fix`** (new, standalone project; original stays untouched as a safety net / working reference).
+- Built test EXEs land in a **`release`** subfolder of the new project directory.
+
+## Verified scope (from direct source inspection this session)
+
+- All actual DirectX COM pointers (`lpDD`, `lpD3D`, `lpD3DDevice`, `lpViewport`, surfaces, `lpDS`) live in one struct `DXPTR`, nested as `App.dx` in `global/types.h`. Grep confirms `App.dx.*`/raw D3D calls are touched **only** inside `specific/*.cpp` (18 files) — **zero hits anywhere in `game/*.cpp`**. The original developers already cleanly separated platform code from game logic; this is not a leaky architecture.
+- **Graphics files needing a genuine D3D9 rewrite** (confirmed call counts): `specific/dxshell.cpp` (device/surface/viewport creation, present, enum, cooperative level), `specific/output.cpp` (the central render/present code — `S_InitialisePolyList`/`S_OutputPolyList`/`S_DumpScreen`, dozens of inline `SetRenderState`/`SetTexture`/`DrawPrimitive` calls per draw-bucket), `specific/specificfx.cpp` (same pattern, smaller scale), `specific/function_table.cpp` (one-time render-state init + BeginScene/EndScene wrapper install, ~48 calls), **`specific/drawroom.cpp`** (42 confirmed `App.dx.*` hits — bump-mapped room rendering, same pattern as output.cpp, easy to miss since it wasn't in the first pass), `specific/texture.cpp` (single texture-upload chokepoint, `CreateTexturePage`), `specific/drawbars.cpp`, `specific/LoadSave.cpp` (save-thumbnail DDraw surface capture), `specific/file.cpp` (one stray direct `SetTexture` call, line 489), `specific/3dmath.cpp` (one `SetTransform` call), `specific/d3dmatrix.cpp` (pure `D3DMATRIX` math, expected near-zero changes), and **`specific/polyinsert.cpp`'s `HWR_DrawSortList` function specifically** (the rest of that file is portable clipping/subdivision math; only this one function issues direct device calls, for a second vertex type `D3DTLBUMPVERTEX`).
+- **The one real "leak"**: `D3DTLVERTEX` (pre-transformed vertex struct: `.sx/.sy/.sz/.rhw/.color/.specular`) is used as a plain data type directly in `game/andrea.cpp` (`DrawPortalDoor`), `game/footprnt.cpp`, `game/text.cpp`, `game/tower.cpp`, `game/newinv2.cpp`, plus `specific/alexstuff.cpp`, `specific/clipping.cpp/.h`, `specific/output.h`, `specific/function_table.h`, `specific/specificfx.h`, `specific/polyinsert.h`. This is a mechanical type-swap risk (D3D9's fixed-function pipeline supports an equivalent `D3DFVF_XYZRHW|DIFFUSE|SPECULAR|TEX1` struct), not an architectural one.
+- **Render pipeline is centralized**: `S_InitialisePolyList` (clear+BeginScene) → game fills sorted poly buckets via `specific/polyinsert.cpp` (pure math, portable as-is except `HWR_DrawSortList`) → `S_OutputPolyList` (specific/output.cpp, the actual DrawPrimitive calls) → `S_DumpScreen`/`S_DumpScreenFrame` (EndScene + present). Game code only calls the wrapper entry points.
+- **Audio files**: `specific/dxsound.cpp` (SFX — 32-slot channel pool, `DuplicateSoundBuffer` per one-shot play, `DXStartSample`/`DSGetFreeChannel`/`DSIsChannelPlaying`), `specific/audio.cpp` (music — one long-lived ACM-decoded streaming buffer with a background notify thread, `ACMInit`/`ACMHandleNotifications`/`ACMEmulateCDPlay`). **`audio.cpp` has a second, independently-confirmed bug**: the main thread and the notify-callback thread both `Lock`/`Unlock` the same buffer with no real mutual exclusion (the `EnterCriticalSection`/`LeaveCriticalSection` pattern there is a near-no-op), producing the recurring `DSERR_INVALIDPARAM` seen on every music-track transition in this session's logs, regardless of device. All game-side sound calls go through simple wrappers (`S_SoundPlaySample`, `S_SoundPlaySampleLooped`, `S_SoundSetPanAndVolume`) — same clean separation as graphics.
+- **Build environment**: `tomb5.vcxproj` targets `PlatformToolset v142`, Windows 10 SDK, links `dxguid.lib;Dsound.lib;Msacm32.lib;Ddraw.lib;dinput8.lib` — no vendored/custom SDK headers. `d3d9.h`/`d3d9.lib` and `xaudio2.h`/`xaudio2.lib` are equally stock-SDK components on the same toolchain, so neither backend choice adds new install/dependency overhead. DirectInput8 (keyboard/joystick) is already modern — out of scope, don't touch it.
+- **Real, confirmed risk — FMV (Bink video) touches both legacy subsystems directly**: `specific/fmv.cpp` calls `BinkSetSoundSystem(BinkOpenDirectSound, App.dx.lpDS)` (wires Bink's audio straight to the raw `IDirectSound` object) and uses `App.dx.lpBackBuffer`/`lpPrimaryBuffer` + `BinkCopyToBuffer`/`BinkDDSurfaceType` for video frames (confirmed by direct grep — lines 145/149/151). `binkw32.dll` is loaded dynamically at runtime, no SDK headers vendored. The actual `binkw32.dll` in the tree's `Build\Backup\` folder exports unused, more modern-friendly entry points the original code never wired up: `BinkOpenWaveOut` (WinMM audio, not DirectSound) and a `BinkBuffer*` API (`BinkBufferOpen`/`BinkBufferSetHWND`/`BinkBufferBlit`) that may not need DirectDraw at all when targeting a plain HWND.
+
+## Approach
+
+**Sequencing: graphics first, then audio.** They're independent at the code level (disjoint file sets touching the same `DXPTR` struct). Graphics is the *blocking* issue (unusable without dgVoodoo2 at all); audio is a "works via dgVoodoo2/Boxen, imperfect on one headset" issue on an otherwise-functional setup. Graphics also has a cleaner first-milestone verification (window opens/presents, binary yes/no) than audio's inherently fuzzier "does it work on this one specific device" validation.
+
+### Graphics: D3D9 fixed-function pipeline
+
+Chosen over OpenGL fixed-function (no 1:1 state-machine mapping to the existing `SetRenderState`/`SetTextureStageState` idiom, closer to a rewrite) and D3D11 (dropped fixed-function/alpha-test entirely, would need a full shader-based re-implementation plus FVF→input-layout translation — much larger surface for a codebase whose actual per-frame logic is simple). D3D9's `SetRenderState`/`SetTextureStageState`/`SetTexture`/`SetTransform`/`DrawPrimitive` and the `D3DRENDERSTATE_*`/`D3DTSS_*`/`D3DBLEND_*` enum families carry over almost verbatim from D3D3 (mostly renamed, e.g. `D3DRENDERSTATE_ZWRITEENABLE`→`D3DRS_ZWRITEENABLE`), making the bulk of this a mechanical port rather than a redesign. Avoid the D3DX9 utility library (needs the legacy DirectX SDK redistributable) — `texture.cpp` already hand-writes pixel conversion manually; continue that pattern (`LockRect` + manual/`D3DUSAGE_AUTOGENMIPMAP` mips) instead.
+
+**M0 — Scaffold**: copy the tree to the new project location, confirm it still builds unmodified (Release), set `OutDir` to the new `release` folder. Gives a known-good, dgVoodoo2-dependent reference build for later A/B comparison.
+
+**M1 — Device/surface/present layer** (`specific/dxshell.cpp`, `global/types.h`'s `DXPTR`): replace `LPDIRECTDRAW4`/`LPDIRECT3D3`/`LPDIRECT3DDEVICE3`/surfaces/`LPDIRECT3DVIEWPORT3` with `IDirect3D9`/`IDirect3DDevice9` + `D3DPRESENT_PARAMETERS` swap chain (D3D9 auto-manages back/z-buffer, no separate viewport object). Port `DXDDCreate`→`Direct3DCreate9`, `DXCreateD3DDevice`, `DXSetCooperativeLevel`→`Reset`/create flags, `DXShowFrame`→`Present`. Leave DirectInput (`lpDirectInput`/`Keyboard`/`Joystick`) untouched. Drop `App.GlobalMaterialHandle`'s D3D3-only handle indirection — call `SetMaterial(D3DMATERIAL9*)` directly where it was used. **Verify**: new EXE opens a window and presents every frame with dgVoodoo2 absent from the folder — no crash on device creation/present alone (the reported crash is menu-triggered, not creation-triggered, so this must pass before M3 even starts).
+
+**M2 — Texture pipeline** (`specific/texture.cpp`): port `CreateTexturePage` from `DDSURFACEDESC2`+`LPDIRECTDRAWSURFACE4`+`QueryInterface(IID_IDirect3DTexture2)` to `IDirect3DDevice9::CreateTexture`+`LockRect`, keeping the existing manual pixel-conversion loop (no D3DX). Map `DDSCAPS2_TEXTUREMANAGE`→`D3DPOOL_MANAGED`. Fix the stray direct call at `specific/file.cpp:489`. Decide manual box-filter mips vs `D3DUSAGE_AUTOGENMIPMAP` via visual A/B, not upfront. **Verify**: isolated textured-quad test using real level texture data.
+
+**M3 — Render-state/DrawPrimitive porting** (the bulk of the work), in order: `function_table.cpp` (state defaults + BeginScene/EndScene install) → `output.cpp` (central render/present) → `specificfx.cpp` → **`drawroom.cpp`** → **`polyinsert.cpp`'s `HWR_DrawSortList`** → `drawbars.cpp` → vertex type swap (define D3D9 `D3DTLVERTEX`/`D3DTLBUMPVERTEX` equivalents + matching FVF constants, apply across the 5 `game/*.cpp` files + the `specific/` headers listed above — mechanical once the two struct definitions are settled) → `3dmath.cpp` (rename `D3DTRANSFORMSTATE_VIEW`→`D3DTS_VIEW`) → `d3dmatrix.cpp` (expect near-zero changes). **Before starting this milestone**, read `D3DTLBUMPVERTEX`'s exact field layout (`global/types.h`/`specific/clipping.h`) to size its FVF correctly (one or two texture coordinate sets) — not yet confirmed. **Verify**: build/run after each file, progressively: empty room → real level geometry → bump-mapped rooms → HUD/effects, isolating regressions file-by-file.
+
+**M4 — Save-thumbnail capture** (`specific/LoadSave.cpp`): current `ConvertSurfaceToTextures`/`CustomBlt` locks `App.dx.lpBackBuffer` directly via `DDSURFACEDESC2`; D3D9 back buffers aren't directly lockable when hardware-accelerated, so use `GetRenderTarget`→`CreateOffscreenPlainSurface(D3DPOOL_SYSTEMMEM)`→`GetRenderTargetData`→`LockRect`, then reuse the existing bitmask-driven pixel-conversion logic (needs a small `D3DFORMAT`→bitmask lookup table since D3D9 doesn't expose `DDPIXELFORMAT`-style masks directly). **Verify**: trigger the thumbnail path, visually compare captured image.
+
+**M5 — Full validation**: real levels (rooms, bump-mapped rooms, portal doors, HUD/inventory, footprints). **Primary exit criterion**: open the in-game menu with dgVoodoo2 fully absent — confirm the crash is gone on the RTX 5080.
+
+**FMV spike (do early, before M3 finishes, since it's the biggest unresolved risk)**: prototype Bink playback against `BinkOpenWaveOut` + `BinkBufferOpen`/`BinkBufferSetHWND` (exported by the vendored `binkw32.dll` but never used by the original code) against a real `.bik` asset, to see if FMV can drop its DirectDraw/DirectSound dependency entirely. If that doesn't pan out, fall back to a minimal, isolated legacy shim: a never-presented `IDirectDraw4` + one offscreen surface feeding a D3D9 dynamic texture (for video), and a minimal non-exclusive `IDirectSound` object (for audio) — both scoped entirely to `fmv.cpp`, never touching the gameplay render/sound path, so neither of the two originally-diagnosed bugs (menu-specific D3D3 crash, `DSSCL_EXCLUSIVE`-related SFX silence) can be triggered by it.
+
+### Audio: XAudio2
+
+Chosen over a cross-platform lib like miniaudio (would add a new external dependency for a Windows-only target that has no reason to be cross-platform) — XAudio2 is stock Windows SDK (same "no extra install" logic as D3D9) and has direct precedent for exactly this "N overlapping one-shot voices + 1 streaming voice" shape. This is also a **structural fix**, not just a rename: XAudio2 voices can all reference the same shared source PCM data directly (`SubmitSourceBuffer`), eliminating the `DuplicateSoundBuffer`-per-play pattern entirely; and its buffer-queue/callback model (`OnBufferEnd`) removes manual `Lock`/`Unlock` altogether, making the already-confirmed audio.cpp race condition structurally impossible rather than just harder to hit. ACM decode (`msacm32.lib`) can likely be kept as-is for the compressed-track decode step — only the DirectSound-specific output/notify-thread mechanism needs replacing; fall back to Media Foundation decode only if ACM itself proves unreliable on Win11 (separate, larger decision, not scoped here).
+
+**A1 — Engine setup**: replace `App.dx.lpDS`/`DXDSCreate` (`DirectSoundCreate`+`SetCooperativeLevel(DSSCL_EXCLUSIVE)`) with `XAudio2Create`→`IXAudio2`+one mastering voice. No exclusive-mode concept in XAudio2 — this removes the entire code path implicated in the original bug. **Verify**: test tone audible on both "Boxen" and "MMX 300" (the two devices from the original investigation).
+
+**A2 — SFX pool** (`specific/dxsound.cpp`): decode each sample's PCM once (reuse `DXCreateSample`/`DXCreateSampleADPCM`'s decode logic, change only the destination), maintain a small pool of `IXAudio2SourceVoice`s (size to the observed ~9-concurrent-shots case, keep the existing 32 as a safe upper bound) that `SubmitSourceBuffer` against the shared PCM per play. Port volume/pan/pitch to `SetVolume`/`SetOutputMatrix`/`SetFrequencyRatio`. Keep the `S_SoundPlaySample*` wrapper API unchanged so `game/*.cpp` callers need zero changes. **Verify**: fire overlapping shots on the MMX 300 headset specifically — the direct regression test for the original bug.
+
+**A3 — Music streaming** (`specific/audio.cpp`): replace the `DSBuffer` ring buffer + notify-thread with one `IXAudio2SourceVoice` in buffer-queue mode (`SubmitSourceBuffer` fixed-size decoded chunks, `IXAudio2VoiceCallback::OnBufferEnd` to queue the next one), replacing "notify thread wakes, locks, writes, unlocks" entirely. Port `ACMEmulateCDPlay`'s track-transition logic to flush/resubmit against the buffer queue instead of `Lock`/`Unlock`-ing a live buffer. **Explicitly confirm** during review that no two threads submit to the same voice concurrently (should be automatic by construction once manual locking is gone — this is the named "free fix" for the race). **Verify**: multiple track transitions, no glitch/dropout, no error-equivalent-to-`DSERR_INVALIDPARAM`.
+
+**A4 — Combined validation**: real gameplay session on MMX 300 — confirm SFX (previously silent) now play, music transitions cleanly, no regression on Boxen.
+
+## Verification summary
+
+| Milestone | Runnable state | Test |
+|---|---|---|
+| M0 | Unmodified copy builds | Clean build in new tree |
+| M1 | Window opens/presents | Run from `release`, dgVoodoo2 absent, no crash |
+| M2 | Textures upload/sample | Isolated textured-quad test |
+| M3 | Full scene renders | Progressive real-level test; watch for the original menu crash |
+| M4 | Thumbnail capture works | Trigger save-thumbnail path, compare image |
+| M5 | Game playable natively | Multiple levels, repeated menu open/close, no dgVoodoo2 |
+| A1 | XAudio2 initializes | Test tone on both Boxen and MMX 300 |
+| A2 | SFX pool works | Overlapping shots audible on MMX 300 |
+| A3 | Music streaming works | Track transitions, no glitch/error |
+| A4 | Full audio in real play | Extended session on MMX 300 |
+
+## Open risks
+
+- FMV/Bink's dual DirectDraw+DirectSound dependency (see spike above) — the single biggest unresolved unknown.
+- `D3DTLBUMPVERTEX`'s exact field layout — read before starting M3, not assumed.
+- Mip-generation approach (manual vs `D3DUSAGE_AUTOGENMIPMAP`) — visual A/B during M2, not decided upfront.
+- Whether D3D9 actually avoids the original menu-crash on this hardware is an empirical bet (well-precedented by TR2Main's equivalent move for TRII), confirmed only at M5.
+- Texture format enumeration (`DXEnumTextureFormats`) moves to `CheckDeviceFormat`/`GetDeviceCaps` — different API, functionally equivalent, worth dedicated attention during M2.
+- ACM's long-term reliability on Windows 11 — deprecated but present; Media Foundation is the fallback decode path if needed, out of scope for now.
+
+## Critical files
+
+- `specific/dxshell.cpp`, `specific/output.cpp`, `specific/drawroom.cpp`, `specific/polyinsert.cpp`, `specific/texture.cpp`, `specific/function_table.cpp`, `specific/specificfx.cpp`, `specific/drawbars.cpp`, `specific/LoadSave.cpp`, `specific/3dmath.cpp`, `specific/d3dmatrix.cpp`, `specific/file.cpp` — graphics
+- `specific/dxsound.cpp`, `specific/audio.cpp` — audio
+- `specific/fmv.cpp` — FMV spike
+- `global/types.h` (`DXPTR`/`WINAPP` struct) — shared handle architecture
+- `tomb5.vcxproj` — build config (add `d3d9.lib`/`xaudio2.lib`, eventually drop `Ddraw.lib`/`Dsound.lib`)

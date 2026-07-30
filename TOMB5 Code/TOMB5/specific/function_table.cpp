@@ -53,6 +53,13 @@ void HWInitialise()
 	App.dx.lpD3DDevice->SetTextureStageState(7, D3DTSS_COLOROP, D3DTOP_DISABLE);
 	App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, D3DTSS_TCI_PASSTHRU);
 
+	// D3D9's default sampler address mode is WRAP, unlike the old fixed pipeline this game
+	// was written against - with UI/font glyphs packed tightly into a shared texture page,
+	// linear filtering at a glyph's UV edge would otherwise wrap and bleed in neighboring
+	// glyphs (visible as ghosting/outline artifacts around menu text).
+	App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+	App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+
 	if (App.Filtering)
 	{
 		App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);

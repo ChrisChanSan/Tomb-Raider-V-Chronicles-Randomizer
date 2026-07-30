@@ -784,15 +784,28 @@ void DoOptions()
 
 void CreateMonoScreen()
 {
-	LPDIRECT3DSURFACE9 back;
+	LPDIRECT3DSURFACE9 back, sysMem;
+	D3DSURFACE_DESC desc;
 
 	MonoScreenOn = 1;
 
-	if (SUCCEEDED(App.dx.lpD3DDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back)))
+	if (FAILED(App.dx.lpD3DDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back)))
+		return;
+
+	// A device back buffer isn't directly lockable in D3D9 (unlike the old DirectDraw
+	// primary/back surfaces) - copy it into a system-memory surface first via
+	// GetRenderTargetData, then lock that instead.
+	back->GetDesc(&desc);
+
+	if (SUCCEEDED(App.dx.lpD3DDevice->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format, D3DPOOL_SYSTEMMEM, &sysMem, 0)))
 	{
-		ConvertSurfaceToTextures(back);
-		back->Release();
+		if (SUCCEEDED(App.dx.lpD3DDevice->GetRenderTargetData(back, sysMem)))
+			ConvertSurfaceToTextures(sysMem);
+
+		sysMem->Release();
 	}
+
+	back->Release();
 }
 
 void RGBM_Mono(uchar* r, uchar* g, uchar* b)

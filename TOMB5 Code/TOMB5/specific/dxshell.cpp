@@ -159,11 +159,21 @@ HRESULT DXShowFrame()
 
 	if (keymap[DIK_APOSTROPHE])
 	{
-		LPDIRECT3DSURFACE9 back;
+		LPDIRECT3DSURFACE9 back, sysMem;
+		D3DSURFACE_DESC desc;
 
 		if (SUCCEEDED(G_dxptr->lpD3DDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back)))
 		{
-			DXSaveScreen(back, "Tomb");
+			back->GetDesc(&desc);
+
+			if (SUCCEEDED(G_dxptr->lpD3DDevice->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format, D3DPOOL_SYSTEMMEM, &sysMem, 0)))
+			{
+				if (SUCCEEDED(G_dxptr->lpD3DDevice->GetRenderTargetData(back, sysMem)))
+					DXSaveScreen(sysMem, "Tomb");
+
+				sysMem->Release();
+			}
+
 			back->Release();
 		}
 	}

@@ -93,6 +93,24 @@ void HWInitialise()
 	DXAttempt(App.dx.lpD3DDevice->SetRenderState(D3DRS_COLORVERTEX, 0));
 
 	App.dx.lpD3DDevice->SetRenderState(D3DRS_FOGENABLE, 0);
+
+	// The game already does its own software transform/clip/light (see output.cpp,
+	// polyinsert.cpp) and hands the device pre-transformed, pre-clipped D3DTLBUMPVERTEX
+	// data (equivalent to the old D3DDP_DONOTCLIP per-DrawPrimitive flag, which DrawPrimitiveUP
+	// has no equivalent for) - disable the D3D9 transform/clipping pipeline globally instead,
+	// and set the one FVF used for every DrawPrimitiveUP call in the game (see HWDrawPrimitive).
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_CLIPPING, FALSE);
+	App.dx.lpD3DDevice->SetFVF(FVF);
+}
+
+void HWDrawPrimitive(D3DPRIMITIVETYPE type, void* vertices, long numVerts)
+{
+	long primCount;
+
+	primCount = (type == D3DPT_LINELIST || type == D3DPT_LINESTRIP) ? (numVerts / 2) : (numVerts / 3);
+
+	if (primCount > 0)
+		App.dx.lpD3DDevice->DrawPrimitiveUP(type, primCount, vertices, sizeof(D3DTLBUMPVERTEX));
 }
 
 HRESULT HWBeginScene()

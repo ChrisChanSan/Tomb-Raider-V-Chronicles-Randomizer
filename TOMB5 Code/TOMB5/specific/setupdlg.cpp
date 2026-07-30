@@ -126,7 +126,12 @@ static void InitDDDevice(HWND dlg, HWND hwnd)
 		SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)buffer);
 	}
 
-	nDDDevice = App.DXInfo.nDDInfo - 1;
+	// Originally defaulted to the last enumerated device (meaningful in the old world of
+	// "software emulation" vs "hardware" DirectDraw devices). Each entry is now one physical
+	// monitor's D3D9 adapter, so default to whichever one DXGetInfo already determined is the
+	// actual Windows primary monitor instead, so the setup dialog (and a fresh registry with
+	// no saved choice) don't default to launching fullscreen on the wrong screen.
+	nDDDevice = App.DXInfo.nDD;
 	SendMessage(hwnd, CB_SETCURSEL, nDDDevice, 0);
 	InitD3DDevice(dlg, GetDlgItem(dlg, IDC_D3D));
 }

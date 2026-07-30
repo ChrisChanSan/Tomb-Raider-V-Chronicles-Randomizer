@@ -473,7 +473,30 @@ long DXGetInfo(DXINFO* dxinfo, HWND hwnd)
 		dxinfo->nDDInfo++;
 	}
 
+	// D3D9 adapter ordinal 0 isn't guaranteed to be the monitor Windows considers "primary"
+	// on every multi-monitor setup - default to whichever enumerated adapter actually drives
+	// the primary monitor (point (0,0) in virtual-screen coordinates always lies on it),
+	// instead of blindly picking index 0 and potentially launching fullscreen on the wrong
+	// display.
 	dxinfo->nDD = 0;
+	{
+		HMONITOR primaryMonitor;
+		POINT origin;
+
+		origin.x = 0;
+		origin.y = 0;
+		primaryMonitor = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+
+		for (int i = 0; i < dxinfo->nDDInfo; i++)
+		{
+			if (G_d3d->GetAdapterMonitor(dxinfo->DDInfo[i].AdapterOrdinal) == primaryMonitor)
+			{
+				dxinfo->nDD = i;
+				break;
+			}
+		}
+	}
+
 	dxinfo->nD3D = 0;
 	dxinfo->bHardware = 1;
 

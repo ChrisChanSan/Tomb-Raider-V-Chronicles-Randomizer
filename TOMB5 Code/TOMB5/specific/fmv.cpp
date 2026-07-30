@@ -44,6 +44,12 @@ static BINK_STRUCT* Bink;
 static LPDIRECTDRAWSURFACE4 BinkSurface;
 static long BinkSurfaceType;
 static LPDIRECTDRAW4 g_fmvDD;
+// A real D3D9 texture Bink frames get copied into and then drawn as a full-screen quad.
+// BinkSurface (above) is kept around purely so BinkDDSurfaceType() can tell Bink what pixel
+// format to write - GDI blitting (the original approach here) is invisible while the D3D9
+// device holds true exclusive fullscreen, since the display is scanned out directly from the
+// D3D backbuffer in that mode; drawing through the device itself works in both modes.
+static LPDIRECT3DTEXTURE9 BinkTexture;
 
 bool LoadBinkStuff()
 {
@@ -109,6 +115,12 @@ bool LoadBinkStuff()
 
 void FreeBinkStuff()
 {
+	if (BinkTexture)
+	{
+		BinkTexture->Release();
+		BinkTexture = 0;
+	}
+
 	if (BinkSurface)
 	{
 		BinkSurface->Release();
@@ -128,29 +140,56 @@ void FreeBinkStuff()
 	}
 }
 
+static void DrawBinkQuad()
+{
+	D3DTLBUMPVERTEX v[6];
+	float w, h;
+
+	w = (float)App.dx.dwRenderWidth;
+	h = (float)App.dx.dwRenderHeight;
+	memset(v, 0, sizeof(v));
+
+	v[0].sx = 0; v[0].sy = 0; v[0].tu = 0; v[0].tv = 0;
+	v[1].sx = w; v[1].sy = 0; v[1].tu = 1; v[1].tv = 0;
+	v[2].sx = w; v[2].sy = h; v[2].tu = 1; v[2].tv = 1;
+	v[3].sx = 0; v[3].sy = 0; v[3].tu = 0; v[3].tv = 0;
+	v[4].sx = w; v[4].sy = h; v[4].tu = 1; v[4].tv = 1;
+	v[5].sx = 0; v[5].sy = h; v[5].tu = 0; v[5].tv = 1;
+
+	for (int i = 0; i < 6; i++)
+	{
+		v[i].sz = 0.5F;
+		v[i].rhw = 1.0F;
+		v[i].color = 0xFFFFFFFF;
+		v[i].specular = 0xFF000000;
+	}
+
+	App.dx.lpD3DDevice->SetTexture(0, BinkTexture);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, 0);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_ALPHATESTENABLE, 0);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_ZENABLE, 0);
+	HWDrawPrimitive(D3DPT_TRIANGLELIST, v, 6);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_ZENABLE, 1);
+}
+
 void ShowBinkFrame()
 {
-	DDSURFACEDESC2 surf;
-	HDC hdcSurf, hdcWnd;
-	RECT client;
+	D3DLOCKED_RECT rect;
 
-	if (!BinkSurface)
+	if (!BinkSurface || !BinkTexture)
 		return;
 
-	memset(&surf, 0, sizeof(surf));
-	surf.dwSize = sizeof(DDSURFACEDESC2);
-	DXAttempt(BinkSurface->Lock(0, &surf, DDLOCK_NOSYSLOCK, 0));
-	BinkCopyToBuffer(Bink, surf.lpSurface, surf.lPitch, Bink->num, 0, 0, BinkSurfaceType);
-	DXAttempt(BinkSurface->Unlock(0));
+	if (FAILED(BinkTexture->LockRect(0, &rect, 0, 0)))
+		return;
 
-	if (SUCCEEDED(BinkSurface->GetDC(&hdcSurf)))
-	{
-		GetClientRect(App.dx.hWnd, &client);
-		hdcWnd = GetDC(App.dx.hWnd);
-		StretchBlt(hdcWnd, 0, 0, client.right, client.bottom, hdcSurf, 0, 0, 640, 480, SRCCOPY);
-		ReleaseDC(App.dx.hWnd, hdcWnd);
-		BinkSurface->ReleaseDC(hdcSurf);
-	}
+	BinkCopyToBuffer(Bink, rect.pBits, rect.Pitch, Bink->num, 0, 0, BinkSurfaceType);
+	BinkTexture->UnlockRect(0);
+
+	_BeginScene();
+	App.dx.lpD3DDevice->Clear(0, 0, D3DCLEAR_TARGET, 0, 1.0F, 0);
+	DrawBinkQuad();
+	_EndScene();
+	DXShowFrame();
 }
 
 long PlayFmv(long num)
@@ -177,6 +216,11 @@ long PlayFmv(long num)
 	strcat(path, name);
 	Log("PlayFMV %s", path);
 	App.fmv = 1;
+
+	// LoadBinkStuff() runs before DXCreate(), so the D3D9 device didn't exist yet - create
+	// the playback texture lazily here instead, the first time it's actually needed.
+	if (!BinkTexture)
+		App.dx.lpD3DDevice->CreateTexture(640, 480, 1, 0, D3DFMT_X8R8G8B8, D3DPOOL_MANAGED, &BinkTexture, 0);
 
 	Bink = 0;
 	BinkSetSoundSystem(BinkOpenDirectSound, App.dx.lpDS);

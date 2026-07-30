@@ -84,5 +84,6 @@ void Log(const char* s, ...)
 	strcat(buf, "\n");
 	va_end(list);
 	fwrite(buf, strlen(buf), 1, logF);
+	fflush(logF);
 #endif
 }

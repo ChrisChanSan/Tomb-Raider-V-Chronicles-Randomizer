@@ -120,9 +120,10 @@ static void InitDDDevice(HWND dlg, HWND hwnd)
 	for (int i = 0; i < App.DXInfo.nDDInfo; i++)
 	{
 		id = &App.DXInfo.DDInfo[i].DDIdentifier;
-		wsprintf(buffer, "%s - %s (%d.%d.%02d.%04d)", id->Description, id->Driver,
+		wsprintf(buffer, "%s - %s (%d.%d.%02d.%04d)%s", id->Description, id->Driver,
 			HIWORD(id->DriverVersion.HighPart), LOWORD(id->DriverVersion.HighPart),
-			HIWORD(id->DriverVersion.LowPart), LOWORD(id->DriverVersion.LowPart));
+			HIWORD(id->DriverVersion.LowPart), LOWORD(id->DriverVersion.LowPart),
+			App.DXInfo.DDInfo[i].MonitorLabel);
 		SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)buffer);
 	}
 

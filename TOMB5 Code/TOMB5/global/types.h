@@ -1751,6 +1751,7 @@ struct DXDIRECTDRAWINFO
 {
 	char Name[256];
 	char About[256];
+	char MonitorLabel[40];
 	UINT AdapterOrdinal;
 	D3DADAPTER_IDENTIFIER9 DDIdentifier;
 	bool bCanRenderWindowed;

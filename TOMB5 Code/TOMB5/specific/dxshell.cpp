@@ -238,11 +238,29 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 
 	if (!(Flags & DXF_FULLSCREEN))
 	{
+		D3DDISPLAYMODE curMode;
+
 		Log("DXCreate: Windowed Mode");
 		r.top = 0;
 		r.left = 0;
-		r.right = dm->w;
-		r.bottom = dm->h;
+
+		// The enumerated exclusive-fullscreen mode list (dm->w/h) can be considerably
+		// shorter than what a monitor actually supports (seen on multi-monitor systems
+		// where the driver reports a much smaller max mode for one output than another,
+		// identical, monitor) - a window doesn't need a real exclusive-fullscreen-capable
+		// mode to exist, so size it off the adapter's actual current desktop resolution
+		// instead, sidestepping that limitation entirely.
+		if (SUCCEEDED(G_d3d->GetAdapterDisplayMode(adapter, &curMode)))
+		{
+			r.right = curMode.Width;
+			r.bottom = curMode.Height;
+		}
+		else
+		{
+			r.right = dm->w;
+			r.bottom = dm->h;
+		}
+
 		AdjustWindowRect(&r, WindowStyle, 0);
 		SetWindowPos(hWnd, 0, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER);
 		GetClientRect(hWnd, &G_dxptr->rViewport);

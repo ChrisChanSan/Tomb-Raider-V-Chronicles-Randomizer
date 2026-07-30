@@ -183,12 +183,12 @@ HRESULT DXShowFrame()
 
 	if (hr == D3DERR_DEVICELOST)
 	{
-		// Normal in exclusive fullscreen whenever the app loses focus (alt-tab, etc) -
-		// the device stays lost until the window is focused again AND the driver is
-		// ready to hand it back, which TestCooperativeLevel() reports via
-		// D3DERR_DEVICENOTRESET. Until then, just skip presenting (keep returning here
-		// every frame - game logic/audio keep running as normal, only rendering pauses)
-		// rather than treating it as a hard error.
+		// "Fullscreen" now always runs as a border-less windowed device (see DXCreate),
+		// which never loses the device on focus changes - this path is only a defensive
+		// fallback for other, rarer causes of device loss (display mode changed by
+		// another app, monitor unplugged, etc). Kept minimal since it's not the normal
+		// case anymore; see git history for the fuller diagnostic version used while
+		// tracking down the original exclusive-fullscreen alt-tab bug this replaced.
 		HRESULT hrCoopLevel = G_dxptr->lpD3DDevice->TestCooperativeLevel();
 
 		if (hrCoopLevel == D3DERR_DEVICENOTRESET)
@@ -209,7 +209,7 @@ HRESULT DXShowFrame()
 				HWInitialise();
 			}
 			else
-				Log("Device reset failed: %s", DXGetErrorString(hrReset));
+				Log("Device reset failed: %s (0x%08X)", DXGetErrorString(hrReset), (unsigned)hrReset);
 		}
 	}
 	else
@@ -303,26 +303,64 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 	}
 	else
 	{
-		// Unlike the old DirectDraw path (where the actual mode switch happened at the
-		// display-controller level and the window's own size/visibility didn't matter much),
-		// D3D9's exclusive fullscreen CreateDevice is picky about the associated window -
-		// leaving it at whatever small/hidden size WinCreateWindow() set initially causes
-		// CreateDevice to fail with D3DERR_INVALIDCALL, particularly at larger resolutions.
-		// Resize it to cover the target mode and make sure it's visible/foreground first.
-		Log("DXCreate: Full Screen Mode");
-		G_dxptr->dwRenderWidth = dm->w;
-		G_dxptr->dwRenderHeight = dm->h;
+		// Real D3D9 exclusive fullscreen has proven unreliable at recovering from
+		// device loss on alt-tab on this system: TestCooperativeLevel() has been
+		// observed staying at D3DERR_DEVICELOST forever after tabbing back in, even
+		// once the window is genuinely focused/visible/foreground again by every
+		// Win32 measure, with or without Windows' fullscreen optimizations enabled
+		// (extensively diagnosed via live Present()/TestCooperativeLevel result
+		// tracing). Sidestep the whole failure class instead of chasing it further:
+		// run a border-less window sized to exactly cover the target monitor at its
+		// current desktop resolution, with the D3D9 device created in *windowed*
+		// mode - windowed-mode devices never lose the device on focus changes at
+		// all, and a border-less window filling the screen is visually
+		// indistinguishable from real exclusive fullscreen. WinSetStyle() already
+		// strips the window border (WS_POPUP) for DXF_FULLSCREEN, so only
+		// positioning/sizing and PresentParams.Windowed (below) need to change here.
+		// One behavioural consequence: since there's no real mode-switch anymore,
+		// "fullscreen" always renders at the monitor's current desktop resolution
+		// regardless of which entry is selected in the resolution dropdown - the
+		// same way windowed mode (above) already works.
+		Log("DXCreate: Full Screen Mode (borderless windowed)");
+
+		D3DDISPLAYMODE curMode;
+		HMONITOR hMonitor = G_d3d->GetAdapterMonitor(adapter);
+		MONITORINFO mi;
+
+		mi.cbSize = sizeof(mi);
+
+		if (hMonitor && GetMonitorInfo(hMonitor, &mi))
+			r = mi.rcMonitor;
+		else
+		{
+			r.left = 0;
+			r.top = 0;
+			r.right = dm->w;
+			r.bottom = dm->h;
+		}
+
+		if (SUCCEEDED(G_d3d->GetAdapterDisplayMode(adapter, &curMode)))
+		{
+			G_dxptr->dwRenderWidth = curMode.Width;
+			G_dxptr->dwRenderHeight = curMode.Height;
+		}
+		else
+		{
+			G_dxptr->dwRenderWidth = dm->w;
+			G_dxptr->dwRenderHeight = dm->h;
+		}
+
 		G_dxptr->rViewport.top = 0;
 		G_dxptr->rViewport.left = 0;
-		G_dxptr->rViewport.right = dm->w;
-		G_dxptr->rViewport.bottom = dm->h;
-		SetWindowPos(hWnd, HWND_TOP, 0, 0, dm->w, dm->h, SWP_SHOWWINDOW);
+		G_dxptr->rViewport.right = G_dxptr->dwRenderWidth;
+		G_dxptr->rViewport.bottom = G_dxptr->dwRenderHeight;
+		SetWindowPos(hWnd, HWND_TOP, r.left, r.top, G_dxptr->dwRenderWidth, G_dxptr->dwRenderHeight, SWP_SHOWWINDOW);
 		ShowWindow(hWnd, SW_SHOW);
 		SetForegroundWindow(hWnd);
 	}
 
 	memset(&G_dxptr->PresentParams, 0, sizeof(D3DPRESENT_PARAMETERS));
-	G_dxptr->PresentParams.Windowed = !(Flags & DXF_FULLSCREEN);
+	G_dxptr->PresentParams.Windowed = TRUE;	// always - see the border-less-windowed comment above
 	G_dxptr->PresentParams.SwapEffect = D3DSWAPEFFECT_DISCARD;
 	G_dxptr->PresentParams.hDeviceWindow = hWnd;
 	G_dxptr->PresentParams.BackBufferWidth = G_dxptr->dwRenderWidth;

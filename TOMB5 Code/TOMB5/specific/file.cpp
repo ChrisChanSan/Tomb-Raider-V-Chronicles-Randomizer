@@ -371,8 +371,7 @@ void FreeLevel()
 bool LoadTextures(long RTPages, long OTPages, long BTPages)
 {
 	DXTEXTUREINFO* dxtex;
-	LPDIRECTDRAWSURFACE4 tSurf;
-	LPDIRECT3DTEXTURE2 pTex;
+	LPDIRECT3DTEXTURE9 tSurf;
 	uchar* TextureData;
 	long* d;
 	char* pData;
@@ -459,9 +458,7 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 	{
 		nTex = nTextures++;
 		tSurf = CreateTexturePage(App.TextureSize, App.TextureSize, 0, (long*)(TextureData + (i * skip * 0x10000)), 0, format);
-		DXAttempt(tSurf->QueryInterface(IID_IDirect3DTexture2, (LPVOID*)&pTex));
-		Textures[nTex].tex = pTex;
-		Textures[nTex].surface = tSurf;
+		Textures[nTex].tex = tSurf;
 		Textures[nTex].width = App.TextureSize;
 		Textures[nTex].height = App.TextureSize;
 		Textures[nTex].bump = 0;
@@ -480,13 +477,11 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 	{
 		nTex = nTextures++;
 		tSurf = CreateTexturePage(App.TextureSize, App.TextureSize, 0, (long*)(TextureData + (i * skip * 0x10000)), 0, format);
-		DXAttempt(tSurf->QueryInterface(IID_IDirect3DTexture2, (LPVOID*)&pTex));
-		Textures[nTex].tex = pTex;
-		Textures[nTex].surface = tSurf;
+		Textures[nTex].tex = tSurf;
 		Textures[nTex].width = App.TextureSize;
 		Textures[nTex].height = App.TextureSize;
 		Textures[nTex].bump = 0;
-		App.dx.lpD3DDevice->SetTexture(0, pTex);
+		App.dx.lpD3DDevice->SetTexture(0, tSurf);
 		S_LoadBar();
 	}
 
@@ -514,9 +509,7 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 			}
 
 			nTex = nTextures++;
-			DXAttempt(tSurf->QueryInterface(IID_IDirect3DTexture2, (LPVOID*)&pTex));
-			Textures[nTex].tex = pTex;
-			Textures[nTex].surface = tSurf;
+			Textures[nTex].tex = tSurf;
 
 			if (i < (BTPages >> 1))
 			{
@@ -604,9 +597,7 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 
 			nTex = nTextures++;
 			tSurf = CreateTexturePage(256, 256, 0, (long*)TextureData, 0, 0);
-			DXAttempt(tSurf->QueryInterface(IID_IDirect3DTexture2, (LPVOID*)&pTex));
-			Textures[nTex].tex = pTex;
-			Textures[nTex].surface = tSurf;
+			Textures[nTex].tex = tSurf;
 			Textures[nTex].width = 256;
 			Textures[nTex].height = 256;
 			Textures[nTex].bump = 0;
@@ -619,9 +610,7 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 	ReadBlock(TextureData, 0x40000);
 	nTex = nTextures++;
 	tSurf = CreateTexturePage(256, 256, 0, (long*)TextureData, 0, 0);
-	DXAttempt(tSurf->QueryInterface(IID_IDirect3DTexture2, (LPVOID*)&pTex));
-	Textures[nTex].tex = pTex;
-	Textures[nTex].surface = tSurf;
+	Textures[nTex].tex = tSurf;
 	Textures[nTex].width = 256;
 	Textures[nTex].height = 256;
 	Textures[nTex].bump = 0;
@@ -630,9 +619,7 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 	ReadBlock(TextureData, 0x40000);
 	nTex = nTextures++;
 	tSurf = CreateTexturePage(256, 256, 0, (long*)TextureData, 0, 0);
-	DXAttempt(tSurf->QueryInterface(IID_IDirect3DTexture2, (LPVOID*)&pTex));
-	Textures[nTex].tex = pTex;
-	Textures[nTex].surface = tSurf;
+	Textures[nTex].tex = tSurf;
 	Textures[nTex].width = 256;
 	Textures[nTex].height = 256;
 	Textures[nTex].bump = 0;
@@ -641,9 +628,7 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 	ReadBlock(TextureData, 0x40000);
 	nTex = nTextures++;
 	tSurf = CreateTexturePage(256, 256, 0, (long*)TextureData, 0, 0);
-	DXAttempt(tSurf->QueryInterface(IID_IDirect3DTexture2, (LPVOID*)&pTex));
-	Textures[nTex].tex = pTex;
-	Textures[nTex].surface = tSurf;
+	Textures[nTex].tex = tSurf;
 	Textures[nTex].width = 256;
 	Textures[nTex].height = 256;
 	Textures[nTex].bump = 0;
@@ -1218,7 +1203,6 @@ unsigned int __stdcall LoadLevel(void* name)
 	FreeLevel();
 	nTextures = 1;
 	Textures[0].tex = 0;
-	Textures[0].surface = 0;
 	Textures[0].width = 0;
 	Textures[0].height = 0;
 	Textures[0].bump = 0;

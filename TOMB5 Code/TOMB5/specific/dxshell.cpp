@@ -416,6 +416,10 @@ long DXGetInfo(DXINFO* dxinfo, HWND hwnd)
 		device->TextureInfos[0].gbpp = 8;
 		device->TextureInfos[0].bbpp = 8;
 		device->TextureInfos[0].abpp = 8;
+		device->TextureInfos[0].rshift = 16;
+		device->TextureInfos[0].gshift = 8;
+		device->TextureInfos[0].bshift = 0;
+		device->TextureInfos[0].ashift = 24;
 
 		device->ZBufferInfos = (DXZBUFFERINFO*)AddStruct(0, 0, sizeof(DXZBUFFERINFO));
 		device->nZBufferInfos = 1;

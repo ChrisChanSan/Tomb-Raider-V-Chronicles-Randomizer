@@ -8,54 +8,53 @@
 TEXTURE Textures[64];
 long nTextures;
 
-LPDIRECTDRAWSURFACE4 CreateTexturePage(long w, long h, long MipMapCount, long* pSrc, rgbfunc RGBM, long format)
+// Destination is always a plain 32-bit D3DFMT_A8R8G8B8 texture now (the old per-adapter
+// enumerated pixel format - 5551, 8888, etc. - no longer varies), so the only path that
+// actually runs in practice is the 32-bit passthrough (format==1, see LoadTextures() in
+// file.cpp, which now always computes format==1 since DXGetInfo always reports 8/8/8/8).
+// The generic bit-packing (format==0) and 16-bit passthrough (format==2) paths are kept
+// for parity/safety in case a caller ever passes source data in those shapes.
+LPDIRECT3DTEXTURE9 CreateTexturePage(long w, long h, long MipMapCount, long* pSrc, rgbfunc RGBM, long format)
 {
-	DXTEXTUREINFO* tex;
-	LPDIRECTDRAWSURFACE4 tSurf;
-	DDSURFACEDESC2 desc;
+	LPDIRECT3DTEXTURE9 tex9;
+	D3DLOCKED_RECT rect;
 	long* lS;
-	long* lD;
+	ulong* lD;
 	short* sS;
-	short* sD;
-	char* cD;
+	uchar* cD;
 	ulong c, o, ro, go, bo, ao;
 	uchar r, g, b, a;
-
-	memset(&desc, 0, sizeof(DDSURFACEDESC2));
-	desc.dwSize = sizeof(DDSURFACEDESC2);
-	desc.dwWidth = w;
-	desc.dwHeight = h;
+	UINT levels;
 
 	if (w < 32 || h < 32)
 		MipMapCount = 0;
 
-	desc.ddpfPixelFormat = G_dxinfo->DDInfo[G_dxinfo->nDD].D3DDevices[G_dxinfo->nD3D].TextureInfos[G_dxinfo->nTexture].ddpf;
-	desc.dwFlags = DDSD_CAPS | DDSD_HEIGHT | DDSD_WIDTH | DDSD_PIXELFORMAT;
-	desc.ddsCaps.dwCaps = DDSCAPS_TEXTURE;
+	levels = MipMapCount ? (UINT)(MipMapCount + 1) : 1;
 
-	if (App.dx.Flags & DXF_HWR)
-		desc.ddsCaps.dwCaps2 = DDSCAPS2_TEXTUREMANAGE;
-	else
-		desc.ddsCaps.dwCaps |= DDSCAPS_SYSTEMMEMORY;
-
-	if (MipMapCount)
+	if (FAILED(App.dx.lpD3DDevice->CreateTexture(w, h, levels, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &tex9, 0)))
 	{
-		desc.dwFlags |= DDSD_MIPMAPCOUNT;
-		desc.dwMipMapCount = MipMapCount + 1;
-		desc.ddsCaps.dwCaps |= DDSCAPS_COMPLEX | DDSCAPS_MIPMAP;
+		Log("CreateTexturePage Failed");
+		return 0;
 	}
 
-	DXCreateSurface(App.dx.lpDD, &desc, &tSurf);
-	DXAttempt(tSurf->Lock(0, &desc, DDLOCK_NOSYSLOCK, 0));
+	if (!pSrc)
+		return tex9;
+
+	if (FAILED(tex9->LockRect(0, &rect, 0, 0)))
+	{
+		tex9->Release();
+		return 0;
+	}
 
 	if (!format)
 	{
 		lS = pSrc;
-		cD = (char*)desc.lpSurface;
 
-		for (ulong y = 0; y < desc.dwHeight; y++)
+		for (long y = 0; y < h; y++)
 		{
-			for (ulong x = 0; x < desc.dwWidth; x++)
+			cD = (uchar*)rect.pBits + y * rect.Pitch;
+
+			for (long x = 0; x < w; x++)
 			{
 				c = *(lS + x * 256 / w + y * 0x10000 / h);
 				r = CLRR(c);
@@ -66,46 +65,50 @@ LPDIRECTDRAWSURFACE4 CreateTexturePage(long w, long h, long MipMapCount, long* p
 				if (RGBM)
 					RGBM(&r, &g, &b);
 
-				tex = &G_dxinfo->DDInfo[G_dxinfo->nDD].D3DDevices[G_dxinfo->nD3D].TextureInfos[G_dxinfo->nTexture];
-				ro = r >> (8 - tex->rbpp) << (tex->rshift);
-				go = g >> (8 - tex->gbpp) << (tex->gshift);
-				bo = b >> (8 - tex->bbpp) << (tex->bshift);
-				ao = a >> (8 - tex->abpp) << (tex->ashift);
+				ro = r >> 0 << 16;
+				go = g >> 0 << 8;
+				bo = b >> 0 << 0;
+				ao = a >> 0 << 24;
 				o = ro | go | bo | ao;
-
-				for (int i = tex->bpp; i > 0; i -= 8)
-				{
-					*cD++ = (char)o;
-					o >>= 8;
-				}
+				*(ulong*)cD = o;
+				cD += 4;
 			}
 		}
 	}
 	else if (format == 2)
 	{
 		sS = (short*)pSrc;
-		sD = (short*)desc.lpSurface;
 
-		for (ulong y = 0; y < desc.dwHeight; y++)
+		for (long y = 0; y < h; y++)
 		{
-			for (ulong x = 0; x < desc.dwWidth; x++)
-				*sD++ = *(sS + x * 256 / w + y * 0x10000 / h);
+			lD = (ulong*)((uchar*)rect.pBits + y * rect.Pitch);
+
+			for (long x = 0; x < w; x++)
+			{
+				ushort px = *(ushort*)(sS + x * 256 / w + y * 0x10000 / h);
+				r = (uchar)((px >> 10) & 0x1F) << 3;
+				g = (uchar)((px >> 5) & 0x1F) << 3;
+				b = (uchar)(px & 0x1F) << 3;
+				a = (px & 0x8000) ? 0xFF : 0;
+				lD[x] = (a << 24) | (r << 16) | (g << 8) | b;
+			}
 		}
 	}
 	else if (format == 1)
 	{
 		lS = pSrc;
-		lD = (long*)desc.lpSurface;
 
-		for (ulong y = 0; y < desc.dwHeight; y++)
+		for (long y = 0; y < h; y++)
 		{
-			for (ulong x = 0; x < desc.dwWidth; x++)
-				*lD++ = *(lS + x * 256 / w + y * 0x10000 / h);
+			lD = (ulong*)((uchar*)rect.pBits + y * rect.Pitch);
+
+			for (long x = 0; x < w; x++)
+				lD[x] = *(ulong*)(lS + x * 256 / w + y * 0x10000 / h);
 		}
 	}
 
-	DXAttempt(tSurf->Unlock(0));
-	return tSurf;
+	tex9->UnlockRect(0);
+	return tex9;
 }
 
 void FreeTextures()
@@ -115,7 +118,6 @@ void FreeTextures()
 	Log(__FUNCTION__);
 
 	DXAttempt(App.dx.lpD3DDevice->SetTexture(0, 0));
-	DXAttempt(App.dx.lpD3D->EvictManagedTextures());
 
 	for (int i = 0; i < nTextures; i++)
 	{
@@ -128,13 +130,5 @@ void FreeTextures()
 		}
 		else
 			Log("%s Attempt To Release NULL Ptr", "Texture");
-
-		if (tex->surface)
-		{
-			Log("Released %s @ %x - RefCnt = %d", "Surface", tex->surface, tex->surface->Release());
-			tex->surface = 0;
-		}
-		else
-			Log("%s Attempt To Release NULL Ptr", "Surface");
 	}
 }

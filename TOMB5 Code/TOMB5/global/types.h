@@ -1807,8 +1807,6 @@ struct WINAPP
 	DXPTR dx;
 	HANDLE mutex;
 	float fps;
-	LPDIRECT3DMATERIAL3 GlobalMaterial;
-	D3DMATERIALHANDLE GlobalMaterialHandle;
 	HACCEL hAccel;
 	bool SetupComplete;
 	bool BumpMapping;
@@ -2326,14 +2324,12 @@ struct D3DTLBUMPVERTEX
 
 struct DXTEXTURE
 {
-	LPDIRECT3DTEXTURE2 tex;
-	LPDIRECTDRAWSURFACE4 surface;
+	LPDIRECT3DTEXTURE9 tex;
 };
 
 struct TEXTURE
 {
-	LPDIRECT3DTEXTURE2 tex;
-	LPDIRECTDRAWSURFACE4 surface;
+	LPDIRECT3DTEXTURE9 tex;
 	ulong xoff;
 	ulong yoff;
 	ulong width;

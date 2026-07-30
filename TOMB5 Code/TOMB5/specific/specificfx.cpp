@@ -930,14 +930,14 @@ void InitBinoculars()
 
 void OutputSky()
 {
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_SRCBLEND, D3DBLEND_SRCALPHA);
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_DESTBLEND, D3DBLEND_INVSRCALPHA);
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_ALPHABLENDENABLE, 0);
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_ZENABLE, 1);
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_ZWRITEENABLE, 0);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, 0);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_ZENABLE, 1);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_ZWRITEENABLE, 0);
 	DrawBuckets();
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_ZENABLE, 1);
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_ZWRITEENABLE, 1);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_ZENABLE, 1);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_ZWRITEENABLE, 1);
 	SortPolyList(SortCount, SortList);
 	DrawSortList();
 	InitBuckets();

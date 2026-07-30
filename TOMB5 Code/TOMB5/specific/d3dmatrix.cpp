@@ -68,7 +68,7 @@ void SaveD3DCameraMatrix()
 void S_InitD3DMatrix()
 {
 	D3DIdentityMatrix(&D3DMWorld);
-	DXAttempt(App.dx.lpD3DDevice->SetTransform(D3DTRANSFORMSTATE_WORLD, &D3DMWorld));
+	DXAttempt(App.dx.lpD3DDevice->SetTransform(D3DTS_WORLD, &D3DMWorld));
 }
 
 D3DVECTOR* D3DNormalise(D3DVECTOR* vec)

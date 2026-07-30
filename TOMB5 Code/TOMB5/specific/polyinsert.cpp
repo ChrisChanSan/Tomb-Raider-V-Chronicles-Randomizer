@@ -21,8 +21,35 @@ static char* pSortBuffer;
 D3DTLBUMPVERTEX XYUVClipperBuffer[20];
 D3DTLBUMPVERTEX zClipperBuffer[20];
 
+static void LogDrawTypeOnce(short texture, short type)
+{
+	static short seenTex[512];
+	static short seenType[512];
+	static long nSeen;
+
+	for (long i = 0; i < nSeen; i++)
+	{
+		if (seenTex[i] == texture && seenType[i] == type)
+			return;
+	}
+
+	if (nSeen < 512)
+	{
+		seenTex[nSeen] = texture;
+		seenType[nSeen] = type;
+		nSeen++;
+	}
+
+	if (texture >= 0 && texture < 64)
+		Log("HWR_DrawSortList: tpage %d type %d bump %d", texture, type, Textures[texture].bump);
+	else
+		Log("HWR_DrawSortList: tpage %d (out of range) type %d", texture, type);
+}
+
 void HWR_DrawSortList(D3DTLBUMPVERTEX* info, short num_verts, short texture, short type)
 {
+	LogDrawTypeOnce(texture, type);
+
 	switch (type)
 	{
 	case 0:

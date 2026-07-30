@@ -20,6 +20,7 @@
 #include <process.h>
 #include <dinput.h>
 #include <dsound.h>
+#include <xaudio2.h>
 #include <cmath>
 #include <time.h>
 #include <mmreg.h>

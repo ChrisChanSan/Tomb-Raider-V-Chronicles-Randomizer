@@ -26,3 +26,5 @@ void S_SoundSetPitch(long num, long pitch);
 bool DXCreateSample(long num, LPWAVEFORMATEX format, LPVOID data, ulong bytes);
 
 extern char* samples_buffer;
+extern IXAudio2* g_XAudio2;
+extern IXAudio2MasteringVoice* g_MasteringVoice;

@@ -9,10 +9,29 @@
 
 char* samples_buffer;
 
-static LPDIRECTSOUNDBUFFER DSPrimary;
-static HACMSTREAM d_hACMStream;
-static DS_SAMPLE DS_Samples[32];
-static DS_SAMPLE DS_Buffers[256];
+IXAudio2* g_XAudio2;
+IXAudio2MasteringVoice* g_MasteringVoice;
+
+// SFX are decoded once into plain PCM (unchanged ACM decode step) and kept in memory here;
+// XAudio2 voices SubmitBuffer directly against this shared data instead of the old
+// DuplicateSoundBuffer-per-play DirectSound pattern.
+struct SFX_BUFFER
+{
+	BYTE* pcm;
+	ulong bytes;
+	ulong frequency;
+};
+
+// A small pool of reusable source voices (one per concurrently playable channel), instead of
+// creating/destroying a DirectSound buffer instance per play.
+struct SFX_VOICE
+{
+	IXAudio2SourceVoice* voice;
+	long playing;
+};
+
+static SFX_BUFFER DS_Buffers[256];
+static SFX_VOICE DS_Samples[32];
 
 #pragma warning(push)
 #pragma warning(disable : 4838)
@@ -24,49 +43,69 @@ static char source_pcm_format[50] =
 };
 #pragma warning(pop)
 
+static HACMSTREAM d_hACMStream;
 static MMRESULT mmresult;
 static WAVEFORMATEX pcm_format;
 static ACMSTREAMHEADER ACMStreamHeader;
 static char* decompressed_samples_buffer;
 
+// DirectSound's SetVolume/pan use hundredths-of-a-decibel (logarithmic, 0 = full, -10000 =
+// silence) - CalcVolume() already produces exactly that, unchanged. XAudio2's SetVolume is a
+// linear amplitude multiplier, so convert at the API boundary rather than touching the
+// existing volume-curve math.
+static float DSVolumeToLinear(long volume)
+{
+	if (volume <= -10000)
+		return 0.0F;
+
+	if (volume >= 0)
+		return 1.0F;
+
+	return powf(10.0F, (float)volume / 2000.0F);
+}
+
+static IXAudio2SourceVoice* CreateSfxVoice(ulong hz)
+{
+	IXAudio2SourceVoice* voice;
+	WAVEFORMATEX wfx;
+
+	memset(&wfx, 0, sizeof(wfx));
+	wfx.wFormatTag = WAVE_FORMAT_PCM;
+	wfx.nChannels = 1;
+	wfx.nSamplesPerSec = hz;
+	wfx.wBitsPerSample = 16;
+	wfx.nBlockAlign = (wfx.nChannels * wfx.wBitsPerSample) / 8;
+	wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;
+
+	if (FAILED(g_XAudio2->CreateSourceVoice(&voice, &wfx, 0, 8.0F, 0, 0, 0)))
+		return 0;
+
+	return voice;
+}
+
 bool DXChangeOutputFormat(long nSamplesPerSec, bool force)
 {
-	WAVEFORMATEX pcfxFormat;
 	static long lastSPC;
 
 	if (!force && lastSPC == nSamplesPerSec)
 		return 1;
 
 	lastSPC = nSamplesPerSec;
-	pcfxFormat.wFormatTag = WAVE_FORMAT_PCM;
-	pcfxFormat.nChannels = 2;
-	pcfxFormat.nSamplesPerSec = nSamplesPerSec;
-	pcfxFormat.nAvgBytesPerSec = 4 * nSamplesPerSec;
-	pcfxFormat.nBlockAlign = 4;
-	pcfxFormat.wBitsPerSample = 16;
-	pcfxFormat.cbSize = 0;
 	S_SoundStopAllSamples();
-
-	if (DSPrimary && DXAttempt(DSPrimary->SetFormat(&pcfxFormat)) != DS_OK)
-	{
-		Log("Can't set sound output format to %d", pcfxFormat.nSamplesPerSec);
-		return 0;
-	}
-
 	return 1;
 }
 
 void DSChangeVolume(long num, long volume)
 {
-	if (DS_Samples[num].buffer)
-		DS_Samples[num].buffer->SetVolume(volume);
+	if (DS_Samples[num].voice)
+		DS_Samples[num].voice->SetVolume(DSVolumeToLinear(volume));
 }
 
 void DSAdjustPitch(long num, long pitch)
 {
 	ulong frequency;
 
-	if (DS_Samples[num].buffer)
+	if (DS_Samples[num].voice)
 	{
 		frequency = ulong((float)pitch / 65536.0F * 22050.0F);
 
@@ -75,53 +114,61 @@ void DSAdjustPitch(long num, long pitch)
 		else if (frequency > 100000)
 			frequency = 100000;
 
-		DS_Samples[num].buffer->SetFrequency(frequency);
+		DS_Samples[num].voice->SetFrequencyRatio((float)frequency / (float)pcm_format.nSamplesPerSec);
 	}
 }
 
 void DSAdjustPan(long num, long pan)
 {
-	if (DS_Samples[num].buffer)
-	{
-		if (pan < 0)
-		{
-			if (pan < -0x4000)
-				pan = -0x4000 - pan;
-		}
-		else if (pan > 0 && pan > 0x4000)
-			pan = 0x8000 - pan;
+	float matrix[2];
+	float norm, angle;
 
-		pan >>= 4;
-		DS_Samples[num].buffer->SetPan(pan);
+	if (DS_Samples[num].voice)
+	{
+		norm = (float)pan / 32768.0F;
+
+		if (norm < -1.0F)
+			norm = -1.0F;
+		else if (norm > 1.0F)
+			norm = 1.0F;
+
+		// equal-power pan law
+		angle = (norm + 1.0F) * 0.25F * 3.14159265F;
+		matrix[0] = cosf(angle);
+		matrix[1] = sinf(angle);
+		DS_Samples[num].voice->SetOutputMatrix(0, 1, 2, matrix);
 	}
 }
 
 bool DXSetOutputFormat()
 {
-	DSBUFFERDESC desc;
-
-	Log(__FUNCTION__);
-	memset(&desc, 0, sizeof(desc));
-	desc.dwSize = sizeof(desc);
-	desc.dwFlags = DSBCAPS_PRIMARYBUFFER;
-
-	if (DXAttempt(App.dx.lpDS->CreateSoundBuffer(&desc, &DSPrimary, 0)) == DS_OK)
-	{
-		DXChangeOutputFormat(sfx_frequencies[SoundQuality], 0);
-		DSPrimary->Play(0, 0, DSBPLAY_LOOPING);
-		return 1;
-	}
-
-	Log("Can't Get Primary Sound Buffer");
-	return 0;
+	return 1;
 }
 
 bool DXDSCreate()
 {
 	Log(__FUNCTION__);
-	DXAttempt(DirectSoundCreate(G_dxinfo->DSInfo[G_dxinfo->nDS].lpGuid, &App.dx.lpDS, 0));
-	DXAttempt(App.dx.lpDS->SetCooperativeLevel(App.hWnd, DSSCL_EXCLUSIVE));
-	DXSetOutputFormat();
+
+	// Bink FMV still wires its audio straight to a raw IDirectSound object (see fmv.cpp) -
+	// keep creating one for that, non-exclusive so it can't interfere with anything else.
+	// The game's own music/SFX go through XAudio2 below instead, entirely bypassing the
+	// exclusive-mode DirectSound buffer path that was silently dropping SFX on some
+	// playback devices.
+	if (DXAttempt(DirectSoundCreate(G_dxinfo->DSInfo[G_dxinfo->nDS].lpGuid, &App.dx.lpDS, 0)) == DS_OK)
+		DXAttempt(App.dx.lpDS->SetCooperativeLevel(App.hWnd, DSSCL_NORMAL));
+
+	if (FAILED(XAudio2Create(&g_XAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR)))
+	{
+		Log("XAudio2Create Failed");
+		return 0;
+	}
+
+	if (FAILED(g_XAudio2->CreateMasteringVoice(&g_MasteringVoice)))
+	{
+		Log("CreateMasteringVoice Failed");
+		return 0;
+	}
+
 	sound_active = 1;
 	return 1;
 }
@@ -174,17 +221,13 @@ bool FreeSampleDecompress()
 	return 1;
 }
 
-bool DXCreateSampleADPCM(char* data, long comp_size, long uncomp_size, long num)	//fixme
+bool DXCreateSampleADPCM(char* data, long comp_size, long uncomp_size, long num)
 {
 	LPWAVEFORMATEX format;
-	LPDIRECTSOUNDBUFFER buffer;
-	LPVOID dest;
-	DSBUFFERDESC desc;
-	ulong bytes;
 
 	Log(__FUNCTION__);
 
-	if (!App.dx.lpDS)
+	if (!g_XAudio2)
 		return 0;
 
 	format = (LPWAVEFORMATEX)(data + 20);
@@ -192,67 +235,47 @@ bool DXCreateSampleADPCM(char* data, long comp_size, long uncomp_size, long num)
 	if (format->nSamplesPerSec != 22050)
 		Log("Incorrect SamplesPerSec");
 
-	ACMStreamHeader.cbSrcLength = comp_size -  (ushort)format->cbSize - 58;
+	ACMStreamHeader.cbSrcLength = comp_size - (ushort)format->cbSize - 58;
 	mmresult = acmStreamConvert(d_hACMStream, &ACMStreamHeader, ACM_STREAMCONVERTF_BLOCKALIGN | ACM_STREAMCONVERTF_START);
 
 	if (mmresult != DS_OK)
 		Log("Stream Convert %d", mmresult);
 
-	memset(&desc, 0, sizeof(DSBUFFERDESC));
-	desc.dwSize = sizeof(DSBUFFERDESC);
-	desc.dwReserved = 0;
-	// Force software mixing, same as the music buffer (ACMInit) already does -
-	// without this, DirectSound prefers hardware/exclusive-mode mixing for SFX,
-	// which some playback endpoints (e.g. jack-sensed headset outputs on a
-	// shared Realtek codec) don't handle the same way as the default output,
-	// silently dropping SFX while music (already LOCSOFTWARE) keeps working.
-	desc.dwFlags = DSBCAPS_STATIC | DSBCAPS_LOCSOFTWARE | DSBCAPS_CTRLFREQUENCY | DSBCAPS_CTRLPAN | DSBCAPS_CTRLVOLUME;
-	desc.dwBufferBytes = uncomp_size - 32;
-	desc.lpwfxFormat = &pcm_format;
-
-	if (DXAttempt(App.dx.lpDS->CreateSoundBuffer(&desc, &buffer, 0)) != DS_OK)
+	if (DS_Buffers[num].pcm)
 	{
-		Log("Unable To Create Sound Buffer");
-		return 0;
+		free(DS_Buffers[num].pcm);
+		DS_Buffers[num].pcm = 0;
 	}
 
-	if (DXAttempt(buffer->Lock(0, uncomp_size - 32, &dest, &bytes, 0, 0, 0)) != DS_OK)
-	{
-		Log("Unable To Lock Sound Buffer");
-		return 0;
-	}
-
-	memcpy(dest, decompressed_samples_buffer, uncomp_size - 32);
-	DXAttempt(buffer->Unlock(dest, bytes, 0, 0));
+	DS_Buffers[num].bytes = uncomp_size - 32;
+	DS_Buffers[num].pcm = (BYTE*)malloc(DS_Buffers[num].bytes);
+	memcpy(DS_Buffers[num].pcm, decompressed_samples_buffer, DS_Buffers[num].bytes);
 	DS_Buffers[num].frequency = pcm_format.nSamplesPerSec;
-	DS_Buffers[num].buffer = buffer;
 	return 1;
 }
 
 void DXStopSample(long num)
 {
-	if (num >= 0 && DS_Samples[num].buffer)
+	if (num >= 0 && DS_Samples[num].voice)
 	{
-		DXAttempt(DS_Samples[num].buffer->Stop());
-		DXAttempt(DS_Samples[num].buffer->Release());
+		DS_Samples[num].voice->Stop(0);
+		DS_Samples[num].voice->FlushSourceBuffers();
 		DS_Samples[num].playing = 0;
-		DS_Samples[num].buffer = 0;
 	}
 }
 
 bool DSIsChannelPlaying(long num)
 {
-	ulong status;
+	XAUDIO2_VOICE_STATE state;
 
-	if (DS_Samples[num].buffer)
+	if (DS_Samples[num].voice)
 	{
-		if (DXAttempt(DS_Samples[num].buffer->GetStatus(&status)) == DS_OK)
-		{
-			if (status & DSBSTATUS_PLAYING)
-				return 1;
+		DS_Samples[num].voice->GetState(&state);
 
-			DXStopSample(num);
-		}
+		if (state.BuffersQueued > 0)
+			return 1;
+
+		DXStopSample(num);
 	}
 
 	return 0;
@@ -271,51 +294,42 @@ long DSGetFreeChannel()
 
 long DXStartSample(long num, long volume, long pitch, long pan, ulong flags)
 {
-	LPDIRECTSOUNDBUFFER buffer;
+	XAUDIO2_BUFFER buf;
 	long channel;
-
-	// TEMPORARY diagnostic logging to see what actually happens when a SFX
-	// sample is played - remove once the headset SFX issue is diagnosed.
-	Log("DXStartSample num=%d vol=%d", num, volume);
 
 	channel = DSGetFreeChannel();
 
-	Log("DSGetFreeChannel -> %d", channel);
-
 	if (channel < 0)
-	{
-		Log("DXStartSample: no free channel");
 		return -1;
+
+	if (!DS_Buffers[num].pcm)
+		return -1;
+
+	if (!DS_Samples[channel].voice)
+	{
+		DS_Samples[channel].voice = CreateSfxVoice(pcm_format.nSamplesPerSec);
+
+		if (!DS_Samples[channel].voice)
+			return -1;
 	}
 
-	if (!DS_Buffers[num].buffer)
-	{
-		Log("DXStartSample: DS_Buffers[%d].buffer is NULL", num);
-		return -1;
-	}
+	DS_Samples[channel].voice->Stop(0);
+	DS_Samples[channel].voice->FlushSourceBuffers();
 
-	if (DXAttempt(App.dx.lpDS->DuplicateSoundBuffer(DS_Buffers[num].buffer, &buffer)) != DS_OK)
-	{
-		Log("DXStartSample: DuplicateSoundBuffer failed");
-		return -1;
-	}
+	memset(&buf, 0, sizeof(buf));
+	buf.AudioBytes = DS_Buffers[num].bytes;
+	buf.pAudioData = DS_Buffers[num].pcm;
+	buf.Flags = XAUDIO2_END_OF_STREAM;
+	buf.LoopCount = (flags & DSBPLAY_LOOPING) ? XAUDIO2_LOOP_INFINITE : 0;
 
-	if (DXAttempt(buffer->SetVolume(volume)) != DS_OK || DXAttempt(buffer->SetCurrentPosition(0)) != DS_OK)
-	{
-		Log("DXStartSample: SetVolume/SetCurrentPosition failed");
+	if (FAILED(DS_Samples[channel].voice->SubmitSourceBuffer(&buf)))
 		return -1;
-	}
 
-	DS_Samples[channel].buffer = buffer;
 	DS_Samples[channel].playing = num;
+	DS_Samples[channel].voice->SetVolume(DSVolumeToLinear(volume));
 	DSAdjustPitch(channel, pitch);
 	DSAdjustPan(channel, pan);
-	buffer->Stop();
-
-	if (DXAttempt(buffer->Play(0, 0, flags)) != DS_OK)
-		Log("DXStartSample: Play failed");
-	else
-		Log("DXStartSample: Play OK on channel %d", channel);
+	DS_Samples[channel].voice->Start(0);
 	return channel;
 }
 
@@ -368,10 +382,10 @@ void DXFreeSounds()
 
 	for (int i = 0; i < 256; i++)
 	{
-		if (DS_Buffers[i].buffer)
+		if (DS_Buffers[i].pcm)
 		{
-			Log("Released %s @ %x - RefCnt = %d", "SoundBuffer", DS_Buffers[i].buffer, DS_Buffers[i].buffer->Release());
-			DS_Buffers[i].buffer = 0;
+			free(DS_Buffers[i].pcm);
+			DS_Buffers[i].pcm = 0;
 		}
 	}
 }
@@ -401,31 +415,20 @@ void S_SoundSetPitch(long num, long pitch)
 
 bool DXCreateSample(long num, LPWAVEFORMATEX format, LPVOID data, ulong bytes)
 {
-	DSBUFFERDESC desc;
-	LPVOID lData;
-	ulong lBytes;
-
 	Log(__FUNCTION__);
 
-	if (!App.dx.lpDS)
+	if (!g_XAudio2)
 		return 0;
 
-	memset(&desc, 0, sizeof(DSBUFFERDESC));
-	desc.dwSize = sizeof(DSBUFFERDESC);
-	desc.lpwfxFormat = format;
-	// See DXCreateSampleADPCM - force software mixing like the music buffer.
-	desc.dwFlags = DSBCAPS_STATIC | DSBCAPS_LOCSOFTWARE | DSBCAPS_CTRLFREQUENCY | DSBCAPS_CTRLPAN | DSBCAPS_CTRLVOLUME;
-	desc.dwBufferBytes = bytes;
-	desc.dwReserved = 0;
+	if (DS_Buffers[num].pcm)
+	{
+		free(DS_Buffers[num].pcm);
+		DS_Buffers[num].pcm = 0;
+	}
 
-	if (DXAttempt(App.dx.lpDS->CreateSoundBuffer(&desc, &DS_Buffers[num].buffer, 0)) != DS_OK)
-		return 0;
-
-	if (DXAttempt(DS_Buffers[num].buffer->Lock(0, bytes, &lData, &lBytes, 0, 0, 0)) != DS_OK)
-		return 0;
-
-	memcpy(lData, data, lBytes);
-	DXAttempt(DS_Buffers[num].buffer->Unlock(lData, lBytes, 0, 0));
+	DS_Buffers[num].bytes = bytes;
+	DS_Buffers[num].pcm = (BYTE*)malloc(bytes);
+	memcpy(DS_Buffers[num].pcm, data, bytes);
 	DS_Buffers[num].frequency = format->nSamplesPerSec;
 	return 1;
 }

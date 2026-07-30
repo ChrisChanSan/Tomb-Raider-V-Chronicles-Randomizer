@@ -71,7 +71,7 @@ static void InitResolution(HWND dlg, HWND hwnd, bool resetvms)
 		}
 	}
 
-	if (App.DXInfo.DDInfo[nDDDevice].DDCaps.dwCaps2 & DDCAPS2_CANRENDERWINDOWED)
+	if (App.DXInfo.DDInfo[nDDDevice].bCanRenderWindowed)
 	{
 		EnableWindow(GetDlgItem(dlg, IDC_WINDOWED), 1);
 		SendMessage(GetDlgItem(dlg, IDC_WINDOWED), BM_SETCHECK, 1, 0);
@@ -108,7 +108,7 @@ static void InitD3DDevice(HWND dlg, HWND hwnd)
 
 static void InitDDDevice(HWND dlg, HWND hwnd)
 {
-	DDDEVICEIDENTIFIER* id;
+	D3DADAPTER_IDENTIFIER9* id;
 	char buffer[256];
 
 	SendMessage(hwnd, CB_RESETCONTENT, 0, 0);
@@ -116,9 +116,9 @@ static void InitDDDevice(HWND dlg, HWND hwnd)
 	for (int i = 0; i < App.DXInfo.nDDInfo; i++)
 	{
 		id = &App.DXInfo.DDInfo[i].DDIdentifier;
-		wsprintf(buffer, "%s - %s (%d.%d.%02d.%04d)", id->szDescription, id->szDriver,
-			HIWORD(id->liDriverVersion.HighPart), LOWORD(id->liDriverVersion.HighPart),
-			HIWORD(id->liDriverVersion.LowPart), LOWORD(id->liDriverVersion.LowPart));
+		wsprintf(buffer, "%s - %s (%d.%d.%02d.%04d)", id->Description, id->Driver,
+			HIWORD(id->DriverVersion.HighPart), LOWORD(id->DriverVersion.HighPart),
+			HIWORD(id->DriverVersion.LowPart), LOWORD(id->DriverVersion.LowPart));
 		SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)buffer);
 	}
 

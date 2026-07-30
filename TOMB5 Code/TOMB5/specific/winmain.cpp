@@ -36,7 +36,7 @@ void ClearSurfaces()
 	r.y2 = App.dx.rViewport.top + App.dx.rViewport.bottom;
 	r.x2 = App.dx.rViewport.left + App.dx.rViewport.right;
 
-	DXAttempt(App.dx.lpViewport->Clear2(1, &r, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0, 1.0F, 0));
+	DXAttempt(App.dx.lpD3DDevice->Clear(1, &r, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0, 1.0F, 0));
 	S_DumpScreen();
 }
 
@@ -118,7 +118,7 @@ void WinProcessCommands(long cmd)
 
 	if (cmd == KA_ALTENTER)
 	{
-		if (App.fmv || !(G_dxinfo->DDInfo[G_dxinfo->nDD].DDCaps.dwCaps2 & DDCAPS2_CANRENDERWINDOWED) || LevelLoadingThread.active)
+		if (App.fmv || !G_dxinfo->DDInfo[G_dxinfo->nDD].bCanRenderWindowed || LevelLoadingThread.active)
 			return;
 
 		Log("KA_ALTENTER");

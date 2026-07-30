@@ -1016,19 +1016,18 @@ long aCheckMeshClip(MESH_DATA* mesh)
 	return 2;
 }
 
-HRESULT DDCopyBitmap(LPDIRECTDRAWSURFACE4 surf, HBITMAP hbm, long x, long y, long dx, long dy)
+HRESULT DDCopyBitmap(LPDIRECT3DSURFACE9 surf, HBITMAP hbm, long x, long y, long dx, long dy)
 {
 	HDC hdc;
 	HDC hdc2;
 	BITMAP bitmap;
-	DDSURFACEDESC2 desc;
+	D3DSURFACE_DESC desc;
 	HRESULT result;
 	long l, t;
 
 	if (!hbm || !surf)
 		return E_FAIL;
 
-	surf->Restore();
 	hdc = CreateCompatibleDC(0);
 
 	if (!hdc)
@@ -1043,28 +1042,14 @@ HRESULT DDCopyBitmap(LPDIRECTDRAWSURFACE4 surf, HBITMAP hbm, long x, long y, lon
 	if (!dy)
 		dy = bitmap.bmHeight;
 
-	desc.dwSize = sizeof(DDSURFACEDESC2);
-	desc.dwFlags = DDSD_WIDTH | DDSD_HEIGHT;
-	surf->GetSurfaceDesc(&desc);
+	surf->GetDesc(&desc);
 	l = 0;
 	t = 0;
-
-	if (!(App.dx.Flags & DXF_HWR))
-	{
-		surf = App.dx.lpPrimaryBuffer;
-
-		if (App.dx.Flags & DXF_WINDOWED)
-		{
-			l = App.dx.rScreen.left;
-			t = App.dx.rScreen.top;
-		}
-	}
-
 	result = surf->GetDC(&hdc2);
 
 	if (result == DD_OK)
 	{
-		StretchBlt(hdc2, l, t, desc.dwWidth, desc.dwHeight, hdc, x, y, dx, dy, SRCCOPY);
+		StretchBlt(hdc2, l, t, desc.Width, desc.Height, hdc, x, y, dx, dy, SRCCOPY);
 		surf->ReleaseDC(hdc2);
 	}
 
@@ -1072,7 +1057,7 @@ HRESULT DDCopyBitmap(LPDIRECTDRAWSURFACE4 surf, HBITMAP hbm, long x, long y, lon
 	return result;
 }
 
-HRESULT _LoadBitmap(LPDIRECTDRAWSURFACE4 surf, LPCSTR name)
+HRESULT _LoadBitmap(LPDIRECT3DSURFACE9 surf, LPCSTR name)
 {
 	HBITMAP hBitmap;
 	HRESULT result;
@@ -1097,6 +1082,19 @@ HRESULT _LoadBitmap(LPDIRECTDRAWSURFACE4 surf, LPCSTR name)
 	return result;
 }
 
+static HRESULT _LoadBitmapToBackBuffer(LPCSTR name)
+{
+	LPDIRECT3DSURFACE9 back;
+	HRESULT result;
+
+	if (FAILED(App.dx.lpD3DDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back)))
+		return E_FAIL;
+
+	result = _LoadBitmap(back, name);
+	back->Release();
+	return result;
+}
+
 void do_boot_screen(long language)
 {
 	Log(__FUNCTION__);
@@ -1105,45 +1103,45 @@ void do_boot_screen(long language)
 	{
 	case ENGLISH:
 	case DUTCH:
-		_LoadBitmap(App.dx.lpBackBuffer, "uk.bmp");
+		_LoadBitmapToBackBuffer("uk.bmp");
 		S_DumpScreen();
-		_LoadBitmap(App.dx.lpBackBuffer, "uk.bmp");
+		_LoadBitmapToBackBuffer("uk.bmp");
 		break;
 
 	case FRENCH:
-		_LoadBitmap(App.dx.lpBackBuffer, "france.bmp");
+		_LoadBitmapToBackBuffer("france.bmp");
 		S_DumpScreen();
-		_LoadBitmap(App.dx.lpBackBuffer, "france.bmp");
+		_LoadBitmapToBackBuffer("france.bmp");
 		break;
 
 	case GERMAN:
-		_LoadBitmap(App.dx.lpBackBuffer, "germany.bmp");
+		_LoadBitmapToBackBuffer("germany.bmp");
 		S_DumpScreen();
-		_LoadBitmap(App.dx.lpBackBuffer, "germany.bmp");
+		_LoadBitmapToBackBuffer("germany.bmp");
 		break;
 
 	case ITALIAN:
-		_LoadBitmap(App.dx.lpBackBuffer, "italy.bmp");
+		_LoadBitmapToBackBuffer("italy.bmp");
 		S_DumpScreen();
-		_LoadBitmap(App.dx.lpBackBuffer, "italy.bmp");
+		_LoadBitmapToBackBuffer("italy.bmp");
 		break;
 
 	case SPANISH:
-		_LoadBitmap(App.dx.lpBackBuffer, "spain.bmp");
+		_LoadBitmapToBackBuffer("spain.bmp");
 		S_DumpScreen();
-		_LoadBitmap(App.dx.lpBackBuffer, "spain.bmp");
+		_LoadBitmapToBackBuffer("spain.bmp");
 		break;
 
 	case US:
-		_LoadBitmap(App.dx.lpBackBuffer, "usa.bmp");
+		_LoadBitmapToBackBuffer("usa.bmp");
 		S_DumpScreen();
-		_LoadBitmap(App.dx.lpBackBuffer, "usa.bmp");
+		_LoadBitmapToBackBuffer("usa.bmp");
 		break;
 
 	case JAPAN:
-		_LoadBitmap(App.dx.lpBackBuffer, "japan.bmp");
+		_LoadBitmapToBackBuffer("japan.bmp");
 		S_DumpScreen();
-		_LoadBitmap(App.dx.lpBackBuffer, "japan.bmp");
+		_LoadBitmapToBackBuffer("japan.bmp");
 		break;
 	}
 }
@@ -1365,7 +1363,7 @@ void S_InitialisePolyList()
 	r.y1 = App.dx.rViewport.top;
 	r.y2 = App.dx.rViewport.top + App.dx.rViewport.bottom;
 	r.x2 = App.dx.rViewport.left + App.dx.rViewport.right;
-	DXAttempt(App.dx.lpViewport->Clear2(1, &r, D3DCLEAR_TARGET, 0, 1.0F, 0));
+	DXAttempt(App.dx.lpD3DDevice->Clear(1, &r, D3DCLEAR_TARGET, 0, 1.0F, 0));
 
 	_BeginScene();
 	InitBuckets();
@@ -1380,9 +1378,9 @@ void S_OutputPolyList()
 	char buf[128];
 
 	WinFrameRate();
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_SRCBLEND, D3DBLEND_SRCALPHA);
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_DESTBLEND, D3DBLEND_INVSRCALPHA);
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_ALPHABLENDENABLE, 0);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, 0);
 
 	if (resChangeCounter)
 	{
@@ -1394,27 +1392,27 @@ void S_OutputPolyList()
 			resChangeCounter = 0;
 	}
 
-	if (App.dx.lpZBuffer)
+	if (App.dx.Flags & DXF_ZBUFFER)
 		DrawBuckets();
 
 	if (gfCurrentLevel == LVL5_TITLE)
 	{
 		Fade();
 
-		if (App.dx.lpZBuffer)
+		if (App.dx.Flags & DXF_ZBUFFER)
 			DrawSortList();
 	}
 
 	SortPolyList(SortCount, SortList);
 	DrawSortList();
 
-	if (App.dx.lpZBuffer)
+	if (App.dx.Flags & DXF_ZBUFFER)
 	{
 		r.x1 = App.dx.rViewport.left;
 		r.y1 = App.dx.rViewport.top;
 		r.x2 = App.dx.rViewport.left + App.dx.rViewport.right;
 		r.y2 = App.dx.rViewport.top + App.dx.rViewport.bottom;
-		DXAttempt(App.dx.lpViewport->Clear2(1, &r, D3DCLEAR_ZBUFFER, 0, 1.0F, 0));
+		DXAttempt(App.dx.lpD3DDevice->Clear(1, &r, D3DCLEAR_ZBUFFER, 0, 1.0F, 0));
 	}
 
 	if ((BinocularRange || SCOverlay || SniperOverlay) && !MonoScreenOn)
@@ -1731,7 +1729,7 @@ void phd_PutPolygonsSkyMesh(short* objptr, long clipstatus)
 				pTex->drawtype = 2;
 			else
 			{
-				if (App.dx.lpZBuffer)
+				if (App.dx.Flags & DXF_ZBUFFER)
 				{
 					aVertexBuffer[quad[0]].color = 0;
 					aVertexBuffer[quad[1]].color = 0;

@@ -21,7 +21,7 @@ void InitialiseFunctionTable()
 	_EndScene = HWEndScene;
 	IsVisible = _NVisible;
 
-	if (App.dx.lpZBuffer)
+	if (App.dx.Flags & DXF_ZBUFFER)
 	{
 		AddQuadZBuffer = AddQuadClippedZBuffer;
 		AddTriZBuffer = AddTriClippedZBuffer;
@@ -55,15 +55,15 @@ void HWInitialise()
 
 	if (App.Filtering)
 	{
-		App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTFN_LINEAR);
-		App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MIPFILTER, D3DTFP_NONE);
-		App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTFG_LINEAR);
+		App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTEXF_LINEAR);
+		App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MIPFILTER, D3DTEXF_NONE);
+		App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTEXF_LINEAR);
 	}
 	else
 	{
-		App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTFG_POINT);
-		App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTFN_POINT);
-		App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MIPFILTER, D3DTFP_NONE);
+		App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTEXF_POINT);
+		App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTEXF_POINT);
+		App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MIPFILTER, D3DTEXF_NONE);
 	}
 
 	App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);	//multiply
@@ -74,28 +74,25 @@ void HWInitialise()
 	App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);	//diffuse color
 	App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, D3DTSS_TCI_PASSTHRU);
 
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_ALPHABLENDENABLE, 0);	//disable alpha blending
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_SPECULARENABLE, 1);	//enable specular
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_CULLMODE, D3DCULL_NONE);	//no culling
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, 0);	//disable alpha blending
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_SPECULARENABLE, 1);	//enable specular
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);	//no culling
 
-	DXAttempt(App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_ZENABLE, D3DZB_TRUE));	//z buffering
-	DXAttempt(App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_ZWRITEENABLE, 1));
-	DXAttempt(App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_TEXTUREPERSPECTIVE, 1));	//perspective correction
+	DXAttempt(App.dx.lpD3DDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE));	//z buffering
+	DXAttempt(App.dx.lpD3DDevice->SetRenderState(D3DRS_ZWRITEENABLE, 1));
 
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_TEXTUREMAPBLEND, D3DTBLEND_MODULATEALPHA);	//Modulate-alpha texture-blending
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_FILLMODE, D3DFILL_SOLID);	//Fill solids.
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_DITHERENABLE, 1);	//enable dithering
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_ALPHAREF, 0);	//reference value for alpha testing
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_ALPHAFUNC, D3DCMP_NOTEQUAL);	//accept pixels with different alpha(?)
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_SRCBLEND, D3DBLEND_SRCALPHA);
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_DESTBLEND, D3DBLEND_INVSRCALPHA);
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_ALPHATESTENABLE, 0);	//disables alpha tests
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);	//Fill solids.
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_DITHERENABLE, 1);	//enable dithering
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_ALPHAREF, 0);	//reference value for alpha testing
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_NOTEQUAL);	//accept pixels with different alpha(?)
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_ALPHATESTENABLE, 0);	//disables alpha tests
 
-	DXAttempt(App.dx.lpD3DDevice->SetLightState(D3DLIGHTSTATE_AMBIENT, 0));
-	DXAttempt(App.dx.lpD3DDevice->SetLightState(D3DLIGHTSTATE_COLORVERTEX, 0));
-	DXAttempt(App.dx.lpD3DDevice->SetLightState(D3DLIGHTSTATE_COLORMODEL, D3DCOLOR_RGB));
+	DXAttempt(App.dx.lpD3DDevice->SetRenderState(D3DRS_AMBIENT, 0));
+	DXAttempt(App.dx.lpD3DDevice->SetRenderState(D3DRS_COLORVERTEX, 0));
 
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_FOGENABLE, 0);
+	App.dx.lpD3DDevice->SetRenderState(D3DRS_FOGENABLE, 0);
 }
 
 HRESULT HWBeginScene()

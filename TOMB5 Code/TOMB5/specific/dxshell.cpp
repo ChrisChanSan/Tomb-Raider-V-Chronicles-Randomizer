@@ -1,6 +1,7 @@
 #include "../tomb5/pch.h"
 #include "dxshell.h"
 #include "function_stubs.h"
+#include "function_table.h"
 #include "winmain.h"
 #include "input.h"
 
@@ -181,7 +182,36 @@ HRESULT DXShowFrame()
 	hr = G_dxptr->lpD3DDevice->Present(0, 0, 0, 0);
 
 	if (hr == D3DERR_DEVICELOST)
-		Log("Present - Device Lost");
+	{
+		// Normal in exclusive fullscreen whenever the app loses focus (alt-tab, etc) -
+		// the device stays lost until the window is focused again AND the driver is
+		// ready to hand it back, which TestCooperativeLevel() reports via
+		// D3DERR_DEVICENOTRESET. Until then, just skip presenting (keep returning here
+		// every frame - game logic/audio keep running as normal, only rendering pauses)
+		// rather than treating it as a hard error.
+		HRESULT hrCoopLevel = G_dxptr->lpD3DDevice->TestCooperativeLevel();
+
+		if (hrCoopLevel == D3DERR_DEVICENOTRESET)
+		{
+			Log("Device lost, resetting");
+
+			HRESULT hrReset = G_dxptr->lpD3DDevice->Reset(&G_dxptr->PresentParams);
+
+			if (SUCCEEDED(hrReset))
+			{
+				// Reset() implicitly discards all render/sampler states (back to
+				// D3D9 defaults) and recreates the swap chain - HWInitialise() is
+				// the same call used at startup and after FMV playback to
+				// (re)establish the render state this engine relies on. Textures
+				// are D3DPOOL_MANAGED (see specific/texture.cpp) so D3D9 restores
+				// their contents automatically - nothing to redo there.
+				Log("Device reset OK");
+				HWInitialise();
+			}
+			else
+				Log("Device reset failed: %s", DXGetErrorString(hrReset));
+		}
+	}
 	else
 		DXAttempt(hr);
 

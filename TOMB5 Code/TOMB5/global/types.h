@@ -31,6 +31,18 @@
 #define MAX_LOT		5
 #define W2V_SHIFT	14
 
+// D3D9's headers dropped the old Direct3D-Immediate-Mode (DX3-7) transformed/lit vertex type;
+// redefine it ourselves, same layout as the old d3dtypes.h D3DTLVERTEX.
+#ifndef D3DFVF_TLVERTEX
+#define D3DFVF_TLVERTEX (D3DFVF_XYZRHW|D3DFVF_DIFFUSE|D3DFVF_SPECULAR|D3DFVF_TEX1)
+#endif
+
+typedef struct {
+	D3DVALUE sx, sy, sz, rhw;
+	D3DCOLOR color, specular;
+	D3DVALUE tu, tv;
+} D3DTLVERTEX, *LPD3DTLVERTEX;
+
 /*typedefs*/
 typedef unsigned char uchar;
 typedef unsigned short ushort;
@@ -1680,7 +1692,6 @@ struct DXDISPLAYMODE
 	long bpp;
 	long RefreshRate;
 	long bPalette;
-	DDSURFACEDESC2 ddsd;
 	uchar rbpp;
 	uchar gbpp;
 	uchar bbpp;
@@ -1691,7 +1702,7 @@ struct DXDISPLAYMODE
 
 struct DXTEXTUREINFO
 {
-	DDPIXELFORMAT ddpf;
+	D3DFORMAT format;
 	ulong bpp;
 	long bPalette;
 	long bAlpha;
@@ -1707,7 +1718,7 @@ struct DXTEXTUREINFO
 
 struct DXZBUFFERINFO
 {
-	DDPIXELFORMAT ddpf;
+	D3DFORMAT format;
 	ulong bpp;
 };
 
@@ -1715,9 +1726,6 @@ struct DXD3DDEVICE
 {
 	char Name[256];
 	char About[256];
-	LPGUID lpGuid;
-	GUID Guid;
-	D3DDEVICEDESC DeviceDesc;
 	long bHardware;
 	long nDisplayModes;
 	DXDISPLAYMODE* DisplayModes;
@@ -1729,12 +1737,11 @@ struct DXD3DDEVICE
 
 struct DXDIRECTDRAWINFO
 {
-	char Name[256];  
+	char Name[256];
 	char About[256];
-	LPGUID lpGuid;
-	GUID Guid;
-	DDCAPS DDCaps;
-	DDDEVICEIDENTIFIER DDIdentifier;
+	UINT AdapterOrdinal;
+	D3DADAPTER_IDENTIFIER9 DDIdentifier;
+	bool bCanRenderWindowed;
 	long nDisplayModes;
 	DXDISPLAYMODE* DisplayModes;
 	long nD3DDevices;
@@ -1766,13 +1773,9 @@ struct DXINFO
 
 struct DXPTR
 {
-	LPDIRECTDRAW4 lpDD;
-	LPDIRECT3D3 lpD3D;
-	LPDIRECT3DDEVICE3 lpD3DDevice;
-	LPDIRECTDRAWSURFACE4 lpPrimaryBuffer;
-	LPDIRECTDRAWSURFACE4 lpBackBuffer;
-	LPDIRECTDRAWSURFACE4 lpZBuffer;
-	LPDIRECT3DVIEWPORT3 lpViewport;
+	LPDIRECT3D9 lpD3D;
+	LPDIRECT3DDEVICE9 lpD3DDevice;
+	D3DPRESENT_PARAMETERS PresentParams;
 	LPDIRECTSOUND lpDS;
 	ulong dwRenderWidth;
 	ulong dwRenderHeight;

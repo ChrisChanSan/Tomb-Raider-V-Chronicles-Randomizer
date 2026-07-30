@@ -16,8 +16,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <mmeapi.h>
-#include <d3d.h>
-#include <d3dtypes.h>
+#include <d3d9.h>
 #include <process.h>
 #include <dinput.h>
 #include <dsound.h>

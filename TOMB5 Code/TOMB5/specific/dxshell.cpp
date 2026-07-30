@@ -255,6 +255,12 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 	}
 	else
 	{
+		// Unlike the old DirectDraw path (where the actual mode switch happened at the
+		// display-controller level and the window's own size/visibility didn't matter much),
+		// D3D9's exclusive fullscreen CreateDevice is picky about the associated window -
+		// leaving it at whatever small/hidden size WinCreateWindow() set initially causes
+		// CreateDevice to fail with D3DERR_INVALIDCALL, particularly at larger resolutions.
+		// Resize it to cover the target mode and make sure it's visible/foreground first.
 		Log("DXCreate: Full Screen Mode");
 		G_dxptr->dwRenderWidth = dm->w;
 		G_dxptr->dwRenderHeight = dm->h;
@@ -262,6 +268,9 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 		G_dxptr->rViewport.left = 0;
 		G_dxptr->rViewport.right = dm->w;
 		G_dxptr->rViewport.bottom = dm->h;
+		SetWindowPos(hWnd, HWND_TOP, 0, 0, dm->w, dm->h, SWP_SHOWWINDOW);
+		ShowWindow(hWnd, SW_SHOW);
+		SetForegroundWindow(hWnd);
 	}
 
 	memset(&G_dxptr->PresentParams, 0, sizeof(D3DPRESENT_PARAMETERS));
@@ -280,8 +289,9 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 		G_dxptr->PresentParams.AutoDepthStencilFormat = D3DFMT_D24S8;
 	}
 
-	if (Flags & DXF_FULLSCREEN)
-		G_dxptr->PresentParams.FullScreen_RefreshRateInHz = dm->RefreshRate;
+	// Leave FullScreen_RefreshRateInHz at 0 (let the driver pick the display's current rate)
+	// rather than forcing dm->RefreshRate - on Windows 11, forcing an exact refresh rate is
+	// what's actually causing D3DERR_INVALIDCALL from CreateDevice at some resolutions.
 
 	if (!DXCreateD3DDevice(G_dxptr->lpD3D, adapter, hWnd, &G_dxptr->PresentParams, &G_dxptr->lpD3DDevice))
 	{

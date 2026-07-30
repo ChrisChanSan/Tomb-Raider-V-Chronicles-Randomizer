@@ -86,7 +86,9 @@ bool LoadBinkStuff()
 
 	if (g_fmvDD)
 	{
-		g_fmvDD->SetCooperativeLevel(App.dx.hWnd, DDSCL_NORMAL);
+		// LoadBinkStuff() runs before DXCreate(), so App.dx.hWnd isn't set yet - use the
+		// WinMain-level App.hWnd (already valid at this point) instead.
+		g_fmvDD->SetCooperativeLevel(App.hWnd, DDSCL_NORMAL);
 		memset(&desc, 0, sizeof(desc));
 		desc.dwSize = sizeof(DDSURFACEDESC2);
 		desc.dwFlags = DDSD_CAPS | DDSD_HEIGHT | DDSD_WIDTH;
@@ -94,6 +96,12 @@ bool LoadBinkStuff()
 		desc.dwHeight = 480;
 		desc.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_SYSTEMMEMORY;
 		g_fmvDD->CreateSurface(&desc, &BinkSurface, 0);
+	}
+
+	if (!BinkSurface)
+	{
+		Log("LoadBinkStuff: failed to create the DirectDraw FMV surface");
+		return 0;
 	}
 
 	return 1;
@@ -125,6 +133,9 @@ void ShowBinkFrame()
 	DDSURFACEDESC2 surf;
 	HDC hdcSurf, hdcWnd;
 	RECT client;
+
+	if (!BinkSurface)
+		return;
 
 	memset(&surf, 0, sizeof(surf));
 	surf.dwSize = sizeof(DDSURFACEDESC2);

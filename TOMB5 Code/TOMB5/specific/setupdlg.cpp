@@ -101,7 +101,11 @@ static void InitD3DDevice(HWND dlg, HWND hwnd)
 	for (int i = 0; i < ddraw->nD3DDevices; i++)
 		SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)ddraw->D3DDevices[i].About);
 
-	nD3DDevice = 1;
+	// Originally hardcoded to 1 (index 0 = old RGB software emulation device, index 1 =
+	// hardware) - the D3D9 enumeration only ever produces one device per adapter now
+	// (index 0), so selecting index 1 pointed past the end of the array, leaving this
+	// combo box (and everything InitResolution derives from it) empty.
+	nD3DDevice = 0;
 	SendMessage(hwnd, CB_SETCURSEL, nD3DDevice, 0);
 	InitResolution(dlg, GetDlgItem(dlg, IDC_RESOLUTION), 1);
 }

@@ -39,7 +39,7 @@ char MonoScreenOn;
 static long SpecialFeaturesNum = -1;
 static long NumSpecialFeatures;
 
-static LPDIRECTDRAWSURFACE4 screen_surface;
+static LPDIRECT3DSURFACE9 screen_surface;
 static SAVEFILE_INFO SaveGames[15];
 static char SpecialFeaturesPage[5];
 
@@ -784,8 +784,15 @@ void DoOptions()
 
 void CreateMonoScreen()
 {
+	LPDIRECT3DSURFACE9 back;
+
 	MonoScreenOn = 1;
-	ConvertSurfaceToTextures(App.dx.lpBackBuffer);
+
+	if (SUCCEEDED(App.dx.lpD3DDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back)))
+	{
+		ConvertSurfaceToTextures(back);
+		back->Release();
+	}
 }
 
 void RGBM_Mono(uchar* r, uchar* g, uchar* b)
@@ -826,12 +833,47 @@ static void BitMaskGetNumberOfBits(ulong bitMask, ulong* bitDepth, ulong* bitOff
 	*bitDepth = i;
 }
 
-static void WinVidGetColorBitMasks(COLOR_BIT_MASKS* bm, LPDDPIXELFORMAT pixelFormat)
+// D3D9 surfaces don't expose a DDPIXELFORMAT-style bitmask description the way DirectDraw
+// surfaces did - GetDesc() only reports a D3DFORMAT enum. Since every surface that actually
+// flows through here is one of exactly two known formats (the game's own X8R8G8B8 back
+// buffer, or the R5G6B5 offscreen surface LoadScreen() builds itself), a tiny format->masks
+// lookup replaces the old generic-any-DirectDraw-format runtime introspection.
+struct BLTSURF
 {
-	bm->dwRBitMask = pixelFormat->dwRBitMask;
-	bm->dwGBitMask = pixelFormat->dwGBitMask;
-	bm->dwBBitMask = pixelFormat->dwBBitMask;
-	bm->dwRGBAlphaBitMask = pixelFormat->dwRGBAlphaBitMask;
+	void* pBits;
+	long Pitch;
+	ulong Bpp;
+	ulong RMask, GMask, BMask, AMask;
+};
+
+static void FormatToMasks(D3DFORMAT format, BLTSURF* s)
+{
+	switch (format)
+	{
+	case D3DFMT_R5G6B5:
+		s->Bpp = 2;
+		s->RMask = 0xF800;
+		s->GMask = 0x07E0;
+		s->BMask = 0x001F;
+		s->AMask = 0;
+		break;
+
+	default:	// D3DFMT_X8R8G8B8 / D3DFMT_A8R8G8B8
+		s->Bpp = 4;
+		s->RMask = 0x00FF0000;
+		s->GMask = 0x0000FF00;
+		s->BMask = 0x000000FF;
+		s->AMask = 0xFF000000;
+		break;
+	}
+}
+
+static void WinVidGetColorBitMasks(COLOR_BIT_MASKS* bm, ulong rMask, ulong gMask, ulong bMask, ulong aMask)
+{
+	bm->dwRBitMask = rMask;
+	bm->dwGBitMask = gMask;
+	bm->dwBBitMask = bMask;
+	bm->dwRGBAlphaBitMask = aMask;
 
 	BitMaskGetNumberOfBits(bm->dwRBitMask, &bm->dwRBitDepth, &bm->dwRBitOffset);
 	BitMaskGetNumberOfBits(bm->dwGBitMask, &bm->dwGBitDepth, &bm->dwGBitOffset);
@@ -839,7 +881,7 @@ static void WinVidGetColorBitMasks(COLOR_BIT_MASKS* bm, LPDDPIXELFORMAT pixelFor
 	BitMaskGetNumberOfBits(bm->dwRGBAlphaBitMask, &bm->dwRGBAlphaBitDepth, &bm->dwRGBAlphaBitOffset);
 }
 
-static void CustomBlt(DDSURFACEDESC2* dst, ulong dstX, ulong dstY, DDSURFACEDESC2* src, LPRECT srcRect)
+static void CustomBlt(BLTSURF* dst, ulong dstX, ulong dstY, BLTSURF* src, LPRECT srcRect)
 {
 	COLOR_BIT_MASKS srcMask, dstMask;
 	uchar* srcLine;
@@ -852,12 +894,12 @@ static void CustomBlt(DDSURFACEDESC2* dst, ulong dstX, ulong dstY, DDSURFACEDESC
 	srcY = srcRect->top;
 	width = srcRect->right - srcRect->left;
 	height = srcRect->bottom - srcRect->top;
-	srcBpp = src->ddpfPixelFormat.dwRGBBitCount / 8;
-	dstBpp = dst->ddpfPixelFormat.dwRGBBitCount / 8;
-	WinVidGetColorBitMasks(&srcMask, &src->ddpfPixelFormat);
-	WinVidGetColorBitMasks(&dstMask, &dst->ddpfPixelFormat);
-	srcLine = (uchar*)src->lpSurface + srcY * src->lPitch + srcX * srcBpp;
-	dstLine = (uchar*)dst->lpSurface + dstY * dst->lPitch + dstX * dstBpp;
+	srcBpp = src->Bpp;
+	dstBpp = dst->Bpp;
+	WinVidGetColorBitMasks(&srcMask, src->RMask, src->GMask, src->BMask, src->AMask);
+	WinVidGetColorBitMasks(&dstMask, dst->RMask, dst->GMask, dst->BMask, dst->AMask);
+	srcLine = (uchar*)src->pBits + srcY * src->Pitch + srcX * srcBpp;
+	dstLine = (uchar*)dst->pBits + dstY * dst->Pitch + dstX * dstBpp;
 
 	for (ulong j = 0; j < height; j++)
 	{
@@ -901,7 +943,7 @@ static void CustomBlt(DDSURFACEDESC2* dst, ulong dstX, ulong dstY, DDSURFACEDESC
 				b >>= srcMask.dwBBitDepth - dstMask.dwBBitDepth;
 
 			RGBM_Mono((uchar*)&r, (uchar*)&g, (uchar*)&b);
-			color = dst->ddpfPixelFormat.dwRGBAlphaBitMask; // destination is opaque
+			color = dst->AMask; // destination is opaque
 			color |= r << dstMask.dwRBitOffset;
 			color |= g << dstMask.dwGBitOffset;
 			color |= b << dstMask.dwBBitOffset;
@@ -910,53 +952,58 @@ static void CustomBlt(DDSURFACEDESC2* dst, ulong dstX, ulong dstY, DDSURFACEDESC
 			dstPtr += dstBpp;
 		}
 
-		srcLine += src->lPitch;
-		dstLine += dst->lPitch;
+		srcLine += src->Pitch;
+		dstLine += dst->Pitch;
 	}
 }
 
-void ConvertSurfaceToTextures(LPDIRECTDRAWSURFACE4 surface)
+void ConvertSurfaceToTextures(LPDIRECT3DSURFACE9 surface)
 {
-	DDSURFACEDESC2 tSurf;
-	DDSURFACEDESC2 uSurf;
+	D3DSURFACE_DESC desc;
+	D3DLOCKED_RECT srcRect, dstRect;
+	BLTSURF src, dst;
 	RECT r;
-	ushort* pTexture;
-	ushort* pSrc;
+	LPDIRECT3DTEXTURE9 tex9;
 
-	memset(&tSurf, 0, sizeof(tSurf));
-	tSurf.dwSize = sizeof(DDSURFACEDESC2);
-	surface->Lock(0, &tSurf, DDLOCK_WAIT | DDLOCK_NOSYSLOCK, 0);
-	pSrc = (ushort*)tSurf.lpSurface;
-	MonoScreen.surface = CreateTexturePage(tSurf.dwWidth, tSurf.dwHeight, 0, NULL, RGBM_Mono, -1);
+	surface->GetDesc(&desc);
+	surface->LockRect(&srcRect, 0, 0);
+	tex9 = CreateTexturePage(desc.Width, desc.Height, 0, NULL, RGBM_Mono, -1);
 
-	memset(&uSurf, 0, sizeof(uSurf));
-	uSurf.dwSize = sizeof(DDSURFACEDESC2);
-	MonoScreen.surface->Lock(0, &uSurf, DDLOCK_WAIT | DDLOCK_NOSYSLOCK, 0);
-	pTexture = (ushort*)uSurf.lpSurface;
+	if (!tex9)
+	{
+		surface->UnlockRect();
+		return;
+	}
+
+	tex9->LockRect(0, &dstRect, 0, 0);
+
+	FormatToMasks(desc.Format, &src);
+	src.pBits = srcRect.pBits;
+	src.Pitch = srcRect.Pitch;
+
+	FormatToMasks(D3DFMT_A8R8G8B8, &dst);
+	dst.pBits = dstRect.pBits;
+	dst.Pitch = dstRect.Pitch;
 
 	r.left = 0;
 	r.top = 0;
-	r.right = tSurf.dwWidth;
-	r.bottom = tSurf.dwHeight;
-	CustomBlt(&uSurf, 0, 0, &tSurf, &r);
+	r.right = desc.Width;
+	r.bottom = desc.Height;
+	CustomBlt(&dst, 0, 0, &src, &r);
 
-	MonoScreen.surface->Unlock(0);
-	DXAttempt(MonoScreen.surface->QueryInterface(IID_IDirect3DTexture2, (void**)&MonoScreen.tex));
-	surface->Unlock(0);
+	tex9->UnlockRect(0);
+	surface->UnlockRect();
+
+	if (MonoScreen.tex)
+		MonoScreen.tex->Release();
+
+	MonoScreen.tex = tex9;
 }
 
 void FreeMonoScreen()
 {
 	if (MonoScreenOn == 1)
 	{
-		if (MonoScreen.surface)
-		{
-			Log("Released %s @ %x - RefCnt = %d", "Mono Screen Surface", MonoScreen.surface, MonoScreen.surface->Release());
-			MonoScreen.surface = 0;
-		}
-		else
-			Log("%s Attempt To Release NULL Ptr", "Mono Screen Surface");
-
 		if (MonoScreen.tex)
 		{
 			Log("Released %s @ %x - RefCnt = %d", "Mono Screen Texture", MonoScreen.tex, MonoScreen.tex->Release());
@@ -969,7 +1016,7 @@ void FreeMonoScreen()
 	MonoScreenOn = 0;
 }
 
-void S_DrawTile(long x, long y, long w, long h, IDirect3DTexture2* t, long tU, long tV, long tW, long tH, long c0, long c1, long c2, long c3)
+void S_DrawTile(long x, long y, long w, long h, LPDIRECT3DTEXTURE9 t, long tU, long tV, long tW, long tH, long c0, long c1, long c2, long c3)
 {
 	D3DTLBUMPVERTEX v[4];
 	D3DTLBUMPVERTEX tri[3];
@@ -1016,21 +1063,19 @@ void S_DrawTile(long x, long y, long w, long h, IDirect3DTexture2* t, long tU, l
 	v[3].color = c2;
 	v[3].specular = 0xFF000000;
 
-	App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTFG_POINT);
-	App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTFG_POINT);
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_TEXTUREPERSPECTIVE, 0);
+	App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+	App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
 	DXAttempt(App.dx.lpD3DDevice->SetTexture(0, t));
 	tri[0] = v[0];
 	tri[1] = v[2];
 	tri[2] = v[3];
-	App.dx.lpD3DDevice->DrawPrimitive(D3DPT_TRIANGLELIST, FVF, v, 3, D3DDP_DONOTCLIP | D3DDP_DONOTUPDATEEXTENTS);
-	App.dx.lpD3DDevice->DrawPrimitive(D3DPT_TRIANGLELIST, FVF, tri, 3, D3DDP_DONOTCLIP | D3DDP_DONOTUPDATEEXTENTS);
-	App.dx.lpD3DDevice->SetRenderState(D3DRENDERSTATE_TEXTUREPERSPECTIVE, 1);
+	HWDrawPrimitive(D3DPT_TRIANGLELIST, v, 3);
+	HWDrawPrimitive(D3DPT_TRIANGLELIST, tri, 3);
 
 	if (App.Filtering)
 	{
-		App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTFG_LINEAR);
-		App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTFG_LINEAR);
+		App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
 	}
 }
 
@@ -1130,42 +1175,24 @@ long S_LoadSave(long load_or_save, long mono, long inv_active)
 void LoadScreen(long screen, long pathNum)
 {
 	FILE* file;
-	DDPIXELFORMAT pixel_format;
-	DDSURFACEDESC2 surf;
+	D3DLOCKED_RECT rect;
 	void* pic;
 	ushort* pSrc;
 	ushort* pDst;
 	ushort col, r, g, b;
 
-	memset(&surf, 0, sizeof(surf));
-	memset(&pixel_format, 0, sizeof(pixel_format));
-	surf.dwSize = sizeof(DDSURFACEDESC2);
-	surf.dwWidth = 640;
-	surf.dwHeight = 480;
-	pixel_format.dwSize = sizeof(DDPIXELFORMAT);
-	pixel_format.dwFlags = DDPF_RGB;
-	pixel_format.dwRGBBitCount = 16;
-	pixel_format.dwRBitMask = 0xF800;
-	pixel_format.dwGBitMask = 0x7E0;
-	pixel_format.dwBBitMask = 0x1F;
-	pixel_format.dwRGBAlphaBitMask = 0;
-	memcpy(&surf.ddpfPixelFormat, &pixel_format, sizeof(surf.ddpfPixelFormat));
-	surf.dwFlags = DDSD_PIXELFORMAT | DDSD_HEIGHT | DDSD_WIDTH | DDSD_CAPS;
-	surf.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_SYSTEMMEMORY;
 	file = FileOpen(screen_paths[pathNum]);
 
-	if (DXCreateSurface(G_dxptr->lpDD, &surf, &screen_surface) && file)
+	if (SUCCEEDED(App.dx.lpD3DDevice->CreateOffscreenPlainSurface(640, 480, D3DFMT_R5G6B5, D3DPOOL_SYSTEMMEM, &screen_surface, 0)) && file)
 	{
 		pic = malloc(0x96000);
 		fseek(file, 0x96000 * screen, SEEK_SET);
 		fread(pic, 0x96000, 1, file);
 		fclose(file);
-		memset(&surf, 0, sizeof(surf));
-		surf.dwSize = sizeof(DDSURFACEDESC2);
-		screen_surface->Lock(0, &surf, DDLOCK_WAIT | DDLOCK_NOSYSLOCK, 0);
-		pDst = (ushort*)surf.lpSurface;
+		screen_surface->LockRect(&rect, 0, 0);
+		pDst = (ushort*)rect.pBits;
 		pSrc = (ushort*)pic;
-		
+
 		for (int i = 0; i < 0x4B000; i++, pSrc++, pDst++)
 		{
 			col = *pSrc;
@@ -1175,7 +1202,7 @@ void LoadScreen(long screen, long pathNum)
 			*pDst = (r << 11) | (g << 6) | b;
 		}
 
-		screen_surface->Unlock(0);
+		screen_surface->UnlockRect();
 		free(pic);
 		MonoScreenOn = 2;
 		ConvertSurfaceToTextures(screen_surface);
@@ -1446,9 +1473,9 @@ static const char* GetStupidText(long type)	//0: next, 1: both, 2: previous
 		if (!type)
 			strcpy(buf, "Ensuite \x1B");
 		else if (type == 1)
-			strcpy(buf, "\x19 Précédent / Ensuite \x1b");
+			strcpy(buf, "\x19 Prï¿½cï¿½dent / Ensuite \x1b");
 		else
-			strcpy(buf, "\x19 Précédent");
+			strcpy(buf, "\x19 Prï¿½cï¿½dent");
 
 		break;
 
@@ -1457,9 +1484,9 @@ static const char* GetStupidText(long type)	//0: next, 1: both, 2: previous
 		if (!type)
 			strcpy(buf, "Weiter \x1B");
 		else if (type == 1)
-			strcpy(buf, "\x19 Zurück / Weiter \x1b");
+			strcpy(buf, "\x19 Zurï¿½ck / Weiter \x1b");
 		else
-			strcpy(buf, "\x19 Zurück");
+			strcpy(buf, "\x19 Zurï¿½ck");
 
 		break;
 

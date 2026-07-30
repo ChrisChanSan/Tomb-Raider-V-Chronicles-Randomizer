@@ -1,4 +1,10 @@
 #include "../tomb5/pch.h"
+// Bink's video path (BinkCopyToBuffer/BinkDDSurfaceType) needs a real DirectDrawSurface -
+// that's still the least-risky way to feed it, so FMV keeps a small standalone DirectDraw
+// object/surface here, decoupled from DXPTR (which is D3D9-only now). Nothing else in the
+// game touches DirectDraw. ddraw.h doesn't redeclare any of d3d9.h's types, so it's safe to
+// include alongside it.
+#include <ddraw.h>
 #include "fmv.h"
 #include "dxshell.h"
 #include "audio.h"
@@ -37,9 +43,13 @@ static long nFmvFrames[9] = { 880, 1826, 3869, 3112, 1903, 1973, 3200, 2799, 172
 static BINK_STRUCT* Bink;
 static LPDIRECTDRAWSURFACE4 BinkSurface;
 static long BinkSurfaceType;
+static LPDIRECTDRAW4 g_fmvDD;
 
 bool LoadBinkStuff()
 {
+	LPDIRECTDRAW pDD;
+	DDSURFACEDESC2 desc;
+
 	hBinkW32 = LoadLibrary("binkw32.dll");
 
 	if (!hBinkW32)
@@ -64,11 +74,45 @@ bool LoadBinkStuff()
 		return 0;
 	}
 
+	// A small standalone, never-presented DirectDraw object + one plain system-memory
+	// offscreen surface, purely so Bink has a real DirectDrawSurface to write video frames
+	// into (via the proven BinkCopyToBuffer/BinkDDSurfaceType path). Non-exclusive, no
+	// display-mode dependency - completely decoupled from the D3D9 rendering device.
+	if (SUCCEEDED(DirectDrawCreate(0, &pDD, 0)))
+	{
+		pDD->QueryInterface(IID_IDirectDraw4, (void**)&g_fmvDD);
+		pDD->Release();
+	}
+
+	if (g_fmvDD)
+	{
+		g_fmvDD->SetCooperativeLevel(App.dx.hWnd, DDSCL_NORMAL);
+		memset(&desc, 0, sizeof(desc));
+		desc.dwSize = sizeof(DDSURFACEDESC2);
+		desc.dwFlags = DDSD_CAPS | DDSD_HEIGHT | DDSD_WIDTH;
+		desc.dwWidth = 640;
+		desc.dwHeight = 480;
+		desc.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_SYSTEMMEMORY;
+		g_fmvDD->CreateSurface(&desc, &BinkSurface, 0);
+	}
+
 	return 1;
 }
 
 void FreeBinkStuff()
 {
+	if (BinkSurface)
+	{
+		BinkSurface->Release();
+		BinkSurface = 0;
+	}
+
+	if (g_fmvDD)
+	{
+		g_fmvDD->Release();
+		g_fmvDD = 0;
+	}
+
 	if (hBinkW32)
 	{
 		FreeLibrary(hBinkW32);
@@ -79,6 +123,8 @@ void FreeBinkStuff()
 void ShowBinkFrame()
 {
 	DDSURFACEDESC2 surf;
+	HDC hdcSurf, hdcWnd;
+	RECT client;
 
 	memset(&surf, 0, sizeof(surf));
 	surf.dwSize = sizeof(DDSURFACEDESC2);
@@ -86,15 +132,18 @@ void ShowBinkFrame()
 	BinkCopyToBuffer(Bink, surf.lpSurface, surf.lPitch, Bink->num, 0, 0, BinkSurfaceType);
 	DXAttempt(BinkSurface->Unlock(0));
 
-	if (App.dx.Flags & DXF_WINDOWED)
-		DXShowFrame();
+	if (SUCCEEDED(BinkSurface->GetDC(&hdcSurf)))
+	{
+		GetClientRect(App.dx.hWnd, &client);
+		hdcWnd = GetDC(App.dx.hWnd);
+		StretchBlt(hdcWnd, 0, 0, client.right, client.bottom, hdcSurf, 0, 0, 640, 480, SRCCOPY);
+		ReleaseDC(App.dx.hWnd, hdcWnd);
+		BinkSurface->ReleaseDC(hdcSurf);
+	}
 }
 
 long PlayFmv(long num)
 {
-	DXDISPLAYMODE* modes;
-	DXDISPLAYMODE* current;
-	long dm, rm, ndms;
 	char name[80];
 	char path[80];
 
@@ -117,39 +166,10 @@ long PlayFmv(long num)
 	strcat(path, name);
 	Log("PlayFMV %s", path);
 	App.fmv = 1;
-	modes = G_dxinfo->DDInfo[App.DXInfo.nDD].D3DDevices[App.DXInfo.nD3D].DisplayModes;
-	rm = 0;
-	dm = App.DXInfo.nDisplayMode;
-	current = &modes[dm];
-
-	if (current->bpp != 16 || current->w != 640 || current->h != 480)
-	{
-		ndms = G_dxinfo->DDInfo[G_dxinfo->nDD].D3DDevices[G_dxinfo->nD3D].nDisplayModes;
-
-		for (int i = 0; i < ndms; i++, modes++)
-		{
-			if (modes->bpp == 16 && modes->w == 640 && modes->h == 480)
-			{
-				App.DXInfo.nDisplayMode = i;
-				break;
-			}
-		}
-
-		DXChangeVideoMode();
-		HWInitialise();
-		ClearSurfaces();
-		rm = 1;
-	}
 
 	Bink = 0;
 	BinkSetSoundSystem(BinkOpenDirectSound, App.dx.lpDS);
 	Bink = (BINK_STRUCT*)BinkOpen(path, 0);
-
-	if (App.dx.Flags & DXF_WINDOWED)
-		BinkSurface = App.dx.lpBackBuffer;
-	else
-		BinkSurface = App.dx.lpPrimaryBuffer;
-
 	BinkSurfaceType = BinkDDSurfaceType(BinkSurface);
 
 	if (Bink)
@@ -178,16 +198,6 @@ long PlayFmv(long num)
 	}
 	else
 		Log("FAILED TO CREATE BINK OBJECT");
-
-	if (rm)
-	{
-		App.DXInfo.nDisplayMode = dm;
-		DXChangeVideoMode();
-		InitWindow(0, 0, App.dx.dwRenderWidth, App.dx.dwRenderHeight, 20, 20480, 80, App.dx.dwRenderWidth, App.dx.dwRenderHeight);
-		InitFont();
-		S_InitD3DMatrix();
-		aSetViewMatrix();
-	}
 
 	DXChangeOutputFormat(sfx_frequencies[SoundQuality], 1);
 	HWInitialise();

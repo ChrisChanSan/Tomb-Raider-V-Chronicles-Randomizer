@@ -43,6 +43,18 @@ typedef struct {
 	D3DVALUE tu, tv;
 } D3DTLVERTEX, *LPD3DTLVERTEX;
 
+// d3d9.h dropped this DX3-7 pointer typedef (D3D9 APIs just take "const D3DMATRIX*" directly).
+typedef D3DMATRIX* LPD3DMATRIX;
+
+// DirectDraw success/enum-continue sentinels (from ddraw.h, no longer included).
+#define DD_OK 0
+#define DD_FALSE 1
+#define DDENUMRET_OK 0
+
+// Color macros from the old d3dtypes.h, still used for plain ARGB packing/unpacking.
+#define RGBA_SETALPHA(rgba, x)	(((x) << 24) | ((rgba) & 0x00ffffff))
+#define RGBA_GETALPHA(rgb)		((rgb) >> 24)
+
 /*typedefs*/
 typedef unsigned char uchar;
 typedef unsigned short ushort;
@@ -456,7 +468,7 @@ struct ROOMLET
 	short nWTri;
 	short padd;
 	float bBox[6];
-	LPDIRECT3DVERTEXBUFFER pVtx;
+	LPDIRECT3DVERTEXBUFFER9 pVtx;
 	float* pSVtx;	//ROOMLET_VERTEX format
 	short* pFac;
 	long* pPrelight;
@@ -1041,7 +1053,7 @@ struct ROOM_INFO
 	long nVerts;
 	long nWaterVerts;
 	long nShoreVerts;
-	LPDIRECT3DVERTEXBUFFER SourceVB;
+	LPDIRECT3DVERTEXBUFFER9 SourceVB;
 	short* FaceData;
 	float posx;
 	float posy;
@@ -1637,7 +1649,7 @@ struct MESH_DATA
 	short ngt3;
 	short* gt3;
 	long* prelight;
-	LPDIRECT3DVERTEXBUFFER SourceVB;
+	LPDIRECT3DVERTEXBUFFER9 SourceVB;
 	D3DVECTOR* Normals;
 	long aFlags;
 	ACMESHVERTEX* aVtx;

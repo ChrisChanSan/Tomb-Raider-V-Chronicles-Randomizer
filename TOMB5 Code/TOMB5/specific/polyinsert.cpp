@@ -171,15 +171,7 @@ void DrawSortList()
 		{
 			pSort = SortList[i];
 			vtx = (D3DTLBUMPVERTEX*)(pSort + 1);
-
-			if (pSort->polytype == 4)
-				App.dx.lpD3DDevice->SetRenderState(D3DRS_TEXTUREPERSPECTIVE, 0);
-
 			HWR_DrawSortList(vtx, pSort->nVtx, pSort->tpage, pSort->drawtype);
-
-			if (pSort->polytype == 4)
-				App.dx.lpD3DDevice->SetRenderState(D3DRS_TEXTUREPERSPECTIVE, 1);
-
 		}
 	}
 	else

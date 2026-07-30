@@ -426,6 +426,42 @@ long DXGetInfo(DXINFO* dxinfo, HWND hwnd)
 
 		lstrcpy(ddi->Name, ddi->DDIdentifier.Description);
 		lstrcpy(ddi->About, ddi->DDIdentifier.Description);
+
+		// On a multi-monitor system, every adapter shows the same GPU name in the setup
+		// dialog's dropdown, making them impossible to tell apart. Append the same display
+		// number Windows' own Settings > Display page shows (from the monitor's device name,
+		// "\\.\DISPLAYn") so the user can match dropdown entries to physical monitors.
+		{
+			HMONITOR hMon;
+			MONITORINFOEXA mi;
+			char* p;
+			long room;
+
+			hMon = G_d3d->GetAdapterMonitor(i);
+			mi.cbSize = sizeof(mi);
+
+			if (hMon && GetMonitorInfoA(hMon, &mi))
+			{
+				p = mi.szDevice + strlen(mi.szDevice);
+
+				while (p > mi.szDevice && isdigit((uchar)p[-1]))
+					p--;
+
+				if (*p)
+				{
+					room = (long)sizeof(ddi->Name) - (long)strlen(ddi->Name) - 24;
+
+					if (room > 0)
+						wsprintf(ddi->Name + strlen(ddi->Name), " (Windows Anzeige %s)", p);
+
+					room = (long)sizeof(ddi->About) - (long)strlen(ddi->About) - 24;
+
+					if (room > 0)
+						wsprintf(ddi->About + strlen(ddi->About), " (Windows Anzeige %s)", p);
+				}
+			}
+		}
+
 		Log("Found - %s\nDriver %s Version %d.%d.%d.%d",
 			ddi->DDIdentifier.Description,
 			ddi->DDIdentifier.Driver,

@@ -77,7 +77,14 @@ void HWInitialise()
 	App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
 	App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);	//texture color
 	App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);	//diffuse color
-	App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);	//texture factor(?)
+	// The original decompile had this as D3DTA_TFACTOR ("texture factor(?)" - even the
+	// decompiler wasn't sure), but D3DRS_TEXTUREFACTOR is never set anywhere in the whole
+	// codebase, so it always sits at its opaque-white default - meaning alpha test/blend
+	// never saw real per-pixel transparency at all. That produces exactly the symptom seen
+	// here: whole rectangular texture cells render instead of just the masked shape (visible
+	// as ghosting around font glyphs and a solid box around alpha-cutout foliage). The
+	// correct source is almost certainly the texture's own alpha channel.
+	App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
 	App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);	//diffuse color
 	App.dx.lpD3DDevice->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, D3DTSS_TCI_PASSTHRU);
 

@@ -87,6 +87,19 @@ long DXCreateD3DDevice(LPDIRECT3D9 d3d, UINT adapter, HWND hwnd, D3DPRESENT_PARA
 
 	flags = (caps.DevCaps & D3DDEVCAPS_HWTRANSFORMANDLIGHT) ? D3DCREATE_HARDWARE_VERTEXPROCESSING : D3DCREATE_SOFTWARE_VERTEXPROCESSING;
 
+	// LoadTextures() (specific/file.cpp, called from LoadLevel on the background
+	// LevelLoadingThread) calls CreateTexture/LockRect on this same device while
+	// the main thread concurrently renders the loading bar (SetRenderState,
+	// BeginScene, DrawPrimitive, Present) on it - a genuine cross-thread D3D9
+	// device race with no flag, undefined behavior per the D3D9 docs. cdb caught
+	// the main thread stuck for good inside the driver's Present() four separate
+	// times, always and only during level loading (the only time a second thread
+	// ever touches the device) - this is what was actually happening, not a
+	// present-call-rate or DWM issue. D3DCREATE_MULTITHREADED makes D3D9 take an
+	// internal critical section around every device call itself, which is the
+	// officially supported way to share one device across threads like this.
+	flags |= D3DCREATE_MULTITHREADED;
+
 	if (DXAttempt(d3d->CreateDevice(adapter, D3DDEVTYPE_HAL, hwnd, flags, pp, device)) != DD_OK)
 	{
 		Log("DXCreateD3DDevice Failed");

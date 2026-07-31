@@ -8,7 +8,7 @@
 
 DXPTR* G_dxptr;
 DXINFO* G_dxinfo;
-LPDIRECT3D9EX G_d3d;
+LPDIRECT3D9 G_d3d;
 HWND G_hwnd;
 char keymap[256];
 
@@ -72,7 +72,7 @@ void* AddStruct(void* p, long num, long size)
 	return ptr;
 }
 
-long DXCreateD3DDevice(LPDIRECT3D9EX d3d, UINT adapter, HWND hwnd, D3DPRESENT_PARAMETERS* pp, LPDIRECT3DDEVICE9EX* device)
+long DXCreateD3DDevice(LPDIRECT3D9 d3d, UINT adapter, HWND hwnd, D3DPRESENT_PARAMETERS* pp, LPDIRECT3DDEVICE9* device)
 {
 	D3DCAPS9 caps;
 	DWORD flags;
@@ -87,15 +87,7 @@ long DXCreateD3DDevice(LPDIRECT3D9EX d3d, UINT adapter, HWND hwnd, D3DPRESENT_PA
 
 	flags = (caps.DevCaps & D3DDEVCAPS_HWTRANSFORMANDLIGHT) ? D3DCREATE_HARDWARE_VERTEXPROCESSING : D3DCREATE_SOFTWARE_VERTEXPROCESSING;
 
-	// CreateDeviceEx instead of CreateDevice: cdb caught the game thread stuck for
-	// good inside the NVIDIA driver during Present() (DXShowFrame), independent of
-	// how often Present() was called - a well-documented failure mode of legacy
-	// (non-Ex) D3D9 swap chains under DWM composition in windowed mode. Ex devices
-	// cooperate with DWM properly and also never raise D3DERR_DEVICELOST from
-	// ordinary focus/window changes. pFullscreenDisplayMode must be NULL when
-	// pp->Windowed is TRUE (always true here - see the border-less-windowed
-	// comment in DXCreate).
-	if (DXAttempt(d3d->CreateDeviceEx(adapter, D3DDEVTYPE_HAL, hwnd, flags, pp, 0, device)) != DD_OK)
+	if (DXAttempt(d3d->CreateDevice(adapter, D3DDEVTYPE_HAL, hwnd, flags, pp, device)) != DD_OK)
 	{
 		Log("DXCreateD3DDevice Failed");
 		return 0;
@@ -480,7 +472,7 @@ long DXGetInfo(DXINFO* dxinfo, HWND hwnd)
 	G_hwnd = hwnd;
 	G_dxinfo = dxinfo;
 
-	Direct3DCreate9Ex(D3D_SDK_VERSION, &G_d3d);
+	G_d3d = Direct3DCreate9(D3D_SDK_VERSION);
 
 	if (!G_d3d)
 	{

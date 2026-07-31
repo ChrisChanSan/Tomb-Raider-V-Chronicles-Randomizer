@@ -1399,10 +1399,23 @@ long S_LoadLevelFile(long num)
 	{
 		if (App.dx.Flags & DXF_HWR && loadbar_on)
 			S_DrawLoadBar();
+
+		// This loop just repaints the loading bar while a background thread
+		// does the actual file I/O - it doesn't need to call Present() (via
+		// S_DrawLoadBar -> S_DumpScreenFrame -> DXShowFrame) any faster than a
+		// human can see it update. Left unthrottled, it hammers Present() as
+		// fast as the CPU allows with no vsync (D3DPRESENT_INTERVAL_IMMEDIATE)
+		// and no message pumping in between - cdb caught the game thread stuck
+		// for good deep inside the NVIDIA driver (nvd3dum) from exactly this
+		// call site, almost certainly a present-queue/DWM stall from calling
+		// Present() far harder than this code was ever tested against on
+		// original hardware.
+		Sleep(1);
 	}
 
 	if (App.dx.Flags & DXF_HWR && !S_DrawLoadBar())
-		while (!S_DrawLoadBar());
+		while (!S_DrawLoadBar())
+			Sleep(1);
 
 	return 1;
 }

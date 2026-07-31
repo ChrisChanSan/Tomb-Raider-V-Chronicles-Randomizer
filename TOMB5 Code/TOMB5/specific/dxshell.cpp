@@ -728,14 +728,18 @@ static long DXUpdateJoystickDirectInput()
 
 	// Right stick tilt as 4 extra digital "buttons" (bits 16-19), same as the XInput
 	// path - not used for camera control, just an alternate 4-way bindable input.
-	long rrx = js.lRx;
-	long rry = js.lRy;
-	const long rdeadzone = 150;
+	// Reads Z/Rz, not Rx/Ry - a full-axis log dump on the reporting controller
+	// showed Rx/Ry permanently pinned at the range minimum (dead/unmapped), while
+	// Z/Rz swung across the whole range and idled near its midpoint rather than
+	// near 0, matching a stick rather than a trigger axis (X/Y is the left stick).
+	long rrx = js.lZ;
+	long rry = js.lRz;
+	const long rdeadzone = 500;	// wide enough to absorb this axis's off-center rest position after DIPROP_RANGE remapping
 
 	if (rrx > -rdeadzone && rrx < rdeadzone) rrx = 0;
 	if (rry > -rdeadzone && rry < rdeadzone) rry = 0;
 
-	if (rry < 0) fire |= 1 << 16;	// Stick R Up (Ry is "up = negative", same convention as the left stick's Y)
+	if (rry < 0) fire |= 1 << 16;	// Stick R Up
 	if (rry > 0) fire |= 1 << 17;	// Stick R Down
 	if (rrx < 0) fire |= 1 << 18;	// Stick R Left
 	if (rrx > 0) fire |= 1 << 19;	// Stick R Right
@@ -855,11 +859,14 @@ static void DXInitJoystick(HWND hwnd)
 	G_dxptr->Joystick->SetProperty(DIPROP_RANGE, &range.diph);
 
 	// Right stick, read as 4 extra digital "buttons" in DXUpdateJoystickDirectInput
-	// (see joy_fire bits 16-19) - most twin-stick DirectInput/HID gamepads report it
-	// on Rx/Ry (X/Y already confirmed to be the left stick).
-	range.diph.dwObj = DIJOFS_RX;
+	// (see joy_fire bits 16-19). Rx/Ry turned out to be dead on this controller
+	// (logged permanently pinned at the range minimum, never changing) - Z/Rz
+	// confirmed live instead (X/Y is the left stick), identified from a full-axis
+	// log dump: they swing across the whole native range and idle near its
+	// midpoint rather than near 0, which rules out them being a trigger axis.
+	range.diph.dwObj = DIJOFS_Z;
 	G_dxptr->Joystick->SetProperty(DIPROP_RANGE, &range.diph);
-	range.diph.dwObj = DIJOFS_RY;
+	range.diph.dwObj = DIJOFS_RZ;
 	G_dxptr->Joystick->SetProperty(DIPROP_RANGE, &range.diph);
 
 	G_dxptr->Joystick->Acquire();

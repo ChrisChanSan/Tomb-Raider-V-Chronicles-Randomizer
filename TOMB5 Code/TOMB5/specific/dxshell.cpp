@@ -741,8 +741,8 @@ static long DXUpdateJoystickDirectInput()
 
 	if (rry < 0) fire |= 1 << 16;	// Stick R Up
 	if (rry > 0) fire |= 1 << 17;	// Stick R Down
-	if (rrx > 0) fire |= 1 << 18;	// Stick R Left (Z is inverted relative to X - confirmed by testing, left/right were swapped)
-	if (rrx < 0) fire |= 1 << 19;	// Stick R Right
+	if (rrx < 0) fire |= 1 << 18;	// Stick R Left
+	if (rrx > 0) fire |= 1 << 19;	// Stick R Right
 
 	joystick_read_fire = fire;
 

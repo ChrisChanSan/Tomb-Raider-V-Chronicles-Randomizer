@@ -496,17 +496,30 @@ void DoOptions()
 						lp2++;
 					}
 
-					jLayout[i] = lp2;
+					// Ignore the button currently bound to Action/Select (jLayout[4]) -
+					// it's what the user just pressed to select this row and enter
+					// waiting_for_key in the first place, and is very likely still
+					// physically held on this very next frame (dbinput's edge-detect
+					// only guards the *selection* press, not this capture read, which
+					// reads the raw, non-debounced joystick state). Without this, that
+					// same still-held press immediately re-captures itself as the new
+					// bind before the user can press anything else - this is the exact
+					// joystick equivalent of the keyboard capture loop below excluding
+					// DIK_RETURN for the same reason.
+					if (lp2 != jLayout[4])
+					{
+						jLayout[i] = lp2;
 
-					// If another action already used this same button/stick-direction,
-					// unbind it (jLayout entries have no "empty" state otherwise, so -1
-					// marks unbound - see Key()'s explicit check for the encoded value
-					// 255, and JoystickButtons' NULL check below).
-					for (int k = 0; k < 15; k++)
-						if (k != i && jLayout[k] == lp2)
-							jLayout[k] = -1;
+						// If another action already used this same button/stick-direction,
+						// unbind it (jLayout entries have no "empty" state otherwise, so -1
+						// marks unbound - see Key()'s explicit check for the encoded value
+						// 255, and JoystickButtons' NULL check below).
+						for (int k = 0; k < 15; k++)
+							if (k != i && jLayout[k] == lp2)
+								jLayout[k] = -1;
 
-					waiting_for_key = 0;
+						waiting_for_key = 0;
+					}
 				}
 			}
 

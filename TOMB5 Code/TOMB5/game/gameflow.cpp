@@ -81,12 +81,12 @@ long GlobalSoftReset;
 uchar bDoCredits = 0;
 char JustLoaded;
 
-// Originally left several slots (including the trailing dev/test levels) marked
-// unavailable (red, unselectable) in the select-level screen - only ever used by
-// that screen (see the two usages below), so with Level Select now a general debug
-// entry rather than something gated behind Gameflow->PlayAnyLevel, there is no
-// reason left to keep any level blocked off here.
-static char available_levels[40] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+// Marks which level slots are actually selectable (not red/blocked) in the select-
+// level screen - only ever used by that screen (see the two usages below). The
+// trailing dev/test level slots (and a few others) are deliberately left at 0: their
+// .trc data was never shipped in the retail data folder, so selecting them crashes
+// on load (FileOpen failure) rather than just being an artificial UI restriction.
+static char available_levels[40] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 static char fmv_to_play[2] = { 0, 0 };
 static char num_fmvs = 0;
 static char DEL_playingamefmv = 0;

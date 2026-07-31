@@ -4,6 +4,7 @@
 #include "function_table.h"
 #include "winmain.h"
 #include "input.h"
+#include <Xinput.h>
 
 DXPTR* G_dxptr;
 DXINFO* G_dxinfo;
@@ -644,13 +645,69 @@ void DXFreeInfo(DXINFO* dxinfo)
 	free(dxinfo->DSInfo);
 }
 
+// Was a complete stub (always zeroed everything, so ReadJoystick()/Key(n>=256) in
+// input.cpp never had real data no matter what ControlMethod was set to) - the game's
+// own Options -> Controls -> Joystick screen (LoadSave.cpp) and its remapping/"Reset"
+// UI were otherwise fully built and working already, just with nothing behind them.
+// Polls XInput controller 0 (covers DS4Windows/DualSense in its default Xbox-emulation
+// output mode too, not just real Xbox controllers) and maps it into the same shape the
+// old DirectInput-joystick-era code already expects, so nothing else needs to change:
+//   - joystick_read_x/y: left stick, deadzoned, scaled from XInput's -32768..32767
+//     range down to roughly the old -128..127 range S_UpdateInput()'s +-8 thresholds
+//     were written against. D-pad is ORed in as a digital alternative.
+//   - joystick_read_fire: one bit per physical button, in "Joy 1".."Joy 16" order
+//     (bit0="Joy 1" etc) - the exact numbering JoyStickButtons[]/jLayout[] already
+//     use, so the existing remapping screen assigns actions to these correctly
+//     without needing to know they're specifically Xbox-layout buttons underneath.
 long DXUpdateJoystick()
 {
+	XINPUT_STATE state;
+
 	joystick_read = 0;
 	joystick_read_x = 0;
 	joystick_read_y = 0;
 	joystick_read_fire = 0;
-	return 0;
+
+	if (XInputGetState(0, &state) != ERROR_SUCCESS)
+		return 0;
+
+	joystick_read = 1;
+
+	long lx = state.Gamepad.sThumbLX;
+	long ly = state.Gamepad.sThumbLY;
+
+	if (lx > -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE && lx < XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+		lx = 0;
+
+	if (ly > -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE && ly < XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+		ly = 0;
+
+	joystick_read_x = lx / 256;	// -32768..32767 -> ~-128..127
+	joystick_read_y = -ly / 256;	// inverted: stick pushed up (ly>0) means forward, which S_UpdateInput() reads as joy_y<0
+
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT)  joystick_read_x = -20;
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT) joystick_read_x = 20;
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_UP)    joystick_read_y = -20;
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_DOWN)  joystick_read_y = 20;
+
+	long fire = 0;
+
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_A)             fire |= 1 << 0;	// Joy 1
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_B)             fire |= 1 << 1;	// Joy 2
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_X)             fire |= 1 << 2;	// Joy 3
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_Y)             fire |= 1 << 3;	// Joy 4
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER) fire |= 1 << 4;	// Joy 5
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER)fire |= 1 << 5;	// Joy 6
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_BACK)          fire |= 1 << 6;	// Joy 7
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_START)         fire |= 1 << 7;	// Joy 8
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_LEFT_THUMB)    fire |= 1 << 8;	// Joy 9
+	if (state.Gamepad.wButtons & XINPUT_GAMEPAD_RIGHT_THUMB)   fire |= 1 << 9;	// Joy 10
+	if (state.Gamepad.bLeftTrigger > 30)                       fire |= 1 << 10;	// Joy 11
+	if (state.Gamepad.bRightTrigger > 30)                      fire |= 1 << 11;	// Joy 12
+
+	joystick_read_fire = fire;
+
+	return 1;
 }
 
 void DXInitInput(HWND hwnd, HINSTANCE hinstance)

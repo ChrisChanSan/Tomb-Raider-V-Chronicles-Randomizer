@@ -245,10 +245,16 @@ static void DoWeaponHotkey()
 
 long Key(long number)
 {
-	short key = layout[1][number];
-
 	if (number >= 256)
-		return joy_fire & (1 << number);
+		// number is jLayout[n]+256 (a "read from the joystick, not the keyboard"
+		// signal) - joy_fire holds one bit per physical button starting at bit 0
+		// (see DXUpdateJoystick), so the actual bit position needs the 256 taken
+		// back out. Left shifting by number (up to ~265) directly here previously
+		// always overflowed to 0 - this joystick-button path was dead even once
+		// DXUpdateJoystick() itself was made to return real data.
+		return joy_fire & (1 << (number - 256));
+
+	short key = layout[1][number];
 
 	if (keymap[key])
 		return 1;

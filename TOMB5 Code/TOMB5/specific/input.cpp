@@ -83,8 +83,8 @@ const char* JoyStickButtons[20] =
 	"Stick R Up", "Stick R Down", "Stick R Left", "Stick R Right"
 };
 
-long jLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-long defaultJLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+long jLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+long defaultJLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 short layout[2][18] =
 {
@@ -496,7 +496,7 @@ long S_UpdateInput()
 
 	DoWeaponHotkey();
 
-	if (keymap[DIK_0])
+	if (keymap[DIK_0] || (ControlMethod == 1 && Key(jLayout[13] + 256)))
 	{
 		if (!med_hotkey_timer)
 		{
@@ -526,7 +526,7 @@ long S_UpdateInput()
 			}
 		}
 	}
-	else if (keymap[DIK_9])
+	else if (keymap[DIK_9] || (ControlMethod == 1 && Key(jLayout[14] + 256)))
 	{
 		if (!med_hotkey_timer)
 		{

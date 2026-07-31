@@ -314,7 +314,7 @@ void DoOptions()
 			keyboard_buttons = KeyboardButtons;
 
 		if (ControlMethod == 1)
-			nMask = 14;	// 13 bindable actions: Duck..Inventory (10) + Pause, Save, Load
+			nMask = 16;	// 15 bindable actions: Duck..Inventory (10) + Pause, Save, Load, Small Medi, Large Medi
 		else if (ControlMethod == 2)
 			nMask = 11;
 		else
@@ -374,6 +374,8 @@ void DoOptions()
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, "Pause", 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Save), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Load), 0);
+			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Small_Medipack), 0);
+			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Large_Medipack), 0);
 
 			for (lp = 0, f = 3; lp < 10; lp++, f++)
 			{
@@ -382,18 +384,21 @@ void DoOptions()
 			}
 
 			// Pause has a keyboard layout slot (role 16, "P") to show as a hint;
-			// Quicksave/Quickload never went through the rebindable layout[]
-			// system on keyboard (S_UpdateInput checks keymap[DIK_F5]/DIK_F6
-			// directly), so their keyboard hint is just the fixed key they use.
+			// Quicksave/Quickload/the medipack hotkeys never went through the
+			// rebindable layout[] system on keyboard (S_UpdateInput checks
+			// keymap[DIK_F5]/DIK_F6/DIK_0/DIK_9 directly), so their keyboard hint
+			// is just the fixed key they use.
 			sprintf(buf, "(%s)", keyboard_buttons[layout[1][16]]);
 			PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f++ * font_height, 5, buf, 0);
 			PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f++ * font_height, 5, "(F5)", 0);
 			PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f++ * font_height, 5, "(F6)", 0);
+			PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f++ * font_height, 5, "(0)", 0);
+			PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f++ * font_height, 5, "(9)", 0);
 
 			y = 3;
 			i = 1;
 
-			for (lp = 0; lp < 13; lp++)
+			for (lp = 0; lp < 15; lp++)
 			{
 				if (waiting_for_key && (sel2 & (1 << i)))
 					text = SCRIPT_TEXT(TXT_Waiting);
@@ -497,7 +502,7 @@ void DoOptions()
 					// unbind it (jLayout entries have no "empty" state otherwise, so -1
 					// marks unbound - see Key()'s explicit check for the encoded value
 					// 255, and JoystickButtons' NULL check below).
-					for (int k = 0; k < 13; k++)
+					for (int k = 0; k < 15; k++)
 						if (k != i && jLayout[k] == lp2)
 							jLayout[k] = -1;
 

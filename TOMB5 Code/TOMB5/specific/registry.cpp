@@ -200,6 +200,8 @@ bool LoadSettings()
 	REG_ReadLong((char*)"JPau", (ulong&)jLayout[10], 10);
 	REG_ReadLong((char*)"JSav", (ulong&)jLayout[11], 11);
 	REG_ReadLong((char*)"JLod", (ulong&)jLayout[12], 12);
+	REG_ReadLong((char*)"JSmd", (ulong&)jLayout[13], 13);
+	REG_ReadLong((char*)"JBmd", (ulong&)jLayout[14], 14);
 
 	REG_ReadLong((char*)"MusicVolume", (ulong&)MusicVolume, 80);
 	REG_ReadLong((char*)"SFXVolume", (ulong&)SFXVolume, 90);
@@ -249,6 +251,8 @@ void SaveSettings()
 	REG_WriteLong((char*)"JPau", jLayout[10]);
 	REG_WriteLong((char*)"JSav", jLayout[11]);
 	REG_WriteLong((char*)"JLod", jLayout[12]);
+	REG_WriteLong((char*)"JSmd", jLayout[13]);
+	REG_WriteLong((char*)"JBmd", jLayout[14]);
 
 	REG_WriteLong((char*)"ControlMethod", ControlMethod);
 	REG_WriteLong((char*)"MusicVolume", MusicVolume);

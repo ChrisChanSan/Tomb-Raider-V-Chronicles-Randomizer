@@ -249,6 +249,14 @@ static void DoWeaponHotkey()
 
 long Key(long number)
 {
+	if (number == 255)
+		// jLayout[n] was -1 (unbound - see LoadSave.cpp's auto-unbind-on-conflict),
+		// so the caller's "+256" offset landed on 255 instead of a real >=256
+		// joystick-button value. 255 is never a real keyboard role index (those
+		// only go 0-17) or a real encoded joystick value (real button indices are
+		// 0-19, i.e. 256-275), so it's safe to use as this sentinel.
+		return 0;
+
 	if (number >= 256)
 		// number is jLayout[n]+256 (a "read from the joystick, not the keyboard"
 		// signal) - joy_fire holds one bit per physical button starting at bit 0

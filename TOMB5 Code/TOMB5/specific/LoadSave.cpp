@@ -395,7 +395,12 @@ void DoOptions()
 
 			for (lp = 0; lp < 13; lp++)
 			{
-				text = (waiting_for_key && (sel2 & (1 << i))) ? SCRIPT_TEXT(TXT_Waiting) : JoyStickButtons[jLayout[lp]];
+				if (waiting_for_key && (sel2 & (1 << i)))
+					text = SCRIPT_TEXT(TXT_Waiting);
+				else if (jLayout[lp] == -1)
+					text = "---";
+				else
+					text = JoyStickButtons[jLayout[lp]];
 				PrintString(phd_centerx + (phd_centerx >> 2), y++ * font_height, (waiting_for_key && (sel & (1 << i++))) ? 1 : 6, text, 0);
 			}
 		}
@@ -487,6 +492,15 @@ void DoOptions()
 					}
 
 					jLayout[i] = lp2;
+
+					// If another action already used this same button/stick-direction,
+					// unbind it (jLayout entries have no "empty" state otherwise, so -1
+					// marks unbound - see Key()'s explicit check for the encoded value
+					// 255, and JoystickButtons' NULL check below).
+					for (int k = 0; k < 13; k++)
+						if (k != i && jLayout[k] == lp2)
+							jLayout[k] = -1;
+
 					waiting_for_key = 0;
 				}
 			}

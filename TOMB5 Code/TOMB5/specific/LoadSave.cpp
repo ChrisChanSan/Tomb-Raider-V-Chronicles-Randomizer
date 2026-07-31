@@ -313,7 +313,9 @@ void DoOptions()
 		else
 			keyboard_buttons = KeyboardButtons;
 
-		if (ControlMethod)
+		if (ControlMethod == 1)
+			nMask = 14;	// 13 bindable actions: Duck..Inventory (10) + Pause, Save, Load
+		else if (ControlMethod == 2)
 			nMask = 11;
 		else
 			nMask = 17;
@@ -369,6 +371,9 @@ void DoOptions()
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Look), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Roll), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Inventory), 0);
+			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, "Pause", 0);
+			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Save), 0);
+			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Load), 0);
 
 			for (lp = 0, f = 3; lp < 10; lp++, f++)
 			{
@@ -376,10 +381,19 @@ void DoOptions()
 				PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f * font_height, 5, buf, 0);
 			}
 
+			// Pause has a keyboard layout slot (role 16, "P") to show as a hint;
+			// Quicksave/Quickload never went through the rebindable layout[]
+			// system on keyboard (S_UpdateInput checks keymap[DIK_F5]/DIK_F6
+			// directly), so their keyboard hint is just the fixed key they use.
+			sprintf(buf, "(%s)", keyboard_buttons[layout[1][16]]);
+			PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f++ * font_height, 5, buf, 0);
+			PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f++ * font_height, 5, "(F5)", 0);
+			PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f++ * font_height, 5, "(F6)", 0);
+
 			y = 3;
 			i = 1;
 
-			for (lp = 0; lp < 10; lp++)
+			for (lp = 0; lp < 13; lp++)
 			{
 				text = (waiting_for_key && (sel2 & (1 << i))) ? SCRIPT_TEXT(TXT_Waiting) : JoyStickButtons[jLayout[lp]];
 				PrintString(phd_centerx + (phd_centerx >> 2), y++ * font_height, (waiting_for_key && (sel & (1 << i++))) ? 1 : 6, text, 0);
@@ -494,7 +508,7 @@ void DoOptions()
 			SoundEffect(SFX_MENU_SELECT, 0, 2);
 			memcpy(layout[1], layout, 72);
 			ControlMethod = 0;
-			memcpy(jLayout, defaultJLayout, 32);
+			memcpy(jLayout, defaultJLayout, sizeof(jLayout));	// was a hardcoded "32" (bytes) - only reset the first 8 of 32 longs, silently skipping Roll/Inventory/Pause/Save/Load
 		}
 
 		if (sel & 1)

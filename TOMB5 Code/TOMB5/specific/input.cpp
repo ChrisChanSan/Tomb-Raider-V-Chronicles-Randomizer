@@ -74,8 +74,8 @@ const char* JoyStickButtons[16] =
 	"Joy 9", "Joy 10", "Joy 11", "Joy 12", "Joy 13", "Joy 14", "Joy 15", "Joy 16"
 };
 
-long jLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-long defaultJLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+long jLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+long defaultJLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 short layout[2][18] =
 {
@@ -446,6 +446,9 @@ long S_UpdateInput()
 
 		if (Key(jLayout[9] + 256))
 			linput |= IN_OPTION;
+
+		if (Key(jLayout[10] + 256))
+			linput |= IN_PAUSE;
 	}
 
 	if (keymap[DIK_ESCAPE])
@@ -564,10 +567,10 @@ long S_UpdateInput()
 
 	if (!gfGameMode && Gameflow->LoadSaveEnabled)
 	{
-		if (keymap[DIK_F5])
+		if (keymap[DIK_F5] || (ControlMethod == 1 && Key(jLayout[11] + 256)))
 			linput |= IN_SAVE;
 
-		if (keymap[DIK_F6])
+		if (keymap[DIK_F6] || (ControlMethod == 1 && Key(jLayout[12] + 256)))
 			linput |= IN_LOAD;
 	}
 

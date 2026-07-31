@@ -1786,8 +1786,12 @@ struct DXINFO
 
 struct DXPTR
 {
-	LPDIRECT3D9 lpD3D;
-	LPDIRECT3DDEVICE9 lpD3DDevice;
+	// Ex interfaces (see DXGetInfo/DXCreateD3DDevice in dxshell.cpp): IDirect3D9Ex
+	// and IDirect3DDevice9Ex both publicly inherit from their non-Ex counterparts,
+	// so every existing ->SomeD3D9Method() call site elsewhere in the engine
+	// keeps working unchanged - only device/interface creation needed to change.
+	LPDIRECT3D9EX lpD3D;
+	LPDIRECT3DDEVICE9EX lpD3DDevice;
 	D3DPRESENT_PARAMETERS PresentParams;
 	LPDIRECTSOUND lpDS;
 	ulong dwRenderWidth;

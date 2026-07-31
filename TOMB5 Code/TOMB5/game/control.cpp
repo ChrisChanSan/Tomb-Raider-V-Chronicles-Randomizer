@@ -264,7 +264,9 @@ long ControlPhase(long nframes, long demo_mode)
 
 		if (cutseq_trig)
 		{
-			if (tomb5.cutseq_skipper && keymap[DIK_ESCAPE] && !ScreenFading && !bDoCredits)	//skip them with esc
+			// Cross/Enter (IN_SELECT) added alongside Escape, same reasoning as the
+			// FMV skip fix - Cross is already the confirm button everywhere else.
+			if (tomb5.cutseq_skipper && (keymap[DIK_ESCAPE] || (input & IN_SELECT)) && !ScreenFading && !bDoCredits)
 				do_cutseq_skipper_stuff();
 
 			input = 0;

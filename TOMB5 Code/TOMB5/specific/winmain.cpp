@@ -353,12 +353,56 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 				if (App.SetupComplete)
 				{
+					// Bounded wait: the game thread can occasionally stall for
+					// several seconds inside the graphics driver's Present()
+					// call (observed via cdb: stuck in nvd3dum during the
+					// level-load progress bar, unrelated to focus changes).
+					// These used to be plain while(){} spins - if the game
+					// thread never reached a safe point, this handler (running
+					// synchronously on the window procedure) would spin here
+					// forever, freezing the entire application with no way to
+					// recover short of killing the process. Give it a couple
+					// seconds, then leave the game thread running unpaused
+					// rather than deadlock the whole app over a driver hiccup.
+					DWORD waitStart = GetTickCount();
+					bool safeToSuspend = true;
+
 					Log("HangGameThread");
-					while (App.dx.InScene) {};
-					App.dx.WaitAtBeginScene = 1;
-					while (!App.dx.InScene) {};
-					SuspendThread((HANDLE)MainThread.handle);
-					Log("Game Thread Suspended");
+
+					while (App.dx.InScene)
+					{
+						if (GetTickCount() - waitStart > 2000)
+						{
+							safeToSuspend = false;
+							break;
+						}
+					}
+
+					if (safeToSuspend)
+					{
+						App.dx.WaitAtBeginScene = 1;
+						waitStart = GetTickCount();
+
+						while (!App.dx.InScene)
+						{
+							if (GetTickCount() - waitStart > 2000)
+							{
+								safeToSuspend = false;
+								break;
+							}
+						}
+					}
+
+					if (safeToSuspend)
+					{
+						SuspendThread((HANDLE)MainThread.handle);
+						Log("Game Thread Suspended");
+					}
+					else
+					{
+						App.dx.WaitAtBeginScene = 0;
+						Log("Game Thread appeared stuck, skipping suspend to avoid a deadlock");
+					}
 				}
 
 				return 0;

@@ -497,13 +497,18 @@ long TitleOptions()
 		Chris_Menu = 0;
 
 		font_height = GetFixedScale(36);
-		PrintString(phd_centerx, phd_winymax - 4 * font_height, (selection & 1) ? 1 : 2, SCRIPT_TEXT(TXT_New_Game), FF_CENTER);
-		PrintString(phd_centerx, phd_winymax - 3 * font_height, (selection & 2) ? 1 : 2, SCRIPT_TEXT(TXT_Load_Game), FF_CENTER);
-		PrintString(phd_centerx, phd_winymax - 2 * font_height, (selection & 4) ? 1 : 2, SCRIPT_TEXT(TXT_Options), FF_CENTER);
-		PrintString(phd_centerx, phd_winymax - 1 * font_height, (selection & 8) ? 1 : 2, SCRIPT_TEXT(TXT_Exit), FF_CENTER);
+		PrintString(phd_centerx, phd_winymax - 5 * font_height, (selection & 1) ? 1 : 2, SCRIPT_TEXT(TXT_New_Game), FF_CENTER);
+		PrintString(phd_centerx, phd_winymax - 4 * font_height, (selection & 2) ? 1 : 2, SCRIPT_TEXT(TXT_Load_Game), FF_CENTER);
+		PrintString(phd_centerx, phd_winymax - 3 * font_height, (selection & 4) ? 1 : 2, SCRIPT_TEXT(TXT_Options), FF_CENTER);
+		// "Level Select" has no baked-in localized string id (would need editing the
+		// SCRIPT.DAT/ENGLISH.DAT string wad), so it's printed as a plain literal
+		// instead of going through SCRIPT_TEXT() - PrintString already accepts raw
+		// C strings directly elsewhere (e.g. the "\x18"/"\x1a" arrow glyphs below).
+		PrintString(phd_centerx, phd_winymax - 2 * font_height, (selection & 8) ? 1 : 2, "Level Select", FF_CENTER);
+		PrintString(phd_centerx, phd_winymax - 1 * font_height, (selection & 16) ? 1 : 2, SCRIPT_TEXT(TXT_Exit), FF_CENTER);
 		font_height = default_font_height;
 
-		flag = 8;
+		flag = 16;
 		break;
 
 	case 3://options menu
@@ -587,6 +592,15 @@ long TitleOptions()
 				break;
 
 			case 8:
+				// Level Select - reuses the same "select level" screen (menu 1)
+				// New Game already uses when Gameflow->PlayAnyLevel is set, just
+				// always reachable here instead of gated behind that gameflow flag.
+				selection_bak = selection;
+				selection = 1;
+				menu = 1;
+				break;
+
+			case 16:
 				ret = 4;
 				break;
 			}

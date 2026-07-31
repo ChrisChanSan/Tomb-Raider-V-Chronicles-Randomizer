@@ -1395,13 +1395,13 @@ long S_PauseMenu()
 	do
 	{
 		S_InitialisePolyList();
+		SetDebounce = 1;
 
 		if (fade)
 			dbinput = 0;
 		else
 			S_UpdateInput();
 
-		SetDebounce = 1;
 		S_DisplayMonoScreen();
 		ret = S_DisplayPauseMenu(0);
 		UpdatePulseColour();

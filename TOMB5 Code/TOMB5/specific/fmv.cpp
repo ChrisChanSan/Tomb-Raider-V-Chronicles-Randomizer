@@ -235,7 +235,10 @@ long PlayFmv(long num)
 
 		for (int i = 0; i != nFmvFrames[num]; i++)
 		{
-			if (input & IN_OPTION || input & IN_DRAW || MainThread.ended)
+			// IN_SELECT added so Cross/Enter also skips FMVs, not just Escape
+			// (IN_OPTION) or Draw Weapon (IN_DRAW) - matches Cross already being
+			// the confirm button everywhere else in the menus.
+			if (input & IN_OPTION || input & IN_DRAW || input & IN_SELECT || MainThread.ended)
 				break;
 
 			BinkNextFrame(Bink);

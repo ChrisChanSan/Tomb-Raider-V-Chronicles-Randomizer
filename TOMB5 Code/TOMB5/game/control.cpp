@@ -264,9 +264,14 @@ long ControlPhase(long nframes, long demo_mode)
 
 		if (cutseq_trig)
 		{
-			// Cross/Enter (IN_SELECT) added alongside Escape, same reasoning as the
-			// FMV skip fix - Cross is already the confirm button everywhere else.
-			if (tomb5.cutseq_skipper && (keymap[DIK_ESCAPE] || (input & IN_SELECT)) && !ScreenFading && !bDoCredits)
+			// Cross added alongside Escape, same reasoning as the FMV skip fix -
+			// Cross is already the confirm button everywhere else. Checked via
+			// Key(257) (raw joy_fire bit 1, Cross on this controller's DirectInput
+			// mapping), not input & IN_SELECT - bDisableLaraControl above already
+			// masks input down to IN_LOOK only during cutscenes (that masking is
+			// exactly why the original code checked keymap[DIK_ESCAPE] directly
+			// instead of input & IN_DESELECT too).
+			if (tomb5.cutseq_skipper && (keymap[DIK_ESCAPE] || (ControlMethod == 1 && Key(257))) && !ScreenFading && !bDoCredits)
 				do_cutseq_skipper_stuff();
 
 			input = 0;

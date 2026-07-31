@@ -707,11 +707,17 @@ static long DXUpdateJoystickDirectInput()
 
 	if (LOWORD(js.rgdwPOV[0]) != 0xFFFF)	// POV hat centered reports as -1/0xFFFFFFFF
 	{
-		DWORD pov = js.rgdwPOV[0];	// hundredths of a degree, 0 = up, clockwise
-		if (pov > 31500 || pov < 4500)  joystick_read_y = -20;
-		if (pov > 4500 && pov < 13500)  joystick_read_x = 20;
-		if (pov > 13500 && pov < 22500) joystick_read_y = 20;
-		if (pov > 22500 && pov < 31500) joystick_read_x = -20;
+		// hundredths of a degree, 0 = up, clockwise (4500 = up-right, 9000 = right, ...).
+		// Each band is inclusive at both ends so a diagonal angle (4500/13500/22500/31500)
+		// falls into its two neighbouring bands at once, setting both axes together -
+		// this was previously 4 exclusive 90-degree slices with gaps at the exact
+		// diagonal angles, so a diagonal press matched none of them and only one axis
+		// (whichever direction got pressed fractionally first) ever moved.
+		DWORD pov = js.rgdwPOV[0];
+		if (pov <= 4500 || pov >= 31500) joystick_read_y = -20;
+		if (pov >= 4500 && pov <= 13500) joystick_read_x = 20;
+		if (pov >= 13500 && pov <= 22500) joystick_read_y = 20;
+		if (pov >= 22500 && pov <= 31500) joystick_read_x = -20;
 	}
 
 	long fire = 0;

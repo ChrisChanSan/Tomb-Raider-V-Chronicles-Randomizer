@@ -1340,7 +1340,7 @@ long S_DisplayPauseMenu(long reset)
 				SoundEffect(SFX_MENU_CHOOSE, 0, SFX_ALWAYS);
 			}
 
-			if (dbinput & IN_DESELECT)
+			if (dbinput & (IN_DESELECT | IN_PAUSE))
 			{
 				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 				return 1;
@@ -1363,7 +1363,7 @@ long S_DisplayPauseMenu(long reset)
 	{
 		DoOptions();
 
-		if (dbinput & IN_DESELECT)
+		if (dbinput & (IN_DESELECT | IN_PAUSE))
 		{
 			menu = 0;
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
@@ -1373,7 +1373,7 @@ long S_DisplayPauseMenu(long reset)
 	{
 		DisplayStatsUCunt();
 
-		if (dbinput & IN_DESELECT)
+		if (dbinput & (IN_DESELECT | IN_PAUSE))
 		{
 			menu = 0;
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);

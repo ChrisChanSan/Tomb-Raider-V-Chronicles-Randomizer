@@ -377,23 +377,12 @@ void DoOptions()
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Small_Medipack), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Large_Medipack), 0);
 
-			for (lp = 0, f = 3; lp < 10; lp++, f++)
-			{
-				sprintf(buf, "(%s)", keyboard_buttons[layout[1][lp + 4]]);
-				PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f * font_height, 5, buf, 0);
-			}
-
-			// Pause has a keyboard layout slot (role 16, "P") to show as a hint;
-			// Quicksave/Quickload/the medipack hotkeys never went through the
-			// rebindable layout[] system on keyboard (S_UpdateInput checks
-			// keymap[DIK_F5]/DIK_F6/DIK_0/DIK_9 directly), so their keyboard hint
-			// is just the fixed key they use.
-			sprintf(buf, "(%s)", keyboard_buttons[layout[1][16]]);
-			PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f++ * font_height, 5, buf, 0);
-			PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f++ * font_height, 5, "(F5)", 0);
-			PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f++ * font_height, 5, "(F6)", 0);
-			PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f++ * font_height, 5, "(0)", 0);
-			PrintString(phd_centerx + (phd_centerx >> 3) + (phd_centerx >> 1), f++ * font_height, 5, "(9)", 0);
+			// The keyboard-equivalent-key hints that used to be printed here (one
+			// column further right, e.g. "(Space)" next to "Jump") were removed -
+			// they cluttered/overlapped the joystick binding names next to them
+			// (worst with the longer "Stick R Left/Right" labels) and this screen
+			// is specifically for joystick bindings, so a keyboard hint isn't
+			// actually useful here.
 
 			y = 3;
 			i = 1;

@@ -1800,6 +1800,12 @@ struct DXPTR
 #if (DIRECTINPUT_VERSION >= 0x800)
 	LPDIRECTINPUT8 lpDirectInput;
 	LPDIRECTINPUTDEVICE8 Keyboard;
+	// Fallback controller path for devices that don't present themselves as XInput
+	// (e.g. a PS4/PS5 controller with no wrapper like Steam Input/DS4Windows active -
+	// those show up to Windows as a plain DirectInput/HID gamepad instead) - see
+	// DXUpdateJoystick(). Was present in the pre-DirectInput8 branch below only; the
+	// upgrade to DirectInput8 apparently dropped it without replacing it.
+	LPDIRECTINPUTDEVICE8 Joystick;
 #else
 	IDirectInput7* lpDirectInput;
 	IDirectInputDevice7* Keyboard;

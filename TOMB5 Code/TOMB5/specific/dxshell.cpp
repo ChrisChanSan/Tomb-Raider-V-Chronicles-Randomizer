@@ -659,6 +659,59 @@ void DXFreeInfo(DXINFO* dxinfo)
 //     (bit0="Joy 1" etc) - the exact numbering JoyStickButtons[]/jLayout[] already
 //     use, so the existing remapping screen assigns actions to these correctly
 //     without needing to know they're specifically Xbox-layout buttons underneath.
+static long DXUpdateJoystickDirectInput()
+{
+	if (!G_dxptr->Joystick)
+		return 0;
+
+	DIJOYSTATE2 js;
+	HRESULT hr = G_dxptr->Joystick->Poll();
+
+	if (FAILED(hr))
+	{
+		hr = G_dxptr->Joystick->Acquire();
+		while (hr == DIERR_INPUTLOST)
+			hr = G_dxptr->Joystick->Acquire();
+		G_dxptr->Joystick->Poll();
+	}
+
+	if (FAILED(G_dxptr->Joystick->GetDeviceState(sizeof(DIJOYSTATE2), &js)))
+		return 0;
+
+	joystick_read = 1;
+
+	// Axes were ranged to -1000..1000 in DXInitInput via DIPROP_RANGE, so this
+	// scales to roughly the same -128..127 ballpark XInput's path produces above.
+	long lx = js.lX;
+	long ly = js.lY;
+	const long deadzone = 150;
+
+	if (lx > -deadzone && lx < deadzone) lx = 0;
+	if (ly > -deadzone && ly < deadzone) ly = 0;
+
+	joystick_read_x = lx / 8;
+	joystick_read_y = ly / 8;	// DirectInput joystick Y is already "up = negative", matching S_UpdateInput()'s joy_y<0=forward - no invert needed here (unlike the XInput thumbstick above)
+
+	if (LOWORD(js.rgdwPOV[0]) != 0xFFFF)	// POV hat centered reports as -1/0xFFFFFFFF
+	{
+		DWORD pov = js.rgdwPOV[0];	// hundredths of a degree, 0 = up, clockwise
+		if (pov > 31500 || pov < 4500)  joystick_read_y = -20;
+		if (pov > 4500 && pov < 13500)  joystick_read_x = 20;
+		if (pov > 13500 && pov < 22500) joystick_read_y = 20;
+		if (pov > 22500 && pov < 31500) joystick_read_x = -20;
+	}
+
+	long fire = 0;
+
+	for (int i = 0; i < 16; i++)
+		if (js.rgbButtons[i] & 0x80)
+			fire |= 1 << i;	// Joy 1..Joy 16, same bit layout the XInput path and JoyStickButtons[] use
+
+	joystick_read_fire = fire;
+
+	return 1;
+}
+
 long DXUpdateJoystick()
 {
 	XINPUT_STATE state;
@@ -669,7 +722,7 @@ long DXUpdateJoystick()
 	joystick_read_fire = 0;
 
 	if (XInputGetState(0, &state) != ERROR_SUCCESS)
-		return 0;
+		return DXUpdateJoystickDirectInput();	// no XInput device (e.g. a PS4/PS5 controller with no Steam Input/DS4Windows wrapper active) - fall back to raw DirectInput
 
 	joystick_read = 1;
 
@@ -708,6 +761,52 @@ long DXUpdateJoystick()
 	joystick_read_fire = fire;
 
 	return 1;
+}
+
+static BOOL CALLBACK DIEnumJoysticksCallback(const DIDEVICEINSTANCE* pdidInstance, VOID* pContext)
+{
+	LPDIRECTINPUT8 dinput = (LPDIRECTINPUT8)pContext;
+	LPDIRECTINPUTDEVICE8 joystick = 0;
+
+	if (SUCCEEDED(dinput->CreateDevice(pdidInstance->guidInstance, &joystick, 0)))
+	{
+		G_dxptr->Joystick = joystick;
+		return DIENUM_STOP;
+	}
+
+	return DIENUM_CONTINUE;
+}
+
+static void DXInitJoystick(HWND hwnd)
+{
+	G_dxptr->Joystick = 0;
+
+	G_dxptr->lpDirectInput->EnumDevices(DI8DEVCLASS_GAMECTRL, DIEnumJoysticksCallback, G_dxptr->lpDirectInput, DIEDFL_ATTACHEDONLY);
+
+	if (!G_dxptr->Joystick)
+	{
+		Log("No DirectInput joystick found (XInput-only controllers still work)");
+		return;
+	}
+
+	DXAttempt(G_dxptr->Joystick->SetDataFormat(&c_dfDIJoystick2));
+	DXAttempt(G_dxptr->Joystick->SetCooperativeLevel(hwnd, DISCL_NONEXCLUSIVE | DISCL_BACKGROUND));
+
+	DIPROPRANGE range;
+	range.diph.dwSize = sizeof(DIPROPRANGE);
+	range.diph.dwHeaderSize = sizeof(DIPROPHEADER);
+	range.diph.dwHow = DIPH_BYOFFSET;
+	range.lMin = -1000;
+	range.lMax = 1000;
+
+	range.diph.dwObj = DIJOFS_X;
+	G_dxptr->Joystick->SetProperty(DIPROP_RANGE, &range.diph);
+	range.diph.dwObj = DIJOFS_Y;
+	G_dxptr->Joystick->SetProperty(DIPROP_RANGE, &range.diph);
+
+	G_dxptr->Joystick->Acquire();
+
+	Log("DirectInput joystick acquired (fallback for non-XInput controllers)");
 }
 
 void DXInitInput(HWND hwnd, HINSTANCE hinstance)
@@ -750,6 +849,8 @@ void DXInitInput(HWND hwnd, HINSTANCE hinstance)
 	DXAttempt(G_dxptr->Keyboard->SetDataFormat(&c_dfDIKeyboard));
 	DXAttempt(G_dxptr->Keyboard->Acquire());
 	memset(keymap, 0, sizeof(keymap));
+
+	DXInitJoystick(hwnd);
 }
 
 const char* DXGetErrorString(HRESULT hr)

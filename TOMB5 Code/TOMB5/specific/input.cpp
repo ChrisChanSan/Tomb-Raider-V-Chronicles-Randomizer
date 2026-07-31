@@ -471,6 +471,20 @@ long S_UpdateInput()
 	if (keymap[DIK_ESCAPE])
 		linput |= IN_DESELECT | IN_OPTION;
 
+	// Fixed "Circle = back" menu convention, similar idea to Escape above but
+	// deliberately WITHOUT IN_OPTION - unlike Escape, Circle is also the user's
+	// rebindable "Roll" gameplay button (jLayout), and IN_OPTION doubles as the
+	// inventory-open toggle (see control.cpp) - adding it here would make every
+	// Roll press during gameplay also try to open the inventory. IN_DESELECT
+	// alone is enough for "back" in every menu screen that checks it.
+	// Not user-rebindable, for the same reason Escape itself isn't. Circle is
+	// bit 2 of joy_fire under this controller's raw DirectInput enumeration
+	// (confirmed by testing; see JoyStickButtons[] in this file) - specific to
+	// the DirectInput fallback path, since under XInput/a Steam or DS4Windows
+	// wrapper Circle usually reports as XINPUT_GAMEPAD_B (bit 1) instead.
+	if (ControlMethod == 1 && (joy_fire & (1 << 2)))
+		linput |= IN_DESELECT;
+
 	if (lara.gun_status == LG_READY)
 	{
 		savegame.AutoTarget = (uchar)App.AutoTarget;

@@ -10,6 +10,7 @@
 #include "../specific/input.h"
 #include "lara.h"
 #include "../specific/dxshell.h"
+#include "../specific/LoadSave.h"
 #include "../tomb5/tomb5.h"
 
 SPOTCAM SpotCam[256];
@@ -428,7 +429,12 @@ void CalculateSpotCams()
 	else if (!spotcam_timer)
 		current_spline_position += cspeed;
 
-	if (tomb5.cutseq_skipper && keymap[DIK_ESCAPE] && gfCurrentLevel != LVL5_TITLE)
+	// Cross added alongside Escape for flyby skipping too (the level-intro camera
+	// flyby, e.g. Andrea1's opening, is its own separate system from both FMVs
+	// and CUTSEQ cutscenes - each needed its own fix). Key(257) reads the raw
+	// joystick state directly (bit 1 = Cross on this controller's DirectInput
+	// mapping), same reasoning as the cutscene-skip fix in control.cpp.
+	if (tomb5.cutseq_skipper && (keymap[DIK_ESCAPE] || (ControlMethod == 1 && Key(257))) && gfCurrentLevel != LVL5_TITLE)
 		current_spline_position = 0x10000;
 
 	if (!(input & IN_LOOK))

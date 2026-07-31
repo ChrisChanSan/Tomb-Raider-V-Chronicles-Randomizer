@@ -726,6 +726,20 @@ static long DXUpdateJoystickDirectInput()
 		if (js.rgbButtons[i] & 0x80)
 			fire |= 1 << i;	// Joy 1..Joy 16, same bit layout the XInput path and JoyStickButtons[] use
 
+	// Right stick tilt as 4 extra digital "buttons" (bits 16-19), same as the XInput
+	// path - not used for camera control, just an alternate 4-way bindable input.
+	long rrx = js.lRx;
+	long rry = js.lRy;
+	const long rdeadzone = 150;
+
+	if (rrx > -rdeadzone && rrx < rdeadzone) rrx = 0;
+	if (rry > -rdeadzone && rry < rdeadzone) rry = 0;
+
+	if (rry < 0) fire |= 1 << 16;	// Stick R Up (Ry is "up = negative", same convention as the left stick's Y)
+	if (rry > 0) fire |= 1 << 17;	// Stick R Down
+	if (rrx < 0) fire |= 1 << 18;	// Stick R Left
+	if (rrx > 0) fire |= 1 << 19;	// Stick R Right
+
 	joystick_read_fire = fire;
 
 	return 1;
@@ -777,6 +791,23 @@ long DXUpdateJoystick()
 	if (state.Gamepad.bLeftTrigger > 30)                       fire |= 1 << 10;	// Joy 11
 	if (state.Gamepad.bRightTrigger > 30)                      fire |= 1 << 11;	// Joy 12
 
+	// Right stick tilt as 4 extra digital "buttons" (bits 16-19, past the 16 real
+	// physical buttons above) so it can be bound to actions the same way the D-pad
+	// already is - not used for camera control, just an alternate 4-way input.
+	long rx = state.Gamepad.sThumbRX;
+	long ry = state.Gamepad.sThumbRY;
+
+	if (rx > -XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE && rx < XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE)
+		rx = 0;
+
+	if (ry > -XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE && ry < XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE)
+		ry = 0;
+
+	if (ry > 0) fire |= 1 << 16;	// Stick R Up
+	if (ry < 0) fire |= 1 << 17;	// Stick R Down
+	if (rx < 0) fire |= 1 << 18;	// Stick R Left
+	if (rx > 0) fire |= 1 << 19;	// Stick R Right
+
 	joystick_read_fire = fire;
 
 	return 1;
@@ -821,6 +852,14 @@ static void DXInitJoystick(HWND hwnd)
 	range.diph.dwObj = DIJOFS_X;
 	G_dxptr->Joystick->SetProperty(DIPROP_RANGE, &range.diph);
 	range.diph.dwObj = DIJOFS_Y;
+	G_dxptr->Joystick->SetProperty(DIPROP_RANGE, &range.diph);
+
+	// Right stick, read as 4 extra digital "buttons" in DXUpdateJoystickDirectInput
+	// (see joy_fire bits 16-19) - most twin-stick DirectInput/HID gamepads report it
+	// on Rx/Ry (X/Y already confirmed to be the left stick).
+	range.diph.dwObj = DIJOFS_RX;
+	G_dxptr->Joystick->SetProperty(DIPROP_RANGE, &range.diph);
+	range.diph.dwObj = DIJOFS_RY;
 	G_dxptr->Joystick->SetProperty(DIPROP_RANGE, &range.diph);
 
 	G_dxptr->Joystick->Acquire();

@@ -7,7 +7,7 @@ long ReadJoystick(long& x, long& y);
 
 extern const char* KeyboardButtons[272];
 extern const char* GermanKeyboard[272];
-extern const char* JoyStickButtons[16];
+extern const char* JoyStickButtons[20];
 extern long jLayout[32];
 extern long defaultJLayout[32];
 

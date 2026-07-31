@@ -68,10 +68,14 @@ const char* GermanKeyboard[272] =
 	"Joy 9", "Joy 10", "Joy 11", "Joy 12", "Joy 13", "Joy 14", "Joy 15", "Joy 16"
 };
 
-const char* JoyStickButtons[16] =
+// Entries 16-19 aren't physical buttons - DXUpdateJoystick/DXUpdateJoystickDirectInput
+// (specific/dxshell.cpp) also set these 4 bits for the right stick's 4 tilt directions,
+// so it can be bound to actions the same way the D-pad already is.
+const char* JoyStickButtons[20] =
 {
 	"Joy 1", "Joy 2", "Joy 3", "Joy 4", "Joy 5", "Joy 6", "Joy 7", "Joy 8",
-	"Joy 9", "Joy 10", "Joy 11", "Joy 12", "Joy 13", "Joy 14", "Joy 15", "Joy 16"
+	"Joy 9", "Joy 10", "Joy 11", "Joy 12", "Joy 13", "Joy 14", "Joy 15", "Joy 16",
+	"Stick R Up", "Stick R Down", "Stick R Left", "Stick R Right"
 };
 
 long jLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };

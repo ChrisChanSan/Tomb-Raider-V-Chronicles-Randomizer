@@ -324,7 +324,7 @@ long ControlPhase(long nframes, long demo_mode)
 					return 2;
 			}
 
-			if (input & IN_PAUSE && !gfGameMode && lara_item->hit_points > 0)
+			if (dbinput & IN_PAUSE && !gfGameMode && lara_item->hit_points > 0)
 			{
 				if (S_PauseMenu() == 8)
 					return 1;

@@ -1,0 +1,38 @@
+{
+  "levelName": "richcut2",
+  "trType": 5,
+  "numRooms": 7,
+  "items": [
+    { "index": 0, "typeId": 0, "room": 0, "x": 49664, "y": 0, "z": 70144, "ocb": 0, "flags": 0, "sectorX": 5, "sectorZ": 8, "localX": 5632, "localY": 0, "localZ": 8704 },
+    { "index": 1, "typeId": 121, "room": 0, "x": 49664, "y": -256, "z": 62976, "ocb": 0, "flags": 15872, "sectorX": 5, "sectorZ": 1, "localX": 5632, "localY": 256, "localZ": 1536 }
+  ],
+  "statics": [
+    { "room": 0, "meshId": 27, "x": 46592, "y": 0, "z": 70144, "rotation": 24576, "sectorX": 2, "sectorZ": 8, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 0, "meshId": 27, "x": 47616, "y": 0, "z": 71168, "rotation": 24576, "sectorX": 3, "sectorZ": 9, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 0, "meshId": 27, "x": 48640, "y": 0, "z": 72192, "rotation": 24576, "sectorX": 4, "sectorZ": 10, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 0, "meshId": 27, "x": 50688, "y": 0, "z": 72192, "rotation": 40960, "sectorX": 6, "sectorZ": 10, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 0, "meshId": 27, "x": 51712, "y": 0, "z": 71168, "rotation": 40960, "sectorX": 7, "sectorZ": 9, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 0, "meshId": 27, "x": 52736, "y": 0, "z": 70144, "rotation": 40960, "sectorX": 8, "sectorZ": 8, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 0, "meshId": 27, "x": 45568, "y": 0, "z": 69120, "rotation": 24576, "sectorX": 1, "sectorZ": 7, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 0, "meshId": 27, "x": 53760, "y": 0, "z": 69120, "rotation": 40960, "sectorX": 9, "sectorZ": 7, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 0, "meshId": 25, "x": 52736, "y": 0, "z": 66048, "rotation": 49152, "sectorX": 8, "sectorZ": 4, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 0, "meshId": 25, "x": 46592, "y": 0, "z": 66048, "rotation": 16384, "sectorX": 2, "sectorZ": 4, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 0, "meshId": 25, "x": 52736, "y": 0, "z": 62976, "rotation": 49152, "sectorX": 8, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 0, "meshId": 25, "x": 46592, "y": 0, "z": 62976, "rotation": 16384, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 0, "meshId": 0, "x": 49664, "y": 0, "z": 66048, "rotation": 0, "sectorX": 5, "sectorZ": 4, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 1, "meshId": 27, "x": 45568, "y": -1536, "z": 69120, "rotation": 24576, "sectorX": 1, "sectorZ": 7, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 1, "meshId": 27, "x": 46592, "y": -1536, "z": 70144, "rotation": 24576, "sectorX": 2, "sectorZ": 8, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 1, "meshId": 27, "x": 47616, "y": -1536, "z": 71168, "rotation": 24576, "sectorX": 3, "sectorZ": 9, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 1, "meshId": 27, "x": 48640, "y": -1536, "z": 72192, "rotation": 24576, "sectorX": 4, "sectorZ": 10, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 1, "meshId": 27, "x": 50688, "y": -1536, "z": 72192, "rotation": 40960, "sectorX": 6, "sectorZ": 10, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 1, "meshId": 27, "x": 51712, "y": -1536, "z": 71168, "rotation": 40960, "sectorX": 7, "sectorZ": 9, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 1, "meshId": 27, "x": 52736, "y": -1536, "z": 70144, "rotation": 40960, "sectorX": 8, "sectorZ": 8, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 1, "meshId": 27, "x": 53760, "y": -1536, "z": 69120, "rotation": 40960, "sectorX": 9, "sectorZ": 7, "collisionBox": { "minX": -761, "maxX": 765, "minY": -1546, "maxY": 14, "minZ": 0, "maxZ": 0 } },
+    { "room": 2, "meshId": 2, "x": 52736, "y": 0, "z": 66048, "rotation": 49152, "sectorX": 8, "sectorZ": 4, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 2, "meshId": 2, "x": 52736, "y": 0, "z": 62976, "rotation": 49152, "sectorX": 8, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 2, "meshId": 2, "x": 46592, "y": 0, "z": 66048, "rotation": 16384, "sectorX": 2, "sectorZ": 4, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 2, "meshId": 2, "x": 46592, "y": 0, "z": 62976, "rotation": 16384, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } }
+  ],
+  "triggers": [
+  ]
+}

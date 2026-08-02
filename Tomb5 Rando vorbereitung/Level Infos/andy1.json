@@ -1,0 +1,762 @@
+{
+  "levelName": "andy1",
+  "trType": 5,
+  "numRooms": 243,
+  "items": [
+    { "index": 0, "typeId": 93, "room": 0, "x": 54784, "y": -1408, "z": 30208, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 2, "localX": 3584, "localY": 1408, "localZ": 2560 },
+    { "index": 1, "typeId": 350, "room": 26, "x": 46592, "y": 8704, "z": 37376, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 256, "localZ": 3584 },
+    { "index": 2, "typeId": 350, "room": 36, "x": 59904, "y": 7936, "z": 35328, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 1, "localX": 4608, "localY": 1792, "localZ": 1536 },
+    { "index": 3, "typeId": 349, "room": 43, "x": 46592, "y": 2304, "z": 36352, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 256, "localZ": 2560 },
+    { "index": 4, "typeId": 93, "room": 43, "x": 46592, "y": 1920, "z": 40448, "ocb": 6, "flags": 256, "sectorX": 1, "sectorZ": 6, "localX": 1536, "localY": 640, "localZ": 6656 },
+    { "index": 5, "typeId": 349, "room": 45, "x": 47616, "y": 6144, "z": 43520, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 6, "typeId": 174, "room": 48, "x": 57856, "y": 8448, "z": 51712, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 1, "localX": 3584, "localY": 0, "localZ": 1536 },
+    { "index": 7, "typeId": 125, "room": 51, "x": 38400, "y": 4608, "z": 50688, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 1792, "localZ": 2560 },
+    { "index": 8, "typeId": 172, "room": 51, "x": 38400, "y": 5888, "z": 50688, "ocb": 5, "flags": 256, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 512, "localZ": 2560 },
+    { "index": 9, "typeId": 223, "room": 53, "x": 50688, "y": 6144, "z": 43520, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 0, "localZ": 3584 },
+    { "index": 10, "typeId": 93, "room": 53, "x": 50688, "y": 6144, "z": 43520, "ocb": 24, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 0, "localZ": 3584 },
+    { "index": 11, "typeId": 349, "room": 53, "x": 49664, "y": 6144, "z": 43520, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 12, "typeId": 284, "room": 55, "x": 36352, "y": 6400, "z": 49664, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 256, "localZ": 1536 },
+    { "index": 13, "typeId": 387, "room": 66, "x": 69120, "y": 6528, "z": 73216, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 1, "localX": 4608, "localY": 2176, "localZ": 1536 },
+    { "index": 14, "typeId": 0, "room": 70, "x": 58880, "y": 128, "z": 32256, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 4, "localX": 3584, "localY": 128, "localZ": 4608 },
+    { "index": 15, "typeId": 350, "room": 78, "x": 34304, "y": 5888, "z": 45568, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 16, "typeId": 166, "room": 82, "x": 83456, "y": 9984, "z": 64000, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 17, "typeId": 428, "room": 82, "x": 83456, "y": 9984, "z": 65024, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 0, "localZ": 2560 },
+    { "index": 18, "typeId": 182, "room": 82, "x": 83456, "y": 9984, "z": 64000, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 19, "typeId": 349, "room": 84, "x": 82432, "y": 9984, "z": 65024, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 20, "typeId": 93, "room": 85, "x": 34304, "y": 8320, "z": 55808, "ocb": 16, "flags": 256, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 896, "localZ": 3584 },
+    { "index": 21, "typeId": 105, "room": 86, "x": 36352, "y": 9216, "z": 56832, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 22, "typeId": 105, "room": 86, "x": 37376, "y": 9216, "z": 56832, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 1, "localX": 3584, "localY": 0, "localZ": 1536 },
+    { "index": 23, "typeId": 387, "room": 109, "x": 64000, "y": 5888, "z": 55808, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 512, "localZ": 1536 },
+    { "index": 24, "typeId": 223, "room": 114, "x": 66048, "y": 6912, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 6, "sectorZ": 2, "localX": 6656, "localY": 768, "localZ": 2560 },
+    { "index": 25, "typeId": 420, "room": 119, "x": 65024, "y": 9984, "z": 69120, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 26, "typeId": 89, "room": 119, "x": 65024, "y": 9984, "z": 69120, "ocb": 2, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 27, "typeId": 418, "room": 121, "x": 62976, "y": 9472, "z": 67072, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 1, "localX": 3584, "localY": 0, "localZ": 1536 },
+    { "index": 28, "typeId": 121, "room": 127, "x": 64000, "y": 9728, "z": 66048, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 2, "localX": 4608, "localY": 256, "localZ": 2560 },
+    { "index": 29, "typeId": 94, "room": 134, "x": 76288, "y": 10240, "z": 61952, "ocb": 12, "flags": 256, "sectorX": 3, "sectorZ": 1, "localX": 3584, "localY": 1280, "localZ": 1536 },
+    { "index": 30, "typeId": 94, "room": 135, "x": 79360, "y": 9472, "z": 62976, "ocb": 8, "flags": 256, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 0, "localZ": 2560 },
+    { "index": 31, "typeId": 432, "room": 140, "x": 74240, "y": 9472, "z": 67072, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 32, "typeId": 36, "room": 151, "x": 55808, "y": 8448, "z": 53760, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 33, "typeId": 38, "room": 151, "x": 55808, "y": 8448, "z": 53760, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 34, "typeId": 40, "room": 151, "x": 55808, "y": 8448, "z": 53760, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 35, "typeId": 42, "room": 151, "x": 55808, "y": 8448, "z": 53760, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 36, "typeId": 46, "room": 151, "x": 55808, "y": 8448, "z": 53760, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 37, "typeId": 48, "room": 151, "x": 55808, "y": 8448, "z": 53760, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 38, "typeId": 50, "room": 151, "x": 55808, "y": 8448, "z": 53760, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 39, "typeId": 183, "room": 172, "x": 53760, "y": 9728, "z": 51712, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 40, "typeId": 430, "room": 175, "x": 52736, "y": 7168, "z": 57856, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 0, "localZ": 2560 },
+    { "index": 41, "typeId": 117, "room": 178, "x": 37376, "y": 11264, "z": 56832, "ocb": 20, "flags": 15872, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 42, "typeId": 117, "room": 178, "x": 36352, "y": 11264, "z": 56832, "ocb": 20, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 43, "typeId": 425, "room": 186, "x": 43520, "y": 5376, "z": 49664, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 4, "localX": 2560, "localY": 256, "localZ": 4608 },
+    { "index": 44, "typeId": 422, "room": 194, "x": 52736, "y": 8448, "z": 46592, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 45, "typeId": 241, "room": 194, "x": 53760, "y": 8448, "z": 46592, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 46, "typeId": 89, "room": 199, "x": 50688, "y": 7168, "z": 55808, "ocb": 1, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 0, "localZ": 2560 },
+    { "index": 47, "typeId": 422, "room": 199, "x": 50688, "y": 7168, "z": 55808, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 0, "localZ": 2560 },
+    { "index": 48, "typeId": 422, "room": 201, "x": 46592, "y": 6912, "z": 53760, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 0, "localZ": 2560 },
+    { "index": 49, "typeId": 89, "room": 201, "x": 46592, "y": 6912, "z": 53760, "ocb": 1, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 0, "localZ": 2560 },
+    { "index": 50, "typeId": 350, "room": 201, "x": 45568, "y": 6912, "z": 52736, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 51, "typeId": 242, "room": 202, "x": 42496, "y": 5376, "z": 50688, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 1024, "localZ": 1536 },
+    { "index": 52, "typeId": 284, "room": 202, "x": 43520, "y": 5376, "z": 50688, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 1024, "localZ": 1536 },
+    { "index": 53, "typeId": 422, "room": 203, "x": 42496, "y": 6400, "z": 58880, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 54, "typeId": 89, "room": 203, "x": 42496, "y": 6400, "z": 58880, "ocb": 1, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 55, "typeId": 422, "room": 205, "x": 45568, "y": 6400, "z": 58880, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 56, "typeId": 89, "room": 205, "x": 45568, "y": 6400, "z": 58880, "ocb": 1, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 57, "typeId": 122, "room": 205, "x": 46592, "y": 5760, "z": 59904, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 640, "localZ": 2560 },
+    { "index": 58, "typeId": 223, "room": 206, "x": 32256, "y": 11264, "z": 56832, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 59, "typeId": 349, "room": 206, "x": 33280, "y": 11264, "z": 56832, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 60, "typeId": 122, "room": 218, "x": 35328, "y": 8064, "z": 61952, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 640, "localZ": 2560 },
+    { "index": 61, "typeId": 93, "room": 221, "x": 37376, "y": 9216, "z": 60928, "ocb": 12, "flags": 0, "sectorX": 1, "sectorZ": 4, "localX": 1536, "localY": 2048, "localZ": 4608 },
+    { "index": 62, "typeId": 93, "room": 239, "x": 69120, "y": 6656, "z": 71168, "ocb": 16, "flags": 256, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 1024, "localZ": 2560 }
+  ],
+  "statics": [
+    { "room": 62, "meshId": 31, "x": 53760, "y": 6144, "z": 52736, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 71, "meshId": 30, "x": 59904, "y": -1536, "z": 30208, "rotation": 0, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 77, "meshId": 32, "x": 59904, "y": 7680, "z": 62976, "rotation": 0, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 77, "meshId": 5, "x": 56832, "y": 7680, "z": 65024, "rotation": 16384, "sectorX": 1, "sectorZ": 4, "collisionBox": { "minX": -415, "maxX": 608, "minY": -2239, "maxY": -19, "minZ": -510, "maxZ": 560 } },
+    { "room": 77, "meshId": 6, "x": 56832, "y": 7680, "z": 66048, "rotation": 0, "sectorX": 1, "sectorZ": 5, "collisionBox": { "minX": -248, "maxX": 376, "minY": -1583, "maxY": 1, "minZ": -254, "maxZ": 216 } },
+    { "room": 82, "meshId": 10, "x": 83456, "y": 9984, "z": 64000, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -258, "maxX": 251, "minY": -714, "maxY": 1, "minZ": 106, "maxZ": 515 } },
+    { "room": 92, "meshId": 6, "x": 65024, "y": 3968, "z": 71168, "rotation": 0, "sectorX": 5, "sectorZ": 2, "collisionBox": { "minX": -248, "maxX": 376, "minY": -1583, "maxY": 1, "minZ": -254, "maxZ": 216 } },
+    { "room": 117, "meshId": 31, "x": 61952, "y": 6656, "z": 60928, "rotation": 16384, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 125, "meshId": 33, "x": 66048, "y": 9984, "z": 69120, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -625, "maxX": 625, "minY": -1024, "maxY": 0, "minZ": -512, "maxZ": -284 } },
+    { "room": 127, "meshId": 11, "x": 64000, "y": 9728, "z": 66048, "rotation": 0, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": -212, "maxX": 185, "minY": -261, "maxY": 16, "minZ": -167, "maxZ": 221 } },
+    { "room": 151, "meshId": 32, "x": 56832, "y": 7168, "z": 53760, "rotation": 0, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 163, "meshId": 30, "x": 80384, "y": 7680, "z": 68096, "rotation": 40960, "sectorX": 3, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 176, "meshId": 31, "x": 57856, "y": 6144, "z": 53760, "rotation": 0, "sectorX": 3, "sectorZ": 3, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 181, "meshId": 36, "x": 56832, "y": 6144, "z": 50688, "rotation": 32768, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 205, "meshId": 43, "x": 46592, "y": 6400, "z": 59904, "rotation": 49152, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 213, "meshId": 32, "x": 56832, "y": 7168, "z": 53760, "rotation": 0, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 215, "meshId": 40, "x": 57856, "y": 8448, "z": 50688, "rotation": 0, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -5, "maxX": 569, "minY": -518, "maxY": 9, "minZ": -314, "maxZ": 265 } },
+    { "room": 215, "meshId": 41, "x": 57856, "y": 8448, "z": 50688, "rotation": 0, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -633, "maxX": -523, "minY": -164, "maxY": -71, "minZ": 620, "maxZ": 747 } },
+    { "room": 215, "meshId": 42, "x": 57856, "y": 8448, "z": 50688, "rotation": 0, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -1180, "maxX": -608, "minY": -619, "maxY": -38, "minZ": 159, "maxZ": 742 } },
+    { "room": 218, "meshId": 43, "x": 35328, "y": 8704, "z": 61952, "rotation": 32768, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 225, "meshId": 29, "x": 66048, "y": 9472, "z": 68096, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -520, "maxX": 454, "minY": -545, "maxY": -299, "minZ": -805, "maxZ": -493 } },
+    { "room": 225, "meshId": 27, "x": 66048, "y": 9472, "z": 68096, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -522, "maxX": -522, "minY": -442, "maxY": -206, "minZ": -534, "maxZ": 590 } },
+    { "room": 225, "meshId": 27, "x": 66048, "y": 9472, "z": 68096, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -522, "maxX": -522, "minY": -442, "maxY": -206, "minZ": -534, "maxZ": 590 } },
+    { "room": 225, "meshId": 26, "x": 66048, "y": 9472, "z": 68096, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 488, "maxX": 614, "minY": -64, "maxY": 512, "minZ": -625, "maxZ": 627 } },
+    { "room": 225, "meshId": 26, "x": 66048, "y": 9472, "z": 68096, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 488, "maxX": 614, "minY": -64, "maxY": 512, "minZ": -625, "maxZ": 627 } },
+    { "room": 225, "meshId": 25, "x": 66048, "y": 9472, "z": 68096, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -511, "maxX": 513, "minY": -64, "maxY": 512, "minZ": 481, "maxZ": 627 } },
+    { "room": 225, "meshId": 25, "x": 66048, "y": 9472, "z": 68096, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -511, "maxX": 513, "minY": -64, "maxY": 512, "minZ": 481, "maxZ": 627 } },
+    { "room": 225, "meshId": 24, "x": 66048, "y": 9472, "z": 68096, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -594, "maxX": 604, "minY": -439, "maxY": -67, "minZ": -606, "maxZ": -476 } },
+    { "room": 225, "meshId": 24, "x": 66048, "y": 9472, "z": 68096, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -594, "maxX": 604, "minY": -439, "maxY": -67, "minZ": -606, "maxZ": -476 } },
+    { "room": 225, "meshId": 23, "x": 66048, "y": 9472, "z": 68096, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 225, "meshId": 22, "x": 66048, "y": 9472, "z": 68096, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -784, "maxX": -464, "minY": -546, "maxY": -252, "minZ": -805, "maxZ": 1165 } },
+    { "room": 225, "meshId": 21, "x": 66048, "y": 9472, "z": 68096, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -526, "maxX": 534, "minY": -1335, "maxY": -275, "minZ": 371, "maxZ": 1131 } },
+    { "room": 236, "meshId": 35, "x": 50688, "y": -1536, "z": 28160, "rotation": 0, "sectorX": 4, "sectorZ": 5, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } }
+  ],
+  "triggers": [
+    {
+      "room": 0, "sectorX": 2, "sectorZ": 5, "floorDataIndex": 49,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 0 }
+      ]
+    },
+    {
+      "room": 0, "sectorX": 3, "sectorZ": 5, "floorDataIndex": 62,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 0 }
+      ]
+    },
+    {
+      "room": 0, "sectorX": 4, "sectorZ": 5, "floorDataIndex": 75,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 0 }
+      ]
+    },
+    {
+      "room": 1, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 114,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "EndLevel", "index": 0 }
+      ]
+    },
+    {
+      "room": 3, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 207,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 41 }
+      ]
+    },
+    {
+      "room": 9, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 446,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 41 }
+      ]
+    },
+    {
+      "room": 9, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 459,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 41 }
+      ]
+    },
+    {
+      "room": 9, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 470,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 41 }
+      ]
+    },
+    {
+      "room": 10, "sectorX": 2, "sectorZ": 5, "floorDataIndex": 519,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 0 },
+        { "type": "Object", "index": 39 },
+        { "type": "Object", "index": 16 },
+        { "type": "Object", "index": 1 }
+      ]
+    },
+    {
+      "room": 10, "sectorX": 3, "sectorZ": 5, "floorDataIndex": 539,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 0 },
+        { "type": "Object", "index": 1 }
+      ]
+    },
+    {
+      "room": 25, "sectorX": 2, "sectorZ": 6, "floorDataIndex": 1576,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 2,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 28 }
+      ]
+    },
+    {
+      "room": 43, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 2804,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 4 },
+        { "type": "Camera", "index": 9 },
+        { "type": "PlaySoundtrack", "index": 21 }
+      ]
+    },
+    {
+      "room": 43, "sectorX": 1, "sectorZ": 4, "floorDataIndex": 2812,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 9 },
+        { "type": "Object", "index": 39 },
+        { "type": "Object", "index": 16 },
+        { "type": "Object", "index": 4 }
+      ]
+    },
+    {
+      "room": 43, "sectorX": 1, "sectorZ": 5, "floorDataIndex": 2818,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 9 },
+        { "type": "Object", "index": 2 },
+        { "type": "Unknown", "index": 768 }
+      ]
+    },
+    {
+      "room": 47, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 2950,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 23 }
+      ]
+    },
+    {
+      "room": 51, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 3107,
+      "triggerType": "Pickup", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 8 },
+        { "type": "Object", "index": 12 },
+        { "type": "Cutscene", "index": 19 }
+      ]
+    },
+    {
+      "room": 53, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 3210,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 10 }
+      ]
+    },
+    {
+      "room": 53, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 3229,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 10 }
+      ]
+    },
+    {
+      "room": 57, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 3360,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 1 },
+        { "type": "Object", "index": 999 },
+        { "type": "Object", "index": 290 },
+        { "type": "Object", "index": 3 },
+        { "type": "Camera", "index": 255 },
+        { "type": "Unknown", "index": 512 },
+        { "type": "Object", "index": 28 }
+      ]
+    },
+    {
+      "room": 57, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 3368,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 28 }
+      ]
+    },
+    {
+      "room": 66, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 3737,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 2 },
+        { "type": "Object", "index": 2 }
+      ]
+    },
+    {
+      "room": 66, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 3747,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 2 },
+        { "type": "Object", "index": 2 },
+        { "type": "Object", "index": 3 },
+        { "type": "Object", "index": 3 },
+        { "type": "Object", "index": 3 },
+        { "type": "Object", "index": 4 }
+      ]
+    },
+    {
+      "room": 66, "sectorX": 4, "sectorZ": 1, "floorDataIndex": 3755,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 78 },
+        { "type": "Camera", "index": 2 },
+        { "type": "Object", "index": 2 }
+      ]
+    },
+    {
+      "room": 67, "sectorX": 4, "sectorZ": 1, "floorDataIndex": 3780,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 13 }
+      ]
+    },
+    {
+      "room": 70, "sectorX": 3, "sectorZ": 4, "floorDataIndex": 3929,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 31 }
+      ]
+    },
+    {
+      "room": 85, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 4628,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 60 }
+      ]
+    },
+    {
+      "room": 85, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 4635,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 60 }
+      ]
+    },
+    {
+      "room": 86, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 4656,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 20 }
+      ]
+    },
+    {
+      "room": 86, "sectorX": 4, "sectorZ": 1, "floorDataIndex": 4669,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 60 }
+      ]
+    },
+    {
+      "room": 87, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 4688,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 57 },
+        { "type": "Object", "index": 60 }
+      ]
+    },
+    {
+      "room": 87, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 4697,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 57 }
+      ]
+    },
+    {
+      "room": 89, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 4746,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 28 }
+      ]
+    },
+    {
+      "room": 89, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 4751,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 28 }
+      ]
+    },
+    {
+      "room": 102, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5098,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 30 },
+        { "type": "Camera", "index": 6 },
+        { "type": "Object", "index": 1 }
+      ]
+    },
+    {
+      "room": 104, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5209,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 40 }
+      ]
+    },
+    {
+      "room": 105, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5226,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 7 },
+        { "type": "Object", "index": 1 }
+      ]
+    },
+    {
+      "room": 108, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5340,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 65 }
+      ]
+    },
+    {
+      "room": 109, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5363,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 4 },
+        { "type": "Object", "index": 3 }
+      ]
+    },
+    {
+      "room": 110, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5379,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 4 },
+        { "type": "Object", "index": 3 },
+        { "type": "Camera", "index": 0 },
+        { "type": "Object", "index": 112 },
+        { "type": "Object", "index": 2 },
+        { "type": "Unknown", "index": 768 }
+      ]
+    },
+    {
+      "room": 111, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5397,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 4 },
+        { "type": "Object", "index": 2 },
+        { "type": "Unknown", "index": 256 }
+      ]
+    },
+    {
+      "room": 111, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 5403,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 28 }
+      ]
+    },
+    {
+      "room": 113, "sectorX": 4, "sectorZ": 1, "floorDataIndex": 5474,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Cutscene", "index": 21 }
+      ]
+    },
+    {
+      "room": 119, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5731,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Flyby", "index": 5 },
+        { "type": "Object", "index": 4 }
+      ]
+    },
+    {
+      "room": 119, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 5735,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Flyby", "index": 5 },
+        { "type": "Object", "index": 40 },
+        { "type": "Object", "index": 256 },
+        { "type": "Object", "index": 4 }
+      ]
+    },
+    {
+      "room": 119, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 5741,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Flyby", "index": 5 },
+        { "type": "Object", "index": 39 },
+        { "type": "Object", "index": 16 },
+        { "type": "Object", "index": 970 },
+        { "type": "Object", "index": 32 },
+        { "type": "Object", "index": 1 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5855,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Flyby", "index": 5 },
+        { "type": "Object", "index": 4 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 5859,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Flyby", "index": 5 },
+        { "type": "Object", "index": 4 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 5863,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Flyby", "index": 5 },
+        { "type": "Unknown", "index": 9 },
+        { "type": "Object", "index": 2 },
+        { "type": "Object", "index": 1 }
+      ]
+    },
+    {
+      "room": 124, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5887,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Flyby", "index": 5 },
+        { "type": "Object", "index": 1 }
+      ]
+    },
+    {
+      "room": 125, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5903,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Flyby", "index": 5 },
+        { "type": "Object", "index": 1 }
+      ]
+    },
+    {
+      "room": 127, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 5963,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 45 },
+        { "type": "Object", "index": 26 },
+        { "type": "Object", "index": 25 }
+      ]
+    },
+    {
+      "room": 127, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 5974,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 45 },
+        { "type": "Object", "index": 26 },
+        { "type": "Object", "index": 25 }
+      ]
+    },
+    {
+      "room": 127, "sectorX": 4, "sectorZ": 2, "floorDataIndex": 5985,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 45 },
+        { "type": "Object", "index": 26 },
+        { "type": "Object", "index": 25 }
+      ]
+    },
+    {
+      "room": 127, "sectorX": 5, "sectorZ": 2, "floorDataIndex": 6000,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 45 },
+        { "type": "Object", "index": 26 },
+        { "type": "Object", "index": 25 }
+      ]
+    },
+    {
+      "room": 127, "sectorX": 6, "sectorZ": 2, "floorDataIndex": 6015,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 45 },
+        { "type": "Object", "index": 26 },
+        { "type": "Object", "index": 25 }
+      ]
+    },
+    {
+      "room": 127, "sectorX": 7, "sectorZ": 2, "floorDataIndex": 6028,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 45 },
+        { "type": "Object", "index": 26 },
+        { "type": "Object", "index": 25 }
+      ]
+    },
+    {
+      "room": 134, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 6385,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 29 }
+      ]
+    },
+    {
+      "room": 134, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 6390,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 29 }
+      ]
+    },
+    {
+      "room": 134, "sectorX": 1, "sectorZ": 4, "floorDataIndex": 6393,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 29 }
+      ]
+    },
+    {
+      "room": 151, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 7164,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Cutscene", "index": 14 }
+      ]
+    },
+    {
+      "room": 151, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 7173,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Cutscene", "index": 14 }
+      ]
+    },
+    {
+      "room": 154, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 7238,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 0,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 28 }
+      ]
+    },
+    {
+      "room": 178, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 8432,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 21 }
+      ]
+    },
+    {
+      "room": 178, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 8436,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 22 },
+        { "type": "PlaySoundtrack", "index": 10 }
+      ]
+    },
+    {
+      "room": 186, "sectorX": 2, "sectorZ": 4, "floorDataIndex": 8546,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Cutscene", "index": 10 }
+      ]
+    },
+    {
+      "room": 192, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 8657,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 8 },
+        { "type": "Object", "index": 1 }
+      ]
+    },
+    {
+      "room": 193, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 8713,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 70 }
+      ]
+    },
+    {
+      "room": 193, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 8720,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 70 }
+      ]
+    },
+    {
+      "room": 193, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 8739,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 70 }
+      ]
+    },
+    {
+      "room": 193, "sectorX": 3, "sectorZ": 3, "floorDataIndex": 8746,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 70 }
+      ]
+    },
+    {
+      "room": 198, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 9141,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 57 }
+      ]
+    },
+    {
+      "room": 198, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 9148,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 57 }
+      ]
+    },
+    {
+      "room": 198, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 9167,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 57 }
+      ]
+    },
+    {
+      "room": 198, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 9174,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 57 }
+      ]
+    },
+    {
+      "room": 198, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 9197,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 57 }
+      ]
+    },
+    {
+      "room": 198, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 9204,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 57 }
+      ]
+    },
+    {
+      "room": 202, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 9331,
+      "triggerType": "Key", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Flyby", "index": 1 },
+        { "type": "Object", "index": 46 },
+        { "type": "Object", "index": 49 },
+        { "type": "Object", "index": 56 },
+        { "type": "Object", "index": 54 },
+        { "type": "Object", "index": 52 }
+      ]
+    },
+    {
+      "room": 219, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 9851,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 61 }
+      ]
+    },
+    {
+      "room": 232, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 10170,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 3 },
+        { "type": "Object", "index": 1001 }
+      ]
+    },
+    {
+      "room": 232, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 10184,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 3 },
+        { "type": "Object", "index": 2 },
+        { "type": "Unknown", "index": 763 }
+      ]
+    },
+    {
+      "room": 232, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 10196,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 3 },
+        { "type": "Unknown", "index": 968 },
+        { "type": "PlaySoundtrack", "index": 288 },
+        { "type": "Unknown", "index": 9 }
+      ]
+    },
+    {
+      "room": 238, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 10541,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 21 },
+        { "type": "Object", "index": 62 }
+      ]
+    }
+  ]
+}

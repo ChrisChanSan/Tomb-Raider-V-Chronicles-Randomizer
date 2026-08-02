@@ -1,0 +1,1057 @@
+{
+  "levelName": "joby5",
+  "trType": 5,
+  "numRooms": 191,
+  "items": [
+    { "index": 0, "typeId": 420, "room": 4, "x": 58880, "y": 256, "z": 54784, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 3, "localX": 4608, "localY": 0, "localZ": 3584 },
+    { "index": 1, "typeId": 422, "room": 4, "x": 58880, "y": 256, "z": 54784, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 3, "localX": 4608, "localY": 0, "localZ": 3584 },
+    { "index": 2, "typeId": 432, "room": 4, "x": 57856, "y": 512, "z": 58880, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 7, "localX": 3584, "localY": -256, "localZ": 7680 },
+    { "index": 3, "typeId": 432, "room": 4, "x": 56832, "y": 512, "z": 58880, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 7, "localX": 2560, "localY": -256, "localZ": 7680 },
+    { "index": 4, "typeId": 429, "room": 4, "x": 59904, "y": 0, "z": 56832, "ocb": 0, "flags": 0, "sectorX": 5, "sectorZ": 5, "localX": 5632, "localY": 256, "localZ": 5632 },
+    { "index": 5, "typeId": 121, "room": 4, "x": 61952, "y": -128, "z": 56832, "ocb": 0, "flags": 0, "sectorX": 7, "sectorZ": 5, "localX": 7680, "localY": 384, "localZ": 5632 },
+    { "index": 6, "typeId": 121, "room": 4, "x": 55808, "y": -128, "z": 53760, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 384, "localZ": 2560 },
+    { "index": 7, "typeId": 411, "room": 4, "x": 59904, "y": 256, "z": 52736, "ocb": 0, "flags": 0, "sectorX": 5, "sectorZ": 1, "localX": 5632, "localY": 0, "localZ": 1536 },
+    { "index": 8, "typeId": 411, "room": 4, "x": 56832, "y": 256, "z": 52736, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 9, "typeId": 411, "room": 4, "x": 58880, "y": 256, "z": 58880, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 7, "localX": 4608, "localY": 0, "localZ": 7680 },
+    { "index": 10, "typeId": 121, "room": 5, "x": 58880, "y": -128, "z": 47616, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 384, "localZ": 1536 },
+    { "index": 11, "typeId": 121, "room": 5, "x": 60928, "y": -128, "z": 48640, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 2, "localX": 3584, "localY": 384, "localZ": 2560 },
+    { "index": 12, "typeId": 374, "room": 10, "x": 60928, "y": -1536, "z": 57856, "ocb": 31, "flags": 0, "sectorX": 5, "sectorZ": 6, "localX": 5632, "localY": 0, "localZ": 6656 },
+    { "index": 13, "typeId": 376, "room": 10, "x": 56832, "y": -1536, "z": 57856, "ocb": 63, "flags": 0, "sectorX": 1, "sectorZ": 6, "localX": 1536, "localY": 0, "localZ": 6656 },
+    { "index": 14, "typeId": 265, "room": 13, "x": 59904, "y": 3840, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 15, "typeId": 300, "room": 13, "x": 59904, "y": 3840, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 16, "typeId": 51, "room": 15, "x": 58880, "y": 3840, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 17, "typeId": 439, "room": 20, "x": 52736, "y": 4864, "z": 77312, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 0, "localZ": 3584 },
+    { "index": 18, "typeId": 437, "room": 20, "x": 53760, "y": 4864, "z": 77312, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 3, "localX": 3584, "localY": 0, "localZ": 3584 },
+    { "index": 19, "typeId": 437, "room": 20, "x": 52736, "y": 4864, "z": 75264, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 20, "typeId": 438, "room": 20, "x": 53760, "y": 4864, "z": 75264, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 1, "localX": 3584, "localY": 0, "localZ": 1536 },
+    { "index": 21, "typeId": 438, "room": 20, "x": 52736, "y": 4864, "z": 77312, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 0, "localZ": 3584 },
+    { "index": 22, "typeId": 42, "room": 20, "x": 53760, "y": 4864, "z": 77312, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 3, "localX": 3584, "localY": 0, "localZ": 3584 },
+    { "index": 23, "typeId": 410, "room": 20, "x": 54784, "y": 4864, "z": 76288, "ocb": 0, "flags": 256, "sectorX": 4, "sectorZ": 2, "localX": 4608, "localY": 0, "localZ": 2560 },
+    { "index": 24, "typeId": 411, "room": 20, "x": 51712, "y": 4864, "z": 77312, "ocb": 0, "flags": 256, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 25, "typeId": 376, "room": 20, "x": 53760, "y": 4096, "z": 77312, "ocb": 31, "flags": 0, "sectorX": 3, "sectorZ": 3, "localX": 3584, "localY": 768, "localZ": 3584 },
+    { "index": 26, "typeId": 302, "room": 24, "x": 58880, "y": 3840, "z": 56832, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 27, "typeId": 168, "room": 26, "x": 61952, "y": 3840, "z": 55808, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 28, "typeId": 168, "room": 26, "x": 61952, "y": 3840, "z": 57856, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 0, "localZ": 3584 },
+    { "index": 29, "typeId": 166, "room": 26, "x": 60928, "y": 3840, "z": 57856, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 30, "typeId": 436, "room": 26, "x": 60928, "y": 3840, "z": 57856, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 31, "typeId": 111, "room": 26, "x": 60928, "y": 1536, "z": 55808, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 2304, "localZ": 1536 },
+    { "index": 32, "typeId": 336, "room": 26, "x": 61952, "y": 3840, "z": 55808, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 33, "typeId": 44, "room": 27, "x": 57856, "y": 6912, "z": 70144, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 5, "localX": 1536, "localY": 0, "localZ": 5632 },
+    { "index": 34, "typeId": 44, "room": 27, "x": 59904, "y": 6912, "z": 70144, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 5, "localX": 3584, "localY": 0, "localZ": 5632 },
+    { "index": 35, "typeId": 46, "room": 27, "x": 57856, "y": 6912, "z": 68096, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 36, "typeId": 46, "room": 27, "x": 57856, "y": 6912, "z": 70144, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 5, "localX": 1536, "localY": 0, "localZ": 5632 },
+    { "index": 37, "typeId": 46, "room": 27, "x": 59904, "y": 6912, "z": 70144, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 5, "localX": 3584, "localY": 0, "localZ": 5632 },
+    { "index": 38, "typeId": 46, "room": 27, "x": 59904, "y": 6912, "z": 68096, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 3, "localX": 3584, "localY": 0, "localZ": 3584 },
+    { "index": 39, "typeId": 410, "room": 27, "x": 58880, "y": 6912, "z": 67072, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 0, "localZ": 2560 },
+    { "index": 40, "typeId": 374, "room": 27, "x": 58880, "y": 5888, "z": 68096, "ocb": 31, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 1024, "localZ": 3584 },
+    { "index": 41, "typeId": 410, "room": 28, "x": 60928, "y": 6912, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 6, "sectorZ": 1, "localX": 6656, "localY": 0, "localZ": 1536 },
+    { "index": 42, "typeId": 411, "room": 28, "x": 56832, "y": 6912, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 43, "typeId": 49, "room": 29, "x": 59904, "y": 7168, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 5, "sectorZ": 1, "localX": 5632, "localY": 0, "localZ": 1536 },
+    { "index": 44, "typeId": 51, "room": 29, "x": 55808, "y": 7168, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 45, "typeId": 337, "room": 29, "x": 59904, "y": 7168, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 5, "sectorZ": 1, "localX": 5632, "localY": 0, "localZ": 1536 },
+    { "index": 46, "typeId": 348, "room": 29, "x": 55808, "y": 7168, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 47, "typeId": 437, "room": 30, "x": 65024, "y": 4864, "z": 77312, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 3, "localX": 4608, "localY": 0, "localZ": 3584 },
+    { "index": 48, "typeId": 437, "room": 30, "x": 64000, "y": 4864, "z": 75264, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 1, "localX": 3584, "localY": 0, "localZ": 1536 },
+    { "index": 49, "typeId": 438, "room": 30, "x": 65024, "y": 4864, "z": 75264, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 1, "localX": 4608, "localY": 0, "localZ": 1536 },
+    { "index": 50, "typeId": 438, "room": 30, "x": 64000, "y": 4864, "z": 77312, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 3, "localX": 3584, "localY": 0, "localZ": 3584 },
+    { "index": 51, "typeId": 439, "room": 30, "x": 65024, "y": 4864, "z": 75264, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 1, "localX": 4608, "localY": 0, "localZ": 1536 },
+    { "index": 52, "typeId": 42, "room": 30, "x": 64000, "y": 4864, "z": 75264, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 1, "localX": 3584, "localY": 0, "localZ": 1536 },
+    { "index": 53, "typeId": 376, "room": 30, "x": 65024, "y": 4224, "z": 75264, "ocb": 63, "flags": 0, "sectorX": 4, "sectorZ": 1, "localX": 4608, "localY": 640, "localZ": 1536 },
+    { "index": 54, "typeId": 410, "room": 30, "x": 65024, "y": 4864, "z": 76288, "ocb": 0, "flags": 256, "sectorX": 4, "sectorZ": 2, "localX": 4608, "localY": 0, "localZ": 2560 },
+    { "index": 55, "typeId": 411, "room": 30, "x": 66048, "y": 4864, "z": 77312, "ocb": 0, "flags": 256, "sectorX": 5, "sectorZ": 3, "localX": 5632, "localY": 0, "localZ": 3584 },
+    { "index": 56, "typeId": 365, "room": 33, "x": 61952, "y": 6208, "z": 60928, "ocb": 47, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 448, "localZ": 1536 },
+    { "index": 57, "typeId": 300, "room": 34, "x": 55808, "y": 6912, "z": 61952, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 58, "typeId": 437, "room": 36, "x": 64000, "y": 4864, "z": 79360, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 1, "localX": 3584, "localY": 0, "localZ": 1536 },
+    { "index": 59, "typeId": 439, "room": 36, "x": 65024, "y": 4864, "z": 79360, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 1, "localX": 4608, "localY": 0, "localZ": 1536 },
+    { "index": 60, "typeId": 437, "room": 36, "x": 65024, "y": 4864, "z": 81408, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 3, "localX": 4608, "localY": 0, "localZ": 3584 },
+    { "index": 61, "typeId": 438, "room": 36, "x": 64000, "y": 4864, "z": 81408, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 3, "localX": 3584, "localY": 0, "localZ": 3584 },
+    { "index": 62, "typeId": 438, "room": 36, "x": 65024, "y": 4864, "z": 79360, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 1, "localX": 4608, "localY": 0, "localZ": 1536 },
+    { "index": 63, "typeId": 42, "room": 36, "x": 64000, "y": 4864, "z": 79360, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 1, "localX": 3584, "localY": 0, "localZ": 1536 },
+    { "index": 64, "typeId": 410, "room": 36, "x": 64000, "y": 4864, "z": 80384, "ocb": 0, "flags": 256, "sectorX": 3, "sectorZ": 2, "localX": 3584, "localY": 0, "localZ": 2560 },
+    { "index": 65, "typeId": 411, "room": 36, "x": 66048, "y": 4864, "z": 79360, "ocb": 0, "flags": 256, "sectorX": 5, "sectorZ": 1, "localX": 5632, "localY": 0, "localZ": 1536 },
+    { "index": 66, "typeId": 410, "room": 37, "x": 58880, "y": 4864, "z": 80384, "ocb": 0, "flags": 256, "sectorX": 1, "sectorZ": 5, "localX": 1536, "localY": 0, "localZ": 5632 },
+    { "index": 67, "typeId": 374, "room": 37, "x": 58880, "y": 3840, "z": 78336, "ocb": 31, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 1024, "localZ": 3584 },
+    { "index": 68, "typeId": 412, "room": 37, "x": 58880, "y": 4864, "z": 77312, "ocb": 0, "flags": 256, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 0, "localZ": 2560 },
+    { "index": 69, "typeId": 437, "room": 40, "x": 53760, "y": 4864, "z": 81408, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 3, "localX": 3584, "localY": 0, "localZ": 3584 },
+    { "index": 70, "typeId": 439, "room": 40, "x": 52736, "y": 4864, "z": 81408, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 0, "localZ": 3584 },
+    { "index": 71, "typeId": 438, "room": 40, "x": 52736, "y": 4864, "z": 81408, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 0, "localZ": 3584 },
+    { "index": 72, "typeId": 42, "room": 40, "x": 53760, "y": 4864, "z": 81408, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 3, "localX": 3584, "localY": 0, "localZ": 3584 },
+    { "index": 73, "typeId": 446, "room": 40, "x": 53760, "y": 4864, "z": 79360, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 1, "localX": 3584, "localY": 0, "localZ": 1536 },
+    { "index": 74, "typeId": 376, "room": 40, "x": 52736, "y": 4224, "z": 81408, "ocb": 63, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 640, "localZ": 3584 },
+    { "index": 75, "typeId": 0, "room": 40, "x": 52736, "y": 4864, "z": 81408, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 0, "localZ": 3584 },
+    { "index": 76, "typeId": 274, "room": 41, "x": 57856, "y": 4864, "z": 80384, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 77, "typeId": 300, "room": 41, "x": 57856, "y": 4864, "z": 80384, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 78, "typeId": 365, "room": 41, "x": 57856, "y": 4480, "z": 80384, "ocb": 47, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 384, "localZ": 1536 },
+    { "index": 79, "typeId": 300, "room": 43, "x": 54784, "y": 3840, "z": 44544, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 80, "typeId": 274, "room": 44, "x": 59904, "y": 4864, "z": 80384, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 81, "typeId": 300, "room": 44, "x": 59904, "y": 4864, "z": 80384, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 82, "typeId": 274, "room": 46, "x": 59904, "y": 4864, "z": 76288, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 83, "typeId": 300, "room": 46, "x": 59904, "y": 4864, "z": 76288, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 84, "typeId": 274, "room": 47, "x": 57856, "y": 4864, "z": 76288, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 85, "typeId": 300, "room": 47, "x": 57856, "y": 4864, "z": 76288, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 86, "typeId": 376, "room": 49, "x": 56832, "y": 2816, "z": 48640, "ocb": 63, "flags": 0, "sectorX": 4, "sectorZ": 4, "localX": 4608, "localY": 1024, "localZ": 4608 },
+    { "index": 87, "typeId": 374, "room": 49, "x": 54784, "y": 2816, "z": 50688, "ocb": 31, "flags": 0, "sectorX": 2, "sectorZ": 6, "localX": 2560, "localY": 1024, "localZ": 6656 },
+    { "index": 88, "typeId": 410, "room": 49, "x": 57856, "y": 3840, "z": 45568, "ocb": 0, "flags": 0, "sectorX": 5, "sectorZ": 1, "localX": 5632, "localY": 0, "localZ": 1536 },
+    { "index": 89, "typeId": 410, "room": 49, "x": 56832, "y": 3840, "z": 49664, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 5, "localX": 4608, "localY": 0, "localZ": 5632 },
+    { "index": 90, "typeId": 412, "room": 49, "x": 54784, "y": 3840, "z": 45568, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 91, "typeId": 98, "room": 49, "x": 53760, "y": 3840, "z": 45568, "ocb": 1, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 92, "typeId": 411, "room": 53, "x": 60928, "y": 3840, "z": 59904, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 93, "typeId": 410, "room": 53, "x": 60928, "y": 3840, "z": 61952, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 94, "typeId": 223, "room": 54, "x": 51712, "y": 1024, "z": 67072, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 0, "localZ": 2560 },
+    { "index": 95, "typeId": 168, "room": 54, "x": 51712, "y": 1024, "z": 66048, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 96, "typeId": 166, "room": 54, "x": 51712, "y": 1024, "z": 67072, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 0, "localZ": 2560 },
+    { "index": 97, "typeId": 436, "room": 54, "x": 51712, "y": 1024, "z": 67072, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 0, "localZ": 2560 },
+    { "index": 98, "typeId": 300, "room": 57, "x": 58880, "y": 3840, "z": 59904, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 99, "typeId": 376, "room": 61, "x": 58880, "y": 2560, "z": 73216, "ocb": 63, "flags": 0, "sectorX": 4, "sectorZ": 3, "localX": 4608, "localY": 1280, "localZ": 3584 },
+    { "index": 100, "typeId": 410, "room": 61, "x": 55808, "y": 3840, "z": 74240, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 4, "localX": 1536, "localY": 0, "localZ": 4608 },
+    { "index": 101, "typeId": 410, "room": 61, "x": 55808, "y": 3840, "z": 71168, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 102, "typeId": 410, "room": 61, "x": 59904, "y": 3840, "z": 73216, "ocb": 0, "flags": 0, "sectorX": 5, "sectorZ": 3, "localX": 5632, "localY": 0, "localZ": 3584 },
+    { "index": 103, "typeId": 300, "room": 64, "x": 52736, "y": 3840, "z": 41472, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 104, "typeId": 265, "room": 64, "x": 52736, "y": 3840, "z": 41472, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 105, "typeId": 416, "room": 66, "x": 55808, "y": -1280, "z": 51712, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 106, "typeId": 447, "room": 66, "x": 55808, "y": -1280, "z": 51712, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 107, "typeId": 242, "room": 82, "x": 57856, "y": -3072, "z": 48640, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 768, "localZ": 2560 },
+    { "index": 108, "typeId": 243, "room": 82, "x": 57856, "y": -3072, "z": 48640, "ocb": 12, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 768, "localZ": 2560 },
+    { "index": 109, "typeId": 440, "room": 82, "x": 57856, "y": -4352, "z": 48640, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 2048, "localZ": 2560 },
+    { "index": 110, "typeId": 64, "room": 82, "x": 58880, "y": -3072, "z": 48640, "ocb": 0, "flags": 256, "sectorX": 3, "sectorZ": 2, "localX": 3584, "localY": 768, "localZ": 2560 },
+    { "index": 111, "typeId": 161, "room": 82, "x": 57856, "y": -3072, "z": 48640, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 768, "localZ": 2560 },
+    { "index": 112, "typeId": 374, "room": 83, "x": 57856, "y": -768, "z": 61952, "ocb": 31, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 1024, "localZ": 1536 },
+    { "index": 113, "typeId": 412, "room": 83, "x": 58880, "y": 256, "z": 61952, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 1, "localX": 3584, "localY": 0, "localZ": 1536 },
+    { "index": 114, "typeId": 416, "room": 95, "x": 61952, "y": -1280, "z": 59904, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 115, "typeId": 365, "room": 100, "x": 56832, "y": 3456, "z": 41472, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 384, "localZ": 1536 },
+    { "index": 116, "typeId": 168, "room": 102, "x": 51712, "y": 3840, "z": 39424, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 0, "localZ": 2560 },
+    { "index": 117, "typeId": 168, "room": 102, "x": 51712, "y": 3840, "z": 38400, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 118, "typeId": 203, "room": 102, "x": 52736, "y": 3840, "z": 38400, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 119, "typeId": 51, "room": 102, "x": 52736, "y": 3840, "z": 38400, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 120, "typeId": 350, "room": 102, "x": 51712, "y": 3840, "z": 38400, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 121, "typeId": 447, "room": 104, "x": 61952, "y": -1280, "z": 51712, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 122, "typeId": 416, "room": 104, "x": 61952, "y": -1280, "z": 51712, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 123, "typeId": 302, "room": 106, "x": 53760, "y": 1024, "z": 67072, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 124, "typeId": 272, "room": 107, "x": 55808, "y": -1536, "z": 56832, "ocb": 0, "flags": 15360, "sectorX": 1, "sectorZ": 5, "localX": 1536, "localY": 256, "localZ": 5632 },
+    { "index": 125, "typeId": 134, "room": 107, "x": 55808, "y": -1536, "z": 56832, "ocb": 63, "flags": 0, "sectorX": 1, "sectorZ": 5, "localX": 1536, "localY": 256, "localZ": 5632 },
+    { "index": 126, "typeId": 409, "room": 107, "x": 55808, "y": -1536, "z": 56832, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 5, "localX": 1536, "localY": 256, "localZ": 5632 },
+    { "index": 127, "typeId": 300, "room": 108, "x": 59904, "y": 256, "z": 51712, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 128, "typeId": 274, "room": 108, "x": 59904, "y": 256, "z": 51712, "ocb": 8, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 129, "typeId": 300, "room": 109, "x": 57856, "y": 256, "z": 62976, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 130, "typeId": 109, "room": 112, "x": 64000, "y": 1792, "z": 47616, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 131, "typeId": 164, "room": 114, "x": 54784, "y": 3840, "z": 72192, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 132, "typeId": 164, "room": 114, "x": 54784, "y": 3840, "z": 73216, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 0, "localZ": 2560 },
+    { "index": 133, "typeId": 350, "room": 114, "x": 54784, "y": 3840, "z": 72192, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 134, "typeId": 374, "room": 115, "x": 61952, "y": 3072, "z": 46592, "ocb": 31, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 768, "localZ": 3584 },
+    { "index": 135, "typeId": 410, "room": 115, "x": 61952, "y": 3840, "z": 46592, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 0, "localZ": 3584 },
+    { "index": 136, "typeId": 98, "room": 115, "x": 62976, "y": 3840, "z": 45568, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 2, "localX": 3584, "localY": 0, "localZ": 2560 },
+    { "index": 137, "typeId": 304, "room": 116, "x": 59904, "y": 3840, "z": 47616, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 138, "typeId": 374, "room": 117, "x": 57856, "y": 2816, "z": 56832, "ocb": 31, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 1024, "localZ": 3584 },
+    { "index": 139, "typeId": 410, "room": 117, "x": 57856, "y": 3840, "z": 54784, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 140, "typeId": 411, "room": 117, "x": 57856, "y": 3840, "z": 58880, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 5, "localX": 1536, "localY": 0, "localZ": 5632 },
+    { "index": 141, "typeId": 164, "room": 119, "x": 60928, "y": 3840, "z": 73216, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 0, "localZ": 2560 },
+    { "index": 142, "typeId": 164, "room": 119, "x": 60928, "y": 3840, "z": 72192, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 143, "typeId": 173, "room": 119, "x": 60928, "y": 3840, "z": 73216, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 0, "localZ": 2560 },
+    { "index": 144, "typeId": 300, "room": 120, "x": 57856, "y": 256, "z": 51712, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 145, "typeId": 56, "room": 121, "x": 59904, "y": 512, "z": 49664, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 0, "localZ": 3584 },
+    { "index": 146, "typeId": 416, "room": 122, "x": 55808, "y": -1280, "z": 59904, "ocb": 0, "flags": 0, "sectorX": 5, "sectorZ": 1, "localX": 5632, "localY": 0, "localZ": 1536 },
+    { "index": 147, "typeId": 447, "room": 122, "x": 55808, "y": -1280, "z": 59904, "ocb": 0, "flags": 0, "sectorX": 5, "sectorZ": 1, "localX": 5632, "localY": 0, "localZ": 1536 },
+    { "index": 148, "typeId": 445, "room": 122, "x": 53760, "y": -1536, "z": 59904, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 1, "localX": 3584, "localY": 256, "localZ": 1536 },
+    { "index": 149, "typeId": 109, "room": 124, "x": 51712, "y": -1280, "z": 60928, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 150, "typeId": 223, "room": 126, "x": 61952, "y": 4096, "z": 45568, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 151, "typeId": 365, "room": 129, "x": 61952, "y": 3072, "z": 49664, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 768, "localZ": 1536 },
+    { "index": 152, "typeId": 121, "room": 132, "x": 57856, "y": 4096, "z": 55808, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 0, "localZ": 2560 },
+    { "index": 153, "typeId": 121, "room": 132, "x": 57856, "y": 4096, "z": 57856, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 4, "localX": 1536, "localY": 0, "localZ": 4608 },
+    { "index": 154, "typeId": 300, "room": 135, "x": 55808, "y": 3840, "z": 62976, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 155, "typeId": 49, "room": 135, "x": 55808, "y": 3840, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 156, "typeId": 201, "room": 135, "x": 55808, "y": 3840, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 157, "typeId": 304, "room": 137, "x": 53760, "y": 3840, "z": 52736, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 158, "typeId": 300, "room": 138, "x": 57856, "y": 3840, "z": 52736, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 159, "typeId": 274, "room": 138, "x": 57856, "y": 3840, "z": 52736, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 160, "typeId": 410, "room": 139, "x": 55808, "y": 3840, "z": 56832, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 3, "localX": 3584, "localY": 0, "localZ": 3584 },
+    { "index": 161, "typeId": 410, "room": 139, "x": 53760, "y": 3840, "z": 54784, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 162, "typeId": 426, "room": 141, "x": 53760, "y": 4096, "z": 56832, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 163, "typeId": 426, "room": 141, "x": 54784, "y": 4096, "z": 56832, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 0, "localZ": 3584 },
+    { "index": 164, "typeId": 426, "room": 141, "x": 55808, "y": 4096, "z": 56832, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 3, "localX": 3584, "localY": 0, "localZ": 3584 },
+    { "index": 165, "typeId": 98, "room": 143, "x": 57856, "y": 3840, "z": 68096, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 166, "typeId": 374, "room": 143, "x": 57856, "y": 2816, "z": 67072, "ocb": 31, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 1024, "localZ": 2560 },
+    { "index": 167, "typeId": 410, "room": 143, "x": 57856, "y": 3840, "z": 66048, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 168, "typeId": 411, "room": 143, "x": 57856, "y": 3840, "z": 68096, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 169, "typeId": 416, "room": 146, "x": 61952, "y": 1536, "z": 55808, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 170, "typeId": 447, "room": 146, "x": 61952, "y": 1536, "z": 55808, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 171, "typeId": 365, "room": 146, "x": 61952, "y": 1088, "z": 56832, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 448, "localZ": 2560 },
+    { "index": 172, "typeId": 300, "room": 148, "x": 58880, "y": 4864, "z": 74240, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 173, "typeId": 300, "room": 150, "x": 57856, "y": 3840, "z": 65024, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 174, "typeId": 410, "room": 151, "x": 56832, "y": 3840, "z": 42496, "ocb": 0, "flags": 0, "sectorX": 5, "sectorZ": 1, "localX": 5632, "localY": 0, "localZ": 1536 },
+    { "index": 175, "typeId": 411, "room": 151, "x": 52736, "y": 3840, "z": 42496, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 176, "typeId": 290, "room": 156, "x": 50688, "y": 4864, "z": 80384, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 177, "typeId": 304, "room": 157, "x": 57856, "y": 3840, "z": 69120, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 178, "typeId": 264, "room": 157, "x": 57856, "y": 3840, "z": 69120, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 179, "typeId": 394, "room": 158, "x": 57856, "y": 4096, "z": 68096, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 180, "typeId": 166, "room": 161, "x": 64000, "y": 3840, "z": 64000, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 181, "typeId": 436, "room": 161, "x": 64000, "y": 3840, "z": 64000, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 182, "typeId": 168, "room": 161, "x": 65024, "y": 3840, "z": 61952, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 183, "typeId": 168, "room": 161, "x": 64000, "y": 3840, "z": 61952, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 184, "typeId": 376, "room": 161, "x": 65024, "y": 2688, "z": 62976, "ocb": 63, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 1152, "localZ": 2560 },
+    { "index": 185, "typeId": 49, "room": 161, "x": 65024, "y": 3840, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 0, "localZ": 2560 },
+    { "index": 186, "typeId": 337, "room": 161, "x": 65024, "y": 3840, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 0, "localZ": 2560 },
+    { "index": 187, "typeId": 286, "room": 163, "x": 50688, "y": 4864, "z": 76288, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 188, "typeId": 302, "room": 164, "x": 52736, "y": 1024, "z": 64000, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 189, "typeId": 263, "room": 164, "x": 52736, "y": 1024, "z": 64000, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 190, "typeId": 280, "room": 165, "x": 53760, "y": 128, "z": 61952, "ocb": 0, "flags": 1024, "sectorX": 3, "sectorZ": 2, "localX": 3584, "localY": 896, "localZ": 2560 },
+    { "index": 191, "typeId": 168, "room": 165, "x": 51712, "y": 1024, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 3, "localX": 1536, "localY": 0, "localZ": 3584 },
+    { "index": 192, "typeId": 374, "room": 169, "x": 49664, "y": 6144, "z": 76288, "ocb": 31, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 1792, "localZ": 1536 },
+    { "index": 193, "typeId": 286, "room": 170, "x": 67072, "y": 4864, "z": 76288, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 194, "typeId": 374, "room": 172, "x": 68096, "y": 6016, "z": 76288, "ocb": 31, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 1920, "localZ": 1536 },
+    { "index": 195, "typeId": 286, "room": 173, "x": 67072, "y": 4864, "z": 80384, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 196, "typeId": 374, "room": 175, "x": 68096, "y": 6016, "z": 80384, "ocb": 31, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 1920, "localZ": 1536 },
+    { "index": 197, "typeId": 302, "room": 177, "x": 61952, "y": 3840, "z": 62976, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 198, "typeId": 376, "room": 178, "x": 66048, "y": 1536, "z": 66048, "ocb": 16, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 0, "localZ": 2560 },
+    { "index": 199, "typeId": 300, "room": 179, "x": 58880, "y": 6912, "z": 64000, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 200, "typeId": 274, "room": 179, "x": 58880, "y": 6912, "z": 64000, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 201, "typeId": 416, "room": 181, "x": 66048, "y": 1536, "z": 64000, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 0, "localZ": 2560 },
+    { "index": 202, "typeId": 365, "room": 181, "x": 66048, "y": 1024, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 512, "localZ": 1536 },
+    { "index": 203, "typeId": 347, "room": 183, "x": 56832, "y": 512, "z": 73216, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 9, "localX": 2560, "localY": 0, "localZ": 9728 },
+    { "index": 204, "typeId": 349, "room": 183, "x": 56832, "y": 512, "z": 65024, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 1, "localX": 2560, "localY": 0, "localZ": 1536 },
+    { "index": 205, "typeId": 348, "room": 183, "x": 59904, "y": 512, "z": 67072, "ocb": 0, "flags": 0, "sectorX": 5, "sectorZ": 3, "localX": 5632, "localY": 0, "localZ": 3584 },
+    { "index": 206, "typeId": 98, "room": 184, "x": 57856, "y": 256, "z": 70144, "ocb": 3, "flags": 0, "sectorX": 3, "sectorZ": 6, "localX": 3584, "localY": 0, "localZ": 6656 },
+    { "index": 207, "typeId": 121, "room": 184, "x": 59904, "y": -768, "z": 69120, "ocb": 0, "flags": 0, "sectorX": 5, "sectorZ": 5, "localX": 5632, "localY": 1024, "localZ": 5632 },
+    { "index": 208, "typeId": 121, "room": 184, "x": 55808, "y": -512, "z": 66048, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 2, "localX": 1536, "localY": 768, "localZ": 2560 },
+    { "index": 209, "typeId": 121, "room": 184, "x": 55808, "y": -512, "z": 72192, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 8, "localX": 1536, "localY": 768, "localZ": 8704 },
+    { "index": 210, "typeId": 410, "room": 184, "x": 56832, "y": 256, "z": 68096, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 4, "localX": 2560, "localY": 0, "localZ": 4608 },
+    { "index": 211, "typeId": 410, "room": 184, "x": 58880, "y": 256, "z": 71168, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 7, "localX": 4608, "localY": 0, "localZ": 7680 },
+    { "index": 212, "typeId": 411, "room": 184, "x": 59904, "y": 256, "z": 67072, "ocb": 0, "flags": 0, "sectorX": 5, "sectorZ": 3, "localX": 5632, "localY": 0, "localZ": 3584 },
+    { "index": 213, "typeId": 172, "room": 184, "x": 58880, "y": -128, "z": 72192, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 8, "localX": 4608, "localY": 384, "localZ": 8704 },
+    { "index": 214, "typeId": 300, "room": 186, "x": 59904, "y": 256, "z": 59904, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 215, "typeId": 109, "room": 188, "x": 65024, "y": 1536, "z": 64000, "ocb": 0, "flags": 15872, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 }
+  ],
+  "statics": [
+    { "room": 2, "meshId": 48, "x": 58880, "y": 4352, "z": 77312, "rotation": 0, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 2, "meshId": 45, "x": 58880, "y": 4352, "z": 79360, "rotation": 0, "sectorX": 1, "sectorZ": 4, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 4, "meshId": 11, "x": 58880, "y": 256, "z": 54784, "rotation": 0, "sectorX": 4, "sectorZ": 3, "collisionBox": { "minX": -512, "maxX": 512, "minY": -384, "maxY": 0, "minZ": -512, "maxZ": -512 } },
+    { "room": 4, "meshId": 11, "x": 57856, "y": 256, "z": 53760, "rotation": 16384, "sectorX": 3, "sectorZ": 2, "collisionBox": { "minX": -512, "maxX": 512, "minY": -384, "maxY": 0, "minZ": -512, "maxZ": -512 } },
+    { "room": 4, "meshId": 11, "x": 59904, "y": 256, "z": 53760, "rotation": 49152, "sectorX": 5, "sectorZ": 2, "collisionBox": { "minX": -512, "maxX": 512, "minY": -384, "maxY": 0, "minZ": -512, "maxZ": -512 } },
+    { "room": 4, "meshId": 11, "x": 59904, "y": 256, "z": 53760, "rotation": 16384, "sectorX": 5, "sectorZ": 2, "collisionBox": { "minX": -512, "maxX": 512, "minY": -384, "maxY": 0, "minZ": -512, "maxZ": -512 } },
+    { "room": 4, "meshId": 11, "x": 59904, "y": 256, "z": 54784, "rotation": 49152, "sectorX": 5, "sectorZ": 3, "collisionBox": { "minX": -512, "maxX": 512, "minY": -384, "maxY": 0, "minZ": -512, "maxZ": -512 } },
+    { "room": 4, "meshId": 11, "x": 57856, "y": 256, "z": 53760, "rotation": 49152, "sectorX": 3, "sectorZ": 2, "collisionBox": { "minX": -512, "maxX": 512, "minY": -384, "maxY": 0, "minZ": -512, "maxZ": -512 } },
+    { "room": 4, "meshId": 11, "x": 57856, "y": 256, "z": 54784, "rotation": 32768, "sectorX": 3, "sectorZ": 3, "collisionBox": { "minX": -512, "maxX": 512, "minY": -384, "maxY": 0, "minZ": -512, "maxZ": -512 } },
+    { "room": 4, "meshId": 11, "x": 57856, "y": 256, "z": 54784, "rotation": 16384, "sectorX": 3, "sectorZ": 3, "collisionBox": { "minX": -512, "maxX": 512, "minY": -384, "maxY": 0, "minZ": -512, "maxZ": -512 } },
+    { "room": 4, "meshId": 11, "x": 59904, "y": 256, "z": 54784, "rotation": 32768, "sectorX": 5, "sectorZ": 3, "collisionBox": { "minX": -512, "maxX": 512, "minY": -384, "maxY": 0, "minZ": -512, "maxZ": -512 } },
+    { "room": 4, "meshId": 11, "x": 58880, "y": 256, "z": 54784, "rotation": 32768, "sectorX": 4, "sectorZ": 3, "collisionBox": { "minX": -512, "maxX": 512, "minY": -384, "maxY": 0, "minZ": -512, "maxZ": -512 } },
+    { "room": 4, "meshId": 39, "x": 55808, "y": 256, "z": 53760, "rotation": 0, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 4, "meshId": 39, "x": 55808, "y": 256, "z": 54784, "rotation": 0, "sectorX": 1, "sectorZ": 3, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 4, "meshId": 39, "x": 55808, "y": 256, "z": 56832, "rotation": 0, "sectorX": 1, "sectorZ": 5, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 4, "meshId": 39, "x": 55808, "y": 256, "z": 57856, "rotation": 0, "sectorX": 1, "sectorZ": 6, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 4, "meshId": 39, "x": 56832, "y": 256, "z": 58880, "rotation": 0, "sectorX": 2, "sectorZ": 7, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 4, "meshId": 39, "x": 57856, "y": 256, "z": 58880, "rotation": 0, "sectorX": 3, "sectorZ": 7, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 4, "meshId": 39, "x": 61952, "y": 256, "z": 57856, "rotation": 0, "sectorX": 7, "sectorZ": 6, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 4, "meshId": 39, "x": 61952, "y": 256, "z": 56832, "rotation": 0, "sectorX": 7, "sectorZ": 5, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 4, "meshId": 39, "x": 61952, "y": 256, "z": 54784, "rotation": 0, "sectorX": 7, "sectorZ": 3, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 4, "meshId": 39, "x": 61952, "y": 256, "z": 53760, "rotation": 0, "sectorX": 7, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 4, "meshId": 43, "x": 58880, "y": 768, "z": 52736, "rotation": 0, "sectorX": 4, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 256, "minY": -1536, "maxY": -1024, "minZ": -512, "maxZ": -384 } },
+    { "room": 4, "meshId": 12, "x": 55808, "y": 256, "z": 53760, "rotation": 49152, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -512, "maxX": 512, "minY": -768, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 4, "meshId": 12, "x": 55808, "y": 256, "z": 54784, "rotation": 49152, "sectorX": 1, "sectorZ": 3, "collisionBox": { "minX": -512, "maxX": 512, "minY": -768, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 4, "meshId": 12, "x": 55808, "y": 256, "z": 56832, "rotation": 49152, "sectorX": 1, "sectorZ": 5, "collisionBox": { "minX": -512, "maxX": 512, "minY": -768, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 4, "meshId": 12, "x": 55808, "y": 256, "z": 57856, "rotation": 49152, "sectorX": 1, "sectorZ": 6, "collisionBox": { "minX": -512, "maxX": 512, "minY": -768, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 4, "meshId": 12, "x": 61952, "y": 256, "z": 57856, "rotation": 16384, "sectorX": 7, "sectorZ": 6, "collisionBox": { "minX": -512, "maxX": 512, "minY": -768, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 4, "meshId": 12, "x": 61952, "y": 256, "z": 56832, "rotation": 16384, "sectorX": 7, "sectorZ": 5, "collisionBox": { "minX": -512, "maxX": 512, "minY": -768, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 4, "meshId": 12, "x": 61952, "y": 256, "z": 54784, "rotation": 16384, "sectorX": 7, "sectorZ": 3, "collisionBox": { "minX": -512, "maxX": 512, "minY": -768, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 4, "meshId": 12, "x": 61952, "y": 256, "z": 53760, "rotation": 16384, "sectorX": 7, "sectorZ": 2, "collisionBox": { "minX": -512, "maxX": 512, "minY": -768, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 4, "meshId": 1, "x": 56832, "y": 256, "z": 58880, "rotation": 32768, "sectorX": 2, "sectorZ": 7, "collisionBox": { "minX": -512, "maxX": 512, "minY": -768, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 4, "meshId": 2, "x": 57856, "y": 256, "z": 58880, "rotation": 32768, "sectorX": 3, "sectorZ": 7, "collisionBox": { "minX": -512, "maxX": 512, "minY": -768, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 5, "meshId": 43, "x": 58880, "y": 256, "z": 49664, "rotation": 32768, "sectorX": 1, "sectorZ": 3, "collisionBox": { "minX": 0, "maxX": 256, "minY": -1536, "maxY": -1024, "minZ": -512, "maxZ": -384 } },
+    { "room": 5, "meshId": 12, "x": 60928, "y": 256, "z": 49664, "rotation": 16384, "sectorX": 3, "sectorZ": 3, "collisionBox": { "minX": -512, "maxX": 512, "minY": -768, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 5, "meshId": 12, "x": 60928, "y": 256, "z": 48640, "rotation": 16384, "sectorX": 3, "sectorZ": 2, "collisionBox": { "minX": -512, "maxX": 512, "minY": -768, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 5, "meshId": 12, "x": 59904, "y": 256, "z": 47616, "rotation": 32768, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": 512, "minY": -768, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 5, "meshId": 12, "x": 58880, "y": 256, "z": 47616, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": 512, "minY": -768, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 5, "meshId": 39, "x": 58880, "y": 256, "z": 47616, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 5, "meshId": 39, "x": 59904, "y": 256, "z": 47616, "rotation": 0, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 5, "meshId": 39, "x": 60928, "y": 256, "z": 48640, "rotation": 0, "sectorX": 3, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 5, "meshId": 39, "x": 60928, "y": 256, "z": 49664, "rotation": 0, "sectorX": 3, "sectorZ": 3, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 10, "meshId": 45, "x": 60928, "y": -1024, "z": 55808, "rotation": 0, "sectorX": 5, "sectorZ": 4, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 10, "meshId": 45, "x": 60928, "y": -1024, "z": 57856, "rotation": 0, "sectorX": 5, "sectorZ": 6, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 10, "meshId": 45, "x": 56832, "y": -1024, "z": 57856, "rotation": 0, "sectorX": 1, "sectorZ": 6, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 10, "meshId": 45, "x": 56832, "y": -1024, "z": 55808, "rotation": 0, "sectorX": 1, "sectorZ": 4, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 10, "meshId": 45, "x": 56832, "y": -1024, "z": 53760, "rotation": 0, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 10, "meshId": 48, "x": 60928, "y": -1024, "z": 53760, "rotation": 0, "sectorX": 5, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 13, "meshId": 10, "x": 59904, "y": 3840, "z": 62976, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 13, "meshId": 31, "x": 59904, "y": 3840, "z": 62976, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 13, "meshId": 32, "x": 59904, "y": 3840, "z": 62976, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 14, "meshId": 45, "x": 51712, "y": 4352, "z": 76288, "rotation": 16384, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 14, "meshId": 48, "x": 54784, "y": 4352, "z": 76288, "rotation": 16384, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 19, "meshId": 27, "x": 53760, "y": 0, "z": 62976, "rotation": 49152, "sectorX": 3, "sectorZ": 3, "collisionBox": { "minX": -256, "maxX": 256, "minY": -768, "maxY": -256, "minZ": -548, "maxZ": -532 } },
+    { "room": 19, "meshId": 27, "x": 53760, "y": 0, "z": 60928, "rotation": 49152, "sectorX": 3, "sectorZ": 1, "collisionBox": { "minX": -256, "maxX": 256, "minY": -768, "maxY": -256, "minZ": -548, "maxZ": -532 } },
+    { "room": 19, "meshId": 45, "x": 52736, "y": 0, "z": 61952, "rotation": 16384, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 20, "meshId": 48, "x": 54784, "y": 4352, "z": 76288, "rotation": 16384, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 20, "meshId": 48, "x": 51712, "y": 4352, "z": 76288, "rotation": 16384, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 26, "meshId": 47, "x": 61952, "y": 2816, "z": 56832, "rotation": 16384, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -192, "maxX": 192, "minY": -1024, "maxY": -640, "minZ": -960, "maxZ": -64 } },
+    { "room": 26, "meshId": 40, "x": 61952, "y": 3840, "z": 57856, "rotation": 24576, "sectorX": 2, "sectorZ": 3, "collisionBox": { "minX": -313, "maxX": -177, "minY": -390, "maxY": 0, "minZ": -473, "maxZ": -385 } },
+    { "room": 26, "meshId": 43, "x": 61952, "y": 3328, "z": 55808, "rotation": 49152, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 256, "minY": -1536, "maxY": -1024, "minZ": -512, "maxZ": -384 } },
+    { "room": 26, "meshId": 9, "x": 61952, "y": 3840, "z": 57856, "rotation": 16384, "sectorX": 2, "sectorZ": 3, "collisionBox": { "minX": -512, "maxX": 512, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 26, "meshId": 9, "x": 61952, "y": 3840, "z": 55808, "rotation": 32768, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": 512, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 26, "meshId": 8, "x": 60928, "y": 3840, "z": 57856, "rotation": 0, "sectorX": 1, "sectorZ": 3, "collisionBox": { "minX": -256, "maxX": 256, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 27, "meshId": 39, "x": 59904, "y": 6912, "z": 70144, "rotation": 0, "sectorX": 3, "sectorZ": 5, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 27, "meshId": 39, "x": 59904, "y": 6912, "z": 69120, "rotation": 0, "sectorX": 3, "sectorZ": 4, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 27, "meshId": 39, "x": 59904, "y": 6912, "z": 68096, "rotation": 0, "sectorX": 3, "sectorZ": 3, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 27, "meshId": 39, "x": 59904, "y": 6912, "z": 67072, "rotation": 0, "sectorX": 3, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 27, "meshId": 39, "x": 57856, "y": 6912, "z": 70144, "rotation": 0, "sectorX": 1, "sectorZ": 5, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 27, "meshId": 39, "x": 57856, "y": 6912, "z": 69120, "rotation": 0, "sectorX": 1, "sectorZ": 4, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 27, "meshId": 39, "x": 57856, "y": 6912, "z": 68096, "rotation": 0, "sectorX": 1, "sectorZ": 3, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 27, "meshId": 39, "x": 57856, "y": 6912, "z": 67072, "rotation": 0, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 27, "meshId": 45, "x": 58880, "y": 6400, "z": 70144, "rotation": 0, "sectorX": 2, "sectorZ": 5, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 27, "meshId": 48, "x": 58880, "y": 6400, "z": 67072, "rotation": 0, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 28, "meshId": 45, "x": 60928, "y": 6400, "z": 62976, "rotation": 16384, "sectorX": 6, "sectorZ": 1, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 28, "meshId": 45, "x": 56832, "y": 6400, "z": 62976, "rotation": 16384, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 30, "meshId": 48, "x": 66048, "y": 4352, "z": 76288, "rotation": 16384, "sectorX": 5, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 30, "meshId": 48, "x": 62976, "y": 4352, "z": 76288, "rotation": 16384, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 32, "meshId": 39, "x": 61952, "y": 6656, "z": 61952, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 34, "meshId": 31, "x": 55808, "y": 6912, "z": 61952, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 34, "meshId": 32, "x": 55808, "y": 6912, "z": 61952, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 34, "meshId": 10, "x": 55808, "y": 6912, "z": 61952, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 36, "meshId": 48, "x": 66048, "y": 4352, "z": 80384, "rotation": 16384, "sectorX": 5, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 36, "meshId": 48, "x": 62976, "y": 4352, "z": 80384, "rotation": 16384, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 37, "meshId": 48, "x": 58880, "y": 4352, "z": 79360, "rotation": 0, "sectorX": 1, "sectorZ": 4, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 37, "meshId": 48, "x": 58880, "y": 4352, "z": 77312, "rotation": 0, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 40, "meshId": 0, "x": 52736, "y": 4864, "z": 79360, "rotation": 0, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": 1536, "minY": -1280, "maxY": 0, "minZ": -896, "maxZ": -512 } },
+    { "room": 40, "meshId": 48, "x": 54784, "y": 4352, "z": 80384, "rotation": 16384, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 40, "meshId": 48, "x": 51712, "y": 4352, "z": 80384, "rotation": 16384, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 41, "meshId": 32, "x": 57856, "y": 4864, "z": 80384, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 41, "meshId": 31, "x": 57856, "y": 4864, "z": 80384, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 41, "meshId": 10, "x": 57856, "y": 4864, "z": 80384, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 43, "meshId": 31, "x": 54784, "y": 3840, "z": 44544, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 43, "meshId": 32, "x": 54784, "y": 3840, "z": 44544, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 43, "meshId": 10, "x": 54784, "y": 3840, "z": 44544, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 44, "meshId": 32, "x": 59904, "y": 4864, "z": 80384, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 44, "meshId": 31, "x": 59904, "y": 4864, "z": 80384, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 44, "meshId": 10, "x": 59904, "y": 4864, "z": 80384, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 46, "meshId": 32, "x": 59904, "y": 4864, "z": 76288, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 46, "meshId": 31, "x": 59904, "y": 4864, "z": 76288, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 46, "meshId": 10, "x": 59904, "y": 4864, "z": 76288, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 47, "meshId": 31, "x": 57856, "y": 4864, "z": 76288, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 47, "meshId": 32, "x": 57856, "y": 4864, "z": 76288, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 47, "meshId": 10, "x": 57856, "y": 4864, "z": 76288, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 49, "meshId": 45, "x": 56832, "y": 3328, "z": 50688, "rotation": 0, "sectorX": 4, "sectorZ": 6, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 49, "meshId": 45, "x": 56832, "y": 3328, "z": 46592, "rotation": 0, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 49, "meshId": 45, "x": 54784, "y": 3328, "z": 48640, "rotation": 0, "sectorX": 2, "sectorZ": 4, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 49, "meshId": 24, "x": 54784, "y": 3840, "z": 47616, "rotation": 0, "sectorX": 2, "sectorZ": 3, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -384, "maxY": 0, "minZ": -64, "maxZ": 64 } },
+    { "room": 49, "meshId": 24, "x": 54784, "y": 3840, "z": 49664, "rotation": 0, "sectorX": 2, "sectorZ": 5, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -384, "maxY": 0, "minZ": -64, "maxZ": 64 } },
+    { "room": 49, "meshId": 24, "x": 57856, "y": 3840, "z": 49664, "rotation": 0, "sectorX": 5, "sectorZ": 5, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -384, "maxY": 0, "minZ": -64, "maxZ": 64 } },
+    { "room": 49, "meshId": 24, "x": 57856, "y": 3840, "z": 45568, "rotation": 0, "sectorX": 5, "sectorZ": 1, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -384, "maxY": 0, "minZ": -64, "maxZ": 64 } },
+    { "room": 49, "meshId": 43, "x": 57856, "y": 3584, "z": 48640, "rotation": 49152, "sectorX": 5, "sectorZ": 4, "collisionBox": { "minX": 0, "maxX": 256, "minY": -1536, "maxY": -1024, "minZ": -512, "maxZ": -384 } },
+    { "room": 49, "meshId": 43, "x": 55808, "y": 3584, "z": 45568, "rotation": 0, "sectorX": 3, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 256, "minY": -1536, "maxY": -1024, "minZ": -512, "maxZ": -384 } },
+    { "room": 49, "meshId": 42, "x": 54784, "y": 4096, "z": 51712, "rotation": 32768, "sectorX": 2, "sectorZ": 7, "collisionBox": { "minX": 76, "maxX": 196, "minY": -764, "maxY": -428, "minZ": -512, "maxZ": -416 } },
+    { "room": 49, "meshId": 48, "x": 56832, "y": 3328, "z": 48640, "rotation": 0, "sectorX": 4, "sectorZ": 4, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 49, "meshId": 48, "x": 54784, "y": 3328, "z": 46592, "rotation": 0, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 49, "meshId": 48, "x": 54784, "y": 3328, "z": 50688, "rotation": 0, "sectorX": 2, "sectorZ": 6, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 50, "meshId": 45, "x": 62976, "y": 4352, "z": 80384, "rotation": 16384, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 50, "meshId": 48, "x": 66048, "y": 4352, "z": 80384, "rotation": 16384, "sectorX": 5, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 52, "meshId": 45, "x": 62976, "y": 4352, "z": 76288, "rotation": 16384, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 52, "meshId": 48, "x": 66048, "y": 4352, "z": 76288, "rotation": 16384, "sectorX": 5, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 53, "meshId": 45, "x": 60928, "y": 3328, "z": 61952, "rotation": 0, "sectorX": 1, "sectorZ": 3, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 54, "meshId": 49, "x": 52736, "y": 0, "z": 66048, "rotation": 16384, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": -192, "maxX": 192, "minY": -1024, "maxY": -640, "minZ": -960, "maxZ": -64 } },
+    { "room": 54, "meshId": 49, "x": 52736, "y": 0, "z": 67072, "rotation": 16384, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -192, "maxX": 192, "minY": -1024, "maxY": -640, "minZ": -960, "maxZ": -64 } },
+    { "room": 54, "meshId": 9, "x": 51712, "y": 1024, "z": 66048, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": 512, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 54, "meshId": 8, "x": 51712, "y": 1024, "z": 67072, "rotation": 49152, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -256, "maxX": 256, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 57, "meshId": 10, "x": 58880, "y": 3840, "z": 59904, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 57, "meshId": 31, "x": 58880, "y": 3840, "z": 59904, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 57, "meshId": 32, "x": 58880, "y": 3840, "z": 59904, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 61, "meshId": 24, "x": 55808, "y": 3840, "z": 72192, "rotation": 16384, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -384, "maxY": 0, "minZ": -64, "maxZ": 64 } },
+    { "room": 61, "meshId": 24, "x": 59904, "y": 3840, "z": 72192, "rotation": 16384, "sectorX": 5, "sectorZ": 2, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -384, "maxY": 0, "minZ": -64, "maxZ": 64 } },
+    { "room": 61, "meshId": 49, "x": 56832, "y": 3072, "z": 72192, "rotation": 32768, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -192, "maxX": 192, "minY": -1024, "maxY": -640, "minZ": -960, "maxZ": -64 } },
+    { "room": 61, "meshId": 49, "x": 57856, "y": 3072, "z": 72192, "rotation": 32768, "sectorX": 3, "sectorZ": 2, "collisionBox": { "minX": -192, "maxX": 192, "minY": -1024, "maxY": -640, "minZ": -960, "maxZ": -64 } },
+    { "room": 61, "meshId": 49, "x": 58880, "y": 3072, "z": 72192, "rotation": 32768, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": -192, "maxX": 192, "minY": -1024, "maxY": -640, "minZ": -960, "maxZ": -64 } },
+    { "room": 63, "meshId": 10, "x": 58880, "y": 4864, "z": 75264, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 63, "meshId": 31, "x": 58880, "y": 4864, "z": 75264, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 63, "meshId": 32, "x": 58880, "y": 4864, "z": 75264, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 64, "meshId": 10, "x": 52736, "y": 3840, "z": 41472, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 64, "meshId": 31, "x": 52736, "y": 3840, "z": 41472, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 64, "meshId": 32, "x": 52736, "y": 3840, "z": 41472, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 67, "meshId": 31, "x": 57856, "y": 4864, "z": 76288, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 67, "meshId": 32, "x": 57856, "y": 4864, "z": 76288, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 67, "meshId": 10, "x": 57856, "y": 4864, "z": 76288, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 68, "meshId": 32, "x": 59904, "y": 4864, "z": 76288, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 68, "meshId": 31, "x": 59904, "y": 4864, "z": 76288, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 68, "meshId": 10, "x": 59904, "y": 4864, "z": 76288, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 69, "meshId": 39, "x": 57856, "y": 4864, "z": 80384, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 69, "meshId": 39, "x": 57856, "y": 4864, "z": 80384, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 70, "meshId": 32, "x": 59904, "y": 4864, "z": 80384, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 70, "meshId": 31, "x": 59904, "y": 4864, "z": 80384, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 70, "meshId": 10, "x": 59904, "y": 4864, "z": 80384, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 80, "meshId": 45, "x": 54784, "y": 4352, "z": 80384, "rotation": 16384, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 80, "meshId": 45, "x": 51712, "y": 4352, "z": 80384, "rotation": 16384, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 80, "meshId": 0, "x": 52736, "y": 4864, "z": 79360, "rotation": 0, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": 1536, "minY": -1280, "maxY": 0, "minZ": -896, "maxZ": -512 } },
+    { "room": 83, "meshId": 45, "x": 57856, "y": -256, "z": 61952, "rotation": 16384, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 85, "meshId": 10, "x": 67072, "y": 4864, "z": 80384, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 86, "meshId": 10, "x": 67072, "y": 4864, "z": 76288, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 87, "meshId": 46, "x": 61952, "y": -1536, "z": 56832, "rotation": 16384, "sectorX": 1, "sectorZ": 4, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 87, "meshId": 46, "x": 61952, "y": -1536, "z": 54784, "rotation": 16384, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 89, "meshId": 10, "x": 50688, "y": 4864, "z": 76288, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 90, "meshId": 10, "x": 50688, "y": 4864, "z": 80384, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 100, "meshId": 39, "x": 56832, "y": 3584, "z": 41472, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 102, "meshId": 49, "x": 52736, "y": 2816, "z": 39424, "rotation": 0, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -192, "maxX": 192, "minY": -1024, "maxY": -640, "minZ": -960, "maxZ": -64 } },
+    { "room": 102, "meshId": 9, "x": 51712, "y": 3840, "z": 39424, "rotation": 49152, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -512, "maxX": 512, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 102, "meshId": 9, "x": 51712, "y": 3840, "z": 38400, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": 512, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 107, "meshId": 46, "x": 55808, "y": -1536, "z": 54784, "rotation": 49152, "sectorX": 1, "sectorZ": 3, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 108, "meshId": 31, "x": 59904, "y": 256, "z": 51712, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 108, "meshId": 32, "x": 59904, "y": 256, "z": 51712, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 108, "meshId": 10, "x": 59904, "y": 256, "z": 51712, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 109, "meshId": 10, "x": 57856, "y": 256, "z": 62976, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 109, "meshId": 31, "x": 57856, "y": 256, "z": 62976, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 109, "meshId": 32, "x": 57856, "y": 256, "z": 62976, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 111, "meshId": 26, "x": 55808, "y": 4096, "z": 73216, "rotation": 49152, "sectorX": 1, "sectorZ": 3, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -256, "maxY": 0, "minZ": -384, "maxZ": 64 } },
+    { "room": 111, "meshId": 26, "x": 59904, "y": 4096, "z": 72192, "rotation": 16384, "sectorX": 5, "sectorZ": 2, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -256, "maxY": 0, "minZ": -384, "maxZ": 64 } },
+    { "room": 111, "meshId": 28, "x": 56832, "y": 4096, "z": 71168, "rotation": 32768, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": -384, "maxX": 384, "minY": -640, "maxY": 0, "minZ": -384, "maxZ": 64 } },
+    { "room": 111, "meshId": 28, "x": 57856, "y": 4096, "z": 71168, "rotation": 32768, "sectorX": 3, "sectorZ": 1, "collisionBox": { "minX": -384, "maxX": 384, "minY": -640, "maxY": 0, "minZ": -384, "maxZ": 64 } },
+    { "room": 111, "meshId": 28, "x": 58880, "y": 4096, "z": 71168, "rotation": 32768, "sectorX": 4, "sectorZ": 1, "collisionBox": { "minX": -384, "maxX": 384, "minY": -640, "maxY": 0, "minZ": -384, "maxZ": 64 } },
+    { "room": 111, "meshId": 28, "x": 58880, "y": 4096, "z": 74240, "rotation": 0, "sectorX": 4, "sectorZ": 4, "collisionBox": { "minX": -384, "maxX": 384, "minY": -640, "maxY": 0, "minZ": -384, "maxZ": 64 } },
+    { "room": 111, "meshId": 28, "x": 57856, "y": 4096, "z": 74240, "rotation": 0, "sectorX": 3, "sectorZ": 4, "collisionBox": { "minX": -384, "maxX": 384, "minY": -640, "maxY": 0, "minZ": -384, "maxZ": 64 } },
+    { "room": 111, "meshId": 28, "x": 56832, "y": 4096, "z": 74240, "rotation": 0, "sectorX": 2, "sectorZ": 4, "collisionBox": { "minX": -384, "maxX": 384, "minY": -640, "maxY": 0, "minZ": -384, "maxZ": 64 } },
+    { "room": 114, "meshId": 49, "x": 54784, "y": 3072, "z": 73216, "rotation": 0, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -192, "maxX": 192, "minY": -1024, "maxY": -640, "minZ": -960, "maxZ": -64 } },
+    { "room": 114, "meshId": 9, "x": 54784, "y": 3840, "z": 72192, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": 512, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 114, "meshId": 9, "x": 54784, "y": 3840, "z": 73216, "rotation": 49152, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -512, "maxX": 512, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 115, "meshId": 45, "x": 62976, "y": 3328, "z": 46592, "rotation": 16384, "sectorX": 3, "sectorZ": 3, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 115, "meshId": 45, "x": 60928, "y": 3328, "z": 45568, "rotation": 32768, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 115, "meshId": 21, "x": 62976, "y": 3584, "z": 46592, "rotation": 0, "sectorX": 3, "sectorZ": 3, "collisionBox": { "minX": 134, "maxX": 394, "minY": -130, "maxY": 0, "minZ": -437, "maxZ": -129 } },
+    { "room": 115, "meshId": 21, "x": 64000, "y": 3584, "z": 45568, "rotation": 16384, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": 134, "maxX": 394, "minY": -130, "maxY": 0, "minZ": -437, "maxZ": -129 } },
+    { "room": 115, "meshId": 22, "x": 61952, "y": 3584, "z": 44544, "rotation": 0, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": -528, "maxX": 528, "minY": -128, "maxY": 192, "minZ": -528, "maxZ": 528 } },
+    { "room": 115, "meshId": 33, "x": 60928, "y": 3584, "z": 46592, "rotation": 16384, "sectorX": 1, "sectorZ": 3, "collisionBox": { "minX": -448, "maxX": 480, "minY": -1280, "maxY": 0, "minZ": -512, "maxZ": -320 } },
+    { "room": 115, "meshId": 33, "x": 62976, "y": 3584, "z": 44544, "rotation": 0, "sectorX": 3, "sectorZ": 1, "collisionBox": { "minX": -448, "maxX": 480, "minY": -1280, "maxY": 0, "minZ": -512, "maxZ": -320 } },
+    { "room": 115, "meshId": 20, "x": 64000, "y": 3584, "z": 45568, "rotation": 32768, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": 170, "maxX": 358, "minY": -112, "maxY": -18, "minZ": -395, "maxZ": -171 } },
+    { "room": 115, "meshId": 20, "x": 62976, "y": 3584, "z": 46592, "rotation": 16384, "sectorX": 3, "sectorZ": 3, "collisionBox": { "minX": 170, "maxX": 358, "minY": -112, "maxY": -18, "minZ": -395, "maxZ": -171 } },
+    { "room": 115, "meshId": 22, "x": 60928, "y": 3584, "z": 45568, "rotation": 16384, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -528, "maxX": 528, "minY": -128, "maxY": 192, "minZ": -528, "maxZ": 528 } },
+    { "room": 115, "meshId": 48, "x": 64000, "y": 3328, "z": 45568, "rotation": 0, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 115, "meshId": 48, "x": 61952, "y": 3328, "z": 44544, "rotation": 16384, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 116, "meshId": 42, "x": 59904, "y": 3840, "z": 47616, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 76, "maxX": 196, "minY": -764, "maxY": -428, "minZ": -512, "maxZ": -416 } },
+    { "room": 117, "meshId": 45, "x": 57856, "y": 3328, "z": 57856, "rotation": 0, "sectorX": 1, "sectorZ": 4, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 117, "meshId": 45, "x": 57856, "y": 3328, "z": 55808, "rotation": 0, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 119, "meshId": 49, "x": 60928, "y": 3072, "z": 72192, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -192, "maxX": 192, "minY": -1024, "maxY": -640, "minZ": -960, "maxZ": -64 } },
+    { "room": 119, "meshId": 9, "x": 60928, "y": 3840, "z": 73216, "rotation": 16384, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -512, "maxX": 512, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 119, "meshId": 9, "x": 60928, "y": 3840, "z": 72192, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": 512, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 120, "meshId": 31, "x": 57856, "y": 256, "z": 51712, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 120, "meshId": 32, "x": 57856, "y": 256, "z": 51712, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 120, "meshId": 10, "x": 57856, "y": 256, "z": 51712, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 121, "meshId": 5, "x": 58880, "y": 512, "z": 49664, "rotation": 16384, "sectorX": 1, "sectorZ": 3, "collisionBox": { "minX": -768, "maxX": 0, "minY": -2048, "maxY": 0, "minZ": -768, "maxZ": 0 } },
+    { "room": 128, "meshId": 23, "x": 57856, "y": 4096, "z": 50688, "rotation": 0, "sectorX": 5, "sectorZ": 6, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -256, "maxY": 0, "minZ": -256, "maxZ": 256 } },
+    { "room": 128, "meshId": 23, "x": 54784, "y": 4096, "z": 50688, "rotation": 0, "sectorX": 2, "sectorZ": 6, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -256, "maxY": 0, "minZ": -256, "maxZ": 256 } },
+    { "room": 128, "meshId": 23, "x": 57856, "y": 4096, "z": 48640, "rotation": 0, "sectorX": 5, "sectorZ": 4, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -256, "maxY": 0, "minZ": -256, "maxZ": 256 } },
+    { "room": 128, "meshId": 23, "x": 54784, "y": 4096, "z": 48640, "rotation": 0, "sectorX": 2, "sectorZ": 4, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -256, "maxY": 0, "minZ": -256, "maxZ": 256 } },
+    { "room": 128, "meshId": 23, "x": 57856, "y": 4096, "z": 46592, "rotation": 0, "sectorX": 5, "sectorZ": 2, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -256, "maxY": 0, "minZ": -256, "maxZ": 256 } },
+    { "room": 128, "meshId": 23, "x": 54784, "y": 4096, "z": 46592, "rotation": 0, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -256, "maxY": 0, "minZ": -256, "maxZ": 256 } },
+    { "room": 128, "meshId": 25, "x": 54784, "y": 4096, "z": 47616, "rotation": 0, "sectorX": 2, "sectorZ": 3, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -256, "maxY": 0, "minZ": -384, "maxZ": 384 } },
+    { "room": 128, "meshId": 25, "x": 54784, "y": 4096, "z": 49664, "rotation": 0, "sectorX": 2, "sectorZ": 5, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -256, "maxY": 0, "minZ": -384, "maxZ": 384 } },
+    { "room": 128, "meshId": 25, "x": 57856, "y": 4096, "z": 49664, "rotation": 0, "sectorX": 5, "sectorZ": 5, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -256, "maxY": 0, "minZ": -384, "maxZ": 384 } },
+    { "room": 128, "meshId": 26, "x": 56832, "y": 4096, "z": 45568, "rotation": 32768, "sectorX": 4, "sectorZ": 1, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -256, "maxY": 0, "minZ": -384, "maxZ": 64 } },
+    { "room": 128, "meshId": 38, "x": 53760, "y": 4096, "z": 46592, "rotation": 0, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 128, "meshId": 38, "x": 54784, "y": 4096, "z": 46592, "rotation": 0, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 128, "meshId": 38, "x": 56832, "y": 4096, "z": 46592, "rotation": 0, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 128, "meshId": 38, "x": 57856, "y": 4096, "z": 46592, "rotation": 0, "sectorX": 5, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 128, "meshId": 38, "x": 56832, "y": 4096, "z": 48640, "rotation": 0, "sectorX": 4, "sectorZ": 4, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 128, "meshId": 38, "x": 57856, "y": 4096, "z": 48640, "rotation": 0, "sectorX": 5, "sectorZ": 4, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 128, "meshId": 38, "x": 54784, "y": 4096, "z": 48640, "rotation": 0, "sectorX": 2, "sectorZ": 4, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 128, "meshId": 38, "x": 53760, "y": 4096, "z": 48640, "rotation": 0, "sectorX": 1, "sectorZ": 4, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 128, "meshId": 38, "x": 53760, "y": 4096, "z": 50688, "rotation": 0, "sectorX": 1, "sectorZ": 6, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 128, "meshId": 38, "x": 54784, "y": 4096, "z": 50688, "rotation": 0, "sectorX": 2, "sectorZ": 6, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 128, "meshId": 38, "x": 56832, "y": 4096, "z": 50688, "rotation": 0, "sectorX": 4, "sectorZ": 6, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 128, "meshId": 38, "x": 57856, "y": 4096, "z": 50688, "rotation": 0, "sectorX": 5, "sectorZ": 6, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 129, "meshId": 39, "x": 61952, "y": 3584, "z": 49664, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 135, "meshId": 10, "x": 55808, "y": 3840, "z": 62976, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 135, "meshId": 31, "x": 55808, "y": 3840, "z": 62976, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 135, "meshId": 32, "x": 55808, "y": 3840, "z": 62976, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 138, "meshId": 31, "x": 57856, "y": 3840, "z": 52736, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 138, "meshId": 32, "x": 57856, "y": 3840, "z": 52736, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 138, "meshId": 10, "x": 57856, "y": 3840, "z": 52736, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 139, "meshId": 22, "x": 54784, "y": 3584, "z": 54784, "rotation": 0, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": -528, "maxX": 528, "minY": -128, "maxY": 192, "minZ": -528, "maxZ": 528 } },
+    { "room": 139, "meshId": 22, "x": 55808, "y": 3584, "z": 54784, "rotation": 0, "sectorX": 3, "sectorZ": 1, "collisionBox": { "minX": -528, "maxX": 528, "minY": -128, "maxY": 192, "minZ": -528, "maxZ": 528 } },
+    { "room": 139, "meshId": 45, "x": 55808, "y": 3328, "z": 55808, "rotation": 16384, "sectorX": 3, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 139, "meshId": 45, "x": 53760, "y": 3328, "z": 55808, "rotation": 16384, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 139, "meshId": 43, "x": 55808, "y": 3584, "z": 54784, "rotation": 49152, "sectorX": 3, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 256, "minY": -1536, "maxY": -1024, "minZ": -512, "maxZ": -384 } },
+    { "room": 139, "meshId": 43, "x": 53760, "y": 3584, "z": 54784, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 256, "minY": -1536, "maxY": -1024, "minZ": -512, "maxZ": -384 } },
+    { "room": 141, "meshId": 40, "x": 53760, "y": 4096, "z": 54784, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -313, "maxX": -177, "minY": -390, "maxY": 0, "minZ": -473, "maxZ": -385 } },
+    { "room": 141, "meshId": 34, "x": 54784, "y": 4096, "z": 56832, "rotation": 0, "sectorX": 2, "sectorZ": 3, "collisionBox": { "minX": 448, "maxX": 576, "minY": -1536, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 141, "meshId": 34, "x": 53760, "y": 4096, "z": 56832, "rotation": 0, "sectorX": 1, "sectorZ": 3, "collisionBox": { "minX": 448, "maxX": 576, "minY": -1536, "maxY": 0, "minZ": -512, "maxZ": 512 } },
+    { "room": 141, "meshId": 7, "x": 55808, "y": 4096, "z": 56832, "rotation": 32768, "sectorX": 3, "sectorZ": 3, "collisionBox": { "minX": -192, "maxX": 192, "minY": -2048, "maxY": 0, "minZ": -1024, "maxZ": 64 } },
+    { "room": 141, "meshId": 7, "x": 54784, "y": 4096, "z": 56832, "rotation": 32768, "sectorX": 2, "sectorZ": 3, "collisionBox": { "minX": -192, "maxX": 192, "minY": -2048, "maxY": 0, "minZ": -1024, "maxZ": 64 } },
+    { "room": 141, "meshId": 7, "x": 53760, "y": 4096, "z": 56832, "rotation": 32768, "sectorX": 1, "sectorZ": 3, "collisionBox": { "minX": -192, "maxX": 192, "minY": -2048, "maxY": 0, "minZ": -1024, "maxZ": 64 } },
+    { "room": 141, "meshId": 6, "x": 55808, "y": 4096, "z": 56832, "rotation": 32768, "sectorX": 3, "sectorZ": 3, "collisionBox": { "minX": 448, "maxX": 576, "minY": -2048, "maxY": 0, "minZ": -1024, "maxZ": 512 } },
+    { "room": 141, "meshId": 6, "x": 54784, "y": 4096, "z": 56832, "rotation": 32768, "sectorX": 2, "sectorZ": 3, "collisionBox": { "minX": 448, "maxX": 576, "minY": -2048, "maxY": 0, "minZ": -1024, "maxZ": 512 } },
+    { "room": 143, "meshId": 45, "x": 57856, "y": 3328, "z": 67072, "rotation": 0, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 143, "meshId": 45, "x": 57856, "y": 3328, "z": 67072, "rotation": 0, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 144, "meshId": 14, "x": 56832, "y": 512, "z": 57856, "rotation": 32768, "sectorX": 1, "sectorZ": 6, "collisionBox": { "minX": -160, "maxX": 160, "minY": -512, "maxY": 0, "minZ": -272, "maxZ": 48 } },
+    { "room": 144, "meshId": 14, "x": 57856, "y": 512, "z": 57856, "rotation": 32768, "sectorX": 2, "sectorZ": 6, "collisionBox": { "minX": -160, "maxX": 160, "minY": -512, "maxY": 0, "minZ": -272, "maxZ": 48 } },
+    { "room": 144, "meshId": 23, "x": 59904, "y": 512, "z": 56832, "rotation": 16384, "sectorX": 4, "sectorZ": 5, "collisionBox": { "minX": -1280, "maxX": 256, "minY": -256, "maxY": 0, "minZ": -256, "maxZ": 256 } },
+    { "room": 144, "meshId": 17, "x": 57856, "y": 512, "z": 56832, "rotation": 16384, "sectorX": 2, "sectorZ": 5, "collisionBox": { "minX": -384, "maxX": 384, "minY": -256, "maxY": 0, "minZ": -256, "maxZ": 256 } },
+    { "room": 146, "meshId": 39, "x": 61952, "y": 1088, "z": 56832, "rotation": 0, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 148, "meshId": 10, "x": 58880, "y": 4864, "z": 74240, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 148, "meshId": 32, "x": 58880, "y": 4864, "z": 74240, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 148, "meshId": 31, "x": 58880, "y": 4864, "z": 74240, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 150, "meshId": 10, "x": 57856, "y": 3840, "z": 65024, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 150, "meshId": 31, "x": 57856, "y": 3840, "z": 65024, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 150, "meshId": 32, "x": 57856, "y": 3840, "z": 65024, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 151, "meshId": 45, "x": 55808, "y": 3328, "z": 42496, "rotation": 16384, "sectorX": 4, "sectorZ": 1, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 151, "meshId": 45, "x": 53760, "y": 3328, "z": 42496, "rotation": 16384, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 156, "meshId": 10, "x": 50688, "y": 4864, "z": 80384, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 161, "meshId": 47, "x": 65024, "y": 2816, "z": 62976, "rotation": 16384, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -192, "maxX": 192, "minY": -1024, "maxY": -640, "minZ": -960, "maxZ": -64 } },
+    { "room": 161, "meshId": 9, "x": 65024, "y": 3840, "z": 61952, "rotation": 32768, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": 512, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 161, "meshId": 9, "x": 64000, "y": 3840, "z": 61952, "rotation": 32768, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": 512, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 161, "meshId": 8, "x": 64000, "y": 3840, "z": 64000, "rotation": 0, "sectorX": 1, "sectorZ": 3, "collisionBox": { "minX": -256, "maxX": 256, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 163, "meshId": 10, "x": 50688, "y": 4864, "z": 76288, "rotation": 49152, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 165, "meshId": 27, "x": 53760, "y": 0, "z": 62976, "rotation": 49152, "sectorX": 3, "sectorZ": 3, "collisionBox": { "minX": -256, "maxX": 256, "minY": -768, "maxY": -256, "minZ": -548, "maxZ": -532 } },
+    { "room": 165, "meshId": 48, "x": 52736, "y": 0, "z": 61952, "rotation": 49152, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 165, "meshId": 27, "x": 53760, "y": 0, "z": 60928, "rotation": 49152, "sectorX": 3, "sectorZ": 1, "collisionBox": { "minX": -256, "maxX": 256, "minY": -768, "maxY": -256, "minZ": -548, "maxZ": -532 } },
+    { "room": 165, "meshId": 9, "x": 51712, "y": 1024, "z": 62976, "rotation": 49152, "sectorX": 1, "sectorZ": 3, "collisionBox": { "minX": -512, "maxX": 512, "minY": -2560, "maxY": 0, "minZ": 256, "maxZ": 768 } },
+    { "room": 170, "meshId": 10, "x": 67072, "y": 4864, "z": 76288, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 173, "meshId": 10, "x": 67072, "y": 4864, "z": 80384, "rotation": 16384, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 179, "meshId": 10, "x": 58880, "y": 6912, "z": 64000, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } },
+    { "room": 179, "meshId": 31, "x": 58880, "y": 6912, "z": 64000, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 179, "meshId": 32, "x": 58880, "y": 6912, "z": 64000, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 181, "meshId": 39, "x": 66048, "y": 1280, "z": 62976, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 183, "meshId": 14, "x": 55808, "y": 512, "z": 68096, "rotation": 32768, "sectorX": 1, "sectorZ": 4, "collisionBox": { "minX": -160, "maxX": 160, "minY": -512, "maxY": 0, "minZ": -272, "maxZ": 48 } },
+    { "room": 183, "meshId": 14, "x": 56832, "y": 512, "z": 68096, "rotation": 32768, "sectorX": 2, "sectorZ": 4, "collisionBox": { "minX": -160, "maxX": 160, "minY": -512, "maxY": 0, "minZ": -272, "maxZ": 48 } },
+    { "room": 183, "meshId": 14, "x": 58880, "y": 512, "z": 68096, "rotation": 32768, "sectorX": 4, "sectorZ": 4, "collisionBox": { "minX": -160, "maxX": 160, "minY": -512, "maxY": 0, "minZ": -272, "maxZ": 48 } },
+    { "room": 183, "meshId": 14, "x": 59904, "y": 512, "z": 68096, "rotation": 32768, "sectorX": 5, "sectorZ": 4, "collisionBox": { "minX": -160, "maxX": 160, "minY": -512, "maxY": 0, "minZ": -272, "maxZ": 48 } },
+    { "room": 183, "meshId": 14, "x": 55808, "y": 512, "z": 71168, "rotation": 32768, "sectorX": 1, "sectorZ": 7, "collisionBox": { "minX": -160, "maxX": 160, "minY": -512, "maxY": 0, "minZ": -272, "maxZ": 48 } },
+    { "room": 183, "meshId": 14, "x": 56832, "y": 512, "z": 71168, "rotation": 32768, "sectorX": 2, "sectorZ": 7, "collisionBox": { "minX": -160, "maxX": 160, "minY": -512, "maxY": 0, "minZ": -272, "maxZ": 48 } },
+    { "room": 183, "meshId": 14, "x": 58880, "y": 512, "z": 71168, "rotation": 32768, "sectorX": 4, "sectorZ": 7, "collisionBox": { "minX": -160, "maxX": 160, "minY": -512, "maxY": 0, "minZ": -272, "maxZ": 48 } },
+    { "room": 183, "meshId": 14, "x": 59904, "y": 512, "z": 71168, "rotation": 32768, "sectorX": 5, "sectorZ": 7, "collisionBox": { "minX": -160, "maxX": 160, "minY": -512, "maxY": 0, "minZ": -272, "maxZ": 48 } },
+    { "room": 184, "meshId": 45, "x": 56832, "y": -512, "z": 67072, "rotation": 0, "sectorX": 2, "sectorZ": 3, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 184, "meshId": 45, "x": 56832, "y": -512, "z": 69120, "rotation": 0, "sectorX": 2, "sectorZ": 5, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 184, "meshId": 45, "x": 58880, "y": -512, "z": 69120, "rotation": 0, "sectorX": 4, "sectorZ": 5, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 184, "meshId": 45, "x": 56832, "y": -512, "z": 71168, "rotation": 0, "sectorX": 2, "sectorZ": 7, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 184, "meshId": 48, "x": 58880, "y": -512, "z": 67072, "rotation": 0, "sectorX": 4, "sectorZ": 3, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 184, "meshId": 48, "x": 58880, "y": -512, "z": 71168, "rotation": 0, "sectorX": 4, "sectorZ": 7, "collisionBox": { "minX": -128, "maxX": 128, "minY": -1024, "maxY": -896, "minZ": -384, "maxZ": 384 } },
+    { "room": 186, "meshId": 31, "x": 59904, "y": 256, "z": 59904, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 384, "maxX": 512, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 186, "meshId": 32, "x": 59904, "y": 256, "z": 59904, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": -512, "maxX": -384, "minY": -1024, "maxY": 0, "minZ": 416, "maxZ": 512 } },
+    { "room": 186, "meshId": 10, "x": 59904, "y": 256, "z": 59904, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 1, "maxX": 1, "minY": 1, "maxY": 1, "minZ": 1, "maxZ": 1 } }
+  ],
+  "triggers": [
+    {
+      "room": 3, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 27,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 74 }
+      ]
+    },
+    {
+      "room": 4, "sectorX": 3, "sectorZ": 5, "floorDataIndex": 50,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 148 },
+        { "type": "Object", "index": 146 },
+        { "type": "Object", "index": 147 },
+        { "type": "Object", "index": 105 },
+        { "type": "Object", "index": 106 },
+        { "type": "Object", "index": 3 },
+        { "type": "Object", "index": 2 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 113,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 184 }
+      ]
+    },
+    {
+      "room": 8, "sectorX": 2, "sectorZ": 4, "floorDataIndex": 130,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 16 },
+        { "type": "Object", "index": 43 }
+      ]
+    },
+    {
+      "room": 12, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 170,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Cutscene", "index": 13 }
+      ]
+    },
+    {
+      "room": 13, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 177,
+      "triggerType": "Key", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 15 }
+      ]
+    },
+    {
+      "room": 15, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 205,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 165 },
+        { "type": "PlaySoundtrack", "index": 65 }
+      ]
+    },
+    {
+      "room": 24, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 275,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 198 }
+      ]
+    },
+    {
+      "room": 25, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 282,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 198 }
+      ]
+    },
+    {
+      "room": 26, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 289,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 171 },
+        { "type": "Object", "index": 169 },
+        { "type": "Object", "index": 170 }
+      ]
+    },
+    {
+      "room": 35, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 384,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 56 },
+        { "type": "Object", "index": 40 }
+      ]
+    },
+    {
+      "room": 38, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 426,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 38 }
+      ]
+    },
+    {
+      "room": 39, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 439,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 38 }
+      ]
+    },
+    {
+      "room": 40, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 454,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 74 },
+        { "type": "Object", "index": 53 }
+      ]
+    },
+    {
+      "room": 40, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 462,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 23 },
+        { "type": "Object", "index": 67 },
+        { "type": "Object", "index": 78 },
+        { "type": "Object", "index": 196 },
+        { "type": "Object", "index": 194 },
+        { "type": "Object", "index": 192 },
+        { "type": "Object", "index": 25 },
+        { "type": "Object", "index": 68 },
+        { "type": "FlipMap", "index": 0 },
+        { "type": "Object", "index": 64 },
+        { "type": "Object", "index": 65 },
+        { "type": "Object", "index": 54 },
+        { "type": "Object", "index": 55 },
+        { "type": "Object", "index": 66 },
+        { "type": "Object", "index": 24 }
+      ]
+    },
+    {
+      "room": 45, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 504,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 40 },
+        { "type": "Object", "index": 56 },
+        { "type": "Object", "index": 138 },
+        { "type": "Object", "index": 86 },
+        { "type": "Object", "index": 87 },
+        { "type": "Object", "index": 115 },
+        { "type": "Object", "index": 152 },
+        { "type": "Object", "index": 153 },
+        { "type": "Object", "index": 134 }
+      ]
+    },
+    {
+      "room": 55, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 611,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 37 }
+      ]
+    },
+    {
+      "room": 56, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 618,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 134 },
+        { "type": "Object", "index": 153 },
+        { "type": "Object", "index": 152 },
+        { "type": "Object", "index": 115 },
+        { "type": "Object", "index": 87 },
+        { "type": "Object", "index": 86 },
+        { "type": "Object", "index": 138 }
+      ]
+    },
+    {
+      "room": 57, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 631,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 184 },
+        { "type": "Object", "index": 138 },
+        { "type": "Object", "index": 86 },
+        { "type": "Object", "index": 87 },
+        { "type": "Object", "index": 115 },
+        { "type": "Object", "index": 152 },
+        { "type": "Object", "index": 153 },
+        { "type": "Object", "index": 134 }
+      ]
+    },
+    {
+      "room": 59, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 649,
+      "triggerType": "Key", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 188 }
+      ]
+    },
+    {
+      "room": 60, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 655,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 206 }
+      ]
+    },
+    {
+      "room": 65, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 708,
+      "triggerType": "Key", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+
+      ]
+    },
+    {
+      "room": 76, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 785,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 6 },
+        { "type": "Object", "index": 5 },
+        { "type": "Object", "index": 12 },
+        { "type": "Object", "index": 13 },
+        { "type": "Object", "index": 10 },
+        { "type": "Object", "index": 11 },
+        { "type": "Object", "index": 208 },
+        { "type": "Object", "index": 207 },
+        { "type": "Object", "index": 209 }
+      ]
+    },
+    {
+      "room": 77, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 804,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 25 },
+        { "type": "Object", "index": 78 },
+        { "type": "Object", "index": 194 },
+        { "type": "Object", "index": 196 },
+        { "type": "Object", "index": 192 },
+        { "type": "Object", "index": 67 },
+        { "type": "Object", "index": 53 },
+        { "type": "Object", "index": 74 }
+      ]
+    },
+    {
+      "room": 77, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 815,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 56 },
+        { "type": "Object", "index": 25 },
+        { "type": "Object", "index": 74 },
+        { "type": "Object", "index": 53 },
+        { "type": "Object", "index": 67 },
+        { "type": "Object", "index": 192 },
+        { "type": "Object", "index": 196 },
+        { "type": "Object", "index": 78 },
+        { "type": "Object", "index": 194 },
+        { "type": "Object", "index": 40 }
+      ]
+    },
+    {
+      "room": 82, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 879,
+      "triggerType": "Key", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 111 },
+        { "type": "FlipMap", "index": 4 }
+      ]
+    },
+    {
+      "room": 87, "sectorX": 1, "sectorZ": 4, "floorDataIndex": 924,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Cutscene", "index": 15 }
+      ]
+    },
+    {
+      "room": 107, "sectorX": 1, "sectorZ": 5, "floorDataIndex": 1015,
+      "triggerType": "HeavySwitch", "timer": 0, "oneShot": false, "mask": 30,
+      "commands": [
+        { "type": "Object", "index": 124 },
+        { "type": "Object", "index": 125 }
+      ]
+    },
+    {
+      "room": 108, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1029,
+      "triggerType": "Switch", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 127 }
+      ]
+    },
+    {
+      "room": 116, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1079,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 151 }
+      ]
+    },
+    {
+      "room": 119, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1098,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 179 }
+      ]
+    },
+    {
+      "room": 119, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 1101,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 179 }
+      ]
+    },
+    {
+      "room": 131, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1239,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 119 },
+        { "type": "Object", "index": 115 }
+      ]
+    },
+    {
+      "room": 135, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1264,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 112 }
+      ]
+    },
+    {
+      "room": 136, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1271,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 153 },
+        { "type": "Object", "index": 152 },
+        { "type": "Object", "index": 138 }
+      ]
+    },
+    {
+      "room": 137, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1280,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 138 },
+        { "type": "Object", "index": 153 },
+        { "type": "Object", "index": 152 }
+      ]
+    },
+    {
+      "room": 138, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1289,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 91 },
+        { "type": "Flyby", "index": 0 },
+        { "type": "PlaySoundtrack", "index": 31 },
+        { "type": "Flyby", "index": 0 },
+        { "type": "Object", "index": 136 }
+      ]
+    },
+    {
+      "room": 141, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1308,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 0 },
+        { "type": "Object", "index": 4 }
+      ]
+    },
+    {
+      "room": 141, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 1312,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 0 },
+        { "type": "Object", "index": 4 }
+      ]
+    },
+    {
+      "room": 141, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 1316,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 0 },
+        { "type": "Object", "index": 1 },
+        { "type": "Object", "index": 139 },
+        { "type": "Object", "index": 4 }
+      ]
+    },
+    {
+      "room": 141, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 1322,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 0 },
+        { "type": "Object", "index": 4 }
+      ]
+    },
+    {
+      "room": 141, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 1326,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 0 },
+        { "type": "Object", "index": 4 }
+      ]
+    },
+    {
+      "room": 141, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 1330,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 0 },
+        { "type": "Object", "index": 1 },
+        { "type": "Object", "index": 139 },
+        { "type": "Object", "index": 4 }
+      ]
+    },
+    {
+      "room": 141, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 1336,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 0 },
+        { "type": "Object", "index": 4 }
+      ]
+    },
+    {
+      "room": 141, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 1340,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 0 },
+        { "type": "Object", "index": 4 }
+      ]
+    },
+    {
+      "room": 141, "sectorX": 3, "sectorZ": 3, "floorDataIndex": 1344,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Camera", "index": 0 },
+        { "type": "Object", "index": 1 }
+      ]
+    },
+    {
+      "room": 144, "sectorX": 1, "sectorZ": 5, "floorDataIndex": 1374,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "FlipMap", "index": 5 }
+      ]
+    },
+    {
+      "room": 145, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1421,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 99 },
+        { "type": "Object", "index": 184 }
+      ]
+    },
+    {
+      "room": 148, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1447,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 40 },
+        { "type": "Object", "index": 56 }
+      ]
+    },
+    {
+      "room": 149, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1455,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 1,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 21 }
+      ]
+    },
+    {
+      "room": 150, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1464,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 184 }
+      ]
+    },
+    {
+      "room": 157, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1527,
+      "triggerType": "Key", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 177 }
+      ]
+    },
+    {
+      "room": 158, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 1536,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 36 },
+        { "type": "Object", "index": 16 },
+        { "type": "Object", "index": 155 }
+      ]
+    },
+    {
+      "room": 161, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 1550,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 202 }
+      ]
+    },
+    {
+      "room": 165, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 1571,
+      "triggerType": "Switch", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 91 },
+        { "type": "Object", "index": 165 },
+        { "type": "Object", "index": 206 },
+        { "type": "FlipMap", "index": 6 },
+        { "type": "Object", "index": 136 }
+      ]
+    },
+    {
+      "room": 176, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1617,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 169 },
+        { "type": "Object", "index": 170 },
+        { "type": "Object", "index": 201 },
+        { "type": "Object", "index": 198 }
+      ]
+    },
+    {
+      "room": 177, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1627,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 198 }
+      ]
+    },
+    {
+      "room": 179, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1634,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 44 }
+      ]
+    },
+    {
+      "room": 186, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1771,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 29 }
+      ]
+    },
+    {
+      "room": 189, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 1790,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 2,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 21 },
+        { "type": "Object", "index": 185 },
+        { "type": "Object", "index": 166 },
+        { "type": "Object", "index": 138 },
+        { "type": "Object", "index": 86 },
+        { "type": "Object", "index": 87 },
+        { "type": "Object", "index": 152 },
+        { "type": "Object", "index": 153 },
+        { "type": "Object", "index": 134 }
+      ]
+    }
+  ]
+}

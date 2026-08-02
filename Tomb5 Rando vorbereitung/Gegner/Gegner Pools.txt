@@ -1,0 +1,120 @@
+Gegner die einfach nur ausgetauscht werden müssen keine verdrahtung mit speziellen Triggern wie z.B AI Patrols haben.
+(= "Pool B" aus AI Pool Logic.txt - ruft GetAITarget() nie auf, ignoriert AIPatrol1/AIAmbush-Marker komplett,
+zielt immer direkt auf Lara über das generische Mood-System. Sicher frei tauschbar.)
+	1 DOG (dog.cpp)
+	2 LION (lion.cpp)
+	3 CROW (crow.cpp)
+	4 ROMAN_GOD (romangod.cpp) - prüft nur ai_bits&GUARD für Zufalls-Angriffs-Roll, keine echte Marker-Nutzung
+	5 AUTOGUN (autogun.cpp) - stationäres Geschütz, zielt per LOS() direkt, nicht als "intelligent" markiert
+	6 GUNSHIP (tower.cpp) - Skript-Helikopter, positionsbasiert, nicht als "intelligent" markiert
+
+Gegner die mit speziellen Triggern verdrahtet sind.
+(= "Pool A" aus AI Pool Logic.txt - ruft GetAITarget() auf, sucht bei entsprechend gesetztem ai_bits
+aktiv nach AIPatrol1/AIAmbush-Markern und löst bei Ambush Trigger aus. Beim Tauschen nur gegen
+andere Pool-A-Gegner ersetzen, wenn der Slot Patrol/Ambush-Marker in Reichweite hat.)
+	1 SAS, BLUE_GUARD, SWAT, SWAT_PLUS, MAFIA, SCIENTIST, CRANE_GUY, SAILOR (sas.cpp)
+	2 MAFIA2 (mafia2.cpp)
+	3 PIERRE, LARSON (pierre.cpp)
+	4 HITMAN (hitman.cpp)
+	5 HUSKIE (huskie.cpp)
+	6 IMP (imp.cpp)
+	7 ATTACK_SUB (minisub.cpp)
+	8 REAPER (minisub.cpp, JellyControl)
+	9 SNIPER (sniper.cpp)
+	10 GREEN_TEETH (swampy.cpp)
+	11 SKELETON (skeleton.cpp)
+	12 TWOGUN (twogun.cpp)
+	13 WILLOWISP, MAZE_MONSTER (willwisp.cpp)
+	14 GLADIATOR (gladiatr.cpp)
+
+	(CHEF nach unten in die Sonderfall-Kategorie verschoben, 2026-08-02 - siehe dort. TWOGUN
+	 taucht in derselben deltapak.cpp-Cutscene-Logik wie CHEF auf (stealth3_start/end) - geprüft
+	 und OK: TwogunControl (twogun.cpp:136) hat eine ganz normale item->hit_points<=0-Prüfung mit
+	 eigener Sterbeanimation, kann also auch ganz normal per Waffen sterben. Die Cutscene ist bei
+	 ihm nur ein optionaler Stealth-Kill-Bonus (OCB/trigger_flags==1 steuert wohl, ob die Death-
+	 Anim die Cutscene- oder die normale Variante nutzt), kein Zwang wie bei CHEF. Bleibt in Pool A.
+
+	 TWOGUN war ursprünglich zusätzlich per obj->undead=1 (global\types.h:972, geprüft in
+	 control.cpp:1958/lara1gun.cpp:606/larafire.cpp:860) gegen normalen Waffenschaden immun -
+	 nur per Kopfschuss mit Laser-Sight-Scope oder Revolver/HK-Autoaim tötbar, und das auch nur
+	 winkelabhängig (control.cpp:1913-1919, ±90°-Frontalkegel). In einer früheren Session
+	 (anderes Chat-Fenster, nicht in dieser Session dokumentiert) wurde obj->undead=1 aus
+	 TWOGUNs Setup entfernt (setup.cpp:1567-1589) - bereits in diesem Code-Stand vorhanden,
+	 user-bestätigt funktionsfähig ("Hat geklappt"). hit_points 2026-08-02 zusätzlich von 24
+	 auf 60 angehoben (+150%, User-Wunsch: "zu schnell killbar für seine Panzerung").)
+
+Statue, Guardian, Hydra und CHEF.
+(Boss-artige Sondergegner/Sonderfälle mit eigener Spawn-/Kill-/Struktur-Logik - NICHT einfach
+gegen normale Gegner tauschen, und normale Gegner nicht in diese Slots setzen. Eigene Kategorie,
+eigene Regeln pro Eintrag. Alle 4 inzwischen im Code gegengeprüft, 2026-08-02.)
+	1 Soldier Statue (TypeID 61 in trview, Andrea3.trc bestätigt) - steht sichtbar auf dem Boden,
+	  wird aber beim Aufwachen 512 Units nach hinten + 1024 Units hoch verschoben, spielt eine
+	  Aufsteh-/Sprung-Animation ab und landet dann erst auf dem eigentlichen Positionierungsfeld.
+	  D.h. die im Level sichtbare Startposition ist NICHT die tatsächliche Kampf-Position -
+	  beim Randomizen der Position wichtig zu beachten (genug Platz für die 512/1024-Unit-
+	  Verschiebung + Landeanimation muss am Zielort vorhanden sein).
+	2 Guardian (guardian.cpp, TypeID noch nicht sicher bestätigt - im Code als Boss mit fester
+	  Skriptlogik/LOS-Checks dokumentiert, kein normales CreatureAIInfo). Der eigentliche Gegner
+	  ist nur der Kopf mit den 2 Augen. Gehört zu einer Gruppe separater "Animating"-Objekte
+	  (in Andrea2.trc z.B. TypeID 438/439 "Animating 12"/"Animating 12 mip") die wie Spinnenbeine/
+	  ein Käfig um den Kopf herum stehen: klappen sich beim Erwachen auf (Spinnen-artige
+	  Animation), und klappen beim Tod des Kopfes (durch die 2 Augen) wieder zusammen + explodieren.
+	  ##  NICHT SICHER RANDOMIZERBAR - Code-Analyse (InitialiseGuardian, guardian.cpp:35-87):
+	  Die Verknüpfung zu den Käfig-Teilen läuft NICHT über Nähe/Raum, sondern durchsucht die
+	  GESAMTE Item-Liste des Levels nach dem ersten Item mit passendem object_number (ANIMATING12
+	  für das Zentrum-Teil, ANIMATING12_MIP mit exakt passendem y_rot in 45°-Schritten für die
+	  8 Käfig-Segmente, PUZZLE_ITEM4 für ein zusätzlich verstecktes Teil). Keine Fehlerbehandlung,
+	  wenn kein Treffer gefunden wird - der Array-Eintrag bleibt uninitialisiert. Das funktioniert
+	  in Vanilla-Leveln nur, WEIL es dort jeweils genau ein passendes Set gibt. Bei mehreren
+	  Guardians im selben Level, geändertem Item-Order oder Verschieben in ein anderes Level ohne
+	  exakt passende Begleitobjekte hängt sich der Kopf an falsche/keine Teile.
+	  EMPFEHLUNG: Guardian komplett aus dem Randomizer-Pool ausschließen (weder Quelle noch Ziel),
+	  bis die Verknüpfung im Code ggf. robuster (raum-/nähe-basiert) gemacht wird - eigene Aufgabe.
+	3 Hydra (hydra.cpp, TypeID 63 in trview, Andrea2.trc bestätigt) - ist eigentlich KEIN einzelner
+	  Gegner sondern 3 Gegner (Köpfe) mit jeweils eigenem Leben/Hitpoints, die zusammen als eine
+	  Einheit auftreten. Trigger-technisch reagiert Hydra laut AI Pool Logic auf Marker (Pool A),
+	  wurde hier aber wegen der Multi-Body-Struktur trotzdem in die Sonderkategorie verschoben.
+	  ##  GRUNDSÄTZLICH SICHER RANDOMIZERBAR (als Gruppe) - Code-Analyse (InitialiseHydra,
+	  hydra.cpp:18-36): alle 3 Items werden im Editor auf EXAKT DERSELBEN Position platziert
+	  (deswegen "alle 3 auf demselben Sektor") - der sichtbare seitliche Versatz kommt komplett
+	  aus dem Code, gesteuert über das OCB-Feld (trigger_flags), das hier NICHT wie sonst üblich
+	  einen Pickup-Typ codiert, sondern die Kettenposition:
+	    OCB 0 = Mitte (kein Versatz)
+	    OCB 1 = Z += 384
+	    OCB 2 = Z -= 384
+	    (zusätzlich immer: X -= 256, y_rot fest auf 0x4000, Start-Animationsframe um 30*OCB
+	    versetzt für Bewegungs-Varianz zwischen den 3 Köpfen)
+	  WICHTIG für den Randomizer: Hydra-Items dürfen NIEMALS von der pauschalen "OCB auf 0
+	  normalisieren"-Regel erfasst werden (siehe Item Pool IDs.txt) - das würde alle 3 Köpfe
+	  exakt übereinander stapeln statt der 3er-Kette. Beim Verschieben der Position muss die
+	  Bewegung auf alle 3 Items mit identischem Delta angewendet werden, OCB-Werte unverändert
+	  lassen, und am Zielort genug Platz für den ~768-Unit-Z-Versatz (halbe bis eine Sektorbreite)
+	  vorhanden sein.
+
+	4 CHEF (chef.cpp, TypeID 87 in trview, joby3.trc bestätigt) - MUSS mit der Brechstange
+	  getriggert/getötet werden. Vom User bestätigt: tötet man ihn vorher mit Waffen (Lebens-
+	  balken läuft auf 0), bleibt er trotzdem unverwundbar aktiv - Level-Softlock, da die
+	  eigentliche Tötung nicht ausgelöst wird.
+	  ##  NICHT RANDOMIZERBAR - Code-Analyse (ChefControl, chef.cpp:28-158): die komplette
+	  Zustandsmaschine prüft item->hit_points an KEINER Stelle. Waffenschaden leert zwar
+	  offenbar die Lebensanzeige (generische Schadensanwendung läuft normal), aber Chefs
+	  eigene Logik reagiert nie darauf - er bleibt für immer im normalen Kampf-/Patrouille-
+	  Zustand hängen. Der einzige echte Tod läuft über eine LEVEL-SPEZIFISCHE Skript-Cutscene
+	  (game\deltapak.cpp, stealth3_start()/stealth3_end()), die item->hit_points/current_anim_state/
+	  anim_number manuell direkt setzt statt über den normalen Kampf-Loop:
+	    stealth3_start(): sucht CHEF/SAS/BLUE_GUARD/SWAT_PLUS/SWAT/TWOGUN in Lara-Nähe
+	      (< 1024/1024/256 Units), blendet den Treffer für die Cutscene aus.
+	    stealth3_end(): setzt hit_points=0, current_anim_state=6/7, spielt die Crowbar-
+	      Finish-Animation (anim_index+11 bei CHEF) manuell ab.
+	  Diese Funktion ist pro Level fest verdrahtet (Name "stealth3" deutet auf eine bestimmte
+	  Levelsequenz hin, vermutlich joby3.trc selbst). Verschiebt/tauscht man CHEF an eine andere
+	  Stelle/anderes Level ohne passende eigene Skript-Funktion, ist er dort schlicht NIEMALS
+	  tötbar - garantierter Softlock, nicht nur ein Risiko.
+	  EMPFEHLUNG: CHEF komplett aus dem Randomizer-Pool ausschließen (weder Quelle noch Ziel).
+
+TODO: Guardians genaue TypeID noch per trview bestätigen (im Screenshot war nur der Item-Index
+"51" sichtbar, nicht die TypeID-Spalte). Auch offen: ob es noch weitere Boss-artige Sonderfälle
+gibt, die hier reingehören (z.B. der Endgegner aus Escape with the Iris?). Gegeben dass CHEF
+diese Skript-Kill-Sonderlogik hat, lohnt sich eine gezielte Prüfung aller anderen deltapak.cpp-
+Funktionen auf ähnliche pro-Level-Sonderfälle, statt sich nur auf die 3 bisher bekannten zu
+verlassen.

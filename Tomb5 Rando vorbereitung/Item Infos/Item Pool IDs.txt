@@ -1,0 +1,41 @@
+Generische Items die immer überall sein können keine Logik.
+(Waffen, Ammo, Medipacks, generische Pickups ohne Raum-/Trigger-Bindung. Frei tauschbar/
+randomisierbar, solange OCB auf 0 normalisiert wird - siehe project_tomb5_native_port.md,
+"CONFIRMED BUG": Plinth/Hidden-OCB-Items (OCB 1/3/4/7/8) werden nach GetCarriedItems()-Aufnahme
+durch einen Gegner beim Droppen dauerhaft unsammelbar, weil DropBaddyPickups() das OCB nicht
+zurücksetzt. Randomizer-Regel: alle Items in dieser Kategorie pauschal auf OCB 0 setzen.
+ACHTUNG: "OCB auf 0 normalisieren" gilt NUR für echte Pickup-Items (object_number = ein
+Pickup-Objekttyp). Bei Gegner-Items (z.B. Hydra) hat das OCB-Feld eine komplett andere,
+objektspezifische Bedeutung - bei Hydra z.B. die Position in der 3er-Kette, siehe
+Gegner Pools.txt. Diese Regel niemals blind über alle Items im Level laufen lassen, immer
+zuerst nach object_number filtern.)
+	1
+	2
+	3
+
+Schlüssel/Puzzel Items die auf Räume achten müssen, wegen Türen und Triggern.
+(Noch keine konkrete Liste - müsste systematisch aus den Level-JSONs (Level Infos\*.json)
+zusammengestellt werden: jedes Item mit einer zugehörigen Keyhole/Puzzle-Hole im selben oder
+einem erreichbaren Raum. TombItemEdit2026s Katalog (RESOURCES\TRCatalog2.xml) hat bereits eine
+Key-Item/Key-Hole/Puzzle-Hole/Puzzle-Done-Unterscheidung über die Icon-Zuordnung - guter
+Ausgangspunkt, um diese Kategorie automatisiert zu befüllen statt von Hand.)
+	1
+	2
+	3
+
+Items die Trigger auslösen und deswegen Einzelfälle sind wie z.B die Iris in rich1.trc
+(Kandidaten lassen sich direkt aus den Level Infos\*.json finden: jedes Item, dessen Index in
+einem Trigger-Command "Object N" mit N == diesem Item-Index selbst auftaucht - d.h. das Item
+löst (auch) sich selbst betreffende oder andere Items/Türen aus. Muss von der Randomizer-
+Logik ausgeschlossen werden, sonst Gefahr eines Level-Softlocks.)
+	1 Iris, rich1.trc - Item 14 (TypeID 221), Raum 11, OCB 8 (Plinth), Sektor (5,5).
+	  Pickup-Trigger auf demselben Sektor löst Object 14 + Object 15 + Object 206 aus
+	  (14 vermutlich sich selbst / Deaktivierung, 15 vermutlich X-Ray Controller,
+	  206 vermutlich die End-Tür - noch nicht einzeln verifiziert). Bereits konkret im
+	  JSON-Export bestätigt (Level Infos\rich1.json), siehe project_tomb5_native_port.md.
+	2
+	3
+
+TODO: Kategorie 2 und 3 (außer dem Iris-Beispiel) sind noch leer/unvollständig - beide lassen
+sich aus den bereits vorhandenen Level Infos\*.json-Dateien ableiten, sobald ein kleines
+Auswertungsskript dafür geschrieben ist (kein manuelles Durchklicken pro Level nötig).

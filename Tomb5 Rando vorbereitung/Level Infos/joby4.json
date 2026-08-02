@@ -1,0 +1,1686 @@
+{
+  "levelName": "joby4",
+  "trType": 5,
+  "numRooms": 137,
+  "items": [
+    { "index": 0, "typeId": 81, "room": 10, "x": 31232, "y": 14592, "z": 76288, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 1, "localX": 3584, "localY": 2560, "localZ": 1536 },
+    { "index": 1, "typeId": 394, "room": 11, "x": 23040, "y": 14720, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 4, "localX": 1536, "localY": 896, "localZ": 4608 },
+    { "index": 2, "typeId": 394, "room": 11, "x": 24064, "y": 15168, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 4, "localX": 2560, "localY": 448, "localZ": 4608 },
+    { "index": 3, "typeId": 418, "room": 12, "x": 31232, "y": 19200, "z": 69120, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 2, "localX": 3584, "localY": 0, "localZ": 2560 },
+    { "index": 4, "typeId": 223, "room": 13, "x": 29184, "y": 17152, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 1, "localX": 1536, "localY": 0, "localZ": 1536 },
+    { "index": 5, "typeId": 446, "room": 14, "x": 13824, "y": 15232, "z": 66048, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 128, "localZ": 3584 },
+    { "index": 6, "typeId": 446, "room": 67, "x": 26112, "y": 17152, "z": 78336, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 0, "localZ": 2560 },
+    { "index": 7, "typeId": 446, "room": 68, "x": 18944, "y": 12544, "z": 66048, "ocb": 0, "flags": 0, "sectorX": 7, "sectorZ": 3, "localX": 7680, "localY": 512, "localZ": 3584 },
+    { "index": 8, "typeId": 446, "room": 68, "x": 12800, "y": 13056, "z": 74240, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 11, "localX": 1536, "localY": 0, "localZ": 11776 },
+    { "index": 9, "typeId": 446, "room": 69, "x": 27136, "y": 13056, "z": 68096, "ocb": 0, "flags": 0, "sectorX": 7, "sectorZ": 5, "localX": 7680, "localY": 0, "localZ": 5632 },
+    { "index": 10, "typeId": 446, "room": 70, "x": 29184, "y": 13056, "z": 70144, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 7, "localX": 1536, "localY": 0, "localZ": 7680 },
+    { "index": 11, "typeId": 446, "room": 71, "x": 34304, "y": 13056, "z": 79360, "ocb": 0, "flags": 0, "sectorX": 6, "sectorZ": 4, "localX": 6656, "localY": 0, "localZ": 4608 },
+    { "index": 12, "typeId": 446, "room": 72, "x": 20992, "y": 12800, "z": 80384, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 5, "localX": 1536, "localY": 256, "localZ": 5632 },
+    { "index": 13, "typeId": 81, "room": 88, "x": 31232, "y": 15104, "z": 69120, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 2, "localX": 3584, "localY": 1024, "localZ": 2560 },
+    { "index": 14, "typeId": 446, "room": 92, "x": 13824, "y": 14976, "z": 70144, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 2, "localX": 2560, "localY": 1152, "localZ": 2560 },
+    { "index": 15, "typeId": 81, "room": 95, "x": 18944, "y": 14464, "z": 74240, "ocb": 0, "flags": 0, "sectorX": 7, "sectorZ": 7, "localX": 7680, "localY": 1920, "localZ": 7680 },
+    { "index": 16, "typeId": 446, "room": 97, "x": 14848, "y": 13056, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 8, "sectorZ": 9, "localX": 8704, "localY": 0, "localZ": 9728 },
+    { "index": 17, "typeId": 446, "room": 98, "x": 40448, "y": 13056, "z": 58880, "ocb": 0, "flags": 0, "sectorX": 6, "sectorZ": 5, "localX": 6656, "localY": 0, "localZ": 5632 },
+    { "index": 18, "typeId": 446, "room": 99, "x": 40448, "y": 13056, "z": 69120, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 6, "localX": 4608, "localY": 0, "localZ": 6656 },
+    { "index": 19, "typeId": 446, "room": 103, "x": 8704, "y": 12544, "z": 82432, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 3, "localX": 2560, "localY": 512, "localZ": 3584 },
+    { "index": 20, "typeId": 446, "room": 106, "x": 14848, "y": 13056, "z": 90624, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 3, "localX": 3584, "localY": 0, "localZ": 3584 },
+    { "index": 21, "typeId": 446, "room": 119, "x": 19968, "y": 13056, "z": 58880, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 7, "localX": 1536, "localY": 0, "localZ": 7680 },
+    { "index": 22, "typeId": 446, "room": 123, "x": 25088, "y": 16128, "z": 56832, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 12, "localX": 1536, "localY": 0, "localZ": 12800 },
+    { "index": 23, "typeId": 446, "room": 123, "x": 27136, "y": 16128, "z": 57856, "ocb": 0, "flags": 0, "sectorX": 3, "sectorZ": 13, "localX": 3584, "localY": 0, "localZ": 13824 },
+    { "index": 24, "typeId": 446, "room": 123, "x": 32256, "y": 13440, "z": 46592, "ocb": 0, "flags": 0, "sectorX": 8, "sectorZ": 2, "localX": 8704, "localY": 2688, "localZ": 2560 },
+    { "index": 25, "typeId": 446, "room": 123, "x": 33280, "y": 13312, "z": 51712, "ocb": 0, "flags": 0, "sectorX": 9, "sectorZ": 7, "localX": 9728, "localY": 2816, "localZ": 7680 },
+    { "index": 26, "typeId": 0, "room": 123, "x": 25088, "y": 13824, "z": 50688, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 6, "localX": 1536, "localY": 2304, "localZ": 6656 },
+    { "index": 27, "typeId": 394, "room": 123, "x": 25088, "y": 14528, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 18, "localX": 1536, "localY": 1600, "localZ": 18944 },
+    { "index": 28, "typeId": 446, "room": 126, "x": 32256, "y": 12544, "z": 62976, "ocb": 0, "flags": 0, "sectorX": 2, "sectorZ": 18, "localX": 2560, "localY": 512, "localZ": 18944 },
+    { "index": 29, "typeId": 446, "room": 127, "x": 15872, "y": 13056, "z": 48640, "ocb": 0, "flags": 0, "sectorX": 1, "sectorZ": 4, "localX": 1536, "localY": 0, "localZ": 4608 },
+    { "index": 30, "typeId": 446, "room": 127, "x": 18944, "y": 13056, "z": 54784, "ocb": 0, "flags": 0, "sectorX": 4, "sectorZ": 10, "localX": 4608, "localY": 0, "localZ": 10752 }
+  ],
+  "statics": [
+    { "room": 121, "meshId": 39, "x": 31232, "y": 12672, "z": 43520, "rotation": 0, "sectorX": 1, "sectorZ": 17, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 121, "meshId": 39, "x": 31232, "y": 12672, "z": 44544, "rotation": 0, "sectorX": 1, "sectorZ": 18, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 121, "meshId": 39, "x": 32256, "y": 12160, "z": 44544, "rotation": 0, "sectorX": 2, "sectorZ": 18, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 121, "meshId": 39, "x": 32256, "y": 11648, "z": 43520, "rotation": 0, "sectorX": 2, "sectorZ": 17, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 121, "meshId": 39, "x": 33280, "y": 10496, "z": 43520, "rotation": 0, "sectorX": 3, "sectorZ": 17, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 121, "meshId": 39, "x": 33280, "y": 11520, "z": 44544, "rotation": 0, "sectorX": 3, "sectorZ": 18, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 123, "meshId": 39, "x": 25088, "y": 15616, "z": 46592, "rotation": 0, "sectorX": 1, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 123, "meshId": 39, "x": 26112, "y": 15616, "z": 46592, "rotation": 0, "sectorX": 2, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 123, "meshId": 39, "x": 27136, "y": 15616, "z": 46592, "rotation": 0, "sectorX": 3, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 123, "meshId": 39, "x": 28160, "y": 15232, "z": 46592, "rotation": 0, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 123, "meshId": 39, "x": 29184, "y": 14848, "z": 46592, "rotation": 0, "sectorX": 5, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 123, "meshId": 39, "x": 30208, "y": 13952, "z": 46592, "rotation": 0, "sectorX": 6, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 123, "meshId": 39, "x": 25088, "y": 15360, "z": 45568, "rotation": 0, "sectorX": 1, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 123, "meshId": 39, "x": 26112, "y": 15360, "z": 45568, "rotation": 0, "sectorX": 2, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 123, "meshId": 39, "x": 27136, "y": 15360, "z": 45568, "rotation": 0, "sectorX": 3, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 123, "meshId": 39, "x": 28160, "y": 14976, "z": 45568, "rotation": 0, "sectorX": 4, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 123, "meshId": 39, "x": 29184, "y": 14592, "z": 45568, "rotation": 0, "sectorX": 5, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 123, "meshId": 39, "x": 30208, "y": 13504, "z": 45568, "rotation": 0, "sectorX": 6, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 124, "meshId": 39, "x": 24064, "y": 15616, "z": 46592, "rotation": 0, "sectorX": 8, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 124, "meshId": 39, "x": 23040, "y": 15488, "z": 46592, "rotation": 0, "sectorX": 7, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 124, "meshId": 39, "x": 22016, "y": 15360, "z": 46592, "rotation": 0, "sectorX": 6, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 124, "meshId": 39, "x": 20992, "y": 14976, "z": 46592, "rotation": 0, "sectorX": 5, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 124, "meshId": 39, "x": 19968, "y": 14592, "z": 46592, "rotation": 0, "sectorX": 4, "sectorZ": 2, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 124, "meshId": 39, "x": 24064, "y": 15360, "z": 45568, "rotation": 0, "sectorX": 8, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 124, "meshId": 39, "x": 23040, "y": 15232, "z": 45568, "rotation": 0, "sectorX": 7, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 124, "meshId": 39, "x": 22016, "y": 15104, "z": 45568, "rotation": 0, "sectorX": 6, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 124, "meshId": 39, "x": 20992, "y": 14720, "z": 45568, "rotation": 0, "sectorX": 5, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 124, "meshId": 39, "x": 19968, "y": 14272, "z": 45568, "rotation": 0, "sectorX": 4, "sectorZ": 1, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 125, "meshId": 39, "x": 18944, "y": 12672, "z": 44544, "rotation": 0, "sectorX": 4, "sectorZ": 18, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 125, "meshId": 39, "x": 18944, "y": 12672, "z": 43520, "rotation": 0, "sectorX": 4, "sectorZ": 17, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 125, "meshId": 39, "x": 17920, "y": 11904, "z": 43520, "rotation": 0, "sectorX": 3, "sectorZ": 17, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 125, "meshId": 39, "x": 17920, "y": 11904, "z": 44544, "rotation": 0, "sectorX": 3, "sectorZ": 18, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 125, "meshId": 39, "x": 16896, "y": 11392, "z": 43520, "rotation": 0, "sectorX": 2, "sectorZ": 17, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } },
+    { "room": 125, "meshId": 39, "x": 16896, "y": 11392, "z": 44544, "rotation": 0, "sectorX": 2, "sectorZ": 18, "collisionBox": { "minX": 0, "maxX": 0, "minY": 0, "maxY": 0, "minZ": 0, "maxZ": 0 } }
+  ],
+  "triggers": [
+    {
+      "room": 6, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 251,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 1, "sectorZ": 4, "floorDataIndex": 256,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 1, "sectorZ": 5, "floorDataIndex": 261,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 1, "sectorZ": 6, "floorDataIndex": 266,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 1, "sectorZ": 7, "floorDataIndex": 269,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 1, "sectorZ": 8, "floorDataIndex": 274,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 1, "sectorZ": 9, "floorDataIndex": 279,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 292,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 2, "sectorZ": 4, "floorDataIndex": 297,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 2, "sectorZ": 5, "floorDataIndex": 302,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 2, "sectorZ": 6, "floorDataIndex": 307,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 2, "sectorZ": 7, "floorDataIndex": 310,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 2, "sectorZ": 8, "floorDataIndex": 313,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 2, "sectorZ": 9, "floorDataIndex": 316,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 3, "sectorZ": 3, "floorDataIndex": 329,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 3, "sectorZ": 4, "floorDataIndex": 334,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 3, "sectorZ": 5, "floorDataIndex": 339,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 3, "sectorZ": 6, "floorDataIndex": 344,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 3, "sectorZ": 7, "floorDataIndex": 349,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 3, "sectorZ": 8, "floorDataIndex": 352,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 3, "sectorZ": 9, "floorDataIndex": 355,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 4, "sectorZ": 3, "floorDataIndex": 366,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 4, "sectorZ": 4, "floorDataIndex": 371,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 4, "sectorZ": 5, "floorDataIndex": 376,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 4, "sectorZ": 6, "floorDataIndex": 381,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 4, "sectorZ": 7, "floorDataIndex": 386,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 4, "sectorZ": 8, "floorDataIndex": 391,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 4, "sectorZ": 9, "floorDataIndex": 394,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 5, "sectorZ": 3, "floorDataIndex": 405,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 5, "sectorZ": 4, "floorDataIndex": 410,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 5, "sectorZ": 5, "floorDataIndex": 415,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 5, "sectorZ": 6, "floorDataIndex": 420,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 5, "sectorZ": 7, "floorDataIndex": 425,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 5, "sectorZ": 8, "floorDataIndex": 430,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 5, "sectorZ": 9, "floorDataIndex": 435,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 6, "sectorZ": 3, "floorDataIndex": 448,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 6, "sectorZ": 4, "floorDataIndex": 455,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 6, "sectorZ": 5, "floorDataIndex": 462,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 6, "sectorZ": 6, "floorDataIndex": 467,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 6, "sectorZ": 7, "floorDataIndex": 472,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 6, "sectorZ": 8, "floorDataIndex": 477,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 6, "sectorZ": 9, "floorDataIndex": 482,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 7, "sectorZ": 3, "floorDataIndex": 493,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 7, "sectorZ": 4, "floorDataIndex": 498,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 7, "sectorZ": 5, "floorDataIndex": 505,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 7, "sectorZ": 6, "floorDataIndex": 512,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 7, "sectorZ": 7, "floorDataIndex": 517,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 7, "sectorZ": 8, "floorDataIndex": 522,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 6, "sectorX": 7, "sectorZ": 9, "floorDataIndex": 527,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 5 }
+      ]
+    },
+    {
+      "room": 11, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 732,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 11, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 737,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 11, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 742,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 11, "sectorX": 1, "sectorZ": 4, "floorDataIndex": 748,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 61 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 11, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 760,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 11, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 766,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 11, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 772,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 11, "sectorX": 2, "sectorZ": 4, "floorDataIndex": 779,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 61 },
+        { "type": "Object", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 12, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 838,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 112 },
+        { "type": "Object", "index": 27 },
+        { "type": "Object", "index": 2 },
+        { "type": "Object", "index": 1 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 908,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 2 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 913,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 2 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 918,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 2 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 1, "sectorZ": 4, "floorDataIndex": 923,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 1 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 1, "sectorZ": 5, "floorDataIndex": 928,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 1 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 939,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 2 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 944,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 2 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 949,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 2 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 2, "sectorZ": 4, "floorDataIndex": 954,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 1 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 2, "sectorZ": 5, "floorDataIndex": 957,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 1 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 968,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 2 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 973,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 2 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 3, "sectorZ": 3, "floorDataIndex": 978,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 2 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 3, "sectorZ": 4, "floorDataIndex": 983,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 1 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 3, "sectorZ": 5, "floorDataIndex": 988,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 1 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 4, "sectorZ": 1, "floorDataIndex": 1001,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 4, "sectorZ": 2, "floorDataIndex": 1007,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 4, "sectorZ": 3, "floorDataIndex": 1013,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 5, "sectorZ": 1, "floorDataIndex": 1029,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 5, "sectorZ": 2, "floorDataIndex": 1035,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 14, "sectorX": 5, "sectorZ": 3, "floorDataIndex": 1041,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 26, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1707,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 4 }
+      ]
+    },
+    {
+      "room": 26, "sectorX": 4, "sectorZ": 1, "floorDataIndex": 1740,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 0 }
+      ]
+    },
+    {
+      "room": 26, "sectorX": 4, "sectorZ": 2, "floorDataIndex": 1745,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 0 }
+      ]
+    },
+    {
+      "room": 35, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 2316,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 35, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 2321,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 35, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 2326,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 39, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 2443,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Cutscene", "index": 40 }
+      ]
+    },
+    {
+      "room": 50, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 3094,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 0 }
+      ]
+    },
+    {
+      "room": 50, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 3097,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 }
+      ]
+    },
+    {
+      "room": 50, "sectorX": 1, "sectorZ": 4, "floorDataIndex": 3102,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 }
+      ]
+    },
+    {
+      "room": 50, "sectorX": 1, "sectorZ": 5, "floorDataIndex": 3107,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 15 }
+      ]
+    },
+    {
+      "room": 55, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 3472,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 }
+      ]
+    },
+    {
+      "room": 55, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 3477,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 15 }
+      ]
+    },
+    {
+      "room": 55, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 3496,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 }
+      ]
+    },
+    {
+      "room": 89, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5127,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 4 }
+      ]
+    },
+    {
+      "room": 90, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5172,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 90, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 5179,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 90, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 5192,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 90, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 5198,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5333,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 5338,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 5353,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 5358,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 5363,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 2, "sectorZ": 4, "floorDataIndex": 5368,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 2, "sectorZ": 5, "floorDataIndex": 5373,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 5384,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 5389,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 3, "sectorZ": 3, "floorDataIndex": 5394,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 3, "sectorZ": 4, "floorDataIndex": 5399,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 3, "sectorZ": 5, "floorDataIndex": 5404,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 4, "sectorZ": 1, "floorDataIndex": 5415,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 4, "sectorZ": 2, "floorDataIndex": 5420,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 4, "sectorZ": 3, "floorDataIndex": 5425,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 4, "sectorZ": 4, "floorDataIndex": 5430,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 4, "sectorZ": 5, "floorDataIndex": 5435,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 4, "sectorZ": 6, "floorDataIndex": 5440,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 6 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 4, "sectorZ": 7, "floorDataIndex": 5445,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 6 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 5, "sectorZ": 1, "floorDataIndex": 5454,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 5, "sectorZ": 2, "floorDataIndex": 5459,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 5, "sectorZ": 3, "floorDataIndex": 5462,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 5, "sectorZ": 4, "floorDataIndex": 5465,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 5, "sectorZ": 5, "floorDataIndex": 5470,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 5, "sectorZ": 6, "floorDataIndex": 5475,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 6 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 5, "sectorZ": 7, "floorDataIndex": 5480,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 6 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 6, "sectorZ": 1, "floorDataIndex": 5493,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 6, "sectorZ": 2, "floorDataIndex": 5498,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 6, "sectorZ": 3, "floorDataIndex": 5501,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 6, "sectorZ": 4, "floorDataIndex": 5504,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 6, "sectorZ": 5, "floorDataIndex": 5509,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 6, "sectorZ": 6, "floorDataIndex": 5514,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 6 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 6, "sectorZ": 7, "floorDataIndex": 5519,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 6 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 7, "sectorZ": 1, "floorDataIndex": 5530,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 7, "sectorZ": 2, "floorDataIndex": 5535,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 7, "sectorZ": 3, "floorDataIndex": 5540,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 7, "sectorZ": 4, "floorDataIndex": 5543,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 7, "sectorZ": 5, "floorDataIndex": 5546,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 8, "sectorZ": 3, "floorDataIndex": 5563,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 8, "sectorZ": 4, "floorDataIndex": 5568,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 92, "sectorX": 8, "sectorZ": 5, "floorDataIndex": 5573,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 95, "sectorX": 5, "sectorZ": 4, "floorDataIndex": 5802,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 95, "sectorX": 5, "sectorZ": 5, "floorDataIndex": 5807,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 95, "sectorX": 6, "sectorZ": 4, "floorDataIndex": 5820,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 95, "sectorX": 6, "sectorZ": 5, "floorDataIndex": 5825,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 3 }
+      ]
+    },
+    {
+      "room": 95, "sectorX": 7, "sectorZ": 7, "floorDataIndex": 5862,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 6 }
+      ]
+    },
+    {
+      "room": 95, "sectorX": 7, "sectorZ": 8, "floorDataIndex": 5867,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 6 }
+      ]
+    },
+    {
+      "room": 95, "sectorX": 8, "sectorZ": 7, "floorDataIndex": 5882,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 6 }
+      ]
+    },
+    {
+      "room": 95, "sectorX": 8, "sectorZ": 8, "floorDataIndex": 5887,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 6 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5916,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 5921,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 5927,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 1, "sectorZ": 4, "floorDataIndex": 5933,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 5945,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 5950,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 5956,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 2, "sectorZ": 4, "floorDataIndex": 5962,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 5974,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 5980,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 3, "sectorZ": 3, "floorDataIndex": 5986,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 3, "sectorZ": 4, "floorDataIndex": 5990,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 4, "sectorZ": 1, "floorDataIndex": 6002,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 4, "sectorZ": 2, "floorDataIndex": 6008,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 4, "sectorZ": 3, "floorDataIndex": 6014,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 4, "sectorZ": 4, "floorDataIndex": 6020,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 7 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 5, "sectorZ": 1, "floorDataIndex": 6032,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 4 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 5, "sectorZ": 2, "floorDataIndex": 6037,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 4 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 5, "sectorZ": 3, "floorDataIndex": 6042,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 4 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 5, "sectorZ": 4, "floorDataIndex": 6047,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 4 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 6, "sectorZ": 1, "floorDataIndex": 6058,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 4 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 6, "sectorZ": 2, "floorDataIndex": 6063,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 4 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 6, "sectorZ": 3, "floorDataIndex": 6068,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 4 }
+      ]
+    },
+    {
+      "room": 96, "sectorX": 6, "sectorZ": 4, "floorDataIndex": 6073,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 4 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 1, "sectorZ": 6, "floorDataIndex": 8448,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 104 },
+        { "type": "Cutscene", "index": 65 },
+        { "type": "Object", "index": 14 },
+        { "type": "Object", "index": 6 },
+        { "type": "Object", "index": 5 },
+        { "type": "Object", "index": 19 },
+        { "type": "Object", "index": 20 },
+        { "type": "Object", "index": 11 },
+        { "type": "Object", "index": 12 },
+        { "type": "Object", "index": 8 },
+        { "type": "Object", "index": 16 },
+        { "type": "Object", "index": 7 },
+        { "type": "Object", "index": 28 },
+        { "type": "Object", "index": 17 },
+        { "type": "Object", "index": 18 },
+        { "type": "Object", "index": 9 },
+        { "type": "Object", "index": 10 },
+        { "type": "Object", "index": 21 },
+        { "type": "Object", "index": 30 },
+        { "type": "Object", "index": 29 },
+        { "type": "Object", "index": 25 },
+        { "type": "Object", "index": 24 },
+        { "type": "Object", "index": 22 },
+        { "type": "Object", "index": 23 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 1, "sectorZ": 7, "floorDataIndex": 8474,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 104 },
+        { "type": "Cutscene", "index": 65 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 1, "sectorZ": 14, "floorDataIndex": 8488,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 1, "sectorZ": 15, "floorDataIndex": 8494,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 1, "sectorZ": 16, "floorDataIndex": 8500,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 1, "sectorZ": 17, "floorDataIndex": 8506,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 1, "sectorZ": 18, "floorDataIndex": 8513,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "PlaySoundtrack", "index": 61 },
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 2, "sectorZ": 14, "floorDataIndex": 8550,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 2, "sectorZ": 15, "floorDataIndex": 8556,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 2, "sectorZ": 16, "floorDataIndex": 8562,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 2, "sectorZ": 17, "floorDataIndex": 8568,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 2, "sectorZ": 18, "floorDataIndex": 8574,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 3, "sectorZ": 14, "floorDataIndex": 8614,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 3, "sectorZ": 15, "floorDataIndex": 8617,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 3, "sectorZ": 16, "floorDataIndex": 8622,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 3, "sectorZ": 17, "floorDataIndex": 8627,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 3, "sectorZ": 18, "floorDataIndex": 8632,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 9 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 4, "sectorZ": 14, "floorDataIndex": 8677,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 4, "sectorZ": 15, "floorDataIndex": 8680,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 4, "sectorZ": 16, "floorDataIndex": 8685,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 4, "sectorZ": 17, "floorDataIndex": 8690,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 5, "sectorZ": 14, "floorDataIndex": 8749,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 5, "sectorZ": 15, "floorDataIndex": 8754,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 5, "sectorZ": 16, "floorDataIndex": 8759,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 5, "sectorZ": 17, "floorDataIndex": 8764,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 6, "sectorZ": 14, "floorDataIndex": 8819,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 6, "sectorZ": 15, "floorDataIndex": 8824,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 6, "sectorZ": 16, "floorDataIndex": 8829,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 6, "sectorZ": 17, "floorDataIndex": 8834,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 7, "sectorZ": 14, "floorDataIndex": 8871,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 7, "sectorZ": 15, "floorDataIndex": 8876,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 7, "sectorZ": 16, "floorDataIndex": 8881,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 7, "sectorZ": 17, "floorDataIndex": 8886,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 8 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 8, "sectorZ": 14, "floorDataIndex": 8925,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 8, "sectorZ": 15, "floorDataIndex": 8931,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 8, "sectorZ": 16, "floorDataIndex": 8935,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 8, "sectorZ": 17, "floorDataIndex": 8941,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "ClearBodies", "index": 0 },
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 8, "sectorZ": 18, "floorDataIndex": 8947,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 9, "sectorZ": 14, "floorDataIndex": 8980,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 13 },
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 9, "sectorZ": 15, "floorDataIndex": 8986,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 13 },
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 9, "sectorZ": 16, "floorDataIndex": 8992,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 13 },
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 9, "sectorZ": 17, "floorDataIndex": 8998,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "Object", "index": 13 },
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 9, "sectorZ": 18, "floorDataIndex": 9004,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 10, "sectorZ": 14, "floorDataIndex": 9045,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 10, "sectorZ": 15, "floorDataIndex": 9050,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 10, "sectorZ": 16, "floorDataIndex": 9055,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 10, "sectorZ": 17, "floorDataIndex": 9060,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    },
+    {
+      "room": 123, "sectorX": 10, "sectorZ": 18, "floorDataIndex": 9065,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "commands": [
+        { "type": "UnderwaterCurrent", "index": 0 }
+      ]
+    }
+  ]
+}

@@ -2034,11 +2034,28 @@ void BuildOutsideTable()
 	long x, y, lp;
 	char flipped[256];
 
+	// flipped[] is a fixed 256-entry STACK array, indexed by both the room
+	// loop below and by other rooms' flipped_room references - same bug
+	// class as SAVEGAME_INFO (see that fix's comments in game\savegame.cpp),
+	// but worse here since this one overflows the stack, not the heap.
+	// number_rooms comes straight from the level file with no upstream cap.
+	if (number_rooms > 256)
+	{
+		Log("FATAL: level has %d rooms, only 256 fit in BuildOutsideTable()'s flipped[]", number_rooms);
+
+		MessageBox(0,
+			"This level has more rooms than the engine can handle.\r\n\r\n"
+			"The game cannot continue and must close.",
+			"Tomb Raider V - Fatal Error", MB_ICONSTOP);
+
+		ExitProcess(1);
+	}
+
 	max_slots = 0;
 	OutsideRoomOffsets = (short*)game_malloc(0x5B2);
 	OutsideRoomTable = (char*)game_malloc(0xB640);
 	memset(OutsideRoomTable, 0xFF, 0xB640);
-	memset(flipped, 0, 255);
+	memset(flipped, 0, sizeof(flipped)); // was memset(flipped, 0, 255) - off-by-one, left flipped[255] uninitialised
 
 	for (int i = 0; i < number_rooms; i++)
 	{

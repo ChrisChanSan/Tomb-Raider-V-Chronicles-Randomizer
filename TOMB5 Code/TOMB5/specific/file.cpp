@@ -344,10 +344,43 @@ void S_GetUVRotateTextures()
 	TEXTURESTRUCT* tex;
 	short* pRange;
 
+	// AnimatingTexturesV is a fixed [16][8][3] array - same bug class as
+	// SAVEGAME_INFO (see that fix's comments in game\savegame.cpp). Both
+	// dimensions used here come from level file data with no upstream
+	// validation: nAnimUVRanges (outer, i) is a raw byte read in
+	// LoadAnimatedTextures(); the per-range count (inner, j's starting
+	// value) is read from aranges[] right below, per range.
+	if (nAnimUVRanges > 16)
+	{
+		Log("FATAL: level has %d animated-UV texture ranges, only 16 fit in AnimatingTexturesV[]", nAnimUVRanges);
+
+		MessageBox(0,
+			"This level has more animated (UV-rotating) texture ranges than "
+			"the engine can handle.\r\n\r\nThe game cannot continue and must close.",
+			"Tomb Raider V - Fatal Error", MB_ICONSTOP);
+
+		ExitProcess(1);
+	}
+
 	pRange = aranges + 1;
 
 	for (int i = 0; i < nAnimUVRanges; i++, pRange++)
 	{
+		int count = (int)*pRange;
+
+		if (count > 7)
+		{
+			Log("FATAL: animated-UV texture range %d has %d entries, only 8 fit in AnimatingTexturesV[][]", i, count + 1);
+
+			MessageBox(0,
+				"This level has an animated (UV-rotating) texture range with "
+				"more entries than the engine can handle.\r\n\r\n"
+				"The game cannot continue and must close.",
+				"Tomb Raider V - Fatal Error", MB_ICONSTOP);
+
+			ExitProcess(1);
+		}
+
 		for (int j = (int)*(pRange++); j >= 0; j--, pRange++)
 		{
 			tex = &textinfo[*pRange];
@@ -381,6 +414,28 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 	uchar r, g, b, a;
 
 	Log(__FUNCTION__);
+
+	// RTPages/OTPages/BTPages come straight from the level file with no
+	// upstream validation - the fill loops below write Textures[nTextures++]
+	// for each page with no bounds check of their own (this is the exact
+	// bug class already found and fixed for SAVEGAME_INFO - see that fix's
+	// comments in game\savegame.cpp for the full rationale). Index 0 is
+	// reserved (set explicitly by the caller before LoadTextures runs), so
+	// the usable range is 1..(RTPages+OTPages+BTPages), which must fit
+	// within Textures[]'s size.
+	if (1 + RTPages + OTPages + BTPages > 256)
+	{
+		Log("FATAL: level has %d texture pages (RTPages=%d OTPages=%d BTPages=%d), only 256 fit in Textures[]",
+			1 + RTPages + OTPages + BTPages, RTPages, OTPages, BTPages);
+
+		MessageBox(0,
+			"This level has more texture pages than the engine can handle "
+			"(too many combined room/object/bump-mapped textures).\r\n\r\n"
+			"The game cannot continue and must close.",
+			"Tomb Raider V - Fatal Error", MB_ICONSTOP);
+
+		ExitProcess(1);
+	}
 
 	nTextures = 1;
 	format = 0;
@@ -877,6 +932,22 @@ bool LoadCameras()
 
 	number_spotcams = (short)ReadLong();
 
+	// number_spotcams comes straight from the level file, and SpotCam is a
+	// fixed-size 256-entry global array - same bug class as SAVEGAME_INFO
+	// (see game\savegame.cpp's fix for the full rationale): the ReadBlock
+	// below is a raw memcpy with no bounds check of its own.
+	if (number_spotcams > 256)
+	{
+		Log("FATAL: level has %d spotcams, only 256 fit in SpotCam[]", number_spotcams);
+
+		MessageBox(0,
+			"This level has more spot cameras than the engine can handle.\r\n\r\n"
+			"The game cannot continue and must close.",
+			"Tomb Raider V - Fatal Error", MB_ICONSTOP);
+
+		ExitProcess(1);
+	}
+
 	if (number_spotcams)
 		ReadBlock(SpotCam, number_spotcams * sizeof(SPOTCAM));
 
@@ -1050,6 +1121,24 @@ bool LoadItems()
 	if (!num_items)
 		return 1;
 
+	// num_items comes straight from the level file with no upstream
+	// validation - the fill loop below writes items[i] for every one of
+	// them with no bounds check of its own (same bug class as SAVEGAME_INFO,
+	// see that fix's comments in game\savegame.cpp). MAX_ITEMS (256, defined
+	// global\types.h) is left as-is here (not raised) - see items[] itself
+	// for why.
+	if (num_items > MAX_ITEMS)
+	{
+		Log("FATAL: level has %d items, only MAX_ITEMS=%d fit in items[]", num_items, MAX_ITEMS);
+
+		MessageBox(0,
+			"This level has more items/moveables than the engine can handle.\r\n\r\n"
+			"The game cannot continue and must close.",
+			"Tomb Raider V - Fatal Error", MB_ICONSTOP);
+
+		ExitProcess(1);
+	}
+
 	items = (ITEM_INFO*)game_malloc(MAX_ITEMS * sizeof(ITEM_INFO));
 	level_items = num_items;
 	InitialiseClosedDoors();
@@ -1168,6 +1257,28 @@ bool LoadSamples()
 	{
 		FreeSampleDecompress();
 		return 1;
+	}
+
+	// num_samples comes straight from the level file with no upstream
+	// validation, and DXCreateSampleADPCM() (specific\dxsound.cpp) writes
+	// DS_Buffers[num] for every one of them with no bounds check of its own
+	// - same bug class as SAVEGAME_INFO (see that fix's comments in
+	// game\savegame.cpp). Note the engine's own sample_lut is sized via
+	// MAX_SAMPLES=450 (global\types.h) - i.e. it already expects up to 450
+	// distinct samples, so DS_Buffers[256] is tighter than the rest of the
+	// engine's own sound system assumes.
+	if (num_samples > 256)
+	{
+		FreeSampleDecompress();
+
+		Log("FATAL: level has %d sound samples, only 256 fit in DS_Buffers[]", num_samples);
+
+		MessageBox(0,
+			"This level has more sound samples than the engine can handle.\r\n\r\n"
+			"The game cannot continue and must close.",
+			"Tomb Raider V - Fatal Error", MB_ICONSTOP);
+
+		ExitProcess(1);
 	}
 
 	for (int i = 0; i < num_samples; i++)

@@ -478,7 +478,22 @@ void InitialisePickup(short item_number)
 		item->pos.y_pos -= bounds[3];
 
 	if (item->trigger_flags & 0x80)
-		RPickups[NumRPickups++] = (uchar)item_number;
+	{
+		// RPickups[16] is a fixed-size array with no bounds check in the
+		// original engine - unlike the fatal-reject cases elsewhere (see
+		// game\savegame.cpp), overflowing this one is harmless to skip: it
+		// only feeds the periodic "refresh regenerating pickups" pass
+		// (game\pickup.cpp) and NumRPickups is a uchar (max 255), so without
+		// this guard it would silently corrupt whatever globals follow
+		// RPickups/KeyTriggerActive in memory once the item count exceeds
+		// 16. A level/Randomizer with more than 16 regenerating pickups just
+		// loses the auto-refresh for the extras past the 16th - a minor
+		// gameplay-only degradation, not a crash or corruption risk.
+		if (NumRPickups < 16)
+			RPickups[NumRPickups++] = (uchar)item_number;
+		else
+			Log("WARNING: more than 16 regenerating pickups in this level - item %d won't auto-refresh", item_number);
+	}
 
 	if (item->trigger_flags & 0x100)
 		item->mesh_bits = 0;

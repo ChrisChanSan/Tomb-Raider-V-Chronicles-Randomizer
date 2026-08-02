@@ -1266,7 +1266,16 @@ struct SAVEGAME_INFO
 	uchar CurrentLevel;
 	uchar CampaignSecrets[4];
 	uchar TLCount;
-	char buffer[7245];
+	// Doubled from the original 7245 to give the Randomizer's higher item/
+	// enemy counts real headroom (WriteSG in game/savegame.cpp fails fast on
+	// overflow rather than silently corrupting past this, but that's a safety
+	// net, not a substitute for the buffer actually being big enough). This
+	// resize changes sizeof(SAVEGAME_INFO), which breaks binary compatibility
+	// with save files written before this change - see savegame_bytes_read
+	// and the format/checksum validation in sgRestoreGame() (game/savegame.cpp),
+	// which detects and cleanly rejects old-format saves instead of silently
+	// restoring from a garbage-filled tail.
+	char buffer[14490];
 };
 
 struct tomb5_save_info

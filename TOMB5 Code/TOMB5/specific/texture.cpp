@@ -5,7 +5,12 @@
 #include "3dmath.h"
 #include "winmain.h"
 
-TEXTURE Textures[64];
+// Raised from the original 64 - a Randomizer combining texture pages from
+// several source levels can plausibly need more than any single vanilla
+// level ever did. See the bounds check at the top of LoadTextures() (file.cpp)
+// that validates RTPages+OTPages+BTPages+1 against this before ever writing
+// into the array - the original engine had neither the check nor the margin.
+TEXTURE Textures[256];
 long nTextures;
 
 // Destination is always a plain 32-bit D3DFMT_A8R8G8B8 texture now (the old per-adapter

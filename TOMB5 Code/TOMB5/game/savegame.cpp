@@ -26,12 +26,39 @@ static long SGcount = 0;
 
 tomb5_save_info tomb5_save;
 ulong tomb5_save_size;
+ulong savegame_bytes_read;
 
 void WriteSG(void* pointer, long size)
 {
 	char* data;
 
 	SGcount += size;
+
+	// The original TR5 engine (unlike TR2's - see TR2Main's WriteSG, which
+	// preserves the original game's own "SG_Count >= sizeof(buffer) ->
+	// S_ExitSystem(...)" guard) has no protection here at all: a level with
+	// enough active/triggered items to exceed savegame.buffer's fixed size
+	// silently writes past its end into whatever memory follows it. Cross-
+	// checked directly against TR2Main before adding this - same fail-fast
+	// philosophy (stop immediately with a clear message, rather than let a
+	// save silently corrupt or crash somewhere unrelated later), adapted to
+	// this engine's own idioms (Log()/MessageBox instead of S_ExitSystem).
+	// Deliberately does NOT resize savegame.buffer itself - that would
+	// change sizeof(SAVEGAME_INFO) and break compatibility with existing
+	// save files (see game/savegame.cpp's WriteFile/ReadFile call sites,
+	// which serialize the whole struct by sizeof()) - a separate, bigger
+	// decision.
+	if (SGcount >= (long)sizeof(savegame.buffer))
+	{
+		Log("FATAL: savegame buffer overflow - SGcount=%d, buffer size=%d", SGcount, (int)sizeof(savegame.buffer));
+
+		char msg[256];
+		sprintf(msg, "Savegame data is too large to fit in the save buffer (%d / %d bytes).\r\n\r\nThe game cannot continue safely and must close.",
+			SGcount, (int)sizeof(savegame.buffer));
+		MessageBox(0, msg, "Tomb Raider V - Fatal Error", MB_ICONSTOP);
+
+		ExitProcess(1);
+	}
 
 	for (data = (char*)pointer; size > 0; size--)
 	{
@@ -1076,6 +1103,67 @@ void sgSaveGame()
 
 void sgRestoreGame()
 {
+	// Validate the loaded savegame before trusting any of it - see
+	// savegame_bytes_read (set in specific\gamemain.cpp's S_LoadGame) and
+	// the buffer[] resize comment in global\types.h. Two independent,
+	// deterministic checks:
+	//  1. Size: an old-format save (written before buffer[] was resized)
+	//     reads fewer bytes than sizeof(SAVEGAME_INFO) - Win32 ReadFile
+	//     doesn't error on a short read, it just leaves the rest of the
+	//     destination untouched, so without this check the unread tail of
+	//     buffer[] would be whatever stale memory happened to be there and
+	//     RestoreLevelData/ReadSG would decode it as if it were real data.
+	//  2. Checksum: recompute the same additive byte-sum sgSaveGame() used
+	//     (with Checksum temporarily zeroed, exactly matching how it was
+	//     originally computed) and compare against the stored short value -
+	//     catches a same-size but corrupted/tampered file, which the size
+	//     check alone wouldn't. Deliberately compares as a typed short, not
+	//     by re-summing Checksum's own 2 stored bytes as part of a flat byte
+	//     scan: Checksum is a signed short holding a sign-extended signed
+	//     char (-sum), so its high byte is 0xFF whenever that char is
+	//     negative - summing that byte as its own signed char (0xFF -> -1)
+	//     instead of accounting for the sign-extension gives the wrong total
+	//     about half the time. Hit exactly this bug during testing (a
+	//     same-build save/load round-trip was wrongly rejected) before
+	//     switching to this comparison.
+	// Both failure modes are unrecoverable here - DoLevel() (game\gameflow.cpp,
+	// the only caller) has no error-recovery path for a save-load failure at
+	// all, so - matching WriteSG's own overflow guard - this fails loudly and
+	// immediately rather than attempt an unproven partial recovery.
+	bool boValid = (savegame_bytes_read >= sizeof(SAVEGAME_INFO));
+
+	if (boValid)
+	{
+		short storedChecksum = savegame.Checksum;
+		savegame.Checksum = 0;
+
+		char* ptr = (char*)&savegame;
+		char sum = 0;
+
+		for (int i = 0; i < sizeof(SAVEGAME_INFO); i++)
+		{
+			sum += *ptr;
+			ptr++;
+		}
+
+		savegame.Checksum = storedChecksum;
+
+		boValid = (storedChecksum == (short)-sum);
+	}
+
+	if (!boValid)
+	{
+		Log("FATAL: incompatible or corrupted savegame - bytes_read=%d, expected=%d", (int)savegame_bytes_read, (int)sizeof(SAVEGAME_INFO));
+
+		MessageBox(0,
+			"This savegame is from an incompatible or older version of the game "
+			"(or the file is corrupted) and cannot be loaded safely.\r\n\r\n"
+			"The game cannot continue and must close.",
+			"Tomb Raider V - Fatal Error", MB_ICONSTOP);
+
+		ExitProcess(1);
+	}
+
 	SGcount = 0;
 	SGpoint = savegame.buffer;
 	GameTimer = savegame.Game.Timer;

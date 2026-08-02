@@ -21,9 +21,24 @@ void ItemNewRoom(short item_num, short room_number)
 
 	if (InItemControlLoop)
 	{
-		ItemNewRooms[ItemNewRoomNo][0] = item_num;
-		ItemNewRooms[ItemNewRoomNo][1] = room_number;
-		ItemNewRoomNo++;
+		// ItemNewRooms[256][2] is a fixed-size deferred-update queue (see
+		// game\control.cpp) drained once per frame after the item-control
+		// loop finishes - same bug class as SAVEGAME_INFO (see that fix's
+		// comments in game\savegame.cpp), but unlike the level-load-time
+		// cases, dropping an overflow entry here is soft/self-correcting
+		// (this item's room change is just deferred to the next successful
+		// call instead of applied this tick) rather than a hard reject -
+		// more than 256 items/effects changing rooms or dying in the same
+		// single tick is an extreme edge case even for a dense Randomizer.
+		if (ItemNewRoomNo < 256)
+		{
+			ItemNewRooms[ItemNewRoomNo][0] = item_num;
+			ItemNewRooms[ItemNewRoomNo][1] = room_number;
+			ItemNewRoomNo++;
+		}
+		else
+			Log("WARNING: ItemNewRooms[] full - dropped deferred room change for item %d", item_num);
+
 		return;
 	}
 
@@ -80,8 +95,17 @@ void KillItem(short item_num)
 
 	if (InItemControlLoop)
 	{
-		ItemNewRooms[ItemNewRoomNo][0] = item_num | 0x8000;
-		ItemNewRoomNo++;
+		// See ItemNewRoom()'s comment above on ItemNewRooms[]'s bounds -
+		// same soft/self-correcting reasoning applies to a dropped deferred
+		// kill (item just stays active one tick longer than intended).
+		if (ItemNewRoomNo < 256)
+		{
+			ItemNewRooms[ItemNewRoomNo][0] = item_num | 0x8000;
+			ItemNewRoomNo++;
+		}
+		else
+			Log("WARNING: ItemNewRooms[] full - dropped deferred kill for item %d", item_num);
+
 		return;
 	}
 
@@ -397,8 +421,18 @@ void KillEffect(short fx_num)
 
 	if (InItemControlLoop)
 	{
-		ItemNewRooms[ItemNewRoomNo][0] = fx_num | 0x8000;
-		ItemNewRoomNo++;
+		// See ItemNewRoom()'s comment (above, earlier in this file) on
+		// ItemNewRooms[]'s bounds - same soft/self-correcting reasoning
+		// applies to a dropped deferred kill (effect just stays active one
+		// tick longer than intended).
+		if (ItemNewRoomNo < 256)
+		{
+			ItemNewRooms[ItemNewRoomNo][0] = fx_num | 0x8000;
+			ItemNewRoomNo++;
+		}
+		else
+			Log("WARNING: ItemNewRooms[] full - dropped deferred kill for effect %d", fx_num);
+
 		return;
 	}
 
@@ -447,9 +481,17 @@ void EffectNewRoom(short fx_num, short room_num)
 
 	if (InItemControlLoop)
 	{
-		ItemNewRooms[ItemNewRoomNo][0] = fx_num;
-		ItemNewRooms[ItemNewRoomNo][1] = room_num;
-		ItemNewRoomNo++;
+		// See ItemNewRoom()'s comment (above, earlier in this file) on
+		// ItemNewRooms[]'s bounds.
+		if (ItemNewRoomNo < 256)
+		{
+			ItemNewRooms[ItemNewRoomNo][0] = fx_num;
+			ItemNewRooms[ItemNewRoomNo][1] = room_num;
+			ItemNewRoomNo++;
+		}
+		else
+			Log("WARNING: ItemNewRooms[] full - dropped deferred room change for effect %d", fx_num);
+
 		return;
 	}
 

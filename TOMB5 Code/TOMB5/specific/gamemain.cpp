@@ -155,6 +155,7 @@ long S_LoadGame(long slot_num)
 		ReadFile(file, &value, sizeof(long), &bytes, 0);
 		ReadFile(file, &value, sizeof(long), &bytes, 0);
 		ReadFile(file, &savegame, sizeof(SAVEGAME_INFO), &bytes, 0);
+		savegame_bytes_read = bytes; // see sgRestoreGame() - detects an old-format (pre-resize) save
 		ReadFile(file, &tomb5_save, sizeof(tomb5_save_info), &tomb5_save_size, 0);
 		CloseHandle(file);
 		return 1;

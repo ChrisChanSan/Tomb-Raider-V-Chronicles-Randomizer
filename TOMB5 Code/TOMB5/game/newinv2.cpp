@@ -119,6 +119,90 @@ static short optmessages[11] =
 
 static uchar wanky_secrets_table[18] = { 0, 3, 3, 3, 3, 3, 1, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3 };
 
+//----------------------------------------------------------------------------
+// Secret bonus (TR2-style): collecting every secret in a level awards items.
+//
+// TR2 did this via the script - GF_SecretInvItems[] filled per level, granted
+// by GF_ModifyInventory(level, TRUE) which both adds the item to the inventory
+// and calls AddDisplayPickup() so it shows on screen (see TR2Main's
+// game/gameflow.cpp:418). TOMB5 has no such script field, so the reward is
+// defined here instead. Everything else it needs already exists in TOMB5:
+// the per-level secret counter (savegame.Level.Secrets), the per-level total
+// (wanky_secrets_table above), the item-granting path (DEL_picked_up_object)
+// and the on-screen pickup display (AddDisplayPickup, game/health.cpp).
+//
+// wanky_secrets_table was verified against the actual level data before being
+// relied on here: counting PICKUP_ITEM4 (object id 223) placements in all 16
+// vanilla .trc files matches this table exactly for all 14 real gameplay
+// levels, including the two irregular ones (Deepsea Dive = 1, Sinking
+// Submarine = 2). Only LVL5_DEL_LEVEL (a dev/test level with no secrets at
+// all) disagrees, which is harmless: the counter can then never reach the
+// table's value, so the bonus simply never fires there.
+//
+// Object ids below are the ones DEL_picked_up_object() already understands,
+// so each reward behaves exactly like picking that item up normally.
+// Per-level tables are separate purely so they are easy to tune - they all
+// start out pointing at the same default.
+//----------------------------------------------------------------------------
+struct SECRET_BONUS_ITEM
+{
+	short object_number;
+	short count;
+};
+
+static const SECRET_BONUS_ITEM SecretBonusDefault[] =
+{
+	{ BIGMEDI_ITEM,         1 },
+	{ SMALLMEDI_ITEM,       2 },
+	{ FLARE_INV_ITEM,       2 },
+	{ REVOLVER_AMMO_ITEM,   1 },
+	{ 0,                    0 }		//terminator
+};
+
+static const SECRET_BONUS_ITEM* secret_bonus_table[18] =
+{
+	0,						//LVL5_TITLE - no secrets
+	SecretBonusDefault,		//LVL5_STREETS_OF_ROME
+	SecretBonusDefault,		//LVL5_TRAJAN_MARKETS
+	SecretBonusDefault,		//LVL5_COLOSSEUM
+	SecretBonusDefault,		//LVL5_BASE
+	SecretBonusDefault,		//LVL5_SUBMARINE
+	SecretBonusDefault,		//LVL5_DEEPSEA_DIVE
+	SecretBonusDefault,		//LVL5_SINKING_SUBMARINE
+	SecretBonusDefault,		//LVL5_GALLOWS_TREE
+	SecretBonusDefault,		//LVL5_LABYRINTH
+	SecretBonusDefault,		//LVL5_OLD_MILL
+	SecretBonusDefault,		//LVL5_THIRTEENTH_FLOOR
+	SecretBonusDefault,		//LVL5_ESCAPE_WITH_THE_IRIS
+	SecretBonusDefault,		//LVL5_SECURITY_BREACH
+	SecretBonusDefault,		//LVL5_RED_ALERT
+	0,						//LVL5_GIBBY_LEVEL - dev level
+	0,						//LVL5_DEL_LEVEL - dev level
+	0						//LVL5_TOM_LEVEL - dev level
+};
+
+void GrantSecretBonus(long level)
+{
+	const SECRET_BONUS_ITEM* bonus;
+
+	if (level < 0 || level >= 18)
+		return;
+
+	bonus = secret_bonus_table[level];
+
+	if (!bonus)
+		return;
+
+	for (; bonus->object_number; bonus++)
+	{
+		for (int i = 0; i < bonus->count; i++)
+		{
+			DEL_picked_up_object(bonus->object_number);
+			AddDisplayPickup(bonus->object_number);
+		}
+	}
+}
+
 static ushort options_table[NUM_INVOBJ] =
 {
 	OPT_EQUIP | OPT_COMBINE | OPT_UZI,			//INV_UZI_ITEM
@@ -2590,6 +2674,15 @@ void DEL_picked_up_object(short objnum)
 			savegame.CampaignSecrets[0]++;
 		else if (gfCurrentLevel >= LVL5_GALLOWS_TREE && gfCurrentLevel <= LVL5_OLD_MILL)
 			savegame.CampaignSecrets[1]++;
+
+		//TR2-style reward for collecting every secret in this level (see
+		//GrantSecretBonus above). Deliberately an equality test, so it fires
+		//exactly once, on the pickup that completes the set - reloading a save
+		//made afterwards cannot re-trigger it, since no further secret pickup
+		//happens. A level whose table value it can never reach simply never
+		//gets a bonus.
+		if (gfCurrentLevel < 18 && savegame.Level.Secrets == wanky_secrets_table[gfCurrentLevel])
+			GrantSecretBonus(gfCurrentLevel);
 
 		return;
 

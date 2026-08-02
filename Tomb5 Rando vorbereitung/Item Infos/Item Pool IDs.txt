@@ -13,6 +13,19 @@ zuerst nach object_number filtern.)
 	2
 	3
 
+Bestätigte TypeIDs für generische Pickups (verifiziert 2026-08-02 über RESOURCES\TRCatalog2.xml
+gegen game/objects.h's object_types-Enum, plus praktisch getestet via -patchlevel im
+Fülltest von Andrea1.trc, Räume 14/40/41):
+	349 = Bigmedi Item (großes Medipack)
+	350 = Smallmedi Item (kleines Medipack)
+	348 = Revolver Ammo Item
+	355 = Flare Inv Item ("Flares" - DAS ist die aufsammelbare Pickup-ID)
+	354 = Flare Item - ACHTUNG, NICHT zum Platzieren verwenden! Das ist die Flare,
+	      die Lara wegwirft, wenn sie verbraucht ist (Wurf-/Deko-Objekt), keine
+	      Pickup-Logik. Im ersten Fülltest fälschlich verwendet (verwechselt mit 355),
+	      vom User über trviews Item-Details-Panel korrigiert (Type-Spalte "Flare" vs
+	      "Flares" macht den Unterschied sichtbar).
+
 Schlüssel/Puzzel Items die auf Räume achten müssen, wegen Türen und Triggern.
 (Noch keine konkrete Liste - müsste systematisch aus den Level-JSONs (Level Infos\*.json)
 zusammengestellt werden: jedes Item mit einer zugehörigen Keyhole/Puzzle-Hole im selben oder

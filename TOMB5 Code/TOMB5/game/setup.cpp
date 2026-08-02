@@ -1569,7 +1569,9 @@ void BaddyObjects()
 		obj->control = TwogunControl;
 		obj->collision = CreatureCollision;
 		obj->shadow_size = 128;
-		obj->hit_points = 24;
+		obj->hit_points = 60; // was 24 - raised +150% (user's own randomizer balancing call:
+		                      // "zu schnell killbar für seine Panzerung" now that undead=1 is
+		                      // gone and he takes normal damage from any weapon/angle again.
 		obj->pivot_length = 50;
 		obj->radius = 128;
 		obj->explodable_meshbits = 4;

@@ -1,0 +1,23 @@
+﻿==============================================================
+ Progressions-Zonen: joby3
+==============================================================
+Laras Start: Raum 23, Sektor (2,1) -> Zone 0
+
+--- Zonenuebergaenge (Blocker) ---
+
+--- Sektoren pro Zone ---
+Zone 0:    15 Sektoren in   3 Raeumen
+Nie erreicht: 1108 begehbare Sektoren
+
+--- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+
+--- Warum kam der Flood nicht weiter? ---
+Tuer Item 125 (typeId 288, Raum   61) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+
+--- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
+Keine hinterlegt.
+
+--- Selbsttest: Level durchspielbar? ---
+Cutscene 15 in Raum   76 Sektor (1,4) -> NICHT ERREICHBAR
+Cutscene 2 in Raum  120 Sektor (3,1) -> NICHT ERREICHBAR

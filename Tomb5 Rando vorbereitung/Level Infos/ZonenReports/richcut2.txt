@@ -1,0 +1,22 @@
+﻿==============================================================
+ Progressions-Zonen: richcut2
+==============================================================
+Laras Start: Raum 0, Sektor (5,8) -> Zone 0
+
+--- Zonenuebergaenge (Blocker) ---
+
+--- Sektoren pro Zone ---
+Zone 0:   153 Sektoren in   3 Raeumen
+Nie erreicht: 156 begehbare Sektoren
+
+--- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+
+--- Warum kam der Flood nicht weiter? ---
+Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
+nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
+
+--- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
+Keine hinterlegt.
+
+--- Selbsttest: Level durchspielbar? ---
+Weder EndLevel- noch Cutscene-Trigger gefunden - Terminus unbekannt.

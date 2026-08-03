@@ -1,0 +1,68 @@
+﻿==============================================================
+ Progressions-Zonen: Andrea1
+==============================================================
+Laras Start: Raum 0, Sektor (1,2) -> Zone 0
+
+--- Zonenuebergaenge (Blocker) ---
+Zone 0 -> 1: Tuer Item 128 (typeId 284, Raum 212)  geoeffnet durch: Schalter Item 129 (Raum 212)
+Zone 0 -> 1: Tuer Item 24 (typeId 286, Raum 59)  geoeffnet durch: Key Item1 in Schloss Item 25 (Raum 59)
+Zone 0 -> 1: Tuer Item 145 (typeId 284, Raum 220)  geoeffnet durch: AntiTrigger
+Zone 0 -> 1: Tuer Item 46 (typeId 286, Raum 107)  geoeffnet durch: Schalter Item 47 (Raum 107)
+Zone 0 -> 1: Tuer Item 37 (typeId 288, Raum 90)  geoeffnet durch: Schalter Item 103 (Raum 187)
+Zone 1 -> 2: Tuer Item 71 (typeId 296, Raum 139)  geoeffnet durch: Schalter Item 72 (Raum 139)
+Zone 1 -> 2: Tuer Item 104 (typeId 288, Raum 188)  geoeffnet durch: Schalter Item 57 (Raum 114)
+Zone 1 -> 2: Tuer Item 102 (typeId 294, Raum 183)  geoeffnet durch: Schalter Item 91 (Raum 168)
+Zone 1 -> 2: Tuer Item 137 (typeId 296, Raum 217)  geoeffnet durch: Schalter Item 75 (Raum 145)
+Zone 1 -> 2: Tuer Item 79 (typeId 294, Raum 153)  geoeffnet durch: Schalter Item 75 (Raum 145)
+Zone 2 -> 3: Tuer Item 90 (typeId 300, Raum 166)  geoeffnet durch: Schalter Item 85 (Raum 165)
+Zone 2 -> 3: Tuer Item 99 (typeId 294, Raum 175)  geoeffnet durch: Schalter Item 84 (Raum 165)
+Zone 2 -> 3: Tuer Item 93 (typeId 294, Raum 171)  geoeffnet durch: Schalter Item 85 (Raum 165)
+Zone 2 -> 3: Tuer Item 54 (typeId 292, Raum 112)  geoeffnet durch: Puzzle Item1 in Schloss Item 63 (Raum 124)
+Zone 2 -> 3: Tuer Item 53 (typeId 290, Raum 112)  geoeffnet durch: Puzzle Item1 in Schloss Item 63 (Raum 124)
+Zone 2 -> 3: Tuer Item 89 (typeId 300, Raum 166)  geoeffnet durch: Schalter Item 85 (Raum 165)
+
+--- Sektoren pro Zone ---
+Zone 0:  1791 Sektoren in 134 Raeumen
+Zone 1:  1640 Sektoren in  85 Raeumen
+Zone 2:   185 Sektoren in  17 Raeumen
+Zone 3:     8 Sektoren in   4 Raeumen
+Nie erreicht: 59 begehbare Sektoren
+
+--- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+TypeId 172: 2 Instanz(en) noetig
+    Instanz 1 -> muss in Zone <= 1 liegen  (Puzzle Item1 in Schloss Item 64 (Raum 124))
+    Instanz 2 -> muss in Zone <= 2 liegen  (Puzzle Item1 in Schloss Item 63 (Raum 124))
+    Vanilla: 2 Instanz(en) vorhanden
+      Item  36 in Raum   85 -> Zone 1            [OK]
+      Item  92 in Raum  170 -> Zone 2            [OK]
+TypeId 196: 1 Instanz(en) noetig
+    Instanz 1 -> muss in Zone <= 0 liegen  (Key Item1 in Schloss Item 25 (Raum 59))
+    Vanilla: 1 Instanz(en) vorhanden
+      Item 107 in Raum  192 -> Zone 0            [OK]
+
+--- Warum kam der Flood nicht weiter? ---
+Tuer Item 120 (typeId 286, Raum  204) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item 121 (typeId 286, Raum  204) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item  83 (typeId 326, Raum  164) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item  39 (typeId 326, Raum   91) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+
+--- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
+Schalter Item 75: Revolver + Lasersight (Glocke abschiessen)
+  wird gebraucht in Zone 1 -> Ausruestung muss in Zone <= 1 liegen
+    typeId  347 Item 149 in Raum  231 -> Zone 1            [OK]
+    typeId  351 Item  73 in Raum  139 -> Zone 1            [OK]
+    typeId  351 Item  76 in Raum  145 -> Zone 1            [OK]
+
+--- Selbsttest: Level durchspielbar? ---
+Cutscene 17 in Raum  116 Sektor (3,2) -> Zone 1
+Cutscene 17 in Raum  116 Sektor (3,3) -> Zone 1
+Cutscene 17 in Raum  116 Sektor (3,4) -> Zone 1
+Cutscene 17 in Raum  116 Sektor (3,5) -> Zone 1
+Cutscene 17 in Raum  116 Sektor (3,6) -> Zone 1
+Cutscene 17 in Raum  116 Sektor (3,7) -> Zone 1
+Cutscene 17 in Raum  116 Sektor (3,8) -> Zone 1
+Cutscene 16 in Raum  234 Sektor (1,2) -> Zone 1

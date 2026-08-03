@@ -1,0 +1,30 @@
+﻿==============================================================
+ Progressions-Zonen: rich2
+==============================================================
+Laras Start: Raum 129, Sektor (1,1) -> Zone 0
+
+--- Zonenuebergaenge (Blocker) ---
+Zone 0 -> 1: Tuer Item 52 (typeId 314, Raum 33)  geoeffnet durch: Schalter Item 110 (Raum 57)
+Zone 0 -> 1: Tuer Item 51 (typeId 312, Raum 33)  geoeffnet durch: Schalter Item 110 (Raum 57)
+
+--- Sektoren pro Zone ---
+Zone 0:   212 Sektoren in  14 Raeumen
+Zone 1:     8 Sektoren in   1 Raeumen
+Nie erreicht: 2113 begehbare Sektoren
+
+--- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+
+--- Warum kam der Flood nicht weiter? ---
+Tuer Item 170 (typeId 300, Raum  116) Maske  0/31
+    Maske 31  Schalter Item 0 (Raum 7)         -> Triggersektor nicht erreichbar
+
+--- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
+Keine hinterlegt.
+
+--- Selbsttest: Level durchspielbar? ---
+Cutscene 1 in Raum    7 Sektor (2,4) -> NICHT ERREICHBAR
+Cutscene 23 in Raum    8 Sektor (1,5) -> Zone 0
+EndLevel 0 in Raum   14 Sektor (1,1) -> NICHT ERREICHBAR
+Cutscene 1 in Raum   46 Sektor (15,2) -> NICHT ERREICHBAR
+Cutscene 1 in Raum   57 Sektor (1,1) -> Zone 0
+Cutscene 1 in Raum   84 Sektor (2,3) -> NICHT ERREICHBAR

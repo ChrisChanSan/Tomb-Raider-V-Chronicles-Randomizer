@@ -1,0 +1,50 @@
+﻿==============================================================
+ Progressions-Zonen: Andrea2
+==============================================================
+Laras Start: Raum 50, Sektor (4,3) -> Zone 0
+
+--- Zonenuebergaenge (Blocker) ---
+Zone 0 -> 1: Tuer Item 47 (typeId 288, Raum 64)  geoeffnet durch: Trigger betreten (230,4,4)
+Zone 0 -> 1: Tuer Item 79 (typeId 288, Raum 76)  geoeffnet durch: AntiTrigger
+Zone 0 -> 1: Tuer Item 112 (typeId 288, Raum 134)  geoeffnet durch: Puzzle Item3 in Schloss Item 41 (Raum 63)
+Zone 0 -> 1: Tuer Item 9 (typeId 296, Raum 17)  geoeffnet durch: Puzzle Item3 in Schloss Item 41 (Raum 63)
+Zone 0 -> 1: Tuer Item 137 (typeId 288, Raum 219)  geoeffnet durch: Trigger betreten (230,3,1)
+Zone 1 -> 2: Tuer Item 105 (typeId 300, Raum 116)  geoeffnet durch: Puzzle Item5 in Schloss Item 95 (Raum 116)
+
+--- Sektoren pro Zone ---
+Zone 0:  3028 Sektoren in 181 Raeumen
+Zone 1:  1024 Sektoren in  47 Raeumen
+Zone 2:     1 Sektoren in   1 Raeumen
+Nie erreicht: 221 begehbare Sektoren
+
+--- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+TypeId 174: 1 Instanz(en) noetig
+    Instanz 1 -> muss in Zone <= 0 liegen  (Puzzle Item3 in Schloss Item 41 (Raum 63))
+    Vanilla: 1 Instanz(en) vorhanden
+      Item 121 in Raum  166 -> Zone 0            [OK]
+TypeId 175: 1 Instanz(en) noetig
+    Instanz 1 -> muss in Zone <= 1 liegen  (Puzzle Item4 in Schloss Item 94 (Raum 116))
+    Vanilla: 1 Instanz(en) vorhanden
+      Item  62 in Raum   69 -> Zone 0            [OK]
+TypeId 176: 1 Instanz(en) noetig
+    Instanz 1 -> muss in Zone <= 1 liegen  (Puzzle Item5 in Schloss Item 95 (Raum 116))
+    Vanilla: 1 Instanz(en) vorhanden
+      Item  48 in Raum   64 -> Zone 1            [OK]
+
+--- Warum kam der Flood nicht weiter? ---
+Tuer Item  90 (typeId 292, Raum  112) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item  89 (typeId 290, Raum  112) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item  37 (typeId 286, Raum   54) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item   0 (typeId 284, Raum    0) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+
+--- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
+Keine hinterlegt.
+
+--- Selbsttest: Level durchspielbar? ---
+Cutscene 7 in Raum   72 Sektor (2,2) -> Zone 1
+Cutscene 8 in Raum  194 Sektor (2,1) -> Zone 1
+EndLevel 0 in Raum  233 Sektor (4,1) -> Zone 1

@@ -1,0 +1,48 @@
+﻿==============================================================
+ Progressions-Zonen: rich1
+==============================================================
+Laras Start: Raum 0, Sektor (4,1) -> Zone 0
+
+--- Zonenuebergaenge (Blocker) ---
+Zone 0 -> 1: Tuer Item 157 (typeId 292, Raum 99)  geoeffnet durch: Trigger betreten (89,1,3)
+Zone 0 -> 1: Tuer Item 179 (typeId 304, Raum 129)  geoeffnet durch: AntiTrigger
+Zone 0 -> 1: Tuer Item 69 (typeId 314, Raum 30)  geoeffnet durch: Schalter Item 42 (Raum 23)
+Zone 0 -> 1: Tuer Item 68 (typeId 312, Raum 30)  geoeffnet durch: Schalter Item 42 (Raum 23)
+Zone 0 -> 1: Tuer Item 64 (typeId 304, Raum 28)  geoeffnet durch: AntiTrigger
+Zone 0 -> 1: Tuer Item 9 (typeId 288, Raum 6)  geoeffnet durch: Trigger betreten (145,1,2)
+
+--- Sektoren pro Zone ---
+Zone 0:   487 Sektoren in  60 Raeumen
+Zone 1:    54 Sektoren in   8 Raeumen
+Nie erreicht: 915 begehbare Sektoren
+
+--- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+TypeId 203: 1 Instanz(en) noetig
+    Instanz 1 -> muss in Zone <= 0 liegen  (Key Item8 in Schloss Item 55 (Raum 26))
+    Vanilla: 1 Instanz(en) vorhanden
+      Item 109 in Raum   67 -> Zone 0            [OK]
+
+--- Warum kam der Flood nicht weiter? ---
+Tuer Item 153 (typeId 284, Raum   89) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item 101 (typeId 288, Raum   63) Maske  0/31
+    Maske 31  Puzzle Item3 in Schloss Item 100 (Raum 63) -> Item fehlt
+    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
+
+--- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
+Keine hinterlegt.
+
+--- Selbsttest: Level durchspielbar? ---
+Cutscene 24 in Raum   34 Sektor (1,3) -> NICHT ERREICHBAR
+Cutscene 24 in Raum   34 Sektor (1,4) -> NICHT ERREICHBAR
+Cutscene 24 in Raum   34 Sektor (1,5) -> NICHT ERREICHBAR
+Cutscene 24 in Raum   34 Sektor (2,3) -> NICHT ERREICHBAR
+Cutscene 24 in Raum   34 Sektor (2,4) -> NICHT ERREICHBAR
+Cutscene 24 in Raum   34 Sektor (2,5) -> NICHT ERREICHBAR
+Cutscene 24 in Raum   34 Sektor (3,3) -> NICHT ERREICHBAR
+Cutscene 24 in Raum   34 Sektor (3,4) -> NICHT ERREICHBAR
+Cutscene 24 in Raum   34 Sektor (3,5) -> NICHT ERREICHBAR
+Cutscene 4 in Raum   69 Sektor (4,7) -> NICHT ERREICHBAR
+Cutscene 20 in Raum   89 Sektor (1,4) -> NICHT ERREICHBAR
+Cutscene 11 in Raum  130 Sektor (1,1) -> Zone 1
+EndLevel 0 in Raum  154 Sektor (1,1) -> NICHT ERREICHBAR

@@ -60,6 +60,18 @@ $ONEWAY_OUT = @{
 }
 $onewayOut = @( if($ONEWAY_OUT.ContainsKey($LevelName)){ $ONEWAY_OUT[$LevelName] } )
 
+# Tueren, die kein Trigger im Level schaltet, weil die Engine sie aus
+# levelspezifischem Skriptcode heraus oeffnet (game/deltapak.cpp ruft dort
+# FlipMap() und TestTriggers() direkt auf - z.B. cranecut_control -> FlipMap(1),
+# die Kran-Cutscene). Solche Oeffnungen stehen nirgends in den Leveldaten und
+# sind aus ihnen grundsaetzlich nicht ableitbar. Wer hier eintraegt, sagt dem
+# Analyser: diese Tuer geht im Spielverlauf auf, behandle sie als offen.
+# Die Diagnose "kein Trigger im Level schaltet diese Tuer" listet die Kandidaten.
+$SCRIPT_DOORS = @{
+    'joby2' = @(138,141)   # Raum 114, geoeffnet ueber die Kran-Cutscene
+}
+$scriptDoors = @( if($SCRIPT_DOORS.ContainsKey($LevelName)){ $SCRIPT_DOORS[$LevelName] } )
+
 $adj = @{}
 function Add-Edge($a, $b) {
     if (-not $adj.ContainsKey($a)) { $adj[$a] = New-Object System.Collections.Generic.HashSet[string] }
@@ -104,12 +116,26 @@ foreach($r in $d.rooms){
     if ($null -eq $r.alternateRoom -or $r.alternateRoom -eq '') { continue }
     $ai = [int]$r.alternateRoom
     if ($ai -eq [int]$r.index) { continue }
+    # Fuer jeden Sektor, der im Alternate begehbar ist: mit dem Basisraum
+    # verbinden. Deckungsgleich, wo beide begehbar sind - und zusaetzlich ueber
+    # die Nachbarsektoren, wo die Basis eine Wand hat. Genau das ist der Sinn
+    # vieler Flipmaps: der Flip *oeffnet* einen Durchgang, wo vorher Wand war
+    # (joby2: der Kran-Cutscene-Flip auf Raum 4/43 gibt den Levelfortgang frei).
+    # Ohne den zweiten Fall bleibt der ganze Alternate-Teil eine eigene Insel
+    # und der Flood stoppt am Levelanfang.
     foreach($s in $d.sectors){
-        if ([int]$s.room -ne [int]$r.index -or $s.isWall) { continue }
+        if ([int]$s.room -ne $ai -or $s.isWall) { continue }
         $ak = "$ai,$($s.sectorX),$($s.sectorZ)"
-        if (-not $sec.ContainsKey($ak) -or $sec[$ak].isWall) { continue }
         $bk = "$($r.index),$($s.sectorX),$($s.sectorZ)"
-        Add-Edge $bk $ak; Add-Edge $ak $bk
+        if ($sec.ContainsKey($bk) -and -not $sec[$bk].isWall) {
+            Add-Edge $bk $ak; Add-Edge $ak $bk
+            continue
+        }
+        foreach($dz in @(-1,0,1)){ foreach($dx in @(-1,0,1)){
+            if (($dx -eq 0 -and $dz -eq 0) -or ($dx -ne 0 -and $dz -ne 0)) { continue }
+            $nb = "$($r.index),$([int]$s.sectorX + $dx),$([int]$s.sectorZ + $dz)"
+            if ($sec.ContainsKey($nb) -and -not $sec[$nb].isWall) { Add-Edge $nb $ak; Add-Edge $ak $nb }
+        }}
     }
 }
 
@@ -188,7 +214,10 @@ $lara = $d.items | Where-Object { $_.typeId -eq 0 } | Select-Object -First 1
 $startKey = "$($lara.room),$($lara.sectorX),$($lara.sectorZ)"
 
 $blocked = @{}   # sectorKey -> itemIndex der Tuer
-foreach($kv in $doorSector.GetEnumerator()){ $blocked[$kv.Value] = $kv.Key }
+foreach($kv in $doorSector.GetEnumerator()){
+    if ($scriptDoors -contains [int]$kv.Key) { continue }   # oeffnet die Engine per Skript
+    $blocked[$kv.Value] = $kv.Key
+}
 
 $zoneOf = @{}    # sectorKey -> Zonennummer
 $openDoors = New-Object System.Collections.Generic.HashSet[int]
@@ -342,6 +371,38 @@ foreach($kv in $byType.GetEnumerator() | Sort-Object Name){
         "      Item {0,3} in Raum {1,4} -> Zone {2,-12} [{3}]" -f $withZone[$j].It.index,$withZone[$j].It.room,$zt,$ok
     }
     if ($withZone.Count -lt $needs.Count) { "      [WIDERSPRUCH] zu wenige Instanzen im Level" }
+}
+
+Write-Output ""
+Write-Output "--- Warum kam der Flood nicht weiter? ---"
+# Ohne diese Diagnose ist "0 Widersprueche" wertlos: ein Level, in dem der Flood
+# sofort stehenbleibt, leitet gar keine Key-Item-Anforderung ab und meldet
+# deshalb faelschlich "alles in Ordnung". Hier steht, welche Tuer am Rand des
+# erreichten Bereichs zu ist und woran es liegt - und wenn dort gar keine Tuer
+# steht, ist die Ursache Geometrie (nicht modellierter Uebergang), nicht Logik.
+$frontier = 0
+foreach($kv in $doorSector.GetEnumerator()){
+    $di = $kv.Key; $ks = $kv.Value
+    if ($openDoors.Contains($di)) { continue }
+    $touch = $false
+    if ($adj.ContainsKey($ks)) { foreach($n in $adj[$ks]){ if ($reached.Contains($n)) { $touch = $true; break } } }
+    if (-not $touch) { continue }
+    $frontier++
+    $it = $items[$di]
+    $have = if($doorMask.ContainsKey($di)){ $doorMask[$di] } else { 0 }
+    "Tuer Item {0,3} (typeId {1}, Raum {2,4}) Maske {3,2}/31" -f $di,$it.typeId,$it.room,$have
+    $trigs = @($allTrig | Where-Object { $_.T.commands | Where-Object { $_.type -eq 'Object' -and [int]$_.index -eq $di } })
+    if ($trigs.Count -eq 0) { "    kein Trigger im Level schaltet diese Tuer"; continue }
+    foreach($e in $trigs){
+        $st = if ($firedTrig.Contains($e.Id)) { 'ausgeloest' }
+              elseif (-not (Test-ReqSector $e.Req $reached)) { 'Triggersektor nicht erreichbar' }
+              else { 'Item fehlt' }
+        "    Maske {0,2}  {1,-32} -> {2}" -f $e.T.mask, $e.Req.Desc, $st
+    }
+}
+if ($frontier -eq 0) {
+    Write-Output "Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,"
+    Write-Output "nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert)."
 }
 
 Write-Output ""

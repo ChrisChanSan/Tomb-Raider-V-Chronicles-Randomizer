@@ -1,0 +1,37 @@
+﻿==============================================================
+ Progressions-Zonen: Andrea3
+==============================================================
+Laras Start: Raum 1, Sektor (5,2) -> Zone 0
+
+--- Zonenuebergaenge (Blocker) ---
+Zone 0 -> 1: Tuer Item 4 (typeId 284, Raum 7)  geoeffnet durch: Schalter Item 3 (Raum 6)
+Zone 1 -> 2: Tuer Item 65 (typeId 284, Raum 63)  geoeffnet durch: Schalter Item 0 (Raum 0)
+Zone 2 -> 3: Tuer Item 70 (typeId 296, Raum 81)  geoeffnet durch: Trigger betreten (76,1,2)
+Zone 2 -> 3: Tuer Item 66 (typeId 284, Raum 65)  geoeffnet durch: Trigger betreten (76,2,2)
+Zone 2 -> 3: Tuer Item 88 (typeId 284, Raum 96)  geoeffnet durch: Trigger betreten (86,1,1)
+Zone 2 -> 3: Tuer Item 82 (typeId 284, Raum 93)  geoeffnet durch: Trigger betreten (43,1,1)
+Zone 3 -> 4: Tuer Item 69 (typeId 284, Raum 78)  geoeffnet durch: Trigger betreten (75,3,2)
+Zone 3 -> 4: Tuer Item 54 (typeId 284, Raum 35)  geoeffnet durch: Trigger betreten (35,2,2)
+Zone 3 -> 4: Tuer Item 90 (typeId 284, Raum 99)  geoeffnet durch: Schalter Item 87 (Raum 95)
+Zone 3 -> 4: Tuer Item 89 (typeId 284, Raum 98)  geoeffnet durch: Schalter Item 87 (Raum 95)
+
+--- Sektoren pro Zone ---
+Zone 0:   205 Sektoren in  19 Raeumen
+Zone 1:    33 Sektoren in   5 Raeumen
+Zone 2:   802 Sektoren in  31 Raeumen
+Zone 3:   136 Sektoren in  17 Raeumen
+Zone 4:    61 Sektoren in   8 Raeumen
+Nie erreicht: 734 begehbare Sektoren
+
+--- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+
+--- Warum kam der Flood nicht weiter? ---
+Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
+nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
+
+--- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
+Keine hinterlegt.
+
+--- Selbsttest: Level durchspielbar? ---
+EndLevel 0 in Raum   70 Sektor (1,2) -> NICHT ERREICHBAR
+Cutscene 41 in Raum   75 Sektor (3,2) -> Zone 3

@@ -1,0 +1,30 @@
+﻿==============================================================
+ Progressions-Zonen: Title
+==============================================================
+Laras Start: Raum 113, Sektor (3,2) -> Zone 0
+
+--- Zonenuebergaenge (Blocker) ---
+
+--- Sektoren pro Zone ---
+Zone 0:    21 Sektoren in   4 Raeumen
+Nie erreicht: 9292 begehbare Sektoren
+
+--- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+
+--- Warum kam der Flood nicht weiter? ---
+Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
+nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
+
+--- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
+Keine hinterlegt.
+
+--- Selbsttest: Level durchspielbar? ---
+Cutscene 28 in Raum   14 Sektor (1,3) -> NICHT ERREICHBAR
+Cutscene 28 in Raum   14 Sektor (1,4) -> NICHT ERREICHBAR
+Cutscene 28 in Raum   14 Sektor (1,5) -> NICHT ERREICHBAR
+Cutscene 30 in Raum   32 Sektor (4,1) -> NICHT ERREICHBAR
+Cutscene 30 in Raum   32 Sektor (5,1) -> NICHT ERREICHBAR
+Cutscene 29 in Raum   42 Sektor (1,1) -> NICHT ERREICHBAR
+Cutscene 29 in Raum   42 Sektor (1,2) -> NICHT ERREICHBAR
+Cutscene 31 in Raum  106 Sektor (1,1) -> NICHT ERREICHBAR
+Cutscene 31 in Raum  107 Sektor (5,1) -> NICHT ERREICHBAR

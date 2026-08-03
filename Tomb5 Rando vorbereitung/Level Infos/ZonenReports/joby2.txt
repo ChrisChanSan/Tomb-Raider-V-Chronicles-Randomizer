@@ -1,0 +1,77 @@
+﻿==============================================================
+ Progressions-Zonen: joby2
+==============================================================
+Laras Start: Raum 55, Sektor (1,4) -> Zone 0
+
+--- Zonenuebergaenge (Blocker) ---
+Zone 0 -> 1: Tuer Item 85 (typeId 288, Raum 64)  geoeffnet durch: Schalter Item 145 (Raum 118)
+Zone 1 -> 2: Tuer Item 123 (typeId 288, Raum 104)  geoeffnet durch: Schalter Item 122 (Raum 104)
+
+--- Sektoren pro Zone ---
+Zone 0:  7803 Sektoren in 132 Raeumen
+Zone 1:    31 Sektoren in   3 Raeumen
+Zone 2:     2 Sektoren in   1 Raeumen
+Nie erreicht: 890 begehbare Sektoren
+
+--- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+
+--- Warum kam der Flood nicht weiter? ---
+Tuer Item  42 (typeId 302, Raum   31) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item 141 (typeId 284, Raum  114) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item 138 (typeId 300, Raum  114) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item 135 (typeId 302, Raum  112) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item 134 (typeId 300, Raum  112) Maske  0/31
+    Maske 31  Key Item7 in Schloss Item 136 (Raum 112) -> Triggersektor nicht erreichbar
+Tuer Item 132 (typeId 306, Raum  108) Maske  0/31
+    Maske 31  Key Item8 in Schloss Item 133 (Raum 108) -> Triggersektor nicht erreichbar
+Tuer Item 131 (typeId 304, Raum  108) Maske  0/31
+    Maske 31  Key Item8 in Schloss Item 133 (Raum 108) -> Triggersektor nicht erreichbar
+Tuer Item  41 (typeId 300, Raum   31) Maske  0/31
+    Maske 31  Key Item7 in Schloss Item 43 (Raum 31) -> Triggersektor nicht erreichbar
+    Maske 31  Key Item8 in Schloss Item 104 (Raum 73) -> Triggersektor nicht erreichbar
+Tuer Item 129 (typeId 306, Raum  106) Maske  0/31
+    Maske 31  Key Item8 in Schloss Item 130 (Raum 106) -> Triggersektor nicht erreichbar
+Tuer Item 128 (typeId 304, Raum  106) Maske  0/31
+    Maske 31  Key Item8 in Schloss Item 130 (Raum 106) -> Triggersektor nicht erreichbar
+Tuer Item  15 (typeId 302, Raum   17) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item  14 (typeId 300, Raum   17) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item  12 (typeId 288, Raum   14) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item  11 (typeId 302, Raum   12) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item  10 (typeId 300, Raum   12) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item   6 (typeId 302, Raum   11) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item   5 (typeId 300, Raum   11) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+
+--- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
+Keine hinterlegt.
+
+--- Selbsttest: Level durchspielbar? ---
+Cutscene 22 in Raum   38 Sektor (2,10) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (2,11) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (2,12) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (2,13) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (2,14) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (2,15) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (2,16) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (2,17) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (3,10) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (3,11) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (3,12) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (3,13) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (3,14) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (3,15) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (3,16) -> Zone 0
+Cutscene 22 in Raum   38 Sektor (3,17) -> Zone 0
+Cutscene 27 in Raum  105 Sektor (1,1) -> Zone 1
+Cutscene 25 in Raum  152 Sektor (11,7) -> Zone 0
+Cutscene 25 in Raum  152 Sektor (11,8) -> Zone 0

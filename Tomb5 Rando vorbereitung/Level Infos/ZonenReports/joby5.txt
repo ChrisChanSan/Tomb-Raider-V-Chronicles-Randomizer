@@ -1,0 +1,23 @@
+﻿==============================================================
+ Progressions-Zonen: joby5
+==============================================================
+Laras Start: Raum 40, Sektor (2,3) -> Zone 0
+
+--- Zonenuebergaenge (Blocker) ---
+
+--- Sektoren pro Zone ---
+Zone 0:    63 Sektoren in   6 Raeumen
+Nie erreicht: 1216 begehbare Sektoren
+
+--- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+
+--- Warum kam der Flood nicht weiter? ---
+Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
+nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
+
+--- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
+Keine hinterlegt.
+
+--- Selbsttest: Level durchspielbar? ---
+Cutscene 13 in Raum   12 Sektor (1,1) -> NICHT ERREICHBAR
+Cutscene 15 in Raum   87 Sektor (1,4) -> NICHT ERREICHBAR

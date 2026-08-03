@@ -1,0 +1,63 @@
+﻿==============================================================
+ Progressions-Zonen: joby3
+==============================================================
+Laras Start: Raum 23, Sektor (2,1) -> Zone 0
+
+--- Zonenuebergaenge (Blocker) ---
+Brechstange ist das Puzzle 1(172) LevelID 41
+Zone 0 -> 1: Tuer Item 25 (typeId 294, Raum 14)  geoeffnet durch: Brechstange (nicht verbraucht)
+Zone 0 -> 1: Tuer Item 125 (typeId 288, Raum 61)  geoeffnet durch: Brechstange (nicht verbraucht)
+Zone 1 -> 2: Tuer Item 156 (typeId 98, Raum 90)  geoeffnet durch: AntiTrigger
+
+--- Sektoren pro Zone ---
+Zone 0:    16 Sektoren in   4 Raeumen
+Zone 1:   166 Sektoren in  40 Raeumen
+Zone 2:     2 Sektoren in   2 Raeumen
+Nie erreicht: 939 begehbare Sektoren
+
+--- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+
+--- Warum kam der Flood nicht weiter? ---
+1#Tuer Item 190 (typeId 302, Raum  124) Maske  0/31 Key kommt vom Chef nach Tot durch cutscene.
+2#Tuer Item 175 (typeId 304, Raum  106) Maske  0/31 Key ist in Raum 154 im Regal 178 erst nach chef zu erreichen
+Maske 31  Key Item7 in Schloss Item 176 (Raum 106) -> Triggersektor nicht erreichbar Erst den Chef töten Raum 120 dann in Raum107 durch die Tür 190 mit Key vom chef und dann durch die tür175 mit dem schlüssel aus dem Regal aus raum 107
+Tuer Item 212 (typeId 302, Raum  142) Maske  0/31(Dekotür) Raum ist durch die Trapdoor in der Decke begehbar LevelID 143 Typeid 109 Raum 75
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item 122 (typeId 284, Raum   58) Maske  0/31(Dekotür Bereich unerreichbar)
+    kein Trigger im Level schaltet diese Tuer
+
+--- Groesste unerreichte Gebiete ---
+Gebiet mit   703 Sektoren in 112 Raeumen
+   Raeume: 2, 3, 6, 7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 25, 26, 27
+   Räume um 140 ist eine Inselgruppe die wird für die Cutscene aus dem Luftschacht Raum 76 nur gesehen. Nicht begehbar.
+   Es gibt auch in dem Level wieder viele türen mit 11111 Bits 
+           ... und 92 weitere
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 300x16, 37x4, 51x5, 49x3, 292x1, 338x1, 294x1, 223x2, 349x1, 184x1, 42x4, 376x4, 302x2, 168x4, 166x2, 111x1, 44x2, 46x4, 185x1, 304x3, 340x1, 244x1, 245x1, 274x7, 350x1, 265x2, 264x1, 339x1, 290x1, 186x1, 286x3, 109x1
+Gebiet mit   136 Sektoren in   9 Raeumen
+   Raeume: 4, 10, 11, 94, 96, 97, 114, 140, 185
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 300x3, 274x1
+Gebiet mit    39 Sektoren in   8 Raeumen
+   Raeume: 58, 73, 115, 116, 118, 119, 129, 130
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 284x1, 300x2
+Gebiet mit    10 Sektoren in   3 Raeumen
+   Raeume: 107, 121, 124
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 168x2, 166x1, 334x1, 202x1, 302x1, 263x1
+
+--- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
+Keine hinterlegt.
+
+--- Selbsttest: Level durchspielbar? ---
+Cutscene 15 in Raum   76 Sektor (1,4) -> Zone 1
+Cutscene 2 in Raum  120 Sektor (3,1) -> Zone 1

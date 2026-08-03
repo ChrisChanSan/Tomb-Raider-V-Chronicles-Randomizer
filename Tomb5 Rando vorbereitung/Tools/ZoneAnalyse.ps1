@@ -111,6 +111,19 @@ $MANUAL_LINK = @{
 $REUSABLE_KEYS = @{
     'joby5' = @(203)
 }
+
+# Raeume, die es nur fuer eine Kamerafahrt gibt und die Lara nie betritt.
+# Die Automatik erkennt solche Gebiete nur, wenn ausser Animatings nichts darin
+# steht (siehe Andy2). Enthaelt die Kulisse auch Tueren oder anderes Inventar,
+# faellt sie durch - dann hilft nur Handkuration.
+# joby3: die Inselgruppe um Raum 140 wird waehrend der Cutscene aus dem
+# Luftschacht (Raum 76) nur GESEHEN, ist aber nicht begehbar (Nutzerangabe im
+# Zonenreport). Sie enthaelt drei Tueren und ist deshalb automatisch nicht als
+# Kulisse erkennbar.
+$CAMERA_ROOMS = @{
+    'joby3' = @(4,10,11,94,96,97,114,140,185)
+}
+$cameraRooms = @( if($CAMERA_ROOMS.ContainsKey($LevelName)){ $CAMERA_ROOMS[$LevelName] } )
 $reusableKeys = @( if($REUSABLE_KEYS.ContainsKey($LevelName)){ $REUSABLE_KEYS[$LevelName] } )
 $manualLinks = @( if($MANUAL_LINK.ContainsKey($LevelName)){ $MANUAL_LINK[$LevelName] } )
 
@@ -534,8 +547,16 @@ for($z=0; $z -le $maxZone; $z++){
     $rms = ($zoneOf.GetEnumerator() | Where-Object { $_.Value -eq $z } | ForEach-Object { ($_.Key -split ',')[0] } | Sort-Object -Unique).Count
     "Zone {0}: {1,5} Sektoren in {2,3} Raeumen" -f $z,$cnt,$rms
 }
-$unreachedSec = @($d.sectors | Where-Object { -not $_.isWall -and -not $zoneOf.ContainsKey("$($_.room),$($_.sectorX),$($_.sectorZ)") })
+# Kulissenraeume zaehlen nicht als Fehlbestand - sie sind nicht zum Betreten
+# gedacht, ihr Fehlen ist also kein Defizit der Analyse.
+$unreachedSec = @($d.sectors | Where-Object {
+    -not $_.isWall -and $cameraRooms -notcontains [int]$_.room -and
+    -not $zoneOf.ContainsKey("$($_.room),$($_.sectorX),$($_.sectorZ)") })
 Write-Output "Nie erreicht: $($unreachedSec.Count) begehbare Sektoren"
+if ($cameraRooms.Count -gt 0) {
+    $camSec = @($d.sectors | Where-Object { -not $_.isWall -and $cameraRooms -contains [int]$_.room })
+    "  (zusaetzlich {0} Sektoren in {1} reinen Kulissenraeumen, nicht mitgezaehlt)" -f $camSec.Count,$cameraRooms.Count
+}
 Write-Output ""
 Write-Output "--- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---"
 # Zaehl-Regel statt Typ-Regel: braucht ein Level zwei Slots desselben Typs,
@@ -638,6 +659,7 @@ Write-Output "--- Groesste unerreichte Gebiete ---"
 $unreach = @{}
 foreach($s in $d.sectors){
     if ($s.isWall -or $s.alternateRoom) { continue }
+    if ($cameraRooms -contains [int]$s.room) { continue }   # reine Kulisse, siehe CAMERA_ROOMS
     $k = "$($s.room),$($s.sectorX),$($s.sectorZ)"
     if ($zoneOf.ContainsKey($k)) { continue }
     $unreach[$k] = $s

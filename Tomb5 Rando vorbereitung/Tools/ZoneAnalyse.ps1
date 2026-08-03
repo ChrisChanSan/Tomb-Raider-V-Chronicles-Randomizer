@@ -163,6 +163,7 @@ foreach($r in $d.rooms){
 # --- Tueren: welcher Sektor wird blockiert? ---------------------------------
 $doorSector = @{}   # itemIndex -> sectorKey
 $openAtStart = @()
+$crowbarDoors = @()
 foreach($i in $d.items){
     if ($DOOR_TYPES -notcontains [int]$i.typeId) { continue }
     $k = "$($i.room),$($i.sectorX),$($i.sectorZ)"
@@ -173,7 +174,31 @@ foreach($i in $d.items){
     # steht dann "Flags 11111". joby2 Item 138 ist genau so ein Fall - er sah
     # aus wie eine unschaltbare Tuer, ist aber von Anfang an offen.
     if (([int]$i.flags -band 0x3E00) -eq 0x3E00) { $openAtStart += ,[int]$i.index; continue }
+    # Brechstangen-Tuer: DoorCollision (game/door.cpp:313) prueft
+    # item->trigger_flags == 2, also OCB 2, und setzt nach dem Aufhebeln
+    # item->flags |= IFL_CODEBITS - dieselbe Mechanik wie oben, nur von Hand
+    # ausgeloest. Kein Trigger im Level schaltet so eine Tuer, sie sah deshalb
+    # aus wie unschaltbar. Braucht das CROWBAR_ITEM (typeId 240; Enum-Reihenfolge
+    # in game/objects.h: HAMMER 239, CROWBAR 240, BURNING_TORCH 241, PUZZLE_HOLE1
+    # 242 - Letzteres unabhaengig bestaetigt).
+    if ([int]$i.ocb -eq 2) { $crowbarDoors += ,[int]$i.index }
     $doorSector[[int]$i.index] = $k
+}
+# Welcher TypeId die Brechstange in diesem Level ist, steht NICHT in den
+# Leveldaten: Level duerfen sie als Puzzle-Item fuehren und ueber den Gameflow
+# umbenennen (CMD_PUZZLE1 objname, String-Wad in ENGLISH.DAT). joby3 macht genau
+# das - dort ist die Brechstange Item 41, typeId 172 "Puzzle 1" mit OCB 9, und
+# Lara hebt sie mit Aktion plus kleiner Cutscene auf. Deshalb je Level kuratiert.
+# Ohne Eintrag gilt der regulaere CROWBAR_ITEM-Slot 240.
+$CROWBAR_TYPE = @{
+    'joby3' = 172
+}
+$crowbarType = if($CROWBAR_TYPE.ContainsKey($LevelName)){ [int]$CROWBAR_TYPE[$LevelName] } else { 240 }
+$crowbarInLevel = @($d.items | Where-Object { [int]$_.typeId -eq $crowbarType })
+if ($crowbarDoors.Count -gt 0 -and $crowbarInLevel.Count -eq 0) {
+    # Nirgends im Level platziert -> Lara bringt sie mit bzw. bekommt sie per
+    # CMD_GIVEOBJ, die Tueren sind dann ab Start offen.
+    foreach($cd in $crowbarDoors){ $openAtStart += ,$cd; $doorSector.Remove($cd) }
 }
 
 # --- Was oeffnet welche Tuer? ------------------------------------------------
@@ -334,6 +359,24 @@ while ($true) {
         if (-not $doorMask.ContainsKey($di)) { continue }
         if (($doorMask[$di] -band 31) -ne 31) { continue }
         $newlyOpened += ,@{ Door=$di; Req=$doorWhy[$di][-1]; All=$doorWhy[$di] }
+    }
+
+    # Brechstangen-Tueren: kein Trigger schaltet sie, die Maske fuellt sich also
+    # nie. Sie gehen auf, sobald Lara die Brechstange hat. Die Brechstange wird
+    # NICHT verbraucht (anders als Keys und Puzzle-Items) - eine reicht fuer
+    # beliebig viele solcher Tueren, deshalb keine Zaehlung, keine Konkurrenz.
+    if ($crowbarDoors.Count -gt 0) {
+        $haveCrowbar = $false
+        foreach($ci in $crowbarInLevel){
+            if ($reached.Contains("$($ci.room),$($ci.sectorX),$($ci.sectorZ)")) { $haveCrowbar = $true; break }
+        }
+        if ($haveCrowbar) {
+            foreach($cd in $crowbarDoors){
+                if ($openDoors.Contains($cd)) { continue }
+                if (-not $doorSector.ContainsKey($cd)) { continue }
+                $newlyOpened += ,@{ Door=$cd; Req=@{ Desc='Brechstange (nicht verbraucht)' } }
+            }
+        }
     }
 
     # Skript-Tueren: gehen auf, sobald der Raum erreicht ist, in dem die Engine

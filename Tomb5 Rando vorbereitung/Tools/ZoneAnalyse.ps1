@@ -21,7 +21,8 @@
 #    (ONEWAY_OUT bzw. EQUIP_GATE weiter unten).
 param(
     [string]$LevelJson,
-    [string]$LevelName = "Level"
+    [string]$LevelName = "Level",
+    [string[]]$DebugSectors = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -92,7 +93,20 @@ $onewayOut = @( if($ONEWAY_OUT.ContainsKey($LevelName)){ $ONEWAY_OUT[$LevelName]
 # Wahrheit an der Geometrie (Sprung ueber die Kisten), siehe MANUAL_LINK.
 # Merke: "Tuer ohne Trigger" heisst zuerst "Tuer oeffnet nie", nicht
 # "Tuer wird per Skript geoeffnet" - Letzteres erst nach Beleg annehmen.
+#
+# joby3, User-Entscheidung (nicht aus Daten bewiesen, sondern bewusst als
+# Randomizer-Regel festgelegt): der Chef in Raum 120 ist per Stealth-Kill zu
+# toeten (proximity-basiert, game/deltapak.cpp stealth3_start/end - siehe
+# Analyse weiter oben, technisch nicht aus Sektor-/Item-Daten ableitbar). Da
+# das Toeten des Chefs zwingend ist, sobald Raum 120 erreicht ist, gelten die
+# beiden Tueren dahinter als sicher passierbar, sobald Raum 120 erreicht wird:
+#   Tuer 190 (Raum 124) <- Key Item6 (typeId 201), Vanilla-Drop des Chefs
+#   Tuer 175 (Raum 106) <- Key Item7 (typeId 202), liegt hinter Tuer 190 in Raum 107
+# Platzierungsregel fuer den Randomizer: Key Item6 bleibt an/bei den Chef
+# gebunden (Zone von Raum 120), Key Item7 darf bis einschliesslich der Zone
+# von Raum 120 liegen - beide Tueren zaehlen ab dort als begehbar.
 $SCRIPT_DOORS = @{
+    'joby3' = @{ 190 = 120; 175 = 120 }
 }
 $scriptDoors = @{}
 if ($SCRIPT_DOORS.ContainsKey($LevelName)) { $scriptDoors = $SCRIPT_DOORS[$LevelName] }
@@ -610,6 +624,17 @@ foreach($e in $log){
         $e.Zone, ($e.Zone+1), $di, $it.typeId, $it.room, $e.Req.Desc
 }
 Write-Output ""
+if ($DebugSectors.Count -gt 0) {
+    Write-Output "--- Debug: einzelne Sektoren ---"
+    foreach($dk in $DebugSectors){
+        $z = if($zoneOf.ContainsKey($dk)){ "Zone $($zoneOf[$dk])" } else { "NICHT ERREICHT" }
+        $isBlocked = $blocked.ContainsKey($dk)
+        $edges = if($adj.ContainsKey($dk)){ ($adj[$dk] | Sort-Object) -join ', ' } else { '(keine Kanten im Graph)' }
+        "  {0}: {1}  blockiert(Tuer)={2}  Kanten -> {3}" -f $dk,$z,$isBlocked,$edges
+    }
+    Write-Output ""
+}
+
 $maxZone = ($zoneOf.Values | Measure-Object -Maximum).Maximum
 Write-Output "--- Sektoren pro Zone ---"
 for($z=0; $z -le $maxZone; $z++){

@@ -4,19 +4,29 @@
 Laras Start: Raum 129, Sektor (1,1) -> Zone 0
 
 --- Zonenuebergaenge (Blocker) ---
+Zone 0 -> 1: Tuer Item 163 (typeId 302, Raum 96)  geoeffnet durch: AntiTrigger
+Zone 0 -> 1: Tuer Item 162 (typeId 302, Raum 91)  geoeffnet durch: AntiTrigger
+Zone 0 -> 1: Tuer Item 153 (typeId 302, Raum 84)  geoeffnet durch: AntiTrigger
+Zone 0 -> 1: Tuer Item 105 (typeId 300, Raum 55)  geoeffnet durch: AntiTrigger
 Zone 0 -> 1: Tuer Item 52 (typeId 314, Raum 33)  geoeffnet durch: Schalter Item 110 (Raum 57)
 Zone 0 -> 1: Tuer Item 51 (typeId 312, Raum 33)  geoeffnet durch: Schalter Item 110 (Raum 57)
+Zone 0 -> 1: Tuer Item 103 (typeId 300, Raum 53)  geoeffnet durch: AntiTrigger
+Zone 0 -> 1: Tuer Item 104 (typeId 300, Raum 54)  geoeffnet durch: AntiTrigger
+Zone 0 -> 1: Tuer Item 96 (typeId 300, Raum 49)  geoeffnet durch: Trigger betreten (49,1,2)
+Zone 1 -> 2: Tuer Item 246 (typeId 302, Raum 177)  geoeffnet durch: AntiTrigger
+Zone 1 -> 2: Tuer Item 108 (typeId 302, Raum 56)  geoeffnet durch: AntiTrigger
 
 --- Sektoren pro Zone ---
-Zone 0:   212 Sektoren in  14 Raeumen
-Zone 1:     8 Sektoren in   1 Raeumen
-Nie erreicht: 2113 begehbare Sektoren
+Zone 0:   353 Sektoren in  37 Raeumen
+Zone 1:    55 Sektoren in  12 Raeumen
+Zone 2:    19 Sektoren in   5 Raeumen
+Nie erreicht: 1906 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 
 --- Warum kam der Flood nicht weiter? ---
-Tuer Item 170 (typeId 300, Raum  116) Maske  0/31
-    Maske 31  Schalter Item 0 (Raum 7)         -> Triggersektor nicht erreichbar
+Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
+nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
 
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Keine hinterlegt.
@@ -27,4 +37,4 @@ Cutscene 23 in Raum    8 Sektor (1,5) -> Zone 0
 EndLevel 0 in Raum   14 Sektor (1,1) -> NICHT ERREICHBAR
 Cutscene 1 in Raum   46 Sektor (15,2) -> NICHT ERREICHBAR
 Cutscene 1 in Raum   57 Sektor (1,1) -> Zone 0
-Cutscene 1 in Raum   84 Sektor (2,3) -> NICHT ERREICHBAR
+Cutscene 1 in Raum   84 Sektor (2,3) -> Zone 0

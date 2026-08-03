@@ -67,10 +67,31 @@ $onewayOut = @( if($ONEWAY_OUT.ContainsKey($LevelName)){ $ONEWAY_OUT[$LevelName]
 # sind aus ihnen grundsaetzlich nicht ableitbar. Wer hier eintraegt, sagt dem
 # Analyser: diese Tuer geht im Spielverlauf auf, behandle sie als offen.
 # Die Diagnose "kein Trigger im Level schaltet diese Tuer" listet die Kandidaten.
+# Wichtig: NICHT "immer offen", sondern an eine Bedingung geknuepft - erreiche
+# den Raum, in dem das Skript-Ereignis ausgeloest wird. Eine Skript-Tuer pauschal
+# zu oeffnen waere schlimmer als sie zu ignorieren: der Analyser wuerde erlauben,
+# ein frueh benoetigtes Key-Item hinter eine Tuer zu legen, die real erst am Ende
+# einer langen Kette aufgeht - der Randomizer erzeugt dann unloesbare Seeds.
+# joby2: Key 7 -> Tuer -> Keycard vom Guard -> eine Ebene hoeher -> ueber die
+# Kisten springen -> Kranraum (104) -> Flipmap gibt den Weg frei.
+# Noch kein Eintrag verifiziert. joby2 138/141 standen hier kurzzeitig drin und
+# hoben das Level scheinbar von 1 auf 90 Prozent - falsch: kein Key-/Switch-
+# Trigger in joby2 schaltet sie, sie oeffnen also nie und Lara geht daran vorbei.
+# Sie standen nur zufaellig am Rand des erreichten Bereichs. joby2 stoppt in
+# Wahrheit an der Geometrie (Sprung ueber die Kisten), siehe MANUAL_LINK.
+# Merke: "Tuer ohne Trigger" heisst zuerst "Tuer oeffnet nie", nicht
+# "Tuer wird per Skript geoeffnet" - Letzteres erst nach Beleg annehmen.
 $SCRIPT_DOORS = @{
-    'joby2' = @(138,141)   # Raum 114, geoeffnet ueber die Kran-Cutscene
 }
-$scriptDoors = @( if($SCRIPT_DOORS.ContainsKey($LevelName)){ $SCRIPT_DOORS[$LevelName] } )
+$scriptDoors = @{}
+if ($SCRIPT_DOORS.ContainsKey($LevelName)) { $scriptDoors = $SCRIPT_DOORS[$LevelName] }
+
+# Uebergaenge, die Lara schafft, der Sektorgraph aber nicht kennt: Spruenge,
+# Kletterstellen, Monkeyswing. Format "Raum,x,z" -> "Raum,x,z", beidseitig.
+# Das ist die Handkuration fuer die Klasse "Flood stoppt an der Geometrie".
+$MANUAL_LINK = @{
+}
+$manualLinks = @( if($MANUAL_LINK.ContainsKey($LevelName)){ $MANUAL_LINK[$LevelName] } )
 
 $adj = @{}
 function Add-Edge($a, $b) {
@@ -141,10 +162,18 @@ foreach($r in $d.rooms){
 
 # --- Tueren: welcher Sektor wird blockiert? ---------------------------------
 $doorSector = @{}   # itemIndex -> sectorKey
+$openAtStart = @()
 foreach($i in $d.items){
     if ($DOOR_TYPES -notcontains [int]$i.typeId) { continue }
     $k = "$($i.room),$($i.sectorX),$($i.sectorZ)"
-    if ($sec.ContainsKey($k)) { $doorSector[[int]$i.index] = $k }
+    if (-not $sec.ContainsKey($k)) { continue }
+    # Eine Tuer, deren Item-Flags die 5 Code-Bits (IFL_CODEBITS, 0x3E00) schon
+    # beim Laden alle gesetzt haben, gilt der Engine sofort als vollstaendig
+    # getriggert und geht ohne jeden Trigger beim Levelstart auf. In trview
+    # steht dann "Flags 11111". joby2 Item 138 ist genau so ein Fall - er sah
+    # aus wie eine unschaltbare Tuer, ist aber von Anfang an offen.
+    if (([int]$i.flags -band 0x3E00) -eq 0x3E00) { $openAtStart += ,[int]$i.index; continue }
+    $doorSector[[int]$i.index] = $k
 }
 
 # --- Was oeffnet welche Tuer? ------------------------------------------------
@@ -214,10 +243,9 @@ $lara = $d.items | Where-Object { $_.typeId -eq 0 } | Select-Object -First 1
 $startKey = "$($lara.room),$($lara.sectorX),$($lara.sectorZ)"
 
 $blocked = @{}   # sectorKey -> itemIndex der Tuer
-foreach($kv in $doorSector.GetEnumerator()){
-    if ($scriptDoors -contains [int]$kv.Key) { continue }   # oeffnet die Engine per Skript
-    $blocked[$kv.Value] = $kv.Key
-}
+foreach($kv in $doorSector.GetEnumerator()){ $blocked[$kv.Value] = $kv.Key }
+
+foreach($ml in $manualLinks){ Add-Edge $ml[0] $ml[1]; Add-Edge $ml[1] $ml[0] }
 
 $zoneOf = @{}    # sectorKey -> Zonennummer
 $openDoors = New-Object System.Collections.Generic.HashSet[int]
@@ -306,6 +334,17 @@ while ($true) {
         if (-not $doorMask.ContainsKey($di)) { continue }
         if (($doorMask[$di] -band 31) -ne 31) { continue }
         $newlyOpened += ,@{ Door=$di; Req=$doorWhy[$di][-1]; All=$doorWhy[$di] }
+    }
+
+    # Skript-Tueren: gehen auf, sobald der Raum erreicht ist, in dem die Engine
+    # das Ereignis ausloest - nicht frueher.
+    foreach($sd in $scriptDoors.GetEnumerator()){
+        $di = [int]$sd.Key
+        if ($openDoors.Contains($di)) { continue }
+        $needRoom = [int]$sd.Value
+        $hit = $false
+        foreach($k in $reached){ if ([int](($k -split ',')[0]) -eq $needRoom) { $hit = $true; break } }
+        if ($hit) { $newlyOpened += ,@{ Door=$di; Req=@{ Desc="Skript-Ereignis (Raum $needRoom erreicht)" } } }
     }
 
     if ($newlyOpened.Count -eq 0) { break }

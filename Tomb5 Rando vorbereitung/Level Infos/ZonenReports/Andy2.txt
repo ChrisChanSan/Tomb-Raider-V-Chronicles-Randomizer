@@ -4,15 +4,14 @@
 Laras Start: Raum 5, Sektor (3,3) -> Zone 0
 
 --- Zonenuebergaenge (Blocker) ---
+Zone 0 -> 1: Tuer Item 25 (typeId 286, Raum 18)  geoeffnet durch: Trigger betreten (1,1,1)
 Zone 0 -> 1: Tuer Item 3 (typeId 286, Raum 4)  geoeffnet durch: Trigger betreten (6,2,1)
-Zone 0 -> 1: Tuer Item 1 (typeId 328, Raum 1)  geoeffnet durch: Trigger betreten (6,7,4)
-Zone 1 -> 2: Tuer Item 25 (typeId 286, Raum 18)  geoeffnet durch: Trigger betreten (1,1,1)
 Zone 1 -> 2: Tuer Item 106 (typeId 288, Raum 88)  geoeffnet durch: Pickup-Trigger
 Zone 1 -> 2: Tuer Item 140 (typeId 286, Raum 161)  geoeffnet durch: Schalter Item 148 (Raum 172)
 
 --- Sektoren pro Zone ---
-Zone 0:   123 Sektoren in   5 Raeumen
-Zone 1:  1663 Sektoren in 110 Raeumen
+Zone 0:   164 Sektoren in  10 Raeumen
+Zone 1:  1622 Sektoren in 105 Raeumen
 Zone 2:   517 Sektoren in  69 Raeumen
 Nie erreicht: 1626 begehbare Sektoren
 

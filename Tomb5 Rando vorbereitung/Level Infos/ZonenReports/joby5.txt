@@ -6,8 +6,8 @@ Laras Start: Raum 40, Sektor (2,3) -> Zone 0
 --- Zonenuebergaenge (Blocker) ---
 
 --- Sektoren pro Zone ---
-Zone 0:    63 Sektoren in   6 Raeumen
-Nie erreicht: 1216 begehbare Sektoren
+Zone 0:   690 Sektoren in  96 Raeumen
+Nie erreicht: 589 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 

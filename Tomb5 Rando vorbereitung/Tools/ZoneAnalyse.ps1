@@ -599,14 +599,32 @@ foreach($k in $unreach.Keys){
 # Da Portalkanten inzwischen beidseitig sind, gilt: hat ein Gebiet ueberhaupt ein
 # Portal in den erreichten Teil, ist es auch erreicht. Bleibt es uebrig, fuehrt
 # der Weg dorthin ueber etwas, das nicht in den Sektordaten steht.
+# Ein Gebiet, in dem nur Animating-Objekte stehen und kein einziger Pickup,
+# Gegner, Schalter oder Tuerteil, ist mit hoher Wahrscheinlichkeit reine
+# Kamerafahrt-Geometrie und gar nicht zum Betreten gedacht. Andy2 (Labyrinth)
+# ist der belegte Fall: das eigentliche Level ist klein, wirkt durch die
+# beweglichen Bruecken aber gross, und die zusaetzlichen Muehlen-Raeume gibt es
+# nur fuer den Flyby - eine drehbare Muehle waere als Animating nicht begehbar,
+# deshalb bekam sie einen eigenen Raum. Solche Gebiete sind KEINE Luecke.
+$ANIM_LO = 416; $ANIM_HI = 447
 foreach($comp in ($comps | Sort-Object { -$_.Count } | Select-Object -First 4)){
     $compRooms = ($comp | ForEach-Object { [int](($_ -split ',')[0]) } | Sort-Object -Unique)
+    $itemsIn = @($d.items | Where-Object { $compRooms -contains [int]$_.room })
+    $meaningful = @($itemsIn | Where-Object { [int]$_.typeId -lt $ANIM_LO -or [int]$_.typeId -gt $ANIM_HI })
     "Gebiet mit {0,5} Sektoren in {1,3} Raeumen" -f $comp.Count,$compRooms.Count
     "   Raeume: {0}" -f (($compRooms | Select-Object -First 20) -join ', ')
     if ($compRooms.Count -gt 20) { "           ... und {0} weitere" -f ($compRooms.Count-20) }
-    "   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil."
-    "   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,"
-    "   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren."
+    if ($itemsIn.Count -gt 0 -and $meaningful.Count -eq 0) {
+        "   Enthaelt {0} Objekte, davon KEINES bespielbar - nur Animatings." -f $itemsIn.Count
+        "   => vermutlich reine Kamerafahrt-Geometrie, keine echte Luecke."
+    } else {
+        "   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil."
+        "   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,"
+        "   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren."
+        if ($meaningful.Count -gt 0) {
+            "   Bespielbare Objekte darin: {0}" -f (($meaningful | Group-Object typeId | ForEach-Object { "$($_.Name)x$($_.Count)" }) -join ', ')
+        }
+    }
 }
 
 Write-Output ""

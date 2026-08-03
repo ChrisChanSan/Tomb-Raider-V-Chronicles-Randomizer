@@ -21,9 +21,8 @@ nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
 --- Groesste unerreichte Gebiete ---
 Gebiet mit   102 Sektoren in   4 Raeumen
    Raeume: 180, 189, 190, 191
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Enthaelt 1 Objekte, davon KEINES bespielbar - nur Animatings.
+   => vermutlich reine Kamerafahrt-Geometrie, keine echte Luecke.
 Gebiet mit     4 Sektoren in   2 Raeumen
    Raeume: 102, 103
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.

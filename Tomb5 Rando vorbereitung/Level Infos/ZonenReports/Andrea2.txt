@@ -48,6 +48,7 @@ Gebiet mit     5 Sektoren in   1 Raeumen
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 296x1
 Gebiet mit     4 Sektoren in   1 Raeumen
    Raeume: 191
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
@@ -63,6 +64,7 @@ Gebiet mit     2 Sektoren in   1 Raeumen
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 290x1, 292x1
 
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Keine hinterlegt.

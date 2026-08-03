@@ -42,11 +42,13 @@ Gebiet mit   390 Sektoren in  27 Raeumen
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 300x2, 302x2, 59x1, 258x1, 196x1, 220x1, 61x1, 134x2, 259x1, 197x1, 223x1, 284x1, 117x6
 Gebiet mit    18 Sektoren in   1 Raeumen
    Raeume: 13
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 114x1
 Gebiet mit     9 Sektoren in   1 Raeumen
    Raeume: 73
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.

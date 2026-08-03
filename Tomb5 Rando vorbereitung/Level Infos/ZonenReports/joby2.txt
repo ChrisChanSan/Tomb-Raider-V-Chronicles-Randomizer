@@ -62,21 +62,23 @@ Gebiet mit   411 Sektoren in   3 Raeumen
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 409x1
 Gebiet mit    79 Sektoren in   6 Raeumen
    Raeume: 56, 57, 58, 86, 112, 113
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 37x2, 164x1, 152x6, 203x1, 365x1, 336x1, 364x1, 288x1, 300x1, 302x1, 264x1
 Gebiet mit    46 Sektoren in   1 Raeumen
    Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Enthaelt 1 Objekte, davon KEINES bespielbar - nur Animatings.
+   => vermutlich reine Kamerafahrt-Geometrie, keine echte Luecke.
 Gebiet mit    44 Sektoren in   5 Raeumen
    Raeume: 1, 35, 52, 59, 72
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 265x1, 306x1, 304x1, 85x1, 288x1, 242x1, 202x1, 37x1, 365x2, 266x1
 
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Keine hinterlegt.

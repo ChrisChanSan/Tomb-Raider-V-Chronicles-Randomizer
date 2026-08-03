@@ -13,10 +13,10 @@ Zone 0 -> 1: Tuer Item 0 (typeId 284, Raum 0)  geoeffnet durch: Brechstange (nic
 Zone 1 -> 2: Tuer Item 105 (typeId 300, Raum 116)  geoeffnet durch: Puzzle Item5 in Schloss Item 95 (Raum 116)
 
 --- Sektoren pro Zone ---
-Zone 0:  3028 Sektoren in 181 Raeumen
-Zone 1:  1026 Sektoren in  48 Raeumen
+Zone 0:  3236 Sektoren in 207 Raeumen
+Zone 1:  1021 Sektoren in  49 Raeumen
 Zone 2:     1 Sektoren in   1 Raeumen
-Nie erreicht: 219 begehbare Sektoren
+Nie erreicht: 16 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 TypeId 174: 1 Instanz(en) noetig
@@ -33,6 +33,8 @@ TypeId 176: 1 Instanz(en) noetig
       Item  48 in Raum   64 -> Zone 1            [OK]
 
 --- Warum kam der Flood nicht weiter? ---
+Tuer Item 115 (typeId 296, Raum  149) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
 Tuer Item  90 (typeId 292, Raum  112) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 Tuer Item  89 (typeId 290, Raum  112) Maske  0/31
@@ -40,15 +42,27 @@ Tuer Item  89 (typeId 290, Raum  112) Maske  0/31
 Tuer Item  37 (typeId 286, Raum   54) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 
---- Groesste unerreichte Gebiete und ihr naechster Anschluss ---
-Gebiet mit    24 Sektoren in   2 Raeumen (z.B. 206,208)
-   naechster Anschluss: Raum 205 (7,5)  ->  Raum 206 (2,1)   Abstand 0 Einheiten, Hoehendiff 3072
-Gebiet mit    24 Sektoren in   1 Raeumen (z.B. 24)
-   naechster Anschluss: Raum 224 (1,1)  ->  Raum 24 (1,1)   Abstand 0 Einheiten, Hoehendiff 6144
-Gebiet mit    24 Sektoren in   2 Raeumen (z.B. 171,44)
-   naechster Anschluss: Raum 14 (3,1)  ->  Raum 171 (4,5)   Abstand 0 Einheiten, Hoehendiff 0
-Gebiet mit    16 Sektoren in   1 Raeumen (z.B. 99)
-   naechster Anschluss: Raum 175 (2,2)  ->  Raum 99 (1,3)   Abstand 0 Einheiten, Hoehendiff 5120
+--- Groesste unerreichte Gebiete ---
+Gebiet mit     5 Sektoren in   1 Raeumen
+   Raeume: 149
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     4 Sektoren in   1 Raeumen
+   Raeume: 191
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     4 Sektoren in   1 Raeumen
+   Raeume: 197
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     2 Sektoren in   1 Raeumen
+   Raeume: 112
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
 
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Keine hinterlegt.

@@ -6,7 +6,7 @@ Laras Start: Raum 0, Sektor (1,2) -> Zone 0
 --- Zonenuebergaenge (Blocker) ---
 Zone 0 -> 1: Tuer Item 128 (typeId 284, Raum 212)  geoeffnet durch: Schalter Item 129 (Raum 212)
 Zone 0 -> 1: Tuer Item 24 (typeId 286, Raum 59)  geoeffnet durch: Key Item1 in Schloss Item 25 (Raum 59)
-Zone 0 -> 1: Tuer Item 145 (typeId 284, Raum 220)  geoeffnet durch: AntiTrigger
+Zone 0 -> 1: Tuer Item 145 (typeId 284, Raum 220)  geoeffnet durch: Schalter Item 144 (Raum 220)
 Zone 0 -> 1: Tuer Item 46 (typeId 286, Raum 107)  geoeffnet durch: Schalter Item 47 (Raum 107)
 Zone 0 -> 1: Tuer Item 37 (typeId 288, Raum 90)  geoeffnet durch: Schalter Item 103 (Raum 187)
 Zone 1 -> 2: Tuer Item 71 (typeId 296, Raum 139)  geoeffnet durch: Schalter Item 72 (Raum 139)
@@ -22,11 +22,11 @@ Zone 2 -> 3: Tuer Item 53 (typeId 290, Raum 112)  geoeffnet durch: Puzzle Item1 
 Zone 2 -> 3: Tuer Item 89 (typeId 300, Raum 166)  geoeffnet durch: Schalter Item 85 (Raum 165)
 
 --- Sektoren pro Zone ---
-Zone 0:  1791 Sektoren in 134 Raeumen
-Zone 1:  1640 Sektoren in  85 Raeumen
-Zone 2:   185 Sektoren in  17 Raeumen
-Zone 3:     8 Sektoren in   4 Raeumen
-Nie erreicht: 59 begehbare Sektoren
+Zone 0:  1839 Sektoren in 144 Raeumen
+Zone 1:  1640 Sektoren in  88 Raeumen
+Zone 2:   184 Sektoren in  18 Raeumen
+Zone 3:     7 Sektoren in   4 Raeumen
+Nie erreicht: 13 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 TypeId 172: 2 Instanz(en) noetig
@@ -50,15 +50,27 @@ Tuer Item  83 (typeId 326, Raum  164) Maske  0/31
 Tuer Item  39 (typeId 326, Raum   91) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 
---- Groesste unerreichte Gebiete und ihr naechster Anschluss ---
-Gebiet mit    16 Sektoren in   1 Raeumen (z.B. 4)
-   naechster Anschluss: Raum 56 (2,1)  ->  Raum 4 (3,5)   Abstand 0 Einheiten, Hoehendiff 3584
-Gebiet mit    10 Sektoren in   1 Raeumen (z.B. 29)
-   naechster Anschluss: Raum 33 (1,3)  ->  Raum 29 (5,3)   Abstand 0 Einheiten, Hoehendiff 0
-Gebiet mit     9 Sektoren in   2 Raeumen (z.B. 197,91)
-   naechster Anschluss: Raum 99 (2,4)  ->  Raum 197 (2,0)   Abstand 0 Einheiten, Hoehendiff 2048
-Gebiet mit     8 Sektoren in   1 Raeumen (z.B. 196)
-   naechster Anschluss: Raum 235 (2,1)  ->  Raum 196 (1,2)   Abstand 0 Einheiten, Hoehendiff 2048
+--- Groesste unerreichte Gebiete ---
+Gebiet mit     9 Sektoren in   2 Raeumen
+   Raeume: 91, 197
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 204
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 164
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 204
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
 
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Schalter Item 75: Revolver + Lasersight (Glocke abschiessen)

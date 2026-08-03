@@ -6,8 +6,8 @@ Laras Start: Raum 123, Sektor (1,6) -> Zone 0
 --- Zonenuebergaenge (Blocker) ---
 
 --- Sektoren pro Zone ---
-Zone 0:  6131 Sektoren in 135 Raeumen
-Nie erreicht: 105 begehbare Sektoren
+Zone 0:  6132 Sektoren in 135 Raeumen
+Nie erreicht: 104 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 
@@ -15,11 +15,527 @@ Nie erreicht: 105 begehbare Sektoren
 Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
 nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
 
---- Groesste unerreichte Gebiete und ihr naechster Anschluss ---
-Gebiet mit   104 Sektoren in   2 Raeumen (z.B. 0,1)
-   naechster Anschluss: Raum 118 (2,1)  ->  Raum 0 (1,13)   Abstand 66874 Einheiten, Hoehendiff -9984
-Gebiet mit     1 Sektoren in   1 Raeumen (z.B. 12)
-   naechster Anschluss: Raum 36 (5,1)  ->  Raum 12 (1,5)   Abstand 0 Einheiten, Hoehendiff 0
+--- Groesste unerreichte Gebiete ---
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 0
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 1
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
 
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Keine hinterlegt.

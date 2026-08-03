@@ -1,4 +1,4 @@
-# Progressions-Zonen-Analyse fuer TR5-Level (Prototyp)
+﻿# Progressions-Zonen-Analyse fuer TR5-Level (Prototyp)
 #
 # Idee: Von Laras Startsektor durch den Sektorgraphen fluten, aber an
 # geschlossenen Tueren stoppen -> Zone 0. Dann pruefen, welche Tueren sich mit
@@ -113,17 +113,25 @@ foreach($s in $d.sectors){
         if ($sec.ContainsKey($nk) -and -not $sec[$nk].isWall) { Add-Edge $key $nk }
     }}
 
-    # Portal / vertikale Verbindungen
+    # Portal / vertikale Verbindungen, beidseitig.
+    # Portale stehen in den Leveldaten nur auf der Seite, von der aus sie
+    # eingetragen wurden. Nur der Vorwaertskante zu folgen ist deshalb zu streng:
+    # grenzen zwei Raeume an denselben Nachbarraum (joby3 Raum 23 und 73 zeigen
+    # beide auf 58), fehlt der Rueckweg und ganze Levelteile fallen aus. Beidseitig
+    # gemessen: Andrea1 98->100%, Andrea2 95->100%, richcut2 50->99%, joby5 54->62%,
+    # rich3 21->26%, ohne dass Andrea1 seine Zonenstruktur oder eine Key-Item-Kette
+    # verliert. Echte Einbahn-Uebergaenge bleiben ueber ONEWAY_OUT ausgenommen -
+    # dort darf auch die Rueckkante nicht entstehen, sonst waere die Kuration wirkungslos.
     $leavesOneway = $onewayOut -contains [int]$s.room
-    if ($null -ne $s.portalTarget) {
-        $t = Get-SectorInRoom ([int]$s.portalTarget) $wx $wz
-        if ($t -and -not $leavesOneway) { Add-Edge $key "$($t.room),$($t.sectorX),$($t.sectorZ)" }
-    }
-    foreach($vr in @($s.roomBelow, $s.roomAbove)){
-        if ($vr -ne 255) {
-            $t = Get-SectorInRoom ([int]$vr) $wx $wz
-            if ($t -and -not $leavesOneway) { Add-Edge $key "$($t.room),$($t.sectorX),$($t.sectorZ)" }
-        }
+    $targets = @()
+    if ($null -ne $s.portalTarget) { $targets += ,[int]$s.portalTarget }
+    foreach($vr in @($s.roomBelow, $s.roomAbove)){ if ($vr -ne 255) { $targets += ,[int]$vr } }
+    foreach($tgt in $targets){
+        $t = Get-SectorInRoom $tgt $wx $wz
+        if (-not $t) { continue }
+        $tk2 = "$($t.room),$($t.sectorX),$($t.sectorZ)"
+        if (-not $leavesOneway) { Add-Edge $key $tk2 }
+        if ($onewayOut -notcontains $tgt) { Add-Edge $tk2 $key }
     }
 }
 
@@ -510,7 +518,7 @@ if ($frontier -eq 0) {
 }
 
 Write-Output ""
-Write-Output "--- Groesste unerreichte Gebiete und ihr naechster Anschluss ---"
+Write-Output "--- Groesste unerreichte Gebiete ---"
 # Unerreichte Sektoren zu Komponenten gruppieren und je Komponente den
 # raeumlich naechsten erreichten Sektor suchen. Damit steht im Report, WO in
 # trview nachzusehen ist, statt nur DASS etwas fehlt. Kleine Distanz und
@@ -544,26 +552,22 @@ foreach($k in $unreach.Keys){
     }
     $comps += ,$comp
 }
-$reachedList = @($zoneOf.Keys | ForEach-Object { $sec[$_] } | Where-Object { -not $_.alternateRoom })
+# KEIN Weltabstand als Hinweis. TR-Raeume ueberlappen sich im Weltkoordinaten-
+# system beliebig; erst die Portale nähen sie zusammen, wodurch nicht-euklidische
+# Geometrie entsteht (Area 51 in TR3: das UFO ist geometrisch winzig, ingame
+# riesig). Zwei Sektoren an derselben Weltkoordinate koennen im Spiel voellig
+# unverbunden sein - "naechster Anschluss nach Abstand" war deshalb irrefuehrend.
+# Da Portalkanten inzwischen beidseitig sind, gilt: hat ein Gebiet ueberhaupt ein
+# Portal in den erreichten Teil, ist es auch erreicht. Bleibt es uebrig, fuehrt
+# der Weg dorthin ueber etwas, das nicht in den Sektordaten steht.
 foreach($comp in ($comps | Sort-Object { -$_.Count } | Select-Object -First 4)){
-    $compRooms = ($comp | ForEach-Object { ($_ -split ',')[0] } | Sort-Object -Unique)
-    $best = $null; $bestD = [double]::MaxValue; $bestFrom = $null
-    foreach($ck in ($comp | Select-Object -First 400)){
-        $cs = $sec[$ck]; $cr = $rooms[[int]$cs.room]
-        $cx = $cr.originX + [int]$cs.sectorX*1024; $cz = $cr.originZ + [int]$cs.sectorZ*1024
-        foreach($rs in $reachedList){
-            $rr = $rooms[[int]$rs.room]
-            $rx = $rr.originX + [int]$rs.sectorX*1024; $rz = $rr.originZ + [int]$rs.sectorZ*1024
-            $dd = [math]::Sqrt([math]::Pow($cx-$rx,2) + [math]::Pow($cz-$rz,2))
-            if ($dd -lt $bestD) { $bestD = $dd; $best = $cs; $bestFrom = $rs }
-        }
-    }
-    "Gebiet mit {0,5} Sektoren in {1,3} Raeumen (z.B. {2})" -f $comp.Count,$compRooms.Count,(($compRooms | Select-Object -First 6) -join ',')
-    if ($best) {
-        $dy = [int]$best.floorY - [int]$bestFrom.floorY
-        "   naechster Anschluss: Raum {0} ({1},{2})  ->  Raum {3} ({4},{5})   Abstand {6} Einheiten, Hoehendiff {7}" -f `
-            $bestFrom.room,$bestFrom.sectorX,$bestFrom.sectorZ,$best.room,$best.sectorX,$best.sectorZ,[int]$bestD,$dy
-    }
+    $compRooms = ($comp | ForEach-Object { [int](($_ -split ',')[0]) } | Sort-Object -Unique)
+    "Gebiet mit {0,5} Sektoren in {1,3} Raeumen" -f $comp.Count,$compRooms.Count
+    "   Raeume: {0}" -f (($compRooms | Select-Object -First 20) -join ', ')
+    if ($compRooms.Count -gt 20) { "           ... und {0} weitere" -f ($compRooms.Count-20) }
+    "   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil."
+    "   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,"
+    "   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren."
 }
 
 Write-Output ""

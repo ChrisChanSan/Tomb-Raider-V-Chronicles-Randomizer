@@ -5,30 +5,46 @@ Laras Start: Raum 8, Sektor (4,3) -> Zone 0
 
 --- Zonenuebergaenge (Blocker) ---
 Zone 0 -> 1: Tuer Item 157 (typeId 300, Raum 129)  geoeffnet durch: Schalter Item 156 (Raum 127)
+Zone 0 -> 1: Tuer Item 161 (typeId 314, Raum 130)  geoeffnet durch: Trigger betreten (4,2,4)
+Zone 0 -> 1: Tuer Item 160 (typeId 312, Raum 130)  geoeffnet durch: Trigger betreten (4,2,4)
 Zone 1 -> 2: Tuer Item 170 (typeId 314, Raum 133)  geoeffnet durch: Schalter Item 168 (Raum 132)
 Zone 1 -> 2: Tuer Item 169 (typeId 312, Raum 133)  geoeffnet durch: Schalter Item 168 (Raum 132)
 
 --- Sektoren pro Zone ---
-Zone 0:   543 Sektoren in  47 Raeumen
-Zone 1:    29 Sektoren in   3 Raeumen
-Zone 2:     8 Sektoren in   1 Raeumen
-Nie erreicht: 2203 begehbare Sektoren
+Zone 0:   682 Sektoren in  71 Raeumen
+Zone 1:    36 Sektoren in   5 Raeumen
+Zone 2:     6 Sektoren in   1 Raeumen
+Nie erreicht: 2059 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 
 --- Warum kam der Flood nicht weiter? ---
-Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
-nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
+Tuer Item  46 (typeId 320, Raum   60) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
 
---- Groesste unerreichte Gebiete und ihr naechster Anschluss ---
-Gebiet mit   620 Sektoren in  76 Raeumen (z.B. 100,101,102,103,104,105)
-   naechster Anschluss: Raum 40 (2,1)  ->  Raum 180 (0,5)   Abstand 16384 Einheiten, Hoehendiff -16640
-Gebiet mit   384 Sektoren in   4 Raeumen (z.B. 64,65,66,67)
-   naechster Anschluss: Raum 132 (1,1)  ->  Raum 65 (18,6)   Abstand 56691 Einheiten, Hoehendiff -11008
-Gebiet mit   263 Sektoren in  21 Raeumen (z.B. 131,166,167,202,209,211)
-   naechster Anschluss: Raum 5 (4,1)  ->  Raum 131 (1,3)   Abstand 28470 Einheiten, Hoehendiff -13312
-Gebiet mit   102 Sektoren in   3 Raeumen (z.B. 121,177,178)
-   naechster Anschluss: Raum 10 (2,0)  ->  Raum 121 (18,2)   Abstand 18460 Einheiten, Hoehendiff -9216
+--- Groesste unerreichte Gebiete ---
+Gebiet mit   805 Sektoren in  86 Raeumen
+   Raeume: 46, 59, 68, 69, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110
+           ... und 66 weitere
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit   443 Sektoren in  25 Raeumen
+   Raeume: 71, 72, 73, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 89, 93, 94, 131, 166
+           ... und 5 weitere
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit   384 Sektoren in   4 Raeumen
+   Raeume: 64, 65, 66, 67
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 217
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
 
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Keine hinterlegt.

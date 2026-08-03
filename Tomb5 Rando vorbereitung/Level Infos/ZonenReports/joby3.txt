@@ -8,25 +8,44 @@ Zone 0 -> 1: Tuer Item 25 (typeId 294, Raum 14)  geoeffnet durch: Brechstange (n
 Zone 0 -> 1: Tuer Item 125 (typeId 288, Raum 61)  geoeffnet durch: Brechstange (nicht verbraucht)
 
 --- Sektoren pro Zone ---
-Zone 0:    15 Sektoren in   3 Raeumen
-Zone 1:   162 Sektoren in  37 Raeumen
-Nie erreicht: 946 begehbare Sektoren
+Zone 0:    16 Sektoren in   4 Raeumen
+Zone 1:   168 Sektoren in  41 Raeumen
+Nie erreicht: 939 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 
 --- Warum kam der Flood nicht weiter? ---
-Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
-nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
+Tuer Item 175 (typeId 304, Raum  106) Maske  0/31
+    Maske 31  Key Item7 in Schloss Item 176 (Raum 106) -> Triggersektor nicht erreichbar
+Tuer Item 212 (typeId 302, Raum  142) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item 122 (typeId 284, Raum   58) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item 190 (typeId 302, Raum  124) Maske  0/31
+    Maske 31  Key Item6 in Schloss Item 191 (Raum 124) -> Triggersektor nicht erreichbar
 
---- Groesste unerreichte Gebiete und ihr naechster Anschluss ---
-Gebiet mit   654 Sektoren in 106 Raeumen (z.B. 106,108,109,12,123,126)
-   naechster Anschluss: Raum 120 (0,3)  ->  Raum 109 (2,1)   Abstand 0 Einheiten, Hoehendiff -256
-Gebiet mit   136 Sektoren in   9 Raeumen (z.B. 10,11,114,140,185,4)
-   naechster Anschluss: Raum 23 (0,1)  ->  Raum 96 (1,2)   Abstand 0 Einheiten, Hoehendiff -10496
-Gebiet mit    40 Sektoren in   8 Raeumen (z.B. 115,116,118,119,129,130)
-   naechster Anschluss: Raum 23 (0,1)  ->  Raum 73 (2,1)   Abstand 0 Einheiten, Hoehendiff 0
-Gebiet mit    11 Sektoren in   3 Raeumen (z.B. 107,121,124)
-   naechster Anschluss: Raum 101 (0,2)  ->  Raum 107 (2,2)   Abstand 0 Einheiten, Hoehendiff 7936
+--- Groesste unerreichte Gebiete ---
+Gebiet mit   703 Sektoren in 112 Raeumen
+   Raeume: 2, 3, 6, 7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 25, 26, 27
+           ... und 92 weitere
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit   136 Sektoren in   9 Raeumen
+   Raeume: 4, 10, 11, 94, 96, 97, 114, 140, 185
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit    39 Sektoren in   8 Raeumen
+   Raeume: 58, 73, 115, 116, 118, 119, 129, 130
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit    10 Sektoren in   3 Raeumen
+   Raeume: 107, 121, 124
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
 
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Keine hinterlegt.

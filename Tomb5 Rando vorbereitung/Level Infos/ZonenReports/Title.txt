@@ -15,15 +15,28 @@ Nie erreicht: 9292 begehbare Sektoren
 Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
 nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
 
---- Groesste unerreichte Gebiete und ihr naechster Anschluss ---
-Gebiet mit  6060 Sektoren in  49 Raeumen (z.B. 100,101,102,103,104,105)
-   naechster Anschluss: Raum 113 (1,1)  ->  Raum 103 (6,3)   Abstand 44222 Einheiten, Hoehendiff 3584
-Gebiet mit  1749 Sektoren in  14 Raeumen (z.B. 29,34,35,36,37,38)
-   naechster Anschluss: Raum 112 (1,1)  ->  Raum 34 (4,16)   Abstand 60103 Einheiten, Hoehendiff 3584
-Gebiet mit   694 Sektoren in  15 Raeumen (z.B. 0,1,10,11,12,13)
-   naechster Anschluss: Raum 112 (1,1)  ->  Raum 7 (2,16)   Abstand 28118 Einheiten, Hoehendiff 3584
-Gebiet mit   407 Sektoren in   6 Raeumen (z.B. 40,41,42,50,51,57)
-   naechster Anschluss: Raum 112 (1,1)  ->  Raum 41 (10,11)   Abstand 74759 Einheiten, Hoehendiff 4608
+--- Groesste unerreichte Gebiete ---
+Gebiet mit  6060 Sektoren in  49 Raeumen
+   Raeume: 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79
+           ... und 29 weitere
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit  1774 Sektoren in  15 Raeumen
+   Raeume: 16, 29, 34, 35, 36, 37, 38, 39, 43, 44, 45, 47, 48, 49, 54
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit   694 Sektoren in  15 Raeumen
+   Raeume: 0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit   407 Sektoren in   6 Raeumen
+   Raeume: 40, 41, 42, 50, 51, 57
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
 
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Keine hinterlegt.

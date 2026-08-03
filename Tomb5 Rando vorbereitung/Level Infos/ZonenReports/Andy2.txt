@@ -12,14 +12,14 @@ Zone 1 -> 2: Tuer Item 140 (typeId 286, Raum 161)  geoeffnet durch: Schalter Ite
 --- Sektoren pro Zone ---
 Zone 0:   166 Sektoren in  12 Raeumen
 Zone 1:  1622 Sektoren in 106 Raeumen
-Zone 2:   515 Sektoren in  69 Raeumen
-Nie erreicht: 1626 begehbare Sektoren
+Zone 2:   559 Sektoren in  78 Raeumen
+Nie erreicht: 1582 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 
 --- Warum kam der Flood nicht weiter? ---
-Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
-nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
+Tuer Item 145 (typeId 300, Raum  169) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
 
 --- Groesste unerreichte Gebiete ---
 Gebiet mit   270 Sektoren in   8 Raeumen
@@ -50,4 +50,4 @@ Keine hinterlegt.
 Cutscene 6 in Raum    5 Sektor (2,2) -> Zone 0
 Cutscene 42 in Raum   52 Sektor (1,2) -> Zone 1
 Cutscene 42 in Raum   52 Sektor (1,3) -> Zone 1
-Cutscene 33 in Raum  169 Sektor (3,2) -> NICHT ERREICHBAR
+Cutscene 33 in Raum  169 Sektor (3,2) -> Zone 2

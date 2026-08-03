@@ -93,6 +93,24 @@ $MANUAL_LINK = @{
 }
 $manualLinks = @( if($MANUAL_LINK.ContainsKey($LevelName)){ $MANUAL_LINK[$LevelName] } )
 
+# Bruecken-Objekte erzeugen begehbaren Boden, wo die Sektordaten Leere melden.
+# Belegt in game/setup.cpp:209-222: BRIDGE_FLAT, BRIDGE_TILT1 und BRIDGE_TILT2
+# bekommen eigene Boden- und Deckenprozeduren (obj->floor = BridgeFlatFloor
+# usw.), die die Hoehe ihres Sektors ueberschreiben. Ein rein sektorbasierter
+# Graph kann sie prinzipiell nicht sehen - deshalb hier nachgezogen.
+$BRIDGE_TYPES = @(448,449,450,451,452,453)
+$bridgeSec = @{}
+foreach($i in $d.items){
+    if ($BRIDGE_TYPES -notcontains [int]$i.typeId) { continue }
+    $bridgeSec["$($i.room),$($i.sectorX),$($i.sectorZ)"] = $true
+}
+
+function Test-Walkable($key) {
+    if (-not $sec.ContainsKey($key)) { return $false }
+    if ($bridgeSec.ContainsKey($key)) { return $true }
+    return (-not $sec[$key].isWall)
+}
+
 $adj = @{}
 function Add-Edge($a, $b) {
     if (-not $adj.ContainsKey($a)) { $adj[$a] = New-Object System.Collections.Generic.HashSet[string] }
@@ -100,8 +118,8 @@ function Add-Edge($a, $b) {
 }
 
 foreach($s in $d.sectors){
-    if ($s.isWall) { continue }
     $key = "$($s.room),$($s.sectorX),$($s.sectorZ)"
+    if (-not (Test-Walkable $key)) { continue }
     $rm = $rooms[[int]$s.room]
     $wx = $rm.originX + $s.sectorX * 1024
     $wz = $rm.originZ + $s.sectorZ * 1024
@@ -110,7 +128,7 @@ foreach($s in $d.sectors){
     foreach($dz in @(-1,0,1)){ foreach($dx in @(-1,0,1)){
         if (($dx -eq 0 -and $dz -eq 0) -or ($dx -ne 0 -and $dz -ne 0)) { continue }
         $nk = "$($s.room),$($s.sectorX + $dx),$($s.sectorZ + $dz)"
-        if ($sec.ContainsKey($nk) -and -not $sec[$nk].isWall) { Add-Edge $key $nk }
+        if (Test-Walkable $nk) { Add-Edge $key $nk }
     }}
 
     # Portal / vertikale Verbindungen, beidseitig.
@@ -165,6 +183,27 @@ foreach($r in $d.rooms){
             $nb = "$($r.index),$([int]$s.sectorX + $dx),$([int]$s.sectorZ + $dz)"
             if ($sec.ContainsKey($nb) -and -not $sec[$nb].isWall) { Add-Edge $nb $ak; Add-Edge $ak $nb }
         }}
+    }
+}
+
+# Teleporter versetzen Lara an die Position des Teleporter-Items selbst.
+# ControlTeleporter (game/tomb4fx.cpp:531ff): bei trigger_flags == 666 laeuft nur
+# der Effekt, in ALLEN anderen Faellen greift der else-Zweig und setzt
+# lara_item->pos auf item->pos plus ItemNewRoom. Also ist der Teleporter das
+# ZIEL und sein Trigger die Quelle - die Kante ist gerichtet, vom Triggersektor
+# zum Teleportersektor. (Frueher hatte ich mir das genau falsch herum notiert;
+# alle Teleporter der 16 Vanilla-Level haben OCB 0, warpen also tatsaechlich.)
+$TELEPORT_TYPES = @(387,388)
+foreach($i in $d.items){
+    if ($TELEPORT_TYPES -notcontains [int]$i.typeId) { continue }
+    if ([int]$i.ocb -eq 666) { continue }
+    $dst = "$($i.room),$($i.sectorX),$($i.sectorZ)"
+    if (-not $sec.ContainsKey($dst)) { continue }
+    foreach($t in $d.triggers){
+        $hit = $false
+        foreach($c in $t.commands){ if ($c.type -eq 'Object' -and [int]$c.index -eq [int]$i.index) { $hit = $true } }
+        if (-not $hit) { continue }
+        Add-Edge "$($t.room),$($t.sectorX),$($t.sectorZ)" $dst
     }
 }
 

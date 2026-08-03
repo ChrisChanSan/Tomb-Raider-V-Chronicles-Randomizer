@@ -10,11 +10,14 @@ Zone 0 -> 1: Tuer Item 69 (typeId 314, Raum 30)  geoeffnet durch: Schalter Item 
 Zone 0 -> 1: Tuer Item 68 (typeId 312, Raum 30)  geoeffnet durch: Schalter Item 42 (Raum 23)
 Zone 0 -> 1: Tuer Item 64 (typeId 304, Raum 28)  geoeffnet durch: AntiTrigger
 Zone 0 -> 1: Tuer Item 9 (typeId 288, Raum 6)  geoeffnet durch: Trigger betreten (145,1,2)
+Zone 1 -> 2: Tuer Item 151 (typeId 314, Raum 82)  geoeffnet durch: Schalter Item 148 (Raum 82)
+Zone 1 -> 2: Tuer Item 150 (typeId 312, Raum 82)  geoeffnet durch: Schalter Item 148 (Raum 82)
 
 --- Sektoren pro Zone ---
 Zone 0:   521 Sektoren in  72 Raeumen
-Zone 1:    56 Sektoren in   9 Raeumen
-Nie erreicht: 879 begehbare Sektoren
+Zone 1:    60 Sektoren in  10 Raeumen
+Zone 2:    46 Sektoren in   6 Raeumen
+Nie erreicht: 829 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 TypeId 203: 1 Instanz(en) noetig
@@ -23,16 +26,36 @@ TypeId 203: 1 Instanz(en) noetig
       Item 109 in Raum   67 -> Zone 0            [OK]
 
 --- Warum kam der Flood nicht weiter? ---
+Tuer Item 145 (typeId 308, Raum   81) Maske  0/31
+    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
+    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
+    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
+    Maske 31  Schalter Item 78 (Raum 31)       -> Triggersektor nicht erreichbar
+    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
+    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
+    Maske 31  Key Item8 in Schloss Item 142 (Raum 81) -> Item fehlt
+Tuer Item 144 (typeId 306, Raum   81) Maske  0/31
+    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
+    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
+    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
+    Maske 31  Schalter Item 78 (Raum 31)       -> Triggersektor nicht erreichbar
+    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
+    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
+    Maske 31  Key Item8 in Schloss Item 142 (Raum 81) -> Item fehlt
 Tuer Item 153 (typeId 284, Raum   89) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 Tuer Item 101 (typeId 288, Raum   63) Maske  0/31
     Maske 31  Puzzle Item3 in Schloss Item 100 (Raum 63) -> Item fehlt
     Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
+Tuer Item  89 (typeId 304, Raum   43) Maske  0/31
+    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
+    Maske 31  Schalter Item 78 (Raum 31)       -> Triggersektor nicht erreichbar
+    Maske 31  Trigger betreten (42,1,1)        -> Triggersektor nicht erreichbar
 
 --- Groesste unerreichte Gebiete ---
-Gebiet mit   761 Sektoren in  73 Raeumen
-   Raeume: 1, 7, 10, 11, 14, 15, 16, 25, 31, 32, 34, 35, 36, 37, 38, 42, 43, 44, 45, 46
-           ... und 53 weitere
+Gebiet mit   685 Sektoren in  67 Raeumen
+   Raeume: 7, 10, 11, 14, 15, 16, 25, 32, 34, 35, 36, 37, 42, 43, 44, 45, 46, 47, 48, 63
+           ... und 47 weitere
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
@@ -41,13 +64,13 @@ Gebiet mit    40 Sektoren in   2 Raeumen
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit    21 Sektoren in   3 Raeumen
-   Raeume: 133, 134, 135
+Gebiet mit    26 Sektoren in   2 Raeumen
+   Raeume: 31, 81
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit    18 Sektoren in   1 Raeumen
-   Raeume: 64
+Gebiet mit    21 Sektoren in   3 Raeumen
+   Raeume: 133, 134, 135
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.

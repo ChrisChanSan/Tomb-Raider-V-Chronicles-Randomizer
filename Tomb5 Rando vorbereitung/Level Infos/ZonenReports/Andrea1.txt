@@ -50,6 +50,16 @@ Tuer Item  83 (typeId 326, Raum  164) Maske  0/31
 Tuer Item  39 (typeId 326, Raum   91) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 
+--- Groesste unerreichte Gebiete und ihr naechster Anschluss ---
+Gebiet mit    16 Sektoren in   1 Raeumen (z.B. 4)
+   naechster Anschluss: Raum 56 (2,1)  ->  Raum 4 (3,5)   Abstand 0 Einheiten, Hoehendiff 3584
+Gebiet mit    10 Sektoren in   1 Raeumen (z.B. 29)
+   naechster Anschluss: Raum 33 (1,3)  ->  Raum 29 (5,3)   Abstand 0 Einheiten, Hoehendiff 0
+Gebiet mit     9 Sektoren in   2 Raeumen (z.B. 197,91)
+   naechster Anschluss: Raum 99 (2,4)  ->  Raum 197 (2,0)   Abstand 0 Einheiten, Hoehendiff 2048
+Gebiet mit     8 Sektoren in   1 Raeumen (z.B. 196)
+   naechster Anschluss: Raum 235 (2,1)  ->  Raum 196 (1,2)   Abstand 0 Einheiten, Hoehendiff 2048
+
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Schalter Item 75: Revolver + Lasersight (Glocke abschiessen)
   wird gebraucht in Zone 1 -> Ausruestung muss in Zone <= 1 liegen

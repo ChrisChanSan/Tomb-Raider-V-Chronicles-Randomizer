@@ -15,6 +15,12 @@ Nie erreicht: 105 begehbare Sektoren
 Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
 nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
 
+--- Groesste unerreichte Gebiete und ihr naechster Anschluss ---
+Gebiet mit   104 Sektoren in   2 Raeumen (z.B. 0,1)
+   naechster Anschluss: Raum 118 (2,1)  ->  Raum 0 (1,13)   Abstand 66874 Einheiten, Hoehendiff -9984
+Gebiet mit     1 Sektoren in   1 Raeumen (z.B. 12)
+   naechster Anschluss: Raum 36 (5,1)  ->  Raum 12 (1,5)   Abstand 0 Einheiten, Hoehendiff 0
+
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Keine hinterlegt.
 

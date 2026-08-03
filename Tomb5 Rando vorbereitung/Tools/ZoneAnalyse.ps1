@@ -488,6 +488,63 @@ if ($frontier -eq 0) {
 }
 
 Write-Output ""
+Write-Output "--- Groesste unerreichte Gebiete und ihr naechster Anschluss ---"
+# Unerreichte Sektoren zu Komponenten gruppieren und je Komponente den
+# raeumlich naechsten erreichten Sektor suchen. Damit steht im Report, WO in
+# trview nachzusehen ist, statt nur DASS etwas fehlt. Kleine Distanz und
+# geringer Hoehenunterschied = vermutlich ein Sprung oder eine Kletterstelle.
+# Alternate-Raeume bleiben aussen vor: sie sind nie eigenstaendig betretbar,
+# sondern tauschen ihren Basisraum aus. Sie als eigenes "unerreichtes Gebiet" zu
+# melden erzeugt nur Rauschen - zwei Alternates verschiedener Flip-Gruppen
+# koennen raeumlich exakt uebereinanderliegen (joby5 Raum 52 und 86, Abstand 0,
+# Hoehendiff 0) und sehen dann wie eine fehlende Verbindung aus, obwohl sie im
+# Spiel nie gleichzeitig existieren. Die richtige Frage ist immer, wie Lara den
+# BASISraum erreicht.
+$unreach = @{}
+foreach($s in $d.sectors){
+    if ($s.isWall -or $s.alternateRoom) { continue }
+    $k = "$($s.room),$($s.sectorX),$($s.sectorZ)"
+    if ($zoneOf.ContainsKey($k)) { continue }
+    $unreach[$k] = $s
+}
+$seen = @{}; $comps = @()
+foreach($k in $unreach.Keys){
+    if ($seen.ContainsKey($k)) { continue }
+    $comp = @(); $q = New-Object System.Collections.Generic.Queue[string]
+    $q.Enqueue($k); $seen[$k] = $true
+    while($q.Count -gt 0){
+        $c = $q.Dequeue(); $comp += ,$c
+        if (-not $adj.ContainsKey($c)) { continue }
+        foreach($nb in $adj[$c]){
+            if ($seen.ContainsKey($nb) -or -not $unreach.ContainsKey($nb)) { continue }
+            $seen[$nb] = $true; $q.Enqueue($nb)
+        }
+    }
+    $comps += ,$comp
+}
+$reachedList = @($zoneOf.Keys | ForEach-Object { $sec[$_] } | Where-Object { -not $_.alternateRoom })
+foreach($comp in ($comps | Sort-Object { -$_.Count } | Select-Object -First 4)){
+    $compRooms = ($comp | ForEach-Object { ($_ -split ',')[0] } | Sort-Object -Unique)
+    $best = $null; $bestD = [double]::MaxValue; $bestFrom = $null
+    foreach($ck in ($comp | Select-Object -First 400)){
+        $cs = $sec[$ck]; $cr = $rooms[[int]$cs.room]
+        $cx = $cr.originX + [int]$cs.sectorX*1024; $cz = $cr.originZ + [int]$cs.sectorZ*1024
+        foreach($rs in $reachedList){
+            $rr = $rooms[[int]$rs.room]
+            $rx = $rr.originX + [int]$rs.sectorX*1024; $rz = $rr.originZ + [int]$rs.sectorZ*1024
+            $dd = [math]::Sqrt([math]::Pow($cx-$rx,2) + [math]::Pow($cz-$rz,2))
+            if ($dd -lt $bestD) { $bestD = $dd; $best = $cs; $bestFrom = $rs }
+        }
+    }
+    "Gebiet mit {0,5} Sektoren in {1,3} Raeumen (z.B. {2})" -f $comp.Count,$compRooms.Count,(($compRooms | Select-Object -First 6) -join ',')
+    if ($best) {
+        $dy = [int]$best.floorY - [int]$bestFrom.floorY
+        "   naechster Anschluss: Raum {0} ({1},{2})  ->  Raum {3} ({4},{5})   Abstand {6} Einheiten, Hoehendiff {7}" -f `
+            $bestFrom.room,$bestFrom.sectorX,$bestFrom.sectorZ,$best.room,$best.sectorX,$best.sectorZ,[int]$bestD,$dy
+    }
+}
+
+Write-Output ""
 Write-Output "--- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---"
 # Ein Shoot switch steht in den Leveldaten nur als Schalter - dass er eine
 # bestimmte Waffe braucht, steht nirgends. Andrea1: die Glocke (Item 75) laesst

@@ -48,6 +48,16 @@ Tuer Item  41 (typeId 300, Raum   31) Maske  0/31
     Maske 31  Key Item7 in Schloss Item 43 (Raum 31) -> Triggersektor nicht erreichbar
     Maske 31  Key Item8 in Schloss Item 104 (Raum 73) -> Triggersektor nicht erreichbar
 
+--- Groesste unerreichte Gebiete und ihr naechster Anschluss ---
+Gebiet mit   411 Sektoren in   3 Raeumen (z.B. 49,50,51)
+   naechster Anschluss: Raum 85 (7,2)  ->  Raum 51 (2,1)   Abstand 45358 Einheiten, Hoehendiff 768
+Gebiet mit   217 Sektoren in  13 Raeumen (z.B. 24,34,60,61,65,66)
+   naechster Anschluss: Raum 31 (4,2)  ->  Raum 98 (1,6)   Abstand 0 Einheiten, Hoehendiff 5632
+Gebiet mit    79 Sektoren in   6 Raeumen (z.B. 112,113,56,57,58,86)
+   naechster Anschluss: Raum 94 (2,5)  ->  Raum 86 (4,1)   Abstand 1024 Einheiten, Hoehendiff 3584
+Gebiet mit    46 Sektoren in   1 Raeumen (z.B. 0)
+   naechster Anschluss: Raum 156 (2,18)  ->  Raum 0 (2,1)   Abstand 16384 Einheiten, Hoehendiff 4608
+
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Keine hinterlegt.
 

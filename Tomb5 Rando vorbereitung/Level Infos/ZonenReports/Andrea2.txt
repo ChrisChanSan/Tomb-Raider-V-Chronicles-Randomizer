@@ -40,6 +40,16 @@ Tuer Item  89 (typeId 290, Raum  112) Maske  0/31
 Tuer Item  37 (typeId 286, Raum   54) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 
+--- Groesste unerreichte Gebiete und ihr naechster Anschluss ---
+Gebiet mit    24 Sektoren in   2 Raeumen (z.B. 206,208)
+   naechster Anschluss: Raum 205 (7,5)  ->  Raum 206 (2,1)   Abstand 0 Einheiten, Hoehendiff 3072
+Gebiet mit    24 Sektoren in   1 Raeumen (z.B. 24)
+   naechster Anschluss: Raum 224 (1,1)  ->  Raum 24 (1,1)   Abstand 0 Einheiten, Hoehendiff 6144
+Gebiet mit    24 Sektoren in   2 Raeumen (z.B. 171,44)
+   naechster Anschluss: Raum 14 (3,1)  ->  Raum 171 (4,5)   Abstand 0 Einheiten, Hoehendiff 0
+Gebiet mit    16 Sektoren in   1 Raeumen (z.B. 99)
+   naechster Anschluss: Raum 175 (2,2)  ->  Raum 99 (1,3)   Abstand 0 Einheiten, Hoehendiff 5120
+
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Keine hinterlegt.
 

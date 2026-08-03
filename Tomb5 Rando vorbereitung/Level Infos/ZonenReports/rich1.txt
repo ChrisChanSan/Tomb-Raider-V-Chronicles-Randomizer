@@ -29,6 +29,16 @@ Tuer Item 101 (typeId 288, Raum   63) Maske  0/31
     Maske 31  Puzzle Item3 in Schloss Item 100 (Raum 63) -> Item fehlt
     Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
 
+--- Groesste unerreichte Gebiete und ihr naechster Anschluss ---
+Gebiet mit   738 Sektoren in  68 Raeumen (z.B. 1,10,100,101,102,103)
+   naechster Anschluss: Raum 27 (3,2)  ->  Raum 7 (5,1)   Abstand 0 Einheiten, Hoehendiff 6912
+Gebiet mit    40 Sektoren in   2 Raeumen (z.B. 98,99)
+   naechster Anschluss: Raum 26 (1,4)  ->  Raum 99 (1,1)   Abstand 22364 Einheiten, Hoehendiff 3840
+Gebiet mit    21 Sektoren in   3 Raeumen (z.B. 133,134,135)
+   naechster Anschluss: Raum 63 (1,2)  ->  Raum 134 (3,1)   Abstand 10691 Einheiten, Hoehendiff 4096
+Gebiet mit    18 Sektoren in   1 Raeumen (z.B. 64)
+   naechster Anschluss: Raum 30 (1,2)  ->  Raum 64 (3,2)   Abstand 0 Einheiten, Hoehendiff 6144
+
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Keine hinterlegt.
 

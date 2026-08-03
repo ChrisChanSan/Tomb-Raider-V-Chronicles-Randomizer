@@ -15,6 +15,7 @@ Zone 2 -> 3: Tuer Item 221 (typeId 284, Raum 211)  geoeffnet durch: AntiTrigger
 Zone 2 -> 3: Tuer Item 108 (typeId 284, Raum 94)  geoeffnet durch: AntiTrigger
 Zone 2 -> 3: Tuer Item 198 (typeId 288, Raum 180)  geoeffnet durch: Trigger betreten (186,1,1)
 Zone 2 -> 3: Tuer Item 216 (typeId 284, Raum 202)  geoeffnet durch: AntiTrigger
+Zone 2 -> 3: Tuer Item 213 (typeId 300, Raum 199)  geoeffnet durch: Puzzle Item1 in Schloss Item 144 (Raum 119)
 Zone 2 -> 3: Tuer Item 86 (typeId 284, Raum 83)  geoeffnet durch: AntiTrigger
 Zone 2 -> 3: Tuer Item 212 (typeId 286, Raum 194)  geoeffnet durch: Trigger betreten (185,1,4)
 Zone 2 -> 3: Tuer Item 152 (typeId 300, Raum 125)  geoeffnet durch: AntiTrigger
@@ -29,17 +30,17 @@ Zone 4 -> 5: Tuer Item 137 (typeId 300, Raum 106)  geoeffnet durch: AntiTrigger
 Zone 0:   682 Sektoren in  71 Raeumen
 Zone 1:    40 Sektoren in   6 Raeumen
 Zone 2:  1181 Sektoren in  94 Raeumen
-Zone 3:   331 Sektoren in  31 Raeumen
+Zone 3:   332 Sektoren in  32 Raeumen
 Zone 4:   113 Sektoren in  19 Raeumen
 Zone 5:    45 Sektoren in   8 Raeumen
-Nie erreicht: 391 begehbare Sektoren
+Nie erreicht: 390 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+Nicht im Level vorhanden, kommt per Gameflow (CMD_GIVEOBJ) - keine Platzierung noetig:
+  TypeId  - gebraucht ab Zone 2 (Puzzle Item1 in Schloss Item 144 (Raum 119))
+
 
 --- Warum kam der Flood nicht weiter? ---
-Tuer Item 213 (typeId 300, Raum  199) Maske  0/31
-    Maske 31  Puzzle Item1 in Schloss Item 144 (Raum 119) -> Item fehlt
-    Maske 31  Puzzle Item1 in Schloss Item 144 (Raum 119) -> Item fehlt
 Tuer Item 173 (typeId 314, Raum  134) Maske  0/31
     Maske 31  Trigger betreten (134,1,1)       -> Triggersektor nicht erreichbar
     Maske 31  Trigger betreten (134,2,1)       -> Triggersektor nicht erreichbar
@@ -63,13 +64,13 @@ Gebiet mit     2 Sektoren in   1 Raeumen
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
    Bespielbare Objekte darin: 312x1, 314x1, 270x1, 388x1
 Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 199
+   Raeume: 217
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 300x1, 35x1
+   Bespielbare Objekte darin: 114x1
 Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 217
+   Raeume: 212
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.

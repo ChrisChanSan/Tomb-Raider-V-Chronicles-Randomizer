@@ -91,6 +91,16 @@ if ($SCRIPT_DOORS.ContainsKey($LevelName)) { $scriptDoors = $SCRIPT_DOORS[$Level
 # Das ist die Handkuration fuer die Klasse "Flood stoppt an der Geometrie".
 $MANUAL_LINK = @{
 }
+
+# Schluessel, die NICHT verbraucht werden. Der Normalfall in TR ist: Key oder
+# Puzzle-Item wandert ins Schloss und ist weg. Manche sind aber Mehrfachnutzer -
+# typischerweise Karten. joby5 hat genau EIN Key Item8 (Item 118, Raum 102),
+# aber ZWEI Keyhole8 (Raeume 13 und 64); ohne diesen Eintrag meldet der Analyser
+# faelschlich Mangel und verkuerzt das Level. Vom Nutzer im Spiel bestaetigt.
+$REUSABLE_KEYS = @{
+    'joby5' = @(203)
+}
+$reusableKeys = @( if($REUSABLE_KEYS.ContainsKey($LevelName)){ $REUSABLE_KEYS[$LevelName] } )
 $manualLinks = @( if($MANUAL_LINK.ContainsKey($LevelName)){ $MANUAL_LINK[$LevelName] } )
 
 # Bruecken-Objekte erzeugen begehbaren Boden, wo die Sektordaten Leere melden.
@@ -359,6 +369,12 @@ $consumed  = @{}   # typeId -> wie viele Instanzen schon in Slots stecken
 $doorMask  = @{}   # doorItem -> bisher gesetzte Maskenbits
 $doorWhy   = @{}   # doorItem -> Liste der beitragenden Anforderungen
 $itemNeed  = @()   # je Slot-Befuellung: welcher Typ, in welcher Zone gebraucht
+$totalOfType = @{} # wie viele Instanzen jedes Typs existieren im Level ueberhaupt
+foreach($i in $d.items){
+    $ti = [int]$i.typeId
+    if (-not $totalOfType.ContainsKey($ti)) { $totalOfType[$ti] = 0 }
+    $totalOfType[$ti]++
+}
 
 while ($true) {
     # fluten
@@ -395,11 +411,24 @@ while ($true) {
             $nt = $e.Req.NeedItemType
             if ($null -eq $nt) { continue }
             $nt = [int]$nt
-            $has  = if($haveCounts.ContainsKey($nt)){ $haveCounts[$nt] } else { 0 }
-            $used = if($consumed.ContainsKey($nt)){ $consumed[$nt] } else { 0 }
-            if (($has - $used) -le 0) { continue }
-            $consumed[$nt] = $used + 1
-            $itemNeed += ,@{ Type=$nt; Zone=$zone; Desc=$e.Req.Desc }
+            # Gibt es den Schluesseltyp im Level ueberhaupt nicht, bringt Lara ihn
+            # per Gameflow mit (CMD_GIVEOBJ) - dasselbe Muster wie bei der
+            # Brechstange. joby5 hat ein Keyhole7, aber kein Key Item7.
+            if (-not $totalOfType.ContainsKey($nt)) {
+                $itemNeed += ,@{ Type=$nt; Zone=$zone; Desc=$e.Req.Desc; Gameflow=$true }
+            }
+            elseif ($reusableKeys -contains $nt) {
+                # Mehrfachnutzer: belegt keinen Vorrat, konkurriert mit nichts.
+                if ((&{ if($haveCounts.ContainsKey($nt)){$haveCounts[$nt]}else{0} }) -le 0) { continue }
+                $itemNeed += ,@{ Type=$nt; Zone=$zone; Desc="$($e.Req.Desc) [mehrfach nutzbar]"; Reusable=$true }
+            }
+            else {
+                $has  = if($haveCounts.ContainsKey($nt)){ $haveCounts[$nt] } else { 0 }
+                $used = if($consumed.ContainsKey($nt)){ $consumed[$nt] } else { 0 }
+                if (($has - $used) -le 0) { continue }
+                $consumed[$nt] = $used + 1
+                $itemNeed += ,@{ Type=$nt; Zone=$zone; Desc=$e.Req.Desc }
+            }
         }
         [void]$firedTrig.Add($e.Id)
         # Maske dieses Triggers auf alle Ziel-Tueren anrechnen.
@@ -494,8 +523,21 @@ Write-Output "--- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---"
 # Zaehl-Regel statt Typ-Regel: braucht ein Level zwei Slots desselben Typs,
 # reicht es nicht, dass "irgendein" Item frueh genug liegt. Die k-te Instanz
 # muss spaetestens in der Zone liegen, in der der k-te Slot bedient wird.
+# Gameflow-Items bringt Lara mit, sie brauchen keine Platzierung und gehoeren
+# deshalb nicht in die Zaehlregel - sonst meldet sie "0 Instanzen vorhanden,
+# WIDERSPRUCH" fuer etwas, das voellig in Ordnung ist (rich3: Puzzle Hole1 in
+# Raum 119, aber kein Puzzle Item1 im Level).
+$gameflowNeeds = @($itemNeed | Where-Object { $_.Gameflow })
+if ($gameflowNeeds.Count -gt 0) {
+    Write-Output "Nicht im Level vorhanden, kommt per Gameflow (CMD_GIVEOBJ) - keine Platzierung noetig:"
+    foreach($g in ($gameflowNeeds | Group-Object Type)){
+        "  TypeId {0} - gebraucht ab Zone {1} ({2})" -f $g.Name,(($g.Group | ForEach-Object { $_.Zone } | Measure-Object -Minimum).Minimum),$g.Group[0].Desc
+    }
+    Write-Output ""
+}
+
 $byType = @{}
-foreach($n in $itemNeed){
+foreach($n in ($itemNeed | Where-Object { -not $_.Gameflow })){
     $t = [int]$n.Type
     if (-not $byType.ContainsKey($t)) { $byType[$t] = @() }
     $byType[$t] += ,$n
@@ -503,7 +545,13 @@ foreach($n in $itemNeed){
 foreach($kv in $byType.GetEnumerator() | Sort-Object Name){
     $nt = [int]$kv.Key
     $needs = @($kv.Value | Sort-Object { $_.Zone })
-    "TypeId {0}: {1} Instanz(en) noetig" -f $nt, $needs.Count
+    # Mehrfach nutzbare Schluessel brauchen nur EINE Instanz, egal wie viele
+    # Schloesser sie bedienen - sonst meldet die Zaehlregel falschen Mangel.
+    if ($reusableKeys -contains $nt) {
+        "TypeId {0}: mehrfach nutzbar - 1 Instanz reicht fuer {1} Schloss/Schloesser" -f $nt, $needs.Count
+        $needs = @($needs | Select-Object -First 1)
+    }
+    else { "TypeId {0}: {1} Instanz(en) noetig" -f $nt, $needs.Count }
     for($j=0; $j -lt $needs.Count; $j++){
         "    Instanz {0} -> muss in Zone <= {1} liegen  ({2})" -f ($j+1), $needs[$j].Zone, $needs[$j].Desc
     }

@@ -6,19 +6,25 @@ Laras Start: Raum 3 (nach der Eingangs-Cutscene; Lara-Item liegt in Raum 40) -> 
 --- Zonenuebergaenge (Blocker) ---
 
 --- Sektoren pro Zone ---
-Zone 0:   796 Sektoren in 127 Raeumen
-Nie erreicht: 483 begehbare Sektoren
+Zone 0:   794 Sektoren in 127 Raeumen
+Nie erreicht: 485 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 
 --- Warum kam der Flood nicht weiter? ---
-Tuer Item  15 (typeId 300, Raum   13) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 14 (Raum 13) -> Triggersektor nicht erreichbar
-Tuer Item 193 (typeId 286, Raum  170) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
 Tuer Item 176 (typeId 290, Raum  156) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
+Tuer Item 136 (typeId 98, Raum  115) Maske  0/31
+    Maske 31  Trigger betreten (138,1,1)       -> ausgeloest
+    Maske 31  Schalter Item 190 (Raum 165)     -> Triggersektor nicht erreichbar
+Tuer Item  91 (typeId 98, Raum   49) Maske  0/31
+    Maske 31  Trigger betreten (138,1,1)       -> ausgeloest
+    Maske 31  Schalter Item 190 (Raum 165)     -> Triggersektor nicht erreichbar
+Tuer Item  15 (typeId 300, Raum   13) Maske  0/31
+    Maske 31  Key Item8 in Schloss Item 14 (Raum 13) -> Triggersektor nicht erreichbar
 Tuer Item 195 (typeId 286, Raum  173) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item 193 (typeId 286, Raum  170) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 Tuer Item 187 (typeId 286, Raum  163) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
@@ -41,10 +47,11 @@ Gebiet mit    10 Sektoren in   2 Raeumen
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
 Gebiet mit     2 Sektoren in   1 Raeumen
-   Raeume: 182
+   Raeume: 178
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 376x1
 
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Keine hinterlegt.

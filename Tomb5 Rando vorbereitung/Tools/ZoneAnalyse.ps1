@@ -30,7 +30,18 @@ $d = Get-Content $LevelJson -Raw | ConvertFrom-Json
 # --- Typ-IDs (aus RESOURCES/TRCatalog2.xml, TR5-Abschnitt) -------------------
 $DOOR_TYPES = @(284,286,288,290,292,294,296,298,   # Door Type 1-8
                 300,302,304,306,308,310,           # Closed Door 1-6
-                312,314,316,318,320,322,324,326,328,332)
+                312,314,316,318,320,322,324,326,328,332,
+                98)                                # Cables - siehe unten
+# Kabel (typeId 98) sind keine Tuer, sperren aber genauso: sie stehen von
+# Levelbeginn an unter Strom und sind unpassierbar, bis ein Wandschalter das
+# ganze Level stromlos macht. joby5: der Jump Switch (Item 190, Raum 165)
+# schaltet mit einem Trigger alle vier Kabel (91/136/165/206) UND FlipMap 6.
+# Raum 143 ist ein Korridor, dessen Sektor (1,3) genau so ein Kabel traegt -
+# dahinter liegt Raum 61, und erst nach einem Besuch dort spawnt der Soldat mit
+# Key 6. Die Kabel tragen flags=0, werden von der CODEBITS-Regel also korrekt
+# nicht als "ab Start offen" behandelt. Sie in DOOR_TYPES aufzunehmen macht das
+# Modell strenger - die sichere Richtung, weil ein Key-Item hinter einem
+# stromfuehrenden Kabel logisch spaeter liegt, als ein permissives Modell glaubt.
 $PUZZLE_ITEM_BASE = 172; $PUZZLE_HOLE_BASE = 242
 $KEY_ITEM_BASE    = 196; $KEY_HOLE_BASE    = 258
 
@@ -435,6 +446,13 @@ while ($true) {
         foreach($c in $e.T.commands){
             if ($c.type -ne 'Object') { continue }
             $tgt = [int]$c.index
+            # Kabel stehen von Levelbeginn an unter Strom. Ein normaler
+            # Bodentrigger auf ein Kabel schaltet es ein, nicht aus - nur ein
+            # Schalter (bzw. AntiTrigger) macht stromlos. Ohne diese
+            # Einschraenkung wuerde joby5 die Kabel 91 und 136 schon ueber einen
+            # Bodentrigger in Raum 138 "oeffnen", was die Richtung umdreht.
+            if ($items.ContainsKey($tgt) -and [int]$items[$tgt].typeId -eq 98 -and
+                $e.T.triggerType -notin @('Switch','HeavySwitch','AntiTrigger','HeavyAntiTrigger')) { continue }
             if (-not $doorMask.ContainsKey($tgt)) { $doorMask[$tgt] = 0; $doorWhy[$tgt] = @() }
             $doorMask[$tgt] = $doorMask[$tgt] -bor ([int]$e.T.mask)
             $doorWhy[$tgt] += ,$e.Req

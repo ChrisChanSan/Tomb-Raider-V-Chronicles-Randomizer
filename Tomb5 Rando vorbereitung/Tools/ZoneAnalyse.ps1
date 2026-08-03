@@ -305,6 +305,20 @@ if ($crowbarDoors.Count -gt 0 -and $crowbarInLevel.Count -eq 0) {
     foreach($cd in $crowbarDoors){ $openAtStart += ,$cd; $doorSector.Remove($cd) }
 }
 
+# Der Hammer folgt demselben Umbenennungs-Muster wie die Brechstange: TR5 kann
+# ihn als Key/Puzzle-Item fuehren und per Gameflow (CMD_KEYn/CMD_PUZZLEn
+# objname) umbenennen. rich1: der Hammer ist Item 35, typeId 202 "Key Item7",
+# Raum 22 - die EINZIGE Instanz dieses Typs im Level, ohne zugehoeriges
+# Key Hole7 und ohne Key-Trigger, der es referenziert (verifiziert). Anders als
+# die Brechstange in den meisten Leveln liegt der Hammer hier tatsaechlich im
+# Level und muss erst erreicht werden - Lara bringt ihn NICHT automatisch mit
+# (User-Korrektur: "die bringt Lara beide nicht mit wie in Joby").
+$HAMMER_TYPE = @{
+    'rich1' = 202
+}
+$hammerType = if($HAMMER_TYPE.ContainsKey($LevelName)){ [int]$HAMMER_TYPE[$LevelName] } else { $null }
+$hammerInLevel = @( if($null -ne $hammerType){ $d.items | Where-Object { [int]$_.typeId -eq $hammerType } } )
+
 # --- Was oeffnet welche Tuer? ------------------------------------------------
 # openedBy[itemIndex] = Liste von Anforderungen (je ein Trigger)
 $openedBy = @{}
@@ -464,6 +478,21 @@ while ($true) {
     foreach($e in $allTrig){
         if ($firedTrig.Contains($e.Id)) { continue }
         if (-not (Test-ReqSector $e.Req $reached)) { continue }
+        # Cutscene-Tueren, die ein Werkzeug voraussetzen (rich1 hamgate: der
+        # Hammer), duerfen nicht schon beim blossen Erreichen des Trigger-
+        # sektors feuern - Lara muss das Werkzeug vorher tatsaechlich haben.
+        # Ohne diese Sperre wuerde der Hammer als "automatisch vorhanden"
+        # behandelt, obwohl er in rich1 ein echter, erst zu findender Gegen-
+        # stand ist (User-Korrektur).
+        if ($null -ne $hammerType) {
+            $needsHammer = $false
+            foreach($c in $e.T.commands){ if ($c.type -eq 'Cutscene' -and $cutsceneDoorByCutscene.ContainsKey([int]$c.index)) { $needsHammer = $true } }
+            if ($needsHammer) {
+                $haveHammer = $false
+                foreach($hi in $hammerInLevel){ if ($reached.Contains("$($hi.room),$($hi.sectorX),$($hi.sectorZ)")) { $haveHammer = $true; break } }
+                if (-not $haveHammer) { continue }
+            }
+        }
         if ($e.Req.Kind -eq 'item') {
             $nt = $e.Req.NeedItemType
             if ($null -eq $nt) { continue }

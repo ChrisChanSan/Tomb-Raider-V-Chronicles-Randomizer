@@ -1,7 +1,7 @@
 ﻿==============================================================
  Progressions-Zonen: joby5
 ==============================================================
-Laras Start: Raum 40, Sektor (2,3) -> Zone 0
+Laras Start: Raum 3 (nach der Eingangs-Cutscene; Lara-Item liegt in Raum 40) -> Zone 0
 
 --- Zonenuebergaenge (Blocker) ---
 

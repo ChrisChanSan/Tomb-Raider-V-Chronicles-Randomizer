@@ -264,8 +264,25 @@ function Test-ReqSector($req, $reached) {
 }
 
 # --- Zonen-Flut --------------------------------------------------------------
+# Wo Lara wirklich losgeht, steht nicht zwingend im Lara-Item: laeuft am
+# Levelanfang eine Cutscene, setzt sie Lara danach woanders ab. joby5 ist so ein
+# Fall - das Lara-Item liegt in Raum 40, gespielt wird ab Raum 3, und Raum 3 ist
+# selbst ein Flipmap-Alternate, der Flip ist zu Spielbeginn also schon aktiv.
+# Ohne Uebersteuerung flutet der Analyser ab der falschen Stelle und meldet
+# grosse Teile des Levels als unerreichbar.
+$START_ROOM = @{
+    'joby5' = 3
+}
 $lara = $d.items | Where-Object { $_.typeId -eq 0 } | Select-Object -First 1
 $startKey = "$($lara.room),$($lara.sectorX),$($lara.sectorZ)"
+$startSeeds = @()
+if ($START_ROOM.ContainsKey($LevelName)) {
+    $sr = [int]$START_ROOM[$LevelName]
+    foreach($s in $d.sectors){
+        if ([int]$s.room -eq $sr -and -not $s.isWall) { $startSeeds += ,"$($s.room),$($s.sectorX),$($s.sectorZ)" }
+    }
+    if ($startSeeds.Count -gt 0) { $startKey = $startSeeds[0] }
+}
 
 $blocked = @{}   # sectorKey -> itemIndex der Tuer
 foreach($kv in $doorSector.GetEnumerator()){ $blocked[$kv.Value] = $kv.Key }
@@ -279,6 +296,7 @@ $log = @()
 
 $reached = New-Object System.Collections.Generic.HashSet[string]
 [void]$reached.Add($startKey)
+foreach($ss in $startSeeds){ [void]$reached.Add($ss) }
 
 # Alle Trigger, die ueberhaupt eine Tuer schalten - einmal vorab aufgeloest.
 $allTrig = @(); $tn = 0
@@ -402,7 +420,11 @@ while ($true) {
 Write-Output "=============================================================="
 Write-Output " Progressions-Zonen: $LevelName"
 Write-Output "=============================================================="
-Write-Output "Laras Start: Raum $($lara.room), Sektor ($($lara.sectorX),$($lara.sectorZ)) -> Zone 0"
+if ($startSeeds.Count -gt 0) {
+    Write-Output "Laras Start: Raum $($START_ROOM[$LevelName]) (nach der Eingangs-Cutscene; Lara-Item liegt in Raum $($lara.room)) -> Zone 0"
+} else {
+    Write-Output "Laras Start: Raum $($lara.room), Sektor ($($lara.sectorX),$($lara.sectorZ)) -> Zone 0"
+}
 Write-Output ""
 Write-Output "--- Zonenuebergaenge (Blocker) ---"
 foreach($e in $log){

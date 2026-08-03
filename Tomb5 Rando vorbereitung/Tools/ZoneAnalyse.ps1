@@ -97,6 +97,29 @@ $SCRIPT_DOORS = @{
 $scriptDoors = @{}
 if ($SCRIPT_DOORS.ContainsKey($LevelName)) { $scriptDoors = $SCRIPT_DOORS[$LevelName] }
 
+# Tueren, die eine per-Level-Skriptfunktion (game/deltapak.cpp) ueber ein
+# Cutscene-Kommando oeffnet, statt ueber ein Object-Kommando. Anders als die
+# leere SCRIPT_DOORS-Tabelle oben ist das hier durch den Engine-Code UND die
+# Leveldaten belegt, nicht geraten:
+# rich1 Item 153 (Door Type1, Raum 89) - das anschiessbare Schloss ist eine
+# Falle (loest wahrscheinlich einen Heavy Trigger fuer einen FlipMap-Wechsel
+# aus, der gedachte Weg ist der Hammer). Der Bodentrigger in Raum 89 (1,4)
+# feuert "Cutscene 20"; cutseq_control_routines[20] in deltapak.cpp ist exakt
+# { hamgate_init, hamgate_control, hamgate_end }. hamgate_end() teleportiert
+# Lara nach (31232,-3328,48344) - praktisch identisch mit der Position von
+# Item 153 (31232,-3328,47616). hamgate_init() setzt fuer das gefundene
+# DOOR_TYPE1-Item IFL_CODEBITS, exakt derselbe Mechanismus wie bei den
+# "Flags 11111"-Tueren, nur hier per Skript statt beim Levelstart gesetzt.
+# Kein Hammer-Item (typeId 239) existiert irgendwo in rich1 - Lara braucht ihn
+# hier nicht als Inventarbedingung, der Bodentrigger allein genuegt.
+$CUTSCENE_DOORS = @{
+    'rich1' = @{ 153 = 20 }   # doorItem -> Cutscene-Index
+}
+$cutsceneDoors = @{}
+if ($CUTSCENE_DOORS.ContainsKey($LevelName)) { $cutsceneDoors = $CUTSCENE_DOORS[$LevelName] }
+$cutsceneDoorByCutscene = @{}
+foreach($kv in $cutsceneDoors.GetEnumerator()){ $cutsceneDoorByCutscene[[int]$kv.Value] = [int]$kv.Key }
+
 # Uebergaenge, die Lara schafft, der Sektorgraph aber nicht kennt: Spruenge,
 # Kletterstellen, Monkeyswing. Format "Raum,x,z" -> "Raum,x,z", beidseitig.
 # Das ist die Handkuration fuer die Klasse "Flood stoppt an der Geometrie".
@@ -299,7 +322,14 @@ function Get-TriggerRequirement($t) {
     $tk = "$($t.room),$($t.sectorX),$($t.sectorZ)"
     switch ($t.triggerType) {
         { $_ -in 'Trigger','Pad','HeavyTrigger','Combat','Dummy' } {
-            return @{ Kind='reach'; Sector=$tk; Desc="Trigger betreten ($tk)" }
+            # Cutscene-Tueren (rich1 hamgate): der Bodentrigger, der die
+            # Skript-Cutscene ausloest, sitzt auf demselben Sektor wie die Tuer
+            # selbst (89/(1,4) fuer Item 153) - derselbe Deadlock wie bei
+            # Schalter/Schloss auf dem Tuersektor, deshalb hier ebenfalls vom
+            # Nachbarsektor aus bedienbar.
+            $isCutsceneDoor = $false
+            foreach($c in $t.commands){ if ($c.type -eq 'Cutscene' -and $cutsceneDoorByCutscene.ContainsKey([int]$c.index)) { $isCutsceneDoor = $true } }
+            return @{ Kind='reach'; Sector=$tk; Operable=$isCutsceneDoor; Desc="Trigger betreten ($tk)" }
         }
         'Switch' {
             $ri = $t.refItem
@@ -383,7 +413,10 @@ foreach($ss in $startSeeds){ [void]$reached.Add($ss) }
 $allTrig = @(); $tn = 0
 foreach($t in $d.triggers){
     $hitsDoor = $false
-    foreach($c in $t.commands){ if ($c.type -eq 'Object' -and $doorSector.ContainsKey([int]$c.index)) { $hitsDoor = $true } }
+    foreach($c in $t.commands){
+        if ($c.type -eq 'Object' -and $doorSector.ContainsKey([int]$c.index)) { $hitsDoor = $true }
+        if ($c.type -eq 'Cutscene' -and $cutsceneDoorByCutscene.ContainsKey([int]$c.index)) { $hitsDoor = $true }
+    }
     if (-not $hitsDoor) { continue }
     $allTrig += ,@{ Id = $tn; T = $t; Req = (Get-TriggerRequirement $t) }
     $tn++
@@ -457,8 +490,12 @@ while ($true) {
         [void]$firedTrig.Add($e.Id)
         # Maske dieses Triggers auf alle Ziel-Tueren anrechnen.
         foreach($c in $e.T.commands){
-            if ($c.type -ne 'Object') { continue }
-            $tgt = [int]$c.index
+            $tgt = $null
+            if ($c.type -eq 'Object') { $tgt = [int]$c.index }
+            elseif ($c.type -eq 'Cutscene' -and $cutsceneDoorByCutscene.ContainsKey([int]$c.index)) {
+                $tgt = $cutsceneDoorByCutscene[[int]$c.index]
+            }
+            if ($null -eq $tgt) { continue }
             # Kabel stehen von Levelbeginn an unter Strom. Ein normaler
             # Bodentrigger auf ein Kabel schaltet es ein, nicht aus - nur ein
             # Schalter (bzw. AntiTrigger) macht stromlos. Ohne diese
@@ -467,7 +504,11 @@ while ($true) {
             if ($items.ContainsKey($tgt) -and [int]$items[$tgt].typeId -eq 98 -and
                 $e.T.triggerType -notin @('Switch','HeavySwitch','AntiTrigger','HeavyAntiTrigger')) { continue }
             if (-not $doorMask.ContainsKey($tgt)) { $doorMask[$tgt] = 0; $doorWhy[$tgt] = @() }
-            $doorMask[$tgt] = $doorMask[$tgt] -bor ([int]$e.T.mask)
+            # Cutscene-Tueren (rich1 hamgate) haben keine echte 5-Bit-Maske im
+            # Sinne von IFL_CODEBITS - hamgate_init() setzt sie direkt im Skript.
+            # Volle Maske erzwingen, sobald der Trigger einmal feuert.
+            if ($cutsceneDoorByCutscene.Values -contains $tgt -and $c.type -eq 'Cutscene') { $doorMask[$tgt] = 31 }
+            else { $doorMask[$tgt] = $doorMask[$tgt] -bor ([int]$e.T.mask) }
             $doorWhy[$tgt] += ,$e.Req
         }
     }

@@ -9,15 +9,16 @@ Zone 0 -> 1: Tuer Item 179 (typeId 304, Raum 129)  geoeffnet durch: AntiTrigger
 Zone 0 -> 1: Tuer Item 69 (typeId 314, Raum 30)  geoeffnet durch: Schalter Item 42 (Raum 23)
 Zone 0 -> 1: Tuer Item 68 (typeId 312, Raum 30)  geoeffnet durch: Schalter Item 42 (Raum 23)
 Zone 0 -> 1: Tuer Item 64 (typeId 304, Raum 28)  geoeffnet durch: AntiTrigger
+Zone 0 -> 1: Tuer Item 153 (typeId 284, Raum 89)  geoeffnet durch: Trigger betreten (89,1,4)
 Zone 0 -> 1: Tuer Item 9 (typeId 288, Raum 6)  geoeffnet durch: Trigger betreten (145,1,2)
 Zone 1 -> 2: Tuer Item 151 (typeId 314, Raum 82)  geoeffnet durch: Schalter Item 148 (Raum 82)
 Zone 1 -> 2: Tuer Item 150 (typeId 312, Raum 82)  geoeffnet durch: Schalter Item 148 (Raum 82)
 
 --- Sektoren pro Zone ---
 Zone 0:   521 Sektoren in  72 Raeumen
-Zone 1:    60 Sektoren in  10 Raeumen
+Zone 1:    61 Sektoren in  11 Raeumen
 Zone 2:    46 Sektoren in   6 Raeumen
-Nie erreicht: 829 begehbare Sektoren
+Nie erreicht: 828 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 TypeId 203: 1 Instanz(en) noetig
@@ -42,8 +43,6 @@ Tuer Item 144 (typeId 306, Raum   81) Maske  0/31
     Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
     Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
     Maske 31  Key Item8 in Schloss Item 142 (Raum 81) -> Item fehlt
-Tuer Item 153 (typeId 284, Raum   89) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
 Tuer Item 101 (typeId 288, Raum   63) Maske  0/31
     Maske 31  Puzzle Item3 in Schloss Item 100 (Raum 63) -> Item fehlt
     Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
@@ -92,6 +91,6 @@ Cutscene 24 in Raum   34 Sektor (3,3) -> NICHT ERREICHBAR
 Cutscene 24 in Raum   34 Sektor (3,4) -> NICHT ERREICHBAR
 Cutscene 24 in Raum   34 Sektor (3,5) -> NICHT ERREICHBAR
 Cutscene 4 in Raum   69 Sektor (4,7) -> NICHT ERREICHBAR
-Cutscene 20 in Raum   89 Sektor (1,4) -> NICHT ERREICHBAR
+Cutscene 20 in Raum   89 Sektor (1,4) -> Zone 1
 Cutscene 11 in Raum  130 Sektor (1,1) -> Zone 1
 EndLevel 0 in Raum  154 Sektor (1,1) -> NICHT ERREICHBAR

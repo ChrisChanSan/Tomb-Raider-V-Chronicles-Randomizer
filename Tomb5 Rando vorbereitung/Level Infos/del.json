@@ -971,7 +971,7 @@
   "triggers": [
     {
       "room": 0, "sectorX": 3, "sectorZ": 15, "floorDataIndex": 1,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 6 },
         { "type": "Object", "index": 5 },
@@ -982,14 +982,14 @@
     },
     {
       "room": 0, "sectorX": 11, "sectorZ": 5, "floorDataIndex": 12,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Cutscene", "index": 2 }
       ]
     },
     {
       "room": 2, "sectorX": 2, "sectorZ": 5, "floorDataIndex": 23,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 9 },
         { "type": "Object", "index": 8 },

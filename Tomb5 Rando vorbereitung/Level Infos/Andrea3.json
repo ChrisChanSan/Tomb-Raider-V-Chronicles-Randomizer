@@ -6897,28 +6897,28 @@
   "triggers": [
     {
       "room": 0, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 19,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 61 }
       ]
     },
     {
       "room": 0, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 22,
-      "triggerType": "Trigger", "timer": 3, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 3, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 21 }
       ]
     },
     {
       "room": 0, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 29,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 61 }
       ]
     },
     {
       "room": 0, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 32,
-      "triggerType": "Switch", "timer": 0, "oneShot": true, "mask": 31,
+      "triggerType": "Switch", "timer": 0, "oneShot": true, "mask": 31, "refItem": 0,
       "commands": [
         { "type": "Object", "index": 64 },
         { "type": "Object", "index": 65 }
@@ -6926,14 +6926,14 @@
     },
     {
       "room": 0, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 41,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 61 }
       ]
     },
     {
       "room": 1, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 110,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Flyby", "index": 0 },
         { "type": "Object", "index": 2 },
@@ -6943,7 +6943,7 @@
     },
     {
       "room": 1, "sectorX": 5, "sectorZ": 2, "floorDataIndex": 138,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 32 },
         { "type": "Object", "index": 31 }
@@ -6951,7 +6951,7 @@
     },
     {
       "room": 3, "sectorX": 5, "sectorZ": 3, "floorDataIndex": 260,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 61 },
         { "type": "Object", "index": 1 }
@@ -6959,56 +6959,56 @@
     },
     {
       "room": 3, "sectorX": 6, "sectorZ": 3, "floorDataIndex": 270,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 45 }
       ]
     },
     {
       "room": 6, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 321,
-      "triggerType": "Switch", "timer": 0, "oneShot": true, "mask": 31,
+      "triggerType": "Switch", "timer": 0, "oneShot": true, "mask": 31, "refItem": 3,
       "commands": [
         { "type": "Object", "index": 4 }
       ]
     },
     {
       "room": 10, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 407,
-      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 112 }
       ]
     },
     {
       "room": 10, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 412,
-      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 79 }
       ]
     },
     {
       "room": 10, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 415,
-      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 112 }
       ]
     },
     {
       "room": 10, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 420,
-      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 112 }
       ]
     },
     {
       "room": 11, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 435,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 31 }
       ]
     },
     {
       "room": 11, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 444,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 32 },
         { "type": "Object", "index": 31 }
@@ -7016,7 +7016,7 @@
     },
     {
       "room": 12, "sectorX": 5, "sectorZ": 2, "floorDataIndex": 468,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Camera", "index": 0 },
         { "type": "Object", "index": 2 }
@@ -7024,14 +7024,14 @@
     },
     {
       "room": 13, "sectorX": 1, "sectorZ": 18, "floorDataIndex": 544,
-      "triggerType": "HeavyAntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyAntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 13 }
       ]
     },
     {
       "room": 14, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 560,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 8 },
         { "type": "Camera", "index": 1 },
@@ -7041,7 +7041,7 @@
     },
     {
       "room": 14, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 566,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Camera", "index": 1 },
         { "type": "Object", "index": 18 },
@@ -7063,7 +7063,7 @@
     },
     {
       "room": 14, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 588,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 12 },
         { "type": "Camera", "index": 1 },
@@ -7072,7 +7072,7 @@
     },
     {
       "room": 14, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 598,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 6 },
         { "type": "Camera", "index": 1 },
@@ -7083,7 +7083,7 @@
     },
     {
       "room": 14, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 606,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 9 },
         { "type": "Camera", "index": 1 },
@@ -7094,7 +7094,7 @@
     },
     {
       "room": 14, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 614,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 11 },
         { "type": "Camera", "index": 1 },
@@ -7103,7 +7103,7 @@
     },
     {
       "room": 14, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 622,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 7 },
         { "type": "Camera", "index": 0 },
@@ -7115,7 +7115,7 @@
     },
     {
       "room": 14, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 630,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 10 },
         { "type": "Camera", "index": 0 },
@@ -7127,7 +7127,7 @@
     },
     {
       "room": 14, "sectorX": 3, "sectorZ": 3, "floorDataIndex": 638,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 14 },
         { "type": "Camera", "index": 0 },
@@ -7136,7 +7136,7 @@
     },
     {
       "room": 14, "sectorX": 4, "sectorZ": 1, "floorDataIndex": 648,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 15 },
         { "type": "Camera", "index": 0 },
@@ -7148,7 +7148,7 @@
     },
     {
       "room": 14, "sectorX": 4, "sectorZ": 2, "floorDataIndex": 656,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 18 },
         { "type": "Camera", "index": 0 },
@@ -7160,7 +7160,7 @@
     },
     {
       "room": 14, "sectorX": 4, "sectorZ": 3, "floorDataIndex": 664,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 16 },
         { "type": "Camera", "index": 0 },
@@ -7169,7 +7169,7 @@
     },
     {
       "room": 15, "sectorX": 2, "sectorZ": 5, "floorDataIndex": 695,
-      "triggerType": "Key", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Key", "timer": 0, "oneShot": false, "mask": 31, "refItem": 27,
       "commands": [
         { "type": "PlaySoundtrack", "index": 66 },
         { "type": "FlipMap", "index": 2 },
@@ -7180,28 +7180,28 @@
     },
     {
       "room": 20, "sectorX": 7, "sectorZ": 3, "floorDataIndex": 926,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 11 }
       ]
     },
     {
       "room": 21, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 967,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 32 }
       ]
     },
     {
       "room": 21, "sectorX": 3, "sectorZ": 3, "floorDataIndex": 998,
-      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 45 }
       ]
     },
     {
       "room": 24, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 1049,
-      "triggerType": "Key", "timer": 4, "oneShot": false, "mask": 31,
+      "triggerType": "Key", "timer": 4, "oneShot": false, "mask": 31, "refItem": 34,
       "commands": [
         { "type": "Flyby", "index": 5 },
         { "type": "Object", "index": 1 }
@@ -7209,14 +7209,14 @@
     },
     {
       "room": 24, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 1056,
-      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 13 }
       ]
     },
     {
       "room": 24, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 1059,
-      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 5 },
         { "type": "PlaySoundtrack", "index": 16 }
@@ -7224,7 +7224,7 @@
     },
     {
       "room": 27, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 1153,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 80 },
         { "type": "Object", "index": 81 }
@@ -7232,35 +7232,35 @@
     },
     {
       "room": 30, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1212,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 43 }
       ]
     },
     {
       "room": 30, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 1216,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 42 }
       ]
     },
     {
       "room": 30, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 1220,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 41 }
       ]
     },
     {
       "room": 30, "sectorX": 4, "sectorZ": 1, "floorDataIndex": 1224,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 44 }
       ]
     },
     {
       "room": 30, "sectorX": 5, "sectorZ": 1, "floorDataIndex": 1228,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 42 },
         { "type": "PlaySoundtrack", "index": 10 },
@@ -7276,35 +7276,35 @@
     },
     {
       "room": 30, "sectorX": 6, "sectorZ": 1, "floorDataIndex": 1244,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 39 }
       ]
     },
     {
       "room": 30, "sectorX": 7, "sectorZ": 1, "floorDataIndex": 1248,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 38 }
       ]
     },
     {
       "room": 30, "sectorX": 8, "sectorZ": 1, "floorDataIndex": 1252,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 37 }
       ]
     },
     {
       "room": 30, "sectorX": 9, "sectorZ": 1, "floorDataIndex": 1256,
-      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Dummy", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 36 }
       ]
     },
     {
       "room": 31, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 1289,
-      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Flyby", "index": 3 },
         { "type": "Object", "index": 20 },
@@ -7313,14 +7313,14 @@
     },
     {
       "room": 31, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 1294,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 46 }
       ]
     },
     {
       "room": 35, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 1401,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 44 },
         { "type": "Object", "index": 54 }
@@ -7328,91 +7328,91 @@
     },
     {
       "room": 35, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 1407,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 74 }
       ]
     },
     {
       "room": 39, "sectorX": 2, "sectorZ": 5, "floorDataIndex": 1634,
-      "triggerType": "Trigger", "timer": 2, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 2, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 27 }
       ]
     },
     {
       "room": 39, "sectorX": 3, "sectorZ": 5, "floorDataIndex": 1647,
-      "triggerType": "Trigger", "timer": 2, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 2, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 27 }
       ]
     },
     {
       "room": 39, "sectorX": 4, "sectorZ": 5, "floorDataIndex": 1662,
-      "triggerType": "Trigger", "timer": 2, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 2, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 27 }
       ]
     },
     {
       "room": 41, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 1765,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 61 }
       ]
     },
     {
       "room": 41, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 1770,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 61 }
       ]
     },
     {
       "room": 41, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 1775,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 61 }
       ]
     },
     {
       "room": 41, "sectorX": 2, "sectorZ": 4, "floorDataIndex": 1780,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 61 }
       ]
     },
     {
       "room": 41, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 1789,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 60 }
       ]
     },
     {
       "room": 41, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 1794,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 60 }
       ]
     },
     {
       "room": 41, "sectorX": 3, "sectorZ": 3, "floorDataIndex": 1797,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 60 }
       ]
     },
     {
       "room": 41, "sectorX": 3, "sectorZ": 4, "floorDataIndex": 1802,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 60 }
       ]
     },
     {
       "room": 41, "sectorX": 4, "sectorZ": 2, "floorDataIndex": 1807,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 60 },
         { "type": "Object", "index": 61 }
@@ -7420,7 +7420,7 @@
     },
     {
       "room": 41, "sectorX": 4, "sectorZ": 3, "floorDataIndex": 1811,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 60 },
         { "type": "Object", "index": 61 }
@@ -7428,7 +7428,7 @@
     },
     {
       "room": 43, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1871,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 82 },
         { "type": "Object", "index": 83 }
@@ -7436,28 +7436,28 @@
     },
     {
       "room": 44, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 1925,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 72 }
       ]
     },
     {
       "room": 49, "sectorX": 5, "sectorZ": 3, "floorDataIndex": 2416,
-      "triggerType": "Switch", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Switch", "timer": 0, "oneShot": false, "mask": 31, "refItem": 56,
       "commands": [
         { "type": "Object", "index": 46 }
       ]
     },
     {
       "room": 58, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 2940,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 60 }
       ]
     },
     {
       "room": 59, "sectorX": 3, "sectorZ": 5, "floorDataIndex": 2955,
-      "triggerType": "Pickup", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Pickup", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 62 },
         { "type": "PlaySoundtrack", "index": 53 }
@@ -7465,14 +7465,14 @@
     },
     {
       "room": 62, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 3028,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 73 }
       ]
     },
     {
       "room": 62, "sectorX": 7, "sectorZ": 3, "floorDataIndex": 3125,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 67 },
         { "type": "Object", "index": 76 },
@@ -7483,7 +7483,7 @@
     },
     {
       "room": 63, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 3158,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 60 },
         { "type": "Object", "index": 61 }
@@ -7491,7 +7491,7 @@
     },
     {
       "room": 63, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 3166,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 60 },
         { "type": "Object", "index": 61 }
@@ -7499,7 +7499,7 @@
     },
     {
       "room": 63, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 3176,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 60 },
         { "type": "Object", "index": 61 }
@@ -7507,21 +7507,21 @@
     },
     {
       "room": 65, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 3290,
-      "triggerType": "Pad", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Pad", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 67 }
       ]
     },
     {
       "room": 65, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 3293,
-      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "AntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 70 }
       ]
     },
     {
       "room": 70, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 3336,
-      "triggerType": "Pickup", "timer": 1, "oneShot": false, "mask": 31,
+      "triggerType": "Pickup", "timer": 1, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 68 },
         { "type": "EndLevel", "index": 0 }
@@ -7529,7 +7529,7 @@
     },
     {
       "room": 75, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 3418,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 69 },
         { "type": "Cutscene", "index": 41 }
@@ -7537,21 +7537,21 @@
     },
     {
       "room": 76, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 3444,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 70 }
       ]
     },
     {
       "room": 76, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 3461,
-      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": true, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 66 }
       ]
     },
     {
       "room": 76, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 3476,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 74 },
         { "type": "Object", "index": 73 }
@@ -7559,70 +7559,70 @@
     },
     {
       "room": 78, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 3500,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "FlipMap", "index": 5 }
       ]
     },
     {
       "room": 81, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 3555,
-      "triggerType": "Pad", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Pad", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 76 }
       ]
     },
     {
       "room": 85, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 3694,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 55 }
       ]
     },
     {
       "room": 86, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 3727,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 88 }
       ]
     },
     {
       "room": 86, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 3732,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 85 }
       ]
     },
     {
       "room": 89, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 3855,
-      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 112 }
       ]
     },
     {
       "room": 89, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 3860,
-      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 112 }
       ]
     },
     {
       "room": 89, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 3865,
-      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 112 }
       ]
     },
     {
       "room": 90, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 3884,
-      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 112 }
       ]
     },
     {
       "room": 90, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 3891,
-      "triggerType": "HeavyAntiTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyAntiTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 80 },
         { "type": "Object", "index": 81 }
@@ -7630,21 +7630,21 @@
     },
     {
       "room": 90, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 3895,
-      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 112 }
       ]
     },
     {
       "room": 90, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 3898,
-      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "HeavyTrigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 103 }
       ]
     },
     {
       "room": 95, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 3935,
-      "triggerType": "Switch", "timer": 0, "oneShot": true, "mask": 31,
+      "triggerType": "Switch", "timer": 0, "oneShot": true, "mask": 31, "refItem": 87,
       "commands": [
         { "type": "Object", "index": 89 },
         { "type": "Object", "index": 90 }
@@ -7652,21 +7652,21 @@
     },
     {
       "room": 100, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 3984,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 25 }
       ]
     },
     {
       "room": 100, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 3991,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 25 }
       ]
     },
     {
       "room": 102, "sectorX": 3, "sectorZ": 4, "floorDataIndex": 4038,
-      "triggerType": "Key", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Key", "timer": 0, "oneShot": false, "mask": 31, "refItem": 93,
       "commands": [
         { "type": "Object", "index": 25 },
         { "type": "Object", "index": 24 },
@@ -7676,7 +7676,7 @@
     },
     {
       "room": 108, "sectorX": 3, "sectorZ": 4, "floorDataIndex": 4277,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 57 },
         { "type": "Object", "index": 29 },
@@ -7685,7 +7685,7 @@
     },
     {
       "room": 108, "sectorX": 3, "sectorZ": 5, "floorDataIndex": 4282,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 57 },
         { "type": "Object", "index": 29 },
@@ -7694,7 +7694,7 @@
     },
     {
       "room": 108, "sectorX": 3, "sectorZ": 6, "floorDataIndex": 4287,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 57 },
         { "type": "Object", "index": 29 },
@@ -7703,7 +7703,7 @@
     },
     {
       "room": 108, "sectorX": 4, "sectorZ": 4, "floorDataIndex": 4294,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 57 },
         { "type": "Object", "index": 29 },
@@ -7712,7 +7712,7 @@
     },
     {
       "room": 118, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 4583,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 95 },
         { "type": "Object", "index": 96 }
@@ -7720,42 +7720,42 @@
     },
     {
       "room": 129, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 4705,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 109 }
       ]
     },
     {
       "room": 129, "sectorX": 4, "sectorZ": 2, "floorDataIndex": 4712,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 108 }
       ]
     },
     {
       "room": 129, "sectorX": 6, "sectorZ": 2, "floorDataIndex": 4731,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 107 }
       ]
     },
     {
       "room": 129, "sectorX": 7, "sectorZ": 2, "floorDataIndex": 4742,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 106 }
       ]
     },
     {
       "room": 129, "sectorX": 8, "sectorZ": 2, "floorDataIndex": 4751,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 105 }
       ]
     },
     {
       "room": 129, "sectorX": 9, "sectorZ": 2, "floorDataIndex": 4758,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 104 }
       ]

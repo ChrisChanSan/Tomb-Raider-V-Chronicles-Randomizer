@@ -24,6 +24,14 @@ Tomb5 Steam Version/*.exe
 Tomb5 Steam Version/*.dat
 Tomb5 Steam Version/*.tag
 Tomb5 Steam Version/log.txt
+Tomb5 Steam Version/savegame.*
+Tomb5 Steam Version/*.bak
+
+# Zweite unangetastete Kopie der Spieldaten (Referenz zum Vergleichen)
+Vanilla Tomb Raider (V) Chronicles Steam Version ENG/
+
+# Transkript-Dump, kein Projektinhalt
+full_conversation.txt
 
 # VS user/local files
 *.vcxproj.user

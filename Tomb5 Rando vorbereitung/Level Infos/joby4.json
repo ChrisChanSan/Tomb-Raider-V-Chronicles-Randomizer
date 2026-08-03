@@ -18469,371 +18469,371 @@
   "triggers": [
     {
       "room": 6, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 251,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 1, "sectorZ": 4, "floorDataIndex": 256,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 1, "sectorZ": 5, "floorDataIndex": 261,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 1, "sectorZ": 6, "floorDataIndex": 266,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 1, "sectorZ": 7, "floorDataIndex": 269,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 1, "sectorZ": 8, "floorDataIndex": 274,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 1, "sectorZ": 9, "floorDataIndex": 279,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 292,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 2, "sectorZ": 4, "floorDataIndex": 297,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 2, "sectorZ": 5, "floorDataIndex": 302,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 2, "sectorZ": 6, "floorDataIndex": 307,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 2, "sectorZ": 7, "floorDataIndex": 310,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 2, "sectorZ": 8, "floorDataIndex": 313,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 2, "sectorZ": 9, "floorDataIndex": 316,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 3, "sectorZ": 3, "floorDataIndex": 329,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 3, "sectorZ": 4, "floorDataIndex": 334,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 3, "sectorZ": 5, "floorDataIndex": 339,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 3, "sectorZ": 6, "floorDataIndex": 344,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 3, "sectorZ": 7, "floorDataIndex": 349,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 3, "sectorZ": 8, "floorDataIndex": 352,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 3, "sectorZ": 9, "floorDataIndex": 355,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 4, "sectorZ": 3, "floorDataIndex": 366,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 4, "sectorZ": 4, "floorDataIndex": 371,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 4, "sectorZ": 5, "floorDataIndex": 376,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 4, "sectorZ": 6, "floorDataIndex": 381,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 4, "sectorZ": 7, "floorDataIndex": 386,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 4, "sectorZ": 8, "floorDataIndex": 391,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 4, "sectorZ": 9, "floorDataIndex": 394,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 5, "sectorZ": 3, "floorDataIndex": 405,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 5, "sectorZ": 4, "floorDataIndex": 410,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 5, "sectorZ": 5, "floorDataIndex": 415,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 5, "sectorZ": 6, "floorDataIndex": 420,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 5, "sectorZ": 7, "floorDataIndex": 425,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 5, "sectorZ": 8, "floorDataIndex": 430,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 5, "sectorZ": 9, "floorDataIndex": 435,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 6, "sectorZ": 3, "floorDataIndex": 448,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 6, "sectorZ": 4, "floorDataIndex": 455,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 6, "sectorZ": 5, "floorDataIndex": 462,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 6, "sectorZ": 6, "floorDataIndex": 467,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 6, "sectorZ": 7, "floorDataIndex": 472,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 6, "sectorZ": 8, "floorDataIndex": 477,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 6, "sectorZ": 9, "floorDataIndex": 482,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 7, "sectorZ": 3, "floorDataIndex": 493,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 7, "sectorZ": 4, "floorDataIndex": 498,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 7, "sectorZ": 5, "floorDataIndex": 505,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 7, "sectorZ": 6, "floorDataIndex": 512,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 7, "sectorZ": 7, "floorDataIndex": 517,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 7, "sectorZ": 8, "floorDataIndex": 522,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 6, "sectorX": 7, "sectorZ": 9, "floorDataIndex": 527,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 5 }
       ]
     },
     {
       "room": 11, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 732,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 9 }
       ]
     },
     {
       "room": 11, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 737,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 9 }
       ]
     },
     {
       "room": 11, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 742,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 9 }
       ]
     },
     {
       "room": 11, "sectorX": 1, "sectorZ": 4, "floorDataIndex": 748,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 61 },
         { "type": "UnderwaterCurrent", "index": 9 }
@@ -18841,7 +18841,7 @@
     },
     {
       "room": 11, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 760,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 9 }
@@ -18849,7 +18849,7 @@
     },
     {
       "room": 11, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 766,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 9 }
@@ -18857,7 +18857,7 @@
     },
     {
       "room": 11, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 772,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 9 }
@@ -18865,7 +18865,7 @@
     },
     {
       "room": 11, "sectorX": 2, "sectorZ": 4, "floorDataIndex": 779,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 61 },
         { "type": "Object", "index": 0 },
@@ -18874,7 +18874,7 @@
     },
     {
       "room": 12, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 838,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 112 },
         { "type": "Object", "index": 27 },
@@ -18884,112 +18884,112 @@
     },
     {
       "room": 14, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 908,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 2 }
       ]
     },
     {
       "room": 14, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 913,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 2 }
       ]
     },
     {
       "room": 14, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 918,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 2 }
       ]
     },
     {
       "room": 14, "sectorX": 1, "sectorZ": 4, "floorDataIndex": 923,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 1 }
       ]
     },
     {
       "room": 14, "sectorX": 1, "sectorZ": 5, "floorDataIndex": 928,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 1 }
       ]
     },
     {
       "room": 14, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 939,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 2 }
       ]
     },
     {
       "room": 14, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 944,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 2 }
       ]
     },
     {
       "room": 14, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 949,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 2 }
       ]
     },
     {
       "room": 14, "sectorX": 2, "sectorZ": 4, "floorDataIndex": 954,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 1 }
       ]
     },
     {
       "room": 14, "sectorX": 2, "sectorZ": 5, "floorDataIndex": 957,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 1 }
       ]
     },
     {
       "room": 14, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 968,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 2 }
       ]
     },
     {
       "room": 14, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 973,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 2 }
       ]
     },
     {
       "room": 14, "sectorX": 3, "sectorZ": 3, "floorDataIndex": 978,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 2 }
       ]
     },
     {
       "room": 14, "sectorX": 3, "sectorZ": 4, "floorDataIndex": 983,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 1 }
       ]
     },
     {
       "room": 14, "sectorX": 3, "sectorZ": 5, "floorDataIndex": 988,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 1 }
       ]
     },
     {
       "room": 14, "sectorX": 4, "sectorZ": 1, "floorDataIndex": 1001,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -18997,7 +18997,7 @@
     },
     {
       "room": 14, "sectorX": 4, "sectorZ": 2, "floorDataIndex": 1007,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19005,7 +19005,7 @@
     },
     {
       "room": 14, "sectorX": 4, "sectorZ": 3, "floorDataIndex": 1013,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19013,7 +19013,7 @@
     },
     {
       "room": 14, "sectorX": 5, "sectorZ": 1, "floorDataIndex": 1029,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19021,7 +19021,7 @@
     },
     {
       "room": 14, "sectorX": 5, "sectorZ": 2, "floorDataIndex": 1035,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19029,7 +19029,7 @@
     },
     {
       "room": 14, "sectorX": 5, "sectorZ": 3, "floorDataIndex": 1041,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19037,112 +19037,112 @@
     },
     {
       "room": 26, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 1707,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 4 }
       ]
     },
     {
       "room": 26, "sectorX": 4, "sectorZ": 1, "floorDataIndex": 1740,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 0 }
       ]
     },
     {
       "room": 26, "sectorX": 4, "sectorZ": 2, "floorDataIndex": 1745,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 0 }
       ]
     },
     {
       "room": 35, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 2316,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 35, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 2321,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 35, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 2326,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 39, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 2443,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Cutscene", "index": 40 }
       ]
     },
     {
       "room": 50, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 3094,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 0 }
       ]
     },
     {
       "room": 50, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 3097,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 }
       ]
     },
     {
       "room": 50, "sectorX": 1, "sectorZ": 4, "floorDataIndex": 3102,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 }
       ]
     },
     {
       "room": 50, "sectorX": 1, "sectorZ": 5, "floorDataIndex": 3107,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 15 }
       ]
     },
     {
       "room": 55, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 3472,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 }
       ]
     },
     {
       "room": 55, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 3477,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 15 }
       ]
     },
     {
       "room": 55, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 3496,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 }
       ]
     },
     {
       "room": 89, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5127,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 4 }
       ]
     },
     {
       "room": 90, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5172,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "ClearBodies", "index": 0 },
@@ -19151,7 +19151,7 @@
     },
     {
       "room": 90, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 5179,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "ClearBodies", "index": 0 },
@@ -19160,7 +19160,7 @@
     },
     {
       "room": 90, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 5192,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19168,364 +19168,364 @@
     },
     {
       "room": 90, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 5198,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 7 }
       ]
     },
     {
       "room": 92, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5333,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 5338,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 5353,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 5358,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 5363,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 2, "sectorZ": 4, "floorDataIndex": 5368,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 2, "sectorZ": 5, "floorDataIndex": 5373,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 5384,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 5389,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 3, "sectorZ": 3, "floorDataIndex": 5394,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 3, "sectorZ": 4, "floorDataIndex": 5399,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 3, "sectorZ": 5, "floorDataIndex": 5404,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 4, "sectorZ": 1, "floorDataIndex": 5415,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 4, "sectorZ": 2, "floorDataIndex": 5420,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 4, "sectorZ": 3, "floorDataIndex": 5425,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 4, "sectorZ": 4, "floorDataIndex": 5430,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 4, "sectorZ": 5, "floorDataIndex": 5435,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 4, "sectorZ": 6, "floorDataIndex": 5440,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 6 }
       ]
     },
     {
       "room": 92, "sectorX": 4, "sectorZ": 7, "floorDataIndex": 5445,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 6 }
       ]
     },
     {
       "room": 92, "sectorX": 5, "sectorZ": 1, "floorDataIndex": 5454,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 5, "sectorZ": 2, "floorDataIndex": 5459,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 5, "sectorZ": 3, "floorDataIndex": 5462,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 5, "sectorZ": 4, "floorDataIndex": 5465,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 5, "sectorZ": 5, "floorDataIndex": 5470,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 5, "sectorZ": 6, "floorDataIndex": 5475,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 6 }
       ]
     },
     {
       "room": 92, "sectorX": 5, "sectorZ": 7, "floorDataIndex": 5480,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 6 }
       ]
     },
     {
       "room": 92, "sectorX": 6, "sectorZ": 1, "floorDataIndex": 5493,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 6, "sectorZ": 2, "floorDataIndex": 5498,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 6, "sectorZ": 3, "floorDataIndex": 5501,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 6, "sectorZ": 4, "floorDataIndex": 5504,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 6, "sectorZ": 5, "floorDataIndex": 5509,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 6, "sectorZ": 6, "floorDataIndex": 5514,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 6 }
       ]
     },
     {
       "room": 92, "sectorX": 6, "sectorZ": 7, "floorDataIndex": 5519,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 6 }
       ]
     },
     {
       "room": 92, "sectorX": 7, "sectorZ": 1, "floorDataIndex": 5530,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 7, "sectorZ": 2, "floorDataIndex": 5535,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 7, "sectorZ": 3, "floorDataIndex": 5540,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 7, "sectorZ": 4, "floorDataIndex": 5543,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 7, "sectorZ": 5, "floorDataIndex": 5546,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 8, "sectorZ": 3, "floorDataIndex": 5563,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 8, "sectorZ": 4, "floorDataIndex": 5568,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 92, "sectorX": 8, "sectorZ": 5, "floorDataIndex": 5573,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 95, "sectorX": 5, "sectorZ": 4, "floorDataIndex": 5802,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 95, "sectorX": 5, "sectorZ": 5, "floorDataIndex": 5807,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 95, "sectorX": 6, "sectorZ": 4, "floorDataIndex": 5820,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 95, "sectorX": 6, "sectorZ": 5, "floorDataIndex": 5825,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 3 }
       ]
     },
     {
       "room": 95, "sectorX": 7, "sectorZ": 7, "floorDataIndex": 5862,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 6 }
       ]
     },
     {
       "room": 95, "sectorX": 7, "sectorZ": 8, "floorDataIndex": 5867,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 6 }
       ]
     },
     {
       "room": 95, "sectorX": 8, "sectorZ": 7, "floorDataIndex": 5882,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 6 }
       ]
     },
     {
       "room": 95, "sectorX": 8, "sectorZ": 8, "floorDataIndex": 5887,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 6 }
       ]
     },
     {
       "room": 96, "sectorX": 1, "sectorZ": 1, "floorDataIndex": 5916,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 }
       ]
     },
     {
       "room": 96, "sectorX": 1, "sectorZ": 2, "floorDataIndex": 5921,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19533,7 +19533,7 @@
     },
     {
       "room": 96, "sectorX": 1, "sectorZ": 3, "floorDataIndex": 5927,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19541,7 +19541,7 @@
     },
     {
       "room": 96, "sectorX": 1, "sectorZ": 4, "floorDataIndex": 5933,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19549,14 +19549,14 @@
     },
     {
       "room": 96, "sectorX": 2, "sectorZ": 1, "floorDataIndex": 5945,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 }
       ]
     },
     {
       "room": 96, "sectorX": 2, "sectorZ": 2, "floorDataIndex": 5950,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19564,7 +19564,7 @@
     },
     {
       "room": 96, "sectorX": 2, "sectorZ": 3, "floorDataIndex": 5956,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19572,7 +19572,7 @@
     },
     {
       "room": 96, "sectorX": 2, "sectorZ": 4, "floorDataIndex": 5962,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19580,7 +19580,7 @@
     },
     {
       "room": 96, "sectorX": 3, "sectorZ": 1, "floorDataIndex": 5974,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19588,7 +19588,7 @@
     },
     {
       "room": 96, "sectorX": 3, "sectorZ": 2, "floorDataIndex": 5980,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19596,7 +19596,7 @@
     },
     {
       "room": 96, "sectorX": 3, "sectorZ": 3, "floorDataIndex": 5986,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19604,7 +19604,7 @@
     },
     {
       "room": 96, "sectorX": 3, "sectorZ": 4, "floorDataIndex": 5990,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19612,7 +19612,7 @@
     },
     {
       "room": 96, "sectorX": 4, "sectorZ": 1, "floorDataIndex": 6002,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19620,7 +19620,7 @@
     },
     {
       "room": 96, "sectorX": 4, "sectorZ": 2, "floorDataIndex": 6008,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19628,7 +19628,7 @@
     },
     {
       "room": 96, "sectorX": 4, "sectorZ": 3, "floorDataIndex": 6014,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19636,7 +19636,7 @@
     },
     {
       "room": 96, "sectorX": 4, "sectorZ": 4, "floorDataIndex": 6020,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 7 }
@@ -19644,63 +19644,63 @@
     },
     {
       "room": 96, "sectorX": 5, "sectorZ": 1, "floorDataIndex": 6032,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 4 }
       ]
     },
     {
       "room": 96, "sectorX": 5, "sectorZ": 2, "floorDataIndex": 6037,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 4 }
       ]
     },
     {
       "room": 96, "sectorX": 5, "sectorZ": 3, "floorDataIndex": 6042,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 4 }
       ]
     },
     {
       "room": 96, "sectorX": 5, "sectorZ": 4, "floorDataIndex": 6047,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 4 }
       ]
     },
     {
       "room": 96, "sectorX": 6, "sectorZ": 1, "floorDataIndex": 6058,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 4 }
       ]
     },
     {
       "room": 96, "sectorX": 6, "sectorZ": 2, "floorDataIndex": 6063,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 4 }
       ]
     },
     {
       "room": 96, "sectorX": 6, "sectorZ": 3, "floorDataIndex": 6068,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 4 }
       ]
     },
     {
       "room": 96, "sectorX": 6, "sectorZ": 4, "floorDataIndex": 6073,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 4 }
       ]
     },
     {
       "room": 123, "sectorX": 1, "sectorZ": 6, "floorDataIndex": 8448,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 104 },
         { "type": "Cutscene", "index": 65 },
@@ -19730,7 +19730,7 @@
     },
     {
       "room": 123, "sectorX": 1, "sectorZ": 7, "floorDataIndex": 8474,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 104 },
         { "type": "Cutscene", "index": 65 }
@@ -19738,7 +19738,7 @@
     },
     {
       "room": 123, "sectorX": 1, "sectorZ": 14, "floorDataIndex": 8488,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 9 }
@@ -19746,7 +19746,7 @@
     },
     {
       "room": 123, "sectorX": 1, "sectorZ": 15, "floorDataIndex": 8494,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 9 }
@@ -19754,7 +19754,7 @@
     },
     {
       "room": 123, "sectorX": 1, "sectorZ": 16, "floorDataIndex": 8500,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 9 }
@@ -19762,7 +19762,7 @@
     },
     {
       "room": 123, "sectorX": 1, "sectorZ": 17, "floorDataIndex": 8506,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 9 }
@@ -19770,7 +19770,7 @@
     },
     {
       "room": 123, "sectorX": 1, "sectorZ": 18, "floorDataIndex": 8513,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "PlaySoundtrack", "index": 61 },
         { "type": "ClearBodies", "index": 0 },
@@ -19779,7 +19779,7 @@
     },
     {
       "room": 123, "sectorX": 2, "sectorZ": 14, "floorDataIndex": 8550,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 9 }
@@ -19787,7 +19787,7 @@
     },
     {
       "room": 123, "sectorX": 2, "sectorZ": 15, "floorDataIndex": 8556,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 9 }
@@ -19795,7 +19795,7 @@
     },
     {
       "room": 123, "sectorX": 2, "sectorZ": 16, "floorDataIndex": 8562,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 9 }
@@ -19803,7 +19803,7 @@
     },
     {
       "room": 123, "sectorX": 2, "sectorZ": 17, "floorDataIndex": 8568,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 9 }
@@ -19811,7 +19811,7 @@
     },
     {
       "room": 123, "sectorX": 2, "sectorZ": 18, "floorDataIndex": 8574,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 9 }
@@ -19819,154 +19819,154 @@
     },
     {
       "room": 123, "sectorX": 3, "sectorZ": 14, "floorDataIndex": 8614,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 9 }
       ]
     },
     {
       "room": 123, "sectorX": 3, "sectorZ": 15, "floorDataIndex": 8617,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 9 }
       ]
     },
     {
       "room": 123, "sectorX": 3, "sectorZ": 16, "floorDataIndex": 8622,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 9 }
       ]
     },
     {
       "room": 123, "sectorX": 3, "sectorZ": 17, "floorDataIndex": 8627,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 9 }
       ]
     },
     {
       "room": 123, "sectorX": 3, "sectorZ": 18, "floorDataIndex": 8632,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 9 }
       ]
     },
     {
       "room": 123, "sectorX": 4, "sectorZ": 14, "floorDataIndex": 8677,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 4, "sectorZ": 15, "floorDataIndex": 8680,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 4, "sectorZ": 16, "floorDataIndex": 8685,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 4, "sectorZ": 17, "floorDataIndex": 8690,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 5, "sectorZ": 14, "floorDataIndex": 8749,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 5, "sectorZ": 15, "floorDataIndex": 8754,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 5, "sectorZ": 16, "floorDataIndex": 8759,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 5, "sectorZ": 17, "floorDataIndex": 8764,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 6, "sectorZ": 14, "floorDataIndex": 8819,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 6, "sectorZ": 15, "floorDataIndex": 8824,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 6, "sectorZ": 16, "floorDataIndex": 8829,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 6, "sectorZ": 17, "floorDataIndex": 8834,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 7, "sectorZ": 14, "floorDataIndex": 8871,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 7, "sectorZ": 15, "floorDataIndex": 8876,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 7, "sectorZ": 16, "floorDataIndex": 8881,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 7, "sectorZ": 17, "floorDataIndex": 8886,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 8 }
       ]
     },
     {
       "room": 123, "sectorX": 8, "sectorZ": 14, "floorDataIndex": 8925,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 0 }
@@ -19974,7 +19974,7 @@
     },
     {
       "room": 123, "sectorX": 8, "sectorZ": 15, "floorDataIndex": 8931,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 0 }
@@ -19982,7 +19982,7 @@
     },
     {
       "room": 123, "sectorX": 8, "sectorZ": 16, "floorDataIndex": 8935,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 0 }
@@ -19990,7 +19990,7 @@
     },
     {
       "room": 123, "sectorX": 8, "sectorZ": 17, "floorDataIndex": 8941,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "ClearBodies", "index": 0 },
         { "type": "UnderwaterCurrent", "index": 0 }
@@ -19998,14 +19998,14 @@
     },
     {
       "room": 123, "sectorX": 8, "sectorZ": 18, "floorDataIndex": 8947,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 0 }
       ]
     },
     {
       "room": 123, "sectorX": 9, "sectorZ": 14, "floorDataIndex": 8980,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 13 },
         { "type": "UnderwaterCurrent", "index": 0 }
@@ -20013,7 +20013,7 @@
     },
     {
       "room": 123, "sectorX": 9, "sectorZ": 15, "floorDataIndex": 8986,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 13 },
         { "type": "UnderwaterCurrent", "index": 0 }
@@ -20021,7 +20021,7 @@
     },
     {
       "room": 123, "sectorX": 9, "sectorZ": 16, "floorDataIndex": 8992,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 13 },
         { "type": "UnderwaterCurrent", "index": 0 }
@@ -20029,7 +20029,7 @@
     },
     {
       "room": 123, "sectorX": 9, "sectorZ": 17, "floorDataIndex": 8998,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "Object", "index": 13 },
         { "type": "UnderwaterCurrent", "index": 0 }
@@ -20037,42 +20037,42 @@
     },
     {
       "room": 123, "sectorX": 9, "sectorZ": 18, "floorDataIndex": 9004,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 0 }
       ]
     },
     {
       "room": 123, "sectorX": 10, "sectorZ": 14, "floorDataIndex": 9045,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 0 }
       ]
     },
     {
       "room": 123, "sectorX": 10, "sectorZ": 15, "floorDataIndex": 9050,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 0 }
       ]
     },
     {
       "room": 123, "sectorX": 10, "sectorZ": 16, "floorDataIndex": 9055,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 0 }
       ]
     },
     {
       "room": 123, "sectorX": 10, "sectorZ": 17, "floorDataIndex": 9060,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 0 }
       ]
     },
     {
       "room": 123, "sectorX": 10, "sectorZ": 18, "floorDataIndex": 9065,
-      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31,
+      "triggerType": "Trigger", "timer": 0, "oneShot": false, "mask": 31, "refItem": null,
       "commands": [
         { "type": "UnderwaterCurrent", "index": 0 }
       ]

@@ -114,6 +114,16 @@ $SCRIPT_DOORS = @{
     # joby3: proximity-/verhaltensbasiert, nicht aus Sektor-/Item-Daten ableitbar.
     # User-Entscheidung, analog zu joby3: Raum erreicht = Tuer gilt als offen.
     'rich1' = @{ 84 = 34 }
+    # Andrea3: der Roman God (Item 79, typeId 61, Raum 90, Sektor 2,3) steht
+    # exakt auf dem HeavyTrigger, der Tuer 103 oeffnet (Object:103, mask 31) -
+    # er faellt beim Sterben buchstaeblich auf seinen eigenen Ausloeser. Anders
+    # als Chef/Scientist ist das kein Stealth-/Anvisier-Sonderfall, sondern ein
+    # normaler bekaempfbarer Boss (kein bekannter Unsterblichkeits-Bug); die
+    # Regel bildet trotzdem denselben Fall ab, weil ein NPC-Tod nicht als
+    # "Lara erreicht Sektor X" modelliert werden kann. Kette danach laut User:
+    # Tuer 103 -> Key Item2 (Raum 119) -> Key-Schloss Raum 102 -> Tuer 77
+    # (Raum 89) -> Levelende-Bereich (EndLevel-Trigger, Raum 70).
+    'Andrea3' = @{ 103 = 90 }
 }
 $scriptDoors = @{}
 if ($SCRIPT_DOORS.ContainsKey($LevelName)) { $scriptDoors = $SCRIPT_DOORS[$LevelName] }
@@ -170,6 +180,10 @@ $REUSABLE_KEYS = @{
 # Kulisse erkennbar.
 $CAMERA_ROOMS = @{
     'joby3' = @(4,10,11,94,96,97,114,140,185)
+    # Andrea3 Raeume 73/74: je 9 Sektoren, komplett leer (keine Items), isoliert.
+    # User: "Ueberbleibsel wie in Andrea2, da war wohl mal was geplant" - Cut
+    # Content, nicht zum Betreten gedacht.
+    'Andrea3' = @(73,74)
 }
 $cameraRooms = @( if($CAMERA_ROOMS.ContainsKey($LevelName)){ $CAMERA_ROOMS[$LevelName] } )
 $reusableKeys = @($REUSABLE_KEYS_GLOBAL) + @( if($REUSABLE_KEYS.ContainsKey($LevelName)){ $REUSABLE_KEYS[$LevelName] } )
@@ -392,7 +406,15 @@ function Get-TriggerRequirement($t) {
             } elseif ($ht -ge $PUZZLE_HOLE_BASE -and $ht -lt ($PUZZLE_HOLE_BASE+8)) {
                 $n = $ht - $PUZZLE_HOLE_BASE; $needType = $PUZZLE_ITEM_BASE + $n; $label = "Puzzle Item$($n+1)"
             }
-            return @{ Kind='item'; Sector=$tk; NeedItemType=$needType; Desc="$label in Schloss Item $ri (Raum $($hole.room))" }
+            # Operable, wie beim Schalter: KeyHoleCollision (game/pickup.cpp:594)
+            # prueft eine Naeherungs-/Ausrichtungszone (TestLaraPosition mit
+            # KeyHoleBounds), Lara muss nicht auf dem exakten Sektor des
+            # Schlosses stehen. Ohne diese Angabe deadlockt jedes Schloss, das
+            # auf demselben Sektor wie seine eigene Tuer sitzt (Andrea3:
+            # Keyhole1, Item 27, Raum 15/(2,5) steht auf einem tuerblockierten
+            # Sektor) - derselbe Fehler, der beim Switch-Fall schon behoben war,
+            # hier aber im Hauptzweig (aufgeloestes Schloss) vergessen wurde.
+            return @{ Kind='item'; Sector=$tk; Operable=$true; NeedItemType=$needType; Desc="$label in Schloss Item $ri (Raum $($hole.room))" }
         }
         'Pickup' {
             $ri = $t.refItem

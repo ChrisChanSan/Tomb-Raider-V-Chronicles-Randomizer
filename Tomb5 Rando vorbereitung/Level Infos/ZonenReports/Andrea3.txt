@@ -12,37 +12,41 @@ Zone 2 -> 3: Tuer Item 66 (typeId 284, Raum 65)  geoeffnet durch: Trigger betret
 Zone 2 -> 3: Tuer Item 54 (typeId 284, Raum 35)  geoeffnet durch: Trigger betreten (35,2,2)
 Zone 2 -> 3: Tuer Item 88 (typeId 284, Raum 96)  geoeffnet durch: Trigger betreten (86,1,1)
 Zone 2 -> 3: Tuer Item 82 (typeId 284, Raum 93)  geoeffnet durch: Trigger betreten (43,1,1)
+Zone 3 -> 4: Tuer Item 25 (typeId 302, Raum 15)  geoeffnet durch: Key Item1 in Schloss Item 27 (Raum 15)
+Zone 3 -> 4: Tuer Item 24 (typeId 300, Raum 15)  geoeffnet durch: Key Item1 in Schloss Item 27 (Raum 15)
 Zone 3 -> 4: Tuer Item 90 (typeId 284, Raum 99)  geoeffnet durch: Schalter Item 87 (Raum 95)
 Zone 3 -> 4: Tuer Item 89 (typeId 284, Raum 98)  geoeffnet durch: Schalter Item 87 (Raum 95)
+Zone 4 -> 5: Tuer Item 103 (typeId 284, Raum 121)  geoeffnet durch: Trigger betreten (90,2,3)
+Zone 4 -> 5: Tuer Item 103 (typeId 284, Raum 121)  geoeffnet durch: Skript-Ereignis (Raum 90 erreicht)
+Zone 5 -> 6: Tuer Item 94 (typeId 302, Raum 102)  geoeffnet durch: Key Item2 in Schloss Item 93 (Raum 102)
+Zone 5 -> 6: Tuer Item 77 (typeId 300, Raum 89)  geoeffnet durch: Key Item2 in Schloss Item 93 (Raum 102)
 
 --- Sektoren pro Zone ---
 Zone 0:   214 Sektoren in  20 Raeumen
 Zone 1:    33 Sektoren in   5 Raeumen
 Zone 2:   947 Sektoren in  50 Raeumen
 Zone 3:   310 Sektoren in  29 Raeumen
-Zone 4:    22 Sektoren in   3 Raeumen
-Nie erreicht: 445 begehbare Sektoren
+Zone 4:   302 Sektoren in  22 Raeumen
+Zone 5:    21 Sektoren in   2 Raeumen
+Zone 6:    89 Sektoren in   9 Raeumen
+Nie erreicht: 37 begehbare Sektoren
+  (zusaetzlich 18 Sektoren in 2 reinen Kulissenraeumen, nicht mitgezaehlt)
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+TypeId 196: 1 Instanz(en) noetig
+    Instanz 1 -> muss in Zone <= 3 liegen  (Key Item1 in Schloss Item 27 (Raum 15))
+    Vanilla: 1 Instanz(en) vorhanden
+      Item  28 in Raum   15 -> Zone 3            [OK]
+TypeId 197: 1 Instanz(en) noetig
+    Instanz 1 -> muss in Zone <= 5 liegen  (Key Item2 in Schloss Item 93 (Raum 102))
+    Vanilla: 1 Instanz(en) vorhanden
+      Item 101 in Raum  119 -> Zone 5            [OK]
 
 --- Warum kam der Flood nicht weiter? ---
-Tuer Item  25 (typeId 302, Raum   15) Maske  0/31
-    Maske 31  Key Item1 in Schloss Item 27 (Raum 15) -> Triggersektor nicht erreichbar
-    Maske 31  Trigger betreten (100,1,2)       -> Triggersektor nicht erreichbar
-    Maske 31  Trigger betreten (100,2,2)       -> Triggersektor nicht erreichbar
-    Maske 31  Key Item2 in Schloss Item 93 (Raum 102) -> Triggersektor nicht erreichbar
-Tuer Item  24 (typeId 300, Raum   15) Maske  0/31
-    Maske 31  Key Item1 in Schloss Item 27 (Raum 15) -> Triggersektor nicht erreichbar
-    Maske 31  Key Item2 in Schloss Item 93 (Raum 102) -> Triggersektor nicht erreichbar
+Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
+nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
 
 --- Groesste unerreichte Gebiete ---
-Gebiet mit   390 Sektoren in  27 Raeumen
-   Raeume: 10, 15, 18, 28, 55, 56, 70, 83, 85, 87, 88, 89, 90, 100, 101, 102, 103, 104, 105, 110
-           ... und 7 weitere
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 300x2, 302x2, 59x1, 258x1, 196x1, 220x1, 61x1, 134x2, 259x1, 197x1, 223x1, 284x1, 117x6
 Gebiet mit    18 Sektoren in   1 Raeumen
    Raeume: 13
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
@@ -50,12 +54,17 @@ Gebiet mit    18 Sektoren in   1 Raeumen
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
    Bespielbare Objekte darin: 114x1
 Gebiet mit     9 Sektoren in   1 Raeumen
-   Raeume: 73
+   Raeume: 71
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
 Gebiet mit     9 Sektoren in   1 Raeumen
-   Raeume: 74
+   Raeume: 72
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 77
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
@@ -64,5 +73,5 @@ Gebiet mit     9 Sektoren in   1 Raeumen
 Keine hinterlegt.
 
 --- Selbsttest: Level durchspielbar? ---
-EndLevel 0 in Raum   70 Sektor (1,2) -> NICHT ERREICHBAR
+EndLevel 0 in Raum   70 Sektor (1,2) -> Zone 6
 Cutscene 41 in Raum   75 Sektor (3,2) -> Zone 2

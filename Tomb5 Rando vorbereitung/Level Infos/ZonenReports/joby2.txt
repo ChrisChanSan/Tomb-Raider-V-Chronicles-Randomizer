@@ -7,35 +7,41 @@ Laras Start: Raum 55, Sektor (1,4) -> Zone 0
 Zone 0 -> 1: Tuer Item 85 (typeId 288, Raum 64)  geoeffnet durch: Schalter Item 145 (Raum 118)
 Zone 0 -> 1: Tuer Item 123 (typeId 288, Raum 104)  geoeffnet durch: Schalter Item 122 (Raum 104)
 Zone 0 -> 1: Tuer Item 82 (typeId 288, Raum 60)  geoeffnet durch: Schalter Item 83 (Raum 60)
+Zone 0 -> 1: Tuer Item 41 (typeId 300, Raum 31)  geoeffnet durch: Key Item7 in Schloss Item 43 (Raum 31)
 
 --- Sektoren pro Zone ---
 Zone 0:  7816 Sektoren in 137 Raeumen
-Zone 1:   243 Sektoren in  16 Raeumen
-Nie erreicht: 667 begehbare Sektoren
+Zone 1:   244 Sektoren in  17 Raeumen
+Nie erreicht: 666 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+TypeId 202: 1 Instanz(en) noetig
+    Instanz 1 -> muss in Zone <= 0 liegen  (Key Item7 in Schloss Item 43 (Raum 31))
+    Vanilla: 2 Instanz(en) vorhanden
+      Item 161 in Raum  129 -> Zone 0            [OK]
+      Item  59 in Raum   52 -> Zone nie erreicht [Reserve]
 
 --- Warum kam der Flood nicht weiter? ---
 Tuer Item  42 (typeId 302, Raum   31) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 Tuer Item 106 (typeId 304, Raum   73) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 104 (Raum 73) -> Triggersektor nicht erreichbar
+    Maske 31  Key Item8 in Schloss Item 104 (Raum 73) -> Item fehlt
 Tuer Item 105 (typeId 306, Raum   73) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 104 (Raum 73) -> Triggersektor nicht erreichbar
+    Maske 31  Key Item8 in Schloss Item 104 (Raum 73) -> Item fehlt
 Tuer Item 141 (typeId 284, Raum  114) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 Tuer Item 135 (typeId 302, Raum  112) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 Tuer Item 134 (typeId 300, Raum  112) Maske  0/31
-    Maske 31  Key Item7 in Schloss Item 136 (Raum 112) -> Triggersektor nicht erreichbar
+    Maske 31  Key Item7 in Schloss Item 136 (Raum 112) -> Item fehlt
 Tuer Item 132 (typeId 306, Raum  108) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 133 (Raum 108) -> Triggersektor nicht erreichbar
+    Maske 31  Key Item8 in Schloss Item 133 (Raum 108) -> Item fehlt
 Tuer Item 131 (typeId 304, Raum  108) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 133 (Raum 108) -> Triggersektor nicht erreichbar
+    Maske 31  Key Item8 in Schloss Item 133 (Raum 108) -> Item fehlt
 Tuer Item 129 (typeId 306, Raum  106) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 130 (Raum 106) -> Triggersektor nicht erreichbar
+    Maske 31  Key Item8 in Schloss Item 130 (Raum 106) -> Item fehlt
 Tuer Item 128 (typeId 304, Raum  106) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 130 (Raum 106) -> Triggersektor nicht erreichbar
+    Maske 31  Key Item8 in Schloss Item 130 (Raum 106) -> Item fehlt
 Tuer Item  15 (typeId 302, Raum   17) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 Tuer Item  12 (typeId 288, Raum   14) Maske  0/31
@@ -48,13 +54,10 @@ Tuer Item   6 (typeId 302, Raum   11) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 Tuer Item   5 (typeId 300, Raum   11) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
-Tuer Item  41 (typeId 300, Raum   31) Maske  0/31
-    Maske 31  Key Item7 in Schloss Item 43 (Raum 31) -> Triggersektor nicht erreichbar
-    Maske 31  Key Item8 in Schloss Item 104 (Raum 73) -> Triggersektor nicht erreichbar
 Tuer Item   3 (typeId 304, Raum    1) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 1 (Raum 1) -> Triggersektor nicht erreichbar
+    Maske 31  Key Item8 in Schloss Item 1 (Raum 1) -> Item fehlt
 Tuer Item   2 (typeId 306, Raum    1) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 1 (Raum 1) -> Triggersektor nicht erreichbar
+    Maske 31  Key Item8 in Schloss Item 1 (Raum 1) -> Item fehlt
 
 --- Groesste unerreichte Gebiete ---
 Gebiet mit   411 Sektoren in   3 Raeumen

@@ -7,6 +7,7 @@ Laras Start: Raum 23, Sektor (2,1) -> Zone 0
 Zone 0 -> 1: Tuer Item 25 (typeId 294, Raum 14)  geoeffnet durch: Brechstange (nicht verbraucht)
 Zone 0 -> 1: Tuer Item 125 (typeId 288, Raum 61)  geoeffnet durch: Brechstange (nicht verbraucht)
 Zone 1 -> 2: Tuer Item 156 (typeId 98, Raum 90)  geoeffnet durch: AntiTrigger
+Zone 1 -> 2: Tuer Item 190 (typeId 302, Raum 124)  geoeffnet durch: Key Item6 in Schloss Item 191 (Raum 124)
 Zone 1 -> 2: Tuer Item 190 (typeId 302, Raum 124)  geoeffnet durch: Skript-Ereignis (Raum 120 erreicht)
 Zone 1 -> 2: Tuer Item 175 (typeId 304, Raum 106)  geoeffnet durch: Skript-Ereignis (Raum 120 erreicht)
 Zone 2 -> 3: Tuer Item 222 (typeId 300, Raum 160)  geoeffnet durch: Schalter Item 223 (Raum 160)
@@ -30,7 +31,7 @@ Nie erreicht: 102 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 TypeId 201: 1 Instanz(en) noetig
-    Instanz 1 -> muss in Zone <= 2 liegen  (Key Item6 in Schloss Item 191 (Raum 124))
+    Instanz 1 -> muss in Zone <= 1 liegen  (Key Item6 in Schloss Item 191 (Raum 124))
     Vanilla: 1 Instanz(en) vorhanden
       Item 187 in Raum  120 -> Zone 1            [OK]
 TypeId 202: 1 Instanz(en) noetig

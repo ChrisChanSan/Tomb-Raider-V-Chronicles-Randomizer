@@ -9,6 +9,7 @@
 // gelesen werden. Beides faellt sonst erst auf, wenn ein Nutzer ein kaputtes
 // Level meldet.
 //----------------------------------------------------------------------------
+#include "core/DataFolder.h"
 #include "core/Json.h"
 #include "core/Rng.h"
 
@@ -187,6 +188,100 @@ static void testAgainstRealExport(const char* path)
     }
 }
 
+static std::wstring toW(const char* s)
+{
+    std::wstring w;
+    for (const char* p = s; *p; ++p) w.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*p)));
+    return w;
+}
+
+static void testDataFolder(const char* csv, const char* dataDir)
+{
+    std::printf("Datenordner\n");
+
+    DataFolder df;
+    std::string err;
+    check(df.loadChecksums(toW(csv), err), "Pruefsummenliste gelesen");
+    if (!err.empty()) { std::printf("       %s\n", err.c_str()); return; }
+    std::printf("  %u bekannte Level\n", static_cast<unsigned>(df.knownLevelCount()));
+    check(df.knownLevelCount() == 16, "16 Level in der Liste");
+
+    if (!dataDir) return;
+
+    auto st = df.inspect(toW(dataDir));
+    int vanilla = 0, modified = 0, missing = 0;
+    for (const auto& s : st)
+    {
+        if (s.state == LevelState::Vanilla)  ++vanilla;
+        if (s.state == LevelState::Modified) { ++modified; std::printf("       abweichend: %s\n", s.name.c_str()); }
+        if (s.state == LevelState::Missing)  { ++missing;  std::printf("       fehlt:      %s\n", s.name.c_str()); }
+    }
+    std::printf("  vanilla=%d  abweichend=%d  fehlt=%d\n", vanilla, modified, missing);
+
+    std::string reason;
+    bool usable = DataFolder::isUsableSource(st, reason);
+    check(usable, "Ordner ist als Quelle brauchbar");
+    if (!usable) std::printf("       %s\n", reason.c_str());
+
+    // Eine erfundene Datei muss als "fehlt" erkannt werden, nicht als vanilla.
+    auto stBad = df.inspect(toW("C:\\gibtesnicht_zufallspfad_12345"));
+    bool allMissing = true;
+    for (const auto& s : stBad) if (s.state != LevelState::Missing) allMissing = false;
+    check(allMissing, "nicht existierender Ordner liefert durchgehend 'fehlt'");
+    std::string r2;
+    check(!DataFolder::isUsableSource(stBad, r2), "leerer Ordner wird als Quelle abgelehnt");
+}
+
+static void testCopyAndRestore(const char* csv, const char* dataDir, const char* targetDir)
+{
+    std::printf("Kopieren und Zuruecksetzen\n");
+
+    DataFolder df;
+    std::string err;
+    if (!df.loadChecksums(toW(csv), err)) { std::printf("  [FEHL] %s\n", err.c_str()); ++g_failed; return; }
+
+    int copied = 0;
+    bool ok = df.copyLevels(toW(dataDir), toW(targetDir), err, &copied);
+    check(ok, "Level in den Zielordner kopiert");
+    if (!ok) { std::printf("       %s\n", err.c_str()); return; }
+    std::printf("  %d Dateien kopiert\n", copied);
+
+    // Die Kopie muss byteidentisch sein - sonst waere schon das Ausgangsmaterial
+    // eines Seeds ein anderes als das geprueffte.
+    auto st = df.inspect(toW(targetDir));
+    std::string reason;
+    check(DataFolder::isUsableSource(st, reason), "Kopie ist byteidentisch mit Vanilla");
+    if (!reason.empty()) std::printf("       %s\n", reason.c_str());
+
+    // Eine Datei absichtlich verfaelschen, danach muss die Pruefung anschlagen
+    // und das Zuruecksetzen sie wiederherstellen. Das ist genau der Ablauf
+    // "randomisiertes Level -> Restore to default".
+    const std::wstring victim = PathUtil::join(toW(targetDir), L"del.trc");
+    FILE* f = nullptr;
+    if (_wfopen_s(&f, victim.c_str(), L"r+b") == 0 && f)
+    {
+        std::fseek(f, 64, SEEK_SET);
+        unsigned char junk = 0xAB;
+        std::fwrite(&junk, 1, 1, f);
+        std::fclose(f);
+
+        auto st2 = df.inspect(toW(targetDir));
+        std::string r2;
+        check(!DataFolder::isUsableSource(st2, r2), "veraenderte Datei wird erkannt");
+
+        int again = 0;
+        check(df.copyLevels(toW(dataDir), toW(targetDir), err, &again), "Zuruecksetzen ausgefuehrt");
+        auto st3 = df.inspect(toW(targetDir));
+        std::string r3;
+        check(DataFolder::isUsableSource(st3, r3), "nach dem Zuruecksetzen wieder Vanilla");
+    }
+    else
+    {
+        std::printf("  [FEHL] Testdatei nicht beschreibbar\n");
+        ++g_failed;
+    }
+}
+
 int main(int argc, char** argv)
 {
     std::printf("TR5Randomizer - Selbsttest des Kerns\n\n");
@@ -197,6 +292,16 @@ int main(int argc, char** argv)
     {
         std::printf("\n");
         testAgainstRealExport(argv[1]);
+    }
+    if (argc > 2)
+    {
+        std::printf("\n");
+        testDataFolder(argv[2], argc > 3 ? argv[3] : nullptr);
+    }
+    if (argc > 4)
+    {
+        std::printf("\n");
+        testCopyAndRestore(argv[2], argv[3], argv[4]);
     }
     std::printf("\n%s (%d Fehler)\n", g_failed ? "FEHLGESCHLAGEN" : "Alles gruen", g_failed);
     return g_failed ? 1 : 0;

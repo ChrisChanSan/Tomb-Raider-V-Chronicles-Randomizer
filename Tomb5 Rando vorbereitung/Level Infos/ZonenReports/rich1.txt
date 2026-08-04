@@ -16,10 +16,10 @@ Zone 1 -> 2: Tuer Item 150 (typeId 312, Raum 82)  geoeffnet durch: Schalter Item
 Zone 2 -> 3: Tuer Item 145 (typeId 308, Raum 81)  geoeffnet durch: Key Item8 in Schloss Item 142 (Raum 81)
 Zone 2 -> 3: Tuer Item 144 (typeId 306, Raum 81)  geoeffnet durch: Key Item8 in Schloss Item 142 (Raum 81)
 Zone 3 -> 4: Tuer Item 89 (typeId 304, Raum 43)  geoeffnet durch: Schalter Item 78 (Raum 31)
-Zone 4 -> 5: Tuer Item 163 (typeId 304, Raum 109)  geoeffnet durch: AntiTrigger
+Zone 4 -> 5: Tuer Item 163 (typeId 304, Raum 109)  geoeffnet durch: Trigger betreten (109,1,1)
+Zone 4 -> 5: Tuer Item 54 (typeId 300, Raum 25)  geoeffnet durch: Trigger betreten (25,3,1)
 Zone 4 -> 5: Tuer Item 206 (typeId 304, Raum 155)  geoeffnet durch: Pickup-Trigger
 Zone 4 -> 5: Tuer Item 10 (typeId 304, Raum 7)  geoeffnet durch: HeavyAntiTrigger
-Zone 5 -> 6: Tuer Item 54 (typeId 300, Raum 25)  geoeffnet durch: AntiTrigger
 Zone 5 -> 6: Tuer Item 26 (typeId 290, Raum 15)  geoeffnet durch: Schalter Item 20 (Raum 15)
 Zone 5 -> 6: Tuer Item 23 (typeId 290, Raum 15)  geoeffnet durch: Schalter Item 19 (Raum 15)
 Zone 5 -> 6: Tuer Item 18 (typeId 286, Raum 15)  geoeffnet durch: Schalter Item 19 (Raum 15)
@@ -40,8 +40,8 @@ Zone 1:    61 Sektoren in  11 Raeumen
 Zone 2:    46 Sektoren in   6 Raeumen
 Zone 3:    26 Sektoren in   2 Raeumen
 Zone 4:   180 Sektoren in  12 Raeumen
-Zone 5:    63 Sektoren in  13 Raeumen
-Zone 6:   323 Sektoren in  36 Raeumen
+Zone 5:    64 Sektoren in  13 Raeumen
+Zone 6:   322 Sektoren in  35 Raeumen
 Zone 7:   125 Sektoren in  19 Raeumen
 Zone 8:     1 Sektoren in   1 Raeumen
 Nie erreicht: 110 begehbare Sektoren

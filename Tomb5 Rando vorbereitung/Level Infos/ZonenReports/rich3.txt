@@ -11,11 +11,13 @@ Zone 1 -> 2: Tuer Item 170 (typeId 314, Raum 133)  geoeffnet durch: Schalter Ite
 Zone 1 -> 2: Tuer Item 169 (typeId 312, Raum 133)  geoeffnet durch: Schalter Item 168 (Raum 132)
 Zone 1 -> 2: Tuer Item 165 (typeId 314, Raum 131)  geoeffnet durch: Schalter Item 166 (Raum 131)
 Zone 1 -> 2: Tuer Item 164 (typeId 312, Raum 131)  geoeffnet durch: Schalter Item 166 (Raum 131)
-Zone 2 -> 3: Tuer Item 221 (typeId 284, Raum 211)  geoeffnet durch: AntiTrigger
-Zone 2 -> 3: Tuer Item 108 (typeId 284, Raum 94)  geoeffnet durch: AntiTrigger
+Zone 2 -> 3: Tuer Item 221 (typeId 284, Raum 211)  geoeffnet durch: Trigger betreten (211,1,1)
+Zone 2 -> 3: Tuer Item 108 (typeId 284, Raum 94)  geoeffnet durch: Trigger betreten (94,1,1)
 Zone 2 -> 3: Tuer Item 198 (typeId 288, Raum 180)  geoeffnet durch: Trigger betreten (186,1,1)
 Zone 2 -> 3: Tuer Item 216 (typeId 284, Raum 202)  geoeffnet durch: AntiTrigger
 Zone 2 -> 3: Tuer Item 213 (typeId 300, Raum 199)  geoeffnet durch: Puzzle Item1 in Schloss Item 144 (Raum 119)
+Zone 2 -> 3: Tuer Item 173 (typeId 314, Raum 134)  geoeffnet durch: Trigger betreten (134,2,1)
+Zone 2 -> 3: Tuer Item 172 (typeId 312, Raum 134)  geoeffnet durch: Trigger betreten (134,2,1)
 Zone 2 -> 3: Tuer Item 86 (typeId 284, Raum 83)  geoeffnet durch: AntiTrigger
 Zone 2 -> 3: Tuer Item 212 (typeId 286, Raum 194)  geoeffnet durch: Trigger betreten (185,1,4)
 Zone 2 -> 3: Tuer Item 152 (typeId 300, Raum 125)  geoeffnet durch: AntiTrigger
@@ -30,10 +32,11 @@ Zone 4 -> 5: Tuer Item 137 (typeId 300, Raum 106)  geoeffnet durch: AntiTrigger
 Zone 0:   682 Sektoren in  71 Raeumen
 Zone 1:    40 Sektoren in   6 Raeumen
 Zone 2:  1181 Sektoren in  94 Raeumen
-Zone 3:   332 Sektoren in  32 Raeumen
+Zone 3:   334 Sektoren in  33 Raeumen
 Zone 4:   113 Sektoren in  19 Raeumen
 Zone 5:    45 Sektoren in   8 Raeumen
-Nie erreicht: 390 begehbare Sektoren
+Nie erreicht: 4 begehbare Sektoren
+  (zusaetzlich 384 Sektoren in 4 reinen Kulissenraeumen, nicht mitgezaehlt)
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 Nicht im Level vorhanden, kommt per Gameflow (CMD_GIVEOBJ) - keine Platzierung noetig:
@@ -41,36 +44,28 @@ Nicht im Level vorhanden, kommt per Gameflow (CMD_GIVEOBJ) - keine Platzierung n
 
 
 --- Warum kam der Flood nicht weiter? ---
-Tuer Item 173 (typeId 314, Raum  134) Maske  0/31
-    Maske 31  Trigger betreten (134,1,1)       -> Triggersektor nicht erreichbar
-    Maske 31  Trigger betreten (134,2,1)       -> Triggersektor nicht erreichbar
-Tuer Item 172 (typeId 312, Raum  134) Maske  0/31
-    Maske 31  Trigger betreten (134,1,1)       -> Triggersektor nicht erreichbar
-    Maske 31  Trigger betreten (134,2,1)       -> Triggersektor nicht erreichbar
 Tuer Item  46 (typeId 320, Raum   60) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 
 --- Groesste unerreichte Gebiete ---
-Gebiet mit   384 Sektoren in   4 Raeumen
-   Raeume: 64, 65, 66, 67
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 149x1
-Gebiet mit     2 Sektoren in   1 Raeumen
-   Raeume: 134
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 312x1, 314x1, 270x1, 388x1
 Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 217
+   Raeume: 212
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
    Bespielbare Objekte darin: 114x1
 Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 212
+   Raeume: 205
+   Enthaelt 1 Objekte, davon KEINES bespielbar - nur Animatings.
+   => vermutlich reine Kamerafahrt-Geometrie, keine echte Luecke.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 60
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 320x1
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 217
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.

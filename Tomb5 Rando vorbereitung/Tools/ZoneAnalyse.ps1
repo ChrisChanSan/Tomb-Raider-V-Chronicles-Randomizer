@@ -184,6 +184,11 @@ $CAMERA_ROOMS = @{
     # User: "Ueberbleibsel wie in Andrea2, da war wohl mal was geplant" - Cut
     # Content, nicht zum Betreten gedacht.
     'Andrea3' = @(73,74)
+    # rich3 Raeume 64/65/66/67: geschlossener 4-Raum-Kreislauf ohne jede
+    # Verbindung zum Rest des Levels. User: liegt in trview sichtbar ausserhalb
+    # der eigentlichen Levelgeometrie ("out of map") - das ist die Intro-Flyby
+    # mit den ums Level kreisenden Helikoptern, rein kosmetisch, nie begehbar.
+    'rich3' = @(64,65,66,67)
 }
 $cameraRooms = @( if($CAMERA_ROOMS.ContainsKey($LevelName)){ $CAMERA_ROOMS[$LevelName] } )
 $reusableKeys = @($REUSABLE_KEYS_GLOBAL) + @( if($REUSABLE_KEYS.ContainsKey($LevelName)){ $REUSABLE_KEYS[$LevelName] } )
@@ -427,9 +432,22 @@ function Get-TriggerRequirement($t) {
 function Test-ReqSector($req, $reached) {
     # Bodentrigger (Pad/Heavy/Trigger) muss Lara wirklich betreten. Schalter und
     # Schloesser bedient sie dagegen vom Nachbarsektor aus - deshalb zaehlt dort
-    # auch, wenn nur ein angrenzender Sektor erreicht ist.
+    # auch, wenn nur ein angrenzender Sektor erreicht ist (Operable-Flag).
     if ($reached.Contains($req.Sector)) { return $true }
-    if (-not $req.Operable) { return $false }
+    # Verallgemeinerung, dritter Fund derselben Deadlock-Klasse (nach Switch und
+    # Key): steht die TUER selbst genau auf dem Triggersektor - egal welcher
+    # Triggertyp -, kann Lara den Sektor per Definition nie *vor* dem Oeffnen
+    # betreten. rich3 Raum 134: Lift Doors (Item 172/173) UND ihr eigener
+    # Boden-Trigger sitzen auf denselben zwei Sektoren (1,1)/(2,1) - ein
+    # gewoehnlicher "Trigger betreten"-Fall, kein Switch/Key, trotzdem derselbe
+    # Widerspruch. Statt jeden Triggertyp einzeln mit Operable zu markieren:
+    # sobald der exakte Sektor durch eine (noch geschlossene) Tuer blockiert ist,
+    # zaehlt ein bereits erreichter Nachbarsektor automatisch mit. Bewusst NICHT
+    # pauschal fuer jeden Trigger - nur wenn eine Tuer nachweislich genau dort
+    # steht, sonst bliebe die Unterscheidung "muss wirklich betreten werden"
+    # wertlos.
+    $doorOnSector = $blocked.ContainsKey($req.Sector)
+    if (-not $req.Operable -and -not $doorOnSector) { return $false }
     if (-not $adj.ContainsKey($req.Sector)) { return $false }
     foreach($n in $adj[$req.Sector]){ if ($reached.Contains($n)) { return $true } }
     return $false

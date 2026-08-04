@@ -4,60 +4,52 @@
 Laras Start: Raum 129, Sektor (1,1) -> Zone 0
 
 --- Zonenuebergaenge (Blocker) ---
+Zone 0 -> 1: Tuer Item 171 (typeId 300, Raum 118)  geoeffnet durch: Trigger betreten (118,1,1)
 Zone 0 -> 1: Tuer Item 163 (typeId 302, Raum 96)  geoeffnet durch: AntiTrigger
 Zone 0 -> 1: Tuer Item 162 (typeId 302, Raum 91)  geoeffnet durch: AntiTrigger
 Zone 0 -> 1: Tuer Item 153 (typeId 302, Raum 84)  geoeffnet durch: AntiTrigger
-Zone 0 -> 1: Tuer Item 105 (typeId 300, Raum 55)  geoeffnet durch: AntiTrigger
+Zone 0 -> 1: Tuer Item 105 (typeId 300, Raum 55)  geoeffnet durch: Trigger betreten (55,2,1)
 Zone 0 -> 1: Tuer Item 52 (typeId 314, Raum 33)  geoeffnet durch: Schalter Item 110 (Raum 57)
 Zone 0 -> 1: Tuer Item 51 (typeId 312, Raum 33)  geoeffnet durch: Schalter Item 110 (Raum 57)
-Zone 0 -> 1: Tuer Item 103 (typeId 300, Raum 53)  geoeffnet durch: AntiTrigger
-Zone 0 -> 1: Tuer Item 104 (typeId 300, Raum 54)  geoeffnet durch: AntiTrigger
-Zone 0 -> 1: Tuer Item 96 (typeId 300, Raum 49)  geoeffnet durch: Trigger betreten (49,1,2)
-Zone 1 -> 2: Tuer Item 246 (typeId 302, Raum 177)  geoeffnet durch: AntiTrigger
+Zone 0 -> 1: Tuer Item 103 (typeId 300, Raum 53)  geoeffnet durch: Trigger betreten (53,1,1)
+Zone 0 -> 1: Tuer Item 104 (typeId 300, Raum 54)  geoeffnet durch: Trigger betreten (54,1,1)
+Zone 0 -> 1: Tuer Item 96 (typeId 300, Raum 49)  geoeffnet durch: Trigger betreten (49,1,3)
+Zone 1 -> 2: Tuer Item 246 (typeId 302, Raum 177)  geoeffnet durch: Trigger betreten (177,1,1)
 Zone 1 -> 2: Tuer Item 65 (typeId 314, Raum 39)  geoeffnet durch: Schalter Item 63 (Raum 39)
 Zone 1 -> 2: Tuer Item 47 (typeId 314, Raum 31)  geoeffnet durch: Trigger betreten (31,2,2)
 Zone 1 -> 2: Tuer Item 46 (typeId 312, Raum 31)  geoeffnet durch: Trigger betreten (31,2,2)
-Zone 1 -> 2: Tuer Item 108 (typeId 302, Raum 56)  geoeffnet durch: AntiTrigger
+Zone 1 -> 2: Tuer Item 108 (typeId 302, Raum 56)  geoeffnet durch: Trigger betreten (56,3,1)
 Zone 1 -> 2: Tuer Item 64 (typeId 312, Raum 39)  geoeffnet durch: Schalter Item 63 (Raum 39)
 Zone 1 -> 2: Tuer Item 180 (typeId 306, Raum 120)  geoeffnet durch: Schalter Item 43 (Raum 26)
 Zone 1 -> 2: Tuer Item 179 (typeId 304, Raum 120)  geoeffnet durch: Schalter Item 43 (Raum 26)
 Zone 2 -> 3: Tuer Item 53 (typeId 332, Raum 34)  geoeffnet durch: Trigger betreten (34,5,5)
 Zone 2 -> 3: Tuer Item 40 (typeId 306, Raum 23)  geoeffnet durch: Schalter Item 38 (Raum 23)
 Zone 2 -> 3: Tuer Item 39 (typeId 304, Raum 23)  geoeffnet durch: Schalter Item 38 (Raum 23)
-Zone 2 -> 3: Tuer Item 216 (typeId 300, Raum 150)  geoeffnet durch: AntiTrigger
+Zone 2 -> 3: Tuer Item 216 (typeId 300, Raum 150)  geoeffnet durch: Trigger betreten (150,1,1)
 Zone 2 -> 3: Tuer Item 37 (typeId 306, Raum 23)  geoeffnet durch: Schalter Item 38 (Raum 23)
 Zone 2 -> 3: Tuer Item 36 (typeId 304, Raum 23)  geoeffnet durch: Schalter Item 38 (Raum 23)
 Zone 2 -> 3: Tuer Item 206 (typeId 302, Raum 145)  geoeffnet durch: Schalter Item 58 (Raum 34)
-Zone 3 -> 4: Tuer Item 220 (typeId 300, Raum 157)  geoeffnet durch: Trigger betreten (156,1,6)
+Zone 3 -> 4: Tuer Item 220 (typeId 300, Raum 157)  geoeffnet durch: HeavyAntiTrigger
 Zone 4 -> 5: Tuer Item 115 (typeId 300, Raum 59)  geoeffnet durch: Schalter Item 0 (Raum 7)
 
 --- Sektoren pro Zone ---
 Zone 0:   361 Sektoren in  43 Raeumen
-Zone 1:  1198 Sektoren in  88 Raeumen
+Zone 1:  1285 Sektoren in  95 Raeumen
 Zone 2:   296 Sektoren in  29 Raeumen
 Zone 3:   288 Sektoren in  20 Raeumen
 Zone 4:    72 Sektoren in   6 Raeumen
 Zone 5:     1 Sektoren in   1 Raeumen
-Nie erreicht: 117 begehbare Sektoren
+Nie erreicht: 30 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 
 --- Warum kam der Flood nicht weiter? ---
-Tuer Item 171 (typeId 300, Raum  118) Maske  0/31
-    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
-    Maske 31  Trigger betreten (118,1,1)       -> Triggersektor nicht erreichbar
 Tuer Item 204 (typeId 302, Raum  144) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 Tuer Item 189 (typeId 320, Raum  131) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 
 --- Groesste unerreichte Gebiete ---
-Gebiet mit    87 Sektoren in   7 Raeumen
-   Raeume: 14, 15, 16, 18, 19, 60, 118
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 394x1, 39x1, 409x1, 300x1, 149x1
 Gebiet mit    16 Sektoren in   1 Raeumen
    Raeume: 83
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
@@ -69,6 +61,12 @@ Gebiet mit     7 Sektoren in   1 Raeumen
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+Gebiet mit     1 Sektoren in   1 Raeumen
+   Raeume: 131
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 111x1, 320x1
 Gebiet mit     1 Sektoren in   1 Raeumen
    Raeume: 138
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
@@ -82,7 +80,7 @@ Keine hinterlegt.
 --- Selbsttest: Level durchspielbar? ---
 Cutscene 1 in Raum    7 Sektor (2,4) -> Zone 4
 Cutscene 23 in Raum    8 Sektor (1,5) -> Zone 0
-EndLevel 0 in Raum   14 Sektor (1,1) -> NICHT ERREICHBAR
+EndLevel 0 in Raum   14 Sektor (1,1) -> Zone 1
 Cutscene 1 in Raum   46 Sektor (15,2) -> Zone 1
 Cutscene 1 in Raum   57 Sektor (1,1) -> Zone 0
 Cutscene 1 in Raum   84 Sektor (2,3) -> Zone 0

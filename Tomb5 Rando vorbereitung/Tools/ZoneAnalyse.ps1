@@ -225,7 +225,13 @@ $noPlacement = @( if($NO_PLACEMENT_ROOMS.ContainsKey($LevelName)){ $NO_PLACEMENT
 $TYPE_ALLOW_ROOMS = @{
     'Andrea2' = @{
         # Vom Nutzer als "save" bestaetigte Raeume fuer die Brechstange.
-        172 = @(0,1,10,17,25,46,50,54,207)
+        # 240, NICHT 172: typeId 172 heisst zwar ueberall "Puzzle Item1", ist in
+        # Andrea2 aber das Ventil (Item 128, Raum 196), das mit der Brechstange
+        # aufgebrochen wird. Die echte Brechstange ist typeId 240 "Crowbar Item"
+        # (Item 2, Raum 1) - im ganzen Spiel nur hier. In joby3 und rich1 ist die
+        # Brechstange dagegen tatsaechlich als Puzzle-/Key-Item getarnt, daher
+        # die Verwechslungsgefahr.
+        240 = @(0,1,10,17,25,46,50,54,207)
     }
     'Andrea3' = @{
         196 = @(15,16,26,27,107,108)                         # Key Item1, Ende 15
@@ -257,14 +263,15 @@ if ($TYPE_ALLOW_ROOMS.ContainsKey($LevelName)) {
 # Wert hier: typeId -> maxZone.
 $EXTRA_POOL_TYPES = @{
     'Andrea3' = @{ 186 = 3 }
-    # Andrea2s Brechstange (Item 128, Raum 196, Zone 1) darf mitrandomisiert
-    # werden - das widerspricht der Regel "Brechstange bleibt Vanilla" nicht:
-    # die gilt fuer joby3 und rich1, wo die Brechstange als Puzzle-/Key-Item
-    # getarnt ist und an einer Aufnahme-Cutscene haengt. Hier ist es ein
-    # normaler Pickup vom Typ 172. Zonengrenze 1 = die der Vanilla-Position;
-    # die eigentliche Schranke ist die Raumliste unten, die der Nutzer als
-    # "save" bestaetigt hat.
-    'Andrea2' = @{ 172 = 1 }
+    # Andrea2s Brechstange (typeId 240, Item 2, Raum 1, Zone 0) darf
+    # mitrandomisiert werden - das widerspricht der Regel "Brechstange bleibt
+    # Vanilla" nicht: die gilt fuer joby3 und rich1, wo die Brechstange als
+    # Puzzle-/Key-Item getarnt ist und an einer Aufnahme-Cutscene haengt. Hier
+    # ist es ein normaler Pickup. Zonengrenze 1 = die Zone des Ventils
+    # (Item 128, Raum 196), das ohne Brechstange nicht aufzubrechen ist; die
+    # eigentliche Schranke ist die Raumliste, die der Nutzer als "save"
+    # bestaetigt hat.
+    'Andrea2' = @{ 240 = 1 }
 }
 
 # Items, die ein Level zwingend BRAUCHT, die in Vanilla aber fehlen. Andrea3

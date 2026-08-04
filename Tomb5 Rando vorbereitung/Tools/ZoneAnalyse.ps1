@@ -108,6 +108,12 @@ $onewayOut = @( if($ONEWAY_OUT.ContainsKey($LevelName)){ $ONEWAY_OUT[$LevelName]
 # von Raum 120 liegen - beide Tueren zaehlen ab dort als begehbar.
 $SCRIPT_DOORS = @{
     'joby3' = @{ 190 = 120; 175 = 120 }
+    # rich1: der Scientist (Item 85, Raum 34, OCB 9) hat eine Anvisier-Cutscene -
+    # laenger auf ihn zielen oeffnet Tuer 84 direkt (der leichte Weg). Toetet man
+    # ihn stattdessen, braucht es einen Umweg. Gleiche Klasse wie der Chef in
+    # joby3: proximity-/verhaltensbasiert, nicht aus Sektor-/Item-Daten ableitbar.
+    # User-Entscheidung, analog zu joby3: Raum erreicht = Tuer gilt als offen.
+    'rich1' = @{ 84 = 34 }
 }
 $scriptDoors = @{}
 if ($SCRIPT_DOORS.ContainsKey($LevelName)) { $scriptDoors = $SCRIPT_DOORS[$LevelName] }

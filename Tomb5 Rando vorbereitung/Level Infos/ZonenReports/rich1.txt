@@ -26,12 +26,13 @@ Zone 5 -> 6: Tuer Item 18 (typeId 286, Raum 15)  geoeffnet durch: Schalter Item 
 Zone 5 -> 6: Tuer Item 17 (typeId 286, Raum 15)  geoeffnet durch: Schalter Item 20 (Raum 15)
 Zone 5 -> 6: Tuer Item 191 (typeId 304, Raum 140)  geoeffnet durch: AntiTrigger
 Zone 5 -> 6: Tuer Item 101 (typeId 288, Raum 63)  geoeffnet durch: Puzzle Item3 in Schloss Item 100 (Raum 63)
+Zone 5 -> 6: Tuer Item 84 (typeId 302, Raum 34)  geoeffnet durch: Skript-Ereignis (Raum 34 erreicht)
 Zone 6 -> 7: Tuer Item 141 (typeId 304, Raum 77)  geoeffnet durch: Key Item8 in Schloss Item 117 (Raum 69)
 Zone 6 -> 7: Tuer Item 123 (typeId 298, Raum 69)  geoeffnet durch: Key Item8 in Schloss Item 124 (Raum 69)
 Zone 6 -> 7: Tuer Item 122 (typeId 296, Raum 69)  geoeffnet durch: Key Item8 in Schloss Item 124 (Raum 69)
 Zone 6 -> 7: Tuer Item 121 (typeId 294, Raum 69)  geoeffnet durch: Key Item8 in Schloss Item 124 (Raum 69)
+Zone 6 -> 7: Tuer Item 107 (typeId 304, Raum 66)  geoeffnet durch: AntiTrigger
 Zone 7 -> 8: Tuer Item 130 (typeId 304, Raum 71)  geoeffnet durch: Trigger betreten (71,1,3)
-Zone 8 -> 9: Tuer Item 107 (typeId 304, Raum 66)  geoeffnet durch: Puzzle Item4 in Schloss Item 182 (Raum 131)
 
 --- Sektoren pro Zone ---
 Zone 0:   521 Sektoren in  72 Raeumen
@@ -40,11 +41,10 @@ Zone 2:    46 Sektoren in   6 Raeumen
 Zone 3:    26 Sektoren in   2 Raeumen
 Zone 4:   180 Sektoren in  12 Raeumen
 Zone 5:    63 Sektoren in  13 Raeumen
-Zone 6:   257 Sektoren in  28 Raeumen
-Zone 7:   111 Sektoren in  16 Raeumen
-Zone 8:    14 Sektoren in   4 Raeumen
-Zone 9:    66 Sektoren in   9 Raeumen
-Nie erreicht: 111 begehbare Sektoren
+Zone 6:   323 Sektoren in  36 Raeumen
+Zone 7:   125 Sektoren in  19 Raeumen
+Zone 8:     1 Sektoren in   1 Raeumen
+Nie erreicht: 110 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
 TypeId 174: 1 Instanz(en) noetig
@@ -52,17 +52,15 @@ TypeId 174: 1 Instanz(en) noetig
     Vanilla: 1 Instanz(en) vorhanden
       Item  27 in Raum   15 -> Zone 5            [OK]
 TypeId 175: 1 Instanz(en) noetig
-    Instanz 1 -> muss in Zone <= 8 liegen  (Puzzle Item4 in Schloss Item 182 (Raum 131))
+    Instanz 1 -> muss in Zone <= 7 liegen  (Puzzle Item4 in Schloss Item 182 (Raum 131))
     Vanilla: 1 Instanz(en) vorhanden
-      Item 204 in Raum  153 -> Zone 8            [OK]
+      Item 204 in Raum  153 -> Zone 7            [OK]
 TypeId 203: mehrfach nutzbar - 1 Instanz reicht fuer 4 Schloss/Schloesser
     Instanz 1 -> muss in Zone <= 0 liegen  (Key Item8 in Schloss Item 55 (Raum 26) [mehrfach nutzbar])
     Vanilla: 1 Instanz(en) vorhanden
       Item 109 in Raum   67 -> Zone 0            [OK]
 
 --- Warum kam der Flood nicht weiter? ---
-Tuer Item  84 (typeId 302, Raum   34) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
 Tuer Item  25 (typeId 290, Raum   15) Maske  0/31
     kein Trigger im Level schaltet diese Tuer
 Tuer Item  24 (typeId 290, Raum   15) Maske  0/31
@@ -102,15 +100,15 @@ Gebiet mit     8 Sektoren in   2 Raeumen
 Keine hinterlegt.
 
 --- Selbsttest: Level durchspielbar? ---
-Cutscene 24 in Raum   34 Sektor (1,3) -> Zone 9
-Cutscene 24 in Raum   34 Sektor (1,4) -> Zone 9
-Cutscene 24 in Raum   34 Sektor (1,5) -> Zone 9
-Cutscene 24 in Raum   34 Sektor (2,3) -> Zone 9
-Cutscene 24 in Raum   34 Sektor (2,4) -> Zone 9
-Cutscene 24 in Raum   34 Sektor (2,5) -> Zone 9
-Cutscene 24 in Raum   34 Sektor (3,3) -> Zone 9
-Cutscene 24 in Raum   34 Sektor (3,4) -> Zone 9
-Cutscene 24 in Raum   34 Sektor (3,5) -> Zone 9
+Cutscene 24 in Raum   34 Sektor (1,3) -> Zone 6
+Cutscene 24 in Raum   34 Sektor (1,4) -> Zone 6
+Cutscene 24 in Raum   34 Sektor (1,5) -> Zone 6
+Cutscene 24 in Raum   34 Sektor (2,3) -> Zone 6
+Cutscene 24 in Raum   34 Sektor (2,4) -> Zone 6
+Cutscene 24 in Raum   34 Sektor (2,5) -> Zone 6
+Cutscene 24 in Raum   34 Sektor (3,3) -> Zone 6
+Cutscene 24 in Raum   34 Sektor (3,4) -> Zone 6
+Cutscene 24 in Raum   34 Sektor (3,5) -> Zone 6
 Cutscene 4 in Raum   69 Sektor (4,7) -> Zone 6
 Cutscene 20 in Raum   89 Sektor (1,4) -> Zone 1
 Cutscene 11 in Raum  130 Sektor (1,1) -> Zone 1

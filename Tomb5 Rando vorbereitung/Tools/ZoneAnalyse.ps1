@@ -245,11 +245,30 @@ if ($TYPE_ALLOW_ROOMS.ContainsKey($LevelName)) {
 # selbst herleiten kann, weil ihnen ein eigenes Schloss im Level fehlt.
 # Kombinationsteile sind der Fall: Andrea3s Puzzle Item4 Combo1 (186) und
 # Combo2 (187) werden im Inventar zum Puzzle Item4 vereint, erst das kommt in
-# ein Puzzle Hole4 - und nur das Loch hat eine Zone. Beide Loecher (Item 20 in
-# Raum 8, Item 34 in Raum 24) liegen in Zone 3, also muss jedes Teil bis
-# spaetestens Zone 3 erreichbar sein. Wert hier: typeId -> maxZone.
+# ein Puzzle Hole4 - und nur das Loch hat eine Zone. Massgeblich ist Item 34 in
+# Raum 24: dort loest das vollstaendige Combo den Teleport aus. Das zweite
+# Puzzle Hole4 (Item 20, Raum 8) ist laut Nutzer reine Deko, die den Teleport
+# kaschiert, und keine Schranke. Beide liegen ohnehin in Zone 3.
+# Combo2 (187) steht bewusst NICHT hier - siehe FIXED_ITEMS.
+# Wert hier: typeId -> maxZone.
 $EXTRA_POOL_TYPES = @{
     'Andrea3' = @{ 186 = 3 }
+}
+
+# Items, die an ihrer Vanilla-Position bleiben MUESSEN. Nicht verschieben,
+# nicht ersetzen, nicht in den Pool aufnehmen. Grund ist jeweils eine
+# Nebenwirkung, die an der Position und nicht am Item haengt und die aus den
+# Leveldaten nicht ablesbar ist - hier: Andrea3 Item 49 (Puzzle Item4 Combo2)
+# triggert eine Tuer. Wird ins Zonen-JSON exportiert, damit ein spaeterer
+# Randomizer die Sperre uebernehmen kann, statt sie neu entdecken zu muessen.
+$FIXED_ITEMS = @{
+    'Andrea3' = @{ 49 = 'Puzzle Item4 Combo2 - triggert eine Tuer' }
+}
+$fixedItems = @()
+if ($FIXED_ITEMS.ContainsKey($LevelName)) {
+    foreach($kv in $FIXED_ITEMS[$LevelName].GetEnumerator()){
+        $fixedItems += [PSCustomObject]@{ item=[int]$kv.Key; reason=[string]$kv.Value }
+    }
 }
 $extraPool = @{}
 if ($EXTRA_POOL_TYPES.ContainsKey($LevelName)) {
@@ -1046,7 +1065,7 @@ if ($ExportZonesJson -ne "") {
         $rows += [PSCustomObject]@{ room=[int]$s.room; sectorX=[int]$s.sectorX; sectorZ=[int]$s.sectorZ; zone=[int]$kv.Value; floorY=[int]$s.floorY }
     }
     $maxZoneOut = if($rows.Count -gt 0){ ($rows | Measure-Object -Property zone -Maximum).Maximum } else { 0 }
-    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
+    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
     Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"
 }
 
@@ -1124,6 +1143,14 @@ Write-Output "Nie erreicht: $($unreachedSec.Count) begehbare Sektoren"
 if ($excludeRooms.Count -gt 0) {
     $exSec = @($d.sectors | Where-Object { -not $_.isWall -and $excludeRooms -contains [int]$_.room })
     Write-Output "Handgesperrt (EXCLUDE_ROOMS): $($exSec.Count) Sektoren in $($excludeRooms.Count) Raeumen - gewollt, nicht als Luecke gezaehlt"
+}
+if ($fixedItems.Count -gt 0) {
+    Write-Output "Unantastbare Items (FIXED_ITEMS) - duerfen nicht verschoben werden:"
+    foreach($fi in $fixedItems){
+        $inst = @($d.items | Where-Object { [int]$_.index -eq [int]$fi.item })
+        $where = if($inst.Count){ "Raum $($inst[0].room), typeId $($inst[0].typeId)" } else { "im Level nicht gefunden" }
+        Write-Output ("  Item {0,4} - {1} ({2})" -f $fi.item,$fi.reason,$where)
+    }
 }
 if ($cameraRooms.Count -gt 0) {
     $camSec = @($d.sectors | Where-Object { -not $_.isWall -and $cameraRooms -contains [int]$_.room })

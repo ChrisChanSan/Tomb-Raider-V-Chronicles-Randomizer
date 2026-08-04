@@ -13,66 +13,87 @@ Zone 0 -> 1: Tuer Item 153 (typeId 284, Raum 89)  geoeffnet durch: Trigger betre
 Zone 0 -> 1: Tuer Item 9 (typeId 288, Raum 6)  geoeffnet durch: Trigger betreten (145,1,2)
 Zone 1 -> 2: Tuer Item 151 (typeId 314, Raum 82)  geoeffnet durch: Schalter Item 148 (Raum 82)
 Zone 1 -> 2: Tuer Item 150 (typeId 312, Raum 82)  geoeffnet durch: Schalter Item 148 (Raum 82)
+Zone 2 -> 3: Tuer Item 145 (typeId 308, Raum 81)  geoeffnet durch: Key Item8 in Schloss Item 142 (Raum 81)
+Zone 2 -> 3: Tuer Item 144 (typeId 306, Raum 81)  geoeffnet durch: Key Item8 in Schloss Item 142 (Raum 81)
+Zone 3 -> 4: Tuer Item 89 (typeId 304, Raum 43)  geoeffnet durch: Schalter Item 78 (Raum 31)
+Zone 4 -> 5: Tuer Item 163 (typeId 304, Raum 109)  geoeffnet durch: AntiTrigger
+Zone 4 -> 5: Tuer Item 206 (typeId 304, Raum 155)  geoeffnet durch: Pickup-Trigger
+Zone 4 -> 5: Tuer Item 10 (typeId 304, Raum 7)  geoeffnet durch: HeavyAntiTrigger
+Zone 5 -> 6: Tuer Item 54 (typeId 300, Raum 25)  geoeffnet durch: AntiTrigger
+Zone 5 -> 6: Tuer Item 26 (typeId 290, Raum 15)  geoeffnet durch: Schalter Item 20 (Raum 15)
+Zone 5 -> 6: Tuer Item 23 (typeId 290, Raum 15)  geoeffnet durch: Schalter Item 19 (Raum 15)
+Zone 5 -> 6: Tuer Item 18 (typeId 286, Raum 15)  geoeffnet durch: Schalter Item 19 (Raum 15)
+Zone 5 -> 6: Tuer Item 17 (typeId 286, Raum 15)  geoeffnet durch: Schalter Item 20 (Raum 15)
+Zone 5 -> 6: Tuer Item 191 (typeId 304, Raum 140)  geoeffnet durch: AntiTrigger
+Zone 5 -> 6: Tuer Item 101 (typeId 288, Raum 63)  geoeffnet durch: Puzzle Item3 in Schloss Item 100 (Raum 63)
+Zone 6 -> 7: Tuer Item 141 (typeId 304, Raum 77)  geoeffnet durch: Key Item8 in Schloss Item 117 (Raum 69)
+Zone 6 -> 7: Tuer Item 123 (typeId 298, Raum 69)  geoeffnet durch: Key Item8 in Schloss Item 124 (Raum 69)
+Zone 6 -> 7: Tuer Item 122 (typeId 296, Raum 69)  geoeffnet durch: Key Item8 in Schloss Item 124 (Raum 69)
+Zone 6 -> 7: Tuer Item 121 (typeId 294, Raum 69)  geoeffnet durch: Key Item8 in Schloss Item 124 (Raum 69)
+Zone 7 -> 8: Tuer Item 130 (typeId 304, Raum 71)  geoeffnet durch: Trigger betreten (71,1,3)
+Zone 8 -> 9: Tuer Item 107 (typeId 304, Raum 66)  geoeffnet durch: Puzzle Item4 in Schloss Item 182 (Raum 131)
 
 --- Sektoren pro Zone ---
 Zone 0:   521 Sektoren in  72 Raeumen
 Zone 1:    61 Sektoren in  11 Raeumen
 Zone 2:    46 Sektoren in   6 Raeumen
-Nie erreicht: 828 begehbare Sektoren
+Zone 3:    26 Sektoren in   2 Raeumen
+Zone 4:   180 Sektoren in  12 Raeumen
+Zone 5:    63 Sektoren in  13 Raeumen
+Zone 6:   257 Sektoren in  28 Raeumen
+Zone 7:   111 Sektoren in  16 Raeumen
+Zone 8:    14 Sektoren in   4 Raeumen
+Zone 9:    66 Sektoren in   9 Raeumen
+Nie erreicht: 111 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
-TypeId 203: 1 Instanz(en) noetig
-    Instanz 1 -> muss in Zone <= 0 liegen  (Key Item8 in Schloss Item 55 (Raum 26))
+TypeId 174: 1 Instanz(en) noetig
+    Instanz 1 -> muss in Zone <= 5 liegen  (Puzzle Item3 in Schloss Item 100 (Raum 63))
+    Vanilla: 1 Instanz(en) vorhanden
+      Item  27 in Raum   15 -> Zone 5            [OK]
+TypeId 175: 1 Instanz(en) noetig
+    Instanz 1 -> muss in Zone <= 8 liegen  (Puzzle Item4 in Schloss Item 182 (Raum 131))
+    Vanilla: 1 Instanz(en) vorhanden
+      Item 204 in Raum  153 -> Zone 8            [OK]
+TypeId 203: mehrfach nutzbar - 1 Instanz reicht fuer 4 Schloss/Schloesser
+    Instanz 1 -> muss in Zone <= 0 liegen  (Key Item8 in Schloss Item 55 (Raum 26) [mehrfach nutzbar])
     Vanilla: 1 Instanz(en) vorhanden
       Item 109 in Raum   67 -> Zone 0            [OK]
 
 --- Warum kam der Flood nicht weiter? ---
-Tuer Item 145 (typeId 308, Raum   81) Maske  0/31
-    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
-    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
-    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
-    Maske 31  Schalter Item 78 (Raum 31)       -> Triggersektor nicht erreichbar
-    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
-    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
-    Maske 31  Key Item8 in Schloss Item 142 (Raum 81) -> Item fehlt
-Tuer Item 144 (typeId 306, Raum   81) Maske  0/31
-    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
-    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
-    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
-    Maske 31  Schalter Item 78 (Raum 31)       -> Triggersektor nicht erreichbar
-    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
-    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
-    Maske 31  Key Item8 in Schloss Item 142 (Raum 81) -> Item fehlt
-Tuer Item 101 (typeId 288, Raum   63) Maske  0/31
-    Maske 31  Puzzle Item3 in Schloss Item 100 (Raum 63) -> Item fehlt
-    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
-Tuer Item  89 (typeId 304, Raum   43) Maske  0/31
-    Maske 31  AntiTrigger                      -> Triggersektor nicht erreichbar
-    Maske 31  Schalter Item 78 (Raum 31)       -> Triggersektor nicht erreichbar
-    Maske 31  Trigger betreten (42,1,1)        -> Triggersektor nicht erreichbar
+Tuer Item  84 (typeId 302, Raum   34) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item  25 (typeId 290, Raum   15) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item  24 (typeId 290, Raum   15) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item  22 (typeId 290, Raum   15) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item  21 (typeId 290, Raum   15) Maske  0/31
+    kein Trigger im Level schaltet diese Tuer
+Tuer Item 186 (typeId 304, Raum  138) Maske  0/31
+    Maske 31  Trigger betreten (142,1,1)       -> Triggersektor nicht erreichbar
 
 --- Groesste unerreichte Gebiete ---
-Gebiet mit   685 Sektoren in  67 Raeumen
-   Raeume: 7, 10, 11, 14, 15, 16, 25, 32, 34, 35, 36, 37, 42, 43, 44, 45, 46, 47, 48, 63
-           ... und 47 weitere
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 304x11, 266x1, 374x1, 150x1, 221x1, 156x5, 286x2, 267x2, 290x6, 174x1, 69x2, 452x8, 448x5, 300x1, 37x6, 302x1, 97x1, 394x1, 244x1, 288x1, 390x1, 265x2, 39x3, 294x1, 296x1, 298x1, 409x3, 346x1, 375x1, 136x1, 164x2, 235x2, 350x2, 349x1, 95x2, 128x6, 149x7, 411x1, 245x1, 223x2, 162x1, 168x2, 236x1, 175x1
 Gebiet mit    40 Sektoren in   2 Raeumen
    Raeume: 98, 99
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
    Bespielbare Objekte darin: 39x1, 292x1, 149x1
-Gebiet mit    26 Sektoren in   2 Raeumen
-   Raeume: 31, 81
+Gebiet mit    21 Sektoren in   3 Raeumen
+   Raeume: 133, 134, 135
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 69x2, 271x1, 97x1, 265x1, 269x1, 306x1, 308x1, 37x2
-Gebiet mit    21 Sektoren in   3 Raeumen
-   Raeume: 133, 134, 135
+Gebiet mit    18 Sektoren in   1 Raeumen
+   Raeume: 64
+   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
+   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
+   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+   Bespielbare Objekte darin: 69x1
+Gebiet mit     8 Sektoren in   2 Raeumen
+   Raeume: 148, 149
    Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
    Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
    Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
@@ -81,16 +102,16 @@ Gebiet mit    21 Sektoren in   3 Raeumen
 Keine hinterlegt.
 
 --- Selbsttest: Level durchspielbar? ---
-Cutscene 24 in Raum   34 Sektor (1,3) -> NICHT ERREICHBAR
-Cutscene 24 in Raum   34 Sektor (1,4) -> NICHT ERREICHBAR
-Cutscene 24 in Raum   34 Sektor (1,5) -> NICHT ERREICHBAR
-Cutscene 24 in Raum   34 Sektor (2,3) -> NICHT ERREICHBAR
-Cutscene 24 in Raum   34 Sektor (2,4) -> NICHT ERREICHBAR
-Cutscene 24 in Raum   34 Sektor (2,5) -> NICHT ERREICHBAR
-Cutscene 24 in Raum   34 Sektor (3,3) -> NICHT ERREICHBAR
-Cutscene 24 in Raum   34 Sektor (3,4) -> NICHT ERREICHBAR
-Cutscene 24 in Raum   34 Sektor (3,5) -> NICHT ERREICHBAR
-Cutscene 4 in Raum   69 Sektor (4,7) -> NICHT ERREICHBAR
+Cutscene 24 in Raum   34 Sektor (1,3) -> Zone 9
+Cutscene 24 in Raum   34 Sektor (1,4) -> Zone 9
+Cutscene 24 in Raum   34 Sektor (1,5) -> Zone 9
+Cutscene 24 in Raum   34 Sektor (2,3) -> Zone 9
+Cutscene 24 in Raum   34 Sektor (2,4) -> Zone 9
+Cutscene 24 in Raum   34 Sektor (2,5) -> Zone 9
+Cutscene 24 in Raum   34 Sektor (3,3) -> Zone 9
+Cutscene 24 in Raum   34 Sektor (3,4) -> Zone 9
+Cutscene 24 in Raum   34 Sektor (3,5) -> Zone 9
+Cutscene 4 in Raum   69 Sektor (4,7) -> Zone 6
 Cutscene 20 in Raum   89 Sektor (1,4) -> Zone 1
 Cutscene 11 in Raum  130 Sektor (1,1) -> Zone 1
-EndLevel 0 in Raum  154 Sektor (1,1) -> NICHT ERREICHBAR
+EndLevel 0 in Raum  154 Sektor (1,1) -> Zone 5

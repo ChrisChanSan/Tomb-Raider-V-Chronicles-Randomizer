@@ -142,12 +142,16 @@ $MANUAL_LINK = @{
 }
 
 # Schluessel, die NICHT verbraucht werden. Der Normalfall in TR ist: Key oder
-# Puzzle-Item wandert ins Schloss und ist weg. Manche sind aber Mehrfachnutzer -
-# typischerweise Karten. joby5 hat genau EIN Key Item8 (Item 118, Raum 102),
-# aber ZWEI Keyhole8 (Raeume 13 und 64); ohne diesen Eintrag meldet der Analyser
-# faelschlich Mangel und verkuerzt das Level. Vom Nutzer im Spiel bestaetigt.
+# Puzzle-Item wandert ins Schloss und ist weg - KeyHoleCollision (game/pickup.cpp:
+# 594) ruft dafuer remove_inventory_item auf. EINE einzige harte Ausnahme steht
+# im Code selbst, nicht in Leveldaten: "if (item->object_number != KEY_HOLE8)
+# remove_inventory_item(...)" - Key Hole 8 (typeId 265) und damit Key Item8
+# (typeId 203) sind ueber ALLE TR5-Level hinweg unverbrauchbar, das ist keine
+# Level-Eigenschaft. joby5 (Item 118, EIN Key fuer ZWEI Keyhole8-Schloesser) und
+# rich1 (EIN Key fuer VIER Keyhole8-Schloesser, Raeume 26/69x2/81) sind beide
+# einfach Anwendungsfaelle derselben globalen Engine-Regel, kein Zufall.
+$REUSABLE_KEYS_GLOBAL = @(203)
 $REUSABLE_KEYS = @{
-    'joby5' = @(203)
 }
 
 # Raeume, die es nur fuer eine Kamerafahrt gibt und die Lara nie betritt.
@@ -162,7 +166,7 @@ $CAMERA_ROOMS = @{
     'joby3' = @(4,10,11,94,96,97,114,140,185)
 }
 $cameraRooms = @( if($CAMERA_ROOMS.ContainsKey($LevelName)){ $CAMERA_ROOMS[$LevelName] } )
-$reusableKeys = @( if($REUSABLE_KEYS.ContainsKey($LevelName)){ $REUSABLE_KEYS[$LevelName] } )
+$reusableKeys = @($REUSABLE_KEYS_GLOBAL) + @( if($REUSABLE_KEYS.ContainsKey($LevelName)){ $REUSABLE_KEYS[$LevelName] } )
 $manualLinks = @( if($MANUAL_LINK.ContainsKey($LevelName)){ $MANUAL_LINK[$LevelName] } )
 
 # Bruecken-Objekte erzeugen begehbaren Boden, wo die Sektordaten Leere melden.

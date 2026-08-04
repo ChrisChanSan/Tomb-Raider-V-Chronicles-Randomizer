@@ -179,6 +179,8 @@ $EXCLUDE_ROOMS = @{
     # Luftraeume ueber den Gassen und der Bereich hinter den Dekotueren 89/90.
     'Andrea2' = @(148,215,83,177,205,220,189,153,226,232,242,47,224,162,237,
                   181,156,124,127,185,112,122,119,118,128,114,115,141,87)
+    # Einbahnraeume, die nur die Skybox zeigen und dem Level Tiefe geben.
+    'Andrea3' = @(113,114,115,116,64)
 }
 $excludeRooms = @( if($EXCLUDE_ROOMS.ContainsKey($LevelName)){ $EXCLUDE_ROOMS[$LevelName] } )
 
@@ -222,15 +224,36 @@ $noPlacement = @( if($NO_PLACEMENT_ROOMS.ContainsKey($LevelName)){ $NO_PLACEMENT
 # abgeleitet (Flut ab 27, Stop an 26 rueckwaerts und am Schloss vorwaerts).
 $TYPE_ALLOW_ROOMS = @{
     'Andrea3' = @{
-        196 = @(15,16,26,27,107,108,115)                     # Key Item1, Ende 15
+        196 = @(15,16,26,27,107,108)                         # Key Item1, Ende 15
         197 = @(10,15,16,17,18,26,27,28,55,56,70,83,85,87,   # Key Item2, Ende 102
                 88,89,90,100,101,102,103,104,105,106,107,
-                108,110,111,113,114,115,116,119,120,121,129)
+                108,110,111,119,120,121,129)
+        # Puzzle Item4 Combo1: ab Raum 0 Richtung 63. Richtung 58 ist gesperrt -
+        # dort liegt eine Schraege, also eine Einbahnstrasse. Dead Stop laut
+        # Nutzer ist Raum 35.
+        186 = @(0,9,31,32,33,35,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,
+                52,53,54,59,60,61,62,63,65,66,67,68,69,75,76,78,79,81,82,84,
+                86,93,94,95,96,97,98,99,109,117,118,125,128)
     }
 }
 $typeAllow = @{}
 if ($TYPE_ALLOW_ROOMS.ContainsKey($LevelName)) {
     foreach($kv in $TYPE_ALLOW_ROOMS[$LevelName].GetEnumerator()){ $typeAllow[[int]$kv.Key] = @($kv.Value) }
+}
+
+# Typen, die in den Pool gehoeren, deren Zonengrenze das Modell aber nicht
+# selbst herleiten kann, weil ihnen ein eigenes Schloss im Level fehlt.
+# Kombinationsteile sind der Fall: Andrea3s Puzzle Item4 Combo1 (186) und
+# Combo2 (187) werden im Inventar zum Puzzle Item4 vereint, erst das kommt in
+# ein Puzzle Hole4 - und nur das Loch hat eine Zone. Beide Loecher (Item 20 in
+# Raum 8, Item 34 in Raum 24) liegen in Zone 3, also muss jedes Teil bis
+# spaetestens Zone 3 erreichbar sein. Wert hier: typeId -> maxZone.
+$EXTRA_POOL_TYPES = @{
+    'Andrea3' = @{ 186 = 3 }
+}
+$extraPool = @{}
+if ($EXTRA_POOL_TYPES.ContainsKey($LevelName)) {
+    foreach($kv in $EXTRA_POOL_TYPES[$LevelName].GetEnumerator()){ $extraPool[[int]$kv.Key] = [int]$kv.Value }
 }
 $onewayOut = @( if($ONEWAY_OUT.ContainsKey($LevelName)){ $ONEWAY_OUT[$LevelName] } )
 
@@ -998,6 +1021,15 @@ foreach($kv in $byType.GetEnumerator()){
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
     $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms }
+}
+# Handgesetzte Zusatztypen anhaengen, sofern das Modell sie nicht ohnehin schon
+# selbst abgeleitet hat (dann gilt die abgeleitete Grenze, nicht die Handangabe).
+foreach($kv in $extraPool.GetEnumerator()){
+    $nt = [int]$kv.Key
+    if ($byType.ContainsKey($nt)) { continue }
+    $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement | Sort-Object -Unique )
+    $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
+    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=[int]$kv.Value; instances=0; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms }
 }
 
 if ($ExportZonesJson -ne "") {

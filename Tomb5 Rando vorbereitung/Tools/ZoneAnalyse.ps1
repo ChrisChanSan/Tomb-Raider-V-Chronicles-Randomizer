@@ -175,9 +175,28 @@ $ONEWAY_OUT = @{
 # Puzzle-Slots - als Regel UND als Verdachtsgenerator unbrauchbar. Deshalb
 # Handkuration: eine Zahl pro Raum, in trview direkt ablesbar.
 $EXCLUDE_ROOMS = @{
-    'Andrea2' = @(177,226)   # Daecher, vom Nutzer in trview identifiziert
+    # Vom Nutzer in trview durchgesehen. Daecher (177/226 und Nachbarn), reine
+    # Luftraeume ueber den Gassen und der Bereich hinter den Dekotueren 89/90.
+    'Andrea2' = @(148,215,83,177,205,220,189,153,226,232,242,47,224,162,237,
+                  181,156,124,127,185,112,122,119,118,128,114,115)
 }
 $excludeRooms = @( if($EXCLUDE_ROOMS.ContainsKey($LevelName)){ $EXCLUDE_ROOMS[$LevelName] } )
+
+# Zusaetzliche Sperren pro Item-Typ statt pro Level: der Raum bleibt begehbar
+# und Teil des Wegenetzes, nur DIESES Item darf dort nicht liegen. Typischer
+# Fall sind Raeume, die zwar frueh erreichbar sind, aber hinter dem Schloss
+# liegen, das der Schluessel oeffnet - die Zone allein sieht das nicht, weil
+# sie nur "ab wann erreichbar" kennt, nicht "wofuer noch gebraucht".
+$TYPE_EXCLUDE_ROOMS = @{
+    'Andrea2' = @{
+        174 = @(17,134,214,46,9,10,207,219)   # Puzzle Item3
+        175 = @(70,204)                       # Puzzle Item4
+    }
+}
+$typeExclude = @{}
+if ($TYPE_EXCLUDE_ROOMS.ContainsKey($LevelName)) {
+    foreach($kv in $TYPE_EXCLUDE_ROOMS[$LevelName].GetEnumerator()){ $typeExclude[[int]$kv.Key] = @($kv.Value) }
+}
 $onewayOut = @( if($ONEWAY_OUT.ContainsKey($LevelName)){ $ONEWAY_OUT[$LevelName] } )
 
 # Umzaeunte Bereiche: ein zusammenhaengender Gebaeude-/Hofkomplex, der im Spiel
@@ -941,7 +960,8 @@ $keyConstraints = @()
 foreach($kv in $byType.GetEnumerator()){
     $nt = [int]$kv.Key
     $maxZ = ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
-    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt) }
+    $exRooms = @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } )
+    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms }
 }
 
 if ($ExportZonesJson -ne "") {
@@ -1023,11 +1043,20 @@ for($z=0; $z -le $maxZone; $z++){
     "Zone {0}: {1,5} Sektoren in {2,3} Raeumen" -f $z,$cnt,$rms
 }
 # Kulissenraeume zaehlen nicht als Fehlbestand - sie sind nicht zum Betreten
-# gedacht, ihr Fehlen ist also kein Defizit der Analyse.
+# gedacht, ihr Fehlen ist also kein Defizit der Analyse. Dasselbe gilt fuer die
+# handkuratierten EXCLUDE_ROOMS: dass sie nicht erreicht werden, ist das
+# gewuenschte Ergebnis, kein Loch im Modell - sonst saehe Andrea2 mit seinen
+# 763 gesperrten Sektoren aus, als waere die Analyse um 18 Prozent schlechter
+# geworden, obwohl die Restluecke unveraendert klein ist.
 $unreachedSec = @($d.sectors | Where-Object {
     -not $_.isWall -and $cameraRooms -notcontains [int]$_.room -and
+    $excludeRooms -notcontains [int]$_.room -and
     -not $zoneOf.ContainsKey("$($_.room),$($_.sectorX),$($_.sectorZ)") })
 Write-Output "Nie erreicht: $($unreachedSec.Count) begehbare Sektoren"
+if ($excludeRooms.Count -gt 0) {
+    $exSec = @($d.sectors | Where-Object { -not $_.isWall -and $excludeRooms -contains [int]$_.room })
+    Write-Output "Handgesperrt (EXCLUDE_ROOMS): $($exSec.Count) Sektoren in $($excludeRooms.Count) Raeumen - gewollt, nicht als Luecke gezaehlt"
+}
 if ($cameraRooms.Count -gt 0) {
     $camSec = @($d.sectors | Where-Object { -not $_.isWall -and $cameraRooms -contains [int]$_.room })
     "  (zusaetzlich {0} Sektoren in {1} reinen Kulissenraeumen, nicht mitgezaehlt)" -f $camSec.Count,$cameraRooms.Count

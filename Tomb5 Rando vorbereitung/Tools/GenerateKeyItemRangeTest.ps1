@@ -60,7 +60,10 @@ foreach($lvl in $Levels){
 
     $itemAdds = @()
     foreach($c in $constraints){
-        $eligible = @($z.sectors | Where-Object { [int]$_.zone -le [int]$c.maxZone })
+        # excludeRooms: Raeume, die zwar in der Zone liegen, in denen dieser eine
+        # Typ aber trotzdem nicht liegen darf (Nutzerangabe aus trview).
+        $ex = @( if($null -ne $c.excludeRooms){ $c.excludeRooms | ForEach-Object { [int]$_ } } )
+        $eligible = @($z.sectors | Where-Object { [int]$_.zone -le [int]$c.maxZone -and $ex -notcontains [int]$_.room })
         foreach($s in $eligible){
             $rm = $rooms[[int]$s.room]
             if (-not $rm) { continue }
@@ -84,7 +87,10 @@ foreach($lvl in $Levels){
     $argList = @('-patchlevel', "`"$srcTrc`"", "`"$dstTrc`"", "`"$patchPath`"")
     $p = Start-Process -FilePath $Exe -ArgumentList $argList -Wait -PassThru -NoNewWindow
     $ok = (Test-Path $dstTrc) -and $p.ExitCode -eq 0
-    $typeList = ($constraints | ForEach-Object { "$($_.typeId)<=Z$($_.maxZone)" }) -join ', '
+    $typeList = ($constraints | ForEach-Object {
+        $x = @( if($null -ne $_.excludeRooms){ $_.excludeRooms } )
+        "$($_.typeId)<=Z$($_.maxZone)$(if($x.Count){" -$($x.Count)R"})"
+    }) -join ', '
     $results += [PSCustomObject]@{ Level=$lvl; Types=$constraints.Count; Items=$itemAdds.Count; OK=$ok }
     "{0,-10} Typen=[{1}]  Items={2,5}  ExitCode={3}  {4}" -f $lvl,$typeList,$itemAdds.Count,$p.ExitCode,($(if($ok){'OK'}else{'FEHLER'}))
 }

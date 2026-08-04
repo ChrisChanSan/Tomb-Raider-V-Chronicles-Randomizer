@@ -3,13 +3,13 @@
   "trType": 5,
   "numRooms": 7,
   "rooms": [
-    { "index": 0, "valid": true, "originX": 44032, "originZ": 61440, "yBottom": 0, "numXSectors": 11, "numZSectors": 12, "alternateRoom": null },
-    { "index": 1, "valid": true, "originX": 44032, "originZ": 61440, "yBottom": -1536, "numXSectors": 11, "numZSectors": 12, "alternateRoom": null },
-    { "index": 2, "valid": true, "originX": 44032, "originZ": 61440, "yBottom": 1536, "numXSectors": 11, "numZSectors": 12, "alternateRoom": null },
-    { "index": 3, "valid": true, "originX": 44032, "originZ": 61440, "yBottom": 3840, "numXSectors": 11, "numZSectors": 12, "alternateRoom": null },
-    { "index": 4, "valid": true, "originX": 48128, "originZ": 71680, "yBottom": 1024, "numXSectors": 3, "numZSectors": 9, "alternateRoom": null },
-    { "index": 5, "valid": true, "originX": 48128, "originZ": 71680, "yBottom": 0, "numXSectors": 3, "numZSectors": 9, "alternateRoom": null },
-    { "index": 6, "valid": true, "originX": 34816, "originZ": 33792, "yBottom": 0, "numXSectors": 4, "numZSectors": 3, "alternateRoom": null }
+    { "index": 0, "valid": true, "originX": 44032, "originZ": 61440, "yBottom": 0, "numXSectors": 11, "numZSectors": 12, "alternateRoom": null, "waterRoom": false, "roomFlags": 8 },
+    { "index": 1, "valid": true, "originX": 44032, "originZ": 61440, "yBottom": -1536, "numXSectors": 11, "numZSectors": 12, "alternateRoom": null, "waterRoom": false, "roomFlags": 8 },
+    { "index": 2, "valid": true, "originX": 44032, "originZ": 61440, "yBottom": 1536, "numXSectors": 11, "numZSectors": 12, "alternateRoom": null, "waterRoom": false, "roomFlags": 8 },
+    { "index": 3, "valid": true, "originX": 44032, "originZ": 61440, "yBottom": 3840, "numXSectors": 11, "numZSectors": 12, "alternateRoom": null, "waterRoom": false, "roomFlags": 8 },
+    { "index": 4, "valid": true, "originX": 48128, "originZ": 71680, "yBottom": 1024, "numXSectors": 3, "numZSectors": 9, "alternateRoom": null, "waterRoom": false, "roomFlags": 64 },
+    { "index": 5, "valid": true, "originX": 48128, "originZ": 71680, "yBottom": 0, "numXSectors": 3, "numZSectors": 9, "alternateRoom": null, "waterRoom": false, "roomFlags": 64 },
+    { "index": 6, "valid": true, "originX": 34816, "originZ": 33792, "yBottom": 0, "numXSectors": 4, "numZSectors": 3, "alternateRoom": null, "waterRoom": false, "roomFlags": 64 }
   ],
   "items": [
     { "index": 0, "typeId": 0, "room": 0, "x": 49664, "y": 0, "z": 70144, "ocb": 0, "flags": 0, "sectorX": 5, "sectorZ": 8, "localX": 5632, "localY": 0, "localZ": 8704 },

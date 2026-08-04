@@ -25,13 +25,26 @@ param(
     [string[]]$DebugSectors = @(),
     [string]$DebugPathTo = "",
     [string]$ExportZonesJson = "",
-    # Maximaler Hoehenunterschied, den Lara ohne Hilfsmittel ueberwindet.
-    # Nutzerangabe: "alles ueber 2x1024 kann Lara nicht aus dem Stand
-    # ueberwinden" - 2048 ist also die Obergrenze, nicht ein Schaetzwert.
-    # Gilt nur fuer Portal-/Vertikaluebergaenge zwischen Raeumen; Nachbar-
-    # sektoren innerhalb eines Raumes bleiben unbeschraenkt (Treppen, Rampen
-    # und Schraegen sind dort ueber viele kleine Stufen modelliert).
-    [int]$CLIMB_LIMIT = 2048
+    # Maximaler Aufstieg, den Lara ohne Hilfsmittel schafft. Engine-Wert, nicht
+    # Schaetzung: TestLaraVault (game/lara.cpp:1107) behandelt hdif bis -1920
+    # (Vault2/Vault3/Hochsprung) und faellt darueber in
+    # "if (!lara.climb_status) return 0;" - hoeher geht nur an Kletterwaenden.
+    # Der Nutzer hatte es im Spiel exakt richtig eingeschaetzt ("alles ueber
+    # 2x1024 geht nicht aus dem Stand" - die Andrea1-Mauer mit 2048 ist real
+    # unueberwindbar, 1920 ist die praezise Codegrenze darunter).
+    [int]$CLIMB_LIMIT = 1920,
+    # PHYSIKMODELL, GEPARKT (2026-08-04): richtungsabhaengige Kletterregel +
+    # Sprungkanten. Drei Messrunden ergaben: die Regel schliesst echte Lecks
+    # (Andrea1-Mauer), zerlegt aber Stockwerk-Level, weil die Sektordaten-
+    # Semantik dafuer nicht ausreicht. Kernbefund aus GetFloor (game/
+    # control.cpp:1206): der Abstieg durch pit_room passiert NUR wenn
+    # y >= Bodenebene - der Floor-Byte ist also echter, solider Boden, AUCH
+    # wenn roomBelow gesetzt ist (gestapelte Stockwerke, Andrea2 Raum 211
+    # ueber 54: beide Ebenen begehbar). Eine "Standhoehen-Aufloesung nach
+    # unten" ist damit grundfalsch; ein korrektes Modell braucht die volle
+    # GetHeight-Semantik inkl. NoCol-Dreiecken. Bis dahin: Schalter aus,
+    # Leck-Schliessung stattdessen per GATED_AREA-Kuration.
+    [switch]$EnableClimbModel
 )
 
 $ErrorActionPreference = "Stop"
@@ -71,6 +84,80 @@ function Get-SectorInRoom([int]$targetRoom, [int]$worldX, [int]$worldZ) {
     return $null
 }
 
+# Wasserraeume (waterRoom aus dem Export, ROOM_UNDERWATER-Bit 0x1 des Room-
+# Headers). Beim Schwimmen ist Hoehe irrelevant - jede Kletterregel muss
+# Wasserraeume vollstaendig ausnehmen.
+$roomWater = @{}
+foreach($r in $d.rooms){ $roomWater[[int]$r.index] = [bool]$r.waterRoom }
+
+# Effektive Standhoehe eines Sektors. floorY eines Portalsektors ist NICHT die
+# Hoehe, auf der Lara dort steht - das war die Kernursache, warum der erste
+# Hoehenregel-Versuch die Level zerlegte (joby3 -82% usw.). Die Engine macht es
+# in GetHeight()/GetFloor() so: bei einem vertikalen Portal (pit_room) wird in
+# den Raum darunter weitergegangen, bis echter Boden gefunden ist; bei einem
+# horizontalen Portal steht Lara letztlich auf dem Boden des Zielraums. Genau
+# das bildet diese Aufloesung nach: roomBelow zuerst (vertikal faellt man
+# durch), sonst Portalziel, sonst der eigene floorY. Nicht aufloesbar (Zyklen,
+# Wand-Sentinel) => $null, und $null behandelt die Kletterpruefung bewusst als
+# "erlaubt" - lieber eine Kante zu viel als ein Level faelschlich zerschnitten.
+$effFloorCache = @{}
+function Get-EffFloorY([string]$k, [int]$depth = 0) {
+    if ($effFloorCache.ContainsKey($k)) { return $effFloorCache[$k] }
+    $v = $null
+    if ($sec.ContainsKey($k) -and $depth -lt 6) {
+        $s = $sec[$k]
+        $rm = $rooms[[int]$s.room]
+        $wx = [int]$rm.originX + [int]$s.sectorX*1024
+        $wz = [int]$rm.originZ + [int]$s.sectorZ*1024
+        if ($s.roomBelow -ne 255) {
+            $t = Get-SectorInRoom ([int]$s.roomBelow) $wx $wz
+            if ($t) { $v = Get-EffFloorY "$($t.room),$($t.sectorX),$($t.sectorZ)" ($depth+1) }
+        }
+        elseif ($s.isPortal -and $null -ne $s.portalTarget) {
+            $t = Get-SectorInRoom ([int]$s.portalTarget) $wx $wz
+            if ($t) { $v = Get-EffFloorY "$($t.room),$($t.sectorX),$($t.sectorZ)" ($depth+1) }
+        }
+        else {
+            $f = [int]$s.floorY
+            if ($f -gt -30000) { $v = $f }   # Wand-Sentinel (-127 Klicks) => unbekannt
+        }
+    }
+    $effFloorCache[$k] = $v
+    return $v
+}
+
+# Darf Lara die Kante von $ka nach $kb nehmen? Runter immer (Fallen ist
+# unbegrenzt - der alte Versuch hatte auch Abstiege gedeckelt, DAS war neben
+# der Portalhoehe der zweite Fehler, joby3s tiefe Schaechte fielen deshalb
+# komplett aus). Hoch nur bis CLIMB_LIMIT (1920, TestLaraVault) - es sei denn,
+# einer der Sektoren ist als Kletterwand markiert, einer der Raeume ist Wasser
+# (Schwimmen), oder ein Brueckensektor ist beteiligt (deren floorY beschreibt
+# den Grund unter der Bruecke, nicht die Bruecke).
+function Test-ClimbEdge([string]$ka, [string]$kb) {
+    if (-not $EnableClimbModel) { return $true }   # Physikmodell geparkt, s. Parameterkommentar
+    if ($bridgeSec.ContainsKey($ka) -or $bridgeSec.ContainsKey($kb)) { return $true }
+    $sa = $sec[$ka]; $sb = $sec[$kb]
+    if ($roomWater[[int]$sa.room] -or $roomWater[[int]$sb.room]) { return $true }
+    $fa = Get-EffFloorY $ka
+    $fb = Get-EffFloorY $kb
+    if ($null -eq $fa -or $null -eq $fb) { return $true }
+    $rise = $fa - $fb    # Y zeigt nach unten: > 0 heisst Ziel liegt HOEHER
+    if ($rise -le $CLIMB_LIMIT) { return $true }
+    if ($sa.climbable -or $sb.climbable) { return $true }
+    # Leitern haengen an WAENDEN: das CLIMB_TYPE-Flag sitzt regelmaessig auf dem
+    # Wandsektor selbst, und Wandsektoren sind nie Endpunkte einer Kante. Lara
+    # steht auf dem Nachbarsektor und klettert die markierte Wand daneben hoch.
+    # Deshalb zaehlt auch ein direkt angrenzender kletterbarer Sektor (egal ob
+    # Wand oder Boden) an einem der beiden Endpunkte.
+    foreach($p in @($sa,$sb)){
+        foreach($off in @(@(1,0),@(-1,0),@(0,1),@(0,-1))){
+            $ak = "$($p.room),$([int]$p.sectorX + $off[0]),$([int]$p.sectorZ + $off[1])"
+            if ($sec.ContainsKey($ak) -and $sec[$ak].climbable) { return $true }
+        }
+    }
+    return $false
+}
+
 # --- Sektorgraph aufbauen ---------------------------------------------------
 # Manuell kuratierte Einbahn-Uebergaenge: Raum, den Lara betreten, aber nicht
 # wieder in Richtung anderer Raeume verlassen kann. Aus der Geometrie allein
@@ -80,6 +167,29 @@ $ONEWAY_OUT = @{
     'Andrea1' = @(194)   # Rattenkaefig: rein ja, weiter nach 170 nein
 }
 $onewayOut = @( if($ONEWAY_OUT.ContainsKey($LevelName)){ $ONEWAY_OUT[$LevelName] } )
+
+# Umzaeunte Bereiche: ein zusammenhaengender Gebaeude-/Hofkomplex, der im Spiel
+# AUSSCHLIESSLICH durch bestimmte Tueren betreten werden kann, den der Graph
+# aber ueber Portal-Randkanten (Zaeune, Tuerstuerze, Hochparterre-Portale)
+# faelschlich frueher erreicht. Der Innenbereich wird zur Laufzeit als
+# Zusammenhangskomponente ab Seed berechnet (ohne Barrier-Raeume zu betreten,
+# ohne Torsektoren zu durchqueren); danach wird jede Kante von aussen nach
+# innen gekappt, die nicht ueber die Torsektoren laeuft. Vom Nutzer in trview
+# verifizierte Vorgabe fuer Andrea1: "ab dem Tor 53/54 darf alles was dahinter
+# liegt keine KeyItem-Positionen mehr enthalten" - der rote Kasten auf seiner
+# Karte ist genau dieser Komplex, das Doppeltor 53/54 (Raum 112) der einzige
+# legale Zugang. Ein volles Hoehen-/Physikmodell wuerde das automatisch
+# erkennen, ist aber geparkt (siehe -EnableClimbModel).
+# Rooms = explizite Innenraum-Liste (der rote Kasten des Nutzers). Eine
+# automatische Komponentenberechnung ab Seed wurde zuerst versucht und
+# verworfen: die Leckkanten sind beidseitig, die Flut ab dem Innenhof frass
+# darueber das gesamte Level. Die explizite Liste ist transparent, in trview
+# direkt verifizierbar und mit einem Eintrag korrigierbar - exakt der
+# "eingrenzen, dann manuell Feinschliff"-Workflow dieses Projekts.
+$GATED_AREA = @{
+    'Andrea1' = @( @{ Doors = @(53,54); Rooms = @(116,117,118,119,121,128,129,142) } )
+}
+$gatedAreas = @( if($GATED_AREA.ContainsKey($LevelName)){ $GATED_AREA[$LevelName] } )
 
 # Tueren, die kein Trigger im Level schaltet, weil die Engine sie aus
 # levelspezifischem Skriptcode heraus oeffnet (game/deltapak.cpp ruft dort
@@ -202,12 +312,18 @@ $cameraRooms = @( if($CAMERA_ROOMS.ContainsKey($LevelName)){ $CAMERA_ROOMS[$Leve
 $reusableKeys = @($REUSABLE_KEYS_GLOBAL) + @( if($REUSABLE_KEYS.ContainsKey($LevelName)){ $REUSABLE_KEYS[$LevelName] } )
 $manualLinks = @( if($MANUAL_LINK.ContainsKey($LevelName)){ $MANUAL_LINK[$LevelName] } )
 
-# Bruecken-Objekte erzeugen begehbaren Boden, wo die Sektordaten Leere melden.
-# Belegt in game/setup.cpp:209-222: BRIDGE_FLAT, BRIDGE_TILT1 und BRIDGE_TILT2
-# bekommen eigene Boden- und Deckenprozeduren (obj->floor = BridgeFlatFloor
-# usw.), die die Hoehe ihres Sektors ueberschreiben. Ein rein sektorbasierter
-# Graph kann sie prinzipiell nicht sehen - deshalb hier nachgezogen.
-$BRIDGE_TYPES = @(448,449,450,451,452,453)
+# Floor-Override-Objekte erzeugen begehbaren Boden, wo die Sektordaten Leere
+# melden. Vollstaendige Liste per grep "obj->floor = " in game/setup.cpp:
+#   BRIDGE_FLAT/TILT1/TILT2  -> BridgeFlatFloor usw.   (448..453 inkl. Mips)
+#   FALLING_BLOCK/2, CRUMBLING_FLOOR -> FallingBlockFloor (103, 104, 105)
+#   TWOBLOCK_PLATFORM        -> TwoBlockPlatformFloor  (136, "Expanding Platform")
+# Ein rein sektorbasierter Graph kann sie prinzipiell nicht sehen. Die
+# Crumbling Floors fehlten hier zunaechst - mit fatalem Effekt, sobald die
+# Kletterregel kam: Andrea3s Einstieg (12 Crumbling Floors ueber Lava, Raum 8)
+# liegt auf Sektoren, deren aufgeloeste "Standhoehe" der Lavagrund weit unten
+# ist; der Rueckweg von der Bruecke wirkte wie ein unmoeglicher 4000er-Aufstieg
+# und das Level kollabierte auf 8%.
+$BRIDGE_TYPES = @(448,449,450,451,452,453, 103,104,105, 136)
 $bridgeSec = @{}
 foreach($i in $d.items){
     if ($BRIDGE_TYPES -notcontains [int]$i.typeId) { continue }
@@ -233,13 +349,47 @@ foreach($s in $d.sectors){
     $wx = $rm.originX + $s.sectorX * 1024
     $wz = $rm.originZ + $s.sectorZ * 1024
 
-    # Nachbarn im selben Raum
+    # Nachbarn im selben Raum - gerichtet: die Gegenrichtung entsteht, wenn der
+    # Nachbar selbst an der Reihe ist und SEINE Kletterpruefung besteht. So darf
+    # Lara eine hohe Kante hinunterfallen, ohne dass daraus ein Rueckweg wird.
     foreach($dz in @(-1,0,1)){ foreach($dx in @(-1,0,1)){
         if (($dx -eq 0 -and $dz -eq 0) -or ($dx -ne 0 -and $dz -ne 0)) { continue }
         $nk = "$($s.room),$($s.sectorX + $dx),$($s.sectorZ + $dz)"
         if (-not (Test-Walkable $nk)) { continue }
+        if (-not (Test-ClimbEdge $key $nk)) { continue }
         Add-Edge $key $nk
     }}
+
+    # Sprungkanten: TR-Kernbewegung, die dem reinen Nachbargraphen fehlt.
+    # Standsprung ueberwindet 1 Lueckensektor, Anlaufsprung 2. Das alte Modell
+    # (ohne Hoehenregel) kaschierte das, indem der Flood DURCH das Loch lief
+    # und drueben wieder "hochkam" - physikalisch falsch, aber zufaellig
+    # verbindend. Mit korrekten Fallkanten wurde jedes Loch zur Einbahnfalle
+    # und Schacht-/Sims-Level kollabierten (joby3 8%, rich2s Fahrstuhlschacht,
+    # Andrea3s Colosseum-Simse - vom Nutzer exakt so benannt). Regel: bis zu
+    # 2 aufeinanderfolgende Sektoren, deren aufgeloeste Standhoehe deutlich
+    # (>512) unter der Absprunghoehe liegt, duerfen uebersprungen werden;
+    # die Landung darf hoechstens 1 Klick (256) hoeher liegen, beliebig tief
+    # ist erlaubt. Nur geradlinig und innerhalb desselben Raums - Raumgrenzen
+    # ueberspannende Spruenge sind eine bekannte, noch offene Luecke.
+    $fa = if ($EnableClimbModel) { Get-EffFloorY $key } else { $null }
+    if ($null -ne $fa) {
+        foreach($dir in @(@(1,0),@(-1,0),@(0,1),@(0,-1))){
+            for($step = 1; $step -le 3; $step++){
+                $ck = "$($s.room),$($s.sectorX + $dir[0]*$step),$($s.sectorZ + $dir[1]*$step)"
+                if (-not $sec.ContainsKey($ck)) { break }
+                $cs = $sec[$ck]
+                if ($cs.isWall) { break }
+                $fc = Get-EffFloorY $ck
+                $isGap = ($null -eq $fc) -or (($fc - $fa) -gt 512)
+                if ($isGap) { if ($step -eq 3) { break }; continue }
+                # erster nicht-Luecken-Sektor = Landekandidat; bei step 1 ist es
+                # ein gewoehnlicher Nachbar, den die normale Kante schon abdeckt
+                if ($step -ge 2 -and (Test-Walkable $ck) -and ($fa - $fc) -le 256) { Add-Edge $key $ck }
+                break
+            }
+        }
+    }
 
     # Portal / vertikale Verbindungen, beidseitig.
     # Portale stehen in den Leveldaten nur auf der Seite, von der aus sie
@@ -258,20 +408,14 @@ foreach($s in $d.sectors){
         $t = Get-SectorInRoom $tgt $wx $wz
         if (-not $t) { continue }
         $tk2 = "$($t.room),$($t.sectorX),$($t.sectorZ)"
-        # HINWEIS (2026-08-04, gemessen und verworfen): eine richtungsabhaengige
-        # Hoehenpruefung (hoch nur bis CLIMB_LIMIT, runter frei) wurde hier
-        # versucht und wieder entfernt. Sie kostete joby3 -82%, rich2 -40%,
-        # joby2 -16%, joby4 -13%, Andrea3 -10% - und schloss den Andrea1-Fall,
-        # fuer den sie gedacht war, nicht einmal (der Aufstieg Strasse 112 ->
-        # Gebaeude 118 betraegt exakt 2048 und liegt damit genau auf der vom
-        # Nutzer genannten Grenze). Ursache der Fehlmessungen: floorY eines
-        # PORTAL-Sektors beschreibt nicht zuverlaessig den Boden, auf dem Lara
-        # dort steht - Portalsektoren sind Randsektoren, deren Hoehenwert je
-        # nach Raumgeometrie vom tatsaechlich begehbaren Boden abweicht. Ein
-        # Hoehenmodell braucht daher erst eine belastbare Definition, welcher
-        # Wert an einem Portal ueberhaupt zu vergleichen ist.
-        if (-not $leavesOneway) { Add-Edge $key $tk2 }
-        if ($onewayOut -notcontains $tgt) { Add-Edge $tk2 $key }
+        # Kletterpruefung je Richtung einzeln (Test-ClimbEdge: runter frei,
+        # hoch nur bis 1920 bzw. Kletterwand/Wasser/Bruecke). Der erste Versuch
+        # einer Hoehenregel hier scheiterte an zwei Fehlern zugleich: rohes
+        # floorY an Portalsektoren verglichen (statt der ueber Portale/roomBelow
+        # aufgeloesten Standhoehe, siehe Get-EffFloorY) UND auch Abstiege
+        # gedeckelt - gemessen kostete das joby3 -82%, rich2 -40%, joby2 -16%.
+        if (-not $leavesOneway -and (Test-ClimbEdge $key $tk2)) { Add-Edge $key $tk2 }
+        if ($onewayOut -notcontains $tgt -and (Test-ClimbEdge $tk2 $key)) { Add-Edge $tk2 $key }
     }
 }
 
@@ -499,6 +643,30 @@ $blocked = @{}   # sectorKey -> itemIndex der Tuer
 foreach($kv in $doorSector.GetEnumerator()){ $blocked[$kv.Value] = $kv.Key }
 
 foreach($ml in $manualLinks){ Add-Edge $ml[0] $ml[1]; Add-Edge $ml[1] $ml[0] }
+
+# GATED_AREA anwenden (nach vollstaendigem Graphaufbau inkl. Flipmap-,
+# Teleporter- und Manuallinks, damit wirklich jede Einstiegskante erfasst ist).
+foreach($ga in $gatedAreas){
+    $gateSecs = New-Object System.Collections.Generic.HashSet[string]
+    foreach($di in $ga.Doors){ if ($doorSector.ContainsKey([int]$di)) { [void]$gateSecs.Add($doorSector[[int]$di]) } }
+
+    $inside = New-Object System.Collections.Generic.HashSet[string]
+    foreach($s0 in $d.sectors){
+        if ($ga.Rooms -notcontains [int]$s0.room -or $s0.isWall) { continue }
+        $k0 = "$($s0.room),$($s0.sectorX),$($s0.sectorZ)"
+        if (-not $gateSecs.Contains($k0)) { [void]$inside.Add($k0) }
+    }
+    Write-Output "GATED_AREA (Tore $($ga.Doors -join '/')): $($inside.Count) Innensektoren in Raeumen $($ga.Rooms -join ', ')"
+
+    $cut = 0
+    foreach($u in @($adj.Keys)){
+        if ($inside.Contains($u) -or $gateSecs.Contains($u)) { continue }
+        $toRemove = @()
+        foreach($v in $adj[$u]){ if ($inside.Contains($v)) { $toRemove += $v } }
+        foreach($v in $toRemove){ [void]$adj[$u].Remove($v); $cut++ }
+    }
+    Write-Output "GATED_AREA: $cut Einstiegskanten ausserhalb der Tore gekappt"
+}
 
 $zoneOf = @{}    # sectorKey -> Zonennummer
 $openDoors = New-Object System.Collections.Generic.HashSet[int]

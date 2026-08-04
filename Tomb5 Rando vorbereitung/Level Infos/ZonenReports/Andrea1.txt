@@ -1,4 +1,6 @@
-﻿==============================================================
+﻿GATED_AREA (Tore 53/54): 335 Innensektoren in Raeumen 116, 117, 118, 119, 121, 128, 129, 142
+GATED_AREA: 203 Einstiegskanten ausserhalb der Tore gekappt
+==============================================================
  Progressions-Zonen: Andrea1
 ==============================================================
 Laras Start: Raum 0, Sektor (1,2) -> Zone 0
@@ -23,9 +25,9 @@ Zone 2 -> 3: Tuer Item 89 (typeId 300, Raum 166)  geoeffnet durch: Schalter Item
 
 --- Sektoren pro Zone ---
 Zone 0:  1839 Sektoren in 144 Raeumen
-Zone 1:  1640 Sektoren in  88 Raeumen
+Zone 1:  1290 Sektoren in  78 Raeumen
 Zone 2:   184 Sektoren in  18 Raeumen
-Zone 3:     7 Sektoren in   4 Raeumen
+Zone 3:   357 Sektoren in  14 Raeumen
 Nie erreicht: 13 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
@@ -84,11 +86,11 @@ Schalter Item 75: Revolver + Lasersight (Glocke abschiessen)
     typeId  351 Item  76 in Raum  145 -> Zone 1            [OK]
 
 --- Selbsttest: Level durchspielbar? ---
-Cutscene 17 in Raum  116 Sektor (3,2) -> Zone 1
-Cutscene 17 in Raum  116 Sektor (3,3) -> Zone 1
-Cutscene 17 in Raum  116 Sektor (3,4) -> Zone 1
-Cutscene 17 in Raum  116 Sektor (3,5) -> Zone 1
-Cutscene 17 in Raum  116 Sektor (3,6) -> Zone 1
-Cutscene 17 in Raum  116 Sektor (3,7) -> Zone 1
-Cutscene 17 in Raum  116 Sektor (3,8) -> Zone 1
+Cutscene 17 in Raum  116 Sektor (3,2) -> Zone 3
+Cutscene 17 in Raum  116 Sektor (3,3) -> Zone 3
+Cutscene 17 in Raum  116 Sektor (3,4) -> Zone 3
+Cutscene 17 in Raum  116 Sektor (3,5) -> Zone 3
+Cutscene 17 in Raum  116 Sektor (3,6) -> Zone 3
+Cutscene 17 in Raum  116 Sektor (3,7) -> Zone 3
+Cutscene 17 in Raum  116 Sektor (3,8) -> Zone 3
 Cutscene 16 in Raum  234 Sektor (1,2) -> Zone 1

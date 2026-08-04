@@ -24,7 +24,14 @@ param(
     [string]$LevelName = "Level",
     [string[]]$DebugSectors = @(),
     [string]$DebugPathTo = "",
-    [string]$ExportZonesJson = ""
+    [string]$ExportZonesJson = "",
+    # Maximaler Hoehenunterschied, den Lara ohne Hilfsmittel ueberwindet.
+    # Nutzerangabe: "alles ueber 2x1024 kann Lara nicht aus dem Stand
+    # ueberwinden" - 2048 ist also die Obergrenze, nicht ein Schaetzwert.
+    # Gilt nur fuer Portal-/Vertikaluebergaenge zwischen Raeumen; Nachbar-
+    # sektoren innerhalb eines Raumes bleiben unbeschraenkt (Treppen, Rampen
+    # und Schraegen sind dort ueber viele kleine Stufen modelliert).
+    [int]$CLIMB_LIMIT = 2048
 )
 
 $ErrorActionPreference = "Stop"
@@ -230,7 +237,8 @@ foreach($s in $d.sectors){
     foreach($dz in @(-1,0,1)){ foreach($dx in @(-1,0,1)){
         if (($dx -eq 0 -and $dz -eq 0) -or ($dx -ne 0 -and $dz -ne 0)) { continue }
         $nk = "$($s.room),$($s.sectorX + $dx),$($s.sectorZ + $dz)"
-        if (Test-Walkable $nk) { Add-Edge $key $nk }
+        if (-not (Test-Walkable $nk)) { continue }
+        Add-Edge $key $nk
     }}
 
     # Portal / vertikale Verbindungen, beidseitig.
@@ -250,6 +258,18 @@ foreach($s in $d.sectors){
         $t = Get-SectorInRoom $tgt $wx $wz
         if (-not $t) { continue }
         $tk2 = "$($t.room),$($t.sectorX),$($t.sectorZ)"
+        # HINWEIS (2026-08-04, gemessen und verworfen): eine richtungsabhaengige
+        # Hoehenpruefung (hoch nur bis CLIMB_LIMIT, runter frei) wurde hier
+        # versucht und wieder entfernt. Sie kostete joby3 -82%, rich2 -40%,
+        # joby2 -16%, joby4 -13%, Andrea3 -10% - und schloss den Andrea1-Fall,
+        # fuer den sie gedacht war, nicht einmal (der Aufstieg Strasse 112 ->
+        # Gebaeude 118 betraegt exakt 2048 und liegt damit genau auf der vom
+        # Nutzer genannten Grenze). Ursache der Fehlmessungen: floorY eines
+        # PORTAL-Sektors beschreibt nicht zuverlaessig den Boden, auf dem Lara
+        # dort steht - Portalsektoren sind Randsektoren, deren Hoehenwert je
+        # nach Raumgeometrie vom tatsaechlich begehbaren Boden abweicht. Ein
+        # Hoehenmodell braucht daher erst eine belastbare Definition, welcher
+        # Wert an einem Portal ueberhaupt zu vergleichen ist.
         if (-not $leavesOneway) { Add-Edge $key $tk2 }
         if ($onewayOut -notcontains $tgt) { Add-Edge $tk2 $key }
     }
@@ -488,6 +508,7 @@ $log = @()
 $reached = New-Object System.Collections.Generic.HashSet[string]
 [void]$reached.Add($startKey)
 foreach($ss in $startSeeds){ [void]$reached.Add($ss) }
+$firstParent = @{}   # Sektor -> Sektor, ueber den er ZUERST erreicht wurde
 
 # Alle Trigger, die ueberhaupt eine Tuer schalten - einmal vorab aufgeloest.
 $allTrig = @(); $tn = 0
@@ -524,6 +545,12 @@ while ($true) {
         foreach($n in $adj[$k]){
             if ($reached.Contains($n)) { continue }
             if ($blocked.ContainsKey($n) -and -not $openDoors.Contains($blocked[$n])) { continue }
+            # Erstzugangs-Elternknoten mitschreiben: nur so laesst sich spaeter
+            # rekonstruieren, ueber WELCHE Kante ein Sektor zum ERSTEN Mal
+            # erreicht wurde. Ein Pfad ueber den Endzustand (alle Tueren offen)
+            # zeigt stattdessen irgendeinen spaeteren, legalen Weg und verdeckt
+            # genau die zu frueh oeffnende Kante, die man sucht.
+            $firstParent[$n] = $k
             [void]$reached.Add($n); $zoneOf[$n] = $zone; $q.Enqueue($n)
         }
     }
@@ -696,34 +723,25 @@ if ($ExportZonesJson -ne "") {
 }
 
 if ($DebugPathTo -ne "") {
-    Write-Output "--- Debug: kuerzester begehbarer Pfad zu $DebugPathTo ---"
+    Write-Output "--- Debug: ERSTZUGANGS-Pfad zu $DebugPathTo ---"
     if (-not $zoneOf.ContainsKey($DebugPathTo)) {
         Write-Output "  Ziel nie erreicht - kein Pfad im begehbaren Graphen."
     } else {
-        # Frische BFS ueber denselben Graphen, aber unter Beachtung aller am
-        # Ende offenen Tueren ($openDoors) - zeigt die TATSAECHLICH benutzte
-        # Kantenfolge, damit sich eine unerwartet fruehe Erreichbarkeit einer
-        # konkreten Kante zuordnen laesst statt nur "irgendwo falsch".
-        $parent = @{}
-        $seen = New-Object System.Collections.Generic.HashSet[string]
-        [void]$seen.Add($startKey)
-        $q2 = New-Object System.Collections.Generic.Queue[string]; $q2.Enqueue($startKey)
-        while($q2.Count -gt 0){
-            $k = $q2.Dequeue()
-            if ($k -eq $DebugPathTo) { break }
-            if (-not $adj.ContainsKey($k)) { continue }
-            foreach($n in $adj[$k]){
-                if ($seen.Contains($n)) { continue }
-                if ($blocked.ContainsKey($n) -and -not $openDoors.Contains($blocked[$n])) { continue }
-                [void]$seen.Add($n); $parent[$n] = $k; $q2.Enqueue($n)
-            }
-        }
+        # Nutzt $firstParent aus dem Flood selbst, NICHT eine neue BFS ueber den
+        # Endzustand: gesucht ist die Kante, ueber die der Sektor zum ersten Mal
+        # erreicht wurde. Eine BFS mit allen am Ende offenen Tueren findet
+        # stattdessen irgendeinen spaeteren legalen Weg und verdeckt genau die
+        # zu frueh oeffnende Kante (bei Andrea1/Raum 117 lief sie faelschlich
+        # durch die laengst geoeffnete Tuer 53 statt ueber den echten Frueh-
+        # zugang).
         $path = @($DebugPathTo); $cur = $DebugPathTo
-        while ($parent.ContainsKey($cur)) { $cur = $parent[$cur]; $path = ,$cur + $path }
+        $guard = 0
+        while ($firstParent.ContainsKey($cur) -and $guard -lt 10000) { $cur = $firstParent[$cur]; $path = ,$cur + $path; $guard++ }
         for($i=0; $i -lt $path.Count; $i++){
+            $zHere = if($zoneOf.ContainsKey($path[$i])){ $zoneOf[$path[$i]] } else { '?' }
             $roomChange = if($i -gt 0){ ($path[$i] -split ',')[0] -ne ($path[$i-1] -split ',')[0] } else { $false }
             $marker = if($roomChange){ " <- Raumwechsel" } else { "" }
-            "  [{0,2}] {1}{2}" -f $i,$path[$i],$marker
+            "  [{0,3}] {1,-14} Zone {2}{3}" -f $i,$path[$i],$zHere,$marker
         }
     }
     Write-Output ""

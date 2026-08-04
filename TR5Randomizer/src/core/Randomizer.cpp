@@ -209,6 +209,20 @@ bool Rando::run(const RandoInput& in,
     std::set<int> pinned(in.triggerPinned);
     for (int i : in.fixedItems) pinned.insert(i);
 
+    // OCB 5 und 10: solche Pickups sind in Vanilla gar nicht aufnehmbar.
+    // InitialisePickup (game/init.cpp:470) setzt ein OCB-5-Item auf
+    // ITEM_INVISIBLE und kehrt zurueck; PickUpCollision (game/pickup.cpp:737)
+    // steigt bei ocb 5 und 10 sofort aus. Sie werden erst durch etwas anderes
+    // freigeschaltet. Wuerden wir sie verschieben und dabei - wie bei jedem
+    // bewegten Item noetig - OCB auf 0 setzen, laegen sie ab sofort sichtbar
+    // und aufnehmbar da. Das ist kein Ortswechsel mehr, sondern eine
+    // Verhaltensaenderung, und im Zweifel wird gesperrt statt geoeffnet.
+    for (const LevelItem& it : in.items)
+    {
+        const int ocb = it.ocb & 0x3F;
+        if (ocb == 5 || ocb == 10) pinned.insert(it.index);
+    }
+
     // Freie Sektoren. Sortierte Reihenfolge ist Pflicht: die Zufallsauswahl
     // greift per Index zu, und eine andere Ausgangsreihenfolge waere ein
     // anderes Ergebnis fuer denselben Seed.

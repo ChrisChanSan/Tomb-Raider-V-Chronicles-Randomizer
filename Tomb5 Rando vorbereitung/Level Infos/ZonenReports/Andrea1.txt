@@ -1,5 +1,6 @@
-﻿GATED_AREA (Tore 53/54): 335 Innensektoren in Raeumen 116, 117, 118, 119, 121, 128, 129, 142
-GATED_AREA: 203 Einstiegskanten ausserhalb der Tore gekappt
+﻿GATED_AREA (Tore 53/54): 1499 Innensektoren in 65 Raeumen
+  Raeume: 113, 116, 117, 118, 119, 121, 122, 123, 125, 126, 128, 129, 130, 135, 136, 137, 138, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 160, 162, 165, 166, 168, 171, 172, 173, 174, 175, 176, 177, 178, 181, 182, 183, 184, 185, 186, 204, 205, 206, 209, 210, 219, 230, 231, 232, 233, 234
+GATED_AREA: 109 Einstiegskanten ausserhalb der Tore gekappt
 ==============================================================
  Progressions-Zonen: Andrea1
 ==============================================================
@@ -13,21 +14,23 @@ Zone 0 -> 1: Tuer Item 46 (typeId 286, Raum 107)  geoeffnet durch: Schalter Item
 Zone 0 -> 1: Tuer Item 37 (typeId 288, Raum 90)  geoeffnet durch: Schalter Item 103 (Raum 187)
 Zone 1 -> 2: Tuer Item 71 (typeId 296, Raum 139)  geoeffnet durch: Schalter Item 72 (Raum 139)
 Zone 1 -> 2: Tuer Item 104 (typeId 288, Raum 188)  geoeffnet durch: Schalter Item 57 (Raum 114)
-Zone 1 -> 2: Tuer Item 102 (typeId 294, Raum 183)  geoeffnet durch: Schalter Item 91 (Raum 168)
-Zone 1 -> 2: Tuer Item 137 (typeId 296, Raum 217)  geoeffnet durch: Schalter Item 75 (Raum 145)
-Zone 1 -> 2: Tuer Item 79 (typeId 294, Raum 153)  geoeffnet durch: Schalter Item 75 (Raum 145)
-Zone 2 -> 3: Tuer Item 90 (typeId 300, Raum 166)  geoeffnet durch: Schalter Item 85 (Raum 165)
-Zone 2 -> 3: Tuer Item 99 (typeId 294, Raum 175)  geoeffnet durch: Schalter Item 84 (Raum 165)
-Zone 2 -> 3: Tuer Item 93 (typeId 294, Raum 171)  geoeffnet durch: Schalter Item 85 (Raum 165)
 Zone 2 -> 3: Tuer Item 54 (typeId 292, Raum 112)  geoeffnet durch: Puzzle Item1 in Schloss Item 63 (Raum 124)
 Zone 2 -> 3: Tuer Item 53 (typeId 290, Raum 112)  geoeffnet durch: Puzzle Item1 in Schloss Item 63 (Raum 124)
-Zone 2 -> 3: Tuer Item 89 (typeId 300, Raum 166)  geoeffnet durch: Schalter Item 85 (Raum 165)
+Zone 3 -> 4: Tuer Item 102 (typeId 294, Raum 183)  geoeffnet durch: Schalter Item 91 (Raum 168)
+Zone 3 -> 4: Tuer Item 137 (typeId 296, Raum 217)  geoeffnet durch: Schalter Item 75 (Raum 145)
+Zone 3 -> 4: Tuer Item 79 (typeId 294, Raum 153)  geoeffnet durch: Schalter Item 75 (Raum 145)
+Zone 4 -> 5: Tuer Item 90 (typeId 300, Raum 166)  geoeffnet durch: Schalter Item 85 (Raum 165)
+Zone 4 -> 5: Tuer Item 99 (typeId 294, Raum 175)  geoeffnet durch: Schalter Item 84 (Raum 165)
+Zone 4 -> 5: Tuer Item 93 (typeId 294, Raum 171)  geoeffnet durch: Schalter Item 85 (Raum 165)
+Zone 4 -> 5: Tuer Item 89 (typeId 300, Raum 166)  geoeffnet durch: Schalter Item 85 (Raum 165)
 
 --- Sektoren pro Zone ---
 Zone 0:  1839 Sektoren in 144 Raeumen
-Zone 1:  1290 Sektoren in  78 Raeumen
-Zone 2:   184 Sektoren in  18 Raeumen
-Zone 3:   357 Sektoren in  14 Raeumen
+Zone 1:   316 Sektoren in  34 Raeumen
+Zone 2:     9 Sektoren in   4 Raeumen
+Zone 3:  1326 Sektoren in  55 Raeumen
+Zone 4:   175 Sektoren in  14 Raeumen
+Zone 5:     5 Sektoren in   3 Raeumen
 Nie erreicht: 13 begehbare Sektoren
 
 --- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
@@ -80,10 +83,10 @@ Gebiet mit     1 Sektoren in   1 Raeumen
 
 --- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
 Schalter Item 75: Revolver + Lasersight (Glocke abschiessen)
-  wird gebraucht in Zone 1 -> Ausruestung muss in Zone <= 1 liegen
-    typeId  347 Item 149 in Raum  231 -> Zone 1            [OK]
+  wird gebraucht in Zone 3 -> Ausruestung muss in Zone <= 3 liegen
+    typeId  347 Item 149 in Raum  231 -> Zone 3            [OK]
     typeId  351 Item  73 in Raum  139 -> Zone 1            [OK]
-    typeId  351 Item  76 in Raum  145 -> Zone 1            [OK]
+    typeId  351 Item  76 in Raum  145 -> Zone 3            [OK]
 
 --- Selbsttest: Level durchspielbar? ---
 Cutscene 17 in Raum  116 Sektor (3,2) -> Zone 3
@@ -93,4 +96,4 @@ Cutscene 17 in Raum  116 Sektor (3,5) -> Zone 3
 Cutscene 17 in Raum  116 Sektor (3,6) -> Zone 3
 Cutscene 17 in Raum  116 Sektor (3,7) -> Zone 3
 Cutscene 17 in Raum  116 Sektor (3,8) -> Zone 3
-Cutscene 16 in Raum  234 Sektor (1,2) -> Zone 1
+Cutscene 16 in Raum  234 Sektor (1,2) -> Zone 3

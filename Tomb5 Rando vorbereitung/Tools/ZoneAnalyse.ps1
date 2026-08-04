@@ -180,14 +180,37 @@ $onewayOut = @( if($ONEWAY_OUT.ContainsKey($LevelName)){ $ONEWAY_OUT[$LevelName]
 # Karte ist genau dieser Komplex, das Doppeltor 53/54 (Raum 112) der einzige
 # legale Zugang. Ein volles Hoehen-/Physikmodell wuerde das automatisch
 # erkennen, ist aber geparkt (siehe -EnableClimbModel).
-# Rooms = explizite Innenraum-Liste (der rote Kasten des Nutzers). Eine
-# automatische Komponentenberechnung ab Seed wurde zuerst versucht und
-# verworfen: die Leckkanten sind beidseitig, die Flut ab dem Innenhof frass
-# darueber das gesamte Level. Die explizite Liste ist transparent, in trview
-# direkt verifizierbar und mit einem Eintrag korrigierbar - exakt der
-# "eingrenzen, dann manuell Feinschliff"-Workflow dieses Projekts.
+# Rooms = explizite Liste der Raeume hinter dem Tor. Drei automatische Ansaetze
+# wurden gemessen und verworfen, die Begruendung gehoert hierher, damit sie
+# niemand blind wiederholt:
+#  1. Insel-Flut ab dem Hof: scheitert prinzipiell, weil der Bereich nur
+#     EINSEITIG versiegelt ist - rein nur durchs Tor, raus per Absprung an
+#     vielen Stellen (Raum 117 grenzt allein an 112,113,116,118,119,144,150,156).
+#     Eine Flut folgt den Abspruengen nach draussen und frisst das Level.
+#  2. Barriere-Raum (Strasse 112) als Stopp: die Flut fand sofort andere
+#     Auswege (117->150->130->113->120->114->...).
+#  3. Hoehenlage als Trennkriterium: widerlegt - Raum 150 (aussen) liegt bei
+#     yBottom -6144 wie 145/165/166/181 (innen), Raum 113 (aussen) bei -2048
+#     wie 118/119 (innen).
+# Sauber loesen wuerde das nur ein vollstaendiges Hoehen-/Kletterodell
+# (-EnableClimbModel), dem die verlaessliche Bodensemantik an Portalen fehlt.
+# Die Liste ist dafuer transparent, in trview direkt ablesbar und je Raum mit
+# einer Zahl korrigierbar.
+# Die Loesung kam vom Nutzer durch UMKEHRUNG der Fragestellung: statt die
+# Innenraeume zu erraten (scheiterte, s.o.), nennt er die Raeume, die VOR dem
+# Tor noch begehbar sind. Sie bilden eine geschlossene Stoppkante, gegen die
+# eine Flut ab dem Hof laeuft - damit ergibt sich der Innenbereich automatisch
+# und vollstaendig (Andrea1: 65 Raeume, 1499 Sektoren, kein Fluchtweg mehr).
+# PreGateRooms bleiben ausdruecklich valide fuer Platzierungen; Raum 217 steht
+# mit drin, weil er laut Nutzer generell auszuschliessen ist und als Stopp
+# ohnehin dieselbe Wirkung hat. Ueber diesen Raeumen liegende reine "Luft"-
+# Raeume sind laut Nutzer irrelevant. Notfall-Hard-Stop waeren 114/120.
 $GATED_AREA = @{
-    'Andrea1' = @( @{ Doors = @(53,54); Rooms = @(116,117,118,119,121,128,129,142) } )
+    'Andrea1' = @( @{
+        Doors        = @(53,54)
+        SeedRooms    = @(117)
+        PreGateRooms = @(112,132,127,124,158,114,120,163,159,164,139,170,217)
+    } )
 }
 $gatedAreas = @( if($GATED_AREA.ContainsKey($LevelName)){ $GATED_AREA[$LevelName] } )
 
@@ -647,16 +670,41 @@ foreach($ml in $manualLinks){ Add-Edge $ml[0] $ml[1]; Add-Edge $ml[1] $ml[0] }
 # GATED_AREA anwenden (nach vollstaendigem Graphaufbau inkl. Flipmap-,
 # Teleporter- und Manuallinks, damit wirklich jede Einstiegskante erfasst ist).
 foreach($ga in $gatedAreas){
+    # ZWEI getrennte Mengen - sie duerfen nicht vermischt werden:
+    #  $gateSecs  = die Torsektoren. Nur sie sind vom Kappen ausgenommen, denn
+    #               ueber sie fuehrt der einzige legale Weg hinein.
+    #  $stopFlood = Begrenzung der Innenbereichs-Flut: Torsektoren PLUS die
+    #               Vor-Tor-Raeume.
+    # In einer ersten Fassung war beides dieselbe Menge - mit dem Effekt, dass
+    # ausgerechnet die Vor-Tor-Raeume vom Kappen ausgenommen wurden, also genau
+    # die Quelle der illegalen Einstiegskanten ("0 Einstiegskanten gekappt").
     $gateSecs = New-Object System.Collections.Generic.HashSet[string]
     foreach($di in $ga.Doors){ if ($doorSector.ContainsKey([int]$di)) { [void]$gateSecs.Add($doorSector[[int]$di]) } }
-
-    $inside = New-Object System.Collections.Generic.HashSet[string]
+    $stop = New-Object System.Collections.Generic.HashSet[string]
+    foreach($g in $gateSecs){ [void]$stop.Add($g) }
     foreach($s0 in $d.sectors){
-        if ($ga.Rooms -notcontains [int]$s0.room -or $s0.isWall) { continue }
-        $k0 = "$($s0.room),$($s0.sectorX),$($s0.sectorZ)"
-        if (-not $gateSecs.Contains($k0)) { [void]$inside.Add($k0) }
+        if ($ga.PreGateRooms -contains [int]$s0.room) { [void]$stop.Add("$($s0.room),$($s0.sectorX),$($s0.sectorZ)") }
     }
-    Write-Output "GATED_AREA (Tore $($ga.Doors -join '/')): $($inside.Count) Innensektoren in Raeumen $($ga.Rooms -join ', ')"
+
+    # Innenbereich = Flut ab den Seed-Raeumen bis zur Stoppkante.
+    $inside = New-Object System.Collections.Generic.HashSet[string]
+    $qg = New-Object System.Collections.Generic.Queue[string]
+    foreach($s0 in $d.sectors){
+        if ($ga.SeedRooms -notcontains [int]$s0.room -or $s0.isWall) { continue }
+        $k0 = "$($s0.room),$($s0.sectorX),$($s0.sectorZ)"
+        if (-not $stop.Contains($k0)) { [void]$inside.Add($k0); $qg.Enqueue($k0) }
+    }
+    while($qg.Count -gt 0){
+        $k = $qg.Dequeue()
+        if (-not $adj.ContainsKey($k)) { continue }
+        foreach($n in $adj[$k]){
+            if ($inside.Contains($n) -or $stop.Contains($n)) { continue }
+            [void]$inside.Add($n); $qg.Enqueue($n)
+        }
+    }
+    $insideRooms = @($inside | ForEach-Object { [int](($_ -split ',')[0]) } | Sort-Object -Unique)
+    Write-Output "GATED_AREA (Tore $($ga.Doors -join '/')): $($inside.Count) Innensektoren in $($insideRooms.Count) Raeumen"
+    Write-Output "  Raeume: $($insideRooms -join ', ')"
 
     $cut = 0
     foreach($u in @($adj.Keys)){

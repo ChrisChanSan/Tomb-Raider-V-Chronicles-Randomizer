@@ -292,7 +292,22 @@ $requiredInjections = @( if($REQUIRED_INJECTIONS.ContainsKey($LevelName)){ $REQU
 # Randomizer die Sperre uebernehmen kann, statt sie neu entdecken zu muessen.
 $FIXED_ITEMS = @{
     'Andrea3' = @{ 49 = 'Puzzle Item4 Combo2 - triggert eine Tuer' }
+    'Andrea2' = @{ 128 = 'Ventil - muss an einer Wand sitzen (siehe VANILLA_TYPES 172)' }
 }
+
+# Typen, die komplett an ihren Vanilla-Positionen bleiben. Ihre Zwangsbedingung
+# wird weiter abgeleitet und im Report angezeigt - man soll sehen, dass es sie
+# gibt -, sie wandern aber nicht in den Pool und bekommen keine Marker.
+# Andrea2s Ventil (172) ist der Fall: es muss innerhalb von 512 Units an einer
+# Wand sitzen UND sein Angle muss zu dieser Wand passen. Beides sind
+# Bedingungen unterhalb der Sektoraufloesung - das Modell arbeitet mit ganzen
+# 1024er-Sektoren und kennt keine Wandausrichtung, koennte eine gueltige
+# Position also gar nicht garantieren. Nutzerentscheidung: "Die Brechstange als
+# zufall reicht."
+$VANILLA_TYPES = @{
+    'Andrea2' = @(172)
+}
+$vanillaTypes = @( if($VANILLA_TYPES.ContainsKey($LevelName)){ $VANILLA_TYPES[$LevelName] } )
 $fixedItems = @()
 if ($FIXED_ITEMS.ContainsKey($LevelName)) {
     foreach($kv in $FIXED_ITEMS[$LevelName].GetEnumerator()){
@@ -1075,6 +1090,8 @@ foreach($n in ($itemNeed | Where-Object { -not $_.Gameflow })){
 $keyConstraints = @()
 foreach($kv in $byType.GetEnumerator()){
     $nt = [int]$kv.Key
+    # Bleibt Vanilla: Anforderung oben im Report sichtbar, aber nicht im Pool.
+    if ($vanillaTypes -contains $nt) { continue }
     $maxZ = ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
@@ -1182,6 +1199,9 @@ Write-Output "Nie erreicht: $($unreachedSec.Count) begehbare Sektoren"
 if ($excludeRooms.Count -gt 0) {
     $exSec = @($d.sectors | Where-Object { -not $_.isWall -and $excludeRooms -contains [int]$_.room })
     Write-Output "Handgesperrt (EXCLUDE_ROOMS): $($exSec.Count) Sektoren in $($excludeRooms.Count) Raeumen - gewollt, nicht als Luecke gezaehlt"
+}
+if ($vanillaTypes.Count -gt 0) {
+    Write-Output "Bleiben Vanilla (VANILLA_TYPES) - nicht im Pool: $($vanillaTypes -join ', ')"
 }
 if ($requiredInjections.Count -gt 0) {
     Write-Output "Pflicht-Injektionen (REQUIRED_INJECTIONS) - fehlen in Vanilla:"

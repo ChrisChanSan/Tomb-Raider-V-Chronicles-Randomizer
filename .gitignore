@@ -41,6 +41,7 @@ full_conversation.txt
 # via -exportinfo + -patchlevel, and derived from copyrighted game data.
 # The hand-written exclusion list in that folder IS tracked (see below).
 Tomb5 Rando vorbereitung/Level Test/*.trc
+Tomb5 Rando vorbereitung/Level Test/**/*.trc
 
 # Third-party GPL3 tool, kept locally as reference only (b122251's TRMOD)
 Tomb5 Rando vorbereitung/Tomb Raider Level Modifier By b122251/

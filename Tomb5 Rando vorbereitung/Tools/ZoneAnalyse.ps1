@@ -23,7 +23,8 @@ param(
     [string]$LevelJson,
     [string]$LevelName = "Level",
     [string[]]$DebugSectors = @(),
-    [string]$DebugPathTo = ""
+    [string]$DebugPathTo = "",
+    [string]$ExportZonesJson = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -656,6 +657,24 @@ while ($true) {
         $log += ,@{ Zone=$zone; Door=$n.Door; Req=$n.Req }
     }
     $zone++
+}
+
+if ($ExportZonesJson -ne "") {
+    # Maschinenlesbarer Export: je Sektor, der sowohl im Flood erreicht als auch
+    # laut Exporter tatsaechlich itemfaehig ist (validForItems), seine Zone.
+    # Nur validForItems-Sektoren, damit ein nachgelagerter Patch-Generator nie
+    # ein Item auf eine Wand, ein Portal oder einen sonst ungeeigneten Sektor
+    # setzt - dieselbe Prüfung, die schon die *_AllValidSectorsFilled.trc-Dateien
+    # sauber gehalten hat, bleibt hier die Grundlage.
+    $rows = @()
+    foreach($kv in $zoneOf.GetEnumerator()){
+        $s = $sec[$kv.Key]
+        if (-not $s -or -not $s.validForItems) { continue }
+        $rows += [PSCustomObject]@{ room=[int]$s.room; sectorX=[int]$s.sectorX; sectorZ=[int]$s.sectorZ; zone=[int]$kv.Value; floorY=[int]$s.floorY }
+    }
+    $maxZoneOut = if($rows.Count -gt 0){ ($rows | Measure-Object -Property zone -Maximum).Maximum } else { 0 }
+    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
+    Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut)"
 }
 
 if ($DebugPathTo -ne "") {

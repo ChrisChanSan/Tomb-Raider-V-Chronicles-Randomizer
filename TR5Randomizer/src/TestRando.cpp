@@ -1,0 +1,176 @@
+//----------------------------------------------------------------------------
+// Test der Platzierungslogik gegen echte Leveldaten.
+//
+// Aufruf: TestRando.exe <zonen.json> <levelinfo.json> [seed]
+//
+// Geprueft wird nicht "es kommt irgendein Patch heraus", sondern genau die
+// Eigenschaften, deren Verletzung ein unspielbares Level ergaebe.
+//----------------------------------------------------------------------------
+#include "core/Json.h"
+#include "core/Randomizer.h"
+
+#include <algorithm>
+#include <cstdio>
+#include <map>
+#include <set>
+#include <string>
+
+static int g_failed = 0;
+
+static void check(bool ok, const char* what)
+{
+    std::printf("  [%s] %s\n", ok ? "ok " : "FEHL", what);
+    if (!ok) ++g_failed;
+}
+
+static std::wstring toW(const char* s)
+{
+    std::wstring w;
+    for (const char* p = s; *p; ++p) w.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*p)));
+    return w;
+}
+
+int main(int argc, char** argv)
+{
+    if (argc < 3)
+    {
+        std::printf("Aufruf: TestRando.exe <zonen.json> <levelinfo.json> [seed]\n");
+        return 2;
+    }
+    const uint64_t seed = (argc > 3) ? std::strtoull(argv[3], nullptr, 10) : 4711ull;
+
+    JsonValue zone, info;
+    std::string err;
+    if (!Json::parseFile(toW(argv[1]), zone, err)) { std::printf("Zonen-Export: %s\n", err.c_str()); return 1; }
+    if (!Json::parseFile(toW(argv[2]), info, err)) { std::printf("Level-Info: %s\n", err.c_str()); return 1; }
+
+    std::printf("Level %s, Seed %llu\n\n", zone["level"].asString("?").c_str(),
+                static_cast<unsigned long long>(seed));
+
+    // --- Ortsgebundene Items ---
+    std::printf("Ortsgebundene Items (aus Pickup-Triggern abgeleitet)\n");
+    std::vector<std::string> why;
+    std::set<int> pinned = Rando::findTriggerPinnedItems(info, &why);
+    for (const std::string& w : why) std::printf("  %s\n", w.c_str());
+
+    RandoInput in;
+    if (!Rando::buildInput(zone, info, in, err)) { std::printf("buildInput: %s\n", err.c_str()); return 1; }
+    std::printf("  Sektoren=%u  Constraints=%u  FixedItems=%u  Injektionen=%u\n\n",
+                static_cast<unsigned>(in.sectors.size()),
+                static_cast<unsigned>(in.constraints.size()),
+                static_cast<unsigned>(in.fixedItems.size()),
+                static_cast<unsigned>(in.injections.size()));
+
+    RandoOptions opt;
+    JsonValue patch;
+    RandoReport rep;
+    std::printf("Platzierung\n");
+    bool ok = Rando::run(in, opt, seed, patch, rep);
+    if (!ok) std::printf("  Fehler: %s\n", rep.error.c_str());
+    check(ok, "Lauf erfolgreich");
+    if (!ok) return 1;
+
+    std::printf("  Key-Items bewegt=%d  sonstige=%d  ortsfest=%d  injiziert=%d\n",
+                rep.movedKeyItems, rep.movedOtherItems, rep.pinnedItems, rep.injected);
+    for (const std::string& n : rep.notes) std::printf("  Hinweis: %s\n", n.c_str());
+
+    // --- Regel 1: niemals Items entfernen ---
+    check(!patch.has("itemRemoves"), "Patch enthaelt kein itemRemoves");
+
+    const JsonValue& edits = patch["itemEdits"];
+
+    // --- Regel 2: kein ortsgebundenes Item wurde angefasst ---
+    std::set<int> edited;
+    for (size_t i = 0; i < edits.size(); ++i) edited.insert(static_cast<int>(edits[i]["index"].asInt()));
+    bool pinnedUntouched = true;
+    for (int p : pinned) if (edited.count(p)) { pinnedUntouched = false; std::printf("       Item %d wurde bewegt!\n", p); }
+    check(pinnedUntouched, "kein triggergebundenes Item wurde bewegt");
+
+    bool fixedUntouched = true;
+    for (int f : in.fixedItems) if (edited.count(f)) { fixedUntouched = false; std::printf("       FIXED Item %d wurde bewegt!\n", f); }
+    check(fixedUntouched, "kein handkuratiertes FIXED_ITEM wurde bewegt");
+
+    // --- Regel 3: OCB wird auf 0 gesetzt ---
+    bool ocbZero = true;
+    for (size_t i = 0; i < edits.size(); ++i) if (edits[i]["ocb"].asInt() != 0) ocbZero = false;
+    check(ocbZero, "jedes bewegte Item bekommt OCB 0");
+
+    // --- Nur Pickups werden bewegt ---
+    std::map<int, int> typeOf;
+    for (const LevelItem& it : in.items) typeOf[it.index] = it.typeId;
+    bool onlyPickups = true;
+    for (int e : edited) if (!isPickupType(typeOf[e])) { onlyPickups = false; std::printf("       Item %d typeId %d ist kein Pickup!\n", e, typeOf[e]); }
+    check(onlyPickups, "ausschliesslich Pickups wurden bewegt");
+
+    // --- Keine zwei Items auf demselben Sektor ---
+    std::set<long long> occupied;
+    bool noStack = true;
+    auto keyOf = [](int room, int x, int z) { return (static_cast<long long>(room) << 40) | (static_cast<long long>(x) << 20) | z; };
+    for (size_t i = 0; i < edits.size(); ++i)
+    {
+        long long k = keyOf(static_cast<int>(edits[i]["room"].asInt()),
+                            static_cast<int>(edits[i]["x"].asInt()),
+                            static_cast<int>(edits[i]["z"].asInt()));
+        if (!occupied.insert(k).second) noStack = false;
+    }
+    check(noStack, "keine zwei Items auf derselben Position");
+
+    // --- Zwangsbedingungen der Key-Items eingehalten ---
+    std::map<long long, const ZoneSector*> secAt;
+    std::map<int, std::pair<int,int>> ro;
+    for (const RoomOrigin& r : in.roomOrigins) ro[r.room] = { r.originX, r.originZ };
+    for (const ZoneSector& s : in.sectors)
+        secAt[keyOf(s.room, ro[s.room].first + s.sectorX * 1024 + 512, ro[s.room].second + s.sectorZ * 1024 + 512)] = &s;
+
+    std::map<int, const KeyConstraint*> con;
+    for (const KeyConstraint& k : in.constraints) con[k.typeId] = &k;
+
+    bool constraintsHeld = true;
+    bool allOnValidSector = true;
+    for (size_t i = 0; i < edits.size(); ++i)
+    {
+        const int idx = static_cast<int>(edits[i]["index"].asInt());
+        const int room = static_cast<int>(edits[i]["room"].asInt());
+        long long k = keyOf(room, static_cast<int>(edits[i]["x"].asInt()), static_cast<int>(edits[i]["z"].asInt()));
+        auto si = secAt.find(k);
+        if (si == secAt.end()) { allOnValidSector = false; continue; }
+
+        // Y muss exakt die Bodenhoehe des Sektors sein, sonst schwebt das Item.
+        if (edits[i]["y"].asInt() != si->second->floorY) allOnValidSector = false;
+
+        auto ci = con.find(typeOf[idx]);
+        if (ci == con.end()) continue;
+        const KeyConstraint* c = ci->second;
+        if (si->second->zone > c->maxZone) { constraintsHeld = false; std::printf("       Item %d in Zone %d > max %d\n", idx, si->second->zone, c->maxZone); }
+        if (!c->allowRooms.empty() && !std::binary_search(c->allowRooms.begin(), c->allowRooms.end(), room))
+        { constraintsHeld = false; std::printf("       Item %d in Raum %d nicht in allowRooms\n", idx, room); }
+        if (std::binary_search(c->excludeRooms.begin(), c->excludeRooms.end(), room))
+        { constraintsHeld = false; std::printf("       Item %d in gesperrtem Raum %d\n", idx, room); }
+    }
+    check(allOnValidSector, "jedes Item sitzt auf einem gueltigen Sektor mit exakter Bodenhoehe");
+    check(constraintsHeld, "alle Key-Item-Zwangsbedingungen eingehalten");
+
+    // --- Reproduzierbarkeit ---
+    JsonValue p2; RandoReport r2;
+    Rando::run(in, opt, seed, p2, r2);
+    check(p2.dump() == patch.dump(), "gleicher Seed -> bytegleicher Patch");
+
+    // Ein anderer Seed muss ein anderes Ergebnis liefern - aber nur, wenn es
+    // ueberhaupt etwas zu bewegen gibt. richcut2 ist eine reine Cutscene ohne
+    // ein einziges Pickup; dort ist ein identisches (leeres) Ergebnis richtig
+    // und kein Zeichen fuer einen kaputten Zufallsgenerator.
+    if (rep.movedKeyItems + rep.movedOtherItems > 1)
+    {
+        JsonValue p3; RandoReport r3;
+        Rando::run(in, opt, seed + 1, p3, r3);
+        check(p3.dump() != patch.dump(), "anderer Seed -> anderes Ergebnis");
+    }
+    else
+    {
+        std::printf("  [--- ] Seed-Variation nicht pruefbar - Level hat %d bewegliche Items\n",
+                    rep.movedKeyItems + rep.movedOtherItems);
+    }
+
+    std::printf("\n%s (%d Fehler)\n", g_failed ? "FEHLGESCHLAGEN" : "Alles gruen", g_failed);
+    return g_failed ? 1 : 0;
+}

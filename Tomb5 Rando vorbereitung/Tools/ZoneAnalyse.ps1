@@ -280,7 +280,11 @@ $EXTRA_POOL_TYPES = @{
 # also nicht nur umverteilen, sondern hinzufuegen. Raum 120 laut Nutzer, dort
 # liegt bereits das Secret (Item 102, Pickup Item4).
 $REQUIRED_INJECTIONS = @{
-    'Andrea3' = @( @{ typeId = 172; room = 120; reason = 'Level enthaelt keine Brechstange - Vanilla-Softlock' } )
+    # typeId 240 "Crowbar Item", NICHT 172: 172 heisst zwar "Puzzle Item1", ist
+    # aber je nach Level etwas anderes (in joby3/rich1 eine getarnte
+    # Brechstange, in Andrea2 ein Ventil). Hier stand zuerst faelschlich 172 -
+    # aufgefallen erst, als der Randomizer den Patch tatsaechlich erzeugt hat.
+    'Andrea3' = @( @{ typeId = 240; room = 120; reason = 'Level enthaelt keine Brechstange - Vanilla-Softlock' } )
 }
 $requiredInjections = @( if($REQUIRED_INJECTIONS.ContainsKey($LevelName)){ $REQUIRED_INJECTIONS[$LevelName] } )
 

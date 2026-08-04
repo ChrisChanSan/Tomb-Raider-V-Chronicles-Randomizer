@@ -876,12 +876,22 @@ foreach($ss in $startSeeds){ [void]$reached.Add($ss) }
 $firstParent = @{}   # Sektor -> Sektor, ueber den er ZUERST erreicht wurde
 
 # Alle Trigger, die ueberhaupt eine Tuer schalten - einmal vorab aufgeloest.
+# Zusaetzlich zaehlen Trigger, die ein Key-/Puzzle-Item aktivieren: ein Schloss
+# muss nicht zwingend eine Tuer oeffnen. Andrea2 ist der Fall - das Puzzle Hole1
+# (Item 146, Raum 239) schaltet mit "Object: 128" das Ventil (typeId 172), keine
+# Tuer, und fiel damit komplett aus der Betrachtung. Die Kette Brechstange ->
+# Ventil -> Schloss war im Modell schlicht nicht vorhanden.
+$KEYPUZZ_LO = $PUZZLE_ITEM_BASE; $KEYPUZZ_HI = $KEY_ITEM_BASE + 7
 $allTrig = @(); $tn = 0
 foreach($t in $d.triggers){
     $hitsDoor = $false
     foreach($c in $t.commands){
         if ($c.type -eq 'Object' -and $doorSector.ContainsKey([int]$c.index)) { $hitsDoor = $true }
         if ($c.type -eq 'Cutscene' -and $cutsceneDoorByCutscene.ContainsKey([int]$c.index)) { $hitsDoor = $true }
+        if ($c.type -eq 'Object' -and $items.ContainsKey([int]$c.index)) {
+            $tt = [int]$items[[int]$c.index].typeId
+            if ($tt -ge $KEYPUZZ_LO -and $tt -le $KEYPUZZ_HI) { $hitsDoor = $true }
+        }
     }
     if (-not $hitsDoor) { continue }
     $allTrig += ,@{ Id = $tn; T = $t; Req = (Get-TriggerRequirement $t) }

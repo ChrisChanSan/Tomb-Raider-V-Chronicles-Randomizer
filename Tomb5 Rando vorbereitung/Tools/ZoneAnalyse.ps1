@@ -180,7 +180,7 @@ $EXCLUDE_ROOMS = @{
     'Andrea2' = @(148,215,83,177,205,220,189,153,226,232,242,47,224,162,237,
                   181,156,124,127,185,112,122,119,118,128,114,115,141,87)
     # Einbahnraeume, die nur die Skybox zeigen und dem Level Tiefe geben.
-    'Andrea3' = @(113,114,115,116,64)
+    'Andrea3' = @(113,114,115,116,64,66,67,69)
 }
 $excludeRooms = @( if($EXCLUDE_ROOMS.ContainsKey($LevelName)){ $EXCLUDE_ROOMS[$LevelName] } )
 
@@ -223,6 +223,10 @@ $noPlacement = @( if($NO_PLACEMENT_ROOMS.ContainsKey($LevelName)){ $NO_PLACEMENT
 # haben und trotzdem die falsche Seite sein. Raumlisten aus dem Portalgraphen
 # abgeleitet (Flut ab 27, Stop an 26 rueckwaerts und am Schloss vorwaerts).
 $TYPE_ALLOW_ROOMS = @{
+    'Andrea2' = @{
+        # Vom Nutzer als "save" bestaetigte Raeume fuer die Brechstange.
+        172 = @(0,1,10,17,25,46,50,54,207)
+    }
     'Andrea3' = @{
         196 = @(15,16,26,27,107,108)                         # Key Item1, Ende 15
         197 = @(10,15,16,17,18,26,27,28,55,56,70,83,85,87,   # Key Item2, Ende 102
@@ -232,7 +236,7 @@ $TYPE_ALLOW_ROOMS = @{
         # dort liegt eine Schraege, also eine Einbahnstrasse. Dead Stop laut
         # Nutzer ist Raum 35.
         186 = @(0,9,31,32,33,35,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,
-                52,53,54,59,60,61,62,63,65,66,67,68,69,75,76,78,79,81,82,84,
+                52,53,54,59,60,61,62,63,65,68,75,76,78,79,81,82,84,
                 86,93,94,95,96,97,98,99,109,117,118,125,128)
     }
 }
@@ -253,7 +257,25 @@ if ($TYPE_ALLOW_ROOMS.ContainsKey($LevelName)) {
 # Wert hier: typeId -> maxZone.
 $EXTRA_POOL_TYPES = @{
     'Andrea3' = @{ 186 = 3 }
+    # Andrea2s Brechstange (Item 128, Raum 196, Zone 1) darf mitrandomisiert
+    # werden - das widerspricht der Regel "Brechstange bleibt Vanilla" nicht:
+    # die gilt fuer joby3 und rich1, wo die Brechstange als Puzzle-/Key-Item
+    # getarnt ist und an einer Aufnahme-Cutscene haengt. Hier ist es ein
+    # normaler Pickup vom Typ 172. Zonengrenze 1 = die der Vanilla-Position;
+    # die eigentliche Schranke ist die Raumliste unten, die der Nutzer als
+    # "save" bestaetigt hat.
+    'Andrea2' = @{ 172 = 1 }
 }
+
+# Items, die ein Level zwingend BRAUCHT, die in Vanilla aber fehlen. Andrea3
+# enthaelt keine einzige Brechstange (typeId 172, im Level nachgezaehlt: 0
+# Instanzen) - ein latenter Softlock schon in Vanilla. Der Randomizer muss hier
+# also nicht nur umverteilen, sondern hinzufuegen. Raum 120 laut Nutzer, dort
+# liegt bereits das Secret (Item 102, Pickup Item4).
+$REQUIRED_INJECTIONS = @{
+    'Andrea3' = @( @{ typeId = 172; room = 120; reason = 'Level enthaelt keine Brechstange - Vanilla-Softlock' } )
+}
+$requiredInjections = @( if($REQUIRED_INJECTIONS.ContainsKey($LevelName)){ $REQUIRED_INJECTIONS[$LevelName] } )
 
 # Items, die an ihrer Vanilla-Position bleiben MUESSEN. Nicht verschieben,
 # nicht ersetzen, nicht in den Pool aufnehmen. Grund ist jeweils eine
@@ -1065,7 +1087,7 @@ if ($ExportZonesJson -ne "") {
         $rows += [PSCustomObject]@{ room=[int]$s.room; sectorX=[int]$s.sectorX; sectorZ=[int]$s.sectorZ; zone=[int]$kv.Value; floorY=[int]$s.floorY }
     }
     $maxZoneOut = if($rows.Count -gt 0){ ($rows | Measure-Object -Property zone -Maximum).Maximum } else { 0 }
-    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
+    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; requiredInjections=$requiredInjections } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
     Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"
 }
 
@@ -1143,6 +1165,13 @@ Write-Output "Nie erreicht: $($unreachedSec.Count) begehbare Sektoren"
 if ($excludeRooms.Count -gt 0) {
     $exSec = @($d.sectors | Where-Object { -not $_.isWall -and $excludeRooms -contains [int]$_.room })
     Write-Output "Handgesperrt (EXCLUDE_ROOMS): $($exSec.Count) Sektoren in $($excludeRooms.Count) Raeumen - gewollt, nicht als Luecke gezaehlt"
+}
+if ($requiredInjections.Count -gt 0) {
+    Write-Output "Pflicht-Injektionen (REQUIRED_INJECTIONS) - fehlen in Vanilla:"
+    foreach($ri in $requiredInjections){
+        $have = @($d.items | Where-Object { [int]$_.typeId -eq [int]$ri.typeId }).Count
+        Write-Output ("  typeId {0,4} -> Raum {1,4} ({2}; im Level vorhanden: {3})" -f $ri.typeId,$ri.room,$ri.reason,$have)
+    }
 }
 if ($fixedItems.Count -gt 0) {
     Write-Output "Unantastbare Items (FIXED_ITEMS) - duerfen nicht verschoben werden:"
@@ -1299,6 +1328,7 @@ $KNOWN_GAPS = @{
         13 = 'Antitrigger-Fix der Devs, fuer uns ohne Bedeutung'
         71 = 'Ueberbleibsel der Devs, ohne Funktion'
         72 = 'Ueberbleibsel der Devs, ohne Funktion'
+        77 = 'ohne Funktion'
     }
 }
 $knownGaps = @{}

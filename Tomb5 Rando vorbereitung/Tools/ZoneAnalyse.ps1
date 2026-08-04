@@ -166,6 +166,18 @@ function Test-ClimbEdge([string]$ka, [string]$kb) {
 $ONEWAY_OUT = @{
     'Andrea1' = @(194)   # Rattenkaefig: rein ja, weiter nach 170 nein
 }
+
+# Raeume, die Lara ohne Glitch gar nicht betritt - typischerweise Daecher und
+# Simse, die geometrisch begehbar aussehen, aber zu hoch liegen. Das waere
+# eigentlich Sache des Hoehenmodells (-EnableClimbModel): es erkennt diese
+# Faelle nachweislich korrekt (Andrea2 Raum 177/226 fallen damit weg), stuft
+# aber gleichzeitig 86 Raeume als unerreichbar ein, darunter 63 und 69 mit den
+# Puzzle-Slots - als Regel UND als Verdachtsgenerator unbrauchbar. Deshalb
+# Handkuration: eine Zahl pro Raum, in trview direkt ablesbar.
+$EXCLUDE_ROOMS = @{
+    'Andrea2' = @(177,226)   # Daecher, vom Nutzer in trview identifiziert
+}
+$excludeRooms = @( if($EXCLUDE_ROOMS.ContainsKey($LevelName)){ $EXCLUDE_ROOMS[$LevelName] } )
 $onewayOut = @( if($ONEWAY_OUT.ContainsKey($LevelName)){ $ONEWAY_OUT[$LevelName] } )
 
 # Umzaeunte Bereiche: ein zusammenhaengender Gebaeude-/Hofkomplex, der im Spiel
@@ -355,6 +367,9 @@ foreach($i in $d.items){
 
 function Test-Walkable($key) {
     if (-not $sec.ContainsKey($key)) { return $false }
+    # Handkuratierte Nicht-Betretbar-Raeume zuerst: sie sollen weder als
+    # Platzierungsziel noch als Durchgang dienen (ein Dach ist auch kein Weg).
+    if ($excludeRooms -contains [int]$sec[$key].room) { return $false }
     if ($bridgeSec.ContainsKey($key)) { return $true }
     return (-not $sec[$key].isWall)
 }
@@ -431,6 +446,15 @@ foreach($s in $d.sectors){
         $t = Get-SectorInRoom $tgt $wx $wz
         if (-not $t) { continue }
         $tk2 = "$($t.room),$($t.sectorX),$($t.sectorZ)"
+        # Auch ueber Portale/roomBelow/roomAbove darf kein ausgeschlossener
+        # Raum betreten werden - sonst waere die Kuration wirkungslos, weil
+        # Daecher fast immer per Portal statt per Nachbarsektor haengen.
+        # Bewusst NUR die Raumsperre, nicht das volle Test-Walkable: ein Portal
+        # darf durchaus auf einem als Wand markierten Sektor landen (Randring
+        # des Zielraums), von dem aus es im Raum weitergeht - das zu kappen
+        # kostete in Andrea2 die Raeume 149/191/197 und in joby2/andy3 je
+        # einige Sektoren, ohne dass dem eine Spielmechanik entspraeche.
+        if ($excludeRooms -contains [int]$t.room) { continue }
         # Kletterpruefung je Richtung einzeln (Test-ClimbEdge: runter frei,
         # hoch nur bis 1920 bzw. Kletterwand/Wasser/Bruecke). Der erste Versuch
         # einer Hoehenregel hier scheiterte an zwei Fehlern zugleich: rohes

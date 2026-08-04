@@ -1,0 +1,133 @@
+Name					TypeID	Eigenschafften
+
+//Generische:{
+Lara					0
+Secret1-3				223
+Chloroform_Bottle		235
+Cloth					236
+Lasersight				351
+Crowbar					240		Kann unendllich benutz werden
+Pickup1_Mars			221
+Pickup1_Philo.Stone		220
+?Portal?				158
+Torch					241
+}
+
+//Utilities:{
+Small_Medi				350
+Big_Medi				349
+Flares					355
+}
+
+//Waffen & Munition:{
+Pistolen				334
+Pistol_Ammo				335		Unnötig da Pistolen unendlich Schuss haben
+Uzis 					336
+Uzi_Ammo				337
+Shotgun 				338
+Shotgun_Ammo_Red		339
+Shotgun_Ammo_Blue		340	
+Grapplinggun			341
+Grapplinggun_Ammo		342
+???						343
+???						344
+HK 						345
+HK_Ammo					346
+Revolver 				347
+Revolver/Deagle_Ammo	348
+}
+
+//Gegner:{
+SWAT					33
+Advanced SWAT			35
+Guard					37
+Two_GUN					39
+Dog						41
+Larsson					45
+Soldier MG				49
+Soldier Pistols			51
+Guardian				65
+Soldier Statue			61
+Hydra					63
+Cyborg					67
+Scientist				69
+Geist					71
+Skeleton				73
+Mazemonster				77
+Wasserhexe				79
+Chef					87
+Imp						89
+Chopper					91
+Rats					94
+Spiders					95
+}
+
+//Türen:{
+Door1					284
+Door2					286
+Door3					288
+Door4					290
+Door5					292
+Door6					294
+Door7					296
+Door8					298
+Double Doors			326		Schieben zum öffnen
+Floor_Trapdoor			109 	Greifen zum öffnen
+Celing_Trapdoor			111		Springen zum öffnen
+Kick_door				320 	Kicken zum öffnen
+}
+
+//Key & Puzzels:
+Puzzle1 				172
+Puzzel2					173
+Puzzel3					174
+Puzzel4					175
+Puzzel5					176
+Puzzle1 Combo1			180
+Puzzle1 Combo2			181
+Puzzle2 Combo1			182
+Puzzle2 Combo2			183
+Puzzle3 Combo1			???
+Puzzle3 Combo2 			???
+Puzzle4 Combo1			186
+Puzzle4 Combo2			187
+Puzzle5 Combo1			???
+Puzzle5 Combo2 			???
+Key1					196
+Key2					197
+Key3					???
+Key4					???
+Key5					???
+Key6					???
+Key7					202
+Key8					203		Kann unendlich benutzt werden
+}
+
+//Puzzel und Schlüssellöcher:{
+Keyhole1 				258
+Keyhole2				259
+Keyhole3				???
+Keyhole4				???
+Keyhole5				???
+Keyhole6				263
+Keyhole7				264
+Keyhole8				265
+Slot1					242
+Slot2					???
+Slot3					244
+Slot4					245
+Slot5					246
+}
+
+//Switches:{
+Switch1					266
+Switch2					267
+Switch3					268
+Switch4					269
+Switch5 				270
+Switch6					271
+Switch7					274
+Shoot_Switch1			272
+Shootswitch2			273
+Cog Switch1				278
+}

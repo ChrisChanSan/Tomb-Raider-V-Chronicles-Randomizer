@@ -178,7 +178,7 @@ $EXCLUDE_ROOMS = @{
     # Vom Nutzer in trview durchgesehen. Daecher (177/226 und Nachbarn), reine
     # Luftraeume ueber den Gassen und der Bereich hinter den Dekotueren 89/90.
     'Andrea2' = @(148,215,83,177,205,220,189,153,226,232,242,47,224,162,237,
-                  181,156,124,127,185,112,122,119,118,128,114,115)
+                  181,156,124,127,185,112,122,119,118,128,114,115,141,87)
 }
 $excludeRooms = @( if($EXCLUDE_ROOMS.ContainsKey($LevelName)){ $EXCLUDE_ROOMS[$LevelName] } )
 
@@ -191,7 +191,8 @@ $TYPE_EXCLUDE_ROOMS = @{
     'Andrea2' = @{
         174 = @(17,134,214,46,9,10,207,219)   # Puzzle Item3
         175 = @(70,204)                       # Puzzle Item4
-        176 = @(70,204,141,87)                # Puzzle Item5
+        176 = @(70,204)                       # Puzzle Item5 (141/87 sind
+                                              # inzwischen ganz gesperrt)
     }
 }
 $typeExclude = @{}

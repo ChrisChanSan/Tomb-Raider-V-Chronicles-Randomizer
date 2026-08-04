@@ -1255,6 +1255,7 @@ $unreach = @{}
 foreach($s in $d.sectors){
     if ($s.isWall -or $s.alternateRoom) { continue }
     if ($cameraRooms -contains [int]$s.room) { continue }   # reine Kulisse, siehe CAMERA_ROOMS
+    if ($excludeRooms -contains [int]$s.room) { continue }  # handgesperrt, siehe EXCLUDE_ROOMS
     $k = "$($s.room),$($s.sectorX),$($s.sectorZ)"
     if ($zoneOf.ContainsKey($k)) { continue }
     $unreach[$k] = $s
@@ -1290,14 +1291,33 @@ foreach($k in $unreach.Keys){
 # nur fuer den Flyby - eine drehbare Muehle waere als Animating nicht begehbar,
 # deshalb bekam sie einen eigenen Raum. Solche Gebiete sind KEINE Luecke.
 $ANIM_LO = 416; $ANIM_HI = 447
+# Bereits geklaerte Luecken. Ohne das meldet der Report bei jedem Lauf dieselben
+# Raeume als offene Frage, obwohl die Antwort laengst vorliegt - und die Antwort
+# steht dann nur im Chatverlauf statt im Werkzeug. Raum -> Grund.
+$KNOWN_GAPS = @{
+    'Andrea3' = @{
+        13 = 'Antitrigger-Fix der Devs, fuer uns ohne Bedeutung'
+        71 = 'Ueberbleibsel der Devs, ohne Funktion'
+        72 = 'Ueberbleibsel der Devs, ohne Funktion'
+    }
+}
+$knownGaps = @{}
+if ($KNOWN_GAPS.ContainsKey($LevelName)) {
+    foreach($kv in $KNOWN_GAPS[$LevelName].GetEnumerator()){ $knownGaps[[int]$kv.Key] = [string]$kv.Value }
+}
 foreach($comp in ($comps | Sort-Object { -$_.Count } | Select-Object -First 4)){
     $compRooms = ($comp | ForEach-Object { [int](($_ -split ',')[0]) } | Sort-Object -Unique)
     $itemsIn = @($d.items | Where-Object { $compRooms -contains [int]$_.room })
     $meaningful = @($itemsIn | Where-Object { [int]$_.typeId -lt $ANIM_LO -or [int]$_.typeId -gt $ANIM_HI })
+    $allKnown = ($compRooms.Count -gt 0) -and -not (@($compRooms | Where-Object { -not $knownGaps.ContainsKey($_) }).Count)
     "Gebiet mit {0,5} Sektoren in {1,3} Raeumen" -f $comp.Count,$compRooms.Count
     "   Raeume: {0}" -f (($compRooms | Select-Object -First 20) -join ', ')
     if ($compRooms.Count -gt 20) { "           ... und {0} weitere" -f ($compRooms.Count-20) }
-    if ($itemsIn.Count -gt 0 -and $meaningful.Count -eq 0) {
+    if ($allKnown) {
+        "   GEKLAERT - keine offene Frage:"
+        foreach($rr in $compRooms){ "     Raum {0,4}: {1}" -f $rr,$knownGaps[$rr] }
+    }
+    elseif ($itemsIn.Count -gt 0 -and $meaningful.Count -eq 0) {
         "   Enthaelt {0} Objekte, davon KEINES bespielbar - nur Animatings." -f $itemsIn.Count
         "   => vermutlich reine Kamerafahrt-Geometrie, keine echte Luecke."
     } else {

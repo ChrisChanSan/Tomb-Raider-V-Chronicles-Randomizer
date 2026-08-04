@@ -1,17 +1,23 @@
-# Erzeugt je Vanilla-Level eine .trc, in der jeder valide, per Zonen-Flood
-# erreichte Sektor ein Marker-Item traegt - der Item-TYP kodiert die Zone.
-# Zweck: visuelle/manuelle Verifikation der ZoneAnalyse.ps1-Ergebnisse direkt
-# in trview - Item-Typ anklicken zeigt sofort, in welcher Zone der Sektor
-# liegt, ohne den Textreport parallel offen halten zu muessen.
+# Erzeugt je Vanilla-Level eine .trc, in der die ECHTEN Key-/Puzzle-Item-Typen
+# dieses Levels auf allen Sektoren liegen, in denen sie laut Zonen-Flood
+# platzierbar waeren. Nutzerwunsch: das ist leichter zu lesen als eine
+# generische, nur nach Zonennummer eingefaerbte Alias-Palette - man sieht in
+# trview direkt "Key Item1" ausgewaehlt und jeder Sektor leuchtet auf, der fuer
+# genau diesen Typ erlaubt ist.
 #
 # Ablauf pro Level:
-#   1. ZoneAnalyse.ps1 -ExportZonesJson liefert je validForItems-Sektor Zone+Y.
-#   2. Marker-Item-Palette (10 unterschiedliche, bekanntermassen sichere
-#      Pickup-Typen - dieselbe Klasse, die schon in den bestehenden
-#      *_AllValidSectorsFilled.trc-Dateien verwendet wurde) wird nach Zone
-#      indiziert; mehr Zonen als Palettenplaetze gibt es bisher bei keinem
-#      Level (Maximum bislang: 6).
-#   3. Patch-JSON (itemAdds) wird gebaut, TombItemEdit2026.exe -patchlevel
+#   1. ZoneAnalyse.ps1 -ExportZonesJson liefert je validForItems-Sektor Zone+Y,
+#      dazu keyConstraints: [{typeId, maxZone, instances, reusable}, ...] - die
+#      im Level tatsaechlich vorkommenden Key-/Puzzle-Typen mit ihrer lockersten
+#      "muss in Zone <= N liegen"-Grenze (das Maximum ueber alle Slot-Instanzen
+#      dieses Typs, falls mehrere Schloesser denselben Typ brauchen).
+#   2. Fuer jeden Constraint: auf jedem Sektor mit zone <= maxZone ein Item
+#      dieses typeId platzieren. Ein Sektor kann so mehrere uebereinanderliegende
+#      Items bekommen, wenn mehrere Key-Typen dort gleichzeitig erlaubt sind -
+#      gewollt, trview unterscheidet sie ueber die Typ-Liste.
+#   3. Levels ohne abgeleitete Key-Constraints (z.B. Andy2) werden ausgelassen -
+#      da gibt es nichts Key-Spezifisches zu zeigen.
+#   4. Patch-JSON (itemAdds) wird gebaut, TombItemEdit2026.exe -patchlevel
 #      wendet ihn auf die Vanilla-.trc an und schreibt das Ergebnis in den
 #      Zielordner.
 #
@@ -32,10 +38,6 @@ $ScratchDir   = "C:\Users\dev\AppData\Local\Temp\claude\C--Cloude-AI\b7de1344-2e
 
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir | Out-Null }
 
-# Zone 0..9 - reine Ammo/Deko-Pickups, bereits als "sicher patchbar" bestaetigt
-# (dieselbe Klasse wie in den frueheren AllValidSectorsFilled-Fuellungen).
-$Palette = @(350,349,355,348,337,339,340,342,343,346)   # SmallMedi,BigMedi,Flares,RevolverAmmo,UziAmmo,ShotgunAmmo1,ShotgunAmmo2,CrossbowAmmo1,CrossbowAmmo2,HkAmmo
-
 $results = @()
 foreach($lvl in $Levels){
     $infoJson = "$LevelInfoDir\$lvl.json"
@@ -50,18 +52,22 @@ foreach($lvl in $Levels){
     & $ZoneScript -LevelJson $infoJson -LevelName $lvl -ExportZonesJson $zonesJson 2>&1 | Out-Null
     if (-not (Test-Path $zonesJson)) { "SKIP $lvl - Zonen-Export fehlgeschlagen"; continue }
     $z = Get-Content $zonesJson -Raw | ConvertFrom-Json
-    if ($z.maxZone -ge $Palette.Count) {
-        "WARNUNG ${lvl}: maxZone=$($z.maxZone) >= Palettengroesse $($Palette.Count) - hoechste Zonen teilen sich einen Marker-Typ"
+    $constraints = @($z.keyConstraints)
+    if ($constraints.Count -eq 0) {
+        "SKIP ${lvl} - keine Key-/Puzzle-Constraints abgeleitet, nichts zu zeigen"
+        continue
     }
 
     $itemAdds = @()
-    foreach($s in $z.sectors){
-        $rm = $rooms[[int]$s.room]
-        if (-not $rm) { continue }
-        $tid = $Palette[[math]::Min([int]$s.zone, $Palette.Count-1)]
-        $wx = [int]$rm.originX + [int]$s.sectorX*1024 + 512
-        $wz = [int]$rm.originZ + [int]$s.sectorZ*1024 + 512
-        $itemAdds += [PSCustomObject]@{ typeId=$tid; room=[int]$s.room; x=$wx; y=[int]$s.floorY; z=$wz }
+    foreach($c in $constraints){
+        $eligible = @($z.sectors | Where-Object { [int]$_.zone -le [int]$c.maxZone })
+        foreach($s in $eligible){
+            $rm = $rooms[[int]$s.room]
+            if (-not $rm) { continue }
+            $wx = [int]$rm.originX + [int]$s.sectorX*1024 + 512
+            $wz = [int]$rm.originZ + [int]$s.sectorZ*1024 + 512
+            $itemAdds += [PSCustomObject]@{ typeId=[int]$c.typeId; room=[int]$s.room; x=$wx; y=[int]$s.floorY; z=$wz }
+        }
     }
 
     $patch = [PSCustomObject]@{ itemAdds = $itemAdds } | ConvertTo-Json -Depth 4 -Compress
@@ -78,8 +84,9 @@ foreach($lvl in $Levels){
     $argList = @('-patchlevel', "`"$srcTrc`"", "`"$dstTrc`"", "`"$patchPath`"")
     $p = Start-Process -FilePath $Exe -ArgumentList $argList -Wait -PassThru -NoNewWindow
     $ok = (Test-Path $dstTrc) -and $p.ExitCode -eq 0
-    $results += [PSCustomObject]@{ Level=$lvl; MaxZone=$z.maxZone; Items=$itemAdds.Count; OK=$ok }
-    "{0,-10} maxZone={1}  Marker={2,5}  ExitCode={3}  {4}" -f $lvl,$z.maxZone,$itemAdds.Count,$p.ExitCode,($(if($ok){'OK'}else{'FEHLER'}))
+    $typeList = ($constraints | ForEach-Object { "$($_.typeId)<=Z$($_.maxZone)" }) -join ', '
+    $results += [PSCustomObject]@{ Level=$lvl; Types=$constraints.Count; Items=$itemAdds.Count; OK=$ok }
+    "{0,-10} Typen=[{1}]  Items={2,5}  ExitCode={3}  {4}" -f $lvl,$typeList,$itemAdds.Count,$p.ExitCode,($(if($ok){'OK'}else{'FEHLER'}))
 }
 
 Write-Output ""

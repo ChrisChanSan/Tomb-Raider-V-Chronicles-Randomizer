@@ -659,6 +659,24 @@ while ($true) {
     $zone++
 }
 
+# Pro Key-/Puzzle-Item-Typ die lockerste (maximale) "muss in Zone <= N liegen"-
+# Anforderung ueber alle seine Slot-Instanzen - dieselbe Gruppierung, die auch
+# der Textreport weiter unten anzeigt, hier vorgezogen, damit der JSON-Export
+# sie mitliefern kann. Gameflow-Typen (kein Slot im Level platziert) bleiben
+# aussen vor - fuer sie gibt es keine sinnvolle "wo platzieren"-Frage.
+$byType = @{}
+foreach($n in ($itemNeed | Where-Object { -not $_.Gameflow })){
+    $t = [int]$n.Type
+    if (-not $byType.ContainsKey($t)) { $byType[$t] = @() }
+    $byType[$t] += ,$n
+}
+$keyConstraints = @()
+foreach($kv in $byType.GetEnumerator()){
+    $nt = [int]$kv.Key
+    $maxZ = ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
+    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt) }
+}
+
 if ($ExportZonesJson -ne "") {
     # Maschinenlesbarer Export: je Sektor, der sowohl im Flood erreicht als auch
     # laut Exporter tatsaechlich itemfaehig ist (validForItems), seine Zone.
@@ -673,8 +691,8 @@ if ($ExportZonesJson -ne "") {
         $rows += [PSCustomObject]@{ room=[int]$s.room; sectorX=[int]$s.sectorX; sectorZ=[int]$s.sectorZ; zone=[int]$kv.Value; floorY=[int]$s.floorY }
     }
     $maxZoneOut = if($rows.Count -gt 0){ ($rows | Measure-Object -Property zone -Maximum).Maximum } else { 0 }
-    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
-    Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut)"
+    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
+    Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"
 }
 
 if ($DebugPathTo -ne "") {
@@ -774,12 +792,8 @@ if ($gameflowNeeds.Count -gt 0) {
     Write-Output ""
 }
 
-$byType = @{}
-foreach($n in ($itemNeed | Where-Object { -not $_.Gameflow })){
-    $t = [int]$n.Type
-    if (-not $byType.ContainsKey($t)) { $byType[$t] = @() }
-    $byType[$t] += ,$n
-}
+# $byType wurde bereits vor dem ExportZonesJson-Block weiter oben berechnet -
+# hier nur noch die Textausgabe.
 foreach($kv in $byType.GetEnumerator() | Sort-Object Name){
     $nt = [int]$kv.Key
     $needs = @($kv.Value | Sort-Object { $_.Zone })

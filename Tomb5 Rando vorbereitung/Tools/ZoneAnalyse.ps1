@@ -199,6 +199,39 @@ $typeExclude = @{}
 if ($TYPE_EXCLUDE_ROOMS.ContainsKey($LevelName)) {
     foreach($kv in $TYPE_EXCLUDE_ROOMS[$LevelName].GetEnumerator()){ $typeExclude[[int]$kv.Key] = @($kv.Value) }
 }
+
+# Raeume, die begehbar bleiben und Teil des Wegenetzes sind, in denen aber gar
+# kein Key-/Puzzle-Item liegen darf - unabhaengig vom Typ. Anders als
+# EXCLUDE_ROOMS ist das bewusst KEINE Begehbarkeitssperre: Andrea3s Startinsel
+# enthaelt Laras Startraum 1, den nicht begehbar zu machen wuerde die Flut
+# sofort abwuergen. Der Grund ist ein reiner Platzierungsgrund - hinter Raum 3
+# liegt ein Point of no return (Lavapit), ein dort uebersehener Schluessel
+# waere unwiederbringlich.
+$NO_PLACEMENT_ROOMS = @{
+    'Andrea3' = @(1,2,3,4,5,6,11,19,20,21,22,29,30,34,112,123,124)
+}
+$noPlacement = @( if($NO_PLACEMENT_ROOMS.ContainsKey($LevelName)){ $NO_PLACEMENT_ROOMS[$LevelName] } )
+
+# Positivliste statt Sperrliste: manche Typen duerfen nur in einem klar
+# umrissenen Abschnitt liegen. Andrea3 ist der Fall - beide Keys muessen im
+# Korridor ab Raum 26 ueber 27 Richtung Ende liegen, Key Item1 bis
+# einschliesslich seines Schlosses in Raum 15, Key Item2 bis Raum 102. Die
+# Zonen allein reichen dafuer nicht: der Teleporter ist wegen des Crumble
+# Floor eine Einbahnstrasse, davor liegende Raeume koennen also dieselbe Zone
+# haben und trotzdem die falsche Seite sein. Raumlisten aus dem Portalgraphen
+# abgeleitet (Flut ab 27, Stop an 26 rueckwaerts und am Schloss vorwaerts).
+$TYPE_ALLOW_ROOMS = @{
+    'Andrea3' = @{
+        196 = @(15,16,26,27,107,108,115)                     # Key Item1, Ende 15
+        197 = @(10,15,16,17,18,26,27,28,55,56,70,83,85,87,   # Key Item2, Ende 102
+                88,89,90,100,101,102,103,104,105,106,107,
+                108,110,111,113,114,115,116,119,120,121,129)
+    }
+}
+$typeAllow = @{}
+if ($TYPE_ALLOW_ROOMS.ContainsKey($LevelName)) {
+    foreach($kv in $TYPE_ALLOW_ROOMS[$LevelName].GetEnumerator()){ $typeAllow[[int]$kv.Key] = @($kv.Value) }
+}
 $onewayOut = @( if($ONEWAY_OUT.ContainsKey($LevelName)){ $ONEWAY_OUT[$LevelName] } )
 
 # Umzaeunte Bereiche: ein zusammenhaengender Gebaeude-/Hofkomplex, der im Spiel
@@ -962,8 +995,9 @@ $keyConstraints = @()
 foreach($kv in $byType.GetEnumerator()){
     $nt = [int]$kv.Key
     $maxZ = ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
-    $exRooms = @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } )
-    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms }
+    $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement | Sort-Object -Unique )
+    $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
+    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms }
 }
 
 if ($ExportZonesJson -ne "") {

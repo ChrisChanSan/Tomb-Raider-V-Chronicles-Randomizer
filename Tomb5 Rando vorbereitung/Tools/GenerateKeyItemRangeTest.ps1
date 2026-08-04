@@ -63,7 +63,12 @@ foreach($lvl in $Levels){
         # excludeRooms: Raeume, die zwar in der Zone liegen, in denen dieser eine
         # Typ aber trotzdem nicht liegen darf (Nutzerangabe aus trview).
         $ex = @( if($null -ne $c.excludeRooms){ $c.excludeRooms | ForEach-Object { [int]$_ } } )
-        $eligible = @($z.sectors | Where-Object { [int]$_.zone -le [int]$c.maxZone -and $ex -notcontains [int]$_.room })
+        # allowRooms ist eine Positivliste: ist sie gesetzt, zaehlt nur noch
+        # sie (die Zone bleibt trotzdem Obergrenze). Leer = keine Einschraenkung.
+        $al = @( if($null -ne $c.allowRooms){ $c.allowRooms | ForEach-Object { [int]$_ } } )
+        $eligible = @($z.sectors | Where-Object {
+            [int]$_.zone -le [int]$c.maxZone -and $ex -notcontains [int]$_.room -and
+            ($al.Count -eq 0 -or $al -contains [int]$_.room) })
         foreach($s in $eligible){
             $rm = $rooms[[int]$s.room]
             if (-not $rm) { continue }
@@ -89,7 +94,8 @@ foreach($lvl in $Levels){
     $ok = (Test-Path $dstTrc) -and $p.ExitCode -eq 0
     $typeList = ($constraints | ForEach-Object {
         $x = @( if($null -ne $_.excludeRooms){ $_.excludeRooms } )
-        "$($_.typeId)<=Z$($_.maxZone)$(if($x.Count){" -$($x.Count)R"})"
+        $a = @( if($null -ne $_.allowRooms){ $_.allowRooms } )
+        "$($_.typeId)<=Z$($_.maxZone)$(if($x.Count){" -$($x.Count)R"})$(if($a.Count){" nur$($a.Count)R"})"
     }) -join ', '
     $results += [PSCustomObject]@{ Level=$lvl; Types=$constraints.Count; Items=$itemAdds.Count; OK=$ok }
     "{0,-10} Typen=[{1}]  Items={2,5}  ExitCode={3}  {4}" -f $lvl,$typeList,$itemAdds.Count,$p.ExitCode,($(if($ok){'OK'}else{'FEHLER'}))

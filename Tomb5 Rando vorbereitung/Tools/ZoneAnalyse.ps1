@@ -22,7 +22,8 @@
 param(
     [string]$LevelJson,
     [string]$LevelName = "Level",
-    [string[]]$DebugSectors = @()
+    [string[]]$DebugSectors = @(),
+    [string]$DebugPathTo = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -605,6 +606,40 @@ while ($true) {
         $log += ,@{ Zone=$zone; Door=$n.Door; Req=$n.Req }
     }
     $zone++
+}
+
+if ($DebugPathTo -ne "") {
+    Write-Output "--- Debug: kuerzester begehbarer Pfad zu $DebugPathTo ---"
+    if (-not $zoneOf.ContainsKey($DebugPathTo)) {
+        Write-Output "  Ziel nie erreicht - kein Pfad im begehbaren Graphen."
+    } else {
+        # Frische BFS ueber denselben Graphen, aber unter Beachtung aller am
+        # Ende offenen Tueren ($openDoors) - zeigt die TATSAECHLICH benutzte
+        # Kantenfolge, damit sich eine unerwartet fruehe Erreichbarkeit einer
+        # konkreten Kante zuordnen laesst statt nur "irgendwo falsch".
+        $parent = @{}
+        $seen = New-Object System.Collections.Generic.HashSet[string]
+        [void]$seen.Add($startKey)
+        $q2 = New-Object System.Collections.Generic.Queue[string]; $q2.Enqueue($startKey)
+        while($q2.Count -gt 0){
+            $k = $q2.Dequeue()
+            if ($k -eq $DebugPathTo) { break }
+            if (-not $adj.ContainsKey($k)) { continue }
+            foreach($n in $adj[$k]){
+                if ($seen.Contains($n)) { continue }
+                if ($blocked.ContainsKey($n) -and -not $openDoors.Contains($blocked[$n])) { continue }
+                [void]$seen.Add($n); $parent[$n] = $k; $q2.Enqueue($n)
+            }
+        }
+        $path = @($DebugPathTo); $cur = $DebugPathTo
+        while ($parent.ContainsKey($cur)) { $cur = $parent[$cur]; $path = ,$cur + $path }
+        for($i=0; $i -lt $path.Count; $i++){
+            $roomChange = if($i -gt 0){ ($path[$i] -split ',')[0] -ne ($path[$i-1] -split ',')[0] } else { $false }
+            $marker = if($roomChange){ " <- Raumwechsel" } else { "" }
+            "  [{0,2}] {1}{2}" -f $i,$path[$i],$marker
+        }
+    }
+    Write-Output ""
 }
 
 # --- Ausgabe ----------------------------------------------------------------

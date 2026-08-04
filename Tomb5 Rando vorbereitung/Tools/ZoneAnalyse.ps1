@@ -191,6 +191,7 @@ $TYPE_EXCLUDE_ROOMS = @{
     'Andrea2' = @{
         174 = @(17,134,214,46,9,10,207,219)   # Puzzle Item3
         175 = @(70,204)                       # Puzzle Item4
+        176 = @(70,204,141,87)                # Puzzle Item5
     }
 }
 $typeExclude = @{}

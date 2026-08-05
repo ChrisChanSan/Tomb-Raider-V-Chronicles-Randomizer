@@ -38,10 +38,11 @@ int main(int argc, char** argv)
         // Der Hauptblock sollte praktisch die gesamte Restdatei ausmachen -
         // dahinter kommt nichts Grosses mehr. Weicht das stark ab, haben wir
         // den Kopfteil falsch gedeutet.
-        const size_t tail = lvl.fileSize() - (lvl.mainBlockOffset() + lvl.mainBlockSize());
-        std::printf("  [ok ] %-10s Version 0x%08X  Datei %8zu  Hauptblock @%8zu +%8zu  Rest %zu\n",
-                    n, (unsigned)lvl.version(), lvl.fileSize(),
-                    lvl.mainBlockOffset(), lvl.mainBlockSize(), tail);
+        Tr5Item first{};
+        lvl.getItem(0, first);
+        std::printf("  [ok ] %-10s Raeume %3d  Items %4d @%8zu   erstes: Typ %3d Raum %3d (%d,%d,%d)\n",
+                    n, lvl.roomCount(), lvl.itemCount(), lvl.itemCountOffset(),
+                    first.objectNumber, first.roomNumber, first.x, first.y, first.z);
         ++ok;
     }
 

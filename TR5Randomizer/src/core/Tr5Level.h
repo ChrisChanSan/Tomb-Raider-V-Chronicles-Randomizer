@@ -71,13 +71,31 @@ public:
     size_t  mainBlockOffset() const { return m_mainOffset; }
     size_t  mainBlockSize() const { return m_mainSize; }
 
+    // --- Items ---------------------------------------------------------
+    // Absolute Position des int32 mit der Item-Anzahl; direkt dahinter
+    // liegen die Items zu je 24 Byte.
+    size_t  itemCountOffset() const { return m_itemCountOffset; }
+    int32_t itemCount() const { return m_itemCount; }
+    int     roomCount() const { return m_roomCount; }
+
+    // Liest ein Item. index muss < itemCount() sein.
+    bool    getItem(int index, Tr5Item& out) const;
+
+    // Schreibt ein Item an derselben Stelle zurueck. Aendert nur die 24 Byte
+    // dieses Datensatzes - Dateigroesse und alle anderen Offsets bleiben
+    // unberuehrt, weshalb Aendern gefahrlos ist und Entfernen nicht.
+    bool    setItem(int index, const Tr5Item& in);
+
 private:
     std::vector<uint8_t> m_bytes;
     int32_t              m_version = 0;
     int16_t              m_rtPages = 0, m_otPages = 0, m_btPages = 0;
     size_t               m_mainOffset = 0;   // Beginn der Hauptblock-Nutzdaten
     size_t               m_mainSize = 0;
+    size_t               m_itemCountOffset = 0;
+    int32_t              m_itemCount = 0;
+    int                  m_roomCount = 0;
 
-    // Leseposition beim Kopfteil.
     bool readHeader(std::string& error);
+    bool findItems(std::string& error);   // laeuft den Hauptblock ab
 };

@@ -49,7 +49,26 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         if (e.has("y"))      it.y = static_cast<int32_t>(e["y"].asInt());
         if (e.has("z"))      it.z = static_cast<int32_t>(e["z"].asInt());
         if (e.has("angle"))  it.yRot = static_cast<int16_t>(e["angle"].asInt());
-        if (e.has("ocb"))    it.triggerFlags = static_cast<int16_t>(e["ocb"].asInt());
+        if (e.has("ocb"))
+        {
+            // "ocb" setzt die unteren sechs Bit - das ist der Wert, den
+            // PickUpCollision und InitialisePickup als OCB auswerten.
+            //
+            // Das Bit 0x80 bleibt erhalten: es markiert ein regenerierendes
+            // Pickup (game/init.cpp:480) und hat mit dem Ort nichts zu tun.
+            // Wuerden wir es beim Verschieben mit loeschen, hoerten mehrere
+            // Munitionsstapel im Spiel still auf, sich nachzufuellen -
+            // Andrea1 Item 66 und 78, Andrea2 Item 69, joby2 Item 8. Erst
+            // seit unser eigener Leser das Feld ungemaskt liefert, ist das
+            // ueberhaupt sichtbar.
+            //
+            // 0x100 (Mesh unsichtbar) wird dagegen bewusst geloescht: ein
+            // verschobenes Pickup soll an seinem neuen Platz zu sehen sein.
+            // 0x40 traegt kein Codepfad aus - reines Editor-Artefakt.
+            const uint16_t keep = static_cast<uint16_t>(it.triggerFlags) & 0x0080u;
+            const uint16_t low = static_cast<uint16_t>(e["ocb"].asInt()) & 0x003Fu;
+            it.triggerFlags = static_cast<int16_t>(keep | low);
+        }
         if (e.has("flags"))  it.flags = static_cast<int16_t>(e["flags"].asInt());
 
         if (!level.setItem(index, it))

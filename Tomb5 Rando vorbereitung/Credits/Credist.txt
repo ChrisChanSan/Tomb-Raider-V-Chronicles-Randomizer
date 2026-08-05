@@ -1,0 +1,15 @@
+Special Thanks to all of these awesome peopel. All of these made It possible to build this randomizer.
+
+Tomb5 Decompile: https://github.com/Trxyebeep/TOMB5 (Trxyebeep)
+
+Trview: https://github.com/chreden/trview (Chreden)
+
+TRmod https://b122251.org/tr/tools/index.html (b122251)
+
+TR Viewer: http://www.evpopov.com/ https://web.archive.org/web/20020320131858/http://www.evpopov.com/index2.html (E.Popov)
+
+imgui: https://github.com/ocornut/imgui (ocornut)
+
+Tomb Raider Chronicles(2000): https://core-design.com/ 
+
+Claude AI: https://claude.ai/login (ANTHROPIC PBC)

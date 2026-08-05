@@ -38,11 +38,29 @@ int main(int argc, char** argv)
         // Der Hauptblock sollte praktisch die gesamte Restdatei ausmachen -
         // dahinter kommt nichts Grosses mehr. Weicht das stark ab, haben wir
         // den Kopfteil falsch gedeutet.
-        Tr5Item first{};
-        lvl.getItem(0, first);
-        std::printf("  [ok ] %-10s Raeume %3d  Items %4d @%8zu   erstes: Typ %3d Raum %3d (%d,%d,%d)\n",
-                    n, lvl.roomCount(), lvl.itemCount(), lvl.itemCountOffset(),
-                    first.objectNumber, first.roomNumber, first.x, first.y, first.z);
+        // R8: welche Items tragen Bits AUSSERHALB der unteren sechs?
+        // Der alte Export maskierte mit 0x3F, dadurch waren 0x80
+        // (regenerierendes Pickup) und 0x100 (Mesh unsichtbar) nicht sichtbar.
+        // Unser Leser liefert das Feld vollstaendig - die Frage laesst sich
+        // also einfach beantworten, statt sie zu vermuten.
+        int withHigh = 0;
+        std::string detail;
+        for (int i = 0; i < lvl.itemCount(); ++i)
+        {
+            Tr5Item it{};
+            if (!lvl.getItem(i, it)) continue;
+            const uint16_t raw = static_cast<uint16_t>(it.triggerFlags);
+            if ((raw & ~0x3Fu) == 0) continue;
+            ++withHigh;
+            if (withHigh <= 6)
+            {
+                char buf[80];
+                std::snprintf(buf, sizeof(buf), " %d(T%d,0x%04X)", i, it.objectNumber, raw);
+                detail += buf;
+            }
+        }
+        std::printf("  [ok ] %-10s Items %4d   hohe OCB-Bits: %3d%s\n",
+                    n, lvl.itemCount(), withHigh, detail.c_str());
         ++ok;
     }
 

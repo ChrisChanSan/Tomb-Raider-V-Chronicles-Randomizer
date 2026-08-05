@@ -121,9 +121,10 @@ So faengst du an
 ----------------
   1. TR5Randomizer.exe starten.
   2. Beim ersten Start fragt er nach dem Ordner deiner
-     Chronicles-Installation. Er prueft die Level gegen eine
-     Pruefsummenliste und legt sich eine eigene Kopie an.
-     Dein Steam-Ordner wird nicht veraendert.
+     Chronicles-Installation. Beim ersten Randomisieren legt er
+     data\Backup an und sichert deine Originallevel dorthin.
+     Randomisiert wird danach direkt in data - du startest das
+     Spiel also wie gewohnt.
   3. Seed eingeben oder wuerfeln lassen, randomisieren, spielen.
 
 Der Seed
@@ -138,7 +139,9 @@ Jede Eingabe ist ein gueltiger Seed. "Weihnachten" funktioniert.
 Wenn etwas schiefgeht
 ---------------------
 Im Randomizer gibt es "Auf Original zuruecksetzen". Damit werden alle
-Level aus deiner unveraenderten Installation neu kopiert.
+Level aus data\Backup zurueckgespielt. Diesen Ordner bitte nicht
+loeschen - er ist die einzige Kopie deiner Originallevel, die das
+Programm kennt.
 
 Hinweis zu Spielstaenden: das Speicherformat wurde gegenueber dem
 Original geaendert. Alte Spielstaende werden mit einer Meldung

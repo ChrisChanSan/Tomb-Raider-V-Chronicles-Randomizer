@@ -175,9 +175,18 @@ namespace
         char                     seedBuf[64] = {};
         bool                     busy = false;
 
-        std::wstring gameDir() const { return PathUtil::join(PathUtil::exeDir(), L"Game"); }
-        std::wstring dataDir() const { return PathUtil::join(gameDir(), L"data"); }
+        // Es wird direkt in der Installation des Nutzers gearbeitet. Die
+        // Originale liegen daneben in data\Backup und sind ab dann der
+        // Massstab - siehe ensureBackup().
+        std::wstring dataDir() const
+        {
+            const std::wstring sub = PathUtil::join(cfg.sourceDir, L"data");
+            return PathUtil::dirExists(sub) ? sub : cfg.sourceDir;
+        }
+        std::wstring backupDir() const { return PathUtil::join(dataDir(), L"Backup"); }
         std::wstring payloadDir() const { return PathUtil::join(PathUtil::exeDir(), L"data"); }
+
+        bool haveBackup = false;
     };
 
     void setStatus(App& a, const std::string& s, bool error = false)
@@ -198,10 +207,14 @@ namespace
 
         if (a.cfg.sourceDir.empty()) { setStatus(a, "Noch kein Spielordner gewaehlt."); return; }
 
-        const std::wstring dir = PathUtil::join(a.cfg.sourceDir, L"data");
-        const std::wstring use = PathUtil::dirExists(dir) ? dir : a.cfg.sourceDir;
+        // Existiert schon ein Backup, ist DAS der Massstab - nicht data\, denn
+        // dort koennen bereits randomisierte Level liegen. Sonst wuerde beim
+        // zweiten Durchlauf ein randomisiertes Level als "Original" gelten und
+        // das echte Original waere fuer immer weg.
+        a.haveBackup = PathUtil::dirExists(a.backupDir());
+        const std::wstring master = a.haveBackup ? a.backupDir() : a.dataDir();
 
-        auto st = a.data.inspect(use);
+        auto st = a.data.inspect(master);
         for (const LevelStatus& s : st)
         {
             LevelRow r;
@@ -213,7 +226,14 @@ namespace
 
         std::string why;
         a.sourceOk = DataFolder::isUsableSource(st, why);
-        setStatus(a, a.sourceOk ? "Installation geprueft - alle Level unveraendert." : why, !a.sourceOk);
+
+        if (a.sourceOk)
+            setStatus(a, a.haveBackup
+                ? "Installation bereit. Originale liegen in data\\Backup."
+                : "Installation geprueft - alle Level unveraendert. Beim ersten "
+                  "Randomisieren wird data\\Backup angelegt.");
+        else
+            setStatus(a, (a.haveBackup ? "Das Backup ist beschaedigt: " : "") + why, true);
     }
 
     // Ein Level randomisieren. Genau dieselben Schritte wie Randomize.cpp.
@@ -247,17 +267,41 @@ namespace
         return true;
     }
 
+    // Legt data\Backup an, falls es fehlt. Das darf NUR passieren, wenn die
+    // Level in data\ nachweislich unveraendert sind - ein Backup aus bereits
+    // randomisierten Dateien waere unbemerkt wertlos und das Original
+    // unwiederbringlich verloren. Deshalb ist die Pruefsummenpruefung hier
+    // keine Bequemlichkeit, sondern die Absicherung.
+    bool ensureBackup(App& a, std::string& err)
+    {
+        if (PathUtil::dirExists(a.backupDir())) return true;
+
+        auto st = a.data.inspect(a.dataDir());
+        std::string why;
+        if (!DataFolder::isUsableSource(st, why))
+        {
+            err = "Es gibt noch kein Backup, und die Level in data sind nicht im "
+                  "Originalzustand: " + why + " Bitte ueber Steam die Dateien "
+                  "pruefen lassen und erneut versuchen.";
+            return false;
+        }
+
+        int copied = 0;
+        if (!a.data.copyLevels(a.dataDir(), a.backupDir(), err, &copied)) return false;
+        a.haveBackup = true;
+        return true;
+    }
+
     void doRandomize(App& a)
     {
-        // Immer aus dem Original kopieren, nie auf ein schon randomisiertes
+        // Immer aus dem Backup kopieren, nie auf ein schon randomisiertes
         // Level aufsetzen - sonst waere das Ergebnis aus dem Seed nicht mehr
         // nachstellbar, und genau dafuer gibt es den Seed.
         std::string err;
-        const std::wstring dir = PathUtil::join(a.cfg.sourceDir, L"data");
-        const std::wstring use = PathUtil::dirExists(dir) ? dir : a.cfg.sourceDir;
+        if (!ensureBackup(a, err)) { setStatus(a, err, true); return; }
 
         int copied = 0;
-        if (!a.data.copyLevels(use, a.dataDir(), err, &copied))
+        if (!a.data.copyLevels(a.backupDir(), a.dataDir(), err, &copied))
         {
             setStatus(a, "Kopieren fehlgeschlagen: " + err, true);
             return;
@@ -278,7 +322,7 @@ namespace
         a.cfg.save();
 
         char buf[192];
-        std::snprintf(buf, sizeof(buf), "%d Level randomisiert%s. Spielordner: Game\\",
+        std::snprintf(buf, sizeof(buf), "%d Level randomisiert%s. Du kannst das Spiel jetzt starten.",
                       done, failed ? " - mit Fehlern, siehe Liste" : "");
         setStatus(a, buf, failed > 0);
     }
@@ -286,11 +330,15 @@ namespace
     void doRestore(App& a)
     {
         std::string err;
-        const std::wstring dir = PathUtil::join(a.cfg.sourceDir, L"data");
-        const std::wstring use = PathUtil::dirExists(dir) ? dir : a.cfg.sourceDir;
+        if (!PathUtil::dirExists(a.backupDir()))
+        {
+            setStatus(a, "Es gibt kein Backup - da wurde noch nie randomisiert, "
+                         "die Level sind also bereits im Originalzustand.", true);
+            return;
+        }
 
         int copied = 0;
-        if (!a.data.copyLevels(use, a.dataDir(), err, &copied))
+        if (!a.data.copyLevels(a.backupDir(), a.dataDir(), err, &copied))
             setStatus(a, "Zuruecksetzen fehlgeschlagen: " + err, true);
         else
         {
@@ -323,7 +371,8 @@ static void drawUi(App& a, HWND hwnd)
     // --- 1. Spielordner ---
     ImGui::SeparatorText("1. Deine Installation");
     ImGui::TextWrapped("Waehle den Ordner deiner Tomb Raider Chronicles-Installation. "
-                       "Er wird nur gelesen - randomisiert wird in einer eigenen Kopie.");
+                       "Die Level werden direkt dort randomisiert; die Originale sichert "
+                       "das Programm vorher nach data\\Backup.");
 
     std::string shown = a.cfg.sourceDir.empty() ? std::string("(nicht gewaehlt)")
                                                 : PathUtil::narrow(a.cfg.sourceDir);

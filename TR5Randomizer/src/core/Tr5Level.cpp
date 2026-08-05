@@ -203,6 +203,41 @@ bool Tr5Level::getItem(int index, Tr5Item& out) const
     return true;
 }
 
+bool Tr5Level::addItem(const Tr5Item& in, std::string& error)
+{
+    if (m_itemCount >= MAX_ITEMS)
+    {
+        char buf[192];
+        std::snprintf(buf, sizeof(buf),
+            "Level hat bereits %d Items - die Engine laedt hoechstens %d.",
+            m_itemCount, MAX_ITEMS);
+        error = buf;
+        return false;
+    }
+
+    // 24 Byte hinter dem letzten Item einfuegen. Alles danach im Hauptblock
+    // (AI-Infos, Cutscene-Daten) rueckt mit; das ist unkritisch, weil dort
+    // alles sequentiell gelesen wird und niemand absolute Offsets haelt.
+    const size_t itemsEnd = m_itemCountOffset + 4 + static_cast<size_t>(m_itemCount) * 24;
+    if (itemsEnd > m_bytes.size()) { error = "Item-Bereich liegt ausserhalb der Datei"; return false; }
+
+    m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(itemsEnd), 24, 0);
+
+    ++m_itemCount;
+    std::memcpy(m_bytes.data() + m_itemCountOffset, &m_itemCount, 4);
+
+    // Der Hauptblock ist um 24 Byte gewachsen. Seine Groesse steht doppelt im
+    // Kopf davor - als size und als compressedSize, die bei einem
+    // unkomprimierten Block gleich sind. Beide muessen mit, sonst liest die
+    // Engine den Block zu kurz und alles Weitere kippt.
+    m_mainSize += 24;
+    const int32_t newSize = static_cast<int32_t>(m_mainSize);
+    std::memcpy(m_bytes.data() + m_mainOffset - 8, &newSize, 4);
+    std::memcpy(m_bytes.data() + m_mainOffset - 4, &newSize, 4);
+
+    return setItem(m_itemCount - 1, in);
+}
+
 bool Tr5Level::setItem(int index, const Tr5Item& in)
 {
     if (index < 0 || index >= m_itemCount) return false;

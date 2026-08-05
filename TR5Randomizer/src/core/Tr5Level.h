@@ -86,6 +86,17 @@ public:
     // unberuehrt, weshalb Aendern gefahrlos ist und Entfernen nicht.
     bool    setItem(int index, const Tr5Item& in);
 
+    // Haengt ein Item hinten an. Das ist der einzige Weg, Items hinzuzufuegen:
+    // anhaengen verschiebt keine bestehenden Indizes, und die "Object N"-
+    // Verweise der Trigger bleiben damit gueltig. Ein Entfernen gibt es hier
+    // bewusst NICHT - es wuerde alle nachfolgenden Indizes verschieben.
+    bool    addItem(const Tr5Item& in, std::string& error);
+
+    // Die Engine haelt items[] als festes Feld dieser Groesse (MAX_ITEMS in
+    // global/types.h). Mehr Items laedt sie nicht - rich2 liegt mit 248 schon
+    // dicht darunter, deshalb wird die Grenze hier geprueft und nicht gehofft.
+    static constexpr int MAX_ITEMS = 256;
+
 private:
     std::vector<uint8_t> m_bytes;
     int32_t              m_version = 0;

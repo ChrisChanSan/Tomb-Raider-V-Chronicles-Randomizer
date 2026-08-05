@@ -297,6 +297,7 @@ $requiredInjections = @( if($REQUIRED_INJECTIONS.ContainsKey($LevelName)){ $REQU
 $FIXED_ITEMS = @{
     'Andrea3' = @{ 49 = 'Puzzle Item4 Combo2 - triggert eine Tuer' }
     'Andrea2' = @{ 128 = 'Ventil - muss an einer Wand sitzen (siehe VANILLA_TYPES 172)' }
+    'rich1'   = @{ 27 = 'CD - Invisible, wird per Switch aus dem Anzug enthuellt' }
 }
 
 # Typen, die komplett an ihren Vanilla-Positionen bleiben. Ihre Zwangsbedingung
@@ -310,6 +311,11 @@ $FIXED_ITEMS = @{
 # zufall reicht."
 $VANILLA_TYPES = @{
     'Andrea2' = @(172)
+    # rich1s Puzzle Item3 ist die CD. Sie traegt in Vanilla Invisible=true und
+    # liegt ausserhalb der Karte; der Switch in Raum 15 aktiviert sie zusammen
+    # mit Door 4 und Door 2. Im Spiel faellt sie aus dem Anzug, sobald dessen
+    # Animation laeuft. Ein Ortswechsel wuerde die Enthuellung zerstoeren.
+    'rich1'   = @(174)
 }
 $vanillaTypes = @( if($VANILLA_TYPES.ContainsKey($LevelName)){ $VANILLA_TYPES[$LevelName] } )
 $fixedItems = @()

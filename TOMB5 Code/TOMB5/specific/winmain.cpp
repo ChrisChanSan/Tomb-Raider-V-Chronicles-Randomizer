@@ -471,6 +471,11 @@ void WinClose()
 	else
 		Log("%s Attempt To Release NULL Ptr", "Keyboard");
 
+	// Erst den Aufzaehlungsthread einholen: er benutzt lpDirectInput noch.
+	// Beendet man das Spiel innerhalb der ersten Sekunden, laeuft er sonst
+	// weiter, waehrend hier die Schnittstelle freigegeben wird.
+	DXWaitJoystickInit();
+
 	if (G_dxptr->lpDirectInput)
 	{
 		Log("Released %s @ %x - RefCnt = %d", "DirectInput", G_dxptr->lpDirectInput, G_dxptr->lpDirectInput->Release());

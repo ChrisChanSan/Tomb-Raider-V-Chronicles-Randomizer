@@ -5,6 +5,7 @@
 #include "winmain.h"
 #include "input.h"
 #include <Xinput.h>
+#include <process.h>	// _beginthreadex - Joystick-Init laeuft im Hintergrund
 
 DXPTR* G_dxptr;
 DXINFO* G_dxinfo;
@@ -817,34 +818,66 @@ long DXUpdateJoystick()
 	return 1;
 }
 
+//----------------------------------------------------------------------------
+// Die DirectInput-Initialisierung laeuft im Hintergrund, siehe DXInitJoystick.
+// Solange sie nicht fertig ist, bleibt G_dxptr->Joystick bewusst 0 - der
+// Per-Frame-Leser DXUpdateJoystickDirectInput prueft darauf und ueberspringt
+// den Controller dann einfach. Deshalb wird das Geraet hier NICHT direkt nach
+// G_dxptr->Joystick geschrieben: es ist an dieser Stelle noch unkonfiguriert
+// (kein Datenformat, nicht acquired), und der Hauptthread duerfte es in dem
+// Zustand nicht anfassen. Veroeffentlicht wird erst ganz am Ende.
+static LPDIRECTINPUTDEVICE8 g_pendingJoystick = 0;
+static HANDLE               g_joystickThread = 0;
+
 static BOOL CALLBACK DIEnumJoysticksCallback(const DIDEVICEINSTANCE* pdidInstance, VOID* pContext)
 {
 	LPDIRECTINPUT8 dinput = (LPDIRECTINPUT8)pContext;
 	LPDIRECTINPUTDEVICE8 joystick = 0;
 
+	Log("Joystick: found \"%s\"", pdidInstance->tszProductName);
+
 	if (SUCCEEDED(dinput->CreateDevice(pdidInstance->guidInstance, &joystick, 0)))
 	{
-		G_dxptr->Joystick = joystick;
+		g_pendingJoystick = joystick;
 		return DIENUM_STOP;
 	}
 
 	return DIENUM_CONTINUE;
 }
 
+//----------------------------------------------------------------------------
+// Laeuft in einem eigenen Thread, weil EnumDevices bei bestimmten
+// Geraetekonstellationen sehr lange braucht und das Spiel sonst schwarz stehen
+// bleibt.
+//
+// Gemessen auf dem Rechner des Entwicklers: exakt 10 Sekunden, dreimal
+// reproduzierbar, und identisch in einem eigenstaendigen 40-Zeilen-Programm
+// ohne jeden Bezug zu dieser Engine - es ist also kein Fehler von uns, sondern
+// ein Timeout in DirectInput selbst. Ursache dort: der Controller haengt am
+// USB-Kabel, ist aber ZUSAETZLICH noch per Bluetooth gekoppelt, und dieser
+// gekoppelte Eintrag antwortet nicht. DirectInput wartet ihn aus.
+//
+// Wir koennen die Bluetooth-Situation eines Nutzers nicht kontrollieren, und
+// die Aufzaehlung ueberspringen geht nicht: ein DualSense ist kein
+// XInput-Geraet, ohne DirectInput haette er gar keinen Controller. Also darf
+// das schlicht nicht im Startpfad liegen. Das Spiel startet sofort, der
+// Controller steht an, sobald die Aufzaehlung durch ist - bei einem
+// unauffaelligen System sind das Millisekunden.
+//----------------------------------------------------------------------------
 static void DXInitJoystick(HWND hwnd)
 {
-	G_dxptr->Joystick = 0;
+	g_pendingJoystick = 0;
 
 	G_dxptr->lpDirectInput->EnumDevices(DI8DEVCLASS_GAMECTRL, DIEnumJoysticksCallback, G_dxptr->lpDirectInput, DIEDFL_ATTACHEDONLY);
 
-	if (!G_dxptr->Joystick)
+	if (!g_pendingJoystick)
 	{
 		Log("No DirectInput joystick found (XInput-only controllers still work)");
 		return;
 	}
 
-	DXAttempt(G_dxptr->Joystick->SetDataFormat(&c_dfDIJoystick2));
-	DXAttempt(G_dxptr->Joystick->SetCooperativeLevel(hwnd, DISCL_NONEXCLUSIVE | DISCL_BACKGROUND));
+	DXAttempt(g_pendingJoystick->SetDataFormat(&c_dfDIJoystick2));
+	DXAttempt(g_pendingJoystick->SetCooperativeLevel(hwnd, DISCL_NONEXCLUSIVE | DISCL_BACKGROUND));
 
 	DIPROPRANGE range;
 	range.diph.dwSize = sizeof(DIPROPRANGE);
@@ -854,9 +887,9 @@ static void DXInitJoystick(HWND hwnd)
 	range.lMax = 1000;
 
 	range.diph.dwObj = DIJOFS_X;
-	G_dxptr->Joystick->SetProperty(DIPROP_RANGE, &range.diph);
+	g_pendingJoystick->SetProperty(DIPROP_RANGE, &range.diph);
 	range.diph.dwObj = DIJOFS_Y;
-	G_dxptr->Joystick->SetProperty(DIPROP_RANGE, &range.diph);
+	g_pendingJoystick->SetProperty(DIPROP_RANGE, &range.diph);
 
 	// Right stick, read as 4 extra digital "buttons" in DXUpdateJoystickDirectInput
 	// (see joy_fire bits 16-19). Rx/Ry turned out to be dead on this controller
@@ -865,13 +898,41 @@ static void DXInitJoystick(HWND hwnd)
 	// log dump: they swing across the whole native range and idle near its
 	// midpoint rather than near 0, which rules out them being a trigger axis.
 	range.diph.dwObj = DIJOFS_Z;
-	G_dxptr->Joystick->SetProperty(DIPROP_RANGE, &range.diph);
+	g_pendingJoystick->SetProperty(DIPROP_RANGE, &range.diph);
 	range.diph.dwObj = DIJOFS_RZ;
-	G_dxptr->Joystick->SetProperty(DIPROP_RANGE, &range.diph);
+	g_pendingJoystick->SetProperty(DIPROP_RANGE, &range.diph);
 
-	G_dxptr->Joystick->Acquire();
+	g_pendingJoystick->Acquire();
+
+	// Erst jetzt veroeffentlichen: ab diesem Zeitpunkt darf der Hauptthread das
+	// Geraet benutzen, vorher waere es unkonfiguriert. InterlockedExchangePointer
+	// stellt sicher, dass alle vorherigen Schreibzugriffe auch wirklich vor
+	// diesem sichtbar sind.
+	InterlockedExchangePointer((void* volatile*)&G_dxptr->Joystick, g_pendingJoystick);
 
 	Log("DirectInput joystick acquired (fallback for non-XInput controllers)");
+}
+
+static unsigned __stdcall JoystickInitThread(void* param)
+{
+	DXInitJoystick((HWND)param);
+	return 0;
+}
+
+// Wird beim Herunterfahren aufgerufen, BEVOR lpDirectInput freigegeben wird -
+// sonst zieht der Hauptthread dem noch laufenden Aufzaehlungsthread die
+// Schnittstelle unter den Fuessen weg. Beim ueblichen Spielende ist der Thread
+// laengst fertig und die Wartezeit betraegt null.
+void DXWaitJoystickInit()
+{
+	if (!g_joystickThread)
+		return;
+
+	if (WaitForSingleObject(g_joystickThread, 15000) == WAIT_TIMEOUT)
+		Log("WARNING: joystick init thread still running at shutdown - not waiting further");
+
+	CloseHandle(g_joystickThread);
+	g_joystickThread = 0;
 }
 
 void DXInitInput(HWND hwnd, HINSTANCE hinstance)
@@ -915,7 +976,19 @@ void DXInitInput(HWND hwnd, HINSTANCE hinstance)
 	DXAttempt(G_dxptr->Keyboard->Acquire());
 	memset(keymap, 0, sizeof(keymap));
 
-	DXInitJoystick(hwnd);
+	// Nicht direkt aufrufen: siehe Kommentar an DXInitJoystick. Der Aufruf kann
+	// je nach Geraetelage zehn Sekunden dauern, und die wuerde der Nutzer als
+	// schwarzen Bildschirm vor dem ersten Video erleben.
+	G_dxptr->Joystick = 0;
+	g_joystickThread = (HANDLE)_beginthreadex(0, 0, JoystickInitThread, (void*)hwnd, 0, 0);
+
+	if (!g_joystickThread)
+	{
+		// Kein Thread zu bekommen ist so unwahrscheinlich, dass ein Rueckfall
+		// auf den blockierenden Weg besser ist als gar kein Controller.
+		Log("WARNING: could not start joystick init thread - falling back to blocking init");
+		DXInitJoystick(hwnd);
+	}
 }
 
 const char* DXGetErrorString(HRESULT hr)

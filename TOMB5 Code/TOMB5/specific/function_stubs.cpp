@@ -83,6 +83,22 @@ void Log(const char* s, ...)
 	vsprintf(buf, s, list);
 	strcat(buf, "\n");
 	va_end(list);
+
+	// Millisekunden seit dem ersten Logeintrag. Ohne diese Angabe laesst sich
+	// eine Startverzoegerung nicht lokalisieren - man sieht die Reihenfolge,
+	// aber nicht, WO die Zeit verloren geht. Bewusst relativ und nicht als
+	// Uhrzeit: gesucht sind Abstaende zwischen zwei Zeilen, nicht der
+	// Zeitpunkt. Kostet einen GetTickCount-Aufruf pro Zeile.
+	{
+		static DWORD firstTick = 0;
+		DWORD now = GetTickCount();
+		if (!firstTick) firstTick = now;
+
+		char stamp[24];
+		sprintf(stamp, "[%7lu] ", (unsigned long)(now - firstTick));
+		fwrite(stamp, strlen(stamp), 1, logF);
+	}
+
 	fwrite(buf, strlen(buf), 1, logF);
 	fflush(logF);
 #endif

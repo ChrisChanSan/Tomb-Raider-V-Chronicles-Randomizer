@@ -164,5 +164,15 @@ Die Oberflaeche des Randomizers benutzt Dear ImGui von Omar Cornut
 [System.IO.File]::WriteAllText("$OutDir\LIESMICH.txt", $readme, (New-Object System.Text.UTF8Encoding($false)))
 Say "Anleitung     : LIESMICH.txt"
 
+# --- 7. Dieselben Daten in den Build-Ordner spiegeln -------------------------
+# Beim Entwickeln startet man die EXE aus build\, nicht aus dem Paket - und
+# dort fehlte data\, was zu einer korrekten, aber unnoetigen Fehlermeldung
+# fuehrte. Die paar Dateien doppelt vorzuhalten ist billiger, als sich das
+# jedes Mal zu merken.
+if (Test-Path (Split-Path $RandoExe -Parent)) {
+    Copy-Item $dataOut (Split-Path $RandoExe -Parent) -Recurse -Force
+    Say "Build-Ordner  : data\ gespiegelt, EXE laeuft auch von dort"
+}
+
 Say ""
 Say "Fertig: $OutDir"

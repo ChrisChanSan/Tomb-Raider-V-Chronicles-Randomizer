@@ -170,6 +170,8 @@ namespace
         std::string              status;
         bool                     statusIsError = false;
         bool                     sourceOk = false;
+        bool                     payloadOk = false;   // Pruefsummenliste geladen?
+        std::string              payloadError;
         char                     seedBuf[64] = {};
         bool                     busy = false;
 
@@ -188,6 +190,12 @@ namespace
     {
         a.levels.clear();
         a.sourceOk = false;
+
+        // Ohne geladene Pruefsummenliste hat eine Pruefung keinen Sinn - sie
+        // wuerde eine leere Liste durchwinken. Deshalb hier abbrechen und den
+        // eigentlichen Grund nennen, statt ihn beim Ordnerwaehlen zu verlieren.
+        if (!a.payloadOk) { setStatus(a, a.payloadError, true); return; }
+
         if (a.cfg.sourceDir.empty()) { setStatus(a, "Noch kein Spielordner gewaehlt."); return; }
 
         const std::wstring dir = PathUtil::join(a.cfg.sourceDir, L"data");
@@ -454,10 +462,17 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                                            : app.cfg.seedText.c_str());
 
     std::string err;
-    if (!app.data.loadChecksums(PathUtil::join(app.payloadDir(), L"VanillaLevelChecksums.csv"), err))
-        setStatus(app, "Mitgelieferte Daten fehlen: " + err, true);
-    else
-        inspectSource(app);
+    const std::wstring csv = PathUtil::join(app.payloadDir(), L"VanillaLevelChecksums.csv");
+    app.payloadOk = app.data.loadChecksums(csv, err);
+    if (!app.payloadOk)
+    {
+        // Haeufigster Fall: die EXE wurde aus dem Build-Ordner gestartet statt
+        // aus dem ausgelieferten Paket. Deshalb den erwarteten Pfad nennen -
+        // "Datei nicht gefunden" allein hilft niemandem weiter.
+        app.payloadError = "Der Ordner \"data\" neben dem Programm fehlt oder ist unvollstaendig ("
+                         + err + "). Erwartet wird: " + PathUtil::narrow(csv);
+    }
+    inspectSource(app);
 
     bool running = true;
     while (running)

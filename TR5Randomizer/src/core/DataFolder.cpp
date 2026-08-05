@@ -261,6 +261,16 @@ std::vector<LevelStatus> DataFolder::inspect(const std::wstring& sourceDataDir) 
 
 bool DataFolder::isUsableSource(const std::vector<LevelStatus>& status, std::string& reason)
 {
+    // Eine leere Liste ist KEIN Erfolg. Ohne diese Pruefung meldet die
+    // Funktion "alles in Ordnung", wenn gar nichts geprueft wurde - was in der
+    // Oberflaeche als gruene Meldung ueber einer leeren Tabelle erschien.
+    if (status.empty())
+    {
+        reason = "Es wurde kein einziges Level geprueft - die mitgelieferte "
+                 "Pruefsummenliste fehlt oder ist leer.";
+        return false;
+    }
+
     int missing = 0, modified = 0;
     std::string firstBad;
 

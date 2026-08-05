@@ -52,6 +52,23 @@ struct Tr5Item
     int16_t flags = 0;
 };
 
+//----------------------------------------------------------------------------
+// Ein Raum, soweit wir ihn brauchen. Der Raum-Blob wird nicht mehr am Stueck
+// uebersprungen, sondern aufgeschluesselt - Portale, Nachbarn und Flags sind
+// die Grundlage dafuer, einen wirklich abgeschiedenen Raum zu finden.
+//----------------------------------------------------------------------------
+struct Tr5Room
+{
+    int   index = 0;
+    int   originX = 0, originZ = 0, yBottom = 0;
+    int   numXSectors = 0, numZSectors = 0;
+    int   altRoom = -1;                 // Flipmap-Partner, -1 = keiner
+    unsigned flags = 0;                 // Bit 0x1 = unter Wasser
+    std::vector<int> portalRooms;       // Zielraeume der Portalliste
+
+    bool isAlternate() const { return altRoom >= 0; }
+};
+
 class Tr5Level
 {
 public:
@@ -77,6 +94,12 @@ public:
     size_t  itemCountOffset() const { return m_itemCountOffset; }
     int32_t itemCount() const { return m_itemCount; }
     int     roomCount() const { return m_roomCount; }
+
+    const std::vector<Tr5Room>& rooms() const { return m_rooms; }
+
+    // Zaehlt, in wie vielen Raeumen die Portalliste NICHT aufging. Muss 0
+    // sein - siehe die Rechnung in parseRoom().
+    int     roomParseMismatches() const { return m_roomMismatch; }
 
     // Liest ein Item. index muss < itemCount() sein.
     bool    getItem(int index, Tr5Item& out) const;
@@ -106,6 +129,12 @@ private:
     size_t               m_itemCountOffset = 0;
     int32_t              m_itemCount = 0;
     int                  m_roomCount = 0;
+    std::vector<Tr5Room> m_rooms;
+    int                  m_roomMismatch = 0;
+
+    // Schluesselt einen Raum-Blob auf. offset/size zeigen auf den Blob im
+    // Hauptblock, index ist die laufende Raumnummer.
+    void parseRoom(size_t offset, size_t size, int index);
 
     bool readHeader(std::string& error);
     bool findItems(std::string& error);   // laeuft den Hauptblock ab

@@ -119,12 +119,16 @@ bool Tr5Level::findItems(std::string& error)
     STEP("unbenutztes Feld", skipN(1, 4));
     STEP("Raumanzahl", i32(n));
     m_roomCount = n;
+    m_rooms.clear();
+    m_roomMismatch = 0;
     for (int i = 0; i < m_roomCount; ++i)
     {
         int32_t roomSize = 0;
         STEP("Raum-Marke", skipN(1, 4));            // "XELA"
         STEP("Raumgroesse", i32(roomSize));
-        STEP("Raumdaten", skipN(roomSize, 1));
+        if (roomSize < 0 || p + static_cast<size_t>(roomSize) > end) { where = "Raumdaten"; goto broken; }
+        parseRoom(p, static_cast<size_t>(roomSize), i);
+        p += static_cast<size_t>(roomSize);
     }
     STEP("Floordata", i32(n));  STEP("Floordata", skipN(n, 2));
 
@@ -185,6 +189,84 @@ broken:
         m_itemCountOffset = 0;
         return false;
     }
+}
+
+//----------------------------------------------------------------------------
+// Aufbau eines Raum-Blobs, aus den Kopf-Offsets abgeleitet:
+//
+//   [0 .. 207]                 tr5_room_header, feste 208 Byte
+//   208 + start_sd             Sektorfeld, numX * numZ * 8 Byte
+//   danach                     uint16 Portalanzahl, dann je 32 Byte Portal
+//   danach                     uint16 Statics-Anzahl
+//   208 + end_portal           Statics-Feld
+//
+// Die Portalliste hat keinen eigenen Offset im Kopf - sie liegt zwischen
+// Sektoren und Statics. Daraus folgt eine Gleichung, die aufgehen MUSS:
+//
+//   208 + end_portal == Sektorende + 2 + Portalanzahl * 32 + 2
+//
+// Das letzte "+ 2" ist die Statics-Anzahl, die end_portal bereits
+// ueberspringt - sie steht zusaetzlich im Kopf bei +50. Ohne dieses eine Feld
+// ging die Rechnung um genau zwei Byte daneben, und zwar in JEDEM Raum; erst
+// an einem echten Blob nachgemessen wurde es sichtbar. An Andrea1 mit allen
+// 242 Raeumen bestaetigt.
+//
+// Genau die wird hier geprueft. Geht sie nicht auf, ist die Annahme ueber den
+// Aufbau falsch, und dann sollen die Portale lieber leer bleiben als falsch
+// sein - ein erfundener Nachbar wuerde die Suche nach einem abgeschiedenen
+// Raum genau dort in die Irre fuehren, wo sie stimmen muss.
+//----------------------------------------------------------------------------
+void Tr5Level::parseRoom(size_t offset, size_t size, int index)
+{
+    constexpr size_t HDR = 208;
+    constexpr size_t OFS_START_SD = 8, OFS_END_PORTAL = 16;
+    constexpr size_t OFS_X = 20, OFS_Z = 28, OFS_YBOTTOM = 32;
+    constexpr size_t OFS_NUM_Z = 40, OFS_NUM_X = 42;
+    constexpr size_t OFS_ALT = 76, OFS_FLAGS = 78;
+    constexpr size_t SECTOR = 8, PORTAL = 32;
+
+    Tr5Room r;
+    r.index = index;
+    if (size < HDR) { m_rooms.push_back(r); ++m_roomMismatch; return; }
+
+    const uint8_t* b = m_bytes.data() + offset;
+    auto u16 = [&](size_t o) { uint16_t v; std::memcpy(&v, b + o, 2); return v; };
+    auto u32 = [&](size_t o) { uint32_t v; std::memcpy(&v, b + o, 4); return v; };
+    auto i32r = [&](size_t o) { int32_t v; std::memcpy(&v, b + o, 4); return v; };
+
+    r.originX = i32r(OFS_X);
+    r.originZ = i32r(OFS_Z);
+    r.yBottom = i32r(OFS_YBOTTOM);
+    r.numZSectors = u16(OFS_NUM_Z);
+    r.numXSectors = u16(OFS_NUM_X);
+    const uint16_t alt = u16(OFS_ALT);
+    r.altRoom = (alt == 0xFFFF) ? -1 : static_cast<int>(alt);
+    r.flags = u16(OFS_FLAGS);
+
+    const size_t sectorsAt = HDR + u32(OFS_START_SD);
+    const size_t sectorsEnd = sectorsAt + static_cast<size_t>(r.numXSectors) * r.numZSectors * SECTOR;
+    const size_t staticsAt = HDR + u32(OFS_END_PORTAL);
+
+    if (sectorsEnd + 2 > size || staticsAt > size || staticsAt < sectorsEnd + 2)
+    {
+        m_rooms.push_back(r);
+        ++m_roomMismatch;
+        return;
+    }
+
+    const uint16_t numPortals = u16(sectorsEnd);
+    if (sectorsEnd + 2 + static_cast<size_t>(numPortals) * PORTAL + 2 != staticsAt)
+    {
+        m_rooms.push_back(r);
+        ++m_roomMismatch;
+        return;
+    }
+
+    r.portalRooms.reserve(numPortals);
+    for (uint16_t i = 0; i < numPortals; ++i)
+        r.portalRooms.push_back(static_cast<int>(u16(sectorsEnd + 2 + static_cast<size_t>(i) * PORTAL)));
+
+    m_rooms.push_back(r);
 }
 
 bool Tr5Level::getItem(int index, Tr5Item& out) const

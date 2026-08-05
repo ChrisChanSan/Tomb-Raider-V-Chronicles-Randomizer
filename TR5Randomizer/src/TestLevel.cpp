@@ -59,9 +59,28 @@ int main(int argc, char** argv)
                 detail += buf;
             }
         }
-        std::printf("  [ok ] %-10s Items %4d   hohe OCB-Bits: %3d%s\n",
-                    n, lvl.itemCount(), withHigh, detail.c_str());
-        ++ok;
+        // Kandidaten fuer den Ablageraum: kein Portal, kein Alternate-Raum,
+        // und von nirgendwo aus ueber ein Portal einsehbar.
+        std::vector<int> seenFrom(lvl.rooms().size(), 0);
+        for (const Tr5Room& r : lvl.rooms())
+            for (int t : r.portalRooms)
+                if (t >= 0 && t < (int)seenFrom.size()) seenFrom[t]++;
+
+        std::string cand;
+        int nCand = 0;
+        for (const Tr5Room& r : lvl.rooms())
+        {
+            if (!r.portalRooms.empty()) continue;
+            if (r.isAlternate()) continue;
+            if (seenFrom[r.index]) continue;
+            ++nCand;
+            if (nCand <= 6) { char b[16]; std::snprintf(b, sizeof(b), " %d", r.index); cand += b; }
+        }
+
+        std::printf("  [%s] %-10s Raeume %3d  OCB-hoch %3d  Portalfehler %d  abgeschiedene Raeume: %d%s\n",
+                    lvl.roomParseMismatches() ? "FEHL" : "ok ",
+                    n, lvl.roomCount(), withHigh, lvl.roomParseMismatches(), nCand, cand.c_str());
+        if (lvl.roomParseMismatches()) ++fail; else ++ok;
     }
 
     std::printf("\n%d gelesen, %d fehlgeschlagen\n", ok, fail);

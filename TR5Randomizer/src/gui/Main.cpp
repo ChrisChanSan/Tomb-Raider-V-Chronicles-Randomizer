@@ -187,6 +187,37 @@ namespace
         std::wstring payloadDir() const { return PathUtil::join(PathUtil::exeDir(), L"data"); }
 
         bool haveBackup = false;
+
+        // Was soll ueberhaupt randomisiert werden?
+        bool optOtherPickups = true;
+        bool optKeyItems = true;
+        bool optEnemies = false;        // noch nicht verfuegbar, siehe unten
+        bool optEnemiesCross = false;   // desgleichen
+
+        // Die Auswahl geht in den Seed ein. Sonst erzeugt derselbe Seed mit
+        // anderen Haken ein anderes Spiel, und ein Fehlerbericht "Seed X ist
+        // unspielbar" waere nicht nachstellbar - also genau das, was die
+        // Seed-Mechanik verhindern soll. Der Nutzer sieht deshalb unten auch
+        // den wirksamen Wert, nicht nur den eingegebenen Text.
+        uint64_t effectiveSeed() const
+        {
+            uint64_t flags = 0;
+            if (optOtherPickups) flags |= 1;
+            if (optKeyItems)     flags |= 2;
+            if (optEnemies)      flags |= 4;
+            if (optEnemiesCross) flags |= 8;
+
+            // FNV-1a ueber Seed-Text und Auswahl, damit beides gleichwertig
+            // eingeht - eine blosse XOR-Verknuepfung haette bei benachbarten
+            // Flags aehnliche Ergebnisse geliefert.
+            uint64_t h = SeedText::parse(seedBuf);
+            for (int i = 0; i < 8; ++i)
+            {
+                h ^= (flags >> (i * 8)) & 0xFF;
+                h *= 0x100000001B3ull;
+            }
+            return h;
+        }
     };
 
     void setStatus(App& a, const std::string& s, bool error = false)
@@ -249,9 +280,13 @@ namespace
         RandoInput in;
         if (!Rando::buildInput(zone, info, in, err)) return false;
 
+        RandoOptions opt;
+        opt.shuffleKeyItems = a.optKeyItems;
+        opt.shuffleOtherPickups = a.optOtherPickups;
+
         JsonValue patch;
         RandoReport rep;
-        if (!Rando::run(in, RandoOptions(), seed, patch, rep)) { err = rep.error; return false; }
+        if (!Rando::run(in, opt, seed, patch, rep)) { err = rep.error; return false; }
 
         Tr5Level lvl;
         const std::wstring target = PathUtil::join(a.dataDir(), PathUtil::widen(row.name));
@@ -307,7 +342,7 @@ namespace
             return;
         }
 
-        const uint64_t seed = SeedText::parse(a.seedBuf);
+        const uint64_t seed = a.effectiveSeed();
         int done = 0, failed = 0;
         for (LevelRow& r : a.levels)
         {
@@ -403,10 +438,28 @@ static void drawUi(App& a, HWND hwnd)
         const std::string s = SeedText::format(SeedText::random());
         std::snprintf(a.seedBuf, sizeof(a.seedBuf), "%s", s.c_str());
     }
-    ImGui::TextDisabled("intern: 0x%016llX", (unsigned long long)SeedText::parse(a.seedBuf));
+    ImGui::TextDisabled("wirksam: 0x%016llX", (unsigned long long)a.effectiveSeed());
+
+    // --- 2b. Was soll randomisiert werden ---
+    ImGui::SeparatorText("3. Was soll gewuerfelt werden");
+    ImGui::Checkbox("Ausruestung (Waffen, Munition, Medipacks)", &a.optOtherPickups);
+    ImGui::Checkbox("Schluessel- und Puzzle-Items", &a.optKeyItems);
+
+    ImGui::BeginDisabled(true);
+    ImGui::Checkbox("Gegner", &a.optEnemies);
+    ImGui::Indent();
+    ImGui::RadioButton("nur levelinterne Gegner tauschen", true);
+    ImGui::RadioButton("levelweit tauschen", false);
+    ImGui::Unindent();
+    ImGui::EndDisabled();
+    ImGui::TextDisabled("   Gegner kommen spaeter - levelweites Tauschen braucht zusaetzlich");
+    ImGui::TextDisabled("   den Objekt-Transfer zwischen Leveln.");
+
+    if (!a.optOtherPickups && !a.optKeyItems)
+        ImGui::TextColored(ImVec4(1, .5f, .3f, 1), "Nichts ausgewaehlt - es wuerde nur zurueckgesetzt.");
 
     // --- 3. Level ---
-    ImGui::SeparatorText("3. Level");
+    ImGui::SeparatorText("4. Level");
     if (ImGui::BeginTable("levels", 3,
         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
         ImVec2(0, 260)))
@@ -450,7 +503,7 @@ static void drawUi(App& a, HWND hwnd)
     }
 
     // --- 4. Los ---
-    ImGui::SeparatorText("4. Los geht's");
+    ImGui::SeparatorText("5. Los geht's");
     ImGui::BeginDisabled(!a.sourceOk);
     if (ImGui::Button("Randomisieren", ImVec2(160, 32))) doRandomize(a);
     ImGui::SameLine();

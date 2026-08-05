@@ -55,6 +55,23 @@ inline bool isPickupType(int typeId)
         || (typeId >= PICKUP_LO_2 && typeId <= PICKUP_HI_2);
 }
 
+// Schwarmgetier: Fledermaus, Ratte, Spinne und der Spinnengenerator. Loest ein
+// Pickup-Trigger nur so etwas aus, haelt er das Item NICHT fest.
+//
+// Begruendung des Nutzers: diese Viecher verfolgen Lara ein paar Sekunden und
+// verschwinden dann von selbst. Sie zu verlieren aendert nichts am Spielablauf.
+// Ein Hund oder ein Swat verschwindet nicht - deshalb bleibt Andrea1s Key Item
+// ortsfest, und genau das war auch die Vorgabe.
+//
+// Ueber alle 16 Level trifft diese Ausnahme exakt einen Fall: Andrea2s Item
+// 121 (Puzzle Item3), dessen Aufnahme eine Ratte spawnt. Alles andere, was
+// Pickup-Trigger im Spiel ausloesen, sind Tueren, Fallen, Steuerobjekte oder
+// echte Gegner.
+inline bool isDespawningSwarm(int typeId)
+{
+    return typeId >= 93 && typeId <= 96;   // Bat, Rat, Spider, Spider Generator
+}
+
 struct RoomOrigin { int room = 0; int originX = 0; int originZ = 0; };
 
 struct ZoneSector

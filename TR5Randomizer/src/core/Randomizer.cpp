@@ -57,6 +57,8 @@ std::set<int> Rando::findTriggerPinnedItems(const JsonValue& levelInfo,
             const std::string type = cmds[c]["type"].asString();
             const int idx = static_cast<int>(cmds[c]["index"].asInt());
 
+            bool harmless = false;
+
             if (type == "Object")
             {
                 auto it = byIndex.find(idx);
@@ -71,10 +73,13 @@ std::set<int> Rando::findTriggerPinnedItems(const JsonValue& levelInfo,
                         onSector.push_back(idx);
                         continue;
                     }
+                    // Schwarmgetier zaehlt wie Musik: nicht festhaltend.
+                    harmless = isDespawningSwarm(static_cast<int>(item["typeId"].asInt()));
                 }
             }
+
             effects.push_back(type);
-            if (type != "PlaySoundtrack") onlySoundtrack = false;
+            if (type != "PlaySoundtrack" && !harmless) onlySoundtrack = false;
         }
 
         if (onSector.empty()) continue;
@@ -86,7 +91,7 @@ std::set<int> Rando::findTriggerPinnedItems(const JsonValue& levelInfo,
         {
             if (explain)
                 for (int i : onSector)
-                    explain->push_back(fmt("Item %d bleibt frei - Pickup-Trigger loest nur Musik aus", i));
+                    explain->push_back(fmt("Item %d bleibt frei - Pickup-Trigger loest nur Musik bzw. Schwarmgetier aus", i));
             continue;
         }
 

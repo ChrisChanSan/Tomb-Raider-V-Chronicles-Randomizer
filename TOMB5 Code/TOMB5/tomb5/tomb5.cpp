@@ -1,7 +1,32 @@
 #include "../tomb5/pch.h"
 #include "tomb5.h"
 #include "../specific/registry.h"
+
+//----------------------------------------------------------------------------
+// Discord Rich Presence: in diesem Fork abgeschaltet.
+//
+// Zwei Gruende, beide unabhaengig voneinander ausreichend:
+//
+// 1. Die Anwendungs-ID unten gehoert dem urspruenglichen Projekt
+//    (Trxyebeep/TOMB5). Wuerden wir so ausliefern, erschienen unsere Nutzer in
+//    Discord unter seiner Anwendung - das ist nicht unsere Identitaet und
+//    gehoert uns nicht.
+// 2. Die mitgelieferte discord-rpc.lib ist gegen die dynamische C-Laufzeit
+//    (/MD) gebaut. Solange sie eingebunden ist, laesst sich das Spiel nicht
+//    statisch linken, und die EXE braucht auf dem Zielrechner die
+//    Visual-C++-Runtime. Genau das wollen wir dem Nutzer ersparen: eine Datei,
+//    die einfach startet.
+//
+// Der Code bleibt stehen und ist ueber diesen einen Schalter wieder
+// einschaltbar - dann aber bitte mit einer eigenen Anwendungs-ID und dem
+// Wissen, dass die statische Verlinkung damit wieder faellt.
+//----------------------------------------------------------------------------
+#define TOMB5_DISCORD_RPC 0
+
+#if TOMB5_DISCORD_RPC
 #include "libs/discordRPC/discord_rpc.h"
+#endif
+
 #include "../game/gameflow.h"
 #include "../game/lara.h"
 
@@ -273,10 +298,12 @@ void save_new_tomb5_settings()
 
 void RPC_Init()
 {
+#if TOMB5_DISCORD_RPC
 	DiscordEventHandlers handlers;
 
 	memset(&handlers, 0, sizeof(handlers));
 	Discord_Initialize("959220032787869751", &handlers, 1, 0);
+#endif
 }
 
 const char* RPC_GetLevelName()
@@ -379,6 +406,7 @@ const char* RPC_GetHealthPercentage()
 
 void RPC_Update()
 {
+#if TOMB5_DISCORD_RPC
 	DiscordRichPresence RPC;
 
 	memset(&RPC, 0, sizeof(RPC));
@@ -394,9 +422,12 @@ void RPC_Update()
 
 	RPC.instance = 1;
 	Discord_UpdatePresence(&RPC);
+#endif
 }
 
 void RPC_close()
 {
+#if TOMB5_DISCORD_RPC
 	Discord_Shutdown();
+#endif
 }

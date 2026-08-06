@@ -1414,8 +1414,15 @@ foreach($ig in $islandGroups){
     if ($bs.Count -eq 0) { Write-Output "WARNUNG: Inselgruppe - Baseline-Raum $($ig.BaselineRoom) hat keine begehbaren Sektoren"; continue }
     $baseY = [int](($bs | Group-Object floorY | Sort-Object Count -Descending | Select-Object -First 1).Name)
     $limit = $baseY - [int]$ig.MaxYAbove
-    foreach($rt in $ig.RequireTypes){ $keyMinFloorY[[int]$rt] = $limit }
-    Write-Output "Inselgruppe: Baseline Raum $($ig.BaselineRoom) y=$baseY, Schluessel hoechstens $($ig.MaxYAbove) darueber (floorY >= $limit) fuer Typen $($ig.RequireTypes -join ', ')"
+    # Die Grenze gilt NUR in der Zone, in der die Gruppe liegt - sonst trifft sie
+    # das halbe Level mit. Die Zone ergibt sich aus dem Baseline-Raum selbst,
+    # muss also nicht zusaetzlich gepflegt werden.
+    $bz = @()
+    foreach($b in $bs){ $bk = "$($b.room),$($b.sectorX),$($b.sectorZ)"; if ($zoneOf.ContainsKey($bk)) { $bz += ,[int]$zoneOf[$bk] } }
+    if ($bz.Count -eq 0) { Write-Output "WARNUNG: Inselgruppe - Baseline-Raum $($ig.BaselineRoom) wird nie erreicht"; continue }
+    $gz = ($bz | Sort-Object | Select-Object -First 1)
+    foreach($rt in $ig.RequireTypes){ $keyMinFloorY[[int]$rt] = @{ Limit = $limit; Zone = $gz } }
+    Write-Output "Inselgruppe: Baseline Raum $($ig.BaselineRoom) y=$baseY in Zone $gz, Schluessel dort hoechstens $($ig.MaxYAbove) darueber (floorY >= $limit) fuer Typen $($ig.RequireTypes -join ', ')"
 }
 
 $keyConstraints = @()
@@ -1426,7 +1433,7 @@ foreach($kv in $byType.GetEnumerator()){
     $maxZ = ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
-    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt]}else{$null}) }
+    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}) }
 }
 # Handgesetzte Zusatztypen anhaengen, sofern das Modell sie nicht ohnehin schon
 # selbst abgeleitet hat (dann gilt die abgeleitete Grenze, nicht die Handangabe).
@@ -1435,7 +1442,7 @@ foreach($kv in $extraPool.GetEnumerator()){
     if ($byType.ContainsKey($nt)) { continue }
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
-    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=[int]$kv.Value; instances=0; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt]}else{$null}) }
+    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=[int]$kv.Value; instances=0; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}) }
 }
 
 if ($ExportZonesJson -ne "") {
@@ -1443,7 +1450,7 @@ if ($ExportZonesJson -ne "") {
     # laut Exporter tatsaechlich itemfaehig ist (validForItems), seine Zone.
     # Nur validForItems-Sektoren, damit ein nachgelagerter Patch-Generator nie
     # ein Item auf eine Wand, ein Portal oder einen sonst ungeeigneten Sektor
-    # setzt - dieselbe Prüfung, die schon die *_AllValidSectorsFilled.trc-Dateien
+    # setzt - dieselbe PrÃ¼fung, die schon die *_AllValidSectorsFilled.trc-Dateien
     # sauber gehalten hat, bleibt hier die Grundlage.
     $rows = @()
     foreach($kv in $zoneOf.GetEnumerator()){
@@ -1673,7 +1680,7 @@ foreach($k in $unreach.Keys){
     $comps += ,$comp
 }
 # KEIN Weltabstand als Hinweis. TR-Raeume ueberlappen sich im Weltkoordinaten-
-# system beliebig; erst die Portale nähen sie zusammen, wodurch nicht-euklidische
+# system beliebig; erst die Portale nÃ¤hen sie zusammen, wodurch nicht-euklidische
 # Geometrie entsteht (Area 51 in TR3: das UFO ist geometrisch winzig, ingame
 # riesig). Zwei Sektoren an derselben Weltkoordinate koennen im Spiel voellig
 # unverbunden sein - "naechster Anschluss nach Abstand" war deshalb irrefuehrend.

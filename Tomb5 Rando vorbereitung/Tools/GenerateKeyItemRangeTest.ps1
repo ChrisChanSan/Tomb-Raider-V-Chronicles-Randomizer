@@ -106,10 +106,15 @@ foreach($lvl in $Levels){
         # ein Sektor unterhalb dieser Schranke ist also zu HOCH - typischerweise
         # die Oberseite eines Kistenstapels, auf den Lara erst mit dem Schluessel
         # kommt, der dort liegen soll.
+        # Sie gilt ausdruecklich NUR in minFloorYZone, der Zone der Gruppe. Ohne
+        # diese Einschraenkung traf sie das halbe Level mit: joby2 fiel von 3062
+        # auf 1633 Marker, und ein Teil davon war hoeher gelegenes Gelaende, das
+        # mit dem Baseline-Raum nichts zu tun hat.
         $eligible = @($z.sectors | Where-Object {
             [int]$_.zone -le [int]$c.maxZone -and $ex -notcontains [int]$_.room -and
             ($al.Count -eq 0 -or $al -contains [int]$_.room) -and
-            ($null -eq $c.minFloorY -or [int]$_.floorY -ge [int]$c.minFloorY) })
+            ($null -eq $c.minFloorY -or [int]$_.zone -ne [int]$c.minFloorYZone -or
+             [int]$_.floorY -ge [int]$c.minFloorY) })
         foreach($s in $eligible){
             $rm = $rooms[[int]$s.room]
             if (-not $rm) { continue }

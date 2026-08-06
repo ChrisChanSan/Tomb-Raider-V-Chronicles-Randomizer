@@ -186,9 +186,30 @@ $EXCLUDE_ROOMS = @{
     # Fall, vom Nutzer in trview geprueft). Der Zonen-Flood laeuft ueber sie
     # hinweg, weil die Sektoren Boden melden; Lara kommt dort nie hin.
     # Zusammen 296 platzierbare Sektoren, die sonst als Ablage gelten wuerden.
-    'joby2' = @(6,7,9,14,149,155,158)
+    # Zweite Runde nach Durchsicht in trview: Daecher, Schiffshuellen, Kaimauern
+    # und andere Flaechen, die Boden melden und keiner sind. Kein einziges
+    # Pickup liegt darin - nur zwei Sniper, Animatings und Bridge-Flats.
+    'joby2' = @(6,7,9,14,149,155,158,
+                8,10,13,15,19,21,139,145,147,148,150,151,153,154,159)
+}
+
+# Einzelne Sektoren sperren, wo ein ganzer Raum zu grob waere. Raum 141 in joby2
+# ist der Fall: er ist bespielbar, nur zwei Felder am Rand sind es nicht.
+# Format wie ueberall sonst "Raum,x,z".
+$EXCLUDE_SECTORS = @{
+    # Raum 141: zwei Felder am Rand, sonst voll bespielbar.
+    # Raum 152: die grosse schraege Flaeche - x 2 bis 11 auf z 2 und z 3, dazu
+    # die Ausbuchtung (5,4) und (6,4). Den ganzen Raum zu sperren waere falsch
+    # gewesen: Lara landet nach der Cutscene an Tuer 41 genau dort, und die
+    # beiden Cutscene-Trigger auf (11,7) und (11,8) waeren unerreichbar geworden.
+    # Der begehbare Teil liegt bei x 10/11 in den Reihen z 7-13 und 17-18.
+    'joby2' = @('141,10,12','141,11,12') +
+              @(2..11 | ForEach-Object { "152,$_,2" }) +
+              @(2..11 | ForEach-Object { "152,$_,3" }) +
+              @('152,5,4','152,6,4')
 }
 $excludeRooms = @( if($EXCLUDE_ROOMS.ContainsKey($LevelName)){ $EXCLUDE_ROOMS[$LevelName] } )
+$excludeSectors = @( if($EXCLUDE_SECTORS.ContainsKey($LevelName)){ $EXCLUDE_SECTORS[$LevelName] } )
 
 # Zusaetzliche Sperren pro Item-Typ statt pro Level: der Raum bleibt begehbar
 # und Teil des Wegenetzes, nur DIESES Item darf dort nicht liegen. Typischer
@@ -627,12 +648,17 @@ function Test-Walkable($key) {
     # Handkuratierte Nicht-Betretbar-Raeume zuerst: sie sollen weder als
     # Platzierungsziel noch als Durchgang dienen (ein Dach ist auch kein Weg).
     if ($excludeRooms -contains [int]$sec[$key].room) { return $false }
+    if ($excludeSectors -contains $key) { return $false }
     if ($bridgeSec.ContainsKey($key)) { return $true }
     return (-not $sec[$key].isWall)
 }
 
 $adj = @{}
 function Add-Edge($a, $b) {
+    # Handgesperrte Einzelsektoren hier abfangen und nicht in Test-Walkable
+    # allein: Portal-, Bruecken- und Manuallink-Kanten rufen Test-Walkable gar
+    # nicht auf, ein Sektor kaeme also ueber sie doch in den Graphen.
+    if ($excludeSectors -contains $a -or $excludeSectors -contains $b) { return }
     if (-not $adj.ContainsKey($a)) { $adj[$a] = New-Object System.Collections.Generic.HashSet[string] }
     [void]$adj[$a].Add($b)
 }
@@ -1538,7 +1564,7 @@ if ($ExportZonesJson -ne "") {
     # laut Exporter tatsaechlich itemfaehig ist (validForItems), seine Zone.
     # Nur validForItems-Sektoren, damit ein nachgelagerter Patch-Generator nie
     # ein Item auf eine Wand, ein Portal oder einen sonst ungeeigneten Sektor
-    # setzt - dieselbe PrÃƒÆ’Ã‚Â¼fung, die schon die *_AllValidSectorsFilled.trc-Dateien
+    # setzt - dieselbe PrÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¼fung, die schon die *_AllValidSectorsFilled.trc-Dateien
     # sauber gehalten hat, bleibt hier die Grundlage.
     $rows = @()
     foreach($kv in $zoneOf.GetEnumerator()){
@@ -1780,7 +1806,7 @@ foreach($k in $unreach.Keys){
     $comps += ,$comp
 }
 # KEIN Weltabstand als Hinweis. TR-Raeume ueberlappen sich im Weltkoordinaten-
-# system beliebig; erst die Portale nÃƒÆ’Ã‚Â¤hen sie zusammen, wodurch nicht-euklidische
+# system beliebig; erst die Portale nÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¤hen sie zusammen, wodurch nicht-euklidische
 # Geometrie entsteht (Area 51 in TR3: das UFO ist geometrisch winzig, ingame
 # riesig). Zwei Sektoren an derselben Weltkoordinate koennen im Spiel voellig
 # unverbunden sein - "naechster Anschluss nach Abstand" war deshalb irrefuehrend.

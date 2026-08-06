@@ -351,7 +351,14 @@ $VANILLA_TYPES = @{
     # joby3s Puzzle Item1 (Item 41, Raum 22) ist die getarnte Brechstange -
     # sie sieht wie ein Puzzleteil aus, oeffnet aber die Brechstangentueren 25
     # und 125. Sie bleibt an ihrem Platz, damit die Pickup-Cutscene stimmt.
-    'joby3' = @(172)
+    #
+    # Dazu zwei Dinge rund um den Chef in Raum 120/107, beide Nutzerangabe:
+    # Key Item6 (201) bleibt beim Chef liegen, und die Pistolen (334) bleiben in
+    # Raum 107 - werden sie verschoben, tritt der Chef-Glitch auf. Deshalb ist
+    # Key6 auch kein Fall fuer einen Deadstop; nur Key Item7 braucht einen, und
+    # den liefert die abgeleitete Regel "nicht hinter der eigenen Tuer" (Tuer
+    # 175) bereits von selbst.
+    'joby3' = @(172,201,334)
     # rich1s Puzzle Item3 ist die CD. Sie traegt in Vanilla Invisible=true und
     # liegt ausserhalb der Karte; der Switch in Raum 15 aktiviert sie zusammen
     # mit Door 4 und Door 2. Im Spiel faellt sie aus dem Anzug, sobald dessen

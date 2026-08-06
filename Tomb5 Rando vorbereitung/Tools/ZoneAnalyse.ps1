@@ -500,7 +500,14 @@ $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] }
 # damit sie aus sich heraus loesbar bleibt.
 #----------------------------------------------------------------------------
 $ISLAND_GROUP = @{
-    'joby2' = @( @{ BaselineRoom = 84; MaxYAbove = 1024; RequireTypes = @(202,203) } )
+    # DeadstopRooms definiert die Insel ueber einen ZWEITEN, schaerferen Flood.
+    # Die Gleisbett-Kette 2/4/5 und Raum 89 sind darin gesperrt, ihre
+    # Flippartner 43 und 53 werden abgeleitet. Was dann noch ab Laras Start
+    # erreichbar ist, IST die Startinsel - dort und nur dort darf Key8 liegen.
+    # Ausdruecklich nicht im Hauptlauf: das Gleisbett ist zugleich der legitime
+    # Hauptweg, und mit dieser Sperre waere Key Item7 in Raum 52 unerreichbar.
+    'joby2' = @( @{ BaselineRoom = 84; MaxYAbove = 1024; RequireTypes = @(202,203)
+                    IslandTypes = @(203); DeadstopRooms = @(2,4,5,89) } )
 }
 $islandGroups = @( if($ISLAND_GROUP.ContainsKey($LevelName)){ $ISLAND_GROUP[$LevelName] } )
 
@@ -1123,6 +1130,12 @@ foreach($i in $d.items){
     $totalOfType[$ti]++
 }
 
+# Welche Tueren stehen schon zu Levelbeginn offen (IFL_CODEBITS)? Wird fuer den
+# Insel-Flood weiter unten gebraucht, der genau den Zustand vor der ersten
+# geoeffneten Tuer abbildet - also Zone 0.
+$doorsOpenAtStart = New-Object System.Collections.Generic.HashSet[int]
+foreach($x in $openDoors){ [void]$doorsOpenAtStart.Add([int]$x) }
+
 while ($true) {
     # fluten
     $q = New-Object System.Collections.Generic.Queue[string]
@@ -1410,6 +1423,50 @@ foreach($n in ($itemNeed | Where-Object { -not $_.Gameflow })){
     if (-not $byType.ContainsKey($t)) { $byType[$t] = @() }
     $byType[$t] += ,$n
 }
+#----------------------------------------------------------------------------
+# Insel-Flood: ein zweiter, schaerferer Durchlauf, der NUR die Gruppe bestimmt.
+#
+# Er laeuft ab Laras Start, mit allen Tueren geschlossen (ausser den von Haus aus
+# offenen) und zusaetzlich mit den Deadstop-Raeumen der Gruppe gesperrt. Was
+# uebrigbleibt, ist die Startinsel.
+#
+# Warum getrennt und nicht im Hauptlauf: in joby2 ist das Gleisbett beides -
+# der Schleichweg unter dem Rolltor hindurch UND der legitime Hauptweg. Sperrt
+# man es im Hauptlauf, steigt "nie erreicht" von 463 auf 6751 und Key Item7 in
+# Raum 52 wird unerreichbar, Vanilla faellt also durch. Der Hauptlauf braucht
+# den Weg, die Insel darf ihn nicht haben. Also zwei Laeufe.
+#----------------------------------------------------------------------------
+$islandSectors = @{}   # typeId -> HashSet der erlaubten Sektoren
+foreach($ig in $islandGroups){
+    if ($null -eq $ig.IslandTypes -or $null -eq $ig.DeadstopRooms) { continue }
+    $stopR = @($ig.DeadstopRooms | ForEach-Object { [int]$_ })
+    foreach($b in @($stopR)){
+        if ($flipVariantRooms.ContainsKey($b)) { $stopR += [int]$flipVariantRooms[$b] }
+        foreach($kvv in $flipVariantRooms.GetEnumerator()){ if ([int]$kvv.Value -eq $b) { $stopR += [int]$kvv.Key } }
+    }
+    $stopR = @($stopR | Sort-Object -Unique)
+
+    $isl = New-Object System.Collections.Generic.HashSet[string]
+    if ($null -ne $startKey) {
+        $qi = New-Object System.Collections.Generic.Queue[string]
+        [void]$isl.Add($startKey); $qi.Enqueue($startKey)
+        while($qi.Count -gt 0){
+            $k = $qi.Dequeue()
+            if (-not $adj.ContainsKey($k)) { continue }
+            foreach($n in $adj[$k]){
+                if ($isl.Contains($n)) { continue }
+                if ($stopR -contains [int](($n -split ',')[0])) { continue }
+                if ($blocked.ContainsKey($n) -and -not $doorsOpenAtStart.Contains([int]$blocked[$n])) { continue }
+                if ($flipGateOf.ContainsKey($n)) { continue }
+                [void]$isl.Add($n); $qi.Enqueue($n)
+            }
+        }
+    }
+    $islRooms = @($isl | ForEach-Object { [int](($_ -split ',')[0]) } | Sort-Object -Unique)
+    Write-Output "Inselgruppe (Deadstops $($stopR -join ', ')): $($isl.Count) Sektoren in $($islRooms.Count) Raeumen"
+    foreach($it in $ig.IslandTypes){ $islandSectors[[int]$it] = $isl }
+}
+
 # Hoehengrenze je Schluesseltyp aus den Inselgruppen ableiten. Baseline ist der
 # haeufigste Bodenwert der begehbaren Sektoren des Baseline-Raums - das Mittel
 # einer einzelnen Ecke waere zu zufaellig, der Modus trifft den eigentlichen
@@ -1439,7 +1496,7 @@ foreach($kv in $byType.GetEnumerator()){
     $maxZ = ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
-    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}) }
+    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}) }
 }
 # Handgesetzte Zusatztypen anhaengen, sofern das Modell sie nicht ohnehin schon
 # selbst abgeleitet hat (dann gilt die abgeleitete Grenze, nicht die Handangabe).
@@ -1448,7 +1505,7 @@ foreach($kv in $extraPool.GetEnumerator()){
     if ($byType.ContainsKey($nt)) { continue }
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
-    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=[int]$kv.Value; instances=0; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}) }
+    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=[int]$kv.Value; instances=0; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}) }
 }
 
 if ($ExportZonesJson -ne "") {
@@ -1456,7 +1513,7 @@ if ($ExportZonesJson -ne "") {
     # laut Exporter tatsaechlich itemfaehig ist (validForItems), seine Zone.
     # Nur validForItems-Sektoren, damit ein nachgelagerter Patch-Generator nie
     # ein Item auf eine Wand, ein Portal oder einen sonst ungeeigneten Sektor
-    # setzt - dieselbe PrÃ¼fung, die schon die *_AllValidSectorsFilled.trc-Dateien
+    # setzt - dieselbe PrÃƒÂ¼fung, die schon die *_AllValidSectorsFilled.trc-Dateien
     # sauber gehalten hat, bleibt hier die Grundlage.
     $rows = @()
     foreach($kv in $zoneOf.GetEnumerator()){
@@ -1686,7 +1743,7 @@ foreach($k in $unreach.Keys){
     $comps += ,$comp
 }
 # KEIN Weltabstand als Hinweis. TR-Raeume ueberlappen sich im Weltkoordinaten-
-# system beliebig; erst die Portale nÃ¤hen sie zusammen, wodurch nicht-euklidische
+# system beliebig; erst die Portale nÃƒÂ¤hen sie zusammen, wodurch nicht-euklidische
 # Geometrie entsteht (Area 51 in TR3: das UFO ist geometrisch winzig, ingame
 # riesig). Zwei Sektoren an derselben Weltkoordinate koennen im Spiel voellig
 # unverbunden sein - "naechster Anschluss nach Abstand" war deshalb irrefuehrend.

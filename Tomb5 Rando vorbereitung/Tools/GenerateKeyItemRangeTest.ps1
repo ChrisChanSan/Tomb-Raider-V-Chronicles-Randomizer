@@ -110,7 +110,16 @@ foreach($lvl in $Levels){
         # diese Einschraenkung traf sie das halbe Level mit: joby2 fiel von 3062
         # auf 1633 Marker, und ein Teil davon war hoeher gelegenes Gelaende, das
         # mit dem Baseline-Raum nichts zu tun hat.
+        # islandSectors: die Startinsel aus dem zweiten Flood. Ist sie gesetzt,
+        # ist sie eine harte Positivliste - Key Item8 in joby2 darf ausschliess-
+        # lich dort liegen, weil die Flipmap am Kran ihn selbst voraussetzt.
+        $isl = $null
+        if ($null -ne $c.islandSectors) {
+            $isl = New-Object System.Collections.Generic.HashSet[string]
+            foreach($k in $c.islandSectors){ [void]$isl.Add([string]$k) }
+        }
         $eligible = @($z.sectors | Where-Object {
+            ($null -eq $isl -or $isl.Contains("$($_.room),$($_.sectorX),$($_.sectorZ)")) -and
             [int]$_.zone -le [int]$c.maxZone -and $ex -notcontains [int]$_.room -and
             ($al.Count -eq 0 -or $al -contains [int]$_.room) -and
             ($null -eq $c.minFloorY -or [int]$_.zone -ne [int]$c.minFloorYZone -or

@@ -1913,6 +1913,15 @@ $ANIM_LO = 416; $ANIM_HI = 447
 # Raeume als offene Frage, obwohl die Antwort laengst vorliegt - und die Antwort
 # steht dann nur im Chatverlauf statt im Werkzeug. Raum -> Grund.
 $KNOWN_GAPS = @{
+    # joby3: vier Nischen fuer die Ventilatoren. Alle vier bauartgleich - 3x4
+    # Raum, genau zwei begehbare Sektoren, kein einziges Portal; in Raum 66
+    # sitzt sichtbar ein Electrical Light. Vom Nutzer in trview bestaetigt.
+    'joby3' = @{
+        63  = 'Dekoraum fuer den Ventilator'
+        66  = 'Dekoraum fuer den Ventilator'
+        111 = 'Dekoraum fuer den Ventilator'
+        113 = 'Dekoraum fuer den Ventilator'
+    }
     'Andrea3' = @{
         13 = 'Antitrigger-Fix der Devs, fuer uns ohne Bedeutung'
         71 = 'Ueberbleibsel der Devs, ohne Funktion'

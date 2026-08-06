@@ -889,6 +889,50 @@ if ($START_ROOM.ContainsKey($LevelName)) {
 $blocked = @{}   # sectorKey -> itemIndex der Tuer
 foreach($kv in $doorSector.GetEnumerator()){ $blocked[$kv.Value] = $kv.Key }
 
+#----------------------------------------------------------------------------
+# Dekotueren.
+#
+# Eine Tuer geht in TR erst auf, wenn ihre Maske vollstaendig ist - die Engine
+# prueft (flags & IFL_CODEBITS) == CODEBITS, also alle fuenf Bits. Findet sich im
+# ganzen Level kein Trigger, der eine Tuer auf 11111 bringen kann, dann geht sie
+# nie auf. Da Vanilla durchspielbar ist, kann so eine Tuer nichts versperren, was
+# gebraucht wird: sie ist Deko. Nutzer zu joby2 Raum 11: "Hinter den Tueren ist
+# nichts sind Dekotueren."
+#
+# Vorher sperrten sie fuer immer, und dahinter lagen echte Pickups (Lasersight
+# und Revolver Ammo), die damit nie in den Pool kamen.
+#
+# Gezaehlt wird ueber ALLE Trigger des Levels, auch die in der Floordata von
+# Flipraeumen - die existieren erst nach dem Flip, zaehlen aber sehr wohl
+# (Nutzerhinweis). Drei Ausnahmen bleiben Tueren: Skript-Tueren, Cutscene-Tueren
+# und Brechstangentueren haben ebenfalls keinen Trigger, gehen aber trotzdem auf.
+#----------------------------------------------------------------------------
+$doorMaskTotal = @{}
+foreach($tr in $d.triggers){
+    foreach($c in $tr.commands){
+        if ($c.type -ne 'Object') { continue }
+        $di = [int]$c.index
+        if (-not $doorSector.ContainsKey($di)) { continue }
+        if (-not $doorMaskTotal.ContainsKey($di)) { $doorMaskTotal[$di] = 0 }
+        $doorMaskTotal[$di] = $doorMaskTotal[$di] -bor [int]$tr.mask
+    }
+}
+$decoDoors = @()
+foreach($kv in $doorSector.GetEnumerator()){
+    $di = [int]$kv.Key
+    if ($scriptDoors.ContainsKey($di)) { continue }
+    if ($cutsceneDoors.ContainsKey($di)) { continue }
+    if ($null -ne $crowbarDoors -and $crowbarDoors -contains $di) { continue }
+    $m = if($doorMaskTotal.ContainsKey($di)){ [int]$doorMaskTotal[$di] } else { 0 }
+    if (($m -band 31) -eq 31) { continue }
+    $decoDoors += ,$di
+}
+foreach($di in $decoDoors){ [void]$blocked.Remove($doorSector[$di]) }
+if ($decoDoors.Count -gt 0) {
+    Write-Output "Dekotueren: $($decoDoors.Count) Tueren bringt kein Trigger auf 11111 - sie sperren nicht"
+    Write-Output "  Items: $(($decoDoors | Sort-Object) -join ', ')"
+}
+
 # Flipvarianten bestimmen: das Feld alternateRoom im Raumkopf zeigt von der Basis
 # auf ihre Flipfassung, die Zielraeume sind also genau die Varianten.
 $flipVariantRooms = @{}

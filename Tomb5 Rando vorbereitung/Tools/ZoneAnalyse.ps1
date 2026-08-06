@@ -966,9 +966,96 @@ while ($true) {
         $haveCounts[$ti]++
     }
 
+    #------------------------------------------------------------------------
+    # Reihenfolge der Schloesser, wenn ein Schluesseltyp knapp ist.
+    #
+    # Die Schleife lief bisher in Arrayreihenfolge, ein Schluessel wurde also an
+    # dem Schloss verbraucht, das die Flut zufaellig zuerst erreichte. Diese Wahl
+    # kann falsch sein und das halbe Level unerreichbar lassen.
+    #
+    # joby2 ist der belegte Fall: Key Item7 existiert zweimal, aber nur eine
+    # Instanz ist anfangs erreichbar. Verbraucht das Modell sie an Tuer 41, ist
+    # Schluss - Tuer 134 bleibt zu, dahinter liegt Key8, und ohne den geht nichts
+    # weiter. Richtig ist die umgekehrte Wahl: Tuer 134 zuerst, sie legt Key8
+    # frei, damit oeffnen sich 105/106, dahinter der zweite Key7, und DER oeffnet
+    # dann Tuer 41. Die Reihenfolge entscheidet ueber das halbe Level.
+    #
+    # Regel: ist ein Typ knapp (weniger verfuegbare Instanzen als offene
+    # Schloesser, die ihn brauchen), kommen zuerst die Schloesser dran, hinter
+    # denen ein noch unerreichter Schluessel liegt. Das ist die Standardheuristik
+    # fuer Schluessel-Schloss-Erreichbarkeit und hier nachweislich richtig.
+    # Bewusst NICHT ins Gegenteil gekippt und einfach alle Schloesser geoeffnet -
+    # das waere optimistisch und wuerde unspielbare Seeds erzeugen.
+    #------------------------------------------------------------------------
+    # Bedarf je Typ unter den noch offenen Schloessern.
+    $trigOrder = @($allTrig)
+    $demand = @{}
+    foreach($e in $allTrig){
+        if ($firedTrig.Contains($e.Id)) { continue }
+        if ($e.Req.Kind -ne 'item' -or $null -eq $e.Req.NeedItemType) { continue }
+        $nt = [int]$e.Req.NeedItemType
+        if ($reusableKeys -contains $nt) { continue }   # Key8: unbegrenzt, nie knapp
+        if (-not $demand.ContainsKey($nt)) { $demand[$nt] = 0 }
+        $demand[$nt]++
+    }
+    $scarce = @{}
+    foreach($kv in $demand.GetEnumerator()){
+        $nt = [int]$kv.Key
+        $hv = if($haveCounts.ContainsKey($nt)){ [int]$haveCounts[$nt] } else { 0 }
+        $cs = if($consumed.ContainsKey($nt)){ [int]$consumed[$nt] } else { 0 }
+        if ([int]$kv.Value -gt ($hv - $cs)) { $scarce[$nt] = $true }
+    }
+
+    if ($scarce.Count -gt 0) {
+        # Legt dieses Schloss einen noch unerreichten Schluessel frei? Dazu ab dem
+        # Sektor der Zieltuer fluten - andere geschlossene Tueren bleiben Sperre -
+        # und nachsehen, ob ein noch unerreichtes Key-/Puzzle-Item darin liegt.
+        $ord = -1
+        $ordered = foreach($e in $allTrig){
+            $ord++
+            $rank = 1
+            if ($e.Req.Kind -eq 'item' -and $null -ne $e.Req.NeedItemType -and
+                $scarce.ContainsKey([int]$e.Req.NeedItemType)) {
+                $rank = 2
+                $seeds = @()
+                foreach($c in $e.T.commands){
+                    if ($c.type -eq 'Object' -and $doorSector.ContainsKey([int]$c.index)) {
+                        $seeds += ,$doorSector[[int]$c.index]
+                    }
+                }
+                if ($seeds.Count -gt 0) {
+                    $seen = New-Object System.Collections.Generic.HashSet[string]
+                    $qq = New-Object System.Collections.Generic.Queue[string]
+                    foreach($sd in $seeds){ if($seen.Add($sd)){ $qq.Enqueue($sd) } }
+                    while($qq.Count -gt 0 -and $seen.Count -lt 4000){
+                        $k = $qq.Dequeue()
+                        if (-not $adj.ContainsKey($k)) { continue }
+                        foreach($nb in $adj[$k]){
+                            if ($seen.Contains($nb) -or $reached.Contains($nb)) { continue }
+                            if ($blocked.ContainsKey($nb) -and $seeds -notcontains $nb) { continue }
+                            [void]$seen.Add($nb); $qq.Enqueue($nb)
+                        }
+                    }
+                    foreach($it in $d.items){
+                        $ti = [int]$it.typeId
+                        if ($ti -lt $KEYPUZZ_LO -or $ti -gt $KEYPUZZ_HI) { continue }
+                        $ik = "$($it.room),$($it.sectorX),$($it.sectorZ)"
+                        if ($reached.Contains($ik)) { continue }
+                        if ($seen.Contains($ik)) { $rank = 0; break }
+                    }
+                }
+            }
+            [PSCustomObject]@{ Rank = $rank; Ord = $ord; E = $e }
+        }
+        # Ord als zweites Sortierkriterium: Windows PowerShell 5.1 kennt kein
+        # -Stable, ohne den Index waere die Reihenfolge gleichrangiger Trigger
+        # nicht reproduzierbar - und Reproduzierbarkeit ist hier Bedingung.
+        $trigOrder = @($ordered | Sort-Object Rank,Ord | ForEach-Object { $_.E })
+    }
+
     # Erreichbare Trigger ausloesen bzw. Slots befuellen. Ein eingesetztes Item
     # ist verbraucht und steht fuer keinen zweiten Slot mehr zur Verfuegung.
-    foreach($e in $allTrig){
+    foreach($e in $trigOrder){
         if ($firedTrig.Contains($e.Id)) { continue }
         if (-not (Test-ReqSector $e.Req $reached)) { continue }
         # Cutscene-Tueren, die ein Werkzeug voraussetzen (rich1 hamgate: der

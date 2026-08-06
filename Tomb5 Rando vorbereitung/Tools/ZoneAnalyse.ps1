@@ -231,6 +231,7 @@ $TYPE_EXCLUDE_ROOMS = @{
     # trview zusammengestellt.
     'joby2' = @{
         202 = @(11,12,16,20,24,25,34,40,42,60,61,65,73,76,92,93,98,138,152)
+        203 = @(83,115)                       # Key Item8
     }
 }
 $typeExclude = @{}

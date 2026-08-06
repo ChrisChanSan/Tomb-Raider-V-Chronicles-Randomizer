@@ -181,6 +181,12 @@ $EXCLUDE_ROOMS = @{
                   181,156,124,127,185,112,122,119,118,128,114,115,141,87)
     # Einbahnraeume, die nur die Skybox zeigen und dem Level Tiefe geben.
     'Andrea3' = @(113,114,115,116,64,66,67,69)
+    # joby2: Gelaende, das begehbar aussieht und es nicht ist - die grossen
+    # geneigten Flaechen am Rand der Anlage (Raum 158 ist der auffaelligste
+    # Fall, vom Nutzer in trview geprueft). Der Zonen-Flood laeuft ueber sie
+    # hinweg, weil die Sektoren Boden melden; Lara kommt dort nie hin.
+    # Zusammen 296 platzierbare Sektoren, die sonst als Ablage gelten wuerden.
+    'joby2' = @(6,7,9,14,149,155,158)
 }
 $excludeRooms = @( if($EXCLUDE_ROOMS.ContainsKey($LevelName)){ $EXCLUDE_ROOMS[$LevelName] } )
 

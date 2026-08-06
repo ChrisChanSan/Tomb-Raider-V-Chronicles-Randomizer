@@ -106,10 +106,11 @@ foreach($lvl in $Levels){
         # ein Sektor unterhalb dieser Schranke ist also zu HOCH - typischerweise
         # die Oberseite eines Kistenstapels, auf den Lara erst mit dem Schluessel
         # kommt, der dort liegen soll.
-        # Sie gilt ausdruecklich NUR in minFloorYZone, der Zone der Gruppe. Ohne
-        # diese Einschraenkung traf sie das halbe Level mit: joby2 fiel von 3062
-        # auf 1633 Marker, und ein Teil davon war hoeher gelegenes Gelaende, das
-        # mit dem Baseline-Raum nichts zu tun hat.
+        # Sie gilt NUR innerhalb der Inselgruppe (minFloorYIsland), denn sie ist
+        # deren Eigenschaft. An die Zone gehaengt war sie zu weit gegriffen:
+        # Zone 0 umfasst in joby2 7756 Sektoren, die Insel nur 1900 - fuer Key
+        # Item7, das ausserhalb der Insel liegen darf, wirkte die Schranke
+        # dadurch im halben Level (vom Nutzer bemerkt).
         # islandSectors: die Startinsel aus dem zweiten Flood. Ist sie gesetzt,
         # ist sie eine harte Positivliste - Key Item8 in joby2 darf ausschliess-
         # lich dort liegen, weil die Flipmap am Kran ihn selbst voraussetzt.
@@ -118,11 +119,17 @@ foreach($lvl in $Levels){
             $isl = New-Object System.Collections.Generic.HashSet[string]
             foreach($k in $c.islandSectors){ [void]$isl.Add([string]$k) }
         }
+        $hs = $null
+        if ($null -ne $c.minFloorYIsland) {
+            $hs = New-Object System.Collections.Generic.HashSet[string]
+            foreach($k in $c.minFloorYIsland){ [void]$hs.Add([string]$k) }
+        }
         $eligible = @($z.sectors | Where-Object {
-            ($null -eq $isl -or $isl.Contains("$($_.room),$($_.sectorX),$($_.sectorZ)")) -and
+            $kk = "$($_.room),$($_.sectorX),$($_.sectorZ)"
+            ($null -eq $isl -or $isl.Contains($kk)) -and
             [int]$_.zone -le [int]$c.maxZone -and $ex -notcontains [int]$_.room -and
             ($al.Count -eq 0 -or $al -contains [int]$_.room) -and
-            ($null -eq $c.minFloorY -or [int]$_.zone -ne [int]$c.minFloorYZone -or
+            ($null -eq $c.minFloorY -or ($null -ne $hs -and -not $hs.Contains($kk)) -or
              [int]$_.floorY -ge [int]$c.minFloorY) })
         foreach($s in $eligible){
             $rm = $rooms[[int]$s.room]

@@ -154,6 +154,17 @@ namespace
 //----------------------------------------------------------------------------
 namespace
 {
+    // Nicht spielbare Dateien. Sie gehoeren zu einer vollstaendigen
+    // Installation und werden bei der Pruefsummenkontrolle mitgeprueft, aber
+    // sie zu randomisieren hat keinen Sinn: Title ist der Titelbildschirm -
+    // dort etwas zu veraendern kann nur schaden -, del und richcut2 sind reine
+    // Cutscene-Level ohne Spielinhalt (richcut2 hat zwei Items, del zehn,
+    // davon kein einziges aufnehmbares).
+    bool isRandomizable(const std::string& fileName)
+    {
+        return fileName != "Title.trc" && fileName != "del.trc" && fileName != "richcut2.trc";
+    }
+
     struct LevelRow
     {
         std::string name;
@@ -187,6 +198,26 @@ namespace
         std::wstring payloadDir() const { return PathUtil::join(PathUtil::exeDir(), L"data"); }
 
         bool haveBackup = false;
+        int  skippedNonPlayable = 0;
+
+        // Ein Lauf laeuft nicht am Stueck durch, sondern schrittweise: pro Bild
+        // ein Level. Sonst friert das Fenster fuer die Dauer aller 15 Level
+        // ein, Windows meldet "reagiert nicht", und der Nutzer haelt es fuer
+        // einen Absturz - obwohl alles laeuft. Der Fortschrittsbalken braucht
+        // dieselbe Aufteilung, sonst haette er nichts anzuzeigen.
+        enum class Phase { Idle, Copy, Levels, Finish };
+        Phase phase = Phase::Idle;
+        size_t stepIndex = 0;
+        int    doneCount = 0, failCount = 0, plannedCount = 0;
+        std::string phaseText;
+
+        float progress() const
+        {
+            if (phase == Phase::Idle) return 0.0f;
+            if (phase == Phase::Copy) return 0.0f;
+            if (plannedCount <= 0) return 1.0f;
+            return static_cast<float>(doneCount + failCount) / static_cast<float>(plannedCount);
+        }
 
         // Was soll ueberhaupt randomisiert werden?
         bool optOtherPickups = true;
@@ -246,15 +277,23 @@ namespace
         const std::wstring master = a.haveBackup ? a.backupDir() : a.dataDir();
 
         auto st = a.data.inspect(master);
+        int skipped = 0;
         for (const LevelStatus& s : st)
         {
+            // Nicht spielbare Dateien werden geprueft, aber nicht angeboten.
+            if (!isRandomizable(s.name)) { ++skipped; continue; }
+
             LevelRow r;
             r.name = s.name;
             r.state = s.state;
             r.enabled = (s.state == LevelState::Vanilla);
             a.levels.push_back(r);
         }
+        a.skippedNonPlayable = skipped;
 
+        // Geprueft wird weiterhin die vollstaendige Liste - eine Installation,
+        // der Title.trc fehlt, ist keine gueltige Quelle, auch wenn wir die
+        // Datei nicht anfassen.
         std::string why;
         a.sourceOk = DataFolder::isUsableSource(st, why);
 
@@ -327,39 +366,86 @@ namespace
         return true;
     }
 
-    void doRandomize(App& a)
+    // Startet einen Lauf. Die Arbeit selbst passiert in advanceRun(), damit die
+    // Oberflaeche zwischendurch zeichnen kann.
+    void startRandomize(App& a)
     {
-        // Immer aus dem Backup kopieren, nie auf ein schon randomisiertes
-        // Level aufsetzen - sonst waere das Ergebnis aus dem Seed nicht mehr
-        // nachstellbar, und genau dafuer gibt es den Seed.
-        std::string err;
-        if (!ensureBackup(a, err)) { setStatus(a, err, true); return; }
-
-        int copied = 0;
-        if (!a.data.copyLevels(a.backupDir(), a.dataDir(), err, &copied))
-        {
-            setStatus(a, "Kopieren fehlgeschlagen: " + err, true);
-            return;
-        }
-
-        const uint64_t seed = a.effectiveSeed();
-        int done = 0, failed = 0;
+        a.plannedCount = 0;
         for (LevelRow& r : a.levels)
         {
             r.result.clear();
-            if (!r.enabled) { r.result = "uebersprungen"; continue; }
-            std::string e;
-            if (doLevel(a, r, seed, e)) { ++done; }
-            else { ++failed; r.result = "FEHLER: " + e; }
+            if (r.enabled) ++a.plannedCount;
+        }
+        a.doneCount = a.failCount = 0;
+        a.stepIndex = 0;
+        a.phase = App::Phase::Copy;
+        a.phaseText = "Originale werden zurueckgespielt...";
+        setStatus(a, "Lauf gestartet.");
+    }
+
+    void advanceRun(App& a)
+    {
+        switch (a.phase)
+        {
+        case App::Phase::Copy:
+        {
+            // Immer aus dem Backup kopieren, nie auf ein schon randomisiertes
+            // Level aufsetzen - sonst waere das Ergebnis aus dem Seed nicht
+            // mehr nachstellbar, und genau dafuer gibt es den Seed.
+            std::string err;
+            if (!ensureBackup(a, err)) { setStatus(a, err, true); a.phase = App::Phase::Idle; return; }
+
+            int copied = 0;
+            if (!a.data.copyLevels(a.backupDir(), a.dataDir(), err, &copied))
+            {
+                setStatus(a, "Kopieren fehlgeschlagen: " + err, true);
+                a.phase = App::Phase::Idle;
+                return;
+            }
+            a.phase = App::Phase::Levels;
+            a.stepIndex = 0;
+            return;
         }
 
-        a.cfg.seedText = a.seedBuf;
-        a.cfg.save();
+        case App::Phase::Levels:
+        {
+            // Nicht bearbeitbare Zeilen ueberspringen, aber pro Bild nur einen
+            // echten Schritt tun.
+            while (a.stepIndex < a.levels.size() && !a.levels[a.stepIndex].enabled)
+            {
+                a.levels[a.stepIndex].result = "uebersprungen";
+                ++a.stepIndex;
+            }
+            if (a.stepIndex >= a.levels.size()) { a.phase = App::Phase::Finish; return; }
 
-        char buf[192];
-        std::snprintf(buf, sizeof(buf), "%d Level randomisiert%s. Du kannst das Spiel jetzt starten.",
-                      done, failed ? " - mit Fehlern, siehe Liste" : "");
-        setStatus(a, buf, failed > 0);
+            LevelRow& r = a.levels[a.stepIndex];
+            a.phaseText = r.name;
+
+            std::string e;
+            if (doLevel(a, r, a.effectiveSeed(), e)) ++a.doneCount;
+            else { ++a.failCount; r.result = "FEHLER: " + e; }
+
+            ++a.stepIndex;
+            return;
+        }
+
+        case App::Phase::Finish:
+        {
+            a.cfg.seedText = a.seedBuf;
+            a.cfg.save();
+
+            char buf[192];
+            std::snprintf(buf, sizeof(buf), "%d Level randomisiert%s. Du kannst das Spiel jetzt starten.",
+                          a.doneCount, a.failCount ? " - mit Fehlern, siehe Liste" : "");
+            setStatus(a, buf, a.failCount > 0);
+            a.phaseText.clear();
+            a.phase = App::Phase::Idle;
+            return;
+        }
+
+        default:
+            return;
+        }
     }
 
     void doRestore(App& a)
@@ -458,8 +544,11 @@ static void drawUi(App& a, HWND hwnd)
     if (!a.optOtherPickups && !a.optKeyItems)
         ImGui::TextColored(ImVec4(1, .5f, .3f, 1), "Nichts ausgewaehlt - es wuerde nur zurueckgesetzt.");
 
-    // --- 3. Level ---
+    // --- 4. Level ---
     ImGui::SeparatorText("4. Level");
+    if (a.skippedNonPlayable > 0)
+        ImGui::TextDisabled("%d nicht spielbare Dateien (Title, del, richcut2) werden geprueft, aber nicht angetastet.",
+                            a.skippedNonPlayable);
     if (ImGui::BeginTable("levels", 3,
         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
         ImVec2(0, 260)))
@@ -502,15 +591,36 @@ static void drawUi(App& a, HWND hwnd)
         ImGui::EndTable();
     }
 
-    // --- 4. Los ---
+    // --- Fortschritt ---
+    // Steht zwischen Levelliste und den Knoepfen, weil dort hingesehen wird,
+    // sobald man auf "Randomisieren" gedrueckt hat.
+    const bool busy = (a.phase != App::Phase::Idle);
+    if (busy)
+    {
+        char overlay[96];
+        if (a.phase == App::Phase::Copy)
+            std::snprintf(overlay, sizeof(overlay), "Originale werden zurueckgespielt...");
+        else
+            std::snprintf(overlay, sizeof(overlay), "%s  (%d von %d)",
+                          a.phaseText.c_str(), a.doneCount + a.failCount, a.plannedCount);
+        ImGui::ProgressBar(a.progress(), ImVec2(-FLT_MIN, 22), overlay);
+    }
+    else
+    {
+        // Platz freihalten, damit die Knoepfe nicht springen, sobald ein Lauf
+        // startet - ein huepfendes Fenster wirkt kaputt.
+        ImGui::Dummy(ImVec2(0, 22));
+    }
+
+    // --- 5. Los ---
     ImGui::SeparatorText("5. Los geht's");
-    ImGui::BeginDisabled(!a.sourceOk);
-    if (ImGui::Button("Randomisieren", ImVec2(160, 32))) doRandomize(a);
+    ImGui::BeginDisabled(!a.sourceOk || busy);
+    if (ImGui::Button("Randomisieren", ImVec2(160, 32))) startRandomize(a);
     ImGui::SameLine();
     if (ImGui::Button("Auf Original zuruecksetzen", ImVec2(220, 32))) doRestore(a);
     ImGui::EndDisabled();
 
-    if (!a.sourceOk)
+    if (!a.sourceOk && !busy)
     {
         ImGui::SameLine();
         ImGui::TextDisabled("(erst eine unveraenderte Installation waehlen)");
@@ -593,6 +703,11 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         ImGui::NewFrame();
 
         drawUi(app, hwnd);
+
+        // Ein Arbeitsschritt pro Bild, NACH dem Zeichnen. So sieht der Nutzer
+        // erst den neuen Balkenstand und dann passiert der naechste Schritt -
+        // andersherum bliebe der letzte Schritt unsichtbar.
+        advanceRun(app);
 
         ImGui::Render();
         const float clear[4] = { 0.10f, 0.11f, 0.13f, 1.0f };

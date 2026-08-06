@@ -1377,6 +1377,16 @@ $KNOWN_GAPS = @{
         72 = 'Ueberbleibsel der Devs, ohne Funktion'
         77 = 'ohne Funktion'
     }
+    'joby2' = @{
+        # Der Kran, der am Levelende ueber dem U-Boot schwenkt, ist im
+        # eigentlichen Level ein Mesh. Diese Raeume existieren nur fuer die
+        # Animation - warum das nicht am echten Kran haengt, weiss auch der
+        # Nutzer nicht, aber betretbar ist hier nichts.
+        49 = 'Kran-Animation fuers Levelende, im Level selbst ein Mesh'
+        50 = 'Kran-Animation fuers Levelende, im Level selbst ein Mesh'
+        51 = 'Kran-Animation fuers Levelende, im Level selbst ein Mesh'
+        0  = 'nur Animatings, keine bespielbare Geometrie'
+    }
 }
 $knownGaps = @{}
 if ($KNOWN_GAPS.ContainsKey($LevelName)) {

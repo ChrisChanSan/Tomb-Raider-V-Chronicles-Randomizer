@@ -223,6 +223,15 @@ $TYPE_EXCLUDE_ROOMS = @{
         176 = @(70,204)                       # Puzzle Item5 (141/87 sind
                                               # inzwischen ganz gesperrt)
     }
+    # joby2: Key Item7 darf nicht hinter Tuer 41 landen. Die abgeleitete Regel
+    # "nicht hinter der eigenen Tuer" greift hier fast nicht - sie findet nur
+    # einen einzigen Sektor, weil man ueber den Aussenbereich hinter die Tuer
+    # kommt, ohne sie zu oeffnen. Aus Modellsicht liegt der Bereich damit gar
+    # nicht dahinter, im Spiel schon. Deshalb hier von Hand, vom Nutzer in
+    # trview zusammengestellt.
+    'joby2' = @{
+        202 = @(11,12,16,20,24,25,34,40,42,60,61,65,73,76,92,93,98,138,152)
+    }
 }
 $typeExclude = @{}
 if ($TYPE_EXCLUDE_ROOMS.ContainsKey($LevelName)) {
@@ -659,6 +668,11 @@ function Add-Edge($a, $b) {
     # allein: Portal-, Bruecken- und Manuallink-Kanten rufen Test-Walkable gar
     # nicht auf, ein Sektor kaeme also ueber sie doch in den Graphen.
     if ($excludeSectors -contains $a -or $excludeSectors -contains $b) { return }
+    # Dasselbe fuer ganze Raeume. Raum 145 in joby2 stand in EXCLUDE_ROOMS und
+    # tauchte trotzdem mit 36 Ablagen auf: er enthaelt vier Bridge-Flats, und
+    # Brueckenkanten holen ihre Sektoren ohne Test-Walkable in den Graphen.
+    if ($excludeRooms -contains [int](($a -split ',')[0])) { return }
+    if ($excludeRooms -contains [int](($b -split ',')[0])) { return }
     if (-not $adj.ContainsKey($a)) { $adj[$a] = New-Object System.Collections.Generic.HashSet[string] }
     [void]$adj[$a].Add($b)
 }
@@ -1539,6 +1553,68 @@ foreach($ig in $islandGroups){
     Write-Output "Inselgruppe: Baseline Raum $($ig.BaselineRoom) y=$baseY in Zone $gz, Schluessel dort hoechstens $($ig.MaxYAbove) darueber (floorY >= $limit) fuer Typen $($ig.RequireTypes -join ', ')"
 }
 
+#----------------------------------------------------------------------------
+# Ein Schluessel darf nie hinter einer Tuer liegen, die er selbst oeffnet.
+#
+# Die Zonenregel allein reicht dafuer nicht. Sie sagt "Schluessel muss in Zone
+# <= N liegen" und verlaesst sich darauf, dass die Flut die Tuer als Grenze
+# sieht. Fuehrt aber irgendein Weg um die Tuer herum - in joby2 kommt man ueber
+# den Aussenbereich hinter Tuer 41, ohne sie zu oeffnen -, dann faellt der
+# Bereich dahinter in dieselbe Zone und der Schluessel darf dort liegen. Im
+# Spiel ist das ein Softlock: die Tuer laesst sich nicht oeffnen, weil ihr
+# Schluessel hinter ihr liegt.
+#
+# Diese Regel fragt deshalb nicht "ist das erreichbar", sondern "haengt das an
+# dieser Tuer": je Schloss ein eigener Flood ab Laras Start, bei dem GENAU DIESE
+# EINE Tuer zu ist und alle anderen offen. Was dann wegfaellt, liegt hinter ihr
+# und ist fuer ihren Schluesseltyp gesperrt. Ein Umweg, den wir nicht kennen,
+# aendert daran nichts - er wird ja mitbenutzt und faellt trotzdem weg, wenn er
+# durch die Tuer fuehrt.
+#
+# Abgeleitet, nicht gepflegt: gilt sofort fuer jedes Schloss in jedem Level.
+#----------------------------------------------------------------------------
+$forbiddenBehindOwnDoor = @{}   # typeId -> HashSet gesperrter Sektoren
+foreach($e in $allTrig){
+    if ($e.Req.Kind -ne 'item' -or $null -eq $e.Req.NeedItemType) { continue }
+    $nt = [int]$e.Req.NeedItemType
+    $doors = @()
+    foreach($c in $e.T.commands){
+        if ($c.type -eq 'Object' -and $doorSector.ContainsKey([int]$c.index)) { $doors += ,[int]$c.index }
+    }
+    if ($doors.Count -eq 0) { continue }
+    # Sektoren dieser Tuer(en) - $blocked ist sectorKey -> Tuer-Item.
+    $shut = New-Object System.Collections.Generic.HashSet[string]
+    foreach($kv in $blocked.GetEnumerator()){ if ($doors -contains [int]$kv.Value) { [void]$shut.Add([string]$kv.Key) } }
+    if ($shut.Count -eq 0) { continue }
+
+    $rr = New-Object System.Collections.Generic.HashSet[string]
+    if ($null -ne $startKey -and -not $shut.Contains($startKey)) {
+        $qq = New-Object System.Collections.Generic.Queue[string]
+        [void]$rr.Add($startKey); $qq.Enqueue($startKey)
+        while($qq.Count -gt 0){
+            $k = $qq.Dequeue()
+            if (-not $adj.ContainsKey($k)) { continue }
+            foreach($n in $adj[$k]){
+                if ($rr.Contains($n) -or $shut.Contains($n)) { continue }
+                [void]$rr.Add($n); $qq.Enqueue($n)
+            }
+        }
+    }
+    if (-not $forbiddenBehindOwnDoor.ContainsKey($nt)) {
+        $forbiddenBehindOwnDoor[$nt] = New-Object System.Collections.Generic.HashSet[string]
+    }
+    # Nur Sektoren, die im Hauptlauf erreicht werden - alles andere ist ohnehin
+    # keine Ablage und wuerde die Liste nur aufblaehen.
+    $add = 0
+    foreach($k0 in $reached){
+        if ($rr.Contains($k0)) { continue }
+        if ($forbiddenBehindOwnDoor[$nt].Add($k0)) { $add++ }
+    }
+    if ($add -gt 0) {
+        Write-Output "Hinter eigener Tuer gesperrt: Typ $nt, Tuer $($doors -join '/') -> $add Sektoren"
+    }
+}
+
 $keyConstraints = @()
 foreach($kv in $byType.GetEnumerator()){
     $nt = [int]$kv.Key
@@ -1547,7 +1623,7 @@ foreach($kv in $byType.GetEnumerator()){
     $maxZ = ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
-    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}); minFloorYIsland=$(if($islandHeightScope.ContainsKey($nt)){@($islandHeightScope[$nt])}else{$null}) }
+    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}); minFloorYIsland=$(if($islandHeightScope.ContainsKey($nt)){@($islandHeightScope[$nt])}else{$null}); forbiddenSectors=$(if($forbiddenBehindOwnDoor.ContainsKey($nt)){@($forbiddenBehindOwnDoor[$nt])}else{$null}) }
 }
 # Handgesetzte Zusatztypen anhaengen, sofern das Modell sie nicht ohnehin schon
 # selbst abgeleitet hat (dann gilt die abgeleitete Grenze, nicht die Handangabe).
@@ -1556,7 +1632,7 @@ foreach($kv in $extraPool.GetEnumerator()){
     if ($byType.ContainsKey($nt)) { continue }
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
-    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=[int]$kv.Value; instances=0; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}); minFloorYIsland=$(if($islandHeightScope.ContainsKey($nt)){@($islandHeightScope[$nt])}else{$null}) }
+    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=[int]$kv.Value; instances=0; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}); minFloorYIsland=$(if($islandHeightScope.ContainsKey($nt)){@($islandHeightScope[$nt])}else{$null}); forbiddenSectors=$(if($forbiddenBehindOwnDoor.ContainsKey($nt)){@($forbiddenBehindOwnDoor[$nt])}else{$null}) }
 }
 
 if ($ExportZonesJson -ne "") {
@@ -1564,7 +1640,7 @@ if ($ExportZonesJson -ne "") {
     # laut Exporter tatsaechlich itemfaehig ist (validForItems), seine Zone.
     # Nur validForItems-Sektoren, damit ein nachgelagerter Patch-Generator nie
     # ein Item auf eine Wand, ein Portal oder einen sonst ungeeigneten Sektor
-    # setzt - dieselbe PrÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¼fung, die schon die *_AllValidSectorsFilled.trc-Dateien
+    # setzt - dieselbe PrÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¼fung, die schon die *_AllValidSectorsFilled.trc-Dateien
     # sauber gehalten hat, bleibt hier die Grundlage.
     $rows = @()
     foreach($kv in $zoneOf.GetEnumerator()){
@@ -1806,7 +1882,7 @@ foreach($k in $unreach.Keys){
     $comps += ,$comp
 }
 # KEIN Weltabstand als Hinweis. TR-Raeume ueberlappen sich im Weltkoordinaten-
-# system beliebig; erst die Portale nÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¤hen sie zusammen, wodurch nicht-euklidische
+# system beliebig; erst die Portale nÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¤hen sie zusammen, wodurch nicht-euklidische
 # Geometrie entsteht (Area 51 in TR3: das UFO ist geometrisch winzig, ingame
 # riesig). Zwei Sektoren an derselben Weltkoordinate koennen im Spiel voellig
 # unverbunden sein - "naechster Anschluss nach Abstand" war deshalb irrefuehrend.

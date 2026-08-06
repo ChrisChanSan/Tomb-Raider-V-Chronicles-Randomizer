@@ -1,4 +1,4 @@
-﻿# Progressions-Zonen-Analyse fuer TR5-Level (Prototyp)
+# Progressions-Zonen-Analyse fuer TR5-Level (Prototyp)
 #
 # Idee: Von Laras Startsektor durch den Sektorgraphen fluten, aber an
 # geschlossenen Tueren stoppen -> Zone 0. Dann pruefen, welche Tueren sich mit
@@ -472,6 +472,31 @@ $FLIP_GATE = @{
     'joby2' = @( @{ BlockRooms = @(89); AfterRoom = 35; Why = 'Rolltor am Kran' } )
 }
 $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] } )
+
+#----------------------------------------------------------------------------
+# Inselgruppen: Bodenhoehe als Grenze fuer Schluessel.
+#
+# Ein Sektor ist noch lange kein erreichbarer Ablageort. In joby2 stehen in Raum
+# 84 Kistenstapel; ihre Oberseiten sind begehbare Sektoren, aber Lara kommt dort
+# ueberhaupt erst hinauf, NACHDEM sie Key Item8 hat. Ein Schluessel obendrauf ist
+# damit unerreichbar - genau der Fall, den der Nutzer an Item 1480 gezeigt hat.
+#
+# Statt solche Ablagen einzeln auszuschliessen, gibt ein Raum der Gruppe die
+# Bodenhoehe vor, und Schluessel duerfen nicht mehr als MaxYAbove darueber
+# liegen. Das erspart sehr viel Handarbeit und traegt sofort fuer die ganze
+# Gruppe.
+#
+# Y-KONVENTION: in TR liegt KLEINERES y HOEHER. "Hoechstens 1024 hoeher" ist
+# also floorY >= baselineY - 1024, nicht <=.
+#
+# RequireTypes ist zusaetzlich eine Zusicherung, keine blosse Filterung: von
+# jedem dieser Typen muss mindestens eine Instanz INNERHALB der Gruppe liegen,
+# damit sie aus sich heraus loesbar bleibt.
+#----------------------------------------------------------------------------
+$ISLAND_GROUP = @{
+    'joby2' = @( @{ BaselineRoom = 84; MaxYAbove = 1024; RequireTypes = @(202,203) } )
+}
+$islandGroups = @( if($ISLAND_GROUP.ContainsKey($LevelName)){ $ISLAND_GROUP[$LevelName] } )
 
 # Tueren, die eine per-Level-Skriptfunktion (game/deltapak.cpp) ueber ein
 # Cutscene-Kommando oeffnet, statt ueber ein Object-Kommando. Anders als die
@@ -1379,6 +1404,20 @@ foreach($n in ($itemNeed | Where-Object { -not $_.Gameflow })){
     if (-not $byType.ContainsKey($t)) { $byType[$t] = @() }
     $byType[$t] += ,$n
 }
+# Hoehengrenze je Schluesseltyp aus den Inselgruppen ableiten. Baseline ist der
+# haeufigste Bodenwert der begehbaren Sektoren des Baseline-Raums - das Mittel
+# einer einzelnen Ecke waere zu zufaellig, der Modus trifft den eigentlichen
+# Hallenboden.
+$keyMinFloorY = @{}
+foreach($ig in $islandGroups){
+    $bs = @($d.sectors | Where-Object { [int]$_.room -eq [int]$ig.BaselineRoom -and -not $_.isWall -and $_.hasFloor })
+    if ($bs.Count -eq 0) { Write-Output "WARNUNG: Inselgruppe - Baseline-Raum $($ig.BaselineRoom) hat keine begehbaren Sektoren"; continue }
+    $baseY = [int](($bs | Group-Object floorY | Sort-Object Count -Descending | Select-Object -First 1).Name)
+    $limit = $baseY - [int]$ig.MaxYAbove
+    foreach($rt in $ig.RequireTypes){ $keyMinFloorY[[int]$rt] = $limit }
+    Write-Output "Inselgruppe: Baseline Raum $($ig.BaselineRoom) y=$baseY, Schluessel hoechstens $($ig.MaxYAbove) darueber (floorY >= $limit) fuer Typen $($ig.RequireTypes -join ', ')"
+}
+
 $keyConstraints = @()
 foreach($kv in $byType.GetEnumerator()){
     $nt = [int]$kv.Key
@@ -1387,7 +1426,7 @@ foreach($kv in $byType.GetEnumerator()){
     $maxZ = ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
-    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms }
+    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt]}else{$null}) }
 }
 # Handgesetzte Zusatztypen anhaengen, sofern das Modell sie nicht ohnehin schon
 # selbst abgeleitet hat (dann gilt die abgeleitete Grenze, nicht die Handangabe).
@@ -1396,7 +1435,7 @@ foreach($kv in $extraPool.GetEnumerator()){
     if ($byType.ContainsKey($nt)) { continue }
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
-    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=[int]$kv.Value; instances=0; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms }
+    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=[int]$kv.Value; instances=0; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt]}else{$null}) }
 }
 
 if ($ExportZonesJson -ne "") {

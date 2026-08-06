@@ -102,9 +102,14 @@ foreach($lvl in $Levels){
         # allowRooms ist eine Positivliste: ist sie gesetzt, zaehlt nur noch
         # sie (die Zone bleibt trotzdem Obergrenze). Leer = keine Einschraenkung.
         $al = @( if($null -ne $c.allowRooms){ $c.allowRooms | ForEach-Object { [int]$_ } } )
+        # minFloorY: Hoehengrenze der Inselgruppe. Kleineres y liegt in TR HOEHER,
+        # ein Sektor unterhalb dieser Schranke ist also zu HOCH - typischerweise
+        # die Oberseite eines Kistenstapels, auf den Lara erst mit dem Schluessel
+        # kommt, der dort liegen soll.
         $eligible = @($z.sectors | Where-Object {
             [int]$_.zone -le [int]$c.maxZone -and $ex -notcontains [int]$_.room -and
-            ($al.Count -eq 0 -or $al -contains [int]$_.room) })
+            ($al.Count -eq 0 -or $al -contains [int]$_.room) -and
+            ($null -eq $c.minFloorY -or [int]$_.floorY -ge [int]$c.minFloorY) })
         foreach($s in $eligible){
             $rm = $rooms[[int]$s.room]
             if (-not $rm) { continue }

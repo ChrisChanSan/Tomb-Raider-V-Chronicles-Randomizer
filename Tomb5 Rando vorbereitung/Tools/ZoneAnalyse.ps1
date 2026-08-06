@@ -457,7 +457,17 @@ if ($SCRIPT_DOORS.ContainsKey($LevelName)) { $scriptDoors = $SCRIPT_DOORS[$Level
 # offen". Vorher gilt sie als geschlossen, danach beginnt eine neue Zone.
 #----------------------------------------------------------------------------
 $FLIP_GATE = @{
-    # 'joby2' = @( @{ Rooms = @(53,54,69); AfterRoom = 35; Why = 'Kran-Cutscene' } )
+    # andy1, die Kirche. Basis 48 -> Variante 214, Basis 151 -> Variante 213.
+    # Das Holz verbaut den groessten Teil des Levels. Lara baut aus den beiden
+    # Haelften Puzzle Item2 Combo1 (Item 18, Raum 82) und Combo2 (Item 39, Raum
+    # 172) eine Zwille; damit laesst eine Cutscene die Glocken herunterkrachen,
+    # die das Holz wegsprengen - erst danach ist der Rest des Levels begehbar.
+    # Deshalb NeedTypes und nicht AfterRoom: der Kirchenraum allein genuegt
+    # nicht, Lara steht dort lange bevor sie die Teile beisammen hat.
+    'andy1' = @( @{ Rooms = @(213,214); NeedTypes = @(182,183); Why = 'Zwille laesst die Glocken fallen' } )
+    # joby2 bekommt bewusst KEINE Freigabe: Raeume 43 und 53 sind das Rolltor am
+    # Kran, und die Flipmap dahinter wird durch Key Item8 ausgeloest. Bliebe sie
+    # offen, duerfte Key8 hinter dem Tor liegen, das er selbst oeffnen soll.
 }
 $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] } )
 
@@ -1255,9 +1265,24 @@ while ($true) {
     $newlyOpenedGates = @()
     for($gi = 0; $gi -lt $flipGates.Count; $gi++){
         if ($openGates.Contains($gi)) { continue }
-        $needRoom = [int]$flipGates[$gi].AfterRoom
-        $hit = $false
-        foreach($k in $reached){ if ([int](($k -split ',')[0]) -eq $needRoom) { $hit = $true; break } }
+        $hit = $true
+        # Bedingung "Raum erreicht" - wie bei den Skript-Tueren.
+        if ($null -ne $flipGates[$gi].AfterRoom) {
+            $needRoom = [int]$flipGates[$gi].AfterRoom
+            $seenRoom = $false
+            foreach($k in $reached){ if ([int](($k -split ',')[0]) -eq $needRoom) { $seenRoom = $true; break } }
+            if (-not $seenRoom) { $hit = $false }
+        }
+        # Bedingung "Items in der Hand". Manche Flipmaps haengen nicht an einem
+        # Ort, sondern an Ausruestung: andy1 laesst die Glocken erst fallen, wenn
+        # Lara die Zwille aus ihren beiden Combo-Haelften gebaut hat. Nur den
+        # Kirchenraum abzufragen wuerde das Tor zu frueh oeffnen - Lara steht dort
+        # laengst, bevor sie die Teile hat.
+        if ($null -ne $flipGates[$gi].NeedTypes) {
+            foreach($nt in $flipGates[$gi].NeedTypes){
+                if (-not $haveCounts.ContainsKey([int]$nt)) { $hit = $false; break }
+            }
+        }
         if ($hit) { $newlyOpenedGates += ,$gi }
     }
 
@@ -1269,7 +1294,10 @@ while ($true) {
     foreach($gi in $newlyOpenedGates){
         [void]$openGates.Add($gi)
         $why = if($flipGates[$gi].Why){ $flipGates[$gi].Why } else { 'Flipmap' }
-        Write-Output "Zone $zone -> $($zone+1): Flipmap-Tor $($flipGates[$gi].Rooms -join '/') frei ($why, Raum $($flipGates[$gi].AfterRoom) erreicht)"
+        $cond = @()
+        if ($null -ne $flipGates[$gi].AfterRoom) { $cond += "Raum $($flipGates[$gi].AfterRoom) erreicht" }
+        if ($null -ne $flipGates[$gi].NeedTypes) { $cond += "Typen $($flipGates[$gi].NeedTypes -join '+') vorhanden" }
+        Write-Output "Zone $zone -> $($zone+1): Flipmap-Tor $($flipGates[$gi].Rooms -join '/') frei - $why ($($cond -join ', '))"
     }
     $zone++
 }

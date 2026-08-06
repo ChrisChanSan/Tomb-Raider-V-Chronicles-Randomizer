@@ -465,9 +465,11 @@ $FLIP_GATE = @{
     # Deshalb NeedTypes und nicht AfterRoom: der Kirchenraum allein genuegt
     # nicht, Lara steht dort lange bevor sie die Teile beisammen hat.
     'andy1' = @( @{ Rooms = @(213,214); NeedTypes = @(182,183); Why = 'Zwille laesst die Glocken fallen' } )
-    # joby2 bekommt bewusst KEINE Freigabe: Raeume 43 und 53 sind das Rolltor am
-    # Kran, und die Flipmap dahinter wird durch Key Item8 ausgeloest. Bliebe sie
-    # offen, duerfte Key8 hinter dem Tor liegen, das er selbst oeffnen soll.
+    # joby2, das Rolltor am Kran. Die Flipmap dahinter wird durch Key Item8
+    # ausgeloest - liegt der Schluessel hinter dem Tor, das er oeffnen soll, ist
+    # das Level unloesbar. Als Deadstop gesetzt: Raum 89 und alles dahinter
+    # bilden eine eigene Inselgruppe, erst ab dem Kran erreichbar.
+    'joby2' = @( @{ BlockRooms = @(89); AfterRoom = 35; Why = 'Rolltor am Kran' } )
 }
 $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] } )
 
@@ -965,6 +967,26 @@ foreach($s0 in $d.sectors){
     $g = -1
     for($gi = 0; $gi -lt $flipGates.Count; $gi++){ if ($flipGates[$gi].Rooms -contains $rn) { $g = $gi; break } }
     $flipNeedsGate["$rn,$($s0.sectorX),$($s0.sectorZ)"] = $g
+}
+# BlockRooms: ganz normale Raeume hinter dasselbe Tor haengen.
+#
+# Nicht jede Flipmap laesst sich an ihren Variantensektoren fassen. In joby2 ist
+# das Rolltor am Kran echte Wandgeometrie, und die Flut umgeht es ohnehin - der
+# Erstzugang zu Raum 89 laeuft ueber 80 und 4, ohne einen einzigen Flipsektor zu
+# beruehren. Der Blocker liegt also nicht dort, wo die Variante etwas oeffnet.
+#
+# Deshalb auf Nutzervorschlag der direkte Weg: das Rolltor als Deadstop setzen
+# und die Raeume dahinter als eigene Inselgruppe fuehren. Damit faellt alles
+# Weitere von selbst heraus - die Zonenlogik zwingt Key Item8 in die Startinsel,
+# weil hinter dem Deadstop eine spaetere Zone beginnt.
+foreach($gi0 in 0..([Math]::Max(0,$flipGates.Count-1))){
+    if ($flipGates.Count -eq 0) { break }
+    if ($null -eq $flipGates[$gi0].BlockRooms) { continue }
+    foreach($s0 in $d.sectors){
+        if ($s0.isWall) { continue }
+        if ($flipGates[$gi0].BlockRooms -notcontains [int]$s0.room) { continue }
+        $flipNeedsGate["$($s0.room),$($s0.sectorX),$($s0.sectorZ)"] = $gi0
+    }
 }
 $flipGateOf = $flipNeedsGate
 $openGates = New-Object System.Collections.Generic.HashSet[int]

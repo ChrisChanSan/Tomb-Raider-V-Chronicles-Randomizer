@@ -458,6 +458,16 @@ foreach($kv in $cutsceneDoors.GetEnumerator()){ $cutsceneDoorByCutscene[[int]$kv
 # Kletterstellen, Monkeyswing. Format "Raum,x,z" -> "Raum,x,z", beidseitig.
 # Das ist die Handkuration fuer die Klasse "Flood stoppt an der Geometrie".
 $MANUAL_LINK = @{
+    # joby2: der Weg auf den vorderen Sims von Raum 11, wo Lasersight und
+    # Revolver Ammo liegen. Zweimal derselbe Sprung mit Anlauf ueber eine Luecke
+    # von genau drei Sektoren - erst innerhalb von Raum 152, dann innerhalb von
+    # Raum 11 ueber die bodenlosen Felder x6/x7/x8 hinweg.
+    # Nutzerregel dahinter: Lara ueberwindet mit Anlauf 3 x 1024, sofern beide
+    # Kanten denselben Y-Wert haben. Hier erfuellt, alles liegt auf -4608.
+    'joby2' = @(
+        @('152,10,13', '152,10,17')
+        @('11,9,1',    '11,5,1')
+    )
 }
 
 # Schluessel, die NICHT verbraucht werden. Der Normalfall in TR ist: Key oder

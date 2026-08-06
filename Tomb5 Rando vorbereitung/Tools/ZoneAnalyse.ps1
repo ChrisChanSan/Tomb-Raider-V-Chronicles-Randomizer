@@ -348,6 +348,10 @@ $FIXED_ITEMS = @{
 # zufall reicht."
 $VANILLA_TYPES = @{
     'Andrea2' = @(172)
+    # joby3s Puzzle Item1 (Item 41, Raum 22) ist die getarnte Brechstange -
+    # sie sieht wie ein Puzzleteil aus, oeffnet aber die Brechstangentueren 25
+    # und 125. Sie bleibt an ihrem Platz, damit die Pickup-Cutscene stimmt.
+    'joby3' = @(172)
     # rich1s Puzzle Item3 ist die CD. Sie traegt in Vanilla Invisible=true und
     # liegt ausserhalb der Karte; der Switch in Raum 15 aktiviert sie zusammen
     # mit Door 4 und Door 2. Im Spiel faellt sie aus dem Anzug, sobald dessen
@@ -544,6 +548,13 @@ $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] }
 # damit im Testlevel unsichtbar und im Randomizer unangetastet.
 $POOL_TYPES = @{
     'joby2' = @(172)
+    # joby3: die vier Combo-Haelften. Puzzle Item3 Combo1+2 ergeben das
+    # Atemgeraet, Puzzle Item4 Combo1+2 die Batterie; beides wandert in den
+    # Anzug und loest die Schluss-Cutscene aus. Die beiden Slots in Raum 40
+    # liegen uebereinander und taeuschen eine Kombinierbarkeit nur vor.
+    # Nutzer: das Level hat keinen Point of no return, die Teile sind rein
+    # fuers Ende - sie duerfen deshalb ueberall auftauchen.
+    'joby3' = @(184,185,186,187)
 }
 $poolTypes = @( if($POOL_TYPES.ContainsKey($LevelName)){ $POOL_TYPES[$LevelName] } )
 

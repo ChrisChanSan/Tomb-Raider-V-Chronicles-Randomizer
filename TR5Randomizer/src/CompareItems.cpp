@@ -1,0 +1,101 @@
+// Stellt die Item-Listen beider Leser gegenueber: unser eigener Tr5Level gegen
+// die Level-Infos-JSON des alten Exporters. Verglichen wird Position fuer
+// Position - Typ, Raum und Koordinaten.
+//
+// Anlass: in rich1 meldete der alte Exporter Item 27 in Raum 15, unser Leser
+// und trview zeigen Raum 45. Da die gesamte Kuration ueber Item-Indizes
+// laeuft, muss geklaert werden, ob das ein Einzelfall ist oder ein Muster.
+//
+// Aufruf: CompareItems.exe <data-Ordner> <Level-Infos-Ordner>
+#include "core/Json.h"
+#include "core/Tr5Level.h"
+
+#include <cstdio>
+#include <string>
+#include <vector>
+
+static std::wstring toW(const std::string& s)
+{
+    std::wstring w;
+    for (unsigned char c : s) w.push_back(static_cast<wchar_t>(c));
+    return w;
+}
+
+int main(int argc, char** argv)
+{
+    if (argc < 3) { std::printf("Aufruf: CompareItems.exe <data> <LevelInfos>\n"); return 2; }
+    const std::string dataDir = argv[1], infoDir = argv[2];
+
+    const char* names[] = {
+        "Andrea1","Andrea2","Andrea3","andy1","Andy2","andy3","del",
+        "joby2","joby3","joby4","joby5","rich1","rich2","rich3","richcut2","Title"
+    };
+
+    int levelsWithDiff = 0;
+    for (const char* n : names)
+    {
+        Tr5Level lvl;
+        std::string err;
+        if (!lvl.load(toW(dataDir + "\\" + n + ".trc"), err))
+        {
+            std::printf("%-10s Level nicht lesbar: %s\n", n, err.c_str());
+            continue;
+        }
+
+        JsonValue info;
+        if (!Json::parseFile(toW(infoDir + "\\" + std::string(n) + ".json"), info, err))
+        {
+            std::printf("%-10s JSON nicht lesbar: %s\n", n, err.c_str());
+            continue;
+        }
+
+        const JsonValue& items = info["items"];
+        const int nJson = static_cast<int>(items.size());
+        const int nOurs = lvl.itemCount();
+
+        int diffType = 0, diffRoom = 0, diffPos = 0, firstDiff = -1;
+        const int count = (nJson < nOurs) ? nJson : nOurs;
+
+        for (int i = 0; i < count; ++i)
+        {
+            Tr5Item a{};
+            lvl.getItem(i, a);
+            const JsonValue& b = items[i];
+
+            const bool tDiff = a.objectNumber != static_cast<int>(b["typeId"].asInt());
+            const bool rDiff = a.roomNumber != static_cast<int>(b["room"].asInt());
+            const bool pDiff = a.x != static_cast<int>(b["x"].asInt())
+                            || a.y != static_cast<int>(b["y"].asInt())
+                            || a.z != static_cast<int>(b["z"].asInt());
+
+            if (tDiff) ++diffType;
+            if (rDiff) ++diffRoom;
+            if (pDiff) ++diffPos;
+            if ((tDiff || rDiff || pDiff) && firstDiff < 0) firstDiff = i;
+        }
+
+        const bool any = (diffType || diffRoom || diffPos || nJson != nOurs);
+        if (any) ++levelsWithDiff;
+
+        std::printf("%-10s Items %3d/%-3d  Typ %3d  Raum %3d  Pos %3d   %s\n",
+                    n, nOurs, nJson, diffType, diffRoom, diffPos,
+                    any ? "ABWEICHUNG" : "identisch");
+
+        // Beim ersten abweichenden Item beide Fassungen zeigen - daran laesst
+        // sich meist sofort ablesen, ob es ein Versatz oder etwas anderes ist.
+        if (firstDiff >= 0)
+        {
+            Tr5Item a{};
+            lvl.getItem(firstDiff, a);
+            const JsonValue& b = items[firstDiff];
+            std::printf("           ab Index %d:  unser T%d R%d (%d,%d,%d)  |  JSON T%d R%d (%d,%d,%d)\n",
+                        firstDiff,
+                        a.objectNumber, a.roomNumber, a.x, a.y, a.z,
+                        (int)b["typeId"].asInt(), (int)b["room"].asInt(),
+                        (int)b["x"].asInt(), (int)b["y"].asInt(), (int)b["z"].asInt());
+        }
+    }
+
+    std::printf("\nLevel mit Abweichungen: %d von 16\n", levelsWithDiff);
+    return levelsWithDiff ? 1 : 0;
+}

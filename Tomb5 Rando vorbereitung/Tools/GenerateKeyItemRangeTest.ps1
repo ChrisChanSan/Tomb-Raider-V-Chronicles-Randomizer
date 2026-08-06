@@ -30,13 +30,49 @@ param(
 $ErrorActionPreference = "Stop"
 
 $LevelInfoDir = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Rando vorbereitung\Level Infos"
-$VanillaDir   = "C:\Cloude AI\Tomb5 Native win 11 fix\Vanilla Tomb Raider (V) Chronicles Steam Version ENG\data"
+# Bewusst der Backup-Unterordner und NICHT data\ selbst: seit der Randomizer
+# eine Oberflaeche hat, wird data\ regelmaessig randomisiert - die Originale
+# liegen dann in data\Backup. Zeigte dieses Skript weiter auf data\, wuerde es
+# still auf bereits randomisierten Leveln rechnen. Nichts wuerde abstuerzen,
+# die Zonen waeren einfach falsch. Genau dieser Fall ist schon einmal
+# aufgetreten und hat eine Stunde Fehlersuche gekostet, siehe die
+# Pruefsummenpruefung weiter unten.
+$VanillaDir   = "C:\Cloude AI\Tomb5 Native win 11 fix\Vanilla Tomb Raider (V) Chronicles Steam Version ENG\data\Backup"
 $OutDir       = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Rando vorbereitung\Level Test\KeyItemRange Level Test"
 $ZoneScript   = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Rando vorbereitung\Tools\ZoneAnalyse.ps1"
 $Exe          = "C:\Cloude AI\Two gun test\TombItemEdit2026\Release\Beta\TombItemEdit2026.exe"
 $ScratchDir   = "C:\Users\dev\AppData\Local\Temp\claude\C--Cloude-AI\b7de1344-2e88-43df-b893-8f3cb52ddbcd\scratchpad"
 
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir | Out-Null }
+
+#----------------------------------------------------------------------------
+# Pruefsummen der Quelle kontrollieren, bevor irgendetwas erzeugt wird.
+#
+# Der Randomizer hat diese Absicherung seit jeher; den Vorbereitungswerkzeugen
+# fehlte sie, und das ist aufgeflogen, als der Zielordner eines GUI-Tests
+# derselbe war, aus dem hier gelesen wurde. Das Ergebnis sah plausibel aus und
+# war falsch - die unangenehmste Sorte Fehler. Lieber laut abbrechen.
+#----------------------------------------------------------------------------
+$ChecksumCsv = Join-Path $LevelInfoDir "VanillaLevelChecksums.csv"
+if (-not (Test-Path $ChecksumCsv)) { throw "Pruefsummenliste fehlt: $ChecksumCsv" }
+$expect = @{}
+foreach ($row in (Import-Csv $ChecksumCsv)) { $expect[$row.FileName] = $row.SHA256.ToUpper() }
+
+$bad = @()
+foreach ($lvl in $Levels) {
+    $trc = Join-Path $VanillaDir "$lvl.trc"
+    if (-not (Test-Path $trc)) { $bad += "$lvl.trc fehlt"; continue }
+    $have = (Get-FileHash $trc -Algorithm SHA256).Hash.ToUpper()
+    if (-not $expect.ContainsKey("$lvl.trc")) { $bad += "$lvl.trc nicht in der Liste"; continue }
+    if ($have -ne $expect["$lvl.trc"]) { $bad += "$lvl.trc weicht von Vanilla ab" }
+}
+if ($bad.Count -gt 0) {
+    Write-Output "ABBRUCH - die Quelle ist nicht unveraendert:"
+    $bad | ForEach-Object { Write-Output "  $_" }
+    Write-Output "Quellordner: $VanillaDir"
+    throw "Quelle nicht vanilla - es wurde nichts erzeugt."
+}
+Write-Output "Quelle geprueft: $($Levels.Count) Level unveraendert ($VanillaDir)"
 
 $results = @()
 foreach($lvl in $Levels){

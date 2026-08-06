@@ -469,7 +469,13 @@ $FLIP_GATE = @{
     # ausgeloest - liegt der Schluessel hinter dem Tor, das er oeffnen soll, ist
     # das Level unloesbar. Als Deadstop gesetzt: Raum 89 und alles dahinter
     # bilden eine eigene Inselgruppe, erst ab dem Kran erreichbar.
-    'joby2' = @( @{ BlockRooms = @(89); AfterRoom = 35; Why = 'Rolltor am Kran' } )
+    # Gesperrt wird die GLEISBETT-KETTE, nicht nur der Raum hinter dem Tor.
+    # Das Gleisbett liegt 256 Units tiefer als das Rolltor, die Flut laeuft also
+    # schlicht darunter hindurch: 132 -> 5 -> 4 -> 2 und von dort in alles, was
+    # hinter dem Tor liegt. Nur Raum 89 zu sperren liess diesen Umweg offen.
+    # 2, 4 und 5 haben selbst keinen einzigen platzierbaren Sektor - sie kosten
+    # als Sperre also nichts und schneiden den Umweg an der Quelle ab.
+    'joby2' = @( @{ BlockRooms = @(2,4,5,89); AfterRoom = 35; Why = 'Rolltor am Kran' } )
 }
 $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] } )
 

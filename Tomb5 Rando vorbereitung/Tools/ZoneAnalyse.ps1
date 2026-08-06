@@ -431,6 +431,36 @@ $SCRIPT_DOORS = @{
 $scriptDoors = @{}
 if ($SCRIPT_DOORS.ContainsKey($LevelName)) { $scriptDoors = $SCRIPT_DOORS[$LevelName] }
 
+#----------------------------------------------------------------------------
+# Flipmap-Raeume.
+#
+# Ein Flipraum ist kein zusaetzlicher Ort, sondern ein ZUSTAND desselben Ortes.
+# Die Sektordaten enthalten beide Fassungen nebeneinander, und wer sie einfach
+# uebereinanderlegt, bekommt eine Geometrie, die es im Spiel nie gibt: jede
+# Wand der Basis UND jeder Durchgang der Flipvariante, alles gleichzeitig, alles
+# ab Levelstart.
+#
+# Genau daran haette joby2 einen sicheren Softlock produziert. Der Kran schaltet
+# per FlipMap das Rolltor auf (Basis 89/87/80 zu, Flipvariante 53/54/69 offen).
+# Die Flut lief durch die Flipvariante, also galt der ganze Bereich dahinter ab
+# Zone 0 als erreichbar - und Key Item8 durfte dort liegen. Nur wird die Flipmap
+# ihrerseits erst durch Key8 ausgeloest. Wer den Schluessel hinter das Tor legt,
+# das er selbst oeffnen soll, hat das Level unloesbar gemacht.
+#
+# Deshalb die Vorgabe: Sektoren einer Flipvariante tragen NICHT. Das ist die
+# konservative Richtung - sie kann Erreichbarkeit nur verkleinern, nie einen Weg
+# erfinden, und ein zu kleiner Bereich faellt im Bericht auf, ein zu grosser
+# erst im Spiel. Nutzer dazu: "Flipmaps koennen oft Wege blocken."
+#
+# Wo eine Flipvariante wirklich einen Weg oeffnet, wird sie hier freigegeben -
+# gleiche Form wie $SCRIPT_DOORS: erreichter Raum als Bedingung, nicht "immer
+# offen". Vorher gilt sie als geschlossen, danach beginnt eine neue Zone.
+#----------------------------------------------------------------------------
+$FLIP_GATE = @{
+    # 'joby2' = @( @{ Rooms = @(53,54,69); AfterRoom = 35; Why = 'Kran-Cutscene' } )
+}
+$flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] } )
+
 # Tueren, die eine per-Level-Skriptfunktion (game/deltapak.cpp) ueber ein
 # Cutscene-Kommando oeffnet, statt ueber ein Object-Kommando. Anders als die
 # leere SCRIPT_DOORS-Tabelle oben ist das hier durch den Engine-Code UND die
@@ -849,6 +879,48 @@ if ($START_ROOM.ContainsKey($LevelName)) {
 $blocked = @{}   # sectorKey -> itemIndex der Tuer
 foreach($kv in $doorSector.GetEnumerator()){ $blocked[$kv.Value] = $kv.Key }
 
+# Flipvarianten bestimmen: das Feld alternateRoom im Raumkopf zeigt von der Basis
+# auf ihre Flipfassung, die Zielraeume sind also genau die Varianten.
+$flipVariantRooms = @{}
+foreach($r in $d.rooms){
+    $ar = "$($r.alternateRoom)"
+    if ($ar -eq '' -or $ar -eq '65535') { continue }
+    $flipVariantRooms[[int]$ar] = [int]$r.index
+}
+# Eine Flipvariante darf keinen Weg schaffen, den die Basis nicht auch hat.
+#
+# Ein pauschales Sperren aller Flipvarianten waere zwar sicher, ist aber viel zu
+# grob: gemessen ueber alle Level tragen sie ueberwiegend voellig legitime Wege
+# (rich3 stuerzte damit von 4 auf 2098 unerreichte Sektoren ab). Die meisten
+# Flipmaps aendern die Verbindungen naemlich gar nicht - Wasserstand, Trueb-
+# mmer, Beleuchtung -, und ihre Sektoren sind Alias derselben Stelle.
+#
+# Gefaehrlich ist nur der andere Fall: die Flipvariante OEFFNET etwas, das in der
+# Basis zu ist - das Rolltor am Kran in joby2. Genau den trifft diese Regel: ein
+# Flipsektor traegt nur, wenn der Sektor gleicher Position im Basisraum ebenfalls
+# begehbar ist. Kosmetische Flips bleiben unberuehrt, neue Durchgaenge nicht.
+$flipNeedsGate = @{}   # sectorKey der Variante -> Nummer des Tors (-1 = keins)
+foreach($s0 in $d.sectors){
+    $rn = [int]$s0.room
+    if (-not $flipVariantRooms.ContainsKey($rn)) { continue }
+    if ($s0.isWall) { continue }
+    $baseKey = "$($flipVariantRooms[$rn]),$($s0.sectorX),$($s0.sectorZ)"
+    # Basis an derselben Stelle ebenfalls begehbar? Dann ist der Flipsektor nur
+    # eine zweite Schreibweise desselben Weges und braucht keine Freigabe.
+    if ($sec.ContainsKey($baseKey) -and -not $sec[$baseKey].isWall) { continue }
+    $g = -1
+    for($gi = 0; $gi -lt $flipGates.Count; $gi++){ if ($flipGates[$gi].Rooms -contains $rn) { $g = $gi; break } }
+    $flipNeedsGate["$rn,$($s0.sectorX),$($s0.sectorZ)"] = $g
+}
+$flipGateOf = $flipNeedsGate
+$openGates = New-Object System.Collections.Generic.HashSet[int]
+if ($flipGateOf.Count -gt 0) {
+    $noGate = @($flipGateOf.GetEnumerator() | Where-Object { $_.Value -lt 0 })
+    $rr = @($noGate | ForEach-Object { [int](($_.Key -split ',')[0]) } | Sort-Object -Unique)
+    Write-Output "Flipmap: $($flipGateOf.Count) Sektoren oeffnen etwas, das die Basis nicht hat - $($noGate.Count) davon ohne Freigabe"
+    if ($rr.Count -gt 0) { Write-Output "  betroffene Flipraeume: $($rr -join ', ')" }
+}
+
 foreach($ml in $manualLinks){ Add-Edge $ml[0] $ml[1]; Add-Edge $ml[1] $ml[0] }
 
 # GATED_AREA anwenden (nach vollstaendigem Graphaufbau inkl. Flipmap-,
@@ -955,6 +1027,9 @@ while ($true) {
         foreach($n in $adj[$k]){
             if ($reached.Contains($n)) { continue }
             if ($blocked.ContainsKey($n) -and -not $openDoors.Contains($blocked[$n])) { continue }
+            # Sektor einer Flipvariante: traegt erst, wenn sein Tor freigegeben
+            # ist - ohne deklariertes Tor nie.
+            if ($flipGateOf.ContainsKey($n) -and -not $openGates.Contains($flipGateOf[$n])) { continue }
             # Erstzugangs-Elternknoten mitschreiben: nur so laesst sich spaeter
             # rekonstruieren, ueber WELCHE Kante ein Sektor zum ERSTEN Mal
             # erreicht wurde. Ein Pfad ueber den Endzustand (alle Tueren offen)
@@ -1175,10 +1250,26 @@ while ($true) {
         if ($hit) { $newlyOpened += ,@{ Door=$di; Req=@{ Desc="Skript-Ereignis (Raum $needRoom erreicht)" } } }
     }
 
-    if ($newlyOpened.Count -eq 0) { break }
+    # Flipmap-Tore: geben ihre Sektoren frei, sobald der ausloesende Raum erreicht
+    # ist - dieselbe Bedingungsform wie die Skript-Tueren.
+    $newlyOpenedGates = @()
+    for($gi = 0; $gi -lt $flipGates.Count; $gi++){
+        if ($openGates.Contains($gi)) { continue }
+        $needRoom = [int]$flipGates[$gi].AfterRoom
+        $hit = $false
+        foreach($k in $reached){ if ([int](($k -split ',')[0]) -eq $needRoom) { $hit = $true; break } }
+        if ($hit) { $newlyOpenedGates += ,$gi }
+    }
+
+    if ($newlyOpened.Count -eq 0 -and $newlyOpenedGates.Count -eq 0) { break }
     foreach($n in $newlyOpened){
         [void]$openDoors.Add($n.Door)
         $log += ,@{ Zone=$zone; Door=$n.Door; Req=$n.Req }
+    }
+    foreach($gi in $newlyOpenedGates){
+        [void]$openGates.Add($gi)
+        $why = if($flipGates[$gi].Why){ $flipGates[$gi].Why } else { 'Flipmap' }
+        Write-Output "Zone $zone -> $($zone+1): Flipmap-Tor $($flipGates[$gi].Rooms -join '/') frei ($why, Raum $($flipGates[$gi].AfterRoom) erreicht)"
     }
     $zone++
 }

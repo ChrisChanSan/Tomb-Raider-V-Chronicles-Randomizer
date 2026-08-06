@@ -499,6 +499,17 @@ $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] }
 # jedem dieser Typen muss mindestens eine Instanz INNERHALB der Gruppe liegen,
 # damit sie aus sich heraus loesbar bleibt.
 #----------------------------------------------------------------------------
+# Typen, die in den Pool sollen, obwohl kein Schloss sie erzwingt - und die
+# dabei KEINE Zonengrenze haben. joby2: die Fuse (Puzzle Item1) hinter den Tueren
+# 105/106. Sie ist Fortschritt, aber keine Sperre fuer irgendetwas Frueheres,
+# deshalb darf sie ueberall liegen. Nutzerentscheidung.
+# Ohne Eintrag taucht so ein Typ gar nicht in den keyConstraints auf und bliebe
+# damit im Testlevel unsichtbar und im Randomizer unangetastet.
+$POOL_TYPES = @{
+    'joby2' = @(172)
+}
+$poolTypes = @( if($POOL_TYPES.ContainsKey($LevelName)){ $POOL_TYPES[$LevelName] } )
+
 $ISLAND_GROUP = @{
     # DeadstopRooms definiert die Insel ueber einen ZWEITEN, schaerferen Flood.
     # Die Gleisbett-Kette 2/4/5 und Raum 89 sind darin gesperrt, ihre
@@ -1530,6 +1541,18 @@ if ($ExportZonesJson -ne "") {
         $rows += [PSCustomObject]@{ room=[int]$s.room; sectorX=[int]$s.sectorX; sectorZ=[int]$s.sectorZ; zone=[int]$kv.Value; floorY=[int]$s.floorY }
     }
     $maxZoneOut = if($rows.Count -gt 0){ ($rows | Measure-Object -Property zone -Maximum).Maximum } else { 0 }
+    # Pool-Typen ohne Zonengrenze anhaengen. maxZone bekommt den hoechsten im
+    # Level vorkommenden Wert, damit wirklich jede Zone offensteht; Insel- und
+    # Hoehengrenzen bleiben leer, denn diese Typen gehoeren keiner Gruppe an.
+    foreach($pt in $poolTypes){
+        $pt = [int]$pt
+        if (@($keyConstraints | Where-Object { [int]$_.typeId -eq $pt }).Count -gt 0) { continue }
+        $inst = @($d.items | Where-Object { [int]$_.typeId -eq $pt }).Count
+        $keyConstraints += [PSCustomObject]@{ typeId=$pt; maxZone=$maxZoneOut; instances=$inst
+            reusable=($reusableKeys -contains $pt); excludeRooms=@(); allowRooms=@()
+            minFloorY=$null; minFloorYZone=$null; islandSectors=$null; minFloorYIsland=$null }
+        Write-Output "Pool-Typ $pt ohne Zonengrenze aufgenommen ($inst Instanzen im Level, maxZone=$maxZoneOut)"
+    }
     [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; requiredInjections=$requiredInjections } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
     Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"
 }

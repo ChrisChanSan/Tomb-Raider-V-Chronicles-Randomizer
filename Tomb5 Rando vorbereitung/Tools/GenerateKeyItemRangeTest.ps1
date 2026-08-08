@@ -124,18 +124,8 @@ foreach($lvl in $Levels){
             $hs = New-Object System.Collections.Generic.HashSet[string]
             foreach($k in $c.minFloorYIsland){ [void]$hs.Add([string]$k) }
         }
-        # forbiddenSectors: was hinter einer Tuer liegt, die dieser Schluessel
-        # selbst oeffnet. Wurde vom Analyser laengst exportiert, hier aber
-        # zunaechst nicht ausgewertet - joby3 zeigte deshalb weiter Key Item7 in
-        # Raum 109, obwohl der Analyser ihn korrekt gesperrt hatte.
-        $fb = $null
-        if ($null -ne $c.forbiddenSectors) {
-            $fb = New-Object System.Collections.Generic.HashSet[string]
-            foreach($k in $c.forbiddenSectors){ [void]$fb.Add([string]$k) }
-        }
         $eligible = @($z.sectors | Where-Object {
             $kk = "$($_.room),$($_.sectorX),$($_.sectorZ)"
-            ($null -eq $fb -or -not $fb.Contains($kk)) -and
             ($null -eq $isl -or $isl.Contains($kk)) -and
             [int]$_.zone -le [int]$c.maxZone -and $ex -notcontains [int]$_.room -and
             ($al.Count -eq 0 -or $al -contains [int]$_.room) -and

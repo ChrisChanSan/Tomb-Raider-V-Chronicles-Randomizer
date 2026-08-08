@@ -190,7 +190,12 @@ $EXCLUDE_ROOMS = @{
     # und andere Flaechen, die Boden melden und keiner sind. Kein einziges
     # Pickup liegt darin - nur zwei Sniper, Animatings und Bridge-Flats.
     'joby2' = @(6,7,9,14,149,155,158,
-                8,10,13,15,19,21,139,145,147,148,150,151,153,154,159)
+                8,10,13,15,19,21,139,145,147,148,150,151,153,154,159,
+                # 39, 41 und 44 sind erst durch die Lichtenkorrektur ueberhaupt
+                # aufgetaucht - alle drei Ablagen je Raum sind neu. Der Nutzer
+                # hat sie sofort als ungueltig erkannt. Die Korrektur bringt
+                # also nicht nur Gewinn, sie schafft auch neuen Pruefbedarf.
+                39,41,44)
     # joby3, vom Nutzer in trview durchgesehen. Kein Pickup liegt darin - nur
     # ein Electrical Light und ein Animating in Raum 104 sowie je eine
     # geschlossene Tuer in 118 und 130.
@@ -265,7 +270,10 @@ $TYPE_EXCLUDE_ROOMS = @{
     # nicht dahinter, im Spiel schon. Deshalb hier von Hand, vom Nutzer in
     # trview zusammengestellt.
     'joby2' = @{
-        202 = @(11,12,16,20,24,25,34,40,42,60,61,65,73,76,92,93,98,138,152)
+        # Raum 67 kam wie 39/41/44 erst mit der Lichtenkorrektur dazu, mit 23
+        # Ablagen auf einen Schlag. Anders als jene bleibt er fuer normale
+        # Items nutzbar - nur Key Item7 darf dort nicht liegen.
+        202 = @(11,12,16,20,24,25,34,40,42,60,61,65,67,73,76,92,93,98,138,152)
         203 = @(83,115)                       # Key Item8
     }
     # joby3: Key Item7 darf nicht hinter Tuer 175 liegen, sie ist sein Deadstop

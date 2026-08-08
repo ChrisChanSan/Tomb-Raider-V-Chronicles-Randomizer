@@ -669,6 +669,30 @@ $MIN_CLEARANCE = @{
 $levelMinClearance = $null
 if ($MIN_CLEARANCE.ContainsKey($LevelName)) { $levelMinClearance = [int]$MIN_CLEARANCE[$LevelName] }
 
+#----------------------------------------------------------------------------
+# Raeume, in denen kein Schluessel- oder Puzzle-Item liegen darf.
+#
+# joby5 hat elektrifiziertes Wasser. Vier Electrical Cables (Typ 98, Items 91,
+# 136, 165, 206) haengen ins Wasser; drei Bodentrigger in den Raeumen 15, 60
+# und 138 schalten sie scharf, der Schalter 190 in Raum 165 schaltet sie wieder
+# aus. Solange sie aktiv sind, kostet der Aufenthalt 10 Trefferpunkte pro Frame
+# und toetet bei <= 32 (game/joby.cpp, ControlElectricalCables).
+#
+# Die Reichweite ist dabei nicht der Raum des Kabels - massgeblich ist die
+# FlipNumber der beruehrten Wassermasse, siehe joby.cpp:191. Welche Raeume das
+# sind, steht deshalb nicht in den Leveldaten; die Zuordnung kommt vom Nutzer:
+# Kabel 91 -> Raum 128, Kabel 136 -> 126 und 127, Kabel 206 -> 183,
+# Kabel 165 -> 158.
+#
+# Nutzerentscheidung: dort duerfen NORMALE Items liegen, aber keine Schluessel.
+# Der Grund ist einleuchtend - ein normales Pickup holt Lara nach dem Schalter,
+# ein Schluessel dagegen kann Teil einer Kette sein, die vorher gebraucht wird.
+#----------------------------------------------------------------------------
+$NO_KEY_ROOMS = @{
+    'joby5' = @(126,127,128,158,183)
+}
+$noKeyRooms = @( if($NO_KEY_ROOMS.ContainsKey($LevelName)){ $NO_KEY_ROOMS[$LevelName] } )
+
 $WEAPON_TYPES = 334..348
 $NO_WEAPON_ROOMS = @{
     'joby3' = @(105,106,120,124,125)
@@ -1720,7 +1744,7 @@ foreach($kv in $byType.GetEnumerator()){
     # Bleibt Vanilla: Anforderung oben im Report sichtbar, aber nicht im Pool.
     if ($vanillaTypes -contains $nt) { continue }
     $maxZ = ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
-    $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement | Sort-Object -Unique )
+    $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement + $noKeyRooms | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
     $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}); minFloorYIsland=$(if($islandHeightScope.ContainsKey($nt)){@($islandHeightScope[$nt])}else{$null}) }
 }
@@ -1729,7 +1753,7 @@ foreach($kv in $byType.GetEnumerator()){
 foreach($kv in $extraPool.GetEnumerator()){
     $nt = [int]$kv.Key
     if ($byType.ContainsKey($nt)) { continue }
-    $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement | Sort-Object -Unique )
+    $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement + $noKeyRooms | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
     $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=[int]$kv.Value; instances=0; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}); minFloorYIsland=$(if($islandHeightScope.ContainsKey($nt)){@($islandHeightScope[$nt])}else{$null}) }
 }
@@ -1757,6 +1781,10 @@ if ($ExportZonesJson -ne "") {
         $pt = [int]$pt
         if (@($keyConstraints | Where-Object { [int]$_.typeId -eq $pt }).Count -gt 0) { continue }
         $inst = @($d.items | Where-Object { [int]$_.typeId -eq $pt }).Count
+        # NO_KEY_ROOMS gilt hier ausdruecklich NICHT. Pool-Typen haben keine
+        # Kette im Level - joby5s Puzzle 1 und 2 werden erst ganz am Ende
+        # gebraucht, und da ist der Strom laengst abgeschaltet. Nutzer: "Die
+        # Puzzels koennen wir lassen, nur Keys sind wichtig."
         $keyConstraints += [PSCustomObject]@{ typeId=$pt; maxZone=$maxZoneOut; instances=$inst
             reusable=($reusableKeys -contains $pt); excludeRooms=@(); allowRooms=@()
             minFloorY=$null; minFloorYZone=$null; islandSectors=$null; minFloorYIsland=$null }

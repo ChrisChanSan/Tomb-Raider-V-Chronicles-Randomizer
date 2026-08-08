@@ -780,6 +780,25 @@ $POOL_TYPES = @{
 $poolTypes = @( if($POOL_TYPES.ContainsKey($LevelName)){ $POOL_TYPES[$LevelName] } )
 
 $ISLAND_GROUP = @{
+    # andy1 hat einen Point of no return: der Teleporter in Raum 47 bringt Lara
+    # nach Raum 109, und von dort geht es nur vorwaerts. Ein Schluessel, der
+    # dahinter liegt und vorher gebraucht wird, waere unerreichbar.
+    #
+    # Der zweite Deadstop ist Raum 186 mit Tuer 52. Das ist der eigentliche Weg
+    # ins Levelende, von Raum 202 aus - die Flut findet ihn aber faelschlich
+    # ueber die Bruecke 43 schon vorher. Nutzerangabe.
+    #
+    # Die Insel ist berechnet und steht bereit - IslandTypes ist aber bewusst
+    # LEER. Puzzle Item1 gehoert NICHT hinein: sein Schloss (Item 51, Raum 202)
+    # liegt selbst hinter dem Teleporter, genau wie sein Vanilla-Platz in Raum
+    # 51. Beide auf derselben Seite, also kein Softlock - Vanilla macht es so.
+    #
+    # Daraus die allgemeine Einsicht, die den ersten Versuch korrigiert hat:
+    # ein Schluessel muss nicht vor dem Point of no return liegen, sondern nur
+    # vor SEINEM SCHLOSS. Das prueft die Zonenregel ohnehin (Zone <= 1). Der
+    # Point of no return wird erst dann zur Schranke, wenn ein Schloss davor
+    # liegt und sein Schluessel dahinter landen koennte.
+    'andy1' = @( @{ IslandTypes = @(); DeadstopRooms = @(47,186) } )
     # DeadstopRooms definiert die Insel ueber einen ZWEITEN, schaerferen Flood.
     # Die Gleisbett-Kette 2/4/5 und Raum 89 sind darin gesperrt, ihre
     # Flippartner 43 und 53 werden abgeleitet. Was dann noch ab Laras Start
@@ -1779,6 +1798,10 @@ foreach($ig in $islandGroups){
 # Hallenboden.
 $keyMinFloorY = @{}
 foreach($ig in $islandGroups){
+    # Ohne BaselineRoom gibt es keine Hoehengrenze - eine Gruppe darf auch nur
+    # aus Deadstops bestehen. Ohne diese Pruefung wuerde [int]$null zu 0 und
+    # damit versehentlich Raum 0 als Baseline genommen.
+    if ($null -eq $ig.BaselineRoom) { continue }
     $bs = @($d.sectors | Where-Object { [int]$_.room -eq [int]$ig.BaselineRoom -and -not $_.isWall -and $_.hasFloor })
     if ($bs.Count -eq 0) { Write-Output "WARNUNG: Inselgruppe - Baseline-Raum $($ig.BaselineRoom) hat keine begehbaren Sektoren"; continue }
     $baseY = [int](($bs | Group-Object floorY | Sort-Object Count -Descending | Select-Object -First 1).Name)

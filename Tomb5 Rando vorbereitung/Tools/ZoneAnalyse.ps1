@@ -233,6 +233,16 @@ $TYPE_EXCLUDE_ROOMS = @{
         202 = @(11,12,16,20,24,25,34,40,42,60,61,65,73,76,92,93,98,138,152)
         203 = @(83,115)                       # Key Item8
     }
+    # joby3: Key Item7 darf nicht hinter Tuer 175 liegen, sie ist sein Deadstop
+    # (Nutzer: "Bis Raum 106 duerfen Key 6/7 auftauchen"). Gemessen mit einer
+    # Flut ab Raum 109, Tuer 175 als Wand, Raum 123 als Grenze: dahinter liegen
+    # 58 Raeume mit Ablagen - aber 52 davon schliesst die Zonengrenze <=Z2
+    # ohnehin schon aus. Uebrig bleiben diese sechs, und nur sie machen den
+    # Unterschied. Raum 109 ist der Fall, den der Nutzer im Testlevel sah.
+    # Key Item6 braucht nichts dergleichen: er bleibt beim Chef in VANILLA_TYPES.
+    'joby3' = @{
+        202 = @(49,60,109,126,152,159)
+    }
 }
 $typeExclude = @{}
 if ($TYPE_EXCLUDE_ROOMS.ContainsKey($LevelName)) {

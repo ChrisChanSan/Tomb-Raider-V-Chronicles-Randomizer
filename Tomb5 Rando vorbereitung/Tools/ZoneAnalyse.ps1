@@ -211,6 +211,11 @@ $EXCLUDE_ROOMS = @{
     # hat die Grenze dann bei rund y 13200 verortet, und dort liegt sie NICHT
     # mehr raumsauber. Sie steht jetzt als Zahl in $MIN_FLOOR_Y und deckt diese
     # drei Raeume mit ab.
+    #
+    # 120 und 122 kommen aus der Durchsicht des Nutzers dazu. Sie sind der
+    # groesste Einzelposten des Levels: je 96 Ablagen, zusammen 192 von 586,
+    # also ein knappes Drittel. Kein Item liegt in beiden.
+    'joby4' = @(120,122)
 }
 
 # Einzelne Sektoren sperren, wo ein ganzer Raum zu grob waere. Raum 141 in joby2

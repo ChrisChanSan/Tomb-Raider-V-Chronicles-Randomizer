@@ -191,6 +191,21 @@ $EXCLUDE_ROOMS = @{
     # Pickup liegt darin - nur zwei Sniper, Animatings und Bridge-Flats.
     'joby2' = @(6,7,9,14,149,155,158,
                 8,10,13,15,19,21,139,145,147,148,150,151,153,154,159)
+    # joby3, vom Nutzer in trview durchgesehen. Kein Pickup liegt darin - nur
+    # ein Electrical Light und ein Animating in Raum 104 sowie je eine
+    # geschlossene Tuer in 118 und 130.
+    #
+    # 116, 119, 129 und 184 sind beim Messen dazugekommen: sie haengen nur an
+    # den obigen Raeumen und fielen dadurch heraus. 116, 129 und 184 haben
+    # ohnehin keine einzige Ablage, sind also reine Durchgaenge. Raum 119 hat
+    # vier - die liegen laut Nutzer hinter einer Dekotuer und sind unerreichbar.
+    #
+    # Merkposten dazu: unsere Dekotueren-Regel behandelt eine Tuer ohne Trigger
+    # als NICHT sperrend. In joby2 war das richtig, weil Lara die Simse
+    # anspringen konnte. Hier ist es umgekehrt - die Tuer geht nie auf und es
+    # gibt keinen anderen Weg. Beide Faelle sehen in den Daten gleich aus, der
+    # Unterschied steckt allein in der Geometrie dahinter.
+    'joby3' = @(73,104,115,116,118,119,129,130,163,171,174,177,184)
 }
 
 # Einzelne Sektoren sperren, wo ein ganzer Raum zu grob waere. Raum 141 in joby2
@@ -1910,6 +1925,11 @@ $KNOWN_GAPS = @{
         66  = 'Dekoraum fuer den Ventilator'
         111 = 'Dekoraum fuer den Ventilator'
         113 = 'Dekoraum fuer den Ventilator'
+        # 180 kam erst zum Vorschein, nachdem die 13 Kulissenraeume gesperrt
+        # waren. Bauartgleich mit den vier obigen - 3x4, zwei begehbare
+        # Sektoren, kein Portal - und wie Raum 66 mit einem Electrical Light
+        # darin. Aus der Bauweise geschlossen, nicht vom Nutzer bestaetigt.
+        180 = 'Dekoraum fuer den Ventilator (aus der Bauweise geschlossen)'
     }
     'Andrea3' = @{
         13 = 'Antitrigger-Fix der Devs, fuer uns ohne Bedeutung'

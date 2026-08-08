@@ -147,6 +147,15 @@ foreach($lvl in $Levels){
             $isl = New-Object System.Collections.Generic.HashSet[string]
             foreach($k in $c.islandSectors){ [void]$isl.Add([string]$k) }
         }
+        # bannedSectors: die Umkehrung von islandSectors - hier darf der Typ
+        # gerade NICHT liegen. andy1s Zwillenhaelften duerfen nicht vor dem
+        # Teleporter liegen, sonst geht Lara ohne sie durch und kommt nie
+        # zurueck.
+        $bn = $null
+        if ($null -ne $c.bannedSectors) {
+            $bn = New-Object System.Collections.Generic.HashSet[string]
+            foreach($k in $c.bannedSectors){ [void]$bn.Add([string]$k) }
+        }
         $hs = $null
         if ($null -ne $c.minFloorYIsland) {
             $hs = New-Object System.Collections.Generic.HashSet[string]
@@ -155,6 +164,7 @@ foreach($lvl in $Levels){
         $eligible = @($z.sectors | Where-Object {
             $kk = "$($_.room),$($_.sectorX),$($_.sectorZ)"
             ($null -eq $isl -or $isl.Contains($kk)) -and
+            ($null -eq $bn -or -not $bn.Contains($kk)) -and
             [int]$_.zone -le [int]$c.maxZone -and $ex -notcontains [int]$_.room -and
             ($al.Count -eq 0 -or $al -contains [int]$_.room) -and
             ($null -eq $c.minFloorY -or ($null -ne $hs -and -not $hs.Contains($kk)) -or

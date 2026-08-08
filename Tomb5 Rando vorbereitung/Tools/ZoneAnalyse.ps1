@@ -212,7 +212,10 @@ $EXCLUDE_ROOMS = @{
     # erreichbar. Sie sind es nicht. Drei davon enthalten nur ein Pulse Light.
     # Dritter Fall dieser Art nach joby3 Raum 119 und joby2 Raum 11: in den
     # Daten sehen sperrende und nicht sperrende Dekotueren identisch aus.
-    'joby5' = @(160,169,172,175)
+    # Raum 112 kommt aus derselben Durchsicht: er haengt an einer Floor
+    # Trapdoor1 (Item 130) mit flags 0 und ohne jeden Trigger - sie geht nie
+    # auf. Vierter Fall der Dekotueren-Grenze in diesem Level.
+    'joby5' = @(112,160,169,172,175)
     # joby4 stand hier zuerst mit den Raeumen 116, 135, 136 - der Schaetzung
     # 3 x 1024 folgend und damals raumsauber. Die Messung des Nutzers im Spiel
     # hat die Grenze dann bei rund y 13200 verortet, und dort liegt sie NICHT

@@ -1982,6 +1982,18 @@ $KNOWN_GAPS = @{
     # joby3: vier Nischen fuer die Ventilatoren. Alle vier bauartgleich - 3x4
     # Raum, genau zwei begehbare Sektoren, kein einziges Portal; in Raum 66
     # sitzt sichtbar ein Electrical Light. Vom Nutzer in trview bestaetigt.
+    # joby4: Raum 0 liegt ausserhalb der Karte, ein Ueberbleibsel der Devs ohne
+    # Funktion - vom Nutzer in trview angesehen. Einer der drei Nicht-Wasser-
+    # raeume des Levels, floorY -1024 bis 256 und damit weit ueber der
+    # Schwimmgrenze. Er meldete sich als mehrere Ein-Sektor-Luecken.
+    # Laut Nutzer sind 0 und 1 der Raum below und above eines Stapels - beide
+    # ausserhalb der Karte. Das deckt sich mit den Daten: gleiche Masse 6x15,
+    # dieselben 52 Nicht-Wand-Sektoren, null Ablagen, keine Items, beide kein
+    # Wasserraum, und Raum 0 hat sein einziges Portal nach Raum 1.
+    'joby4' = @{
+        0 = 'Out of map, Ueberbleibsel der Devs, ohne Funktion (Raum below)'
+        1 = 'Out of map, Ueberbleibsel der Devs, ohne Funktion (Raum above)'
+    }
     'joby3' = @{
         63  = 'Dekoraum fuer den Ventilator'
         66  = 'Dekoraum fuer den Ventilator'

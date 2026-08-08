@@ -360,8 +360,8 @@ $noPlacement = @( if($NO_PLACEMENT_ROOMS.ContainsKey($LevelName)){ $NO_PLACEMENT
 # Deshalb hier: der Weg bleibt, die Ablagen verschwinden.
 #----------------------------------------------------------------------------
 $NO_ITEM_ROOMS = @{
-    'andy1' = @(2,24,30,33,41,42,50,64,65,68,72,74,75,76,77,103,129,139,140,
-                147,160,161,163,171,174,175,193,195,242)
+    'andy1' = @(2,11,24,30,32,33,41,42,50,64,65,68,69,72,74,75,76,77,103,129,
+                139,140,147,160,161,163,171,174,175,191,193,195,198,242)
 }
 $noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$LevelName] } )
 
@@ -829,6 +829,14 @@ $MANUAL_LINK = @{
         @('11,9,1',    '11,5,1')
     )
 }
+
+# Einzelne Sektoren, in denen nichts liegen darf - im Gegensatz zu
+# EXCLUDE_SECTORS bleiben sie begehbar. Sektorfeine Fassung von NO_ITEM_ROOMS,
+# fuer Raeume, die im Uebrigen voellig in Ordnung sind.
+$NO_ITEM_SECTORS = @{
+    'andy1' = @('176,2,1','176,3,1','170,1,6','170,3,6','170,3,4')
+}
+$noItemSectors = @( if($NO_ITEM_SECTORS.ContainsKey($LevelName)){ $NO_ITEM_SECTORS[$LevelName] } )
 
 # Schluessel, die NICHT verbraucht werden. Der Normalfall in TR ist: Key oder
 # Puzzle-Item wandert ins Schloss und ist weg - KeyHoleCollision (game/pickup.cpp:
@@ -1834,6 +1842,7 @@ if ($ExportZonesJson -ne "") {
         if ($null -ne $levelMinFloorY -and [int]$s.floorY -lt $levelMinFloorY) { continue }
         if ($null -ne $levelMinClearance -and [int]$s.clearance -lt $levelMinClearance) { continue }
         if ($noItemRooms -contains [int]$s.room) { continue }
+        if ($noItemSectors -contains "$($s.room),$($s.sectorX),$($s.sectorZ)") { continue }
         $rows += [PSCustomObject]@{ room=[int]$s.room; sectorX=[int]$s.sectorX; sectorZ=[int]$s.sectorZ; zone=[int]$kv.Value; floorY=[int]$s.floorY }
     }
     $maxZoneOut = if($rows.Count -gt 0){ ($rows | Measure-Object -Property zone -Maximum).Maximum } else { 0 }
@@ -2105,7 +2114,8 @@ $KNOWN_GAPS = @{
     # dieselben 52 Nicht-Wand-Sektoren, null Ablagen, keine Items, beide kein
     # Wasserraum, und Raum 0 hat sein einziges Portal nach Raum 1.
     'andy1' = @{
-        49 = 'Nicht angebunden'
+        49  = 'Nicht angebunden'
+        220 = 'Nicht angebunden'
     }
     'joby4' = @{
         0 = 'Out of map, Ueberbleibsel der Devs, ohne Funktion (Raum below)'

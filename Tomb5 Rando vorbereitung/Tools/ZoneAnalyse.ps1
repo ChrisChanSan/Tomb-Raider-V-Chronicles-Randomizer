@@ -206,19 +206,11 @@ $EXCLUDE_ROOMS = @{
     # gibt keinen anderen Weg. Beide Faelle sehen in den Daten gleich aus, der
     # Unterschied steckt allein in der Geometrie dahinter.
     'joby3' = @(73,104,115,116,118,119,129,130,163,171,174,177,184)
-    # joby4 ist ein Tauchlevel - 134 von 137 Raeumen sind Wasserraeume. Laut
-    # Nutzer kann Lara darin nicht ueber eine bestimmte Hoehe hinaufschwimmen;
-    # was darueber liegt, ist unerreichbar, und dort standen Marker im Luftraum
-    # ueber der Insel. Seine Schaetzung fuer die Grenze war 3 x 1024.
-    #
-    # Die Messung trifft das raumsauber: 116, 135 und 136 liegen mit ihren 33
-    # Ablagen vollstaendig bei floorY -768 bis 512, die naechste Gruppe (115,
-    # 132, 133) geschlossen bei 3840. Kein Raum liegt auf beiden Seiten.
-    # Deshalb hier als Raumliste und nicht als Hoehenregel: exakt dasselbe
-    # Ergebnis, ohne einen Grenzwert, den spaeter niemand mehr herleiten kann.
-    # Taucht die Eigenschaft in einem Level auf, das NICHT raumsauber liegt,
-    # ist das der Anlass fuer die allgemeine Regel - dann weiss man auch wofuer.
-    'joby4' = @(116,135,136)
+    # joby4 stand hier zuerst mit den Raeumen 116, 135, 136 - der Schaetzung
+    # 3 x 1024 folgend und damals raumsauber. Die Messung des Nutzers im Spiel
+    # hat die Grenze dann bei rund y 13200 verortet, und dort liegt sie NICHT
+    # mehr raumsauber. Sie steht jetzt als Zahl in $MIN_FLOOR_Y und deckt diese
+    # drei Raeume mit ab.
 }
 
 # Einzelne Sektoren sperren, wo ein ganzer Raum zu grob waere. Raum 141 in joby2
@@ -605,6 +597,30 @@ $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] }
 # Waffen. Typ 353 "Silencer" steht bewusst nicht in der Liste: er kommt in
 # keinem der 16 Level vor, ist also ein ungenutzter Engine-Slot.
 #----------------------------------------------------------------------------
+#----------------------------------------------------------------------------
+# Levelweite Hoehengrenze fuer Ablagen.
+#
+# joby4 ist ein Tauchlevel, und der Nutzer hat im Spiel gemessen: Lara kommt
+# nirgends hoeher als etwa y 13200. Das ist keine Engine-Grenze - der Code kennt
+# fuer vertikalen Zwang nur die Sinks (laraswim.cpp:721, sie ziehen Lara auf
+# ihre eigene Hoehe) - sondern die Wasseroberflaeche. Oberhalb beginnt bei
+# yBottom 13056 die naechste Raumschicht, in die sie vom Wasser aus nicht mehr
+# aufsteigt: 21 Raeume dort, weitere 27 darueber.
+#
+# Anders als die Inselgruppe in joby2 ist das keine Eigenschaft einer Gruppe und
+# gilt fuer ALLE Typen, nicht nur fuer Schluessel. Und anders als zuerst
+# angenommen ist es nicht raumsauber - Raum 72 etwa hat Boeden bei 11008, 12032
+# und 12544, liegt also teils ueber und teils unter der Linie. Eine Raumliste
+# kann das nicht abbilden, deshalb hier als Zahl.
+#
+# KLEINERES y liegt HOEHER: die Bedingung ist floorY >= Grenze.
+#----------------------------------------------------------------------------
+$MIN_FLOOR_Y = @{
+    'joby4' = 13312
+}
+$levelMinFloorY = $null
+if ($MIN_FLOOR_Y.ContainsKey($LevelName)) { $levelMinFloorY = [int]$MIN_FLOOR_Y[$LevelName] }
+
 $WEAPON_TYPES = 334..348
 $NO_WEAPON_ROOMS = @{
     'joby3' = @(105,106,120,124,125)
@@ -1675,6 +1691,7 @@ if ($ExportZonesJson -ne "") {
     foreach($kv in $zoneOf.GetEnumerator()){
         $s = $sec[$kv.Key]
         if (-not $s -or -not $s.validForItems) { continue }
+        if ($null -ne $levelMinFloorY -and [int]$s.floorY -lt $levelMinFloorY) { continue }
         $rows += [PSCustomObject]@{ room=[int]$s.room; sectorX=[int]$s.sectorX; sectorZ=[int]$s.sectorZ; zone=[int]$kv.Value; floorY=[int]$s.floorY }
     }
     $maxZoneOut = if($rows.Count -gt 0){ ($rows | Measure-Object -Property zone -Maximum).Maximum } else { 0 }

@@ -822,10 +822,14 @@ $ISLAND_GROUP = @{
     # vor SEINEM SCHLOSS. Das prueft die Zonenregel ohnehin (Zone <= 1). Der
     # Point of no return wird erst dann zur Schranke, wenn ein Schloss davor
     # liegt und sein Schluessel dahinter landen koennte.
-    # NotOnIslandTypes sind die Zwillenhaelften: sie duerfen NICHT vor dem
-    # Teleporter liegen. Zusammen mit ihrer Zonengrenze 0 aus POOL_TYPES ergibt
-    # das den Korridor "nach dem Point of no return, vor der Kirche".
-    'andy1' = @( @{ IslandTypes = @(); NotOnIslandTypes = @(182,183); DeadstopRooms = @(47,186) } )
+    # NotOnIslandTypes: alle vier Fortschrittsgegenstaende duerfen NICHT vor dem
+    # Teleporter liegen. Fuer jeden von ihnen gilt derselbe Softlock - Lara geht
+    # hindurch, ohne ihn eingesammelt zu haben, und kommt nie zurueck.
+    #
+    # Zusammen mit der jeweiligen Zonengrenze ergibt das zwei Korridore:
+    #   182/183 (Zwille)          Zone 0 -> zwischen Teleporter und Kirche
+    #   172 (Herz), 174 (Klapper) Zone 1 -> ab Teleporter bis hinter die Kirche
+    'andy1' = @( @{ IslandTypes = @(); NotOnIslandTypes = @(172,174,182,183); DeadstopRooms = @(47,186) } )
     # DeadstopRooms definiert die Insel ueber einen ZWEITEN, schaerferen Flood.
     # Die Gleisbett-Kette 2/4/5 und Raum 89 sind darin gesperrt, ihre
     # Flippartner 43 und 53 werden abgeleitet. Was dann noch ab Laras Start

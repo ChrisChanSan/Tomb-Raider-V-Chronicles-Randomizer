@@ -667,6 +667,12 @@ $POOL_TYPES = @{
     # Nutzer: das Level hat keinen Point of no return, die Teile sind rein
     # fuers Ende - sie duerfen deshalb ueberall auftauchen.
     'joby3' = @(184,185,186,187)
+    # joby5: Puzzle Item1 und Item2 oeffnen das Levelende. Slot 1 oeffnet Slot 2,
+    # Slot 2 loest das Ende aus. Das erklaert auch, warum der Trigger an Puzzle
+    # Hole2 (Item 108) leer aussieht - er hat kein Object-Kommando, weil er das
+    # Level beendet statt eine Tuer zu oeffnen. Beide duerfen laut Nutzer
+    # ueberall liegen, ohne jede Einschraenkung.
+    'joby5' = @(172,173)
 }
 $poolTypes = @( if($POOL_TYPES.ContainsKey($LevelName)){ $POOL_TYPES[$LevelName] } )
 
@@ -1993,6 +1999,20 @@ $KNOWN_GAPS = @{
     'joby4' = @{
         0 = 'Out of map, Ueberbleibsel der Devs, ohne Funktion (Raum below)'
         1 = 'Out of map, Ueberbleibsel der Devs, ohne Funktion (Raum above)'
+    }
+    # joby5, alle vier Luecken vom Nutzer in trview durchgesehen. Raum 104 ist
+    # dabei der mit dem Keyhole8, dessen Tuer 103 ohnehin 11111 traegt und ab
+    # Levelstart offen steht - das Schloss ist gegenstandslos.
+    'joby5' = @{
+        11  = 'Ventilatorraum'
+        22  = 'Out of map, ohne Bedeutung'
+        23  = 'Out of map, ohne Bedeutung'
+        87  = 'Kulisse'
+        95  = 'Kulisse'
+        104 = 'Kulisse (enthaelt das gegenstandslose Keyhole8 zu Tuer 103)'
+        105 = 'Ventilatorraum'
+        166 = 'Kulisse'
+        167 = 'Kulisse'
     }
     'joby3' = @{
         63  = 'Dekoraum fuer den Ventilator'

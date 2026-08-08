@@ -621,6 +621,32 @@ $MIN_FLOOR_Y = @{
 $levelMinFloorY = $null
 if ($MIN_FLOOR_Y.ContainsKey($LevelName)) { $levelMinFloorY = [int]$MIN_FLOOR_Y[$LevelName] }
 
+#----------------------------------------------------------------------------
+# Mindestlichte zwischen Boden und Decke.
+#
+# Der Exporter schneidet von sich aus bei 512 ab - kein Level hat eine Ablage
+# darunter. Der Nutzer hat in joby4 Raum 123 Sektor (3,3) geprueft: floorY
+# 15616, ceilingY 15104, also genau 512, und Lara kommt dort nicht hin. 768 ist
+# die Kriechhoehe der Engine und damit die naechste sinnvolle Stufe.
+#
+# BEWUSST NICHT GLOBAL. Die Gegenprobe ueber alle Level findet 25 Vanilla-
+# Pickups auf Sektoren mit clearance < 768 - darunter joby3s Key Item6 in Raum
+# 120 bei 256 und in rich2 ein HK bei 0. Grund: clearance beschreibt den SEKTOR,
+# nicht das Item. Ein Pickup hat seine eigene y-Koordinate und kann auf einem
+# Sims, in einer Nische oder auf einem Sockel liegen, wo der Sektorboden an die
+# Decke stoesst. Die Lichte ist also kein verlaesslicher Stellvertreter fuer
+# "Lara kommt da hin".
+#
+# joby4 kommt in dieser Trefferliste NICHT vor - dort liegt kein Vanilla-Pickup
+# unter 768. Nur deshalb steht es hier. Jedes weitere Level braucht denselben
+# Nachweis, und fuer joby3, joby5, rich2 und rich3 scheitert er nachweislich.
+#----------------------------------------------------------------------------
+$MIN_CLEARANCE = @{
+    'joby4' = 768
+}
+$levelMinClearance = $null
+if ($MIN_CLEARANCE.ContainsKey($LevelName)) { $levelMinClearance = [int]$MIN_CLEARANCE[$LevelName] }
+
 $WEAPON_TYPES = 334..348
 $NO_WEAPON_ROOMS = @{
     'joby3' = @(105,106,120,124,125)
@@ -1692,6 +1718,7 @@ if ($ExportZonesJson -ne "") {
         $s = $sec[$kv.Key]
         if (-not $s -or -not $s.validForItems) { continue }
         if ($null -ne $levelMinFloorY -and [int]$s.floorY -lt $levelMinFloorY) { continue }
+        if ($null -ne $levelMinClearance -and [int]$s.clearance -lt $levelMinClearance) { continue }
         $rows += [PSCustomObject]@{ room=[int]$s.room; sectorX=[int]$s.sectorX; sectorZ=[int]$s.sectorZ; zone=[int]$kv.Value; floorY=[int]$s.floorY }
     }
     $maxZoneOut = if($rows.Count -gt 0){ ($rows | Measure-Object -Property zone -Maximum).Maximum } else { 0 }

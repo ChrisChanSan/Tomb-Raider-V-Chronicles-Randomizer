@@ -219,7 +219,14 @@ $EXCLUDE_ROOMS = @{
     # 113 (dort wird eine Cutscene ausgeloest, Kernbereich) sowie 195, 50, 197,
     # 170, 38 und 37 - alle bespielbar. Der Generator zeigt Verdaechtige, keine
     # Ergebnisse; hier lag er in sieben von dreizehn Faellen daneben.
-    'andy1' = @(71,92,93,162,211,236)
+    #
+    # Zweite Gruppe: 6, 14, 16, 20, 58, 59 und 185 liegen zusammen in einer
+    # Levelecke und sind samt und sonders nicht erreichbar. Zusammen nur 19
+    # Ablagen und kein einziges Item. Raum 59 war dabei der Anlass - er hat 26
+    # begehbare Sektoren und Portale nach 6, 16 und 185, sieht also nach einem
+    # ordentlichen Raum aus. Er ist einer, nur betritt ihn niemand.
+    # Nutzer: "Das werden wir in dem Level oefter haben."
+    'andy1' = @(6,14,16,20,58,59,71,92,93,162,185,211,236)
     # joby5: vier Raeume gleich am Levelanfang. Die Tueren davor - 176, 187,
     # 193 und 195 - haben KEINEN Trigger, unsere Dekotueren-Regel laesst sie
     # deshalb als nicht sperrend durchgehen und die Raeume dahinter gelten als

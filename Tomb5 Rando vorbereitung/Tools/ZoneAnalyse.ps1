@@ -206,6 +206,19 @@ $EXCLUDE_ROOMS = @{
     # gibt keinen anderen Weg. Beide Faelle sehen in den Daten gleich aus, der
     # Unterschied steckt allein in der Geometrie dahinter.
     'joby3' = @(73,104,115,116,118,119,129,130,163,171,174,177,184)
+    # joby4 ist ein Tauchlevel - 134 von 137 Raeumen sind Wasserraeume. Laut
+    # Nutzer kann Lara darin nicht ueber eine bestimmte Hoehe hinaufschwimmen;
+    # was darueber liegt, ist unerreichbar, und dort standen Marker im Luftraum
+    # ueber der Insel. Seine Schaetzung fuer die Grenze war 3 x 1024.
+    #
+    # Die Messung trifft das raumsauber: 116, 135 und 136 liegen mit ihren 33
+    # Ablagen vollstaendig bei floorY -768 bis 512, die naechste Gruppe (115,
+    # 132, 133) geschlossen bei 3840. Kein Raum liegt auf beiden Seiten.
+    # Deshalb hier als Raumliste und nicht als Hoehenregel: exakt dasselbe
+    # Ergebnis, ohne einen Grenzwert, den spaeter niemand mehr herleiten kann.
+    # Taucht die Eigenschaft in einem Level auf, das NICHT raumsauber liegt,
+    # ist das der Anlass fuer die allgemeine Regel - dann weiss man auch wofuer.
+    'joby4' = @(116,135,136)
 }
 
 # Einzelne Sektoren sperren, wo ein ganzer Raum zu grob waere. Raum 141 in joby2

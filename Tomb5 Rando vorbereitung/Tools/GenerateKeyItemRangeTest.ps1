@@ -89,9 +89,37 @@ foreach($lvl in $Levels){
     if (-not (Test-Path $zonesJson)) { "SKIP $lvl - Zonen-Export fehlgeschlagen"; continue }
     $z = Get-Content $zonesJson -Raw | ConvertFrom-Json
     $constraints = @($z.keyConstraints)
+    #------------------------------------------------------------------------
+    # Level ohne Schluesselschloesser trotzdem pruefbar machen.
+    #
+    # Sechs der vierzehn Level haben keine Key-/Puzzle-Constraints - joby4,
+    # Andy2, andy3, rich2, rich3, richcut2 - und wurden bisher uebersprungen.
+    # Damit gab es fuer sie kein aktuelles Testlevel und keine Moeglichkeit,
+    # die Kuration in trview gegenzusehen. Genau das ist bei joby4 aufgefallen:
+    # der Nutzer schaute auf eine vier Tage alte Datei aus einem Werkzeug, das
+    # es nicht mehr gibt.
+    #
+    # Ersatzweise wird ein einzelner Constraint gebaut, der ALLE gueltigen
+    # Sektoren abdeckt. Als Typ dient ein Pickup, das im Level wirklich
+    # vorkommt - ein Typ ohne Eintrag in der Objekttabelle waere im Spiel
+    # unsichtbar. Bevorzugt wird der haeufigste, dann ist er in trview leicht
+    # ueber die Typliste zu finden.
+    #------------------------------------------------------------------------
     if ($constraints.Count -eq 0) {
-        "SKIP ${lvl} - keine Key-/Puzzle-Constraints abgeleitet, nichts zu zeigen"
-        continue
+        $cand = @($d.items | Where-Object { $t=[int]$_.typeId; ($t -ge 172 -and $t -le 241) -or ($t -ge 334 -and $t -le 355) } |
+                  Group-Object typeId | Sort-Object Count -Descending)
+        if ($cand.Count -eq 0) {
+            "SKIP ${lvl} - keine Constraints und kein einziges Pickup im Level, nichts zu zeigen"
+            continue
+        }
+        $genericType = [int]$cand[0].Name
+        $maxZ = if($null -ne $z.maxZone){ [int]$z.maxZone } else { 0 }
+        $constraints = @([PSCustomObject]@{
+            typeId = $genericType; maxZone = $maxZ; instances = [int]$cand[0].Count
+            reusable = $false; excludeRooms = @(); allowRooms = @()
+            minFloorY = $null; minFloorYZone = $null
+            islandSectors = $null; minFloorYIsland = $null })
+        "  ${lvl}: keine Key-Constraints - alle gueltigen Sektoren mit Typ $genericType gefuellt"
     }
 
     $itemAdds = @()

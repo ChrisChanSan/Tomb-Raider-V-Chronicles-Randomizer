@@ -206,6 +206,13 @@ $EXCLUDE_ROOMS = @{
     # gibt keinen anderen Weg. Beide Faelle sehen in den Daten gleich aus, der
     # Unterschied steckt allein in der Geometrie dahinter.
     'joby3' = @(73,104,115,116,118,119,129,130,163,171,174,177,184)
+    # joby5: vier Raeume gleich am Levelanfang. Die Tueren davor - 176, 187,
+    # 193 und 195 - haben KEINEN Trigger, unsere Dekotueren-Regel laesst sie
+    # deshalb als nicht sperrend durchgehen und die Raeume dahinter gelten als
+    # erreichbar. Sie sind es nicht. Drei davon enthalten nur ein Pulse Light.
+    # Dritter Fall dieser Art nach joby3 Raum 119 und joby2 Raum 11: in den
+    # Daten sehen sperrende und nicht sperrende Dekotueren identisch aus.
+    'joby5' = @(160,169,172,175)
     # joby4 stand hier zuerst mit den Raeumen 116, 135, 136 - der Schaetzung
     # 3 x 1024 folgend und damals raumsauber. Die Messung des Nutzers im Spiel
     # hat die Grenze dann bei rund y 13200 verortet, und dort liegt sie NICHT
@@ -267,6 +274,13 @@ $TYPE_EXCLUDE_ROOMS = @{
     # Key Item6 braucht nichts dergleichen: er bleibt beim Chef in VANILLA_TYPES.
     'joby3' = @{
         202 = @(49,60,109,126,152,159)
+    }
+    # joby5: Keyhole6 oeffnet die Raeume 18, 54 und 106. Key Item6 darf dort
+    # nicht liegen - er waere hinter der Tuer, die er selbst oeffnet. Genau der
+    # Fall, den die zurueckgenommene automatische Regel abdecken sollte; bis es
+    # dafuer eine tragfaehige Loesung gibt (Aufgabe #49), steht er hier.
+    'joby5' = @{
+        201 = @(18,54,106)
     }
 }
 $typeExclude = @{}

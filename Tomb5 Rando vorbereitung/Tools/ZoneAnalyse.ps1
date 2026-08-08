@@ -226,6 +226,21 @@ $EXCLUDE_ROOMS = @{
     # begehbare Sektoren und Portale nach 6, 16 und 185, sieht also nach einem
     # ordentlichen Raum aus. Er ist einer, nur betritt ihn niemand.
     # Nutzer: "Das werden wir in dem Level oefter haben."
+    #
+    # Dritte und groesste Gruppe, 30 Raeume aus einer weiteren Durchsicht. Der
+    # Nutzer zum Verfahren: "Wir nehmen ganze Raeume, alles andere waere zu
+    # krass." Raum 193 steht beispielhaft dafuer - acht Ablagen, Bodenhoehen
+    # von 5632 bis 8192, also bis zu zweieinhalb Meter Unterschied zwischen
+    # Nachbarsektoren. Geometrisch begehbar, mit Laras Bewegungen nicht
+    # anzulaufen. Sektorgenau zu kuratieren waere hier unverhaeltnismaessig.
+    #
+    # Kostet 127 der 502 Ablagen und kein einziges Pickup. Raeume 50 und 195
+    # galten in einer frueheren Durchsicht noch als Kernlevel und sind bei
+    # naeherem Hinsehen doch keiner - die spaetere Angabe gilt.
+    # Die 30 Raeume aus der dritten Durchsicht stehen NICHT hier, sondern in
+    # NO_ITEM_ROOMS: sie sind Kernbereiche, durch die Lara hindurchgeht, nur
+    # ihre Raender sind keine Ablage. Als Begehbarkeitssperre haetten sie die
+    # Schluesselkette gekappt.
     'andy1' = @(6,14,16,20,58,59,71,92,93,162,185,211,236)
     # joby5: vier Raeume gleich am Levelanfang. Die Tueren davor - 176, 187,
     # 193 und 195 - haben KEINEN Trigger, unsere Dekotueren-Regel laesst sie
@@ -326,6 +341,29 @@ $NO_PLACEMENT_ROOMS = @{
     'Andrea3' = @(1,2,3,4,5,6,11,19,20,21,22,29,30,34,112,123,124)
 }
 $noPlacement = @( if($NO_PLACEMENT_ROOMS.ContainsKey($LevelName)){ $NO_PLACEMENT_ROOMS[$LevelName] } )
+
+#----------------------------------------------------------------------------
+# Raeume, die begehbar bleiben, in denen aber GAR NICHTS liegen darf.
+#
+# Die dritte Sperrebene, und sie war noetig, weil die beiden anderen den Fall
+# nicht treffen: EXCLUDE_ROOMS nimmt den Raum auch aus dem Wegenetz,
+# NO_PLACEMENT_ROOMS sperrt nur Key- und Puzzle-Items.
+#
+# andy1 hat den Fall in Reinform. Der Nutzer beschreibt eine Schlucht, durch die
+# Lara hindurchgeht; an ihren Raendern liegen Stellen, die geometrisch begehbar
+# und in Wirklichkeit nicht anzulaufen sind. Sektorgenau waere das
+# unverhaeltnismaessig - "ich muesste jetzt 12 Sektoren als nicht valide suchen,
+# nur um 4 gute zu retten". Als EXCLUDE_ROOMS eingetragen kappte die Liste
+# dagegen den Zugang zu 229 Sektoren mitsamt Puzzle Item1 und seinem Schloss,
+# das Level war im Modell nicht mehr loesbar.
+#
+# Deshalb hier: der Weg bleibt, die Ablagen verschwinden.
+#----------------------------------------------------------------------------
+$NO_ITEM_ROOMS = @{
+    'andy1' = @(2,24,30,33,41,42,50,64,65,68,72,74,75,76,77,103,129,139,140,
+                147,160,161,163,171,174,175,193,195,242)
+}
+$noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$LevelName] } )
 
 # Positivliste statt Sperrliste: manche Typen duerfen nur in einem klar
 # umrissenen Abschnitt liegen. Andrea3 ist der Fall - beide Keys muessen im
@@ -1795,6 +1833,7 @@ if ($ExportZonesJson -ne "") {
         if (-not $s -or -not $s.validForItems) { continue }
         if ($null -ne $levelMinFloorY -and [int]$s.floorY -lt $levelMinFloorY) { continue }
         if ($null -ne $levelMinClearance -and [int]$s.clearance -lt $levelMinClearance) { continue }
+        if ($noItemRooms -contains [int]$s.room) { continue }
         $rows += [PSCustomObject]@{ room=[int]$s.room; sectorX=[int]$s.sectorX; sectorZ=[int]$s.sectorZ; zone=[int]$kv.Value; floorY=[int]$s.floorY }
     }
     $maxZoneOut = if($rows.Count -gt 0){ ($rows | Measure-Object -Property zone -Maximum).Maximum } else { 0 }
@@ -2065,6 +2104,9 @@ $KNOWN_GAPS = @{
     # ausserhalb der Karte. Das deckt sich mit den Daten: gleiche Masse 6x15,
     # dieselben 52 Nicht-Wand-Sektoren, null Ablagen, keine Items, beide kein
     # Wasserraum, und Raum 0 hat sein einziges Portal nach Raum 1.
+    'andy1' = @{
+        49 = 'Nicht angebunden'
+    }
     'joby4' = @{
         0 = 'Out of map, Ueberbleibsel der Devs, ohne Funktion (Raum below)'
         1 = 'Out of map, Ueberbleibsel der Devs, ohne Funktion (Raum above)'

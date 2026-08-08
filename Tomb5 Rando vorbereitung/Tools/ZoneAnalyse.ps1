@@ -776,8 +776,32 @@ $POOL_TYPES = @{
     # Level beendet statt eine Tuer zu oeffnen. Beide duerfen laut Nutzer
     # ueberall liegen, ohne jede Einschraenkung.
     'joby5' = @(172,173)
+    # andy1: drei Typen, zwei verschiedene Grenzen. Als Hashtabelle geschrieben,
+    # weil eine reine Typliste das nicht ausdruecken kann - typeId -> maxZone.
+    #
+    # 182/183 sind die Zwillenhaelften, die das Kirchen-Flipmap-Tor oeffnen
+    # (FLIP_GATE, NeedTypes). Sie muessen VOR der Kirche liegen, sonst oeffnet
+    # sich das Tor nie, das sie selbst aufziehen - der Uebergang ist Zone 0 -> 1,
+    # also Zone 0. Hinter dem Point of no return duerfen sie liegen, das ist
+    # kein Widerspruch: der Teleporter fuehrt in Zone 0 hinein.
+    #
+    # 174 ist die Eisenklapper, mit der Lara in Cutscene 10 die Imps abwehrt -
+    # ohne sie stirbt sie dort. Der Nutzer laesst sie wie das Herz in beiden
+    # Bereichen zu; die Cutscene liegt im echten Spielverlauf hinter Raum 202,
+    # also nach der Kirche. Zone 1 deckt das ab.
+    #
+    # 172, das Herz, steht nicht hier - es hat ein Schloss und damit bereits
+    # eine abgeleitete Grenze (Zone <= 1).
+    'andy1' = @{ 174 = 1; 182 = 0; 183 = 0 }
 }
-$poolTypes = @( if($POOL_TYPES.ContainsKey($LevelName)){ $POOL_TYPES[$LevelName] } )
+# Zwei Schreibweisen: eine Liste von typeIds (keine Zonengrenze) oder eine
+# Hashtabelle typeId -> maxZone. Beides wird hier auf dieselbe Form gebracht.
+$poolTypes = @{}
+if ($POOL_TYPES.ContainsKey($LevelName)) {
+    $pv = $POOL_TYPES[$LevelName]
+    if ($pv -is [hashtable]) { foreach($kv in $pv.GetEnumerator()){ $poolTypes[[int]$kv.Key] = [int]$kv.Value } }
+    else { foreach($t in @($pv)){ $poolTypes[[int]$t] = $null } }
+}
 
 $ISLAND_GROUP = @{
     # andy1 hat einen Point of no return: der Teleporter in Raum 47 bringt Lara
@@ -1872,18 +1896,20 @@ if ($ExportZonesJson -ne "") {
     # Pool-Typen ohne Zonengrenze anhaengen. maxZone bekommt den hoechsten im
     # Level vorkommenden Wert, damit wirklich jede Zone offensteht; Insel- und
     # Hoehengrenzen bleiben leer, denn diese Typen gehoeren keiner Gruppe an.
-    foreach($pt in $poolTypes){
-        $pt = [int]$pt
+    foreach($ptKv in $poolTypes.GetEnumerator()){
+        $pt = [int]$ptKv.Key
+        $ptZone = if ($null -eq $ptKv.Value) { $maxZoneOut } else { [int]$ptKv.Value }
         if (@($keyConstraints | Where-Object { [int]$_.typeId -eq $pt }).Count -gt 0) { continue }
         $inst = @($d.items | Where-Object { [int]$_.typeId -eq $pt }).Count
         # NO_KEY_ROOMS gilt hier ausdruecklich NICHT. Pool-Typen haben keine
         # Kette im Level - joby5s Puzzle 1 und 2 werden erst ganz am Ende
         # gebraucht, und da ist der Strom laengst abgeschaltet. Nutzer: "Die
         # Puzzels koennen wir lassen, nur Keys sind wichtig."
-        $keyConstraints += [PSCustomObject]@{ typeId=$pt; maxZone=$maxZoneOut; instances=$inst
+        $keyConstraints += [PSCustomObject]@{ typeId=$pt; maxZone=$ptZone; instances=$inst
             reusable=($reusableKeys -contains $pt); excludeRooms=@(); allowRooms=@()
             minFloorY=$null; minFloorYZone=$null; islandSectors=$null; minFloorYIsland=$null }
-        Write-Output "Pool-Typ $pt ohne Zonengrenze aufgenommen ($inst Instanzen im Level, maxZone=$maxZoneOut)"
+        $wie = if ($null -eq $ptKv.Value) { 'ohne Zonengrenze' } else { "begrenzt auf Zone <= $ptZone" }
+        Write-Output "Pool-Typ $pt $wie aufgenommen ($inst Instanzen im Level)"
     }
     [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; requiredInjections=$requiredInjections; noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
     Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"

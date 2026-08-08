@@ -211,6 +211,15 @@ $EXCLUDE_ROOMS = @{
     # gibt keinen anderen Weg. Beide Faelle sehen in den Daten gleich aus, der
     # Unterschied steckt allein in der Geometrie dahinter.
     'joby3' = @(73,104,115,116,118,119,129,130,163,171,174,177,184)
+    # andy1, vom Nutzer in trview durchgesehen. Raum 236 ist mit 36 Ablagen der
+    # groesste Einzelposten des Levels und liegt hinter dem Levelende - reine
+    # Kulisse. 71, 92, 93, 162 und 211 ebenso. Kein Item liegt in einem davon.
+    #
+    # Ausdruecklich NICHT dabei, obwohl der Verdachtsgenerator sie oben listete:
+    # 113 (dort wird eine Cutscene ausgeloest, Kernbereich) sowie 195, 50, 197,
+    # 170, 38 und 37 - alle bespielbar. Der Generator zeigt Verdaechtige, keine
+    # Ergebnisse; hier lag er in sieben von dreizehn Faellen daneben.
+    'andy1' = @(71,92,93,162,211,236)
     # joby5: vier Raeume gleich am Levelanfang. Die Tueren davor - 176, 187,
     # 193 und 195 - haben KEINEN Trigger, unsere Dekotueren-Regel laesst sie
     # deshalb als nicht sperrend durchgehen und die Raeume dahinter gelten als

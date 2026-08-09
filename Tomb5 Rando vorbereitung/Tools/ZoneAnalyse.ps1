@@ -551,6 +551,15 @@ $VANILLA_TYPES = @{
     # mit Door 4 und Door 2. Im Spiel faellt sie aus dem Anzug, sobald dessen
     # Animation laeuft. Ein Ortswechsel wuerde die Enthuellung zerstoeren.
     'rich1'   = @(174)
+    # andy3: alle drei Puzzle-Items bleiben liegen. Nutzerentscheidung, und die
+    # Bilder aus trview zeigen warum - jedes steckt in der Kulisse statt auf dem
+    # Boden zu liegen. Die Kreide (172) sitzt in einer Felswand und traegt OCB 2,
+    # den Brechstangen-Pickup; die Brechstange (174, OCB 9) steckt in einem
+    # Gitterzaun; die Muenze (173, OCB 11) liegt auf einem Zierdeckel im Wasser.
+    # Beim Verschieben wird OCB auf 0 gesetzt, alle drei laegen danach flach auf
+    # dem Boden und die Inszenierung waere weg - derselbe Grund, aus dem rich1s
+    # CD nicht wandert.
+    'andy3'   = @(172,173,174)
 }
 $vanillaTypes = @( if($VANILLA_TYPES.ContainsKey($LevelName)){ $VANILLA_TYPES[$LevelName] } )
 $fixedItems = @()
@@ -580,6 +589,32 @@ if ($FIXED_ITEMS.ContainsKey($LevelName)) {
 $SECRET_TYPE = 223
 foreach($it in ($d.items | Where-Object { [int]$_.typeId -eq $SECRET_TYPE })){
     $fixedItems += [PSCustomObject]@{ item=[int]$it.index; reason='Secret - bleibt bis zur eigenen Secret-Liste an seinem Platz' }
+}
+
+#----------------------------------------------------------------------------
+# VANILLA_TYPES muss die Items auch wirklich festhalten.
+#
+# Das tat es nicht. Der Eintrag hielt einen Typ nur aus den keyConstraints
+# heraus - also aus dem Pool und aus den Testleveln. Der Randomizer bewegt aber
+# jedes Pickup, das nicht in fixedItems steht, und ein Typ ohne Constraint gilt
+# ihm schlicht als gewoehnliches Item. Die Eintraege waren damit reine
+# Dokumentation.
+#
+# Aufgefallen ist es an joby3: Pistolen (334), Key Item6 beim Chef (201) und die
+# getarnte Brechstange (172) stehen dort seit jeher in VANILLA_TYPES, und alle
+# drei wurden in jedem Seed verschoben - mitsamt dem Chef-Glitch, gegen den der
+# Eintrag gedacht war. Dass rich1s CD trotzdem liegen blieb, lag allein an
+# ihrem zusaetzlichen FIXED_ITEMS-Eintrag.
+#
+# Beides bleibt nebeneinander bestehen und meint Verschiedenes: VANILLA_TYPES
+# ist "dieser TYP bleibt, wo er ist", FIXED_ITEMS ist "dieses eine ITEM bleibt,
+# wo es ist". Der Grund wird mitgeschrieben, damit im Report sichtbar ist,
+# welcher Eintrag ein Item haelt.
+#----------------------------------------------------------------------------
+$fixedSchon = @($fixedItems | ForEach-Object { [int]$_.item })
+foreach($it in ($d.items | Where-Object { $vanillaTypes -contains [int]$_.typeId })){
+    if ($fixedSchon -contains [int]$it.index) { continue }
+    $fixedItems += [PSCustomObject]@{ item=[int]$it.index; reason="VANILLA_TYPES: Typ $($it.typeId) bleibt an seiner Vanilla-Position" }
 }
 
 $extraPool = @{}
@@ -859,12 +894,12 @@ $noWeaponRooms = @( if($NO_WEAPON_ROOMS.ContainsKey($LevelName)){ $NO_WEAPON_ROO
 
 $POOL_TYPES = @{
     'joby2' = @(172)
-    # andy3 hat kein einziges Schloss im Level - weder Puzzle Hole noch Key
-    # Hole. Ohne Eintrag hier taucht die Fortschrittskette also ueberhaupt nicht
-    # in den keyConstraints auf, und dann kann auch keine Sperrliste auf sie
-    # wirken. Eine Zonengrenze waere sinnlos: Zone 1 besteht aus zwei Sektoren.
-    # Die Begrenzung leistet allein TYPE_EXCLUDE_ROOMS.
-    'andy3' = @(172,174)
+    # andy3 stand hier kurz mit 172 und 174 drin, weil das Level kein einziges
+    # Schloss hat und die Fortschrittskette sonst gar nicht in den
+    # keyConstraints auftaucht. Der Nutzer hat sich dann fuer Vanilla
+    # entschieden - siehe VANILLA_TYPES. Der Eintrag bleibt als Kommentar, weil
+    # die Ueberlegung weiter gilt, falls die Puzzles doch einmal wandern sollen:
+    #   'andy3' = @(172,174)   zusammen mit TYPE_EXCLUDE_ROOMS weiter unten
     # joby3: die vier Combo-Haelften. Puzzle Item3 Combo1+2 ergeben das
     # Atemgeraet, Puzzle Item4 Combo1+2 die Batterie; beides wandert in den
     # Anzug und loest die Schluss-Cutscene aus. Die beiden Slots in Raum 40

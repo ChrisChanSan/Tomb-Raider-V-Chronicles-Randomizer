@@ -361,10 +361,21 @@ $noPlacement = @( if($NO_PLACEMENT_ROOMS.ContainsKey($LevelName)){ $NO_PLACEMENT
 #----------------------------------------------------------------------------
 $NO_ITEM_ROOMS = @{
     # Dritte Durchsicht: 55, 78, 95, 145, 150, 186, 228, 231 - zusammen 20
-    # Ablagen. Raum 78 enthaelt ein Vanilla-Smallmedi (Item 15), dessen Platz
-    # damit entfaellt; bei einem Medipack unkritisch, beim Nutzer angesprochen.
-    # Raum 186 ist zugleich Deadstop der Inselgruppe - hier nur als Ablage
-    # gesperrt, der Weg bleibt.
+    # Ablagen. Raum 186 ist zugleich Deadstop der Inselgruppe - hier nur als
+    # Ablage gesperrt, der Weg bleibt.
+    #
+    # 55 und 78 haengen zusammen und sind ein Sonderfall, den der Nutzer
+    # aufgeklaert hat. Der Pickup-Trigger in Raum 51 Sektor (2,2) - genau dort
+    # liegt das Herz - feuert Object:8 (das Herz selbst), Object:12 (die Tuer
+    # in Raum 55) und Cutscene:19. Wird das Herz anderswohin randomisiert,
+    # hebt auf diesem Sektor niemand mehr etwas auf, der Trigger feuert nie und
+    # Tuer 12 bleibt zu. Verschieben laesst er sich nicht, weil er zugleich die
+    # Cutscene traegt.
+    #
+    # Der kleine Bereich dahinter ist damit tot, und das ist so akzeptiert:
+    # "Sollte das Herz mal zufaellig auf seinem Trigger liegen, ok, ist das halt
+    # leer. Sonst egal." Deshalb liegt dort auch nichts.
+    # (Item 15 in Raum 78 ist ein Smallmedi, nicht das Herz - das ist Item 8.)
     'andy1' = @(2,11,24,30,32,33,41,42,50,55,64,65,68,69,72,74,75,76,77,78,95,
                 103,129,139,140,145,147,150,160,161,163,171,174,175,186,191,
                 193,195,198,228,231,242)

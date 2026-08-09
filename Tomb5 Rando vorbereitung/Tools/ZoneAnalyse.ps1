@@ -386,6 +386,27 @@ $NO_ITEM_ROOMS = @{
     'andy1' = @(2,11,24,30,32,33,41,42,50,55,64,65,68,69,72,74,75,76,77,78,95,
                 103,129,139,140,145,147,150,160,161,163,171,174,175,186,191,
                 193,195,198,228,231,242)
+    # Andy2, Raum 29: das Dach der Muehle. In einem 11x11-Raum steht mittig ein
+    # Plateau, ringsum ist kein Boden - ein Schacht. Genau die neun
+    # Plateausektoren sind Ablageflaeche, und der Nutzer hat sie in trview als
+    # unerreichbar bestaetigt ("die sind auf der Muehle").
+    #
+    # Das Modell haelt sie fuer erreichbar, und zwar nachvollziehbar: die
+    # Sektoren 29(5,1) und (5,2) haben keinen eigenen Boden, Lara steht dort auf
+    # Raum 30 bei y=13568. Von da aufs Plateau bei 12288 sind 1280 Einheiten,
+    # und Test-ClimbEdge laesst bis 1920 zu. Die Kante ist ingame aber nicht
+    # greifbar.
+    #
+    # Zwei automatische Erkennungen sind daran gescheitert. Ein lokaler Test auf
+    # "Aufstieg > 1024" findet den Fall nicht, weil der Torsektor 29(5,3) selbst
+    # keine Ablage ist und die Plateausektoren untereinander eben liegen. Und
+    # ein Test auf "Plateau ueber bodenlosem Umfeld" trifft in Andy2 ueber
+    # achtzig Raeume, weil jeder kleine 3x3-Raum so aussieht - Raum 29 war nicht
+    # einmal darunter. Die tragfaehige Variante waere ein zweiter Flood mit
+    # Kletterschranke 1024; bis dahin steht der Raum hier.
+    #
+    # Der Rest der Liste ist die zweite Durchsicht des Nutzers in trview.
+    'Andy2' = @(7,29,143,144,145,173,174,175,176,177,179,180,181,248,250)
 }
 $noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$LevelName] } )
 
@@ -510,6 +531,29 @@ if ($FIXED_ITEMS.ContainsKey($LevelName)) {
         $fixedItems += [PSCustomObject]@{ item=[int]$kv.Key; reason=[string]$kv.Value }
     }
 }
+#----------------------------------------------------------------------------
+# Secrets bleiben vorerst liegen, wo sie sind.
+#
+# Welcher Typ ein Secret ist, steht nicht in der Objekttabelle, sondern in der
+# Engine: newinv2.cpp, case PICKUP_ITEM4 zaehlt savegame.Level.Secrets hoch.
+# Das ist typeId 223 und gilt spielweit, unabhaengig vom Level. Zusammen sind
+# es 36 Stueck - genau die Zahl, die der Ladebildschirm anzeigt.
+#
+# Der Nutzer will die Secrets spaeter gesondert behandeln: eine eigene Liste
+# handverlesener Verstecke plus ein Schalter im Werkzeug, der sie in den Pool
+# aufnimmt. Bis dahin duerfen sie nicht mitwandern - ein Secret, das offen im
+# Gang liegt, ist keins mehr, und die Nischenfundstellen (Andy2 Item 142 mit
+# OCB 1 in Raum 163) gingen dabei verloren.
+#
+# VANILLA_TYPES allein reicht dafuer NICHT: das steuert nur die Constraints,
+# der Randomizer bewegt aber jedes Pickup, das nicht ortsfest ist. Erst der
+# Eintrag in fixedItems haelt sie wirklich fest.
+#----------------------------------------------------------------------------
+$SECRET_TYPE = 223
+foreach($it in ($d.items | Where-Object { [int]$_.typeId -eq $SECRET_TYPE })){
+    $fixedItems += [PSCustomObject]@{ item=[int]$it.index; reason='Secret - bleibt bis zur eigenen Secret-Liste an seinem Platz' }
+}
+
 $extraPool = @{}
 if ($EXTRA_POOL_TYPES.ContainsKey($LevelName)) {
     foreach($kv in $EXTRA_POOL_TYPES[$LevelName].GetEnumerator()){ $extraPool[[int]$kv.Key] = [int]$kv.Value }
@@ -910,6 +954,8 @@ $MANUAL_LINK = @{
 $NO_ITEM_SECTORS = @{
     'andy1' = @('176,2,1','176,3,1','170,1,6','170,3,6','170,3,4',
                 '200,2,0','121,1,1','121,2,3','226,1,2','158,2,2')
+    # Andy2, zweite Durchsicht des Nutzers in trview.
+    'Andy2' = @('251,1,3','3,6,4')
 }
 $noItemSectors = @( if($NO_ITEM_SECTORS.ContainsKey($LevelName)){ $NO_ITEM_SECTORS[$LevelName] } )
 
@@ -2319,6 +2365,33 @@ $KNOWN_GAPS = @{
         105 = 'Ventilatorraum'
         166 = 'Kulisse'
         167 = 'Kulisse'
+    }
+    # Andy2. Die vier grossen Luecken sind vier fast baugleiche Muehlenmodule -
+    # 270/270/215/215 Sektoren, alle auf yBottom 12544, nebeneinander in der
+    # Welt, und in allen vieren steckt kein einziges bespielbares Objekt. Der
+    # Nutzer hat sie in trview angesehen: "Das sind nur Flyby-Bereiche, kein
+    # Kernsegment." Dasselbe gilt fuer den Bereich um Raum 15.
+    #
+    # Gesperrt werden muss dafuer nichts - in keinem dieser Raeume liegt eine
+    # einzige erreichte Ablageflaeche. Sie stehen hier ausschliesslich, damit
+    # der Report sie nicht bei jedem Lauf neu als ungeklaerte Luecke meldet.
+    'Andy2' = @{
+        15  = 'Out of map, nur Flyby'
+        137 = 'Muehlenmodul, nur Flyby'; 139 = 'Muehlenmodul, nur Flyby'
+        140 = 'Muehlenmodul, nur Flyby'; 146 = 'Muehlenmodul, nur Flyby'
+        148 = 'Muehlenmodul, nur Flyby'; 149 = 'Muehlenmodul, nur Flyby'
+        150 = 'Muehlenmodul, nur Flyby'; 151 = 'Muehlenmodul, nur Flyby'
+        153 = 'Muehlenmodul, nur Flyby'; 154 = 'Muehlenmodul, nur Flyby'
+        156 = 'Muehlenmodul, nur Flyby'; 158 = 'Muehlenmodul, nur Flyby'
+        159 = 'Muehlenmodul, nur Flyby'; 160 = 'Muehlenmodul, nur Flyby'
+        189 = 'Muehlenmodul, nur Flyby'; 190 = 'Muehlenmodul, nur Flyby'
+        192 = 'Muehlenmodul, nur Flyby'; 193 = 'Muehlenmodul, nur Flyby'
+        194 = 'Muehlenmodul, nur Flyby'; 195 = 'Muehlenmodul, nur Flyby'
+        196 = 'Muehlenmodul, nur Flyby'; 197 = 'Muehlenmodul, nur Flyby'
+        198 = 'Muehlenmodul, nur Flyby'; 203 = 'Muehlenmodul, nur Flyby'
+        204 = 'Muehlenmodul, nur Flyby'; 205 = 'Muehlenmodul, nur Flyby'
+        207 = 'Muehlenmodul, nur Flyby'; 242 = 'Muehlenmodul, nur Flyby'
+        246 = 'Muehlenmodul, nur Flyby'; 247 = 'Muehlenmodul, nur Flyby'
     }
     'joby3' = @{
         63  = 'Dekoraum fuer den Ventilator'

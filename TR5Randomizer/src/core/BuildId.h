@@ -26,8 +26,11 @@
 //    Inselgruppen, Hoehengrenzen, gesperrte Sektoren, waffenfreie Raeume und
 //    "hinter der eigenen Tuer". Der Randomizer hat diese Felder vorher gelesen
 //    und ignoriert, jeder Seed faellt damit anders aus als unter 1.
-#define RANDO_BUILD_ID      2
-#define RANDO_BUILD_STRING  "0.2"
+// 3: Secrets (typeId 223, spielweit 36 Stueck) bleiben vorerst ortsfest, und
+//    Andy2 ist kuratiert. Beides sind Kurationsdaten, und die verschieben
+//    Platzierungen genauso wie eine Codeaenderung.
+#define RANDO_BUILD_ID      3
+#define RANDO_BUILD_STRING  "0.3"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

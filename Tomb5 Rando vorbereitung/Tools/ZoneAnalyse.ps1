@@ -405,8 +405,16 @@ $NO_ITEM_ROOMS = @{
     # einmal darunter. Die tragfaehige Variante waere ein zweiter Flood mit
     # Kletterschranke 1024; bis dahin steht der Raum hier.
     #
-    # Der Rest der Liste ist die zweite Durchsicht des Nutzers in trview.
-    'Andy2' = @(7,29,143,144,145,173,174,175,176,177,179,180,181,248,250)
+    # Der Rest der Liste ist die zweite und dritte Durchsicht des Nutzers in
+    # trview. 31 und 41 sind die Raeume mit den Feuer- und Stachelfallen - die
+    # Sektoren dazwischen sehen als Ablage voellig in Ordnung aus.
+    #
+    # 132 und 134 sind die Flipvarianten von 31 und 41 und haben ohnehin keine
+    # einzige Ablageflaeche: der Exporter sperrt jede Flipvariante grundsaetzlich
+    # (RoomIsAlternate, siehe TRFile_RandomizerExport.cpp). Sie stehen hier als
+    # Sicherheitsnetz, falls diese Regel je gelockert wird - dann duerfen die
+    # Fallenraeume nicht stillschweigend zurueckkommen.
+    'Andy2' = @(7,29,31,41,132,134,143,144,145,173,174,175,176,177,179,180,181,248,250)
 }
 $noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$LevelName] } )
 
@@ -954,8 +962,12 @@ $MANUAL_LINK = @{
 $NO_ITEM_SECTORS = @{
     'andy1' = @('176,2,1','176,3,1','170,1,6','170,3,6','170,3,4',
                 '200,2,0','121,1,1','121,2,3','226,1,2','158,2,2')
-    # Andy2, zweite Durchsicht des Nutzers in trview.
-    'Andy2' = @('251,1,3','3,6,4')
+    # Andy2, zweite und dritte Durchsicht des Nutzers in trview. Die Eintraege
+    # ab 133 sind einzelne Fallensektoren; die in den Flipvarianten 133, 135 und
+    # 136 sind wie die Raeume 132/134 oben schon durch die Flipsperre erledigt
+    # und stehen nur als Sicherheitsnetz.
+    'Andy2' = @('251,1,3','3,6,4','55,5,5','44,5,5',
+                '133,5,4','135,4,5','135,6,5','136,5,5')
 }
 $noItemSectors = @( if($NO_ITEM_SECTORS.ContainsKey($LevelName)){ $NO_ITEM_SECTORS[$LevelName] } )
 

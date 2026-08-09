@@ -151,6 +151,13 @@ foreach($lvl in $Levels){
         # gerade NICHT liegen. andy1s Zwillenhaelften duerfen nicht vor dem
         # Teleporter liegen, sonst geht Lara ohne sie durch und kommt nie
         # zurueck.
+        # forbiddenSectors: hinter der eigenen Tuer - Schnitt ueber alle
+        # Schloesser dieses Typs, siehe ZoneAnalyse.
+        $fb = $null
+        if ($null -ne $c.forbiddenSectors) {
+            $fb = New-Object System.Collections.Generic.HashSet[string]
+            foreach($k in $c.forbiddenSectors){ [void]$fb.Add([string]$k) }
+        }
         $bn = $null
         if ($null -ne $c.bannedSectors) {
             $bn = New-Object System.Collections.Generic.HashSet[string]
@@ -165,6 +172,7 @@ foreach($lvl in $Levels){
             $kk = "$($_.room),$($_.sectorX),$($_.sectorZ)"
             ($null -eq $isl -or $isl.Contains($kk)) -and
             ($null -eq $bn -or -not $bn.Contains($kk)) -and
+            ($null -eq $fb -or -not $fb.Contains($kk)) -and
             [int]$_.zone -le [int]$c.maxZone -and $ex -notcontains [int]$_.room -and
             ($al.Count -eq 0 -or $al -contains [int]$_.room) -and
             ($null -eq $c.minFloorY -or ($null -ne $hs -and -not $hs.Contains($kk)) -or

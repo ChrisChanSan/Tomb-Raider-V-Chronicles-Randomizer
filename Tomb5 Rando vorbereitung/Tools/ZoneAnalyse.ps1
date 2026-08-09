@@ -966,8 +966,17 @@ $NO_ITEM_SECTORS = @{
     # ab 133 sind einzelne Fallensektoren; die in den Flipvarianten 133, 135 und
     # 136 sind wie die Raeume 132/134 oben schon durch die Flipsperre erledigt
     # und stehen nur als Sicherheitsnetz.
-    'Andy2' = @('251,1,3','3,6,4','55,5,5','44,5,5',
-                '133,5,4','135,4,5','135,6,5','136,5,5')
+    # Die vierte Durchsicht nimmt die restlichen Fallensektoren in den
+    # Bruecken-Raeumen mit. 30, 43, 56 und 57 sind die Basisraeume der Flipmap-
+    # Gruppen 3, 4 und 5 - dieselbe Bauform wie 31 und 41, nur dass hier nicht
+    # der ganze Raum weg muss.
+    'Andy2' = @('251,1,3','3,6,4','44,5,5',
+                '133,5,4','135,4,5','135,6,5','136,5,5',
+                '30,5,4','30,5,6',
+                '43,5,4','43,5,6','43,6,5',
+                '55,5,4','55,4,5','55,5,5','55,5,6','55,6,5',
+                '56,5,4','56,4,5','56,6,5',
+                '57,5,5')
 }
 $noItemSectors = @( if($NO_ITEM_SECTORS.ContainsKey($LevelName)){ $NO_ITEM_SECTORS[$LevelName] } )
 

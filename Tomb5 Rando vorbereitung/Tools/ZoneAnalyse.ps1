@@ -360,8 +360,14 @@ $noPlacement = @( if($NO_PLACEMENT_ROOMS.ContainsKey($LevelName)){ $NO_PLACEMENT
 # Deshalb hier: der Weg bleibt, die Ablagen verschwinden.
 #----------------------------------------------------------------------------
 $NO_ITEM_ROOMS = @{
-    'andy1' = @(2,11,24,30,32,33,41,42,50,64,65,68,69,72,74,75,76,77,103,129,
-                139,140,147,160,161,163,171,174,175,191,193,195,198,242)
+    # Dritte Durchsicht: 55, 78, 95, 145, 150, 186, 228, 231 - zusammen 20
+    # Ablagen. Raum 78 enthaelt ein Vanilla-Smallmedi (Item 15), dessen Platz
+    # damit entfaellt; bei einem Medipack unkritisch, beim Nutzer angesprochen.
+    # Raum 186 ist zugleich Deadstop der Inselgruppe - hier nur als Ablage
+    # gesperrt, der Weg bleibt.
+    'andy1' = @(2,11,24,30,32,33,41,42,50,55,64,65,68,69,72,74,75,76,77,78,95,
+                103,129,139,140,145,147,150,160,161,163,171,174,175,186,191,
+                193,195,198,228,231,242)
 }
 $noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$LevelName] } )
 
@@ -884,7 +890,8 @@ $MANUAL_LINK = @{
 # EXCLUDE_SECTORS bleiben sie begehbar. Sektorfeine Fassung von NO_ITEM_ROOMS,
 # fuer Raeume, die im Uebrigen voellig in Ordnung sind.
 $NO_ITEM_SECTORS = @{
-    'andy1' = @('176,2,1','176,3,1','170,1,6','170,3,6','170,3,4')
+    'andy1' = @('176,2,1','176,3,1','170,1,6','170,3,6','170,3,4',
+                '200,2,0','121,1,1','121,2,3','226,1,2','158,2,2')
 }
 $noItemSectors = @( if($NO_ITEM_SECTORS.ContainsKey($LevelName)){ $NO_ITEM_SECTORS[$LevelName] } )
 

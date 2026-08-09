@@ -122,8 +122,17 @@ foreach($lvl in $Levels){
         "  ${lvl}: keine Key-Constraints - alle gueltigen Sektoren mit Typ $genericType gefuellt"
     }
 
+    # Waffenfreie Raeume. Sie haengen am Level, nicht am Typ, und treffen jeden
+    # Waffentyp - auch einen, der hier nur als Ersatz-Constraint auftaucht.
+    # Heute ist das wirkungslos (nur joby3 hat solche Raeume, und joby3 hat
+    # echte Key-Constraints), aber der Randomizer setzt es durch, und die
+    # Testlevel muessen dasselbe zeigen wie das, was am Ende erzeugt wird.
+    $noWeapon = @( if($null -ne $z.noWeaponRooms){ $z.noWeaponRooms | ForEach-Object { [int]$_ } } )
+    $wTypes   = @( if($null -ne $z.weaponTypes){ $z.weaponTypes | ForEach-Object { [int]$_ } } )
+
     $itemAdds = @()
     foreach($c in $constraints){
+        $typIstWaffe = $wTypes -contains [int]$c.typeId
         # excludeRooms: Raeume, die zwar in der Zone liegen, in denen dieser eine
         # Typ aber trotzdem nicht liegen darf (Nutzerangabe aus trview).
         $ex = @( if($null -ne $c.excludeRooms){ $c.excludeRooms | ForEach-Object { [int]$_ } } )
@@ -173,6 +182,7 @@ foreach($lvl in $Levels){
             ($null -eq $isl -or $isl.Contains($kk)) -and
             ($null -eq $bn -or -not $bn.Contains($kk)) -and
             ($null -eq $fb -or -not $fb.Contains($kk)) -and
+            (-not $typIstWaffe -or $noWeapon -notcontains [int]$_.room) -and
             [int]$_.zone -le [int]$c.maxZone -and $ex -notcontains [int]$_.room -and
             ($al.Count -eq 0 -or $al -contains [int]$_.room) -and
             ($null -eq $c.minFloorY -or ($null -ne $hs -and -not $hs.Contains($kk)) -or

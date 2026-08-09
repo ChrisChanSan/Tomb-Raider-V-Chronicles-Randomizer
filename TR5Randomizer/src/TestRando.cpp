@@ -146,9 +146,67 @@ int main(int argc, char** argv)
         { constraintsHeld = false; std::printf("       Item %d in Raum %d nicht in allowRooms\n", idx, room); }
         if (std::binary_search(c->excludeRooms.begin(), c->excludeRooms.end(), room))
         { constraintsHeld = false; std::printf("       Item %d in gesperrtem Raum %d\n", idx, room); }
+
+        const long long sk = secKey(si->second->room, si->second->sectorX, si->second->sectorZ);
+        if (!c->islandSectors.empty() && !c->islandSectors.count(sk))
+        { constraintsHeld = false; std::printf("       Item %d liegt ausserhalb seiner Inselgruppe\n", idx); }
+        if (c->bannedSectors.count(sk))
+        { constraintsHeld = false; std::printf("       Item %d liegt auf einem gesperrten Sektor\n", idx); }
+        if (c->forbiddenSectors.count(sk))
+        { constraintsHeld = false; std::printf("       Item %d liegt hinter seiner eigenen Tuer\n", idx); }
+        if (c->hasMinFloorY && si->second->floorY < c->minFloorY &&
+            (c->minFloorYScope.empty() || c->minFloorYScope.count(sk)))
+        { constraintsHeld = false; std::printf("       Item %d liegt zu hoch (y=%d < %d)\n", idx, si->second->floorY, c->minFloorY); }
     }
     check(allOnValidSector, "jedes Item sitzt auf einem gueltigen Sektor mit exakter Bodenhoehe");
     check(constraintsHeld, "alle Key-Item-Zwangsbedingungen eingehalten");
+
+    // --- Waffen bleiben aus den gesperrten Raeumen heraus ---
+    bool weaponsClear = true;
+    for (size_t i = 0; i < edits.size(); ++i)
+    {
+        const int idx  = static_cast<int>(edits[i]["index"].asInt());
+        const int room = static_cast<int>(edits[i]["room"].asInt());
+        if (in.weaponTypes.count(typeOf[idx]) && in.noWeaponRooms.count(room))
+        { weaponsClear = false; std::printf("       Waffe %d (Typ %d) in Raum %d\n", idx, typeOf[idx], room); }
+    }
+    check(weaponsClear, "keine Waffe in einem waffenfreien Raum");
+
+    // --- Pflichtvorkommen in der Inselgruppe ---
+    //
+    // Das ist die einzige Bedingung, die sich nicht je Item pruefen laesst: sie
+    // gilt fuer alle Instanzen eines Typs zusammen. Betrachtet werden deshalb
+    // die bewegten Instanzen an ihrem neuen Platz UND die uebrigen dort, wo sie
+    // in Vanilla liegen - ein ortsfestes Item auf der Insel erfuellt die
+    // Forderung genauso.
+    std::map<int, long long> placedAt;    // Item -> Sektorschluessel nach dem Lauf
+    for (const LevelItem& it : in.items) placedAt[it.index] = secKey(it.room, it.sectorX, it.sectorZ);
+    for (size_t i = 0; i < edits.size(); ++i)
+    {
+        long long k = keyOf(static_cast<int>(edits[i]["room"].asInt()),
+                            static_cast<int>(edits[i]["x"].asInt()),
+                            static_cast<int>(edits[i]["z"].asInt()));
+        auto si = secAt.find(k);
+        if (si != secAt.end())
+            placedAt[static_cast<int>(edits[i]["index"].asInt())] =
+                secKey(si->second->room, si->second->sectorX, si->second->sectorZ);
+    }
+    bool requiredHeld = true;
+    for (const KeyConstraint& c : in.constraints)
+    {
+        if (c.requireInIsland.empty()) continue;
+        int inside = 0, total = 0;
+        for (const LevelItem& it : in.items)
+        {
+            if (it.typeId != c.typeId) continue;
+            ++total;
+            if (c.requireInIsland.count(placedAt[it.index])) ++inside;
+        }
+        std::printf("  Typ %d: %d von %d Instanzen in der Inselgruppe\n", c.typeId, inside, total);
+        if (inside == 0)
+        { requiredHeld = false; std::printf("       Typ %d hat KEINE Instanz in der Inselgruppe!\n", c.typeId); }
+    }
+    check(requiredHeld, "jeder Pflichttyp liegt mindestens einmal in seiner Inselgruppe");
 
     // --- Reproduzierbarkeit ---
     JsonValue p2; RandoReport r2;

@@ -16,10 +16,29 @@ namespace
         return std::string(buf);
     }
 
-    // Schluessel eines Sektors, um Doppelbelegung zu verhindern.
-    inline long long secKey(int room, int sx, int sz)
+    // Sektormengen des Zonen-Exports einlesen. Dort steht je Eintrag ein String
+    // "raum,x,z" - die PowerShell-Seite nutzt dieselbe Schreibweise als
+    // Hashset-Schluessel, und beide Werkzeuge muessen exakt dieselben Sektoren
+    // meinen. Fehlt das Feld, kommt hier ein Null-Wert an und die Menge bleibt
+    // leer, was ueberall "keine Einschraenkung" bedeutet.
+    void readSectorSet(const JsonValue& v, std::set<long long>& out)
     {
-        return (static_cast<long long>(room) << 32) | (static_cast<long long>(sx) << 16) | static_cast<long long>(sz);
+        for (size_t i = 0; i < v.size(); ++i)
+        {
+            const std::string s = v[i].asString();
+            // Von Hand zerlegt statt per sscanf: Raum- und Sektorindizes sind nie
+            // negativ, damit reicht das hier und die CRT-Warnung entfaellt.
+            int part[3] = { 0, 0, 0 };
+            int n = 0;
+            bool ok = !s.empty();
+            for (size_t c = 0; c < s.size() && ok; ++c)
+            {
+                if (s[c] == ',')                       { ok = (++n <= 2); }
+                else if (s[c] >= '0' && s[c] <= '9')   { part[n] = part[n] * 10 + (s[c] - '0'); }
+                else                                    { ok = false; }
+            }
+            if (ok && n == 2) out.insert(secKey(part[0], part[1], part[2]));
+        }
     }
 }
 
@@ -144,6 +163,17 @@ bool Rando::buildInput(const JsonValue& zoneExport,
         for (size_t j = 0; j < e.size(); ++j) k.excludeRooms.push_back(static_cast<int>(e[j].asInt()));
         std::sort(k.allowRooms.begin(), k.allowRooms.end());
         std::sort(k.excludeRooms.begin(), k.excludeRooms.end());
+
+        // Die Felder unten sind alle optional: ein Level ohne Inselgruppe
+        // exportiert sie als null, und dann bleiben die Mengen leer.
+        const JsonValue& mf = cons[i]["minFloorY"];
+        if (!mf.isNull()) { k.hasMinFloorY = true; k.minFloorY = static_cast<int>(mf.asInt()); }
+        readSectorSet(cons[i]["minFloorYIsland"],  k.minFloorYScope);
+        readSectorSet(cons[i]["islandSectors"],    k.islandSectors);
+        readSectorSet(cons[i]["bannedSectors"],    k.bannedSectors);
+        readSectorSet(cons[i]["forbiddenSectors"], k.forbiddenSectors);
+        readSectorSet(cons[i]["requireInIsland"],  k.requireInIsland);
+
         out.constraints.push_back(k);
     }
     std::sort(out.constraints.begin(), out.constraints.end(),
@@ -152,6 +182,11 @@ bool Rando::buildInput(const JsonValue& zoneExport,
     const JsonValue& fx = zoneExport["fixedItems"];
     for (size_t i = 0; i < fx.size(); ++i) out.fixedItems.push_back(static_cast<int>(fx[i]["item"].asInt()));
     std::sort(out.fixedItems.begin(), out.fixedItems.end());
+
+    const JsonValue& nw = zoneExport["noWeaponRooms"];
+    for (size_t i = 0; i < nw.size(); ++i) out.noWeaponRooms.insert(static_cast<int>(nw[i].asInt()));
+    const JsonValue& wt = zoneExport["weaponTypes"];
+    for (size_t i = 0; i < wt.size(); ++i) out.weaponTypes.insert(static_cast<int>(wt[i].asInt()));
 
     const JsonValue& inj = zoneExport["requiredInjections"];
     for (size_t i = 0; i < inj.size(); ++i)
@@ -249,6 +284,53 @@ bool Rando::run(const RandoInput& in,
         else                            movableOther.push_back(it);
     }
 
+    // RequireTypes: von diesen Typen muss MINDESTENS EINE Instanz innerhalb der
+    // Inselgruppe liegen. joby2 erzwingt die Regel: Key Item8 schaltet ueber den
+    // Kran die Flipmap frei, die den Rest des Levels oeffnet. Liegt keine
+    // Instanz davor, kommt Lara nie an den Kran.
+    //
+    // Als Sektorfilter ist das nicht ausdrueckbar. Ein Filter beantwortet "darf
+    // DIESE Instanz hierhin?", die Forderung betrifft aber alle Instanzen eines
+    // Typs zusammen - vier einzeln zulaessige Plaetze koennen gemeinsam trotzdem
+    // falsch sein. Deshalb wird eine Instanz ausgewaehlt und ihr Kandidatensatz
+    // auf die Insel eingeschraenkt.
+    //
+    // Erfuellt ein ortsfestes Item die Forderung bereits, ist nichts zu tun - es
+    // bleibt ja liegen, wo es ist. Sonst faellt die Wahl auf die bewegliche
+    // Instanz mit dem kleinsten Index, damit sie nicht vom Seed abhaengt.
+    std::map<int, int> forceIsland;      // typeId -> Item, das auf die Insel muss
+    if (opt.shuffleKeyItems)
+    {
+        for (const KeyConstraint& k : in.constraints)
+        {
+            if (k.requireInIsland.empty()) continue;
+
+            bool satisfied = false;
+            int  firstMovable = -1;
+            for (const LevelItem& it : in.items)      // nach Index sortiert
+            {
+                if (it.typeId != k.typeId || !isPickupType(it.typeId)) continue;
+                if (pinned.count(it.index))
+                {
+                    if (k.requireInIsland.count(secKey(it.room, it.sectorX, it.sectorZ))) satisfied = true;
+                    continue;
+                }
+                if (firstMovable < 0) firstMovable = it.index;
+            }
+            if (satisfied) continue;
+            if (firstMovable < 0)
+            {
+                report.ok = false;
+                report.error = fmt("Typ %d muss mindestens einmal in der Inselgruppe liegen, hat dort aber "
+                                   "weder ein ortsfestes Vorkommen noch eine bewegliche Instanz.", k.typeId);
+                return false;
+            }
+            forceIsland[k.typeId] = firstMovable;
+            report.notes.push_back(fmt("Typ %d: Item %d wird in die Inselgruppe gezwungen (Pflichtvorkommen).",
+                                       k.typeId, firstMovable));
+        }
+    }
+
     JsonValue edits = JsonValue::makeArray();
     JsonValue adds = JsonValue::makeArray();
 
@@ -274,15 +356,32 @@ bool Rando::run(const RandoInput& in,
         auto ci = conByType.find(it.typeId);
         const KeyConstraint* k = (ci == conByType.end()) ? nullptr : ci->second;
 
+        auto fi = forceIsland.find(it.typeId);
+        const bool mustBeOnIsland = (fi != forceIsland.end() && fi->second == it.index);
+        // Das Waffenverbot haengt am Level, nicht am Typ-Constraint: eine
+        // Schrotflinte ist kein Schluessel und wuerde sonst gar nicht geprueft.
+        const bool isWeapon = in.weaponTypes.count(it.typeId) != 0;
+
         for (const ZoneSector& s : pool)
         {
-            if (used.count(secKey(s.room, s.sectorX, s.sectorZ))) continue;
+            const long long sk = secKey(s.room, s.sectorX, s.sectorZ);
+            if (used.count(sk)) continue;
+            if (isWeapon && in.noWeaponRooms.count(s.room)) continue;
             if (k)
             {
                 if (s.zone > k->maxZone) continue;
                 if (!k->allowRooms.empty() &&
                     !std::binary_search(k->allowRooms.begin(), k->allowRooms.end(), s.room)) continue;
                 if (std::binary_search(k->excludeRooms.begin(), k->excludeRooms.end(), s.room)) continue;
+                if (!k->islandSectors.empty() && !k->islandSectors.count(sk)) continue;
+                if (k->bannedSectors.count(sk)) continue;
+                if (k->forbiddenSectors.count(sk)) continue;
+                // Kleineres y liegt hoeher: ein Sektor unterhalb der Schranke ist
+                // zu hoch. Sie gilt nur in ihrem Geltungsbereich, und ohne
+                // Geltungsbereich ueberall.
+                if (k->hasMinFloorY && s.floorY < k->minFloorY &&
+                    (k->minFloorYScope.empty() || k->minFloorYScope.count(sk))) continue;
+                if (mustBeOnIsland && !k->requireInIsland.count(sk)) continue;
             }
             out.push_back(&s);
         }

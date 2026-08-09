@@ -22,8 +22,12 @@
 // sich das nicht durch einen gemeinsamen Header erzwingen.
 //----------------------------------------------------------------------------
 
-#define RANDO_BUILD_ID      1
-#define RANDO_BUILD_STRING  "0.1"
+// 2: Die Kurationsdaten setzen jetzt durch, was sie schon lange beschreiben -
+//    Inselgruppen, Hoehengrenzen, gesperrte Sektoren, waffenfreie Raeume und
+//    "hinter der eigenen Tuer". Der Randomizer hat diese Felder vorher gelesen
+//    und ignoriert, jeder Seed faellt damit anders aus als unter 1.
+#define RANDO_BUILD_ID      2
+#define RANDO_BUILD_STRING  "0.2"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

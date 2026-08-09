@@ -1805,6 +1805,7 @@ foreach($n in ($itemNeed | Where-Object { -not $_.Gameflow })){
 $islandSectors = @{}   # typeId -> HashSet der erlaubten Sektoren
 $islandBanned  = @{}   # typeId -> HashSet der VERBOTENEN Sektoren (Umkehrung)
 $islandHeightScope = @{}   # typeId -> HashSet, in dem die Hoehengrenze gilt
+$islandRequire = @{}   # typeId -> HashSet, in der mindestens eine Instanz liegen MUSS
 foreach($ig in $islandGroups){
     if ($null -eq $ig.IslandTypes -or $null -eq $ig.DeadstopRooms) { continue }
     $stopR = @($ig.DeadstopRooms | ForEach-Object { [int]$_ })
@@ -1852,6 +1853,14 @@ foreach($ig in $islandGroups){
     # jeder Typ der Gruppe die Inselmenge als Geltungsbereich, auch die, die
     # nicht auf die Insel beschraenkt sind.
     foreach($rt in $ig.RequireTypes){ $islandHeightScope[[int]$rt] = $isl }
+    # RequireTypes ist mehr als ein Filter: von jedem dieser Typen muss
+    # mindestens eine Instanz INNERHALB der Gruppe liegen, sonst ist die Gruppe
+    # aus sich heraus nicht loesbar. Das laesst sich nicht als Sektorfilter
+    # ausdruecken - ein Filter sagt, wo eine EINZELNE Instanz liegen darf, hier
+    # geht es um eine Aussage ueber ALLE Instanzen eines Typs zusammen. Der
+    # Randomizer bekommt die Menge deshalb getrennt und zwingt eine Instanz
+    # hinein; wer nur filtert, kann sie nicht durchsetzen.
+    foreach($rt in $ig.RequireTypes){ $islandRequire[[int]$rt] = $isl }
 }
 
 # Hoehengrenze je Schluesseltyp aus den Inselgruppen ableiten. Baseline ist der
@@ -1983,7 +1992,7 @@ foreach($kv in $byType.GetEnumerator()){
     $maxZ = ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement + $noKeyRooms | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
-    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}); bannedSectors=$(if($islandBanned.ContainsKey($nt)){@($islandBanned[$nt])}else{$null}); forbiddenSectors=$(if($forbiddenBehindOwnDoor.ContainsKey($nt)){@($forbiddenBehindOwnDoor[$nt])}else{$null}); minFloorYIsland=$(if($islandHeightScope.ContainsKey($nt)){@($islandHeightScope[$nt])}else{$null}) }
+    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}); bannedSectors=$(if($islandBanned.ContainsKey($nt)){@($islandBanned[$nt])}else{$null}); forbiddenSectors=$(if($forbiddenBehindOwnDoor.ContainsKey($nt)){@($forbiddenBehindOwnDoor[$nt])}else{$null}); minFloorYIsland=$(if($islandHeightScope.ContainsKey($nt)){@($islandHeightScope[$nt])}else{$null}); requireInIsland=$(if($islandRequire.ContainsKey($nt)){@($islandRequire[$nt])}else{$null}) }
 }
 # Handgesetzte Zusatztypen anhaengen, sofern das Modell sie nicht ohnehin schon
 # selbst abgeleitet hat (dann gilt die abgeleitete Grenze, nicht die Handangabe).
@@ -1992,7 +2001,7 @@ foreach($kv in $extraPool.GetEnumerator()){
     if ($byType.ContainsKey($nt)) { continue }
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement + $noKeyRooms | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
-    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=[int]$kv.Value; instances=0; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}); bannedSectors=$(if($islandBanned.ContainsKey($nt)){@($islandBanned[$nt])}else{$null}); forbiddenSectors=$(if($forbiddenBehindOwnDoor.ContainsKey($nt)){@($forbiddenBehindOwnDoor[$nt])}else{$null}); minFloorYIsland=$(if($islandHeightScope.ContainsKey($nt)){@($islandHeightScope[$nt])}else{$null}) }
+    $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=[int]$kv.Value; instances=0; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}); bannedSectors=$(if($islandBanned.ContainsKey($nt)){@($islandBanned[$nt])}else{$null}); forbiddenSectors=$(if($forbiddenBehindOwnDoor.ContainsKey($nt)){@($forbiddenBehindOwnDoor[$nt])}else{$null}); minFloorYIsland=$(if($islandHeightScope.ContainsKey($nt)){@($islandHeightScope[$nt])}else{$null}); requireInIsland=$(if($islandRequire.ContainsKey($nt)){@($islandRequire[$nt])}else{$null}) }
 }
 
 if ($ExportZonesJson -ne "") {
@@ -2027,7 +2036,7 @@ if ($ExportZonesJson -ne "") {
         # Puzzels koennen wir lassen, nur Keys sind wichtig."
         $keyConstraints += [PSCustomObject]@{ typeId=$pt; maxZone=$ptZone; instances=$inst
             reusable=($reusableKeys -contains $pt); excludeRooms=@(); allowRooms=@()
-            minFloorY=$null; minFloorYZone=$null; islandSectors=$null; minFloorYIsland=$null; bannedSectors=$(if($islandBanned.ContainsKey($pt)){@($islandBanned[$pt])}else{$null}) }
+            minFloorY=$null; minFloorYZone=$null; islandSectors=$null; minFloorYIsland=$null; requireInIsland=$null; bannedSectors=$(if($islandBanned.ContainsKey($pt)){@($islandBanned[$pt])}else{$null}) }
         $wie = if ($null -eq $ptKv.Value) { 'ohne Zonengrenze' } else { "begrenzt auf Zone <= $ptZone" }
         Write-Output "Pool-Typ $pt $wie aufgenommen ($inst Instanzen im Level)"
     }

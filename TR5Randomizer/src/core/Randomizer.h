@@ -81,12 +81,42 @@ struct ZoneSector
     int floorY = 0;
 };
 
+// Sektorschluessel: Raum, Sektor-X und Sektor-Z in eine Zahl gepackt. Die
+// Zonen-Exporte nennen Sektoren als "raum,x,z"; hier wird daraus ein
+// vergleichbarer Wert, damit die Mengen unten mit set<long long> auskommen.
+inline long long secKey(int room, int sx, int sz)
+{
+    return (static_cast<long long>(room) << 32) | (static_cast<long long>(sx) << 16) | static_cast<long long>(sz);
+}
+
 struct KeyConstraint
 {
     int              typeId = 0;
     int              maxZone = 0;
     std::vector<int> allowRooms;     // leer = keine Einschraenkung
     std::vector<int> excludeRooms;
+
+    // Hoehengrenze einer Inselgruppe. Y-KONVENTION: in TR liegt KLEINERES y
+    // HOEHER. "Hoechstens 1024 ueber der Baseline" ist deshalb
+    // floorY >= baseline - 1024, und ein Sektor UNTER der Schranke ist zu hoch -
+    // typischerweise die Oberseite eines Kistenstapels, auf den Lara erst mit
+    // genau dem Schluessel kommt, der dort liegen soll.
+    bool             hasMinFloorY = false;
+    int              minFloorY = 0;
+    // Wo diese Schranke gilt. Leer heisst ueberall. Sie ist Eigenschaft der
+    // GRUPPE, nicht der Zone: joby2s Zone 0 hat 7756 Sektoren, die Insel 1900 -
+    // an die Zone gehaengt wirkte sie im halben Level.
+    std::set<long long> minFloorYScope;
+
+    std::set<long long> islandSectors;     // Positivliste; leer = keine
+    std::set<long long> bannedSectors;     // Umkehrung: hier gerade nicht
+    std::set<long long> forbiddenSectors;  // hinter der eigenen Tuer
+
+    // Von diesem Typ muss MINDESTENS EINE Instanz in dieser Menge liegen.
+    // Anders als alle Felder darueber ist das kein Filter fuer eine einzelne
+    // Instanz, sondern eine Aussage ueber alle Instanzen zusammen - siehe
+    // die Behandlung in run().
+    std::set<long long> requireInIsland;
 };
 
 struct Injection
@@ -117,6 +147,14 @@ struct RandoInput
     std::vector<LevelItem>   items;          // alle Items des Levels
     std::vector<RoomOrigin>  roomOrigins;
     std::set<int>            triggerPinned;  // abgeleitet, siehe Regel 2
+
+    // Raeume, in denen keine Waffe liegen darf, und was als Waffe zaehlt.
+    // joby3: eine zufaellig in den Chef-Bereich gewanderte Schrotflinte loest
+    // denselben Glitch aus wie versetzte Pistolen. Das ist keine Eigenschaft
+    // eines Schluesseltyps, sondern des Levels, und trifft deshalb auch
+    // gewoehnliche Pickups.
+    std::set<int>            noWeaponRooms;
+    std::set<int>            weaponTypes;
 };
 
 struct RandoOptions

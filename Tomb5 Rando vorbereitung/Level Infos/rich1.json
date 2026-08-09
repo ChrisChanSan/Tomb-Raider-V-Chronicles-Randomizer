@@ -1,6 +1,9 @@
 {
   "levelName": "rich1",
   "trType": 5,
+  "sourceFile": "RICH1.TRC",
+  "sourceSha256": "A00CC78935597FB370A6DFA768E8F08BC20EEC8EF02AB4A24D4E183509E8181D",
+  "sourceSize": 4716621,
   "numRooms": 165,
   "rooms": [
     { "index": 0, "valid": true, "originX": 38912, "originZ": 36864, "yBottom": 0, "numXSectors": 7, "numZSectors": 3, "alternateRoom": null, "waterRoom": false, "roomFlags": 72 },

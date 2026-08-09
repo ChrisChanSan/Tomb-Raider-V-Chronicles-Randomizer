@@ -1,6 +1,9 @@
 {
   "levelName": "andy3",
   "trType": 5,
+  "sourceFile": "ANDY3.TRC",
+  "sourceSha256": "BEC763D16E5C58F263F075B4D61B6BBB724FE2596144B54DB72884634D9D8E95",
+  "sourceSize": 5169937,
   "numRooms": 211,
   "rooms": [
     { "index": 0, "valid": true, "originX": 31744, "originZ": 17408, "yBottom": 11008, "numXSectors": 8, "numZSectors": 5, "alternateRoom": null, "waterRoom": false, "roomFlags": 544 },

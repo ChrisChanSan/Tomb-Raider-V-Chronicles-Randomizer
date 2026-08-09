@@ -20,6 +20,11 @@ foreach($m in $x.SelectSingleNode("//game[@id='TR5']").SelectNodes(".//moveable"
     $names[[int]$m.id] = $m.name
 }
 
+# Dieselbe Herkunftspruefung wie in ZoneAnalyse: die Raumnummern hier sind nur
+# so viel wert wie die Level-Info, aus der sie stammen.
+. (Join-Path $PSScriptRoot "VanillaGate.ps1")
+[void](Test-VanillaHerkunft -LevelJson "$InfoDir\$LevelName.json")
+
 $d = Get-Content "$InfoDir\$LevelName.json" -Raw | ConvertFrom-Json
 
 # Unerreichte Raeume aus dem Report ziehen

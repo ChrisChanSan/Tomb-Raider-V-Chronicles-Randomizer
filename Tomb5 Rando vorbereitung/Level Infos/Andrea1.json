@@ -1,6 +1,9 @@
 {
   "levelName": "Andrea1",
   "trType": 5,
+  "sourceFile": "ANDREA1.TRC",
+  "sourceSha256": "569E44F49F471E361C45A177A28A6F3B705C5FFB999E88B52CFA8E00F06B2489",
+  "sourceSize": 5723173,
   "numRooms": 242,
   "rooms": [
     { "index": 0, "valid": true, "originX": 45056, "originZ": 28672, "yBottom": 0, "numXSectors": 4, "numZSectors": 7, "alternateRoom": null, "waterRoom": false, "roomFlags": 64 },

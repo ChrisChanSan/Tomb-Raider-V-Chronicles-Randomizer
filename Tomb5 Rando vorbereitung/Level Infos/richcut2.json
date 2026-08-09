@@ -1,6 +1,9 @@
 {
   "levelName": "richcut2",
   "trType": 5,
+  "sourceFile": "RICHCUT2.TRC",
+  "sourceSha256": "F78BB12172F63DC0B0E14C475C7E376788069BE2C9D7A8A2278FC3D7609A86A9",
+  "sourceSize": 2490858,
   "numRooms": 7,
   "rooms": [
     { "index": 0, "valid": true, "originX": 44032, "originZ": 61440, "yBottom": 0, "numXSectors": 11, "numZSectors": 12, "alternateRoom": null, "waterRoom": false, "roomFlags": 8 },

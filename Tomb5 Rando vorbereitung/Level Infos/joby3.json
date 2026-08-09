@@ -1,6 +1,9 @@
 {
   "levelName": "joby3",
   "trType": 5,
+  "sourceFile": "JOBY3.TRC",
+  "sourceSha256": "D62D0E89D9F8C435B7504F3C5BA4673564349045564C2C74F3514F50C8396B8F",
+  "sourceSize": 4371827,
   "numRooms": 195,
   "rooms": [
     { "index": 0, "valid": true, "originX": 0, "originZ": 101376, "yBottom": 0, "numXSectors": 3, "numZSectors": 3, "alternateRoom": null, "waterRoom": false, "roomFlags": 64 },

@@ -48,6 +48,13 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# Bevor irgendetwas gerechnet wird: stammt diese Level-Info aus einem
+# unberuehrten Level? Eine aus randomisierten Daten erzeugte Datei sieht genauso
+# aus, und die Zonen waeren dann still falsch statt sichtbar kaputt.
+. (Join-Path $PSScriptRoot "VanillaGate.ps1")
+[void](Test-VanillaHerkunft -LevelJson $LevelJson)
+
 $d = Get-Content $LevelJson -Raw | ConvertFrom-Json
 
 # --- Typ-IDs (aus RESOURCES/TRCatalog2.xml, TR5-Abschnitt) -------------------

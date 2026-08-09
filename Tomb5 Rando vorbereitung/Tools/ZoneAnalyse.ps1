@@ -331,6 +331,26 @@ $TYPE_EXCLUDE_ROOMS = @{
     'joby5' = @{
         201 = @(18,54,106)
     }
+    # andy3: Brechstange (174) und Kreide (172) haengen aneinander und beide
+    # haengen am selben Point of no return. Der Nutzer hat die Kette erklaert:
+    # mit der Brechstange bricht Lara die Kreide aus der Wand (Puzzle Item1
+    # traegt darum OCB 2, den Brechstangen-Pickup), mit der Kreide malt sie in
+    # Raum 18 Sektor (2,5) das Bannsiegel, die Cutscene macht den Teleporter in
+    # Raum 110 erreichbar - und der ist eine Einbahnstrasse.
+    #
+    # Im Level gibt es weder Puzzle Hole noch Key Hole, die Zonenlogik sieht von
+    # dieser Kette also gar nichts und leitet keinen einzigen Constraint ab.
+    #
+    # Eine Inselgruppe waere hier mit Kanonen auf Spatzen geschossen. Der
+    # Bereich hinter dem Teleporter ist die Komponente um Raum 140, und die
+    # umfasst gemessen sechs Raeume mit zusammen VIER Ablageflaechen. Im
+    # Portalgraphen haengt sie ueber 142 an Raum 135, im Spiel kommt man nur per
+    # Teleporter hinein und nicht zurueck. Sechs Raumnummern sperren ist
+    # nachvollziehbarer als ein zweiter Flood und wirkt genauso.
+    'andy3' = @{
+        172 = @(136,137,139,140,141,142)      # Kreide
+        174 = @(136,137,139,140,141,142)      # Brechstange
+    }
 }
 $typeExclude = @{}
 if ($TYPE_EXCLUDE_ROOMS.ContainsKey($LevelName)) {
@@ -839,6 +859,12 @@ $noWeaponRooms = @( if($NO_WEAPON_ROOMS.ContainsKey($LevelName)){ $NO_WEAPON_ROO
 
 $POOL_TYPES = @{
     'joby2' = @(172)
+    # andy3 hat kein einziges Schloss im Level - weder Puzzle Hole noch Key
+    # Hole. Ohne Eintrag hier taucht die Fortschrittskette also ueberhaupt nicht
+    # in den keyConstraints auf, und dann kann auch keine Sperrliste auf sie
+    # wirken. Eine Zonengrenze waere sinnlos: Zone 1 besteht aus zwei Sektoren.
+    # Die Begrenzung leistet allein TYPE_EXCLUDE_ROOMS.
+    'andy3' = @(172,174)
     # joby3: die vier Combo-Haelften. Puzzle Item3 Combo1+2 ergeben das
     # Atemgeraet, Puzzle Item4 Combo1+2 die Batterie; beides wandert in den
     # Anzug und loest die Schluss-Cutscene aus. Die beiden Slots in Raum 40
@@ -2109,8 +2135,15 @@ if ($ExportZonesJson -ne "") {
         # Kette im Level - joby5s Puzzle 1 und 2 werden erst ganz am Ende
         # gebraucht, und da ist der Strom laengst abgeschaltet. Nutzer: "Die
         # Puzzels koennen wir lassen, nur Keys sind wichtig."
+        # TYPE_EXCLUDE_ROOMS gilt hier sehr wohl - hier stand vorher eine leere
+        # Liste, und das war schlicht eine Luecke. Ein Pool-Typ hat kein Schloss
+        # und deshalb keine abgeleitete Zwangsbedingung; die Handkuration ist bei
+        # ihm also das EINZIGE, was ihn irgendwo fernhalten kann. andy3 ist der
+        # Fall, der es aufgedeckt hat: Kreide und Brechstange haben dort kein
+        # Schloss im Level und muessen trotzdem vor dem Teleporter bleiben.
+        $ptEx = @( if($typeExclude.ContainsKey($pt)){ $typeExclude[$pt] } )
         $keyConstraints += [PSCustomObject]@{ typeId=$pt; maxZone=$ptZone; instances=$inst
-            reusable=($reusableKeys -contains $pt); excludeRooms=@(); allowRooms=@()
+            reusable=($reusableKeys -contains $pt); excludeRooms=$ptEx; allowRooms=@()
             minFloorY=$null; minFloorYZone=$null; islandSectors=$null; minFloorYIsland=$null; requireInIsland=$null; bannedSectors=$(if($islandBanned.ContainsKey($pt)){@($islandBanned[$pt])}else{$null}) }
         $wie = if ($null -eq $ptKv.Value) { 'ohne Zonengrenze' } else { "begrenzt auf Zone <= $ptZone" }
         Write-Output "Pool-Typ $pt $wie aufgenommen ($inst Instanzen im Level)"
@@ -2414,6 +2447,20 @@ $KNOWN_GAPS = @{
         204 = 'Muehlenmodul, nur Flyby'; 205 = 'Muehlenmodul, nur Flyby'
         207 = 'Muehlenmodul, nur Flyby'; 242 = 'Muehlenmodul, nur Flyby'
         246 = 'Muehlenmodul, nur Flyby'; 247 = 'Muehlenmodul, nur Flyby'
+    }
+    # andy3, alle vier Luecken vom Nutzer in trview durchgesehen. Es liegt in
+    # keiner von ihnen ein bespielbares Objekt.
+    'andy3' = @{
+        148 = 'Out of map'
+        180 = 'Flyby-Kulisse'
+        181 = 'Out of map'
+        189 = 'Flyby-Kulisse'
+        190 = 'Flyby-Kulisse'
+        191 = 'Flyby-Kulisse'
+        # Raum 102 steht bewusst NICHT hier. Er ist Kernlevel und wird auch
+        # erreicht - nur ein paar seiner Sektoren nicht, und die melden sich
+        # zusammen mit dem benachbarten 103 als Vier-Sektor-Luecke.
+        103 = 'Out of map'
     }
     'joby3' = @{
         63  = 'Dekoraum fuer den Ventilator'

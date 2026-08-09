@@ -435,6 +435,17 @@ $NO_ITEM_ROOMS = @{
     # Sicherheitsnetz, falls diese Regel je gelockert wird - dann duerfen die
     # Fallenraeume nicht stillschweigend zurueckkommen.
     'Andy2' = @(7,29,31,41,132,134,143,144,145,173,174,175,176,177,179,180,181,248,250)
+    # andy3 ist bei den Sperrlisten eine andere Hausnummer als die uebrigen
+    # Level - der Nutzer schaetzt mindestens hundert Raeume. Die Liste waechst
+    # hier in Bloecken, wie er sie in trview durchgeht.
+    #
+    # Raum 113 ist der erste und zeigt zugleich, warum das Modell hier so wenig
+    # helfen kann: der Raum enthaelt KEIN einziges Item und KEINEN einzigen
+    # Static, seine Stacheln stecken in der Raumgeometrie selbst. Weder die
+    # Item- noch die Statics-Liste weiss von ihnen, und ein Sektor mit Boden und
+    # Kopffreiheit sieht fuer den Exporter tadellos aus. Solche Fallen sind
+    # ausschliesslich mit dem Auge zu finden.
+    'andy3' = @(113)
 }
 $noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$LevelName] } )
 

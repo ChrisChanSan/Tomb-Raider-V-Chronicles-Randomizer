@@ -72,6 +72,44 @@ inline bool isDespawningSwarm(int typeId)
     return typeId >= 93 && typeId <= 96;   // Bat, Rat, Spider, Spider Generator
 }
 
+// Traeger im Sinne von GetCarriedItems (game/setup.cpp:1925): ein Item, das
+// beim Levelstart die Pickups in seiner unmittelbaren Naehe einsammelt. Sie
+// verschwinden dabei aus dem Raum (room_number = NO_ROOM) und kommen erst
+// wieder zum Vorschein, wenn der Gegner stirbt oder die Kiste durchsucht wird.
+//
+// Die Engine fragt objects[...].intelligent ab. Das ist eine Eigenschaft, die
+// setup.cpp Slot fuer Slot setzt, kein zusammenhaengender Zahlenbereich - hier
+// stehen deshalb genau die 24 Slots, die sie dort bekommen. Dazu kommt der
+// Bereich SEARCH_OBJECT1..SEARCH_OBJECT3, den GetCarriedItems ausdruecklich
+// zusaetzlich prueft: die durchsuchbaren Kisten und Spinde. In den sechzehn
+// Leveln stellen sie die Mehrheit aller Traeger.
+//
+// Ausdruecklich NICHT dabei, weil man es vermuten wuerde: Scientist (69) und
+// Guardian (65) bekommen kein intelligent und tragen nichts.
+inline bool isCarrierType(int typeId)
+{
+    switch (typeId)
+    {
+    case 31: case 33: case 37: case 39: case 41: case 43: case 45: case 47:
+    case 51: case 57: case 59: case 61: case 63: case 67: case 71: case 73:
+    case 75: case 77: case 79: case 81: case 83: case 85: case 87: case 89:
+        return true;                              // intelligent = 1
+    default:
+        return typeId >= 164 && typeId <= 168;    // SEARCH_OBJECT1..3 samt MIPs
+    }
+}
+
+// Der Kasten aus GetCarriedItems, unveraendert uebernommen: gleicher Raum,
+// weniger als 512 Einheiten in X und Z, weniger als 256 in Y. Bewusst ein
+// Positionstest in Weltkoordinaten und kein Sektortest - die Engine rechnet so,
+// und ein Sektortest waere an den Raendern falsch.
+inline bool isWithinCarryBox(int bx, int by, int bz, int px, int py, int pz)
+{
+    return (bx - px < 512) && (px - bx < 512)
+        && (by - py < 256) && (py - by < 256)
+        && (bz - pz < 512) && (pz - bz < 512);
+}
+
 struct RoomOrigin { int room = 0; int originX = 0; int originZ = 0; };
 
 struct ZoneSector

@@ -208,6 +208,44 @@ int main(int argc, char** argv)
     }
     check(requiredHeld, "jeder Pflichttyp liegt mindestens einmal in seiner Inselgruppe");
 
+    // --- Getragene Items brauchen OCB 0 ---
+    //
+    // Nachgerechnet wird derselbe Kasten wie in GetCarriedItems. Was der Lauf
+    // bewegt hat, steht in edits; alles andere liegt noch auf seinem
+    // Vanilla-Platz. Zaehlt werden beide Richtungen: getragene Items insgesamt
+    // und die davon, die nach dem Ablegen unaufnehmbar waeren.
+    std::map<int, LevelItem> after;
+    for (const LevelItem& it : in.items) after[it.index] = it;
+    for (size_t i = 0; i < edits.size(); ++i)
+    {
+        LevelItem& f = after[static_cast<int>(edits[i]["index"].asInt())];
+        f.room = static_cast<int>(edits[i]["room"].asInt());
+        f.x    = static_cast<int>(edits[i]["x"].asInt());
+        f.y    = static_cast<int>(edits[i]["y"].asInt());
+        f.z    = static_cast<int>(edits[i]["z"].asInt());
+        f.ocb  = static_cast<int>(edits[i]["ocb"].asInt());
+    }
+    int carried = 0, carriedBad = 0;
+    for (const LevelItem& b : in.items)
+    {
+        if (!isCarrierType(b.typeId)) continue;
+        for (const auto& kv : after)
+        {
+            const LevelItem& p = kv.second;
+            if (p.index == b.index || !isPickupType(p.typeId)) continue;
+            if (p.room != b.room || !isWithinCarryBox(b.x, b.y, b.z, p.x, p.y, p.z)) continue;
+            ++carried;
+            if ((p.ocb & 0x3F) != 0)
+            {
+                ++carriedBad;
+                std::printf("       Item %d (Typ %d) wird von %d getragen, OCB %d\n",
+                            p.index, p.typeId, b.index, p.ocb & 0x3F);
+            }
+        }
+    }
+    std::printf("  %d Pickups landen bei einem Traeger, davon %d mit OCB != 0\n", carried, carriedBad);
+    check(carriedBad == 0, "jedes getragene Pickup hat OCB 0");
+
     // --- Reproduzierbarkeit ---
     JsonValue p2; RandoReport r2;
     Rando::run(in, opt, seed, p2, r2);

@@ -334,9 +334,22 @@ bool Rando::run(const RandoInput& in,
     JsonValue edits = JsonValue::makeArray();
     JsonValue adds = JsonValue::makeArray();
 
+    // Endstand jedes Items nach dem Lauf. Bewegte bekommen ihre neue Position,
+    // alle anderen behalten die aus Vanilla - beides zusammen braucht die
+    // Traegerpruefung ganz unten.
+    std::map<int, LevelItem> finalOf;
+    for (const LevelItem& it : in.items) finalOf[it.index] = it;
+
     auto placeAt = [&](const LevelItem& it, const ZoneSector& s)
     {
         const RoomOrigin& ro = origin[s.room];
+        LevelItem& fin = finalOf[it.index];
+        fin.room = s.room;
+        fin.x = ro.originX + s.sectorX * 1024 + 512;
+        fin.y = s.floorY;
+        fin.z = ro.originZ + s.sectorZ * 1024 + 512;
+        fin.ocb = 0;
+
         JsonValue e = JsonValue::makeObject();
         e.set("index", JsonValue::makeInt(it.index));
         e.set("room", JsonValue::makeInt(s.room));
@@ -474,6 +487,59 @@ bool Rando::run(const RandoInput& in,
         used.insert(secKey(s.room, s.sectorX, s.sectorZ));
         ++report.injected;
         report.notes.push_back(fmt("Injiziert: typeId %d in Raum %d (%s)", j.typeId, j.room, j.reason.c_str()));
+    }
+
+    // --- Was traegt am Ende wer? ---
+    //
+    // GetCarriedItems (game/setup.cpp:1925) laeuft beim Levelstart ueber alle
+    // Items und gibt jedem Traeger die Pickups, die dicht genug bei ihm liegen.
+    // Das ist gewollt und vom Nutzer ausdruecklich in Ordnung befunden: ein
+    // Schluessel beim Gegner ist eine gute Fundstelle.
+    //
+    // Eine Bedingung gibt es aber. DropBaddyPickups (game/box.cpp:833) legt das
+    // Item beim Tod auf die Sektormitte des Gegners, und PickUpCollision
+    // (game/pickup.cpp:734) faechert ueber die OCB in Sonderfaelle auf, die Lara
+    // per TestLaraPosition an einer Kulisse ausrichten - an einer Kulisse, die
+    // am Fallort nicht steht. Ein getragenes Pickup mit OCB != 0 liegt danach
+    // fuer immer unaufnehmbar herum, ohne Absturz und ohne Meldung.
+    //
+    // Alles, was dieser Lauf bewegt, bekommt nach Regel 3 ohnehin OCB 0, und in
+    // Vanilla haben alle 56 getragenen Items ebenfalls OCB 0. Die Regel ist also
+    // erfuellt - nachgerechnet wird sie trotzdem, denn beides ist eine Zusage
+    // von aussen und keine Eigenschaft dieses Codes. Sobald Gegner selbst
+    // bewegt werden, kann ein Traeger auf einem ortsfesten Pickup landen, und
+    // dann faellt es hier auf statt im Spiel.
+    for (const LevelItem& b : in.items)
+    {
+        if (!isCarrierType(b.typeId)) continue;
+        for (const auto& kv : finalOf)
+        {
+            const LevelItem& p = kv.second;
+            if (p.index == b.index || !isPickupType(p.typeId)) continue;
+            if (p.room != b.room) continue;
+            if (!isWithinCarryBox(b.x, b.y, b.z, p.x, p.y, p.z)) continue;
+
+            if ((p.ocb & 0x3F) != 0)
+            {
+                // Kein Abbruch. Bewegte Items bekommen immer OCB 0, ein Wert
+                // ungleich null kann also nur bedeuten, dass Item UND Traeger
+                // beide unveraendert dort liegen, wo Vanilla sie hingestellt
+                // hat. Daran ist dieser Lauf unschuldig, und einen Lauf an einer
+                // Vanilla-Konstellation scheitern zu lassen hat sich in diesem
+                // Projekt schon zweimal als falsch erwiesen.
+                //
+                // Sobald Gegner selbst verschoben werden, aendert sich das: dann
+                // kann ein Traeger auf einem ortsfesten Pickup landen, und das
+                // waere sehr wohl unser Werk. Hier ist die Stelle, an der es
+                // dann zum Fehler werden muss.
+                report.notes.push_back(fmt("Item %d (typeId %d) liegt unveraendert bei Traeger %d und hat OCB %d - "
+                                           "abgelegt waere es nicht aufnehmbar (Vanilla-Zustand, nicht veraendert).",
+                                           p.index, p.typeId, b.index, p.ocb & 0x3F));
+                continue;
+            }
+            report.notes.push_back(fmt("Item %d (typeId %d) liegt bei Item %d (typeId %d) und wird getragen.",
+                                       p.index, p.typeId, b.index, b.typeId));
+        }
     }
 
     patchOut = JsonValue::makeObject();

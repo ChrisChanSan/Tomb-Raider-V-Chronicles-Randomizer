@@ -1028,6 +1028,16 @@ $ISLAND_GROUP = @{
     # Zonengrenze, die 150 uebrig liess. Der Hammer liegt vanilla in Raum 22 und
     # damit innerhalb.
     'rich1' = @( @{ IslandTypes = @(202); DeadstopRooms = @(12) } )
+    # Fuer Puzzle Item4 wurde hier eine zweite Gruppe versucht (Deadstop Raum 66,
+    # in dem Tuer 107 steht) und wieder verworfen: sie verbot dem Teil seinen
+    # eigenen Vanilla-Platz in Raum 153.
+    #
+    # Der Grund ist keine falsche Raumwahl, sondern ein Denkfehler in der
+    # Zuordnung. Eine Inselgruppe flutet ab Laras Start mit ALLEN Tueren zu -
+    # sie beschreibt "was von Anfang an offensteht". Das passt auf den Hammer,
+    # der frueh im Level liegt, und prinzipiell nicht auf ein Teil, dessen
+    # Vanilla-Platz in Zone 7 hinter einem Dutzend Tueren sitzt. Fuer solche
+    # Faelle braucht es eine Raumliste in TYPE_EXCLUDE_ROOMS.
 }
 $islandGroups = @( if($ISLAND_GROUP.ContainsKey($LevelName)){ $ISLAND_GROUP[$LevelName] } )
 
@@ -2276,7 +2286,28 @@ foreach($kv in $byType.GetEnumerator()){
     $nt = [int]$kv.Key
     # Bleibt Vanilla: Anforderung oben im Report sichtbar, aber nicht im Pool.
     if ($vanillaTypes -contains $nt) { continue }
-    $maxZ = ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
+    # Verbraucht oder mehrfach nutzbar - das entscheidet, ob hier das Maximum
+    # oder das Minimum steht, und es ist keine Feinheit.
+    #
+    # Ein VERBRAUCHTER Schluessel hat so viele Instanzen wie Schloesser, und
+    # jede bedient genau eines. Welche Instanz zu welchem Schloss gehoert,
+    # entscheidet der Randomizer; fuer den Typ als Ganzes zaehlt darum das
+    # spaeteste Schloss - Maximum.
+    #
+    # Ein MEHRFACH NUTZBARER Schluessel (203, siehe REUSABLE_KEYS_GLOBAL) hat
+    # eine einzige Instanz fuer alle Schloesser. Die muss vor dem FRUEHESTEN
+    # verfuegbar sein, sonst ist das erste Schloss unbedienbar - Minimum.
+    #
+    # Mit dem Maximum stand rich1s Key Item8 auf Zone <= 6, obwohl sein erstes
+    # Schloss (Item 55, Raum 26) in Zone 0 sitzt. Der Nutzer fand ihn daraufhin
+    # in Raum 27, Zone 1, hinter einer Tuer, die er selbst oeffnen soll. Der
+    # Textreport nannte die richtige Zahl uebrigens die ganze Zeit ("muss in
+    # Zone <= 0 liegen"); falsch war nur, was in den Export ging.
+    $maxZ = if ($reusableKeys -contains $nt) {
+        ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Minimum).Minimum
+    } else {
+        ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
+    }
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement + $noKeyRooms | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
     $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}); bannedSectors=$(if($islandBanned.ContainsKey($nt)){@($islandBanned[$nt])}else{$null}); forbiddenSectors=$(if($forbiddenBehindOwnDoor.ContainsKey($nt)){@($forbiddenBehindOwnDoor[$nt])}else{$null}); minFloorYIsland=$(if($islandHeightScope.ContainsKey($nt)){@($islandHeightScope[$nt])}else{$null}); requireInIsland=$(if($islandRequire.ContainsKey($nt)){@($islandRequire[$nt])}else{$null}) }

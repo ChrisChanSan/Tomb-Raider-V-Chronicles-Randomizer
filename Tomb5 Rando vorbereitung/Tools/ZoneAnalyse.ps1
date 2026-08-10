@@ -447,6 +447,12 @@ $NO_ITEM_ROOMS = @{
     # eingetragen: das Item geht nicht verloren, es wandert nur woanders hin,
     # und die Abnahmeregel "keine Vanilla-Position verbieten" richtet sich gegen
     # falsche ABGELEITETE Regeln, nicht gegen eine Handentscheidung des Nutzers.
+    #
+    # Raum 17 hat einen eigenen Grund, den nur der Nutzer kennen kann: SOBALD DER
+    # HAMMER BENUTZT WIRD, ist der Bereich unerreichbar. Was dort liegt, ist
+    # danach verloren. In den Leveldaten steht davon nichts - der Raum sieht
+    # begehbar aus, ist erreicht und traegt zwoelf tadellose Ablagen. Genau die
+    # Sorte Einbahnstrasse, die das Zonenmodell prinzipiell nicht sehen kann.
     'rich1' = @(17,19,20,46,47,68,85,87,89,90,92,123,130,154)
     # Raum 113 ist der erste und zeigt zugleich, warum das Modell hier so wenig
     # helfen kann: der Raum enthaelt KEIN einziges Item und KEINEN einzigen

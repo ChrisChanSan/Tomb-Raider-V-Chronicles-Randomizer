@@ -1034,6 +1034,16 @@ $ISLAND_GROUP = @{
         # Schluessel ist mehrfach nutzbar, eine einzige Instanz bedient alle vier
         # Schloesser - sie muss also vor jedem von ihnen liegen.
         @{ IslandTypes = @(203); DeadstopRooms = @(27,31,42,111); DoorsOpen = $true }
+        # Puzzle Item4. Vorgabe des Nutzers: ein Abschnitt zwischen zwei Sperren,
+        # Raum 116 auf der einen und Raum 66 (dort steht Tuer 107) auf der
+        # anderen Seite - dazwischen darf das Teil ueberall liegen. Raum 116 ist
+        # ueber Raum 114 mit Explosionen erreichbar und damit vermutlich selbst
+        # ein Point of no return.
+        #
+        # Das ist der erste Abschnitt, der nicht an Laras Start haengt, daher
+        # StartRoom. Von Lara aus liesse er sich nicht beschreiben: die erste
+        # Sperre laege dann schon davor.
+        @{ IslandTypes = @(175); StartRoom = 114; DeadstopRooms = @(66,116); DoorsOpen = $true }
     )
     # Fuer Puzzle Item4 wurde hier eine zweite Gruppe versucht (Deadstop Raum 66,
     # in dem Tuer 107 steht) und wieder verworfen: sie verbot dem Teil seinen
@@ -2130,10 +2140,26 @@ foreach($ig in $islandGroups){
     # erst im Spielverlauf aufgehen, und die geschlossene Lesart sperrte sie
     # deshalb faelschlich aus.
     $doorsOpen = ($ig.DoorsOpen -eq $true)
+
+    # Normalerweise beginnt die Flut bei Lara. Ein Abschnitt MITTEN im Level
+    # laesst sich so aber nicht beschreiben - rich1s Puzzle Item4 liegt zwischen
+    # zwei Sperren, und von Laras Start aus kaeme man ueber die erste nie hinaus.
+    # StartRoom setzt den Keim deshalb frei; genommen wird der erste begehbare
+    # Sektor des Raums, der ueberhaupt im Graphen haengt.
+    $seedKey = $startKey
+    if ($null -ne $ig.StartRoom) {
+        $seedKey = $null
+        foreach($cand in @($d.sectors | Where-Object { [int]$_.room -eq [int]$ig.StartRoom -and -not $_.isWall -and $_.hasFloor } | Sort-Object sectorX,sectorZ)){
+            $ck = "$($cand.room),$($cand.sectorX),$($cand.sectorZ)"
+            if ($adj.ContainsKey($ck)) { $seedKey = $ck; break }
+        }
+        if ($null -eq $seedKey) { Write-Output "WARNUNG: Inselgruppe - StartRoom $($ig.StartRoom) hat keinen begehbaren Sektor im Graphen" }
+    }
+
     $isl = New-Object System.Collections.Generic.HashSet[string]
-    if ($null -ne $startKey) {
+    if ($null -ne $seedKey) {
         $qi = New-Object System.Collections.Generic.Queue[string]
-        [void]$isl.Add($startKey); $qi.Enqueue($startKey)
+        [void]$isl.Add($seedKey); $qi.Enqueue($seedKey)
         while($qi.Count -gt 0){
             $k = $qi.Dequeue()
             if (-not $adj.ContainsKey($k)) { continue }

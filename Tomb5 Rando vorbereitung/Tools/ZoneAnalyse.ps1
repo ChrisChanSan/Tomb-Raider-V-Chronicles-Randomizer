@@ -449,7 +449,7 @@ $NO_ITEM_ROOMS = @{
     # Abschnitte werden ueber den Raumgraphen und DeadstopRooms bestimmt,
     # NO_ITEM_ROOMS wirkt erst danach auf die Ablagen.
     'andy3' = @(10,12,14,15,16,17,19,22,23,24,25,27,35,36,86,87,108,113,115,116,
-                120,121,133,155,156,158,167,172,209)
+                120,121,133,155,156,158,167,171,172,209)
 }
 $noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$LevelName] } )
 

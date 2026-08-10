@@ -34,8 +34,11 @@
 //    liefen also die ganze Zeit ohne ihre Handkanten. Zonen und Ablagen der
 //    zwoelf anderen Level bleiben davon zwar unberuehrt, rich2 aber nicht,
 //    und die Zonennummern selbst sind Eingabe jeder Platzierung.
-#define RANDO_BUILD_ID      4
-#define RANDO_BUILD_STRING  "0.4"
+// 5: rich2 hat jetzt Constraints - vorher hatte es null. Puzzle Item3 bekommt
+//    seine Zonengrenze, Pickup Item2 und je eine Flasche und ein Tuch muessen
+//    in den Startbereich, die Aufzugssektion traegt keine Key-Items mehr.
+#define RANDO_BUILD_ID      5
+#define RANDO_BUILD_STRING  "0.5"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

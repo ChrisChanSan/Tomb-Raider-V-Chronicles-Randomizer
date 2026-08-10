@@ -618,6 +618,24 @@ $EXTRA_POOL_TYPES = @{
     # eigentliche Schranke ist die Raumliste, die der Nutzer als "save"
     # bestaetigt hat.
     'Andrea2' = @{ 240 = 1 }
+    # rich2s einziges echtes Key-Item: Puzzle Item3 (typeId 174, Item 234,
+    # Raum 166). Von seinen vier Schloessern findet nur Puzzle Hole3 (Item 207,
+    # Raum 147) ein passendes Item - Hole8 steht zweimal fuer die Keypads, deren
+    # "Schluessel" ein abzulesender Code ist, und Hole2 in Raum 149 hat im ganzen
+    # Level kein Puzzle Item2.
+    #
+    # Das Modell leitet hier von sich aus NICHTS ab, und der Grund ist lehrreich:
+    # es kennt nur Schloesser, die eine TUER aufsperren. Alle 27 Zonentueren in
+    # rich2 haengen an Triggern und Schaltern, keine an einem Schloss. Hole3
+    # dagegen hebt einen Raising Block2 (Item 214) in Raum 149 und schaltet vier
+    # Animatings - erst dadurch kommt Lara an Hole2, deren Trigger den Teleporter
+    # nach Raum 152 stellt. Ein Hubblock ist im Zonenmodell keine Schranke, also
+    # sieht es die Kette nicht.
+    #
+    # Massgeblich ist die Zone des Schlosses: Raum 147 liegt in Zone 4, das Item
+    # muss also spaetestens in Zone 4 liegen. Seine Vanilla-Position in Raum 166
+    # ist ebenfalls Zone 4 - die Grenze verbietet sie nicht.
+    'rich2'   = @{ 174 = 4 }
 }
 
 # Items, die ein Level zwingend BRAUCHT, die in Vanilla aber fehlen. Andrea3
@@ -644,6 +662,11 @@ $FIXED_ITEMS = @{
     'Andrea3' = @{ 49 = 'Puzzle Item4 Combo2 - triggert eine Tuer' }
     'Andrea2' = @{ 128 = 'Ventil - muss an einer Wand sitzen (siehe VANILLA_TYPES 172)' }
     'rich1'   = @{ 27 = 'CD - Invisible, wird per Switch aus dem Anzug enthuellt' }
+    # rich2s Guard (USSR) in Raum 84. Nutzervorgabe: der Gegner bleibt Vanilla.
+    # Heute folgenlos - Gegner stehen ueberhaupt noch nicht im Pool, das ist #38 -,
+    # aber der Eintrag muss jetzt stehen, sonst geht die Vorgabe verloren, wenn
+    # der Gegnertausch kommt. Dieselbe Rolle wie rich1s Scientist in Raum 34.
+    'rich2'   = @{ 154 = 'Guard (USSR) - bleibt Vanilla (Nutzervorgabe, gilt ab #38)' }
 }
 
 # Typen, die komplett an ihren Vanilla-Positionen bleiben. Ihre Zwangsbedingung
@@ -1071,6 +1094,12 @@ $POOL_TYPES = @{
     # sieben Inselsektoren aus Zone 1 faelschlich verbieten. Deshalb hier ohne
     # Zonengrenze.
     'rich1' = @(202)
+    # rich2: die drei Typen, die der Nutzer im Startbereich haben will - Pickup
+    # Item2 (221), Bottle (235) und Cloth (236). Keiner hat ein Schloss, also
+    # entsteht ohne diesen Eintrag gar kein Constraint-Objekt, an dem die
+    # Inselgruppe haengen koennte - die Insel wurde brav berechnet und lief ins
+    # Leere. Dieselbe Falle wie bei rich1s Hammer.
+    'rich2' = @(221,235,236)
     # joby3: die vier Combo-Haelften. Puzzle Item3 Combo1+2 ergeben das
     # Atemgeraet, Puzzle Item4 Combo1+2 die Batterie; beides wandert in den
     # Anzug und loest die Schluss-Cutscene aus. Die beiden Slots in Raum 40
@@ -1172,6 +1201,29 @@ $ISLAND_GROUP = @{
         # StartRoom. Von Lara aus liesse er sich nicht beschreiben: die erste
         # Sperre laege dann schon davor.
         @{ IslandTypes = @(175); StartRoom = 114; DeadstopRooms = @(66,116); DoorsOpen = $true }
+    )
+    # rich2s Startbereich: "alles bis Tuer 105" (Nutzer). Das ist die Keypad-Tuer
+    # in Raum 55, hinter der es ins WC und damit in den Rest des Levels geht.
+    # Deshalb Raum 55 als Deadstop und eine Flut ab Laras Start.
+    #
+    # Drei Sachen sollen dort liegen, alle drei Nutzervorgabe:
+    #   221  Pickup Item2 - genau eine Instanz im Level, muss in den Bereich
+    #   235  Bottle       - vier Instanzen, mindestens eine muss hinein
+    #   236  Cloth        - genau eine Instanz, muss hinein
+    # Flasche und Tuch werden im Inventar zum Chloroformtuch verbunden, mit dem
+    # Lara Gegner lautlos ausschaltet. Fehlt eins von beiden im Startbereich,
+    # steht dieser Weg von Anfang an nicht offen.
+    #
+    # IslandTypes fuer 221 (der Typ als Ganzes gehoert hinein), RequireTypes fuer
+    # 235 und 236 ("mindestens eine Instanz in der Gruppe") - bei 236 laeuft
+    # beides aufs selbe hinaus, weil es nur eine gibt.
+    'rich2' = @(
+    # Zweiter Deadstop ist Raum 58, und der ist nicht offensichtlich: von dort
+    # fuehrt die Deckenluke (Item 7, geoeffnet vom Trigger in 58) zurueck nach
+    # Raum 8. Das ist der Rueckweg vom Levelende, mit dem Lara die HK holt. Ohne
+    # ihn lief die Flut ueber 58 -> 59 -> 7 bis in die Raeume 152, 156 und 161 -
+    # Zone 4 und 5 - und der "Startbereich" haette das halbe Levelende umfasst.
+        @{ IslandTypes = @(221); RequireTypes = @(235,236); DeadstopRooms = @(55,58); DoorsOpen = $true }
     )
     # Fuer Puzzle Item4 wurde hier eine zweite Gruppe versucht (Deadstop Raum 66,
     # in dem Tuer 107 steht) und wieder verworfen: sie verbot dem Teil seinen

@@ -305,7 +305,17 @@ $EXCLUDE_SECTORS = @{
     # Merke fuer den naechsten Fall dieser Art: eine Sperre, die das halbe Level
     # kostet, ist fast nie zu streng - ihr fehlt ein Weg, den das Modell nicht
     # kennt. Erst den Weg suchen, dann die Sperre bewerten.
-    'rich2' = @('119,8,1','119,8,2')
+    #
+    # Vier Sektoren, nicht zwei. (8,1) und (8,2) sind die Felder, auf denen der
+    # Strahl liegt - der Nutzer hat sie so benannt, dort steht Item 178. (9,1)
+    # und (9,2) sind das PORTAL nach Raum 57, einen Sektor dahinter.
+    #
+    # Beide zu sperren ist noetig, weil Add-Edge Portale beidseitig anlegt: von
+    # 57 aus kam die Flut ueber die Rueckkante in 119(9,z) an, ohne je an (8,z)
+    # vorbeigemusst zu haben. Fuer die Hauptflut aenderte das nichts, dort war
+    # (8,z) schon die Bremse - aber die Aufzugsinsel griff dadurch nach Raum 119
+    # und damit nach einem Zone-0-Raum der Hauptseite.
+    'rich2' = @('119,8,1','119,8,2','119,9,1','119,9,2')
 }
 $excludeRooms = @( if($EXCLUDE_ROOMS.ContainsKey($LevelName)){ $EXCLUDE_ROOMS[$LevelName] } )
 $excludeSectors = @( if($EXCLUDE_SECTORS.ContainsKey($LevelName)){ $EXCLUDE_SECTORS[$LevelName] } )
@@ -389,6 +399,54 @@ $NO_PLACEMENT_ROOMS = @{
     'Andrea3' = @(1,2,3,4,5,6,11,19,20,21,22,29,30,34,112,123,124)
 }
 $noPlacement = @( if($NO_PLACEMENT_ROOMS.ContainsKey($LevelName)){ $NO_PLACEMENT_ROOMS[$LevelName] } )
+
+# Dasselbe wie NO_PLACEMENT_ROOMS, nur nicht als Raumliste, sondern als
+# Abschnitt zwischen Eingang und Ausgang: `StartRoom` und `DeadstopRooms`, der
+# Rest ergibt sich aus dem Sektorgraphen. Gedacht fuer geschlossene Sektionen,
+# die man nicht Raum fuer Raum abschreiben will.
+#
+# Der Flood laeuft auf DEM SEKTORGRAPHEN, nicht auf dem Raumgraphen. Das ist
+# der ganze Unterschied: der Raumgraph kennt keine gesperrten Sektoren, und in
+# rich2 lief er deshalb bei 57 -> 119 mitten durch die Laserwand zurueck ins
+# Level - 128 von 179 Raeumen, bis hinunter zu Laras Startraum. Der
+# Sektorgraph traegt die Wand und bleibt drin.
+$NO_KEY_ISLAND = @{
+    # rich2s Aufzugssektion. Der Nutzer: Eingang ist Raum 140, Ausgang Raum 113,
+    # und was dazwischen liegt, soll keine Key-Items tragen - gewoehnliche
+    # Pickups schon.
+    #
+    # Der Grund steckt in der Sektion selbst. Sie ist eine Kette aus Schaltern,
+    # Lifttueren und fuenf Teleportern, an deren Ende Lara per Cutscene ins EG
+    # versetzt wird; das Modell sieht davon nur die Sektoren und laeuft sie in
+    # beliebiger Reihenfolge ab. Ein Schluessel darin haette eine Zonennummer,
+    # der niemand trauen kann. Ein Medipack dagegen stoert nicht.
+    'rich2' = @(
+        # Drei Deadstops, und jeder hat seinen eigenen Grund.
+        #
+        # 141 ist der Schacht ueber dem Eingang. Ohne ihn laeuft die Flut ueber
+        # die Handkante 130 -> 139 rueckwaerts wieder ins WC und von dort ins
+        # ganze Level.
+        #
+        # 46 ist das eigentliche Leck, und es zu finden hat gedauert, weil es
+        # nicht in den Sektordaten steht: der Nutzer hat es in trview gesehen.
+        # Im Erdgeschoss ist bei FlipMap 0 der Schacht offen, und FlipMap 0 ist
+        # ab Levelstart gesetzt - Raum 42 haengt damit dauerhaft an Raum 46, der
+        # EG-Halle. Ueber sie lief die Flut jedes Mal bis hinunter zu Laras
+        # Startraum 129. Mein erster Versuch, stattdessen 46s Nachbarn 122 und
+        # 123 zu sperren, war Symptomkur: 46 selbst gehoert nicht mehr zur
+        # Sektion.
+        #
+        # 113 ist der Ausgang, den der Nutzer genannt hat. Er wird zusaetzlich
+        # gebraucht - 46 allein reicht nicht, weil 113 auch ueber 115 und 172
+        # von innen erreichbar ist und die Flut von dort weiterlaeuft.
+        #
+        # Ergebnis: 51 Raeume, 638 Sektoren, 93 der 588 Ablagen. Ohne die
+        # Deadstops waeren es 586 von 588 gewesen - also praktisch das ganze
+        # Level.
+        @{ StartRoom = 140; DeadstopRooms = @(141,46,113) }
+    )
+}
+$noKeyIslands = @( if($NO_KEY_ISLAND.ContainsKey($LevelName)){ $NO_KEY_ISLAND[$LevelName] } )
 
 #----------------------------------------------------------------------------
 # Raeume, die begehbar bleiben, in denen aber GAR NICHTS liegen darf.
@@ -1217,19 +1275,21 @@ $MANUAL_LINK = @{
     'rich1' = @(
         @{From='30,2,2'; To='82,2,2'}
     )
-    # rich2: das Teleporternetz der Aufzugssektion. Der Nutzer hat die Kette
-    # erklaert, die Sektoren stehen so in den Triggerdaten:
-    #   Schalter 33(2,2) -> Teleporter  62 in Raum  39   (Lift 2, erster Sprung)
-    #   Schalter 39(2,2) -> Teleporter 142 in Raum  80   (Tueren schliessen)
-    #   Schalter 80(2,2) -> Teleporter  72 in Raum  42   (nach der Cutscene ins EG)
-    #   Trigger  71(2,2) -> Teleporter  76 in Raum  42
-    #   Trigger  74(2,2) -> Teleporter 148 in Raum  82
-    #   Key     149(5,5) -> Teleporter 217 in Raum 152
+    # rich2. HIER STANDEN EINMAL SECHS TELEPORTERPAARE - sie sind wieder weg,
+    # und das ist die eigentliche Lehre dieses Levels. Die Aufzugssektion haengt
+    # an sechs Teleportern, ich hatte sie aus den Triggerdaten abgeschrieben und
+    # von Hand eingetragen. Der Code leitet sie aber laengst selbst ab (siehe die
+    # TELEPORT_TYPES-Schleife weiter unten) - und zwar GERICHTET, vom Trigger zum
+    # Teleporter, so wie ControlTeleporter Lara wirklich versetzt.
     #
-    # Der Lift faehrt dabei nirgendwo hin - Raum 39 ist dieselbe Kabine noch
-    # einmal, eine Etage hoeher gebaut, damit es nach Fahrt aussieht. Deshalb
-    # findet der Portalgraph nichts: es gibt keine Portale, die Engine versetzt
-    # Lara.
+    # Meine Handeintraege waren mit denselben Sektoren also reine Dubletten, nur
+    # BEIDSEITIG. Damit lief die Flut die Kette rueckwaerts: sie stand im EG und
+    # ging von dort zurueck in die Liftkabine, die sie nie erreicht hatte. Aus
+    # einer gerichteten Levelmechanik eine Strasse zu machen ist schlimmer, als
+    # sie gar nicht zu kennen.
+    #
+    # Merke: bevor eine Kante von Hand kommt, nachsehen, ob der Code sie schon
+    # ableitet. Teleporter, Bruecken und Tueren tut er.
     'rich2' = @(
         # Der Eintritt in die Aufzugssektion. Der Weg dorthin ist die Kette, die
         # der Nutzer beschrieben hat: Tuer 105 per Keypad ins WC, von Raum 134
@@ -1247,12 +1307,6 @@ $MANUAL_LINK = @{
         # ueberspringt. Lara haelt sich dort ohnehin nicht auf, sie geht
         # hindurch. 130(1,1) und 139(1,1) sind beide sauberer Boden.
         @{From='130,1,1'; To='139,1,1'}
-        @{From='33,2,2';  To='39,1,2'}
-        @{From='39,2,2';  To='80,1,2'}
-        @{From='80,2,2';  To='42,2,2'}
-        @{From='71,2,2';  To='42,2,3'}
-        @{From='74,2,2';  To='82,1,2'}
-        @{From='149,5,5'; To='152,5,5'}
     )
 }
 
@@ -2474,6 +2528,35 @@ if ($null -ne $startKey) {
         $forbiddenBehindOwnDoor[$nt] = $cut
         Write-Output "Hinter eigener Tuer gesperrt: Typ $nt, $($sets.Count) Tuer(en) -> $($cut.Count) Sektoren (Schnitt)"
     }
+}
+
+# NO_KEY_ISLAND aufloesen: Abschnitt fluten und seine Raeume an $noPlacement
+# haengen. Muss hier stehen - nach dem vollstaendigen Graphaufbau, damit die
+# Sperren und Handkanten drin sind, und vor der Key-Auswertung, die
+# $noPlacement liest.
+foreach($ni in $noKeyIslands){
+    $stopN = @($ni.DeadstopRooms)
+    $seedN = $null
+    foreach($cand in @($d.sectors | Where-Object { [int]$_.room -eq [int]$ni.StartRoom -and -not $_.isWall -and $_.hasFloor } | Sort-Object sectorX,sectorZ)){
+        $ck = "$($cand.room),$($cand.sectorX),$($cand.sectorZ)"
+        if ($adj.ContainsKey($ck)) { $seedN = $ck; break }
+    }
+    if ($null -eq $seedN) { Write-Output "WARNUNG: NO_KEY_ISLAND - StartRoom $($ni.StartRoom) hat keinen begehbaren Sektor im Graphen"; continue }
+    $islN = New-Object System.Collections.Generic.HashSet[string]
+    $qn = New-Object System.Collections.Generic.Queue[string]
+    [void]$islN.Add($seedN); $qn.Enqueue($seedN)
+    while($qn.Count -gt 0){
+        $k = $qn.Dequeue()
+        if (-not $adj.ContainsKey($k)) { continue }
+        foreach($n in $adj[$k]){
+            if ($islN.Contains($n)) { continue }
+            if ($stopN -contains [int](($n -split ',')[0])) { continue }
+            [void]$islN.Add($n); $qn.Enqueue($n)
+        }
+    }
+    $rmN = @($islN | ForEach-Object { [int](($_ -split ',')[0]) } | Sort-Object -Unique)
+    $noPlacement = @($noPlacement + $rmN | Sort-Object -Unique)
+    Write-Output "NO_KEY_ISLAND (Start $($ni.StartRoom), Deadstops $($stopN -join ', ')): $($islN.Count) Sektoren in $($rmN.Count) Raeumen ohne Key-Items"
 }
 
 # HINWEIS: Hier stand die abgeleitete Regel "ein Schluessel darf nie hinter

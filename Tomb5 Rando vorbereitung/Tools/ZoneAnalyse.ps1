@@ -453,7 +453,7 @@ $NO_ITEM_ROOMS = @{
     # danach verloren. In den Leveldaten steht davon nichts - der Raum sieht
     # begehbar aus, ist erreicht und traegt zwoelf tadellose Ablagen. Genau die
     # Sorte Einbahnstrasse, die das Zonenmodell prinzipiell nicht sehen kann.
-    'rich1' = @(17,19,20,46,47,68,85,87,89,90,92,123,130,154)
+    'rich1' = @(17,19,20,46,47,68,83,85,87,89,90,92,123,130,154)
     # Raum 113 ist der erste und zeigt zugleich, warum das Modell hier so wenig
     # helfen kann: der Raum enthaelt KEIN einziges Item und KEINEN einzigen
     # Static, seine Stacheln stecken in der Raumgeometrie selbst. Weder die

@@ -1053,6 +1053,84 @@ $NO_ITEM_SECTORS = @{
 }
 $noItemSectors = @( if($NO_ITEM_SECTORS.ContainsKey($LevelName)){ $NO_ITEM_SECTORS[$LevelName] } )
 
+#----------------------------------------------------------------------------
+# Hoehenbaender je Levelabschnitt.
+#
+# Idee des Nutzers fuer andy3, und dort zahlt sie sich sofort aus: das Level
+# zerfaellt durch seine Einbahn-Teleporter ohnehin in Abschnitte, und innerhalb
+# eines Abschnitts liegt der bespielbare Boden in einem schmalen Hoehenband.
+# Alles darueber und darunter ist Dach, Kulisse oder Abgrund. Statt hundert
+# Raumnummern von Hand zu sammeln, reicht damit je Abschnitt ein Bandwert.
+#
+# Der Abschnitt wird als Raumkomponente bestimmt: ab StartRoom durch Portale und
+# vertikale Verbindungen, ohne DeadstopRooms zu betreten. Bewusst der ROMGRAPH
+# und nicht die begehbare Flut - der Abschnitt soll eine Eigenschaft der
+# Levelarchitektur sein und nicht davon abhaengen, welche Tuer gerade offen ist.
+# In andy3 trennt das sauber: 64 Raeume ab Lara mit Stop am Teleporterraum 110,
+# 117 Raeume ab dem Zielraum 140 mit Stop am naechsten Teleporter 155, ohne
+# einen einzigen gemeinsamen Raum.
+#
+# Y-KONVENTION: in TR liegt KLEINERES y HOEHER. YMin ist deshalb die OBERE
+# Schranke der Welt und YMax die untere. Die Werte kommen aus trview, und dessen
+# Anzeige ist bitgleich mit unserem floorY - an vier Items gegengeprueft, es
+# wird nichts invertiert.
+#
+# $null auf einer Seite heisst "dort offen". Insel 2 in andy3 braucht nur eine
+# obere Schranke; nach unten geht es dort einfach immer tiefer ins Level.
+#----------------------------------------------------------------------------
+$ISLAND_YBAND = @{
+    'andy3' = @(
+        @{ Name = 'Insel 1'; StartRoom = 29;  DeadstopRooms = @(110); YMin = 451;  YMax = 6495 }
+        @{ Name = 'Insel 2'; StartRoom = 140; DeadstopRooms = @(155); YMin = 7940; YMax = $null }
+    )
+}
+$ybandBarred = New-Object System.Collections.Generic.HashSet[string]
+if ($ISLAND_YBAND.ContainsKey($LevelName)) {
+    $roomAdj = @{}
+    foreach($sx in $d.sectors){
+        $a = [int]$sx.room
+        foreach($t in @($sx.portalTarget, $sx.roomBelow, $sx.roomAbove)){
+            if ($null -eq $t -or "$t" -eq "") { continue }
+            $b = [int]$t
+            if ($b -lt 0 -or $b -ge $d.rooms.Count) { continue }
+            if (-not $roomAdj.ContainsKey($a)) { $roomAdj[$a] = New-Object System.Collections.Generic.HashSet[int] }
+            if (-not $roomAdj.ContainsKey($b)) { $roomAdj[$b] = New-Object System.Collections.Generic.HashSet[int] }
+            [void]$roomAdj[$a].Add($b); [void]$roomAdj[$b].Add($a)
+        }
+    }
+    foreach($band in $ISLAND_YBAND[$LevelName]){
+        $stopR = @($band.DeadstopRooms | ForEach-Object { [int]$_ })
+        $seenR = New-Object System.Collections.Generic.HashSet[int]
+        [void]$seenR.Add([int]$band.StartRoom)
+        $qr = New-Object System.Collections.Generic.Queue[int]
+        $qr.Enqueue([int]$band.StartRoom)
+        while($qr.Count -gt 0){
+            $cr = $qr.Dequeue()
+            if (-not $roomAdj.ContainsKey($cr)) { continue }
+            foreach($n in $roomAdj[$cr]){
+                if ($stopR -contains $n -or $seenR.Contains($n)) { continue }
+                [void]$seenR.Add($n); $qr.Enqueue($n)
+            }
+        }
+        $rausHoch = 0; $rausTief = 0
+        foreach($sx in $d.sectors){
+            if (-not $seenR.Contains([int]$sx.room)) { continue }
+            $y = [int]$sx.floorY
+            if ($null -ne $band.YMin -and $y -lt [int]$band.YMin) {
+                [void]$ybandBarred.Add("$($sx.room),$($sx.sectorX),$($sx.sectorZ)"); $rausHoch++
+            }
+            elseif ($null -ne $band.YMax -and $y -gt [int]$band.YMax) {
+                [void]$ybandBarred.Add("$($sx.room),$($sx.sectorX),$($sx.sectorZ)"); $rausTief++
+            }
+        }
+        $oben  = if ($null -ne $band.YMin) { "y >= $($band.YMin)" } else { 'nach oben offen' }
+        $unten = if ($null -ne $band.YMax) { "y <= $($band.YMax)" } else { 'nach unten offen' }
+        # Gezaehlt werden alle Sektoren des Abschnitts, nicht nur die itemfaehigen -
+        # wie viele Ablagen es am Ende kostet, steht in der Exportzeile.
+        Write-Output "Hoehenband $($band.Name): $($seenR.Count) Raeume ab $($band.StartRoom) (Stop $($stopR -join ', ')), erlaubt $oben und $unten - ausserhalb: $rausHoch zu hoch, $rausTief zu tief (Sektoren des Abschnitts)"
+    }
+}
+
 # Schluessel, die NICHT verbraucht werden. Der Normalfall in TR ist: Key oder
 # Puzzle-Item wandert ins Schloss und ist weg - KeyHoleCollision (game/pickup.cpp:
 # 594) ruft dafuer remove_inventory_item auf. EINE einzige harte Ausnahme steht
@@ -2166,6 +2244,7 @@ if ($ExportZonesJson -ne "") {
         if ($null -ne $levelMinClearance -and [int]$s.clearance -lt $levelMinClearance) { continue }
         if ($noItemRooms -contains [int]$s.room) { continue }
         if ($noItemSectors -contains "$($s.room),$($s.sectorX),$($s.sectorZ)") { continue }
+        if ($ybandBarred.Contains("$($s.room),$($s.sectorX),$($s.sectorZ)")) { continue }
         $rows += [PSCustomObject]@{ room=[int]$s.room; sectorX=[int]$s.sectorX; sectorZ=[int]$s.sectorZ; zone=[int]$kv.Value; floorY=[int]$s.floorY }
     }
     $maxZoneOut = if($rows.Count -gt 0){ ($rows | Measure-Object -Property zone -Maximum).Maximum } else { 0 }

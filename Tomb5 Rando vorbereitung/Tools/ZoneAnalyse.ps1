@@ -285,15 +285,25 @@ $EXCLUDE_SECTORS = @{
               @(2..11 | ForEach-Object { "152,$_,2" }) +
               @(2..11 | ForEach-Object { "152,$_,3" }) +
               @('152,5,4','152,6,4')
-    # rich2s Laser (Item 178) stand hier kurz als Wand zwischen Raum 119 und 57
-    # und ist wieder heraus. Gemessen kostete er das halbe Level: Zonen 6 -> 3,
-    # nie erreicht 34 -> 1851, Ablagen 592 -> 131. Diese beiden Felder tragen
-    # also den Hauptweg, und eine dauerhafte Sperre dort kann nicht richtig sein -
-    # dieselbe Lehre wie bei andy1s dreissig Raeumen und joby2s Gleisbett.
+    # rich2s Laser (Item 178) zwischen Raum 119 und 57 ist laut Nutzer eine
+    # echte, unueberwindbare Wand - er gehoert hier hinein. Er steht trotzdem
+    # noch nicht drin, weil das Modell dann auseinanderfaellt, und das ist ein
+    # Befund und kein Grund zum Weitermachen:
     #
-    # Wahrscheinlich laesst sich der Laser abschalten, die Sperre waere dann
-    # bedingt und nicht dauerhaft. Bis das geklaert ist steht der Uebergang in
-    # NO_ITEM_SECTORS: dort liegt nichts, der Weg bleibt.
+    # Mit der Wand verlieren 63 Raeume ihre Ablagen, 590 -> 131, Zonen 6 -> 3.
+    # Der Grund ist nicht die Wand, sondern dass der Portalgraph nur ZWEI
+    # Zugaenge in diesen Bereich kennt und beide zu sind - 119->57 ist die Wand
+    # selbst, und 58->59 fuehrt durch Tuer 115, die Schalter 0 in Raum 7 oeffnet,
+    # also von INNERHALB des Bereichs. Der echte Weg fehlt dem Modell komplett.
+    #
+    # Abgeschnitten waeren: 5, 7, 17, 20, 22-27, 31, 33-35, 39, 41-47, 57, 59,
+    # 61, 64-66, 80, 86, 87, 98, 107, 110, 113, 120-128, 139, 140, 142-147, 149,
+    # 150, 152, 155-157, 161, 162, 166, 167, 174, 176.
+    #
+    # Erreichbar bleiben dabei sowohl das Keypad (Raum 55) als auch die Codekarte
+    # (Raum 89) - der fehlende Zugang liegt also woanders. Sobald der Nutzer ihn
+    # benennt, kommen MANUAL_LINK und diese Wand zusammen herein; einzeln taugt
+    # keins von beidem.
 }
 $excludeRooms = @( if($EXCLUDE_ROOMS.ContainsKey($LevelName)){ $EXCLUDE_ROOMS[$LevelName] } )
 $excludeSectors = @( if($EXCLUDE_SECTORS.ContainsKey($LevelName)){ $EXCLUDE_SECTORS[$LevelName] } )

@@ -439,6 +439,15 @@ $NO_ITEM_ROOMS = @{
     # Level - der Nutzer schaetzt mindestens hundert Raeume. Die Liste waechst
     # hier in Bloecken, wie er sie in trview durchgeht.
     #
+    # rich1, erste Durchsicht des Nutzers. Fuenf der genannten Raeume (46, 47,
+    # 87, 90, 92) hatten schon vorher keine Ablage - sie stehen trotzdem hier,
+    # damit die Liste die Durchsicht vollstaendig abbildet.
+    #
+    # In Raum 123 liegt ein Vanilla-Smallmedi (Item 178). Das ist bewusst so
+    # eingetragen: das Item geht nicht verloren, es wandert nur woanders hin,
+    # und die Abnahmeregel "keine Vanilla-Position verbieten" richtet sich gegen
+    # falsche ABGELEITETE Regeln, nicht gegen eine Handentscheidung des Nutzers.
+    'rich1' = @(17,19,20,46,47,68,85,87,89,90,92,123,130,154)
     # Raum 113 ist der erste und zeigt zugleich, warum das Modell hier so wenig
     # helfen kann: der Raum enthaelt KEIN einziges Item und KEINEN einzigen
     # Static, seine Stacheln stecken in der Raumgeometrie selbst. Weder die

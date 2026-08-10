@@ -445,7 +445,11 @@ $NO_ITEM_ROOMS = @{
     # Item- noch die Statics-Liste weiss von ihnen, und ein Sektor mit Boden und
     # Kopffreiheit sieht fuer den Exporter tadellos aus. Solche Fallen sind
     # ausschliesslich mit dem Auge zu finden.
-    'andy3' = @(10,12,14,15,16,17,19,22,23,27,35,36,86,87,108,113,115,120,121,133,156,209)
+    # 155 ist zugleich der Deadstop von Insel 2. Das stoert sich nicht: die
+    # Abschnitte werden ueber den Raumgraphen und DeadstopRooms bestimmt,
+    # NO_ITEM_ROOMS wirkt erst danach auf die Ablagen.
+    'andy3' = @(10,12,14,15,16,17,19,22,23,24,25,27,35,36,86,87,108,113,115,116,
+                120,121,133,155,156,158,167,172,209)
 }
 $noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$LevelName] } )
 

@@ -285,6 +285,15 @@ $EXCLUDE_SECTORS = @{
               @(2..11 | ForEach-Object { "152,$_,2" }) +
               @(2..11 | ForEach-Object { "152,$_,3" }) +
               @('152,5,4','152,6,4')
+    # rich2s Laser (Item 178) stand hier kurz als Wand zwischen Raum 119 und 57
+    # und ist wieder heraus. Gemessen kostete er das halbe Level: Zonen 6 -> 3,
+    # nie erreicht 34 -> 1851, Ablagen 592 -> 131. Diese beiden Felder tragen
+    # also den Hauptweg, und eine dauerhafte Sperre dort kann nicht richtig sein -
+    # dieselbe Lehre wie bei andy1s dreissig Raeumen und joby2s Gleisbett.
+    #
+    # Wahrscheinlich laesst sich der Laser abschalten, die Sperre waere dann
+    # bedingt und nicht dauerhaft. Bis das geklaert ist steht der Uebergang in
+    # NO_ITEM_SECTORS: dort liegt nichts, der Weg bleibt.
 }
 $excludeRooms = @( if($EXCLUDE_ROOMS.ContainsKey($LevelName)){ $EXCLUDE_ROOMS[$LevelName] } )
 $excludeSectors = @( if($EXCLUDE_SECTORS.ContainsKey($LevelName)){ $EXCLUDE_SECTORS[$LevelName] } )
@@ -590,6 +599,12 @@ $VANILLA_TYPES = @{
     # dem Boden und die Inszenierung waere weg - derselbe Grund, aus dem rich1s
     # CD nicht wandert.
     'andy3'   = @(172,173,174)
+    # rich2: die HK (typeId 345, Item 6 in Raum 8). Sie ist kein Fund, sondern
+    # eine Ablage - Lara legt sie am Mesh 15 nieder, um sich zu entwaffnen,
+    # damit der Roentgenscanner in Raum 9 keine Fallen ausloest. Das Item traegt
+    # entsprechend flags 256 (unsichtbar) und OCB 4 (Sockel); beim Verschieben
+    # faellt die OCB auf 0 und aus der Ablage wuerde ein gewoehnliches Pickup.
+    'rich2'   = @(345)
 }
 $vanillaTypes = @( if($VANILLA_TYPES.ContainsKey($LevelName)){ $VANILLA_TYPES[$LevelName] } )
 $fixedItems = @()
@@ -935,7 +950,22 @@ $WEAPON_TYPES = 334..348
 $NO_WEAPON_ROOMS = @{
     'joby3' = @(105,106,120,124,125)
 }
+# Level, in denen ueberhaupt keine Waffe liegen darf - nicht raumweise, sondern
+# ganz. rich2 ist der Fall: dort muss Lara ihre HK am Mesh 15 in Raum 8 ablegen,
+# um den Roentgenscanner in Raum 9 unbewaffnet zu passieren. Eine zusaetzlich
+# eingestreute Waffe macht dieses Entwaffnen gegenstandslos und das Level laut
+# Nutzer unloesbar.
+#
+# Heute traegt rich2 ohnehin nur die eine HK (jetzt VANILLA_TYPES) und zwei
+# HK-Munitionen. Der Eintrag zielt auf spaeter: sobald #36 zusaetzliche
+# Ausruestung verteilt, muss die Sperre schon stehen. Der Randomizer setzt
+# noWeaponRooms seit dem Kurations-Commit selbst durch.
+$NO_WEAPON_LEVELS = @('rich2')
 $noWeaponRooms = @( if($NO_WEAPON_ROOMS.ContainsKey($LevelName)){ $NO_WEAPON_ROOMS[$LevelName] } )
+if ($NO_WEAPON_LEVELS -contains $LevelName) {
+    $noWeaponRooms = @($d.rooms | ForEach-Object { [int]$_.index })
+    Write-Output "Waffensperre: im ganzen Level $LevelName darf keine Waffe liegen ($($noWeaponRooms.Count) Raeume)"
+}
 
 $POOL_TYPES = @{
     'joby2' = @(172)
@@ -1091,6 +1121,34 @@ $islandGroups = @( if($ISLAND_GROUP.ContainsKey($LevelName)){ $ISLAND_GROUP[$Lev
 $CUTSCENE_DOORS = @{
     'rich1' = @{ 153 = 20 }   # doorItem -> Cutscene-Index
 }
+
+#----------------------------------------------------------------------------
+# rich2s Levelende - festgehalten, weil das Modell es NICHT richtig abbildet
+# und die naechste Kuration sonst auf einer falschen Zone aufbaut.
+#
+# Der Nutzer hat die Kette erklaert:
+#   - Flipmap 0 wird gleich beim Start gesetzt. Sie schaltet den
+#     Trigger-Triggerer (Item 25, Raum 14) ab, der seinerseits den EndLevel-
+#     Trigger in Raum 14 (1,1) sperrt.
+#   - Lara muss das Level bis Raum 58 spielen; dort schaltet der Trigger auf
+#     (2,1) "Object:7, FlipOff:0" die Flipmap wieder aus und gibt das Ende frei.
+#   - Um Tuer 171 zu oeffnen, muss sie den Feuerloescher (Mesh 301, Raum 118)
+#     anschiessen. Der HeavyTrigger in 118 (1,1) feuert Object:171 zusammen mit
+#     Object:172, der Explosion - ausgeloest also nicht von Lara, sondern vom
+#     Geschoss.
+#   - Ohne diese Flipmap-Trickserei koennte Lara sich das Entwaffnen sparen,
+#     durchheilen, direkt zum Feuerloescher sprinten und das Level oeffnen.
+#
+# Was das Modell daraus macht: es liest den HeavyTrigger in Raum 118 wie einen
+# gewoehnlichen Bodentrigger und oeffnet Tuer 171 damit VIEL zu frueh - deshalb
+# steht sie im Report als Zone-0/1-Uebergang und Zone 1 umfasst 1285 Sektoren.
+# Die Flipmap-Sperre des Trigger-Triggerers kennt es gar nicht.
+#
+# Folgenlos ist das derzeit nur, weil rich2 ueberhaupt keine abgeleiteten
+# Key-Constraints hat: seine vier Schloesser (Puzzle Hole2/3/8/8) finden bis auf
+# Puzzle Item3 kein passendes Item im Level. Sobald hier ein Typ begrenzt werden
+# soll, ist die Zone die falsche Grundlage und es braucht Deadstops.
+#----------------------------------------------------------------------------
 $cutsceneDoors = @{}
 if ($CUTSCENE_DOORS.ContainsKey($LevelName)) { $cutsceneDoors = $CUTSCENE_DOORS[$LevelName] }
 $cutsceneDoorByCutscene = @{}
@@ -1131,6 +1189,11 @@ $MANUAL_LINK = @{
 $NO_ITEM_SECTORS = @{
     'andy1' = @('176,2,1','176,3,1','170,1,6','170,3,6','170,3,4',
                 '200,2,0','121,1,1','121,2,3','226,1,2','158,2,2')
+    # rich2: die beiden Felder unter dem Laser (Item 178) zwischen Raum 119 und
+    # Raum 57. Lara kommt dort laut Nutzer nicht hinueber. Als EXCLUDE_SECTORS
+    # war es viel zu scharf - siehe die Begruendung dort -, hier kostet es
+    # nichts als zwei Ablagen.
+    'rich2' = @('119,8,1','119,8,2')
     # andy3, erste Sektor-Durchsicht des Nutzers. Raum 188 traegt ein Secret und
     # ein grosses Medipack - beide liegen anderswo im Raum, die Sperre trifft
     # keine Vanilla-Position.
@@ -2753,6 +2816,17 @@ $KNOWN_GAPS = @{
         204 = 'Muehlenmodul, nur Flyby'; 205 = 'Muehlenmodul, nur Flyby'
         207 = 'Muehlenmodul, nur Flyby'; 242 = 'Muehlenmodul, nur Flyby'
         246 = 'Muehlenmodul, nur Flyby'; 247 = 'Muehlenmodul, nur Flyby'
+    }
+    # rich2, alle vier Luecken vom Nutzer erklaert. 137 und 138 sind zwei von
+    # sechs Ein-Sektor-Nischen hinter Kick Doors (131/132/133 haengen an Raum
+    # 134, 136/137/138 an Raum 135) - Lara tritt sie einfach ein, ueber Raum 131
+    # geht das Level weiter. Zu sperren ist dort nichts: der einzige Sektor jeder
+    # Nische traegt die Tuer selbst und ist damit ohnehin keine Ablage.
+    'rich2' = @{
+        83  = 'Flyby-Kulisse'
+        137 = 'Nische hinter einer Kick Door, Lara tritt sie ein'
+        138 = 'Nische hinter einer Kick Door, Lara tritt sie ein'
+        158 = 'Out of map'
     }
     # rich1, alle vier Luecken vom Nutzer erklaert. 98/99 ist die Flyby-Kulisse
     # mit dem Twogun, 64 ebenfalls Kulisse (ein Scientist und drei Animatings,

@@ -445,7 +445,7 @@ $NO_ITEM_ROOMS = @{
     # Item- noch die Statics-Liste weiss von ihnen, und ein Sektor mit Boden und
     # Kopffreiheit sieht fuer den Exporter tadellos aus. Solche Fallen sind
     # ausschliesslich mit dem Auge zu finden.
-    'andy3' = @(113)
+    'andy3' = @(10,12,14,15,16,17,19,22,23,27,35,36,86,87,108,113,115,120,121,133,156,209)
 }
 $noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$LevelName] } )
 
@@ -1034,6 +1034,10 @@ $MANUAL_LINK = @{
 $NO_ITEM_SECTORS = @{
     'andy1' = @('176,2,1','176,3,1','170,1,6','170,3,6','170,3,4',
                 '200,2,0','121,1,1','121,2,3','226,1,2','158,2,2')
+    # andy3, erste Sektor-Durchsicht des Nutzers. Raum 188 traegt ein Secret und
+    # ein grosses Medipack - beide liegen anderswo im Raum, die Sperre trifft
+    # keine Vanilla-Position.
+    'andy3' = @('150,2,1','188,1,2','188,1,3','58,2,1','58,3,1','58,4,1')
     # Andy2, zweite und dritte Durchsicht des Nutzers in trview. Die Eintraege
     # ab 133 sind einzelne Fallensektoren; die in den Flipvarianten 133, 135 und
     # 136 sind wie die Raeume 132/134 oben schon durch die Flipsperre erledigt

@@ -45,3 +45,20 @@ Tomb5 Rando vorbereitung/Level Test/**/*.trc
 
 # Third-party GPL3 tool, kept locally as reference only (b122251's TRMOD)
 Tomb5 Rando vorbereitung/Tomb Raider Level Modifier By b122251/
+
+# DIE ORIGINAL-LEVELDATEN. Sie duerfen niemals ins Repository - das waere
+# Weitergabe von Spieldaten. Der Ordner selbst muss auf der Platte bleiben, er
+# ist die einzige unberuehrte Kopie, die das Werkzeug kennt; nur git haelt sich
+# hier heraus. Ein "git add -A" hat sie einmal mitgenommen, der Commit wurde
+# zurueckgenommen, bevor er irgendwo hinging. Deshalb steht die Regel jetzt hier
+# und nicht nur in der Absicht.
+data Backup/
+
+# Fertiges Auslieferungspaket - erzeugt, nicht geschrieben. Enthaelt unter
+# anderem eine vollstaendige Kopie des TOMB5-Quellbaums samt Lizenzen; die
+# gehoert an ihren Platz im Baum, nicht ein zweites Mal hierher.
+Release Paket/
+
+# Dear ImGui als Fremdbibliothek im Original-Release-Stand. Wird nicht
+# geaendert, ihre Historie liegt bei ihrem eigenen Projekt.
+Tomb5 Rando vorbereitung/imgui-*/

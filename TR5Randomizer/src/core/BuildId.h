@@ -29,8 +29,13 @@
 // 3: Secrets (typeId 223, spielweit 36 Stueck) bleiben vorerst ortsfest, und
 //    Andy2 ist kuratiert. Beides sind Kurationsdaten, und die verschieben
 //    Platzierungen genauso wie eine Codeaenderung.
-#define RANDO_BUILD_ID      3
-#define RANDO_BUILD_STRING  "0.3"
+// 4: andy3, rich1 und rich2 kuratiert - und MANUAL_LINK repariert. Die Tabelle
+//    hat nie funktioniert (PowerShell zog die Paare flach), joby2 und rich1
+//    liefen also die ganze Zeit ohne ihre Handkanten. Zonen und Ablagen der
+//    zwoelf anderen Level bleiben davon zwar unberuehrt, rich2 aber nicht,
+//    und die Zonennummern selbst sind Eingabe jeder Platzierung.
+#define RANDO_BUILD_ID      4
+#define RANDO_BUILD_STRING  "0.4"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

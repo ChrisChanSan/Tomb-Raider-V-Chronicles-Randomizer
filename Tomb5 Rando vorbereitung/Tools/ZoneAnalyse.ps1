@@ -285,25 +285,27 @@ $EXCLUDE_SECTORS = @{
               @(2..11 | ForEach-Object { "152,$_,2" }) +
               @(2..11 | ForEach-Object { "152,$_,3" }) +
               @('152,5,4','152,6,4')
-    # rich2s Laser (Item 178) zwischen Raum 119 und 57 ist laut Nutzer eine
-    # echte, unueberwindbare Wand - er gehoert hier hinein. Er steht trotzdem
-    # noch nicht drin, weil das Modell dann auseinanderfaellt, und das ist ein
-    # Befund und kein Grund zum Weitermachen:
+    # rich2s Laser (Item 178) zwischen Raum 119 und 57. Er hat als einziger der
+    # vier Laser im Level KEINEN Trigger - 21, 181 und 34 lassen sich abschalten,
+    # dieser nicht -, ist also dauerhaft an und eine echte Wand.
     #
-    # Mit der Wand verlieren 63 Raeume ihre Ablagen, 590 -> 131, Zonen 6 -> 3.
-    # Der Grund ist nicht die Wand, sondern dass der Portalgraph nur ZWEI
-    # Zugaenge in diesen Bereich kennt und beide zu sind - 119->57 ist die Wand
-    # selbst, und 58->59 fuehrt durch Tuer 115, die Schalter 0 in Raum 7 oeffnet,
-    # also von INNERHALB des Bereichs. Der echte Weg fehlt dem Modell komplett.
+    # Sie kostete lange 63 Raeume - 590 Ablagen auf 131, Zonen 6 auf 3 - und war
+    # deshalb dreimal wieder ausgebaut worden. Der Grund war nie die Wand: der
+    # Portalgraph kannte nur ZWEI Zugaenge in diesen Bereich, und beide sind zu.
+    # 119->57 ist die Wand selbst, und 58->59 fuehrt durch Tuer 115, die Schalter
+    # 0 in Raum 7 oeffnet - von INNERHALB. Der echte Weg fehlte dem Modell ganz.
     #
-    # Abgeschnitten waeren: 5, 7, 17, 20, 22-27, 31, 33-35, 39, 41-47, 57, 59,
-    # 61, 64-66, 80, 86, 87, 98, 107, 110, 113, 120-128, 139, 140, 142-147, 149,
-    # 150, 152, 155-157, 161, 162, 166, 167, 174, 176.
+    # Jetzt steht er in MANUAL_LINK: Raum 130 -> Raum 139, der Sprung ueber die
+    # WC-Nische in den Fahrstuhlschacht. Damit kostet die Wand GAR NICHTS mehr -
+    # 590 Ablagen mit ihr wie ohne sie -, und die Zonen wachsen von 6 auf 7, weil
+    # die Aufzugssektion nun hinter dem Keypad haengt statt neben der Abkuerzung.
+    # Genau so muss eine richtige Sperre sich verhalten: sie ordnet, sie nimmt
+    # nicht weg.
     #
-    # Erreichbar bleiben dabei sowohl das Keypad (Raum 55) als auch die Codekarte
-    # (Raum 89) - der fehlende Zugang liegt also woanders. Sobald der Nutzer ihn
-    # benennt, kommen MANUAL_LINK und diese Wand zusammen herein; einzeln taugt
-    # keins von beidem.
+    # Merke fuer den naechsten Fall dieser Art: eine Sperre, die das halbe Level
+    # kostet, ist fast nie zu streng - ihr fehlt ein Weg, den das Modell nicht
+    # kennt. Erst den Weg suchen, dann die Sperre bewerten.
+    'rich2' = @('119,8,1','119,8,2')
 }
 $excludeRooms = @( if($EXCLUDE_ROOMS.ContainsKey($LevelName)){ $EXCLUDE_ROOMS[$LevelName] } )
 $excludeSectors = @( if($EXCLUDE_SECTORS.ContainsKey($LevelName)){ $EXCLUDE_SECTORS[$LevelName] } )
@@ -473,6 +475,19 @@ $NO_ITEM_ROOMS = @{
     # begehbar aus, ist erreicht und traegt zwoelf tadellose Ablagen. Genau die
     # Sorte Einbahnstrasse, die das Zonenmodell prinzipiell nicht sehen kann.
     'rich1' = @(17,19,20,46,47,68,83,85,87,89,90,92,123,130,154)
+    # rich2, Raum 107 im Fahrstuhlschacht. Der Nutzer: begehbar erst, wenn
+    # Flipmap 7 an ist, und dort kommt Lara nur vom Erdgeschoss aus hin - also
+    # NACH der ganzen Aufzugssektion. Das Modell sieht ihn in Zone 2, zusammen
+    # mit dem Schacht selbst, und das ist um mehrere Stationen zu frueh. Ein
+    # FLIP_GATE hilft nicht: 107 ist ein Basisraum ohne eigene Flipvariante, die
+    # Geometrieaenderung kommt aus dem Umschalten benachbarter Raeume. Zwei
+    # Ablagen sind der ganze Preis.
+    #
+    # Ebenfalls vom Nutzer und hier nur vermerkt, weil es sonst verloren geht:
+    # Raum 105 ist der Deadstop nach dem Fahrstuhlabsturz - von dort geht es
+    # zurueck ins Level. Ablagen hat er ohnehin keine, alle seine Sektoren sind
+    # zu steil; fuer eine spaetere Inselgruppe ist er der richtige Stopp.
+    'rich2' = @(107)
     # Raum 113 ist der erste und zeigt zugleich, warum das Modell hier so wenig
     # helfen kann: der Raum enthaelt KEIN einziges Item und KEINEN einzigen
     # Static, seine Stacheln stecken in der Raumgeometrie selbst. Weder die
@@ -1165,8 +1180,19 @@ $cutsceneDoorByCutscene = @{}
 foreach($kv in $cutsceneDoors.GetEnumerator()){ $cutsceneDoorByCutscene[[int]$kv.Value] = [int]$kv.Key }
 
 # Uebergaenge, die Lara schafft, der Sektorgraph aber nicht kennt: Spruenge,
-# Kletterstellen, Monkeyswing. Format "Raum,x,z" -> "Raum,x,z", beidseitig.
-# Das ist die Handkuration fuer die Klasse "Flood stoppt an der Geometrie".
+# Kletterstellen, Monkeyswing. Format @{From='Raum,x,z'; To='Raum,x,z'},
+# beidseitig. Das ist die Handkuration fuer "Flood stoppt an der Geometrie".
+#
+# WARUM HASHTABLES UND KEINE PAARE AUS ZWEI STRINGS: die Tabelle stand lange als
+# @( @('a','b') @('c','d') ) da und hat NIE funktioniert. @(...) ist in
+# PowerShell ein Array-AUSDRUCK, keine Literalliste - jedes innere @(...) ist
+# eine eigene Anweisung, deren Ausgabe der Strom flachzieht. Aus zwei Paaren
+# wurden vier Strings, aus rich2s sieben Paaren vierzehn. Die Schleife las dann
+# $ml[0]/$ml[1] als ZEICHEN eines Strings und legte Kanten wie '1' -> '3' an:
+# lautlos, folgenlos, und drei Level lang unbemerkt. Ein Komma zwischen den
+# Paaren wuerde es auch richten - aber genau das faellt beim naechsten Eintrag
+# wieder weg. Eine Hashtable ist ein einzelner Wert, den der Strom nicht
+# zerlegen kann, und die Feldnamen sagen ausserdem, welche Seite welche ist.
 $MANUAL_LINK = @{
     # joby2: der Weg auf den vorderen Sims von Raum 11, wo Lasersight und
     # Revolver Ammo liegen. Zweimal derselbe Sprung mit Anlauf ueber eine Luecke
@@ -1175,8 +1201,8 @@ $MANUAL_LINK = @{
     # Nutzerregel dahinter: Lara ueberwindet mit Anlauf 3 x 1024, sofern beide
     # Kanten denselben Y-Wert haben. Hier erfuellt, alles liegt auf -4608.
     'joby2' = @(
-        @('152,10,13', '152,10,17')
-        @('11,9,1',    '11,5,1')
+        @{From='152,10,13'; To='152,10,17'}
+        @{From='11,9,1';    To='11,5,1'}
     )
     # rich1: der Teleportlift zwischen den Kabinen in Raum 30 und Raum 82. Im
     # Portalgraphen fehlt er vollstaendig - Raum 30 grenzt dort nur an 23, Raum
@@ -1189,7 +1215,44 @@ $MANUAL_LINK = @{
     # sind jederzeit in beide Richtungen benutzbar - deshalb eine gewoehnliche
     # beidseitige Kante und kein ONEWAY_OUT.
     'rich1' = @(
-        @('30,2,2', '82,2,2')
+        @{From='30,2,2'; To='82,2,2'}
+    )
+    # rich2: das Teleporternetz der Aufzugssektion. Der Nutzer hat die Kette
+    # erklaert, die Sektoren stehen so in den Triggerdaten:
+    #   Schalter 33(2,2) -> Teleporter  62 in Raum  39   (Lift 2, erster Sprung)
+    #   Schalter 39(2,2) -> Teleporter 142 in Raum  80   (Tueren schliessen)
+    #   Schalter 80(2,2) -> Teleporter  72 in Raum  42   (nach der Cutscene ins EG)
+    #   Trigger  71(2,2) -> Teleporter  76 in Raum  42
+    #   Trigger  74(2,2) -> Teleporter 148 in Raum  82
+    #   Key     149(5,5) -> Teleporter 217 in Raum 152
+    #
+    # Der Lift faehrt dabei nirgendwo hin - Raum 39 ist dieselbe Kabine noch
+    # einmal, eine Etage hoeher gebaut, damit es nach Fahrt aussieht. Deshalb
+    # findet der Portalgraph nichts: es gibt keine Portale, die Engine versetzt
+    # Lara.
+    'rich2' = @(
+        # Der Eintritt in die Aufzugssektion. Der Weg dorthin ist die Kette, die
+        # der Nutzer beschrieben hat: Tuer 105 per Keypad ins WC, von Raum 134
+        # die Kick Door in die Nische 131 eintreten, dort durch die Deckenluke
+        # 188 hinauf nach Raum 139 in den Fahrstuhlschacht, und von da mit
+        # einigen Klettermanoevern zur Falltuer 117, wo die Liftsektion beginnt.
+        #
+        # Der Portalgraph kann diese Kette nicht laufen. Das Portal 134->131
+        # liegt beidseitig auf WANDSEKTOREN (134(2,3) und 131(0,1)), und 131(1,1)
+        # - der einzige Boden der Nische - traegt blockedByStatic. Der Flood
+        # kaeme also selbst mit offener Kick Door nicht hinein; die Tuer ist
+        # unschuldig und steht laengst in der Dekotuerliste.
+        #
+        # Deshalb der vom Nutzer benannte Sprung 130 -> 139, der die Nische
+        # ueberspringt. Lara haelt sich dort ohnehin nicht auf, sie geht
+        # hindurch. 130(1,1) und 139(1,1) sind beide sauberer Boden.
+        @{From='130,1,1'; To='139,1,1'}
+        @{From='33,2,2';  To='39,1,2'}
+        @{From='39,2,2';  To='80,1,2'}
+        @{From='80,2,2';  To='42,2,2'}
+        @{From='71,2,2';  To='42,2,3'}
+        @{From='74,2,2';  To='82,1,2'}
+        @{From='149,5,5'; To='152,5,5'}
     )
 }
 
@@ -1199,11 +1262,9 @@ $MANUAL_LINK = @{
 $NO_ITEM_SECTORS = @{
     'andy1' = @('176,2,1','176,3,1','170,1,6','170,3,6','170,3,4',
                 '200,2,0','121,1,1','121,2,3','226,1,2','158,2,2')
-    # rich2: die beiden Felder unter dem Laser (Item 178) zwischen Raum 119 und
-    # Raum 57. Lara kommt dort laut Nutzer nicht hinueber. Als EXCLUDE_SECTORS
-    # war es viel zu scharf - siehe die Begruendung dort -, hier kostet es
-    # nichts als zwei Ablagen.
-    'rich2' = @('119,8,1','119,8,2')
+    # rich2s Laser stand hier als Notloesung, solange er als EXCLUDE_SECTORS das
+    # halbe Level kostete. Seit der Sprung 130 -> 139 in MANUAL_LINK steht, ist
+    # er dort richtig aufgehoben - er ist eine Wand, kein Ablageverbot.
     # andy3, erste Sektor-Durchsicht des Nutzers. Raum 188 traegt ein Secret und
     # ein grosses Medipack - beide liegen anderswo im Raum, die Sperre trifft
     # keine Vanilla-Position.
@@ -1800,7 +1861,7 @@ if ($flipGateOf.Count -gt 0) {
     if ($rr.Count -gt 0) { Write-Output "  betroffene Flipraeume: $($rr -join ', ')" }
 }
 
-foreach($ml in $manualLinks){ Add-Edge $ml[0] $ml[1]; Add-Edge $ml[1] $ml[0] }
+foreach($ml in $manualLinks){ Add-Edge $ml.From $ml.To; Add-Edge $ml.To $ml.From }
 
 # GATED_AREA anwenden (nach vollstaendigem Graphaufbau inkl. Flipmap-,
 # Teleporter- und Manuallinks, damit wirklich jede Einstiegskante erfasst ist).

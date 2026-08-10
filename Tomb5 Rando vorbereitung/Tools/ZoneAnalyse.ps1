@@ -935,14 +935,14 @@ $POOL_TYPES = @{
     # ohne diesen Eintrag in keinem Constraint auf. Er braucht ihn aber, denn
     # "nicht hinter der eigenen Tuer" gilt fuer ihn wie fuer jeden Schluessel.
     #
-    # Die Zonengrenze macht die eigentliche Arbeit, nicht forbiddenSectors. Tuer
-    # 153 ist ein Zone-0/1-Uebergang, "nicht weiter als die Tuer" heisst also
-    # schlicht Zone 0. Die abgeleitete Tuerregel findet fuer sich genommen nur
-    # einen einzigen Sektor - den der Tuer selbst -, weil der Flood um sie herum
-    # kommt; dahinter liegt aus Modellsicht nichts. Erst die Zone bildet ab, was
-    # der Nutzer meint. Vanilla liegt der Hammer in Raum 22, Zone 0, und behaelt
-    # mit dieser Grenze 150 von 404 Ablagen.
-    'rich1' = @{ 202 = 0 }
+    # Die Begrenzung leistet die Inselgruppe oben (Flut ab Lara, Deadstop Raum
+    # 12), nicht die Zone. Die abgeleitete Tuerregel findet fuer sich genommen
+    # nur einen einzigen Sektor - den der Tuer 153 selbst -, weil der Flood um
+    # sie herum kommt; aus Modellsicht liegt dahinter nichts. Eine Zonengrenze
+    # waere mit 150 Ablagen dreimal so locker wie die Insel und wuerde ausserdem
+    # sieben Inselsektoren aus Zone 1 faelschlich verbieten. Deshalb hier ohne
+    # Zonengrenze.
+    'rich1' = @(202)
     # joby3: die vier Combo-Haelften. Puzzle Item3 Combo1+2 ergeben das
     # Atemgeraet, Puzzle Item4 Combo1+2 die Batterie; beides wandert in den
     # Anzug und loest die Schluss-Cutscene aus. Die beiden Slots in Raum 40
@@ -1018,6 +1018,16 @@ $ISLAND_GROUP = @{
     # Hauptweg, und mit dieser Sperre waere Key Item7 in Raum 52 unerreichbar.
     'joby2' = @( @{ BaselineRoom = 84; MaxYAbove = 1024; RequireTypes = @(202,203)
                     IslandTypes = @(203); DeadstopRooms = @(2,4,5,89) } )
+    # rich1, der Hammer. Vorschlag des Nutzers, und er trifft es besser als die
+    # Zonengrenze: eine Flut ab Laras Start mit Raum 12 als Deadstop.
+    #
+    # Die Insel ist keine Teilmenge einer Zone - sie enthaelt Sektoren aus Zone 0
+    # UND Zone 1 -, weil "vor Raum 12" und "vor der ersten Tuer" eben nicht
+    # dasselbe sind. Genau deshalb laesst sich das mit maxZone nicht ausdruecken,
+    # und deshalb ist sie mit rund fuenfzig Ablagen auch dreimal so eng wie die
+    # Zonengrenze, die 150 uebrig liess. Der Hammer liegt vanilla in Raum 22 und
+    # damit innerhalb.
+    'rich1' = @( @{ IslandTypes = @(202); DeadstopRooms = @(12) } )
 }
 $islandGroups = @( if($ISLAND_GROUP.ContainsKey($LevelName)){ $ISLAND_GROUP[$LevelName] } )
 
@@ -2318,16 +2328,26 @@ if ($ExportZonesJson -ne "") {
         # ihm also das EINZIGE, was ihn irgendwo fernhalten kann. andy3 ist der
         # Fall, der es aufgedeckt hat: Kreide und Brechstange haben dort kein
         # Schloss im Level und muessen trotzdem vor dem Teleporter bleiben.
-        # forbiddenSectors gilt hier ebenso - aus demselben Grund wie
-        # excludeRooms. rich1s Hammer ist der Fall: er hat kein Schloss und
-        # taucht deshalb nur als Pool-Typ auf, darf aber trotzdem nicht hinter
-        # der Cutscene-Tuer liegen, die er selbst oeffnet.
+        # Ein Pool-Typ traegt GENAU DIESELBEN Kurationsfelder wie ein Typ mit
+        # Schloss - die Zeile unten ist bis auf $pt statt $nt die des Hauptpfads.
+        #
+        # Vorher standen hier feste $null-Werte, und das hat dreimal
+        # hintereinander stillschweigend Kuration verschluckt: erst
+        # excludeRooms (andy3s Kreide), dann forbiddenSectors und schliesslich
+        # islandSectors (rich1s Hammer). Der Denkfehler war jedesmal derselbe -
+        # ein Pool-Typ hat kein Schloss, ALSO ist die Handkuration bei ihm das
+        # einzige, was ihn irgendwo halten kann, und nicht etwa entbehrlich.
         $ptEx = @( if($typeExclude.ContainsKey($pt)){ $typeExclude[$pt] } )
-        $ptFb = $(if($forbiddenBehindOwnDoor.ContainsKey($pt)){@($forbiddenBehindOwnDoor[$pt])}else{$null})
+        $ptAl = @( if($typeAllow.ContainsKey($pt)){ $typeAllow[$pt] } )
         $keyConstraints += [PSCustomObject]@{ typeId=$pt; maxZone=$ptZone; instances=$inst
-            reusable=($reusableKeys -contains $pt); excludeRooms=$ptEx; allowRooms=@()
-            minFloorY=$null; minFloorYZone=$null; islandSectors=$null; minFloorYIsland=$null; requireInIsland=$null
-            bannedSectors=$(if($islandBanned.ContainsKey($pt)){@($islandBanned[$pt])}else{$null}); forbiddenSectors=$ptFb }
+            reusable=($reusableKeys -contains $pt); excludeRooms=$ptEx; allowRooms=$ptAl
+            minFloorY=$(if($keyMinFloorY.ContainsKey($pt)){$keyMinFloorY[$pt].Limit}else{$null})
+            minFloorYZone=$(if($keyMinFloorY.ContainsKey($pt)){$keyMinFloorY[$pt].Zone}else{$null})
+            islandSectors=$(if($islandSectors.ContainsKey($pt)){@($islandSectors[$pt])}else{$null})
+            bannedSectors=$(if($islandBanned.ContainsKey($pt)){@($islandBanned[$pt])}else{$null})
+            forbiddenSectors=$(if($forbiddenBehindOwnDoor.ContainsKey($pt)){@($forbiddenBehindOwnDoor[$pt])}else{$null})
+            minFloorYIsland=$(if($islandHeightScope.ContainsKey($pt)){@($islandHeightScope[$pt])}else{$null})
+            requireInIsland=$(if($islandRequire.ContainsKey($pt)){@($islandRequire[$pt])}else{$null}) }
         $wie = if ($null -eq $ptKv.Value) { 'ohne Zonengrenze' } else { "begrenzt auf Zone <= $ptZone" }
         Write-Output "Pool-Typ $pt $wie aufgenommen ($inst Instanzen im Level)"
     }

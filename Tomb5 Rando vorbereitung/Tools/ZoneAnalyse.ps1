@@ -1085,6 +1085,19 @@ $MANUAL_LINK = @{
         @('152,10,13', '152,10,17')
         @('11,9,1',    '11,5,1')
     )
+    # rich1: der Teleportlift zwischen den Kabinen in Raum 30 und Raum 82. Im
+    # Portalgraphen fehlt er vollstaendig - Raum 30 grenzt dort nur an 23, Raum
+    # 82 nur an 81 -, weil der Lift Lara per Teleporter versetzt statt sie durch
+    # ein Portal gehen zu lassen.
+    #
+    # Die beiden Schalter 49 (Raum 30) und 175 (Raum 82) bedienen jeweils die
+    # Lifttueren ihrer Seite, den Ruftaster der Gegenseite (42 in Raum 23, 143 in
+    # Raum 81) und den Lift-Teleporter der anderen Kabine. Der Nutzer: die Lifts
+    # sind jederzeit in beide Richtungen benutzbar - deshalb eine gewoehnliche
+    # beidseitige Kante und kein ONEWAY_OUT.
+    'rich1' = @(
+        @('30,2,2', '82,2,2')
+    )
 }
 
 # Einzelne Sektoren, in denen nichts liegen darf - im Gegensatz zu

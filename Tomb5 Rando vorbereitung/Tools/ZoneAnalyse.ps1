@@ -784,6 +784,21 @@ $FLIP_GATE = @{
     # 2, 4 und 5 haben selbst keinen einzigen platzierbaren Sektor - sie kosten
     # als Sperre also nichts und schneiden den Umweg an der Quelle ab.
     'joby2' = @( @{ BlockRooms = @(2,4,5,89); AfterRoom = 35; Why = 'Rolltor am Kran' } )
+    # rich1: der zweite, schwere Weg zum Hammer, vom Nutzer erklaert. An Tuer 153
+    # in Raum 85 sitzt ein Schloss, das aussieht, als liesse es sich aufschiessen.
+    # Tut man es, loest die Patronenhuelse den HeavyTrigger in Raum 89 aus - der
+    # schaltet FlipMap 0, und Lara faellt in den Raum mit dem Twogun. Das ist kein
+    # Fehler, sondern die Alternative zum Hammer.
+    #
+    # Die Freigabe haengt deshalb an Raum 85: vorher kann Lara nicht schiessen,
+    # nachher steht ihr der Weg offen. Die Gruppen 1 und 2 (Raeume 106 und 107)
+    # haengen an eigenen HeavyTriggern in 101 bzw. 102 und bekommen ihre eigene
+    # Bedingung.
+    'rich1' = @(
+        @{ Rooms = @(86,94,95,122,124); AfterRoom = 85;  Why = 'Fake-Schloss an Tuer 153 anschiessen - schwerer Weg zum Hammer' }
+        @{ Rooms = @(106);              AfterRoom = 101; Why = 'HeavyTrigger in Raum 101' }
+        @{ Rooms = @(107);              AfterRoom = 102; Why = 'HeavyTrigger in Raum 102' }
+    )
 }
 $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] } )
 
@@ -915,6 +930,19 @@ $POOL_TYPES = @{
     # entschieden - siehe VANILLA_TYPES. Der Eintrag bleibt als Kommentar, weil
     # die Ueberlegung weiter gilt, falls die Puzzles doch einmal wandern sollen:
     #   'andy3' = @(172,174)   zusammen mit TYPE_EXCLUDE_ROOMS weiter unten
+    # rich1: der Hammer (Key Item7, typeId 202, Item 35 in Raum 22). Er hat kein
+    # Schloss - seine Tuer 153 geht ueber die Cutscene hamgate auf -, taucht also
+    # ohne diesen Eintrag in keinem Constraint auf. Er braucht ihn aber, denn
+    # "nicht hinter der eigenen Tuer" gilt fuer ihn wie fuer jeden Schluessel.
+    #
+    # Die Zonengrenze macht die eigentliche Arbeit, nicht forbiddenSectors. Tuer
+    # 153 ist ein Zone-0/1-Uebergang, "nicht weiter als die Tuer" heisst also
+    # schlicht Zone 0. Die abgeleitete Tuerregel findet fuer sich genommen nur
+    # einen einzigen Sektor - den der Tuer selbst -, weil der Flood um sie herum
+    # kommt; dahinter liegt aus Modellsicht nichts. Erst die Zone bildet ab, was
+    # der Nutzer meint. Vanilla liegt der Hammer in Raum 22, Zone 0, und behaelt
+    # mit dieser Grenze 150 von 404 Ablagen.
+    'rich1' = @{ 202 = 0 }
     # joby3: die vier Combo-Haelften. Puzzle Item3 Combo1+2 ergeben das
     # Atemgeraet, Puzzle Item4 Combo1+2 die Batterie; beides wandert in den
     # Anzug und loest die Schluss-Cutscene aus. Die beiden Slots in Raum 40
@@ -2162,6 +2190,22 @@ if ($null -ne $startKey) {
         }
     }
 
+    # Der Hammer hat kein Schloss im ueblichen Sinn - seine Tuer geht nicht ueber
+    # ein Object-Kommando auf, sondern ueber eine Cutscene (rich1: hamgate,
+    # Tuer 153). Fuer die Platzierung gilt aber genau dasselbe: er darf nicht
+    # hinter der Tuer liegen, die er selbst oeffnet. Nutzer: "Der darf nicht
+    # weiter als die Tuer platziert werden."
+    #
+    # Der Flood kannte diese Bedingung schon (er laesst die Cutscene-Tuer erst
+    # feuern, wenn der Hammer erreichbar ist); was fehlte, war die Umkehrung fuer
+    # die Platzierung. Beides haengt jetzt an derselben Regel.
+    if ($null -ne $hammerType -and $cutsceneDoors.Count -gt 0) {
+        if (-not $typeDoors.ContainsKey($hammerType)) { $typeDoors[$hammerType] = New-Object System.Collections.Generic.HashSet[int] }
+        foreach($cd in $cutsceneDoors.Keys){
+            if ($doorSector.ContainsKey([int]$cd)) { [void]$typeDoors[$hammerType].Add([int]$cd) }
+        }
+    }
+
     $perLock = @{}   # typeId -> Liste von HashSets, eines je Tuer
     foreach($tdKv in $typeDoors.GetEnumerator()){
       $nt = [int]$tdKv.Key
@@ -2274,10 +2318,16 @@ if ($ExportZonesJson -ne "") {
         # ihm also das EINZIGE, was ihn irgendwo fernhalten kann. andy3 ist der
         # Fall, der es aufgedeckt hat: Kreide und Brechstange haben dort kein
         # Schloss im Level und muessen trotzdem vor dem Teleporter bleiben.
+        # forbiddenSectors gilt hier ebenso - aus demselben Grund wie
+        # excludeRooms. rich1s Hammer ist der Fall: er hat kein Schloss und
+        # taucht deshalb nur als Pool-Typ auf, darf aber trotzdem nicht hinter
+        # der Cutscene-Tuer liegen, die er selbst oeffnet.
         $ptEx = @( if($typeExclude.ContainsKey($pt)){ $typeExclude[$pt] } )
+        $ptFb = $(if($forbiddenBehindOwnDoor.ContainsKey($pt)){@($forbiddenBehindOwnDoor[$pt])}else{$null})
         $keyConstraints += [PSCustomObject]@{ typeId=$pt; maxZone=$ptZone; instances=$inst
             reusable=($reusableKeys -contains $pt); excludeRooms=$ptEx; allowRooms=@()
-            minFloorY=$null; minFloorYZone=$null; islandSectors=$null; minFloorYIsland=$null; requireInIsland=$null; bannedSectors=$(if($islandBanned.ContainsKey($pt)){@($islandBanned[$pt])}else{$null}) }
+            minFloorY=$null; minFloorYZone=$null; islandSectors=$null; minFloorYIsland=$null; requireInIsland=$null
+            bannedSectors=$(if($islandBanned.ContainsKey($pt)){@($islandBanned[$pt])}else{$null}); forbiddenSectors=$ptFb }
         $wie = if ($null -eq $ptKv.Value) { 'ohne Zonengrenze' } else { "begrenzt auf Zone <= $ptZone" }
         Write-Output "Pool-Typ $pt $wie aufgenommen ($inst Instanzen im Level)"
     }
@@ -2580,6 +2630,22 @@ $KNOWN_GAPS = @{
         204 = 'Muehlenmodul, nur Flyby'; 205 = 'Muehlenmodul, nur Flyby'
         207 = 'Muehlenmodul, nur Flyby'; 242 = 'Muehlenmodul, nur Flyby'
         246 = 'Muehlenmodul, nur Flyby'; 247 = 'Muehlenmodul, nur Flyby'
+    }
+    # rich1, alle vier Luecken vom Nutzer erklaert. 98/99 ist die Flyby-Kulisse
+    # mit dem Twogun, 64 ebenfalls Kulisse (ein Scientist und drei Animatings,
+    # ohne ein einziges Portal), 133-135 und 148/149 Kulisse. Raum 142 liegt out
+    # of map und traegt den Triggersektor fuer Tuer 186 - die Tuer kann damit nie
+    # aufgehen, was laut Nutzer wieder ein Antitrigger-Fix ist.
+    'rich1' = @{
+        64  = 'Kulisse, ohne Portal'
+        98  = 'Flyby-Kulisse'
+        99  = 'Flyby-Kulisse'
+        133 = 'Kulisse'
+        134 = 'Kulisse'
+        135 = 'Kulisse'
+        142 = 'Out of map, Antitrigger-Fix (traegt den Trigger fuer Tuer 186)'
+        148 = 'Kulisse'
+        149 = 'Kulisse'
     }
     # andy3, alle vier Luecken vom Nutzer in trview durchgesehen. Es liegt in
     # keiner von ihnen ein bespielbares Objekt.

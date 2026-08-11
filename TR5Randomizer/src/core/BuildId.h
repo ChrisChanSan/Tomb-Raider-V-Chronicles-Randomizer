@@ -42,8 +42,10 @@
 //    Teleporter liegen. 214 -> 145 erlaubte Ablagen fuer diesen Typ.
 // 7: Pflicht-Injektionen koennen einen festen Sektor tragen und sich dort
 //    stapeln. rich2 bekommt damit HK plus zwei Magazine auf 140(1,2).
-#define RANDO_BUILD_ID      7
-#define RANDO_BUILD_STRING  "0.7"
+// 8: Injektionen koennen einen Hoehenversatz tragen, und rich2 grenzt Flasche
+//    und Tuch enger ein als den uebrigen Startbereich.
+#define RANDO_BUILD_ID      8
+#define RANDO_BUILD_STRING  "0.8"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

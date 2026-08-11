@@ -640,6 +640,23 @@ $EXTRA_POOL_TYPES = @{
     # muss also spaetestens in Zone 4 liegen. Seine Vanilla-Position in Raum 166
     # ist ebenfalls Zone 4 - die Grenze verbietet sie nicht.
     'rich2'   = @{ 174 = 4 }
+    # rich3s Puzzle Item1 gibt es im Level gar nicht - es entsteht im Inventar
+    # aus zwei Haelften, und beide werden von den Cyborgs GETRAGEN:
+    #   Combo1 (180), Item 201, liegt auf Cyborg 200 (Hitman) in Raum 183
+    #   Combo2 (181), Item 184, liegt auf Cyborg 183 (Hitman) in Raum 152
+    # Der Bericht meldete deshalb "kommt per Gameflow, keine Platzierung noetig"
+    # - er sucht Typ 172 und findet ihn nicht. Das war falsch gelesen, die Kette
+    # ist da, nur zweigeteilt. Dieselbe Konstruktion wie Andrea3s Puzzle Item4.
+    #
+    # Die beiden Cyborgs sind nicht mit Waffen zu toeten: der eine braucht die
+    # Flutung seines Raums (FlipMap 6, Kurzschluss), der andere den Gasbereich um
+    # Raum 149. Das komplette Puzzle Item1 kommt in Slot 1 (Item 144, Raum 119)
+    # und oeffnet Tuer 213 zum Levelende.
+    #
+    # Massgeblich ist die Zone des Schlosses: Raum 119 liegt in Zone 2. Beide
+    # Vanilla-Positionen liegen ebenfalls auf Zone-2-Sektoren, die Grenze
+    # verbietet also keine von beiden.
+    'rich3'   = @{ 180 = 2; 181 = 2 }
 }
 
 # Items, die ein Level zwingend BRAUCHT, die in Vanilla aber fehlen. Andrea3
@@ -1064,6 +1081,45 @@ $FLIP_GATE = @{
         @{ Rooms = @(86,94,95,122,124); AfterRoom = 85;  Why = 'Fake-Schloss an Tuer 153 anschiessen - schwerer Weg zum Hammer' }
         @{ Rooms = @(106);              AfterRoom = 101; Why = 'HeavyTrigger in Raum 101' }
         @{ Rooms = @(107);              AfterRoom = 102; Why = 'HeavyTrigger in Raum 102' }
+    )
+    # rich3, alle sieben Gruppen vom Nutzer erklaert. Die Bedingungen stehen
+    # nicht geraten da, sondern kommen aus den Triggerdaten - welcher Sektor
+    # welche FlipMap setzt, ist im Level nachgezaehlt.
+    #
+    # Gruppe 0 (Raum 18, Basis 10) fehlt hier bewusst: laut Nutzer aendert sie
+    # am Treppenhaus um Laras Start nur die Optik. Sie bleibt also gesperrt, und
+    # das kostet nichts.
+    #
+    # Gruppe 7 fehlt ebenfalls, aus dem umgekehrten Grund: sie oeffnet gar
+    # keinen Weg, den die Basis nicht schon hat, taucht also im Bericht nicht
+    # auf. Sie ist der Gasbereich um Raum 149, mit dem der zweite Cyborg
+    # (Item 183) getoetet wird - Mechanik ohne Wegewirkung.
+    'rich3' = @(
+        # Erweitert das Treppenhaus um neue Raeume, darunter Raum 207 mit dem
+        # Secret. FlipMap 1 wird in Raum 12 (4,2) und Raum 119 (5,7) gesetzt;
+        # Raum 12 ist selbst die Basis von Flipraum 45, also die frueheste
+        # Stelle, an der Lara sie ausloesen kann.
+        @{ Rooms = @(43,45);   AfterRoom = 12;  Why = 'Treppenhaus waechst - Raum 207 mit dem Secret' }
+        # Bindet das Treppenhaus ueber Raum 61 an den Levelteil an, in dem die
+        # Armbrust liegt (Raum 79). FlipMap 3 wird unter anderem in Raum 26
+        # gesetzt - der Basis dieses Flipraums.
+        @{ Rooms = @(13);      AfterRoom = 26;  Why = 'Anbindung an Raum 61, dort geht es zur Armbrust' }
+        # Die grosse Gruppe: neun Raeume, die das Treppenhaus ueber Raum 57 in
+        # den Rest des Levels fuehren. Der Nutzer: dafuer braucht Lara ERST die
+        # Grappling Gun - im Level ist das die Armbrust (typeId 341, Items 75
+        # und 76 in Raum 79). Deshalb NeedTypes und nicht AfterRoom: der Raum
+        # allein genuegt nicht, so wie bei andy1s Zwille.
+        @{ Rooms = @(9,20,28,32,48,49,50,53,54); NeedTypes = @(341); Why = 'Weg ueber Raum 57 - braucht die Armbrust aus Raum 79' }
+        # Die beiden Schiessstaende. Sie oeffnen die Gitter, hinter denen es
+        # weitergeht; Lara muss dort bewegliche Ziele treffen. FlipMap 4 und 5
+        # werden beide aus Raum 46 gesetzt, dazu 170 bzw. 169.
+        @{ Rooms = @(74);      AfterRoom = 46;  Why = 'Schiessstand 1 - oeffnet die Gitter in Raum 73, Weg durch Tuer 284' }
+        @{ Rooms = @(87);      AfterRoom = 46;  Why = 'Schiessstand 2 - Tuer 86 zum Secret in Raum 78' }
+        # Der Cyborg. Anschiessen beschaedigt ihn, toeten laesst er sich so
+        # nicht - die Flipmap setzt seinen Raum teilweise unter Wasser, dann gibt
+        # es einen Kurzschluss. FlipOn 6 steht in Raum 183 (4,5), also in seinem
+        # eigenen Raum; Lara muss dort sein, um zu schiessen.
+        @{ Rooms = @(190,192); AfterRoom = 183; Why = 'Cyborg 200 - Raum flutet, Kurzschluss' }
     )
 }
 $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] } )
@@ -3262,6 +3318,15 @@ $KNOWN_GAPS = @{
         50 = 'Kran-Animation fuers Levelende, im Level selbst ein Mesh'
         51 = 'Kran-Animation fuers Levelende, im Level selbst ein Mesh'
         0  = 'nur Animatings, keine bespielbare Geometrie'
+    }
+    # rich3: drei Ein-Sektor-Raeume ohne Portal, alle drei geklaert.
+    # 212 und 217 enthalten je einen Rollingball - das ist seine Startnische,
+    # von dort rollt er los. Lara geht da nie hin. Raum 217 hat der Nutzer
+    # ausserdem als Antitrigger-Fix-Raum benannt, zusammen mit Raum 112.
+    'rich3' = @{
+        205 = 'nur ein Animating, Kamerafahrt-Geometrie'
+        212 = 'Startnische eines Rollingballs (Item 222)'
+        217 = 'Startnische eines Rollingballs (Item 224), zugleich Antitrigger-Fix'
     }
 }
 $knownGaps = @{}

@@ -51,8 +51,10 @@
 // 11: Andrea2s Puzzle Item3 bleibt vanilla - mit genullter OCB ist es nicht
 //     aufnehmbar, mit erhaltener braucht es eine Wand dahinter. KEEP_OCB ist
 //     als Mechanismus gebaut, aber leer.
-#define RANDO_BUILD_ID      11
-#define RANDO_BUILD_STRING  "0.11"
+// 12: rich3 kuratiert - sechs Flipmap-Freigaben und die beiden Puzzle-Combos,
+//     die von den Cyborgs getragen werden. Damit sind alle 13 Level durch.
+#define RANDO_BUILD_ID      12
+#define RANDO_BUILD_STRING  "0.12"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

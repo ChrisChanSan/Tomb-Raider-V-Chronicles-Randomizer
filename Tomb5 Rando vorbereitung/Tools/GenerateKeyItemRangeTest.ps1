@@ -25,7 +25,19 @@
 # X/Z = Raumursprung + Sektorindex*1024 + 512 (Sektormitte) - gegengeprueft an
 # einem realen Vanilla-Item (Andrea1 Key Item1, Item 107).
 param(
-    [string[]]$Levels = @('Andrea1','Andrea2','Andrea3','andy1','Andy2','andy3','joby2','joby3','joby4','joby5','rich1','rich2','rich3','richcut2')
+    [string[]]$Levels = @('Andrea1','Andrea2','Andrea3','andy1','Andy2','andy3','joby2','joby3','joby4','joby5','rich1','rich2','rich3','richcut2'),
+    # Alle gueltigen Sektoren, die von KEINEM Constraint abgedeckt sind, mit
+    # diesem Typ fuellen. 0 = aus.
+    #
+    # Wozu: die Constraint-Typen zeigen, wo ein Key-Item liegen DARF. Was sie
+    # nicht zeigen, ist der Rest - all die Sektoren, die fuer gewoehnliche
+    # Pickups offenstehen und die der Nutzer noch durchsehen muss. Mit diesem
+    # Schalter leuchtet genau dieser Rest auf, und die Sperrliste laesst sich in
+    # einem Durchgang aufnehmen statt Raum fuer Raum.
+    #
+    # Sinnvoll ist ein Typ, der im Level vorkommt und sich in trview leicht
+    # herausfiltern laesst - 223 (Pickup Item4, das Secret) hat sich bewaehrt.
+    [int]$FillRestWith = 0
 )
 $ErrorActionPreference = "Stop"
 
@@ -141,6 +153,7 @@ foreach($lvl in $Levels){
     }
 
     $itemAdds = @()
+    $abgedeckt = New-Object System.Collections.Generic.HashSet[string]
     foreach($c in $constraints){
         $typIstWaffe = $wTypes -contains [int]$c.typeId
         # excludeRooms: Raeume, die zwar in der Zone liegen, in denen dieser eine
@@ -214,10 +227,31 @@ foreach($lvl in $Levels){
         foreach($s in $eligible){
             $rm = $rooms[[int]$s.room]
             if (-not $rm) { continue }
+            $kk2 = "$($s.room),$($s.sectorX),$($s.sectorZ)"
             $wx = [int]$rm.originX + [int]$s.sectorX*1024 + 512 + $off.dx
             $wz = [int]$rm.originZ + [int]$s.sectorZ*1024 + 512 + $off.dz
             $itemAdds += [PSCustomObject]@{ typeId=[int]$c.typeId; room=[int]$s.room; x=$wx; y=([int]$s.floorY + $off.dy); z=$wz }
+            [void]$abgedeckt.Add($kk2)
         }
+    }
+
+    # Der Rest: alles, was kein Constraint abdeckt. Das sind die Sektoren, auf
+    # denen gewoehnliche Pickups landen koennen und die noch keine Regel
+    # einschraenkt - genau die Liste, die der Nutzer in trview durchgeht.
+    if ($FillRestWith -gt 0) {
+        $offR = if ($offOf.ContainsKey($FillRestWith)) { $offOf[$FillRestWith] } else { @{ dx=0; dy=0; dz=0 } }
+        $rest = 0
+        foreach($s in $z.sectors){
+            $kk = "$($s.room),$($s.sectorX),$($s.sectorZ)"
+            if ($abgedeckt.Contains($kk)) { continue }
+            $rm = $rooms[[int]$s.room]
+            if (-not $rm) { continue }
+            $wx = [int]$rm.originX + [int]$s.sectorX*1024 + 512 + $offR.dx
+            $wz = [int]$rm.originZ + [int]$s.sectorZ*1024 + 512 + $offR.dz
+            $itemAdds += [PSCustomObject]@{ typeId=$FillRestWith; room=[int]$s.room; x=$wx; y=([int]$s.floorY + $offR.dy); z=$wz }
+            $rest++
+        }
+        "  ${lvl}: $rest Sektoren ohne Constraint mit Typ $FillRestWith gefuellt (von $($z.sectors.Count) gueltigen)"
     }
 
     $patch = [PSCustomObject]@{ itemAdds = $itemAdds } | ConvertTo-Json -Depth 4 -Compress

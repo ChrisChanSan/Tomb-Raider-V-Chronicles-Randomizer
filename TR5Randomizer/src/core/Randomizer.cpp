@@ -188,9 +188,15 @@ bool Rando::buildInput(const JsonValue& zoneExport,
     const JsonValue& wt = zoneExport["weaponTypes"];
     for (size_t i = 0; i < wt.size(); ++i) out.weaponTypes.insert(static_cast<int>(wt[i].asInt()));
 
-    const JsonValue& tyo = zoneExport["typeYOffsets"];
+    const JsonValue& tyo = zoneExport["typeOffsets"];
     for (size_t i = 0; i < tyo.size(); ++i)
-        out.typeYOffset[static_cast<int>(tyo[i]["typeId"].asInt())] = static_cast<int>(tyo[i]["yOffset"].asInt());
+    {
+        PlacementOffset po;
+        po.dx = static_cast<int>(tyo[i]["dx"].asInt());
+        po.dy = static_cast<int>(tyo[i]["dy"].asInt());
+        po.dz = static_cast<int>(tyo[i]["dz"].asInt());
+        out.typeOffset[static_cast<int>(tyo[i]["typeId"].asInt())] = po;
+    }
 
     const JsonValue& inj = zoneExport["requiredInjections"];
     for (size_t i = 0; i < inj.size(); ++i)
@@ -354,32 +360,37 @@ bool Rando::run(const RandoInput& in,
     std::map<int, LevelItem> finalOf;
     for (const LevelItem& it : in.items) finalOf[it.index] = it;
 
-    // Manche Typen liegen auf dem Sektorboden im Boden. Ihr Mesh-Ursprung sitzt
-    // nicht auf der Unterkante, und ohne Versatz sind sie unsichtbar und damit
-    // unauffindbar. Gilt fuer JEDE Platzierung dieses Typs - verschoben wie
-    // injiziert -, deshalb hier zentral und nicht am einzelnen Eintrag.
-    auto yFor = [&](int typeId, int floorY)
+    // Manche Objekte tragen ihren Mesh-Ursprung nicht dort, wo das Modell ihn
+    // annimmt: sie stecken dann im Boden oder stehen am Sektorrand statt in der
+    // Mitte. Gilt fuer JEDE Platzierung dieses Typs - verschoben wie injiziert -,
+    // deshalb hier zentral und nicht am einzelnen Eintrag.
+    auto offFor = [&](int typeId)
     {
-        std::map<int, int>::const_iterator f = in.typeYOffset.find(typeId);
-        return floorY + (f == in.typeYOffset.end() ? 0 : f->second);
+        std::map<int, PlacementOffset>::const_iterator f = in.typeOffset.find(typeId);
+        return f == in.typeOffset.end() ? PlacementOffset() : f->second;
     };
 
     auto placeAt = [&](const LevelItem& it, const ZoneSector& s)
     {
         const RoomOrigin& ro = origin[s.room];
+        const PlacementOffset po = offFor(it.typeId);
+        const int px = ro.originX + s.sectorX * 1024 + 512 + po.dx;
+        const int py = s.floorY + po.dy;
+        const int pz = ro.originZ + s.sectorZ * 1024 + 512 + po.dz;
+
         LevelItem& fin = finalOf[it.index];
         fin.room = s.room;
-        fin.x = ro.originX + s.sectorX * 1024 + 512;
-        fin.y = yFor(it.typeId, s.floorY);
-        fin.z = ro.originZ + s.sectorZ * 1024 + 512;
+        fin.x = px;
+        fin.y = py;
+        fin.z = pz;
         fin.ocb = 0;
 
         JsonValue e = JsonValue::makeObject();
         e.set("index", JsonValue::makeInt(it.index));
         e.set("room", JsonValue::makeInt(s.room));
-        e.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + s.sectorX * 1024 + 512));
-        e.set("y", JsonValue::makeInt(yFor(it.typeId, s.floorY)));
-        e.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s.sectorZ * 1024 + 512));
+        e.set("x", JsonValue::makeInt(px));
+        e.set("y", JsonValue::makeInt(py));
+        e.set("z", JsonValue::makeInt(pz));
         // Regel 3: Sockel- und Versteck-OCB ueberleben einen Ortswechsel nicht.
         e.set("ocb", JsonValue::makeInt(0));
         edits.push(e);
@@ -510,12 +521,13 @@ bool Rando::run(const RandoInput& in,
         const ZoneSector& s = j.hasSector ? *c[0] : *c[static_cast<size_t>(rng.below(c.size()))];
         const RoomOrigin& ro = origin[s.room];
 
+        const PlacementOffset po = offFor(j.typeId);
         JsonValue a = JsonValue::makeObject();
         a.set("typeId", JsonValue::makeInt(j.typeId));
         a.set("room", JsonValue::makeInt(s.room));
-        a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + s.sectorX * 1024 + 512));
-        a.set("y", JsonValue::makeInt(yFor(j.typeId, s.floorY) + j.yOffset));
-        a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s.sectorZ * 1024 + 512));
+        a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + s.sectorX * 1024 + 512 + po.dx));
+        a.set("y", JsonValue::makeInt(s.floorY + po.dy + j.yOffset));
+        a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s.sectorZ * 1024 + 512 + po.dz));
         a.set("ocb", JsonValue::makeInt(0));
         adds.push(a);
         // Nur automatisch gewaehlte Sektoren werden belegt. Ein handgesetzter

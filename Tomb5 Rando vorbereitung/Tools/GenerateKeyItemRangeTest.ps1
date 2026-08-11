@@ -130,6 +130,16 @@ foreach($lvl in $Levels){
     $noWeapon = @( if($null -ne $z.noWeaponRooms){ $z.noWeaponRooms | ForEach-Object { [int]$_ } } )
     $wTypes   = @( if($null -ne $z.weaponTypes){ $z.weaponTypes | ForEach-Object { [int]$_ } } )
 
+    # Platzierungsversatz je Typ (TYPE_OFFSET, im Export schon fuer dieses Level
+    # aufgeloest). Muss hier genauso angewandt werden wie im Randomizer, sonst
+    # zeigt das Testlevel die Items woanders, als sie im Seed landen - und genau
+    # dafuer sieht der Nutzer es sich an.
+    $offOf = @{}
+    foreach($to in @($z.typeOffsets)){
+        if ($null -eq $to) { continue }
+        $offOf[[int]$to.typeId] = @{ dx=[int]$to.dx; dy=[int]$to.dy; dz=[int]$to.dz }
+    }
+
     $itemAdds = @()
     foreach($c in $constraints){
         $typIstWaffe = $wTypes -contains [int]$c.typeId
@@ -200,12 +210,13 @@ foreach($lvl in $Levels){
             ($al.Count -eq 0 -or $al -contains [int]$_.room) -and
             ($null -eq $c.minFloorY -or ($null -ne $hs -and -not $hs.Contains($kk)) -or
              [int]$_.floorY -ge [int]$c.minFloorY) })
+        $off = if ($offOf.ContainsKey([int]$c.typeId)) { $offOf[[int]$c.typeId] } else { @{ dx=0; dy=0; dz=0 } }
         foreach($s in $eligible){
             $rm = $rooms[[int]$s.room]
             if (-not $rm) { continue }
-            $wx = [int]$rm.originX + [int]$s.sectorX*1024 + 512
-            $wz = [int]$rm.originZ + [int]$s.sectorZ*1024 + 512
-            $itemAdds += [PSCustomObject]@{ typeId=[int]$c.typeId; room=[int]$s.room; x=$wx; y=[int]$s.floorY; z=$wz }
+            $wx = [int]$rm.originX + [int]$s.sectorX*1024 + 512 + $off.dx
+            $wz = [int]$rm.originZ + [int]$s.sectorZ*1024 + 512 + $off.dz
+            $itemAdds += [PSCustomObject]@{ typeId=[int]$c.typeId; room=[int]$s.room; x=$wx; y=([int]$s.floorY + $off.dy); z=$wz }
         }
     }
 

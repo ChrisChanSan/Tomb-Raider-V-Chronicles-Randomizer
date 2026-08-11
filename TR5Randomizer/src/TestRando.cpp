@@ -131,12 +131,21 @@ int main(int argc, char** argv)
     {
         const int idx = static_cast<int>(edits[i]["index"].asInt());
         const int room = static_cast<int>(edits[i]["room"].asInt());
-        long long k = keyOf(room, static_cast<int>(edits[i]["x"].asInt()), static_cast<int>(edits[i]["z"].asInt()));
+        // Der Platzierungsversatz des Typs (TYPE_OFFSET) wird herausgerechnet,
+        // bevor der Sektor gesucht wird - sonst schluege die Suche fehl, weil
+        // das Item absichtlich NICHT auf der Sektormitte sitzt. Die Pruefung
+        // bleibt dadurch genauso streng: sie verlangt exakt Mitte plus Versatz.
+        PlacementOffset po;
+        std::map<int, PlacementOffset>::const_iterator poi = in.typeOffset.find(typeOf[idx]);
+        if (poi != in.typeOffset.end()) po = poi->second;
+
+        long long k = keyOf(room, static_cast<int>(edits[i]["x"].asInt()) - po.dx,
+                                  static_cast<int>(edits[i]["z"].asInt()) - po.dz);
         auto si = secAt.find(k);
         if (si == secAt.end()) { allOnValidSector = false; continue; }
 
         // Y muss exakt die Bodenhoehe des Sektors sein, sonst schwebt das Item.
-        if (edits[i]["y"].asInt() != si->second->floorY) allOnValidSector = false;
+        if (edits[i]["y"].asInt() != si->second->floorY + po.dy) allOnValidSector = false;
 
         auto ci = con.find(typeOf[idx]);
         if (ci == con.end()) continue;
@@ -158,7 +167,7 @@ int main(int argc, char** argv)
             (c->minFloorYScope.empty() || c->minFloorYScope.count(sk)))
         { constraintsHeld = false; std::printf("       Item %d liegt zu hoch (y=%d < %d)\n", idx, si->second->floorY, c->minFloorY); }
     }
-    check(allOnValidSector, "jedes Item sitzt auf einem gueltigen Sektor mit exakter Bodenhoehe");
+    check(allOnValidSector, "jedes Item sitzt auf einem gueltigen Sektor, exakt auf Bodenhoehe plus Typversatz");
     check(constraintsHeld, "alle Key-Item-Zwangsbedingungen eingehalten");
 
     // --- Waffen bleiben aus den gesperrten Raeumen heraus ---

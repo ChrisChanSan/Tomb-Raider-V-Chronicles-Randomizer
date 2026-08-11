@@ -684,23 +684,53 @@ $REQUIRED_INJECTIONS = @{
 $requiredInjections = @( if($REQUIRED_INJECTIONS.ContainsKey($LevelName)){ $REQUIRED_INJECTIONS[$LevelName] } )
 
 #----------------------------------------------------------------------------
-# Typen, deren Mesh-Ursprung nicht auf der Unterkante sitzt. Auf den blanken
-# Sektorboden gesetzt stecken sie IM Boden - unsichtbar und damit unauffindbar.
-# Negativer Wert hebt an (y waechst in TR nach unten).
+# Platzierungsversatz je Typ: dx/dy/dz gegen die Sektormitte auf Bodenhoehe.
+# Gebraucht, wenn der Mesh-Ursprung eines Objekts nicht dort sitzt, wo das
+# Modell ihn annimmt - das Item steht dann im Boden oder am Sektorrand statt in
+# der Mitte. Aus den Leveldaten ist das nicht ablesbar, es faellt nur im Bild
+# auf. y waechst in TR nach unten, ein negatives dy hebt also an.
 #
-# Bewusst GLOBAL und nicht je Level: das ist eine Eigenschaft des Objekts, kein
-# Levelbefund. Und bewusst als Regel statt als Handeintrag an einer einzelnen
-# Injektion - der naechste, der eine HK platziert, soll nicht daran denken
-# muessen. Derselbe Merksatz wie bei VANILLA_TYPES: eine Tabelle, die nur eine
+# Zwei Ebenen, und beide werden gebraucht:
+#   'ALLE'      - Eigenschaft des Objekts, gilt in jedem Level.
+#   '<Level>'   - dasselbe Objekt verhaelt sich nur dort so. TR5 belegt seine
+#                 Puzzle- und Key-Slots je Level neu, "Puzzle Item3" ist also
+#                 in fuenf Leveln fuenf verschiedene Dinge.
+# Levelwerte ueberschreiben globale je Achse.
+#
+# Warum ueberhaupt als Regel und nicht als Handeintrag an der einzelnen
+# Injektion: der Naechste, der so ein Item platziert, soll nicht daran denken
+# muessen. Derselbe Merksatz wie bei VANILLA_TYPES - eine Tabelle, die nur eine
 # Absicht beschreibt und nichts durchsetzt, wirkt nicht.
 #
-# 345 (HK) ist vom Nutzer beobachtet. Die einzige HK im ganzen Spiel - rich2
-# Item 6, Raum 8 - liegt vanilla 384 Units ueber ihrem Sektorboden, aber die
-# steht auf einem Sockel (OCB 4) und ist ohnehin gescriptet. Fuer eine frei
-# platzierte reichen 100.
+# 345 (HK): steckt sonst im Boden, unsichtbar und unauffindbar. Vom Nutzer
+# beobachtet. Die einzige HK des Spiels (rich2 Item 6, Raum 8) liegt vanilla
+# 384 Units hoch, steht dort aber auf einem Sockel (OCB 4) und ist gescriptet;
+# fuer eine frei platzierte reichen 100.
+#
+# Andrea2 / 174: kein Hoehen-, sondern ein Tiefenproblem - das Objekt landet am
+# Sektorrand statt in der Mitte, sein Ursprung sitzt einen halben Sektor zu
+# weit. GILT NUR HIER: typeId 174 kommt in fuenf Leveln vor (Andrea2, andy1,
+# andy3, rich1, rich2), und in allen fuenf liegt das Vanilla-Item exakt auf
+# seinem Sektorboden. Ein globaler Eintrag wuerde vier belegte Vanilla-
+# Positionen ueberstimmen.
 #----------------------------------------------------------------------------
-$TYPE_Y_OFFSET = @{ 345 = -100 }
-$typeYOffsets = @( $TYPE_Y_OFFSET.GetEnumerator() | ForEach-Object { [PSCustomObject]@{ typeId=[int]$_.Key; yOffset=[int]$_.Value } } )
+$TYPE_OFFSET = @{
+    'ALLE'    = @{ 345 = @{ dy = -100 } }
+    'Andrea2' = @{ 174 = @{ dz = -512 } }
+}
+$typeOffsetOf = @{}
+foreach($ebene in @('ALLE', $LevelName)){
+    if (-not $TYPE_OFFSET.ContainsKey($ebene)) { continue }
+    foreach($kv in $TYPE_OFFSET[$ebene].GetEnumerator()){
+        $t = [int]$kv.Key
+        if (-not $typeOffsetOf.ContainsKey($t)) { $typeOffsetOf[$t] = @{ dx=0; dy=0; dz=0 } }
+        foreach($achse in @('dx','dy','dz')){
+            if ($null -ne $kv.Value[$achse]) { $typeOffsetOf[$t][$achse] = [int]$kv.Value[$achse] }
+        }
+    }
+}
+$typeOffsets = @( $typeOffsetOf.GetEnumerator() | ForEach-Object {
+    [PSCustomObject]@{ typeId=[int]$_.Key; dx=[int]$_.Value.dx; dy=[int]$_.Value.dy; dz=[int]$_.Value.dz } } )
 
 # Items, die an ihrer Vanilla-Position bleiben MUESSEN. Nicht verschieben,
 # nicht ersetzen, nicht in den Pool aufnehmen. Grund ist jeweils eine
@@ -2815,7 +2845,7 @@ if ($ExportZonesJson -ne "") {
         $wie = if ($null -eq $ptKv.Value) { 'ohne Zonengrenze' } else { "begrenzt auf Zone <= $ptZone" }
         Write-Output "Pool-Typ $pt $wie aufgenommen ($inst Instanzen im Level)"
     }
-    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; requiredInjections=$requiredInjections; typeYOffsets=$typeYOffsets; noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
+    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
     Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"
 }
 

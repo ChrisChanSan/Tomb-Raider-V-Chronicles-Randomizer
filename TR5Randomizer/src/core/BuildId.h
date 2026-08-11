@@ -46,8 +46,10 @@
 //    und Tuch enger ein als den uebrigen Startbereich.
 // 9: TYPE_Y_OFFSET - Typen, deren Mesh-Ursprung nicht auf der Unterkante sitzt,
 //    werden bei JEDER Platzierung angehoben. Bisher nur die HK (345).
-#define RANDO_BUILD_ID      9
-#define RANDO_BUILD_STRING  "0.9"
+// 10: Aus TYPE_Y_OFFSET wird TYPE_OFFSET mit dx/dy/dz und einer Levelebene.
+//     Neu: Andrea2s Puzzle Item3 rueckt um dz -512 in die Sektormitte.
+#define RANDO_BUILD_ID      10
+#define RANDO_BUILD_STRING  "0.10"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

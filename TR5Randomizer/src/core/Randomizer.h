@@ -157,6 +157,13 @@ struct KeyConstraint
     std::set<long long> requireInIsland;
 };
 
+struct PlacementOffset
+{
+    int dx = 0;
+    int dy = 0;
+    int dz = 0;
+};
+
 struct Injection
 {
     int         typeId = 0;
@@ -195,9 +202,11 @@ struct RandoInput
     std::vector<KeyConstraint> constraints;
     std::vector<int>         fixedItems;     // aus dem Zonen-Export (Handkuration)
     std::vector<Injection>   injections;
-    // typeId -> Hoehenversatz gegen den Sektorboden, negativ hebt an. Eine
-    // Eigenschaft des Objekts, nicht des Levels: siehe TYPE_Y_OFFSET.
-    std::map<int, int>       typeYOffset;
+    // typeId -> Versatz gegen die Sektormitte auf Bodenhoehe. Noetig, wenn der
+    // Mesh-Ursprung eines Objekts nicht dort sitzt, wo das Modell ihn annimmt.
+    // Die Aufloesung global/levelbezogen passiert schon im Export, hier kommt
+    // nur der fertige Wert an. Siehe TYPE_OFFSET in ZoneAnalyse.ps1.
+    std::map<int, PlacementOffset> typeOffset;
     std::vector<LevelItem>   items;          // alle Items des Levels
     std::vector<RoomOrigin>  roomOrigins;
     std::set<int>            triggerPinned;  // abgeleitet, siehe Regel 2

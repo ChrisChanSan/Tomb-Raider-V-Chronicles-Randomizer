@@ -37,8 +37,11 @@
 // 5: rich2 hat jetzt Constraints - vorher hatte es null. Puzzle Item3 bekommt
 //    seine Zonengrenze, Pickup Item2 und je eine Flasche und ein Tuch muessen
 //    in den Startbereich, die Aufzugssektion traegt keine Key-Items mehr.
-#define RANDO_BUILD_ID      5
-#define RANDO_BUILD_STRING  "0.5"
+// 6: rich2s erste Sperrliste aus dem trview-Durchgang, und Puzzle Item3 bekommt
+//    eine Untergrenze - es darf erst ab Raum 128 und nicht mehr hinter dem
+//    Teleporter liegen. 214 -> 145 erlaubte Ablagen fuer diesen Typ.
+#define RANDO_BUILD_ID      6
+#define RANDO_BUILD_STRING  "0.6"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

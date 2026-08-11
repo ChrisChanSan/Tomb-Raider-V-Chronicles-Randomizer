@@ -545,7 +545,11 @@ $NO_ITEM_ROOMS = @{
     # Raum 105 ist der Deadstop nach dem Fahrstuhlabsturz - von dort geht es
     # zurueck ins Level. Ablagen hat er ohnehin keine, alle seine Sektoren sind
     # zu steil; fuer eine spaetere Inselgruppe ist er der richtige Stopp.
-    'rich2' = @(107)
+    #
+    # Erste Sperrliste des Nutzers aus dem trview-Durchgang: 19, 42, 43, 44, 60
+    # und 66. Vier davon (42, 43, 44, 66) liegen in der Aufzugsinsel und waren
+    # dort schon fuer Key-Items gesperrt - jetzt darf dort gar nichts liegen.
+    'rich2' = @(107,19,42,43,44,60,66)
     # Raum 113 ist der erste und zeigt zugleich, warum das Modell hier so wenig
     # helfen kann: der Raum enthaelt KEIN einziges Item und KEINEN einzigen
     # Static, seine Stacheln stecken in der Raumgeometrie selbst. Weder die
@@ -1224,6 +1228,29 @@ $ISLAND_GROUP = @{
     # ihn lief die Flut ueber 58 -> 59 -> 7 bis in die Raeume 152, 156 und 161 -
     # Zone 4 und 5 - und der "Startbereich" haette das halbe Levelende umfasst.
         @{ IslandTypes = @(221); RequireTypes = @(235,236); DeadstopRooms = @(55,58); DoorsOpen = $true }
+        # Puzzle Item3 bekommt eine UNTERGRENZE, die die Zone nicht ausdruecken
+        # kann. Nutzervorgabe: es darf erst ab Raum 128 in Richtung Raum 5 liegen,
+        # und die Tueren 180/179 sind der Deadstop - die stehen beide in Raum 120
+        # und werden von Schalter 43 in Raum 26 geoeffnet.
+        #
+        # maxZone 4 aus EXTRA_POOL_TYPES sagt "nicht spaeter als das Schloss";
+        # diese Insel sagt "nicht frueher als Raum 128". Erst beides zusammen
+        # beschreibt den Korridor, in dem das Teil liegen darf.
+        # Raum 58 muss als zweiter Deadstop dazu, aus demselben Grund wie beim
+        # Startbereich: die Deckenluke von 58 nach 8 ist der Rueckweg vom
+        # Levelende. Mit Raum 120 allein umfasste die Insel 163 Raeume und reichte
+        # bis zu Laras Startraum - also genau das Gegenteil einer Untergrenze.
+        # Mit beiden sind es 586 Sektoren, und zusammen mit maxZone 4 bleiben 214
+        # Ablagen in 26 Raeumen: der Korridor 128 -> 5 -> 23 -> 27 -> ... -> 149
+        # -> 152 -> 166. Der Vanilla-Platz in Raum 166 und das Schloss in Raum 147
+        # liegen beide darin.
+        # Dritter Deadstop ist Raum 152, das Ziel des Teleporters aus Raum 149
+        # (Item 217, ausgeloest vom Trigger auf 149,5,5 - demselben Sektor, auf
+        # dem Puzzle Hole2 steht). Nutzervorgabe: hinter dem Teleporter darf das
+        # Teil nicht mehr liegen. Das kostet 86, 98, 152, 156, 161 und 162; Raum
+        # 166 bleibt erreichbar, ohne durch 152 zu gehen, und damit auch der
+        # Vanilla-Platz.
+        @{ IslandTypes = @(174); StartRoom = 128; DeadstopRooms = @(120,58,152); DoorsOpen = $true }
     )
     # Fuer Puzzle Item4 wurde hier eine zweite Gruppe versucht (Deadstop Raum 66,
     # in dem Tuer 107 steht) und wieder verworfen: sie verbot dem Teil seinen
@@ -1371,6 +1398,13 @@ $NO_ITEM_SECTORS = @{
     # rich2s Laser stand hier als Notloesung, solange er als EXCLUDE_SECTORS das
     # halbe Level kostete. Seit der Sprung 130 -> 139 in MANUAL_LINK steht, ist
     # er dort richtig aufgehoben - er ist eine Wand, kein Ablageverbot.
+    #
+    # Was hier steht, ist die Sektorliste des Nutzers aus dem trview-Durchgang.
+    # 149(5,5) traegt Puzzle Hole2 selbst - auf einem Schloss hat kein Item etwas
+    # zu suchen. Die sechs Felder in Raum 166 sind Nutzerangabe; der Vanilla-Platz
+    # von Puzzle Item3 auf 166(3,2) ist NICHT darunter und bleibt erlaubt.
+    'rich2' = @('149,5,5',
+                '166,2,1','166,4,1','166,1,3','166,3,3','166,2,4','166,4,4')
     # andy3, erste Sektor-Durchsicht des Nutzers. Raum 188 traegt ein Secret und
     # ein grosses Medipack - beide liegen anderswo im Raum, die Sperre trifft
     # keine Vanilla-Position.

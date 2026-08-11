@@ -161,6 +161,15 @@ struct Injection
 {
     int         typeId = 0;
     int         room = 0;
+    // Optionaler fester Sektor. Ohne ihn sucht sich die Injektion einen
+    // beliebigen freien gueltigen Sektor des Raums - richtig fuer Andrea3s
+    // Brechstange, die irgendwo in Raum 120 liegen darf. rich2 braucht das
+    // Gegenteil: dort sollen drei Items auf genau einem Feld liegen, weil der
+    // Nutzer die Stelle ausgesucht hat. Ein fester Sektor belegt ihn deshalb
+    // auch NICHT fuer die naechste Injektion - Stapeln ist hier gewollt.
+    bool        hasSector = false;
+    int         sectorX = 0;
+    int         sectorZ = 0;
     std::string reason;
 };
 

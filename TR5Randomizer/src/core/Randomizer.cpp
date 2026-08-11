@@ -194,6 +194,14 @@ bool Rando::buildInput(const JsonValue& zoneExport,
         Injection j;
         j.typeId = static_cast<int>(inj[i]["typeId"].asInt());
         j.room = static_cast<int>(inj[i]["room"].asInt());
+        const JsonValue& sx = inj[i]["sectorX"];
+        const JsonValue& sz = inj[i]["sectorZ"];
+        if (!sx.isNull() && !sz.isNull())
+        {
+            j.hasSector = true;
+            j.sectorX = static_cast<int>(sx.asInt());
+            j.sectorZ = static_cast<int>(sz.asInt());
+        }
         j.reason = inj[i]["reason"].asString();
         out.injections.push_back(j);
     }
@@ -463,17 +471,27 @@ bool Rando::run(const RandoInput& in,
         for (const ZoneSector& s : pool)
         {
             if (s.room != j.room) continue;
+            // Bei festem Sektor zaehlt nur er, und ob er schon belegt ist,
+            // spielt keine Rolle: mehrere Injektionen duerfen sich dort stapeln.
+            if (j.hasSector)
+            {
+                if (s.sectorX == j.sectorX && s.sectorZ == j.sectorZ) c.push_back(&s);
+                continue;
+            }
             if (used.count(secKey(s.room, s.sectorX, s.sectorZ))) continue;
             c.push_back(&s);
         }
         if (c.empty())
         {
             report.ok = false;
-            report.error = fmt("Pflicht-Injektion typeId %d: in Raum %d ist kein freier gueltiger Sektor.",
-                               j.typeId, j.room);
+            report.error = j.hasSector
+                ? fmt("Pflicht-Injektion typeId %d: Sektor %d,%d,%d ist keine gueltige Ablage.",
+                      j.typeId, j.room, j.sectorX, j.sectorZ)
+                : fmt("Pflicht-Injektion typeId %d: in Raum %d ist kein freier gueltiger Sektor.",
+                      j.typeId, j.room);
             return false;
         }
-        const ZoneSector& s = *c[static_cast<size_t>(rng.below(c.size()))];
+        const ZoneSector& s = j.hasSector ? *c[0] : *c[static_cast<size_t>(rng.below(c.size()))];
         const RoomOrigin& ro = origin[s.room];
 
         JsonValue a = JsonValue::makeObject();
@@ -484,9 +502,13 @@ bool Rando::run(const RandoInput& in,
         a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s.sectorZ * 1024 + 512));
         a.set("ocb", JsonValue::makeInt(0));
         adds.push(a);
-        used.insert(secKey(s.room, s.sectorX, s.sectorZ));
+        // Nur automatisch gewaehlte Sektoren werden belegt. Ein handgesetzter
+        // bleibt frei, sonst koennte dort nur ein einziges Item liegen.
+        if (!j.hasSector) used.insert(secKey(s.room, s.sectorX, s.sectorZ));
         ++report.injected;
-        report.notes.push_back(fmt("Injiziert: typeId %d in Raum %d (%s)", j.typeId, j.room, j.reason.c_str()));
+        report.notes.push_back(j.hasSector
+            ? fmt("Injiziert: typeId %d auf %d,%d,%d (%s)", j.typeId, s.room, s.sectorX, s.sectorZ, j.reason.c_str())
+            : fmt("Injiziert: typeId %d in Raum %d (%s)", j.typeId, j.room, j.reason.c_str()));
     }
 
     // --- Was traegt am Ende wer? ---

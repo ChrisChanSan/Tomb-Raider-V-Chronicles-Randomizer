@@ -40,8 +40,10 @@
 // 6: rich2s erste Sperrliste aus dem trview-Durchgang, und Puzzle Item3 bekommt
 //    eine Untergrenze - es darf erst ab Raum 128 und nicht mehr hinter dem
 //    Teleporter liegen. 214 -> 145 erlaubte Ablagen fuer diesen Typ.
-#define RANDO_BUILD_ID      6
-#define RANDO_BUILD_STRING  "0.6"
+// 7: Pflicht-Injektionen koennen einen festen Sektor tragen und sich dort
+//    stapeln. rich2 bekommt damit HK plus zwei Magazine auf 140(1,2).
+#define RANDO_BUILD_ID      7
+#define RANDO_BUILD_STRING  "0.7"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

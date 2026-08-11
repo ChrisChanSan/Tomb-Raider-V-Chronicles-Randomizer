@@ -653,6 +653,30 @@ $REQUIRED_INJECTIONS = @{
     # Brechstange, in Andrea2 ein Ventil). Hier stand zuerst faelschlich 172 -
     # aufgefallen erst, als der Randomizer den Patch tatsaechlich erzeugt hat.
     'Andrea3' = @( @{ typeId = 240; room = 120; reason = 'Level enthaelt keine Brechstange - Vanilla-Softlock' } )
+    # rich2: eine HK und zwei Magazine auf 140(1,2), Stelle vom Nutzer gewaehlt.
+    # Anders als Andrea3s Brechstange mit festem SEKTOR, denn hier kommt es auf
+    # das eine Feld an - alle drei sollen dort zusammen liegen.
+    #
+    # Der Grund ist ein Softlock, den erst der Randomizer erzeugt: ab Raum 140
+    # kann ein Key-Item unter einem Gegner landen, und ohne Waffe kaeme Lara
+    # nicht daran. In Vanilla stellt sich die Frage nicht, weil dort nichts
+    # wandert.
+    #
+    # Das steht NICHT im Widerspruch zu NO_WEAPON_LEVELS, auch wenn es so
+    # aussieht. Die Sperre dort richtet sich gegen zufaellig verteilte Waffen
+    # VOR dem Roentgenscanner in Raum 9 - Lara muss sich am Mesh 15 entwaffnen,
+    # und eine zweite Waffe irgendwo davor macht das gegenstandslos. Raum 140
+    # liegt hinter der Keypad-Tuer und laut Nutzer hinter einem Point of no
+    # Return, der Scanner ist da laengst passiert. Das Levelende ist ebenfalls
+    # sicher: der Trigger-Triggerer am Feuerloescher haengt an FlipMap 0, die
+    # erst in Raum 58 abgeschaltet wird - eine Waffe allein oeffnet also nichts.
+    # Injektionen laufen ohnehin nicht durch den Waffenfilter, sie werden
+    # direkt platziert; die Sperre bleibt fuer die Verteilung in Kraft.
+    'rich2'   = @(
+        @{ typeId = 345; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK - ab hier kann ein Key-Item unter einem Gegner liegen' }
+        @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK-Munition zur HK auf demselben Feld' }
+        @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK-Munition zur HK auf demselben Feld' }
+    )
 }
 $requiredInjections = @( if($REQUIRED_INJECTIONS.ContainsKey($LevelName)){ $REQUIRED_INJECTIONS[$LevelName] } )
 

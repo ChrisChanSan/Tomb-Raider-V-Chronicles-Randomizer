@@ -188,6 +188,10 @@ bool Rando::buildInput(const JsonValue& zoneExport,
     const JsonValue& wt = zoneExport["weaponTypes"];
     for (size_t i = 0; i < wt.size(); ++i) out.weaponTypes.insert(static_cast<int>(wt[i].asInt()));
 
+    const JsonValue& tyo = zoneExport["typeYOffsets"];
+    for (size_t i = 0; i < tyo.size(); ++i)
+        out.typeYOffset[static_cast<int>(tyo[i]["typeId"].asInt())] = static_cast<int>(tyo[i]["yOffset"].asInt());
+
     const JsonValue& inj = zoneExport["requiredInjections"];
     for (size_t i = 0; i < inj.size(); ++i)
     {
@@ -350,13 +354,23 @@ bool Rando::run(const RandoInput& in,
     std::map<int, LevelItem> finalOf;
     for (const LevelItem& it : in.items) finalOf[it.index] = it;
 
+    // Manche Typen liegen auf dem Sektorboden im Boden. Ihr Mesh-Ursprung sitzt
+    // nicht auf der Unterkante, und ohne Versatz sind sie unsichtbar und damit
+    // unauffindbar. Gilt fuer JEDE Platzierung dieses Typs - verschoben wie
+    // injiziert -, deshalb hier zentral und nicht am einzelnen Eintrag.
+    auto yFor = [&](int typeId, int floorY)
+    {
+        std::map<int, int>::const_iterator f = in.typeYOffset.find(typeId);
+        return floorY + (f == in.typeYOffset.end() ? 0 : f->second);
+    };
+
     auto placeAt = [&](const LevelItem& it, const ZoneSector& s)
     {
         const RoomOrigin& ro = origin[s.room];
         LevelItem& fin = finalOf[it.index];
         fin.room = s.room;
         fin.x = ro.originX + s.sectorX * 1024 + 512;
-        fin.y = s.floorY;
+        fin.y = yFor(it.typeId, s.floorY);
         fin.z = ro.originZ + s.sectorZ * 1024 + 512;
         fin.ocb = 0;
 
@@ -364,7 +378,7 @@ bool Rando::run(const RandoInput& in,
         e.set("index", JsonValue::makeInt(it.index));
         e.set("room", JsonValue::makeInt(s.room));
         e.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + s.sectorX * 1024 + 512));
-        e.set("y", JsonValue::makeInt(s.floorY));
+        e.set("y", JsonValue::makeInt(yFor(it.typeId, s.floorY)));
         e.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s.sectorZ * 1024 + 512));
         // Regel 3: Sockel- und Versteck-OCB ueberleben einen Ortswechsel nicht.
         e.set("ocb", JsonValue::makeInt(0));
@@ -500,7 +514,7 @@ bool Rando::run(const RandoInput& in,
         a.set("typeId", JsonValue::makeInt(j.typeId));
         a.set("room", JsonValue::makeInt(s.room));
         a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + s.sectorX * 1024 + 512));
-        a.set("y", JsonValue::makeInt(s.floorY + j.yOffset));
+        a.set("y", JsonValue::makeInt(yFor(j.typeId, s.floorY) + j.yOffset));
         a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s.sectorZ * 1024 + 512));
         a.set("ocb", JsonValue::makeInt(0));
         adds.push(a);

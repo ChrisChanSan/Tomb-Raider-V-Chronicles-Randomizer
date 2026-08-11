@@ -195,6 +195,9 @@ struct RandoInput
     std::vector<KeyConstraint> constraints;
     std::vector<int>         fixedItems;     // aus dem Zonen-Export (Handkuration)
     std::vector<Injection>   injections;
+    // typeId -> Hoehenversatz gegen den Sektorboden, negativ hebt an. Eine
+    // Eigenschaft des Objekts, nicht des Levels: siehe TYPE_Y_OFFSET.
+    std::map<int, int>       typeYOffset;
     std::vector<LevelItem>   items;          // alle Items des Levels
     std::vector<RoomOrigin>  roomOrigins;
     std::set<int>            triggerPinned;  // abgeleitet, siehe Regel 2

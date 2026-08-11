@@ -44,8 +44,10 @@
 //    stapeln. rich2 bekommt damit HK plus zwei Magazine auf 140(1,2).
 // 8: Injektionen koennen einen Hoehenversatz tragen, und rich2 grenzt Flasche
 //    und Tuch enger ein als den uebrigen Startbereich.
-#define RANDO_BUILD_ID      8
-#define RANDO_BUILD_STRING  "0.8"
+// 9: TYPE_Y_OFFSET - Typen, deren Mesh-Ursprung nicht auf der Unterkante sitzt,
+//    werden bei JEDER Platzierung angehoben. Bisher nur die HK (345).
+#define RANDO_BUILD_ID      9
+#define RANDO_BUILD_STRING  "0.9"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

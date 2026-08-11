@@ -673,15 +673,34 @@ $REQUIRED_INJECTIONS = @{
     # Injektionen laufen ohnehin nicht durch den Waffenfilter, sie werden
     # direkt platziert; die Sperre bleibt fuer die Verteilung in Kraft.
     'rich2'   = @(
-        # yOffset hebt die HK um 100 Units ueber den Sektorboden, damit sie nicht
-        # in den beiden Magazinen steckt. y waechst in TR nach unten, "hoeher"
-        # heisst also kleinerer Wert: -20992 wird zu -21092.
-        @{ typeId = 345; room = 140; sectorX = 1; sectorZ = 2; yOffset = -100; reason = 'HK - ab hier kann ein Key-Item unter einem Gegner liegen' }
+        # Der Hoehenversatz der HK steht NICHT hier, sondern in TYPE_Y_OFFSET:
+        # er gilt fuer jede HK ueberall, nicht nur fuer diese eine. Ein zweiter
+        # Eintrag hier wuerde ihn verdoppeln.
+        @{ typeId = 345; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK - ab hier kann ein Key-Item unter einem Gegner liegen' }
         @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK-Munition zur HK auf demselben Feld' }
         @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK-Munition zur HK auf demselben Feld' }
     )
 }
 $requiredInjections = @( if($REQUIRED_INJECTIONS.ContainsKey($LevelName)){ $REQUIRED_INJECTIONS[$LevelName] } )
+
+#----------------------------------------------------------------------------
+# Typen, deren Mesh-Ursprung nicht auf der Unterkante sitzt. Auf den blanken
+# Sektorboden gesetzt stecken sie IM Boden - unsichtbar und damit unauffindbar.
+# Negativer Wert hebt an (y waechst in TR nach unten).
+#
+# Bewusst GLOBAL und nicht je Level: das ist eine Eigenschaft des Objekts, kein
+# Levelbefund. Und bewusst als Regel statt als Handeintrag an einer einzelnen
+# Injektion - der naechste, der eine HK platziert, soll nicht daran denken
+# muessen. Derselbe Merksatz wie bei VANILLA_TYPES: eine Tabelle, die nur eine
+# Absicht beschreibt und nichts durchsetzt, wirkt nicht.
+#
+# 345 (HK) ist vom Nutzer beobachtet. Die einzige HK im ganzen Spiel - rich2
+# Item 6, Raum 8 - liegt vanilla 384 Units ueber ihrem Sektorboden, aber die
+# steht auf einem Sockel (OCB 4) und ist ohnehin gescriptet. Fuer eine frei
+# platzierte reichen 100.
+#----------------------------------------------------------------------------
+$TYPE_Y_OFFSET = @{ 345 = -100 }
+$typeYOffsets = @( $TYPE_Y_OFFSET.GetEnumerator() | ForEach-Object { [PSCustomObject]@{ typeId=[int]$_.Key; yOffset=[int]$_.Value } } )
 
 # Items, die an ihrer Vanilla-Position bleiben MUESSEN. Nicht verschieben,
 # nicht ersetzen, nicht in den Pool aufnehmen. Grund ist jeweils eine
@@ -2796,7 +2815,7 @@ if ($ExportZonesJson -ne "") {
         $wie = if ($null -eq $ptKv.Value) { 'ohne Zonengrenze' } else { "begrenzt auf Zone <= $ptZone" }
         Write-Output "Pool-Typ $pt $wie aufgenommen ($inst Instanzen im Level)"
     }
-    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; requiredInjections=$requiredInjections; noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
+    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; requiredInjections=$requiredInjections; typeYOffsets=$typeYOffsets; noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
     Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"
 }
 

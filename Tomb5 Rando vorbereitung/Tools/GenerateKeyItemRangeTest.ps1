@@ -26,18 +26,22 @@
 # einem realen Vanilla-Item (Andrea1 Key Item1, Item 107).
 param(
     [string[]]$Levels = @('Andrea1','Andrea2','Andrea3','andy1','Andy2','andy3','joby2','joby3','joby4','joby5','rich1','rich2','rich3','richcut2'),
-    # Alle gueltigen Sektoren, die von KEINEM Constraint abgedeckt sind, mit
-    # diesem Typ fuellen. 0 = aus.
+    # JEDEN gueltigen Sektor zusaetzlich mit diesem Typ fuellen. 0 = aus.
     #
-    # Wozu: die Constraint-Typen zeigen, wo ein Key-Item liegen DARF. Was sie
-    # nicht zeigen, ist der Rest - all die Sektoren, die fuer gewoehnliche
-    # Pickups offenstehen und die der Nutzer noch durchsehen muss. Mit diesem
-    # Schalter leuchtet genau dieser Rest auf, und die Sperrliste laesst sich in
-    # einem Durchgang aufnehmen statt Raum fuer Raum.
+    # Wozu: die Constraint-Typen zeigen, wo ein KEY-Item liegen darf. Ein
+    # gewoehnliches Pickup darf dagegen ueberall liegen, wo ueberhaupt etwas
+    # liegen darf - also auf jedem Sektor des Exports. Beide Ebenen
+    # uebereinander ergeben genau die Frage, die der Nutzer beantwortet haben
+    # will: welche ITEMARTEN sind auf diesem Sektor zugelassen?
+    #
+    # ALLE, nicht der Rest. Der erste Versuch fuellte nur die Sektoren, die kein
+    # Constraint abdeckt - dann fehlte der 223-Marker ueberall dort, wo auch ein
+    # Key-Item liegen darf, und in Andrea1 sahen 654 Sektoren so aus, als waeren
+    # sie fuer normale Pickups gesperrt. Die Ebenen sollen sich ueberlappen.
     #
     # Sinnvoll ist ein Typ, der im Level vorkommt und sich in trview leicht
     # herausfiltern laesst - 223 (Pickup Item4, das Secret) hat sich bewaehrt.
-    [int]$FillRestWith = 0
+    [int]$FillAllWith = 0
 )
 $ErrorActionPreference = "Stop"
 
@@ -117,19 +121,20 @@ foreach($lvl in $Levels){
     # unsichtbar. Bevorzugt wird der haeufigste, dann ist er in trview leicht
     # ueber die Typliste zu finden.
     #------------------------------------------------------------------------
-    if ($constraints.Count -eq 0) {
-        # Mit -FillRestWith uebernimmt der Fuelltyp diese Rolle. Sonst zeigte
-        # ein Level ohne Key-Constraints denselben Sachverhalt - "hier gilt
-        # keine Regel" - unter einem ANDEREN Typ als alle anderen Level, und die
-        # Konvention beim Durchsehen waere hin. Andy2 und andy3 leuchteten so in
-        # Typ 349 statt in 223.
+    # Mit -FillAllWith braucht es den Ersatz-Constraint gar nicht: die Fuellebene
+    # deckt ohnehin jeden Sektor ab, und ein zweiter Marker desselben Typs auf
+    # demselben Feld waere nur Rauschen.
+    if ($constraints.Count -eq 0 -and $FillAllWith -gt 0) {
+        "  ${lvl}: keine Key-Constraints - es zaehlt allein die Fuellebene"
+    }
+    elseif ($constraints.Count -eq 0) {
         $cand = @($d.items | Where-Object { $t=[int]$_.typeId; ($t -ge 172 -and $t -le 241) -or ($t -ge 334 -and $t -le 355) } |
                   Group-Object typeId | Sort-Object Count -Descending)
-        if ($FillRestWith -le 0 -and $cand.Count -eq 0) {
+        if ($cand.Count -eq 0) {
             "SKIP ${lvl} - keine Constraints und kein einziges Pickup im Level, nichts zu zeigen"
             continue
         }
-        $genericType = if ($FillRestWith -gt 0) { $FillRestWith } else { [int]$cand[0].Name }
+        $genericType = [int]$cand[0].Name
         $maxZ = if($null -ne $z.maxZone){ [int]$z.maxZone } else { 0 }
         $constraints = @([PSCustomObject]@{
             typeId = $genericType; maxZone = $maxZ; instances = $(if($cand.Count){[int]$cand[0].Count}else{0})
@@ -240,23 +245,21 @@ foreach($lvl in $Levels){
         }
     }
 
-    # Der Rest: alles, was kein Constraint abdeckt. Das sind die Sektoren, auf
-    # denen gewoehnliche Pickups landen koennen und die noch keine Regel
-    # einschraenkt - genau die Liste, die der Nutzer in trview durchgeht.
-    if ($FillRestWith -gt 0) {
-        $offR = if ($offOf.ContainsKey($FillRestWith)) { $offOf[$FillRestWith] } else { @{ dx=0; dy=0; dz=0 } }
-        $rest = 0
+    # Die Ebene der gewoehnlichen Pickups: JEDER gueltige Sektor bekommt den
+    # Marker, auch die, auf denen zusaetzlich ein Key-Item liegen darf.
+    if ($FillAllWith -gt 0) {
+        $offR = if ($offOf.ContainsKey($FillAllWith)) { $offOf[$FillAllWith] } else { @{ dx=0; dy=0; dz=0 } }
+        $n = 0
         foreach($s in $z.sectors){
-            $kk = "$($s.room),$($s.sectorX),$($s.sectorZ)"
-            if ($abgedeckt.Contains($kk)) { continue }
             $rm = $rooms[[int]$s.room]
             if (-not $rm) { continue }
             $wx = [int]$rm.originX + [int]$s.sectorX*1024 + 512 + $offR.dx
             $wz = [int]$rm.originZ + [int]$s.sectorZ*1024 + 512 + $offR.dz
-            $itemAdds += [PSCustomObject]@{ typeId=$FillRestWith; room=[int]$s.room; x=$wx; y=([int]$s.floorY + $offR.dy); z=$wz }
-            $rest++
+            $itemAdds += [PSCustomObject]@{ typeId=$FillAllWith; room=[int]$s.room; x=$wx; y=([int]$s.floorY + $offR.dy); z=$wz }
+            $n++
         }
-        "  ${lvl}: $rest Sektoren ohne Constraint mit Typ $FillRestWith gefuellt (von $($z.sectors.Count) gueltigen)"
+        $nurKey = @($z.sectors | Where-Object { -not $abgedeckt.Contains("$($_.room),$($_.sectorX),$($_.sectorZ)") }).Count
+        "  ${lvl}: $n Sektoren mit Typ $FillAllWith belegt, davon $nurKey ohne jede Key-Range"
     }
 
     $patch = [PSCustomObject]@{ itemAdds = $itemAdds } | ConvertTo-Json -Depth 4 -Compress

@@ -198,6 +198,9 @@ bool Rando::buildInput(const JsonValue& zoneExport,
         out.typeOffset[static_cast<int>(tyo[i]["typeId"].asInt())] = po;
     }
 
+    const JsonValue& ko = zoneExport["keepOcbTypes"];
+    for (size_t i = 0; i < ko.size(); ++i) out.keepOcbTypes.insert(static_cast<int>(ko[i].asInt()));
+
     const JsonValue& inj = zoneExport["requiredInjections"];
     for (size_t i = 0; i < inj.size(); ++i)
     {
@@ -378,12 +381,18 @@ bool Rando::run(const RandoInput& in,
         const int py = s.floorY + po.dy;
         const int pz = ro.originZ + s.sectorZ * 1024 + 512 + po.dz;
 
+        // Regel 3: Sockel- und Versteck-OCB ueberleben einen Ortswechsel nicht.
+        // Ausnahme sind Typen aus KEEP_OCB, bei denen die OCB nicht die alte
+        // Stelle beschreibt, sondern die Aufnahmeart - ohne sie ist das Objekt
+        // am neuen Platz gar nicht aufnehmbar.
+        const int neueOcb = in.keepOcbTypes.count(it.typeId) ? it.ocb : 0;
+
         LevelItem& fin = finalOf[it.index];
         fin.room = s.room;
         fin.x = px;
         fin.y = py;
         fin.z = pz;
-        fin.ocb = 0;
+        fin.ocb = neueOcb;
 
         JsonValue e = JsonValue::makeObject();
         e.set("index", JsonValue::makeInt(it.index));
@@ -391,8 +400,7 @@ bool Rando::run(const RandoInput& in,
         e.set("x", JsonValue::makeInt(px));
         e.set("y", JsonValue::makeInt(py));
         e.set("z", JsonValue::makeInt(pz));
-        // Regel 3: Sockel- und Versteck-OCB ueberleben einen Ortswechsel nicht.
-        e.set("ocb", JsonValue::makeInt(0));
+        e.set("ocb", JsonValue::makeInt(neueOcb));
         edits.push(e);
         used.insert(secKey(s.room, s.sectorX, s.sectorZ));
     };

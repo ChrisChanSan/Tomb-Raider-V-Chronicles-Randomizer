@@ -716,8 +716,51 @@ $requiredInjections = @( if($REQUIRED_INJECTIONS.ContainsKey($LevelName)){ $REQU
 #----------------------------------------------------------------------------
 $TYPE_OFFSET = @{
     'ALLE'    = @{ 345 = @{ dy = -100 } }
-    'Andrea2' = @{ 174 = @{ dz = -512 } }
+    # Andrea2 / 174 stand hier mit dz -512 und ist wieder raus: der Typ bleibt
+    # jetzt vanilla (siehe VANILLA_TYPES), er wird also gar nicht mehr bewegt.
+    # Der gemessene Versatz bleibt der Vollstaendigkeit halber notiert, falls das
+    # Objekt je wieder in den Pool soll.
 }
+
+#----------------------------------------------------------------------------
+# Typen, deren OCB einen Ortswechsel UEBERLEBEN muss - die Ausnahme von Regel 3.
+#
+# Regel 3 nullt die OCB bei jeder Verschiebung, und das ist fuer Sockel- und
+# Versteck-OCBs richtig: die beschreiben die alte Stelle und waeren an der neuen
+# sinnlos. Bei manchen Objekten ist die OCB aber keine Ortsangabe, sondern die
+# AUFNAHMEART. Andrea2s Puzzle Item3 traegt OCB 2 - den Brechstangen-Pickup mit
+# eigenen Bounds, eigener Animation und Inventarabfrage (pickup.cpp, case 2).
+# Mit OCB 0 landet es im default-Zweig, und dort ist es nachweislich gar nicht
+# aufnehmbar: der Nutzer hat es an drei verschiedenen Stellen probiert, zwei
+# davon ohne jede Triggerbindung. Mit OCB 2 spielt Lara die Animation und nimmt
+# es auf.
+#
+# Auch hier levelbezogen: typeId 174 ist in fuenf Leveln fuenf verschiedene
+# Dinge, und nur in Andrea2 ist es ein Brechstangenobjekt.
+#----------------------------------------------------------------------------
+# ANDREA2 / 174 STAND HIER UND IST WIEDER RAUS - der Versuch war erfolgreich und
+# hat trotzdem zum Gegenteil gefuehrt. Mit OCB 2 nimmt Lara das Objekt an einer
+# beliebigen Stelle auf, die Animation laeuft, das Teil landet im Inventar. Nur
+# steht danach der Rest der Bedingung da: der Brechstangen-Pickup braucht eine
+# WAND hinter sich und einen Angle, der zu dieser Wand passt (der Nutzer hat es
+# im Spiel gesehen und es selbst benannt). Beides liegt unterhalb der
+# Sektoraufloesung - das Modell rechnet in ganzen 1024er-Feldern und kennt keine
+# Wandausrichtung. Es koennte eine gueltige Position also nicht garantieren,
+# sondern nur raten.
+#
+# Dieselbe Entscheidung hat der Nutzer in DIESEM Level schon einmal getroffen:
+# Andrea2s Ventil (typeId 172) steht aus exakt diesem Grund in VANILLA_TYPES.
+# 174 folgt ihm.
+#
+# Gemessen und hier festgehalten, falls das Objekt je wieder in den Pool soll:
+# es braucht dann dz -512 (Mesh-Ursprung einen halben Sektor versetzt) und
+# dy +512, weil die Engine die automatische Bodenkorrektur nur fuer OCB 0, 3, 4,
+# 7, 8 und 11 macht (init.cpp:477) und OCB 2 davon ausgenommen ist.
+#
+# Der Mechanismus bleibt, er ist gebaut und geprueft - es gibt nur derzeit
+# keinen Typ, fuer den er richtig waere.
+$KEEP_OCB = @{ }
+$keepOcbTypes = @( if($KEEP_OCB.ContainsKey($LevelName)){ $KEEP_OCB[$LevelName] } )
 $typeOffsetOf = @{}
 foreach($ebene in @('ALLE', $LevelName)){
     if (-not $TYPE_OFFSET.ContainsKey($ebene)) { continue }
@@ -759,7 +802,14 @@ $FIXED_ITEMS = @{
 # Position also gar nicht garantieren. Nutzerentscheidung: "Die Brechstange als
 # zufall reicht."
 $VANILLA_TYPES = @{
-    'Andrea2' = @(172)
+    # 174 kam nach langer Suche dazu und aus demselben Grund wie 172. Der
+    # Randomizer nullt die OCB beim Verschieben, und mit OCB 0 ist das Objekt
+    # NICHT aufnehmbar - der Nutzer hat es an drei Stellen probiert, zwei davon
+    # ohne jede Triggerbindung. Mit erhaltener OCB 2 funktioniert es (getestet),
+    # aber dann gilt die volle Bedingung des Brechstangen-Pickups: Wand dahinter
+    # und passender Angle. Das kann ein Modell aus 1024er-Sektoren ohne
+    # Wandausrichtung nicht garantieren. Siehe die lange Begruendung bei KEEP_OCB.
+    'Andrea2' = @(172,174)
     # joby3s Puzzle Item1 (Item 41, Raum 22) ist die getarnte Brechstange -
     # sie sieht wie ein Puzzleteil aus, oeffnet aber die Brechstangentueren 25
     # und 125. Sie bleibt an ihrem Platz, damit die Pickup-Cutscene stimmt.
@@ -2845,7 +2895,7 @@ if ($ExportZonesJson -ne "") {
         $wie = if ($null -eq $ptKv.Value) { 'ohne Zonengrenze' } else { "begrenzt auf Zone <= $ptZone" }
         Write-Output "Pool-Typ $pt $wie aufgenommen ($inst Instanzen im Level)"
     }
-    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
+    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
     Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"
 }
 

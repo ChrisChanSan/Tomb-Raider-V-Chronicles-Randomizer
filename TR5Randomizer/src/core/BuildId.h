@@ -48,8 +48,11 @@
 //    werden bei JEDER Platzierung angehoben. Bisher nur die HK (345).
 // 10: Aus TYPE_Y_OFFSET wird TYPE_OFFSET mit dx/dy/dz und einer Levelebene.
 //     Neu: Andrea2s Puzzle Item3 rueckt um dz -512 in die Sektormitte.
-#define RANDO_BUILD_ID      10
-#define RANDO_BUILD_STRING  "0.10"
+// 11: Andrea2s Puzzle Item3 bleibt vanilla - mit genullter OCB ist es nicht
+//     aufnehmbar, mit erhaltener braucht es eine Wand dahinter. KEEP_OCB ist
+//     als Mechanismus gebaut, aber leer.
+#define RANDO_BUILD_ID      11
+#define RANDO_BUILD_STRING  "0.11"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

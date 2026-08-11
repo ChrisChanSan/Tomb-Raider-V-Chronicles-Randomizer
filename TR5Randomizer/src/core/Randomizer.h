@@ -207,6 +207,10 @@ struct RandoInput
     // Die Aufloesung global/levelbezogen passiert schon im Export, hier kommt
     // nur der fertige Wert an. Siehe TYPE_OFFSET in ZoneAnalyse.ps1.
     std::map<int, PlacementOffset> typeOffset;
+    // Typen, deren OCB einen Ortswechsel ueberlebt - die Ausnahme von Regel 3.
+    // Nur fuer Objekte, bei denen die OCB die Aufnahmeart beschreibt und nicht
+    // die alte Stelle. Siehe KEEP_OCB in ZoneAnalyse.ps1.
+    std::set<int>            keepOcbTypes;
     std::vector<LevelItem>   items;          // alle Items des Levels
     std::vector<RoomOrigin>  roomOrigins;
     std::set<int>            triggerPinned;  // abgeleitet, siehe Regel 2

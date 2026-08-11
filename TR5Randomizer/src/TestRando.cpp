@@ -91,9 +91,27 @@ int main(int argc, char** argv)
     check(fixedUntouched, "kein handkuratiertes FIXED_ITEM wurde bewegt");
 
     // --- Regel 3: OCB wird auf 0 gesetzt ---
+    // Ausgenommen sind Typen aus KEEP_OCB: dort beschreibt die OCB nicht die
+    // alte Stelle, sondern die Aufnahmeart, und ohne sie ist das Objekt am
+    // neuen Platz gar nicht aufnehmbar. Geprueft wird dann, dass die OCB
+    // wirklich die des Originals ist und nicht irgendeine.
+    std::map<int, const LevelItem*> origOf;
+    for (const LevelItem& it : in.items) origOf[it.index] = &it;
     bool ocbZero = true;
-    for (size_t i = 0; i < edits.size(); ++i) if (edits[i]["ocb"].asInt() != 0) ocbZero = false;
-    check(ocbZero, "jedes bewegte Item bekommt OCB 0");
+    for (size_t i = 0; i < edits.size(); ++i)
+    {
+        const int idx = static_cast<int>(edits[i]["index"].asInt());
+        const int ocb = static_cast<int>(edits[i]["ocb"].asInt());
+        std::map<int, const LevelItem*>::const_iterator oi = origOf.find(idx);
+        const bool behalten = oi != origOf.end() && in.keepOcbTypes.count(oi->second->typeId) != 0;
+        const int erwartet = behalten ? oi->second->ocb : 0;
+        if (ocb != erwartet)
+        {
+            ocbZero = false;
+            std::printf("       Item %d hat OCB %d, erwartet %d\n", idx, ocb, erwartet);
+        }
+    }
+    check(ocbZero, "jedes bewegte Item bekommt OCB 0 (ausser KEEP_OCB-Typen)");
 
     // --- Nur Pickups werden bewegt ---
     std::map<int, int> typeOf;

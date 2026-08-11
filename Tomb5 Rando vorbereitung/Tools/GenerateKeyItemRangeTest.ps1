@@ -118,16 +118,21 @@ foreach($lvl in $Levels){
     # ueber die Typliste zu finden.
     #------------------------------------------------------------------------
     if ($constraints.Count -eq 0) {
+        # Mit -FillRestWith uebernimmt der Fuelltyp diese Rolle. Sonst zeigte
+        # ein Level ohne Key-Constraints denselben Sachverhalt - "hier gilt
+        # keine Regel" - unter einem ANDEREN Typ als alle anderen Level, und die
+        # Konvention beim Durchsehen waere hin. Andy2 und andy3 leuchteten so in
+        # Typ 349 statt in 223.
         $cand = @($d.items | Where-Object { $t=[int]$_.typeId; ($t -ge 172 -and $t -le 241) -or ($t -ge 334 -and $t -le 355) } |
                   Group-Object typeId | Sort-Object Count -Descending)
-        if ($cand.Count -eq 0) {
+        if ($FillRestWith -le 0 -and $cand.Count -eq 0) {
             "SKIP ${lvl} - keine Constraints und kein einziges Pickup im Level, nichts zu zeigen"
             continue
         }
-        $genericType = [int]$cand[0].Name
+        $genericType = if ($FillRestWith -gt 0) { $FillRestWith } else { [int]$cand[0].Name }
         $maxZ = if($null -ne $z.maxZone){ [int]$z.maxZone } else { 0 }
         $constraints = @([PSCustomObject]@{
-            typeId = $genericType; maxZone = $maxZ; instances = [int]$cand[0].Count
+            typeId = $genericType; maxZone = $maxZ; instances = $(if($cand.Count){[int]$cand[0].Count}else{0})
             reusable = $false; excludeRooms = @(); allowRooms = @()
             minFloorY = $null; minFloorYZone = $null
             islandSectors = $null; minFloorYIsland = $null })

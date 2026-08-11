@@ -673,7 +673,10 @@ $REQUIRED_INJECTIONS = @{
     # Injektionen laufen ohnehin nicht durch den Waffenfilter, sie werden
     # direkt platziert; die Sperre bleibt fuer die Verteilung in Kraft.
     'rich2'   = @(
-        @{ typeId = 345; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK - ab hier kann ein Key-Item unter einem Gegner liegen' }
+        # yOffset hebt die HK um 100 Units ueber den Sektorboden, damit sie nicht
+        # in den beiden Magazinen steckt. y waechst in TR nach unten, "hoeher"
+        # heisst also kleinerer Wert: -20992 wird zu -21092.
+        @{ typeId = 345; room = 140; sectorX = 1; sectorZ = 2; yOffset = -100; reason = 'HK - ab hier kann ein Key-Item unter einem Gegner liegen' }
         @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK-Munition zur HK auf demselben Feld' }
         @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK-Munition zur HK auf demselben Feld' }
     )
@@ -1251,7 +1254,19 @@ $ISLAND_GROUP = @{
     # Raum 8. Das ist der Rueckweg vom Levelende, mit dem Lara die HK holt. Ohne
     # ihn lief die Flut ueber 58 -> 59 -> 7 bis in die Raeume 152, 156 und 161 -
     # Zone 4 und 5 - und der "Startbereich" haette das halbe Levelende umfasst.
-        @{ IslandTypes = @(221); RequireTypes = @(235,236); DeadstopRooms = @(55,58); DoorsOpen = $true }
+        @{ IslandTypes = @(221); DeadstopRooms = @(55,58); DoorsOpen = $true }
+        # Flasche und Tuch brauchen einen ENGEREN Bereich als Pickup Item2, auch
+        # wenn beides "Startbereich" heisst. Nutzervorgabe: nicht weiter als Raum
+        # 52, denn ab Raum 84 steht schon der Gegner, fuer den das Chloroformtuch
+        # gedacht ist - liegt eine der beiden Haelften erst dort, kommt Lara zu
+        # spaet an die Kombination.
+        #
+        # Raum 84 ist deshalb der dritte Deadstop; er grenzt an 52, 85, 97 und
+        # 170, schneidet also genau den Gegnerbereich ab. Das Vanilla-Tuch in
+        # Raum 50 haengt nur an Raum 54 und bleibt drin - wichtig, weil es im
+        # ganzen Level nur eines gibt und RequireTypes es damit zwingend hier
+        # unterbringen muss.
+        @{ IslandTypes = @(); RequireTypes = @(235,236); DeadstopRooms = @(55,58,84); DoorsOpen = $true }
         # Puzzle Item3 bekommt eine UNTERGRENZE, die die Zone nicht ausdruecken
         # kann. Nutzervorgabe: es darf erst ab Raum 128 in Richtung Raum 5 liegen,
         # und die Tueren 180/179 sind der Deadstop - die stehen beide in Raum 120

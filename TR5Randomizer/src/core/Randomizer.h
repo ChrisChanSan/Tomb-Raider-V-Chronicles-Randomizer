@@ -170,6 +170,10 @@ struct Injection
     bool        hasSector = false;
     int         sectorX = 0;
     int         sectorZ = 0;
+    // Hoehenversatz gegen den Sektorboden. y waechst in TR nach UNTEN, ein
+    // negativer Wert hebt das Item also an. Gebraucht, sobald mehrere
+    // Injektionen auf demselben Feld stehen und nicht ineinander stecken sollen.
+    int         yOffset = 0;
     std::string reason;
 };
 

@@ -156,6 +156,19 @@ foreach($lvl in $Levels){
             $isl = New-Object System.Collections.Generic.HashSet[string]
             foreach($k in $c.islandSectors){ [void]$isl.Add([string]$k) }
         }
+        # requireInIsland ist KEINE Schranke fuer die einzelne Instanz, sondern
+        # eine Aussage ueber alle zusammen: mindestens eine muss dort liegen, die
+        # uebrigen duerfen ueberall hin. Genau genommen ist der "erlaubte
+        # Bereich" dieses Typs also das ganze Level - und genau so hat das
+        # Testlevel es zuerst gezeigt, mit 552 Flaschen quer durch rich2. Das ist
+        # zwar korrekt, aber unbrauchbar: der Nutzer will die Pflichtzone sehen,
+        # denn nur die hat er festgelegt. Deshalb wird sie hier gezeichnet, wenn
+        # es keine echte Insel gibt. Beim Lesen also mitdenken - was hier
+        # leuchtet, ist "hier muss eine liegen", nicht "nur hier darf eine liegen".
+        elseif ($null -ne $c.requireInIsland) {
+            $isl = New-Object System.Collections.Generic.HashSet[string]
+            foreach($k in $c.requireInIsland){ [void]$isl.Add([string]$k) }
+        }
         # bannedSectors: die Umkehrung von islandSectors - hier darf der Typ
         # gerade NICHT liegen. andy1s Zwillenhaelften duerfen nicht vor dem
         # Teleporter liegen, sonst geht Lara ohne sie durch und kommt nie

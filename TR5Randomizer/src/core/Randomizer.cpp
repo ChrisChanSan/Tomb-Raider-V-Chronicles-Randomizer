@@ -202,6 +202,8 @@ bool Rando::buildInput(const JsonValue& zoneExport,
             j.sectorX = static_cast<int>(sx.asInt());
             j.sectorZ = static_cast<int>(sz.asInt());
         }
+        const JsonValue& yo = inj[i]["yOffset"];
+        if (!yo.isNull()) j.yOffset = static_cast<int>(yo.asInt());
         j.reason = inj[i]["reason"].asString();
         out.injections.push_back(j);
     }
@@ -498,7 +500,7 @@ bool Rando::run(const RandoInput& in,
         a.set("typeId", JsonValue::makeInt(j.typeId));
         a.set("room", JsonValue::makeInt(s.room));
         a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + s.sectorX * 1024 + 512));
-        a.set("y", JsonValue::makeInt(s.floorY));
+        a.set("y", JsonValue::makeInt(s.floorY + j.yOffset));
         a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s.sectorZ * 1024 + 512));
         a.set("ocb", JsonValue::makeInt(0));
         adds.push(a);

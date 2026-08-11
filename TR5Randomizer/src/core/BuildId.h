@@ -53,8 +53,10 @@
 //     als Mechanismus gebaut, aber leer.
 // 12: rich3 kuratiert - sechs Flipmap-Freigaben und die beiden Puzzle-Combos,
 //     die von den Cyborgs getragen werden. Damit sind alle 13 Level durch.
-#define RANDO_BUILD_ID      12
-#define RANDO_BUILD_STRING  "0.12"
+// 13: rich3 bekommt seine beiden Inselgruppen - die Puzzle-Combos hinter den
+//     Einbahn-Teleporter, die Armbrust in ihren eigenen Bereich.
+#define RANDO_BUILD_ID      13
+#define RANDO_BUILD_STRING  "0.13"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

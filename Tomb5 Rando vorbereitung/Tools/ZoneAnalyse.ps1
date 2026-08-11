@@ -1286,6 +1286,13 @@ $POOL_TYPES = @{
     # Inselgruppe haengen koennte - die Insel wurde brav berechnet und lief ins
     # Leere. Dieselbe Falle wie bei rich1s Hammer.
     'rich2' = @(221,235,236)
+    # rich3: die Armbrust (typeId 341, Items 75 und 76 in Raum 79). Sie ist im
+    # Spiel die Grappling Gun und damit ein Fortschrittsgegenstand - FlipMap 2,
+    # der Weg ueber Raum 57 in den Rest des Levels, haengt an ihr (siehe
+    # FLIP_GATE). Ein Schloss hat sie nicht, also braucht sie diesen Eintrag,
+    # damit ueberhaupt ein Constraint entsteht, an dem ihre Inselgruppe haengen
+    # kann. Dieselbe Falle wie rich1s Hammer und rich2s Flasche.
+    'rich3' = @(341)
     # joby3: die vier Combo-Haelften. Puzzle Item3 Combo1+2 ergeben das
     # Atemgeraet, Puzzle Item4 Combo1+2 die Batterie; beides wandert in den
     # Anzug und loest die Schluss-Cutscene aus. Die beiden Slots in Raum 40
@@ -1445,6 +1452,45 @@ $ISLAND_GROUP = @{
         # 166 bleibt erreichbar, ohne durch 152 zu gehen, und damit auch der
         # Vanilla-Platz.
         @{ IslandTypes = @(174); StartRoom = 128; DeadstopRooms = @(120,58,152); DoorsOpen = $true }
+    )
+    # rich3: die beiden Puzzle-Combos duerfen erst hinter dem Einbahn-Teleporter
+    # liegen. Nutzerangabe, zwei Point of no Return in diesem Level: Raum 58
+    # ueber die Schraege, und Schalter 310 in Raum 133, dessen Teleporter nach
+    # Raum 134 fuehrt - in Raum 134 gibt es keinen Trigger, der Lara zuruecksetzt.
+    #
+    # Das Schloss (Puzzle Hole1, Item 144) liegt in Raum 119, also jenseits
+    # dieser Einbahnstelle. Laege eine der beiden Haelften davor, koennte Lara
+    # hindurchgehen, ohne sie eingesammelt zu haben, und nie zurueck.
+    #
+    # Der Deadstop ist Raum 133, die Quelle des Teleporters - er verhindert nur,
+    # dass die Flut rueckwaerts hinauslaeuft. Mehr braucht es nicht: Raum 134 hat
+    # ueberhaupt nur EINEN Nachbarn, naemlich 119. Der Bereich begrenzt sich also
+    # von selbst und umfasst 76 Raeume, darunter beide Vanilla-Positionen
+    # (Combo1 in Raum 183, Combo2 in Raum 152) und das Schloss - Laras Startraum
+    # dagegen nicht.
+    'rich3' = @(
+        @{ IslandTypes = @(180,181); StartRoom = 134; DeadstopRooms = @(133); DoorsOpen = $true }
+        # Die Armbrust - im Spiel die Grappling Gun. Sie MUSS hier liegen und
+        # DARF nur hier liegen; IslandTypes leistet beides, es ist eine harte
+        # Positivliste ueber alle Instanzen.
+        #
+        # Der Grund ist ein doppelter Softlock. FlipMap 2, der Weg ueber Raum 57
+        # in den Rest des Levels, haengt an ihr (siehe FLIP_GATE). Und Raum 58
+        # ist ohne sie ueberhaupt nicht erreichbar: dort haengt das Rope
+        # (Item 29, typeId 126), das Lara anschiesst, um hinueberzuschwingen.
+        #
+        # Der Bereich ist die Route, die der Nutzer beschrieben hat:
+        # 61 -> Deckenluke -> 63 -> 3 -> Lift 130 -> Lift 131 -> Schiessstand 73
+        # -> 79 (dort liegt die Armbrust) -> 93 -> 80 und zurueck. Deadstop ist
+        # Raum 60, der Rueckweg ins Treppenhaus - ohne ihn liefe die Flut bis zu
+        # Laras Startraum.
+        #
+        # Die beiden Lifte 130 <-> 131 sind Teleporter (Items 162 und 167,
+        # typeId 388) und stehen NICHT im Portalgraphen. Der Code leitet sie aus
+        # den Triggerdaten ab; ein von Hand gebauter Raumflood ohne diese Kanten
+        # kommt bis Raum 130 und dann nicht weiter - genau so ist mir die Insel
+        # zuerst auf acht Raeume geschrumpft.
+        @{ IslandTypes = @(341); StartRoom = 61; DeadstopRooms = @(60); DoorsOpen = $true }
     )
     # Fuer Puzzle Item4 wurde hier eine zweite Gruppe versucht (Deadstop Raum 66,
     # in dem Tuer 107 steht) und wieder verworfen: sie verbot dem Teil seinen

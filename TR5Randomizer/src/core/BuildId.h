@@ -55,8 +55,10 @@
 //     die von den Cyborgs getragen werden. Damit sind alle 13 Level durch.
 // 13: rich3 bekommt seine beiden Inselgruppen - die Puzzle-Combos hinter den
 //     Einbahn-Teleporter, die Armbrust in ihren eigenen Bereich.
-#define RANDO_BUILD_ID      13
-#define RANDO_BUILD_STRING  "0.13"
+// 14: rich3s Armbrust wird auf drei Raeume eingegrenzt, ihre Munition bleibt
+//     vorerst vanilla.
+#define RANDO_BUILD_ID      14
+#define RANDO_BUILD_STRING  "0.14"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

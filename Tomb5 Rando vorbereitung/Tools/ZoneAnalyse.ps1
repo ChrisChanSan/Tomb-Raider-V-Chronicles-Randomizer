@@ -858,6 +858,14 @@ $VANILLA_TYPES = @{
     # entsprechend flags 256 (unsichtbar) und OCB 4 (Sockel); beim Verschieben
     # faellt die OCB auf 0 und aus der Ablage wuerde ein gewoehnliches Pickup.
     'rich2'   = @(345)
+    # rich3s Armbrustmunition (typeId 342). Es gibt im ganzen Level genau DREI
+    # Stueck - Items 10 (Raum 2), 82 (Raum 79) und 209 (Raum 188) -, und von
+    # typeId 343 keine einzige. Der Nutzer wollte je drei in der Armbrust- und
+    # in der Combo-Insel; das ist mit dreien nicht zu verteilen, dafuer muessten
+    # drei injiziert werden. Bis er sich fuer eine Loesung entschieden hat,
+    # bleiben alle drei liegen, wo sie sind - die sichere Richtung, denn eine
+    # falsch verteilte Munition ist ein Softlock, eine liegengebliebene nicht.
+    'rich3'   = @(342)
 }
 $vanillaTypes = @( if($VANILLA_TYPES.ContainsKey($LevelName)){ $VANILLA_TYPES[$LevelName] } )
 $fixedItems = @()
@@ -1474,23 +1482,23 @@ $ISLAND_GROUP = @{
         # DARF nur hier liegen; IslandTypes leistet beides, es ist eine harte
         # Positivliste ueber alle Instanzen.
         #
-        # Der Grund ist ein doppelter Softlock. FlipMap 2, der Weg ueber Raum 57
-        # in den Rest des Levels, haengt an ihr (siehe FLIP_GATE). Und Raum 58
-        # ist ohne sie ueberhaupt nicht erreichbar: dort haengt das Rope
-        # (Item 29, typeId 126), das Lara anschiesst, um hinueberzuschwingen.
+        # Der Bereich ist bewusst winzig, und der Nutzer hat ihn zweimal enger
+        # gezogen. Zuerst war es die ganze Route ab Raum 61 (359 Ablagen in 31
+        # Raeumen); dann kam der ausschlaggebende Befund: sobald Lara den
+        # Antitrigger (Item 149, Raum 124) erreicht, kommt sie ohne die Armbrust
+        # nicht mehr heraus. Sie darf deshalb erst ab Raum 79 auftauchen und
+        # nicht weiter als Raum 93 liegen - Raum 167 ist ueberhaupt nur mit ihr
+        # erreichbar.
         #
-        # Der Bereich ist die Route, die der Nutzer beschrieben hat:
-        # 61 -> Deckenluke -> 63 -> 3 -> Lift 130 -> Lift 131 -> Schiessstand 73
-        # -> 79 (dort liegt die Armbrust) -> 93 -> 80 und zurueck. Deadstop ist
-        # Raum 60, der Rueckweg ins Treppenhaus - ohne ihn liefe die Flut bis zu
-        # Laras Startraum.
+        # Die drei Raeume 79, 93 und 94 sind eine Kette: 79 -> 94 -> 93. Die
+        # Deadstops kappen beide Enden - 82 den Rueckweg ueber Raum 80, und 167
+        # das, was erst mit der Armbrust aufgeht. Bleiben 85 Ablagen; die
+        # Vanilla-Position (Items 75/76 in Raum 79) liegt darin.
         #
-        # Die beiden Lifte 130 <-> 131 sind Teleporter (Items 162 und 167,
-        # typeId 388) und stehen NICHT im Portalgraphen. Der Code leitet sie aus
-        # den Triggerdaten ab; ein von Hand gebauter Raumflood ohne diese Kanten
-        # kommt bis Raum 130 und dann nicht weiter - genau so ist mir die Insel
-        # zuerst auf acht Raeume geschrumpft.
-        @{ IslandTypes = @(341); StartRoom = 61; DeadstopRooms = @(60); DoorsOpen = $true }
+        # Woran alles haengt: FlipMap 2 (der Weg ueber Raum 57) braucht sie, und
+        # die drei Ropes (Items 29, 105, 204) sind ohne sie nicht zu nutzen -
+        # ueber Rope 29 geht es zu Raum 58.
+        @{ IslandTypes = @(341); StartRoom = 79; DeadstopRooms = @(82,167); DoorsOpen = $true }
     )
     # Fuer Puzzle Item4 wurde hier eine zweite Gruppe versucht (Deadstop Raum 66,
     # in dem Tuer 107 steht) und wieder verworfen: sie verbot dem Teil seinen

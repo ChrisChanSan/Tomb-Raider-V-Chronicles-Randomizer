@@ -1,0 +1,75 @@
+TR5 Randomizer
+==============
+
+Was hier drin ist
+-----------------
+  TR5Randomizer.exe   Das Werkzeug. Hier stellst du den Seed ein.
+  PCTomb5.exe         Die Spiel-Engine, nativ fuer Windows 11.
+  data\               Vorberechnete Daten, die der Randomizer braucht.
+  Source\             Der vollstaendige Quelltext von beidem.
+  Licenses\           Die Lizenzen.
+
+Du brauchst zusaetzlich deine eigene Installation von Tomb Raider
+Chronicles. Spieldaten sind hier bewusst KEINE enthalten - das Spiel
+gehoert seinen Rechteinhabern.
+
+So faengst du an
+----------------
+  1. TR5Randomizer.exe starten.
+  2. Beim ersten Start fragt er nach dem Ordner deiner
+     Chronicles-Installation. Beim ersten Randomisieren legt er
+     data\Backup an und sichert deine Originallevel dorthin.
+     Randomisiert wird danach direkt in data - du startest das
+     Spiel also wie gewohnt.
+  3. Seed eingeben oder wuerfeln lassen, randomisieren, spielen.
+
+Der Seed
+--------
+Derselbe Seed erzeugt immer dasselbe Spiel - auf jedem Rechner. Wenn
+dir etwas komisch vorkommt, notiere den Seed und die Build-Kennung;
+damit laesst sich genau dein Spielstand nachbauen. Beides wird im
+Pausenmenue angezeigt, ein Screenshot reicht also.
+
+Jede Eingabe ist ein gueltiger Seed. "Weihnachten" funktioniert.
+
+Wenn etwas schiefgeht
+---------------------
+Im Randomizer gibt es "Auf Original zuruecksetzen". Damit werden alle
+Level aus data\Backup zurueckgespielt. Diesen Ordner bitte nicht
+loeschen - er ist die einzige Kopie deiner Originallevel, die das
+Programm kennt.
+
+Hinweis zu Spielstaenden: das Speicherformat wurde gegenueber dem
+Original geaendert. Alte Spielstaende werden mit einer Meldung
+abgelehnt statt stillschweigend kaputtzugehen - beende einen
+laufenden Durchgang also, bevor du auf eine neue Version wechselst.
+
+Herkunft und Lizenz
+-------------------
+Die Engine ist eine modifizierte Fassung von TOMB5, dem
+Dekompilationsprojekt zu PC Tomb Raider Chronicles von Troye
+(Trxyebeep) und Mitwirkenden:
+
+    https://github.com/Trxyebeep/TOMB5
+
+Credits des Originalprojekts: Troye (Hauptprogrammierer und
+Projektleiter), ChocolateFan, thatguyfrombb und Raildex. Unsere Arbeit
+liegt auf ihrer.
+
+TOMB5 steht unter der GNU GPL v3, und diese modifizierte Fassung
+ebenso. Deshalb liegt der vollstaendige Quelltext bei - du kannst die
+EXE selbst nachbauen und musst uns nicht glauben. Was wir geaendert
+haben und warum, steht in Source\TOMB5\MODIFICATIONS.md.
+
+Der Randomizer selbst steht ebenfalls unter der GNU GPL v3. Sein
+Quelltext liegt in Source\TR5Randomizer, die Lizenz in
+Licenses\TOMB5-GPLv3.txt - es ist dieselbe.
+
+Die Oberflaeche des Randomizers benutzt Dear ImGui von Omar Cornut
+(MIT-Lizenz).
+
+Die Kuration der Level - also die Frage, welches Item wo liegen darf -
+waere ohne trview nicht moeglich gewesen. Jede Zonengrenze in diesem
+Randomizer wurde damit geprueft:
+
+    https://github.com/chreden/trview

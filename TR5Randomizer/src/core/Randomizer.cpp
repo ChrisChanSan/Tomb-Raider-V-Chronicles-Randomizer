@@ -254,6 +254,109 @@ bool Rando::buildInput(const JsonValue& zoneExport,
     return true;
 }
 
+bool Rando::sectorAllowedFor(const RandoInput& in,
+                             const KeyConstraint* k,
+                             const ZoneSector& s,
+                             int typeId,
+                             bool mustBeOnIsland)
+{
+    // Das Waffenverbot haengt am LEVEL, nicht am Typ-Constraint: eine
+    // Schrotflinte ist kein Schluessel und wuerde sonst gar nicht geprueft.
+    if (in.weaponTypes.count(typeId) && in.noWeaponRooms.count(s.room)) return false;
+    if (!k) return true;
+
+    const long long sk = secKey(s.room, s.sectorX, s.sectorZ);
+    if (s.zone > k->maxZone) return false;
+    if (!k->allowRooms.empty() &&
+        !std::binary_search(k->allowRooms.begin(), k->allowRooms.end(), s.room)) return false;
+    if (std::binary_search(k->excludeRooms.begin(), k->excludeRooms.end(), s.room)) return false;
+    if (!k->islandSectors.empty() && !k->islandSectors.count(sk)) return false;
+    if (k->bannedSectors.count(sk)) return false;
+    if (k->forbiddenSectors.count(sk)) return false;
+    // Kleineres y liegt hoeher: ein Sektor unterhalb der Schranke ist zu hoch.
+    // Sie gilt nur in ihrem Geltungsbereich, und ohne Geltungsbereich ueberall.
+    if (k->hasMinFloorY && s.floorY < k->minFloorY &&
+        (k->minFloorYScope.empty() || k->minFloorYScope.count(sk))) return false;
+    if (mustBeOnIsland && !k->requireInIsland.count(sk)) return false;
+    return true;
+}
+
+bool Rando::buildMarkerPatch(const RandoInput& in,
+                             int fillType,
+                             JsonValue& patchOut,
+                             std::vector<MarkerCount>& perType,
+                             int& fillSectors)
+{
+    perType.clear();
+    fillSectors = 0;
+    patchOut = JsonValue::makeObject();
+    JsonValue adds = JsonValue::makeArray();
+
+    std::map<int, RoomOrigin> origin;
+    for (const RoomOrigin& r : in.roomOrigins) origin[r.room] = r;
+
+    auto offFor = [&](int typeId)
+    {
+        std::map<int, PlacementOffset>::const_iterator f = in.typeOffset.find(typeId);
+        return f == in.typeOffset.end() ? PlacementOffset() : f->second;
+    };
+
+    auto marker = [&](int typeId, const ZoneSector& s)
+    {
+        std::map<int, RoomOrigin>::const_iterator ro = origin.find(s.room);
+        if (ro == origin.end()) return;
+        const PlacementOffset po = offFor(typeId);
+        JsonValue a = JsonValue::makeObject();
+        a.set("typeId", JsonValue::makeInt(typeId));
+        a.set("room", JsonValue::makeInt(s.room));
+        a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro->second.originX) + s.sectorX * 1024 + 512 + po.dx));
+        a.set("y", JsonValue::makeInt(s.floorY + po.dy));
+        a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro->second.originZ) + s.sectorZ * 1024 + 512 + po.dz));
+        a.set("ocb", JsonValue::makeInt(0));
+        adds.push(a);
+    };
+
+    // Ebene 1: der Fuelltyp auf JEDEN gueltigen Sektor. Nicht nur auf die, die
+    // kein Constraint abdeckt - sonst fehlte der Marker ueberall dort, wo AUCH
+    // ein Key-Item liegen darf, und diese Sektoren saehen aus, als waeren sie
+    // fuer gewoehnliche Pickups gesperrt.
+    if (fillType > 0)
+    {
+        for (const ZoneSector& s : in.sectors) { marker(fillType, s); ++fillSectors; }
+    }
+
+    // Ebene 2: je Constraint-Typ sein eigener, engerer Bereich. Geprueft wird
+    // mit derselben Funktion, die auch die Platzierung benutzt.
+    //
+    // Hat ein Typ ein requireInIsland, wird der PFLICHTBEREICH gezeichnet, also
+    // der uebliche Bereich UND die Insel. Formal duerfte eine zweite Instanz
+    // desselben Typs auch ausserhalb liegen - requireInIsland sagt nur "eine
+    // davon dort". Gezeichnet wird trotzdem die engere Menge: das ist die, die
+    // der Nutzer festgelegt hat und pruefen will, und genau so macht es auch
+    // das PowerShell-Werkzeug, gegen das er seine Kuration bisher abgeglichen
+    // hat. Zwei Werkzeuge, die dasselbe Level unterschiedlich zeichnen, waeren
+    // schlimmer als eine formale Unschaerfe.
+    for (const KeyConstraint& k : in.constraints)
+    {
+        const bool pflichtbereich = k.islandSectors.empty() && !k.requireInIsland.empty();
+        MarkerCount mc;
+        mc.typeId = k.typeId;
+        std::set<int> rooms;
+        for (const ZoneSector& s : in.sectors)
+        {
+            if (!sectorAllowedFor(in, &k, s, k.typeId, pflichtbereich)) continue;
+            marker(k.typeId, s);
+            ++mc.sectors;
+            rooms.insert(s.room);
+        }
+        mc.rooms = static_cast<int>(rooms.size());
+        perType.push_back(mc);
+    }
+
+    patchOut.set("itemAdds", adds);
+    return true;
+}
+
 bool Rando::run(const RandoInput& in,
                 const RandoOptions& opt,
                 uint64_t seed,
@@ -414,31 +517,10 @@ bool Rando::run(const RandoInput& in,
 
         auto fi = forceIsland.find(it.typeId);
         const bool mustBeOnIsland = (fi != forceIsland.end() && fi->second == it.index);
-        // Das Waffenverbot haengt am Level, nicht am Typ-Constraint: eine
-        // Schrotflinte ist kein Schluessel und wuerde sonst gar nicht geprueft.
-        const bool isWeapon = in.weaponTypes.count(it.typeId) != 0;
-
         for (const ZoneSector& s : pool)
         {
-            const long long sk = secKey(s.room, s.sectorX, s.sectorZ);
-            if (used.count(sk)) continue;
-            if (isWeapon && in.noWeaponRooms.count(s.room)) continue;
-            if (k)
-            {
-                if (s.zone > k->maxZone) continue;
-                if (!k->allowRooms.empty() &&
-                    !std::binary_search(k->allowRooms.begin(), k->allowRooms.end(), s.room)) continue;
-                if (std::binary_search(k->excludeRooms.begin(), k->excludeRooms.end(), s.room)) continue;
-                if (!k->islandSectors.empty() && !k->islandSectors.count(sk)) continue;
-                if (k->bannedSectors.count(sk)) continue;
-                if (k->forbiddenSectors.count(sk)) continue;
-                // Kleineres y liegt hoeher: ein Sektor unterhalb der Schranke ist
-                // zu hoch. Sie gilt nur in ihrem Geltungsbereich, und ohne
-                // Geltungsbereich ueberall.
-                if (k->hasMinFloorY && s.floorY < k->minFloorY &&
-                    (k->minFloorYScope.empty() || k->minFloorYScope.count(sk))) continue;
-                if (mustBeOnIsland && !k->requireInIsland.count(sk)) continue;
-            }
+            if (used.count(secKey(s.room, s.sectorX, s.sectorZ))) continue;
+            if (!Rando::sectorAllowedFor(in, k, s, it.typeId, mustBeOnIsland)) continue;
             out.push_back(&s);
         }
     };

@@ -287,7 +287,7 @@ bool Tr5Level::getItem(int index, Tr5Item& out) const
 
 bool Tr5Level::addItem(const Tr5Item& in, std::string& error)
 {
-    if (m_itemCount >= MAX_ITEMS)
+    if (m_itemCount >= MAX_ITEMS && !m_allowOverLimit)
     {
         char buf[192];
         std::snprintf(buf, sizeof(buf),

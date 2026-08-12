@@ -26,6 +26,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <d3d11.h>
+#include <shellapi.h>
 #include <shlobj.h>
 
 #include <string>
@@ -205,7 +206,7 @@ namespace
         // ein, Windows meldet "reagiert nicht", und der Nutzer haelt es fuer
         // einen Absturz - obwohl alles laeuft. Der Fortschrittsbalken braucht
         // dieselbe Aufteilung, sonst haette er nichts anzuzeigen.
-        enum class Phase { Idle, Copy, Levels, Finish };
+        enum class Phase { Idle, Copy, Levels, Finish, Debug };
         Phase phase = Phase::Idle;
         size_t stepIndex = 0;
         int    doneCount = 0, failCount = 0, plannedCount = 0;
@@ -249,6 +250,19 @@ namespace
             }
             return h;
         }
+
+        // --- Debugwerkzeug: Sektoren mit Markern befuellen ---
+        //
+        // Beantwortet die Frage, die keine Zahl beantwortet: liegt die Grenze an
+        // der RICHTIGEN Stelle? Der Blick ins Level findet Fehler, die eine
+        // Statistik nicht zeigt - so wurde in rich2 das Leck vom Erdgeschoss in
+        // den Aufzugsschacht gefunden.
+        bool dbgOpen = false;
+        bool dbgUseFill = true;
+        int  dbgFillType = 223;          // Pickup Item4 - im Spiel selten, faellt auf
+        std::vector<std::string> dbgLog;
+
+        std::wstring debugDir() const { return PathUtil::join(PathUtil::exeDir(), L"Debug Level"); }
     };
 
     void setStatus(App& a, const std::string& s, bool error = false)
@@ -341,6 +355,85 @@ namespace
         return true;
     }
 
+    // Ein Debug-Level bauen: statt Items zu verschieben, wird jeder gueltige
+    // Sektor mit einem Marker belegt. Grundlage ist immer das ORIGINAL - liegt
+    // ein Backup vor, kommt die Datei von dort, sonst aus data\. Ein bereits
+    // randomisiertes Level als Vorlage waere zwar geometrisch gleich, aber die
+    // Itemliste im Ergebnis waere nicht die, die der Nutzer erwartet.
+    //
+    // Geschrieben wird ausschliesslich nach "Debug Level" neben der EXE. Diese
+    // Dateien sind nicht spielbar (mehrere tausend Items), und in data\ haetten
+    // sie deshalb nichts verloren.
+    bool doDebugLevel(App& a, LevelRow& row, std::string& err)
+    {
+        const std::string base = row.name.substr(0, row.name.find_last_of('.'));
+        const std::wstring wbase = PathUtil::widen(base);
+
+        JsonValue zone, info;
+        if (!Json::parseFile(PathUtil::join(a.payloadDir(), L"zones_" + wbase + L".json"), zone, err)) return false;
+        if (!Json::parseFile(PathUtil::join(a.payloadDir(), L"level_" + wbase + L".json"), info, err)) return false;
+
+        RandoInput in;
+        if (!Rando::buildInput(zone, info, in, err)) return false;
+
+        JsonValue patch;
+        std::vector<MarkerCount> perType;
+        int fillSectors = 0;
+        if (!Rando::buildMarkerPatch(in, a.dbgUseFill ? a.dbgFillType : 0, patch, perType, fillSectors))
+        {
+            err = "Marker konnten nicht erzeugt werden.";
+            return false;
+        }
+
+        const std::wstring src = PathUtil::join(
+            a.haveBackup ? a.backupDir() : a.dataDir(), PathUtil::widen(row.name));
+
+        Tr5Level lvl;
+        if (!lvl.load(src, err)) return false;
+        lvl.allowMoreThanMaxItems(true);   // hier ausdruecklich gewollt, siehe Tr5Level.h
+
+        PatchReport pr;
+        if (!Patch::apply(lvl, patch, pr, err)) return false;
+
+        if (!PathUtil::ensureDir(a.debugDir())) { err = "Ordner \"Debug Level\" liess sich nicht anlegen."; return false; }
+        if (!lvl.save(PathUtil::join(a.debugDir(), PathUtil::widen(row.name)), err)) return false;
+
+        char buf[160];
+        std::snprintf(buf, sizeof(buf), "%d Marker", pr.added);
+        row.result = buf;
+
+        std::snprintf(buf, sizeof(buf), "%s: %d Sektoren gesamt%s",
+                      row.name.c_str(), fillSectors,
+                      a.dbgUseFill ? "" : " (Fuellebene aus)");
+        a.dbgLog.push_back(buf);
+        for (const MarkerCount& m : perType)
+        {
+            std::snprintf(buf, sizeof(buf), "    Typ %d: %d Sektoren in %d Raeumen",
+                          m.typeId, m.sectors, m.rooms);
+            a.dbgLog.push_back(buf);
+            // Ein Typ ohne einen einzigen erlaubten Sektor ist kein Randfall,
+            // sondern ein Kurationsfehler - der Lauf wuerde spaeter daran
+            // scheitern, und hier faellt es sofort auf.
+            if (m.sectors == 0) a.dbgLog.push_back("    ^ KEIN erlaubter Sektor!");
+        }
+        return true;
+    }
+
+    void startDebugMarkers(App& a)
+    {
+        a.dbgLog.clear();
+        a.plannedCount = 0;
+        for (LevelRow& r : a.levels)
+        {
+            r.result.clear();
+            if (r.enabled) ++a.plannedCount;
+        }
+        a.doneCount = a.failCount = 0;
+        a.stepIndex = 0;
+        a.phase = App::Phase::Debug;
+        setStatus(a, "Debug-Level werden gebaut...");
+    }
+
     // Legt data\Backup an, falls es fehlt. Das darf NUR passieren, wenn die
     // Level in data\ nachweislich unveraendert sind - ein Backup aus bereits
     // randomisierten Dateien waere unbemerkt wertlos und das Original
@@ -429,6 +522,37 @@ namespace
             return;
         }
 
+        case App::Phase::Debug:
+        {
+            while (a.stepIndex < a.levels.size() && !a.levels[a.stepIndex].enabled)
+            {
+                a.levels[a.stepIndex].result = "uebersprungen";
+                ++a.stepIndex;
+            }
+            if (a.stepIndex >= a.levels.size())
+            {
+                char buf[224];
+                std::snprintf(buf, sizeof(buf),
+                              "%d Debug-Level in \"Debug Level\" abgelegt%s. Nur fuer trview - "
+                              "mit so vielen Items startet das Spiel nicht.",
+                              a.doneCount, a.failCount ? " - mit Fehlern, siehe Liste" : "");
+                setStatus(a, buf, a.failCount > 0);
+                a.phaseText.clear();
+                a.phase = App::Phase::Idle;
+                return;
+            }
+
+            LevelRow& r = a.levels[a.stepIndex];
+            a.phaseText = r.name;
+
+            std::string e;
+            if (doDebugLevel(a, r, e)) ++a.doneCount;
+            else { ++a.failCount; r.result = "FEHLER: " + e; a.dbgLog.push_back(r.name + ": FEHLER: " + e); }
+
+            ++a.stepIndex;
+            return;
+        }
+
         case App::Phase::Finish:
         {
             a.cfg.seedText = a.seedBuf;
@@ -472,6 +596,80 @@ namespace
 }
 
 //----------------------------------------------------------------------------
+// Debugfenster: Sektoren mit Markern befuellen.
+//
+// Was hier entsteht, ist kein Level, sondern ein Bild: auf jedem Sektor, auf
+// dem etwas liegen darf, liegt ein Marker. Der Fuelltyp zeigt die Flaeche fuer
+// gewoehnliche Ausruestung, darueber liegt je Schluesseltyp dessen engerer
+// Bereich - beide UEBERLAPPEN sich. Ein Sektor mit nur dem Fuelltyp erlaubt
+// also ausschliesslich Ausruestung, ein Sektor mit beidem beides.
+//
+// Geprueft wird mit derselben Funktion, die auch platziert
+// (Rando::sectorAllowedFor). Genau darum geht es: was hier zu sehen ist, ist
+// das, was der Randomizer wirklich tut - nicht eine zweite Beschreibung davon.
+//----------------------------------------------------------------------------
+static void drawDebugWindow(App& a)
+{
+    if (!a.dbgOpen) return;
+
+    ImGui::SetNextWindowSize(ImVec2(560, 460), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Debug: Sektoren-Marker", &a.dbgOpen))
+    {
+        ImGui::End();
+        return;
+    }
+
+    ImGui::TextWrapped(
+        "Baut zu jedem oben angehakten Level eine Kopie, in der jeder erlaubte "
+        "Sektor einen Marker traegt. Zum Ansehen in trview - mit mehreren tausend "
+        "Items startet das Spiel diese Dateien NICHT. Deine Installation bleibt "
+        "unberuehrt, geschrieben wird nur nach \"Debug Level\" neben dem Programm.");
+
+    ImGui::Separator();
+    ImGui::Checkbox("Fuellebene: jeden gueltigen Sektor markieren", &a.dbgUseFill);
+    ImGui::BeginDisabled(!a.dbgUseFill);
+    ImGui::SetNextItemWidth(120);
+    ImGui::InputInt("Typ der Fuellebene", &a.dbgFillType);
+    if (a.dbgFillType < 0) a.dbgFillType = 0;
+    ImGui::EndDisabled();
+    ImGui::TextDisabled("223 = Pickup Item4. Im Spiel selten, faellt in der Itemliste sofort auf.");
+
+    const bool busy = (a.phase != App::Phase::Idle);
+    ImGui::Separator();
+    ImGui::BeginDisabled(!a.sourceOk || busy);
+    if (ImGui::Button("Debug-Level bauen", ImVec2(200, 30))) startDebugMarkers(a);
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!PathUtil::dirExists(a.debugDir()));
+    if (ImGui::Button("Ordner oeffnen", ImVec2(150, 30)))
+        ShellExecuteW(nullptr, L"open", a.debugDir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    ImGui::EndDisabled();
+
+    if (!a.sourceOk)
+        ImGui::TextDisabled("(erst oben eine Installation waehlen)");
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("Ergebnis je Typ:");
+    if (ImGui::BeginChild("dbglog", ImVec2(0, 0), ImGuiChildFlags_Borders))
+    {
+        for (const std::string& l : a.dbgLog)
+        {
+            if (l.find("KEIN erlaubter") != std::string::npos)
+                ImGui::TextColored(ImVec4(1, .4f, .4f, 1), "%s", l.c_str());
+            else if (l.find("FEHLER") != std::string::npos)
+                ImGui::TextColored(ImVec4(1, .4f, .4f, 1), "%s", l.c_str());
+            else
+                ImGui::TextUnformatted(l.c_str());
+        }
+        // Waehrend des Laufs mitscrollen, sonst sieht man immer nur den Anfang.
+        if (a.phase == App::Phase::Debug) ImGui::SetScrollHereY(1.0f);
+    }
+    ImGui::EndChild();
+
+    ImGui::End();
+}
+
+//----------------------------------------------------------------------------
 // Oberflaeche
 //----------------------------------------------------------------------------
 static void drawUi(App& a, HWND hwnd)
@@ -487,6 +685,23 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::TextUnformatted("TR5 Randomizer");
     ImGui::SameLine();
     ImGui::TextDisabled("Build %s", RANDO_BUILD_STRING);
+
+    // Rechts oben, weil es kein Bedienschritt ist: die vier nummerierten
+    // Abschnitte darunter sind der Weg durchs Programm, das hier steht daneben.
+    {
+        const float w = 110.0f;
+        ImGui::SameLine(ImGui::GetContentRegionMax().x - w);
+        if (ImGui::Button("Debug", ImVec2(w, 0))) ImGui::OpenPopup("##debugmenu");
+        if (ImGui::BeginPopup("##debugmenu"))
+        {
+            if (ImGui::MenuItem("Sektoren-Marker...")) a.dbgOpen = true;
+            ImGui::Separator();
+            if (ImGui::MenuItem("Ordner \"Debug Level\" oeffnen",
+                                nullptr, false, PathUtil::dirExists(a.debugDir())))
+                ShellExecuteW(nullptr, L"open", a.debugDir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            ImGui::EndPopup();
+        }
+    }
     ImGui::Separator();
 
     // --- 1. Spielordner ---
@@ -634,6 +849,10 @@ static void drawUi(App& a, HWND hwnd)
     }
 
     ImGui::End();
+
+    // Nach dem Hauptfenster, damit es darueber liegt - das Hauptfenster fuellt
+    // den ganzen Bildschirm und traegt NoBringToFrontOnFocus.
+    drawDebugWindow(a);
 }
 
 //----------------------------------------------------------------------------

@@ -120,7 +120,18 @@ public:
     // dicht darunter, deshalb wird die Grenze hier geprueft und nicht gehofft.
     static constexpr int MAX_ITEMS = 256;
 
+    // Hebt genau diese Grenze auf - ausschliesslich fuer die Debug-Level, die
+    // jeden gueltigen Sektor mit einem Marker belegen. Die entstehen mit
+    // mehreren tausend Items und sind deshalb NICHT spielbar; die Engine bricht
+    // beim Laden mit einer Meldung ab. Sie sind zum Ansehen in trview gedacht
+    // und landen darum auch in einem eigenen Ordner, nie in data\.
+    //
+    // Bewusst ein ausdruecklicher Schalter statt eines gelockerten Grenzwerts:
+    // wer ihn setzt, muss wissen, dass das Ergebnis kein Level mehr ist.
+    void    allowMoreThanMaxItems(bool on) { m_allowOverLimit = on; }
+
 private:
+    bool                 m_allowOverLimit = false;
     std::vector<uint8_t> m_bytes;
     int32_t              m_version = 0;
     int16_t              m_rtPages = 0, m_otPages = 0, m_btPages = 0;

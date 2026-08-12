@@ -164,6 +164,13 @@ struct PlacementOffset
     int dz = 0;
 };
 
+struct MarkerCount
+{
+    int typeId = 0;
+    int sectors = 0;
+    int rooms = 0;
+};
+
 struct Injection
 {
     int         typeId = 0;
@@ -262,4 +269,36 @@ namespace Rando
              uint64_t seed,
              JsonValue& patchOut,
              RandoReport& report);
+
+    // Darf dieser Typ auf diesem Sektor liegen? Die eine Stelle, an der alle
+    // Zwangsbedingungen einer Instanz geprueft werden - benutzt von der
+    // Platzierung UND vom Debugwerkzeug. Bewusst gemeinsam: eine zweite Kopie
+    // dieses Filters wuerde frueher oder spaeter abweichen, und dann zeigte das
+    // Debugbild etwas anderes, als der Randomizer tut.
+    //
+    // `mustBeOnIsland` betrifft nur requireInIsland - das ist eine Aussage ueber
+    // alle Instanzen zusammen und gilt deshalb genau fuer die eine, die der Lauf
+    // hineinzwingt.
+    bool sectorAllowedFor(const RandoInput& in,
+                          const KeyConstraint* k,
+                          const ZoneSector& s,
+                          int typeId,
+                          bool mustBeOnIsland);
+
+    // Debugwerkzeug: legt Marker auf Sektoren, statt Items zu verschieben.
+    //
+    // Zwei Ebenen uebereinander. `fillType` kommt auf JEDEN gueltigen Sektor -
+    // das ist die Flaeche, auf der ueberhaupt etwas liegen darf. Darueber je
+    // Constraint-Typ dessen eigener, engerer Bereich. Wo beide liegen, sind
+    // beide Itemarten erlaubt; wo nur der Fuelltyp liegt, ausschliesslich
+    // gewoehnliche Ausruestung.
+    //
+    // fillType 0 laesst die Fuellebene weg. Das Ergebnis ist ein Patch mit
+    // itemAdds - nur fuer trview, denn mit ueber 256 Items laedt die Engine das
+    // Level nicht mehr (MAX_ITEMS, harter Abbruch in specific/file.cpp).
+    bool buildMarkerPatch(const RandoInput& in,
+                          int fillType,
+                          JsonValue& patchOut,
+                          std::vector<MarkerCount>& perType,
+                          int& fillSectors);
 }

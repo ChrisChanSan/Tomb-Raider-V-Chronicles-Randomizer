@@ -111,7 +111,14 @@ void LaraInitialiseMeshes()
 		lara.mesh_ptrs[i] = meshes[objects[LARA].mesh_index + 2 * i];
 	}
 
-	if (gfCurrentLevel >= LVL5_GALLOWS_TREE && gfCurrentLevel <= LVL5_OLD_MILL)
+	// Der Kind-Torso (gruene Weste, weisses Hemd) lagert in den Ireland-Leveln
+	// im Slot ANIMATING6_MIP und wird hier ueber das Skin-Mesh gelegt. Original
+	// hing das allein am Levelnamen - wer per SCRIPT.DAT GF_YOUNGLARA loescht,
+	// um dort die erwachsene Lara zu spielen, behielt dadurch den Kinderbrust-
+	// korb, und der Kopf schwebte ueber dem zu kleinen Torso. Deshalb zusaetzlich
+	// ans Flag gebunden: mit gesetztem Flag (Vanilla) aendert sich nichts.
+	if (gfCurrentLevel >= LVL5_GALLOWS_TREE && gfCurrentLevel <= LVL5_OLD_MILL &&
+		(gfLevelFlags & GF_YOUNGLARA))
 		lara.mesh_ptrs[LM_TORSO] = meshes[objects[ANIMATING6_MIP].mesh_index + 2 * LM_TORSO];
 
 	if (lara.gun_type == WEAPON_HK)

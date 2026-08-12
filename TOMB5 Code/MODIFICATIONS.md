@@ -4,14 +4,22 @@
 decompilation project by Troye/Trxyebeep and contributors,
 <https://github.com/Trxyebeep/TOMB5>).
 
-Modified between **2026-07-30 and 2026-08-05** for the *TR5 Randomizer* project.
+Modified between **2026-07-30 and 2026-08-13** for the *TR5 Randomizer* project.
 The unmodified upstream code is preserved as the first commit of this
 repository (`ebde675`, 2026-07-30), so every change we made is visible as a
 diff against it.
 
+Verified on 2026-08-13 against a freshly downloaded copy of the upstream
+repository: of the 214 source files we did not touch, 212 are byte-identical
+and the remaining two differ only in line endings. The base is therefore
+exactly that upstream version, and the 40 files listed below are the whole of
+our work.
+
 This modified version remains licensed under the **GNU General Public License
 version 3**, the same licence as the original. See `LICENSE`. The complete
 corresponding source is distributed alongside any binary we release.
+Every file we changed carries a modification notice at the top, as required by
+GPLv3 section 5(a).
 
 Original credits are unchanged and remain with the upstream project: Troye
 (main programmer, project leader), ChocolateFan, thatguyfrombb, Raildex. The
@@ -100,6 +108,12 @@ Also in this group:
   statically. The code is left in place and one `#define` re-enables it.
 - `tomb5.vcxproj` — output path, static C runtime (`/MT`) so the executable
   runs without the Visual C++ redistributable, and the Discord library removed.
+- `game/laramisc.cpp` — the child-Lara torso swap in `LaraInitialiseMeshes` is
+  now tied to `GF_YOUNGLARA` as well as to the level range. Upstream it depended
+  on the level name alone, so clearing the flag in `SCRIPT.DAT` to play the
+  Ireland levels with the adult Lara left her with the child's chest and a head
+  floating above a torso that was too small. With the flag set — that is, with an
+  unmodified `SCRIPT.DAT` — nothing changes.
 
 ---
 

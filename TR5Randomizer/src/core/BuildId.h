@@ -62,8 +62,10 @@
 //     dreizehn Level abgeschlossen.
 // 17: Die finale Sperrliste des Nutzers ueber alle Level, plus die neue
 //     Tabelle TYPE_EXCLUDE_SECTORS.
-#define RANDO_BUILD_ID      17
-#define RANDO_BUILD_STRING  "0.17"
+// 18: EQUIP_GATE wird durchgesetzt statt nur berichtet. Andrea1s Revolver und
+//     Lasersight duerfen nicht mehr hinter die Glocke wandern.
+#define RANDO_BUILD_ID      18
+#define RANDO_BUILD_STRING  "0.18"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

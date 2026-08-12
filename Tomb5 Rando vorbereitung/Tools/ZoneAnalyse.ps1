@@ -1306,6 +1306,24 @@ $NO_WEAPON_ROOMS = @{
 # HK-Munitionen. Der Eintrag zielt auf spaeter: sobald #36 zusaetzliche
 # Ausruestung verteilt, muss die Sperre schon stehen. Der Randomizer setzt
 # noWeaponRooms seit dem Kurations-Commit selbst durch.
+#----------------------------------------------------------------------------
+# Ausruestung, die ein Schalter voraussetzt.
+#
+# Ein Shoot Switch steht in den Leveldaten nur als Schalter - dass er eine
+# bestimmte Waffe braucht, steht nirgends. Andrea1: die Glocke (Item 75) laesst
+# sich nur mit Revolver/Desert Eagle plus Lasersight abschiessen. Item 72
+# dagegen ist NICHT gesperrt - der laesst sich auch mit den Pistolen treffen,
+# indem man im Knien zielt (vom Nutzer im Spiel bestaetigt).
+#
+# Wird vor dem Constraint-Aufbau ausgewertet: die Zone, in der der Schalter
+# gebraucht wird, begrenzt die genannten Typen. Vorher stand das nur im
+# Textreport, und der Randomizer durfte die Ausruestung hinter den Schalter
+# legen, den sie bedienen soll.
+#----------------------------------------------------------------------------
+$EQUIP_GATE = @{
+    'Andrea1' = @{ 75 = @{ Need = @(347,351); Desc = 'Revolver + Lasersight (Glocke abschiessen)' } }
+}
+
 $NO_WEAPON_LEVELS = @('rich2')
 $noWeaponRooms = @( if($NO_WEAPON_ROOMS.ContainsKey($LevelName)){ $NO_WEAPON_ROOMS[$LevelName] } )
 if ($NO_WEAPON_LEVELS -contains $LevelName) {
@@ -2698,6 +2716,40 @@ foreach($n in ($itemNeed | Where-Object { -not $_.Gameflow })){
     if (-not $byType.ContainsKey($t)) { $byType[$t] = @() }
     $byType[$t] += ,$n
 }
+
+#----------------------------------------------------------------------------
+# Ausruestungs-Sperren durchsetzen, nicht nur berichten.
+#
+# EQUIP_GATE stand lange NUR im Textreport: er rechnete aus, in welcher Zone der
+# Schalter gebraucht wird, und zeigte an, ob die noetige Ausruestung heute frueh
+# genug liegt. Im Export tauchte davon nichts auf. Der Randomizer durfte
+# Andrea1s Revolver und Lasersight also frei verschieben - auch hinter die
+# Glocke, die man ohne sie nicht abschiessen kann. Dass es bisher gutging, lag
+# am Zufall der geprueften Seeds.
+#
+# Dieselbe Lektion wie bei VANILLA_TYPES und den Inselgruppen: eine Tabelle, die
+# eine Absicht beschreibt und nichts durchsetzt, wirkt nicht. Deshalb landet die
+# Zone jetzt in $extraPool und wird daraus zu einem gewoehnlichen Constraint.
+#
+# Bei mehreren Sperren fuer denselben Typ gilt die STRENGSTE, also die kleinste
+# Zone - die Ausruestung muss vor JEDEM Schalter da sein, der sie braucht.
+#----------------------------------------------------------------------------
+if ($EQUIP_GATE.ContainsKey($LevelName)) {
+    foreach($g in $EQUIP_GATE[$LevelName].GetEnumerator()){
+        $swItem = [int]$g.Key
+        $gz = ($log | Where-Object { $_.Req.Desc -like "*Item $swItem *" } | ForEach-Object { $_.Zone } | Sort-Object | Select-Object -First 1)
+        if ($null -eq $gz) {
+            Write-Output "WARNUNG: EQUIP_GATE - Schalter Item $swItem taucht in keinem Zonenuebergang auf, Sperre wirkungslos"
+            continue
+        }
+        foreach($nt in $g.Value.Need){
+            $t = [int]$nt
+            if ($extraPool.ContainsKey($t)) { $extraPool[$t] = [Math]::Min([int]$extraPool[$t], [int]$gz) }
+            else                            { $extraPool[$t] = [int]$gz }
+        }
+        Write-Output "Ausruestungs-Sperre: Schalter Item $swItem in Zone $gz -> Typen $($g.Value.Need -join ', ') auf Zone <= $gz begrenzt"
+    }
+}
 #----------------------------------------------------------------------------
 # Insel-Flood: ein zweiter, schaerferer Durchlauf, der NUR die Gruppe bestimmt.
 #
@@ -3487,14 +3539,9 @@ foreach($comp in ($comps | Sort-Object { -$_.Count } | Select-Object -First 4)){
 
 Write-Output ""
 Write-Output "--- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---"
-# Ein Shoot switch steht in den Leveldaten nur als Schalter - dass er eine
-# bestimmte Waffe braucht, steht nirgends. Andrea1: die Glocke (Item 75) laesst
-# sich nur mit Revolver/Desert Eagle plus Lasersight abschiessen. Item 72
-# dagegen ist NICHT gesperrt - der laesst sich auch mit den Pistolen treffen,
-# indem man im Knien zielt (vom Nutzer im Spiel bestaetigt).
-$EQUIP_GATE = @{
-    'Andrea1' = @{ 75 = @{ Need = @(347,351); Desc = 'Revolver + Lasersight (Glocke abschiessen)' } }
-}
+# Die Tabelle steht weiter oben bei den uebrigen Kurationsdaten, weil sie
+# inzwischen nicht nur berichtet, sondern durchgesetzt wird - siehe die
+# Auswertung vor dem Constraint-Aufbau.
 if (-not $EQUIP_GATE.ContainsKey($LevelName)) {
     Write-Output "Keine hinterlegt."
 } else {

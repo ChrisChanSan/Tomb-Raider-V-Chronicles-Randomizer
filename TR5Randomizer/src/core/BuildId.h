@@ -57,8 +57,9 @@
 //     Einbahn-Teleporter, die Armbrust in ihren eigenen Bereich.
 // 14: rich3s Armbrust wird auf drei Raeume eingegrenzt, ihre Munition bleibt
 //     vorerst vanilla.
-#define RANDO_BUILD_ID      14
-#define RANDO_BUILD_STRING  "0.14"
+// 15: rich3s erste Sperrliste - 27 Raeume, 808 -> 528 Ablagen.
+#define RANDO_BUILD_ID      15
+#define RANDO_BUILD_STRING  "0.15"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

@@ -344,6 +344,10 @@ $TYPE_EXCLUDE_ROOMS = @{
         # Items nutzbar - nur Key Item7 darf dort nicht liegen.
         202 = @(11,12,16,20,24,25,34,40,42,60,61,65,67,73,76,92,93,98,138,152)
         203 = @(83,115)                       # Key Item8
+        # Die Sicherung. Raum 146 aus der letzten Durchsicht des Nutzers; die
+        # drei Einzelfelder in Raum 141 stehen in TYPE_EXCLUDE_SECTORS, weil der
+        # Rest dieses Raums fuer sie in Ordnung ist.
+        172 = @(146)                          # Fuse
     }
     # joby3: Key Item7 darf nicht hinter Tuer 175 liegen, sie ist sein Deadstop
     # (Nutzer: "Bis Raum 106 duerfen Key 6/7 auftauchen"). Gemessen mit einer
@@ -466,6 +470,17 @@ $noKeyIslands = @( if($NO_KEY_ISLAND.ContainsKey($LevelName)){ $NO_KEY_ISLAND[$L
 # Deshalb hier: der Weg bleibt, die Ablagen verschwinden.
 #----------------------------------------------------------------------------
 $NO_ITEM_ROOMS = @{
+    #------------------------------------------------------------------------
+    # Letzte Durchsicht des Nutzers ueber alle Level, nachdem die Testlevel
+    # beide Ebenen zeigten (223 auf jedem Sektor, Key-Ranges darueber). Diese
+    # sechs Level hatten bis dahin gar keinen Eintrag.
+    #------------------------------------------------------------------------
+    'Andrea1' = @(216,67,155)
+    'Andrea2' = @(149)
+    'Andrea3' = @(129,68,75)
+    'joby2'   = @(72)
+    'joby3'   = @(65)
+    'joby5'   = @(181)
     # Dritte Durchsicht: 55, 78, 95, 145, 150, 186, 228, 231 - zusammen 20
     # Ablagen. Raum 186 ist zugleich Deadstop der Inselgruppe - hier nur als
     # Ablage gesperrt, der Weg bleibt.
@@ -482,9 +497,10 @@ $NO_ITEM_ROOMS = @{
     # "Sollte das Herz mal zufaellig auf seinem Trigger liegen, ok, ist das halt
     # leer. Sonst egal." Deshalb liegt dort auch nichts.
     # (Item 15 in Raum 78 ist ein Smallmedi, nicht das Herz - das ist Item 8.)
-    'andy1' = @(2,11,24,30,32,33,41,42,50,55,64,65,68,69,72,74,75,76,77,78,95,
-                103,129,139,140,145,147,150,160,161,163,171,174,175,186,191,
-                193,195,198,228,231,242)
+    # 27 und 200 kamen in der letzten Durchsicht dazu.
+    'andy1' = @(2,11,24,27,30,32,33,41,42,50,55,64,65,68,69,72,74,75,76,77,78,
+                95,103,129,139,140,145,147,150,160,161,163,171,174,175,186,191,
+                193,195,198,200,228,231,242)
     # Andy2, Raum 29: das Dach der Muehle. In einem 11x11-Raum steht mittig ein
     # Plateau, ringsum ist kein Boden - ein Schacht. Genau die neun
     # Plateausektoren sind Ablageflaeche, und der Nutzer hat sie in trview als
@@ -532,7 +548,8 @@ $NO_ITEM_ROOMS = @{
     # danach verloren. In den Leveldaten steht davon nichts - der Raum sieht
     # begehbar aus, ist erreicht und traegt zwoelf tadellose Ablagen. Genau die
     # Sorte Einbahnstrasse, die das Zonenmodell prinzipiell nicht sehen kann.
-    'rich1' = @(17,19,20,46,47,68,83,85,87,89,90,92,123,130,154)
+    # Raum 5 kam in der letzten Durchsicht dazu.
+    'rich1' = @(5,17,19,20,46,47,68,83,85,87,89,90,92,123,130,154)
     # rich2, Raum 107 im Fahrstuhlschacht. Der Nutzer: begehbar erst, wenn
     # Flipmap 7 an ist, und dort kommt Lara nur vom Erdgeschoss aus hin - also
     # NACH der ganzen Aufzugssektion. Das Modell sieht ihn in Zone 2, zusammen
@@ -549,7 +566,9 @@ $NO_ITEM_ROOMS = @{
     # Erste Sperrliste des Nutzers aus dem trview-Durchgang: 19, 42, 43, 44, 60
     # und 66. Vier davon (42, 43, 44, 66) liegen in der Aufzugsinsel und waren
     # dort schon fuer Key-Items gesperrt - jetzt darf dort gar nichts liegen.
-    'rich2' = @(107,19,42,43,44,60,66)
+    # 34 und 110 kamen in der letzten Durchsicht dazu. Raum 34 ist der mit dem
+    # Motion Sensor, der die Fallen ausloest - damit ist auch diese Frage geklaert.
+    'rich2' = @(107,19,34,42,43,44,60,66,110)
     # rich3, Sperrliste des Nutzers aus dem trview-Durchgang. 28 Raeume; Raum 121
     # hatte er doppelt genannt, 209 kam als letzter nach. Damit ist rich3 fertig.
     'rich3' = @(2,23,24,33,41,47,51,52,56,58,60,68,71,72,84,85,92,121,151,153,
@@ -576,6 +595,24 @@ $noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$Le
 # Floor eine Einbahnstrasse, davor liegende Raeume koennen also dieselbe Zone
 # haben und trotzdem die falsche Seite sein. Raumlisten aus dem Portalgraphen
 # abgeleitet (Flut ab 27, Stop an 26 rueckwaerts und am Schloss vorwaerts).
+#----------------------------------------------------------------------------
+# Wie TYPE_EXCLUDE_ROOMS, nur feiner: einzelne Sektoren statt ganzer Raeume, je
+# Typ. Gebraucht, wenn ein Raum fuer einen Typ ueberwiegend in Ordnung ist und
+# nur ein paar Felder darin nicht - dann waere die Raumsperre zu grob und die
+# allgemeine NO_ITEM_SECTORS-Liste zu weit, weil sie ja ALLE Typen trifft.
+#
+# joby2 ist der erste Fall: die Sicherung (typeId 172) darf auf drei Feldern in
+# Raum 141 nicht liegen, waehrend der Rest des Raums fuer sie taugt. Die neun
+# anderen Felder desselben Raums sind dagegen fuer jeden Typ gesperrt und stehen
+# deshalb in NO_ITEM_SECTORS.
+#
+# Wird unten zu bannedSectors hinzugefuegt, denselben Weg wie NotOnIslandTypes -
+# damit greift es in beiden Constraint-Pfaden, abgeleitet wie handgesetzt.
+#----------------------------------------------------------------------------
+$TYPE_EXCLUDE_SECTORS = @{
+    'joby2' = @{ 172 = @('141,9,3','141,8,3','141,6,2') }
+}
+
 $TYPE_ALLOW_ROOMS = @{
     'Andrea2' = @{
         # Vom Nutzer als "save" bestaetigte Raeume fuer die Brechstange.
@@ -585,7 +622,8 @@ $TYPE_ALLOW_ROOMS = @{
         # (Item 2, Raum 1) - im ganzen Spiel nur hier. In joby3 und rich1 ist die
         # Brechstange dagegen tatsaechlich als Puzzle-/Key-Item getarnt, daher
         # die Verwechslungsgefahr.
-        240 = @(0,1,10,17,25,46,50,54,207)
+        # Raum 26 kam in der letzten Durchsicht dazu.
+        240 = @(0,1,10,17,25,26,46,50,54,207)
     }
     'Andrea3' = @{
         196 = @(15,16,26,27,107,108)                         # Key Item1, Ende 15
@@ -603,6 +641,10 @@ $TYPE_ALLOW_ROOMS = @{
 $typeAllow = @{}
 if ($TYPE_ALLOW_ROOMS.ContainsKey($LevelName)) {
     foreach($kv in $TYPE_ALLOW_ROOMS[$LevelName].GetEnumerator()){ $typeAllow[[int]$kv.Key] = @($kv.Value) }
+}
+$typeExcludeSectors = @{}
+if ($TYPE_EXCLUDE_SECTORS.ContainsKey($LevelName)) {
+    foreach($kv in $TYPE_EXCLUDE_SECTORS[$LevelName].GetEnumerator()){ $typeExcludeSectors[[int]$kv.Key] = @($kv.Value) }
 }
 
 # Typen, die in den Pool gehoeren, deren Zonengrenze das Modell aber nicht
@@ -1645,8 +1687,22 @@ $MANUAL_LINK = @{
 # EXCLUDE_SECTORS bleiben sie begehbar. Sektorfeine Fassung von NO_ITEM_ROOMS,
 # fuer Raeume, die im Uebrigen voellig in Ordnung sind.
 $NO_ITEM_SECTORS = @{
+    #------------------------------------------------------------------------
+    # Letzte Durchsicht des Nutzers ueber alle Level. Diese vier hatten bis
+    # dahin keinen Eintrag.
+    #------------------------------------------------------------------------
+    'Andrea1' = @('214,1,1')
+    'Andrea2' = @('6,1,2','33,2,2','51,2,2')
+    'Andrea3' = @('49,5,3')
+    # joby2: die neun Felder in Raum 141 bilden einen zusammenhaengenden Block
+    # (x1-x3 auf z3-z5), dazu ein Feld in Raum 138.
+    'joby2'   = @('141,1,3','141,1,4','141,1,5','141,2,3','141,2,4','141,2,5',
+                  '141,3,3','141,3,4','141,3,5','138,4,1')
+    'rich1'   = @('31,3,4')
+    # 1(1,1), 70(5,3), 70(5,5) und 13(2,3) kamen in der letzten Durchsicht dazu.
     'andy1' = @('176,2,1','176,3,1','170,1,6','170,3,6','170,3,4',
-                '200,2,0','121,1,1','121,2,3','226,1,2','158,2,2')
+                '200,2,0','121,1,1','121,2,3','226,1,2','158,2,2',
+                '1,1,1','70,5,3','70,5,5','13,2,3')
     # rich2s Laser stand hier als Notloesung, solange er als EXCLUDE_SECTORS das
     # halbe Level kostete. Seit der Sprung 130 -> 139 in MANUAL_LINK steht, ist
     # er dort richtig aufgehoben - er ist eine Wand, kein Ablageverbot.
@@ -1655,7 +1711,8 @@ $NO_ITEM_SECTORS = @{
     # 149(5,5) traegt Puzzle Hole2 selbst - auf einem Schloss hat kein Item etwas
     # zu suchen. Die sechs Felder in Raum 166 sind Nutzerangabe; der Vanilla-Platz
     # von Puzzle Item3 auf 166(3,2) ist NICHT darunter und bleibt erlaubt.
-    'rich2' = @('149,5,5',
+    # 9(2,3) kam in der letzten Durchsicht dazu.
+    'rich2' = @('149,5,5','9,2,3',
                 '166,2,1','166,4,1','166,1,3','166,3,3','166,2,4','166,4,4')
     # andy3, erste Sektor-Durchsicht des Nutzers. Raum 188 traegt ein Secret und
     # ein grosses Medipack - beide liegen anderswo im Raum, die Sperre trifft
@@ -2792,6 +2849,18 @@ foreach($ig in $islandGroups){
 # allen anderen offen. Ein Umweg um die Tuer herum aendert daran nichts - er
 # wird ja mitbenutzt.
 #----------------------------------------------------------------------------
+# Handgesetzte Sektorsperren je Typ (TYPE_EXCLUDE_SECTORS) in bannedSectors
+# mischen. EINMAL hier, nicht in den Constraint-Schleifen: es gibt DREI Pfade,
+# ueber die ein Constraint entstehen kann - abgeleitet aus einem Schloss,
+# EXTRA_POOL_TYPES und POOL_TYPES -, und beim ersten Versuch hatte ich nur die
+# ersten beiden gepatcht. joby2s Sicherung laeuft ueber den dritten, und
+# bannedSectors blieb still leer.
+foreach($kv in $typeExcludeSectors.GetEnumerator()){
+    $nt = [int]$kv.Key
+    if (-not $islandBanned.ContainsKey($nt)) { $islandBanned[$nt] = New-Object System.Collections.Generic.HashSet[string] }
+    foreach($sk in $kv.Value){ [void]$islandBanned[$nt].Add([string]$sk) }
+}
+
 $forbiddenBehindOwnDoor = @{}
 if ($null -ne $startKey) {
     # Je TUER, nicht je Schloss. Ein Schloss oeffnet oft mehrere Tueren -

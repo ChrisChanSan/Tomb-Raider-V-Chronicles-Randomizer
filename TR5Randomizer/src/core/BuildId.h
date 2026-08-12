@@ -60,8 +60,10 @@
 // 15: rich3s erste Sperrliste - 27 Raeume, 808 -> 528 Ablagen.
 // 16: Raum 209 kommt zu rich3s Sperrliste - damit ist die Kuration aller
 //     dreizehn Level abgeschlossen.
-#define RANDO_BUILD_ID      16
-#define RANDO_BUILD_STRING  "0.16"
+// 17: Die finale Sperrliste des Nutzers ueber alle Level, plus die neue
+//     Tabelle TYPE_EXCLUDE_SECTORS.
+#define RANDO_BUILD_ID      17
+#define RANDO_BUILD_STRING  "0.17"
 
 // Name der Datei, die der Randomizer neben die Level legt und die Engine beim
 // Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein

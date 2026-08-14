@@ -276,6 +276,21 @@ namespace
         // Seed schon veraendert, waere spaeter nicht rueckwaerts vergleichbar.
         int optSecrets = 0;
 
+        // Weitere PLATZHALTER (Nutzerwunsch 2026-08-14), alle ohne Wirkung,
+        // ohne Seed-Bit und ohne Persistenz, bis die jeweilige Logik steht.
+        int  optItemMenge = 0;          // 0 Vanilla Anzahl, 1 mehr, 2 viel mehr (#36)
+        bool phTexRgb = false;          // Farbwuerfel ueber Vanilla-Texturen
+        bool phTexMix = false;          // Texturen leveluebergreifend mixen
+        bool phTexRemaster = false;     // Remaster-Texturen patchen
+        bool phRoomKulissen = false;    // Kulissenbereiche einbinden
+        bool phRoomNachbar = false;     // gesperrte Nachbarraeume oeffnen
+        bool phJoby4NoWater = false;    // Deepsea Dive ohne Wasser
+        bool phLevelAbschnitte = false; // Abschnitte (Rom/Russland/...) tauschen
+        bool phLevelReihenfolge = false;// alle 13 Level durchwuerfeln
+        bool phSpiegeln = false;        // GF_MIRROR je Level
+        bool phMusikSwitch = false;     // Audiotrack je Level wuerfeln
+        bool phMusikTrigger = false;    // Musik-/Sound-Trigger-IDs wuerfeln
+
         // Die Auswahl geht in den Seed ein. Sonst erzeugt derselbe Seed mit
         // anderen Haken ein anderes Spiel, und ein Fehlerbericht "Seed X ist
         // unspielbar" waere nicht nachstellbar - also genau das, was die
@@ -902,8 +917,7 @@ static void drawUi(App& a, HWND hwnd)
     }
     ImGui::TextDisabled("wirksam: 0x%016llX", (unsigned long long)a.effectiveSeed());
 
-    // --- 2b. Was soll randomisiert werden ---
-    ImGui::SeparatorText("3. Was soll gewuerfelt werden");
+    // --- 3. Was soll gewuerfelt werden - thematische Bereiche ------------
 
     // Die Erklaerungen haengen als schwebende Box an der Checkbox: kurz mit
     // der Maus darueber verweilen blendet sie ein, wegbewegen blendet sie
@@ -922,8 +936,26 @@ static void drawUi(App& a, HWND hwnd)
         }
     };
 
+    // --- Items: eigener Bereich (Nutzerwunsch) ---------------------------
+    ImGui::SeparatorText("3. Items");
+
     ImGui::Checkbox("Ausruestung (Waffen, Munition, Medipacks)", &a.optOtherPickups);
-    ImGui::Checkbox("Schluessel- und Puzzle-Items", &a.optKeyItems);
+    // Mengenwahl ist die kommende Item-Abundance (#36) - sichtbar, aber
+    // ausgegraut, bis die Logik existiert. "Vanilla Anzahl" ist der Ist-Stand.
+    ImGui::SameLine();
+    ImGui::BeginDisabled(true);
+    ImGui::RadioButton("Vanilla Anzahl", &a.optItemMenge, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("Mehr Items", &a.optItemMenge, 1);
+    hoverHilfe("Kommt noch: zusaetzliche Ausruestung im Level verteilen. "
+               "Grenze ist das 256-Item-Limit der Engine.");
+    ImGui::SameLine();
+    ImGui::RadioButton("Viel mehr Items", &a.optItemMenge, 2);
+    hoverHilfe("Kommt noch: deutlich mehr Ausruestung - braucht vorher die "
+               "MAX_ITEMS-Verdopplung in der Engine.");
+    ImGui::EndDisabled();
+
+    ImGui::Checkbox("Schluessel & Puzzles", &a.optKeyItems);
 
     ImGui::Checkbox("Zufaellige Outfits", &a.optOutfits);
     hoverHilfe("Jeder Abschnitt bekommt zufaellig Lara_Andrea, Lara_Joby oder "
@@ -997,6 +1029,72 @@ static void drawUi(App& a, HWND hwnd)
                "Seed wirklich einsetzt; der Texturseiten-Haushalt bleibt "
                "gemessen deutlich unter der 256er-Grenze. Gescriptete Gegner "
                "bleiben in jedem Modus unberuehrt; Hydra ist noch nicht im Pool.");
+    ImGui::EndDisabled();
+
+    // --- Platzhalter-Bereiche (Nutzerwunsch, alle noch ohne Wirkung) -----
+    //
+    // Sichtbar, damit die Oberflaeche ihre endgueltige Form zeigt; ausgegraut,
+    // bis die jeweilige Logik existiert. Erklaerungen als Schwebehilfe.
+    ImGui::SeparatorText("Texturen (in Vorbereitung)");
+    ImGui::BeginDisabled(true);
+    ImGui::Checkbox("RGB Vanilla Texturen", &a.phTexRgb);
+    hoverHilfe("Kommt noch: Farbwuerfel ueber die Vanilla-Texturseiten - der "
+               "Seed verschiebt die Farbtoene, rein kosmetisch.");
+    ImGui::SameLine();
+    ImGui::Checkbox("Leveluebergreifend mixen", &a.phTexMix);
+    hoverHilfe("Kommt noch: Texturseiten zwischen den Leveln tauschen - Rom in "
+               "Russland, U-Boot in Irland.");
+    ImGui::SameLine();
+    ImGui::Checkbox("Remaster-Texturen patchen", &a.phTexRemaster);
+    hoverHilfe("Kommt noch: Remaster-Texturen (sofern der Spieler sie hat) in "
+               "die klassischen Level patchen.");
+    ImGui::EndDisabled();
+
+    ImGui::SeparatorText("Raeume (in Vorbereitung)");
+    ImGui::BeginDisabled(true);
+    ImGui::Checkbox("Kulissen einbinden", &a.phRoomKulissen);
+    hoverHilfe("Kommt noch: reine Kulissenbereiche ins Spiel einbinden, damit "
+               "dort Items und Gegner liegen koennen.");
+    ImGui::SameLine();
+    ImGui::Checkbox("Nachbar-Raeume begehbar machen", &a.phRoomNachbar);
+    hoverHilfe("Kommt noch: angrenzende, vanilla gesperrte Raeume oeffnen - "
+               "mehr Flaeche fuer die Platzierung.");
+    ImGui::SameLine();
+    ImGui::Checkbox("joby4 NoWater", &a.phJoby4NoWater);
+    hoverHilfe("Kommt noch: Deepsea Dive ohne Wasser - damit waere joby4 "
+               "endlich voll randomisierbar statt vanilla.");
+    ImGui::EndDisabled();
+
+    ImGui::SeparatorText("Level (in Vorbereitung)");
+    ImGui::BeginDisabled(true);
+    ImGui::Checkbox("Levelabschnitte switchen", &a.phLevelAbschnitte);
+    hoverHilfe("Kommt noch: die vier Abschnitte (Rom, Russland, Irland, VCI) "
+               "in zufaelliger Reihenfolge spielen - SCRIPT.DAT-Arbeit.");
+    ImGui::SameLine();
+    ImGui::Checkbox("Level-Reihenfolge switchen", &a.phLevelReihenfolge);
+    hoverHilfe("Kommt noch: die 13 Level komplett durchwuerfeln. Achtung "
+               "Levelketten: Ausruestung und Story-Uebergaben haengen an der "
+               "Reihenfolge (z.B. die Brechstange von Andrea2 nach Andrea3).");
+    ImGui::EndDisabled();
+
+    ImGui::SeparatorText("Global (in Vorbereitung)");
+    ImGui::BeginDisabled(true);
+    ImGui::Checkbox("Level spiegeln", &a.phSpiegeln);
+    hoverHilfe("Kommt noch: Level gespiegelt spielen. Die Engine kennt dafuer "
+               "schon ein Flag (GF_MIRROR in SCRIPT.DAT) - wie gut Cores "
+               "Spiegelmodus ausserhalb seines einen Einsatzes traegt, muss "
+               "der Test zeigen.");
+    ImGui::EndDisabled();
+
+    ImGui::SeparatorText("Musik (in Vorbereitung)");
+    ImGui::BeginDisabled(true);
+    ImGui::Checkbox("Hintergrundmusik switchen", &a.phMusikSwitch);
+    hoverHilfe("Kommt noch: der Audiotrack je Level wird gewuerfelt - er steht "
+               "als Byte im CMD_LEVEL-Eintrag der SCRIPT.DAT.");
+    ImGui::SameLine();
+    ImGui::Checkbox("Trigger-Sound/Musik-IDs switchen", &a.phMusikTrigger);
+    hoverHilfe("Kommt noch: Musik- und Sound-Trigger in der Floordata bekommen "
+               "zufaellige IDs - Jingles und Stimmungen wechseln die Plaetze.");
     ImGui::EndDisabled();
 
     // --- Secrets (#53) - Platzhalter ohne Wirkung ------------------------

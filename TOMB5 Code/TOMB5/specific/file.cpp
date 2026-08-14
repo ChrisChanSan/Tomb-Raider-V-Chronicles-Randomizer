@@ -1450,11 +1450,21 @@ unsigned int __stdcall LoadLevel(void* name)
 		}
 
 		FileClose(level_fp);
-		aInit();
+		// aInit() und aMakeCutsceneResident() liefen hier urspruenglich noch
+		// im LADETHREAD - beides arbeitet am D3D-Geraet (Raum-Vertexbuffer,
+		// Cutscene-Texturen), waehrend der Hauptthread parallel den Ladebalken
+		// praesentiert. Dieselbe Zwei-Threads-ein-Geraet-Klasse wie der
+		// Level-Lade-Haenger vom 31.07. (damals LoadTextures, Fix
+		// D3DCREATE_MULTITHREADED); seit die randomisierten Level groesser
+		// sind, fror das Spiel sporadisch genau in diesem Fenster ein
+		// (Balken voll, nichts geht mehr - 15.08. auch beim Titel gesehen).
+		// Beide Aufrufe macht jetzt der Hauptthread NACH dem Thread-Ende,
+		// siehe S_LoadLevelFile.
 		ClearFX();
+		LevelLoadingThread.ended = 1;    // Erfolgspfad - Hauptthread darf aInit()
 	}
 
-	aMakeCutsceneResident(gfResidentCut[0], gfResidentCut[1], gfResidentCut[2], gfResidentCut[3]);
+	Log("LoadLevel: Ladethread fertig");
 	LevelLoadingThread.active = 0;
 	_endthreadex(1);
 	return 1;
@@ -1523,6 +1533,7 @@ long S_LoadLevelFile(long num)
 		if (App.dx.Flags & DXF_HWR && loadbar_on)
 			S_DrawLoadBar();
 
+
 		// This loop just repaints the loading bar while a background thread
 		// does the actual file I/O - it doesn't need to call Present() (via
 		// S_DrawLoadBar -> S_DumpScreenFrame -> DXShowFrame) any faster than a
@@ -1536,9 +1547,24 @@ long S_LoadLevelFile(long num)
 		Sleep(1);
 	}
 
+	Log("S_LoadLevelFile: Ladethread beigetreten");
+
+	// Aus dem Ladethread hierher verlegt (siehe Kommentar in LoadLevel):
+	// Raum-Vertexbuffer und residente Cutscenes gehoeren dem Hauptthread,
+	// der das Geraet ohnehin besitzt - kein zweiter Thread mehr am D3D,
+	// waehrend der Balken praesentiert.
+	if (LevelLoadingThread.ended)        // Erfolgspfad des Ladethreads
+	{
+		aInit();
+		Log("S_LoadLevelFile: aInit fertig");
+	}
+	aMakeCutsceneResident(gfResidentCut[0], gfResidentCut[1], gfResidentCut[2], gfResidentCut[3]);
+	Log("S_LoadLevelFile: Cutscenes resident");
+
 	if (App.dx.Flags & DXF_HWR && !S_DrawLoadBar())
 		while (!S_DrawLoadBar())
 			Sleep(1);
 
+	Log("S_LoadLevelFile: Balken abgeschlossen");
 	return 1;
 }

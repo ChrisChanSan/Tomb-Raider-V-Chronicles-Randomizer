@@ -811,8 +811,10 @@ void DoLevel(uchar Name, uchar Audio)
 	}
 
 	S_LoadLevelFile(Name);
+	Log("DoLevel: Leveldaten geladen");
 	InitialiseFXArray(1);
 	InitialiseLOTarray(1);
+	Log("DoLevel: FX/LOT bereit");
 	GlobalSoftReset = 0;
 	InitSpotCamSequences();
 	InitialisePickUpDisplay();
@@ -873,14 +875,18 @@ void DoLevel(uchar Name, uchar Audio)
 	}
 
 	InitialiseCamera();
+	Log("DoLevel: Kamera bereit, starte erste Logikphase");
 	bUseSpotCam = 0;
 	gfGameMode = 0;
 	gfLevelComplete = 0;
 	nframes = 2;
 	framecount = 0;
 	gfStatus = ControlPhase(2, 0);
+	Log("DoLevel: erste Logikphase fertig");
 	dbinput = 0;
 	JustLoaded = 0;
+
+	long diagFrames = 0;
 
 	while (!gfStatus)	//game loooooooooooopppppppppppp
 	{
@@ -893,6 +899,12 @@ void DoLevel(uchar Name, uchar Audio)
 		}
 
 		nframes = DrawPhaseGame();
+
+		if (diagFrames < 3)
+		{
+			Log("DoLevel: Frame %d gezeichnet", diagFrames);
+			diagFrames++;
+		}
 		handle_cutseq_triggering(Name);
 
 		if (DEL_playingamefmv)

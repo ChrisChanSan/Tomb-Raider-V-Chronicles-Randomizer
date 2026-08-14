@@ -441,6 +441,12 @@ long ControlPhase(long nframes, long demo_mode)
 			item = &items[item_num];
 			nex = item->next_active;
 
+			// Diagnose Levelstart-Freeze (2026-08-15): beim allerersten
+			// Logikdurchlauf jedes gesteuerte Item festhalten - haengt eine
+			// control-Funktion, ist ihre Zeile die letzte im Log.
+			if (JustLoaded)
+				Log("Startlogik: Item %d Typ %d", item_num, item->object_number);
+
 			if (item->after_death < 128)
 			{
 				if (objects[item->object_number].control)

@@ -484,6 +484,11 @@ bool Rando::run(const RandoInput& in,
     report = RandoReport();
     Rng rng(seed);
 
+    // Levelname in Kleinbuchstaben - mehrere Bloecke unten entscheiden daran
+    // (Waffenstreuung, Outfit, Waffenregeln).
+    std::string klein;
+    for (char c : in.level) klein.push_back((c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c);
+
     std::map<int, RoomOrigin> origin;
     for (const RoomOrigin& r : in.roomOrigins) origin[r.room] = r;
 
@@ -771,6 +776,92 @@ bool Rando::run(const RandoInput& in,
         report.notes.push_back(j.hasSector
             ? fmt("Injiziert: typeId %d auf %d,%d,%d (%s)", j.typeId, s.room, s.sectorX, s.sectorZ, j.reason.c_str())
             : fmt("Injiziert: typeId %d in Raum %d (%s)", j.typeId, j.room, j.reason.c_str()));
+    }
+
+    // --- Waffen streuen ---
+    //
+    // Zufaellige Streuung (Nutzerentscheidung): der Seed bestimmt, WELCHE der
+    // durch den Import nutzbaren Waffen ein Level zusaetzlich als Pickup
+    // bekommt und wie viel Munition dazu. Nur Waffen, die das Level nicht
+    // ohnehin als Item auslegt - vorhandene werden normal mitgemischt, und
+    // mehr Munition fuer Bestandwaffen ist Sache der Item-Abundance (#36).
+    //
+    // Pistolen (334) fehlen mit Absicht: Lara startet ueberall mit ihnen,
+    // sobald der Modellslot da ist - und rich2 darf sie gar nicht haben
+    // (Slot 1 traegt dort Cores gescriptete Zweit-HK, siehe Waffenregeln).
+    //
+    // Die Sektorwahl laeuft ueber sectorAllowedFor ohne Constraint: damit
+    // greift genau eine Regel, das Waffenverbot je Raum (noWeaponRooms,
+    // rich1s Scientist). Budget: MAX_ITEMS ist 256 (#35 noch offen), hier
+    // wird bei 250 aufgehoert, und die spaeter gesetzten Zusatzgegner sind
+    // schon abgezogen.
+    if (opt.allWeapons && klein != "joby4")
+    {
+        struct WStreu { int waffe; int munition[2]; };
+        static const WStreu kStreu[] = {
+            { 336, { 337,  -1 } },     // Uzi + Uzi-Munition
+            { 338, { 339, 340 } },     // Schrotflinte + Normal-/Wideshot
+            { 345, { 346,  -1 } },     // HK + HK-Munition
+            { 347, { 348,  -1 } },     // Deagle + Deagle-Munition
+        };
+
+        std::set<int> schonDa;
+        for (const LevelItem& it : in.items) schonDa.insert(it.typeId);
+
+        int budget = 250 - static_cast<int>(in.items.size())
+                         - static_cast<int>(adds.size())
+                         - (opt.addEnemies ? opt.enemiesPerLevel : 0);
+
+        auto freieStelle = [&](int typeId) -> const ZoneSector* {
+            std::vector<const ZoneSector*> c;
+            for (const ZoneSector& s : pool)
+            {
+                if (used.count(secKey(s.room, s.sectorX, s.sectorZ))) continue;
+                if (!Rando::sectorAllowedFor(in, nullptr, s, typeId, false)) continue;
+                c.push_back(&s);
+            }
+            return c.empty() ? nullptr : c[static_cast<size_t>(rng.below(c.size()))];
+        };
+        auto lege = [&](int typeId, const ZoneSector& s)
+        {
+            const RoomOrigin& ro = origin[s.room];
+            const PlacementOffset po = offFor(typeId);
+            JsonValue a = JsonValue::makeObject();
+            a.set("typeId", JsonValue::makeInt(typeId));
+            a.set("room", JsonValue::makeInt(s.room));
+            a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + s.sectorX * 1024 + 512 + po.dx));
+            a.set("y", JsonValue::makeInt(s.floorY + po.dy));
+            a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s.sectorZ * 1024 + 512 + po.dz));
+            a.set("ocb", JsonValue::makeInt(0));
+            adds.push(a);
+            used.insert(secKey(s.room, s.sectorX, s.sectorZ));
+            ++report.weaponsScattered;
+            --budget;
+        };
+
+        for (const WStreu& w : kStreu)
+        {
+            if (schonDa.count(w.waffe)) continue;          // legt das Level selbst aus
+            if (rng.below(2) == 0) continue;               // Muenzwurf je Waffe
+
+            if (budget < 2) { report.notes.push_back("Waffenstreuung: Item-Budget erschoepft."); break; }
+            const ZoneSector* sw = freieStelle(w.waffe);
+            if (!sw) { report.notes.push_back(fmt("Waffenstreuung: kein Platz fuer typeId %d.", w.waffe)); continue; }
+            lege(w.waffe, *sw);
+
+            const int packs = 1 + static_cast<int>(rng.below(3));   // 1..3
+            int gelegt = 0;
+            for (int n = 0; n < packs && budget > 0; ++n)
+            {
+                const int mun = (w.munition[1] < 0) ? w.munition[0]
+                              : w.munition[rng.below(2)];
+                const ZoneSector* sm = freieStelle(mun);
+                if (!sm) break;
+                lege(mun, *sm);
+                ++gelegt;
+            }
+            report.notes.push_back(fmt("Waffenstreuung: typeId %d + %d Munitionspacks.", w.waffe, gelegt));
+        }
     }
 
     // --- Vorhandene Gegner tauschen ---
@@ -1080,9 +1171,6 @@ bool Rando::run(const RandoInput& in,
     // eigentliche Uebertragung macht der Patchweg, der die Spender-Level
     // kennt. Faellt die Wahl auf das Outfit, das das Level ohnehin traegt,
     // steht nichts im Patch - ein Kopieren auf sich selbst waere nur Ballast.
-    std::string klein;
-    for (char c : in.level) klein.push_back((c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c);
-
     JsonValue outfit = JsonValue::makeObject();
     bool outfitGesetzt = false;
     if (opt.randomOutfits)
@@ -1198,6 +1286,16 @@ bool Rando::run(const RandoInput& in,
             for (const char* p = r.von; *p; ++p)
                 vonKlein.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p);
             if (vonKlein == klein) continue;          // sich selbst spendet niemand
+
+            // rich2 bekommt KEINE Pistolen. Sein Slot 1 (PISTOLS_ANIM) ist
+            // von Core mit einer zweiten HK samt gescriptetem Animationssatz
+            // belegt (mesh-identisch mit Slot 5, eigene Anims mit KILLITEM
+            // und Schusssounds - Sequenzmaterial, richcut2 traegt denselben
+            // Slot). Der Slot bleibt unangetastet, und damit darf auch das
+            // Pistolen-Item nicht ins Level: setup.cpp:111 gibt Lara
+            // Startpistolen, sobald PISTOLS_ITEM geladen ist, und gezogen
+            // liefen die Arme ueber die gescripteten HK-Anims.
+            if (klein == "rich2" && (r.slot == 334 || r.slot == 335)) continue;
 
             JsonValue e = JsonValue::makeObject();
             e.set("slot", JsonValue::makeInt(r.slot));

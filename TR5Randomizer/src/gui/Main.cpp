@@ -472,6 +472,8 @@ namespace
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Trigger mit", pr.triggersMoved);
         if (pr.weaponsCopied > 0)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Waffenslots", pr.weaponsCopied);
+        if (rep.weaponsScattered > 0)
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Waffen gestreut", rep.weaponsScattered);
         if (!pr.outfitFrom.empty())
             std::snprintf(buf + len, sizeof(buf) - len, ", Outfit %s", pr.outfitFrom.c_str());
         row.result = buf;

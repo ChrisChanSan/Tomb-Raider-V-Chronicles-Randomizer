@@ -132,8 +132,9 @@ int main(int argc, char** argv)
                     rep.enemiesSwapped, pr.soundsCopied);
     if (!pr.outfitFrom.empty())
         std::printf("  Outfit      Lara aus %s\n", pr.outfitFrom.c_str());
-    if (pr.weaponsCopied > 0)
-        std::printf("  Waffen      %d Slots uebernommen\n", pr.weaponsCopied);
+    if (pr.weaponsCopied > 0 || rep.weaponsScattered > 0)
+        std::printf("  Waffen      %d Slots uebernommen, %d Items gestreut\n",
+                    pr.weaponsCopied, rep.weaponsScattered);
     std::printf("  Items       %d -> %d\n", itemsBefore, lvl.itemCount());
 
     // Gegenprobe: das Ergebnis neu einlesen und pruefen, dass die Aenderungen

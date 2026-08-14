@@ -359,6 +359,7 @@ struct RandoReport
     int injected = 0;
     int enemiesAdded = 0;
     int enemiesSwapped = 0;
+    int weaponsScattered = 0;           // gestreute Waffen-/Munitions-Items
     std::vector<std::string> notes;     // Auffaelligkeiten fuer die Oberflaeche
     bool ok = true;
     std::string error;

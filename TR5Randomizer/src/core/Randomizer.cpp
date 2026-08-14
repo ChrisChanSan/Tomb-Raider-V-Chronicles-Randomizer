@@ -1080,12 +1080,13 @@ bool Rando::run(const RandoInput& in,
     // eigentliche Uebertragung macht der Patchweg, der die Spender-Level
     // kennt. Faellt die Wahl auf das Outfit, das das Level ohnehin traegt,
     // steht nichts im Patch - ein Kopieren auf sich selbst waere nur Ballast.
+    std::string klein;
+    for (char c : in.level) klein.push_back((c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c);
+
     JsonValue outfit = JsonValue::makeObject();
     bool outfitGesetzt = false;
     if (opt.randomOutfits)
     {
-        std::string klein;
-        for (char c : in.level) klein.push_back((c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c);
 
         // Eigene Familie: andrea VOR andy pruefen, sonst faengt "andy" nie.
         int eigene = -1;
@@ -1147,8 +1148,73 @@ bool Rando::run(const RandoInput& in,
         }
     }
 
+    // --- Waffen ueberall ---
+    //
+    // Aufgeloest als fertige Kopierliste, damit die Spenderregeln an EINER
+    // Stelle stehen (hier) und der Patchweg nur noch ausfuehrt - dasselbe
+    // Muster wie beim LaraType-Byte des Outfits. Die Regeln sind die der
+    // Werkzeug-Goldreferenz (Import Export\Waffen Tests\Plan.md, "Alle 13
+    // Level mit dem vollen Set"), mit zwei begruendeten Abweichungen:
+    //
+    // 1. Die Holsterslots 13-16 sind hier ALLE "nur was fehlt" und kommen
+    //    einheitlich aus Andrea3 (die Goldreferenz nahm 16 immer aus joby2).
+    //    Die Slots liefern die OBERSCHENKEL-Ansicht je Holsterzustand; bei
+    //    zufaelligen Outfits bringt der Outfit-Spender seine eigenen mit,
+    //    und gemischte Oberschenkel (drei von Andrea, einer von joby) waeren
+    //    sichtbar falsch. Preis: die Deagle sieht IM Holster wie der alte
+    //    Revolver aus - gezogen (6), mit Laser (12), als Pickup (347) und im
+    //    Inventar ist sie ueberall die Deagle.
+    // 2. Andrea3 liefert zusaetzlich 352/456/457 (Fernglas-Inventarobjekt
+    //    und die Overlays fuer Fernglas und Zielfernrohr) - die fehlen nur
+    //    den andy-Leveln, und ohne 457 zeigt der Blick durchs Scope Laras
+    //    Pistolenhand (Levelabhaengige Eigenheiten.md, Mesh-Index 0).
+    //
+    // Der Patchweg ueberspringt "nur was fehlt"-Eintraege, wenn der Slot da
+    // ist - dadurch loest sich auch die rich2-Ausnahme (eigene HK-Spezialpose
+    // bleibt) von selbst. Eintraege, deren Spender das Level selbst ist,
+    // entfallen hier schon.
+    JsonValue waffen = JsonValue::makeArray();
+    if (opt.allWeapons && klein != "joby4")
+    {
+        struct WRegel { const char* von; int slot; bool ersetzen; };
+        static const WRegel kWaffen[] = {
+            // Andrea3: Pistolen/Uzi/Schrotflinte/Holster/Lasersight - nur was fehlt
+            {"Andrea3",1,false},{"Andrea3",2,false},{"Andrea3",3,false},
+            {"Andrea3",13,false},{"Andrea3",14,false},{"Andrea3",15,false},{"Andrea3",16,false},
+            {"Andrea3",334,false},{"Andrea3",335,false},{"Andrea3",336,false},{"Andrea3",337,false},
+            {"Andrea3",338,false},{"Andrea3",339,false},{"Andrea3",340,false},{"Andrea3",351,false},
+            // Gefolge (fehlt nur den andy-Leveln)
+            {"Andrea3",352,false},{"Andrea3",456,false},{"Andrea3",457,false},
+            // joby2: Desert Eagle ist Vorgabe - immer ersetzen
+            {"joby2",6,true},{"joby2",12,true},{"joby2",347,true},{"joby2",348,true},
+            // rich1: HK - "nur was fehlt" laesst rich2 seine Spezialpose
+            {"rich1",5,false},{"rich1",345,false},{"rich1",346,false},
+        };
+
+        int eintraege = 0;
+        for (const WRegel& r : kWaffen)
+        {
+            std::string vonKlein;
+            for (const char* p = r.von; *p; ++p)
+                vonKlein.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p);
+            if (vonKlein == klein) continue;          // sich selbst spendet niemand
+
+            JsonValue e = JsonValue::makeObject();
+            e.set("slot", JsonValue::makeInt(r.slot));
+            e.set("fromLevel", JsonValue::makeString(r.von));
+            e.set("replace", JsonValue::makeBool(r.ersetzen));
+            waffen.push(e);
+            ++eintraege;
+        }
+        if (eintraege > 0)
+            report.notes.push_back(fmt("Waffen: %d Slot-Regeln (Andrea3/joby2/rich1) im Patch.", eintraege));
+    }
+    else if (opt.allWeapons)
+        report.notes.push_back("Waffen: joby4 bleibt vanilla (Taucheranzug).");
+
     patchOut = JsonValue::makeObject();
     patchOut.set("itemEdits", edits);
+    if (waffen.size() > 0) patchOut.set("weaponAdds", waffen);
     if (outfitGesetzt) patchOut.set("outfit", outfit);
     if (soundAdds.size() > 0) patchOut.set("soundAdds", soundAdds);
     if (adds.size() > 0) patchOut.set("itemAdds", adds);

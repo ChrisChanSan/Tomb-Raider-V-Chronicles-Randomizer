@@ -252,6 +252,9 @@ namespace
         bool optEnemySwap = false;
         // Zufaellige Outfits (Lara_Andrea/Lara_Joby/Lara_Rich) je Abschnitt.
         bool optOutfits = false;
+        // Volles Waffenset in jedes Level importieren (Spender Andrea3/joby2/
+        // rich1, Desert Eagle als Standard-Revolver; joby4 bleibt vanilla).
+        bool optWeapons = false;
         // Dasselbe ueber Levelgrenzen hinweg. Braucht den Objekt-Transfer
         // zwischen Leveln (Meshes, Animationen, Frames, Texturseiten) - den
         // gibt es bisher nur in TombItemEdit2026, und das wird nie mitgeliefert.
@@ -271,6 +274,7 @@ namespace
             if (optEnemiesCross) flags |= 8;
             if (optEnemySwap)    flags |= 16;
             if (optOutfits)      flags |= 32;
+            if (optWeapons)      flags |= 64;
             // Die Anzahl gehoert genauso in den Seed wie die Haken: mit 3 und
             // mit 12 Gegnern ist es nicht dasselbe Spiel.
             flags |= static_cast<uint64_t>(optEnemyCount & 0xFF) << 8;
@@ -440,6 +444,7 @@ namespace
         opt.enemiesPerLevel = a.optEnemyCount;
         opt.swapEnemies = a.optEnemySwap;
         opt.randomOutfits = a.optOutfits;
+        opt.allWeapons = a.optWeapons;
 
         JsonValue patch;
         RandoReport rep;
@@ -465,6 +470,8 @@ namespace
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Gegner", rep.enemiesAdded);
         if (pr.triggersMoved > 0)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Trigger mit", pr.triggersMoved);
+        if (pr.weaponsCopied > 0)
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Waffenslots", pr.weaponsCopied);
         if (!pr.outfitFrom.empty())
             std::snprintf(buf + len, sizeof(buf) - len, ", Outfit %s", pr.outfitFrom.c_str());
         row.result = buf;
@@ -900,6 +907,15 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::TextDisabled("8/9/10) samt Outfit-Byte - nie Slot 0, der traegt die Animationen.");
     ImGui::TextDisabled("joby4 behaelt den Taucheranzug; die andy-Level bekommen immer eine");
     ImGui::TextDisabled("erwachsene Lara (Kind-Lara kann keine Waffen tragen).");
+    ImGui::Unindent();
+
+    ImGui::Checkbox("Alle Waffen ueberall", &a.optWeapons);
+    ImGui::Indent();
+    ImGui::TextDisabled("Jedes Level bekommt das volle Waffenset: Pistolen, Uzi, Schrot-");
+    ImGui::TextDisabled("flinte, Desert Eagle (ersetzt den Revolver, auch im Namen der");
+    ImGui::TextDisabled("joby-Level) und HK samt Munition. Ein Level behaelt seine eigene");
+    ImGui::TextDisabled("funktionierende Waffe; joby4 bleibt vanilla. Die Modelle kommen");
+    ImGui::TextDisabled("zur Laufzeit aus den eigenen Leveldateien des Spielers.");
     ImGui::Unindent();
 
     ImGui::BeginDisabled(true);

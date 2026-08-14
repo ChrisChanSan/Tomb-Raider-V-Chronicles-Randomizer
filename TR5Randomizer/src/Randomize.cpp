@@ -49,17 +49,19 @@ int main(int argc, char** argv)
         std::printf("  Zahl:     Anzahl zusaetzlicher Gegner, 0 = keine (Vorgabe)\n");
         std::printf("  nur:      Items unangetastet lassen - fuer Gegner-/Outfittests\n");
         std::printf("  outfit:   zufaelliges Outfit (Lara_Andrea/Joby/Rich)\n");
+        std::printf("  waffen:   volles Waffenset importieren (Spender Andrea3/joby2/rich1)\n");
         return 2;
     }
 
     const std::string seedText = (argc > 5) ? argv[5] : "Weihnachten";
     int gegner = 0;
-    bool nurGegner = false, outfits = false;
+    bool nurGegner = false, outfits = false, waffen = false;
     for (int i = 6; i < argc; ++i)
     {
         const std::string s = argv[i];
         if (s == "nur")         nurGegner = true;
         else if (s == "outfit") outfits = true;
+        else if (s == "waffen") waffen = true;
         else                    gegner = std::atoi(argv[i]);
     }
     const uint64_t seed = SeedText::parse(seedText);
@@ -86,6 +88,7 @@ int main(int argc, char** argv)
     opt.enemiesPerLevel = gegner;
     opt.swapEnemies = gegner > 0;      // im CLI zusammen, fuer Tests reicht das
     opt.randomOutfits = outfits;
+    opt.allWeapons = waffen;
     if (nurGegner) { opt.shuffleKeyItems = false; opt.shuffleOtherPickups = false; }
 
     JsonValue patch;
@@ -129,6 +132,8 @@ int main(int argc, char** argv)
                     rep.enemiesSwapped, pr.soundsCopied);
     if (!pr.outfitFrom.empty())
         std::printf("  Outfit      Lara aus %s\n", pr.outfitFrom.c_str());
+    if (pr.weaponsCopied > 0)
+        std::printf("  Waffen      %d Slots uebernommen\n", pr.weaponsCopied);
     std::printf("  Items       %d -> %d\n", itemsBefore, lvl.itemCount());
 
     // Gegenprobe: das Ergebnis neu einlesen und pruefen, dass die Aenderungen

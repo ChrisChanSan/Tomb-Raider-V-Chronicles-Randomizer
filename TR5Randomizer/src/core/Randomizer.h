@@ -340,6 +340,15 @@ struct RandoOptions
     // bleibt ohnehin vanilla); die andy-Level bekommen immer einen Ersatz,
     // ihr eigenes Outfit ist die Kind-Lara.
     bool randomOutfits = false;
+
+    // Jedes Level bekommt das volle Waffenset (Pistolen, Uzi, Schrotflinte,
+    // Desert Eagle, HK samt Munitions- und Inventarslots). Die Spenderregeln
+    // stammen aus der Waffenarbeit und sind in allen 13 Leveln gebaut und
+    // geprueft (Import Export\Waffen Tests\Plan.md): Andrea3 fuellt nur, was
+    // fehlt; joby2 ersetzt den Revolver immer durch die Desert Eagle
+    // (Nutzervorgabe); rich1 liefert die HK ausser nach rich2, das seine
+    // eigene Spezialpose behaelt. joby4 bleibt vanilla (Nutzerentscheidung).
+    bool allWeapons = false;
 };
 
 struct RandoReport

@@ -213,6 +213,53 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             }
     }
 
+    // --- Waffen ueberall --------------------------------------------------
+    //
+    // Kopierliste aus dem Randomizer (fertig aufgeloest, Regeln dort). Laeuft
+    // NACH dem Outfit: die Holsterslots 13-16 des Outfit-Spenders sollen
+    // stehen bleiben, die Waffeneintraege dafuer sind "nur was fehlt" und
+    // werden dann hier uebersprungen.
+    //
+    // Fehlerbild mit Absicht zweigeteilt: ein nicht ladbarer SPENDER ist wie
+    // bei Outfit und Sounds nur eine Warnung (das Level bleibt spielbar, ihm
+    // fehlen halt Waffen). Ein GESCHEITERTER Kopiervorgang dagegen bricht ab
+    // wie ein halbes Outfit - dann ist unklar, in welchem Zustand die
+    // angehaengten Bloecke sind, und gespeichert wird so etwas nicht.
+    const JsonValue& wadds = patch["weaponAdds"];
+    if (wadds.size() > 0 && !levelSource)
+    {
+        report.warnings.push_back(msg("%d weaponAdds uebersprungen - kein Zugriff auf die Quell-Level.",
+                                      static_cast<int>(wadds.size())));
+    }
+    else
+    {
+        for (size_t i = 0; i < wadds.size(); ++i)
+        {
+            const JsonValue& w = wadds[i];
+            const int slot = static_cast<int>(w["slot"].asInt(-1));
+            const std::string von = w["fromLevel"].asString();
+            const bool ersetzen = w["replace"].asBool(false);
+
+            Tr5Level::MoveableInfo mi;
+            if (!ersetzen && level.moveableInfo(slot, mi)) continue;   // hat es schon
+
+            Tr5Level* spender = quelle(von);
+            if (!spender)
+            {
+                report.warnings.push_back("Waffen: Spender-Level " + von + " nicht ladbar - Slots von dort fehlen.");
+                continue;
+            }
+
+            std::string wErr;
+            if (!level.copyMoveableFrom(*spender, slot, wErr))
+            {
+                error = "Waffen-Slot " + std::to_string(slot) + " aus " + von + ": " + wErr;
+                return false;
+            }
+            ++report.weaponsCopied;
+        }
+    }
+
     // --- Sound-Samples uebernehmen ---------------------------------------
     const JsonValue& sadds = patch["soundAdds"];
     if (sadds.size() > 0 && !levelSource)

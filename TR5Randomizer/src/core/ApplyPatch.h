@@ -59,6 +59,13 @@
 // nur die Samples mit, die es selbst braucht, und ohne sie steht der Gegner
 // stumm da. Der Quellpfad kommt vom Aufrufer, weil nur der weiss, wo die
 // unberuehrten Level liegen - siehe Patch::apply's levelSource.
+// weaponAdds kopiert Waffen-Modellslots aus anderen Leveln:
+//   "weaponAdds": [ {slot, fromLevel, replace}, ... ]
+// replace false heisst "nur was fehlt" - hat das Level den Slot schon, bleibt
+// er unangetastet (so behaelt rich2 seine HK-Spezialpose). Die Liste kommt
+// fertig aufgeloest aus dem Randomizer; die Spenderregeln stehen dort.
+// Ausgefuehrt wird NACH dem Outfit, damit die Holsterslots des
+// Outfit-Spenders nicht wieder ueberschrieben werden.
 struct PatchReport
 {
     int edited = 0;
@@ -66,6 +73,7 @@ struct PatchReport
     int triggersMoved = 0;
     int triggersAdded = 0;
     int soundsCopied = 0;
+    int weaponsCopied = 0;               // uebernommene Waffenslots
     std::string outfitFrom;              // leer = Outfit unveraendert
     std::vector<std::string> warnings;
 };

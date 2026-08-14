@@ -1561,8 +1561,15 @@ long S_LoadLevelFile(long num)
 	aMakeCutsceneResident(gfResidentCut[0], gfResidentCut[1], gfResidentCut[2], gfResidentCut[3]);
 	Log("S_LoadLevelFile: Cutscenes resident");
 
+	// Der Ladethread ist beigetreten - das Laden IST fertig, egal was die
+	// Schrittzaehlung glaubt. S_FinishLoadBar stellt den Balken auf 100 %
+	// (Cores Abschlusskriterium kippte ab ~75 Texturseiten in eine
+	// Endlosschleife, siehe drawbars.cpp), und die Aufholschleife ist
+	// zusaetzlich begrenzt - haengen darf hier nie wieder etwas.
+	S_FinishLoadBar();
+
 	if (App.dx.Flags & DXF_HWR && !S_DrawLoadBar())
-		while (!S_DrawLoadBar())
+		for (int i = 0; i < 200 && !S_DrawLoadBar(); ++i)
 			Sleep(1);
 
 	Log("S_LoadLevelFile: Balken abgeschlossen");

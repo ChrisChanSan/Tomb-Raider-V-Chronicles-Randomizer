@@ -526,6 +526,23 @@ void S_LoadBar()
 	S_UpdateLoadBar();
 }
 
+// Balken auf "fertig" stellen. Noetig, weil Cores Abschlusskriterium in
+// S_DrawLoadBar (loadbar_maxpos <= loadbar_steps) rechnerisch kippt: steps
+// waechst je Schritt um 100/maxpos und erreicht hoechstens ~100 - ab etwa
+// 75 Texturseiten (maxpos = Seiten + 20, file.cpp:1343) wird die Bedingung
+// UNERREICHBAR und die Aufholschleife nach dem Ladethread drehte endlos
+// (im Spiel gesehen: andy1 mit 79 und joby5 mit 82 Seiten froren bei vollem
+// Balken ein; Vanilla-Level liegen bei 9-17 Seiten, da konnte das nie
+// feuern). Der Aufrufer weiss es besser als die Zaehlung: wenn der
+// Ladethread beigetreten ist, IST das Laden fertig.
+void S_FinishLoadBar()
+{
+	loadbar_steps = 100.0F;
+
+	if (loadbar_maxpos > 100)
+		loadbar_maxpos = 100;
+}
+
 void DoSlider(long x, long y, long width, long height, long pos, long c1, long c2, long c3)
 {
 	TEXTURESTRUCT tex;

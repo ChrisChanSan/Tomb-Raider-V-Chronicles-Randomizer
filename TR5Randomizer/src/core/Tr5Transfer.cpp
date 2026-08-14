@@ -294,11 +294,16 @@ bool Tr5Level::debugMeshWalk(int ptrIndex, int& nVerts, int& nNorms,
     return true;
 }
 
-bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& error)
+bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& error,
+                                int dstSlot, bool nurMeshes)
 {
     char buf[256];
 
-    if (slotId == 0)
+    // Unter welchem Slot die Kopie im Ziel steht. Abweichend nur fuer die
+    // Ausweichslots des Cross-Gegnermix (Spender-MESHSWAP1 -> 399-403).
+    const int zielSlot = (dstSlot < 0) ? slotId : dstSlot;
+
+    if (slotId == 0 || zielSlot == 0)
     {
         // Regel 1 aus der Waffenarbeit. Der Meshtree von Slot 0 ist in allen
         // Leveln identisch, der Koerper kommt aus LARA_SKIN (8) - kopieren
@@ -342,16 +347,19 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         return best;
     };
 
-    const long long boneStart = mv.boneIndex;
-    const long long boneEnd = nextStart(boneStart, src.m_bones.count,
+    // nurMeshes: Anim-, Frame- und Bone-Scheiben bewusst leer lassen -
+    // siehe die Begruendung am Prototyp in Tr5Level.h (MESHSWAP1 traegt
+    // einen anim_index ohne eigene Animationen).
+    const long long boneStart = nurMeshes ? 0 : mv.boneIndex;
+    const long long boneEnd = nurMeshes ? 0 : nextStart(boneStart, src.m_bones.count,
                                         [](const MoveableInfo& m) { return static_cast<long long>(m.boneIndex); });
 
-    const long long frameStart = mv.frameOffset;
-    const long long frameEnd = nextStart(frameStart, static_cast<long long>(src.m_frames.count) * 2,
+    const long long frameStart = nurMeshes ? 0 : mv.frameOffset;
+    const long long frameEnd = nurMeshes ? 0 : nextStart(frameStart, static_cast<long long>(src.m_frames.count) * 2,
                                          [](const MoveableInfo& m) { return static_cast<long long>(m.frameOffset); });
 
     long long animStart = -1, animEnd = -1;
-    if (mv.animIndex >= 0)
+    if (!nurMeshes && mv.animIndex >= 0)
     {
         animStart = mv.animIndex;
         animEnd = nextStart(animStart, src.m_anims.count,
@@ -681,15 +689,18 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         push32(neuePtrs, static_cast<uint32_t>(dstMeshBytesAlt + meshRegion[ofs].first));
 
     // Der Objekteintrag. Ersetzt oder angehaengt - beides ueber dieselben Bytes.
+    // Im nurMeshes-Fall zeigen Bone/Frame/Anim bewusst auf nichts - an einem
+    // Mesh-Lager liest die Engine nur mesh_index.
     uint8_t objRec[SZ_OBJ];
     {
-        const int32_t s32 = slotId;                       std::memcpy(objRec + 0, &s32, 4);
+        const int32_t s32 = zielSlot;                     std::memcpy(objRec + 0, &s32, 4);
         const int16_t nm = static_cast<int16_t>(mv.nmeshes); std::memcpy(objRec + 4, &nm, 2);
         const int16_t mi = static_cast<int16_t>(dstPtrAlt);  std::memcpy(objRec + 6, &mi, 2);
-        const int32_t bi = dstBoneAlt;                    std::memcpy(objRec + 8, &bi, 4);
-        const uint32_t fo = static_cast<uint32_t>(dstFrameBytesAlt + (mv.frameOffset - frameStart));
+        const int32_t bi = nurMeshes ? 0 : dstBoneAlt;    std::memcpy(objRec + 8, &bi, 4);
+        const uint32_t fo = nurMeshes ? 0
+                          : static_cast<uint32_t>(dstFrameBytesAlt + (mv.frameOffset - frameStart));
         std::memcpy(objRec + 12, &fo, 4);
-        const uint16_t ai = (mv.animIndex < 0) ? 0xFFFF
+        const uint16_t ai = (nurMeshes || mv.animIndex < 0) ? 0xFFFF
                           : static_cast<uint16_t>(mv.animIndex - animStart + dstAnimAlt);
         std::memcpy(objRec + 16, &ai, 2);
         objRec[18] = 0; objRec[19] = 0;
@@ -700,7 +711,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     {
         const size_t o = m_objects.dataAt + static_cast<size_t>(i) * SZ_OBJ;
         int32_t slot; std::memcpy(&slot, m_bytes.data() + o, 4);
-        if (slot != slotId) continue;
+        if (slot != zielSlot) continue;
         std::memcpy(m_bytes.data() + o, objRec, SZ_OBJ);
         ersetzt = true;
     }

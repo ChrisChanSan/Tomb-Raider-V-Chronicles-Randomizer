@@ -242,9 +242,15 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             const int slot = static_cast<int>(w["slot"].asInt(-1));
             const std::string von = w["fromLevel"].asString();
             const bool ersetzen = w["replace"].asBool(false);
+            // Abweichender Zielslot (Ausweichslots des Cross-Gegnermix:
+            // Spender-MESHSWAP1 405 landet unter 399-402), und ob nur die
+            // Meshes wandern (Mesh-Lager ohne eigene Animationen).
+            const int nach = static_cast<int>(w["toSlot"].asInt(-1));
+            const int zielSlot = (nach < 0) ? slot : nach;
+            const bool nurMeshes = w["onlyMeshes"].asBool(false);
 
             Tr5Level::MoveableInfo mi;
-            if (!ersetzen && level.moveableInfo(slot, mi)) continue;   // hat es schon
+            if (!ersetzen && level.moveableInfo(zielSlot, mi)) continue;   // hat es schon
 
             Tr5Level* spender = quelle(von);
             if (!spender)
@@ -255,7 +261,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             }
 
             std::string wErr;
-            if (!level.copyMoveableFrom(*spender, slot, wErr))
+            if (!level.copyMoveableFrom(*spender, slot, wErr, nach, nurMeshes))
             {
                 error = std::string(was) + "-Slot " + std::to_string(slot) + " aus " + von + ": " + wErr;
                 return false;

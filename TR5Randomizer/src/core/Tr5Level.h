@@ -259,7 +259,20 @@ public:
     //
     // Sounds kommen NICHT automatisch mit - dafuer gibt es copySoundFrom und
     // die Wissenstabelle in Tr5Transfer.cpp (hartverdrahtete Waffen-SFX).
-    bool copyMoveableFrom(const Tr5Level& src, int slotId, std::string& error);
+    //
+    // dstSlot (< 0 = wie slotId): der Slot, unter dem die Kopie im ZIEL
+    // eingetragen wird. Gebraucht fuer die Ausweichslots des Cross-Gegnermix:
+    // die MESHSWAP1 des Spenders (405) landet dort unter 399-402, damit der
+    // eigene MESHSWAP1 des Ziels unangetastet bleibt.
+    //
+    // nurMeshes: NUR Meshes, Zeiger und Texturen kopieren - keine
+    // Animationen, Frames oder Bones. Fuer Mesh-Lager wie MESHSWAP1: dessen
+    // Objekteintrag traegt zwar einen anim_index, aber keine eigenen
+    // Animationen (Core-Altlast; der generische Zuschnitt liefe damit aus
+    // seinen Bloecken). Der Eintrag im Ziel bekommt anim 0xFFFF, bone 0,
+    // frame 0 - gelesen wird an einem Lagerslot ohnehin nur mesh_index.
+    bool copyMoveableFrom(const Tr5Level& src, int slotId, std::string& error,
+                          int dstSlot = -1, bool nurMeshes = false);
 
     // Der Objektslot, wie er in der Datei steht. anim < 0 heisst: keiner.
     struct MoveableInfo

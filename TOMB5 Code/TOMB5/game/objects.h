@@ -23,6 +23,30 @@ void CutsceneRopeControl(short item_number);
 void HybridCollision(short item_num, ITEM_INFO* laraitem, COLL_INFO* coll);
 void DrawBaddieGunFlash(ITEM_INFO* item);
 
+// Ausweichslots fuer den Cross-Gegnermix des TR5-Randomizers. MESHSWAP1
+// traegt je Level die Tauschhaelften seiner EIGENEN Gegner (SWAT-Familie:
+// Waffenhaende 10/13, Imp: Kopf 10, TwoGun: 10<-2, Gladiator/Roman God:
+// ganze Schadenssaetze) - ein fremder Gegner braeuchte den Inhalt seines
+// Spenderlevels, und den kann man nicht nach MESHSWAP1 legen, ohne die
+// einheimischen Nutzer des Ziels zu brechen. Der Randomizer kopiert die
+// MESHSWAP1 des Spenders deshalb in einen dieser Slots; setup.cpp greift
+// bevorzugt darauf zu (MeshSwapQuelle) und faellt sonst auf MESHSWAP1
+// zurueck. SMASH_OBJECT3-7 sind in keinem der 13 Level geladen und im
+// Motor nur ueber item->object_number-Bereichspruefungen erwaehnt - ohne
+// Items dieses Typs reine Mesh-Lager, Vanilla bleibt also unveraendert.
+// Die Gruppierung nach SPENDERLEVEL muss mit der kCross-Tabelle des
+// Randomizers uebereinstimmen (Randomizer.cpp).
+// Gruppiert nach dem TAUSCHHAELFTEN-Spender, nicht dem Modellspender -
+// die beiden koennen abweichen: rich1 (Modellspender fuer Guard und
+// TwoGun) traegt selbst gar keinen MESHSWAP1, seine Gegner setzen die
+// Tauschbits dort vanilla nie. Den Inhalt liefern joby3 (Guard-Haende,
+// dort teilen sich MAFIA und BLUE_GUARD denselben Satz) bzw. rich3
+// (TwoGun-Quellmesh 2 im SWAT/Hitman-Satz).
+#define MESHSWAP_CROSS_RICH3	SMASH_OBJECT3	// SWAT, SWAT_PLUS, TWOGUN
+#define MESHSWAP_CROSS_JOBY3	SMASH_OBJECT4	// BLUE_GUARD, MAFIA
+#define MESHSWAP_CROSS_ANDREA3	SMASH_OBJECT5	// GLADIATOR, ROMAN_GOD
+#define MESHSWAP_CROSS_ANDY	SMASH_OBJECT6	// IMP
+
 enum object_types 
 {
 	LARA, PISTOLS_ANIM, UZI_ANIM, SHOTGUN_ANIM, CROSSBOW_ANIM, HK_ANIM, REVOLVER_ANIM, FLARE_ANIM,

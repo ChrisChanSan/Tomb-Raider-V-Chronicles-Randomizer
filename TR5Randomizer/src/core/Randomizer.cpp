@@ -928,23 +928,34 @@ bool Rando::run(const RandoInput& in,
     // man bei Imp-Kopf und Statuen-Schadensmeshes; die Loesung (eigene
     // Ausweichslots in der Engine oder Mesh-genaues Einsetzen) ist als
     // Aufgabe vermerkt und NICHT Teil dieser Tabelle.
+    // "swapVon"/"swapDst": Tauschhaelften des Typs. MESHSWAP1 (405) ist je
+    // Level mit dem Inhalt seiner EIGENEN Gegner belegt - ein fremder Gegner
+    // braucht den Satz eines Levels, das ihn WIRKLICH traegt, und der landet
+    // beim Import unter dem Ausweichslot swapDst (399-402, in keinem Level
+    // geladen; die Engine greift bevorzugt darauf zu, MeshSwapQuelle in
+    // setup.cpp, Zuordnung als MESHSWAP_CROSS_* in objects.h - beide Seiten
+    // muessen uebereinstimmen). swapVon kann vom Modellspender abweichen:
+    // rich1 (Modell fuer Guard und TwoGun) hat selbst KEINEN MESHSWAP1 -
+    // die Guard-Haende kommen aus joby3, TwoGuns Quellmesh 2 aus rich3.
+    // Typen mit demselben swapDst teilen sich den Import (einmal emittiert).
     struct CrossSound  { int map; const char* vonLevel; int vonMap; };
-    struct CrossGegner { int typeId; const char* von; CrossSound sounds[2]; int begleiter[2]; };
+    struct CrossGegner { int typeId; const char* von; CrossSound sounds[2];
+                         int begleiter[2]; const char* swapVon; int swapDst; };
     static const CrossGegner kCross[] = {
-        { 33, "rich3",   {},                                    {-1,-1} },  // SWAT
-        { 35, "rich3",   {},                                    {-1,-1} },  // Advanced SWAT
-        { 37, "rich1",   {},                                    {-1,-1} },  // Guard (Blue Guard)
-        { 39, "rich1",   {},                                    {-1,-1} },  // Two Gun
-        { 41, "Andrea1", {},                                    {-1,-1} },  // Dog
-        { 45, "Andrea1", { {96,"rich1",85}, {98,"rich1",143} }, {-1,-1} },  // Larson
-        { 47, "Andrea3", { {90,"joby5",45}, {91,"joby5",123} }, {-1,-1} },  // Pierre
-        { 49, "joby3",   {},                                    {-1,-1} },  // Soldier MG (Mafia)
-        { 51, "joby3",   {},                                    {406,-1} }, // Soldier Pistols (Mafia2) + MESHSWAP2
-        { 57, "Andrea3", {},                                    {-1,-1} },  // Lion
-        { 59, "Andrea3", {},                                    {-1,-1} },  // Gladiator
-        { 61, "Andrea3", {},                                    {-1,-1} },  // Soldier Statue (Hammer)
-        { 77, "Andy2",   {},                                    {-1,-1} },  // Maze Monster
-        { 89, "andy1",   {},                                    {-1,-1} },  // Imp
+        { 33, "rich3",   {},                                    {-1,-1},  "rich3",   399 }, // SWAT
+        { 35, "rich3",   {},                                    {-1,-1},  "rich3",   399 }, // Advanced SWAT
+        { 37, "rich1",   {},                                    {-1,-1},  "joby3",   400 }, // Guard (Blue Guard)
+        { 39, "rich1",   {},                                    {-1,-1},  "rich3",   399 }, // Two Gun
+        { 41, "Andrea1", {},                                    {-1,-1},  nullptr,   -1 },  // Dog
+        { 45, "Andrea1", { {96,"rich1",85}, {98,"rich1",143} }, {-1,-1},  nullptr,   -1 },  // Larson
+        { 47, "Andrea3", { {90,"joby5",45}, {91,"joby5",123} }, {-1,-1},  nullptr,   -1 },  // Pierre
+        { 49, "joby3",   {},                                    {-1,-1},  "joby3",   400 }, // Soldier MG (Mafia)
+        { 51, "joby3",   {},                                    {406,-1}, nullptr,   -1 },  // Soldier Pistols (Mafia2) + MESHSWAP2
+        { 57, "Andrea3", {},                                    {-1,-1},  nullptr,   -1 },  // Lion
+        { 59, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Gladiator
+        { 61, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Soldier Statue (Hammer)
+        { 77, "Andy2",   {},                                    {-1,-1},  nullptr,   -1 },  // Maze Monster
+        { 89, "andy1",   {},                                    {-1,-1},  "andy1",   402 }, // Imp
     };
 
     std::vector<int> gegnerPool = in.enemyTypes;
@@ -1319,6 +1330,7 @@ bool Rando::run(const RandoInput& in,
     // hat. Doppelte Sound-Anforderungen sind unschaedlich - der Patchweg
     // ueberspringt Vorhandenes.
     JsonValue moveables = JsonValue::makeArray();
+    std::set<int> swapEmittiert;
     for (int t : crossBenutzt)
     {
         const CrossGegner* c = crossGewaehlt[t];
@@ -1336,6 +1348,23 @@ bool Rando::run(const RandoInput& in,
             g.set("slot", JsonValue::makeInt(b));
             g.set("fromLevel", JsonValue::makeString(c->von));
             g.set("replace", JsonValue::makeBool(true));
+            moveables.push(g);
+        }
+
+        // Tauschhaelften: die MESHSWAP1 des Tauschspenders (swapVon, kann
+        // vom Modellspender abweichen) in den Ausweichslot des Typs. Typen
+        // mit demselben swapDst teilen sich den Import - einmal reicht.
+        if (c->swapDst >= 0 && c->swapVon && !swapEmittiert.count(c->swapDst))
+        {
+            swapEmittiert.insert(c->swapDst);
+            JsonValue g = JsonValue::makeObject();
+            g.set("slot", JsonValue::makeInt(405));         // MESHSWAP1 des Tauschspenders
+            g.set("toSlot", JsonValue::makeInt(c->swapDst));
+            g.set("fromLevel", JsonValue::makeString(c->swapVon));
+            g.set("replace", JsonValue::makeBool(true));
+            // MESHSWAP1 traegt einen anim_index ohne eigene Animationen
+            // (Core-Altlast) - nur die Meshes zaehlen.
+            g.set("onlyMeshes", JsonValue::makeBool(true));
             moveables.push(g);
         }
 

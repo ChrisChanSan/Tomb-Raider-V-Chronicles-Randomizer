@@ -989,6 +989,19 @@ void TrapObjects()
 	obj->save_anim = 1;
 }
 
+// Cross-Gegnermix: liefert die Tauschhaelfte eines Gegners bevorzugt aus
+// seinem Ausweichslot (dort legt der Randomizer die MESHSWAP1 seines
+// Spenderlevels ab - siehe die MESHSWAP_CROSS_*-Definitionen in objects.h),
+// sonst wie upstream aus MESHSWAP1. In unveraenderten Leveln ist der
+// Ausweichslot nie geladen, der Rueckfall macht das Verhalten byte-gleich
+// mit dem Original.
+static short* MeshSwapQuelle(long ausweich, long mesh)
+{
+	const long basis = objects[ausweich].loaded ? objects[ausweich].mesh_index
+	                                            : objects[MESHSWAP1].mesh_index;
+	return meshes[basis + mesh * 2];
+}
+
 void BaddyObjects()
 {
 	OBJECT_INFO* obj;
@@ -1056,8 +1069,8 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (10 * 2)];
-		meshes[obj->mesh_index + (13 * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (13 * 2)];
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_JOBY3, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_JOBY3, 13);
 	}
 
 	if (objects[SWAT].loaded)
@@ -1084,8 +1097,8 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (10 * 2)];
-		meshes[obj->mesh_index + (13 * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (13 * 2)];
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_RICH3, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_RICH3, 13);
 	}
 
 	if (objects[SWAT_PLUS].loaded)
@@ -1117,8 +1130,8 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (10 * 2)];
-		meshes[obj->mesh_index + (13 * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (13 * 2)];
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_RICH3, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_RICH3, 13);
 	}
 
 	if (objects[MAFIA].loaded)
@@ -1151,8 +1164,8 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (10 * 2)];
-		meshes[obj->mesh_index + (13 * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (13 * 2)];
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_JOBY3, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_JOBY3, 13);
 	}
 
 	if (objects[SCIENTIST].loaded)
@@ -1599,7 +1612,7 @@ void BaddyObjects()
 		bones[obj->bone_index] |= 4;
 		bones[obj->bone_index + 4] |= 8;
 		bones[obj->bone_index + 4] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (2 * 2)];
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_RICH3, 2);
 	}
 
 	if (objects[HYDRA].loaded)
@@ -1649,7 +1662,7 @@ void BaddyObjects()
 		bones[obj->bone_index + 16] |= 4;
 		bones[obj->bone_index + 36] |= 16;
 		bones[obj->bone_index + 36] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (10 * 2)];
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_ANDY, 10);
 	}
 
 	if (objects[WILLOWISP].loaded)
@@ -1805,7 +1818,7 @@ void BaddyObjects()
 		bones[obj->bone_index + 52] |= 4;
 
 		for (lp = 0; lp < 16; lp++)
-			meshes[obj->mesh_index + (lp * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (lp * 2)];
+			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_ANDREA3, lp);
 	}
 
 	if (objects[ROMAN_GOD].loaded)
@@ -1832,7 +1845,7 @@ void BaddyObjects()
 		bones[obj->bone_index + 52] |= 4;
 
 		for (lp = 0; lp < 17; lp++)
-			meshes[obj->mesh_index + (lp * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (lp * 2)];
+			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_ANDREA3, lp);
 	}
 
 	if (objects[GUARDIAN].loaded)

@@ -157,6 +157,23 @@ Also in this group:
   in `SCRIPT.DAT`) silently bent one triangle of the adult hand. Same pattern
   and rationale as the `laramisc.cpp` torso fix below; with the flag set — an
   unmodified `SCRIPT.DAT` — nothing changes.
+- `game/objects.h`, `game/setup.cpp` — **fallback slots for the randomizer's
+  cross-level enemy mesh swaps**. `MESHSWAP1` holds, per level, the swap
+  meshes of that level's OWN enemies (people-family gun hands 10/13, Imp's
+  alternate head 10, Two Gun's source mesh 2, Gladiator's and the Roman
+  God's full damage sets); an imported enemy needs the set of a level that
+  actually carries him, and that cannot be placed into `MESHSWAP1` without
+  breaking the target's native users. The pool enemies' wiring in
+  `BaddyObjects` now goes through `MeshSwapQuelle()`, which prefers a
+  designated fallback slot and otherwise behaves exactly like upstream.
+  The fallback ids are `SMASH_OBJECT3..6` (`MESHSWAP_CROSS_*` in
+  objects.h) — loaded by no vanilla level and referenced by the engine
+  only through `item->object_number` range checks, so without items of
+  those types they are inert mesh warehouses; in unmodified levels the
+  fallback is never loaded and behaviour is byte-identical to upstream.
+  Grouping is by SWAP-set donor, which can differ from the model donor:
+  rich1 (model source for the Guard and Two Gun) carries no `MESHSWAP1`
+  at all — its enemies never set their swap bits in vanilla.
 - `global/types.h`, `game/control.cpp`/`control.h`, `game/items.cpp` —
   **`MAX_ITEMS` doubled from 256 to 512**: the densest levels (rich2 at 248,
   joby3 at 244) left almost no room for the randomizer's extra enemies and

@@ -51,13 +51,14 @@ int main(int argc, char** argv)
         std::printf("  outfit:   zufaelliges Outfit (Lara_Andrea/Joby/Rich)\n");
         std::printf("  waffen:   volles Waffenset importieren (Spender Andrea3/joby2/rich1)\n");
         std::printf("  mix:      vorhandene Gegner untereinander tauschen\n");
-        std::printf("  cross:    Gegnerpool um fremde Typen erweitern (mit mix/Zahl)\n");
+        std::printf("  cross:    Gegnerpool um bis zu drei fremde Typen erweitern (mit mix/Zahl)\n");
+        std::printf("  allsanity: der ganze Gegnerpool, jede Rolle wuerfelt frei (mit mix/Zahl)\n");
         return 2;
     }
 
     const std::string seedText = (argc > 5) ? argv[5] : "Weihnachten";
     int gegner = 0;
-    bool nurGegner = false, outfits = false, waffen = false, mix = false, cross = false;
+    bool nurGegner = false, outfits = false, waffen = false, mix = false, cross = false, allsanity = false;
     for (int i = 6; i < argc; ++i)
     {
         const std::string s = argv[i];
@@ -66,6 +67,7 @@ int main(int argc, char** argv)
         else if (s == "waffen") waffen = true;
         else if (s == "mix")    mix = true;
         else if (s == "cross")  cross = true;
+        else if (s == "allsanity") allsanity = true;
         else                    gegner = std::atoi(argv[i]);
     }
     const uint64_t seed = SeedText::parse(seedText);
@@ -95,6 +97,7 @@ int main(int argc, char** argv)
     opt.allWeapons = waffen;
     opt.swapEnemies = mix;
     opt.crossEnemies = cross;
+    opt.allsanity = allsanity;
     if (nurGegner) { opt.shuffleKeyItems = false; opt.shuffleOtherPickups = false; }
 
     JsonValue patch;

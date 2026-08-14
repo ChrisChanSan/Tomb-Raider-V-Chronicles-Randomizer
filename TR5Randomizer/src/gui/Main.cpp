@@ -259,9 +259,10 @@ namespace
 
         // Vorhandene Gegner untereinander tauschen.
         bool optEnemySwap = false;
-        // Gegnerpool um Typen aus anderen Leveln erweitern (Cross-Gegnermix).
+        // Gegnerpool-Stufe: 0 nur Levelpool, 1 Cross-Mix (bis zu drei fremde
+        // Typen), 2 Allsanity (der ganze Pool, jede Rolle wuerfelt frei).
         // Wirkt nur zusammen mit optEnemySwap oder optEnemies.
-        bool optEnemiesCross = false;
+        int optEnemyPool = 0;
         // Zufaellige Outfits (Lara_Andrea/Lara_Joby/Lara_Rich) je Abschnitt.
         bool optOutfits = false;
         // Volles Waffenset in jedem Level ist STANDARD (Nutzerentscheidung,
@@ -285,12 +286,13 @@ namespace
             uint64_t flags = 0;
             if (optOtherPickups) flags |= 1;
             if (optKeyItems)     flags |= 2;
-            if (optEnemies)      flags |= 4;
-            if (optEnemiesCross) flags |= 8;
-            if (optEnemySwap)    flags |= 16;
-            if (optOutfits)      flags |= 32;
+            if (optEnemies)          flags |= 4;
+            if (optEnemyPool == 1)   flags |= 8;    // Cross-Mix
+            if (optEnemySwap)        flags |= 16;
+            if (optOutfits)          flags |= 32;
+            if (optEnemyPool == 2)   flags |= 64;   // Allsanity
             // Bit 64 war kurz "Alle Waffen ueberall" - seit die Standard
-            // sind, bleibt das Bit frei (immer gesetzt waere bedeutungslos).
+            // sind, traegt es jetzt Allsanity.
             // Die Anzahl gehoert genauso in den Seed wie die Haken: mit 3 und
             // mit 12 Gegnern ist es nicht dasselbe Spiel.
             flags |= static_cast<uint64_t>(optEnemyCount & 0xFF) << 8;
@@ -459,7 +461,8 @@ namespace
         opt.addEnemies = a.optEnemies;
         opt.enemiesPerLevel = a.optEnemyCount;
         opt.swapEnemies = a.optEnemySwap;
-        opt.crossEnemies = a.optEnemiesCross;
+        opt.crossEnemies = (a.optEnemyPool == 1);
+        opt.allsanity    = (a.optEnemyPool == 2);
         opt.randomOutfits = a.optOutfits;
         opt.allWeapons = true;              // Standard, siehe App-Kommentar
 
@@ -922,6 +925,31 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::Checkbox("Ausruestung (Waffen, Munition, Medipacks)", &a.optOtherPickups);
     ImGui::Checkbox("Schluessel- und Puzzle-Items", &a.optKeyItems);
 
+    ImGui::Checkbox("Zufaellige Outfits", &a.optOutfits);
+    hoverHilfe("Jeder Abschnitt bekommt zufaellig Lara_Andrea, Lara_Joby oder "
+               "Lara_Rich (Catsuit). Uebertragen werden nur Haut und Kopf (Slots "
+               "8/9/10) samt Outfit-Byte - nie Slot 0, der traegt die Animationen. "
+               "joby4 behaelt den Taucheranzug; die andy-Level bekommen immer eine "
+               "erwachsene Lara (Kind-Lara kann keine Waffen tragen).");
+
+    // Kein Haken mehr: volles Waffenset ist Standard (Nutzerentscheidung).
+    ImGui::TextDisabled("Alle Waffen ueberall sind Standard und immer dabei.");
+    hoverHilfe("Jedes Level bekommt bei jedem Lauf das volle Waffenset: Pistolen, "
+               "Uzi, Schrotflinte, Desert Eagle (ersetzt den Revolver, in den "
+               "joby-Leveln auch im Namen) und HK samt Munition. Ein Level behaelt "
+               "seine eigene funktionierende Waffe; joby4 bleibt vanilla, und "
+               "rich2 bekommt keine Pistolen (sein Pistolenslot traegt "
+               "Sequenzmaterial von Core). Der Seed streut zusaetzlich einige der "
+               "neuen Waffen samt Munition als Pickups ins Level. Die Modelle "
+               "kommen zur Laufzeit aus den eigenen Leveldateien des Spielers.");
+
+    if (!a.optOtherPickups && !a.optKeyItems && !a.optEnemies && !a.optEnemySwap && !a.optOutfits)
+        ImGui::TextColored(ImVec4(1, .5f, .3f, 1),
+                           "Keine Wuerfel-Option gewaehlt - die Level bekommen nur das Standard-Waffenset.");
+
+    // --- Gegner: eigener Bereich (Nutzerwunsch) --------------------------
+    ImGui::SeparatorText("Gegner");
+
     ImGui::Checkbox("Zusaetzliche Gegner ins Level setzen", &a.optEnemies);
     hoverHilfe("Jeder bekommt einen eigenen Trigger, etwa drei Sektoren vor sich "
                "auf Laras Weg - nie auf seinem eigenen Feld, sonst spawnt er in ihr. "
@@ -940,36 +968,28 @@ static void drawUi(App& a, HWND hwnd)
                "also weiter dort auf, wo sein Trigger es vorsieht. Anzahl und "
                "Verteilung bleiben gleich, gescriptete Gegner bleiben unberuehrt.");
 
-    ImGui::Checkbox("Zufaellige Outfits", &a.optOutfits);
-    hoverHilfe("Jeder Abschnitt bekommt zufaellig Lara_Andrea, Lara_Joby oder "
-               "Lara_Rich (Catsuit). Uebertragen werden nur Haut und Kopf (Slots "
-               "8/9/10) samt Outfit-Byte - nie Slot 0, der traegt die Animationen. "
-               "joby4 behaelt den Taucheranzug; die andy-Level bekommen immer eine "
-               "erwachsene Lara (Kind-Lara kann keine Waffen tragen).");
-
-    ImGui::Checkbox("Cross-Gegnermix", &a.optEnemiesCross);
-    hoverHilfe("Der Gegnerpool wird um Typen aus ANDEREN Leveln erweitert - "
+    // Woraus wuerfeln Tausch und Zusatzgegner? Drei Stufen.
+    ImGui::TextUnformatted("Gegnerpool:");
+    ImGui::SameLine();
+    ImGui::RadioButton("Nur Levelpool", &a.optEnemyPool, 0);
+    hoverHilfe("Getauscht und gesetzt wird nur, was das Level selbst kennt "
+               "(die handkuratierte Liste je Level).");
+    ImGui::SameLine();
+    ImGui::RadioButton("Cross-Mix", &a.optEnemyPool, 1);
+    hoverHilfe("Bis zu DREI fremde Typen aus anderen Leveln kommen in den Pool - "
                "SWAT, Guards, Mafia, Larson, Pierre, Loewe, Gladiator, Statue, "
-               "Maze Monster, Imp und mehr. Je Level kommen bis zu drei fremde "
-               "Typen dazu; Modelle und Sounds wandern zur Laufzeit aus den "
-               "eigenen Leveldateien mit. Wirkt nur zusammen mit Vanilla-"
-               "Gegnermix oder Zusatzgegnern. Gescriptete Gegner bleiben "
-               "unberuehrt; Hydra ist noch nicht im Pool.");
-
-    // Kein Haken mehr: volles Waffenset ist Standard (Nutzerentscheidung).
-    ImGui::TextDisabled("Alle Waffen ueberall sind Standard und immer dabei.");
-    hoverHilfe("Jedes Level bekommt bei jedem Lauf das volle Waffenset: Pistolen, "
-               "Uzi, Schrotflinte, Desert Eagle (ersetzt den Revolver, in den "
-               "joby-Leveln auch im Namen) und HK samt Munition. Ein Level behaelt "
-               "seine eigene funktionierende Waffe; joby4 bleibt vanilla, und "
-               "rich2 bekommt keine Pistolen (sein Pistolenslot traegt "
-               "Sequenzmaterial von Core). Der Seed streut zusaetzlich einige der "
-               "neuen Waffen samt Munition als Pickups ins Level. Die Modelle "
-               "kommen zur Laufzeit aus den eigenen Leveldateien des Spielers.");
-
-    if (!a.optOtherPickups && !a.optKeyItems && !a.optEnemies && !a.optEnemySwap && !a.optOutfits)
-        ImGui::TextColored(ImVec4(1, .5f, .3f, 1),
-                           "Keine Wuerfel-Option gewaehlt - die Level bekommen nur das Standard-Waffenset.");
+               "Maze Monster, Imp und mehr. Beim Tausch geht etwa jede vierte "
+               "Rolle an einen davon, das Level bleibt erkennbar. Modelle und "
+               "Sounds wandern zur Laufzeit aus den eigenen Leveldateien mit.");
+    ImGui::SameLine();
+    ImGui::RadioButton("Allsanity", &a.optEnemyPool, 2);
+    hoverHilfe("Der KOMPLETTE Gegnerpool steht jedem Level zur Verfuegung, und "
+               "beim Tausch wuerfelt jede Rolle frei aus allem - maximale "
+               "Auswahl. Uebernommen werden trotzdem nur die Typen, die der "
+               "Seed wirklich einsetzt; der Texturseiten-Haushalt bleibt "
+               "gemessen deutlich unter der 256er-Grenze. Gescriptete Gegner "
+               "bleiben in jedem Modus unberuehrt; Hydra ist noch nicht im Pool.");
+    ImGui::TextDisabled("Wirkt zusammen mit Vanilla-Gegnermix oder Zusatzgegnern.");
 
     // --- Secrets (#53) - Platzhalter ohne Wirkung ------------------------
     //
@@ -1165,7 +1185,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.optEnemies      = app.cfg.optEnemies;
     app.optEnemyCount   = app.cfg.enemyCount;
     app.optEnemySwap    = app.cfg.optEnemySwap;
-    app.optEnemiesCross = app.cfg.optEnemiesCross;
+    app.optEnemyPool    = app.cfg.enemyPool;
     app.optOutfits      = app.cfg.optOutfits;
     app.optSecrets      = app.cfg.secrets;
 
@@ -1185,7 +1205,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.optEnemies      = app.optEnemies;
         app.cfg.enemyCount      = app.optEnemyCount;
         app.cfg.optEnemySwap    = app.optEnemySwap;
-        app.cfg.optEnemiesCross = app.optEnemiesCross;
+        app.cfg.enemyPool       = app.optEnemyPool;
         app.cfg.optOutfits      = app.optOutfits;
         app.cfg.secrets         = app.optSecrets;
         app.cfg.seedText        = app.seedBuf;
@@ -1240,7 +1260,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.optEnemies      != app.optEnemies ||
                  app.cfg.enemyCount      != app.optEnemyCount ||
                  app.cfg.optEnemySwap    != app.optEnemySwap ||
-                 app.cfg.optEnemiesCross != app.optEnemiesCross ||
+                 app.cfg.enemyPool       != app.optEnemyPool ||
                  app.cfg.optOutfits      != app.optOutfits ||
                  app.cfg.secrets         != app.optSecrets)
         {

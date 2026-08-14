@@ -342,6 +342,15 @@ struct RandoOptions
     // oder addEnemies - allein aendert der Haken nichts.
     bool crossEnemies = false;
 
+    // Allsanity: wie crossEnemies, aber OHNE die Drei-Typen-Grenze - der
+    // ganze Pool steht dem Level zur Verfuegung, und beim Tausch wuerfelt
+    // jede Rolle frei aus dem vollen Pool statt nur jede vierte. Maximale
+    // Auswahl (Nutzerwunsch). Importiert wird weiterhin nur, was der Lauf
+    // wirklich einsetzt - so bleibt der Texturseiten-Haushalt im Rahmen
+    // (gemessen: 3 Fremdtypen +15..25 Seiten von 256; selbst der volle Pool
+    // bleibt zusammen mit Waffen und Outfit deutlich unter der Grenze).
+    bool allsanity = false;
+
     // Jedes Level bekommt zufaellig eines der drei Outfits: Lara_Andrea
     // (Spender Andrea1), Lara_Joby (joby2) oder Lara_Rich (rich2, Catsuit).
     // Uebertragen werden die Slots 8/9/10 (LARA_SKIN, LARA_SKIN_JOINTS,

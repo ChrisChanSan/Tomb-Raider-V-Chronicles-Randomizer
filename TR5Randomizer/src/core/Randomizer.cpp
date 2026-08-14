@@ -906,7 +906,7 @@ bool Rando::run(const RandoInput& in,
     std::vector<int> gegnerPool = in.enemyTypes;
     std::map<int, const CrossGegner*> crossGewaehlt;
     std::set<int> crossBenutzt;
-    if (opt.crossEnemies && (opt.swapEnemies || opt.addEnemies) && klein != "joby4")
+    if ((opt.crossEnemies || opt.allsanity) && (opt.swapEnemies || opt.addEnemies) && klein != "joby4")
     {
         std::set<int> eigene(in.enemyTypes.begin(), in.enemyTypes.end());
         std::vector<const CrossGegner*> kandidaten;
@@ -919,7 +919,10 @@ bool Rando::run(const RandoInput& in,
             if (vonKlein == klein) continue;              // sich selbst spendet niemand
             kandidaten.push_back(&c);
         }
-        for (int n = 0; n < 3 && !kandidaten.empty(); ++n)
+
+        // Allsanity nimmt den ganzen Pool, Cross-Mix hoechstens drei.
+        const int maxFremd = opt.allsanity ? static_cast<int>(kandidaten.size()) : 3;
+        for (int n = 0; n < maxFremd && !kandidaten.empty(); ++n)
         {
             const size_t pick = static_cast<size_t>(rng.below(kandidaten.size()));
             const CrossGegner* c = kandidaten[pick];
@@ -928,6 +931,9 @@ bool Rando::run(const RandoInput& in,
             crossGewaehlt[c->typeId] = c;
         }
         std::sort(gegnerPool.begin(), gegnerPool.end());
+        if (opt.allsanity)
+            report.notes.push_back(fmt("Allsanity: Gegnerpool auf %d Typen erweitert.",
+                                       static_cast<int>(gegnerPool.size())));
     }
 
     // --- Vorhandene Gegner tauschen ---
@@ -969,10 +975,18 @@ bool Rando::run(const RandoInput& in,
                 std::swap(arten[i], arten[j]);
             }
 
-            // Cross-Gegnermix: etwa jede vierte Rolle geht an einen der
-            // gewaehlten fremden Typen. Zurueckhaltend mit Absicht - das
-            // Level soll durchmischt wirken, nicht ausgetauscht.
-            if (!crossGewaehlt.empty())
+            // Allsanity: jede Rolle wuerfelt frei aus dem VOLLEN Pool -
+            // maximale Auswahl, das Level darf sein Gesicht verlieren
+            // (Nutzerwunsch). Cross-Mix dagegen bleibt zurueckhaltend:
+            // etwa jede vierte Rolle geht an einen der bis zu drei
+            // gewaehlten fremden Typen, das Level wirkt durchmischt,
+            // nicht ausgetauscht.
+            if (opt.allsanity && !gegnerPool.empty())
+            {
+                for (size_t i = 0; i < arten.size(); ++i)
+                    arten[i] = gegnerPool[static_cast<size_t>(rng.below(gegnerPool.size()))];
+            }
+            else if (!crossGewaehlt.empty())
             {
                 for (size_t i = 0; i < arten.size(); ++i)
                 {

@@ -31,8 +31,23 @@ struct Config
     std::wstring sourceDir;   // data-Ordner der eigenen Chronicles-Installation
     std::string  seedText;    // zuletzt benutzter Seed, als Text
 
+    // Fenstergroesse beim letzten Beenden bzw. nach dem letzten Ziehen.
+    // 0 heisst "noch nie gespeichert" - dann gilt die Vorgabegroesse.
+    int winW = 0, winH = 0;
+
+    // Die Wuerfel-Optionen aus Abschnitt 3, damit der Nutzer seine Auswahl
+    // beim naechsten Start wiederfindet. Vorgaben identisch mit denen der
+    // Oberflaeche - fehlt ein Schluessel in der Datei, aendert sich nichts.
+    bool optOtherPickups = true;
+    bool optKeyItems     = true;
+    bool optEnemies      = false;
+    int  enemyCount      = 6;
+    bool optEnemySwap    = false;
+    bool optOutfits      = false;
+    int  secrets         = 0;     // Platzhalter (#53): 0 Aus .. 3 Custom
+
     // Liest bzw. schreibt <exe-Ordner>\TR5Randomizer.cfg. Fehlt die Datei,
-    // bleibt alles leer - das ist kein Fehler, sondern der erste Start.
+    // bleibt alles auf Vorgabe - das ist kein Fehler, sondern der erste Start.
     void load();
     bool save() const;
 

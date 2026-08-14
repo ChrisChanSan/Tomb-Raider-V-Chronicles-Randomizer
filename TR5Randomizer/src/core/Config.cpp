@@ -19,6 +19,7 @@
 #include "DataFolder.h"
 
 #include <cstdio>
+#include <cstdlib>
 
 std::wstring Config::path()
 {
@@ -27,8 +28,7 @@ std::wstring Config::path()
 
 void Config::load()
 {
-    sourceDir.clear();
-    seedText.clear();
+    *this = Config();   // alles auf Vorgabe; fehlende Schluessel bleiben so
 
     FILE* f = nullptr;
     if (_wfopen_s(&f, path().c_str(), L"rb") != 0 || !f) return;   // erster Start
@@ -54,7 +54,20 @@ void Config::load()
         const std::string val = line.substr(eq + 1);
         if (key == "sourceDir") sourceDir = PathUtil::widen(val);
         else if (key == "seed")  seedText = val;
+        else if (key == "winW")            winW = std::atoi(val.c_str());
+        else if (key == "winH")            winH = std::atoi(val.c_str());
+        else if (key == "ausruestung")     optOtherPickups = (val == "1");
+        else if (key == "keyItems")        optKeyItems = (val == "1");
+        else if (key == "gegnerZusatz")    optEnemies = (val == "1");
+        else if (key == "gegnerAnzahl")    enemyCount = std::atoi(val.c_str());
+        else if (key == "gegnerMix")       optEnemySwap = (val == "1");
+        else if (key == "outfits")         optOutfits = (val == "1");
+        else if (key == "secrets")         secrets = std::atoi(val.c_str());
     }
+
+    if (enemyCount < 1)  enemyCount = 1;
+    if (enemyCount > 20) enemyCount = 20;
+    if (secrets < 0 || secrets > 3) secrets = 0;
 }
 
 bool Config::save() const
@@ -66,6 +79,15 @@ bool Config::save() const
     const std::string dir = PathUtil::narrow(sourceDir);
     std::fprintf(f, "sourceDir=%s\n", dir.c_str());
     std::fprintf(f, "seed=%s\n", seedText.c_str());
+    std::fprintf(f, "winW=%d\n", winW);
+    std::fprintf(f, "winH=%d\n", winH);
+    std::fprintf(f, "ausruestung=%d\n", optOtherPickups ? 1 : 0);
+    std::fprintf(f, "keyItems=%d\n", optKeyItems ? 1 : 0);
+    std::fprintf(f, "gegnerZusatz=%d\n", optEnemies ? 1 : 0);
+    std::fprintf(f, "gegnerAnzahl=%d\n", enemyCount);
+    std::fprintf(f, "gegnerMix=%d\n", optEnemySwap ? 1 : 0);
+    std::fprintf(f, "outfits=%d\n", optOutfits ? 1 : 0);
+    std::fprintf(f, "secrets=%d\n", secrets);
     std::fclose(f);
     return true;
 }

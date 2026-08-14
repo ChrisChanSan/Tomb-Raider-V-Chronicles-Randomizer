@@ -65,6 +65,7 @@ namespace
     ID3D11Device*           g_dev = nullptr;
     ID3D11DeviceContext*    g_ctx = nullptr;
     IDXGISwapChain*         g_swap = nullptr;
+    bool                    g_fensterGezogen = false;   // WM_EXITSIZEMOVE gesehen
     ID3D11RenderTargetView* g_rtv = nullptr;
 
     void createRTV()
@@ -125,6 +126,14 @@ namespace
                 g_swap->ResizeBuffers(0, (UINT)LOWORD(lp), (UINT)HIWORD(lp), DXGI_FORMAT_UNKNOWN, 0);
                 createRTV();
             }
+            // Maximieren/Wiederherstellen kommt ohne WM_EXITSIZEMOVE - auch
+            // das soll die gespeicherte Groesse aktualisieren.
+            if (wp == SIZE_MAXIMIZED || wp == SIZE_RESTORED) g_fensterGezogen = true;
+            return 0;
+        case WM_EXITSIZEMOVE:
+            // Der Nutzer hat das Fenster gezogen - die Hauptschleife schreibt
+            // daraufhin die Einstellungsdatei (Nutzerwunsch: Groesse merken).
+            g_fensterGezogen = true;
             return 0;
         case WM_SYSCOMMAND:
             if ((wp & 0xfff0) == SC_KEYMENU) return 0;   // Alt-Menue unterdruecken
@@ -995,14 +1004,15 @@ static void drawUi(App& a, HWND hwnd)
     if (a.skippedNonPlayable > 0)
         ImGui::TextDisabled("%d nicht spielbare Dateien (Title, del, richcut2) werden geprueft, aber nicht angetastet.",
                             a.skippedNonPlayable);
+    // Feste Hoehe nach Levelanzahl statt Scrollleiste (Nutzerwunsch): ohne
+    // ScrollY und ohne Hoehenvorgabe waechst die Tabelle genau auf ihre
+    // Zeilen - bei 13 spielbaren Leveln ist das ueberschaubar.
     if (ImGui::BeginTable("levels", 3,
-        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
-        ImVec2(0, 260)))
+        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
     {
         ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_WidthFixed, 160);
         ImGui::TableSetupColumn("Zustand", ImGuiTableColumnFlags_WidthFixed, 150);
         ImGui::TableSetupColumn("Ergebnis");
-        ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableHeadersRow();
 
         for (size_t i = 0; i < a.levels.size(); ++i)
@@ -1094,8 +1104,16 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     WNDCLASSEXW wc{ sizeof(wc), CS_CLASSDC, WndProc, 0, 0, hInst, nullptr, nullptr, nullptr, nullptr,
                     L"TR5RandomizerWnd", nullptr };
     RegisterClassExW(&wc);
+
+    // Fenstergroesse aus der Einstellungsdatei; beim ersten Start eine
+    // grosszuegige Vorgabe (Nutzerwunsch - das alte 820x780 war zu klein).
+    // Untergrenzen fangen eine von Hand kaputteditierte Datei ab.
+    Config vorab;
+    vorab.load();
+    const int fensterW = (vorab.winW >= 500) ? vorab.winW : 1000;
+    const int fensterH = (vorab.winH >= 400) ? vorab.winH : 920;
     HWND hwnd = CreateWindowW(wc.lpszClassName, L"TR5 Randomizer", WS_OVERLAPPEDWINDOW,
-                              100, 100, 820, 780, nullptr, nullptr, hInst, nullptr);
+                              100, 100, fensterW, fensterH, nullptr, nullptr, hInst, nullptr);
 
     if (!createDevice(hwnd))
     {
@@ -1136,6 +1154,38 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                   app.cfg.seedText.empty() ? SeedText::format(SeedText::random()).c_str()
                                            : app.cfg.seedText.c_str());
 
+    // Gespeicherte Auswahl wiederherstellen - der Nutzer soll seine Haken
+    // beim naechsten Start wiederfinden.
+    app.optOtherPickups = app.cfg.optOtherPickups;
+    app.optKeyItems     = app.cfg.optKeyItems;
+    app.optEnemies      = app.cfg.optEnemies;
+    app.optEnemyCount   = app.cfg.enemyCount;
+    app.optEnemySwap    = app.cfg.optEnemySwap;
+    app.optOutfits      = app.cfg.optOutfits;
+    app.optSecrets      = app.cfg.secrets;
+
+    // Alles Merkenswerte in die Einstellungsdatei schreiben: Fenstergroesse,
+    // Haken, Seed. Laeuft beim Ziehen des Fensters, bei jeder geaenderten
+    // Auswahl und beim Beenden - die Datei ist winzig, das darf oft passieren.
+    auto merkeEinstellungen = [&app](HWND fenster)
+    {
+        RECT r;
+        if (GetWindowRect(fenster, &r) && r.right > r.left && r.bottom > r.top)
+        {
+            app.cfg.winW = r.right - r.left;
+            app.cfg.winH = r.bottom - r.top;
+        }
+        app.cfg.optOtherPickups = app.optOtherPickups;
+        app.cfg.optKeyItems     = app.optKeyItems;
+        app.cfg.optEnemies      = app.optEnemies;
+        app.cfg.enemyCount      = app.optEnemyCount;
+        app.cfg.optEnemySwap    = app.optEnemySwap;
+        app.cfg.optOutfits      = app.optOutfits;
+        app.cfg.secrets         = app.optSecrets;
+        app.cfg.seedText        = app.seedBuf;
+        app.cfg.save();
+    };
+
     std::string err;
     const std::wstring csv = PathUtil::join(app.payloadDir(), L"VanillaLevelChecksums.csv");
     app.payloadOk = app.data.loadChecksums(csv, err);
@@ -1172,6 +1222,24 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         // andersherum bliebe der letzte Schritt unsichtbar.
         advanceRun(app);
 
+        // Einstellungen festhalten: nach dem Ziehen des Fensters und immer,
+        // wenn sich eine Auswahl gegenueber der Datei geaendert hat.
+        if (g_fensterGezogen)
+        {
+            g_fensterGezogen = false;
+            merkeEinstellungen(hwnd);
+        }
+        else if (app.cfg.optOtherPickups != app.optOtherPickups ||
+                 app.cfg.optKeyItems     != app.optKeyItems ||
+                 app.cfg.optEnemies      != app.optEnemies ||
+                 app.cfg.enemyCount      != app.optEnemyCount ||
+                 app.cfg.optEnemySwap    != app.optEnemySwap ||
+                 app.cfg.optOutfits      != app.optOutfits ||
+                 app.cfg.secrets         != app.optSecrets)
+        {
+            merkeEinstellungen(hwnd);
+        }
+
         ImGui::Render();
         const float clear[4] = { 0.10f, 0.11f, 0.13f, 1.0f };
         g_ctx->OMSetRenderTargets(1, &g_rtv, nullptr);
@@ -1188,6 +1256,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 
         g_swap->Present(1, 0);
     }
+
+    merkeEinstellungen(hwnd);   // letzter Stand, auch Groesse und Seed
 
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();

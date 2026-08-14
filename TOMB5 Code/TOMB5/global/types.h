@@ -40,7 +40,21 @@
 #define FVF (D3DFVF_TEX2 | D3DFVF_SPECULAR | D3DFVF_DIFFUSE | D3DFVF_XYZRHW)
 #define MALLOC_SIZE	15000000	//15MB
 #define GAME_FOV	(80 * 182)
-#define MAX_LOT		5
+// Wie viele KI-Gegner gleichzeitig aktiv sein koennen (baddie_slots,
+// lot.cpp). Upstream 5: der sechste ausgeloeste Gegner verdraengte den
+// kamerafernsten aktiven (EnableBaddieAI setzt ihn ITEM_INVISIBLE) - mit
+// den 10-20 Zusatzgegnern des Randomizers standen dann regelmaessig Gegner
+// eingefroren herum. 16 kostet nur Speicher im game_malloc-Pool
+// (je Slot sizeof(CREATURE_INFO) + num_boxes * sizeof(BOX_NODE), also
+// grob 25 KB je Slot beim groessten Level - der Pool hat 15 MB).
+// Die Verdraengung bleibt als Rueckfall fuer den 17. Gegner bestehen.
+#define MAX_LOT		16
+
+// Laras Zielerfassung sammelt bis zu MAX_LOT anvisierbare Gegner plus
+// Endmarke (larafire.cpp, TargetList/LastTargets). Upstream waren beide
+// Felder fest [8] - bei 5 Slots genug, ab 8 aktiven Gegnern ein
+// Pufferueberlauf. Deshalb haengt die Groesse jetzt an MAX_LOT.
+#define MAX_TARGETS	(MAX_LOT + 1)
 #define W2V_SHIFT	14
 
 // D3D9's headers dropped the old Direct3D-Immediate-Mode (DX3-7) transformed/lit vertex type;

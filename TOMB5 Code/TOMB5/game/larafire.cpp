@@ -555,8 +555,10 @@ void LaraGetNewTarget(WEAPON_INFO* winfo)
 {
 	ITEM_INFO* item;
 	ITEM_INFO* bestitem;
-	static ITEM_INFO* TargetList[8];
-	static ITEM_INFO* LastTargets[8];
+	// Groesse haengt an MAX_LOT - siehe MAX_TARGETS in types.h (upstream
+	// fest [8], mit mehr KI-Slots ein Pufferueberlauf).
+	static ITEM_INFO* TargetList[MAX_TARGETS];
+	static ITEM_INFO* LastTargets[MAX_TARGETS];
 	CREATURE_INFO* creature;
 	GAME_VECTOR src, target;
 	long x, y, z, slot, dist, maxdist, maxdist2, bestdist;
@@ -631,7 +633,7 @@ void LaraGetNewTarget(WEAPON_INFO* winfo)
 
 	if (TargetList[0])
 	{
-		for (slot = 0; slot < 8; ++slot)
+		for (slot = 0; slot < MAX_TARGETS; ++slot)
 		{
 			if (!TargetList[slot])
 				lara.target = 0;
@@ -651,16 +653,16 @@ void LaraGetNewTarget(WEAPON_INFO* winfo)
 			{
 				lara.target = 0;
 
-				for (match = 0; match < 8; ++match)
+				for (match = 0; match < MAX_TARGETS; ++match)
 				{
 					if (!TargetList[match])
 						break;
 
-					for (slot = 0; slot < 8; ++slot)
+					for (slot = 0; slot < MAX_TARGETS; ++slot)
 					{
 						if (!LastTargets[slot])
 						{
-							slot = 8;
+							slot = MAX_TARGETS;
 							break;
 						}
 
@@ -668,7 +670,7 @@ void LaraGetNewTarget(WEAPON_INFO* winfo)
 							break;
 					}
 
-					if (slot == 8)
+					if (slot == MAX_TARGETS)
 					{
 						lara.target = TargetList[match];
 						break;
@@ -688,7 +690,7 @@ void LaraGetNewTarget(WEAPON_INFO* winfo)
 
 	if (lara.target != LastTargets[0])
 	{
-		for (slot = 7; slot > 0; slot--)
+		for (slot = MAX_TARGETS - 1; slot > 0; slot--)
 			LastTargets[slot] = LastTargets[slot - 1];
 
 		LastTargets[0] = lara.target;

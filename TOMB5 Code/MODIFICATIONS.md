@@ -157,6 +157,21 @@ Also in this group:
   in `SCRIPT.DAT`) silently bent one triangle of the adult hand. Same pattern
   and rationale as the `laramisc.cpp` torso fix below; with the flag set — an
   unmodified `SCRIPT.DAT` — nothing changes.
+- `global/types.h`, `game/larafire.cpp` — **`MAX_LOT` raised from 5 to 16**:
+  upstream allowed only five AI enemies to be active at once; the sixth
+  triggered enemy evicted the one farthest from the camera (`EnableBaddieAI`
+  freezes it as `ITEM_INVISIBLE`). With the randomizer placing 10–20 extra
+  enemies per level, frozen bystanders were routine. The slot pool is fully
+  parametric (`lot.cpp` allocates per slot `CREATURE_INFO` plus
+  `num_boxes × BOX_NODE` from the 15 MB `game_malloc` pool — roughly 25 KB per
+  slot in the largest level), savegames store creature state per item and
+  re-acquire slots on load, so no compatibility impact. One genuine hidden
+  assumption surfaced in the audit and is fixed alongside: Lara's target
+  acquisition (`larafire.cpp`) collected up to `MAX_LOT` targets plus a
+  terminator into fixed `TargetList[8]`/`LastTargets[8]` arrays — fine for 5
+  slots, a buffer overflow from 8 active enemies up. Both arrays and their
+  loop bounds now derive from the new `MAX_TARGETS (MAX_LOT + 1)`. The
+  eviction path remains as fallback for the 17th enemy.
 - `game/setup.cpp` — two hit-point balance changes for the randomizer's
   cross-level enemy pool, both explicit user calls from playtesting: the
   Maze Monster drops from 4000 to 120 (upstream built him effectively

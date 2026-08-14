@@ -844,8 +844,15 @@ $typeOffsets = @( $typeOffsetOf.GetEnumerator() | ForEach-Object {
 # Leveldaten nicht ablesbar ist - hier: Andrea3 Item 49 (Puzzle Item4 Combo2)
 # triggert eine Tuer. Wird ins Zonen-JSON exportiert, damit ein spaeterer
 # Randomizer die Sperre uebernehmen kann, statt sie neu entdecken zu muessen.
+# Die Gegner-Eintraege unten stammen aus der Nutzerliste "Gegner die Vanilla
+# bleiben muessen.txt" (2026-08-14): gescriptete Gegner, die fuer Cutscenes,
+# Stealth-Sequenzen oder spaetere Umbauten unangetastet bleiben. FIXED_ITEMS
+# schlaegt sowohl den Gegnertausch als auch jede Platzierung.
 $FIXED_ITEMS = @{
-    'Andrea3' = @{ 49 = 'Puzzle Item4 Combo2 - triggert eine Tuer' }
+    'Andrea3' = @{
+        49 = 'Puzzle Item4 Combo2 - triggert eine Tuer'
+        79 = 'Roman God (Raum 90) - bleibt Vanilla (Nutzerliste 2026-08-14)'
+    }
     'Andrea2' = @{
         128 = 'Ventil - muss an einer Wand sitzen (siehe VANILLA_TYPES 172)'
         # Der gescriptete Larson. Cutscene 8 (andrea3_end, deltapak.cpp) weckt
@@ -853,13 +860,44 @@ $FIXED_ITEMS = @{
         # Heavy-Trigger auf 72,2,2 und damit die Todes-Cutscene. Ein anderer
         # Gegnertyp an diesem Index hiesse: Cutscene weckt niemanden mehr.
         76 = 'Larson - gescripteter Miniboss, haengt an Cutscene 8 und 7'
+        # Die Hydra ist DREI Items auf einer Position; die OCB waehlt das
+        # Kettenglied (hydra.cpp:18). Auseinanderreissen zerstoert den Boss.
+        91 = 'Hydra Kettenglied (Raum 116) - bleibt Vanilla (Nutzerliste)'
+        92 = 'Hydra Kettenglied (Raum 116) - bleibt Vanilla (Nutzerliste)'
+        93 = 'Hydra Kettenglied (Raum 116) - bleibt Vanilla (Nutzerliste)'
+        65 = 'Typ 420 (Raum 69) - gescriptet, bleibt Vanilla (Nutzerliste)'
+        108 = 'Roman God (Raum 131) - bleibt Vanilla (Nutzerliste)'
     }
-    'rich1'   = @{ 27 = 'CD - Invisible, wird per Switch aus dem Anzug enthuellt' }
-    # rich2s Guard (USSR) in Raum 84. Nutzervorgabe: der Gegner bleibt Vanilla.
-    # Heute folgenlos - Gegner stehen ueberhaupt noch nicht im Pool, das ist #38 -,
-    # aber der Eintrag muss jetzt stehen, sonst geht die Vorgabe verloren, wenn
-    # der Gegnertausch kommt. Dieselbe Rolle wie rich1s Scientist in Raum 34.
-    'rich2'   = @{ 154 = 'Guard (USSR) - bleibt Vanilla (Nutzervorgabe, gilt ab #38)' }
+    'Andy2'   = @{
+        0  = 'Skelett (Raum 0) - gescripteter Aufsteher (Nutzerliste)'
+        4  = 'Skelett (Raum 5) - gescripteter Aufsteher (Nutzerliste)'
+        5  = 'Skelett (Raum 5) - gescripteter Aufsteher (Nutzerliste)'
+        10 = 'Skelett (Raum 6) - gescripteter Aufsteher (Nutzerliste)'
+        11 = 'Skelett (Raum 6) - gescripteter Aufsteher (Nutzerliste)'
+    }
+    'andy3'   = @{ 20 = 'Green Teeth (Raum 99) - bleibt Vanilla (Nutzerliste)' }
+    'joby2'   = @{
+        20 = 'Sniper (Raum 19) - gescriptet, bleibt Vanilla (Nutzerliste)'
+        21 = 'Sniper (Raum 21) - gescriptet, bleibt Vanilla (Nutzerliste)'
+    }
+    'joby3'   = @{ 186 = 'Chef (Raum 120) - nur per Stealth-Cutscene toetbar, bleibt Vanilla (Nutzerliste)' }
+    'joby5'   = @{ 145 = 'Crane Guy MIP (Raum 121) - Cutscene-Double, bleibt Vanilla (Nutzerliste)' }
+    'rich1'   = @{
+        27 = 'CD - Invisible, wird per Switch aus dem Anzug enthuellt'
+        85 = 'Scientist (Raum 34) - Anvisier-Cutscene, bleibt Vanilla (Nutzerliste)'
+        180 = 'Twogun (Raum 130) - Stealth-Kill-Sequenz, bleibt Vanilla (Nutzerliste)'
+    }
+    # rich2s Guards (USSR). Nutzervorgabe seit #38, bestaetigt und erweitert
+    # durch die Nutzerliste 2026-08-14.
+    'rich2'   = @{
+        154 = 'Guard (USSR, Raum 84) - bleibt Vanilla (Nutzervorgabe)'
+        155 = 'Guard (USSR, Raum 84) - bleibt Vanilla (Nutzerliste)'
+        219 = 'Guard (USSR, Raum 156) - bleibt Vanilla (Nutzerliste)'
+    }
+    'rich3'   = @{
+        183 = 'Hitman (Raum 152) - bleibt Vanilla (Nutzerliste)'
+        200 = 'Hitman (Raum 183) - bleibt Vanilla (Nutzerliste)'
+    }
 }
 
 # Typen, die komplett an ihren Vanilla-Positionen bleiben. Ihre Zwangsbedingung

@@ -283,6 +283,13 @@ struct RandoInput
     std::vector<RoomOrigin>  roomOrigins;
     std::set<int>            triggerPinned;  // abgeleitet, siehe Regel 2
 
+    // Raeume mit Wasser-Flag (waterRoom aus dem Level-Export). Nutzervorgabe
+    // 2026-08-14: dort duerfen keine Gegner gesetzt werden - Landgegner
+    // koennen unter Wasser weder laufen noch angreifen und staenden nur
+    // hilflos herum. Betrifft die Zusatzgegner-Plaetze; getauschte Gegner
+    // stehen an Cores eigenen Positionen und bleiben unberuehrt.
+    std::set<int>            waterRooms;
+
     // Raeume, in denen keine Waffe liegen darf, und was als Waffe zaehlt.
     // joby3: eine zufaellig in den Chef-Bereich gewanderte Schrotflinte loest
     // denselben Glitch aus wie versetzte Pistolen. Das ist keine Eigenschaft

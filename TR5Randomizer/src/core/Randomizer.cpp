@@ -296,6 +296,8 @@ bool Rando::buildInput(const JsonValue& zoneExport,
         r.originX = static_cast<int>(rooms[i]["originX"].asInt());
         r.originZ = static_cast<int>(rooms[i]["originZ"].asInt());
         out.roomOrigins.push_back(r);
+        if (rooms[i]["waterRoom"].asBool(false))
+            out.waterRooms.insert(r.room);
     }
     if (out.roomOrigins.empty()) { error = "Level-Info enthaelt keine Raeume"; return false; }
 
@@ -1062,6 +1064,8 @@ bool Rando::run(const RandoInput& in,
             const long long sk = secKey(s.room, s.sectorX, s.sectorZ);
             if (used.count(sk)) continue;
             if (!origin.count(s.room)) continue;
+            // Nutzervorgabe: kein Gegner in einen Raum mit Wasser-Flag.
+            if (in.waterRooms.count(s.room)) continue;
 
             Platz p;
             p.s = &s;

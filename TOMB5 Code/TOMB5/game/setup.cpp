@@ -1581,9 +1581,9 @@ void BaddyObjects()
 		obj->control = TwogunControl;
 		obj->collision = CreatureCollision;
 		obj->shadow_size = 128;
-		obj->hit_points = 60; // was 24 - raised +150% (user's own randomizer balancing call:
-		                      // "zu schnell killbar für seine Panzerung" now that undead=1 is
-		                      // gone and he takes normal damage from any weapon/angle again.
+		obj->hit_points = 90; // was 24 vanilla, then 60 - raised again per the user's
+		                      // randomizer balancing call after the cross-mix playtest
+		                      // (2026-08-15): "Two Gun kann auch mehr Leben bekommen."
 		obj->pivot_length = 50;
 		obj->radius = 128;
 		obj->explodable_meshbits = 4;
@@ -1684,7 +1684,11 @@ void BaddyObjects()
 		obj->control = MazeMonsterControl;
 		obj->collision = CreatureCollision;
 		obj->shadow_size = 128;
-		obj->hit_points = 4000;
+		obj->hit_points = 120;  // was 4000 - upstream built him effectively unkillable
+		                        // (in Andy2 he is a chase set piece, not a combat target).
+		                        // As a cross-mix pool enemy he must be killable; 120 keeps
+		                        // him the toughest regular (user call 2026-08-15: "kann
+		                        // gerne mehr haben, aber nicht so viel").
 		obj->pivot_length = 20;
 		obj->radius = 341;
 		obj->bite_offset = 256;

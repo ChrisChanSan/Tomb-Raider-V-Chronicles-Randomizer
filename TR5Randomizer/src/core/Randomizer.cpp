@@ -299,6 +299,20 @@ bool Rando::buildInput(const JsonValue& zoneExport,
         if (rooms[i]["waterRoom"].asBool(false))
             out.waterRooms.insert(r.room);
     }
+
+    // Antitrigger-Ziele einsammeln - siehe RandoInput::antitriggered.
+    {
+        const JsonValue& trigs = levelInfo["triggers"];
+        for (size_t t = 0; t < trigs.size(); ++t)
+        {
+            const std::string art = trigs[t]["triggerType"].asString();
+            if (art != "AntiTrigger" && art != "HeavyAntiTrigger") continue;
+            const JsonValue& cmds = trigs[t]["commands"];
+            for (size_t c = 0; c < cmds.size(); ++c)
+                if (cmds[c]["type"].asString() == "Object")
+                    out.antitriggered.insert(static_cast<int>(cmds[c]["index"].asInt(-1)));
+        }
+    }
     if (out.roomOrigins.empty()) { error = "Level-Info enthaelt keine Raeume"; return false; }
 
     const JsonValue& items = levelInfo["items"];
@@ -484,12 +498,27 @@ bool Rando::run(const RandoInput& in,
                 RandoReport& report)
 {
     report = RandoReport();
-    Rng rng(seed);
 
     // Levelname in Kleinbuchstaben - mehrere Bloecke unten entscheiden daran
     // (Waffenstreuung, Outfit, Waffenregeln).
     std::string klein;
     for (char c : in.level) klein.push_back((c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c);
+
+    // Jedes Level bekommt seinen eigenen Wuerfelstrom. Vorher speiste
+    // DERSELBE globale Seed jeden Levellauf mit derselben Zugfolge - und weil
+    // die Allsanity-Pools fast identisch sind, bekamen alle Level fast
+    // dieselben Gegnertypen in derselben Reihenfolge ("als haette er nur ein
+    // Set ausgewaehlt und das auf alle gleich gemacht", Nutzerbeobachtung im
+    // Spiel). FNV-1a ueber den Levelnamen entkoppelt die Stroeme;
+    // deterministisch bleibt alles: derselbe Seed erzeugt weiterhin dasselbe
+    // Spiel, nur eben je Level ein anderes.
+    uint64_t levelSeed = seed;
+    for (char c : klein)
+    {
+        levelSeed ^= static_cast<unsigned char>(c);
+        levelSeed *= 0x100000001B3ull;
+    }
+    Rng rng(levelSeed);
 
     std::map<int, RoomOrigin> origin;
     for (const RoomOrigin& r : in.roomOrigins) origin[r.room] = r;
@@ -886,23 +915,36 @@ bool Rando::run(const RandoInput& in,
     // wurde - und zwar mit replace, damit auch ein vorhandener, aber nie
     // bespielter Slot (joby5s Guard ohne Samples) vollstaendig vom Spender
     // kommt.
+    // "begleiter": Slots, die der Typ zwingend mitbringen muss. Mafia2 traegt
+    // seinen Oberkoerper als Tauschhaelfte aus MESHSWAP2 = Slot 406
+    // (setup.cpp:1443: Meshes 7/10/13, meshswap_meshbits 0x2400 schon ab
+    // Initialise) - ohne den Slot ist der Torso unsichtbar (im Spiel
+    // gesehen). MESHSWAP2 nutzt sonst niemand, der Import ist konfliktfrei.
+    //
+    // MESHSWAP1 dagegen ist ein GETEILTER Slot mit levelabhaengigem Inhalt
+    // (SWAT-Familie: Meshes 10/13; Imp: 10; TwoGun: 10<-2; Gladiator: 0-15;
+    // Roman God: 0-16; Hitman: 0-19) - den kann man nicht einfach ersetzen,
+    // ohne die einheimischen Nutzer des Ziels zu brechen. Die Folgen sieht
+    // man bei Imp-Kopf und Statuen-Schadensmeshes; die Loesung (eigene
+    // Ausweichslots in der Engine oder Mesh-genaues Einsetzen) ist als
+    // Aufgabe vermerkt und NICHT Teil dieser Tabelle.
     struct CrossSound  { int map; const char* vonLevel; int vonMap; };
-    struct CrossGegner { int typeId; const char* von; CrossSound sounds[2]; };
+    struct CrossGegner { int typeId; const char* von; CrossSound sounds[2]; int begleiter[2]; };
     static const CrossGegner kCross[] = {
-        { 33, "rich3",   {} },                                      // SWAT
-        { 35, "rich3",   {} },                                      // Advanced SWAT
-        { 37, "rich1",   {} },                                      // Guard (Blue Guard)
-        { 39, "rich1",   {} },                                      // Two Gun
-        { 41, "Andrea1", {} },                                      // Dog
-        { 45, "Andrea1", { {96,"rich1",85}, {98,"rich1",143} } },   // Larson
-        { 47, "Andrea3", { {90,"joby5",45}, {91,"joby5",123} } },   // Pierre
-        { 49, "joby3",   {} },                                      // Soldier MG (Mafia)
-        { 51, "joby3",   {} },                                      // Soldier Pistols (Mafia2)
-        { 57, "Andrea3", {} },                                      // Lion
-        { 59, "Andrea3", {} },                                      // Gladiator
-        { 61, "Andrea3", {} },                                      // Soldier Statue (Hammer)
-        { 77, "Andy2",   {} },                                      // Maze Monster
-        { 89, "andy1",   {} },                                      // Imp
+        { 33, "rich3",   {},                                    {-1,-1} },  // SWAT
+        { 35, "rich3",   {},                                    {-1,-1} },  // Advanced SWAT
+        { 37, "rich1",   {},                                    {-1,-1} },  // Guard (Blue Guard)
+        { 39, "rich1",   {},                                    {-1,-1} },  // Two Gun
+        { 41, "Andrea1", {},                                    {-1,-1} },  // Dog
+        { 45, "Andrea1", { {96,"rich1",85}, {98,"rich1",143} }, {-1,-1} },  // Larson
+        { 47, "Andrea3", { {90,"joby5",45}, {91,"joby5",123} }, {-1,-1} },  // Pierre
+        { 49, "joby3",   {},                                    {-1,-1} },  // Soldier MG (Mafia)
+        { 51, "joby3",   {},                                    {406,-1} }, // Soldier Pistols (Mafia2) + MESHSWAP2
+        { 57, "Andrea3", {},                                    {-1,-1} },  // Lion
+        { 59, "Andrea3", {},                                    {-1,-1} },  // Gladiator
+        { 61, "Andrea3", {},                                    {-1,-1} },  // Soldier Statue (Hammer)
+        { 77, "Andy2",   {},                                    {-1,-1} },  // Maze Monster
+        { 89, "andy1",   {},                                    {-1,-1} },  // Imp
     };
 
     std::vector<int> gegnerPool = in.enemyTypes;
@@ -963,6 +1005,9 @@ bool Rando::run(const RandoInput& in,
             // Handkuration schlaegt alles: was dort steht, bleibt wie es ist.
             if (std::find(in.fixedItems.begin(), in.fixedItems.end(), it.index) != in.fixedItems.end())
                 continue;
+            // Antitrigger-Ziele bleiben vorerst unangetastet - siehe
+            // RandoInput::antitriggered (gescriptetes Despawnen).
+            if (in.antitriggered.count(it.index)) continue;
             indizes.push_back(it.index);
             arten.push_back(it.typeId);
         }
@@ -1283,6 +1328,17 @@ bool Rando::run(const RandoInput& in,
         e.set("fromLevel", JsonValue::makeString(c->von));
         e.set("replace", JsonValue::makeBool(true));
         moveables.push(e);
+
+        // Pflicht-Gefolge des Typs (siehe Tabellenkommentar).
+        for (int b : c->begleiter)
+        {
+            if (b < 0) continue;
+            JsonValue g = JsonValue::makeObject();
+            g.set("slot", JsonValue::makeInt(b));
+            g.set("fromLevel", JsonValue::makeString(c->von));
+            g.set("replace", JsonValue::makeBool(true));
+            moveables.push(g);
+        }
 
         for (int k = 0; k < 2; ++k)
         {

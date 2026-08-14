@@ -157,6 +157,14 @@ Also in this group:
   in `SCRIPT.DAT`) silently bent one triangle of the adult hand. Same pattern
   and rationale as the `laramisc.cpp` torso fix below; with the flag set — an
   unmodified `SCRIPT.DAT` — nothing changes.
+- `game/setup.cpp` — two hit-point balance changes for the randomizer's
+  cross-level enemy pool, both explicit user calls from playtesting: the
+  Maze Monster drops from 4000 to 120 (upstream built him effectively
+  unkillable — in his home level he is a chase set piece, not a combat
+  target; as a pool enemy he must die, and 120 keeps him the toughest
+  regular), and Two Gun rises from 60 to 90 (24 in vanilla). Vanilla
+  behaviour changes only in the sense that both are now reasonably
+  killable/durable wherever they appear.
 - `game/pierre.cpp` — Larson's corpse now fades out like every other enemy.
   When his death animation reaches its last frame the routine already probes
   his start sector for a heavy trigger; it now also sets `after_death = 1`,

@@ -290,6 +290,16 @@ struct RandoInput
     // stehen an Cores eigenen Positionen und bleiben unberuehrt.
     std::set<int>            waterRooms;
 
+    // Items, auf die ein AntiTrigger oder HeavyAntiTrigger zeigt. Ein
+    // Antitrigger LOESCHT die Aktivierung seines Ziels - gescriptetes
+    // Despawnen. Nach einem Typentausch passt das Skript nicht mehr: der
+    // neue Gegner erstarrt oder verschwindet mitten im Kampf (im Spiel
+    // gesehen: Andrea1 Item 34 unter Allsanity, Antitrigger 46 in Raum 88).
+    // Solche Items werden vorerst nicht getauscht; die vollwertige Loesung
+    // - den Antitrigger an eine unerreichbare Stelle verschieben - ist als
+    // Aufgabe vermerkt.
+    std::set<int>            antitriggered;
+
     // Raeume, in denen keine Waffe liegen darf, und was als Waffe zaehlt.
     // joby3: eine zufaellig in den Chef-Bereich gewanderte Schrotflinte loest
     // denselben Glitch aus wie versetzte Pistolen. Das ist keine Eigenschaft

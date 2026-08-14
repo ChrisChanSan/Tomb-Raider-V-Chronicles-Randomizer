@@ -114,6 +114,62 @@ Also in this group:
   Ireland levels with the adult Lara left her with the child's chest and a head
   floating above a torso that was too small. With the flag set — that is, with an
   unmodified `SCRIPT.DAT` — nothing changes.
+- `game/hair.cpp` — the special braid anchoring for the Russia levels (torso
+  sphere shifted by −11/−16/+25, fixed radius 94, upstream's own comment:
+  "repositioned to avoid floating hair") now also engages when
+  `LaraDrawType == LARA_BUNHEAD`. That anchoring belongs to the Russia OUTFIT
+  (beanie, bomber jacket), not to the level — upstream could conflate the two
+  because the outfit never leaves its section in vanilla. The randomizer marks
+  the Russia outfit with LaraType 2 (`LARA_BUNHEAD`), a value no vanilla level
+  file uses and no other code path branches on (the draw switch treats it like
+  `LARA_NORMAL`). Without this, the braid pierces the body when the Russia
+  outfit is worn elsewhere. The level half of the condition is additionally
+  narrowed to `LARA_NORMAL`, so a foreign outfit brought INTO a Russia level
+  gets its own standard anchoring there. Vanilla files never carry LaraType 2
+  and vanilla Russia levels are `LARA_NORMAL`, so nothing changes for them.
+- `game/laraskin.cpp` — the braid-root welding table is chosen per OUTFIT, not
+  per level. `HairSkinVertNums[5]` lists the head-mesh vertex numbers of the
+  Russia head (beanie), `[0]` those of the standard head; upstream selects `[5]`
+  purely by level range. The selection now follows the same rule as the
+  anchoring in `game/hair.cpp`: Russia level with `LARA_NORMAL` (unmodified
+  vanilla file), or `LARA_BUNHEAD` anywhere. Without this, the braid root
+  welds to the wrong head vertices whenever an outfit crosses sections — the
+  visible result is the braid collapsing into a spike (the anchoring fix above
+  is correct but was not sufficient on its own).
+- `global/types.h`, `specific/drawlara.cpp` — new draw-type value
+  `LARA_PONYTAIL` (LaraType byte 5 in the level file), drawn exactly like
+  `LARA_NORMAL`. It exists for one case: the standard outfit worn IN a Russia
+  level. There `LARA_NORMAL` would wrongly satisfy the "unmodified Russia
+  level" half of the two conditions above, so the randomizer writes a value
+  that is not `LARA_NORMAL` but draws like it. No vanilla file carries byte 5.
+- `specific/drawlara.cpp` — `DrawLara__4` (catsuit) now draws the thigh
+  holsters exactly like `DrawLara__1`, but only when the holster objects
+  (slots 13–16) are actually loaded. Upstream never drew them on the catsuit —
+  the catsuit levels do not load those objects, so there was nothing to draw.
+  The randomizer can now copy them in, and then they should appear. The
+  `loaded` guard keeps vanilla behaviour identical and also prevents drawing a
+  stray mesh through `objects[].mesh_index == 0` — the exact artefact seen in
+  `DrawLara__1` when holster objects are missing.
+- `specific/drawroom.cpp` — the young-Lara left-hand mesh correction in
+  `ProcessMeshData` (rewriting triangle 30 of `LARA_SKIN`'s left hand) is now
+  tied to `GF_YOUNGLARA` as well as to the Ireland level range. Upstream keys it
+  on the level alone, so playing those levels with the adult Lara (flag cleared
+  in `SCRIPT.DAT`) silently bent one triangle of the adult hand. Same pattern
+  and rationale as the `laramisc.cpp` torso fix below; with the flag set — an
+  unmodified `SCRIPT.DAT` — nothing changes.
+- `game/pierre.cpp` — Larson's corpse now fades out like every other enemy.
+  When his death animation reaches its last frame the routine already probes
+  his start sector for a heavy trigger; it now also sets `after_death = 1`,
+  which is all the engine needs to fade the body and remove it (`draw.cpp:742`).
+  Upstream never does this for him: his death animation carries no `KillItem`
+  animation command — a dog's does — because the only place his body is ever
+  removed is Trajan's Markets, where a cutscene takes over at exactly that frame
+  and hides him. Everywhere else he never dies in the first place, since he
+  flees below 40 hit points. Once an enemy pool can place him in any level that
+  stops being true, and without this he would stand there dead for good: his
+  death animation is a 207-frame set piece for the camera and ends upright, not
+  fallen. Trajan's Markets is unaffected — the cutscene hides him in the same
+  instant, so the fade never becomes visible.
 
 ---
 

@@ -83,7 +83,39 @@ struct Tr5Room
     unsigned flags = 0;                 // Bit 0x1 = unter Wasser
     std::vector<int> portalRooms;       // Zielraeume der Portalliste
 
+    // Absolute Dateiposition des Sektorfelds (numXSectors * numZSectors
+    // Eintraege zu je 8 Byte). 0, wenn der Raum nicht aufging. Das erste Wort
+    // jedes Eintrags ist FLOOR_INFO.index, der Zeiger in die Floordata.
+    size_t sectorsOffset = 0;
+
     bool isAlternate() const { return altRoom >= 0; }
+};
+
+//----------------------------------------------------------------------------
+// Ein Eintrag einer Floordata-Kette, mit allen seinen Woertern.
+//
+// Das Zerlegen in Eintraege ist nicht Bequemlichkeit, sondern Notwendigkeit:
+// woerter[0] traegt in Bit 15 das "letzter Eintrag der Kette"-Kennzeichen. Wer
+// eine Kette wortweise kopiert und einen Eintrag herausnimmt, laesst dieses Bit
+// am falschen Wort stehen - die Engine liest dann ueber das Kettenende hinaus.
+// Beim Zusammensetzen wird es darum neu vergeben.
+//----------------------------------------------------------------------------
+struct Tr5FloorEntry
+{
+    int funktion = 0;                   // global/types.h, enum floor_types
+    int art = 0;                        // nur bei funktion == 4 (Trigger)
+    std::vector<uint16_t> woerter;
+};
+
+//----------------------------------------------------------------------------
+// Ein Triggerbefehl. type ist die 4-Bit-Befehlsart (enum trigobj_types,
+// global/types.h:435): 0 = TO_OBJECT, 1 = TO_CAMERA, 3 = TO_FLIPMAP,
+// 8 = TO_CD, 13 = TO_CUTSCENE und so weiter.
+//----------------------------------------------------------------------------
+struct Tr5TriggerCmd
+{
+    int type = 0;
+    int param = 0;
 };
 
 class Tr5Level
@@ -147,6 +179,114 @@ public:
     // wer ihn setzt, muss wissen, dass das Ergebnis kein Level mehr ist.
     void    allowMoreThanMaxItems(bool on) { m_allowOverLimit = on; }
 
+    // --- Floordata -----------------------------------------------------
+    //
+    // Geaendert wird nach genau einem Muster: die neue Kette hinten an den
+    // Block anhaengen und den FLOOR_INFO.index des Sektors umhaengen. Nie
+    // mittendrin einfuegen oder loeschen - das wuerde JEDEN nachfolgenden
+    // Index verschieben, und zwar lautlos, weil ein falscher Index einfach
+    // eine andere Kette liest. Die alte Kette bleibt als toter Ballast
+    // liegen; auf sie zeigt danach kein Sektor mehr.
+    int32_t floorDataCount() const { return m_floorCount; }
+
+    // Liest den FLOOR_INFO.index eines Sektors. -1, wenn es den Sektor nicht
+    // gibt. 0 bedeutet: dieser Sektor hat ueberhaupt keine Floordata.
+    int     sectorIndex(int room, int sx, int sz) const;
+
+    // Zerlegt die Kette ab index in ihre Eintraege. Bei index == 0 ist das
+    // Ergebnis leer und der Rueckgabewert trotzdem true. false heisst: die
+    // Kette laeuft aus dem Block heraus, Finger weg.
+    bool    readChain(int index, std::vector<Tr5FloorEntry>& out) const;
+
+    // Nimmt den Triggereintrag des Quellsektors heraus und haengt ihn an die
+    // Kette des Zielsektors. Beide Ketten werden neu hinten angebaut, beide
+    // Sektoren umgehaengt. Der Trigger behaelt sein Referenzwort und seine
+    // Befehle wortgleich - er spricht sein Item ueber den Index an, nicht
+    // ueber den Ort, und bleibt darum gueltig.
+    //
+    // Bricht ab, wenn die Quelle nicht genau einen Trigger hat oder das Ziel
+    // nach canAppendTrigger() ungeeignet ist.
+    bool    moveTrigger(int fromRoom, int fromSx, int fromSz,
+                        int toRoom, int toSx, int toSz, std::string& error);
+
+    // Setzt einen NEUEN Trigger auf einen Sektor. Das ist der Weg, dem Level
+    // Gegner hinzuzufuegen: kein vorhandener Eintrag wird gelesen oder
+    // umgebaut, es kommt nur eine Kette hinten dazu.
+    //
+    // art ist die Triggerart (0 = TRIGGER, 1 = PAD, 5 = HEAVY, ...), mask die
+    // fuenf Codebits (31 = alle, der uebliche Wert). oneShot setzt Bit 8 des
+    // Setup-Worts - und das ist mehr als "nur einmal": _TestTriggers
+    // (control.cpp:2415) setzt daraufhin IFL_INVISIBLE am geweckten Item, was
+    // bei manchen Gegnern deren Verhalten aendert. Larson etwa flieht ohne
+    // dieses Bit bei 40 Trefferpunkten und ist gar nicht toetbar
+    // (pierre.cpp:68).
+    bool    addTrigger(int room, int sx, int sz, int art, int timer, bool oneShot,
+                       int mask, const std::vector<Tr5TriggerCmd>& cmds,
+                       std::string& error);
+
+    // Darf an diese Kette hinten ein Trigger? Gibt den Hinderungsgrund zurueck
+    // oder nullptr. Siehe die Herleitung in der Implementierung.
+    static const char* canAppendTrigger(const std::vector<Tr5FloorEntry>& chain);
+
+    // --- Sound ---------------------------------------------------------
+    //
+    // Ein Level fuehrt nur die Samples mit, die es selbst braucht. Kommt ein
+    // Gegner darin vanilla nicht vor, fehlen seine Geraeusche - er steht dann
+    // stumm im Level. Pierre ist der Fall, an dem das auffiel.
+    int  soundInfoIndex(int map) const;    // -1 = dieses Level kennt den Sound nicht
+    int  soundSampleCount() const { return m_nSamples; }
+
+    // Uebernimmt das Sample hinter srcMap aus src und legt es hier unter
+    // dstMap ab. Zufallsvarianten ("nimm eines von N") kommen mit.
+    // Tut nichts und meldet Erfolg, wenn dstMap hier schon aufloest.
+    bool copySoundFrom(const Tr5Level& src, int srcMap, int dstMap, std::string& error);
+
+    // --- Modelltransfer ------------------------------------------------
+    //
+    // Uebernimmt einen kompletten Objektslot aus einem anderen Level: Meshes,
+    // Meshzeiger, Bones, Animationen samt Zustandswechseln, Bereichen,
+    // Befehlen und Frames, die referenzierten Texturinfos, die zugehoerigen
+    // Texturseiten (32- und 16-Bit synchron) und den OBJECT_INFO-Eintrag.
+    // Existiert der Slot im Ziel, wird sein Eintrag ersetzt; die alten Daten
+    // bleiben als toter Ballast liegen - dieselbe Philosophie wie ueberall:
+    // nichts wird entfernt, nichts verschiebt fremde Indizes.
+    //
+    // Slot 0 (LARA) wird verweigert: er traegt die Animationen des Levels,
+    // ein fremder Slot 0 nimmt dem Level seine eigenen Bewegungen (im Spiel
+    // erlebt: fehlende Schalter- und Kriechanimationen).
+    //
+    // Sounds kommen NICHT automatisch mit - dafuer gibt es copySoundFrom und
+    // die Wissenstabelle in Tr5Transfer.cpp (hartverdrahtete Waffen-SFX).
+    bool copyMoveableFrom(const Tr5Level& src, int slotId, std::string& error);
+
+    // Der Objektslot, wie er in der Datei steht. anim < 0 heisst: keiner.
+    struct MoveableInfo
+    {
+        int slot = -1;
+        int nmeshes = 0, meshIndex = 0, boneIndex = 0, animIndex = -1;
+        uint32_t frameOffset = 0;
+    };
+    bool moveableInfo(int slotId, MoveableInfo& out) const;
+    std::vector<int> moveableSlots() const;
+
+    // Nur fuer Diagnosewerkzeuge: rohe Werte aus den Bloecken. Ausserhalb des
+    // Blocks kommt 0 zurueck - die Werkzeuge vergleichen Spender gegen Kopie,
+    // da faellt ein Ausreisser als Unterschied auf.
+    int32_t debugReadBoneLong(long long i) const;
+    int16_t debugReadFrameShort(long long i) const;
+    // Kopf eines Meshes (x, y, z, r, flags, nVerts-Wort) ueber seinen
+    // Zeigerindex. false, wenn es den Zeiger nicht gibt.
+    bool    debugMeshHeader(int ptrIndex, int16_t out[6]) const;
+    // Laeuft ein Mesh mit der korrekten Normalen-Regel ab (0 = Normalen,
+    // nur negativ = Prelight) und liefert seine Kennzahlen. In
+    // Tr5Transfer.cpp definiert, wo der Ableser wohnt.
+    bool    debugMeshWalk(int ptrIndex, int& nVerts, int& nNorms,
+                          int& ngt4, int& ngt3, int& bytes) const;
+
+    // Das Outfit-Byte (LaraType) im Levelkopf, hinter den Texturbloecken.
+    int  laraType() const;
+    bool setLaraType(int value);
+
 private:
     bool                 m_allowOverLimit = false;
     std::vector<uint8_t> m_bytes;
@@ -156,9 +296,55 @@ private:
     size_t               m_mainSize = 0;
     size_t               m_itemCountOffset = 0;
     int32_t              m_itemCount = 0;
+    size_t               m_floorCountOffset = 0;  // das int32 mit numFloorData
+    size_t               m_floorAt = 0;           // erstes Short der Floordata
+    int32_t              m_floorCount = 0;
+
+    // --- Sound-Block ---------------------------------------------------
+    // Alles ausser den Sampledaten selbst liegt IM Hauptblock, hinter den
+    // Items. Wer davor etwas einfuegt - Items oder Floordata -, muss diese
+    // Offsets mitziehen; genau dafuer gibt es verschiebeSound().
+    size_t               m_lutAt = 0;             // short sample_lut[450]
+    size_t               m_numInfosAt = 0;
+    size_t               m_infosAt = 0;
+    int32_t              m_nInfos = 0;
+    size_t               m_numSamplesInMainAt = 0;  // num_samples, Fassung im Hauptblock
+    size_t               m_numSamplesAt = 0;        // num_samples, Fassung dahinter
+    int32_t              m_nSamples = 0;
+    bool                 m_soundOk = false;
+
+    bool findSound();                     // nach findItems, darf scheitern
+    void verschiebeSound(size_t bytes, size_t abOffset);
+
+    // --- Blockkarte ----------------------------------------------------
+    // Lage der Bloecke, die der Modelltransfer anfassen muss. countAt ist die
+    // Position des int32 mit der Anzahl, dataAt der erste Datenbyte. Wird in
+    // findItems mitgeschrieben und ist nach JEDEM Einfuegen ungueltig, bis
+    // reparse() gelaufen ist - deshalb arbeitet der Transfer mit einer
+    // Splice-Liste und fuegt alles auf einen Schlag ein.
+    struct Block
+    {
+        size_t  countAt = 0;
+        size_t  dataAt = 0;
+        int32_t count = 0;
+    };
+    Block m_meshData, m_meshPtrs, m_anims, m_changes, m_ranges, m_commands,
+          m_bones, m_frames, m_objects, m_sprites, m_texinfos;
+
+    // Liest Kopf und Hauptblock neu ein, nachdem Bytes eingefuegt wurden.
+    // copyMoveableFrom ist ein Member und in Tr5Transfer.cpp definiert - die
+    // Trennung haelt Tr5Level.cpp lesbar, mehr nicht.
+    bool reparse(std::string& error);
     int                  m_roomCount = 0;
     std::vector<Tr5Room> m_rooms;
     int                  m_roomMismatch = 0;
+
+    // Setzt eine Kette hinten an den Block und liefert ihren Index. Leere
+    // Kette -> 0 ("keine Floordata"). Zieht numFloorData und die doppelt
+    // gefuehrte Hauptblockgroesse mit.
+    bool appendChain(const std::vector<Tr5FloorEntry>& chain, uint16_t& outIndex,
+                     std::string& error);
+    void setSectorIndex(const Tr5Room& r, int sx, int sz, uint16_t index);
 
     // Schluesselt einen Raum-Blob auf. offset/size zeigen auf den Blob im
     // Hauptblock, index ist die laufende Raumnummer.

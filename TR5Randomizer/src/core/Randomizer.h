@@ -134,6 +134,16 @@ struct ZoneSector
     int room = 0, sectorX = 0, sectorZ = 0;
     int zone = 0;
     int floorY = 0;
+
+    // Sektoren, die Lara auf ihrem Erstzugangsweg kurz VOR diesem betritt,
+    // etwa drei Schritte davor, beste Wahl zuerst. Aus dem Zonen-Export; dort
+    // steht der Erstzugangsbaum, hier nur noch die fertige Antwort.
+    //
+    // Dafuer gibt es genau einen Zweck: der Trigger eines neu gesetzten Gegners.
+    // Er darf nicht auf dem Gegnersektor liegen - sonst spawnt der Gegner in
+    // Lara hinein -, muss aber sicher ueberquert werden, sonst wacht der Gegner
+    // nie auf.
+    std::vector<long long> approach;
 };
 
 // Sektorschluessel: Raum, Sektor-X und Sektor-Z in eine Zahl gepackt. Die
@@ -218,6 +228,40 @@ struct LevelItem
     // "angle" weg - ein verschobenes Item behaelt damit seine Ausrichtung.
 };
 
+//----------------------------------------------------------------------------
+// Ein Item, dessen Pickup-Trigger mitwandert.
+//
+// Normalerweise haelt ein Pickup-Trigger sein Item fest (Regel 2): der Trigger
+// klebt am Sektor, das Item wuerde ohne ihn wegwandern und seine Wirkung - eine
+// Tuer, ein Gegner - bliebe am alten Fleck zurueck. Der gekoppelte Zug loest
+// das, indem beides zusammen umzieht: ein Vorgang, nicht zwei.
+//
+// Erlaubt ist das nicht allgemein, sondern nur, wo es ausdruecklich kuriert
+// wurde. Heute genau ein Fall: Andrea1 Item 107, der Schluessel, dessen Trigger
+// zusaetzlich den Hund und einen Flame Emitter weckt.
+//----------------------------------------------------------------------------
+struct CoupledTrigger
+{
+    int itemIndex = 0;
+    int room = 0, sectorX = 0, sectorZ = 0;   // wo der Trigger heute liegt
+};
+
+//----------------------------------------------------------------------------
+// Ein Sound, den ein Gegner braucht, den SEIN Level aber nicht mitfuehrt.
+//
+// Ein Level traegt nur die Samples, die es selbst benoetigt. Kommt ein Gegner
+// darin vanilla nicht vor, fehlen sie - er steht dann stumm da. Woher Ersatz
+// kommt, ist Kuration (ENEMY_SOUND_FIX in ZoneAnalyse.ps1) und steht fertig im
+// Zonen-Export; hier wird nur noch weitergereicht.
+//----------------------------------------------------------------------------
+struct EnemySound
+{
+    int typeId = 0;
+    int map = 0;                 // die fehlende SFX-Nummer im Ziellevel
+    std::string fromLevel;
+    int fromMap = 0;
+};
+
 struct RandoInput
 {
     std::string              level;
@@ -246,12 +290,56 @@ struct RandoInput
     // gewoehnliche Pickups.
     std::set<int>            noWeaponRooms;
     std::set<int>            weaponTypes;
+
+    // Items, deren Trigger mitwandert. Sie duerfen sich trotz triggerPinned
+    // bewegen - eben weil ihr Trigger nicht zurueckbleibt.
+    std::vector<CoupledTrigger> coupledTriggers;
+
+    // Gegnertypen, die diesem Level hinzugefuegt werden duerfen. Handkuration
+    // aus dem Zonen-Export - leer heisst: keine. Ein Gegner gehoert erst hinein,
+    // wenn er im Spiel nachgewiesen hat, dass er ohne Levelskript auskommt.
+    std::vector<int>         enemyTypes;
+
+    // Samples, die einzelne dieser Typen im Level nicht vorfinden.
+    std::vector<EnemySound>  enemySounds;
+
+    // Sektoren, die einen Trigger aufnehmen koennen, als secKey. Wird
+    // ausgewertet, sobald coupledTriggers oder enemyTypes nicht leer sind.
+    //
+    // Diese Menge kommt aus der Floordata des echten Levels, nicht aus dem
+    // Level-Info-Export: ob ein Sektor einen Trigger vertraegt, haengt an
+    // Eintragsarten (Lava, Climb, Monkey, TrigTrigger), von denen der Export
+    // nur zwei kennt. Raten waere hier ein stiller Levelschaden - siehe
+    // Tr5Level::canAppendTrigger.
+    std::set<long long>      triggerSafeSectors;
 };
 
 struct RandoOptions
 {
     bool shuffleKeyItems = true;
     bool shuffleOtherPickups = true;
+
+    // Zusaetzliche Gegner ins Level setzen. Aus wie viele: 0 heisst keine.
+    // Die Typen kommen aus RandoInput::enemyTypes, nicht von hier.
+    bool addEnemies = false;
+    int  enemiesPerLevel = 6;
+
+    // Vorhandene Gegner untereinander tauschen. Nur die Art wechselt, der
+    // Item-Index bleibt - damit bleiben alle "Object N"-Verweise der Trigger
+    // gueltig und jeder Gegner wacht weiter dort auf, wo er es sollte.
+    //
+    // Getauscht wird ausschliesslich unter den kuratierten Typen des Levels
+    // (RandoInput::enemyTypes); handkurierte Items bleiben ausgenommen.
+    bool swapEnemies = false;
+
+    // Jedes Level bekommt zufaellig eines der drei Outfits: Lara_Andrea
+    // (Spender Andrea1), Lara_Joby (joby2) oder Lara_Rich (rich2, Catsuit).
+    // Uebertragen werden die Slots 8/9/10 (LARA_SKIN, LARA_SKIN_JOINTS,
+    // LARA_SCREAM) plus das LaraType-Byte des Spenders - NIE Slot 0, der
+    // traegt die Animationen des Levels. joby4 ist ausgenommen (Taucheranzug,
+    // bleibt ohnehin vanilla); die andy-Level bekommen immer einen Ersatz,
+    // ihr eigenes Outfit ist die Kind-Lara.
+    bool randomOutfits = false;
 };
 
 struct RandoReport
@@ -260,6 +348,8 @@ struct RandoReport
     int movedOtherItems = 0;
     int pinnedItems = 0;
     int injected = 0;
+    int enemiesAdded = 0;
+    int enemiesSwapped = 0;
     std::vector<std::string> notes;     // Auffaelligkeiten fuer die Oberflaeche
     bool ok = true;
     std::string error;

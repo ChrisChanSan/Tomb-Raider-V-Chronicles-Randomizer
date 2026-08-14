@@ -147,21 +147,30 @@ bool Tr5Level::findItems(std::string& error)
         parseRoom(p, static_cast<size_t>(roomSize), i);
         p += static_cast<size_t>(roomSize);
     }
-    STEP("Floordata", i32(n));  STEP("Floordata", skipN(n, 2));
+    m_floorCountOffset = p;
+    STEP("Floordata", i32(n));
+    m_floorCount = n;
+    m_floorAt = p;
+    STEP("Floordata", skipN(n, 2));
 
-    STEP("Mesh-Daten", i32(n));   STEP("Mesh-Daten", skipN(n, 2));
-    STEP("Mesh-Zeiger", i32(n));  STEP("Mesh-Zeiger", skipN(n, 4));
-    STEP("Animationen", i32(n));  STEP("Animationen", skipN(n, SZ_ANIM));
-    STEP("Zustandswechsel", i32(n)); STEP("Zustandswechsel", skipN(n, SZ_CHANGE));
-    STEP("Bereiche", i32(n));     STEP("Bereiche", skipN(n, SZ_RANGE));
-    STEP("Anim-Befehle", i32(n)); STEP("Anim-Befehle", skipN(n, 2));
-    STEP("Knochen", i32(n));      STEP("Knochen", skipN(n, 4));
-    STEP("Frames", i32(n));       STEP("Frames", skipN(n, 2));
-    STEP("Objekte", i32(n));      STEP("Objekte", skipN(n, SZ_OBJECTINFO));
+    // Blockkarte fuer den Modelltransfer nebenbei mitschreiben. merk() haelt
+    // fest, wo die Anzahl steht und wo die Daten beginnen - NACHDEM i32 die
+    // Anzahl gelesen hat, zeigt p genau auf das erste Datenbyte.
+    auto merk = [&](Block& b, int32_t anzahl) { b.countAt = p - 4; b.dataAt = p; b.count = anzahl; };
+
+    STEP("Mesh-Daten", i32(n));   merk(m_meshData, n);  STEP("Mesh-Daten", skipN(n, 2));
+    STEP("Mesh-Zeiger", i32(n));  merk(m_meshPtrs, n);  STEP("Mesh-Zeiger", skipN(n, 4));
+    STEP("Animationen", i32(n));  merk(m_anims, n);     STEP("Animationen", skipN(n, SZ_ANIM));
+    STEP("Zustandswechsel", i32(n)); merk(m_changes, n); STEP("Zustandswechsel", skipN(n, SZ_CHANGE));
+    STEP("Bereiche", i32(n));     merk(m_ranges, n);    STEP("Bereiche", skipN(n, SZ_RANGE));
+    STEP("Anim-Befehle", i32(n)); merk(m_commands, n);  STEP("Anim-Befehle", skipN(n, 2));
+    STEP("Knochen", i32(n));      merk(m_bones, n);     STEP("Knochen", skipN(n, 4));
+    STEP("Frames", i32(n));       merk(m_frames, n);    STEP("Frames", skipN(n, 2));
+    STEP("Objekte", i32(n));      merk(m_objects, n);   STEP("Objekte", skipN(n, SZ_OBJECTINFO));
     STEP("Statics", i32(n));      STEP("Statics", skipN(n, SZ_STATICINFO));
 
     STEP("SPR-Marke", skipN(1, 4));
-    STEP("Sprites", i32(n));      STEP("Sprites", skipN(n, SZ_SPRITE));
+    STEP("Sprites", i32(n));      merk(m_sprites, n);   STEP("Sprites", skipN(n, SZ_SPRITE));
     STEP("Sprite-Slots", i32(n)); STEP("Sprite-Slots", skipN(n, SZ_SPRITESLOT));
 
     STEP("Kameras", i32(n));      STEP("Kameras", skipN(n, SZ_OBJVEC));
@@ -184,12 +193,16 @@ bool Tr5Level::findItems(std::string& error)
     // Nachfolgende um eine Stelle verschoben.
     STEP("Anim-UV-Anzahl", skipN(1, 1));
     STEP("TEX-Marke", skipN(1, 4));
-    STEP("Texturinfos", i32(n)); STEP("Texturinfos", skipN(n, SZ_TEXINFO));
+    STEP("Texturinfos", i32(n)); merk(m_texinfos, n); STEP("Texturinfos", skipN(n, SZ_TEXINFO));
 
     // Angekommen: hier steht die Item-Anzahl.
     m_itemCountOffset = p;
     STEP("Item-Anzahl", i32(m_itemCount));
     STEP("Item-Daten", skipN(m_itemCount, 24));
+    // Der Sound-Block schliesst sich an. Er darf fehlschlagen, ohne dass das
+    // ganze Level als unlesbar gilt - gebraucht wird er nur, wenn Samples
+    // uebernommen werden sollen.
+    findSound();
     return true;
 
 #undef STEP
@@ -283,6 +296,11 @@ void Tr5Level::parseRoom(size_t offset, size_t size, int index)
     for (uint16_t i = 0; i < numPortals; ++i)
         r.portalRooms.push_back(static_cast<int>(u16(sectorsEnd + 2 + static_cast<size_t>(i) * PORTAL)));
 
+    // Erst hier setzen: bis zu diesem Punkt kann der Raum noch als nicht
+    // aufgegangen abgebrochen werden, und ein Offset auf einen unklaren Raum
+    // waere schlimmer als gar keiner.
+    r.sectorsOffset = offset + sectorsAt;
+
     m_rooms.push_back(r);
 }
 
@@ -321,6 +339,8 @@ bool Tr5Level::addItem(const Tr5Item& in, std::string& error)
     if (itemsEnd > m_bytes.size()) { error = "Item-Bereich liegt ausserhalb der Datei"; return false; }
 
     m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(itemsEnd), 24, 0);
+    // Hinter den Items liegt der Sound-Block - seine Offsets wandern mit.
+    verschiebeSound(24, itemsEnd);
 
     ++m_itemCount;
     std::memcpy(m_bytes.data() + m_itemCountOffset, &m_itemCount, 4);
@@ -350,6 +370,615 @@ bool Tr5Level::setItem(int index, const Tr5Item& in)
     std::memcpy(p + 18, &in.shade, 2);
     std::memcpy(p + 20, &in.triggerFlags, 2);
     std::memcpy(p + 22, &in.flags, 2);
+    return true;
+}
+
+//----------------------------------------------------------------------------
+// Floordata
+//
+// Das Format ist vollstaendig in "Tomb5 Rando vorbereitung\Trigger\Floordata
+// und Trigger.md" hergeleitet, mit Zeilenangaben in die Engine. Hier nur, was
+// zum Mitlesen des Codes noetig ist.
+//----------------------------------------------------------------------------
+namespace
+{
+    // global/types.h, enum floor_types
+    enum { FN_DOOR = 1, FN_TILT = 2, FN_ROOF = 3, FN_TRIGGER = 4,
+           FN_LAVA = 5, FN_CLIMB = 6, FN_MONKEY = 19, FN_TRIGTRIGGER = 20 };
+
+    // SWITCH (2), KEY (3) und PICKUP (4) schieben ein Referenzwort vor die
+    // Befehlsliste: das Item, das bedient bzw. aufgenommen werden muss. Alle
+    // drei liest die Engine gleich - game/control.cpp:2251, :2266, :2274, jedes
+    // Mal "value = *(data++) & 0x3FF". Das Wort ist KEIN Befehl.
+    bool hasRefWord(int art) { return art == 2 || art == 3 || art == 4; }
+
+    // Zusatzwoerter eines Eintrags, der kein Trigger ist: genau die Faelle, in
+    // denen GetHeight (control.cpp:977ff) ein "data++" macht.
+    int extraWords(int fn)
+    {
+        return (fn == FN_DOOR || fn == FN_TILT || fn == FN_ROOF || (fn >= 7 && fn <= 18)) ? 1 : 0;
+    }
+
+    // Befehlsart: 4 Bit, nicht 5. Zweimal unabhaengig belegt - "switch
+    // ((trigger & 0x3FFF) >> 10)" in _TestTriggers (control.cpp:2350) und
+    // "(trigger & 0x3C00) != (TO_OBJECT << 10)" in GetHeight (:1025). Bit 15
+    // ist das Endebit, Bit 14 wertet die Engine gar nicht aus.
+    int cmdType(uint16_t c) { return (c & 0x3C00) >> 10; }
+}
+
+int Tr5Level::sectorIndex(int room, int sx, int sz) const
+{
+    if (room < 0 || room >= static_cast<int>(m_rooms.size())) return -1;
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    if (r.sectorsOffset == 0) return -1;
+    if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors) return -1;
+
+    // Das Sektorfeld ist x-major: x * numZSectors + z.
+    const size_t at = r.sectorsOffset + (static_cast<size_t>(sx) * r.numZSectors + sz) * 8;
+    if (at + 2 > m_bytes.size()) return -1;
+    uint16_t v;
+    std::memcpy(&v, m_bytes.data() + at, 2);
+    return static_cast<int>(v);
+}
+
+void Tr5Level::setSectorIndex(const Tr5Room& r, int sx, int sz, uint16_t index)
+{
+    const size_t at = r.sectorsOffset + (static_cast<size_t>(sx) * r.numZSectors + sz) * 8;
+    std::memcpy(m_bytes.data() + at, &index, 2);
+}
+
+bool Tr5Level::readChain(int index, std::vector<Tr5FloorEntry>& out) const
+{
+    out.clear();
+    if (index <= 0) return index == 0;              // 0 = keine Floordata
+
+    auto word = [&](size_t i) {
+        uint16_t v;
+        std::memcpy(&v, m_bytes.data() + m_floorAt + i * 2, 2);
+        return v;
+    };
+    const size_t limit = static_cast<size_t>(m_floorCount);
+    size_t i = static_cast<size_t>(index);
+
+    for (;;)
+    {
+        if (i >= limit) return false;
+
+        Tr5FloorEntry e;
+        const uint16_t w = word(i++);
+        e.funktion = w & 0x1F;
+        e.art = (w >> 8) & 0x3F;
+        e.woerter.push_back(w);
+        const bool last = (w & 0x8000) != 0;
+
+        if (e.funktion == FN_TRIGGER)
+        {
+            if (i >= limit) return false;
+            e.woerter.push_back(word(i++));         // Timer, OneShot, Maske
+
+            bool more = true;
+            if (hasRefWord(e.art))
+            {
+                if (i >= limit) return false;
+                const uint16_t r = word(i++);
+                e.woerter.push_back(r);
+                more = (r & 0x8000) == 0;
+            }
+            while (more)
+            {
+                if (i >= limit) return false;
+                const uint16_t c = word(i++);
+                e.woerter.push_back(c);
+                const int akt = cmdType(c);
+                if (akt == 1 /*Kamera*/ || akt == 12 /*Flyby*/)
+                {
+                    if (i >= limit) return false;
+                    e.woerter.push_back(word(i++));
+                }
+                if (c & 0x8000) break;
+            }
+        }
+        else
+        {
+            for (int k = 0; k < extraWords(e.funktion); ++k)
+            {
+                if (i >= limit) return false;
+                e.woerter.push_back(word(i++));
+            }
+        }
+
+        out.push_back(e);
+        if (last) break;
+    }
+    return true;
+}
+
+const char* Tr5Level::canAppendTrigger(const std::vector<Tr5FloorEntry>& chain)
+{
+    // _TestTriggers bekommt von GetHeight einen Zeiger und ueberspringt ab dort
+    // GENAU vier Eintragsarten - Lava, Climb, Monkey, TrigTrigger
+    // (control.cpp:2151-2195) - und liest dann bedingungslos einen Triggerkopf
+    // (:2197). GetHeight setzt den Zeiger auf den ERSTEN Eintrag aus {Trigger,
+    // Climb, Monkey, TrigTrigger} (1014-1053), Lava sogar bedingungslos neu.
+    //
+    // Steht eines dieser fuenf schon in der Kette, zeigt der Zeiger dorthin -
+    // und alles, was zwischen ihm und unserem angehaengten Trigger liegt, wird
+    // als Triggerkopf fehlgedeutet. Portale und Neigungen allein sind harmlos:
+    // die frisst GetHeight beim Laufen, ohne den Zeiger zu setzen.
+    for (const Tr5FloorEntry& e : chain)
+    {
+        if (e.funktion == FN_TRIGGER)     return "Sektor hat schon einen Trigger";
+        if (e.funktion == FN_LAVA)        return "Sektor hat einen Lava-Eintrag";
+        if (e.funktion == FN_CLIMB)       return "Sektor hat einen Climb-Eintrag";
+        if (e.funktion == FN_MONKEY)      return "Sektor hat einen Monkey-Eintrag";
+        if (e.funktion == FN_TRIGTRIGGER) return "Sektor hat einen TrigTrigger-Eintrag";
+    }
+    return nullptr;
+}
+
+bool Tr5Level::appendChain(const std::vector<Tr5FloorEntry>& chain, uint16_t& outIndex,
+                           std::string& error)
+{
+    if (chain.empty()) { outIndex = 0; return true; }   // Sektor ohne Floordata
+
+    std::vector<uint16_t> words;
+    for (size_t n = 0; n < chain.size(); ++n)
+    {
+        std::vector<uint16_t> w = chain[n].woerter;
+        if (w.empty()) { error = "leerer Floordata-Eintrag"; return false; }
+        w[0] &= 0x7FFF;                              // Endebit erst mal weg
+        if (n + 1 == chain.size()) w[0] |= 0x8000;   // und nur beim letzten setzen
+        words.insert(words.end(), w.begin(), w.end());
+    }
+
+    // FLOOR_INFO.index ist ein ushort (global/types.h). Was jenseits von 65535
+    // liegt, kann kein Sektor mehr adressieren.
+    const size_t newIndex = static_cast<size_t>(m_floorCount);
+    if (newIndex + words.size() > 65535)
+    {
+        error = "Floordata wuerde 65535 Shorts ueberschreiten - FLOOR_INFO.index ist ushort";
+        return false;
+    }
+
+    std::vector<uint8_t> raw;
+    raw.reserve(words.size() * 2);
+    for (uint16_t w : words) { raw.push_back(w & 0xFF); raw.push_back(w >> 8); }
+
+    const size_t at = m_floorAt + static_cast<size_t>(m_floorCount) * 2;
+    m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(at), raw.begin(), raw.end());
+
+    m_floorCount += static_cast<int32_t>(words.size());
+    std::memcpy(m_bytes.data() + m_floorCountOffset, &m_floorCount, 4);
+
+    // Der Hauptblock ist gewachsen; seine Groesse steht doppelt davor.
+    m_mainSize += raw.size();
+    const int32_t newSize = static_cast<int32_t>(m_mainSize);
+    std::memcpy(m_bytes.data() + m_mainOffset - 8, &newSize, 4);
+    std::memcpy(m_bytes.data() + m_mainOffset - 4, &newSize, 4);
+
+    // Und das hier ist der Fallstrick: die Items liegen HINTER der Floordata.
+    // Wer den Block wachsen laesst, ohne diesen Offset nachzuziehen, schreibt
+    // beim naechsten setItem/addItem mitten in fremde Daten. Die Sektorfelder
+    // der Raeume liegen davor und bleiben, wo sie sind.
+    m_itemCountOffset += raw.size();
+    verschiebeSound(raw.size(), at);      // der Sound-Block liegt noch weiter hinten
+
+    outIndex = static_cast<uint16_t>(newIndex);
+    return true;
+}
+
+bool Tr5Level::moveTrigger(int fromRoom, int fromSx, int fromSz,
+                           int toRoom, int toSx, int toSz, std::string& error)
+{
+    char buf[256];
+
+    if (fromRoom == toRoom && fromSx == toSx && fromSz == toSz)
+    { error = "Quelle und Ziel sind derselbe Sektor"; return false; }
+
+    const int fromIdx = sectorIndex(fromRoom, fromSx, fromSz);
+    const int toIdx = sectorIndex(toRoom, toSx, toSz);
+    if (fromIdx < 0) { error = "Quellsektor gibt es nicht"; return false; }
+    if (toIdx < 0) { error = "Zielsektor gibt es nicht"; return false; }
+
+    std::vector<Tr5FloorEntry> from, to;
+    if (!readChain(fromIdx, from)) { error = "Quellkette laeuft aus dem Block heraus"; return false; }
+    if (!readChain(toIdx, to)) { error = "Zielkette laeuft aus dem Block heraus"; return false; }
+
+    // Genau einen Triggereintrag erwarten. Zwei waeren mehrdeutig, keiner ein
+    // Bedienfehler - beides lieber abbrechen als raten.
+    size_t found = 0, at = 0;
+    for (size_t k = 0; k < from.size(); ++k)
+        if (from[k].funktion == FN_TRIGGER) { ++found; at = k; }
+    if (found != 1)
+    {
+        std::snprintf(buf, sizeof(buf),
+            "Quellsektor %d,%d,%d hat %zu Triggereintraege, erwartet genau einen",
+            fromRoom, fromSx, fromSz, found);
+        error = buf;
+        return false;
+    }
+
+    if (const char* why = canAppendTrigger(to))
+    {
+        std::snprintf(buf, sizeof(buf), "Zielsektor %d,%d,%d ungeeignet: %s",
+                      toRoom, toSx, toSz, why);
+        error = buf;
+        return false;
+    }
+
+    const Tr5FloorEntry trig = from[at];
+    from.erase(from.begin() + static_cast<ptrdiff_t>(at));
+    to.push_back(trig);
+
+    // Reihenfolge mit Absicht: erst beide Ketten anhaengen, dann beide Sektoren
+    // umhaengen. Sonst zeigte ein Sektor zwischenzeitlich auf eine Kette, die
+    // noch nicht vollstaendig geschrieben ist.
+    uint16_t newFrom = 0, newTo = 0;
+    if (!appendChain(from, newFrom, error)) return false;
+    if (!appendChain(to, newTo, error)) return false;
+
+    setSectorIndex(m_rooms[static_cast<size_t>(fromRoom)], fromSx, fromSz, newFrom);
+    setSectorIndex(m_rooms[static_cast<size_t>(toRoom)], toSx, toSz, newTo);
+    return true;
+}
+
+bool Tr5Level::addTrigger(int room, int sx, int sz, int art, int timer, bool oneShot,
+                          int mask, const std::vector<Tr5TriggerCmd>& cmds,
+                          std::string& error)
+{
+    char buf[256];
+
+    if (cmds.empty()) { error = "Trigger ohne Befehle waere wirkungslos"; return false; }
+
+    const int idx = sectorIndex(room, sx, sz);
+    if (idx < 0)
+    {
+        std::snprintf(buf, sizeof(buf), "Sektor %d,%d,%d gibt es nicht", room, sx, sz);
+        error = buf;
+        return false;
+    }
+
+    std::vector<Tr5FloorEntry> chain;
+    if (!readChain(idx, chain)) { error = "Kette laeuft aus dem Block heraus"; return false; }
+
+    if (const char* why = canAppendTrigger(chain))
+    {
+        std::snprintf(buf, sizeof(buf), "Sektor %d,%d,%d ungeeignet: %s", room, sx, sz, why);
+        error = buf;
+        return false;
+    }
+
+    Tr5FloorEntry e;
+    e.funktion = FN_TRIGGER;
+    e.art = art;
+    // Wort 0: Funktion in Bit 0-4, Art in Bit 8-13. Bit 15 vergibt baueKette.
+    e.woerter.push_back(static_cast<uint16_t>((art << 8) | FN_TRIGGER));
+    // Wort 1: Timer, OneShot, Codebits.
+    e.woerter.push_back(static_cast<uint16_t>((timer & 0xFF) |
+                                              (oneShot ? 0x100 : 0) |
+                                              ((mask & 0x1F) << 9)));
+
+    // SWITCH, KEY und PICKUP braeuchten hier ein Referenzwort. Das waere kein
+    // Trigger, den man "hinzufuegt", sondern einer, der an ein vorhandenes
+    // Objekt gebunden ist - deshalb bewusst nicht unterstuetzt statt geraten.
+    if (hasRefWord(art))
+    {
+        error = "Triggerart braucht ein Referenzwort - so nicht anlegbar";
+        return false;
+    }
+
+    for (size_t i = 0; i < cmds.size(); ++i)
+    {
+        uint16_t c = static_cast<uint16_t>(((cmds[i].type & 0xF) << 10) | (cmds[i].param & 0x3FF));
+        if (i + 1 == cmds.size()) c |= 0x8000;       // Endebit auf den letzten
+        e.woerter.push_back(c);
+
+        if (cmds[i].type == 1 || cmds[i].type == 12)
+        {
+            error = "Kamera- und Flyby-Befehle brauchen ein Zusatzwort - hier nicht vorgesehen";
+            return false;
+        }
+    }
+
+    chain.push_back(e);
+
+    uint16_t neu = 0;
+    if (!appendChain(chain, neu, error)) return false;
+    setSectorIndex(m_rooms[static_cast<size_t>(room)], sx, sz, neu);
+    return true;
+}
+
+//----------------------------------------------------------------------------
+// Sound
+//
+// Aufbau, abgelesen an TOMB5s LoadSamples (specific/file.cpp:1232):
+//
+//   Im Hauptblock, direkt hinter den Items:
+//     long  nAIObjs;  AIOBJECT aiObjs[nAIObjs];    (24 Byte je Eintrag)
+//     short cinematic;
+//     short sample_lut[450];      Map -> Index ins sample_infos, -1 = fehlt
+//     long  num_infos;
+//     SAMPLE_INFO sample_infos[num_infos];         (8 Byte: short number,
+//                                                   uchar volume, char radius,
+//                                                   randomness, pitch, short flags)
+//     long  num_samples;
+//     ... danach eine Indextabelle, die die Engine NIE liest ...
+//
+//   Hinter dem Hauptblock, bis Dateiende:
+//     long  num_samples;          dasselbe noch einmal
+//     je Sample: long uncompSize, long compSize, compSize Bytes
+//
+// Dass num_samples zweimal dasteht, ist kein Lesefehler: LoadSamples holt es
+// erst mit ReadLong() aus dem gepufferten Hauptblock (:1252) und gleich darauf
+// noch einmal per fread() direkt aus der Datei (:1261), womit der zweite Wert
+// den ersten ueberschreibt. Wer nur einen der beiden nachzieht, baut eine
+// Datei, die je nach Leser verschieden aussieht.
+//----------------------------------------------------------------------------
+namespace
+{
+    constexpr int SAMPLE_LUT_SIZE = 450;   // MAX_SAMPLES, global/types.h
+    constexpr int SZ_SAMPLE_INFO = 8;
+    constexpr int SZ_AIOBJECT = 24;
+
+    // specific/dxsound.cpp schreibt DS_Buffers[num] ohne Bereichspruefung; die
+    // Engine bricht darum ab 257 Samples mit einer Meldung ab (file.cpp:1282).
+    constexpr int MAX_SAMPLES_PLAYABLE = 256;
+}
+
+bool Tr5Level::findSound()
+{
+    m_soundOk = false;
+    if (m_itemCountOffset == 0) return false;
+
+    size_t p = m_itemCountOffset + 4 + static_cast<size_t>(m_itemCount) * 24;
+    if (p + 4 > m_bytes.size()) return false;
+
+    int32_t nAI = 0;
+    std::memcpy(&nAI, m_bytes.data() + p, 4); p += 4;
+    if (nAI < 0) return false;
+    p += static_cast<size_t>(nAI) * SZ_AIOBJECT;
+    p += 2;                                             // cinematic
+
+    if (p + SAMPLE_LUT_SIZE * 2 + 4 > m_bytes.size()) return false;
+    m_lutAt = p;
+    m_numInfosAt = p + SAMPLE_LUT_SIZE * 2;
+    std::memcpy(&m_nInfos, m_bytes.data() + m_numInfosAt, 4);
+    if (m_nInfos <= 0) return false;
+
+    m_infosAt = m_numInfosAt + 4;
+    m_numSamplesInMainAt = m_infosAt + static_cast<size_t>(m_nInfos) * SZ_SAMPLE_INFO;
+    if (m_numSamplesInMainAt + 4 > m_bytes.size()) return false;
+
+    m_numSamplesAt = m_mainOffset + m_mainSize;
+    if (m_numSamplesAt + 4 > m_bytes.size()) return false;
+    std::memcpy(&m_nSamples, m_bytes.data() + m_numSamplesAt, 4);
+
+    // Beide Fassungen muessen dasselbe sagen. Tun sie es nicht, sitzt einer der
+    // Offsets falsch - dann lieber gar nichts anfassen.
+    int32_t imBlock = 0;
+    std::memcpy(&imBlock, m_bytes.data() + m_numSamplesInMainAt, 4);
+    if (imBlock != m_nSamples) return false;
+
+    m_soundOk = true;
+    return true;
+}
+
+void Tr5Level::verschiebeSound(size_t bytes, size_t abOffset)
+{
+    if (!m_soundOk || bytes == 0) return;
+    if (m_lutAt >= abOffset)              m_lutAt += bytes;
+    if (m_numInfosAt >= abOffset)         m_numInfosAt += bytes;
+    if (m_infosAt >= abOffset)            m_infosAt += bytes;
+    if (m_numSamplesInMainAt >= abOffset) m_numSamplesInMainAt += bytes;
+    if (m_numSamplesAt >= abOffset)       m_numSamplesAt += bytes;
+}
+
+int Tr5Level::soundInfoIndex(int map) const
+{
+    if (!m_soundOk || map < 0 || map >= SAMPLE_LUT_SIZE) return -1;
+    int16_t v;
+    std::memcpy(&v, m_bytes.data() + m_lutAt + static_cast<size_t>(map) * 2, 2);
+    return (v < 0 || v >= m_nInfos) ? -1 : static_cast<int>(v);
+}
+
+bool Tr5Level::copySoundFrom(const Tr5Level& src, int srcMap, int dstMap, std::string& error)
+{
+    char buf[256];
+
+    if (!m_soundOk) { error = "Ziel-Level: Sound-Block nicht deutbar"; return false; }
+    if (!src.m_soundOk) { error = "Quell-Level: Sound-Block nicht deutbar"; return false; }
+    if (dstMap < 0 || dstMap >= SAMPLE_LUT_SIZE) { error = "Ziel-Map ausserhalb 0..449"; return false; }
+
+    if (soundInfoIndex(dstMap) >= 0) return true;      // schon da, nichts zu tun
+
+    const int erste = src.soundInfoIndex(srcMap);
+    if (erste < 0)
+    {
+        std::snprintf(buf, sizeof(buf), "Quell-Level hat Map %d nicht", srcMap);
+        error = buf;
+        return false;
+    }
+
+    // Zufallsvarianten: N aufeinanderfolgende Infos, N in Bit 2-5 der Flags des
+    // ersten - "(sample_infos[lut].flags >> 2) & 0xF", game/sound.cpp:70.
+    // SAMPLE_INFO selbst steht in global/types.h:691.
+    int16_t flags = 0;
+    std::memcpy(&flags, src.m_bytes.data() + src.m_infosAt + static_cast<size_t>(erste) * SZ_SAMPLE_INFO + 6, 2);
+    int varianten = (static_cast<int>(static_cast<uint16_t>(flags)) >> 2) & 0xF;
+    if (varianten <= 0) varianten = 1;
+    if (erste + varianten > src.m_nInfos) { error = "Variantenzahl passt nicht zur Quelle"; return false; }
+
+    if (m_nSamples + varianten > MAX_SAMPLES_PLAYABLE)
+    {
+        std::snprintf(buf, sizeof(buf),
+            "Level haette %d Samples - die Engine laedt hoechstens %d",
+            m_nSamples + varianten, MAX_SAMPLES_PLAYABLE);
+        error = buf;
+        return false;
+    }
+
+    // Quellsamples heraussuchen, bevor irgendetwas geschrieben wird.
+    std::vector<std::vector<uint8_t>> infos;
+    std::vector<std::pair<int32_t, std::vector<uint8_t>>> samples;
+    for (int k = 0; k < varianten; ++k)
+    {
+        const size_t o = src.m_infosAt + static_cast<size_t>(erste + k) * SZ_SAMPLE_INFO;
+        int16_t nummer = 0;
+        std::memcpy(&nummer, src.m_bytes.data() + o, 2);
+        if (nummer < 0 || nummer >= src.m_nSamples) { error = "Info zeigt auf ein Sample, das es nicht gibt"; return false; }
+
+        // Physisches Sample-Feld der Quelle ablaufen
+        size_t q = src.m_numSamplesAt + 4;
+        bool gefunden = false;
+        for (int32_t i = 0; i < src.m_nSamples; ++i)
+        {
+            if (q + 8 > src.m_bytes.size()) break;
+            int32_t uc = 0, cs = 0;
+            std::memcpy(&uc, src.m_bytes.data() + q, 4);
+            std::memcpy(&cs, src.m_bytes.data() + q + 4, 4);
+            q += 8;
+            if (cs < 0 || q + static_cast<size_t>(cs) > src.m_bytes.size()) break;
+            if (i == nummer)
+            {
+                samples.push_back({ uc, std::vector<uint8_t>(src.m_bytes.begin() + q,
+                                                             src.m_bytes.begin() + q + cs) });
+                gefunden = true;
+                break;
+            }
+            q += static_cast<size_t>(cs);
+        }
+        if (!gefunden) { error = "Sampledaten der Quelle nicht auffindbar"; return false; }
+
+        std::vector<uint8_t> info(src.m_bytes.begin() + o, src.m_bytes.begin() + o + SZ_SAMPLE_INFO);
+        const int16_t neuNummer = static_cast<int16_t>(m_nSamples + k);
+        std::memcpy(info.data(), &neuNummer, 2);        // auf den neuen Platz zeigen
+        infos.push_back(info);
+    }
+
+    // --- Infos einfuegen. Sie liegen IM Hauptblock, der waechst also. -----
+    const size_t einfuegenAn = m_infosAt + static_cast<size_t>(m_nInfos) * SZ_SAMPLE_INFO;
+    std::vector<uint8_t> roh;
+    for (const std::vector<uint8_t>& i : infos) roh.insert(roh.end(), i.begin(), i.end());
+    m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(einfuegenAn), roh.begin(), roh.end());
+
+    const int16_t neueLut = static_cast<int16_t>(m_nInfos);
+    std::memcpy(m_bytes.data() + m_lutAt + static_cast<size_t>(dstMap) * 2, &neueLut, 2);
+
+    m_nInfos += varianten;
+    std::memcpy(m_bytes.data() + m_numInfosAt, &m_nInfos, 4);
+
+    // Alles hinter der Einfuegestelle ist gewandert.
+    verschiebeSound(roh.size(), einfuegenAn);
+    if (m_itemCountOffset >= einfuegenAn) m_itemCountOffset += roh.size();
+
+    m_mainSize += roh.size();
+    const int32_t neueGroesse = static_cast<int32_t>(m_mainSize);
+    std::memcpy(m_bytes.data() + m_mainOffset - 8, &neueGroesse, 4);
+    std::memcpy(m_bytes.data() + m_mainOffset - 4, &neueGroesse, 4);
+
+    m_nSamples += varianten;
+    std::memcpy(m_bytes.data() + m_numSamplesInMainAt, &m_nSamples, 4);
+    std::memcpy(m_bytes.data() + m_numSamplesAt, &m_nSamples, 4);
+
+    // --- Sampledaten ans Dateiende ---------------------------------------
+    for (const auto& s : samples)
+    {
+        const int32_t uc = s.first, cs = static_cast<int32_t>(s.second.size());
+        const uint8_t* pu = reinterpret_cast<const uint8_t*>(&uc);
+        const uint8_t* pc = reinterpret_cast<const uint8_t*>(&cs);
+        m_bytes.insert(m_bytes.end(), pu, pu + 4);
+        m_bytes.insert(m_bytes.end(), pc, pc + 4);
+        m_bytes.insert(m_bytes.end(), s.second.begin(), s.second.end());
+    }
+    return true;
+}
+
+bool Tr5Level::reparse(std::string& error)
+{
+    // Nach einem Einfuegen sind ALLE gemerkten Offsets Vergangenheit. Statt
+    // jeden einzeln nachzuziehen - und einen zu vergessen -, wird die Datei
+    // schlicht neu gedeutet. Sie liegt im Speicher, das kostet nichts.
+    if (!readHeader(error)) return false;
+    return findItems(error);
+}
+
+bool Tr5Level::moveableInfo(int slotId, MoveableInfo& out) const
+{
+    for (int32_t i = 0; i < m_objects.count; ++i)
+    {
+        const size_t o = m_objects.dataAt + static_cast<size_t>(i) * 20;
+        int32_t slot; std::memcpy(&slot, m_bytes.data() + o, 4);
+        if (slot != slotId) continue;
+
+        int16_t v16; uint16_t u16v; int32_t v32; uint32_t u32v;
+        std::memcpy(&v16, m_bytes.data() + o + 4, 2);  out.nmeshes = v16;
+        std::memcpy(&v16, m_bytes.data() + o + 6, 2);  out.meshIndex = v16;
+        std::memcpy(&v32, m_bytes.data() + o + 8, 4);  out.boneIndex = v32;
+        std::memcpy(&u32v, m_bytes.data() + o + 12, 4); out.frameOffset = u32v;
+        std::memcpy(&u16v, m_bytes.data() + o + 16, 2);
+        out.animIndex = (u16v == 0xFFFF) ? -1 : static_cast<int>(u16v);
+        out.slot = slotId;
+        return true;
+    }
+    return false;
+}
+
+std::vector<int> Tr5Level::moveableSlots() const
+{
+    std::vector<int> raus;
+    for (int32_t i = 0; i < m_objects.count; ++i)
+    {
+        int32_t slot;
+        std::memcpy(&slot, m_bytes.data() + m_objects.dataAt + static_cast<size_t>(i) * 20, 4);
+        raus.push_back(slot);
+    }
+    return raus;
+}
+
+int32_t Tr5Level::debugReadBoneLong(long long i) const
+{
+    if (i < 0 || i >= m_bones.count) return 0;
+    int32_t v;
+    std::memcpy(&v, m_bytes.data() + m_bones.dataAt + static_cast<size_t>(i) * 4, 4);
+    return v;
+}
+
+int16_t Tr5Level::debugReadFrameShort(long long i) const
+{
+    if (i < 0 || i >= m_frames.count) return 0;
+    int16_t v;
+    std::memcpy(&v, m_bytes.data() + m_frames.dataAt + static_cast<size_t>(i) * 2, 2);
+    return v;
+}
+
+bool Tr5Level::debugMeshHeader(int ptrIndex, int16_t out[6]) const
+{
+    if (ptrIndex < 0 || ptrIndex >= m_meshPtrs.count) return false;
+    uint32_t ofs;
+    std::memcpy(&ofs, m_bytes.data() + m_meshPtrs.dataAt + static_cast<size_t>(ptrIndex) * 4, 4);
+    if (ofs + 12 > static_cast<uint32_t>(m_meshData.count) * 2) return false;
+    std::memcpy(out, m_bytes.data() + m_meshData.dataAt + ofs, 12);
+    return true;
+}
+
+//----------------------------------------------------------------------------
+// LaraType: das Outfit-Byte. Es liegt in den 32 Bytes zwischen den
+// Texturbloecken und dem Hauptblock (LaraType u16, WeatherType u16, Rest
+// Polsterung) - genau der Bereich, den readHeader mit "+ 32" ueberspringt.
+//----------------------------------------------------------------------------
+int Tr5Level::laraType() const
+{
+    if (m_mainOffset < 40) return -1;
+    int16_t v;
+    std::memcpy(&v, m_bytes.data() + m_mainOffset - 8 - 32, 2);
+    return v;
+}
+
+bool Tr5Level::setLaraType(int value)
+{
+    if (m_mainOffset < 40) return false;
+    const int16_t v = static_cast<int16_t>(value);
+    std::memcpy(m_bytes.data() + m_mainOffset - 8 - 32, &v, 2);
     return true;
 }
 

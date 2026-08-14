@@ -45,11 +45,23 @@ int main(int argc, char** argv)
 {
     if (argc < 5)
     {
-        std::printf("Aufruf: Randomize.exe <zonen.json> <levelinfo.json> <quelle.trc> <ziel.trc> [seed]\n");
+        std::printf("Aufruf: Randomize.exe <zonen.json> <levelinfo.json> <quelle.trc> <ziel.trc> [seed] [schalter...]\n");
+        std::printf("  Zahl:     Anzahl zusaetzlicher Gegner, 0 = keine (Vorgabe)\n");
+        std::printf("  nur:      Items unangetastet lassen - fuer Gegner-/Outfittests\n");
+        std::printf("  outfit:   zufaelliges Outfit (Lara_Andrea/Joby/Rich)\n");
         return 2;
     }
 
     const std::string seedText = (argc > 5) ? argv[5] : "Weihnachten";
+    int gegner = 0;
+    bool nurGegner = false, outfits = false;
+    for (int i = 6; i < argc; ++i)
+    {
+        const std::string s = argv[i];
+        if (s == "nur")         nurGegner = true;
+        else if (s == "outfit") outfits = true;
+        else                    gegner = std::atoi(argv[i]);
+    }
     const uint64_t seed = SeedText::parse(seedText);
 
     std::string err;
@@ -61,20 +73,45 @@ int main(int argc, char** argv)
     RandoInput in;
     if (!Rando::buildInput(zone, info, in, err)) { std::printf("Eingabe: %s\n", err.c_str()); return 1; }
 
+    // Level VOR der Platzierung oeffnen, nicht erst zum Patchen: wandert ein
+    // Trigger mit, muss die Platzierung wissen, welche Sektoren ihn aufnehmen
+    // koennen, und das steht nur in der Floordata.
+    Tr5Level lvl;
+    if (!lvl.load(toW(argv[3]), err)) { std::printf("Level laden: %s\n", err.c_str()); return 1; }
+    const int itemsBefore = lvl.itemCount();
+    Patch::markTriggerSafeSectors(lvl, in);
+
+    RandoOptions opt;
+    opt.addEnemies = gegner > 0;
+    opt.enemiesPerLevel = gegner;
+    opt.swapEnemies = gegner > 0;      // im CLI zusammen, fuer Tests reicht das
+    opt.randomOutfits = outfits;
+    if (nurGegner) { opt.shuffleKeyItems = false; opt.shuffleOtherPickups = false; }
+
     JsonValue patch;
     RandoReport rep;
-    if (!Rando::run(in, RandoOptions(), seed, patch, rep))
+    if (!Rando::run(in, opt, seed, patch, rep))
     {
         std::printf("Platzierung fehlgeschlagen: %s\n", rep.error.c_str());
         return 1;
     }
 
-    Tr5Level lvl;
-    if (!lvl.load(toW(argv[3]), err)) { std::printf("Level laden: %s\n", err.c_str()); return 1; }
-    const int itemsBefore = lvl.itemCount();
+    // Quell-Level fuer soundAdds: sie liegen neben der Quelldatei, die hier
+    // ohnehin uebergeben wird.
+    static std::wstring ordner = toW(argv[3]);
+    {
+        const size_t schnitt = ordner.find_last_of(L"\\/");
+        ordner = (schnitt == std::wstring::npos) ? L"." : ordner.substr(0, schnitt);
+    }
+    auto quelle = [](const std::string& name, void*) -> std::wstring {
+        std::wstring w;
+        for (char c : name) w.push_back(static_cast<wchar_t>(static_cast<unsigned char>(c)));
+        return ordner + L"\\" + w + L".trc";
+    };
 
     PatchReport pr;
-    if (!Patch::apply(lvl, patch, pr, err)) { std::printf("Patch: %s\n", err.c_str()); return 1; }
+    if (!Patch::apply(lvl, patch, pr, err, quelle)) { std::printf("Patch: %s\n", err.c_str()); return 1; }
+    for (const std::string& w : pr.warnings) std::printf("  Hinweis: %s\n", w.c_str());
     for (const std::string& w : pr.warnings) std::printf("  Hinweis: %s\n", w.c_str());
 
     if (!lvl.save(toW(argv[4]), err)) { std::printf("Speichern: %s\n", err.c_str()); return 1; }
@@ -84,6 +121,14 @@ int main(int argc, char** argv)
     std::printf("  Platzierung Key %d, sonstige %d, ortsfest %d, injiziert %d\n",
                 rep.movedKeyItems, rep.movedOtherItems, rep.pinnedItems, rep.injected);
     std::printf("  Patch       %d geaendert, %d hinzugefuegt\n", pr.edited, pr.added);
+    if (rep.enemiesAdded > 0 || pr.triggersAdded > 0 || pr.triggersMoved > 0)
+        std::printf("  Trigger     %d Gegner gesetzt, %d Trigger neu, %d verschoben\n",
+                    rep.enemiesAdded, pr.triggersAdded, pr.triggersMoved);
+    if (rep.enemiesSwapped > 0 || pr.soundsCopied > 0)
+        std::printf("  Gegner      %d getauscht, %d Samples uebernommen\n",
+                    rep.enemiesSwapped, pr.soundsCopied);
+    if (!pr.outfitFrom.empty())
+        std::printf("  Outfit      Lara aus %s\n", pr.outfitFrom.c_str());
     std::printf("  Items       %d -> %d\n", itemsBefore, lvl.itemCount());
 
     // Gegenprobe: das Ergebnis neu einlesen und pruefen, dass die Aenderungen
@@ -108,6 +153,20 @@ int main(int argc, char** argv)
         const int idx = static_cast<int>(edits[i]["index"].asInt());
         Tr5Item it{};
         if (!check.getItem(idx, it)) { ++wrong; continue; }
+
+        // Ein Gegnertausch traegt nur Index und typeId - keine Position, keine
+        // OCB. Der Positionsvergleich unten wuerde ihn gegen lauter Nullen
+        // pruefen und immer melden. Er bekommt seine eigene Pruefung.
+        if (!edits[i].has("x"))
+        {
+            if (edits[i].has("typeId") &&
+                it.objectNumber != static_cast<int16_t>(edits[i]["typeId"].asInt()))
+                ++wrong;
+            else
+                ++verified;
+            continue;
+        }
+
         if (it.roomNumber != static_cast<int16_t>(edits[i]["room"].asInt()) ||
             it.x != static_cast<int32_t>(edits[i]["x"].asInt()) ||
             it.y != static_cast<int32_t>(edits[i]["y"].asInt()) ||

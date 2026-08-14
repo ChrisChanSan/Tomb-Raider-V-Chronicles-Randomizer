@@ -34,6 +34,7 @@
 #include "core/Json.h"
 #include "core/Randomizer.h"
 #include "core/Rng.h"
+#include "core/ScriptDat.h"
 #include "core/Tr5Level.h"
 
 #include "imgui.h"
@@ -217,6 +218,7 @@ namespace
 
         bool haveBackup = false;
         int  skippedNonPlayable = 0;
+        std::string scriptNote;      // was SCRIPT.DAT beim letzten Lauf ergab
 
         // Ein Lauf laeuft nicht am Stueck durch, sondern schrittweise: pro Bild
         // ein Level. Sonst friert das Fenster fuer die Dauer aller 15 Level
@@ -240,8 +242,20 @@ namespace
         // Was soll ueberhaupt randomisiert werden?
         bool optOtherPickups = true;
         bool optKeyItems = true;
-        bool optEnemies = false;        // noch nicht verfuegbar, siehe unten
-        bool optEnemiesCross = false;   // desgleichen
+        // Zusaetzliche Gegner ins Level setzen. Welche Typen ein Level vertraegt,
+        // steht in der Kuration (ENEMY_TYPES in ZoneAnalyse.ps1) - ist sie leer,
+        // bleibt der Haken folgenlos.
+        bool optEnemies = false;
+        int  optEnemyCount = 6;
+
+        // Vorhandene Gegner untereinander tauschen.
+        bool optEnemySwap = false;
+        // Zufaellige Outfits (Lara_Andrea/Lara_Joby/Lara_Rich) je Abschnitt.
+        bool optOutfits = false;
+        // Dasselbe ueber Levelgrenzen hinweg. Braucht den Objekt-Transfer
+        // zwischen Leveln (Meshes, Animationen, Frames, Texturseiten) - den
+        // gibt es bisher nur in TombItemEdit2026, und das wird nie mitgeliefert.
+        bool optEnemiesCross = false;
 
         // Die Auswahl geht in den Seed ein. Sonst erzeugt derselbe Seed mit
         // anderen Haken ein anderes Spiel, und ein Fehlerbericht "Seed X ist
@@ -255,6 +269,11 @@ namespace
             if (optKeyItems)     flags |= 2;
             if (optEnemies)      flags |= 4;
             if (optEnemiesCross) flags |= 8;
+            if (optEnemySwap)    flags |= 16;
+            if (optOutfits)      flags |= 32;
+            // Die Anzahl gehoert genauso in den Seed wie die Haken: mit 3 und
+            // mit 12 Gegnern ist es nicht dasselbe Spiel.
+            flags |= static_cast<uint64_t>(optEnemyCount & 0xFF) << 8;
 
             // FNV-1a ueber Seed-Text und Auswahl, damit beides gleichwertig
             // eingeht - eine blosse XOR-Verknuepfung haette bei benachbarten
@@ -337,6 +356,60 @@ namespace
             setStatus(a, (a.haveBackup ? "Das Backup ist beschaedigt: " : "") + why, true);
     }
 
+    // SCRIPT.DAT: den Ireland-Leveln das Kind-Lara-Bit nehmen.
+    //
+    // Ohne das laeuft Lara in andy1, Andy2 und andy3 als Kind herum und kann
+    // ueberhaupt keine Waffe tragen - GF_YOUNGLARA schaltet an acht Stellen im
+    // Motor das Waffensystem ab. Nutzervorgabe: die Andy-Level muessen immer
+    // Waffen haben, sonst steht Lara einem Two Gun mit leeren Haenden gegenueber.
+    //
+    // Bedingungslos und wiederholbar: ein schon geloeschtes Bit noch einmal zu
+    // loeschen aendert nichts, und der Randomizer laeuft mehrfach ueber
+    // dieselbe Installation.
+    //
+    // Vor dem ersten Schreiben wird das Original daneben gesichert - dieselbe
+    // Zusage wie bei den Leveln: nichts geht unwiederbringlich verloren.
+    bool doScriptDat(App& a, std::string& err, std::string& info)
+    {
+        const std::wstring skript = PathUtil::join(a.dataDir(), L"SCRIPT.DAT");
+        if (!PathUtil::fileExists(skript))
+        {
+            info = "SCRIPT.DAT nicht gefunden - die Andy-Level bleiben Kind-Lara.";
+            return true;                      // kein Abbruchgrund
+        }
+
+        const std::wstring sicherung = PathUtil::join(a.backupDir(), L"SCRIPT.DAT");
+        if (PathUtil::dirExists(a.backupDir()) && !PathUtil::fileExists(sicherung))
+            CopyFileW(skript.c_str(), sicherung.c_str(), TRUE);
+
+        // Immer aus der Sicherung lesen, wenn es sie gibt: sonst arbeitet ein
+        // zweiter Lauf auf dem Ergebnis des ersten.
+        ScriptDat sd;
+        const std::wstring quelle = PathUtil::fileExists(sicherung) ? sicherung : skript;
+        if (!sd.load(quelle, err)) return false;
+
+        static const char* kIreland[] = { "andy1", "andy2", "andy3" };
+        int geaendert = 0, fehlend = 0;
+        for (const char* lv : kIreland)
+        {
+            bool ch = false;
+            if (!sd.clearLevelFlags(lv, ScriptDat::GF_YOUNGLARA, ch)) ++fehlend;
+            else if (ch) ++geaendert;
+        }
+
+        if (fehlend > 0)
+        {
+            info = "SCRIPT.DAT: " + std::to_string(fehlend) + " Ireland-Level nicht im Skript gefunden.";
+            return true;
+        }
+        if (!sd.save(skript, err)) return false;
+
+        info = geaendert > 0
+            ? "SCRIPT.DAT: Kind-Lara in " + std::to_string(geaendert) + " Ireland-Leveln abgeschaltet."
+            : "SCRIPT.DAT: Kind-Lara war bereits abgeschaltet.";
+        return true;
+    }
+
     // Ein Level randomisieren. Genau dieselben Schritte wie Randomize.cpp.
     bool doLevel(App& a, LevelRow& row, uint64_t seed, std::string& err)
     {
@@ -350,24 +423,50 @@ namespace
         RandoInput in;
         if (!Rando::buildInput(zone, info, in, err)) return false;
 
+        // Das Level wird VOR der Platzierung geoeffnet, nicht erst zum Patchen.
+        // Grund ist der gekoppelte Triggerzug: welche Sektoren einen Trigger
+        // aufnehmen koennen, steht nur in der Floordata, und die Platzierung
+        // muss es wissen, bevor sie waehlt - sonst faellt es erst beim Patchen
+        // auf, und dann ist der Lauf schon halb gelaufen.
+        Tr5Level lvl;
+        const std::wstring target = PathUtil::join(a.dataDir(), PathUtil::widen(row.name));
+        if (!lvl.load(target, err)) return false;
+        Patch::markTriggerSafeSectors(lvl, in);
+
         RandoOptions opt;
         opt.shuffleKeyItems = a.optKeyItems;
         opt.shuffleOtherPickups = a.optOtherPickups;
+        opt.addEnemies = a.optEnemies;
+        opt.enemiesPerLevel = a.optEnemyCount;
+        opt.swapEnemies = a.optEnemySwap;
+        opt.randomOutfits = a.optOutfits;
 
         JsonValue patch;
         RandoReport rep;
         if (!Rando::run(in, opt, seed, patch, rep)) { err = rep.error; return false; }
 
-        Tr5Level lvl;
-        const std::wstring target = PathUtil::join(a.dataDir(), PathUtil::widen(row.name));
-        if (!lvl.load(target, err)) return false;
+        // Quell-Level fuer soundAdds: immer das Backup, nie data\ - dort koennen
+        // schon randomisierte Level liegen, und aus denen Samples zu holen waere
+        // vom Seed nicht mehr nachstellbar.
+        static std::wstring soundQuelle;
+        soundQuelle = a.haveBackup ? a.backupDir() : a.dataDir();
+        auto quelle = [](const std::string& name, void*) -> std::wstring {
+            return PathUtil::join(soundQuelle, PathUtil::widen(name) + L".trc");
+        };
 
         PatchReport pr;
-        if (!Patch::apply(lvl, patch, pr, err)) return false;
+        if (!Patch::apply(lvl, patch, pr, err, quelle)) return false;
+        for (const std::string& w : pr.warnings) rep.notes.push_back(w);
         if (!lvl.save(target, err)) return false;
 
-        char buf[128];
-        std::snprintf(buf, sizeof(buf), "%d bewegt, %d neu", pr.edited, pr.added);
+        char buf[200];
+        int len = std::snprintf(buf, sizeof(buf), "%d bewegt, %d neu", pr.edited, pr.added);
+        if (rep.enemiesAdded > 0)
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Gegner", rep.enemiesAdded);
+        if (pr.triggersMoved > 0)
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Trigger mit", pr.triggersMoved);
+        if (!pr.outfitFrom.empty())
+            std::snprintf(buf + len, sizeof(buf) - len, ", Outfit %s", pr.outfitFrom.c_str());
         row.result = buf;
         return true;
     }
@@ -512,6 +611,17 @@ namespace
                 a.phase = App::Phase::Idle;
                 return;
             }
+            // SCRIPT.DAT genau hier: einmal je Lauf, bevor das erste Level
+            // angefasst wird. Scheitert es, ist das kein Grund abzubrechen -
+            // die Level sind davon unabhaengig.
+            {
+                std::string sErr, sInfo;
+                if (!doScriptDat(a, sErr, sInfo))
+                    a.scriptNote = "SCRIPT.DAT: " + sErr;
+                else
+                    a.scriptNote = sInfo;
+            }
+
             a.phase = App::Phase::Levels;
             a.stepIndex = 0;
             return;
@@ -763,17 +873,45 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::Checkbox("Ausruestung (Waffen, Munition, Medipacks)", &a.optOtherPickups);
     ImGui::Checkbox("Schluessel- und Puzzle-Items", &a.optKeyItems);
 
-    ImGui::BeginDisabled(true);
-    ImGui::Checkbox("Gegner", &a.optEnemies);
+    ImGui::Checkbox("Zusaetzliche Gegner ins Level setzen", &a.optEnemies);
     ImGui::Indent();
-    ImGui::RadioButton("nur levelinterne Gegner tauschen", true);
-    ImGui::RadioButton("levelweit tauschen", false);
-    ImGui::Unindent();
+    ImGui::BeginDisabled(!a.optEnemies);
+    ImGui::SetNextItemWidth(160.0f);
+    ImGui::SliderInt("pro Level", &a.optEnemyCount, 1, 20);
     ImGui::EndDisabled();
-    ImGui::TextDisabled("   Gegner kommen spaeter - levelweites Tauschen braucht zusaetzlich");
-    ImGui::TextDisabled("   den Objekt-Transfer zwischen Leveln.");
+    ImGui::TextDisabled("Jeder bekommt einen eigenen Trigger, etwa drei Sektoren vor sich");
+    ImGui::TextDisabled("auf Laras Weg - nie auf seinem eigenen Feld, sonst spawnt er in ihr.");
+    ImGui::TextDisabled("Welche Gegnertypen ein Level vertraegt, ist handkuriert; ist die Liste");
+    ImGui::TextDisabled("leer, bleibt der Haken folgenlos.");
+    ImGui::Unindent();
 
-    if (!a.optOtherPickups && !a.optKeyItems)
+    ImGui::Checkbox("Vanilla-Gegnermix", &a.optEnemySwap);
+    ImGui::Indent();
+    ImGui::TextDisabled("Die Gegner, die im Level ohnehin stehen, tauschen die Rollen.");
+    ImGui::TextDisabled("Nur die Art wechselt, der Item-Index bleibt - jeder Gegner wacht");
+    ImGui::TextDisabled("also weiter dort auf, wo sein Trigger es vorsieht. Anzahl und");
+    ImGui::TextDisabled("Verteilung bleiben gleich, gescriptete Gegner bleiben unberuehrt.");
+    ImGui::Unindent();
+
+    ImGui::Checkbox("Zufaellige Outfits", &a.optOutfits);
+    ImGui::Indent();
+    ImGui::TextDisabled("Jeder Abschnitt bekommt zufaellig Lara_Andrea, Lara_Joby oder");
+    ImGui::TextDisabled("Lara_Rich (Catsuit). Uebertragen werden nur Haut und Kopf (Slots");
+    ImGui::TextDisabled("8/9/10) samt Outfit-Byte - nie Slot 0, der traegt die Animationen.");
+    ImGui::TextDisabled("joby4 behaelt den Taucheranzug; die andy-Level bekommen immer eine");
+    ImGui::TextDisabled("erwachsene Lara (Kind-Lara kann keine Waffen tragen).");
+    ImGui::Unindent();
+
+    ImGui::BeginDisabled(true);
+    ImGui::Checkbox("Cross-Gegnermix", &a.optEnemiesCross);
+    ImGui::EndDisabled();
+    ImGui::Indent();
+    ImGui::TextDisabled("Jeder Gegner in jedem Level. Der Modelltransfer dafuer steht seit");
+    ImGui::TextDisabled("heute (die Waffen nutzen ihn schon) - es fehlt noch die Kuration,");
+    ImGui::TextDisabled("welcher Gegner in welches Level darf, ohne es zu sprengen.");
+    ImGui::Unindent();
+
+    if (!a.optOtherPickups && !a.optKeyItems && !a.optEnemies && !a.optEnemySwap && !a.optOutfits)
         ImGui::TextColored(ImVec4(1, .5f, .3f, 1), "Nichts ausgewaehlt - es wuerde nur zurueckgesetzt.");
 
     // --- 4. Level ---

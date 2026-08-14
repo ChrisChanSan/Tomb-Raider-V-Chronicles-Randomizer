@@ -64,10 +64,18 @@ std::set<int> Rando::findTriggerPinnedItems(const JsonValue& levelInfo,
 {
     std::set<int> pinned;
 
-    // Item-Index -> Sektor, um zu pruefen, ob ein per Object-Kommando genanntes
-    // Item wirklich auf dem Triggersektor liegt. Nur dann ist es das Item, das
-    // der Pickup-Trigger meint - die uebrigen Object-Kommandos sind seine
-    // Wirkung (Tueren, Gegner, Flipmaps).
+    // Welches Item der Pickup-Trigger meint, steht in seinem Referenzwort
+    // ("refItem"), nicht in der Befehlsliste - die Befehle sind ausnahmslos
+    // seine Wirkung (Tueren, Gegner, Flipmaps).
+    //
+    // Frueher stand hier ein Umweg: das gemeinte Item wurde daran erkannt, dass
+    // ein Object-Befehl auf ein Item auf dem Triggersektor zeigt. Das lieferte
+    // die richtige Antwort, aber aus dem falschen Grund - der Exporter las das
+    // Referenzwort damals gar nicht und schob es als ersten Object-Befehl in
+    // die Liste. Seit der Exporter es als refItem fuehrt, ist der Umweg leer,
+    // und dieselbe Schleife wuerde ohne diese Umstellung KEIN Item mehr
+    // festhalten. Die Karte bleibt trotzdem stehen: sie wird gebraucht, um den
+    // Typ der per Befehl geweckten Objekte nachzuschlagen (Schwarmgetier).
     std::map<int, const JsonValue*> byIndex;
     const JsonValue& items = levelInfo["items"];
     for (size_t i = 0; i < items.size(); ++i)
@@ -79,11 +87,22 @@ std::set<int> Rando::findTriggerPinnedItems(const JsonValue& levelInfo,
         const JsonValue& tr = trigs[t];
         if (tr["triggerType"].asString() != "Pickup") continue;
 
+        // Welches Item ist gemeint? Zwei Exportstaende sind zu bedienen, und ein
+        // Stichtag waere hier gefaehrlich: laege eine aeltere Datei daneben,
+        // haette KEIN Trigger mehr ein Item festgehalten, und ortsgebundene
+        // Items waeren klanglos in den Pool gerutscht.
+        //
+        // Neuer Export: das Referenzwort steht als "refItem" da.
+        // Aelterer Export: das Wort wurde als erster Object-Befehl ausgegeben.
+        //   Es zeigt dann auf ein Item, das auf dem Triggersektor liegt - und
+        //   genau daran ist es erkennbar.
         const int trRoom = static_cast<int>(tr["room"].asInt());
         const int trSx = static_cast<int>(tr["sectorX"].asInt());
         const int trSz = static_cast<int>(tr["sectorZ"].asInt());
 
-        std::vector<int> onSector;
+        const JsonValue& ref = tr["refItem"];
+        int refItem = ref.isNull() ? -1 : static_cast<int>(ref.asInt());
+
         std::vector<std::string> effects;
         bool onlySoundtrack = true;
 
@@ -100,17 +119,20 @@ std::set<int> Rando::findTriggerPinnedItems(const JsonValue& levelInfo,
                 auto it = byIndex.find(idx);
                 if (it != byIndex.end())
                 {
-                    const JsonValue& item = *it->second;
-                    if (static_cast<int>(item["room"].asInt()) == trRoom &&
-                        static_cast<int>(item["sectorX"].asInt()) == trSx &&
-                        static_cast<int>(item["sectorZ"].asInt()) == trSz)
+                    const JsonValue& target = *it->second;
+
+                    if (refItem < 0 &&
+                        static_cast<int>(target["room"].asInt()) == trRoom &&
+                        static_cast<int>(target["sectorX"].asInt()) == trSx &&
+                        static_cast<int>(target["sectorZ"].asInt()) == trSz)
                     {
-                        // Das ist das aufzunehmende Item selbst, keine Wirkung.
-                        onSector.push_back(idx);
+                        // Das ist das Referenzwort des aelteren Exports, kein
+                        // Befehl. Nicht als Wirkung zaehlen.
+                        refItem = idx;
                         continue;
                     }
                     // Schwarmgetier zaehlt wie Musik: nicht festhaltend.
-                    harmless = isDespawningSwarm(static_cast<int>(item["typeId"].asInt()));
+                    harmless = isDespawningSwarm(static_cast<int>(target["typeId"].asInt()));
                 }
             }
 
@@ -118,7 +140,8 @@ std::set<int> Rando::findTriggerPinnedItems(const JsonValue& levelInfo,
             if (type != "PlaySoundtrack" && !harmless) onlySoundtrack = false;
         }
 
-        if (onSector.empty()) continue;
+        if (refItem < 0) continue;                  // kein deutbarer Pickup-Trigger
+        const std::vector<int> onSector(1, refItem);
 
         // Ein Trigger, dessen einzige weitere Wirkung Musik ist, haelt das Item
         // nicht fest - bewusst akzeptiertes Opfer, damit z.B. Andrea2s
@@ -165,6 +188,16 @@ bool Rando::buildInput(const JsonValue& zoneExport,
         s.sectorZ = static_cast<int>(secs[i]["sectorZ"].asInt());
         s.zone = static_cast<int>(secs[i]["zone"].asInt());
         s.floorY = static_cast<int>(secs[i]["floorY"].asInt());
+
+        // Anmarschsektoren stehen als "raum,x,z" da, in Vorzugsreihenfolge.
+        const JsonValue& ap = secs[i]["approach"];
+        for (size_t a = 0; a < ap.size(); ++a)
+        {
+            int r = 0, x = 0, z = 0;
+            if (std::sscanf(ap[a].asString().c_str(), "%d,%d,%d", &r, &x, &z) == 3)
+                s.approach.push_back(secKey(r, x, z));
+        }
+
         out.sectors.push_back(s);
     }
 
@@ -199,6 +232,23 @@ bool Rando::buildInput(const JsonValue& zoneExport,
     const JsonValue& fx = zoneExport["fixedItems"];
     for (size_t i = 0; i < fx.size(); ++i) out.fixedItems.push_back(static_cast<int>(fx[i]["item"].asInt()));
     std::sort(out.fixedItems.begin(), out.fixedItems.end());
+
+    const JsonValue& et = zoneExport["enemyTypes"];
+    for (size_t i = 0; i < et.size(); ++i)
+        out.enemyTypes.push_back(static_cast<int>(et[i]["typeId"].asInt()));
+    std::sort(out.enemyTypes.begin(), out.enemyTypes.end());
+
+    const JsonValue& es = zoneExport["enemySounds"];
+    for (size_t i = 0; i < es.size(); ++i)
+    {
+        EnemySound s;
+        s.typeId = static_cast<int>(es[i]["typeId"].asInt());
+        s.map = static_cast<int>(es[i]["map"].asInt(-1));
+        s.fromLevel = es[i]["fromLevel"].asString();
+        s.fromMap = static_cast<int>(es[i]["fromMap"].asInt(-1));
+        if (s.map >= 0 && s.fromMap >= 0 && !s.fromLevel.empty())
+            out.enemySounds.push_back(s);
+    }
 
     const JsonValue& nw = zoneExport["noWeaponRooms"];
     for (size_t i = 0; i < nw.size(); ++i) out.noWeaponRooms.insert(static_cast<int>(nw[i].asInt()));
@@ -268,6 +318,57 @@ bool Rando::buildInput(const JsonValue& zoneExport,
               [](const LevelItem& a, const LevelItem& b) { return a.index < b.index; });
 
     out.triggerPinned = findTriggerPinnedItems(levelInfo);
+
+    // --- Gekoppelte Trigger ---
+    //
+    // Aus der Kuration kommt nur der Item-Index. Wo der Trigger heute liegt,
+    // wird hier aus den Leveldaten gelesen und nicht von Hand gepflegt: eine
+    // eingetragene Koordinate waere genau die Angabe, die beim naechsten
+    // Levelumbau still falsch wird.
+    const JsonValue& ct = zoneExport["coupledTriggers"];
+    for (size_t i = 0; i < ct.size(); ++i)
+    {
+        const int wanted = static_cast<int>(ct[i]["item"].asInt(-1));
+        if (wanted < 0) continue;
+
+        const JsonValue& trigs = levelInfo["triggers"];
+        for (size_t t = 0; t < trigs.size(); ++t)
+        {
+            const JsonValue& tr = trigs[t];
+            if (tr["triggerType"].asString() != "Pickup") continue;
+
+            // Dasselbe Zwei-Wege-Lesen wie in findTriggerPinnedItems: neuer
+            // Export fuehrt das Referenzwort als refItem, aelterer als ersten
+            // Object-Befehl auf ein Item des eigenen Sektors.
+            int ref = tr["refItem"].isNull() ? -1 : static_cast<int>(tr["refItem"].asInt());
+            if (ref < 0)
+            {
+                const int trRoom = static_cast<int>(tr["room"].asInt());
+                const int trSx = static_cast<int>(tr["sectorX"].asInt());
+                const int trSz = static_cast<int>(tr["sectorZ"].asInt());
+                const JsonValue& cmds = tr["commands"];
+                for (size_t c = 0; c < cmds.size() && ref < 0; ++c)
+                {
+                    if (cmds[c]["type"].asString() != "Object") continue;
+                    const int idx = static_cast<int>(cmds[c]["index"].asInt());
+                    for (const LevelItem& li : out.items)
+                        if (li.index == idx && li.room == trRoom &&
+                            li.sectorX == trSx && li.sectorZ == trSz)
+                        { ref = idx; break; }
+                }
+            }
+            if (ref != wanted) continue;
+
+            CoupledTrigger c;
+            c.itemIndex = wanted;
+            c.room = static_cast<int>(tr["room"].asInt());
+            c.sectorX = static_cast<int>(tr["sectorX"].asInt());
+            c.sectorZ = static_cast<int>(tr["sectorZ"].asInt());
+            out.coupledTriggers.push_back(c);
+            break;
+        }
+    }
+
     return true;
 }
 
@@ -392,6 +493,19 @@ bool Rando::run(const RandoInput& in,
     std::set<int> pinned(in.triggerPinned);
     for (int i : in.fixedItems) pinned.insert(i);
 
+    // Der gekoppelte Zug hebt genau die Fesselung auf, die Regel 2 anlegt: das
+    // Item darf wandern, weil sein Trigger mitkommt. Die Handkuration
+    // (fixedItems) bleibt davon unberuehrt - wer dort steht, bleibt liegen,
+    // egal was mit seinem Trigger ginge.
+    std::map<int, const CoupledTrigger*> coupled;
+    for (const CoupledTrigger& c : in.coupledTriggers)
+    {
+        if (std::find(in.fixedItems.begin(), in.fixedItems.end(), c.itemIndex) != in.fixedItems.end())
+            continue;
+        coupled[c.itemIndex] = &c;
+        pinned.erase(c.itemIndex);
+    }
+
     // OCB 5 und 10: solche Pickups sind in Vanilla gar nicht aufnehmbar.
     // InitialisePickup (game/init.cpp:470) setzt ein OCB-5-Item auf
     // ITEM_INVISIBLE und kehrt zurueck; PickUpCollision (game/pickup.cpp:737)
@@ -513,6 +627,11 @@ bool Rando::run(const RandoInput& in,
         fin.y = py;
         fin.z = pz;
         fin.ocb = neueOcb;
+        // Sektor mitfuehren, nicht nur die Weltkoordinate: der gekoppelte
+        // Triggerzug braucht ihn, und ihn hinterher aus x/z zurueckzurechnen
+        // waere eine zweite Quelle derselben Wahrheit.
+        fin.sectorX = s.sectorX;
+        fin.sectorZ = s.sectorZ;
 
         JsonValue e = JsonValue::makeObject();
         e.set("index", JsonValue::makeInt(it.index));
@@ -534,9 +653,17 @@ bool Rando::run(const RandoInput& in,
 
         auto fi = forceIsland.find(it.typeId);
         const bool mustBeOnIsland = (fi != forceIsland.end() && fi->second == it.index);
+        // Wandert der Trigger mit, kommt nur ein Sektor in Frage, der ihn auch
+        // aufnehmen kann. Sonst waehlt die Platzierung eine Stelle, an der der
+        // Patch spaeter abbricht - und ein abgebrochener Patch mitten im Lauf
+        // ist schlechter als eine engere Auswahl.
+        const bool needsTriggerRoom = coupled.count(it.index) != 0;
+
         for (const ZoneSector& s : pool)
         {
-            if (used.count(secKey(s.room, s.sectorX, s.sectorZ))) continue;
+            const long long sk = secKey(s.room, s.sectorX, s.sectorZ);
+            if (used.count(sk)) continue;
+            if (needsTriggerRoom && !in.triggerSafeSectors.count(sk)) continue;
             if (!Rando::sectorAllowedFor(in, k, s, it.typeId, mustBeOnIsland)) continue;
             out.push_back(&s);
         }
@@ -646,6 +773,196 @@ bool Rando::run(const RandoInput& in,
             : fmt("Injiziert: typeId %d in Raum %d (%s)", j.typeId, j.room, j.reason.c_str()));
     }
 
+    // --- Vorhandene Gegner tauschen ---
+    //
+    // Nur die ART wechselt, der Item-Index bleibt. Das ist der ganze Trick:
+    // Trigger sprechen ihre Gegner ueber "Object N" an, also ueber den Index.
+    // Bleibt der, wacht jeder Gegner weiter genau dort und genau dann auf, wo
+    // und wann Core es vorgesehen hat - der Fortschritt im Level kann sich
+    // nicht verschieben. Ein Entfernen oder Hinzufuegen an dieser Stelle waere
+    // etwas voellig anderes.
+    //
+    // Getauscht wird nur unter den kuratierten Typen des Levels. Damit sind
+    // Chef, Scientist, Guardian und die gescripteten Faelle von selbst aussen
+    // vor - sie stehen dort nicht drin.
+    if (opt.swapEnemies && in.enemyTypes.size() > 1)
+    {
+        std::set<int> erlaubt(in.enemyTypes.begin(), in.enemyTypes.end());
+
+        std::vector<int> indizes;                 // Item-Indizes der Tauschbaren
+        std::vector<int> arten;                   // ihre Typen, gleiche Reihenfolge
+        for (const LevelItem& it : in.items)
+        {
+            if (!erlaubt.count(it.typeId)) continue;
+            // Handkuration schlaegt alles: was dort steht, bleibt wie es ist.
+            if (std::find(in.fixedItems.begin(), in.fixedItems.end(), it.index) != in.fixedItems.end())
+                continue;
+            indizes.push_back(it.index);
+            arten.push_back(it.typeId);
+        }
+
+        if (indizes.size() > 1)
+        {
+            // Fisher-Yates ueber die Typen. Der RNG ist derselbe wie ueberall,
+            // der Seed bestimmt das Ergebnis also vollstaendig.
+            for (size_t i = arten.size() - 1; i > 0; --i)
+            {
+                const size_t j = static_cast<size_t>(rng.below(i + 1));
+                std::swap(arten[i], arten[j]);
+            }
+
+            for (size_t i = 0; i < indizes.size(); ++i)
+            {
+                std::map<int, LevelItem>::iterator f = finalOf.find(indizes[i]);
+                if (f == finalOf.end() || f->second.typeId == arten[i]) continue;
+
+                JsonValue e = JsonValue::makeObject();
+                e.set("index", JsonValue::makeInt(indizes[i]));
+                e.set("typeId", JsonValue::makeInt(arten[i]));
+                edits.push(e);
+
+                report.notes.push_back(fmt("Gegner Item %d: typeId %d -> %d",
+                                           indizes[i], f->second.typeId, arten[i]));
+                f->second.typeId = arten[i];
+                ++report.enemiesSwapped;
+            }
+        }
+        else
+            report.notes.push_back(fmt("Gegnertausch: nur %d tauschbare Gegner im Level, nichts zu mischen.",
+                                       static_cast<int>(indizes.size())));
+    }
+
+    // --- Zusaetzliche Gegner ---
+    //
+    // Zwei Dinge muessen zusammenpassen, und beide sind Nutzervorgaben aus
+    // Beobachtungen im Spiel:
+    //
+    //  1. Der Trigger darf NIE auf dem Gegnersektor liegen. Sonst spawnt der
+    //     Gegner in Lara hinein.
+    //  2. Er muss trotzdem sicher ueberquert werden, sonst wacht der Gegner nie
+    //     auf.
+    //
+    // Beides erfuellt der Anmarschsektor: er liegt etwa drei Schritte vor dem
+    // Gegner auf Laras Erstzugangsweg. Ausgerechnet wird er im Zonen-Export, wo
+    // der Erstzugangsbaum liegt - hier kommt nur noch die fertige Antwort an.
+    //
+    // Der Trigger bekommt OneShot. Das ist keine Formalie: _TestTriggers
+    // (control.cpp:2415) gibt das Bit als IFL_INVISIBLE ans Item weiter, und
+    // Larson ist ohne es gar nicht toetbar (pierre.cpp:68).
+    JsonValue trigAdds = JsonValue::makeArray();
+    if (opt.addEnemies && opt.enemiesPerLevel > 0 && !in.enemyTypes.empty())
+    {
+        // Die Engine haelt items[] als festes Feld von 256 Eintraegen
+        // (MAX_ITEMS, global/types.h; Tr5Level prueft es beim Anhaengen). rich2
+        // liegt mit 248 schon dicht darunter, deshalb hier gedeckelt statt
+        // gehofft - ein abgewiesener Patch mitten im Lauf waere schlimmer als
+        // ein Gegner weniger.
+        const int platzFrei = 256 - static_cast<int>(in.items.size()) - static_cast<int>(adds.size());
+
+        // Wohin darf ein Gegner? Auf einen freien Sektor, dessen Anmarsch
+        // ebenfalls frei ist und einen Trigger vertraegt.
+        //
+        // ALLE tauglichen Anmarschsektoren mitfuehren, nicht nur den besten:
+        // zwei verschiedene Gegnerfelder koennen denselben Anmarschsektor
+        // haben. Wer sich hier auf einen festlegt, merkt beim zweiten Gegner
+        // nicht mehr, dass dessen Trigger schon vergeben ist - und setzt zwei
+        // Trigger auf ein Feld. Beim Patchen fliegt das dann auf, und zwar
+        // nicht als "ein Gegner weniger", sondern als verlorenes Level.
+        struct Platz { const ZoneSector* s; std::vector<long long> trigger; };
+        std::vector<Platz> plaetze;
+        for (const ZoneSector& s : pool)
+        {
+            const long long sk = secKey(s.room, s.sectorX, s.sectorZ);
+            if (used.count(sk)) continue;
+            if (!origin.count(s.room)) continue;
+
+            Platz p;
+            p.s = &s;
+            for (long long a : s.approach)
+            {
+                if (a == sk || used.count(a)) continue;
+                if (!in.triggerSafeSectors.count(a)) continue;
+                p.trigger.push_back(a);
+            }
+            if (!p.trigger.empty()) plaetze.push_back(p);
+        }
+
+        int wieViele = opt.enemiesPerLevel;
+        if (wieViele > platzFrei) wieViele = platzFrei;
+        if (wieViele > static_cast<int>(plaetze.size())) wieViele = static_cast<int>(plaetze.size());
+
+        const int wollte = opt.enemiesPerLevel;
+        const int plaetzeVorher = static_cast<int>(plaetze.size());
+
+        int gesetzt = 0;
+        while (gesetzt < wieViele && !plaetze.empty())
+        {
+            const size_t pick = static_cast<size_t>(rng.below(plaetze.size()));
+            const Platz p = plaetze[pick];
+            plaetze.erase(plaetze.begin() + static_cast<ptrdiff_t>(pick));
+
+            // Erst hier entscheidet sich der Trigger: bis zur Auswahl koennen
+            // andere Gegner Sektoren belegt haben.
+            long long trigger = -1;
+            for (long long a : p.trigger)
+                if (!used.count(a)) { trigger = a; break; }
+            if (trigger < 0) continue;          // alle Anmarschfelder vergeben
+            ++gesetzt;
+
+            const int typeId = in.enemyTypes[static_cast<size_t>(rng.below(in.enemyTypes.size()))];
+            const RoomOrigin& ro = origin[p.s->room];
+
+            // Der Index, den das neue Item bekommt: itemAdds haengt hinten an,
+            // in genau dieser Reihenfolge.
+            const int neuerIndex = static_cast<int>(in.items.size()) + static_cast<int>(adds.size());
+
+            JsonValue a = JsonValue::makeObject();
+            a.set("typeId", JsonValue::makeInt(typeId));
+            a.set("room", JsonValue::makeInt(p.s->room));
+            a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + p.s->sectorX * 1024 + 512));
+            a.set("y", JsonValue::makeInt(p.s->floorY));
+            a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + p.s->sectorZ * 1024 + 512));
+            // OCB 0: bei Larson setzt eine OCB != 0 ai_bits = GUARD, und dann
+            // sucht er AI-Objekte, die an einer neuen Stelle nicht stehen
+            // (pierre.cpp:84). Fuer neu gesetzte Gegner ist 0 die einzige
+            // Einstellung, die ueberall dasselbe bedeutet.
+            a.set("ocb", JsonValue::makeInt(0));
+            a.set("angle", JsonValue::makeInt(static_cast<int64_t>(rng.below(4)) * 16384 - 32768));
+            adds.push(a);
+
+            const int tr = static_cast<int>(trigger >> 32);
+            const int tx = static_cast<int>((trigger >> 16) & 0xFFFF);
+            const int tz = static_cast<int>(trigger & 0xFFFF);
+
+            JsonValue cmd = JsonValue::makeObject();
+            cmd.set("type", JsonValue::makeInt(0));          // TO_OBJECT
+            cmd.set("param", JsonValue::makeInt(neuerIndex));
+            JsonValue cmdList = JsonValue::makeArray();
+            cmdList.push(cmd);
+
+            JsonValue t = JsonValue::makeObject();
+            t.set("room", JsonValue::makeInt(tr));
+            t.set("sectorX", JsonValue::makeInt(tx));
+            t.set("sectorZ", JsonValue::makeInt(tz));
+            t.set("commands", cmdList);
+            trigAdds.push(t);
+
+            used.insert(secKey(p.s->room, p.s->sectorX, p.s->sectorZ));
+            used.insert(trigger);
+            ++report.enemiesAdded;
+            report.notes.push_back(fmt("Gegner typeId %d als Item %d auf %d,%d,%d - Trigger auf %d,%d,%d",
+                                       typeId, neuerIndex, p.s->room, p.s->sectorX, p.s->sectorZ, tr, tx, tz));
+        }
+
+        // Der Lauf setzt so viele, wie das Level hergibt - fehlende Plaetze
+        // sind kein Fehler, sondern eine Eigenschaft des Levels. Gemeldet wird
+        // es trotzdem, sonst wundert sich jemand ueber die Zahl.
+        if (report.enemiesAdded < wollte)
+            report.notes.push_back(fmt("Nur %d von %d zusaetzlichen Gegnern gesetzt "
+                                       "(%d Plaetze zur Auswahl, %d Item-Slots frei).",
+                                       report.enemiesAdded, wollte, plaetzeVorher, platzFrei));
+    }
+
     // --- Was traegt am Ende wer? ---
     //
     // GetCarriedItems (game/setup.cpp:1925) laeuft beim Levelstart ueber alle
@@ -699,9 +1016,144 @@ bool Rando::run(const RandoInput& in,
         }
     }
 
+    // --- Gekoppelte Trigger ---
+    //
+    // Erst hier, weil erst jetzt feststeht, wo die Items gelandet sind. Ist ein
+    // gekoppeltes Item liegen geblieben, gibt es auch nichts zu verschieben -
+    // der Trigger liegt dann noch auf seinem Vanilla-Sektor und ist richtig.
+    JsonValue trigMoves = JsonValue::makeArray();
+    for (const auto& kv : coupled)
+    {
+        const CoupledTrigger& c = *kv.second;
+        std::map<int, LevelItem>::const_iterator f = finalOf.find(c.itemIndex);
+        if (f == finalOf.end()) continue;
+        const LevelItem& fin = f->second;
+
+        if (fin.room == c.room && fin.sectorX == c.sectorX && fin.sectorZ == c.sectorZ)
+        {
+            report.notes.push_back(fmt("Item %d blieb auf seinem Sektor - Trigger bleibt ebenfalls.", c.itemIndex));
+            continue;
+        }
+
+        JsonValue m = JsonValue::makeObject();
+        m.set("fromRoom", JsonValue::makeInt(c.room));
+        m.set("fromSectorX", JsonValue::makeInt(c.sectorX));
+        m.set("fromSectorZ", JsonValue::makeInt(c.sectorZ));
+        m.set("toRoom", JsonValue::makeInt(fin.room));
+        m.set("toSectorX", JsonValue::makeInt(fin.sectorX));
+        m.set("toSectorZ", JsonValue::makeInt(fin.sectorZ));
+        trigMoves.push(m);
+        report.notes.push_back(fmt("Item %d wandert nach %d,%d,%d - sein Pickup-Trigger zieht von %d,%d,%d mit.",
+                                   c.itemIndex, fin.room, fin.sectorX, fin.sectorZ,
+                                   c.room, c.sectorX, c.sectorZ));
+    }
+
+    // --- Fehlende Sounds anfordern ---
+    //
+    // Nur fuer Typen, die nach diesem Lauf tatsaechlich im Level stehen. Ein
+    // Sample fuer einen Gegner zu holen, den es hier gar nicht gibt, waere
+    // sichtbarer Ballast in der Datei.
+    JsonValue soundAdds = JsonValue::makeArray();
+    if (!in.enemySounds.empty())
+    {
+        std::set<int> vorhanden;
+        for (const auto& kv : finalOf) vorhanden.insert(kv.second.typeId);
+        for (size_t i = 0; i < adds.size(); ++i)
+            vorhanden.insert(static_cast<int>(adds[i]["typeId"].asInt()));
+
+        for (const EnemySound& s : in.enemySounds)
+        {
+            if (!vorhanden.count(s.typeId)) continue;
+            JsonValue a = JsonValue::makeObject();
+            a.set("map", JsonValue::makeInt(s.map));
+            a.set("fromLevel", JsonValue::makeString(s.fromLevel));
+            a.set("fromMap", JsonValue::makeInt(s.fromMap));
+            soundAdds.push(a);
+            report.notes.push_back(fmt("Sound fuer typeId %d: Map %d aus %s Map %d",
+                                       s.typeId, s.map, s.fromLevel.c_str(), s.fromMap));
+        }
+    }
+
+    // --- Outfit wuerfeln ---
+    //
+    // Die Wahl faellt hier, damit sie am Seed haengt wie alles andere; die
+    // eigentliche Uebertragung macht der Patchweg, der die Spender-Level
+    // kennt. Faellt die Wahl auf das Outfit, das das Level ohnehin traegt,
+    // steht nichts im Patch - ein Kopieren auf sich selbst waere nur Ballast.
+    JsonValue outfit = JsonValue::makeObject();
+    bool outfitGesetzt = false;
+    if (opt.randomOutfits)
+    {
+        std::string klein;
+        for (char c : in.level) klein.push_back((c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c);
+
+        // Eigene Familie: andrea VOR andy pruefen, sonst faengt "andy" nie.
+        int eigene = -1;
+        if (klein.rfind("andrea", 0) == 0)     eigene = 0;
+        else if (klein.rfind("andy", 0) == 0)  eigene = -1;   // Kind-Lara, hat keins der drei
+        else if (klein.rfind("joby", 0) == 0)  eigene = 1;
+        else if (klein.rfind("rich", 0) == 0)  eigene = 2;
+
+        static const char* kSpender[3] = { "Andrea1", "joby2", "rich2" };
+
+        if (klein == "joby4")
+            report.notes.push_back("Outfit: joby4 behaelt den Taucheranzug (bleibt vanilla).");
+        else
+        {
+            const int wahl = static_cast<int>(rng.below(3));
+            if (wahl == eigene)
+            {
+                report.notes.push_back(fmt("Outfit: %s behaelt sein eigenes.", in.level.c_str()));
+                // Auch die eigene Catsuit soll Holster tragen (Nutzerwunsch) -
+                // die rich-Level haben die Objekte 13-16 vanilla nicht, und
+                // erst mit ihnen zeichnet die Engine dort Holster.
+                if (eigene == 2)
+                {
+                    outfit.set("holstersFrom", JsonValue::makeString("joby2"));
+                    outfitGesetzt = true;
+                }
+            }
+            else
+            {
+                outfit.set("fromLevel", JsonValue::makeString(kSpender[wahl]));
+
+                // LaraType-Byte ausdruecklich mitgeben - die Engine macht die
+                // Zopf-Sonderbehandlung (Verankerung in hair.cpp, Schweiss-
+                // tabelle in laraskin.cpp) am Outfit fest, nicht am Level:
+                //   0 = LARA_NORMAL   (Andrea-Outfit, Standardzopf)
+                //   2 = LARA_BUNHEAD  (Joby-Outfit: Muetzenzopf, auch
+                //                      ausserhalb der Russland-Level)
+                //   3 = LARA_CATSUIT  (rich2-Outfit, eigener Zeichenweg)
+                //   5 = LARA_PONYTAIL (Andrea-Outfit IN einem Russland-Level:
+                //                      dort loest LARA_NORMAL faelschlich die
+                //                      Russland-Zopfbehandlung aus, also ein
+                //                      Wert, der wie NORMAL zeichnet, aber
+                //                      nicht NORMAL ist)
+                static const int kLaraTypeByte[3] = { 0, 2, 3 };
+                int typByte = kLaraTypeByte[wahl];
+                if (wahl == 0 && klein.rfind("joby", 0) == 0)
+                    typByte = 5;
+                outfit.set("laraType", JsonValue::makeInt(typByte));
+
+                // Der Catsuit-Spender rich2 bringt keine Holster mit - die
+                // fehlenden Slots kommen dann aus joby2 (dunkle Riemen, passt
+                // zum schwarzen Anzug).
+                if (wahl == 2)
+                    outfit.set("holstersFrom", JsonValue::makeString("joby2"));
+                outfitGesetzt = true;
+                report.notes.push_back(fmt("Outfit: %s bekommt die Lara aus %s.",
+                                           in.level.c_str(), kSpender[wahl]));
+            }
+        }
+    }
+
     patchOut = JsonValue::makeObject();
     patchOut.set("itemEdits", edits);
+    if (outfitGesetzt) patchOut.set("outfit", outfit);
+    if (soundAdds.size() > 0) patchOut.set("soundAdds", soundAdds);
     if (adds.size() > 0) patchOut.set("itemAdds", adds);
+    if (trigMoves.size() > 0) patchOut.set("triggerMoves", trigMoves);
+    if (trigAdds.size() > 0) patchOut.set("triggerAdds", trigAdds);
     // Bewusst KEIN itemRemoves - siehe Regel 1 im Header.
     return true;
 }

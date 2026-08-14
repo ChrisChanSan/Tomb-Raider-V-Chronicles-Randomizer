@@ -426,6 +426,52 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 
 	bLaraUnderWater = (LaraNodeUnderwater[0] != 0) - 1;
 
+	// Holster auch auf der Catsuit. Upstream zeichnet DrawLara__4 keine
+	// Oberschenkel-Holster - die Catsuit-Level haben die Objekte 13-16 gar
+	// nicht geladen, es gab schlicht nichts zu zeichnen. Der Randomizer kann
+	// sie inzwischen hineinkopieren; dann sollen sie auch erscheinen, wie in
+	// DrawLara__1. Die loaded-Pruefung haelt Vanilla byteidentisch im
+	// Verhalten: ohne die Objekte wird weiterhin nichts gezeichnet - und sie
+	// verhindert zugleich, ueber objects[].mesh_index == 0 ein fremdes Mesh
+	// auf den Schenkel zu legen (genau der Fehler, der bei fehlenden
+	// Holstern in DrawLara__1 sichtbar wurde).
+	if (!(gfLevelFlags & GF_YOUNGLARA) && objects[LHolster].loaded && objects[lara.holster].loaded)
+	{
+		obj = &objects[LHolster];
+		meshpp = &meshes[obj->mesh_index];
+		meshpp += 8;
+		aMXPtr[M00] = lara_matrices[LMX_THIGH_L * indices_count + M00];
+		aMXPtr[M01] = lara_matrices[LMX_THIGH_L * indices_count + M01];
+		aMXPtr[M02] = lara_matrices[LMX_THIGH_L * indices_count + M02];
+		aMXPtr[M03] = lara_matrices[LMX_THIGH_L * indices_count + M03];
+		aMXPtr[M10] = lara_matrices[LMX_THIGH_L * indices_count + M10];
+		aMXPtr[M11] = lara_matrices[LMX_THIGH_L * indices_count + M11];
+		aMXPtr[M12] = lara_matrices[LMX_THIGH_L * indices_count + M12];
+		aMXPtr[M13] = lara_matrices[LMX_THIGH_L * indices_count + M13];
+		aMXPtr[M20] = lara_matrices[LMX_THIGH_L * indices_count + M20];
+		aMXPtr[M21] = lara_matrices[LMX_THIGH_L * indices_count + M21];
+		aMXPtr[M22] = lara_matrices[LMX_THIGH_L * indices_count + M22];
+		aMXPtr[M23] = lara_matrices[LMX_THIGH_L * indices_count + M23];
+		phd_PutPolygons(*meshpp, -1);
+
+		obj = &objects[lara.holster];
+		meshpp = &meshes[obj->mesh_index];
+		meshpp += 16;
+		aMXPtr[M00] = lara_matrices[LMX_THIGH_R * indices_count + M00];
+		aMXPtr[M01] = lara_matrices[LMX_THIGH_R * indices_count + M01];
+		aMXPtr[M02] = lara_matrices[LMX_THIGH_R * indices_count + M02];
+		aMXPtr[M03] = lara_matrices[LMX_THIGH_R * indices_count + M03];
+		aMXPtr[M10] = lara_matrices[LMX_THIGH_R * indices_count + M10];
+		aMXPtr[M11] = lara_matrices[LMX_THIGH_R * indices_count + M11];
+		aMXPtr[M12] = lara_matrices[LMX_THIGH_R * indices_count + M12];
+		aMXPtr[M13] = lara_matrices[LMX_THIGH_R * indices_count + M13];
+		aMXPtr[M20] = lara_matrices[LMX_THIGH_R * indices_count + M20];
+		aMXPtr[M21] = lara_matrices[LMX_THIGH_R * indices_count + M21];
+		aMXPtr[M22] = lara_matrices[LMX_THIGH_R * indices_count + M22];
+		aMXPtr[M23] = lara_matrices[LMX_THIGH_R * indices_count + M23];
+		phd_PutPolygons(*meshpp, -1);
+	}
+
 	if (!(gfLevelFlags & GF_YOUNGLARA) && lara.back_gun)
 	{
 		phd_PushMatrix();
@@ -752,6 +798,7 @@ void DrawLara(ITEM_INFO* item, long mirror)
 		case LARA_NORMAL:
 		case LARA_YOUNG:
 		case LARA_BUNHEAD:
+		case LARA_PONYTAIL:	// Randomizer: Standard-Outfit im Russland-Level
 			DrawLara__1(item, mirror);
 			break;
 

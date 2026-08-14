@@ -116,6 +116,29 @@ void PierreControl(short item_number)
 			floor = GetFloor(x, y, z, &room_number);
 			GetHeight(floor, x, y, z);
 			TestTriggers(trigger_index, 1, 0);
+
+			// Larson ausblenden lassen wie jeden anderen Gegner.
+			//
+			// Seine Sterbeanimation traegt keinen Anim-Befehl 4 (KillItem) -
+			// nachgesehen, sie hat sieben PlaySound-Befehle und sonst nichts.
+			// Beim Hund sitzt der Befehl in der Sterbeanimation und setzt ueber
+			// control.cpp:3220 after_death = 1; von da an blendet draw.cpp:742
+			// die Leiche aus und raeumt sie bei 128 weg.
+			//
+			// Bei Larson fehlt das, weil Core seine Leiche nur an einer einzigen
+			// Stelle wegraeumt: in Trajan Markets uebernimmt am letzten Frame
+			// dieser Animation die Cutscene, und andrea3b_init (deltapak.cpp)
+			// setzt ihn auf ITEM_INVISIBLE. In jedem anderen Level - wo er in
+			// Vanilla nie stirbt, weil er vorher flieht - bliebe die Leiche
+			// stehen. Seine Sterbeanimation endet naemlich im Stand, sie ist
+			// ein 207 Frames langes Stueck fuer die Kamera und kein Umfallen.
+			//
+			// Fuer den Gegner-Pool muss er ueberall sterben koennen, deshalb
+			// hier der Anstoss, den seine Animation nicht mitbringt. Andrea2
+			// bleibt unberuehrt: dort blendet die Cutscene ihn im selben
+			// Augenblick aus, das Verblassen wird nie sichtbar.
+			if (!item->after_death)
+				item->after_death = 1;
 		}
 	}
 	else

@@ -4,6 +4,7 @@
 #include "gameflow.h"
 #include "delstuff.h"
 #include "control.h"
+#include "lara.h"	// LaraDrawType - Outfit-Marker fuer die Zopf-Schweisstabelle
 
 static uchar SkinJoints[14][4] =
 {
@@ -426,7 +427,19 @@ void CreateSkinningData()
 			SkinVertNums[28][i] = HairSkinVertNums[1][i];
 			SkinVertNums[34][i] = HairSkinVertNums[2][i];
 		}
-		else if (gfCurrentLevel >= LVL5_BASE && gfCurrentLevel <= LVL5_SINKING_SUBMARINE)
+		// Die Schweisstabelle des Zopfansatzes gehoert zum OUTFIT, nicht zum
+		// Level: HairSkinVertNums[5] nennt die Kopf-Vertexnummern des
+		// RUSSLAND-Kopfes (Muetze), [0] die des Standardkopfes. Core hat das
+		// am Levelnamen festgemacht, weil das Outfit vanilla nie den
+		// Abschnitt wechselt. Der Randomizer markiert das Joby-Outfit mit
+		// LaraType 2 (LARA_BUNHEAD) - dann muss [5] auch ausserhalb der
+		// Russland-Level greifen. Umgekehrt darf in den Russland-Leveln [5]
+		// nur bei LARA_NORMAL greifen (= unveraendertes Vanilla-Level);
+		// traegt Lara dort ein fremdes Outfit (CATSUIT/PONYTAIL), gehoert
+		// der Standardkopf dazu. Ohne diese Zeile klebte der Zopfansatz an
+		// falschen Kopf-Vertices - der "Zopf-Spiess" bei rich1 mit
+		// Joby-Outfit (im Spiel gesehen).
+		else if ((gfCurrentLevel >= LVL5_BASE && gfCurrentLevel <= LVL5_SINKING_SUBMARINE && LaraDrawType == LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD)
 		{
 			SkinVertNums[28][i] = HairSkinVertNums[5][i];
 			SkinVertNums[34][i] = HairSkinVertNums[5][i];

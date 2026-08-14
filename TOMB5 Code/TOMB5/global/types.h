@@ -165,7 +165,15 @@ enum lara_draw_type
 	LARA_YOUNG,
 	LARA_BUNHEAD,
 	LARA_CATSUIT,
-	LARA_DIVESUIT
+	LARA_DIVESUIT,
+
+	// Randomizer-Marker (LaraType-Byte 5 in der Leveldatei): Standard-Outfit
+	// mit Pferdeschwanz in einem RUSSLAND-Level. Noetig, weil hair.cpp und
+	// laraskin.cpp die Russland-Sonderbehandlung des Zopfs an
+	// "Russland-Level UND LARA_NORMAL" festmachen - ein Andrea-Outfit dort
+	// braucht einen Wert, der NICHT LARA_NORMAL ist, sonst klebte der Zopf
+	// an den Kopf-Vertexnummern der Muetze. Gezeichnet wie LARA_NORMAL.
+	LARA_PONYTAIL
 };
 
 enum LMX

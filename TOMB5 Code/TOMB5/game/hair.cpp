@@ -166,7 +166,15 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		phd_PushMatrix_I();
 		objptr = lara.mesh_ptrs[LM_TORSO];
 
-		if (gfCurrentLevel >= LVL5_BASE && gfCurrentLevel <= LVL5_SINKING_SUBMARINE)
+		// Die Sonderverankerung des Zopfs gehoert zum RUSSLAND-OUTFIT (Muetze,
+		// Bomberjacke), nicht zum Level - Core hat beides gleichgesetzt, weil
+		// das Outfit vanilla nie den Abschnitt wechselt. Der Randomizer setzt
+		// beim Joby-Outfit LaraType 2 (LARA_BUNHEAD, sonst ungenutzt; die
+		// Zeichenwege behandeln es wie LARA_NORMAL), damit der Zopf dem Outfit
+		// folgt. In unveraenderten Russland-Leveln (LARA_NORMAL) aendert
+		// sich nichts; traegt Lara dort per Randomizer ein fremdes Outfit
+		// (CATSUIT/PONYTAIL), gehoert die Standard-Verankerung dazu.
+		if ((gfCurrentLevel >= LVL5_BASE && gfCurrentLevel <= LVL5_SINKING_SUBMARINE && LaraDrawType == LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD)
 			phd_TranslateRel_I(*objptr - 11, objptr[1] - 16, objptr[2] + 25);
 		else
 			phd_TranslateRel_I(*objptr - 9, objptr[1], objptr[2] + 25);	//repositioned to avoid floating hair
@@ -176,7 +184,15 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		sphere[1].y = (long)aMXPtr[M13];
 		sphere[1].z = (long)aMXPtr[M23];
 
-		if (gfCurrentLevel >= LVL5_BASE && gfCurrentLevel <= LVL5_SINKING_SUBMARINE)
+		// Die Sonderverankerung des Zopfs gehoert zum RUSSLAND-OUTFIT (Muetze,
+		// Bomberjacke), nicht zum Level - Core hat beides gleichgesetzt, weil
+		// das Outfit vanilla nie den Abschnitt wechselt. Der Randomizer setzt
+		// beim Joby-Outfit LaraType 2 (LARA_BUNHEAD, sonst ungenutzt; die
+		// Zeichenwege behandeln es wie LARA_NORMAL), damit der Zopf dem Outfit
+		// folgt. In unveraenderten Russland-Leveln (LARA_NORMAL) aendert
+		// sich nichts; traegt Lara dort per Randomizer ein fremdes Outfit
+		// (CATSUIT/PONYTAIL), gehoert die Standard-Verankerung dazu.
+		if ((gfCurrentLevel >= LVL5_BASE && gfCurrentLevel <= LVL5_SINKING_SUBMARINE && LaraDrawType == LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD)
 			sphere[1].r = 94;
 		else
 			sphere[1].r = objptr[3];
@@ -281,7 +297,15 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		phd_PushMatrix();
 		objptr = lara.mesh_ptrs[LM_TORSO];
 
-		if (gfCurrentLevel >= LVL5_BASE && gfCurrentLevel <= LVL5_SINKING_SUBMARINE)
+		// Die Sonderverankerung des Zopfs gehoert zum RUSSLAND-OUTFIT (Muetze,
+		// Bomberjacke), nicht zum Level - Core hat beides gleichgesetzt, weil
+		// das Outfit vanilla nie den Abschnitt wechselt. Der Randomizer setzt
+		// beim Joby-Outfit LaraType 2 (LARA_BUNHEAD, sonst ungenutzt; die
+		// Zeichenwege behandeln es wie LARA_NORMAL), damit der Zopf dem Outfit
+		// folgt. In unveraenderten Russland-Leveln (LARA_NORMAL) aendert
+		// sich nichts; traegt Lara dort per Randomizer ein fremdes Outfit
+		// (CATSUIT/PONYTAIL), gehoert die Standard-Verankerung dazu.
+		if ((gfCurrentLevel >= LVL5_BASE && gfCurrentLevel <= LVL5_SINKING_SUBMARINE && LaraDrawType == LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD)
 			phd_TranslateRel(*objptr - 11, objptr[1] - 16, objptr[2] + 25);
 		else
 			phd_TranslateRel(*objptr - 9, objptr[1], objptr[2] + 25);
@@ -290,7 +314,15 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		sphere[1].y = (long)aMXPtr[M13];
 		sphere[1].z = (long)aMXPtr[M23];
 
-		if (gfCurrentLevel >= LVL5_BASE && gfCurrentLevel <= LVL5_SINKING_SUBMARINE)
+		// Die Sonderverankerung des Zopfs gehoert zum RUSSLAND-OUTFIT (Muetze,
+		// Bomberjacke), nicht zum Level - Core hat beides gleichgesetzt, weil
+		// das Outfit vanilla nie den Abschnitt wechselt. Der Randomizer setzt
+		// beim Joby-Outfit LaraType 2 (LARA_BUNHEAD, sonst ungenutzt; die
+		// Zeichenwege behandeln es wie LARA_NORMAL), damit der Zopf dem Outfit
+		// folgt. In unveraenderten Russland-Leveln (LARA_NORMAL) aendert
+		// sich nichts; traegt Lara dort per Randomizer ein fremdes Outfit
+		// (CATSUIT/PONYTAIL), gehoert die Standard-Verankerung dazu.
+		if ((gfCurrentLevel >= LVL5_BASE && gfCurrentLevel <= LVL5_SINKING_SUBMARINE && LaraDrawType == LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD)
 			sphere[1].r = 94;
 		else
 			sphere[1].r = objptr[3];

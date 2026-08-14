@@ -256,6 +256,12 @@ namespace
         // kein Haken): opt.allWeapons wird beim Lauf fest auf true gesetzt.
         // Deshalb auch kein Seed-Bit dafuer - eine Konstante unterscheidet
         // keine Spiele.
+
+        // Secrets (#53) - PLATZHALTER, noch ohne Wirkung. 0 Aus, 1 normaler
+        // Item-Pool, 2 Glitched-Liste, 3 Custom-Nutzerliste. Bekommt sein
+        // Seed-Bit erst, wenn die Logik existiert - ein Platzhalter, der den
+        // Seed schon veraendert, waere spaeter nicht rueckwaerts vergleichbar.
+        int optSecrets = 0;
         // Dasselbe ueber Levelgrenzen hinweg. Braucht den Objekt-Transfer
         // zwischen Leveln (Meshes, Animationen, Frames, Texturseiten) - den
         // gibt es bisher nur in TombItemEdit2026, und das wird nie mitgeliefert.
@@ -828,7 +834,10 @@ static void drawUi(App& a, HWND hwnd)
     // Abschnitte darunter sind der Weg durchs Programm, das hier steht daneben.
     {
         const float w = 110.0f;
-        ImGui::SameLine(ImGui::GetContentRegionMax().x - w);
+        // GetContentRegionMax ist im Docking-Zweig (imconfig mit
+        // IMGUI_DISABLE_OBSOLETE_FUNCTIONS) nicht mehr da; Cursor-X am
+        // Zeilenanfang plus verfuegbare Breite ergibt denselben rechten Rand.
+        ImGui::SameLine(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - w);
         if (ImGui::Button("Debug", ImVec2(w, 0))) ImGui::OpenPopup("##debugmenu");
         if (ImGui::BeginPopup("##debugmenu"))
         {
@@ -948,6 +957,38 @@ static void drawUi(App& a, HWND hwnd)
     if (!a.optOtherPickups && !a.optKeyItems && !a.optEnemies && !a.optEnemySwap && !a.optOutfits)
         ImGui::TextColored(ImVec4(1, .5f, .3f, 1),
                            "Keine Wuerfel-Option gewaehlt - die Level bekommen nur das Standard-Waffenset.");
+
+    // --- Secrets (#53) - Platzhalter ohne Wirkung ------------------------
+    //
+    // Die Auswahl ist schon sichtbar, damit die Oberflaeche ihre endgueltige
+    // Form zeigt; ausgegraut, bis die Sektorlisten und die Platzierungslogik
+    // existieren. Die Erklaerungen haengen wie oben als Schwebehilfe dran.
+    ImGui::SeparatorText("Secrets (in Vorbereitung)");
+    ImGui::BeginDisabled(true);
+
+    ImGui::RadioButton("Aus", &a.optSecrets, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("Im normalen Item-Pool", &a.optSecrets, 1);
+    hoverHilfe("Die Secrets wandern als gewoehnliche Pickups in den Wuerfelpool "
+               "und koennen ueberall dort liegen, wo auch Ausruestung liegen darf.");
+
+    ImGui::RadioButton("Glitched Secrets", &a.optSecrets, 2);
+    hoverHilfe("Handverlesene Liste von Raeumen und Sektoren, die nur mit "
+               "Glitches erreichbar sind. Die Liste wird von Hand gepflegt "
+               "und kommt noch.");
+
+    ImGui::RadioButton("Custom-Nutzerliste", &a.optSecrets, 3);
+    hoverHilfe("Von Nutzern eingereichte, handverlesene Sektorlisten. Jede "
+               "Liste traegt den Namen ihres Autors samt Kennzeichnung "
+               "Glitched oder Non-Glitched, z.B. Lucifer[Glitched]. Die "
+               "Dateien kommen in den Ordner SecretLists neben dem Programm; "
+               "das Format wird mit der ersten echten Liste festgelegt.");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(220.0f);
+    if (ImGui::BeginCombo("##secretliste", "(keine Listen gefunden)"))
+        ImGui::EndCombo();
+
+    ImGui::EndDisabled();
 
     // --- 4. Level ---
     ImGui::SeparatorText("4. Level");
@@ -1072,7 +1113,20 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;   // keine Fensterlage-Datei hinterlassen
+
+    // Unterfenster (z.B. der Sektoren-Marker) sollen sich aus dem Hauptfenster
+    // herausziehen lassen, auch auf einen zweiten Bildschirm (Nutzerwunsch).
+    // Dafuer der Docking-Zweig von Dear ImGui mit Viewports: sobald ein
+    // Fenster den Rand verlaesst, bekommt es ein eigenes Betriebssystem-
+    // Fenster. WindowRounding 0 und volle Deckkraft, weil freistehende
+    // Fenster keine runden, durchscheinenden Ecken haben koennen.
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
     ImGui::StyleColorsDark();
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowRounding = 0.0f;
+    style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_dev, g_ctx);
 
@@ -1123,6 +1177,15 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         g_ctx->OMSetRenderTargets(1, &g_rtv, nullptr);
         g_ctx->ClearRenderTargetView(g_rtv, clear);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+
+        // Herausgezogene Fenster leben in eigenen Betriebssystem-Fenstern mit
+        // eigener Swapchain - die zeichnet und praesentiert dieser Aufruf.
+        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+        }
+
         g_swap->Present(1, 0);
     }
 

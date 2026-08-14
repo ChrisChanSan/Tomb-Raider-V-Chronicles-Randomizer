@@ -962,13 +962,21 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::EndDisabled();
     ImGui::Unindent();
 
-    ImGui::Checkbox("Vanilla-Gegnermix", &a.optEnemySwap);
+    // Frueher "Vanilla-Gegnermix" - der Name klang wie die Poolstufe "Nur
+    // Levelpool" und stiftete Verwirrung (Nutzerfrage). Der Haken sagt, OB
+    // vorhandene Gegner die Rollen tauschen; die Poolwahl darunter sagt,
+    // WORAUS Tausch und Zusatzgegner wuerfeln.
+    ImGui::Checkbox("Vorhandene Gegner tauschen", &a.optEnemySwap);
     hoverHilfe("Die Gegner, die im Level ohnehin stehen, tauschen die Rollen. "
                "Nur die Art wechselt, der Item-Index bleibt - jeder Gegner wacht "
                "also weiter dort auf, wo sein Trigger es vorsieht. Anzahl und "
-               "Verteilung bleiben gleich, gescriptete Gegner bleiben unberuehrt.");
+               "Verteilung bleiben gleich, gescriptete Gegner bleiben unberuehrt. "
+               "Woraus die neuen Rollen kommen, entscheidet der Gegnerpool unten.");
 
-    // Woraus wuerfeln Tausch und Zusatzgegner? Drei Stufen.
+    // Woraus wuerfeln Tausch und Zusatzgegner? Drei Stufen. Ausgegraut,
+    // solange keine der beiden Aktionen aktiv ist - ohne sie hat die Wahl
+    // keine Wirkung.
+    ImGui::BeginDisabled(!a.optEnemies && !a.optEnemySwap);
     ImGui::TextUnformatted("Gegnerpool:");
     ImGui::SameLine();
     ImGui::RadioButton("Nur Levelpool", &a.optEnemyPool, 0);
@@ -989,7 +997,7 @@ static void drawUi(App& a, HWND hwnd)
                "Seed wirklich einsetzt; der Texturseiten-Haushalt bleibt "
                "gemessen deutlich unter der 256er-Grenze. Gescriptete Gegner "
                "bleiben in jedem Modus unberuehrt; Hydra ist noch nicht im Pool.");
-    ImGui::TextDisabled("Wirkt zusammen mit Vanilla-Gegnermix oder Zusatzgegnern.");
+    ImGui::EndDisabled();
 
     // --- Secrets (#53) - Platzhalter ohne Wirkung ------------------------
     //

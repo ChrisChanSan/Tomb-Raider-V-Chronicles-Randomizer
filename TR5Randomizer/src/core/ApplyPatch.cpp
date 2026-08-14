@@ -225,17 +225,20 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     // fehlen halt Waffen). Ein GESCHEITERTER Kopiervorgang dagegen bricht ab
     // wie ein halbes Outfit - dann ist unklar, in welchem Zustand die
     // angehaengten Bloecke sind, und gespeichert wird so etwas nicht.
-    const JsonValue& wadds = patch["weaponAdds"];
-    if (wadds.size() > 0 && !levelSource)
+    // weaponAdds und moveableAdds sind dieselbe Operation - beide sind
+    // aufgeloeste Kopierlisten {slot, fromLevel, replace} aus dem Randomizer,
+    // sie zaehlen nur getrennt (Waffen bzw. Cross-Gegner).
+    auto kopiereSlots = [&](const JsonValue& liste, const char* was, int& zaehler) -> bool
     {
-        report.warnings.push_back(msg("%d weaponAdds uebersprungen - kein Zugriff auf die Quell-Level.",
-                                      static_cast<int>(wadds.size())));
-    }
-    else
-    {
-        for (size_t i = 0; i < wadds.size(); ++i)
+        if (liste.size() > 0 && !levelSource)
         {
-            const JsonValue& w = wadds[i];
+            report.warnings.push_back(std::to_string(liste.size()) + " " + was +
+                                      "-Eintraege uebersprungen - kein Zugriff auf die Quell-Level.");
+            return true;
+        }
+        for (size_t i = 0; i < liste.size(); ++i)
+        {
+            const JsonValue& w = liste[i];
             const int slot = static_cast<int>(w["slot"].asInt(-1));
             const std::string von = w["fromLevel"].asString();
             const bool ersetzen = w["replace"].asBool(false);
@@ -246,19 +249,23 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             Tr5Level* spender = quelle(von);
             if (!spender)
             {
-                report.warnings.push_back("Waffen: Spender-Level " + von + " nicht ladbar - Slots von dort fehlen.");
+                report.warnings.push_back(std::string(was) + ": Spender-Level " + von +
+                                          " nicht ladbar - Slots von dort fehlen.");
                 continue;
             }
 
             std::string wErr;
             if (!level.copyMoveableFrom(*spender, slot, wErr))
             {
-                error = "Waffen-Slot " + std::to_string(slot) + " aus " + von + ": " + wErr;
+                error = std::string(was) + "-Slot " + std::to_string(slot) + " aus " + von + ": " + wErr;
                 return false;
             }
-            ++report.weaponsCopied;
+            ++zaehler;
         }
-    }
+        return true;
+    };
+    if (!kopiereSlots(patch["weaponAdds"], "Waffen", report.weaponsCopied)) return false;
+    if (!kopiereSlots(patch["moveableAdds"], "Cross-Gegner", report.moveablesCopied)) return false;
 
     // --- Sound-Samples uebernehmen ---------------------------------------
     const JsonValue& sadds = patch["soundAdds"];

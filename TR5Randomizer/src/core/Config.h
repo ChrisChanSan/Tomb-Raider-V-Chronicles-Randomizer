@@ -43,6 +43,7 @@ struct Config
     bool optEnemies      = false;
     int  enemyCount      = 6;
     bool optEnemySwap    = false;
+    bool optEnemiesCross = false;
     bool optOutfits      = false;
     int  secrets         = 0;     // Platzhalter (#53): 0 Aus .. 3 Custom
 

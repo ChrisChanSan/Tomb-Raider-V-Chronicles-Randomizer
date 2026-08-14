@@ -259,6 +259,9 @@ namespace
 
         // Vorhandene Gegner untereinander tauschen.
         bool optEnemySwap = false;
+        // Gegnerpool um Typen aus anderen Leveln erweitern (Cross-Gegnermix).
+        // Wirkt nur zusammen mit optEnemySwap oder optEnemies.
+        bool optEnemiesCross = false;
         // Zufaellige Outfits (Lara_Andrea/Lara_Joby/Lara_Rich) je Abschnitt.
         bool optOutfits = false;
         // Volles Waffenset in jedem Level ist STANDARD (Nutzerentscheidung,
@@ -271,10 +274,6 @@ namespace
         // Seed-Bit erst, wenn die Logik existiert - ein Platzhalter, der den
         // Seed schon veraendert, waere spaeter nicht rueckwaerts vergleichbar.
         int optSecrets = 0;
-        // Dasselbe ueber Levelgrenzen hinweg. Braucht den Objekt-Transfer
-        // zwischen Leveln (Meshes, Animationen, Frames, Texturseiten) - den
-        // gibt es bisher nur in TombItemEdit2026, und das wird nie mitgeliefert.
-        bool optEnemiesCross = false;
 
         // Die Auswahl geht in den Seed ein. Sonst erzeugt derselbe Seed mit
         // anderen Haken ein anderes Spiel, und ein Fehlerbericht "Seed X ist
@@ -460,6 +459,7 @@ namespace
         opt.addEnemies = a.optEnemies;
         opt.enemiesPerLevel = a.optEnemyCount;
         opt.swapEnemies = a.optEnemySwap;
+        opt.crossEnemies = a.optEnemiesCross;
         opt.randomOutfits = a.optOutfits;
         opt.allWeapons = true;              // Standard, siehe App-Kommentar
 
@@ -491,6 +491,8 @@ namespace
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Waffenslots", pr.weaponsCopied);
         if (rep.weaponsScattered > 0)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Waffen gestreut", rep.weaponsScattered);
+        if (rep.crossTypesUsed > 0)
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Cross-Typen", rep.crossTypesUsed);
         if (!pr.outfitFrom.empty())
             std::snprintf(buf + len, sizeof(buf) - len, ", Outfit %s", pr.outfitFrom.c_str());
         row.result = buf;
@@ -945,12 +947,14 @@ static void drawUi(App& a, HWND hwnd)
                "joby4 behaelt den Taucheranzug; die andy-Level bekommen immer eine "
                "erwachsene Lara (Kind-Lara kann keine Waffen tragen).");
 
-    ImGui::BeginDisabled(true);
     ImGui::Checkbox("Cross-Gegnermix", &a.optEnemiesCross);
-    ImGui::EndDisabled();
-    hoverHilfe("Jeder Gegner in jedem Level. Der Modelltransfer dafuer steht "
-               "(die Waffen nutzen ihn schon) - es fehlt noch die Kuration, "
-               "welcher Gegner in welches Level darf, ohne es zu sprengen.");
+    hoverHilfe("Der Gegnerpool wird um Typen aus ANDEREN Leveln erweitert - "
+               "SWAT, Guards, Mafia, Larson, Pierre, Loewe, Gladiator, Statue, "
+               "Maze Monster, Imp und mehr. Je Level kommen bis zu drei fremde "
+               "Typen dazu; Modelle und Sounds wandern zur Laufzeit aus den "
+               "eigenen Leveldateien mit. Wirkt nur zusammen mit Vanilla-"
+               "Gegnermix oder Zusatzgegnern. Gescriptete Gegner bleiben "
+               "unberuehrt; Hydra ist noch nicht im Pool.");
 
     // Kein Haken mehr: volles Waffenset ist Standard (Nutzerentscheidung).
     ImGui::TextDisabled("Alle Waffen ueberall sind Standard und immer dabei.");
@@ -1161,6 +1165,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.optEnemies      = app.cfg.optEnemies;
     app.optEnemyCount   = app.cfg.enemyCount;
     app.optEnemySwap    = app.cfg.optEnemySwap;
+    app.optEnemiesCross = app.cfg.optEnemiesCross;
     app.optOutfits      = app.cfg.optOutfits;
     app.optSecrets      = app.cfg.secrets;
 
@@ -1180,6 +1185,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.optEnemies      = app.optEnemies;
         app.cfg.enemyCount      = app.optEnemyCount;
         app.cfg.optEnemySwap    = app.optEnemySwap;
+        app.cfg.optEnemiesCross = app.optEnemiesCross;
         app.cfg.optOutfits      = app.optOutfits;
         app.cfg.secrets         = app.optSecrets;
         app.cfg.seedText        = app.seedBuf;
@@ -1234,6 +1240,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.optEnemies      != app.optEnemies ||
                  app.cfg.enemyCount      != app.optEnemyCount ||
                  app.cfg.optEnemySwap    != app.optEnemySwap ||
+                 app.cfg.optEnemiesCross != app.optEnemiesCross ||
                  app.cfg.optOutfits      != app.optOutfits ||
                  app.cfg.secrets         != app.optSecrets)
         {

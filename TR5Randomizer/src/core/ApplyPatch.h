@@ -74,6 +74,7 @@ struct PatchReport
     int triggersAdded = 0;
     int soundsCopied = 0;
     int weaponsCopied = 0;               // uebernommene Waffenslots
+    int moveablesCopied = 0;             // uebernommene Cross-Gegner-Slots
     std::string outfitFrom;              // leer = Outfit unveraendert
     std::vector<std::string> warnings;
 };

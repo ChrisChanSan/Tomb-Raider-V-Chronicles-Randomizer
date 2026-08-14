@@ -864,6 +864,72 @@ bool Rando::run(const RandoInput& in,
         }
     }
 
+    // --- Cross-Gegnermix: den Pool um fremde Typen erweitern ---
+    //
+    // Die globale Pool-Tabelle ist die Nutzerliste "Gegner Pool.txt", je Typ
+    // mit dem Spenderlevel, das ihn MIT Vanilla-Instanzen traegt - nur dort
+    // liegen Modell UND Samples beisammen. Die Sound-Eintraege sind die
+    // bekannten Ausnahmen, deren Samples selbst dem Spender fehlen (Larsons
+    // Sterbeklaenge, Pierres nie ausgelieferter Schuss - beide vom Nutzer im
+    // Soundboard ausgesucht und im Spiel geprueft).
+    //
+    // Hydra (63) fehlt mit Absicht: Nutzerentscheidung steht aus, und ihre
+    // drei Items teilen sich eine Position, deren OCB das Kettenglied waehlt
+    // (hydra.cpp:18) - das vertraegt keine einfache Platzierung. Chef,
+    // Scientist und Guardian stehen aus bekannten Gruenden nirgends im Pool.
+    //
+    // Je Level hoechstens DREI fremde Typen, vom Seed gewaehlt: jeder Typ
+    // kostet Texturseiten und Samples im Ziel, und das Level soll sein
+    // Gesicht behalten. Importiert wird spaeter nur, was wirklich verwendet
+    // wurde - und zwar mit replace, damit auch ein vorhandener, aber nie
+    // bespielter Slot (joby5s Guard ohne Samples) vollstaendig vom Spender
+    // kommt.
+    struct CrossSound  { int map; const char* vonLevel; int vonMap; };
+    struct CrossGegner { int typeId; const char* von; CrossSound sounds[2]; };
+    static const CrossGegner kCross[] = {
+        { 33, "rich3",   {} },                                      // SWAT
+        { 35, "rich3",   {} },                                      // Advanced SWAT
+        { 37, "rich1",   {} },                                      // Guard (Blue Guard)
+        { 39, "rich1",   {} },                                      // Two Gun
+        { 41, "Andrea1", {} },                                      // Dog
+        { 45, "Andrea1", { {96,"rich1",85}, {98,"rich1",143} } },   // Larson
+        { 47, "Andrea3", { {90,"joby5",45}, {91,"joby5",123} } },   // Pierre
+        { 49, "joby3",   {} },                                      // Soldier MG (Mafia)
+        { 51, "joby3",   {} },                                      // Soldier Pistols (Mafia2)
+        { 57, "Andrea3", {} },                                      // Lion
+        { 59, "Andrea3", {} },                                      // Gladiator
+        { 61, "Andrea3", {} },                                      // Soldier Statue (Hammer)
+        { 77, "Andy2",   {} },                                      // Maze Monster
+        { 89, "andy1",   {} },                                      // Imp
+    };
+
+    std::vector<int> gegnerPool = in.enemyTypes;
+    std::map<int, const CrossGegner*> crossGewaehlt;
+    std::set<int> crossBenutzt;
+    if (opt.crossEnemies && (opt.swapEnemies || opt.addEnemies) && klein != "joby4")
+    {
+        std::set<int> eigene(in.enemyTypes.begin(), in.enemyTypes.end());
+        std::vector<const CrossGegner*> kandidaten;
+        for (const CrossGegner& c : kCross)
+        {
+            if (eigene.count(c.typeId)) continue;         // steht schon im Levelpool
+            std::string vonKlein;
+            for (const char* p = c.von; *p; ++p)
+                vonKlein.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p);
+            if (vonKlein == klein) continue;              // sich selbst spendet niemand
+            kandidaten.push_back(&c);
+        }
+        for (int n = 0; n < 3 && !kandidaten.empty(); ++n)
+        {
+            const size_t pick = static_cast<size_t>(rng.below(kandidaten.size()));
+            const CrossGegner* c = kandidaten[pick];
+            kandidaten.erase(kandidaten.begin() + static_cast<ptrdiff_t>(pick));
+            gegnerPool.push_back(c->typeId);
+            crossGewaehlt[c->typeId] = c;
+        }
+        std::sort(gegnerPool.begin(), gegnerPool.end());
+    }
+
     // --- Vorhandene Gegner tauschen ---
     //
     // Nur die ART wechselt, der Item-Index bleibt. Das ist der ganze Trick:
@@ -875,8 +941,9 @@ bool Rando::run(const RandoInput& in,
     //
     // Getauscht wird nur unter den kuratierten Typen des Levels. Damit sind
     // Chef, Scientist, Guardian und die gescripteten Faelle von selbst aussen
-    // vor - sie stehen dort nicht drin.
-    if (opt.swapEnemies && in.enemyTypes.size() > 1)
+    // vor - sie stehen dort nicht drin. Mit Cross-Gegnermix gehen einzelne
+    // Rollen zusaetzlich an die gewaehlten fremden Typen.
+    if (opt.swapEnemies && (in.enemyTypes.size() > 1 || !crossGewaehlt.empty()))
     {
         std::set<int> erlaubt(in.enemyTypes.begin(), in.enemyTypes.end());
 
@@ -892,7 +959,7 @@ bool Rando::run(const RandoInput& in,
             arten.push_back(it.typeId);
         }
 
-        if (indizes.size() > 1)
+        if (indizes.size() > 1 || (!indizes.empty() && !crossGewaehlt.empty()))
         {
             // Fisher-Yates ueber die Typen. Der RNG ist derselbe wie ueberall,
             // der Seed bestimmt das Ergebnis also vollstaendig.
@@ -900,6 +967,20 @@ bool Rando::run(const RandoInput& in,
             {
                 const size_t j = static_cast<size_t>(rng.below(i + 1));
                 std::swap(arten[i], arten[j]);
+            }
+
+            // Cross-Gegnermix: etwa jede vierte Rolle geht an einen der
+            // gewaehlten fremden Typen. Zurueckhaltend mit Absicht - das
+            // Level soll durchmischt wirken, nicht ausgetauscht.
+            if (!crossGewaehlt.empty())
+            {
+                for (size_t i = 0; i < arten.size(); ++i)
+                {
+                    if (rng.below(4) != 0) continue;
+                    std::map<int, const CrossGegner*>::iterator w = crossGewaehlt.begin();
+                    std::advance(w, static_cast<size_t>(rng.below(crossGewaehlt.size())));
+                    arten[i] = w->first;
+                }
             }
 
             for (size_t i = 0; i < indizes.size(); ++i)
@@ -915,6 +996,7 @@ bool Rando::run(const RandoInput& in,
                 report.notes.push_back(fmt("Gegner Item %d: typeId %d -> %d",
                                            indizes[i], f->second.typeId, arten[i]));
                 f->second.typeId = arten[i];
+                if (crossGewaehlt.count(arten[i])) crossBenutzt.insert(arten[i]);
                 ++report.enemiesSwapped;
             }
         }
@@ -941,7 +1023,7 @@ bool Rando::run(const RandoInput& in,
     // (control.cpp:2415) gibt das Bit als IFL_INVISIBLE ans Item weiter, und
     // Larson ist ohne es gar nicht toetbar (pierre.cpp:68).
     JsonValue trigAdds = JsonValue::makeArray();
-    if (opt.addEnemies && opt.enemiesPerLevel > 0 && !in.enemyTypes.empty())
+    if (opt.addEnemies && opt.enemiesPerLevel > 0 && !gegnerPool.empty())
     {
         // Die Engine haelt items[] als festes Feld von 256 Eintraegen
         // (MAX_ITEMS, global/types.h; Tr5Level prueft es beim Anhaengen). rich2
@@ -1000,7 +1082,8 @@ bool Rando::run(const RandoInput& in,
             if (trigger < 0) continue;          // alle Anmarschfelder vergeben
             ++gesetzt;
 
-            const int typeId = in.enemyTypes[static_cast<size_t>(rng.below(in.enemyTypes.size()))];
+            const int typeId = gegnerPool[static_cast<size_t>(rng.below(gegnerPool.size()))];
+            if (crossGewaehlt.count(typeId)) crossBenutzt.insert(typeId);
             const RoomOrigin& ro = origin[p.s->room];
 
             // Der Index, den das neue Item bekommt: itemAdds haengt hinten an,
@@ -1165,6 +1248,38 @@ bool Rando::run(const RandoInput& in,
         }
     }
 
+    // --- Cross-Gegner: Modelle und Sonder-Sounds anfordern ---
+    //
+    // Nur fuer die Typen, die der Lauf wirklich eingesetzt hat. Der Patchweg
+    // holt das Modell samt der Samples seiner Animationskommandos vom
+    // Spender (replace, siehe Pool-Kommentar oben); die Eintraege hier
+    // decken zusaetzlich die bekannten Luecken ab, die selbst der Spender
+    // hat. Doppelte Sound-Anforderungen sind unschaedlich - der Patchweg
+    // ueberspringt Vorhandenes.
+    JsonValue moveables = JsonValue::makeArray();
+    for (int t : crossBenutzt)
+    {
+        const CrossGegner* c = crossGewaehlt[t];
+        JsonValue e = JsonValue::makeObject();
+        e.set("slot", JsonValue::makeInt(t));
+        e.set("fromLevel", JsonValue::makeString(c->von));
+        e.set("replace", JsonValue::makeBool(true));
+        moveables.push(e);
+
+        for (int k = 0; k < 2; ++k)
+        {
+            if (c->sounds[k].map == 0) continue;
+            JsonValue a = JsonValue::makeObject();
+            a.set("map", JsonValue::makeInt(c->sounds[k].map));
+            a.set("fromLevel", JsonValue::makeString(c->sounds[k].vonLevel));
+            a.set("fromMap", JsonValue::makeInt(c->sounds[k].vonMap));
+            soundAdds.push(a);
+        }
+
+        ++report.crossTypesUsed;
+        report.notes.push_back(fmt("Cross-Gegner: typeId %d kommt aus %s.", t, c->von));
+    }
+
     // --- Outfit wuerfeln ---
     //
     // Die Wahl faellt hier, damit sie am Seed haengt wie alles andere; die
@@ -1312,6 +1427,7 @@ bool Rando::run(const RandoInput& in,
 
     patchOut = JsonValue::makeObject();
     patchOut.set("itemEdits", edits);
+    if (moveables.size() > 0) patchOut.set("moveableAdds", moveables);
     if (waffen.size() > 0) patchOut.set("weaponAdds", waffen);
     if (outfitGesetzt) patchOut.set("outfit", outfit);
     if (soundAdds.size() > 0) patchOut.set("soundAdds", soundAdds);

@@ -50,18 +50,22 @@ int main(int argc, char** argv)
         std::printf("  nur:      Items unangetastet lassen - fuer Gegner-/Outfittests\n");
         std::printf("  outfit:   zufaelliges Outfit (Lara_Andrea/Joby/Rich)\n");
         std::printf("  waffen:   volles Waffenset importieren (Spender Andrea3/joby2/rich1)\n");
+        std::printf("  mix:      vorhandene Gegner untereinander tauschen\n");
+        std::printf("  cross:    Gegnerpool um fremde Typen erweitern (mit mix/Zahl)\n");
         return 2;
     }
 
     const std::string seedText = (argc > 5) ? argv[5] : "Weihnachten";
     int gegner = 0;
-    bool nurGegner = false, outfits = false, waffen = false;
+    bool nurGegner = false, outfits = false, waffen = false, mix = false, cross = false;
     for (int i = 6; i < argc; ++i)
     {
         const std::string s = argv[i];
         if (s == "nur")         nurGegner = true;
         else if (s == "outfit") outfits = true;
         else if (s == "waffen") waffen = true;
+        else if (s == "mix")    mix = true;
+        else if (s == "cross")  cross = true;
         else                    gegner = std::atoi(argv[i]);
     }
     const uint64_t seed = SeedText::parse(seedText);
@@ -89,6 +93,8 @@ int main(int argc, char** argv)
     opt.swapEnemies = gegner > 0;      // im CLI zusammen, fuer Tests reicht das
     opt.randomOutfits = outfits;
     opt.allWeapons = waffen;
+    opt.swapEnemies = mix;
+    opt.crossEnemies = cross;
     if (nurGegner) { opt.shuffleKeyItems = false; opt.shuffleOtherPickups = false; }
 
     JsonValue patch;
@@ -135,6 +141,9 @@ int main(int argc, char** argv)
     if (pr.weaponsCopied > 0 || rep.weaponsScattered > 0)
         std::printf("  Waffen      %d Slots uebernommen, %d Items gestreut\n",
                     pr.weaponsCopied, rep.weaponsScattered);
+    if (rep.crossTypesUsed > 0)
+        std::printf("  Cross       %d fremde Gegnertypen, %d Slots uebernommen\n",
+                    rep.crossTypesUsed, pr.moveablesCopied);
     std::printf("  Items       %d -> %d\n", itemsBefore, lvl.itemCount());
 
     // Gegenprobe: das Ergebnis neu einlesen und pruefen, dass die Aenderungen

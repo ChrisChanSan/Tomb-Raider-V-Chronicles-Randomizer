@@ -332,6 +332,16 @@ struct RandoOptions
     // (RandoInput::enemyTypes); handkurierte Items bleiben ausgenommen.
     bool swapEnemies = false;
 
+    // Cross-Gegnermix: der Wuerfelpool fuer Tausch und Zusatzgegner wird um
+    // Typen aus ANDEREN Leveln erweitert (globale Pool-Tabelle in
+    // Randomizer.cpp, aus der Nutzerliste "Gegner Pool.txt"). Je Level
+    // kommen hoechstens drei fremde Typen dazu - jeder kostet Texturseiten
+    // und Sample-Speicher im Ziel. Modelle und Sounds wandern beim Patchen
+    // ueber den nativen Transfer mit (moveableAdds/soundAdds); was das Level
+    // schon kennt, wird uebersprungen. Wirkt nur zusammen mit swapEnemies
+    // oder addEnemies - allein aendert der Haken nichts.
+    bool crossEnemies = false;
+
     // Jedes Level bekommt zufaellig eines der drei Outfits: Lara_Andrea
     // (Spender Andrea1), Lara_Joby (joby2) oder Lara_Rich (rich2, Catsuit).
     // Uebertragen werden die Slots 8/9/10 (LARA_SKIN, LARA_SKIN_JOINTS,
@@ -360,6 +370,7 @@ struct RandoReport
     int enemiesAdded = 0;
     int enemiesSwapped = 0;
     int weaponsScattered = 0;           // gestreute Waffen-/Munitions-Items
+    int crossTypesUsed = 0;             // fremde Gegnertypen im Einsatz
     std::vector<std::string> notes;     // Auffaelligkeiten fuer die Oberflaeche
     bool ok = true;
     std::string error;

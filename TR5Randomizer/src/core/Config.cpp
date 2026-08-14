@@ -61,6 +61,7 @@ void Config::load()
         else if (key == "gegnerZusatz")    optEnemies = (val == "1");
         else if (key == "gegnerAnzahl")    enemyCount = std::atoi(val.c_str());
         else if (key == "gegnerMix")       optEnemySwap = (val == "1");
+        else if (key == "gegnerCross")     optEnemiesCross = (val == "1");
         else if (key == "outfits")         optOutfits = (val == "1");
         else if (key == "secrets")         secrets = std::atoi(val.c_str());
     }
@@ -86,6 +87,7 @@ bool Config::save() const
     std::fprintf(f, "gegnerZusatz=%d\n", optEnemies ? 1 : 0);
     std::fprintf(f, "gegnerAnzahl=%d\n", enemyCount);
     std::fprintf(f, "gegnerMix=%d\n", optEnemySwap ? 1 : 0);
+    std::fprintf(f, "gegnerCross=%d\n", optEnemiesCross ? 1 : 0);
     std::fprintf(f, "outfits=%d\n", optOutfits ? 1 : 0);
     std::fprintf(f, "secrets=%d\n", secrets);
     std::fclose(f);

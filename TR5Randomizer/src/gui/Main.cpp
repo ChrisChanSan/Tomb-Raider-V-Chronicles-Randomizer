@@ -252,9 +252,10 @@ namespace
         bool optEnemySwap = false;
         // Zufaellige Outfits (Lara_Andrea/Lara_Joby/Lara_Rich) je Abschnitt.
         bool optOutfits = false;
-        // Volles Waffenset in jedes Level importieren (Spender Andrea3/joby2/
-        // rich1, Desert Eagle als Standard-Revolver; joby4 bleibt vanilla).
-        bool optWeapons = false;
+        // Volles Waffenset in jedem Level ist STANDARD (Nutzerentscheidung,
+        // kein Haken): opt.allWeapons wird beim Lauf fest auf true gesetzt.
+        // Deshalb auch kein Seed-Bit dafuer - eine Konstante unterscheidet
+        // keine Spiele.
         // Dasselbe ueber Levelgrenzen hinweg. Braucht den Objekt-Transfer
         // zwischen Leveln (Meshes, Animationen, Frames, Texturseiten) - den
         // gibt es bisher nur in TombItemEdit2026, und das wird nie mitgeliefert.
@@ -274,7 +275,8 @@ namespace
             if (optEnemiesCross) flags |= 8;
             if (optEnemySwap)    flags |= 16;
             if (optOutfits)      flags |= 32;
-            if (optWeapons)      flags |= 64;
+            // Bit 64 war kurz "Alle Waffen ueberall" - seit die Standard
+            // sind, bleibt das Bit frei (immer gesetzt waere bedeutungslos).
             // Die Anzahl gehoert genauso in den Seed wie die Haken: mit 3 und
             // mit 12 Gegnern ist es nicht dasselbe Spiel.
             flags |= static_cast<uint64_t>(optEnemyCount & 0xFF) << 8;
@@ -444,7 +446,7 @@ namespace
         opt.enemiesPerLevel = a.optEnemyCount;
         opt.swapEnemies = a.optEnemySwap;
         opt.randomOutfits = a.optOutfits;
-        opt.allWeapons = a.optWeapons;
+        opt.allWeapons = true;              // Standard, siehe App-Kommentar
 
         JsonValue patch;
         RandoReport rep;
@@ -879,58 +881,73 @@ static void drawUi(App& a, HWND hwnd)
 
     // --- 2b. Was soll randomisiert werden ---
     ImGui::SeparatorText("3. Was soll gewuerfelt werden");
+
+    // Die Erklaerungen haengen als schwebende Box an der Checkbox: kurz mit
+    // der Maus darueber verweilen blendet sie ein, wegbewegen blendet sie
+    // aus (Nutzerwunsch - die Liste bleibt kompakt, die Texte gehen nicht
+    // verloren). AllowWhenDisabled, damit auch der ausgegraute
+    // Cross-Gegnermix seine Erklaerung zeigt.
+    auto hoverHilfe = [](const char* text)
+    {
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled))
+        {
+            ImGui::BeginTooltip();
+            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 28.0f);
+            ImGui::TextUnformatted(text);
+            ImGui::PopTextWrapPos();
+            ImGui::EndTooltip();
+        }
+    };
+
     ImGui::Checkbox("Ausruestung (Waffen, Munition, Medipacks)", &a.optOtherPickups);
     ImGui::Checkbox("Schluessel- und Puzzle-Items", &a.optKeyItems);
 
     ImGui::Checkbox("Zusaetzliche Gegner ins Level setzen", &a.optEnemies);
+    hoverHilfe("Jeder bekommt einen eigenen Trigger, etwa drei Sektoren vor sich "
+               "auf Laras Weg - nie auf seinem eigenen Feld, sonst spawnt er in ihr. "
+               "Welche Gegnertypen ein Level vertraegt, ist handkuriert; ist die "
+               "Liste leer, bleibt der Haken folgenlos.");
     ImGui::Indent();
     ImGui::BeginDisabled(!a.optEnemies);
     ImGui::SetNextItemWidth(160.0f);
     ImGui::SliderInt("pro Level", &a.optEnemyCount, 1, 20);
     ImGui::EndDisabled();
-    ImGui::TextDisabled("Jeder bekommt einen eigenen Trigger, etwa drei Sektoren vor sich");
-    ImGui::TextDisabled("auf Laras Weg - nie auf seinem eigenen Feld, sonst spawnt er in ihr.");
-    ImGui::TextDisabled("Welche Gegnertypen ein Level vertraegt, ist handkuriert; ist die Liste");
-    ImGui::TextDisabled("leer, bleibt der Haken folgenlos.");
     ImGui::Unindent();
 
     ImGui::Checkbox("Vanilla-Gegnermix", &a.optEnemySwap);
-    ImGui::Indent();
-    ImGui::TextDisabled("Die Gegner, die im Level ohnehin stehen, tauschen die Rollen.");
-    ImGui::TextDisabled("Nur die Art wechselt, der Item-Index bleibt - jeder Gegner wacht");
-    ImGui::TextDisabled("also weiter dort auf, wo sein Trigger es vorsieht. Anzahl und");
-    ImGui::TextDisabled("Verteilung bleiben gleich, gescriptete Gegner bleiben unberuehrt.");
-    ImGui::Unindent();
+    hoverHilfe("Die Gegner, die im Level ohnehin stehen, tauschen die Rollen. "
+               "Nur die Art wechselt, der Item-Index bleibt - jeder Gegner wacht "
+               "also weiter dort auf, wo sein Trigger es vorsieht. Anzahl und "
+               "Verteilung bleiben gleich, gescriptete Gegner bleiben unberuehrt.");
 
     ImGui::Checkbox("Zufaellige Outfits", &a.optOutfits);
-    ImGui::Indent();
-    ImGui::TextDisabled("Jeder Abschnitt bekommt zufaellig Lara_Andrea, Lara_Joby oder");
-    ImGui::TextDisabled("Lara_Rich (Catsuit). Uebertragen werden nur Haut und Kopf (Slots");
-    ImGui::TextDisabled("8/9/10) samt Outfit-Byte - nie Slot 0, der traegt die Animationen.");
-    ImGui::TextDisabled("joby4 behaelt den Taucheranzug; die andy-Level bekommen immer eine");
-    ImGui::TextDisabled("erwachsene Lara (Kind-Lara kann keine Waffen tragen).");
-    ImGui::Unindent();
-
-    ImGui::Checkbox("Alle Waffen ueberall", &a.optWeapons);
-    ImGui::Indent();
-    ImGui::TextDisabled("Jedes Level bekommt das volle Waffenset: Pistolen, Uzi, Schrot-");
-    ImGui::TextDisabled("flinte, Desert Eagle (ersetzt den Revolver, auch im Namen der");
-    ImGui::TextDisabled("joby-Level) und HK samt Munition. Ein Level behaelt seine eigene");
-    ImGui::TextDisabled("funktionierende Waffe; joby4 bleibt vanilla. Die Modelle kommen");
-    ImGui::TextDisabled("zur Laufzeit aus den eigenen Leveldateien des Spielers.");
-    ImGui::Unindent();
+    hoverHilfe("Jeder Abschnitt bekommt zufaellig Lara_Andrea, Lara_Joby oder "
+               "Lara_Rich (Catsuit). Uebertragen werden nur Haut und Kopf (Slots "
+               "8/9/10) samt Outfit-Byte - nie Slot 0, der traegt die Animationen. "
+               "joby4 behaelt den Taucheranzug; die andy-Level bekommen immer eine "
+               "erwachsene Lara (Kind-Lara kann keine Waffen tragen).");
 
     ImGui::BeginDisabled(true);
     ImGui::Checkbox("Cross-Gegnermix", &a.optEnemiesCross);
     ImGui::EndDisabled();
-    ImGui::Indent();
-    ImGui::TextDisabled("Jeder Gegner in jedem Level. Der Modelltransfer dafuer steht seit");
-    ImGui::TextDisabled("heute (die Waffen nutzen ihn schon) - es fehlt noch die Kuration,");
-    ImGui::TextDisabled("welcher Gegner in welches Level darf, ohne es zu sprengen.");
-    ImGui::Unindent();
+    hoverHilfe("Jeder Gegner in jedem Level. Der Modelltransfer dafuer steht "
+               "(die Waffen nutzen ihn schon) - es fehlt noch die Kuration, "
+               "welcher Gegner in welches Level darf, ohne es zu sprengen.");
+
+    // Kein Haken mehr: volles Waffenset ist Standard (Nutzerentscheidung).
+    ImGui::TextDisabled("Alle Waffen ueberall sind Standard und immer dabei.");
+    hoverHilfe("Jedes Level bekommt bei jedem Lauf das volle Waffenset: Pistolen, "
+               "Uzi, Schrotflinte, Desert Eagle (ersetzt den Revolver, in den "
+               "joby-Leveln auch im Namen) und HK samt Munition. Ein Level behaelt "
+               "seine eigene funktionierende Waffe; joby4 bleibt vanilla, und "
+               "rich2 bekommt keine Pistolen (sein Pistolenslot traegt "
+               "Sequenzmaterial von Core). Der Seed streut zusaetzlich einige der "
+               "neuen Waffen samt Munition als Pickups ins Level. Die Modelle "
+               "kommen zur Laufzeit aus den eigenen Leveldateien des Spielers.");
 
     if (!a.optOtherPickups && !a.optKeyItems && !a.optEnemies && !a.optEnemySwap && !a.optOutfits)
-        ImGui::TextColored(ImVec4(1, .5f, .3f, 1), "Nichts ausgewaehlt - es wuerde nur zurueckgesetzt.");
+        ImGui::TextColored(ImVec4(1, .5f, .3f, 1),
+                           "Keine Wuerfel-Option gewaehlt - die Level bekommen nur das Standard-Waffenset.");
 
     // --- 4. Level ---
     ImGui::SeparatorText("4. Level");

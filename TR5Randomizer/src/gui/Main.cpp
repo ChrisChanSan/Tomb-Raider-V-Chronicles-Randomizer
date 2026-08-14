@@ -290,6 +290,9 @@ namespace
         bool phSpiegeln = false;        // GF_MIRROR je Level
         bool phMusikSwitch = false;     // Audiotrack je Level wuerfeln
         bool phMusikTrigger = false;    // Musik-/Sound-Trigger-IDs wuerfeln
+        bool phOutfitTr1 = false;       // klassisches TR1-Outfit im Pool
+        bool phOutfitTr2 = false;       // TR2-Outfits im Pool
+        bool phOutfitTr3 = false;       // TR3-Outfits im Pool
 
         // Die Auswahl geht in den Seed ein. Sonst erzeugt derselbe Seed mit
         // anderen Haken ein anderes Spiel, und ein Fehlerbericht "Seed X ist
@@ -957,13 +960,6 @@ static void drawUi(App& a, HWND hwnd)
 
     ImGui::Checkbox("Schluessel & Puzzles", &a.optKeyItems);
 
-    ImGui::Checkbox("Zufaellige Outfits", &a.optOutfits);
-    hoverHilfe("Jeder Abschnitt bekommt zufaellig Lara_Andrea, Lara_Joby oder "
-               "Lara_Rich (Catsuit). Uebertragen werden nur Haut und Kopf (Slots "
-               "8/9/10) samt Outfit-Byte - nie Slot 0, der traegt die Animationen. "
-               "joby4 behaelt den Taucheranzug; die andy-Level bekommen immer eine "
-               "erwachsene Lara (Kind-Lara kann keine Waffen tragen).");
-
     // Kein Haken mehr: volles Waffenset ist Standard (Nutzerentscheidung).
     ImGui::TextDisabled("Alle Waffen ueberall sind Standard und immer dabei.");
     hoverHilfe("Jedes Level bekommt bei jedem Lauf das volle Waffenset: Pistolen, "
@@ -978,6 +974,33 @@ static void drawUi(App& a, HWND hwnd)
     if (!a.optOtherPickups && !a.optKeyItems && !a.optEnemies && !a.optEnemySwap && !a.optOutfits)
         ImGui::TextColored(ImVec4(1, .5f, .3f, 1),
                            "Keine Wuerfel-Option gewaehlt - die Level bekommen nur das Standard-Waffenset.");
+
+    // --- Outfits: eigener Bereich (Nutzerwunsch) -------------------------
+    ImGui::SeparatorText("Outfits");
+
+    ImGui::Checkbox("Zufaellige Outfits", &a.optOutfits);
+    hoverHilfe("Jeder Abschnitt bekommt zufaellig Lara_Andrea, Lara_Joby oder "
+               "Lara_Rich (Catsuit). Uebertragen werden nur Haut und Kopf (Slots "
+               "8/9/10) samt Outfit-Byte - nie Slot 0, der traegt die Animationen. "
+               "joby4 behaelt den Taucheranzug; die andy-Level bekommen immer eine "
+               "erwachsene Lara (Kind-Lara kann keine Waffen tragen).");
+
+    // Platzhalter: klassische Outfits als zusaetzliche Poolauswahl.
+    ImGui::BeginDisabled(true);
+    ImGui::Checkbox("TR1 Outfit", &a.phOutfitTr1);
+    hoverHilfe("Kommt noch: das klassische TR1-Outfit als zusaetzliche Wahl im "
+               "Outfit-Pool. Braucht ein passendes TR5-Modell - Spieldaten "
+               "anderer Spiele liefern wir nie mit, das Modell muss also "
+               "eigens gebaut oder vom Spieler beigesteuert werden.");
+    ImGui::SameLine();
+    ImGui::Checkbox("TR2 Outfits", &a.phOutfitTr2);
+    hoverHilfe("Kommt noch: die TR2-Outfits (u.a. Bomberjacke, Wetsuit) als "
+               "zusaetzliche Poolauswahl - gleiche Voraussetzung wie TR1.");
+    ImGui::SameLine();
+    ImGui::Checkbox("TR3 Outfits", &a.phOutfitTr3);
+    hoverHilfe("Kommt noch: die TR3-Outfits (u.a. Dschungel, Antarktis) als "
+               "zusaetzliche Poolauswahl - gleiche Voraussetzung wie TR1.");
+    ImGui::EndDisabled();
 
     // --- Gegner: eigener Bereich (Nutzerwunsch) --------------------------
     ImGui::SeparatorText("Gegner");

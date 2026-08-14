@@ -80,7 +80,7 @@ extern long OnObject;
 extern long height_type;
 
 extern long InItemControlLoop;
-extern short ItemNewRooms[256][2];
+extern short ItemNewRooms[MAX_ITEMS][2];
 extern short ItemNewRoomNo;
 
 extern ulong FmvSceneTriggered;

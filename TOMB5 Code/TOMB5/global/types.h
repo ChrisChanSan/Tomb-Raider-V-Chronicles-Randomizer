@@ -34,7 +34,15 @@
 #define NO_HEIGHT -32512
 #define	NO_ITEM	-1
 #define NO_ROOM	255
-#define MAX_ITEMS	256
+// Verdoppelt von 256 (Randomizer: rich2 lag vanilla schon bei 248, mit
+// Zusatzgegnern und Waffenstreuung war die Decke erreicht). items[] wird
+// mit dieser Groesse aus dem game_malloc-Pool geholt (file.cpp), die
+// Frei-Liste laeuft parametrisch (InitialiseItemArray). Trigger sprechen
+// Items ueber ein 10-Bit-Feld an (control.cpp: items[trigger & 0x3FF]),
+// 512 bleibt also adressierbar; die ItemNewRooms-Warteschlange haengt
+// jetzt an derselben Konstante, ihr Kill-Bit 0x8000 vertraegt Indizes
+// bis 0x7FFF. Der Savegame-Puffer waechst mit (siehe SAVEGAME_INFO).
+#define MAX_ITEMS	512
 #define MAX_SAMPLES	450
 #define MAX_RIPPLES	128
 #define FVF (D3DFVF_TEX2 | D3DFVF_SPECULAR | D3DFVF_DIFFUSE | D3DFVF_XYZRHW)
@@ -1309,7 +1317,11 @@ struct SAVEGAME_INFO
 	// and the format/checksum validation in sgRestoreGame() (game/savegame.cpp),
 	// which detects and cleanly rejects old-format saves instead of silently
 	// restoring from a garbage-filled tail.
-	char buffer[14490];
+	// 7245 upstream, 14490 seit der Pufferrunde 2026-08-02, 28980 seit der
+	// MAX_ITEMS-Verdopplung: der Item-Teil des Spielstands waechst mit der
+	// Itemzahl. Alte Spielstaende werden beim Laden sauber abgewiesen
+	// (Kurz-Lese-Erkennung in sgRestoreGame, siehe savegame.cpp).
+	char buffer[28980];
 };
 
 struct tomb5_save_info

@@ -1136,7 +1136,7 @@ bool LoadItems()
 	// num_items comes straight from the level file with no upstream
 	// validation - the fill loop below writes items[i] for every one of
 	// them with no bounds check of its own (same bug class as SAVEGAME_INFO,
-	// see that fix's comments in game\savegame.cpp). MAX_ITEMS (256, defined
+	// see that fix's comments in game\savegame.cpp). MAX_ITEMS (defined
 	// global\types.h) is left as-is here (not raised) - see items[] itself
 	// for why.
 	if (num_items > MAX_ITEMS)

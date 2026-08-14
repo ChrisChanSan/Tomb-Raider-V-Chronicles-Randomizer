@@ -167,7 +167,9 @@ public:
     // Die Engine haelt items[] als festes Feld dieser Groesse (MAX_ITEMS in
     // global/types.h). Mehr Items laedt sie nicht - rich2 liegt mit 248 schon
     // dicht darunter, deshalb wird die Grenze hier geprueft und nicht gehofft.
-    static constexpr int MAX_ITEMS = 256;
+    // Seit der Engine-Verdopplung 512 (vorher 256; global/types.h der
+    // Engine ist die massgebliche Stelle, beide muessen uebereinstimmen).
+    static constexpr int MAX_ITEMS = 512;
 
     // Hebt genau diese Grenze auf - ausschliesslich fuer die Debug-Level, die
     // jeden gueltigen Sektor mit einem Marker belegen. Die entstehen mit

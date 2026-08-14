@@ -110,7 +110,7 @@ long OnObject;
 long height_type;
 
 long InItemControlLoop = 0;
-short ItemNewRooms[256][2];
+short ItemNewRooms[MAX_ITEMS][2];
 short ItemNewRoomNo = 0;
 
 ulong FmvSceneTriggered;

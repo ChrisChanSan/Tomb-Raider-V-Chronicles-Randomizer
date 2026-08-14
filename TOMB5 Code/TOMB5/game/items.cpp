@@ -33,16 +33,16 @@ void ItemNewRoom(short item_num, short room_number)
 
 	if (InItemControlLoop)
 	{
-		// ItemNewRooms[256][2] is a fixed-size deferred-update queue (see
+		// ItemNewRooms[MAX_ITEMS][2] is a fixed-size deferred-update queue (see
 		// game\control.cpp) drained once per frame after the item-control
 		// loop finishes - same bug class as SAVEGAME_INFO (see that fix's
 		// comments in game\savegame.cpp), but unlike the level-load-time
 		// cases, dropping an overflow entry here is soft/self-correcting
 		// (this item's room change is just deferred to the next successful
 		// call instead of applied this tick) rather than a hard reject -
-		// more than 256 items/effects changing rooms or dying in the same
-		// single tick is an extreme edge case even for a dense Randomizer.
-		if (ItemNewRoomNo < 256)
+		// more than MAX_ITEMS items/effects changing rooms or dying in the
+		// same single tick is an extreme edge case even for a dense Randomizer.
+		if (ItemNewRoomNo < MAX_ITEMS)
 		{
 			ItemNewRooms[ItemNewRoomNo][0] = item_num;
 			ItemNewRooms[ItemNewRoomNo][1] = room_number;
@@ -110,7 +110,7 @@ void KillItem(short item_num)
 		// See ItemNewRoom()'s comment above on ItemNewRooms[]'s bounds -
 		// same soft/self-correcting reasoning applies to a dropped deferred
 		// kill (item just stays active one tick longer than intended).
-		if (ItemNewRoomNo < 256)
+		if (ItemNewRoomNo < MAX_ITEMS)
 		{
 			ItemNewRooms[ItemNewRoomNo][0] = item_num | 0x8000;
 			ItemNewRoomNo++;
@@ -437,7 +437,7 @@ void KillEffect(short fx_num)
 		// ItemNewRooms[]'s bounds - same soft/self-correcting reasoning
 		// applies to a dropped deferred kill (effect just stays active one
 		// tick longer than intended).
-		if (ItemNewRoomNo < 256)
+		if (ItemNewRoomNo < MAX_ITEMS)
 		{
 			ItemNewRooms[ItemNewRoomNo][0] = fx_num | 0x8000;
 			ItemNewRoomNo++;
@@ -495,7 +495,7 @@ void EffectNewRoom(short fx_num, short room_num)
 	{
 		// See ItemNewRoom()'s comment (above, earlier in this file) on
 		// ItemNewRooms[]'s bounds.
-		if (ItemNewRoomNo < 256)
+		if (ItemNewRoomNo < MAX_ITEMS)
 		{
 			ItemNewRooms[ItemNewRoomNo][0] = fx_num;
 			ItemNewRooms[ItemNewRoomNo][1] = room_num;

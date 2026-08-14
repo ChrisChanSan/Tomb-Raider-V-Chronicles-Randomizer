@@ -157,6 +157,18 @@ Also in this group:
   in `SCRIPT.DAT`) silently bent one triangle of the adult hand. Same pattern
   and rationale as the `laramisc.cpp` torso fix below; with the flag set — an
   unmodified `SCRIPT.DAT` — nothing changes.
+- `global/types.h`, `game/control.cpp`/`control.h`, `game/items.cpp` —
+  **`MAX_ITEMS` doubled from 256 to 512**: the densest levels (rich2 at 248,
+  joby3 at 244) left almost no room for the randomizer's extra enemies and
+  scattered weapons. `items[]` is allocated from the `game_malloc` pool with
+  this constant and the free list is parametric; triggers address items
+  through a 10-bit field (`items[trigger & 0x3FF]`), so 512 stays fully
+  reachable. The `ItemNewRooms` deferred queue (and its kill flag `0x8000`,
+  which tolerates indices up to `0x7FFF`) now derives from `MAX_ITEMS` too,
+  including the extern declaration in `control.h`. The savegame buffer grows
+  to 28980 bytes because the per-item section scales with the item count —
+  saves from older builds are cleanly rejected by the existing short-read
+  detection, exactly as with the first buffer resize.
 - `global/types.h`, `game/larafire.cpp` — **`MAX_LOT` raised from 5 to 16**:
   upstream allowed only five AI enemies to be active at once; the sixth
   triggered enemy evicted the one farthest from the camera (`EnableBaddieAI`

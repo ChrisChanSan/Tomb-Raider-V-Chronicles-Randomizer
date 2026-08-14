@@ -823,9 +823,9 @@ bool Rando::run(const RandoInput& in,
     //
     // Die Sektorwahl laeuft ueber sectorAllowedFor ohne Constraint: damit
     // greift genau eine Regel, das Waffenverbot je Raum (noWeaponRooms,
-    // rich1s Scientist). Budget: MAX_ITEMS ist 256 (#35 noch offen), hier
-    // wird bei 250 aufgehoert, und die spaeter gesetzten Zusatzgegner sind
-    // schon abgezogen.
+    // rich1s Scientist). Budget: MAX_ITEMS ist seit der Verdopplung 512,
+    // hier wird bei 500 aufgehoert, und die spaeter gesetzten Zusatzgegner
+    // sind schon abgezogen.
     if (opt.allWeapons && klein != "joby4")
     {
         struct WStreu { int waffe; int munition[2]; };
@@ -839,7 +839,7 @@ bool Rando::run(const RandoInput& in,
         std::set<int> schonDa;
         for (const LevelItem& it : in.items) schonDa.insert(it.typeId);
 
-        int budget = 250 - static_cast<int>(in.items.size())
+        int budget = 500 - static_cast<int>(in.items.size())
                          - static_cast<int>(adds.size())
                          - (opt.addEnemies ? opt.enemiesPerLevel : 0);
 
@@ -1086,12 +1086,11 @@ bool Rando::run(const RandoInput& in,
     JsonValue trigAdds = JsonValue::makeArray();
     if (opt.addEnemies && opt.enemiesPerLevel > 0 && !gegnerPool.empty())
     {
-        // Die Engine haelt items[] als festes Feld von 256 Eintraegen
-        // (MAX_ITEMS, global/types.h; Tr5Level prueft es beim Anhaengen). rich2
-        // liegt mit 248 schon dicht darunter, deshalb hier gedeckelt statt
-        // gehofft - ein abgewiesener Patch mitten im Lauf waere schlimmer als
-        // ein Gegner weniger.
-        const int platzFrei = 256 - static_cast<int>(in.items.size()) - static_cast<int>(adds.size());
+        // Die Engine haelt items[] als festes Feld von 512 Eintraegen
+        // (MAX_ITEMS, global/types.h - seit der Verdopplung; Tr5Level prueft
+        // es beim Anhaengen). Gedeckelt statt gehofft - ein abgewiesener
+        // Patch mitten im Lauf waere schlimmer als ein Gegner weniger.
+        const int platzFrei = 512 - static_cast<int>(in.items.size()) - static_cast<int>(adds.size());
 
         // Wohin darf ein Gegner? Auf einen freien Sektor, dessen Anmarsch
         // ebenfalls frei ist und einen Trigger vertraegt.

@@ -567,6 +567,33 @@ bool Rando::run(const RandoInput& in,
     });
     std::set<long long> used;
 
+    // --- Sektoren von Gegnern sperren, die mit Fracht verschwinden koennen ---
+    //
+    // GetCarriedItems (setup.cpp:1962) haengt beim Levelstart jedes Pickup
+    // im Umkreis von 512 Einheiten an den naechsten Gegner: RemoveDrawnItem,
+    // room_number = NO_ROOM - das Item ist danach nur noch dessen Fracht und
+    // faellt erst bei seinem Tod wieder heraus.
+    //
+    // Fuer alle anderen Gegner ist das harmlos, seit der Antitrigger sie
+    // nicht mehr loeschen kann und die beiden eigenen Todeswege ihre Fracht
+    // ablegen. Ein Fall bleibt: Larson und Pierre, die ihre OCB behalten -
+    // sie finden damit Cores eigenen AI_AMBUSH-Marker und fliehen bei 40
+    // Lebenspunkten aus dem Level. Betroffen sind genau drei Exemplare im
+    // ganzen Spiel (Andrea1 34 und 35, Andrea2 76 - der gescriptete
+    // Miniboss, der als handkuriertes Item ohnehin nie getauscht wird).
+    //
+    // Auf ihren Sektor kommt deshalb kein Pickup. Drei gesperrte Flaechen
+    // von mehreren hundert kosten nichts; ein Schluesselitem, das mit einem
+    // fliehenden Larson das Level verlaesst, kostet den ganzen Durchgang.
+    for (const LevelItem& it : in.items)
+    {
+        if ((it.typeId != 45 && it.typeId != 47) || it.ocb == 0) continue;
+        used.insert(secKey(it.room, it.sectorX, it.sectorZ));
+        report.notes.push_back(fmt("Sektor %d,%d,%d gesperrt: Item %d (typeId %d, OCB %d) kann "
+                                   "fliehen und wuerde Fracht mitnehmen.",
+                                   it.room, it.sectorX, it.sectorZ, it.index, it.typeId, it.ocb));
+    }
+
     // Welche Items kommen ueberhaupt in Frage?
     std::vector<LevelItem> movableKey, movableOther;
     for (const LevelItem& it : in.items)
@@ -1212,6 +1239,7 @@ bool Rando::run(const RandoInput& in,
     // Chef, Scientist, Guardian und die gescripteten Faelle von selbst aussen
     // vor - sie stehen dort nicht drin. Mit Cross-Gegnermix gehen einzelne
     // Rollen zusaetzlich an die gewaehlten fremden Typen.
+    std::set<int> immunGesetzt;      // Items, die schon beim Tausch immun wurden
     if (opt.swapEnemies && (in.enemyTypes.size() > 1 || !crossGewaehlt.empty()))
     {
         std::set<int> erlaubt(in.enemyTypes.begin(), in.enemyTypes.end());
@@ -1227,15 +1255,29 @@ bool Rando::run(const RandoInput& in,
                 continue;
             // Antitrigger-Ziele duerfen mittauschen: der getauschte Gegner
             // bekommt unten die Antitrigger-Immunitaet mit (siehe dort).
-            // OCB != 0 heisst: typspezifischer Spezial-Spawn. Die OCB steuert
-            // Initialise/Control des URSPRUNGSTYPS (Imp 1/2/3/11/12:
-            // Kletter-/Wurfzustaende auf Wandvorspruengen, imp.cpp:82;
-            // Pierre: Positionsversatz + AMBUSH, pierre.cpp:30; u.a.) - ein
-            // fremder Typ versteht sie nicht und steht dann in der Wand
-            // (im Spiel gesehen: andy3 Items 2/3, Klippen-Imps OCB 3 wurden
-            // SWAT/Guard - Grafikloch, Zielerfassung flackert). Solche
-            // Items behalten ihren Typ.
-            if (it.ocb != 0) continue;
+            // OCB != 0 heisst in der Regel: typspezifischer Spezial-Spawn.
+            // Die OCB steuert Initialise/Control des URSPRUNGSTYPS (Imp
+            // 1/2/3/11/12: Kletter-/Wurfzustaende auf Wandvorspruengen,
+            // imp.cpp:82) - ein fremder Typ versteht sie nicht und steht dann
+            // in der Wand (im Spiel gesehen: andy3 Items 2/3, Klippen-Imps
+            // OCB 3 wurden SWAT/Guard - Grafikloch, Zielerfassung flackert).
+            //
+            // Larson und Pierre (45/47) sind die begruendete Ausnahme: bei
+            // ihnen beschreibt die OCB KEINE Sonderumgebung, sondern nur drei
+            // harmlose Dinge (pierre.cpp:70-83 und 124-135) - die Kennung
+            // ihres Fluchtmarkers (item_flags[3]), einen Versatz von 384
+            // Einheiten innerhalb desselben Sektors und den Start im
+            // Wachmodus. Nichts davon steckt in der Geometrie. Ein fremder
+            // Typ darf hier also einziehen, solange die OCB dabei auf 0
+            // faellt - sonst deutet er sie als seine eigene.
+            //
+            // Betroffen sind im ganzen Spiel drei Items: Andrea1 34 (OCB 1)
+            // und 35 (OCB 2), beide mit eigenem AI_AMBUSH-Marker in Raum 89
+            // bzw. 169, sowie Andrea2 76 - der gescriptete Miniboss, der
+            // ueber fixedItems geschuetzt ist und oben schon aussortiert
+            // wurde.
+            const bool ocbNurMarker = (it.typeId == 45 || it.typeId == 47);
+            if (it.ocb != 0 && !ocbNurMarker) continue;
             indizes.push_back(it.index);
             arten.push_back(it.typeId);
         }
@@ -1281,18 +1323,23 @@ bool Rando::run(const RandoInput& in,
                 e.set("index", JsonValue::makeInt(indizes[i]));
                 e.set("typeId", JsonValue::makeInt(arten[i]));
 
-                // Zeigt ein Antitrigger auf dieses Item, wuerde er den neuen
-                // Gegner beim Betreten seines Sektors ohne Sterben und ohne
-                // Ausblenden aus dem Level loeschen (control.cpp:2422). In
-                // Vanilla ist das harmlos, weil der Gegner dort zu diesem
-                // Zeitpunkt erledigt sein soll - der getauschte kaempft aber
-                // vielleicht noch. Er bekommt deshalb Cores eigene
-                // Antitrigger-Immunitaet mit; Details in ApplyPatch.
+                // Die OCB gehoerte dem alten Typ (nur Larson/Pierre kommen
+                // ueberhaupt mit einer hierher, siehe oben). Der neue Typ
+                // wuerde sie als seine eigene lesen - deshalb auf 0.
+                if (f->second.ocb != 0)
+                {
+                    e.set("ocb", JsonValue::makeInt(0));
+                    report.notes.push_back(fmt("Item %d: OCB %d faellt beim Typwechsel auf 0.",
+                                               indizes[i], f->second.ocb));
+                    f->second.ocb = 0;
+                }
+
+                // Antitrigger-Immunitaet, falls noetig - Begruendung beim
+                // Nachzuegler-Durchgang weiter unten.
                 if (in.antitriggered.count(indizes[i]))
                 {
                     e.set("antitriggerImmun", JsonValue::makeBool(true));
-                    report.notes.push_back(fmt("Item %d ist Antitrigger-Ziel - Immunitaet gesetzt.",
-                                               indizes[i]));
+                    immunGesetzt.insert(indizes[i]);
                 }
 
                 edits.push(e);
@@ -1307,6 +1354,58 @@ bool Rando::run(const RandoInput& in,
         else
             report.notes.push_back(fmt("Gegnertausch: nur %d tauschbare Gegner im Level, nichts zu mischen.",
                                        static_cast<int>(indizes.size())));
+    }
+
+    // --- Antitrigger-Immunitaet fuer JEDEN betroffenen Gegner ---
+    //
+    // Der Item-Verlust ist der eigentliche Grund, und er haengt NICHT am
+    // Typentausch: GetCarriedItems (setup.cpp:1962) haengt beim Levelstart
+    // jedes Pickup im Umkreis von 512 Einheiten an den naechsten Gegner -
+    // RemoveDrawnItem, room_number = NO_ROOM, das Item ist danach nur noch
+    // dessen Fracht. Stirbt er normal, gibt CreatureDie sie ueber
+    // DropBaddyPickups wieder frei (box.cpp:880). Der Antitrigger dagegen
+    // ruft direkt KillItem (control.cpp:2422) - Gegner UND Fracht sind weg.
+    //
+    // In Vanilla ist das folgenlos, weil Core neben solche Gegner nichts
+    // legt. Sobald die Items wandern, kann dort aber ein Schluesselitem
+    // liegen, und dann ist das Level nach einem Schritt auf den
+    // Antitrigger-Sektor unloesbar - ohne jede Meldung.
+    //
+    // Deshalb bekommt jeder betroffene Gegner das Immunitaetsbit, auch der
+    // ungetauschte. Wirkung wie "den Zeiger aus dem Antitrigger nehmen", nur
+    // am Item statt an der Floordata: der Antitrigger fuehrt ihn weiter auf,
+    // ueberspringt ihn aber (control.cpp:2378), und alle anderen Zeiger
+    // desselben Triggers arbeiten unveraendert weiter.
+    //
+    // Nur wenn Items ueberhaupt wandern: bei reiner Gegner-Randomisierung
+    // gibt es nichts zu verlieren, und ein Vanilla-Lauf soll vanilla bleiben.
+    if (opt.shuffleKeyItems || opt.shuffleOtherPickups)
+    {
+        std::set<int> gegnerarten(in.enemyTypes.begin(), in.enemyTypes.end());
+        for (std::map<int, const CrossGegner*>::const_iterator c = crossGewaehlt.begin();
+             c != crossGewaehlt.end(); ++c)
+            gegnerarten.insert(c->first);
+
+        int nachgezogen = 0;
+        for (int idx : in.antitriggered)
+        {
+            if (immunGesetzt.count(idx)) continue;
+            std::map<int, LevelItem>::const_iterator f = finalOf.find(idx);
+            // Nur Gegner: ein Antitrigger auf eine Tuer oder eine Flipmap
+            // muss weiter feuern, sonst steht das Level still.
+            if (f == finalOf.end() || !gegnerarten.count(f->second.typeId)) continue;
+
+            JsonValue e = JsonValue::makeObject();
+            e.set("index", JsonValue::makeInt(idx));
+            e.set("antitriggerImmun", JsonValue::makeBool(true));
+            edits.push(e);
+            immunGesetzt.insert(idx);
+            ++nachgezogen;
+        }
+        if (!immunGesetzt.empty())
+            report.notes.push_back(fmt("Antitrigger: %d Gegner immun gesetzt (%d davon ungetauscht) - "
+                                       "schuetzt getragene Items vor dem Verschwinden.",
+                                       static_cast<int>(immunGesetzt.size()), nachgezogen));
     }
 
     // --- Zusaetzliche Gegner ---
@@ -1647,87 +1746,33 @@ bool Rando::run(const RandoInput& in,
         report.notes.push_back("Imp geheilt: voller Animsatz (mit Tod) aus andy3.");
     }
 
-    // --- Fluchtmarker fuer Larson/Pierre (45/47) ---
+    // --- Keine Fluchtmarker: Larson und Pierre sollen kaempfen und sterben ---
     //
-    // Beide fliehen ab 40 LP zu einem AI_AMBUSH-Marker mit passender OCB in
-    // ihrer Zone und despawnen dort (GetAITarget/FindAITargetObject,
-    // box.cpp) - Core garantiert den Marker in jedem Vanilla-Level, das ihn
-    // braucht.
+    // Beide fliehen ab 40 Lebenspunkten zu einem AI_AMBUSH-Marker mit
+    // passender OCB und despawnen dort (GetAITarget/FindAITargetObject,
+    // box.cpp; PierreControl klemmt die Lebenspunkte solange bei 40 fest).
+    // Der Randomizer hat solche Marker eine Zeit lang selbst gesetzt, damit
+    // die Flucht ihr Ziel findet - das war die falsche Richtung:
     //
-    // Der Marker darf NIE auf dem Spawn-Sektor des Gegners liegen:
-    // GetAIPickups (setup.cpp:2024) macht beim Levelstart jedes AI-Objekt
-    // im Umkreis von 512 Units im selben Raum zur Start-Verhaltensanweisung
-    // des Gegners (ai_bits |= AMBUSH - er rennt dann nur noch und zielt
-    // nie) und VERBRAUCHT den Marker danach (room_number = NO_ROOM), die
-    // Fluchtsuche findet also auch nichts mehr. Im Spiel gesehen: joby2
-    // Item 182 lief Lara stumm hinterher, DIAG zeigte ai_bits 2 ab Spawn.
+    //  1. Nutzervorgabe: als Pool-Gegner sollen die beiden IMMER kaempfen
+    //     und sterben. Genau dafuer sind Larsons Ausblenden (#65) und
+    //     Pierres schleifenfeste Todesanimation ueberhaupt gebaut worden.
+    //  2. Der Despawn nimmt getragene Items mit. GetCarriedItems
+    //     (setup.cpp:1962) haengt jedes Pickup im Umkreis von 512 Einheiten
+    //     an den naechsten Gegner - ein Schluesselitem neben einem
+    //     fliehenden Larson waere nach seiner Flucht fort.
     //
-    // Deshalb EIN Marker je Level auf Laras Startposition: die Flucht
-    // fuehrt sichtbar zurueck Richtung Leveleingang und endet ausser Sicht,
-    // wie Core es in den Vanilla-Leveln inszeniert. Exemplare, deren Zone
-    // den Start nicht erreicht, fliehen einfach nicht und sterben normal
-    // (PierreKannFliehen laesst die 40-LP-Klammer dann aus). Steht ein
-    // Gegner nah an Laras Start, wuerde ER den Marker fressen - dann lieber
-    // gar keiner. Vanilla-Exemplare mit OCB != 0 bleiben aussen vor - fuer
-    // die stehen Cores eigene Marker im Level.
+    // Ohne Marker greift PierreKannFliehen() nicht, die 40-LP-Klammer
+    // entfaellt, und beide sterben wie jeder andere Gegner. Cores eigene
+    // Marker in Andrea1 und Andrea2 bleiben unangetastet - dort behalten
+    // die Vanilla-Exemplare mit ihrer OCB ihr Originalverhalten; ein
+    // getauschter Gegner verliert seine OCB (siehe Tauschschleife) und
+    // findet damit ohnehin keinen Marker mehr.
+    //
+    // Tr5Level::addAiObject und das Patchfeld "aiAdds" bleiben bestehen -
+    // die Mechanik ist geprueft und wird gebraucht, sobald wir AI-Objekte
+    // fuer etwas anderes setzen wollen.
     JsonValue aiAdds = JsonValue::makeArray();
-    {
-        bool braucht = false;
-        for (const auto& kv : finalOf)
-            if ((kv.second.typeId == 45 || kv.second.typeId == 47) && kv.second.ocb == 0)
-                braucht = true;
-        for (size_t i = 0; i < adds.size(); ++i)
-        {
-            const int t = static_cast<int>(adds[i]["typeId"].asInt());
-            if (t == 45 || t == 47) braucht = true;
-        }
-
-        const LevelItem* lara = nullptr;
-        for (const LevelItem& it : in.items)
-            if (it.typeId == 0) { lara = &it; break; }
-
-        if (braucht && lara)
-        {
-            // Gegnertypen, die den Marker fressen koennten (GetAIPickups
-            // greift bei jedem intelligenten Item): kuratierte Levelgegner,
-            // alle Pool-Fremdtypen und die beiden Fluechter selbst.
-            std::set<int> intelligente(in.enemyTypes.begin(), in.enemyTypes.end());
-            for (const CrossGegner& c : kCross) intelligente.insert(c.typeId);
-
-            auto zuNah = [&](int room, int x, int z)
-            { return room == lara->room && std::abs(x - lara->x) < 768 && std::abs(z - lara->z) < 768; };
-
-            bool frei = true;
-            for (const auto& kv : finalOf)
-                if (intelligente.count(kv.second.typeId) && zuNah(kv.second.room, kv.second.x, kv.second.z))
-                    frei = false;
-            for (size_t i = 0; i < adds.size(); ++i)
-                if (intelligente.count(static_cast<int>(adds[i]["typeId"].asInt())) &&
-                    zuNah(static_cast<int>(adds[i]["room"].asInt()),
-                          static_cast<int>(adds[i]["x"].asInt()),
-                          static_cast<int>(adds[i]["z"].asInt())))
-                    frei = false;
-
-            if (frei)
-            {
-                JsonValue m = JsonValue::makeObject();
-                m.set("slot", JsonValue::makeInt(379));   // AI_AMBUSH (objects.h:270)
-                m.set("room", JsonValue::makeInt(lara->room));
-                m.set("x", JsonValue::makeInt(lara->x));
-                m.set("y", JsonValue::makeInt(lara->y));
-                m.set("z", JsonValue::makeInt(lara->z));
-                m.set("ocb", JsonValue::makeInt(0));
-                aiAdds.push(m);
-                report.notes.push_back("Fluchtmarker: AI_AMBUSH fuer Larson/Pierre an Laras Start gesetzt.");
-            }
-            else
-                report.notes.push_back("Fluchtmarker entfaellt: Gegner zu nah an Laras Start "
-                                       "(GetAIPickups wuerde ihn fressen) - Larson/Pierre sterben normal.");
-        }
-        else if (braucht)
-            report.notes.push_back("Fluchtmarker entfaellt: Lara-Startitem nicht im Export - "
-                                   "Larson/Pierre sterben normal.");
-    }
 
     // --- Outfit wuerfeln ---
     //

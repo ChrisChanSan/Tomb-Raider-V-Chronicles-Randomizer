@@ -167,8 +167,15 @@ void MazeMonsterControl(short item_number)
 			// Spiel gesehen: "schwarzer Kegel"). Ab dem letzten Frame den
 			// Fade anstossen, draw.cpp:742 blendet aus und raeumt bei 128 weg
 			// - dasselbe Muster wie bei Larson (pierre.cpp).
+			// Getragenes gehoert mit heraus: freigegeben wird es sonst nur
+			// von CreatureDie, und dorthin fuehrt allein der Anim-Befehl 4
+			// ueber ITEM_DEACTIVATED - den traegt diese Sterbeanimation
+			// nicht, deshalb steht dieser Zweig ueberhaupt hier.
 			else if (item->frame_number == anims[item->anim_number].frame_end && !item->after_death)
+			{
+				DropBaddyPickups(item);
 				item->after_death = 1;
+			}
 		}
 		else
 		{

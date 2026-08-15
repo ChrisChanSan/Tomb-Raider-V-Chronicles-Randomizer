@@ -177,8 +177,16 @@ void PierreControl(short item_number)
 			// hier der Anstoss, den seine Animation nicht mitbringt. Andrea2
 			// bleibt unberuehrt: dort blendet die Cutscene ihn im selben
 			// Augenblick aus, das Verblassen wird nie sichtbar.
+			//
+			// Mit dem Fade muss auch die Fracht heraus: getragene Items gibt
+			// sonst NUR CreatureDie frei, und dorthin kommt Larson nie -
+			// seine Sterbeanimation traegt keinen Befehl 4, der ueber
+			// ITEM_DEACTIVATED (control.cpp:3246) dorthin fuehren wuerde.
 			if (!item->after_death)
+			{
+				DropBaddyPickups(item);
 				item->after_death = 1;
+			}
 		}
 		else if (item->object_number == PIERRE && item->frame_number >= anims[item->anim_number].frame_end - 1)
 		{
@@ -191,8 +199,15 @@ void PierreControl(short item_number)
 			// after_death blendet aus und raeumt bei 128 weg.
 			item->frame_number = anims[item->anim_number].frame_end - 1;
 
+			// Fracht freigeben: der Riegel eine Bildnummer vor dem Ende ist
+			// genau der Grund, warum Pierres eigener Befehl 4 nie mehr
+			// ausgeloest wird - und damit auch CreatureDie nicht, das die
+			// getragenen Items sonst ablegen wuerde.
 			if (!item->after_death)
+			{
+				DropBaddyPickups(item);
 				item->after_death = 1;
+			}
 		}
 	}
 	else
@@ -415,6 +430,21 @@ void PierreControl(short item_number)
 		}
 		else
 		{
+			// Getragenes zuerst ablegen, dann verschwinden.
+			//
+			// GetCarriedItems (setup.cpp:1962) haengt beim Levelstart JEDES
+			// Pickup im Umkreis von 512 Einheiten an den naechsten Gegner:
+			// RemoveDrawnItem, room_number = NO_ROOM - das Item existiert
+			// danach nur noch als seine Fracht. Beim normalen Tod gibt
+			// CreatureDie sie ueber DropBaddyPickups wieder frei; dieser
+			// Fluchtabgang ruft aber direkt KillItem, und damit waere die
+			// Fracht fuer immer fort.
+			//
+			// In Vanilla faellt das nicht auf, weil Core keinem fliehenden
+			// Larson etwas mitgibt. Mit zufaelliger Itemverteilung kann dort
+			// aber ein Schluesselitem liegen - und dann waere das Level nach
+			// seiner Flucht nicht mehr loesbar.
+			DropBaddyPickups(item);
 			item->hit_points = -16384;
 			DisableBaddieAI(item_number);
 			KillItem(item_number);

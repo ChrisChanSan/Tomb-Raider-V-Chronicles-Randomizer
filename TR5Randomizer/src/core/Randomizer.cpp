@@ -298,6 +298,8 @@ bool Rando::buildInput(const JsonValue& zoneExport,
         r.room = static_cast<int>(rooms[i]["index"].asInt());
         r.originX = static_cast<int>(rooms[i]["originX"].asInt());
         r.originZ = static_cast<int>(rooms[i]["originZ"].asInt());
+        r.numX = static_cast<int>(rooms[i]["numXSectors"].asInt());
+        r.numZ = static_cast<int>(rooms[i]["numZSectors"].asInt());
         out.roomOrigins.push_back(r);
         if (rooms[i]["waterRoom"].asBool(false))
             out.waterRooms.insert(r.room);
@@ -1321,6 +1323,96 @@ bool Rando::run(const RandoInput& in,
     // vor - sie stehen dort nicht drin. Mit Cross-Gegnermix gehen einzelne
     // Rollen zusaetzlich an die gewaehlten fremden Typen.
     std::set<int> immunGesetzt;      // Items, die schon beim Tausch immun wurden
+    // Platzbedarf: manche Gegner brauchen eine Arena, kein Kaemmerchen.
+    //
+    // Die Hydra ist der Anlass. Sie steht fest verwurzelt, dreht sich um volle
+    // 360 Grad und kaempft auf Distanz mit ihrem Flammengeschoss - in einer
+    // engen Kammer kann Lara weder ausweichen noch die Reichweite nutzen.
+    //
+    // Gemessen wird NICHT der Raum, sondern der freie Platz UM DEN SEKTOR
+    // herum - ein Fenster von 7x7 Feldern, in dessen Mitte der Gegner steht.
+    // Zwei Irrwege liegen dahinter, beide verworfen:
+    //
+    //  - Der einzelne Raum ist das falsche Mass. Die Raumaufteilung eines
+    //    TR5-Levels folgt dem Baukasten des Editors, nicht dem, was Lara als
+    //    Halle wahrnimmt: ihre eigene Arena in Andrea2 besteht aus SIEBEN
+    //    Raeumen (71, 72, 116, 117, 121, 140, 194), Raum 116 allein waere nur
+    //    4x8 begehbar. Jede Schwelle auf Raumebene haette ihren eigenen
+    //    Kampfplatz ausgeschlossen.
+    //  - Die zusammenhaengende Flaeche ist zu grosszuegig. Sie verschmilzt
+    //    alles, was auf gleicher Hoehe verbunden ist - in Andrea1 waren das
+    //    619 von 961 Sektoren, Korridore eingeschlossen. Die Hydra haette im
+    //    Gang stehen duerfen, nur weil der Gang an eine Halle andockt.
+    //
+    // Das Fenster misst genau das, was zaehlt: wie offen es dort ist, wo sie
+    // steht. Die Schwelle stammt nicht aus dem Bauch, sondern aus Vanilla -
+    // an allen drei Kampfplaetzen in Andrea2 (Items 91/92/93) sind 40 der 49
+    // Felder frei. Wer 40 verlangt, verlangt genau so viel Luft, wie Core ihr
+    // selbst gegeben hat.
+    //
+    // Die Tabelle gilt fuer JEDEN Weg, auf dem ein Typ irgendwo landet, also
+    // fuer Tausch und Zusatzgegner gleichermassen - auch fuer den heimischen
+    // Pool: in Andrea2 steht die Hydra im eigenen Levelpool und koennte sonst
+    // ueber den Tausch in eine Abstellkammer geraten. Die drei Vanilla-Hydras
+    // stehen in fixedItems und bleiben ohnehin unberuehrt.
+    struct Raumbedarf { int typeId; int fenster; int frei; };
+    static const Raumbedarf kRaumbedarf[] = {
+        { 63, 7, 40 },   // Hydra: 7x7-Fenster, mindestens 40 Felder frei
+    };
+
+    // Weltraster aller begehbaren Sektoren, Schluessel ist das Feld in
+    // Sektorschritten. Bewusst in.sectors und nicht der laufend gefilterte
+    // Pool: gemessen werden soll, wie offen die Umgebung IST, nicht wo gerade
+    // noch etwas hindarf. Genau diese Quelle lag auch der Vanilla-Messung
+    // zugrunde, aus der die 40 stammen - Mass und Messlatte muessen aus
+    // derselben Quelle kommen, sonst vergleicht man Aepfel mit Birnen.
+    //
+    // Je Feld werden die Bodenhoehen gesammelt, weil uebereinander liegende
+    // Raeume dieselben x/z teilen. Ohne Hoehenvergleich zaehlte der Balkon
+    // ueber ihr als freier Platz neben ihr.
+    std::map<long long, std::vector<int>> freiRaster;
+    for (const ZoneSector& s : in.sectors)
+    {
+        std::map<int, RoomOrigin>::const_iterator o = origin.find(s.room);
+        if (o == origin.end()) continue;
+        const long long gk =
+            (static_cast<long long>((o->second.originX + s.sectorX * 1024) / 1024) << 24)
+          |  static_cast<long long>((o->second.originZ + s.sectorZ * 1024) / 1024);
+        freiRaster[gk].push_back(s.floorY);
+    }
+
+    auto genugPlatz = [&origin, &freiRaster]
+                      (int typeId, int room, int sectorX, int sectorZ, int y) -> bool
+    {
+        const Raumbedarf* b = 0;
+        for (const Raumbedarf& r : kRaumbedarf)
+            if (r.typeId == typeId) { b = &r; break; }
+        if (!b) return true;                        // kein Sondermass, alles erlaubt
+
+        std::map<int, RoomOrigin>::const_iterator o = origin.find(room);
+        if (o == origin.end()) return false;        // Raum unbekannt: nicht riskieren
+        const int gx = (o->second.originX + sectorX * 1024) / 1024;
+        const int gz = (o->second.originZ + sectorZ * 1024) / 1024;
+        const int r  = b->fenster / 2;
+
+        int frei = 0;
+        for (int dx = -r; dx <= r; ++dx)
+            for (int dz = -r; dz <= r; ++dz)
+            {
+                const long long nk = (static_cast<long long>(gx + dx) << 24)
+                                   |  static_cast<long long>(gz + dz);
+                std::map<long long, std::vector<int>>::const_iterator f = freiRaster.find(nk);
+                if (f == freiRaster.end()) continue;
+                for (int h : f->second)
+                {
+                    int dy = h - y;
+                    if (dy < 0) dy = -dy;
+                    if (dy <= 512) { ++frei; break; }   // ein Stockwerk zaehlt einmal
+                }
+            }
+        return frei >= b->frei;
+    };
+
     if (opt.swapEnemies && (in.enemyTypes.size() > 1 || !crossGewaehlt.empty()))
     {
         std::set<int> erlaubt(in.enemyTypes.begin(), in.enemyTypes.end());
@@ -1399,6 +1491,18 @@ bool Rando::run(const RandoInput& in,
             {
                 std::map<int, LevelItem>::iterator f = finalOf.find(indizes[i]);
                 if (f == finalOf.end() || f->second.typeId == arten[i]) continue;
+
+                // Grosse Gegner brauchen freien Platz um sich (siehe
+                // kRaumbedarf). Passt der ausgewuerfelte Typ hier nicht, bleibt
+                // das Item auf seinem alten Typ stehen - ein Gegner weniger im
+                // Mix ist besser als eine Hydra, die in ihrer Kammer festsitzt.
+                if (!genugPlatz(arten[i], f->second.room,
+                                f->second.sectorX, f->second.sectorZ, f->second.y))
+                {
+                    report.notes.push_back(fmt("Gegner Item %d: typeId %d braucht mehr freien Platz, als es in Raum %d hat - bleibt typeId %d.",
+                                               indizes[i], arten[i], f->second.room, f->second.typeId));
+                    continue;
+                }
 
                 JsonValue e = JsonValue::makeObject();
                 e.set("index", JsonValue::makeInt(indizes[i]));
@@ -1579,9 +1683,19 @@ bool Rando::run(const RandoInput& in,
             for (long long a : p.trigger)
                 if (!used.count(a)) { trigger = a; break; }
             if (trigger < 0) continue;          // alle Anmarschfelder vergeben
+
+            // Erst die Typen aussieben, die hier genug Platz finden (siehe
+            // kRaumbedarf), dann daraus wuerfeln. Andersherum - wuerfeln und
+            // bei Nichtpassen verwerfen - wuerde der Hydra jedes Mal einen
+            // Platz stehlen, den ein anderer Typ haette nutzen koennen.
+            std::vector<int> passend;
+            for (int t : gegnerPool)
+                if (genugPlatz(t, p.s->room, p.s->sectorX, p.s->sectorZ, p.s->floorY))
+                    passend.push_back(t);
+            if (passend.empty()) continue;      // hier ist es fuer den ganzen Pool zu eng
             ++gesetzt;
 
-            const int typeId = gegnerPool[static_cast<size_t>(rng.below(gegnerPool.size()))];
+            const int typeId = passend[static_cast<size_t>(rng.below(passend.size()))];
             if (crossGewaehlt.count(typeId)) crossBenutzt.insert(typeId);
             const RoomOrigin& ro = origin[p.s->room];
 

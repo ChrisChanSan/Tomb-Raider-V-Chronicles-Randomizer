@@ -127,7 +127,11 @@ inline bool isWithinCarryBox(int bx, int by, int bz, int px, int py, int pz)
         && (bz - pz < 512) && (pz - bz < 512);
 }
 
-struct RoomOrigin { int room = 0; int originX = 0; int originZ = 0; };
+// numX/numZ sind das ROHMASS aus dem Raumkopf - der Wandring rundherum zaehlt
+// mit, begehbar sind also (numX-2) * (numZ-2) Felder. Gebraucht wird das in
+// kRaumbedarf (Randomizer.cpp): dort entscheidet die Raumgroesse, welche
+// Gegner ueberhaupt hinein duerfen.
+struct RoomOrigin { int room = 0; int originX = 0; int originZ = 0; int numX = 0; int numZ = 0; };
 
 struct ZoneSector
 {

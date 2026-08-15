@@ -1036,6 +1036,15 @@ bool Rando::run(const RandoInput& in,
             // Antitrigger-Ziele bleiben vorerst unangetastet - siehe
             // RandoInput::antitriggered (gescriptetes Despawnen).
             if (in.antitriggered.count(it.index)) continue;
+            // OCB != 0 heisst: typspezifischer Spezial-Spawn. Die OCB steuert
+            // Initialise/Control des URSPRUNGSTYPS (Imp 1/2/3/11/12:
+            // Kletter-/Wurfzustaende auf Wandvorspruengen, imp.cpp:82;
+            // Pierre: Positionsversatz + AMBUSH, pierre.cpp:30; u.a.) - ein
+            // fremder Typ versteht sie nicht und steht dann in der Wand
+            // (im Spiel gesehen: andy3 Items 2/3, Klippen-Imps OCB 3 wurden
+            // SWAT/Guard - Grafikloch, Zielerfassung flackert). Solche
+            // Items behalten ihren Typ.
+            if (it.ocb != 0) continue;
             indizes.push_back(it.index);
             arten.push_back(it.typeId);
         }

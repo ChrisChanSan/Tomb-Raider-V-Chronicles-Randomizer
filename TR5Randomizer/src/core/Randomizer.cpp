@@ -411,6 +411,19 @@ bool Rando::buildInput(const JsonValue& zoneExport,
     return true;
 }
 
+bool Rando::bodenAn(const RandoInput& in, const ZoneSector& s,
+                    int lokalX, int lokalZ, int& yOut)
+{
+    yOut = s.floorY;
+    std::map<long long, SchraegeInfo>::const_iterator f =
+        in.schraegen.find(secKey(s.room, s.sectorX, s.sectorZ));
+    if (f == in.schraegen.end()) return true;       // kein Eintrag: eben
+
+    const BodenLage lage = bodenLageAn(f->second, s.floorY, lokalX, lokalZ);
+    yOut = lage.y;
+    return lage.begehbar;
+}
+
 bool Rando::sectorAllowedFor(const RandoInput& in,
                              const KeyConstraint* k,
                              const ZoneSector& s,
@@ -421,12 +434,20 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
     // Schrotflinte ist kein Schluessel und wuerde sonst gar nicht geprueft.
     if (in.weaponTypes.count(typeId) && in.noWeaponRooms.count(s.room)) return false;
 
-    // Kein Item auf geneigten oder halb begehbaren Boden: es wuerde dort in
-    // der Luft haengen oder im Boden stecken (siehe RandoInput::
-    // unebeneSektoren). Steht wie typeNoRooms VOR dem Constraint-Zweig und
-    // gilt damit auf jedem Platzierungsweg - Schluessel, Pickups,
-    // Injektionen, Streuung und Abundance.
-    if (in.unebeneSektoren.count(secKey(s.room, s.sectorX, s.sectorZ))) return false;
+    // Kein Item auf Rutschen (Neigung > 2 - Lara kann dort nichts aufheben)
+    // oder ueber dem kollisionsfreien Dreieck eines NOCOLF-Sektors. Belaufbare
+    // Schraegen sind dagegen erlaubt - ihr y rechnen die Ausgabestellen mit
+    // bodenAn auf die echte Bodenhoehe. Entscheidend ist der LANDEPUNKT
+    // (Sektormitte plus Typversatz), denn bei Splits gelten je Dreieck eigene
+    // Neigungen. Steht wie typeNoRooms VOR dem Constraint-Zweig und gilt
+    // damit auf jedem Platzierungsweg - Schluessel, Pickups, Injektionen,
+    // Streuung und Abundance.
+    {
+        std::map<int, PlacementOffset>::const_iterator o = in.typeOffset.find(typeId);
+        const PlacementOffset po = (o == in.typeOffset.end()) ? PlacementOffset() : o->second;
+        int y = 0;
+        if (!bodenAn(in, s, 512 + po.dx, 512 + po.dz, y)) return false;
+    }
 
     // Sperre einzelner Typen fuer einzelne Raeume. Steht bewusst VOR dem
     // Constraint-Zweig und gilt damit auf jedem Platzierungsweg, auch fuer
@@ -479,11 +500,13 @@ bool Rando::buildMarkerPatch(const RandoInput& in,
         std::map<int, RoomOrigin>::const_iterator ro = origin.find(s.room);
         if (ro == origin.end()) return;
         const PlacementOffset po = offFor(typeId);
+        int yBoden = 0;
+        Rando::bodenAn(in, s, 512 + po.dx, 512 + po.dz, yBoden);
         JsonValue a = JsonValue::makeObject();
         a.set("typeId", JsonValue::makeInt(typeId));
         a.set("room", JsonValue::makeInt(s.room));
         a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro->second.originX) + s.sectorX * 1024 + 512 + po.dx));
-        a.set("y", JsonValue::makeInt(s.floorY + po.dy));
+        a.set("y", JsonValue::makeInt(yBoden + po.dy));
         a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro->second.originZ) + s.sectorZ * 1024 + 512 + po.dz));
         a.set("ocb", JsonValue::makeInt(0));
         adds.push(a);
@@ -714,7 +737,11 @@ bool Rando::run(const RandoInput& in,
         const RoomOrigin& ro = origin[s.room];
         const PlacementOffset po = offFor(it.typeId);
         const int px = ro.originX + s.sectorX * 1024 + 512 + po.dx;
-        const int py = s.floorY + po.dy;
+        // Echte Bodenhoehe am Landepunkt statt Sektor-Grundwert: auf einer
+        // belaufbaren Schraege laege das Item sonst in der Luft (#86/#87).
+        int pyBoden = 0;
+        Rando::bodenAn(in, s, 512 + po.dx, 512 + po.dz, pyBoden);
+        const int py = pyBoden + po.dy;
         const int pz = ro.originZ + s.sectorZ * 1024 + 512 + po.dz;
 
         // Regel 3: Sockel- und Versteck-OCB ueberleben einen Ortswechsel nicht.
@@ -868,11 +895,13 @@ bool Rando::run(const RandoInput& in,
         const RoomOrigin& ro = origin[s.room];
 
         const PlacementOffset po = offFor(j.typeId);
+        int yBoden = 0;
+        Rando::bodenAn(in, s, 512 + po.dx, 512 + po.dz, yBoden);
         JsonValue a = JsonValue::makeObject();
         a.set("typeId", JsonValue::makeInt(j.typeId));
         a.set("room", JsonValue::makeInt(s.room));
         a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + s.sectorX * 1024 + 512 + po.dx));
-        a.set("y", JsonValue::makeInt(s.floorY + po.dy + j.yOffset));
+        a.set("y", JsonValue::makeInt(yBoden + po.dy + j.yOffset));
         a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s.sectorZ * 1024 + 512 + po.dz));
         a.set("ocb", JsonValue::makeInt(0));
         adds.push(a);
@@ -938,11 +967,13 @@ bool Rando::run(const RandoInput& in,
         {
             const RoomOrigin& ro = origin[s.room];
             const PlacementOffset po = offFor(typeId);
+            int yBoden = 0;
+            Rando::bodenAn(in, s, 512 + po.dx, 512 + po.dz, yBoden);
             JsonValue a = JsonValue::makeObject();
             a.set("typeId", JsonValue::makeInt(typeId));
             a.set("room", JsonValue::makeInt(s.room));
             a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + s.sectorX * 1024 + 512 + po.dx));
-            a.set("y", JsonValue::makeInt(s.floorY + po.dy));
+            a.set("y", JsonValue::makeInt(yBoden + po.dy));
             a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s.sectorZ * 1024 + 512 + po.dz));
             a.set("ocb", JsonValue::makeInt(0));
             adds.push(a);
@@ -1123,11 +1154,13 @@ bool Rando::run(const RandoInput& in,
                 }
                 const RoomOrigin& ro = origin[s->room];
                 const PlacementOffset po = offFor(typ);
+                int yBoden = 0;
+                Rando::bodenAn(in, *s, 512 + po.dx, 512 + po.dz, yBoden);
                 JsonValue a = JsonValue::makeObject();
                 a.set("typeId", JsonValue::makeInt(typ));
                 a.set("room", JsonValue::makeInt(s->room));
                 a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + s->sectorX * 1024 + 512 + po.dx));
-                a.set("y", JsonValue::makeInt(s->floorY + po.dy));
+                a.set("y", JsonValue::makeInt(yBoden + po.dy));
                 a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s->sectorZ * 1024 + 512 + po.dz));
                 a.set("ocb", JsonValue::makeInt(0));
                 adds.push(a);
@@ -1721,11 +1754,17 @@ bool Rando::run(const RandoInput& in,
             // in genau dieser Reihenfolge.
             const int neuerIndex = static_cast<int>(in.items.size()) + static_cast<int>(adds.size());
 
+            // Auch der Gegner bekommt die echte Bodenhoehe - er wuerde zwar
+            // von der Engine auf den Boden gesetzt, soll aber nicht einen
+            // halben Sektor tief einfallen. Belaufbarkeit ist fuer ihn keine
+            // Bedingung, deshalb nur die Hoehe.
+            int gyBoden = 0;
+            Rando::bodenAn(in, *p.s, 512, 512, gyBoden);
             JsonValue a = JsonValue::makeObject();
             a.set("typeId", JsonValue::makeInt(typeId));
             a.set("room", JsonValue::makeInt(p.s->room));
             a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + p.s->sectorX * 1024 + 512));
-            a.set("y", JsonValue::makeInt(p.s->floorY));
+            a.set("y", JsonValue::makeInt(gyBoden));
             a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + p.s->sectorZ * 1024 + 512));
             // OCB 0: bei Larson setzt eine OCB != 0 ai_bits = GUARD, und dann
             // sucht er AI-Objekte, die an einer neuen Stelle nicht stehen

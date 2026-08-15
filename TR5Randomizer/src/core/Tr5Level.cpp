@@ -533,49 +533,39 @@ bool Tr5Level::readChain(int index, std::vector<Tr5FloorEntry>& out) const
     return true;
 }
 
-bool Tr5Level::floorIstUneben(int room, int sx, int sz) const
+int Tr5Level::floorNeigung(int room, int sx, int sz, SchraegeInfo& si, int& baseY) const
 {
+    si = SchraegeInfo();
+    baseY = 0;
+
+    if (room < 0 || room >= static_cast<int>(m_rooms.size())) return -1;
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors) return -1;
+
+    // floor-Byte des Sektors: Vorzeichenbyte an +5 des 8-Byte-Eintrags
+    // (FLOOR_INFO in global/types.h: index, fx/box/stopper, pit_room, floor,
+    // sky_room, ceiling). GetHeight beginnt mit genau diesem Wert << 8.
+    const size_t at = r.sectorsOffset + (static_cast<size_t>(sx) * r.numZSectors + sz) * 8;
+    baseY = static_cast<int8_t>(m_bytes[at + 5]) << 8;
+
     const int idx = sectorIndex(room, sx, sz);
-    if (idx < 0) return true;                       // Sektor unbekannt: Finger weg
-    if (idx == 0) return false;                     // keine Floordata = eben
+    if (idx < 0) return -1;
+    if (idx == 0) return 0;                         // keine Floordata = eben
 
     std::vector<Tr5FloorEntry> chain;
-    if (!readChain(idx, chain)) return true;        // unlesbar: Finger weg
+    if (!readChain(idx, chain)) return -1;          // unlesbar: Finger weg
 
     for (const Tr5FloorEntry& e : chain)
     {
-        // TILT (2): das Datenwort traegt die beiden Neigungen als
-        // Vorzeichenbytes (GetHeight, control.cpp:1014-1015). Null/Null
-        // waere eben, kommt aber praktisch nicht vor.
-        if (e.funktion == FN_TILT && e.woerter.size() >= 2)
-        {
-            const int xoff = static_cast<int16_t>(e.woerter[1]) >> 8;
-            const int yoff = static_cast<int8_t>(e.woerter[1] & 0xFF);
-            if (xoff != 0 || yoff != 0) return true;
-        }
-
-        // SPLIT1/2 (7/8): diagonal geteilter Boden. Eben ist er nur, wenn
-        // alle vier Ecknibbles des Datenworts gleich sind UND beide
-        // hadj-Felder im Typwort (Bits 5-9 und 10-14, je Dreieck eines)
-        // null sind - sonst liegen die Dreiecke geneigt oder versetzt
-        // (control.cpp:1084-1143).
-        if (e.funktion == 7 || e.funktion == 8)
-        {
-            if (e.woerter.size() < 2) return true;
-            const uint16_t t = e.woerter[1];
-            const int t0 = t & 0xF, t1 = (t >> 4) & 0xF,
-                      t2 = (t >> 8) & 0xF, t3 = (t >> 12) & 0xF;
-            if (t0 != t1 || t1 != t2 || t2 != t3) return true;
-            if (((e.woerter[0] >> 5) & 0x3FF) != 0) return true;
-        }
-
-        // NOCOLF (11-14): ein Dreieck hat KEINE Bodenkollision. Selbst wenn
-        // beide Haelften rechnerisch eben sind, hinge ein Item in der
-        // Sektormitte womoeglich ueber dem kollisionsfreien Teil - solche
-        // Sektoren sind fuer Items immer tabu.
-        if (e.funktion >= 11 && e.funktion <= 14) return true;
+        const bool boden = (e.funktion == FN_TILT || e.funktion == 7 ||
+                            e.funktion == 8 || (e.funktion >= 11 && e.funktion <= 14));
+        if (!boden) continue;
+        if (e.woerter.size() < 2) return -1;        // Eintrag ohne Datenwort: kaputt
+        si.typWort = e.woerter[0];
+        si.datenWort = e.woerter[1];
+        return 1;
     }
-    return false;
+    return 0;                                       // nur Portale/Trigger/...: eben
 }
 
 const char* Tr5Level::canAppendTrigger(const std::vector<Tr5FloorEntry>& chain)

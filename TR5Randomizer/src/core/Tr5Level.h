@@ -20,6 +20,8 @@
 #include <string>
 #include <vector>
 
+#include "Boden.h"
+
 //----------------------------------------------------------------------------
 // Eigener Leser und Schreiber fuer TR5-Leveldateien (.trc).
 //
@@ -227,15 +229,14 @@ public:
     // Kette laeuft aus dem Block heraus, Finger weg.
     bool    readChain(int index, std::vector<Tr5FloorEntry>& out) const;
 
-    // Ist der Boden dieses Sektors geneigt oder nur halb begehbar? Dann darf
-    // dort kein Item hin: ein platziertes Item bekommt das floorY des Sektors
-    // als y, die Engine zeichnet es genau dort - auf einer Schraege haengt es
-    // in der Luft oder steckt im Boden (GetHeight rechnet die Neigung erst
-    // zur Laufzeit aus der Floordata, control.cpp:1013ff und 1078ff; im Spiel
-    // gesehen auf Halbschraegen und geneigten Ecken). Gegner sind nicht
-    // betroffen - die setzt die Engine jeden Frame selbst auf den Boden.
-    // true auch bei unlesbarer Kette: Finger weg.
-    bool    floorIstUneben(int room, int sx, int sz) const;
+    // Der Neigungseintrag eines Sektors (TILT, SPLIT1/2, NOCOLF), roh fuer
+    // bodenLageAn (Boden.h) - dort steckt die portierte GetHeight-Mathematik,
+    // die aus Eintrag + Punkt die echte Bodenhoehe und die Belaufbarkeit
+    // macht. baseY ist der Grundwert des Sektors (floor-Byte << 8), auf einer
+    // Schraege die HOECHSTE Ecke.
+    // Rueckgabe: -1 Kette unlesbar (Finger weg), 0 eben (kein Eintrag,
+    // baseY trotzdem gefuellt), 1 Eintrag steht in si.
+    int     floorNeigung(int room, int sx, int sz, SchraegeInfo& si, int& baseY) const;
 
     // Nimmt den Triggereintrag des Quellsektors heraus und haengt ihn an die
     // Kette des Zielsektors. Beide Ketten werden neu hinten angebaut, beide

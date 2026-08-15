@@ -16,6 +16,7 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 #pragma once
+#include "Boden.h"
 #include "Json.h"
 #include "Rng.h"
 
@@ -384,18 +385,25 @@ struct RandoInput
     // Tr5Level::canAppendTrigger.
     std::set<long long>      triggerSafeSectors;
 
-    // Sektoren mit geneigtem oder nur halb begehbarem Boden (Schraegen,
-    // Splits mit Hoehenversatz, kollisionsfreie Dreiecke). Fuer ITEMS tabu:
-    // ein Item wird auf das floorY des Sektors gelegt und genau dort
-    // gezeichnet - auf einer Schraege haengt es in der Luft oder steckt im
-    // Boden (im Spiel gesehen, trview zeigt es dagegen am Boden). Gegner
-    // duerfen weiter auf Schraegen stehen, die setzt die Engine jeden Frame
-    // per GetHeight selbst auf den Boden.
-    //
-    // Wie triggerSafeSectors aus der Floordata des ECHTEN Levels gelesen
+    // Neigungseintraege aller Platzierungssektoren (nur Sektoren MIT Eintrag;
+    // wer fehlt, ist eben). Aus der Floordata des ECHTEN Levels gelesen
     // (markTriggerSafeSectors) - der Zonen-Export kennt je Sektor nur ein
     // floorY und kann eben und geneigt nicht unterscheiden.
-    std::set<long long>      unebeneSektoren;
+    //
+    // Gebraucht fuer zwei Dinge, beide in bodenLageAn (Boden.h):
+    //  1. Das ITEM-y. Ein Item wird von der Engine genau auf seinem y
+    //     gezeichnet; das floorY des Sektors ist auf einer Schraege aber die
+    //     hoechste Ecke - ohne Umrechnung haengt das Item in der Luft (im
+    //     Spiel gesehen, #86). Belaufbare Schraegen (Neigung bis 2) sind
+    //     vollwertige Itemplaetze, Core legt dort selbst Pickups ab - eine
+    //     Pauschalsperre kostete andy1-3 fast alle Sektoren (Nutzerfund).
+    //  2. Die Sperre der echten Ausnahmen: Rutschen (Neigung > 2, Lara kann
+    //     dort nichts aufheben) und das kollisionsfreie Dreieck der
+    //     NOCOLF-Sektoren (dort gibt es keinen Boden).
+    // Gegner brauchen beides nicht zwingend - die setzt die Engine jeden
+    // Frame per GetHeight auf den Boden - bekommen ihr y aber trotzdem
+    // ausgerechnet, damit sie nicht einen halben Sektor tief einfallen.
+    std::map<long long, SchraegeInfo> schraegen;
 };
 
 struct RandoOptions
@@ -517,6 +525,13 @@ namespace Rando
                           const ZoneSector& s,
                           int typeId,
                           bool mustBeOnIsland);
+
+    // Bodenhoehe und Belaufbarkeit an einem Punkt des Sektors (lokalX/lokalZ
+    // in 0..1023, ueblich 512 + Typversatz). yOut wird IMMER gefuellt - auch
+    // auf einer Rutsche stimmt die Hoehe, nur stehen darf dort niemand.
+    // Sektoren ohne Neigungseintrag sind eben: yOut = floorY, true.
+    bool bodenAn(const RandoInput& in, const ZoneSector& s,
+                 int lokalX, int lokalZ, int& yOut);
 
     // Debugwerkzeug: legt Marker auf Sektoren, statt Items zu verschieben.
     //

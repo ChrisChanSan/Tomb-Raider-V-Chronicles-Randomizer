@@ -11,10 +11,50 @@
 #include "people.h"
 #include "../specific/function_stubs.h"
 #include "lara.h"
+#include "../specific/file.h"
 
 static BITE_INFO larson_gun = { -55, 200, 5, 14 };
 static BITE_INFO pierre_gun1 = { 60, 200, 0, 11 };
 static BITE_INFO pierre_gun2 = { -57, 200, 0, 14 };
+
+// Kann Larson/Pierre von hier aus fliehen? Die Flucht ab 40 LP laeuft ueber
+// ai_bits = AMBUSH zu einem AIAmbush-Marker mit passender OCB in derselben
+// Zone (FindAITargetObject, box.cpp:1631) - dort despawnt er ueber
+// reached_goal. Core garantiert den Marker in den Vanilla-Leveln; als
+// Pool-Gegner steht er auch in Leveln OHNE passenden Marker. Dann fand
+// FindAITargetObject nie ein Ziel, er rannte endlos "fliehend" hinter Lara
+// her, und die 40-LP-Klammer machte ihn unsterblich (im Spiel gesehen:
+// joby2 Item 36). Ohne Fluchtziel greift die Klammer jetzt nicht - er
+// kaempft und stirbt wie ein normaler Gegner (seine Todesanimation bringt
+// ihr KillItem-Kommando selbst mit). Die Marker-Pruefung ist dieselbe wie
+// in FindAITargetObject: Typ, OCB, Zone.
+static long PierreKannFliehen(ITEM_INFO* item, CREATURE_INFO* pierre)
+{
+	AIOBJECT* aiObj;
+	ROOM_INFO* r;
+	short* zone;
+
+	zone = ground_zone[pierre->LOT.zone][flip_status];
+
+	for (int i = 0; i < nAIObjects; i++)
+	{
+		aiObj = &AIObjects[i];
+
+		if (aiObj->object_number != AI_AMBUSH || aiObj->trigger_flags != item->item_flags[3] || aiObj->room_number == NO_ROOM)
+			continue;
+
+		r = &room[item->room_number];
+		item->box_number = r->floor[((item->pos.z_pos - r->z) >> 10) + r->x_size * ((item->pos.x_pos - r->x) >> 10)].box;
+
+		r = &room[aiObj->room_number];
+		aiObj->box_number = r->floor[((aiObj->z - r->z) >> 10) + r->x_size * ((aiObj->x - r->x) >> 10)].box;
+
+		if (zone[item->box_number] == zone[aiObj->box_number])
+			return 1;
+	}
+
+	return 0;
+}
 
 void InitialisePierre(short item_number)
 {
@@ -65,7 +105,7 @@ void PierreControl(short item_number)
 	item = &items[item_number];
 	pierre = (CREATURE_INFO*)item->data;
 
-	if (item->hit_points <= 40 && !(item->flags & IFL_INVISIBLE))
+	if (item->hit_points <= 40 && !(item->flags & IFL_INVISIBLE) && PierreKannFliehen(item, pierre))
 	{
 		item->hit_points = 40;
 		pierre->flags++;

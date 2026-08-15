@@ -276,6 +276,20 @@ Also in this group:
   actual playing state) and Cross must be freshly pressed (edge), so a
   fire button still held from gameplay never insta-skips the scene that
   just started; Escape keeps its original held behaviour.
+- `game/pierre.cpp` — Larson/Pierre's 40-HP flee only engages when a
+  matching escape marker actually exists. Their shared control clamps hit
+  points at 40 and switches to `ai_bits = AMBUSH`, sending them to an
+  `AIAmbush` object with matching OCB in the same zone, where they despawn
+  (`reached_goal`). Core places that marker in every vanilla level that
+  needs it; as pool enemies they can land in levels without one — then
+  `FindAITargetObject` never finds a target, they chase Lara around
+  "fleeing" forever, and the HP clamp makes them immortal (seen in game:
+  joby2 item 36). The new `PierreKannFliehen()` runs the same
+  type/OCB/zone match as `FindAITargetObject` before the clamp: with a
+  reachable marker everything behaves exactly as vanilla; without one the
+  clamp is skipped and they fight to a normal death (both their death
+  animations carry their own `KillItem` command — Pierre's natively,
+  Larson's via the earlier after_death addition, so the corpses clean up).
 
 ---
 

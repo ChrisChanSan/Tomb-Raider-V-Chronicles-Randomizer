@@ -290,6 +290,24 @@ struct RandoInput
     // stehen an Cores eigenen Positionen und bleiben unberuehrt.
     std::set<int>            waterRooms;
 
+    // Einzelne Typen, die in bestimmten Raeumen nicht liegen duerfen. Anders
+    // als noWeaponRooms (sperrt ALLE Waffen eines Raums) und anders als die
+    // excludeRooms eines KeyConstraint (steuern nur das Verschieben
+    // vorhandener Items) gilt diese Sperre auf JEDEM Platzierungsweg -
+    // Verschieben, Waffenstreuung, Item-Abundance -, weil sie direkt in
+    // sectorAllowedFor sitzt.
+    //
+    // Einziger Fall bisher: rich2s HK (345) darf nicht in die Startinsel.
+    // Der Roentgenscanner in Raum 9 reagiert im Spiel geprueft NUR auf sie;
+    // andere Waffen duerfen dort liegen, sonst waere der gegnerreiche
+    // Levelanfang allein mit Pistolen zu bestehen.
+    std::map<int, std::set<int>> typeNoRooms;
+
+    // Items, die ihr Antitrigger nicht mehr anfassen soll (Flagbit 0x80).
+    // Kuratiert, unabhaengig von der Gegner-Automatik: rich2s Tuer 171 soll
+    // offen bleiben, sobald sie einmal offen war.
+    std::set<int>            antitriggerImmunItems;
+
     // Items, auf die ein AntiTrigger oder HeavyAntiTrigger zeigt. Zeigt so
     // ein Trigger auf einen AKTIVEN intelligenten Gegner, loescht er ihn
     // ohne Sterben und ohne Ausblenden aus dem Level (hit_points = -16384,

@@ -300,6 +300,23 @@ bool Rando::buildInput(const JsonValue& zoneExport,
             out.waterRooms.insert(r.room);
     }
 
+    // Typsperren je Raum (siehe RandoInput::typeNoRooms) und kuratierte
+    // Antitrigger-Immunitaeten.
+    {
+        const JsonValue& tnr = zoneExport["typeNoRooms"];
+        for (size_t i = 0; i < tnr.size(); ++i)
+        {
+            const int typ = static_cast<int>(tnr[i]["typeId"].asInt(-1));
+            if (typ < 0) continue;
+            const JsonValue& rl = tnr[i]["rooms"];
+            for (size_t r = 0; r < rl.size(); ++r)
+                out.typeNoRooms[typ].insert(static_cast<int>(rl[r].asInt(-1)));
+        }
+        const JsonValue& ai = zoneExport["antitriggerImmun"];
+        for (size_t i = 0; i < ai.size(); ++i)
+            out.antitriggerImmunItems.insert(static_cast<int>(ai[i].asInt(-1)));
+    }
+
     // Antitrigger-Ziele einsammeln - siehe RandoInput::antitriggered.
     {
         const JsonValue& trigs = levelInfo["triggers"];
@@ -397,6 +414,15 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
     // Das Waffenverbot haengt am LEVEL, nicht am Typ-Constraint: eine
     // Schrotflinte ist kein Schluessel und wuerde sonst gar nicht geprueft.
     if (in.weaponTypes.count(typeId) && in.noWeaponRooms.count(s.room)) return false;
+
+    // Sperre einzelner Typen fuer einzelne Raeume. Steht bewusst VOR dem
+    // Constraint-Zweig und gilt damit auf jedem Platzierungsweg, auch fuer
+    // Streuung und Abundance, die ohne Constraint hierherkommen.
+    {
+        std::map<int, std::set<int>>::const_iterator f = in.typeNoRooms.find(typeId);
+        if (f != in.typeNoRooms.end() && f->second.count(s.room)) return false;
+    }
+
     if (!k) return true;
 
     const long long sk = secKey(s.room, s.sectorX, s.sectorZ);
@@ -1406,6 +1432,20 @@ bool Rando::run(const RandoInput& in,
             report.notes.push_back(fmt("Antitrigger: %d Gegner immun gesetzt (%d davon ungetauscht) - "
                                        "schuetzt getragene Items vor dem Verschwinden.",
                                        static_cast<int>(immunGesetzt.size()), nachgezogen));
+    }
+
+    // Kuratierte Antitrigger-Immunitaeten: gelten IMMER, unabhaengig davon, ob
+    // Items wandern - sie beschreiben Levellogik, nicht eine Nebenwirkung der
+    // Randomisierung. rich2s Tuer 171 ist der Fall (siehe Kurationstabelle).
+    for (int idx : in.antitriggerImmunItems)
+    {
+        if (immunGesetzt.count(idx)) continue;
+        JsonValue e = JsonValue::makeObject();
+        e.set("index", JsonValue::makeInt(idx));
+        e.set("antitriggerImmun", JsonValue::makeBool(true));
+        edits.push(e);
+        immunGesetzt.insert(idx);
+        report.notes.push_back(fmt("Item %d: kuratierte Antitrigger-Immunitaet gesetzt.", idx));
     }
 
     // --- Zusaetzliche Gegner ---

@@ -1506,23 +1506,67 @@ $NO_KEY_ROOMS = @{
 $noKeyRooms = @( if($NO_KEY_ROOMS.ContainsKey($LevelName)){ $NO_KEY_ROOMS[$LevelName] } )
 
 $WEAPON_TYPES = 334..348
+
+# rich2s Startinsel: alles, was Lara VOR dem Roentgenscanner betreten kann.
+# Liste vom Nutzer (2026-08-15) - aus den Daten ist sie nicht ableitbar, der
+# Sektorgraph ist ungerichtet und flutet am Point of no Return vorbei.
+# 117 der 544 Ablageflaechen des Levels liegen hier, 427 dahinter.
+$RICH2_STARTINSEL = @(8,9,10,12,14,15,16,18,19,21,29,48,49,50,51,52,53,54,55,56,60,
+                      84,85,88,89,90,91,95,96,97,116,117,118,119,130,131,132,133,
+                      134,135,136,137,138,139,141,170,177)
+
 $NO_WEAPON_ROOMS = @{
     'joby3' = @(105,106,120,124,125)
-    # rich2: NUR die Startinsel bleibt waffenfrei. Dort muss Lara ihre HK am
-    # Mesh 15 in Raum 8 ablegen, um den Roentgenscanner in Raum 9 unbewaffnet
-    # zu passieren - eine zusaetzlich eingestreute Waffe davor macht das
-    # Entwaffnen gegenstandslos und das Level laut Nutzer unloesbar.
-    #
-    # Hinter dem Scanner liegt ein Point of no Return; ab der Fahrstuhlinsel
-    # (Raum 140, wo die HK per Injektion wieder bereitliegt) bis zum Levelende
-    # in Raum 58 sind Waffen ausdruecklich erwuenscht - sonst stuende das
-    # Level als einziges ohne Nachschub fuer das importierte Waffenset da.
-    # Die Raumliste stammt vom Nutzer (2026-08-15); aus den Daten ist sie
-    # nicht ableitbar, der Sektorgraph ist ungerichtet und laeuft am Point of
-    # no Return vorbei.
-    'rich2' = @(8,9,10,12,14,15,16,18,19,21,29,48,49,50,51,52,53,54,55,56,60,
-                84,85,88,89,90,91,95,96,97,116,117,118,119,130,131,132,133,
-                134,135,136,137,138,139,141,170,177)
+}
+#----------------------------------------------------------------------------
+# Einzelne TYPEN, die in bestimmten Raeumen nicht liegen duerfen - anders als
+# NO_WEAPON_ROOMS, das alle Waffen auf einmal sperrt, und anders als
+# TYPE_EXCLUDE_ROOMS, das nur die Verschiebung vorhandener Items steuert:
+# diese Sperre gilt fuer JEDEN Platzierungsweg (Verschieben, Waffenstreuung,
+# Item-Abundance).
+#
+# rich2: NUR die HK darf nicht in die Startinsel. Der Nutzer hat im Spiel
+# geprueft, dass der Roentgenscanner in Raum 9 ausschliesslich auf sie
+# reagiert - Lara legt sie am Mesh 15 in Raum 8 ab und passiert unbewaffnet.
+# Auf Uzi, Schrotflinte oder Deagle spricht der Scanner NICHT an, die duerfen
+# also dort liegen; ohne sie waere die Startinsel mit ihren vielen Gegnern
+# nur mit Pistolen zu bestehen. HK-Munition (346) ist ohne die Waffe
+# wirkungslos und bleibt erlaubt.
+#----------------------------------------------------------------------------
+$TYPE_NO_ROOMS = @{
+    'rich2' = @{ 345 = $RICH2_STARTINSEL }
+}
+
+#----------------------------------------------------------------------------
+# Items, die gegen ihren Antitrigger immun werden sollen (Flagbit 0x80,
+# IFL_ANTITRIGGER_ONESHOT - TestTriggers ueberspringt sie dann,
+# control.cpp:2378). Der Trigger bleibt vollstaendig erhalten und wirkt
+# weiter auf alle anderen Ziele.
+#
+# rich2 Tuer 171 (Raum 118, Typ 300): geoeffnet von einem HeavyTrigger in
+# Raum 118, wieder geschlossen vom AntiTrigger in Raum 18 - der traegt NUR
+# diesen einen Zeiger. Solange die Startinsel waffenfrei war, spielte das
+# keine Rolle. Jetzt darf dort eine Waffe liegen, und damit kann ein Spieler
+# die Tuer frueher oeffnen als vorgesehen; laeuft er danach ueber Raum 18,
+# faellt sie wieder zu. Mit dem Immunitaetsbit bleibt sie offen, sobald sie
+# einmal offen war.
+#----------------------------------------------------------------------------
+$ANTITRIGGER_IMMUN = @{
+    'rich2' = @(171)
+}
+$typeNoRooms = @(
+    if ($TYPE_NO_ROOMS.ContainsKey($LevelName)) {
+        foreach ($t in $TYPE_NO_ROOMS[$LevelName].Keys) {
+            [PSCustomObject]@{ typeId = [int]$t; rooms = @($TYPE_NO_ROOMS[$LevelName][$t]) }
+        }
+    }
+)
+$antitriggerImmun = @( if ($ANTITRIGGER_IMMUN.ContainsKey($LevelName)) { $ANTITRIGGER_IMMUN[$LevelName] } )
+foreach ($e in $typeNoRooms) {
+    Write-Output "Typsperre: typeId $($e.typeId) ist in $($e.rooms.Count) Raeumen von $LevelName gesperrt"
+}
+if ($antitriggerImmun.Count -gt 0) {
+    Write-Output "Antitrigger-Immunitaet: $($antitriggerImmun.Count) Item(s) in $LevelName"
 }
 #----------------------------------------------------------------------------
 # Ausruestung, die ein Schalter voraussetzt.
@@ -3399,7 +3443,7 @@ if ($ExportZonesJson -ne "") {
         $wie = if ($null -eq $ptKv.Value) { 'ohne Zonengrenze' } else { "begrenzt auf Zone <= $ptZone" }
         Write-Output "Pool-Typ $pt $wie aufgenommen ($inst Instanzen im Level)"
     }
-    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
+    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES); typeNoRooms=@($typeNoRooms); antitriggerImmun=@($antitriggerImmun) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
     Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"
 }
 

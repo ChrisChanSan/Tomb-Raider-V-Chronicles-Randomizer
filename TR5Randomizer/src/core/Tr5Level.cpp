@@ -966,6 +966,38 @@ bool Tr5Level::moveableInfo(int slotId, MoveableInfo& out) const
     return false;
 }
 
+bool Tr5Level::uebernehmeAnimDaten(int dstSlot, int dstOffset, int srcSlot,
+                                   int srcOffset, std::string& fehler)
+{
+    MoveableInfo dst, src;
+    if (!moveableInfo(dstSlot, dst) || dst.animIndex < 0)
+    { fehler = "Zielslot fehlt oder traegt keine Anims"; return false; }
+    if (!moveableInfo(srcSlot, src) || src.animIndex < 0)
+    { fehler = "Quellslot fehlt oder traegt keine Anims"; return false; }
+
+    const long long d = static_cast<long long>(dst.animIndex) + dstOffset;
+    const long long s = static_cast<long long>(src.animIndex) + srcOffset;
+    if (d < 0 || d >= m_anims.count || s < 0 || s >= m_anims.count)
+    { fehler = "Anim liegt ausserhalb der Tabelle"; return false; }
+
+    uint8_t* dr = m_bytes.data() + m_anims.dataAt + static_cast<size_t>(d) * 40;
+    const uint8_t* sr = m_bytes.data() + m_anims.dataAt + static_cast<size_t>(s) * 40;
+
+    // Schablonengleichheit der Familiensaetze absichern: beide Anims muessen
+    // denselben Frame-Bereich tragen, sonst passen Keyframe-Zaehlung und
+    // Kommando-Framenummern nicht.
+    uint16_t dVon, dBis, sVon, sBis;
+    std::memcpy(&dVon, dr + 24, 2); std::memcpy(&dBis, dr + 26, 2);
+    std::memcpy(&sVon, sr + 24, 2); std::memcpy(&sBis, sr + 26, 2);
+    if (dVon != sVon || dBis != sBis)
+    { fehler = "Frame-Bereiche der beiden Anims sind verschieden"; return false; }
+
+    std::memcpy(dr, sr, 6);           // Frame-Zeiger, Rate, frame_size
+    std::memcpy(dr + 8, sr + 8, 16);  // Geschwindigkeit/Beschleunigung
+    std::memcpy(dr + 36, sr + 36, 4); // Kommandozahl + -offset (globaler Block)
+    return true;
+}
+
 std::vector<int> Tr5Level::moveableSlots() const
 {
     std::vector<int> raus;

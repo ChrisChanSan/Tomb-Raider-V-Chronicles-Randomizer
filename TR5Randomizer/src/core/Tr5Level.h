@@ -310,6 +310,20 @@ public:
                           int dstSlot = -1, bool nurMeshes = false,
                           int animZahl = -1);
 
+    // Laesst eine Anim die Daten- und Bewegungsfelder einer anderen Anim
+    // DESSELBEN Levels uebernehmen: Frame-Zeiger, Rate, frame_size,
+    // Geschwindigkeiten und die Kommandoreferenz. Zustand, Frame-Bereich,
+    // Folgeanim und Changes bleiben stehen. Gedacht fuer tote Erbe-Anims wie
+    // SWATs Zustand-3-Feueranim (+2): sie teilt sich ihren Frame-Zeiger mit
+    // der Zielanim (+3), liest deren 34-Wort-Frames aber mit Schrittweite 36
+    // - ab Keyframe 1 entsteht Muell (Modell verschwindet, Schatten zerrt).
+    // Core hat das nie bemerkt, weil SWAT selbst ueber Zustand 35 feuert;
+    // nur Guard/CRANE_GUY feuern ueber Zustand 3, und kein Vanilla-Level
+    // laesst beide Saetze zusammen spielen. Verlangt identische
+    // Frame-Bereiche in beiden Anims (Familiensaetze sind schablonengleich).
+    bool uebernehmeAnimDaten(int dstSlot, int dstOffset, int srcSlot,
+                             int srcOffset, std::string& fehler);
+
     // Der Objektslot, wie er in der Datei steht. anim < 0 heisst: keiner.
     struct MoveableInfo
     {

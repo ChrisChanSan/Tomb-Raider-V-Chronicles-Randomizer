@@ -314,6 +314,24 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     if (!kopiereSlots(patch["weaponAdds"], "Waffen", report.weaponsCopied)) return false;
     if (!kopiereSlots(patch["moveableAdds"], "Cross-Gegner", report.moveablesCopied)) return false;
 
+    // Sobald SWAT (33) und Guard (37) zusammen im Level liegen, laeuft der
+    // Guard per Engine-Alias auf SWATs Anim-Satz und feuert dort ueber
+    // Zustand 3 - dessen Anim (+2) ist in Cores rich3-Daten totes Erbe mit
+    // falscher Schrittweite (liest die 34-Wort-Frames der Zielanim in 36ern:
+    // Modell verschwindet ab Keyframe 1, Schatten zerrt, kein Schusssound).
+    // Reparatur: +2 uebernimmt Frame-Daten, Rate und Schusskommando der
+    // gesunden Guard-Feueranim (+2 seines eigenen Satzes) im selben Level.
+    {
+        Tr5Level::MoveableInfo swat, guard;
+        if (level.moveableInfo(33, swat) && swat.animIndex >= 0 &&
+            level.moveableInfo(37, guard) && guard.animIndex >= 0)
+        {
+            std::string rErr;
+            if (!level.uebernehmeAnimDaten(33, 2, 37, 2, rErr))
+                report.warnings.push_back("SWAT-Feueranim nicht reparierbar: " + rErr);
+        }
+    }
+
     // --- Sound-Samples uebernehmen ---------------------------------------
     const JsonValue& sadds = patch["soundAdds"];
     if (sadds.size() > 0 && !levelSource)

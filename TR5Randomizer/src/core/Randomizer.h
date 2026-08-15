@@ -383,6 +383,19 @@ struct RandoInput
     // nur zwei kennt. Raten waere hier ein stiller Levelschaden - siehe
     // Tr5Level::canAppendTrigger.
     std::set<long long>      triggerSafeSectors;
+
+    // Sektoren mit geneigtem oder nur halb begehbarem Boden (Schraegen,
+    // Splits mit Hoehenversatz, kollisionsfreie Dreiecke). Fuer ITEMS tabu:
+    // ein Item wird auf das floorY des Sektors gelegt und genau dort
+    // gezeichnet - auf einer Schraege haengt es in der Luft oder steckt im
+    // Boden (im Spiel gesehen, trview zeigt es dagegen am Boden). Gegner
+    // duerfen weiter auf Schraegen stehen, die setzt die Engine jeden Frame
+    // per GetHeight selbst auf den Boden.
+    //
+    // Wie triggerSafeSectors aus der Floordata des ECHTEN Levels gelesen
+    // (markTriggerSafeSectors) - der Zonen-Export kennt je Sektor nur ein
+    // floorY und kann eben und geneigt nicht unterscheiden.
+    std::set<long long>      unebeneSektoren;
 };
 
 struct RandoOptions

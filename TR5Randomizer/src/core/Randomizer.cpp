@@ -421,6 +421,13 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
     // Schrotflinte ist kein Schluessel und wuerde sonst gar nicht geprueft.
     if (in.weaponTypes.count(typeId) && in.noWeaponRooms.count(s.room)) return false;
 
+    // Kein Item auf geneigten oder halb begehbaren Boden: es wuerde dort in
+    // der Luft haengen oder im Boden stecken (siehe RandoInput::
+    // unebeneSektoren). Steht wie typeNoRooms VOR dem Constraint-Zweig und
+    // gilt damit auf jedem Platzierungsweg - Schluessel, Pickups,
+    // Injektionen, Streuung und Abundance.
+    if (in.unebeneSektoren.count(secKey(s.room, s.sectorX, s.sectorZ))) return false;
+
     // Sperre einzelner Typen fuer einzelne Raeume. Steht bewusst VOR dem
     // Constraint-Zweig und gilt damit auf jedem Platzierungsweg, auch fuer
     // Streuung und Abundance, die ohne Constraint hierherkommen.

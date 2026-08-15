@@ -61,6 +61,13 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
         in.vorhandeneSlots.insert(slots.begin(), slots.end());
     }
 
+    // Geneigte und halb begehbare Sektoren fuer Items sperren - IMMER, auch
+    // wenn unten kein Trigger-Durchgang noetig ist: jede Item-Platzierung
+    // braucht diese Menge (siehe RandoInput::unebeneSektoren).
+    for (const ZoneSector& s : in.sectors)
+        if (level.floorIstUneben(s.room, s.sectorX, s.sectorZ))
+            in.unebeneSektoren.insert(secKey(s.room, s.sectorX, s.sectorZ));
+
     if (in.coupledTriggers.empty() && in.enemyTypes.empty()) return;
 
     std::vector<Tr5FloorEntry> chain;

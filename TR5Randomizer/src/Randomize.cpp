@@ -60,10 +60,12 @@ int main(int argc, char** argv)
     const std::string seedText = (argc > 5) ? argv[5] : "Weihnachten";
     int gegner = 0, extraItems = 0;
     bool nurGegner = false, outfits = false, waffen = false, mix = false, cross = false, allsanity = false;
+    bool notizen = false;
     for (int i = 6; i < argc; ++i)
     {
         const std::string s = argv[i];
         if (s == "nur")         nurGegner = true;
+        else if (s == "notizen") notizen = true;   // Report-Notizen ausgeben (Diagnose)
         else if (s == "outfit") outfits = true;
         else if (s == "waffen") waffen = true;
         else if (s == "mix")    mix = true;
@@ -134,7 +136,9 @@ int main(int argc, char** argv)
     PatchReport pr;
     if (!Patch::apply(lvl, patch, pr, err, quelle)) { std::printf("Patch: %s\n", err.c_str()); return 1; }
     for (const std::string& w : pr.warnings) std::printf("  Hinweis: %s\n", w.c_str());
-    for (const std::string& w : pr.warnings) std::printf("  Hinweis: %s\n", w.c_str());
+
+    if (notizen)
+        for (const std::string& n : rep.notes) std::printf("  Notiz: %s\n", n.c_str());
 
     if (!lvl.save(toW(argv[4]), err)) { std::printf("Speichern: %s\n", err.c_str()); return 1; }
 

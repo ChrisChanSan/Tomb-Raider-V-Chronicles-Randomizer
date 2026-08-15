@@ -533,6 +533,51 @@ bool Tr5Level::readChain(int index, std::vector<Tr5FloorEntry>& out) const
     return true;
 }
 
+bool Tr5Level::floorIstUneben(int room, int sx, int sz) const
+{
+    const int idx = sectorIndex(room, sx, sz);
+    if (idx < 0) return true;                       // Sektor unbekannt: Finger weg
+    if (idx == 0) return false;                     // keine Floordata = eben
+
+    std::vector<Tr5FloorEntry> chain;
+    if (!readChain(idx, chain)) return true;        // unlesbar: Finger weg
+
+    for (const Tr5FloorEntry& e : chain)
+    {
+        // TILT (2): das Datenwort traegt die beiden Neigungen als
+        // Vorzeichenbytes (GetHeight, control.cpp:1014-1015). Null/Null
+        // waere eben, kommt aber praktisch nicht vor.
+        if (e.funktion == FN_TILT && e.woerter.size() >= 2)
+        {
+            const int xoff = static_cast<int16_t>(e.woerter[1]) >> 8;
+            const int yoff = static_cast<int8_t>(e.woerter[1] & 0xFF);
+            if (xoff != 0 || yoff != 0) return true;
+        }
+
+        // SPLIT1/2 (7/8): diagonal geteilter Boden. Eben ist er nur, wenn
+        // alle vier Ecknibbles des Datenworts gleich sind UND beide
+        // hadj-Felder im Typwort (Bits 5-9 und 10-14, je Dreieck eines)
+        // null sind - sonst liegen die Dreiecke geneigt oder versetzt
+        // (control.cpp:1084-1143).
+        if (e.funktion == 7 || e.funktion == 8)
+        {
+            if (e.woerter.size() < 2) return true;
+            const uint16_t t = e.woerter[1];
+            const int t0 = t & 0xF, t1 = (t >> 4) & 0xF,
+                      t2 = (t >> 8) & 0xF, t3 = (t >> 12) & 0xF;
+            if (t0 != t1 || t1 != t2 || t2 != t3) return true;
+            if (((e.woerter[0] >> 5) & 0x3FF) != 0) return true;
+        }
+
+        // NOCOLF (11-14): ein Dreieck hat KEINE Bodenkollision. Selbst wenn
+        // beide Haelften rechnerisch eben sind, hinge ein Item in der
+        // Sektormitte womoeglich ueber dem kollisionsfreien Teil - solche
+        // Sektoren sind fuer Items immer tabu.
+        if (e.funktion >= 11 && e.funktion <= 14) return true;
+    }
+    return false;
+}
+
 const char* Tr5Level::canAppendTrigger(const std::vector<Tr5FloorEntry>& chain)
 {
     // _TestTriggers bekommt von GetHeight einen Zeiger und ueberspringt ab dort

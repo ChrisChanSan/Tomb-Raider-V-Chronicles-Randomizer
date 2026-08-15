@@ -705,6 +705,16 @@ $EXTRA_POOL_TYPES = @{
     'rich3'   = @{ 180 = 2; 181 = 2 }
 }
 
+# rich2s Startinsel: alles, was Lara VOR dem Roentgenscanner betreten kann.
+# Liste vom Nutzer (2026-08-15) - aus den Daten ist sie nicht ableitbar, der
+# Sektorgraph ist ungerichtet und flutet am Point of no Return vorbei.
+# 117 der 544 Ablageflaechen des Levels liegen hier, 427 dahinter.
+# Wird von REQUIRED_INJECTIONS und TYPE_NO_ROOMS gebraucht, steht deshalb vor
+# beiden.
+$RICH2_STARTINSEL = @(8,9,10,12,14,15,16,18,19,21,29,48,49,50,51,52,53,54,55,56,60,
+                      84,85,88,89,90,91,95,96,97,116,117,118,119,130,131,132,133,
+                      134,135,136,137,138,139,141,170,177)
+
 # Items, die ein Level zwingend BRAUCHT, die in Vanilla aber fehlen. Andrea3
 # enthaelt keine einzige Brechstange (typeId 172, im Level nachgezaehlt: 0
 # Instanzen) - ein latenter Softlock schon in Vanilla. Der Randomizer muss hier
@@ -742,6 +752,26 @@ $REQUIRED_INJECTIONS = @{
         @{ typeId = 345; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK - ab hier kann ein Key-Item unter einem Gegner liegen' }
         @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK-Munition zur HK auf demselben Feld' }
         @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK-Munition zur HK auf demselben Feld' }
+
+        # Pflicht-Deagle fuer die Startinsel (Nutzerwunsch 2026-08-15). Die
+        # Startinsel ist gegnerreich, und seit nur noch die HK dort gesperrt
+        # ist, duerfen andere Waffen liegen - der Zufall allein liefert aber
+        # keine: pro Lauf werden nur drei bis vier Waffen gestreut, und die
+        # Insel stellt 117 der 544 Ablageflaechen (21 Prozent). Ueber sechs
+        # Seeds gemessen landete dort keine einzige.
+        #
+        # Kein fester Raum, sondern die ganze Insel als Auswahl: der Seed
+        # sucht sich jedes Mal einen anderen freien Sektor darin ("Raum kann
+        # immer Zufall sein"). Waffe und Magazine liegen dabei NICHT
+        # zusammen - jede Zeile wuerfelt ihre Stelle selbst.
+        #
+        # Menge: die Deagle bringt beim Aufnehmen 6 Schuss mit, jedes Magazin
+        # weitere 6 (newinv2.cpp:2550 und 2622) - mit drei Magazinen sind das
+        # 24 Schuss, die vom Nutzer gewuenschten "ca. 20".
+        @{ typeId = 347; rooms = $RICH2_STARTINSEL; reason = 'Deagle - Startinsel ist gegnerreich, Pistolen allein reichen nicht' }
+        @{ typeId = 348; rooms = $RICH2_STARTINSEL; reason = 'Deagle-Munition fuer die Startinsel (6 Schuss)' }
+        @{ typeId = 348; rooms = $RICH2_STARTINSEL; reason = 'Deagle-Munition fuer die Startinsel (6 Schuss)' }
+        @{ typeId = 348; rooms = $RICH2_STARTINSEL; reason = 'Deagle-Munition fuer die Startinsel (6 Schuss)' }
     )
 }
 $requiredInjections = @( if($REQUIRED_INJECTIONS.ContainsKey($LevelName)){ $REQUIRED_INJECTIONS[$LevelName] } )
@@ -1506,14 +1536,6 @@ $NO_KEY_ROOMS = @{
 $noKeyRooms = @( if($NO_KEY_ROOMS.ContainsKey($LevelName)){ $NO_KEY_ROOMS[$LevelName] } )
 
 $WEAPON_TYPES = 334..348
-
-# rich2s Startinsel: alles, was Lara VOR dem Roentgenscanner betreten kann.
-# Liste vom Nutzer (2026-08-15) - aus den Daten ist sie nicht ableitbar, der
-# Sektorgraph ist ungerichtet und flutet am Point of no Return vorbei.
-# 117 der 544 Ablageflaechen des Levels liegen hier, 427 dahinter.
-$RICH2_STARTINSEL = @(8,9,10,12,14,15,16,18,19,21,29,48,49,50,51,52,53,54,55,56,60,
-                      84,85,88,89,90,91,95,96,97,116,117,118,119,130,131,132,133,
-                      134,135,136,137,138,139,141,170,177)
 
 $NO_WEAPON_ROOMS = @{
     'joby3' = @(105,106,120,124,125)

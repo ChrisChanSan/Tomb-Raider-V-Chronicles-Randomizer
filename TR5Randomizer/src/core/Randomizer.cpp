@@ -274,6 +274,9 @@ bool Rando::buildInput(const JsonValue& zoneExport,
         Injection j;
         j.typeId = static_cast<int>(inj[i]["typeId"].asInt());
         j.room = static_cast<int>(inj[i]["room"].asInt());
+        const JsonValue& rl = inj[i]["rooms"];
+        for (size_t r = 0; r < rl.size(); ++r)
+            j.rooms.push_back(static_cast<int>(rl[r].asInt()));
         const JsonValue& sx = inj[i]["sectorX"];
         const JsonValue& sz = inj[i]["sectorZ"];
         if (!sx.isNull() && !sz.isNull())
@@ -817,10 +820,14 @@ bool Rando::run(const RandoInput& in,
     // verschieben deshalb keine bestehenden Indizes - anders als ein Entfernen.
     for (const Injection& j : in.injections)
     {
+        // Raumauswahl: entweder die Liste (Seed sucht darin) oder der eine Raum.
+        const bool ausListe = !j.rooms.empty();
+        std::set<int> erlaubteRaeume(j.rooms.begin(), j.rooms.end());
+
         std::vector<const ZoneSector*> c;
         for (const ZoneSector& s : pool)
         {
-            if (s.room != j.room) continue;
+            if (ausListe ? !erlaubteRaeume.count(s.room) : (s.room != j.room)) continue;
             // Bei festem Sektor zaehlt nur er, und ob er schon belegt ist,
             // spielt keine Rolle: mehrere Injektionen duerfen sich dort stapeln.
             if (j.hasSector)
@@ -829,6 +836,9 @@ bool Rando::run(const RandoInput& in,
                 continue;
             }
             if (used.count(secKey(s.room, s.sectorX, s.sectorZ))) continue;
+            // Typsperren gelten auch hier: eine Pflicht-Injektion darf nicht in
+            // einen Raum, den die Kuration fuer genau diesen Typ gesperrt hat.
+            if (!Rando::sectorAllowedFor(in, nullptr, s, j.typeId, false)) continue;
             c.push_back(&s);
         }
         if (c.empty())
@@ -837,8 +847,11 @@ bool Rando::run(const RandoInput& in,
             report.error = j.hasSector
                 ? fmt("Pflicht-Injektion typeId %d: Sektor %d,%d,%d ist keine gueltige Ablage.",
                       j.typeId, j.room, j.sectorX, j.sectorZ)
-                : fmt("Pflicht-Injektion typeId %d: in Raum %d ist kein freier gueltiger Sektor.",
-                      j.typeId, j.room);
+                : ausListe
+                    ? fmt("Pflicht-Injektion typeId %d: in den %d genannten Raeumen ist kein freier "
+                          "gueltiger Sektor.", j.typeId, static_cast<int>(j.rooms.size()))
+                    : fmt("Pflicht-Injektion typeId %d: in Raum %d ist kein freier gueltiger Sektor.",
+                          j.typeId, j.room);
             return false;
         }
         const ZoneSector& s = j.hasSector ? *c[0] : *c[static_cast<size_t>(rng.below(c.size()))];

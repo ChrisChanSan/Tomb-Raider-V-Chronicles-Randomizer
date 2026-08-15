@@ -202,6 +202,12 @@ struct Injection
 {
     int         typeId = 0;
     int         room = 0;
+    // Statt EINES Raums eine Auswahl: der Seed sucht sich einen freien
+    // gueltigen Sektor aus allen genannten Raeumen. Gedacht fuer Vorgaben der
+    // Art "irgendwo in diesem Levelabschnitt muss das liegen" - rich2s
+    // Pflicht-Deagle in der Startinsel ist der Fall (Nutzerwunsch: Waffe
+    // garantiert, Ort jedes Mal anders). Ist die Liste leer, gilt "room".
+    std::vector<int> rooms;
     // Optionaler fester Sektor. Ohne ihn sucht sich die Injektion einen
     // beliebigen freien gueltigen Sektor des Raums - richtig fuer Andrea3s
     // Brechstange, die irgendwo in Raum 120 liegen darf. rich2 braucht das

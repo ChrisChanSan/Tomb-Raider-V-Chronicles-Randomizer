@@ -105,13 +105,6 @@ void KillItem(short item_num)
 	ITEM_INFO* item;
 	short linknum;
 
-	// DIAG (voruebergehend, wieder entfernen): wer raeumt einen lebenden
-	// intelligenten Gegner weg? Faengt das "spurlose Verschwinden".
-	if (item_num >= 0 && item_num < MAX_ITEMS &&
-		objects[items[item_num].object_number].intelligent && items[item_num].hit_points > 0)
-		Log("DIAG KillItem: lebender Gegner %d Typ %d Raum %d HP %d",
-			item_num, items[item_num].object_number, items[item_num].room_number, items[item_num].hit_points);
-
 	if (InItemControlLoop)
 	{
 		// See ItemNewRoom()'s comment above on ItemNewRooms[]'s bounds -

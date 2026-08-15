@@ -290,6 +290,25 @@ Also in this group:
   clamp is skipped and they fight to a normal death (both their death
   animations carry their own `KillItem` command — Pierre's natively,
   Larson's via the earlier after_death addition, so the corpses clean up).
+- `game/pierre.cpp` — Pierre's death animation can no longer restart itself.
+  His `+12` death animation jumps back into a *living* animation when it
+  ends, because Core never uses his generic death: in vanilla he dies by
+  cutscene. Outside that script the control routine saw a living state
+  again the next tick and re-installed the death animation — an endless
+  death loop (seen in game). The routine now holds the animation one frame
+  short of its end and sets `after_death = 1`, so the body settles and
+  fades like any other corpse. Vanilla is unaffected, since the loop can
+  only be reached where a generic Pierre death happens at all.
+- `game/sas.cpp` — the soldier family reads its animation set from its own
+  object entry. `SasControl` picked the vault and special animations from a
+  globally chosen base (SWAT's set if loaded, otherwise the Guard's), which
+  is correct in vanilla because no level ever loads two members of the
+  family at once. With a mixed enemy pool they do coexist, and the loser of
+  that global pick indexed into the other one's animations. `index` now
+  comes from `objects[items[item_number].object_number].anim_index`, which
+  is the very set `InitialiseObjects` already aliased for that type
+  (`setup.cpp:1052/1112-1115/1145-1148`) — identical in single-family
+  levels, correct in mixed ones.
 
 ---
 

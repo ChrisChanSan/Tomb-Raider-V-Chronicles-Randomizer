@@ -105,22 +105,6 @@ void PierreControl(short item_number)
 	item = &items[item_number];
 	pierre = (CREATURE_INFO*)item->data;
 
-	// DIAG (voruebergehend, wieder entfernen): Zustandsbild jede Sekunde -
-	// wer ist das Ziel, welche Stimmung, greift die Fluchtklammer.
-	{
-		static int diagTakt = 0;
-
-		if (++diagTakt >= 30)
-		{
-			diagTakt = 0;
-			Log("DIAG Pierre %d: HP %d ai_bits %d Zustand %d Stimmung %d Ziel %s flags %d reached %d kann %d oneshot %d",
-				item_number, item->hit_points, item->ai_bits, item->current_anim_state,
-				pierre->mood, (pierre->enemy == lara_item) ? "Lara" : (pierre->enemy ? "Marker" : "keins"),
-				pierre->flags, pierre->reached_goal, (int)PierreKannFliehen(item, pierre),
-				(item->flags & IFL_INVISIBLE) ? 1 : 0);
-		}
-	}
-
 	if (item->hit_points <= 40 && !(item->flags & IFL_INVISIBLE) && PierreKannFliehen(item, pierre))
 	{
 		item->hit_points = 40;

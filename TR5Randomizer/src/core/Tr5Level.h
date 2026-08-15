@@ -289,6 +289,24 @@ public:
     // da faellt ein Ausreisser als Unterschied auf.
     int32_t debugReadBoneLong(long long i) const;
     int16_t debugReadFrameShort(long long i) const;
+    // Diagnose der physischen Samplekette: wo das num_samples-Feld hinter dem
+    // Hauptblock liegt und wie viele Samples es zaehlt, plus die Rohbytes.
+    bool debugSampleArray(size_t& numSamplesAt, int32_t& n) const
+    { if (!m_soundOk) return false; numSamplesAt = m_numSamplesAt; n = m_nSamples; return true; }
+    const std::vector<uint8_t>& debugBytes() const { return m_bytes; }
+    int32_t debugTexinfoCount() const { return m_texinfos.count; }
+    bool debugTexinfoBlock(size_t& dataAt, int32_t& n) const { dataAt = m_texinfos.dataAt; n = m_texinfos.count; return m_texinfos.count > 0; }
+    // Byteposition eines Meshes ueber seinen Zeigerindex - fuer
+    // Rohvergleiche (Walk-Kennzahlen unterscheiden identische Geometrie
+    // mit verschiedener Texturierung nicht).
+    bool debugMeshAt(int ptrIndex, size_t& at) const
+    {
+        if (ptrIndex < 0 || ptrIndex >= m_meshPtrs.count) return false;
+        uint32_t ofs;
+        std::memcpy(&ofs, m_bytes.data() + m_meshPtrs.dataAt + static_cast<size_t>(ptrIndex) * 4, 4);
+        at = m_meshData.dataAt + ofs;
+        return true;
+    }
     // Kopf eines Meshes (x, y, z, r, flags, nVerts-Wort) ueber seinen
     // Zeigerindex. false, wenn es den Zeiger nicht gibt.
     bool    debugMeshHeader(int ptrIndex, int16_t out[6]) const;
@@ -301,6 +319,8 @@ public:
     // Das Outfit-Byte (LaraType) im Levelkopf, hinter den Texturbloecken.
     int  laraType() const;
     bool setLaraType(int value);
+    int  fremdeSprechkoepfe() const;
+    bool setFremdeSprechkoepfe(int value);
 
 private:
     bool                 m_allowOverLimit = false;

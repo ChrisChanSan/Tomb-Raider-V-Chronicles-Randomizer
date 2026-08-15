@@ -186,3 +186,4 @@ extern ITEM_INFO* lara_item;
 extern short DashTimer;
 extern char LaraDrawType;
 extern char WeatherType;
+extern char GfFremdeSprechkoepfe;

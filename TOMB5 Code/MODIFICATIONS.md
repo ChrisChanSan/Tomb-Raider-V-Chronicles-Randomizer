@@ -238,6 +238,31 @@ Also in this group:
   death animation is a 207-frame set piece for the camera and ends upright, not
   fallen. Trajan's Markets is unaffected — the cutscene hides him in the same
   instant, so the fade never becomes visible.
+- `game/deltapak.cpp`, `game/lara.cpp/.h`, `specific/file.cpp` — cutscene mesh
+  swaps no longer outlive the cutscene, and dialog head swaps respect foreign
+  outfits. Cutscenes graft vanilla-outfit meshes onto Lara at runtime:
+  `handle_lara_chatting` swaps her head against `LARA_SPEECH_HEAD1-4` during
+  dialog passages, the joby5 suit-exit swaps hips/legs. The swap-back only
+  happens when the respective table runs past its terminator — skipping the
+  cutscene mid-passage (or a passage reaching the final frame) left the last
+  swap state installed into normal gameplay until the next weapon draw reset
+  the head (seen in game: catsuit Lara wearing joby5's knitted beanie, and
+  with the yellow suit legs). This is a Core bug that vanilla masks because
+  there the grafted meshes match the level outfit. Fix in two parts:
+  `CutseqLaraMeshesZurueck()` resets all 15 `lara.mesh_ptrs` from slot 0
+  (primed with the current skin by `LaraInitialiseMeshes`, child torso from
+  `ANIMATING6_MIP` as there) at the single spot in
+  `handle_cutseq_triggering` where every cutscene teardown passes (right
+  beside Core's own holster restore); and `handle_lara_chatting` skips the
+  speech-head install when the new `GfFremdeSprechkoepfe` flag is set. That
+  flag comes from `data[2]` of the 32-byte block before the main level chunk
+  (`LoadLevel`, next to LaraType/WeatherType) — all 16 vanilla files carry 0
+  there (measured), so unpatched levels behave byte-identically. The
+  randomizer sets it when an outfit donor has no speech heads of its own
+  (rich2/catsuit: the VCI levels know no dialog cutscenes) and otherwise
+  imports the donor's speech heads so dialog mouths keep animating. Known
+  corner: a weapon/torch held in hand across a cutscene is reset to the skin
+  hand too; the weapon state machine reinstalls on the next draw.
 
 ---
 

@@ -2045,6 +2045,26 @@ void special4_end()
 	_special4_end();
 }
 
+// Cutscenes haengen Lara fremde Meshes an (Sprechkoepfe ueber
+// handle_lara_chatting, Anzugteile beim Taucheranzug-Ausstieg in joby5).
+// Zurueckgetauscht wird nur, wenn die jeweilige Tauschtabelle sauber bis zu
+// ihrem Ende laeuft - wer die Cutscene mitten in einer Passage skippt (oder
+// wenn die Passage bis zum letzten Frame reicht), behaelt den letzten
+// Tauschzustand im normalen Spiel (im Spiel gesehen: Catsuit mit
+// Strickmuetze bzw. mit gelben Anzugbeinen in joby5). Deshalb nach JEDEM
+// Cutscene-Ende alle Knoten zurueck auf die Skin - Slot 0 traegt seit
+// LaraInitialiseMeshes die Meshes des aktuellen Outfits. Der Kind-Torso der
+// Ireland-Level kommt wie dort aus ANIMATING6_MIP.
+static void CutseqLaraMeshesZurueck()
+{
+	for (int i = 0; i < 15; i++)
+		lara.mesh_ptrs[i] = meshes[objects[LARA].mesh_index + 2 * i];
+
+	if (gfCurrentLevel >= LVL5_GALLOWS_TREE && gfCurrentLevel <= LVL5_OLD_MILL &&
+		(gfLevelFlags & GF_YOUNGLARA))
+		lara.mesh_ptrs[LM_TORSO] = meshes[objects[ANIMATING6_MIP].mesh_index + 2 * LM_TORSO];
+}
+
 void handle_cutseq_triggering(long name)
 {
 	long n, goin;
@@ -2178,6 +2198,7 @@ void handle_cutseq_triggering(long name)
 
 		LHolster = old_lara_LHolster;
 		lara.holster = old_lara_holster;
+		CutseqLaraMeshesZurueck();
 
 		if (cutseq_num <= 4)
 			DelsHandyTeleportLara(GLOBAL_cutme->orgx, GLOBAL_cutme->orgy, GLOBAL_cutme->orgz, cutrot * 0x4000);
@@ -2716,7 +2737,14 @@ void handle_lara_chatting(short* _ranges)
 		_ranges += 2;
 	}
 
-	if (!lara_chat_cnt)
+	// Die Sprechkoepfe 17-20 tragen das VANILLA-Outfit des Levels. Traegt
+	// Lara ein fremdes Outfit, dessen Spender keine eigenen Sprechkoepfe hat
+	// (Catsuit: die VCI-Level kennen keine Dialog-Cutscenes), setzt der
+	// Randomizer GfFremdeSprechkoepfe im Levelkopf - dann bleibt der
+	// Skin-Kopf einfach drauf (Lara spricht ohne Mundbewegung statt mit
+	// Muetze). Passende Sprechkoepfe importiert der Randomizer mit, dann
+	// ist das Flag 0 und alles laeuft wie vanilla.
+	if (!lara_chat_cnt && !GfFremdeSprechkoepfe)
 		lara.mesh_ptrs[LM_HEAD] = meshes[objects[(GetRandomControl() & 3) + LARA_SPEECH_HEAD1].mesh_index + LM_HEAD * 2];
 }
 

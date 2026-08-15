@@ -1348,6 +1348,10 @@ unsigned int __stdcall LoadLevel(void* name)
 		fread(data, 1, 32, level_fp);
 		LaraDrawType = data[0] + LARA_NORMAL;
 		WeatherType = (char)data[1];
+		// data[2]: Randomizer-Marker "Sprechkoepfe passen nicht zum Outfit"
+		// (Outfit-Spender ohne LARA_SPEECH_HEAD1-4, z.B. Catsuit aus rich2).
+		// Vanilla steht hier in allen 16 Dateien 0 - nachgemessen.
+		GfFremdeSprechkoepfe = (char)data[2];
 
 		fread(&size, 1, 4, level_fp);
 		fread(&compressedSize, 1, 4, level_fp);

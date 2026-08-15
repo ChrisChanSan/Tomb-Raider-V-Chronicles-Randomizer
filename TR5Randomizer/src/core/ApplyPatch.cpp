@@ -159,6 +159,23 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                 if (spender->moveableInfo(s, mi)) slots.push_back(s);
             }
 
+            // Sprechkoepfe (17-20): in Dialog-Cutscenes tauscht die Engine
+            // Laras Kopf gegen LARA_SPEECH_HEAD1-4 (deltapak.cpp,
+            // handle_lara_chatting) - die tragen das VANILLA-Gesicht des
+            // Levels (im Spiel gesehen: Catsuit mit Strickmuetze in joby5).
+            // Hat der Spender eigene, wandern sie wie die Holster mit. rich2
+            // hat KEINE - die VCI-Level kennen keine Dialog-Cutscenes; dann
+            // bekommt das Ziel das Fremdkoepfe-Flag (data[2] im Levelkopf)
+            // und die Engine laesst den Tausch aus.
+            bool sprechkoepfeDa = true;
+            for (int s : { 17, 18, 19, 20 })
+            {
+                Tr5Level::MoveableInfo mi;
+                if (!spender->moveableInfo(s, mi)) { sprechkoepfeDa = false; break; }
+            }
+            if (sprechkoepfeDa)
+                for (int s : { 17, 18, 19, 20 }) slots.push_back(s);
+
             for (int slot : slots)
             {
                 std::string oErr;
@@ -183,6 +200,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                 level.setLaraType(static_cast<int>(outfit["laraType"].asInt(spender->laraType())));
             else
                 level.setLaraType(von == "joby2" ? 2 : spender->laraType());
+            level.setFremdeSprechkoepfe(sprechkoepfeDa ? 0 : 1);
             report.outfitFrom = von;
         }
     }

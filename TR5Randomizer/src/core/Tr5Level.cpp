@@ -982,6 +982,30 @@ bool Tr5Level::setLaraType(int value)
     return true;
 }
 
+//----------------------------------------------------------------------------
+// data[2] derselben 32 Bytes: "Sprechkoepfe passen nicht zum Outfit". Die
+// Engine tauscht Laras Kopf in Dialog-Cutscenes gegen LARA_SPEECH_HEAD1-4
+// (deltapak.cpp, handle_lara_chatting) - die tragen das Vanilla-Outfit des
+// Levels. Kann der Outfit-Spender keine eigenen Sprechkoepfe liefern (rich2:
+// die VCI-Level kennen keine Dialog-Cutscenes), laesst die Engine den Tausch
+// bei gesetztem Flag aus. Vanilla steht hier in allen 16 Dateien 0.
+//----------------------------------------------------------------------------
+int Tr5Level::fremdeSprechkoepfe() const
+{
+    if (m_mainOffset < 40) return -1;
+    int16_t v;
+    std::memcpy(&v, m_bytes.data() + m_mainOffset - 8 - 32 + 4, 2);
+    return v;
+}
+
+bool Tr5Level::setFremdeSprechkoepfe(int value)
+{
+    if (m_mainOffset < 40) return false;
+    const int16_t v = static_cast<int16_t>(value);
+    std::memcpy(m_bytes.data() + m_mainOffset - 8 - 32 + 4, &v, 2);
+    return true;
+}
+
 bool Tr5Level::readHeader(std::string& error)
 {
     size_t pos = 0;

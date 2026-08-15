@@ -1227,16 +1227,19 @@ bool Rando::run(const RandoInput& in,
         //    braucht weder MESHSWAP noch Begleitslots.
         //  - Ihre vier Anim-Sounds (406-409) wandern automatisch mit, die
         //    holt Phase D des Transfers aus den Anim-Befehlen. Der einzige
-        //    fest verdrahtete Klang ist SFX_SMASH_ROCK (168) beim Zerbersten
-        //    - der fehlt in Andrea2 SELBST, ihr Tod ist dort also stumm.
-        //    Aus joby2 mitgenommen, damit er im Zielevel wenigstens klingt.
+        //    fest verdrahtete Klang ist SFX_SMASH_ROCK beim Zerbersten - der
+        //    steht in KEINEM Anim-Befehl und braucht deshalb diesen Eintrag.
+        //    Seine Nummer ist 167, nicht 168: im Spiel nachgewiesen ueber
+        //    "Non present sample:167" im Log, nachdem eine Zaehlung im Enum
+        //    von sound.h um eins danebenlag. Andrea2 hat ihn selbst, der
+        //    Spender ist also derselbe wie fuers Modell.
         // Die drei Vanilla-Exemplare in Andrea2 (Items 91/92/93) sind ueber
         // fixedItems geschuetzt und bleiben unberuehrt.
         //  - animZahl 17: die Objekttabelle gesteht ihr weniger zu, als ihre
         //    Steuerung braucht (anim_index+15 ist die Todesanim) - dasselbe
         //    Muster wie beim Imp. Ohne die explizite Laenge bricht der
         //    Transfer mit "Frame-Zeiger ausserhalb der Frame-Scheibe" ab.
-        { 63, "Andrea2", { {168,"joby2",168} },                 {-1,-1},  nullptr,   -1, 17 },  // Hydra
+        { 63, "Andrea2", { {167,"Andrea2",167} },               {-1,-1},  nullptr,   -1, 17 },  // Hydra
         { 77, "Andy2",   {},                                    {-1,-1},  nullptr,   -1 },  // Maze Monster
         // Imp: Spender andy3, NICHT andy1. andy1s Imp-Animsatz ist entkernt:
         // die Todesanimation +45 (ImpControl setzt sie bei hit_points<=0 fest

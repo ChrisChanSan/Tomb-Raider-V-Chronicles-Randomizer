@@ -1461,49 +1461,81 @@ bool Rando::run(const RandoInput& in,
     // Beide fliehen ab 40 LP zu einem AI_AMBUSH-Marker mit passender OCB in
     // ihrer Zone und despawnen dort (GetAITarget/FindAITargetObject,
     // box.cpp) - Core garantiert den Marker in jedem Vanilla-Level, das ihn
-    // braucht. Der Randomizer legt zu JEDEM Exemplar (getauscht wie
-    // eingesetzt, alle mit OCB 0) einen Marker auf den Spawn-Sektor: die
-    // Flucht fuehrt zurueck zum Spawnpunkt und endet dort sauber, statt
-    // endlos hinter Lara herzulaufen (im Spiel gesehen: joby2 Item 36).
-    // Vanilla-Exemplare mit OCB != 0 bleiben aussen vor - fuer die stehen
-    // Cores eigene Marker im Level. Ein Marker je Sektor genuegt.
+    // braucht.
+    //
+    // Der Marker darf NIE auf dem Spawn-Sektor des Gegners liegen:
+    // GetAIPickups (setup.cpp:2024) macht beim Levelstart jedes AI-Objekt
+    // im Umkreis von 512 Units im selben Raum zur Start-Verhaltensanweisung
+    // des Gegners (ai_bits |= AMBUSH - er rennt dann nur noch und zielt
+    // nie) und VERBRAUCHT den Marker danach (room_number = NO_ROOM), die
+    // Fluchtsuche findet also auch nichts mehr. Im Spiel gesehen: joby2
+    // Item 182 lief Lara stumm hinterher, DIAG zeigte ai_bits 2 ab Spawn.
+    //
+    // Deshalb EIN Marker je Level auf Laras Startposition: die Flucht
+    // fuehrt sichtbar zurueck Richtung Leveleingang und endet ausser Sicht,
+    // wie Core es in den Vanilla-Leveln inszeniert. Exemplare, deren Zone
+    // den Start nicht erreicht, fliehen einfach nicht und sterben normal
+    // (PierreKannFliehen laesst die 40-LP-Klammer dann aus). Steht ein
+    // Gegner nah an Laras Start, wuerde ER den Marker fressen - dann lieber
+    // gar keiner. Vanilla-Exemplare mit OCB != 0 bleiben aussen vor - fuer
+    // die stehen Cores eigene Marker im Level.
     JsonValue aiAdds = JsonValue::makeArray();
     {
-        std::set<long long> markerSektoren;
-        auto marker = [&](int room, int x, int y, int z)
-        {
-            const long long schluessel = (static_cast<long long>(room) << 40)
-                                       ^ (static_cast<long long>(x >> 10) << 20)
-                                       ^ static_cast<long long>(z >> 10);
-            if (markerSektoren.count(schluessel)) return;
-            markerSektoren.insert(schluessel);
-            JsonValue m = JsonValue::makeObject();
-            m.set("slot", JsonValue::makeInt(379));       // AI_AMBUSH (objects.h:270)
-            m.set("room", JsonValue::makeInt(room));
-            m.set("x", JsonValue::makeInt(x));
-            m.set("y", JsonValue::makeInt(y));
-            m.set("z", JsonValue::makeInt(z));
-            m.set("ocb", JsonValue::makeInt(0));
-            aiAdds.push(m);
-        };
-
+        bool braucht = false;
         for (const auto& kv : finalOf)
             if ((kv.second.typeId == 45 || kv.second.typeId == 47) && kv.second.ocb == 0)
-                marker(kv.second.room, kv.second.x, kv.second.y, kv.second.z);
-
+                braucht = true;
         for (size_t i = 0; i < adds.size(); ++i)
         {
             const int t = static_cast<int>(adds[i]["typeId"].asInt());
-            if (t != 45 && t != 47) continue;
-            marker(static_cast<int>(adds[i]["room"].asInt()),
-                   static_cast<int>(adds[i]["x"].asInt()),
-                   static_cast<int>(adds[i]["y"].asInt()),
-                   static_cast<int>(adds[i]["z"].asInt()));
+            if (t == 45 || t == 47) braucht = true;
         }
 
-        if (aiAdds.size() > 0)
-            report.notes.push_back(fmt("Fluchtmarker: %d AI_AMBUSH fuer Larson/Pierre gesetzt.",
-                                       static_cast<int>(aiAdds.size())));
+        const LevelItem* lara = nullptr;
+        for (const LevelItem& it : in.items)
+            if (it.typeId == 0) { lara = &it; break; }
+
+        if (braucht && lara)
+        {
+            // Gegnertypen, die den Marker fressen koennten (GetAIPickups
+            // greift bei jedem intelligenten Item): kuratierte Levelgegner,
+            // alle Pool-Fremdtypen und die beiden Fluechter selbst.
+            std::set<int> intelligente(in.enemyTypes.begin(), in.enemyTypes.end());
+            for (const CrossGegner& c : kCross) intelligente.insert(c.typeId);
+
+            auto zuNah = [&](int room, int x, int z)
+            { return room == lara->room && std::abs(x - lara->x) < 768 && std::abs(z - lara->z) < 768; };
+
+            bool frei = true;
+            for (const auto& kv : finalOf)
+                if (intelligente.count(kv.second.typeId) && zuNah(kv.second.room, kv.second.x, kv.second.z))
+                    frei = false;
+            for (size_t i = 0; i < adds.size(); ++i)
+                if (intelligente.count(static_cast<int>(adds[i]["typeId"].asInt())) &&
+                    zuNah(static_cast<int>(adds[i]["room"].asInt()),
+                          static_cast<int>(adds[i]["x"].asInt()),
+                          static_cast<int>(adds[i]["z"].asInt())))
+                    frei = false;
+
+            if (frei)
+            {
+                JsonValue m = JsonValue::makeObject();
+                m.set("slot", JsonValue::makeInt(379));   // AI_AMBUSH (objects.h:270)
+                m.set("room", JsonValue::makeInt(lara->room));
+                m.set("x", JsonValue::makeInt(lara->x));
+                m.set("y", JsonValue::makeInt(lara->y));
+                m.set("z", JsonValue::makeInt(lara->z));
+                m.set("ocb", JsonValue::makeInt(0));
+                aiAdds.push(m);
+                report.notes.push_back("Fluchtmarker: AI_AMBUSH fuer Larson/Pierre an Laras Start gesetzt.");
+            }
+            else
+                report.notes.push_back("Fluchtmarker entfaellt: Gegner zu nah an Laras Start "
+                                       "(GetAIPickups wuerde ihn fressen) - Larson/Pierre sterben normal.");
+        }
+        else if (braucht)
+            report.notes.push_back("Fluchtmarker entfaellt: Lara-Startitem nicht im Export - "
+                                   "Larson/Pierre sterben normal.");
     }
 
     // --- Outfit wuerfeln ---

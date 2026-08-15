@@ -177,10 +177,12 @@ public:
     bool    setItem(int index, const Tr5Item& in);
 
     // Haengt ein AI-Objekt hinten an den AI-Block (direkt hinter den Items).
-    // Fuer die Fluchtmarker von Larson/Pierre: der Randomizer legt zu jedem
-    // platzierten oder getauschten Exemplar einen AI_AMBUSH auf seinen
-    // Spawn-Sektor - die 40-LP-Flucht findet damit immer ihr Ziel und der
-    // Gegner despawnt dort wie vanilla vorgesehen.
+    // Fuer den Fluchtmarker von Larson/Pierre: EIN AI_AMBUSH je Level an
+    // Laras Startposition - die 40-LP-Flucht fuehrt Richtung Leveleingang
+    // und despawnt ausser Sicht. NIE auf den Spawn-Sektor eines Gegners
+    // legen: GetAIPickups (setup.cpp:2024) macht AI-Objekte im Umkreis von
+    // 512 Units zur Start-Verhaltensanweisung des Gegners (Dauer-AMBUSH,
+    // er zielt nie) und verbraucht sie danach (room_number = NO_ROOM).
     bool    addAiObject(const Tr5AiObject& in, std::string& error);
 
     // Haengt ein Item hinten an. Das ist der einzige Weg, Items hinzuzufuegen:

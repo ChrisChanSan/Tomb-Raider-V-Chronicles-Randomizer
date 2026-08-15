@@ -1057,6 +1057,14 @@ bool Rando::run(const RandoInput& in,
                 adds.push(a);
                 used.insert(secKey(s->room, s->sectorX, s->sectorZ));
                 ++report.extraPickups;
+
+                // Eine Waffe genau einmal: sie liegt im Topf, damit sie
+                // ueberhaupt auffindbar ist - ein zweites Exemplar waere nur
+                // Munition mit unnoetigem Modell davor.
+                bool istWaffe = false;
+                for (const Streuwaffe& w : kWaffenGut) if (w.waffe == typ) istWaffe = true;
+                if (istWaffe)
+                    topf.erase(std::remove(topf.begin(), topf.end(), typ), topf.end());
             }
             report.notes.push_back(fmt("Item-Abundance: %d von %d zusaetzlichen Pickups gestreut "
                                        "(%d streubare Typen im Level).",

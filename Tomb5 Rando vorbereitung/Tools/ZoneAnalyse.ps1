@@ -1508,17 +1508,22 @@ $noKeyRooms = @( if($NO_KEY_ROOMS.ContainsKey($LevelName)){ $NO_KEY_ROOMS[$Level
 $WEAPON_TYPES = 334..348
 $NO_WEAPON_ROOMS = @{
     'joby3' = @(105,106,120,124,125)
+    # rich2: NUR die Startinsel bleibt waffenfrei. Dort muss Lara ihre HK am
+    # Mesh 15 in Raum 8 ablegen, um den Roentgenscanner in Raum 9 unbewaffnet
+    # zu passieren - eine zusaetzlich eingestreute Waffe davor macht das
+    # Entwaffnen gegenstandslos und das Level laut Nutzer unloesbar.
+    #
+    # Hinter dem Scanner liegt ein Point of no Return; ab der Fahrstuhlinsel
+    # (Raum 140, wo die HK per Injektion wieder bereitliegt) bis zum Levelende
+    # in Raum 58 sind Waffen ausdruecklich erwuenscht - sonst stuende das
+    # Level als einziges ohne Nachschub fuer das importierte Waffenset da.
+    # Die Raumliste stammt vom Nutzer (2026-08-15); aus den Daten ist sie
+    # nicht ableitbar, der Sektorgraph ist ungerichtet und laeuft am Point of
+    # no Return vorbei.
+    'rich2' = @(8,9,10,12,14,15,16,18,19,21,29,48,49,50,51,52,53,54,55,56,60,
+                84,85,88,89,90,91,95,96,97,116,117,118,119,130,131,132,133,
+                134,135,136,137,138,139,141,170,177)
 }
-# Level, in denen ueberhaupt keine Waffe liegen darf - nicht raumweise, sondern
-# ganz. rich2 ist der Fall: dort muss Lara ihre HK am Mesh 15 in Raum 8 ablegen,
-# um den Roentgenscanner in Raum 9 unbewaffnet zu passieren. Eine zusaetzlich
-# eingestreute Waffe macht dieses Entwaffnen gegenstandslos und das Level laut
-# Nutzer unloesbar.
-#
-# Heute traegt rich2 ohnehin nur die eine HK (jetzt VANILLA_TYPES) und zwei
-# HK-Munitionen. Der Eintrag zielt auf spaeter: sobald #36 zusaetzliche
-# Ausruestung verteilt, muss die Sperre schon stehen. Der Randomizer setzt
-# noWeaponRooms seit dem Kurations-Commit selbst durch.
 #----------------------------------------------------------------------------
 # Ausruestung, die ein Schalter voraussetzt.
 #
@@ -1537,11 +1542,18 @@ $EQUIP_GATE = @{
     'Andrea1' = @{ 75 = @{ Need = @(347,351); Desc = 'Revolver + Lasersight (Glocke abschiessen)' } }
 }
 
-$NO_WEAPON_LEVELS = @('rich2')
+# Ganze Level ohne jede Waffe: steht derzeit keines drin. rich2 war hier
+# eingetragen und ist jetzt raumweise geloest (siehe NO_WEAPON_ROOMS) - die
+# Sperre auf das ganze Level haette dem Level als einzigem die Munition fuer
+# das importierte Waffenset gekostet.
+$NO_WEAPON_LEVELS = @()
 $noWeaponRooms = @( if($NO_WEAPON_ROOMS.ContainsKey($LevelName)){ $NO_WEAPON_ROOMS[$LevelName] } )
 if ($NO_WEAPON_LEVELS -contains $LevelName) {
     $noWeaponRooms = @($d.rooms | ForEach-Object { [int]$_.index })
     Write-Output "Waffensperre: im ganzen Level $LevelName darf keine Waffe liegen ($($noWeaponRooms.Count) Raeume)"
+}
+elseif ($noWeaponRooms.Count -gt 0) {
+    Write-Output "Waffensperre: $($noWeaponRooms.Count) Raeume in $LevelName sind waffenfrei"
 }
 
 $POOL_TYPES = @{

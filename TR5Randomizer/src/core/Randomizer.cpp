@@ -318,6 +318,7 @@ bool Rando::buildInput(const JsonValue& zoneExport,
         const JsonValue& ai = zoneExport["antitriggerImmun"];
         for (size_t i = 0; i < ai.size(); ++i)
             out.antitriggerImmunItems.insert(static_cast<int>(ai[i].asInt(-1)));
+
     }
 
     // Antitrigger-Ziele einsammeln - siehe RandoInput::antitriggered.

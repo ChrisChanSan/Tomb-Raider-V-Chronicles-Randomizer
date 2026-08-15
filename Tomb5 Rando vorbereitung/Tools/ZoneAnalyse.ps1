@@ -568,7 +568,10 @@ $NO_ITEM_ROOMS = @{
     # dort schon fuer Key-Items gesperrt - jetzt darf dort gar nichts liegen.
     # 34 und 110 kamen in der letzten Durchsicht dazu. Raum 34 ist der mit dem
     # Motion Sensor, der die Fallen ausloest - damit ist auch diese Frage geklaert.
-    'rich2' = @(107,19,34,42,43,44,60,66,110)
+    # 14, 15, 16 und 18 kamen am 2026-08-15 dazu: sie liegen laut Nutzer
+    # hinter Tuer 171 und gehoeren damit weder zur Startinsel noch verlaesslich
+    # zum Bereich dahinter. 19 und 60 standen schon vorher hier.
+    'rich2' = @(107,14,15,16,18,19,34,42,43,44,60,66,110)
     # rich3, Sperrliste des Nutzers aus dem trview-Durchgang. 28 Raeume; Raum 121
     # hatte er doppelt genannt, 209 kam als letzter nach. Damit ist rich3 fertig.
     'rich3' = @(2,23,24,33,41,47,51,52,56,58,60,68,71,72,84,85,92,121,151,153,
@@ -708,12 +711,19 @@ $EXTRA_POOL_TYPES = @{
 # rich2s Startinsel: alles, was Lara VOR dem Roentgenscanner betreten kann.
 # Liste vom Nutzer (2026-08-15) - aus den Daten ist sie nicht ableitbar, der
 # Sektorgraph ist ungerichtet und flutet am Point of no Return vorbei.
-# 117 der 544 Ablageflaechen des Levels liegen hier, 427 dahinter.
 # Wird von REQUIRED_INJECTIONS und TYPE_NO_ROOMS gebraucht, steht deshalb vor
 # beiden.
-$RICH2_STARTINSEL = @(8,9,10,12,14,15,16,18,19,21,29,48,49,50,51,52,53,54,55,56,60,
+#
+# Nachtrag desselben Tages: 14, 15, 16, 18, 19 und 60 liegen laut Nutzer
+# HINTER der Tuer und gehoeren nicht zur Insel. Sie stehen jetzt in
+# NO_ITEM_ROOMS - dort landet ueberhaupt nichts mehr, damit erledigt sich fuer
+# sie auch die Frage nach der HK.
+$RICH2_STARTINSEL = @(8,9,10,12,21,29,48,49,50,51,52,53,54,55,56,
                       84,85,88,89,90,91,95,96,97,116,117,118,119,130,131,132,133,
                       134,135,136,137,138,139,141,170,177)
+
+# Die itemfreien Raeume stehen in NO_ITEM_ROOMS weiter unten - dort sind fuer
+# rich2 auch 14, 15, 16 und 18 nachgetragen (hinter Tuer 171, Nutzerangabe).
 
 # Items, die ein Level zwingend BRAUCHT, die in Vanilla aber fehlen. Andrea3
 # enthaelt keine einzige Brechstange (typeId 172, im Level nachgezaehlt: 0

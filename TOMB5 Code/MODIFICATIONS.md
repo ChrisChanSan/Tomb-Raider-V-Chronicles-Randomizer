@@ -157,6 +157,22 @@ Also in this group:
   in `SCRIPT.DAT`) silently bent one triangle of the adult hand. Same pattern
   and rationale as the `laramisc.cpp` torso fix below; with the flag set — an
   unmodified `SCRIPT.DAT` — nothing changes.
+- `specific/file.cpp`, `specific/drawbars.cpp`/`.h`, `game/gameflow.cpp`,
+  `game/control.cpp` — **two independent level-start freeze fixes**, found
+  when randomized levels grew past anything the engine was ever tested
+  with. (1) `aInit()` (room vertex buffers) and `aMakeCutsceneResident()`
+  (cutscene textures) ran on the LOADING thread while the main thread
+  presented the loading bar — the same two-threads-one-device class as the
+  2026-07-31 loading hang; both now run on the main thread after the
+  loader joins. (2) The loading bar's completion test
+  (`loadbar_maxpos <= loadbar_steps` with steps growing by `100/maxpos`
+  per step and `maxpos = texture pages + 20`) becomes mathematically
+  unreachable at roughly 75+ texture pages, leaving the catch-up loop
+  spinning forever with a full bar — unreachable in vanilla (9–17 pages),
+  hit immediately by 79/82-page randomized levels. `S_FinishLoadBar()`
+  forces the bar complete once the loader has joined, and the catch-up
+  loop is bounded. Cheap seam logs remain around the load hand-off and
+  the level-start milestones for future diagnosis.
 - `game/objects.h`, `game/setup.cpp` — **fallback slots for the randomizer's
   cross-level enemy mesh swaps**. `MESHSWAP1` holds, per level, the swap
   meshes of that level's OWN enemies (people-family gun hands 10/13, Imp's

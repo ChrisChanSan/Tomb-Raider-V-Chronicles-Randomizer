@@ -1346,9 +1346,20 @@ bool Rando::run(const RandoInput& in,
     //
     // Das Fenster misst genau das, was zaehlt: wie offen es dort ist, wo sie
     // steht. Die Schwelle stammt nicht aus dem Bauch, sondern aus Vanilla -
-    // an allen drei Kampfplaetzen in Andrea2 (Items 91/92/93) sind 40 der 49
-    // Felder frei. Wer 40 verlangt, verlangt genau so viel Luft, wie Core ihr
-    // selbst gegeben hat.
+    // an allen drei Kampfplaetzen in Andrea2 (Items 91/92/93) gemessen:
+    // im 3x3-Fenster 9 von 9 Feldern frei, im 7x7 genau 40 von 49.
+    //
+    // Gewaehlt ist 3x3 mit allen neun Feldern (Nutzerentscheidung): kein
+    // einziges Nachbarfeld darf verbaut sein. Das ist scharf genug, um
+    // Kammern, Nischen und Gaenge auszuschliessen, und laesst ihr trotzdem
+    // Kampfplaetze in fast jedem Level. Ein 7x7-Fenster mit 40 Feldern waere
+    // die Halle gewesen - das Mass hielten spielweit nur 255 Sektoren, fuenf
+    // Level haetten die Hydra nie zu sehen bekommen.
+    //
+    // Der Zonen-Export ist dabei ein PLATZIERUNGS-Pool, kein
+    // Begehbarkeitsraster: er fuehrt nur Sektoren, auf denen wirklich etwas
+    // stehen darf. Lueckenlose Bloecke sind darin selten - umso wichtiger,
+    // dass Messlatte und Mass aus derselben Quelle stammen.
     //
     // Die Tabelle gilt fuer JEDEN Weg, auf dem ein Typ irgendwo landet, also
     // fuer Tausch und Zusatzgegner gleichermassen - auch fuer den heimischen
@@ -1357,7 +1368,7 @@ bool Rando::run(const RandoInput& in,
     // stehen in fixedItems und bleiben ohnehin unberuehrt.
     struct Raumbedarf { int typeId; int fenster; int frei; };
     static const Raumbedarf kRaumbedarf[] = {
-        { 63, 7, 40 },   // Hydra: 7x7-Fenster, mindestens 40 Felder frei
+        { 63, 3, 9 },    // Hydra: 3x3-Fenster, alle 9 Felder frei
     };
 
     // Weltraster aller begehbaren Sektoren, Schluessel ist das Feld in

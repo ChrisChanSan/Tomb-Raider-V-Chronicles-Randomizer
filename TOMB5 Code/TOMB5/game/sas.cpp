@@ -313,6 +313,13 @@ void SasControl(short item_number)
 				sas->flags = 1;
 				item->fired_weapon = 2;
 
+				// DIAG (voruebergehend, wieder entfernen): Schussmoment des
+				// Grafikfehlers festnageln - welcher Typ feuert mit welcher
+				// Anim/Frame/Zustand.
+				Log("DIAG Schuss: Typ %d Anim %d Frame %d Zustand %d (objAnimIndex %d)",
+					item->object_number, item->anim_number, item->frame_number,
+					item->current_anim_state, objects[item->object_number].anim_index);
+
 				if (item->current_anim_state == 3)
 					ShotLara(item, &sasAI, &sas_gun, lara_info.angle >> 1, 30 * ((gfCurrentLevel > LVL5_OLD_MILL) + 1));
 				else

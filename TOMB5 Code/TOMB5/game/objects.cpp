@@ -810,7 +810,21 @@ void DrawBaddieGunFlash(ITEM_INFO* item)
 	bite[1] = objects[item->object_number].bite_offset + 1;
 	node[0] = EnemyBites[bite[0]].mesh_num;
 	node[1] = EnemyBites[bite[1]].mesh_num;
-	
+
+	// DIAG (voruebergehend, wieder entfernen): was zeichnet der Blitz
+	// wirklich - Gelenke, Bite-Eintraege, GUN_FLASH-Mesh. Einmal je Typ.
+	{
+		static short diagTyp = -1;
+
+		if (item->object_number != diagTyp)
+		{
+			diagTyp = item->object_number;
+			Log("DIAG Blitz: Typ %d bite %d/%d node %d/%d GUN_FLASH mesh_index %d loaded %d",
+				item->object_number, bite[0], bite[1], node[0], node[1],
+				objects[GUN_FLASH].mesh_index, objects[GUN_FLASH].loaded);
+		}
+	}
+
 	num = node[0] < 0 ? 1 : 0;
 
 	while (num >= 0)

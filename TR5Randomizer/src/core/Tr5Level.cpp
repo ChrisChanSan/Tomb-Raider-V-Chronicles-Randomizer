@@ -799,14 +799,24 @@ bool Tr5Level::copySoundFrom(const Tr5Level& src, int srcMap, int dstMap, std::s
         return false;
     }
 
-    // Zufallsvarianten: N aufeinanderfolgende Infos, N in Bit 2-5 der Flags des
-    // ersten - "(sample_infos[lut].flags >> 2) & 0xF", game/sound.cpp:70.
-    // SAMPLE_INFO selbst steht in global/types.h:691.
+    // Zufallsvarianten: N aufeinanderfolgende SAMPLES, N in Bit 2-5 der
+    // Flags des Infos - die Engine wuerfelt sample = number + Zufall(N)
+    // (game/sound.cpp:280). Es ist also EIN Info mit N Samples, NICHT N
+    // Infos: die alte Lesart hier kopierte die Samples der NACHBAR-Infos
+    // (= fremde Klaenge) als "Varianten" mit - im Ziel wuerfelte die
+    // Engine dann zwischen dem richtigen Klang und fremden, mit den Flags
+    // des richtigen (im Spiel gehoert, #76: TwoGun spielt beim Laufen
+    // zufaellig seinen Schuss statt der Schritte, Gladiator/Roman God
+    // einen High-Pitch-Schrei beim Treffer - alles Mehrvarianten-Sounds).
     int16_t flags = 0;
     std::memcpy(&flags, src.m_bytes.data() + src.m_infosAt + static_cast<size_t>(erste) * SZ_SAMPLE_INFO + 6, 2);
     int varianten = (static_cast<int>(static_cast<uint16_t>(flags)) >> 2) & 0xF;
     if (varianten <= 0) varianten = 1;
-    if (erste + varianten > src.m_nInfos) { error = "Variantenzahl passt nicht zur Quelle"; return false; }
+
+    int16_t nummer = 0;
+    std::memcpy(&nummer, src.m_bytes.data() + src.m_infosAt + static_cast<size_t>(erste) * SZ_SAMPLE_INFO, 2);
+    if (nummer < 0 || nummer + varianten > src.m_nSamples)
+    { error = "Info zeigt auf Samples, die es nicht gibt"; return false; }
 
     if (m_nSamples + varianten > MAX_SAMPLES_PLAYABLE)
     {
@@ -817,20 +827,13 @@ bool Tr5Level::copySoundFrom(const Tr5Level& src, int srcMap, int dstMap, std::s
         return false;
     }
 
-    // Quellsamples heraussuchen, bevor irgendetwas geschrieben wird.
+    // Quellsamples nummer..nummer+varianten-1 in einem Durchlauf einsammeln,
+    // bevor irgendetwas geschrieben wird.
     std::vector<std::vector<uint8_t>> infos;
     std::vector<std::pair<int32_t, std::vector<uint8_t>>> samples;
-    for (int k = 0; k < varianten; ++k)
     {
-        const size_t o = src.m_infosAt + static_cast<size_t>(erste + k) * SZ_SAMPLE_INFO;
-        int16_t nummer = 0;
-        std::memcpy(&nummer, src.m_bytes.data() + o, 2);
-        if (nummer < 0 || nummer >= src.m_nSamples) { error = "Info zeigt auf ein Sample, das es nicht gibt"; return false; }
-
-        // Physisches Sample-Feld der Quelle ablaufen
         size_t q = src.m_numSamplesAt + 4;
-        bool gefunden = false;
-        for (int32_t i = 0; i < src.m_nSamples; ++i)
+        for (int32_t i = 0; i < src.m_nSamples && static_cast<int>(samples.size()) < varianten; ++i)
         {
             if (q + 8 > src.m_bytes.size()) break;
             int32_t uc = 0, cs = 0;
@@ -838,19 +841,19 @@ bool Tr5Level::copySoundFrom(const Tr5Level& src, int srcMap, int dstMap, std::s
             std::memcpy(&cs, src.m_bytes.data() + q + 4, 4);
             q += 8;
             if (cs < 0 || q + static_cast<size_t>(cs) > src.m_bytes.size()) break;
-            if (i == nummer)
-            {
+            if (i >= nummer)
                 samples.push_back({ uc, std::vector<uint8_t>(src.m_bytes.begin() + q,
                                                              src.m_bytes.begin() + q + cs) });
-                gefunden = true;
-                break;
-            }
             q += static_cast<size_t>(cs);
         }
-        if (!gefunden) { error = "Sampledaten der Quelle nicht auffindbar"; return false; }
+        if (static_cast<int>(samples.size()) != varianten)
+        { error = "Sampledaten der Quelle nicht auffindbar"; return false; }
+    }
 
+    {
+        const size_t o = src.m_infosAt + static_cast<size_t>(erste) * SZ_SAMPLE_INFO;
         std::vector<uint8_t> info(src.m_bytes.begin() + o, src.m_bytes.begin() + o + SZ_SAMPLE_INFO);
-        const int16_t neuNummer = static_cast<int16_t>(m_nSamples + k);
+        const int16_t neuNummer = static_cast<int16_t>(m_nSamples);
         std::memcpy(info.data(), &neuNummer, 2);        // auf den neuen Platz zeigen
         infos.push_back(info);
     }
@@ -864,7 +867,7 @@ bool Tr5Level::copySoundFrom(const Tr5Level& src, int srcMap, int dstMap, std::s
     const int16_t neueLut = static_cast<int16_t>(m_nInfos);
     std::memcpy(m_bytes.data() + m_lutAt + static_cast<size_t>(dstMap) * 2, &neueLut, 2);
 
-    m_nInfos += varianten;
+    m_nInfos += 1;      // EIN Info; die Varianten sind Samples, keine Infos
     std::memcpy(m_bytes.data() + m_numInfosAt, &m_nInfos, 4);
 
     // Alles hinter der Einfuegestelle ist gewandert.

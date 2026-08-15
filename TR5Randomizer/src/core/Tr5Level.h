@@ -311,6 +311,10 @@ public:
     // Anzahl, Datensatzformat siehe SZ_ANIM in Tr5Transfer.cpp (40 Byte).
     bool debugAnimBlock(size_t& dataAt, int32_t& n) const { dataAt = m_anims.dataAt; n = m_anims.count; return m_anims.count > 0; }
     bool debugCommandBlock(size_t& dataAt, int32_t& n) const { dataAt = m_commands.dataAt; n = m_commands.count; return m_commands.count > 0; }
+    // Byteposition des SAMPLE_INFO einer Soundmap-ID (8 Byte: number s16,
+    // volume u8, radius s8, randomness s8, pitch s8, flags s16).
+    bool debugSoundInfoAt(int map, size_t& at) const
+    { const int i = soundInfoIndex(map); if (i < 0) return false; at = m_infosAt + static_cast<size_t>(i) * 8; return true; }
     // Byteposition eines Meshes ueber seinen Zeigerindex - fuer
     // Rohvergleiche (Walk-Kennzahlen unterscheiden identische Geometrie
     // mit verschiedener Texturierung nicht).

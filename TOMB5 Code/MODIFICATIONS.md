@@ -263,6 +263,19 @@ Also in this group:
   imports the donor's speech heads so dialog mouths keep animating. Known
   corner: a weapon/torch held in hand across a cutscene is reset to the skin
   hand too; the weapon state machine reinstalls on the next draw.
+- `game/control.cpp` — the cutscene skipper no longer fires during the
+  cutscene START phase, and the controller skip (Cross) is edge-triggered.
+  The skip check ran for any `cutseq_trig != 0`; entering a cutscene trigger
+  while firing meant Cross (= the fire button on controllers) was still held
+  when the pre-start fade finished, so `do_cutseq_skipper_stuff()` aborted
+  the scene BEFORE `Load_and_Init_Cutseq` ever ran. The played-flag
+  (`SetCutPlayed`, set inside `Load_and_Init_Cutseq`) was therefore never
+  written, Lara still stood on the floor trigger, and the scene was
+  re-requested the next frame — an endless approach/abort loop, Alt+F4
+  required (seen in game). Now the skip requires `cutseq_trig == 2` (the
+  actual playing state) and Cross must be freshly pressed (edge), so a
+  fire button still held from gameplay never insta-skips the scene that
+  just started; Escape keeps its original held behaviour.
 
 ---
 

@@ -283,8 +283,29 @@ long ControlPhase(long nframes, long demo_mode)
 			// masks input down to IN_LOOK only during cutscenes (that masking is
 			// exactly why the original code checked keymap[DIK_ESCAPE] directly
 			// instead of input & IN_DESELECT too).
-			if (tomb5.cutseq_skipper && (keymap[DIK_ESCAPE] || (ControlMethod == 1 && Key(257))) && !ScreenFading && !bDoCredits)
-				do_cutseq_skipper_stuff();
+			//
+			// Skip NUR waehrend die Szene wirklich laeuft (cutseq_trig == 2,
+			// gesetzt nach Load_and_Init_Cutseq). Vorher feuerte der Skipper
+			// auch in der STARTPHASE (trig 1): wer schiessend in den Ausloeser
+			// lief, hielt Kreuz (= Feuertaste) noch gedrueckt, der Skipper
+			// wuergte die Szene VOR Load_and_Init ab - damit wurde die
+			// Abspielsperre (SetCutPlayed, deltapak.cpp:3409) nie gesetzt,
+			// der Bodentrigger zuendete im naechsten Frame neu: Endlosschleife
+			// aus Anlauf und Abbruch, Alt+F4 noetig (im Spiel gesehen, #78).
+			// Kreuz skippt ausserdem nur auf FLANKE (frisch gedrueckt), damit
+			// die vom Feuern noch gehaltene Taste die gerade gestartete Szene
+			// nicht sofort ueberspringt - Escape behaelt das gehaltene
+			// Verhalten des Originals.
+			{
+				static char crossWarGedrueckt = 0;
+				const char crossJetzt = (ControlMethod == 1 && Key(257)) ? 1 : 0;
+
+				if (tomb5.cutseq_skipper && cutseq_trig == 2 && !ScreenFading && !bDoCredits &&
+					(keymap[DIK_ESCAPE] || (crossJetzt && !crossWarGedrueckt)))
+					do_cutseq_skipper_stuff();
+
+				crossWarGedrueckt = crossJetzt;
+			}
 
 			input = 0;
 		}

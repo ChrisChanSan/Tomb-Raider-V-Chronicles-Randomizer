@@ -1148,10 +1148,9 @@ bool Rando::run(const RandoInput& in,
     // Sterbeklaenge, Pierres nie ausgelieferter Schuss - beide vom Nutzer im
     // Soundboard ausgesucht und im Spiel geprueft).
     //
-    // Hydra (63) fehlt mit Absicht: Nutzerentscheidung steht aus, und ihre
-    // drei Items teilen sich eine Position, deren OCB das Kettenglied waehlt
-    // (hydra.cpp:18) - das vertraegt keine einfache Platzierung. Chef,
-    // Scientist und Guardian stehen aus bekannten Gruenden nirgends im Pool.
+    // Hydra (63) ist seit dem 2026-08-15 dabei - Begruendung an ihrer Zeile.
+    // Chef, Scientist und Guardian stehen aus bekannten Gruenden nirgends im
+    // Pool.
     //
     // Je Level hoechstens DREI fremde Typen, vom Seed gewaehlt: jeder Typ
     // kostet Texturseiten und Samples im Ziel, und das Level soll sein
@@ -1210,6 +1209,34 @@ bool Rando::run(const RandoInput& in,
         { 57, "Andrea3", {},                                    {-1,-1},  nullptr,   -1 },  // Lion
         { 59, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Gladiator
         { 61, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Soldier Statue (Hammer)
+        // Hydra: lange bewusst draussen ("drei Items auf einer Position, die
+        // OCB waehlt das Kettenglied"). Nach der Durchsicht am 2026-08-15
+        // aufgenommen - die OCB ist harmlos, alles andere traegt:
+        //  - InitialiseHydra nutzt trigger_flags NUR fuer den Startframe
+        //    (30 * OCB, damit die drei Koepfe nicht synchron zucken) und
+        //    einen Versatz von +-384 in z. Mit OCB 0 faellt beides weg, und
+        //    der Pool setzt ohnehin nur OCB 0.
+        //  - Toetbar trotz objects[].undead: HydraControl rechnet ihren
+        //    Schaden SELBST aus (hydra.cpp:154 und 175) - im Flammenzustand 2
+        //    auf Distanz, in den Angriffszustaenden aus der Naehe, mit der
+        //    Schrotflinte dreifach. 30 Trefferpunkte.
+        //  - Sie raeumt hinter sich auf: Todesanim +15 traegt Kmd 4
+        //    (KillItem), davor sprengt sie sich Knoten fuer Knoten.
+        //  - Ihre Steuerung greift nur auf anim_index+15, also kein Zugriff
+        //    jenseits der Objektgrenze (das Imp-Problem entfaellt), und sie
+        //    braucht weder MESHSWAP noch Begleitslots.
+        //  - Ihre vier Anim-Sounds (406-409) wandern automatisch mit, die
+        //    holt Phase D des Transfers aus den Anim-Befehlen. Der einzige
+        //    fest verdrahtete Klang ist SFX_SMASH_ROCK (168) beim Zerbersten
+        //    - der fehlt in Andrea2 SELBST, ihr Tod ist dort also stumm.
+        //    Aus joby2 mitgenommen, damit er im Zielevel wenigstens klingt.
+        // Die drei Vanilla-Exemplare in Andrea2 (Items 91/92/93) sind ueber
+        // fixedItems geschuetzt und bleiben unberuehrt.
+        //  - animZahl 17: die Objekttabelle gesteht ihr weniger zu, als ihre
+        //    Steuerung braucht (anim_index+15 ist die Todesanim) - dasselbe
+        //    Muster wie beim Imp. Ohne die explizite Laenge bricht der
+        //    Transfer mit "Frame-Zeiger ausserhalb der Frame-Scheibe" ab.
+        { 63, "Andrea2", { {168,"joby2",168} },                 {-1,-1},  nullptr,   -1, 17 },  // Hydra
         { 77, "Andy2",   {},                                    {-1,-1},  nullptr,   -1 },  // Maze Monster
         // Imp: Spender andy3, NICHT andy1. andy1s Imp-Animsatz ist entkernt:
         // die Todesanimation +45 (ImpControl setzt sie bei hit_points<=0 fest

@@ -45,6 +45,7 @@ struct Config
     bool optEnemySwap    = false;
     int  enemyPool       = 0;     // 0 Levelpool, 1 Cross-Mix, 2 Allsanity
     bool optOutfits      = false;
+    int  itemMenge       = 0;     // 0 Vanilla, 1 mehr, 2 viel mehr (#36)
     int  secrets         = 0;     // Platzhalter (#53): 0 Aus .. 3 Custom
 
     // Liest bzw. schreibt <exe-Ordner>\TR5Randomizer.cfg. Fehlt die Datei,

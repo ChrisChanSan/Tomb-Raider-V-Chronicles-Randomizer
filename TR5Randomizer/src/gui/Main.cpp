@@ -314,6 +314,8 @@ namespace
             // Die Anzahl gehoert genauso in den Seed wie die Haken: mit 3 und
             // mit 12 Gegnern ist es nicht dasselbe Spiel.
             flags |= static_cast<uint64_t>(optEnemyCount & 0xFF) << 8;
+            // Dasselbe fuer die Item-Menge (#36).
+            flags |= static_cast<uint64_t>(optItemMenge & 0x3) << 16;
 
             // FNV-1a ueber Seed-Text und Auswahl, damit beides gleichwertig
             // eingeht - eine blosse XOR-Verknuepfung haette bei benachbarten
@@ -483,6 +485,9 @@ namespace
         opt.allsanity    = (a.optEnemyPool == 2);
         opt.randomOutfits = a.optOutfits;
         opt.allWeapons = true;              // Standard, siehe App-Kommentar
+        // Item-Abundance: die drei Stufen der Oberflaeche als Stueckzahl.
+        // Freie Ablageflaechen und das Item-Limit deckeln sie ohnehin.
+        opt.extraPickups = (a.optItemMenge == 1) ? 12 : (a.optItemMenge == 2) ? 30 : 0;
 
         JsonValue patch;
         RandoReport rep;
@@ -943,20 +948,26 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::SeparatorText("3. Items");
 
     ImGui::Checkbox("Ausruestung (Waffen, Munition, Medipacks)", &a.optOtherPickups);
-    // Mengenwahl ist die kommende Item-Abundance (#36) - sichtbar, aber
-    // ausgegraut, bis die Logik existiert. "Vanilla Anzahl" ist der Ist-Stand.
+    // Item-Abundance (#36): zusaetzliche Verbrauchsgueter streuen. Weniger als
+    // Vanilla gibt es bewusst nicht - Items entfernen wuerde alle folgenden
+    // Indizes verschieben und jeden "Object N"-Verweis der Trigger brechen.
     ImGui::SameLine();
-    ImGui::BeginDisabled(true);
     ImGui::RadioButton("Vanilla Anzahl", &a.optItemMenge, 0);
+    hoverHilfe("Das Level behaelt genau so viel Ausruestung, wie Core vorgesehen "
+               "hat - nur an anderen Stellen.");
     ImGui::SameLine();
     ImGui::RadioButton("Mehr Items", &a.optItemMenge, 1);
-    hoverHilfe("Kommt noch: zusaetzliche Ausruestung im Level verteilen. "
-               "Grenze ist das 256-Item-Limit der Engine.");
+    hoverHilfe("Streut bis zu zwoelf zusaetzliche Verbrauchsgueter pro Level. "
+               "Gelegt wird nur, was das Level ohnehin kennt - Munition, "
+               "Medipacks, Fackeln -, gewichtet nach Haeufigkeit: Andy2 (Kind-Lara, "
+               "keine Waffen) bekommt also Medipacks, ein Waffenlevel Munition. "
+               "Schluessel, Puzzleteile und Secrets bleiben aussen vor.");
     ImGui::SameLine();
     ImGui::RadioButton("Viel mehr Items", &a.optItemMenge, 2);
-    hoverHilfe("Kommt noch: deutlich mehr Ausruestung - braucht vorher die "
-               "MAX_ITEMS-Verdopplung in der Engine.");
-    ImGui::EndDisabled();
+    hoverHilfe("Wie \"Mehr Items\", aber bis zu dreissig pro Level. Die Grenze "
+               "ist erreicht, wenn die freien Ablageflaechen ausgehen oder das "
+               "Item-Limit der Engine (512) naeher rueckt - beides deckelt die "
+               "Zahl von selbst.");
 
     ImGui::Checkbox("Schluessel & Puzzles", &a.optKeyItems);
 
@@ -1316,6 +1327,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.optEnemySwap    = app.cfg.optEnemySwap;
     app.optEnemyPool    = app.cfg.enemyPool;
     app.optOutfits      = app.cfg.optOutfits;
+    app.optItemMenge    = app.cfg.itemMenge;
     app.optSecrets      = app.cfg.secrets;
 
     // Alles Merkenswerte in die Einstellungsdatei schreiben: Fenstergroesse,
@@ -1336,6 +1348,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.optEnemySwap    = app.optEnemySwap;
         app.cfg.enemyPool       = app.optEnemyPool;
         app.cfg.optOutfits      = app.optOutfits;
+        app.cfg.itemMenge       = app.optItemMenge;
         app.cfg.secrets         = app.optSecrets;
         app.cfg.seedText        = app.seedBuf;
         app.cfg.save();
@@ -1391,6 +1404,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.optEnemySwap    != app.optEnemySwap ||
                  app.cfg.enemyPool       != app.optEnemyPool ||
                  app.cfg.optOutfits      != app.optOutfits ||
+                 app.cfg.itemMenge       != app.optItemMenge ||
                  app.cfg.secrets         != app.optSecrets)
         {
             merkeEinstellungen(hwnd);

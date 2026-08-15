@@ -404,6 +404,17 @@ struct RandoOptions
     // (Nutzervorgabe); rich1 liefert die HK ausser nach rich2, das seine
     // eigene Spezialpose behaelt. joby4 bleibt vanilla (Nutzerentscheidung).
     bool allWeapons = false;
+
+    // Item-Abundance: so viele zusaetzliche Verbrauchsgueter je Level
+    // streuen (0 = aus). Gelegt wird nur, was das Level ohnehin kennt -
+    // Munition, Medipacks, Fackeln -, gewichtet nach Haeufigkeit; Details am
+    // Streublock in Randomizer.cpp. Karge Level sind der Anlass: Andy2 hat
+    // auf 254 Raeume zehn Pickups bei 348 gueltigen Ablageflaechen.
+    //
+    // Eine Gegenrichtung ("weniger als Vanilla") gibt es nicht: Items
+    // entfernen wuerde alle nachfolgenden Indizes verschieben und jeden
+    // "Object N"-Verweis der Trigger brechen.
+    int  extraPickups = 0;
 };
 
 struct RandoReport
@@ -415,6 +426,7 @@ struct RandoReport
     int enemiesAdded = 0;
     int enemiesSwapped = 0;
     int weaponsScattered = 0;           // gestreute Waffen-/Munitions-Items
+    int extraPickups = 0;               // zusaetzliche Ausruestung (Abundance)
     int crossTypesUsed = 0;             // fremde Gegnertypen im Einsatz
     std::vector<std::string> notes;     // Auffaelligkeiten fuer die Oberflaeche
     bool ok = true;

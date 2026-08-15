@@ -826,6 +826,21 @@ bool Rando::run(const RandoInput& in,
     // rich1s Scientist). Budget: MAX_ITEMS ist seit der Verdopplung 512,
     // hier wird bei 500 aufgehoert, und die spaeter gesetzten Zusatzgegner
     // sind schon abgezogen.
+    // Ein freier, fuer diesen Typ zulaessiger Sektor. Ohne Constraint, damit
+    // genau eine Regel greift: das Waffenverbot je Raum (noWeaponRooms,
+    // rich1s Scientist). Wird von der Waffenstreuung UND der Item-Abundance
+    // genutzt, deshalb steht sie vor beiden.
+    auto freieStelle = [&](int typeId) -> const ZoneSector* {
+        std::vector<const ZoneSector*> c;
+        for (const ZoneSector& s : pool)
+        {
+            if (used.count(secKey(s.room, s.sectorX, s.sectorZ))) continue;
+            if (!Rando::sectorAllowedFor(in, nullptr, s, typeId, false)) continue;
+            c.push_back(&s);
+        }
+        return c.empty() ? nullptr : c[static_cast<size_t>(rng.below(c.size()))];
+    };
+
     if (opt.allWeapons && klein != "joby4")
     {
         struct WStreu { int waffe; int munition[2]; };
@@ -843,16 +858,6 @@ bool Rando::run(const RandoInput& in,
                          - static_cast<int>(adds.size())
                          - (opt.addEnemies ? opt.enemiesPerLevel : 0);
 
-        auto freieStelle = [&](int typeId) -> const ZoneSector* {
-            std::vector<const ZoneSector*> c;
-            for (const ZoneSector& s : pool)
-            {
-                if (used.count(secKey(s.room, s.sectorX, s.sectorZ))) continue;
-                if (!Rando::sectorAllowedFor(in, nullptr, s, typeId, false)) continue;
-                c.push_back(&s);
-            }
-            return c.empty() ? nullptr : c[static_cast<size_t>(rng.below(c.size()))];
-        };
         auto lege = [&](int typeId, const ZoneSector& s)
         {
             const RoomOrigin& ro = origin[s.room];
@@ -892,6 +897,108 @@ bool Rando::run(const RandoInput& in,
                 ++gelegt;
             }
             report.notes.push_back(fmt("Waffenstreuung: typeId %d + %d Munitionspacks.", w.waffe, gelegt));
+        }
+    }
+
+    // --- Item-Abundance: zusaetzliche Ausruestung streuen (#36) ---
+    //
+    // Manche Level sind ausgesprochen karg: Andy2 hat auf 254 Raeume ganze
+    // zehn Pickups, davon drei Secrets - bei 348 gueltigen Ablageflaechen
+    // nach der Kuration. extraPickups legt bis zu N weitere Verbrauchsgueter
+    // aus.
+    //
+    // Gestreut wird NUR, was das Level schon kennt (eigene Items oder gerade
+    // gestreute Waffenmunition): fuer einen Typ ohne Modell im Level gaebe es
+    // nichts zu zeichnen. Damit passt die Zugabe von selbst zum Level - Andy2
+    // (Kind-Lara, keine Waffen) bekommt Medipacks, ein Waffenlevel bekommt
+    // Munition.
+    //
+    // Die Auswahl ist nach Haeufigkeit gewichtet: was ein Level ohnehin oft
+    // auslegt, kommt auch oefter dazu, und der Charakter bleibt erhalten.
+    // Ausgenommen bleibt alles unter 334 - Schluessel, Puzzleteile,
+    // Quest-Gegenstaende und vor allem die Secrets (PICKUP_ITEM4 = 223):
+    // ein zusaetzliches Secret wuerde die Levelzaehlung verfaelschen. Ebenso
+    // aussen vor: die Waffen selbst (das macht die Streuung oben),
+    // Einzelstuecke wie Lasersight/Fernglas/Schalldaempfer und der
+    // Armbrustbolzen (Geschoss, kein Pickup).
+    //
+    // "Weniger als Vanilla" gibt es bewusst nicht: Items entfernen wuerde
+    // alle nachfolgenden Indizes verschieben und damit jeden "Object N"-
+    // Verweis der Trigger brechen - die Grundregel des ganzen Werkzeugs.
+    if (opt.extraPickups > 0)
+    {
+        // Verbrauchsgueter, die sich gefahrlos vervielfachen lassen.
+        static const int kVerbrauch[] = {
+            335,        // Pistolenmunition
+            337,        // Uzi
+            339, 340,   // Schrotflinte normal / Wideshot
+            342, 343,   // Armbrust normal / explosiv
+            346,        // HK
+            348,        // Deagle
+            349, 350,   // Bigmedi / Smallmedi
+            354,        // Fackel
+        };
+
+        // Haeufigkeit im Level zaehlen - Vanilla-Bestand plus das, was die
+        // Waffenstreuung eben erst dazugelegt hat.
+        std::map<int, int> haeufig;
+        for (const LevelItem& it : in.items) ++haeufig[it.typeId];
+        for (size_t i = 0; i < adds.size(); ++i)
+            ++haeufig[static_cast<int>(adds[i]["typeId"].asInt())];
+
+        std::vector<int> topf;                 // Ziehungstopf, je Vorkommen ein Los
+        for (int t : kVerbrauch)
+        {
+            std::map<int, int>::const_iterator f = haeufig.find(t);
+            if (f == haeufig.end()) continue;
+            for (int n = 0; n < f->second; ++n) topf.push_back(t);
+        }
+
+        if (topf.empty())
+            report.notes.push_back("Item-Abundance: das Level fuehrt keine streubaren "
+                                   "Verbrauchsgueter - nichts hinzugefuegt.");
+        else
+        {
+            const int typenVorher = static_cast<int>(std::set<int>(topf.begin(), topf.end()).size());
+            int budget = 500 - static_cast<int>(in.items.size())
+                             - static_cast<int>(adds.size())
+                             - (opt.addEnemies ? opt.enemiesPerLevel : 0);
+            int wieViele = opt.extraPickups;
+            if (wieViele > budget) wieViele = budget;
+
+            for (int n = 0; n < wieViele && !topf.empty(); ++n)
+            {
+                const int typ = topf[static_cast<size_t>(rng.below(topf.size()))];
+                const ZoneSector* s = freieStelle(typ);
+                if (!s)
+                {
+                    // Fuer diesen Typ gibt es nirgends mehr einen erlaubten
+                    // freien Sektor - in rich2 etwa ist fast das ganze Level
+                    // waffenfreie Zone, dort kommt keine Munition unter. Der
+                    // Typ fliegt aus dem Topf, die uebrigen wuerfeln weiter;
+                    // ein Abbruch hier haette wegen EINES gesperrten Typs auch
+                    // die Medipacks gekostet. Erneut frei werden kann er nicht,
+                    // Sektoren werden im Verlauf nur belegt, nie frei.
+                    topf.erase(std::remove(topf.begin(), topf.end(), typ), topf.end());
+                    --n;
+                    continue;
+                }
+                const RoomOrigin& ro = origin[s->room];
+                const PlacementOffset po = offFor(typ);
+                JsonValue a = JsonValue::makeObject();
+                a.set("typeId", JsonValue::makeInt(typ));
+                a.set("room", JsonValue::makeInt(s->room));
+                a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + s->sectorX * 1024 + 512 + po.dx));
+                a.set("y", JsonValue::makeInt(s->floorY + po.dy));
+                a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s->sectorZ * 1024 + 512 + po.dz));
+                a.set("ocb", JsonValue::makeInt(0));
+                adds.push(a);
+                used.insert(secKey(s->room, s->sectorX, s->sectorZ));
+                ++report.extraPickups;
+            }
+            report.notes.push_back(fmt("Item-Abundance: %d von %d zusaetzlichen Pickups gestreut "
+                                       "(%d streubare Typen im Level).",
+                                       report.extraPickups, opt.extraPickups, typenVorher));
         }
     }
 

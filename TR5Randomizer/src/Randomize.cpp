@@ -53,11 +53,12 @@ int main(int argc, char** argv)
         std::printf("  mix:      vorhandene Gegner untereinander tauschen\n");
         std::printf("  cross:    Gegnerpool um bis zu drei fremde Typen erweitern (mit mix/Zahl)\n");
         std::printf("  allsanity: der ganze Gegnerpool, jede Rolle wuerfelt frei (mit mix/Zahl)\n");
+        std::printf("  itemsN:   N zusaetzliche Verbrauchsgueter streuen (z.B. items20)\n");
         return 2;
     }
 
     const std::string seedText = (argc > 5) ? argv[5] : "Weihnachten";
-    int gegner = 0;
+    int gegner = 0, extraItems = 0;
     bool nurGegner = false, outfits = false, waffen = false, mix = false, cross = false, allsanity = false;
     for (int i = 6; i < argc; ++i)
     {
@@ -68,6 +69,14 @@ int main(int argc, char** argv)
         else if (s == "mix")    mix = true;
         else if (s == "cross")  cross = true;
         else if (s == "allsanity") allsanity = true;
+        // "itemsN" bzw. "items=N" - muss VOR dem Zahl-Rueckfall stehen, sonst
+        // schluckt atoi das Wort als 0 und ueberschreibt die Gegnerzahl.
+        else if (s.rfind("items", 0) == 0)
+        {
+            const char* p = s.c_str() + 5;
+            if (*p == '=') ++p;
+            extraItems = std::atoi(p);
+        }
         else                    gegner = std::atoi(argv[i]);
     }
     const uint64_t seed = SeedText::parse(seedText);
@@ -98,6 +107,7 @@ int main(int argc, char** argv)
     opt.swapEnemies = mix;
     opt.crossEnemies = cross;
     opt.allsanity = allsanity;
+    opt.extraPickups = extraItems;
     if (nurGegner) { opt.shuffleKeyItems = false; opt.shuffleOtherPickups = false; }
 
     JsonValue patch;
@@ -144,6 +154,8 @@ int main(int argc, char** argv)
     if (pr.weaponsCopied > 0 || rep.weaponsScattered > 0)
         std::printf("  Waffen      %d Slots uebernommen, %d Items gestreut\n",
                     pr.weaponsCopied, rep.weaponsScattered);
+    if (rep.extraPickups > 0)
+        std::printf("  Abundance   %d zusaetzliche Verbrauchsgueter gestreut\n", rep.extraPickups);
     if (rep.crossTypesUsed > 0)
         std::printf("  Cross       %d fremde Gegnertypen, %d Slots uebernommen\n",
                     rep.crossTypesUsed, pr.moveablesCopied);

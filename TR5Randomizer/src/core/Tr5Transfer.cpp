@@ -295,7 +295,7 @@ bool Tr5Level::debugMeshWalk(int ptrIndex, int& nVerts, int& nNorms,
 }
 
 bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& error,
-                                int dstSlot, bool nurMeshes)
+                                int dstSlot, bool nurMeshes, int animZahl)
 {
     char buf[256];
 
@@ -355,7 +355,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
                                         [](const MoveableInfo& m) { return static_cast<long long>(m.boneIndex); });
 
     const long long frameStart = nurMeshes ? 0 : mv.frameOffset;
-    const long long frameEnd = nurMeshes ? 0 : nextStart(frameStart, static_cast<long long>(src.m_frames.count) * 2,
+    long long frameEnd = nurMeshes ? 0 : nextStart(frameStart, static_cast<long long>(src.m_frames.count) * 2,
                                          [](const MoveableInfo& m) { return static_cast<long long>(m.frameOffset); });
 
     long long animStart = -1, animEnd = -1;
@@ -365,6 +365,28 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         animEnd = nextStart(animStart, src.m_anims.count,
                             [](const MoveableInfo& m) { return static_cast<long long>(m.animIndex); });
         if (animEnd > src.m_anims.count) { error = "Anim-Scheibe unplausibel"; return false; }
+
+        // Explizite Scheibenlaenge (siehe Prototyp): die Steuerung mancher
+        // Typen greift ueber die Objektgrenze hinaus in die globale
+        // Anim-Tabelle (Imp: anim_index+45 als Todesanimation). Dann muss
+        // auch die Frame-Scheibe bis hinter den hoechsten Frame-Zeiger der
+        // erweiterten Anims wachsen - die Zeiger-Pruefung unten verlangt,
+        // dass jeder davon in der Scheibe liegt.
+        if (animZahl > 0)
+        {
+            animEnd = animStart + animZahl;
+            if (animEnd > src.m_anims.count)
+            { error = "Anim-Scheibe (explizite Laenge) laeuft aus der Tabelle"; return false; }
+
+            long long maxFp = frameStart;
+            for (long long a = animStart; a < animEnd; ++a)
+            {
+                const uint32_t fp = rd32(src.m_bytes, src.m_anims.dataAt + static_cast<size_t>(a) * SZ_ANIM);
+                if (fp > maxFp) maxFp = fp;
+            }
+            frameEnd = nextStart(maxFp, static_cast<long long>(src.m_frames.count) * 2,
+                                 [](const MoveableInfo& m) { return static_cast<long long>(m.frameOffset); });
+        }
     }
 
     // --- Animationen samt Anhang -------------------------------------------

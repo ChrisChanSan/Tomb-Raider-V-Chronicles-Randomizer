@@ -266,6 +266,9 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             const int nach = static_cast<int>(w["toSlot"].asInt(-1));
             const int zielSlot = (nach < 0) ? slot : nach;
             const bool nurMeshes = w["onlyMeshes"].asBool(false);
+            // Explizite Anim-Scheibenlaenge (Imp: Todesanim liegt jenseits
+            // der Objektgrenze in der globalen Tabelle, siehe Tr5Level.h).
+            const int animZahl = static_cast<int>(w["animZahl"].asInt(-1));
 
             Tr5Level::MoveableInfo mi;
             if (!ersetzen && level.moveableInfo(zielSlot, mi)) continue;   // hat es schon
@@ -279,7 +282,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             }
 
             std::string wErr;
-            if (!level.copyMoveableFrom(*spender, slot, wErr, nach, nurMeshes))
+            if (!level.copyMoveableFrom(*spender, slot, wErr, nach, nurMeshes, animZahl))
             {
                 error = std::string(was) + "-Slot " + std::to_string(slot) + " aus " + von + ": " + wErr;
                 return false;

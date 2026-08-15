@@ -939,8 +939,12 @@ bool Rando::run(const RandoInput& in,
     // die Guard-Haende kommen aus joby3, TwoGuns Quellmesh 2 aus rich3.
     // Typen mit demselben swapDst teilen sich den Import (einmal emittiert).
     struct CrossSound  { int map; const char* vonLevel; int vonMap; };
+    // animZahl (0 = Heuristik): explizite Anim-Scheibenlaenge fuer Typen,
+    // deren Steuerung ueber die Objektgrenze hinaus in die globale
+    // Anim-Tabelle greift - bisher nur der Imp (siehe Tabelleneintrag).
     struct CrossGegner { int typeId; const char* von; CrossSound sounds[2];
-                         int begleiter[2]; const char* swapVon; int swapDst; };
+                         int begleiter[2]; const char* swapVon; int swapDst;
+                         int animZahl; };
     static const CrossGegner kCross[] = {
         { 33, "rich3",   {},                                    {-1,-1},  "rich3",   399 }, // SWAT
         { 35, "rich3",   {},                                    {-1,-1},  "rich3",   399 }, // Advanced SWAT
@@ -955,7 +959,20 @@ bool Rando::run(const RandoInput& in,
         { 59, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Gladiator
         { 61, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Soldier Statue (Hammer)
         { 77, "Andy2",   {},                                    {-1,-1},  nullptr,   -1 },  // Maze Monster
-        { 89, "andy1",   {},                                    {-1,-1},  "andy1",   402 }, // Imp
+        // Imp: Spender andy3, NICHT andy1. andy1s Imp-Animsatz ist entkernt:
+        // die Todesanimation +45 (ImpControl setzt sie bei hit_points<=0 fest
+        // ein) ist dort ein Ein-Frame-Dummy ohne KillItem-Kommando - der Imp
+        // kann nie sterben (Zustands-Flackern 9<->0, kein Fade, Muell-Pose;
+        // im Spiel gesehen). Core ist das nie aufgefallen, weil die junge
+        // Lara in andy1 keine Waffen hat. andy3 traegt den vollen Satz
+        // (+45 = Frames 45..66 mit KillItem -> after_death -> Fade); Anims
+        // 0-12, Geometrie und MESHSWAP1-Tauschsatz sind in beiden identisch
+        // (AnimDump/SucheModell, 2026-08-15). animZahl 46: die Objekttabelle
+        // gesteht dem Imp nur 18 Anims zu, +19..+45 liegen physisch in den
+        // Bereichen fremder Kulissenslots - ohne explizite Laenge fehlte die
+        // Todesanim im Import und die Engine las hinter dem Tabellenende
+        // (die beobachtete Todes-Flugschleife).
+        { 89, "andy3",   {},                                    {-1,-1},  "andy3",   402, 46 }, // Imp
     };
 
     std::vector<int> gegnerPool = in.enemyTypes;
@@ -1338,6 +1355,7 @@ bool Rando::run(const RandoInput& in,
         e.set("slot", JsonValue::makeInt(t));
         e.set("fromLevel", JsonValue::makeString(c->von));
         e.set("replace", JsonValue::makeBool(true));
+        if (c->animZahl > 0) e.set("animZahl", JsonValue::makeInt(c->animZahl));
         moveables.push(e);
 
         // Pflicht-Gefolge des Typs (siehe Tabellenkommentar).
@@ -1380,6 +1398,26 @@ bool Rando::run(const RandoInput& in,
 
         ++report.crossTypesUsed;
         report.notes.push_back(fmt("Cross-Gegner: typeId %d kommt aus %s.", t, c->von));
+    }
+
+    // --- andy1: eigenen Imp heilen ---
+    //
+    // andy1s Imp-Slot traegt den entkernten Animsatz (Todesanim +45 ist ein
+    // Dummy ohne KillItem - siehe kCross-Kommentar beim Imp). Vanilla fiel
+    // das nie auf, weil die junge Lara dort keine Waffen hat. Der Randomizer
+    // nimmt das Jung-Flag raus und gibt Pistolen - ab da stirbt der Imp auch
+    // in andy1 und braucht den vollen Satz aus andy3 (Geometrie identisch,
+    // nur die Animationen sind dort vollstaendig). Unbedingt, nicht an
+    // Optionen gebunden: jeder Lauf macht andy1s Imps toetbar.
+    if (klein == "andy1")
+    {
+        JsonValue e = JsonValue::makeObject();
+        e.set("slot", JsonValue::makeInt(89));
+        e.set("fromLevel", JsonValue::makeString("andy3"));
+        e.set("replace", JsonValue::makeBool(true));
+        e.set("animZahl", JsonValue::makeInt(46));   // wie im kCross-Eintrag
+        moveables.push(e);
+        report.notes.push_back("Imp geheilt: voller Animsatz (mit Tod) aus andy3.");
     }
 
     // --- Outfit wuerfeln ---

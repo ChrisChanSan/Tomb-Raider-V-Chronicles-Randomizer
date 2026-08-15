@@ -271,8 +271,19 @@ public:
     // Animationen (Core-Altlast; der generische Zuschnitt liefe damit aus
     // seinen Bloecken). Der Eintrag im Ziel bekommt anim 0xFFFF, bone 0,
     // frame 0 - gelesen wird an einem Lagerslot ohnehin nur mesh_index.
+    //
+    // animZahl (<= 0 = Heuristik "bis zum naechsten Objekt"): explizite
+    // Laenge der Anim-Scheibe. Noetig fuer den Imp (89): seine Steuerung
+    // greift mit anim_index+45 QUER durch die globale Anim-Tabelle - die
+    // Todesanimation liegt physisch in den Bereichen fremder Kulissenslots,
+    // die Heuristik schneidet nach 18 Anims ab und die Engine laese im Ziel
+    // hinter dem Tabellenende (im Spiel gesehen: Todes-Flugschleife). Die
+    // Frame-Scheibe waechst dann mit bis hinter den hoechsten Frame-Zeiger
+    // der erweiterten Scheibe; mitkopierte Kulissen-Anims sind harmloser
+    // Ballast nach dem Prinzip "nichts entfernen, nichts verschieben".
     bool copyMoveableFrom(const Tr5Level& src, int slotId, std::string& error,
-                          int dstSlot = -1, bool nurMeshes = false);
+                          int dstSlot = -1, bool nurMeshes = false,
+                          int animZahl = -1);
 
     // Der Objektslot, wie er in der Datei steht. anim < 0 heisst: keiner.
     struct MoveableInfo
@@ -296,6 +307,10 @@ public:
     const std::vector<uint8_t>& debugBytes() const { return m_bytes; }
     int32_t debugTexinfoCount() const { return m_texinfos.count; }
     bool debugTexinfoBlock(size_t& dataAt, int32_t& n) const { dataAt = m_texinfos.dataAt; n = m_texinfos.count; return m_texinfos.count > 0; }
+    // Anim- und Kommandoblock fuer Diagnosewerkzeuge (AnimDump): Lage und
+    // Anzahl, Datensatzformat siehe SZ_ANIM in Tr5Transfer.cpp (40 Byte).
+    bool debugAnimBlock(size_t& dataAt, int32_t& n) const { dataAt = m_anims.dataAt; n = m_anims.count; return m_anims.count > 0; }
+    bool debugCommandBlock(size_t& dataAt, int32_t& n) const { dataAt = m_commands.dataAt; n = m_commands.count; return m_commands.count > 0; }
     // Byteposition eines Meshes ueber seinen Zeigerindex - fuer
     // Rohvergleiche (Walk-Kennzahlen unterscheiden identische Geometrie
     // mit verschiedener Texturierung nicht).

@@ -1048,9 +1048,8 @@ bool Rando::run(const RandoInput& in,
             // Handkuration schlaegt alles: was dort steht, bleibt wie es ist.
             if (std::find(in.fixedItems.begin(), in.fixedItems.end(), it.index) != in.fixedItems.end())
                 continue;
-            // Antitrigger-Ziele bleiben vorerst unangetastet - siehe
-            // RandoInput::antitriggered (gescriptetes Despawnen).
-            if (in.antitriggered.count(it.index)) continue;
+            // Antitrigger-Ziele duerfen mittauschen: der getauschte Gegner
+            // bekommt unten die Antitrigger-Immunitaet mit (siehe dort).
             // OCB != 0 heisst: typspezifischer Spezial-Spawn. Die OCB steuert
             // Initialise/Control des URSPRUNGSTYPS (Imp 1/2/3/11/12:
             // Kletter-/Wurfzustaende auf Wandvorspruengen, imp.cpp:82;
@@ -1104,6 +1103,21 @@ bool Rando::run(const RandoInput& in,
                 JsonValue e = JsonValue::makeObject();
                 e.set("index", JsonValue::makeInt(indizes[i]));
                 e.set("typeId", JsonValue::makeInt(arten[i]));
+
+                // Zeigt ein Antitrigger auf dieses Item, wuerde er den neuen
+                // Gegner beim Betreten seines Sektors ohne Sterben und ohne
+                // Ausblenden aus dem Level loeschen (control.cpp:2422). In
+                // Vanilla ist das harmlos, weil der Gegner dort zu diesem
+                // Zeitpunkt erledigt sein soll - der getauschte kaempft aber
+                // vielleicht noch. Er bekommt deshalb Cores eigene
+                // Antitrigger-Immunitaet mit; Details in ApplyPatch.
+                if (in.antitriggered.count(indizes[i]))
+                {
+                    e.set("antitriggerImmun", JsonValue::makeBool(true));
+                    report.notes.push_back(fmt("Item %d ist Antitrigger-Ziel - Immunitaet gesetzt.",
+                                               indizes[i]));
+                }
+
                 edits.push(e);
 
                 report.notes.push_back(fmt("Gegner Item %d: typeId %d -> %d",

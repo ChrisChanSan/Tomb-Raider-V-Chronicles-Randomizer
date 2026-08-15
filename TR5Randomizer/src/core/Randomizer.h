@@ -290,14 +290,22 @@ struct RandoInput
     // stehen an Cores eigenen Positionen und bleiben unberuehrt.
     std::set<int>            waterRooms;
 
-    // Items, auf die ein AntiTrigger oder HeavyAntiTrigger zeigt. Ein
-    // Antitrigger LOESCHT die Aktivierung seines Ziels - gescriptetes
-    // Despawnen. Nach einem Typentausch passt das Skript nicht mehr: der
-    // neue Gegner erstarrt oder verschwindet mitten im Kampf (im Spiel
+    // Items, auf die ein AntiTrigger oder HeavyAntiTrigger zeigt. Zeigt so
+    // ein Trigger auf einen AKTIVEN intelligenten Gegner, loescht er ihn
+    // ohne Sterben und ohne Ausblenden aus dem Level (hit_points = -16384,
+    // DisableBaddieAI, KillItem - control.cpp:2422). In Vanilla ist das
+    // Absicht, weil der Gegner dort erledigt sein soll; ein getauschter
+    // kaempft womoeglich noch und verschwand mitten im Kampf (im Spiel
     // gesehen: Andrea1 Item 34 unter Allsanity, Antitrigger 46 in Raum 88).
-    // Solche Items werden vorerst nicht getauscht; die vollwertige Loesung
-    // - den Antitrigger an eine unerreichbare Stelle verschieben - ist als
-    // Aufgabe vermerkt.
+    //
+    // Solche Items tauschen jetzt mit und bekommen dabei Cores eigene
+    // Antitrigger-Immunitaet (IFL_ANTITRIGGER_ONESHOT) ins Flag-Wort - der
+    // Antitrigger prallt dann ab, der Gegner stirbt normal. Das wirkt pro
+    // ITEM: Andy2s Antitrigger auf die Items 150-154 bleibt fuer die
+    // ungetauschten Geschwister in Kraft. Betroffen sind ueberhaupt nur
+    // fuenf Gegner im ganzen Spiel (Andrea1 34, Andy2 151, rich1 180,
+    // rich2 26 und 111 - gemessen), davon faellt Andrea1 34 schon durch die
+    // OCB-Regel heraus.
     std::set<int>            antitriggered;
 
     // Typen, die dieses Level NICHT tragen darf. Gefuellt von der

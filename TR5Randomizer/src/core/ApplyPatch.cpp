@@ -486,6 +486,27 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
         if (e.has("flags"))  it.flags = static_cast<int16_t>(e["flags"].asInt());
 
+        // "antitriggerImmun" setzt IFL_ANTITRIGGER_ONESHOT (0x80) im
+        // Flag-Wort. Ein Antitrigger, der auf einen AKTIVEN intelligenten
+        // Gegner zeigt, toetet ihn ohne Umweg: hit_points = -16384,
+        // DisableBaddieAI, KillItem (control.cpp:2422) - kein Sterben, kein
+        // Ausblenden, er ist einfach weg. In Vanilla ist das Absicht, weil
+        // der Gegner an dieser Stelle laengst erledigt sein soll; nach einem
+        // Typentausch stimmt diese Annahme nicht mehr und der neue Gegner
+        // verschwindet mitten im Kampf (im Spiel gesehen: Andrea1 Item 34).
+        //
+        // Cores eigene Bremse dagegen ist dieses Bit: steht es, laesst
+        // TestTriggers das Item in Ruhe (control.cpp:2378) - gedacht als
+        // "einmal antigetriggert, nie wieder". Wir setzen es von vornherein,
+        // dann prallt der Antitrigger ab und der Gegner kaempft und stirbt
+        // normal. Das wirkt pro ITEM, nicht pro Trigger: teilen sich mehrere
+        // Gegner einen Antitrigger (Andy2 Items 150-154), bleiben die
+        // uebrigen unberuehrt. Das Bit ist in allen 15 Vanilla-Leveln bei
+        // keinem einzigen der 2094 Items gesetzt (gemessen) und wird von
+        // InitialiseItem nicht angefasst, ueberlebt also aus der Datei.
+        if (e["antitriggerImmun"].asBool(false))
+            it.flags = static_cast<int16_t>(static_cast<uint16_t>(it.flags) | 0x0080u);
+
         if (!level.setItem(index, it))
         {
             error = msg("Item %d liess sich nicht schreiben.", index);

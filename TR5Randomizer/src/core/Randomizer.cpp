@@ -983,7 +983,12 @@ bool Rando::run(const RandoInput& in,
         { 89, "andy3",   {},                                    {-1,-1},  "andy3",   402, 46 }, // Imp
     };
 
-    std::vector<int> gegnerPool = in.enemyTypes;
+    // Verbotene Typen (siehe RandoInput::verboteneTypen) fliegen aus dem
+    // Pool, BEVOR irgendetwas waehlt - weder Tausch noch Zusatzgegner noch
+    // Cross duerfen sie anfassen.
+    std::vector<int> gegnerPool;
+    for (int t : in.enemyTypes)
+        if (!in.verboteneTypen.count(t)) gegnerPool.push_back(t);
     std::map<int, const CrossGegner*> crossGewaehlt;
     std::set<int> crossBenutzt;
     if ((opt.crossEnemies || opt.allsanity) && (opt.swapEnemies || opt.addEnemies) && klein != "joby4")
@@ -993,6 +998,7 @@ bool Rando::run(const RandoInput& in,
         for (const CrossGegner& c : kCross)
         {
             if (eigene.count(c.typeId)) continue;         // steht schon im Levelpool
+            if (in.verboteneTypen.count(c.typeId)) continue;   // Level vertraegt ihn nicht
             std::string vonKlein;
             for (const char* p = c.von; *p; ++p)
                 vonKlein.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p);
@@ -1032,6 +1038,7 @@ bool Rando::run(const RandoInput& in,
     if (opt.swapEnemies && (in.enemyTypes.size() > 1 || !crossGewaehlt.empty()))
     {
         std::set<int> erlaubt(in.enemyTypes.begin(), in.enemyTypes.end());
+        for (int t : in.verboteneTypen) erlaubt.erase(t);
 
         std::vector<int> indizes;                 // Item-Indizes der Tauschbaren
         std::vector<int> arten;                   // ihre Typen, gleiche Reihenfolge
@@ -1449,6 +1456,56 @@ bool Rando::run(const RandoInput& in,
         report.notes.push_back("Imp geheilt: voller Animsatz (mit Tod) aus andy3.");
     }
 
+    // --- Fluchtmarker fuer Larson/Pierre (45/47) ---
+    //
+    // Beide fliehen ab 40 LP zu einem AI_AMBUSH-Marker mit passender OCB in
+    // ihrer Zone und despawnen dort (GetAITarget/FindAITargetObject,
+    // box.cpp) - Core garantiert den Marker in jedem Vanilla-Level, das ihn
+    // braucht. Der Randomizer legt zu JEDEM Exemplar (getauscht wie
+    // eingesetzt, alle mit OCB 0) einen Marker auf den Spawn-Sektor: die
+    // Flucht fuehrt zurueck zum Spawnpunkt und endet dort sauber, statt
+    // endlos hinter Lara herzulaufen (im Spiel gesehen: joby2 Item 36).
+    // Vanilla-Exemplare mit OCB != 0 bleiben aussen vor - fuer die stehen
+    // Cores eigene Marker im Level. Ein Marker je Sektor genuegt.
+    JsonValue aiAdds = JsonValue::makeArray();
+    {
+        std::set<long long> markerSektoren;
+        auto marker = [&](int room, int x, int y, int z)
+        {
+            const long long schluessel = (static_cast<long long>(room) << 40)
+                                       ^ (static_cast<long long>(x >> 10) << 20)
+                                       ^ static_cast<long long>(z >> 10);
+            if (markerSektoren.count(schluessel)) return;
+            markerSektoren.insert(schluessel);
+            JsonValue m = JsonValue::makeObject();
+            m.set("slot", JsonValue::makeInt(379));       // AI_AMBUSH (objects.h:270)
+            m.set("room", JsonValue::makeInt(room));
+            m.set("x", JsonValue::makeInt(x));
+            m.set("y", JsonValue::makeInt(y));
+            m.set("z", JsonValue::makeInt(z));
+            m.set("ocb", JsonValue::makeInt(0));
+            aiAdds.push(m);
+        };
+
+        for (const auto& kv : finalOf)
+            if ((kv.second.typeId == 45 || kv.second.typeId == 47) && kv.second.ocb == 0)
+                marker(kv.second.room, kv.second.x, kv.second.y, kv.second.z);
+
+        for (size_t i = 0; i < adds.size(); ++i)
+        {
+            const int t = static_cast<int>(adds[i]["typeId"].asInt());
+            if (t != 45 && t != 47) continue;
+            marker(static_cast<int>(adds[i]["room"].asInt()),
+                   static_cast<int>(adds[i]["x"].asInt()),
+                   static_cast<int>(adds[i]["y"].asInt()),
+                   static_cast<int>(adds[i]["z"].asInt()));
+        }
+
+        if (aiAdds.size() > 0)
+            report.notes.push_back(fmt("Fluchtmarker: %d AI_AMBUSH fuer Larson/Pierre gesetzt.",
+                                       static_cast<int>(aiAdds.size())));
+    }
+
     // --- Outfit wuerfeln ---
     //
     // Die Wahl faellt hier, damit sie am Seed haengt wie alles andere; die
@@ -1598,6 +1655,7 @@ bool Rando::run(const RandoInput& in,
     patchOut.set("itemEdits", edits);
     if (moveables.size() > 0) patchOut.set("moveableAdds", moveables);
     if (waffen.size() > 0) patchOut.set("weaponAdds", waffen);
+    if (aiAdds.size() > 0) patchOut.set("aiAdds", aiAdds);
     if (outfitGesetzt) patchOut.set("outfit", outfit);
     if (soundAdds.size() > 0) patchOut.set("soundAdds", soundAdds);
     if (adds.size() > 0) patchOut.set("itemAdds", adds);

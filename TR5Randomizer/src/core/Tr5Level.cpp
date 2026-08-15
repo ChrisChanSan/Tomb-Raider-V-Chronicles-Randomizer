@@ -373,6 +373,46 @@ bool Tr5Level::setItem(int index, const Tr5Item& in)
     return true;
 }
 
+bool Tr5Level::addAiObject(const Tr5AiObject& in, std::string& error)
+{
+    // Der AI-Block liegt direkt hinter den Items: int32 Anzahl, dann
+    // AIOBJECT-Eintraege zu je 24 Byte (LoadAIInfo, specific/file.cpp:1209).
+    // Einfuegen am Blockende, dieselbe Mechanik wie addItem: alles dahinter
+    // im Hauptblock (Cutscene-Daten, Sound) rueckt mit.
+    const size_t aiCountAt = m_itemCountOffset + 4 + static_cast<size_t>(m_itemCount) * 24;
+    if (aiCountAt + 4 > m_bytes.size()) { error = "AI-Block liegt ausserhalb der Datei"; return false; }
+
+    int32_t nAi = 0;
+    std::memcpy(&nAi, m_bytes.data() + aiCountAt, 4);
+    if (nAi < 0 || aiCountAt + 4 + static_cast<size_t>(nAi) * 24 > m_bytes.size())
+    { error = "AI-Block unplausibel"; return false; }
+
+    const size_t einfuegenAn = aiCountAt + 4 + static_cast<size_t>(nAi) * 24;
+    m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(einfuegenAn), 24, 0);
+    verschiebeSound(24, einfuegenAn);
+
+    ++nAi;
+    std::memcpy(m_bytes.data() + aiCountAt, &nAi, 4);
+
+    uint8_t* p = m_bytes.data() + einfuegenAn;
+    std::memcpy(p + 0, &in.objectNumber, 2);
+    std::memcpy(p + 2, &in.roomNumber, 2);
+    std::memcpy(p + 4, &in.x, 4);
+    std::memcpy(p + 8, &in.y, 4);
+    std::memcpy(p + 12, &in.z, 4);
+    std::memcpy(p + 16, &in.ocb, 2);
+    std::memcpy(p + 18, &in.flags, 2);
+    std::memcpy(p + 20, &in.yRot, 2);
+    std::memcpy(p + 22, &in.boxNumber, 2);
+
+    m_mainSize += 24;
+    const int32_t newSize = static_cast<int32_t>(m_mainSize);
+    std::memcpy(m_bytes.data() + m_mainOffset - 8, &newSize, 4);
+    std::memcpy(m_bytes.data() + m_mainOffset - 4, &newSize, 4);
+
+    return true;
+}
+
 //----------------------------------------------------------------------------
 // Floordata
 //

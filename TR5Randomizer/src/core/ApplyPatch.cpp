@@ -33,6 +33,26 @@ namespace
 
 void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
 {
+    // Pierre-Kampfsatz-Pruefung: traegt das Level Slot 47 nur als
+    // CUTSCENE-Variante (Todesanim +12 hat dort NICHT Zustand 5 -
+    // Andrea2, Trajan-Finale), darf der Pool ihn hier nie einsetzen.
+    // Der Slot bleibt unangetastet, die Cutscene braucht ihn.
+    {
+        Tr5Level::MoveableInfo mi;
+        if (level.moveableInfo(47, mi) && mi.animIndex >= 0)
+        {
+            size_t animAt; int32_t nAnims;
+            if (level.debugAnimBlock(animAt, nAnims) && mi.animIndex + 12 < nAnims)
+            {
+                uint16_t zustand = 0;
+                std::memcpy(&zustand,
+                            level.debugBytes().data() + animAt + (static_cast<size_t>(mi.animIndex) + 12) * 40 + 6, 2);
+                if (zustand != 5)
+                    in.verboteneTypen.insert(47);
+            }
+        }
+    }
+
     if (in.coupledTriggers.empty() && in.enemyTypes.empty()) return;
 
     std::vector<Tr5FloorEntry> chain;
@@ -482,6 +502,33 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             return false;
         }
         ++report.added;
+    }
+
+    // --- AI-Objekte (Fluchtmarker) ----------------------------------------
+    //
+    // NACH den itemAdds: addAiObject rechnet die Lage des AI-Blocks aus der
+    // aktuellen Item-Anzahl. Larson/Pierre bekommen so zu jedem Exemplar
+    // einen AI_AMBUSH auf dem Spawn-Sektor - die 40-LP-Flucht findet ihr
+    // Ziel und despawnt dort, statt endlos hinter Lara herzulaufen.
+    const JsonValue& aiAdds = patch["aiAdds"];
+    for (size_t i = 0; i < aiAdds.size(); ++i)
+    {
+        const JsonValue& a = aiAdds[i];
+
+        Tr5AiObject ai{};
+        ai.objectNumber = static_cast<int16_t>(a["slot"].asInt());
+        ai.roomNumber = static_cast<int16_t>(a["room"].asInt());
+        ai.x = static_cast<int32_t>(a["x"].asInt());
+        ai.y = static_cast<int32_t>(a["y"].asInt());
+        ai.z = static_cast<int32_t>(a["z"].asInt());
+        ai.ocb = static_cast<int16_t>(a["ocb"].asInt(0));
+
+        std::string aiErr;
+        if (!level.addAiObject(ai, aiErr))
+        {
+            error = "aiAdds: " + aiErr;
+            return false;
+        }
     }
 
     return true;

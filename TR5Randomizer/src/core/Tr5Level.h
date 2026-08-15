@@ -70,6 +70,24 @@ struct Tr5Item
 };
 
 //----------------------------------------------------------------------------
+// Ein AI-Objekt (AIOBJECT, global/types.h:2295, 24 Byte im Block direkt
+// hinter den Items). Marker wie AI_AMBUSH (Slot 379): Larson/Pierre fliehen
+// ab 40 LP zu einem AIAmbush mit passender OCB in ihrer Zone und despawnen
+// dort (GetAITarget/FindAITargetObject, box.cpp). boxNumber darf 0 sein -
+// die Engine rechnet sie zur Laufzeit selbst (box.cpp:1640).
+//----------------------------------------------------------------------------
+struct Tr5AiObject
+{
+    int16_t objectNumber = 0;
+    int16_t roomNumber = 0;
+    int32_t x = 0, y = 0, z = 0;
+    int16_t ocb = 0;            // trigger_flags: muss der OCB des Gegners entsprechen
+    int16_t flags = 0;
+    int16_t yRot = 0;
+    int16_t boxNumber = 0;
+};
+
+//----------------------------------------------------------------------------
 // Ein Raum, soweit wir ihn brauchen. Der Raum-Blob wird nicht mehr am Stueck
 // uebersprungen, sondern aufgeschluesselt - Portale, Nachbarn und Flags sind
 // die Grundlage dafuer, einen wirklich abgeschiedenen Raum zu finden.
@@ -157,6 +175,13 @@ public:
     // dieses Datensatzes - Dateigroesse und alle anderen Offsets bleiben
     // unberuehrt, weshalb Aendern gefahrlos ist und Entfernen nicht.
     bool    setItem(int index, const Tr5Item& in);
+
+    // Haengt ein AI-Objekt hinten an den AI-Block (direkt hinter den Items).
+    // Fuer die Fluchtmarker von Larson/Pierre: der Randomizer legt zu jedem
+    // platzierten oder getauschten Exemplar einen AI_AMBUSH auf seinen
+    // Spawn-Sektor - die 40-LP-Flucht findet damit immer ihr Ziel und der
+    // Gegner despawnt dort wie vanilla vorgesehen.
+    bool    addAiObject(const Tr5AiObject& in, std::string& error);
 
     // Haengt ein Item hinten an. Das ist der einzige Weg, Items hinzuzufuegen:
     // anhaengen verschiebt keine bestehenden Indizes, und die "Object N"-
@@ -311,6 +336,8 @@ public:
     // Anzahl, Datensatzformat siehe SZ_ANIM in Tr5Transfer.cpp (40 Byte).
     bool debugAnimBlock(size_t& dataAt, int32_t& n) const { dataAt = m_anims.dataAt; n = m_anims.count; return m_anims.count > 0; }
     bool debugCommandBlock(size_t& dataAt, int32_t& n) const { dataAt = m_commands.dataAt; n = m_commands.count; return m_commands.count > 0; }
+    bool debugChangeBlock(size_t& dataAt, int32_t& n) const { dataAt = m_changes.dataAt; n = m_changes.count; return m_changes.count > 0; }
+    bool debugRangeBlock(size_t& dataAt, int32_t& n) const { dataAt = m_ranges.dataAt; n = m_ranges.count; return m_ranges.count > 0; }
     // Byteposition des SAMPLE_INFO einer Soundmap-ID (8 Byte: number s16,
     // volume u8, radius s8, randomness s8, pitch s8, flags s16).
     bool debugSoundInfoAt(int map, size_t& at) const

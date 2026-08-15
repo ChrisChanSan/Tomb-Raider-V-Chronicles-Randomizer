@@ -180,6 +180,20 @@ void PierreControl(short item_number)
 			if (!item->after_death)
 				item->after_death = 1;
 		}
+		else if (item->object_number == PIERRE && item->frame_number >= anims[item->anim_number].frame_end - 1)
+		{
+			// Pierres Todesanimation (+12) springt an ihrem Ende in eine
+			// LEBEND-Animation (+8) zurueck - Core hat seinen generischen Tod
+			// nie benutzt, vanilla stirbt er per Cutscene (Colosseum). Ohne
+			// Riegel setzte die Steuerung den Tod im naechsten Tick neu auf:
+			// eine Imp-artige Endlosschleife (im Spiel gesehen). Die Anim
+			// kurz vor dem Ende festhalten - kein Sprung, Pose bleibt liegen,
+			// after_death blendet aus und raeumt bei 128 weg.
+			item->frame_number = anims[item->anim_number].frame_end - 1;
+
+			if (!item->after_death)
+				item->after_death = 1;
+		}
 	}
 	else
 	{

@@ -300,6 +300,17 @@ struct RandoInput
     // Aufgabe vermerkt.
     std::set<int>            antitriggered;
 
+    // Typen, die dieses Level NICHT tragen darf. Gefuellt von der
+    // Levelpruefung in ApplyPatch (markTriggerSafeSectors): Andrea2 traegt
+    // in Slot 47 nur Pierres CUTSCENE-Variante (Todesanim +12 hat Zustand 9
+    // und springt in eine Lebend-Anim - fuer die Trajan-Finale-Szene, nie
+    // fuer PierreControl gedacht; das Level hat auch keine Typ-47-Items).
+    // Weil der Slot "da ist", wuerde weder Cross importieren noch der Pool
+    // ihn meiden - ein dort platzierter Pierre friert ein und stirbt in
+    // einer Endlosschleife (im Spiel gesehen). Ersetzen verbietet sich:
+    // die Finale-Cutscene braucht genau diesen Satz.
+    std::set<int>            verboteneTypen;
+
     // Raeume, in denen keine Waffe liegen darf, und was als Waffe zaehlt.
     // joby3: eine zufaellig in den Chef-Bereich gewanderte Schrotflinte loest
     // denselben Glitch aus wie versetzte Pistolen. Das ist keine Eigenschaft

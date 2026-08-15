@@ -1239,7 +1239,18 @@ bool Rando::run(const RandoInput& in,
         //    Steuerung braucht (anim_index+15 ist die Todesanim) - dasselbe
         //    Muster wie beim Imp. Ohne die explizite Laenge bricht der
         //    Transfer mit "Frame-Zeiger ausserhalb der Frame-Scheibe" ab.
-        { 63, "Andrea2", { {167,"Andrea2",167} },               {-1,-1},  nullptr,   -1, 17 },  // Hydra
+        //  - Begleitslot BUBBLES (367): ihr Feuergeschoss ist KEIN Sprite,
+        //    sondern das 17. Mesh dieses Slots (hydra.cpp:280,
+        //    objects[BUBBLES].mesh_index + 16). Fuehrt das Ziel dort andere
+        //    Meshes, fliegt etwas Falsches durch die Luft - im Spiel gesehen
+        //    in Andrea1. Andrea2 traegt in 367 genau den Geschosskern samt
+        //    Flammenfluegeln (vom Nutzer im Objektbaum nachgesehen).
+        //    Das Ersetzen ist gefahrlos: die LUFTBLASEN im Wasser haben mit
+        //    diesem Slot nichts zu tun, sie laufen ueber ein eigenes
+        //    Partikelsystem (Bubbles[40], CreateBubble in tomb4fx.cpp:1438).
+        //    Auch Andrea2 selbst hat Wasser und trotzdem den Geschosskern
+        //    in 367 - der beste Beleg dafuer.
+        { 63, "Andrea2", { {167,"Andrea2",167} },               {367,-1}, nullptr,   -1, 17 },  // Hydra
         { 77, "Andy2",   {},                                    {-1,-1},  nullptr,   -1 },  // Maze Monster
         // Imp: Spender andy3, NICHT andy1. andy1s Imp-Animsatz ist entkernt:
         // die Todesanimation +45 (ImpControl setzt sie bei hit_points<=0 fest

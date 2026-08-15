@@ -160,6 +160,15 @@ void MazeMonsterControl(short item_number)
 				item->frame_number = anims[item->anim_number].frame_base;
 				item->current_anim_state = 7;
 			}
+			// Leiche ausblenden wie beim Hund. Die Todesanimation traegt kein
+			// KillItem-Kommando, und mit 4000 LP hat den Tod vanilla nie
+			// jemand erlebt - Core hat ihn nie fertig gebaut: die Liegepose
+			// versinkt im Boden, uebrig bleibt ewig der Blob-Schatten (im
+			// Spiel gesehen: "schwarzer Kegel"). Ab dem letzten Frame den
+			// Fade anstossen, draw.cpp:742 blendet aus und raeumt bei 128 weg
+			// - dasselbe Muster wie bei Larson (pierre.cpp).
+			else if (item->frame_number == anims[item->anim_number].frame_end && !item->after_death)
+				item->after_death = 1;
 		}
 		else
 		{

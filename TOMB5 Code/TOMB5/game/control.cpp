@@ -465,7 +465,24 @@ long ControlPhase(long nframes, long demo_mode)
 			if (item->after_death < 128)
 			{
 				if (objects[item->object_number].control)
+				{
+					// DIAG (voruebergehend, wieder entfernen): Teleport-Faenger
+					// fuer verschwindende/zerreissende Gegner. Ein normaler
+					// Lauftick bewegt <100 Units - alles darueber ist ein
+					// Sprung, den keine Animation erklaert.
+					const long dx0 = item->pos.x_pos, dy0 = item->pos.y_pos, dz0 = item->pos.z_pos;
+					const short r0 = item->room_number;
 					objects[item->object_number].control(item_num);
+					if (objects[item->object_number].intelligent)
+					{
+						const long dd = abs(item->pos.x_pos - dx0) + abs(item->pos.y_pos - dy0) + abs(item->pos.z_pos - dz0);
+						if (dd > 700)
+							Log("DIAG Sprung: Item %d Typ %d Raum %d->%d um %d auf %d/%d/%d (Anim %d Frame %d Status %d)",
+								item_num, item->object_number, r0, item->room_number, dd,
+								item->pos.x_pos, item->pos.y_pos, item->pos.z_pos,
+								item->anim_number, item->frame_number, item->status);
+					}
+				}
 			}
 			else
 				KillItem(item_num);

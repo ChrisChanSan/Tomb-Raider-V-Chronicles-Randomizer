@@ -942,18 +942,26 @@ bool Rando::run(const RandoInput& in,
     // animZahl (0 = Heuristik): explizite Anim-Scheibenlaenge fuer Typen,
     // deren Steuerung ueber die Objektgrenze hinaus in die globale
     // Anim-Tabelle greift - bisher nur der Imp (siehe Tabelleneintrag).
+    //
+    // basisSlot (0 = keiner): Anim-Basistyp der Soldatenfamilie. SWAT+ und
+    // Mafia tragen in den Dateien nur einen Ein-Frame-Stummel - ihre Anims
+    // holt die Engine zur Laufzeit vom Basistyp (setup.cpp:1052/1112/1145:
+    // anim_index wird auf SWATs, sonst Guards Satz umgebogen). Wer so einen
+    // Typ importiert, MUSS den Basistyp mitbringen, sonst laeuft er ohne
+    // gueltigen Satz. Import mit replace=false: hat das Ziel den Basistyp
+    // schon (nativ oder als eigener Cross-Import), bleibt der stehen.
     struct CrossGegner { int typeId; const char* von; CrossSound sounds[2];
                          int begleiter[2]; const char* swapVon; int swapDst;
-                         int animZahl; };
+                         int animZahl; int basisSlot; };
     static const CrossGegner kCross[] = {
-        { 33, "rich3",   {},                                    {-1,-1},  "rich3",   399 }, // SWAT
-        { 35, "rich3",   {},                                    {-1,-1},  "rich3",   399 }, // Advanced SWAT
-        { 37, "rich1",   {},                                    {-1,-1},  "joby3",   400 }, // Guard (Blue Guard)
-        { 39, "rich1",   {},                                    {-1,-1},  "rich3",   399 }, // Two Gun
+        { 33, "rich3",   {},                                    {-1,-1},  "rich3",   399, 0, 0 },  // SWAT
+        { 35, "rich3",   {},                                    {-1,-1},  "rich3",   399, 0, 33 }, // Advanced SWAT (Anims von SWAT)
+        { 37, "rich1",   {},                                    {-1,-1},  "joby3",   400, 0, 0 },  // Guard (Blue Guard)
+        { 39, "rich1",   {},                                    {-1,-1},  "rich3",   399, 0, 0 },  // Two Gun
         { 41, "Andrea1", {},                                    {-1,-1},  nullptr,   -1 },  // Dog
         { 45, "Andrea1", { {96,"rich1",85}, {98,"rich1",143} }, {-1,-1},  nullptr,   -1 },  // Larson
         { 47, "Andrea3", { {90,"joby5",45}, {91,"joby5",123} }, {-1,-1},  nullptr,   -1 },  // Pierre
-        { 49, "joby3",   {},                                    {-1,-1},  "joby3",   400 }, // Soldier MG (Mafia)
+        { 49, "joby3",   {},                                    {-1,-1},  "joby3",   400, 0, 37 }, // Soldier MG (Mafia, Anims von Guard)
         { 51, "joby3",   {},                                    {406,-1}, nullptr,   -1 },  // Soldier Pistols (Mafia2) + MESHSWAP2
         { 57, "Andrea3", {},                                    {-1,-1},  nullptr,   -1 },  // Lion
         { 59, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Gladiator
@@ -1375,6 +1383,18 @@ bool Rando::run(const RandoInput& in,
             g.set("slot", JsonValue::makeInt(b));
             g.set("fromLevel", JsonValue::makeString(c->von));
             g.set("replace", JsonValue::makeBool(true));
+            moveables.push(g);
+        }
+
+        // Anim-Basistyp der Familie (siehe Tabellenkommentar): SWAT+/Mafia
+        // laufen zur Laufzeit auf dem Satz von SWAT bzw. Guard. replace=false
+        // laesst einen nativen oder selbst importierten Basistyp stehen.
+        if (c->basisSlot > 0)
+        {
+            JsonValue g = JsonValue::makeObject();
+            g.set("slot", JsonValue::makeInt(c->basisSlot));
+            g.set("fromLevel", JsonValue::makeString(c->von));
+            g.set("replace", JsonValue::makeBool(false));
             moveables.push(g);
         }
 

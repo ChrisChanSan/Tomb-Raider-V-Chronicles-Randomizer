@@ -34,10 +34,18 @@ void SasControl(short item_number)
 	if (!CreatureActive(item_number))
 		return;
 
-	if (objects[SWAT].loaded)
-		index = objects[SWAT].anim_index;
-	else
-		index = objects[BLUE_GUARD].anim_index;
+	// Vault-/Zustandsanims aus dem Satz des EIGENEN Objekts, nicht global
+	// "SWATs, sonst Guards": SasControl bedient die ganze Soldatenfamilie
+	// (SWAT, SWAT+, Guard, Mafia), und setup.cpp biegt die anim_index der
+	// Stummel-Typen ohnehin auf den geteilten Satz um - vanilla laeuft
+	// beides auf dasselbe hinaus, weil nie beide Familien in einem Level
+	// stecken. Der Randomizer importiert aber SWAT UND Guard mit je
+	// eigenem vollen Satz: der Guard lief auf seinem (setup laesst ihn in
+	// Ruhe), die alte globale Wahl schob ihm beim Klettern trotzdem SWATs
+	// Satz unter - SWAT-Frames auf Guard-Skelett, Polygonexplosion bei
+	// jedem Vault (im Spiel gesehen: Andrea2 Item 150, Anim 710 = SWATs
+	// anim_index 675 + 35 statt eigener 775 + 35).
+	index = objects[items[item_number].object_number].anim_index;
 
 	item = &items[item_number];
 	sas = (CREATURE_INFO*)item->data;

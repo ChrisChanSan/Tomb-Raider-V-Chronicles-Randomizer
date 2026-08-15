@@ -53,6 +53,14 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
         }
     }
 
+    // Welche Modellslots traegt das Level ueberhaupt? Die Item-Abundance
+    // darf nur streuen, was auch gezeichnet werden kann - ein Pickup ohne
+    // Modell im Level waere nichts als ein unsichtbarer Stolperstein.
+    {
+        const std::vector<int> slots = level.moveableSlots();
+        in.vorhandeneSlots.insert(slots.begin(), slots.end());
+    }
+
     if (in.coupledTriggers.empty() && in.enemyTypes.empty()) return;
 
     std::vector<Tr5FloorEntry> chain;

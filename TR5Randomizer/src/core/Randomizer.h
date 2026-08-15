@@ -308,6 +308,13 @@ struct RandoInput
     // OCB-Regel heraus.
     std::set<int>            antitriggered;
 
+    // Modellslots, die das Level fuehrt - von der Levelpruefung in ApplyPatch
+    // (markTriggerSafeSectors) aus der Datei gelesen. Die Item-Abundance
+    // streut nur Typen, deren Modell da ist; ein Pickup ohne Modell waere ein
+    // unsichtbarer Stolperstein. Fuer das Waffenset kommt hinzu, was der
+    // Import erst hineinbringt - das steht dann nicht in dieser Liste.
+    std::set<int>            vorhandeneSlots;
+
     // Typen, die dieses Level NICHT tragen darf. Gefuellt von der
     // Levelpruefung in ApplyPatch (markTriggerSafeSectors): Andrea2 traegt
     // in Slot 47 nur Pierres CUTSCENE-Variante (Todesanim +12 hat Zustand 9

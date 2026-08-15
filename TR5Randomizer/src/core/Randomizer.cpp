@@ -907,52 +907,114 @@ bool Rando::run(const RandoInput& in,
     // nach der Kuration. extraPickups legt bis zu N weitere Verbrauchsgueter
     // aus.
     //
-    // Gestreut wird NUR, was das Level schon kennt (eigene Items oder gerade
-    // gestreute Waffenmunition): fuer einen Typ ohne Modell im Level gaebe es
-    // nichts zu zeichnen. Damit passt die Zugabe von selbst zum Level - Andy2
-    // (Kind-Lara, keine Waffen) bekommt Medipacks, ein Waffenlevel bekommt
-    // Munition.
+    // Gestreut wird nur, was im Level auch ein MODELL hat - sonst gaebe es
+    // nichts zu zeichnen. Das sind zwei Quellen: was das Level ohnehin
+    // auslegt, und was der Waffenimport hineinbringt.
     //
-    // Die Auswahl ist nach Haeufigkeit gewichtet: was ein Level ohnehin oft
-    // auslegt, kommt auch oefter dazu, und der Charakter bleibt erhalten.
-    // Ausgenommen bleibt alles unter 334 - Schluessel, Puzzleteile,
-    // Quest-Gegenstaende und vor allem die Secrets (PICKUP_ITEM4 = 223):
+    // Der Waffenimport ist der wichtigere Fall. Munition liegt vanilla nur in
+    // 3 bis 5 von 15 Leveln (gemessen: Uzi 5, Schrot 3, HK 3, Deagle 4) -
+    // seit jedes Level das volle Waffenset bekommt, stuenden ueber zehn
+    // Level mit Waffen ohne passende Munition da. Deshalb bekommen die
+    // Munitionssorten des Sets ein festes Grundgewicht, unabhaengig vom
+    // Vanilla-Bestand.
+    //
+    // Pistolenmunition (335) faellt raus: Pistolen haben unbegrenzt Schuss,
+    // und in keinem der 15 Level liegt ein einziges Stueck davon. Fuer rich2
+    // sind Pistolen samt Munition ganz gesperrt - sein Slot 1 traegt Cores
+    // gescriptete Zweit-HK, und schon das blosse Vorhandensein des
+    // Pistolen-Items gaebe Lara Startpistolen (setup.cpp:111).
+    //
+    // Die Waffen selbst kommen nur in den Topf, wenn das Level sie noch
+    // nirgends auslegt: die Streuung oben wuerfelt je Waffe eine Muenze, und
+    // bei Pech ist die Waffe zwar importiert, aber nirgends zu finden. So
+    // ist sie es doch - Doppelstuecke gibt es dadurch keine.
+    //
+    // Alles unter typeId 334 bleibt aussen vor: Schluessel, Puzzleteile,
+    // Quest-Gegenstaende und vor allem die Secrets (PICKUP_ITEM4 = 223) -
     // ein zusaetzliches Secret wuerde die Levelzaehlung verfaelschen. Ebenso
-    // aussen vor: die Waffen selbst (das macht die Streuung oben),
-    // Einzelstuecke wie Lasersight/Fernglas/Schalldaempfer und der
-    // Armbrustbolzen (Geschoss, kein Pickup).
+    // aussen vor: Einzelstuecke wie Lasersight/Fernglas/Schalldaempfer und
+    // der Armbrustbolzen (Geschoss, kein Pickup).
     //
     // "Weniger als Vanilla" gibt es bewusst nicht: Items entfernen wuerde
     // alle nachfolgenden Indizes verschieben und damit jeden "Object N"-
     // Verweis der Trigger brechen - die Grundregel des ganzen Werkzeugs.
-    if (opt.extraPickups > 0)
+    //
+    // joby4 bleibt aussen vor wie ueberall sonst: Lara steckt dort im
+    // Taucheranzug und traegt keine Waffen. Die Munitionsslots liegen in der
+    // Datei zwar herum, aber Nachschub fuer Waffen, die es im Level nicht
+    // gibt, waere nur Deko.
+    if (opt.extraPickups > 0 && klein == "joby4")
+        report.notes.push_back("Item-Abundance: joby4 bleibt vanilla (Taucheranzug).");
+    else if (opt.extraPickups > 0)
     {
-        // Verbrauchsgueter, die sich gefahrlos vervielfachen lassen.
-        static const int kVerbrauch[] = {
-            335,        // Pistolenmunition
-            337,        // Uzi
-            339, 340,   // Schrotflinte normal / Wideshot
-            342, 343,   // Armbrust normal / explosiv
-            346,        // HK
-            348,        // Deagle
-            349, 350,   // Bigmedi / Smallmedi
-            354,        // Fackel
+        // Alle Waffen und Munitionssorten, die TR5 als Pickup kennt
+        // (Nutzervorgabe: alles in den Topf, was das Level tragen kann).
+        // Zu jeder Waffe ihre Munition - eine Waffe ohne Nachschub ist nach
+        // zwei Kaempfen totes Gewicht.
+        struct Streuwaffe { int waffe; int munition[2]; };
+        static const Streuwaffe kWaffenGut[] = {
+            { 336, { 337,  -1 } },     // Uzi
+            { 338, { 339, 340 } },     // Schrotflinte normal / Wideshot
+            { 341, { 342, 343 } },     // Armbrust normal / explosiv
+            { 345, { 346,  -1 } },     // HK
+            { 347, { 348,  -1 } },     // Deagle
         };
+        // Verbrauchsgueter ohne zugehoerige Waffe.
+        static const int kSonstiges[] = { 349, 350, 354 };   // Bigmedi, Smallmedi, Fackel
 
-        // Haeufigkeit im Level zaehlen - Vanilla-Bestand plus das, was die
-        // Waffenstreuung eben erst dazugelegt hat.
+        // Was liegt im Level - Vanilla-Bestand plus das, was Waffenstreuung
+        // und Pflicht-Injektionen eben erst dazugelegt haben?
         std::map<int, int> haeufig;
         for (const LevelItem& it : in.items) ++haeufig[it.typeId];
         for (size_t i = 0; i < adds.size(); ++i)
             ++haeufig[static_cast<int>(adds[i]["typeId"].asInt())];
 
-        std::vector<int> topf;                 // Ziehungstopf, je Vorkommen ein Los
-        for (int t : kVerbrauch)
+        // Kann das Level diesen Typ zeichnen? Entweder der Modellslot steht
+        // schon in der Datei, oder der Waffenimport bringt ihn mit (Slots aus
+        // kWaffen weiter unten: Andrea3 334-340, joby2 347/348, rich1
+        // 345/346 - die Armbrust ist NICHT dabei, sie bleibt den Leveln
+        // vorbehalten, die sie selbst fuehren).
+        const bool waffensetDa = opt.allWeapons && klein != "joby4";
+        auto zeichenbar = [&](int typ) -> bool {
+            if (in.vorhandeneSlots.count(typ)) return true;
+            if (!waffensetDa) return false;
+            switch (typ)
+            {
+            case 334: case 335: case 336: case 337:
+            case 338: case 339: case 340:
+            case 345: case 346: case 347: case 348: return true;
+            default: return false;
+            }
+        };
+
+        // Lose je Typ: ein Los je vorhandenem Stueck erhaelt den Charakter
+        // des Levels, das Grundgewicht sorgt fuer Nachschub.
+        std::map<int, int> lose;
+        auto biete = [&](int typ, int grundgewicht)
         {
-            std::map<int, int>::const_iterator f = haeufig.find(t);
-            if (f == haeufig.end()) continue;
-            for (int n = 0; n < f->second; ++n) topf.push_back(t);
+            if (!zeichenbar(typ)) return;
+            std::map<int, int>::const_iterator f = haeufig.find(typ);
+            lose[typ] += grundgewicht + (f == haeufig.end() ? 0 : f->second);
+        };
+
+        for (const Streuwaffe& w : kWaffenGut)
+        {
+            for (int m = 0; m < 2; ++m)
+                if (w.munition[m] > 0) biete(w.munition[m], 4);
+            // Die Waffe selbst nur, wenn sie noch nirgends liegt: die
+            // Streuung oben wuerfelt je Waffe eine Muenze, und bei Pech waere
+            // sie zwar importiert, aber nirgends zu finden. Doppelstuecke
+            // gibt es so keine.
+            if (!haeufig.count(w.waffe)) biete(w.waffe, 2);
         }
+        for (int t : kSonstiges) biete(t, 2);
+
+        // rich2: weder Pistolen noch ihre Munition, nie (siehe oben).
+        if (klein == "rich2") { lose.erase(334); lose.erase(335); }
+
+        std::vector<int> topf;                 // Ziehungstopf, ein Eintrag je Los
+        for (std::map<int, int>::const_iterator it = lose.begin(); it != lose.end(); ++it)
+            for (int n = 0; n < it->second; ++n) topf.push_back(it->first);
 
         if (topf.empty())
             report.notes.push_back("Item-Abundance: das Level fuehrt keine streubaren "

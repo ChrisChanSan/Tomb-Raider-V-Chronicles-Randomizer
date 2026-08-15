@@ -12,6 +12,7 @@
 #include "../specific/function_stubs.h"
 #include "tomb4fx.h"
 #include "lara.h"
+#include "gameflow.h"
 
 static BITE_INFO hydra_hit = { 0, 0, 0, 11 };
 
@@ -72,7 +73,18 @@ void HydraControl(short item_number)
 			if (item->item_flags[3] < 12)
 			{
 				ExplodeItemNode(item, 11 - item->item_flags[3], 0, 64);
-				SoundEffect(SFX_SMASH_ROCK, &item->pos, 0);
+
+				// DIAG (voruebergehend, wieder entfernen): der Zerbersten-Klang
+				// bleibt im Zielevel stumm, obwohl Map 168 dort steht. Der
+				// Rueckgabewert von SoundEffect sagt, ob die Engine ihn
+				// ueberhaupt annimmt.
+				{
+					const long ok = SoundEffect(SFX_SMASH_ROCK, &item->pos, 0);
+					if (item->item_flags[3] == 0)
+						Log("DIAG Hydra-Tod: SoundEffect(%d) -> %d, Knoten %d",
+							SFX_SMASH_ROCK, (int)ok, 11 - item->item_flags[3]);
+				}
+
 				item->item_flags[3]++;
 			}
 		}
@@ -277,8 +289,29 @@ void TriggerHydraMissile(PHD_3DPOS* pos, short room_number, short num)
 		fx->counter = (num << 4) + 15;
 		fx->speed = (GetRandomControl() & 0x1F) + 64;
 		fx->flag1 = 0;
-		fx->object_number = BUBBLES;
-		fx->frame_number = objects[BUBBLES].mesh_index + 16;
+
+		// Das Geschoss ist kein eigenes Modell, sondern ein SPRITE - und Core
+		// holt es aus der BUBBLES-Sequenz, sechzehn Bilder hinter deren
+		// Anfang. Das geht nur auf, solange die Spriteliste genau so aussieht
+		// wie in Trajan Markets, dem einzigen Level mit einer Hydra. Steht sie
+		// als Pool-Gegner woanders, liegt an dieser Stelle irgendein anderes
+		// Bild, und sie spuckt einen Farbstreifen (im Spiel gesehen: Andrea1).
+		//
+		// Jeder andere Effekt der Engine nimmt dafuer DEFAULT_SPRITES - die
+		// Standardbank, die in jedem Level an derselben Stelle liegt (+11 ist
+		// die Flamme, siehe tomb4fx.cpp:503 und 940). Genau die bekommt die
+		// Hydra hier, ausser in ihrem Heimatlevel: dort bleibt Cores Original
+		// stehen, damit die Vanilla-Begegnung unveraendert aussieht.
+		if (gfCurrentLevel == LVL5_TRAJAN_MARKETS)
+		{
+			fx->object_number = BUBBLES;
+			fx->frame_number = objects[BUBBLES].mesh_index + 16;
+		}
+		else
+		{
+			fx->object_number = DEFAULT_SPRITES;
+			fx->frame_number = objects[DEFAULT_SPRITES].mesh_index + 11;
+		}
 	}
 }
 

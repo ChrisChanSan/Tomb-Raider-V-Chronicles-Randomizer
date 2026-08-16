@@ -28,6 +28,13 @@ namespace
 {
     const int SZ_ANIM = 40, SZ_CHANGE = 6, SZ_RANGE = 8, SZ_OBJ = 20;
 
+    // Dieselben Werte wie im Namensraum von Tr5Level.cpp (dort Zeile 794ff).
+    // Bewusst abgelesen und nicht geraten; wenn sie sich dort je aendern,
+    // faellt es hier auf, weil der Sound-Block nicht mehr aufgeht.
+    constexpr int SAMPLE_LUT_SIZE = 450;        // MAX_SAMPLES, global/types.h
+    constexpr int SZ_SAMPLE_INFO = 8;
+    constexpr int MAX_SAMPLES_PLAYABLE = 256;   // DS_Buffers[], siehe #94
+
     uint16_t g16(const std::vector<uint8_t>& b, size_t p) { uint16_t v; std::memcpy(&v, &b[p], 2); return v; }
     uint32_t g32(const std::vector<uint8_t>& b, size_t p) { uint32_t v; std::memcpy(&v, &b[p], 4); return v; }
     void     s16(std::vector<uint8_t>& b, size_t p, uint16_t v) { std::memcpy(&b[p], &v, 2); }
@@ -59,6 +66,141 @@ namespace
         for (int i = 0; i < nt; ++i, p += 10) { if (p + 10 > ende) return false; fn(p + 6); }
         return p <= ende;
     }
+}
+
+bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
+                               std::vector<std::pair<int,int>>& zuordnung,
+                               std::string& error)
+{
+    char buf[256];
+    zuordnung.clear();
+
+    if (!m_soundOk) { error = "Ziel-Level: Sound-Block nicht deutbar"; return false; }
+    if (paket.size() < 12 || std::memcmp(paket.data(), "T35S", 4) != 0)
+    { error = "Kein TR3-Soundpaket (Kennung T35S fehlt)"; return false; }
+    if (g32(paket, 4) != 1) { error = "Unbekannte Soundpaketversion"; return false; }
+
+    const uint32_t anzahl = g32(paket, 8);
+    if (basisId < 0 || basisId + int(anzahl) > SAMPLE_LUT_SIZE)
+    { error = "Zielplaetze liegen ausserhalb der Soundmap"; return false; }
+
+    // Ein vorhandenes SAMPLE_INFO des Ziels als Vorlage nehmen. Warum nicht
+    // die Werte aus TR3? Weil deren Zahlenbereiche nicht nachweislich
+    // dieselben sind - TR3 fuehrt Volume und Chance als ganze Worte, TR5 hat
+    // ein Byte fuer die Lautstaerke. Eine geratene Umrechnung waere genau die
+    // Sorte Fehler, die hier schon zweimal Zeit gekostet hat. Die
+    // TR3-Originalwerte liegen im Paket und lassen sich spaeter nachziehen,
+    // sobald die Skala gemessen ist.
+    if (m_nInfos <= 0) { error = "Ziel-Level hat keine SAMPLE_INFOs als Vorlage"; return false; }
+    std::vector<uint8_t> vorlage(m_bytes.begin() + m_infosAt,
+                                 m_bytes.begin() + m_infosAt + SZ_SAMPLE_INFO);
+
+    // --- Erst alles einsammeln, dann schreiben ----------------------------
+    struct Klang { int origId; int32_t uncomp; std::vector<uint8_t> wav; };
+    std::vector<Klang> klaenge;
+    {
+        size_t p = 12;
+        for (uint32_t i = 0; i < anzahl; ++i)
+        {
+            if (p + 12 > paket.size()) { error = "Soundpaket endet vorzeitig"; return false; }
+            Klang k;
+            k.origId = g16(paket, p);
+            p += 8;                                   // Volume, Chance, Chars: siehe oben
+            const uint32_t len = g32(paket, p); p += 4;
+            if (p + len > paket.size()) { error = "Wave laeuft aus dem Paket"; return false; }
+            k.wav.assign(paket.begin() + p, paket.begin() + p + len);
+            p += len;
+
+            // uncomp_size sauber setzen: Laenge des data-Blocks. Die Engine
+            // rechnet ihn im PCM-Zweig zwar selbst aus, aber ein stimmiger
+            // Wert erspart spaeteren Lesern das Raetselraten.
+            k.uncomp = 0;
+            for (size_t q = 12; q + 8 <= k.wav.size(); )
+            {
+                const uint32_t cl = g32(k.wav, q + 4);
+                if (!std::memcmp(&k.wav[q], "data", 4)) { k.uncomp = int32_t(cl); break; }
+                q += 8 + cl + (cl & 1);
+            }
+            klaenge.push_back(std::move(k));
+        }
+    }
+
+    if (m_nSamples + int32_t(klaenge.size()) > MAX_SAMPLES_PLAYABLE)
+    {
+        std::snprintf(buf, sizeof(buf),
+            "Level haette %d Samples - die Engine laedt hoechstens %d",
+            m_nSamples + int32_t(klaenge.size()), MAX_SAMPLES_PLAYABLE);
+        error = buf;
+        return false;
+    }
+
+    for (size_t i = 0; i < klaenge.size(); ++i)
+    {
+        const int ziel = basisId + int(i);
+        if (soundInfoIndex(ziel) >= 0)
+        {
+            std::snprintf(buf, sizeof(buf), "Soundmap-Platz %d ist im Ziel schon belegt", ziel);
+            error = buf;
+            return false;
+        }
+    }
+
+    // --- Infos einfuegen (liegen IM Hauptblock, der waechst) --------------
+    std::vector<uint8_t> roh;
+    for (size_t i = 0; i < klaenge.size(); ++i)
+    {
+        std::vector<uint8_t> info = vorlage;
+        const int16_t nummer = static_cast<int16_t>(m_nSamples + int32_t(i));
+        std::memcpy(info.data(), &nummer, 2);
+
+        // Genau EINE Variante: Bits 2-5 der Flags auf 1. Sonst wuerfelte die
+        // Engine sample = number + Zufall(N) und griffe auf die Nachbarn zu
+        // (die Falle aus #76).
+        int16_t flags = 0;
+        std::memcpy(&flags, info.data() + 6, 2);
+        flags = static_cast<int16_t>((static_cast<uint16_t>(flags) & ~0x3C) | (1 << 2));
+        std::memcpy(info.data() + 6, &flags, 2);
+
+        roh.insert(roh.end(), info.begin(), info.end());
+    }
+
+    const size_t einfuegenAn = m_infosAt + static_cast<size_t>(m_nInfos) * SZ_SAMPLE_INFO;
+    m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(einfuegenAn), roh.begin(), roh.end());
+
+    for (size_t i = 0; i < klaenge.size(); ++i)
+    {
+        const int ziel = basisId + int(i);
+        const int16_t lut = static_cast<int16_t>(m_nInfos + int32_t(i));
+        std::memcpy(m_bytes.data() + m_lutAt + static_cast<size_t>(ziel) * 2, &lut, 2);
+        zuordnung.push_back({ klaenge[i].origId, ziel });
+    }
+
+    m_nInfos += int32_t(klaenge.size());
+    std::memcpy(m_bytes.data() + m_numInfosAt, &m_nInfos, 4);
+
+    verschiebeSound(roh.size(), einfuegenAn);
+    if (m_itemCountOffset >= einfuegenAn) m_itemCountOffset += roh.size();
+
+    m_mainSize += roh.size();
+    const int32_t neueGroesse = static_cast<int32_t>(m_mainSize);
+    std::memcpy(m_bytes.data() + m_mainOffset - 8, &neueGroesse, 4);
+    std::memcpy(m_bytes.data() + m_mainOffset - 4, &neueGroesse, 4);
+
+    m_nSamples += int32_t(klaenge.size());
+    std::memcpy(m_bytes.data() + m_numSamplesInMainAt, &m_nSamples, 4);
+    std::memcpy(m_bytes.data() + m_numSamplesAt, &m_nSamples, 4);
+
+    // --- Sampledaten ans Dateiende ---------------------------------------
+    for (const Klang& k : klaenge)
+    {
+        const int32_t uc = k.uncomp, cs = static_cast<int32_t>(k.wav.size());
+        const uint8_t* pu = reinterpret_cast<const uint8_t*>(&uc);
+        const uint8_t* pc = reinterpret_cast<const uint8_t*>(&cs);
+        m_bytes.insert(m_bytes.end(), pu, pu + 4);
+        m_bytes.insert(m_bytes.end(), pc, pc + 4);
+        m_bytes.insert(m_bytes.end(), k.wav.begin(), k.wav.end());
+    }
+    return true;
 }
 
 bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlot,

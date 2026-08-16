@@ -250,6 +250,19 @@ public:
     bool    addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlot,
                                int texinfoIndex, std::string& error);
 
+    // Setzt die Klaenge eines TR3-Pakets ("T35S" aus TR3Ton) auf die
+    // Soundmap-Plaetze basisId, basisId+1, ... und liefert die Zuordnung
+    // urspruengliche TR3-ID -> neuer Platz zurueck. Damit werden anschliessend
+    // die SFX-Nummern in den Anim-Kommandos umgebogen.
+    //
+    // Warum hohe Plaetze statt der TR3-Nummern: die urspruenglichen IDs sind
+    // in TR5 teils belegt (89 in JEDEM Level, 84/87 in einigen). Die Plaetze
+    // 440..449 sind dagegen ueberall frei, und die Soundmap ist ein festes
+    // Feld von 450 Eintraegen - ein hoher Platz kostet also kein Byte.
+    bool    addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
+                             std::vector<std::pair<int,int>>& zuordnung,
+                             std::string& error);
+
     // Nimmt den Triggereintrag des Quellsektors heraus und haengt ihn an die
     // Kette des Zielsektors. Beide Ketten werden neu hinten angebaut, beide
     // Sektoren umgehaengt. Der Trigger behaelt sein Referenzwort und seine

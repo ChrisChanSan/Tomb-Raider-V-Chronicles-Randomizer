@@ -341,13 +341,32 @@ int main(int argc, char** argv)
         }
         if (n2 < 0) { std::printf("Kommandoblock im Modellpaket nicht auffindbar\n"); return 1; }
         std::printf("  Anim-Kommandos: %d SFX-Nummern umgebogen\n", n2);
+        // HART ABBRECHEN, nicht nur warnen.
+        //
+        // Eine stehen gebliebene TR3-Nummer trifft im Ziel irgendeinen
+        // Vanilla-Klang. Das ist kein Schoenheitsfehler: beim Compsognathus
+        // blieb 243 stehen und wurde zu SFX_GENERIC_HEAVY_FEET - ein wuchtiger
+        // schwerer Schritt mitten zwischen den richtigen Klaengen. Die Suche
+        // danach hat Stunden gekostet, weil alle Messungen an den Dateien
+        // sauber waren und nur eine WARNUNG im Bauprotokoll stand, die man
+        // ueberliest.
+        //
+        // Wo die Zielplaetze liegen, hilft dagegen nicht: sie liegen ohnehin
+        // hoch (420-449) und koennen mit TR3-Nummern (bis etwa 256) nicht
+        // kollidieren. Der Schutz muss an der Quelle greifen - jede gerufene
+        // Nummer MUSS eine Zuordnung haben.
+        //
+        // Wer den Klang bewusst nicht mitnehmen will, biegt ihn auf einen
+        // eigenen stillen Platz. Einfach stehenlassen ist keine Option mehr.
         if (!offen.empty())
         {
-            std::printf("  ACHTUNG: %zu SFX-Nummern OHNE Zuordnung - sie behalten ihre\n"
-                        "           TR3-Nummer und treffen im Ziel einen fremden Klang:\n           ",
+            std::printf("\nABBRUCH: %zu SFX-Nummern OHNE Zuordnung. Sie wuerden ihre\n"
+                        "TR3-Nummer behalten und im Ziel einen fremden Klang treffen:\n   ",
                         offen.size());
             for (int o : offen) std::printf("%d ", o);
-            std::printf("\n");
+            std::printf("\n\nNimm sie ins Klangpaket auf (TR3Ton -wellen) oder biege sie\n"
+                        "bewusst auf einen stillen Platz. Es wurde NICHTS geschrieben.\n");
+            return 1;
         }
     }
 

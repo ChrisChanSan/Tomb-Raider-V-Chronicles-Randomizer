@@ -42,6 +42,7 @@
 #include "dog.h"
 #include "huskie.h"
 #include "crow.h"
+#include "trex.h"
 #include "mafia2.h"
 #include "pierre.h"
 #include "sniper.h"
@@ -1018,27 +1019,35 @@ void BaddyObjects()
 	obj->save_flags = 1;
 	obj->save_anim = 1;
 
+	// SLOT 31 = T-REX (#88). Der SAS ist ein Ueberrest aus Tomb Raider 4:
+	// die Steuerung steht hier seit jeher, aber KEIN einziges der 16
+	// TR5-Level traegt ein Modell dafuer (an allen Dateien nachgemessen).
+	// Ein toter Slot mit vollstaendigem Unterbau - genau der richtige Platz
+	// fuer den T-Rex aus TR3, den der Randomizer hier hineinkopiert. CROW
+	// (43) bleibt dadurch fuer den Geier frei, der dort hingehoert.
+	//
+	// Die Werte stammen aus TR3s eigenem Setup fuer den TREX.
 	if (objects[SAS].loaded)
 	{
 		obj = &objects[SAS];
-		obj->initialise = InitialiseSas;
-		obj->control = SasControl;
+		obj->initialise = InitialiseCreature;
+		obj->control = DinoControl;
 		obj->collision = CreatureCollision;
-		obj->shadow_size = 128;
-		obj->hit_points = 40;
-		obj->pivot_length = 50;
-		obj->radius = 102;
-		obj->bite_offset = 0;
+		obj->shadow_size = 64;
+		obj->hit_points = 100;
+		obj->pivot_length = 2000;
+		obj->radius = 341;
 		obj->intelligent = 1;
 		obj->HitEffect = 1;
 		obj->save_position = 1;
 		obj->save_hitpoints = 1;
 		obj->save_flags = 1;
 		obj->save_anim = 1;
-		bones[obj->bone_index + 24] |= 8;
-		bones[obj->bone_index + 24] |= 4;
-		bones[obj->bone_index + 52] |= 8;
-		bones[obj->bone_index + 52] |= 4;
+
+		// Kopf und Nacken frei drehen lassen, damit er Lara anschaut.
+		// TR3 setzt dieselben zwei Knochen (10 und 11 der 24).
+		bones[obj->bone_index + 40] |= 8;
+		bones[obj->bone_index + 44] |= 8;
 	}
 
 	if (objects[BLUE_GUARD].loaded)

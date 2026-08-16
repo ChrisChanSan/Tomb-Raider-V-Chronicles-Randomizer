@@ -82,6 +82,42 @@ namespace Tr3Quelle
                      std::vector<uint8_t>& paket,
                      std::string& fehler);
 
+    // Ein Gast aus Tomb Raider 3, vollstaendig beschrieben (#92).
+    //
+    // Das ist die EINZIGE Wahrheit ueber die vier Dinosaurier - Randomizer und
+    // Patchweg lesen beide hier. Frueher standen dieselben Angaben verstreut
+    // in Aufrufzeilen der Werkzeuge, und genau daran ist mir beim Compy die
+    // halbe Klangzuordnung durchgerutscht.
+    struct DinoQuelle
+    {
+        int         slot;        // Zielslot in TR5 - in KEINEM Level belegt
+        const char* name;
+        const char* quelle;      // "tr3" oder "tr3gold": welche Installation
+        const char* datei;       // Levelname darin
+        int         objekt;      // Objektnummer in dieser Datei
+        int         klangBasis;  // erster Zielplatz in der Soundmap
+        std::vector<KlangWunsch> klaenge;
+        std::vector<int>         stumm;   // bewusst nicht mitgenommene Nummern
+        std::vector<int>         laut;    // Prozent je Klang, in Paketreihenfolge
+    };
+
+    // Die vier Gaeste. Klangplaetze sind kollisionsfrei verteilt und im Level
+    // "Jurassic Raider" gemeinsam erprobt: Geier 420-423, Compy 430-434,
+    // Raptor 438-444, T-Rex 445-449, Stummes auf 411.
+    std::vector<DinoQuelle> dinos();
+
+    // Welche MAIN.SFX gilt fuer diesen Gast? ACHTUNG, nicht offensichtlich:
+    // der Geier steckt zwar in The Lost Artifact, seine Klaenge liegen aber in
+    // der MAIN.SFX von Tomb Raider 3. Gold bringt eine eigene mit, die sich
+    // unterscheidet (9820544 gegen 11646918 Byte) - die abgehoerten
+    // Wave-Nummern beziehen sich auf die von TR3.
+    std::wstring sfxPfad(const DinoQuelle& d,
+                         const std::wstring& tr3Dir, const std::wstring& tr3GoldDir);
+
+    // Und wo liegt sein Level?
+    std::wstring levelPfad(const DinoQuelle& d,
+                           const std::wstring& tr3Dir, const std::wstring& tr3GoldDir);
+
     // Schreibt die SFX-Nummern der Anim-Kommandos im Modellpaket um.
     //
     // "zuordnung" bildet TR3-Nummer auf Zielplatz ab. Nummern, die gerufen

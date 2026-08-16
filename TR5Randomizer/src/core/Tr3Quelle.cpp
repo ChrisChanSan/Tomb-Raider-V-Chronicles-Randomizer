@@ -757,3 +757,83 @@ bool Tr3Quelle::biegeSfxUm(std::vector<uint8_t>& paket,
     }
     return true;
 }
+
+//----------------------------------------------------------------------------
+// Die vier Gaeste aus Tomb Raider 3 (#92).
+//
+// Alle Zahlen sind GEMESSEN, nicht angenommen:
+//   - Objektnummern aus der tomb3-Enum, gegengeprueft (VULTURE steht dort auf
+//     29 und passt zur Notiz des Nutzers)
+//   - Zielslots mit MissMod an allen 16 TR5-Leveln geprueft: keiner traegt
+//     dort ein Modell
+//   - Wave-Nummern im Werkzeug TRsound abgehoert und aus den fertigen
+//     Klangpaketen zurueckgewonnen, indem die Wellendaten in MAIN.SFX
+//     wiedergefunden wurden
+//   - Lautstaerken vom Nutzer im Spiel eingestellt
+//----------------------------------------------------------------------------
+std::vector<Tr3Quelle::DinoQuelle> Tr3Quelle::dinos()
+{
+    std::vector<DinoQuelle> d;
+
+    {   // T-Rex auf SAS. Der Laufklang ist die Ausnahme: die Anim-Kommandos
+        // rufen 88, der im Spiel gehoerte Klang ist aber der dumpfe,
+        // zweivariantige von 250 - vom Nutzer am Original gegengehoert.
+        DinoQuelle t;
+        t.slot = 31; t.name = "T-Rex"; t.quelle = "tr3";
+        t.datei = "CRASH.TR2"; t.objekt = 287; t.klangBasis = 445;
+        t.klaenge = { { 84, {87} }, { 87, {89} }, { 88, {256,257} },
+                      { 89, {91} }, { 255, {262} } };
+        t.stumm = { 143 };                 // TR3 "Falling", in TR5 belegt
+        t.laut  = { 100, 130, 150, 100, 140 };
+        d.push_back(t);
+    }
+    {   // Raptor auf REAPER (war eine Wasserqualle).
+        DinoQuelle t;
+        t.slot = 75; t.name = "Raptor"; t.quelle = "tr3";
+        t.datei = "CRASH.TR2"; t.objekt = 288; t.klangBasis = 438;
+        t.klaenge = { { 250, {256,257} }, { 251, {258} }, { 252, {259} },
+                      { 253, {260} }, { 254, {261} }, { 255, {262} }, { 256, {263} } };
+        t.stumm = { 143 };
+        t.laut  = { 100, 110, 110, 110, 130, 120, 120 };
+        d.push_back(t);
+    }
+    {   // Compsognathus auf SAILOR (war ein Matrose ohne Modell).
+        DinoQuelle t;
+        t.slot = 53; t.name = "Compy"; t.quelle = "tr3";
+        t.datei = "CRASH.TR2"; t.objekt = 34; t.klangBasis = 430;
+        t.klaenge = { { 239, {242} }, { 240, {243} }, { 241, {244} },
+                      { 242, {245} }, { 243, {246,247} } };
+        t.laut  = { 100, 100, 100, 110, 70 };
+        d.push_back(t);
+    }
+    {   // Geier auf CROW. Modell aus The Lost Artifact, Klaenge aus TR3 -
+        // siehe sfxPfad().
+        DinoQuelle t;
+        t.slot = 43; t.name = "Geier"; t.quelle = "tr3gold";
+        t.datei = "chunnel.tr2"; t.objekt = 29; t.klangBasis = 420;
+        t.klaenge = { { 182, {192} }, { 183, {193,194} }, { 184, {195} }, { 185, {196} } };
+        t.stumm = { 56 };                  // TR3: Laras Schritt, in TR5 belegt
+        t.laut  = { 100, 100, 100, 100 };
+        d.push_back(t);
+    }
+    return d;
+}
+
+std::wstring Tr3Quelle::sfxPfad(const DinoQuelle&,
+                                const std::wstring& tr3Dir, const std::wstring&)
+{
+    // IMMER die MAIN.SFX von Tomb Raider 3 - auch fuer den Geier. Gold bringt
+    // eine eigene mit, aber die abgehoerten Wave-Nummern beziehen sich auf
+    // die von TR3. Der Parameter fuer Gold bleibt in der Schnittstelle, damit
+    // die Absicht sichtbar ist und niemand spaeter "aufraeumt".
+    return tr3Dir + L"\\MAIN.SFX";
+}
+
+std::wstring Tr3Quelle::levelPfad(const DinoQuelle& d,
+                                  const std::wstring& tr3Dir, const std::wstring& tr3GoldDir)
+{
+    const std::wstring& basis = (std::strcmp(d.quelle, "tr3gold") == 0) ? tr3GoldDir : tr3Dir;
+    std::wstring name;
+    for (const char* p = d.datei; *p; ++p) name.push_back(wchar_t((unsigned char)*p));
+    return basis + L"\\" + name;
+}

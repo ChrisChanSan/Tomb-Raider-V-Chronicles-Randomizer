@@ -63,7 +63,23 @@ static int biegeSfxUm(std::vector<uint8_t>& paket, const std::vector<std::pair<i
         if (!anzahl) continue;
         const uint16_t start = g16(ao + 38);
 
-    for (uint32_t i = start, ende = start + anzahl; i < ende && i < nCmd; )
+    // ANZAHL ZAEHLT KOMMANDOS, NICHT WORTE.
+    //
+    // Hier stand "i < start + anzahl" mit i als WORTindex - und weil ein
+    // Kommando je nach Art 1 bis 4 Worte belegt, brach die Schleife viel zu
+    // frueh ab. Sie sah nur die ersten paar Kommandos einer Animation, der
+    // Rest blieb unangetastet UND unbemerkt: die Meldung "ohne Zuordnung"
+    // kann nur melden, was sie ueberhaupt gelesen hat.
+    //
+    // Aufgefallen ist es am Compsognathus. Seine Laufanimation ruft den
+    // Schritt mehrfach; die erste Fundstelle wurde umgebogen, die spaeteren
+    // behielten ihre TR3-Nummer 243 - und 243 ist in TR5
+    // SFX_GENERIC_HEAVY_FEET, ein wuchtiger schwerer Schritt. Genau den hat
+    // der Nutzer gehoert, waehrend alle Messungen an Modell, Zuordnung,
+    // Soundmap und Wave-Daten sauber blieben. Sichtbar wurde es erst durch
+    // das Klangprotokoll in der Engine.
+    uint32_t i = start;
+    for (uint16_t k = 0; k < anzahl && i < nCmd; ++k)
     {
         const uint16_t art = g16(cmdAt + size_t(i) * 2);
         ++i;

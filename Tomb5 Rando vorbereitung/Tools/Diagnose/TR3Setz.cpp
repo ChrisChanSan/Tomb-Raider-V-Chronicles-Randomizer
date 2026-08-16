@@ -165,14 +165,21 @@ static int biegeTexUm(std::vector<uint8_t>& paket, const std::map<int,int>& zuor
 
 int main(int argc, char** argv)
 {
-    if (argc < 5 || argc > 7)
+    if (argc < 5)
     {
         std::printf("Aufruf: TR3Setz <ziel.trc> <paket.bin> <zielSlot> <ausgabe.trc> [texinfo] [ton.bin]\n");
         return 2;
     }
     const int slot = std::atoi(argv[3]);
-    const int tex  = (argc >= 6) ? std::atoi(argv[5]) : 0;
-    const char* tonDatei = (argc == 7) ? argv[6] : 0;
+
+    // Stellungsargumente 5 und 6, danach duerfen Schalter folgen (-basis,
+    // -laut). Ein mit '-' beginnendes Wort ist ein Schalter, kein Wert -
+    // sonst zaehlte argc mit und der Tonpfad fiele lautlos auf NULL zurueck.
+    auto stellung = [&](int i) -> const char* {
+        return (argc > i && argv[i][0] != '-') ? argv[i] : 0; };
+    const char* texArg   = stellung(5);
+    const int   tex      = texArg ? std::atoi(texArg) : 0;
+    const char* tonDatei = stellung(6);
 
     std::vector<uint8_t> paket;
     {
@@ -221,10 +228,36 @@ int main(int argc, char** argv)
         // Grundwert ist 191 und das Feld ein Byte - alles ueber 133 Prozent
         // landet an der Obergrenze 255. Bruellen und Sterben liegen dort,
         // ihre Prozentwerte sind also der Wunsch, nicht das Ergebnis.
-        const std::vector<int> laut = { 100, 130, 150, 100, 140 };
+        std::vector<int> laut = { 100, 130, 150, 100, 140 };
 
         // 445..449: fuenf Plaetze am oberen Ende, in allen Leveln frei.
-        if (!lvl.addSoundsFromTr3(ton, 445, zuordnung, err, &laut))
+        int basis = 445;
+
+        // Ab dem Raptor (#97) sind Basisplatz und Lautstaerken einstellbar -
+        // vorher standen die T-Rex-Werte fest im Werkzeug. Zwei Gegner teilen
+        // sich den oberen Rand der Soundmap nicht mehr von allein:
+        //   -basis N        erster Zielplatz
+        //   -laut a,b,c,..  Prozent je Klang in Paketreihenfolge
+        for (int a = 5; a < argc; ++a)
+        {
+            if (std::strcmp(argv[a], "-basis") == 0 && a + 1 < argc)
+                basis = std::atoi(argv[++a]);
+            else if (std::strcmp(argv[a], "-laut") == 0 && a + 1 < argc)
+            {
+                laut.clear();
+                const char* p = argv[++a];
+                while (*p)
+                {
+                    laut.push_back(std::atoi(p));
+                    while (*p && *p != ',') ++p;
+                    if (*p == ',') ++p;
+                }
+            }
+        }
+        std::printf("  Zielplaetze ab %d, %d Lautstaerkeangaben\n",
+                    basis, static_cast<int>(laut.size()));
+
+        if (!lvl.addSoundsFromTr3(ton, basis, zuordnung, err, &laut))
         { std::printf("SOUNDS GESCHEITERT: %s\n", err.c_str()); return 1; }
 
         std::printf("  Sounds: %d -> %d Samples\n", vorherSamples, lvl.soundSampleCount());

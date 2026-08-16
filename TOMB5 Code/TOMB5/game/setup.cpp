@@ -43,6 +43,7 @@
 #include "huskie.h"
 #include "crow.h"
 #include "trex.h"
+#include "raptor.h"
 #include "mafia2.h"
 #include "pierre.h"
 #include "sniper.h"
@@ -1430,24 +1431,43 @@ void BaddyObjects()
 
 	if (objects[REAPER].loaded)
 	{
+		// REAPER ist der Raptor-Slot (#97), nicht mehr die Qualle.
+		//
+		// REAPER war eine Wasserqualle (InitialiseJelly/JellyControl in
+		// minisub.cpp) und traegt in KEINEM der 16 TR5-Level ein Modell - mit
+		// MissMod an allen nachgemessen, Gegenprobe ueber den Hund (41), der in
+		// zweien steht. Dieselbe Lage wie SAS fuer den T-Rex und CROW fuer den
+		// Geier: die Steuerung liegt seit jeher im Setup, benutzt hat sie nie
+		// jemand. JellyControl bleibt im Quelltext stehen, nur der Slot wechselt
+		// den Besitzer.
+		//
+		// Alle Werte aus tomb3 setup.cpp:575-594 ABGELESEN, nicht geraten -
+		// das ist die Lehre aus dem T-Rex.
 		obj = &objects[REAPER];
-		obj->initialise = InitialiseJelly;
-		obj->control = JellyControl;
+		obj->initialise = InitialiseCreature;
+		obj->control = RaptorControl;
 		obj->collision = CreatureCollision;
-		obj->draw_routine_extra = DrawBaddieGunFlash;
 		obj->shadow_size = 128;
-		obj->hit_points = 10;
-		obj->pivot_length = 50;
-		obj->radius = 102;
-		obj->bite_offset = 0;
-		obj->object_mip = 5120;
+		obj->hit_points = 90;
+		obj->pivot_length = 600;
+		obj->radius = 341;
 		obj->intelligent = 1;
 		obj->HitEffect = 1;
 		obj->save_position = 1;
 		obj->save_hitpoints = 1;
 		obj->save_flags = 1;
 		obj->save_anim = 1;
-		obj->water_creature = 1;
+
+		// Knochen-Drehflags fuer das Kopf- und Halsnachfuehren. Beim T-Rex
+		// habe ich sie weggelassen, und das war dort richtig: TR4/TR5
+		// verteilen ueber die markierten Knochen die vier joint_rotation-Werte
+		// der CREATURE_INFO, und DinoControl setzt sie nie - vier Marken ohne
+		// Absender. RaptorControl setzt alle vier (CreatureJoint 0..3), hier
+		// haben sie also einen. Nummern aus tomb3 abgelesen.
+		bones[obj->bone_index + 80] |= 8;
+		bones[obj->bone_index + 84] |= 8;
+		bones[obj->bone_index + 92] |= 8;
+		bones[obj->bone_index + 100] |= 8;
 	}
 
 	if (objects[MAFIA2].loaded)

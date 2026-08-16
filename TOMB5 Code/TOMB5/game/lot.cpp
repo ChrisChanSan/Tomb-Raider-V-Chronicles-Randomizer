@@ -160,9 +160,13 @@ void InitialiseSlot(short item_number, long slot)
 		creature->LOT.zone = HUMAN_ZONE;
 		break;
 
+	// REAPER stand hier, solange der Slot die Wasserqualle war: Flugzone,
+	// Schrittweite 20480, fly 16. Als Raptor (#97) gehoert er auf den Boden -
+	// und dafuer ist nichts zu tun ausser ihn hier herauszunehmen. Die
+	// Vorgabewerte oben (step 256, drop -512, fly 0, BASIC_ZONE) sind genau
+	// die, die tomb3 dem Raptor gibt: er steht dort in keinem Sonderfall.
 	case CROW:
 	case WILLOWISP:
-	case REAPER:
 	case GREEN_TEETH:
 	case ATTACK_SUB:
 		creature->LOT.step = 20480;

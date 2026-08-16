@@ -159,6 +159,48 @@ int main(int argc, char** argv)
                 suche, z->numMeshes, z->numMeshes ? z->numMeshes - 1 : 0,
                 z->animIndex, animEnde - 1, animZahl);
 
+    // --- Weiter bis zu den Objekttexturen (fuer die Texturarbeit, #90) -----
+    // Die strittigen Feldgroessen im Dateiende werden wieder durchprobiert
+    // statt geraten: richtig ist die Kombination, bei der die letzte Tabelle
+    // exakt am Dateiende endet. Findet sich keine, bleibt objTexAt 0 und der
+    // Bericht faellt eben knapper aus - das Modell wandert trotzdem.
+    uint32_t nObjTex = 0;
+    size_t objTexAt = 0;
+    {
+        const size_t nachMv = r.at;
+        for (int mapN = 256; mapN <= 370 && !objTexAt; mapN += 114)
+        for (int itemSz = 22; itemSz <= 24 && !objTexAt; itemSz += 2)
+        for (int boxSz = 8; boxSz <= 20 && !objTexAt; boxSz += 12)
+        for (int zoneN = 10; zoneN <= 20 && !objTexAt; zoneN += 10)
+        {
+            r.at = nachMv; r.kaputt = false;
+            r.spring(size_t(r.u32()) * 32);              // StaticMeshes
+            r.spring(size_t(r.u32()) * 16);              // SpriteTextures
+            r.spring(size_t(r.u32()) * 8);               // SpriteSequences
+            r.spring(size_t(r.u32()) * 16);              // Cameras
+            r.spring(size_t(r.u32()) * 16);              // SoundSources
+            const uint32_t nBoxes = r.u32();
+            r.spring(size_t(nBoxes) * boxSz);
+            r.spring(size_t(r.u32()) * 2);               // Overlaps
+            r.spring(size_t(nBoxes) * zoneN * 2);        // Zones
+            r.spring(size_t(r.u32()) * 2);               // AnimatedTextures
+            const uint32_t nOT = r.u32();
+            const size_t otAt = r.at;
+            r.spring(size_t(nOT) * 20);
+            r.spring(size_t(r.u32()) * itemSz);          // Items
+            r.spring(8192);                              // LightMap
+            r.spring(size_t(r.u16()) * 16);              // CinematicFrames
+            r.spring(size_t(r.u16()));                   // DemoData
+            r.spring(size_t(mapN) * 2);                  // SoundMap
+            r.spring(size_t(r.u32()) * 8);               // SoundDetails
+            r.spring(size_t(r.u32()) * 4);               // SampleIndices
+            if (r.kaputt || r.at != r.b.size()) continue;
+            if (!nOT || nOT > 20000) continue;
+            nObjTex = nOT; objTexAt = otAt;
+        }
+        r.at = nachMv; r.kaputt = false;
+    }
+
     // --- Meshes umschreiben -------------------------------------------------
     std::vector<std::vector<uint8_t>> meshes;
     int gesQuads = 0, gesTris = 0, gesFarbig = 0, maxVerts = 0;
@@ -310,6 +352,66 @@ int main(int argc, char** argv)
     if (!f) { std::printf("Ziel nicht schreibbar: %s\n", argv[3]); return 2; }
     std::fwrite(out.data(), 1, out.size(), f);
     std::fclose(f);
+
+    // --- Welche Objekttexturen braucht dieses Modell? -----------------------
+    //
+    // Die Faces tragen noch die TR3-Indizes; erst der Einsetzer biegt sie um.
+    // Fuer die Texturarbeit (#90) zaehlt, WIE VIELE verschiedene Eintraege und
+    // vor allem wie viele verschiedene KACHELN dahinter stehen - jede Kachel
+    // wird spaeter eine 256x256-Seite im Ziel.
+    {
+        std::vector<int> texIdx;
+        for (const std::vector<uint8_t>& m : meshes)
+        {
+            size_t p = 10;
+            const int16_t vw = rs16(m, p); p += 2;
+            const int nv = vw & 0xFF;
+            if (nv == 0) p += (size_t((vw >> 8) & 0xFF) * 6 + 1) * 2;
+            else
+            {
+                p += size_t(nv) * 6;
+                const int16_t nn = rs16(m, p); p += 2;
+                p += size_t(nv) * (nn >= 0 ? 6 : 2);
+            }
+            const int16_t nq = rs16(m, p); p += 2;
+            for (int i = 0; i < nq; ++i, p += 12)
+            {
+                const int t = ru16(m, p + 8) & 0x7FFF;
+                bool da = false; for (int x : texIdx) if (x == t) { da = true; break; }
+                if (!da) texIdx.push_back(t);
+            }
+            const int16_t nt = rs16(m, p); p += 2;
+            for (int i = 0; i < nt; ++i, p += 10)
+            {
+                const int t = ru16(m, p + 6) & 0x7FFF;
+                bool da = false; for (int x : texIdx) if (x == t) { da = true; break; }
+                if (!da) texIdx.push_back(t);
+            }
+        }
+
+        std::printf("  Objekttexturen: %zu verschiedene", texIdx.size());
+        if (nObjTex && objTexAt)
+        {
+            std::vector<int> kacheln;
+            int ausserhalb = 0;
+            for (int t : texIdx)
+            {
+                if (t < 0 || uint32_t(t) >= nObjTex) { ++ausserhalb; continue; }
+                const int k = ru16(r.b, objTexAt + size_t(t) * 20 + 2) & 0x7FFF;
+                bool da = false; for (int x : kacheln) if (x == k) { da = true; break; }
+                if (!da) kacheln.push_back(k);
+            }
+            std::printf(", auf %zu Texturkacheln", kacheln.size());
+            if (!kacheln.empty())
+            {
+                std::printf(" (");
+                for (size_t i = 0; i < kacheln.size(); ++i) std::printf("%s%d", i ? ", " : "", kacheln[i]);
+                std::printf(")");
+            }
+            if (ausserhalb) std::printf("  ACHTUNG: %d Indizes ausserhalb der Tabelle", ausserhalb);
+        }
+        std::printf("\n");
+    }
 
     // --- Gegenprobe: laeuft der TR5-Ableser sauber durch? -------------------
     //

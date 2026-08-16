@@ -2,6 +2,14 @@
 // TR3Ton - loest eine TR3-Sound-ID bis zum Wave in MAIN.SFX auf (#93).
 //
 // Aufruf: TR3Ton <level.TR2> <MAIN.SFX> <soundId> [weitere ids...]
+//         TR3Ton <level.TR2> <MAIN.SFX> -paket <ziel.bin> <id> [ids...]
+//
+// Im Paketmodus wird ein Container fuer den Einsetzer geschrieben:
+//   "T35S", version, anzahl
+//   je Klang: origId, volume, chance, chars, wavLen, dann wavLen Bytes
+// Die WAVs wandern byteweise unveraendert - sie sind reines PCM in genau
+// dem Format, das TR5 erwartet (mono, 22050 Hz, 16 Bit), und die Engine
+// hat dafuer seit der XAudio2-Portierung einen direkten Weg.
 //
 // Der Weg von der ID zum Klang geht ueber DREI Tabellen, und der Abstand
 // zwischen beiden Enden ist NICHT konstant:
@@ -168,8 +176,20 @@ int main(int argc, char** argv)
     std::printf("       (Item %d Byte, Box %d Byte, Zone %d Worte - selbst ermittelt)\n\n",
                 gutItem, gutBox, gutZone);
 
+    // Paketmodus? Dann ist argv[3] der Schalter und argv[4] das Ziel.
+    const bool paket = (argc >= 6 && std::strcmp(argv[3], "-paket") == 0);
+    const int erstesId = paket ? 5 : 3;
+    std::vector<uint8_t> out;
+    int imPaket = 0;
+    if (paket)
+    {
+        out.push_back('T'); out.push_back('3'); out.push_back('5'); out.push_back('S');
+        for (int i = 0; i < 4; ++i) out.push_back(i == 0 ? 1 : 0);   // Version 1
+        for (int i = 0; i < 4; ++i) out.push_back(0);                // Platz fuer die Anzahl
+    }
+
     std::printf("  ID   Details  Sample  Varianten  Wave  Offset      Laenge\n");
-    for (int a = 3; a < argc; ++a)
+    for (int a = erstesId; a < argc; ++a)
     {
         const int id = std::atoi(argv[a]);
         if (id < 0 || id >= gutMap) { std::printf("  %3d  ausserhalb der SoundMap\n", id); continue; }
@@ -192,6 +212,31 @@ int main(int argc, char** argv)
 
         std::printf("  %3d  %7d  %6u  %9d  %4u  %-10u  %u\n",
                     id, det, sample, varianten, nr + 1, waveAt[nr], waveLen[nr]);
+
+        if (!paket) continue;
+
+        // Lautstaerke, Zufallsanteil und Kennungswort aus den SoundDetails
+        // mitnehmen - damit der Klang im Ziel so klingt wie in TR3.
+        const uint16_t volume = g16(r.b, d + 2);
+        const uint16_t chance = g16(r.b, d + 4);
+        auto p16 = [&](uint16_t v) { out.push_back(uint8_t(v & 0xFF)); out.push_back(uint8_t(v >> 8)); };
+        auto p32 = [&](uint32_t v) { for (int i = 0; i < 4; ++i) out.push_back(uint8_t((v >> (8*i)) & 0xFF)); };
+        p16(uint16_t(id)); p16(volume); p16(chance); p16(chars);
+        p32(waveLen[nr]);
+        out.insert(out.end(), sfx.b.begin() + waveAt[nr],
+                              sfx.b.begin() + waveAt[nr] + waveLen[nr]);
+        ++imPaket;
+    }
+
+    if (paket)
+    {
+        out[8]  = uint8_t(imPaket & 0xFF);
+        out[9]  = uint8_t((imPaket >> 8) & 0xFF);
+        FILE* f = std::fopen(argv[4], "wb");
+        if (!f) { std::printf("Ziel nicht schreibbar: %s\n", argv[4]); return 2; }
+        std::fwrite(out.data(), 1, out.size(), f);
+        std::fclose(f);
+        std::printf("\n  Paket: %d Klaenge, %zu Byte -> %s\n", imPaket, out.size(), argv[4]);
     }
     return 0;
 }

@@ -238,6 +238,18 @@ public:
     // baseY trotzdem gefuellt), 1 Eintrag steht in si.
     int     floorNeigung(int room, int sx, int sz, SchraegeInfo& si, int& baseY) const;
 
+    // Baut ein aus einem TR3-Level geholtes Moveable ein (Paket aus TR3Hol,
+    // Kennung "T35H"). Implementierung in Tr5Tr3Import.cpp - bewusst neben
+    // dem erprobten TR5->TR5-Weg und nicht in ihm.
+    //
+    // texinfoIndex: JEDES Face zeigt danach auf diesen im Ziel bereits
+    // vorhandenen Texinfo. Damit wird keine Texturseite eingefuegt und keine
+    // Kachelnummer verschoben; der Gegner ist falsch texturiert, aber die
+    // Seitenverwaltung bleibt unberuehrt. Echte Texturen sind ein eigener
+    // Schritt ueber Tr5Transfer.cpp.
+    bool    addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlot,
+                               int texinfoIndex, std::string& error);
+
     // Nimmt den Triggereintrag des Quellsektors heraus und haengt ihn an die
     // Kette des Zielsektors. Beide Ketten werden neu hinten angebaut, beide
     // Sektoren umgehaengt. Der Trigger behaelt sein Referenzwort und seine

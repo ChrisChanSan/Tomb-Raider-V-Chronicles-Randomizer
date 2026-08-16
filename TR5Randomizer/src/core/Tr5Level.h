@@ -410,6 +410,10 @@ public:
     // Anim- und Kommandoblock fuer Diagnosewerkzeuge (AnimDump): Lage und
     // Anzahl, Datensatzformat siehe SZ_ANIM in Tr5Transfer.cpp (40 Byte).
     bool debugAnimBlock(size_t& dataAt, int32_t& n) const { dataAt = m_anims.dataAt; n = m_anims.count; return m_anims.count > 0; }
+    // Modellbloecke fuer Messwerkzeuge (Objekttabelle und Frame-Scheibe).
+    bool debugModellBloecke(size_t& objAt, int32_t& objN, size_t& frAt, int32_t& frN) const
+    { objAt = m_objects.dataAt; objN = m_objects.count;
+      frAt = m_frames.dataAt;  frN  = m_frames.count;  return objN > 0; }
     bool debugCommandBlock(size_t& dataAt, int32_t& n) const { dataAt = m_commands.dataAt; n = m_commands.count; return m_commands.count > 0; }
     bool debugChangeBlock(size_t& dataAt, int32_t& n) const { dataAt = m_changes.dataAt; n = m_changes.count; return m_changes.count > 0; }
     bool debugRangeBlock(size_t& dataAt, int32_t& n) const { dataAt = m_ranges.dataAt; n = m_ranges.count; return m_ranges.count > 0; }

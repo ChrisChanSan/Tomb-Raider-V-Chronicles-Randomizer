@@ -16,6 +16,7 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 #include "ApplyPatch.h"
+#include "Tr3Quelle.h"
 
 #include <cstdio>
 #include <map>
@@ -90,7 +91,8 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
 }
 
 bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, std::string& error,
-                  LevelSourceFn levelSource, void* levelSourceUser)
+                  LevelSourceFn levelSource, void* levelSourceUser,
+                  const std::wstring& tr3Dir, const std::wstring& tr3GoldDir)
 {
     report = PatchReport();
 
@@ -289,6 +291,68 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     // weaponAdds und moveableAdds sind dieselbe Operation - beide sind
     // aufgeloeste Kopierlisten {slot, fromLevel, replace} aus dem Randomizer,
     // sie zaehlen nur getrennt (Waffen bzw. Cross-Gegner).
+    // Holt einen Gast aus Tomb Raider 3 und setzt ihn ein (#92).
+    //
+    // Alles passiert hier und jetzt auf dem Rechner des Nutzers: entnehmen,
+    // umrechnen, einsetzen. Nichts davon liegt vorbereitet herum, denn
+    // vorbereitete Pakete waeren fremde Spieldaten.
+    auto tr3Bauen = [&](Tr5Level& lvl, int slot, PatchReport& rep, std::string& err) -> bool
+    {
+        const Tr3Quelle::DinoQuelle* d = nullptr;
+        static const std::vector<Tr3Quelle::DinoQuelle> alle = Tr3Quelle::dinos();
+        for (const Tr3Quelle::DinoQuelle& k : alle) if (k.slot == slot) { d = &k; break; }
+        if (!d) { err = "Kein Gast fuer Slot " + std::to_string(slot) + " bekannt"; return false; }
+
+        const std::wstring lvlPfad = Tr3Quelle::levelPfad(*d, tr3Dir, tr3GoldDir);
+        const std::wstring sfx     = Tr3Quelle::sfxPfad(*d, tr3Dir, tr3GoldDir);
+
+        std::vector<uint8_t> modell, klaenge;
+        std::string f;
+        if (!Tr3Quelle::holeMoveable(lvlPfad, d->objekt, modell, f))
+        { err = std::string(d->name) + ": " + f; return false; }
+        if (!Tr3Quelle::holeKlaenge(sfx, d->klaenge, klaenge, f))
+        { err = std::string(d->name) + " (Klaenge): " + f; return false; }
+
+        // 1. Sounds
+        std::vector<std::pair<int,int>> zuordnung;
+        if (!lvl.addSoundsFromTr3(klaenge, d->klangBasis, zuordnung, f, &d->laut))
+        { err = std::string(d->name) + " (Sounds einsetzen): " + f; return false; }
+
+        // 2. SFX-Nummern der Anim-Kommandos umbiegen. Bleibt eine Nummer
+        //    offen, wird ABGEBROCHEN - sie wuerde im Ziel einen fremden
+        //    Vanilla-Klang treffen (beim Compy wurde aus 243 ein wuchtiger
+        //    SFX_GENERIC_HEAVY_FEET, und das zu finden hat Stunden gekostet).
+        std::vector<int> offen;
+        if (!Tr3Quelle::biegeSfxUm(modell, zuordnung, d->stumm, 411, offen, f))
+        { err = std::string(d->name) + " (SFX umbiegen): " + f; return false; }
+        if (!offen.empty())
+        {
+            err = std::string(d->name) + ": SFX-Nummer ohne Zuordnung (" +
+                  std::to_string(offen[0]) + ") - sie wuerde einen fremden Klang treffen";
+            return false;
+        }
+
+        // 3. Texturen ANHAENGEN, nie verschieben - sonst faellt das Level in
+        //    sich zusammen (Nutzervorgabe, siehe Texturseiten-Regel).
+        std::map<int,int> texMap;
+        if (!lvl.addTexturesFromTr3(modell, texMap, f))
+        { err = std::string(d->name) + " (Texturen): " + f; return false; }
+
+        // Und die Faces darauf zeigen lassen. Ohne diesen Schritt behalten sie
+        // die TR3-Nummern und greifen im Ziel wahllos in dessen Texinfos.
+        if (Tr3Quelle::biegeTexUm(modell, texMap) < 0)
+        { err = std::string(d->name) + ": Faces nicht lesbar"; return false; }
+
+        // 4. Modell. texBasis -1, weil die Faces schon auf die neuen Texinfos
+        //    zeigen.
+        if (!lvl.addMoveableFromTr3(modell, slot, -1, f))
+        { err = std::string(d->name) + " (Modell): " + f; return false; }
+
+        rep.warnings.push_back(std::string("Gast aus Tomb Raider 3 geholt: ") + d->name +
+                               " auf Slot " + std::to_string(slot));
+        return true;
+    };
+
     auto kopiereSlots = [&](const JsonValue& liste, const char* was, int& zaehler) -> bool
     {
         if (liste.size() > 0 && !levelSource)
@@ -301,6 +365,24 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         {
             const JsonValue& w = liste[i];
             const int slot = static_cast<int>(w["slot"].asInt(-1));
+
+            // --- Gast aus Tomb Raider 3 (#92) -------------------------------
+            //
+            // Kein Spenderlevel: alles wird JETZT aus der Installation des
+            // Nutzers geholt. Genau dafuer ist dieser Weg da - wir liefern
+            // keine Spieldaten mit, also darf nichts vorbereitet sein.
+            //
+            // Reihenfolge ist Vorschrift, nicht Geschmack (siehe Rezept):
+            // SOUNDS -> TEXTUREN -> MODELL. Erst danach steht fest, worauf die
+            // Anim-Kommandos und die Faces zeigen muessen, und beides steckt im
+            // Modellpaket, das zuletzt eingebaut wird.
+            if (w.has("ausTr3"))
+            {
+                if (!tr3Bauen(level, slot, report, error)) return false;
+                ++zaehler;
+                continue;
+            }
+
             const std::string von = w["fromLevel"].asString();
             const bool ersetzen = w["replace"].asBool(false);
             // Abweichender Zielslot (Ausweichslots des Cross-Gegnermix:

@@ -837,3 +837,53 @@ std::wstring Tr3Quelle::levelPfad(const DinoQuelle& d,
     for (const char* p = d.datei; *p; ++p) name.push_back(wchar_t((unsigned char)*p));
     return basis + L"\\" + name;
 }
+
+//----------------------------------------------------------------------------
+// Texturworte der Faces auf die neuen Texinfos umbiegen (#92, aus TR3Setz).
+//
+// Gleicher Ableser wie ueberall: Meshkopf 10 Byte, dann das Vertexwort;
+// 0 Normalen heisst NORMALEN. Bit 15 des Texturworts ist ein Flag und bleibt
+// stehen - es entscheidet, ob AdjustUVs die Halbtexel-Korrektur laufen laesst.
+//----------------------------------------------------------------------------
+int Tr3Quelle::biegeTexUm(std::vector<uint8_t>& paket, const std::map<int,int>& zuordnung)
+{
+    const uint32_t nMeshes = ru32(paket, 12);
+    size_t p = 48;
+    int getauscht = 0;
+
+    for (uint32_t i = 0; i < nMeshes; ++i)
+    {
+        if (p + 4 > paket.size()) return -1;
+        const uint32_t len = ru32(paket, p); p += 4;
+        const size_t ende = p + len;
+        size_t q = p + 10;
+        if (q + 2 > ende) return -1;
+
+        const int16_t vw = rs16(paket, q); q += 2;
+        const int nv = vw & 0xFF;
+        if (nv == 0) q += (size_t((vw >> 8) & 0xFF) * 6 + 1) * 2;
+        else
+        {
+            q += size_t(nv) * 6;
+            const int16_t nn = rs16(paket, q); q += 2;
+            q += size_t(nv) * (nn >= 0 ? 6 : 2);
+        }
+
+        auto biege = [&](size_t at) {
+            const uint16_t w = ru16(paket, at);
+            std::map<int,int>::const_iterator f = zuordnung.find(w & 0x7FFF);
+            if (f == zuordnung.end()) return;
+            const uint16_t neu = uint16_t((w & 0x8000) | (f->second & 0x7FFF));
+            std::memcpy(&paket[at], &neu, 2);
+            ++getauscht;
+        };
+
+        const int16_t nq = rs16(paket, q); q += 2;
+        for (int k = 0; k < nq; ++k, q += 12) biege(q + 8);
+        const int16_t nt = rs16(paket, q); q += 2;
+        for (int k = 0; k < nt; ++k, q += 10) biege(q + 6);
+
+        p = ende;
+    }
+    return getauscht;
+}

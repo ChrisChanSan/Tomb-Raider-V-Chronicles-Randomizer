@@ -163,7 +163,7 @@ int main(int argc, char** argv)
     };
 
     PatchReport pr;
-    if (!Patch::apply(lvl, patch, pr, err, quelle)) { std::printf("Patch: %s\n", err.c_str()); return 1; }
+    if (!Patch::apply(lvl, patch, pr, err, quelle, nullptr, tr3Dir, tr3GoldDir)) { std::printf("Patch: %s\n", err.c_str()); return 1; }
     for (const std::string& w : pr.warnings) std::printf("  Hinweis: %s\n", w.c_str());
 
     if (notizen)

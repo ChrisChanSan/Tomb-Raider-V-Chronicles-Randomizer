@@ -88,8 +88,15 @@ namespace Patch
     // levelSource wird nur fuer soundAdds gebraucht. Ohne sie werden
     // vorhandene soundAdds als Warnung gemeldet und uebersprungen - der Patch
     // scheitert daran nicht, denn ein stummer Gegner ist kein kaputtes Level.
+    // tr3Dir/tr3GoldDir: die Installationen des Nutzers fuer die Gaeste aus
+    // Tomb Raider 3 (#92). Sie stehen als Parameter da und NICHT im Patch:
+    // ein Patch wird zum Nachvollziehen aufbewahrt und soll keine Rechnerpfade
+    // tragen. Bleiben sie leer, kommt ohnehin kein Gast im Patch vor - der
+    // Randomizer nimmt sie dann gar nicht erst in den Pool.
     bool apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, std::string& error,
-               LevelSourceFn levelSource = nullptr, void* levelSourceUser = nullptr);
+               LevelSourceFn levelSource = nullptr, void* levelSourceUser = nullptr,
+               const std::wstring& tr3Dir = std::wstring(),
+               const std::wstring& tr3GoldDir = std::wstring());
 
     // Traegt in die Eingabe ein, welche Sektoren einen mitwandernden Trigger
     // aufnehmen koennen. Muss VOR Rando::run laufen, sonst waehlt die

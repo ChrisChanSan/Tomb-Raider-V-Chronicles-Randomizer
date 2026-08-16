@@ -41,6 +41,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -117,6 +118,11 @@ namespace Tr3Quelle
     // Und wo liegt sein Level?
     std::wstring levelPfad(const DinoQuelle& d,
                            const std::wstring& tr3Dir, const std::wstring& tr3GoldDir);
+
+    // Biegt die Texturworte der Faces auf die neuen Texinfos um. Muss NACH
+    // Tr5Level::addTexturesFromTr3 laufen (das liefert die Zuordnung) und VOR
+    // addMoveableFromTr3. Rueckgabe: Anzahl umgebogener Worte, -1 bei Fehler.
+    int biegeTexUm(std::vector<uint8_t>& paket, const std::map<int,int>& zuordnung);
 
     // Schreibt die SFX-Nummern der Anim-Kommandos im Modellpaket um.
     //

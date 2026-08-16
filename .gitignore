@@ -67,6 +67,12 @@ Release Paket/
 # geaendert, ihre Historie liegt bei ihrem eigenen Projekt.
 Tomb5 Rando vorbereitung/imgui-*/
 
+# Eigener trview-Bau (chreden/trview 2.9.1, GPL) samt Quellkopie - die
+# Historie liegt beim Upstream-Projekt, die EXE ist ein Bauartefakt.
+# Baurezept siehe Aufgabe #105-Umfeld: 8.3-Kurzpfad (Leerzeichen!),
+# DirectXTK-Shader einmal von Hand mit fxc, PreBuildEvent-Quotes.
+Tomb5 Rando vorbereitung/TRView f*r Tomb5 Rando/
+
 # --- Fremde Spieldaten: NIEMALS mitcommitten ---------------------------------
 #
 # Dieses Projekt steht unter GPLv3 und liefert keine Spieldaten mit. Wer die

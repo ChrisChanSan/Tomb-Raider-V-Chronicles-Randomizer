@@ -1299,6 +1299,55 @@ bool LoadSamples()
 		fread(&comp_size, 1, 4, level_fp);
 		fread(samples_buffer, comp_size, 1, level_fp);
 
+		// Formatweiche fuer Fremdimporte (#93). Cores eigene Samples liegen
+		// als MS-ADPCM vor und gehen durch den ACM-Dekoder. Die Samples aus
+		// Tomb Raider 3 (MAIN.SFX) sind dagegen reines PCM - und zwar in
+		// genau dem Format, das die Engine ohnehin erwartet: mono, 22050 Hz,
+		// 16 Bit. Sie brauchen also gar keinen Dekoder, nur den direkten Weg
+		// in den XAudio2-Puffer, den DXCreateSample schon bietet.
+		//
+		// Die Kennung steht im fmt-Block bei +20 (RIFF 4 + Groesse 4 +
+		// WAVE 4 + "fmt " 4 + Blockgroesse 4). 1 = PCM, 2 = MS-ADPCM.
+		// Dieselbe Stelle liest auch DXCreateSampleADPCM.
+		const WAVEFORMATEX* wf = (const WAVEFORMATEX*)(samples_buffer + 20);
+
+		if (comp_size > 20 && wf->wFormatTag == WAVE_FORMAT_PCM)
+		{
+			// Den data-Block suchen statt seine Lage anzunehmen: hinter dem
+			// fmt-Block koennen weitere Bloecke stehen (fact, LIST).
+			long at = 12;
+			long dataAt = 0, dataLen = 0;
+
+			while (at + 8 <= comp_size)
+			{
+				const long len = *(const long*)(samples_buffer + at + 4);
+
+				if (!memcmp(samples_buffer + at, "data", 4))
+				{
+					dataAt = at + 8;
+					dataLen = len;
+					break;
+				}
+
+				at += 8 + len + (len & 1);
+			}
+
+			if (dataAt <= 0 || dataAt + dataLen > comp_size)
+			{
+				Log("Sample %d: PCM ohne brauchbaren data-Block", i);
+				FreeSampleDecompress();
+				return 0;
+			}
+
+			if (!DXCreateSample(i, (LPWAVEFORMATEX)wf, samples_buffer + dataAt, dataLen))
+			{
+				FreeSampleDecompress();
+				return 0;
+			}
+
+			continue;
+		}
+
 		if (!DXCreateSampleADPCM(samples_buffer, comp_size, uncomp_size, i))
 		{
 			FreeSampleDecompress();

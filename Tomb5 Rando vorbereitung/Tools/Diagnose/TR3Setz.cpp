@@ -31,7 +31,8 @@ static std::wstring toW(const char* s)
 // Ziel andere oder gar keine Klaenge sind. Dasselbe Vergessen bei der
 // Sprungtabelle war der Absturz in #88 - deshalb hier ausdruecklich.
 static int biegeSfxUm(std::vector<uint8_t>& paket, const std::vector<std::pair<int,int>>& zuordnung,
-                      std::vector<int>& offen, std::vector<std::pair<int,int>>& genutzt)
+                      std::vector<int>& offen, std::vector<std::pair<int,int>>& genutzt,
+                      std::vector<std::pair<int,int>>& arten)
 {
     auto g32 = [&](size_t p) { uint32_t v; std::memcpy(&v, &paket[p], 4); return v; };
     auto g16 = [&](size_t p) { uint16_t v; std::memcpy(&v, &paket[p], 2); return v; };
@@ -75,6 +76,12 @@ static int biegeSfxUm(std::vector<uint8_t>& paket, const std::vector<std::pair<i
         case 6: folge = 2; break;    // Flipeffect
         default: folge = 0; break;   // EmptyHands, KillItem, Unbekanntes
         }
+
+        // Kommandoarten mitzaehlen. Ein Flipeffect (6) traegt eine Nummer,
+        // die in TR3 und TR5 VERSCHIEDENE Wirkungen hat und in TR5 durchaus
+        // einen Klang ausloesen kann - er wird hier NICHT umgebogen. Wer nur
+        // die PlaySounds betrachtet, uebersieht das.
+        arten.push_back(std::make_pair((int)art, (int)a));
 
         if (art == 5 && i + 1 < nCmd)
         {
@@ -272,7 +279,8 @@ int main(int argc, char** argv)
 
         std::vector<int> offen;
         std::vector<std::pair<int,int>> genutzt;
-        const int n2 = biegeSfxUm(paket, zuordnung, offen, genutzt);
+        std::vector<std::pair<int,int>> arten;
+        const int n2 = biegeSfxUm(paket, zuordnung, offen, genutzt, arten);
 
         // Je ID zeigen, wie oft und aus welcher Animation sie gerufen wird.
         // Eine blosse Gesamtzahl reicht nicht: beim Compy stimmte die Summe,
@@ -291,6 +299,29 @@ int main(int argc, char** argv)
                 }
             std::printf("    ID %3d -> Map %3d : %dx%s%s\n", z.first, z.second, mal,
                         mal ? ", Anim " : " - WIRD NIE GERUFEN", wo.c_str());
+        }
+
+        // Alle Kommandoarten auflisten. PlaySound ist nicht die einzige, die
+        // im Ziel hoerbar wird: ein Flipeffect traegt eine Nummer, die in TR3
+        // und TR5 verschiedene Wirkungen hat, und wird NICHT umgebogen.
+        {
+            const char* name[8] = { "?", "SetPosition", "JumpVelocity", "EmptyHands",
+                                    "KillItem", "PlaySound", "Flipeffect", "?" };
+            for (int k = 1; k <= 6; ++k)
+            {
+                std::string wo;
+                int mal = 0;
+                for (const auto& s : arten)
+                    if (s.first == k)
+                    {
+                        ++mal;
+                        char puf[16];
+                        std::snprintf(puf, sizeof(puf), "%s%d", wo.empty() ? "" : ",", s.second);
+                        wo += puf;
+                    }
+                if (mal)
+                    std::printf("    Kommando %d (%s): %dx, Anim %s\n", k, name[k], mal, wo.c_str());
+            }
         }
         if (n2 < 0) { std::printf("Kommandoblock im Modellpaket nicht auffindbar\n"); return 1; }
         std::printf("  Anim-Kommandos: %d SFX-Nummern umgebogen\n", n2);

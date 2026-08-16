@@ -280,7 +280,30 @@ int main(int argc, char** argv)
                           r.b.begin() + frameAt + frameEnde);
     out.insert(out.end(), anims.begin(), anims.end());
     out.insert(out.end(), r.b.begin() + scAt,  r.b.begin() + scAt  + size_t(nSC) * 6);
-    out.insert(out.end(), r.b.begin() + adAt,  r.b.begin() + adAt  + size_t(nAD) * 8);
+
+    // Sprungtabelle (AnimDispatch, 8 Byte: Low, High, NextAnim, NextFrame).
+    // Ihr NextAnim ist ein GLOBALER Anim-Index des Quelllevels - genau wie
+    // bei den Anims selbst muss er auf die Scheibe bezogen werden, sonst
+    // zeigt er im Ziel irgendwohin. Das war der Absturz beim ersten Versuch:
+    // die Eintraege wanderten ungerebased mit, und sobald die Steuerung einen
+    // Zustandswechsel nahm, sprang die Engine in eine fremde Animation.
+    // Eintraege ausserhalb der Scheibe gehoeren zu anderen Objekten; sie
+    // werden nie gelesen, bekommen aber 0, damit kein wilder Wert dasteht.
+    {
+        std::vector<uint8_t> ad(r.b.begin() + adAt, r.b.begin() + adAt + size_t(nAD) * 8);
+        int drin = 0, drauss = 0;
+        for (size_t o = 0; o + 8 <= ad.size(); o += 8)
+        {
+            const uint16_t na = uint16_t(ad[o + 4] | (ad[o + 5] << 8));
+            uint16_t neu = 0;
+            if (na >= z->animIndex && na < animEnde) { neu = uint16_t(na - z->animIndex); ++drin; }
+            else ++drauss;
+            ad[o + 4] = uint8_t(neu & 0xFF);
+            ad[o + 5] = uint8_t(neu >> 8);
+        }
+        std::printf("  Sprungtabelle: %d Eintraege auf die Scheibe bezogen, %d fremde genullt\n", drin, drauss);
+        out.insert(out.end(), ad.begin(), ad.end());
+    }
     out.insert(out.end(), r.b.begin() + cmdAt, r.b.begin() + cmdAt + size_t(nCmd) * 2);
 
     FILE* f = std::fopen(argv[3], "wb");

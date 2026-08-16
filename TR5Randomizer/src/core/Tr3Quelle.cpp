@@ -20,6 +20,8 @@
 // die gewohnte Ausgabe, in der Oberflaeche laufen sie ins Leere.
 //----------------------------------------------------------------------------
 #include "Tr3Quelle.h"
+#include <sys/stat.h>
+#include <direct.h>
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -886,4 +888,106 @@ int Tr3Quelle::biegeTexUm(std::vector<uint8_t>& paket, const std::map<int,int>& 
         p = ende;
     }
     return getauscht;
+}
+
+//----------------------------------------------------------------------------
+// Zwischenlager fuer die entnommenen Pakete (#103).
+//----------------------------------------------------------------------------
+namespace
+{
+    bool dateiLesen(const std::wstring& p, std::vector<uint8_t>& b)
+    {
+        FILE* f = nullptr;
+        if (_wfopen_s(&f, p.c_str(), L"rb") != 0 || !f) return false;
+        std::fseek(f, 0, SEEK_END); const long n = std::ftell(f); std::fseek(f, 0, SEEK_SET);
+        if (n <= 0) { std::fclose(f); return false; }
+        b.resize(static_cast<size_t>(n));
+        const size_t g = std::fread(b.data(), 1, b.size(), f);
+        std::fclose(f);
+        return g == b.size();
+    }
+
+    bool dateiSchreiben(const std::wstring& p, const std::vector<uint8_t>& b)
+    {
+        FILE* f = nullptr;
+        if (_wfopen_s(&f, p.c_str(), L"wb") != 0 || !f) return false;
+        const size_t g = std::fwrite(b.data(), 1, b.size(), f);
+        std::fclose(f);
+        return g == b.size();
+    }
+
+    // Kennzeichen der Quelldatei: Groesse und Aenderungszeit. Beides zusammen
+    // reicht, um eine neu installierte oder gepatchte Fassung zu erkennen -
+    // und es kostet keinen Durchlauf durch 11 MB wie eine Pruefsumme.
+    std::string quellKennung(const std::wstring& pfad)
+    {
+        struct _stat64 s;
+        if (_wstat64(pfad.c_str(), &s) != 0) return std::string();
+        return std::to_string((long long)s.st_size) + "-" + std::to_string((long long)s.st_mtime);
+    }
+
+    std::wstring lagerName(const std::wstring& dir, const char* name, const char* teil)
+    {
+        std::wstring w = dir + L"\\";
+        for (const char* p = name; *p; ++p) w.push_back(wchar_t((unsigned char)*p));
+        w += L"_";
+        for (const char* p = teil; *p; ++p) w.push_back(wchar_t((unsigned char)*p));
+        return w + L".bin";
+    }
+}
+
+bool Tr3Quelle::holeMitLager(const DinoQuelle& d,
+                             const std::wstring& tr3Dir, const std::wstring& tr3GoldDir,
+                             const std::wstring& lagerDir,
+                             std::vector<uint8_t>& modell, std::vector<uint8_t>& klaenge,
+                             std::string& fehler)
+{
+    const std::wstring lvlPfad = levelPfad(d, tr3Dir, tr3GoldDir);
+    const std::wstring sfx     = sfxPfad(d, tr3Dir, tr3GoldDir);
+
+    // Erwartete Kennung: beide Quelldateien zusammen. Aendert sich eine, ist
+    // der Eintrag hinfaellig.
+    const std::string kennung = quellKennung(lvlPfad) + "|" + quellKennung(sfx);
+
+    const std::wstring mDatei = lagerName(lagerDir, d.name, "modell");
+    const std::wstring kDatei = lagerName(lagerDir, d.name, "klaenge");
+    const std::wstring nDatei = lagerName(lagerDir, d.name, "kennung");
+
+    if (!lagerDir.empty() && !kennung.empty())
+    {
+        std::vector<uint8_t> alt;
+        if (dateiLesen(nDatei, alt))
+        {
+            const std::string war(alt.begin(), alt.end());
+            if (war == kennung && dateiLesen(mDatei, modell) && dateiLesen(kDatei, klaenge))
+            {
+                std::printf("  %s: aus dem Zwischenlager\n", d.name);
+                return true;
+            }
+        }
+    }
+
+    modell.clear();
+    klaenge.clear();
+    if (!holeMoveable(lvlPfad, d.objekt, modell, fehler))
+    { fehler = std::string(d.name) + ": " + fehler; return false; }
+    if (!holeKlaenge(sfx, d.klaenge, klaenge, fehler))
+    { fehler = std::string(d.name) + " (Klaenge): " + fehler; return false; }
+
+    // Ablegen ist Kuer: schlaegt es fehl (schreibgeschuetzter Ordner, volle
+    // Platte), laeuft der Durchgang trotzdem - er ist eben beim naechsten Mal
+    // wieder langsam. Ein Zwischenlager darf nie der Grund sein, dass etwas
+    // nicht geht.
+    if (!lagerDir.empty() && !kennung.empty())
+    {
+        // Ordner anlegen, falls er fehlt. Frueher stand das beim Aufrufer -
+        // und die Kommandozeile hatte es nicht, weshalb jedes Ablegen still
+        // scheiterte und das Lager leer blieb. Eine Funktion, die einen
+        // Ordner benutzt, soll ihn auch anlegen koennen.
+        _wmkdir(lagerDir.c_str());
+        dateiSchreiben(mDatei, modell);
+        dateiSchreiben(kDatei, klaenge);
+        dateiSchreiben(nDatei, std::vector<uint8_t>(kennung.begin(), kennung.end()));
+    }
+    return true;
 }

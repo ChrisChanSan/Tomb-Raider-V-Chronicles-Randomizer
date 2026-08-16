@@ -92,7 +92,8 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
 
 bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, std::string& error,
                   LevelSourceFn levelSource, void* levelSourceUser,
-                  const std::wstring& tr3Dir, const std::wstring& tr3GoldDir)
+                  const std::wstring& tr3Dir, const std::wstring& tr3GoldDir,
+                  const std::wstring& lagerDir)
 {
     report = PatchReport();
 
@@ -303,15 +304,11 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         for (const Tr3Quelle::DinoQuelle& k : alle) if (k.slot == slot) { d = &k; break; }
         if (!d) { err = "Kein Gast fuer Slot " + std::to_string(slot) + " bekannt"; return false; }
 
-        const std::wstring lvlPfad = Tr3Quelle::levelPfad(*d, tr3Dir, tr3GoldDir);
-        const std::wstring sfx     = Tr3Quelle::sfxPfad(*d, tr3Dir, tr3GoldDir);
-
+        // Ueber das Zwischenlager (#103): einmal entnehmen statt je Level.
         std::vector<uint8_t> modell, klaenge;
         std::string f;
-        if (!Tr3Quelle::holeMoveable(lvlPfad, d->objekt, modell, f))
-        { err = std::string(d->name) + ": " + f; return false; }
-        if (!Tr3Quelle::holeKlaenge(sfx, d->klaenge, klaenge, f))
-        { err = std::string(d->name) + " (Klaenge): " + f; return false; }
+        if (!Tr3Quelle::holeMitLager(*d, tr3Dir, tr3GoldDir, lagerDir, modell, klaenge, f))
+        { err = f; return false; }
 
         // 1. Sounds
         std::vector<std::pair<int,int>> zuordnung;

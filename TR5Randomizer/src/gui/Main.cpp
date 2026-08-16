@@ -349,6 +349,42 @@ namespace
         std::wstring debugDir() const { return PathUtil::join(PathUtil::exeDir(), L"Debug Level"); }
     };
 
+// Zwischenlager fuer die aus Tomb Raider 3 entnommenen Pakete (#103).
+//
+// Liegt neben dem Programm. Die Dateien entstehen auf dem Rechner dessen, der
+// die Spiele besitzt, und bleiben dort - lizenzrechtlich unbedenklich. NIE
+// MITAUSLIEFERN: der Ordner bekommt dafuer eine Warnung als Textdatei, damit
+// es beim Packen auffaellt.
+
+static std::wstring lagerDir(const App& a)
+{
+    if (a.cfg.tr3Dir.empty()) return std::wstring();      // ohne Quelle kein Lager
+    const std::wstring dir = PathUtil::join(PathUtil::exeDir(), L"Import-Export");
+    if (!PathUtil::ensureDir(dir)) return std::wstring();
+
+    const std::wstring hinweis = PathUtil::join(dir, L"NICHT MITLIEFERN.txt");
+    if (!PathUtil::fileExists(hinweis))
+    {
+        FILE* h = nullptr;
+        if (_wfopen_s(&h, hinweis.c_str(), L"wb") == 0 && h)
+        {
+            std::fputs(
+                "Dieser Ordner ist ein Zwischenlager.\r\n\r\n"
+                "Darin liegen Modelle, Texturen und Klaenge, die das Programm aus\r\n"
+                "DEINER Installation von Tomb Raider 3 entnommen hat. Sie sparen\r\n"
+                "Zeit: ohne sie wird bei jedem Level neu entnommen.\r\n\r\n"
+                "WEITERGEBEN DARFST DU DIESEN ORDNER NICHT. Er enthaelt Daten aus\r\n"
+                "einem Spiel, das jeder selbst besitzen muss. Beim Packen einer\r\n"
+                "Weitergabe gehoert er heraus.\r\n\r\n"
+                "Loeschen ist jederzeit gefahrlos - es wird dann eben neu entnommen.\r\n", h);
+            std::fclose(h);
+        }
+    }
+    return dir;
+}
+
+
+
     void setStatus(App& a, const std::string& s, bool error = false)
     {
         a.status = s;
@@ -516,7 +552,7 @@ namespace
         // Gaeste aus Tomb Raider 3 zur Laufzeit holen (#92). Fehlen sie, hat
         // der Randomizer sie gar nicht erst in den Pool genommen.
         if (!Patch::apply(lvl, patch, pr, err, quelle, nullptr,
-                          a.cfg.tr3Dir, a.cfg.tr3GoldDir)) return false;
+                          a.cfg.tr3Dir, a.cfg.tr3GoldDir, lagerDir(a))) return false;
         for (const std::string& w : pr.warnings) rep.notes.push_back(w);
         if (!lvl.save(target, err)) return false;
 

@@ -96,7 +96,10 @@ namespace Patch
     bool apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, std::string& error,
                LevelSourceFn levelSource = nullptr, void* levelSourceUser = nullptr,
                const std::wstring& tr3Dir = std::wstring(),
-               const std::wstring& tr3GoldDir = std::wstring());
+               const std::wstring& tr3GoldDir = std::wstring(),
+               // Zwischenlager fuer die entnommenen Pakete (#103). Leer heisst
+               // "jedes Mal neu entnehmen" - langsamer, aber immer richtig.
+               const std::wstring& lagerDir = std::wstring());
 
     // Traegt in die Eingabe ein, welche Sektoren einen mitwandernden Trigger
     // aufnehmen koennen. Muss VOR Rando::run laufen, sonst waehlt die

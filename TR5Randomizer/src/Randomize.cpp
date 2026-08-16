@@ -163,7 +163,10 @@ int main(int argc, char** argv)
     };
 
     PatchReport pr;
-    if (!Patch::apply(lvl, patch, pr, err, quelle, nullptr, tr3Dir, tr3GoldDir)) { std::printf("Patch: %s\n", err.c_str()); return 1; }
+    // Zwischenlager neben den Quelldateien (#103): einmal entnehmen statt je
+    // Level. Ohne TR3-Pfad gibt es nichts zu lagern.
+    const std::wstring lager = tr3Dir.empty() ? std::wstring() : ordner + L"\\Import-Export";
+    if (!Patch::apply(lvl, patch, pr, err, quelle, nullptr, tr3Dir, tr3GoldDir, lager)) { std::printf("Patch: %s\n", err.c_str()); return 1; }
     for (const std::string& w : pr.warnings) std::printf("  Hinweis: %s\n", w.c_str());
 
     if (notizen)

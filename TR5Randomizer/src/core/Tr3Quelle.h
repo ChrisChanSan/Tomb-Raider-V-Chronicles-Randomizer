@@ -119,6 +119,27 @@ namespace Tr3Quelle
     std::wstring levelPfad(const DinoQuelle& d,
                            const std::wstring& tr3Dir, const std::wstring& tr3GoldDir);
 
+    // Holt Modell und Klaenge eines Gastes - mit ZWISCHENLAGER (#103).
+    //
+    // Die Entnahme kostet je Aufruf rund elf Sekunden: sie liest den TR3-Level
+    // (3,3 MB) und MAIN.SFX (11,6 MB) neu ein. Bei dreizehn Leveln wird
+    // derselbe T-Rex also dreizehnmal entnommen. Einmal reicht.
+    //
+    // Liegt "lagerDir" vor, werden die fertigen Pakete dort abgelegt und beim
+    // naechsten Mal wiederverwendet. Das ist lizenzrechtlich unbedenklich: die
+    // Dateien entstehen auf dem Rechner dessen, der die Spiele besitzt, und
+    // bleiben dort. AUSGELIEFERT WIRD DIESER ORDNER NIE - er traegt eine
+    // Warnung als Textdatei, damit das auch beim Packen auffaellt.
+    //
+    // Erkannt wird ein veralteter Eintrag an Groesse und Aenderungszeit der
+    // Quelldatei. Wer sein Spiel neu installiert oder patcht, bekommt
+    // automatisch eine frische Entnahme statt eines stillen Fehlers.
+    bool holeMitLager(const DinoQuelle& d,
+                      const std::wstring& tr3Dir, const std::wstring& tr3GoldDir,
+                      const std::wstring& lagerDir,
+                      std::vector<uint8_t>& modell, std::vector<uint8_t>& klaenge,
+                      std::string& fehler);
+
     // Biegt die Texturworte der Faces auf die neuen Texinfos um. Muss NACH
     // Tr5Level::addTexturesFromTr3 laufen (das liefert die Zuordnung) und VOR
     // addMoveableFromTr3. Rueckgabe: Anzahl umgebogener Worte, -1 bei Fehler.

@@ -385,8 +385,75 @@ int main(int argc, char** argv)
     for (const std::vector<uint8_t>& m : meshes) { put32(out, uint32_t(m.size())); out.insert(out.end(), m.begin(), m.end()); }
     for (uint32_t i = 0; i < (z->numMeshes ? uint32_t(z->numMeshes - 1) * 4 : 0); ++i)
         put32(out, ru32(r.b, boneAt + (size_t(z->meshTree) + i) * 4));
-    out.insert(out.end(), r.b.begin() + frameAt + z->frameOffset,
-                          r.b.begin() + frameAt + frameEnde);
+    // --- Frames: Einachs-Drehungen auf TR5s Breite umschreiben -------------
+    //
+    // DIE eigentliche Bruecke zwischen den Spielen. Beide packen eine Drehung
+    // in ein oder zwei Worte, die oberen zwei Bits waehlen die Form. Der
+    // Zweiwort-Fall ist IDENTISCH (phd_RotYXZpack rechnet in beiden Spielen
+    // (angles >> 10) & 0x3FF, dann << 6). Der Einachs-Fall aber nicht:
+    //
+    //   TR3 (draw.cpp:183):  (wort & 1023)  << 6     10 Bit
+    //   TR5 (draw.cpp:267):  (wort & 0xFFF) << 4     12 Bit
+    //
+    // Ein unveraendert uebernommenes TR3-Wort liest TR5 also mit einem
+    // Viertel des Winkels - und weil TR3 den Ueberlauf ins Negative nutzt,
+    // kippen grosse Werte ganz. Betroffen sind genau die EINACHSGELENKE:
+    // Kiefer, Knoechel, Zehen. Im Spiel gesehen als verdrehte Fuesse und ein
+    // umgestuelptes Maul, waehrend der Rumpf stimmte - der dreht um alle drei
+    // Achsen und laeuft damit durch den identischen Zweiwort-Fall.
+    //
+    // Umrechnung verlustfrei: TR5 soll v << 6 ergeben, rechnet aber << 4,
+    // also gehoert v << 2 ins 12-Bit-Feld (v <= 1023, passt).
+    {
+        std::vector<uint8_t> frames(r.b.begin() + frameAt + z->frameOffset,
+                                    r.b.begin() + frameAt + frameEnde);
+        int umgerechnet = 0, ausserhalb = 0;
+        std::vector<uint32_t> erledigt;
+
+        for (uint32_t a = 0; a < animZahl; ++a)
+        {
+            const size_t ao = animAt + size_t(z->animIndex + a) * 32;
+            const uint32_t fo = ru32(r.b, ao);
+            const uint8_t rate = r.b[ao + 4];
+            const uint8_t fsize = r.b[ao + 5];
+            const uint16_t fs = ru16(r.b, ao + 16), fe = ru16(r.b, ao + 18);
+            if (!rate || !fsize) continue;
+
+            const int keyframes = (fe >= fs) ? int((fe - fs) / rate) + 1 : 1;
+            for (int k = 0; k < keyframes; ++k)
+            {
+                const long long start = (long long)fo - z->frameOffset + (long long)k * fsize * 2;
+                if (start < 0 || start + 18 > (long long)frames.size()) { ++ausserhalb; continue; }
+
+                bool schon = false;
+                for (uint32_t e : erledigt) if (e == uint32_t(start)) { schon = true; break; }
+                if (schon) continue;
+                erledigt.push_back(uint32_t(start));
+
+                size_t p2 = size_t(start) + 18;          // BBox (6) + Versatz (3) Worte
+                for (uint16_t m = 0; m < z->numMeshes; ++m)
+                {
+                    if (p2 + 2 > frames.size()) break;
+                    const uint16_t w = ru16(frames, p2);
+                    if (w & 0xC000)
+                    {
+                        const uint16_t v = w & 0x3FF;
+                        const uint16_t neu = uint16_t((w & 0xC000) | ((v << 2) & 0xFFF));
+                        frames[p2]     = uint8_t(neu & 0xFF);
+                        frames[p2 + 1] = uint8_t(neu >> 8);
+                        ++umgerechnet;
+                        p2 += 2;
+                    }
+                    else p2 += 4;
+                }
+            }
+        }
+        std::printf("  Drehungen: %d Einachs-Worte auf TR5-Breite gebracht (%zu Frames)\n",
+                    umgerechnet, erledigt.size());
+        if (ausserhalb) std::printf("  ACHTUNG: %d Frames lagen ausserhalb der Scheibe\n", ausserhalb);
+
+        out.insert(out.end(), frames.begin(), frames.end());
+    }
     out.insert(out.end(), anims.begin(), anims.end());
     out.insert(out.end(), r.b.begin() + scAt,  r.b.begin() + scAt  + size_t(nSC) * 6);
 

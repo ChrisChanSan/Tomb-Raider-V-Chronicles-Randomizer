@@ -31,7 +31,7 @@ static std::wstring toW(const char* s)
 // Ziel andere oder gar keine Klaenge sind. Dasselbe Vergessen bei der
 // Sprungtabelle war der Absturz in #88 - deshalb hier ausdruecklich.
 static int biegeSfxUm(std::vector<uint8_t>& paket, const std::vector<std::pair<int,int>>& zuordnung,
-                      std::vector<int>& offen)
+                      std::vector<int>& offen, std::vector<std::pair<int,int>>& genutzt)
 {
     auto g32 = [&](size_t p) { uint32_t v; std::memcpy(&v, &paket[p], 4); return v; };
     auto g16 = [&](size_t p) { uint16_t v; std::memcpy(&v, &paket[p], 2); return v; };
@@ -89,6 +89,12 @@ static int biegeSfxUm(std::vector<uint8_t>& paket, const std::vector<std::pair<i
                     std::memcpy(&paket[at], &neu, 2);
                     ++getauscht;
                     zugeordnet = true;
+                    // Mitzaehlen, WELCHE ID wie oft und in welcher Animation
+                    // gerufen wird. Eine blosse Gesamtzahl sagt nicht, ob der
+                    // gesuchte Klang ueberhaupt vorkommt - beim Compy hielt
+                    // ich den Laufklang faelschlich fuer belegt, weil die
+                    // Summe stimmte.
+                    genutzt.push_back(std::make_pair(nr, (int)a));
                     break;
                 }
 
@@ -265,7 +271,27 @@ int main(int argc, char** argv)
             std::printf("    TR3-Sound %3d  ->  Map %3d\n", z.first, z.second);
 
         std::vector<int> offen;
-        const int n2 = biegeSfxUm(paket, zuordnung, offen);
+        std::vector<std::pair<int,int>> genutzt;
+        const int n2 = biegeSfxUm(paket, zuordnung, offen, genutzt);
+
+        // Je ID zeigen, wie oft und aus welcher Animation sie gerufen wird.
+        // Eine blosse Gesamtzahl reicht nicht: beim Compy stimmte die Summe,
+        // und trotzdem war offen, ob der Laufklang ueberhaupt vorkommt.
+        for (const auto& z : zuordnung)
+        {
+            std::string wo;
+            int mal = 0;
+            for (const auto& g : genutzt)
+                if (g.first == z.first)
+                {
+                    ++mal;
+                    char puf[16];
+                    std::snprintf(puf, sizeof(puf), "%s%d", wo.empty() ? "" : ",", g.second);
+                    wo += puf;
+                }
+            std::printf("    ID %3d -> Map %3d : %dx%s%s\n", z.first, z.second, mal,
+                        mal ? ", Anim " : " - WIRD NIE GERUFEN", wo.c_str());
+        }
         if (n2 < 0) { std::printf("Kommandoblock im Modellpaket nicht auffindbar\n"); return 1; }
         std::printf("  Anim-Kommandos: %d SFX-Nummern umgebogen\n", n2);
         if (!offen.empty())

@@ -2330,6 +2330,14 @@ bool Rando::run(const RandoInput& in,
     if (adds.size() > 0) patchOut.set("itemAdds", adds);
     if (trigMoves.size() > 0) patchOut.set("triggerMoves", trigMoves);
     if (trigAdds.size() > 0) patchOut.set("triggerAdds", trigAdds);
+    // Die Itemzahl, von der aus die Planung neue Items nummeriert hat (#107).
+    // Traegt die Quelldatei MEHR Items als das Level-JSON (die Waffen-Basis
+    // entstand NACH dem JSON-Export), landen die itemAdds weiter hinten als
+    // geplant - und jeder Trigger weckte das Item ZWEI VOR seinem Gegner
+    // (in Andrea1 gesehen: JSON 151, Datei 153, alle Wecker um 2 verrutscht,
+    // die letzten beiden Gegner ohne Trigger). ApplyPatch verschiebt mit
+    // dieser Zahl alle TO_OBJECT-Ziele >= itemBase um die echte Differenz.
+    patchOut.set("itemBase", JsonValue::makeInt(static_cast<int64_t>(in.items.size())));
     // Bewusst KEIN itemRemoves - siehe Regel 1 im Header.
     return true;
 }

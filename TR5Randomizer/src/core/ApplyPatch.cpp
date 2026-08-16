@@ -489,6 +489,29 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     // appendChain zieht den Item-Offset selbst nach -, aber es haelt den Ablauf
     // beim Nachlesen eindeutig.
     const JsonValue& tadds = patch["triggerAdds"];
+
+    // Versatz zwischen Planung und Datei ausgleichen (#107): die Planung
+    // nummeriert neue Items ab der Itemzahl des LEVEL-JSONS (itemBase), die
+    // itemAdds haengen aber an die ECHTE Datei an. Traegt die Quelldatei mehr
+    // Items als das JSON (die Waffen-Basis entstand nach dem JSON-Export),
+    // zeigte jeder Wecker auf das Item ZWEI VOR seinem Gegner, und die
+    // letzten Gegner blieben ohne Trigger fuer immer regungslos stehen
+    // (Andrea1 Seed 1: JSON 151, Datei 153 - in trview gesehen).
+    // Verschoben werden nur TO_OBJECT-Ziele >= itemBase: alles darunter sind
+    // Vanilla-Indizes, und die verschieben sich nicht, weil auch die
+    // Waffen-Basis ihre Extra-Items nur hinten anhaengt.
+    const int itemBase = static_cast<int>(patch["itemBase"].asInt(-1));
+    const int itemDelta = (itemBase >= 0) ? (level.itemCount() - itemBase) : 0;
+    if (itemDelta != 0 && tadds.size() > 0)
+    {
+        char buf[256];
+        std::snprintf(buf, sizeof(buf),
+                      "Trigger-Ziele um %+d verschoben: das Level-JSON kennt %d Items, "
+                      "die Quelldatei traegt %d. JSON-Export und Basislevel laufen auseinander.",
+                      itemDelta, itemBase, level.itemCount());
+        report.warnings.push_back(buf);
+    }
+
     for (size_t i = 0; i < tadds.size(); ++i)
     {
         const JsonValue& t = tadds[i];
@@ -500,6 +523,8 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             Tr5TriggerCmd cmd;
             cmd.type = static_cast<int>(cl[c]["type"].asInt(0));
             cmd.param = static_cast<int>(cl[c]["param"].asInt(0));
+            if (cmd.type == 0 && itemBase >= 0 && cmd.param >= itemBase)
+                cmd.param += itemDelta;                      // TO_OBJECT auf ein NEUES Item
             cmds.push_back(cmd);
         }
 

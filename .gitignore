@@ -30,6 +30,10 @@ Tomb5 Steam Version/*.bak
 # Zweite unangetastete Kopie der Spieldaten (Referenz zum Vergleichen)
 Vanilla Tomb Raider (V) Chronicles Steam Version ENG/
 
+# Vom Nutzer beiseitegelegte alte EXE-Staende samt SCRIPT.DAT-Kopie -
+# Build-Artefakte und Spieldaten, nichts davon gehoert ins Repository.
+Tomb5 Steam Version/Alte exen/
+
 # Transkript-Dump, kein Projektinhalt
 full_conversation.txt
 

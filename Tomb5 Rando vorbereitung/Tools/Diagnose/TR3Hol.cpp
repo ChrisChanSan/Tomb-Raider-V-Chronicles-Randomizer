@@ -1,0 +1,336 @@
+//----------------------------------------------------------------------------
+// TR3Hol - holt ein Moveable aus einem TR3-Level und rechnet es auf das
+// TR5-Layout um. Schritt 1 des T-Rex-Ports (#88): erst die Formatbruecke
+// beweisen, dann einsetzen.
+//
+// Aufruf: TR3Hol <tr3level.TR2> <objektId> <ziel.bin>
+//
+// Was gleich ist und einfach mitwandert:
+//   - Mesh-Kopf: TR3 Centre(6) + CollRadius(4) = 10 Byte, TR5 liest genau
+//     5 shorts vor dem Vertex-Wort. Gleiche Stelle, gleiche Bedeutung.
+//   - Vertices und Normalen: je 3 shorts, unveraendert.
+//   - Knochenbaum: 4 int32 je Knochen, in TR1..TR5 identisch.
+//   - Frames: TR2/TR3 und TR4/TR5 packen Rotationen gleich (2 Bit Achswahl,
+//     danach ein oder zwei Worte). Nachgerechnet am T-Rex: frameSize 58
+//     Worte = 6 BBox + 3 Versatz + 49 fuer 25 Knochen, also 24 zweiwortige
+//     und eine einwortige Rotation. Passt.
+//
+// Was umgerechnet werden MUSS:
+//   - Faces: TR3 traegt 4 Vertexworte + 1 Texturwort (Quad 8 Byte,
+//     Tri 6 Byte). TR5 haengt je ein EFFEKTWORT an (12 bzw. 10 Byte).
+//   - Farbige Faces: TR3 kennt sie, TR5 nicht. Sie werden zu texturierten
+//     mit Textur 0 - sichtbar falsch, aber geometrisch heil; der T-Rex
+//     nutzt sie ohnehin kaum.
+//   - Animationen: TR3 32 Byte, TR5 40 Byte. Die zusaetzlichen 8 Byte sind
+//     die seitlichen Geschwindigkeiten (TR4+), sie werden auf 0 gesetzt.
+//
+// Die Ausgabe ist ein schlichter Container, den der Einsetzer liest:
+//   Kopf: "T35H", version, objektId, numMeshes, numAnims, numFrameWorte,
+//         numBoneWorte, numStateChanges, numDispatches, numCmdWorte
+//   dann: Meshbloecke (je uint32 Laenge + Bytes), Bonebytes, Framebytes,
+//         Animbytes (40 je Anim), StateChanges, Dispatches, Commands
+//----------------------------------------------------------------------------
+#include <cstdio>
+#include <cstdint>
+#include <cstring>
+#include <string>
+#include <vector>
+
+namespace
+{
+    struct Leser
+    {
+        std::vector<uint8_t> b;
+        size_t at = 0;
+        bool   kaputt = false;
+
+        bool laden(const char* p)
+        {
+            FILE* f = std::fopen(p, "rb");
+            if (!f) return false;
+            std::fseek(f, 0, SEEK_END); const long n = std::ftell(f); std::fseek(f, 0, SEEK_SET);
+            b.resize(static_cast<size_t>(n));
+            const size_t g = std::fread(b.data(), 1, b.size(), f);
+            std::fclose(f);
+            return g == b.size();
+        }
+        bool platz(size_t n) { if (at + n > b.size()) { kaputt = true; return false; } return true; }
+        uint16_t u16() { if (!platz(2)) return 0; uint16_t v; std::memcpy(&v, &b[at], 2); at += 2; return v; }
+        uint32_t u32() { if (!platz(4)) return 0; uint32_t v; std::memcpy(&v, &b[at], 4); at += 4; return v; }
+        void spring(size_t n) { if (platz(n)) at += n; }
+    };
+
+    int16_t  rs16(const std::vector<uint8_t>& b, size_t p) { int16_t v; std::memcpy(&v, &b[p], 2); return v; }
+    uint16_t ru16(const std::vector<uint8_t>& b, size_t p) { uint16_t v; std::memcpy(&v, &b[p], 2); return v; }
+    uint32_t ru32(const std::vector<uint8_t>& b, size_t p) { uint32_t v; std::memcpy(&v, &b[p], 4); return v; }
+
+    void put16(std::vector<uint8_t>& o, uint16_t v) { o.push_back(uint8_t(v & 0xFF)); o.push_back(uint8_t(v >> 8)); }
+    void put32(std::vector<uint8_t>& o, uint32_t v) { for (int i = 0; i < 4; ++i) o.push_back(uint8_t((v >> (8*i)) & 0xFF)); }
+
+    struct Moveable
+    {
+        uint32_t objectId; uint16_t numMeshes; uint16_t startingMesh;
+        uint32_t meshTree; uint32_t frameOffset; uint16_t animIndex;
+    };
+}
+
+int main(int argc, char** argv)
+{
+    if (argc != 4) { std::printf("Aufruf: TR3Hol <tr3level.TR2> <objektId> <ziel.bin>\n"); return 2; }
+    const int suche = std::atoi(argv[2]);
+
+    Leser r;
+    if (!r.laden(argv[1])) { std::printf("Datei nicht lesbar: %s\n", argv[1]); return 2; }
+
+    const uint32_t version = r.u32();
+    if ((version >> 24) != 0xFF) { std::printf("Kein TR3-Level (Version 0x%08X)\n", version); return 2; }
+
+    r.spring(768); r.spring(1024);
+    const uint32_t nTex = r.u32();
+    r.spring(size_t(nTex) * 65536); r.spring(size_t(nTex) * 131072);
+    r.u32();
+
+    const size_t raumAt = r.at;
+    const uint16_t nRooms = r.u16();
+
+    // Raumkopf-Varianten durchprobieren statt raten (siehe TR3Peek).
+    size_t nachRaeumen = 0;
+    for (int amb = 2; amb <= 6 && !nachRaeumen; amb += 2)
+    for (int licht = 18; licht <= 26 && !nachRaeumen; licht += 2)
+    {
+        r.at = raumAt + 2; r.kaputt = false;
+        for (uint16_t i = 0; i < nRooms && !r.kaputt; ++i)
+        {
+            r.spring(16);
+            r.spring(size_t(r.u32()) * 2);
+            r.spring(size_t(r.u16()) * 32);
+            const uint16_t nZ = r.u16(), nX = r.u16();
+            r.spring(size_t(nZ) * nX * 8);
+            r.spring(size_t(amb));
+            r.spring(size_t(r.u16()) * licht);
+            r.spring(size_t(r.u16()) * 20);
+            r.spring(2 + 2 + 3);
+        }
+        if (r.kaputt) continue;
+        const size_t merk = r.at;
+        const uint32_t a = r.u32(); r.spring(size_t(a) * 2);
+        const uint32_t b2 = r.u32(); r.spring(size_t(b2) * 2);
+        const uint32_t c = r.u32(); r.spring(size_t(c) * 4);
+        const uint32_t d = r.u32(); r.spring(size_t(d) * 32);
+        if (!r.kaputt && a < 500000 && b2 < 2000000 && c < 20000 && d < 20000) nachRaeumen = merk;
+        r.at = merk;
+    }
+    if (!nachRaeumen) { std::printf("Raumdurchlauf gescheitert\n"); return 1; }
+    r.at = nachRaeumen; r.kaputt = false;
+
+    r.spring(size_t(r.u32()) * 2);                                  // Floordata
+    const uint32_t nMeshData = r.u32(); const size_t meshAt = r.at;
+    r.spring(size_t(nMeshData) * 2);
+    const uint32_t nPtr = r.u32(); const size_t ptrAt = r.at;
+    r.spring(size_t(nPtr) * 4);
+    const uint32_t nAnims = r.u32(); const size_t animAt = r.at;
+    r.spring(size_t(nAnims) * 32);
+    const uint32_t nSC = r.u32(); const size_t scAt = r.at;  r.spring(size_t(nSC) * 6);
+    const uint32_t nAD = r.u32(); const size_t adAt = r.at;  r.spring(size_t(nAD) * 8);
+    const uint32_t nCmd = r.u32(); const size_t cmdAt = r.at; r.spring(size_t(nCmd) * 2);
+    const uint32_t nBone = r.u32(); const size_t boneAt = r.at; r.spring(size_t(nBone) * 4);
+    const uint32_t nFrame = r.u32(); const size_t frameAt = r.at; r.spring(size_t(nFrame) * 2);
+    const uint32_t nMv = r.u32();
+    if (r.kaputt) { std::printf("Datei endet vor der Moveable-Tabelle\n"); return 1; }
+
+    std::vector<Moveable> mv;
+    for (uint32_t i = 0; i < nMv; ++i)
+    {
+        Moveable m;
+        m.objectId = r.u32(); m.numMeshes = r.u16(); m.startingMesh = r.u16();
+        m.meshTree = r.u32(); m.frameOffset = r.u32(); m.animIndex = r.u16();
+        mv.push_back(m);
+    }
+    const Moveable* z = 0;
+    for (const Moveable& m : mv) if (int(m.objectId) == suche) { z = &m; break; }
+    if (!z) { std::printf("Objekt %d nicht vorhanden\n", suche); return 1; }
+
+    uint32_t animEnde = nAnims;
+    for (const Moveable& m : mv)
+        if (m.animIndex > z->animIndex && m.animIndex < animEnde) animEnde = m.animIndex;
+    const uint32_t animZahl = animEnde - z->animIndex;
+
+    std::printf("Objekt %d: %u Meshes, %u Knochen, Anims %u..%u (%u)\n",
+                suche, z->numMeshes, z->numMeshes ? z->numMeshes - 1 : 0,
+                z->animIndex, animEnde - 1, animZahl);
+
+    // --- Meshes umschreiben -------------------------------------------------
+    std::vector<std::vector<uint8_t>> meshes;
+    int gesQuads = 0, gesTris = 0, gesFarbig = 0, maxVerts = 0;
+    for (uint16_t i = 0; i < z->numMeshes; ++i)
+    {
+        const uint32_t off = ru32(r.b, ptrAt + size_t(z->startingMesh + i) * 4);
+        size_t p = meshAt + off;
+        std::vector<uint8_t> o;
+
+        for (int k = 0; k < 10; ++k) o.push_back(r.b[p + k]);       // Centre + CollRadius
+        p += 10;
+        const int16_t nVerts = rs16(r.b, p); p += 2;
+        if (nVerts > 255) { std::printf("  Mesh %u hat %d Vertices - TR5 liest nur 255\n", i, nVerts); return 1; }
+        put16(o, uint16_t(nVerts));
+        for (int v = 0; v < nVerts * 3; ++v) { put16(o, ru16(r.b, p)); p += 2; }
+        const int16_t nNorms = rs16(r.b, p); p += 2;
+        put16(o, uint16_t(nNorms));
+        const int worte = (nNorms >= 0) ? nVerts * 3 : nVerts;
+        for (int v = 0; v < worte; ++v) { put16(o, ru16(r.b, p)); p += 2; }
+        if (nVerts > maxVerts) maxVerts = nVerts;
+
+        // Texturierte Quads: 4 Vertexworte + Textur, dazu neu ein Effektwort.
+        const int16_t nQ = rs16(r.b, p); p += 2;
+        const int16_t nQfarbAt = 0; (void)nQfarbAt;
+        std::vector<uint8_t> quads, tris;
+        int qz = 0, tz = 0;
+        for (int q = 0; q < nQ; ++q)
+        {
+            for (int w = 0; w < 5; ++w) { put16(quads, ru16(r.b, p)); p += 2; }
+            put16(quads, 0);                                        // Effektwort
+            ++qz;
+        }
+        const int16_t nT = rs16(r.b, p); p += 2;
+        for (int t = 0; t < nT; ++t)
+        {
+            for (int w = 0; w < 4; ++w) { put16(tris, ru16(r.b, p)); p += 2; }
+            put16(tris, 0);
+            ++tz;
+        }
+        // Farbige Faces: TR5 kennt sie nicht - als texturierte mit Textur 0
+        // uebernehmen, damit die Geometrie geschlossen bleibt.
+        const int16_t nCQ = rs16(r.b, p); p += 2;
+        for (int q = 0; q < nCQ; ++q)
+        {
+            for (int w = 0; w < 4; ++w) { put16(quads, ru16(r.b, p)); p += 2; }
+            p += 2;                                                 // Farbindex verwerfen
+            put16(quads, 0); put16(quads, 0);
+            ++qz; ++gesFarbig;
+        }
+        const int16_t nCT = rs16(r.b, p); p += 2;
+        for (int t = 0; t < nCT; ++t)
+        {
+            for (int w = 0; w < 3; ++w) { put16(tris, ru16(r.b, p)); p += 2; }
+            p += 2;
+            put16(tris, 0); put16(tris, 0);
+            ++tz; ++gesFarbig;
+        }
+
+        put16(o, uint16_t(qz)); o.insert(o.end(), quads.begin(), quads.end());
+        put16(o, uint16_t(tz)); o.insert(o.end(), tris.begin(), tris.end());
+        gesQuads += qz; gesTris += tz;
+        meshes.push_back(o);
+    }
+
+    // --- Frame-Scheibe abgrenzen -------------------------------------------
+    //
+    // Der Frame-Zeiger einer Animation ist ein Byte-Offset in den GLOBALEN
+    // Frameblock des Levels. Wer nur das Objekt herausnimmt, muss die Scheibe
+    // schneiden und die Zeiger auf ihren Anfang beziehen - sonst zeigen sie im
+    // Ziel irgendwohin. Das Ende ist der Anfang des naechsten Objekts, genau
+    // wie bei den Anims.
+    uint32_t frameEnde = nFrame * 2;
+    for (const Moveable& m : mv)
+        if (m.frameOffset > z->frameOffset && m.frameOffset < frameEnde) frameEnde = m.frameOffset;
+    const uint32_t frameBytes = frameEnde - z->frameOffset;
+
+    // --- Animationen 32 -> 40 Byte, Frame-Zeiger auf die Scheibe beziehen ---
+    std::vector<uint8_t> anims;
+    int ausserhalb = 0;
+    uint16_t animMin = 0xFFFF, animMax = 0;
+    for (uint32_t i = 0; i < animZahl; ++i)
+    {
+        const size_t a = animAt + size_t(z->animIndex + i) * 32;
+
+        const uint32_t fo = ru32(r.b, a);
+        if (fo < z->frameOffset || fo >= frameEnde) ++ausserhalb;
+        put32(anims, fo - z->frameOffset);                          // rebasiert
+
+        anims.push_back(r.b[a + 4]); anims.push_back(r.b[a + 5]);   // Rate, Size
+        anims.push_back(r.b[a + 6]); anims.push_back(r.b[a + 7]);   // State
+        for (int k = 8; k < 16; ++k) anims.push_back(r.b[a + k]);   // Speed, Accel
+        for (int k = 0; k < 8; ++k) anims.push_back(0);             // Lateral (TR4+)
+
+        for (int k = 16; k < 20; ++k) anims.push_back(r.b[a + k]);  // FrameStart, FrameEnd
+        const uint16_t nextAnim = ru16(r.b, a + 20);
+        if (nextAnim < animMin) animMin = nextAnim;
+        if (nextAnim > animMax) animMax = nextAnim;
+        put16(anims, uint16_t(nextAnim - z->animIndex));            // auf die Scheibe beziehen
+        for (int k = 22; k < 32; ++k) anims.push_back(r.b[a + k]);  // NextFrame, SC, Cmd
+    }
+
+    // --- Ausgabe ------------------------------------------------------------
+    std::vector<uint8_t> out;
+    out.push_back('T'); out.push_back('3'); out.push_back('5'); out.push_back('H');
+    put32(out, 1);
+    put32(out, uint32_t(suche));
+    put32(out, z->numMeshes);
+    put32(out, animZahl);
+    put32(out, frameBytes / 2);  // nur die Scheibe dieses Objekts, in Worten
+    put32(out, uint32_t(z->numMeshes ? (z->numMeshes - 1) * 4 : 0));
+    put32(out, nSC); put32(out, nAD); put32(out, nCmd);
+    put32(out, z->frameOffset);
+    put32(out, z->animIndex);
+
+    for (const std::vector<uint8_t>& m : meshes) { put32(out, uint32_t(m.size())); out.insert(out.end(), m.begin(), m.end()); }
+    for (uint32_t i = 0; i < (z->numMeshes ? uint32_t(z->numMeshes - 1) * 4 : 0); ++i)
+        put32(out, ru32(r.b, boneAt + (size_t(z->meshTree) + i) * 4));
+    out.insert(out.end(), r.b.begin() + frameAt + z->frameOffset,
+                          r.b.begin() + frameAt + frameEnde);
+    out.insert(out.end(), anims.begin(), anims.end());
+    out.insert(out.end(), r.b.begin() + scAt,  r.b.begin() + scAt  + size_t(nSC) * 6);
+    out.insert(out.end(), r.b.begin() + adAt,  r.b.begin() + adAt  + size_t(nAD) * 8);
+    out.insert(out.end(), r.b.begin() + cmdAt, r.b.begin() + cmdAt + size_t(nCmd) * 2);
+
+    FILE* f = std::fopen(argv[3], "wb");
+    if (!f) { std::printf("Ziel nicht schreibbar: %s\n", argv[3]); return 2; }
+    std::fwrite(out.data(), 1, out.size(), f);
+    std::fclose(f);
+
+    // --- Gegenprobe: laeuft der TR5-Ableser sauber durch? -------------------
+    //
+    // Nachgebaut nach ProcessMeshData der Engine (drawroom.cpp), identisch zu
+    // meshSize() in Tr5Transfer.cpp. Wenn die gerechnete Laenge auf das Byte
+    // mit der geschriebenen uebereinstimmt, passt das Layout - das ist der
+    // eigentliche Beweis der Formatbruecke, nicht die blosse Byteausgabe.
+    int schlecht = 0;
+    for (size_t i = 0; i < meshes.size(); ++i)
+    {
+        const std::vector<uint8_t>& m = meshes[i];
+        size_t p = 10;
+        const int16_t vw = rs16(m, p); p += 2;
+        const int nv = vw & 0xFF;
+        if (nv == 0) p += (size_t((vw >> 8) & 0xFF) * 6 + 1) * 2;
+        else
+        {
+            p += size_t(nv) * 6;
+            const int16_t nn = rs16(m, p); p += 2;
+            p += size_t(nv) * (nn >= 0 ? 6 : 2);
+        }
+        const int16_t q = rs16(m, p); p += 2; p += size_t(q) * 12;
+        const int16_t t = rs16(m, p); p += 2; p += size_t(t) * 10;
+        if (p != m.size())
+        {
+            std::printf("  MESH %zu PASST NICHT: Ableser endet bei %zu, geschrieben %zu\n", i, p, m.size());
+            ++schlecht;
+        }
+    }
+    std::printf("  Gegenprobe TR5-Ableser: %zu Meshes geprueft, %d Abweichungen\n",
+                meshes.size(), schlecht);
+
+    size_t meshBytes = 0; for (const std::vector<uint8_t>& m : meshes) meshBytes += m.size();
+    std::printf("  Meshes umgeschrieben: %zu Byte, %d Quads, %d Tris (davon %d aus farbigen Faces)\n",
+                meshBytes, gesQuads, gesTris, gesFarbig);
+    std::printf("  Groesstes Mesh: %d Vertices\n", maxVerts);
+    std::printf("  Anims: %u a 40 Byte, Frame-Scheibe %u Byte (%u..%u), Knochen %u Worte\n",
+                animZahl, frameBytes, z->frameOffset, frameEnde,
+                z->numMeshes ? (z->numMeshes - 1) * 4 : 0);
+    std::printf("  Frame-Zeiger ausserhalb der Scheibe: %d   Sprungziele %u..%u (Scheibe %u..%u)\n",
+                ausserhalb, animMin, animMax, z->animIndex, animEnde - 1);
+    if (ausserhalb) std::printf("  ACHTUNG: Frame-Zeiger zeigen aus der Scheibe heraus\n");
+    if (animMin < z->animIndex || animMax >= animEnde)
+        std::printf("  ACHTUNG: eine Anim springt aus der eigenen Scheibe heraus\n");
+    std::printf("  Geschrieben: %s (%zu Byte)\n", argv[3], out.size());
+    return 0;
+}

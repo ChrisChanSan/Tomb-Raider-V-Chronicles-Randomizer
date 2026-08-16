@@ -1960,6 +1960,46 @@ bool Rando::run(const RandoInput& in,
     // ueberspringt Vorhandenes.
     JsonValue moveables = JsonValue::makeArray();
     std::set<int> swapEmittiert;
+
+    // ZUERST die Anim-Basistypen der Soldatenfamilie, VOR den Typen, die sie
+    // brauchen (#96). Standen sie hinten, brach der Import ab, sobald der
+    // Basistyp wirklich nachgeladen werden musste statt schon dazusein:
+    // "Hauptblock laesst sich nicht durchlaufen - Mesh-Zeiger". Aufgefallen
+    // ist es erst mit dem Fenster "Gegnerarten", weil man den Basistyp jetzt
+    // gezielt abwaehlen kann - vorher zog der Seed ihn fast immer selbst mit,
+    // und dann stand er schon da.
+    //
+    // Wer selbst im Lauf steckt, wird hier uebersprungen: er kommt unten mit
+    // replace=true und damit vollstaendiger vom Spender.
+    std::set<int> basisEmittiert;
+    for (int t : crossBenutzt)
+    {
+        const CrossGegner* c = crossGewaehlt[t];
+        if (c->basisSlot <= 0) continue;
+        if (crossBenutzt.count(c->basisSlot)) continue;
+        if (!basisEmittiert.insert(c->basisSlot).second) continue;
+
+        // Der Basistyp kommt aus SEINER EIGENEN Zeile, nicht aus dem
+        // Spenderlevel dessen, der ihn anfordert. Vorher stand hier c->von -
+        // beim Crane Guy holte das den Guard aus joby2, und der laesst sich
+        // nicht kopieren ("Frame-Zeiger ausserhalb der Frame-Scheibe"); aus
+        // rich1 geht er. Bei Mafia und SWAT+ fiel es nie auf, weil deren
+        // Spender zufaellig einen brauchbaren Basistyp fuehren.
+        const char* basisVon = c->von;
+        for (const CrossGegner& b : kCross)
+            if (b.typeId == c->basisSlot) { basisVon = b.von; break; }
+
+        JsonValue g = JsonValue::makeObject();
+        g.set("slot", JsonValue::makeInt(c->basisSlot));
+        g.set("fromLevel", JsonValue::makeString(basisVon));
+        // replace=false laesst einen nativen Basistyp stehen - das Level soll
+        // sein eigenes Modell behalten, wenn es eins hat.
+        g.set("replace", JsonValue::makeBool(false));
+        moveables.push(g);
+        report.notes.push_back(fmt("Anim-Basistyp %d aus %s fuer typeId %d nachgeladen.",
+                                   c->basisSlot, basisVon, t));
+    }
+
     for (int t : crossBenutzt)
     {
         const CrossGegner* c = crossGewaehlt[t];
@@ -1981,28 +2021,8 @@ bool Rando::run(const RandoInput& in,
             moveables.push(g);
         }
 
-        // Anim-Basistyp der Familie (siehe Tabellenkommentar): SWAT+/Mafia
-        // laufen zur Laufzeit auf dem Satz von SWAT bzw. Guard. replace=false
-        // laesst einen nativen oder selbst importierten Basistyp stehen.
-        if (c->basisSlot > 0)
-        {
-            // Der Basistyp kommt aus SEINER EIGENEN Zeile, nicht aus dem
-            // Spenderlevel dessen, der ihn anfordert. Vorher stand hier
-            // c->von - beim Crane Guy holte das den Guard aus joby2, und der
-            // laesst sich nicht kopieren ("Frame-Zeiger ausserhalb der
-            // Frame-Scheibe"); aus rich1 geht er. Bei Mafia und SWAT+ fiel es
-            // nie auf, weil deren Spender zufaellig einen brauchbaren
-            // Basistyp fuehren.
-            const char* basisVon = c->von;
-            for (const CrossGegner& b : kCross)
-                if (b.typeId == c->basisSlot) { basisVon = b.von; break; }
-
-            JsonValue g = JsonValue::makeObject();
-            g.set("slot", JsonValue::makeInt(c->basisSlot));
-            g.set("fromLevel", JsonValue::makeString(basisVon));
-            g.set("replace", JsonValue::makeBool(false));
-            moveables.push(g);
-        }
+        // Der Anim-Basistyp der Familie steht schon oben in der Liste - er
+        // MUSS vor dem Typ kommen, der ihn braucht (#96).
 
         // Tauschhaelften: die MESHSWAP1 des Tauschspenders (swapVon, kann
         // vom Modellspender abweichen) in den Ausweichslot des Typs. Typen

@@ -828,6 +828,13 @@ static void drawGegnerartenWindow(App& a)
         "und auf zusaetzliche Gegner - Gegner, die im Level ohnehin stehen und "
         "nicht getauscht werden, bleiben davon unberuehrt.");
     ImGui::Spacing();
+    // Manche Arten teilen sich unter der Haube einen Animationssatz oder
+    // brauchen ein unsichtbares Hilfsobjekt (der Geschosskern der Hydra etwa).
+    // Das ist Technik, keine Spielerentscheidung - der Lauf holt es selbst, egal
+    // wie die Haken stehen. Hier steht nur, DASS es passiert, damit sich niemand
+    // fragt, warum ein abgewaehlter Wachmann trotzdem in der Datei auftaucht.
+    ImGui::TextDisabled("Was eine Art technisch braucht, laedt der Randomizer von selbst.");
+    ImGui::Spacing();
 
     if (ImGui::Button("Alle an"))  a.optGegnerAus.clear();
     ImGui::SameLine();

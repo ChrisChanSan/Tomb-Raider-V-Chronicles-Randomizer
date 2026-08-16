@@ -44,6 +44,7 @@
 #include "crow.h"
 #include "trex.h"
 #include "raptor.h"
+#include "compy.h"
 #include "mafia2.h"
 #include "pierre.h"
 #include "sniper.h"
@@ -1292,31 +1293,40 @@ void BaddyObjects()
 
 	if (objects[SAILOR].loaded)
 	{
+		// SAILOR ist der Compsognathus-Slot (#99), nicht mehr der Matrose.
+		//
+		// Der Slot hing an InitialiseSas/SasControl und holte seine Anims von
+		// SWAT - benutzt hat ihn nie jemand: in keinem der 16 Level steckt
+		// dort ein Modell (mit MissMod an allen nachgemessen, Gegenprobe ueber
+		// den Hund 41 in zweien). Vierter toter Slot nach SAS 31 (T-Rex),
+		// CROW 43 (Geier) und REAPER 75 (Raptor). Der Anim-Umweg ueber SWAT
+		// faellt weg: der Compy bringt seinen eigenen Satz mit.
+		//
+		// Alle Werte aus tomb3 setup.cpp ABGELESEN, nicht geraten.
 		obj = &objects[SAILOR];
-		obj->initialise = InitialiseSas;
-			obj->control = SasControl;
+		obj->initialise = InitialiseCompy;
+		obj->control = CompyControl;
 		obj->collision = CreatureCollision;
-
-		if (objects[SWAT].loaded)
-			obj->anim_index = objects[SWAT].anim_index;
-		else
-			obj->anim_index = objects[BLUE_GUARD].anim_index;
-
-		obj->shadow_size = 128;
-		obj->hit_points = 24;
+		obj->shadow_size = 85;
+		obj->hit_points = 10;
 		obj->pivot_length = 50;
 		obj->radius = 102;
-		obj->bite_offset = 0;
-		obj->object_mip = 5120;
 		obj->intelligent = 1;
 		obj->HitEffect = 1;
 		obj->save_position = 1;
 		obj->save_hitpoints = 1;
 		obj->save_flags = 1;
 		obj->save_anim = 1;
-		bones[obj->bone_index + 24] |= 8;
-		bones[obj->bone_index + 24] |= 4;
-		bones[obj->bone_index + 52] |= 8;
+
+		// Drehflags fuer Torso und Kopf, Nummern aus tomb3 abgelesen. Sie
+		// kommen mit, weil CompyControl beide Gelenke setzt (CreatureJoint 0
+		// und 1) - genau das fehlte beim T-Rex, wo sie deshalb draussen
+		// bleiben mussten. Die alten Flags des Matrosen (+24 und +52) gehoeren
+		// zu einem Menschenskelett und sind hier sinnlos.
+		bones[obj->bone_index + 4] |= 8;
+		bones[obj->bone_index + 8] |= 8;
+
+		// non_lot bleibt bewusst AUS - Begruendung im Kopf von compy.cpp.
 		bones[obj->bone_index + 52] |= 4;
 	}
 

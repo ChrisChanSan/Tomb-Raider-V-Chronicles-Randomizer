@@ -150,10 +150,15 @@ void InitialiseSlot(short item_number, long slot)
 
 	switch (item->object_number)
 	{
+	// SAILOR stand hier, solange der Slot der Matrose war: Menschengruppe mit
+	// Schrittweite 1024, Sprungfaehigkeit und HUMAN_ZONE. Als Compsognathus
+	// (#99) gehoert er in die Vorgabegruppe - er ist knietief und springt
+	// nicht ueber Absaetze. Dafuer ist nichts zu tun ausser ihn hier
+	// herauszunehmen; die Vorgaben oben (step 256, drop -512, BASIC_ZONE) sind
+	// dieselben, die schon der Raptor bekommt.
 	case SAS:
 	case BLUE_GUARD:
 	case MAFIA2:
-	case SAILOR:
 		creature->LOT.step = 1024;
 		creature->LOT.drop = -1024;
 		creature->LOT.can_jump = 1;

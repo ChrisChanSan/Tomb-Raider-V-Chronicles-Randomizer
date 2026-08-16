@@ -32,6 +32,20 @@ struct Config
     std::wstring sourceDir;   // data-Ordner der eigenen Chronicles-Installation
     std::string  seedText;    // zuletzt benutzter Seed, als Text
 
+    // Fremdinstallationen fuer die Gegner aus Tomb Raider 3 (#102).
+    //
+    // Wir liefern KEINE Spieldaten mit - wer die Dinosaurier haben will, muss
+    // die Spiele besitzen. Aus ihnen holt der Lauf zur Laufzeit Modell,
+    // Texturen und Klaenge; ohne Pfad bleiben die Arten in der Oberflaeche
+    // ausgegraut.
+    //
+    //   tr3Dir     data-Ordner von Tomb Raider 3 - CRASH.TR2 traegt T-Rex,
+    //              Raptor und Compsognathus, MAIN.SFX die Klaenge dazu.
+    //   tr3GoldDir data-Ordner von The Lost Artifact - chunnel.TR2 traegt
+    //              den Geier.
+    std::wstring tr3Dir;
+    std::wstring tr3GoldDir;
+
     // Fenstergroesse beim letzten Beenden bzw. nach dem letzten Ziehen.
     // 0 heisst "noch nie gespeichert" - dann gilt die Vorgabegroesse.
     int winW = 0, winH = 0;

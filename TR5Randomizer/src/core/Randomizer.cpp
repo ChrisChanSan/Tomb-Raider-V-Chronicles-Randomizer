@@ -2269,21 +2269,29 @@ bool Rando::run(const RandoInput& in,
 std::vector<Gegnerart> Rando::gegnerarten()
 {
     return {
-        { 33, "SWAT" },
-        { 35, "SWAT (schwer)" },
-        { 37, "Wachmann" },
-        { 39, "Two Gun" },
-        { 41, "Hund" },
-        { 45, "Larson" },
-        { 47, "Pierre" },
-        { 49, "Mafia (MP)" },
-        { 51, "Mafia (Pistolen)" },
-        { 55, "Crane Guy" },
-        { 57, "Loewe" },
-        { 59, "Gladiator" },
-        { 61, "Soldatenstatue" },
-        { 63, "Hydra" },
-        { 77, "Labyrinth-Monster" },
-        { 89, "Imp" },
+        { 33, "SWAT",              nullptr },
+        { 35, "SWAT (schwer)",     nullptr },
+        { 37, "Wachmann",          nullptr },
+        { 39, "Two Gun",           nullptr },
+        { 41, "Hund",              nullptr },
+        { 45, "Larson",            nullptr },
+        { 47, "Pierre",            nullptr },
+        { 49, "Mafia (MP)",        nullptr },
+        { 51, "Mafia (Pistolen)",  nullptr },
+        { 55, "Crane Guy",         nullptr },
+        { 57, "Loewe",             nullptr },
+        { 59, "Gladiator",         nullptr },
+        { 61, "Soldatenstatue",    nullptr },
+        { 63, "Hydra",             nullptr },
+        { 77, "Labyrinth-Monster", nullptr },
+        { 89, "Imp",               nullptr },
+
+        // Die Gaeste aus Tomb Raider 3. Sie sitzen auf Slots, die in KEINEM
+        // der 16 TR5-Level ein Modell tragen - deshalb nehmen sie keinem
+        // einheimischen Gegner etwas weg (an allen nachgemessen).
+        { 31, "T-Rex (TR3)",       "tr3" },
+        { 75, "Raptor (TR3)",      "tr3" },
+        { 53, "Compy (TR3)",       "tr3" },
+        { 43, "Geier (TR3 LA)",    "tr3gold" },
     };
 }

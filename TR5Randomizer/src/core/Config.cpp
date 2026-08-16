@@ -53,6 +53,8 @@ void Config::load()
         const std::string key = line.substr(0, eq);
         const std::string val = line.substr(eq + 1);
         if (key == "sourceDir") sourceDir = PathUtil::widen(val);
+        else if (key == "tr3Dir")     tr3Dir = PathUtil::widen(val);
+        else if (key == "tr3GoldDir") tr3GoldDir = PathUtil::widen(val);
         else if (key == "seed")  seedText = val;
         else if (key == "winW")            winW = std::atoi(val.c_str());
         else if (key == "winH")            winH = std::atoi(val.c_str());
@@ -102,6 +104,8 @@ bool Config::save() const
     // UTF-8 ohne BOM, damit Pfade mit Umlauten unbeschadet zurueckkommen.
     const std::string dir = PathUtil::narrow(sourceDir);
     std::fprintf(f, "sourceDir=%s\n", dir.c_str());
+    std::fprintf(f, "tr3Dir=%s\n", PathUtil::narrow(tr3Dir).c_str());
+    std::fprintf(f, "tr3GoldDir=%s\n", PathUtil::narrow(tr3GoldDir).c_str());
     std::fprintf(f, "seed=%s\n", seedText.c_str());
     std::fprintf(f, "winW=%d\n", winW);
     std::fprintf(f, "winH=%d\n", winH);

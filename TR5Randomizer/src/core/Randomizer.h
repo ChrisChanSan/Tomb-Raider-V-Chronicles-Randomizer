@@ -502,7 +502,15 @@ struct RandoReport
 };
 
 // Eine im Pool waehlbare Gegnerart, fuer das Fenster "Gegnerarten" (#95).
-struct Gegnerart { int typeId; const char* name; };
+//
+// "quelle" sagt, aus welchem Spiel die Art stammt (#102):
+//   nullptr    steckt in Tomb Raider 5 selbst
+//   "tr3"      braucht eine Tomb-Raider-3-Installation
+//   "tr3gold"  braucht The Lost Artifact
+//
+// Wir liefern keine Spieldaten mit. Ohne den passenden Pfad bleibt die Art in
+// der Oberflaeche ausgegraut, statt im Lauf zu scheitern.
+struct Gegnerart { int typeId; const char* name; const char* quelle; };
 
 namespace Rando
 {

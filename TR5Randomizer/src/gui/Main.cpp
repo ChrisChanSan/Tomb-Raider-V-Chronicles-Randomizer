@@ -340,6 +340,8 @@ namespace
         // Gehalten wird die ABWAHL - siehe Config::gegnerAus.
         bool artenOpen = false;
         std::set<int> optGegnerAus;
+        // Fenster "Installations-Pfade" (#102).
+        bool pfadeOpen = false;
         bool dbgUseFill = true;
         int  dbgFillType = 223;          // Pickup Item4 - im Spiel selten, faellt auf
         std::vector<std::string> dbgLog;
@@ -795,6 +797,114 @@ namespace
 // das, was der Randomizer wirklich tut - nicht eine zweite Beschreibung davon.
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
+// Ist die Fremdinstallation hinter einer Gegnerart nutzbar? (#102)
+//
+// Geprueft wird nicht der Ordner, sondern die Datei, die WIRKLICH gebraucht
+// wird - ein Ordner kann existieren und trotzdem leer sein. CRASH.TR2 traegt
+// T-Rex, Raptor und Compy, chunnel.TR2 den Geier; MAIN.SFX liefert in beiden
+// Faellen die Klaenge.
+//----------------------------------------------------------------------------
+static bool dinoQuelleDa(const App& a, const char* quelle)
+{
+    if (!quelle) return true;                 // steckt in TR5 selbst
+
+    if (std::strcmp(quelle, "tr3") == 0)
+        return !a.cfg.tr3Dir.empty()
+            && PathUtil::fileExists(PathUtil::join(a.cfg.tr3Dir, L"CRASH.TR2"))
+            && PathUtil::fileExists(PathUtil::join(a.cfg.tr3Dir, L"MAIN.SFX"));
+
+    // Der Geier braucht BEIDE Installationen: sein Modell steckt in chunnel.TR2
+    // von The Lost Artifact, seine Klaenge kommen aber aus der MAIN.SFX von
+    // Tomb Raider 3. Die beiden Dateien sind verschieden - Gold bringt eine
+    // eigene mit (9,8 MB gegen 11,6 MB), und die abgehoerten Wave-Nummern
+    // beziehen sich auf die von TR3.
+    if (std::strcmp(quelle, "tr3gold") == 0)
+        return !a.cfg.tr3GoldDir.empty()
+            && PathUtil::fileExists(PathUtil::join(a.cfg.tr3GoldDir, L"chunnel.TR2"))
+            && !a.cfg.tr3Dir.empty()
+            && PathUtil::fileExists(PathUtil::join(a.cfg.tr3Dir, L"MAIN.SFX"));
+
+    return false;
+}
+
+//----------------------------------------------------------------------------
+// Fenster "Installations-Pfade" (#102).
+//
+// Die Dinosaurier stammen aus Tomb Raider 3 und The Lost Artifact. Wir
+// liefern KEINE Spieldaten mit - wer sie haben will, muss die Spiele
+// besitzen. Der Lauf holt Modell, Texturen und Klaenge zur Laufzeit von dort.
+//
+// Ohne gueltigen Pfad bleibt die jeweilige Art im Fenster "Gegnerarten"
+// ausgegraut, statt mitten im Lauf zu scheitern.
+//----------------------------------------------------------------------------
+static void drawPfadeWindow(App& a, HWND hwnd)
+{
+    if (!a.pfadeOpen) return;
+
+    ImGui::SetNextWindowSize(ImVec2(620, 400), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Installations-Pfade", &a.pfadeOpen))
+    {
+        ImGui::End();
+        return;
+    }
+
+    ImGui::TextWrapped(
+        "Die Dinosaurier stammen aus anderen Spielen. Dieses Werkzeug bringt "
+        "keine Spieldaten mit - gib die Ordner an, dann holt der Lauf sich "
+        "Modelle, Texturen und Klaenge von dort. Ohne Pfad bleiben die "
+        "betroffenen Gegnerarten ausgegraut, sonst laeuft alles wie gewohnt.");
+    ImGui::Spacing();
+
+    struct Eintrag { const char* titel; const char* datei; const char* wofuer;
+                     std::wstring* pfad; const char* quelle; };
+    Eintrag liste[] = {
+        { "Tomb Raider 5 (Chronicles)", nullptr, "die Level, die randomisiert werden",
+          &a.cfg.sourceDir, nullptr },
+        { "Tomb Raider 3",             "CRASH.TR2", "T-Rex, Raptor und Compy",
+          &a.cfg.tr3Dir, "tr3" },
+        { "Tomb Raider 3: The Lost Artifact", "chunnel.TR2", "der Geier",
+          &a.cfg.tr3GoldDir, "tr3gold" },
+    };
+
+    for (Eintrag& e : liste)
+    {
+        ImGui::PushID(e.titel);
+        ImGui::SeparatorText(e.titel);
+        ImGui::TextDisabled("fuer %s", e.wofuer);
+
+        const bool da = e.quelle ? dinoQuelleDa(a, e.quelle) : a.sourceOk;
+        ImGui::TextWrapped("%s", e.pfad->empty() ? "(nicht gewaehlt)"
+                                                 : PathUtil::narrow(*e.pfad).c_str());
+
+        if (ImGui::Button("Ordner waehlen..."))
+        {
+            std::wstring picked;
+            if (pickFolder(hwnd, picked))
+            {
+                *e.pfad = picked;
+                a.cfg.save();
+                if (!e.quelle) inspectSource(a);
+            }
+        }
+        if (!e.pfad->empty())
+        {
+            ImGui::SameLine();
+            if (ImGui::Button("Leeren")) { e.pfad->clear(); a.cfg.save(); }
+        }
+        ImGui::SameLine();
+        if (da) ImGui::TextDisabled("in Ordnung");
+        else if (e.datei) ImGui::TextDisabled("%s nicht gefunden", e.datei);
+        else ImGui::TextDisabled("noch nicht geprueft");
+
+        ImGui::PopID();
+    }
+
+    ImGui::Spacing();
+    ImGui::TextDisabled("Gesucht wird jeweils der data-Ordner der Installation.");
+    ImGui::End();
+}
+
+//----------------------------------------------------------------------------
 // Fenster "Gegnerarten" (#95): welche Arten darf der Pool ueberhaupt ziehen?
 //
 // Gut fuer den Spieler, der seine Lieblingsgegner haeufiger sehen will, und
@@ -849,7 +959,13 @@ static void drawGegnerartenWindow(App& a)
     ImGui::BeginChild("##artenliste", ImVec2(0, -78), true);
     for (const Gegnerart& g : arten)
     {
-        bool an = !a.optGegnerAus.count(g.typeId);
+        // Arten aus einem anderen Spiel bleiben ausgegraut, solange der Pfad
+        // dorthin fehlt (#102). Der Haken bleibt dabei erhalten - traegt der
+        // Nutzer den Pfad spaeter nach, ist seine Auswahl noch da.
+        const bool da = dinoQuelleDa(a, g.quelle);
+        ImGui::BeginDisabled(!da);
+
+        bool an = !a.optGegnerAus.count(g.typeId) && da;
         char label[96];
         std::snprintf(label, sizeof(label), "%s##art%d", g.name, g.typeId);
         if (ImGui::Checkbox(label, &an))
@@ -859,6 +975,14 @@ static void drawGegnerartenWindow(App& a)
         }
         ImGui::SameLine();
         ImGui::TextDisabled("(%d)", g.typeId);
+        ImGui::EndDisabled();
+
+        if (!da)
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled("- braucht %s",
+                std::strcmp(g.quelle, "tr3gold") == 0 ? "The Lost Artifact" : "Tomb Raider 3");
+        }
     }
     ImGui::EndChild();
 
@@ -998,6 +1122,20 @@ static void drawUi(App& a, HWND hwnd)
     }
     ImGui::SameLine();
     if (ImGui::Button("Erneut pruefen")) inspectSource(a);
+    ImGui::SameLine();
+    if (ImGui::Button("Installations-Pfade...")) a.pfadeOpen = true;
+    // Die Schwebehilfe der Optionsliste steht hier noch nicht zur Verfuegung -
+    // sie wird erst weiter unten angelegt. Der eigene Tooltip tut es auch.
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+        ImGui::SetTooltip("Optional: Ordner von Tomb Raider 3 und The Lost Artifact.\n"
+                          "Nur damit lassen sich die Dinosaurier verwenden -\n"
+                          "wir liefern keine Spieldaten mit.");
+    {
+        const int fehlt = (dinoQuelleDa(a, "tr3") ? 0 : 1) + (dinoQuelleDa(a, "tr3gold") ? 0 : 1);
+        ImGui::SameLine();
+        if (fehlt == 0) ImGui::TextDisabled("TR3 + LA gefunden");
+        else            ImGui::TextDisabled("%d ohne Pfad", fehlt);
+    }
 
     // --- 2. Seed ---
     ImGui::SeparatorText("2. Seed");
@@ -1359,6 +1497,7 @@ static void drawUi(App& a, HWND hwnd)
     // den ganzen Bildschirm und traegt NoBringToFrontOnFocus.
     drawDebugWindow(a);
     drawGegnerartenWindow(a);
+    drawPfadeWindow(a, hwnd);
 }
 
 //----------------------------------------------------------------------------

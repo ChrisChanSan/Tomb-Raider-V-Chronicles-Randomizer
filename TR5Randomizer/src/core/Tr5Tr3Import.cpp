@@ -79,7 +79,7 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
     if (!m_soundOk) { error = "Ziel-Level: Sound-Block nicht deutbar"; return false; }
     if (paket.size() < 12 || std::memcmp(paket.data(), "T35S", 4) != 0)
     { error = "Kein TR3-Soundpaket (Kennung T35S fehlt)"; return false; }
-    if (g32(paket, 4) != 1) { error = "Unbekannte Soundpaketversion"; return false; }
+    if (g32(paket, 4) != 2) { error = "Unbekannte Soundpaketversion"; return false; }
 
     const uint32_t anzahl = g32(paket, 8);
     if (basisId < 0 || basisId + int(anzahl) > SAMPLE_LUT_SIZE)
@@ -103,42 +103,54 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
     const uint16_t FLAGS = 0x0004;   // Bits 2-5 = 1 Variante, sonst nichts
 
     // --- Erst alles einsammeln, dann schreiben ----------------------------
-    struct Klang { int origId; int32_t uncomp; std::vector<uint8_t> wav; };
+    struct Welle { int32_t uncomp; std::vector<uint8_t> wav; };
+    struct Klang { int origId; std::vector<Welle> wellen; };
     std::vector<Klang> klaenge;
+    int32_t samplesGesamt = 0;
     {
         size_t p = 12;
         for (uint32_t i = 0; i < anzahl; ++i)
         {
-            if (p + 12 > paket.size()) { error = "Soundpaket endet vorzeitig"; return false; }
+            if (p + 10 > paket.size()) { error = "Soundpaket endet vorzeitig"; return false; }
             Klang k;
             k.origId = g16(paket, p);
             p += 8;                                   // Volume, Chance, Chars: siehe oben
-            const uint32_t len = g32(paket, p); p += 4;
-            if (p + len > paket.size()) { error = "Wave laeuft aus dem Paket"; return false; }
-            k.wav.assign(paket.begin() + p, paket.begin() + p + len);
-            p += len;
+            const uint16_t varianten = g16(paket, p); p += 2;
+            if (varianten < 1 || varianten > 15) { error = "Unplausible Variantenzahl"; return false; }
 
-            // uncomp_size sauber setzen: Laenge des data-Blocks. Die Engine
-            // rechnet ihn im PCM-Zweig zwar selbst aus, aber ein stimmiger
-            // Wert erspart spaeteren Lesern das Raetselraten.
-            k.uncomp = 0;
-            for (size_t q = 12; q + 8 <= k.wav.size(); )
+            for (uint16_t v = 0; v < varianten; ++v)
             {
-                const uint32_t cl = g32(k.wav, q + 4);
-                if (!std::memcmp(&k.wav[q], "data", 4)) { k.uncomp = int32_t(cl); break; }
-                q += 8 + cl + (cl & 1);
+                if (p + 4 > paket.size()) { error = "Soundpaket endet vor einer Variante"; return false; }
+                const uint32_t len = g32(paket, p); p += 4;
+                if (p + len > paket.size()) { error = "Wave laeuft aus dem Paket"; return false; }
+                Welle w;
+                w.wav.assign(paket.begin() + p, paket.begin() + p + len);
+                p += len;
+
+                // uncomp_size sauber setzen: Laenge des data-Blocks. Die
+                // Engine rechnet ihn im PCM-Zweig zwar selbst aus, aber ein
+                // stimmiger Wert erspart spaeteren Lesern das Raetselraten.
+                w.uncomp = 0;
+                for (size_t q = 12; q + 8 <= w.wav.size(); )
+                {
+                    const uint32_t cl = g32(w.wav, q + 4);
+                    if (!std::memcmp(&w.wav[q], "data", 4)) { w.uncomp = int32_t(cl); break; }
+                    q += 8 + cl + (cl & 1);
+                }
+                k.wellen.push_back(std::move(w));
             }
+            samplesGesamt += int32_t(k.wellen.size());
             klaenge.push_back(std::move(k));
         }
     }
 
     if (m_nInfos <= 0) { error = "Ziel-Level hat keinen Sound-Block"; return false; }
 
-    if (m_nSamples + int32_t(klaenge.size()) > MAX_SAMPLES_PLAYABLE)
+    if (m_nSamples + samplesGesamt > MAX_SAMPLES_PLAYABLE)
     {
         std::snprintf(buf, sizeof(buf),
             "Level haette %d Samples - die Engine laedt hoechstens %d",
-            m_nSamples + int32_t(klaenge.size()), MAX_SAMPLES_PLAYABLE);
+            m_nSamples + samplesGesamt, MAX_SAMPLES_PLAYABLE);
         error = buf;
         return false;
     }
@@ -156,18 +168,27 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
 
     // --- Infos einfuegen (liegen IM Hauptblock, der waechst) --------------
     std::vector<uint8_t> roh;
+    int32_t laufSample = m_nSamples;
     for (size_t i = 0; i < klaenge.size(); ++i)
     {
         // SAMPLE_INFO: short number, uchar volume, char radius,
         //              char randomness, char pitch, short flags
+        //
+        // Mehrere Varianten sind EIN Info mit N aufeinanderfolgenden
+        // SAMPLES - die Engine wuerfelt sample = number + Zufall(N)
+        // (sound.cpp:280). Die Zahl steht in Bit 2-5 der Flags. Wer
+        // stattdessen N Infos anlegt, holt sich die Falle aus #76.
+        const int varianten = static_cast<int>(klaenge[i].wellen.size());
         std::vector<uint8_t> info(SZ_SAMPLE_INFO, 0);
-        const int16_t nummer = static_cast<int16_t>(m_nSamples + int32_t(i));
+        const int16_t nummer = static_cast<int16_t>(laufSample);
         std::memcpy(info.data(), &nummer, 2);
         info[2] = VOL;
         info[3] = static_cast<uint8_t>(RAD);
         info[4] = 0;                       // keine Lautstaerkestreuung
         info[5] = 0;                       // keine Tonhoehenverschiebung
-        std::memcpy(info.data() + 6, &FLAGS, 2);
+        const uint16_t flags = static_cast<uint16_t>((FLAGS & ~0x3C) | ((varianten & 0xF) << 2));
+        std::memcpy(info.data() + 6, &flags, 2);
+        laufSample += varianten;
 
         // Lautstaerke nachjustieren. Das Feld ist EIN Byte (0..255) - der Wert
         // kommt aus der Vorlage des Ziels, damit die Groessenordnung sicher
@@ -210,20 +231,23 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
     std::memcpy(m_bytes.data() + m_mainOffset - 8, &neueGroesse, 4);
     std::memcpy(m_bytes.data() + m_mainOffset - 4, &neueGroesse, 4);
 
-    m_nSamples += int32_t(klaenge.size());
+    m_nSamples += samplesGesamt;
     std::memcpy(m_bytes.data() + m_numSamplesInMainAt, &m_nSamples, 4);
     std::memcpy(m_bytes.data() + m_numSamplesAt, &m_nSamples, 4);
 
     // --- Sampledaten ans Dateiende ---------------------------------------
+    // Reihenfolge zaehlt: die Varianten eines Klangs muessen unmittelbar
+    // aufeinander folgen, sonst greift die Zufallsauswahl der Engine daneben.
     for (const Klang& k : klaenge)
-    {
-        const int32_t uc = k.uncomp, cs = static_cast<int32_t>(k.wav.size());
-        const uint8_t* pu = reinterpret_cast<const uint8_t*>(&uc);
-        const uint8_t* pc = reinterpret_cast<const uint8_t*>(&cs);
-        m_bytes.insert(m_bytes.end(), pu, pu + 4);
-        m_bytes.insert(m_bytes.end(), pc, pc + 4);
-        m_bytes.insert(m_bytes.end(), k.wav.begin(), k.wav.end());
-    }
+        for (const Welle& w : k.wellen)
+        {
+            const int32_t uc = w.uncomp, cs = static_cast<int32_t>(w.wav.size());
+            const uint8_t* pu = reinterpret_cast<const uint8_t*>(&uc);
+            const uint8_t* pc = reinterpret_cast<const uint8_t*>(&cs);
+            m_bytes.insert(m_bytes.end(), pu, pu + 4);
+            m_bytes.insert(m_bytes.end(), pc, pc + 4);
+            m_bytes.insert(m_bytes.end(), w.wav.begin(), w.wav.end());
+        }
     return true;
 }
 

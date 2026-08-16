@@ -7,7 +7,20 @@
 #include "effects.h"
 #include "control.h"
 #include "items.h"
+#include "sound.h"
 #include "../specific/function_stubs.h"
+
+//----------------------------------------------------------------------------
+// Soundplaetze der TR3-Klaenge. Der Importeur (TR3Setz) legt sie IMMER ab 445
+// ab: die urspruenglichen TR3-Nummern sind in TR5 teils belegt (89 in jedem
+// Level), die Plaetze 445-449 dagegen ueberall frei. Dieselbe Art fester
+// Absprache wie SFX_SMASH_ROCK bei der Hydra.
+//----------------------------------------------------------------------------
+#define SFX_TREX_ATTACK   445
+#define SFX_TREX_ROAR     446
+#define SFX_TREX_FOOTSTEP 447
+#define SFX_TREX_SNIFF    448
+#define SFX_TREX_DEATH    449
 
 //----------------------------------------------------------------------------
 // T-Rex aus Tomb Raider 3, portiert aus der tomb3-Dekompilation
@@ -189,10 +202,18 @@ void DinoControl(short item_number)
             rex->maximum_turn = 364;
 
             // Der Biss. In TR3 folgt hier CreatureKill mit einer eigenen
-            // Lara-Animation; die gibt es in TR5 nicht (siehe Kopf), also
-            // toetet der Treffer schlicht.
+            // Lara-Animation - dem Zuschnappen, mit dem er sie in einem Zug
+            // frisst. TR5 hat diese Animation nicht, und CreatureKill ist
+            // dort zwar deklariert, wird aber von KEINEM Gegner aufgerufen
+            // (nachgemessen) - eine tote Huelle wie der SAS-Slot. Ohne die
+            // Animation faellt die Engine auf schlichtes Umfallen zurueck.
+            //
+            // Der KLANG haengt in TR3 an eben dieser Animation und bliebe
+            // damit stumm. Er wird deshalb hier direkt ausgeloest: das
+            // Zuschnappen hoert man, auch wenn die Sonderanimation fehlt.
             if (item->touch_bits & 0x3000)
             {
+                SoundEffect(SFX_TREX_ATTACK, &item->pos, 0);
                 CreatureEffect(item, &trex_hit, DoBloodSplat);
                 lara_item->hit_points -= 10000;
                 lara_item->hit_status = 1;

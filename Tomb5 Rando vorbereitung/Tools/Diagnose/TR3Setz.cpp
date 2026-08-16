@@ -161,7 +161,11 @@ int main(int argc, char** argv)
         // 88 Fussstampfen, 89 Schnuppern, 255 Raptor-Todesschrei). Das
         // Bruellen soll rund 30 Prozent lauter sein - im Spiel gehoert,
         // Wunsch des Nutzers.
-        const std::vector<int> laut = { 100, 130, 100, 100, 100 };
+        // Alle im Spiel abgehoert und vom Nutzer eingestellt. ACHTUNG: der
+        // Grundwert ist 191 und das Feld ein Byte - alles ueber 133 Prozent
+        // landet an der Obergrenze 255. Bruellen und Sterben liegen dort,
+        // ihre Prozentwerte sind also der Wunsch, nicht das Ergebnis.
+        const std::vector<int> laut = { 100, 130, 150, 100, 140 };
 
         // 445..449: fuenf Plaetze am oberen Ende, in allen Leveln frei.
         if (!lvl.addSoundsFromTr3(ton, 445, zuordnung, err, &laut))

@@ -4,9 +4,16 @@
 // Aufruf: TR3Ton <level.TR2> <MAIN.SFX> <soundId> [weitere ids...]
 //         TR3Ton <level.TR2> <MAIN.SFX> -paket <ziel.bin> <id> [ids...]
 //
+// Eine ID darf als "88=250" geschrieben werden: der Klang ist im Ziel unter
+// 88 erreichbar (so rufen ihn die Anim-Kommandos), die Daten kommen aber von
+// Sound 250. Gebraucht fuer den T-Rex: seine Kommandos nennen 88
+// ("T-rex footstep"), der im Spiel gehoerte Laufklang ist aber 250
+// (zweivariantig, dumpf) - vom Nutzer am Original gegengehoert.
+//
 // Im Paketmodus wird ein Container fuer den Einsetzer geschrieben:
-//   "T35S", version, anzahl
-//   je Klang: origId, volume, chance, chars, wavLen, dann wavLen Bytes
+//   "T35S", version 2, anzahl
+//   je Klang: origId, volume, chance, chars, varianten,
+//             dann je Variante wavLen + wavLen Bytes
 // Die WAVs wandern byteweise unveraendert - sie sind reines PCM in genau
 // dem Format, das TR5 erwartet (mono, 22050 Hz, 16 Bit), und die Engine
 // hat dafuer seit der XAudio2-Portierung einen direkten Weg.
@@ -184,17 +191,25 @@ int main(int argc, char** argv)
     if (paket)
     {
         out.push_back('T'); out.push_back('3'); out.push_back('5'); out.push_back('S');
-        for (int i = 0; i < 4; ++i) out.push_back(i == 0 ? 1 : 0);   // Version 1
+        for (int i = 0; i < 4; ++i) out.push_back(i == 0 ? 2 : 0);   // Version 2
         for (int i = 0; i < 4; ++i) out.push_back(0);                // Platz fuer die Anzahl
     }
 
     std::printf("  ID   Details  Sample  Varianten  Wave  Offset      Laenge\n");
     for (int a = erstesId; a < argc; ++a)
     {
-        const int id = std::atoi(argv[a]);
-        if (id < 0 || id >= gutMap) { std::printf("  %3d  ausserhalb der SoundMap\n", id); continue; }
+        // "88=250": unter 88 erreichbar, Daten von 250 (siehe Kopf).
+        int id = std::atoi(argv[a]);
+        int quelle = id;
+        if (const char* gl = std::strchr(argv[a], '='))
+        {
+            quelle = std::atoi(gl + 1);
+            std::printf("  (Klang %d nimmt die Daten von %d)\n", id, quelle);
+        }
+        const int nachschlag = quelle;
+        if (nachschlag < 0 || nachschlag >= gutMap) { std::printf("  %3d  ausserhalb der SoundMap\n", id); continue; }
 
-        const int16_t det = static_cast<int16_t>(g16(r.b, soundMapAt + size_t(id) * 2));
+        const int16_t det = static_cast<int16_t>(g16(r.b, soundMapAt + size_t(nachschlag) * 2));
         if (det < 0 || det >= nDetails) { std::printf("  %3d  nicht belegt\n", id); continue; }
 
         const size_t d = detailsAt + size_t(det) * 8;
@@ -202,7 +217,8 @@ int main(int argc, char** argv)
         const uint16_t chars = g16(r.b, d + 6);
         const int varianten = (chars >> 2) & 0xF;
 
-        if (sample >= nIndices) { std::printf("  %3d  Sampleindex ausserhalb\n", id); continue; }
+        const int varZahl = varianten > 0 ? varianten : 1;
+        if (sample + varZahl > int(nIndices)) { std::printf("  %3d  Sampleindex ausserhalb\n", id); continue; }
 
         // SampleIndices fuehrt WAVE-NUMMERN, keine Byte-Offsets - an den
         // Vergleichszahlen des Werkzeugs TRsound nachgewiesen (Sound 84 ->
@@ -222,9 +238,21 @@ int main(int argc, char** argv)
         auto p16 = [&](uint16_t v) { out.push_back(uint8_t(v & 0xFF)); out.push_back(uint8_t(v >> 8)); };
         auto p32 = [&](uint32_t v) { for (int i = 0; i < 4; ++i) out.push_back(uint8_t((v >> (8*i)) & 0xFF)); };
         p16(uint16_t(id)); p16(volume); p16(chance); p16(chars);
-        p32(waveLen[nr]);
-        out.insert(out.end(), sfx.b.begin() + waveAt[nr],
-                              sfx.b.begin() + waveAt[nr] + waveLen[nr]);
+        p16(uint16_t(varZahl));
+
+        // Alle Varianten mitnehmen: sie liegen als AUFEINANDERFOLGENDE
+        // Samples hinter dem ersten (die Engine wuerfelt
+        // sample = number + Zufall(N)). Beim Laufklang des T-Rex sind es
+        // zwei - genau die Stelle, an der ein Einzelsample falsch klaenge.
+        for (int v = 0; v < varZahl; ++v)
+        {
+            const uint32_t vnr = g32(r.b, indicesAt + size_t(sample + v) * 4);
+            if (vnr >= waveAt.size()) { std::printf("  Variante %d liegt ausserhalb\n", v); return 1; }
+            p32(waveLen[vnr]);
+            out.insert(out.end(), sfx.b.begin() + waveAt[vnr],
+                                  sfx.b.begin() + waveAt[vnr] + waveLen[vnr]);
+            if (v) std::printf("        Variante %d: Wave %u, %u Byte\n", v + 1, vnr + 1, waveLen[vnr]);
+        }
         ++imPaket;
     }
 

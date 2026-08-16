@@ -62,3 +62,24 @@ Release Paket/
 # Dear ImGui als Fremdbibliothek im Original-Release-Stand. Wird nicht
 # geaendert, ihre Historie liegt bei ihrem eigenen Projekt.
 Tomb5 Rando vorbereitung/imgui-*/
+
+# --- Fremde Spieldaten: NIEMALS mitcommitten ---------------------------------
+#
+# Dieses Projekt steht unter GPLv3 und liefert keine Spieldaten mit. Wer die
+# Dinosaurier will, muss Tomb Raider 3 besitzen; der Randomizer holt sie zur
+# Laufzeit aus SEINER Installation (#92). Alles, was hier beim Entwickeln
+# herumliegt, gehoert jemand anderem und darf nicht ins Repository.
+#
+# Siehe auch den Ordner "Import-Export" neben dem Programm - er traegt aus
+# demselben Grund eine Datei "NICHT MITLIEFERN.txt".
+Spiel/
+Neue chechsums/
+Import Export/
+Outfit Test/
+*.TR2
+*.tr2
+*.trc
+*.SFX
+*.sfx
+*.bin
+Compy Sounds/

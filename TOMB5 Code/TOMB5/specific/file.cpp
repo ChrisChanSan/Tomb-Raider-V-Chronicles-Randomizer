@@ -1273,17 +1273,21 @@ bool LoadSamples()
 
 	// num_samples comes straight from the level file with no upstream
 	// validation, and DXCreateSampleADPCM() (specific\dxsound.cpp) writes
-	// DS_Buffers[num] for every one of them with no bounds check of its own
-	// - same bug class as SAVEGAME_INFO (see that fix's comments in
-	// game\savegame.cpp). Note the engine's own sample_lut is sized via
-	// MAX_SAMPLES=450 (global\types.h) - i.e. it already expects up to 450
-	// distinct samples, so DS_Buffers[256] is tighter than the rest of the
-	// engine's own sound system assumes.
-	if (num_samples > 256)
+	// DS_Buffers[num] for every one of them - same bug class as SAVEGAME_INFO
+	// (see that fix's comments in game\savegame.cpp).
+	//
+	// The ceiling used to be 256 while sample_lut right above is allocated
+	// with MAX_SAMPLES=450 - DS_Buffers[] was the tightest part of the
+	// engine's own sound system. It now matches (#94), because every foreign
+	// import brings its own sounds along and the TR3 enemies ate visibly into
+	// the budget. Both DXCreateSample* now range-check as well, so this stays
+	// a clean early exit rather than the only line of defence.
+	if (num_samples > MAX_SAMPLES)
 	{
 		FreeSampleDecompress();
 
-		Log("FATAL: level has %d sound samples, only 256 fit in DS_Buffers[]", num_samples);
+		Log("FATAL: level has %d sound samples, only %d fit in DS_Buffers[]",
+			num_samples, MAX_SAMPLES);
 
 		MessageBox(0,
 			"This level has more sound samples than the engine can handle.\r\n\r\n"

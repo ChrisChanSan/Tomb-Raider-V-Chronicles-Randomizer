@@ -56,8 +56,8 @@ int main(int argc, char** argv)
     }
 
     const std::vector<uint8_t>& b = lvl.debugBytes();
-    std::printf("%s: %d Moveables, Frame-Scheibe %d Woerter\n\n",
-                argv[1], objN, frN);
+    std::printf("%s: %d Moveables, Frame-Scheibe %d Woerter, %d Samples\n\n",
+                argv[1], objN, frN, lvl.soundSampleCount());
 
     std::vector<int> gesucht;
     for (int i = 2; i < argc; ++i) gesucht.push_back(std::atoi(argv[i]));

@@ -42,7 +42,16 @@ struct SFX_VOICE
 	long playing;
 };
 
-static SFX_BUFFER DS_Buffers[256];
+// Frueher fest 256. Die Soundmap des Levelformats fasst MAX_SAMPLES (450)
+// Eintraege, und sample_lut wird in LoadSamples() auch mit MAX_SAMPLES
+// angelegt - DS_Buffers war also enger als der Rest des eigenen Soundsystems.
+// Cores Level bleiben weit darunter, aber jeder Fremdimport bringt Klaenge
+// mit, und die TR3-Gegner haben den Vorrat spuerbar angeknabbert (#94).
+//
+// Kosten: reine Verwaltung, 450 * 12 Byte statt 256 * 12 - die Klangdaten
+// selbst haengen als malloc daran und wachsen nur mit dem, was ein Level
+// wirklich mitbringt.
+static SFX_BUFFER DS_Buffers[MAX_SAMPLES];
 static SFX_VOICE DS_Samples[32];
 
 #pragma warning(push)
@@ -242,6 +251,14 @@ bool DXCreateSampleADPCM(char* data, long comp_size, long uncomp_size, long num)
 	if (!g_XAudio2)
 		return 0;
 
+	// Siehe DXCreateSample: eigene Schranke, damit der Schreibzugriff unten
+	// nicht am Aufrufer haengt (#94).
+	if (num < 0 || num >= MAX_SAMPLES)
+	{
+		Log("DXCreateSampleADPCM: sample %d outside DS_Buffers[%d]", num, MAX_SAMPLES);
+		return 0;
+	}
+
 	format = (LPWAVEFORMATEX)(data + 20);
 
 	if (format->nSamplesPerSec != 22050)
@@ -392,7 +409,7 @@ void DXFreeSounds()
 {
 	S_SoundStopAllSamples();
 
-	for (int i = 0; i < 256; i++)
+	for (int i = 0; i < MAX_SAMPLES; i++)
 	{
 		if (DS_Buffers[i].pcm)
 		{
@@ -431,6 +448,15 @@ bool DXCreateSample(long num, LPWAVEFORMATEX format, LPVOID data, ulong bytes)
 
 	if (!g_XAudio2)
 		return 0;
+
+	// Eigene Schranke, statt sich auf den Aufrufer zu verlassen: LoadSamples()
+	// prueft die Gesamtzahl, aber diese Funktion schrieb bisher blind in
+	// DS_Buffers[num] (#94).
+	if (num < 0 || num >= MAX_SAMPLES)
+	{
+		Log("DXCreateSample: sample %d outside DS_Buffers[%d]", num, MAX_SAMPLES);
+		return 0;
+	}
 
 	if (DS_Buffers[num].pcm)
 	{

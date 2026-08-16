@@ -87,7 +87,9 @@ int main(int argc, char** argv)
 
     r.spring(768); r.spring(1024);
     const uint32_t nTex = r.u32();
-    r.spring(size_t(nTex) * 65536); r.spring(size_t(nTex) * 131072);
+    r.spring(size_t(nTex) * 65536);              // Textile8 (Palettenfassung)
+    const size_t tex16At = r.at;                 // Textile16: ARGB1555, 131072 je Kachel
+    r.spring(size_t(nTex) * 131072);
     r.u32();
 
     const size_t raumAt = r.at;
@@ -265,6 +267,46 @@ int main(int argc, char** argv)
         meshes.push_back(o);
     }
 
+    // --- Welche Objekttexturen braucht dieses Modell? -----------------------
+    //
+    // Die Faces tragen noch die TR3-Indizes; erst der Einsetzer biegt sie um.
+    // Fuer die Texturarbeit (#90) zaehlt, wie viele verschiedene Eintraege und
+    // vor allem wie viele verschiedene KACHELN dahinter stehen - jede Kachel
+    // wird im Ziel eine 256x256-Seite.
+    std::vector<int> texIdx;      // gebrauchte TR3-Objekttexturen, in Fundreihenfolge
+    std::vector<int> kacheln;     // die Kacheln dahinter, in Fundreihenfolge
+    for (const std::vector<uint8_t>& m : meshes)
+    {
+        size_t p = 10;
+        const int16_t vw = rs16(m, p); p += 2;
+        const int nv = vw & 0xFF;
+        if (nv == 0) p += (size_t((vw >> 8) & 0xFF) * 6 + 1) * 2;
+        else
+        {
+            p += size_t(nv) * 6;
+            const int16_t nn = rs16(m, p); p += 2;
+            p += size_t(nv) * (nn >= 0 ? 6 : 2);
+        }
+        auto merke = [&](int t) {
+            for (int x : texIdx) if (x == t) return;
+            texIdx.push_back(t);
+            if (t >= 0 && nObjTex && uint32_t(t) < nObjTex)
+            {
+                const int k = ru16(r.b, objTexAt + size_t(t) * 20 + 2) & 0x7FFF;
+                for (int x : kacheln) if (x == k) return;
+                kacheln.push_back(k);
+            }
+        };
+        const int16_t nq = rs16(m, p); p += 2;
+        for (int i = 0; i < nq; ++i, p += 12) merke(ru16(m, p + 8) & 0x7FFF);
+        const int16_t nt = rs16(m, p); p += 2;
+        for (int i = 0; i < nt; ++i, p += 10) merke(ru16(m, p + 6) & 0x7FFF);
+    }
+    std::printf("  Objekttexturen: %zu verschiedene auf %zu Kacheln (",
+                texIdx.size(), kacheln.size());
+    for (size_t i = 0; i < kacheln.size(); ++i) std::printf("%s%d", i ? ", " : "", kacheln[i]);
+    std::printf(")\n");
+
     // --- Frame-Scheibe abgrenzen -------------------------------------------
     //
     // Der Frame-Zeiger einer Animation ist ein Byte-Offset in den GLOBALEN
@@ -305,7 +347,7 @@ int main(int argc, char** argv)
     // --- Ausgabe ------------------------------------------------------------
     std::vector<uint8_t> out;
     out.push_back('T'); out.push_back('3'); out.push_back('5'); out.push_back('H');
-    put32(out, 1);
+    put32(out, 2);                 // Version 2: mit Texturteil am Ende
     put32(out, uint32_t(suche));
     put32(out, z->numMeshes);
     put32(out, animZahl);
@@ -348,70 +390,60 @@ int main(int argc, char** argv)
     }
     out.insert(out.end(), r.b.begin() + cmdAt, r.b.begin() + cmdAt + size_t(nCmd) * 2);
 
+    // --- Texturteil (Paketversion 2) --------------------------------------
+    //
+    // Angehaengt, damit alte Pakete weiter lesbar bleiben: wer nur bis zum
+    // Kommandoblock liest, bekommt genau das alte Format.
+    //
+    //   uint32 anzahlTexturen
+    //   je Textur: origIndex(2), drawtype(2), kachelImPaket(2),
+    //              dann 8 Byte u1,v1,u2,v2,u3,v3,u4,v4 als PIXEL
+    //   uint32 anzahlKacheln
+    //   je Kachel: 131072 Byte ARGB1555 (TR3s 16-Bit-Fassung)
+    //
+    // Die UVs bleiben hier PIXEL. Erst der Einsetzer schiebt sie um 8 Bit
+    // nach links - TR5 fuehrt sie als 8.8-Festkomma (file.cpp:1096).
+    {
+        put32(out, uint32_t(texIdx.size()));
+        int geschrieben = 0;
+        for (int t : texIdx)
+        {
+            if (t < 0 || uint32_t(t) >= nObjTex) { put16(out, uint16_t(t)); put16(out, 0); put16(out, 0);
+                                                   for (int k = 0; k < 8; ++k) out.push_back(0); continue; }
+            const size_t o = objTexAt + size_t(t) * 20;
+            const uint16_t attribut = ru16(r.b, o);
+            const int kachel = ru16(r.b, o + 2) & 0x7FFF;
+
+            int lokal = 0;
+            for (size_t i = 0; i < kacheln.size(); ++i) if (kacheln[i] == kachel) { lokal = int(i); break; }
+
+            put16(out, uint16_t(t));
+            put16(out, attribut);
+            put16(out, uint16_t(lokal));
+            for (int v = 0; v < 4; ++v)
+            {
+                out.push_back(r.b[o + 4 + v * 4 + 1]);   // Xpixel
+                out.push_back(r.b[o + 4 + v * 4 + 3]);   // Ypixel
+            }
+            ++geschrieben;
+        }
+
+        put32(out, uint32_t(kacheln.size()));
+        for (int k : kacheln)
+        {
+            if (k < 0 || uint32_t(k) >= nTex)
+            { std::printf("  Kachel %d liegt ausserhalb der Texturseiten\n", k); return 1; }
+            const size_t at = tex16At + size_t(k) * 131072;
+            out.insert(out.end(), r.b.begin() + at, r.b.begin() + at + 131072);
+        }
+        std::printf("  Texturteil: %d Eintraege, %zu Kacheln a 131072 Byte\n",
+                    geschrieben, kacheln.size());
+    }
+
     FILE* f = std::fopen(argv[3], "wb");
     if (!f) { std::printf("Ziel nicht schreibbar: %s\n", argv[3]); return 2; }
     std::fwrite(out.data(), 1, out.size(), f);
     std::fclose(f);
-
-    // --- Welche Objekttexturen braucht dieses Modell? -----------------------
-    //
-    // Die Faces tragen noch die TR3-Indizes; erst der Einsetzer biegt sie um.
-    // Fuer die Texturarbeit (#90) zaehlt, WIE VIELE verschiedene Eintraege und
-    // vor allem wie viele verschiedene KACHELN dahinter stehen - jede Kachel
-    // wird spaeter eine 256x256-Seite im Ziel.
-    {
-        std::vector<int> texIdx;
-        for (const std::vector<uint8_t>& m : meshes)
-        {
-            size_t p = 10;
-            const int16_t vw = rs16(m, p); p += 2;
-            const int nv = vw & 0xFF;
-            if (nv == 0) p += (size_t((vw >> 8) & 0xFF) * 6 + 1) * 2;
-            else
-            {
-                p += size_t(nv) * 6;
-                const int16_t nn = rs16(m, p); p += 2;
-                p += size_t(nv) * (nn >= 0 ? 6 : 2);
-            }
-            const int16_t nq = rs16(m, p); p += 2;
-            for (int i = 0; i < nq; ++i, p += 12)
-            {
-                const int t = ru16(m, p + 8) & 0x7FFF;
-                bool da = false; for (int x : texIdx) if (x == t) { da = true; break; }
-                if (!da) texIdx.push_back(t);
-            }
-            const int16_t nt = rs16(m, p); p += 2;
-            for (int i = 0; i < nt; ++i, p += 10)
-            {
-                const int t = ru16(m, p + 6) & 0x7FFF;
-                bool da = false; for (int x : texIdx) if (x == t) { da = true; break; }
-                if (!da) texIdx.push_back(t);
-            }
-        }
-
-        std::printf("  Objekttexturen: %zu verschiedene", texIdx.size());
-        if (nObjTex && objTexAt)
-        {
-            std::vector<int> kacheln;
-            int ausserhalb = 0;
-            for (int t : texIdx)
-            {
-                if (t < 0 || uint32_t(t) >= nObjTex) { ++ausserhalb; continue; }
-                const int k = ru16(r.b, objTexAt + size_t(t) * 20 + 2) & 0x7FFF;
-                bool da = false; for (int x : kacheln) if (x == k) { da = true; break; }
-                if (!da) kacheln.push_back(k);
-            }
-            std::printf(", auf %zu Texturkacheln", kacheln.size());
-            if (!kacheln.empty())
-            {
-                std::printf(" (");
-                for (size_t i = 0; i < kacheln.size(); ++i) std::printf("%s%d", i ? ", " : "", kacheln[i]);
-                std::printf(")");
-            }
-            if (ausserhalb) std::printf("  ACHTUNG: %d Indizes ausserhalb der Tabelle", ausserhalb);
-        }
-        std::printf("\n");
-    }
 
     // --- Gegenprobe: laeuft der TR5-Ableser sauber durch? -------------------
     //

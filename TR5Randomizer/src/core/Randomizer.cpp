@@ -1244,13 +1244,30 @@ bool Rando::run(const RandoInput& in,
     // nicht aus einem TR5-Level, sondern zur Laufzeit aus der Installation des
     // Nutzers. Alles Weitere steht in der Dino-Tabelle, damit es nur EINE
     // Wahrheit gibt.
+    // "quellSlot" (0 = wie typeId): der Slot, unter dem das Modell BEIM
+    // SPENDER liegt. Gebraucht fuer die neuen Engine-Slots jenseits 460
+    // (#105): der Joby-Wachmann liegt in jedem Spender unter 37, wohnt im
+    // Ziel aber unter 460 - nur so koennen beide Guard-Modelle nebeneinander
+    // existieren. Solche Level laufen NUR auf unserer Engine (die wird per
+    // #31 ohnehin mitgeliefert); trview kommt mit ihnen klar, am Quelltext
+    // geprueft 2026-08-17.
     struct CrossGegner { int typeId; const char* von; CrossSound sounds[2];
                          int begleiter[2]; const char* swapVon; int swapDst;
-                         int animZahl; int basisSlot; const char* tr3; };
+                         int animZahl; int basisSlot; const char* tr3;
+                         int quellSlot; };
     static const CrossGegner kCross[] = {
         { 33, "rich3",   {},                                    {-1,-1},  "rich3",   399, 0, 0 },  // SWAT
         { 35, "rich3",   {},                                    {-1,-1},  "rich3",   399, 0, 33 }, // Advanced SWAT (Anims von SWAT)
         { 37, "rich1",   {},                                    {-1,-1},  "joby3",   400, 0, 0 },  // Guard (Blue Guard)
+        // Der zweite Wachmann (#83/#105, Engine-Slot 460 = BLUE_GUARD2):
+        // das Joby-Modell aus joby3 - dort ist der Guard der Anim-Anker der
+        // Familie und traegt den vollen eigenen Satz (Mafia holt sich seine
+        // Anims von ihm). joby2s Guard laesst sich NICHT kopieren
+        // (Frame-Zeiger, siehe Crane Guy). Kein Basistyp: er bringt alles
+        // mit; steht zusaetzlich SWAT/Guard im Ziel, biegt setup.cpp ihn
+        // zur Laufzeit auf deren Satz um wie jedes Familienmitglied.
+        // Tauschhaelften (Feuerhaende 10/13) wie der Guard aus joby3.
+        { 460, "joby3",  {},                                    {-1,-1},  "joby3",   400, 0, 0, nullptr, 37 }, // Wachmann (Joby)
         { 39, "rich1",   {},                                    {-1,-1},  "rich3",   399, 0, 0 },  // Two Gun
         { 41, "Andrea1", {},                                    {-1,-1},  nullptr,   -1 },  // Dog
         { 45, "Andrea1", { {96,"rich1",85}, {98,"rich1",143} }, {-1,-1},  nullptr,   -1 },  // Larson
@@ -2055,7 +2072,11 @@ bool Rando::run(const RandoInput& in,
         }
 
         JsonValue e = JsonValue::makeObject();
-        e.set("slot", JsonValue::makeInt(t));
+        // Engine-Slots jenseits 460 (#105): das Modell liegt beim Spender
+        // unter quellSlot und wandert per toSlot in den neuen Slot.
+        e.set("slot", JsonValue::makeInt(c->quellSlot > 0 ? c->quellSlot : t));
+        if (c->quellSlot > 0)
+            e.set("toSlot", JsonValue::makeInt(t));
         e.set("fromLevel", JsonValue::makeString(c->von));
         e.set("replace", JsonValue::makeBool(true));
         if (c->animZahl > 0) e.set("animZahl", JsonValue::makeInt(c->animZahl));
@@ -2323,6 +2344,11 @@ std::vector<Gegnerart> Rando::gegnerarten()
         { 33, "SWAT",              nullptr },
         { 35, "SWAT (schwer)",     nullptr },
         { 37, "Wachmann",          nullptr },
+        // Engine-Slot 460 (BLUE_GUARD2, #105): das Joby-Modell des Wachmanns.
+        // Vanilla teilen sich beide Modelle Slot 37 und schliessen sich aus -
+        // der neue Slot macht sie gleichzeitig moeglich. Nur auf unserer
+        // Engine lauffaehig (wird per #31 mitgeliefert).
+        { 460, "Wachmann (Joby)",  nullptr },
         { 39, "Two Gun",           nullptr },
         { 41, "Hund",              nullptr },
         { 45, "Larson",            nullptr },

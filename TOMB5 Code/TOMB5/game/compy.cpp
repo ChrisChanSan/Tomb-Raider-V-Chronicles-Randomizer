@@ -132,7 +132,26 @@ void CompyControl(short item_number)
 		switch (compy->mood)
 		{
 		case BORED_MOOD:
-			// Ohne Kadaver kein Sammelpunkt - siehe Abweichung 1.
+			// Ersatz fuer den Kadaver-Sammelpunkt (siehe Abweichung 1).
+			//
+			// Ohne Kadaver setzte dieser Zweig GAR KEIN Ziel, und compy->target
+			// behielt den Wert, mit dem er ins Leben kam - die Compys liefen
+			// auf eine Stelle zu, die niemand gesetzt hatte. Im Spiel gesehen:
+			// nach dem Wecken erst einmal gegen die naechste Wand. In TR3
+			// faellt das nie auf, weil ueberall dort ein Kadaver liegt, wo
+			// Compys vorkommen.
+			//
+			// Lara ist der naheliegende Ersatz: sie streifen in ihrer Naehe
+			// umher, ohne sie anzugreifen. Die Feigheit haengt an
+			// compys_attack_lara und bleibt davon unberuehrt - die rund sechs
+			// Sekunden, bis das Rudel sich traut, sind Original (item->timer
+			// > 180) und sollen bleiben.
+			if (compy->enemy)
+			{
+				compy->target.x = compy->enemy->pos.x_pos;
+				compy->target.z = compy->enemy->pos.z_pos;
+			}
+
 			break;
 
 		case ATTACK_MOOD:

@@ -338,6 +338,22 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 		break;
 	}
 
+	// Klangprotokoll: was wird WIRKLICH abgespielt?
+	//
+	// Gebaut, weil beim Compsognathus-Import ein fremder, basslastiger Klang
+	// dazwischenfuhr, den keine Messung an den Dateien fand: Modell, Zuordnung,
+	// Soundmap, SAMPLE_INFO-Kette und Wave-Daten waren alle nachweislich
+	// richtig. Wer den Verursacher nicht in den Daten findet, muss ihn zur
+	// Laufzeit sehen.
+	//
+	// Eine Zeile je Abspielvorgang mit allem, was zur Zuordnung noetig ist:
+	// die gerufene SFX-Nummer, der Eintrag der Soundmap, die tatsaechliche
+	// Sample-Nummer samt Variantenzahl und die fertige Lautstaerke. Die Zeile
+	// ist bewusst durchsuchbar aufgebaut ("SFXLOG"), damit sie sich aus dem
+	// uebrigen Protokoll herausfiltern laesst.
+	Log("SFXLOG sfx=%d map=%d sample=%d von %d Varianten vol=%d pitch=%d %s",
+		sfx, lut, sample, rnd, volume, pitch, flag == 3 ? "Schleife" : "einmal");
+
 	if (flag == 3)
 		dx = S_SoundPlaySampleLooped(sample, (ushort)volume, pitch, (short)pan);
 	else

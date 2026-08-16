@@ -410,6 +410,11 @@ public:
     // Anim- und Kommandoblock fuer Diagnosewerkzeuge (AnimDump): Lage und
     // Anzahl, Datensatzformat siehe SZ_ANIM in Tr5Transfer.cpp (40 Byte).
     bool debugAnimBlock(size_t& dataAt, int32_t& n) const { dataAt = m_anims.dataAt; n = m_anims.count; return m_anims.count > 0; }
+    // Klangkette fuer Messwerkzeuge: Soundmap, SAMPLE_INFO-Feld, Samplezahl.
+    bool debugKlangBloecke(size_t& lutAt, size_t& infosAt, int32_t& nInfos, int32_t& nSamples) const
+    { if (!m_soundOk) return false;
+      lutAt = m_lutAt; infosAt = m_infosAt; nInfos = m_nInfos; nSamples = m_nSamples; return true; }
+
     // Modellbloecke fuer Messwerkzeuge (Objekttabelle und Frame-Scheibe).
     bool debugModellBloecke(size_t& objAt, int32_t& objN, size_t& frAt, int32_t& frN) const
     { objAt = m_objects.dataAt; objN = m_objects.count;

@@ -59,6 +59,41 @@ int main(int argc, char** argv)
     std::printf("%s: %d Moveables, Frame-Scheibe %d Woerter, %d Samples\n\n",
                 argv[1], objN, frN, lvl.soundSampleCount());
 
+    // --- Klangkette pruefen: MissMod <level.trc> -ton <mapId ...> ----------
+    //
+    // Geht den Weg, den auch die Engine geht: SoundMap[id] -> SAMPLE_INFO ->
+    // dessen Nummer und Variantenzahl. Gebraucht, weil beim Compy ein fremder
+    // Klang dazwischenfuhr und aus der Zuordnungstabelle des Einsetzers allein
+    // nicht zu sehen war, worauf ein Platz am Ende WIRKLICH zeigt.
+    if (argc >= 3 && std::strcmp(argv[2], "-ton") == 0)
+    {
+        size_t lutAt = 0, infosAt = 0;
+        int32_t nInfos = 0, nSamples = 0;
+        if (!lvl.debugKlangBloecke(lutAt, infosAt, nInfos, nSamples))
+        {
+            std::printf("Kein lesbarer Klangblock.\n");
+            return 4;
+        }
+        std::printf("SAMPLE_INFOs %d, Samples %d\n\n", nInfos, nSamples);
+        std::printf("Map   Info   Nummer  Vol  Rad  Varianten\n");
+        for (int i = 3; i < argc; ++i)
+        {
+            const int map = std::atoi(argv[i]);
+            if (map < 0 || map >= 450) { std::printf("%3d   ausserhalb 0..449\n", map); continue; }
+            const int16_t idx = w16(b, lutAt + (size_t)map * 2);
+            if (idx < 0 || idx >= nInfos) { std::printf("%3d   %5d   <- leer oder ausserhalb\n", map, idx); continue; }
+
+            const size_t at = infosAt + (size_t)idx * 8;
+            const int16_t nummer = w16(b, at);
+            const uint8_t vol = b[at + 2];
+            const int8_t  rad = (int8_t)b[at + 3];
+            const uint16_t fl = u16(b, at + 6);
+            std::printf("%3d   %5d   %6d  %3u  %3d  %d%s\n", map, idx, nummer, vol, rad,
+                        (fl >> 2) & 0xF, (nummer + ((fl >> 2) & 0xF) > nSamples) ? "   LAEUFT UEBER DAS ENDE" : "");
+        }
+        return 0;
+    }
+
     std::vector<int> gesucht;
     for (int i = 2; i < argc; ++i) gesucht.push_back(std::atoi(argv[i]));
 

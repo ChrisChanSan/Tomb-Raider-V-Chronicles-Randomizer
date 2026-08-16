@@ -1033,10 +1033,10 @@ void BaddyObjects()
 		obj->initialise = InitialiseCreature;
 		obj->control = DinoControl;
 		obj->collision = CreatureCollision;
-		obj->shadow_size = 64;
-		obj->hit_points = 100;
-		obj->pivot_length = 2000;
-		obj->radius = 341;
+		obj->shadow_size = 128;
+		obj->hit_points = 800;
+		obj->pivot_length = 1800;
+		obj->radius = 512;
 		obj->intelligent = 1;
 		obj->HitEffect = 1;
 		obj->save_position = 1;
@@ -1044,10 +1044,15 @@ void BaddyObjects()
 		obj->save_flags = 1;
 		obj->save_anim = 1;
 
-		// Kopf und Nacken frei drehen lassen, damit er Lara anschaut.
-		// TR3 setzt dieselben zwei Knochen (10 und 11 der 24).
-		bones[obj->bone_index + 40] |= 8;
+		// Knochen mit freier Drehung - ABGELESEN aus TR3s eigenem Setup
+		// (tomb3 setup.cpp:569-572), nicht geschaetzt. Ein erster Versuch mit
+		// geratenen Nummern (40/44) traf ein Beingelenk: der T-Rex verdrehte
+		// sich beim Laufen die Beine. Merksatz fuers naechste Mal - Knochen
+		// nie raten, sie sind je Modell voellig verschieden.
+		bones[obj->bone_index + 36] |= 8;
 		bones[obj->bone_index + 44] |= 8;
+		bones[obj->bone_index + 80] |= 8;
+		bones[obj->bone_index + 88] |= 8;
 	}
 
 	if (objects[BLUE_GUARD].loaded)

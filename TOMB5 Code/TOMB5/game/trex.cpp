@@ -87,10 +87,18 @@ void DinoControl(short item_number)
         if (!rex->flags && info.distance > 0x225510 && info.distance < 0x1000000 && info.bite)
             rex->flags = 1;
 
-        // TR3 verlangt hier zusaetzlich, dass Lara still steht oder duckt.
-        // Die Zustandsnummern passen nicht zwischen den Spielen; uebrig
-        // bleibt das Wesentliche: keine Fackel in der Hand und kein Treffer.
-        if (lara.gun_type != LG_FLARE && !item->hit_status)
+        // Diese Klammer entscheidet, ob der T-Rex Ruhe gibt. TR3 verlangt:
+        // keine Fackel, Lara steht oder duckt UND haelt den Zustand, kein
+        // Treffer. Nur dann laeuft der Zaehler herunter; sobald Lara sich
+        // bewegt, springt er auf 120 zurueck und der Dino bleibt wach.
+        //
+        // Beim ersten Versuch hatte ich den Stillstand weggelassen, weil TR5
+        // andere Zustandsnummern hat - dadurch lief der Zaehler IMMER leer,
+        // der Dino war dauerhaft BORED_MOOD und trottete nur herum, statt
+        // Lara zu jagen (im Spiel gesehen). Statt der Zustandsnummern wird
+        // jetzt Laras Geschwindigkeit geprueft: das ist dieselbe Aussage
+        // ("sie bewegt sich nicht") und ueber Spielgrenzen hinweg stabil.
+        if (lara.gun_type != LG_FLARE && !lara_item->speed && !item->hit_status)
         {
             if (item->item_flags[0] > 0)
                 item->item_flags[0]--;

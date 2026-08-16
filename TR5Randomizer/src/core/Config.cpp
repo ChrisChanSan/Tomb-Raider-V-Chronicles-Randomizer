@@ -62,6 +62,26 @@ void Config::load()
         else if (key == "gegnerAnzahl")    enemyCount = std::atoi(val.c_str());
         else if (key == "gegnerMix")       optEnemySwap = (val == "1");
         else if (key == "gegnerPool")      enemyPool = std::atoi(val.c_str());
+        else if (key == "gegnerAus")
+        {
+            // Kommaliste abgewaehlter typeIds. Leere Felder werden
+            // uebersprungen, damit ein Endkomma nicht als Typ 0 (Lara!)
+            // ankommt.
+            gegnerAus.clear();
+            size_t a = 0;
+            while (a <= val.size())
+            {
+                size_t e = val.find(',', a);
+                if (e == std::string::npos) e = val.size();
+                std::string stueck = val.substr(a, e - a);
+                if (!stueck.empty())
+                {
+                    int t = std::atoi(stueck.c_str());
+                    if (t > 0) gegnerAus.insert(t);
+                }
+                a = e + 1;
+            }
+        }
         else if (key == "outfits")         optOutfits = (val == "1");
         else if (key == "itemMenge")       itemMenge = std::atoi(val.c_str());
         else if (key == "secrets")         secrets = std::atoi(val.c_str());
@@ -91,6 +111,12 @@ bool Config::save() const
     std::fprintf(f, "gegnerAnzahl=%d\n", enemyCount);
     std::fprintf(f, "gegnerMix=%d\n", optEnemySwap ? 1 : 0);
     std::fprintf(f, "gegnerPool=%d\n", enemyPool);
+    std::fprintf(f, "gegnerAus=");
+    {
+        bool erstes = true;
+        for (int t : gegnerAus) { std::fprintf(f, "%s%d", erstes ? "" : ",", t); erstes = false; }
+    }
+    std::fprintf(f, "\n");
     std::fprintf(f, "outfits=%d\n", optOutfits ? 1 : 0);
     std::fprintf(f, "itemMenge=%d\n", itemMenge);
     std::fprintf(f, "secrets=%d\n", secrets);

@@ -16,6 +16,7 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 #pragma once
+#include <set>
 #include <string>
 
 //----------------------------------------------------------------------------
@@ -44,6 +45,9 @@ struct Config
     int  enemyCount      = 6;
     bool optEnemySwap    = false;
     int  enemyPool       = 0;     // 0 Levelpool, 1 Cross-Mix, 2 Allsanity
+    // Abgewaehlte Gegnerarten (#95). Gespeichert wird die ABWAHL, damit eine
+    // spaeter hinzukommende Art nicht durch alte Dateien stumm ausfaellt.
+    std::set<int> gegnerAus;
     bool optOutfits      = false;
     int  itemMenge       = 0;     // 0 Vanilla, 1 mehr, 2 viel mehr (#36)
     int  secrets         = 0;     // Platzhalter (#53): 0 Aus .. 3 Custom

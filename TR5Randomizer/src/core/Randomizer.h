@@ -443,6 +443,18 @@ struct RandoOptions
     // bleibt zusammen mit Waffen und Outfit deutlich unter der Grenze).
     bool allsanity = false;
 
+    // Vom Nutzer abgewaehlte Gegnerarten (Fenster "Gegnerarten", #95).
+    // Gespeichert wird die ABWAHL, nicht die Auswahl: so ist jede spaeter
+    // hinzukommende Art automatisch an, ohne dass alte Einstellungsdateien
+    // sie stumm ausschliessen.
+    //
+    // Der Filter beschneidet AUSSCHLIESSLICH die Wahl aus dem Pool. Was eine
+    // gewaehlte Zeile technisch nachzieht, sieht ihn nie: der Anim-Basistyp
+    // der Soldatenfamilie (basisSlot), Pflichtbegleiter wie der Geschosskern
+    // der Hydra (begleiter) und die MESHSWAP-Haelften (swapVon/swapDst).
+    // Sonst stuende ein Gegner ohne seinen Animationssatz im Level.
+    std::set<int> gesperrteGegner;
+
     // Jedes Level bekommt zufaellig eines der drei Outfits: Lara_Andrea
     // (Spender Andrea1), Lara_Joby (joby2) oder Lara_Rich (rich2, Catsuit).
     // Uebertragen werden die Slots 8/9/10 (LARA_SKIN, LARA_SKIN_JOINTS,
@@ -489,8 +501,19 @@ struct RandoReport
     std::string error;
 };
 
+// Eine im Pool waehlbare Gegnerart, fuer das Fenster "Gegnerarten" (#95).
+struct Gegnerart { int typeId; const char* name; };
+
 namespace Rando
 {
+    // Die waehlbaren Gegnerarten mit Anzeigenamen, in Tabellenreihenfolge.
+    //
+    // Die Liste steht neben der Pool-Tabelle kCross in Randomizer.cpp und
+    // muss mit ihr mitwachsen - wer dort eine Zeile ergaenzt, ergaenzt sie
+    // hier. Eine Art, die hier fehlt, laesst sich nicht abwaehlen; eine, die
+    // nur hier steht, hat einen wirkungslosen Haken.
+    std::vector<Gegnerart> gegnerarten();
+
     // Liest Zonen-Export und Level-Info zu einem Eingabesatz zusammen und
     // leitet dabei die triggergebundenen Items ab.
     bool buildInput(const JsonValue& zoneExport,

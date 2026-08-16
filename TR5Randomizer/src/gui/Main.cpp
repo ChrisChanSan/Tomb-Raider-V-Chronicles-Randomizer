@@ -336,6 +336,10 @@ namespace
         // Statistik nicht zeigt - so wurde in rich2 das Leck vom Erdgeschoss in
         // den Aufzugsschacht gefunden.
         bool dbgOpen = false;
+        // Fenster "Gegnerarten" (#95): welche Arten darf der Pool ziehen?
+        // Gehalten wird die ABWAHL - siehe Config::gegnerAus.
+        bool artenOpen = false;
+        std::set<int> optGegnerAus;
         bool dbgUseFill = true;
         int  dbgFillType = 223;          // Pickup Item4 - im Spiel selten, faellt auf
         std::vector<std::string> dbgLog;
@@ -483,6 +487,7 @@ namespace
         opt.swapEnemies = a.optEnemySwap;
         opt.crossEnemies = (a.optEnemyPool == 1);
         opt.allsanity    = (a.optEnemyPool == 2);
+        opt.gesperrteGegner = a.optGegnerAus;
         opt.randomOutfits = a.optOutfits;
         opt.allWeapons = true;              // Standard, siehe App-Kommentar
         // Item-Abundance: die drei Stufen der Oberflaeche als Stueckzahl.
@@ -789,6 +794,82 @@ namespace
 // (Rando::sectorAllowedFor). Genau darum geht es: was hier zu sehen ist, ist
 // das, was der Randomizer wirklich tut - nicht eine zweite Beschreibung davon.
 //----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+// Fenster "Gegnerarten" (#95): welche Arten darf der Pool ueberhaupt ziehen?
+//
+// Gut fuer den Spieler, der seine Lieblingsgegner haeufiger sehen will, und
+// gut zum Pruefen einer einzelnen Art - alles abwaehlen bis auf eine, und der
+// Lauf setzt nur noch die.
+//
+// Gehalten und gespeichert wird die ABWAHL, nicht die Auswahl. Eine Art, die
+// spaeter dazukommt, ist dadurch automatisch an und faellt nicht stumm durch
+// eine alte Einstellungsdatei.
+//
+// Der Haken beschneidet AUSSCHLIESSLICH die Wahl aus dem Pool. Was eine
+// gewaehlte Art technisch nachzieht - ihren Anim-Basistyp, Pflichtbegleiter
+// wie den Geschosskern der Hydra, die MESHSWAP-Haelften - sieht ihn nie.
+// Sonst stuende ein Gegner ohne seinen Animationssatz im Level.
+//----------------------------------------------------------------------------
+static void drawGegnerartenWindow(App& a)
+{
+    if (!a.artenOpen) return;
+
+    ImGui::SetNextWindowSize(ImVec2(420, 520), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Gegnerarten", &a.artenOpen))
+    {
+        ImGui::End();
+        return;
+    }
+
+    const std::vector<Gegnerart> arten = Rando::gegnerarten();
+
+    ImGui::TextWrapped(
+        "Welche Arten darf der Zufall ziehen? Der Haken wirkt auf den Tausch "
+        "und auf zusaetzliche Gegner - Gegner, die im Level ohnehin stehen und "
+        "nicht getauscht werden, bleiben davon unberuehrt.");
+    ImGui::Spacing();
+
+    if (ImGui::Button("Alle an"))  a.optGegnerAus.clear();
+    ImGui::SameLine();
+    if (ImGui::Button("Alle aus"))
+        for (const Gegnerart& g : arten) a.optGegnerAus.insert(g.typeId);
+    ImGui::SameLine();
+    ImGui::TextDisabled("%d von %d an",
+                        static_cast<int>(arten.size() - a.optGegnerAus.size()),
+                        static_cast<int>(arten.size()));
+
+    ImGui::Separator();
+    ImGui::BeginChild("##artenliste", ImVec2(0, -78), true);
+    for (const Gegnerart& g : arten)
+    {
+        bool an = !a.optGegnerAus.count(g.typeId);
+        char label[96];
+        std::snprintf(label, sizeof(label), "%s##art%d", g.name, g.typeId);
+        if (ImGui::Checkbox(label, &an))
+        {
+            if (an) a.optGegnerAus.erase(g.typeId);
+            else    a.optGegnerAus.insert(g.typeId);
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%d)", g.typeId);
+    }
+    ImGui::EndChild();
+
+    // Alles abgewaehlt heisst nicht "keine Gegner": der Cross-Pool faellt dann
+    // leer aus, und jedes Level wuerfelt nur noch aus seinen einheimischen
+    // Arten. Das ist ein gueltiger Zustand, aber keiner, den man versehentlich
+    // haben will - deshalb steht es hier und wird nicht stillschweigend getan.
+    if (a.optGegnerAus.size() >= arten.size())
+        ImGui::TextWrapped("Alle Arten abgewaehlt: jedes Level bleibt bei seinen "
+                           "eigenen Gegnern, fremde kommen keine dazu.");
+    else if (!a.optGegnerAus.empty())
+        ImGui::TextWrapped("Waehlst du sehr viele ab, stehen manchen Leveln kaum "
+                           "noch fremde Arten zur Verfuegung - sie bleiben dann "
+                           "naeher am Original.");
+
+    ImGui::End();
+}
+
 static void drawDebugWindow(App& a)
 {
     if (!a.dbgOpen) return;
@@ -1062,7 +1143,19 @@ static void drawUi(App& a, HWND hwnd)
                "Auswahl. Uebernommen werden trotzdem nur die Typen, die der "
                "Seed wirklich einsetzt; der Texturseiten-Haushalt bleibt "
                "gemessen deutlich unter der 256er-Grenze. Gescriptete Gegner "
-               "bleiben in jedem Modus unberuehrt; Hydra ist noch nicht im Pool.");
+               "bleiben in jedem Modus unberuehrt.");
+
+    // Feinauswahl in einem eigenen Fenster: die Liste ist zu lang fuer die
+    // Hauptseite und der Nutzer fasst sie selten an.
+    if (ImGui::Button("Gegnerarten...")) a.artenOpen = true;
+    hoverHilfe("Welche Gegnerarten der Zufall ueberhaupt ziehen darf. Gut, um "
+               "Lieblingsgegner haeufiger zu sehen - oder um eine einzelne Art "
+               "zu pruefen: alles abwaehlen bis auf eine.");
+    if (!a.optGegnerAus.empty())
+    {
+        ImGui::SameLine();
+        ImGui::TextDisabled("%d abgewaehlt", static_cast<int>(a.optGegnerAus.size()));
+    }
     ImGui::EndDisabled();
 
     // --- Platzhalter-Bereiche (Nutzerwunsch, alle noch ohne Wirkung) -----
@@ -1258,6 +1351,7 @@ static void drawUi(App& a, HWND hwnd)
     // Nach dem Hauptfenster, damit es darueber liegt - das Hauptfenster fuellt
     // den ganzen Bildschirm und traegt NoBringToFrontOnFocus.
     drawDebugWindow(a);
+    drawGegnerartenWindow(a);
 }
 
 //----------------------------------------------------------------------------
@@ -1326,6 +1420,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.optEnemyCount   = app.cfg.enemyCount;
     app.optEnemySwap    = app.cfg.optEnemySwap;
     app.optEnemyPool    = app.cfg.enemyPool;
+    app.optGegnerAus    = app.cfg.gegnerAus;
     app.optOutfits      = app.cfg.optOutfits;
     app.optItemMenge    = app.cfg.itemMenge;
     app.optSecrets      = app.cfg.secrets;
@@ -1347,6 +1442,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.enemyCount      = app.optEnemyCount;
         app.cfg.optEnemySwap    = app.optEnemySwap;
         app.cfg.enemyPool       = app.optEnemyPool;
+        app.cfg.gegnerAus       = app.optGegnerAus;
         app.cfg.optOutfits      = app.optOutfits;
         app.cfg.itemMenge       = app.optItemMenge;
         app.cfg.secrets         = app.optSecrets;
@@ -1403,6 +1499,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.enemyCount      != app.optEnemyCount ||
                  app.cfg.optEnemySwap    != app.optEnemySwap ||
                  app.cfg.enemyPool       != app.optEnemyPool ||
+                 app.cfg.gegnerAus       != app.optGegnerAus ||
                  app.cfg.optOutfits      != app.optOutfits ||
                  app.cfg.itemMenge       != app.optItemMenge ||
                  app.cfg.secrets         != app.optSecrets)

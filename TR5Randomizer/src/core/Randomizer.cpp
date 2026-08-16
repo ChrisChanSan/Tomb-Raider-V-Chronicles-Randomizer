@@ -1181,6 +1181,9 @@ bool Rando::run(const RandoInput& in,
         }
     }
 
+    // Anzeigenamen siehe Rando::gegnerarten() am Dateiende - die Liste dort
+    // muss mit dieser Tabelle mitwachsen.
+    //
     // --- Cross-Gegnermix: den Pool um fremde Typen erweitern ---
     //
     // Die globale Pool-Tabelle ist die Nutzerliste "Gegner Pool.txt", je Typ
@@ -1328,7 +1331,22 @@ bool Rando::run(const RandoInput& in,
     // Cross duerfen sie anfassen.
     std::vector<int> gegnerPool;
     for (int t : in.enemyTypes)
-        if (!in.verboteneTypen.count(t)) gegnerPool.push_back(t);
+        if (!in.verboteneTypen.count(t) && !opt.gesperrteGegner.count(t))
+            gegnerPool.push_back(t);
+
+    // Sicherung: waehlt jemand alle einheimischen Arten eines Levels ab,
+    // bliebe hier nichts uebrig und Tausch wie Zusatzgegner liefen ins
+    // Leere. Dann gilt die Abwahl fuer dieses Level nicht - lieber die
+    // Vanilla-Auswahl als ein Level ohne Gegner. Der Cross-Pool unten kann
+    // trotzdem greifen und tut es meistens auch.
+    if (gegnerPool.empty())
+    {
+        for (int t : in.enemyTypes)
+            if (!in.verboteneTypen.count(t)) gegnerPool.push_back(t);
+        if (!gegnerPool.empty())
+            report.notes.push_back("Gegnerarten: alle einheimischen Arten dieses Levels "
+                                   "waren abgewaehlt - fuer dieses Level ignoriert.");
+    }
     std::map<int, const CrossGegner*> crossGewaehlt;
     std::set<int> crossBenutzt;
     if ((opt.crossEnemies || opt.allsanity) && (opt.swapEnemies || opt.addEnemies) && klein != "joby4")
@@ -1339,6 +1357,7 @@ bool Rando::run(const RandoInput& in,
         {
             if (eigene.count(c.typeId)) continue;         // steht schon im Levelpool
             if (in.verboteneTypen.count(c.typeId)) continue;   // Level vertraegt ihn nicht
+            if (opt.gesperrteGegner.count(c.typeId)) continue; // vom Nutzer abgewaehlt
             std::string vonKlein;
             for (const char* p = c.von; *p; ++p)
                 vonKlein.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p);
@@ -2221,4 +2240,30 @@ bool Rando::run(const RandoInput& in,
     if (trigAdds.size() > 0) patchOut.set("triggerAdds", trigAdds);
     // Bewusst KEIN itemRemoves - siehe Regel 1 im Header.
     return true;
+}
+
+// Die waehlbaren Gegnerarten mit Anzeigenamen (#95). Reihenfolge und Inhalt
+// folgen der Pool-Tabelle kCross weiter oben - wer dort eine Zeile ergaenzt,
+// ergaenzt sie hier. Die Namen sind die aus der Nutzerliste "Gegner Pool.txt",
+// nicht die Enum-Bezeichner der Engine.
+std::vector<Gegnerart> Rando::gegnerarten()
+{
+    return {
+        { 33, "SWAT" },
+        { 35, "SWAT (schwer)" },
+        { 37, "Wachmann" },
+        { 39, "Two Gun" },
+        { 41, "Hund" },
+        { 45, "Larson" },
+        { 47, "Pierre" },
+        { 49, "Mafia (MP)" },
+        { 51, "Mafia (Pistolen)" },
+        { 55, "Crane Guy" },
+        { 57, "Loewe" },
+        { 59, "Gladiator" },
+        { 61, "Soldatenstatue" },
+        { 63, "Hydra" },
+        { 77, "Labyrinth-Monster" },
+        { 89, "Imp" },
+    };
 }

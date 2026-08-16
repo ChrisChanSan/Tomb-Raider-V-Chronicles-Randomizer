@@ -32,6 +32,7 @@
 #include "core/Tr5Level.h"
 
 #include <cstdio>
+#include <set>
 #include <string>
 
 static std::wstring toW(const char* s)
@@ -61,6 +62,7 @@ int main(int argc, char** argv)
     int gegner = 0, extraItems = 0;
     bool nurGegner = false, outfits = false, waffen = false, mix = false, cross = false, allsanity = false;
     bool notizen = false;
+    std::set<int> gegnerAus;         // Abwahl, siehe Argument gegneraus=
     for (int i = 6; i < argc; ++i)
     {
         const std::string s = argv[i];
@@ -71,6 +73,25 @@ int main(int argc, char** argv)
         else if (s == "mix")    mix = true;
         else if (s == "cross")  cross = true;
         else if (s == "allsanity") allsanity = true;
+        // "gegneraus=47,49" - dieselbe Abwahl wie das Fenster "Gegnerarten"
+        // in der Oberflaeche (#95), damit sich der Filter auch aus Skripten
+        // pruefen laesst.
+        else if (s.rfind("gegneraus=", 0) == 0)
+        {
+            size_t a2 = 10;
+            while (a2 <= s.size())
+            {
+                size_t e = s.find(',', a2);
+                if (e == std::string::npos) e = s.size();
+                std::string stueck = s.substr(a2, e - a2);
+                if (!stueck.empty())
+                {
+                    int t = std::atoi(stueck.c_str());
+                    if (t > 0) gegnerAus.insert(t);
+                }
+                a2 = e + 1;
+            }
+        }
         // "itemsN" bzw. "items=N" - muss VOR dem Zahl-Rueckfall stehen, sonst
         // schluckt atoi das Wort als 0 und ueberschreibt die Gegnerzahl.
         else if (s.rfind("items", 0) == 0)
@@ -109,6 +130,7 @@ int main(int argc, char** argv)
     opt.swapEnemies = mix;
     opt.crossEnemies = cross;
     opt.allsanity = allsanity;
+    opt.gesperrteGegner = gegnerAus;
     opt.extraPickups = extraItems;
     if (nurGegner) { opt.shuffleKeyItems = false; opt.shuffleOtherPickups = false; }
 

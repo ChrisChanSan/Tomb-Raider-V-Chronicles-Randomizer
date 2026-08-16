@@ -1,0 +1,5 @@
+Level Chunnel.tr2(Version_TR3) Type_ID(29) Level_ID(188,185,184,183,182)
+
+In TR5 soll er den Crow Slot füllen, mit blick auf die Flugsteuerung.
+
+Sound die ich finden konnte in TRview Sample 104/map182(Flügelschlag), Sample105/map183(Attack?), Sample106/map183(Attack?), Sample107/map184(Death), Sample108/map185(random sound when flying)

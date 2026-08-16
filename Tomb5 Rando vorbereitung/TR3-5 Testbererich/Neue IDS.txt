@@ -1,0 +1,6 @@
+TypeID		Alter Name			Neuer Name
+
+31			SAS					T-Rex (Fertig)
+43			Crow				Pterodactylus_Vulture (Fertig)
+53			Sailor				offen (Plan für Compsognathus)
+75			Reaper				Raptor (Fertig)

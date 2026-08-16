@@ -1,0 +1,56 @@
+{
+    "itemAdds":  [
+                     {
+                         "typeId":  75,
+                         "room":  0,
+                         "x":  47616,
+                         "y":  0,
+                         "z":  32256,
+                         "ocb":  0,
+                         "angle":  16384
+                     },
+                     {
+                         "typeId":  75,
+                         "room":  0,
+                         "x":  46592,
+                         "y":  0,
+                         "z":  33280,
+                         "ocb":  0,
+                         "angle":  16384
+                     },
+                     {
+                         "typeId":  75,
+                         "room":  0,
+                         "x":  46592,
+                         "y":  0,
+                         "z":  31232,
+                         "ocb":  0,
+                         "angle":  16384
+                     }
+                 ],
+    "triggerAdds":  [
+                        {
+                            "room":  0,
+                            "sectorX":  2,
+                            "sectorZ":  2,
+                            "art":  0,
+                            "timer":  0,
+                            "oneShot":  1,
+                            "mask":  31,
+                            "commands":  [
+                                             {
+                                                 "type":  0,
+                                                 "param":  153
+                                             },
+                                             {
+                                                 "type":  0,
+                                                 "param":  154
+                                             },
+                                             {
+                                                 "type":  0,
+                                                 "param":  155
+                                             }
+                                         ]
+                        }
+                    ]
+}

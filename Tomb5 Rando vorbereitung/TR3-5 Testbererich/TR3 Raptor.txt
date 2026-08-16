@@ -1,0 +1,5 @@
+75	Reaper	Husky-Modell	ist eine Qualle (JellyControl, Wasserwesen) an Land. Können wir den Slot für ihn nutzbar machen?
+
+Level Crash.tr2(Version_TR3) Type_ID(288) Level_ID(138) Vorsicht hanging Raptor Type_ID(38) Level_ID(110) ist was Leveleigenes das eist eine Leiche die abgeschossen werden kann für ein Heavy_Trigger.
+
+Sounds die ich finden konnte TRView Sample109/map250(foodstep1,gleich wie T-Rex nur leiser),Sample110/map250(foodstep2,gleich wie T-Rex nur leiser), Sample111/map251(Attak1), Sample112/map252(Attack2), Sample113/map253(Attack3), Sample114/map254(Growel), Sample115/map255(Death1, gleich wie TRex nur leiser), Sample116/map256(Death2)

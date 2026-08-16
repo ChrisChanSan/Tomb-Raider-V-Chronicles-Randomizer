@@ -259,6 +259,16 @@ int main(int argc, char** argv)
         // ihre Prozentwerte sind also der Wunsch, nicht das Ergebnis.
         std::vector<int> laut = { 100, 130, 150, 100, 140 };
 
+        // -stumm <id,...>: diese Nummern bewusst auf einen LEEREN Platz der
+        // Soundmap biegen, statt sie stehen zu lassen.
+        //
+        // 411 ist in allen 16 TR5-Leveln unbelegt - mit MissMod -ton an jedem
+        // einzelnen nachgemessen, nicht angenommen. Der erste Kandidat 405 war
+        // in rich3 belegt; frei sind 411 bis 419. Der Platz liegt ausserhalb
+        // der Bereiche, die wir fuer Importe vergeben (420-449).
+        std::vector<int> stumm;
+        int stummPlatz = 411;
+
         // 445..449: fuenf Plaetze am oberen Ende, in allen Leveln frei.
         int basis = 445;
 
@@ -269,7 +279,19 @@ int main(int argc, char** argv)
         //   -laut a,b,c,..  Prozent je Klang in Paketreihenfolge
         for (int a = 5; a < argc; ++a)
         {
-            if (std::strcmp(argv[a], "-basis") == 0 && a + 1 < argc)
+            if (std::strcmp(argv[a], "-stumm") == 0 && a + 1 < argc)
+            {
+                const char* p = argv[++a];
+                while (*p)
+                {
+                    stumm.push_back(std::atoi(p));
+                    while (*p && *p != ',') ++p;
+                    if (*p == ',') ++p;
+                }
+            }
+            else if (std::strcmp(argv[a], "-stummplatz") == 0 && a + 1 < argc)
+                stummPlatz = std::atoi(argv[++a]);
+            else if (std::strcmp(argv[a], "-basis") == 0 && a + 1 < argc)
                 basis = std::atoi(argv[++a]);
             else if (std::strcmp(argv[a], "-laut") == 0 && a + 1 < argc)
             {
@@ -358,6 +380,42 @@ int main(int argc, char** argv)
         //
         // Wer den Klang bewusst nicht mitnehmen will, biegt ihn auf einen
         // eigenen stillen Platz. Einfach stehenlassen ist keine Option mehr.
+        // Bewusst stummgeschaltete Nummern: sie werden auf einen LEEREN Platz
+        // der Soundmap gebogen. Die Engine steigt dort aus (sound.cpp: lut ==
+        // -1 -> "Non present sample") und spielt nichts. Das kostet kein
+        // Sample und trifft garantiert nichts Fremdes.
+        //
+        // Gebraucht fuer Klaenge, die wir aus dem Quellspiel nicht mitnehmen
+        // wollen: TR3 143 "Falling" bei T-Rex und Raptor, TR3 56 (Laras
+        // Schritt) beim Geier. Stehenlassen ist keine Option - 143 und 56 sind
+        // in TR5 belegt (SFX_GENERIC_BODY_FALL, SFX_LARA_GRABFEET).
+        if (!offen.empty() && !stumm.empty())
+        {
+            std::vector<std::pair<int,int>> aufStumm;
+            for (int o : offen)
+                for (int s : stumm)
+                    if (o == s) aufStumm.push_back(std::make_pair(o, stummPlatz));
+
+            if (!aufStumm.empty())
+            {
+                std::vector<int> rest;
+                std::vector<std::pair<int,int>> egal;
+                biegeSfxUm(paket, aufStumm, rest, egal, egal);
+                std::printf("  Stummgeschaltet auf leeren Platz %d:", stummPlatz);
+                for (const auto& z : aufStumm) std::printf(" %d", z.first);
+                std::printf("\n");
+
+                std::vector<int> uebrig;
+                for (int o : offen)
+                {
+                    bool weg = false;
+                    for (const auto& z : aufStumm) if (z.first == o) weg = true;
+                    if (!weg) uebrig.push_back(o);
+                }
+                offen = uebrig;
+            }
+        }
+
         if (!offen.empty())
         {
             std::printf("\nABBRUCH: %zu SFX-Nummern OHNE Zuordnung. Sie wuerden ihre\n"

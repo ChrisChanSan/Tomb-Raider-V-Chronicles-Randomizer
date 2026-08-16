@@ -14,10 +14,22 @@ void InitialiseCrow(short item_number)
 
 	InitialiseCreature(item_number);
 	item = &items[item_number];
-	item->anim_number = objects[CROW].anim_index + 14;
+
+	// GEIER-VERSATZ, nicht Kraehe (#91).
+	//
+	// In Tomb Raider 3 steuert EINE Funktion beide Voegel und unterscheidet
+	// per object_number (tomb3 bird.cpp:19-32): die Kraehe startet mit
+	// anim_index + 14 im Fresszustand, der Geier mit + 5 im Stehzustand.
+	// TR5 hat nur den Kraehen-Zweig behalten - dort gibt es keinen Geier.
+	//
+	// Der Slot bleibt trotzdem gefahrlos umzustellen: CROW hat in KEINEM der
+	// 16 TR5-Level ein Modell (an allen Dateien nachgemessen). Diese Funktion
+	// laeuft also ausschliesslich fuer den importierten TR3-Geier, der nur
+	// 12 Animationen hat - mit + 14 liefe sie ins Leere.
+	item->anim_number = objects[CROW].anim_index + 5;
 	item->frame_number = anims[item->anim_number].frame_base;
-	item->goal_anim_state = 7;
-	item->current_anim_state = 7;
+	item->goal_anim_state = 1;                 // BIRD_STOP
+	item->current_anim_state = 1;
 }
 
 void CrowControl(short item_number)
@@ -51,8 +63,10 @@ void CrowControl(short item_number)
 			item->pos.y_pos = item->floor;
 		else
 		{
-			item->anim_number = objects[CROW].anim_index + 1;
-			item->frame_number = anims[item->anim_number].frame_base;;
+			// Sturzanimation: Kraehe + 1, Geier + 8 (tomb3 bird.cpp:65-68).
+			// Siehe die Begruendung in InitialiseCrow.
+			item->anim_number = objects[CROW].anim_index + 8;
+			item->frame_number = anims[item->anim_number].frame_base;
 			item->current_anim_state = 4;
 			item->gravity_status = 1;
 			item->speed = 0;

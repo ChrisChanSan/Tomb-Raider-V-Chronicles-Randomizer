@@ -183,6 +183,74 @@ int main(int argc, char** argv)
     std::printf("       (Item %d Byte, Box %d Byte, Zone %d Worte - selbst ermittelt)\n\n",
                 gutItem, gutBox, gutZone);
 
+    // --- Wave-Modus: die Leveltabellen umgehen ----------------------------
+    //
+    // Aufruf: TR3Ton <lvl.TR2> <MAIN.SFX> -wellen <ziel.bin> <id>:<wave>[,<wave>...]
+    //
+    // Gebraucht fuer chunnel.TR2 (TR3 Gold): dort liefert der Weg ueber
+    // SoundMap/SoundDetails/SampleIndices nachweislich falsche Waves - meine
+    // Selbstkalibrierung findet zwar eine Kombination, die exakt am Dateiende
+    // endet, aber nicht die richtige. Bei CRASH.TR2 stimmte sie noch aufs Byte
+    // mit dem Werkzeug des Nutzers ueberein.
+    //
+    // Statt zu forschen wird hier die im Werkzeug TRsound ABGEHOERTE
+    // Wave-Nummer direkt genommen. Die ID bleibt trotzdem noetig: unter ihr
+    // rufen die Anim-Kommandos den Klang, und danach richtet sich das
+    // Umbiegen im Einsetzer.
+    if (argc >= 6 && std::strcmp(argv[3], "-wellen") == 0)
+    {
+        std::vector<uint8_t> out;
+        out.push_back('T'); out.push_back('3'); out.push_back('5'); out.push_back('S');
+        for (int i = 0; i < 4; ++i) out.push_back(i == 0 ? 2 : 0);
+        for (int i = 0; i < 4; ++i) out.push_back(0);
+        int imPaket = 0;
+
+        auto p16 = [&](uint16_t v) { out.push_back(uint8_t(v & 0xFF)); out.push_back(uint8_t(v >> 8)); };
+        auto p32 = [&](uint32_t v) { for (int i = 0; i < 4; ++i) out.push_back(uint8_t((v >> (8*i)) & 0xFF)); };
+
+        std::printf("  ID   Varianten  Waves\n");
+        for (int a = 5; a < argc; ++a)
+        {
+            const char* s = argv[a];
+            const int id = std::atoi(s);
+            const char* dp = std::strchr(s, ':');
+            if (!dp) { std::printf("  %s: erwartet <id>:<wave>[,<wave>]\n", s); return 2; }
+
+            std::vector<int> wellen;
+            for (const char* q = dp + 1; *q; )
+            {
+                wellen.push_back(std::atoi(q));
+                while (*q && *q != ',') ++q;
+                if (*q == ',') ++q;
+            }
+
+            for (int w : wellen)
+                if (w < 1 || size_t(w) > waveAt.size())
+                { std::printf("  Wave %d gibt es in MAIN.SFX nicht\n", w); return 1; }
+
+            p16(uint16_t(id)); p16(0); p16(0); p16(0);
+            p16(uint16_t(wellen.size()));
+            std::printf("  %3d  %9zu ", id, wellen.size());
+            for (int w : wellen)
+            {
+                const size_t k = size_t(w) - 1;              // TRsound zaehlt ab 1
+                p32(waveLen[k]);
+                out.insert(out.end(), sfx.b.begin() + waveAt[k], sfx.b.begin() + waveAt[k] + waveLen[k]);
+                std::printf(" %d(%u B)", w, waveLen[k]);
+            }
+            std::printf("\n");
+            ++imPaket;
+        }
+
+        out[8] = uint8_t(imPaket & 0xFF); out[9] = uint8_t((imPaket >> 8) & 0xFF);
+        FILE* f = std::fopen(argv[4], "wb");
+        if (!f) { std::printf("Ziel nicht schreibbar\n"); return 2; }
+        std::fwrite(out.data(), 1, out.size(), f);
+        std::fclose(f);
+        std::printf("\n  Paket: %d Klaenge, %zu Byte -> %s\n", imPaket, out.size(), argv[4]);
+        return 0;
+    }
+
     // Paketmodus? Dann ist argv[3] der Schalter und argv[4] das Ziel.
     const bool paket = (argc >= 6 && std::strcmp(argv[3], "-paket") == 0);
     const int erstesId = paket ? 5 : 3;

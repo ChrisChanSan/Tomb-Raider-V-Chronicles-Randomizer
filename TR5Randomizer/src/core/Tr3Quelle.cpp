@@ -576,3 +576,184 @@ bool Tr3Quelle::holeMoveable(const std::wstring& levelPfad, int objektId,
     std::printf("  Paket fertig: %zu Byte\n", paket.size());
     return true;
 }
+
+//----------------------------------------------------------------------------
+// Klangentnahme aus MAIN.SFX (#92, aus TR3Ton uebernommen).
+//----------------------------------------------------------------------------
+namespace
+{
+    // MAIN.SFX ist eine Kette aneinandergehaengter RIFF-WAVs. Ein Verzeichnis
+    // gibt es nicht - man laeuft durch und merkt sich Anfang und Laenge jedes
+    // Blocks. Ungerade Laengen sind auf gerade aufgefuellt.
+    bool wellenVerzeichnis(const std::vector<uint8_t>& b,
+                           std::vector<uint32_t>& at, std::vector<uint32_t>& len)
+    {
+        for (size_t p = 0; p + 8 <= b.size(); )
+        {
+            if (b[p] == 'R' && b[p+1] == 'I' && b[p+2] == 'F' && b[p+3] == 'F')
+            {
+                const uint32_t n = ru32(b, p + 4) + 8;
+                if (p + n > b.size()) break;
+                at.push_back(static_cast<uint32_t>(p));
+                len.push_back(n);
+                p += n;
+                if (n & 1) ++p;
+            }
+            else ++p;
+        }
+        return !at.empty();
+    }
+}
+
+bool Tr3Quelle::holeKlaenge(const std::wstring& sfxPfad,
+                            const std::vector<KlangWunsch>& wuensche,
+                            std::vector<uint8_t>& paket,
+                            std::string& fehler)
+{
+    fehler.clear();
+    paket.clear();
+
+    Leser sfx;
+    if (!sfx.laden(sfxPfad.c_str())) { fehler = "MAIN.SFX nicht lesbar"; return false; }
+
+    std::vector<uint32_t> at, len;
+    if (!wellenVerzeichnis(sfx.b, at, len))
+    { fehler = "In MAIN.SFX steht kein einziges RIFF - falsche Datei?"; return false; }
+
+    // Paketkopf: Kennung, Version 2, Anzahl (wird am Ende nachgetragen).
+    std::vector<uint8_t> out;
+    out.push_back('T'); out.push_back('3'); out.push_back('5'); out.push_back('S');
+    for (int i = 0; i < 4; ++i) out.push_back(i == 0 ? 2 : 0);
+    for (int i = 0; i < 4; ++i) out.push_back(0);
+
+    for (const KlangWunsch& k : wuensche)
+    {
+        if (k.wellen.empty())
+        { fehler = "Klang " + std::to_string(k.tr3Id) + " ohne Wellenangabe"; return false; }
+
+        for (int w : k.wellen)
+            if (w < 1 || size_t(w) > at.size())
+            {
+                fehler = "Wave " + std::to_string(w) + " gibt es in dieser MAIN.SFX nicht ("
+                       + std::to_string(at.size()) + " vorhanden)";
+                return false;
+            }
+
+        // Kopf je Klang: ID, dann drei Woerter, die der Einsetzer neu bildet
+        // (Lautstaerke, Chance, Merkmale - eine Vorlage wuerde Tonhoehe und
+        // Zufallsverstimmung mitschleppen, siehe Tr5Tr3Import.cpp).
+        put16(out, uint16_t(k.tr3Id)); put16(out, 0); put16(out, 0); put16(out, 0);
+        put16(out, uint16_t(k.wellen.size()));
+
+        for (int w : k.wellen)
+        {
+            const size_t i = size_t(w) - 1;          // TRsound zaehlt ab 1
+            put32(out, len[i]);
+            out.insert(out.end(), sfx.b.begin() + at[i], sfx.b.begin() + at[i] + len[i]);
+        }
+    }
+
+    out[8]  = uint8_t(wuensche.size() & 0xFF);
+    out[9]  = uint8_t((wuensche.size() >> 8) & 0xFF);
+    paket = out;
+    return true;
+}
+
+//----------------------------------------------------------------------------
+// SFX-Nummern der Anim-Kommandos umbiegen (#92, aus TR3Setz uebernommen).
+//
+// ZWEI FALLEN STECKEN HIER DRIN, beide teuer bezahlt:
+//
+// 1. "Anzahl" im Anim-Kopf zaehlt KOMMANDOS, nicht Worte. Ein Kommando belegt
+//    je nach Art 1 bis 4 Worte. Wer die Schleife bis "Start + Anzahl" mit dem
+//    WORTindex laufen laesst, sieht nur die ersten Kommandos und merkt nichts
+//    davon - die Meldung ueber offene Nummern kann nur melden, was sie gelesen
+//    hat. Beim Compsognathus blieb so die zweite Fundstelle von 243 stehen,
+//    und 243 ist in TR5 SFX_GENERIC_HEAVY_FEET.
+//
+// 2. Nur die Kommandos anfassen, auf die die Animationen DIESES Objekts
+//    zeigen. Das Paket fuehrt den ganzen Kommandoblock des Quelllevels mit.
+//----------------------------------------------------------------------------
+bool Tr3Quelle::biegeSfxUm(std::vector<uint8_t>& paket,
+                           const std::vector<std::pair<int,int>>& zuordnung,
+                           const std::vector<int>& stumm,
+                           int stummPlatz,
+                           std::vector<int>& offen,
+                           std::string& fehler)
+{
+    fehler.clear();
+    offen.clear();
+
+    if (paket.size() < 48) { fehler = "Modellpaket zu klein"; return false; }
+
+    const uint32_t nMeshes = ru32(paket, 12), nAnims = ru32(paket, 16);
+    const uint32_t nFrameW = ru32(paket, 20), nBoneW = ru32(paket, 24);
+    const uint32_t nSC = ru32(paket, 28), nAD = ru32(paket, 32), nCmd = ru32(paket, 36);
+
+    size_t p = 48;
+    for (uint32_t i = 0; i < nMeshes; ++i)
+    {
+        if (p + 4 > paket.size()) { fehler = "Modellpaket bricht in den Meshes ab"; return false; }
+        p += 4 + ru32(paket, p);
+    }
+    p += size_t(nBoneW) * 4 + size_t(nFrameW) * 2 + size_t(nAnims) * 40
+       + size_t(nSC) * 6 + size_t(nAD) * 8;
+
+    const size_t cmdAt = p;
+    if (cmdAt + size_t(nCmd) * 2 > paket.size())
+    { fehler = "Kommandoblock im Modellpaket nicht auffindbar"; return false; }
+    const size_t animAt = cmdAt - size_t(nAD) * 8 - size_t(nSC) * 6 - size_t(nAnims) * 40;
+
+    // Stummschaltung ist nur eine weitere Zuordnung - auf einen leeren Platz
+    // der Soundmap, wo die Engine aussteigt statt etwas Fremdes zu spielen.
+    std::vector<std::pair<int,int>> alle = zuordnung;
+    for (int s : stumm) alle.push_back(std::make_pair(s, stummPlatz));
+
+    for (uint32_t a = 0; a < nAnims; ++a)
+    {
+        const size_t ao = animAt + size_t(a) * 40;
+        const uint16_t anzahl = ru16(paket, ao + 36);
+        if (!anzahl) continue;
+        const uint16_t start = ru16(paket, ao + 38);
+
+        uint32_t i = start;
+        for (uint16_t k = 0; k < anzahl && i < nCmd; ++k)      // KOMMANDOS zaehlen
+        {
+            const uint16_t art = ru16(paket, cmdAt + size_t(i) * 2);
+            ++i;
+            int folge = 0;
+            switch (art)
+            {
+            case 1: folge = 3; break;    // SetPosition
+            case 2: folge = 2; break;    // JumpVelocity
+            case 5: folge = 2; break;    // PlaySound: Frame + SFX
+            case 6: folge = 2; break;    // Flipeffect
+            default: folge = 0; break;
+            }
+
+            if (art == 5 && i + 1 < nCmd)
+            {
+                const size_t stelle = cmdAt + size_t(i + 1) * 2;
+                const uint16_t wort = ru16(paket, stelle);
+                const int nr = wort & 0x0FFF;    // Bits 12-15 sind Bedingungen
+                bool getroffen = false;
+                for (const auto& z : alle)
+                    if (z.first == nr)
+                    {
+                        const uint16_t neu = uint16_t((wort & 0xF000) | (z.second & 0x0FFF));
+                        std::memcpy(&paket[stelle], &neu, 2);
+                        getroffen = true;
+                        break;
+                    }
+                if (!getroffen)
+                {
+                    bool schon = false;
+                    for (int o : offen) if (o == nr) { schon = true; break; }
+                    if (!schon) offen.push_back(nr);
+                }
+            }
+            i += folge;
+        }
+    }
+    return true;
+}

@@ -1248,6 +1248,19 @@ bool Rando::run(const RandoInput& in,
         { 47, "Andrea3", { {90,"joby5",45}, {91,"joby5",123} }, {-1,-1},  nullptr,   -1 },  // Pierre
         { 49, "joby3",   {},                                    {-1,-1},  "joby3",   400, 0, 37 }, // Soldier MG (Mafia, Anims von Guard)
         { 51, "joby3",   {},                                    {406,-1}, nullptr,   -1 },  // Soldier Pistols (Mafia2) + MESHSWAP2
+        // Crane Guy: der einzige TR5-Gegner mit vollstaendigem Modell, den
+        // Core NIE als Item platziert hat - dieselbe Lage wie bei Pierre.
+        // Modell nur in joby2 (15 Meshes, eigene Anims), Steuerung ist
+        // SasControl, er feuert ueber Zustand 3 wie der Blue Guard
+        // (sas.cpp:344 nennt ihn dort ausdruecklich). Im Testlevel bestaetigt.
+        //
+        // basisSlot 37: er holt seinen Anim-Satz zur Laufzeit von SWAT, sonst
+        // Guard (setup.cpp:1211-1214) - Stummel-Familie wie Mafia und SWAT+.
+        // Der Basisslot wird ueber SEINE eigene kCross-Zeile geholt, also aus
+        // rich1. Das ist wichtig: der Guard aus joby2 laesst sich NICHT
+        // kopieren ("Frame-Zeiger ausserhalb der Frame-Scheibe"), der aus
+        // rich1 schon.
+        { 55, "joby2",   {},                                    {-1,-1},  nullptr,   -1, 0, 37 }, // Crane Guy
         { 57, "Andrea3", {},                                    {-1,-1},  nullptr,   -1 },  // Lion
         { 59, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Gladiator
         { 61, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Soldier Statue (Hammer)
@@ -1954,9 +1967,20 @@ bool Rando::run(const RandoInput& in,
         // laesst einen nativen oder selbst importierten Basistyp stehen.
         if (c->basisSlot > 0)
         {
+            // Der Basistyp kommt aus SEINER EIGENEN Zeile, nicht aus dem
+            // Spenderlevel dessen, der ihn anfordert. Vorher stand hier
+            // c->von - beim Crane Guy holte das den Guard aus joby2, und der
+            // laesst sich nicht kopieren ("Frame-Zeiger ausserhalb der
+            // Frame-Scheibe"); aus rich1 geht er. Bei Mafia und SWAT+ fiel es
+            // nie auf, weil deren Spender zufaellig einen brauchbaren
+            // Basistyp fuehren.
+            const char* basisVon = c->von;
+            for (const CrossGegner& b : kCross)
+                if (b.typeId == c->basisSlot) { basisVon = b.von; break; }
+
             JsonValue g = JsonValue::makeObject();
             g.set("slot", JsonValue::makeInt(c->basisSlot));
-            g.set("fromLevel", JsonValue::makeString(c->von));
+            g.set("fromLevel", JsonValue::makeString(basisVon));
             g.set("replace", JsonValue::makeBool(false));
             moveables.push(g);
         }

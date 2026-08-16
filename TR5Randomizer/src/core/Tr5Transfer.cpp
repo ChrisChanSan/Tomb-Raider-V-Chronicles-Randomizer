@@ -723,6 +723,78 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     if (frameEnd > frameStart)
         frameBytes.assign(src.m_bytes.begin() + src.m_frames.dataAt + frameStart,
                           src.m_bytes.begin() + src.m_frames.dataAt + frameEnd);
+
+    // --- Modellversatz geradruecken ----------------------------------------
+    // Nicht jedes Modell sitzt auf dem Itemursprung. Wo Core eine Figur nur
+    // als Deko an einem Aufbau verbaut hat, steckt der Versatz in den FRAMES:
+    // in der Wurzelverschiebung und in der Frame-Box. Der Crane Guy (55) ist
+    // in joby2 nur ein ANIMATING4 an der Krankonsole - mit MissMod gemessen
+    // (Mitte der Frame-Box | Wurzel):
+    //
+    //   Guard 37      -1 /  29 |   -1 -478  24   <- so sieht zentriert aus
+    //   Mafia 51      -4 /  40 |   -1 -478  24
+    //   Crane 55    -539 / 471 | -510 -473 361   <- Versatz
+    //   Anim4 422   -540 / 458 | -510 -473 361   <- dieselbe Figur als Deko
+    //
+    // Als Gegner steht er dadurch rund einen halben Sektor neben seinem Item.
+    // Korrigiert wird das MODELL, nicht das Item: verschoebe man das Item,
+    // stimmten Optik und Kollision zwar, aber die KI holt ihre Box- und
+    // Zonenzuordnung aus item->pos und daechte im Nachbarsektor.
+    //
+    // Der Betrag wird von JEDEM Frame abgezogen, nicht nur vom ersten - so
+    // bleibt die Wurzelbewegung innerhalb der Animation unangetastet.
+    struct Versatz { int slot; int dx; int dz; };
+    static const Versatz kVersatz[] = {
+        { 55, 510, -361 },
+    };
+    for (const Versatz& v : kVersatz)
+    {
+        if (v.slot != mv.slot || frameBytes.empty() || animBytes.empty()) continue;
+
+        // Die Frames werden ueber die ANIMATIONEN abgelaufen, nicht mit einer
+        // festen Schrittweite durch die Scheibe: frame_size steht je Animation
+        // im Kopf (Byte 5, Angabe in Woertern) und darf sich zwischen den
+        // Anims eines Modells unterscheiden, weil Einachs-Drehungen nur ein
+        // Wort brauchen. Eine geratene Schrittweite liefe irgendwann mitten in
+        // die Drehdaten und wuerde das Modell zerschreiben.
+        //
+        // Mehrere Anims koennen auf denselben Frame zeigen - deshalb erst alle
+        // Anfaenge einsammeln, dann jeden genau einmal anfassen.
+        std::set<size_t> anfaenge;
+        for (size_t a = 0; a + SZ_ANIM <= animBytes.size(); a += SZ_ANIM)
+        {
+            const uint32_t fp  = rd32(animBytes, a);
+            const size_t   fsz = static_cast<size_t>(animBytes[a + 5]) * 2;
+            const uint16_t fb  = rd16(animBytes, a + 24);
+            const uint16_t fe  = rd16(animBytes, a + 26);
+            if (fsz < 18 || fe < fb || fp < frameStart) continue;
+
+            size_t pos = static_cast<size_t>(fp - frameStart);
+            for (int k = 0; k <= fe - fb; ++k, pos += fsz)
+            {
+                if (pos + 18 > frameBytes.size()) break;
+                anfaenge.insert(pos);
+            }
+        }
+
+        int korrigiert = 0;
+        for (size_t f : anfaenge)
+        {
+            auto zu = [&](size_t wort, int d) {
+                int16_t w = static_cast<int16_t>(rd16(frameBytes, f + wort * 2));
+                w = static_cast<int16_t>(w + d);
+                frameBytes[f + wort * 2]     = static_cast<uint8_t>(w & 0xFF);
+                frameBytes[f + wort * 2 + 1] = static_cast<uint8_t>((w >> 8) & 0xFF);
+            };
+            zu(0, v.dx); zu(1, v.dx);       // minX, maxX
+            zu(4, v.dz); zu(5, v.dz);       // minZ, maxZ
+            zu(6, v.dx); zu(8, v.dz);       // Wurzel x und z (y bleibt)
+            ++korrigiert;
+        }
+        (void)korrigiert;   // Gegenprobe laeuft ueber MissMod am fertigen Level
+        break;
+    }
+
     if (boneEnd > boneStart)
         boneBytes.assign(src.m_bytes.begin() + src.m_bones.dataAt + boneStart * 4,
                          src.m_bytes.begin() + src.m_bones.dataAt + boneEnd * 4);

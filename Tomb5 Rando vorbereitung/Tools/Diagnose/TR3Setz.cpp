@@ -28,7 +28,8 @@ static std::wstring toW(const char* s)
 // Ohne diesen Schritt ruft der Gegner weiter seine TR3-Nummern auf, die im
 // Ziel andere oder gar keine Klaenge sind. Dasselbe Vergessen bei der
 // Sprungtabelle war der Absturz in #88 - deshalb hier ausdruecklich.
-static int biegeSfxUm(std::vector<uint8_t>& paket, const std::vector<std::pair<int,int>>& zuordnung)
+static int biegeSfxUm(std::vector<uint8_t>& paket, const std::vector<std::pair<int,int>>& zuordnung,
+                      std::vector<int>& offen)
 {
     auto g32 = [&](size_t p) { uint32_t v; std::memcpy(&v, &paket[p], 4); return v; };
     auto g16 = [&](size_t p) { uint16_t v; std::memcpy(&v, &paket[p], 2); return v; };
@@ -43,8 +44,23 @@ static int biegeSfxUm(std::vector<uint8_t>& paket, const std::vector<std::pair<i
     const size_t cmdAt = p;
     if (cmdAt + size_t(nCmd) * 2 > paket.size()) return -1;
 
+    // Nur die Kommandos anfassen, auf die die Animationen DIESES Objekts
+    // zeigen. Das Paket fuehrt den ganzen Kommandoblock des Quelllevels mit
+    // (die Anims verweisen mit globalen Indizes hinein) - wer stumpf ueber
+    // alles laeuft, sieht auch die Klaenge von Raptoren, Tueren und Lara und
+    // meldet Dutzende "fehlender" Zuordnungen, die niemanden interessieren.
+    // Je Anim stehen Anzahl bei +36 und Startindex bei +38.
+    const size_t animAt = cmdAt - size_t(nAD) * 8 - size_t(nSC) * 6 - size_t(nAnims) * 40;
+
     int getauscht = 0;
-    for (uint32_t i = 0; i < nCmd; )
+    for (uint32_t a = 0; a < nAnims; ++a)
+    {
+        const size_t ao = animAt + size_t(a) * 40;
+        const uint16_t anzahl = g16(ao + 36);
+        if (!anzahl) continue;
+        const uint16_t start = g16(ao + 38);
+
+    for (uint32_t i = start, ende = start + anzahl; i < ende && i < nCmd; )
     {
         const uint16_t art = g16(cmdAt + size_t(i) * 2);
         ++i;
@@ -63,16 +79,30 @@ static int biegeSfxUm(std::vector<uint8_t>& paket, const std::vector<std::pair<i
             const size_t at = cmdAt + size_t(i + 1) * 2;
             const uint16_t w = g16(at);
             const int nr = w & 0x0FFF;
+            bool zugeordnet = false;
             for (const auto& z : zuordnung)
                 if (z.first == nr)
                 {
                     const uint16_t neu = static_cast<uint16_t>((w & 0xF000) | (z.second & 0x0FFF));
                     std::memcpy(&paket[at], &neu, 2);
                     ++getauscht;
+                    zugeordnet = true;
                     break;
                 }
+
+            // Nicht zugeordnete Nummern MELDEN. Sie behalten sonst still
+            // ihre TR3-Nummer und treffen im Ziel irgendeinen fremden Klang -
+            // genau die Sorte lautloser Fehler, die dieses Projekt schon
+            // mehrfach Zeit gekostet hat.
+            if (!zugeordnet)
+            {
+                bool schonGemeldet = false;
+                for (int o : offen) if (o == nr) { schonGemeldet = true; break; }
+                if (!schonGemeldet) offen.push_back(nr);
+            }
         }
         i += folge;
+    }
     }
     return getauscht;
 }
@@ -127,16 +157,32 @@ int main(int argc, char** argv)
 
         // 446..449: in allen 16 Leveln frei. Die Soundmap ist ein festes Feld
         // von 450 Plaetzen, ein hoher Platz kostet also kein Byte.
-        if (!lvl.addSoundsFromTr3(ton, 446, zuordnung, err))
+        // Lautstaerke je Klang in Paketreihenfolge (84 Angriff, 87 Bruellen,
+        // 88 Fussstampfen, 89 Schnuppern, 255 Raptor-Todesschrei). Das
+        // Bruellen soll rund 30 Prozent lauter sein - im Spiel gehoert,
+        // Wunsch des Nutzers.
+        const std::vector<int> laut = { 100, 130, 100, 100, 100 };
+
+        // 445..449: fuenf Plaetze am oberen Ende, in allen Leveln frei.
+        if (!lvl.addSoundsFromTr3(ton, 445, zuordnung, err, &laut))
         { std::printf("SOUNDS GESCHEITERT: %s\n", err.c_str()); return 1; }
 
         std::printf("  Sounds: %d -> %d Samples\n", vorherSamples, lvl.soundSampleCount());
         for (const auto& z : zuordnung)
             std::printf("    TR3-Sound %3d  ->  Map %3d\n", z.first, z.second);
 
-        const int n2 = biegeSfxUm(paket, zuordnung);
+        std::vector<int> offen;
+        const int n2 = biegeSfxUm(paket, zuordnung, offen);
         if (n2 < 0) { std::printf("Kommandoblock im Modellpaket nicht auffindbar\n"); return 1; }
         std::printf("  Anim-Kommandos: %d SFX-Nummern umgebogen\n", n2);
+        if (!offen.empty())
+        {
+            std::printf("  ACHTUNG: %zu SFX-Nummern OHNE Zuordnung - sie behalten ihre\n"
+                        "           TR3-Nummer und treffen im Ziel einen fremden Klang:\n           ",
+                        offen.size());
+            for (int o : offen) std::printf("%d ", o);
+            std::printf("\n");
+        }
     }
 
     if (!lvl.addMoveableFromTr3(paket, slot, tex, err))

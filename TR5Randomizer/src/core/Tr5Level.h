@@ -259,9 +259,16 @@ public:
     // in TR5 teils belegt (89 in JEDEM Level, 84/87 in einigen). Die Plaetze
     // 440..449 sind dagegen ueberall frei, und die Soundmap ist ein festes
     // Feld von 450 Eintraegen - ein hoher Platz kostet also kein Byte.
+    //
+    // lautProzent (optional, je Klang in Paketreihenfolge): dehnt die
+    // Lautstaerke prozentual. Der Grundwert kommt aus einem vorhandenen
+    // SAMPLE_INFO des Ziels, damit die Groessenordnung stimmt - TR3 fuehrt
+    // Volume als ganzes Wort, TR5 als ein Byte, eine direkte Uebernahme waere
+    // geraten. 100 oder fehlend heisst unveraendert.
     bool    addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
                              std::vector<std::pair<int,int>>& zuordnung,
-                             std::string& error);
+                             std::string& error,
+                             const std::vector<int>* lautProzent = nullptr);
 
     // Nimmt den Triggereintrag des Quellsektors heraus und haengt ihn an die
     // Kette des Zielsektors. Beide Ketten werden neu hinten angebaut, beide

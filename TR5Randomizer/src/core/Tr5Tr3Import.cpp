@@ -70,7 +70,8 @@ namespace
 
 bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
                                std::vector<std::pair<int,int>>& zuordnung,
-                               std::string& error)
+                               std::string& error,
+                               const std::vector<int>* lautProzent)
 {
     char buf[256];
     zuordnung.clear();
@@ -84,16 +85,22 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
     if (basisId < 0 || basisId + int(anzahl) > SAMPLE_LUT_SIZE)
     { error = "Zielplaetze liegen ausserhalb der Soundmap"; return false; }
 
-    // Ein vorhandenes SAMPLE_INFO des Ziels als Vorlage nehmen. Warum nicht
-    // die Werte aus TR3? Weil deren Zahlenbereiche nicht nachweislich
-    // dieselben sind - TR3 fuehrt Volume und Chance als ganze Worte, TR5 hat
-    // ein Byte fuer die Lautstaerke. Eine geratene Umrechnung waere genau die
-    // Sorte Fehler, die hier schon zweimal Zeit gekostet hat. Die
-    // TR3-Originalwerte liegen im Paket und lassen sich spaeter nachziehen,
-    // sobald die Skala gemessen ist.
-    if (m_nInfos <= 0) { error = "Ziel-Level hat keine SAMPLE_INFOs als Vorlage"; return false; }
-    std::vector<uint8_t> vorlage(m_bytes.begin() + m_infosAt,
-                                 m_bytes.begin() + m_infosAt + SZ_SAMPLE_INFO);
+    // Das SAMPLE_INFO wird NEU gebaut, nicht von einem vorhandenen abgeschrieben.
+    //
+    // Der erste Versuch nahm das erste Info des Ziels als Vorlage, um bei der
+    // Lautstaerke nicht raten zu muessen. Damit kamen aber auch Tonhoehe und
+    // Flags mit: in Andrea1 ist das Laras Schritt (pitch 12, Flags 0x6010 mit
+    // Zufalls-Tonhoehe). Der T-Rex stampfte dadurch bei jedem Schritt anders
+    // und grundsaetzlich zu hoch - im Spiel gehoert, der Nutzer hat es am
+    // Original gegengehoert.
+    //
+    // Deshalb feste, neutrale Werte nach dem Muster, das Andrea1s eigene
+    // Eintraege zeigen (vol 191, rad 13, pitch 0, Flags 0x0004 = eine
+    // Variante, keine Verstimmung). Ein Klang, der so eingetragen ist, klingt
+    // genau wie seine Datei.
+    const uint8_t VOL = 191;      // gebraeuchlicher Wert in TR5-Leveln
+    const int8_t  RAD = 13;       // Hoerweite in Sektoren, dito
+    const uint16_t FLAGS = 0x0004;   // Bits 2-5 = 1 Variante, sonst nichts
 
     // --- Erst alles einsammeln, dann schreiben ----------------------------
     struct Klang { int origId; int32_t uncomp; std::vector<uint8_t> wav; };
@@ -125,6 +132,8 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
         }
     }
 
+    if (m_nInfos <= 0) { error = "Ziel-Level hat keinen Sound-Block"; return false; }
+
     if (m_nSamples + int32_t(klaenge.size()) > MAX_SAMPLES_PLAYABLE)
     {
         std::snprintf(buf, sizeof(buf),
@@ -149,17 +158,32 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
     std::vector<uint8_t> roh;
     for (size_t i = 0; i < klaenge.size(); ++i)
     {
-        std::vector<uint8_t> info = vorlage;
+        // SAMPLE_INFO: short number, uchar volume, char radius,
+        //              char randomness, char pitch, short flags
+        std::vector<uint8_t> info(SZ_SAMPLE_INFO, 0);
         const int16_t nummer = static_cast<int16_t>(m_nSamples + int32_t(i));
         std::memcpy(info.data(), &nummer, 2);
+        info[2] = VOL;
+        info[3] = static_cast<uint8_t>(RAD);
+        info[4] = 0;                       // keine Lautstaerkestreuung
+        info[5] = 0;                       // keine Tonhoehenverschiebung
+        std::memcpy(info.data() + 6, &FLAGS, 2);
 
-        // Genau EINE Variante: Bits 2-5 der Flags auf 1. Sonst wuerfelte die
-        // Engine sample = number + Zufall(N) und griffe auf die Nachbarn zu
-        // (die Falle aus #76).
-        int16_t flags = 0;
-        std::memcpy(&flags, info.data() + 6, 2);
-        flags = static_cast<int16_t>((static_cast<uint16_t>(flags) & ~0x3C) | (1 << 2));
-        std::memcpy(info.data() + 6, &flags, 2);
+        // Lautstaerke nachjustieren. Das Feld ist EIN Byte (0..255) - der Wert
+        // kommt aus der Vorlage des Ziels, damit die Groessenordnung sicher
+        // stimmt, und wird hier nur prozentual gedehnt. Beim T-Rex wollte der
+        // Nutzer das Bruellen rund 30 Prozent lauter.
+        if (lautProzent && i < lautProzent->size())
+        {
+            const int p = (*lautProzent)[i];
+            if (p > 0 && p != 100)
+            {
+                int v = (static_cast<int>(info[2]) * p) / 100;
+                if (v > 255) v = 255;
+                if (v < 1) v = 1;
+                info[2] = static_cast<uint8_t>(v);
+            }
+        }
 
         roh.insert(roh.end(), info.begin(), info.end());
     }

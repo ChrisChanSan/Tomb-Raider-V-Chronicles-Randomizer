@@ -3694,8 +3694,13 @@ void ResetGuards()
 			item->anim_number = objects[SWAT].anim_index;
 		else if (objects[ATTACK_SUB].loaded)
 			item->anim_number = objects[ATTACK_SUB].anim_index;
-		else
+		else if (objects[BLUE_GUARD].loaded)
 			item->anim_number = objects[BLUE_GUARD].anim_index;
+		else
+			// Randomizer (#105): letzter Anker, wenn nur der importierte
+			// zweite Guard im Level steht. Ohne ihn verhaelt sich die Kette
+			// wie vorher (BLUE_GUARD war der unbedingte Endfall).
+			item->anim_number = objects[BLUE_GUARD2].anim_index;
 
 		if (object_number == MAZE_MONSTER)
 		{

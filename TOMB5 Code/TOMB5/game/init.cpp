@@ -954,7 +954,14 @@ void InitialiseSas(short item_number)
 	anim_index = objects[SWAT].anim_index;
 
 	if (!objects[SWAT].loaded)
+	{
 		anim_index = objects[BLUE_GUARD].anim_index;
+
+		// Randomizer (#105): steht keiner der beiden Vanilla-Anker im Level,
+		// traegt der importierte zweite Guard den Familiensatz selbst.
+		if (!objects[BLUE_GUARD].loaded)
+			anim_index = objects[BLUE_GUARD2].anim_index;
+	}
 
 	switch (item->trigger_flags)
 	{

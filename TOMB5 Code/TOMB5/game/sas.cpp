@@ -341,7 +341,7 @@ void SasControl(short item_number)
 
 			if (!Targetable(item, &sasAI))
 				item->goal_anim_state = 1;
-			else if (item->object_number == BLUE_GUARD || item->object_number == CRANE_GUY)
+			else if (item->object_number == BLUE_GUARD || item->object_number == BLUE_GUARD2 || item->object_number == CRANE_GUY)
 				item->goal_anim_state = 3;
 			else
 				item->goal_anim_state = 35;

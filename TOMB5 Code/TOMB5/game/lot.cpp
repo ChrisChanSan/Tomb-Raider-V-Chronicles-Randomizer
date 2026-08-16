@@ -158,6 +158,7 @@ void InitialiseSlot(short item_number, long slot)
 	// dieselben, die schon der Raptor bekommt.
 	case SAS:
 	case BLUE_GUARD:
+	case BLUE_GUARD2:	// zweiter Guard (#105): laeuft und springt wie sein Vorbild
 	case MAFIA2:
 		creature->LOT.step = 1024;
 		creature->LOT.drop = -1024;

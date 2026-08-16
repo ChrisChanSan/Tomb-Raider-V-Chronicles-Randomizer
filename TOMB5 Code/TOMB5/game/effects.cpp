@@ -285,8 +285,12 @@ void ResetTest(ITEM_INFO* item)
 				target_item->anim_number = objects[TWOGUN].anim_index + 6;
 			else if (objects[SWAT].loaded)
 				target_item->anim_number = objects[SWAT].anim_index + 0;
-			else
+			else if (objects[BLUE_GUARD].loaded)
 				target_item->anim_number = objects[BLUE_GUARD].anim_index + 0;
+			else
+				// Randomizer (#105): letzter Anker fuer den zweiten Guard,
+				// siehe die gleiche Kette in control.cpp.
+				target_item->anim_number = objects[BLUE_GUARD2].anim_index + 0;
 
 			target_item->current_anim_state = 1;
 			target_item->goal_anim_state = 1;

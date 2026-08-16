@@ -1256,6 +1256,46 @@ void BaddyObjects()
 		meshes[obj->mesh_index + (13 * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (13 * 2)];
 	}
 
+	if (objects[BLUE_GUARD2].loaded)
+	{
+		// Zweites Guard-Modell (#83/#105): Kopie des BLUE_GUARD-Blocks. Der
+		// Slot kommt nur aus dem Randomizer und bringt einen vollen eigenen
+		// Anim-Satz mit; steht im Level zusaetzlich ein Familienanker (SWAT
+		// oder BLUE_GUARD), teilt er dessen Satz wie die anderen Mitglieder -
+		// die Saetze sind schablonengleich, und nur so greift die
+		// Feueranim-Reparatur des Randomizers (#82) auch fuer ihn.
+		obj = &objects[BLUE_GUARD2];
+		obj->initialise = InitialiseSas;
+		obj->control = SasControl;
+		obj->collision = CreatureCollision;
+		obj->draw_routine_extra = DrawBaddieGunFlash;
+
+		if (objects[SWAT].loaded)
+			obj->anim_index = objects[SWAT].anim_index;
+		else if (objects[BLUE_GUARD].loaded)
+			obj->anim_index = objects[BLUE_GUARD].anim_index;
+
+		obj->shadow_size = 128;
+		obj->hit_points = 24;
+		obj->pivot_length = 50;
+		obj->radius = 102;
+		obj->bite_offset = 4;
+		obj->explodable_meshbits = 0x4000;
+		obj->object_mip = 5120;
+		obj->intelligent = 1;
+		obj->HitEffect = 1;
+		obj->save_position = 1;
+		obj->save_hitpoints = 1;
+		obj->save_flags = 1;
+		obj->save_anim = 1;
+		bones[obj->bone_index + 24] |= 8;
+		bones[obj->bone_index + 24] |= 4;
+		bones[obj->bone_index + 52] |= 8;
+		bones[obj->bone_index + 52] |= 4;
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_JOBY3, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_JOBY3, 13);
+	}
+
 	obj = &objects[CRANE_GUY_MIP];
 	obj->control = ControlAnimatingSlots;
 	obj->save_flags = 1;
@@ -1264,6 +1304,7 @@ void BaddyObjects()
 	objects[SWAT_MIP].save_flags = 1;
 	objects[SWAT_PLUS_MIP].save_flags = 1;
 	objects[BLUE_GUARD_MIP].save_flags = 1;
+	objects[BLUE_GUARD2_MIP].save_flags = 1;
 	objects[TWOGUN_MIP].save_flags = 1;
 	objects[DOG_MIP].save_flags = 1;
 	objects[CROW_MIP].save_flags = 1;

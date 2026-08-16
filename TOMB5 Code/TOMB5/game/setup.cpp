@@ -1044,15 +1044,22 @@ void BaddyObjects()
 		obj->save_flags = 1;
 		obj->save_anim = 1;
 
-		// Knochen mit freier Drehung - ABGELESEN aus TR3s eigenem Setup
-		// (tomb3 setup.cpp:569-572), nicht geschaetzt. Ein erster Versuch mit
-		// geratenen Nummern (40/44) traf ein Beingelenk: der T-Rex verdrehte
-		// sich beim Laufen die Beine. Merksatz fuers naechste Mal - Knochen
-		// nie raten, sie sind je Modell voellig verschieden.
-		bones[obj->bone_index + 36] |= 8;
-		bones[obj->bone_index + 44] |= 8;
-		bones[obj->bone_index + 80] |= 8;
-		bones[obj->bone_index + 88] |= 8;
+		// KEINE Knochen-Drehflags. TR3 setzt hier vier (36, 44, 80, 88;
+		// tomb3 setup.cpp:569-572) fuer sein Kopfnachfuehren - uebernommen
+		// sahen sie im Spiel falsch aus: sporadisch verdrehte Fuesse und ein
+		// umgestuelptes Maul beim Zubeissen (vom Nutzer gesehen).
+		//
+		// Der Grund ist die andere Bedeutung des Bits: TR4/TR5 verteilen ueber
+		// die markierten Knochen die joint_rotation der CREATURE_INFO, und
+		// davon gibt es genau vier Werte - DinoControl setzt sie nie, andere
+		// Steuerungen dieser Engine tun es. Vier markierte Knochen an einem
+		// Modell, dessen Steuerung sie nicht fuellt, ergeben Drehungen ohne
+		// Absender.
+		//
+		// Ohne die Flags schaut er Lara nicht mit dem Kopf nach. Das ist der
+		// Preis, und er ist kleiner als zuckende Gliedmassen. Wer es zurueck
+		// will, muss in DinoControl CreatureJoint fuellen - dann aber alle
+		// vier bewusst belegen.
 	}
 
 	if (objects[BLUE_GUARD].loaded)

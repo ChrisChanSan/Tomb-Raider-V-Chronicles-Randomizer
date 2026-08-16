@@ -9,6 +9,8 @@
 #include "core/Tr5Level.h"
 
 #include <cstdio>
+#include <cstring>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -107,6 +109,60 @@ static int biegeSfxUm(std::vector<uint8_t>& paket, const std::vector<std::pair<i
     return getauscht;
 }
 
+static uint32_t paketVersion(const std::vector<uint8_t>& p)
+{
+    if (p.size() < 8) return 0;
+    uint32_t v; std::memcpy(&v, p.data() + 4, 4); return v;
+}
+
+// Schreibt die Texturworte der Faces auf die neuen Texinfos um. Gleicher
+// Ableser wie ueberall (Kopf 10 Byte, dann das Vertexwort; 0 Normalen heisst
+// NORMALEN). Bit 15 des Texturworts ist ein Flag und bleibt stehen.
+static int biegeTexUm(std::vector<uint8_t>& paket, const std::map<int,int>& zuordnung)
+{
+    auto g32 = [&](size_t q) { uint32_t v; std::memcpy(&v, &paket[q], 4); return v; };
+    auto g16 = [&](size_t q) { uint16_t v; std::memcpy(&v, &paket[q], 2); return v; };
+
+    const uint32_t nMeshes = g32(12);
+    size_t p = 48;
+    int getauscht = 0;
+
+    for (uint32_t i = 0; i < nMeshes; ++i)
+    {
+        if (p + 4 > paket.size()) return -1;
+        const uint32_t len = g32(p); p += 4;
+        const size_t ende = p + len;
+        size_t q = p + 10;
+        if (q + 2 > ende) return -1;
+        const int16_t vw = static_cast<int16_t>(g16(q)); q += 2;
+        const int nv = vw & 0xFF;
+        if (nv == 0) q += (size_t((vw >> 8) & 0xFF) * 6 + 1) * 2;
+        else
+        {
+            q += size_t(nv) * 6;
+            const int16_t nn = static_cast<int16_t>(g16(q)); q += 2;
+            q += size_t(nv) * (nn >= 0 ? 6 : 2);
+        }
+
+        auto biege = [&](size_t at) {
+            const uint16_t w = g16(at);
+            std::map<int,int>::const_iterator f = zuordnung.find(w & 0x7FFF);
+            if (f == zuordnung.end()) return;
+            const uint16_t neu = static_cast<uint16_t>((w & 0x8000) | (f->second & 0x7FFF));
+            std::memcpy(&paket[at], &neu, 2);
+            ++getauscht;
+        };
+
+        const int16_t nq = static_cast<int16_t>(g16(q)); q += 2;
+        for (int k = 0; k < nq; ++k, q += 12) biege(q + 8);
+        const int16_t nt = static_cast<int16_t>(g16(q)); q += 2;
+        for (int k = 0; k < nt; ++k, q += 10) biege(q + 6);
+
+        p = ende;
+    }
+    return getauscht;
+}
+
 int main(int argc, char** argv)
 {
     if (argc < 5 || argc > 7)
@@ -189,7 +245,24 @@ int main(int argc, char** argv)
         }
     }
 
-    if (!lvl.addMoveableFromTr3(paket, slot, tex, err))
+    // Texturen VOR dem Modell: erst danach steht fest, auf welche Texinfos
+    // die Faces zeigen muessen - und die Faces stecken im Modellpaket.
+    // Dieselbe Reihenfolge wie bei den Sounds.
+    int texBasis = tex;
+    if (paketVersion(paket) >= 2)
+    {
+        std::map<int,int> texMap;
+        if (!lvl.addTexturesFromTr3(paket, texMap, err))
+        { std::printf("TEXTUREN GESCHEITERT: %s\n", err.c_str()); return 1; }
+        std::printf("  Texturen: %s\n", err.c_str());
+
+        const int n = biegeTexUm(paket, texMap);
+        if (n < 0) { std::printf("Meshes im Paket nicht lesbar\n"); return 1; }
+        std::printf("  Faces: %d Texturworte umgebogen\n", n);
+        texBasis = -1;                 // Faces stehen jetzt richtig, nicht ueberschreiben
+    }
+
+    if (!lvl.addMoveableFromTr3(paket, slot, texBasis, err))
     { std::printf("EINBAU GESCHEITERT: %s\n", err.c_str()); return 1; }
 
     Tr5Level::MoveableInfo mi;

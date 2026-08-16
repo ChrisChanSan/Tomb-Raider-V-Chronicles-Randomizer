@@ -294,6 +294,260 @@ bool Tr5Level::debugMeshWalk(int ptrIndex, int& nVerts, int& nNorms,
     return true;
 }
 
+//----------------------------------------------------------------------------
+// Texturen eines TR3-Pakets einsetzen (#90).
+//
+// Bewusst HIER und nicht in Tr5Tr3Import.cpp: die Seitenverwaltung ist die
+// gefaehrlichste Stelle des ganzen Werkzeugs (Nutzervorgabe: "an den
+// Texturseiten nur anhaengen wie bisher, nichts verschieben - sonst faellt
+// das Level in sich zusammen"). Die erprobten Helfer dafuer liegen in dieser
+// Datei; sie ein zweites Mal nachzubauen waere genau der Fehler, den die
+// Vorgabe verhindern soll. Angebaut, nicht umgebaut - copyMoveableFrom bleibt
+// unberuehrt.
+//
+// Rueckgabe in "zuordnung": TR3-Objekttexturnummer -> neuer Texinfo-Index.
+// Damit biegt der Aufrufer anschliessend die Texturworte der Faces um.
+//----------------------------------------------------------------------------
+bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
+                                  std::map<int,int>& zuordnung, std::string& error)
+{
+    char buf[256];
+    zuordnung.clear();
+
+    if (paket.size() < 48 || std::memcmp(paket.data(), "T35H", 4) != 0)
+    { error = "Kein TR3-Modellpaket"; return false; }
+    if (rd32(paket, 4) < 2) { error = "Paket ohne Texturteil (Version < 2)"; return false; }
+
+    // --- An den Texturteil vorspulen (Aufbau siehe TR3Hol) ----------------
+    const uint32_t nMeshes = rd32(paket, 12), nAnims = rd32(paket, 16);
+    const uint32_t nFrameW = rd32(paket, 20), nBoneW = rd32(paket, 24);
+    const uint32_t nSC = rd32(paket, 28), nAD = rd32(paket, 32), nCmd = rd32(paket, 36);
+    size_t p = 48;
+    for (uint32_t i = 0; i < nMeshes; ++i)
+    {
+        if (p + 4 > paket.size()) { error = "Paket endet in der Meshliste"; return false; }
+        p += 4 + rd32(paket, p);
+    }
+    p += size_t(nBoneW) * 4 + size_t(nFrameW) * 2 + size_t(nAnims) * SZ_ANIM
+       + size_t(nSC) * SZ_CHANGE + size_t(nAD) * SZ_RANGE + size_t(nCmd) * 2;
+    if (p + 4 > paket.size()) { error = "Paket endet vor dem Texturteil"; return false; }
+
+    struct Tr3Tex { int orig; uint16_t drawtype; int kachel; uint8_t uv[8]; };
+    std::vector<Tr3Tex> texte;
+    const uint32_t nTexte = rd32(paket, p); p += 4;
+    for (uint32_t i = 0; i < nTexte; ++i)
+    {
+        if (p + 14 > paket.size()) { error = "Texturteil endet vorzeitig"; return false; }
+        Tr3Tex t;
+        t.orig = rd16(paket, p);
+        t.drawtype = rd16(paket, p + 2);
+        t.kachel = rd16(paket, p + 4);
+        std::memcpy(t.uv, paket.data() + p + 6, 8);
+        p += 14;
+        texte.push_back(t);
+    }
+
+    const uint32_t nKacheln = rd32(paket, p); p += 4;
+    const size_t kachelAt = p;
+    if (p + size_t(nKacheln) * PAGE16 > paket.size())
+    { error = "Kacheldaten laufen aus dem Paket"; return false; }
+
+    // --- Zielbloecke oeffnen ----------------------------------------------
+    TexHeader dstTex;
+    if (!parseTexHeader(m_bytes, dstTex, error)) return false;
+
+    std::vector<uint8_t> dst32, dst16;
+    if (!inflateBlock(m_bytes, dstTex.block32At, dst32, error)) { error = "Ziel 32: " + error; return false; }
+    if (!inflateBlock(m_bytes, dstTex.block16At, dst16, error)) { error = "Ziel 16: " + error; return false; }
+
+    if (1 + dstTex.rt + dstTex.ot + dstTex.bt + int(nKacheln) > MAX_PAGES)
+    {
+        std::snprintf(buf, sizeof(buf),
+            "Ziel haette %d Texturseiten - die Engine haelt hoechstens %d",
+            1 + dstTex.rt + dstTex.ot + dstTex.bt + int(nKacheln), MAX_PAGES);
+        error = buf;
+        return false;
+    }
+
+    // --- Kanalreihenfolge der 32-Bit-Seiten AM ZIEL ABLESEN ----------------
+    //
+    // TR3 liefert ARGB1555. Wie TR5 seine 32-Bit-Seiten anordnet, wird nicht
+    // angenommen, sondern gemessen: das Ziel fuehrt jede Seite in beiden
+    // Fassungen, also laesst sich die Zuordnung an seinen eigenen Daten
+    // ablesen. Gesucht wird der Kanal, der zum Rotanteil des 16-Bit-Pixels
+    // passt.
+    int posR = 2, posG = 1, posB = 0, posA = 3;      // Vorgabe: BGRA
+    if (dst16.size() >= PAGE16 && dst32.size() >= PAGE32)
+    {
+        long long best = -1;
+        const int kandidaten[2][3] = { { 2, 1, 0 }, { 0, 1, 2 } };   // BGRA, RGBA
+        for (int k = 0; k < 2; ++k)
+        {
+            long long fehler = 0;
+            for (size_t px = 0; px < 4096; ++px)
+            {
+                const uint16_t w = rd16(dst16, px * 2);
+                const int r5 = (w >> 10) & 0x1F, g5 = (w >> 5) & 0x1F, b5 = w & 0x1F;
+                const int r8 = (r5 << 3) | (r5 >> 2);
+                const int g8 = (g5 << 3) | (g5 >> 2);
+                const int b8 = (b5 << 3) | (b5 >> 2);
+                fehler += std::abs(int(dst32[px * 4 + kandidaten[k][0]]) - r8);
+                fehler += std::abs(int(dst32[px * 4 + kandidaten[k][1]]) - g8);
+                fehler += std::abs(int(dst32[px * 4 + kandidaten[k][2]]) - b8);
+            }
+            if (best < 0 || fehler < best)
+            { best = fehler; posR = kandidaten[k][0]; posG = kandidaten[k][1]; posB = kandidaten[k][2]; }
+        }
+    }
+
+    // --- Seiten einsetzen: NUR anhaengen, an derselben Stelle wie bisher ---
+    const int einfuegeAb = dstTex.rt + dstTex.ot;
+    std::map<int,int> kachelRemap;
+    int neueSeiten = 0;
+
+    for (uint32_t k = 0; k < nKacheln; ++k)
+    {
+        const uint8_t* quelle16 = paket.data() + kachelAt + size_t(k) * PAGE16;
+
+        std::vector<uint8_t> seite32(PAGE32);
+        for (size_t px = 0; px < 256 * 256; ++px)
+        {
+            uint16_t w; std::memcpy(&w, quelle16 + px * 2, 2);
+            const int r5 = (w >> 10) & 0x1F, g5 = (w >> 5) & 0x1F, b5 = w & 0x1F;
+            uint8_t* z = seite32.data() + px * 4;
+            z[posR] = uint8_t((r5 << 3) | (r5 >> 2));
+            z[posG] = uint8_t((g5 << 3) | (g5 >> 2));
+            z[posB] = uint8_t((b5 << 3) | (b5 >> 2));
+            z[posA] = (w & 0x8000) ? 255 : 0;        // Bit 15 = sichtbar
+        }
+
+        // Wie beim TR5-Transfer: nur gegen die STABILEN Seiten vor der
+        // Einfuegestelle pruefen, damit eine Wiederverwendung nicht durch
+        // spaetere Einfuegungen verrutscht.
+        int gefunden = -1;
+        const int stabil = einfuegeAb + neueSeiten;
+        for (int d = 0; d < stabil; ++d)
+            if (std::memcmp(dst32.data() + size_t(d) * PAGE32, seite32.data(), PAGE32) == 0)
+            { gefunden = d; break; }
+
+        if (gefunden >= 0) { kachelRemap[int(k)] = gefunden; continue; }
+
+        const int neu = einfuegeAb + neueSeiten;
+        dst32.insert(dst32.begin() + size_t(neu) * PAGE32, seite32.begin(), seite32.end());
+        dst16.insert(dst16.begin() + size_t(neu) * PAGE16, quelle16, quelle16 + PAGE16);
+        kachelRemap[int(k)] = neu;
+        ++neueSeiten;
+    }
+
+    if (neueSeiten > 0)
+    {
+        std::vector<uint8_t> b32, b16;
+        deflateBlock(dst32, b32);
+        deflateBlock(dst16, b16);
+
+        std::vector<uint8_t> neu;
+        neu.reserve(m_bytes.size() + b32.size() + b16.size());
+        neu.insert(neu.end(), m_bytes.begin(), m_bytes.begin() + 10);
+        neu.insert(neu.end(), b32.begin(), b32.end());
+        neu.insert(neu.end(), b16.begin(), b16.end());
+        neu.insert(neu.end(), m_bytes.begin() + dstTex.blockMiscAt, m_bytes.end());
+        m_bytes.swap(neu);
+
+        wr16(m_bytes, 6, static_cast<uint16_t>(dstTex.ot + neueSeiten));
+
+        if (!reparse(error)) { error = "nach dem Seiteneinfuegen: " + error; return false; }
+
+        // Alle GESPEICHERTEN Kachelnummern ab der Einfuegestelle nachziehen -
+        // Texinfos (Bit 15 ist ein Flag und bleibt stehen) und Sprites.
+        for (int32_t i = 0; i < m_texinfos.count; ++i)
+        {
+            const size_t o = m_texinfos.dataAt + static_cast<size_t>(i) * SZ_TEXINFO + 2;
+            const uint16_t w = rd16(m_bytes, o);
+            const int tile = w & 0x7FFF;
+            if (tile >= einfuegeAb)
+                wr16(m_bytes, o, static_cast<uint16_t>((w & 0x8000) | (tile + neueSeiten)));
+        }
+        for (int32_t i = 0; i < m_sprites.count; ++i)
+        {
+            const size_t o = m_sprites.dataAt + static_cast<size_t>(i) * SZ_SPRITE;
+            const uint16_t w = rd16(m_bytes, o);
+            if (w >= einfuegeAb) wr16(m_bytes, o, static_cast<uint16_t>(w + neueSeiten));
+        }
+    }
+
+    // --- Texinfos anlegen --------------------------------------------------
+    //
+    // Aufbau aus global/types.h und specific/file.cpp:1089ff, abgelesen:
+    //   +0 drawtype, +2 tpage, +4 flag, dann u1,v1,u2,v2,u3,v3,u4,v4
+    //   als 8.8-Festkomma. TR3 fuehrt dieselben vier Ecken als Pixel.
+    //
+    // tpage bekommt BEWUSST kein Bit 15: nur dann laeuft in AdjustUV die
+    // Halbtexel-Korrektur (file.cpp:214 prueft flag & 0x8000, und dieses Bit
+    // stammt aus tpage). Ohne sie wird auch der Orientierungswert in flag & 7
+    // nie gelesen - die einzige Groesse, die man sonst raten muesste.
+    std::vector<uint8_t> neueInfos;
+    int neuAngelegt = 0;
+    for (const Tr3Tex& t : texte)
+    {
+        std::map<int,int>::const_iterator kr = kachelRemap.find(t.kachel);
+        if (kr == kachelRemap.end()) { error = "Textur verweist auf eine Kachel, die nicht im Paket ist"; return false; }
+
+        uint8_t rec[SZ_TEXINFO];
+        std::memset(rec, 0, SZ_TEXINFO);
+        const uint16_t draw = t.drawtype;
+        const uint16_t tp = static_cast<uint16_t>(kr->second);
+        std::memcpy(rec + 0, &draw, 2);
+        std::memcpy(rec + 2, &tp, 2);
+        for (int v = 0; v < 4; ++v)
+        {
+            const uint16_t u = static_cast<uint16_t>(t.uv[v * 2]) << 8;
+            const uint16_t vv = static_cast<uint16_t>(t.uv[v * 2 + 1]) << 8;
+            std::memcpy(rec + 6 + v * 4, &u, 2);
+            std::memcpy(rec + 8 + v * 4, &vv, 2);
+        }
+
+        // Gibt es den Eintrag schon? Dann wiederverwenden.
+        int gefunden = -1;
+        for (int32_t i = 0; i < m_texinfos.count && gefunden < 0; ++i)
+            if (std::memcmp(m_bytes.data() + m_texinfos.dataAt + static_cast<size_t>(i) * SZ_TEXINFO,
+                            rec, SZ_TEXINFO) == 0)
+                gefunden = i;
+        for (int k = 0; k < neuAngelegt && gefunden < 0; ++k)
+            if (std::memcmp(neueInfos.data() + static_cast<size_t>(k) * SZ_TEXINFO, rec, SZ_TEXINFO) == 0)
+                gefunden = m_texinfos.count + k;
+
+        if (gefunden >= 0) { zuordnung[t.orig] = gefunden; continue; }
+        zuordnung[t.orig] = m_texinfos.count + neuAngelegt;
+        neueInfos.insert(neueInfos.end(), rec, rec + SZ_TEXINFO);
+        ++neuAngelegt;
+    }
+
+    if (neuAngelegt > 0)
+    {
+        int32_t v; std::memcpy(&v, m_bytes.data() + m_texinfos.countAt, 4);
+        v += neuAngelegt;
+        std::memcpy(m_bytes.data() + m_texinfos.countAt, &v, 4);
+
+        std::vector<Splice> splices;
+        splices.push_back({ m_texinfos.dataAt + static_cast<size_t>(m_texinfos.count) * SZ_TEXINFO,
+                            std::move(neueInfos) });
+        const size_t dazu = splices[0].bytes.size();
+        applySplices(m_bytes, splices);
+
+        m_mainSize += dazu;
+        const int32_t neueGroesse = static_cast<int32_t>(m_mainSize);
+        std::memcpy(m_bytes.data() + m_mainOffset - 8, &neueGroesse, 4);
+        std::memcpy(m_bytes.data() + m_mainOffset - 4, &neueGroesse, 4);
+
+        if (!reparse(error)) { error = "nach den Texinfos: " + error; return false; }
+    }
+
+    std::snprintf(buf, sizeof(buf), "%d neue Seiten, %d neue Texinfos (Kanaele R=%d G=%d B=%d)",
+                  neueSeiten, neuAngelegt, posR, posG, posB);
+    error = buf;              // Erfolgsmeldung fuer den Aufrufer
+    return true;
+}
+
 bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& error,
                                 int dstSlot, bool nurMeshes, int animZahl)
 {

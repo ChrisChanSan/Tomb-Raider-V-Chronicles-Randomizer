@@ -17,6 +17,7 @@
  */
 #pragma once
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -269,6 +270,21 @@ public:
                              std::vector<std::pair<int,int>>& zuordnung,
                              std::string& error,
                              const std::vector<int>* lautProzent = nullptr);
+
+    // Setzt die Texturen eines TR3-Modellpakets (Version 2) ein: Seiten
+    // anhaengen, Texinfos anlegen. Liefert TR3-Texturnummer -> neuer
+    // Texinfo-Index; damit biegt der Aufrufer die Texturworte der Faces um.
+    //
+    // Implementierung in Tr5Transfer.cpp - dort liegen die erprobten Helfer
+    // fuer die Seitenverwaltung. Die ist die gefaehrlichste Stelle des
+    // Werkzeugs: eingefuegt wird an derselben Stelle wie beim TR5-Transfer
+    // (rt+ot), danach werden Texinfos und Sprites nachgezogen. Niemals
+    // eigenmaechtig hinten anhaengen - das verschiebt die Grenze zwischen
+    // Objekt- und Bump-Seiten.
+    //
+    // Bei Erfolg steht in error eine Kurzmeldung (neue Seiten, neue Infos).
+    bool    addTexturesFromTr3(const std::vector<uint8_t>& paket,
+                               std::map<int,int>& zuordnung, std::string& error);
 
     // Nimmt den Triggereintrag des Quellsektors heraus und haengt ihn an die
     // Kette des Zielsektors. Beide Ketten werden neu hinten angebaut, beide

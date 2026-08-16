@@ -259,7 +259,9 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlo
     if (paket.size() < 48 || std::memcmp(paket.data(), "T35H", 4) != 0)
     { error = "Kein TR3-Paket (Kennung T35H fehlt)"; return false; }
     if (zielSlot <= 0) { error = "Zielslot muss groesser 0 sein"; return false; }
-    if (texinfoIndex < 0 || texinfoIndex >= m_texinfos.count)
+    // texinfoIndex < 0 heisst: die Faces tragen schon gueltige Texinfos
+    // (die Texturen wurden vorher eingesetzt) und werden NICHT angefasst.
+    if (texinfoIndex >= m_texinfos.count)
     { error = "Texinfo-Index liegt nicht im Ziel"; return false; }
 
     size_t p = 4;
@@ -273,7 +275,10 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlo
     const uint32_t nAD       = g32(paket, p); p += 4;
     const uint32_t nCmd      = g32(paket, p); p += 4;
     p += 8;                                              // Quell-Offsets, schon rebasiert
-    if (version != 1) { error = "Unbekannte Paketversion"; return false; }
+    // Version 2 haengt hinter dem Kommandoblock einen Texturteil an. Der wird
+    // hier nicht gelesen - dafuer gibt es addTexturesFromTr3 -, stoert aber
+    // auch nicht: alles davor steht unveraendert an derselben Stelle.
+    if (version != 1 && version != 2) { error = "Unbekannte Paketversion"; return false; }
 
     // --- Meshes einsammeln und zu einem Block packen -----------------------
     std::vector<uint8_t> meshPack;
@@ -295,8 +300,12 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlo
     {
         const size_t at = meshStart[i];
         const size_t ende = (i + 1 < nMeshes) ? meshStart[i + 1] : meshPack.size();
+        // Auch bei texinfoIndex < 0 durchlaufen: der Ableser prueft dabei,
+        // dass jedes Mesh als TR5-Mesh lesbar ist.
         if (!faceTexte(meshPack, at, ende,
-                       [&](size_t texAt) { s16(meshPack, texAt, static_cast<uint16_t>(texinfoIndex)); }))
+                       [&](size_t texAt) {
+                           if (texinfoIndex >= 0) s16(meshPack, texAt, static_cast<uint16_t>(texinfoIndex));
+                       }))
         {
             std::snprintf(buf, sizeof(buf), "Mesh %u laesst sich nicht als TR5-Mesh lesen", i);
             error = buf;
@@ -315,7 +324,11 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlo
     std::vector<uint8_t> chgBytes   = hol(static_cast<size_t>(nSC) * SZ_CHANGE);
     std::vector<uint8_t> rngBytes   = hol(static_cast<size_t>(nAD) * SZ_RANGE);
     std::vector<uint8_t> cmdBytes   = hol(static_cast<size_t>(nCmd) * 2);
-    if (p != paket.size()) { error = "Paketgroesse passt nicht zu den Kopfangaben"; return false; }
+    // Version 1 endet hier genau; Version 2 haengt den Texturteil an, der von
+    // addTexturesFromTr3 gelesen wird und hier folgerichtig uebrig bleibt.
+    if (version == 1 && p != paket.size())
+    { error = "Paketgroesse passt nicht zu den Kopfangaben"; return false; }
+    if (p > paket.size()) { error = "Paket kuerzer als seine Kopfangaben"; return false; }
 
     // --- Rebasen auf die Zaehlerstaende des Ziels --------------------------
     const int32_t dstMeshBytes = m_meshData.count * 2;

@@ -206,6 +206,9 @@ int main(int argc, char** argv)
     // --- Meshes umschreiben -------------------------------------------------
     std::vector<std::vector<uint8_t>> meshes;
     int gesQuads = 0, gesTris = 0, gesFarbig = 0, maxVerts = 0;
+    int erstesTex = -1;                       // erste Textur, die das Modell selbst nutzt
+    struct FarbStelle { std::vector<uint8_t>* puffer; size_t at; };
+    std::vector<FarbStelle> farbigeStellen;
     for (uint16_t i = 0; i < z->numMeshes; ++i)
     {
         const uint32_t off = ru32(r.b, ptrAt + size_t(z->startingMesh + i) * 4);
@@ -242,13 +245,18 @@ int main(int argc, char** argv)
             put16(tris, 0);
             ++tz;
         }
-        // Farbige Faces: TR5 kennt sie nicht - als texturierte mit Textur 0
-        // uebernehmen, damit die Geometrie geschlossen bleibt.
+        // Farbige Faces: TR5 kennt sie nicht. Sie werden texturiert
+        // uebernommen, damit die Geometrie geschlossen bleibt - aber NICHT
+        // mit Textur 0. Die ist im Quelllevel irgendetwas Beliebiges; beim
+        // T-Rex war es ein Stueck von Laras Bein, das dann unter seinem Maul
+        // klebte (im Spiel gesehen). Stattdessen die erste Textur, die das
+        // Modell selbst benutzt - die gehoert garantiert zu ihm.
         const int16_t nCQ = rs16(r.b, p); p += 2;
         for (int q = 0; q < nCQ; ++q)
         {
             for (int w = 0; w < 4; ++w) { put16(quads, ru16(r.b, p)); p += 2; }
             p += 2;                                                 // Farbindex verwerfen
+            farbigeStellen.push_back({ &quads, quads.size() });
             put16(quads, 0); put16(quads, 0);
             ++qz; ++gesFarbig;
         }
@@ -257,9 +265,26 @@ int main(int argc, char** argv)
         {
             for (int w = 0; w < 3; ++w) { put16(tris, ru16(r.b, p)); p += 2; }
             p += 2;
+            farbigeStellen.push_back({ &tris, tris.size() });
             put16(tris, 0); put16(tris, 0);
             ++tz; ++gesFarbig;
         }
+
+        // Erste echte Textur dieses Meshes merken und die farbigen Stellen
+        // darauf setzen, BEVOR die Puffer ins Mesh wandern.
+        if (erstesTex < 0)
+        {
+            if (nQ > 0)      erstesTex = ru16(quads, 8);
+            else if (nT > 0) erstesTex = ru16(tris, 6);
+        }
+        for (const FarbStelle& fs : farbigeStellen)
+            if (erstesTex >= 0)
+            {
+                const uint16_t v = uint16_t(erstesTex);
+                (*fs.puffer)[fs.at]     = uint8_t(v & 0xFF);
+                (*fs.puffer)[fs.at + 1] = uint8_t(v >> 8);
+            }
+        farbigeStellen.clear();
 
         put16(o, uint16_t(qz)); o.insert(o.end(), quads.begin(), quads.end());
         put16(o, uint16_t(tz)); o.insert(o.end(), tris.begin(), tris.end());

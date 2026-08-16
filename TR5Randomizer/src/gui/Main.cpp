@@ -490,6 +490,8 @@ namespace
         opt.crossEnemies = (a.optEnemyPool == 1);
         opt.allsanity    = (a.optEnemyPool == 2);
         opt.gesperrteGegner = a.optGegnerAus;
+        opt.tr3Dir     = a.cfg.tr3Dir;
+        opt.tr3GoldDir = a.cfg.tr3GoldDir;
         opt.randomOutfits = a.optOutfits;
         opt.allWeapons = true;              // Standard, siehe App-Kommentar
         // Item-Abundance: die drei Stufen der Oberflaeche als Stueckzahl.
@@ -510,7 +512,11 @@ namespace
         };
 
         PatchReport pr;
-        if (!Patch::apply(lvl, patch, pr, err, quelle)) return false;
+        // Die Fremdinstallationen durchreichen: nur damit kann apply() die
+        // Gaeste aus Tomb Raider 3 zur Laufzeit holen (#92). Fehlen sie, hat
+        // der Randomizer sie gar nicht erst in den Pool genommen.
+        if (!Patch::apply(lvl, patch, pr, err, quelle, nullptr,
+                          a.cfg.tr3Dir, a.cfg.tr3GoldDir)) return false;
         for (const std::string& w : pr.warnings) rep.notes.push_back(w);
         if (!lvl.save(target, err)) return false;
 

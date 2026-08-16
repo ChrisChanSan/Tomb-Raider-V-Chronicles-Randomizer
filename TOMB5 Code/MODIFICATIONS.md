@@ -190,6 +190,18 @@ Also in this group:
   Grouping is by SWAP-set donor, which can differ from the model donor:
   rich1 (model source for the Guard and Two Gun) carries no `MESHSWAP1`
   at all — its enemies never set their swap bits in vanilla.
+- `game/objects.h`, `specific/file.cpp` — **the on-disk slot boundary is
+  pinned to 460** (`SLOT_FILE_BOUNDARY`). The level file format encodes
+  static-object sprite slots as `460 + static number`, 460 being the value
+  `NUMBER_OBJECTS` had when the original levels were built; `LoadSprites`
+  used the enum constant for that split, which silently breaks every
+  existing level the moment new moveable slots are appended to the enum.
+  The loader now uses the pinned constant, and `LoadObjects` skips (and
+  logs) moveable records whose slot this build does not know instead of
+  writing past the end of `objects[]`. With the enum unchanged both are
+  no-ops: 460 == `NUMBER_OBJECTS`, and no vanilla level carries unknown
+  slots. This is groundwork for engine-only extra slots (randomizer:
+  additional enemy types beyond the original 460).
 - `global/types.h`, `game/control.cpp`/`control.h`, `game/items.cpp` —
   **`MAX_ITEMS` doubled from 256 to 512**: the densest levels (rich2 at 248,
   joby3 at 244) left almost no room for the randomizer's extra enemies and

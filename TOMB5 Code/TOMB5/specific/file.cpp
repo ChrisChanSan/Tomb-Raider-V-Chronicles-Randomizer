@@ -814,6 +814,24 @@ bool LoadObjects()
 	for (lp = 0; lp < num; lp++)
 	{
 		slot = ReadLong();
+
+		// The slot comes straight from the level file with no upstream
+		// validation (same bug class as num_items in LoadItems). A file
+		// written for a newer build of this engine may carry slots this
+		// build's enum does not know yet - skip the record instead of
+		// writing past the end of objects[].
+		if (slot < 0 || slot >= NUMBER_OBJECTS)
+		{
+			Log("LoadObjects: unknown slot %d skipped (NUMBER_OBJECTS=%d)", slot, NUMBER_OBJECTS);
+			ReadShort();
+			ReadShort();
+			ReadLong();
+			ReadLong();
+			ReadShort();
+			ReadShort();	//Skip padding
+			continue;
+		}
+
 		obj = &objects[slot];
 
 		obj->nmeshes = ReadShort();
@@ -912,9 +930,15 @@ bool LoadSprites()
 	{
 		slot = ReadLong();
 
-		if (slot >= NUMBER_OBJECTS)
+		// SLOT_FILE_BOUNDARY, not NUMBER_OBJECTS: every existing level file
+		// encodes static-object sprite slots as 460 + static number, because
+		// 460 was the value of NUMBER_OBJECTS when those files were written.
+		// NUMBER_OBJECTS may grow as new moveable slots are appended to the
+		// enum (randomizer project); the on-disk encoding must stay pinned at
+		// 460 or these entries would be misread as moveables in every level.
+		if (slot >= SLOT_FILE_BOUNDARY)
 		{
-			slot -= NUMBER_OBJECTS;
+			slot -= SLOT_FILE_BOUNDARY;
 			stat = &static_objects[slot];
 			stat->mesh_number = ReadShort();
 			stat->mesh_number = ReadShort();

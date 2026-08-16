@@ -1,3 +1,15 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #pragma once
 #include "../global/types.h"
 
@@ -296,5 +308,13 @@ enum object_types
 
 	NUMBER_OBJECTS
 };
+
+// The level file format encodes static-object sprite slots as
+// 460 + static number - 460 being the value NUMBER_OBJECTS had when the
+// original levels were built. New moveable slots appended to the enum above
+// push NUMBER_OBJECTS past 460, so the loader must keep using this pinned
+// constant for the on-disk boundary (see LoadSprites in specific/file.cpp).
+// Items and moveable records are unaffected: they carry their slot verbatim.
+#define SLOT_FILE_BOUNDARY	460
 
 extern OBJECT_INFO objects[NUMBER_OBJECTS];

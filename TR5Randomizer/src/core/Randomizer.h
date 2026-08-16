@@ -455,6 +455,15 @@ struct RandoOptions
     // Sonst stuende ein Gegner ohne seinen Animationssatz im Level.
     std::set<int> gesperrteGegner;
 
+    // Fremdinstallationen fuer die Gaeste aus Tomb Raider 3 (#92, #102).
+    //
+    // Wir liefern keine Spieldaten mit - der Lauf holt Modell, Texturen und
+    // Klaenge zur Laufzeit von HIER. Fehlt ein Pfad, fallen die zugehoerigen
+    // Arten still aus dem Pool. Der Lauf darf NIE daran scheitern, dass
+    // jemand die Spiele nicht besitzt.
+    std::wstring tr3Dir;
+    std::wstring tr3GoldDir;
+
     // Jedes Level bekommt zufaellig eines der drei Outfits: Lara_Andrea
     // (Spender Andrea1), Lara_Joby (joby2) oder Lara_Rich (rich2, Catsuit).
     // Uebertragen werden die Slots 8/9/10 (LARA_SKIN, LARA_SKIN_JOINTS,

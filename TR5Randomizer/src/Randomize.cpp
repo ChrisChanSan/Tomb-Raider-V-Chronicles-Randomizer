@@ -63,6 +63,9 @@ int main(int argc, char** argv)
     bool nurGegner = false, outfits = false, waffen = false, mix = false, cross = false, allsanity = false;
     bool notizen = false;
     std::set<int> gegnerAus;         // Abwahl, siehe Argument gegneraus=
+    // Fremdinstallationen fuer die Gaeste aus TR3 (#92). Ohne sie fallen die
+    // vier Arten still aus dem Pool - genau wie beim Nutzer ohne die Spiele.
+    std::wstring tr3Dir, tr3GoldDir;
     for (int i = 6; i < argc; ++i)
     {
         const std::string s = argv[i];
@@ -73,6 +76,8 @@ int main(int argc, char** argv)
         else if (s == "mix")    mix = true;
         else if (s == "cross")  cross = true;
         else if (s == "allsanity") allsanity = true;
+        else if (s.rfind("tr3=", 0) == 0)     tr3Dir     = toW(s.c_str() + 4);
+        else if (s.rfind("tr3gold=", 0) == 0) tr3GoldDir = toW(s.c_str() + 8);
         // "gegneraus=47,49" - dieselbe Abwahl wie das Fenster "Gegnerarten"
         // in der Oberflaeche (#95), damit sich der Filter auch aus Skripten
         // pruefen laesst.
@@ -131,6 +136,8 @@ int main(int argc, char** argv)
     opt.crossEnemies = cross;
     opt.allsanity = allsanity;
     opt.gesperrteGegner = gegnerAus;
+    opt.tr3Dir     = tr3Dir;
+    opt.tr3GoldDir = tr3GoldDir;
     opt.extraPickups = extraItems;
     if (nurGegner) { opt.shuffleKeyItems = false; opt.shuffleOtherPickups = false; }
 

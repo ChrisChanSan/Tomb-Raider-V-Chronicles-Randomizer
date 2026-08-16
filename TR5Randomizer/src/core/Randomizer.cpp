@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 
 namespace
 {
@@ -1238,9 +1239,14 @@ bool Rando::run(const RandoInput& in,
     // Typ importiert, MUSS den Basistyp mitbringen, sonst laeuft er ohne
     // gueltigen Satz. Import mit replace=false: hat das Ziel den Basistyp
     // schon (nativ oder als eigener Cross-Import), bleibt der stehen.
+    // "tr3" (0 = aus TR5 selbst): Kennung der Fremdquelle aus
+    // Tr3Quelle::dinos(). Ist sie gesetzt, ist "von" leer - das Modell kommt
+    // nicht aus einem TR5-Level, sondern zur Laufzeit aus der Installation des
+    // Nutzers. Alles Weitere steht in der Dino-Tabelle, damit es nur EINE
+    // Wahrheit gibt.
     struct CrossGegner { int typeId; const char* von; CrossSound sounds[2];
                          int begleiter[2]; const char* swapVon; int swapDst;
-                         int animZahl; int basisSlot; };
+                         int animZahl; int basisSlot; const char* tr3; };
     static const CrossGegner kCross[] = {
         { 33, "rich3",   {},                                    {-1,-1},  "rich3",   399, 0, 0 },  // SWAT
         { 35, "rich3",   {},                                    {-1,-1},  "rich3",   399, 0, 33 }, // Advanced SWAT (Anims von SWAT)
@@ -1324,6 +1330,21 @@ bool Rando::run(const RandoInput& in,
         // Todesanim im Import und die Engine las hinter dem Tabellenende
         // (die beobachtete Todes-Flugschleife).
         { 89, "andy3",   {},                                    {-1,-1},  "andy3",   402, 46 }, // Imp
+
+        // --- Gaeste aus Tomb Raider 3 (#92) ---------------------------------
+        //
+        // Kein Spenderlevel: "von" bleibt leer, das Modell kommt zur Laufzeit
+        // aus der Installation des Nutzers. Alles Naehere - Datei, Objekt,
+        // Klaenge, Lautstaerken - steht in Tr3Quelle::dinos().
+        //
+        // Die vier Zielslots tragen in KEINEM der 16 TR5-Level ein Modell (mit
+        // MissMod an allen nachgemessen), sie nehmen also keinem einheimischen
+        // Gegner etwas weg. Weder Basistyp noch Begleiter noch Tauschhaelften -
+        // sie bringen alles selbst mit.
+        { 31, nullptr,   {},                                    {-1,-1},  nullptr,   -1, 0, 0, "tr3"     }, // T-Rex
+        { 43, nullptr,   {},                                    {-1,-1},  nullptr,   -1, 0, 0, "tr3gold" }, // Geier
+        { 53, nullptr,   {},                                    {-1,-1},  nullptr,   -1, 0, 0, "tr3"     }, // Compy
+        { 75, nullptr,   {},                                    {-1,-1},  nullptr,   -1, 0, 0, "tr3"     }, // Raptor
     };
 
     // Verbotene Typen (siehe RandoInput::verboteneTypen) fliegen aus dem
@@ -1358,6 +1379,21 @@ bool Rando::run(const RandoInput& in,
             if (eigene.count(c.typeId)) continue;         // steht schon im Levelpool
             if (in.verboteneTypen.count(c.typeId)) continue;   // Level vertraegt ihn nicht
             if (opt.gesperrteGegner.count(c.typeId)) continue; // vom Nutzer abgewaehlt
+
+            // Gaeste aus Tomb Raider 3 (#92): sie brauchen die Installation
+            // des Nutzers. Fehlt sie, fallen sie STILL heraus - ein Lauf darf
+            // nie daran scheitern, dass jemand die Spiele nicht besitzt.
+            if (c.tr3)
+            {
+                const bool gold = (std::strcmp(c.tr3, "tr3gold") == 0);
+                // Der Geier braucht BEIDE: sein Modell steckt in Gold, seine
+                // Klaenge in der MAIN.SFX von TR3 (siehe Tr3Quelle::sfxPfad).
+                if (opt.tr3Dir.empty()) continue;
+                if (gold && opt.tr3GoldDir.empty()) continue;
+                kandidaten.push_back(&c);
+                continue;
+            }
+
             std::string vonKlein;
             for (const char* p = c.von; *p; ++p)
                 vonKlein.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p);
@@ -2003,6 +2039,21 @@ bool Rando::run(const RandoInput& in,
     for (int t : crossBenutzt)
     {
         const CrossGegner* c = crossGewaehlt[t];
+
+        // Gast aus Tomb Raider 3 (#92): kein Spenderlevel, sondern eine
+        // Anweisung an den Patchweg, ihn zur Laufzeit aus der Installation
+        // des Nutzers zu holen. Alles Naehere steht in Tr3Quelle::dinos() -
+        // hier reicht der Slot, denn die Tabelle ist ueber ihn auffindbar.
+        if (c->tr3)
+        {
+            JsonValue e = JsonValue::makeObject();
+            e.set("slot", JsonValue::makeInt(t));
+            e.set("ausTr3", JsonValue::makeString(c->tr3));
+            moveables.push(e);
+            report.notes.push_back(fmt("Gast aus Tomb Raider 3: Slot %d wird beim Patchen geholt.", t));
+            continue;
+        }
+
         JsonValue e = JsonValue::makeObject();
         e.set("slot", JsonValue::makeInt(t));
         e.set("fromLevel", JsonValue::makeString(c->von));

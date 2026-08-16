@@ -349,6 +349,29 @@ namespace
         std::wstring debugDir() const { return PathUtil::join(PathUtil::exeDir(), L"Debug Level"); }
     };
 
+// Wo liegt die gesuchte Datei wirklich?
+//
+// Der Nutzer waehlt im Dateidialog den SPIELORDNER - das ist das Natuerliche,
+// und genau das hat er getan. Die Leveldateien liegen aber im Unterordner
+// "data". Statt ihn mit einem Hinweistext zu belehren, sucht das Werkzeug an
+// beiden Stellen. Zurueck kommt der Ordner, der die Datei wirklich enthaelt,
+// oder leer.
+//
+// Gross- und Kleinschreibung ist unter Windows egal, "Data" und "DATA" also
+// mit abgedeckt.
+static std::wstring loeseOrdner(const std::wstring& gewaehlt, const wchar_t* datei)
+{
+    if (gewaehlt.empty()) return std::wstring();
+    if (PathUtil::fileExists(PathUtil::join(gewaehlt, datei))) return gewaehlt;
+    const std::wstring unten = PathUtil::join(gewaehlt, L"data");
+    if (PathUtil::fileExists(PathUtil::join(unten, datei))) return unten;
+    return std::wstring();
+}
+
+// Die aufgeloesten Ordner, wie sie an Kern und Patchweg gehen.
+static std::wstring tr3Ordner(const App& a)  { return loeseOrdner(a.cfg.tr3Dir, L"CRASH.TR2"); }
+static std::wstring goldOrdner(const App& a) { return loeseOrdner(a.cfg.tr3GoldDir, L"chunnel.TR2"); }
+
 // Zwischenlager fuer die aus Tomb Raider 3 entnommenen Pakete (#103).
 //
 // Liegt neben dem Programm. Die Dateien entstehen auf dem Rechner dessen, der
@@ -358,7 +381,7 @@ namespace
 
 static std::wstring lagerDir(const App& a)
 {
-    if (a.cfg.tr3Dir.empty()) return std::wstring();      // ohne Quelle kein Lager
+    if (tr3Ordner(a).empty()) return std::wstring();     // ohne Quelle kein Lager
     const std::wstring dir = PathUtil::join(PathUtil::exeDir(), L"Import-Export");
     if (!PathUtil::ensureDir(dir)) return std::wstring();
 
@@ -552,7 +575,7 @@ static std::wstring lagerDir(const App& a)
         // Gaeste aus Tomb Raider 3 zur Laufzeit holen (#92). Fehlen sie, hat
         // der Randomizer sie gar nicht erst in den Pool genommen.
         if (!Patch::apply(lvl, patch, pr, err, quelle, nullptr,
-                          a.cfg.tr3Dir, a.cfg.tr3GoldDir, lagerDir(a))) return false;
+                          tr3Ordner(a), goldOrdner(a), lagerDir(a))) return false;
         for (const std::string& w : pr.warnings) rep.notes.push_back(w);
         if (!lvl.save(target, err)) return false;
 
@@ -851,9 +874,8 @@ static bool dinoQuelleDa(const App& a, const char* quelle)
     if (!quelle) return true;                 // steckt in TR5 selbst
 
     if (std::strcmp(quelle, "tr3") == 0)
-        return !a.cfg.tr3Dir.empty()
-            && PathUtil::fileExists(PathUtil::join(a.cfg.tr3Dir, L"CRASH.TR2"))
-            && PathUtil::fileExists(PathUtil::join(a.cfg.tr3Dir, L"MAIN.SFX"));
+        return !tr3Ordner(a).empty()
+            && !loeseOrdner(a.cfg.tr3Dir, L"MAIN.SFX").empty();
 
     // Der Geier braucht BEIDE Installationen: sein Modell steckt in chunnel.TR2
     // von The Lost Artifact, seine Klaenge kommen aber aus der MAIN.SFX von
@@ -861,10 +883,8 @@ static bool dinoQuelleDa(const App& a, const char* quelle)
     // eigene mit (9,8 MB gegen 11,6 MB), und die abgehoerten Wave-Nummern
     // beziehen sich auf die von TR3.
     if (std::strcmp(quelle, "tr3gold") == 0)
-        return !a.cfg.tr3GoldDir.empty()
-            && PathUtil::fileExists(PathUtil::join(a.cfg.tr3GoldDir, L"chunnel.TR2"))
-            && !a.cfg.tr3Dir.empty()
-            && PathUtil::fileExists(PathUtil::join(a.cfg.tr3Dir, L"MAIN.SFX"));
+        return !goldOrdner(a).empty()
+            && !loeseOrdner(a.cfg.tr3Dir, L"MAIN.SFX").empty();
 
     return false;
 }

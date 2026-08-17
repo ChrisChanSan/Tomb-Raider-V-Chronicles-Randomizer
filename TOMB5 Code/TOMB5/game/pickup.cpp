@@ -653,7 +653,25 @@ void KeyHoleCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 				lara.torso_y_rot = 0;
 				lara.gun_status = LG_HANDS_BUSY;
 				item->status = ITEM_ACTIVE;
-				item->flags &= IFL_TRIGGERED;
+				// War "flags &= IFL_TRIGGERED" - das loescht ALLE Bits, wenn
+				// IFL_TRIGGERED nicht schon gesetzt ist, und ein frisches
+				// Schluesselloch traegt in der Leveldatei flags 0. Der
+				// Savegame-Schreiber speichert ein Item aber nur, wenn eines
+				// von CODEBITS/INVISIBLE/TRIGGERED gesetzt ist
+				// (savegame.cpp:305): das Schloss fiel also mit flags 0 aus
+				// dem Spielstand heraus und kam beim Laden als "nicht
+				// benutzt" zurueck - waehrend der Schluessel (Inventar WIRD
+				// gespeichert) schon weg war. Die Tuer ging nie wieder auf,
+				// weil KeyTrigger (oben, Zeile 140) ITEM_ACTIVE verlangt.
+				// Reproduziert vom Nutzer in VANILLA Andrea1, Item 25
+				// (Keyhole1): Anim starten, sofort speichern, laden.
+				// Im ganzen Motor ist dies die EINZIGE Stelle mit "&=" - die
+				// 26 anderen setzen das Bit mit "|=". Die Zuweisung behaelt
+				// Cores Absicht ("alle anderen Bits weg") und stellt nur
+				// sicher, dass das Bit wirklich steht. Der Puzzle-Hole macht
+				// es richtig (Zeile 317) und ueberlebt Save/Load deshalb
+				// seit jeher (savegame.cpp:924 stellt ihn wieder her).
+				item->flags = IFL_TRIGGERED;
 
 				if (item->trigger_flags == 1 && item->object_number == KEY_HOLE8)
 					item->item_flags[3] = 92;

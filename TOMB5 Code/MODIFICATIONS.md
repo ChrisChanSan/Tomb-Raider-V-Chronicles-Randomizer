@@ -190,6 +190,21 @@ Also in this group:
   Grouping is by SWAP-set donor, which can differ from the model donor:
   rich1 (model source for the Guard and Two Gun) carries no `MESHSWAP1`
   at all — its enemies never set their swap bits in vanilla.
+- `game/pickup.cpp` — **keyhole state was lost across save/load** (an
+  original-game bug, reproduced in unmodified Chronicles): inserting a key
+  ran `item->flags &= IFL_TRIGGERED`, which clears *every* flag bit unless
+  that one was already set — and a keyhole starts at flags 0 in the level
+  file. The savegame writer only stores an item when one of
+  `CODEBITS`/`INVISIBLE`/`TRIGGERED` is set (`savegame.cpp`), so the
+  keyhole dropped out of the save entirely and came back as "unused",
+  while the key itself was already gone (inventory *is* saved). The door
+  could then never open, because `KeyTrigger` requires `ITEM_ACTIVE`.
+  Saving during the key-insert animation and reloading reproduces it every
+  time. This is the only `&=` of its kind in the engine — the other 26
+  sites use `|=`, and the puzzle hole (which uses `|=`) survives save/load
+  correctly for exactly this reason. Now assigns `IFL_TRIGGERED`, which
+  keeps the original "clear the other bits" intent and only guarantees the
+  bit is actually set.
 - `game/objects.h`, `specific/file.cpp` — **the on-disk slot boundary is
   pinned to 460** (`SLOT_FILE_BOUNDARY`). The level file format encodes
   static-object sprite slots as `460 + static number`, 460 being the value

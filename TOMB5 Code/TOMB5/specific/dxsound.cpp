@@ -245,6 +245,7 @@ bool FreeSampleDecompress()
 bool DXCreateSampleADPCM(char* data, long comp_size, long uncomp_size, long num)
 {
 	LPWAVEFORMATEX format;
+	ulong dekodiert;
 
 	Log(__FUNCTION__);
 
@@ -276,9 +277,25 @@ bool DXCreateSampleADPCM(char* data, long comp_size, long uncomp_size, long num)
 		DS_Buffers[num].pcm = 0;
 	}
 
+	// Nur uebernehmen, was die Umsetzung wirklich geliefert hat: sie arbeitet
+	// blockweise und bleibt gern unter uncomp_size - 32. Der alte Code (schon
+	// bei Core so) kopierte trotzdem die volle Laenge - das Ende war dann
+	// Altbestand des zuvor dekodierten Samples und knackte hoerbar.
+	dekodiert = ACMStreamHeader.cbDstLengthUsed;
 	DS_Buffers[num].bytes = uncomp_size - 32;
 	DS_Buffers[num].pcm = (BYTE*)malloc(DS_Buffers[num].bytes);
-	memcpy(DS_Buffers[num].pcm, decompressed_samples_buffer, DS_Buffers[num].bytes);
+
+	if (dekodiert > DS_Buffers[num].bytes)
+		dekodiert = DS_Buffers[num].bytes;
+
+	memcpy(DS_Buffers[num].pcm, decompressed_samples_buffer, dekodiert);
+
+	if (dekodiert < DS_Buffers[num].bytes)
+	{
+		memset(DS_Buffers[num].pcm + dekodiert, 0, DS_Buffers[num].bytes - dekodiert);
+		Log("Sample %d: %lu Bytes Rest genullt", num, DS_Buffers[num].bytes - dekodiert);
+	}
+
 	DS_Buffers[num].frequency = pcm_format.nSamplesPerSec;
 	return 1;
 }

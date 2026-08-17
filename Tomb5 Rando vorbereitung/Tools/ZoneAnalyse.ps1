@@ -1101,7 +1101,15 @@ $ENEMY_TYPES = @{
     'andy1'   = @{ 89 = 'Imp - im Spiel geprueft: faellt eigenartig, blendet aber aus' }
     'Andy2'   = @{ 77 = 'Maze Monster - vom Nutzer als "testen ob nutzbar" markiert' }
     'andy3'   = @{ 89 = 'Imp - in andy1 geprueft, hier noch nicht' }
-    'joby2'   = @{ 37 = 'Guard (Blue Guard)' }
+    'joby2'   = @{
+        37 = 'Guard (Blue Guard)'
+        # Freigabe des Nutzers 17.08.2026. Der Huskie ist ein EIGENER Gegner,
+        # nicht der Hund (41): eigene Steuerung, 24 statt 18 Trefferpunkte,
+        # 26 statt 21 Meshes. joby2 ist das einzige Level mit einem Modell in
+        # Slot 85 und hat drei Vanilla-Instanzen (Items 4, 86, 153) - die
+        # harte Instanz-Regel oben ist damit erfuellt.
+        85 = 'Huskie - der Hund aus joby2, eigener Typ mit eigener Steuerung'
+    }
     'joby3'   = @{
         37 = 'Guard (Blue Guard)'
         49 = 'Soldier MG (Mafia)'

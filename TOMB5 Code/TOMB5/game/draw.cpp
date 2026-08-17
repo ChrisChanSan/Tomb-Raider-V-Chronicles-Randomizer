@@ -564,7 +564,30 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	phd_TranslateAbs(item->pos.x_pos, item->pos.y_pos, item->pos.z_pos);
 	phd_RotYXZ(item->pos.y_rot, item->pos.x_rot, item->pos.z_rot);
 
-	if (obj->object_mip && (obj + 1)->loaded && phd_mxptr[M23] >> 16 > obj->object_mip)
+	// Fernmodelle (MIP/LOD) sind fuer GEGNER abgeschaltet - sie werden immer
+	// in voller Aufloesung gezeichnet.
+	//
+	// Der Grund ist nicht Optik, sondern Sicherheit: der Slot dahinter wird
+	// hier BLIND genommen, sobald ueberhaupt etwas geladen ist. In Vanilla
+	// geht das gut, weil Level und Gegner zusammen gebaut wurden; fuer den
+	// Randomizer nicht - er setzt Gegner in Level, deren MIP-Slot voellig
+	// fremdes Material traegt. Der Gegner wuerde ab 5120 Units als dieses
+	// Fremdmaterial gezeichnet, mit SEINEN Bones und SEINEM Frame, also als
+	// zerrissener Klumpen. Ueber alle 13 Level nachgemessen (SlotAnims):
+	// 51 solcher Kombinationen sind moeglich.
+	//
+	// Was dabei verloren geht, ist fast nichts: MIPs werden in TR5 kaum
+	// benutzt. Es gibt genau SIEBEN echte Faelle - SWAT, SWAT+, Guard und
+	// Two Gun in den drei rich-Leveln -, alle mit derselben Meshzahl wie das
+	// Original (15/15), also praktisch derselben Silhouette auf fuenf
+	// Sektoren Entfernung. Die Rechenersparnis von 2000 braucht heute
+	// niemand mehr.
+	//
+	// "intelligent" trennt sauber: alle Gegner mit object_mip tragen es
+	// (nachgeprueft), Tueren und Bruecken (mip 2048-4096) tragen es nicht
+	// und behalten ihr Fernmodell.
+	if (obj->object_mip && !obj->intelligent && (obj + 1)->loaded &&
+		phd_mxptr[M23] >> 16 > obj->object_mip)
 		obj++;
 
 	calc_animating_item_clip_window(item, frm[0]);

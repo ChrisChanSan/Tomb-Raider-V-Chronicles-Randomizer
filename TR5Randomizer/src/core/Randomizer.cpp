@@ -1333,6 +1333,26 @@ bool Rando::run(const RandoInput& in,
         //    in 367 - der beste Beleg dafuer.
         { 63, "Andrea2", { {167,"Andrea2",167} },               {367,-1}, nullptr,   -1, 17 },  // Hydra
         { 77, "Andy2",   {},                                    {-1,-1},  nullptr,   -1 },  // Maze Monster
+        // Huskie (85): der Hund aus joby2 - ein EIGENER Gegner, nicht der
+        // Hund (41). Eigene Steuerung (HuskieControl), eigenes Initialise,
+        // 24 statt 18 Trefferpunkte, 26 statt 21 Meshes. Der Motor kennt ihn
+        // vollstaendig, es war nur nie jemand im Pool.
+        //
+        // Mit SlotAnims ueber alle 13 Level gemessen: Slot 85 traegt NUR in
+        // joby2 ein Modell (anim_index 579, Scheibe 25 Anims). Seine
+        // Steuerung greift bis anim_index+22 (DeathAnims 20/21/22) - die
+        // Scheibe reicht, also kein animZahl noetig (anders als Imp/Hydra).
+        // Kein MESHSWAP, kein Begleiter, kein Basistyp; die Klaenge haengen
+        // alle an Anim-Kommandos und wandern von selbst mit (huskie.cpp
+        // ruft SoundEffect nirgends fest verdrahtet auf).
+        //
+        // OCB: InitialiseHuskie startet bei trigger_flags != 0 auf anim+1
+        // statt +8 und nimmt ITEM_INVISIBLE weg. Der Pool setzt immer OCB 0,
+        // und Items mit OCB != 0 werden ohnehin nie getauscht.
+        //
+        // joby2s eigene drei Huskies (Items 4, 86, 153) stehen nicht in
+        // seiner kuratierten Liste - sie bleiben vanilla, joby2 gibt nur ab.
+        { 85, "joby2",   {},                                    {-1,-1},  nullptr,   -1 },  // Huskie
         // Imp: Spender andy3, NICHT andy1. andy1s Imp-Animsatz ist entkernt:
         // die Todesanimation +45 (ImpControl setzt sie bei hit_points<=0 fest
         // ein) ist dort ein Ein-Frame-Dummy ohne KillItem-Kommando - der Imp
@@ -2369,6 +2389,9 @@ std::vector<Gegnerart> Rando::gegnerarten()
         { 61, "Soldatenstatue",    nullptr },
         { 63, "Hydra",             nullptr },
         { 77, "Labyrinth-Monster", nullptr },
+        // Der Hund aus joby2 - eigener Gegnertyp mit eigener Steuerung,
+        // nicht zu verwechseln mit "Hund" (41) aus Andrea1.
+        { 85, "Huskie",            nullptr },
         { 89, "Imp",               nullptr },
 
         // Die Gaeste aus Tomb Raider 3. Sie sitzen auf Slots, die in KEINEM

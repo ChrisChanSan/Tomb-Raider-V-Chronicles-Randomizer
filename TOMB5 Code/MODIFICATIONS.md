@@ -190,6 +190,21 @@ Also in this group:
   Grouping is by SWAP-set donor, which can differ from the model donor:
   rich1 (model source for the Guard and Two Gun) carries no `MESHSWAP1`
   at all — its enemies never set their swap bits in vanilla.
+- `game/draw.cpp` — **distance models (MIP/LOD) switched off for enemies**.
+  `DrawAnimatingItem` took the slot *after* the enemy blindly, as soon as
+  anything at all was loaded there. That is safe in an original level,
+  where level and enemies were built together — but the randomizer places
+  enemies into levels whose MIP slot holds something entirely unrelated,
+  and the enemy would then be drawn as that foreign model, using its own
+  bones and frame. Measured across all 13 levels: 51 such combinations are
+  reachable. What is lost is almost nothing — MIPs are barely used in this
+  game. There are exactly seven genuine cases (SWAT, SWAT+, Guard and Two
+  Gun in the three "rich" levels), all with the same mesh count as the
+  full model, i.e. practically the same silhouette at five sectors'
+  distance. `intelligent` separates cleanly: every enemy with `object_mip`
+  sets it, doors and bridges (mip 2048–4096) do not and keep their
+  distance models. This also removes the need to reserve a `_MIP` twin for
+  new enemy slots — they are now added one per enemy.
 - `game/pickup.cpp` — **keyhole state was lost across save/load** (an
   original-game bug, reproduced in unmodified Chronicles): inserting a key
   ran `item->flags &= IFL_TRIGGERED`, which clears *every* flag bit unless

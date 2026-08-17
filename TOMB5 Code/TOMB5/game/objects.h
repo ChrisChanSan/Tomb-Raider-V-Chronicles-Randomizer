@@ -313,17 +313,17 @@ enum object_types
 	// builds skip unknown slots, see LoadObjects). Keep SLOT_FILE_BOUNDARY
 	// below untouched - it pins the on-disk sprite/static split at 460.
 	//
-	// Every enemy slot keeps the ENEMY, ENEMY_MIP pairing of the enum above:
-	// the distance-model switch in draw.cpp uses obj + 1 blindly whenever
-	// object_mip is set, so a new enemy slot without a reserved MIP twin
-	// would draw whatever slot comes next in this list.
+	// New enemy slots need NO _MIP twin: distance models are switched off for
+	// enemies entirely (see DrawAnimatingItem in draw.cpp). They are added
+	// one per enemy, which also means we never overwrite a slot some level
+	// uses for something else.
 	//
 	// BLUE_GUARD2: second guard model (#83). Vanilla carries two different
 	// guard models in the same slot 37 - rich levels one, joby levels the
 	// other - so both can never coexist. This slot takes the joby model;
 	// it is a full member of the SasControl family (setup.cpp anchors its
 	// anim_index like the others, InitialiseSas/lot.cpp/sas.cpp know it).
-	BLUE_GUARD2, BLUE_GUARD2_MIP,
+	BLUE_GUARD2,
 
 	NUMBER_OBJECTS
 };

@@ -1304,7 +1304,6 @@ void BaddyObjects()
 	objects[SWAT_MIP].save_flags = 1;
 	objects[SWAT_PLUS_MIP].save_flags = 1;
 	objects[BLUE_GUARD_MIP].save_flags = 1;
-	objects[BLUE_GUARD2_MIP].save_flags = 1;
 	objects[TWOGUN_MIP].save_flags = 1;
 	objects[DOG_MIP].save_flags = 1;
 	objects[CROW_MIP].save_flags = 1;

@@ -256,6 +256,11 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlo
 {
     char buf[256];
 
+    // Frische Blockkarte holen (#104) - gleiche Begruendung wie am Eingang
+    // von copyMoveableFrom: Vorarbeiten wie addTrigger haben den Hauptblock
+    // verschoben, ohne die Karte nachzuziehen.
+    if (!reparse(error)) { error = "Blockkarte: " + error; return false; }
+
     if (paket.size() < 48 || std::memcmp(paket.data(), "T35H", 4) != 0)
     { error = "Kein TR3-Paket (Kennung T35H fehlt)"; return false; }
     if (zielSlot <= 0) { error = "Zielslot muss groesser 0 sein"; return false; }

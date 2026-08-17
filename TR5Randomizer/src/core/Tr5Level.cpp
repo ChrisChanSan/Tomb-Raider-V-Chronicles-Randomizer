@@ -212,8 +212,9 @@ broken:
         char buf[256];
         std::snprintf(buf, sizeof(buf),
             "Hauptblock laesst sich nicht durchlaufen - gescheitert bei \"%s\" "
-            "an Offset %zu. Passt die Datei zum erwarteten TR5-Format?",
-            where, p);
+            "an Offset %zu (n=%d, mainOffset=%zu, end=%zu, datei=%zu). "
+            "Passt die Datei zum erwarteten TR5-Format?",
+            where, p, n, m_mainOffset, m_mainOffset + m_mainSize, m_bytes.size());
         error = buf;
         m_itemCount = 0;
         m_itemCountOffset = 0;
@@ -1180,6 +1181,16 @@ bool Tr5Level::readHeader(std::string& error)
 bool Tr5Level::save(const std::wstring& path, std::string& error) const
 {
     if (m_bytes.empty()) { error = "Kein Level geladen"; return false; }
+
+    // Texturwerkstatt (#104): solange sie schmutzig offen ist, tragen die
+    // Texturbloecke in m_bytes den ALTEN Stand. Lieber laut scheitern als
+    // still ein Level mit veralteten Seiten schreiben (die TR3Setz-Lehre:
+    // eine Warnung liest niemand). Patch::apply schliesst am Ende selbst.
+    if (m_texOffen && m_texSchmutzig)
+    {
+        error = "Texturwerkstatt noch offen - texWerkstattSchliessen() vor dem Speichern rufen";
+        return false;
+    }
 
     FILE* f = nullptr;
     if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f)

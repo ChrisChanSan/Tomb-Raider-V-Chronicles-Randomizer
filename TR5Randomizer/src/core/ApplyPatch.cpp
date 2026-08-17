@@ -708,5 +708,15 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
+    // Texturwerkstatt schliessen (#104): alle Seiten-Importe dieses Laufs
+    // werden jetzt EINMAL gepackt und in die Datei gesetzt. save() weigert
+    // sich, eine schmutzig offene Werkstatt zu schreiben - vergessen faellt
+    // also laut auf, nicht als kaputtes Level.
+    if (!level.texWerkstattSchliessen(error))
+    {
+        error = "Texturwerkstatt: " + error;
+        return false;
+    }
+
     return true;
 }

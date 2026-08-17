@@ -170,7 +170,13 @@ namespace
     {
         uLongf grenze = compressBound(static_cast<uLong>(roh.size()));
         std::vector<uint8_t> puffer(grenze);
-        compress2(puffer.data(), &grenze, roh.data(), static_cast<uLong>(roh.size()), Z_BEST_COMPRESSION);
+        // Z_BEST_SPEED statt Z_BEST_COMPRESSION (#104): dieser Aufruf lief
+        // je importiertem Typ EINMAL ueber den kompletten Texturblock des
+        // Ziels - bei Allsanity zehnmal je Level auf 30+ MB, und genau hier
+        // steckten die gemessenen 5-10 Sekunden des Gegnermixes (Laden eines
+        // Levels kostet dagegen nur 15 ms). Die Engine ist die Stufe egal,
+        // die Datei wird etwas groesser, die Zeit faellt um ein Vielfaches.
+        compress2(puffer.data(), &grenze, roh.data(), static_cast<uLong>(roh.size()), Z_BEST_SPEED);
         raus.clear();
         push32(raus, static_cast<uint32_t>(roh.size()));
         push32(raus, static_cast<uint32_t>(grenze));
@@ -356,9 +362,11 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
     TexHeader dstTex;
     if (!parseTexHeader(m_bytes, dstTex, error)) return false;
 
-    std::vector<uint8_t> dst32, dst16;
-    if (!inflateBlock(m_bytes, dstTex.block32At, dst32, error)) { error = "Ziel 32: " + error; return false; }
-    if (!inflateBlock(m_bytes, dstTex.block16At, dst16, error)) { error = "Ziel 16: " + error; return false; }
+    // Ziel ueber die Texturwerkstatt (#104): einmal entpackt, jeder Import
+    // arbeitet auf den offenen Bloecken, gepackt wird beim Schliessen.
+    if (!texWerkstattOeffnen(error)) return false;
+    std::vector<uint8_t>& dst32 = m_tex32;
+    std::vector<uint8_t>& dst16 = m_tex16;
 
     if (1 + dstTex.rt + dstTex.ot + dstTex.bt + int(nKacheln) > MAX_PAGES)
     {
@@ -441,21 +449,12 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
 
     if (neueSeiten > 0)
     {
-        std::vector<uint8_t> b32, b16;
-        deflateBlock(dst32, b32);
-        deflateBlock(dst16, b16);
-
-        std::vector<uint8_t> neu;
-        neu.reserve(m_bytes.size() + b32.size() + b16.size());
-        neu.insert(neu.end(), m_bytes.begin(), m_bytes.begin() + 10);
-        neu.insert(neu.end(), b32.begin(), b32.end());
-        neu.insert(neu.end(), b16.begin(), b16.end());
-        neu.insert(neu.end(), m_bytes.begin() + dstTex.blockMiscAt, m_bytes.end());
-        m_bytes.swap(neu);
-
+        // Werkstatt (#104): nur der Seitenzaehler im Kopf wandert sofort mit -
+        // gepackt und neu zusammengesetzt wird EINMAL beim Schliessen. Der
+        // Hauptblock verschiebt sich dadurch nicht, die Blockversaetze fuer
+        // das Nachziehen unten bleiben ohne reparse gueltig.
         wr16(m_bytes, 6, static_cast<uint16_t>(dstTex.ot + neueSeiten));
-
-        if (!reparse(error)) { error = "nach dem Seiteneinfuegen: " + error; return false; }
+        m_texSchmutzig = true;
 
         // Alle GESPEICHERTEN Kachelnummern ab der Einfuegestelle nachziehen -
         // Texinfos (Bit 15 ist ein Flag und bleibt stehen) und Sprites.
@@ -548,10 +547,73 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
     return true;
 }
 
+//----------------------------------------------------------------------------
+// Texturwerkstatt (#104) - siehe Tr5Level.h. Oeffnen entpackt beide
+// Zielbloecke einmal, Schliessen packt sie einmal zurueck und setzt die
+// Datei EINMAL neu zusammen. Dazwischen bleiben Kopf und Hauptblock von
+// m_bytes unangetastet, nur der Seitenzaehler im Kopf (Wort 6) wandert
+// je Import mit - den lesen die MAX_PAGES-Pruefung und die Einfuegestelle.
+//----------------------------------------------------------------------------
+bool Tr5Level::texWerkstattOeffnen(std::string& error)
+{
+    if (m_texOffen) return true;
+
+    TexHeader t;
+    if (!parseTexHeader(m_bytes, t, error)) return false;
+    if (!inflateBlock(m_bytes, t.block32At, m_tex32, error)) { error = "Ziel 32: " + error; return false; }
+    if (!inflateBlock(m_bytes, t.block16At, m_tex16, error)) { error = "Ziel 16: " + error; return false; }
+
+    m_texOffen = true;
+    m_texSchmutzig = false;
+    return true;
+}
+
+bool Tr5Level::texWerkstattSchliessen(std::string& error)
+{
+    if (!m_texOffen) return true;
+
+    if (m_texSchmutzig)
+    {
+        TexHeader t;
+        if (!parseTexHeader(m_bytes, t, error)) return false;
+
+        // Datei neu zusammensetzen: Kopf, beide gewachsenen Bloecke, Rest -
+        // exakt der Zusammenbau, der frueher je Import lief.
+        std::vector<uint8_t> b32, b16;
+        deflateBlock(m_tex32, b32);
+        deflateBlock(m_tex16, b16);
+
+        std::vector<uint8_t> neu;
+        neu.reserve(m_bytes.size() + b32.size() + b16.size());
+        neu.insert(neu.end(), m_bytes.begin(), m_bytes.begin() + 10);
+        neu.insert(neu.end(), b32.begin(), b32.end());
+        neu.insert(neu.end(), b16.begin(), b16.end());
+        neu.insert(neu.end(), m_bytes.begin() + t.blockMiscAt, m_bytes.end());
+        m_bytes.swap(neu);
+
+        if (!reparse(error)) { error = "nach dem Seiteneinfuegen: " + error; return false; }
+    }
+
+    m_texOffen = false;
+    m_texSchmutzig = false;
+    m_tex32.clear(); m_tex32.shrink_to_fit();
+    m_tex16.clear(); m_tex16.shrink_to_fit();
+    return true;
+}
+
 bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& error,
                                 int dstSlot, bool nurMeshes, int animZahl)
 {
     char buf[256];
+
+    // Frische Blockkarte holen (#104). Wer vor uns in den Hauptblock
+    // geschrieben hat, ohne die Karte nachzuziehen - addTrigger haengt etwa
+    // Floordata an -, hinterlaesst veraltete dataAt-Werte, und die Splices
+    // unten laegen daneben. Bisher heilte das der Zufall: Phase B baute die
+    // Datei je Import neu und rief reparse, BEVOR Phase C die Karte nutzte.
+    // Mit der Texturwerkstatt entfaellt dieser Neubau - die Karte muss am
+    // Eingang selbst frisch geholt werden, nicht als Nebenwirkung.
+    if (!reparse(error)) { error = "Blockkarte: " + error; return false; }
 
     // Unter welchem Slot die Kopie im Ziel steht. Abweichend nur fuer die
     // Ausweichslots des Cross-Gegnermix (Spender-MESHSWAP1 -> 399-403).
@@ -852,11 +914,15 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     for (int t : srcTiles)
         if (t >= srcPages) { error = "Texinfo verweist auf eine Seite, die es nicht gibt"; return false; }
 
-    std::vector<uint8_t> src32, src16, dst32, dst16;
+    std::vector<uint8_t> src32, src16;
     if (!inflateBlock(src.m_bytes, srcTex.block32At, src32, error)) { error = "Quelle: " + error; return false; }
     if (!inflateBlock(src.m_bytes, srcTex.block16At, src16, error)) { error = "Quelle: " + error; return false; }
-    if (!inflateBlock(m_bytes, dstTex.block32At, dst32, error)) { error = "Ziel: " + error; return false; }
-    if (!inflateBlock(m_bytes, dstTex.block16At, dst16, error)) { error = "Ziel: " + error; return false; }
+
+    // Ziel ueber die Texturwerkstatt (#104): einmal entpackt, jeder Import
+    // arbeitet auf den offenen Bloecken, gepackt wird beim Schliessen.
+    if (!texWerkstattOeffnen(error)) { error = "Ziel: " + error; return false; }
+    std::vector<uint8_t>& dst32 = m_tex32;
+    std::vector<uint8_t>& dst16 = m_tex16;
 
     //========================================================================
     // Phase B: Texturseiten ins Ziel. Eingefuegt wird am Ende des
@@ -904,22 +970,12 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
 
     if (neueSeiten > 0)
     {
-        // Datei neu zusammensetzen: Kopf, beide gewachsenen Bloecke, Rest.
-        std::vector<uint8_t> b32, b16;
-        deflateBlock(dst32, b32);
-        deflateBlock(dst16, b16);
-
-        std::vector<uint8_t> neu;
-        neu.reserve(m_bytes.size() + b32.size() + b16.size());
-        neu.insert(neu.end(), m_bytes.begin(), m_bytes.begin() + 10);
-        neu.insert(neu.end(), b32.begin(), b32.end());
-        neu.insert(neu.end(), b16.begin(), b16.end());
-        neu.insert(neu.end(), m_bytes.begin() + dstTex.blockMiscAt, m_bytes.end());
-        m_bytes.swap(neu);
-
+        // Werkstatt (#104): nur der Seitenzaehler im Kopf wandert sofort mit -
+        // gepackt und neu zusammengesetzt wird EINMAL beim Schliessen. Der
+        // Hauptblock verschiebt sich dadurch nicht, die Blockversaetze fuer
+        // das Nachziehen unten bleiben ohne reparse gueltig.
         wr16(m_bytes, 6, static_cast<uint16_t>(dstTex.ot + neueSeiten));
-
-        if (!reparse(error)) { error = "nach dem Seiteneinfuegen: " + error; return false; }
+        m_texSchmutzig = true;
 
         // Alle GESPEICHERTEN Kachelnummern ab der Einfuegestelle nachziehen -
         // das sind die Texinfos (Bump-Seiten der Raeume) und die Sprites.

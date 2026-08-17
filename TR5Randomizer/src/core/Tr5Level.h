@@ -452,7 +452,29 @@ public:
     int  fremdeSprechkoepfe() const;
     bool setFremdeSprechkoepfe(int value);
 
+    // --- Texturwerkstatt (#104) ----------------------------------------
+    //
+    // Die beiden Texturbloecke des Levels werden beim ersten Seiten-Import
+    // EINMAL entpackt und offen gehalten; jeder weitere Import haengt nur
+    // noch an. Gepackt und in die Datei zurueckgesetzt wird EINMAL beim
+    // Schliessen - save() ruft es selbst, der Aufrufer muss nichts tun.
+    //
+    // Vorher liefen Entpacken, Packen, Datei-Neuzusammensetzen und reparse
+    // je importiertem Typ: bei Allsanity zehnmal je Level ueber 30+ MB, und
+    // genau da steckten die gemessenen 5-10 Sekunden des Gegnermixes (ein
+    // Level LADEN kostet nur 15 ms). Wichtig fuer alle Zwischenzustaende:
+    // solange die Werkstatt offen ist, tragen die Texturbloecke in m_bytes
+    // den ALTEN Stand - wer sie liest, muss vorher schliessen. Der
+    // Hauptblock dahinter verschiebt sich bis zum Schliessen nicht, alle
+    // Blockversaetze bleiben gueltig.
+    bool texWerkstattSchliessen(std::string& error);
+
 private:
+    bool                 m_texOffen = false;
+    bool                 m_texSchmutzig = false;
+    std::vector<uint8_t> m_tex32, m_tex16;
+
+    bool texWerkstattOeffnen(std::string& error);
     bool                 m_allowOverLimit = false;
     std::vector<uint8_t> m_bytes;
     int32_t              m_version = 0;

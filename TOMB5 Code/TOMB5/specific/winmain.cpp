@@ -451,10 +451,6 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		mouseY = GET_Y_LPARAM(lParam);
 		mouseB = wParam;
 		break;
-
-	case WM_APP:
-		FillADPCMBuffer((char*)lParam, wParam);
-		return 0;
 	}
 
 	return DefWindowProc(hwnd, uMsg, wParam, lParam);

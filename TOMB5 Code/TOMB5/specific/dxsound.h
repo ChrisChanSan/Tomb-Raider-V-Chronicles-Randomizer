@@ -13,6 +13,7 @@
 #pragma once
 #include "../global/types.h"
 
+float DSVolumeToLinear(long volume);
 bool DXChangeOutputFormat(long nSamplesPerSec, bool force);
 void DSChangeVolume(long num, long volume);
 void DSAdjustPitch(long num, long pitch);

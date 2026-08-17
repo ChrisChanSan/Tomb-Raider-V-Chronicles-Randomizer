@@ -226,9 +226,6 @@ void GameClose()
 	FreeLevel();
 	free(clipflags);
 
-	if (wav_file_buffer)
-		free(wav_file_buffer);
-
 	if (ADPCMBuffer)
 		free(ADPCMBuffer);
 

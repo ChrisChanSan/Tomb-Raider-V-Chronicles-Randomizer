@@ -1,9 +1,20 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
 #include "audio.h"
 #include "file.h"
 #include "function_stubs.h"
-#include "dxshell.h"
-#include "winmain.h"
+#include "dxsound.h"
 #include "../game/control.h"
 #include "LoadSave.h"
 
@@ -158,36 +169,53 @@ static char source_wav_format[50] =
 #pragma warning(pop)
 
 HACMDRIVER hACMDriver;
-uchar* wav_file_buffer;
 uchar* ADPCMBuffer;
 bool acm_ready;
 
 long XATrack = -1;
 
+// Musik ueber XAudio2 statt DirectSound (#100, A3 des Portierungsplans).
+//
+// Die ACM-Dekodierung (MS-ADPCM -> PCM) und die Dateilogik - Schleifen per
+// fseek auf Byte 90, EOF-Nachlauf, Rueckkehr zur Atmosphaere - bleiben 1:1
+// erhalten. Ersetzt ist nur die Geraeteschicht: statt eines DirectSound-
+// Ringpuffers mit Positions-Notifications (dessen Lock unter Windows 11 bei
+// jedem Trackstart mit E_INVALIDARG scheiterte - die Musik war stumm)
+// dekodieren die vier Stream-Header jetzt in eigene PCM-Bloecke, die per
+// SubmitSourceBuffer in die Warteschlange einer Source-Voice gehen. Der
+// Nachschub-Thread bleibt, wird aber von OnBufferEnd der Voice geweckt.
+#define MUSIC_CHUNKS		4
+
 static FILE* audio_stream_fp;
-static LPDIRECTSOUNDBUFFER DSBuffer;
-static LPDIRECTSOUNDNOTIFY DSNotify;
 static HACMSTREAM hACMStream;
 static HACMDRIVERID hACMDriverID;
 static HANDLE NotificationThreadHandle;
 static CRITICAL_SECTION audio_cs;
-static ACMSTREAMHEADER StreamHeaders[4];
+static ACMSTREAMHEADER StreamHeaders[MUSIC_CHUNKS];
 static HANDLE NotifyEventHandles[2];
-static uchar* audio_fp_write_ptr;
-static uchar* pAudioWrite;
-static ulong AudioBytes;
+static IXAudio2SourceVoice* MusicVoice;
+static uchar* MusicChunks[MUSIC_CHUNKS];
 static long audio_play_mode;
-static long audio_buffer_size;
 static long CurrentNotify;
-static long NextWriteOffset;
-static long NotifySize;
 static long eof_counter;
-static volatile bool reading_audio_file;
-static volatile bool continue_reading_audio_file;
 
 #define ACM_BUFFER_SIZE		0x5800
-#define FILE_BUFFER_SIZE	((ACM_BUFFER_SIZE * 2) * 1)		//WAS * 5
 #define EOF_LEEWAY			2								//WAS 8.. every 2 = about 1 extra second of playtime
+
+// Weckt nur den Nachschub-Thread: auf dem XAudio2-Mischthread darf nichts
+// blockieren, also passiert die eigentliche Arbeit nicht hier.
+struct MusicVoiceCallback : public IXAudio2VoiceCallback
+{
+	void __stdcall OnVoiceProcessingPassStart(UINT32) {}
+	void __stdcall OnVoiceProcessingPassEnd() {}
+	void __stdcall OnStreamEnd() {}
+	void __stdcall OnBufferStart(void*) {}
+	void __stdcall OnBufferEnd(void*) { SetEvent(NotifyEventHandles[0]); }
+	void __stdcall OnLoopEnd(void*) {}
+	void __stdcall OnVoiceError(void*, HRESULT) {}
+};
+
+static MusicVoiceCallback MusicCallback;
 
 void S_CDPlay(long track, long mode)
 {
@@ -202,17 +230,26 @@ void S_CDPlay(long track, long mode)
 
 void S_CDStop()
 {
-	if (acm_ready && audio_stream_fp)
+	if (!acm_ready)
+		return;
+
+	EnterCriticalSection(&audio_cs);
+
+	if (audio_stream_fp)
 	{
-		memset(wav_file_buffer, 0, FILE_BUFFER_SIZE);
-		DSBuffer->Stop();
-		DSBuffer->SetCurrentPosition(0);
-		while (reading_audio_file) {};
+		if (MusicVoice)
+		{
+			MusicVoice->Stop(0);
+			MusicVoice->FlushSourceBuffers();
+		}
+
 		fclose(audio_stream_fp);
 		audio_stream_fp = 0;
 		eof_counter = 0;
 		XATrack = -1;
 	}
+
+	LeaveCriticalSection(&audio_cs);
 }
 
 void S_CDFade(long n)
@@ -235,21 +272,15 @@ void ACMSetVolume()
 	else
 		volume = -4000 * (100 - MusicVolume) / 100;
 
-	if (DSBuffer)
-		DSBuffer->SetVolume(volume);
+	// Gleiche Kurve wie zu DirectSound-Zeiten (hundertstel Dezibel),
+	// erst an der API-Grenze in den linearen XAudio2-Faktor uebersetzt.
+	if (MusicVoice)
+		MusicVoice->SetVolume(DSVolumeToLinear(volume));
 }
 
-void OpenStreamFile(char* name)
+// Aufrufer haelt audio_cs.
+static void OpenStreamFile(char* name)
 {
-	__try
-	{
-		EnterCriticalSection(&audio_cs);
-	}
-	__finally
-	{
-		LeaveCriticalSection(&audio_cs);
-	}
-
 	audio_stream_fp = FileOpen(name);
 
 	if (!audio_stream_fp)
@@ -259,47 +290,107 @@ void OpenStreamFile(char* name)
 	}
 
 	fseek(audio_stream_fp, 90, SEEK_SET);
-	audio_fp_write_ptr = wav_file_buffer;
-	memset(wav_file_buffer, 0, FILE_BUFFER_SIZE);
+}
 
-	if (fread(wav_file_buffer, 1, FILE_BUFFER_SIZE, audio_stream_fp) < FILE_BUFFER_SIZE && audio_play_mode == 1)
+// Liest den naechsten ADPCM-Block, dekodiert ihn in den naechsten freien
+// PCM-Block und haengt ihn an die Voice-Warteschlange. Aufrufer haelt
+// audio_cs. Bei Trackende laeuft hier auch der alte EOF-Nachlauf samt
+// Rueckkehr zur Levelatmosphaere.
+static void MusicFeedChunk(bool erster)
+{
+	XAUDIO2_BUFFER buf;
+	ACMSTREAMHEADER* kopf;
+
+	if (!MusicVoice || !audio_stream_fp || XATrack == -1)
+		return;
+
+	memset(ADPCMBuffer, 0, ACM_BUFFER_SIZE);
+	fread(ADPCMBuffer, 1, ACM_BUFFER_SIZE, audio_stream_fp);
+
+	if (feof(audio_stream_fp))
 	{
-		fseek(audio_stream_fp, 90, SEEK_SET);
-		Log("FileReset In OpenStreamFile");
+		if (audio_play_mode == 1)
+			fseek(audio_stream_fp, 90, SEEK_SET);
+		else
+		{
+			eof_counter++;
+
+			if (eof_counter > EOF_LEEWAY)
+			{
+				eof_counter = 0;
+
+				if (audio_play_mode == 2)
+				{
+					S_CDStop();
+					return;
+				}
+
+				if (CurrentAtmosphere && !IsAtmospherePlaying)
+				{
+					S_CDStop();
+					S_CDPlay(CurrentAtmosphere, 1);
+					return;
+				}
+			}
+		}
+	}
+
+	kopf = &StreamHeaders[CurrentNotify];
+
+	if (acmStreamConvert(hACMStream, kopf,
+		erster ? ACM_STREAMCONVERTF_BLOCKALIGN | ACM_STREAMCONVERTF_START : ACM_STREAMCONVERTF_BLOCKALIGN))
+		return;
+
+	if (!kopf->cbDstLengthUsed)
+		return;
+
+	memset(&buf, 0, sizeof(buf));
+	buf.pAudioData = kopf->pbDst;
+	buf.AudioBytes = kopf->cbDstLengthUsed;
+
+	if (FAILED(MusicVoice->SubmitSourceBuffer(&buf)))
+		return;
+
+	CurrentNotify = (CurrentNotify + 1) & (MUSIC_CHUNKS - 1);
+}
+
+// Fuellt die Warteschlange wieder auf zwei Bloecke auf. Eine Schleife statt
+// eines einzelnen Blocks, weil das Auto-Reset-Ereignis zwei kurz
+// aufeinanderfolgende OnBufferEnd zu einem Aufwachen zusammenzieht - wer
+// dann nur einen Block nachlegt, laesst die Schlange langsam leerlaufen.
+static void MusicFeed()
+{
+	XAUDIO2_VOICE_STATE state;
+
+	while (MusicVoice && audio_stream_fp && XATrack != -1)
+	{
+		MusicVoice->GetState(&state, XAUDIO2_VOICE_NOSAMPLESPLAYED);
+
+		if (state.BuffersQueued >= 2)
+			break;
+
+		MusicFeedChunk(false);
 	}
 }
 
-void GetADPCMData()
+static ulong __stdcall MusicStreamThread(void* arg)
 {
-	if (!audio_stream_fp)
-		return;
-
-	memset(audio_fp_write_ptr, 0, ACM_BUFFER_SIZE);
-
-	if (fread(audio_fp_write_ptr, 1, ACM_BUFFER_SIZE, audio_stream_fp) < ACM_BUFFER_SIZE && audio_play_mode == 1)
+	while (WaitForMultipleObjects(2, NotifyEventHandles, 0, INFINITE) == WAIT_OBJECT_0)
 	{
-		Log("FileReset In GetADPCMData");
-		fseek(audio_stream_fp, 90, SEEK_SET);
+		EnterCriticalSection(&audio_cs);
+		MusicFeed();
+		LeaveCriticalSection(&audio_cs);
 	}
 
-	audio_fp_write_ptr += ACM_BUFFER_SIZE;
-
-	if ((long)audio_fp_write_ptr >= long(wav_file_buffer + FILE_BUFFER_SIZE))
-		audio_fp_write_ptr = wav_file_buffer;
+	return 0;
 }
 
 void ACMEmulateCDPlay(long track, long mode)
 {
+	XAUDIO2_VOICE_STATE state;
 	char name[256];
 
-	__try
-	{
-		EnterCriticalSection(&audio_cs);
-	}
-	__finally
-	{
-		LeaveCriticalSection(&audio_cs);
-	}
+	EnterCriticalSection(&audio_cs);
 
 	wsprintf(name, "audio\\%s", TrackFileNames[track]);
 
@@ -313,23 +404,41 @@ void ACMEmulateCDPlay(long track, long mode)
 	OpenStreamFile(name);
 
 	if (!audio_stream_fp)
+	{
+		LeaveCriticalSection(&audio_cs);
 		return;
+	}
 
-	memcpy(ADPCMBuffer, audio_fp_write_ptr, ACM_BUFFER_SIZE);
-	GetADPCMData();
-	DXAttempt(DSBuffer->Lock(0, audio_buffer_size, (LPVOID*)&pAudioWrite, &AudioBytes, 0, 0, 0));
-	acmStreamConvert(hACMStream, &StreamHeaders[0], ACM_STREAMCONVERTF_BLOCKALIGN | ACM_STREAMCONVERTF_START);
-	memcpy(ADPCMBuffer, audio_fp_write_ptr, ACM_BUFFER_SIZE);
-	GetADPCMData();
-	acmStreamConvert(hACMStream, &StreamHeaders[1], ACM_STREAMCONVERTF_BLOCKALIGN);
-	DXAttempt(DSBuffer->Unlock(pAudioWrite, audio_buffer_size, 0, 0));
-	CurrentNotify = 2;
-	NextWriteOffset = 2 * NotifySize;
+	// Nach Stop+FlushSourceBuffers kann die Mischschleife die alten Bloecke
+	// noch einen Wimpernschlag halten - erst weiterschreiben, wenn sie
+	// wirklich raus sind, sonst knackt der Trackwechsel.
+	if (MusicVoice)
+	{
+		for (int i = 0; i < 100; i++)
+		{
+			MusicVoice->GetState(&state, XAUDIO2_VOICE_NOSAMPLESPLAYED);
+
+			if (!state.BuffersQueued)
+				break;
+
+			Sleep(1);
+		}
+	}
+
+	// Zwei Bloecke Vorlauf wie frueher (CurrentNotify begann bei 2); der
+	// START-Umsetzungslauf setzt den ADPCM-Vorhersagezustand zurueck.
+	CurrentNotify = 0;
+	MusicFeedChunk(true);
+	MusicFeedChunk(false);
 	ACMSetVolume();
-	DSBuffer->Play(0, 0, DSBPLAY_LOOPING);
+
+	if (MusicVoice)
+		MusicVoice->Start(0);
+
+	LeaveCriticalSection(&audio_cs);
 }
 
-BOOL __stdcall ACMEnumCallBack(HACMDRIVERID hadid, DWORD_PTR dwInstance, DWORD fdwSupport)
+static BOOL __stdcall ACMEnumCallBack(HACMDRIVERID hadid, DWORD_PTR dwInstance, DWORD fdwSupport)
 {
 	ACMDRIVERDETAILS driver;
 
@@ -344,175 +453,11 @@ BOOL __stdcall ACMEnumCallBack(HACMDRIVERID hadid, DWORD_PTR dwInstance, DWORD f
 	return 0;
 }
 
-long ACMSetupNotifications()
-{
-	DSBPOSITIONNOTIFY posNotif[5];
-	ulong ThreadId;
-	long result;
-
-	NotifyEventHandles[0] = CreateEvent(0, 0, 0, 0);
-	NotifyEventHandles[1] = CreateEvent(0, 0, 0, 0);
-	posNotif[0].dwOffset = NotifySize;
-	posNotif[0].hEventNotify = NotifyEventHandles[0];
-	Log("Set notifies for position %lu", posNotif[0].dwOffset);
-
-	for (int i = 1; i < 4; i++)
-	{
-		posNotif[i].dwOffset = NotifySize + posNotif[i - 1].dwOffset;
-		posNotif[i].hEventNotify = NotifyEventHandles[0];
-		Log("Set notifies for positions %lu", posNotif[i].dwOffset);
-	}
-
-	posNotif[3].dwOffset--;
-	posNotif[4].dwOffset = -1;
-	posNotif[4].hEventNotify = NotifyEventHandles[1];
-	NotificationThreadHandle = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)ACMHandleNotifications, 0, 0, &ThreadId);
-
-	if (!NotificationThreadHandle)
-		Log("Create Notification Thread failed");
-
-	result = DSNotify->SetNotificationPositions(5, posNotif);
-
-	if (result != DS_OK)
-	{
-		CloseHandle(NotifyEventHandles[0]);
-		CloseHandle(NotifyEventHandles[1]);
-		NotifyEventHandles[0] = 0;
-		NotifyEventHandles[1] = 0;
-	}
-	else
-		Log("Setup Notifications OK");
-
-	return result;
-}
-
-void FillADPCMBuffer(char* p, long track)
-{
-	reading_audio_file = 1;
-
-	__try
-	{
-		EnterCriticalSection(&audio_cs);
-	}
-	__finally
-	{
-		LeaveCriticalSection(&audio_cs);
-	}
-
-	if (!audio_stream_fp)
-	{
-		reading_audio_file = 0;
-		continue_reading_audio_file = 0;
-		return;
-	}
-
-	if (track != XATrack || track == -1)
-	{
-		Log("Not Current Track %d", track);
-		reading_audio_file = 0;
-		continue_reading_audio_file = 0;
-		return;
-	}
-
-	memset(p, 0, ACM_BUFFER_SIZE);
-
-	if (!audio_stream_fp)
-	{
-		reading_audio_file = 0;
-		continue_reading_audio_file = 0;
-		return;
-	}
-
-	fread(p, 1, ACM_BUFFER_SIZE, audio_stream_fp);
-
-	if (audio_stream_fp && feof(audio_stream_fp))
-	{
-		if (audio_play_mode == 1)
-			fseek(audio_stream_fp, 90, SEEK_SET);
-		else
-		{
-			eof_counter++;
-
-			if (eof_counter > EOF_LEEWAY)
-			{
-				eof_counter = 0;
-
-				if (audio_play_mode == 2)
-				{
-					reading_audio_file = 0;
-					continue_reading_audio_file = 0;
-					S_CDStop();
-					return;
-				}
-
-				if (CurrentAtmosphere && !IsAtmospherePlaying)
-				{
-					reading_audio_file = 0;
-					continue_reading_audio_file = 0;
-					S_CDStop();
-					S_CDPlay(CurrentAtmosphere, 1);
-					return;
-				}
-			}
-		}
-	}
-
-	reading_audio_file = 0;
-	continue_reading_audio_file = 1;
-}
-
-long ACMHandleNotifications()
-{
-	char* write;
-	ulong wait, bytes;
-
-	while ((wait = WaitForMultipleObjects(2, NotifyEventHandles, 0, INFINITE)) != WAIT_FAILED)
-	{
-		EnterCriticalSection(&audio_cs);
-
-		if (!wait && DSBuffer)
-		{
-			memcpy(ADPCMBuffer, audio_fp_write_ptr, ACM_BUFFER_SIZE);
-
-			if (XATrack == -1)
-				memset(ADPCMBuffer, 0, ACM_BUFFER_SIZE);
-			else
-				FillADPCMBuffer((char*)audio_fp_write_ptr, XATrack);
-
-			if (continue_reading_audio_file)
-			{
-				audio_fp_write_ptr += ACM_BUFFER_SIZE;
-
-				if ((long)audio_fp_write_ptr >= long(wav_file_buffer + FILE_BUFFER_SIZE))
-					audio_fp_write_ptr = wav_file_buffer;
-
-				DSBuffer->Lock(NextWriteOffset, NotifySize, (LPVOID*)&write, &bytes, 0, 0, 0);
-				acmStreamConvert(hACMStream, &StreamHeaders[CurrentNotify], ACM_STREAMCONVERTF_BLOCKALIGN);
-				DSBuffer->Unlock(&write, bytes, 0, 0);
-				NextWriteOffset += bytes;
-
-				if (NextWriteOffset >= audio_buffer_size)
-					NextWriteOffset -= audio_buffer_size;
-
-				CurrentNotify = (CurrentNotify + 1) & 3;
-			}
-		}
-
-		LeaveCriticalSection(&audio_cs);
-
-		if (!DSBuffer)
-			break;
-	}
-
-	return DS_OK;
-}
-
 bool ACMInit()
 {
-	DSBUFFERDESC desc;
 	static WAVEFORMATEX wav_format;
 	static ulong StreamSize;
-	ulong version, pMetric;
+	ulong version, pMetric, ThreadId;
 
 	version = acmGetVersion();
 	InitializeCriticalSection(&audio_cs);
@@ -533,39 +478,44 @@ bool ACMInit()
 	}
 
 	ADPCMBuffer = (uchar*)malloc(ACM_BUFFER_SIZE);
-	wav_file_buffer = (uchar*)malloc(FILE_BUFFER_SIZE);
 	wav_format.wFormatTag = WAVE_FORMAT_PCM;
 	acmMetrics(0, ACM_METRIC_MAX_SIZE_FORMAT, &pMetric);
 	acmFormatSuggest(hACMDriver, (LPWAVEFORMATEX)&source_wav_format, &wav_format, pMetric, ACM_FORMATSUGGESTF_WFORMATTAG);
-	audio_buffer_size = 0x577C0;
-	NotifySize = 0x15DF0;
 
-	memset(&desc, 0, sizeof(DSBUFFERDESC));
-	desc.dwSize = sizeof(DSBUFFERDESC);
-	desc.dwBufferBytes = 0x577C0;
-	desc.dwFlags = DSBCAPS_LOCSOFTWARE | DSBCAPS_CTRLFREQUENCY | DSBCAPS_CTRLPAN | DSBCAPS_CTRLVOLUME | DSBCAPS_CTRLPOSITIONNOTIFY | DSBCAPS_GETCURRENTPOSITION2;
-	desc.lpwfxFormat = &wav_format;
-	App.dx.lpDS->CreateSoundBuffer(&desc, &DSBuffer, 0);
-	DSBuffer->QueryInterface(IID_IDirectSoundNotify, (LPVOID*)&DSNotify);
-
-	ACMSetupNotifications();
 	acmStreamOpen(&hACMStream, hACMDriver, (LPWAVEFORMATEX)&source_wav_format, &wav_format, 0, 0, 0, 0);
 	acmStreamSize(hACMStream, ACM_BUFFER_SIZE, &StreamSize, 0);
-	DXAttempt(DSBuffer->Lock(0, audio_buffer_size, (LPVOID*)&pAudioWrite, &AudioBytes, 0, 0, 0));
-	memset(pAudioWrite, 0, audio_buffer_size);
 
-	for (int i = 0; i < 4; i++)
+	// Vier eigene PCM-Bloecke in der von acmStreamSize gemeldeten
+	// Obergrenze - frueher zeigten die Header in den gesperrten
+	// DirectSound-Ring, im Abstand von NotifySize.
+	for (int i = 0; i < MUSIC_CHUNKS; i++)
 	{
+		MusicChunks[i] = (uchar*)malloc(StreamSize);
 		memset(&StreamHeaders[i], 0, sizeof(ACMSTREAMHEADER));
 		StreamHeaders[i].cbStruct = sizeof(ACMSTREAMHEADER);
 		StreamHeaders[i].pbSrc = ADPCMBuffer;
 		StreamHeaders[i].cbSrcLength = ACM_BUFFER_SIZE;
+		StreamHeaders[i].pbDst = MusicChunks[i];
 		StreamHeaders[i].cbDstLength = StreamSize;
-		StreamHeaders[i].pbDst = &pAudioWrite[NotifySize * i];
 		acmStreamPrepareHeader(hACMStream, &StreamHeaders[i], 0);
 	}
 
-	DXAttempt(DSBuffer->Unlock(pAudioWrite, audio_buffer_size, 0, 0));
+	if (!g_XAudio2 || FAILED(g_XAudio2->CreateSourceVoice(&MusicVoice, &wav_format, 0, XAUDIO2_DEFAULT_FREQ_RATIO, &MusicCallback, 0, 0)))
+	{
+		Log("*** Unable To Create Music Voice ***");
+		return 0;
+	}
+
+	NotifyEventHandles[0] = CreateEvent(0, 0, 0, 0);
+	NotifyEventHandles[1] = CreateEvent(0, 0, 0, 0);
+	NotificationThreadHandle = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)MusicStreamThread, 0, 0, &ThreadId);
+
+	if (!NotificationThreadHandle)
+	{
+		Log("Create Notification Thread failed");
+		return 0;
+	}
+
 	acm_ready = 1;
 	return 1;
 }
@@ -575,32 +525,34 @@ void ACMClose()
 	if (!acm_ready)
 		return;
 
-	EnterCriticalSection(&audio_cs);
 	S_CDStop();
+	acm_ready = 0;
+
+	// Erst den Nachschub-Thread einholen, dann die Ereignisse schliessen -
+	// Handles zu schliessen, auf denen noch gewartet wird, ist Gluecksspiel.
+	SetEvent(NotifyEventHandles[1]);
+	WaitForSingleObject(NotificationThreadHandle, 5000);
+	CloseHandle(NotificationThreadHandle);
+	NotificationThreadHandle = 0;
 	CloseHandle(NotifyEventHandles[0]);
 	CloseHandle(NotifyEventHandles[1]);
-	acmStreamUnprepareHeader(hACMStream, &StreamHeaders[0], 0);
-	acmStreamUnprepareHeader(hACMStream, &StreamHeaders[1], 0);
-	acmStreamUnprepareHeader(hACMStream, &StreamHeaders[2], 0);
-	acmStreamUnprepareHeader(hACMStream, &StreamHeaders[3], 0);
+	NotifyEventHandles[0] = 0;
+	NotifyEventHandles[1] = 0;
+
+	if (MusicVoice)
+	{
+		MusicVoice->DestroyVoice();
+		MusicVoice = 0;
+	}
+
+	for (int i = 0; i < MUSIC_CHUNKS; i++)
+	{
+		acmStreamUnprepareHeader(hACMStream, &StreamHeaders[i], 0);
+		free(MusicChunks[i]);
+		MusicChunks[i] = 0;
+	}
+
 	acmStreamClose(hACMStream, 0);
 	acmDriverClose(hACMDriver, 0);
-
-	if (DSNotify)
-	{
-		Log("Released %s @ %x - RefCnt = %d", "Notification", DSNotify, DSNotify->Release());
-		DSNotify = 0;
-	}
-	else
-		Log("%s Attempt To Release NULL Ptr", "Notification");
-
-	if (DSBuffer)
-	{
-		Log("Released %s @ %x - RefCnt = %d", "Stream Buffer", DSBuffer, DSBuffer->Release());
-		DSBuffer = 0;
-	}
-	else
-		Log("%s Attempt To Release NULL Ptr", "Stream Buffer");
-
-	LeaveCriticalSection(&audio_cs);
+	DeleteCriticalSection(&audio_cs);
 }

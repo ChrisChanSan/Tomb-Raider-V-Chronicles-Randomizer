@@ -73,8 +73,8 @@ static char* decompressed_samples_buffer;
 // DirectSound's SetVolume/pan use hundredths-of-a-decibel (logarithmic, 0 = full, -10000 =
 // silence) - CalcVolume() already produces exactly that, unchanged. XAudio2's SetVolume is a
 // linear amplitude multiplier, so convert at the API boundary rather than touching the
-// existing volume-curve math.
-static float DSVolumeToLinear(long volume)
+// existing volume-curve math. Shared with the music path in audio.cpp (#100).
+float DSVolumeToLinear(long volume)
 {
 	if (volume <= -10000)
 		return 0.0F;

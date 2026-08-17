@@ -320,6 +320,17 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
     char buf[256];
     zuordnung.clear();
 
+    // Frische Blockkarte holen (#104) - dritter Eingang derselben Art.
+    // Beim TR3-Weg laufen VOR den Texturen die Klaenge (Reihenfolge ist
+    // Vorschrift: Sounds -> SFX -> Texturen -> Faces -> Modell), und
+    // addSoundsFromTr3 schiebt den Hauptblock, ohne die Karte nachzuziehen.
+    // Bis zur Texturwerkstatt heilte das der Neubau in Phase B; ohne ihn
+    // splicte Phase C die Texinfos an eine veraltete Stelle und der
+    // Hauptblock war hinueber ("Item-Anzahl 2926"). Aufgefallen erst bei
+    // Seed 3 OHNE items20 - der #104-Sweep lief immer mit, ein Beleg
+    // dafuer, dass ein Sweep nur die Parameter prueft, die er faehrt.
+    if (!reparse(error)) { error = "Blockkarte: " + error; return false; }
+
     if (paket.size() < 48 || std::memcmp(paket.data(), "T35H", 4) != 0)
     { error = "Kein TR3-Modellpaket"; return false; }
     if (rd32(paket, 4) < 2) { error = "Paket ohne Texturteil (Version < 2)"; return false; }

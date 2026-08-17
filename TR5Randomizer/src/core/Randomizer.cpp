@@ -1516,6 +1516,34 @@ bool Rando::run(const RandoInput& in,
         { 63, 3, 9 },    // Hydra: 3x3-Fenster, alle 9 Felder frei
     };
 
+    // Rudelgegner: Typen, die allein nicht funktionieren (#98).
+    //
+    // Der Compsognathus ist der Anlass. Seine Steuerung ist ganz auf die
+    // Gruppe gebaut: `bits = 512 * (item_number & 7) - 1792` (compy.cpp)
+    // verteilt die Tiere anhand ihrer ITEM-NUMMER auf acht Winkel eines
+    // Kreises um das Ziel, und der Angriffsentschluss haengt an zwei
+    // GLOBALEN Zaehlern (compy_scared_timer, compys_attack_lara), die alle
+    // Compys gemeinsam fuehren. Ein einzelner Compy umkreist Lara deshalb
+    // nur und traut sich fast nie heran - im Spiel als "die KI spielt
+    // verrueckt" gesehen (Nutzerbefund 2026-08-17).
+    //
+    // Vier aufeinanderfolgende Item-Nummern ergeben vier verschiedene
+    // Winkel - genau das liefert unser Anhaengen von selbst.
+    //
+    // Ein Rudel wird als EIN Zusatzgegner-Platz gesetzt: alle Tiere auf
+    // denselben Sektor, geweckt von EINEM Trigger mit mehreren
+    // Object-Kommandos. Mehrere Items auf einer Position sind in TR5
+    // ueblich - Andrea2 fuehrt die drei Hydra-Glieder genauso.
+    struct Herde { int typeId; int anzahl; };
+    static const Herde kHerden[] = {
+        { 53, 4 },      // Compsognathus
+    };
+    auto herdenGroesse = [](int typeId) -> int {
+        for (const Herde& h : kHerden)
+            if (h.typeId == typeId) return h.anzahl;
+        return 1;
+    };
+
     // Weltraster aller begehbaren Sektoren, Schluessel ist das Feld in
     // Sektorschritten. Bewusst in.sectors und nicht der laufend gefilterte
     // Pool: gemessen werden soll, wie offen die Umgebung IST, nicht wo gerade
@@ -1627,19 +1655,34 @@ bool Rando::run(const RandoInput& in,
             // etwa jede vierte Rolle geht an einen der bis zu drei
             // gewaehlten fremden Typen, das Level wirkt durchmischt,
             // nicht ausgetauscht.
-            if (opt.allsanity && !gegnerPool.empty())
+            // Rudelgegner nehmen am Tausch NICHT teil (#98). Ein Tausch
+            // aendert nur die Art eines vorhandenen Items - Begleiter liessen
+            // sich nur unterbringen, indem man Cores bestehende Triggerkette
+            // aufbohrt, und ein einzelner Compy funktioniert nicht (siehe
+            // kHerden). Sie kommen ausschliesslich als Zusatzgegner ins Level,
+            // dort gehoert uns der Trigger. Gefiltert wird schon bei der
+            // Ziehung: sonst faenden Wuerfe reihenweise auf einen Typ, der
+            // hinterher doch abgelehnt wird, und die Rolle bliebe vanilla.
+            std::vector<int> tauschPool;
+            for (int t : gegnerPool)
+                if (herdenGroesse(t) == 1) tauschPool.push_back(t);
+
+            if (opt.allsanity && !tauschPool.empty())
             {
                 for (size_t i = 0; i < arten.size(); ++i)
-                    arten[i] = gegnerPool[static_cast<size_t>(rng.below(gegnerPool.size()))];
+                    arten[i] = tauschPool[static_cast<size_t>(rng.below(tauschPool.size()))];
             }
             else if (!crossGewaehlt.empty())
             {
-                for (size_t i = 0; i < arten.size(); ++i)
+                std::vector<int> crossTausch;
+                for (std::map<int, const CrossGegner*>::const_iterator w = crossGewaehlt.begin();
+                     w != crossGewaehlt.end(); ++w)
+                    if (herdenGroesse(w->first) == 1) crossTausch.push_back(w->first);
+
+                for (size_t i = 0; i < arten.size() && !crossTausch.empty(); ++i)
                 {
                     if (rng.below(4) != 0) continue;
-                    std::map<int, const CrossGegner*>::iterator w = crossGewaehlt.begin();
-                    std::advance(w, static_cast<size_t>(rng.below(crossGewaehlt.size())));
-                    arten[i] = w->first;
+                    arten[i] = crossTausch[static_cast<size_t>(rng.below(crossTausch.size()))];
                 }
             }
 
@@ -1846,12 +1889,18 @@ bool Rando::run(const RandoInput& in,
             // Platz stehlen, den ein anderer Typ haette nutzen koennen.
             std::vector<int> passend;
             for (int t : gegnerPool)
-                if (genugPlatz(t, p.s->room, p.s->sectorX, p.s->sectorZ, p.s->floorY))
-                    passend.push_back(t);
+            {
+                if (!genugPlatz(t, p.s->room, p.s->sectorX, p.s->sectorZ, p.s->floorY)) continue;
+                // Ein Rudel muss KOMPLETT ins Item-Budget passen (#98) -
+                // lieber gar keine Compys als drei ohne den vierten.
+                if (herdenGroesse(t) > wieViele - gesetzt) continue;
+                passend.push_back(t);
+            }
             if (passend.empty()) continue;      // hier ist es fuer den ganzen Pool zu eng
-            ++gesetzt;
 
             const int typeId = passend[static_cast<size_t>(rng.below(passend.size()))];
+            const int herde = herdenGroesse(typeId);
+            gesetzt += herde;
             if (crossGewaehlt.count(typeId)) crossBenutzt.insert(typeId);
             const RoomOrigin& ro = origin[p.s->room];
 
@@ -1865,29 +1914,37 @@ bool Rando::run(const RandoInput& in,
             // Bedingung, deshalb nur die Hoehe.
             int gyBoden = 0;
             Rando::bodenAn(in, *p.s, 512, 512, gyBoden);
-            JsonValue a = JsonValue::makeObject();
-            a.set("typeId", JsonValue::makeInt(typeId));
-            a.set("room", JsonValue::makeInt(p.s->room));
-            a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + p.s->sectorX * 1024 + 512));
-            a.set("y", JsonValue::makeInt(gyBoden));
-            a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + p.s->sectorZ * 1024 + 512));
-            // OCB 0: bei Larson setzt eine OCB != 0 ai_bits = GUARD, und dann
-            // sucht er AI-Objekte, die an einer neuen Stelle nicht stehen
-            // (pierre.cpp:84). Fuer neu gesetzte Gegner ist 0 die einzige
-            // Einstellung, die ueberall dasselbe bedeutet.
-            a.set("ocb", JsonValue::makeInt(0));
-            a.set("angle", JsonValue::makeInt(static_cast<int64_t>(rng.below(4)) * 16384 - 32768));
-            adds.push(a);
+
+            // Ein Rudel steht auf EINEM Sektor - wie Andrea2 seine drei
+            // Hydra-Glieder. Die Tiere verteilen sich zur Laufzeit selbst:
+            // ihre Formation haengt an der Item-Nummer, und die vergeben wir
+            // hier fortlaufend. Ein Trigger weckt alle.
+            JsonValue cmdList = JsonValue::makeArray();
+            for (int k = 0; k < herde; ++k)
+            {
+                JsonValue a = JsonValue::makeObject();
+                a.set("typeId", JsonValue::makeInt(typeId));
+                a.set("room", JsonValue::makeInt(p.s->room));
+                a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + p.s->sectorX * 1024 + 512));
+                a.set("y", JsonValue::makeInt(gyBoden));
+                a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + p.s->sectorZ * 1024 + 512));
+                // OCB 0: bei Larson setzt eine OCB != 0 ai_bits = GUARD, und dann
+                // sucht er AI-Objekte, die an einer neuen Stelle nicht stehen
+                // (pierre.cpp:84). Fuer neu gesetzte Gegner ist 0 die einzige
+                // Einstellung, die ueberall dasselbe bedeutet.
+                a.set("ocb", JsonValue::makeInt(0));
+                a.set("angle", JsonValue::makeInt(static_cast<int64_t>(rng.below(4)) * 16384 - 32768));
+                adds.push(a);
+
+                JsonValue cmd = JsonValue::makeObject();
+                cmd.set("type", JsonValue::makeInt(0));          // TO_OBJECT
+                cmd.set("param", JsonValue::makeInt(neuerIndex + k));
+                cmdList.push(cmd);
+            }
 
             const int tr = static_cast<int>(trigger >> 32);
             const int tx = static_cast<int>((trigger >> 16) & 0xFFFF);
             const int tz = static_cast<int>(trigger & 0xFFFF);
-
-            JsonValue cmd = JsonValue::makeObject();
-            cmd.set("type", JsonValue::makeInt(0));          // TO_OBJECT
-            cmd.set("param", JsonValue::makeInt(neuerIndex));
-            JsonValue cmdList = JsonValue::makeArray();
-            cmdList.push(cmd);
 
             JsonValue t = JsonValue::makeObject();
             t.set("room", JsonValue::makeInt(tr));
@@ -1898,9 +1955,14 @@ bool Rando::run(const RandoInput& in,
 
             used.insert(secKey(p.s->room, p.s->sectorX, p.s->sectorZ));
             used.insert(trigger);
-            ++report.enemiesAdded;
-            report.notes.push_back(fmt("Gegner typeId %d als Item %d auf %d,%d,%d - Trigger auf %d,%d,%d",
-                                       typeId, neuerIndex, p.s->room, p.s->sectorX, p.s->sectorZ, tr, tx, tz));
+            report.enemiesAdded += herde;
+            if (herde > 1)
+                report.notes.push_back(fmt("Rudel: %d x typeId %d als Items %d-%d auf %d,%d,%d - ein Trigger auf %d,%d,%d",
+                                           herde, typeId, neuerIndex, neuerIndex + herde - 1,
+                                           p.s->room, p.s->sectorX, p.s->sectorZ, tr, tx, tz));
+            else
+                report.notes.push_back(fmt("Gegner typeId %d als Item %d auf %d,%d,%d - Trigger auf %d,%d,%d",
+                                           typeId, neuerIndex, p.s->room, p.s->sectorX, p.s->sectorZ, tr, tx, tz));
         }
 
         // Der Lauf setzt so viele, wie das Level hergibt - fehlende Plaetze

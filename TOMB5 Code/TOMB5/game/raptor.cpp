@@ -18,11 +18,12 @@
  * steckt dort ein Modell (mit MissMod an allen nachgemessen), genau wie bei
  * SAS fuer den T-Rex und CROW fuer den Geier.
  *
- * ZWEI ABWEICHUNGEN gegenueber tomb3, beide hier begruendet:
+ * DREI ABWEICHUNGEN gegenueber tomb3, alle hier begruendet:
  *
- * 1. Die Rudelsuche vergleicht in TR3 gegen RAPTOR, um zu verhindern, dass
- *    Raptoren sich gegenseitig als Beute waehlen. Hier steht dafuer REAPER -
- *    dasselbe in unserer Slotbelegung.
+ * 1. Die Beutesuche ist ganz entfallen (#98) - der Raptor jagt nur noch Lara.
+ *    Begruendung an der Stelle selbst, kurz: TR3 stellt ihm Mercenaries
+ *    gegenueber, die auch gegen Lara kaempfen; bei uns waeren die naechsten
+ *    Ziele immer Laras eigene Verfolger.
  *
  * 2. tomb3 prueft im Laufzustand zusaetzlich
  *    `raptor->enemy->object_number != ANIMATING6`. ANIMATING6 ist in TR3 ein
@@ -55,15 +56,12 @@ void RaptorControl(short item_number)
 {
 	ITEM_INFO* item;
 	ITEM_INFO* enemy;
-	ITEM_INFO* candidate;
 	CREATURE_INFO* raptor;
 	AI_INFO info;
-	long x, y, z, dist, best_dist, lp;
 	short tilt, angle, neck, head;
 
 	item = &items[item_number];
 	enemy = 0;
-	best_dist = 0x7FFFFFFF;
 
 	if (item->status == ITEM_INVISIBLE)
 	{
@@ -94,43 +92,28 @@ void RaptorControl(short item_number)
 	}
 	else
 	{
-		if (!raptor->enemy || !(GetRandomControl() & 0x7F))
-		{
-			for (lp = 0; lp < MAX_LOT; lp++)
-			{
-				if (baddie_slots[lp].item_num == NO_ITEM || baddie_slots[lp].item_num == item_number)
-					continue;
-
-				candidate = &items[baddie_slots[lp].item_num];
-				x = (candidate->pos.x_pos - item->pos.x_pos) >> 6;
-				y = (candidate->pos.y_pos - item->pos.y_pos) >> 6;
-				z = (candidate->pos.z_pos - item->pos.z_pos) >> 6;
-				dist = SQUARE(x) + SQUARE(y) + SQUARE(z);
-
-				if (dist < best_dist && item->hit_points > 0)
-				{
-					enemy = candidate;
-					best_dist = dist;
-				}
-			}
-
-			// REAPER statt RAPTOR: unser Slot. Damit waehlen sich Raptoren
-			// untereinander nicht als Beute.
-			if (enemy && (enemy->object_number != REAPER || GetRandomControl() < 0x400 && best_dist < 0x400000))
-				raptor->enemy = enemy;
-
-			//Favor Lara if she's closer
-			x = (lara_item->pos.x_pos - item->pos.x_pos) >> 6;
-			y = (lara_item->pos.y_pos - item->pos.y_pos) >> 6;
-			z = (lara_item->pos.z_pos - item->pos.z_pos) >> 6;
-			dist = SQUARE(x) + SQUARE(y) + SQUARE(z);
-
-			if (dist < best_dist)
-				raptor->enemy = lara_item;
-		}
-
+		// ABWEICHUNG 3 (#98, Nutzerentscheidung 2026-08-17): der Raptor nimmt
+		// nur noch Lara ins Visier.
+		//
+		// Hier stand tomb3s Beutesuche: sie geht alle aktiven Gegnerslots
+		// durch, nimmt den naechsten als Ziel und schuetzt nur Artgenossen
+		// (1 zu 32, und nur auf kurze Distanz). In TR3 ergab das ein schoenes
+		// Bild - in CRASH.TR2 stehen dem Rudel Mercenaries gegenueber, und
+		// die kaempfen ihrerseits gegen Lara. Der Dschungel lebt.
+		//
+		// Bei uns gibt es diese dritte Fraktion nicht. Der Cross-Gegnermix
+		// stellt dem Raptor Wachmaenner, SWATs und andere Dinos an die
+		// Seite, die alle ebenfalls auf Lara losgehen: die Suche findet
+		// also immer einen Verbuendeten und der Raptor zerfleischt die
+		// eigene Verstaerkung, statt Lara zu jagen (im Testlevel gesehen).
+		//
+		// Jetzt dieselbe Zeile wie bei jedem einheimischen TR5-Gegner. Die
+		// Bisswirkung auf Nicht-Lara-Ziele weiter unten bleibt stehen: ueber
+		// ai_bits kann GetAITarget weiterhin ein AI-Objekt setzen.
 		if (item->ai_bits)
 			GetAITarget(raptor);
+		else
+			raptor->enemy = lara_item;
 
 		CreatureAIInfo(item, &info);
 

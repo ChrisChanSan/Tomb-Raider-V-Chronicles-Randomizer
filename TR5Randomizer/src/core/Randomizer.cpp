@@ -1414,19 +1414,9 @@ bool Rando::run(const RandoInput& in,
         if (!in.verboteneTypen.count(t) && !opt.gesperrteGegner.count(t))
             gegnerPool.push_back(t);
 
-    // Sicherung: waehlt jemand alle einheimischen Arten eines Levels ab,
-    // bliebe hier nichts uebrig und Tausch wie Zusatzgegner liefen ins
-    // Leere. Dann gilt die Abwahl fuer dieses Level nicht - lieber die
-    // Vanilla-Auswahl als ein Level ohne Gegner. Der Cross-Pool unten kann
-    // trotzdem greifen und tut es meistens auch.
-    if (gegnerPool.empty())
-    {
-        for (int t : in.enemyTypes)
-            if (!in.verboteneTypen.count(t)) gegnerPool.push_back(t);
-        if (!gegnerPool.empty())
-            report.notes.push_back("Gegnerarten: alle einheimischen Arten dieses Levels "
-                                   "waren abgewaehlt - fuer dieses Level ignoriert.");
-    }
+    // Die Notbremse fuer "alles abgewaehlt" steht ABSICHTLICH erst hinter dem
+    // Cross-Pool (#109) - sie stand hier und war damit der Grund, dass eine
+    // gezielte Auswahl nicht durchkam.
     std::map<int, const CrossGegner*> crossGewaehlt;
     std::set<int> crossBenutzt;
     if ((opt.crossEnemies || opt.allsanity) && (opt.swapEnemies || opt.addEnemies) && klein != "joby4")
@@ -1474,6 +1464,32 @@ bool Rando::run(const RandoInput& in,
         if (opt.allsanity)
             report.notes.push_back(fmt("Allsanity: Gegnerpool auf %d Typen erweitert.",
                                        static_cast<int>(gegnerPool.size())));
+    }
+
+    // Notbremse fuer "der Nutzer hat ALLES abgewaehlt" (#109).
+    //
+    // Sie steht hier unten und nicht mehr vor dem Cross-Pool - und genau das
+    // war der Fehler, den der Nutzer gemeldet hat: Wer im Fenster
+    // "Gegnerarten" nur die Dinos anhakt, waehlt damit alle einheimischen
+    // Arten ab. Oben war der Pool dann leer, die Bremse fuellte ihn mit der
+    // KOMPLETTEN Vanilla-Liste wieder auf (die Abwahl also ignoriert), und
+    // die Dinos kamen nur obendrauf. Ergebnis: der halbe Level blieb vanilla,
+    // obwohl "nur Dinos" gewaehlt war.
+    //
+    // Jetzt zaehlt, was am Ende WIRKLICH im Topf liegt. Eine Auswahl, die
+    // durch Cross-Typen erfuellbar ist, kommt unveraendert durch. Die Bremse
+    // greift nur noch im echten Notfall - etwa wenn jemand ausschliesslich
+    // Dinos waehlt, aber die TR3-Pfade fehlen und sie deshalb still
+    // herausfallen. Dann ist ein Level mit Vanilla-Gegnern immer noch besser
+    // als eines, in dem gar nichts mehr passiert.
+    if (gegnerPool.empty())
+    {
+        for (int t : in.enemyTypes)
+            if (!in.verboteneTypen.count(t)) gegnerPool.push_back(t);
+        if (!gegnerPool.empty())
+            report.notes.push_back("Gegnerarten: die Auswahl liess fuer dieses Level keinen "
+                                   "einzigen Typ uebrig (auch keinen fremden) - fuer dieses "
+                                   "Level ignoriert, sonst haette es gar keine Gegner.");
     }
 
     // --- Vorhandene Gegner tauschen ---

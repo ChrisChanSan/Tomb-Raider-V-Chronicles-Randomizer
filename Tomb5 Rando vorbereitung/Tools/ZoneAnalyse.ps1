@@ -919,6 +919,12 @@ $FIXED_ITEMS = @{
     'joby2'   = @{
         20 = 'Sniper (Raum 19) - gescriptet, bleibt Vanilla (Nutzerliste)'
         21 = 'Sniper (Raum 21) - gescriptet, bleibt Vanilla (Nutzerliste)'
+        # Nutzerentscheidung 2026-08-17 (#109): seit die Soldatenfamilie auch
+        # mit OCB getauscht werden darf, waere dieser Wachmann frei. Er wartet
+        # aber auf die Entkopplung der Ausweichslots (#111) - seine OCB 3
+        # setzt meshswap_meshbits, und Slot 400 traegt heute noch den Satz
+        # eines fremden Spenders. Nach #111 kann die Zeile hier weg.
+        69 = 'Guard OCB 3 (Raum 58) - wartet auf die Slot-Entkopplung #111'
     }
     'joby3'   = @{ 186 = 'Chef (Raum 120) - nur per Stealth-Cutscene toetbar, bleibt Vanilla (Nutzerliste)' }
     'joby5'   = @{ 145 = 'Crane Guy MIP (Raum 121) - Cutscene-Double, bleibt Vanilla (Nutzerliste)' }
@@ -937,6 +943,13 @@ $FIXED_ITEMS = @{
     'rich3'   = @{
         183 = 'Hitman (Raum 152) - bleibt Vanilla (Nutzerliste)'
         200 = 'Hitman (Raum 183) - bleibt Vanilla (Nutzerliste)'
+        # Nutzerentscheidung 2026-08-17 (#109): die Soldatenfamilie darf jetzt
+        # auch mit OCB getauscht werden - diese beiden aber nicht. Sie stehen
+        # zu zweit in Raum 68 (beide OCB 5) und haengen am ROPE; ein anderer
+        # Typ dort macht die Stelle unspielbar. "53 54 muessen wegen dem Rope
+        # erst mal bleiben."
+        53 = 'SWAT+ (Raum 68) - haengt am Rope, bleibt vorerst Vanilla'
+        54 = 'SWAT (Raum 68) - haengt am Rope, bleibt vorerst Vanilla'
     }
 }
 

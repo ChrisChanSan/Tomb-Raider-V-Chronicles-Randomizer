@@ -1707,8 +1707,33 @@ bool Rando::run(const RandoInput& in,
             // bzw. 169, sowie Andrea2 76 - der gescriptete Miniboss, der
             // ueber fixedItems geschuetzt ist und oben schon aussortiert
             // wurde.
-            const bool ocbNurMarker = (it.typeId == 45 || it.typeId == 47);
-            if (it.ocb != 0 && !ocbNurMarker) continue;
+            // NACHTRAG 2026-08-17 (#109), Nutzerdurchsicht Item fuer Item:
+            // Die Sperre war zu breit. Bei der Soldatenfamilie waehlt die OCB
+            // nur die SPAWN-POSE (InitialiseSas: durchs Fenster einsteigen,
+            // vom Sims abseilen, aus dem Sitzen aufstehen) - das steckt nicht
+            // in der Geometrie, der neue Typ steht danach einfach normal da.
+            //
+            // Und der Imp ist NICHT der Sonderfall, fuer den ich ihn gehalten
+            // habe: der Nutzer hat den alten Befund als Fehlalarm eingeordnet
+            // ("die sind da faelschlich gelandet, das war ein false Flag
+            // wegen einem anderen Bug"). Der oben beschriebene Grafikfehler
+            // in andy3 kam von woanders. Zu andy1 ausdruecklich: "das wird
+            // eher lustig, wenn auf einmal die alle spawnen."
+            //
+            // Was NICHT ueber diese Liste laeuft, sondern ueber fixedItems
+            // (eine Typregel kann kein einzelnes Item schuetzen):
+            //   rich3 53 und 54 - haengen am Rope und bleiben vorerst
+            //   joby2 69        - wartet auf die Slot-Entkopplung (#111)
+            const int ot = it.typeId;
+            const bool ocbNurPose =
+                   ot == 45 || ot == 47            // Larson/Pierre: Markerkennung
+                || ot == 33 || ot == 35            // SWAT, SWAT+
+                || ot == 37 || ot == 460           // Wachmann, Wachmann (Joby)
+                || ot == 39                        // Two Gun
+                || ot == 49 || ot == 51            // Mafia, Mafia2
+                || ot == 55                        // Crane Guy
+                || ot == 89;                       // Imp
+            if (it.ocb != 0 && !ocbNurPose) continue;
             indizes.push_back(it.index);
             arten.push_back(it.typeId);
         }

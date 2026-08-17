@@ -1289,7 +1289,20 @@ bool Rando::run(const RandoInput& in,
         { 55, "joby2",   {},                                    {-1,-1},  nullptr,   -1, 0, 37 }, // Crane Guy
         { 57, "Andrea3", {},                                    {-1,-1},  nullptr,   -1 },  // Lion
         { 59, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Gladiator
-        { 61, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Soldier Statue (Hammer)
+        // Roman God: EIGENER Ausweichslot 403, nicht der 401 des Gladiators
+        // (#84). Er existiert in zwei Fassungen - Andrea2 mit SCHWERT,
+        // Andrea3 mit HAMMER -, und seine Steuerung kommt mit der falschen
+        // nicht klar (im Spiel gesehen: er fuehrt das Schwert wie einen
+        // Hammer). Teilten sich beide den Slot, braechte ein importierter
+        // GLADIATOR den Andrea3-Tauschsatz mit, und Andrea2s einheimischer
+        // Schwert-Gott zoege die Hammer-Meshes daraus - ohne dass Typ 61
+        // ueberhaupt importiert waere. In vier von acht Seeds nachgemessen.
+        //
+        // Beide Level fuehren 61 in ihrer kuratierten Liste (Andrea2 Item
+        // 108, Andrea3 Item 79), deshalb importiert KEINES von beiden den
+        // Typ selbst - der Modellspender bleibt fuer alle anderen Level
+        // Andrea3, und das ist auch richtig so.
+        { 61, "Andrea3", {},                                    {-1,-1},  "Andrea3", 403 }, // Soldier Statue (Hammer)
         // Hydra: lange bewusst draussen ("drei Items auf einer Position, die
         // OCB waehlt das Kettenglied"). Nach der Durchsicht am 2026-08-15
         // aufgenommen - die OCB ist harmlos, alles andere traegt:

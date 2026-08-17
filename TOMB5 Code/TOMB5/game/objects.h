@@ -56,8 +56,21 @@ void DrawBaddieGunFlash(ITEM_INFO* item);
 // (TwoGun-Quellmesh 2 im SWAT/Hitman-Satz).
 #define MESHSWAP_CROSS_RICH3	SMASH_OBJECT3	// SWAT, SWAT_PLUS, TWOGUN
 #define MESHSWAP_CROSS_JOBY3	SMASH_OBJECT4	// BLUE_GUARD, MAFIA
-#define MESHSWAP_CROSS_ANDREA3	SMASH_OBJECT5	// GLADIATOR, ROMAN_GOD
+#define MESHSWAP_CROSS_ANDREA3	SMASH_OBJECT5	// GLADIATOR
 #define MESHSWAP_CROSS_ANDY	SMASH_OBJECT6	// IMP
+// ROMAN_GOD hat einen EIGENEN Ausweichslot, obwohl sein Tauschsatz aus
+// demselben Spender kommt wie der des Gladiators (#84).
+//
+// Der Grund ist der Roman God selbst: er existiert in ZWEI Fassungen -
+// Andrea2 fuehrt ihn mit SCHWERT, Andrea3 mit HAMMER -, und die
+// Steuerung kommt mit der falschen Fassung nicht klar (der Nutzer hat es
+// im Spiel gesehen: er versucht das Schwert wie einen Hammer zu fuehren
+// und umgekehrt). Teilten sich beide den Slot, wuerde schon ein
+// importierter GLADIATOR den Tauschsatz von Andrea3 mitbringen - und
+// Andrea2s einheimischer Schwert-Gott zoege dann die Hammer-Meshes
+// daraus, ohne dass Typ 61 je importiert waere. In vier von acht Seeds
+// nachgemessen.
+#define MESHSWAP_CROSS_ROMANGOD	SMASH_OBJECT7	// ROMAN_GOD, in allen 13 Leveln frei
 
 enum object_types 
 {

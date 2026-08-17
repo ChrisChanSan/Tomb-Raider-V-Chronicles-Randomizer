@@ -1935,8 +1935,10 @@ void BaddyObjects()
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
 
+		// Eigener Ausweichslot, NICHT der des Gladiators - siehe die
+		// Begruendung bei MESHSWAP_CROSS_ROMANGOD in objects.h (#84).
 		for (lp = 0; lp < 17; lp++)
-			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_ANDREA3, lp);
+			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_ROMANGOD, lp);
 	}
 
 	if (objects[GUARDIAN].loaded)

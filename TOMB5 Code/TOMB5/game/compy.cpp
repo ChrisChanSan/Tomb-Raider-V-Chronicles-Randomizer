@@ -17,7 +17,7 @@
  * nachgemessen, Gegenprobe ueber den Hund). Vierter toter Slot nach SAS 31
  * (T-Rex), CROW 43 (Geier) und REAPER 75 (Raptor).
  *
- * DREI ABWEICHUNGEN gegenueber tomb3, alle hier begruendet:
+ * VIER ABWEICHUNGEN gegenueber tomb3, alle hier begruendet:
  *
  * 1. DIE KADAVERSUCHE ENTFAELLT. tomb3 durchsucht den Raum nach einem Objekt
  *    vom Typ ANIMATING6 - in TR3 ist das der tote Raptor, um den sich das
@@ -46,6 +46,17 @@
  *    Levelwechsel ueberleben - in dieser Engine wird viel neu geladen (Level
  *    Select), und ein uebrig gebliebener Schreckzaehler liesse das erste
  *    Rudel im naechsten Level ohne Grund fliehen.
+ *
+ * 4. ZURUECKHALTUNG HALBIERT (Nutzerentscheidung 2026-08-17). Alle drei
+ *    Wartezeiten der Feigheit auf die Haelfte:
+ *      - Fluchtdauer        compy_scared_timer  280 -> 140  (~9,3 -> ~4,7 s)
+ *      - Sperre vor Angriff item->timer > 180   -> 90       (~6   -> ~3   s)
+ *      - dieselbe bei Beschuss  > 200           -> 100      (~6,7 -> ~3,3 s)
+ *    Grund: TR3 gibt dem Rudel viel Zeit, weil dort ganze Schwaerme in
+ *    weiten Dschungelabschnitten leben und Lara sie lange begleitet. Bei
+ *    uns steht EIN Rudel aus vier Tieren irgendwo im Level - neun Sekunden
+ *    Flucht heisst dort, dass Lara laengst weg ist, bevor etwas passiert.
+ *    Die Feigheit als Verhalten bleibt, sie dauert nur halb so lang.
  *
  * Klaenge kommen ueber die Anim-Kommandos des Modells, hier ist kein Aufruf
  * noetig.
@@ -111,7 +122,13 @@ void CompyControl(short item_number)
 		if (!compy_scared_timer && !compys_attack_lara && (info.enemy_facing < 0x3000 && info.enemy_facing > -0x3000 && lara_item->speed > 15 || lara_item->current_anim_state == AS_ROLL || item->hit_status))
 		{
 			item->item_flags[0] = (bits + 1792) >> 7;
-			compy_scared_timer = 280;
+			// ABWEICHUNG 4 (Nutzerentscheidung 2026-08-17): alle drei
+			// Zurueckhaltungs-Zeiten halbiert. TR3 gab dem Rudel viel Zeit,
+			// weil dort ganze Schwaerme in weiten Dschungelabschnitten
+			// leben; bei uns steht EIN Rudel aus vier Tieren in einem
+			// TR5-Level, und neun Sekunden Flucht sind dort schlicht
+			// langweilig. Original: 280 (~9,3 s bei 30 Bildern/s).
+			compy_scared_timer = 140;
 		}
 		else if (compy_scared_timer)
 		{
@@ -123,7 +140,8 @@ void CompyControl(short item_number)
 				compy_scared_timer--;
 			}
 
-			if (GetRandomControl() < 0x1F && item->timer > 180)
+			// Halbiert, siehe Abweichung 4. Original: 180 (~6 s).
+			if (GetRandomControl() < 0x1F && item->timer > 90)
 				compys_attack_lara = 1;
 		}
 		else
@@ -142,10 +160,9 @@ void CompyControl(short item_number)
 			// Compys vorkommen.
 			//
 			// Lara ist der naheliegende Ersatz: sie streifen in ihrer Naehe
-			// umher, ohne sie anzugreifen. Die Feigheit haengt an
-			// compys_attack_lara und bleibt davon unberuehrt - die rund sechs
-			// Sekunden, bis das Rudel sich traut, sind Original (item->timer
-			// > 180) und sollen bleiben.
+			// umher, ohne sie anzugreifen. Die Feigheit selbst haengt an
+			// compys_attack_lara und ist von diesem Ersatz unberuehrt; ihre
+			// DAUER ist inzwischen halbiert (Abweichung 4 oben).
 			if (compy->enemy)
 			{
 				compy->target.x = compy->enemy->pos.x_pos;
@@ -184,7 +201,8 @@ void CompyControl(short item_number)
 		head = -(info.angle / 4);
 		item->timer++;
 
-		if (item->hit_status && item->timer > 200 && GetRandomControl() < 0xC1C)
+		// Halbiert, siehe Abweichung 4. Original: 200 (~6,7 s).
+		if (item->hit_status && item->timer > 100 && GetRandomControl() < 0xC1C)
 			compys_attack_lara = 1;
 
 		switch (item->current_anim_state)

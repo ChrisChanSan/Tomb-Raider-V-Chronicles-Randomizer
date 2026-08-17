@@ -267,7 +267,7 @@ void InitialiseRomangod(short item_number)
 
 	item = &items[item_number];
 	InitialiseCreature(item_number);
-	item->anim_number = objects[ROMAN_GOD].anim_index + 16;
+	item->anim_number = objects[item->object_number].anim_index + 16;
 	item->goal_anim_state = 13;
 	item->current_anim_state = 13;
 	item->frame_number = anims[item->anim_number].frame_base;
@@ -332,7 +332,7 @@ void RomangodControl(short item_number)
 		{
 			item->goal_anim_state = 6;
 			item->current_anim_state = 6;
-			item->anim_number = objects[ROMAN_GOD].anim_index + 5;
+			item->anim_number = objects[item->object_number].anim_index + 5;
 			item->frame_number = anims[item->anim_number].frame_base;
 		}
 
@@ -342,7 +342,7 @@ void RomangodControl(short item_number)
 
 			if (item->current_anim_state != 11)
 			{
-				item->anim_number = objects[ROMAN_GOD].anim_index + 14;
+				item->anim_number = objects[item->object_number].anim_index + 14;
 				item->current_anim_state = 11;
 				item->frame_number = anims[item->anim_number].frame_base;
 			}

@@ -1941,6 +1941,37 @@ void BaddyObjects()
 			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_ROMANGOD, lp);
 	}
 
+	// Zweite Fassung des Roman God (#84): Block eins zu eins wie oben, nur
+	// mit eigenem Ausweichslot. Beide Fassungen koennen damit im selben Level
+	// stehen; welche Waffe ein Exemplar fuehrt, entscheidet weiterhin die OCB
+	// seines Items, und der Randomizer setzt sie passend zum Modell.
+	if (objects[ROMAN_GOD2].loaded)
+	{
+		obj = &objects[ROMAN_GOD2];
+		obj->initialise = InitialiseRomangod;
+		obj->control = RomangodControl;
+		obj->collision = CreatureCollision;
+		obj->shadow_size = 128;
+		obj->hit_points = 300;
+		obj->pivot_length = 50;
+		obj->radius = 256;
+		obj->bite_offset = 0;
+		obj->object_mip = 5120;
+		obj->intelligent = 1;
+		obj->HitEffect = 2;
+		obj->save_position = 1;
+		obj->save_hitpoints = 1;
+		obj->save_flags = 1;
+		obj->save_anim = 1;
+		bones[obj->bone_index + 24] |= 8;
+		bones[obj->bone_index + 24] |= 4;
+		bones[obj->bone_index + 52] |= 8;
+		bones[obj->bone_index + 52] |= 4;
+
+		for (lp = 0; lp < 17; lp++)
+			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_ROMANGOD2, lp);
+	}
+
 	if (objects[GUARDIAN].loaded)
 	{
 		obj = &objects[GUARDIAN];

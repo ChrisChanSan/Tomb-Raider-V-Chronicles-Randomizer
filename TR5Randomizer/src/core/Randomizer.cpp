@@ -1289,20 +1289,29 @@ bool Rando::run(const RandoInput& in,
         { 55, "joby2",   {},                                    {-1,-1},  nullptr,   -1, 0, 37 }, // Crane Guy
         { 57, "Andrea3", {},                                    {-1,-1},  nullptr,   -1 },  // Lion
         { 59, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Gladiator
-        // Roman God: EIGENER Ausweichslot 403, nicht der 401 des Gladiators
-        // (#84). Er existiert in zwei Fassungen - Andrea2 mit SCHWERT,
-        // Andrea3 mit HAMMER -, und seine Steuerung kommt mit der falschen
-        // nicht klar (im Spiel gesehen: er fuehrt das Schwert wie einen
-        // Hammer). Teilten sich beide den Slot, braechte ein importierter
-        // GLADIATOR den Andrea3-Tauschsatz mit, und Andrea2s einheimischer
-        // Schwert-Gott zoege die Hammer-Meshes daraus - ohne dass Typ 61
-        // ueberhaupt importiert waere. In vier von acht Seeds nachgemessen.
+        // Der Roman God, ZWEI Fassungen, zwei Slots (#84, Nutzeridee).
         //
-        // Beide Level fuehren 61 in ihrer kuratierten Liste (Andrea2 Item
-        // 108, Andrea3 Item 79), deshalb importiert KEINES von beiden den
-        // Typ selbst - der Modellspender bleibt fuer alle anderen Level
-        // Andrea3, und das ist auch richtig so.
-        { 61, "Andrea3", {},                                    {-1,-1},  "Andrea3", 403 }, // Soldier Statue (Hammer)
+        // Vanilla teilen sie sich Slot 61 und schliessen sich damit aus:
+        // Andrea2 fuehrt dort das SCHWERT (Item 108, OCB 1 - Fernkampf,
+        // gruener Blitz), Andrea3 den HAMMER (Item 79, OCB 0 - Nahkampf,
+        // blau). Die Waffe waehlt die OCB des ITEMS, das Aussehen der Slot -
+        // passen die nicht zusammen, fuehrt er die Klinge wie einen Hammer
+        // (vom Nutzer im Spiel fotografiert).
+        //
+        // Mit dem eigenen Slot 461 fuer den Hammer passen jetzt BEIDE in
+        // dasselbe Level. Die Spawn-OCB dazu steht in kSpawnOcb.
+        //
+        // Spender: 61 kommt aus Andrea2 (Schwert), 461 aus Andrea3 (Hammer,
+        // dort unter Slot 61 - daher quellSlot). Beide Level fuehren 61 in
+        // ihrer kuratierten Liste und importieren es deshalb nie selbst;
+        // Andrea3 ueberspringt 461 zusaetzlich als eigener Spender.
+        //
+        // Begleiter BUBBLES (367): das Geschoss der SCHWERT-Fassung ist wie
+        // bei der Hydra kein Sprite, sondern ein Mesh aus diesem Slot
+        // (romangod.cpp:119 und 228). Ohne ihn fliegt in fremden Leveln
+        // etwas Falsches.
+        { 61,  "Andrea2", {},                                   {367,-1}, "Andrea2", 403 }, // Roman God (Schwert)
+        { 461, "Andrea3", {},                                   {-1,-1},  "Andrea3", 404, 0, 0, nullptr, 61 }, // Roman God (Hammer)
         // Hydra: lange bewusst draussen ("drei Items auf einer Position, die
         // OCB waehlt das Kettenglied"). Nach der Durchsicht am 2026-08-15
         // aufgenommen - die OCB ist harmlos, alles andere traegt:
@@ -1551,6 +1560,42 @@ bool Rando::run(const RandoInput& in,
     static const Herde kHerden[] = {
         { 53, 4 },      // Compsognathus
     };
+
+    // Spawn-OCB: manche Gegner lesen ihre OCB als VERHALTEN, nicht als
+    // Ortsangabe - fuer die ist "immer 0" falsch.
+    //
+    // Der Roman God ist der Anlass (vom Nutzer im Spiel fotografiert). Seine
+    // Steuerung liest trigger_flags als WAFFENART:
+    //   trigger_flags == 1 -> Fernkampf, wirft ein Geschoss  (romangod.cpp:415)
+    //   trigger_flags == 0 -> Nahkampf mit dem Hammer        (romangod.cpp:417)
+    // sogar die Farbe seiner Blitze haengt daran (romangod.cpp:516).
+    //
+    // Und die Fassungen unterscheiden sich je Level: Andrea2 fuehrt ihn mit
+    // SCHWERT (Item 108, OCB 1 - gruen, schiesst), Andrea3 mit HAMMER
+    // (Item 79, OCB 0 - blau, schlaegt). Mit unserer Vorgabe OCB 0 bekam ein
+    // in Andrea2 gesetzter Roman God das Hammer-Verhalten zum Schwert-Modell:
+    // er hielt die Klinge wie einen Hammer und der Blitz war blau statt gruen.
+    // Genau das hat der Nutzer gesehen - nur das Vanilla-Item 108 stimmte.
+    //
+    // Die Regel folgt dem MODELL, nicht dem Level an sich: wo das eigene
+    // Schwert-Modell steht, muss OCB 1 hin. Alle anderen Level bekommen das
+    // Hammer-Modell aus Andrea3 importiert und bleiben bei 0.
+    // Seit beide Fassungen einen eigenen Slot haben (Nutzeridee), folgt die
+    // OCB dem SLOT statt dem Level - mit einer Ausnahme: Andrea3 fuehrt in
+    // seinem eigenen Slot 61 den Hammer, nicht das Schwert. Die
+    // levelgenaue Zeile steht deshalb VOR der allgemeinen, erste Treffer
+    // gewinnt.
+    struct SpawnOcb { int typeId; const char* level; int ocb; };  // level 0 = ueberall
+    static const SpawnOcb kSpawnOcb[] = {
+        {  61, "andrea3", 0 },  // Andrea3s eigener Slot 61 IST der Hammer
+        {  61, nullptr,   1 },  // sonst Schwert-Fassung: Fernkampf
+        { 461, nullptr,   0 },  // Hammer-Fassung: Nahkampf
+    };
+    auto spawnOcbFuer = [&klein](int typeId) -> int {
+        for (const SpawnOcb& s : kSpawnOcb)
+            if (s.typeId == typeId && (!s.level || klein == s.level)) return s.ocb;
+        return 0;
+    };
     auto herdenGroesse = [](int typeId) -> int {
         for (const Herde& h : kHerden)
             if (h.typeId == typeId) return h.anzahl;
@@ -1722,13 +1767,16 @@ bool Rando::run(const RandoInput& in,
 
                 // Die OCB gehoerte dem alten Typ (nur Larson/Pierre kommen
                 // ueberhaupt mit einer hierher, siehe oben). Der neue Typ
-                // wuerde sie als seine eigene lesen - deshalb auf 0.
-                if (f->second.ocb != 0)
+                // wuerde sie als seine eigene lesen - deshalb weg damit.
+                // Fuer Typen, deren OCB ein VERHALTEN waehlt, steht der
+                // richtige Wert in kSpawnOcb (Roman God: Waffenart).
+                const int wunschOcb = spawnOcbFuer(arten[i]);
+                if (f->second.ocb != wunschOcb)
                 {
-                    e.set("ocb", JsonValue::makeInt(0));
-                    report.notes.push_back(fmt("Item %d: OCB %d faellt beim Typwechsel auf 0.",
-                                               indizes[i], f->second.ocb));
-                    f->second.ocb = 0;
+                    e.set("ocb", JsonValue::makeInt(wunschOcb));
+                    report.notes.push_back(fmt("Item %d: OCB %d -> %d beim Typwechsel auf typeId %d.",
+                                               indizes[i], f->second.ocb, wunschOcb, arten[i]));
+                    f->second.ocb = wunschOcb;
                 }
 
                 // Antitrigger-Immunitaet, falls noetig - Begruendung beim
@@ -1941,11 +1989,13 @@ bool Rando::run(const RandoInput& in,
                 a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + p.s->sectorX * 1024 + 512));
                 a.set("y", JsonValue::makeInt(gyBoden));
                 a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + p.s->sectorZ * 1024 + 512));
-                // OCB 0: bei Larson setzt eine OCB != 0 ai_bits = GUARD, und dann
-                // sucht er AI-Objekte, die an einer neuen Stelle nicht stehen
-                // (pierre.cpp:84). Fuer neu gesetzte Gegner ist 0 die einzige
-                // Einstellung, die ueberall dasselbe bedeutet.
-                a.set("ocb", JsonValue::makeInt(0));
+                // OCB 0 als Vorgabe: bei Larson setzt eine OCB != 0
+                // ai_bits = GUARD, und dann sucht er AI-Objekte, die an
+                // einer neuen Stelle nicht stehen (pierre.cpp:84).
+                // Ausnahme sind Typen, deren OCB ein VERHALTEN waehlt statt
+                // einer Umgebung - die stehen mit ihrem Wert in kSpawnOcb
+                // (Roman God: Waffenart, siehe dort).
+                a.set("ocb", JsonValue::makeInt(spawnOcbFuer(typeId)));
                 a.set("angle", JsonValue::makeInt(static_cast<int64_t>(rng.below(4)) * 16384 - 32768));
                 adds.push(a);
 
@@ -2461,7 +2511,11 @@ std::vector<Gegnerart> Rando::gegnerarten()
         { 55, "Crane Guy",         nullptr },
         { 57, "Loewe",             nullptr },
         { 59, "Gladiator",         nullptr },
-        { 61, "Soldatenstatue",    nullptr },
+        { 61, "Soldatenstatue (Schwert)", nullptr },
+        // Engine-Slot 461 (ROMAN_GOD2, #84): die Hammer-Fassung aus Andrea3.
+        // Vanilla teilt sie sich Slot 61 mit dem Schwert und schliesst es aus;
+        // mit dem eigenen Slot koennen beide im selben Level stehen.
+        { 461, "Soldatenstatue (Hammer)", nullptr },
         { 63, "Hydra",             nullptr },
         { 77, "Labyrinth-Monster", nullptr },
         // Der Hund aus joby2 - eigener Gegnertyp mit eigener Steuerung,

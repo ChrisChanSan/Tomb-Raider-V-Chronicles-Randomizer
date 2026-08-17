@@ -71,6 +71,7 @@ void DrawBaddieGunFlash(ITEM_INFO* item);
 // daraus, ohne dass Typ 61 je importiert waere. In vier von acht Seeds
 // nachgemessen.
 #define MESHSWAP_CROSS_ROMANGOD	SMASH_OBJECT7	// ROMAN_GOD, in allen 13 Leveln frei
+#define MESHSWAP_CROSS_ROMANGOD2 SMASH_OBJECT8	// ROMAN_GOD2, ebenfalls ueberall frei
 
 enum object_types 
 {
@@ -337,6 +338,19 @@ enum object_types
 	// it is a full member of the SasControl family (setup.cpp anchors its
 	// anim_index like the others, InitialiseSas/lot.cpp/sas.cpp know it).
 	BLUE_GUARD2,
+
+	// ROMAN_GOD2: die zweite Fassung des Roman God (#84). Vanilla teilen sich
+	// beide denselben Slot 61 und schliessen sich damit aus - Andrea2 fuehrt
+	// dort das SCHWERT, Andrea3 den HAMMER. Welche Waffe er fuehrt, entscheidet
+	// die OCB des ITEMS (romangod.cpp: trigger_flags 1 = Fernkampf/Schwert,
+	// 0 = Nahkampf/Hammer), das MODELL kommt aus dem Slot. Mit einem zweiten
+	// Slot passen beide in dasselbe Level: 61 traegt das Schwert, hier der
+	// Hammer, und jeder bekommt die OCB, die zu seinem Modell gehoert.
+	//
+	// Voraussetzung dafuer war, dass RomangodControl seine Animationen ueber
+	// item->object_number holt statt fest ueber ROMAN_GOD - genau die Lehre
+	// aus der Soldatenfamilie (#80).
+	ROMAN_GOD2,
 
 	NUMBER_OBJECTS
 };

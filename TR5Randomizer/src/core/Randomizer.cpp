@@ -1260,7 +1260,11 @@ bool Rando::run(const RandoInput& in,
                          int quellSlot; };
     static const CrossGegner kCross[] = {
         { 33, "rich3",   {},                                    {-1,-1},  "rich3",   462, 0, 0 },  // SWAT
-        { 35, "rich3",   {},                                    {-1,-1},  "rich3",   463, 0, 33 }, // Advanced SWAT (Anims von SWAT)
+        // Klang 88 (BIO_BREATHE_OUT): das Gasmasken-Atmen des SWAT+ in
+        // dunklen Raeumen (sas.cpp:155, fest verdrahtet - steht in keinem
+        // Anim-Kommando und reist deshalb nicht von selbst). Ohne den
+        // Eintrag atmet er in fremden Leveln stumm (#111 Teil 3).
+        { 35, "rich3",   { {88,"rich3",88} },                   {-1,-1},  "rich3",   463, 0, 33 }, // Advanced SWAT (Anims von SWAT)
         { 37, "rich1",   {},                                    {-1,-1},  "joby3",   465, 0, 0 },  // Guard (Blue Guard)
         // Der zweite Wachmann (#83/#105, Engine-Slot 460 = BLUE_GUARD2):
         // das Joby-Modell aus joby3 - dort ist der Guard der Anim-Anker der
@@ -1271,7 +1275,12 @@ bool Rando::run(const RandoInput& in,
         // zur Laufzeit auf deren Satz um wie jedes Familienmitglied.
         // Tauschhaelften (Feuerhaende 10/13) wie der Guard aus joby3.
         { 460, "joby3",  {},                                    {-1,-1},  "joby3",   467, 0, 0, nullptr, 37 }, // Wachmann (Joby)
-        { 39, "rich1",   {},                                    {-1,-1},  "rich3",   464, 0, 0 },  // Two Gun
+        // Laserschuss (193) und -einschlag (167): fest verdrahtet in
+        // twogun.cpp:616f, in keinem Anim-Kommando - ohne die Eintraege
+        // feuert der Laser in fremden Leveln stumm (#111 Teil 3). Beide
+        // Samples sind in rich1 und rich3 byte-identisch; die 167 setzt
+        // auch die Hydra (aus Andrea2), ebenfalls identischer Inhalt.
+        { 39, "rich1",   { {167,"rich3",167}, {193,"rich3",193} }, {-1,-1}, "rich3",  464, 0, 0 },  // Two Gun
         { 41, "Andrea1", {},                                    {-1,-1},  nullptr,   -1 },  // Dog
         { 45, "Andrea1", { {96,"rich1",85}, {98,"rich1",143} }, {-1,-1},  nullptr,   -1 },  // Larson
         { 47, "Andrea3", { {90,"joby5",45}, {91,"joby5",123} }, {-1,-1},  nullptr,   -1 },  // Pierre

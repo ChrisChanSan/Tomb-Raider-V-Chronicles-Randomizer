@@ -1540,6 +1540,13 @@ void BaddyObjects()
 		obj->save_hitpoints = 1;
 		obj->save_flags = 1;
 		obj->save_anim = 1;
+		// Core-Luecke: als einziger Soldat traegt er einen DAUERHAFTEN
+		// Mesh-Tausch (0x2400 = Pistolen im Holster, nach der Ziehanimation
+		// 0x80 = in der Hand). Ohne save_mesh landet der Zustand nie im
+		// Spielstand - nach dem Laden steckten die Waffen wieder im Holster
+		// und er zog neu (Nutzerfund 2026-08-18). Sichert zugleich
+		// mesh_bits, also auch den abgeschossenen Kopfschmuck (0x4000).
+		obj->save_mesh = 1;
 		bones[obj->bone_index + 24] |= 8;
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;

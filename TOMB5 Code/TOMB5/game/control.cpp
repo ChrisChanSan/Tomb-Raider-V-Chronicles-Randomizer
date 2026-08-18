@@ -3310,8 +3310,17 @@ void AnimateItem(ITEM_INFO* item)
 						num = SFX_BLUEG_HIT_DIE;
 
 					// Fuers SFXLOG: wer ruft hier? (Diagnose, siehe sound.cpp)
+					// Anim, Typ-Bits und Raumflaggen dazu, seit der
+					// Wasserschritt-Phantomjagd: die Datei ist sauber, die
+					// Raeume sind trocken, die Weiche liest sich dicht - also
+					// muss die naechste Wiederholung zeigen, WELCHER Wert zur
+					// Laufzeit luegt (Anim ausserhalb der Scheibe? Typ-Bits
+					// weg? Raumflaggen anders als in der Datei?).
 					SfxKommandoRufer = item->object_number;
 					SfxKommandoRaum = item->room_number;
+					SfxKommandoAnim = item->anim_number;
+					SfxKommandoTyp = type;
+					SfxKommandoRaumFlags = (item->room_number == NO_ROOM) ? -1 : (long)room[item->room_number].flags;
 
 					if (objects[item->object_number].water_creature)
 					{
@@ -3338,6 +3347,9 @@ void AnimateItem(ITEM_INFO* item)
 
 					SfxKommandoRufer = -1;
 					SfxKommandoRaum = -1;
+					SfxKommandoAnim = -1;
+					SfxKommandoTyp = -1;
+					SfxKommandoRaumFlags = -1;
 				}
 
 				cmd += 2;

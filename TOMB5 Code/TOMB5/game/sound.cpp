@@ -19,6 +19,9 @@ long sound_cut_flag = 0;
 // lassen -1 stehen. Nur fuers SFXLOG, kein Spielverhalten.
 long SfxKommandoRufer = -1;
 long SfxKommandoRaum = -1;
+long SfxKommandoAnim = -1;
+long SfxKommandoTyp = -1;
+long SfxKommandoRaumFlags = -1;
 
 void SoundEffectCS(long sfx, PHD_3DPOS* pos, long flags)
 {
@@ -363,9 +366,9 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 	// (Wasserschritt-Fall 2026-08-19: nur die Nummer im Log, der Verursacher
 	// musste ueber die Anim-Saetze rueckgerechnet werden).
 	if (SfxKommandoRufer >= 0)
-		Log("SFXLOG sfx=%d map=%d sample=%d von %d Varianten vol=%d pitch=%d %s obj=%d raum=%d",
+		Log("SFXLOG sfx=%d map=%d sample=%d von %d Varianten vol=%d pitch=%d %s obj=%d raum=%d anim=%d typ=0x%X rflags=0x%X",
 			sfx, lut, sample, rnd, volume, pitch, flag == 3 ? "Schleife" : "einmal",
-			SfxKommandoRufer, SfxKommandoRaum);
+			SfxKommandoRufer, SfxKommandoRaum, SfxKommandoAnim, SfxKommandoTyp, SfxKommandoRaumFlags);
 	else
 		Log("SFXLOG sfx=%d map=%d sample=%d von %d Varianten vol=%d pitch=%d %s",
 			sfx, lut, sample, rnd, volume, pitch, flag == 3 ? "Schleife" : "einmal");

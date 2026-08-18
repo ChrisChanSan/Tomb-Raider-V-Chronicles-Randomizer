@@ -16,6 +16,9 @@ extern long sound_active;
 extern long sound_cut_flag;
 extern long SfxKommandoRufer;
 extern long SfxKommandoRaum;
+extern long SfxKommandoAnim;
+extern long SfxKommandoTyp;
+extern long SfxKommandoRaumFlags;
 
 enum sfx_types
 {

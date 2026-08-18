@@ -3291,6 +3291,24 @@ void AnimateItem(ITEM_INFO* item)
 					num = cmd[1] & 0x3FFF;
 					type = cmd[1] & 0xC000;
 
+					// Joby-Charaktere auf fremdem Anim-Satz (#111 Teil 2):
+					// Crane Guy und Mafia laufen zur Laufzeit auf SWATs Satz,
+					// sobald der geladen ist - dessen Sterbeanim +11 ruft aber
+					// SWATs eigenen Schrei (377, SFX_SWAT_DIE). Die Joby-Saetze
+					// rufen an derselben Stelle den Wachmann-Schrei (84,
+					// SFX_BLUEG_HIT_DIE) - der gehoert zu diesen Figuren
+					// (Nutzerabnahme: Mafia-Soundkulisse != Rich-Soundkulisse).
+					// Das Sample unter 84 ist in allen Leveln byte-identisch
+					// und reist mit jedem Soldatensatz mit; fehlt es doch,
+					// steigt SoundEffect wie immer still aus. In Vanilla
+					// feuert die Weiche nie: dort steht kein Joby-Charakter
+					// neben einem SWAT.
+					if (num == SFX_SWAT_DIE &&
+						(item->object_number == BLUE_GUARD2 ||
+						 item->object_number == CRANE_GUY ||
+						 item->object_number == MAFIA))
+						num = SFX_BLUEG_HIT_DIE;
+
 					if (objects[item->object_number].water_creature)
 					{
 						if (room[item->room_number].flags & ROOM_UNDERWATER)

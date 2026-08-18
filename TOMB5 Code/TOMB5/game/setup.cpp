@@ -1270,11 +1270,11 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
-		if (objects[SWAT].loaded)
-			obj->anim_index = objects[SWAT].anim_index;
-		else if (objects[BLUE_GUARD].loaded)
-			obj->anim_index = objects[BLUE_GUARD].anim_index;
-
+		// Kein Umbiegen auf SWAT/Guard mehr (#111 Teil 2): der Joby-Wachmann
+		// bringt immer seinen vollen eigenen Satz aus joby3 mit (kCross ohne
+		// basisSlot) - auf dem eigenen Satz stimmen Sterbeschrei (84 statt
+		// SWATs 377), Konsolen- und Sitzposen von Haus aus. Die Stummel der
+		// Familie erben weiter wie gehabt.
 		obj->shadow_size = 128;
 		obj->hit_points = 24;
 		obj->pivot_length = 50;

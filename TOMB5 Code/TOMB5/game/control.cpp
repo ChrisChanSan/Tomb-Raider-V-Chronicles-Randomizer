@@ -3309,6 +3309,10 @@ void AnimateItem(ITEM_INFO* item)
 						 item->object_number == MAFIA))
 						num = SFX_BLUEG_HIT_DIE;
 
+					// Fuers SFXLOG: wer ruft hier? (Diagnose, siehe sound.cpp)
+					SfxKommandoRufer = item->object_number;
+					SfxKommandoRaum = item->room_number;
+
 					if (objects[item->object_number].water_creature)
 					{
 						if (room[item->room_number].flags & ROOM_UNDERWATER)
@@ -3331,6 +3335,9 @@ void AnimateItem(ITEM_INFO* item)
 					}
 					else if (type == SFX_LANDANDWATER || type == SFX_LANDONLY && !(room[camera.pos.room_number].flags & ROOM_UNDERWATER))
 						SoundEffect(num, &item->pos, SFX_DEFAULT);
+
+					SfxKommandoRufer = -1;
+					SfxKommandoRaum = -1;
 				}
 
 				cmd += 2;

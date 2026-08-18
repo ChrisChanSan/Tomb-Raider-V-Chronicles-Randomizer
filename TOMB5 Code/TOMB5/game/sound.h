@@ -14,6 +14,8 @@ extern SoundSlot LaSlot[32];
 extern short* sample_lut;
 extern long sound_active;
 extern long sound_cut_flag;
+extern long SfxKommandoRufer;
+extern long SfxKommandoRaum;
 
 enum sfx_types
 {

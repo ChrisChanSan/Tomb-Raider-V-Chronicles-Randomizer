@@ -14,6 +14,12 @@ short* sample_lut;
 long sound_active;
 long sound_cut_flag = 0;
 
+// Diagnose: wer hat den laufenden Klang gerufen? AnimateItem setzt beide
+// vor den PlaySound-Kommandos und raeumt danach auf; alle anderen Rufer
+// lassen -1 stehen. Nur fuers SFXLOG, kein Spielverhalten.
+long SfxKommandoRufer = -1;
+long SfxKommandoRaum = -1;
+
 void SoundEffectCS(long sfx, PHD_3DPOS* pos, long flags)
 {
 	long bak;
@@ -351,8 +357,18 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 	// Sample-Nummer samt Variantenzahl und die fertige Lautstaerke. Die Zeile
 	// ist bewusst durchsuchbar aufgebaut ("SFXLOG"), damit sie sich aus dem
 	// uebrigen Protokoll herausfiltern laesst.
-	Log("SFXLOG sfx=%d map=%d sample=%d von %d Varianten vol=%d pitch=%d %s",
-		sfx, lut, sample, rnd, volume, pitch, flag == 3 ? "Schleife" : "einmal");
+	// Der Rufer wird von AnimateItem (control.cpp) vor dem Aufruf gesetzt -
+	// kommt der Klang nicht aus einem Anim-Kommando, steht dort -1 und die
+	// Zeile bleibt wie gehabt. Gebaut fuer die Frage "WER hat das gespielt?"
+	// (Wasserschritt-Fall 2026-08-19: nur die Nummer im Log, der Verursacher
+	// musste ueber die Anim-Saetze rueckgerechnet werden).
+	if (SfxKommandoRufer >= 0)
+		Log("SFXLOG sfx=%d map=%d sample=%d von %d Varianten vol=%d pitch=%d %s obj=%d raum=%d",
+			sfx, lut, sample, rnd, volume, pitch, flag == 3 ? "Schleife" : "einmal",
+			SfxKommandoRufer, SfxKommandoRaum);
+	else
+		Log("SFXLOG sfx=%d map=%d sample=%d von %d Varianten vol=%d pitch=%d %s",
+			sfx, lut, sample, rnd, volume, pitch, flag == 3 ? "Schleife" : "einmal");
 
 	if (flag == 3)
 		dx = S_SoundPlaySampleLooped(sample, (ushort)volume, pitch, (short)pan);

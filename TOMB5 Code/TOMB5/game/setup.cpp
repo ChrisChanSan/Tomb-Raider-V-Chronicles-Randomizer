@@ -1092,8 +1092,8 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_JOBY3, 10);
-		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_JOBY3, 13);
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_GUARD, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_GUARD, 13);
 	}
 
 	if (objects[SWAT].loaded)
@@ -1120,8 +1120,8 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_RICH3, 10);
-		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_RICH3, 13);
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_SWAT, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_SWAT, 13);
 	}
 
 	if (objects[SWAT_PLUS].loaded)
@@ -1153,8 +1153,8 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_RICH3, 10);
-		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_RICH3, 13);
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_SWATPLUS, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_SWATPLUS, 13);
 	}
 
 	if (objects[MAFIA].loaded)
@@ -1187,8 +1187,8 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_JOBY3, 10);
-		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_JOBY3, 13);
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_MAFIA, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_MAFIA, 13);
 	}
 
 	if (objects[SCIENTIST].loaded)
@@ -1292,8 +1292,8 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_JOBY3, 10);
-		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_JOBY3, 13);
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_GUARD2, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_GUARD2, 13);
 	}
 
 	obj = &objects[CRANE_GUY_MIP];
@@ -1703,7 +1703,7 @@ void BaddyObjects()
 		bones[obj->bone_index] |= 4;
 		bones[obj->bone_index + 4] |= 8;
 		bones[obj->bone_index + 4] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_RICH3, 2);
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_TWOGUN, 2);
 	}
 
 	if (objects[HYDRA].loaded)
@@ -1753,7 +1753,7 @@ void BaddyObjects()
 		bones[obj->bone_index + 16] |= 4;
 		bones[obj->bone_index + 36] |= 16;
 		bones[obj->bone_index + 36] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_ANDY, 10);
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_IMP, 10);
 	}
 
 	if (objects[WILLOWISP].loaded)
@@ -1909,7 +1909,7 @@ void BaddyObjects()
 		bones[obj->bone_index + 52] |= 4;
 
 		for (lp = 0; lp < 16; lp++)
-			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_ANDREA3, lp);
+			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_GLADIATOR, lp);
 	}
 
 	if (objects[ROMAN_GOD].loaded)

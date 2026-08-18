@@ -383,8 +383,9 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             const std::string von = w["fromLevel"].asString();
             const bool ersetzen = w["replace"].asBool(false);
             // Abweichender Zielslot (Ausweichslots des Cross-Gegnermix:
-            // Spender-MESHSWAP1 405 landet unter 399-402), und ob nur die
-            // Meshes wandern (Mesh-Lager ohne eigene Animationen).
+            // Spender-MESHSWAP1 405 landet im Slot DES GEGNERS, seit #111
+            // 401-404 bzw. 462-467), und ob nur die Meshes wandern
+            // (Mesh-Lager ohne eigene Animationen).
             const int nach = static_cast<int>(w["toSlot"].asInt(-1));
             const int zielSlot = (nach < 0) ? slot : nach;
             const bool nurMeshes = w["onlyMeshes"].asBool(false);

@@ -1220,13 +1220,16 @@ bool Rando::run(const RandoInput& in,
     // "swapVon"/"swapDst": Tauschhaelften des Typs. MESHSWAP1 (405) ist je
     // Level mit dem Inhalt seiner EIGENEN Gegner belegt - ein fremder Gegner
     // braucht den Satz eines Levels, das ihn WIRKLICH traegt, und der landet
-    // beim Import unter dem Ausweichslot swapDst (399-402, in keinem Level
-    // geladen; die Engine greift bevorzugt darauf zu, MeshSwapQuelle in
-    // setup.cpp, Zuordnung als MESHSWAP_CROSS_* in objects.h - beide Seiten
-    // muessen uebereinstimmen). swapVon kann vom Modellspender abweichen:
-    // rich1 (Modell fuer Guard und TwoGun) hat selbst KEINEN MESHSWAP1 -
-    // die Guard-Haende kommen aus joby3, TwoGuns Quellmesh 2 aus rich3.
-    // Typen mit demselben swapDst teilen sich den Import (einmal emittiert).
+    // beim Import unter dem Ausweichslot swapDst. Seit #111 hat JEDER Gegner
+    // seinen eigenen (Soldatenfamilie 462-467 jenseits der Dateigrenze,
+    // Einzelgaenger 401-404) - vorher teilten sich die Familien je Spender
+    // einen Slot, und einheimische Nutzer desselben Slots zogen fremde
+    // Haende (joby2 Item 69). Die Engine greift bevorzugt darauf zu
+    // (MeshSwapQuelle in setup.cpp, Zuordnung als MESHSWAP_CROSS_* in
+    // objects.h - beide Seiten muessen uebereinstimmen). swapVon kann vom
+    // Modellspender abweichen: rich1 (Modell fuer Guard und TwoGun) hat
+    // selbst KEINEN MESHSWAP1 - die Guard-Haende kommen aus joby3, TwoGuns
+    // Quellmesh 2 aus rich3.
     struct CrossSound  { int map; const char* vonLevel; int vonMap; };
     // animZahl (0 = Heuristik): explizite Anim-Scheibenlaenge fuer Typen,
     // deren Steuerung ueber die Objektgrenze hinaus in die globale
@@ -1256,9 +1259,9 @@ bool Rando::run(const RandoInput& in,
                          int animZahl; int basisSlot; const char* tr3;
                          int quellSlot; };
     static const CrossGegner kCross[] = {
-        { 33, "rich3",   {},                                    {-1,-1},  "rich3",   399, 0, 0 },  // SWAT
-        { 35, "rich3",   {},                                    {-1,-1},  "rich3",   399, 0, 33 }, // Advanced SWAT (Anims von SWAT)
-        { 37, "rich1",   {},                                    {-1,-1},  "joby3",   400, 0, 0 },  // Guard (Blue Guard)
+        { 33, "rich3",   {},                                    {-1,-1},  "rich3",   462, 0, 0 },  // SWAT
+        { 35, "rich3",   {},                                    {-1,-1},  "rich3",   463, 0, 33 }, // Advanced SWAT (Anims von SWAT)
+        { 37, "rich1",   {},                                    {-1,-1},  "joby3",   465, 0, 0 },  // Guard (Blue Guard)
         // Der zweite Wachmann (#83/#105, Engine-Slot 460 = BLUE_GUARD2):
         // das Joby-Modell aus joby3 - dort ist der Guard der Anim-Anker der
         // Familie und traegt den vollen eigenen Satz (Mafia holt sich seine
@@ -1267,12 +1270,12 @@ bool Rando::run(const RandoInput& in,
         // mit; steht zusaetzlich SWAT/Guard im Ziel, biegt setup.cpp ihn
         // zur Laufzeit auf deren Satz um wie jedes Familienmitglied.
         // Tauschhaelften (Feuerhaende 10/13) wie der Guard aus joby3.
-        { 460, "joby3",  {},                                    {-1,-1},  "joby3",   400, 0, 0, nullptr, 37 }, // Wachmann (Joby)
-        { 39, "rich1",   {},                                    {-1,-1},  "rich3",   399, 0, 0 },  // Two Gun
+        { 460, "joby3",  {},                                    {-1,-1},  "joby3",   467, 0, 0, nullptr, 37 }, // Wachmann (Joby)
+        { 39, "rich1",   {},                                    {-1,-1},  "rich3",   464, 0, 0 },  // Two Gun
         { 41, "Andrea1", {},                                    {-1,-1},  nullptr,   -1 },  // Dog
         { 45, "Andrea1", { {96,"rich1",85}, {98,"rich1",143} }, {-1,-1},  nullptr,   -1 },  // Larson
         { 47, "Andrea3", { {90,"joby5",45}, {91,"joby5",123} }, {-1,-1},  nullptr,   -1 },  // Pierre
-        { 49, "joby3",   {},                                    {-1,-1},  "joby3",   400, 0, 37 }, // Soldier MG (Mafia, Anims von Guard)
+        { 49, "joby3",   {},                                    {-1,-1},  "joby3",   466, 0, 37 }, // Soldier MG (Mafia, Anims von Guard)
         { 51, "joby3",   {},                                    {406,-1}, nullptr,   -1 },  // Soldier Pistols (Mafia2) + MESHSWAP2
         // Crane Guy: der einzige TR5-Gegner mit vollstaendigem Modell, den
         // Core NIE als Item platziert hat - dieselbe Lage wie bei Pierre.
@@ -2283,8 +2286,9 @@ bool Rando::run(const RandoInput& in,
         // MUSS vor dem Typ kommen, der ihn braucht (#96).
 
         // Tauschhaelften: die MESHSWAP1 des Tauschspenders (swapVon, kann
-        // vom Modellspender abweichen) in den Ausweichslot des Typs. Typen
-        // mit demselben swapDst teilen sich den Import - einmal reicht.
+        // vom Modellspender abweichen) in den Ausweichslot des Typs. Seit
+        // #111 ist der je Gegner eindeutig; die Menge bleibt als Schutz
+        // gegen doppelte Emission, falls ein Slot je wieder geteilt wird.
         if (c->swapDst >= 0 && c->swapVon && !swapEmittiert.count(c->swapDst))
         {
             swapEmittiert.insert(c->swapDst);

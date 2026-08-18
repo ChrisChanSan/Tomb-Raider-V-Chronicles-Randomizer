@@ -221,7 +221,13 @@ void MazeMonsterControl(short item_number)
 				if (distance < 1048576 || monster->mood != ATTACK_MOOD)
 					item->goal_anim_state = 1;
 
-				SoundEffect(SFX_IMP_BARREL_ROLL, &item->pos, SFX_DEFAULT);
+				// Kein Laufklang. Core rief hier jede Frame SFX_IMP_BARREL_ROLL
+				// (250) - aber Andy2 belegt die Nummer nicht, zu Hause lief der
+				// Aufruf immer ins Leere und das Monster war beim Laufen stumm.
+				// In andy1 liegt unter 250 das Fassrollen der Imps, Abspielmodus
+				// 0 (stapelt): jede Frame ein neuer Abspielvorgang uebereinander,
+				// hoerbar als metallisches Kreischen (SFXLOG: 125x sfx=250,
+				// Nutzerfund 2026-08-18). Vanilla-Verhalten ist die Stille.
 				break;
 
 			case 4:

@@ -919,12 +919,12 @@ $FIXED_ITEMS = @{
     'joby2'   = @{
         20 = 'Sniper (Raum 19) - gescriptet, bleibt Vanilla (Nutzerliste)'
         21 = 'Sniper (Raum 21) - gescriptet, bleibt Vanilla (Nutzerliste)'
-        # Nutzerentscheidung 2026-08-17 (#109): seit die Soldatenfamilie auch
-        # mit OCB getauscht werden darf, waere dieser Wachmann frei. Er wartet
-        # aber auf die Entkopplung der Ausweichslots (#111) - seine OCB 3
-        # setzt meshswap_meshbits, und Slot 400 traegt heute noch den Satz
-        # eines fremden Spenders. Nach #111 kann die Zeile hier weg.
-        69 = 'Guard OCB 3 (Raum 58) - wartet auf die Slot-Entkopplung #111'
+        # Item 69 (Guard OCB 3, Raum 58 - steht vom Stuhl auf) stand hier bis
+        # zur Slot-Entkopplung #111: seine OCB setzt meshswap_meshbits, und
+        # der geteilte Slot 400 trug den Satz eines fremden Spenders. Seit
+        # jeder Gegner seinen eigenen Parkplatz hat (462-467), faellt ein
+        # einheimischer Guard auf die level-eigene MESHSWAP1 zurueck - die
+        # Haende stimmen wieder, das Item darf wandern.
     }
     'joby3'   = @{ 186 = 'Chef (Raum 120) - nur per Stealth-Cutscene toetbar, bleibt Vanilla (Nutzerliste)' }
     'joby5'   = @{ 145 = 'Crane Guy MIP (Raum 121) - Cutscene-Double, bleibt Vanilla (Nutzerliste)' }

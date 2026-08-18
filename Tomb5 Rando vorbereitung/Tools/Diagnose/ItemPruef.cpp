@@ -42,7 +42,12 @@ int main(int argc, char** argv)
     for (int i = 2; i < argc; ++i) gesucht.push_back(std::atoi(argv[i]));
 
     std::printf("%s: %d Items\n", argv[1], lvl.itemCount());
-    std::printf("%5s %5s %5s %6s %8s %7s\n", "Item", "Typ", "Raum", "OCB", "Flags", "Winkel");
+    // Position und ihre Lage im Sektor dazu (#61): Sektormitte liegt bei
+    // x.5 * 1024. "inSekt" zeigt den Versatz zur Mitte in Units - 0 heisst
+    // genau mittig, +-512 waere die Sektorkante.
+    std::printf("%5s %5s %5s %6s %8s %7s %6s  %9s %7s %9s  %11s\n",
+                "Item", "Typ", "Raum", "OCB", "Flags", "Winkel", "Grad",
+                "X", "Y", "Z", "dX/dZ z.Mitte");
 
     int gezeigt = 0;
     for (int i = 0; i < lvl.itemCount(); ++i)
@@ -59,10 +64,16 @@ int main(int argc, char** argv)
 
         // Die OCB steckt in den unteren 6 Bit von trigger_flags; darueber
         // stehen andere Angaben, deshalb beides ausgeben.
-        std::printf("%5d %5d %5d %6d   0x%04X %7d\n",
+        // Versatz zur Sektormitte: die Mitte liegt bei (n + 0.5) * 1024,
+        // also ist der Rest von (koordinate mod 1024) minus 512 der Abstand.
+        const int dx = ((it.x % 1024) + 1024) % 1024 - 512;
+        const int dz = ((it.z % 1024) + 1024) % 1024 - 512;
+        std::printf("%5d %5d %5d %6d   0x%04X %7d %6d  %9d %7d %9d  %5d /%5d\n",
                     i, (int)it.objectNumber, (int)it.roomNumber,
                     (int)(it.triggerFlags & 0x3F),
-                    (unsigned)(uint16_t)it.flags, (int)it.yRot);
+                    (unsigned)(uint16_t)it.flags, (int)it.yRot,
+                    (int)((long long)it.yRot * 360 / 65536),
+                    it.x, it.y, it.z, dx, dz);
         ++gezeigt;
     }
     std::printf("%d Items ausgegeben\n", gezeigt);

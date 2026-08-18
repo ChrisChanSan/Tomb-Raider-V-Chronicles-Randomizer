@@ -19,6 +19,7 @@ extern long SfxKommandoRaum;
 extern long SfxKommandoAnim;
 extern long SfxKommandoTyp;
 extern long SfxKommandoRaumFlags;
+extern long SfxQuelleAmbient;
 
 enum sfx_types
 {

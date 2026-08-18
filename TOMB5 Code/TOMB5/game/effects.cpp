@@ -473,6 +473,10 @@ void SoundEffects()
 	OBJECT_VECTOR* sound;
 	SoundSlot* slot;
 	
+	// Alles in dieser Schleife ist ortsfeste Levelkulisse - sound.cpp haengt
+	// daran die Reichweitenbremse und den Stapelschutz (#114).
+	SfxQuelleAmbient = 1;
+
 	for (int i = 0; i < number_sound_effects; i++)
 	{
 		sound = &sound_effects[i];
@@ -494,6 +498,8 @@ void SoundEffects()
 			continue;
 		}
 	}
+
+	SfxQuelleAmbient = 0;
 
 	if (flipeffect != -1)
 		effect_routines[flipeffect](0);

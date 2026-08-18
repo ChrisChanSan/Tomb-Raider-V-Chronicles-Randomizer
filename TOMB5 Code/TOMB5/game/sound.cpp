@@ -23,6 +23,17 @@ long SfxKommandoAnim = -1;
 long SfxKommandoTyp = -1;
 long SfxKommandoRaumFlags = -1;
 
+// Levelkulisse: gesetzt, solange SoundEffects() die ortsfesten Klangquellen
+// des Levels abarbeitet (Gaskocher, Ventilatoren, Fernseher). Alles andere -
+// Gegner, Lara, Anim-Kommandos - laeuft mit 0 und bleibt unberuehrt.
+long SfxQuelleAmbient = 0;
+
+// Reichweite der Levelkulisse in Prozent des Datenwerts (#114). TR5 kennt
+// keine Wanddaempfung: ein Klang mit radius 10 ist 11 Sektoren weit hoerbar,
+// quer durch geschlossene Raeume. In joby3 stapelt sich davon eine ganze
+// Etage. 100 = unveraendert wie Vanilla.
+#define SFX_AMBIENT_REICHWEITE	65
+
 void SoundEffectCS(long sfx, PHD_3DPOS* pos, long flags)
 {
 	long bak;
@@ -201,6 +212,13 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 	}
 
 	radius = (info->radius + 1) << 10;
+
+	// Nur die ortsfeste Levelkulisse wird eingehegt - Gegner und Lara
+	// behalten ihre Reichweite, damit man Schritte und Rufe weiter so
+	// frueh hoert wie vorgesehen.
+	if (SfxQuelleAmbient)
+		radius = radius * SFX_AMBIENT_REICHWEITE / 100;
+
 	pan = 0;
 
 	if (pos)
@@ -289,6 +307,18 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 		sample = info->number + ((rnd * GetRandomDraw()) >> 15);
 
 	flag = info->flags & 3;
+
+	// Stapelschutz fuer die Levelkulisse (#114). SoundEffects() ruft jede
+	// ortsfeste Quelle JEDEN Frame auf; steht ihr Klang auf Modus 0
+	// ("stapelt"), entstehen 30 uebereinanderliegende Stimmen je Sekunde.
+	// Das ist nie gewollt, sondern ein Datenfehler - belegt am Gaskocher in
+	// joby3: SFX_KITCHEN_HOB_LOOP (220) traegt "LOOP" im Namen, aber Modus 0
+	// und keine Zufallsdrossel (242 Abspielvorgaenge in einem Log-Lauf).
+	// Solche Quellen werden hier wie Modus 1 behandelt: neu anstossen erst,
+	// wenn der vorige Durchlauf zu Ende ist. Einmalklaenge von Gegnern und
+	// Lara bleiben unberuehrt, die laufen nicht ueber diesen Weg.
+	if (SfxQuelleAmbient && flag == 0)
+		flag = 1;
 
 	switch (flag)
 	{

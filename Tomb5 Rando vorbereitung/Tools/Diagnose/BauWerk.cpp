@@ -17,7 +17,7 @@ static std::wstring spender(const std::string& name, void*)
 
 int main(int argc, char** argv)
 {
-    if (argc < 4) { std::printf("Aufruf: PatchAn <quelle.trc> <patch.json> <ziel.trc> [spenderordner]\n"); return 1; }
+    if (argc < 4) { std::printf("Aufruf: BauWerk <quelle.trc> <patch.json> <ziel.trc> [spenderordner] [-mehritems]\n"); return 1; }
     auto W = [](const char* p){ std::string s(p); return std::wstring(s.begin(), s.end()); };
 
     std::string err;
@@ -27,7 +27,23 @@ int main(int argc, char** argv)
     Tr5Level lvl;
     if (!lvl.load(W(argv[1]), err)) { std::printf("Level laden: %s\n", err.c_str()); return 1; }
 
-    g_ordner = (argc > 4) ? W(argv[4]) : W(".");
+    // "-mehritems": die MAX_ITEMS-Schranke aufheben. NUR fuer Testlevel, die
+    // in trview angesehen und nie geladen werden (Wandtest, Key-Item-Range).
+    // Das Ergebnis ist bewusst kein spielbares Level mehr - die Engine bricht
+    // beim Laden ab. Siehe allowMoreThanMaxItems in Tr5Level.h.
+    bool mehrItems = false;
+    std::wstring ordner = W(".");
+    for (int i = 4; i < argc; ++i)
+    {
+        if (!std::strcmp(argv[i], "-mehritems")) mehrItems = true;
+        else ordner = W(argv[i]);
+    }
+    if (mehrItems)
+    {
+        lvl.allowMoreThanMaxItems(true);
+        std::printf("Hinweis: MAX_ITEMS-Schranke aus - Ergebnis ist nur fuer trview.\n");
+    }
+    g_ordner = ordner;
     PatchReport rep;
     if (!Patch::apply(lvl, patch, rep, err, spender)) { std::printf("Patch: %s\n", err.c_str()); return 1; }
     for (const std::string& w : rep.warnings) std::printf("  Hinweis: %s\n", w.c_str());

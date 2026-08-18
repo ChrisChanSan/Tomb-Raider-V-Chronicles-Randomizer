@@ -93,3 +93,6 @@ Outfit Test/
 *.sfx
 *.bin
 Compy Sounds/
+
+# Erzeugte Wandtest-Level (#61): abgeleitete Spieldaten, nur fuer trview
+Tomb5 Rando vorbereitung/Wandtest/

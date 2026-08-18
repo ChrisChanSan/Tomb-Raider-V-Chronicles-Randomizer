@@ -3445,13 +3445,41 @@ if ($ExportZonesJson -ne "") {
         }
     }
 
+    # Wandkanten je Sektor (#61). Gebraucht fuer die OCB-Pickups, die an einer
+    # Wand haengen muessen (Brechstange OCB 2, Joby-Crow OCB 9).
+    #
+    # Der WINKEL ZEIGT AUF DIE WAND, nicht von ihr weg - an Vanilla Andrea2
+    # Item 121 nachgemessen: Sektor (2,1) in Raum 166, Wand bei -Z, Item-Winkel
+    # -32768 (180 Grad, Blick -Z). Das passt zur Bauweise der Modelle: ihr Mesh
+    # sitzt rund +450..500 in Modell-Z, landet also auf der Wandflaeche, und
+    # Lara rueckt auf +215 dazwischen und schaut die Wand an
+    # (CrowbarPickUpPosition in game\pickup.cpp).
+    #
+    # TR-Richtungen: 0 = +Z, 16384 = +X, -32768 = -Z, -16384 = -X.
+    # Als Wand zaehlt ein Nachbar, der isWall traegt oder gar nicht existiert
+    # (ausserhalb des Sektorgitters des Raums - dort endet der Raum).
+    $wandRichtungen = @(
+        @{ dx = 0; dz =  1; winkel =      0 },
+        @{ dx = 1; dz =  0; winkel =  16384 },
+        @{ dx = 0; dz = -1; winkel = -32768 },
+        @{ dx =-1; dz =  0; winkel = -16384 }
+    )
+
     $rows = @()
     foreach($kv in $zoneOf.GetEnumerator()){
         if (-not $exportKeys.Contains($kv.Key)) { continue }
         $s = $sec[$kv.Key]
+        $wa = @()
+        foreach($wr in $wandRichtungen){
+            $nk = "$([int]$s.room),$([int]$s.sectorX + $wr.dx),$([int]$s.sectorZ + $wr.dz)"
+            if ((-not $sec.ContainsKey($nk)) -or $sec[$nk].isWall) { $wa += [int]$wr.winkel }
+        }
         $rows += [PSCustomObject]@{ room=[int]$s.room; sectorX=[int]$s.sectorX; sectorZ=[int]$s.sectorZ; zone=[int]$kv.Value; floorY=[int]$s.floorY;
+                                    wallAngles=@($wa);
                                     approach=@( if($approachOf.ContainsKey($kv.Key)){ $approachOf[$kv.Key] } ) }
     }
+    $mitWand = @($rows | Where-Object { $_.wallAngles.Count -gt 0 }).Count
+    Write-Output "Wandplaetze: $mitWand von $($rows.Count) Sektoren haben mindestens eine Wandkante"
     $mitAnmarsch = @($rows | Where-Object { $_.approach.Count -gt 0 }).Count
     Write-Output "Anmarschsektoren: $mitAnmarsch von $($rows.Count) Sektoren haben mindestens einen"
     $maxZoneOut = if($rows.Count -gt 0){ ($rows | Measure-Object -Property zone -Maximum).Maximum } else { 0 }

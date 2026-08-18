@@ -791,6 +791,46 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         scheibe(src.m_changes, chgStart, chgEnd, SZ_CHANGE, changeBytes);
         scheibe(src.m_ranges, rngStart, rngEnd, SZ_RANGE, rangeBytes);
         scheibe(src.m_commands, cmdStart, cmdEnd, 2, cmdBytes);
+
+        // Cores Vertonungsfehler in Spendersaetzen, nur in der KOPIE
+        // geradegerueckt - das Original bleibt byte-treu, denn zu Hause
+        // faellt der Fehler nicht auf (oder gehoert zur Kulisse). Bisher
+        // ein einziger belegter Fall, gefunden ueber das erweiterte SFXLOG
+        // (anim=886 typ=0x4000 in trockenem Raum, #113):
+        //  - joby3, Mafia2 (51), Anim +17 Frame 589: der Wasserschritt
+        //    (sfx 17) traegt als EINZIGER im Satz die Marke "nur Land" -
+        //    alle Geschwister sind "nur Wasser". In trockenen Zielleveln
+        //    platschte er hoerbar mitten auf der Strasse.
+        struct KmdTonFix { int slot; uint16_t alt; uint16_t neu; };
+        static const KmdTonFix kKmdTonFixes[] = {
+            { 51, 17 | 0x4000, 17 | 0x8000 },
+        };
+        for (const KmdTonFix& fx : kKmdTonFixes)
+        {
+            if (fx.slot != slotId) continue;
+            for (long long a = animStart; a < animEnd; ++a)
+            {
+                const size_t o = src.m_anims.dataAt + static_cast<size_t>(a) * SZ_ANIM;
+                const uint16_t nCmd = rd16(src.m_bytes, o + 36);
+                const uint16_t iCmd = rd16(src.m_bytes, o + 38);
+                if (!nCmd || iCmd < cmdStart) continue;
+                // Lokal im geschnittenen Block laufen; die Schleife zaehlt
+                // KOMMANDOS, nicht Worte (die alte TR3Setz-Lehre).
+                size_t c = (static_cast<size_t>(iCmd) - static_cast<size_t>(cmdStart)) * 2;
+                for (int k = 0; k < nCmd && c + 2 <= cmdBytes.size(); ++k)
+                {
+                    const int16_t typ = rs16(cmdBytes, c);
+                    const int len = commandLen(typ);
+                    if (len <= 0) break;
+                    if (typ == 5 && c + 6 <= cmdBytes.size() && rd16(cmdBytes, c + 4) == fx.alt)
+                    {
+                        cmdBytes[c + 4] = static_cast<uint8_t>(fx.neu & 0xFF);
+                        cmdBytes[c + 5] = static_cast<uint8_t>(fx.neu >> 8);
+                    }
+                    c += static_cast<size_t>(len) * 2;
+                }
+            }
+        }
     }
 
     if (frameEnd > frameStart)

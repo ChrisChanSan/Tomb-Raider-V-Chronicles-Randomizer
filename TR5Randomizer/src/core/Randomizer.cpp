@@ -1323,7 +1323,12 @@ bool Rando::run(const RandoInput& in,
         // (romangod.cpp:119 und 228). Ohne ihn fliegt in fremden Leveln
         // etwas Falsches.
         { 61,  "Andrea2", {},                                   {367,-1}, "Andrea2", 403 }, // Roman God (Schwert)
-        { 461, "Andrea3", {},                                   {-1,-1},  "Andrea3", 404, 0, 0, nullptr, 61 }, // Roman God (Hammer)
+        // Sterbelaut 204 (SGOD_SWD_DIE1_Q): die Sterbeanim +16 der
+        // Hammer-Fassung ruft ihn, aber nur Andrea2 belegt die Nummer -
+        // zu Hause in Andrea3 starb die Statue stumm (Core-Loch). Mit dem
+        // Eintrag quiekt sie ueberall wie ihr Schwert-Bruder
+        // (Nutzerentscheidung 2026-08-19: "dann sind beide komplett").
+        { 461, "Andrea3", { {204,"Andrea2",204} },              {-1,-1},  "Andrea3", 404, 0, 0, nullptr, 61 }, // Roman God (Hammer)
         // Hydra: lange bewusst draussen ("drei Items auf einer Position, die
         // OCB waehlt das Kettenglied"). Nach der Durchsicht am 2026-08-15
         // aufgenommen - die OCB ist harmlos, alles andere traegt:

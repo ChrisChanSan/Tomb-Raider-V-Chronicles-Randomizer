@@ -45,6 +45,10 @@ param(
 $WANDTYPEN = @{
     'Andrea2' = @( @{ typeId = 174; ocb = 2 }, @{ typeId = 172; ocb = 2 } )
     'andy3'   = @( @{ typeId = 172; ocb = 2 }, @{ typeId = 174; ocb = 9 } )
+    # Ueber alle Vanilla-Level gemessen (ItemPruef, OCB 2 oder 9 auf einem
+    # Pickup-Typ) - diese beiden standen bis dahin auf keiner Liste:
+    'Andrea3' = @( @{ typeId = 220; ocb = 2 } )   # Item 68, Raum 70
+    'joby3'   = @( @{ typeId = 172; ocb = 9 } )   # Item 41, Raum 22 (getarnte Brechstange)
 }
 
 New-Item -ItemType Directory -Force $OutDir | Out-Null

@@ -1,30 +1,32 @@
-# Liest die Secret-Vorlage des Nutzers (Kuration\Secrets.txt) und macht daraus
-# einen maschinenlesbaren Plan je Level und Satz (#53).
+# Liest die Secret-Listen aus Kuration\Secrets und macht daraus einen
+# maschinenlesbaren Plan (#53).
 #
-# Die Vorlage ist von Hand gepflegt und soll das auch bleiben - sie ist in
-# trview ablesbar und ohne Werkzeug zu aendern. Dieser Parser passt sich ihr
-# an, nicht umgekehrt.
+# EINE DATEI = EINE LISTE. Der Dateiname traegt Autor und Kategorie:
+#   ChrisChanSan_Glitchless.txt  ->  Dropdown "Glitchless", Anzeige "ChrisChanSan"
+#   ChrisChanSan_Glitched.txt    ->  Dropdown "Glitched",   Anzeige "ChrisChanSan"
+# Dateien mit fuehrendem Unterstrich erscheinen in keinem Dropdown (Referenzen).
 #
-# Aufbau der Vorlage:
-#   <Satzname>{
-#   Level        Anzahl  Type_ID  Level_ID        New_Rooms/Sektor        Extra_Options
-#   Andrea1.trc  3       223      (134,140,148)   Room210(x3,z1), ...     (add ...)+(add ...)
-#   }
+# Wer eine eigene Liste beisteuern will, legt eine weitere Datei dorthin -
+# am Programm ist nichts zu aendern.
 #
-# Zuordnung ist POSITIONSBASIERT: das erste Level_ID gehoert an die erste
-# genannte Stelle. Stimmen die Laengen nicht ueberein, meldet der Parser das,
-# statt still danebenzugreifen.
+# Zwei Betriebsarten brauchen ueberhaupt keine Liste und stehen deshalb nicht
+# in diesem Ordner: "Vanilla" (Secrets bleiben liegen) und "Pool" (sie wandern
+# wie gewoehnliche Pickups, kann ueberall auftauchen).
 #
-# Extra_Options, Beispiel aus Andrea1:
-#   (add Type_ID(196)@Room14(x1,z3))
-#   +(add Type_ID(258)@Room181(x1,z3)@Angle0+Trigger_Type(Key)to->Door Item_Level_ID(120))
-# Die Gruppen sind mit + verkettet, und + kommt auch INNERHALB einer Gruppe vor
-# (vor Trigger_Type). Deshalb wird auf Klammertiefe 0 getrennt.
+# Die Listen sind von Hand gepflegt und sollen das bleiben - in trview
+# ablesbar, ohne Werkzeug aenderbar. Dieser Parser passt sich ihnen an.
+#
+# Aufruf:
+#   SecretPlan.ps1 -Liste                       alle verfuegbaren Listen zeigen
+#   SecretPlan.ps1 -Autor X -Kategorie Y        Plan dieser Liste ausgeben
+#   ... zusaetzlich -LevelName A -AlsJson Pfad
 param(
-    [string]$Datei = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Rando vorbereitung\Kuration\Secrets.txt",
-    [string]$Satz = "",          # leer = alle Saetze ausgeben
-    [string]$LevelName = "",     # leer = alle Level
-    [string]$AlsJson = ""        # Zielpfad; leer = nur Bericht auf der Konsole
+    [string]$Ordner = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Rando vorbereitung\Kuration\Secrets",
+    [switch]$Liste,
+    [string]$Autor = "",
+    [string]$Kategorie = "",
+    [string]$LevelName = "",
+    [string]$AlsJson = ""
 )
 
 function Split-AufTiefe0([string]$text, [char]$trenner) {
@@ -39,105 +41,107 @@ function Split-AufTiefe0([string]$text, [char]$trenner) {
     return @($teile | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 })
 }
 
-# Eine Extra-Option zerlegen. Rueckgabe: Objekt mit typeId/room/sectorX/sectorZ,
-# optional angle, optional trigger (art + Zielitem).
+# Eine Extra-Option zerlegen: Pflichtteil ist "add Type_ID(N)@RoomR(xA,zB)",
+# optional dazu "@AngleW" und "Trigger_Type(Art)...Item_Level_ID(Ziel)".
 function Lies-Option([string]$o) {
     $o = $o.Trim()
     if ($o -notmatch 'add\s+Type_ID\((\d+)\)\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)') { return $null }
     $e = [PSCustomObject]@{
-        typeId  = [int]$Matches[1]
-        room    = [int]$Matches[2]
-        sectorX = [int]$Matches[3]
-        sectorZ = [int]$Matches[4]
-        angle   = $null
-        trigger = $null
-        text    = $o
+        typeId = [int]$Matches[1]; room = [int]$Matches[2]
+        sectorX = [int]$Matches[3]; sectorZ = [int]$Matches[4]
+        angle = $null; triggerArt = $null; triggerZiel = $null
     }
     if ($o -match '@\s*Angle\s*(-?\d+)') { $e.angle = [int]$Matches[1] }
-    # Trigger_Type(Key)to->Door Item_Level_ID(120)
     if ($o -match 'Trigger_Type\(\s*(\w+)\s*\).*?Item_Level_ID\(\s*(\d+)\s*\)') {
-        $e.trigger = [PSCustomObject]@{ art = [string]$Matches[1]; zielItem = [int]$Matches[2] }
+        $e.triggerArt = [string]$Matches[1]; $e.triggerZiel = [int]$Matches[2]
     }
     return $e
 }
 
-if (-not (Test-Path $Datei)) { Write-Output "Vorlage nicht gefunden: $Datei"; exit 1 }
-$zeilen = Get-Content $Datei
+function Lies-Liste([string]$pfad) {
+    $level = @(); $warn = @()
+    foreach ($z in (Get-Content $pfad)) {
+        if ($z -match '^\s*#') { continue }
+        if ($z -notmatch '^\s*(\w+)\.trc\s+(\d+)\s+(\d+)\s+\(([^)]*)\)\s*(.*)$') { continue }
+        $lvl = $Matches[1]; $anzahl = [int]$Matches[2]; $typ = [int]$Matches[3]
+        $ids = @($Matches[4] -split ',' | ForEach-Object { [int]$_.Trim() })
+        $rest = $Matches[5]
 
-$saetze = @()
-$aktSatz = $null
-foreach ($z in $zeilen) {
-    if ($z -match '^\s*([^{}\s][^{}]*?)\s*\{\s*$') {
-        $aktSatz = [PSCustomObject]@{ name = $Matches[1].Trim(); level = @() }
+        # Die Stellen stehen VOR den Extra_Options; die Optionen nennen selbst
+        # Raeume und wuerden sonst als zusaetzliche Secrets mitgezaehlt.
+        $pExtra = $rest.IndexOf('(add')
+        $vorn = if ($pExtra -ge 0) { $rest.Substring(0, $pExtra) } else { $rest }
+        $stellen = @()
+        foreach ($m in [regex]::Matches($vorn, 'Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)')) {
+            $stellen += [PSCustomObject]@{ room=[int]$m.Groups[1].Value; sectorX=[int]$m.Groups[2].Value; sectorZ=[int]$m.Groups[3].Value }
+        }
+
+        $extras = @()
+        if ($pExtra -ge 0) {
+            foreach ($g in (Split-AufTiefe0 $rest.Substring($pExtra) '+')) {
+                $o = Lies-Option $g
+                if ($null -ne $o) { $extras += $o } else { $warn += "${lvl}: Option nicht lesbar -> $g" }
+            }
+        }
+
+        if ($ids.Count -ne $anzahl) { $warn += "${lvl}: Anzahl $anzahl, aber $($ids.Count) Level_ID" }
+        if ($stellen.Count -gt 0 -and $stellen.Count -ne $ids.Count) {
+            $warn += "${lvl}: $($ids.Count) Secrets, aber $($stellen.Count) neue Stellen"
+        }
+
+        $level += [PSCustomObject]@{ level=$lvl; anzahl=$anzahl; typeId=$typ; ids=$ids; stellen=$stellen; extras=$extras }
+    }
+    return [PSCustomObject]@{ level = $level; warnungen = $warn }
+}
+
+if (-not (Test-Path $Ordner)) { Write-Output "Ordner nicht gefunden: $Ordner"; exit 1 }
+
+# Verfuegbare Listen einsammeln
+$gefunden = @()
+foreach ($f in (Get-ChildItem $Ordner -Filter *.txt | Sort-Object Name)) {
+    if ($f.Name.StartsWith('_')) { continue }
+    if ($f.BaseName -notmatch '^(.+)_(Glitchless|Glitched)$') {
+        Write-Output "  uebersprungen (Name passt nicht auf Autor_Kategorie): $($f.Name)"
         continue
     }
-    if ($z -match '^\s*\}\s*$') { if ($aktSatz) { $saetze += $aktSatz; $aktSatz = $null }; continue }
-    if (-not $aktSatz) { continue }
-
-    # Levelzeile: Name.trc  Anzahl  Type_ID  (ids...)  Rest
-    if ($z -notmatch '^\s*(\w+)\.trc\s+(\d+)\s+(\d+)\s+\(([^)]*)\)\s*(.*)$') { continue }
-    $lvl = $Matches[1]; $anzahl = [int]$Matches[2]; $typ = [int]$Matches[3]
-    $ids = @($Matches[4] -split ',' | ForEach-Object { [int]$_.Trim() })
-    $rest = $Matches[5]
-
-    # Neue Stellen: Room<N>(x<A>,z<B>), Trennung egal (Komma oder Leerzeichen).
-    # NUR bis zum Beginn der Extra_Options suchen - die nennen selbst Raeume,
-    # und die wuerden sonst als zusaetzliche Secret-Stellen mitgezaehlt.
-    $pExtra = $rest.IndexOf('(add')
-    $restStellen = if ($pExtra -ge 0) { $rest.Substring(0, $pExtra) } else { $rest }
-    $stellen = @()
-    foreach ($m in [regex]::Matches($restStellen, 'Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)')) {
-        $stellen += [PSCustomObject]@{ room=[int]$m.Groups[1].Value; sectorX=[int]$m.Groups[2].Value; sectorZ=[int]$m.Groups[3].Value }
-    }
-
-    # Extra_Options beginnen beim ersten "(add"
-    $extras = @()
-    $p = $pExtra
-    if ($p -ge 0) {
-        foreach ($g in (Split-AufTiefe0 $rest.Substring($p) '+')) {
-            $o = Lies-Option $g
-            if ($null -ne $o) { $extras += $o } else { Write-Output "  WARNUNG ${lvl}: Option nicht lesbar -> $g" }
-        }
-    }
-
-    $aktSatz.level += [PSCustomObject]@{
-        level = $lvl; anzahl = $anzahl; typeId = $typ
-        ids = $ids; stellen = $stellen; extras = $extras
-    }
+    $gefunden += [PSCustomObject]@{ autor = $Matches[1]; kategorie = $Matches[2]; datei = $f.FullName }
 }
 
-# Pruefungen
-foreach ($s in $saetze) {
-    foreach ($l in $s.level) {
-        if ($l.ids.Count -ne $l.anzahl) {
-            Write-Output "  FEHLER $($s.name)/$($l.level): Anzahl $($l.anzahl), aber $($l.ids.Count) Level_ID"
-        }
-        if ($l.stellen.Count -gt 0 -and $l.stellen.Count -ne $l.ids.Count) {
-            Write-Output "  FEHLER $($s.name)/$($l.level): $($l.ids.Count) Secrets, aber $($l.stellen.Count) neue Stellen"
-        }
+if ($Liste -or ($Autor -eq "" -and $Kategorie -eq "")) {
+    Write-Output "Verfuegbare Secret-Listen in $Ordner :"
+    foreach ($k in @('Glitchless','Glitched')) {
+        $inKat = @($gefunden | Where-Object { $_.kategorie -eq $k })
+        Write-Output "  Dropdown ${k}: $(if($inKat.Count){ ($inKat.autor) -join ', ' } else { '(keine)' })"
     }
+    Write-Output "  Ohne Liste immer verfuegbar: Vanilla, Pool"
+    if (-not $Liste) { exit 0 }
+    exit 0
 }
 
-# Ausgabe
-$auswahl = $saetze
-if ($Satz -ne "") { $auswahl = @($saetze | Where-Object { $_.name -eq $Satz }) }
-foreach ($s in $auswahl) {
-    Write-Output "=== Satz: $($s.name) ==="
-    foreach ($l in $s.level) {
+$treffer = @($gefunden | Where-Object { ($Autor -eq "" -or $_.autor -eq $Autor) -and ($Kategorie -eq "" -or $_.kategorie -eq $Kategorie) })
+if ($treffer.Count -eq 0) { Write-Output "Keine Liste fuer Autor '$Autor' / Kategorie '$Kategorie'"; exit 1 }
+
+$alles = @()
+foreach ($t in $treffer) {
+    $p = Lies-Liste $t.datei
+    foreach ($w in $p.warnungen) { Write-Output "  WARNUNG $($t.autor)_$($t.kategorie): $w" }
+    Write-Output "=== $($t.autor) / $($t.kategorie) ==="
+    foreach ($l in $p.level) {
         if ($LevelName -ne "" -and $l.level -ne $LevelName) { continue }
         $ziel = if ($l.stellen.Count -gt 0) {
             (0..($l.ids.Count-1) | ForEach-Object { "$($l.ids[$_])->R$($l.stellen[$_].room)($($l.stellen[$_].sectorX),$($l.stellen[$_].sectorZ))" }) -join '  '
-        } else { "bleibt vanilla" }
-        Write-Output ("  {0,-10} Typ {1}  {2}" -f $l.level, $l.typeId, $ziel)
+        } else { 'bleibt vanilla' }
+        Write-Output ("  {0,-10} {1}" -f $l.level, $ziel)
         foreach ($e in $l.extras) {
-            $t = if ($null -ne $e.trigger) { "  + Trigger $($e.trigger.art) -> Item $($e.trigger.zielItem)" } else { "" }
             $a = if ($null -ne $e.angle) { " Winkel $($e.angle)" } else { "" }
-            Write-Output ("      dazu: Typ {0} in Raum {1}({2},{3}){4}{5}" -f $e.typeId,$e.room,$e.sectorX,$e.sectorZ,$a,$t)
+            $tr = if ($null -ne $e.triggerArt) { "  + Trigger $($e.triggerArt) -> Item $($e.triggerZiel)" } else { "" }
+            Write-Output ("      dazu: Typ {0} in Raum {1}({2},{3}){4}{5}" -f $e.typeId,$e.room,$e.sectorX,$e.sectorZ,$a,$tr)
         }
     }
+    $alles += [PSCustomObject]@{ autor=$t.autor; kategorie=$t.kategorie; level=$p.level }
 }
 
 if ($AlsJson -ne "") {
-    $auswahl | ConvertTo-Json -Depth 8 -Compress | Out-File $AlsJson -Encoding utf8
+    $alles | ConvertTo-Json -Depth 8 -Compress | Out-File $AlsJson -Encoding utf8
     Write-Output "JSON geschrieben: $AlsJson"
 }

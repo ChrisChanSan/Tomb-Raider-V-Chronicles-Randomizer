@@ -3379,6 +3379,14 @@ if ($null -ne $startKey) {
 # haengen. Muss hier stehen - nach dem vollstaendigen Graphaufbau, damit die
 # Sperren und Handkanten drin sind, und vor der Key-Auswertung, die
 # $noPlacement liest.
+# Die geflutete Sektormenge wird zusaetzlich gesammelt und exportiert
+# (keyBarredSectors). Grund: intern endet NO_KEY_ISLAND als RAUMliste in
+# $noPlacement, und die Key-Auswertung liest sie - aber nur fuer Typen, fuer
+# die es ueberhaupt eine Key-Constraint gibt. In andy3 gibt es keine einzige
+# (Kreide und Brechstange sind Werkzeuge ohne Aufnahme), also erreichte der
+# Deadstop sie nicht. Als eigene Sektormenge im Export kann jeder Erzeuger
+# sie anwenden, auch fuer Typen ohne Aufnahme (#61).
+$keyBarred = New-Object System.Collections.Generic.HashSet[string]
 foreach($ni in $noKeyIslands){
     $stopN = @($ni.DeadstopRooms)
     $seedN = $null
@@ -3399,6 +3407,7 @@ foreach($ni in $noKeyIslands){
             [void]$islN.Add($n); $qn.Enqueue($n)
         }
     }
+    foreach($k in $islN){ [void]$keyBarred.Add($k) }
     $rmN = @($islN | ForEach-Object { [int](($_ -split ',')[0]) } | Sort-Object -Unique)
     $noPlacement = @($noPlacement + $rmN | Sort-Object -Unique)
     Write-Output "NO_KEY_ISLAND (Start $($ni.StartRoom), Deadstops $($stopN -join ', ')): $($islN.Count) Sektoren in $($rmN.Count) Raeumen ohne Key-Items"
@@ -3588,7 +3597,7 @@ if ($ExportZonesJson -ne "") {
         $wie = if ($null -eq $ptKv.Value) { 'ohne Zonengrenze' } else { "begrenzt auf Zone <= $ptZone" }
         Write-Output "Pool-Typ $pt $wie aufgenommen ($inst Instanzen im Level)"
     }
-    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES); typeNoRooms=@($typeNoRooms); antitriggerImmun=@($antitriggerImmun) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
+    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES); typeNoRooms=@($typeNoRooms); antitriggerImmun=@($antitriggerImmun); keyBarredSectors=@($keyBarred) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
     Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"
 }
 

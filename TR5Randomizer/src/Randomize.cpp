@@ -29,6 +29,7 @@
 #include "core/Json.h"
 #include "core/Randomizer.h"
 #include "core/Rng.h"
+#include "core/ScriptDat.h"
 #include "core/Tr5Level.h"
 
 #include <cstdio>
@@ -55,6 +56,9 @@ int main(int argc, char** argv)
         std::printf("  cross:    Gegnerpool um bis zu drei fremde Typen erweitern (mit mix/Zahl)\n");
         std::printf("  allsanity: der ganze Gegnerpool, jede Rolle wuerfelt frei (mit mix/Zahl)\n");
         std::printf("  itemsN:   N zusaetzliche Verbrauchsgueter streuen (z.B. items20)\n");
+        std::printf("  skript=P: SCRIPT.DAT unter P mitbehandeln - Kind-Lara aus den\n");
+        std::printf("            Ireland-Leveln und KEY8 fuer joby3 aus joby2. Wiederholbar:\n");
+        std::printf("            ein zweiter Lauf ueber dieselbe Datei aendert nichts mehr.\n");
         return 2;
     }
 
@@ -66,6 +70,8 @@ int main(int argc, char** argv)
     // Fremdinstallationen fuer die Gaeste aus TR3 (#92). Ohne sie fallen die
     // vier Arten still aus dem Pool - genau wie beim Nutzer ohne die Spiele.
     std::wstring tr3Dir, tr3GoldDir;
+    // SCRIPT.DAT mitbehandeln - dieselben Eingriffe wie die Oberflaeche.
+    std::wstring skriptDat;
     for (int i = 6; i < argc; ++i)
     {
         const std::string s = argv[i];
@@ -78,6 +84,7 @@ int main(int argc, char** argv)
         else if (s == "allsanity") allsanity = true;
         else if (s.rfind("tr3=", 0) == 0)     tr3Dir     = toW(s.c_str() + 4);
         else if (s.rfind("tr3gold=", 0) == 0) tr3GoldDir = toW(s.c_str() + 8);
+        else if (s.rfind("skript=", 0) == 0)  skriptDat  = toW(s.c_str() + 7);
         // "gegneraus=47,49" - dieselbe Abwahl wie das Fenster "Gegnerarten"
         // in der Oberflaeche (#95), damit sich der Filter auch aus Skripten
         // pruefen laesst.
@@ -108,6 +115,39 @@ int main(int argc, char** argv)
         else                    gegner = std::atoi(argv[i]);
     }
     const uint64_t seed = SeedText::parse(seedText);
+
+    // --- SCRIPT.DAT mitbehandeln (Schalter skript=) -----------------------
+    //
+    // Dieselben Eingriffe wie die Oberflaeche, aus derselben Quelle: Kind-Lara
+    // aus den Ireland-Leveln und der KEY8-Eintrag fuer joby3. Die Oberflaeche
+    // legt sich vorher eine Sicherung an und liest immer aus ihr; hier gibt es
+    // keinen Sicherungsordner, deshalb wird die Datei an Ort und Stelle
+    // bearbeitet. Das ist unbedenklich, weil beide Eingriffe wiederholbar sind
+    // - ein schon geloeschtes Bit bleibt geloescht, ein schon vorhandener
+    // Objektbefehl wird nicht ein zweites Mal eingefuegt.
+    //
+    // Passiert vor der Levelarbeit: geht das Skript schief, ist noch nichts
+    // geschrieben.
+    if (!skriptDat.empty())
+    {
+        ScriptDat sd;
+        std::string sErr;
+        if (!sd.load(skriptDat, sErr)) { std::printf("SCRIPT.DAT: %s\n", sErr.c_str()); return 1; }
+
+        ScriptDat::Eingriffe e;
+        sd.randomizerEingriffe(e);
+
+        if (e.levelFehlend > 0)
+            std::printf("SCRIPT.DAT  %d Ireland-Level nicht im Skript - nichts geaendert.\n", e.levelFehlend);
+        else
+        {
+            if (!sd.save(skriptDat, sErr)) { std::printf("SCRIPT.DAT: %s\n", sErr.c_str()); return 1; }
+            std::printf("SCRIPT.DAT  Kind-Lara: %d Level geaendert; KEY8 fuer joby3: %s\n",
+                        e.flagsGeaendert,
+                        !e.keyFehler.empty() ? e.keyFehler.c_str()
+                                             : (e.keyKopiert ? "eingefuegt" : "war schon da"));
+        }
+    }
 
     std::string err;
 

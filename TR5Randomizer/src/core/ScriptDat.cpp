@@ -299,6 +299,49 @@ bool ScriptDat::clearLevelFlags(const std::string& fileName, uint16_t mask, bool
     return false;
 }
 
+
+void ScriptDat::randomizerEingriffe(Eingriffe& e)
+{
+    e = Eingriffe();
+
+    // 1. Den Ireland-Leveln das Kind-Lara-Bit nehmen.
+    //
+    // GF_YOUNGLARA schaltet an acht Stellen im Motor das Waffensystem ab -
+    // Lara ist dort als Kind unterwegs und kann nichts tragen. Nutzervorgabe:
+    // die Andy-Level muessen immer Waffen haben, sonst steht Lara einem Two
+    // Gun mit leeren Haenden gegenueber.
+    static const char* kIreland[] = { "andy1", "andy2", "andy3" };
+    for (const char* lv : kIreland)
+    {
+        bool ch = false;
+        if (!clearLevelFlags(lv, GF_YOUNGLARA, ch)) ++e.levelFehlend;
+        else if (ch) ++e.flagsGeaendert;
+    }
+
+    // Kennt das Skript die Ireland-Level nicht, ist es keines von Chronicles.
+    // Dann wird hier gar nichts mehr angefasst - und der Aufrufer speichert
+    // nicht.
+    if (e.levelFehlend > 0) return;
+
+    // 2. joby3 bekommt den KEY8-Eintrag aus joby2.
+    //
+    // Der Randomizer legt joby3 das Modell von Key Item 8 hinein (siehe
+    // Randomizer.cpp). Name und Inventarpose stehen aber im Skript, und joby3
+    // hat dafuer keinen Eintrag. Vanilla faellt das nie auf, weil joby2 direkt
+    // davor laeuft und KEY8 dort setzt - inventry_objects_list wird zwischen
+    // Leveln nie zurueckgesetzt. Wer aber in joby3 speichert und laedt,
+    // bekommt den Werkswert zu sehen: der Schluessel hiesse "Load".
+    //
+    // Scheitert es, bleibt es bei der Notiz: das Level ist spielbar, der
+    // Schluessel heisst halt falsch. Ein Abbruch waere die haertere Strafe.
+    bool keyCh = false;
+    if (copyObjectCommand("joby2", "joby3", cmdKey(8), keyCh, e.keyFehler))
+    {
+        e.keyKopiert = keyCh;
+        e.keyFehler.clear();
+    }
+}
+
 bool ScriptDat::save(const std::wstring& path, std::string& error) const
 {
     FILE* f = nullptr;

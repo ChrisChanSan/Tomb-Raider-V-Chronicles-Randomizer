@@ -102,6 +102,28 @@ public:
     bool copyObjectCommand(const std::string& vonLevel, const std::string& nachLevel,
                            uint8_t cmd, bool& changed, std::string& error);
 
+    // --- Alle Eingriffe des Randomizers an EINER Stelle -------------------
+    //
+    // Oberflaeche und CLI treiben dieselben Schritte an. Standen sie doppelt
+    // im Code, waere der naechste Eingriff garantiert nur an einer der beiden
+    // Stellen gelandet.
+    //
+    // Beide Eingriffe sind wiederholbar: ein schon geloeschtes Bit noch einmal
+    // zu loeschen aendert nichts, und ein schon vorhandener Objektbefehl wird
+    // nicht ein zweites Mal eingefuegt. Derselbe Lauf darf also mehrfach ueber
+    // dieselbe Datei gehen, ohne sie aufzublaehen.
+    struct Eingriffe
+    {
+        int         flagsGeaendert = 0;   // Ireland-Level, denen das Kind-Bit genommen wurde
+        int         levelFehlend   = 0;   // Ireland-Level, die das Skript gar nicht kennt
+        bool        keyKopiert     = false;
+        std::string keyFehler;            // leer = hat geklappt
+    };
+
+    // Bei levelFehlend > 0 ist das Skript keines von Chronicles - dann bleibt
+    // alles Weitere aus, und der Aufrufer soll NICHT speichern.
+    void randomizerEingriffe(Eingriffe& e);
+
     // Was steht heute drin? Fuer Anzeige und Selbsttest.
     struct Eintrag
     {

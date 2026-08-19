@@ -495,47 +495,24 @@ static std::wstring lagerDir(const App& a)
         const std::wstring quelle = PathUtil::fileExists(sicherung) ? sicherung : skript;
         if (!sd.load(quelle, err)) return false;
 
-        static const char* kIreland[] = { "andy1", "andy2", "andy3" };
-        int geaendert = 0, fehlend = 0;
-        for (const char* lv : kIreland)
-        {
-            bool ch = false;
-            if (!sd.clearLevelFlags(lv, ScriptDat::GF_YOUNGLARA, ch)) ++fehlend;
-            else if (ch) ++geaendert;
-        }
+        // Die Eingriffe selbst stehen in ScriptDat - dasselbe ruft die CLI
+        // auf, damit beide Wege nicht auseinanderlaufen.
+        ScriptDat::Eingriffe e;
+        sd.randomizerEingriffe(e);
 
-        if (fehlend > 0)
+        if (e.levelFehlend > 0)
         {
-            info = "SCRIPT.DAT: " + std::to_string(fehlend) + " Ireland-Level nicht im Skript gefunden.";
+            info = "SCRIPT.DAT: " + std::to_string(e.levelFehlend) + " Ireland-Level nicht im Skript gefunden.";
             return true;
-        }
-
-        // joby3 bekommt Key Item 8 (203) aus joby2 - siehe Randomizer.cpp.
-        // Das Modell allein reicht nicht: Name und Inventarpose eines
-        // Key-Items stehen im Skript, und joby3 hat dafuer keinen Eintrag.
-        // Vanilla faellt das nie auf, weil joby2 direkt davor laeuft und KEY8
-        // dort setzt - inventry_objects_list wird zwischen Leveln nie
-        // zurueckgesetzt. Wer aber in joby3 speichert und laedt, bekommt den
-        // Werkswert zu sehen: der Schluessel heisst dann "Load".
-        //
-        // Scheitert es, gibt es nur eine Notiz und keinen Abbruch: das Level
-        // bleibt spielbar, der Schluessel heisst halt falsch.
-        std::string keyNote;
-        {
-            bool keyCh = false;
-            std::string keyErr;
-            if (!sd.copyObjectCommand("joby2", "joby3", ScriptDat::cmdKey(8), keyCh, keyErr))
-                keyNote = "  KEY8 fuer joby3 nicht uebernommen: " + keyErr;
-            else if (keyCh)
-                keyNote = "  KEY8 fuer joby3 aus joby2 uebernommen.";
         }
 
         if (!sd.save(skript, err)) return false;
 
-        info = geaendert > 0
-            ? "SCRIPT.DAT: Kind-Lara in " + std::to_string(geaendert) + " Ireland-Leveln abgeschaltet."
+        info = e.flagsGeaendert > 0
+            ? "SCRIPT.DAT: Kind-Lara in " + std::to_string(e.flagsGeaendert) + " Ireland-Leveln abgeschaltet."
             : "SCRIPT.DAT: Kind-Lara war bereits abgeschaltet.";
-        info += keyNote;
+        if (!e.keyFehler.empty())   info += "  KEY8 fuer joby3 nicht uebernommen: " + e.keyFehler;
+        else if (e.keyKopiert)      info += "  KEY8 fuer joby3 aus joby2 uebernommen.";
         return true;
     }
 

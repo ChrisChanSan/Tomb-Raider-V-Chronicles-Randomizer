@@ -925,7 +925,10 @@ $FIXED_ITEMS = @{
         79 = 'Roman God (Raum 90) - bleibt Vanilla (Nutzerliste 2026-08-14)'
     }
     'Andrea2' = @{
-        128 = 'Ventil - muss an einer Wand sitzen (siehe VANILLA_TYPES 172)'
+        # Item 128 (das Ventil) stand hier mit der Begruendung "muss an einer
+        # Wand sitzen". Genau das leistet die Platzierung seit #61 selbst:
+        # Wandkante samt Winkel werden gewaehlt, KEEP_OCB haelt die OCB 2.
+        # Der Grund ist damit weg, das Item darf wandern.
         # Der gescriptete Larson. Cutscene 8 (andrea3_end, deltapak.cpp) weckt
         # GENAU DIESES Item und macht es toetbar, sein Tod feuert den
         # Heavy-Trigger auf 72,2,2 und damit die Todes-Cutscene. Ein anderer

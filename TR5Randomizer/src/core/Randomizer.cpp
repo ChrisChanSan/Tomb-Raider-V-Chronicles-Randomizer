@@ -2503,6 +2503,34 @@ bool Rando::run(const RandoInput& in,
         report.notes.push_back("Imp geheilt: voller Animsatz (mit Tod) aus andy3.");
     }
 
+    // --- joby3: Key Item 8 (203) muss im Level liegen ---
+    //
+    // Nutzervorgabe fuer einen Secret-Spot in joby3 (#53): der Slot soll
+    // VORHANDEN sein, damit ein Secret-Patch spaeter ein Item dieses Typs
+    // setzen kann. Er wird hier ausdruecklich NICHT geworfen - nur das
+    // Modell wandert mit. joby3 hat den Slot vanilla nicht (geprueft mit
+    // SlotAnims: joby2 = 1 Mesh ab Anim 618, joby3 = kein Modell), joby2
+    // liegt als Spender im selben Abschnitt.
+    //
+    // Ohne "replace": liegt der Slot schon da (etwa weil ein Secret-Patch
+    // ihn selbst mitgebracht hat), bleibt der vorhandene stehen.
+    //
+    // ACHTUNG fuer den Tag, an dem das Item wirklich aufgesammelt wird:
+    // Name und Inventarpose eines Key-Items stehen NICHT im Level, sondern
+    // im CMD_KEY8-Eintrag des Levelblocks der SCRIPT.DAT
+    // (gameflow.cpp:371ff). inventry_objects_list wird zwischen Leveln nie
+    // zurueckgesetzt - fehlt joby3 der Eintrag, traegt der Schluessel Namen
+    // und Pose, die zuletzt irgendein anderes Level gesetzt hat. Unser
+    // ScriptDat-Weg kann bisher nur Levelflags loeschen, keine Objektnamen.
+    if (klein == "joby3")
+    {
+        JsonValue e = JsonValue::makeObject();
+        e.set("slot", JsonValue::makeInt(203));
+        e.set("fromLevel", JsonValue::makeString("joby2"));
+        moveables.push(e);
+        report.notes.push_back("Key Item 8 (203) aus joby2 eingelegt - nur vorhanden, nicht geworfen (Secret-Spot).");
+    }
+
     // --- Keine Fluchtmarker: Larson und Pierre sollen kaempfen und sterben ---
     //
     // Beide fliehen ab 40 Lebenspunkten zu einem AI_AMBUSH-Marker mit

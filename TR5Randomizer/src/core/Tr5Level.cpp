@@ -700,7 +700,7 @@ bool Tr5Level::moveTrigger(int fromRoom, int fromSx, int fromSz,
 
 bool Tr5Level::addTrigger(int room, int sx, int sz, int art, int timer, bool oneShot,
                           int mask, const std::vector<Tr5TriggerCmd>& cmds,
-                          std::string& error)
+                          std::string& error, int refItem)
 {
     char buf[256];
 
@@ -734,12 +734,29 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int art, int timer, bool one
                                               (oneShot ? 0x100 : 0) |
                                               ((mask & 0x1F) << 9)));
 
-    // SWITCH, KEY und PICKUP braeuchten hier ein Referenzwort. Das waere kein
-    // Trigger, den man "hinzufuegt", sondern einer, der an ein vorhandenes
-    // Objekt gebunden ist - deshalb bewusst nicht unterstuetzt statt geraten.
+    // SWITCH, KEY und PICKUP schieben ein Referenzwort vor die Befehlsliste:
+    // das Item, das bedient bzw. aufgenommen werden muss. Die Engine liest es
+    // dreimal gleich (control.cpp:2251/2266/2274, "value = *(data++) & 0x3FF")
+    // und wertet es NICHT als Befehl.
+    //
+    // Frueher stand hier eine Absage - so ein Trigger ist eben keiner, den man
+    // frei hinstellt, sondern einer, der an ein vorhandenes Objekt gebunden
+    // ist. Mit den Secret-Listen (#53) gibt es diesen Fall jetzt: der Nutzer
+    // setzt ein Schluesselloch und dazu den Key-Trigger, der es mit einer Tuer
+    // verbindet. Wer refItem mitgibt, sagt damit ausdruecklich, an welches
+    // Objekt der Trigger gebunden ist.
     if (hasRefWord(art))
     {
-        error = "Triggerart braucht ein Referenzwort - so nicht anlegbar";
+        if (refItem < 0)
+        {
+            error = "Triggerart braucht ein Referenzwort (refItem) - so nicht anlegbar";
+            return false;
+        }
+        e.woerter.push_back(static_cast<uint16_t>(refItem & 0x3FF));
+    }
+    else if (refItem >= 0)
+    {
+        error = "Diese Triggerart kennt kein Referenzwort - refItem waere wirkungslos";
         return false;
     }
 

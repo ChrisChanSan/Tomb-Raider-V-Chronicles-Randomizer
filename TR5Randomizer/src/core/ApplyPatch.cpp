@@ -540,7 +540,8 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                               static_cast<int>(t["timer"].asInt(0)),
                               t["oneShot"].asInt(1) != 0,
                               static_cast<int>(t["mask"].asInt(31)),
-                              cmds, addErr))
+                              cmds, addErr,
+                              static_cast<int>(t["refItem"].asInt(-1))))
         {
             // Hart abbrechen wie beim Zug: ein Gegner ohne seinen Trigger steht
             // fuer immer regungslos im Level, und das faellt spaeter niemandem
@@ -578,6 +579,22 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         if (e.has("x"))      it.x = static_cast<int32_t>(e["x"].asInt());
         if (e.has("y"))      it.y = static_cast<int32_t>(e["y"].asInt());
         if (e.has("z"))      it.z = static_cast<int32_t>(e["z"].asInt());
+
+        // "yAuto" auch beim Verschieben (#53): dieselbe Rechnung wie bei den
+        // Hinzufuegungen weiter unten. Gebraucht von Erzeugern, die nur Raum
+        // und Sektor kennen - die Secret-Listen des Nutzers nennen genau das.
+        if (e["yAuto"].asBool(false) &&
+            it.roomNumber >= 0 && static_cast<size_t>(it.roomNumber) < level.rooms().size())
+        {
+            const Tr5Room& rm = level.rooms()[static_cast<size_t>(it.roomNumber)];
+            SchraegeInfo si;
+            int baseY = 0;
+            const int art = level.floorNeigung(it.roomNumber,
+                                               (it.x - rm.originX) / 1024,
+                                               (it.z - rm.originZ) / 1024, si, baseY);
+            if (art == 0) it.y = static_cast<int32_t>(baseY);
+            else if (art > 0) it.y = static_cast<int32_t>(bodenLageAn(si, baseY, it.x & 1023, it.z & 1023).y);
+        }
         if (e.has("angle"))  it.yRot = static_cast<int16_t>(e["angle"].asInt());
         if (e.has("ocb"))
         {

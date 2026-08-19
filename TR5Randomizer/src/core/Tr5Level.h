@@ -310,7 +310,7 @@ public:
     // (pierre.cpp:68).
     bool    addTrigger(int room, int sx, int sz, int art, int timer, bool oneShot,
                        int mask, const std::vector<Tr5TriggerCmd>& cmds,
-                       std::string& error);
+                       std::string& error, int refItem = -1);
 
     // Darf an diese Kette hinten ein Trigger? Gibt den Hinderungsgrund zurueck
     // oder nullptr. Siehe die Herleitung in der Implementierung.

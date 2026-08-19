@@ -31,7 +31,11 @@ param(
     # den Secrets (Typ 223) der Vanilla-Datei ueberein? Menschen vertippen sich,
     # und ein falscher Index verschiebt still das falsche Item.
     [string]$VanillaDir = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Steam Version\data\Vanilla",
-    [string]$ItemPruef = "C:\Cloude AI\Alte sachen\Two gun test\Bittenichtbitdefender\ItemPruef.exe"
+    [string]$ItemPruef = "C:\Cloude AI\Alte sachen\Two gun test\Bittenichtbitdefender\ItemPruef.exe",
+    [string]$AlsPatch = "",
+    [string]$Trc = "",
+    # Level-Info-JSON: liefert die Raumurspruenge fuer Raum+Sektor -> Welt.
+    [string]$LevelInfo = ""
 )
 
 function Split-AufTiefe0([string]$text, [char]$trenner) {
@@ -186,4 +190,87 @@ foreach ($t in $treffer) {
 if ($AlsJson -ne "") {
     $alles | ConvertTo-Json -Depth 8 -Compress | Out-File $AlsJson -Encoding utf8
     Write-Output "JSON geschrieben: $AlsJson"
+}
+
+#----------------------------------------------------------------------------
+# Patch-Ausgabe (#53): aus dem Plan eines Levels ein Patch-JSON fuer BauWerk.
+#
+# Warum als Patch NACH dem Wurf und nicht im Randomizer: die Secret-Stellen
+# sind handkuriert und damit seedunabhaengig. Ein Patch beschreibt genau das -
+# er setzt die Secrets an ihre Plaetze, egal was der Wurf vorher mit ihnen
+# gemacht hat, und haengt die Extra_Options an.
+#
+# Das y wird NICHT gerechnet, sondern mit "yAuto" der Datei ueberlassen: dort
+# steckt die portierte Bodenmathematik der Engine, auch fuer Schraegen.
+#
+# Der Trigger einer Extra-Option braucht den Itemindex des Objekts, an das er
+# gebunden ist (Schluesselloch). Das ist ein NEU angehaengtes Item, sein Index
+# steht also erst nach dem Anhaengen fest: Itemzahl der Zieldatei plus Position
+# in der Liste der Hinzufuegungen.
+if ($AlsPatch -ne "") {
+    if ($LevelName -eq "" -or $Trc -eq "") { Write-Output "AlsPatch braucht -LevelName und -Trc"; exit 1 }
+    if (-not (Test-Path $Trc)) { Write-Output "Zieldatei nicht gefunden: $Trc"; exit 1 }
+
+    $planLevel = $null
+    foreach ($a in $alles) { foreach ($l in $a.level) { if ($l.level -eq $LevelName) { $planLevel = $l } } }
+    if ($null -eq $planLevel) { Write-Output "Kein Planeintrag fuer $LevelName"; exit 1 }
+
+    # Raumursprünge aus dem Level-Info-JSON
+    $info = Get-Content $LevelInfo -Raw | ConvertFrom-Json
+    $ro = @{}; foreach ($r in $info.rooms) { $ro[[int]$r.index] = $r }
+
+    # Itemzahl der Zieldatei - Grundlage fuer die Indizes der neuen Items
+    $kopf = & $ItemPruef $Trc 2>$null | Select-Object -First 1
+    if ($kopf -notmatch ':\s*(\d+)\s+Items') { Write-Output "Itemzahl nicht lesbar aus $Trc"; exit 1 }
+    $itemBasis = [int]$Matches[1]
+
+    $edits = @(); $adds = @(); $trigger = @()
+
+    for ($i = 0; $i -lt $planLevel.stellen.Count; $i++) {
+        $s = $planLevel.stellen[$i]
+        $rm = $ro[[int]$s.room]
+        $edits += [PSCustomObject]@{
+            index = [int]$planLevel.ids[$i]; room = [int]$s.room
+            x = ([int]$rm.originX + [int]$s.sectorX * 1024 + 512)
+            z = ([int]$rm.originZ + [int]$s.sectorZ * 1024 + 512)
+            y = 0; yAuto = $true
+        }
+    }
+
+    $n = 0
+    foreach ($e in $planLevel.extras) {
+        $rm = $ro[[int]$e.room]
+        $eintrag = [ordered]@{
+            typeId = [int]$e.typeId; room = [int]$e.room
+            x = ([int]$rm.originX + [int]$e.sectorX * 1024 + 512)
+            z = ([int]$rm.originZ + [int]$e.sectorZ * 1024 + 512)
+            y = 0; yAuto = $true
+        }
+        if ($null -ne $e.angle) { $eintrag['angle'] = [int]$e.angle }
+        $adds += [PSCustomObject]$eintrag
+        $meinIndex = $itemBasis + $n
+        $n++
+
+        if ($null -ne $e.triggerArt) {
+            # Triggerarten der Engine: 2 = SWITCH, 3 = KEY, 4 = PICKUP. Alle
+            # drei tragen ein Referenzwort - hier das eben angehaengte Objekt.
+            $art = switch ($e.triggerArt.ToLower()) {
+                'key'    { 3 }
+                'switch' { 2 }
+                'pickup' { 4 }
+                default  { 0 }
+            }
+            $trigger += [PSCustomObject]@{
+                room = [int]$e.room; sectorX = [int]$e.sectorX; sectorZ = [int]$e.sectorZ
+                art = $art; timer = 0; oneShot = 1; mask = 31
+                refItem = $meinIndex
+                commands = @( [PSCustomObject]@{ type = 0; param = [int]$e.triggerZiel } )
+            }
+        }
+    }
+
+    $patch = [PSCustomObject]@{ itemEdits = $edits; itemAdds = $adds; triggerAdds = $trigger }
+    $json = $patch | ConvertTo-Json -Depth 8 -Compress
+    [System.IO.File]::WriteAllText($AlsPatch, $json, (New-Object System.Text.UTF8Encoding($false)))
+    Write-Output "Patch geschrieben: $AlsPatch  ($($edits.Count) Secrets, $($adds.Count) Zusatzitems, $($trigger.Count) Trigger; neue Items ab Index $itemBasis)"
 }

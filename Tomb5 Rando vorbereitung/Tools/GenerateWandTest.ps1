@@ -95,8 +95,28 @@ foreach ($lvl in $Levels) {
     if (-not (Test-Path $zonesJson)) { "SKIP $lvl - Zonen-Export fehlgeschlagen"; continue }
     $z = Get-Content $zonesJson -Raw | ConvertFrom-Json
 
+    # Key-Item-Range je Typ (#61, Punkt 2 der Durchsicht). Ohne sie reichten
+    # die Wanditems im ersten Testlevel bis ans Levelende - der Filter war
+    # nicht kaputt, er war fuer diese Typen nur nie eingeschaltet, weil sie in
+    # VANILLA_TYPES standen. Jetzt leitet ZoneAnalyse fuer sie eine Grenze ab.
+    $grenze = @{}
+    foreach ($c in @($z.keyConstraints)) {
+        if ($null -eq $c) { continue }
+        $grenze[[int]$c.typeId] = @{
+            maxZone = [int]$c.maxZone
+            ex = @( if ($null -ne $c.excludeRooms) { $c.excludeRooms | ForEach-Object { [int]$_ } } )
+        }
+    }
+    foreach ($t in $WANDTYPEN[$lvl]) {
+        if (-not $grenze.ContainsKey([int]$t.typeId)) {
+            "  Hinweis ${lvl}: Typ $($t.typeId) hat KEINE Zonengrenze - liegt ueberall"
+        } else {
+            "  ${lvl}: Typ $($t.typeId) bis Zone $($grenze[[int]$t.typeId].maxZone), $($grenze[[int]$t.typeId].ex.Count) Raeume ausgeschlossen"
+        }
+    }
+
     $itemAdds = @()
-    $mitWand = 0; $wegWasser = 0; $wegBelegt = 0
+    $mitWand = 0; $wegWasser = 0; $wegBelegt = 0; $wegZone = 0
     foreach ($s in $z.sectors) {
         $wa = @( if ($null -ne $s.wallAngles) { $s.wallAngles } )
         if ($wa.Count -eq 0) { continue }
@@ -110,13 +130,21 @@ foreach ($lvl in $Levels) {
         # Je Wandkante ein Item, die hinterlegten Typen reihum - so liegen in
         # einer Ecke zwei verschiedene Modelle nebeneinander und man sieht
         # sofort, ob beide gleich stehen.
-        $i = 0
+        # Je Wandkante JEDEN Typ setzen, der dort laut seiner Zonengrenze
+        # liegen darf. So sieht man in trview typweise, wie weit die Reichweite
+        # jeweils traegt - liegen an einer Kante beide, ist der Platz fuer
+        # beide erlaubt.
         foreach ($w in $wa) {
-            $t = $WANDTYPEN[$lvl][$i % $WANDTYPEN[$lvl].Count]
-            $itemAdds += [PSCustomObject]@{ typeId = [int]$t.typeId; room = [int]$s.room;
-                                            x = $wx; y = [int]$s.floorY; z = $wz;
-                                            angle = [int]$w; ocb = [int]$t.ocb; yAuto = $true }
-            $i++
+            foreach ($t in $WANDTYPEN[$lvl]) {
+                $tid = [int]$t.typeId
+                if ($grenze.ContainsKey($tid)) {
+                    if ([int]$s.zone -gt $grenze[$tid].maxZone) { $wegZone++; continue }
+                    if ($grenze[$tid].ex -contains [int]$s.room) { $wegZone++; continue }
+                }
+                $itemAdds += [PSCustomObject]@{ typeId = $tid; room = [int]$s.room;
+                                                x = $wx; y = [int]$s.floorY; z = $wz;
+                                                angle = [int]$w; ocb = [int]$t.ocb; yAuto = $true }
+            }
         }
     }
 
@@ -132,7 +160,7 @@ foreach ($lvl in $Levels) {
     $p = Start-Process -FilePath $Exe -ArgumentList $argList -Wait -PassThru -NoNewWindow
     $ok = (Test-Path $dstTrc) -and $p.ExitCode -eq 0
     $results += [PSCustomObject]@{ Level = $lvl; Wandsektoren = $mitWand; Wasser = $wegWasser; Belegt = $wegBelegt; Items = $itemAdds.Count; OK = $ok }
-    "{0,-10} Wandsektoren={1,4}  (-{2} Wasser, -{3} belegt)  Items={4,4}  {5}" -f $lvl, $mitWand, $wegWasser, $wegBelegt, $itemAdds.Count, ($(if ($ok) { 'OK' } else { 'FEHLER' }))
+    "{0,-10} Wandsektoren={1,4}  (-{2} Wasser, -{3} belegt, -{4} Zone)  Items={5,4}  {6}" -f $lvl, $mitWand, $wegWasser, $wegBelegt, $wegZone, $itemAdds.Count, ($(if ($ok) { 'OK' } else { 'FEHLER' }))
 }
 
 Write-Output ""

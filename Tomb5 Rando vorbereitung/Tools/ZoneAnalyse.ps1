@@ -331,6 +331,15 @@ $TYPE_EXCLUDE_ROOMS = @{
         175 = @(70,204)                       # Puzzle Item4
         176 = @(70,204)                       # Puzzle Item5 (141/87 sind
                                               # inzwischen ganz gesperrt)
+        # Das Ventil (#61, Nutzerdurchsicht am Wandtest 2026-08-19). Puzzle
+        # Item3 wird von seiner Zonengrenze schon richtig abgefangen, das
+        # Ventil muss frueher stoppen:
+        #  - 31 ist der Leckweg. Von dort laeuft der Flood nach 132 (und
+        #    weiter nach 246), obwohl das hinter der Tuer liegt. Nutzer:
+        #    "Raum 31 muss ein Blocker werden."
+        #  - 103 ist erst erreichbar, NACHDEM das Ventil benutzt wurde - ein
+        #    Ventil, das dort liegt, koennte sich selbst nicht freischalten.
+        172 = @(31,132,103)                   # Puzzle Item1 (Ventil)
     }
     # joby2: Key Item7 darf nicht hinter Tuer 41 landen. Die abgeleitete Regel
     # "nicht hinter der eigenen Tuer" greift hier fast nicht - sie findet nur
@@ -862,7 +871,18 @@ $TYPE_OFFSET = @{
 #
 # Der Mechanismus bleibt, er ist gebaut und geprueft - es gibt nur derzeit
 # keinen Typ, fuer den er richtig waere.
-$KEEP_OCB = @{ }
+$KEEP_OCB = @{
+    # Andrea2s Wand-Pickups (#61). Beide tragen OCB 2 (Brechstangen-Griff);
+    # der Randomizer nullt die OCB sonst beim Verschieben, und mit OCB 0
+    # waere das Objekt gar nicht mehr aufnehmbar.
+    #
+    # Frueher standen sie deshalb in VANILLA_TYPES: die OCB zu erhalten hiess,
+    # die volle Bedingung des Griffs erfuellen zu muessen - Wand dahinter und
+    # passender Winkel -, und das konnte das Modell nicht garantieren. Seit
+    # ZoneAnalyse je Sektor wallAngles liefert und die Platzierung Wandkante
+    # samt Winkel waehlt, ist genau das erfuellt.
+    'Andrea2' = @(172,174)
+}
 $keepOcbTypes = @( if($KEEP_OCB.ContainsKey($LevelName)){ $KEEP_OCB[$LevelName] } )
 $typeOffsetOf = @{}
 foreach($ebene in @('ALLE', $LevelName)){
@@ -970,7 +990,12 @@ $VANILLA_TYPES = @{
     # aber dann gilt die volle Bedingung des Brechstangen-Pickups: Wand dahinter
     # und passender Angle. Das kann ein Modell aus 1024er-Sektoren ohne
     # Wandausrichtung nicht garantieren. Siehe die lange Begruendung bei KEEP_OCB.
-    'Andrea2' = @(172,174)
+    # Andrea2 fuehrte hier 172 und 174 - die beiden Wand-Pickups. Seit #61
+    # duerfen sie wandern: die Platzierung waehlt jetzt Wandkante und Winkel,
+    # und KEEP_OCB haelt ihre OCB 2 fest. Der Grund fuer die Stilllegung ist
+    # damit weg. Nebenwirkung, die es zu pruefen galt: fuer stillgelegte Typen
+    # leitet dieses Skript keine Key-Constraint ab - deshalb reichten die
+    # Wanditems im ersten Testlevel bis ans Levelende.
     # joby3s Puzzle Item1 (Item 41, Raum 22) ist die getarnte Brechstange -
     # sie sieht wie ein Puzzleteil aus, oeffnet aber die Brechstangentueren 25
     # und 125. Sie bleibt an ihrem Platz, damit die Pickup-Cutscene stimmt.

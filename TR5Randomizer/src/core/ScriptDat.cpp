@@ -19,6 +19,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cstddef>
 
 namespace
 {
@@ -31,6 +32,38 @@ namespace
         uint16_t FileNameLen, ScriptLen;
     };
 #pragma pack(pop)
+
+    // Nutzbytelaenge je Befehl, 1:1 aus DoGameflow (game/gameflow.cpp:160ff).
+    // Opcodes aus enum gf_commands (game/gameflow.h), CMD_FMV = 0x80.
+    //
+    // Die Objektbefehle (0x92..0xD8: Key/Puzzle/Pickup/Examine und die Combos)
+    // tragen 14 Nutzbytes - Namensindex, yoff, Groesse und drei Drehungen plus
+    // Flags. Genau die fehlten hier frueher: der alte Parser gab ihnen wie
+    // allem Unbekannten 2 Nutzbytes. Dass er trotzdem ans Ziel kam, war Glueck
+    // - ein Objektbefehl ist 15 Byte lang, und 15 ist durch 3 teilbar, also
+    // fand der zu kurze Schritt nach fuenf Spruengen zufaellig wieder den
+    // Takt. Er haette gerissen, sobald eines der angesprungenen Nutzbytes
+    // (Versatz 3, 6, 9 oder 12 im Befehl) auf einem Opcode mit anderer Laenge
+    // gelandet waere, etwa 0x80 aus einer Drehung von 0x8000.
+    int nutzlast(uint8_t cmd)
+    {
+        switch (cmd)
+        {
+        case 0x80: case 0x84: case 0x85: case 0x86: case 0x87: case 0x88:
+        case 0x8B: case 0x8C: case 0x90: case 0x91: return 1;
+        case 0x81:                                  return 5;   // LEVEL
+        case 0x82: case 0x89: case 0x8A:            return 4;   // TITLE, LAYER1/2
+        case 0x83:                                  return 0;   // ENDSEQ
+        case 0x8D:                                  return 9;   // LENSFLARE
+        case 0x8E:                                  return 5;   // MIRROR
+        case 0x8F:                                  return 3;   // FOG
+        case 0xD9: case 0xDA:                       return 2;   // GIVEOBJ/TAKEOBJ
+        default:
+            if (cmd >= ScriptDat::CMD_OBJ_ERSTER && cmd <= ScriptDat::CMD_OBJ_LETZTER)
+                return ScriptDat::OBJEKT_NUTZBYTES;
+            return -1;                                          // unbekannt: anhalten
+        }
+    }
 
     bool gleichOhneEndung(const char* a, const std::string& b)
     {
@@ -76,6 +109,12 @@ bool ScriptDat::load(const std::wstring& path, std::string& error)
 
 bool ScriptDat::zerlege(std::string& error)
 {
+    m_levels.clear();
+    m_flagsAt.clear();
+    m_blockAn.clear();
+    m_blockBis.clear();
+    m_ofsIndex.clear();
+
     if (m_bytes.size() < sizeof(GAMEFLOW) + 40) { error = "SCRIPT.DAT zu klein"; return false; }
 
     GAMEFLOW gf;
@@ -92,16 +131,31 @@ bool ScriptDat::zerlege(std::string& error)
 
     if (scriptWad + gf.ScriptLen > m_bytes.size()) { error = "SCRIPT.DAT: Kopf passt nicht zur Datei"; return false; }
 
+    m_scriptOfsAt = scriptOfsAt;
+    m_scriptWad   = scriptWad;
+    m_nLevels     = gf.nLevels;
+
     auto u16 = [&](size_t o) { uint16_t v; std::memcpy(&v, m_bytes.data() + o, 2); return v; };
 
     for (int i = 0; i < gf.nLevels; ++i)
     {
-        size_t q = scriptWad + u16(scriptOfsAt + 2ull * i);
+        const size_t start = scriptWad + u16(scriptOfsAt + 2ull * i);
 
-        while (q + 1 < m_bytes.size())
+        // Blockende ist der naechstgroessere Offset, nicht stur der naechste
+        // Eintrag: die Reihenfolge der Offsettabelle ist nirgends zugesichert.
+        size_t ende = scriptWad + gf.ScriptLen;
+        for (int j = 0; j < gf.nLevels; ++j)
+        {
+            const size_t o = scriptWad + u16(scriptOfsAt + 2ull * j);
+            if (o > start && o < ende) ende = o;
+        }
+        if (ende > m_bytes.size()) ende = m_bytes.size();
+
+        for (size_t q = start; q < ende; )
         {
             const uint8_t cmd = m_bytes[q];
-            if (cmd == 0x83) break;                   // CMD_ENDSEQ
+            const int len = nutzlast(cmd);
+            if (len < 0) break;                       // unbekannt: hier ist Schluss
 
             if (cmd == 0x81)                          // CMD_LEVEL
             {
@@ -119,29 +173,109 @@ bool ScriptDat::zerlege(std::string& error)
                 }
                 m_levels.push_back(e);
                 m_flagsAt.push_back(fl);
+                m_blockAn.push_back(start);
+                m_blockBis.push_back(ende);
+                m_ofsIndex.push_back(i);
                 break;
             }
 
-            // Nutzbytelaenge je Befehl, 1:1 aus LoadGameflow. Opcodes aus
-            // enum gf_commands (CMD_FMV = 0x80):
-            //   80 FMV   81 LEVEL  82 TITLE  83 ENDSEQ  84 PLAYCUT
-            //   85 CUT1  86 CUT2   87 CUT3   88 CUT4    89 LAYER1
-            //   8A LAYER2 8B UVROT 8C LEGEND 8D LENSFLARE
-            //   8E MIRROR 8F FOG   90 ANIMATINGMIP      91 RESETHUB
-            switch (cmd)
-            {
-            case 0x80: case 0x84: case 0x85: case 0x86: case 0x87: case 0x88:
-            case 0x8B: case 0x8C: case 0x90: case 0x91: q += 2; break;
-            case 0x82: case 0x89: case 0x8A:                    q += 5; break;
-            case 0x8D:                                          q += 10; break;
-            case 0x8E:                                          q += 6; break;
-            case 0x8F:                                          q += 4; break;
-            default:                                            q += 3; break;
-            }
+            q += 1 + len;
         }
     }
 
     if (m_levels.empty()) { error = "SCRIPT.DAT: kein einziger CMD_LEVEL gefunden"; return false; }
+    return true;
+}
+
+// Sucht einen Objektbefehl im Block eines Levels. Liefert die Stelle des
+// Opcodes oder npos.
+size_t ScriptDat::findeBefehl(size_t idx, uint8_t cmd) const
+{
+    for (size_t q = m_blockAn[idx]; q < m_blockBis[idx]; )
+    {
+        const int len = nutzlast(m_bytes[q]);
+        if (len < 0) break;
+        if (m_bytes[q] == cmd) return q;
+        q += 1 + len;
+    }
+    return std::string::npos;
+}
+
+bool ScriptDat::findeLevel(const std::string& name, size_t& idx) const
+{
+    for (size_t i = 0; i < m_levels.size(); ++i)
+        if (gleichOhneEndung(m_levels[i].fileName.c_str(), name)) { idx = i; return true; }
+    return false;
+}
+
+bool ScriptDat::copyObjectCommand(const std::string& vonLevel, const std::string& nachLevel,
+                                  uint8_t cmd, bool& changed, std::string& error)
+{
+    changed = false;
+
+    if (cmd < CMD_OBJ_ERSTER || cmd > CMD_OBJ_LETZTER)
+    { error = "kein Objektbefehl: " + std::to_string((int)cmd); return false; }
+
+    size_t iVon = 0, iNach = 0;
+    if (!findeLevel(vonLevel, iVon))   { error = "Level nicht im Skript: " + vonLevel;  return false; }
+    if (!findeLevel(nachLevel, iNach)) { error = "Level nicht im Skript: " + nachLevel; return false; }
+
+    // Hat das Ziel den Befehl schon, bleibt alles wie es ist. Der Aufruf ist
+    // damit wiederholbar - genau wie clearLevelFlags, und aus demselben Grund:
+    // der Randomizer laeuft mehrfach ueber dieselbe Installation.
+    if (findeBefehl(iNach, cmd) != std::string::npos) return true;
+
+    const size_t quelle = findeBefehl(iVon, cmd);
+    if (quelle == std::string::npos)
+    { error = "Level " + vonLevel + " hat den Befehl gar nicht"; return false; }
+    if (quelle + OBJEKT_BEFEHL_BYTES > m_bytes.size())
+    { error = "Befehl in " + vonLevel + " ragt aus der Datei"; return false; }
+
+    std::vector<uint8_t> befehl(m_bytes.begin() + quelle,
+                                m_bytes.begin() + quelle + OBJEKT_BEFEHL_BYTES);
+
+    // Vorne in den Block: die Objektbefehle stehen vanilla alle vor CMD_LEVEL,
+    // und das muessen sie auch - DoGameflow arbeitet EINE Schleife ab, und
+    // CMD_LEVEL steigt dort ins Level ab. Was dahinter stuende, wuerde erst
+    // nach dem Level gelesen und kaeme fuer die Namensvergabe zu spaet.
+    const size_t einfuegeAn = m_blockAn[iNach];
+
+    GAMEFLOW gf;
+    std::memcpy(&gf, m_bytes.data(), sizeof(gf));
+
+    if (gf.ScriptLen + OBJEKT_BEFEHL_BYTES > 0xFFFF)
+    { error = "SCRIPT.DAT: Skript-Wad wuerde ueberlaufen"; return false; }
+
+    // Erst pruefen, dann schreiben: kein halb umgebautes Skript hinterlassen.
+    for (int i = 0; i < m_nLevels; ++i)
+    {
+        uint16_t o;
+        std::memcpy(&o, m_bytes.data() + m_scriptOfsAt + 2ull * i, 2);
+        if (m_scriptWad + o > einfuegeAn && o + OBJEKT_BEFEHL_BYTES > 0xFFFF)
+        { error = "SCRIPT.DAT: Leveloffset wuerde ueberlaufen"; return false; }
+    }
+
+    m_bytes.insert(m_bytes.begin() + einfuegeAn, befehl.begin(), befehl.end());
+
+    // Jeder Block HINTER der Einfuegestelle rueckt um die Befehlslaenge nach.
+    // Der Zielblock selbst faengt genau an der Einfuegestelle an und bleibt,
+    // wo er ist - deshalb strikt groesser.
+    for (int i = 0; i < m_nLevels; ++i)
+    {
+        uint16_t o;
+        std::memcpy(&o, m_bytes.data() + m_scriptOfsAt + 2ull * i, 2);
+        if (m_scriptWad + o > einfuegeAn)
+        {
+            o = static_cast<uint16_t>(o + OBJEKT_BEFEHL_BYTES);
+            std::memcpy(m_bytes.data() + m_scriptOfsAt + 2ull * i, &o, 2);
+        }
+    }
+
+    gf.ScriptLen = static_cast<uint16_t>(gf.ScriptLen + OBJEKT_BEFEHL_BYTES);
+    std::memcpy(m_bytes.data() + offsetof(GAMEFLOW, ScriptLen), &gf.ScriptLen, 2);
+
+    if (!zerlege(error)) return false;                // Blockgrenzen neu einlesen
+    changed = true;
     return true;
 }
 

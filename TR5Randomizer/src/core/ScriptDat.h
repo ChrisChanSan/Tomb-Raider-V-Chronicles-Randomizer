@@ -66,6 +66,42 @@ public:
     // braucht er: der Randomizer laeuft mehrfach ueber dieselbe Installation.
     bool clearLevelFlags(const std::string& fileName, uint16_t mask, bool& changed);
 
+    // --- Objektbefehle: Name und Inventarpose eines Key-/Puzzle-/Pickup-Items
+    //
+    // Diese Angaben stehen NICHT im Level, sondern im Skriptblock des Levels.
+    // Je Objekt ein Befehl mit 14 Nutzbytes: Namensindex, yoff, Groesse, drei
+    // Drehungen, Flags. gameflow.cpp:371 schreibt sie nach
+    // inventry_objects_list - und diese Tabelle wird zwischen Leveln NIE
+    // zurueckgesetzt. Fehlt einem Level der Befehl, traegt das Item Namen und
+    // Pose des zuletzt gesetzten Levels; bei frischem Start den Werkswert
+    // TXT_Load (newinv2.cpp:325ff, alle acht Key-Items tragen denselben
+    // Platzhalter, vanilla immer vom Skript ueberschrieben).
+    //
+    // Genau das trifft uns, sobald ein Modell in ein fremdes Level wandert:
+    // joby3 bekommt Key Item 8, hat aber kein CMD_KEY8. Vanilla faellt das
+    // nie auf, weil joby2 direkt davor laeuft und den Eintrag setzt - nach
+    // einem Speichern und Laden in joby3 waere der Schluessel "Load".
+    static constexpr uint8_t CMD_OBJ_ERSTER  = 0x92;   // CMD_KEY1  = 146
+    static constexpr uint8_t CMD_OBJ_LETZTER = 0xD8;   // CMD_PICKUPCOMBO4_2 = 216
+    static constexpr int     OBJEKT_NUTZBYTES    = 14;
+    static constexpr int     OBJEKT_BEFEHL_BYTES = 1 + OBJEKT_NUTZBYTES;
+
+    static constexpr uint8_t cmdKey(int n)    { return static_cast<uint8_t>(0x92 + (n - 1)); }  // KEY1..12
+    static constexpr uint8_t cmdPuzzle(int n) { return static_cast<uint8_t>(0x9E + (n - 1)); }  // PUZZLE1..12
+    static constexpr uint8_t cmdPickup(int n) { return static_cast<uint8_t>(0xAA + (n - 1)); }  // PICKUP1..4
+
+    // Kopiert einen Objektbefehl samt Pose von einem Level in ein anderes.
+    // Hat das Ziel ihn schon, passiert nichts (changed bleibt false) - der
+    // Aufruf ist wiederholbar, genau wie clearLevelFlags.
+    //
+    // Der Einschub verlaengert die Datei: das Skript-Wad waechst um 15 Byte,
+    // alle dahinterliegenden Leveloffsets und ScriptLen werden nachgezogen.
+    // Unkritisch, weil LoadGameflow (gameflow.cpp:980) rein sequentiell durch
+    // die Datei laeuft und die Texte in eigenen Sprachdateien liegen - es gibt
+    // keine absoluten Offsets, die zeigen koennten.
+    bool copyObjectCommand(const std::string& vonLevel, const std::string& nachLevel,
+                           uint8_t cmd, bool& changed, std::string& error);
+
     // Was steht heute drin? Fuer Anzeige und Selbsttest.
     struct Eintrag
     {
@@ -78,6 +114,15 @@ private:
     std::vector<uint8_t> m_bytes;
     std::vector<Eintrag> m_levels;
     std::vector<size_t>  m_flagsAt;    // wo die Flags jedes Eintrags stehen
+    std::vector<size_t>  m_blockAn;    // Blockanfang je Level
+    std::vector<size_t>  m_blockBis;   // Blockende (ausschliesslich)
+    std::vector<int>     m_ofsIndex;   // Platz in der Offsettabelle
+    size_t               m_scriptOfsAt = 0;
+    size_t               m_scriptWad   = 0;
+    int                  m_nLevels     = 0;
+
+    bool   findeLevel(const std::string& name, size_t& idx) const;
+    size_t findeBefehl(size_t idx, uint8_t cmd) const;
 
     bool zerlege(std::string& error);
 };

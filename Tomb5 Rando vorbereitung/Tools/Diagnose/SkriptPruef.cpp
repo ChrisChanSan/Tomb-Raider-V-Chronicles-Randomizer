@@ -63,6 +63,10 @@ int main(int argc, char** argv)
 {
     if (argc < 2) { std::printf("Aufruf: SkriptPruef <SCRIPT.DAT> [levelname ...]\n"); return 1; }
 
+    bool rohModus = false;
+    for (int a = 1; a < argc; ++a)
+        if (std::strcmp(argv[a], "-roh") == 0) { rohModus = true; argv[a] = (char*)"-"; }
+
     FILE* f = std::fopen(argv[1], "rb");
     if (!f) { std::printf("nicht lesbar: %s\n", argv[1]); return 1; }
     std::fseek(f, 0, SEEK_END); long n = std::ftell(f); std::fseek(f, 0, SEEK_SET);
@@ -107,11 +111,11 @@ int main(int argc, char** argv)
             q += 1 + len;
         }
 
-        if (argc > 2)
+        if (argc > 2 + (rohModus ? 1 : 0))
         {
             bool gewollt = false;
             for (int a = 2; a < argc; ++a)
-                if (klein(datei) == klein(argv[a])) { gewollt = true; break; }
+                if (std::strcmp(argv[a],"-") && klein(datei) == klein(argv[a])) { gewollt = true; break; }
             if (!gewollt) continue;
         }
 
@@ -138,6 +142,18 @@ int main(int argc, char** argv)
                 ++objekte;
             }
             q += 1 + len;
+        }
+        if (rohModus)
+        {
+            std::printf("   -- Befehlsfolge --\n");
+            for (size_t q = start; q < ende; )
+            {
+                const int l = nutzlast(d[q]);
+                std::printf("   +%-4zu  %-3u  %s%s\n", q - start, d[q], befehlsname(d[q]).c_str(),
+                            d[q] == 0x81 ? "   <== CMD_LEVEL" : "");
+                if (l < 0) break;
+                q += 1 + l;
+            }
         }
         if (!objekte) std::printf("   (kein einziger Objektbefehl)\n");
         std::printf("\n");

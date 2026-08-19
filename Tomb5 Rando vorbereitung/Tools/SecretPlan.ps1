@@ -60,6 +60,19 @@ function Lies-Option([string]$o) {
     if ($o -match 'Trigger_Type\(\s*(\w+)\s*\).*?Item_Level_ID\(\s*(\d+)\s*\)') {
         $e.triggerArt = [string]$Matches[1]; $e.triggerZiel = [int]$Matches[2]
     }
+
+    # Strenge statt Nachsicht: was der Parser NICHT erkannt hat, wird gemeldet.
+    # Ein stillschweigend verschlucktes "@Angel0" (statt Angle) waere sonst
+    # erst im Spiel zu sehen - und dort schwer als Tippfehler zu erkennen.
+    $rest = $o
+    $rest = $rest -replace 'add\s+Type_ID\(\d+\)', ''
+    $rest = $rest -replace '@\s*Room\d+\(\s*x\d+\s*,\s*z\d+\s*\)', ''
+    $rest = $rest -replace '@\s*Angle\s*-?\d+', ''
+    $rest = $rest -replace 'Trigger_Type\(\s*\w+\s*\)', ''
+    $rest = $rest -replace 'to\s*->\s*\w+', ''
+    $rest = $rest -replace 'Item_Level_ID\(\s*\d+\s*\)', ''
+    $rest = ($rest -replace '[()+;\s]', '')
+    if ($rest.Length -gt 0) { $e | Add-Member -NotePropertyName unbekannt -NotePropertyValue $rest }
     return $e
 }
 
@@ -81,11 +94,21 @@ function Lies-Liste([string]$pfad) {
             $stellen += [PSCustomObject]@{ room=[int]$m.Groups[1].Value; sectorX=[int]$m.Groups[2].Value; sectorZ=[int]$m.Groups[3].Value }
         }
 
+        # Gruppen trennen. Empfohlen ist ';' - eindeutig, weil es sonst nirgends
+        # vorkommt. Das urspruengliche '+' bleibt erlaubt (die vorhandenen
+        # Listen benutzen es), wird aber auf Klammertiefe 0 getrennt, weil '+'
+        # auch INNERHALB einer Gruppe steht (vor Trigger_Type).
         $extras = @()
         if ($pExtra -ge 0) {
-            foreach ($g in (Split-AufTiefe0 $rest.Substring($pExtra) '+')) {
+            $roh = $rest.Substring($pExtra)
+            $gruppen = if ($roh.Contains(';')) { Split-AufTiefe0 $roh ';' } else { Split-AufTiefe0 $roh '+' }
+            foreach ($g in $gruppen) {
                 $o = Lies-Option $g
-                if ($null -ne $o) { $extras += $o } else { $warn += "${lvl}: Option nicht lesbar -> $g" }
+                if ($null -eq $o) { $warn += "${lvl}: Option nicht lesbar -> $g"; continue }
+                if ($o.PSObject.Properties.Name -contains 'unbekannt') {
+                    $warn += "${lvl}: nicht verstandener Teil in einer Option -> '$($o.unbekannt)'"
+                }
+                $extras += $o
             }
         }
 

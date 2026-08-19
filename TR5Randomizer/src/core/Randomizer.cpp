@@ -464,6 +464,13 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
     {
         if (s.wallAngles.empty()) return false;
         if (s.clearance < 768) return false;
+
+        // Und niemals unter Wasser: PickUpCollision laeuft ueberhaupt nur bei
+        // water_status LW_ABOVE_WATER oder LW_WADE (pickup.cpp:766). Gilt NUR
+        // fuer diese Griffe - gewoehnliche Pickups und Puzzleteile duerfen
+        // sehr wohl im Wasser liegen (Nutzervorgabe 2026-08-19: "Nur diese
+        // spezielle Art mit Anim nicht").
+        if (in.waterRooms.count(s.room)) return false;
     }
 
     // Hinter einem Deadstop liegt nichts, was ein Schluessel sein koennte.

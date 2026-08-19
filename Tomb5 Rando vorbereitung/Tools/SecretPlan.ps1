@@ -90,8 +90,22 @@ function Lies-Liste([string]$pfad) {
         $rest = $Matches[5]
 
         # Die Stellen stehen VOR den Extra_Options; die Optionen nennen selbst
+        # Die Stellen stehen VOR den Extra_Options; die Optionen nennen selbst
         # Raeume und wuerden sonst als zusaetzliche Secrets mitgezaehlt.
-        $pExtra = $rest.IndexOf('(add')
+        #
+        # Die Grenze war frueher das woertliche "(add" - und damit blind fuer
+        # jede Gruppe, die anders anfaengt. Eine Zeile mit "(replace ...)" fiel
+        # STILL heraus: keine Option gelesen, keine Warnung. Genau das, was der
+        # Kopf dieser Datei ausschliesst.
+        #
+        # Jetzt ohne Wortliste: die Stellen bestehen aus "Room<N>(x..,z..)", und
+        # deren Klammern werden ausgeblendet. Die erste Klammer, die danach noch
+        # uebrig ist, faengt die Extra_Options an - egal mit welchem Verb.
+        $maske = $rest.ToCharArray()
+        foreach ($m in [regex]::Matches($rest, 'Room\d+\(\s*x\d+\s*,\s*z\d+\s*\)')) {
+            for ($i = $m.Index; $i -lt $m.Index + $m.Length; $i++) { $maske[$i] = ' ' }
+        }
+        $pExtra = (-join $maske).IndexOf('(')
         $vorn = if ($pExtra -ge 0) { $rest.Substring(0, $pExtra) } else { $rest }
         $stellen = @()
         foreach ($m in [regex]::Matches($vorn, 'Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)')) {

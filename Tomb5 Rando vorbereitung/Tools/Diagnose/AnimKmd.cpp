@@ -74,6 +74,21 @@ int main(int argc, char** argv)
         std::printf("\nSlot %d: Anims %d..%d (Scheibe %d)\n",
                     slot, mv.animIndex, ende - 1, ende - mv.animIndex);
 
+        // Bildbereich je Animation. Entscheidet die Frage "bewegt sich das
+        // Objekt beim Ausloesen ueberhaupt": ein Anim mit frame_base ==
+        // frame_end steht still, dann kommt jede sichtbare Bewegung von
+        // aussen (Cutscene) und ein Trigger tut nichts. Die Anim-Struktur ist
+        // 40 Byte, frame_base bei +24, frame_end bei +26, next_animation +28.
+        for (int a = mv.animIndex; a < ende; ++a)
+        {
+            const size_t o = animAt + (size_t)a * 40;
+            const uint16_t fb = r16(o + 24), fe = r16(o + 26), na = r16(o + 28);
+            const uint8_t  iv = b[o + 4];
+            std::printf("  Anim +%-3d (abs %4d): Frames %u..%u (%d Stueck) Rate %u -> weiter mit Anim %u%s\n",
+                        a - mv.animIndex, a, fb, fe, (int)fe - (int)fb + 1, iv, na,
+                        (fe == fb) ? "   [STEHT STILL]" : "");
+        }
+
         for (int a = mv.animIndex; a < ende; ++a)
         {
             const size_t o = animAt + (size_t)a * 40;

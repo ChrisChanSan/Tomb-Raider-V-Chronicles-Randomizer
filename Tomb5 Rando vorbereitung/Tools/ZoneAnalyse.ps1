@@ -797,9 +797,11 @@ $REQUIRED_INJECTIONS = @{
     # Injektionen laufen ohnehin nicht durch den Waffenfilter, sie werden
     # direkt platziert; die Sperre bleibt fuer die Verteilung in Kraft.
     'rich2'   = @(
-        # Der Hoehenversatz der HK steht NICHT hier, sondern in TYPE_Y_OFFSET:
-        # er gilt fuer jede HK ueberall, nicht nur fuer diese eine. Ein zweiter
-        # Eintrag hier wuerde ihn verdoppeln.
+        # Der Hoehenversatz dieser HK steht NICHT hier, sondern in TYPE_OFFSET
+        # unter rich2 - ein zweiter Eintrag hier wuerde ihn verdoppeln.
+        # Global ist er seit #61 weg: der Motor hebt ein Pickup bei OCB 0 schon
+        # selbst um bounds[3] an, unsere -100 kamen obendrauf und liessen die
+        # HK schweben. Nur an diesem handverlesenen Platz wird er gebraucht.
         @{ typeId = 345; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK - ab hier kann ein Key-Item unter einem Gegner liegen' }
         @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK-Munition zur HK auf demselben Feld' }
         @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK-Munition zur HK auf demselben Feld' }
@@ -875,6 +877,15 @@ $TYPE_OFFSET = @{
     # kompensiert. Sollte die HK ohne Versatz doch im Boden stecken, ist -50
     # der naechste Kandidat, nicht -100.
     'ALLE'    = @{ }
+    # ... ausser in rich2. Dort setzt REQUIRED_INJECTIONS eine HK auf einen vom
+    # Nutzer handverlesenen Platz (Raum 140, Sektor 1,2), und genau dort wird
+    # der Versatz weiter gebraucht - Nutzerbefund 2026-08-19: "Nur fuer das
+    # rich2 muessen wir den Y offset beibehalten. Die anderen Level koennen
+    # ohne den Offset bleiben."
+    #
+    # Betrifft praktisch nur diese eine HK: rich2s Vanilla-HK (Item 6) steht in
+    # VANILLA_TYPES und wandert ohnehin nicht.
+    'rich2'   = @{ 345 = @{ dy = -100 } }
     # Andrea2 / 174 stand hier mit dz -512 und ist wieder raus: der Typ bleibt
     # jetzt vanilla (siehe VANILLA_TYPES), er wird also gar nicht mehr bewegt.
     # Der gemessene Versatz bleibt der Vollstaendigkeit halber notiert, falls das

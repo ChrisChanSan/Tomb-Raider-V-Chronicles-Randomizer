@@ -893,6 +893,8 @@ $KEEP_OCB = @{
     # ZoneAnalyse je Sektor wallAngles liefert und die Platzierung Wandkante
     # samt Winkel waehlt, ist genau das erfuellt.
     'Andrea2' = @(172,174)
+    # andy3 dasselbe: Kreide (OCB 2) und Zaun-Brechstange (OCB 9).
+    'andy3'   = @(172,174)
 }
 $keepOcbTypes = @( if($KEEP_OCB.ContainsKey($LevelName)){ $KEEP_OCB[$LevelName] } )
 $typeOffsetOf = @{}
@@ -1034,7 +1036,11 @@ $VANILLA_TYPES = @{
     # Beim Verschieben wird OCB auf 0 gesetzt, alle drei laegen danach flach auf
     # dem Boden und die Inszenierung waere weg - derselbe Grund, aus dem rich1s
     # CD nicht wandert.
-    'andy3'   = @(172,173,174)
+    # andy3: 172 (Kreide, OCB 2) und 174 (Brechstange im Zaun, OCB 9) sind
+    # seit #61 frei - die Platzierung waehlt Wandkante und Winkel, KEEP_OCB
+    # haelt ihre OCB. 173 (Muenze, OCB 11) bleibt: sie liegt auf einem
+    # Zierdeckel im Wasser, das ist eine eigene Entscheidung.
+    'andy3'   = @(173)
     # rich2: die HK (typeId 345, Item 6 in Raum 8). Sie ist kein Fund, sondern
     # eine Ablage - Lara legt sie am Mesh 15 nieder, um sich zu entwaffnen,
     # damit der Roentgenscanner in Raum 9 keine Fallen ausloest. Das Item traegt

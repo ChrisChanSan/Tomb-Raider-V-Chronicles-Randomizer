@@ -47,8 +47,12 @@ $WANDTYPEN = @{
     'andy3'   = @( @{ typeId = 172; ocb = 2 }, @{ typeId = 174; ocb = 9 } )
     # Ueber alle Vanilla-Level gemessen (ItemPruef, OCB 2 oder 9 auf einem
     # Pickup-Typ) - diese beiden standen bis dahin auf keiner Liste:
-    'Andrea3' = @( @{ typeId = 220; ocb = 2 } )   # Item 68, Raum 70
-    'joby3'   = @( @{ typeId = 172; ocb = 9 } )   # Item 41, Raum 22 (getarnte Brechstange)
+    # Andrea3 (220, Item 68) und joby3 (172, Item 41) haben zwar OCB 2/9,
+    # sind aber aus ANDEREN Gruenden festgenagelt, die die Wandarbeit nicht
+    # aufloest - der Nutzer hat beide schon frueher festgehalten:
+    #   Andrea3 68 klebt am LevelEnd-Trigger.
+    #   joby3 41 wird gleich im Startraum als Brechstange gebraucht; im Raum
+    #   gaebe es nur vier andere Plaetze, der Aufwand lohnt nicht.
 }
 
 New-Item -ItemType Directory -Force $OutDir | Out-Null

@@ -435,6 +435,25 @@ $noPlacement = @( if($NO_PLACEMENT_ROOMS.ContainsKey($LevelName)){ $NO_PLACEMENT
 # Level - 128 von 179 Raeumen, bis hinunter zu Laras Startraum. Der
 # Sektorgraph traegt die Wand und bleibt drin.
 $NO_KEY_ISLAND = @{
+    # andy3 (#61): die beiden Wand-Pickups - Kreide (172) und Zaun-Brechstange
+    # (174) - gehoeren in die erste Inselgruppe, in der Lara startet und in
+    # der beide gebraucht werden. Nutzerangabe:
+    #
+    #   "Deadstop sind Raum 18, 19, 22. Da wird die Kreide verwendet, womit
+    #    der Teleporter Trigger74 in Raum 110 ueberhaupt erst zu erreichen
+    #    ist. Das sollte jetzt eine Wand bilden, dass die Flood nicht raus
+    #    kann."
+    #
+    # Eingang ist Raum 140 - derselbe Startraum, den ISLAND_YBAND fuer
+    # Insel 2 fuehrt. Alles, was von dort aus hinter der Wand 18/19/22 liegt,
+    # traegt kein Key-Item mehr; gewoehnliche Pickups bleiben erlaubt.
+    #
+    # Bewusst NICHT ueber TYPE_EXCLUDE_ROOMS: das sperrt nur den Typ in
+    # genannten Raeumen und stoppt den Zonenlauf NICHT - in Andrea2 sickerte
+    # der Flood deshalb weiter und es brauchte am Ende 14 Raeume von Hand.
+    'andy3' = @(
+        @{ StartRoom = 140; DeadstopRooms = @(18,19,22) }
+    )
     # rich2s Aufzugssektion. Der Nutzer: Eingang ist Raum 140, Ausgang Raum 113,
     # und was dazwischen liegt, soll keine Key-Items tragen - gewoehnliche
     # Pickups schon.

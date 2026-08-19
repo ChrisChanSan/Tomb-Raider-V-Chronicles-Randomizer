@@ -342,7 +342,15 @@ $TYPE_EXCLUDE_ROOMS = @{
         #    Ventil, das dort liegt, koennte sich selbst nicht freischalten.
         #  - 246 ist der Bossraum der Statue, vom Nutzer bestaetigt: "das liegt
         #    hinter der Tuer". Mit ihm ist der Bereich in sich geschlossen.
-        172 = @(31,132,246,103)               # Puzzle Item1 (Ventil)
+        #  - Der Flood laeuft trotz allem weiter: TYPE_EXCLUDE_ROOMS sperrt nur
+        #    den TYP, nicht den Zonenlauf. Die Zone hinter der Tuer bleibt
+        #    deshalb niedrig, und die Raeume dahinter blieben erlaubt. Der
+        #    Nutzer hat sie in trview abgelesen und die Freigabe gegeben, sie
+        #    einzeln zu sperren. Struktureller Fix waere GATED_AREA (Tor +
+        #    Stoppkante wie in Andrea1) - dafuer braucht es die Tuernummern
+        #    und eine geschlossene PreGateRooms-Liste.
+        172 = @(31,132,246,103,
+                109,175,174,217,136,131,93,86,135,76)   # Puzzle Item1 (Ventil)
     }
     # joby2: Key Item7 darf nicht hinter Tuer 41 landen. Die abgeleitete Regel
     # "nicht hinter der eigenen Tuer" greift hier fast nicht - sie findet nur

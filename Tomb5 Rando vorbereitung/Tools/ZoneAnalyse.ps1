@@ -624,7 +624,9 @@ $NO_ITEM_ROOMS = @{
     # 155 ist zugleich der Deadstop von Insel 2. Das stoert sich nicht: die
     # Abschnitte werden ueber den Raumgraphen und DeadstopRooms bestimmt,
     # NO_ITEM_ROOMS wirkt erst danach auf die Ablagen.
-    'andy3' = @(10,12,14,15,16,17,19,22,23,24,25,27,35,36,86,87,108,113,115,116,
+    # 109 kam mit #61 dazu (Nutzerdurchsicht am Wandtest): "Raum 109 darf
+    # nichts sein."
+    'andy3' = @(109,10,12,14,15,16,17,19,22,23,24,25,27,35,36,86,87,108,113,115,116,
                 120,121,133,155,156,158,167,171,172,209)
 }
 $noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$LevelName] } )
@@ -3547,7 +3549,7 @@ if ($ExportZonesJson -ne "") {
             $nk = "$([int]$s.room),$([int]$s.sectorX + $wr.dx),$([int]$s.sectorZ + $wr.dz)"
             if ((-not $sec.ContainsKey($nk)) -or $sec[$nk].isWall) { $wa += [int]$wr.winkel }
         }
-        $rows += [PSCustomObject]@{ room=[int]$s.room; sectorX=[int]$s.sectorX; sectorZ=[int]$s.sectorZ; zone=[int]$kv.Value; floorY=[int]$s.floorY;
+        $rows += [PSCustomObject]@{ room=[int]$s.room; sectorX=[int]$s.sectorX; sectorZ=[int]$s.sectorZ; zone=[int]$kv.Value; floorY=[int]$s.floorY; clearance=[int]$s.clearance;
                                     wallAngles=@($wa);
                                     approach=@( if($approachOf.ContainsKey($kv.Key)){ $approachOf[$kv.Key] } ) }
     }

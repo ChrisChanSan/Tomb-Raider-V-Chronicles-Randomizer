@@ -132,13 +132,23 @@ foreach ($lvl in $Levels) {
     if ($gesperrt.Count -gt 0) { "  ${lvl}: $($gesperrt.Count) Sektoren hinter einem Deadstop gesperrt" }
 
     $itemAdds = @()
-    $mitWand = 0; $wegWasser = 0; $wegBelegt = 0; $wegZone = 0; $wegDeadstop = 0
+    $mitWand = 0; $wegWasser = 0; $wegBelegt = 0; $wegZone = 0; $wegDeadstop = 0; $wegHoehe = 0
     foreach ($s in $z.sectors) {
         $wa = @( if ($null -ne $s.wallAngles) { $s.wallAngles } )
         if ($wa.Count -eq 0) { continue }
         if ($wasserRaum.ContainsKey([int]$s.room)) { $wegWasser++; continue }
         if ($blocker.Contains("$([int]$s.room),$([int]$s.sectorX),$([int]$s.sectorZ)")) { $wegBelegt++; continue }
         if ($gesperrt.Contains("$([int]$s.room),$([int]$s.sectorX),$([int]$s.sectorZ)")) { $wegDeadstop++; continue }
+        # Stehhoehe. PickUpCollision verlangt bei OCB 2 ausdruecklich
+        # !lara.IsDucked (game\pickup.cpp:803) - im Kriechgang ist der Griff
+        # unmoeglich, das Item waere unerreichbar. Das ist eine harte
+        # Engine-Regel wie die Wassersperre, keine Optik.
+        #
+        # Schwelle 1024 an Cores eigener Praxis gemessen: die vier Vanilla-
+        # Wanditems sitzen auf clearance 1024, 1792, 2048 und 2048 - keines
+        # darunter. Der Nutzer kam unabhaengig auf denselben Wert ("1024 ca"),
+        # nachdem ihm andy3 Raum 130 (clearance 512) aufgefallen war.
+        if ([int]$s.clearance -lt 1024) { $wegHoehe++; continue }
         $mitWand++
         $rm = $rooms[[int]$s.room]
         if (-not $rm) { continue }
@@ -177,7 +187,7 @@ foreach ($lvl in $Levels) {
     $p = Start-Process -FilePath $Exe -ArgumentList $argList -Wait -PassThru -NoNewWindow
     $ok = (Test-Path $dstTrc) -and $p.ExitCode -eq 0
     $results += [PSCustomObject]@{ Level = $lvl; Wandsektoren = $mitWand; Wasser = $wegWasser; Belegt = $wegBelegt; Items = $itemAdds.Count; OK = $ok }
-    "{0,-10} Wandsektoren={1,4}  (-{2} Wasser, -{3} belegt, -{4} Deadstop, -{5} Zone)  Items={6,4}  {7}" -f $lvl, $mitWand, $wegWasser, $wegBelegt, $wegDeadstop, $wegZone, $itemAdds.Count, ($(if ($ok) { 'OK' } else { 'FEHLER' }))
+    "{0,-10} Wandsektoren={1,4}  (-{2} Wasser, -{3} belegt, -{4} Deadstop, -{5} Hoehe, -{6} Zone)  Items={7,4}  {8}" -f $lvl, $mitWand, $wegWasser, $wegBelegt, $wegDeadstop, $wegHoehe, $wegZone, $itemAdds.Count, ($(if ($ok) { 'OK' } else { 'FEHLER' }))
 }
 
 Write-Output ""

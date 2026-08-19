@@ -144,11 +144,15 @@ foreach ($lvl in $Levels) {
         # unmoeglich, das Item waere unerreichbar. Das ist eine harte
         # Engine-Regel wie die Wassersperre, keine Optik.
         #
-        # Schwelle 1024 an Cores eigener Praxis gemessen: die vier Vanilla-
-        # Wanditems sitzen auf clearance 1024, 1792, 2048 und 2048 - keines
-        # darunter. Der Nutzer kam unabhaengig auf denselben Wert ("1024 ca"),
-        # nachdem ihm andy3 Raum 130 (clearance 512) aufgefallen war.
-        if ([int]$s.clearance -lt 1024) { $wegHoehe++; continue }
+        # Schwelle 768: Laras Stehhoehe ist 762 Units, bei clearance 768 passt
+        # sie also stehend hinein - erst darunter zwingt die Decke sie in den
+        # Duck-Zustand. 512 ist der Kriechraum.
+        #
+        # Zuerst stand hier 1024, abgeleitet aus den vier Vanilla-Wanditems
+        # (die sitzen auf 1024..2048). Das war Korrelation, nicht die Regel:
+        # der Nutzer vermisste daraufhin die guten Plaetze in andy3 Raum 64,
+        # der fast nur aus 768er-Sektoren besteht.
+        if ([int]$s.clearance -lt 768) { $wegHoehe++; continue }
         $mitWand++
         $rm = $rooms[[int]$s.room]
         if (-not $rm) { continue }

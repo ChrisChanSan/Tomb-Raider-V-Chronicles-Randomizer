@@ -859,7 +859,22 @@ $requiredInjections = @( if($REQUIRED_INJECTIONS.ContainsKey($LevelName)){ $REQU
 # Positionen ueberstimmen.
 #----------------------------------------------------------------------------
 $TYPE_OFFSET = @{
-    'ALLE'    = @{ 345 = @{ dy = -100 } }
+    # Die HK (345) stand hier mit dy -100 und ist wieder raus (#61,
+    # Nutzerbeobachtung 2026-08-19: "die HK schwebt wieder ueber dem Boden").
+    #
+    # Nachgerechnet statt geraten. MissMod am Modell in rich2: die Meshes
+    # liegen bei y 23..50, also UNTER dem Ursprung (y waechst nach unten).
+    # InitialisePickup korrigiert bei OCB 0 mit y -= bounds[3], und bounds[3]
+    # ist genau diese 50. Ein Item auf der Bodenhoehe wird vom Motor also
+    # schon auf floorY-50 gehoben, womit die Modellunterkante exakt auf dem
+    # Boden sitzt. Unsere -100 kamen obendrauf: floorY-150, das Modell schwebt
+    # 100 Units in der Luft - genau das Bild, das der Nutzer sieht.
+    #
+    # Die alte Vorgabe "HK muss 100 hoeher, sonst unsichtbar" stammt aus der
+    # Zeit des fehlerhaften rich2-Imports; sie hat ein anderes Problem
+    # kompensiert. Sollte die HK ohne Versatz doch im Boden stecken, ist -50
+    # der naechste Kandidat, nicht -100.
+    'ALLE'    = @{ }
     # Andrea2 / 174 stand hier mit dz -512 und ist wieder raus: der Typ bleibt
     # jetzt vanilla (siehe VANILLA_TYPES), er wird also gar nicht mehr bewegt.
     # Der gemessene Versatz bleibt der Vollstaendigkeit halber notiert, falls das
@@ -1112,6 +1127,37 @@ $coupledTriggers = @()
 if ($COUPLED_TRIGGERS.ContainsKey($LevelName)) {
     foreach($kv in $COUPLED_TRIGGERS[$LevelName].GetEnumerator()){
         $coupledTriggers += [PSCustomObject]@{ item=[int]$kv.Key; reason=[string]$kv.Value }
+    }
+}
+
+#----------------------------------------------------------------------------
+# Items, deren Codebits von vornherein gesetzt werden - dritter Weg neben
+# "liegen lassen" und "Trigger mitnehmen".
+#
+# Der Fall, der dazu gefuehrt hat (Andrea2 Item 62, Puzzle Item4): auf seinem
+# Sektor liegt ein HeavyTrigger mit Object(62), und auf derselben Position
+# steht der Guardian (Item 51). Nutzer: "Das ist ein Schutz, damit der Death
+# des Guardians den Heavy trigger ausloest und das Pickup auf 11111 setzt."
+# Das Puzzleteil wird also erst durch den Tod des Guardians freigeschaltet.
+#
+# Ein HeavyTrigger laesst sich nicht mitnehmen - er braucht etwas Schweres auf
+# genau diesem Feld, und das ist der sterbende Guardian. Statt das Item
+# deswegen ewig festzunageln, nimmt die Kuration ihm die Bedingung ab:
+# Codebits gleich zu Beginn auf 11111, dann ist es von Anfang an da und darf
+# wandern. Nutzerentscheidung: "Kann uns egal sein auf 11111 setzen und ab in
+# den pool."
+#
+# Je Eintrag: Itemindex -> @{ flags = <Wert>; reason = <Begruendung> }.
+# 31 ist 11111 binaer, also alle fuenf Codebits.
+$PRESET_FLAGS = @{
+    'Andrea2' = @{
+        62 = @{ flags = 31; reason = 'Puzzle Item4 - HeavyTrigger haengt am Tod des Guardians (Item 51); Codebits vorgesetzt, damit es wandern darf' }
+    }
+}
+$flagPresets = @()
+if ($PRESET_FLAGS.ContainsKey($LevelName)) {
+    foreach($kv in $PRESET_FLAGS[$LevelName].GetEnumerator()){
+        $flagPresets += [PSCustomObject]@{ item=[int]$kv.Key; flags=[int]$kv.Value.flags; reason=[string]$kv.Value.reason }
     }
 }
 
@@ -3599,7 +3645,7 @@ if ($ExportZonesJson -ne "") {
         $wie = if ($null -eq $ptKv.Value) { 'ohne Zonengrenze' } else { "begrenzt auf Zone <= $ptZone" }
         Write-Output "Pool-Typ $pt $wie aufgenommen ($inst Instanzen im Level)"
     }
-    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES); typeNoRooms=@($typeNoRooms); antitriggerImmun=@($antitriggerImmun); keyBarredSectors=@($keyBarred) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
+    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES); typeNoRooms=@($typeNoRooms); antitriggerImmun=@($antitriggerImmun); keyBarredSectors=@($keyBarred); flagPresets=@($flagPresets) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
     Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"
 }
 

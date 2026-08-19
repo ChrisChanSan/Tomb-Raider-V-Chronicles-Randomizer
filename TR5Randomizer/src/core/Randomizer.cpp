@@ -280,6 +280,10 @@ bool Rando::buildInput(const JsonValue& zoneExport,
     // Sektoren hinter einem Deadstop (#61), als "raum,x,z" wie die
     // Anmarschsektoren. Fehlt das Feld (aelterer Export), bleibt die Menge
     // leer und nichts aendert sich.
+    const JsonValue& fp = zoneExport["flagPresets"];
+    for (size_t i = 0; i < fp.size(); ++i)
+        out.flagPresets[static_cast<int>(fp[i]["item"].asInt())] = static_cast<int>(fp[i]["flags"].asInt());
+
     const JsonValue& kb = zoneExport["keyBarredSectors"];
     for (size_t i = 0; i < kb.size(); ++i)
     {
@@ -645,6 +649,12 @@ bool Rando::run(const RandoInput& in,
     // Item darf wandern, weil sein Trigger mitkommt. Die Handkuration
     // (fixedItems) bleibt davon unberuehrt - wer dort steht, bleibt liegen,
     // egal was mit seinem Trigger ginge.
+    // Vorgesetzte Codebits heben die Fesselung ebenfalls auf: die Bedingung,
+    // die der Trigger erfuellt haette, ist damit schon erfuellt (#61).
+    for (std::map<int, int>::const_iterator f = in.flagPresets.begin(); f != in.flagPresets.end(); ++f)
+        if (std::find(in.fixedItems.begin(), in.fixedItems.end(), f->first) == in.fixedItems.end())
+            pinned.erase(f->first);
+
     std::map<int, const CoupledTrigger*> coupled;
     for (const CoupledTrigger& c : in.coupledTriggers)
     {
@@ -662,10 +672,19 @@ bool Rando::run(const RandoInput& in,
     // bewegten Item noetig - OCB auf 0 setzen, laegen sie ab sofort sichtbar
     // und aufnehmbar da. Das ist kein Ortswechsel mehr, sondern eine
     // Verhaltensaenderung, und im Zweifel wird gesperrt statt geoeffnet.
+    //
+    // Genau diese Sperre hebt ein flagPresets-Eintrag auf, und nur der: dort
+    // hat die Kuration nachgesehen, WAS das Item freigeschaltet haette, und
+    // ihm die Bedingung abgenommen (Andrea2 Item 62 - der HeavyTrigger unter
+    // ihm haengt am Tod des Guardians, siehe #61). Mit vorgesetzten Codebits
+    // und genullter OCB liegt es von Anfang an sichtbar da, was hier sonst
+    // gerade verhindert werden soll - deshalb ist es eine Handentscheidung
+    // und keine abgeleitete Regel.
     for (const LevelItem& it : in.items)
     {
         const int ocb = it.ocb & 0x3F;
-        if (ocb == 5 || ocb == 10) pinned.insert(it.index);
+        if ((ocb == 5 || ocb == 10) && !in.flagPresets.count(it.index))
+            pinned.insert(it.index);
     }
 
     // Freie Sektoren. Sortierte Reihenfolge ist Pflicht: die Zufallsauswahl
@@ -819,6 +838,13 @@ bool Rando::run(const RandoInput& in,
         e.set("y", JsonValue::makeInt(py));
         e.set("z", JsonValue::makeInt(pz));
         e.set("ocb", JsonValue::makeInt(neueOcb));
+
+        // Vorgesetzte Codebits mitschreiben, sonst waere das Item am neuen Ort
+        // wieder von seinem alten Trigger abhaengig (#61).
+        {
+            std::map<int, int>::const_iterator fp = in.flagPresets.find(it.index);
+            if (fp != in.flagPresets.end()) e.set("flags", JsonValue::makeInt(fp->second));
+        }
 
         // Wandgriffe brauchen den Winkel ZUR Wand (#61). Sonst behaelt ein
         // verschobenes Item seine alte Ausrichtung - was fuer gewoehnliche

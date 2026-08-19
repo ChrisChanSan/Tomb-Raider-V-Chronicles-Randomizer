@@ -410,6 +410,12 @@ struct RandoInput
     // Deadstop erreichte sie also nie (#61).
     std::set<long long>      keyBarredSectors;
 
+    // Items, deren Codebits von vornherein gesetzt werden (#61). Dritter Weg
+    // neben "liegen lassen" und "Trigger mitnehmen": ein HeavyTrigger laesst
+    // sich nicht mitnehmen, also nimmt die Kuration dem Item die Bedingung ab.
+    // Wer hier steht, ist damit auch von der Trigger-Fesselung befreit.
+    std::map<int, int>       flagPresets;   // Itemindex -> flags
+
     // Neigungseintraege aller Platzierungssektoren (nur Sektoren MIT Eintrag;
     // wer fehlt, ist eben). Aus der Floordata des ECHTEN Levels gelesen
     // (markTriggerSafeSectors) - der Zonen-Export kennt je Sektor nur ein

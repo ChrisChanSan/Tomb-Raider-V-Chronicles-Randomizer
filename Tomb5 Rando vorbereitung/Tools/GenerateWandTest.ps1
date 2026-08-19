@@ -115,7 +115,7 @@ foreach ($lvl in $Levels) {
             $t = $WANDTYPEN[$lvl][$i % $WANDTYPEN[$lvl].Count]
             $itemAdds += [PSCustomObject]@{ typeId = [int]$t.typeId; room = [int]$s.room;
                                             x = $wx; y = [int]$s.floorY; z = $wz;
-                                            angle = [int]$w; ocb = [int]$t.ocb }
+                                            angle = [int]$w; ocb = [int]$t.ocb; yAuto = $true }
             $i++
         }
     }

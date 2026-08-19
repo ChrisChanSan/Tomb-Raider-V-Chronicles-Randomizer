@@ -666,6 +666,35 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         it.x = static_cast<int32_t>(a["x"].asInt());
         it.y = static_cast<int32_t>(a["y"].asInt());
         it.z = static_cast<int32_t>(a["z"].asInt());
+
+        // "yAuto": die echte Bodenhoehe an dieser Stelle ausrechnen statt sie
+        // vom Aufrufer zu uebernehmen (#61). Der Sektorgrundwert ist auf einer
+        // Schraege die HOECHSTE Ecke - ein Item in der Sektormitte haenge damit
+        // bis zu einen halben Sektor in der Luft (#86). Dieselbe Rechnung, mit
+        // der die Engine den Boden findet: floorNeigung + bodenLageAn.
+        //
+        // Gebraucht von Erzeugern, die keine Neigungsdaten haben (das
+        // Wandtest-Skript in PowerShell). Ohne das Feld bleibt alles wie
+        // bisher - der Randomizer rechnet sein y selbst und setzt es nicht.
+        if (a["yAuto"].asBool(false) &&
+            it.roomNumber >= 0 && static_cast<size_t>(it.roomNumber) < level.rooms().size())
+        {
+            const Tr5Room& rm = level.rooms()[static_cast<size_t>(it.roomNumber)];
+            const int sx = (it.x - rm.originX) / 1024;
+            const int sz = (it.z - rm.originZ) / 1024;
+            SchraegeInfo si;
+            int baseY = 0;
+            const int art = level.floorNeigung(it.roomNumber, sx, sz, si, baseY);
+            if (art == 0)
+                it.y = static_cast<int32_t>(baseY);          // eben
+            else if (art > 0)
+            {
+                const BodenLage lage = bodenLageAn(si, baseY, it.x & 1023, it.z & 1023);
+                it.y = static_cast<int32_t>(lage.y);
+            }
+            // art < 0 (Kette unlesbar): das mitgegebene y bleibt stehen.
+        }
+
         it.yRot = static_cast<int16_t>(a["angle"].asInt(0));
         it.triggerFlags = static_cast<int16_t>(a["ocb"].asInt(0));
         it.flags = static_cast<int16_t>(a["flags"].asInt(0));

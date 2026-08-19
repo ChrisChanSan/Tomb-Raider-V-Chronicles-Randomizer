@@ -335,11 +335,14 @@ $TYPE_EXCLUDE_ROOMS = @{
         # Item3 wird von seiner Zonengrenze schon richtig abgefangen, das
         # Ventil muss frueher stoppen:
         #  - 31 ist der Leckweg. Von dort laeuft der Flood nach 132 (und
-        #    weiter nach 246), obwohl das hinter der Tuer liegt. Nutzer:
+        #    weiter nach 246 - dem Bossraum der Statue), obwohl das alles
+        #    hinter der Tuer liegt. Nutzer:
         #    "Raum 31 muss ein Blocker werden."
         #  - 103 ist erst erreichbar, NACHDEM das Ventil benutzt wurde - ein
         #    Ventil, das dort liegt, koennte sich selbst nicht freischalten.
-        172 = @(31,132,103)                   # Puzzle Item1 (Ventil)
+        #  - 246 ist der Bossraum der Statue, vom Nutzer bestaetigt: "das liegt
+        #    hinter der Tuer". Mit ihm ist der Bereich in sich geschlossen.
+        172 = @(31,132,246,103)               # Puzzle Item1 (Ventil)
     }
     # joby2: Key Item7 darf nicht hinter Tuer 41 landen. Die abgeleitete Regel
     # "nicht hinter der eigenen Tuer" greift hier fast nicht - sie findet nur

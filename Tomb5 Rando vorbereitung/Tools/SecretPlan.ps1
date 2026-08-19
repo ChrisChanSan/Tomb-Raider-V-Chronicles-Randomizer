@@ -26,7 +26,12 @@ param(
     [string]$Autor = "",
     [string]$Kategorie = "",
     [string]$LevelName = "",
-    [string]$AlsJson = ""
+    [string]$AlsJson = "",
+    # Gegenprobe gegen die echten Leveldaten: stimmen die Level_ID wirklich mit
+    # den Secrets (Typ 223) der Vanilla-Datei ueberein? Menschen vertippen sich,
+    # und ein falscher Index verschiebt still das falsche Item.
+    [string]$VanillaDir = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Steam Version\data\Vanilla",
+    [string]$ItemPruef = "C:\Cloude AI\Alte sachen\Two gun test\Bittenichtbitdefender\ItemPruef.exe"
 )
 
 function Split-AufTiefe0([string]$text, [char]$trenner) {
@@ -85,6 +90,20 @@ function Lies-Liste([string]$pfad) {
         }
 
         if ($ids.Count -ne $anzahl) { $warn += "${lvl}: Anzahl $anzahl, aber $($ids.Count) Level_ID" }
+
+        # Gegenprobe an der echten Vanilla-Datei: sind das wirklich die
+        # Secrets? Ein vertippter Index verschiebt sonst still ein ganz
+        # anderes Item, und das faellt erst im Spiel auf.
+        $trc = Join-Path $VanillaDir "$lvl.trc"
+        if ((Test-Path $trc) -and (Test-Path $ItemPruef)) {
+            $echt = @(& $ItemPruef $trc $typ 2>$null | ForEach-Object {
+                if ($_ -match "^\s*(\d+)\s+$typ\s") { [int]$Matches[1] } })
+            if ($echt.Count -gt 0) {
+                $fehlt = @($ids | Where-Object { $echt -notcontains $_ })
+                if ($fehlt.Count -gt 0) { $warn += "${lvl}: Item $($fehlt -join ',') ist in der Datei kein Typ $typ" }
+                if ($echt.Count -ne $ids.Count) { $warn += "${lvl}: Datei hat $($echt.Count) Stueck Typ $typ, die Liste nennt $($ids.Count)" }
+            }
+        }
         if ($stellen.Count -gt 0 -and $stellen.Count -ne $ids.Count) {
             $warn += "${lvl}: $($ids.Count) Secrets, aber $($stellen.Count) neue Stellen"
         }

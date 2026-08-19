@@ -887,6 +887,58 @@ bool Rando::run(const RandoInput& in,
         }
     };
 
+    // Mindestabstand zwischen den WICHTIGEN Fundstuecken - Schluessel,
+    // Puzzleteile und Waffen (Nutzerwunsch 2026-08-19: "Bisschen mehr Spread
+    // bei den Keys, Puzzels und den Waffen waere cool").
+    //
+    // Vorher zog die Auswahl gleichverteilt aus allen erlaubten Sektoren, ohne
+    // die schon gesetzten anzusehen. Gemessen ueber 20 Andrea2-Seeds landeten
+    // dabei 6 von 200 Paaren naeher als drei Sektoren und 2 im selben Raum -
+    // das ist ungefaehr Zufallserwartung, faellt beim Spielen aber auf, weil
+    // ein Paar nebeneinander im Gedaechtnis bleibt und die gut verteilten
+    // Paare nicht.
+    //
+    // Kein hartes Verbot, sondern Stufen: erst 5 Sektoren Abstand versuchen,
+    // dann 3, dann 2, zuletzt ohne Bedingung. So bleibt eine enge Zone
+    // platzierbar - ein Lauf, der an einer Geschmacksregel scheitert, waere
+    // schlechter als zwei Fundstuecke, die naeher beieinander liegen.
+    std::vector<std::pair<int, int>> gesetztXZ;   // Weltkoordinaten der bisherigen
+
+    auto waehleMitAbstand = [&](const std::vector<const ZoneSector*>& c) -> const ZoneSector*
+    {
+        static const int stufen[] = { 5120, 3072, 2048, 0 };
+        for (int st : stufen)
+        {
+            if (st == 0 || gesetztXZ.empty())
+                return c[static_cast<size_t>(rng.below(c.size()))];
+
+            std::vector<const ZoneSector*> weit;
+            for (const ZoneSector* s : c)
+            {
+                const RoomOrigin& ro = origin[s->room];
+                const int sx = ro.originX + s->sectorX * 1024 + 512;
+                const int sz = ro.originZ + s->sectorZ * 1024 + 512;
+                bool ok = true;
+                for (size_t i = 0; i < gesetztXZ.size() && ok; ++i)
+                {
+                    const long long dx = sx - gesetztXZ[i].first;
+                    const long long dz = sz - gesetztXZ[i].second;
+                    if (dx * dx + dz * dz < static_cast<long long>(st) * st) ok = false;
+                }
+                if (ok) weit.push_back(s);
+            }
+            if (!weit.empty()) return weit[static_cast<size_t>(rng.below(weit.size()))];
+        }
+        return c[static_cast<size_t>(rng.below(c.size()))];
+    };
+
+    auto merkePlatz = [&](const ZoneSector& s)
+    {
+        const RoomOrigin& ro = origin[s.room];
+        gesetztXZ.push_back({ ro.originX + s.sectorX * 1024 + 512,
+                              ro.originZ + s.sectorZ * 1024 + 512 });
+    };
+
     // Zuerst die Key-Items, und darunter die am staerksten eingeschraenkten
     // zuerst. Sonst belegt ein freier Typ genau den letzten Sektor, den ein
     // engerer Typ noch gebraucht haette, und die Platzierung scheitert an
@@ -917,7 +969,9 @@ bool Rando::run(const RandoInput& in,
                                    it.index, it.typeId);
                 return false;
             }
-            placeAt(it, *c[static_cast<size_t>(rng.below(c.size()))]);
+            const ZoneSector* w = waehleMitAbstand(c);
+            placeAt(it, *w);
+            merkePlatz(*w);
             ++report.movedKeyItems;
         }
     }
@@ -937,7 +991,17 @@ bool Rando::run(const RandoInput& in,
                                            it.index, it.typeId));
                 continue;
             }
-            placeAt(it, *c[static_cast<size_t>(rng.below(c.size()))]);
+            // Waffen zaehlen zum Spread, gewoehnliche Munition und Medipacks
+            // nicht - die duerfen dicht liegen, sie sind kein Fund, den man
+            // sucht.
+            if (in.weaponTypes.count(it.typeId))
+            {
+                const ZoneSector* w = waehleMitAbstand(c);
+                placeAt(it, *w);
+                merkePlatz(*w);
+            }
+            else
+                placeAt(it, *c[static_cast<size_t>(rng.below(c.size()))]);
             ++report.movedOtherItems;
         }
     }

@@ -189,6 +189,14 @@ bool Rando::buildInput(const JsonValue& zoneExport,
         s.sectorZ = static_cast<int>(secs[i]["sectorZ"].asInt());
         s.zone = static_cast<int>(secs[i]["zone"].asInt());
         s.floorY = static_cast<int>(secs[i]["floorY"].asInt());
+        s.clearance = static_cast<int>(secs[i]["clearance"].asInt(0));
+
+        // Wandkanten (#61). Aeltere Exporte kennen das Feld nicht - dann
+        // bleibt die Liste leer, und Wand-Pickups finden keinen Platz statt
+        // an einer falschen Stelle zu landen.
+        const JsonValue& wa = secs[i]["wallAngles"];
+        for (size_t w = 0; w < wa.size(); ++w)
+            s.wallAngles.push_back(static_cast<int>(wa[w].asInt()));
 
         // Anmarschsektoren stehen als "raum,x,z" da, in Vorzugsreihenfolge.
         const JsonValue& ap = secs[i]["approach"];
@@ -268,6 +276,17 @@ bool Rando::buildInput(const JsonValue& zoneExport,
 
     const JsonValue& ko = zoneExport["keepOcbTypes"];
     for (size_t i = 0; i < ko.size(); ++i) out.keepOcbTypes.insert(static_cast<int>(ko[i].asInt()));
+
+    // Sektoren hinter einem Deadstop (#61), als "raum,x,z" wie die
+    // Anmarschsektoren. Fehlt das Feld (aelterer Export), bleibt die Menge
+    // leer und nichts aendert sich.
+    const JsonValue& kb = zoneExport["keyBarredSectors"];
+    for (size_t i = 0; i < kb.size(); ++i)
+    {
+        int r = 0, x = 0, z = 0;
+        if (std::sscanf(kb[i].asString().c_str(), "%d,%d,%d", &r, &x, &z) == 3)
+            out.keyBarredSectors.insert(secKey(r, x, z));
+    }
 
     const JsonValue& inj = zoneExport["requiredInjections"];
     for (size_t i = 0; i < inj.size(); ++i)
@@ -429,8 +448,31 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
                              const KeyConstraint* k,
                              const ZoneSector& s,
                              int typeId,
-                             bool mustBeOnIsland)
+                             bool mustBeOnIsland,
+                             int itemOcb)
 {
+    // Wandgriffe (#61): OCB 2 (Brechstange) und OCB 9 (Joby-Crow) verlangen
+    // eine Wand und Stehhoehe. Beides sind Engine-Regeln, keine Optik:
+    //  - PickUpCollision:803 prueft ausdruecklich !lara.IsDucked, im
+    //    Kriechgang ist der Griff also unmoeglich. Laras Kollisionshoehe im
+    //    Stehen ist 762 (game\lara.cpp), 768 ist die naechste Stufe darueber.
+    //  - Die Wand selbst prueft die Engine NIE - sie ist Optik und
+    //    Erreichbarkeit. Ohne Wandkante gaebe es aber keinen sinnvollen
+    //    Winkel, und das Modell (Mesh bei ~+470 in Modell-Z) stuende frei im
+    //    Raum statt in einer Wand.
+    if (itemOcb == 2 || itemOcb == 9)
+    {
+        if (s.wallAngles.empty()) return false;
+        if (s.clearance < 768) return false;
+    }
+
+    // Hinter einem Deadstop liegt nichts, was ein Schluessel sein koennte.
+    // Gilt fuer JEDEN Typ mit Constraint und zusaetzlich fuer die Wandgriffe,
+    // die keine Constraint haben (#61).
+    if ((k != nullptr || itemOcb == 2 || itemOcb == 9) &&
+        in.keyBarredSectors.count(secKey(s.room, s.sectorX, s.sectorZ)))
+        return false;
+
     // Das Waffenverbot haengt am LEVEL, nicht am Typ-Constraint: eine
     // Schrotflinte ist kein Schluessel und wuerde sonst gar nicht geprueft.
     if (in.weaponTypes.count(typeId) && in.noWeaponRooms.count(s.room)) return false;
@@ -770,6 +812,19 @@ bool Rando::run(const RandoInput& in,
         e.set("y", JsonValue::makeInt(py));
         e.set("z", JsonValue::makeInt(pz));
         e.set("ocb", JsonValue::makeInt(neueOcb));
+
+        // Wandgriffe brauchen den Winkel ZUR Wand (#61). Sonst behaelt ein
+        // verschobenes Item seine alte Ausrichtung - was fuer gewoehnliche
+        // Pickups richtig ist (die Engine dreht sie beim Aufheben ohnehin auf
+        // Lara), fuer OCB 2 und 9 aber nicht: dort prueft PickUpCollision den
+        // echten Winkel (+-30 Grad), und das Modell soll in der Wand stecken.
+        // Hat der Sektor mehrere Wandkanten, entscheidet der Zufall.
+        if ((neueOcb == 2 || neueOcb == 9) && !s.wallAngles.empty())
+        {
+            const size_t w = static_cast<size_t>(rng.below(s.wallAngles.size()));
+            e.set("angle", JsonValue::makeInt(s.wallAngles[w]));
+        }
+
         edits.push(e);
         used.insert(secKey(s.room, s.sectorX, s.sectorZ));
     };
@@ -794,7 +849,7 @@ bool Rando::run(const RandoInput& in,
             const long long sk = secKey(s.room, s.sectorX, s.sectorZ);
             if (used.count(sk)) continue;
             if (needsTriggerRoom && !in.triggerSafeSectors.count(sk)) continue;
-            if (!Rando::sectorAllowedFor(in, k, s, it.typeId, mustBeOnIsland)) continue;
+            if (!Rando::sectorAllowedFor(in, k, s, it.typeId, mustBeOnIsland, it.ocb)) continue;
             out.push_back(&s);
         }
     };

@@ -140,6 +140,21 @@ struct ZoneSector
     int zone = 0;
     int floorY = 0;
 
+    // Lichte zwischen Boden und Decke (#61). Unter 768 kann Lara nicht
+    // stehen - ihre Kollisionshoehe ist 762 (game\lara.cpp) -, und
+    // PickUpCollision verweigert den Wandgriff im Duck-Zustand ausdruecklich.
+    int clearance = 0;
+
+    // Kanten dieses Sektors, an denen eine Wand liegt, als Winkel, die AUF
+    // die Wand zeigen (0 = +Z, 16384 = +X, -32768 = -Z, -16384 = -X). Leer
+    // heisst: keine Wand, also kein Platz fuer ein OCB-2/9-Pickup.
+    //
+    // Warum der Winkel auf die Wand zeigt und nicht von ihr weg: das Mesh
+    // dieser Modelle sitzt rund +450..500 in Modell-Z und landet damit auf
+    // der Wandflaeche, waehrend Lara auf +215 davor rueckt. An Vanilla
+    // Andrea2 Item 121 nachgemessen.
+    std::vector<int> wallAngles;
+
     // Sektoren, die Lara auf ihrem Erstzugangsweg kurz VOR diesem betritt,
     // etwa drei Schritte davor, beste Wahl zuerst. Aus dem Zonen-Export; dort
     // steht der Erstzugangsbaum, hier nur noch die fertige Antwort.
@@ -385,6 +400,16 @@ struct RandoInput
     // Tr5Level::canAppendTrigger.
     std::set<long long>      triggerSafeSectors;
 
+    // Sektoren hinter einem Deadstop (NO_KEY_ISLAND im Zonen-Export als
+    // keyBarredSectors). Dort darf kein Schluesselgegenstand liegen.
+    //
+    // Warum als eigene Menge und nicht ueber die Zonengrenze: die Grenze
+    // haengt an einer Key-Constraint, und die gibt es nur fuer Typen mit
+    // einer Aufnahme. andy3s Kreide und Brechstange sind Werkzeuge ohne
+    // Aufnahme - fuer sie leitet ZoneAnalyse gar keine Grenze ab, der
+    // Deadstop erreichte sie also nie (#61).
+    std::set<long long>      keyBarredSectors;
+
     // Neigungseintraege aller Platzierungssektoren (nur Sektoren MIT Eintrag;
     // wer fehlt, ist eben). Aus der Floordata des ECHTEN Levels gelesen
     // (markTriggerSafeSectors) - der Zonen-Export kennt je Sektor nur ein
@@ -560,11 +585,16 @@ namespace Rando
     // `mustBeOnIsland` betrifft nur requireInIsland - das ist eine Aussage ueber
     // alle Instanzen zusammen und gilt deshalb genau fuer die eine, die der Lauf
     // hineinzwingt.
+    // itemOcb: die OCB des Items, das platziert werden soll. Nur 2 und 9
+    // aendern etwas - das sind die Wandgriffe (Brechstange und Joby-Crow),
+    // und die brauchen eine Wandkante und Stehhoehe (#61). 0 fuer alles
+    // andere und fuer Wege ohne konkretes Item (Injektionen).
     bool sectorAllowedFor(const RandoInput& in,
                           const KeyConstraint* k,
                           const ZoneSector& s,
                           int typeId,
-                          bool mustBeOnIsland);
+                          bool mustBeOnIsland,
+                          int itemOcb = 0);
 
     // Bodenhoehe und Belaufbarkeit an einem Punkt des Sektors (lokalX/lokalZ
     // in 0..1023, ueblich 512 + Typversatz). yOut wird IMMER gefuellt - auch

@@ -639,7 +639,16 @@ void KeyHoleCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 				if (item->object_number != KEY_HOLE8)
 					remove_inventory_item(short(hole + KEY_ITEM1));
 
-				if (item->object_number == KEY_HOLE8)
+				// Die Kartenzieh-Animation (ANIM_KEYCARD, 437) hat nur in
+				// joby2 echte Bilddaten. In allen anderen Leveln ist Laras
+				// Anim 437 ein Core-Stub: joby3s Anims 436-439 zeigen ALLE
+				// auf denselben Frame-Offset 212544 (nachgemessen mit
+				// AnimKmd), abgespielt wird 22 Sekunden eingefrorene Pose
+				// ohne Sound - vom Nutzer im Rando gesehen, seit der
+				// Randomizer Key Hole 8 in fremde Level setzen kann (#53).
+				// Ueberall sonst nimmt Lara darum die gewoehnliche
+				// Schluesselanimation; die passt an jedes Schloss.
+				if (item->object_number == KEY_HOLE8 && gfCurrentLevel == LVL5_BASE)
 					l->anim_number = ANIM_KEYCARD;
 				else
 					l->anim_number = ANIM_USEKEY;

@@ -475,7 +475,48 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
         // sehr wohl im Wasser liegen (Nutzervorgabe 2026-08-19: "Nur diese
         // spezielle Art mit Anim nicht").
         if (in.waterRooms.count(s.room)) return false;
+
+        // Kein Wandgriff in Reichweite eines Traegers (Testlauf 2026-08-20,
+        // joby3): GetCarriedItems (setup.cpp:2085) haengt beim Levelstart
+        // jedes Pickup im Kasten |dx|<512, |dy|<256, |dz|<512 an den
+        // naechsten Gegner oder eine Durchsuchbare. Ein getragener Wandgriff
+        // ist nach dem Tod des Traegers verloren: DropBaddyPickups legt ihn
+        // auf offenen Boden, wo seine Aufnahmeart (Wand + Winkel) nie wieder
+        // erfuellbar ist. Der Kasten ist auf Sektorgroesse aufgeweitet, weil
+        // die endgueltige Wandposition erst beim Schreiben gewuerfelt wird -
+        // jeder Punkt des Sektors muss sicher sein. Die Gegenrichtung (neuer
+        // Gegner neben fertigem Wandgriff) sperrt die Gegnerplatzierung.
+        const RoomOrigin* wro = nullptr;
+        for (const RoomOrigin& r : in.roomOrigins)
+            if (r.room == s.room) { wro = &r; break; }
+        if (wro)
+        {
+            const int cx = wro->originX + s.sectorX * 1024 + 512;
+            const int cz = wro->originZ + s.sectorZ * 1024 + 512;
+            for (const LevelItem& b : in.items)
+            {
+                if (!isCarrierType(b.typeId)) continue;
+                if (std::abs(b.x - cx) < 1024 && std::abs(b.z - cz) < 1024 &&
+                    std::abs(b.y - s.floorY) < 512)
+                    return false;
+            }
+        }
     }
+
+    // Kein Item auf den Sektor eines Feuers (Testlauf 2026-08-20, joby5:
+    // Schrotmunition lag in der Flamme). Die Flammenfamilie 120..125 - Flame,
+    // die drei Flame Emitter, der Gaskocher (COOKER_FLAME, #114) und Burning
+    // Roots - brennt an Ort und Stelle; ein Pickup dort ist eine Falle, kein
+    // Fund. Steam Emitter (365) bleiben absichtlich erlaubt: die senkrechten
+    // sind harmlose Kulisse, und ein Pauschalverbot wuerde in den Schiffs-
+    // leveln halbe Korridore sperren.
+    for (const LevelItem& fb : in.items)
+    {
+        if (fb.typeId < 120 || fb.typeId > 125) continue;
+        if (fb.room == s.room && fb.sectorX == s.sectorX && fb.sectorZ == s.sectorZ)
+            return false;
+    }
+
 
     // Hinter einem Deadstop liegt nichts, was ein Schluessel sein koennte.
     // Gilt fuer JEDEN Typ mit Constraint und zusaetzlich fuer die Wandgriffe,
@@ -2121,6 +2162,30 @@ bool Rando::run(const RandoInput& in,
             if (!origin.count(s.room)) continue;
             // Nutzervorgabe: kein Gegner in einen Raum mit Wasser-Flag.
             if (in.waterRooms.count(s.room)) continue;
+
+            // Kein neuer Gegner im Traeger-Kasten eines Wandgriffs (Testlauf
+            // 2026-08-20, joby3: der Imp trug die frisch gesetzte Brechstangen-
+            // Stelle davon, das Item schwebte danach unaufnehmbar in der Luft).
+            // GetCarriedItems prueft |dx|<512, |dy|<256, |dz|<512 gegen die
+            // GEGNERposition beim Levelstart - hier mit Marge (576/320), weil
+            // der Gegner auf der Sektormitte, der Griff aber an einer
+            // Wandkante steht. finalOf traegt die endgueltigen Plaetze samt
+            // OCB, die Wandgriffe stehen also schon fest.
+            {
+                bool wandNah = false;
+                const RoomOrigin& roW = origin[s.room];
+                const int cx = roW.originX + s.sectorX * 1024 + 512;
+                const int cz = roW.originZ + s.sectorZ * 1024 + 512;
+                for (const auto& kv : finalOf)
+                {
+                    const LevelItem& p2 = kv.second;
+                    if ((p2.ocb & 0x3F) != 2 && (p2.ocb & 0x3F) != 9) continue;
+                    if (!isPickupType(p2.typeId)) continue;
+                    if (std::abs(p2.x - cx) < 576 && std::abs(p2.z - cz) < 576 &&
+                        std::abs(p2.y - s.floorY) < 320) { wandNah = true; break; }
+                }
+                if (wandNah) continue;
+            }
 
             Platz p;
             p.s = &s;

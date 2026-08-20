@@ -9,6 +9,7 @@
 //
 // Aufruf: AnimKmd <level.trc> <slot> [slot ...]
 #include <cstdio>
+#include <cstring>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -83,9 +84,10 @@ int main(int argc, char** argv)
         {
             const size_t o = animAt + (size_t)a * 40;
             const uint16_t fb = r16(o + 24), fe = r16(o + 26), na = r16(o + 28);
+            uint32_t fo; std::memcpy(&fo, &b[o], 4);
             const uint8_t  iv = b[o + 4];
-            std::printf("  Anim +%-3d (abs %4d): Frames %u..%u (%d Stueck) Rate %u -> weiter mit Anim %u%s\n",
-                        a - mv.animIndex, a, fb, fe, (int)fe - (int)fb + 1, iv, na,
+            std::printf("  Anim +%-3d (abs %4d): FrameOfs %-7u Frames %u..%u (%d Stueck) Rate %u -> weiter mit Anim %u%s\n",
+                        a - mv.animIndex, a, fo, fb, fe, (int)fe - (int)fb + 1, iv, na,
                         (fe == fb) ? "   [STEHT STILL]" : "");
         }
 

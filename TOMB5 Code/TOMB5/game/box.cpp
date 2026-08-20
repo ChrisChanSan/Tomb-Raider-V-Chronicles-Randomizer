@@ -841,6 +841,16 @@ void DropBaddyPickups(ITEM_INFO* item)
 	while (pickup_number != NO_ITEM)
 	{
 		pickup = &items[pickup_number];
+
+		// Wandpickups (OCB 2 und 9) verlieren beim Abwurf ihre Aufnahmeart:
+		// die verlangt eine Wand hinter dem Item und Laras Winkel darauf -
+		// auf offenem Boden ist so ein Item fuer immer unaufnehmbar (im
+		// Rando gesehen: Imp traegt ein Brechstangen-Pickup davon, joby3).
+		// Ohne Aufnahmeart ist es ein gewoehnliches Bodenpickup. Die Bits
+		// 0x40/0x80 (Eintrittskarte des Pickup-Triggers) bleiben erhalten.
+		if ((pickup->trigger_flags & 0x3F) == 2 || (pickup->trigger_flags & 0x3F) == 9)
+			pickup->trigger_flags &= ~0x3F;
+
 		pickup->pos.x_pos = (item->pos.x_pos & -512) | 512;
 		pickup->pos.z_pos = (item->pos.z_pos & -512) | 512;
 

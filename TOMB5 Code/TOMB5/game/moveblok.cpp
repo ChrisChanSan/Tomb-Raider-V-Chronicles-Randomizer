@@ -1,5 +1,7 @@
 #include "../tomb5/pch.h"
 #include "moveblok.h"
+#include "pickup.h"
+#include "objects.h"
 #include "lara_states.h"
 #include "sound.h"
 #include "delstuff.h"
@@ -337,6 +339,24 @@ void MovableBlockCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 		ObjectCollision(item_number, l, coll);
 }
 
+
+// Steht auf dem Zielsektor nur Aufsammelbares, darf der Block darueber.
+//
+// GetCollidedObjects liefert JEDES Item im Weg, und TR5 verweigerte den Zug
+// schon bei einem Medipack auf dem Zielfeld - TR1-4 kannten diesen
+// generellen Itemtest nicht, dort rollte der Block einfach ueber das Pickup
+// (vom Nutzer im Rando gesehen: Andrea3, verschobenes Item blockiert den
+// Schiebeweg zum Raetsel). Ein Pickup unterm Block bleibt liegen und ist
+// wieder da, sobald der Block weiterwandert - genau das alte Verhalten.
+// Alles andere (Gegner, Statuen, zweiter Block) blockiert weiterhin.
+static long NurPickupsImWeg(ITEM_INFO** itemlist)
+{
+	for (long i = 0; itemlist[i]; i++)
+		if (objects[itemlist[i]->object_number].collision != PickUpCollision)
+			return 0;
+	return 1;
+}
+
 long TestBlockPush(ITEM_INFO* item, long height, ushort quadrant)
 {
 	ITEM_INFO** itemlist;
@@ -399,7 +419,7 @@ long TestBlockPush(ITEM_INFO* item, long height, ushort quadrant)
 	GetCollidedObjects(item, 256, 1, itemlist, 0, 0);
 	item->pos.x_pos = rx;
 	item->pos.z_pos = rz;
-	return !*itemlist;
+	return NurPickupsImWeg(itemlist);
 }
 
 long TestBlockPull(ITEM_INFO* item, long height, ushort quadrant)
@@ -459,7 +479,7 @@ long TestBlockPull(ITEM_INFO* item, long height, ushort quadrant)
 	item->pos.x_pos = rx;
 	item->pos.z_pos = rz;
 
-	if (*itemlist)
+	if (!NurPickupsImWeg(itemlist))
 		return 0;
 
 	x += destx;

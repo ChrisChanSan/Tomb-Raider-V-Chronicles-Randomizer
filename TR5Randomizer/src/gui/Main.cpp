@@ -612,7 +612,7 @@ static std::wstring lagerDir(const App& a)
         // anlegt. Eine fehlende Liste ist kein Abbruch (das Level ist ja
         // fertig), ein GESCHEITERTER Patch schon - halb gesetzte Secrets
         // faende niemand wieder.
-        int secretsGesetzt = 0;
+        int secretsGesetzt = 0, beiwerk = 0;
         if (a.optSecrets >= 2)
         {
             const char* kat = (a.optSecrets == 2) ? "Glitchless" : "Glitched";
@@ -627,7 +627,8 @@ static std::wstring lagerDir(const App& a)
                 JsonValue sPatch;
                 std::vector<std::string> sWarn;
                 std::string sErr;
-                if (!secretPatchBauen(liste->pfad, base, lvl, sPatch, sWarn, sErr))
+                int sZahl = 0;
+                if (!secretPatchBauen(liste->pfad, base, lvl, sPatch, sZahl, sWarn, sErr))
                 { err = "Secret-Liste: " + sErr; return false; }
                 for (const std::string& w : sWarn) rep.notes.push_back("Secrets: " + w);
 
@@ -636,7 +637,12 @@ static std::wstring lagerDir(const App& a)
                                   tr3Ordner(a), goldOrdner(a), lagerDir(a)))
                 { err = "Secret-Patch: " + err; return false; }
                 for (const std::string& w : spr.warnings) rep.notes.push_back("Secrets: " + w);
-                secretsGesetzt = spr.edited + spr.added;
+                // NUR die umgezogenen Secrets zaehlen. edited+added des
+                // Reports enthaelt das Beiwerk (Schluessel, Schalter,
+                // Umtypungen) - die Statuszeile meldete damit "6 Secrets" in
+                // einem Level mit dreien (vom Nutzer gesehen).
+                secretsGesetzt = sZahl;
+                beiwerk = (spr.edited + spr.added) - sZahl;
             }
         }
         if (!lvl.save(target, err)) return false;
@@ -651,8 +657,8 @@ static std::wstring lagerDir(const App& a)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Waffenslots", pr.weaponsCopied);
         if (rep.weaponsScattered > 0)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Waffen gestreut", rep.weaponsScattered);
-        if (secretsGesetzt > 0)
-            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Secrets", secretsGesetzt);
+        if (secretsGesetzt > 0 || beiwerk > 0)
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Secrets (+%d Beiwerk)", secretsGesetzt, beiwerk);
         if (rep.crossTypesUsed > 0)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Cross-Typen", rep.crossTypesUsed);
         if (!pr.outfitFrom.empty())

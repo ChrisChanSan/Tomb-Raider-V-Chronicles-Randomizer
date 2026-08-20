@@ -54,6 +54,12 @@ std::vector<SecretQuelle> secretQuellenSuchen(const std::wstring& ordner);
 // portalAdds). Eine Zeile ohne neue Stellen und ohne Extras laesst den Patch
 // leer - das Level bleibt vanilla, genau wie in der Vorlage vereinbart.
 // Nicht verstandene Teile werden gemeldet, nie stillschweigend verschluckt.
+//
+// secretsVerschoben zaehlt NUR die umgezogenen Secrets selbst. Der Patch
+// traegt daneben noch Beiwerk (Schluessel, Schalter, Umtypungen), und wer
+// stattdessen edited+added des Reports anzeigt, meldet dem Nutzer "6 Secrets"
+// in einem Level mit dreien - genau so in der Oberflaeche passiert.
 bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelName,
                       const Tr5Level& lvl, JsonValue& patchOut,
+                      int& secretsVerschoben,
                       std::vector<std::string>& warnungen, std::string& error);

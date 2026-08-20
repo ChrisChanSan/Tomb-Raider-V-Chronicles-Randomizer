@@ -220,7 +220,8 @@ int main(int argc, char** argv)
         std::string levelName = zone["level"].asString("");
         JsonValue sPatch;
         std::vector<std::string> sWarn;
-        if (!secretPatchBauen(secretListe, levelName, lvl, sPatch, sWarn, err))
+        int sZahl = 0;
+        if (!secretPatchBauen(secretListe, levelName, lvl, sPatch, sZahl, sWarn, err))
         { std::printf("Secret-Liste: %s\n", err.c_str()); return 1; }
         for (const std::string& w : sWarn) std::printf("  Secrets: %s\n", w.c_str());
 
@@ -228,8 +229,9 @@ int main(int argc, char** argv)
         if (!Patch::apply(lvl, sPatch, spr, err, quelle, nullptr, tr3Dir, tr3GoldDir, lager))
         { std::printf("Secret-Patch: %s\n", err.c_str()); return 1; }
         for (const std::string& w : spr.warnings) std::printf("  Secrets: %s\n", w.c_str());
-        std::printf("  Secrets     %d geaendert, %d hinzugefuegt, %d Trigger, %zu Portale\n",
-                    spr.edited, spr.added, spr.triggersAdded, sPatch["portalAdds"].size());
+        std::printf("  Secrets     %d verschoben, %d Beiwerk (%d Trigger, %zu Portale)\n",
+                    sZahl, (spr.edited + spr.added) - sZahl,
+                    spr.triggersAdded, sPatch["portalAdds"].size());
     }
 
 

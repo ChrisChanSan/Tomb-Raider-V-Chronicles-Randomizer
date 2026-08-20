@@ -310,8 +310,10 @@ std::vector<SecretQuelle> secretQuellenSuchen(const std::wstring& ordner)
 
 bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelName,
                       const Tr5Level& lvl, JsonValue& patchOut,
+                      int& secretsVerschoben,
                       std::vector<std::string>& warnungen, std::string& error)
 {
+    secretsVerschoben = 0;
     std::vector<Zeile> zeilen;
     if (!liesListe(listenPfad, zeilen, warnungen, error)) return false;
 
@@ -360,6 +362,7 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
         e.set("y", JsonValue::makeInt(0));
         e.set("yAuto", JsonValue::makeBool(true));
         edits.push(e);
+        ++secretsVerschoben;
     }
 
     // Extras. Neue Items haengen ab der ECHTEN Itemzahl hinten an.

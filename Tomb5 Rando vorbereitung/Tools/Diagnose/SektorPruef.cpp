@@ -95,6 +95,11 @@ static void zeigeSektor(const Tr5Level& lvl, const Tr5Room& r, int sx, int sz)
         std::printf("  Floordata: %-12s", fnName(e.funktion));
         if (e.funktion == 1 && e.woerter.size() >= 2)
             std::printf(" -> Raum %u", e.woerter[1]);
+        else if (e.funktion == 6 && !e.woerter.empty())
+        {
+            const unsigned b6 = (e.woerter[0] >> 8) & 0xF;
+            std::printf(" Richtungen:%s%s%s%s", (b6&1)?" 0":"", (b6&2)?" 90":"", (b6&4)?" 180":"", (b6&8)?" 270":"");
+        }
         else if ((e.funktion == 2 || e.funktion == 3) && e.woerter.size() >= 2)
             std::printf(" x=%d z=%d", static_cast<int8_t>(e.woerter[1] & 0xFF),
                         static_cast<int8_t>(e.woerter[1] >> 8));

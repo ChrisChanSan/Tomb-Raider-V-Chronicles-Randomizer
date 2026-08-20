@@ -108,6 +108,18 @@ function Lies-Option([string]$o) {
             ocb = $null; angle = $null; hoehe = $null; xOff = $null; zOff = $null; wieItem = $null; triggerArt = $null; triggerZiele = @()
         }
     }
+    # --- Form 5: Kletterwand --------------------------------------------
+    # Make_Climb@Room112(x1,z3)@Angle90 - der Sektor wird kletterbar, der
+    # Winkel ist Laras BLICK auf die Wand (Konvention der Wandgriffe).
+    # Umrechnung in die Engine-Bits macht die Patch-Ausgabe.
+    elseif ($o -match 'Make_Climb\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)') {
+        $e = [PSCustomObject]@{
+            art = 'climb'; index = $null; typeId = $null
+            room = [int]$Matches[1]; sectorX = [int]$Matches[2]; sectorZ = [int]$Matches[3]
+            roomA = $null; sxA = $null; szA = $null; roomB = $null; sxB = $null; szB = $null
+            ocb = $null; angle = $null; hoehe = $null; xOff = $null; zOff = $null; wieItem = $null; triggerArt = $null; triggerZiele = @()
+        }
+    }
     # --- Form 4: Portal beidseitig oeffnen --------------------------------
     # Make_Portal@Room34(x0,z5)->Room36(x4,z5) - das "->" ist Paarung, nicht
     # Richtung: EINE Zeile macht beide Sektoren zu Portalen aufeinander. Die
@@ -163,6 +175,7 @@ function Lies-Option([string]$o) {
     # Strenge statt Nachsicht: was der Parser NICHT erkannt hat, wird gemeldet.
     $rest = $o
     $rest = $rest -replace 'Make_Portal\s*@\s*Room\d+\(\s*x\d+\s*,\s*z\d+\s*\)\s*->\s*Room\d+\(\s*x\d+\s*,\s*z\d+\s*\)', ''
+    $rest = $rest -replace 'Make_Climb\s*@\s*Room\d+\(\s*x\d+\s*,\s*z\d+\s*\)', ''
     $rest = $rest -replace 'replace\s+', ''
     $rest = $rest -replace 'with\s*->', ''
     $rest = $rest -replace 'add\s+', ''
@@ -309,6 +322,7 @@ foreach ($t in $treffer) {
                 'trigger' { Write-Output ("      dazu: Trigger {0} in Raum {1}({2},{3}) -> Item {4}" -f $e.triggerArt,$e.room,$e.sectorX,$e.sectorZ,$zl) }
                 'ersetz'  { Write-Output ("      dazu: Item {0} wird Typ {1}{2}{3}{4}" -f $e.index,$e.typeId,$ob,$a,$hh) }
                 'portal'  { Write-Output ("      dazu: Portal Raum {0}({1},{2}) <-> Raum {3}({4},{5})" -f $e.roomA,$e.sxA,$e.szA,$e.roomB,$e.sxB,$e.szB) }
+                'climb'   { Write-Output ("      dazu: Kletterwand Raum {0}({1},{2}) Winkel {3}" -f $e.room,$e.sectorX,$e.sectorZ,$e.angle) }
             }
         }
     }
@@ -352,7 +366,7 @@ if ($AlsPatch -ne "") {
     if ($kopf -notmatch ':\s*(\d+)\s+Items') { Write-Output "Itemzahl nicht lesbar aus $Trc"; exit 1 }
     $itemBasis = [int]$Matches[1]
 
-    $edits = @(); $adds = @(); $trigger = @(); $portale = @()
+    $edits = @(); $adds = @(); $trigger = @(); $portale = @(); $climbs = @()
 
     for ($i = 0; $i -lt $planLevel.stellen.Count; $i++) {
         $s = $planLevel.stellen[$i]
@@ -398,6 +412,20 @@ if ($AlsPatch -ne "") {
     }
     foreach ($e in $planLevel.extras) {
 
+
+        # Kletterwand: Winkel (Grad, Laras Blick auf die Wand) in die
+        # Engine-Bits (control.cpp:2189): 0->0x100, 90->0x200, 180->0x400,
+        # 270->0x800. Krumme Winkel runden auf das naechste Viertel.
+        if ($e.art -eq 'climb') {
+            if ($null -eq $e.angle) { Write-Output "  WARNUNG: Make_Climb ohne @Angle - uebersprungen."; continue }
+            $grad = (($e.angle % 360) + 360) % 360
+            $quad = [int][math]::Floor(($grad + 45) / 90) % 4
+            $climbs += [PSCustomObject]@{
+                room = [int]$e.room; sectorX = [int]$e.sectorX; sectorZ = [int]$e.sectorZ
+                dirBits = [int][math]::Pow(2, $quad + 8)
+            }
+            continue
+        }
         # Portal: beide Seiten in einem Eintrag; die Werte gehen unveraendert
         # an makePortal, das die Vorbedingungen (Sichtfenster!) selbst prueft.
         if ($e.art -eq 'portal') {
@@ -499,7 +527,7 @@ if ($AlsPatch -ne "") {
         }
     }
 
-    $patch = [PSCustomObject]@{ itemEdits = $edits; itemAdds = $adds; triggerAdds = $trigger; portalAdds = $portale }
+    $patch = [PSCustomObject]@{ itemEdits = $edits; itemAdds = $adds; triggerAdds = $trigger; portalAdds = $portale; climbAdds = $climbs }
     $json = $patch | ConvertTo-Json -Depth 8 -Compress
     [System.IO.File]::WriteAllText($AlsPatch, $json, (New-Object System.Text.UTF8Encoding($false)))
     $umTyp = @($planLevel.extras | Where-Object { $_.art -eq 'ersetz' }).Count

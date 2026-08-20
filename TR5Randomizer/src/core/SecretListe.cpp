@@ -47,7 +47,7 @@ namespace
     // Eine Extra-Option, alle vier Formen in einem Topf.
     struct Option
     {
-        enum Art { ITEM, TRIGGER, ERSETZ, PORTAL } art = ITEM;
+        enum Art { ITEM, TRIGGER, ERSETZ, PORTAL, CLIMB } art = ITEM;
         int typeId = -1, index = -1;
         int room = -1, sx = -1, sz = -1;
         int roomB = -1, sxB = -1, szB = -1;          // nur PORTAL
@@ -116,6 +116,7 @@ namespace
         static const std::regex reRoom(R"(@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\))");
         static const std::regex reTrigForm(R"(add\s+Trigger_Type\()");
         static const std::regex rePortal(R"(Make_Portal\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)\s*->\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\))");
+        static const std::regex reClimb(R"(Make_Climb\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\))");
         static const std::regex reOcb(R"(@\s*OCB\(\s*(\d+)\s*\))");
         static const std::regex reAngle(R"(@\s*Angle\s*\(?\s*(-?\d+))");
         static const std::regex reHoehe(R"(@\s*Height\(\s*(-?\d+)\s*\))");
@@ -125,7 +126,12 @@ namespace
         static const std::regex reTrig(R"(Trigger_Type\(\s*(\w+)\s*\)[\s\S]*?Item_Level_ID\(\s*([^)]*)\))");
 
         std::smatch m;
-        if (std::regex_search(roh, m, rePortal))
+        if (std::regex_search(roh, m, reClimb))
+        {
+            e.art = Option::CLIMB;
+            e.room = std::stoi(m[1]); e.sx = std::stoi(m[2]); e.sz = std::stoi(m[3]);
+        }
+        else if (std::regex_search(roh, m, rePortal))
         {
             e.art = Option::PORTAL;
             e.room = std::stoi(m[1]); e.sx = std::stoi(m[2]); e.sz = std::stoi(m[3]);
@@ -162,7 +168,7 @@ namespace
         if (std::regex_search(roh, m, reXOff))  { e.hatXOff = true;  e.xOff = std::stoi(m[1]); }
         if (std::regex_search(roh, m, reZOff))  { e.hatZOff = true;  e.zOff = std::stoi(m[1]); }
         if (std::regex_search(roh, m, reLike))    e.wieItem = std::stoi(m[1]);
-        if (e.art != Option::ERSETZ && e.art != Option::PORTAL &&
+        if (e.art != Option::ERSETZ && e.art != Option::PORTAL && e.art != Option::CLIMB &&
             std::regex_search(roh, m, reTrig))
         {
             e.triggerArt = m[1];
@@ -186,6 +192,9 @@ namespace
         std::string rest = roh;
         auto tilge = [&rest](const std::regex& re) { rest = std::regex_replace(rest, re, ""); };
         tilge(rePortal);
+        tilge(reClimb);
+        static const std::regex reWClimb(R"(Make_Climb)");
+        tilge(reWClimb);
         static const std::regex reW1(R"(replace\s+)"), reW2(R"(with\s*->)"), reW3(R"(add\s+)");
         static const std::regex reW4(R"(Type_?ID\(\s*\d+\s*\))");
         static const std::regex reW5(R"(Trigger_Type\(\s*\w+\s*\))");
@@ -334,6 +343,7 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
     JsonValue adds = JsonValue::makeArray();
     JsonValue trigger = JsonValue::makeArray();
     JsonValue portale = JsonValue::makeArray();
+    JsonValue climbs = JsonValue::makeArray();
 
     const std::vector<Tr5Room>& rooms = lvl.rooms();
     auto raumOk = [&](int r) { return r >= 0 && r < static_cast<int>(rooms.size()); };
@@ -410,6 +420,24 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
     int n = 0;
     for (const Option& o : row->extras)
     {
+        if (o.art == Option::CLIMB)
+        {
+            if (!o.hatAngle)
+            { error = levelName + ": Make_Climb braucht @Angle (Laras Blick auf die Wand)"; return false; }
+            // Engine-Konvention control.cpp:2189: quad = (yRot+0x2000)/0x4000,
+            // Bit = 1 << (quad+8). In Grad: 0->0x100, 90->0x200, 180->0x400,
+            // 270->0x800. Krumme Winkel runden auf das naechste Viertel.
+            const int grad = ((o.angleGrad % 360) + 360) % 360;
+            const int quad = ((grad + 45) / 90) & 3;
+            JsonValue c = JsonValue::makeObject();
+            c.set("room", JsonValue::makeInt(o.room));
+            c.set("sectorX", JsonValue::makeInt(o.sx));
+            c.set("sectorZ", JsonValue::makeInt(o.sz));
+            c.set("dirBits", JsonValue::makeInt(1 << (quad + 8)));
+            climbs.push(c);
+            continue;
+        }
+
         if (o.art == Option::PORTAL)
         {
             JsonValue p = JsonValue::makeObject();
@@ -513,5 +541,6 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
     if (adds.size() > 0)    patchOut.set("itemAdds", adds);
     if (trigger.size() > 0) patchOut.set("triggerAdds", trigger);
     if (portale.size() > 0) patchOut.set("portalAdds", portale);
+    if (climbs.size() > 0)  patchOut.set("climbAdds", climbs);
     return true;
 }

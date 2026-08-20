@@ -519,6 +519,27 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
+    // --- Kletterwaende (#53) --------------------------------------------
+    //
+    // {"room","sectorX","sectorZ","dirBits"}: der Sektor wird kletterbar.
+    // dirBits nach der Engine-Konvention (control.cpp:2189), berechnet vom
+    // Listenleser aus @Angle. Harter Fehler wie beim Portal - eine halbe
+    // Kletterwand faende niemand.
+    const JsonValue& klettern = patch["climbAdds"];
+    for (size_t i = 0; i < klettern.size(); ++i)
+    {
+        const JsonValue& c = klettern[i];
+        std::string cErr;
+        if (!level.makeClimb(static_cast<int>(c["room"].asInt(-1)),
+                             static_cast<int>(c["sectorX"].asInt(-1)),
+                             static_cast<int>(c["sectorZ"].asInt(-1)),
+                             static_cast<int>(c["dirBits"].asInt(0)), cErr))
+        {
+            error = "climbAdds[" + std::to_string(i) + "]: " + cErr;
+            return false;
+        }
+    }
+
     // --- Portale (#53) --------------------------------------------------
     //
     // Ein Eintrag oeffnet BEIDE Seiten einer versiegelten Wand: der genannte

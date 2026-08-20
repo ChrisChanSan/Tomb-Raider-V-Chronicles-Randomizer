@@ -330,6 +330,11 @@ public:
     //
     // Wiederholbar: zeigt die Kette schon auf targetRoom, passiert nichts.
     bool    makePortal(int room, int sx, int sz, int targetRoom, std::string& error);
+
+    // Macht einen Sektor kletterbar: CLIMB-Eintrag mit Richtungsbits
+    // (0x100=0 Grad, 0x200=90, 0x400=180, 0x800=270 - Laras Blick auf die
+    // Wand). ODER-t in vorhandene Eintraege; Kettenordnung siehe Rumpf.
+    bool    makeClimb(int room, int sx, int sz, int dirBits, std::string& error);
     // --- Sound ---------------------------------------------------------
     //
     // Ein Level fuehrt nur die Samples mit, die es selbst braucht. Kommt ein

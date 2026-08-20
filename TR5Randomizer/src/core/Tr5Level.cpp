@@ -889,6 +889,84 @@ bool Tr5Level::makePortal(int room, int sx, int sz, int targetRoom, std::string&
 }
 
 //----------------------------------------------------------------------------
+// Einen Sektor kletterbar machen (#53, Make_Climb).
+//
+// Ein CLIMB-Eintrag ist EIN Wort: Funktion 6 in Bit 0-4, die kletterbaren
+// Wandseiten in Bit 8-11. Die Engine prueft in _TestTriggers
+// (control.cpp:2189): quad = (yRot + 0x2000) / 0x4000, Bit = 1 << (quad+8) -
+// 0 Grad -> 0x100, 90 -> 0x200, 180 -> 0x400, 270 -> 0x800. Der Winkel ist
+// Laras BLICKrichtung auf die Wand, dieselbe Konvention wie bei den
+// Wandgriffen.
+//
+// Die KETTENORDNUNG ist Vorschrift, nicht Geschmack: _TestTriggers liest ab
+// trigger_index der Reihe nach [LAVA] -> [CLIMB] -> Rest. Ein CLIMB hinter
+// dem Trigger wuerde als Triggerbefehl fehlgedeutet, einer vor der LAVA
+// liesse die LAVA ungelesen. Deshalb wird die Kette neu zusammengesetzt:
+// Geometrie, dann LAVA, dann CLIMB, dann alles Uebrige in alter Folge.
+//
+// Wiederholbar: vorhandene CLIMB-Bits werden ge-ODER-t, ein zweiter Aufruf
+// mit denselben Bits aendert nichts.
+//----------------------------------------------------------------------------
+bool Tr5Level::makeClimb(int room, int sx, int sz, int dirBits, std::string& error)
+{
+    if (room < 0 || room >= static_cast<int>(m_rooms.size()))
+    { error = "Raum " + std::to_string(room) + " gibt es nicht"; return false; }
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    if (!r.sectorsOffset) { error = "Sektorfeld nicht aufgegangen"; return false; }
+    if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors)
+    { error = "Sektor ausserhalb des Raums"; return false; }
+    if ((dirBits & ~0x0F00) || !(dirBits & 0x0F00))
+    { error = "Kletterbits muessen in 0x100..0x800 liegen"; return false; }
+
+    const size_t at = r.sectorsOffset + (static_cast<size_t>(sx) * r.numZSectors + sz) * 8;
+    uint16_t alt;
+    std::memcpy(&alt, m_bytes.data() + at, 2);
+
+    std::vector<Tr5FloorEntry> kette;
+    if (alt && !readChain(alt, kette))
+    { error = "Floordata-Kette nicht lesbar"; return false; }
+
+    std::vector<Tr5FloorEntry> geo, lava, rest;
+    Tr5FloorEntry* climb = nullptr;
+    Tr5FloorEntry climbAlt;
+    for (Tr5FloorEntry& e : kette)
+    {
+        if (e.funktion == 6)      { climbAlt = e; climb = &climbAlt; }
+        else if (e.funktion == 5) lava.push_back(e);
+        else if (e.funktion == 1 || e.funktion == 2 || e.funktion == 3 ||
+                 (e.funktion >= 7 && e.funktion <= 18))
+            geo.push_back(e);
+        else
+            rest.push_back(e);
+    }
+
+    if (climb)
+    {
+        if ((climb->woerter[0] & 0x0F00 & dirBits) == static_cast<uint16_t>(dirBits))
+            return true;                              // Bits stehen schon
+        climb->woerter[0] |= static_cast<uint16_t>(dirBits);
+    }
+    else
+    {
+        climbAlt = Tr5FloorEntry();
+        climbAlt.funktion = 6;
+        climbAlt.woerter.push_back(static_cast<uint16_t>(0x0006 | dirBits));
+        climb = &climbAlt;
+    }
+
+    std::vector<Tr5FloorEntry> neu;
+    for (const Tr5FloorEntry& e : geo)  neu.push_back(e);
+    for (const Tr5FloorEntry& e : lava) neu.push_back(e);
+    neu.push_back(*climb);
+    for (const Tr5FloorEntry& e : rest) neu.push_back(e);
+
+    uint16_t idx = 0;
+    if (!appendChain(neu, idx, error)) return false;
+    setSectorIndex(r, sx, sz, idx);
+    return true;
+}
+
+//----------------------------------------------------------------------------
 // Sound
 //
 // Aufbau, abgelesen an TOMB5s LoadSamples (specific/file.cpp:1232):

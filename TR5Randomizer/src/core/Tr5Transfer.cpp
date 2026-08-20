@@ -1261,3 +1261,138 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
 
     return true;
 }
+
+//----------------------------------------------------------------------------
+// Eine einzelne Lara-Animation aus einem Spenderlevel einpflanzen (#53).
+//
+// Anlass: ANIM_KEYCARD (437), die Kartenzieh-Bewegung an Key Hole 8. Der
+// Anim-PLATZ existiert in jedem Level - Laras Tabelle ist ueberall gleich
+// lang -, aber die BILDDATEN sind levelspezifisch: ausserhalb von joby2 sind
+// die Extra-Anims 435+ Core-Stubs, deren Frame-Zeiger alle auf denselben
+// Datenklumpen zeigen (joby3: 436-439 -> ein Offset; mit AnimKmd/FrameOfs
+// nachgemessen). Abgespielt ergibt das eine eingefrorene Pose.
+//
+// Verpflanzt werden: die Frame-Daten (ans Blockende), Rate/frame_size/
+// Zustand/Geschwindigkeiten des Anim-Satzes, die Anim-Kommandos (ans Ende
+// des Kommandoblocks, PlaySound/FlipEffect-Framenummern auf die Zaehlung
+// des Ziels umgerechnet) und die PlaySound-Samples, die dem Ziel fehlen.
+// NICHT verpflanzt: frame_base/frame_end (Zielzaehlung bleibt), next_anim/
+// next_frame (verweisen in die levelEIGENE Nummerierung des Ziels) und die
+// State-Changes (bleiben die des Ziels).
+//
+// Wiederholbar im Sinne des Patchlaufs nicht noetig - der Lauf startet immer
+// von der Vanilla-Datei. Ein zweiter Aufruf haengte die Daten erneut an.
+//----------------------------------------------------------------------------
+bool Tr5Level::kopiereLaraAnimVon(const Tr5Level& src, int animNr, std::string& fehler)
+{
+    MoveableInfo dl, sl;
+    if (!moveableInfo(0, dl) || dl.animIndex < 0) { fehler = "Ziel hat keine Lara"; return false; }
+    if (!src.moveableInfo(0, sl) || sl.animIndex < 0) { fehler = "Spender hat keine Lara"; return false; }
+
+    const long long d = static_cast<long long>(dl.animIndex) + animNr;
+    const long long s = static_cast<long long>(sl.animIndex) + animNr;
+    if (d < 0 || d >= m_anims.count) { fehler = "Anim liegt im Ziel ausserhalb der Tabelle"; return false; }
+    if (s < 0 || s >= src.m_anims.count) { fehler = "Anim liegt im Spender ausserhalb der Tabelle"; return false; }
+
+    const size_t so = src.m_anims.dataAt + static_cast<size_t>(s) * 40;
+    const uint32_t foSrc = rd32(src.m_bytes, so);
+
+    // Laenge der Frame-Daten: bis zum naechstgroesseren Frame-Offset
+    // IRGENDEINER Animation des Spenders - die Offsets sind global ueber
+    // alle Objekte, und die Keyframes sind gepackt, ihre Laenge steht
+    // nirgends einzeln.
+    uint32_t foEnde = static_cast<uint32_t>(src.m_frames.count) * 2;
+    for (int32_t i = 0; i < src.m_anims.count; ++i)
+    {
+        const uint32_t fo = rd32(src.m_bytes, src.m_anims.dataAt + static_cast<size_t>(i) * 40);
+        if (fo > foSrc && fo < foEnde) foEnde = fo;
+    }
+    if (foEnde <= foSrc) { fehler = "Frame-Daten des Spenders nicht abgrenzbar"; return false; }
+
+    std::vector<uint8_t> frameBytes(src.m_bytes.begin() + src.m_frames.dataAt + foSrc,
+                                    src.m_bytes.begin() + src.m_frames.dataAt + foEnde);
+
+    // Kommandos herausschneiden und Framenummern umrechnen.
+    const uint16_t nCmd = rd16(src.m_bytes, so + 36);
+    const uint16_t iCmd = rd16(src.m_bytes, so + 38);
+    const uint16_t sBase = rd16(src.m_bytes, so + 24);
+    const size_t dstRec0 = m_anims.dataAt + static_cast<size_t>(d) * 40;
+    const uint16_t dBase = rd16(m_bytes, dstRec0 + 24);
+
+    std::vector<uint8_t> cmdBytes;
+    std::vector<int> sfxGebraucht;
+    {
+        size_t c = src.m_commands.dataAt + static_cast<size_t>(iCmd) * 2;
+        for (int k = 0; k < nCmd; ++k)
+        {
+            int16_t typ; std::memcpy(&typ, src.m_bytes.data() + c, 2);
+            const int len = commandLen(typ);
+            if (len <= 0) { fehler = "unbekanntes Anim-Kommando im Spender"; return false; }
+            std::vector<uint8_t> w(src.m_bytes.begin() + c, src.m_bytes.begin() + c + static_cast<size_t>(len) * 2);
+            if (typ == 5 || typ == 6)
+            {
+                uint16_t frame; std::memcpy(&frame, w.data() + 2, 2);
+                frame = static_cast<uint16_t>(dBase + (frame - sBase));
+                std::memcpy(w.data() + 2, &frame, 2);
+            }
+            if (typ == 5)
+            {
+                uint16_t sfx; std::memcpy(&sfx, w.data() + 4, 2);
+                sfxGebraucht.push_back(sfx & 0x3FFF);
+            }
+            cmdBytes.insert(cmdBytes.end(), w.begin(), w.end());
+            c += static_cast<size_t>(len) * 2;
+        }
+    }
+
+    // Anhaengepositionen VOR dem Splice festhalten.
+    const uint32_t neuerFrameOfs = static_cast<uint32_t>(m_frames.count) * 2;
+    const uint16_t neuerCmdIndex = static_cast<uint16_t>(m_commands.count);
+
+    auto zaehler = [&](const Block& b, int32_t delta) {
+        int32_t v; std::memcpy(&v, m_bytes.data() + b.countAt, 4);
+        v += delta;
+        std::memcpy(m_bytes.data() + b.countAt, &v, 4);
+    };
+    zaehler(m_frames, static_cast<int32_t>(frameBytes.size() / 2));
+    zaehler(m_commands, static_cast<int32_t>(cmdBytes.size() / 2));
+
+    std::vector<Splice> splices;
+    if (!cmdBytes.empty())
+        splices.push_back({ m_commands.dataAt + static_cast<size_t>(m_commands.count) * 2, std::move(cmdBytes) });
+    splices.push_back({ m_frames.dataAt + static_cast<size_t>(m_frames.count) * 2, std::move(frameBytes) });
+
+    size_t imHauptblock = 0;
+    for (const Splice& sp : splices) imHauptblock += sp.bytes.size();
+    applySplices(m_bytes, splices);
+    m_mainSize += imHauptblock;
+    const int32_t neueGroesse = static_cast<int32_t>(m_mainSize);
+    std::memcpy(m_bytes.data() + m_mainOffset - 8, &neueGroesse, 4);
+    std::memcpy(m_bytes.data() + m_mainOffset - 4, &neueGroesse, 4);
+    if (!reparse(fehler)) { fehler = "nach dem Anhaengen: " + fehler; return false; }
+
+    // Den Ziel-Anim-Satz NACH dem reparse anfassen - die Blockkarte ist frisch.
+    uint8_t* dr = m_bytes.data() + m_anims.dataAt + static_cast<size_t>(d) * 40;
+    const uint8_t* sr = src.m_bytes.data() + so;
+    std::memcpy(dr + 0, &neuerFrameOfs, 4);       // Frame-Zeiger auf die Kopie
+    std::memcpy(dr + 4, sr + 4, 4);               // Rate, frame_size, Zustand
+    std::memcpy(dr + 8, sr + 8, 16);              // Geschwindigkeiten
+    {
+        const uint16_t sEnd = rd16(src.m_bytes, so + 26);
+        const uint16_t dEnd = static_cast<uint16_t>(dBase + (sEnd - sBase));
+        std::memcpy(dr + 26, &dEnd, 2);           // Laenge der Quelle, Zaehlung des Ziels
+        std::memcpy(dr + 36, &nCmd, 2);
+        std::memcpy(dr + 38, &neuerCmdIndex, 2);
+    }
+
+    // Fehlende PlaySound-Samples nachziehen - weich wie im Modelltransfer:
+    // ein fehlender Klang macht die Animation nicht kaputt.
+    for (int sfx : sfxGebraucht)
+    {
+        if (soundInfoIndex(sfx) >= 0) continue;
+        if (src.soundInfoIndex(sfx) < 0) continue;
+        std::string sErr;
+        copySoundFrom(src, sfx, sfx, sErr);
+    }
+    return true;
+}

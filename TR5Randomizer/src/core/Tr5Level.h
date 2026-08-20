@@ -399,6 +399,12 @@ public:
     bool uebernehmeAnimDaten(int dstSlot, int dstOffset, int srcSlot,
                              int srcOffset, std::string& fehler);
 
+    // Eine einzelne Lara-Anim samt Frame-Daten, Kommandos und Sounds aus
+    // einem SPENDERLEVEL einpflanzen (ANIM_KEYCARD 437, #53). Der Anim-Platz
+    // existiert ueberall, die Bilddaten sind levelspezifisch - Begruendung
+    // und Grenzen am Rumpf in Tr5Transfer.cpp.
+    bool kopiereLaraAnimVon(const Tr5Level& src, int animNr, std::string& fehler);
+
     // Der Objektslot, wie er in der Datei steht. anim < 0 heisst: keiner.
     struct MoveableInfo
     {

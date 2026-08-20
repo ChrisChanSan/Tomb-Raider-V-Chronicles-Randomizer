@@ -639,16 +639,23 @@ void KeyHoleCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 				if (item->object_number != KEY_HOLE8)
 					remove_inventory_item(short(hole + KEY_ITEM1));
 
-				// Die Kartenzieh-Animation (ANIM_KEYCARD, 437) hat nur in
-				// joby2 echte Bilddaten. In allen anderen Leveln ist Laras
-				// Anim 437 ein Core-Stub: joby3s Anims 436-439 zeigen ALLE
-				// auf denselben Frame-Offset 212544 (nachgemessen mit
-				// AnimKmd), abgespielt wird 22 Sekunden eingefrorene Pose
-				// ohne Sound - vom Nutzer im Rando gesehen, seit der
-				// Randomizer Key Hole 8 in fremde Level setzen kann (#53).
-				// Ueberall sonst nimmt Lara darum die gewoehnliche
-				// Schluesselanimation; die passt an jedes Schloss.
-				if (item->object_number == KEY_HOLE8 && gfCurrentLevel == LVL5_BASE)
+				// Die Kartenzieh-Animation (ANIM_KEYCARD, 437) hat echte
+				// Bilddaten nur, wo der Levelbau sie hingelegt hat: vanilla
+				// allein in joby2. In joby3 pflanzt der Randomizer sie samt
+				// Sound aus joby2 ein (#53, laraAnimAdds) - deshalb ist
+				// joby3 hier zugelassen, aber nur mit DATENPROBE: Cores
+				// Stubs erkennt man daran, dass 437 und 438 auf denselben
+				// Frame-Klumpen zeigen (mit AnimKmd nachgemessen); die
+				// Verpflanzung gibt 437 einen eigenen Zeiger. Ein
+				// UNrepariertes joby3 (Vanilla-Spiel) faellt damit weiter
+				// auf die gewoehnliche Schluesselanim zurueck statt 22
+				// Sekunden in eingefrorener Pose zu stehen. Andere Level
+				// bleiben ganz draussen: Laras Tabelle ist dort teils
+				// kuerzer, anims[437] gehoert schon dem naechsten Objekt.
+				if (item->object_number == KEY_HOLE8 &&
+					(gfCurrentLevel == LVL5_BASE ||
+					 (gfCurrentLevel == LVL5_SUBMARINE &&
+					  anims[ANIM_KEYCARD].frame_ptr != anims[ANIM_KEYCARD + 1].frame_ptr)))
 					l->anim_number = ANIM_KEYCARD;
 				else
 					l->anim_number = ANIM_USEKEY;

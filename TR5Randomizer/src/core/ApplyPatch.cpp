@@ -489,6 +489,36 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     // bevor irgendetwas an den Items geschrieben wird. Zwingend ist es nicht -
     // appendChain zieht den Item-Offset selbst nach -, aber es haelt den Ablauf
     // beim Nachlesen eindeutig.
+    // --- Lara-Anims aus Spenderleveln (#53) -----------------------------
+    //
+    // {"anim": 437, "fromLevel": "joby2"} pflanzt eine einzelne Lara-Anim
+    // samt Frames, Kommandos und Sounds ein. Gebraucht fuer ANIM_KEYCARD:
+    // der Platz existiert ueberall, echte Bilddaten hat nur joby2. Ein
+    // nicht ladbarer Spender ist nur eine Warnung (die Engine faellt an
+    // Key Hole 8 dann auf die gewoehnliche Schluesselanim zurueck); ein
+    // GESCHEITERTER Einbau bricht ab.
+    const JsonValue& lanims = patch["laraAnimAdds"];
+    if (lanims.size() > 0 && !levelSource)
+        report.warnings.push_back(std::to_string(lanims.size()) +
+                                  " Lara-Anim-Eintraege uebersprungen - kein Zugriff auf die Quell-Level.");
+    else for (size_t i = 0; i < lanims.size(); ++i)
+    {
+        const JsonValue& la = lanims[i];
+        const std::string von = la["fromLevel"].asString();
+        Tr5Level* spender = quelle(von);
+        if (!spender)
+        {
+            report.warnings.push_back("Lara-Anim: Spender-Level " + von + " nicht ladbar.");
+            continue;
+        }
+        std::string aErr;
+        if (!level.kopiereLaraAnimVon(*spender, static_cast<int>(la["anim"].asInt(-1)), aErr))
+        {
+            error = "laraAnimAdds[" + std::to_string(i) + "]: " + aErr;
+            return false;
+        }
+    }
+
     // --- Portale (#53) --------------------------------------------------
     //
     // Ein Eintrag oeffnet BEIDE Seiten einer versiegelten Wand: der genannte

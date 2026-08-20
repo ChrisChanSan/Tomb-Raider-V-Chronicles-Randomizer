@@ -2432,6 +2432,7 @@ bool Rando::run(const RandoInput& in,
     // hat. Doppelte Sound-Anforderungen sind unschaedlich - der Patchweg
     // ueberspringt Vorhandenes.
     JsonValue moveables = JsonValue::makeArray();
+    JsonValue laraAnims = JsonValue::makeArray();
     std::set<int> swapEmittiert;
 
     // ZUERST die Anim-Basistypen der Soldatenfamilie, VOR den Typen, die sie
@@ -2594,6 +2595,18 @@ bool Rando::run(const RandoInput& in,
         e.set("fromLevel", JsonValue::makeString("joby2"));
         moveables.push(e);
         report.notes.push_back("Key Item 8 (203) aus joby2 eingelegt - nur vorhanden, nicht geworfen (Secret-Spot).");
+
+        // Und Laras Kartenzieh-Animation dazu (ANIM_KEYCARD 437): der Platz
+        // existiert in jedem Level, echte Bilddaten hat nur joby2 - in joby3
+        // sind die Extra-Anims Core-Stubs (436-439 zeigen auf denselben
+        // Frame-Offset), und die Engine spielt an Key Hole 8 sonst nur die
+        // Ersatz-Schluesselanim ("sieht komisch aus", Nutzer 2026-08-21).
+        // Der Kartensound (sfx 316) wandert im selben Zug mit.
+        JsonValue la = JsonValue::makeObject();
+        la.set("anim", JsonValue::makeInt(437));
+        la.set("fromLevel", JsonValue::makeString("joby2"));
+        laraAnims.push(la);
+        report.notes.push_back("Kartenzieh-Anim (Lara 437) aus joby2 eingepflanzt.");
     }
 
     // --- Keine Fluchtmarker: Larson und Pierre sollen kaempfen und sterben ---
@@ -2772,6 +2785,7 @@ bool Rando::run(const RandoInput& in,
     patchOut = JsonValue::makeObject();
     patchOut.set("itemEdits", edits);
     if (moveables.size() > 0) patchOut.set("moveableAdds", moveables);
+    if (laraAnims.size() > 0) patchOut.set("laraAnimAdds", laraAnims);
     if (waffen.size() > 0) patchOut.set("weaponAdds", waffen);
     if (aiAdds.size() > 0) patchOut.set("aiAdds", aiAdds);
     if (outfitGesetzt) patchOut.set("outfit", outfit);

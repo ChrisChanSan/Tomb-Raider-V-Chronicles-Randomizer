@@ -782,6 +782,113 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int art, int timer, bool one
 }
 
 //----------------------------------------------------------------------------
+// Einen Wandsektor zum Portal machen (#53, andy3-Doppeltuer).
+//
+// Was ein Portalsektor ist, wurde mit SektorPruef an den funktionierenden
+// Nachbarn in andy3 nachgemessen (Raum 34 Spalte x0, Raum 36 Spalte x4):
+//
+//   - Boden/Decke tragen die Werte des UEBERLAPPTEN begehbaren Sektors des
+//     Zielraums. Die Portalspalten zweier Raeume liegen naemlich uebereinander:
+//     34(0,z) deckt dieselbe Weltflaeche wie 36(3,z). Von dort kommen auch
+//     pit_room und sky_room.
+//   - Das Boxwort ist bei allen Portalsektoren fx=6, box=2047 (keine Box,
+//     0x7FF6) - Portale gehoeren keiner KI-Box.
+//   - Die Kette endet mit DOOR -> Zielraum; Neigungen davor bleiben
+//     (36(4,4) vanilla: [TILT][SPLIT4][DOOR]).
+//
+// Das SICHTFENSTER (32-Byte-Portaleintrag der Raumliste) wird hier NICHT
+// angelegt - es muss schon existieren. Bei andy3 hat Core beide Fenster
+// fertig eingebaut und nur die Sektoren versiegelt; genau dieser Fall wird
+// geprueft, und sein Fehlen ist ein harter Fehler statt eines schwarzen
+// Lochs im Bild.
+//----------------------------------------------------------------------------
+bool Tr5Level::makePortal(int room, int sx, int sz, int targetRoom, std::string& error)
+{
+    if (room < 0 || room >= static_cast<int>(m_rooms.size()))
+    { error = "Raum " + std::to_string(room) + " gibt es nicht"; return false; }
+    if (targetRoom < 0 || targetRoom >= static_cast<int>(m_rooms.size()))
+    { error = "Zielraum " + std::to_string(targetRoom) + " gibt es nicht"; return false; }
+
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    const Tr5Room& z = m_rooms[static_cast<size_t>(targetRoom)];
+    if (!r.sectorsOffset || !z.sectorsOffset)
+    { error = "Sektorfeld nicht aufgegangen"; return false; }
+    if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors)
+    { error = "Sektor ausserhalb des Raums"; return false; }
+
+    // Sichtfenster-Vorbedingung: der Zielraum muss in der Portalliste stehen.
+    bool fenster = false;
+    for (int p : r.portalRooms) if (p == targetRoom) { fenster = true; break; }
+    if (!fenster)
+    {
+        error = "Raum " + std::to_string(room) + " hat kein Sichtfenster nach " +
+                std::to_string(targetRoom) + " - das 32-Byte-Portal fehlt, ohne es "
+                "waere die Oeffnung ein schwarzes Loch";
+        return false;
+    }
+
+    // Ueberlappten Sektor des Zielraums finden: gleiche Weltflaeche.
+    const int weltX = r.originX + sx * 1024;
+    const int weltZ = r.originZ + sz * 1024;
+    const int osx = (weltX - z.originX) / 1024;
+    const int osz = (weltZ - z.originZ) / 1024;
+    if (osx < 0 || osx >= z.numXSectors || osz < 0 || osz >= z.numZSectors)
+    { error = "Zielraum ueberlappt den Sektor nicht"; return false; }
+
+    const size_t eigenAt   = r.sectorsOffset + (static_cast<size_t>(sx) * r.numZSectors + sz) * 8;
+    const size_t druebenAt = z.sectorsOffset + (static_cast<size_t>(osx) * z.numZSectors + osz) * 8;
+    if (eigenAt + 8 > m_bytes.size() || druebenAt + 8 > m_bytes.size())
+    { error = "Sektor liegt ausserhalb der Datei"; return false; }
+
+    // Der ueberlappte Sektor muss begehbar sein - eine Wand als Vorlage
+    // hiesse, das Portal fuehrte ins Massiv.
+    if (static_cast<int8_t>(m_bytes[druebenAt + 5]) == -127)
+    { error = "der ueberlappte Sektor im Zielraum ist selbst eine Wand"; return false; }
+
+    // Bestehende Kette lesen; Geometrie (TILT/ROOF/SPLITs/NOCOLs) bleibt.
+    uint16_t alt;
+    std::memcpy(&alt, m_bytes.data() + eigenAt, 2);
+    std::vector<Tr5FloorEntry> kette;
+    if (alt && !readChain(alt, kette))
+    { error = "Floordata-Kette nicht lesbar"; return false; }
+
+    std::vector<Tr5FloorEntry> neu;
+    for (const Tr5FloorEntry& e : kette)
+    {
+        if (e.funktion == 1)                              // schon ein Portal?
+        {
+            if (e.woerter.size() >= 2 && e.woerter[1] == static_cast<uint16_t>(targetRoom))
+                return true;                              // genau dieses: fertig
+            error = "Sektor hat schon ein Portal in einen anderen Raum";
+            return false;
+        }
+        if (e.funktion == 2 || e.funktion == 3 ||
+            (e.funktion >= 7 && e.funktion <= 18))
+            neu.push_back(e);
+        // alles andere (Trigger, Climb, ...) hat auf einem Portalsektor
+        // nichts verloren und faellt weg - vanilla tragen sie so etwas nie.
+    }
+
+    Tr5FloorEntry tuer;
+    tuer.funktion = 1;
+    tuer.woerter.push_back(0x0001);
+    tuer.woerter.push_back(static_cast<uint16_t>(targetRoom));
+    neu.push_back(tuer);
+
+    uint16_t idx = 0;
+    if (!appendChain(neu, idx, error)) return false;
+    setSectorIndex(r, sx, sz, idx);
+
+    // Boxwort: fx=6, box=2047 (keine), stopper=0 - wie alle Portalsektoren.
+    const uint16_t boxwort = 0x7FF6;
+    std::memcpy(m_bytes.data() + eigenAt + 2, &boxwort, 2);
+
+    // pit/floor/sky/ceiling vom ueberlappten Sektor.
+    std::memcpy(m_bytes.data() + eigenAt + 4, m_bytes.data() + druebenAt + 4, 4);
+    return true;
+}
+
+//----------------------------------------------------------------------------
 // Sound
 //
 // Aufbau, abgelesen an TOMB5s LoadSamples (specific/file.cpp:1232):

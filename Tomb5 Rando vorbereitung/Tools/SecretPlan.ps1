@@ -108,6 +108,20 @@ function Lies-Option([string]$o) {
             ocb = $null; angle = $null; hoehe = $null; xOff = $null; zOff = $null; wieItem = $null; triggerArt = $null; triggerZiele = @()
         }
     }
+    # --- Form 4: Portal beidseitig oeffnen --------------------------------
+    # Make_Portal@Room34(x0,z5)->Room36(x4,z5) - das "->" ist Paarung, nicht
+    # Richtung: EINE Zeile macht beide Sektoren zu Portalen aufeinander. Die
+    # Sichtfenster muessen im Level schon existieren (Vorbedingung, die der
+    # Patchweg prueft).
+    elseif ($o -match 'Make_Portal\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)\s*->\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)') {
+        $e = [PSCustomObject]@{
+            art = 'portal'
+            roomA = [int]$Matches[1]; sxA = [int]$Matches[2]; szA = [int]$Matches[3]
+            roomB = [int]$Matches[4]; sxB = [int]$Matches[5]; szB = [int]$Matches[6]
+            room = $null; sectorX = $null; sectorZ = $null; index = $null; typeId = $null
+            ocb = $null; angle = $null; hoehe = $null; xOff = $null; zOff = $null; wieItem = $null; triggerArt = $null; triggerZiele = @()
+        }
+    }
     else { return $null }
 
     if ($o -match '@\s*OCB\(\s*(\d+)\s*\)')       { $e.ocb   = [int]$Matches[1] }
@@ -148,6 +162,7 @@ function Lies-Option([string]$o) {
 
     # Strenge statt Nachsicht: was der Parser NICHT erkannt hat, wird gemeldet.
     $rest = $o
+    $rest = $rest -replace 'Make_Portal\s*@\s*Room\d+\(\s*x\d+\s*,\s*z\d+\s*\)\s*->\s*Room\d+\(\s*x\d+\s*,\s*z\d+\s*\)', ''
     $rest = $rest -replace 'replace\s+', ''
     $rest = $rest -replace 'with\s*->', ''
     $rest = $rest -replace 'add\s+', ''
@@ -293,6 +308,7 @@ foreach ($t in $treffer) {
                 }
                 'trigger' { Write-Output ("      dazu: Trigger {0} in Raum {1}({2},{3}) -> Item {4}" -f $e.triggerArt,$e.room,$e.sectorX,$e.sectorZ,$zl) }
                 'ersetz'  { Write-Output ("      dazu: Item {0} wird Typ {1}{2}{3}{4}" -f $e.index,$e.typeId,$ob,$a,$hh) }
+                'portal'  { Write-Output ("      dazu: Portal Raum {0}({1},{2}) <-> Raum {3}({4},{5})" -f $e.roomA,$e.sxA,$e.szA,$e.roomB,$e.sxB,$e.szB) }
             }
         }
     }
@@ -336,7 +352,7 @@ if ($AlsPatch -ne "") {
     if ($kopf -notmatch ':\s*(\d+)\s+Items') { Write-Output "Itemzahl nicht lesbar aus $Trc"; exit 1 }
     $itemBasis = [int]$Matches[1]
 
-    $edits = @(); $adds = @(); $trigger = @()
+    $edits = @(); $adds = @(); $trigger = @(); $portale = @()
 
     for ($i = 0; $i -lt $planLevel.stellen.Count; $i++) {
         $s = $planLevel.stellen[$i]
@@ -381,6 +397,16 @@ if ($AlsPatch -ne "") {
         return @($c)
     }
     foreach ($e in $planLevel.extras) {
+
+        # Portal: beide Seiten in einem Eintrag; die Werte gehen unveraendert
+        # an makePortal, das die Vorbedingungen (Sichtfenster!) selbst prueft.
+        if ($e.art -eq 'portal') {
+            $portale += [PSCustomObject]@{
+                roomA = [int]$e.roomA; sxA = [int]$e.sxA; szA = [int]$e.szA
+                roomB = [int]$e.roomB; sxB = [int]$e.sxB; szB = [int]$e.szB
+            }
+            continue
+        }
 
         # Ein vorhandenes Item umtypen: kein neues Item, also auch kein neuer
         # Index. Position bleibt, wo sie ist - nur Typ und wahlweise Winkel
@@ -473,7 +499,7 @@ if ($AlsPatch -ne "") {
         }
     }
 
-    $patch = [PSCustomObject]@{ itemEdits = $edits; itemAdds = $adds; triggerAdds = $trigger }
+    $patch = [PSCustomObject]@{ itemEdits = $edits; itemAdds = $adds; triggerAdds = $trigger; portalAdds = $portale }
     $json = $patch | ConvertTo-Json -Depth 8 -Compress
     [System.IO.File]::WriteAllText($AlsPatch, $json, (New-Object System.Text.UTF8Encoding($false)))
     $umTyp = @($planLevel.extras | Where-Object { $_.art -eq 'ersetz' }).Count

@@ -489,6 +489,32 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     // bevor irgendetwas an den Items geschrieben wird. Zwingend ist es nicht -
     // appendChain zieht den Item-Offset selbst nach -, aber es haelt den Ablauf
     // beim Nachlesen eindeutig.
+    // --- Portale (#53) --------------------------------------------------
+    //
+    // Ein Eintrag oeffnet BEIDE Seiten einer versiegelten Wand: der genannte
+    // Sektor von roomA wird Portal nach roomB und umgekehrt. Die Sichtfenster
+    // (32-Byte-Portale der Raumliste) muessen schon existieren - makePortal
+    // prueft das und bricht sonst hart ab, denn eine begehbare Oeffnung ohne
+    // Fenster waere ein schwarzes Loch im Bild.
+    const JsonValue& portale = patch["portalAdds"];
+    for (size_t i = 0; i < portale.size(); ++i)
+    {
+        const JsonValue& p = portale[i];
+        std::string pErr;
+        if (!level.makePortal(static_cast<int>(p["roomA"].asInt(-1)),
+                              static_cast<int>(p["sxA"].asInt(-1)),
+                              static_cast<int>(p["szA"].asInt(-1)),
+                              static_cast<int>(p["roomB"].asInt(-1)), pErr) ||
+            !level.makePortal(static_cast<int>(p["roomB"].asInt(-1)),
+                              static_cast<int>(p["sxB"].asInt(-1)),
+                              static_cast<int>(p["szB"].asInt(-1)),
+                              static_cast<int>(p["roomA"].asInt(-1)), pErr))
+        {
+            error = "portalAdds[" + std::to_string(i) + "]: " + pErr;
+            return false;
+        }
+    }
+
     const JsonValue& tadds = patch["triggerAdds"];
 
     // Versatz zwischen Planung und Datei ausgleichen (#107): die Planung

@@ -316,6 +316,20 @@ public:
     // oder nullptr. Siehe die Herleitung in der Implementierung.
     static const char* canAppendTrigger(const std::vector<Tr5FloorEntry>& chain);
 
+
+    // Macht einen Wandsektor zum Portal nach targetRoom (EINE Seite - der
+    // Aufrufer macht die Gegenseite mit vertauschten Rollen).
+    //
+    // Vorbedingung, gefunden mit SektorPruef an andy3: das 32-Byte-SICHTFENSTER
+    // in der Portalliste des Raums muss schon existieren. Diese Funktion
+    // schreibt nur die Sektorseite: Boden/Decke vom ueberlappten Sektor des
+    // Zielraums (die Portalspalten zweier Raeume liegen uebereinander),
+    // Boxwort wie bei allen Portalsektoren (fx=6, box=2047), und an die
+    // Floordata-Kette kommt ein DOOR-Eintrag - vorhandene Neigungen (TILT)
+    // bleiben stehen, Vanilla-Muster [TILT][SPLIT][DOOR].
+    //
+    // Wiederholbar: zeigt die Kette schon auf targetRoom, passiert nichts.
+    bool    makePortal(int room, int sx, int sz, int targetRoom, std::string& error);
     // --- Sound ---------------------------------------------------------
     //
     // Ein Level fuehrt nur die Samples mit, die es selbst braucht. Kommt ein

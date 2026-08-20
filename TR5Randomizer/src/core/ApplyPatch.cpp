@@ -600,6 +600,8 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         // Block ueber dem unteren. y waechst in TR nach UNTEN, ein Objekt
         // hoeher zu setzen heisst also abzuziehen - die Liste schreibt
         // deshalb eine Hoehe ueber dem Boden, und der Leser dreht das Zeichen.
+        if (e.has("xOff")) it.x += static_cast<int32_t>(e["xOff"].asInt(0));
+        if (e.has("zOff")) it.z += static_cast<int32_t>(e["zOff"].asInt(0));
         if (e.has("yOff")) it.y += static_cast<int32_t>(e["yOff"].asInt(0));
         if (e.has("angle"))  it.yRot = static_cast<int16_t>(e["angle"].asInt());
         if (e.has("ocb"))
@@ -721,6 +723,8 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
 
         // Wie bei den Aenderungen: Versatz gegen die gerechnete Bodenlage,
         // damit sich Objekte stapeln lassen (Doppeltuer).
+        if (a.has("xOff")) it.x += static_cast<int32_t>(a["xOff"].asInt(0));
+        if (a.has("zOff")) it.z += static_cast<int32_t>(a["zOff"].asInt(0));
         if (a.has("yOff")) it.y += static_cast<int32_t>(a["yOff"].asInt(0));
         it.yRot = static_cast<int16_t>(a["angle"].asInt(0));
         it.triggerFlags = static_cast<int16_t>(a["ocb"].asInt(0));

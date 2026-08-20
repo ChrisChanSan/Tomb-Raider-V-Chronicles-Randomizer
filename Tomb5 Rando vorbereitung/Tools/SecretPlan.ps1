@@ -80,7 +80,7 @@ function Lies-Option([string]$o) {
         $e = [PSCustomObject]@{
             art = 'ersetz'; index = [int]$Matches[1]; typeId = [int]$Matches[2]
             room = $null; sectorX = $null; sectorZ = $null
-            ocb = $null; angle = $null; hoehe = $null; wieItem = $null; triggerArt = $null; triggerZiele = @()
+            ocb = $null; angle = $null; hoehe = $null; xOff = $null; zOff = $null; wieItem = $null; triggerArt = $null; triggerZiele = @()
         }
     }
     # --- Form 1: Item anhaengen -------------------------------------------
@@ -96,7 +96,7 @@ function Lies-Option([string]$o) {
         $e = [PSCustomObject]@{
             art = 'item'; index = $null; typeId = $typ
             room = $rm; sectorX = $sx; sectorZ = $sz
-            ocb = $null; angle = $null; hoehe = $null; wieItem = $null; triggerArt = $null; triggerZiele = @()
+            ocb = $null; angle = $null; hoehe = $null; xOff = $null; zOff = $null; wieItem = $null; triggerArt = $null; triggerZiele = @()
         }
     }
     # --- Form 2: nur ein Trigger, ohne Item -------------------------------
@@ -105,7 +105,7 @@ function Lies-Option([string]$o) {
         $e = [PSCustomObject]@{
             art = 'trigger'; index = $null; typeId = $null
             room = [int]$Matches[1]; sectorX = [int]$Matches[2]; sectorZ = [int]$Matches[3]
-            ocb = $null; angle = $null; hoehe = $null; wieItem = $null; triggerArt = $null; triggerZiele = @()
+            ocb = $null; angle = $null; hoehe = $null; xOff = $null; zOff = $null; wieItem = $null; triggerArt = $null; triggerZiele = @()
         }
     }
     else { return $null }
@@ -113,6 +113,8 @@ function Lies-Option([string]$o) {
     if ($o -match '@\s*OCB\(\s*(\d+)\s*\)')       { $e.ocb   = [int]$Matches[1] }
     if ($o -match '@\s*Angle\s*\(?\s*(-?\d+)')    { $e.angle = [int]$Matches[1] }
     if ($o -match '@\s*Height\(\s*(-?\d+)\s*\)') { $e.hoehe = [int]$Matches[1] }
+    if ($o -match '@\s*XOff\(\s*(-?\d+)\s*\)')      { $e.xOff    = [int]$Matches[1] }
+    if ($o -match '@\s*ZOff\(\s*(-?\d+)\s*\)')      { $e.zOff    = [int]$Matches[1] }
     # Position eines vorhandenen Items uebernehmen. Gebraucht fuers Stapeln:
     # yAuto rechnet die ECHTE Bodenlage in der Sektormitte, und auf einem
     # leicht geneigten Sektor liegt die bis zu 128 Einheiten neben dem flachen
@@ -158,6 +160,8 @@ function Lies-Option([string]$o) {
     $rest = $rest -replace 'Item_Level_ID\([^)]*\)', ''
     $rest = $rest -replace '@\s*Height\(\s*-?\d+\s*\)', ''
     $rest = $rest -replace '@\s*LikeItem\(\s*\d+\s*\)', ''
+    $rest = $rest -replace '@\s*XOff\(\s*-?\d+\s*\)', ''
+    $rest = $rest -replace '@\s*ZOff\(\s*-?\d+\s*\)', ''
     $rest = ($rest -replace '[()+;\s]', '')
     if ($rest.Length -gt 0) { $e | Add-Member -NotePropertyName unbekannt -NotePropertyValue $rest }
     return $e
@@ -387,6 +391,8 @@ if ($AlsPatch -ne "") {
             if ($null -ne $e.angle) { $ed['angle'] = Grad-InRoh ([int]$e.angle) }
             if ($null -ne $e.ocb)   { $ed['ocb']   = [int]$e.ocb }
             if ($null -ne $e.hoehe) { $ed['yOff']  = -[int]$e.hoehe; $ed['yAuto'] = $true }
+            if ($null -ne $e.xOff)  { $ed['xOff']  =  [int]$e.xOff }
+            if ($null -ne $e.zOff)  { $ed['zOff']  =  [int]$e.zOff }
             $edits += [PSCustomObject]$ed
             continue
         }
@@ -451,6 +457,8 @@ if ($AlsPatch -ne "") {
         if ($null -ne $e.angle) { $eintrag['angle'] = Grad-InRoh ([int]$e.angle) }
         if ($null -ne $e.ocb)   { $eintrag['ocb']   = [int]$e.ocb }
         if ($null -ne $e.hoehe) { $eintrag['yOff']  = -[int]$e.hoehe }
+        if ($null -ne $e.xOff)  { $eintrag['xOff']  =  [int]$e.xOff }
+        if ($null -ne $e.zOff)  { $eintrag['zOff']  =  [int]$e.zOff }
         $adds += [PSCustomObject]$eintrag
         $meinIndex = $itemBasis + $n
         $n++

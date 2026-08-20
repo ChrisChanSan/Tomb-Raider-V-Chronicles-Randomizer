@@ -157,8 +157,8 @@ int main(int argc, char** argv)
     const Tr5Room& r = rooms[static_cast<size_t>(raum)];
     if (!r.sectorsOffset) { std::printf("Raum %d: Sektorfeld nicht aufgegangen\n", raum); return 1; }
 
-    std::printf("%s Raum %d: origin (%d, %d), %dx%d Sektoren, Portalliste: ",
-                argv[1], raum, r.originX, r.originZ, r.numXSectors, r.numZSectors);
+    std::printf("%s Raum %d: origin (%d, %d), yBottom/minfloor %d, %dx%d Sektoren, Portalliste: ",
+                argv[1], raum, r.originX, r.originZ, r.yBottom, r.numXSectors, r.numZSectors);
     for (size_t i = 0; i < r.portalRooms.size(); ++i)
         std::printf("%s%d", i ? " " : "", r.portalRooms[i]);
     if (r.portalRooms.empty()) std::printf("(leer)");

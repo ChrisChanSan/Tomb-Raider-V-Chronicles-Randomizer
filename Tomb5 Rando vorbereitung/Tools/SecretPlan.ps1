@@ -82,6 +82,12 @@ function Lies-Option([string]$o) {
             room = $null; sectorX = $null; sectorZ = $null
             ocb = $null; angle = $null; hoehe = $null; xOff = $null; zOff = $null; wieItem = $null; triggerArt = $null; triggerZiele = @()
         }
+        # Wahlweise mit Umzug: @Room verlegt das Item (Sektormitte, Boden
+        # gerechnet, @Height oben drauf). Vorher wurde ein @Room hier
+        # stillschweigend verschluckt - joby5-Falltuer, vom Nutzer bemerkt.
+        if ($o -match '@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)') {
+            $e.room = [int]$Matches[1]; $e.sectorX = [int]$Matches[2]; $e.sectorZ = [int]$Matches[3]
+        }
     }
     # --- Form 1: Item anhaengen -------------------------------------------
     elseif ($o -match 'add\s+Type_ID\(\s*(\d+)\s*\)' ) {
@@ -320,7 +326,10 @@ foreach ($t in $treffer) {
                     Write-Output ("      dazu: Typ {0} {1}{2}{3}{4}{5}" -f $e.typeId,$wo,$ob,$a,$hh,$tr)
                 }
                 'trigger' { Write-Output ("      dazu: Trigger {0} in Raum {1}({2},{3}) -> Item {4}" -f $e.triggerArt,$e.room,$e.sectorX,$e.sectorZ,$zl) }
-                'ersetz'  { Write-Output ("      dazu: Item {0} wird Typ {1}{2}{3}{4}" -f $e.index,$e.typeId,$ob,$a,$hh) }
+                'ersetz'  {
+                    $wo = if ($null -ne $e.room) { " -> Raum $($e.room)($($e.sectorX),$($e.sectorZ))" } else { "" }
+                    Write-Output ("      dazu: Item {0} wird Typ {1}{2}{3}{4}{5}" -f $e.index,$e.typeId,$wo,$ob,$a,$hh)
+                }
                 'portal'  { Write-Output ("      dazu: Portal Raum {0}({1},{2}) <-> Raum {3}({4},{5})" -f $e.roomA,$e.sxA,$e.szA,$e.roomB,$e.sxB,$e.szB) }
                 'climb'   { Write-Output ("      dazu: Kletterwand Raum {0}({1},{2}) Winkel {3}" -f $e.room,$e.sectorX,$e.sectorZ,$e.angle) }
             }
@@ -442,6 +451,15 @@ if ($AlsPatch -ne "") {
         # auf den Sektorboden springen.
         if ($e.art -eq 'ersetz') {
             $ed = [ordered]@{ index = [int]$e.index; typeId = [int]$e.typeId }
+            # Mit @Room zieht das Item um (Sektormitte, Boden gerechnet).
+            if ($null -ne $e.room) {
+                $rm = $ro[[int]$e.room]
+                $ed['room']  = [int]$e.room
+                $ed['x']     = ([int]$rm.originX + [int]$e.sectorX * 1024 + 512)
+                $ed['z']     = ([int]$rm.originZ + [int]$e.sectorZ * 1024 + 512)
+                $ed['y']     = 0
+                $ed['yAuto'] = $true
+            }
             if ($null -ne $e.angle) { $ed['angle'] = Grad-InRoh ([int]$e.angle) }
             if ($null -ne $e.ocb)   { $ed['ocb']   = [int]$e.ocb }
             if ($null -ne $e.hoehe) { $ed['yOff']  = -[int]$e.hoehe; $ed['yAuto'] = $true }

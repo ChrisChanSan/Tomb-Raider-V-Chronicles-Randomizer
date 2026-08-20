@@ -142,6 +142,15 @@ namespace
             e.art = Option::ERSETZ;
             e.index = std::stoi(m[1]);
             e.typeId = std::stoi(m[2]);
+            // Wahlweise mit Umzug: @Room verlegt das Item an die Sektormitte
+            // (Boden gerechnet, @Height oben drauf). Ohne @Room bleibt die
+            // Position - das war vorher der EINZIGE Fall, und ein trotzdem
+            // geschriebenes @Room wurde stillschweigend verschluckt (vom
+            // Nutzer bemerkt: die joby5-Falltuer sollte in den unteren Raum
+            // ziehen und nichts geschah).
+            std::smatch r;
+            if (std::regex_search(roh, r, reRoom))
+            { e.room = std::stoi(r[1]); e.sx = std::stoi(r[2]); e.sz = std::stoi(r[3]); }
         }
         else if (std::regex_search(roh, m, reItem))
         {
@@ -456,6 +465,23 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
             JsonValue e = JsonValue::makeObject();
             e.set("index", JsonValue::makeInt(o.index));
             e.set("typeId", JsonValue::makeInt(o.typeId));
+            // Mit @Room zieht das Item um: Sektormitte, Boden gerechnet.
+            // Gebraucht fuer die joby5-Falltuer (#53): eine Falltuer MUSS auf
+            // der Portalebene ihres Sektors stehen (CloseTrapDoor versiegelt
+            // sonst nichts), und die Deckenfalltuer gehoert dafuer in den
+            // UNTEREN Raum an dessen Decke - also Raumwechsel plus @Height.
+            // Frueher wurde ein @Room hier stillschweigend verschluckt; der
+            // Nutzer hat den Umzug erwartet und nichts ist passiert.
+            if (o.room >= 0)
+            {
+                if (!raumOk(o.room))
+                { error = levelName + ": Raum " + std::to_string(o.room) + " gibt es nicht"; return false; }
+                e.set("room", JsonValue::makeInt(o.room));
+                e.set("x", JsonValue::makeInt(rooms[static_cast<size_t>(o.room)].originX + o.sx * 1024 + 512));
+                e.set("z", JsonValue::makeInt(rooms[static_cast<size_t>(o.room)].originZ + o.sz * 1024 + 512));
+                e.set("y", JsonValue::makeInt(0));
+                e.set("yAuto", JsonValue::makeBool(true));
+            }
             if (o.hatAngle) e.set("angle", JsonValue::makeInt(gradInRoh(o.angleGrad)));
             if (o.hatOcb)   e.set("ocb", JsonValue::makeInt(o.ocb));
             if (o.hatHoehe) { e.set("yOff", JsonValue::makeInt(-o.hoehe)); e.set("yAuto", JsonValue::makeBool(true)); }

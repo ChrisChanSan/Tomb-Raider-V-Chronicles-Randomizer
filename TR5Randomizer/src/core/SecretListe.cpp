@@ -380,6 +380,14 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
         e.set("z", JsonValue::makeInt(rooms[static_cast<size_t>(s.room)].originZ + s.sz * 1024 + 512));
         e.set("y", JsonValue::makeInt(0));
         e.set("yAuto", JsonValue::makeBool(true));
+        // Regel 3 des Randomizers gilt auch hier: eine Sockel- oder
+        // Versteck-OCB beschreibt die ALTE Stelle und ueberlebt den Umzug
+        // nicht. Andrea3s Secret 75 trug OCB 4 (Sockel, vanilla Raum 81);
+        // am neuen Platz sucht PickUpCollision per FindPlinth einen Sockel,
+        // der dort nicht steht - das Secret lag sichtbar da und war fuer
+        // immer unaufnehmbar (vom Nutzer gefunden, erst dem Schiebeblock
+        // zugeschrieben).
+        e.set("ocb", JsonValue::makeInt(0));
         edits.push(e);
         ++secretsVerschoben;
     }

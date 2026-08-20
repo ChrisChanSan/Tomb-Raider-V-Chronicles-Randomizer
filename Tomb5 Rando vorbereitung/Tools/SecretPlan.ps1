@@ -380,11 +380,14 @@ if ($AlsPatch -ne "") {
     for ($i = 0; $i -lt $planLevel.stellen.Count; $i++) {
         $s = $planLevel.stellen[$i]
         $rm = $ro[[int]$s.room]
+        # Regel 3 auch hier: Sockel-/Versteck-OCB beschreibt die ALTE Stelle
+        # und ueberlebt den Umzug nicht (Andrea3 Secret 75: OCB 4 = Sockel,
+        # am neuen Platz sucht FindPlinth einen Sockel, der nicht da ist).
         $edits += [PSCustomObject]@{
             index = [int]$planLevel.ids[$i]; room = [int]$s.room
             x = ([int]$rm.originX + [int]$s.sectorX * 1024 + 512)
             z = ([int]$rm.originZ + [int]$s.sectorZ * 1024 + 512)
-            y = 0; yAuto = $true
+            y = 0; yAuto = $true; ocb = 0
         }
     }
 

@@ -80,17 +80,23 @@ function Lies-Option([string]$o) {
         $e = [PSCustomObject]@{
             art = 'ersetz'; index = [int]$Matches[1]; typeId = [int]$Matches[2]
             room = $null; sectorX = $null; sectorZ = $null
-            ocb = $null; angle = $null; triggerArt = $null; triggerZiel = $null
+            ocb = $null; angle = $null; hoehe = $null; wieItem = $null; triggerArt = $null; triggerZiele = @()
         }
     }
     # --- Form 1: Item anhaengen -------------------------------------------
     elseif ($o -match 'add\s+Type_ID\(\s*(\d+)\s*\)' ) {
         $typ = [int]$Matches[1]
-        if ($o -notmatch '@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)') { return $null }
+        # Die Stelle kommt entweder aus Raum+Sektor oder von einem Bezugsitem
+        # (@LikeItem). Eines von beiden muss dastehen.
+        if ($o -match '@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)') {
+            $rm = [int]$Matches[1]; $sx = [int]$Matches[2]; $sz = [int]$Matches[3]
+        } elseif ($o -match '@\s*LikeItem\(\s*\d+\s*\)') {
+            $rm = $null; $sx = $null; $sz = $null
+        } else { return $null }
         $e = [PSCustomObject]@{
             art = 'item'; index = $null; typeId = $typ
-            room = [int]$Matches[1]; sectorX = [int]$Matches[2]; sectorZ = [int]$Matches[3]
-            ocb = $null; angle = $null; triggerArt = $null; triggerZiel = $null
+            room = $rm; sectorX = $sx; sectorZ = $sz
+            ocb = $null; angle = $null; hoehe = $null; wieItem = $null; triggerArt = $null; triggerZiele = @()
         }
     }
     # --- Form 2: nur ein Trigger, ohne Item -------------------------------
@@ -99,23 +105,44 @@ function Lies-Option([string]$o) {
         $e = [PSCustomObject]@{
             art = 'trigger'; index = $null; typeId = $null
             room = [int]$Matches[1]; sectorX = [int]$Matches[2]; sectorZ = [int]$Matches[3]
-            ocb = $null; angle = $null; triggerArt = $null; triggerZiel = $null
+            ocb = $null; angle = $null; hoehe = $null; wieItem = $null; triggerArt = $null; triggerZiele = @()
         }
     }
     else { return $null }
 
     if ($o -match '@\s*OCB\(\s*(\d+)\s*\)')       { $e.ocb   = [int]$Matches[1] }
     if ($o -match '@\s*Angle\s*\(?\s*(-?\d+)')    { $e.angle = [int]$Matches[1] }
-    if ($o -match 'Trigger_Type\(\s*(\w+)\s*\).*?Item_Level_ID\(\s*(\d+)\s*\)') {
-        $e.triggerArt = [string]$Matches[1]; $e.triggerZiel = [int]$Matches[2]
+    if ($o -match '@\s*Height\(\s*(-?\d+)\s*\)') { $e.hoehe = [int]$Matches[1] }
+    # Position eines vorhandenen Items uebernehmen. Gebraucht fuers Stapeln:
+    # yAuto rechnet die ECHTE Bodenlage in der Sektormitte, und auf einem
+    # leicht geneigten Sektor liegt die bis zu 128 Einheiten neben dem flachen
+    # Grundwert, auf den Core sein Item gesetzt hat. Fuer eine Doppeltuer muss
+    # das obere Teil aber exakt ueber dem unteren sitzen, nicht ueber dem
+    # Boden - also wird die Position des Bezugsitems kopiert und nur @Height
+    # daraufgerechnet.
+    if ($o -match '@\s*LikeItem\(\s*(\d+)\s*\)') { $e.wieItem = [int]$Matches[1] }
+    if ($o -match 'Trigger_Type\(\s*(\w+)\s*\).*?Item_Level_ID\(\s*([^)]*)\)') {
+        $e.triggerArt = [string]$Matches[1]
+        # Mehrere Ziele mit Komma: "Item_Level_ID(13, Neu1)". Ein Eintrag ist
+        # entweder ein vorhandener Itemindex oder "Neu<k>" - das k-te Item,
+        # das die Extra_Options dieses Levels selbst anlegen. Ohne das liesse
+        # sich ein gerade erst erzeugtes Item nicht ansprechen, denn seinen
+        # Index kennt erst der Patchlauf (Doppeltuer: unten ersetzt, oben neu,
+        # ein Schalter fuer beide).
+        foreach ($teil in ([string]$Matches[2] -split ',')) {
+            $t = $teil.Trim()
+            if ($t -match '^\d+$')            { $e.triggerZiele += [int]$t }
+            elseif ($t -match '^Neu\s*(\d+)$'){ $e.triggerZiele += "Neu$($Matches[1])" }
+            elseif ($t.Length -gt 0)          { $e.triggerZiele += "?$t" }
+        }
     }
 
     # Bei 'ersetz' verweist Item_Level_ID auf das Item SELBST, nicht auf ein
     # Triggerziel - sonst wuerde die Zeile sich selbst als Ziel eintragen.
-    if ($e.art -eq 'ersetz') { $e.triggerArt = $null; $e.triggerZiel = $null }
+    if ($e.art -eq 'ersetz') { $e.triggerArt = $null; $e.triggerZiele = @() }
 
     # Ein Trigger ohne Ziel ist sinnlos und faellt sonst still auf art 0.
-    if ($e.art -eq 'trigger' -and $null -eq $e.triggerZiel) { return $null }
+    if ($e.art -eq 'trigger' -and $e.triggerZiele.Count -eq 0) { return $null }
 
     # Strenge statt Nachsicht: was der Parser NICHT erkannt hat, wird gemeldet.
     $rest = $o
@@ -128,7 +155,9 @@ function Lies-Option([string]$o) {
     $rest = $rest -replace '@\s*Angle\s*\(?\s*-?\d+\s*\)?', ''
     $rest = $rest -replace 'Trigger_Type\(\s*\w+\s*\)', ''
     $rest = $rest -replace 'to\s*->\s*\w+', ''
-    $rest = $rest -replace 'Item_Level_ID\(\s*\d+\s*\)', ''
+    $rest = $rest -replace 'Item_Level_ID\([^)]*\)', ''
+    $rest = $rest -replace '@\s*Height\(\s*-?\d+\s*\)', ''
+    $rest = $rest -replace '@\s*LikeItem\(\s*\d+\s*\)', ''
     $rest = ($rest -replace '[()+;\s]', '')
     if ($rest.Length -gt 0) { $e | Add-Member -NotePropertyName unbekannt -NotePropertyValue $rest }
     return $e
@@ -249,11 +278,17 @@ foreach ($t in $treffer) {
         foreach ($e in $l.extras) {
             $a  = if ($null -ne $e.angle) { " Winkel $($e.angle)" } else { "" }
             $ob = if ($null -ne $e.ocb)   { " OCB $($e.ocb)" }      else { "" }
-            $tr = if ($null -ne $e.triggerArt) { "  + Trigger $($e.triggerArt) -> Item $($e.triggerZiel)" } else { "" }
+            $hh = if ($null -ne $e.hoehe) { " $($e.hoehe) ueber Boden" } else { "" }
+            $zl = ($e.triggerZiele -join ', ')
+            $tr = if ($null -ne $e.triggerArt) { "  + Trigger $($e.triggerArt) -> Item $zl" } else { "" }
             switch ($e.art) {
-                'item'    { Write-Output ("      dazu: Typ {0} in Raum {1}({2},{3}){4}{5}{6}" -f $e.typeId,$e.room,$e.sectorX,$e.sectorZ,$ob,$a,$tr) }
-                'trigger' { Write-Output ("      dazu: Trigger {0} in Raum {1}({2},{3}) -> Item {4}" -f $e.triggerArt,$e.room,$e.sectorX,$e.sectorZ,$e.triggerZiel) }
-                'ersetz'  { Write-Output ("      dazu: Item {0} wird Typ {1}{2}{3}" -f $e.index,$e.typeId,$ob,$a) }
+                'item'    {
+                    $wo = if ($null -ne $e.wieItem) { "wie Item $($e.wieItem)" }
+                          else { "Raum $($e.room)($($e.sectorX),$($e.sectorZ))" }
+                    Write-Output ("      dazu: Typ {0} {1}{2}{3}{4}{5}" -f $e.typeId,$wo,$ob,$a,$hh,$tr)
+                }
+                'trigger' { Write-Output ("      dazu: Trigger {0} in Raum {1}({2},{3}) -> Item {4}" -f $e.triggerArt,$e.room,$e.sectorX,$e.sectorZ,$zl) }
+                'ersetz'  { Write-Output ("      dazu: Item {0} wird Typ {1}{2}{3}{4}" -f $e.index,$e.typeId,$ob,$a,$hh) }
             }
         }
     }
@@ -311,6 +346,36 @@ if ($AlsPatch -ne "") {
     }
 
     $n = 0
+
+    # "Neu<k>" in einem Triggerziel meint das k-te Item, das die Extra_Options
+    # dieses Levels selbst anlegen. Seinen Index kennt erst dieser Lauf: die
+    # neuen Items haengen ab $itemBasis hinten an, in der Reihenfolge, in der
+    # sie in der Zeile stehen. Gebraucht fuer eine Doppeltuer - unten wird ein
+    # vorhandenes Item umgetypt, oben kommt ein neues dazu, und EIN Schalter
+    # muss beide ansteuern.
+    $addZahl = @($planLevel.extras | Where-Object { $_.art -eq 'item' }).Count
+    function Ziel-Aufloesen($z) {
+        if ($z -is [int]) { return $z }
+        $s = [string]$z
+        if ($s -match '^Neu(\d+)$') {
+            $k = [int]$Matches[1]
+            if ($k -lt 1 -or $k -gt $addZahl) {
+                Write-Output "  WARNUNG: Neu$k gibt es nicht - die Zeile legt $addZahl Items an."
+                return $null
+            }
+            return $itemBasis + $k - 1
+        }
+        Write-Output "  WARNUNG: Triggerziel '$s' nicht verstanden - uebersprungen."
+        return $null
+    }
+    function Ziel-Befehle($ziele) {
+        $c = @()
+        foreach ($z in $ziele) {
+            $i = Ziel-Aufloesen $z
+            if ($null -ne $i) { $c += [PSCustomObject]@{ type = 0; param = [int]$i } }
+        }
+        return @($c)
+    }
     foreach ($e in $planLevel.extras) {
 
         # Ein vorhandenes Item umtypen: kein neues Item, also auch kein neuer
@@ -321,6 +386,7 @@ if ($AlsPatch -ne "") {
             $ed = [ordered]@{ index = [int]$e.index; typeId = [int]$e.typeId }
             if ($null -ne $e.angle) { $ed['angle'] = Grad-InRoh ([int]$e.angle) }
             if ($null -ne $e.ocb)   { $ed['ocb']   = [int]$e.ocb }
+            if ($null -ne $e.hoehe) { $ed['yOff']  = -[int]$e.hoehe; $ed['yAuto'] = $true }
             $edits += [PSCustomObject]$ed
             continue
         }
@@ -348,21 +414,43 @@ if ($AlsPatch -ne "") {
             $trigger += [PSCustomObject]@{
                 room = [int]$e.room; sectorX = [int]$e.sectorX; sectorZ = [int]$e.sectorZ
                 art = $art; timer = 0; oneShot = 1; mask = 31
-                commands = @( [PSCustomObject]@{ type = 0; param = [int]$e.triggerZiel } )
+                commands = (Ziel-Befehle $e.triggerZiele)
             }
             continue
         }
 
-        # Item anhaengen.
-        $rm = $ro[[int]$e.room]
-        $eintrag = [ordered]@{
-            typeId = [int]$e.typeId; room = [int]$e.room
-            x = ([int]$rm.originX + [int]$e.sectorX * 1024 + 512)
-            z = ([int]$rm.originZ + [int]$e.sectorZ * 1024 + 512)
-            y = 0; yAuto = $true
+        # Item anhaengen. Bei @LikeItem steht die Stelle noch nicht fest - dann
+        # kommt sie gleich vom Bezugsitem, und Raum/Sektor bleiben hier leer.
+        $eintrag = [ordered]@{ typeId = [int]$e.typeId }
+        if ($null -ne $e.room) {
+            $rm = $ro[[int]$e.room]
+            $eintrag['room']  = [int]$e.room
+            $eintrag['x']     = ([int]$rm.originX + [int]$e.sectorX * 1024 + 512)
+            $eintrag['z']     = ([int]$rm.originZ + [int]$e.sectorZ * 1024 + 512)
+            $eintrag['y']     = 0
+            $eintrag['yAuto'] = $true
+        }
+
+        # @LikeItem: Position eines vorhandenen Items uebernehmen statt sie aus
+        # Raum und Sektor zu rechnen. Dann KEIN yAuto - das Item soll genau
+        # dort sitzen, wo das Bezugsitem sitzt, nicht auf der gerechneten
+        # Bodenlage (die auf geneigten Sektoren bis zu 128 Einheiten daneben
+        # liegt).
+        if ($null -ne $e.wieItem) {
+            $bez = $info.items | Where-Object { $_.index -eq [int]$e.wieItem }
+            if ($null -eq $bez) {
+                Write-Output "  WARNUNG: LikeItem($($e.wieItem)) - dieses Item gibt es im Level-JSON nicht."
+            } else {
+                $eintrag['x'] = [int]$bez.x
+                $eintrag['z'] = [int]$bez.z
+                $eintrag['y'] = [int]$bez.y
+                $eintrag['room'] = [int]$bez.room
+                $eintrag['yAuto'] = $false
+            }
         }
         if ($null -ne $e.angle) { $eintrag['angle'] = Grad-InRoh ([int]$e.angle) }
         if ($null -ne $e.ocb)   { $eintrag['ocb']   = [int]$e.ocb }
+        if ($null -ne $e.hoehe) { $eintrag['yOff']  = -[int]$e.hoehe }
         $adds += [PSCustomObject]$eintrag
         $meinIndex = $itemBasis + $n
         $n++
@@ -372,7 +460,7 @@ if ($AlsPatch -ne "") {
                 room = [int]$e.room; sectorX = [int]$e.sectorX; sectorZ = [int]$e.sectorZ
                 art = $art; timer = 0; oneShot = 1; mask = 31
                 refItem = $meinIndex
-                commands = @( [PSCustomObject]@{ type = 0; param = [int]$e.triggerZiel } )
+                commands = (Ziel-Befehle $e.triggerZiele)
             }
         }
     }

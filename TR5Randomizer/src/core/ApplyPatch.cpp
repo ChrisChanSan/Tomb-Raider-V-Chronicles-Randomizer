@@ -595,6 +595,12 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             if (art == 0) it.y = static_cast<int32_t>(baseY);
             else if (art > 0) it.y = static_cast<int32_t>(bodenLageAn(si, baseY, it.x & 1023, it.z & 1023).y);
         }
+        // Versatz gegen die gerechnete Bodenlage. Gebraucht fuer gestapelte
+        // Objekte: eine Doppeltuer aus zwei Tuermodellen, das obere einen
+        // Block ueber dem unteren. y waechst in TR nach UNTEN, ein Objekt
+        // hoeher zu setzen heisst also abzuziehen - die Liste schreibt
+        // deshalb eine Hoehe ueber dem Boden, und der Leser dreht das Zeichen.
+        if (e.has("yOff")) it.y += static_cast<int32_t>(e["yOff"].asInt(0));
         if (e.has("angle"))  it.yRot = static_cast<int16_t>(e["angle"].asInt());
         if (e.has("ocb"))
         {
@@ -712,6 +718,10 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             // art < 0 (Kette unlesbar): das mitgegebene y bleibt stehen.
         }
 
+
+        // Wie bei den Aenderungen: Versatz gegen die gerechnete Bodenlage,
+        // damit sich Objekte stapeln lassen (Doppeltuer).
+        if (a.has("yOff")) it.y += static_cast<int32_t>(a["yOff"].asInt(0));
         it.yRot = static_cast<int16_t>(a["angle"].asInt(0));
         it.triggerFlags = static_cast<int16_t>(a["ocb"].asInt(0));
         it.flags = static_cast<int16_t>(a["flags"].asInt(0));

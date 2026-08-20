@@ -50,28 +50,82 @@ function Split-AufTiefe0([string]$text, [char]$trenner) {
     return @($teile | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 })
 }
 
-# Eine Extra-Option zerlegen: Pflichtteil ist "add Type_ID(N)@RoomR(xA,zB)",
-# optional dazu "@AngleW" und "Trigger_Type(Art)...Item_Level_ID(Ziel)".
+# Winkel: die Liste ist in GRAD geschrieben (@Angle90 = eine Vierteldrehung),
+# der Patch will die rohe TR-Einheit (yRot, int16: 65536 = volle Drehung).
+# Ohne die Umrechnung wurde aus 90 Grad eine halbe Gradminute - im Level
+# unsichtbar, weil das Item einfach ungedreht dastand.
+function Grad-InRoh([int]$grad) {
+    $roh = [int][math]::Round($grad * 65536.0 / 360.0) % 65536
+    if ($roh -gt 32767) { $roh -= 65536 }
+    if ($roh -lt -32768) { $roh += 65536 }
+    return $roh
+}
+
+# Eine Extra-Option zerlegen. Es gibt drei Formen, unterschieden durch 'art':
+#
+#   'item'    add Type_ID(N)@Room R(xA,zB)          - Item anhaengen
+#             dazu wahlweise @OCB(n), @Angle(w) und ein Trigger darauf
+#   'trigger' add Trigger_Type(Art)@Room R(xA,zB)   - NUR ein Trigger, kein Item
+#   'ersetz'  replace Item_Level_ID(N)with->Type_ID(T) - vorhandenes Item umtypen
+#             dazu wahlweise @OCB(n), @Angle(w)
+#
+# Alles, was der Parser nicht erkennt, wird gemeldet - ein vertipptes "@Angel0"
+# soll nicht stillschweigend verschwinden.
 function Lies-Option([string]$o) {
     $o = $o.Trim()
-    if ($o -notmatch 'add\s+Type_ID\((\d+)\)\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)') { return $null }
-    $e = [PSCustomObject]@{
-        typeId = [int]$Matches[1]; room = [int]$Matches[2]
-        sectorX = [int]$Matches[3]; sectorZ = [int]$Matches[4]
-        angle = $null; triggerArt = $null; triggerZiel = $null
+    $e = $null
+
+    # --- Form 3: ein vorhandenes Item umtypen -----------------------------
+    if ($o -match 'replace\s+Item_Level_ID\(\s*(\d+)\s*\)\s*with\s*->\s*Type_?ID\(\s*(\d+)\s*\)') {
+        $e = [PSCustomObject]@{
+            art = 'ersetz'; index = [int]$Matches[1]; typeId = [int]$Matches[2]
+            room = $null; sectorX = $null; sectorZ = $null
+            ocb = $null; angle = $null; triggerArt = $null; triggerZiel = $null
+        }
     }
-    if ($o -match '@\s*Angle\s*(-?\d+)') { $e.angle = [int]$Matches[1] }
+    # --- Form 1: Item anhaengen -------------------------------------------
+    elseif ($o -match 'add\s+Type_ID\(\s*(\d+)\s*\)' ) {
+        $typ = [int]$Matches[1]
+        if ($o -notmatch '@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)') { return $null }
+        $e = [PSCustomObject]@{
+            art = 'item'; index = $null; typeId = $typ
+            room = [int]$Matches[1]; sectorX = [int]$Matches[2]; sectorZ = [int]$Matches[3]
+            ocb = $null; angle = $null; triggerArt = $null; triggerZiel = $null
+        }
+    }
+    # --- Form 2: nur ein Trigger, ohne Item -------------------------------
+    elseif ($o -match 'add\s+Trigger_Type\(') {
+        if ($o -notmatch '@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)') { return $null }
+        $e = [PSCustomObject]@{
+            art = 'trigger'; index = $null; typeId = $null
+            room = [int]$Matches[1]; sectorX = [int]$Matches[2]; sectorZ = [int]$Matches[3]
+            ocb = $null; angle = $null; triggerArt = $null; triggerZiel = $null
+        }
+    }
+    else { return $null }
+
+    if ($o -match '@\s*OCB\(\s*(\d+)\s*\)')       { $e.ocb   = [int]$Matches[1] }
+    if ($o -match '@\s*Angle\s*\(?\s*(-?\d+)')    { $e.angle = [int]$Matches[1] }
     if ($o -match 'Trigger_Type\(\s*(\w+)\s*\).*?Item_Level_ID\(\s*(\d+)\s*\)') {
         $e.triggerArt = [string]$Matches[1]; $e.triggerZiel = [int]$Matches[2]
     }
 
+    # Bei 'ersetz' verweist Item_Level_ID auf das Item SELBST, nicht auf ein
+    # Triggerziel - sonst wuerde die Zeile sich selbst als Ziel eintragen.
+    if ($e.art -eq 'ersetz') { $e.triggerArt = $null; $e.triggerZiel = $null }
+
+    # Ein Trigger ohne Ziel ist sinnlos und faellt sonst still auf art 0.
+    if ($e.art -eq 'trigger' -and $null -eq $e.triggerZiel) { return $null }
+
     # Strenge statt Nachsicht: was der Parser NICHT erkannt hat, wird gemeldet.
-    # Ein stillschweigend verschlucktes "@Angel0" (statt Angle) waere sonst
-    # erst im Spiel zu sehen - und dort schwer als Tippfehler zu erkennen.
     $rest = $o
-    $rest = $rest -replace 'add\s+Type_ID\(\d+\)', ''
+    $rest = $rest -replace 'replace\s+', ''
+    $rest = $rest -replace 'with\s*->', ''
+    $rest = $rest -replace 'add\s+', ''
+    $rest = $rest -replace 'Type_?ID\(\s*\d+\s*\)', ''
     $rest = $rest -replace '@\s*Room\d+\(\s*x\d+\s*,\s*z\d+\s*\)', ''
-    $rest = $rest -replace '@\s*Angle\s*-?\d+', ''
+    $rest = $rest -replace '@\s*OCB\(\s*\d+\s*\)', ''
+    $rest = $rest -replace '@\s*Angle\s*\(?\s*-?\d+\s*\)?', ''
     $rest = $rest -replace 'Trigger_Type\(\s*\w+\s*\)', ''
     $rest = $rest -replace 'to\s*->\s*\w+', ''
     $rest = $rest -replace 'Item_Level_ID\(\s*\d+\s*\)', ''
@@ -193,9 +247,14 @@ foreach ($t in $treffer) {
         } else { 'bleibt vanilla' }
         Write-Output ("  {0,-10} {1}" -f $l.level, $ziel)
         foreach ($e in $l.extras) {
-            $a = if ($null -ne $e.angle) { " Winkel $($e.angle)" } else { "" }
+            $a  = if ($null -ne $e.angle) { " Winkel $($e.angle)" } else { "" }
+            $ob = if ($null -ne $e.ocb)   { " OCB $($e.ocb)" }      else { "" }
             $tr = if ($null -ne $e.triggerArt) { "  + Trigger $($e.triggerArt) -> Item $($e.triggerZiel)" } else { "" }
-            Write-Output ("      dazu: Typ {0} in Raum {1}({2},{3}){4}{5}" -f $e.typeId,$e.room,$e.sectorX,$e.sectorZ,$a,$tr)
+            switch ($e.art) {
+                'item'    { Write-Output ("      dazu: Typ {0} in Raum {1}({2},{3}){4}{5}{6}" -f $e.typeId,$e.room,$e.sectorX,$e.sectorZ,$ob,$a,$tr) }
+                'trigger' { Write-Output ("      dazu: Trigger {0} in Raum {1}({2},{3}) -> Item {4}" -f $e.triggerArt,$e.room,$e.sectorX,$e.sectorZ,$e.triggerZiel) }
+                'ersetz'  { Write-Output ("      dazu: Item {0} wird Typ {1}{2}{3}" -f $e.index,$e.typeId,$ob,$a) }
+            }
         }
     }
     $alles += [PSCustomObject]@{ autor=$t.autor; kategorie=$t.kategorie; level=$p.level }
@@ -253,6 +312,48 @@ if ($AlsPatch -ne "") {
 
     $n = 0
     foreach ($e in $planLevel.extras) {
+
+        # Ein vorhandenes Item umtypen: kein neues Item, also auch kein neuer
+        # Index. Position bleibt, wo sie ist - nur Typ und wahlweise Winkel
+        # und OCB aendern sich. yAuto waere hier falsch: das Item soll nicht
+        # auf den Sektorboden springen.
+        if ($e.art -eq 'ersetz') {
+            $ed = [ordered]@{ index = [int]$e.index; typeId = [int]$e.typeId }
+            if ($null -ne $e.angle) { $ed['angle'] = Grad-InRoh ([int]$e.angle) }
+            if ($null -ne $e.ocb)   { $ed['ocb']   = [int]$e.ocb }
+            $edits += [PSCustomObject]$ed
+            continue
+        }
+
+        # Triggerarten der Engine: 0 = TRIGGER, 2 = SWITCH, 3 = KEY,
+        # 4 = PICKUP. Nur 2/3/4 tragen ein Referenzwort.
+        $art = 0
+        if ($null -ne $e.triggerArt) {
+            $art = switch ($e.triggerArt.ToLower()) {
+                'key'     { 3 }
+                'switch'  { 2 }
+                'pickup'  { 4 }
+                'trigger' { 0 }
+                default   { -1 }
+            }
+            if ($art -lt 0) {
+                Write-Output "  WARNUNG: unbekannte Triggerart '$($e.triggerArt)' - als einfacher Trigger behandelt."
+                $art = 0
+            }
+        }
+
+        # Reiner Trigger ohne Item: nichts anhaengen, kein Index verbraucht,
+        # kein Referenzwort.
+        if ($e.art -eq 'trigger') {
+            $trigger += [PSCustomObject]@{
+                room = [int]$e.room; sectorX = [int]$e.sectorX; sectorZ = [int]$e.sectorZ
+                art = $art; timer = 0; oneShot = 1; mask = 31
+                commands = @( [PSCustomObject]@{ type = 0; param = [int]$e.triggerZiel } )
+            }
+            continue
+        }
+
+        # Item anhaengen.
         $rm = $ro[[int]$e.room]
         $eintrag = [ordered]@{
             typeId = [int]$e.typeId; room = [int]$e.room
@@ -260,20 +361,13 @@ if ($AlsPatch -ne "") {
             z = ([int]$rm.originZ + [int]$e.sectorZ * 1024 + 512)
             y = 0; yAuto = $true
         }
-        if ($null -ne $e.angle) { $eintrag['angle'] = [int]$e.angle }
+        if ($null -ne $e.angle) { $eintrag['angle'] = Grad-InRoh ([int]$e.angle) }
+        if ($null -ne $e.ocb)   { $eintrag['ocb']   = [int]$e.ocb }
         $adds += [PSCustomObject]$eintrag
         $meinIndex = $itemBasis + $n
         $n++
 
         if ($null -ne $e.triggerArt) {
-            # Triggerarten der Engine: 2 = SWITCH, 3 = KEY, 4 = PICKUP. Alle
-            # drei tragen ein Referenzwort - hier das eben angehaengte Objekt.
-            $art = switch ($e.triggerArt.ToLower()) {
-                'key'    { 3 }
-                'switch' { 2 }
-                'pickup' { 4 }
-                default  { 0 }
-            }
             $trigger += [PSCustomObject]@{
                 room = [int]$e.room; sectorX = [int]$e.sectorX; sectorZ = [int]$e.sectorZ
                 art = $art; timer = 0; oneShot = 1; mask = 31
@@ -286,5 +380,6 @@ if ($AlsPatch -ne "") {
     $patch = [PSCustomObject]@{ itemEdits = $edits; itemAdds = $adds; triggerAdds = $trigger }
     $json = $patch | ConvertTo-Json -Depth 8 -Compress
     [System.IO.File]::WriteAllText($AlsPatch, $json, (New-Object System.Text.UTF8Encoding($false)))
-    Write-Output "Patch geschrieben: $AlsPatch  ($($edits.Count) Secrets, $($adds.Count) Zusatzitems, $($trigger.Count) Trigger; neue Items ab Index $itemBasis)"
+    $umTyp = @($planLevel.extras | Where-Object { $_.art -eq 'ersetz' }).Count
+    Write-Output "Patch geschrieben: $AlsPatch  ($($planLevel.stellen.Count) Secrets verschoben, $umTyp umgetypt, $($adds.Count) Zusatzitems, $($trigger.Count) Trigger; neue Items ab Index $itemBasis)"
 }

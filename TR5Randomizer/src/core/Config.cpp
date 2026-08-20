@@ -87,6 +87,7 @@ void Config::load()
         else if (key == "outfits")         optOutfits = (val == "1");
         else if (key == "itemMenge")       itemMenge = std::atoi(val.c_str());
         else if (key == "secrets")         secrets = std::atoi(val.c_str());
+        else if (key == "secretAutor")     secretAutor = val;
     }
 
     if (enemyCount < 1)  enemyCount = 1;

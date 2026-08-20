@@ -35,6 +35,7 @@
 #include "core/Randomizer.h"
 #include "core/Rng.h"
 #include "core/ScriptDat.h"
+#include "core/SecretListe.h"
 #include "core/Tr5Level.h"
 
 #include "imgui.h"
@@ -47,6 +48,8 @@
 #include <shellapi.h>
 #include <shlobj.h>
 
+#include <algorithm>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -270,11 +273,16 @@ namespace
         // Deshalb auch kein Seed-Bit dafuer - eine Konstante unterscheidet
         // keine Spiele.
 
-        // Secrets (#53) - PLATZHALTER, noch ohne Wirkung. 0 Aus, 1 normaler
-        // Item-Pool, 2 Glitched-Liste, 3 Custom-Nutzerliste. Bekommt sein
-        // Seed-Bit erst, wenn die Logik existiert - ein Platzhalter, der den
-        // Seed schon veraendert, waere spaeter nicht rueckwaerts vergleichbar.
+        // Secrets (#53): 0 Vanilla, 1 normaler Item-Pool, 2 Glitchless-Liste,
+        // 3 Glitched-Liste. Die Listen selbst liest SecretListe.cpp aus
+        // data\secrets; angewandt werden sie als zweiter Patch-Durchgang in
+        // doLevel. Kein Seed-Bit: die Listen sind deterministisch, derselbe
+        // Seed bleibt mit und ohne Secrets vergleichbar.
         int optSecrets = 0;
+
+        // Gefundene Secret-Listen (data\secrets) und der gewaehlte Autor.
+        std::vector<SecretQuelle> secretQuellen;
+        std::string secretAutor;
 
         // Weitere PLATZHALTER (Nutzerwunsch 2026-08-14), alle ohne Wirkung,
         // ohne Seed-Bit und ohne Persistenz, bis die jeweilige Logik steht.
@@ -448,6 +456,11 @@ static std::wstring lagerDir(const App& a)
         }
         a.skippedNonPlayable = skipped;
 
+        // Secret-Listen einsammeln - hier statt beim Start, damit ein frisch
+        // dazugelegter Autor ohne Neustart auftaucht (inspectSource laeuft bei
+        // jedem Ordnerwechsel und nach jedem Lauf).
+        a.secretQuellen = secretQuellenSuchen(PathUtil::join(a.payloadDir(), L"secrets"));
+
         // Geprueft wird weiterhin die vollstaendige Liste - eine Installation,
         // der Title.trc fehlt, ist keine gueltige Quelle, auch wenn wir die
         // Datei nicht anfassen.
@@ -539,6 +552,21 @@ static std::wstring lagerDir(const App& a)
         if (!lvl.load(target, err)) return false;
         Patch::markTriggerSafeSectors(lvl, in);
 
+        // Secrets in den Pool (#53, Art 1): die Handkuration pinnt jedes
+        // Secret ueber fixedItems fest. Genau diese Pins nimmt der Modus
+        // heraus - Typ 223 wuerfelt dann als gewoehnliches Pickup mit. Nur
+        // die Secret-Pins fallen, alle anderen Handkurationen bleiben.
+        if (a.optSecrets == 1)
+        {
+            std::set<int> secrets;
+            for (const LevelItem& it : in.items)
+                if (it.typeId == 223) secrets.insert(it.index);
+            in.fixedItems.erase(
+                std::remove_if(in.fixedItems.begin(), in.fixedItems.end(),
+                               [&](int i) { return secrets.count(i) != 0; }),
+                in.fixedItems.end());
+        }
+
         RandoOptions opt;
         opt.shuffleKeyItems = a.optKeyItems;
         opt.shuffleOtherPickups = a.optOtherPickups;
@@ -576,6 +604,41 @@ static std::wstring lagerDir(const App& a)
         if (!Patch::apply(lvl, patch, pr, err, quelle, nullptr,
                           tr3Ordner(a), goldOrdner(a), lagerDir(a))) return false;
         for (const std::string& w : pr.warnings) rep.notes.push_back(w);
+
+        // Secrets aus einer Nutzerliste (#53, Art 2/3): ZWEITER Durchgang mit
+        // derselben apply-Maschinerie, gegen den echten Stand nach dem ersten.
+        // Ohne "itemBase" im Patch verschiebt apply nichts - die Neu<k>-
+        // Verweise der Liste zeigen exakt auf die Items, die dieser Patch
+        // anlegt. Eine fehlende Liste ist kein Abbruch (das Level ist ja
+        // fertig), ein GESCHEITERTER Patch schon - halb gesetzte Secrets
+        // faende niemand wieder.
+        int secretsGesetzt = 0;
+        if (a.optSecrets >= 2)
+        {
+            const char* kat = (a.optSecrets == 2) ? "Glitchless" : "Glitched";
+            const SecretQuelle* liste = nullptr;
+            for (const SecretQuelle& q : a.secretQuellen)
+                if (q.kategorie == kat && q.autor == a.secretAutor) { liste = &q; break; }
+
+            if (!liste)
+                rep.notes.push_back(std::string("Secrets: keine ") + kat + "-Liste gewaehlt - Level bleibt vanilla.");
+            else
+            {
+                JsonValue sPatch;
+                std::vector<std::string> sWarn;
+                std::string sErr;
+                if (!secretPatchBauen(liste->pfad, base, lvl, sPatch, sWarn, sErr))
+                { err = "Secret-Liste: " + sErr; return false; }
+                for (const std::string& w : sWarn) rep.notes.push_back("Secrets: " + w);
+
+                PatchReport spr;
+                if (!Patch::apply(lvl, sPatch, spr, err, quelle, nullptr,
+                                  tr3Ordner(a), goldOrdner(a), lagerDir(a)))
+                { err = "Secret-Patch: " + err; return false; }
+                for (const std::string& w : spr.warnings) rep.notes.push_back("Secrets: " + w);
+                secretsGesetzt = spr.edited + spr.added;
+            }
+        }
         if (!lvl.save(target, err)) return false;
 
         char buf[200];
@@ -588,6 +651,8 @@ static std::wstring lagerDir(const App& a)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Waffenslots", pr.weaponsCopied);
         if (rep.weaponsScattered > 0)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Waffen gestreut", rep.weaponsScattered);
+        if (secretsGesetzt > 0)
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Secrets", secretsGesetzt);
         if (rep.crossTypesUsed > 0)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Cross-Typen", rep.crossTypesUsed);
         if (!pr.outfitFrom.empty())
@@ -1430,37 +1495,55 @@ static void drawUi(App& a, HWND hwnd)
                "zufaellige IDs - Jingles und Stimmungen wechseln die Plaetze.");
     ImGui::EndDisabled();
 
-    // --- Secrets (#53) - Platzhalter ohne Wirkung ------------------------
+    // --- Secrets (#53) ---------------------------------------------------
     //
-    // Die Auswahl ist schon sichtbar, damit die Oberflaeche ihre endgueltige
-    // Form zeigt; ausgegraut, bis die Sektorlisten und die Platzierungslogik
-    // existieren. Die Erklaerungen haengen wie oben als Schwebehilfe dran.
-    ImGui::SeparatorText("Secrets (in Vorbereitung)");
-    ImGui::BeginDisabled(true);
+    // Vier Arten: Vanilla (aus), normaler Pool, und zwei Nutzerlisten-
+    // Kategorien mit Autoren-Dropdown. Die Listen liegen als
+    // Autor_Kategorie.txt in data\secrets neben dem Programm; gelesen
+    // werden sie von SecretListe.cpp - dieselbe Grammatik liest auch
+    // SecretPlan.ps1 in der Kuration.
+    ImGui::SeparatorText("Secrets");
 
-    ImGui::RadioButton("Aus", &a.optSecrets, 0);
+    ImGui::RadioButton("Vanilla", &a.optSecrets, 0);
+    hoverHilfe("Die Secrets bleiben, wo Core sie versteckt hat.");
     ImGui::SameLine();
     ImGui::RadioButton("Im normalen Item-Pool", &a.optSecrets, 1);
     hoverHilfe("Die Secrets wandern als gewoehnliche Pickups in den Wuerfelpool "
                "und koennen ueberall dort liegen, wo auch Ausruestung liegen darf.");
 
-    ImGui::RadioButton("Glitched Secrets", &a.optSecrets, 2);
-    hoverHilfe("Handverlesene Liste von Raeumen und Sektoren, die nur mit "
-               "Glitches erreichbar sind. Die Liste wird von Hand gepflegt "
-               "und kommt noch.");
-
-    ImGui::RadioButton("Custom-Nutzerliste", &a.optSecrets, 3);
-    hoverHilfe("Von Nutzern eingereichte, handverlesene Sektorlisten. Jede "
-               "Liste traegt den Namen ihres Autors samt Kennzeichnung "
-               "Glitched oder Non-Glitched, z.B. Lucifer[Glitched]. Die "
-               "Dateien kommen in den Ordner SecretLists neben dem Programm; "
-               "das Format wird mit der ersten echten Liste festgelegt.");
+    ImGui::RadioButton("Glitchless-Liste", &a.optSecrets, 2);
+    hoverHilfe("Handverlesene Verstecke eines Autors, ohne Glitches erreichbar. "
+               "Eine Liste kann je Level auch Zusatzobjekte setzen - Schluessel, "
+               "Schalter, Tueren, sogar neue Portale.");
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(220.0f);
-    if (ImGui::BeginCombo("##secretliste", "(keine Listen gefunden)"))
-        ImGui::EndCombo();
+    ImGui::RadioButton("Glitched-Liste", &a.optSecrets, 3);
+    hoverHilfe("Wie die Glitchless-Liste, aber die Verstecke duerfen Glitches "
+               "voraussetzen.");
 
-    ImGui::EndDisabled();
+    if (a.optSecrets >= 2)
+    {
+        const char* kat = (a.optSecrets == 2) ? "Glitchless" : "Glitched";
+        std::vector<const SecretQuelle*> passend;
+        for (const SecretQuelle& q : a.secretQuellen)
+            if (q.kategorie == kat) passend.push_back(&q);
+
+        ImGui::SetNextItemWidth(220.0f);
+        const char* anzeige = "(keine Listen gefunden)";
+        for (const SecretQuelle* q : passend)
+            if (q->autor == a.secretAutor) anzeige = q->autor.c_str();
+        if (!passend.empty() && anzeige[0] == '(')
+        { a.secretAutor = passend[0]->autor; anzeige = passend[0]->autor.c_str(); }
+
+        if (ImGui::BeginCombo("Autor", anzeige))
+        {
+            for (const SecretQuelle* q : passend)
+                if (ImGui::Selectable(q->autor.c_str(), q->autor == a.secretAutor))
+                    a.secretAutor = q->autor;
+            ImGui::EndCombo();
+        }
+        if (passend.empty())
+            ImGui::TextDisabled("Keine %s-Liste in data\secrets gefunden - die Level bleiben vanilla.", kat);
+    }
 
     // --- 4. Level ---
     ImGui::SeparatorText("4. Level");
@@ -1631,6 +1714,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.optOutfits      = app.cfg.optOutfits;
     app.optItemMenge    = app.cfg.itemMenge;
     app.optSecrets      = app.cfg.secrets;
+    app.secretAutor     = app.cfg.secretAutor;
 
     // Alles Merkenswerte in die Einstellungsdatei schreiben: Fenstergroesse,
     // Haken, Seed. Laeuft beim Ziehen des Fensters, bei jeder geaenderten
@@ -1653,6 +1737,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.optOutfits      = app.optOutfits;
         app.cfg.itemMenge       = app.optItemMenge;
         app.cfg.secrets         = app.optSecrets;
+        app.cfg.secretAutor     = app.secretAutor;
         app.cfg.seedText        = app.seedBuf;
         app.cfg.save();
     };
@@ -1709,7 +1794,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.gegnerAus       != app.optGegnerAus ||
                  app.cfg.optOutfits      != app.optOutfits ||
                  app.cfg.itemMenge       != app.optItemMenge ||
-                 app.cfg.secrets         != app.optSecrets)
+                 app.cfg.secrets         != app.optSecrets ||
+                 app.cfg.secretAutor     != app.secretAutor)
         {
             merkeEinstellungen(hwnd);
         }

@@ -30,6 +30,7 @@
 #include "core/Randomizer.h"
 #include "core/Rng.h"
 #include "core/ScriptDat.h"
+#include "core/SecretListe.h"
 #include "core/Tr5Level.h"
 
 #include <cstdio>
@@ -72,6 +73,8 @@ int main(int argc, char** argv)
     std::wstring tr3Dir, tr3GoldDir;
     // SCRIPT.DAT mitbehandeln - dieselben Eingriffe wie die Oberflaeche.
     std::wstring skriptDat;
+    // Secret-Liste (#53): zweiter Patch-Durchgang aus einer Autor-Datei.
+    std::wstring secretListe;
     for (int i = 6; i < argc; ++i)
     {
         const std::string s = argv[i];
@@ -85,6 +88,7 @@ int main(int argc, char** argv)
         else if (s.rfind("tr3=", 0) == 0)     tr3Dir     = toW(s.c_str() + 4);
         else if (s.rfind("tr3gold=", 0) == 0) tr3GoldDir = toW(s.c_str() + 8);
         else if (s.rfind("skript=", 0) == 0)  skriptDat  = toW(s.c_str() + 7);
+        else if (s.rfind("secrets=", 0) == 0) secretListe = toW(s.c_str() + 8);
         // "gegneraus=47,49" - dieselbe Abwahl wie das Fenster "Gegnerarten"
         // in der Oberflaeche (#95), damit sich der Filter auch aus Skripten
         // pruefen laesst.
@@ -208,6 +212,26 @@ int main(int argc, char** argv)
     const std::wstring lager = tr3Dir.empty() ? std::wstring() : ordner + L"\\Import-Export";
     if (!Patch::apply(lvl, patch, pr, err, quelle, nullptr, tr3Dir, tr3GoldDir, lager)) { std::printf("Patch: %s\n", err.c_str()); return 1; }
     for (const std::string& w : pr.warnings) std::printf("  Hinweis: %s\n", w.c_str());
+
+    // Secrets aus einer Nutzerliste: zweiter Durchgang gegen den Stand nach
+    // dem ersten Patch - exakt wie in der Oberflaeche (doLevel).
+    if (!secretListe.empty())
+    {
+        std::string levelName = zone["level"].asString("");
+        JsonValue sPatch;
+        std::vector<std::string> sWarn;
+        if (!secretPatchBauen(secretListe, levelName, lvl, sPatch, sWarn, err))
+        { std::printf("Secret-Liste: %s\n", err.c_str()); return 1; }
+        for (const std::string& w : sWarn) std::printf("  Secrets: %s\n", w.c_str());
+
+        PatchReport spr;
+        if (!Patch::apply(lvl, sPatch, spr, err, quelle, nullptr, tr3Dir, tr3GoldDir, lager))
+        { std::printf("Secret-Patch: %s\n", err.c_str()); return 1; }
+        for (const std::string& w : spr.warnings) std::printf("  Secrets: %s\n", w.c_str());
+        std::printf("  Secrets     %d geaendert, %d hinzugefuegt, %d Trigger, %zu Portale\n",
+                    spr.edited, spr.added, spr.triggersAdded, sPatch["portalAdds"].size());
+    }
+
 
     if (notizen)
         for (const std::string& n : rep.notes) std::printf("  Notiz: %s\n", n.c_str());

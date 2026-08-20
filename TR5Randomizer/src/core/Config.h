@@ -64,7 +64,8 @@ struct Config
     std::set<int> gegnerAus;
     bool optOutfits      = false;
     int  itemMenge       = 0;     // 0 Vanilla, 1 mehr, 2 viel mehr (#36)
-    int  secrets         = 0;     // Platzhalter (#53): 0 Aus .. 3 Custom
+    int  secrets         = 0;     // Secrets (#53): 0 Vanilla, 1 Pool, 2/3 Liste
+    std::string secretAutor;      // gewaehlter Listenautor (Art 2/3)
 
     // Liest bzw. schreibt <exe-Ordner>\TR5Randomizer.cfg. Fehlt die Datei,
     // bleibt alles auf Vorgabe - das ist kein Fehler, sondern der erste Start.

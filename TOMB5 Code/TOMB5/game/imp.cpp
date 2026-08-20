@@ -13,6 +13,7 @@
 #include "lara.h"
 #include "effect2.h"
 #include "flmtorch.h"
+#include "sound.h"
 
 static BITE_INFO imp_hit = { 0, 100, 0, 9 };
 
@@ -124,14 +125,18 @@ void ImpControl(short item_number)
 
 	if (item->hit_points <= 0)
 	{
-		item->hit_points = 0;
-
-		if (item->current_anim_state != 9)
-		{
-			item->anim_number = objects[IMP].anim_index + 45;
-			item->frame_number = anims[item->anim_number].frame_base;
-			item->current_anim_state = 9;
-		}
+		// Zerfetzen statt Sterbeanimation (Nutzerwunsch 2026-08-20): der
+		// TR4-Granatwerfer-Tod lebt im Code weiter (DoGrenadeDamageOnBaddie
+		// -> CreatureDie(1) -> ExplodingDeath2, tomb4fx.cpp), TR5 nutzt ihn
+		// nur fuer den Roman God. Die Fetzen sind die MESHES DES GEGNERS
+		// selbst, als BODY_PART-Effekte geworfen - kein Zusatzmodell noetig.
+		// CreatureDie(1) erledigt alles, was die Animation erledigt haette:
+		// KillItem, DropBaddyPickups, AI aus, IFL_INVISIBLE fuer den
+		// Spielstand. Die alte Todesanim +45 samt ihrem KillItem-Kommando
+		// bleibt in den Daten, wird aber nicht mehr angespielt.
+		SoundEffect(SFX_IMP_DIE, &item->pos, 0);
+		CreatureDie(item_number, 1);
+		return;
 	}
 	else
 	{

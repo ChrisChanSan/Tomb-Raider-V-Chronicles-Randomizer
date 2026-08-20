@@ -152,30 +152,17 @@ void MazeMonsterControl(short item_number)
 
 		if (item->hit_points <= 0)
 		{
-			item->hit_points = 0;
-
-			if (item->current_anim_state != 7)
-			{
-				item->anim_number = anim + 10;
-				item->frame_number = anims[item->anim_number].frame_base;
-				item->current_anim_state = 7;
-			}
-			// Leiche ausblenden wie beim Hund. Die Todesanimation traegt kein
-			// KillItem-Kommando, und mit 4000 LP hat den Tod vanilla nie
-			// jemand erlebt - Core hat ihn nie fertig gebaut: die Liegepose
-			// versinkt im Boden, uebrig bleibt ewig der Blob-Schatten (im
-			// Spiel gesehen: "schwarzer Kegel"). Ab dem letzten Frame den
-			// Fade anstossen, draw.cpp:742 blendet aus und raeumt bei 128 weg
-			// - dasselbe Muster wie bei Larson (pierre.cpp).
-			// Getragenes gehoert mit heraus: freigegeben wird es sonst nur
-			// von CreatureDie, und dorthin fuehrt allein der Anim-Befehl 4
-			// ueber ITEM_DEACTIVATED - den traegt diese Sterbeanimation
-			// nicht, deshalb steht dieser Zweig ueberhaupt hier.
-			else if (item->frame_number == anims[item->anim_number].frame_end && !item->after_death)
-			{
-				DropBaddyPickups(item);
-				item->after_death = 1;
-			}
+			// Zerfetzen statt Sterbeanimation (Nutzerwunsch 2026-08-20, wie
+			// beim Imp - Begruendung dort). Hier ersetzt es zugleich den
+			// Fade-Behelf: Core hat diesen Tod nie fertig gebaut (Liegepose
+			// versinkt im Boden, kein KillItem in der Anim), wir haben ihn
+			// erst ausgeblendet wie Larson. Jetzt uebernimmt CreatureDie(1)
+			// samt ExplodingDeath2 - KillItem, DropBaddyPickups, AI aus,
+			// IFL_INVISIBLE, alles in einem Zug. Der Klang ist sein eigener:
+			// die Daten fuehren den MazeMonster als "Werwolf".
+			SoundEffect(SFX_WEREWOLF_DIE, &item->pos, 0);
+			CreatureDie(item_number, 1);
+			return;
 		}
 		else
 		{

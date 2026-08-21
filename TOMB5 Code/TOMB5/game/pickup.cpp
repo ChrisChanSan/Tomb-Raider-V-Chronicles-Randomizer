@@ -639,23 +639,24 @@ void KeyHoleCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 				if (item->object_number != KEY_HOLE8)
 					remove_inventory_item(short(hole + KEY_ITEM1));
 
-				// Die Kartenzieh-Animation (ANIM_KEYCARD, 437) hat echte
-				// Bilddaten nur, wo der Levelbau sie hingelegt hat: vanilla
-				// allein in joby2. In joby3 pflanzt der Randomizer sie samt
-				// Sound aus joby2 ein (#53, laraAnimAdds) - deshalb ist
-				// joby3 hier zugelassen, aber nur mit DATENPROBE: Cores
-				// Stubs erkennt man daran, dass 437 und 438 auf denselben
-				// Frame-Klumpen zeigen (mit AnimKmd nachgemessen); die
-				// Verpflanzung gibt 437 einen eigenen Zeiger. Ein
-				// UNrepariertes joby3 (Vanilla-Spiel) faellt damit weiter
-				// auf die gewoehnliche Schluesselanim zurueck statt 22
-				// Sekunden in eingefrorener Pose zu stehen. Andere Level
-				// bleiben ganz draussen: Laras Tabelle ist dort teils
-				// kuerzer, anims[437] gehoert schon dem naechsten Objekt.
+				// Die Kartenzieh-Animation (ANIM_KEYCARD, 437) gibt es nur
+				// dort, wo der Levelbau ihre Bilddaten hingelegt hat. Laras
+				// Anim-Tabelle ist ueberall gleich lang, die DATEN sind es
+				// nicht - Core laesst ungenutzte Eintraege als Stub stehen.
+				//
+				// Gefragt wird deshalb nach den DATEN, nicht nach dem Level:
+				// das hohe Byte von "interpolation" ist die FrameSize, und
+				// bei null rechnet der Motor frame_ptr[n * 0] und zeigt ewig
+				// dasselbe Bild (in joby3 waren das 22 Sekunden erstarrte
+				// Pose). Vanilla tragen sie joby2, joby4, joby5 und rich1;
+				// der Randomizer pflanzt sie bei Bedarf weiteren Leveln ein
+				// (laraAnimAdds), und die greifen damit automatisch mit.
+				//
+				// Vorher stand hier eine Levelliste. Die war zu eng: rich1
+				// hat die Animation, benutzte aber die Schluessel-dreh-Geste
+				// (vom Nutzer im Spiel gesehen).
 				if (item->object_number == KEY_HOLE8 &&
-					(gfCurrentLevel == LVL5_BASE ||
-					 (gfCurrentLevel == LVL5_SUBMARINE &&
-					  anims[ANIM_KEYCARD].frame_ptr != anims[ANIM_KEYCARD + 1].frame_ptr)))
+					(anims[ANIM_KEYCARD].interpolation >> 8) != 0)
 					l->anim_number = ANIM_KEYCARD;
 				else
 					l->anim_number = ANIM_USEKEY;

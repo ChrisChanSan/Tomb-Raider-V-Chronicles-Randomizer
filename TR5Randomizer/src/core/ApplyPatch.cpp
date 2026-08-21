@@ -897,7 +897,12 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             { 274, 274,  8, 63, 470, "Airlock Switch" },
             // Schluessel- und Puzzleloecher
             { 258, 264,  0, 63, 131, "Schluesselloch" },
-            { 265, 265,  0, 63, 131, "Schluesselloch 8" },
+            // Key Hole 8 nimmt die Kartenzieh-Geste, WENN das Level ihre
+            // Daten hat (pickup.cpp fragt die FrameSize ab). Deshalb hier
+            // anfordern - dann hat es sie, und die Geste passt zum Objekt.
+            // ANIM_USEKEY bleibt trotzdem noetig: sie ist der Rueckfall.
+            { 265, 265,  0, 63, 437, "Schluesselloch 8 (Karte)" },
+            { 265, 265,  0, 63, 131, "Schluesselloch 8 (Rueckfall)" },
             { 236, 243,  0, 63, 134, "Puzzleloch" },
             // Falltueren und Schiebeblock
             { 109, 110,  0, 63, 317, "Bodenfalltuer" },

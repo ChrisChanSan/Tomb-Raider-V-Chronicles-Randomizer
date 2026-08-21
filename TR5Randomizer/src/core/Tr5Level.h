@@ -418,6 +418,10 @@ public:
     // und Grenzen am Rumpf in Tr5Transfer.cpp.
     bool kopiereLaraAnimVon(const Tr5Level& src, int animNr, std::string& fehler);
 
+    // Traegt Laras Anim <animNr> hier echte Bilddaten? FrameSize null ist
+    // Cores Stub-Kennzeichen; zusaetzlich wird der Platz nachgerechnet.
+    bool    laraAnimBrauchbar(int animNr) const;
+
     // Der Objektslot, wie er in der Datei steht. anim < 0 heisst: keiner.
     struct MoveableInfo
     {

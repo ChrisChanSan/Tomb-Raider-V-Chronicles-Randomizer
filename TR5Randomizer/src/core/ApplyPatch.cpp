@@ -19,6 +19,7 @@
 #include "Tr3Quelle.h"
 
 #include <cstdio>
+#include <set>
 #include <map>
 #include <utility>
 
@@ -860,6 +861,89 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         {
             error = "aiAdds: " + aiErr;
             return false;
+        }
+    }
+
+    // --- Laras Interaktions-Anims nachreichen (#53) ----------------------
+    //
+    // Laras Anim-Tabelle ist in jedem Level gleich lang, die BILDDATEN sind
+    // aber levelspezifisch. Wo ein Level eine Bewegung nie braucht, laesst
+    // Core den Eintrag als Stub stehen (FrameSize 0) - abgespielt wird eine
+    // eingefrorene Pose oder eine viel zu kurze Bewegung. Beim Nutzer
+    // zweimal aufgeschlagen: die Keycard in joby3 (22 Sekunden erstarrt) und
+    // ein Schalter in andy3 ("macht eine Schalteranimation, nur nicht die
+    // richtige - viel zu schnell"). Das zweite ist schlimmer als haesslich:
+    // Lara ist vor dem Ende der OBJEKT-Animation fertig, verlaesst den
+    // Sektor und der Trigger greift nie.
+    //
+    // Deshalb hier, NACH allen Objektaenderungen: nachsehen, welche
+    // Interaktionen im fertigen Level ueberhaupt vorkommen, und die
+    // zugehoerige Anim aus einem Spenderlevel holen, wenn sie fehlt.
+    //
+    // Die Spenderreihenfolge stammt aus der Vermessung aller 13 Level mit
+    // LaraAnim: joby4 traegt fast alles, andy1 fast den Rest. Genommen wird
+    // der erste Spender, der die Anim WIRKLICH traegt - geprueft wird das am
+    // geladenen Spender, nicht geglaubt.
+    {
+        struct Bedarf { int typVon, typBis; int ocbVon, ocbBis; int anim; const char* was; };
+        static const Bedarf kBedarf[] = {
+            // Schalter 266..271: die OCB waehlt Laras Bewegung (switch.cpp:246ff)
+            { 266, 271,  0,  0,  64, "Schalter" },
+            { 266, 271,  1,  2, 325, "Schalter (versteckt)" },
+            { 266, 271,  3,  3, 413, "Schalter (klein)" },
+            { 266, 271,  4,  4, 196, "Schalter (Generator)" },
+            { 266, 271,  5,  7, 197, "Schalter (einhaendig)" },
+            { 266, 271,  8, 63, 470, "Schalter (Airlock)" },
+            { 274, 274,  8, 63, 470, "Airlock Switch" },
+            // Schluessel- und Puzzleloecher
+            { 258, 264,  0, 63, 131, "Schluesselloch" },
+            { 265, 265,  0, 63, 131, "Schluesselloch 8" },
+            { 236, 243,  0, 63, 134, "Puzzleloch" },
+            // Falltueren und Schiebeblock
+            { 109, 110,  0, 63, 317, "Bodenfalltuer" },
+            { 111, 112,  0, 63, 318, "Deckenfalltuer" },
+            { 137, 141,  0, 63, 316, "Schiebeblock" },
+        };
+
+        // Spenderreihenfolge, vermessen mit LaraAnim ueber alle 13 Level.
+        static const char* kSpender[] = { "joby4", "andy1", "Andy3", "joby3", "Andrea3", "joby5", "Andy2", "joby2", "rich2" };
+
+        std::set<int> gebraucht;
+        for (int i = 0; i < level.itemCount(); ++i)
+        {
+            Tr5Item it;
+            if (!level.getItem(i, it)) continue;
+            const int typ = it.objectNumber;
+            const int ocb = it.triggerFlags & 0x3F;
+            for (const Bedarf& b : kBedarf)
+                if (typ >= b.typVon && typ <= b.typBis && ocb >= b.ocbVon && ocb <= b.ocbBis)
+                    gebraucht.insert(b.anim);
+        }
+
+        for (int animNr : gebraucht)
+        {
+            if (level.laraAnimBrauchbar(animNr)) continue;
+            if (!levelSource)
+            {
+                report.warnings.push_back("Lara-Anim " + std::to_string(animNr) +
+                                          " fehlt und kein Zugriff auf die Spender-Level.");
+                continue;
+            }
+            bool geholt = false;
+            for (const char* sp : kSpender)
+            {
+                Tr5Level* q = quelle(sp);
+                if (!q || !q->laraAnimBrauchbar(animNr)) continue;
+                std::string aErr;
+                if (!level.kopiereLaraAnimVon(*q, animNr, aErr)) continue;
+                report.warnings.push_back("Lara-Anim " + std::to_string(animNr) +
+                                          " aus " + sp + " nachgereicht.");
+                geholt = true;
+                break;
+            }
+            if (!geholt)
+                report.warnings.push_back("Lara-Anim " + std::to_string(animNr) +
+                                          " fehlt und kein Spender hat sie - Interaktion bleibt fehlerhaft.");
         }
     }
 

@@ -640,6 +640,23 @@ bool Tr5Level::appendChain(const std::vector<Tr5FloorEntry>& chain, uint16_t& ou
     m_itemCountOffset += raw.size();
     verschiebeSound(raw.size(), at);      // der Sound-Block liegt noch weiter hinten
 
+    // Und die BLOCKKARTE gleich mit. Mesh-, Anim-, Frame- und Objektbloecke
+    // liegen im Hauptblock ebenfalls hinter der Floordata; ohne diese
+    // Korrektur zeigen sie nach dem ersten angehaengten Trigger daneben.
+    // Lange unbemerkt geblieben, weil niemand nach einem Floordata-Anhang
+    // noch in diese Bloecke gelesen hat - erst die Anim-Pruefung tat es und
+    // meldete prompt, dass Laras Animationen "fehlen" (#53).
+    auto blockNachziehen = [&](Block& b) {
+        if (b.countAt >= at) b.countAt += raw.size();
+        if (b.dataAt  >= at) b.dataAt  += raw.size();
+    };
+    blockNachziehen(m_meshData);  blockNachziehen(m_meshPtrs);
+    blockNachziehen(m_anims);     blockNachziehen(m_changes);
+    blockNachziehen(m_ranges);    blockNachziehen(m_commands);
+    blockNachziehen(m_bones);     blockNachziehen(m_frames);
+    blockNachziehen(m_objects);   blockNachziehen(m_sprites);
+    blockNachziehen(m_texinfos);
+
     outIndex = static_cast<uint16_t>(newIndex);
     return true;
 }
@@ -999,6 +1016,56 @@ bool Tr5Level::setRoomWater(int room, bool anAus, std::string& error)
     std::memcpy(m_bytes.data() + at, &neu, 2);
     r.flags = neu;
     return true;
+}
+
+//----------------------------------------------------------------------------
+// Traegt Laras Animation <animNr> in diesem Level echte Bilddaten?
+//
+// Cores Stub-Kennzeichen ist die FrameSize null (hohes Byte des Feldes
+// "interpolation", ANIM_STRUCT in global/types.h:645). Der Motor rechnet die
+// Bildadresse als frame_ptr[n * FrameSize] - bei null steht sie fuer immer
+// auf demselben Bild, und abgespielt wird eine eingefrorene Pose.
+//
+// Zweiter Fall: die Groesse stimmt, aber zwischen dem eigenen Frame-Zeiger
+// und dem naechstgroesseren liegt weniger Platz, als die Keyframes brauchen.
+// Dann gehoeren die Daten dort einer anderen Animation.
+//
+// Gefunden ueber ANIM_KEYCARD in joby3 (22 Sekunden erstarrt) und den
+// Schalter in andy3 (falsche, viel zu kurze Bewegung). Siehe LaraAnim.
+//----------------------------------------------------------------------------
+bool Tr5Level::laraAnimBrauchbar(int animNr) const
+{
+    MoveableInfo mv;
+    if (!moveableInfo(0, mv) || mv.animIndex < 0) return false;
+
+    const long long a = static_cast<long long>(mv.animIndex) + animNr;
+    if (a < 0 || a >= m_anims.count) return false;
+
+    const size_t o = m_anims.dataAt + static_cast<size_t>(a) * 40;
+    const uint8_t groesse = m_bytes[o + 4 + 1];          // hohes Byte
+    if (!groesse) return false;                          // Stub, Form 1
+
+    const uint8_t rate = m_bytes[o + 4];
+    uint16_t von, bis;
+    std::memcpy(&von, m_bytes.data() + o + 24, 2);
+    std::memcpy(&bis, m_bytes.data() + o + 26, 2);
+    // Stub, Form 2: leerer Bildbereich. joby4 traegt seine AIRLOCKSW so -
+    // FrameSize 10, aber Frames 0..0. Ein Spender mit dieser Form waere ein
+    // Tausch von Stub gegen Stub.
+    if (bis <= von) return false;
+    const int keyframes = (rate > 0 && bis >= von) ? ((bis - von) / rate + 1) : 1;
+    const long long gebraucht = static_cast<long long>(keyframes) * groesse * 2;
+
+    uint32_t eigen;
+    std::memcpy(&eigen, m_bytes.data() + o, 4);
+    uint32_t naechster = static_cast<uint32_t>(m_frames.count) * 2;
+    for (int32_t i = 0; i < m_anims.count; ++i)
+    {
+        uint32_t z;
+        std::memcpy(&z, m_bytes.data() + m_anims.dataAt + static_cast<size_t>(i) * 40, 4);
+        if (z > eigen && z < naechster) naechster = z;
+    }
+    return gebraucht <= static_cast<long long>(naechster) - eigen;
 }
 
 //----------------------------------------------------------------------------

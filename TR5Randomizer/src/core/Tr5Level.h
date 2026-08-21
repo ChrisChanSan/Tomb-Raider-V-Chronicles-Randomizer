@@ -109,6 +109,10 @@ struct Tr5Room
     // jedes Eintrags ist FLOOR_INFO.index, der Zeiger in die Floordata.
     size_t sectorsOffset = 0;
 
+    // Absolute Dateiposition des Raumkopfes (208 Byte). Gebraucht, um die
+    // Flags bei +78 zu schreiben - das Wasserbit sitzt dort.
+    size_t headerOffset = 0;
+
     bool isAlternate() const { return altRoom >= 0; }
 };
 
@@ -335,6 +339,10 @@ public:
     // (0x100=0 Grad, 0x200=90, 0x400=180, 0x800=270 - Laras Blick auf die
     // Wand). ODER-t in vorhandene Eintraege; Kettenordnung siehe Rumpf.
     bool    makeClimb(int room, int sx, int sz, int dirBits, std::string& error);
+
+    // Wasserbit eines Raums (ROOM_UNDERWATER, Bit 0 der Raumflags bei +78).
+    // Echter Eingriff: 44 Motorstellen haengen daran, nicht nur die Optik.
+    bool    setRoomWater(int room, bool anAus, std::string& error);
     // --- Sound ---------------------------------------------------------
     //
     // Ein Level fuehrt nur die Samples mit, die es selbst braucht. Kommt ein

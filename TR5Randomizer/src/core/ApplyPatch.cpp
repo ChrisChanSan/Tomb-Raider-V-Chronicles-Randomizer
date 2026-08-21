@@ -519,6 +519,23 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
+    // --- Wasserraeume (#53) ---------------------------------------------
+    //
+    // {"room": N, "an": true|false} setzt bzw. loescht ROOM_UNDERWATER.
+    // Harter Fehler wie bei Portal und Kletterwand: ein halb umgestellter
+    // Raum waere schlimmer als gar keiner.
+    const JsonValue& wasser = patch["roomWater"];
+    for (size_t i = 0; i < wasser.size(); ++i)
+    {
+        const JsonValue& w = wasser[i];
+        std::string wErr;
+        if (!level.setRoomWater(static_cast<int>(w["room"].asInt(-1)), w["an"].asBool(true), wErr))
+        {
+            error = "roomWater[" + std::to_string(i) + "]: " + wErr;
+            return false;
+        }
+    }
+
     // --- Kletterwaende (#53) --------------------------------------------
     //
     // {"room","sectorX","sectorZ","dirBits"}: der Sektor wird kletterbar.

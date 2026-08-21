@@ -301,6 +301,7 @@ void Tr5Level::parseRoom(size_t offset, size_t size, int index)
     // aufgegangen abgebrochen werden, und ein Offset auf einen unklaren Raum
     // waere schlimmer als gar keiner.
     r.sectorsOffset = offset + sectorsAt;
+    r.headerOffset = offset;
 
     m_rooms.push_back(r);
 }
@@ -963,6 +964,40 @@ bool Tr5Level::makeClimb(int room, int sx, int sz, int dirBits, std::string& err
     uint16_t idx = 0;
     if (!appendChain(neu, idx, error)) return false;
     setSectorIndex(r, sx, sz, idx);
+    return true;
+}
+
+//----------------------------------------------------------------------------
+// Das Wasserbit eines Raums setzen oder loeschen (#53, Make_Room_Water /
+// Make_Room_Nowater).
+//
+// ROOM_UNDERWATER ist Bit 0 der Raumflags (global/types.h:281), im Raumkopf
+// bei +78. Der Motor haengt 44 Stellen daran: Laras Schwimmzustand, Kamera,
+// Sound, KI-Wege, Feuer. Es umzulegen ist damit ein echter Eingriff und
+// keine Optik - der Raum wird wirklich zum Wasserraum.
+//
+// Wiederholbar: steht das Bit schon wie gewuenscht, passiert nichts.
+//----------------------------------------------------------------------------
+bool Tr5Level::setRoomWater(int room, bool anAus, std::string& error)
+{
+    if (room < 0 || room >= static_cast<int>(m_rooms.size()))
+    { error = "Raum " + std::to_string(room) + " gibt es nicht"; return false; }
+
+    Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    if (!r.headerOffset) { error = "Raumkopf nicht aufgegangen"; return false; }
+
+    constexpr size_t OFS_FLAGS = 78;
+    const size_t at = r.headerOffset + OFS_FLAGS;
+    if (at + 2 > m_bytes.size()) { error = "Raumkopf liegt ausserhalb der Datei"; return false; }
+
+    uint16_t f;
+    std::memcpy(&f, m_bytes.data() + at, 2);
+    const uint16_t neu = anAus ? static_cast<uint16_t>(f | 0x0001)
+                               : static_cast<uint16_t>(f & ~0x0001);
+    if (neu == f) return true;                    // steht schon so
+
+    std::memcpy(m_bytes.data() + at, &neu, 2);
+    r.flags = neu;
     return true;
 }
 

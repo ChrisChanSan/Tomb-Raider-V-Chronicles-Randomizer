@@ -36,6 +36,12 @@ Mehrere Anims dürfen sich **einen** Zeiger teilen, wenn sie dieselbe
 `frame_base` haben — dann sind es Varianten desselben Bewegungsblocks
 (andy3: 468/469/470 starten alle auf Frame 8190). Das ist normal.
 
+Ein geteilter Zeiger heißt aber **nicht automatisch „alles in Ordnung"**.
+Er kann auch bedeuten, dass ein echter Besitzer daliegt und die anderen
+mit `FrameSize 0` nur daraufzeigen — genau rich1s Fall (218–220 zeigten auf
+221s Block). Auseinanderzuhalten sind die beiden Fälle nur über die
+Framegröße, nicht über den Zeiger.
+
 ## Ergebnis: kein einziges Level trägt alle
 
 Reichste Spender: **joby4** und **andy1**. Ärmste: **rich1, rich2, rich3** —
@@ -79,9 +85,50 @@ das ab — eine Spendertabelle, die nur „Slot vorhanden" fragt, tut es nicht.
 3. Jede davon wird mit `Tr5Level::laraAnimBrauchbar` geprüft und bei Bedarf
    über `kopiereLaraAnimVon` aus dem ersten Spender geholt, der sie
    **wirklich** trägt — geprüft am geladenen Spender, nicht geglaubt.
+4. **Der Bedarf wird entlang der Kette aufgezogen**, bevor irgendetwas
+   geholt wird — siehe unten. Selbstbezug (222 → 222) beendet den Lauf.
 
-Ein Vanilla-Durchlauf über alle Level repariert damit von sich aus sieben
+Ein Vanilla-Durchlauf über alle Level repariert damit von sich aus neun
 Animationen.
+
+## Animationen sind Ketten — und Core stubbt sie am Stück
+
+Eine Bewegung ist selten eine Animation. `next_animation` (Offset +28 im
+40-Byte-Eintrag) hängt die nächste an, und Core lässt beim Stubben die
+**ganze Kette** stehen. Die Kriechrolle in rich1:
+
+| Anim | Frame-Zeiger | Rate | weiter mit |
+|---|---|---|---|
+| 218 | 103896 | 5 | 219 |
+| 219 | 103896 | 5 | 220 |
+| 220 | 103896 | 5 | 222 |
+| 221 | 103896 | 4 | 11 |
+
+Alle vier auf **einem** Zeiger. 221 ist der echte Besitzer (Größe 37,
+braucht 518 der 592 Byte), 218–220 sind Stubs mit Größe 0.
+
+Nur 218 zu reparieren reicht deshalb nicht: Lara setzt zum Rollen an und
+fällt nach sechs Bildern in die Kriechpose zurück, weil 219 sie wieder auf
+das Standbild schickt. Genau so im Spiel gesehen.
+
+Der Nachlauf zieht den Bedarf darum erst über `laraAnimNachfolger` auf,
+bevor er etwas holt. Nach dem Lauf:
+
+| Anim | Frame-Zeiger | Rate |
+|---|---|---|
+| 218 | 410112 | 2 |
+| 219 | 410408 | 2 |
+| 220 | 411032 | 2 |
+| 221 | 103896 | 4 (unangetastet, war nie kaputt) |
+
+Die Klangbefehle kommen mit und werden auf die Zielbasis umgerechnet:
+joby4s PlaySound auf Frame 5500 bei Basis 5497 landet in rich1 auf 4278 bei
+Basis 4275 — derselbe Abstand.
+
+**Gegenprobe:** `AnimKmd <level.trc> 0` zeigt Frame-Zeiger, Rate,
+Nachfolger, Zustandswechsel und alle Befehle je Animation. Wenn zwei
+benachbarte Anims denselben `FrameOfs` zeigen, sofort mit
+`LaraAnim -anim <nr>` die Größe nachsehen.
 
 ## Die OCB wählt Laras Bewegung
 

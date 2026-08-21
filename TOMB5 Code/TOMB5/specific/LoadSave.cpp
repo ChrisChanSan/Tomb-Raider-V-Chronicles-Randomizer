@@ -710,7 +710,7 @@ void DoOptions()
 	else if (menu == 0)	//main options menu
 	{
 		f= 3 * font_height;
-		nMask = 6;
+		nMask = 7;	// + Language-Zeile
 		PrintString(phd_centerx, 3 * font_height, 6, SCRIPT_TEXT(TXT_Options), FF_CENTER);
 		PrintString(phd_centerx, f + font_height + (font_height >> 1), sel & 1 ? 1 : 2, SCRIPT_TEXT(TXT_Control_Configuration), FF_CENTER);
 		PrintString(phd_centerx >> 2, f + 3 * font_height, sel & 2 ? 1 : 2, SCRIPT_TEXT(TXT_Music_Volume), 0);
@@ -743,20 +743,27 @@ void DoOptions()
 			strcpy(buf, SCRIPT_TEXT(TXT_Manual));
 
 		PrintString(phd_centerx + (phd_centerx >> 2), f + 6 * font_height, sel & 0x10 ? 1 : 6, buf, 0);
-		SFMask = 0x20;
+
+		// Sprachwahl: schaltet live auf eine andere der Sprachdateien um, die
+		// neben der EXE liegen (gameflow.cpp). "Language" hat keine String-ID
+		// im Sprach-Wad, darum als Literal - wie "tomb5 options" darunter.
+		PrintString(phd_centerx >> 2, f + 7 * font_height, sel & 0x20 ? 1 : 2, "Language", 0);
+		PrintString(phd_centerx + (phd_centerx >> 2), f + 7 * font_height, sel & 0x20 ? 1 : 6, (char*)SprachAnzeige(Gameflow->Language), 0);
+
+		SFMask = 0x40;
 
 		if (gfGameMode == 1)
 		{
-			nMask = 7;
-			PrintString(phd_centerx, (font_height >> 1) + f + 7 * font_height, sel & 0x20 ? 1 : 2, SCRIPT_TEXT(TXT_Special_Features), FF_CENTER);
+			nMask = 8;
+			PrintString(phd_centerx, (font_height >> 1) + f + 8 * font_height, sel & 0x40 ? 1 : 2, SCRIPT_TEXT(TXT_Special_Features), FF_CENTER);
 		}
 		else
 			SFMask = 0;
 
 		if (SFMask)
-			PrintString(phd_centerx, (font_height >> 1) + f + 8 * font_height, sel & 0x40 ? 1 : 2, "tomb5 options", FF_CENTER);
+			PrintString(phd_centerx, (font_height >> 1) + f + 9 * font_height, sel & 0x80 ? 1 : 2, "tomb5 options", FF_CENTER);
 		else
-			PrintString(phd_centerx, (font_height >> 1) + f + 7 * font_height, sel & 0x20 ? 1 : 2, "tomb5 options", FF_CENTER);
+			PrintString(phd_centerx, (font_height >> 1) + f + 8 * font_height, sel & 0x40 ? 1 : 2, "tomb5 options", FF_CENTER);
 
 		if (dbinput & IN_FORWARD)
 		{
@@ -776,7 +783,7 @@ void DoOptions()
 			menu = 1;
 		}
 
-		i = !SFMask ? 0x20 : 0x40;
+		i = !SFMask ? 0x40 : 0x80;	// "tomb5 options"-Bit, um die Language-Zeile verschoben
 
 		if (dbinput & IN_SELECT && sel & (ulong)i)
 		{
@@ -888,6 +895,31 @@ void DoOptions()
 			}
 
 			savegame.AutoTarget = (uchar)App.AutoTarget;
+		}
+		else if (sel & 0x20)
+		{
+			long richtung = 0;
+
+			if (dbinput & IN_LEFT)
+				richtung = -1;
+
+			if (dbinput & IN_RIGHT)
+				richtung = 1;
+
+			if (richtung)
+			{
+				// Naechste VORHANDENE Sprachdatei in Blickrichtung - fehlende
+				// werden uebersprungen (WechsleSprache scheitert dann leise).
+				for (long n = Gameflow->Language + richtung; n >= 0 && n < gfLanguageCount; n += richtung)
+				{
+					if (WechsleSprache(n))
+					{
+						SprachWahl = n;	// ab jetzt explizite Wahl, Registry "Language"
+						SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+						break;
+					}
+				}
+			}
 		}
 		else if (sel & SFMask && dbinput & IN_SELECT)
 		{

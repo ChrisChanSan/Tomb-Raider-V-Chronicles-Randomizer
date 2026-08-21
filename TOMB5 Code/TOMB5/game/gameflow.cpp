@@ -977,16 +977,110 @@ void DoLevel(uchar Name, uchar Audio)
 	reset_flag = 0;
 }
 
-void LoadGameflow()
+//----------------------------------------------------------------------------
+// Sprachwechsel im laufenden Spiel: die SCRIPT.DAT traegt am Ende eine Liste
+// von Sprachdateinamen (NUL-getrennt bis zum Dateiende). Das Original nimmt
+// stur die ERSTE Datei, die sich laden laesst - Regionalversionen unterschieden
+// sich nur durch die mitgelieferten Dateien. Wir merken uns die Liste und
+// koennen jederzeit auf eine andere vorhandene Datei umschalten; SCRIPT_TEXT
+// loest jeden Text live ueber gfStringOffset/gfStringWad auf, der Wechsel
+// wirkt also sofort und ohne Neustart.
+char* gfLanguageList;	// erster Name in der Liste (zeigt in gfScriptFile)
+long gfLanguageCount;
+long SprachWahl = -1;	// Registry "Language": -1 = Automatik (erste ladbare Datei)
+
+static char* SprachDateiName(long idx)
+{
+	char* s = gfLanguageList;
+
+	if (idx < 0 || idx >= gfLanguageCount)
+		return 0;
+
+	for (long i = 0; i < idx; i++)
+		s += strlen(s) + 1;
+
+	return s;
+}
+
+// Anzeigename fuers Optionsmenue - nur Zeichen, die die Spielschrift kann.
+const char* SprachAnzeige(long idx)
+{
+	static const char* namen[8] = { "English", "Francais", "Deutsch", "Italiano", "Espanol", "English US", "Japanese", "Nederlands" };
+	const char* datei = SprachDateiName(idx);
+
+	if (!datei)
+		return "---";
+
+	if (idx < 8 && !_strnicmp(datei, "ENGLISH", 7)) return namen[0];
+	if (!_strnicmp(datei, "FRENCH", 6))  return namen[1];
+	if (!_strnicmp(datei, "GERMAN", 6))  return namen[2];
+	if (!_strnicmp(datei, "ITALIAN", 7)) return namen[3];
+	if (!_strnicmp(datei, "SPANISH", 7)) return namen[4];
+	if (!_strnicmp(datei, "US.", 3))     return namen[5];
+	if (!_strnicmp(datei, "JAPAN", 5))   return namen[6];
+	if (!_strnicmp(datei, "DUTCH", 5))   return namen[7];
+	return datei;
+}
+
+// Zeigertabelle umlegen, Kopf verdichten, Strings ent-XOR-en (0xA5) - exakt
+// der Ablauf, den LoadGameflow immer schon fuhr, nur wiederverwendbar.
+static void SprachPufferAufbereiten(char* d)
 {
 	STRINGHEADER sh;
+	char* s;
+	char* e;
+	long l;
+
+	gfStringOffset = (ushort*)d;
+	gfLanguageFile = (uchar*)d;
+
+	memcpy(&sh, gfStringOffset, sizeof(STRINGHEADER));
+	memcpy(gfStringOffset, gfStringOffset + (sizeof(STRINGHEADER) / sizeof(ushort)), TXT_NUM_STRINGS * sizeof(ushort));
+	gfStringWad = (char*)(gfStringOffset + TXT_NUM_STRINGS);
+	memcpy(gfStringOffset + TXT_NUM_STRINGS,
+		gfStringOffset + TXT_NUM_STRINGS + (sizeof(STRINGHEADER) / sizeof(ushort)),
+		sh.StringWadLen + sh.PCStringWadLen + sh.PSXStringWadLen);
+
+	for (int i = 0; i < TXT_NUM_STRINGS - 1; i++)
+	{
+		s = &gfStringWad[gfStringOffset[i]];
+		e = &gfStringWad[gfStringOffset[i + 1]];
+		l = e - s - 1;
+
+		for (int j = 0; j < l; j++)
+			s[j] ^= 0xA5;
+	}
+}
+
+long WechsleSprache(long idx)
+{
+	char* d;
+	char* name = SprachDateiName(idx);
+
+	if (!name || !*name || idx > 7)	// Gameflow->Language ist ein 3-Bit-Feld
+		return 0;
+
+	d = 0;
+
+	if (!LoadFile(name, &d))
+		return 0;
+
+	free(gfLanguageFile);
+	SprachPufferAufbereiten(d);
+	Gameflow->Language = idx;	// steuert auch die deutsche Tastaturtabelle (LoadSave.cpp)
+	return 1;
+}
+
+void LoadGameflow()
+{
 	uchar* n;
 	char* s;
 	char* d;
 	long l, end;
 
 	s = 0;
-	LoadFile("SCRIPT.DAT", &s);
+	l = LoadFile("SCRIPT.DAT", &s);
+	const long scriptGroesse = l;
 
 	gfScriptFile = (uchar*)s;
 
@@ -1008,6 +1102,16 @@ void LoadGameflow()
 	gfScriptWad = (uchar*)s;
 	s += Gameflow->ScriptLen;
 
+	// Sprachliste vermessen: Namen liegen NUL-getrennt bis zum Dateiende.
+	gfLanguageList = s;
+	gfLanguageCount = 0;
+
+	for (char* p = s; p < (char*)gfScriptFile + scriptGroesse && *p; p += strlen(p) + 1)
+		gfLanguageCount++;
+
+	// Wie das Original: die erste Datei nehmen, die sich laden laesst. Die
+	// gespeicherte Wahl des Nutzers (SprachWahl) zieht WinMain nach dem
+	// LoadSettings-Aufruf nach - die Registry ist hier noch nicht gelesen.
 	for (l = 0;; l++)
 	{
 		d = 0;
@@ -1018,26 +1122,8 @@ void LoadGameflow()
 		s += strlen(s) + 1;
 	}
 
-	gfStringOffset = (ushort*)d;
-	gfLanguageFile = (uchar*)d;
+	SprachPufferAufbereiten(d);
 	Gameflow->Language = l;
-
-	memcpy(&sh, gfStringOffset, sizeof(STRINGHEADER));
-	memcpy(gfStringOffset, gfStringOffset + (sizeof(STRINGHEADER) / sizeof(ushort)), TXT_NUM_STRINGS * sizeof(ushort));
-	gfStringWad = (char*)(gfStringOffset + TXT_NUM_STRINGS);
-	memcpy(gfStringOffset + TXT_NUM_STRINGS,
-		gfStringOffset + TXT_NUM_STRINGS + (sizeof(STRINGHEADER) / sizeof(ushort)),
-		sh.StringWadLen + sh.PCStringWadLen + sh.PSXStringWadLen);
-
-	for (int i = 0; i < TXT_NUM_STRINGS - 1; i++)
-	{
-		s = &gfStringWad[gfStringOffset[i]];
-		d = &gfStringWad[gfStringOffset[i + 1]];
-		l = d - s - 1;
-
-		for (int j = 0; j < l; j++)
-			s[j] ^= 0xA5;
-	}
 
 	for (int i = 0; i < Gameflow->nLevels; i++)
 	{

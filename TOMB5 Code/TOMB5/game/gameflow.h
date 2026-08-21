@@ -2,6 +2,8 @@
 #include "../global/types.h"
 
 void DoGameflow();
+long WechsleSprache(long idx);
+const char* SprachAnzeige(long idx);
 long TitleOptions();
 void DoTitle(uchar name, uchar audio);
 long do_dels_cutseq_selector();
@@ -18,6 +20,9 @@ extern ushort* gfStringOffset;
 extern ushort* gfFilenameOffset;
 extern uchar* gfScriptFile;
 extern uchar* gfLanguageFile;
+extern char* gfLanguageList;
+extern long gfLanguageCount;
+extern long SprachWahl;
 extern char* gfStringWad;
 extern char* gfFilenameWad;
 extern long gfStatus;

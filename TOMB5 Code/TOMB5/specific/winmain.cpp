@@ -591,6 +591,12 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		LoadSettings();
 	}
 
+	// Gespeicherte Sprachwahl nachziehen: LoadGameflow lief VOR LoadSettings
+	// und hat wie das Original die erste ladbare Sprachdatei genommen - erst
+	// jetzt ist die Registry gelesen ("Language", -1 = Automatik).
+	if (SprachWahl >= 0 && SprachWahl != (long)Gameflow->Language)
+		WechsleSprache(SprachWahl);
+
 	if (!fmvs_disabled)
 	{
 		if (!LoadBinkStuff())

@@ -390,7 +390,7 @@ void DoOptions()
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Look), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Roll), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Inventory), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, "Pause", 0);
+			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, (char*)EigenText("Pause"), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Save), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Load), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Small_Medipack), 0);
@@ -660,7 +660,7 @@ void DoOptions()
 		PrintString(phd_centerx, f + 5 * font_height, SpecialFeaturesPage[0] ? (sel & 1 ? 1 : 2) : 3, SCRIPT_TEXT(TXT_Storyboards_Part_1), FF_CENTER);
 		PrintString(phd_centerx, f + 6 * font_height, SpecialFeaturesPage[1] ? (sel & 2 ? 1 : 2) : 3, SCRIPT_TEXT(TXT_Next_Generation_Concept), FF_CENTER);
 		PrintString(phd_centerx, f + 7 * font_height, SpecialFeaturesPage[2] ? (sel & 4 ? 1 : 2) : 3, SCRIPT_TEXT(TXT_Storyboards_Part_2), FF_CENTER);
-		PrintString(phd_centerx, f + 8 * font_height, SpecialFeaturesPage[3] ? (sel & 8 ? 1 : 2) : 3, "Gallery", FF_CENTER);
+		PrintString(phd_centerx, f + 8 * font_height, SpecialFeaturesPage[3] ? (sel & 8 ? 1 : 2) : 3, (char*)EigenText("Gallery"), FF_CENTER);
 
 		if (NumSpecialFeatures)
 		{
@@ -747,7 +747,7 @@ void DoOptions()
 		// Sprachwahl: schaltet live auf eine andere der Sprachdateien um, die
 		// neben der EXE liegen (gameflow.cpp). "Language" hat keine String-ID
 		// im Sprach-Wad, darum als Literal - wie "tomb5 options" darunter.
-		PrintString(phd_centerx >> 2, f + 7 * font_height, sel & 0x20 ? 1 : 2, "Language", 0);
+		PrintString(phd_centerx >> 2, f + 7 * font_height, sel & 0x20 ? 1 : 2, (char*)EigenText("Language"), 0);
 		PrintString(phd_centerx + (phd_centerx >> 2), f + 7 * font_height, sel & 0x20 ? 1 : 6, (char*)SprachAnzeige(Gameflow->Language), 0);
 
 		SFMask = 0x40;
@@ -761,9 +761,9 @@ void DoOptions()
 			SFMask = 0;
 
 		if (SFMask)
-			PrintString(phd_centerx, (font_height >> 1) + f + 9 * font_height, sel & 0x80 ? 1 : 2, "tomb5 options", FF_CENTER);
+			PrintString(phd_centerx, (font_height >> 1) + f + 9 * font_height, sel & 0x80 ? 1 : 2, (char*)EigenText("tomb5 options"), FF_CENTER);
 		else
-			PrintString(phd_centerx, (font_height >> 1) + f + 8 * font_height, sel & 0x40 ? 1 : 2, "tomb5 options", FF_CENTER);
+			PrintString(phd_centerx, (font_height >> 1) + f + 8 * font_height, sel & 0x40 ? 1 : 2, (char*)EigenText("tomb5 options"), FF_CENTER);
 
 		if (dbinput & IN_FORWARD)
 		{

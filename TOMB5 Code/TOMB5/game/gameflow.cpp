@@ -521,7 +521,7 @@ long TitleOptions()
 		// SCRIPT.DAT/ENGLISH.DAT string wad), so it's printed as a plain literal
 		// instead of going through SCRIPT_TEXT() - PrintString already accepts raw
 		// C strings directly elsewhere (e.g. the "\x18"/"\x1a" arrow glyphs below).
-		PrintString(phd_centerx, phd_winymax - 2 * font_height, (selection & 8) ? 1 : 2, "Level Select", FF_CENTER);
+		PrintString(phd_centerx, phd_winymax - 2 * font_height, (selection & 8) ? 1 : 2, (char*)EigenText("Level Select"), FF_CENTER);
 		PrintString(phd_centerx, phd_winymax - 1 * font_height, (selection & 16) ? 1 : 2, SCRIPT_TEXT(TXT_Exit), FF_CENTER);
 		font_height = default_font_height;
 
@@ -1020,6 +1020,46 @@ const char* SprachAnzeige(long idx)
 	if (!_strnicmp(datei, "JAPAN", 5))   return namen[6];
 	if (!_strnicmp(datei, "DUTCH", 5))   return namen[7];
 	return datei;
+}
+
+// Selbst ergaenzte Menuezeilen ("Language", "Level Select", ...) haben keine
+// String-ID im Sprach-Wad - kleine eigene Tabelle je geladener Sprache.
+// Italienisch bekommt bewusst Englisch: die ITALIAN.DAT der Steam-Fassung
+// IST Englisch, uebersetzte Zeilen dazwischen waeren Kauderwelsch. Nur
+// Zeichen, die die Spielschrift ohne Escape-Codes kann (ASCII).
+const char* EigenText(const char* engl)
+{
+	static const char* tabelle[][4] =
+	{	// Englisch          Franzoesisch       Deutsch           Spanisch
+		{ "Language",        "Langue",          "Sprache",        "Idioma" },
+		{ "Level Select",    "Choix du niveau", "Levelauswahl",   "Seleccion de nivel" },
+		{ "Pause",           "Pause",           "Pause",          "Pausa" },
+		{ "Gallery",         "Galerie",         "Galerie",        "Galeria" },
+		{ "tomb5 options",   "Options tomb5",   "tomb5-Optionen", "Opciones tomb5" },
+	};
+
+	long spalte;
+
+	switch (Gameflow->Language)
+	{
+	case FRENCH:
+		spalte = 1;
+		break;
+	case GERMAN:
+		spalte = 2;
+		break;
+	case SPANISH:
+		spalte = 3;
+		break;
+	default:
+		return engl;	// Englisch, US und Italienisch (= Englisch)
+	}
+
+	for (long i = 0; i < (long)(sizeof(tabelle) / sizeof(tabelle[0])); i++)
+		if (!strcmp(engl, tabelle[i][0]))
+			return tabelle[i][spalte];
+
+	return engl;
 }
 
 // Zeigertabelle aufbauen und Strings ent-XOR-en (0xA5).

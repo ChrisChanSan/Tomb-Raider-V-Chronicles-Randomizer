@@ -4,6 +4,7 @@
 void DoGameflow();
 long WechsleSprache(long idx);
 const char* SprachAnzeige(long idx);
+const char* EigenText(const char* engl);
 long TitleOptions();
 void DoTitle(uchar name, uchar audio);
 long do_dels_cutseq_selector();

@@ -1144,12 +1144,15 @@ long WechsleSprache(long idx)
 	if (!LoadFile(name, &d))
 		return 0;
 
-	// Nur Dateien im PC-Layout (195 Haupt- / 58 PC-Strings) sind dem Enum
-	// zuordenbar. JAPAN.DAT und DUTCH.DAT der Steam-Fassung sind in
-	// Wahrheit PSX-Dateien (204/96, PSX-Seriennummern BESLES-02238/-02243
-	// mitten im Text) - deren Reihenfolge passt nicht, das Ergebnis waren
-	// Muellzeilen im Menue. Geprueft wird der KOPF, nicht der Name: eine
-	// echte PC-Fassung von einer Regionalversions-CD ginge weiterhin.
+	// Nur Dateien im TR5-PC-Layout (195 Haupt- / 58 PC-Strings) sind dem
+	// Enum zuordenbar. JAPAN.DAT und DUTCH.DAT sind in JEDER TR5-Fassung
+	// (Steam wie die japanische PC-CD) in Wahrheit TOMB-RAIDER-4-Dateien:
+	// Layout 204/96 wie TR4s English.dat, TR4-Itemnamen ("Hathor Effigy")
+	// und TR4-PSX-Seriennummern (SLES-02238/-02243) mitten im Text. Ein
+	// japanisches oder hollaendisches TR5-PC-Textpaket gab es nie - selbst
+	// die japanische CD fiel beim Start auf ENGLISH.DAT zurueck. Geprueft
+	// wird der KOPF, nicht der Name: eine echte Fassung im TR5-Layout
+	// (so wie die vom Nutzer aufgetriebene ITALIAN.DAT) geht weiterhin.
 	memcpy(&sh, d, sizeof(STRINGHEADER));
 
 	if (sh.nStrings != 195 || sh.nPCStrings != 58)

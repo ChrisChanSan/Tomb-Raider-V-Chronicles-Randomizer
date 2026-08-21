@@ -110,6 +110,36 @@ static void init_water_table()
 	}
 }
 
+// Die Spielstaende liegen im Unterordner savegame\ neben der EXE statt lose
+// im Spielordner. SaveGamePath baut den Pfad, EnsureSaveGameFolder legt den
+// Ordner beim Start an und zieht dort noch liegende savegame.N aus dem
+// Spielordner um (nur wenn der Slot im Ordner frei ist - MoveFile
+// ueberschreibt nicht).
+void SaveGamePath(char* buffer, long slot_num)
+{
+	wsprintf(buffer, "savegame\\savegame.%d", slot_num);
+}
+
+void EnsureSaveGameFolder()
+{
+	char alt[32], neu[32];
+
+	CreateDirectory("savegame", 0);
+
+	for (int i = 0; i < 15; i++)
+	{
+		wsprintf(alt, "savegame.%d", i);
+
+		if (GetFileAttributes(alt) == INVALID_FILE_ATTRIBUTES)
+			continue;
+
+		SaveGamePath(neu, i);
+
+		if (MoveFile(alt, neu))
+			Log("Moved %s into savegame folder", alt);
+	}
+}
+
 long S_SaveGame(long slot_num)
 {
 	HANDLE file;
@@ -120,7 +150,7 @@ long S_SaveGame(long slot_num)
 	for (int i = 0; i < 20; i++)
 		buffer[i] = '\0';
 
-	wsprintf(buffer, "savegame.%d", slot_num);
+	SaveGamePath(buffer, slot_num);
 	file = CreateFile(buffer, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 
 	if (file != INVALID_HANDLE_VALUE)
@@ -157,7 +187,7 @@ long S_LoadGame(long slot_num)
 	long value;
 	char buffer[80];
 
-	wsprintf(buffer, "savegame.%d", slot_num);
+	SaveGamePath(buffer, slot_num);
 	file = CreateFile(buffer, GENERIC_READ, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 
 	if (file != INVALID_HANDLE_VALUE)
@@ -179,6 +209,7 @@ long S_LoadGame(long slot_num)
 bool GameInitialise()
 {
 	Log(__FUNCTION__);
+	EnsureSaveGameFolder();
 	init_game_malloc();
 	clipflags = (short*)malloc(0x8000);
 	init_water_table();

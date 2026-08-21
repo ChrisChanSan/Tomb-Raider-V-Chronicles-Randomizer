@@ -1304,7 +1304,7 @@ long GetSaveLoadFiles()
 	for (int i = 0; i < 15; i++)
 	{
 		pSave = &SaveGames[i];
-		wsprintf(name, "savegame.%d", i);
+		SaveGamePath(name, i);
 		file = fopen(name, "rb");
 		Log("Attempting to open %s", name);
 

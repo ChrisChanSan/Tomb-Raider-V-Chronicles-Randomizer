@@ -18,6 +18,7 @@
 #pragma once
 #include <cstdint>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -233,6 +234,16 @@ public:
     // Ergebnis leer und der Rueckgabewert trotzdem true. false heisst: die
     // Kette laeuft aus dem Block heraus, Finger weg.
     bool    readChain(int index, std::vector<Tr5FloorEntry>& out) const;
+
+    // Musik-Trigger: besucht jedes TO_CD-Aktionswort (Typ 8) aller
+    // Sektorketten genau einmal (geteilte Ketten werden ueber den
+    // Kettenanfang dedupliziert - sonst ginge ein Track ZWEIMAL durch die
+    // Abbildung und landete woanders als gewuerfelt). gefunden sammelt die
+    // Tracknummern; abbildung patcht sie IN PLACE - das Wort behaelt Typ,
+    // Ende-Bit und Platz, nur die Tracknummer (Bits 0..9) wechselt, darum
+    // braucht es hier KEIN Ketten-Neubauen. Rueckgabe: Zahl der gepatchten
+    // bzw. gefundenen Woerter.
+    long    musikTrigger(const std::map<int, int>* abbildung, std::set<int>* gefunden);
 
     // Der Neigungseintrag eines Sektors (TILT, SPLIT1/2, NOCOLF), roh fuer
     // bodenLageAn (Boden.h) - dort steckt die portierte GetHeight-Mathematik,

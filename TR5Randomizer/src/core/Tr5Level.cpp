@@ -535,6 +535,81 @@ bool Tr5Level::readChain(int index, std::vector<Tr5FloorEntry>& out) const
     return true;
 }
 
+long Tr5Level::musikTrigger(const std::map<int, int>* abbildung, std::set<int>* gefunden)
+{
+    // Der Lauf stuetzt sich bewusst auf readChain: die kennt jede
+    // Wortverteilung (Referenzwort der Schalter/Key/Pickup-Arten,
+    // Zusatzwoerter von Kamera und Flyby, extraWords der uebrigen
+    // Funktionen). Die Dateiposition eines Wortes ergibt sich exakt aus
+    // Kettenanfang + aufsummierten Eintragslaengen, weil readChain streng
+    // linear liest.
+    std::set<int> ketten;
+    std::vector<Tr5FloorEntry> eintraege;
+    long zahl = 0;
+
+    for (size_t rm = 0; rm < m_rooms.size(); ++rm)
+    {
+        const Tr5Room& r = m_rooms[rm];
+
+        for (int sx = 0; sx < r.numXSectors; ++sx)
+        {
+            for (int sz = 0; sz < r.numZSectors; ++sz)
+            {
+                const int start = sectorIndex(static_cast<int>(rm), sx, sz);
+                if (start <= 0 || !ketten.insert(start).second) continue;
+                if (!readChain(start, eintraege)) continue;   // unlesbar: Finger weg
+
+                size_t pos = static_cast<size_t>(start);
+                for (const Tr5FloorEntry& e : eintraege)
+                {
+                    if (e.funktion == FN_TRIGGER)
+                    {
+                        // Aktionsworte beginnen hinter Kopf + Setup (+ Referenzwort).
+                        size_t k = hasRefWord(e.art) ? 3 : 2;
+                        for (; k < e.woerter.size(); ++k)
+                        {
+                            const uint16_t c = e.woerter[k];
+                            const int akt = cmdType(c);
+
+                            if (akt == 1 || akt == 12)      // Kamera/Flyby: Zusatzwort
+                            {
+                                ++k;
+                                continue;
+                            }
+
+                            if (akt != 8)                   // TO_CD
+                                continue;
+
+                            const int track = c & 0x3FF;
+
+                            if (gefunden)
+                            {
+                                gefunden->insert(track);
+                                ++zahl;
+                            }
+
+                            if (abbildung)
+                            {
+                                const auto it = abbildung->find(track);
+                                if (it != abbildung->end() && it->second != track)
+                                {
+                                    const uint16_t neu = static_cast<uint16_t>((c & 0xFC00) | (it->second & 0x3FF));
+                                    std::memcpy(m_bytes.data() + m_floorAt + (pos + k) * 2, &neu, 2);
+                                    ++zahl;
+                                }
+                            }
+                        }
+                    }
+
+                    pos += e.woerter.size();
+                }
+            }
+        }
+    }
+
+    return zahl;
+}
+
 int Tr5Level::floorNeigung(int room, int sx, int sz, SchraegeInfo& si, int& baseY) const
 {
     si = SchraegeInfo();

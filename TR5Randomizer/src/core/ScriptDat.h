@@ -137,6 +137,15 @@ public:
     // alles Weitere aus, und der Aufrufer soll NICHT speichern.
     void randomizerEingriffe(Eingriffe& e);
 
+    // Hintergrundmusik wuerfeln: das Audio-Byte im CMD_LEVEL-Eintrag
+    // (CurrentAtmosphere beim Levelstart) wird unter den spielbaren Leveln
+    // permutiert. Aussen vor bleiben GF_NOLEVEL-Eintraege und die
+    // Cutscene-Level (RICHCUT) - deren Musik gehoert zur Szene. NICHT
+    // wiederholungsfest: jeder Lauf wuerfelt neu, der Aufrufer muss von der
+    // unveraenderten Datei ausgehen (die Oberflaeche liest ohnehin aus der
+    // Sicherung).
+    bool musikWuerfeln(uint64_t seed, int& getauscht, std::string& error);
+
     // Was steht heute drin? Fuer Anzeige und Selbsttest.
     struct Eintrag
     {

@@ -17,9 +17,11 @@
  */
 #include "ScriptDat.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <cstddef>
+#include <random>
 
 namespace
 {
@@ -374,6 +376,49 @@ bool ScriptDat::addTakeObject(const std::string& levelName, int invObjekt,
     changed = true;
     return true;
 }
+bool ScriptDat::musikWuerfeln(uint64_t seed, int& getauscht, std::string& error)
+{
+    getauscht = 0;
+
+    // Das Audio-Byte liegt fix hinter den Flags: CMD_LEVEL-Nutzlast ist
+    // [0]=Name-String [1][2]=Flags [3]=Dateiindex [4]=Audio, und m_flagsAt
+    // zeigt auf [1]. Die Engine uebernimmt es 1:1 als CurrentAtmosphere
+    // (DoLevel, gameflow.cpp).
+    std::vector<size_t> stellen;
+
+    for (size_t i = 0; i < m_levels.size(); ++i)
+    {
+        if (m_levels[i].flags & 0x8000) continue;                       // GF_NOLEVEL: unspielbare Platzhalter
+        if (m_levels[i].fileName.find("RICHCUT") != std::string::npos)  // Cutscene-Level: Musik gehoert zur Szene
+            continue;
+
+        const size_t audioAt = m_flagsAt[i] + 3;
+        if (audioAt < m_bytes.size())
+            stellen.push_back(audioAt);
+    }
+
+    if (stellen.size() < 2)
+    {
+        error = "zu wenige spielbare Level fuer den Musiktausch";
+        return false;
+    }
+
+    std::vector<uint8_t> werte;
+    for (size_t s : stellen)
+        werte.push_back(m_bytes[s]);
+
+    std::mt19937_64 rng(seed ^ 0x414D4249454E54ull);    // "AMBIENT" - eigener Strom neben Item-/Gegnerwuerfeln
+    std::shuffle(werte.begin(), werte.end(), rng);
+
+    for (size_t k = 0; k < stellen.size(); ++k)
+    {
+        if (m_bytes[stellen[k]] != werte[k]) ++getauscht;
+        m_bytes[stellen[k]] = werte[k];
+    }
+
+    return true;
+}
+
 void ScriptDat::randomizerEingriffe(Eingriffe& e)
 {
     e = Eingriffe();

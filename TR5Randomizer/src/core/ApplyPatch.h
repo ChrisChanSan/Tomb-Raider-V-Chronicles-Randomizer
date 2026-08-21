@@ -113,4 +113,14 @@ namespace Patch
     //
     // Ohne gekoppelte Items und ohne Gegnertypen tut sie nichts.
     void markTriggerSafeSectors(const Tr5Level& level, RandoInput& in);
+
+    // Musik-Trigger wuerfeln (Haken "Trigger-Sound/Musik-IDs switchen"):
+    // sammelt alle TO_CD-Tracks des fertigen Levels und permutiert sie -
+    // aber in ZWEI getrennten Toepfen, weil die Engine sie verschieden
+    // behandelt (TriggerNormalCDTrack, control.cpp): 117/118/121/123..130
+    // schalten die laufende Atmosphaere um, alles andere spielt einmal mit
+    // cd_flags-Sperre. Ein Atmosphaerentrigger bleibt so ein
+    // Atmosphaerentrigger, nur die Stimmung wechselt. Rueckgabe: Zahl der
+    // umgeschriebenen Woerter.
+    long musikTriggerWuerfeln(Tr5Level& level, uint64_t seed);
 }

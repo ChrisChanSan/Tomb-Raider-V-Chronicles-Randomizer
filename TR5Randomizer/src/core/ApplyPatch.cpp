@@ -18,7 +18,9 @@
 #include "ApplyPatch.h"
 #include "Tr3Quelle.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <random>
 #include <set>
 #include <map>
 #include <utility>
@@ -31,6 +33,40 @@ namespace
         std::snprintf(buf, sizeof(buf), f, a, b);
         return std::string(buf);
     }
+}
+
+long Patch::musikTriggerWuerfeln(Tr5Level& level, uint64_t seed)
+{
+    std::set<int> tracks;
+    level.musikTrigger(nullptr, &tracks);
+
+    const auto istAtmo = [](int t)
+    {
+        // TriggerNormalCDTrack (control.cpp): diese IDs schalten die laufende
+        // Atmosphaere um, alle anderen sind Einmal-Jingles mit cd_flags-Sperre.
+        return t == 117 || t == 118 || t == 121 || (t >= 123 && t <= 130);
+    };
+
+    std::vector<int> atmo, jingle;
+    for (int t : tracks)
+        (istAtmo(t) ? atmo : jingle).push_back(t);
+
+    // Bewusst OHNE Level-Salz: derselbe Seed vertauscht die Stimmungen in
+    // jedem Level gleich - die Welt bleibt in sich stimmig, nur eben anders.
+    std::mt19937_64 rng(seed ^ 0x54524B4D5553ull);      // "TRKMUS"
+
+    std::map<int, int> abbildung;
+    const auto mische = [&](std::vector<int>& topf)
+    {
+        std::vector<int> ziel = topf;
+        std::shuffle(ziel.begin(), ziel.end(), rng);
+        for (size_t i = 0; i < topf.size(); ++i)
+            abbildung[topf[i]] = ziel[i];
+    };
+    mische(atmo);
+    mische(jingle);
+
+    return level.musikTrigger(&abbildung, nullptr);
 }
 
 void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)

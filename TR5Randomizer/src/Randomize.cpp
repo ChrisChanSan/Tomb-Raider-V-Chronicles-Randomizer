@@ -60,6 +60,11 @@ int main(int argc, char** argv)
         std::printf("  skript=P: SCRIPT.DAT unter P mitbehandeln - Kind-Lara aus den\n");
         std::printf("            Ireland-Leveln und KEY8 fuer joby3 aus joby2. Wiederholbar:\n");
         std::printf("            ein zweiter Lauf ueber dieselbe Datei aendert nichts mehr.\n");
+        std::printf("  musik=hintergrund|trigger|beides:\n");
+        std::printf("            hintergrund wuerfelt die Levelmusik in der SCRIPT.DAT\n");
+        std::printf("            (braucht skript=; NICHT wiederholbar - jeder Lauf wuerfelt\n");
+        std::printf("            die Datei erneut). trigger vertauscht die TO_CD-Tracks der\n");
+        std::printf("            Floordata: Atmosphaeren unter sich, Jingles unter sich.\n");
         return 2;
     }
 
@@ -75,6 +80,11 @@ int main(int argc, char** argv)
     std::wstring skriptDat;
     // Secret-Liste (#53): zweiter Patch-Durchgang aus einer Autor-Datei.
     std::wstring secretListe;
+    // Musik: "hintergrund" wuerfelt das Audio-Byte der CMD_LEVEL-Eintraege
+    // (braucht skript=), "trigger" die TO_CD-Tracks in der Floordata,
+    // "beides" beides. VORSICHT hintergrund: nicht wiederholbar - jeder Lauf
+    // mit skript= wuerfelt die Datei erneut durch.
+    bool musikHintergrund = false, musikTrigger = false;
     for (int i = 6; i < argc; ++i)
     {
         const std::string s = argv[i];
@@ -89,6 +99,9 @@ int main(int argc, char** argv)
         else if (s.rfind("tr3gold=", 0) == 0) tr3GoldDir = toW(s.c_str() + 8);
         else if (s.rfind("skript=", 0) == 0)  skriptDat  = toW(s.c_str() + 7);
         else if (s.rfind("secrets=", 0) == 0) secretListe = toW(s.c_str() + 8);
+        else if (s == "musik=hintergrund") musikHintergrund = true;
+        else if (s == "musik=trigger")     musikTrigger = true;
+        else if (s == "musik=beides")      { musikHintergrund = true; musikTrigger = true; }
         // "gegneraus=47,49" - dieselbe Abwahl wie das Fenster "Gegnerarten"
         // in der Oberflaeche (#95), damit sich der Filter auch aus Skripten
         // pruefen laesst.
@@ -145,6 +158,15 @@ int main(int argc, char** argv)
             std::printf("SCRIPT.DAT  %d Ireland-Level nicht im Skript - nichts geaendert.\n", e.levelFehlend);
         else
         {
+            if (musikHintergrund)
+            {
+                int mg = 0;
+                if (sd.musikWuerfeln(seed, mg, sErr))
+                    std::printf("SCRIPT.DAT  Hintergrundmusik: %d Level neu vertont\n", mg);
+                else
+                    std::printf("SCRIPT.DAT  Hintergrundmusik: %s\n", sErr.c_str());
+            }
+
             if (!sd.save(skriptDat, sErr)) { std::printf("SCRIPT.DAT: %s\n", sErr.c_str()); return 1; }
             std::printf("SCRIPT.DAT  Kind-Lara: %d Level geaendert; KEY8 fuer joby3: %s\n",
                         e.flagsGeaendert,
@@ -240,6 +262,12 @@ int main(int argc, char** argv)
 
     if (notizen)
         for (const std::string& n : rep.notes) std::printf("  Notiz: %s\n", n.c_str());
+
+    if (musikTrigger)
+    {
+        const long mw = Patch::musikTriggerWuerfeln(lvl, seed);
+        std::printf("  Musik-Trigger %ld Woerter neu verteilt\n", mw);
+    }
 
     if (!lvl.save(toW(argv[4]), err)) { std::printf("Speichern: %s\n", err.c_str()); return 1; }
 

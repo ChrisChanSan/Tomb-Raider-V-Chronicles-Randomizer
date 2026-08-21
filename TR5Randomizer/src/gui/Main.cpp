@@ -537,6 +537,17 @@ static std::wstring lagerDir(const App& a)
             return true;
         }
 
+        // Hintergrundmusik: erst NACH den Pflichteingriffen wuerfeln, und nur
+        // wenn der Haken steht. Weil oben immer aus der Sicherung gelesen
+        // wird, stellt ein Lauf OHNE Haken die Originalmusik wieder her.
+        int musikLevel = 0;
+        if (a.phMusikSwitch)
+        {
+            std::string mErr;
+            if (!sd.musikWuerfeln(a.effectiveSeed(), musikLevel, mErr))
+                a.scriptNote = "Hintergrundmusik: " + mErr;
+        }
+
         if (!sd.save(skript, err)) return false;
 
         info = e.flagsGeaendert > 0
@@ -546,6 +557,8 @@ static std::wstring lagerDir(const App& a)
         else if (e.keyKopiert)      info += "  KEY8 fuer joby3 aus joby2 uebernommen.";
         if (!e.pistolenFehler.empty()) info += "  rich2-Pistolen nicht entzogen: " + e.pistolenFehler;
         else if (e.pistolenWeg > 0)    info += "  rich2: Pistolen abgenommen.";
+        if (a.phMusikSwitch && musikLevel > 0)
+            info += "  Hintergrundmusik: " + std::to_string(musikLevel) + " Level neu vertont.";
         return true;
     }
 
@@ -665,6 +678,16 @@ static std::wstring lagerDir(const App& a)
                 beiwerk = (spr.edited + spr.added) - sZahl;
             }
         }
+        // Musik-Trigger: als letzter Pass auf dem fertigen Level, direkt vor
+        // dem Speichern - so erwischt er auch Trigger, die erst die
+        // Secret-Liste gesetzt hat.
+        if (a.phMusikTrigger)
+        {
+            const long mw = Patch::musikTriggerWuerfeln(lvl, seed);
+            if (mw > 0)
+                rep.notes.push_back("Musik-Trigger: " + std::to_string(mw) + " Woerter neu verteilt");
+        }
+
         if (!lvl.save(target, err)) return false;
 
         char buf[200];
@@ -1510,16 +1533,20 @@ static void drawUi(App& a, HWND hwnd)
                "der Test zeigen.");
     ImGui::EndDisabled();
 
-    ImGui::SeparatorText("Musik (in Vorbereitung)");
-    ImGui::BeginDisabled(true);
+    ImGui::SeparatorText("Musik");
     ImGui::Checkbox("Hintergrundmusik switchen", &a.phMusikSwitch);
-    hoverHilfe("Kommt noch: der Audiotrack je Level wird gewuerfelt - er steht "
-               "als Byte im CMD_LEVEL-Eintrag der SCRIPT.DAT.");
+    hoverHilfe("Die Levelmusik wird unter den spielbaren Leveln vertauscht - "
+               "das Audio-Byte im CMD_LEVEL-Eintrag der SCRIPT.DAT. Cutscene-"
+               "Level behalten ihre Musik. Gewuerfelt wird bei jedem Lauf neu "
+               "aus der Sicherung heraus; Haken weg = naechster Lauf stellt "
+               "die Originalmusik wieder her.");
     ImGui::SameLine();
     ImGui::Checkbox("Trigger-Sound/Musik-IDs switchen", &a.phMusikTrigger);
-    hoverHilfe("Kommt noch: Musik- und Sound-Trigger in der Floordata bekommen "
-               "zufaellige IDs - Jingles und Stimmungen wechseln die Plaetze.");
-    ImGui::EndDisabled();
+    hoverHilfe("Die Musik-Trigger in den Leveln (TO_CD) bekommen vertauschte "
+               "Tracks - Atmosphaeren tauschen unter sich, Einmal-Jingles "
+               "unter sich, damit ein Stimmungswechsel ein Stimmungswechsel "
+               "bleibt. Cutscene-Vertonung ist nicht betroffen, die laeuft "
+               "nicht ueber diese Trigger.");
 
     // --- Secrets (#53) ---------------------------------------------------
     //

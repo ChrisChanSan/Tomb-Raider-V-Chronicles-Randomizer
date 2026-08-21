@@ -40,8 +40,8 @@
 }
 
 static void(__stdcall* BinkCopyToBuffer)(BINK_STRUCT*, LPVOID, LONG, long, long, long, long);
-static void(__stdcall* BinkOpenDirectSound)(ulong);
-static void(__stdcall* BinkSetSoundSystem)(LPVOID, LPDIRECTSOUND);
+static void(__stdcall* BinkOpenWaveOut)(ulong);
+static void(__stdcall* BinkSetSoundSystem)(LPVOID, ulong);
 static LPVOID(__stdcall* BinkOpen)(char*, ulong);
 static long(__stdcall* BinkDDSurfaceType)(LPDIRECTDRAWSURFACE4);
 static long(__stdcall* BinkDoFrame)(BINK_STRUCT*);
@@ -76,7 +76,7 @@ bool LoadBinkStuff()
 	try
 	{
 		GET_DLL_PROC(hBinkW32, BinkCopyToBuffer, "_BinkCopyToBuffer@28");
-		GET_DLL_PROC(hBinkW32, BinkOpenDirectSound, "_BinkOpenDirectSound@4");
+		GET_DLL_PROC(hBinkW32, BinkOpenWaveOut, "_BinkOpenWaveOut@4");
 		GET_DLL_PROC(hBinkW32, BinkSetSoundSystem, "_BinkSetSoundSystem@8");
 		GET_DLL_PROC(hBinkW32, BinkOpen, "_BinkOpen@8");
 		GET_DLL_PROC(hBinkW32, BinkDDSurfaceType, "_BinkDDSurfaceType@4");
@@ -235,7 +235,10 @@ long PlayFmv(long num)
 		App.dx.lpD3DDevice->CreateTexture(640, 480, 1, 0, D3DFMT_X8R8G8B8, D3DPOOL_MANAGED, &BinkTexture, 0);
 
 	Bink = 0;
-	BinkSetSoundSystem(BinkOpenDirectSound, App.dx.lpDS);
+	// FMV audio goes through WaveOut now instead of a raw IDirectSound object -
+	// the last DirectSound user in the game. WAVE_MAPPER picks the default device,
+	// same as XAudio2's mastering voice does for music and SFX.
+	BinkSetSoundSystem(BinkOpenWaveOut, WAVE_MAPPER);
 	Bink = (BINK_STRUCT*)BinkOpen(path, 0);
 	BinkSurfaceType = BinkDDSurfaceType(BinkSurface);
 

@@ -170,14 +170,8 @@ bool DXDSCreate()
 {
 	Log(__FUNCTION__);
 
-	// Bink FMV still wires its audio straight to a raw IDirectSound object (see fmv.cpp) -
-	// keep creating one for that, non-exclusive so it can't interfere with anything else.
-	// The game's own music/SFX go through XAudio2 below instead, entirely bypassing the
-	// exclusive-mode DirectSound buffer path that was silently dropping SFX on some
-	// playback devices.
-	if (DXAttempt(DirectSoundCreate(G_dxinfo->DSInfo[G_dxinfo->nDS].lpGuid, &App.dx.lpDS, 0)) == DS_OK)
-		DXAttempt(App.dx.lpDS->SetCooperativeLevel(App.hWnd, DSSCL_NORMAL));
-
+	// No IDirectSound object anymore: music and SFX run on XAudio2, and Bink FMV
+	// audio goes through BinkOpenWaveOut (fmv.cpp) since the WaveOut switch.
 	if (FAILED(XAudio2Create(&g_XAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR)))
 	{
 		Log("XAudio2Create Failed");

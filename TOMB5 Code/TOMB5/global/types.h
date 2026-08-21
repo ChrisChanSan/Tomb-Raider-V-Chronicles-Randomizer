@@ -1844,7 +1844,6 @@ struct DXPTR
 	LPDIRECT3D9 lpD3D;
 	LPDIRECT3DDEVICE9 lpD3DDevice;
 	D3DPRESENT_PARAMETERS PresentParams;
-	LPDIRECTSOUND lpDS;
 	ulong dwRenderWidth;
 	ulong dwRenderHeight;
 	RECT rViewport;

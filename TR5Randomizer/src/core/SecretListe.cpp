@@ -19,6 +19,7 @@
 
 #include "Json.h"
 #include "Tr5Level.h"
+#include "Boden.h"
 
 #include <cctype>
 #include <cmath>
@@ -512,6 +513,28 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
             t.set("commands", zielBefehle(o.ziele));
             trigger.push(t);
             continue;
+        }
+
+        // Schalter und Schluesseloecher brauchen EBENEN Boden.
+        //
+        // Ihr Positionsfenster hat in Y die Breite null (SwitchBounds und
+        // KeyHoleBounds: bounds[2] == bounds[3] == 0), TestLaraPosition
+        // verlangt also Laras y_pos EXAKT gleich der Item-Hoehe
+        // (collide.cpp:1455). Auf einer Schraege nimmt Lara je nach Standort
+        // beliebig viele Hoehen an und trifft die eine nie - das Objekt ist
+        // dann unbedienbar, ohne Absturz und ohne Meldung. Gegenprobe ueber
+        // alle 13 Level: alle 72 Vanilla-Schalter stehen auf ebenem Boden,
+        // keine einzige Ausnahme. Gefunden am andy3-Schalter, den der Nutzer
+        // nicht bedienen konnte (Raum 202 Sektor 1,1 traegt TILT).
+        if ((o.typeId >= 258 && o.typeId <= 274) && o.room >= 0)
+        {
+            SchraegeInfo si;
+            int baseY = 0;
+            if (lvl.floorNeigung(o.room, o.sx, o.sz, si, baseY) > 0)
+                warnungen.push_back(levelName + ": Typ " + std::to_string(o.typeId) +
+                                    " auf Raum " + std::to_string(o.room) + "(" + std::to_string(o.sx) +
+                                    "," + std::to_string(o.sz) + ") steht auf einer SCHRAEGE - Schalter und "
+                                    "Schluessellocher sind dort nicht bedienbar (Y-Fenster ist null breit).");
         }
 
         // Item anhaengen.

@@ -304,6 +304,12 @@ void DoOptions()
 	static char sfx_backup_flag;	//have we backed sfx stuff up?
 	static bool waiting_for_key = 0;
 	static bool action_still_held = 0;	// Action-Knopf hielt beim Betreten von waiting_for_key noch die Zeilenauswahl fest
+	// Die Reset-Stellung der Method-Zeile ist eine MENUEAKTION, kein
+	// Eingabemodus: ControlMethod bleibt beim Blaettern unangetastet. Das
+	// alte ControlMethod=2 schaltete saemtliche Pad-Verarbeitung ab
+	// (alles haengt an "ControlMethod == 1") - auf der Reset-Stellung war
+	// der Controller damit systemisch tot, nur die Tastatur kam zurueck.
+	static bool reset_row = 0;
 
 	if (!(sfx_backup_flag & 1))
 	{
@@ -326,10 +332,10 @@ void DoOptions()
 		else
 			keyboard_buttons = KeyboardButtons;
 
-		if (ControlMethod == 1)
+		if (reset_row)
+			nMask = 1;	// nur die Method-Zeile selbst ist waehlbar
+		else if (ControlMethod == 1)
 			nMask = 16;	// 15 bindable actions: Duck..Inventory (10) + Pause, Save, Load, Small Medi, Large Medi
-		else if (ControlMethod == 2)
-			nMask = 11;
 		else
 			nMask = 17;
 
@@ -414,7 +420,9 @@ void DoOptions()
 
 		font_height = default_font_height;
 
-		if (!ControlMethod)
+		if (reset_row)
+			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, SCRIPT_TEXT(TXT_Reset), 0);
+		else if (!ControlMethod)
 			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, SCRIPT_TEXT(TXT_Keyboard), 0);
 		else if (ControlMethod == 1)
 		{
@@ -437,10 +445,8 @@ void DoOptions()
 
 			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, text, 0);
 		}
-		else if (ControlMethod == 2)
-			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, SCRIPT_TEXT(TXT_Reset), 0);
 
-		if (ControlMethod < 2 && !waiting_for_key)
+		if (!reset_row && !waiting_for_key)
 		{
 			if (dbinput & IN_FORWARD)
 			{
@@ -555,7 +561,7 @@ void DoOptions()
 			dbinput = 0;
 		}
 
-		if (dbinput & IN_SELECT && sel > 1 && ControlMethod < 2)
+		if (dbinput & IN_SELECT && sel > 1 && !reset_row)
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			sel2 = sel;
@@ -570,30 +576,35 @@ void DoOptions()
 			memset(keymap, 0, sizeof(keymap));
 		}
 
-		if (dbinput & IN_SELECT && ControlMethod == 2)
+		if (dbinput & IN_SELECT && (sel & 1) && reset_row)
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, 2);
 			memcpy(layout[1], layout, 72);
-			ControlMethod = 0;
 			JoyDefaultsAnwenden();	// Vorgaben passend zu Seite UND Eingabeweg (input.cpp) - vorher eine feste Tabelle in DualSense-Bitfolge, auf Xbox-Pads Unsinn
+			// ControlMethod bleibt, was es war (das Original sprang hart auf
+			// Keyboard zurueck - fuer einen Controller-Nutzer hiesse das:
+			// Pad nach dem Reset tot). Die Zeile zeigt wieder die Methode.
+			reset_row = 0;
 		}
 
 		if (sel & 1)
 		{
 			// Fuenf sichtbare Stellungen: Keyboard, PS5 Controller,
 			// Xbox Controller, Joystick (generisch), Reset. Intern bleibt
-			// ControlMethod 0/1/2 (Keyboard/Joystick/Reset) - die drei
+			// ControlMethod 0/1 (Keyboard/Joystick) - die drei
 			// Controller-Stellungen sind Methode 1 mit JoyStyle 0/1/2,
 			// damit jede bestehende "ControlMethod == 1"-Pruefung im Spiel
-			// unveraendert weiterlaeuft.
+			// unveraendert weiterlaeuft. Die Reset-Stellung ist nur das
+			// lokale reset_row-Flag (siehe oben) und laesst die Methode -
+			// und damit das Pad - in Ruhe.
 			long pos;
 
-			if (!ControlMethod)
-				pos = 0;
-			else if (ControlMethod == 1)
-				pos = 1 + AktiverJoyStyle();
-			else
+			if (reset_row)
 				pos = 4;
+			else if (!ControlMethod)
+				pos = 0;
+			else
+				pos = 1 + AktiverJoyStyle();
 
 			if (dbinput & IN_LEFT)
 			{
@@ -613,6 +624,8 @@ void DoOptions()
 			if (pos < 0)
 				pos = 0;
 
+			reset_row = pos == 4;
+
 			if (!pos)
 				ControlMethod = 0;
 			else if (pos < 4)
@@ -620,8 +633,6 @@ void DoOptions()
 				ControlMethod = 1;
 				JoyStyle = pos - 1;	// ab jetzt explizite Wahl statt Automatik
 			}
-			else
-				ControlMethod = 2;
 		}
 
 		if (!sel)
@@ -634,7 +645,9 @@ void DoOptions()
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 
-			if (ControlMethod < 2)
+			if (reset_row)
+				reset_row = 0;	// Zurueck von der Reset-Stellung: erst auf die Methode, nicht gleich aus dem Menue
+			else
 				menu = 0;
 
 			dbinput = 0;

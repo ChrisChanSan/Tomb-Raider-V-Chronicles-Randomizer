@@ -150,6 +150,9 @@ int main(int argc, char** argv)
                         e.flagsGeaendert,
                         !e.keyFehler.empty() ? e.keyFehler.c_str()
                                              : (e.keyKopiert ? "eingefuegt" : "war schon da"));
+            std::printf("SCRIPT.DAT  rich2-Pistolen: %s\n",
+                        !e.pistolenFehler.empty() ? e.pistolenFehler.c_str()
+                                                  : (e.pistolenWeg > 0 ? "abgenommen" : "war schon so"));
         }
     }
 

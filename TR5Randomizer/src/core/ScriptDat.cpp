@@ -300,6 +300,80 @@ bool ScriptDat::clearLevelFlags(const std::string& fileName, uint16_t mask, bool
 }
 
 
+
+//----------------------------------------------------------------------------
+// Ein CMD_TAKEOBJ in den Skriptblock eines Levels setzen (#53).
+//
+// Der Befehl ist 3 Byte: Opcode 0xDA und zwei Nutzbytes, davon traegt das
+// erste die INVENTAR-Objektnummer (enum invobj_types, newinv2.h:121 -
+// 0 = Uzi, 1 = Pistolen, 19 = Pistolenmunition). Beim Levelstart laeuft
+// setup.cpp:160 die Liste durch und ruft NailInvItem: was drinsteht, hat
+// Lara beim Betreten nicht mehr.
+//
+// Eingefuegt wird direkt VOR CMD_LEVEL, dort wo die vorhandenen TAKEOBJ
+// schon stehen - alles vor CMD_LEVEL wird gelesen, bevor DoLevel ins Level
+// absteigt.
+//
+// Wiederholbar: steht der Befehl fuer dieses Objekt schon da, passiert
+// nichts.
+//----------------------------------------------------------------------------
+bool ScriptDat::addTakeObject(const std::string& levelName, int invObjekt,
+                              bool& changed, std::string& error)
+{
+    changed = false;
+    if (invObjekt < 0 || invObjekt > 255)
+    { error = "Inventarnummer ausserhalb 0..255"; return false; }
+
+    size_t idx = 0;
+    if (!findeLevel(levelName, idx)) { error = "Level nicht im Skript: " + levelName; return false; }
+
+    // Schon da? Und wo faengt CMD_LEVEL an?
+    size_t vorLevel = std::string::npos;
+    for (size_t q = m_blockAn[idx]; q < m_blockBis[idx]; )
+    {
+        const int len = nutzlast(m_bytes[q]);
+        if (len < 0) break;
+        if (m_bytes[q] == 0xDA && q + 1 < m_bytes.size() &&
+            m_bytes[q + 1] == static_cast<uint8_t>(invObjekt))
+            return true;                          // nimmt es schon weg
+        if (m_bytes[q] == 0x81) { vorLevel = q; break; }
+        q += 1 + len;
+    }
+    if (vorLevel == std::string::npos)
+    { error = "kein CMD_LEVEL im Block von " + levelName; return false; }
+
+    GAMEFLOW gf;
+    std::memcpy(&gf, m_bytes.data(), sizeof(gf));
+    if (gf.ScriptLen + TAKEOBJ_BYTES > 0xFFFF)
+    { error = "SCRIPT.DAT: Skript-Wad wuerde ueberlaufen"; return false; }
+    for (int i = 0; i < m_nLevels; ++i)
+    {
+        uint16_t o;
+        std::memcpy(&o, m_bytes.data() + m_scriptOfsAt + 2ull * i, 2);
+        if (m_scriptWad + o > vorLevel && o + TAKEOBJ_BYTES > 0xFFFF)
+        { error = "SCRIPT.DAT: Leveloffset wuerde ueberlaufen"; return false; }
+    }
+
+    const uint8_t befehl[TAKEOBJ_BYTES] = { 0xDA, static_cast<uint8_t>(invObjekt), 0 };
+    m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(vorLevel), befehl, befehl + TAKEOBJ_BYTES);
+
+    for (int i = 0; i < m_nLevels; ++i)
+    {
+        uint16_t o;
+        std::memcpy(&o, m_bytes.data() + m_scriptOfsAt + 2ull * i, 2);
+        if (m_scriptWad + o > vorLevel)
+        {
+            o = static_cast<uint16_t>(o + TAKEOBJ_BYTES);
+            std::memcpy(m_bytes.data() + m_scriptOfsAt + 2ull * i, &o, 2);
+        }
+    }
+    gf.ScriptLen = static_cast<uint16_t>(gf.ScriptLen + TAKEOBJ_BYTES);
+    std::memcpy(m_bytes.data() + offsetof(GAMEFLOW, ScriptLen), &gf.ScriptLen, 2);
+
+    if (!zerlege(error)) return false;
+    changed = true;
+    return true;
+}
 void ScriptDat::randomizerEingriffe(Eingriffe& e)
 {
     e = Eingriffe();
@@ -339,6 +413,31 @@ void ScriptDat::randomizerEingriffe(Eingriffe& e)
     {
         e.keyKopiert = keyCh;
         e.keyFehler.clear();
+    }
+
+    // 3. rich2 nimmt Lara die Pistolen ab.
+    //
+    // rich2s Slot 1 (PISTOLS_ANIM) ist gar keine Pistole: Core hat dort eine
+    // zweite HK mit gescriptetem Animationssatz liegen (mesh-identisch mit
+    // Slot 5, eigene Anims mit KillItem und Schusssounds - richcut2 traegt
+    // denselben Slot). Der Randomizer haelt PISTOLS_ITEM deshalb aus rich2
+    // heraus, aber das reicht nicht: Lara BRINGT die Pistolen aus dem
+    // Vorlevel mit, und gezogen laufen ihre Arme ueber die gescripteten
+    // HK-Anims. Vom Nutzer im Spiel gesehen ("die Pistolen sind in rich2
+    // verbugt, Lara an sich und das Inventar-Item").
+    //
+    // Vanilla nimmt rich2 schon drei Dinge weg (Inventarobjekte 78, 59, 60)
+    // und gibt zwei (7, 30) - die Pistolen stehen nur nicht dabei. Genau da
+    // gehoeren sie hin. Munition gleich mit, sonst bleibt ein Eintrag ohne
+    // Waffe im Inventar stehen.
+    for (int obj : { INV_PISTOLEN, INV_PISTOLEN_MUNI })
+    {
+        bool ch = false;
+        std::string tErr;
+        if (!addTakeObject("rich2", obj, ch, tErr))
+            e.pistolenFehler = tErr;
+        else if (ch)
+            ++e.pistolenWeg;
     }
 }
 

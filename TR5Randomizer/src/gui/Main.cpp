@@ -526,6 +526,8 @@ static std::wstring lagerDir(const App& a)
             : "SCRIPT.DAT: Kind-Lara war bereits abgeschaltet.";
         if (!e.keyFehler.empty())   info += "  KEY8 fuer joby3 nicht uebernommen: " + e.keyFehler;
         else if (e.keyKopiert)      info += "  KEY8 fuer joby3 aus joby2 uebernommen.";
+        if (!e.pistolenFehler.empty()) info += "  rich2-Pistolen nicht entzogen: " + e.pistolenFehler;
+        else if (e.pistolenWeg > 0)    info += "  rich2: Pistolen abgenommen.";
         return true;
     }
 

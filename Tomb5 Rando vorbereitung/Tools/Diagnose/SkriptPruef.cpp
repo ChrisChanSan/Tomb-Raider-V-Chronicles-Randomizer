@@ -149,8 +149,21 @@ int main(int argc, char** argv)
             for (size_t q = start; q < ende; )
             {
                 const int l = nutzlast(d[q]);
-                std::printf("   +%-4zu  %-3u  %s%s\n", q - start, d[q], befehlsname(d[q]).c_str(),
-                            d[q] == 0x81 ? "   <== CMD_LEVEL" : "");
+                const char* zusatz = "";
+                char puffer[64];
+                if (d[q] == 0x81) zusatz = "   <== CMD_LEVEL";
+                else if ((d[q] == 0xD9 || d[q] == 0xDA) && q + 1 < d.size())
+                {
+                    // Nutzbyte 0 ist die INVENTAR-Objektnummer (enum
+                    // invobj_types, newinv2.h:121): 0 = Uzi, 1 = Pistolen,
+                    // 19 = Pistolenmunition. setup.cpp:122/160 wendet sie
+                    // beim Levelstart an - GIVEOBJ legt ins Inventar,
+                    // TAKEOBJ nimmt heraus (NailInvItem).
+                    std::snprintf(puffer, sizeof(puffer), "   %s Inventarobjekt %u",
+                                  d[q] == 0xD9 ? "gibt" : "NIMMT", d[q + 1]);
+                    zusatz = puffer;
+                }
+                std::printf("   +%-4zu  %-3u  %s%s\n", q - start, d[q], befehlsname(d[q]).c_str(), zusatz);
                 if (l < 0) break;
                 q += 1 + l;
             }

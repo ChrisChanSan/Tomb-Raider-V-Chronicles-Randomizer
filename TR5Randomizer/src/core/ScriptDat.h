@@ -102,6 +102,17 @@ public:
     bool copyObjectCommand(const std::string& vonLevel, const std::string& nachLevel,
                            uint8_t cmd, bool& changed, std::string& error);
 
+    // Inventarnummern (enum invobj_types, newinv2.h:121), soweit gebraucht.
+    static constexpr int INV_PISTOLEN      = 1;
+    static constexpr int INV_PISTOLEN_MUNI = 19;
+    static constexpr int TAKEOBJ_BYTES     = 3;   // Opcode + 2 Nutzbytes
+
+    // Setzt ein CMD_TAKEOBJ in den Block eines Levels: Lara hat das
+    // Inventarobjekt beim Betreten nicht mehr (setup.cpp:160, NailInvItem).
+    // Wiederholbar - steht es schon da, passiert nichts.
+    bool addTakeObject(const std::string& levelName, int invObjekt,
+                       bool& changed, std::string& error);
+
     // --- Alle Eingriffe des Randomizers an EINER Stelle -------------------
     //
     // Oberflaeche und CLI treiben dieselben Schritte an. Standen sie doppelt
@@ -117,7 +128,9 @@ public:
         int         flagsGeaendert = 0;   // Ireland-Level, denen das Kind-Bit genommen wurde
         int         levelFehlend   = 0;   // Ireland-Level, die das Skript gar nicht kennt
         bool        keyKopiert     = false;
+        int         pistolenWeg    = 0;    // rich2: Pistolen + Munition entzogen
         std::string keyFehler;            // leer = hat geklappt
+        std::string pistolenFehler;
     };
 
     // Bei levelFehlend > 0 ist das Skript keines von Chronicles - dann bleibt

@@ -908,7 +908,17 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         // Spenderreihenfolge, vermessen mit LaraAnim ueber alle 13 Level.
         static const char* kSpender[] = { "joby4", "andy1", "Andy3", "joby3", "Andrea3", "joby5", "Andy2", "joby2", "rich2" };
 
-        std::set<int> gebraucht;
+        // Diese Bewegungen haengen an keinem Objekt, sondern an Laras
+        // Steuerung - sie muessen in JEDEM Level liegen. Gefunden vom
+        // Nutzer: die Kriechrolle (Ducken + Sprint, lara.cpp:3288 setzt
+        // Anim 218) ist in rich1 ein Stub, und zwar schon vanilla - Lara
+        // wird nach vorn geschoben, ohne dass sich etwas bewegt. Gemessen
+        // mit LaraAnim: rich1 ist das EINZIGE Level mit FrameSize 0 dort.
+        static const int kImmer[] = {
+            218,   // AS_DUCKROLL - Kriechrolle
+            421,   // ANIM_CRAWLJUMP - Kriechsprung
+        };
+        std::set<int> gebraucht(std::begin(kImmer), std::end(kImmer));
         for (int i = 0; i < level.itemCount(); ++i)
         {
             Tr5Item it;

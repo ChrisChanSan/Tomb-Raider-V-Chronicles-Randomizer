@@ -393,8 +393,21 @@ bool ScriptDat::musikWuerfeln(uint64_t seed, int& getauscht, std::string& error)
             continue;
 
         const size_t audioAt = m_flagsAt[i] + 3;
-        if (audioAt < m_bytes.size())
-            stellen.push_back(audioAt);
+        if (audioAt >= m_bytes.size())
+            continue;
+
+        // Nur echte Atmosphaeren mischen - dieselbe Menge, die die Engine in
+        // TriggerNormalCDTrack als Dauerkulisse behandelt. Das haelt zugleich
+        // die Dev-Eintraege GIBBY/TOM heraus, die OHNE NOLEVEL-Flag im Skript
+        // stehen und (wie DEL) das Cutscene-Audio 110/xa14_joby6 tragen -
+        // ueber die Flags allein war der Topf verseucht: Andrea1 zog die
+        // Cutscene als Hintergrundmusik (vom Nutzer gehoert).
+        const uint8_t t = m_bytes[audioAt];
+        const bool atmo = t == 117 || t == 118 || t == 121 || (t >= 123 && t <= 130);
+        if (!atmo)
+            continue;
+
+        stellen.push_back(audioAt);
     }
 
     if (stellen.size() < 2)

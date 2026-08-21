@@ -1022,32 +1022,66 @@ const char* SprachAnzeige(long idx)
 	return datei;
 }
 
-// Zeigertabelle umlegen, Kopf verdichten, Strings ent-XOR-en (0xA5) - exakt
-// der Ablauf, den LoadGameflow immer schon fuhr, nur wiederverwendbar.
+// Zeigertabelle aufbauen und Strings ent-XOR-en (0xA5).
+//
+// VORSICHT, Altlast: das Original verdichtete den Puffer mit TXT_NUM_STRINGS
+// (309) als FESTER Groesse der Offsettabelle. Die stimmt aber nur fuer
+// ENGLISH/US/FRENCH/ITALIAN/SPANISH (195 Haupt + 56 PSX + 58 PC = 309).
+// GERMAN traegt 58 PSX-Eintraege (311 gesamt), JAPAN/DUTCH sogar 204+96+58
+// (358) - dort begann der Text-Wad mitten in der Offsettabelle, jeder String
+// las verschoben, und die Muell-Glyphen rissen den Zeichner um (Hard-Crash
+// beim Sprachwechsel auf Deutsch). Vanilla fiel das nie auf, weil jede
+// Regionalversion nur Dateien mit passender Zaehlung dabei hatte.
+//
+// Darum jetzt: Blockgrenzen aus dem DATEIKOPF, und die Enum-Indizes werden
+// blockweise zugeordnet (das Enum folgt der englischen Aufteilung 195/56/58).
+// Jede Datei traegt mindestens so viele Eintraege je Block - Ueberzaehlige
+// haengen hinten am Block und bleiben einfach unbenutzt.
 static void SprachPufferAufbereiten(char* d)
 {
 	STRINGHEADER sh;
+	static ushort tabelle[TXT_NUM_STRINGS];
 	char* s;
 	char* e;
-	long l;
+	long l, q;
 
-	gfStringOffset = (ushort*)d;
-	gfLanguageFile = (uchar*)d;
+	memcpy(&sh, d, sizeof(STRINGHEADER));
 
-	memcpy(&sh, gfStringOffset, sizeof(STRINGHEADER));
-	memcpy(gfStringOffset, gfStringOffset + (sizeof(STRINGHEADER) / sizeof(ushort)), TXT_NUM_STRINGS * sizeof(ushort));
-	gfStringWad = (char*)(gfStringOffset + TXT_NUM_STRINGS);
-	memcpy(gfStringOffset + TXT_NUM_STRINGS,
-		gfStringOffset + TXT_NUM_STRINGS + (sizeof(STRINGHEADER) / sizeof(ushort)),
-		sh.StringWadLen + sh.PCStringWadLen + sh.PSXStringWadLen);
+	const long nDatei = sh.nStrings + sh.nPSXStrings + sh.nPCStrings;
+	ushort* off = (ushort*)(d + sizeof(STRINGHEADER));
+	char* wad = d + sizeof(STRINGHEADER) + nDatei * sizeof(ushort);
 
-	for (int i = 0; i < TXT_NUM_STRINGS - 1; i++)
+	const long enumHaupt = 195;
+	const long enumPSX = 56;
+
+	for (long i = 0; i < TXT_NUM_STRINGS; i++)
 	{
-		s = &gfStringWad[gfStringOffset[i]];
-		e = &gfStringWad[gfStringOffset[i + 1]];
+		if (i < enumHaupt)
+			q = i;
+		else if (i < enumHaupt + enumPSX)
+			q = sh.nStrings + (i - enumHaupt);
+		else
+			q = sh.nStrings + sh.nPSXStrings + (i - enumHaupt - enumPSX);
+
+		tabelle[i] = q < nDatei ? off[q] : 0;
+	}
+
+	gfLanguageFile = (uchar*)d;
+	gfStringOffset = tabelle;
+	gfStringWad = wad;
+
+	// Entschluesselt wird ueber die DATEI-Offsets (alle nDatei Strings), damit
+	// auch die Eintraege jenseits des Enums konsistent bleiben. Wie im
+	// Original bleibt je String das letzte Byte (der unverschluesselte
+	// NUL-Abschluss) unangetastet, und der allerletzte String der Datei
+	// bleibt kodiert - der liegt ausserhalb jeder Enum-Zuordnung.
+	for (long i = 0; i + 1 < nDatei; i++)
+	{
+		s = &wad[off[i]];
+		e = &wad[off[i + 1]];
 		l = e - s - 1;
 
-		for (int j = 0; j < l; j++)
+		for (long j = 0; j < l; j++)
 			s[j] ^= 0xA5;
 	}
 }

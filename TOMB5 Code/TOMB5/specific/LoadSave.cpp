@@ -303,6 +303,7 @@ void DoOptions()
 	char buf[256];
 	static char sfx_backup_flag;	//have we backed sfx stuff up?
 	static bool waiting_for_key = 0;
+	static bool action_still_held = 0;	// Action-Knopf hielt beim Betreten von waiting_for_key noch die Zeilenauswahl fest
 
 	if (!(sfx_backup_flag & 1))
 	{
@@ -406,7 +407,7 @@ void DoOptions()
 				else if (jLayout[lp] == -1)
 					text = "---";
 				else
-					text = JoyStickButtons[jLayout[lp]];
+					text = JoyButtonName(jLayout[lp]);
 				PrintString(phd_centerx + (phd_centerx >> 2), y++ * font_height, (waiting_for_key && (sel & (1 << i++))) ? 1 : 6, text, 0);
 			}
 		}
@@ -416,7 +417,26 @@ void DoOptions()
 		if (!ControlMethod)
 			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, SCRIPT_TEXT(TXT_Keyboard), 0);
 		else if (ControlMethod == 1)
-			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, SCRIPT_TEXT(TXT_Joystick), 0);
+		{
+			// Die Joystick-Zeile traegt den Namen der gewaehlten Seite. Die
+			// Seite aendert nur die ANZEIGE der Knopfnamen (und die Vorgaben
+			// beim Reset) - die Bitfolge kommt vom aktiven Eingabeweg, siehe
+			// input.cpp.
+			switch (AktiverJoyStyle())
+			{
+			case JOYSTYLE_PS5:
+				text = (char*)"PS5 Controller";
+				break;
+			case JOYSTYLE_XBOX:
+				text = (char*)"Xbox Controller";
+				break;
+			default:
+				text = SCRIPT_TEXT(TXT_Joystick);
+				break;
+			}
+
+			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, text, 0);
+		}
 		else if (ControlMethod == 2)
 			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, SCRIPT_TEXT(TXT_Reset), 0);
 
@@ -507,7 +527,14 @@ void DoOptions()
 					// bind before the user can press anything else - this is the exact
 					// joystick equivalent of the keyboard capture loop below excluding
 					// DIK_RETURN for the same reason.
-					if (lp2 != jLayout[4])
+					// The guard is armed only while that selection press is still
+					// physically down (action_still_held): once released - or when
+					// the row was selected via keyboard Enter in the first place -
+					// the Action button itself becomes bindable like any other.
+					if (!Key(jLayout[4] + 256))
+						action_still_held = 0;
+
+					if (lp2 != jLayout[4] || !action_still_held)
 					{
 						jLayout[i] = lp2;
 
@@ -533,6 +560,13 @@ void DoOptions()
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			sel2 = sel;
 			waiting_for_key = 1;
+			// Der Halte-Schutz unten (Action-Knopf nicht sofort als neue
+			// Bindung einfangen) gilt nur, wenn die Zeile auch WIRKLICH mit
+			// dem Pad-Knopf angewaehlt wurde. Kam die Auswahl von der
+			// Tastatur (Enter), blockte der Schutz frueher DAUERHAFT jeden
+			// Versuch, den Action-Knopf selbst zu binden - nur Esc kam
+			// wieder raus (Befund des Xbox-Testers).
+			action_still_held = ControlMethod == 1 && Key(jLayout[4] + 256);
 			memset(keymap, 0, sizeof(keymap));
 		}
 
@@ -541,28 +575,53 @@ void DoOptions()
 			SoundEffect(SFX_MENU_SELECT, 0, 2);
 			memcpy(layout[1], layout, 72);
 			ControlMethod = 0;
-			memcpy(jLayout, defaultJLayout, sizeof(jLayout));	// was a hardcoded "32" (bytes) - only reset the first 8 of 32 longs, silently skipping Roll/Inventory/Pause/Save/Load
+			JoyDefaultsAnwenden();	// Vorgaben passend zu Seite UND Eingabeweg (input.cpp) - vorher eine feste Tabelle in DualSense-Bitfolge, auf Xbox-Pads Unsinn
 		}
 
 		if (sel & 1)
 		{
+			// Fuenf sichtbare Stellungen: Keyboard, PS5 Controller,
+			// Xbox Controller, Joystick (generisch), Reset. Intern bleibt
+			// ControlMethod 0/1/2 (Keyboard/Joystick/Reset) - die drei
+			// Controller-Stellungen sind Methode 1 mit JoyStyle 0/1/2,
+			// damit jede bestehende "ControlMethod == 1"-Pruefung im Spiel
+			// unveraendert weiterlaeuft.
+			long pos;
+
+			if (!ControlMethod)
+				pos = 0;
+			else if (ControlMethod == 1)
+				pos = 1 + AktiverJoyStyle();
+			else
+				pos = 4;
+
 			if (dbinput & IN_LEFT)
 			{
 				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-				ControlMethod--;
+				pos--;
 			}
 
 			if (dbinput & IN_RIGHT)
 			{
 				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-				ControlMethod++;
+				pos++;
 			}
 
-			if (ControlMethod > 2)
-				ControlMethod = 2;
+			if (pos > 4)
+				pos = 4;
 
-			if (ControlMethod < 0)
+			if (pos < 0)
+				pos = 0;
+
+			if (!pos)
 				ControlMethod = 0;
+			else if (pos < 4)
+			{
+				ControlMethod = 1;
+				JoyStyle = pos - 1;	// ab jetzt explizite Wahl statt Automatik
+			}
+			else
+				ControlMethod = 2;
 		}
 
 		if (!sel)

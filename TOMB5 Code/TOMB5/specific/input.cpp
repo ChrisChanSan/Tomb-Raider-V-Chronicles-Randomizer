@@ -80,23 +80,130 @@ const char* GermanKeyboard[272] =
 	"Joy 9", "Joy 10", "Joy 11", "Joy 12", "Joy 13", "Joy 14", "Joy 15", "Joy 16"
 };
 
-// Indices 0-12 named for a PS5 DualSense controller (user-confirmed physical
-// button per index via manual testing - button order on the controller's raw
-// DirectInput/HID report isn't standardized, so this had to be measured, not
-// assumed). Indices 13-15 are still unidentified physical buttons (touchpad
-// click, etc. - untested) so they stay as generic "Joy N". Indices 16-19
-// aren't physical buttons at all - DXUpdateJoystick/DXUpdateJoystickDirectInput
-// (specific/dxshell.cpp) also set these 4 bits for the right stick's 4 tilt
-// directions, so it can be bound to actions the same way the D-pad already is.
-const char* JoyStickButtons[20] =
+//----------------------------------------------------------------------------
+// Controller-Namenstabellen. Der Bitplatz eines Knopfes haengt vom EINGABEWEG
+// ab, nicht vom Controller-Typ:
+//   - XInput (echte Xbox-Pads, aber auch DualSense hinter Steam Input oder
+//     DS4Windows): Bitfolge aus DXUpdateJoystick (dxshell.cpp) -
+//     0=A 1=B 2=X 3=Y 4=LB 5=RB 6=View 7=Menu 8=L3 9=R3 10=LT 11=RT.
+//     Der Guide-Knopf kommt ueber XInput nicht an, Bits 12-15 bleiben tot.
+//   - DirectInput-Fallback (DualSense roh, No-Name-Pads): Bit i = HID-Knopf i.
+//     Fuer den DualSense am echten Geraet vermessen (Reihenfolge ist im
+//     HID-Report nicht genormt): 0=Square 1=Cross 2=Circle 3=Triangle 4=L1
+//     5=R1 6=L2 7=R2 8=Share 9=Options 10=L3 11=R3 12=PS Button.
+// Bits 16-19 sind auf beiden Wegen die vier Kipprichtungen des rechten
+// Sticks (dxshell.cpp), damit er wie das Steuerkreuz belegbar ist.
+//
+// Die Control-Method-Seite (JoyStyle) waehlt nur das VOKABULAR; welche
+// Bitfolge gilt, weiss der Motor selbst (joystick_is_xinput). So stimmen
+// die Namen auch fuer einen DualSense hinter DS4Windows: PS5-Seite plus
+// XInput-Bitfolge.
+#define JOYNAME_STICK "Stick R Up", "Stick R Down", "Stick R Left", "Stick R Right"
+
+static const char* JoyNamesPS5DInput[20] =
 {
 	"Square", "Cross", "Circle", "Triangle", "L1", "R1", "L2", "R2",
 	"Share", "Options", "L3", "R3", "PS Button", "Joy 14", "Joy 15", "Joy 16",
-	"Stick R Up", "Stick R Down", "Stick R Left", "Stick R Right"
+	JOYNAME_STICK
 };
 
+static const char* JoyNamesPS5XInput[20] =
+{
+	"Cross", "Circle", "Square", "Triangle", "L1", "R1", "Share", "Options",
+	"L3", "R3", "L2", "R2", "Joy 13", "Joy 14", "Joy 15", "Joy 16",
+	JOYNAME_STICK
+};
+
+static const char* JoyNamesXbox[20] =
+{
+	"A", "B", "X", "Y", "LB", "RB", "View", "Menu",
+	"L3", "R3", "LT", "RT", "Joy 13", "Joy 14", "Joy 15", "Joy 16",
+	JOYNAME_STICK
+};
+
+static const char* JoyNamesGeneric[20] =
+{
+	"Joy 1", "Joy 2", "Joy 3", "Joy 4", "Joy 5", "Joy 6", "Joy 7", "Joy 8",
+	"Joy 9", "Joy 10", "Joy 11", "Joy 12", "Joy 13", "Joy 14", "Joy 15", "Joy 16",
+	JOYNAME_STICK
+};
+
+// -1 = automatisch (XInput-Geraet -> Xbox-Seite, sonst PS5-Seite); ab der
+// ersten Wahl des Nutzers 0=PS5, 1=Xbox, 2=Generisch (Registry "JoyStyle").
+long JoyStyle = -1;
+
+long AktiverJoyStyle()
+{
+	if (JoyStyle >= 0)
+		return JoyStyle;
+
+	return joystick_is_xinput ? JOYSTYLE_XBOX : JOYSTYLE_PS5;
+}
+
+const char* JoyButtonName(long idx)
+{
+	if (idx < 0 || idx > 19)
+		return "---";
+
+	switch (AktiverJoyStyle())
+	{
+	case JOYSTYLE_PS5:
+		return joystick_is_xinput ? JoyNamesPS5XInput[idx] : JoyNamesPS5DInput[idx];
+	case JOYSTYLE_XBOX:
+		return joystick_is_xinput ? JoyNamesXbox[idx] : JoyNamesGeneric[idx];
+	default:
+		return JoyNamesGeneric[idx];
+	}
+}
+
+// Standardbelegungen je Seite UND Eingabeweg - Belegungen sind Bit-Indizes,
+// dieselbe Absicht ("Duck auf R2") landet je Weg auf anderen Bits.
+// Zeilen: Duck Dash Walk Jump Action Draw Flare Look Roll Inv Pause Save Load
+// SmallMedi LargeMedi. -1 = unbelegt (Anzeige "---", Key() ignoriert es).
+static const long jDefPS5DInput[15] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14 };
+static const long jDefPS5XInput[15] = { 5, 3, 4, 2, 0, 1, 7, 10, 11, 6, 8, 9, -1, 18, 19 };
+// Xbox-Vorgabe nach dem Layout des Xbox-Testers: RT=Duck LT=Dash RB=Walk
+// X=Jump A=Action Y=Draw LB=Look B=Roll View=Inventory Menu=Pause.
+static const long jDefXbox[15] = { 11, 10, 5, 2, 0, 3, 8, 4, 1, 6, 7, -1, -1, 18, 19 };
+static const long jDefGeneric[15] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };
+
+void JoyDefaultsAnwenden()
+{
+	const long* quelle;
+
+	switch (AktiverJoyStyle())
+	{
+	case JOYSTYLE_PS5:
+		quelle = joystick_is_xinput ? jDefPS5XInput : jDefPS5DInput;
+		break;
+	case JOYSTYLE_XBOX:
+		quelle = joystick_is_xinput ? jDefXbox : jDefGeneric;
+		break;
+	default:
+		quelle = jDefGeneric;
+		break;
+	}
+
+	for (int i = 0; i < 15; i++)
+		jLayout[i] = quelle[i];
+
+	for (int i = 15; i < 32; i++)
+		jLayout[i] = 0;
+}
+
+// Bestaetigen (Kreuz/A) und Zurueck (Kreis/B) als Bit des aktiven Wegs.
+// Physisch ist es auf beiden Pads dieselbe Position - nur das Bit wandert.
+long JoyBitBestaetigen()
+{
+	return joystick_is_xinput ? 0 : 1;
+}
+
+long JoyBitZurueck()
+{
+	return joystick_is_xinput ? 1 : 2;
+}
+
 long jLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-long defaultJLayout[32] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 short layout[2][18] =
 {
@@ -115,6 +222,7 @@ long joystick_read;
 long joystick_read_x;
 long joystick_read_y;
 long joystick_read_fire;
+long joystick_is_xinput;	// 1 = XInput liefert (Xbox-Pad oder DS4Windows/Steam), 0 = DirectInput-Fallback; je Poll neu gesetzt (dxshell.cpp)
 
 static long joy_fire;
 
@@ -483,18 +591,18 @@ long S_UpdateInput()
 	if (keymap[DIK_ESCAPE])
 		linput |= IN_DESELECT | IN_OPTION;
 
-	// Fixed "Circle = back" menu convention, similar idea to Escape above but
-	// deliberately WITHOUT IN_OPTION - unlike Escape, Circle is also the user's
-	// rebindable "Roll" gameplay button (jLayout), and IN_OPTION doubles as the
-	// inventory-open toggle (see control.cpp) - adding it here would make every
-	// Roll press during gameplay also try to open the inventory. IN_DESELECT
-	// alone is enough for "back" in every menu screen that checks it.
-	// Not user-rebindable, for the same reason Escape itself isn't. Circle is
-	// bit 2 of joy_fire under this controller's raw DirectInput enumeration
-	// (confirmed by testing; see JoyStickButtons[] in this file) - specific to
-	// the DirectInput fallback path, since under XInput/a Steam or DS4Windows
-	// wrapper Circle usually reports as XINPUT_GAMEPAD_B (bit 1) instead.
-	if (ControlMethod == 1 && (joy_fire & (1 << 2)))
+	// Fixed "Circle/B = back" menu convention, similar idea to Escape above but
+	// deliberately WITHOUT IN_OPTION - unlike Escape, this is also a rebindable
+	// gameplay button (jLayout), and IN_OPTION doubles as the inventory-open
+	// toggle (see control.cpp) - adding it here would make every such press
+	// during gameplay also try to open the inventory. IN_DESELECT alone is
+	// enough for "back" in every menu screen that checks it.
+	// Not user-rebindable, for the same reason Escape itself isn't. The BIT
+	// depends on the active input path (JoyBitZurueck): raw DirectInput puts
+	// Circle on bit 2, XInput puts B - and Circle via DS4Windows/Steam - on
+	// bit 1. The hardcoded bit 2 here was why an Xbox pad could only leave
+	// menus with its X button.
+	if (ControlMethod == 1 && (joy_fire & (1 << JoyBitZurueck())))
 		linput |= IN_DESELECT;
 
 	if (lara.gun_status == LG_READY)

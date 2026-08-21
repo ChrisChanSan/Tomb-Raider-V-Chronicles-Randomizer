@@ -218,6 +218,7 @@ bool LoadSettings()
 	REG_ReadLong((char*)"MusicVolume", (ulong&)MusicVolume, 80);
 	REG_ReadLong((char*)"SFXVolume", (ulong&)SFXVolume, 90);
 	REG_ReadLong((char*)"ControlMethod", (ulong&)ControlMethod, 0);
+	REG_ReadLong((char*)"JoyStyle", (ulong&)JoyStyle, (ulong)-1);	// -1 = Automatik: XInput-Pad -> Xbox-Seite, sonst PS5 (input.cpp)
 	REG_ReadLong((char*)"SoundQuality", (ulong&)SoundQuality, 1);
 	REG_ReadLong((char*)"AutoTarget", (ulong&)App.AutoTarget, 1);
 	REG_ReadLong((char*)"WindowX", (ulong&)App.dx.rScreen.left, 0);
@@ -267,6 +268,7 @@ void SaveSettings()
 	REG_WriteLong((char*)"JBmd", jLayout[14]);
 
 	REG_WriteLong((char*)"ControlMethod", ControlMethod);
+	REG_WriteLong((char*)"JoyStyle", JoyStyle);
 	REG_WriteLong((char*)"MusicVolume", MusicVolume);
 	REG_WriteLong((char*)"SFXVolume", SFXVolume);
 	REG_WriteLong((char*)"SoundQuality", SoundQuality);

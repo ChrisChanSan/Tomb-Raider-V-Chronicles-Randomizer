@@ -13,15 +13,25 @@
 #pragma once
 #include "../global/types.h"
 
+// Control-Method-Seiten fuer den Joystick: nur das VOKABULAR der Anzeige.
+// Die Bitfolge bestimmt der aktive Eingabeweg (joystick_is_xinput).
+#define JOYSTYLE_PS5	0
+#define JOYSTYLE_XBOX	1
+#define JOYSTYLE_GENERIC	2
+
 long Key(long number);
 long S_UpdateInput();
 long ReadJoystick(long& x, long& y);
+long AktiverJoyStyle();
+const char* JoyButtonName(long idx);
+void JoyDefaultsAnwenden();
+long JoyBitBestaetigen();
+long JoyBitZurueck();
 
 extern const char* KeyboardButtons[272];
 extern const char* GermanKeyboard[272];
-extern const char* JoyStickButtons[20];
+extern long JoyStyle;
 extern long jLayout[32];
-extern long defaultJLayout[32];
 
 extern short layout[2][18];
 extern long conflict[18];
@@ -32,5 +42,6 @@ extern long joystick_read;
 extern long joystick_read_x;
 extern long joystick_read_y;
 extern long joystick_read_fire;
+extern long joystick_is_xinput;
 extern short ammo_change_timer;
 extern char ammo_change_buf[12];

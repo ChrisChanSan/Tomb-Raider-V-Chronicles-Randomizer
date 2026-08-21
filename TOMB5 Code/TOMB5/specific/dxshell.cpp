@@ -682,7 +682,7 @@ void DXFreeInfo(DXINFO* dxinfo)
 //     range down to roughly the old -128..127 range S_UpdateInput()'s +-8 thresholds
 //     were written against. D-pad is ORed in as a digital alternative.
 //   - joystick_read_fire: one bit per physical button, in "Joy 1".."Joy 16" order
-//     (bit0="Joy 1" etc) - the exact numbering JoyStickButtons[]/jLayout[] already
+//     (bit0="Joy 1" etc) - the exact numbering JoyButtonName()/jLayout[] already
 //     use, so the existing remapping screen assigns actions to these correctly
 //     without needing to know they're specifically Xbox-layout buttons underneath.
 static long DXUpdateJoystickDirectInput()
@@ -705,6 +705,7 @@ static long DXUpdateJoystickDirectInput()
 		return 0;
 
 	joystick_read = 1;
+	joystick_is_xinput = 0;	// dieser Pfad liefert rohe HID-Bits (Namenstabellen siehe input.cpp)
 
 	// Axes were ranged to -1000..1000 in DXInitInput via DIPROP_RANGE, so this
 	// scales to roughly the same -128..127 ballpark XInput's path produces above.
@@ -737,7 +738,7 @@ static long DXUpdateJoystickDirectInput()
 
 	for (int i = 0; i < 16; i++)
 		if (js.rgbButtons[i] & 0x80)
-			fire |= 1 << i;	// Joy 1..Joy 16, same bit layout the XInput path and JoyStickButtons[] use
+			fire |= 1 << i;	// Joy 1..Joy 16, same bit layout the XInput path and the name tables in input.cpp use
 
 	// Right stick tilt as 4 extra digital "buttons" (bits 16-19), same as the XInput
 	// path - not used for camera control, just an alternate 4-way bindable input.
@@ -775,6 +776,7 @@ long DXUpdateJoystick()
 		return DXUpdateJoystickDirectInput();	// no XInput device (e.g. a PS4/PS5 controller with no Steam Input/DS4Windows wrapper active) - fall back to raw DirectInput
 
 	joystick_read = 1;
+	joystick_is_xinput = 1;	// XInput-Bitfolge aktiv (Namenstabellen siehe input.cpp)
 
 	long lx = state.Gamepad.sThumbLX;
 	long ly = state.Gamepad.sThumbLY;

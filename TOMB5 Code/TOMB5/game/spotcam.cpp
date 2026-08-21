@@ -443,10 +443,11 @@ void CalculateSpotCams()
 
 	// Cross added alongside Escape for flyby skipping too (the level-intro camera
 	// flyby, e.g. Andrea1's opening, is its own separate system from both FMVs
-	// and CUTSEQ cutscenes - each needed its own fix). Key(257) reads the raw
-	// joystick state directly (bit 1 = Cross on this controller's DirectInput
-	// mapping), same reasoning as the cutscene-skip fix in control.cpp.
-	if (tomb5.cutseq_skipper && (keymap[DIK_ESCAPE] || (ControlMethod == 1 && Key(257))) && gfCurrentLevel != LVL5_TITLE)
+	// and CUTSEQ cutscenes - each needed its own fix). Reads the raw joystick
+	// state directly; the confirm bit (Cross/A) depends on the active input
+	// path - see JoyBitBestaetigen() in input.cpp, same reasoning as the
+	// cutscene-skip fix in control.cpp.
+	if (tomb5.cutseq_skipper && (keymap[DIK_ESCAPE] || (ControlMethod == 1 && Key(256 + JoyBitBestaetigen()))) && gfCurrentLevel != LVL5_TITLE)
 		current_spline_position = 0x10000;
 
 	if (!(input & IN_LOOK))

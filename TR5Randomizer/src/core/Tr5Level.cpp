@@ -1069,6 +1069,30 @@ bool Tr5Level::laraAnimBrauchbar(int animNr) const
 }
 
 //----------------------------------------------------------------------------
+// Auf welche Anim zeigt Laras Anim <animNr> mit next_animation?
+//
+// Gebraucht, um eine Bewegung als KETTE zu reparieren statt gliedweise: die
+// Kriechrolle laeuft 218 -> 219 -> 220 -> 222, und Core stubbt solche
+// Ketten am Stueck. Liefert -1, wenn es die Anim nicht gibt oder der
+// Nachfolger ausserhalb von Laras Satz liegt.
+//----------------------------------------------------------------------------
+int Tr5Level::laraAnimNachfolger(int animNr) const
+{
+    MoveableInfo mv;
+    if (!moveableInfo(0, mv) || mv.animIndex < 0) return -1;
+
+    const long long a = static_cast<long long>(mv.animIndex) + animNr;
+    if (a < 0 || a >= m_anims.count) return -1;
+
+    uint16_t weiter;
+    std::memcpy(&weiter, m_bytes.data() + m_anims.dataAt + static_cast<size_t>(a) * 40 + 28, 2);
+
+    const long long rel = static_cast<long long>(weiter) - mv.animIndex;
+    if (rel < 0 || static_cast<long long>(mv.animIndex) + rel >= m_anims.count) return -1;
+    return static_cast<int>(rel);
+}
+
+//----------------------------------------------------------------------------
 // Sound
 //
 // Aufbau, abgelesen an TOMB5s LoadSamples (specific/file.cpp:1232):

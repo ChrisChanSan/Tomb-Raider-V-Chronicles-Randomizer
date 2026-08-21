@@ -422,6 +422,11 @@ public:
     // Cores Stub-Kennzeichen; zusaetzlich wird der Platz nachgerechnet.
     bool    laraAnimBrauchbar(int animNr) const;
 
+    // Auf welche Anim zeigt Laras <animNr> weiter (next_animation)? Fuer die
+    // Kettenreparatur - Bewegungen bestehen aus mehreren Gliedern, und Core
+    // stubbt sie am Stueck. -1 = gibt es nicht.
+    int     laraAnimNachfolger(int animNr) const;
+
     // Der Objektslot, wie er in der Datei steht. anim < 0 heisst: keiner.
     struct MoveableInfo
     {

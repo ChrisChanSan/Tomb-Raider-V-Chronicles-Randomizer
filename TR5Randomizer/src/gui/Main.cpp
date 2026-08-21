@@ -226,6 +226,24 @@ namespace
             return PathUtil::dirExists(sub) ? sub : cfg.sourceDir;
         }
         std::wstring backupDir() const { return PathUtil::join(dataDir(), L"Backup"); }
+
+        // Die SCRIPT.DAT liegt bei einer echten Installation im SPIELORDNER
+        // neben der EXE, NICHT in data\ - dort liegen nur die Level. Weil
+        // dataDir() aber auf data\ zeigt, sobald es den Ordner gibt, suchte
+        // doScriptDat sie jahrelang an der falschen Stelle, fand sie nicht
+        // und stieg still aus ("SCRIPT.DAT nicht gefunden"). Damit lief der
+        // ganze Skript-Schritt bei keinem einzigen GUI-Lauf: kein
+        // Kind-Lara-Bit, kein KEY8 fuer joby3, kein Pistolenentzug fuer
+        // rich2. Vom Nutzer gefunden - die Pistolen kamen trotz Fix weiter
+        // aus rich1 mit, und seine SCRIPT.DAT war neun Tage alt.
+        //
+        // Gesucht wird deshalb an beiden Stellen, Spielordner zuerst.
+        std::wstring scriptPath() const
+        {
+            const std::wstring imSpiel = PathUtil::join(cfg.sourceDir, L"SCRIPT.DAT");
+            if (PathUtil::fileExists(imSpiel)) return imSpiel;
+            return PathUtil::join(dataDir(), L"SCRIPT.DAT");
+        }
         std::wstring payloadDir() const { return PathUtil::join(PathUtil::exeDir(), L"data"); }
 
         bool haveBackup = false;
@@ -491,7 +509,7 @@ static std::wstring lagerDir(const App& a)
     // Zusage wie bei den Leveln: nichts geht unwiederbringlich verloren.
     bool doScriptDat(App& a, std::string& err, std::string& info)
     {
-        const std::wstring skript = PathUtil::join(a.dataDir(), L"SCRIPT.DAT");
+        const std::wstring skript = a.scriptPath();
         if (!PathUtil::fileExists(skript))
         {
             info = "SCRIPT.DAT nicht gefunden - die Andy-Level bleiben Kind-Lara.";

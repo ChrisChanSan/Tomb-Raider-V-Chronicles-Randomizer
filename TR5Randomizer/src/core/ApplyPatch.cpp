@@ -935,6 +935,29 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                     gebraucht.insert(b.anim);
         }
 
+        // Animationen sind KETTEN. Ein Eintrag zeigt mit next_animation auf
+        // seinen Nachfolger, und eine Bewegung besteht meist aus mehreren
+        // Gliedern: die Kriechrolle in rich1 laeuft 218 -> 219 -> 220 -> 222.
+        // Core stubbt in so einem Fall die GANZE Kette (in rich1 zeigen 218
+        // bis 221 auf denselben Frame-Zeiger). Nur das erste Glied zu
+        // reparieren reicht deshalb nicht: Lara setzt zum Rollen an und
+        // faellt nach sechs Bildern in die Kriechpose zurueck - genau so vom
+        // Nutzer gesehen. Der Bedarf wird darum entlang next_animation
+        // aufgezogen, bevor irgendetwas geholt wird.
+        {
+            std::set<int> offen = gebraucht;
+            while (!offen.empty())
+            {
+                const int a = *offen.begin();
+                offen.erase(offen.begin());
+                const int weiter = level.laraAnimNachfolger(a);
+                // Selbstbezug beendet die Kette (222 -> 222 ist das
+                // uebliche Halten am Ende), ebenso ein unbekannter Wert.
+                if (weiter < 0 || weiter == a) continue;
+                if (gebraucht.insert(weiter).second) offen.insert(weiter);
+            }
+        }
+
         for (int animNr : gebraucht)
         {
             if (level.laraAnimBrauchbar(animNr)) continue;

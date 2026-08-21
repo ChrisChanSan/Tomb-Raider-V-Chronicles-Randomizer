@@ -1023,19 +1023,20 @@ const char* SprachAnzeige(long idx)
 }
 
 // Selbst ergaenzte Menuezeilen ("Language", "Level Select", ...) haben keine
-// String-ID im Sprach-Wad - kleine eigene Tabelle je geladener Sprache.
-// Italienisch bekommt bewusst Englisch: die ITALIAN.DAT der Steam-Fassung
-// IST Englisch, uebersetzte Zeilen dazwischen waeren Kauderwelsch. Nur
-// Zeichen, die die Spielschrift ohne Escape-Codes kann (ASCII).
+// String-ID im Sprach-Wad - kleine eigene Tabelle je geladener Sprache. Nur
+// Zeichen, die die Spielschrift ohne Escape-Codes kann (ASCII). Hinweis:
+// die ITALIAN.DAT der Steam-Fassung ist nur eine Englisch-Kopie - wer sie
+// noch hat, sieht fuenf italienische Zeilen im englischen Menue; mit einer
+// echten Uebersetzung (der Nutzer hat eine) passt alles zusammen.
 const char* EigenText(const char* engl)
 {
-	static const char* tabelle[][4] =
-	{	// Englisch          Franzoesisch       Deutsch           Spanisch
-		{ "Language",        "Langue",          "Sprache",        "Idioma" },
-		{ "Level Select",    "Choix du niveau", "Levelauswahl",   "Seleccion de nivel" },
-		{ "Pause",           "Pause",           "Pause",          "Pausa" },
-		{ "Gallery",         "Galerie",         "Galerie",        "Galeria" },
-		{ "tomb5 options",   "Options tomb5",   "tomb5-Optionen", "Opciones tomb5" },
+	static const char* tabelle[][5] =
+	{	// Englisch          Franzoesisch       Deutsch           Italienisch           Spanisch
+		{ "Language",        "Langue",          "Sprache",        "Lingua",             "Idioma" },
+		{ "Level Select",    "Choix du niveau", "Levelauswahl",   "Selezione livello",  "Seleccion de nivel" },
+		{ "Pause",           "Pause",           "Pause",          "Pausa",              "Pausa" },
+		{ "Gallery",         "Galerie",         "Galerie",        "Galleria",           "Galeria" },
+		{ "tomb5 options",   "Options tomb5",   "tomb5-Optionen", "Opzioni tomb5",      "Opciones tomb5" },
 	};
 
 	long spalte;
@@ -1048,11 +1049,14 @@ const char* EigenText(const char* engl)
 	case GERMAN:
 		spalte = 2;
 		break;
-	case SPANISH:
+	case ITALIAN:
 		spalte = 3;
 		break;
+	case SPANISH:
+		spalte = 4;
+		break;
 	default:
-		return engl;	// Englisch, US und Italienisch (= Englisch)
+		return engl;	// Englisch und US
 	}
 
 	for (long i = 0; i < (long)(sizeof(tabelle) / sizeof(tabelle[0])); i++)

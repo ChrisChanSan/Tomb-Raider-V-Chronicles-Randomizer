@@ -632,6 +632,17 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 		else
 			size = LoadFile("data\\logo512.pak", &CompressedData);
 
+		// Sprach-Logos (grlogo/frlogo) gab es nur auf den jeweiligen CDs -
+		// die Steam-Fassung liefert nur logo512/uslogo/uklogo. Fehlt die
+		// Datei, faellt der Titel aufs englische Logo zurueck, statt eine
+		// Nullseite zu dekomprimieren (Hard-Crash beim Ruecksprung ins
+		// Titelmenue mit Deutsch oder Franzoesisch aktiv).
+		if (!size || !CompressedData)
+		{
+			CompressedData = 0;
+			size = LoadFile("data\\logo512.pak", &CompressedData);
+		}
+
 		pComp = (char*)malloc(*(long*)CompressedData);
 		Decompress(pComp, CompressedData + 4, size - 4, *(long*)CompressedData);
 		free(CompressedData);

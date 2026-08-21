@@ -1088,6 +1088,7 @@ static void SprachPufferAufbereiten(char* d)
 
 long WechsleSprache(long idx)
 {
+	STRINGHEADER sh;
 	char* d;
 	char* name = SprachDateiName(idx);
 
@@ -1098,6 +1099,20 @@ long WechsleSprache(long idx)
 
 	if (!LoadFile(name, &d))
 		return 0;
+
+	// Nur Dateien im PC-Layout (195 Haupt- / 58 PC-Strings) sind dem Enum
+	// zuordenbar. JAPAN.DAT und DUTCH.DAT der Steam-Fassung sind in
+	// Wahrheit PSX-Dateien (204/96, PSX-Seriennummern BESLES-02238/-02243
+	// mitten im Text) - deren Reihenfolge passt nicht, das Ergebnis waren
+	// Muellzeilen im Menue. Geprueft wird der KOPF, nicht der Name: eine
+	// echte PC-Fassung von einer Regionalversions-CD ginge weiterhin.
+	memcpy(&sh, d, sizeof(STRINGHEADER));
+
+	if (sh.nStrings != 195 || sh.nPCStrings != 58)
+	{
+		free(d);
+		return 0;
+	}
 
 	free(gfLanguageFile);
 	SprachPufferAufbereiten(d);

@@ -312,7 +312,7 @@ namespace
         bool phRoomNachbar = false;     // gesperrte Nachbarraeume oeffnen
         bool phJoby4NoWater = false;    // Deepsea Dive ohne Wasser
         bool phLevelAbschnitte = false; // Abschnitte (Rom/Russland/...) tauschen
-        bool phLevelReihenfolge = false;// alle 13 Level durchwuerfeln
+        int  optLevelFolge = 0;         // 0 aus, 1 innerhalb der Abschnitte (Stufe 2), 2 frei ueber alles (Stufe 3)
         bool phMusikSwitch = false;     // Audiotrack je Level wuerfeln
         bool phMusikTrigger = false;    // Musik-/Sound-Trigger-IDs wuerfeln
         bool phOutfitTr1 = false;       // klassisches TR1-Outfit im Pool
@@ -557,15 +557,15 @@ static std::wstring lagerDir(const App& a)
             if (!sd.abschnitteWuerfeln(a.effectiveSeed(), abschnitte, aErr))
                 a.scriptNote = "Levelabschnitte: " + aErr;
         }
-        if (a.phLevelReihenfolge)
+        if (a.optLevelFolge > 0)
         {
             std::string lErr;
-            if (!sd.levelWuerfeln(a.effectiveSeed(), levelFolge, lErr))
+            if (!sd.levelWuerfeln(a.effectiveSeed(), a.optLevelFolge == 2, levelFolge, lErr))
                 a.scriptNote = "Level-Reihenfolge: " + lErr;
         }
         // Ketten immer auf die JETZIGE Reihenfolge pruefen - in Vanilla-Folge
         // passiert nichts, nach einem Wuerfel reicht das Skript nach.
-        if (a.phLevelAbschnitte || a.phLevelReihenfolge)
+        if (a.phLevelAbschnitte || a.optLevelFolge > 0)
         {
             std::string kErr;
             if (!sd.kettenAufloesen(ketten, kErr))
@@ -585,7 +585,7 @@ static std::wstring lagerDir(const App& a)
             info += "  Hintergrundmusik: " + std::to_string(musikLevel) + " Level neu vertont.";
         if (a.phLevelAbschnitte && !abschnitte.empty())
             info += "  Abschnitte: " + abschnitte + ".";
-        if (a.phLevelReihenfolge && !levelFolge.empty())
+        if (a.optLevelFolge > 0 && !levelFolge.empty())
             info += "  Reihenfolge: " + levelFolge + ".";
         for (const std::string& k : ketten)
             info += "  " + k + ".";
@@ -1551,14 +1551,17 @@ static void drawUi(App& a, HWND hwnd)
                "Engine ab 2026-08-22 (Levelidentitaet aus dem Dateinamen); "
                "alte Spielstaende passen nicht zur neuen Reihenfolge.");
     ImGui::SameLine();
-    ImGui::Checkbox("Level-Reihenfolge switchen", &a.phLevelReihenfolge);
-    hoverHilfe("Die Reihenfolge INNERHALB der Abschnitte wuerfeln (Rom/Russland/"
-               "Irland/VCI bleiben als Bloecke; die Cutscene richcut2 bleibt an "
-               "rich2). Schluessel, die vanilla aus einem frueheren Level "
-               "mitkommen (Key 8 fuer joby3, Key 7 fuer joby5, Puzzle 2 fuer "
-               "Andy2), reicht das Skript per GIVEOBJ nach, wenn der Spender "
-               "dahinter liegt - samt Modell und Namen. Kuratiert in "
-               "Levelketten.h. Kombinierbar mit dem Abschnitts-Haken.");
+    ImGui::SetNextItemWidth(220);
+    const char* folgeNamen[] = { "Level-Reihenfolge: aus", "innerhalb der Abschnitte", "frei ueber alles" };
+    ImGui::Combo("##levelfolge", &a.optLevelFolge, folgeNamen, 3);
+    hoverHilfe("Innerhalb: Rom/Russland/Irland/VCI bleiben Bloecke, nur die Level "
+               "darin tauschen. Frei: alle 13 Level ueber alle Abschnitte hinweg "
+               "(z.B. rich1 -> Andrea2 -> joby5 -> rich2). Die Cutscene richcut2 "
+               "bleibt immer an rich2. Schluessel, die vanilla aus einem frueheren "
+               "Level mitkommen (Key 8 fuer joby3, Key 7 fuer joby5, Puzzle 2 fuer "
+               "Andy2), reicht das Skript per GIVEOBJ nach - wenn der Spender "
+               "dahinter liegt ODER ein Level dazwischen das Item wegnimmt (rich2) - "
+               "samt Modell und Namen. Kuratiert in Levelketten.h.");
 
     ImGui::SeparatorText("Musik");
     ImGui::Checkbox("Hintergrundmusik switchen", &a.phMusikSwitch);

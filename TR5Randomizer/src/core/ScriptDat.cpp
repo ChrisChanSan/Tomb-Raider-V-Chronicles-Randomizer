@@ -499,7 +499,7 @@ bool ScriptDat::abschnitteWuerfeln(uint64_t seed, std::string& reihenfolge, std:
     return zerlege(error);                                // Caches neu, Bloecke liegen jetzt anders
 }
 
-bool ScriptDat::levelWuerfeln(uint64_t seed, std::string& reihenfolge, std::string& error)
+bool ScriptDat::levelWuerfeln(uint64_t seed, bool frei, std::string& reihenfolge, std::string& error)
 {
     reihenfolge.clear();
 
@@ -538,9 +538,26 @@ bool ScriptDat::levelWuerfeln(uint64_t seed, std::string& reihenfolge, std::stri
 
     std::mt19937_64 rng(seed ^ 0x4C45564C464F4C47ull);   // "LEVLFOLG"
 
+    // Stufe 3 (frei): alle Einheiten in EINEN Topf, ueber alle Kampagnen-
+    // Slots verteilt - die Abschnitte loesen sich auf. Umgesetzt, indem
+    // Topf 0 alles bekommt und die Toepfe 1..3 leer bleiben.
+    if (frei)
+    {
+        for (int a = 1; a < 4; ++a)
+        {
+            einheiten[0].insert(einheiten[0].end(), einheiten[a].begin(), einheiten[a].end());
+            einheiten[a].clear();
+        }
+    }
+
     for (int a = 0; a < 4; ++a)
     {
-        if (einheiten[a].empty()) { error = "ein Story-Abschnitt fehlt im Skript"; return false; }
+        if (einheiten[a].empty())
+        {
+            if (frei && a > 0) continue;
+            error = "ein Story-Abschnitt fehlt im Skript";
+            return false;
+        }
 
         // Zielslots des Abschnitts in aufsteigender Folge, dann die Einheiten
         // permutiert darauf verteilen.
@@ -602,7 +619,19 @@ bool ScriptDat::kettenAufloesen(std::vector<std::string>& notizen, std::string& 
         const int sn = slotVonLevel(k.nehmer);
         const int ss = slotVonLevel(k.spender);
         if (sn < 0 || ss < 0) continue;                      // Level nicht im Skript: nichts zu tun
-        if (ss < sn) continue;                               // Spender liegt davor: vanilla-Weg, Item kommt im Inventar
+
+        // Spender davor: das Item kaeme im Inventar - es sei denn, ein Level
+        // DAZWISCHEN nimmt es per TAKEOBJ wieder weg (rich2 nimmt Key 7/8;
+        // in freier Reihenfolge kann rich2 zwischen joby2 und joby3 liegen).
+        // Dann muss der Nehmer es trotzdem nachgereicht bekommen.
+        bool weggenommen = false;
+        if (ss < sn)
+        {
+            for (size_t k2 = 0; k2 < m_levels.size() && !weggenommen; ++k2)
+                if (m_ofsIndex[k2] > ss && m_ofsIndex[k2] < sn && nimmtObjekt(k2, k.inv))
+                    weggenommen = true;
+            if (!weggenommen) continue;
+        }
 
         bool ch = false;
         if (!addGiveObject(k.nehmer, k.inv, ch, error))
@@ -618,7 +647,7 @@ bool ScriptDat::kettenAufloesen(std::vector<std::string>& notizen, std::string& 
                 notizen.push_back(std::string(k.name) + ": Namensbefehl nicht kopiert (" + nErr + ")");
         }
 
-        notizen.push_back(std::string(k.name) + ": Spender liegt dahinter - Item per GIVEOBJ nachgereicht");
+        notizen.push_back(std::string(k.name) + (weggenommen ? ": ein Level dazwischen nimmt es weg" : ": Spender liegt dahinter") + " - per GIVEOBJ nachgereicht");
     }
     return true;
 }
@@ -708,4 +737,19 @@ bool ScriptDat::addTakeObject(const std::string& levelName, int invObjekt, bool&
 bool ScriptDat::addGiveObject(const std::string& levelName, int invObjekt, bool& changed, std::string& error)
 {
     return addInvBefehl(0xD9, levelName, invObjekt, changed, error);      // CMD_GIVEOBJ
+}
+
+bool ScriptDat::nimmtObjekt(size_t idx, int invObjekt) const
+{
+    for (size_t q = m_blockAn[idx]; q < m_blockBis[idx]; )
+    {
+        const int len = nutzlast(m_bytes[q]);
+        if (len < 0) break;
+        if (m_bytes[q] == 0xDA && q + 1 < m_bytes.size() &&
+            m_bytes[q + 1] == static_cast<uint8_t>(invObjekt))
+            return true;
+        if (m_bytes[q] == 0x81) break;                      // CMD_LEVEL: Blockkopf zu Ende
+        q += 1 + len;
+    }
+    return false;
 }

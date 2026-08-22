@@ -121,7 +121,11 @@ public:
     // Stufe 2: Reihenfolge INNERHALB der vier Abschnitte wuerfeln (RICHCUT2
     // bleibt an RICH2 geklebt). Wie abschnitteWuerfeln nur die Offsettabelle;
     // nicht wiederholbar. reihenfolge: die neue Abfolge als Text.
-    bool levelWuerfeln(uint64_t seed, std::string& reihenfolge, std::string& error);
+    // frei = Stufe 3: alle Kampagnen-Level ueber alle Abschnitte hinweg
+    // permutieren (RICH2+RICHCUT2 bleiben eine Einheit). Die Videos haengen
+    // in der Engine an der Level-Identitaet, das Finale am letzten Slot -
+    // beides traegt auch die freie Folge.
+    bool levelWuerfeln(uint64_t seed, bool frei, std::string& reihenfolge, std::string& error);
 
     // Slot (Platz in der Offsettabelle) eines Levels, -1 wenn unbekannt.
     int  slotVonLevel(const std::string& levelName) const;
@@ -199,6 +203,7 @@ private:
     bool   findeLevel(const std::string& name, size_t& idx) const;
     bool   addInvBefehl(uint8_t op, const std::string& levelName, int invObjekt,
                         bool& changed, std::string& error);   // GIVEOBJ/TAKEOBJ gemeinsam
+    bool   nimmtObjekt(size_t idx, int invObjekt) const;     // traegt der Block ein TAKEOBJ dafuer?
     size_t findeBefehl(size_t idx, uint8_t cmd) const;
 
     bool zerlege(std::string& error);

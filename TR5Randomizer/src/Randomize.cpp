@@ -67,11 +67,12 @@ int main(int argc, char** argv)
         std::printf("            die Datei erneut). trigger schickt die TO_CD-Tracks der\n");
         std::printf("            Floordata durch eine GLOBALE Permutation der getriggerten Tracks:\n");
         std::printf("            Atmosphaeren unter sich, alles andere unter sich.\n");
-        std::printf("  reihenfolge=abschnitte|level|beides:\n");
+        std::printf("  reihenfolge=abschnitte|level|beides|frei:\n");
         std::printf("            abschnitte permutiert die vier Story-Abschnitte, level die\n");
-        std::printf("            Reihenfolge INNERHALB der Abschnitte (Levelketten aus\n");
-        std::printf("            Levelketten.h werden per GIVEOBJ aufgeloest). Braucht skript=\n");
-        std::printf("            und die Engine mit gfLevelId; NICHT wiederholbar.\n");
+        std::printf("            Reihenfolge INNERHALB der Abschnitte, frei alle 13 Level ueber\n");
+        std::printf("            alles hinweg (Levelketten aus Levelketten.h werden per GIVEOBJ\n");
+        std::printf("            aufgeloest). Braucht skript= und die Engine mit gfLevelId;\n");
+        std::printf("            NICHT wiederholbar.\n");
         return 2;
     }
 
@@ -93,7 +94,8 @@ int main(int argc, char** argv)
     // mit skript= wuerfelt die Datei erneut durch.
     bool musikHintergrund = false, musikTrigger = false;
     // Levelabschnitte permutieren (braucht skript= und die Engine mit gfLevelId).
-    bool abschnitte = false, levelFolge = false;
+    bool abschnitte = false;
+    int  levelFolge = 0;            // 1 innerhalb der Abschnitte, 2 frei ueber alles
     for (int i = 6; i < argc; ++i)
     {
         const std::string s = argv[i];
@@ -112,8 +114,9 @@ int main(int argc, char** argv)
         else if (s == "musik=trigger")     musikTrigger = true;
         else if (s == "musik=beides")      { musikHintergrund = true; musikTrigger = true; }
         else if (s == "reihenfolge=abschnitte") abschnitte = true;
-        else if (s == "reihenfolge=level")      levelFolge = true;
-        else if (s == "reihenfolge=beides")     { abschnitte = true; levelFolge = true; }
+        else if (s == "reihenfolge=level")      levelFolge = 1;
+        else if (s == "reihenfolge=beides")     { abschnitte = true; levelFolge = 1; }
+        else if (s == "reihenfolge=frei")       levelFolge = 2;
         // "gegneraus=47,49" - dieselbe Abwahl wie das Fenster "Gegnerarten"
         // in der Oberflaeche (#95), damit sich der Filter auch aus Skripten
         // pruefen laesst.
@@ -191,7 +194,7 @@ int main(int argc, char** argv)
             if (levelFolge)
             {
                 std::string folge;
-                if (sd.levelWuerfeln(seed, folge, sErr))
+                if (sd.levelWuerfeln(seed, levelFolge == 2, folge, sErr))
                     std::printf("SCRIPT.DAT  Reihenfolge: %s\n", folge.c_str());
                 else
                     std::printf("SCRIPT.DAT  Reihenfolge: %s\n", sErr.c_str());

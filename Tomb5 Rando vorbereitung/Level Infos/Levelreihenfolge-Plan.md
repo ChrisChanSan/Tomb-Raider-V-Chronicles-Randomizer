@@ -174,3 +174,23 @@ Schlüsselketten). Vergleichbar mit der Sprachwahl plus ein TR3-Port-Tag.
   Abschnitt 7): verwaiste Schlösser (rich1 PUZZLE_HOLE1, rich2
   PUZZLE_HOLE8, Andy2 PUZZLE_HOLE1), Brechstange Andrea3, levelgebundene
   Story-Tore, Waffenstand nach joby3 (nimmt alles), Irland als Startlevel.
+
+## 10. Inventar-Garbage-Collector (2026-08-22, Vorschlag des Nutzers)
+
+**Die Einsicht:** die Inventar-Slots sind generisch. `PUZZLE_ITEM1` ist in
+Andrea1 der Garden Key, in joby4 die Chaff flares, in andy1 das Heart, in
+rich3 der Helipad access key — jedes Level benennt denselben Slot um. Ein
+mitgeschleppter Garden Key *wird* in joby4 zu Chaff flares. Und die
+„Grappling Gun" ist der Crossbow-Slot (95 + Munition), der nur in rich3
+Modell und Anims hat (Hard-Crash beim Ausrüsten anderswo).
+
+**Darum:** beim Start jedes Kampagnen-Levels nimmt das Skript per TAKEOBJ
+alles aus der Schlüsselfamilie weg, was ein früheres Level anbieten konnte
+und das weder dieses noch ein späteres Level per Kette importiert; die
+Crossbow-Familie überall außer rich3. Ketten (`Levelketten.h`) sind jetzt
+„geben" (GIVEOBJ + Name + Modell) oder „nur behalten" (Story-Items
+unterwegs). Engine: `gfPickups`/`gfTakeaways` von 16 auf 64 mit Riegel.
+
+Offen für den Spieltest: ob die „nur behalten"-Ketten reichen (Iris,
+Bestiary, Spear, Iron clapper), und ob irgendein Level ein Item braucht,
+das die Matrix nicht zeigt (Flipmap-Dubletten).

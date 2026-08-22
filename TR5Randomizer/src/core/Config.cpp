@@ -88,7 +88,13 @@ void Config::load()
         else if (key == "itemMenge")       itemMenge = std::atoi(val.c_str());
         else if (key == "secrets")         secrets = std::atoi(val.c_str());
         else if (key == "secretAutor")     secretAutor = val;
+        else if (key == "musikSwitch")     optMusikSwitch = (val == "1");
+        else if (key == "musikTrigger")    optMusikTrigger = (val == "1");
+        else if (key == "levelAbschnitte") optLevelAbschnitte = (val == "1");
+        else if (key == "levelFolge")      optLevelFolge = std::atoi(val.c_str());
     }
+
+    if (optLevelFolge < 0 || optLevelFolge > 2) optLevelFolge = 0;
 
     if (enemyCount < 1)  enemyCount = 1;
     if (enemyCount > 20) enemyCount = 20;
@@ -125,6 +131,13 @@ bool Config::save() const
     std::fprintf(f, "outfits=%d\n", optOutfits ? 1 : 0);
     std::fprintf(f, "itemMenge=%d\n", itemMenge);
     std::fprintf(f, "secrets=%d\n", secrets);
+    // Wurde gelesen, aber nie geschrieben - die Autorenwahl ging bei jedem
+    // Programmstart verloren.
+    std::fprintf(f, "secretAutor=%s\n", secretAutor.c_str());
+    std::fprintf(f, "musikSwitch=%d\n", optMusikSwitch ? 1 : 0);
+    std::fprintf(f, "musikTrigger=%d\n", optMusikTrigger ? 1 : 0);
+    std::fprintf(f, "levelAbschnitte=%d\n", optLevelAbschnitte ? 1 : 0);
+    std::fprintf(f, "levelFolge=%d\n", optLevelFolge);
     std::fclose(f);
     return true;
 }

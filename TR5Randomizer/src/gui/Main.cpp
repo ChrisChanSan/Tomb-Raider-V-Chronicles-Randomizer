@@ -1814,6 +1814,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.optItemMenge    = app.cfg.itemMenge;
     app.optSecrets      = app.cfg.secrets;
     app.secretAutor     = app.cfg.secretAutor;
+    app.phMusikSwitch     = app.cfg.optMusikSwitch;
+    app.phMusikTrigger    = app.cfg.optMusikTrigger;
+    app.phLevelAbschnitte = app.cfg.optLevelAbschnitte;
+    app.optLevelFolge     = app.cfg.optLevelFolge;
 
     // Alles Merkenswerte in die Einstellungsdatei schreiben: Fenstergroesse,
     // Haken, Seed. Laeuft beim Ziehen des Fensters, bei jeder geaenderten
@@ -1837,6 +1841,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.itemMenge       = app.optItemMenge;
         app.cfg.secrets         = app.optSecrets;
         app.cfg.secretAutor     = app.secretAutor;
+        app.cfg.optMusikSwitch     = app.phMusikSwitch;
+        app.cfg.optMusikTrigger    = app.phMusikTrigger;
+        app.cfg.optLevelAbschnitte = app.phLevelAbschnitte;
+        app.cfg.optLevelFolge      = app.optLevelFolge;
         app.cfg.seedText        = app.seedBuf;
         app.cfg.save();
     };
@@ -1894,6 +1902,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.optOutfits      != app.optOutfits ||
                  app.cfg.itemMenge       != app.optItemMenge ||
                  app.cfg.secrets         != app.optSecrets ||
+                 app.cfg.optMusikSwitch     != app.phMusikSwitch ||
+                 app.cfg.optMusikTrigger    != app.phMusikTrigger ||
+                 app.cfg.optLevelAbschnitte != app.phLevelAbschnitte ||
+                 app.cfg.optLevelFolge      != app.optLevelFolge ||
                  app.cfg.secretAutor     != app.secretAutor)
         {
             merkeEinstellungen(hwnd);

@@ -468,7 +468,14 @@ bool ScriptDat::abschnitteWuerfeln(uint64_t seed, std::string& reihenfolge, std:
 
     int folge[4] = { 0, 1, 2, 3 };
     std::mt19937_64 rng(seed ^ 0x414253434E495454ull);   // "ABSCNITT" - eigener Strom
-    std::shuffle(folge, folge + 4, rng);
+    // Ein Wuerfeln soll auch etwas aendern: die Identitaet (1 von 24) wird
+    // neu gewuerfelt, sonst sieht der Spieler Vanilla und glaubt, der Haken
+    // tue nichts.
+    for (int versuch = 0; versuch < 16; ++versuch)
+    {
+        std::shuffle(folge, folge + 4, rng);
+        if (folge[0] != 0 || folge[1] != 1 || folge[2] != 2 || folge[3] != 3) break;
+    }
 
     // Alte Offsets einsammeln, dann neu verteilen.
     std::vector<uint16_t> alt(m_nLevels);
@@ -541,7 +548,17 @@ bool ScriptDat::levelWuerfeln(uint64_t seed, std::string& reihenfolge, std::stri
         for (const auto& e : einheiten[a]) ziele.insert(ziele.end(), e.begin(), e.end());
         std::sort(ziele.begin(), ziele.end());
 
-        std::shuffle(einheiten[a].begin(), einheiten[a].end(), rng);
+        // Auch hier: keine Identitaet, solange es etwas zu tauschen gibt (bei
+        // drei Leveln waere jede sechste Permutation Vanilla - der Nutzer
+        // hatte den Eindruck, der Haken greife nicht).
+        {
+            const std::vector<std::vector<int>> vorher = einheiten[a];
+            for (int versuch = 0; versuch < 16; ++versuch)
+            {
+                std::shuffle(einheiten[a].begin(), einheiten[a].end(), rng);
+                if (einheiten[a].size() < 2 || einheiten[a] != vorher) break;
+            }
+        }
 
         size_t z = 0;
         for (const auto& e : einheiten[a])

@@ -19,6 +19,7 @@
 #include "Tr3Quelle.h"
 
 #include <algorithm>
+#include <iterator>
 #include <cstdio>
 #include <random>
 #include <set>
@@ -38,13 +39,11 @@ namespace
 long Patch::musikTriggerWuerfeln(Tr5Level& level, uint64_t seed)
 {
     // GLOBAL (Wunsch des Nutzers): keine levelinterne Permutation der
-    // vorhandenen Tracks mehr, sondern EINE Seed-Permutation ueber den
-    // ganzen Trackraum 0..135 (TriggerCDTrack nimmt nur value < 136;
-    // TrackFileNames hat genau 136 Eintraege, alle Wavs liegen bei). Jedes
-    // Level wendet dieselbe Abbildung an - so wandern Jingles ueber
-    // Levelgrenzen (rich3-Klaenge in joby2, Tutorial-Sprueche als Jingle),
-    // derselbe Track klingt aber ueberall gleich. Und das CLI braucht keine
-    // Sammelphase ueber fremde Level, die es gar nicht kennt.
+    // vorhandenen Tracks, sondern EINE Seed-Permutation ueber einen festen
+    // Katalog (unten), die jedes Level gleich anwendet - so wandern Jingles
+    // ueber Levelgrenzen (rich3-Klaenge in joby2), derselbe Track klingt
+    // aber ueberall gleich. Und das CLI braucht keine Sammelphase ueber
+    // fremde Level, die es gar nicht kennt.
     //
     // Die Atmosphaeren bleiben ein eigener Topf, weil die Engine sie anders
     // behandelt (TriggerNormalCDTrack, control.cpp: 117/118/121/123..130
@@ -56,9 +55,28 @@ long Patch::musikTriggerWuerfeln(Tr5Level& level, uint64_t seed)
         return t == 117 || t == 118 || t == 121 || (t >= 123 && t <= 130);
     };
 
-    std::vector<int> atmo, jingle;
+    // Der Jingle-Topf ist NICHT der ganze Trackraum, sondern nur, was
+    // irgendwo im Spiel ein Trigger tatsaechlich ausloest - gemessen mit
+    // MusikPruef ueber alle 15 Vanilla-Level (2026-08-22, Vereinigung der
+    // TO_CD-Tracks, ohne die Atmosphaeren). Damit bleiben Cutscene-
+    // Dialoge, Titelmusik, Credits-Vorlauf, FMV-nahe Tracks und die
+    // Tutorial-Sprueche (TL_*, laufen ohnehin nur ueber Flipeffects)
+    // draussen: ein Jingle-Trigger spielt nie einen 70-Sekunden-Dialog
+    // (vom Nutzer gehoert und gewuenscht). Drin sind die wenigen im Level
+    // getriggerten Sprachzeilen (1, 26, 42, 47, 48, 52, 54, 59, 67, 79,
+    // 90, 100) - das sind Levelinhalte, keine Zwischensequenzen.
+    static const int kJingles[] =
+    {
+        1, 8, 10, 11, 14, 15, 16, 17, 18, 21, 24, 25, 26, 27, 28, 29, 31, 32,
+        33, 34, 36, 37, 38, 40, 41, 42, 44, 45, 47, 48, 49, 52, 53, 54, 55,
+        57, 59, 61, 62, 63, 65, 66, 67, 70, 72, 74, 75, 78, 79, 80, 88, 90,
+        100, 104, 111, 112
+    };
+
+    std::vector<int> atmo, jingle(std::begin(kJingles), std::end(kJingles));
     for (int t = 0; t < 136; ++t)
-        (istAtmo(t) ? atmo : jingle).push_back(t);
+        if (istAtmo(t))
+            atmo.push_back(t);
 
     std::mt19937_64 rng(seed ^ 0x54524B4D5553ull);      // "TRKMUS"
 

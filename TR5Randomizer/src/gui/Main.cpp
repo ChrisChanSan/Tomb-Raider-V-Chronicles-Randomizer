@@ -1543,8 +1543,8 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::SameLine();
     ImGui::Checkbox("Trigger-Sound/Musik-IDs switchen", &a.phMusikTrigger);
     hoverHilfe("Die Musik-Trigger in den Leveln (TO_CD) bekommen vertauschte "
-               "Tracks - GLOBAL ueber den ganzen Trackbestand: Jingles aus "
-               "anderen Leveln, Tutorial-Sprueche, alles kann auftauchen, "
+               "Tracks - GLOBAL ueber alle Level: nur Tracks, die irgendwo im Spiel "
+               "ein Trigger ausloest (keine Cutscene-Dialoge, kein FMV-Ton), "
                "und derselbe Track klingt in jedem Level gleich. "
                "Atmosphaeren tauschen weiter nur unter sich, damit ein "
                "Stimmungswechsel ein Stimmungswechsel bleibt. Die fest "

@@ -116,7 +116,7 @@ namespace Patch
 
     // Musik-Trigger wuerfeln (Haken "Trigger-Sound/Musik-IDs switchen"):
     // schickt alle TO_CD-Tracks des fertigen Levels durch eine GLOBALE
-    // Seed-Permutation ueber den ganzen Trackraum 0..135 - Jingles wandern
+    // Seed-Permutation ueber den gemessenen Trigger-Katalog (56 Jingles) - Jingles wandern
     // damit ueber Levelgrenzen, derselbe Track klingt aber in jedem Level
     // gleich. In ZWEI getrennten Toepfen, weil die Engine sie verschieden
     // behandelt (TriggerNormalCDTrack, control.cpp): 117/118/121/123..130

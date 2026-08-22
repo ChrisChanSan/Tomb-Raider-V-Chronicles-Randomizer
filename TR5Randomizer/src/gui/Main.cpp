@@ -1748,8 +1748,18 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-    WNDCLASSEXW wc{ sizeof(wc), CS_CLASSDC, WndProc, 0, 0, hInst, nullptr, nullptr, nullptr, nullptr,
-                    L"TR5RandomizerWnd", nullptr };
+    // Programmsymbol aus den Ressourcen (TR5Randomizer.rc, Logo des Nutzers).
+    // LoadIconW nimmt aus der ICO-Datei je nach Feld die passende Groesse:
+    // hIcon das grosse (Alt+Tab, Fenstereigenschaften), hIconSm das kleine
+    // (Titelleiste, Taskleiste). Ohne diese beiden Zeilen zeigt Windows das
+    // Standardsymbol, selbst wenn die Ressource in der EXE liegt.
+    HICON symbolGross = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(101), IMAGE_ICON,
+                                    GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), 0);
+    HICON symbolKlein = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(101), IMAGE_ICON,
+                                    GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
+
+    WNDCLASSEXW wc{ sizeof(wc), CS_CLASSDC, WndProc, 0, 0, hInst, symbolGross, nullptr, nullptr, nullptr,
+                    L"TR5RandomizerWnd", symbolKlein };
     RegisterClassExW(&wc);
 
     // Fenstergroesse aus der Einstellungsdatei; beim ersten Start eine

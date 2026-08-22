@@ -1,0 +1,9 @@
+// Programmsymbol des Randomizers. Das Logo stammt vom Nutzer (Logos\),
+// TR5Randomizer.ico traegt es in sechs Groessen (16 bis 256) als
+// PNG-Eintraege - Windows waehlt je nach Anzeige die passende.
+//
+// 101 ist die erste Symbolnummer: Windows nimmt fuer Fenster und
+// Taskleiste das Symbol mit der KLEINSTEN Nummer aus der EXE, wenn kein
+// Code etwas anderes setzt. Main.cpp setzt es zusaetzlich ausdruecklich.
+#define IDI_APPICON 101
+IDI_APPICON ICON "TR5Randomizer.ico"

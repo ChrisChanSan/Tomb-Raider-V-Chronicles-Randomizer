@@ -506,9 +506,10 @@ void ACMEmulateCDPlay(long track, long mode)
 		{
 		case GERMAN:  hq = "DE"; break;
 		case FRENCH:  hq = "FR"; break;
+		case ITALIAN: hq = "IT"; break;
 		case SPANISH: hq = "ES"; break;
 		case JAPAN:   hq = "JP"; break;
-		default:      hq = 0;    break;	// Englisch, US, Italienisch, Niederlaendisch
+		default:      hq = 0;    break;	// Englisch, US, Niederlaendisch
 		}
 
 		if (hq)

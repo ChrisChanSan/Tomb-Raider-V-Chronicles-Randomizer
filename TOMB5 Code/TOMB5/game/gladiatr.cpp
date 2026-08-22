@@ -1,4 +1,17 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
+#include "balance.h"
 #include "gladiatr.h"
 #include "box.h"
 #include "objects.h"
@@ -242,7 +255,7 @@ void GladiatorControl(short item_number)
 
 				if (!gladiator->flags && item->touch_bits & 0x6000)
 				{
-					lara_item->hit_points -= 120;
+					lara_item->hit_points -= GegnerSchaden(120);
 					lara_item->hit_status = 1;
 					CreatureEffectT(item, &gladiator_hit, 10, item->pos.y_rot, DoBloodSplat);
 					SoundEffect(SFX_LARA_THUD, &item->pos, SFX_DEFAULT);

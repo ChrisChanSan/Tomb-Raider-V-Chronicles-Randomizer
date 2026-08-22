@@ -25,6 +25,7 @@
 #include "dxshell.h"
 #include "specificfx.h"
 #include "../game/savegame.h"
+#include "../game/balance.h"
 #include "../tomb5/tomb5.h"
 
 WATERTAB WaterTable[22][64];
@@ -237,6 +238,7 @@ bool GameInitialise()
 {
 	Log(__FUNCTION__);
 	EnsureSaveGameFolder();
+	BalanceLaden();
 	init_game_malloc();
 	clipflags = (short*)malloc(0x8000);
 	init_water_table();

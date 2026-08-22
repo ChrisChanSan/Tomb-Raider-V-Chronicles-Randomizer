@@ -1,4 +1,17 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
+#include "balance.h"
 #include "willwisp.h"
 #include "box.h"
 #include "objects.h"
@@ -237,7 +250,7 @@ void MazeMonsterControl(short item_number)
 						item->anim_number == anim + 2 && item->frame_number > frame + 6 && item->frame_number < frame + 16))
 					{
 						CreatureEffectT(item, &mazemonster_hitleft, 20, item->pos.y_rot, DoBloodSplat);
-						lara_item->hit_points -= 150;
+						lara_item->hit_points -= GegnerSchaden(150);
 						lara_item->hit_status = 1;
 						monster->flags |= 1;
 					}
@@ -246,7 +259,7 @@ void MazeMonsterControl(short item_number)
 						item->anim_number == anim + 2 && item->frame_number > frame + 33 && item->frame_number < frame + 43))
 					{
 						CreatureEffectT(item, &mazemonster_hitright, 20, item->pos.y_rot, DoBloodSplat);
-						lara_item->hit_points -= 150;
+						lara_item->hit_points -= GegnerSchaden(150);
 						lara_item->hit_status = 1;
 						monster->flags |= 2;
 					}

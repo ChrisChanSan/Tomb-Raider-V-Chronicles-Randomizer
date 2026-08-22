@@ -1,4 +1,17 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
+#include "balance.h"
 #include "autogun.h"
 #include "sound.h"
 #include "effect2.h"
@@ -139,7 +152,7 @@ void AutogunControl(short item_number)
 				pos2.z = 0;
 				GetLaraJointPos((PHD_VECTOR*)&pos2, GetRandomControl() % 15);
 				DoBloodSplat(pos2.x, pos2.y, pos2.z, (GetRandomControl() & 3) + 3, short(GetRandomControl() << 1), lara_item->room_number);
-				lara_item->hit_points -= 20;
+				lara_item->hit_points -= GegnerSchaden(20);
 			}
 			else
 			{

@@ -78,6 +78,7 @@
 #include "footprnt.h"
 #include "lara.h"
 #include "larafire.h"
+#include "balance.h"
 #include "savegame.h"
 #include "lara2gun.h"
 
@@ -169,7 +170,7 @@ void InitialiseLara(long restore)
 		DEL_picked_up_object((short)convert_invobj_to_obj(gfNachgaben[i]));
 
 	gfNumNachgaben = 0;
-	weapons[WEAPON_REVOLVER].damage = gfLevelId > LVL5_COLOSSEUM ? 15 : 6;
+	BalanceWaffenSetzen();
 
 	if (gfLevelId == LVL5_DEEPSEA_DIVE)
 	{
@@ -2063,6 +2064,33 @@ void InitialiseObjects()
 	BaddyObjects();
 	ObjectObjects();
 	TrapObjects();
+
+	// Gegnerleben aus Balance.txt. Erst hier, weil die drei Aufbaufunktionen
+	// die Originalwerte setzen. Nur denkende Gegner werden angefasst: Lara
+	// haengt zwar auch an einem Objekteintrag, ist aber nicht intelligent,
+	// und Objekte ohne eigene Lebenspunkte stehen auf -16384.
+	if (balance.gegnerLeben != 100)
+	{
+		for (lp = 0; lp < NUMBER_OBJECTS; lp++)
+		{
+			long punkte;
+
+			obj = &objects[lp];
+
+			if (!obj->intelligent || obj->hit_points <= 0)
+				continue;
+
+			punkte = obj->hit_points * balance.gegnerLeben / 100;
+
+			if (punkte < 1)
+				punkte = 1;
+			else if (punkte > 32000)
+				punkte = 32000;
+
+			obj->hit_points = (short)punkte;
+		}
+	}
+
 	InitialiseHair();
 	InitialiseEffects();
 

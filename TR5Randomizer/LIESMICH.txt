@@ -32,6 +32,19 @@ Pausenmenue angezeigt, ein Screenshot reicht also.
 
 Jede Eingabe ist ein gueltiger Seed. "Weihnachten" funktioniert.
 
+Schwierigkeit selbst einstellen
+-------------------------------
+Beim ersten Start legt das Spiel neben der PCtomb5.exe eine Datei
+Balance.txt an. Darin stehen der Schaden jeder Waffe, wie zaeh die
+Gegner sind, wie hart sie zuschlagen und wie weit die Klaenge der
+Levelkulisse zu hoeren sind. Die Datei erklaert sich selbst - jede
+Zeile nennt ihren Originalwert. Aendern, speichern, Spiel neu
+starten. Wer sie loescht, bekommt sie beim naechsten Start neu.
+
+Fallen, Stuerze, Feuer und Ertrinken bleiben immer so hart wie im
+Original, auch wenn du die Gegner harmlos stellst.
+
+
 Wenn etwas schiefgeht
 ---------------------
 Im Randomizer gibt es "Auf Original zuruecksetzen". Damit werden alle

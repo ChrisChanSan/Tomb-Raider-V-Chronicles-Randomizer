@@ -1,4 +1,17 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
+#include "balance.h"
 #include "spider.h"
 #include "../specific/LoadSave.h"
 #include "control.h"
@@ -130,7 +143,7 @@ void UpdateSpiders()
 
 				if (abs(dz) < 85 && abs(dy) < 85 && abs(dx) < 85)
 				{
-					lara_item->hit_points -= 3;
+					lara_item->hit_points -= GegnerSchaden(3);
 					lara_item->hit_status = 1;
 					TriggerBlood(fx->pos.x_pos, fx->pos.y_pos, fx->pos.z_pos, fx->pos.y_rot, 1);
 				}

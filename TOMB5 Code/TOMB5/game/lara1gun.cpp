@@ -1,3 +1,15 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
 #include "delstuff.h"
 #include "lara1gun.h"
@@ -23,6 +35,7 @@
 #include "../specific/input.h"
 #include "lara.h"
 #include "savegame.h"
+#include "balance.h"
 
 static char HKTimer = 0;
 static char HKShotsFired = 0;
@@ -216,12 +229,12 @@ void FireHK(long running)
 	if (running)
 	{
 		weapons[WEAPON_HK].shot_accuracy = 2184;
-		weapons[WEAPON_HK].damage = 1;
+		weapons[WEAPON_HK].damage = (char)balance.hkLauf;
 	}
 	else
 	{
 		weapons[WEAPON_HK].shot_accuracy = 728;
-		weapons[WEAPON_HK].damage = 3;
+		weapons[WEAPON_HK].damage = (char)balance.hkStand;
 	}
 
 	if (FireWeapon(WEAPON_HK, lara.target, lara_item, angles))

@@ -1,3 +1,15 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
 #include "sound.h"
 #include "../specific/function_stubs.h"
@@ -7,6 +19,7 @@
 #include "deltapak.h"
 #include "camera.h"
 #include "control.h"
+#include "balance.h"
 
 SAMPLE_INFO* sample_infos;
 SoundSlot LaSlot[32];
@@ -31,8 +44,8 @@ long SfxQuelleAmbient = 0;
 // Reichweite der Levelkulisse in Prozent des Datenwerts (#114). TR5 kennt
 // keine Wanddaempfung: ein Klang mit radius 10 ist 11 Sektoren weit hoerbar,
 // quer durch geschlossene Raeume. In joby3 stapelt sich davon eine ganze
-// Etage. 100 = unveraendert wie Vanilla.
-#define SFX_AMBIENT_REICHWEITE	65
+// Etage. 100 = unveraendert wie Vanilla. Seit #108 stellt Balance.txt den
+// Wert ein, Voreinstellung 65.
 
 void SoundEffectCS(long sfx, PHD_3DPOS* pos, long flags)
 {
@@ -217,7 +230,7 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 	// behalten ihre Reichweite, damit man Schritte und Rufe weiter so
 	// frueh hoert wie vorgesehen.
 	if (SfxQuelleAmbient)
-		radius = radius * SFX_AMBIENT_REICHWEITE / 100;
+		radius = radius * balance.kulissenReichweite / 100;
 
 	pan = 0;
 

@@ -4,16 +4,20 @@
 decompilation project by Troye/Trxyebeep and contributors,
 <https://github.com/Trxyebeep/TOMB5>).
 
-Modified between **2026-07-30 and 2026-08-13** for the *TR5 Randomizer* project.
+Modified between **2026-07-30 and 2026-08-22** for the *TR5 Randomizer* project.
 The unmodified upstream code is preserved as the first commit of this
 repository (`ebde675`, 2026-07-30), so every change we made is visible as a
 diff against it.
 
 Verified on 2026-08-13 against a freshly downloaded copy of the upstream
-repository: of the 214 source files we did not touch, 212 are byte-identical
-and the remaining two differ only in line endings. The base is therefore
-exactly that upstream version, and the 40 files listed below are the whole of
-our work.
+repository: 40 files were changed at that point, and of the 214 source files
+we had not touched, 212 were byte-identical while the remaining two differed
+only in line endings. The base is therefore exactly that upstream version.
+Work has continued since, so the count is no longer 40 — every file we changed
+carries the modification notice at the top, and
+`grep -rl "Modified 2026 by ChrisChanSan" TOMB5/` lists them all (70 at the
+time of writing). The comparison against a fresh upstream checkout is repeated
+as part of the release packaging step.
 
 This modified version remains licensed under the **GNU General Public License
 version 3**, the same licence as the original. See `LICENSE`. The complete
@@ -351,6 +355,33 @@ Also in this group:
   is the very set `InitialiseObjects` already aliased for that type
   (`setup.cpp:1052/1112-1115/1145-1148`) — identical in single-family
   levels, correct in mixed ones.
+
+- `game/balance.cpp`, `.h` (new) — a plain-text settings file, `Balance.txt`,
+  read once at startup from the folder the game runs in. It carries the
+  damage of each of Lara's weapons, a percentage for enemy hit points, a
+  percentage for the damage enemies deal to her, and the audible range of the
+  stationary level ambience. If the file is absent the game writes it out with
+  the original values and an explanation of every line, so it doubles as its
+  own documentation; if a single line is absent or unreadable, that setting
+  keeps its original value. Every value is clamped to a sane range on read.
+  The wiring is deliberately spread to where the engine actually decides these
+  numbers rather than patched into one table:
+  `game/setup.cpp` calls `BalanceWaffenSetzen` at level start (the point where
+  vanilla already re-set the revolver's damage per level) and scales enemy hit
+  points once in `InitialiseObjects`, after the three setup routines have
+  written the originals, touching only objects that are both intelligent and
+  damageable — so Lara and the flare keep theirs. `game/lara1gun.cpp` takes
+  the HK's two values, which vanilla rewrites on every shot. `game/sound.cpp`
+  reads the ambience range that used to be a compile-time constant.
+  The enemy damage factor is applied through `GegnerSchaden()` at the 33 places
+  in 23 enemy files that subtract from Lara's hit points; traps, falls, fire,
+  poison and drowning deliberately bypass it and stay exactly as hard as the
+  original.
+- `game/romangod.cpp` — the Roman God's armour used to burst at fixed hit
+  point counts (225/150/75 out of 300). Those are now computed as three
+  quarters, one half and one quarter of the object's own maximum, so the
+  stages still line up when `Balance.txt` scales enemy hit points. With the
+  original hit points the numbers are identical to vanilla.
 
 ---
 

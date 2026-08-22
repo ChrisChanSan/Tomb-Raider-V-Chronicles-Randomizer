@@ -1,4 +1,16 @@
 /*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
+/*
  * Raptor aus Tomb Raider 3, portiert 2026 nach TOMB5 (#97).
  *
  * Uebernommen aus tomb3 (game/raptor.cpp, GPLv3) - dieselbe Lizenz wie TOMB5
@@ -40,6 +52,7 @@
  * CreatureKill-Luecke wie beim T-Rex.
  */
 #include "../tomb5/pch.h"
+#include "balance.h"
 #include "raptor.h"
 #include "box.h"
 #include "objects.h"
@@ -216,7 +229,7 @@ void RaptorControl(short item_number)
 					if (lara_item->hit_points <= 0)
 						raptor->flags |= 2;
 
-					lara_item->hit_points -= 100;
+					lara_item->hit_points -= GegnerSchaden(100);
 					lara_item->hit_status = 1;
 					item->required_anim_state = RAPTOR_STOP;
 				}
@@ -251,7 +264,7 @@ void RaptorControl(short item_number)
 				{
 					raptor->flags |= 1;
 					CreatureEffect(item, &raptor_bite, DoBloodSplat);
-					lara_item->hit_points -= 100;
+					lara_item->hit_points -= GegnerSchaden(100);
 					lara_item->hit_status = 1;
 
 					if (lara_item->hit_points <= 0)

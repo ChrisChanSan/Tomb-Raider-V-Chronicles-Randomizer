@@ -1,4 +1,17 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
+#include "balance.h"
 #include "people.h"
 #include "draw.h"
 #include "control.h"
@@ -144,7 +157,7 @@ long ShotLara(ITEM_INFO* item, AI_INFO* info, BITE_INFO* gun, short extra_rotati
 			if (hit)
 			{
 				CreatureEffect(item, gun, GunHit);
-				lara_item->hit_points -= (short)damage;
+				lara_item->hit_points -= GegnerSchaden((short)damage);
 				lara_item->hit_status = 1;
 			}
 			else if (targetable)

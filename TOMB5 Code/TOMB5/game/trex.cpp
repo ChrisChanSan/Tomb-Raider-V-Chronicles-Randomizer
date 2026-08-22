@@ -1,4 +1,17 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
+#include "balance.h"
 #include "trex.h"
 #include "box.h"
 #include "objects.h"
@@ -92,7 +105,7 @@ void DinoControl(short item_number)
         angle = CreatureTurn(item, rex->maximum_turn);
 
         if (item->touch_bits)
-            lara_item->hit_points -= item->current_anim_state == DINO_RUN ? 10 : 1;
+            lara_item->hit_points -= GegnerSchaden(item->current_anim_state == DINO_RUN ? 10 : 1);
 
         rex->flags = rex->mood != ESCAPE_MOOD && !info.ahead &&
                      info.enemy_facing > -0x4000 && info.enemy_facing < 0x4000;
@@ -215,7 +228,7 @@ void DinoControl(short item_number)
             {
                 SoundEffect(SFX_TREX_ATTACK, &item->pos, 0);
                 CreatureEffect(item, &trex_hit, DoBloodSplat);
-                lara_item->hit_points -= 10000;
+                lara_item->hit_points -= GegnerSchaden(10000);
                 lara_item->hit_status = 1;
                 rex->maximum_turn = 0;
             }

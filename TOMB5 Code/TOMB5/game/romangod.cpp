@@ -1,4 +1,17 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
+#include "balance.h"
 #include "romangod.h"
 #include "box.h"
 #include "objects.h"
@@ -287,7 +300,7 @@ void RomangodControl(short item_number)
 	PHD_VECTOR v, s, d;
 	PHD_3DPOS p;
 	ulong bits;
-	long x, y, z, g;
+	long x, y, z, g, voll;
 	short rot[2];
 	short angle, torso_y, head_x, head, room_number, frame, dframe;
 	char light;
@@ -302,26 +315,35 @@ void RomangodControl(short item_number)
 		roman = (CREATURE_INFO*) item->data;
 		bits = item->meshswap_meshbits;
 
+		// Die Ruestung platzt bei drei Vierteln, der Haelfte und einem Viertel
+		// der Lebenspunkte. Vanilla stand hier fest auf 225/150/75 bei 300 LP -
+		// seit Balance.txt die Lebenspunkte skaliert, wird der Anteil gerechnet,
+		// sonst faellt die Ruestung bei zaeheren Gegnern zu spaet (#108).
+		voll = objects[item->object_number].hit_points;
+
+		if (voll < 4)
+			voll = 300;
+
 		if (item->hit_points < 1 && !(bits & 0x10000))
 		{
 			ExplodeItemNode(item, 16, 0, 8);
 			item->mesh_bits |= 0x10000;
 			item->meshswap_meshbits |= 0x10000;
 		}
-		else if (item->hit_points < 75 && !(bits & 0x100))
+		else if (item->hit_points < voll * 1 / 4 && !(bits & 0x100))
 		{
 			ExplodeItemNode(item, 8, 0, 8);
 			item->mesh_bits |= 0x100;
 			item->meshswap_meshbits |= 0x100;
 		}
-		else if (item->hit_points < 150 && !(bits & 0x400))
+		else if (item->hit_points < voll * 2 / 4 && !(bits & 0x400))
 		{
 			ExplodeItemNode(item, 10, 0, 32);
 			ExplodeItemNode(item, 11, 0, 32);
 			item->mesh_bits |= 0x400;
 			item->meshswap_meshbits |= 0x400;
 		}
-		else if (item->hit_points < 225 && !(bits & 0x10))
+		else if (item->hit_points < voll * 3 / 4 && !(bits & 0x10))
 		{
 			ExplodeItemNode(item, 4, 0, 8);
 			item->mesh_bits |= 0x10;
@@ -348,7 +370,7 @@ void RomangodControl(short item_number)
 			}
 			else if (item->frame_number > anims[item->anim_number].frame_base + 54 && item->frame_number < anims[item->anim_number].frame_base + 74 && item->touch_bits)
 			{
-				lara_item->hit_points -= 40;
+				lara_item->hit_points -= GegnerSchaden(40);
 				lara_item->hit_status = 1;
 			}
 			else if (item->frame_number == anims[item->anim_number].frame_end)
@@ -560,7 +582,7 @@ void RomangodControl(short item_number)
 
 					if (!roman->flags && item->touch_bits & 0xC000)
 					{
-						lara_item->hit_points -= 200;
+						lara_item->hit_points -= GegnerSchaden(200);
 						lara_item->hit_status = 1;
 						CreatureEffectT(item, &romangod_hit, 20, item->pos.y_rot, DoBloodSplat);
 						SoundEffect(SFX_LARA_THUD, &item->pos, SFX_DEFAULT);

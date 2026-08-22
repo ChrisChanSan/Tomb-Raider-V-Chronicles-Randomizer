@@ -1,4 +1,17 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
+#include "balance.h"
 #include "tower.h"
 #include "gameflow.h"
 #include "control.h"
@@ -246,7 +259,7 @@ void ControlGunship(short item_number)
 				{
 					TriggerDynamic(pos2.x, pos2.y, pos2.z, 16, (GetRandomControl() & 0x3F) + 96, (GetRandomControl() & 0x1F) + 64, 0);
 					DoBloodSplat(v.x, v.y, v.z, short((GetRandomControl() & 1) + 2), short(GetRandomControl() << 1), lara_item->room_number);
-					lara_item->hit_points -= 20;
+					lara_item->hit_points -= GegnerSchaden(20);
 				}
 				else if (items[Target].object_number >= SMASH_OBJECT1 && items[Target].object_number <= SMASH_OBJECT8)
 				{
@@ -358,7 +371,7 @@ void ControlIris(short item_number)
 				}
 				else
 				{
-					lara_item->hit_points -= 12;
+					lara_item->hit_points -= GegnerSchaden(12);
 					item->item_flags[3]++;
 				}
 			}
@@ -547,7 +560,7 @@ void ControlArea51Laser(short item_number)
 			item->draw_room = 1;
 		}
 
-		lara_item->hit_points -= 100;
+		lara_item->hit_points -= GegnerSchaden(100);
 		DoBloodSplat(lara_item->pos.x_pos, item->pos.y_pos - GetRandomControl() - 32, lara_item->pos.z_pos,
 			(GetRandomControl() & 3) + 4, short(GetRandomControl() << 1), lara_item->room_number);
 		AnimateItem(item);

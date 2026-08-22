@@ -1,4 +1,17 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
+#include "balance.h"
 #include "huskie.h"
 #include "box.h"
 #include "effects.h"
@@ -173,7 +186,7 @@ void HuskieControl(short item_number)
 			if (info.bite && item->touch_bits & 0x6648 && frame >= 4 && frame <= 14)
 			{
 				CreatureEffectT(item, &huskie_bite, 2, -1, DoBloodSplat);
-				lara_item->hit_points -= 20;
+				lara_item->hit_points -= GegnerSchaden(20);
 				lara_item->hit_status = 1;
 			}
 
@@ -248,7 +261,7 @@ void HuskieControl(short item_number)
 			if (info.bite && item->touch_bits & 0x48 && (frame >= 9 && frame <= 12 || frame >= 22 && frame <= 25))
 			{
 				CreatureEffectT(item, &huskie_bite, 2, -1, DoBloodSplat);
-				lara_item->hit_points -= 10;
+				lara_item->hit_points -= GegnerSchaden(10);
 				lara_item->hit_status = 1;
 			}
 

@@ -205,6 +205,8 @@ int main(int argc, char** argv)
                 std::vector<std::string> ketten;
                 if (!sd.kettenAufloesen(ketten, sErr))
                     std::printf("SCRIPT.DAT  Levelketten: %s\n", sErr.c_str());
+                else if (!sd.inventarAufraeumen(ketten, sErr))
+                    std::printf("SCRIPT.DAT  Inventar aufraeumen: %s\n", sErr.c_str());
                 for (const std::string& k : ketten)
                     std::printf("SCRIPT.DAT  %s\n", k.c_str());
             }

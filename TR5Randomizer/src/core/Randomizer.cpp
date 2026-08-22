@@ -2583,6 +2583,7 @@ bool Rando::run(const RandoInput& in,
     for (size_t ki = 0; ki < kLevelkettenZahl; ++ki)
     {
         const Levelkette& k = kLevelketten[ki];
+        if (!k.slot) continue;                          // Story-Items ohne Modellkopie
         std::string kn = k.nehmer;
         for (char& c : kn) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         if (kn != klein) continue;

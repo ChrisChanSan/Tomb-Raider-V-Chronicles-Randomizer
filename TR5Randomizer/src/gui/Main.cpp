@@ -574,6 +574,10 @@ static std::wstring lagerDir(const App& a)
             std::string kErr;
             if (!sd.kettenAufloesen(ketten, kErr))
                 a.scriptNote = "Levelketten: " + kErr;
+            // Danach der Inventar-Garbage-Collector (Levelketten.h): nimmt je
+            // Levelstart weg, was aus frueheren Leveln nur noch Ballast waere.
+            else if (!sd.inventarAufraeumen(ketten, kErr))
+                a.scriptNote = "Inventar aufraeumen: " + kErr;
         }
 
         if (!sd.save(skript, err)) return false;

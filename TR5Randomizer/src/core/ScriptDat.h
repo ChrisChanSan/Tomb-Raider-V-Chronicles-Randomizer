@@ -136,6 +136,14 @@ public:
     // passiert nichts. Jede Massnahme landet als Klartext in notizen.
     bool kettenAufloesen(std::vector<std::string>& notizen, std::string& error);
 
+    // Inventar-Garbage-Collector (Levelketten.h, Kopfkommentar): beim Start
+    // jedes Kampagnen-Levels wird per TAKEOBJ alles aus der Schluesselfamilie
+    // weggenommen, was ein frueheres Level anbieten konnte und das weder
+    // dieses noch ein spaeteres Level importiert; die Crossbow-Familie
+    // ("Grappling Gun") ueberall ausser rich3. Laeuft NACH kettenAufloesen,
+    // damit Ketten-Gaben nicht gleich wieder weggenommen werden.
+    bool inventarAufraeumen(std::vector<std::string>& notizen, std::string& error);
+
     // --- Alle Eingriffe des Randomizers an EINER Stelle -------------------
     //
     // Oberflaeche und CLI treiben dieselben Schritte an. Standen sie doppelt
@@ -204,6 +212,7 @@ private:
     bool   addInvBefehl(uint8_t op, const std::string& levelName, int invObjekt,
                         bool& changed, std::string& error);   // GIVEOBJ/TAKEOBJ gemeinsam
     bool   nimmtObjekt(size_t idx, int invObjekt) const;     // traegt der Block ein TAKEOBJ dafuer?
+    bool   gibtObjekt(size_t idx, int invObjekt) const;      // ... bzw. ein GIVEOBJ?
     size_t findeBefehl(size_t idx, uint8_t cmd) const;
 
     bool zerlege(std::string& error);

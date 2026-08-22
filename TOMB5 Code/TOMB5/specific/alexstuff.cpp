@@ -355,11 +355,22 @@ char* aFetchCutData(long n)
 	return data;
 }
 
+// Laufzustand des Abspanns - ausserhalb der Funktion, damit ein Abbruch
+// (ResetCredits, aus TitleOptions) den naechsten Lauf wieder unten beginnen
+// laesst; vorher hing der Zustand als Funktionsstatik fest.
+static ulong CreditsStartPos = 0;
+static long CreditsInit = 0;
+
+void ResetCredits()
+{
+	CreditsInit = 0;
+}
+
 long DoCredits()
 {
 	const char* s;
-	static ulong StartPos = 0;
-	static long init = 0;
+	ulong& StartPos = CreditsStartPos;
+	long& init = CreditsInit;
 	long y, num_drawn;
 
 	num_drawn = 0;

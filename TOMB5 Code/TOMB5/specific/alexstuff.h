@@ -11,5 +11,6 @@ long aCalcDepackBufferSz(char* data);
 void aMakeCutsceneResident(long n1, long n2, long n3, long n4);
 char* aFetchCutData(long n);
 long DoCredits();
+void ResetCredits();
 
 extern long aWibble;

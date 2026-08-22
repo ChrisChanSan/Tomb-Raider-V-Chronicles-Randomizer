@@ -40,6 +40,7 @@ extern uchar gfCurrentLevel;
 // hoechste Kampagnen-Slot - dort, nicht bei "Red Alert", kommt der Abspann.
 extern uchar gfLevelId;
 extern uchar gfSlotVonId[18];	// NUM_TR5_LEVELS - das Enum steht weiter unten
+extern uchar gfIdVonSlot[18];	// die Gegenrichtung: welche Identitaet liegt auf Slot n
 extern uchar gfLetzterSlot;
 uchar LevelIdVonDatei(uchar fileIndex);
 extern uchar gfLevelComplete;

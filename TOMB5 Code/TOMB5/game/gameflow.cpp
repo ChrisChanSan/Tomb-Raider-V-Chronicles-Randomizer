@@ -62,7 +62,40 @@ short gfLevelFlags;
 uchar gfCurrentLevel;
 uchar gfLevelId;
 uchar gfSlotVonId[18];
+uchar gfIdVonSlot[18];
 uchar gfLetzterSlot = LVL5_RED_ALERT;
+
+// Die Videos haengen an den ABSCHNITTEN, nicht an Slots: Intro vor dem
+// ersten Level eines Abschnitts, Outro nach dem letzten. Vanilla lagen die
+// Paare (Outro, naechstes Intro) als CMD_FMV im Block des Abschnittsendes
+// und das Rom-Intro hart im Titel-Code - nach einer Permutation spielte das
+// Russland-Intro nach Rom, egal was folgte. FMV 8 ist das Finale und kommt
+// nach dem letzten Kampagnen-Slot (gfLetzterSlot), nicht nach "Red Alert".
+static uchar IntroFmv(uchar id)
+{
+	switch (id)
+	{
+	case LVL5_STREETS_OF_ROME: return 2;
+	case LVL5_BASE:            return 4;
+	case LVL5_GALLOWS_TREE:    return 6;
+	}
+
+	return 0;
+}
+
+static uchar OutroFmv(uchar id)
+{
+	switch (id)
+	{
+	case LVL5_COLOSSEUM:          return 3;
+	case LVL5_SINKING_SUBMARINE:  return 5;
+	case LVL5_OLD_MILL:           return 7;
+	}
+
+	return 0;
+}
+
+#define FINALE_FMV	8
 uchar gfLevelComplete;
 
 // Identitaet aus dem Dateinamen des Levels (Dateiindex aus CMD_LEVEL). Die
@@ -442,6 +475,18 @@ long TitleOptions()
 
 	if (bDoCredits)
 	{
+		// Abspann abbrechbar: Bestaetigen, Zurueck oder Escape springt in den
+		// Titel (vorher half nur Alt+F4). ResetCredits setzt den Lauf zurueck,
+		// damit der naechste Abspann wieder von unten beginnt.
+		if (dbinput & (IN_SELECT | IN_DESELECT | IN_OPTION))
+		{
+			ResetCredits();
+			bDoCredits = 0;
+			DestFadeScreenHeight = 0;
+			dbinput = 0;
+			return 0;
+		}
+
 		if (DoCredits())
 			return 0;
 
@@ -765,8 +810,10 @@ void DoTitle(uchar name, uchar audio)
 	bUseSpotCam = 0;
 	bDisableLaraControl = 0;
 
-	if (gfLevelComplete == 1 && gfStatus != 2)
-		PlayFmvNow(2, 1);
+	// Neues Spiel: das Intro des Abschnitts, der auf Slot 1 liegt (vanilla
+	// Rom = FMV 2, hier frueher hart verdrahtet).
+	if (gfLevelComplete == 1 && gfStatus != 2 && IntroFmv(gfIdVonSlot[1]))
+		PlayFmvNow(IntroFmv(gfIdVonSlot[1]), 1);
 
 	if (gfStatus != 4 && tomb5.tr4_loadscreens)
 		RenderLoadPic(0);
@@ -980,13 +1027,27 @@ void DoLevel(uchar Name, uchar Audio)
 	S_SoundStopAllSamples();
 	S_CDStop();
 
+	// Videos nach IDENTITAET statt aus dem Block (siehe IntroFmv/OutroFmv):
+	// erst das Outro des Abschnitts, der hier endet - am letzten Kampagnen-
+	// Slot stattdessen das Finale -, dann das Intro des Abschnitts, der
+	// auf dem naechsten Slot beginnt. Vanilla ergibt das exakt die alten
+	// Paare (3+4 nach Andrea3, 5+6 nach joby5, 7 nach andy3, 8 nach rich3);
+	// die CMD_FMV der Bloecke (fmv_to_play) werden dafuer nicht mehr
+	// abgespielt, sonst kaemen sie doppelt.
 	if (gfStatus == 3)
 	{
-		if (fmv_to_play[0])
-			gamestatus = PlayFmvNow(fmv_to_play[0] & 0x7F, 1);
+		const uchar outro = (gfCurrentLevel == gfLetzterSlot) ? FINALE_FMV : OutroFmv(gfLevelId);
 
-		if (gamestatus != 2 && fmv_to_play[1])
-				PlayFmvNow(fmv_to_play[1] & 0x7F, 1);
+		if (outro)
+			gamestatus = PlayFmvNow(outro, 1);
+
+		if (gamestatus != 2 && gfCurrentLevel != gfLetzterSlot && gfCurrentLevel + 1 < 18)
+		{
+			const uchar intro = IntroFmv(gfIdVonSlot[gfCurrentLevel + 1]);
+
+			if (intro)
+				PlayFmvNow(intro, 1);
+		}
 	}
 
 	num_fmvs = 0;
@@ -1259,7 +1320,10 @@ void LoadGameflow()
 	// Vanilla ist Slot == Identitaet; die Schleife unten ueberschreibt, was
 	// die SCRIPT.DAT anders verteilt hat.
 	for (int i = 0; i < 18; i++)
+	{
 		gfSlotVonId[i] = (uchar)i;
+		gfIdVonSlot[i] = (uchar)i;
+	}
 	gfLetzterSlot = 0;
 
 	for (int i = 0; i < Gameflow->nLevels; i++)
@@ -1292,7 +1356,11 @@ void LoadGameflow()
 				{
 					const uchar id = LevelIdVonDatei(n[3]);
 					if (id < 18)
+					{
 						gfSlotVonId[id] = (uchar)i;
+						if (i < 18)
+							gfIdVonSlot[i] = id;
+					}
 					if (id >= LVL5_STREETS_OF_ROME && id <= LVL5_RED_ALERT && i > gfLetzterSlot)
 						gfLetzterSlot = (uchar)i;
 				}

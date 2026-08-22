@@ -248,13 +248,24 @@ long PlayFmv(long num)
 		BinkDoFrame(Bink);
 		S_UpdateInput();
 
+		// Skip nur auf FLANKE: die Taste, mit der das vorige Video (Eidos-Logo)
+		// uebersprungen wurde, ist beim Start des naechsten (Intro) meist noch
+		// gehalten - mit einer Pegelabfrage flog das Intro gleich mit raus
+		// (vom Nutzer gesehen). Darum zaehlt erst ein Druck, der NACH einem
+		// Loslassen kommt; beim Einstieg gilt die Taste als gehalten.
+		long skipGehalten = 1;
+
 		for (int i = 0; i != nFmvFrames[num]; i++)
 		{
 			// IN_SELECT added so Cross/Enter also skips FMVs, not just Escape
 			// (IN_OPTION) or Draw Weapon (IN_DRAW) - matches Cross already being
 			// the confirm button everywhere else in the menus.
-			if (input & IN_OPTION || input & IN_DRAW || input & IN_SELECT || MainThread.ended)
+			const long skipJetzt = (input & (IN_OPTION | IN_DRAW | IN_SELECT)) != 0;
+
+			if ((skipJetzt && !skipGehalten) || MainThread.ended)
 				break;
+
+			skipGehalten = skipJetzt;
 
 			BinkNextFrame(Bink);
 

@@ -926,7 +926,7 @@ void InitBinoculars()
 	mesh->aVtx = (ACMESHVERTEX*)game_malloc(mesh->nVerts * sizeof(ACMESHVERTEX));
 	v = (D3DTLVERTEX*)mesh->aVtx;	//makes no sense otherwise
 
-	x = gfCurrentLevel == LVL5_LABYRINTH ? 33.0F : 32.0F;
+	x = gfLevelId == LVL5_LABYRINTH ? 33.0F : 32.0F;
 	y = 30.0F;
 
 	for (int i = 0; i < mesh->nVerts; i++)
@@ -1639,7 +1639,7 @@ void DrawBinoculars()
 			drawbak = tex->drawtype;
 			tex->drawtype = 0;
 
-			if (gfCurrentLevel == LVL5_LABYRINTH)
+			if (gfLevelId == LVL5_LABYRINTH)
 			{
 				if (i < 14)
 				{
@@ -1686,7 +1686,7 @@ void DrawBinoculars()
 			drawbak = tex->drawtype;
 			tex->drawtype = 0;
 
-			if (gfCurrentLevel < LVL5_THIRTEENTH_FLOOR)
+			if (gfLevelId < LVL5_THIRTEENTH_FLOOR)
 			{
 				if (tri[4] & 1)
 				{
@@ -2355,7 +2355,7 @@ void DrawPsxTile(long x_y, long height_width, long color, long u0, long u1)
 		col = color | 0xFF000000;
 	}
 
-	if (gfCurrentLevel == LVL5_TITLE)
+	if (gfLevelId == LVL5_TITLE)
 	{
 		z = f_znear + 10;
 		rhw = f_moneoznear + 50;
@@ -5582,7 +5582,7 @@ void DrawSkySegment(ulong color, long drawtype, long def, long seg, long zpos, l
 
 	phd_PushMatrix();
 
-	if (gfCurrentLevel != LVL5_TITLE)
+	if (gfLevelId != LVL5_TITLE)
 		phd_TranslateRel(zpos, ypos, 0);
 	else
 		phd_TranslateRel(0, ypos, 0);
@@ -5713,7 +5713,7 @@ void DrawSkySegment(ulong color, long drawtype, long def, long seg, long zpos, l
 		clip[0] = clipdistance;
 	}
 
-	if (gfCurrentLevel != LVL5_TITLE)
+	if (gfLevelId != LVL5_TITLE)
 		AddQuadSorted(v, 3, 2, 1, 0, &Tex, 1);
 
 	phd_PopMatrix();
@@ -5744,7 +5744,7 @@ void DrawFlatSky(ulong color, long zpos, long ypos, long drawtype)
 
 	phd_PushMatrix();
 
-	if (gfCurrentLevel != LVL5_TITLE)
+	if (gfLevelId != LVL5_TITLE)
 		phd_TranslateRel(zpos, ypos, 0);
 	else
 		phd_TranslateRel(0, ypos, 0);
@@ -5831,7 +5831,7 @@ void DrawFlatSky(ulong color, long zpos, long ypos, long drawtype)
 	clip++;
 	ClipCheckPoint(&v[3], vec[3].x, vec[3].y, vec[3].z, clip);
 
-	if (gfCurrentLevel != LVL5_TITLE)
+	if (gfLevelId != LVL5_TITLE)
 		AddQuadSorted(v, 3, 2, 1, 0, &Tex, 1);
 
 	phd_PopMatrix();

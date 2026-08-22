@@ -123,7 +123,7 @@ void PierreControl(short item_number)
 
 	if (item->trigger_flags)
 	{
-		if (gfCurrentLevel == LVL5_TRAJAN_MARKETS)
+		if (gfLevelId == LVL5_TRAJAN_MARKETS)
 		{
 			item->item_flags[3] = 1;
 			item->ai_bits = AMBUSH;
@@ -255,7 +255,7 @@ void PierreControl(short item_number)
 				item->goal_anim_state = 3;
 			else if (Targetable(item, &info))
 				item->goal_anim_state = 4;
-			else if (item->ai_bits & GUARD || gfCurrentLevel == LVL5_TRAJAN_MARKETS || item->item_flags[3])
+			else if (item->ai_bits & GUARD || gfLevelId == LVL5_TRAJAN_MARKETS || item->item_flags[3])
 			{
 				pierre->maximum_turn = 0;
 				item->goal_anim_state = 1;
@@ -420,7 +420,7 @@ void PierreControl(short item_number)
 
 	if (pierre->reached_goal)
 	{
-		if (gfCurrentLevel == LVL5_TRAJAN_MARKETS)
+		if (gfLevelId == LVL5_TRAJAN_MARKETS)
 		{
 			item->goal_anim_state = 1;
 			item->required_anim_state = 1;

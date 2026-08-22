@@ -690,7 +690,7 @@ static inline void GetLoadScreenCam()
 {
 	TR4LS* ls;
 
-	ls = &tr4_load_screens[gfCurrentLevel];
+	ls = &tr4_load_screens[gfLevelId];
 	load_cam.x = ls->px;
 	load_cam.y = ls->py;
 	load_cam.z = ls->pz;
@@ -1407,7 +1407,7 @@ void S_OutputPolyList()
 	if (App.dx.Flags & DXF_ZBUFFER)
 		DrawBuckets();
 
-	if (gfCurrentLevel == LVL5_TITLE)
+	if (gfLevelId == LVL5_TITLE)
 	{
 		Fade();
 
@@ -1451,7 +1451,7 @@ void S_OutputPolyList()
 		DrawPsxTile(phd_winheight - h, phd_winwidth | (h << 16), 0x62FFFFFF, 0, 0);
 	}
 
-	if (gfCurrentLevel != LVL5_TITLE)
+	if (gfLevelId != LVL5_TITLE)
 	{
 		Fade();
 

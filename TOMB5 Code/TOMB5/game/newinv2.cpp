@@ -472,7 +472,7 @@ long S_CallInventory2()
 	long return_value, val, flag;
 	short room_number, item;
 
-	if (gfCurrentLevel >= LVL5_BASE && gfCurrentLevel <= LVL5_SINKING_SUBMARINE)
+	if (gfLevelId >= LVL5_BASE && gfLevelId <= LVL5_SINKING_SUBMARINE)
 	{
 		inventry_objects_list[INV_REVOLVER_ITEM1].objname = TXT_DESERT1;
 		inventry_objects_list[INV_REVOLVER_ITEM2].objname = TXT_DESERT2;
@@ -485,7 +485,7 @@ long S_CallInventory2()
 		inventry_objects_list[INV_REVOLVER_AMMO_ITEM].objname = TXT_Revolver_Ammo;
 	}
 
-	if (gfCurrentLevel >= LVL5_THIRTEENTH_FLOOR && gfCurrentLevel <= LVL5_RED_ALERT)
+	if (gfLevelId >= LVL5_THIRTEENTH_FLOOR && gfLevelId <= LVL5_RED_ALERT)
 	{
 		inventry_objects_list[INV_BINOCULARS_ITEM].scale1 = 900;
 		inventry_objects_list[INV_BINOCULARS_ITEM].yrot = -0x8000;
@@ -498,7 +498,7 @@ long S_CallInventory2()
 		inventry_objects_list[INV_BINOCULARS_ITEM].objname = TXT_Binoculars;
 	}
 
-	if (gfCurrentLevel == LVL5_ESCAPE_WITH_THE_IRIS)
+	if (gfLevelId == LVL5_ESCAPE_WITH_THE_IRIS)
 	{
 		inventry_objects_list[INV_HK_ITEM1].xrot = 0x2100;
 		inventry_objects_list[INV_HK_ITEM1].yrot = 0x4000;
@@ -905,7 +905,7 @@ void DrawInventoryItemMe(ITEM_INFO* item, long shade, long overlay, long shagfla
 	object = &objects[item->object_number];
 	phd_PushMatrix();
 
-	if (item->object_number == HK_ITEM && gfCurrentLevel == LVL5_ESCAPE_WITH_THE_IRIS)
+	if (item->object_number == HK_ITEM && gfLevelId == LVL5_ESCAPE_WITH_THE_IRIS)
 		phd_TranslateRel(0, 70, 0);
 
 	phd_TranslateRel(item->pos.x_pos, item->pos.y_pos, item->pos.z_pos);
@@ -1002,7 +1002,7 @@ void construct_combine_object_list()
 				insert_object_into_list_v2(INV_REVOLVER_ITEM1);
 		}
 
-		if (lara.crossbow_type_carried & W_PRESENT && (gfCurrentLevel < LVL5_THIRTEENTH_FLOOR || gfCurrentLevel > LVL5_RED_ALERT))
+		if (lara.crossbow_type_carried & W_PRESENT && (gfLevelId < LVL5_THIRTEENTH_FLOOR || gfLevelId > LVL5_RED_ALERT))
 		{
 			if (lara.crossbow_type_carried & W_LASERSIGHT)
 				insert_object_into_list_v2(INV_CROSSBOW_AMMO2_ITEM2);
@@ -1126,7 +1126,7 @@ void construct_object_list()
 
 		if (lara.crossbow_type_carried & W_PRESENT)
 		{
-			if (gfCurrentLevel < LVL5_THIRTEENTH_FLOOR || gfCurrentLevel > LVL5_RED_ALERT)
+			if (gfLevelId < LVL5_THIRTEENTH_FLOOR || gfLevelId > LVL5_RED_ALERT)
 			{
 				if (lara.crossbow_type_carried & W_LASERSIGHT)
 					insert_object_into_list(INV_CROSSBOW_AMMO2_ITEM2);
@@ -1142,7 +1142,7 @@ void construct_object_list()
 				CurrentCrossBowAmmoType = 0;
 			}
 		}
-		else if (gfCurrentLevel < LVL5_THIRTEENTH_FLOOR || gfCurrentLevel > LVL5_RED_ALERT)
+		else if (gfLevelId < LVL5_THIRTEENTH_FLOOR || gfLevelId > LVL5_RED_ALERT)
 		{
 			if (AmountCrossBowAmmo1)
 				insert_object_into_list(INV_CROSSBOW_AMMO2_ITEM3);
@@ -1444,7 +1444,7 @@ void draw_current_object_list(long ringnum)
 			if (!nummeup)
 				sprintf(textbufme, SCRIPT_TEXT(inventry_objects_list[rings[ringnum]->current_object_list[n].invitem].objname));
 			else if (objmeup == PICKUP_ITEM4)
-				sprintf(textbufme, SCRIPT_TEXT(TXT_DELSECRET), nummeup, wanky_secrets_table[gfCurrentLevel]);
+				sprintf(textbufme, SCRIPT_TEXT(TXT_DELSECRET), nummeup, wanky_secrets_table[gfLevelId]);
 			else if (nummeup == -1)
 				sprintf(textbufme, SCRIPT_TEXT(TXT_Unlimited_s), SCRIPT_TEXT(inventry_objects_list[rings[ringnum]->current_object_list[n].invitem].objname));
 			else
@@ -2354,7 +2354,7 @@ void use_current_item()
 	invobject = rings[RING_INVENTORY]->current_object_list[rings[RING_INVENTORY]->curobjinlist].invitem;
 	gmeobject = inventry_objects_list[invobject].object_number;
 
-	if (gfCurrentLevel == LVL5_DEEPSEA_DIVE && gmeobject == PUZZLE_ITEM1)
+	if (gfLevelId == LVL5_DEEPSEA_DIVE && gmeobject == PUZZLE_ITEM1)
 	{
 		FireChaff();
 		return;
@@ -2553,7 +2553,7 @@ void DEL_picked_up_object(short objnum)
 
 	case CROSSBOW_ITEM:
 
-		if (gfCurrentLevel < LVL5_THIRTEENTH_FLOOR || gfCurrentLevel > LVL5_RED_ALERT)
+		if (gfLevelId < LVL5_THIRTEENTH_FLOOR || gfLevelId > LVL5_RED_ALERT)
 		{
 			if (!(lara.crossbow_type_carried & W_PRESENT))
 				lara.crossbow_type_carried = W_PRESENT | W_AMMO1;
@@ -2575,7 +2575,7 @@ void DEL_picked_up_object(short objnum)
 		if (!(lara.hk_type_carried & W_PRESENT))
 			lara.hk_type_carried = W_PRESENT | W_AMMO1;
 
-		if (gfCurrentLevel != LVL5_ESCAPE_WITH_THE_IRIS)
+		if (gfLevelId != LVL5_ESCAPE_WITH_THE_IRIS)
 			if (lara.num_hk_ammo1 != -1)
 				lara.num_hk_ammo1 += 30;
 
@@ -2678,13 +2678,13 @@ void DEL_picked_up_object(short objnum)
 		savegame.Level.Secrets++;
 		savegame.Game.Secrets++;
 
-		if (gfCurrentLevel >= LVL5_THIRTEENTH_FLOOR && gfCurrentLevel <= LVL5_RED_ALERT)
+		if (gfLevelId >= LVL5_THIRTEENTH_FLOOR && gfLevelId <= LVL5_RED_ALERT)
 			savegame.CampaignSecrets[3]++;
-		else if (gfCurrentLevel >= LVL5_BASE && gfCurrentLevel <= LVL5_SINKING_SUBMARINE)
+		else if (gfLevelId >= LVL5_BASE && gfLevelId <= LVL5_SINKING_SUBMARINE)
 			savegame.CampaignSecrets[2]++;
-		else if (gfCurrentLevel >= LVL5_STREETS_OF_ROME && gfCurrentLevel <= LVL5_COLOSSEUM)
+		else if (gfLevelId >= LVL5_STREETS_OF_ROME && gfLevelId <= LVL5_COLOSSEUM)
 			savegame.CampaignSecrets[0]++;
-		else if (gfCurrentLevel >= LVL5_GALLOWS_TREE && gfCurrentLevel <= LVL5_OLD_MILL)
+		else if (gfLevelId >= LVL5_GALLOWS_TREE && gfLevelId <= LVL5_OLD_MILL)
 			savegame.CampaignSecrets[1]++;
 
 		//TR2-style reward for collecting every secret in this level (see
@@ -2693,7 +2693,7 @@ void DEL_picked_up_object(short objnum)
 		//made afterwards cannot re-trigger it, since no further secret pickup
 		//happens. A level whose table value it can never reach simply never
 		//gets a bonus.
-		if (gfCurrentLevel < 18 && savegame.Level.Secrets == wanky_secrets_table[gfCurrentLevel])
+		if (gfLevelId < 18 && savegame.Level.Secrets == wanky_secrets_table[gfLevelId])
 			GrantSecretBonus(gfCurrentLevel);
 
 		return;
@@ -3131,7 +3131,7 @@ void dels_give_lara_items_cheat()
 			lara.pickupitems |= (1 << (piss & 0x1F));
 	}
 
-	if (gfCurrentLevel == LVL5_SUBMARINE)
+	if (gfLevelId == LVL5_SUBMARINE)
 	{
 		lara.puzzleitems[0] = 0;
 		lara.puzzleitemscombo = 0;
@@ -3139,7 +3139,7 @@ void dels_give_lara_items_cheat()
 		lara.pickupitemscombo = 0;
 	}
 
-	if (gfCurrentLevel == LVL5_OLD_MILL)
+	if (gfLevelId == LVL5_OLD_MILL)
 	{
 		lara.puzzleitems[2] = 0;
 		lara.puzzleitemscombo = 0;
@@ -3177,7 +3177,7 @@ void dels_give_lara_guns_cheat()
 			lara.num_crossbow_ammo2 = -1;
 			lara.crossbow_type_carried |= W_PRESENT;
 
-			if (gfCurrentLevel < LVL5_GIBBY_LEVEL)
+			if (gfLevelId < LVL5_GIBBY_LEVEL)
 			{
 				lara.crossbow_type_carried = W_PRESENT | W_LASERSIGHT | W_AMMO1;
 				lara.num_crossbow_ammo2 = 0;

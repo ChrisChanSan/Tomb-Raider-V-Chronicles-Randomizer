@@ -439,7 +439,7 @@ void CreateSkinningData()
 		// der Standardkopf dazu. Ohne diese Zeile klebte der Zopfansatz an
 		// falschen Kopf-Vertices - der "Zopf-Spiess" bei rich1 mit
 		// Joby-Outfit (im Spiel gesehen).
-		else if ((gfCurrentLevel >= LVL5_BASE && gfCurrentLevel <= LVL5_SINKING_SUBMARINE && LaraDrawType == LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD)
+		else if ((gfLevelId >= LVL5_BASE && gfLevelId <= LVL5_SINKING_SUBMARINE && LaraDrawType == LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD)
 		{
 			SkinVertNums[28][i] = HairSkinVertNums[5][i];
 			SkinVertNums[34][i] = HairSkinVertNums[5][i];

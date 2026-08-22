@@ -1055,7 +1055,7 @@ long GetKeyTrigger(ITEM_INFO* item)
 	FLOOR_INFO* floor;
 	short* data;
 
-	if (item->object_number == PUZZLE_HOLE8 && gfCurrentLevel == LVL5_ESCAPE_WITH_THE_IRIS)
+	if (item->object_number == PUZZLE_HOLE8 && gfLevelId == LVL5_ESCAPE_WITH_THE_IRIS)
 		return 1;
 
 	floor = GetFloor(item->pos.x_pos, item->pos.y_pos, item->pos.z_pos, &item->room_number);

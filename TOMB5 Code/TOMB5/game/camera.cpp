@@ -119,7 +119,7 @@ void CalculateCamera()
 			camera.speed = 1;
 	}
 
-	if (gfCurrentLevel == LVL5_STREETS_OF_ROME && (!XATrack || XATrack == 13))
+	if (gfLevelId == LVL5_STREETS_OF_ROME && (!XATrack || XATrack == 13))
 		TLFlag = 1;
 	else
 	{
@@ -129,7 +129,7 @@ void CalculateCamera()
 		TLFlag = 0;
 	}
 
-	if (gfCurrentLevel != LVL5_DEEPSEA_DIVE)
+	if (gfLevelId != LVL5_DEEPSEA_DIVE)
 	{
 		if (room[camera.pos.room_number].flags & ROOM_UNDERWATER)
 		{
@@ -682,7 +682,7 @@ void FixedCamera()
 							SmashedMeshRoom[SmashedMeshCount] = t2.room_number;
 							SmashedMesh[SmashedMeshCount++] = StaticMesh;
 							StaticMesh->Flags &= ~1;
-							SoundEffect(ShatterSounds[gfCurrentLevel][StaticMesh->static_number - 50], (PHD_3DPOS*)&StaticMesh->x, 0);
+							SoundEffect(ShatterSounds[gfLevelId][StaticMesh->static_number - 50], (PHD_3DPOS*)&StaticMesh->x, 0);
 						}
 
 						TriggerRicochetSpark((GAME_VECTOR*)&v, GetRandomControl() << 1, 3, 0);
@@ -1133,7 +1133,7 @@ void MoveCamera(GAME_VECTOR* ideal, long speed)
 		camera.pos.room_number = ideal->room_number;
 	}
 
-	if (gfCurrentLevel == LVL5_THIRTEENTH_FLOOR || gfCurrentLevel == LVL5_ESCAPE_WITH_THE_IRIS)
+	if (gfLevelId == LVL5_THIRTEENTH_FLOOR || gfLevelId == LVL5_ESCAPE_WITH_THE_IRIS)
 		CheckForRichesIllegalDiagonalWalls();
 
 	GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &camera.pos.room_number);
@@ -1651,7 +1651,7 @@ void LookCamera(ITEM_INFO* item)
 		camera.pos.room_number = lara_item->room_number;
 	}
 
-	if (gfCurrentLevel == LVL5_THIRTEENTH_FLOOR || gfCurrentLevel == LVL5_ESCAPE_WITH_THE_IRIS)
+	if (gfLevelId == LVL5_THIRTEENTH_FLOOR || gfLevelId == LVL5_ESCAPE_WITH_THE_IRIS)
 		CheckForRichesIllegalDiagonalWalls();
 
 	GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &camera.pos.room_number);

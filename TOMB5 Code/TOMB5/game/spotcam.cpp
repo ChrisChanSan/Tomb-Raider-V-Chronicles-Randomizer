@@ -365,7 +365,7 @@ void CalculateSpotCams()
 	{
 		CameraFade = current_spline_camera;
 
-		if (gfCurrentLevel != LVL5_TITLE)
+		if (gfLevelId != LVL5_TITLE)
 		{
 			ScreenFadedOut = 0;
 			ScreenFade = 255;
@@ -378,7 +378,7 @@ void CalculateSpotCams()
 	{
 		CameraFade = current_spline_camera;
 
-		if (gfCurrentLevel != LVL5_TITLE)
+		if (gfLevelId != LVL5_TITLE)
 		{
 			ScreenFadedOut = 0;
 			ScreenFade = 0;
@@ -447,7 +447,7 @@ void CalculateSpotCams()
 	// state directly; the confirm bit (Cross/A) depends on the active input
 	// path - see JoyBitBestaetigen() in input.cpp, same reasoning as the
 	// cutscene-skip fix in control.cpp.
-	if (tomb5.cutseq_skipper && (keymap[DIK_ESCAPE] || (ControlMethod == 1 && Key(256 + JoyBitBestaetigen()))) && gfCurrentLevel != LVL5_TITLE)
+	if (tomb5.cutseq_skipper && (keymap[DIK_ESCAPE] || (ControlMethod == 1 && Key(256 + JoyBitBestaetigen()))) && gfLevelId != LVL5_TITLE)
 		current_spline_position = 0x10000;
 
 	if (!(input & IN_LOOK))
@@ -515,7 +515,7 @@ void CalculateSpotCams()
 			ctype = camera.type;
 			camera.type = HEAVY_CAMERA;
 
-			if (gfCurrentLevel != LVL5_TITLE)
+			if (gfLevelId != LVL5_TITLE)
 				TestTriggersAtXYZ(camera.pos.x, camera.pos.y, camera.pos.z, camera.pos.room_number, 1, 0);
 			else
 			{
@@ -680,7 +680,7 @@ void CalculateSpotCams()
 							ctype = camera.type;
 							camera.type = HEAVY_CAMERA;
 
-							if (gfCurrentLevel != LVL5_TITLE)
+							if (gfLevelId != LVL5_TITLE)
 								TestTriggersAtXYZ(camera.pos.x, camera.pos.y, camera.pos.z, camera.pos.room_number, 1, 0);
 							else
 							{

@@ -2060,7 +2060,7 @@ static void CutseqLaraMeshesZurueck()
 	for (int i = 0; i < 15; i++)
 		lara.mesh_ptrs[i] = meshes[objects[LARA].mesh_index + 2 * i];
 
-	if (gfCurrentLevel >= LVL5_GALLOWS_TREE && gfCurrentLevel <= LVL5_OLD_MILL &&
+	if (gfLevelId >= LVL5_GALLOWS_TREE && gfLevelId <= LVL5_OLD_MILL &&
 		(gfLevelFlags & GF_YOUNGLARA))
 		lara.mesh_ptrs[LM_TORSO] = meshes[objects[ANIMATING6_MIP].mesh_index + 2 * LM_TORSO];
 }
@@ -2082,12 +2082,12 @@ void handle_cutseq_triggering(long name)
 		cutseq_busy_timeout = 50;
 		cutseq_trig = 1;
 
-		if (gfCurrentLevel != LVL5_TITLE)
+		if (gfLevelId != LVL5_TITLE)
 			SetFadeClip(28, 1);
 
 		if (!ScreenFadedOut)
 		{
-			if (gfCurrentLevel != LVL5_TITLE)
+			if (gfLevelId != LVL5_TITLE)
 				S_CDFade(0);
 
 			SetScreenFadeOut(16, 0);
@@ -2153,7 +2153,7 @@ void handle_cutseq_triggering(long name)
 
 			lara.water_status = LW_ABOVE_WATER;
 
-			if (gfCurrentLevel != LVL5_TITLE)
+			if (gfLevelId != LVL5_TITLE)
 				S_CDStop();
 
 			numnailed = 0;
@@ -2177,7 +2177,7 @@ void handle_cutseq_triggering(long name)
 	{
 		SetScreenFadeOut(16, 1);
 
-		if (gfCurrentLevel != LVL5_TITLE)
+		if (gfLevelId != LVL5_TITLE)
 			S_CDFade(0);
 
 		cutseq_trig = 4;
@@ -2187,7 +2187,7 @@ void handle_cutseq_triggering(long name)
 		if (!ScreenFadedOut)
 			return;
 
-		if (gfCurrentLevel != LVL5_TITLE)
+		if (gfLevelId != LVL5_TITLE)
 			S_CDStop();
 
 		ScreenFadedOut = 0;
@@ -2257,12 +2257,12 @@ void handle_cutseq_triggering(long name)
 		cutseq_num = 0;
 		camera.type = GLOBAL_oldcamtype;
 
-		if (gfCurrentLevel != LVL5_TITLE)
+		if (gfLevelId != LVL5_TITLE)
 			SetFadeClip(0, 1);
 
 		AlterFOV(GAME_FOV);
 
-		if (gfCurrentLevel != LVL5_TITLE)
+		if (gfLevelId != LVL5_TITLE)
 			S_CDPlay(CurrentAtmosphere, 1);
 
 		IsAtmospherePlaying = 1;
@@ -3625,7 +3625,7 @@ void do_cutseq_skipper_stuff()
 	ITEM_INFO* item;
 	short room_num;
 
-	if (gfCurrentLevel == LVL5_TITLE)
+	if (gfLevelId == LVL5_TITLE)
 		return;
 
 	//a bunch of hardcoded bullshit to avoid softlocking..

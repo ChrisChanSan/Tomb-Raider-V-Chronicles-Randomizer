@@ -432,6 +432,65 @@ bool ScriptDat::musikWuerfeln(uint64_t seed, int& getauscht, std::string& error)
     return true;
 }
 
+bool ScriptDat::abschnitteWuerfeln(uint64_t seed, std::string& reihenfolge, std::string& error)
+{
+    reihenfolge.clear();
+
+    // Abschnitt je Level ueber den Dateinamen; alles andere (Titel, GIBBY,
+    // DEL, TOM) bleibt auf seinem Slot.
+    const auto abschnitt = [](const std::string& datei) -> int
+    {
+        const size_t p = datei.find_last_of('\\');
+        const std::string k = (p == std::string::npos) ? datei : datei.substr(p + 1);
+        if (k.rfind("ANDREA", 0) == 0) return 0;
+        if (k.rfind("JOBY", 0) == 0)   return 1;
+        if (k.rfind("ANDY", 0) == 0)   return 2;
+        if (k.rfind("RICH", 0) == 0)   return 3;
+        return -1;
+    };
+
+    // Slots je Abschnitt in ihrer heutigen Reihenfolge.
+    std::vector<int> slots[4];
+    for (size_t k = 0; k < m_levels.size(); ++k)
+    {
+        const int a = abschnitt(m_levels[k].fileName);
+        if (a >= 0) slots[a].push_back(m_ofsIndex[k]);
+    }
+    for (int a = 0; a < 4; ++a)
+        if (slots[a].empty()) { error = "ein Story-Abschnitt fehlt im Skript"; return false; }
+
+    // Alle betroffenen Slots in aufsteigender Folge - dorthin werden die
+    // permutierten Abschnitte der Reihe nach gelegt.
+    std::vector<int> ziele;
+    for (int a = 0; a < 4; ++a) ziele.insert(ziele.end(), slots[a].begin(), slots[a].end());
+    std::sort(ziele.begin(), ziele.end());
+
+    int folge[4] = { 0, 1, 2, 3 };
+    std::mt19937_64 rng(seed ^ 0x414253434E495454ull);   // "ABSCNITT" - eigener Strom
+    std::shuffle(folge, folge + 4, rng);
+
+    // Alte Offsets einsammeln, dann neu verteilen.
+    std::vector<uint16_t> alt(m_nLevels);
+    for (int i = 0; i < m_nLevels; ++i)
+        std::memcpy(&alt[i], m_bytes.data() + m_scriptOfsAt + 2ull * i, 2);
+
+    static const char* namen[4] = { "Rom", "Russland", "Irland", "VCI" };
+    size_t z = 0;
+    for (int n = 0; n < 4; ++n)
+    {
+        const int a = folge[n];
+        for (int s : slots[a])
+        {
+            const uint16_t o = alt[s];
+            std::memcpy(m_bytes.data() + m_scriptOfsAt + 2ull * ziele[z++], &o, 2);
+        }
+        if (!reihenfolge.empty()) reihenfolge += " -> ";
+        reihenfolge += namen[a];
+    }
+
+    return zerlege(error);                                // Caches neu, Bloecke liegen jetzt anders
+}
+
 void ScriptDat::randomizerEingriffe(Eingriffe& e)
 {
     e = Eingriffe();

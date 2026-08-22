@@ -618,7 +618,7 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 	TextureData = (uchar*)malloc(0x40000);
 
 	//main menu logo
-	if (gfCurrentLevel == LVL5_TITLE)
+	if (gfLevelId == LVL5_TITLE)
 	{
 		pComp = 0;
 		CompressedData = 0;
@@ -1064,7 +1064,7 @@ bool LoadAnimatedTextures()
 	aranges = (short*)game_malloc(num_anim_ranges * 2);
 	ReadBlock(aranges, num_anim_ranges * sizeof(short));
 
-	if (gfCurrentLevel == LVL5_ESCAPE_WITH_THE_IRIS)
+	if (gfLevelId == LVL5_ESCAPE_WITH_THE_IRIS)
 		aranges[2] = 2076;
 
 	nAnimUVRanges = ReadChar();
@@ -1073,37 +1073,37 @@ bool LoadAnimatedTextures()
 
 static bool LarasNoseTexture(long i)
 {
-	if (gfCurrentLevel == LVL5_STREETS_OF_ROME && (i == 200 || i == 204))
+	if (gfLevelId == LVL5_STREETS_OF_ROME && (i == 200 || i == 204))
 		return 1;
 
-	if (gfCurrentLevel == LVL5_TRAJAN_MARKETS && (i == 225 || i == 229))
+	if (gfLevelId == LVL5_TRAJAN_MARKETS && (i == 225 || i == 229))
 		return 1;
 
-	if (gfCurrentLevel == LVL5_COLOSSEUM && (i == 240 || i == 244))
+	if (gfLevelId == LVL5_COLOSSEUM && (i == 240 || i == 244))
 		return 1;
 
-	if (gfCurrentLevel == LVL5_BASE && (i == 210 || i == 213))
+	if (gfLevelId == LVL5_BASE && (i == 210 || i == 213))
 		return 1;
 
-	if (gfCurrentLevel == LVL5_SUBMARINE && (i == 205 || i == 208))
+	if (gfLevelId == LVL5_SUBMARINE && (i == 205 || i == 208))
 		return 1;
 
-	if (gfCurrentLevel == LVL5_DEEPSEA_DIVE && (i == 201 || i == 205))
+	if (gfLevelId == LVL5_DEEPSEA_DIVE && (i == 201 || i == 205))
 		return 1;
 
-	if (gfCurrentLevel == LVL5_SINKING_SUBMARINE && (i == 235 || i == 238))
+	if (gfLevelId == LVL5_SINKING_SUBMARINE && (i == 235 || i == 238))
 		return 1;
 
-	if ((gfCurrentLevel >= LVL5_GALLOWS_TREE && gfCurrentLevel <= LVL5_OLD_MILL) && (i == 144 || i == 148))
+	if ((gfLevelId >= LVL5_GALLOWS_TREE && gfLevelId <= LVL5_OLD_MILL) && (i == 144 || i == 148))
 		return 1;
 
-	if (gfCurrentLevel == LVL5_THIRTEENTH_FLOOR && (i == 99 || i == 103))
+	if (gfLevelId == LVL5_THIRTEENTH_FLOOR && (i == 99 || i == 103))
 		return 1;
 
-	if (gfCurrentLevel == LVL5_ESCAPE_WITH_THE_IRIS && (i == 101 || i == 105))
+	if (gfLevelId == LVL5_ESCAPE_WITH_THE_IRIS && (i == 101 || i == 105))
 		return 1;
 
-	if (gfCurrentLevel == LVL5_RED_ALERT && (i == 133 || i == 137))
+	if (gfLevelId == LVL5_RED_ALERT && (i == 133 || i == 137))
 		return 1;
 
 	return 0;
@@ -1516,10 +1516,10 @@ unsigned int __stdcall LoadLevel(void* name)
 		SetFadeClip(0, 1);
 		reset_cutseq_vars();
 
-		if (gfCurrentLevel == LVL5_STREETS_OF_ROME)
+		if (gfLevelId == LVL5_STREETS_OF_ROME)
 			find_a_fucking_item(ANIMATING10)->mesh_bits = 11;
 
-		if (gfCurrentLevel == LVL5_OLD_MILL)
+		if (gfLevelId == LVL5_OLD_MILL)
 			find_a_fucking_item(ANIMATING16)->mesh_bits = 1;
 
 		MonitorScreenTex = 0;

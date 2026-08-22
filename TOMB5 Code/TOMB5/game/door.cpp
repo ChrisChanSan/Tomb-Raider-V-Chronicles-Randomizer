@@ -279,8 +279,8 @@ void DoorControl(short item_number)
 
 			if (item->frame_number == anims[item->anim_number].frame_end)
 			{
-				if ((gfCurrentLevel == LVL5_THIRTEENTH_FLOOR && (item->object_number == CLOSED_DOOR2 || item->object_number == CLOSED_DOOR3)) ||
-					(gfCurrentLevel >= LVL5_ESCAPE_WITH_THE_IRIS && gfCurrentLevel <= LVL5_RED_ALERT && item->object_number == CLOSED_DOOR1))
+				if ((gfLevelId == LVL5_THIRTEENTH_FLOOR && (item->object_number == CLOSED_DOOR2 || item->object_number == CLOSED_DOOR3)) ||
+					(gfLevelId >= LVL5_ESCAPE_WITH_THE_IRIS && gfLevelId <= LVL5_RED_ALERT && item->object_number == CLOSED_DOOR1))
 					item->status = ITEM_INVISIBLE;
 			}
 		}

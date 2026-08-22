@@ -305,7 +305,7 @@ void S_DrawHealthBar(long pos)
 {
 	long x, y, w, h;
 
-	if (gfCurrentLevel == LVL5_TITLE)
+	if (gfLevelId == LVL5_TITLE)
 		return;
 
 	if (BinocularRange || SniperOverlay)
@@ -341,7 +341,7 @@ void S_DrawAirBar(long pos)
 {
 	long x, y, w, h;
 
-	if (gfCurrentLevel == LVL5_TITLE)
+	if (gfLevelId == LVL5_TITLE)
 		return;
 
 	w = GetFixedScale(150);
@@ -376,7 +376,7 @@ void S_DrawDashBar(long pos)
 {
 	long x, y, w, h;
 
-	if (gfCurrentLevel == LVL5_TITLE)
+	if (gfLevelId == LVL5_TITLE)
 		return;
 
 	w = GetFixedScale(150);

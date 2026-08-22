@@ -160,14 +160,14 @@ void InitialiseLara(long restore)
 		NailInvItem((short)convert_invobj_to_obj(gfTakeaways[i]));
 
 	gfNumTakeaways = 0;
-	weapons[WEAPON_REVOLVER].damage = gfCurrentLevel > LVL5_COLOSSEUM ? 15 : 6;
+	weapons[WEAPON_REVOLVER].damage = gfLevelId > LVL5_COLOSSEUM ? 15 : 6;
 
-	if (gfCurrentLevel == LVL5_DEEPSEA_DIVE)
+	if (gfLevelId == LVL5_DEEPSEA_DIVE)
 	{
 		lara.puzzleitems[0] = 10;
 		lara.pickupitems &= ~8;
 	}
-	else if (gfCurrentLevel == LVL5_SUBMARINE)
+	else if (gfLevelId == LVL5_SUBMARINE)
 	{
 		memset(&lara.puzzleitems, 0, 12);
 		lara.puzzleitemscombo = 0;
@@ -176,25 +176,25 @@ void InitialiseLara(long restore)
 		lara.keyitems = 0;
 		lara.keyitemscombo = 0;
 	}
-	else if (gfCurrentLevel == LVL5_SINKING_SUBMARINE)
+	else if (gfLevelId == LVL5_SINKING_SUBMARINE)
 	{
 		lara.puzzleitems[0] = 0;
 		lara.pickupitems = 0;
 	}
-	else if (gfCurrentLevel == LVL5_ESCAPE_WITH_THE_IRIS)
+	else if (gfLevelId == LVL5_ESCAPE_WITH_THE_IRIS)
 	{
 		lara.pickupitems &= ~1;
 		lara.puzzleitems[2] = 0;
 		lara.puzzleitems[3] = 0;
 		lara.pickupitems &= ~8;
 	}
-	else if (gfCurrentLevel == LVL5_RED_ALERT)
+	else if (gfLevelId == LVL5_RED_ALERT)
 	{
 		lara.pickupitems &= ~2;
 		lara.pickupitems &= ~8;
 	}
 
-	if (gfCurrentLevel >= LVL5_THIRTEENTH_FLOOR && gfCurrentLevel <= LVL5_RED_ALERT)
+	if (gfLevelId >= LVL5_THIRTEENTH_FLOOR && gfLevelId <= LVL5_RED_ALERT)
 	{
 		lara.bottle = 0;
 		lara.wetcloth = CLOTH_MISSING;
@@ -2342,8 +2342,8 @@ void SetupGame()
 	InitTarget();
 	InitialiseGameFlags();
 
-	if (gfCurrentLevel == LVL5_THIRTEENTH_FLOOR || gfCurrentLevel == LVL5_BASE || gfCurrentLevel == LVL5_GALLOWS_TREE ||
-		gfCurrentLevel == LVL5_STREETS_OF_ROME || gfInitialiseGame)
+	if (gfLevelId == LVL5_THIRTEENTH_FLOOR || gfLevelId == LVL5_BASE || gfLevelId == LVL5_GALLOWS_TREE ||
+		gfLevelId == LVL5_STREETS_OF_ROME || gfInitialiseGame)
 		InitialiseLara(0);
 	else
 		InitialiseLara(1);

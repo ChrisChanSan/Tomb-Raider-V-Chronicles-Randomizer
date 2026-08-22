@@ -146,6 +146,18 @@ public:
     // Sicherung).
     bool musikWuerfeln(uint64_t seed, int& getauscht, std::string& error);
 
+    // Levelabschnitte wuerfeln (Stufe 1 des Plans in Level Infos\
+    // Levelreihenfolge-Plan.md): die vier Story-Abschnitte Rom (ANDREA*),
+    // Russland (JOBY*), Irland (ANDY*) und VCI (RICH*, inkl. RICHCUT2) werden
+    // als unteilbare Bloecke permutiert. Geaendert wird NUR die Offsettabelle
+    // der Levelbloecke - die Bloecke selbst (FMVs, Cutscenes, Flags, Musik,
+    // Inventarbefehle) wandern unangetastet mit. Innerhalb eines Abschnitts
+    // bleibt die Reihenfolge, damit alle Schluesselketten gueltig bleiben.
+    // BRAUCHT die Engine mit gfLevelId (Identitaet aus dem Dateinamen) -
+    // eine aeltere EXE hielte Slot 1 weiter fuer Rom. Nicht wiederholbar.
+    // reihenfolge bekommt die neue Abfolge als Text fuer die Anzeige.
+    bool abschnitteWuerfeln(uint64_t seed, std::string& reihenfolge, std::string& error);
+
     // Was steht heute drin? Fuer Anzeige und Selbsttest.
     struct Eintrag
     {

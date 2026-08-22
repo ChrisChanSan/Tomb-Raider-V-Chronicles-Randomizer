@@ -249,7 +249,7 @@ void ControlAnimatingSlots(short item_number)
 
 	item = &items[item_number];
 
-	if (gfCurrentLevel == LVL5_THIRTEENTH_FLOOR && item->object_number == ANIMATING8)
+	if (gfLevelId == LVL5_THIRTEENTH_FLOOR && item->object_number == ANIMATING8)
 	{
 		pos.x = 0;
 		pos.y = 0;
@@ -502,7 +502,7 @@ void AnimateWaterfalls()
 	{
 		obj = &objects[i];
 
-		if (gfCurrentLevel == LVL5_RED_ALERT && i == WATERFALL2)
+		if (gfLevelId == LVL5_RED_ALERT && i == WATERFALL2)
 			continue;
 
 		if (obj->loaded)
@@ -742,7 +742,7 @@ void ControlXRayMachine(short item_number)
 			{
 				ShatterObject(0, mesh, 128, item->room_number, 0);
 				mesh->Flags &= ~1;
-				SoundEffect(ShatterSounds[gfCurrentLevel][mesh->static_number - 50], (PHD_3DPOS*)&mesh->x, SFX_DEFAULT);
+				SoundEffect(ShatterSounds[gfLevelId][mesh->static_number - 50], (PHD_3DPOS*)&mesh->x, SFX_DEFAULT);
 			}
 		}
 
@@ -792,7 +792,7 @@ void HybridCollision(short item_num, ITEM_INFO* laraitem, COLL_INFO* coll)
 
 	item = &items[item_num];
 
-	if (gfCurrentLevel == LVL5_SINKING_SUBMARINE && item->frame_number < anims[item->anim_number].frame_end)
+	if (gfLevelId == LVL5_SINKING_SUBMARINE && item->frame_number < anims[item->anim_number].frame_end)
 		ObjectCollision(item_num, laraitem, coll);
 }
 

@@ -268,7 +268,7 @@ long ControlPhase(long nframes, long demo_mode)
 
 		if (bDisableLaraControl)
 		{
-			if (gfCurrentLevel != LVL5_TITLE)
+			if (gfLevelId != LVL5_TITLE)
 				dbinput = 0;
 
 			input &= IN_LOOK;
@@ -312,7 +312,7 @@ long ControlPhase(long nframes, long demo_mode)
 
 		SetDebounce = 0;
 
-		if (gfCurrentLevel != LVL5_TITLE && (dbinput & IN_OPTION || GLOBAL_enterinventory != NO_ITEM) && !cutseq_trig && lara_item->hit_points > 0)
+		if (gfLevelId != LVL5_TITLE && (dbinput & IN_OPTION || GLOBAL_enterinventory != NO_ITEM) && !cutseq_trig && lara_item->hit_points > 0)
 		{
 			S_SoundStopAllSamples();
 
@@ -628,7 +628,7 @@ long ControlPhase(long nframes, long demo_mode)
 		AnimateWaterfalls();
 		UpdatePulseColour();
 
-		if (gfCurrentLevel == LVL5_SINKING_SUBMARINE)
+		if (gfLevelId == LVL5_SINKING_SUBMARINE)
 			KlaxonTremor();
 
 		SoundEffects();
@@ -1269,7 +1269,7 @@ long ExplodeItemNode(ITEM_INFO* item, long Node, long NoXZVel, long bits)
 	if (!(item->mesh_bits & (1 << Node)))
 		return 0;
 
-	if (item->object_number == SWITCH_TYPE7 && (gfCurrentLevel == LVL5_SINKING_SUBMARINE || gfCurrentLevel == LVL5_BASE))
+	if (item->object_number == SWITCH_TYPE7 && (gfLevelId == LVL5_SINKING_SUBMARINE || gfLevelId == LVL5_BASE))
 		SoundEffect(SFX_SMASH_METAL, &item->pos, SFX_DEFAULT);
 	else if (bits == 256)
 		bits = -64;
@@ -1932,7 +1932,7 @@ long GetTargetOnLOS(GAME_VECTOR* src, GAME_VECTOR* dest, long DrawTarget, long f
 					SmashedMesh[SmashedMeshCount] = Mesh;
 					SmashedMeshCount++;
 					Mesh->Flags &= ~0x1;
-					SoundEffect(ShatterSounds[gfCurrentLevel][Mesh->static_number - 50], (PHD_3DPOS*)Mesh, 0);
+					SoundEffect(ShatterSounds[gfLevelId][Mesh->static_number - 50], (PHD_3DPOS*)Mesh, 0);
 				}
 
 				TriggerRicochetSpark(&target, lara_item->pos.y_rot, 3, 0);
@@ -2307,7 +2307,7 @@ void _TestTriggers(short* data, long heavy, long HeavyFlags)
 		case HEAVYSWITCH:
 		case HEAVYANTITRIGGER:
 
-			if (gfCurrentLevel == LVL5_ESCAPE_WITH_THE_IRIS && lara_item->pos.x_pos > 37979 && lara_item->pos.x_pos < 38911 &&
+			if (gfLevelId == LVL5_ESCAPE_WITH_THE_IRIS && lara_item->pos.x_pos > 37979 && lara_item->pos.x_pos < 38911 &&
 				lara_item->pos.z_pos > 67685 && lara_item->pos.z_pos < 68600 && lara_item->pos.y_pos == -24064)
 			{
 				timer = 3;
@@ -2680,7 +2680,7 @@ void RemoveRoomFlipItems(ROOM_INFO* r)
 
 		if (item->flags & IFL_INVISIBLE && objects[item->object_number].intelligent && item->hit_points <= 0 && item->hit_points != -16384)
 		{
-			if (gfCurrentLevel == LVL5_RED_ALERT && item->object_number == HITMAN)
+			if (gfLevelId == LVL5_RED_ALERT && item->object_number == HITMAN)
 				continue;
 
 			KillItem(item_num);

@@ -38,7 +38,7 @@ void AddFootprint(ITEM_INFO* item)
 	if (floor->fx != 6 && floor->fx != 5 && floor->fx != 11)
 		SoundEffect(footsounds[floor->fx] + SFX_FOOTSTEPS_MUD, &lara_item->pos, 0);
 
-	if (tomb5.footprints && floor->fx < 3 && (gfCurrentLevel == LVL5_BASE || !OnObject))
+	if (tomb5.footprints && floor->fx < 3 && (gfLevelId == LVL5_BASE || !OnObject))
 	{
 		print = &FootPrint[FootPrintNum];
 		print->x = pos.x;

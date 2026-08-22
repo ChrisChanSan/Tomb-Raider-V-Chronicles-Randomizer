@@ -231,7 +231,7 @@ void GladiatorControl(short item_number)
 						if (!((r->mesh[i].z ^ pos.z) & ~1023) && !((r->mesh[i].x ^ pos.x) & ~1023) && r->mesh[i].static_number >= 50 && r->mesh[i].static_number <= 59)
 						{
 							ShatterObject(0, &r->mesh[i], -64, lara_item->room_number, 0);
-							SoundEffect(ShatterSounds[gfCurrentLevel][r->mesh[i].static_number - 50], (PHD_3DPOS*)&r->mesh[i].x, SFX_DEFAULT);
+							SoundEffect(ShatterSounds[gfLevelId][r->mesh[i].static_number - 50], (PHD_3DPOS*)&r->mesh[i].x, SFX_DEFAULT);
 							r->mesh[i].Flags &= ~1;
 							floor->stopper = 0;
 							GetHeight(floor, pos.x, pos.y, pos.z);

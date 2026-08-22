@@ -406,7 +406,7 @@ void SkyDrawPhase()
 			return;
 		}
 
-		if (gfCurrentLevel == LVL5_GALLOWS_TREE || gfCurrentLevel == LVL5_LABYRINTH || gfCurrentLevel == LVL5_OLD_MILL)
+		if (gfLevelId == LVL5_GALLOWS_TREE || gfLevelId == LVL5_LABYRINTH || gfLevelId == LVL5_OLD_MILL)
 			DrawMoon();
 
 		if (BinocularRange)
@@ -463,7 +463,7 @@ void SkyDrawPhase()
 
 		if (gfLevelFlags & GF_HORIZON)
 		{
-			if (gfCurrentLevel == LVL5_TITLE && jobyfrigger)
+			if (gfLevelId == LVL5_TITLE && jobyfrigger)
 				phd_PutPolygonsSkyMesh(meshes[objects[CHEF_MIP].mesh_index], -1);
 			else
 				phd_PutPolygonsSkyMesh(meshes[objects[HORIZON].mesh_index], -1);
@@ -471,7 +471,7 @@ void SkyDrawPhase()
 			OutputSky();
 		}
 
-		if (gfCurrentLevel == LVL5_GALLOWS_TREE || gfCurrentLevel == LVL5_LABYRINTH || gfCurrentLevel == LVL5_OLD_MILL)
+		if (gfLevelId == LVL5_GALLOWS_TREE || gfLevelId == LVL5_LABYRINTH || gfLevelId == LVL5_OLD_MILL)
 		{
 			DrawStars();
 			OutputSky();
@@ -747,10 +747,10 @@ void PrintObjects(short room_number)
 			if (item->after_death)
 				GlobalAlpha = 0xFE000000 * item->after_death;
 
-		//	if (gfCurrentLevel == LVL5_BASE && item->object_number == BRIDGE_FLAT)
+		//	if (gfLevelId == LVL5_BASE && item->object_number == BRIDGE_FLAT)
 		//		don't draw
 
-			if (gfCurrentLevel != LVL5_BASE || item->object_number != BRIDGE_FLAT)
+			if (gfLevelId != LVL5_BASE || item->object_number != BRIDGE_FLAT)
 			{
 				if (obj->draw_routine)
 					obj->draw_routine(item);
@@ -825,7 +825,7 @@ void DrawRooms(short current_room)
 	GetRoomBounds();
 	ProcessClosedDoors();
 
-	if (gfCurrentLevel != LVL5_TITLE)
+	if (gfLevelId != LVL5_TITLE)
 		SkyDrawPhase();
 
 	if (objects[LARA].loaded && !(lara_item->flags & IFL_INVISIBLE))

@@ -212,7 +212,7 @@ void ControlSmokeEmitter(short item_number)
 
 	if (item->object_number == STEAM_EMITTER && item->trigger_flags & 8 && item->trigger_flags != 111)
 	{
-		if (gfCurrentLevel == LVL5_RED_ALERT && item->trigger_flags > 0)
+		if (gfLevelId == LVL5_RED_ALERT && item->trigger_flags > 0)
 			SoundEffect(SFX_HISS_LOOP_BIG, &item->pos, SFX_DEFAULT);
 
 		if (item->trigger_flags & 4)

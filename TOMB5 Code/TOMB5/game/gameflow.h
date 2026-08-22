@@ -30,6 +30,18 @@ extern long gfStatus;
 extern long gfMirrorZPlane;
 extern short gfLevelFlags;
 extern uchar gfCurrentLevel;
+// Levelreihenfolge (Plan: Tomb5 Rando vorbereitung\Level Infos\
+// Levelreihenfolge-Plan.md): gfCurrentLevel ist der SLOT in der SCRIPT.DAT
+// (Reihenfolge, Savegame, Namen), gfLevelId die IDENTITAET des geladenen
+// Levels (LVL5_*, aus dem Dateinamen). Vanilla sind beide gleich; sobald der
+// Randomizer die Bloecke permutiert, fragt alles, was "bin ich im 13. Stock?"
+// wissen will, gfLevelId. gfSlotVonId ist die Umkehrung fuer Spruenge auf
+// eine bestimmte Identitaet (Cheat, Cutscene-Auswahl); gfLetzterSlot der
+// hoechste Kampagnen-Slot - dort, nicht bei "Red Alert", kommt der Abspann.
+extern uchar gfLevelId;
+extern uchar gfSlotVonId[18];	// NUM_TR5_LEVELS - das Enum steht weiter unten
+extern uchar gfLetzterSlot;
+uchar LevelIdVonDatei(uchar fileIndex);
 extern uchar gfLevelComplete;
 extern uchar gfGameMode;
 extern uchar gfRequiredStartPos;

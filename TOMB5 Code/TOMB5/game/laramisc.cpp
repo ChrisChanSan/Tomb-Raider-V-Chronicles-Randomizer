@@ -129,7 +129,7 @@ void LaraInitialiseMeshes()
 	// um dort die erwachsene Lara zu spielen, behielt dadurch den Kinderbrust-
 	// korb, und der Kopf schwebte ueber dem zu kleinen Torso. Deshalb zusaetzlich
 	// ans Flag gebunden: mit gesetztem Flag (Vanilla) aendert sich nichts.
-	if (gfCurrentLevel >= LVL5_GALLOWS_TREE && gfCurrentLevel <= LVL5_OLD_MILL &&
+	if (gfLevelId >= LVL5_GALLOWS_TREE && gfLevelId <= LVL5_OLD_MILL &&
 		(gfLevelFlags & GF_YOUNGLARA))
 		lara.mesh_ptrs[LM_TORSO] = meshes[objects[ANIMATING6_MIP].mesh_index + 2 * LM_TORSO];
 

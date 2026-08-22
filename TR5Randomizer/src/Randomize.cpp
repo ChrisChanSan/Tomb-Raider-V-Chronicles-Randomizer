@@ -66,6 +66,9 @@ int main(int argc, char** argv)
         std::printf("            die Datei erneut). trigger schickt die TO_CD-Tracks der\n");
         std::printf("            Floordata durch eine GLOBALE Permutation der getriggerten Tracks:\n");
         std::printf("            Atmosphaeren unter sich, alles andere unter sich.\n");
+        std::printf("  reihenfolge=abschnitte: die vier Story-Abschnitte permutieren\n");
+        std::printf("            (braucht skript= und die Engine mit gfLevelId; NICHT\n");
+        std::printf("            wiederholbar).\n");
         return 2;
     }
 
@@ -86,6 +89,8 @@ int main(int argc, char** argv)
     // "beides" beides. VORSICHT hintergrund: nicht wiederholbar - jeder Lauf
     // mit skript= wuerfelt die Datei erneut durch.
     bool musikHintergrund = false, musikTrigger = false;
+    // Levelabschnitte permutieren (braucht skript= und die Engine mit gfLevelId).
+    bool abschnitte = false;
     for (int i = 6; i < argc; ++i)
     {
         const std::string s = argv[i];
@@ -103,6 +108,7 @@ int main(int argc, char** argv)
         else if (s == "musik=hintergrund") musikHintergrund = true;
         else if (s == "musik=trigger")     musikTrigger = true;
         else if (s == "musik=beides")      { musikHintergrund = true; musikTrigger = true; }
+        else if (s == "reihenfolge=abschnitte") abschnitte = true;
         // "gegneraus=47,49" - dieselbe Abwahl wie das Fenster "Gegnerarten"
         // in der Oberflaeche (#95), damit sich der Filter auch aus Skripten
         // pruefen laesst.
@@ -166,6 +172,15 @@ int main(int argc, char** argv)
                     std::printf("SCRIPT.DAT  Hintergrundmusik: %d Level neu vertont\n", mg);
                 else
                     std::printf("SCRIPT.DAT  Hintergrundmusik: %s\n", sErr.c_str());
+            }
+
+            if (abschnitte)
+            {
+                std::string folge;
+                if (sd.abschnitteWuerfeln(seed, folge, sErr))
+                    std::printf("SCRIPT.DAT  Abschnitte: %s\n", folge.c_str());
+                else
+                    std::printf("SCRIPT.DAT  Abschnitte: %s\n", sErr.c_str());
             }
 
             if (!sd.save(skriptDat, sErr)) { std::printf("SCRIPT.DAT: %s\n", sErr.c_str()); return 1; }

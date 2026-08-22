@@ -60,7 +60,37 @@ long gfStatus = 0;
 long gfMirrorZPlane;
 short gfLevelFlags;
 uchar gfCurrentLevel;
+uchar gfLevelId;
+uchar gfSlotVonId[18];
+uchar gfLetzterSlot = LVL5_RED_ALERT;
 uchar gfLevelComplete;
+
+// Identitaet aus dem Dateinamen des Levels (Dateiindex aus CMD_LEVEL). Die
+// Namen sind die der Vanilla-Auslieferung ("DATA\JOBY3"); unbekannte Namen
+// fallen auf den Slot zurueck, damit ein Fremdlevel nicht als Titel gilt.
+uchar LevelIdVonDatei(uchar fileIndex)
+{
+	static const char* namen[18] =
+	{
+		"TITLE", "ANDREA1", "ANDREA2", "ANDREA3", "JOBY2", "JOBY3", "JOBY4", "JOBY5",
+		"ANDY1", "ANDY2", "ANDY3", "RICH1", "RICH2", "RICHCUT2", "RICH3", "GIBBY", "DEL", "TOM"
+	};
+	const char* s;
+	const char* kurz;
+
+	if (!gfFilenameWad || fileIndex >= Gameflow->nFileNames)
+		return gfCurrentLevel;
+
+	s = &gfFilenameWad[gfFilenameOffset[fileIndex]];
+	kurz = strrchr(s, '\\');
+	kurz = kurz ? kurz + 1 : s;
+
+	for (int i = 0; i < 18; i++)
+		if (!_stricmp(kurz, namen[i]))
+			return (uchar)i;
+
+	return gfCurrentLevel;
+}
 uchar gfGameMode = 1;
 uchar gfRequiredStartPos;
 uchar gfMirrorRoom;
@@ -566,7 +596,7 @@ long TitleOptions()
 
 		if (cheat_jump)
 		{
-			gfLevelComplete = (uchar)cheat_jump;
+			gfLevelComplete = gfSlotVonId[cheat_jump & 15];	// Cheat nennt eine IDENTITAET - in den Slot uebersetzen
 			ret = 3;
 		}
 
@@ -656,6 +686,7 @@ long TitleOptions()
 
 void DoTitle(uchar name, uchar audio)
 {
+	gfLevelId = LVL5_TITLE;
 	DoFrontEndOneShotStuff();
 	SetFade(255, 0);
 	savegame.Level.Timer = 0;
@@ -781,7 +812,7 @@ long do_dels_cutseq_selector()
 		SoundEffect(SFX_MENU_CHOOSE, 0, SFX_ALWAYS);
 		dels_cutseq_selector_flag = 0;
 		cutrot = 0;
-		gfLevelComplete = (uchar)cutsel[selection + 1].lvl;
+		gfLevelComplete = gfSlotVonId[cutsel[selection + 1].lvl & 15];	// Cutscene-Auswahl nennt eine IDENTITAET
 		dels_cutseq_player = cutsel[selection + 1].num;
 		selection = 0;
 		ret = 3;
@@ -798,6 +829,7 @@ void DoLevel(uchar Name, uchar Audio)
 	long gamestatus;
 
 	gamestatus = 0;
+	gfLevelId = LevelIdVonDatei(Name);	// Identitaet VOR dem Laden - alles Levelspezifische fragt ab jetzt gfLevelId
 	SetFade(255, 0);
 
 	if (gfGameMode != 4)
@@ -843,7 +875,7 @@ void DoLevel(uchar Name, uchar Audio)
 		CurrentAtmosphere = Audio;
 		savegame.Level.Timer = 0;
 
-		if (gfCurrentLevel == LVL5_STREETS_OF_ROME)
+		if (gfLevelId == LVL5_STREETS_OF_ROME)
 			savegame.TLCount = 0;
 	}
 
@@ -967,7 +999,10 @@ void DoLevel(uchar Name, uchar Audio)
 	if (tomb5.tr4_loadscreens)
 		RenderLoadPic(0);
 
-	if (gfStatus == 3 && gfCurrentLevel == LVL5_RED_ALERT)
+	// Abspann nach dem LETZTEN Kampagnen-Slot - vanilla ist das Red Alert,
+	// nach einer Permutation das Level, das der Randomizer ans Ende gelegt
+	// hat. Haenge das an die Identitaet, kaeme der Abspann mitten im Spiel.
+	if (gfStatus == 3 && gfCurrentLevel == gfLetzterSlot)
 	{
 		gfStatus = 1;
 		bDoCredits = 1;
@@ -1221,6 +1256,12 @@ void LoadGameflow()
 	SprachPufferAufbereiten(d);
 	Gameflow->Language = l;
 
+	// Vanilla ist Slot == Identitaet; die Schleife unten ueberschreibt, was
+	// die SCRIPT.DAT anders verteilt hat.
+	for (int i = 0; i < 18; i++)
+		gfSlotVonId[i] = (uchar)i;
+	gfLetzterSlot = 0;
+
 	for (int i = 0; i < Gameflow->nLevels; i++)
 	{
 		end = 0;
@@ -1245,6 +1286,16 @@ void LoadGameflow()
 
 			case CMD_LEVEL:
 				gfLevelNames[i] = *n;
+				// Slot -> Identitaet merken (Umkehrtabelle) und den letzten
+				// Kampagnen-Slot bestimmen: dort kommt der Abspann, egal
+				// welches Level der Randomizer ans Ende gelegt hat.
+				{
+					const uchar id = LevelIdVonDatei(n[3]);
+					if (id < 18)
+						gfSlotVonId[id] = (uchar)i;
+					if (id >= LVL5_STREETS_OF_ROME && id <= LVL5_RED_ALERT && i > gfLetzterSlot)
+						gfLetzterSlot = (uchar)i;
+				}
 				n += 5;
 				break;
 

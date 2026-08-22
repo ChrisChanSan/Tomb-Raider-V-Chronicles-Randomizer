@@ -436,7 +436,7 @@ void aRoomletTransformLight(float* verts, long nVerts, long nLights, long nWater
 		{
 			if (CurrentRoomPtr->flags & ROOM_REFLECT && CurrentRoomPtr->flags & ROOM_REFLECT_CEILING)
 			{
-				if (gfCurrentLevel == LVL5_RED_ALERT)
+				if (gfLevelId == LVL5_RED_ALERT)
 				{
 					if (pos.y != CurrentRoomPtr->minfloor)
 						flags |= 2;
@@ -765,7 +765,7 @@ void ProcessMeshData(long num_meshes)
 		// in SCRIPT.DAT geloescht), bekaeme ein verbogenes Dreieck an der
 		// linken Hand der Erwachsenenhaut. Ans Flag gebunden wie schon der
 		// Torso-Tausch in laramisc.cpp - mit gesetztem Flag aendert sich nichts.
-		hand = i == objects[LARA_SKIN].mesh_index + LM_LHAND * 2 && gfCurrentLevel >= LVL5_GALLOWS_TREE && gfCurrentLevel <= LVL5_OLD_MILL &&
+		hand = i == objects[LARA_SKIN].mesh_index + LM_LHAND * 2 && gfLevelId >= LVL5_GALLOWS_TREE && gfLevelId <= LVL5_OLD_MILL &&
 			(gfLevelFlags & GF_YOUNGLARA);
 
 		if (mesh_ptr == last_mesh_ptr)
@@ -1018,7 +1018,7 @@ void aRoomInit()
 			bulb = &LevelFogBulbs[nBulbs];
 			memcpy(bulb, &r->fogbulb[j], sizeof(FOGBULB_INFO));
 
-			if (gfCurrentLevel == LVL5_TRAJAN_MARKETS || gfCurrentLevel == LVL5_COLOSSEUM)
+			if (gfLevelId == LVL5_TRAJAN_MARKETS || gfLevelId == LVL5_COLOSSEUM)
 			{
 				bulb->den -= bulb->den * 0.5F;
 

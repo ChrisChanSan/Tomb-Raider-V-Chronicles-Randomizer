@@ -286,7 +286,7 @@ void InitialiseDoor(short item_number)
 
 	item = &items[item_number];
 
-	if (gfCurrentLevel == LVL5_TITLE)	//someone thought it was an incredible idea to place two doors in the same place <3
+	if (gfLevelId == LVL5_TITLE)	//someone thought it was an incredible idea to place two doors in the same place <3
 										//this fixes the random lighting shift in the home title flyby sequence
 	{
 		if (item_number == 6)
@@ -474,7 +474,7 @@ void InitialisePickup(short item_number)
 	item = &items[item_number];
 	ocb = item->trigger_flags & 0x3F;
 
-	if (item->object_number == HK_ITEM && gfCurrentLevel == LVL5_ESCAPE_WITH_THE_IRIS)
+	if (item->object_number == HK_ITEM && gfLevelId == LVL5_ESCAPE_WITH_THE_IRIS)
 		return;
 
 	bounds = GetBoundsAccurate(item);
@@ -1406,7 +1406,7 @@ void InitialiseAnimatingSlots(short item_number)
 
 void InitialiseGenSlot3(short item_number)
 {
-	if (gfCurrentLevel != LVL5_SINKING_SUBMARINE)
+	if (gfLevelId != LVL5_SINKING_SUBMARINE)
 		items[item_number].mesh_bits = items[item_number].trigger_flags;
 }
 

@@ -92,7 +92,7 @@ void RegeneratePickups()
 
 static void PuzzleDone(ITEM_INFO* item, short item_num)
 {
-	if (item->object_number == PUZZLE_HOLE1 && gfCurrentLevel == LVL5_GALLOWS_TREE)
+	if (item->object_number == PUZZLE_HOLE1 && gfLevelId == LVL5_GALLOWS_TREE)
 	{
 		IsAtmospherePlaying = 0;
 		S_CDPlay(45, 0);
@@ -208,7 +208,7 @@ void PuzzleHoleCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 			item->pos.y_rot = l->pos.y_rot;
 		}
 
-		if (hole == 7 && gfCurrentLevel >= LVL5_THIRTEENTH_FLOOR && gfCurrentLevel <= LVL5_ESCAPE_WITH_THE_IRIS)
+		if (hole == 7 && gfLevelId >= LVL5_THIRTEENTH_FLOOR && gfLevelId <= LVL5_ESCAPE_WITH_THE_IRIS)
 		{
 			PuzzleBounds[4] -= 512;
 			PuzzleBounds[0] -= 512;
@@ -246,7 +246,7 @@ void PuzzleHoleCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 				return;
 			}
 
-			if (hole == 7 && gfCurrentLevel >= LVL5_THIRTEENTH_FLOOR && gfCurrentLevel <= LVL5_ESCAPE_WITH_THE_IRIS)
+			if (hole == 7 && gfLevelId >= LVL5_THIRTEENTH_FLOOR && gfLevelId <= LVL5_ESCAPE_WITH_THE_IRIS)
 			{
 				pos.z = bounds[4] - 100;
 
@@ -304,7 +304,7 @@ void PuzzleHoleCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 					item->item_flags[0] = 1;
 				}
 
-				if (hole == 1 && gfCurrentLevel == LVL5_ESCAPE_WITH_THE_IRIS)
+				if (hole == 1 && gfLevelId == LVL5_ESCAPE_WITH_THE_IRIS)
 					bDisableLaraControl = 1;
 
 				l->frame_number = anims[l->anim_number].frame_base;

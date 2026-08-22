@@ -547,6 +547,16 @@ static std::wstring lagerDir(const App& a)
                 a.scriptNote = "Hintergrundmusik: " + mErr;
         }
 
+        // Levelabschnitte: als LETZTER Eingriff, damit alle Namens-Lookups
+        // davor auf dem bekannten Stand liefen (zerlege laeuft danach neu).
+        std::string abschnitte;
+        if (a.phLevelAbschnitte)
+        {
+            std::string aErr;
+            if (!sd.abschnitteWuerfeln(a.effectiveSeed(), abschnitte, aErr))
+                a.scriptNote = "Levelabschnitte: " + aErr;
+        }
+
         if (!sd.save(skript, err)) return false;
 
         info = e.flagsGeaendert > 0
@@ -558,6 +568,8 @@ static std::wstring lagerDir(const App& a)
         else if (e.pistolenWeg > 0)    info += "  rich2: Pistolen abgenommen.";
         if (a.phMusikSwitch && musikLevel > 0)
             info += "  Hintergrundmusik: " + std::to_string(musikLevel) + " Level neu vertont.";
+        if (a.phLevelAbschnitte && !abschnitte.empty())
+            info += "  Abschnitte: " + abschnitte + ".";
         return true;
     }
 
@@ -1511,12 +1523,16 @@ static void drawUi(App& a, HWND hwnd)
                "endlich voll randomisierbar statt vanilla.");
     ImGui::EndDisabled();
 
-    ImGui::SeparatorText("Level (in Vorbereitung)");
-    ImGui::BeginDisabled(true);
+    ImGui::SeparatorText("Level");
     ImGui::Checkbox("Levelabschnitte switchen", &a.phLevelAbschnitte);
-    hoverHilfe("Kommt noch: die vier Abschnitte (Rom, Russland, Irland, VCI) "
-               "in zufaelliger Reihenfolge spielen - SCRIPT.DAT-Arbeit.");
+    hoverHilfe("Die vier Story-Abschnitte (Rom, Russland, Irland, VCI) in "
+               "zufaelliger Reihenfolge spielen. Innerhalb eines Abschnitts "
+               "bleibt die Reihenfolge - alle Schluesselketten bleiben gueltig, "
+               "der Abspann kommt nach dem letzten Abschnitt. BRAUCHT die "
+               "Engine ab 2026-08-22 (Levelidentitaet aus dem Dateinamen); "
+               "alte Spielstaende passen nicht zur neuen Reihenfolge.");
     ImGui::SameLine();
+    ImGui::BeginDisabled(true);
     ImGui::Checkbox("Level-Reihenfolge switchen", &a.phLevelReihenfolge);
     hoverHilfe("Kommt noch: die 13 Level komplett durchwuerfeln. Achtung "
                "Levelketten: Ausruestung und Story-Uebergaben haengen an der "

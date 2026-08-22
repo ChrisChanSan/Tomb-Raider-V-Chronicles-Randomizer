@@ -226,8 +226,8 @@ void AddDisplayPickup(short object_number)
 {
 	DISPLAYPU* pu; 
 
-	if (gfCurrentLevel == LVL5_SUBMARINE && object_number == PUZZLE_ITEM1 ||
-		gfCurrentLevel == LVL5_OLD_MILL && object_number == PUZZLE_ITEM3)
+	if (gfLevelId == LVL5_SUBMARINE && object_number == PUZZLE_ITEM1 ||
+		gfLevelId == LVL5_OLD_MILL && object_number == PUZZLE_ITEM3)
 		object_number = CROWBAR_ITEM;
 
 	for (int i = 0; i < 8; i++)

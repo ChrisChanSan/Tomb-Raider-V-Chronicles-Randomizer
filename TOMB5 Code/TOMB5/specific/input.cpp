@@ -249,7 +249,7 @@ static void DoWeaponHotkey()
 	
 	if (keymap[DIK_1])
 	{
-		if (gfCurrentLevel < LVL5_THIRTEENTH_FLOOR)
+		if (gfLevelId < LVL5_THIRTEENTH_FLOOR)
 		{
 			if (!(lara.pistols_type_carried & W_PRESENT))
 				return;
@@ -304,7 +304,7 @@ static void DoWeaponHotkey()
 	}
 	else if (keymap[DIK_2])
 	{
-		if (gfCurrentLevel < LVL5_THIRTEENTH_FLOOR)
+		if (gfLevelId < LVL5_THIRTEENTH_FLOOR)
 		{
 			if (!(lara.shotgun_type_carried & W_PRESENT))
 				return;

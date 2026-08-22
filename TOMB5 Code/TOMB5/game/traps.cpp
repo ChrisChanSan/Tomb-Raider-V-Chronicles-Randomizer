@@ -202,7 +202,7 @@ void ControlExplosion(short item_number)
 						staticp->y -= 128;
 						TriggerShockwave((PHD_VECTOR*) &staticp->x, 0xB00028, 64, 0x10806000, 0);
 						staticp->y += 128;
-						SoundEffect(ShatterSounds[gfCurrentLevel][staticp->static_number - 50], (PHD_3DPOS*)&staticp->x, 0);
+						SoundEffect(ShatterSounds[gfLevelId][staticp->static_number - 50], (PHD_3DPOS*)&staticp->x, 0);
 						ShatterObject(0, staticp, -128, item->room_number, 0);
 						SmashedMeshRoom[SmashedMeshCount] = item->room_number;
 						SmashedMesh[SmashedMeshCount] = staticp;
@@ -995,7 +995,7 @@ void TrapDoorControl(short item_number)
 	{
 		if (item->current_anim_state == 0 && item->trigger_flags >= 0)
 			item->goal_anim_state = 1;
-		else if (item->frame_number == anims[item->anim_number].frame_end && gfCurrentLevel == LVL5_RED_ALERT && item->object_number == TRAPDOOR1)
+		else if (item->frame_number == anims[item->anim_number].frame_end && gfLevelId == LVL5_RED_ALERT && item->object_number == TRAPDOOR1)
 			item->status = ITEM_INVISIBLE;
 	}
 	else

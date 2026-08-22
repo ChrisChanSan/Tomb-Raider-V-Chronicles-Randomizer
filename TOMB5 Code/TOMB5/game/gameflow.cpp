@@ -813,7 +813,7 @@ void DoTitle(uchar name, uchar audio)
 	// Neues Spiel: das Intro des Abschnitts, der auf Slot 1 liegt (vanilla
 	// Rom = FMV 2, hier frueher hart verdrahtet).
 	if (gfLevelComplete == 1 && gfStatus != 2 && IntroFmv(gfIdVonSlot[1]))
-		PlayFmvNow(IntroFmv(gfIdVonSlot[1]), 1);
+		PlayFmv(IntroFmv(gfIdVonSlot[1]));
 
 	if (gfStatus != 4 && tomb5.tr4_loadscreens)
 		RenderLoadPic(0);
@@ -1039,14 +1039,14 @@ void DoLevel(uchar Name, uchar Audio)
 		const uchar outro = (gfCurrentLevel == gfLetzterSlot) ? FINALE_FMV : OutroFmv(gfLevelId);
 
 		if (outro)
-			gamestatus = PlayFmvNow(outro, 1);
+			PlayFmv(outro);
 
 		if (gamestatus != 2 && gfCurrentLevel != gfLetzterSlot && gfCurrentLevel + 1 < 18)
 		{
 			const uchar intro = IntroFmv(gfIdVonSlot[gfCurrentLevel + 1]);
 
 			if (intro)
-				PlayFmvNow(intro, 1);
+				PlayFmv(intro);
 		}
 	}
 

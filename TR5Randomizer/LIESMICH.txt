@@ -68,6 +68,12 @@ Licenses\TOMB5-GPLv3.txt - es ist dieselbe.
 Die Oberflaeche des Randomizers benutzt Dear ImGui von Omar Cornut
 (MIT-Lizenz).
 
+Die Engine kann Musik im OGG-Format abspielen (fuer selbst bereitgestellte
+HQ-Tonspuren, siehe unten - wir liefern keine mit). Der Dekoder dafuer ist
+stb_vorbis von Sean Barrett und Mitwirkenden (Public Domain):
+
+    https://github.com/nothings/stb
+
 Die Kuration der Level - also die Frage, welches Item wo liegen darf -
 waere ohne trview nicht moeglich gewesen. Jede Zonengrenze in diesem
 Randomizer wurde damit geprueft:

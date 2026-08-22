@@ -16,7 +16,23 @@
 #include "function_stubs.h"
 #include "dxsound.h"
 #include "../game/control.h"
+#include "../game/gameflow.h"	// Gameflow->Language: waehlt HQ DE oder HQ EN
 #include "LoadSave.h"
+
+// HQ-Musik: liegen unter audio\HQ DE\<nr>.OGG bzw. audio\HQ EN\<nr>.OGG
+// Remaster-Fassungen der Tracks (Nummer = Engine-Tracknummer, per
+// Laufzeitvergleich verifiziert - die HQ-Saetze tragen genau die 52
+// Sprachtracks), spielt die Engine sie statt der Original-WAVs: bei
+// Deutsch die deutsche, sonst die englische; fehlt die Datei, laeuft das
+// Original-WAV wie immer. Die Dateien sind 44,1 kHz stereo - exakt das
+// PCM-Format der MusicVoice, darum reicht dieselbe Warteschlange.
+// Dekoder: stb_vorbis (public domain, Sean Barrett u. a.). NIE mit
+// ausliefern - die OGGs sind Daten des Nutzers, die Engine schaut nur
+// nach, ob sie da sind.
+#pragma warning(push, 0)
+#define STB_VORBIS_NO_PUSHDATA_API
+#include "../tomb5/libs/stb/stb_vorbis.c"
+#pragma warning(pop)
 
 const char* TrackFileNames[136] =
 {
@@ -199,6 +215,14 @@ static long audio_play_mode;
 static long CurrentNotify;
 static long eof_counter;
 
+// HQ-OGG-Strom (siehe Kopfkommentar). Laeuft er, ruht der ACM-Weg: ein
+// Track spielt entweder als OGG oder als WAV, nie beides. Eigene
+// PCM-Bloecke in ADPCM-Blockgroesse (~0,5 s), damit der EOF-Nachlauf
+// (EOF_LEEWAY) im selben Takt tickt wie beim WAV-Weg.
+#define OGG_CHUNK_FRAMES	22050
+static stb_vorbis* OggStream;
+static short* OggChunks[MUSIC_CHUNKS];
+
 #define ACM_BUFFER_SIZE		0x5800
 #define EOF_LEEWAY			2								//WAS 8.. every 2 = about 1 extra second of playtime
 
@@ -235,7 +259,7 @@ void S_CDStop()
 
 	EnterCriticalSection(&audio_cs);
 
-	if (audio_stream_fp)
+	if (audio_stream_fp || OggStream)
 	{
 		if (MusicVoice)
 		{
@@ -243,8 +267,18 @@ void S_CDStop()
 			MusicVoice->FlushSourceBuffers();
 		}
 
-		fclose(audio_stream_fp);
-		audio_stream_fp = 0;
+		if (audio_stream_fp)
+		{
+			fclose(audio_stream_fp);
+			audio_stream_fp = 0;
+		}
+
+		if (OggStream)
+		{
+			stb_vorbis_close(OggStream);
+			OggStream = 0;
+		}
+
 		eof_counter = 0;
 		XATrack = -1;
 	}
@@ -292,6 +326,64 @@ static void OpenStreamFile(char* name)
 	fseek(audio_stream_fp, 90, SEEK_SET);
 }
 
+// Das OGG-Gegenstueck zu MusicFeedChunk: dekodiert den naechsten Block aus
+// dem stb_vorbis-Strom und haengt ihn an dieselbe Voice-Warteschlange.
+// Aufrufer haelt audio_cs. Am Trackende werden STILLE-Bloecke
+// nachgeschoben, damit OnBufferEnd weitertickt - sonst kaeme der
+// EOF-Nachlauf (Rueckkehr zur Levelatmosphaere) nie zum Zug.
+static void OggFeedChunk()
+{
+	XAUDIO2_BUFFER buf;
+	long frames;
+
+	if (!MusicVoice || !OggStream || XATrack == -1)
+		return;
+
+	short* ziel = OggChunks[CurrentNotify];
+	frames = stb_vorbis_get_samples_short_interleaved(OggStream, 2, ziel, OGG_CHUNK_FRAMES * 2);
+
+	if (frames <= 0 && audio_play_mode == 1)
+	{
+		stb_vorbis_seek_start(OggStream);
+		frames = stb_vorbis_get_samples_short_interleaved(OggStream, 2, ziel, OGG_CHUNK_FRAMES * 2);
+	}
+
+	if (frames <= 0)
+	{
+		eof_counter++;
+
+		if (eof_counter > EOF_LEEWAY)
+		{
+			eof_counter = 0;
+
+			if (audio_play_mode == 2)
+			{
+				S_CDStop();
+				return;
+			}
+
+			if (CurrentAtmosphere && !IsAtmospherePlaying)
+			{
+				S_CDStop();
+				S_CDPlay(CurrentAtmosphere, 1);
+				return;
+			}
+		}
+
+		memset(ziel, 0, OGG_CHUNK_FRAMES * 2 * sizeof(short));
+		frames = OGG_CHUNK_FRAMES;
+	}
+
+	memset(&buf, 0, sizeof(buf));
+	buf.pAudioData = (BYTE*)ziel;
+	buf.AudioBytes = static_cast<UINT32>(frames) * 2 * sizeof(short);
+
+	if (FAILED(MusicVoice->SubmitSourceBuffer(&buf)))
+		return;
+
+	CurrentNotify = (CurrentNotify + 1) & (MUSIC_CHUNKS - 1);
+}
+
 // Liest den naechsten ADPCM-Block, dekodiert ihn in den naechsten freien
 // PCM-Block und haengt ihn an die Voice-Warteschlange. Aufrufer haelt
 // audio_cs. Bei Trackende laeuft hier auch der alte EOF-Nachlauf samt
@@ -300,6 +392,12 @@ static void MusicFeedChunk(bool erster)
 {
 	XAUDIO2_BUFFER buf;
 	ACMSTREAMHEADER* kopf;
+
+	if (OggStream)
+	{
+		OggFeedChunk();
+		return;
+	}
 
 	if (!MusicVoice || !audio_stream_fp || XATrack == -1)
 		return;
@@ -362,7 +460,7 @@ static void MusicFeed()
 {
 	XAUDIO2_VOICE_STATE state;
 
-	while (MusicVoice && audio_stream_fp && XATrack != -1)
+	while (MusicVoice && (audio_stream_fp || OggStream) && XATrack != -1)
 	{
 		MusicVoice->GetState(&state, XAUDIO2_VOICE_NOSAMPLESPLAYED);
 
@@ -391,6 +489,58 @@ void ACMEmulateCDPlay(long track, long mode)
 	char name[256];
 
 	EnterCriticalSection(&audio_cs);
+
+	// Erst nach einer HQ-Fassung schauen: audio\HQ DE\<nr>.OGG bei Deutsch
+	// (Sprachwahl im Optionsmenue), sonst audio\HQ EN\<nr>.OGG - und wer
+	// Deutsch spielt, aber nur den englischen Satz hat, bekommt den.
+	// S_CDPlay hat vorher S_CDStop gerufen, OggStream ist hier immer 0.
+	if (track >= 0 && track < 136)
+	{
+		int fehler = 0;
+
+		if (Gameflow->Language == GERMAN)
+		{
+			wsprintf(name, "audio\\HQ DE\\%d.OGG", track);
+			OggStream = stb_vorbis_open_filename(name, &fehler, 0);
+		}
+
+		if (!OggStream)
+		{
+			wsprintf(name, "audio\\HQ EN\\%d.OGG", track);
+			OggStream = stb_vorbis_open_filename(name, &fehler, 0);
+		}
+	}
+
+	if (OggStream)
+	{
+		Log("Playing %s %s %d", name, mode ? "Looped" : "", track);
+		XATrack = track;
+		audio_play_mode = mode;
+
+		if (MusicVoice)
+		{
+			for (int i = 0; i < 100; i++)
+			{
+				MusicVoice->GetState(&state, XAUDIO2_VOICE_NOSAMPLESPLAYED);
+
+				if (!state.BuffersQueued)
+					break;
+
+				Sleep(1);
+			}
+		}
+
+		CurrentNotify = 0;
+		OggFeedChunk();
+		OggFeedChunk();
+		ACMSetVolume();
+
+		if (MusicVoice)
+			MusicVoice->Start(0);
+
+		LeaveCriticalSection(&audio_cs);
+		return;
+	}
 
 	wsprintf(name, "audio\\%s", TrackFileNames[track]);
 
@@ -499,6 +649,11 @@ bool ACMInit()
 		StreamHeaders[i].cbDstLength = StreamSize;
 		acmStreamPrepareHeader(hACMStream, &StreamHeaders[i], 0);
 	}
+
+	// Eigene PCM-Bloecke fuer den HQ-OGG-Weg - stereo 16 Bit, dasselbe
+	// Format wie wav_format, darum teilen sich beide Wege die MusicVoice.
+	for (int i = 0; i < MUSIC_CHUNKS; i++)
+		OggChunks[i] = (short*)malloc(OGG_CHUNK_FRAMES * 2 * sizeof(short));
 
 	if (!g_XAudio2 || FAILED(g_XAudio2->CreateSourceVoice(&MusicVoice, &wav_format, 0, XAUDIO2_DEFAULT_FREQ_RATIO, &MusicCallback, 0, 0)))
 	{

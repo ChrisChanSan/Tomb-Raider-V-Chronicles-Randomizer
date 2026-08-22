@@ -194,3 +194,11 @@ unterwegs). Engine: `gfPickups`/`gfTakeaways` von 16 auf 64 mit Riegel.
 Offen für den Spieltest: ob die „nur behalten"-Ketten reichen (Iris,
 Bestiary, Spear, Iron clapper), und ob irgendein Level ein Item braucht,
 das die Matrix nicht zeigt (Flipmap-Dubletten).
+
+**Nachtrag (Spieltest des ersten GC):** die „unterwegs behalten"-Regeln
+ließen die Iris durch halb Rom reisen. Entscheidung: **Keys/Puzzles/
+Pickups wandern nie** — jedes Level startet frisch (~64 TAKEOBJ je
+Levelstart), nur Waffen/Munition/Medis/Leuchtfackeln bleiben; die vier
+Gaben (Key 8 joby3, Key 7 joby5, Catapult Andy2, Brechstange Andrea3)
+kommen unbedingt. Anmerkung für später (kein Auftrag): die Gaben könnten
+auch Pickups im Level werden — bräuchte kuratierte Bereiche je Schloss.

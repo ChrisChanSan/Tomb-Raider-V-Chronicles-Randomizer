@@ -160,3 +160,17 @@ Umkehrtabelle + Vanilla-Regression). Stufe 1 danach klein
 (`ScriptDat`: Offsettabelle permutieren, Blöcke bleiben unangetastet).
 Stufe 2 mittel (Abhängigkeitstabelle + GIVEOBJ + Spieltests der
 Schlüsselketten). Vergleichbar mit der Sprachwahl plus ein TR3-Port-Tag.
+
+## 9. Stand nach dem ersten Spieltest (2026-08-22)
+
+- Stufe 0 + 1: im Spiel bestätigt (Abschnitte, Videos nach Identität,
+  Finale am letzten Slot, Abspann abbrechbar).
+- Stufe 2 + 3 gebaut (innerhalb / frei, Levelketten.h mit drei aktiven
+  Ketten, GIVEOBJ + Namensbefehl + Modellkopie, Wegnahme-Fall über
+  TAKEOBJ dazwischen). Testseed für „frei": **380**.
+- **Spieltest „frei" (Seed 380): „es passiert, was ich befürchtet habe —
+  das wird was Großes."** Der Nutzer trägt eine große Fehlerliste zusammen;
+  die wird die Grundlage für die nächste Runde. Erwartbare Kandidaten (aus
+  Abschnitt 7): verwaiste Schlösser (rich1 PUZZLE_HOLE1, rich2
+  PUZZLE_HOLE8, Andy2 PUZZLE_HOLE1), Brechstange Andrea3, levelgebundene
+  Story-Tore, Waffenstand nach joby3 (nimmt alles), Irland als Startlevel.

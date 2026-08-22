@@ -115,8 +115,10 @@ namespace Patch
     void markTriggerSafeSectors(const Tr5Level& level, RandoInput& in);
 
     // Musik-Trigger wuerfeln (Haken "Trigger-Sound/Musik-IDs switchen"):
-    // sammelt alle TO_CD-Tracks des fertigen Levels und permutiert sie -
-    // aber in ZWEI getrennten Toepfen, weil die Engine sie verschieden
+    // schickt alle TO_CD-Tracks des fertigen Levels durch eine GLOBALE
+    // Seed-Permutation ueber den ganzen Trackraum 0..135 - Jingles wandern
+    // damit ueber Levelgrenzen, derselbe Track klingt aber in jedem Level
+    // gleich. In ZWEI getrennten Toepfen, weil die Engine sie verschieden
     // behandelt (TriggerNormalCDTrack, control.cpp): 117/118/121/123..130
     // schalten die laufende Atmosphaere um, alles andere spielt einmal mit
     // cd_flags-Sperre. Ein Atmosphaerentrigger bleibt so ein

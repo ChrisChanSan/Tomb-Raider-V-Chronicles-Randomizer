@@ -37,22 +37,29 @@ namespace
 
 long Patch::musikTriggerWuerfeln(Tr5Level& level, uint64_t seed)
 {
-    std::set<int> tracks;
-    level.musikTrigger(nullptr, &tracks);
-
+    // GLOBAL (Wunsch des Nutzers): keine levelinterne Permutation der
+    // vorhandenen Tracks mehr, sondern EINE Seed-Permutation ueber den
+    // ganzen Trackraum 0..135 (TriggerCDTrack nimmt nur value < 136;
+    // TrackFileNames hat genau 136 Eintraege, alle Wavs liegen bei). Jedes
+    // Level wendet dieselbe Abbildung an - so wandern Jingles ueber
+    // Levelgrenzen (rich3-Klaenge in joby2, Tutorial-Sprueche als Jingle),
+    // derselbe Track klingt aber ueberall gleich. Und das CLI braucht keine
+    // Sammelphase ueber fremde Level, die es gar nicht kennt.
+    //
+    // Die Atmosphaeren bleiben ein eigener Topf, weil die Engine sie anders
+    // behandelt (TriggerNormalCDTrack, control.cpp: 117/118/121/123..130
+    // schalten die laufende Kulisse um, alles andere sind Einmal-Jingles
+    // mit cd_flags-Sperre) - ein Stimmungswechsel bleibt ein
+    // Stimmungswechsel.
     const auto istAtmo = [](int t)
     {
-        // TriggerNormalCDTrack (control.cpp): diese IDs schalten die laufende
-        // Atmosphaere um, alle anderen sind Einmal-Jingles mit cd_flags-Sperre.
         return t == 117 || t == 118 || t == 121 || (t >= 123 && t <= 130);
     };
 
     std::vector<int> atmo, jingle;
-    for (int t : tracks)
+    for (int t = 0; t < 136; ++t)
         (istAtmo(t) ? atmo : jingle).push_back(t);
 
-    // Bewusst OHNE Level-Salz: derselbe Seed vertauscht die Stimmungen in
-    // jedem Level gleich - die Welt bleibt in sich stimmig, nur eben anders.
     std::mt19937_64 rng(seed ^ 0x54524B4D5553ull);      // "TRKMUS"
 
     std::map<int, int> abbildung;

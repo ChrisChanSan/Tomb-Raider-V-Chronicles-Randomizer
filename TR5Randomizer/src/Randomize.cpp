@@ -63,8 +63,9 @@ int main(int argc, char** argv)
         std::printf("  musik=hintergrund|trigger|beides:\n");
         std::printf("            hintergrund wuerfelt die Levelmusik in der SCRIPT.DAT\n");
         std::printf("            (braucht skript=; NICHT wiederholbar - jeder Lauf wuerfelt\n");
-        std::printf("            die Datei erneut). trigger vertauscht die TO_CD-Tracks der\n");
-        std::printf("            Floordata: Atmosphaeren unter sich, Jingles unter sich.\n");
+        std::printf("            die Datei erneut). trigger schickt die TO_CD-Tracks der\n");
+        std::printf("            Floordata durch eine GLOBALE Permutation aller 136 Tracks:\n");
+        std::printf("            Atmosphaeren unter sich, alles andere unter sich.\n");
         return 2;
     }
 

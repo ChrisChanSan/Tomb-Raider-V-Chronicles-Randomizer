@@ -1543,10 +1543,13 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::SameLine();
     ImGui::Checkbox("Trigger-Sound/Musik-IDs switchen", &a.phMusikTrigger);
     hoverHilfe("Die Musik-Trigger in den Leveln (TO_CD) bekommen vertauschte "
-               "Tracks - Atmosphaeren tauschen unter sich, Einmal-Jingles "
-               "unter sich, damit ein Stimmungswechsel ein Stimmungswechsel "
-               "bleibt. Cutscene-Vertonung ist nicht betroffen, die laeuft "
-               "nicht ueber diese Trigger.");
+               "Tracks - GLOBAL ueber den ganzen Trackbestand: Jingles aus "
+               "anderen Leveln, Tutorial-Sprueche, alles kann auftauchen, "
+               "und derselbe Track klingt in jedem Level gleich. "
+               "Atmosphaeren tauschen weiter nur unter sich, damit ein "
+               "Stimmungswechsel ein Stimmungswechsel bleibt. Die fest "
+               "einprogrammierte Cutscene- und Tutorial-Ausloesung ist "
+               "nicht betroffen.");
 
     // --- Secrets (#53) ---------------------------------------------------
     //

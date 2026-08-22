@@ -490,17 +490,30 @@ void ACMEmulateCDPlay(long track, long mode)
 
 	EnterCriticalSection(&audio_cs);
 
-	// Erst nach einer HQ-Fassung schauen: audio\HQ DE\<nr>.OGG bei Deutsch
-	// (Sprachwahl im Optionsmenue), sonst audio\HQ EN\<nr>.OGG - und wer
-	// Deutsch spielt, aber nur den englischen Satz hat, bekommt den.
+	// Erst nach einer HQ-Fassung schauen: audio\HQ <Sprache>\<nr>.OGG,
+	// gewaehlt ueber die Sprachwahl im Optionsmenue; fehlt der Satz der
+	// Sprache, springt audio\HQ EN\<nr>.OGG ein, fehlt auch der, laeuft
+	// das Original-WAV. Italienisch hat (noch) keinen eigenen Satz; der
+	// JP-Satz wird erst erreichbar, wenn eine echte japanische
+	// Sprachdatei waehlbar ist (#116).
 	// S_CDPlay hat vorher S_CDStop gerufen, OggStream ist hier immer 0.
 	if (track >= 0 && track < 136)
 	{
+		const char* hq;
 		int fehler = 0;
 
-		if (Gameflow->Language == GERMAN)
+		switch (Gameflow->Language)
 		{
-			wsprintf(name, "audio\\HQ DE\\%d.OGG", track);
+		case GERMAN:  hq = "DE"; break;
+		case FRENCH:  hq = "FR"; break;
+		case SPANISH: hq = "ES"; break;
+		case JAPAN:   hq = "JP"; break;
+		default:      hq = 0;    break;	// Englisch, US, Italienisch, Niederlaendisch
+		}
+
+		if (hq)
+		{
+			wsprintf(name, "audio\\HQ %s\\%d.OGG", hq, track);
 			OggStream = stb_vorbis_open_filename(name, &fehler, 0);
 		}
 

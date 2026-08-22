@@ -70,50 +70,24 @@ constexpr int INV_PICKUP(int n) { return 77 + (n - 1); }
 constexpr int INV_CROWBAR       = 90;
 constexpr int INV_CROSSBOW      = 95;   // "Grappling Gun" in rich3
 
+// ARCHITEKTUR (Entscheidung des Nutzers nach dem Spieltest, 2026-08-22):
+// Keys/Puzzles/Pickups wandern NIE zwischen Leveln - bei jedem Levelstart
+// wird die ganze Familie zurueckgesetzt (inventarAufraeumen). Nur Waffen,
+// Munition, Medis und Leuchtfackeln bleiben. Was ein Level aus einem
+// anderen braucht, bekommt es deshalb IMMER per GIVEOBJ, unabhaengig von
+// der Reihenfolge - "geben" ist hier keine Bedingung mehr, sondern die
+// Liste der Gaben. Ausnahmen vom Reset ergeben sich von selbst: was der
+// eigene Block gibt (Iris in rich2 per Vanilla-Skript, die Gaben unten),
+// wird nie weggenommen.
 static const Levelkette kLevelketten[] =
 {
-    // --- echte Importe (geben) ---
-    { "joby3",   "joby2",   203, INV_KEY(8),    kettenCmdKey(8),    true,  "Swipe Card / Key 8 (joby2 -> joby3)" },
-    { "joby5",   "joby2",   202, INV_KEY(7),    kettenCmdKey(7),    true,  "Silver key / Key 7 (joby2 -> joby5)" },
-    { "Andy2",   "andy1",   173, INV_PUZZLE(2), kettenCmdPuzzle(2), true,  "Catapult / Puzzle 2 (andy1 -> Andy2)" },
-    { "Andrea3", "Andrea2", 240, INV_CROWBAR,   0,                  true,  "Brechstange (Andrea2 -> Andrea3)" },
-    // --- Story-Items, die unterwegs sind: nicht wegraeumen, nicht geben ---
-    { "rich3",   "rich2",   0,   INV_PUZZLE(2), 0,                  false, "Iris artifact (rich2 -> rich3)" },
-    { "andy3",   "Andy2",   0,   INV_PICKUP(1), 0,                  false, "Bestiary (Andy2 -> andy3)" },
-    { "joby5",   "joby4",   0,   INV_PICKUP(1), 0,                  false, "Spear of Destiny (joby4 -> joby5)" },
-    { "Andy2",   "andy1",   0,   INV_PUZZLE(3), 0,                  false, "Iron clapper / Puzzle 3 (andy1 -> Andy2)" },
-    { "joby5",   "joby2",   0,   INV_KEY(8),    0,                  false, "Swipe Card / Key 8 (joby2 -> joby5)" },
+    { "joby3",   "joby2",   203, INV_KEY(8),    kettenCmdKey(8),    true, "Swipe Card / Key 8 (joby2 -> joby3)" },
+    { "joby5",   "joby2",   202, INV_KEY(7),    kettenCmdKey(7),    true, "Silver key / Key 7 (joby2 -> joby5)" },
+    { "Andy2",   "andy1",   173, INV_PUZZLE(2), kettenCmdPuzzle(2), true, "Catapult / Puzzle 2 (andy1 -> Andy2)" },
+    { "Andrea3", "Andrea2", 240, INV_CROWBAR,   0,                  true, "Brechstange (Andrea2 -> Andrea3)" },
 };
 
 constexpr size_t kLevelkettenZahl = sizeof(kLevelketten) / sizeof(kLevelketten[0]);
-
-// Was ein Level der Schluesselfamilie ins Inventar bringen kann (Items im
-// Level; Skript-Gaben und Ketten-Gaben kommen zur Laufzeit dazu).
-// Aus der Schluesselmatrix, Kombi-Haelften auf das fertige Item abgebildet.
-struct Anbieter
-{
-    const char* level;
-    int         inv[8];     // 0 = Ende
-};
-
-static const Anbieter kAnbieter[] =
-{
-    { "Andrea1", { INV_PICKUP(2), INV_KEY(1), INV_PUZZLE(1), 0 } },
-    { "Andrea2", { INV_CROWBAR, INV_PUZZLE(1), INV_PUZZLE(3), INV_PUZZLE(4), INV_PUZZLE(5), 0 } },
-    { "Andrea3", { INV_PICKUP(1), INV_KEY(1), INV_KEY(2), INV_PUZZLE(4), 0 } },
-    { "joby2",   { INV_KEY(7), INV_KEY(8), INV_PUZZLE(1), 0 } },
-    { "joby3",   { INV_KEY(6), INV_KEY(7), INV_PUZZLE(1), INV_PUZZLE(3), INV_PUZZLE(4), 0 } },
-    { "joby4",   { INV_PUZZLE(1), INV_PICKUP(1), 0 } },
-    { "joby5",   { INV_KEY(6), INV_KEY(8), INV_PUZZLE(1), INV_PUZZLE(2), 0 } },
-    { "andy1",   { INV_PUZZLE(1), INV_PUZZLE(2), INV_PUZZLE(3), 0 } },
-    { "Andy2",   { INV_PICKUP(1), 0 } },
-    { "andy3",   { INV_PUZZLE(1), INV_PUZZLE(2), INV_PUZZLE(3), 0 } },
-    { "rich1",   { INV_PICKUP(2), INV_KEY(7), INV_KEY(8), INV_PUZZLE(3), INV_PUZZLE(4), INV_PICKUP(1), 0 } },
-    { "rich2",   { INV_PICKUP(2), INV_PUZZLE(3), INV_PICKUP(1), 0 } },
-    { "rich3",   { INV_PUZZLE(1), INV_CROSSBOW, 0 } },
-};
-
-constexpr size_t kAnbieterZahl = sizeof(kAnbieter) / sizeof(kAnbieter[0]);
 
 // Kombi-Haelften: wird das fertige Item weggenommen, die Haelften gleich mit
 // (sonst bleibt eine halbe Katapult-Gabel aus andy1 ewig im Inventar).

@@ -617,24 +617,15 @@ bool ScriptDat::kettenAufloesen(std::vector<std::string>& notizen, std::string& 
     for (size_t i = 0; i < kLevelkettenZahl; ++i)
     {
         const Levelkette& k = kLevelketten[i];
-        if (!k.geben) continue;                              // nur-nicht-wegraeumen: Sache des Aufraeumens
+        if (!k.geben) continue;
         const int sn = slotVonLevel(k.nehmer);
         const int ss = slotVonLevel(k.spender);
         if (sn < 0 || ss < 0) continue;                      // Level nicht im Skript: nichts zu tun
 
-        // Spender davor: das Item kaeme im Inventar - es sei denn, ein Level
-        // DAZWISCHEN nimmt es per TAKEOBJ wieder weg (rich2 nimmt Key 7/8;
-        // in freier Reihenfolge kann rich2 zwischen joby2 und joby3 liegen).
-        // Dann muss der Nehmer es trotzdem nachgereicht bekommen.
-        bool weggenommen = false;
-        if (ss < sn)
-        {
-            for (size_t k2 = 0; k2 < m_levels.size() && !weggenommen; ++k2)
-                if (m_ofsIndex[k2] > ss && m_ofsIndex[k2] < sn && nimmtObjekt(k2, k.inv))
-                    weggenommen = true;
-            if (!weggenommen) continue;
-        }
-
+        // Seit dem Inventar-Reset je Levelstart (Levelketten.h) wandert kein
+        // Schluessel mehr zwischen Leveln - die Gabe ist darum UNBEDINGT,
+        // egal wo der Spender liegt. Die alte Fallunterscheidung (Spender
+        // davor / ein Level dazwischen nimmt es weg) ist damit hinfaellig.
         bool ch = false;
         if (!addGiveObject(k.nehmer, k.inv, ch, error))
         { error = std::string(k.name) + ": " + error; return false; }
@@ -649,7 +640,7 @@ bool ScriptDat::kettenAufloesen(std::vector<std::string>& notizen, std::string& 
                 notizen.push_back(std::string(k.name) + ": Namensbefehl nicht kopiert (" + nErr + ")");
         }
 
-        notizen.push_back(std::string(k.name) + (weggenommen ? ": ein Level dazwischen nimmt es weg" : ": Spender liegt dahinter") + " - per GIVEOBJ nachgereicht");
+        notizen.push_back(std::string(k.name) + ": per GIVEOBJ gegeben");
     }
     return true;
 }
@@ -806,46 +797,36 @@ bool ScriptDat::inventarAufraeumen(std::vector<std::string>& notizen, std::strin
                k.rfind("ANDY", 0) == 0 || k.rfind("RICH", 0) == 0;
     };
 
-    std::vector<int> angeboten;                     // alles, was bis hierher im Inventar sein KANN
-
     for (const auto& f : folge)
     {
-        const int    slot = f.first;
         const size_t idx  = f.second;
         const std::string name = kurz(m_levels[idx].fileName);
         if (!istKampagne(name)) continue;
 
-        // Behalten: Importe dieses Levels und Items, die durch dieses Level
-        // hindurch zu einem spaeteren Nehmer unterwegs sind (Spender davor).
-        std::vector<int> behalten;
-        for (size_t i = 0; i < kLevelkettenZahl; ++i)
-        {
-            const Levelkette& k = kLevelketten[i];
-            const int sn = slotVonLevel(k.nehmer);
-            const int ss = slotVonLevel(k.spender);
-            if (sn < 0) continue;
-            if (slot <= sn && (ss < 0 || ss < slot || k.geben))
-                behalten.push_back(k.inv);
-        }
-        if (gleich(name, "RICH3"))
-            for (const int* c = kCrossbowFamilie; *c; ++c) behalten.push_back(*c);
-
-        // Wegnehmen: angeboten, nicht behalten, nicht hier gegeben.
+        // Kompletter Reset der Schluesselfamilie bei JEDEM Levelstart
+        // (Entscheidung des Nutzers): Puzzles 1-8 samt Haelften, Keys 1-8
+        // samt Haelften, Pickups 1-3 samt Haelften, Brechstange - und die
+        // Crossbow-Familie ueberall ausser rich3. Rosen (PICKUP_ITEM4)
+        // bleiben. Was der eigene Block gibt (Vanilla-Iris in rich2, die
+        // Ketten-Gaben), wird nicht angefasst - ein TAKE hinter dem GIVE
+        // wuerde die Gabe aufheben (setup.cpp wendet erst Gaben, dann
+        // Wegnahmen an).
         std::vector<int> nehmen;
         const auto nimm = [&](int inv)
         {
-            if (std::find(behalten.begin(), behalten.end(), inv) != behalten.end()) return;
             if (gibtObjekt(idx, inv)) return;
             if (std::find(nehmen.begin(), nehmen.end(), inv) == nehmen.end()) nehmen.push_back(inv);
         };
-        for (int inv : angeboten)
+        for (int n = 1; n <= 8; ++n)
         {
-            nimm(inv);
-            // Kombi-Haelften des fertigen Items gleich mit.
-            if (inv >= INV_PUZZLE(1) && inv <= INV_PUZZLE(8)) { nimm(INV_PUZZLE_COMBO(inv - INV_PUZZLE(1) + 1, 1)); nimm(INV_PUZZLE_COMBO(inv - INV_PUZZLE(1) + 1, 2)); }
-            if (inv >= INV_KEY(1)    && inv <= INV_KEY(8))    { nimm(INV_KEY_COMBO(inv - INV_KEY(1) + 1, 1));       nimm(INV_KEY_COMBO(inv - INV_KEY(1) + 1, 2)); }
-            if (inv >= INV_PICKUP(1) && inv <= INV_PICKUP(3)) { nimm(INV_PICKUP_COMBO(inv - INV_PICKUP(1) + 1, 1)); nimm(INV_PICKUP_COMBO(inv - INV_PICKUP(1) + 1, 2)); }
+            nimm(INV_PUZZLE(n)); nimm(INV_PUZZLE_COMBO(n, 1)); nimm(INV_PUZZLE_COMBO(n, 2));
+            nimm(INV_KEY(n));    nimm(INV_KEY_COMBO(n, 1));    nimm(INV_KEY_COMBO(n, 2));
         }
+        for (int n = 1; n <= 3; ++n)
+        {
+            nimm(INV_PICKUP(n)); nimm(INV_PICKUP_COMBO(n, 1)); nimm(INV_PICKUP_COMBO(n, 2));
+        }
+        nimm(INV_CROWBAR);
         if (!gleich(name, "RICH3"))
             for (const int* c = kCrossbowFamilie; *c; ++c) nimm(*c);
 
@@ -862,17 +843,6 @@ bool ScriptDat::inventarAufraeumen(std::vector<std::string>& notizen, std::strin
             if (nehmen.size() > 6) z += ",...";
             notizen.push_back(z + ")");
         }
-
-        // Was dieses Level anbietet, kann ab jetzt im Inventar sein.
-        for (size_t a = 0; a < kAnbieterZahl; ++a)
-            if (gleich(name, kAnbieter[a].level))
-                for (const int* p = kAnbieter[a].inv; *p; ++p)
-                    if (std::find(angeboten.begin(), angeboten.end(), *p) == angeboten.end())
-                        angeboten.push_back(*p);
-        for (size_t i = 0; i < kLevelkettenZahl; ++i)     // Ketten-Gaben ebenfalls
-            if (gleich(name, kLevelketten[i].nehmer) && gibtObjekt(idx, kLevelketten[i].inv))
-                if (std::find(angeboten.begin(), angeboten.end(), kLevelketten[i].inv) == angeboten.end())
-                    angeboten.push_back(kLevelketten[i].inv);
     }
     return true;
 }

@@ -1567,11 +1567,12 @@ static void drawUi(App& a, HWND hwnd)
     hoverHilfe("Innerhalb: Rom/Russland/Irland/VCI bleiben Bloecke, nur die Level "
                "darin tauschen. Frei: alle 13 Level ueber alle Abschnitte hinweg "
                "(z.B. rich1 -> Andrea2 -> joby5 -> rich2). Die Cutscene richcut2 "
-               "bleibt immer an rich2. Schluessel, die vanilla aus einem frueheren "
-               "Level mitkommen (Key 8 fuer joby3, Key 7 fuer joby5, Puzzle 2 fuer "
-               "Andy2), reicht das Skript per GIVEOBJ nach - wenn der Spender "
-               "dahinter liegt ODER ein Level dazwischen das Item wegnimmt (rich2) - "
-               "samt Modell und Namen. Kuratiert in Levelketten.h.");
+               "bleibt immer an rich2. Bei jedem Levelstart werden Keys/Puzzles/"
+               "Pickups und die Grappling Gun (nur rich3) zurueckgesetzt - Waffen, "
+               "Munition, Medis und Leuchtfackeln bleiben. Was ein Level aus einem "
+               "anderen braucht (Key 8 joby3, Key 7 joby5, Catapult Andy2, "
+               "Brechstange Andrea3), gibt das Skript immer - samt Modell und Namen. "
+               "Kuratiert in Levelketten.h.");
 
     ImGui::SeparatorText("Musik");
     ImGui::Checkbox("Hintergrundmusik switchen", &a.phMusikSwitch);

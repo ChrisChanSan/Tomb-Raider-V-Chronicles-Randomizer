@@ -131,8 +131,8 @@ uchar gfInitialiseGame;
 uchar gfNumPickups;
 uchar gfNumTakeaways;
 uchar gfNumMips = 0;
-uchar gfPickups[64];	// war 16 - der Inventar-Aufraeumer des Randomizers setzt bis zu ~45 TAKEOBJ je Level
-uchar gfTakeaways[64];
+uchar gfPickups[128];	// war 16 - der Inventar-Reset des Randomizers setzt ~70 TAKEOBJ je Level
+uchar gfTakeaways[128];
 uchar gfMips[8];
 uchar gfResidentCut[4];
 uchar gfLevelNames[40];
@@ -405,12 +405,12 @@ void DoGameflow()
 			break;
 
 		case CMD_GIVEOBJ:
-			if (gfNumPickups < 64) gfPickups[gfNumPickups++] = *gf;	// Riegel: vorher ungeprueft in ein 16er-Feld
+			if (gfNumPickups < 128) gfPickups[gfNumPickups++] = *gf;	// Riegel: vorher ungeprueft in ein 16er-Feld
 			gf += 2;
 			break;
 
 		case CMD_TAKEOBJ:
-			if (gfNumTakeaways < 64) gfTakeaways[gfNumTakeaways++] = *gf;
+			if (gfNumTakeaways < 128) gfTakeaways[gfNumTakeaways++] = *gf;
 			gf += 2;
 			break;
 

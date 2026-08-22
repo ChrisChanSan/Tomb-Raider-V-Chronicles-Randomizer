@@ -53,6 +53,8 @@ extern uchar gfNumTakeaways;
 extern uchar gfNumMips;
 extern uchar gfPickups[128];
 extern uchar gfTakeaways[128];
+extern uchar gfNachgaben[128];
+extern uchar gfNumNachgaben;
 extern uchar gfMips[8];
 extern uchar gfResidentCut[4];
 extern uchar gfLevelNames[40];

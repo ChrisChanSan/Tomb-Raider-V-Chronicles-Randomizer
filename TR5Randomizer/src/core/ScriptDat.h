@@ -209,10 +209,14 @@ private:
     int                  m_nLevels     = 0;
 
     bool   findeLevel(const std::string& name, size_t& idx) const;
+    // GIVEOBJ/TAKEOBJ gemeinsam. force: auch dann einfuegen, wenn derselbe
+    // Befehl schon im Block steht - gebraucht vom Inventar-Reset, der eine
+    // Gabe hinter seinen Wegnahmen wiederholen muss.
     bool   addInvBefehl(uint8_t op, const std::string& levelName, int invObjekt,
-                        bool& changed, std::string& error);   // GIVEOBJ/TAKEOBJ gemeinsam
+                        bool& changed, std::string& error, bool force = false);
     bool   nimmtObjekt(size_t idx, int invObjekt) const;     // traegt der Block ein TAKEOBJ dafuer?
     bool   gibtObjekt(size_t idx, int invObjekt) const;      // ... bzw. ein GIVEOBJ?
+    bool   gibtObjektNachWegnahme(size_t idx, int invObjekt) const;
     size_t findeBefehl(size_t idx, uint8_t cmd) const;
 
     bool zerlege(std::string& error);

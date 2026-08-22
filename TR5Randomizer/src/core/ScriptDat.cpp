@@ -322,7 +322,7 @@ bool ScriptDat::clearLevelFlags(const std::string& fileName, uint16_t mask, bool
 // nichts.
 //----------------------------------------------------------------------------
 bool ScriptDat::addInvBefehl(uint8_t op, const std::string& levelName, int invObjekt,
-                              bool& changed, std::string& error)
+                              bool& changed, std::string& error, bool force)
 {
     changed = false;
     if (invObjekt < 0 || invObjekt > 255)
@@ -337,7 +337,7 @@ bool ScriptDat::addInvBefehl(uint8_t op, const std::string& levelName, int invOb
     {
         const int len = nutzlast(m_bytes[q]);
         if (len < 0) break;
-        if (m_bytes[q] == op && q + 1 < m_bytes.size() &&
+        if (!force && m_bytes[q] == op && q + 1 < m_bytes.size() &&
             m_bytes[q + 1] == static_cast<uint8_t>(invObjekt))
             return true;                          // nimmt es schon weg
         if (m_bytes[q] == 0x81) { vorLevel = q; break; }
@@ -811,10 +811,17 @@ bool ScriptDat::inventarAufraeumen(std::vector<std::string>& notizen, std::strin
         // Ketten-Gaben), wird nicht angefasst - ein TAKE hinter dem GIVE
         // wuerde die Gabe aufheben (setup.cpp wendet erst Gaben, dann
         // Wegnahmen an).
-        std::vector<int> nehmen;
+        std::vector<int> nehmen, wiedergeben;
         const auto nimm = [&](int inv)
         {
-            if (gibtObjekt(idx, inv)) return;
+            // Gibt der Block das Item selbst (Vanilla-Iris in rich2, Andrea1s
+            // Pickup 1), wird es trotzdem weggenommen - und danach neu
+            // gegeben. Die Engine wendet Gaben hinter Wegnahmen in einer
+            // dritten Phase an (gameflow.cpp/setup.cpp), darum stimmt die
+            // Menge am Ende auf genau eins. Ohne das ueberlebte eine
+            // mitgeschleppte Kopie, und ein gezaehltes Puzzle-Item stand
+            // doppelt im Inventar ("2 x Katapult", vom Nutzer gesehen).
+            if (gibtObjekt(idx, inv) && !gibtObjektNachWegnahme(idx, inv)) wiedergeben.push_back(inv);
             if (std::find(nehmen.begin(), nehmen.end(), inv) == nehmen.end()) nehmen.push_back(inv);
         };
         for (int n = 1; n <= 8; ++n)
@@ -843,6 +850,35 @@ bool ScriptDat::inventarAufraeumen(std::vector<std::string>& notizen, std::strin
             if (nehmen.size() > 6) z += ",...";
             notizen.push_back(z + ")");
         }
+
+        // ... und die Gaben des Blocks danach neu setzen (force: der alte
+        // Befehl steht weiter vorne und wird von der Wegnahme aufgehoben).
+        for (int inv : wiedergeben)
+        {
+            bool ch = false;
+            if (!addInvBefehl(0xD9, name, inv, ch, error, true))
+            { error = name + ": " + error; return false; }
+        }
     }
     return true;
+}
+
+// Steht im Block ein GIVEOBJ fuer dieses Objekt HINTER einem TAKEOBJ? Genau
+// das legt der Aufraeumer an - die Abfrage macht ihn wiederholbar.
+bool ScriptDat::gibtObjektNachWegnahme(size_t idx, int invObjekt) const
+{
+    bool wegnahmeGesehen = false;
+
+    for (size_t q = m_blockAn[idx]; q < m_blockBis[idx]; )
+    {
+        const int len = nutzlast(m_bytes[q]);
+        if (len < 0) break;
+        if (m_bytes[q] == 0xDA) wegnahmeGesehen = true;
+        if (wegnahmeGesehen && m_bytes[q] == 0xD9 && q + 1 < m_bytes.size() &&
+            m_bytes[q + 1] == static_cast<uint8_t>(invObjekt))
+            return true;
+        if (m_bytes[q] == 0x81) break;
+        q += 1 + len;
+    }
+    return false;
 }

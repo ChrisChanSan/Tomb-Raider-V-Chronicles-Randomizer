@@ -82,9 +82,14 @@ constexpr int INV_CROSSBOW      = 95;   // "Grappling Gun" in rich3
 static const Levelkette kLevelketten[] =
 {
     { "joby3",   "joby2",   203, INV_KEY(8),    kettenCmdKey(8),    true, "Swipe Card / Key 8 (joby2 -> joby3)" },
-    { "joby5",   "joby2",   202, INV_KEY(7),    kettenCmdKey(7),    true, "Silver key / Key 7 (joby2 -> joby5)" },
     { "Andy2",   "andy1",   173, INV_PUZZLE(2), kettenCmdPuzzle(2), true, "Catapult / Puzzle 2 (andy1 -> Andy2)" },
     { "Andrea3", "Andrea2", 240, INV_CROWBAR,   0,                  true, "Brechstange (Andrea2 -> Andrea3)" },
+    // KEIN Eintrag fuer joby5/Key 7: das Level hat zwar KEY_HOLE7 und kein
+    // KEY_ITEM7, bekommt den Silberschluessel aber IM Level - die Cutscene
+    // joby9 gibt ihn am Ende (deltapak.cpp: joby9_end -> AddDisplayPickup
+    // (KEY_ITEM7), der Admiral uebergibt ihn). "Schloss ohne Item" heisst
+    // also nicht automatisch "Import noetig"; Cutscenes sind die zweite
+    // Quelle. Genauso PICKUP_ITEM1 in Andrea3 (deltapak.cpp:1767).
 };
 
 constexpr size_t kLevelkettenZahl = sizeof(kLevelketten) / sizeof(kLevelketten[0]);

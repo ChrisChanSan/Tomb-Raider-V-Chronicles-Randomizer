@@ -133,6 +133,8 @@ uchar gfNumTakeaways;
 uchar gfNumMips = 0;
 uchar gfPickups[128];	// war 16 - der Inventar-Reset des Randomizers setzt ~70 TAKEOBJ je Level
 uchar gfTakeaways[128];
+uchar gfNachgaben[128];	// GIVEOBJ, die im Block HINTER einem TAKEOBJ stehen - siehe DoGameflow
+uchar gfNumNachgaben;
 uchar gfMips[8];
 uchar gfResidentCut[4];
 uchar gfLevelNames[40];
@@ -245,6 +247,7 @@ void DoGameflow()
 			gfUVRotate = 0;
 			gfNumMips = 0;
 			gfNumPickups = 0;
+			gfNumNachgaben = 0;
 			gfMirrorRoom = -1;
 			gfFog.r = 0;
 			gfFog.g = 0;
@@ -291,6 +294,7 @@ void DoGameflow()
 			gfUVRotate = 0;
 			gfNumMips = 0;
 			gfNumPickups = 0;
+			gfNumNachgaben = 0;
 
 			switch (gfStatus)
 			{
@@ -405,7 +409,19 @@ void DoGameflow()
 			break;
 
 		case CMD_GIVEOBJ:
-			if (gfNumPickups < 128) gfPickups[gfNumPickups++] = *gf;	// Riegel: vorher ungeprueft in ein 16er-Feld
+			// Ein GIVEOBJ, das im Block HINTER einem TAKEOBJ steht, wird auch
+			// NACH den Wegnahmen angewandt (dritte Phase in setup.cpp) - sonst
+			// gaebe es kein "erst alles wegnehmen, dann gezielt geben": die
+			// Wegnahmen laufen dort bewusst zuletzt, weil sie u.a. die
+			// Pistolen entfernen muessen, die setup.cpp jedem Level mit
+			// geladenem Pistolenmodell vorher wieder in die Hand drueckt.
+			// Vanilla stehen alle Gaben VOR allen Wegnahmen (Andrea1: gibt
+			// Uzi, nimmt Uzi) - dort aendert sich also nichts.
+			if (gfNumTakeaways)
+			{
+				if (gfNumNachgaben < 128) gfNachgaben[gfNumNachgaben++] = *gf;
+			}
+			else if (gfNumPickups < 128) gfPickups[gfNumPickups++] = *gf;	// Riegel: vorher ungeprueft in ein 16er-Feld
 			gf += 2;
 			break;
 

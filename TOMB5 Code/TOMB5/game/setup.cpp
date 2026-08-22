@@ -160,6 +160,15 @@ void InitialiseLara(long restore)
 		NailInvItem((short)convert_invobj_to_obj(gfTakeaways[i]));
 
 	gfNumTakeaways = 0;
+
+	// Dritte Phase: Gaben, die im Skriptblock hinter den Wegnahmen stehen
+	// (siehe CMD_GIVEOBJ in gameflow.cpp). Damit laesst sich ein Level
+	// "erst leerraeumen, dann gezielt ausstatten" - vanilla ist die Liste
+	// immer leer.
+	for (int i = 0; i < gfNumNachgaben; i++)
+		DEL_picked_up_object((short)convert_invobj_to_obj(gfNachgaben[i]));
+
+	gfNumNachgaben = 0;
 	weapons[WEAPON_REVOLVER].damage = gfLevelId > LVL5_COLOSSEUM ? 15 : 6;
 
 	if (gfLevelId == LVL5_DEEPSEA_DIVE)

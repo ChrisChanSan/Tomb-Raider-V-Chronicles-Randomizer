@@ -572,12 +572,13 @@ static std::wstring lagerDir(const App& a)
         if (a.phLevelAbschnitte || a.optLevelFolge > 0)
         {
             std::string kErr;
-            if (!sd.kettenAufloesen(ketten, kErr))
-                a.scriptNote = "Levelketten: " + kErr;
-            // Danach der Inventar-Garbage-Collector (Levelketten.h): nimmt je
-            // Levelstart weg, was aus frueheren Leveln nur noch Ballast waere.
-            else if (!sd.inventarAufraeumen(ketten, kErr))
+            // ERST aufraeumen, DANN geben: die Wegnahmen muessen im Block vor den
+            // Gaben stehen, damit die Engine sie in der dritten Phase
+            // (setup.cpp) nach den Wegnahmen anwendet.
+            if (!sd.inventarAufraeumen(ketten, kErr))
                 a.scriptNote = "Inventar aufraeumen: " + kErr;
+            else if (!sd.kettenAufloesen(ketten, kErr))
+                a.scriptNote = "Levelketten: " + kErr;
         }
 
         if (!sd.save(skript, err)) return false;

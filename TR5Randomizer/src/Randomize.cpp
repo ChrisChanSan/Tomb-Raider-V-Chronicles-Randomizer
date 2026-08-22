@@ -202,11 +202,12 @@ int main(int argc, char** argv)
 
             if (abschnitte || levelFolge)
             {
+                // ERST aufraeumen, DANN geben - siehe Main.cpp/setup.cpp.
                 std::vector<std::string> ketten;
-                if (!sd.kettenAufloesen(ketten, sErr))
-                    std::printf("SCRIPT.DAT  Levelketten: %s\n", sErr.c_str());
-                else if (!sd.inventarAufraeumen(ketten, sErr))
+                if (!sd.inventarAufraeumen(ketten, sErr))
                     std::printf("SCRIPT.DAT  Inventar aufraeumen: %s\n", sErr.c_str());
+                else if (!sd.kettenAufloesen(ketten, sErr))
+                    std::printf("SCRIPT.DAT  Levelketten: %s\n", sErr.c_str());
                 for (const std::string& k : ketten)
                     std::printf("SCRIPT.DAT  %s\n", k.c_str());
             }

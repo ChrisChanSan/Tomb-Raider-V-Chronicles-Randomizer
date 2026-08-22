@@ -81,15 +81,29 @@ constexpr int INV_CROSSBOW      = 95;   // "Grappling Gun" in rich3
 // wird nie weggenommen.
 static const Levelkette kLevelketten[] =
 {
-    { "joby3",   "joby2",   203, INV_KEY(8),    kettenCmdKey(8),    true, "Swipe Card / Key 8 (joby2 -> joby3)" },
-    { "Andy2",   "andy1",   173, INV_PUZZLE(2), kettenCmdPuzzle(2), true, "Catapult / Puzzle 2 (andy1 -> Andy2)" },
-    { "Andrea3", "Andrea2", 240, INV_CROWBAR,   0,                  true, "Brechstange (Andrea2 -> Andrea3)" },
-    // KEIN Eintrag fuer joby5/Key 7: das Level hat zwar KEY_HOLE7 und kein
-    // KEY_ITEM7, bekommt den Silberschluessel aber IM Level - die Cutscene
-    // joby9 gibt ihn am Ende (deltapak.cpp: joby9_end -> AddDisplayPickup
-    // (KEY_ITEM7), der Admiral uebergibt ihn). "Schloss ohne Item" heisst
-    // also nicht automatisch "Import noetig"; Cutscenes sind die zweite
-    // Quelle. Genauso PICKUP_ITEM1 in Andrea3 (deltapak.cpp:1767).
+    { "joby3",   "joby2",   203, INV_KEY(8), kettenCmdKey(8), true, "Swipe Card / Key 8 (joby2 -> joby3)" },
+    { "Andrea3", "Andrea2", 240, INV_CROWBAR, 0,              true, "Brechstange (Andrea2 -> Andrea3)" },
+
+    // ZWEI Eintraege, die hier NICHT stehen duerfen - beide Male hatte ich
+    // aus "Schloss vorhanden, Item fehlt" auf einen Import geschlossen. Die
+    // Levelmatrix kann das nicht entscheiden:
+    //
+    // joby5 / Key 7: die Cutscene joby9 gibt den Silberschluessel im Level
+    //   (deltapak.cpp: joby9_end -> AddDisplayPickup(KEY_ITEM7), der Admiral
+    //   uebergibt ihn). Cutscenes sind die zweite Itemquelle - ebenso
+    //   PICKUP_ITEM1 in Andrea3 (deltapak.cpp:1767).
+    //
+    // Andy2 / Puzzle 2 (Katapult): Andy2 hat zwar Puzzle Hole 2 in Raum 9,
+    // und dessen trigger_flags 1058 (>1024) heissen laut
+    // PuzzleHoleCollision "starte beim Loesen Cutscene 34" - die laut
+    // cutsel-Tabelle zu LVL5_LABYRINTH gehoert. Trotzdem ist das Schloss
+    // ZWECKENTFREMDET: es laeuft im Hintergrund ab, Lara benutzt dort kein
+    // Katapult (im Spiel geprueft, Aussage des Nutzers). Ein Katapult im
+    // Startinventar waere also nur ein sinnloses Item.
+    //
+    // Merksatz: ein Schloss ohne passendes Item im Level beweist gar nichts.
+    // Vor jeder neuen Kette gehoert die Frage "wer gibt es sonst?" - Cutscene,
+    // Gegner-Drop, Skript - und im Zweifel der Spieltest.
 };
 
 constexpr size_t kLevelkettenZahl = sizeof(kLevelketten) / sizeof(kLevelketten[0]);

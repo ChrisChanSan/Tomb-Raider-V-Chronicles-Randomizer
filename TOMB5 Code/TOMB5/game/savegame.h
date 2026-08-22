@@ -32,3 +32,4 @@ extern ulong tomb5_save_size;
 // resized) before ever applying it. Same technique this codebase already uses
 // for tomb5_save_size/tomb5_save_info, applied to the main savegame struct too.
 extern ulong savegame_bytes_read;
+extern bool  savegame_checksum_ok;

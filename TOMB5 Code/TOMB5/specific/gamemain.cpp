@@ -198,6 +198,33 @@ long S_LoadGame(long slot_num)
 		ReadFile(file, &value, sizeof(long), &bytes, 0);
 		ReadFile(file, &savegame, sizeof(SAVEGAME_INFO), &bytes, 0);
 		savegame_bytes_read = bytes; // see sgRestoreGame() - detects an old-format (pre-resize) save
+
+		// Pruefsumme SOFORT bilden, solange die Bytes noch genau die aus der
+		// Datei sind. sgRestoreGame() laeuft erst nach dem Ueberblenden und
+		// dem Neuladen des Levels - bis dahin hat der Spielloop laengst
+		// weitergerechnet und savegame.Level.Timer erhoeht (control.cpp:642,
+		// laeuft solange gfGameMode 0 ist). Genau das traf den Nutzer beim
+		// Laden waehrend Laras Todesanimation: der Loop lief hinter dem Menue
+		// weiter, die Summe stimmte nicht mehr, und der Ladevorgang brach mit
+		// "incompatible or corrupted savegame" ab - bei bytes_read == expected,
+		// also nachweislich vollstaendig gelesener Datei. Nach einem Neustart
+		// derselben Datei ging es, weil dort keine Frames dazwischenlagen.
+		{
+			const short gespeichert = savegame.Checksum;
+			savegame.Checksum = 0;
+
+			char* p = (char*)&savegame;
+			char summe = 0;
+
+			for (int i = 0; i < sizeof(SAVEGAME_INFO); i++)
+			{
+				summe += *p;
+				p++;
+			}
+
+			savegame.Checksum = gespeichert;
+			savegame_checksum_ok = (gespeichert == (short)-summe);
+		}
 		ReadFile(file, &tomb5_save, sizeof(tomb5_save_info), &tomb5_save_size, 0);
 		CloseHandle(file);
 		return 1;

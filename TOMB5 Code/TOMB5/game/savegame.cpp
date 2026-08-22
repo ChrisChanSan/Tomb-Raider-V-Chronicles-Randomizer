@@ -39,6 +39,7 @@ static long SGcount = 0;
 tomb5_save_info tomb5_save;
 ulong tomb5_save_size;
 ulong savegame_bytes_read;
+bool  savegame_checksum_ok;	// in S_LoadGame gebildet, siehe dort
 
 void WriteSG(void* pointer, long size)
 {
@@ -1144,24 +1145,14 @@ void sgRestoreGame()
 	// immediately rather than attempt an unproven partial recovery.
 	bool boValid = (savegame_bytes_read >= sizeof(SAVEGAME_INFO));
 
+	// Die Summe wird NICHT mehr hier gebildet, sondern in S_LoadGame direkt
+	// nach dem Lesen (specific\gamemain.cpp) - dort sind die Bytes noch die
+	// der Datei. Zwischen Lesen und diesem Punkt liegen Ueberblendung und
+	// Levelneuladen, und der Spielloop schreibt in dieser Zeit weiter in
+	// savegame (control.cpp:642). Wer die Summe hier bildet, verwirft
+	// gesunde Spielstaende.
 	if (boValid)
-	{
-		short storedChecksum = savegame.Checksum;
-		savegame.Checksum = 0;
-
-		char* ptr = (char*)&savegame;
-		char sum = 0;
-
-		for (int i = 0; i < sizeof(SAVEGAME_INFO); i++)
-		{
-			sum += *ptr;
-			ptr++;
-		}
-
-		savegame.Checksum = storedChecksum;
-
-		boValid = (storedChecksum == (short)-sum);
-	}
+		boValid = savegame_checksum_ok;
 
 	if (!boValid)
 	{

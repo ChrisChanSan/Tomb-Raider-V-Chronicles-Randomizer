@@ -159,7 +159,7 @@ void HydraControl(short item_number)
 			{
 				if (item->touch_bits & 0x400)
 				{
-					lara_item->hit_points -= GegnerSchaden(120);
+					lara_item->hit_points -= GegnerSchaden(balance.sHydraStrahl);
 					lara_item->hit_status = 1;
 					CreatureEffectT(item, &hydra_hit, 10, item->pos.y_rot, DoBloodSplat);
 					hydra->flags = 1;

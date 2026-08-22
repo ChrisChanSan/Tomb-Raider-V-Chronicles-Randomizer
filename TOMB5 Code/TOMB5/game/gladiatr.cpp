@@ -255,7 +255,7 @@ void GladiatorControl(short item_number)
 
 				if (!gladiator->flags && item->touch_bits & 0x6000)
 				{
-					lara_item->hit_points -= GegnerSchaden(120);
+					lara_item->hit_points -= GegnerSchaden(balance.sGladiatorHieb);
 					lara_item->hit_status = 1;
 					CreatureEffectT(item, &gladiator_hit, 10, item->pos.y_rot, DoBloodSplat);
 					SoundEffect(SFX_LARA_THUD, &item->pos, SFX_DEFAULT);

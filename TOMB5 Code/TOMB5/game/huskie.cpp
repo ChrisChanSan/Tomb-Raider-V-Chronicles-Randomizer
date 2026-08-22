@@ -186,7 +186,7 @@ void HuskieControl(short item_number)
 			if (info.bite && item->touch_bits & 0x6648 && frame >= 4 && frame <= 14)
 			{
 				CreatureEffectT(item, &huskie_bite, 2, -1, DoBloodSplat);
-				lara_item->hit_points -= GegnerSchaden(20);
+				lara_item->hit_points -= GegnerSchaden(balance.sHuskyBiss);
 				lara_item->hit_status = 1;
 			}
 
@@ -261,7 +261,7 @@ void HuskieControl(short item_number)
 			if (info.bite && item->touch_bits & 0x48 && (frame >= 9 && frame <= 12 || frame >= 22 && frame <= 25))
 			{
 				CreatureEffectT(item, &huskie_bite, 2, -1, DoBloodSplat);
-				lara_item->hit_points -= GegnerSchaden(10);
+				lara_item->hit_points -= GegnerSchaden(balance.sHuskySprung);
 				lara_item->hit_status = 1;
 			}
 

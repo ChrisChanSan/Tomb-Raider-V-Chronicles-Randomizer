@@ -250,7 +250,7 @@ void MazeMonsterControl(short item_number)
 						item->anim_number == anim + 2 && item->frame_number > frame + 6 && item->frame_number < frame + 16))
 					{
 						CreatureEffectT(item, &mazemonster_hitleft, 20, item->pos.y_rot, DoBloodSplat);
-						lara_item->hit_points -= GegnerSchaden(150);
+						lara_item->hit_points -= GegnerSchaden(balance.sLabyrinthmonster);
 						lara_item->hit_status = 1;
 						monster->flags |= 1;
 					}
@@ -259,7 +259,7 @@ void MazeMonsterControl(short item_number)
 						item->anim_number == anim + 2 && item->frame_number > frame + 33 && item->frame_number < frame + 43))
 					{
 						CreatureEffectT(item, &mazemonster_hitright, 20, item->pos.y_rot, DoBloodSplat);
-						lara_item->hit_points -= GegnerSchaden(150);
+						lara_item->hit_points -= GegnerSchaden(balance.sLabyrinthmonster);
 						lara_item->hit_status = 1;
 						monster->flags |= 2;
 					}

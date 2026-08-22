@@ -14,6 +14,7 @@
 #include "balance.h"
 #include "larafire.h"
 #include "gameflow.h"
+#include "objects.h"
 #include "../specific/function_stubs.h"
 
 #define BALANCE_DATEI	"Balance.txt"
@@ -21,120 +22,259 @@
 BALANCE_INFO balance;
 
 /*
- * Die Originalwerte. Waffenschaden steht in larafire.cpp in weapons[9], die
- * Werte fuer Revolver und HK werden dort allerdings zur Laufzeit ueberschrieben
- * (setup.cpp je Level, lara1gun.cpp je Schuss) - deshalb stehen sie hier
- * einzeln und werden an genau diesen Stellen wieder eingesetzt.
+ * Eine Zeile der Einstellungsdatei. Diese Tabelle ist die einzige Quelle der
+ * Wahrheit: Voreinstellung, erlaubter Bereich, der Text der Vorlage und - bei
+ * Lebenspunkten - der Objektplatz stehen alle hier. Die Vorlage wird daraus
+ * erzeugt, sie kann also nicht von den Voreinstellungen abweichen.
+ *
+ * name == 0 heisst: keine Einstellung, nur der Vorlagentext in kopf.
+ * slot >= 0 heisst: der Wert gehoert in objects[slot].hit_points.
  */
-static const BALANCE_INFO balanceOriginal =
-{
-	1,		/* Pistolen */
-	1,		/* Uzi */
-	3,		/* Schrotflinte */
-	5,		/* Armbrust */
-	3,		/* Fackel */
-	6,		/* Revolver frueh */
-	15,		/* Revolver spaet */
-	3,		/* HK im Stand */
-	1,		/* HK in Bewegung */
-	100,	/* Gegnerleben */
-	100,	/* Gegnerschaden */
-	65		/* Kulissenreichweite */
-};
-
 struct BALANCE_ZEILE
 {
 	const char* name;
 	long* wert;
+	long standard;
 	long min;
 	long max;
+	short slot;
+	const char* kopf;
+	const char* notiz;
 };
+
+#define TRENNER(text)	{ 0, 0, 0, 0, 0, -1, text, 0 }
+#define WAFFE(n, f, s, hinweis)		{ n, &balance.f, s, 0, 127, -1, 0, hinweis }
+#define LEBEN(n, f, s, platz)		{ n, &balance.f, s, 1, 32000, platz, 0, 0 }
+#define SCHADEN(n, f, s, hinweis)	{ n, &balance.f, s, 0, 32000, -1, 0, hinweis }
 
 static const BALANCE_ZEILE balanceZeilen[] =
 {
-	{ "Pistolen",			&balance.pistolen,			0, 127 },
-	{ "Uzi",				&balance.uzi,				0, 127 },
-	{ "Schrotflinte",		&balance.schrotflinte,		0, 127 },
-	{ "Armbrust",			&balance.armbrust,			0, 127 },
-	{ "Fackel",				&balance.fackel,			0, 127 },
-	{ "RevolverFrueh",		&balance.revolverFrueh,		0, 127 },
-	{ "RevolverSpaet",		&balance.revolverSpaet,		0, 127 },
-	{ "HK_Stand",			&balance.hkStand,			0, 127 },
-	{ "HK_Lauf",			&balance.hkLauf,			0, 127 },
-	{ "GegnerLeben",		&balance.gegnerLeben,		1, 1000 },
-	{ "GegnerSchaden",		&balance.gegnerSchaden,		0, 1000 },
-	{ "KulissenReichweite",	&balance.kulissenReichweite,	10, 400 }
+	TRENNER(
+		"; ---------------------------------------------------------------\r\n"
+		";  Balance.txt - Feineinstellung fuer Tomb Raider Chronicles\r\n"
+		";  Teil des TR5 Randomizer. Aendern, speichern, Spiel neu starten.\r\n"
+		"; ---------------------------------------------------------------\r\n"
+		";  Aufbau:  Name = Zahl\r\n"
+		";  Zeilen, die mit ; oder # beginnen, sind Kommentare.\r\n"
+		";  Fehlt eine Zeile, gilt der Originalwert in der Klammer.\r\n"
+		";  Wird die Datei geloescht, legt das Spiel sie neu an.\r\n"
+		"\r\n"
+		"\r\n"
+		"; === Schaden von Laras Waffen ===================================\r\n"
+		";  Treffer je Schuss, 0 bis 127. Lara hat 1000 Lebenspunkte, ein\r\n"
+		";  einfacher Wachmann 24. Die Schrotflinte zaehlt je Schrotkugel,\r\n"
+		";  sie wirkt also staerker als die Zahl vermuten laesst.\r\n"
+		"\r\n"),
+
+	WAFFE("Pistolen",		pistolen,		1,	0),
+	WAFFE("Uzi",			uzi,			1,	0),
+	WAFFE("Schrotflinte",	schrotflinte,	3,	"  je Schrotkugel"),
+	WAFFE("Armbrust",		armbrust,		5,	"  im Spiel die Grappling Gun"),
+	WAFFE("Fackel",			fackel,			3,	0),
+
+	TRENNER(
+		"\r\n"
+		";  Der Revolver hat zwei Werte: das Spiel setzt ihn in jedem Level\r\n"
+		";  neu, schwach in den Rom-Levels, stark ab dem U-Boot.\r\n"),
+
+	WAFFE("RevolverFrueh",	revolverFrueh,	6,	"  bis einschliesslich Kolosseum"),
+	WAFFE("RevolverSpaet",	revolverSpaet,	15,	"  alle spaeteren Level"),
+
+	TRENNER(
+		"\r\n"
+		";  Die HK hat ebenfalls zwei Werte: gezielt aus dem Stand trifft\r\n"
+		";  sie haerter als aus der Bewegung.\r\n"),
+
+	WAFFE("HK_Stand",		hkStand,		3,	0),
+	WAFFE("HK_Lauf",		hkLauf,			1,	0),
+
+	TRENNER(
+		"\r\n"
+		"\r\n"
+		"; === Lebenspunkte der Gegner ====================================\r\n"
+		";  Ein Wert je Gegner, absolut wie im Original. Zum Vergleich:\r\n"
+		";  Lara hat 1000, eine Pistolenkugel macht 1 Schaden.\r\n"
+		"\r\n"),
+
+	LEBEN("LP_WachmannBlau",		lpWachmannBlau,		24,		BLUE_GUARD),
+	LEBEN("LP_WachmannJoby",		lpWachmannJoby,		24,		BLUE_GUARD2),
+	LEBEN("LP_Swat",				lpSwat,				24,		SWAT),
+	LEBEN("LP_SwatPlus",			lpSwatPlus,			24,		SWAT_PLUS),
+	LEBEN("LP_Mafioso",				lpMafioso,			24,		MAFIA),
+	LEBEN("LP_Mafia2",				lpMafia2,			26,		MAFIA2),
+	LEBEN("LP_Wissenschaftler",		lpWissenschaftler,	24,		SCIENTIST),
+	LEBEN("LP_Kranfuehrer",			lpKranfuehrer,		24,		CRANE_GUY),
+	LEBEN("LP_Hitman",				lpHitman,			50,		HITMAN),
+	LEBEN("LP_Scharfschuetze",		lpScharfschuetze,	35,		SNIPER),
+	LEBEN("LP_Koch",				lpKoch,				35,		CHEF),
+	LEBEN("LP_Pierre",				lpPierre,			60,		PIERRE),
+	LEBEN("LP_Larson",				lpLarson,			60,		LARSON),
+	LEBEN("LP_TwoGun",				lpTwoGun,			90,		TWOGUN),
+	LEBEN("LP_Hund",				lpHund,				18,		DOG),
+	LEBEN("LP_Husky",				lpHusky,			24,		HUSKIE),
+	LEBEN("LP_Loewe",				lpLoewe,			40,		LION),
+	LEBEN("LP_Kraehe",				lpKraehe,			10,		CROW),
+	LEBEN("LP_TRex",				lpTRex,				800,	SAS),
+	LEBEN("LP_Raptor",				lpRaptor,			90,		REAPER),
+	LEBEN("LP_Compy",				lpCompy,			10,		SAILOR),
+	LEBEN("LP_MiniUBoot",			lpMiniUBoot,		100,	ATTACK_SUB),
+	LEBEN("LP_Hydra",				lpHydra,			30,		HYDRA),
+	LEBEN("LP_Kobold",				lpKobold,			12,		IMP),
+	LEBEN("LP_Irrlicht",			lpIrrlicht,			256,	WILLOWISP),
+	LEBEN("LP_Labyrinthmonster",	lpLabyrinthmonster,	120,	MAZE_MONSTER),
+	LEBEN("LP_Sumpfmonster",		lpSumpfmonster,		100,	GREEN_TEETH),
+	LEBEN("LP_Skelett",				lpSkelett,			100,	SKELETON),
+	LEBEN("LP_Gladiator",			lpGladiator,		20,		GLADIATOR),
+	LEBEN("LP_RoemischerGott",		lpRoemischerGott,	300,	ROMAN_GOD),
+	LEBEN("LP_RoemischerGott2",		lpRoemischerGott2,	300,	ROMAN_GOD2),
+
+	TRENNER(
+		"\r\n"
+		"\r\n"
+		"; === Schaden der Gegner an Lara =================================\r\n"
+		";  Ein Wert je Angriff. Gegner mit mehreren Angriffen haben\r\n"
+		";  mehrere Zeilen - im Original sind die absichtlich verschieden\r\n"
+		";  stark, der Sprung eines Hundes tut mehr weh als sein Biss.\r\n"
+		"\r\n"
+		";  Schusswaffen der menschlichen Gegner:\r\n"),
+
+	SCHADEN("S_Soldat_Frueh",		sSoldatFrueh,		30,		"  Wachmann/SWAT/Mafioso, bis Old Mill"),
+	SCHADEN("S_Soldat_Spaet",		sSoldatSpaet,		60,		"  dieselben ab Old Mill - doppelt so hart"),
+	SCHADEN("S_Soldat_Kurz",		sSoldatKurz,		10,		"  ihr schwaecherer zweiter Schuss"),
+	SCHADEN("S_Hitman_Schuss",		sHitmanSchuss,		12,		0),
+	SCHADEN("S_Mafia2_Schuss",		sMafia2Schuss,		35,		0),
+	SCHADEN("S_Pierre_Schuss",		sPierreSchuss,		20,		"  je Pistole, er schiesst mit zweien"),
+	SCHADEN("S_Larson_Schuss",		sLarsonSchuss,		20,		0),
+	SCHADEN("S_Scharfschuetze",		sScharfschuetzeSchuss, 100,	"  ein Treffer ist ein Zehntel von Lara"),
+
+	TRENNER(
+		"\r\n"
+		";  Tiere:\r\n"),
+
+	SCHADEN("S_Hund_Biss",			sHundBiss,			30,		0),
+	SCHADEN("S_Hund_Sprung",		sHundSprung,		80,		0),
+	SCHADEN("S_Hund_Nachsetzen",	sHundNachsetzen,	50,		0),
+	SCHADEN("S_Husky_Biss",			sHuskyBiss,			20,		0),
+	SCHADEN("S_Husky_Sprung",		sHuskySprung,		10,		0),
+	SCHADEN("S_Loewe_Sprung",		sLoeweSprung,		200,	0),
+	SCHADEN("S_Loewe_Tatze",		sLoeweTatze,		60,		0),
+	SCHADEN("S_Kraehe",				sKraeheHieb,		20,		0),
+	SCHADEN("S_Fledermaeuse",		sFledermaeuse,		2,		"  je Fledermaus und Treffer"),
+	SCHADEN("S_Spinnen",			sSpinnen,			3,		"  je Spinne und Treffer"),
+	SCHADEN("S_TRex_Tritt",			sTRexTritt,			1,		"  wenn er steht"),
+	SCHADEN("S_TRex_TrittLauf",		sTRexTrittLauf,		10,		"  wenn er laeuft"),
+	SCHADEN("S_TRex_Biss",			sTRexBiss,			10000,	"  toedlich gemeint, Lara hat 1000"),
+	SCHADEN("S_Raptor_Biss",		sRaptorBiss,		100,	0),
+	SCHADEN("S_Raptor_Sprung",		sRaptorSprung,		100,	0),
+	SCHADEN("S_Compy_Biss",			sCompyBiss,			90,		0),
+
+	TRENNER(
+		"\r\n"
+		";  Uebernatuerliches und schweres Geraet:\r\n"),
+
+	SCHADEN("S_Koch_Messer",		sKochMesser,		80,		0),
+	SCHADEN("S_Skelett_Hieb",		sSkelettHieb,		400,	0),
+	SCHADEN("S_Gladiator_Hieb",		sGladiatorHieb,		120,	0),
+	SCHADEN("S_Gott_Hieb",			sGottHieb,			40,		"  Roemischer Gott im Nahkampf"),
+	SCHADEN("S_Gott_Blitz",			sGottBlitz,			200,	"  sein Fernangriff"),
+	SCHADEN("S_Hydra_Strahl",		sHydraStrahl,		120,	0),
+	SCHADEN("S_Kobold_Wurf",		sKoboldWurf,		3,		0),
+	SCHADEN("S_Labyrinthmonster",	sLabyrinthmonster,	150,	0),
+	SCHADEN("S_Sumpfmonster",		sSumpfmonster,		100,	0),
+	SCHADEN("S_TwoGun_Plasma",		sTwoGunPlasma,		250,	0),
+	SCHADEN("S_Torpedo",			sTorpedo,			200,	"  vom Mini-U-Boot"),
+
+	TRENNER(
+		"\r\n"
+		"\r\n"
+		"; === Levelgefahren ==============================================\r\n"
+		";  Das sind keine Gegner, sondern fest eingebaute Maschinen. Sie\r\n"
+		";  tauchen im Rando nirgends anders auf, und die Prozentzeile\r\n"
+		";  GegnerSchaden weiter unten laesst sie absichtlich in Ruhe.\r\n"
+		"\r\n"),
+
+	SCHADEN("S_Autogun",			sAutogun,			20,		"  Deckengeschuetz"),
+	SCHADEN("S_Gunship",			sGunship,			20,		"  Kampfhubschrauber"),
+	SCHADEN("S_Iris",				sIris,				12,		"  je Bilddurchlauf, solange Lara zu nah steht"),
+	SCHADEN("S_Area51Laser",		sArea51Laser,		100,	0),
+	SCHADEN("S_Stromkabel",			sStromkabel,		10,		"  die Kabel im U-Boot-Stuetzpunkt"),
+
+	TRENNER(
+		"\r\n"
+		"\r\n"
+		"; === Alles auf einmal ===========================================\r\n"
+		";  Prozentwerte. Sie wirken ZUSAETZLICH auf alle Gegnerwerte oben,\r\n"
+		";  damit man das ganze Spiel mit einer Zahl haerter oder weicher\r\n"
+		";  stellen kann, ohne die Feinabstimmung anzufassen. 100 laesst\r\n"
+		";  alles wie eingetragen. Levelgefahren und Laras Waffen bleiben\r\n"
+		";  davon unberuehrt.\r\n"
+		"\r\n"),
+
+	{ "GegnerLeben",	&balance.gegnerLeben,	100, 1, 1000, -1, 0,
+		"  50 = halb so zaeh, 200 = doppelt so zaeh" },
+	{ "GegnerSchaden",	&balance.gegnerSchaden,	100, 0, 1000, -1, 0,
+		"  0 macht alle Gegner harmlos" },
+
+	TRENNER(
+		"\r\n"
+		"\r\n"
+		"; === Klang ======================================================\r\n"
+		";  Hoerweite der ortsfesten Levelkulisse in Prozent: Maschinen,\r\n"
+		";  Feuer, tropfendes Wasser. Das Original liess sie durch halbe\r\n"
+		";  Level dringen, der Randomizer hegt sie ein. 100 stellt das\r\n"
+		";  Original wieder her. Gegner und Lara behalten immer ihre volle\r\n"
+		";  Reichweite.\r\n"
+		"\r\n"),
+
+	{ "KulissenReichweite", &balance.kulissenReichweite, 65, 10, 400, -1, 0,
+		"  Vanilla waere 100, der Randomizer haelt 65" },
+
+	TRENNER(
+		"\r\n"
+		";  Fallen, Stuerze, Feuer, Gift und Ertrinken sind hier bewusst\r\n"
+		";  nicht einstellbar. Die bleiben immer so hart wie im Original,\r\n"
+		";  auch wenn du die Gegner harmlos stellst.\r\n")
 };
 
 #define BALANCE_ANZAHL	(sizeof(balanceZeilen) / sizeof(balanceZeilen[0]))
 
-/*
- * Die Datei, die beim ersten Start angelegt wird. Sie ist die eigentliche
- * Bedienungsanleitung der Aufgabe - wer sie in Notepad oeffnet, soll ohne
- * Nachfrage wissen, was jede Zeile tut und was der Originalwert war.
- */
-static const char* balanceVorlage =
-	"; ---------------------------------------------------------------\r\n"
-	";  Balance.txt - Feineinstellung fuer Tomb Raider Chronicles\r\n"
-	";  Teil des TR5 Randomizer. Aendern, speichern, Spiel neu starten.\r\n"
-	"; ---------------------------------------------------------------\r\n"
-	";  Aufbau:  Name = Zahl\r\n"
-	";  Zeilen, die mit ; oder # beginnen, sind Kommentare.\r\n"
-	";  Fehlt eine Zeile, gilt der Originalwert aus dem Klammerhinweis.\r\n"
-	";  Wird die Datei geloescht, legt das Spiel sie neu an.\r\n"
-	"\r\n"
-	"\r\n"
-	"; === Schaden von Laras Waffen ===================================\r\n"
-	";  Treffer je Schuss, 0 bis 127. Lara selbst hat 1000 Lebenspunkte,\r\n"
-	";  ein einfacher Wachmann 24. Die Schrotflinte zaehlt je Kugel des\r\n"
-	";  Schrotschusses, sie wirkt also staerker als die Zahl vermuten laesst.\r\n"
-	"\r\n"
-	"Pistolen        = 1     ; (Original 1)\r\n"
-	"Uzi             = 1     ; (Original 1)\r\n"
-	"Schrotflinte    = 3     ; (Original 3)  je Schrotkugel\r\n"
-	"Armbrust        = 5     ; (Original 5)  im Spiel die Grappling Gun\r\n"
-	"Fackel          = 3     ; (Original 3)\r\n"
-	"\r\n"
-	";  Der Revolver hat zwei Werte: das Spiel setzt ihn in jedem Level neu,\r\n"
-	";  schwach in den Rom-Levels, stark ab dem U-Boot.\r\n"
-	"RevolverFrueh   = 6     ; (Original 6)  bis einschliesslich Kolosseum\r\n"
-	"RevolverSpaet   = 15    ; (Original 15) alle spaeteren Level\r\n"
-	"\r\n"
-	";  Die HK hat ebenfalls zwei Werte: gezielt aus dem Stand trifft sie\r\n"
-	";  haerter als aus der Bewegung.\r\n"
-	"HK_Stand        = 3     ; (Original 3)\r\n"
-	"HK_Lauf         = 1     ; (Original 1)\r\n"
-	"\r\n"
-	"\r\n"
-	"; === Gegner =====================================================\r\n"
-	";  Prozentwerte. 100 laesst alles wie im Original.\r\n"
-	"\r\n"
-	";  Lebenspunkte aller Gegner. 50 = halb so zaeh, 200 = doppelt so zaeh.\r\n"
-	"GegnerLeben     = 100   ; (Original 100), erlaubt 1 bis 1000\r\n"
-	"\r\n"
-	";  Schaden, den Gegner an Lara austeilen. 0 macht sie voellig harmlos.\r\n"
-	";  Fallen, Stuerze, Feuer, Gift und Ertrinken bleiben unberuehrt.\r\n"
-	"GegnerSchaden   = 100   ; (Original 100), erlaubt 0 bis 1000\r\n"
-	"\r\n"
-	"\r\n"
-	"; === Klang ======================================================\r\n"
-	";  Hoerweite der ortsfesten Levelkulisse in Prozent: Maschinen, Feuer,\r\n"
-	";  tropfendes Wasser. Das Original liess sie durch halbe Level dringen,\r\n"
-	";  der Randomizer hegt sie auf 65 Prozent ein. 100 stellt das Original\r\n"
-	";  wieder her. Gegner und Lara behalten immer ihre volle Reichweite.\r\n"
-	"KulissenReichweite = 65 ; (Randomizer 65, Original 100), erlaubt 10 bis 400\r\n";
+static void BalanceSchreibe(HANDLE datei, const char* text)
+{
+	DWORD geschrieben;
+	WriteFile(datei, text, (DWORD)strlen(text), &geschrieben, 0);
+}
 
+/*
+ * Die Vorlage wird aus der Tabelle erzeugt, damit sie nicht von den
+ * tatsaechlichen Voreinstellungen abweichen kann.
+ */
 static void BalanceVorlageSchreiben()
 {
 	HANDLE datei;
-	DWORD geschrieben;
+	char zeile[256];
+
+	zeile[sizeof(zeile) - 1] = 0;
 
 	datei = CreateFile(BALANCE_DATEI, GENERIC_WRITE, 0, 0, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, 0);
 
 	if (datei == INVALID_HANDLE_VALUE)
 		return;
 
-	WriteFile(datei, balanceVorlage, (DWORD)strlen(balanceVorlage), &geschrieben, 0);
+	for (int i = 0; i < BALANCE_ANZAHL; i++)
+	{
+		if (balanceZeilen[i].kopf)
+			BalanceSchreibe(datei, balanceZeilen[i].kopf);
+
+		if (!balanceZeilen[i].name)
+			continue;
+
+		_snprintf(zeile, sizeof(zeile) - 1, "%-22s = %-6ld ; (Original %ld)%s\r\n",
+			balanceZeilen[i].name, balanceZeilen[i].standard, balanceZeilen[i].standard,
+			balanceZeilen[i].notiz ? balanceZeilen[i].notiz : "");
+
+		BalanceSchreibe(datei, zeile);
+	}
+
 	CloseHandle(datei);
 	Log("Balance.txt neu angelegt");
 }
@@ -212,7 +352,7 @@ static void BalanceZeileLesen(char* zeile)
 
 	for (int i = 0; i < BALANCE_ANZAHL; i++)
 	{
-		if (!BalanceNameGleich(name, balanceZeilen[i].name))
+		if (!balanceZeilen[i].name || !BalanceNameGleich(name, balanceZeilen[i].name))
 			continue;
 
 		if (zahl < balanceZeilen[i].min)
@@ -235,7 +375,11 @@ void BalanceLaden()
 	char* puffer;
 	char* zeile;
 
-	balance = balanceOriginal;
+	for (int i = 0; i < BALANCE_ANZAHL; i++)
+	{
+		if (balanceZeilen[i].wert)
+			*balanceZeilen[i].wert = balanceZeilen[i].standard;
+	}
 
 	datei = CreateFile(BALANCE_DATEI, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 
@@ -247,8 +391,8 @@ void BalanceLaden()
 
 	groesse = GetFileSize(datei, 0);
 
-	if (groesse == INVALID_FILE_SIZE || groesse > 0x10000)
-		groesse = 0x10000;
+	if (groesse == INVALID_FILE_SIZE || groesse > 0x20000)
+		groesse = 0x20000;
 
 	puffer = (char*)malloc(groesse + 1);
 
@@ -311,9 +455,67 @@ void BalanceWaffenSetzen()
 }
 
 /*
+ * Lebenspunkte der Gegner. Wird aus InitialiseObjects gerufen, nachdem
+ * BaddyObjects/ObjectObjects/TrapObjects die Originalwerte geschrieben haben.
+ */
+void BalanceGegnerSetzen()
+{
+	OBJECT_INFO* obj;
+
+	/* Erst die einzelnen Werte aus der Datei. */
+	for (int i = 0; i < BALANCE_ANZAHL; i++)
+	{
+		if (balanceZeilen[i].slot < 0)
+			continue;
+
+		obj = &objects[balanceZeilen[i].slot];
+
+		/* hit_points <= 0 heisst: das Level laedt diesen Gegner nicht. */
+		if (obj->hit_points <= 0)
+			continue;
+
+		/* Faellt an, wenn jemand setup.cpp aendert und die Tabelle vergisst. */
+		if (obj->hit_points != balanceZeilen[i].standard)
+			Log("Balance: %s steht in setup.cpp auf %d, die Tabelle kennt %d",
+				balanceZeilen[i].name, obj->hit_points, balanceZeilen[i].standard);
+
+		obj->hit_points = (short)*balanceZeilen[i].wert;
+	}
+
+	if (balance.gegnerLeben == 100)
+		return;
+
+	/*
+	 * Dann die Prozentzeile auf alles Denkende. Absichtlich ueber alle
+	 * Objekte statt ueber die Tabelle: so faellt auch ein Gegner darunter,
+	 * der oben keine eigene Zeile hat. Lara haengt zwar auch an einem
+	 * Objekteintrag, ist aber nicht intelligent, und Objekte ohne eigene
+	 * Lebenspunkte stehen auf -16384.
+	 */
+	for (int lp = 0; lp < NUMBER_OBJECTS; lp++)
+	{
+		long punkte;
+
+		obj = &objects[lp];
+
+		if (!obj->intelligent || obj->hit_points <= 0)
+			continue;
+
+		punkte = obj->hit_points * balance.gegnerLeben / 100;
+
+		if (punkte < 1)
+			punkte = 1;
+		else if (punkte > 32000)
+			punkte = 32000;
+
+		obj->hit_points = (short)punkte;
+	}
+}
+
+/*
  * Schaden eines Gegners an Lara. Absichtlich nur fuer Gegner - Fallen,
- * Stuerze, Feuer, Gift und Ertrinken laufen an dieser Stelle vorbei und
- * bleiben so hart wie im Original.
+ * Stuerze, Feuer, Gift, Ertrinken und die fest eingebauten Levelgefahren
+ * laufen an dieser Stelle vorbei und bleiben so hart wie im Original.
  */
 short GegnerSchaden(long schaden)
 {

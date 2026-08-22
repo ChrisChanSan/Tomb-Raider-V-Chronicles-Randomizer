@@ -1,4 +1,17 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
+#include "balance.h"
 #include "sas.h"
 #include "box.h"
 #include "objects.h"
@@ -314,9 +327,9 @@ void SasControl(short item_number)
 				item->fired_weapon = 2;
 
 				if (item->current_anim_state == 3)
-					ShotLara(item, &sasAI, &sas_gun, lara_info.angle >> 1, 30 * ((gfLevelId > LVL5_OLD_MILL) + 1));
+					ShotLara(item, &sasAI, &sas_gun, lara_info.angle >> 1, gfLevelId > LVL5_OLD_MILL ? balance.sSoldatSpaet : balance.sSoldatFrueh);
 				else
-					ShotLara(item, &sasAI, &sas_gun, lara_info.angle >> 1, 10);
+					ShotLara(item, &sasAI, &sas_gun, lara_info.angle >> 1, balance.sSoldatKurz);
 			}
 
 			break;

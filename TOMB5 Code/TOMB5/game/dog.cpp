@@ -173,7 +173,7 @@ void DogControl(short item_number)
 			if (dog->flags != 1 && info.ahead && item->touch_bits & 0x122000)
 			{
 				CreatureEffect(item, &dog_bite, DoBloodSplat);
-				lara_item->hit_points -= GegnerSchaden(30);
+				lara_item->hit_points -= GegnerSchaden(balance.sHundBiss);
 				lara_item->hit_status = 1;
 				dog->flags = 1;
 			}
@@ -190,7 +190,7 @@ void DogControl(short item_number)
 			if (dog->flags != 2 && item->touch_bits & 0x122000)
 			{
 				CreatureEffect(item, &dog_bite, DoBloodSplat);
-				lara_item->hit_points -= GegnerSchaden(80);
+				lara_item->hit_points -= GegnerSchaden(balance.sHundSprung);
 				lara_item->hit_status = 1;
 				dog->flags = 2;
 			}
@@ -208,7 +208,7 @@ void DogControl(short item_number)
 			if (dog->flags != 3 && item->touch_bits & 0x122000)
 			{
 				CreatureEffect(item, &dog_bite, DoBloodSplat);
-				lara_item->hit_points -= GegnerSchaden(50);
+				lara_item->hit_points -= GegnerSchaden(balance.sHundNachsetzen);
 				lara_item->hit_status = 1;
 				dog->flags = 3;
 			}

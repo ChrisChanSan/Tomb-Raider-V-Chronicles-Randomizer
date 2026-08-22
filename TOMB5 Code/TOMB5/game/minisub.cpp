@@ -275,7 +275,7 @@ void TorpedoControl(short item_number)
 		TriggerUnderwaterExplosion(item);
 		SoundEffect(SFX_UNDERWATER_EXPLOSION, &item->pos, SFX_ALWAYS);
 		SoundEffect(SFX_LARA_UNDERWATER_HIT, &lara_item->pos, SFX_ALWAYS);
-		lara_item->hit_points -= GegnerSchaden(200);
+		lara_item->hit_points -= GegnerSchaden(balance.sTorpedo);
 		lara_item->hit_status = 1;
 
 		if (lara.Anxiety < 127)

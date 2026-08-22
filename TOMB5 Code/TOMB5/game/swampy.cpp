@@ -109,7 +109,7 @@ void SwampyControl(short item_number)
 
 		if (!swampy->flags && (item->touch_bits & 0x3C3C0) && item->frame_number > anims[item->anim_number].frame_base + 29)
 		{
-			lara_item->hit_points -= GegnerSchaden(100);
+			lara_item->hit_points -= GegnerSchaden(balance.sSumpfmonster);
 			lara_item->hit_status = 1;
 			CreatureEffectT(item, &swampy_hitright, 10, item->pos.y_rot, DoBloodSplat);
 			swampy->flags = 1;

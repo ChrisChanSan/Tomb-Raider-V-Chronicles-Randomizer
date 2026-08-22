@@ -2066,30 +2066,9 @@ void InitialiseObjects()
 	TrapObjects();
 
 	// Gegnerleben aus Balance.txt. Erst hier, weil die drei Aufbaufunktionen
-	// die Originalwerte setzen. Nur denkende Gegner werden angefasst: Lara
-	// haengt zwar auch an einem Objekteintrag, ist aber nicht intelligent,
-	// und Objekte ohne eigene Lebenspunkte stehen auf -16384.
-	if (balance.gegnerLeben != 100)
-	{
-		for (lp = 0; lp < NUMBER_OBJECTS; lp++)
-		{
-			long punkte;
-
-			obj = &objects[lp];
-
-			if (!obj->intelligent || obj->hit_points <= 0)
-				continue;
-
-			punkte = obj->hit_points * balance.gegnerLeben / 100;
-
-			if (punkte < 1)
-				punkte = 1;
-			else if (punkte > 32000)
-				punkte = 32000;
-
-			obj->hit_points = (short)punkte;
-		}
-	}
+	// darueber die Originalwerte setzen. Wer dort eine Zahl aendert, muss sie
+	// auch in der Tabelle in balance.cpp aendern - sonst meldet sich das Log.
+	BalanceGegnerSetzen();
 
 	InitialiseHair();
 	InitialiseEffects();

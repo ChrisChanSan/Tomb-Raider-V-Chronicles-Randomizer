@@ -135,7 +135,7 @@ void CrowControl(short item_number)
 
 			if (!crow->flags && item->touch_bits)
 			{
-				lara_item->hit_points -= GegnerSchaden(20);
+				lara_item->hit_points -= GegnerSchaden(balance.sKraeheHieb);
 				lara_item->hit_status = 1;
 				CreatureEffect(item, &crow_bite, DoBloodSplat);
 				crow->flags = 1;

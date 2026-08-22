@@ -241,7 +241,7 @@ void UpdateBats()
 				TriggerBlood(fx->pos.x_pos, fx->pos.y_pos, fx->pos.z_pos, GetRandomControl() << 1, 2);
 
 				if (lara_item->hit_points > 0)
-					lara_item->hit_points -= GegnerSchaden(2);
+					lara_item->hit_points -= GegnerSchaden(balance.sFledermaeuse);
 			}
 		}
 	}

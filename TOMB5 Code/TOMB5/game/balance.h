@@ -14,27 +14,111 @@
 
 /*
  * Balance.txt - eine reine Textdatei neben der PCtomb5.exe, mit der Spieler
- * Waffenschaden, Zaehigkeit und Schlagkraft der Gegner sowie die Hoerweite
- * der Levelkulisse ohne Neuuebersetzung einstellen koennen (Aufgabe #108).
+ * jede Waffe, jeden Gegner und jede Levelgefahr einzeln einstellen koennen,
+ * ohne den Quelltext neu zu uebersetzen (Aufgabe #108).
  *
  * Fehlt die Datei, legt das Spiel sie beim Start mit den Originalwerten und
  * Erklaerungen an. Fehlt eine einzelne Zeile, gilt der Originalwert.
+ *
+ * Alle Werte sind absolut wie im Original. Die beiden Prozentzeilen
+ * GegnerLeben und GegnerSchaden wirken zusaetzlich obendrauf, damit man das
+ * ganze Spiel mit einer Zahl haerter oder weicher stellen kann, ohne die
+ * Feinabstimmung darunter anzufassen.
  */
 
 struct BALANCE_INFO
 {
-	/* Schaden je Treffer. Die Engine haelt ihn in einem char, also 0..127. */
+	/* --- Schaden von Laras Waffen. Die Engine haelt ihn in einem char. --- */
 	long pistolen;
 	long uzi;
 	long schrotflinte;
 	long armbrust;
 	long fackel;
 	long revolverFrueh;		/* bis einschliesslich Kolosseum */
-	long revolverSpaet;		/* ab Ende Rom - das Spiel setzt beides je Level neu */
+	long revolverSpaet;		/* danach - setup.cpp setzt beides je Level neu */
 	long hkStand;			/* HK gezielt; lara1gun.cpp setzt beides je Schuss neu */
 	long hkLauf;			/* HK aus der Bewegung */
 
-	/* Prozentwerte, 100 = unveraendert */
+	/* --- Lebenspunkte der Gegner, je Objektplatz --- */
+	long lpTRex;			/* liegt auf dem Platz SAS (TR3-Port) */
+	long lpRaptor;			/* liegt auf dem Platz REAPER (TR3-Port) */
+	long lpCompy;			/* liegt auf dem Platz SAILOR (TR3-Port) */
+	long lpWachmannBlau;
+	long lpSwat;
+	long lpSwatPlus;
+	long lpMafioso;
+	long lpWissenschaftler;
+	long lpKranfuehrer;
+	long lpWachmannJoby;	/* BLUE_GUARD2, der zweite Wachmann aus joby3 */
+	long lpMiniUBoot;
+	long lpLoewe;
+	long lpHund;
+	long lpHusky;
+	long lpKraehe;			/* traegt im Rando auch den Geier aus TR3 */
+	long lpMafia2;
+	long lpPierre;
+	long lpLarson;
+	long lpHitman;
+	long lpScharfschuetze;
+	long lpKoch;
+	long lpTwoGun;
+	long lpHydra;
+	long lpKobold;
+	long lpIrrlicht;
+	long lpLabyrinthmonster;
+	long lpSumpfmonster;
+	long lpSkelett;
+	long lpGladiator;
+	long lpRoemischerGott;
+	long lpRoemischerGott2;
+
+	/* --- Schaden der Gegner an Lara, je Angriff --- */
+	long sTRexTritt;
+	long sTRexTrittLauf;
+	long sTRexBiss;
+	long sRaptorBiss;
+	long sRaptorSprung;
+	long sCompyBiss;
+	long sHundBiss;
+	long sHundSprung;
+	long sHundNachsetzen;
+	long sHuskyBiss;
+	long sHuskySprung;
+	long sLoeweSprung;
+	long sLoeweTatze;
+	long sKraeheHieb;
+	long sFledermaeuse;
+	long sSpinnen;
+	long sKochMesser;
+	long sSkelettHieb;
+	long sGladiatorHieb;
+	long sGottHieb;
+	long sGottBlitz;
+	long sHydraStrahl;
+	long sKoboldWurf;
+	long sLabyrinthmonster;
+	long sSumpfmonster;
+	long sTwoGunPlasma;
+	long sTorpedo;
+
+	/* Schusswaffen der menschlichen Gegner (ShotLara) */
+	long sSoldatFrueh;		/* bis einschliesslich Old Mill */
+	long sSoldatSpaet;
+	long sSoldatKurz;
+	long sHitmanSchuss;
+	long sMafia2Schuss;
+	long sPierreSchuss;
+	long sLarsonSchuss;
+	long sScharfschuetzeSchuss;
+
+	/* --- Levelgefahren. Keine Gegner, deshalb ohne Prozentzeile. --- */
+	long sAutogun;
+	long sGunship;
+	long sIris;
+	long sArea51Laser;
+	long sStromkabel;
+
+	/* --- Prozentwerte, 100 = unveraendert --- */
 	long gegnerLeben;
 	long gegnerSchaden;
 	long kulissenReichweite;
@@ -44,4 +128,5 @@ extern BALANCE_INFO balance;
 
 void BalanceLaden();
 void BalanceWaffenSetzen();
+void BalanceGegnerSetzen();
 short GegnerSchaden(long schaden);

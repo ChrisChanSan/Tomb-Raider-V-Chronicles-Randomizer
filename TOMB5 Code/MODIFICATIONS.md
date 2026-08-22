@@ -357,26 +357,42 @@ Also in this group:
   levels, correct in mixed ones.
 
 - `game/balance.cpp`, `.h` (new) — a plain-text settings file, `Balance.txt`,
-  read once at startup from the folder the game runs in. It carries the
-  damage of each of Lara's weapons, a percentage for enemy hit points, a
-  percentage for the damage enemies deal to her, and the audible range of the
-  stationary level ambience. If the file is absent the game writes it out with
-  the original values and an explanation of every line, so it doubles as its
-  own documentation; if a single line is absent or unreadable, that setting
-  keeps its original value. Every value is clamped to a sane range on read.
-  The wiring is deliberately spread to where the engine actually decides these
-  numbers rather than patched into one table:
+  read once at startup from the folder the game runs in. It carries an
+  individual value for each of Lara's weapons, for the hit points of each
+  enemy, for each separate enemy attack, and for each fixed level hazard, plus
+  the audible range of the stationary level ambience and two percentages that
+  scale all enemy values at once. If the file is absent the game writes it out
+  with the original values and an explanation of every line, so it doubles as
+  its own documentation; if a single line is absent or unreadable, that
+  setting keeps its original value. Every value is clamped on read.
+  One table in `balance.cpp` is the single source of truth: it holds the
+  default, the allowed range, the explanatory text and — for hit points — the
+  object slot. The template file is generated from that same table, so it
+  cannot drift from the defaults the code actually uses.
+  The wiring sits where the engine really decides these numbers rather than in
+  one patched-over table, because three of the values in `weapons[9]` are dead:
   `game/setup.cpp` calls `BalanceWaffenSetzen` at level start (the point where
-  vanilla already re-set the revolver's damage per level) and scales enemy hit
-  points once in `InitialiseObjects`, after the three setup routines have
-  written the originals, touching only objects that are both intelligent and
-  damageable — so Lara and the flare keep theirs. `game/lara1gun.cpp` takes
-  the HK's two values, which vanilla rewrites on every shot. `game/sound.cpp`
-  reads the ambience range that used to be a compile-time constant.
-  The enemy damage factor is applied through `GegnerSchaden()` at the 33 places
-  in 23 enemy files that subtract from Lara's hit points; traps, falls, fire,
-  poison and drowning deliberately bypass it and stay exactly as hard as the
-  original.
+  vanilla already re-set the revolver's damage per level) and
+  `BalanceGegnerSetzen` once in `InitialiseObjects`, after the three setup
+  routines have written the originals. That function writes the per-enemy hit
+  points and then applies the percentage to everything intelligent and
+  damageable, so Lara and the flare keep theirs; it also logs a warning if a
+  value in `setup.cpp` no longer matches the table, which is the one way the
+  two could silently diverge. `game/lara1gun.cpp` takes the HK's two values,
+  which vanilla rewrites on every shot. `game/sound.cpp` reads the ambience
+  range that used to be a compile-time constant. `game/hitman.cpp`,
+  `mafia2.cpp`, `pierre.cpp`, `sniper.cpp` and `sas.cpp` pass their own gunshot
+  damage into `ShotLara` instead of a literal.
+  The per-attack values are applied through `GegnerSchaden()` at the 33 places
+  in 23 enemy files that subtract from Lara's hit points, which is also where
+  the global percentage is applied. Falls, fire, poison, drowning and the trap
+  code in `traps.cpp`, `effect2.cpp`, `tomb4fx.cpp`, `control.cpp` and
+  `camera.cpp` deliberately bypass all of it and stay exactly as hard as the
+  original. Five fixed level hazards — the autogun, the gunship, the Iris, the
+  Area 51 laser and the electrical cables in the submarine pen — are settable
+  individually but are *not* enemies and are therefore left out of the
+  percentage: they never move between levels, so scaling them with the enemy
+  pool would be meaningless.
 - `game/romangod.cpp` — the Roman God's armour used to burst at fixed hit
   point counts (225/150/75 out of 300). Those are now computed as three
   quarters, one half and one quarter of the object's own maximum, so the

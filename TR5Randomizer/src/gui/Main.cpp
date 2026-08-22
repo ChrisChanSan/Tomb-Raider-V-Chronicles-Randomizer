@@ -551,7 +551,11 @@ static std::wstring lagerDir(const App& a)
         // davor auf dem bekannten Stand liefen (zerlege laeuft danach neu).
         std::string abschnitte, levelFolge;
         std::vector<std::string> ketten;
-        if (a.phLevelAbschnitte)
+        // Bei "frei ueber alles" ist der Abschnitts-Wuerfel bedeutungslos - und
+        // er darf auch nicht laufen, sonst startet der freie Wuerfel von einer
+        // anderen Ausgangsfolge und derselbe Seed ergaebe je nach Haken zwei
+        // verschiedene Spiele.
+        if (a.phLevelAbschnitte && a.optLevelFolge != 2)
         {
             std::string aErr;
             if (!sd.abschnitteWuerfeln(a.effectiveSeed(), abschnitte, aErr))
@@ -1543,7 +1547,9 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::EndDisabled();
 
     ImGui::SeparatorText("Level");
+    ImGui::BeginDisabled(a.optLevelFolge == 2);	// bei "frei ueber alles" bedeutungslos und bewusst ohne Wirkung
     ImGui::Checkbox("Levelabschnitte switchen", &a.phLevelAbschnitte);
+    ImGui::EndDisabled();
     hoverHilfe("Die vier Story-Abschnitte (Rom, Russland, Irland, VCI) in "
                "zufaelliger Reihenfolge spielen. Innerhalb eines Abschnitts "
                "bleibt die Reihenfolge - alle Schluesselketten bleiben gueltig, "

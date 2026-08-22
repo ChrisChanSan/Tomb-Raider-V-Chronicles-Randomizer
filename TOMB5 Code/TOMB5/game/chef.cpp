@@ -43,6 +43,30 @@ void ChefControl(short item_number)
 	torso_y = 0;
 	torso_x = 0;
 
+	// Der Koch war unsterblich: er hat 35 Lebenspunkte und nimmt Schaden
+	// (HitEffect in setup.cpp), aber ChefControl fragte hit_points nie ab -
+	// es gab keinen Weg aus den Zustaenden 1-5 heraus. Vanilla faellt das
+	// nicht auf, weil joby3 Lara vorher alle Waffen abnimmt; mit dem
+	// Randomizer stehen dort Gegner und Lara ist bewaffnet, also braucht
+	// er einen Tod. Zustand 6 ist er: Anim +11 des Slots traegt als
+	// einziges Kommando KillItem (mit AnimKmd nachgesehen), der Koch
+	// verschwindet also beim Abspielen - so hat Core es angelegt.
+	if (item->hit_points <= 0)
+	{
+		item->hit_points = 0;
+
+		if (item->current_anim_state != 6)
+		{
+			item->anim_number = objects[CHEF].anim_index + 11;
+			item->frame_number = anims[item->anim_number].frame_base;
+			item->current_anim_state = 6;
+			item->goal_anim_state = 6;
+		}
+
+		CreatureAnimation(item_number, 0, 0);
+		return;
+	}
+
 	if (item->ai_bits)
 		GetAITarget(chef);
 	else if (chef->hurt_by_lara)

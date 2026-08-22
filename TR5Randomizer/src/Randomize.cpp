@@ -220,6 +220,9 @@ int main(int argc, char** argv)
             std::printf("SCRIPT.DAT  rich2-Pistolen: %s\n",
                         !e.pistolenFehler.empty() ? e.pistolenFehler.c_str()
                                                   : (e.pistolenWeg > 0 ? "abgenommen" : "war schon so"));
+
+            if (e.joby3Waffen > 0)
+                std::printf("SCRIPT.DAT  joby3: %d Waffen-Wegnahmen entfernt\n", e.joby3Waffen);
         }
     }
 

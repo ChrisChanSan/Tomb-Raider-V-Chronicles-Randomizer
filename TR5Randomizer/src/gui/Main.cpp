@@ -590,6 +590,7 @@ static std::wstring lagerDir(const App& a)
         else if (e.keyKopiert)      info += "  KEY8 fuer joby3 aus joby2 uebernommen.";
         if (!e.pistolenFehler.empty()) info += "  rich2-Pistolen nicht entzogen: " + e.pistolenFehler;
         else if (e.pistolenWeg > 0)    info += "  rich2: Pistolen abgenommen.";
+        if (e.joby3Waffen > 0)         info += "  joby3: " + std::to_string(e.joby3Waffen) + " Waffen-Wegnahmen entfernt.";
         if (a.phMusikSwitch && musikLevel > 0)
             info += "  Hintergrundmusik: " + std::to_string(musikLevel) + " Level neu vertont.";
         if (a.phLevelAbschnitte && !abschnitte.empty())

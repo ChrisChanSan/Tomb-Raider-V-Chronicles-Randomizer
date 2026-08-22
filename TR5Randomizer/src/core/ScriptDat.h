@@ -118,6 +118,12 @@ public:
     bool addGiveObject(const std::string& levelName, int invObjekt,
                        bool& changed, std::string& error);
 
+    // Nimmt einen GIVEOBJ/TAKEOBJ-Befehl wieder heraus (die Gegenrichtung zu
+    // addInvBefehl, inklusive Offsets und ScriptLen). Wiederholbar: ist er
+    // nicht da, passiert nichts.
+    bool removeInvBefehl(uint8_t op, const std::string& levelName, int invObjekt,
+                         bool& changed, std::string& error);
+
     // Stufe 2: Reihenfolge INNERHALB der vier Abschnitte wuerfeln (RICHCUT2
     // bleibt an RICH2 geklebt). Wie abschnitteWuerfeln nur die Offsettabelle;
     // nicht wiederholbar. reihenfolge: die neue Abfolge als Text.
@@ -161,6 +167,8 @@ public:
         bool        keyKopiert     = false;
         int         pistolenWeg    = 0;    // rich2: Pistolen + Munition entzogen
         std::string keyFehler;            // leer = hat geklappt
+        int         joby3Waffen    = 0;   // entfernte Waffen-Wegnahmen in joby3
+        std::string waffenFehler;
         std::string pistolenFehler;
     };
 

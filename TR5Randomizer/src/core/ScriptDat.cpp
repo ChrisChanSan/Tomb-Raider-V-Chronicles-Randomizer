@@ -710,6 +710,26 @@ void ScriptDat::randomizerEingriffe(Eingriffe& e)
         else if (ch)
             ++e.pistolenWeg;
     }
+
+    // 4. joby3 nimmt Lara NICHT mehr die Waffen ab.
+    //
+    // Vanilla entwaffnet das Level Lara (Uzi, Pistolen, Revolver,
+    // Lasersight): sie wird gefangen an Bord gebracht, und der einzige
+    // Gegner bis zur Waffenkammer ist der Koch - der war unsterblich, weil
+    // ChefControl seine Lebenspunkte nie abfragte. Beides passt nicht mehr:
+    // der Randomizer stellt ueberall Gegner hin, und der Koch hat jetzt
+    // seine Todesbehandlung (chef.cpp). Also weg mit den vier Wegnahmen.
+    static const int kJoby3Waffen[] = { 0 /*Uzi*/, INV_PISTOLEN, 3 /*Revolver*/, 20 /*Lasersight*/ };
+
+    for (int obj : kJoby3Waffen)
+    {
+        bool ch = false;
+        std::string wErr;
+        if (!removeInvBefehl(0xDA, "joby3", obj, ch, wErr))
+            e.waffenFehler = wErr;
+        else if (ch)
+            ++e.joby3Waffen;
+    }
 }
 
 bool ScriptDat::save(const std::wstring& path, std::string& error) const
@@ -881,4 +901,51 @@ bool ScriptDat::gibtObjektNachWegnahme(size_t idx, int invObjekt) const
         q += 1 + len;
     }
     return false;
+}
+
+bool ScriptDat::removeInvBefehl(uint8_t op, const std::string& levelName, int invObjekt,
+                                bool& changed, std::string& error)
+{
+    changed = false;
+
+    size_t idx = 0;
+    if (!findeLevel(levelName, idx)) { error = "Level nicht im Skript: " + levelName; return false; }
+
+    size_t stelle = std::string::npos;
+    for (size_t q = m_blockAn[idx]; q < m_blockBis[idx]; )
+    {
+        const int len = nutzlast(m_bytes[q]);
+        if (len < 0) break;
+        if (m_bytes[q] == op && q + 1 < m_bytes.size() &&
+            m_bytes[q + 1] == static_cast<uint8_t>(invObjekt))
+        { stelle = q; break; }
+        if (m_bytes[q] == 0x81) break;
+        q += 1 + len;
+    }
+    if (stelle == std::string::npos) return true;          // nicht da: nichts zu tun (wiederholbar)
+
+    m_bytes.erase(m_bytes.begin() + static_cast<ptrdiff_t>(stelle),
+                  m_bytes.begin() + static_cast<ptrdiff_t>(stelle + TAKEOBJ_BYTES));
+
+    // Genau die Gegenrichtung zu addInvBefehl: jeder Block HINTER der
+    // Loeschstelle rueckt um die Befehlslaenge vor.
+    for (int i = 0; i < m_nLevels; ++i)
+    {
+        uint16_t o;
+        std::memcpy(&o, m_bytes.data() + m_scriptOfsAt + 2ull * i, 2);
+        if (m_scriptWad + o > stelle)
+        {
+            o = static_cast<uint16_t>(o - TAKEOBJ_BYTES);
+            std::memcpy(m_bytes.data() + m_scriptOfsAt + 2ull * i, &o, 2);
+        }
+    }
+
+    GAMEFLOW gf;
+    std::memcpy(&gf, m_bytes.data(), sizeof(gf));
+    gf.ScriptLen = static_cast<uint16_t>(gf.ScriptLen - TAKEOBJ_BYTES);
+    std::memcpy(m_bytes.data() + offsetof(GAMEFLOW, ScriptLen), &gf.ScriptLen, 2);
+
+    if (!zerlege(error)) return false;
+    changed = true;
+    return true;
 }

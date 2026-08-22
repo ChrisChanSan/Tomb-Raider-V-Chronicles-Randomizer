@@ -87,8 +87,9 @@ int main(int argc, char** argv)
             const uint16_t nCh = r16(o + 32), iCh = r16(o + 34);
             uint32_t fo; std::memcpy(&fo, &b[o], 4);
             const uint8_t  iv = b[o + 4];
-            std::printf("  Anim +%-3d (abs %4d): FrameOfs %-7u Frames %u..%u (%d Stueck) Rate %u -> weiter mit Anim %u  Wechsel:%u@%u%s\n",
-                        a - mv.animIndex, a, fo, fb, fe, (int)fe - (int)fb + 1, iv, na, nCh, iCh,
+            const uint16_t st = r16(o + 6);     // current_anim_state
+            std::printf("  Anim +%-3d (abs %4d): Zustand %-3u FrameOfs %-7u Frames %u..%u (%d Stueck) Rate %u -> weiter mit Anim %u  Wechsel:%u@%u%s\n",
+                        a - mv.animIndex, a, st, fo, fb, fe, (int)fe - (int)fb + 1, iv, na, nCh, iCh,
                         (fe == fb) ? "   [STEHT STILL]" : "");
         }
 

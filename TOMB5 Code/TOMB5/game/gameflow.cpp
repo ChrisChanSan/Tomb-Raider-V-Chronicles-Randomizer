@@ -1412,3 +1412,17 @@ void LoadGameflow()
 		}
 	}
 }
+
+// Steht die Kampagne noch in Vanilla-Reihenfolge? Der Randomizer permutiert
+// die Bloecke der SCRIPT.DAT; gfIdVonSlot bildet Slot -> Identitaet ab und
+// ist vanilla die Identitaet selbst. Gebraucht von setup.cpp, um die vier
+// eingebauten Kapitel-Inventarloeschungen nur dann anzuwenden, wenn sie
+// noch Kapitelanfaenge sind.
+long ReihenfolgeGewuerfelt()
+{
+	for (int s = 1; s < 18; s++)
+		if (gfIdVonSlot[s] != s)
+			return 1;
+
+	return 0;
+}

@@ -2351,8 +2351,22 @@ void SetupGame()
 	InitTarget();
 	InitialiseGameFlags();
 
-	if (gfLevelId == LVL5_THIRTEENTH_FLOOR || gfLevelId == LVL5_BASE || gfLevelId == LVL5_GALLOWS_TREE ||
-		gfLevelId == LVL5_STREETS_OF_ROME || gfInitialiseGame)
+	// Inventar komplett loeschen (InitialiseLara(0)) statt uebernehmen: das
+	// tut Vanilla an den vier KAPITELANFAENGEN - Rom, Russland, Irland, VCI
+	// beginnen je als eigene Ruecklende, Lara startet mit nichts als den
+	// Pistolen (die setup.cpp gleich darauf wieder vergibt).
+	//
+	// In gewuerfelter Reihenfolge ist das falsch: die vier Level koennen
+	// ueberall stehen, und Lara verliert ihr Arsenal dann mehrfach mitten
+	// im Lauf (vom Nutzer gesehen: joby5 -> Andrea1, joby3 -> joby2,
+	// rich1 -> andy1). Darum greift die Regel nur noch bei UNVERAENDERTER
+	// Reihenfolge; sonst zaehlt allein "neues Spiel". Waffen, Munition,
+	// Medipacks und Leuchtfackeln wandern damit durch den ganzen Lauf,
+	// genau wie es die Aufraeumlogik des Randomizers vorsieht.
+	if (gfInitialiseGame ||
+		(!ReihenfolgeGewuerfelt() &&
+		 (gfLevelId == LVL5_THIRTEENTH_FLOOR || gfLevelId == LVL5_BASE ||
+		  gfLevelId == LVL5_GALLOWS_TREE || gfLevelId == LVL5_STREETS_OF_ROME)))
 		InitialiseLara(0);
 	else
 		InitialiseLara(1);

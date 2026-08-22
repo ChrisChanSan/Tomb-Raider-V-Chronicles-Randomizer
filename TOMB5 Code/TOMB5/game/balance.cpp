@@ -58,6 +58,9 @@ static const BALANCE_ZEILE balanceZeilen[] =
 		";  Zeilen, die mit ; oder # beginnen, sind Kommentare.\r\n"
 		";  Fehlt eine Zeile, gilt der Originalwert in der Klammer.\r\n"
 		";  Wird die Datei geloescht, legt das Spiel sie neu an.\r\n"
+		";  Kommen mit einer neuen Fassung Einstellungen dazu, traegt das\r\n"
+		";  Spiel sie hier nach und behaelt deine Zahlen. Eigene Kommentare\r\n"
+		";  gehen dabei verloren.\r\n"
 		"\r\n"
 		"\r\n"
 		"; === Schaden von Laras Waffen ===================================\r\n"
@@ -244,18 +247,24 @@ static void BalanceSchreibe(HANDLE datei, const char* text)
 	WriteFile(datei, text, (DWORD)strlen(text), &geschrieben, 0);
 }
 
+/* Welche Zeilen beim Lesen tatsaechlich in der Datei standen. */
+static char balanceGefunden[BALANCE_ANZAHL];
+
 /*
- * Die Vorlage wird aus der Tabelle erzeugt, damit sie nicht von den
- * tatsaechlichen Voreinstellungen abweichen kann.
+ * Die Datei wird aus der Tabelle erzeugt, damit Text und Voreinstellungen
+ * nicht auseinanderlaufen koennen. Geschrieben werden die aktuellen Werte -
+ * bei einer neuen Datei sind das die Originalwerte, beim Nachtragen die des
+ * Spielers.
  */
-static void BalanceVorlageSchreiben()
+static void BalanceDateiSchreiben(long neu)
 {
 	HANDLE datei;
 	char zeile[256];
 
 	zeile[sizeof(zeile) - 1] = 0;
 
-	datei = CreateFile(BALANCE_DATEI, GENERIC_WRITE, 0, 0, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, 0);
+	datei = CreateFile(BALANCE_DATEI, GENERIC_WRITE, 0, 0,
+		neu ? CREATE_NEW : CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 
 	if (datei == INVALID_HANDLE_VALUE)
 		return;
@@ -269,14 +278,39 @@ static void BalanceVorlageSchreiben()
 			continue;
 
 		_snprintf(zeile, sizeof(zeile) - 1, "%-22s = %-6ld ; (Original %ld)%s\r\n",
-			balanceZeilen[i].name, balanceZeilen[i].standard, balanceZeilen[i].standard,
+			balanceZeilen[i].name, *balanceZeilen[i].wert, balanceZeilen[i].standard,
 			balanceZeilen[i].notiz ? balanceZeilen[i].notiz : "");
 
 		BalanceSchreibe(datei, zeile);
 	}
 
 	CloseHandle(datei);
-	Log("Balance.txt neu angelegt");
+	Log(neu ? "Balance.txt neu angelegt" : "Balance.txt um neue Zeilen ergaenzt");
+}
+
+/*
+ * Nach dem Lesen: standen nicht alle Einstellungen in der Datei, wird sie neu
+ * geschrieben - mit den Werten des Spielers, aber vollstaendig. Sonst wuerde
+ * eine Datei aus einer aelteren Fassung des Spiels alle spaeter
+ * hinzugekommenen Einstellungen fuer immer verstecken. Eigene Kommentare des
+ * Spielers gehen dabei verloren, seine Zahlen nicht.
+ */
+static void BalanceNachtragen()
+{
+	long fehlt = 0;
+
+	for (int i = 0; i < BALANCE_ANZAHL; i++)
+	{
+		if (balanceZeilen[i].name && !balanceGefunden[i])
+		{
+			Log("Balance.txt: %s fehlte, Originalwert %ld eingetragen",
+				balanceZeilen[i].name, balanceZeilen[i].standard);
+			fehlt++;
+		}
+	}
+
+	if (fehlt)
+		BalanceDateiSchreiben(0);
 }
 
 static int BalanceNameGleich(const char* a, const char* b)
@@ -361,6 +395,7 @@ static void BalanceZeileLesen(char* zeile)
 			zahl = balanceZeilen[i].max;
 
 		*balanceZeilen[i].wert = zahl;
+		balanceGefunden[i] = 1;
 		return;
 	}
 
@@ -377,6 +412,8 @@ void BalanceLaden()
 
 	for (int i = 0; i < BALANCE_ANZAHL; i++)
 	{
+		balanceGefunden[i] = 0;
+
 		if (balanceZeilen[i].wert)
 			*balanceZeilen[i].wert = balanceZeilen[i].standard;
 	}
@@ -385,7 +422,7 @@ void BalanceLaden()
 
 	if (datei == INVALID_HANDLE_VALUE)
 	{
-		BalanceVorlageSchreiben();
+		BalanceDateiSchreiben(1);
 		return;
 	}
 
@@ -434,6 +471,7 @@ void BalanceLaden()
 	}
 
 	free(puffer);
+	BalanceNachtragen();
 
 	Log("Balance.txt gelesen: Gegnerleben %d%%, Gegnerschaden %d%%, Kulisse %d%%",
 		balance.gegnerLeben, balance.gegnerSchaden, balance.kulissenReichweite);

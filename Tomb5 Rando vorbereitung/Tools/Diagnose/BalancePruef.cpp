@@ -180,6 +180,33 @@ int main()
 	balance.gegnerSchaden = 1000;
 	pruefe("1000% aus 10000 gedeckelt", GegnerSchaden(10000), 32767);
 
+	printf("--- 8) Alte Datei aus einer frueheren Fassung: nachtragen,\n");
+	printf("       aber die Zahlen des Spielers behalten\n");
+	schreibeDatei(
+		"; so sah die Datei in der ersten Fassung aus\r\n"
+		"Pistolen = 42\r\n"
+		"GegnerSchaden = 55\r\n"
+		"KulissenReichweite = 80\r\n");
+	BalanceLaden();
+	pruefe("Pistolen behalten", balance.pistolen, 42);
+	pruefe("GegnerSchaden behalten", balance.gegnerSchaden, 55);
+	pruefe("KulissenReichweite behalten", balance.kulissenReichweite, 80);
+	pruefe("LP_TRex nachgetragen", balance.lpTRex, 800);
+	pruefe("S_Gott_Blitz nachgetragen", balance.sGottBlitz, 200);
+	{
+		// Jetzt muss die Datei vollstaendig sein: nochmal lesen darf nichts
+		// mehr nachtragen und nichts mehr veraendern.
+		BALANCE_INFO vorher = balance;
+		BalanceLaden();
+		if (memcmp(&vorher, &balance, sizeof(BALANCE_INFO)) == 0)
+			printf("    ok    ergaenzte Datei liest sich unveraendert wieder ein\n");
+		else
+		{
+			printf("    FEHLER die ergaenzte Datei liefert andere Werte\n");
+			fehler++;
+		}
+	}
+
 	DeleteFileA("Balance.txt");
 	printf("\n%s (%d Abweichungen)\n", fehler ? "FEHLGESCHLAGEN" : "ALLES IN ORDNUNG", fehler);
 	return fehler ? 1 : 0;

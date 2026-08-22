@@ -77,6 +77,9 @@ struct Config
     int  balWaffen        = 100;
     int  balGegnerLeben   = 100;
     int  balGegnerSchaden = 100;
+    bool balWaffenZufall        = false;
+    bool balGegnerLebenZufall   = false;
+    bool balGegnerSchadenZufall = false;
 
     // Liest bzw. schreibt <exe-Ordner>\TR5Randomizer.cfg. Fehlt die Datei,
     // bleibt alles auf Vorgabe - das ist kein Fehler, sondern der erste Start.

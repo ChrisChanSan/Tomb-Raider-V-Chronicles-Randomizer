@@ -394,6 +394,14 @@ namespace
         float balWaffen        = 1.0f;
         float balGegnerLeben   = 1.0f;
         float balGegnerSchaden = 1.0f;
+
+        // Je Regler: Wert aus dem Seed wuerfeln statt von Hand einstellen.
+        // Der Regler zeigt dann, was gefallen ist, laesst sich aber nicht
+        // mehr ziehen.
+        bool balWaffenZufall        = false;
+        bool balGegnerLebenZufall   = false;
+        bool balGegnerSchadenZufall = false;
+
         std::string balHinweis;   // letzte Rueckmeldung unter den Reglern
         std::set<int> optGegnerAus;
         // Fenster "Installations-Pfade" (#102).
@@ -887,6 +895,52 @@ static std::wstring lagerDir(const App& a)
 
     // Startet einen Lauf. Die Arbeit selbst passiert in advanceRun(), damit die
     // Oberflaeche zwischendurch zeichnen kann.
+    //------------------------------------------------------------------------
+    // Die angehakten Balance-Regler aus dem Seed wuerfeln (#108).
+    //
+    // Gewuerfelt wird in Fuenferschritten von 0.50x bis 2.00x - auch der
+    // Waffenschaden, obwohl sein Regler bis 0.00x reicht. Ein Seed, der Laras
+    // Waffen auf ein Zehntel stellt, waere nicht schwer, sondern unspielbar;
+    // 0.00x gehoert deshalb der Handeinstellung.
+    //
+    // ALLE DREI werden immer geworfen, auch die nicht angehakten. Sonst haenge
+    // der Wurf des Waffenschadens davon ab, ob daneben die Gegnerhaken
+    // gesetzt sind - derselbe Seed gaebe unterschiedliche Werte, je nachdem
+    // was sonst noch angekreuzt ist.
+    //------------------------------------------------------------------------
+    void balanceWuerfeln(App& a)
+    {
+        if (!a.balWaffenZufall && !a.balGegnerLebenZufall && !a.balGegnerSchadenZufall)
+            return;
+
+        Rng r(a.effectiveSeed() ^ 0x42414C414E434521ull);   // "BALANCE!" - eigener Strom
+
+        auto wurf = [&r]() { return (50 + static_cast<int>(r.below(31)) * 5) / 100.0f; };
+
+        const float waffen = wurf();
+        const float leben  = wurf();
+        const float schaden = wurf();
+
+        if (a.balWaffenZufall)        a.balWaffen        = waffen;
+        if (a.balGegnerLebenZufall)   a.balGegnerLeben   = leben;
+        if (a.balGegnerSchadenZufall) a.balGegnerSchaden = schaden;
+    }
+
+    // Die Reglerstellung in die Balance.txt der Installation schreiben.
+    void balanceSchreibenNach(App& a)
+    {
+        BalanceDatei::Werte w;
+        w.waffenSchaden = static_cast<int>(a.balWaffen * 100.0f + 0.5f);
+        w.gegnerLeben   = static_cast<int>(a.balGegnerLeben * 100.0f + 0.5f);
+        w.gegnerSchaden = static_cast<int>(a.balGegnerSchaden * 100.0f + 0.5f);
+
+        std::string fehler;
+        if (BalanceDatei::schreiben(a.spielOrdner(), w, &fehler))
+            a.balHinweis = "Balance.txt geschrieben - gilt ab dem naechsten Spielstart.";
+        else
+            a.balHinweis = fehler;
+    }
+
     void startRandomize(App& a)
     {
         a.plannedCount = 0;
@@ -898,17 +952,12 @@ static std::wstring lagerDir(const App& a)
         a.doneCount = a.failCount = 0;
         a.stepIndex = 0;
 
-        // Die Reglerstellung mit in die Installation schreiben (#108). Die
-        // Regler tun das schon beim Loslassen, hier wird nur sichergestellt,
-        // dass ein Lauf in einem neu gewaehlten Spielordner nicht ohne die
-        // Balance.txt dasteht, die der Nutzer eingestellt hat.
-        {
-            BalanceDatei::Werte w;
-            w.waffenSchaden = static_cast<int>(a.balWaffen * 100.0f + 0.5f);
-            w.gegnerLeben   = static_cast<int>(a.balGegnerLeben * 100.0f + 0.5f);
-            w.gegnerSchaden = static_cast<int>(a.balGegnerSchaden * 100.0f + 0.5f);
-            BalanceDatei::schreiben(a.spielOrdner(), w, nullptr);
-        }
+        // Angehakte Regler neu aus dem Seed werfen und die Stellung in die
+        // Installation schreiben (#108). Die Regler schreiben schon beim
+        // Loslassen; hier geht es um den Wurf und darum, dass ein Lauf in
+        // einem neu gewaehlten Spielordner nicht ohne Balance.txt dasteht.
+        balanceWuerfeln(a);
+        balanceSchreibenNach(a);
 
         a.phase = App::Phase::Copy;
         a.phaseText = "Originale werden zurueckgespielt...";
@@ -1326,6 +1375,12 @@ static void drawDebugWindow(App& a)
 //----------------------------------------------------------------------------
 static void drawUi(App& a, HWND hwnd)
 {
+    // Angehakte Balance-Regler zeigen immer, was der AKTUELLE Seed gibt -
+    // deshalb je Bild neu geworfen statt nur beim Lauf. Der Wurf ist eine
+    // Handvoll Rechenschritte und beruehrt keine Datei; geschrieben wird er
+    // erst beim Anhaken, beim Zuruecksetzen und beim Lauf.
+    balanceWuerfeln(a);
+
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
@@ -1438,25 +1493,15 @@ static void drawUi(App& a, HWND hwnd)
     // Angefasst werden nur die drei Prozentzeilen. Der Schaden je Waffe, die
     // Lebenspunkte je Gegner und der Schaden je Angriff bleiben stehen, damit
     // Handarbeit in der Datei eine Reglerbewegung ueberlebt.
-    auto balanceSchreiben = [&a]()
-    {
-        BalanceDatei::Werte w;
-        w.waffenSchaden = static_cast<int>(a.balWaffen * 100.0f + 0.5f);
-        w.gegnerLeben   = static_cast<int>(a.balGegnerLeben * 100.0f + 0.5f);
-        w.gegnerSchaden = static_cast<int>(a.balGegnerSchaden * 100.0f + 0.5f);
+    auto balanceSchreiben = [&a]() { balanceSchreibenNach(a); };
 
-        std::string fehler;
-        if (BalanceDatei::schreiben(a.spielOrdner(), w, &fehler))
-            a.balHinweis = "Balance.txt geschrieben - gilt ab dem naechsten Spielstart.";
-        else
-            a.balHinweis = fehler;
-    };
-
-    auto balanceRegler = [&](const char* beschriftung, float* wert,
+    auto balanceRegler = [&](const char* beschriftung, float* wert, bool* zufall,
                              float von, float bis, const char* hilfe)
     {
+        ImGui::BeginDisabled(*zufall);
         ImGui::SetNextItemWidth(220.0f);
         ImGui::SliderFloat(beschriftung, wert, von, bis, "%.2fx", ImGuiSliderFlags_AlwaysClamp);
+        ImGui::EndDisabled();
         hoverHilfe(hilfe);
 
         if (ImGui::IsItemDeactivatedAfterEdit())
@@ -1464,6 +1509,30 @@ static void drawUi(App& a, HWND hwnd)
 
         ImGui::SameLine();
         ImGui::TextDisabled("(%d %%)", static_cast<int>(*wert * 100.0f + 0.5f));
+
+        // Eigene Kennung je Haken, damit ImGui drei "Zufall" unterscheiden
+        // kann - der sichtbare Text bleibt fuer alle derselbe.
+        char kennung[64];
+        std::snprintf(kennung, sizeof(kennung), "Zufall##%s", beschriftung);
+
+        ImGui::SameLine();
+        if (ImGui::Checkbox(kennung, zufall))
+        {
+            // Sofort werfen, damit der Regler nicht auf dem alten Wert
+            // stehen bleibt und der Nutzer gleich sieht, was der Seed gibt.
+            balanceWuerfeln(a);
+            balanceSchreiben();
+        }
+        hoverHilfe("Statt von Hand: der Seed wuerfelt den Wert aus, in "
+                   "Fuenferschritten zwischen 0.50x und 2.00x. Derselbe Seed "
+                   "gibt immer denselben Wert, und zwar unabhaengig davon, ob "
+                   "die anderen beiden Haken gesetzt sind.\n\n"
+                   "Der Regler zeigt sofort, was der aktuelle Seed gibt. In die "
+                   "Balance.txt wandert der Wurf beim Anhaken und beim naechsten "
+                   "Lauf.\n\n"
+                   "Auch der Waffenschaden wird nur ab 0.50x geworfen - ein Seed, "
+                   "der Laras Waffen auf ein Zehntel stellt, waere nicht schwer, "
+                   "sondern unspielbar. 0.00x bleibt der Handeinstellung.");
     };
 
     // --- Items: eigener Bereich (Nutzerwunsch) ---------------------------
@@ -1508,7 +1577,7 @@ static void drawUi(App& a, HWND hwnd)
         ImGui::TextColored(ImVec4(1, .5f, .3f, 1),
                            "Keine Wuerfel-Option gewaehlt - die Level bekommen nur das Standard-Waffenset.");
 
-    balanceRegler("Waffenschaden", &a.balWaffen, 0.0f, 2.0f,
+    balanceRegler("Waffenschaden", &a.balWaffen, &a.balWaffenZufall, 0.0f, 2.0f,
                   "Wirkt auf alle Waffen Laras zugleich - Pistolen, Uzi, "
                   "Schrotflinte, Revolver, HK, Grappling Gun und Fackel. "
                   "0.00x macht sie wirkungslos, 2.00x verdoppelt ihren Schaden.\n\n"
@@ -1607,14 +1676,14 @@ static void drawUi(App& a, HWND hwnd)
     }
     ImGui::EndDisabled();
 
-    balanceRegler("Gegnerleben", &a.balGegnerLeben, 0.5f, 2.0f,
+    balanceRegler("Gegnerleben", &a.balGegnerLeben, &a.balGegnerLebenZufall, 0.5f, 2.0f,
                   "Wie zaeh alle Gegner sind. 0.50x halbiert ihre Lebenspunkte, "
                   "2.00x verdoppelt sie.\n\n"
                   "Geschrieben wird die Zeile GegnerLeben in Balance.txt neben der "
                   "PCtomb5.exe. Wer dort einzelne Gegner von Hand eingestellt hat, "
                   "behaelt sie: der Regler wirkt zusaetzlich obendrauf.");
 
-    balanceRegler("Gegnerschaden", &a.balGegnerSchaden, 0.5f, 2.0f,
+    balanceRegler("Gegnerschaden", &a.balGegnerSchaden, &a.balGegnerSchadenZufall, 0.5f, 2.0f,
                   "Wie hart alle Gegner zuschlagen. Fallen, Stuerze, Feuer, Gift "
                   "und Ertrinken bleiben immer so hart wie im Original, ebenso die "
                   "fest eingebauten Levelgefahren wie das Deckengeschuetz.\n\n"
@@ -1623,10 +1692,12 @@ static void drawUi(App& a, HWND hwnd)
 
     if (ImGui::Button("Balance zuruecksetzen"))
     {
+        a.balWaffenZufall = a.balGegnerLebenZufall = a.balGegnerSchadenZufall = false;
         a.balWaffen = a.balGegnerLeben = a.balGegnerSchaden = 1.0f;
         balanceSchreiben();
     }
-    hoverHilfe("Setzt die drei Regler auf 1.00x und traegt das in Balance.txt ein. "
+    hoverHilfe("Nimmt die Zufallshaken zurueck, setzt die drei Regler auf 1.00x "
+               "und traegt das in Balance.txt ein. "
                "Von Hand eingestellte Einzelwerte in der Datei bleiben erhalten - "
                "wer die auch zurueck will, loescht die Balance.txt; das Spiel legt "
                "sie beim naechsten Start neu und vollstaendig an.");
@@ -1953,6 +2024,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     // und dann sollen die Regler zeigen, was wirklich gilt. Nur wenn dort
     // nichts steht, gilt die zuletzt gemerkte Reglerstellung.
     {
+        app.balWaffenZufall        = app.cfg.balWaffenZufall;
+        app.balGegnerLebenZufall   = app.cfg.balGegnerLebenZufall;
+        app.balGegnerSchadenZufall = app.cfg.balGegnerSchadenZufall;
+
         const BalanceDatei::Werte da = BalanceDatei::lesen(app.spielOrdner());
         const bool vorhanden = PathUtil::fileExists(
             PathUtil::join(app.spielOrdner(), L"Balance.txt"));
@@ -2001,6 +2076,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.balWaffen        = static_cast<int>(app.balWaffen * 100.0f + 0.5f);
         app.cfg.balGegnerLeben   = static_cast<int>(app.balGegnerLeben * 100.0f + 0.5f);
         app.cfg.balGegnerSchaden = static_cast<int>(app.balGegnerSchaden * 100.0f + 0.5f);
+        app.cfg.balWaffenZufall        = app.balWaffenZufall;
+        app.cfg.balGegnerLebenZufall   = app.balGegnerLebenZufall;
+        app.cfg.balGegnerSchadenZufall = app.balGegnerSchadenZufall;
         app.cfg.seedText        = app.seedBuf;
         app.cfg.save();
     };
@@ -2065,6 +2143,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.balWaffen        != static_cast<int>(app.balWaffen * 100.0f + 0.5f) ||
                  app.cfg.balGegnerLeben   != static_cast<int>(app.balGegnerLeben * 100.0f + 0.5f) ||
                  app.cfg.balGegnerSchaden != static_cast<int>(app.balGegnerSchaden * 100.0f + 0.5f) ||
+                 app.cfg.balWaffenZufall        != app.balWaffenZufall ||
+                 app.cfg.balGegnerLebenZufall   != app.balGegnerLebenZufall ||
+                 app.cfg.balGegnerSchadenZufall != app.balGegnerSchadenZufall ||
                  app.cfg.secretAutor     != app.secretAutor)
         {
             merkeEinstellungen(hwnd);

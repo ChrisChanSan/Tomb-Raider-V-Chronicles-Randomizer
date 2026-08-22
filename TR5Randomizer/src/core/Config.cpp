@@ -95,6 +95,9 @@ void Config::load()
         else if (key == "balWaffen")       balWaffen = std::atoi(val.c_str());
         else if (key == "balGegnerLeben")  balGegnerLeben = std::atoi(val.c_str());
         else if (key == "balGegnerSchaden") balGegnerSchaden = std::atoi(val.c_str());
+        else if (key == "balWaffenZufall")  balWaffenZufall = (val == "1");
+        else if (key == "balGegnerLebenZufall")   balGegnerLebenZufall = (val == "1");
+        else if (key == "balGegnerSchadenZufall") balGegnerSchadenZufall = (val == "1");
     }
 
     if (optLevelFolge < 0 || optLevelFolge > 2) optLevelFolge = 0;
@@ -154,6 +157,9 @@ bool Config::save() const
     std::fprintf(f, "balWaffen=%d\n", balWaffen);
     std::fprintf(f, "balGegnerLeben=%d\n", balGegnerLeben);
     std::fprintf(f, "balGegnerSchaden=%d\n", balGegnerSchaden);
+    std::fprintf(f, "balWaffenZufall=%d\n", balWaffenZufall ? 1 : 0);
+    std::fprintf(f, "balGegnerLebenZufall=%d\n", balGegnerLebenZufall ? 1 : 0);
+    std::fprintf(f, "balGegnerSchadenZufall=%d\n", balGegnerSchadenZufall ? 1 : 0);
     std::fclose(f);
     return true;
 }

@@ -52,6 +52,12 @@ unter Gegner. Die Regler schreiben nur diese drei Zeilen - was du
 sonst in der Datei von Hand eingestellt hast, bleibt stehen. Der
 Knopf "Balance zuruecksetzen" stellt alle drei auf 1.00x.
 
+Neben jedem Regler steht ein Haken "Zufall". Damit wuerfelt der
+Seed den Wert aus, in Fuenferschritten zwischen 0.50x und 2.00x -
+manuell und gewuerfelt lassen sich beliebig mischen. Derselbe Seed
+gibt immer dieselben Werte. Der Waffenschaden wird auch beim
+Wuerfeln nie unter 0.50x gedrueckt; 0.00x gibt es nur von Hand.
+
 Fallen, Stuerze, Feuer, Gift und Ertrinken bleiben immer so hart wie
 im Original, auch wenn du die Gegner harmlos stellst.
 

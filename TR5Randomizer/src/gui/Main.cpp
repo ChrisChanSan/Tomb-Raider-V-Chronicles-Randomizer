@@ -28,6 +28,7 @@
 // Diese Datei enthaelt deshalb keine Spiellogik, nur Bedienung.
 //----------------------------------------------------------------------------
 #include "core/ApplyPatch.h"
+#include "core/BalanceDatei.h"
 #include "core/BuildId.h"
 #include "core/Config.h"
 #include "core/DataFolder.h"
@@ -246,6 +247,29 @@ namespace
         }
         std::wstring payloadDir() const { return PathUtil::join(PathUtil::exeDir(), L"data"); }
 
+        // Balance.txt liegt neben der PCtomb5.exe, also im SPIELORDNER - aus
+        // demselben Grund wie die SCRIPT.DAT und mit derselben Falle: hat der
+        // Nutzer den data-Ordner gewaehlt, ist der Spielordner eine Ebene
+        // hoeher. Anders als bei der SCRIPT.DAT hilft "wo liegt sie schon"
+        // nicht weiter, weil wir sie auch anlegen koennen muessen - deshalb
+        // wird an der EXE festgemacht.
+        std::wstring spielOrdner() const
+        {
+            if (cfg.sourceDir.empty()) return std::wstring();
+            if (PathUtil::fileExists(PathUtil::join(cfg.sourceDir, L"PCtomb5.exe")))
+                return cfg.sourceDir;
+
+            const size_t schnitt = cfg.sourceDir.find_last_of(L"\\/");
+            if (schnitt != std::wstring::npos)
+            {
+                const std::wstring eltern = cfg.sourceDir.substr(0, schnitt);
+                if (PathUtil::fileExists(PathUtil::join(eltern, L"PCtomb5.exe")))
+                    return eltern;
+            }
+
+            return cfg.sourceDir;
+        }
+
         bool haveBackup = false;
         int  skippedNonPlayable = 0;
         std::string scriptNote;      // was SCRIPT.DAT beim letzten Lauf ergab
@@ -364,6 +388,13 @@ namespace
         // Fenster "Gegnerarten" (#95): welche Arten darf der Pool ziehen?
         // Gehalten wird die ABWAHL - siehe Config::gegnerAus.
         bool artenOpen = false;
+
+        // Regler fuer Balance.txt (#108). Als Faktor gehalten, weil die
+        // Oberflaeche "1.25x" zeigt; in der Datei stehen Prozentzahlen.
+        float balWaffen        = 1.0f;
+        float balGegnerLeben   = 1.0f;
+        float balGegnerSchaden = 1.0f;
+        std::string balHinweis;   // letzte Rueckmeldung unter den Reglern
         std::set<int> optGegnerAus;
         // Fenster "Installations-Pfade" (#102).
         bool pfadeOpen = false;
@@ -866,6 +897,19 @@ static std::wstring lagerDir(const App& a)
         }
         a.doneCount = a.failCount = 0;
         a.stepIndex = 0;
+
+        // Die Reglerstellung mit in die Installation schreiben (#108). Die
+        // Regler tun das schon beim Loslassen, hier wird nur sichergestellt,
+        // dass ein Lauf in einem neu gewaehlten Spielordner nicht ohne die
+        // Balance.txt dasteht, die der Nutzer eingestellt hat.
+        {
+            BalanceDatei::Werte w;
+            w.waffenSchaden = static_cast<int>(a.balWaffen * 100.0f + 0.5f);
+            w.gegnerLeben   = static_cast<int>(a.balGegnerLeben * 100.0f + 0.5f);
+            w.gegnerSchaden = static_cast<int>(a.balGegnerSchaden * 100.0f + 0.5f);
+            BalanceDatei::schreiben(a.spielOrdner(), w, nullptr);
+        }
+
         a.phase = App::Phase::Copy;
         a.phaseText = "Originale werden zurueckgespielt...";
         setStatus(a, "Lauf gestartet.");
@@ -1385,6 +1429,43 @@ static void drawUi(App& a, HWND hwnd)
         }
     };
 
+    // --- Regler fuer Balance.txt (#108) ----------------------------------
+    //
+    // Geschrieben wird erst, wenn der Regler LOSGELASSEN wird - waehrend des
+    // Ziehens laeuft die Schleife mit 60 Bildern je Sekunde, das waeren 60
+    // Schreibvorgaenge in die Installation des Nutzers je Sekunde.
+    //
+    // Angefasst werden nur die drei Prozentzeilen. Der Schaden je Waffe, die
+    // Lebenspunkte je Gegner und der Schaden je Angriff bleiben stehen, damit
+    // Handarbeit in der Datei eine Reglerbewegung ueberlebt.
+    auto balanceSchreiben = [&a]()
+    {
+        BalanceDatei::Werte w;
+        w.waffenSchaden = static_cast<int>(a.balWaffen * 100.0f + 0.5f);
+        w.gegnerLeben   = static_cast<int>(a.balGegnerLeben * 100.0f + 0.5f);
+        w.gegnerSchaden = static_cast<int>(a.balGegnerSchaden * 100.0f + 0.5f);
+
+        std::string fehler;
+        if (BalanceDatei::schreiben(a.spielOrdner(), w, &fehler))
+            a.balHinweis = "Balance.txt geschrieben - gilt ab dem naechsten Spielstart.";
+        else
+            a.balHinweis = fehler;
+    };
+
+    auto balanceRegler = [&](const char* beschriftung, float* wert,
+                             float von, float bis, const char* hilfe)
+    {
+        ImGui::SetNextItemWidth(220.0f);
+        ImGui::SliderFloat(beschriftung, wert, von, bis, "%.2fx", ImGuiSliderFlags_AlwaysClamp);
+        hoverHilfe(hilfe);
+
+        if (ImGui::IsItemDeactivatedAfterEdit())
+            balanceSchreiben();
+
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%d %%)", static_cast<int>(*wert * 100.0f + 0.5f));
+    };
+
     // --- Items: eigener Bereich (Nutzerwunsch) ---------------------------
     ImGui::SeparatorText("3. Items");
 
@@ -1426,6 +1507,14 @@ static void drawUi(App& a, HWND hwnd)
     if (!a.optOtherPickups && !a.optKeyItems && !a.optEnemies && !a.optEnemySwap && !a.optOutfits)
         ImGui::TextColored(ImVec4(1, .5f, .3f, 1),
                            "Keine Wuerfel-Option gewaehlt - die Level bekommen nur das Standard-Waffenset.");
+
+    balanceRegler("Waffenschaden", &a.balWaffen, 0.0f, 2.0f,
+                  "Wirkt auf alle Waffen Laras zugleich - Pistolen, Uzi, "
+                  "Schrotflinte, Revolver, HK, Grappling Gun und Fackel. "
+                  "0.00x macht sie wirkungslos, 2.00x verdoppelt ihren Schaden.\n\n"
+                  "Geschrieben wird die Zeile WaffenSchaden in Balance.txt neben "
+                  "der PCtomb5.exe. Wer dort einzelne Waffen von Hand eingestellt "
+                  "hat, behaelt sie: der Regler wirkt zusaetzlich obendrauf.");
 
     // --- Outfits: eigener Bereich (Nutzerwunsch) -------------------------
     ImGui::SeparatorText("Outfits");
@@ -1517,6 +1606,36 @@ static void drawUi(App& a, HWND hwnd)
         ImGui::TextDisabled("%d abgewaehlt", static_cast<int>(a.optGegnerAus.size()));
     }
     ImGui::EndDisabled();
+
+    balanceRegler("Gegnerleben", &a.balGegnerLeben, 0.5f, 2.0f,
+                  "Wie zaeh alle Gegner sind. 0.50x halbiert ihre Lebenspunkte, "
+                  "2.00x verdoppelt sie.\n\n"
+                  "Geschrieben wird die Zeile GegnerLeben in Balance.txt neben der "
+                  "PCtomb5.exe. Wer dort einzelne Gegner von Hand eingestellt hat, "
+                  "behaelt sie: der Regler wirkt zusaetzlich obendrauf.");
+
+    balanceRegler("Gegnerschaden", &a.balGegnerSchaden, 0.5f, 2.0f,
+                  "Wie hart alle Gegner zuschlagen. Fallen, Stuerze, Feuer, Gift "
+                  "und Ertrinken bleiben immer so hart wie im Original, ebenso die "
+                  "fest eingebauten Levelgefahren wie das Deckengeschuetz.\n\n"
+                  "Geschrieben wird die Zeile GegnerSchaden in Balance.txt neben "
+                  "der PCtomb5.exe.");
+
+    if (ImGui::Button("Balance zuruecksetzen"))
+    {
+        a.balWaffen = a.balGegnerLeben = a.balGegnerSchaden = 1.0f;
+        balanceSchreiben();
+    }
+    hoverHilfe("Setzt die drei Regler auf 1.00x und traegt das in Balance.txt ein. "
+               "Von Hand eingestellte Einzelwerte in der Datei bleiben erhalten - "
+               "wer die auch zurueck will, loescht die Balance.txt; das Spiel legt "
+               "sie beim naechsten Start neu und vollstaendig an.");
+
+    if (!a.balHinweis.empty())
+    {
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", a.balHinweis.c_str());
+    }
 
     // --- Platzhalter-Bereiche (Nutzerwunsch, alle noch ohne Wirkung) -----
     //
@@ -1829,6 +1948,30 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.phLevelAbschnitte = app.cfg.optLevelAbschnitte;
     app.optLevelFolge     = app.cfg.optLevelFolge;
 
+    // Balance.txt (#108): steht sie schon in der Installation, hat SIE recht
+    // und nicht unsere cfg - der Nutzer kann sie in Notepad geaendert haben,
+    // und dann sollen die Regler zeigen, was wirklich gilt. Nur wenn dort
+    // nichts steht, gilt die zuletzt gemerkte Reglerstellung.
+    {
+        const BalanceDatei::Werte da = BalanceDatei::lesen(app.spielOrdner());
+        const bool vorhanden = PathUtil::fileExists(
+            PathUtil::join(app.spielOrdner(), L"Balance.txt"));
+
+        app.balWaffen        = (vorhanden ? da.waffenSchaden : app.cfg.balWaffen)        / 100.0f;
+        app.balGegnerLeben   = (vorhanden ? da.gegnerLeben   : app.cfg.balGegnerLeben)   / 100.0f;
+        app.balGegnerSchaden = (vorhanden ? da.gegnerSchaden : app.cfg.balGegnerSchaden) / 100.0f;
+
+        // Von Hand weiter aufgedreht als die Regler reichen? Dann klemmt der
+        // Regler auf seine Bahn - geschrieben wird aber erst, wenn der Nutzer
+        // ihn anfasst, die Datei bleibt bis dahin unangetastet.
+        auto klemme = [](float& v, float von, float bis)
+        { if (v < von) v = von; if (v > bis) v = bis; };
+
+        klemme(app.balWaffen, 0.0f, 2.0f);
+        klemme(app.balGegnerLeben, 0.5f, 2.0f);
+        klemme(app.balGegnerSchaden, 0.5f, 2.0f);
+    }
+
     // Alles Merkenswerte in die Einstellungsdatei schreiben: Fenstergroesse,
     // Haken, Seed. Laeuft beim Ziehen des Fensters, bei jeder geaenderten
     // Auswahl und beim Beenden - die Datei ist winzig, das darf oft passieren.
@@ -1855,6 +1998,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.optMusikTrigger    = app.phMusikTrigger;
         app.cfg.optLevelAbschnitte = app.phLevelAbschnitte;
         app.cfg.optLevelFolge      = app.optLevelFolge;
+        app.cfg.balWaffen        = static_cast<int>(app.balWaffen * 100.0f + 0.5f);
+        app.cfg.balGegnerLeben   = static_cast<int>(app.balGegnerLeben * 100.0f + 0.5f);
+        app.cfg.balGegnerSchaden = static_cast<int>(app.balGegnerSchaden * 100.0f + 0.5f);
         app.cfg.seedText        = app.seedBuf;
         app.cfg.save();
     };
@@ -1916,6 +2062,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.optMusikTrigger    != app.phMusikTrigger ||
                  app.cfg.optLevelAbschnitte != app.phLevelAbschnitte ||
                  app.cfg.optLevelFolge      != app.optLevelFolge ||
+                 app.cfg.balWaffen        != static_cast<int>(app.balWaffen * 100.0f + 0.5f) ||
+                 app.cfg.balGegnerLeben   != static_cast<int>(app.balGegnerLeben * 100.0f + 0.5f) ||
+                 app.cfg.balGegnerSchaden != static_cast<int>(app.balGegnerSchaden * 100.0f + 0.5f) ||
                  app.cfg.secretAutor     != app.secretAutor)
         {
             merkeEinstellungen(hwnd);

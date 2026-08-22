@@ -393,6 +393,12 @@ Also in this group:
   individually but are *not* enemies and are therefore left out of the
   percentage: they never move between levels, so scaling them with the enemy
   pool would be meaningless.
+- `game/balance.cpp` also carries a `WaffenSchaden` percentage next to the two
+  enemy ones, applied in `BalanceWaffenSetzen` and in `lara1gun.cpp` through
+  `WaffenSchaden()`, capped at 127 because the engine holds weapon damage in a
+  `char`. It exists so the randomizer can offer a single slider for all of
+  Lara's weapons without overwriting per-weapon values a player set by hand.
+
 - `game/romangod.cpp` — the Roman God's armour used to burst at fixed hit
   point counts (225/150/75 out of 300). Those are now computed as three
   quarters, one half and one quarter of the object's own maximum, so the

@@ -119,6 +119,7 @@ struct BALANCE_INFO
 	long sStromkabel;
 
 	/* --- Prozentwerte, 100 = unveraendert --- */
+	long waffenSchaden;
 	long gegnerLeben;
 	long gegnerSchaden;
 	long kulissenReichweite;
@@ -129,4 +130,5 @@ extern BALANCE_INFO balance;
 void BalanceLaden();
 void BalanceWaffenSetzen();
 void BalanceGegnerSetzen();
+char WaffenSchaden(long basis);
 short GegnerSchaden(long schaden);

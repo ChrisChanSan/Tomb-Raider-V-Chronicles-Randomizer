@@ -180,6 +180,29 @@ int main()
 	balance.gegnerSchaden = 1000;
 	pruefe("1000% aus 10000 gedeckelt", GegnerSchaden(10000), 32767);
 
+	printf("--- 7b) WaffenSchaden-Prozentzeile (Regler des Randomizer)\n");
+	schreibeDatei(
+		"Pistolen = 10\r\n"
+		"Schrotflinte = 3\r\n"
+		"HK_Stand = 3\r\n"
+		"RevolverFrueh = 6\r\n"
+		"WaffenSchaden = 200\r\n");
+	BalanceLaden();
+	gfLevelId = 0;
+	BalanceWaffenSetzen();
+	pruefe("200% Pistolen 10 -> 20", weapons[WEAPON_PISTOLS].damage, 20);
+	pruefe("200% Revolver 6 -> 12", weapons[WEAPON_REVOLVER].damage, 12);
+	pruefe("200% HK ueber Helfer", WaffenSchaden(balance.hkStand), 6);
+	balance.waffenSchaden = 50;
+	BalanceWaffenSetzen();
+	pruefe("50% Pistolen 10 -> 5", weapons[WEAPON_PISTOLS].damage, 5);
+	pruefe("50% Schrotflinte 3 -> 1", weapons[WEAPON_SHOTGUN].damage, 1);
+	pruefe("50% aus 1 wird nie 0", WaffenSchaden(1), 1);
+	balance.waffenSchaden = 0;
+	pruefe("0% macht wirkungslos", WaffenSchaden(10), 0);
+	balance.waffenSchaden = 1000;
+	pruefe("1000% auf 127 gedeckelt", WaffenSchaden(100), 127);
+
 	printf("--- 8) Alte Datei aus einer frueheren Fassung: nachtragen,\n");
 	printf("       aber die Zahlen des Spielers behalten\n");
 	schreibeDatei(

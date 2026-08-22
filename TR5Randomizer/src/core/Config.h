@@ -71,6 +71,13 @@ struct Config
     bool optLevelAbschnitte = false;  // die vier Story-Abschnitte permutieren
     int  optLevelFolge   = 0;     // 0 aus, 1 innerhalb der Abschnitte, 2 frei ueber alles
 
+    // Die drei Regler fuer Balance.txt (#108), in Prozent. Gespeichert wird
+    // hier nur die Reglerstellung; die Wahrheit steht in Balance.txt neben
+    // der PCtomb5.exe und wird beim Start von dort gelesen.
+    int  balWaffen        = 100;
+    int  balGegnerLeben   = 100;
+    int  balGegnerSchaden = 100;
+
     // Liest bzw. schreibt <exe-Ordner>\TR5Randomizer.cfg. Fehlt die Datei,
     // bleibt alles auf Vorgabe - das ist kein Fehler, sondern der erste Start.
     void load();

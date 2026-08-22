@@ -92,9 +92,22 @@ void Config::load()
         else if (key == "musikTrigger")    optMusikTrigger = (val == "1");
         else if (key == "levelAbschnitte") optLevelAbschnitte = (val == "1");
         else if (key == "levelFolge")      optLevelFolge = std::atoi(val.c_str());
+        else if (key == "balWaffen")       balWaffen = std::atoi(val.c_str());
+        else if (key == "balGegnerLeben")  balGegnerLeben = std::atoi(val.c_str());
+        else if (key == "balGegnerSchaden") balGegnerSchaden = std::atoi(val.c_str());
     }
 
     if (optLevelFolge < 0 || optLevelFolge > 2) optLevelFolge = 0;
+
+    // Grenzen der Regler in der Oberflaeche. Wer die Werte in Balance.txt
+    // von Hand weiter aufdreht, behaelt sie dort - hier geht es nur um die
+    // Reglerstellung, die sonst ausserhalb ihrer Bahn laege.
+    if (balWaffen < 0)          balWaffen = 0;
+    if (balWaffen > 200)        balWaffen = 200;
+    if (balGegnerLeben < 50)    balGegnerLeben = 50;
+    if (balGegnerLeben > 200)   balGegnerLeben = 200;
+    if (balGegnerSchaden < 50)  balGegnerSchaden = 50;
+    if (balGegnerSchaden > 200) balGegnerSchaden = 200;
 
     if (enemyCount < 1)  enemyCount = 1;
     if (enemyCount > 20) enemyCount = 20;
@@ -138,6 +151,9 @@ bool Config::save() const
     std::fprintf(f, "musikTrigger=%d\n", optMusikTrigger ? 1 : 0);
     std::fprintf(f, "levelAbschnitte=%d\n", optLevelAbschnitte ? 1 : 0);
     std::fprintf(f, "levelFolge=%d\n", optLevelFolge);
+    std::fprintf(f, "balWaffen=%d\n", balWaffen);
+    std::fprintf(f, "balGegnerLeben=%d\n", balGegnerLeben);
+    std::fprintf(f, "balGegnerSchaden=%d\n", balGegnerSchaden);
     std::fclose(f);
     return true;
 }

@@ -206,13 +206,17 @@ static const BALANCE_ZEILE balanceZeilen[] =
 		"\r\n"
 		"\r\n"
 		"; === Alles auf einmal ===========================================\r\n"
-		";  Prozentwerte. Sie wirken ZUSAETZLICH auf alle Gegnerwerte oben,\r\n"
+		";  Prozentwerte. Sie wirken ZUSAETZLICH auf die Einzelwerte oben,\r\n"
 		";  damit man das ganze Spiel mit einer Zahl haerter oder weicher\r\n"
 		";  stellen kann, ohne die Feinabstimmung anzufassen. 100 laesst\r\n"
-		";  alles wie eingetragen. Levelgefahren und Laras Waffen bleiben\r\n"
-		";  davon unberuehrt.\r\n"
+		";  alles wie eingetragen. Die Levelgefahren bleiben unberuehrt.\r\n"
+		"\r\n"
+		";  Diese drei Zeilen stellt auch der Randomizer ueber seine Regler\r\n"
+		";  ein. Alles andere in dieser Datei fasst er nicht an.\r\n"
 		"\r\n"),
 
+	{ "WaffenSchaden",	&balance.waffenSchaden,	100, 0, 1000, -1, 0,
+		"  auf alle Waffen Laras. 0 macht sie wirkungslos" },
 	{ "GegnerLeben",	&balance.gegnerLeben,	100, 1, 1000, -1, 0,
 		"  50 = halb so zaeh, 200 = doppelt so zaeh" },
 	{ "GegnerSchaden",	&balance.gegnerSchaden,	100, 0, 1000, -1, 0,
@@ -473,8 +477,8 @@ void BalanceLaden()
 	free(puffer);
 	BalanceNachtragen();
 
-	Log("Balance.txt gelesen: Gegnerleben %d%%, Gegnerschaden %d%%, Kulisse %d%%",
-		balance.gegnerLeben, balance.gegnerSchaden, balance.kulissenReichweite);
+	Log("Balance.txt gelesen: Waffen %d%%, Gegnerleben %d%%, Gegnerschaden %d%%, Kulisse %d%%",
+		balance.waffenSchaden, balance.gegnerLeben, balance.gegnerSchaden, balance.kulissenReichweite);
 }
 
 /*
@@ -483,13 +487,40 @@ void BalanceLaden()
  */
 void BalanceWaffenSetzen()
 {
-	weapons[WEAPON_PISTOLS].damage = (char)balance.pistolen;
-	weapons[WEAPON_UZI].damage = (char)balance.uzi;
-	weapons[WEAPON_SHOTGUN].damage = (char)balance.schrotflinte;
-	weapons[WEAPON_CROSSBOW].damage = (char)balance.armbrust;
-	weapons[WEAPON_TORCH].damage = (char)balance.fackel;
+	weapons[WEAPON_PISTOLS].damage = WaffenSchaden(balance.pistolen);
+	weapons[WEAPON_UZI].damage = WaffenSchaden(balance.uzi);
+	weapons[WEAPON_SHOTGUN].damage = WaffenSchaden(balance.schrotflinte);
+	weapons[WEAPON_CROSSBOW].damage = WaffenSchaden(balance.armbrust);
+	weapons[WEAPON_TORCH].damage = WaffenSchaden(balance.fackel);
 	weapons[WEAPON_REVOLVER].damage =
-		(char)(gfLevelId > LVL5_COLOSSEUM ? balance.revolverSpaet : balance.revolverFrueh);
+		WaffenSchaden(gfLevelId > LVL5_COLOSSEUM ? balance.revolverSpaet : balance.revolverFrueh);
+}
+
+/*
+ * Der Einzelwert einer Waffe mal der Prozentzeile. Der Deckel ist 127, weil
+ * die Engine den Schaden in einem char haelt - ohne ihn wuerde eine starke
+ * Waffe bei hohen Prozentwerten ins Negative kippen und den Gegner heilen.
+ */
+char WaffenSchaden(long basis)
+{
+	long wert;
+
+	if (balance.waffenSchaden == 100)
+		wert = basis;
+	else
+	{
+		wert = basis * balance.waffenSchaden / 100;
+
+		/* Abrunden darf eine Waffe nicht wirkungslos machen - das soll nur,
+		   wer ausdruecklich 0 einstellt. */
+		if (wert < 1 && basis > 0 && balance.waffenSchaden > 0)
+			wert = 1;
+	}
+
+	if (wert > 127)
+		wert = 127;
+
+	return (char)wert;
 }
 
 /*

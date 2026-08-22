@@ -46,6 +46,12 @@ Die Datei erklaert sich selbst - jede Zeile nennt ihren
 Originalwert. Aendern, speichern, Spiel neu starten. Wer sie
 loescht, bekommt sie beim naechsten Start neu.
 
+Die drei Prozentzeilen lassen sich auch im Randomizer einstellen:
+"Waffenschaden" unter Items, "Gegnerleben" und "Gegnerschaden"
+unter Gegner. Die Regler schreiben nur diese drei Zeilen - was du
+sonst in der Datei von Hand eingestellt hast, bleibt stehen. Der
+Knopf "Balance zuruecksetzen" stellt alle drei auf 1.00x.
+
 Fallen, Stuerze, Feuer, Gift und Ertrinken bleiben immer so hart wie
 im Original, auch wenn du die Gegner harmlos stellst.
 

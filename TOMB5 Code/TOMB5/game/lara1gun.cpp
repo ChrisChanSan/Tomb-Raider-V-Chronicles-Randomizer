@@ -229,12 +229,12 @@ void FireHK(long running)
 	if (running)
 	{
 		weapons[WEAPON_HK].shot_accuracy = 2184;
-		weapons[WEAPON_HK].damage = (char)balance.hkLauf;
+		weapons[WEAPON_HK].damage = WaffenSchaden(balance.hkLauf);
 	}
 	else
 	{
 		weapons[WEAPON_HK].shot_accuracy = 728;
-		weapons[WEAPON_HK].damage = (char)balance.hkStand;
+		weapons[WEAPON_HK].damage = WaffenSchaden(balance.hkStand);
 	}
 
 	if (FireWeapon(WEAPON_HK, lara.target, lara_item, angles))

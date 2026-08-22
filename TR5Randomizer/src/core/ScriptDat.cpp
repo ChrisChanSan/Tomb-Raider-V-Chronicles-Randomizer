@@ -16,6 +16,7 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 #include "ScriptDat.h"
+#include "Levelketten.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -319,7 +320,7 @@ bool ScriptDat::clearLevelFlags(const std::string& fileName, uint16_t mask, bool
 // Wiederholbar: steht der Befehl fuer dieses Objekt schon da, passiert
 // nichts.
 //----------------------------------------------------------------------------
-bool ScriptDat::addTakeObject(const std::string& levelName, int invObjekt,
+bool ScriptDat::addInvBefehl(uint8_t op, const std::string& levelName, int invObjekt,
                               bool& changed, std::string& error)
 {
     changed = false;
@@ -335,7 +336,7 @@ bool ScriptDat::addTakeObject(const std::string& levelName, int invObjekt,
     {
         const int len = nutzlast(m_bytes[q]);
         if (len < 0) break;
-        if (m_bytes[q] == 0xDA && q + 1 < m_bytes.size() &&
+        if (m_bytes[q] == op && q + 1 < m_bytes.size() &&
             m_bytes[q + 1] == static_cast<uint8_t>(invObjekt))
             return true;                          // nimmt es schon weg
         if (m_bytes[q] == 0x81) { vorLevel = q; break; }
@@ -356,7 +357,7 @@ bool ScriptDat::addTakeObject(const std::string& levelName, int invObjekt,
         { error = "SCRIPT.DAT: Leveloffset wuerde ueberlaufen"; return false; }
     }
 
-    const uint8_t befehl[TAKEOBJ_BYTES] = { 0xDA, static_cast<uint8_t>(invObjekt), 0 };
+    const uint8_t befehl[TAKEOBJ_BYTES] = { op, static_cast<uint8_t>(invObjekt), 0 };
     m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(vorLevel), befehl, befehl + TAKEOBJ_BYTES);
 
     for (int i = 0; i < m_nLevels; ++i)
@@ -491,6 +492,120 @@ bool ScriptDat::abschnitteWuerfeln(uint64_t seed, std::string& reihenfolge, std:
     return zerlege(error);                                // Caches neu, Bloecke liegen jetzt anders
 }
 
+bool ScriptDat::levelWuerfeln(uint64_t seed, std::string& reihenfolge, std::string& error)
+{
+    reihenfolge.clear();
+
+    const auto kurzname = [](const std::string& datei) -> std::string
+    {
+        const size_t p = datei.find_last_of('\\');
+        return (p == std::string::npos) ? datei : datei.substr(p + 1);
+    };
+    const auto abschnitt = [&](const std::string& datei) -> int
+    {
+        const std::string k = kurzname(datei);
+        if (k.rfind("ANDREA", 0) == 0) return 0;
+        if (k.rfind("JOBY", 0) == 0)   return 1;
+        if (k.rfind("ANDY", 0) == 0)   return 2;
+        if (k.rfind("RICH", 0) == 0)   return 3;
+        return -1;
+    };
+
+    // Einheiten je Abschnitt: ein Level = eine Einheit, RICH2+RICHCUT2 = eine
+    // Einheit (die Cutscene gehoert hinter rich2, egal wo rich2 landet).
+    std::vector<std::vector<int>> einheiten[4];
+    for (size_t k = 0; k < m_levels.size(); ++k)
+    {
+        const int a = abschnitt(m_levels[k].fileName);
+        if (a < 0) continue;
+        const std::string kn = kurzname(m_levels[k].fileName);
+        if (kn == "RICHCUT2" && !einheiten[a].empty())
+            einheiten[a].back().push_back(m_ofsIndex[k]);        // an rich2 kleben
+        else
+            einheiten[a].push_back(std::vector<int>{ m_ofsIndex[k] });
+    }
+
+    std::vector<uint16_t> alt(m_nLevels);
+    for (int i = 0; i < m_nLevels; ++i)
+        std::memcpy(&alt[i], m_bytes.data() + m_scriptOfsAt + 2ull * i, 2);
+
+    std::mt19937_64 rng(seed ^ 0x4C45564C464F4C47ull);   // "LEVLFOLG"
+
+    for (int a = 0; a < 4; ++a)
+    {
+        if (einheiten[a].empty()) { error = "ein Story-Abschnitt fehlt im Skript"; return false; }
+
+        // Zielslots des Abschnitts in aufsteigender Folge, dann die Einheiten
+        // permutiert darauf verteilen.
+        std::vector<int> ziele;
+        for (const auto& e : einheiten[a]) ziele.insert(ziele.end(), e.begin(), e.end());
+        std::sort(ziele.begin(), ziele.end());
+
+        std::shuffle(einheiten[a].begin(), einheiten[a].end(), rng);
+
+        size_t z = 0;
+        for (const auto& e : einheiten[a])
+        {
+            for (int s : e)
+            {
+                const uint16_t o = alt[s];
+                std::memcpy(m_bytes.data() + m_scriptOfsAt + 2ull * ziele[z++], &o, 2);
+            }
+        }
+    }
+
+    if (!zerlege(error)) return false;
+
+    // Neue Abfolge als Text (nur die Kampagnen-Level, in Slotreihenfolge).
+    std::vector<std::pair<int, std::string>> folge;
+    for (size_t k = 0; k < m_levels.size(); ++k)
+        if (abschnitt(m_levels[k].fileName) >= 0)
+            folge.emplace_back(m_ofsIndex[k], kurzname(m_levels[k].fileName));
+    std::sort(folge.begin(), folge.end());
+    for (const auto& f : folge)
+    {
+        if (!reihenfolge.empty()) reihenfolge += " ";
+        reihenfolge += f.second;
+    }
+    return true;
+}
+
+int ScriptDat::slotVonLevel(const std::string& levelName) const
+{
+    size_t idx = 0;
+    if (!findeLevel(levelName, idx)) return -1;
+    return m_ofsIndex[idx];
+}
+
+bool ScriptDat::kettenAufloesen(std::vector<std::string>& notizen, std::string& error)
+{
+    for (size_t i = 0; i < kLevelkettenZahl; ++i)
+    {
+        const Levelkette& k = kLevelketten[i];
+        const int sn = slotVonLevel(k.nehmer);
+        const int ss = slotVonLevel(k.spender);
+        if (sn < 0 || ss < 0) continue;                      // Level nicht im Skript: nichts zu tun
+        if (ss < sn) continue;                               // Spender liegt davor: vanilla-Weg, Item kommt im Inventar
+
+        bool ch = false;
+        if (!addGiveObject(k.nehmer, k.inv, ch, error))
+        { error = std::string(k.name) + ": " + error; return false; }
+
+        if (k.nameCmd)
+        {
+            // Name und Inventarpose kommen aus dem Namensbefehl des Spenders;
+            // copyObjectCommand ist wiederholbar und laesst vorhandene stehen.
+            bool nch = false;
+            std::string nErr;
+            if (!copyObjectCommand(k.spender, k.nehmer, k.nameCmd, nch, nErr))
+                notizen.push_back(std::string(k.name) + ": Namensbefehl nicht kopiert (" + nErr + ")");
+        }
+
+        notizen.push_back(std::string(k.name) + ": Spender liegt dahinter - Item per GIVEOBJ nachgereicht");
+    }
+    return true;
+}
+
 void ScriptDat::randomizerEingriffe(Eingriffe& e)
 {
     e = Eingriffe();
@@ -566,4 +681,14 @@ bool ScriptDat::save(const std::wstring& path, std::string& error) const
     std::fclose(f);
     if (!ok) { error = "SCRIPT.DAT unvollstaendig geschrieben"; return false; }
     return true;
+}
+
+bool ScriptDat::addTakeObject(const std::string& levelName, int invObjekt, bool& changed, std::string& error)
+{
+    return addInvBefehl(0xDA, levelName, invObjekt, changed, error);      // CMD_TAKEOBJ
+}
+
+bool ScriptDat::addGiveObject(const std::string& levelName, int invObjekt, bool& changed, std::string& error)
+{
+    return addInvBefehl(0xD9, levelName, invObjekt, changed, error);      // CMD_GIVEOBJ
 }

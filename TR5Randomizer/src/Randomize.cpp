@@ -36,6 +36,7 @@
 #include <cstdio>
 #include <set>
 #include <string>
+#include <vector>
 
 static std::wstring toW(const char* s)
 {
@@ -66,9 +67,11 @@ int main(int argc, char** argv)
         std::printf("            die Datei erneut). trigger schickt die TO_CD-Tracks der\n");
         std::printf("            Floordata durch eine GLOBALE Permutation der getriggerten Tracks:\n");
         std::printf("            Atmosphaeren unter sich, alles andere unter sich.\n");
-        std::printf("  reihenfolge=abschnitte: die vier Story-Abschnitte permutieren\n");
-        std::printf("            (braucht skript= und die Engine mit gfLevelId; NICHT\n");
-        std::printf("            wiederholbar).\n");
+        std::printf("  reihenfolge=abschnitte|level|beides:\n");
+        std::printf("            abschnitte permutiert die vier Story-Abschnitte, level die\n");
+        std::printf("            Reihenfolge INNERHALB der Abschnitte (Levelketten aus\n");
+        std::printf("            Levelketten.h werden per GIVEOBJ aufgeloest). Braucht skript=\n");
+        std::printf("            und die Engine mit gfLevelId; NICHT wiederholbar.\n");
         return 2;
     }
 
@@ -90,7 +93,7 @@ int main(int argc, char** argv)
     // mit skript= wuerfelt die Datei erneut durch.
     bool musikHintergrund = false, musikTrigger = false;
     // Levelabschnitte permutieren (braucht skript= und die Engine mit gfLevelId).
-    bool abschnitte = false;
+    bool abschnitte = false, levelFolge = false;
     for (int i = 6; i < argc; ++i)
     {
         const std::string s = argv[i];
@@ -109,6 +112,8 @@ int main(int argc, char** argv)
         else if (s == "musik=trigger")     musikTrigger = true;
         else if (s == "musik=beides")      { musikHintergrund = true; musikTrigger = true; }
         else if (s == "reihenfolge=abschnitte") abschnitte = true;
+        else if (s == "reihenfolge=level")      levelFolge = true;
+        else if (s == "reihenfolge=beides")     { abschnitte = true; levelFolge = true; }
         // "gegneraus=47,49" - dieselbe Abwahl wie das Fenster "Gegnerarten"
         // in der Oberflaeche (#95), damit sich der Filter auch aus Skripten
         // pruefen laesst.
@@ -181,6 +186,24 @@ int main(int argc, char** argv)
                     std::printf("SCRIPT.DAT  Abschnitte: %s\n", folge.c_str());
                 else
                     std::printf("SCRIPT.DAT  Abschnitte: %s\n", sErr.c_str());
+            }
+
+            if (levelFolge)
+            {
+                std::string folge;
+                if (sd.levelWuerfeln(seed, folge, sErr))
+                    std::printf("SCRIPT.DAT  Reihenfolge: %s\n", folge.c_str());
+                else
+                    std::printf("SCRIPT.DAT  Reihenfolge: %s\n", sErr.c_str());
+            }
+
+            if (abschnitte || levelFolge)
+            {
+                std::vector<std::string> ketten;
+                if (!sd.kettenAufloesen(ketten, sErr))
+                    std::printf("SCRIPT.DAT  Levelketten: %s\n", sErr.c_str());
+                for (const std::string& k : ketten)
+                    std::printf("SCRIPT.DAT  %s\n", k.c_str());
             }
 
             if (!sd.save(skriptDat, sErr)) { std::printf("SCRIPT.DAT: %s\n", sErr.c_str()); return 1; }

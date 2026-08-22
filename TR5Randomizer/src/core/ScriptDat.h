@@ -113,6 +113,25 @@ public:
     bool addTakeObject(const std::string& levelName, int invObjekt,
                        bool& changed, std::string& error);
 
+    // Das Gegenstueck: CMD_GIVEOBJ - Lara hat das Inventarobjekt beim
+    // Betreten (setup.cpp:122, DEL_picked_up_object). Wiederholbar.
+    bool addGiveObject(const std::string& levelName, int invObjekt,
+                       bool& changed, std::string& error);
+
+    // Stufe 2: Reihenfolge INNERHALB der vier Abschnitte wuerfeln (RICHCUT2
+    // bleibt an RICH2 geklebt). Wie abschnitteWuerfeln nur die Offsettabelle;
+    // nicht wiederholbar. reihenfolge: die neue Abfolge als Text.
+    bool levelWuerfeln(uint64_t seed, std::string& reihenfolge, std::string& error);
+
+    // Slot (Platz in der Offsettabelle) eines Levels, -1 wenn unbekannt.
+    int  slotVonLevel(const std::string& levelName) const;
+
+    // Levelketten (Levelketten.h) gegen die JETZIGE Reihenfolge aufloesen:
+    // liegt der Spender hinter dem Nehmer, bekommt der Nehmer das Item per
+    // GIVEOBJ und den Namensbefehl des Spenders. In Vanilla-Reihenfolge
+    // passiert nichts. Jede Massnahme landet als Klartext in notizen.
+    bool kettenAufloesen(std::vector<std::string>& notizen, std::string& error);
+
     // --- Alle Eingriffe des Randomizers an EINER Stelle -------------------
     //
     // Oberflaeche und CLI treiben dieselben Schritte an. Standen sie doppelt
@@ -178,6 +197,8 @@ private:
     int                  m_nLevels     = 0;
 
     bool   findeLevel(const std::string& name, size_t& idx) const;
+    bool   addInvBefehl(uint8_t op, const std::string& levelName, int invObjekt,
+                        bool& changed, std::string& error);   // GIVEOBJ/TAKEOBJ gemeinsam
     size_t findeBefehl(size_t idx, uint8_t cmd) const;
 
     bool zerlege(std::string& error);

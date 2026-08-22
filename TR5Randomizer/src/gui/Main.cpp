@@ -549,12 +549,27 @@ static std::wstring lagerDir(const App& a)
 
         // Levelabschnitte: als LETZTER Eingriff, damit alle Namens-Lookups
         // davor auf dem bekannten Stand liefen (zerlege laeuft danach neu).
-        std::string abschnitte;
+        std::string abschnitte, levelFolge;
+        std::vector<std::string> ketten;
         if (a.phLevelAbschnitte)
         {
             std::string aErr;
             if (!sd.abschnitteWuerfeln(a.effectiveSeed(), abschnitte, aErr))
                 a.scriptNote = "Levelabschnitte: " + aErr;
+        }
+        if (a.phLevelReihenfolge)
+        {
+            std::string lErr;
+            if (!sd.levelWuerfeln(a.effectiveSeed(), levelFolge, lErr))
+                a.scriptNote = "Level-Reihenfolge: " + lErr;
+        }
+        // Ketten immer auf die JETZIGE Reihenfolge pruefen - in Vanilla-Folge
+        // passiert nichts, nach einem Wuerfel reicht das Skript nach.
+        if (a.phLevelAbschnitte || a.phLevelReihenfolge)
+        {
+            std::string kErr;
+            if (!sd.kettenAufloesen(ketten, kErr))
+                a.scriptNote = "Levelketten: " + kErr;
         }
 
         if (!sd.save(skript, err)) return false;
@@ -570,6 +585,10 @@ static std::wstring lagerDir(const App& a)
             info += "  Hintergrundmusik: " + std::to_string(musikLevel) + " Level neu vertont.";
         if (a.phLevelAbschnitte && !abschnitte.empty())
             info += "  Abschnitte: " + abschnitte + ".";
+        if (a.phLevelReihenfolge && !levelFolge.empty())
+            info += "  Reihenfolge: " + levelFolge + ".";
+        for (const std::string& k : ketten)
+            info += "  " + k + ".";
         return true;
     }
 
@@ -1532,12 +1551,14 @@ static void drawUi(App& a, HWND hwnd)
                "Engine ab 2026-08-22 (Levelidentitaet aus dem Dateinamen); "
                "alte Spielstaende passen nicht zur neuen Reihenfolge.");
     ImGui::SameLine();
-    ImGui::BeginDisabled(true);
     ImGui::Checkbox("Level-Reihenfolge switchen", &a.phLevelReihenfolge);
-    hoverHilfe("Kommt noch: die 13 Level komplett durchwuerfeln. Achtung "
-               "Levelketten: Ausruestung und Story-Uebergaben haengen an der "
-               "Reihenfolge (z.B. die Brechstange von Andrea2 nach Andrea3).");
-    ImGui::EndDisabled();
+    hoverHilfe("Die Reihenfolge INNERHALB der Abschnitte wuerfeln (Rom/Russland/"
+               "Irland/VCI bleiben als Bloecke; die Cutscene richcut2 bleibt an "
+               "rich2). Schluessel, die vanilla aus einem frueheren Level "
+               "mitkommen (Key 8 fuer joby3, Key 7 fuer joby5, Puzzle 2 fuer "
+               "Andy2), reicht das Skript per GIVEOBJ nach, wenn der Spender "
+               "dahinter liegt - samt Modell und Namen. Kuratiert in "
+               "Levelketten.h. Kombinierbar mit dem Abschnitts-Haken.");
 
     ImGui::SeparatorText("Musik");
     ImGui::Checkbox("Hintergrundmusik switchen", &a.phMusikSwitch);

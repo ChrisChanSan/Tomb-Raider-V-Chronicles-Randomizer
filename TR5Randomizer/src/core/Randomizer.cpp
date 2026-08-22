@@ -16,8 +16,10 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 #include "Randomizer.h"
+#include "Levelketten.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -2567,6 +2569,29 @@ bool Rando::run(const RandoInput& in,
         e.set("animZahl", JsonValue::makeInt(46));   // wie im kCross-Eintrag
         moveables.push(e);
         report.notes.push_back("Imp geheilt: voller Animsatz (mit Tod) aus andy3.");
+    }
+
+    // --- Levelketten (Levelketten.h): Modelle der nachreichbaren Items ---
+    //
+    // Jedes Level, das laut Kette ein Item aus einem anderen Level brauchen
+    // KANN, bekommt dessen Modellslot vom Spender - unabhaengig von der
+    // Reihenfolge, denn ob die SCRIPT.DAT das Item per GIVEOBJ nachreicht,
+    // entscheidet sich erst im Skript-Schritt, und der Level-Schritt kennt
+    // die Reihenfolge nicht (CLI!). Ein Slot zu viel kostet nichts; ein
+    // Inventar-Item ohne Modell ist der Fehler, den der Nutzer bei
+    // Cheat-Items gesehen hat. Ohne "replace": vorhandene Slots bleiben.
+    for (size_t ki = 0; ki < kLevelkettenZahl; ++ki)
+    {
+        const Levelkette& k = kLevelketten[ki];
+        std::string kn = k.nehmer;
+        for (char& c : kn) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (kn != klein) continue;
+
+        JsonValue e = JsonValue::makeObject();
+        e.set("slot", JsonValue::makeInt(k.slot));
+        e.set("fromLevel", JsonValue::makeString(k.spender));
+        moveables.push(e);
+        report.notes.push_back(std::string("Levelkette: Modell fuer ") + k.name + " eingelegt.");
     }
 
     // --- joby3: Key Item 8 (203) muss im Level liegen ---

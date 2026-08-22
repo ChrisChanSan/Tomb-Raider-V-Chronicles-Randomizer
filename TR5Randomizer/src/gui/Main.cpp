@@ -313,7 +313,6 @@ namespace
         bool phJoby4NoWater = false;    // Deepsea Dive ohne Wasser
         bool phLevelAbschnitte = false; // Abschnitte (Rom/Russland/...) tauschen
         bool phLevelReihenfolge = false;// alle 13 Level durchwuerfeln
-        bool phSpiegeln = false;        // GF_MIRROR je Level
         bool phMusikSwitch = false;     // Audiotrack je Level wuerfeln
         bool phMusikTrigger = false;    // Musik-/Sound-Trigger-IDs wuerfeln
         bool phOutfitTr1 = false;       // klassisches TR1-Outfit im Pool
@@ -1522,16 +1521,6 @@ static void drawUi(App& a, HWND hwnd)
     hoverHilfe("Kommt noch: die 13 Level komplett durchwuerfeln. Achtung "
                "Levelketten: Ausruestung und Story-Uebergaben haengen an der "
                "Reihenfolge (z.B. die Brechstange von Andrea2 nach Andrea3).");
-    ImGui::EndDisabled();
-
-    ImGui::SeparatorText("Global (in Vorbereitung)");
-    ImGui::BeginDisabled(true);
-    ImGui::Checkbox("Level spiegeln", &a.phSpiegeln);
-    hoverHilfe("Vielleicht spaeter: Level gespiegelt spielen. Die Engine hilft "
-               "dabei NICHT - ihr GF_MIRROR ist nur der Spiegelraum-Effekt "
-               "(ein Raum, eine Spiegelebene). Ein Spiegel-Level waere eine "
-               "Datentransformation der ganzen Leveldatei; Haken: die "
-               "In-Engine-Cutscenes (CUTSEQ.BIN) kennen nur absolute Positionen.");
     ImGui::EndDisabled();
 
     ImGui::SeparatorText("Musik");

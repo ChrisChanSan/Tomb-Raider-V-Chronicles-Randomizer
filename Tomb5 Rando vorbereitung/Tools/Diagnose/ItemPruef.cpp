@@ -45,8 +45,8 @@ int main(int argc, char** argv)
     // Position und ihre Lage im Sektor dazu (#61): Sektormitte liegt bei
     // x.5 * 1024. "inSekt" zeigt den Versatz zur Mitte in Units - 0 heisst
     // genau mittig, +-512 waere die Sektorkante.
-    std::printf("%5s %5s %5s %6s %8s %7s %6s  %9s %7s %9s  %11s\n",
-                "Item", "Typ", "Raum", "OCB", "Flags", "Winkel", "Grad",
+    std::printf("%5s %5s %5s %6s %6s %8s %7s %6s  %9s %7s %9s  %11s\n",
+                "Item", "Typ", "Raum", "OCB", "roh", "Flags", "Winkel", "Grad",
                 "X", "Y", "Z", "dX/dZ z.Mitte");
 
     int gezeigt = 0;
@@ -62,15 +62,21 @@ int main(int argc, char** argv)
             if (!drin) continue;
         }
 
-        // Die OCB steckt in den unteren 6 Bit von trigger_flags; darueber
-        // stehen andere Angaben, deshalb beides ausgeben.
+        // Die OCB steckt in den unteren 6 Bit von trigger_flags - aber die
+        // oberen Bits sind KEIN Beiwerk, sie tragen eigene Bedeutungen, und
+        // wer nur die 6 Bit ansieht, wird in die Irre gefuehrt. Beispiel
+        // (2026-08-22, kostete eine falsche Levelkette): Andy2s Puzzle Hole 2
+        // hat trigger_flags 1058. Maskiert sieht das wie OCB 34 aus; in
+        // Wahrheit heisst >1024 in PuzzleHoleCollision (pickup.cpp:186)
+        // "PuzzleType 2" und startet beim Loesen die Cutscene
+        // trigger_flags - 1024, hier also 34. Darum steht jetzt beides da.
         // Versatz zur Sektormitte: die Mitte liegt bei (n + 0.5) * 1024,
         // also ist der Rest von (koordinate mod 1024) minus 512 der Abstand.
         const int dx = ((it.x % 1024) + 1024) % 1024 - 512;
         const int dz = ((it.z % 1024) + 1024) % 1024 - 512;
-        std::printf("%5d %5d %5d %6d   0x%04X %7d %6d  %9d %7d %9d  %5d /%5d\n",
+        std::printf("%5d %5d %5d %6d %6d   0x%04X %7d %6d  %9d %7d %9d  %5d /%5d\n",
                     i, (int)it.objectNumber, (int)it.roomNumber,
-                    (int)(it.triggerFlags & 0x3F),
+                    (int)(it.triggerFlags & 0x3F), (int)(uint16_t)it.triggerFlags,
                     (unsigned)(uint16_t)it.flags, (int)it.yRot,
                     (int)((long long)it.yRot * 360 / 65536),
                     it.x, it.y, it.z, dx, dz);

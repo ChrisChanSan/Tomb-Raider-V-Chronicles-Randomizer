@@ -1641,19 +1641,47 @@ static void drawUi(App& a, HWND hwnd)
     const float lueckeX = ImGui::GetStyle().ItemSpacing.x;
     const float spaltenBreite = (ImGui::GetContentRegionAvail().x - 3.0f * lueckeX) / 4.0f;
 
-    auto blockAuf = [spaltenBreite](const char* id, const char* titel)
+    // Jeder Bereich bekommt seine eigene Farbe (Nutzerwunsch), damit sich die
+    // Kaesten voneinander abheben. Die Flaeche bleibt sehr schwach getoent -
+    // sie soll den Bereich kennzeichnen und den Text vom Hintergrundbild
+    // abheben, nicht selbst auffallen. Rahmen und Ueberschrift tragen
+    // dieselbe Farbe kraeftiger.
+    auto blockAuf = [spaltenBreite](const char* id, const char* titel, ImVec4 farbe)
     {
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(farbe.x, farbe.y, farbe.z, 0.13f));
+        ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(farbe.x, farbe.y, farbe.z, 0.75f));
         ImGui::BeginChild(id, ImVec2(spaltenBreite, 0.0f),
                           ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(farbe.x, farbe.y, farbe.z, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(farbe.x, farbe.y, farbe.z, 0.6f));
         ImGui::SeparatorText(titel);
+        ImGui::PopStyleColor(2);
     };
-    auto blockZu = []() { ImGui::EndChild(); };
+    auto blockZu = []()
+    {
+        ImGui::EndChild();
+        ImGui::PopStyleColor(2);
+    };
+
+    // Die Farbtafel an einer Stelle, damit die Bereiche zueinander passen.
+    const ImVec4 fInstall (0.45f, 0.70f, 1.00f, 1.0f);   // Blau
+    const ImVec4 fSeed    (0.40f, 0.85f, 0.80f, 1.0f);   // Tuerkis
+    const ImVec4 fItems   (0.55f, 0.85f, 0.45f, 1.0f);   // Gruen
+    const ImVec4 fOutfits (0.80f, 0.55f, 0.95f, 1.0f);   // Violett
+    const ImVec4 fGegner  (1.00f, 0.50f, 0.40f, 1.0f);   // Rot
+    const ImVec4 fVorb    (0.60f, 0.60f, 0.65f, 1.0f);   // Grau, weil ohne Wirkung
+    const ImVec4 fLevel   (1.00f, 0.80f, 0.35f, 1.0f);   // Gold
+    const ImVec4 fMusik   (0.50f, 0.75f, 1.00f, 1.0f);   // Hellblau
+    const ImVec4 fSecrets (1.00f, 0.60f, 0.80f, 1.0f);   // Rosa
+    const ImVec4 fListe   (0.75f, 0.78f, 0.85f, 1.0f);   // neutral
+    const ImVec4 fStart   (0.55f, 0.90f, 0.60f, 1.0f);   // Gruen
 
     // --- Spalte 1: Installation und Seed ---------------------------------
     ImGui::BeginGroup();
 
     // --- 1. Spielordner ---
-    blockAuf("k_install", "1. Deine Installation");
+    blockAuf("k_install", "1. Deine Installation", fInstall);
     ImGui::TextWrapped("Waehle den Ordner deiner Tomb Raider Chronicles-Installation. "
                        "Die Level werden direkt dort randomisiert; die Originale sichert "
                        "das Programm vorher nach data\\Backup.");
@@ -1692,7 +1720,7 @@ static void drawUi(App& a, HWND hwnd)
     blockZu();
 
     // --- 2. Seed ---
-    blockAuf("k_seed", "2. Seed");
+    blockAuf("k_seed", "2. Seed", fSeed);
     ImGui::TextWrapped("Derselbe Seed erzeugt immer dasselbe Spiel. Jede Eingabe ist gueltig - "
                        "auch ein Wort.");
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 90.0f);
@@ -1742,24 +1770,27 @@ static void drawUi(App& a, HWND hwnd)
     auto balanceRegler = [&](const char* beschriftung, float* wert, bool* zufall,
                              float von, float bis, const char* hilfe)
     {
-        ImGui::BeginDisabled(*zufall);
-        ImGui::SetNextItemWidth(220.0f);
-        ImGui::SliderFloat(beschriftung, wert, von, bis, "%.2fx", ImGuiSliderFlags_AlwaysClamp);
-        ImGui::EndDisabled();
-        hoverHilfe(hilfe);
-
-        if (ImGui::IsItemDeactivatedAfterEdit())
-            balanceSchreiben();
-
-        ImGui::SameLine();
-        ImGui::TextDisabled("(%d %%)", static_cast<int>(*wert * 100.0f + 0.5f));
-
-        // Eigene Kennung je Haken, damit ImGui drei "Zufall" unterscheiden
-        // kann - der sichtbare Text bleibt fuer alle derselbe.
+        // Zwei Zeilen statt einer: Beschriftung samt Haken oben, der Regler
+        // darunter ueber die volle Kastenbreite. In einer Zeile passten
+        // Regler, Name, Prozentzahl und Haken in einer Viertelspalte nicht
+        // mehr nebeneinander und wurden rechts abgeschnitten.
         char kennung[64];
         std::snprintf(kennung, sizeof(kennung), "Zufall##%s", beschriftung);
 
+        ImGui::TextUnformatted(beschriftung);
+        hoverHilfe(hilfe);
         ImGui::SameLine();
+
+        // Den Haken rechtsbuendig setzen, damit die drei Regler untereinander
+        // eine Linie ergeben statt einer Treppe.
+        {
+            const float breite = ImGui::CalcTextSize("Zufall").x
+                               + ImGui::GetFrameHeight()
+                               + ImGui::GetStyle().ItemInnerSpacing.x;
+            const float ziel = ImGui::GetContentRegionAvail().x - breite;
+            if (ziel > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ziel);
+        }
+
         if (ImGui::Checkbox(kennung, zufall))
         {
             // Sofort werfen, damit der Regler nicht auf dem alten Wert
@@ -1777,30 +1808,47 @@ static void drawUi(App& a, HWND hwnd)
                    "Auch der Waffenschaden wird nur ab 0.50x geworfen - ein Seed, "
                    "der Laras Waffen auf ein Zehntel stellt, waere nicht schwer, "
                    "sondern unspielbar. 0.00x bleibt der Handeinstellung.");
+
+        // Der Regler traegt seinen Wert selbst als Beschriftung - eine eigene
+        // Prozentzeile daneben braucht es damit nicht mehr.
+        char anzeige[32];
+        std::snprintf(anzeige, sizeof(anzeige), "%%.2fx  (%d %%%%)",
+                      static_cast<int>(*wert * 100.0f + 0.5f));
+
+        char reglerId[64];
+        std::snprintf(reglerId, sizeof(reglerId), "##regler_%s", beschriftung);
+
+        ImGui::BeginDisabled(*zufall);
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+        ImGui::SliderFloat(reglerId, wert, von, bis, anzeige, ImGuiSliderFlags_AlwaysClamp);
+        ImGui::EndDisabled();
+        hoverHilfe(hilfe);
+
+        if (ImGui::IsItemDeactivatedAfterEdit())
+            balanceSchreiben();
     };
 
     // --- Spalte 2: Items und Outfits -------------------------------------
     ImGui::BeginGroup();
 
-    blockAuf("k_items", "3. Items");
+    blockAuf("k_items", "3. Items", fItems);
 
     ImGui::Checkbox("Ausruestung (Waffen, Munition, Medipacks)", &a.optOtherPickups);
     // Item-Abundance (#36): zusaetzliche Verbrauchsgueter streuen. Weniger als
     // Vanilla gibt es bewusst nicht - Items entfernen wuerde alle folgenden
     // Indizes verschieben und jeden "Object N"-Verweis der Trigger brechen.
-    ImGui::SameLine();
     ImGui::RadioButton("Vanilla Anzahl", &a.optItemMenge, 0);
     hoverHilfe("Das Level behaelt genau so viel Ausruestung, wie Core vorgesehen "
                "hat - nur an anderen Stellen.");
     ImGui::SameLine();
-    ImGui::RadioButton("Mehr Items", &a.optItemMenge, 1);
+    ImGui::RadioButton("Mehr", &a.optItemMenge, 1);
     hoverHilfe("Streut bis zu zwoelf zusaetzliche Verbrauchsgueter pro Level. "
                "Gelegt wird nur, was das Level ohnehin kennt - Munition, "
                "Medipacks, Fackeln -, gewichtet nach Haeufigkeit: Andy2 (Kind-Lara, "
                "keine Waffen) bekommt also Medipacks, ein Waffenlevel Munition. "
                "Schluessel, Puzzleteile und Secrets bleiben aussen vor.");
     ImGui::SameLine();
-    ImGui::RadioButton("Viel mehr Items", &a.optItemMenge, 2);
+    ImGui::RadioButton("Viel mehr", &a.optItemMenge, 2);
     hoverHilfe("Wie \"Mehr Items\", aber bis zu dreissig pro Level. Die Grenze "
                "ist erreicht, wenn die freien Ablageflaechen ausgehen oder das "
                "Item-Limit der Engine (512) naeher rueckt - beides deckelt die "
@@ -1833,7 +1881,7 @@ static void drawUi(App& a, HWND hwnd)
 
     blockZu();
 
-    blockAuf("k_outfits", "Outfits");
+    blockAuf("k_outfits", "Outfits", fOutfits);
 
     ImGui::Checkbox("Zufaellige Outfits", &a.optOutfits);
     hoverHilfe("Jeder Abschnitt bekommt zufaellig Lara_Andrea, Lara_Joby oder "
@@ -1864,7 +1912,7 @@ static void drawUi(App& a, HWND hwnd)
     // --- Spalte 3: Gegner und die Platzhalter ----------------------------
     ImGui::BeginGroup();
 
-    blockAuf("k_gegner", "Gegner");
+    blockAuf("k_gegner", "Gegner", fGegner);
 
     ImGui::Checkbox("Zusaetzliche Gegner ins Level setzen", &a.optEnemies);
     hoverHilfe("Jeder bekommt einen eigenen Trigger, etwa drei Sektoren vor sich "
@@ -1894,18 +1942,15 @@ static void drawUi(App& a, HWND hwnd)
     // keine Wirkung.
     ImGui::BeginDisabled(!a.optEnemies && !a.optEnemySwap);
     ImGui::TextUnformatted("Gegnerpool:");
-    ImGui::SameLine();
     ImGui::RadioButton("Nur Levelpool", &a.optEnemyPool, 0);
     hoverHilfe("Getauscht und gesetzt wird nur, was das Level selbst kennt "
                "(die handkuratierte Liste je Level).");
-    ImGui::SameLine();
     ImGui::RadioButton("Cross-Mix", &a.optEnemyPool, 1);
     hoverHilfe("Bis zu DREI fremde Typen aus anderen Leveln kommen in den Pool - "
                "SWAT, Guards, Mafia, Larson, Pierre, Loewe, Gladiator, Statue, "
                "Maze Monster, Imp und mehr. Beim Tausch geht etwa jede vierte "
                "Rolle an einen davon, das Level bleibt erkennbar. Modelle und "
                "Sounds wandern zur Laufzeit aus den eigenen Leveldateien mit.");
-    ImGui::SameLine();
     ImGui::RadioButton("Allsanity", &a.optEnemyPool, 2);
     hoverHilfe("Der KOMPLETTE Gegnerpool steht jedem Level zur Verfuegung, und "
                "beim Tausch wuerfelt jede Rolle frei aus allem - maximale "
@@ -1963,7 +2008,7 @@ static void drawUi(App& a, HWND hwnd)
     // bis die jeweilige Logik existiert. Erklaerungen als Schwebehilfe.
     // Texturen und Raeume stehen zusammen in einem Kasten - beide sind
     // Zukunftsmusik, und getrennt waeren es zwei sehr flache Kaesten.
-    blockAuf("k_vorbereitung", "In Vorbereitung");
+    blockAuf("k_vorbereitung", "In Vorbereitung", fVorb);
     ImGui::BeginDisabled(true);
 
     ImGui::TextDisabled("Texturen");
@@ -1997,7 +2042,7 @@ static void drawUi(App& a, HWND hwnd)
     // --- Spalte 4: Level, Musik, Secrets ---------------------------------
     ImGui::BeginGroup();
 
-    blockAuf("k_level", "Level");
+    blockAuf("k_level", "Level", fLevel);
     ImGui::BeginDisabled(a.optLevelFolge == 2);	// bei "frei ueber alles" bedeutungslos und bewusst ohne Wirkung
     ImGui::Checkbox("Levelabschnitte switchen", &a.phLevelAbschnitte);
     ImGui::EndDisabled();
@@ -2022,7 +2067,7 @@ static void drawUi(App& a, HWND hwnd)
 
     blockZu();
 
-    blockAuf("k_musik", "Musik");
+    blockAuf("k_musik", "Musik", fMusik);
     ImGui::Checkbox("Hintergrundmusik switchen", &a.phMusikSwitch);
     hoverHilfe("Die Levelmusik wird unter den spielbaren Leveln vertauscht - "
                "das Audio-Byte im CMD_LEVEL-Eintrag der SCRIPT.DAT. Cutscene-"
@@ -2048,7 +2093,7 @@ static void drawUi(App& a, HWND hwnd)
     // SecretPlan.ps1 in der Kuration.
     blockZu();
 
-    blockAuf("k_secrets", "Secrets");
+    blockAuf("k_secrets", "Secrets", fSecrets);
 
     ImGui::RadioButton("Vanilla", &a.optSecrets, 0);
     hoverHilfe("Die Secrets bleiben, wo Core sie versteckt hat.");
@@ -2110,9 +2155,14 @@ static void drawUi(App& a, HWND hwnd)
     };
 
     mittig(tabelleBreite);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(fListe.x, fListe.y, fListe.z, 0.13f));
+    ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(fListe.x, fListe.y, fListe.z, 0.75f));
     ImGui::BeginChild("k_levelliste", ImVec2(tabelleBreite, 0.0f),
                       ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(fListe.x, fListe.y, fListe.z, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(fListe.x, fListe.y, fListe.z, 0.6f));
     ImGui::SeparatorText("4. Level");
+    ImGui::PopStyleColor(2);
     if (a.skippedNonPlayable > 0)
         ImGui::TextWrapped("%d nicht spielbare Dateien (Title, del, richcut2) werden "
                            "geprueft, aber nicht angetastet.", a.skippedNonPlayable);
@@ -2177,6 +2227,7 @@ static void drawUi(App& a, HWND hwnd)
         ImGui::EndTable();
     }
     ImGui::EndChild();
+    ImGui::PopStyleColor(2);
 
     // --- 5. Los geht's - ebenfalls mittig, unter der Levelliste ----------
     ImGui::Spacing();
@@ -2185,9 +2236,14 @@ static void drawUi(App& a, HWND hwnd)
     const bool busy = (a.phase != App::Phase::Idle);
 
     mittig(startBreite);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(fStart.x, fStart.y, fStart.z, 0.13f));
+    ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(fStart.x, fStart.y, fStart.z, 0.75f));
     ImGui::BeginChild("k_start", ImVec2(startBreite, 0.0f),
                       ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(fStart.x, fStart.y, fStart.z, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(fStart.x, fStart.y, fStart.z, 0.6f));
     ImGui::SeparatorText("5. Los geht's");
+    ImGui::PopStyleColor(2);
 
     // Der Fortschritt steht ueber den Knoepfen, weil genau dorthin gesehen
     // wird, sobald man auf "Randomisieren" gedrueckt hat.
@@ -2224,6 +2280,7 @@ static void drawUi(App& a, HWND hwnd)
         else                 ImGui::TextWrapped("%s", a.status.c_str());
     }
     ImGui::EndChild();
+    ImGui::PopStyleColor(2);
 
     ImGui::End();
 

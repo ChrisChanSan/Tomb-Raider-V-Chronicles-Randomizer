@@ -223,6 +223,24 @@ long EnableBaddieAI(short item_number, long Always)
 		}
 	}
 
+	// SLOTLOG (#121, vierte Messung): SKIPLOG zeigt sechs Abweisungen im
+	// selben Tick, obwohl das Level hoechstens ~35 Kreaturen traegt und 48
+	// Plaetze existieren. Hier steht, was die Vergabe WIRKLICH sieht: den
+	// Zaehler und die tatsaechlich freien Plaetze. Laufen die beiden
+	// auseinander, ist die Buchhaltung der Taeter, nicht der Platzmangel.
+	{
+		static long letzterLog = -1000;
+		if (GlobalCounter - letzterLog > 30 || GlobalCounter < letzterLog)
+		{
+			long frei = 0;
+			for (long k = 0; k < MAX_LOT; k++)
+				if (baddie_slots[k].item_num == NO_ITEM) frei++;
+			Log("SLOTLOG item=%d slots_used=%d frei=%d MAX_LOT=%d",
+				item_number, slots_used, frei, MAX_LOT);
+			letzterLog = GlobalCounter;
+		}
+	}
+
 	if (Always)
 		worstdist = 0;
 	else

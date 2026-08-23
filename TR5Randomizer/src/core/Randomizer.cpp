@@ -1460,7 +1460,24 @@ bool Rando::run(const RandoInput& in,
         // Anim-Kommando und reist deshalb nicht von selbst). Ohne den
         // Eintrag atmet er in fremden Leveln stumm (#111 Teil 3).
         { 35, "rich3",   { {88,"rich3",88} },                   {-1,-1},  "rich3",   463, 0, 33 }, // Advanced SWAT (Anims von SWAT)
-        { 37, "rich1",   {},                                    {-1,-1},  "joby3",   465, 0, 0 },  // Guard (Blue Guard)
+        // Guard-Spender ist joby3, NICHT rich1 (#121, 2026-08-23). Der Satz
+        // dient als Anim-Basis der ganzen Stummel-Familie (Mafia, Crane,
+        // SWAT+), und Cores Saetze tragen je Level andere TOTE ERBEN: Anims,
+        // die sich den Frame-Zeiger mit einer Nachbaranim teilen, ihn aber
+        // mit eigener (falscher) Schrittweite lesen. Beim nativen Besitzer
+        // faellt das nie auf, weil er diese Zustaende nicht spielt - unsere
+        // Familienmitglieder spielen sie.
+        //
+        // Gemessen (AnimMap, Gruppen mit ungleicher Schrittweite):
+        //   rich1-Guard: +19..23, +24..30, +34/35, +41..45, +50..56 - also
+        //     die SONDERPOSEN (Zst 26-31) und Zustand 35, Mafias
+        //     SCHUSS-Pose. Ergebnis im Spiel: Modell verschwindet ab
+        //     Keyframe 1, Schatten bleibt, Schaden kommt an - der
+        //     Blink-Soldat aus andy3 (Nutzerfund, drei Messlaeufe).
+        //   joby3-Guard: Kampfblock und Sonderposen sauber; toter Rest nur
+        //     +23..28/+30..32/+34f/+57f. Feldbeweis: der Wachmann (460)
+        //     traegt exakt diesen Satz und ist in allen Posen fehlerfrei.
+        { 37, "joby3",   {},                                    {-1,-1},  "joby3",   465, 0, 0 },  // Guard (Blue Guard)
         // Der zweite Wachmann (#83/#105, Engine-Slot 460 = BLUE_GUARD2):
         // das Joby-Modell aus joby3 - dort ist der Guard der Anim-Anker der
         // Familie und traegt den vollen eigenen Satz (Mafia holt sich seine

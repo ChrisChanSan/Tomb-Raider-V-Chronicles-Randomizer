@@ -162,10 +162,16 @@ int main(int argc, char** argv)
                                 (za.frameEnd - za.frameStart) != (zb.frameEnd - zb.frameStart);
         if (auffaellig) ++kaputt;
 
-        std::printf("%4d %-4s | %4u %3d..%-3d %10u  %6d %6d %6d | %4u %3d..%-3d %10u  %6d %6d %6d\n",
+        // Rate und frameSize mit ausgeben: die Schrittweiten-Krankheit
+        // ("totes Erbe", siehe uebernehmeAnimDaten in Tr5Level.h) erkennt
+        // man NUR daran, dass zwei Anims denselben frameOffset mit
+        // verschiedener frameSize lesen.
+        std::printf("%4d %-4s | %4u %3d..%-3d r%-2u s%-3u %10u  %6d %6d %6d | %4u %3d..%-3d r%-2u s%-3u %10u  %6d %6d %6d\n",
                     i, auffaellig ? "!!" : "", za.state, za.frameStart, za.frameEnd,
+                    za.frameRate, za.frameSize,
                     za.frameOffset, boxA[0], boxA[2], boxA[4],
                     zb.state, zb.frameStart, zb.frameEnd,
+                    zb.frameRate, zb.frameSize,
                     zb.frameOffset, boxB[0], boxB[2], boxB[4]);
     }
     std::printf("%d von %d auffaellig\n", kaputt, n);

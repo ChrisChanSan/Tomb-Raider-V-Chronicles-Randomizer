@@ -622,6 +622,19 @@ void DrawAnimatingItem(ITEM_INFO* item)
 		}
 	}
 
+	// MESHLOG (#121, sechste Messung): aCheckMeshClip verwirft Meshes, deren
+	// Kasten ganz ausserhalb des aktuellen Fensters f_left..f_bottom liegt.
+	// Der Zaehler sagt nach dem Zeichnen, ob der Koerper DORT gestorben ist -
+	// und das Fenster sagt, mit welchem Ausschnitt gepreuft wurde.
+	extern long aMeshClipRejects;
+	extern long aClipMeldeObj;
+	const long rejVor = aMeshClipRejects;
+
+	// CLIPDETAIL nur fuer DIESEN Denker scharf schalten - die globale
+	// Drossel fing sonst auch legitime Wegklipper (Tueren hinter der
+	// Kamera) und machte die Zeilen mehrdeutig.
+	aClipMeldeObj = obj->intelligent ? item->object_number : -1;
+
 	if (clip)
 	{
 		CalculateObjectLighting(item, frm[0]);
@@ -739,6 +752,24 @@ void DrawAnimatingItem(ITEM_INFO* item)
 		}
 	}
 
+	aClipMeldeObj = -1;
+
+	if (obj->intelligent && aMeshClipRejects > rejVor)
+	{
+		extern float f_left, f_right, f_top, f_bottom;
+		static long zuletztM[64];
+		const long fachM = (long)(item - items) & 63;
+
+		if (GlobalCounter - zuletztM[fachM] > 30 || GlobalCounter < zuletztM[fachM])
+		{
+			zuletztM[fachM] = GlobalCounter;
+			Log("MESHLOG obj=%d item=%d anim=%d frame=%d clip=%d verworfen=%d fenster=%d..%d/%d..%d",
+				item->object_number, (int)(item - items), item->anim_number,
+				item->frame_number, clip, (int)(aMeshClipRejects - rejVor),
+				(int)f_left, (int)f_right, (int)f_top, (int)f_bottom);
+		}
+	}
+
 	phd_right = phd_winwidth;
 	phd_left = 0;
 	phd_top = 0;
@@ -777,23 +808,23 @@ void PrintObjects(short room_number)
 		// Anim) eine Zeile, nur fuer Denker: dann steht schwarz auf weiss,
 		// mit welchem Status er aussortiert wird und was seine Steuerung
 		// gerade spielt.
+		// Zweite Fassung: nicht mehr je (Item, Anim) EINMAL, sondern je Item
+		// alle 30 Bilder wieder - die erste Fassung sah vom Blink-Zyklus
+		// nur den allerersten Eintritt und war danach blind. data wird
+		// mitgeloggt: bleibt der KI-Platz waehrend der Unsichtbarkeit
+		// bestehen, kommt der Status-Wechsel NICHT von der Platzvergabe.
 		if (obj->intelligent && item->status == ITEM_INVISIBLE)
 		{
-			static long gesehen2[128];
-			static long nGesehen2;
-			const long kennung2 = ((long)i << 16) | (item->anim_number & 0xFFFF);
-			long neu2 = 1;
+			static long zuletzt[64];
+			const long fach = i & 63;
 
-			for (long k = 0; k < nGesehen2; k++)
-				if (gesehen2[k] == kennung2) { neu2 = 0; break; }
-
-			if (neu2 && nGesehen2 < 128)
+			if (GlobalCounter - zuletzt[fach] > 30 || GlobalCounter < zuletzt[fach])
 			{
-				gesehen2[nGesehen2++] = kennung2;
-				Log("SKIPLOG obj=%d item=%d anim=%d frame=%d zustand=%d ziel=%d flags=%X data=%d",
+				zuletzt[fach] = GlobalCounter;
+				Log("SKIPLOG obj=%d item=%d anim=%d frame=%d zustand=%d ziel=%d flags=%X data=%d takt=%d",
 					item->object_number, i, item->anim_number, item->frame_number,
 					item->current_anim_state, item->goal_anim_state,
-					(unsigned)item->flags, item->data ? 1 : 0);
+					(unsigned)item->flags, item->data ? 1 : 0, GlobalCounter);
 			}
 		}
 

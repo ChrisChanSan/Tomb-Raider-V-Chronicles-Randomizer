@@ -1689,6 +1689,18 @@ bool Rando::run(const RandoInput& in,
     // gezielte Auswahl nicht durchkam.
     std::map<int, const CrossGegner*> crossGewaehlt;
     std::set<int> crossBenutzt;
+
+    // Liegt das Modell dieser Zeile schon NATIV im Level? Genau dann, wenn
+    // dieses Level der Spender IST und das Modell dort unter derselben
+    // Nummer wohnt (kein quellSlot). Dann ist nichts zu kopieren - der Typ
+    // wird nur gesetzt (#124). Gaeste aus TR3 haben kein Spenderlevel.
+    auto modellSchonDa = [&klein](const CrossGegner& c) -> bool {
+        if (!c.von || c.quellSlot > 0) return false;
+        std::string k;
+        for (const char* p = c.von; *p; ++p)
+            k.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p);
+        return k == klein;
+    };
     if ((opt.crossEnemies || opt.allsanity) && (opt.swapEnemies || opt.addEnemies) && klein != "joby4")
     {
         std::set<int> eigene(in.enemyTypes.begin(), in.enemyTypes.end());
@@ -1713,10 +1725,28 @@ bool Rando::run(const RandoInput& in,
                 continue;
             }
 
+            // "Sich selbst spendet niemand" - das ist ein Grund, den IMPORT
+            // zu lassen, aber KEIN Grund, den Typ auszuschliessen (#124,
+            // Nutzerfrage 2026-08-24: "Er ist ja enthalten, da muesste der
+            // Rando mit Add+OCB ja einfach weiterkommen"). Wessen Modell
+            // schon im Level liegt, der laesst sich ohne jede Kopie setzen -
+            // die Bremse gehoert an die Emission, nicht an die Auswahl.
+            //
+            // Anlass ist der Koch in joby3: der Slot ist da, Cores Kuration
+            // benutzt ihn nur fuer ein einziges Item. Dasselbe galt still
+            // fuer den Kranfuehrer in joby2, Pierre in Andrea3 und die Hydra
+            // in Andrea2 - alles Typen, deren Modell im Spenderlevel liegt,
+            // die dort aber nicht in der kuratierten Liste stehen.
+            //
+            // Eine Ausnahme bleibt: traegt die Zeile einen quellSlot, wohnt
+            // das Modell beim Spender unter einer ANDEREN Nummer (der
+            // Wachmann 460 liegt dort auf 37). Im Spenderlevel selbst waere
+            // das ein Klon seiner selbst - zwei gleiche Modelle auf zwei
+            // Slots. Das bleibt draussen.
             std::string vonKlein;
             for (const char* p = c.von; *p; ++p)
                 vonKlein.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p);
-            if (vonKlein == klein) continue;              // sich selbst spendet niemand
+            if (vonKlein == klein && c.quellSlot > 0) continue;   // kloent sich sonst selbst
             kandidaten.push_back(&c);
         }
 
@@ -2640,6 +2670,24 @@ bool Rando::run(const RandoInput& in,
             e.set("ausTr3", JsonValue::makeString(c->tr3));
             moveables.push(e);
             report.notes.push_back(fmt("Gast aus Tomb Raider 3: Slot %d wird beim Patchen geholt.", t));
+            continue;
+        }
+
+        // Einheimischer Typ (#124): dieses Level IST der Spender, das Modell
+        // steht also schon unter der richtigen Nummer - samt Meshes,
+        // Tauschhaelften und Samples, denn genau von hier holen die anderen
+        // Level sie. Kopiert wird nichts, gesetzt schon: der Koch in joby3
+        // ist der Anlass, er hatte seinen Slot immer und stand trotzdem nur
+        // ein einziges Mal im Level.
+        //
+        // Der Anim-Basistyp weiter oben bleibt bewusst unberuehrt: er kommt
+        // mit replace=false und faellt von selbst aus, wenn das Level ihn
+        // schon hat - und wenn nicht, ist er echt gebraucht (der Koch leiht
+        // sich seine Sterbeanimation von ihm, chef.cpp).
+        if (modellSchonDa(*c))
+        {
+            report.notes.push_back(fmt("Gegner typeId %d ist hier einheimisch - Modell steht schon, kein Import.", t));
+            ++report.crossTypesUsed;
             continue;
         }
 

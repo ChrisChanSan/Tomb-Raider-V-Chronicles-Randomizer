@@ -134,7 +134,31 @@ int main(int argc, char** argv)
             if (boxA[k]) nullA = false;
             if (boxA[k] != boxB[k]) gleich = false;
         }
-        const bool auffaellig = (nullA && !gleich) || za.state != zb.state ||
+
+        // Auch den LETZTEN Keyframe vergleichen, nicht nur den ersten. Die
+        // Engine interpoliert zwischen Keyframes (frameRate); reicht der
+        // kopierte Frame-Strom nicht bis zum letzten Keyframe, ist der erste
+        // Keyframe intakt (der Vergleich oben schweigt), aber jedes
+        // interpolierte Bild dahinter liest Muell - der Gegner ist dann nur
+        // auf den Keyframes selbst sichtbar. Genau der Blink-Takt aus andy3.
+        bool endeGleich = true;
+        {
+            const int rateA = za.frameRate ? za.frameRate : 1;
+            const int rateB = zb.frameRate ? zb.frameRate : 1;
+            const int kfA = (za.frameEnd - za.frameStart) / rateA;
+            const int kfB = (zb.frameEnd - zb.frameStart) / rateB;
+            for (int k = 0; k < 6; ++k)
+            {
+                const int16_t ea = a.debugReadFrameShort((long long)(za.frameOffset / 2) + (long long)kfA * za.frameSize + k);
+                const int16_t eb = b.debugReadFrameShort((long long)(zb.frameOffset / 2) + (long long)kfB * zb.frameSize + k);
+                if (ea != eb) { endeGleich = false; break; }
+            }
+        }
+
+        const bool auffaellig = (nullA && !gleich) || !endeGleich ||
+                                za.state != zb.state ||
+                                za.frameRate != zb.frameRate ||
+                                za.frameSize != zb.frameSize ||
                                 (za.frameEnd - za.frameStart) != (zb.frameEnd - zb.frameStart);
         if (auffaellig) ++kaputt;
 

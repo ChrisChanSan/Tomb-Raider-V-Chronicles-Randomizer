@@ -771,6 +771,32 @@ void PrintObjects(short room_number)
 		item = &items[i];
 		obj = &objects[item->object_number];
 
+		// SKIPLOG (#121, dritte Messung): der Blink-Soldat (Mafia2, Slot 51)
+		// tauchte im CLIPLOG NIE auf - er erreicht DrawAnimatingItem also gar
+		// nicht. Die einzige Weiche davor ist diese hier. Je (Item, Status,
+		// Anim) eine Zeile, nur fuer Denker: dann steht schwarz auf weiss,
+		// mit welchem Status er aussortiert wird und was seine Steuerung
+		// gerade spielt.
+		if (obj->intelligent && item->status == ITEM_INVISIBLE)
+		{
+			static long gesehen2[128];
+			static long nGesehen2;
+			const long kennung2 = ((long)i << 16) | (item->anim_number & 0xFFFF);
+			long neu2 = 1;
+
+			for (long k = 0; k < nGesehen2; k++)
+				if (gesehen2[k] == kennung2) { neu2 = 0; break; }
+
+			if (neu2 && nGesehen2 < 128)
+			{
+				gesehen2[nGesehen2++] = kennung2;
+				Log("SKIPLOG obj=%d item=%d anim=%d frame=%d zustand=%d ziel=%d flags=%X data=%d",
+					item->object_number, i, item->anim_number, item->frame_number,
+					item->current_anim_state, item->goal_anim_state,
+					(unsigned)item->flags, item->data ? 1 : 0);
+			}
+		}
+
 		if (item->status != ITEM_INVISIBLE)
 		{
 			if (item->after_death)

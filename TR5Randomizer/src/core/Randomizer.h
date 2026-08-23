@@ -73,6 +73,27 @@ inline bool isPickupType(int typeId)
         || (typeId >= PICKUP_LO_2 && typeId <= PICKUP_HI_2);
 }
 
+// Bedienelemente: alles, wovor Lara stehen und eine Animation abspielen muss
+// (#120). Ein Gegner darf dort nicht stehen - seine Hitbox schiebt sie weg,
+// die Animation laeuft nie an, und eine Tuer, die daran haengt, bleibt fuer
+// immer zu.
+//
+// Die vier Bereiche sind aus der TR5-Slotliste abgelesen, nicht geraten:
+//   242-249  Puzzle Hole 1-8
+//   258-265  Key Hole 1-8
+//   266-283  Switch Type 1-8, Airlock, Underwater 1-2, Turn, Cog, Lever,
+//            Jump, Crowbar, Pulley, Crowdove
+//   329-331  Sequence Switch 1-3
+//
+// Puzzle Done (250-257) steht bewusst NICHT dabei: das ist der fertige
+// Zustand, daran bedient niemand mehr etwas.
+inline bool istBedienelement(int typeId)
+{
+    return (typeId >= 242 && typeId <= 249)
+        || (typeId >= 258 && typeId <= 283)
+        || (typeId >= 329 && typeId <= 331);
+}
+
 // Schwarmgetier: Fledermaus, Ratte, Spinne und der Spinnengenerator. Loest ein
 // Pickup-Trigger nur so etwas aus, haelt er das Item NICHT fest.
 //

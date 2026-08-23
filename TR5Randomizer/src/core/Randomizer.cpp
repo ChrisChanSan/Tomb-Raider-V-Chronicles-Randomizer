@@ -2014,6 +2014,38 @@ bool Rando::run(const RandoInput& in,
                     continue;
                 }
 
+                // Steht dieser Gegner an einem Bedienelement, behaelt er
+                // seinen Vanilla-Typ (#120).
+                //
+                // Die Sperre fuer ZUSATZgegner allein reicht nicht: hier
+                // wechselt kein Ort, sondern eine Art. Wer neben einem
+                // Schluesselloch steht und zum T-Rex wird, blockiert die
+                // Bedienung genauso - nur faellt es beim Wuerfeln nicht auf,
+                // weil der Platz ja vanilla besetzt war.
+                //
+                // Core hat den Gegner dort hingestellt und offenbar fuer
+                // vertraeglich befunden; ihn einfach stehen zu lassen ist
+                // deshalb die sichere Antwort und braucht keine Tabelle
+                // darueber, welcher Typ "gross" ist.
+                {
+                    bool anBedienelement = false;
+                    for (const auto& kv : finalOf)
+                    {
+                        if (!istBedienelement(kv.second.typeId)) continue;
+                        if (std::abs(kv.second.x - f->second.x) > 1536) continue;
+                        if (std::abs(kv.second.z - f->second.z) > 1536) continue;
+                        if (std::abs(kv.second.y - f->second.y) > 512) continue;
+                        anBedienelement = true;
+                        break;
+                    }
+                    if (anBedienelement)
+                    {
+                        report.notes.push_back(fmt("Gegner Item %d steht an einem Bedienelement - bleibt typeId %d statt %d.",
+                                                   indizes[i], f->second.typeId, arten[i]));
+                        continue;
+                    }
+                }
+
                 JsonValue e = JsonValue::makeObject();
                 e.set("index", JsonValue::makeInt(indizes[i]));
                 e.set("typeId", JsonValue::makeInt(arten[i]));
@@ -2187,6 +2219,44 @@ bool Rando::run(const RandoInput& in,
                         std::abs(p2.y - s.floorY) < 320) { wandNah = true; break; }
                 }
                 if (wandNah) continue;
+            }
+
+            // Kein neuer Gegner an einem BEDIENELEMENT (#120).
+            //
+            // Der Nutzer hat den Fall an joby5 gezeigt: das Schloss fuer Tuer
+            // 177 und das Ventil fuer 127 sitzen direkt an ihrer Tuer. Steht
+            // dort ein grosser Gegner - Statue, T-Rex, TwoGun -, schiebt seine
+            // Hitbox Lara weg, bevor die Bedienanimation anlaufen kann. Die
+            // Tuer ist dann nie zu oeffnen, und das Level ist verloren.
+            //
+            // Gesperrt wird fuer JEDEN Gegnertyp, nicht nur fuer grosse.
+            // Wo die Grenze zwischen "schiebt weg" und "stoert nicht" genau
+            // liegt, haengt an Radius, Zustand und Anmarschwinkel und waere
+            // eine Tabelle voller Schaetzwerte - ein Softlock ist teurer als
+            // ein Gegner, der woanders steht. Gemessen kostet die Regel je
+            // nach Level 0 bis 18 Prozent der Gegnerplaetze (rich1 ist der
+            // Ausreisser mit 65 von 361); zum Setzen von zwanzig Gegnern
+            // bleibt ueberall reichlich uebrig.
+            //
+            // 1536 Units ist kein runder Daumenwert: Bedienelemente stehen an
+            // der Wandkante, bis zu 512 von der Sektormitte entfernt. Erst
+            // 512 + 1024 deckt sicher den Sektor des Objekts UND die
+            // Nachbarfelder ab, auf denen Lara zum Bedienen steht.
+            {
+                bool bedienNah = false;
+                const RoomOrigin& roB = origin[s.room];
+                const int bx = roB.originX + s.sectorX * 1024 + 512;
+                const int bz = roB.originZ + s.sectorZ * 1024 + 512;
+                for (const auto& kv : finalOf)
+                {
+                    if (!istBedienelement(kv.second.typeId)) continue;
+                    if (std::abs(kv.second.x - bx) > 1536) continue;
+                    if (std::abs(kv.second.z - bz) > 1536) continue;
+                    if (std::abs(kv.second.y - s.floorY) > 512) continue;
+                    bedienNah = true;
+                    break;
+                }
+                if (bedienNah) continue;
             }
 
             Platz p;

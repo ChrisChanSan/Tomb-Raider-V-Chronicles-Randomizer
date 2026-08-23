@@ -1082,6 +1082,29 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
+		// Die Soldatenfamilie teilt sich einen Animationssatz: SWAT_PLUS,
+		// MAFIA, SCIENTIST und CRANE_GUY uebernehmen ihn von SWAT, sonst vom
+		// BLUE_GUARD. Die Saetze sind schablonengleich, deshalb geht das gut.
+		//
+		// Der zweite Zweig war NICHT geprueft: objects[BLUE_GUARD].anim_index
+		// wurde blind genommen, auch wenn BLUE_GUARD im Level gar nicht
+		// liegt. Fuer ein ungeladenes Objekt steht dort 0 - InitialiseObjects
+		// setzt anim_index nicht zurueck -, der Gegner spielte also Animation
+		// 0 mit FREMDER Meshzahl. Die Frame-Grenzen sind dann Unsinn,
+		// S_GetObjectBounds liefert 0, und damit faellt er aus dem Zeichnen
+		// UND aus der Trefferpruefung (collide.cpp:797, "don't get objects
+		// that are not drawn"). Sichtbar bleibt nur der Schatten, den
+		// draw.cpp:561 schon VOR der Bounds-Pruefung zeichnet. Schaden teilt
+		// er weiter aus, seine Steuerung laeuft ja.
+		//
+		// Vom Nutzer in Andy3 gesehen: etwa drei Bilder sichtbar und
+		// treffbar, danach fuenfzehn Bilder nur Schatten und unverwundbar,
+		// im Kreis. In Vanilla faellt es nie auf, weil dort zu jedem
+		// Familienmitglied auch ein Anker im Level liegt - erst der
+		// Randomizer setzt eines allein in ein fremdes Level.
+		//
+		// Ohne Anker behaelt der Slot jetzt seinen EIGENEN Satz, und genau
+		// den liefert der Randomizer mit. Vanilla aendert sich nicht.
 		if (objects[SWAT].loaded)
 			obj->anim_index = objects[SWAT].anim_index;
 
@@ -1142,9 +1165,11 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
+		// Familienanker fuer den Animationssatz - BEIDE Zweige geprueft,
+		// siehe die Herleitung ueber dem BLUE_GUARD-Block.
 		if (objects[SWAT].loaded)
 			obj->anim_index = objects[SWAT].anim_index;
-		else
+		else if (objects[BLUE_GUARD].loaded)
 			obj->anim_index = objects[BLUE_GUARD].anim_index;
 
 		obj->shadow_size = 128;
@@ -1175,9 +1200,11 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
+		// Familienanker fuer den Animationssatz - BEIDE Zweige geprueft,
+		// siehe die Herleitung ueber dem BLUE_GUARD-Block.
 		if (objects[SWAT].loaded)
 			obj->anim_index = objects[SWAT].anim_index;
-		else
+		else if (objects[BLUE_GUARD].loaded)
 			obj->anim_index = objects[BLUE_GUARD].anim_index;
 
 		obj->shadow_size = 128;
@@ -1208,9 +1235,11 @@ void BaddyObjects()
 		obj->control = SasControl;
 		obj->collision = CreatureCollision;
 
+		// Familienanker fuer den Animationssatz - BEIDE Zweige geprueft,
+		// siehe die Herleitung ueber dem BLUE_GUARD-Block.
 		if (objects[SWAT].loaded)
 			obj->anim_index = objects[SWAT].anim_index;
-		else
+		else if (objects[BLUE_GUARD].loaded)
 			obj->anim_index = objects[BLUE_GUARD].anim_index;
 
 		obj->shadow_size = 128;
@@ -1241,9 +1270,11 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
+		// Familienanker fuer den Animationssatz - BEIDE Zweige geprueft,
+		// siehe die Herleitung ueber dem BLUE_GUARD-Block.
 		if (objects[SWAT].loaded)
 			obj->anim_index = objects[SWAT].anim_index;
-		else
+		else if (objects[BLUE_GUARD].loaded)
 			obj->anim_index = objects[BLUE_GUARD].anim_index;
 
 		obj->shadow_size = 128;

@@ -91,28 +91,47 @@ void InitialiseLaraLoad(short item_num)
 	lara_item = &items[item_num];
 }
 
+// Zurueck aus dem Flugmodus in den normalen Zustand.
+//
+// Stand vorher wortgleich in LaraCheat und war nur ueber die Geh-Taste zu
+// erreichen. Seit die Tastenkombination umschaltet (LaraCheatyBits) gibt es
+// zwei Wege hinaus, und beide sollen dasselbe tun - deshalb hier an einer
+// Stelle.
+//
+// current_anim_state und goal_anim_state werden mitgesetzt; im Original
+// standen sie noch auf AS_SWIMCHEAT und wurden erst im naechsten Bild von
+// AnimateLara nachgezogen. Das war folgenlos, aber ein Zustand, der eine
+// Bildlaenge lang nicht zur Animation passt, ist beim Debuggen genau das,
+// worueber man stolpert.
+void LaraCheatEnde(ITEM_INFO* item)
+{
+	lara.water_status = LW_ABOVE_WATER;
+	item->anim_number = ANIM_STOP;
+	item->frame_number = anims[ANIM_STOP].frame_base;
+	item->current_anim_state = AS_STOP;
+	item->goal_anim_state = AS_STOP;
+	item->pos.z_rot = 0;
+	item->pos.x_rot = 0;
+	lara.torso_y_rot = 0;
+	lara.torso_x_rot = 0;
+	lara.head_y_rot = 0;
+	lara.head_x_rot = 0;
+	lara.gun_status = 0;
+	LaraInitialiseMeshes();
+	lara.mesh_effects = 0;
+	item->hit_points = 1000;
+}
+
 void LaraCheat(ITEM_INFO* item, COLL_INFO* coll)
 {
 	lara.death_count = 0;
 	lara_item->hit_points = 1000;
 	LaraUnderWater(item, coll);
 
+	// Vanilla-Ausstieg: Gehen ohne Umsehen. Bleibt, auch wenn die
+	// Tastenkombination inzwischen ebenfalls hinausfuehrt.
 	if (input & IN_WALK && !(input & IN_LOOK))
-	{
-		lara.water_status = LW_ABOVE_WATER;
-		item->frame_number = anims[ANIM_STOP].frame_base;
-		item->anim_number = ANIM_STOP;
-		item->pos.z_rot = 0;
-		item->pos.x_rot = 0;
-		lara.torso_y_rot = 0;
-		lara.torso_x_rot = 0;
-		lara.head_y_rot = 0;
-		lara.head_x_rot = 0;
-		lara.gun_status = 0;
-		LaraInitialiseMeshes();
-		lara.mesh_effects = 0;
-		lara_item->hit_points = 1000;
-	}
+		LaraCheatEnde(item);
 }
 
 void LaraInitialiseMeshes()
@@ -206,7 +225,43 @@ void LaraCheatGetStuff()
 void LaraCheatyBits()
 {
 #ifndef _DEBUG	//public releases have cheats in inventory, except for DOZY
-	if (keymap[DIK_D] && keymap[DIK_O] && keymap[DIK_Z] && keymap[DIK_Y])
+	// D+O+Z+Y schaltet den Flugmodus UM, nicht nur ein.
+	//
+	// Vanilla kannte nur den Weg hinein; heraus kam man ausschliesslich ueber
+	// die Geh-Taste in LaraCheat - und darauf kommt niemand von selbst (der
+	// Nutzer nicht, und beim Testen ist ein steckengebliebener Flugmodus
+	// genau dann laestig, wenn man es eilig hat).
+	//
+	// Reagiert wird auf die FLANKE, nicht auf das Halten: bei 30 Bildern je
+	// Sekunde wuerde ein gehaltenes Tastenpaket sonst dreissigmal je Sekunde
+	// vor und zurueck schalten.
+	//
+	// Das Anheben um 128 bleibt aber am HALTEN haengen und nur beim
+	// Einschalten - so kommt Lara wie gewohnt aus dem Boden heraus, wenn man
+	// die Tasten einen Moment gedrueckt haelt. Beim Ausschalten waere ein
+	// Anheben sinnlos.
+	static bool dozyGehalten = false;
+	static bool dozyHebt = false;
+
+	const bool dozyJetzt = keymap[DIK_D] && keymap[DIK_O] && keymap[DIK_Z] && keymap[DIK_Y];
+
+	if (dozyJetzt && !dozyGehalten)
+	{
+		if (lara.water_status == LW_FLYCHEAT)
+		{
+			LaraCheatEnde(lara_item);
+			dozyHebt = false;
+		}
+		else
+			dozyHebt = true;
+	}
+
+	if (!dozyJetzt)
+		dozyHebt = false;
+
+	dozyGehalten = dozyJetzt;
+
+	if (dozyJetzt && dozyHebt)
 	{
 		lara_item->pos.y_pos -= 128;
 

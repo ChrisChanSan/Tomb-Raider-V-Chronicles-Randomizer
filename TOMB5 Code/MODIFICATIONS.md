@@ -393,6 +393,14 @@ Also in this group:
   individually but are *not* enemies and are therefore left out of the
   percentage: they never move between levels, so scaling them with the enemy
   pool would be meaningless.
+- `game/laramisc.cpp` - the DOZY fly cheat is now a TOGGLE. Vanilla only had a
+  way in; the only way out was the Walk key inside `LaraCheat`, which nobody
+  discovers on their own and which leaves a tester stuck in flight. The key
+  combination now reacts to the rising EDGE and switches the mode off again if
+  it is already on; the Walk exit stays. Both exits share one function,
+  `LaraCheatEnde`, which also sets `current_anim_state`/`goal_anim_state` -
+  upstream left them on the swim-cheat state for one frame.
+
 - `game/balance.cpp` also carries a `WaffenSchaden` percentage next to the two
   enemy ones, applied in `BalanceWaffenSetzen` and in `lara1gun.cpp` through
   `WaffenSchaden()`, capped at 127 because the engine holds weapon damage in a

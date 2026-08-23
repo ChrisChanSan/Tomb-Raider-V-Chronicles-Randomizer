@@ -108,17 +108,12 @@ void CalculateCamera()
 	SniperOverlay = 0;
 	SniperCamActive = 0;
 
-	// Ego-Sicht (#126): den Kopf JEDES BILD zurueckgeben und ihn nur dann
-	// wieder ausblenden, wenn EgoKamera unten wirklich laeuft. Sonst stuende
-	// Lara in jeder festen Kamera und jeder Cutscene kopflos da - die Sicht
-	// wechselt mitten im Spiel, das Ausblenden muss also mitwechseln.
-	// CalculateCamera laeuft vor dem Zeichnen, das Bild sieht immer den
-	// Stand dieses Durchlaufs.
-	if (egoKopfWeg)
-	{
-		lara_item->mesh_bits = -1;
-		egoKopfWeg = 0;
-	}
+	// Ego-Sicht (#126): Merker JEDES BILD zuruecksetzen. Er wird nur wieder
+	// gesetzt, wenn EgoKamera unten wirklich laeuft - sonst stuende Lara in
+	// jeder festen Kamera und jeder Cutscene kopflos da. CalculateCamera
+	// laeuft vor dem Zeichnen, das Bild sieht immer den Stand dieses
+	// Durchlaufs.
+	egoKopfWeg = 0;
 
 	if (BinocularRange)
 	{
@@ -1288,22 +1283,20 @@ void EgoKamera(ITEM_INFO* item)
 		}
 	}
 
-	// Kopf ausblenden - und NUR den Kopf. Der Rest von ihr bleibt stehen,
-	// sonst greift im Bild niemand mehr nach den Kanten.
+	// Merken, dass die Ego-Sicht dieses Bild wirklich lief. Das Ausblenden
+	// von Kopf und Zopf haengt daran (drawlara.cpp) - hier wird mesh_bits
+	// BEWUSST NICHT ANGEFASST:
 	//
-	// ACHTUNG, FALLE: Lara liest mesh_bits ANDERS als jedes andere Item.
-	// Ihre Haut zeichnet DrawLara__1/__4 (specific\drawlara.cpp) und prueft
-	// dabei
-	//        mesh_bits >> 16 & (1 << (15 - i))
-	// wobei i die ZEICHENREIHENFOLGE ist - lara_mesh_sweetness_table, und
-	// die laeuft in LMX_-Ordnung, nicht in LM_-Ordnung. Der Kopf steht dort
-	// auf Platz 8 (LMX_HEAD), sein Bit ist also 16 + (15 - 8) = 23.
-	// LM_HEAD (14) trifft etwas ganz anderes: die GELENKE weiter unten
-	// pruefen 1 << (14 - i), Bit 14 ist dort Gelenk 0 (Huefte). Genau das
-	// war der erste Versuch - ein Huftgelenk verschwand, der Kopf blieb und
-	// ragte bei manchen Drehungen ins Bild (Nutzerbefund "ich kann manchmal
-	// noch Laras Haare clippen sehen").
-	item->mesh_bits = ~(1 << 23);
+	//  - Laras Haut ist geskinnt. Ein per mesh_bits ausgeblendetes Mesh
+	//    stasht seine Randpunkte nicht mehr (beides steht in derselben
+	//    Klammer), und der Nachbar skinnt dann aus altem Speicher: das
+	//    gestreckte Dreieck, das der Nutzer als "dritter Arm" sah.
+	//  - Fernglas und Laservisier schreiben mesh_bits ebenfalls (0 beim
+	//    Start, -1 beim Verlassen). Zwei Schreiber auf demselben Feld waren
+	//    der Grund, warum der Fehler nach dem Zielfernrohr bis zum Neustart
+	//    stehen blieb.
+	//
+	// Wer ausgeblendet wird, entscheidet jetzt allein die Zeichenroutine.
 	egoKopfWeg = 1;
 
 	GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &camera.pos.room_number);

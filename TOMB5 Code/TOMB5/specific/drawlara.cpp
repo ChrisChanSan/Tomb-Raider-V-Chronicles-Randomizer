@@ -140,7 +140,20 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 
 		if (lara_item->mesh_bits >> 0x10 & 1 << (15 - i))
 		{
-			phd_PutPolygons(lara.mesh_ptrs[lara_mesh_sweetness_table[i]], -1);
+			// Ego-Sicht (#126): den Kopf NICHT ZEICHNEN - seine Vertices
+			// aber sehr wohl stashen (die Schleife darunter).
+			//
+			// Deshalb steht das hier und nicht in mesh_bits: Laras Haut ist
+			// GESKINNT, die Nachbarteile ziehen ihre Randpunkte aus dem
+			// Stash dieses Meshes. Blendet man den Kopf ueber mesh_bits aus,
+			// faellt das Stashen mit weg (es steckt in derselben Klammer),
+			// und das Halsgelenk skinnt aus altem Speicher: ein riesiges
+			// gestrecktes Dreieck quer durchs Bild - vom Nutzer als
+			// "dritter Arm" fotografiert. Nach dem Zielfernrohr blieb es
+			// sogar dauerhaft stehen, weil dann auch noch die
+			// mesh_bits-Rueckgabe des Fernglases dagegenhielt.
+			if (!(EgoKopfWeg() && lara_mesh_sweetness_table[i] == LM_HEAD))
+				phd_PutPolygons(lara.mesh_ptrs[lara_mesh_sweetness_table[i]], -1);
 
 			for (int j = 0; j < 4; j++)
 			{
@@ -345,7 +358,12 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 			bLaraUnderWater = -1;
 
 		aSetViewMatrix();
-		phd_PutPolygonsSpcEnvmap(lara.mesh_ptrs[lara_mesh_sweetness_table[i]], -1);
+
+		// Ego-Sicht (#126): Kopf nicht zeichnen, Vertices trotzdem stashen -
+		// Begruendung wie in DrawLara__1. Diese Fassung prueft mesh_bits gar
+		// nicht erst, sie haette den Kopf sonst weiter gezeichnet.
+		if (!(EgoKopfWeg() && lara_mesh_sweetness_table[i] == LM_HEAD))
+			phd_PutPolygonsSpcEnvmap(lara.mesh_ptrs[lara_mesh_sweetness_table[i]], -1);
 
 		for (int j = 0; j < 4; j++)
 		{

@@ -2742,14 +2742,24 @@ bool Rando::run(const RandoInput& in,
     // Werkzeug-Goldreferenz (Import Export\Waffen Tests\Plan.md, "Alle 13
     // Level mit dem vollen Set"), mit zwei begruendeten Abweichungen:
     //
-    // 1. Die Holsterslots 13-16 sind hier ALLE "nur was fehlt" und kommen
-    //    einheitlich aus Andrea3 (die Goldreferenz nahm 16 immer aus joby2).
-    //    Die Slots liefern die OBERSCHENKEL-Ansicht je Holsterzustand; bei
-    //    zufaelligen Outfits bringt der Outfit-Spender seine eigenen mit,
-    //    und gemischte Oberschenkel (drei von Andrea, einer von joby) waeren
-    //    sichtbar falsch. Preis: die Deagle sieht IM Holster wie der alte
-    //    Revolver aus - gezogen (6), mit Laser (12), als Pickup (347) und im
-    //    Inventar ist sie ueberall die Deagle.
+    // 1. Die Holsterslots 13, 14 und 15 sind "nur was fehlt" und kommen aus
+    //    Andrea3. Slot 16 dagegen kommt IMMER aus joby2 und ersetzt, was da
+    //    ist - so wie es die Goldreferenz von Anfang an hatte.
+    //
+    //    Warum das eine Abwaegung ist und keine Selbstverstaendlichkeit: die
+    //    vier Slots liefern Laras zwei OBERSCHENKEL je Holsterzustand, und
+    //    Bein, Holster und Waffe sind EIN Mesh - trennen laesst sich das
+    //    nicht. Slot 16 aus joby2 heisst also: die Deagle steckt richtig im
+    //    Holster, aber Rom- und Catsuit-Lara tragen waehrenddessen joby2s
+    //    Tarnhosen-Oberschenkel.
+    //
+    //    Eine Zeit lang stand hier deshalb Andrea3 auch fuer 16, mit dem
+    //    umgekehrten Preis: stimmige Oberschenkel, dafuer der alte Revolver
+    //    im Holster. Der Nutzer hat sich 2026-08-23 ausdruecklich fuer die
+    //    Waffe entschieden ("Wir wollten den Revolver ja gaenzlich durch die
+    //    Desert Eagle ersetzen") - er sieht die Waffe, die Oberschenkel
+    //    nimmt er in Kauf. Gezogen (6), mit Laser (12), als Pickup (347) und
+    //    im Inventar war die Deagle ohnehin schon ueberall.
     // 2. Andrea3 liefert zusaetzlich 352/456/457 (Fernglas-Inventarobjekt
     //    und die Overlays fuer Fernglas und Zielfernrohr) - die fehlen nur
     //    den andy-Leveln, und ohne 457 zeigt der Blick durchs Scope Laras
@@ -2766,13 +2776,13 @@ bool Rando::run(const RandoInput& in,
         static const WRegel kWaffen[] = {
             // Andrea3: Pistolen/Uzi/Schrotflinte/Holster/Lasersight - nur was fehlt
             {"Andrea3",1,false},{"Andrea3",2,false},{"Andrea3",3,false},
-            {"Andrea3",13,false},{"Andrea3",14,false},{"Andrea3",15,false},{"Andrea3",16,false},
+            {"Andrea3",13,false},{"Andrea3",14,false},{"Andrea3",15,false},
             {"Andrea3",334,false},{"Andrea3",335,false},{"Andrea3",336,false},{"Andrea3",337,false},
             {"Andrea3",338,false},{"Andrea3",339,false},{"Andrea3",340,false},{"Andrea3",351,false},
             // Gefolge (fehlt nur den andy-Leveln)
             {"Andrea3",352,false},{"Andrea3",456,false},{"Andrea3",457,false},
             // joby2: Desert Eagle ist Vorgabe - immer ersetzen
-            {"joby2",6,true},{"joby2",12,true},{"joby2",347,true},{"joby2",348,true},
+            {"joby2",6,true},{"joby2",12,true},{"joby2",16,true},{"joby2",347,true},{"joby2",348,true},
             // rich1: HK - "nur was fehlt" laesst rich2 seine Spezialpose
             {"rich1",5,false},{"rich1",345,false},{"rich1",346,false},
         };

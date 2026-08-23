@@ -479,6 +479,11 @@ public:
     // volume u8, radius s8, randomness s8, pitch s8, flags s16).
     bool debugSoundInfoAt(int map, size_t& at) const
     { const int i = soundInfoIndex(map); if (i < 0) return false; at = m_infosAt + static_cast<size_t>(i) * 8; return true; }
+    // Lage und Umfang der beiden Meshbloecke - fuer Rohvergleiche zweier
+    // Fassungen desselben Levels (LevelDiff).
+    int32_t debugMeshPtrCount() const { return m_meshPtrs.count; }
+    bool debugMeshDataBlock(size_t& dataAt, int32_t& n) const
+    { dataAt = m_meshData.dataAt; n = m_meshData.count; return m_meshData.count > 0; }
     // Byteposition eines Meshes ueber seinen Zeigerindex - fuer
     // Rohvergleiche (Walk-Kennzahlen unterscheiden identische Geometrie
     // mit verschiedener Texturierung nicht).

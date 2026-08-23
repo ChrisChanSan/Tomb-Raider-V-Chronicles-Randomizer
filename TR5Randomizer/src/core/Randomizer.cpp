@@ -1432,11 +1432,15 @@ bool Rando::run(const RandoInput& in,
     //
     // basisSlot (0 = keiner): Anim-Basistyp der Soldatenfamilie. SWAT+ und
     // Mafia tragen in den Dateien nur einen Ein-Frame-Stummel - ihre Anims
-    // holt die Engine zur Laufzeit vom Basistyp (setup.cpp:1052/1112/1145:
-    // anim_index wird auf SWATs, sonst Guards Satz umgebogen). Wer so einen
-    // Typ importiert, MUSS den Basistyp mitbringen, sonst laeuft er ohne
-    // gueltigen Satz. Import mit replace=false: hat das Ziel den Basistyp
-    // schon (nativ oder als eigener Cross-Import), bleibt der stehen.
+    // holt die Engine zur Laufzeit vom Basistyp (setup.cpp: anim_index wird
+    // auf SWATs Satz umgebogen, sonst Wachmann 460, sonst Guard 37 - die
+    // Mittelstufe ist der #121-Nachtrag). Wer so einen Typ importiert, MUSS
+    // den Basistyp mitbringen, sonst laeuft er ohne gueltigen Satz. Import
+    // mit replace=false: hat das Ziel den Basistyp schon (nativ oder als
+    // eigener Cross-Import), bleibt der stehen. Basis der Stummel ist seit
+    // dem #121-Nachtrag der Wachmann (460): der traegt IMMER den sauberen
+    // joby3-Satz, waehrend Slot 37 je Level ein anderes Modell fuehren darf
+    // (rich!) - Messdaten bei Zeile 37.
     // "tr3" (0 = aus TR5 selbst): Kennung der Fremdquelle aus
     // Tr3Quelle::dinos(). Ist sie gesetzt, ist "von" leer - das Modell kommt
     // nicht aus einem TR5-Level, sondern zur Laufzeit aus der Installation des
@@ -1460,31 +1464,44 @@ bool Rando::run(const RandoInput& in,
         // Anim-Kommando und reist deshalb nicht von selbst). Ohne den
         // Eintrag atmet er in fremden Leveln stumm (#111 Teil 3).
         { 35, "rich3",   { {88,"rich3",88} },                   {-1,-1},  "rich3",   463, 0, 33 }, // Advanced SWAT (Anims von SWAT)
-        // Guard-Spender ist joby3, NICHT rich1 (#121, 2026-08-23). Der Satz
-        // dient als Anim-Basis der ganzen Stummel-Familie (Mafia, Crane,
-        // SWAT+), und Cores Saetze tragen je Level andere TOTE ERBEN: Anims,
-        // die sich den Frame-Zeiger mit einer Nachbaranim teilen, ihn aber
-        // mit eigener (falscher) Schrittweite lesen. Beim nativen Besitzer
-        // faellt das nie auf, weil er diese Zustaende nicht spielt - unsere
-        // Familienmitglieder spielen sie.
+        // Slot 37 traegt wieder das RICH-Modell (blaue Weste, rich1) - der
+        // #121-Nachtrag vom 2026-08-23. Der Erstfix hatte den Spender auf
+        // joby3 gestellt, weil der Satz damals die Anim-Basis der ganzen
+        // Stummel-Familie war und Cores Saetze je Level andere TOTE ERBEN
+        // tragen: Anims, die sich den Frame-Zeiger mit einer Nachbaranim
+        // teilen, ihn aber mit eigener (falscher) Schrittweite lesen. Beim
+        // nativen Besitzer faellt das nie auf, weil er diese Zustaende
+        // nicht spielt - die Stummel-Familie spielt sie.
         //
-        // Gemessen (AnimMap, Gruppen mit ungleicher Schrittweite):
-        //   rich1-Guard: +19..23, +24..30, +34/35, +41..45, +50..56 - also
+        // Folge des Erstfixes (Nutzerfund, trview-Screenshots): Guard (37)
+        // und Wachmann (460) waren Zwillinge, und in Leveln mit nativem
+        // rich-Guard ueberschrieb der Import sogar das native Modell. Darum
+        // haengt die Familie jetzt am Wachmann 460 (basisSlot der Stummel,
+        // Alias-Kette in setup.cpp) - und 37 darf wieder rich sein.
+        //
+        // Warum das rich-Modell FUER SICH sicher ist (AnimMap-Messung):
+        //   rich1-Guard krank: +19..23, +24..30, +34/35, +41..45, +50..56 -
         //     die SONDERPOSEN (Zst 26-31) und Zustand 35, Mafias
-        //     SCHUSS-Pose. Ergebnis im Spiel: Modell verschwindet ab
+        //     Schuss-Pose. Der Guard SELBST spielt davon nichts: seine
+        //     eigene Schuss-Anim (+2) ist gesund, und die Sonderposen
+        //     brauchen eine Pose-OCB - der Rando setzt bei Swap und
+        //     Zusatzgegnern immer die Wunsch-OCB (kSpawnOcb, Guard = 0).
+        //     Krank wurde der Satz nur als FAMILIENBASIS: Modell weg ab
         //     Keyframe 1, Schatten bleibt, Schaden kommt an - der
-        //     Blink-Soldat aus andy3 (Nutzerfund, drei Messlaeufe).
+        //     Blink-Soldat aus andy3 (drei Messlaeufe).
         //   joby3-Guard: Kampfblock und Sonderposen sauber; toter Rest nur
         //     +23..28/+30..32/+34f/+57f. Feldbeweis: der Wachmann (460)
         //     traegt exakt diesen Satz und ist in allen Posen fehlerfrei.
-        { 37, "joby3",   {},                                    {-1,-1},  "joby3",   465, 0, 0 },  // Guard (Blue Guard)
+        { 37, "rich1",   {},                                    {-1,-1},  "joby3",   465, 0, 0 },  // Guard (Blue Guard, rich-Modell)
         // Der zweite Wachmann (#83/#105, Engine-Slot 460 = BLUE_GUARD2):
         // das Joby-Modell aus joby3 - dort ist der Guard der Anim-Anker der
         // Familie und traegt den vollen eigenen Satz (Mafia holt sich seine
         // Anims von ihm). joby2s Guard laesst sich NICHT kopieren
         // (Frame-Zeiger, siehe Crane Guy). Kein Basistyp: er bringt alles
-        // mit; steht zusaetzlich SWAT/Guard im Ziel, biegt setup.cpp ihn
-        // zur Laufzeit auf deren Satz um wie jedes Familienmitglied.
+        // mit und behaelt seinen Satz auch neben SWAT/Guard (#111 Teil 2,
+        // kein Umbiegen mehr). Seit dem #121-Nachtrag ist ER die Anim-Basis
+        // der Stummel-Familie (basisSlot 460 bei Mafia und Crane Guy) -
+        // genau weil sein Satz IMMER der saubere aus joby3 ist.
         // Tauschhaelften (Feuerhaende 10/13) wie der Guard aus joby3.
         { 460, "joby3",  {},                                    {-1,-1},  "joby3",   467, 0, 0, nullptr, 37 }, // Wachmann (Joby)
         // Laserschuss (193) und -einschlag (167): fest verdrahtet in
@@ -1496,7 +1513,7 @@ bool Rando::run(const RandoInput& in,
         { 41, "Andrea1", {},                                    {-1,-1},  nullptr,   -1 },  // Dog
         { 45, "Andrea1", { {96,"rich1",85}, {98,"rich1",143} }, {-1,-1},  nullptr,   -1 },  // Larson
         { 47, "Andrea3", { {90,"joby5",45}, {91,"joby5",123} }, {-1,-1},  nullptr,   -1 },  // Pierre
-        { 49, "joby3",   {},                                    {-1,-1},  "joby3",   466, 0, 37 }, // Soldier MG (Mafia, Anims von Guard)
+        { 49, "joby3",   {},                                    {-1,-1},  "joby3",   466, 0, 460 }, // Soldier MG (Mafia, Anims vom Wachmann)
         { 51, "joby3",   {},                                    {406,-1}, nullptr,   -1 },  // Soldier Pistols (Mafia2) + MESHSWAP2
         // Crane Guy: der einzige TR5-Gegner mit vollstaendigem Modell, den
         // Core NIE als Item platziert hat - dieselbe Lage wie bei Pierre.
@@ -1504,13 +1521,13 @@ bool Rando::run(const RandoInput& in,
         // SasControl, er feuert ueber Zustand 3 wie der Blue Guard
         // (sas.cpp:344 nennt ihn dort ausdruecklich). Im Testlevel bestaetigt.
         //
-        // basisSlot 37: er holt seinen Anim-Satz zur Laufzeit von SWAT, sonst
-        // Guard (setup.cpp:1211-1214) - Stummel-Familie wie Mafia und SWAT+.
-        // Der Basisslot wird ueber SEINE eigene kCross-Zeile geholt, also aus
-        // rich1. Das ist wichtig: der Guard aus joby2 laesst sich NICHT
-        // kopieren ("Frame-Zeiger ausserhalb der Frame-Scheibe"), der aus
-        // rich1 schon.
-        { 55, "joby2",   {},                                    {-1,-1},  nullptr,   -1, 0, 37 }, // Crane Guy
+        // basisSlot 460: er holt seinen Anim-Satz zur Laufzeit von SWAT,
+        // sonst vom Wachmann (#121-Nachtrag) - Stummel-Familie wie Mafia
+        // und SWAT+. Der Basisslot wird ueber SEINE eigene kCross-Zeile
+        // geholt, also aus joby3. Das ist wichtig: der Guard aus joby2
+        // laesst sich NICHT kopieren ("Frame-Zeiger ausserhalb der
+        // Frame-Scheibe").
+        { 55, "joby2",   {},                                    {-1,-1},  nullptr,   -1, 0, 460 }, // Crane Guy
         { 57, "Andrea3", {},                                    {-1,-1},  nullptr,   -1 },  // Lion
         { 59, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Gladiator
         // Der Roman God, ZWEI Fassungen, zwei Slots (#84, Nutzeridee).
@@ -2549,11 +2566,22 @@ bool Rando::run(const RandoInput& in,
         // rich1 geht er. Bei Mafia und SWAT+ fiel es nie auf, weil deren
         // Spender zufaellig einen brauchbaren Basistyp fuehren.
         const char* basisVon = c->von;
+        int basisQuelle = c->basisSlot;
         for (const CrossGegner& b : kCross)
-            if (b.typeId == c->basisSlot) { basisVon = b.von; break; }
+            if (b.typeId == c->basisSlot)
+            {
+                basisVon = b.von;
+                // Engine-Slots jenseits 460 liegen beim Spender unter ihrem
+                // quellSlot (der Wachmann 460 unter 37) - dieselbe
+                // toSlot-Mechanik wie bei der eigenen Zeile des Typs.
+                if (b.quellSlot > 0) basisQuelle = b.quellSlot;
+                break;
+            }
 
         JsonValue g = JsonValue::makeObject();
-        g.set("slot", JsonValue::makeInt(c->basisSlot));
+        g.set("slot", JsonValue::makeInt(basisQuelle));
+        if (basisQuelle != c->basisSlot)
+            g.set("toSlot", JsonValue::makeInt(c->basisSlot));
         g.set("fromLevel", JsonValue::makeString(basisVon));
         // replace=false laesst einen nativen Basistyp stehen - das Level soll
         // sein eigenes Modell behalten, wenn es eins hat.

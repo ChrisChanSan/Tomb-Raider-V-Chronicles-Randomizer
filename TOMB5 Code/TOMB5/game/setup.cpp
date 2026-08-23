@@ -1165,10 +1165,14 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
-		// Familienanker fuer den Animationssatz - BEIDE Zweige geprueft,
-		// siehe die Herleitung ueber dem BLUE_GUARD-Block.
+		// Familienanker fuer den Animationssatz - Herleitung ueber dem
+		// BLUE_GUARD-Block. Mittelstufe Wachmann (460) seit #121-Nachtrag:
+		// Begruendung beim BLUE_GUARD2-Block unten; in Vanilla ist 460 nie
+		// geladen, dort bleibt die alte Kette SWAT -> BLUE_GUARD.
 		if (objects[SWAT].loaded)
 			obj->anim_index = objects[SWAT].anim_index;
+		else if (objects[BLUE_GUARD2].loaded)
+			obj->anim_index = objects[BLUE_GUARD2].anim_index;
 		else if (objects[BLUE_GUARD].loaded)
 			obj->anim_index = objects[BLUE_GUARD].anim_index;
 
@@ -1200,10 +1204,14 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
-		// Familienanker fuer den Animationssatz - BEIDE Zweige geprueft,
-		// siehe die Herleitung ueber dem BLUE_GUARD-Block.
+		// Familienanker fuer den Animationssatz - Herleitung ueber dem
+		// BLUE_GUARD-Block. Mittelstufe Wachmann (460) seit #121-Nachtrag:
+		// Begruendung beim BLUE_GUARD2-Block unten; in Vanilla ist 460 nie
+		// geladen, dort bleibt die alte Kette SWAT -> BLUE_GUARD.
 		if (objects[SWAT].loaded)
 			obj->anim_index = objects[SWAT].anim_index;
+		else if (objects[BLUE_GUARD2].loaded)
+			obj->anim_index = objects[BLUE_GUARD2].anim_index;
 		else if (objects[BLUE_GUARD].loaded)
 			obj->anim_index = objects[BLUE_GUARD].anim_index;
 
@@ -1235,10 +1243,14 @@ void BaddyObjects()
 		obj->control = SasControl;
 		obj->collision = CreatureCollision;
 
-		// Familienanker fuer den Animationssatz - BEIDE Zweige geprueft,
-		// siehe die Herleitung ueber dem BLUE_GUARD-Block.
+		// Familienanker fuer den Animationssatz - Herleitung ueber dem
+		// BLUE_GUARD-Block. Mittelstufe Wachmann (460) seit #121-Nachtrag:
+		// Begruendung beim BLUE_GUARD2-Block unten; in Vanilla ist 460 nie
+		// geladen, dort bleibt die alte Kette SWAT -> BLUE_GUARD.
 		if (objects[SWAT].loaded)
 			obj->anim_index = objects[SWAT].anim_index;
+		else if (objects[BLUE_GUARD2].loaded)
+			obj->anim_index = objects[BLUE_GUARD2].anim_index;
 		else if (objects[BLUE_GUARD].loaded)
 			obj->anim_index = objects[BLUE_GUARD].anim_index;
 
@@ -1270,10 +1282,14 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
-		// Familienanker fuer den Animationssatz - BEIDE Zweige geprueft,
-		// siehe die Herleitung ueber dem BLUE_GUARD-Block.
+		// Familienanker fuer den Animationssatz - Herleitung ueber dem
+		// BLUE_GUARD-Block. Mittelstufe Wachmann (460) seit #121-Nachtrag:
+		// Begruendung beim BLUE_GUARD2-Block unten; in Vanilla ist 460 nie
+		// geladen, dort bleibt die alte Kette SWAT -> BLUE_GUARD.
 		if (objects[SWAT].loaded)
 			obj->anim_index = objects[SWAT].anim_index;
+		else if (objects[BLUE_GUARD2].loaded)
+			obj->anim_index = objects[BLUE_GUARD2].anim_index;
 		else if (objects[BLUE_GUARD].loaded)
 			obj->anim_index = objects[BLUE_GUARD].anim_index;
 
@@ -1301,10 +1317,7 @@ void BaddyObjects()
 	{
 		// Zweites Guard-Modell (#83/#105): Kopie des BLUE_GUARD-Blocks. Der
 		// Slot kommt nur aus dem Randomizer und bringt einen vollen eigenen
-		// Anim-Satz mit; steht im Level zusaetzlich ein Familienanker (SWAT
-		// oder BLUE_GUARD), teilt er dessen Satz wie die anderen Mitglieder -
-		// die Saetze sind schablonengleich, und nur so greift die
-		// Feueranim-Reparatur des Randomizers (#82) auch fuer ihn.
+		// Anim-Satz mit - immer den des joby3-Guards.
 		obj = &objects[BLUE_GUARD2];
 		obj->initialise = InitialiseSas;
 		obj->control = SasControl;
@@ -1314,8 +1327,16 @@ void BaddyObjects()
 		// Kein Umbiegen auf SWAT/Guard mehr (#111 Teil 2): der Joby-Wachmann
 		// bringt immer seinen vollen eigenen Satz aus joby3 mit (kCross ohne
 		// basisSlot) - auf dem eigenen Satz stimmen Sterbeschrei (84 statt
-		// SWATs 377), Konsolen- und Sitzposen von Haus aus. Die Stummel der
-		// Familie erben weiter wie gehabt.
+		// SWATs 377), Konsolen- und Sitzposen von Haus aus.
+		//
+		// Seit dem #121-Nachtrag ist er darum die ANIM-BASIS der
+		// Stummel-Familie (Mittelstufe der Alias-Kette oben, kCross basisSlot
+		// 460 bei Mafia und Crane Guy): sein joby3-Satz ist an allen Posen
+		// gemessen sauber, waehrend Slot 37 je Level ein anderes Modell
+		// traegt - das rich-Modell dort schleppt tote Erb-Anims mit falscher
+		// Schrittweite genau auf den Zustaenden, die NUR die Stummel spielen
+		// (Zst 35, Mafias Schuss-Pose: der Blink-Soldat aus andy3). Ohne
+		// geladenen Wachmann gilt die alte Vanilla-Kette SWAT -> BLUE_GUARD.
 		obj->shadow_size = 128;
 		obj->hit_points = 24;
 		obj->pivot_length = 50;

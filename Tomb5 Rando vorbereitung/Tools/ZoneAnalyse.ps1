@@ -1206,7 +1206,10 @@ if ($PRESET_FLAGS.ContainsKey($LevelName)) {
 # Je Eintrag: typeId -> Grund/Nachweis. Der Randomizer setzt jeden dieser Typen
 # mit einem eigenen OneShot-Trigger ins Level (siehe addTrigger).
 #
-# NIE aufnehmen (Nutzervorgabe): Chef, Scientist, Guardian, Hydra.
+# NIE aufnehmen (Nutzervorgabe): Scientist, Guardian. Der Chef ist seit #124 im
+# Cross-Pool (kCross joby3, basisSlot 460, geliehener Soldatentod), die Hydra
+# seit 2026-08-15 - beide laufen ueber die Cross-Maschinerie, nicht ueber diese
+# Handkurationsliste.
 # Vor der Aufnahme pruefen:
 #   - Braucht er AI-Objekte (AI_GUARD, AI_AMBUSH, ...)? Die stehen woanders nicht.
 #   - Haengt sein Tod an einem Levelskript oder einer Cutscene?

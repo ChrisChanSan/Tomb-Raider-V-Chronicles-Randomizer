@@ -1390,7 +1390,8 @@ bool Rando::run(const RandoInput& in,
     // Soundboard ausgesucht und im Spiel geprueft).
     //
     // Hydra (63) ist seit dem 2026-08-15 dabei - Begruendung an ihrer Zeile.
-    // Chef, Scientist und Guardian stehen aus bekannten Gruenden nirgends im
+    // Der Koch (87) ist seit #124 dabei - Begruendung an seiner Zeile.
+    // Scientist und Guardian stehen aus bekannten Gruenden nirgends im
     // Pool.
     //
     // Je Level hoechstens DREI fremde Typen, vom Seed gewaehlt: jeder Typ
@@ -1621,6 +1622,27 @@ bool Rando::run(const RandoInput& in,
         // joby2s eigene drei Huskies (Items 4, 86, 153) stehen nicht in
         // seiner kuratierten Liste - sie bleiben vanilla, joby2 gibt nur ab.
         { 85, "joby2",   {},                                    {-1,-1},  nullptr,   -1 },  // Huskie
+        // Der Koch (#124, Nutzerentscheid 2026-08-23: "kann er sogar einfach
+        // mit in den Pool"). Reiner Nahkaempfer (Messer), Modell nur in
+        // joby3. Sein Satz traegt nur +0..+11 echte Anims (der Rest sind
+        // tote Erben, die seine Zustaende 1-6 nie beruehren); sein Tod ist
+        // ein 1-Frame-Stummel, deshalb leiht er sich in der Engine den
+        // Soldatentod +16 - Skelett knochengleich mit der Familie
+        // (BonePruef: 0 von 14 abweichend). basisSlot 460: der Wachmann
+        // reist als Todes-Spender immer mit (chef.cpp). Keine
+        // Tauschhaelften, kein Meshswap, OCB 0; seine Anim-Sounds
+        // (89/187/190) reisen ueber die Kommandos mit. Das native Item 186
+        // in joby3 bleibt per Kuration vanilla (Stealth-Cutscene-Fallback).
+        //
+        // animZahl 12: die Scheibe wird auf die 12 ECHTEN Anims begrenzt -
+        // erstmals schrumpfend statt wachsend (der Imp dehnt sie). Seine
+        // toten Erben +12..+55 zeigen alle in die Frame-Region des
+        // NAECHSTEN Slots, daran scheitert der Frame-Zeiger-Pruefer des
+        // Kopierers ("ausserhalb der Frame-Scheibe" - gemessen am
+        // CLI-Lauf). AnimMap bestaetigt: alle Verkettungen von +0..+11
+        // bleiben innerhalb der 12er-Scheibe (0 falsche), mehr spielt
+        // seine Steuerung nie.
+        { 87, "joby3",   {},                                    {-1,-1},  nullptr,   -1, 12, 460 }, // Koch
         // Imp: Spender andy3, NICHT andy1. andy1s Imp-Animsatz ist entkernt:
         // die Todesanimation +45 (ImpControl setzt sie bei hit_points<=0 fest
         // ein) ist dort ein Ein-Frame-Dummy ohne KillItem-Kommando - der Imp
@@ -1748,9 +1770,12 @@ bool Rando::run(const RandoInput& in,
     // etwas voellig anderes.
     //
     // Getauscht wird nur unter den kuratierten Typen des Levels. Damit sind
-    // Chef, Scientist, Guardian und die gescripteten Faelle von selbst aussen
-    // vor - sie stehen dort nicht drin. Mit Cross-Gegnermix gehen einzelne
-    // Rollen zusaetzlich an die gewaehlten fremden Typen.
+    // Scientist, Guardian und die gescripteten Faelle von selbst aussen
+    // vor - sie stehen dort nicht drin. Der Koch (87) ist seit #124 ein
+    // normaler Cross-Typ; sein EINES natives Item (joby3, 186) bleibt
+    // trotzdem vanilla, weil die Kuration es festnagelt (Stealth-Cutscene).
+    // Mit Cross-Gegnermix gehen einzelne Rollen zusaetzlich an die
+    // gewaehlten fremden Typen.
     std::set<int> immunGesetzt;      // Items, die schon beim Tausch immun wurden
     // Platzbedarf: manche Gegner brauchen eine Arena, kein Kaemmerchen.
     //
@@ -2990,6 +3015,8 @@ std::vector<Gegnerart> Rando::gegnerarten()
         // Der Hund aus joby2 - eigener Gegnertyp mit eigener Steuerung,
         // nicht zu verwechseln mit "Hund" (41) aus Andrea1.
         { 85, "Huskie",            nullptr },
+        // Der Koch aus joby3 (#124) - Nahkaempfer mit Messer.
+        { 87, "Koch",              nullptr },
         { 89, "Imp",               nullptr },
 
         // Die Gaeste aus Tomb Raider 3. Sie sitzen auf Slots, die in KEINEM

@@ -1730,7 +1730,10 @@ void BaddyObjects()
 		obj->control = ChefControl;
 		obj->collision = CreatureCollision;
 		obj->shadow_size = 128;
-		obj->hit_points = 35;
+		obj->hit_points = 60; // war 35 - #124: er geht in den Gegner-Pool,
+		                      // als reiner Nahkaempfer braucht er Substanz
+		                      // (Larson/Pierre-Klasse). Der Spielwert kommt
+		                      // ohnehin aus Balance.txt (LP_Koch).
 		obj->pivot_length = 50;
 		obj->radius = 102;
 		obj->bite_offset = 0;

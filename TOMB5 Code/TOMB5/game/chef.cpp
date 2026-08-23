@@ -56,24 +56,47 @@ void ChefControl(short item_number)
 	torso_y = 0;
 	torso_x = 0;
 
-	// Der Koch war unsterblich: er hat 35 Lebenspunkte und nimmt Schaden
+	// Der Koch war unsterblich: er hat Lebenspunkte und nimmt Schaden
 	// (HitEffect in setup.cpp), aber ChefControl fragte hit_points nie ab -
 	// es gab keinen Weg aus den Zustaenden 1-5 heraus. Vanilla faellt das
 	// nicht auf, weil joby3 Lara vorher alle Waffen abnimmt; mit dem
 	// Randomizer stehen dort Gegner und Lara ist bewaffnet, also braucht
-	// er einen Tod. Zustand 6 ist er: Anim +11 des Slots traegt als
-	// einziges Kommando KillItem (mit AnimKmd nachgesehen), der Koch
-	// verschwindet also beim Abspielen - so hat Core es angelegt.
+	// er einen Tod.
+	//
+	// Sein eigener Satz hat aber keine ECHTE Sterbeanimation: +11 (Zustand
+	// 6) ist ein 1-Frame-Stummel mit KillItem - er klappte uebergangslos
+	// zusammen (#124, Nutzerfund). Sein Skelett ist knochengleich mit der
+	// Soldatenfamilie (BonePruef: 0 von 14 Knochen abweichend), also leiht
+	// er sich ihren Schusstod: Anim +16, Zustand 8, 64 Frames samt
+	// Sterbeschrei und KillItem am Ende - die Leiche bleibt liegen wie bei
+	// jedem Soldaten. Dieselbe Alias-Mechanik, mit der die Stummel-Familie
+	// ihren ganzen Satz leiht, nur auf den Tod beschraenkt; die Kette ist
+	// dieselbe wie in setup.cpp: SWAT -> Wachmann (460) -> Guard (37), und
+	// +16 ist in allen drei Saetzen gesund (AnimMap; die toten Erben des
+	// rich-Satzes beginnen erst bei +19). Als Pool-Gegner bringt der
+	// Randomizer immer den Wachmann mit (kCross basisSlot 460); ganz ohne
+	// Spender bleibt der Vanilla-Stummel.
 	if (item->hit_points <= 0)
 	{
 		item->hit_points = 0;
 
-		if (item->current_anim_state != 6)
+		if (item->current_anim_state != 6 && item->current_anim_state != 8)
 		{
-			item->anim_number = objects[CHEF].anim_index + 11;
+			if (objects[SWAT].loaded)
+				item->anim_number = objects[SWAT].anim_index + 16;
+			else if (objects[BLUE_GUARD2].loaded)
+				item->anim_number = objects[BLUE_GUARD2].anim_index + 16;
+			else if (objects[BLUE_GUARD].loaded)
+				item->anim_number = objects[BLUE_GUARD].anim_index + 16;
+			else
+				item->anim_number = objects[CHEF].anim_index + 11;
+
 			item->frame_number = anims[item->anim_number].frame_base;
-			item->current_anim_state = 6;
-			item->goal_anim_state = 6;
+			// Zustand aus der Anim-Tabelle uebernehmen (8 beim geliehenen
+			// Soldatentod, 6 beim eigenen Stummel) - genau wie AnimateItem
+			// ihn beim Weiterschalten nachziehen wuerde.
+			item->current_anim_state = anims[item->anim_number].current_anim_state;
+			item->goal_anim_state = item->current_anim_state;
 		}
 
 		CreatureAnimation(item_number, 0, 0);

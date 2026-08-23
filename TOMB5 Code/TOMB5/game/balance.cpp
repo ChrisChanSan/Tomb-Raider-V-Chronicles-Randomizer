@@ -109,7 +109,7 @@ static const BALANCE_ZEILE balanceZeilen[] =
 	LEBEN("LP_Kranfuehrer",			lpKranfuehrer,		24,		CRANE_GUY),
 	LEBEN("LP_Hitman",				lpHitman,			50,		HITMAN),
 	LEBEN("LP_Scharfschuetze",		lpScharfschuetze,	35,		SNIPER),
-	LEBEN("LP_Koch",				lpKoch,				35,		CHEF),
+	LEBEN("LP_Koch",				lpKoch,				60,		CHEF),
 	LEBEN("LP_Pierre",				lpPierre,			60,		PIERRE),
 	LEBEN("LP_Larson",				lpLarson,			60,		LARSON),
 	LEBEN("LP_TwoGun",				lpTwoGun,			90,		TWOGUN),
@@ -175,7 +175,7 @@ static const BALANCE_ZEILE balanceZeilen[] =
 		"\r\n"
 		";  Uebernatuerliches und schweres Geraet:\r\n"),
 
-	SCHADEN("S_Koch_Messer",		sKochMesser,		80,		0),
+	SCHADEN("S_Koch_Messer",		sKochMesser,		150,	"  Nahkaempfer im Pool seit #124 - war 80"),
 	SCHADEN("S_Skelett_Hieb",		sSkelettHieb,		400,	0),
 	SCHADEN("S_Gladiator_Hieb",		sGladiatorHieb,		120,	0),
 	SCHADEN("S_Gott_Hieb",			sGottHieb,			40,		"  Roemischer Gott im Nahkampf"),

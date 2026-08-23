@@ -593,6 +593,35 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	calc_animating_item_clip_window(item, frm[0]);
 	clip = S_GetObjectBounds(frm[0]);
 
+	// CLIPLOG (#121), zweite Fassung. Die erste schrieb nur bei clip == 0 -
+	// und blieb beim Blink-Soldaten LEER. Damit ist die Bounds-Pruefung als
+	// Taeter raus, und die Frage verschiebt sich: LAEUFT diese Funktion
+	// waehrend der unsichtbaren Bilder ueberhaupt, und wenn ja, mit welcher
+	// Anim und welchem clip? Deshalb jetzt jedes NEUE (Slot, Anim)-Paar
+	// jedes denkenden Gegners, samt clip, Raum und Status. Faellt eine Anim
+	// im Log nie, wird der Gegner in ihr gar nicht erst gezeichnet - dann
+	// liegt der Fehler vor dieser Funktion (Raumliste, Status), nicht in ihr.
+	if (obj->intelligent)
+	{
+		static long gesehen[128];
+		static long nGesehen;
+		const long kennung = ((long)item->object_number << 16) | (item->anim_number & 0xFFFF);
+		long neu = 1;
+
+		for (long k = 0; k < nGesehen; k++)
+			if (gesehen[k] == kennung) { neu = 0; break; }
+
+		if (neu && nGesehen < 128)
+		{
+			gesehen[nGesehen++] = kennung;
+			Log("CLIPLOG obj=%d item=%d anim=%d frame=%d clip=%d raum=%d status=%d zustand=%d ziel=%d meshbits=%X swap=%X",
+				item->object_number, (int)(item - items), item->anim_number,
+				item->frame_number, clip, item->room_number, item->status,
+				item->current_anim_state, item->goal_anim_state,
+				(unsigned)item->mesh_bits, (unsigned)item->meshswap_meshbits);
+		}
+	}
+
 	if (clip)
 	{
 		CalculateObjectLighting(item, frm[0]);

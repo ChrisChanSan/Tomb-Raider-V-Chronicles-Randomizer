@@ -46,7 +46,10 @@
 #define MAX_SAMPLES	450
 #define MAX_RIPPLES	128
 #define FVF (D3DFVF_TEX2 | D3DFVF_SPECULAR | D3DFVF_DIFFUSE | D3DFVF_XYZRHW)
-#define MALLOC_SIZE	15000000	//15MB
+// 15 MB waren Troyes Mass fuer 16 KI-Plaetze. MAX_LOT 48 (#121) holt sich je
+// Platz bis zu ~16 KB mehr aus diesem Topf; 20 MB lassen dafuer und fuer die
+// dichteren Rando-Level Luft. Der Topf ist ein einmaliges malloc beim Start.
+#define MALLOC_SIZE	20000000	//20MB
 #define GAME_FOV	(80 * 182)
 // Wie viele KI-Gegner gleichzeitig aktiv sein koennen (baddie_slots,
 // lot.cpp). Upstream 5: der sechste ausgeloeste Gegner verdraengte den
@@ -56,7 +59,16 @@
 // (je Slot sizeof(CREATURE_INFO) + num_boxes * sizeof(BOX_NODE), also
 // grob 25 KB je Slot beim groessten Level - der Pool hat 15 MB).
 // Die Verdraengung bleibt als Rueckfall fuer den 17. Gegner bestehen.
-#define MAX_LOT		16
+// KI-Plaetze (#121). Es gibt nur MAX_LOT gleichzeitige Denker: wer keinen
+// Platz bekommt, wird ITEM_INVISIBLE gesetzt (lot.cpp:256) und faellt damit
+// komplett aus dem Zeichnen UND aus der Trefferpruefung - er holt sich den
+// Platz aber alle paar Bilder zurueck und feuert dann kurz. Das ergibt genau
+// das Blinken, das der Nutzer in andy3 gesehen hat: ~3 Bilder sichtbar,
+// ~15 Bilder weg, Schaden kommt trotzdem an. Vanilla hatte 5, Troye 16; der
+// Randomizer setzt bis zu 20 Zusatzgegner je Level PLUS die eigenen - 48
+// deckt das ab. Kosten: je Platz ein BOX_NODE-Feld (8 Byte x Boxzahl,
+// hoechstens ~16 KB) aus dem game_malloc-Topf, siehe MALLOC_SIZE.
+#define MAX_LOT		48
 
 // Laras Zielerfassung sammelt bis zu MAX_LOT anvisierbare Gegner plus
 // Endmarke (larafire.cpp, TargetList/LastTargets). Upstream waren beide

@@ -7,7 +7,7 @@
 #include "../specific/input.h"
 
 #define PAGE0_NUM	12
-#define PAGE1_NUM	12
+#define PAGE1_NUM	13
 
 void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak)
 {
@@ -358,6 +358,7 @@ bool Page1(long& num, long textY, ulong selection)
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Look transparency", 0);
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Static lighting", 0);
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "UW Effect", 0);
+	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "First person view", 0);
 
 	y = 2;
 	i = 0;
@@ -396,6 +397,9 @@ bool Page1(long& num, long textY, ulong selection)
 	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
 
 	strcpy(buffer, tomb5.uw_dust == 1 ? "off" : tomb5.uw_dust == 2 ? "Original" : "TR4");
+	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
+
+	strcpy(buffer, tomb5.ego_kamera ? "on" : "off");
 	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
 
 	switch (selection)
@@ -572,6 +576,17 @@ bool Page1(long& num, long textY, ulong selection)
 			if (tomb5.uw_dust < 1)
 				tomb5.uw_dust = 3;
 
+			changed = 1;
+		}
+
+		break;
+
+	case 1 << 12:
+
+		if (dbinput & IN_LEFT || dbinput & IN_RIGHT)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			tomb5.ego_kamera = !tomb5.ego_kamera;
 			changed = 1;
 		}
 

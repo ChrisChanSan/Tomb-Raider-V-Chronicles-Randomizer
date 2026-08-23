@@ -20,6 +20,8 @@
 #include "lara.h"
 #include "tomb4fx.h"
 #include "savegame.h"
+#include "delstuff.h"
+#include "../tomb5/tomb5.h"
 
 CAMERA_INFO camera;
 
@@ -38,6 +40,13 @@ long LaserSight = 0;
 long InfraRed = 0;
 char SniperOverlay = 0;
 char SniperCamActive = 0;
+
+// Ego-Sicht (#126): Merker, ob WIR Laras Kopf ausgeblendet haben, und die
+// Frage, ob die Sicht ueberhaupt laufen darf. Beides steht hier oben, weil
+// CalculateCamera es braucht - die Kamera selbst wohnt weiter unten neben
+// ihrer Vorlage BinocularCamera.
+static long egoKopfWeg = 0;
+static bool EgoSichtAn();
 static char SniperCount = 0;
 
 uchar WeaponDelay = 0;
@@ -98,6 +107,18 @@ void CalculateCamera()
 	CamOldPos.z = camera.pos.z;
 	SniperOverlay = 0;
 	SniperCamActive = 0;
+
+	// Ego-Sicht (#126): den Kopf JEDES BILD zurueckgeben und ihn nur dann
+	// wieder ausblenden, wenn EgoKamera unten wirklich laeuft. Sonst stuende
+	// Lara in jeder festen Kamera und jeder Cutscene kopflos da - die Sicht
+	// wechselt mitten im Spiel, das Ausblenden muss also mitwechseln.
+	// CalculateCamera laeuft vor dem Zeichnen, das Bild sieht immer den
+	// Stand dieses Durchlaufs.
+	if (egoKopfWeg)
+	{
+		lara_item->mesh_bits = -1;
+		egoKopfWeg = 0;
+	}
 
 	if (BinocularRange)
 	{
@@ -267,7 +288,9 @@ void CalculateCamera()
 		}
 
 		if (camera.type != CHASE_CAMERA && camera.flags != 3)
-			FixedCamera();
+			FixedCamera();      // Regie des Levels - die bleibt auch in Ego-Sicht
+		else if (EgoSichtAn())
+			EgoKamera(item);
 		else
 			ChaseCamera(item);
 	}
@@ -296,7 +319,9 @@ void CalculateCamera()
 
 		camera.fixed_camera = 0;
 
-		if (camera.type == LOOK_CAMERA)
+		if (EgoSichtAn())
+			EgoKamera(item);
+		else if (camera.type == LOOK_CAMERA)
 			LookCamera(item);
 		else
 			CombatCamera(item);
@@ -1135,6 +1160,119 @@ void MoveCamera(GAME_VECTOR* ideal, long speed)
 
 	if (gfLevelId == LVL5_THIRTEENTH_FLOOR || gfLevelId == LVL5_ESCAPE_WITH_THE_IRIS)
 		CheckForRichesIllegalDiagonalWalls();
+
+	GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &camera.pos.room_number);
+	phd_LookAt(camera.pos.x, camera.pos.y, camera.pos.z, camera.target.x, camera.target.y, camera.target.z, 0);
+	camera.old_type = camera.type;
+}
+
+/*
+ * Ego-Sicht (#126): die Kamera haengt an Laras Kopf statt hinter ihr.
+ *
+ * Vorlage ist BinocularCamera direkt darunter - die Ferngläser sind dieselbe
+ * Idee, Core hat sie also schon gebaut. Drei Unterschiede:
+ *
+ *  - Lara bleibt BEWEGLICH. Das Fernglas setzt lara.Busy und friert sie ein;
+ *    hier wird ausschliesslich die Sicht ersetzt, die Steuerung bleibt, wie
+ *    sie ist.
+ *  - Es verschwindet NUR DER KOPF, nicht der ganze Koerper (Nutzervorgabe):
+ *    das Fernglas setzt mesh_bits = 0 und blendet alles aus - dann fehlen im
+ *    Bild aber die Arme, mit denen sie greift und schiesst.
+ *  - Der Augenpunkt kommt aus dem echten Kopfgelenk (GetLaraJointPos) statt
+ *    aus einem festen Versatz. So folgt er Ducken, Kriechen, Schwimmen und
+ *    jeder Animation von selbst.
+ *
+ * Ein erster Versuch, bewusst schlicht: keine Kollisionspruefung fuer die
+ * Kamera (sie sitzt in Laras Kopf, der steckt ohnehin nie in der Wand) und
+ * keine Glaettung - sie ist an den Kopf genagelt, so war es gedacht.
+ */
+static bool EgoSichtAn()
+{
+	if (!tomb5.ego_kamera)
+		return false;
+
+	// Fernglas und Laservisier bringen ihre EIGENE Kopfkamera mit, samt
+	// eigenem Ausstieg (ExittingBinos, mesh_bits-Rueckgabe). Dazwischen zu
+	// funken wuerde beide zerlegen.
+	if (BinocularRange || BinocularOn < 0)
+		return false;
+
+	// Beim Sterben soll die Kamera zurueckweichen und zeigen, was geschehen
+	// ist - aus Laras eigenen Augen waere ihr Tod nur ein Schwenk ins Nichts.
+	if (!lara_item || lara_item->hit_points <= 0)
+		return false;
+
+	return true;
+}
+
+void EgoKamera(ITEM_INFO* item)
+{
+	PHD_VECTOR kopf;
+	long weite, rndval, shake;
+	short yrot, xrot, raum;
+
+	// Blickrichtung: Koerperdrehung plus Kopfdrehung. Die Anschlaege sind die
+	// des Fernglases - so weit und nicht weiter dreht Lara den Hals.
+	xrot = lara.head_x_rot << 1;
+	yrot = lara.head_y_rot;
+
+	if (xrot > 13650)
+		xrot = 13650;
+	else if (xrot < -13650)
+		xrot = -13650;
+
+	if (yrot > 14560)
+		yrot = 14560;
+	else if (yrot < -14560)
+		yrot = -14560;
+
+	xrot += item->pos.x_rot;
+	yrot += item->pos.y_rot;
+
+	// Augenpunkt: das Kopfgelenk, ein Stueck in Blickrichtung geschoben,
+	// damit die Kamera nicht im eigenen Hinterkopf sitzt.
+	kopf.x = 0;
+	kopf.y = 0;
+	kopf.z = 0;
+	GetLaraJointPos(&kopf, LMX_HEAD);
+
+	camera.pos.x = kopf.x + (phd_sin(yrot) * 48 >> W2V_SHIFT);
+	camera.pos.y = kopf.y - 16;
+	camera.pos.z = kopf.z + (phd_cos(yrot) * 48 >> W2V_SHIFT);
+	raum = item->room_number;
+	GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &raum);
+	camera.pos.room_number = raum;
+
+	// Zielpunkt weit voraus in Blickrichtung, gerechnet wie beim Fernglas.
+	weite = (0x5100 * phd_cos(xrot)) >> W2V_SHIFT;
+	camera.target.x = camera.pos.x + (phd_sin(yrot) * weite >> W2V_SHIFT);
+	camera.target.y = camera.pos.y - (0x5100 * phd_sin(xrot) >> W2V_SHIFT);
+	camera.target.z = camera.pos.z + (phd_cos(yrot) * weite >> W2V_SHIFT);
+	camera.target.room_number = camera.pos.room_number;
+
+	// Erschuetterungen mitnehmen, sonst haben Explosionen keine Wucht mehr.
+	if (camera.bounce && camera.type == camera.old_type)
+	{
+		if (camera.bounce <= 0)
+		{
+			rndval = -camera.bounce;
+			shake = rndval >> 1;
+			camera.target.x += (GetRandomControl() % rndval - shake) << 4;
+			camera.target.y += (GetRandomControl() % rndval - shake) << 4;
+			camera.target.z += (GetRandomControl() % rndval - shake) << 4;
+			camera.bounce += 5;
+		}
+		else
+		{
+			camera.bounce = 0;
+			camera.target.y += camera.bounce;
+		}
+	}
+
+	// Kopf ausblenden - und NUR den Kopf (Bit 14, LM_HEAD). Der Rest von ihr
+	// bleibt stehen, sonst greift im Bild niemand mehr nach den Kanten.
+	item->mesh_bits = ~(1 << LM_HEAD);
+	egoKopfWeg = 1;
 
 	GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &camera.pos.room_number);
 	phd_LookAt(camera.pos.x, camera.pos.y, camera.pos.z, camera.target.x, camera.target.y, camera.target.z, 0);

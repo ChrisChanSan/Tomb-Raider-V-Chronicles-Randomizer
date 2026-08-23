@@ -2619,5 +2619,6 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	bool look_transparency;		//on off
 	bool static_lighting;		//on off
 	ulong uw_dust;				//1-> off, 2-> original, 3-> TR4
+	bool ego_kamera;			//on off, Ego-Sicht an Laras Kopf (#126)
 };
 #pragma pack(pop)

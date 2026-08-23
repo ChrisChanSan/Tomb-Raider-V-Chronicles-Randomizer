@@ -1630,9 +1630,11 @@ bool Rando::run(const RandoInput& in,
         // Soldatentod +16 - Skelett knochengleich mit der Familie
         // (BonePruef: 0 von 14 abweichend). basisSlot 460: der Wachmann
         // reist als Todes-Spender immer mit (chef.cpp). Keine
-        // Tauschhaelften, kein Meshswap, OCB 0; seine Anim-Sounds
-        // (89/187/190) reisen ueber die Kommandos mit. Das native Item 186
-        // in joby3 bleibt per Kuration vanilla (Stealth-Cutscene-Fallback).
+        // Tauschhaelften, kein Meshswap; seine Anim-Sounds (89/187/190)
+        // reisen ueber die Kommandos mit. Seine Spawn-OCB ist 1 (Jagd statt
+        // Kuechenarbeit, siehe kSpawnOcb). Das native Item 186 in joby3
+        // bleibt per Kuration vanilla mit OCB 0 - Stealth-Cutscene-Fallback
+        // UND Kuechenarbeit haengen beide daran.
         //
         // animZahl 12: die Scheibe wird auf die 12 ECHTEN Anims begrenzt -
         // erstmals schrumpfend statt wachsend (der Imp dehnt sie). Seine
@@ -1877,6 +1879,13 @@ bool Rando::run(const RandoInput& in,
         {  61, "andrea3", 0 },  // Andrea3s eigener Slot 61 IST der Hammer
         {  61, nullptr,   1 },  // sonst Schwert-Fassung: Fernkampf
         { 461, nullptr,   0 },  // Hammer-Fassung: Nahkampf
+        // Der Koch (#124, Nutzerbefund im Spieltest): Zustand 1 ist sein
+        // Gemueseschneiden, und Vanilla verlaesst er ihn erst, wenn Lara ihm
+        // auf anderthalb Sektoren nahe kommt (chef.cpp). Fuer einen Gegner,
+        // den wir irgendwohin setzen, ist das falsch - er soll suchen wie
+        // jeder andere. OCB 1 schaltet in chef.cpp auf Jagd; der Vanilla-Koch
+        // in joby3 (Item 186, OCB 0) bleibt unberuehrt bei seiner Arbeit.
+        {  87, nullptr,   1 },  // Koch: Jagd statt Kuechenarbeit
     };
     auto spawnOcbFuer = [&klein](int typeId) -> int {
         for (const SpawnOcb& s : kSpawnOcb)

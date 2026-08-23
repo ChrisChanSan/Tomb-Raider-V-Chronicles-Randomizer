@@ -141,8 +141,26 @@ void ChefControl(short item_number)
 	{
 	case 1:
 
-		if (abs(lara_item->pos.y_pos - item->pos.y_pos) < 1024 && info.distance < 0x240000 &&
-			(item->touch_bits || lara_item->speed > 15 || item->hit_status || TargetVisible(item, &larainfo)))
+		// Zustand 1 ist seine ARBEIT am Schneidebrett. Vanilla legt er das
+		// Messer erst weg, wenn Lara ihm auf anderthalb Sektoren nahe kommt
+		// (0x240000 ist das Quadrat von 1536), hoehengleich steht und dabei
+		// sichtbar, laut oder handgreiflich wird - die Kueche in joby3 ist
+		// genau auf diesen Moment gebaut.
+		//
+		// OCB 1 (#124): JAGD-KOCH. Wen der Randomizer irgendwohin ins Level
+		// setzt, der hat keine Kueche und keinen Grund zu warten - er
+		// verlaesst seine Arbeitsanimation, sobald sein Trigger ihn weckt,
+		// und sucht Lara wie jeder andere Gegner. Ein Ziel braucht er dafuer
+		// nicht mitgeliefert zu bekommen: CreatureAIInfo traegt Lara von
+		// selbst ein, wenn der Gegner keinen Feind hat (box.cpp:74).
+		//
+		// Der Vanilla-Koch (joby3 Item 186) traegt OCB 0 - am Quelltext und
+		// mit ItemPruef nachgesehen - und bleibt damit bei seinem Gemuese.
+		// Die Kuration nagelt ihn ohnehin fest (FIXED_ITEMS), er kann seine
+		// OCB also gar nicht verlieren.
+		if ((item->trigger_flags & 1) ||
+			(abs(lara_item->pos.y_pos - item->pos.y_pos) < 1024 && info.distance < 0x240000 &&
+			(item->touch_bits || lara_item->speed > 15 || item->hit_status || TargetVisible(item, &larainfo))))
 		{
 			item->goal_anim_state = 2;
 			chef->alerted = 1;

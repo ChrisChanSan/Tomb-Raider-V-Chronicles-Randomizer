@@ -1222,8 +1222,9 @@ static bool EgoSichtAn()
 void EgoKamera(ITEM_INFO* item)
 {
 	PHD_VECTOR kopf;
+	GAME_VECTOR auge, ziel;
 	long weite, rndval, shake;
-	short yrot, xrot, raum;
+	short yrot, xrot;
 
 	// Blickrichtung: Koerperdrehung plus Kopfdrehung. Die Anschlaege sind die
 	// des Fernglases - so weit und nicht weiter dreht Lara den Hals.
@@ -1264,12 +1265,33 @@ void EgoKamera(ITEM_INFO* item)
 	kopf.z = 0;
 	GetLaraJointPos(&kopf, LMX_HEAD);
 
-	camera.pos.x = kopf.x + (phd_sin(yrot) * 48 >> W2V_SHIFT);
-	camera.pos.y = kopf.y - 16;
-	camera.pos.z = kopf.z + (phd_cos(yrot) * 48 >> W2V_SHIFT);
-	raum = item->room_number;
-	GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &raum);
-	camera.pos.room_number = raum;
+	// Der Versatz nach vorn muss die WAND FRAGEN. Steht Lara dicht davor und
+	// sieht sich um, schwenkt das Auge um ihren Kopf herum - und 48 Einheiten
+	// reichen, um in der Wand zu landen. Dann stimmt auch die Raumnummer
+	// nicht mehr (GetFloor findet den Raum JENSEITS der Wand), und der
+	// Zeichner malt von dort aus: man sieht durch die Wand (vom Nutzer
+	// gefunden, "mit der Umsehen-Taste bei der richtigen Neigung").
+	//
+	// mgLOS tastet den kurzen Weg vom Kopfmittelpunkt zum Auge ab, zieht
+	// den Punkt vor das Hindernis zurueck UND setzt die Raumnummer dabei
+	// richtig - es laeuft die Portale ab, statt zu raten. Der Kopfmittelpunkt
+	// selbst ist immer gueltiger Raum: er steckt in Lara.
+	auge.x = kopf.x;
+	auge.y = kopf.y - 16;
+	auge.z = kopf.z;
+	auge.room_number = item->room_number;
+
+	ziel.x = auge.x + (phd_sin(yrot) * 48 >> W2V_SHIFT);
+	ziel.y = auge.y;
+	ziel.z = auge.z + (phd_cos(yrot) * 48 >> W2V_SHIFT);
+	ziel.room_number = auge.room_number;
+
+	mgLOS(&auge, &ziel, 0);
+
+	camera.pos.x = ziel.x;
+	camera.pos.y = ziel.y;
+	camera.pos.z = ziel.z;
+	camera.pos.room_number = ziel.room_number;
 
 	// Zielpunkt weit voraus in Blickrichtung, gerechnet wie beim Fernglas.
 	weite = (0x5100 * phd_cos(xrot)) >> W2V_SHIFT;

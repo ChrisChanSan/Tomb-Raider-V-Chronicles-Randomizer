@@ -3673,7 +3673,16 @@ if ($ExportZonesJson -ne "") {
         $wie = if ($null -eq $ptKv.Value) { 'ohne Zonengrenze' } else { "begrenzt auf Zone <= $ptZone" }
         Write-Output "Pool-Typ $pt $wie aufgenommen ($inst Instanzen im Level)"
     }
-    [PSCustomObject]@{ level=$LevelName; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES); typeNoRooms=@($typeNoRooms); antitriggerImmun=@($antitriggerImmun); keyBarredSectors=@($keyBarred); flagPresets=@($flagPresets) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
+    # Herkunftsstempel: die Pruefsumme DIESES Skripts. Der Randomizer liest
+    # nicht die Kurationstabellen, sondern nur diesen Export - eine Aenderung
+    # an den Tabellen wirkt also erst nach dem Neu-Erzeugen. Genau das ist am
+    # 2026-08-23 aufgefallen: fuenf Exporte im Arbeitsordner stammten vom
+    # 13./14.08 und trugen noch den widerlegten globalen HK-Versatz, waehrend
+    # die Tabelle ihn laengst nur noch fuer rich2 kannte. Mit dem Stempel
+    # sieht man den Unterschied, statt ihn im Spiel zu suchen.
+    $kurationStand = (Get-FileHash $PSCommandPath -Algorithm SHA256).Hash.Substring(0,16)
+
+    [PSCustomObject]@{ level=$LevelName; kurationStand=$kurationStand; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES); typeNoRooms=@($typeNoRooms); antitriggerImmun=@($antitriggerImmun); keyBarredSectors=@($keyBarred); flagPresets=@($flagPresets) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
     Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"
 }
 

@@ -60,6 +60,7 @@
 #include <shlobj.h>
 
 #include <algorithm>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -325,6 +326,8 @@ namespace
         bool                     sourceOk = false;
         bool                     payloadOk = false;   // Pruefsummenliste geladen?
         std::string              payloadError;
+        // Gemischter Kurationsstand der Zonen-Exporte in data\ - leer = ok.
+        std::string              zonenWarnung;
         char                     seedBuf[64] = {};
         bool                     busy = false;
 
@@ -1748,6 +1751,22 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::BeginGroup();
 
     // --- 1. Spielordner ---
+    // Kurationsstand-Warnung ganz oben und quer ueber alle Spalten: sie
+    // betrifft das Ergebnis JEDES Laufs, nicht einen einzelnen Bereich.
+    if (!a.zonenWarnung.empty())
+    {
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(1.0f, .45f, .30f, 0.16f));
+        ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(1.0f, .45f, .30f, 0.85f));
+        ImGui::BeginChild("k_zonenwarnung", ImVec2(0.0f, 0.0f),
+                          ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+        ImGui::TextColored(ImVec4(1, .55f, .35f, 1), "Achtung: veralteter Kurationsstand");
+        ImGui::TextWrapped("%s", a.zonenWarnung.c_str());
+        ImGui::TextDisabled("Beheben: ZoneAnalyse.ps1 fuer ALLE Level neu nach data\\ exportieren.");
+        ImGui::EndChild();
+        ImGui::PopStyleColor(2);
+        ImGui::Spacing();
+    }
+
     blockAuf("k_install", "1. Deine Installation", fInstall);
     ImGui::TextWrapped("Waehle den Ordner deiner Tomb Raider Chronicles-Installation. "
                        "Die Level werden direkt dort randomisiert; die Originale sichert "
@@ -2531,6 +2550,70 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.payloadError = "Der Ordner \"data\" neben dem Programm fehlt oder ist unvollstaendig ("
                          + err + "). Erwartet wird: " + PathUtil::narrow(csv);
     }
+
+    //------------------------------------------------------------------------
+    // Kurationsstand der Zonen-Exporte pruefen.
+    //
+    // Der Randomizer liest nie die Kurationstabellen aus ZoneAnalyse.ps1,
+    // sondern nur die daraus erzeugten zones_<level>.json. Wird die Tabelle
+    // geaendert und nicht neu erzeugt, arbeitet er lautlos mit der alten
+    // Kuration weiter - und der Ordner data\ ist ein Erzeugnis, also gibt es
+    // auch keinen Commit, der es sichtbar machen wuerde.
+    //
+    // Genau das ist am 2026-08-23 aufgeflogen: fuenf Exporte stammten vom
+    // 13./14.08 und trugen noch den widerlegten globalen HK-Versatz, waehrend
+    // die Tabelle ihn schon seit dem 19.08 nur noch fuer rich2 kannte. Dem
+    // Nutzer war das im Spiel als "greift nur teilweise" aufgefallen, ohne
+    // dass die Ursache zu sehen war.
+    //
+    // Geprueft wird nicht gegen das Skript - das liegt dem Spieler gar nicht
+    // vor -, sondern die Exporte GEGENEINANDER. Ein gemischter Stand heisst
+    // sicher, dass jemand nur einen Teil neu erzeugt hat. Ein einheitlich
+    // alter Stand faellt so nicht auf, aber das ist der seltenere Fall und
+    // beim Paketieren erzeugt BuildRelease.ps1 ohnehin alles frisch.
+    //------------------------------------------------------------------------
+    if (app.payloadOk)
+    {
+        std::map<std::string, std::vector<std::string>> staende;
+
+        std::vector<std::wstring> dateien;
+        {
+            WIN32_FIND_DATAW fd{};
+            const std::wstring muster = PathUtil::join(app.payloadDir(), L"zones_*.json");
+            HANDLE h = FindFirstFileW(muster.c_str(), &fd);
+            if (h != INVALID_HANDLE_VALUE)
+            {
+                do { dateien.push_back(fd.cFileName); } while (FindNextFileW(h, &fd));
+                FindClose(h);
+            }
+        }
+
+        for (const std::wstring& datei : dateien)
+        {
+            JsonValue z;
+            std::string jerr;
+            if (!Json::parseFile(PathUtil::join(app.payloadDir(), datei), z, jerr)) continue;
+
+            const std::string stand = z["kurationStand"].asString();
+            const std::string level = z["level"].asString();
+            staende[stand.empty() ? std::string("(ohne Stempel)") : stand]
+                .push_back(level.empty() ? PathUtil::narrow(datei) : level);
+        }
+
+        if (staende.size() > 1)
+        {
+            std::string t = "Die Zonen-Exporte in data\\ haben verschiedene Kurationsstaende - "
+                            "ein Teil wurde nach einer Aenderung an ZoneAnalyse.ps1 nicht neu "
+                            "erzeugt. Betroffen:";
+            for (const auto& kv : staende)
+            {
+                t += "\n  " + kv.first + ":";
+                for (const std::string& l : kv.second) t += " " + l;
+            }
+            app.zonenWarnung = t;
+        }
+    }
+
     inspectSource(app);
 
     bool running = true;

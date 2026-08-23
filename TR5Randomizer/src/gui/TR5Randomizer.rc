@@ -7,3 +7,14 @@
 // Code etwas anderes setzt. Main.cpp setzt es zusaetzlich ausdruecklich.
 #define IDI_APPICON 101
 IDI_APPICON ICON "TR5Randomizer.ico"
+
+// Das Hintergrundbild der Oberflaeche - dasselbe Banner des Nutzers, aus
+// Logos\Tomb5 Rando Logo 1920x1080.png. Als JPEG eingebettet und nicht als
+// PNG: dieses Bild ist fotoartig, PNG braucht dafuer 3,1 MB, JPEG mit
+// Qualitaet 88 nur 0,5 MB. Sichtbar ist der Unterschied nicht, weil das Bild
+// stark abgedunkelt hinter der Oberflaeche liegt.
+//
+// Eingebettet statt als Datei daneben, damit die EXE fuer sich allein
+// lauffaehig bleibt und niemand das Bild versehentlich loescht.
+#define IDR_HINTERGRUND 201
+IDR_HINTERGRUND RCDATA "Hintergrund.jpg"

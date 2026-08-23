@@ -43,6 +43,15 @@
 #include "backends/imgui_impl_dx11.h"
 #include "backends/imgui_impl_win32.h"
 
+// stb_image (Public Domain, Sean Barrett) - nur fuer das eingebettete
+// Hintergrundbild. Mitgeliefert unter libs/stb, damit das Quellpaket ohne
+// weitere Beschaffung uebersetzbar bleibt.
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_JPEG
+#define STBI_ONLY_PNG
+#define STBI_NO_STDIO
+#include "libs/stb/stb_image.h"
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <d3d11.h>
@@ -71,6 +80,94 @@ namespace
     IDXGISwapChain*         g_swap = nullptr;
     bool                    g_fensterGezogen = false;   // WM_EXITSIZEMOVE gesehen
     ID3D11RenderTargetView* g_rtv = nullptr;
+
+    // Hintergrundbild: das Banner des Nutzers, als JPEG in der EXE
+    // (TR5Randomizer.rc, IDR_HINTERGRUND). Einmal beim Start entpackt, dann
+    // je Bild in Fenstergroesse gezeichnet.
+    ID3D11ShaderResourceView* g_hintergrund = nullptr;
+    int                       g_hgBreite = 0, g_hgHoehe = 0;
+
+    void ladeHintergrund()
+    {
+        HRSRC res = FindResourceW(nullptr, MAKEINTRESOURCEW(201), reinterpret_cast<LPCWSTR>(RT_RCDATA));
+        if (!res) return;
+
+        const DWORD groesse = SizeofResource(nullptr, res);
+        HGLOBAL geladen = LoadResource(nullptr, res);
+        if (!geladen || !groesse) return;
+
+        const void* daten = LockResource(geladen);
+        if (!daten) return;
+
+        int kanaele = 0;
+        stbi_uc* pixel = stbi_load_from_memory(static_cast<const stbi_uc*>(daten),
+                                               static_cast<int>(groesse),
+                                               &g_hgBreite, &g_hgHoehe, &kanaele, 4);
+        if (!pixel) return;
+
+        D3D11_TEXTURE2D_DESC td{};
+        td.Width = g_hgBreite;
+        td.Height = g_hgHoehe;
+        td.MipLevels = 1;
+        td.ArraySize = 1;
+        td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        td.SampleDesc.Count = 1;
+        td.Usage = D3D11_USAGE_DEFAULT;
+        td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+        D3D11_SUBRESOURCE_DATA sd{};
+        sd.pSysMem = pixel;
+        sd.SysMemPitch = g_hgBreite * 4;
+
+        ID3D11Texture2D* tex = nullptr;
+        if (SUCCEEDED(g_dev->CreateTexture2D(&td, &sd, &tex)) && tex)
+        {
+            D3D11_SHADER_RESOURCE_VIEW_DESC vd{};
+            vd.Format = td.Format;
+            vd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+            vd.Texture2D.MipLevels = 1;
+            g_dev->CreateShaderResourceView(tex, &vd, &g_hintergrund);
+            tex->Release();
+        }
+
+        stbi_image_free(pixel);
+    }
+
+    void gibHintergrundFrei()
+    {
+        if (g_hintergrund) { g_hintergrund->Release(); g_hintergrund = nullptr; }
+    }
+
+    // Das Bild fuellt das Fenster immer ganz aus und behaelt sein
+    // Seitenverhaeltnis: die knappere Achse bestimmt den Massstab, die andere
+    // laeuft mittig ueber den Rand hinaus. Ein Verzerren beim Ziehen des
+    // Fensters waere sofort sichtbar, ein Beschnitt faellt nicht auf.
+    //
+    // Gezeichnet wird sehr dunkel getoent - der Hintergrund soll das Bild
+    // erkennen lassen, ohne dass Text darauf schwer zu lesen wird.
+    void zeichneHintergrund()
+    {
+        if (!g_hintergrund || g_hgBreite <= 0 || g_hgHoehe <= 0) return;
+
+        const ImGuiViewport* vp = ImGui::GetMainViewport();
+        const float fw = vp->WorkSize.x, fh = vp->WorkSize.y;
+        if (fw <= 0.0f || fh <= 0.0f) return;
+
+        const float massstab = (fw / static_cast<float>(g_hgBreite) >
+                                fh / static_cast<float>(g_hgHoehe))
+                             ? fw / static_cast<float>(g_hgBreite)
+                             : fh / static_cast<float>(g_hgHoehe);
+
+        const float bw = g_hgBreite * massstab;
+        const float bh = g_hgHoehe * massstab;
+        const ImVec2 links(vp->WorkPos.x + (fw - bw) * 0.5f,
+                           vp->WorkPos.y + (fh - bh) * 0.5f);
+        const ImVec2 rechts(links.x + bw, links.y + bh);
+
+        ImDrawList* dl = ImGui::GetBackgroundDrawList();
+        dl->AddImage(reinterpret_cast<ImTextureID>(g_hintergrund), links, rechts,
+                     ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 46));
+    }
 
     void createRTV()
     {
@@ -941,6 +1038,100 @@ static std::wstring lagerDir(const App& a)
             a.balHinweis = fehler;
     }
 
+    //------------------------------------------------------------------------
+    // spoiler.txt neben dem Programm schreiben.
+    //
+    // Frueher stand das je Level in einer dritten Tabellenspalte. Das kostete
+    // die halbe Fensterbreite fuer eine Zeile Text, die man einmal liest -
+    // und die Zeile war zu kurz fuer alles, was man wirklich wissen will. In
+    // der Datei ist Platz fuer den Seed, alle Einstellungen und das, was die
+    // SCRIPT.DAT abbekommen hat.
+    //------------------------------------------------------------------------
+    bool schreibeSpoiler(App& a)
+    {
+        const std::wstring pfad = PathUtil::join(PathUtil::exeDir(), L"spoiler.txt");
+        FILE* f = nullptr;
+        if (_wfopen_s(&f, pfad.c_str(), L"wb") != 0 || !f) return false;
+
+        auto zeile = [f](const char* s) { std::fprintf(f, "%s\r\n", s); };
+
+        std::fprintf(f, "TR5 Randomizer - spoiler.txt\r\n");
+        std::fprintf(f, "Build %s\r\n", RANDO_BUILD_STRING);
+        zeile("");
+        std::fprintf(f, "Seed:      %s\r\n", a.seedBuf);
+        std::fprintf(f, "wirksam:   0x%016llX\r\n", (unsigned long long)a.effectiveSeed());
+        zeile("");
+
+        zeile("EINSTELLUNGEN");
+        std::fprintf(f, "  Ausruestung:        %s\r\n", a.optOtherPickups ? "gewuerfelt" : "aus");
+        std::fprintf(f, "  Itemmenge:          %s\r\n",
+                     a.optItemMenge == 0 ? "Vanilla" : a.optItemMenge == 1 ? "mehr" : "viel mehr");
+        std::fprintf(f, "  Schluessel/Puzzles: %s\r\n", a.optKeyItems ? "gewuerfelt" : "aus");
+        std::fprintf(f, "  Outfits:            %s\r\n", a.optOutfits ? "gewuerfelt" : "aus");
+        std::fprintf(f, "  Zusatzgegner:       %s\r\n",
+                     a.optEnemies ? (std::to_string(a.optEnemyCount) + " pro Level").c_str() : "aus");
+        std::fprintf(f, "  Gegner tauschen:    %s\r\n", a.optEnemySwap ? "an" : "aus");
+        std::fprintf(f, "  Gegnerpool:         %s\r\n",
+                     a.optEnemyPool == 0 ? "nur Levelpool"
+                                         : a.optEnemyPool == 1 ? "Cross-Mix" : "Allsanity");
+        if (!a.optGegnerAus.empty())
+            std::fprintf(f, "  abgewaehlte Arten:  %d\r\n", (int)a.optGegnerAus.size());
+        std::fprintf(f, "  Secrets:            %s%s%s\r\n",
+                     a.optSecrets == 0 ? "Vanilla" : a.optSecrets == 1 ? "im Item-Pool"
+                                                   : a.optSecrets == 2 ? "Glitchless-Liste"
+                                                                       : "Glitched-Liste",
+                     a.optSecrets >= 2 && !a.secretAutor.empty() ? ", Autor " : "",
+                     a.optSecrets >= 2 && !a.secretAutor.empty() ? a.secretAutor.c_str() : "");
+        std::fprintf(f, "  Levelabschnitte:    %s\r\n", a.phLevelAbschnitte ? "getauscht" : "aus");
+        std::fprintf(f, "  Levelreihenfolge:   %s\r\n",
+                     a.optLevelFolge == 0 ? "aus"
+                                          : a.optLevelFolge == 1 ? "innerhalb der Abschnitte"
+                                                                 : "frei ueber alles");
+        std::fprintf(f, "  Hintergrundmusik:   %s\r\n", a.phMusikSwitch ? "getauscht" : "aus");
+        std::fprintf(f, "  Trigger-Musik:      %s\r\n", a.phMusikTrigger ? "getauscht" : "aus");
+        std::fprintf(f, "  Waffenschaden:      %d %%%s\r\n",
+                     (int)(a.balWaffen * 100.0f + 0.5f), a.balWaffenZufall ? " (gewuerfelt)" : "");
+        std::fprintf(f, "  Gegnerleben:        %d %%%s\r\n",
+                     (int)(a.balGegnerLeben * 100.0f + 0.5f), a.balGegnerLebenZufall ? " (gewuerfelt)" : "");
+        std::fprintf(f, "  Gegnerschaden:      %d %%%s\r\n",
+                     (int)(a.balGegnerSchaden * 100.0f + 0.5f), a.balGegnerSchadenZufall ? " (gewuerfelt)" : "");
+        zeile("");
+
+        if (!a.scriptNote.empty())
+        {
+            zeile("SCRIPT.DAT");
+            // Die Notiz ist ein langer Satz mit zwei Leerzeichen als Trenner -
+            // je Teil eine Zeile liest sich deutlich besser.
+            const std::string& s = a.scriptNote;
+            size_t i = 0;
+            while (i < s.size())
+            {
+                size_t e = s.find("  ", i);
+                if (e == std::string::npos) e = s.size();
+                std::string teil = s.substr(i, e - i);
+                while (!teil.empty() && teil.front() == ' ') teil.erase(teil.begin());
+                if (!teil.empty()) std::fprintf(f, "  %s\r\n", teil.c_str());
+                i = (e == s.size()) ? e : e + 2;
+            }
+            zeile("");
+        }
+
+        zeile("LEVEL");
+        for (const LevelRow& r : a.levels)
+        {
+            const char* zustand = r.state == LevelState::Vanilla  ? "original"
+                                : r.state == LevelState::Modified ? "veraendert"
+                                : r.state == LevelState::Missing  ? "fehlt" : "unbekannt";
+            std::fprintf(f, "  %-16s %-11s %s\r\n", r.name.c_str(), zustand,
+                         r.result.empty() ? "-" : r.result.c_str());
+        }
+        zeile("");
+        std::fprintf(f, "%d Level randomisiert, %d Fehler.\r\n", a.doneCount, a.failCount);
+
+        std::fclose(f);
+        return true;
+    }
+
     void startRandomize(App& a)
     {
         a.plannedCount = 0;
@@ -1057,9 +1248,14 @@ static std::wstring lagerDir(const App& a)
             a.cfg.seedText = a.seedBuf;
             a.cfg.save();
 
-            char buf[192];
-            std::snprintf(buf, sizeof(buf), "%d Level randomisiert%s. Du kannst das Spiel jetzt starten.",
-                          a.doneCount, a.failCount ? " - mit Fehlern, siehe Liste" : "");
+            const bool spoiler = schreibeSpoiler(a);
+
+            char buf[256];
+            std::snprintf(buf, sizeof(buf),
+                          "%d Level randomisiert%s. %s Du kannst das Spiel jetzt starten.",
+                          a.doneCount, a.failCount ? " - mit Fehlern, siehe spoiler.txt" : "",
+                          spoiler ? "Einzelheiten stehen in spoiler.txt neben dem Programm."
+                                  : "spoiler.txt liess sich nicht schreiben.");
             setStatus(a, buf, a.failCount > 0);
             a.phaseText.clear();
             a.phase = App::Phase::Idle;
@@ -1384,6 +1580,11 @@ static void drawUi(App& a, HWND hwnd)
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
+    // Durchsichtig, damit das Hintergrundbild ueberhaupt zu sehen ist - es
+    // liegt auf der BackgroundDrawList, also HINTER den Fenstern. Die
+    // Lesbarkeit kommt von der dunklen Grundfarbe und der schwachen Toenung
+    // des Bildes, nicht von einer Flaeche darueber.
+    ImGui::SetNextWindowBgAlpha(0.0f);
     ImGui::Begin("TR5 Randomizer", nullptr,
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
@@ -1842,12 +2043,14 @@ static void drawUi(App& a, HWND hwnd)
     // Feste Hoehe nach Levelanzahl statt Scrollleiste (Nutzerwunsch): ohne
     // ScrollY und ohne Hoehenvorgabe waechst die Tabelle genau auf ihre
     // Zeilen - bei 13 spielbaren Leveln ist das ueberschaubar.
-    if (ImGui::BeginTable("levels", 3,
-        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+    // Zwei Spalten statt drei: was ein Lauf im einzelnen getan hat, steht seit
+    // dem Spoiler in spoiler.txt. Die dritte Spalte kostete die halbe
+    // Fensterbreite fuer eine Zeile Text, die man einmal liest.
+    if (ImGui::BeginTable("levels", 2,
+        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
     {
         ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_WidthFixed, 160);
         ImGui::TableSetupColumn("Zustand", ImGuiTableColumnFlags_WidthFixed, 150);
-        ImGui::TableSetupColumn("Ergebnis");
         ImGui::TableHeadersRow();
 
         for (size_t i = 0; i < a.levels.size(); ++i)
@@ -1863,20 +2066,36 @@ static void drawUi(App& a, HWND hwnd)
             ImGui::EndDisabled();
             ImGui::PopID();
 
+            // Solange kein Lauf gelaufen ist, steht hier der Dateizustand;
+            // danach das Ergebnis dieses Laufs. Fehler bleiben also sichtbar,
+            // ohne dass die Tabelle eine Textspalte braucht - die Einzelheiten
+            // stehen in spoiler.txt.
             ImGui::TableSetColumnIndex(1);
-            switch (r.state)
+            if (r.result.empty())
             {
-            case LevelState::Vanilla:  ImGui::TextUnformatted("original"); break;
-            case LevelState::Modified: ImGui::TextColored(ImVec4(1, .5f, .3f, 1), "veraendert"); break;
-            case LevelState::Missing:  ImGui::TextColored(ImVec4(1, .4f, .4f, 1), "fehlt"); break;
-            default:                   ImGui::TextUnformatted("unbekannt"); break;
+                switch (r.state)
+                {
+                case LevelState::Vanilla:  ImGui::TextUnformatted("original"); break;
+                case LevelState::Modified: ImGui::TextColored(ImVec4(1, .5f, .3f, 1), "veraendert"); break;
+                case LevelState::Missing:  ImGui::TextColored(ImVec4(1, .4f, .4f, 1), "fehlt"); break;
+                default:                   ImGui::TextUnformatted("unbekannt"); break;
+                }
             }
-
-            ImGui::TableSetColumnIndex(2);
-            if (!r.result.empty())
+            else if (r.result.rfind("FEHLER", 0) == 0)
             {
-                if (r.result.rfind("FEHLER", 0) == 0) ImGui::TextColored(ImVec4(1, .4f, .4f, 1), "%s", r.result.c_str());
-                else                                   ImGui::TextUnformatted(r.result.c_str());
+                ImGui::TextColored(ImVec4(1, .4f, .4f, 1), "Fehler");
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                    ImGui::SetTooltip("%s", r.result.c_str());
+            }
+            else if (r.result == "uebersprungen")
+            {
+                ImGui::TextDisabled("uebersprungen");
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(.5f, .9f, .5f, 1), "fertig");
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                    ImGui::SetTooltip("%s", r.result.c_str());
             }
         }
         ImGui::EndTable();
@@ -1994,6 +2213,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_dev, g_ctx);
+    ladeHintergrund();
 
     App app;
     app.cfg.load();
@@ -2111,6 +2331,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
+        zeichneHintergrund();
 
         drawUi(app, hwnd);
 
@@ -2173,6 +2394,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
+    gibHintergrundFrei();
     destroyDevice();
     DestroyWindow(hwnd);
     UnregisterClassW(wc.lpszClassName, hInst);

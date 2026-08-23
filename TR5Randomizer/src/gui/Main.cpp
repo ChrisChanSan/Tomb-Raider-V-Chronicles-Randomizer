@@ -166,7 +166,7 @@ namespace
 
         ImDrawList* dl = ImGui::GetBackgroundDrawList();
         dl->AddImage(reinterpret_cast<ImTextureID>(g_hintergrund), links, rechts,
-                     ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 46));
+                     ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 70));
     }
 
     void createRTV()
@@ -235,6 +235,18 @@ namespace
             // Der Nutzer hat das Fenster gezogen - die Hauptschleife schreibt
             // daraufhin die Einstellungsdatei (Nutzerwunsch: Groesse merken).
             g_fensterGezogen = true;
+            return 0;
+        case WM_GETMINMAXINFO:
+            // Der obere Bereich steht in vier Spalten. Schrumpft das Fenster
+            // unter diese Breite, werden die Kaesten so schmal, dass Regler
+            // und Beschriftungen nicht mehr nebeneinander passen - deshalb
+            // eine harte Untergrenze statt einer kaputt aussehenden
+            // Oberflaeche.
+            {
+                MINMAXINFO* mm = reinterpret_cast<MINMAXINFO*>(lp);
+                mm->ptMinTrackSize.x = 1180;
+                mm->ptMinTrackSize.y = 780;
+            }
             return 0;
         case WM_SYSCOMMAND:
             if ((wp & 0xfff0) == SC_KEYMENU) return 0;   // Alt-Menue unterdruecken
@@ -1615,8 +1627,33 @@ static void drawUi(App& a, HWND hwnd)
     }
     ImGui::Separator();
 
+    //------------------------------------------------------------------------
+    // Aufteilung des oberen Bereichs (Nutzerwunsch): vier gleich breite
+    // Spalten mit umrandeten Kaesten statt einer einzigen langen Spalte.
+    // Vorher liefen die Trennlinien ueber die volle Fensterbreite und der
+    // Inhalt stand als schmales Band ganz links - auf einem breiten Bildschirm
+    // war das viel Weg fuer wenig Inhalt.
+    //
+    // Die Aufteilung ist so gewaehlt, dass die vier Spalten ungefaehr gleich
+    // hoch werden: Installation+Seed, Items+Outfits, Gegner+Vorbereitung,
+    // Level+Musik+Secrets.
+    //------------------------------------------------------------------------
+    const float lueckeX = ImGui::GetStyle().ItemSpacing.x;
+    const float spaltenBreite = (ImGui::GetContentRegionAvail().x - 3.0f * lueckeX) / 4.0f;
+
+    auto blockAuf = [spaltenBreite](const char* id, const char* titel)
+    {
+        ImGui::BeginChild(id, ImVec2(spaltenBreite, 0.0f),
+                          ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+        ImGui::SeparatorText(titel);
+    };
+    auto blockZu = []() { ImGui::EndChild(); };
+
+    // --- Spalte 1: Installation und Seed ---------------------------------
+    ImGui::BeginGroup();
+
     // --- 1. Spielordner ---
-    ImGui::SeparatorText("1. Deine Installation");
+    blockAuf("k_install", "1. Deine Installation");
     ImGui::TextWrapped("Waehle den Ordner deiner Tomb Raider Chronicles-Installation. "
                        "Die Level werden direkt dort randomisiert; die Originale sichert "
                        "das Programm vorher nach data\\Backup.");
@@ -1652,11 +1689,13 @@ static void drawUi(App& a, HWND hwnd)
         else            ImGui::TextDisabled("%d ohne Pfad", fehlt);
     }
 
+    blockZu();
+
     // --- 2. Seed ---
-    ImGui::SeparatorText("2. Seed");
+    blockAuf("k_seed", "2. Seed");
     ImGui::TextWrapped("Derselbe Seed erzeugt immer dasselbe Spiel. Jede Eingabe ist gueltig - "
                        "auch ein Wort.");
-    ImGui::SetNextItemWidth(280);
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 90.0f);
     ImGui::InputText("##seed", a.seedBuf, sizeof(a.seedBuf));
     ImGui::SameLine();
     if (ImGui::Button("Wuerfeln"))
@@ -1665,6 +1704,10 @@ static void drawUi(App& a, HWND hwnd)
         std::snprintf(a.seedBuf, sizeof(a.seedBuf), "%s", s.c_str());
     }
     ImGui::TextDisabled("wirksam: 0x%016llX", (unsigned long long)a.effectiveSeed());
+    blockZu();
+
+    ImGui::EndGroup();
+    ImGui::SameLine();
 
     // --- 3. Was soll gewuerfelt werden - thematische Bereiche ------------
 
@@ -1736,8 +1779,10 @@ static void drawUi(App& a, HWND hwnd)
                    "sondern unspielbar. 0.00x bleibt der Handeinstellung.");
     };
 
-    // --- Items: eigener Bereich (Nutzerwunsch) ---------------------------
-    ImGui::SeparatorText("3. Items");
+    // --- Spalte 2: Items und Outfits -------------------------------------
+    ImGui::BeginGroup();
+
+    blockAuf("k_items", "3. Items");
 
     ImGui::Checkbox("Ausruestung (Waffen, Munition, Medipacks)", &a.optOtherPickups);
     // Item-Abundance (#36): zusaetzliche Verbrauchsgueter streuen. Weniger als
@@ -1786,8 +1831,9 @@ static void drawUi(App& a, HWND hwnd)
                   "der PCtomb5.exe. Wer dort einzelne Waffen von Hand eingestellt "
                   "hat, behaelt sie: der Regler wirkt zusaetzlich obendrauf.");
 
-    // --- Outfits: eigener Bereich (Nutzerwunsch) -------------------------
-    ImGui::SeparatorText("Outfits");
+    blockZu();
+
+    blockAuf("k_outfits", "Outfits");
 
     ImGui::Checkbox("Zufaellige Outfits", &a.optOutfits);
     hoverHilfe("Jeder Abschnitt bekommt zufaellig Lara_Andrea, Lara_Joby oder "
@@ -1803,18 +1849,22 @@ static void drawUi(App& a, HWND hwnd)
                "Outfit-Pool. Braucht ein passendes TR5-Modell - Spieldaten "
                "anderer Spiele liefern wir nie mit, das Modell muss also "
                "eigens gebaut oder vom Spieler beigesteuert werden.");
-    ImGui::SameLine();
     ImGui::Checkbox("TR2 Outfits", &a.phOutfitTr2);
     hoverHilfe("Kommt noch: die TR2-Outfits (u.a. Bomberjacke, Wetsuit) als "
                "zusaetzliche Poolauswahl - gleiche Voraussetzung wie TR1.");
-    ImGui::SameLine();
     ImGui::Checkbox("TR3 Outfits", &a.phOutfitTr3);
     hoverHilfe("Kommt noch: die TR3-Outfits (u.a. Dschungel, Antarktis) als "
                "zusaetzliche Poolauswahl - gleiche Voraussetzung wie TR1.");
     ImGui::EndDisabled();
+    blockZu();
 
-    // --- Gegner: eigener Bereich (Nutzerwunsch) --------------------------
-    ImGui::SeparatorText("Gegner");
+    ImGui::EndGroup();
+    ImGui::SameLine();
+
+    // --- Spalte 3: Gegner und die Platzhalter ----------------------------
+    ImGui::BeginGroup();
+
+    blockAuf("k_gegner", "Gegner");
 
     ImGui::Checkbox("Zusaetzliche Gegner ins Level setzen", &a.optEnemies);
     hoverHilfe("Jeder bekommt einen eigenen Trigger, etwa drei Sektoren vor sich "
@@ -1904,46 +1954,50 @@ static void drawUi(App& a, HWND hwnd)
                "sie beim naechsten Start neu und vollstaendig an.");
 
     if (!a.balHinweis.empty())
-    {
-        ImGui::SameLine();
         ImGui::TextDisabled("%s", a.balHinweis.c_str());
-    }
+    blockZu();
 
-    // --- Platzhalter-Bereiche (Nutzerwunsch, alle noch ohne Wirkung) -----
+    // --- Platzhalter (Nutzerwunsch, alle noch ohne Wirkung) --------------
     //
     // Sichtbar, damit die Oberflaeche ihre endgueltige Form zeigt; ausgegraut,
     // bis die jeweilige Logik existiert. Erklaerungen als Schwebehilfe.
-    ImGui::SeparatorText("Texturen (in Vorbereitung)");
+    // Texturen und Raeume stehen zusammen in einem Kasten - beide sind
+    // Zukunftsmusik, und getrennt waeren es zwei sehr flache Kaesten.
+    blockAuf("k_vorbereitung", "In Vorbereitung");
     ImGui::BeginDisabled(true);
+
+    ImGui::TextDisabled("Texturen");
     ImGui::Checkbox("RGB Vanilla Texturen", &a.phTexRgb);
     hoverHilfe("Kommt noch: Farbwuerfel ueber die Vanilla-Texturseiten - der "
                "Seed verschiebt die Farbtoene, rein kosmetisch.");
-    ImGui::SameLine();
     ImGui::Checkbox("Leveluebergreifend mixen", &a.phTexMix);
     hoverHilfe("Kommt noch: Texturseiten zwischen den Leveln tauschen - Rom in "
                "Russland, U-Boot in Irland.");
-    ImGui::SameLine();
     ImGui::Checkbox("Remaster-Texturen patchen", &a.phTexRemaster);
     hoverHilfe("Kommt noch: Remaster-Texturen (sofern der Spieler sie hat) in "
                "die klassischen Level patchen.");
-    ImGui::EndDisabled();
 
-    ImGui::SeparatorText("Raeume (in Vorbereitung)");
-    ImGui::BeginDisabled(true);
+    ImGui::TextDisabled("Raeume");
     ImGui::Checkbox("Kulissen einbinden", &a.phRoomKulissen);
     hoverHilfe("Kommt noch: reine Kulissenbereiche ins Spiel einbinden, damit "
                "dort Items und Gegner liegen koennen.");
-    ImGui::SameLine();
     ImGui::Checkbox("Nachbar-Raeume begehbar machen", &a.phRoomNachbar);
     hoverHilfe("Kommt noch: angrenzende, vanilla gesperrte Raeume oeffnen - "
                "mehr Flaeche fuer die Platzierung.");
-    ImGui::SameLine();
     ImGui::Checkbox("joby4 NoWater", &a.phJoby4NoWater);
     hoverHilfe("Kommt noch: Deepsea Dive ohne Wasser - damit waere joby4 "
                "endlich voll randomisierbar statt vanilla.");
-    ImGui::EndDisabled();
 
-    ImGui::SeparatorText("Level");
+    ImGui::EndDisabled();
+    blockZu();
+
+    ImGui::EndGroup();
+    ImGui::SameLine();
+
+    // --- Spalte 4: Level, Musik, Secrets ---------------------------------
+    ImGui::BeginGroup();
+
+    blockAuf("k_level", "Level");
     ImGui::BeginDisabled(a.optLevelFolge == 2);	// bei "frei ueber alles" bedeutungslos und bewusst ohne Wirkung
     ImGui::Checkbox("Levelabschnitte switchen", &a.phLevelAbschnitte);
     ImGui::EndDisabled();
@@ -1953,8 +2007,7 @@ static void drawUi(App& a, HWND hwnd)
                "der Abspann kommt nach dem letzten Abschnitt. BRAUCHT die "
                "Engine ab 2026-08-22 (Levelidentitaet aus dem Dateinamen); "
                "alte Spielstaende passen nicht zur neuen Reihenfolge.");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(220);
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
     const char* folgeNamen[] = { "Level-Reihenfolge: aus", "innerhalb der Abschnitte", "frei ueber alles" };
     ImGui::Combo("##levelfolge", &a.optLevelFolge, folgeNamen, 3);
     hoverHilfe("Innerhalb: Rom/Russland/Irland/VCI bleiben Bloecke, nur die Level "
@@ -1967,14 +2020,15 @@ static void drawUi(App& a, HWND hwnd)
                "Brechstange Andrea3), gibt das Skript immer - samt Modell und Namen. "
                "Kuratiert in Levelketten.h.");
 
-    ImGui::SeparatorText("Musik");
+    blockZu();
+
+    blockAuf("k_musik", "Musik");
     ImGui::Checkbox("Hintergrundmusik switchen", &a.phMusikSwitch);
     hoverHilfe("Die Levelmusik wird unter den spielbaren Leveln vertauscht - "
                "das Audio-Byte im CMD_LEVEL-Eintrag der SCRIPT.DAT. Cutscene-"
                "Level behalten ihre Musik. Gewuerfelt wird bei jedem Lauf neu "
                "aus der Sicherung heraus; Haken weg = naechster Lauf stellt "
                "die Originalmusik wieder her.");
-    ImGui::SameLine();
     ImGui::Checkbox("Trigger-Sound/Musik-IDs switchen", &a.phMusikTrigger);
     hoverHilfe("Die Musik-Trigger in den Leveln (TO_CD) bekommen vertauschte "
                "Tracks - GLOBAL ueber alle Level: nur Tracks, die irgendwo im Spiel "
@@ -1992,11 +2046,12 @@ static void drawUi(App& a, HWND hwnd)
     // Autor_Kategorie.txt in data\secrets neben dem Programm; gelesen
     // werden sie von SecretListe.cpp - dieselbe Grammatik liest auch
     // SecretPlan.ps1 in der Kuration.
-    ImGui::SeparatorText("Secrets");
+    blockZu();
+
+    blockAuf("k_secrets", "Secrets");
 
     ImGui::RadioButton("Vanilla", &a.optSecrets, 0);
     hoverHilfe("Die Secrets bleiben, wo Core sie versteckt hat.");
-    ImGui::SameLine();
     ImGui::RadioButton("Im normalen Item-Pool", &a.optSecrets, 1);
     hoverHilfe("Die Secrets wandern als gewoehnliche Pickups in den Wuerfelpool "
                "und koennen ueberall dort liegen, wo auch Ausruestung liegen darf.");
@@ -2005,7 +2060,6 @@ static void drawUi(App& a, HWND hwnd)
     hoverHilfe("Handverlesene Verstecke eines Autors, ohne Glitches erreichbar. "
                "Eine Liste kann je Level auch Zusatzobjekte setzen - Schluessel, "
                "Schalter, Tueren, sogar neue Portale.");
-    ImGui::SameLine();
     ImGui::RadioButton("Glitched-Liste", &a.optSecrets, 3);
     hoverHilfe("Wie die Glitchless-Liste, aber die Verstecke duerfen Glitches "
                "voraussetzen.");
@@ -2034,12 +2088,34 @@ static void drawUi(App& a, HWND hwnd)
         if (passend.empty())
             ImGui::TextDisabled("Keine %s-Liste in data\secrets gefunden - die Level bleiben vanilla.", kat);
     }
+    blockZu();
 
-    // --- 4. Level ---
+    ImGui::EndGroup();
+
+    //------------------------------------------------------------------------
+    // 4. Level - mittig unter den vier Spalten (Nutzerwunsch).
+    //
+    // Die Tabelle ist seit dem Spoiler schmal. Links buendig unter einem
+    // breiten Fenster saehe sie verloren aus; mittig steht sie als eigener
+    // Block da und laesst links und rechts den Hintergrund frei.
+    //------------------------------------------------------------------------
+    ImGui::Spacing();
+
+    const float tabelleBreite = 340.0f;
+    auto mittig = [](float breite)
+    {
+        const float frei = ImGui::GetContentRegionAvail().x;
+        if (frei > breite)
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (frei - breite) * 0.5f);
+    };
+
+    mittig(tabelleBreite);
+    ImGui::BeginChild("k_levelliste", ImVec2(tabelleBreite, 0.0f),
+                      ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
     ImGui::SeparatorText("4. Level");
     if (a.skippedNonPlayable > 0)
-        ImGui::TextDisabled("%d nicht spielbare Dateien (Title, del, richcut2) werden geprueft, aber nicht angetastet.",
-                            a.skippedNonPlayable);
+        ImGui::TextWrapped("%d nicht spielbare Dateien (Title, del, richcut2) werden "
+                           "geprueft, aber nicht angetastet.", a.skippedNonPlayable);
     // Feste Hoehe nach Levelanzahl statt Scrollleiste (Nutzerwunsch): ohne
     // ScrollY und ohne Hoehenvorgabe waechst die Tabelle genau auf ihre
     // Zeilen - bei 13 spielbaren Leveln ist das ueberschaubar.
@@ -2100,11 +2176,21 @@ static void drawUi(App& a, HWND hwnd)
         }
         ImGui::EndTable();
     }
+    ImGui::EndChild();
 
-    // --- Fortschritt ---
-    // Steht zwischen Levelliste und den Knoepfen, weil dort hingesehen wird,
-    // sobald man auf "Randomisieren" gedrueckt hat.
+    // --- 5. Los geht's - ebenfalls mittig, unter der Levelliste ----------
+    ImGui::Spacing();
+
+    const float startBreite = 400.0f;
     const bool busy = (a.phase != App::Phase::Idle);
+
+    mittig(startBreite);
+    ImGui::BeginChild("k_start", ImVec2(startBreite, 0.0f),
+                      ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+    ImGui::SeparatorText("5. Los geht's");
+
+    // Der Fortschritt steht ueber den Knoepfen, weil genau dorthin gesehen
+    // wird, sobald man auf "Randomisieren" gedrueckt hat.
     if (busy)
     {
         char overlay[96];
@@ -2122,26 +2208,22 @@ static void drawUi(App& a, HWND hwnd)
         ImGui::Dummy(ImVec2(0, 22));
     }
 
-    // --- 5. Los ---
-    ImGui::SeparatorText("5. Los geht's");
     ImGui::BeginDisabled(!a.sourceOk || busy);
     if (ImGui::Button("Randomisieren", ImVec2(160, 32))) startRandomize(a);
     ImGui::SameLine();
-    if (ImGui::Button("Auf Original zuruecksetzen", ImVec2(220, 32))) doRestore(a);
+    if (ImGui::Button("Auf Original zuruecksetzen", ImVec2(200, 32))) doRestore(a);
     ImGui::EndDisabled();
 
     if (!a.sourceOk && !busy)
-    {
-        ImGui::SameLine();
         ImGui::TextDisabled("(erst eine unveraenderte Installation waehlen)");
-    }
 
-    ImGui::Separator();
     if (!a.status.empty())
     {
+        ImGui::Separator();
         if (a.statusIsError) ImGui::TextColored(ImVec4(1, .5f, .3f, 1), "%s", a.status.c_str());
         else                 ImGui::TextWrapped("%s", a.status.c_str());
     }
+    ImGui::EndChild();
 
     ImGui::End();
 

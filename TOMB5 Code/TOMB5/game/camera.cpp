@@ -22,6 +22,7 @@
 #include "savegame.h"
 #include "delstuff.h"
 #include "../tomb5/tomb5.h"
+#include "spotcam.h"
 
 CAMERA_INFO camera;
 
@@ -1183,6 +1184,19 @@ void MoveCamera(GAME_VECTOR* ideal, long speed)
  */
 bool EgoKopfWeg()
 {
+	// Flybys ZEIGEN Lara - dort muss ihr Kopf da sein.
+	//
+	// Und sie sind der eine Fall, in dem der Merker allein nicht reicht:
+	// waehrend eines Flybys ruft control.cpp gar nicht CalculateCamera,
+	// sondern CalculateSpotCams. Das Zuruecksetzen oben laeuft also nie, und
+	// der Merker bliebe auf dem Stand des letzten normalen Bildes stehen -
+	// Lara sass kopflos in genau den Kameras, die sie vorfuehren (vom Nutzer
+	// fotografiert). Cutscenes gehen zwar durch CalculateCamera (Zweig
+	// CINEMATIC_CAMERA, hinter dem Zuruecksetzen), stehen hier aber der
+	// Deutlichkeit halber mit.
+	if (bUseSpotCam || GLOBAL_playing_cutseq)
+		return false;
+
 	return egoKopfWeg != 0;
 }
 

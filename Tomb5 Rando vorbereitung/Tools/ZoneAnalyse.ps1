@@ -522,7 +522,12 @@ $NO_ITEM_ROOMS = @{
     # sechs Level hatten bis dahin gar keinen Eintrag.
     #------------------------------------------------------------------------
     'Andrea1' = @(216,67,155)
-    'Andrea2' = @(149)
+    # Raum 6 kam 2026-08-23 dazu (Nutzer). Er trug 6 Ablagesektoren in Zone 0,
+    # vanilla liegt dort nichts. Bewusst hier und nicht in EXCLUDE_ROOMS: Raum
+    # 6 ist ein Verbinder (Portale zu 4, 7 und 55), und Raum 4 haengt nur an 1
+    # und 6 - als Begehbarkeitssperre koennte er Wege kappen. Der Weg bleibt,
+    # die Ablagen verschwinden.
+    'Andrea2' = @(149,6)
     'Andrea3' = @(129,68,75)
     'joby2'   = @(72)
     'joby3'   = @(65)

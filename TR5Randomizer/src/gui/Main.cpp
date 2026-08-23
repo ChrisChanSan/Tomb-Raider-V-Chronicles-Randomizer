@@ -521,8 +521,9 @@ namespace
         // niemand sieht.
         struct KastenHoehen
         {
-            float install = 0, seed = 0, items = 0, outfits = 0;
-            float gegner = 0, level = 0, musik = 0, secrets = 0;
+            // Nur Kaesten, die NIE gestreckt werden - sonst entsteht eine
+            // Rueckkopplung, siehe drawUi.
+            float install = 0, items = 0, gegner = 0, level = 0, musik = 0;
         } hoehen;
         std::set<int> optGegnerAus;
         // Fenster "Installations-Pfade" (#102).
@@ -1658,51 +1659,61 @@ static void drawUi(App& a, HWND hwnd)
     // sie soll den Bereich kennzeichnen und den Text vom Hintergrundbild
     // abheben, nicht selbst auffallen. Rahmen und Ueberschrift tragen
     // dieselbe Farbe kraeftiger.
-    auto blockAuf = [spaltenBreite](const char* id, const char* titel, ImVec4 farbe)
+    // hoehe == 0 heisst selbstwachsend. Nur die Kaesten, die eine Spalte auf
+    // die gemeinsame Unterkante strecken, bekommen eine feste Hoehe.
+    auto blockAuf = [spaltenBreite](const char* id, const char* titel, ImVec4 farbe,
+                                    float hoehe = 0.0f)
     {
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(farbe.x, farbe.y, farbe.z, 0.13f));
         ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(farbe.x, farbe.y, farbe.z, 0.75f));
-        ImGui::BeginChild(id, ImVec2(spaltenBreite, 0.0f),
-                          ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+
+        ImGuiChildFlags flags = ImGuiChildFlags_Borders;
+        if (hoehe <= 0.0f) flags |= ImGuiChildFlags_AutoResizeY;
+
+        ImGui::BeginChild(id, ImVec2(spaltenBreite, hoehe), flags);
 
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(farbe.x, farbe.y, farbe.z, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(farbe.x, farbe.y, farbe.z, 0.6f));
         ImGui::SeparatorText(titel);
         ImGui::PopStyleColor(2);
     };
-    // Schliesst einen Kasten und merkt sich seine EIGENHOEHE.
-    //
-    // "fuell" ist der Zuschlag, mit dem der letzte Kasten einer Spalte auf die
-    // gemeinsame Unterkante gestreckt wird. Er wird als Leerraum INNEN
-    // angehaengt, nicht als feste Kastenhoehe - dadurch bleibt der Kasten
-    // selbstwachsend, und die Eigenhoehe laesst sich in jedem Bild neu
-    // ausrechnen (gemessen minus Zuschlag). Waere die Hoehe fest gesetzt,
-    // koennte man die Eigenhoehe nie wieder messen und die Reihe liefe
-    // auseinander, sobald sich ein Inhalt aendert.
-    auto blockZu = [](float* eigenhoehe = nullptr, float fuell = 0.0f)
+    // Schliesst einen Kasten und merkt sich seine gemessene Hoehe.
+    auto blockZu = [](float* hoehe = nullptr)
     {
-        if (fuell > 0.0f) ImGui::Dummy(ImVec2(0.0f, fuell));
         ImGui::EndChild();
         ImGui::PopStyleColor(2);
-        if (eigenhoehe) *eigenhoehe = ImGui::GetItemRectSize().y - fuell;
+        if (hoehe) *hoehe = ImGui::GetItemRectSize().y;
     };
 
-    // Zielhoehe der oberen Reihe: die hoechste Spalte gibt sie vor. In der
-    // Praxis ist das der Gegnerkasten, aber ausgerechnet statt festgelegt -
-    // sonst wuerde eine spaeter wachsende Spalte unten abgeschnitten.
+    //------------------------------------------------------------------------
+    // Gemeinsame Unterkante der oberen Reihe.
+    //
+    // Der Gegnerkasten gibt die Zielhoehe vor (Nutzerwunsch: "alles an die
+    // Groesse des Gegner Blocks"). Gestreckt werden die jeweils LETZTEN
+    // Kaesten der anderen Spalten - Seed, Outfits, Secrets - und zwar ueber
+    // eine FESTE Hoehe.
+    //
+    // Wichtig ist, was hier NICHT passiert: gemessen werden ausschliesslich
+    // Kaesten, die selbst nie gestreckt werden. Ein erster Versuch hat die
+    // Streckung als Leerraum im Kasten angehaengt und die Eigenhoehe als
+    // "gemessen minus Leerraum" zurueckgerechnet - das ergab eine
+    // Rueckkopplung, weil ImGui die Groesse eines selbstwachsenden
+    // Kindfensters immer aus dem VORIGEN Bild nimmt. Die Rechnung mischte
+    // damit zwei Bilder, der Fehler ging in die Zielhoehe ein, und die
+    // Kaesten wuchsen von Bild zu Bild weiter ins Nichts (vom Nutzer
+    // gesehen). Feste Hoehe fuer die Gestreckten, messen nur die Freien -
+    // damit kann nichts zurueckwirken.
+    //------------------------------------------------------------------------
     const float lueckeY = ImGui::GetStyle().ItemSpacing.y;
-    const float hSp1 = a.hoehen.install + lueckeY + a.hoehen.seed;
-    const float hSp2 = a.hoehen.items   + lueckeY + a.hoehen.outfits;
-    const float hSp3 = a.hoehen.gegner;
-    const float hSp4 = a.hoehen.level + lueckeY + a.hoehen.musik + lueckeY + a.hoehen.secrets;
+    const float zielHoehe = a.hoehen.gegner;    // 0 im allerersten Bild
 
-    float zielHoehe = hSp1;
-    if (hSp2 > zielHoehe) zielHoehe = hSp2;
-    if (hSp3 > zielHoehe) zielHoehe = hSp3;
-    if (hSp4 > zielHoehe) zielHoehe = hSp4;
-
-    auto rest = [zielHoehe](float spaltenhoehe)
-    { const float r = zielHoehe - spaltenhoehe; return r > 0.0f ? r : 0.0f; };
+    auto restHoehe = [zielHoehe](float belegt) -> float
+    {
+        if (zielHoehe <= 0.0f) return 0.0f;     // noch nichts gemessen
+        const float r = zielHoehe - belegt;
+        // Zu wenig Platz? Dann lieber selbstwachsend als abgeschnitten.
+        return r > 60.0f ? r : 0.0f;
+    };
 
     // Die Farbtafel an einer Stelle, damit die Bereiche zueinander passen.
     const ImVec4 fInstall (0.45f, 0.70f, 1.00f, 1.0f);   // Blau
@@ -1760,7 +1771,7 @@ static void drawUi(App& a, HWND hwnd)
     blockZu(&a.hoehen.install);
 
     // --- 2. Seed ---
-    blockAuf("k_seed", "2. Seed", fSeed);
+    blockAuf("k_seed", "2. Seed", fSeed, restHoehe(a.hoehen.install + lueckeY));
     ImGui::TextWrapped("Derselbe Seed erzeugt immer dasselbe Spiel. Jede Eingabe ist gueltig - "
                        "auch ein Wort.");
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 90.0f);
@@ -1772,7 +1783,7 @@ static void drawUi(App& a, HWND hwnd)
         std::snprintf(a.seedBuf, sizeof(a.seedBuf), "%s", s.c_str());
     }
     ImGui::TextDisabled("wirksam: 0x%016llX", (unsigned long long)a.effectiveSeed());
-    blockZu(&a.hoehen.seed, rest(hSp1));
+    blockZu();
 
     ImGui::EndGroup();
     ImGui::SameLine();
@@ -1921,7 +1932,7 @@ static void drawUi(App& a, HWND hwnd)
 
     blockZu(&a.hoehen.items);
 
-    blockAuf("k_outfits", "4. Outfits", fOutfits);
+    blockAuf("k_outfits", "4. Outfits", fOutfits, restHoehe(a.hoehen.items + lueckeY));
 
     ImGui::Checkbox("Zufaellige Outfits", &a.optOutfits);
     hoverHilfe("Jeder Abschnitt bekommt zufaellig Lara_Andrea, Lara_Joby oder "
@@ -1944,7 +1955,7 @@ static void drawUi(App& a, HWND hwnd)
     hoverHilfe("Kommt noch: die TR3-Outfits (u.a. Dschungel, Antarktis) als "
                "zusaetzliche Poolauswahl - gleiche Voraussetzung wie TR1.");
     ImGui::EndDisabled();
-    blockZu(&a.hoehen.outfits, rest(hSp2));
+    blockZu();
 
     ImGui::EndGroup();
     ImGui::SameLine();
@@ -2040,7 +2051,7 @@ static void drawUi(App& a, HWND hwnd)
 
     if (!a.balHinweis.empty())
         ImGui::TextDisabled("%s", a.balHinweis.c_str());
-    blockZu(&a.hoehen.gegner, rest(hSp3));
+    blockZu(&a.hoehen.gegner);
 
 
     ImGui::EndGroup();
@@ -2100,7 +2111,8 @@ static void drawUi(App& a, HWND hwnd)
     // SecretPlan.ps1 in der Kuration.
     blockZu(&a.hoehen.musik);
 
-    blockAuf("k_secrets", "8. Secrets", fSecrets);
+    blockAuf("k_secrets", "8. Secrets", fSecrets,
+             restHoehe(a.hoehen.level + lueckeY + a.hoehen.musik + lueckeY));
 
     ImGui::RadioButton("Vanilla", &a.optSecrets, 0);
     hoverHilfe("Die Secrets bleiben, wo Core sie versteckt hat.");
@@ -2140,7 +2152,7 @@ static void drawUi(App& a, HWND hwnd)
         if (passend.empty())
             ImGui::TextDisabled("Keine %s-Liste in data\secrets gefunden - die Level bleiben vanilla.", kat);
     }
-    blockZu(&a.hoehen.secrets, rest(hSp4));
+    blockZu();
 
     ImGui::EndGroup();
 

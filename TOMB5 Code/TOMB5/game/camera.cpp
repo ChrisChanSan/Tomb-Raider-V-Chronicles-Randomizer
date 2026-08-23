@@ -1288,9 +1288,22 @@ void EgoKamera(ITEM_INFO* item)
 		}
 	}
 
-	// Kopf ausblenden - und NUR den Kopf (Bit 14, LM_HEAD). Der Rest von ihr
-	// bleibt stehen, sonst greift im Bild niemand mehr nach den Kanten.
-	item->mesh_bits = ~(1 << LM_HEAD);
+	// Kopf ausblenden - und NUR den Kopf. Der Rest von ihr bleibt stehen,
+	// sonst greift im Bild niemand mehr nach den Kanten.
+	//
+	// ACHTUNG, FALLE: Lara liest mesh_bits ANDERS als jedes andere Item.
+	// Ihre Haut zeichnet DrawLara__1/__4 (specific\drawlara.cpp) und prueft
+	// dabei
+	//        mesh_bits >> 16 & (1 << (15 - i))
+	// wobei i die ZEICHENREIHENFOLGE ist - lara_mesh_sweetness_table, und
+	// die laeuft in LMX_-Ordnung, nicht in LM_-Ordnung. Der Kopf steht dort
+	// auf Platz 8 (LMX_HEAD), sein Bit ist also 16 + (15 - 8) = 23.
+	// LM_HEAD (14) trifft etwas ganz anderes: die GELENKE weiter unten
+	// pruefen 1 << (14 - i), Bit 14 ist dort Gelenk 0 (Huefte). Genau das
+	// war der erste Versuch - ein Huftgelenk verschwand, der Kopf blieb und
+	// ragte bei manchen Drehungen ins Bild (Nutzerbefund "ich kann manchmal
+	// noch Laras Haare clippen sehen").
+	item->mesh_bits = ~(1 << 23);
 	egoKopfWeg = 1;
 
 	GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &camera.pos.room_number);

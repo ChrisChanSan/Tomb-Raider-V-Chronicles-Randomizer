@@ -48,6 +48,12 @@ char SniperCamActive = 0;
 // ihrer Vorlage BinocularCamera.
 static long egoKopfWeg = 0;
 static bool EgoSichtAn();
+
+// Wie weit das Auge vor dem Kopfmittelpunkt sitzt, und wieviel Luft davor
+// frei sein muss, damit die nahe Ebene des Zeichners (20, siehe InitWindow)
+// nicht in der Wand steckt.
+#define EGO_VERSATZ	48
+#define EGO_RAND	48
 static char SniperCount = 0;
 
 uchar WeaponDelay = 0;
@@ -1208,7 +1214,13 @@ static bool EgoSichtAn()
 	// Fernglas und Laservisier bringen ihre EIGENE Kopfkamera mit, samt
 	// eigenem Ausstieg (ExittingBinos, mesh_bits-Rueckgabe). Dazwischen zu
 	// funken wuerde beide zerlegen.
-	if (BinocularRange || BinocularOn < 0)
+	//
+	// NUR solange sie wirklich laufen (BinocularRange). Der Nachlauf danach
+	// (BinocularOn < 0, acht Bilder) gehoerte frueher auch hierher - dann
+	// sah man Lara nach dem Verlassen des Zielfernrohrs kurz von aussen
+	// (Nutzerbefund: "1-2 Frames aus der 3. Person"). Der Nachlauf ist nur
+	// die Anfahrt der normalen Kamera; eine angenagelte braucht sie nicht.
+	if (BinocularRange)
 		return false;
 
 	// Beim Sterben soll die Kamera zurueckweichen und zeigen, was geschehen
@@ -1225,6 +1237,13 @@ void EgoKamera(ITEM_INFO* item)
 	GAME_VECTOR auge, ziel;
 	long weite, rndval, shake;
 	short yrot, xrot;
+
+	// Den Nachlauf des Fernglases herunterzaehlen. Das erledigt sonst
+	// MoveCamera - und die laeuft hier nie. Ohne das bliebe BinocularOn
+	// fuer immer negativ, und alles, was daran haengt (Kamerageschwindigkeit,
+	// der old_cam-Vergleich), bliebe fuer den Rest des Levels verstellt.
+	if (BinocularOn < 0)
+		BinocularOn++;
 
 	// Blickrichtung: Koerperdrehung plus Kopfdrehung. Die Anschlaege sind die
 	// des Fernglases - so weit und nicht weiter dreht Lara den Hals.
@@ -1281,11 +1300,33 @@ void EgoKamera(ITEM_INFO* item)
 	auge.z = kopf.z;
 	auge.room_number = item->room_number;
 
-	ziel.x = auge.x + (phd_sin(yrot) * 48 >> W2V_SHIFT);
+	// Erst mit SICHERHEITSABSTAND tasten, dann erst setzen.
+	//
+	// mgLOS geht in acht Schritten und tritt einen zurueck - bei 48 Einheiten
+	// Versatz bleiben also nur sechs Einheiten Abstand zur Wand. Die NAHE
+	// EBENE des Zeichners liegt aber bei 20 (InitWindow in gamemain.cpp), und
+	// sie ist eine Flaeche, keine Spitze: an ihren Ecken steht sie noch
+	// weiter aussen. Sechs Einheiten reichten nicht, mit etwas Muehe sah man
+	// weiter durch die Wand (Nutzerbefund).
+	//
+	// Also wird um EGO_VERSATZ + EGO_RAND getastet. Ist der Weg frei, bekommt
+	// das Auge seinen normalen Versatz; steht etwas im Weg, bleibt es im
+	// Kopfmittelpunkt - der liegt tief in Lara und damit immer weit genug von
+	// jeder Wand entfernt (ihr Kollisionsradius ist 102).
+	ziel.x = auge.x + (phd_sin(yrot) * (EGO_VERSATZ + EGO_RAND) >> W2V_SHIFT);
 	ziel.y = auge.y;
-	ziel.z = auge.z + (phd_cos(yrot) * 48 >> W2V_SHIFT);
+	ziel.z = auge.z + (phd_cos(yrot) * (EGO_VERSATZ + EGO_RAND) >> W2V_SHIFT);
 	ziel.room_number = auge.room_number;
 
+	weite = mgLOS(&auge, &ziel, 0) ? EGO_VERSATZ : 0;
+
+	// Zweiter Lauf auf den ECHTEN Punkt: er liefert die Raumnummer dazu.
+	// Bei weite 0 faellt er auf den Kopfmittelpunkt zurueck (Start gleich
+	// Ziel), was ebenfalls den richtigen Raum ergibt.
+	ziel.x = auge.x + (phd_sin(yrot) * weite >> W2V_SHIFT);
+	ziel.y = auge.y;
+	ziel.z = auge.z + (phd_cos(yrot) * weite >> W2V_SHIFT);
+	ziel.room_number = auge.room_number;
 	mgLOS(&auge, &ziel, 0);
 
 	camera.pos.x = ziel.x;

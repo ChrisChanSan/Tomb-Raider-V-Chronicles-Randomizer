@@ -593,48 +593,6 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	calc_animating_item_clip_window(item, frm[0]);
 	clip = S_GetObjectBounds(frm[0]);
 
-	// CLIPLOG (#121), zweite Fassung. Die erste schrieb nur bei clip == 0 -
-	// und blieb beim Blink-Soldaten LEER. Damit ist die Bounds-Pruefung als
-	// Taeter raus, und die Frage verschiebt sich: LAEUFT diese Funktion
-	// waehrend der unsichtbaren Bilder ueberhaupt, und wenn ja, mit welcher
-	// Anim und welchem clip? Deshalb jetzt jedes NEUE (Slot, Anim)-Paar
-	// jedes denkenden Gegners, samt clip, Raum und Status. Faellt eine Anim
-	// im Log nie, wird der Gegner in ihr gar nicht erst gezeichnet - dann
-	// liegt der Fehler vor dieser Funktion (Raumliste, Status), nicht in ihr.
-	if (obj->intelligent)
-	{
-		static long gesehen[128];
-		static long nGesehen;
-		const long kennung = ((long)item->object_number << 16) | (item->anim_number & 0xFFFF);
-		long neu = 1;
-
-		for (long k = 0; k < nGesehen; k++)
-			if (gesehen[k] == kennung) { neu = 0; break; }
-
-		if (neu && nGesehen < 128)
-		{
-			gesehen[nGesehen++] = kennung;
-			Log("CLIPLOG obj=%d item=%d anim=%d frame=%d clip=%d raum=%d status=%d zustand=%d ziel=%d meshbits=%X swap=%X",
-				item->object_number, (int)(item - items), item->anim_number,
-				item->frame_number, clip, item->room_number, item->status,
-				item->current_anim_state, item->goal_anim_state,
-				(unsigned)item->mesh_bits, (unsigned)item->meshswap_meshbits);
-		}
-	}
-
-	// MESHLOG (#121, sechste Messung): aCheckMeshClip verwirft Meshes, deren
-	// Kasten ganz ausserhalb des aktuellen Fensters f_left..f_bottom liegt.
-	// Der Zaehler sagt nach dem Zeichnen, ob der Koerper DORT gestorben ist -
-	// und das Fenster sagt, mit welchem Ausschnitt gepreuft wurde.
-	extern long aMeshClipRejects;
-	extern long aClipMeldeObj;
-	const long rejVor = aMeshClipRejects;
-
-	// CLIPDETAIL nur fuer DIESEN Denker scharf schalten - die globale
-	// Drossel fing sonst auch legitime Wegklipper (Tueren hinter der
-	// Kamera) und machte die Zeilen mehrdeutig.
-	aClipMeldeObj = obj->intelligent ? item->object_number : -1;
-
 	if (clip)
 	{
 		CalculateObjectLighting(item, frm[0]);
@@ -752,24 +710,6 @@ void DrawAnimatingItem(ITEM_INFO* item)
 		}
 	}
 
-	aClipMeldeObj = -1;
-
-	if (obj->intelligent && aMeshClipRejects > rejVor)
-	{
-		extern float f_left, f_right, f_top, f_bottom;
-		static long zuletztM[64];
-		const long fachM = (long)(item - items) & 63;
-
-		if (GlobalCounter - zuletztM[fachM] > 30 || GlobalCounter < zuletztM[fachM])
-		{
-			zuletztM[fachM] = GlobalCounter;
-			Log("MESHLOG obj=%d item=%d anim=%d frame=%d clip=%d verworfen=%d fenster=%d..%d/%d..%d",
-				item->object_number, (int)(item - items), item->anim_number,
-				item->frame_number, clip, (int)(aMeshClipRejects - rejVor),
-				(int)f_left, (int)f_right, (int)f_top, (int)f_bottom);
-		}
-	}
-
 	phd_right = phd_winwidth;
 	phd_left = 0;
 	phd_top = 0;
@@ -801,32 +741,6 @@ void PrintObjects(short room_number)
 		ClipRoomNum = room_number;
 		item = &items[i];
 		obj = &objects[item->object_number];
-
-		// SKIPLOG (#121, dritte Messung): der Blink-Soldat (Mafia2, Slot 51)
-		// tauchte im CLIPLOG NIE auf - er erreicht DrawAnimatingItem also gar
-		// nicht. Die einzige Weiche davor ist diese hier. Je (Item, Status,
-		// Anim) eine Zeile, nur fuer Denker: dann steht schwarz auf weiss,
-		// mit welchem Status er aussortiert wird und was seine Steuerung
-		// gerade spielt.
-		// Zweite Fassung: nicht mehr je (Item, Anim) EINMAL, sondern je Item
-		// alle 30 Bilder wieder - die erste Fassung sah vom Blink-Zyklus
-		// nur den allerersten Eintritt und war danach blind. data wird
-		// mitgeloggt: bleibt der KI-Platz waehrend der Unsichtbarkeit
-		// bestehen, kommt der Status-Wechsel NICHT von der Platzvergabe.
-		if (obj->intelligent && item->status == ITEM_INVISIBLE)
-		{
-			static long zuletzt[64];
-			const long fach = i & 63;
-
-			if (GlobalCounter - zuletzt[fach] > 30 || GlobalCounter < zuletzt[fach])
-			{
-				zuletzt[fach] = GlobalCounter;
-				Log("SKIPLOG obj=%d item=%d anim=%d frame=%d zustand=%d ziel=%d flags=%X data=%d takt=%d",
-					item->object_number, i, item->anim_number, item->frame_number,
-					item->current_anim_state, item->goal_anim_state,
-					(unsigned)item->flags, item->data ? 1 : 0, GlobalCounter);
-			}
-		}
 
 		if (item->status != ITEM_INVISIBLE)
 		{

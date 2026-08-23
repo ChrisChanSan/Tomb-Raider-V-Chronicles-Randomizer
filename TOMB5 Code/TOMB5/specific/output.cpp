@@ -929,15 +929,6 @@ void S_AnimateTextures(long n)
 	}
 }
 
-// MESHLOG-Zaehler (#121): wie oft hat aCheckMeshClip ein Mesh KOMPLETT
-// verworfen? DrawAnimatingItem liest ihn vor und nach dem Zeichnen eines
-// Denkers - steigt er, ist der Koerper hier gestorben, nicht an den Bounds.
-long aMeshClipRejects;
-
-// Von DrawAnimatingItem gesetzt, solange ein DENKER gezeichnet wird - nur
-// dann schreibt der Verwerfungszweig sein CLIPDETAIL. -1 = aus.
-long aClipMeldeObj = -1;
-
 long aCheckMeshClip(MESH_DATA* mesh)
 {
 	float* stash;
@@ -1029,33 +1020,7 @@ long aCheckMeshClip(MESH_DATA* mesh)
 	}
 
 	if (tooNear == 8 || left > f_right || right < f_left || top > f_bottom || bottom < f_top)
-	{
-		// MESHLOG-Detail (#121): MESHLOG hat bewiesen, dass hier ganze
-		// Koerper bei VOLLBILD-Fenster sterben. Also muss die Projektion
-		// selbst Unsinn liefern - diese Zeile sagt, welchen: wohin die acht
-		// Ecken projiziert wurden, wie viele vor der Nahebene lagen, und wo
-		// das Mesh laut View-Matrix relativ zur Kamera sitzt.
-		aMeshClipRejects++;
-		if (aClipMeldeObj >= 0)
-		{
-			static long zuletztC;
-			if (GlobalCounter - zuletztC > 15 || GlobalCounter < zuletztC)
-			{
-				zuletztC = GlobalCounter;
-				// aMXPtr[M23] daneben: S_GetObjectBounds urteilt mit dem
-				// a-Stapel, dieser Test mit D3DMView. Laufen die beiden
-				// auseinander, steht es hier Zahl gegen Zahl.
-				Log("CLIPDETAIL obj=%d nah=%d L=%d R=%d T=%d B=%d vorn=%d hinten=%d kamera=%d/%d/%d aM23=%d box=%d,%d,%d..%d,%d,%d",
-					(int)aClipMeldeObj, (int)tooNear, (int)left, (int)right,
-					(int)top, (int)bottom, (int)front, (int)back,
-					(int)D3DMView._41, (int)D3DMView._42, (int)D3DMView._43,
-					(int)aMXPtr[M23],
-					(int)mesh->bbox[0], (int)mesh->bbox[1], (int)mesh->bbox[2],
-					(int)mesh->bbox[3], (int)mesh->bbox[4], (int)mesh->bbox[5]);
-			}
-		}
 		return 0;
-	}
 
 	if (tooNear || offScreen)
 		return 1;

@@ -29,6 +29,7 @@
 //----------------------------------------------------------------------------
 #include "core/ApplyPatch.h"
 #include "core/BalanceDatei.h"
+#include "core/Levelfix.h"
 #include "core/BuildId.h"
 #include "core/Config.h"
 #include "core/DataFolder.h"
@@ -784,6 +785,19 @@ static std::wstring lagerDir(const App& a)
         Tr5Level lvl;
         const std::wstring target = PathUtil::join(a.dataDir(), PathUtil::widen(row.name));
         if (!lvl.load(target, err)) return false;
+
+        // Levelfehler von Core reparieren, BEVOR irgendetwas gewuerfelt wird
+        // (Levelfix.h). Frueh, weil die Platzierung die Floordata liest: ein
+        // Trigger, der erst danach dazukaeme, waere fuer die Zonenrechnung
+        // nicht da gewesen.
+        // Der Bericht entsteht erst weiter unten - bis dahin sammeln.
+        std::vector<std::string> fixNotizen;
+        {
+            const int fixes = Levelfix::anwenden(lvl, base, fixNotizen);
+            if (fixes > 0)
+                fixNotizen.push_back(std::to_string(fixes) + " Levelfix angewandt");
+        }
+
         Patch::markTriggerSafeSectors(lvl, in);
 
         // Secrets in den Pool (#53, Art 1): die Handkuration pinnt jedes
@@ -830,6 +844,8 @@ static std::wstring lagerDir(const App& a)
         auto quelle = [](const std::string& name, void*) -> std::wstring {
             return PathUtil::join(soundQuelle, PathUtil::widen(name) + L".trc");
         };
+
+        for (const std::string& n : fixNotizen) rep.notes.push_back(n);
 
         PatchReport pr;
         // Die Fremdinstallationen durchreichen: nur damit kann apply() die

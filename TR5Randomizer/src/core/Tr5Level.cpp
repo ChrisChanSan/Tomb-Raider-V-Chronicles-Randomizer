@@ -791,6 +791,56 @@ bool Tr5Level::moveTrigger(int fromRoom, int fromSx, int fromSz,
     return true;
 }
 
+bool Tr5Level::kopiereTrigger(int fromRoom, int fromSx, int fromSz,
+                              int toRoom, int toSx, int toSz, std::string& error)
+{
+    char buf[256];
+
+    if (fromRoom == toRoom && fromSx == toSx && fromSz == toSz)
+    { error = "Quelle und Ziel sind derselbe Sektor"; return false; }
+
+    const int fromIdx = sectorIndex(fromRoom, fromSx, fromSz);
+    const int toIdx = sectorIndex(toRoom, toSx, toSz);
+    if (fromIdx < 0) { error = "Quellsektor gibt es nicht"; return false; }
+    if (toIdx < 0) { error = "Zielsektor gibt es nicht"; return false; }
+
+    std::vector<Tr5FloorEntry> from, to;
+    if (!readChain(fromIdx, from)) { error = "Quellkette laeuft aus dem Block heraus"; return false; }
+    if (!readChain(toIdx, to)) { error = "Zielkette laeuft aus dem Block heraus"; return false; }
+
+    // Wie bei moveTrigger: genau ein Triggereintrag. Zwei waeren mehrdeutig,
+    // keiner ein Bedienfehler.
+    size_t found = 0, at = 0;
+    for (size_t k = 0; k < from.size(); ++k)
+        if (from[k].funktion == FN_TRIGGER) { ++found; at = k; }
+    if (found != 1)
+    {
+        std::snprintf(buf, sizeof(buf),
+            "Quellsektor %d,%d,%d hat %zu Triggereintraege, erwartet genau einen",
+            fromRoom, fromSx, fromSz, found);
+        error = buf;
+        return false;
+    }
+
+    if (const char* why = canAppendTrigger(to))
+    {
+        std::snprintf(buf, sizeof(buf), "Zielsektor %d,%d,%d ungeeignet: %s",
+                      toRoom, toSx, toSz, why);
+        error = buf;
+        return false;
+    }
+
+    // Nur die Zielkette waechst. Die Quelle bleibt Wort fuer Wort, wie sie
+    // war - das ist der ganze Unterschied zu moveTrigger.
+    to.push_back(from[at]);
+
+    uint16_t newTo = 0;
+    if (!appendChain(to, newTo, error)) return false;
+
+    setSectorIndex(m_rooms[static_cast<size_t>(toRoom)], toSx, toSz, newTo);
+    return true;
+}
+
 bool Tr5Level::addTrigger(int room, int sx, int sz, int art, int timer, bool oneShot,
                           int mask, const std::vector<Tr5TriggerCmd>& cmds,
                           std::string& error, int refItem)

@@ -53,10 +53,17 @@ $LevelInfoDir = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Rando vorbereitung\L
 # die Zonen waeren einfach falsch. Genau dieser Fall ist schon einmal
 # aufgetreten und hat eine Stunde Fehlersuche gekostet, siehe die
 # Pruefsummenpruefung weiter unten.
-$VanillaDir   = "C:\Cloude AI\Tomb5 Native win 11 fix\Vanilla Tomb Raider (V) Chronicles Steam Version ENG\data\Backup"
+# Beide Pfade 2026-08-23 nachgezogen: der eigene Vanilla-Ordner und der alte
+# Ablageort von TombItemEdit2026 gibt es nicht mehr. Quelle ist jetzt die
+# Sicherung der Installation - die Pruefsummenkontrolle darunter belegt, dass
+# sie unveraendert ist, und genau dafuer ist sie da.
+$VanillaDir   = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Steam Version\data\Backup"
 $OutDir       = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Rando vorbereitung\Level Test\KeyItemRange Level Test"
 $ZoneScript   = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Rando vorbereitung\Tools\ZoneAnalyse.ps1"
-$Exe          = "C:\Cloude AI\Two gun test\TombItemEdit2026\Release\Beta\TombItemEdit2026.exe"
+# ACHTUNG: nur der Build unter Release\Beta kann -patchlevel. Die gleichnamige
+# EXE in Bittenichtbitdefender ist die GUI-Fassung - die oeffnet ihr Fenster
+# und liefert Exitcode 0 ohne Ausgabedatei (2026-08-23 hineingelaufen).
+$Exe          = "C:\Cloude AI\Alte sachen\Two gun test\TombItemEdit2026\Release\Beta\TombItemEdit2026.exe"
 $ScratchDir   = "C:\Users\dev\AppData\Local\Temp\claude\C--Cloude-AI\b7de1344-2e88-43df-b893-8f3cb52ddbcd\scratchpad"
 
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir | Out-Null }

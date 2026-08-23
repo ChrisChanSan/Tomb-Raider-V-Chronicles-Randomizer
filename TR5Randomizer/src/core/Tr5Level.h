@@ -312,6 +312,13 @@ public:
     bool    moveTrigger(int fromRoom, int fromSx, int fromSz,
                         int toRoom, int toSx, int toSz, std::string& error);
 
+    // Wie moveTrigger, aber die Quelle behaelt ihren Trigger: der Zielsektor
+    // bekommt eine ZWEITE, gleichlautende Kopie. Gebraucht fuer Levelfehler,
+    // bei denen ein Trigger nur auf einem von mehreren Wegen liegt - siehe
+    // Levelfix.h.
+    bool    kopiereTrigger(int fromRoom, int fromSx, int fromSz,
+                           int toRoom, int toSx, int toSz, std::string& error);
+
     // Setzt einen NEUEN Trigger auf einen Sektor. Das ist der Weg, dem Level
     // Gegner hinzuzufuegen: kein vorhandener Eintrag wird gelesen oder
     // umgebaut, es kommt nur eine Kette hinten dazu.

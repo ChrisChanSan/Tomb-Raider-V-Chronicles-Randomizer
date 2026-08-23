@@ -383,6 +383,13 @@ $TYPE_EXCLUDE_ROOMS = @{
     # nicht liegen - er waere hinter der Tuer, die er selbst oeffnet. Genau der
     # Fall, den die zurueckgenommene automatische Regel abdecken sollte; bis es
     # dafuer eine tragfaehige Loesung gibt (Aufgabe #49), steht er hier.
+    # Key Item8 (die Keycard fuer Tuer 15) braucht hier KEINEN Eintrag. Am
+    # 2026-08-23 stand hier kurz einer, nach einem Testerbericht ueber
+    # dauerhaft eingeschaltete Kabel - er war ueberfluessig und obendrein
+    # enger als das, was ohnehin gilt: NO_KEY_ROOMS sperrt fuer joby5 bereits
+    # alle fuenf elektrifizierten Wasserraeume (126,127,128,158,183), und das
+    # gilt fuer JEDEN Schluesseltyp. Nachgesehen im Zonenexport: Typ 203 kommt
+    # dort mit maxZone 0 und genau diesen fuenf Raeumen an.
     'joby5' = @{
         201 = @(18,54,106)
     }
@@ -519,7 +526,17 @@ $NO_ITEM_ROOMS = @{
     'Andrea3' = @(129,68,75)
     'joby2'   = @(72)
     'joby3'   = @(65)
-    'joby5'   = @(181)
+    # 16, 40, 41, 42 und 156 kamen 2026-08-23 dazu (Nutzer, im Spiel gesehen):
+    # In allen fuenf lagen noch Gegner und Items. Gleich nach dem Level-Intro
+    # greift Flipmap 0, und alle fuenf sind Flip-ORIGINALE - an der Datei
+    # nachgemessen (RaumPruef): 16->84, 40->80, 41->69, 42->79, 156->90. Ab
+    # diesem Moment steht ueberall die Flip-Fassung, die Originale sind nie zu
+    # begehen. Ein Gegner dort wacht nie auf, ein Item ist nie zu holen.
+    #
+    # Bewusst hier und nicht in EXCLUDE_ROOMS: als Begehbarkeitssperre wuerden
+    # sie das Wegenetz zerschneiden, obwohl ihre Flip-Fassungen sehr wohl
+    # begangen werden. Der Weg bleibt, die Ablagen verschwinden.
+    'joby5'   = @(181,16,40,41,42,156)
     # Dritte Durchsicht: 55, 78, 95, 145, 150, 186, 228, 231 - zusammen 20
     # Ablagen. Raum 186 ist zugleich Deadstop der Inselgruppe - hier nur als
     # Ablage gesperrt, der Weg bleibt.

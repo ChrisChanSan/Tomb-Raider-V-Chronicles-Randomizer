@@ -137,7 +137,10 @@ void GetPanVolume(SoundSlot* slot)
 				else
 					distance = 0;
 
-				nPan = (CamRot.y << 4) + phd_atan(dz, dx);
+				// Dasselbe fuer laufende Klaenge (#126) - siehe SoundEffect:
+				// aus naechster Naehe gibt es keine Richtung, sonst kippt
+				// ein Dauerton bei jeder Drehung von links nach rechts.
+				nPan = (EgoKopfWeg() && !distance) ? 0 : ((CamRot.y << 4) + phd_atan(dz, dx));
 				nVolume = slot->OrigVolume;
 
 				if (distance)
@@ -268,7 +271,16 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 		else
 			distance = 0;
 
-		if (!(info->flags & 0x1000))
+		// Ego-Sicht (#126): ein Klang, der IM Ohr entsteht, hat keine
+		// Richtung. Die Kamera sitzt in Laras Kopf, ihre eigene Waffe also
+		// eine Handbreit daneben - phd_atan rechnet aus diesem winzigen
+		// Vektor einen vollen Winkel, und weil die Samples mono sind, sprang
+		// der Schuss hart von einem Lautsprecher zum anderen (vom Nutzer
+		// gehoert). "distance" ist hier schon 0, sobald die Quelle naeher
+		// als ein Sektor steht - genau der Fall, den wir mittig legen.
+		// Nur in Ego-Sicht: die normale Kamera steht 1536 hinter Lara, dort
+		// bleibt alles wie bei Core.
+		if (!(info->flags & 0x1000) && !(EgoKopfWeg() && !distance))
 			pan = (CamRot.y << 4) + phd_atan(dz, dx);
 	}
 	else

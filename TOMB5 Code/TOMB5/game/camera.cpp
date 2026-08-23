@@ -1186,6 +1186,11 @@ void MoveCamera(GAME_VECTOR* ideal, long speed)
  * Kamera (sie sitzt in Laras Kopf, der steckt ohnehin nie in der Wand) und
  * keine Glaettung - sie ist an den Kopf genagelt, so war es gedacht.
  */
+bool EgoKopfWeg()
+{
+	return egoKopfWeg != 0;
+}
+
 static bool EgoSichtAn()
 {
 	if (!tomb5.ego_kamera)
@@ -1228,6 +1233,20 @@ void EgoKamera(ITEM_INFO* item)
 
 	xrot += item->pos.x_rot;
 	yrot += item->pos.y_rot;
+
+	// Gelenkmatrizen AUFFRISCHEN, bevor wir den Kopf abfragen.
+	//
+	// Ohne das hinkt die Kamera ein Bild hinterher: CalcLaraMatrices steht
+	// als erstes in DrawPhaseGame (draw.cpp), also NACH CalculateCamera -
+	// lara_joint_matrices traegt hier normalerweise noch den Stand des
+	// VORIGEN Bildes. Bei ruhigem Laufen faellt das nicht auf, bei schnellen
+	// Bewegungen schon: die Kamera blieb kurz hinter Lara, ihr Koerper
+	// schob sich durchs Bild, dann fing sie sich wieder (vom Nutzer gesehen).
+	// Flag 1 ist der Satz, den GetLaraJointPos liest, und er will eine
+	// Einheitsmatrix auf dem Stapel - genau wie in DrawPhaseGame.
+	phd_PushUnitMatrix();
+	CalcLaraMatrices(1);
+	phd_PopMatrix();
 
 	// Augenpunkt: das Kopfgelenk, ein Stueck in Blickrichtung geschoben,
 	// damit die Kamera nicht im eigenen Hinterkopf sitzt.

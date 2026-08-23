@@ -5,6 +5,7 @@
 #include "output.h"
 #include "../game/draw.h"
 #include "../game/hair.h"
+#include "../game/camera.h"
 #include "../game/objects.h"
 #include "../game/gameflow.h"
 #include "../game/control.h"
@@ -155,7 +156,13 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 
 	phd_PopMatrix();
 	bLaraUnderWater = LaraNodeUnderwater[8] != 0 ? 8 : -1;
-	DrawHair();
+
+	// Ego-Sicht (#126): mit dem Kopf muss auch der ZOPF weg. Er haengt am
+	// Kopfgelenk - also genau dort, wo die Kamera sitzt - und wehte dem
+	// Spieler durchs Bild. Die Meshbits des Koerpers erwischen ihn nicht,
+	// er wird getrennt gezeichnet.
+	if (!EgoKopfWeg())
+		DrawHair();
 	phd_PushMatrix();
 	obj = &objects[LARA_SKIN_JOINTS];
 	meshpp = &meshes[obj->mesh_index];
@@ -354,7 +361,13 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 
 	phd_PopMatrix();
 	bLaraUnderWater = LaraNodeUnderwater[8] != 0 ? 8 : -1;
-	DrawHair();
+
+	// Ego-Sicht (#126): mit dem Kopf muss auch der ZOPF weg. Er haengt am
+	// Kopfgelenk - also genau dort, wo die Kamera sitzt - und wehte dem
+	// Spieler durchs Bild. Die Meshbits des Koerpers erwischen ihn nicht,
+	// er wird getrennt gezeichnet.
+	if (!EgoKopfWeg())
+		DrawHair();
 	phd_PushMatrix();
 	obj = &objects[LARA_SKIN_JOINTS];
 	meshpp = &meshes[obj->mesh_index];

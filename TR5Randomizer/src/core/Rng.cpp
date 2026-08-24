@@ -22,10 +22,10 @@
 
 namespace
 {
-    // splitmix64 - streut einen einzelnen 64-Bit-Seed auf den 256-Bit-Zustand
-    // von xoshiro. Ohne diesen Schritt liefert ein Seed wie 1 oder 0 eine
-    // erkennbar schlechte erste Zahlenfolge, weil xoshiro einen gut verteilten
-    // Anfangszustand voraussetzt.
+    // splitmix64 - spreads a single 64-bit seed over xoshiro's 256-bit
+    // state. Without this step a seed like 1 or 0 yields a recognizably
+    // poor first sequence, because xoshiro assumes a well-distributed
+    // initial state.
     uint64_t splitmix64(uint64_t& x)
     {
         x += 0x9E3779B97F4A7C15ull;
@@ -68,10 +68,10 @@ uint64_t Rng::below(uint64_t bound)
 {
     if (bound == 0) return 0;
 
-    // Lemire: multipliziere in die doppelte Breite und verwirf den unteren
-    // Randbereich, der die Gleichverteilung verletzen wuerde. Das Verwerfen
-    // greift so selten, dass die Schleife praktisch nie zweimal laeuft - aber
-    // sie muss da sein, sonst waeren kleine Values bevorzugt.
+    // Lemire: multiply into double width and reject the lower edge region
+    // that would violate uniformity. Rejection hits so rarely that the loop
+    // practically never runs twice - but it must exist, or small values
+    // would be favored.
 #if defined(_MSC_VER) && defined(_M_X64)
     unsigned __int64 hi;
     uint64_t lo = _umul128(next(), bound, &hi);
@@ -85,11 +85,11 @@ uint64_t Rng::below(uint64_t bound)
     }
     return hi;
 #else
-    // Portabler Weg ohne 128-Bit-Multiplikation: Ablehnungsverfahren auf
-    // Basis der groessten durch bound teilbaren Schranke. Liefert dieselbe
-    // Verteilung, aber NICHT dieselbe Zahlenfolge wie der Zweig oben - der
-    // Build muss deshalb bei einer Zielplattform bleiben, sonst waeren Seeds
-    // zwischen 32- und 64-Bit-Build nicht vergleichbar. Wir liefern x86.
+    // Portable path without 128-bit multiplication: rejection based on the
+    // largest bound-divisible limit. Yields the same distribution but NOT
+    // the same sequence as the branch above - the build must therefore
+    // stick to one target platform, or seeds would not be comparable
+    // between 32- and 64-bit builds. We ship x86.
     const uint64_t limit = 0xFFFFFFFFFFFFFFFFull - (0xFFFFFFFFFFFFFFFFull % bound) - 1;
     uint64_t r;
     do { r = next(); } while (r > limit);
@@ -101,9 +101,9 @@ uint64_t Rng::below(uint64_t bound)
 
 namespace
 {
-    // Ohne 0/O und 1/I/L - die Zeichen, die beim Abtippen aus einem Screenshot
-    // oder einer Chatnachricht regelmaessig verwechselt werden.
-    const char* SEED_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";  // 31 Zeichen
+    // Without 0/O and 1/I/L - the characters regularly confused when typing
+    // from a screenshot or a chat message.
+    const char* SEED_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";  // 31 characters
     const int   SEED_BASE = 31;
     const int   SEED_LEN = 13;   // 31^13 > 2^64
 }
@@ -122,8 +122,8 @@ std::string SeedText::format(uint64_t seed)
 
 uint64_t SeedText::parse(const std::string& text)
 {
-    // Erst versuchen, den Text als unser Base31-Format zu read. Trennzeichen
-    // und Leerraum werden ignoriert, Kleinschreibung akzeptiert.
+    // First try to read the text as our Base31 format. Separators and
+    // whitespace are ignored, lower case accepted.
     std::string clean;
     bool decodable = true;
     for (char c : text)
@@ -146,8 +146,8 @@ uint64_t SeedText::parse(const std::string& text)
         return v;
     }
 
-    // Sonst: den Text als Zeichenkette hashen (FNV-1a, 64 Bit), damit jede
-    // Eingabe zu einem gueltigen und reproduzierbaren Seed fuehrt.
+    // Otherwise: hash the text as a string (FNV-1a, 64 bit), so every input
+    // leads to a valid and reproducible seed.
     uint64_t h = 0xCBF29CE484222325ull;
     for (unsigned char c : text)
     {
@@ -159,8 +159,8 @@ uint64_t SeedText::parse(const std::string& text)
 
 uint64_t SeedText::random()
 {
-    // Nur fuer den Wuerfeln-Knopf. Der erzeugte Wert wird sofort als Text
-    // angezeigt und ist damit ab da genauso reproduzierbar wie jeder andere.
+    // Only for the dice button. The generated value is shown as text right
+    // away and from then on is as reproducible as any other.
     const uint64_t t = static_cast<uint64_t>(
         std::chrono::high_resolution_clock::now().time_since_epoch().count());
     uint64_t x = t ^ 0xA5A5A5A5DEADBEEFull;

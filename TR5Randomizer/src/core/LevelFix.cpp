@@ -22,10 +22,10 @@
 
 namespace
 {
-    // Levelnamen ohne Ruecksicht auf Gross- und Kleinschreibung vergleichen -
-    // die Dateien heissen mal "joby5", mal "Andrea1", und der Aufrufer reicht
-    // durch, was im Ordner steht.
-    bool gleicherName(const std::string& a, const char* b)
+    // Compare level names ignoring case - the files are called "joby5" here
+    // and "Andrea1" there, and the caller passes through whatever the
+    // folder says.
+    bool sameName(const std::string& a, const char* b)
     {
         size_t i = 0;
         for (; i < a.size() && b[i]; ++i)
@@ -45,30 +45,30 @@ namespace LevelFix
 int apply(Tr5Level& level, const std::string& levelName,
              std::vector<std::string>& warnings)
 {
-    int uebernommen = 0;
+    int applied = 0;
 
     for (const TriggerCopy& k : kTriggerCopies)
     {
-        if (!gleicherName(levelName, k.level)) continue;
+        if (!sameName(levelName, k.level)) continue;
 
         std::string error;
         if (level.copyTrigger(k.fromRoom, k.fromSx, k.fromSz,
                                  k.toRoom, k.toSx, k.toSz, error))
         {
-            ++uebernommen;
+            ++applied;
             continue;
         }
 
-        // Nicht abbrechen: ohne den Fix ist das Level so kaputt wie vanilla,
-        // mit einem Abbruch waere der ganze Lauf hin. Aber volumes sagen.
+        // Do not abort: without the fix the level is as broken as vanilla,
+        // and an abort would kill the whole run. But say it out loud.
         char buf[400];
         std::snprintf(buf, sizeof(buf),
-                      "LevelFix nicht angewandt (%s -> Raum %d Sektor %d,%d): %s",
+                      "LevelFix not applied (%s -> room %d sector %d,%d): %s",
                       k.reason, k.toRoom, k.toSx, k.toSz, error.c_str());
         warnings.push_back(buf);
     }
 
-    return uebernommen;
+    return applied;
 }
 
 }

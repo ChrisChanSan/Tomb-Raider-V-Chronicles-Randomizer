@@ -28,10 +28,10 @@ std::wstring Config::path()
 
 void Config::load()
 {
-    *this = Config();   // alles auf Vorgabe; fehlende Schluessel bleiben so
+    *this = Config();   // everything to defaults; missing keys stay that way
 
     FILE* f = nullptr;
-    if (_wfopen_s(&f, path().c_str(), L"rb") != 0 || !f) return;   // erster Start
+    if (_wfopen_s(&f, path().c_str(), L"rb") != 0 || !f) return;   // first start
 
     std::string text;
     char buf[1024];
@@ -67,19 +67,18 @@ void Config::load()
         else if (key == "enemyPool")      enemyPool = std::atoi(val.c_str());
         else if (key == "enemiesDisabled")
         {
-            // Kommaliste abgewaehlter typeIds. Leere Felder werden
-            // uebersprungen, damit ein Endkomma nicht als Typ 0 (Lara!)
-            // ankommt.
+            // Comma list of deselected typeIds. Empty pieces are skipped so
+            // a trailing comma does not arrive as type 0 (Lara!).
             enemiesDisabled.clear();
             size_t a = 0;
             while (a <= val.size())
             {
                 size_t e = val.find(',', a);
                 if (e == std::string::npos) e = val.size();
-                std::string stueck = val.substr(a, e - a);
-                if (!stueck.empty())
+                std::string piece = val.substr(a, e - a);
+                if (!piece.empty())
                 {
-                    int t = std::atoi(stueck.c_str());
+                    int t = std::atoi(piece.c_str());
                     if (t > 0) enemiesDisabled.insert(t);
                 }
                 a = e + 1;
@@ -103,9 +102,9 @@ void Config::load()
 
     if (optLevelOrder < 0 || optLevelOrder > 2) optLevelOrder = 0;
 
-    // Grenzen der Regler in der Oberflaeche. Wer die Values in Balance.txt
-    // von Hand weiter aufdreht, behaelt sie dort - hier geht es nur um die
-    // Reglerstellung, die sonst ausserhalb ihrer Bahn laege.
+    // Limits of the UI sliders. Whoever turns the values in Balance.txt up
+    // further by hand keeps them there - this is only about the slider
+    // position, which would otherwise sit outside its track.
     if (balWeapons < 0)          balWeapons = 0;
     if (balWeapons > 200)        balWeapons = 200;
     if (balEnemyHealth < 50)    balEnemyHealth = 50;
@@ -125,7 +124,12 @@ bool Config::save() const
     FILE* f = nullptr;
     if (_wfopen_s(&f, path().c_str(), L"wb") != 0 || !f) return false;
 
-    // UTF-8 ohne BOM, damit Pfade mit Umlauten unbeschadet zurueckkommen.
+    // UTF-8 without BOM, so paths with umlauts come back unharmed.
+    //
+    // The keys here MUST match the ones load() reads - the #129 rename
+    // once broke exactly this round trip (load read the new English keys,
+    // save still wrote the old German ones, and a restart silently reset
+    // half the settings).
     const std::string dir = PathUtil::narrow(sourceDir);
     std::fprintf(f, "sourceDir=%s\n", dir.c_str());
     std::fprintf(f, "tr3Dir=%s\n", PathUtil::narrow(tr3Dir).c_str());
@@ -133,29 +137,29 @@ bool Config::save() const
     std::fprintf(f, "seed=%s\n", seedText.c_str());
     std::fprintf(f, "winW=%d\n", winW);
     std::fprintf(f, "winH=%d\n", winH);
-    std::fprintf(f, "sprache=%s\n", germanUi ? "de" : "en");
-    std::fprintf(f, "ausruestung=%d\n", optOtherPickups ? 1 : 0);
+    std::fprintf(f, "language=%s\n", germanUi ? "de" : "en");
+    std::fprintf(f, "equipment=%d\n", optOtherPickups ? 1 : 0);
     std::fprintf(f, "keyItems=%d\n", optKeyItems ? 1 : 0);
-    std::fprintf(f, "gegnerZusatz=%d\n", optEnemies ? 1 : 0);
-    std::fprintf(f, "gegnerAnzahl=%d\n", enemyCount);
-    std::fprintf(f, "gegnerMix=%d\n", optEnemySwap ? 1 : 0);
-    std::fprintf(f, "gegnerPool=%d\n", enemyPool);
+    std::fprintf(f, "extraEnemies=%d\n", optEnemies ? 1 : 0);
+    std::fprintf(f, "enemyCount=%d\n", enemyCount);
+    std::fprintf(f, "enemySwap=%d\n", optEnemySwap ? 1 : 0);
+    std::fprintf(f, "enemyPool=%d\n", enemyPool);
     std::fprintf(f, "enemiesDisabled=");
     {
-        bool erstes = true;
-        for (int t : enemiesDisabled) { std::fprintf(f, "%s%d", erstes ? "" : ",", t); erstes = false; }
+        bool first = true;
+        for (int t : enemiesDisabled) { std::fprintf(f, "%s%d", first ? "" : ",", t); first = false; }
     }
     std::fprintf(f, "\n");
     std::fprintf(f, "outfits=%d\n", optOutfits ? 1 : 0);
     std::fprintf(f, "itemAmount=%d\n", itemAmount);
     std::fprintf(f, "secrets=%d\n", secrets);
-    // Wurde gelesen, aber nie geschrieben - die Autorenwahl ging bei jedem
-    // Programmstart verloren.
+    // Was read but never written once - the author choice used to be lost
+    // on every program start.
     std::fprintf(f, "secretAuthor=%s\n", secretAuthor.c_str());
-    std::fprintf(f, "musikSwitch=%d\n", optMusicSwitch ? 1 : 0);
-    std::fprintf(f, "musicTriggers=%d\n", optMusicTrigger ? 1 : 0);
-    std::fprintf(f, "levelAbschnitte=%d\n", optLevelSections ? 1 : 0);
-    std::fprintf(f, "levelFolge=%d\n", optLevelOrder);
+    std::fprintf(f, "musicSwitch=%d\n", optMusicSwitch ? 1 : 0);
+    std::fprintf(f, "musicTrigger=%d\n", optMusicTrigger ? 1 : 0);
+    std::fprintf(f, "levelSections=%d\n", optLevelSections ? 1 : 0);
+    std::fprintf(f, "levelOrder=%d\n", optLevelOrder);
     std::fprintf(f, "balWeapons=%d\n", balWeapons);
     std::fprintf(f, "balEnemyHealth=%d\n", balEnemyHealth);
     std::fprintf(f, "balEnemyDamage=%d\n", balEnemyDamage);

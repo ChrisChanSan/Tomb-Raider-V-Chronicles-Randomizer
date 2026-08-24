@@ -18,73 +18,73 @@
 #pragma once
 
 //----------------------------------------------------------------------------
-// Gemeinsame Kennung von Randomizer, Engine und Kurationsdaten.
+// Shared identifier of randomizer, engine and curation data.
 //
-// Warum das ueberhaupt existiert: ein Seed allein reproduziert gar nichts. Ob
-// aus Seed X dasselbe Level entsteht, haengt an drei Dingen - der
-// Platzierungslogik im Randomizer, den mitgelieferten Zonen-/Kurationsdaten und
-// der Engine, die das Ergebnis spielt. Meldet jemand "Seed K7M... ist
-// unspielbar", ist das ohne diese drei Angaben nicht nachstellbar. Genau dafuer
-// war die Seed-Funktion aber gedacht.
+// Why this exists at all: a seed alone reproduces nothing. Whether seed X
+// yields the same level depends on three things - the placement logic in the
+// randomizer, the bundled zone/curation data, and the engine that plays the
+// result. If someone reports "seed K7M... is unwinnable", that is not
+// reproducible without these three. Yet that was the whole point of the
+// seed feature.
 //
-// Regel: RANDO_BUILD_ID wird bei JEDER Aenderung erhoeht, die das Ergebnis
-// eines Seeds veraendern kann. Das ist mehr, als man zuerst denkt - dazu
-// gehoeren auch die Kurationstabellen in ZoneAnalyse.ps1, denn eine neue
-// Sperrliste verschiebt Items. Reine Oberflaechenaenderungen dagegen nicht.
+// Rule: RANDO_BUILD_ID is bumped on EVERY change that can alter the outcome
+// of a seed. That is more than one first thinks - it includes the curation
+// tables in ZoneAnalyse.ps1, because a new ban list moves items. Pure UI
+// changes, on the other hand, do not count.
 //
-// Die Engine traegt dieselbe Konstante. Stimmen sie nicht ueberein, verweigert
-// der Randomizer die Arbeit, statt einen Seed zu erzeugen, dessen Ergebnis
-// niemand nachvollziehen kann. Beim Erhoehen hier also immer auch die Engine
-// anfassen - die beiden Projekte liegen in getrennten Baeumen, deshalb laesst
-// sich das nicht durch einen gemeinsamen Header erzwingen.
+// The engine carries the same constant. If they do not match, the randomizer
+// refuses to work instead of producing a seed whose result nobody can
+// reproduce. So when bumping it here, always touch the engine as well - the
+// two projects live in separate trees, which is why a shared header cannot
+// enforce this.
 //----------------------------------------------------------------------------
 
-// 2: Die Kurationsdaten setzen jetzt durch, was sie schon lange beschreiben -
-//    Inselgruppen, Hoehengrenzen, gesperrte Sektoren, waffenfreie Raeume und
-//    "hinter der eigenen Tuer". Der Randomizer hat diese Felder vorher gelesen
-//    und ignoriert, jeder Seed faellt damit anders aus als unter 1.
-// 3: Secrets (typeId 223, spielweit 36 Stueck) bleiben vorerst ortsfest, und
-//    Andy2 ist kuratiert. Beides sind Kurationsdaten, und die verschieben
-//    Platzierungen genauso wie eine Codeaenderung.
-// 4: andy3, rich1 und rich2 kuratiert - und MANUAL_LINK repariert. Die Tabelle
-//    hat nie funktioniert (PowerShell zog die Paare flach), joby2 und rich1
-//    liefen also die ganze Zeit ohne ihre Handkanten. Zonen und Ablagen der
-//    zwoelf anderen Level bleiben davon zwar unberuehrt, rich2 aber nicht,
-//    und die Zonennummern selbst sind Eingabe jeder Platzierung.
-// 5: rich2 hat jetzt Constraints - vorher hatte es null. Puzzle Item3 bekommt
-//    seine Zonengrenze, Pickup Item2 und je eine Flasche und ein Tuch muessen
-//    in den Startbereich, die Aufzugssektion traegt keine Key-Items mehr.
-// 6: rich2s erste Sperrliste aus dem trview-Durchgang, und Puzzle Item3 bekommt
-//    eine Untergrenze - es darf erst ab Raum 128 und nicht mehr hinter dem
-//    Teleporter liegen. 214 -> 145 erlaubte Ablagen fuer diesen Typ.
-// 7: Pflicht-Injektionen koennen einen festen Sektor tragen und sich dort
-//    stapeln. rich2 bekommt damit HK plus zwei Magazine auf 140(1,2).
-// 8: Injektionen koennen einen Hoehenversatz tragen, und rich2 grenzt Flasche
-//    und Tuch enger ein als den uebrigen Startbereich.
-// 9: TYPE_Y_OFFSET - Typen, deren Mesh-Ursprung nicht auf der Unterkante sitzt,
-//    werden bei JEDER Platzierung angehoben. Bisher nur die HK (345).
-// 10: Aus TYPE_Y_OFFSET wird TYPE_OFFSET mit dx/dy/dz und einer Levelebene.
-//     Neu: Andrea2s Puzzle Item3 rueckt um dz -512 in die Sektormitte.
-// 11: Andrea2s Puzzle Item3 bleibt vanilla - mit genullter OCB ist es nicht
-//     aufnehmbar, mit erhaltener braucht es eine Wand dahinter. KEEP_OCB ist
-//     als Mechanismus gebaut, aber leer.
-// 12: rich3 kuratiert - sechs Flipmap-Freigaben und die beiden Puzzle-Combos,
-//     die von den Cyborgs getragen werden. Damit sind alle 13 Level durch.
-// 13: rich3 bekommt seine beiden Inselgruppen - die Puzzle-Combos hinter den
-//     Einbahn-Teleporter, die Armbrust in ihren eigenen Bereich.
-// 14: rich3s Armbrust wird auf drei Raeume eingegrenzt, ihre Munition bleibt
-//     vorerst vanilla.
-// 15: rich3s erste Sperrliste - 27 Raeume, 808 -> 528 Ablagen.
-// 16: Raum 209 kommt zu rich3s Sperrliste - damit ist die Kuration aller
-//     dreizehn Level abgeschlossen.
-// 17: Die finale Sperrliste des Nutzers ueber alle Level, plus die neue
-//     Tabelle TYPE_EXCLUDE_SECTORS.
-// 18: EQUIP_GATE wird durchgesetzt statt nur berichtet. Andrea1s Revolver und
-//     Lasersight duerfen nicht mehr hinter die Glocke wandern.
+// 2: The curation data now enforces what it has long described - island
+//    groups, height limits, banned sectors, weapon-free rooms and "behind
+//    its own door". The randomizer used to read and ignore these fields, so
+//    every seed comes out differently than under 1.
+// 3: Secrets (typeId 223, 36 in the whole game) stay in place for now, and
+//    Andy2 is curated. Both are curation data, and that moves placements
+//    just like a code change would.
+// 4: andy3, rich1 and rich2 curated - and MANUAL_LINK repaired. The table
+//    never worked (PowerShell flattened the pairs), so joby2 and rich1 ran
+//    without their hand edges the whole time. Zones and spots of the twelve
+//    other levels are untouched by that, but rich2 is not, and the zone
+//    numbers themselves are input to every placement.
+// 5: rich2 now has constraints - before it had none. Puzzle Item3 gets its
+//    zone limit, Pickup Item2 plus one bottle and one cloth must go to the
+//    start area, and the elevator section carries no key items anymore.
+// 6: rich2's first ban list from the trview walkthrough, and Puzzle Item3
+//    gets a lower bound - it may only lie from room 128 on and no longer
+//    behind the teleporter. 214 -> 145 allowed spots for this type.
+// 7: Mandatory injections can carry a fixed sector and stack there. rich2
+//    thus gets the HK plus two magazines on 140(1,2).
+// 8: Injections can carry a height offset, and rich2 confines bottle and
+//    cloth more tightly than the rest of the start area.
+// 9: TYPE_Y_OFFSET - types whose mesh origin does not sit on the lower edge
+//    are lifted on EVERY placement. So far only the HK (345).
+// 10: TYPE_Y_OFFSET becomes TYPE_OFFSET with dx/dy/dz and a level scope.
+//     New: Andrea2's Puzzle Item3 moves dz -512 into the sector center.
+// 11: Andrea2's Puzzle Item3 stays vanilla - with its OCB zeroed it cannot
+//     be picked up, with it kept it needs a wall behind it. KEEP_OCB exists
+//     as a mechanism but is empty.
+// 12: rich3 curated - six flipmap releases and the two puzzle combos
+//     carried by the cyborgs. With that, all 13 levels are done.
+// 13: rich3 gets its two island groups - the puzzle combos behind the
+//     one-way teleporter, the crossbow into its own area.
+// 14: rich3's crossbow is narrowed to three rooms, its ammo stays vanilla
+//     for now.
+// 15: rich3's first ban list - 27 rooms, 808 -> 528 spots.
+// 16: Room 209 joins rich3's ban list - and with that the curation of all
+//     thirteen levels is complete.
+// 17: The user's final ban list across all levels, plus the new table
+//     TYPE_EXCLUDE_SECTORS.
+// 18: EQUIP_GATE is enforced instead of merely reported. Andrea1's revolver
+//     and lasersight may no longer wander behind the bell.
 #define RANDO_BUILD_ID      18
 #define RANDO_BUILD_STRING  "0.18"
 
-// Name der Datei, die der Randomizer neben die Level legt und die Engine beim
-// Start liest, um Seed und Build im Pausenmenue anzuzeigen. Damit ist ein
-// Fehlerbericht ein einzelner Screenshot statt einer Rueckfragerunde.
+// Name of the file the randomizer puts next to the levels and the engine
+// reads at startup to show seed and build in the pause menu. That makes a
+// bug report a single screenshot instead of a round of questions.
 #define RANDO_SIDECAR_NAME  L"randomizer.txt"

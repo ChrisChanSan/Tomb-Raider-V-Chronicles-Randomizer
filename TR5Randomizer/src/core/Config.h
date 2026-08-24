@@ -20,65 +20,63 @@
 #include <string>
 
 //----------------------------------------------------------------------------
-// Einstellungen, die zwischen zwei Starts erhalten bleiben.
+// Settings that persist between two starts.
 //
-// Bewusst eine Textdatei neben der EXE und keine Registry: das Werkzeug soll
-// tragbar sein - Ordner kopieren, laeuft. Ausserdem kann der Nutzer
-// hineinsehen und notfalls von Hand korrigieren, was bei einem Pfadproblem
-// deutlich freundlicher ist als ein Registrierungseditor.
+// Deliberately a text file next to the EXE and not the registry: the tool is
+// meant to be portable - copy the folder, it runs. The user can also look
+// inside and fix things by hand if need be, which in case of a path problem
+// is a lot friendlier than a registry editor.
 //----------------------------------------------------------------------------
 struct Config
 {
-    std::wstring sourceDir;   // data-Ordner der eigenen Chronicles-Installation
-    std::string  seedText;    // zuletzt benutzter Seed, als Text
+    std::wstring sourceDir;   // data folder of the user's Chronicles install
+    std::string  seedText;    // last used seed, as text
 
-    // Fremdinstallationen fuer die Gegner aus Tomb Raider 3 (#102).
+    // Third-party installations for the Tomb Raider 3 enemies (#102).
     //
-    // Wir liefern KEINE Spieldaten mit - wer die Dinosaurier haben will, muss
-    // die Spiele besitzen. Aus ihnen holt der Lauf zur Laufzeit Modell,
-    // Texturen und Klaenge; ohne Pfad bleiben die Arten in der Oberflaeche
-    // ausgegraut.
+    // We ship NO game data - whoever wants the dinosaurs must own the games.
+    // The run fetches model, textures and sounds from them at runtime;
+    // without a path the affected types stay grayed out in the UI.
     //
-    //   tr3Dir     data-Ordner von Tomb Raider 3 - CRASH.TR2 traegt T-Rex,
-    //              Raptor und Compsognathus, MAIN.SFX die Klaenge dazu.
-    //   tr3GoldDir data-Ordner von The Lost Artifact - chunnel.TR2 traegt
-    //              den Geier.
+    //   tr3Dir     data folder of Tomb Raider 3 - CRASH.TR2 carries T-Rex,
+    //              Raptor and Compsognathus, MAIN.SFX the matching sounds.
+    //   tr3GoldDir data folder of The Lost Artifact - chunnel.TR2 carries
+    //              the vulture.
     std::wstring tr3Dir;
     std::wstring tr3GoldDir;
 
-    // Fenstergroesse beim letzten Beenden bzw. nach dem letzten Ziehen.
-    // 0 heisst "noch nie gespeichert" - dann gilt die Vorgabegroesse.
+    // Window size at last exit or after the last resize. 0 means "never
+    // saved yet" - then the default size applies.
     int winW = 0, winH = 0;
 
-    // Sprache der Oberflaeche (#128). Vorgabe ENGLISCH (Nutzerentscheid
-    // 2026-08-24) - die deutschen Texte sind die Quelltexte, uebersetzt
-    // wird in gui\Language.cpp.
+    // UI language (#128). Default is ENGLISH (user decision 2026-08-24);
+    // the translation table lives in gui\Language.cpp.
     bool germanUi = false;
 
-    // Die Wuerfel-Optionen aus Abschnitt 3, damit der Nutzer seine Auswahl
-    // beim naechsten Start wiederfindet. Vorgaben identisch mit denen der
-    // Oberflaeche - fehlt ein Schluessel in der Datei, aendert sich nichts.
+    // The shuffle options from section 3, so the user finds their choices
+    // again on the next start. Defaults identical to those of the UI - if a
+    // key is missing from the file, nothing changes.
     bool optOtherPickups = true;
     bool optKeyItems     = true;
     bool optEnemies      = false;
     int  enemyCount      = 6;
     bool optEnemySwap    = false;
-    int  enemyPool       = 0;     // 0 Levelpool, 1 Cross-Mix, 2 Allsanity
-    // Abgewaehlte Gegnerarten (#95). Gespeichert wird die ABWAHL, damit eine
-    // spaeter hinzukommende Art nicht durch alte Dateien muted ausfaellt.
+    int  enemyPool       = 0;     // 0 level pool, 1 cross mix, 2 allsanity
+    // Deselected enemy types (#95). The DESELECTION is what gets saved, so
+    // a type added later is not silently dropped by old files.
     std::set<int> enemiesDisabled;
     bool optOutfits      = false;
-    int  itemAmount       = 0;     // 0 Vanilla, 1 mehr, 2 viel mehr (#36)
-    int  secrets         = 0;     // Secrets (#53): 0 Vanilla, 1 Pool, 2/3 Liste
-    std::string secretAuthor;      // gewaehlter Listenautor (Art 2/3)
-    bool optMusicSwitch  = false; // Levelmusik in der SCRIPT.DAT wuerfeln
-    bool optMusicTrigger = false; // TO_CD-Tracks der Floordata wuerfeln
-    bool optLevelSections = false;  // die vier Story-Abschnitte permutieren
-    int  optLevelOrder   = 0;     // 0 aus, 1 innerhalb der Abschnitte, 2 frei ueber alles
+    int  itemAmount       = 0;     // 0 vanilla, 1 more, 2 a lot more (#36)
+    int  secrets         = 0;     // secrets (#53): 0 vanilla, 1 pool, 2/3 list
+    std::string secretAuthor;      // chosen list author (kinds 2/3)
+    bool optMusicSwitch  = false; // shuffle level music in SCRIPT.DAT
+    bool optMusicTrigger = false; // shuffle the floordata's TO_CD tracks
+    bool optLevelSections = false;  // permute the four story sections
+    int  optLevelOrder   = 0;     // 0 off, 1 within the sections, 2 free across everything
 
-    // Die drei Regler fuer Balance.txt (#108), in Prozent. Gespeichert wird
-    // hier nur die Reglerstellung; die Wahrheit steht in Balance.txt neben
-    // der PCtomb5.exe und wird beim Start von dort gelesen.
+    // The three Balance.txt sliders (#108), in percent. Only the slider
+    // position is stored here; the truth lives in Balance.txt next to
+    // PCtomb5.exe and is read from there at startup.
     int  balWeapons        = 100;
     int  balEnemyHealth   = 100;
     int  balEnemyDamage = 100;
@@ -86,8 +84,9 @@ struct Config
     bool balEnemyHealthRandom   = false;
     bool balEnemyDamageRandom = false;
 
-    // Liest bzw. schreibt <exe-Ordner>\TR5Randomizer.cfg. Fehlt die Datei,
-    // bleibt alles auf Vorgabe - das ist kein Fehler, sondern der erste Start.
+    // Reads/writes <exe folder>\TR5Randomizer.cfg. If the file is missing,
+    // everything stays at its default - that is not an error, it is the
+    // first start.
     void load();
     bool save() const;
 

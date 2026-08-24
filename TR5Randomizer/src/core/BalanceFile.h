@@ -19,23 +19,23 @@
 #include <string>
 
 //----------------------------------------------------------------------------
-// Balance.txt - die Einstellungsdatei der Engine, die neben der PCtomb5.exe
-// liegt (Aufgabe #108).
+// Balance.txt - the engine's tuning file that lives next to PCtomb5.exe
+// (task #108).
 //
-// Der Randomizer fasst darin AUSSCHLIESSLICH die drei Prozentzeilen an, die
-// seine Regler bedienen. Alles andere - der Schaden je Waffe, die
-// Lebenspunkte je Gegner, der Schaden je Angriff, die Levelgefahren - bleibt
-// unberuehrt, damit die Handarbeit des Spielers eine Runde Wuerfeln
-// ueberlebt. Genau dafuer sind die Prozentzeilen in der Engine da: sie wirken
-// zusaetzlich auf die Einzelwerte.
+// The randomizer touches EXCLUSIVELY the three percentage lines that its
+// sliders drive. Everything else - per-weapon damage, per-enemy hit points,
+// per-attack damage, the level hazards - stays untouched, so that the
+// player's hand tuning survives a round of shuffling. That is exactly what
+// the percentage lines in the engine are for: they apply on top of the
+// individual values.
 //
-// Fehlt die Datei, wird eine kurze mit nur diesen drei Zeilen geschrieben.
-// Das Spiel traegt beim naechsten Start alles Uebrige nach - das kann es seit
-// bcb3286 von allein.
+// If the file is missing, a short one with just these three lines is
+// written. The game fills in everything else on its next start - it has
+// been able to do that on its own since bcb3286.
 //----------------------------------------------------------------------------
 namespace BalanceFile
 {
-    // Alle drei Values in Prozent. 100 = unveraendert.
+    // All three values in percent. 100 = unchanged.
     struct Values
     {
         int weaponDamage = 100;
@@ -43,16 +43,16 @@ namespace BalanceFile
         int enemyDamage = 100;
     };
 
-    // Die drei Zeilen in <gameDir>\Balance.txt setzen. Vorhandene Zeilen
-    // werden an Ort und Stelle ersetzt, fehlende hinten angehaengt, der Rest
-    // der Datei bleibt Zeichen fuer Zeichen stehen.
+    // Set the three lines in <gameDir>\Balance.txt. Existing lines are
+    // replaced in place, missing ones appended at the end, and the rest of
+    // the file stays character for character as it was.
     //
-    // Rueckgabe false nur bei einem echten Schreibfehler; errorText traegt
-    // dann den Grund.
+    // Returns false only on a genuine write error; errorText then carries
+    // the cause.
     bool write(const std::wstring& gameDir, const Values& w,
                    std::string* errorText = nullptr);
 
-    // Was gerade in der Datei steht. Fehlt sie oder eine Zeile darin, gilt
-    // 100 - dasselbe, was die Engine annimmt.
+    // What the file currently says. If it or a line in it is missing, 100
+    // applies - the same assumption the engine makes.
     Values read(const std::wstring& gameDir);
 }

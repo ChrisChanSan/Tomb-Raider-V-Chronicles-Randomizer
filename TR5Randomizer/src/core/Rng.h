@@ -21,24 +21,24 @@
 #include <vector>
 
 //----------------------------------------------------------------------------
-// Deterministischer Zufallsgenerator fuer den Randomizer.
+// Deterministic random number generator for the randomizer.
 //
-// Warum nicht std::mt19937 mit std::shuffle/std::uniform_int_distribution?
-// Weil der Seed dann NICHT reproduzierbar waere, und genau das ist die
-// Anforderung: meldet ein Nutzer einen Fehler zu Seed X, muss derselbe Seed
-// hier exakt dasselbe Level erzeugen. std::mt19937 selbst ist zwar im Standard
-// bitgenau festgelegt, aber std::uniform_int_distribution und std::shuffle
-// sind es ausdruecklich NICHT - deren Verteilungs- bzw. Mischalgorithmus ist
-// der Implementierung ueberlassen. Derselbe Seed liefert damit je nach
-// Compiler, Standardbibliothek oder sogar deren Version ein anderes Ergebnis.
-// Ein Nutzerbericht "Seed 12345 ist unspielbar" waere dann nicht nachstellbar,
-// sobald der Build mit einem anderen Toolset erzeugt wurde.
+// Why not std::mt19937 with std::shuffle/std::uniform_int_distribution?
+// Because the seed would then NOT be reproducible, and that is precisely the
+// requirement: if a user reports a bug for seed X, the same seed must
+// produce exactly the same level here. std::mt19937 itself is specified
+// bit-exactly by the standard, but std::uniform_int_distribution and
+// std::shuffle explicitly are NOT - their distribution and shuffling
+// algorithms are left to the implementation. The same seed thus yields a
+// different result depending on compiler, standard library or even its
+// version. A user report "seed 12345 is unwinnable" would then not be
+// reproducible as soon as the build was made with a different toolset.
 //
-// Deshalb: eigener Generator (xoshiro256** mit splitmix64-Initialisierung,
-// beide Public Domain von Blackman/Vigna bzw. Steele et al.), eigene
-// verzerrungsfreie Bereichsreduktion und eigenes Fisher-Yates. Alles hier ist
-// exakt festgelegt, damit ein Seed ueber Compiler- und Versionsgrenzen hinweg
-// dasselbe Ergebnis liefert.
+// Hence: our own generator (xoshiro256** with splitmix64 initialization,
+// both Public Domain by Blackman/Vigna and Steele et al.), our own bias-free
+// range reduction and our own Fisher-Yates. Everything here is pinned down
+// exactly, so one seed gives the same result across compiler and version
+// boundaries.
 //----------------------------------------------------------------------------
 class Rng
 {
@@ -47,16 +47,17 @@ public:
 
     void reseed(uint64_t seed);
 
-    // Rohes 64-Bit-Wort.
+    // Raw 64-bit word.
     uint64_t next();
 
-    // Gleichverteilt in [0, bound). bound == 0 liefert 0.
-    // Verwendet Lemires verzerrungsfreies Verfahren mit Verwerfen - kein
-    // "next() % bound", das haette bei nicht-Zweierpotenzen eine messbare
-    // Schlagseite zu kleinen Werten.
+    // Uniform in [0, bound). bound == 0 yields 0.
+    // Uses Lemire's bias-free rejection method - no "next() % bound", which
+    // would have a measurable lean towards small values for non-powers of
+    // two.
     uint64_t below(uint64_t bound);
 
-    // Fisher-Yates, absteigend. Bewusst hier ausgeschrieben statt std::shuffle.
+    // Fisher-Yates, descending. Deliberately spelled out here instead of
+    // std::shuffle.
     template <typename T>
     void shuffle(std::vector<T>& v)
     {
@@ -73,7 +74,7 @@ public:
         }
     }
 
-    // Ein Element auswaehlen. Der Aufrufer stellt sicher, dass v nicht leer ist.
+    // Pick one element. The caller ensures v is not empty.
     template <typename T>
     const T& pick(const std::vector<T>& v)
     {
@@ -85,21 +86,21 @@ private:
 };
 
 //----------------------------------------------------------------------------
-// Seed-Darstellung fuer die Oberflaeche.
+// Seed representation for the UI.
 //
-// Ein Seed wird dem Nutzer als Text gezeigt und von ihm als Text wieder
-// eingegeben - das ist der Weg, auf dem eine Fehlermeldung zurueckkommt. Rein
-// numerisch waere das eine 20-stellige Zahl, die sich niemand fehlerfrei
-// abtippt. Darum Base32 mit einem Alphabet ohne die Verwechslungspaare 0/O und
-// 1/I/L: 13 Zeichen, gross-/kleinschreibungsunabhaengig lesbar.
+// A seed is shown to the user as text and entered by them as text - that is
+// the path a bug report travels back on. Purely numeric it would be a
+// 20-digit number nobody can retype without mistakes. Hence Base32 with an
+// alphabet that avoids the look-alike pairs 0/O and 1/I/L: 13 characters,
+// readable regardless of case.
 //
-// Jeder Seed-Text ist gueltig: laesst er sich nicht als Base32 read, wird er
-// stattdessen als Zeichenkette gehasht. Damit kann ein Nutzer auch einfach
-// "Weihnachten" eintippen und bekommt reproduzierbar dasselbe Level.
+// Every seed text is valid: if it cannot be read as Base32, it is hashed as
+// a string instead. That way a user can simply type "Christmas" and
+// reproducibly gets the same level.
 //----------------------------------------------------------------------------
 namespace SeedText
 {
-    std::string  format(uint64_t seed);           // 64 Bit -> lesbarer Text
-    uint64_t     parse(const std::string& text);  // Text -> 64 Bit
-    uint64_t     random();                        // frischer Seed aus der Systemzeit
+    std::string  format(uint64_t seed);           // 64 bits -> readable text
+    uint64_t     parse(const std::string& text);  // text -> 64 bits
+    uint64_t     random();                        // fresh seed from system time
 }

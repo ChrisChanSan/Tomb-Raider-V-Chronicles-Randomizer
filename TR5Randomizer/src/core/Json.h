@@ -22,22 +22,22 @@
 #include <vector>
 
 //----------------------------------------------------------------------------
-// Kleiner, eigenstaendiger JSON-Leser und -Schreiber.
+// Small, self-contained JSON reader and writer.
 //
-// Bewusst kein Fremdpaket: der Randomizer soll eine einzelne EXE ohne
-// Installation sein, und die zu lesenden Dateien sind ausschliesslich unsere
-// eigenen Exporte (Zonen, Level-Infos) plus unser eigenes Patch-Format. Der
-// Funktionsumfang ist entsprechend zugeschnitten - vollstaendig genug fuer
-// diese Dateien, kein allgemeiner Parser.
+// Deliberately no third-party package: the randomizer is meant to be a
+// single EXE without installation, and the files it reads are exclusively
+// our own exports (zones, level infos) plus our own patch format. The
+// feature set is trimmed accordingly - complete enough for these files, not
+// a general-purpose parser.
 //
-// Herkunft: der Kern stammt aus dem handgeschriebenen Leser in
-// TombItemEdit2026s TRFile_RandomizerPatch.cpp, hier von _T()/stdafx geloest
-// und um Schreiben, Gleitkomma und Fehlermeldungen mit Zeilennummer erweitert.
+// Origin: the core comes from the hand-written reader in TombItemEdit2026's
+// TRFile_RandomizerPatch.cpp, detached here from _T()/stdafx and extended
+// with writing, floating point and error messages with line numbers.
 //
-// UTF-8 ohne BOM ist das erwartete Format (so write es unsere Werkzeuge),
-// ein vorhandenes BOM wird aber uebersprungen statt als Fehler behandelt -
-// PowerShells Out-File setzt eines, und das hat in diesem Projekt schon einmal
-// einen halben Tag gekostet.
+// UTF-8 without BOM is the expected format (that is what our tools write),
+// but an existing BOM is skipped instead of treated as an error -
+// PowerShell's Out-File adds one, and that has already cost half a day in
+// this project.
 //----------------------------------------------------------------------------
 class JsonValue
 {
@@ -51,18 +51,18 @@ public:
     bool isArray()  const { return m_type == Type::Array; }
     bool isObject() const { return m_type == Type::Object; }
 
-    // Zugriff mit Standardwert - der uebliche Fall beim Lesen unserer Exporte,
-    // wo optionale Felder schlicht fehlen duerfen.
+    // Access with a default - the usual case when reading our exports,
+    // where optional fields are simply allowed to be absent.
     bool        asBool(bool def = false) const;
     double      asDouble(double def = 0.0) const;
     int64_t     asInt(int64_t def = 0) const;
     std::string asString(const std::string& def = std::string()) const;
 
-    // Objektzugriff. Fehlt der Schluessel, kommt ein Null-Wert zurueck, kein
-    // Fehler - so lassen sich optionale Felder ohne Vorabpruefung read.
+    // Object access. If the key is missing, a null value comes back, not an
+    // error - so optional fields can be read without checking first.
     const JsonValue& operator[](const std::string& key) const;
 
-    // Arrayzugriff. Ausserhalb des Bereichs kommt ebenfalls Null zurueck.
+    // Array access. Out of range likewise returns null.
     const JsonValue& operator[](size_t index) const;
 
     size_t size() const;
@@ -70,7 +70,7 @@ public:
 
     const std::vector<JsonValue>& items() const { return m_array; }
 
-    // --- Aufbau fuer das Schreiben ---
+    // --- Construction for writing ---
     static JsonValue makeObject();
     static JsonValue makeArray();
     static JsonValue makeNumber(double v);
@@ -81,9 +81,9 @@ public:
     void set(const std::string& key, const JsonValue& v);
     void push(const JsonValue& v);
 
-    // Kompakt, ohne Leerraum. Zahlen ohne Nachkommaanteil werden als
-    // Ganzzahlen geschrieben, damit das Patch-Format so aussieht wie das der
-    // PowerShell-Kette und beide Werkzeuge dieselben Dateien erzeugen koennen.
+    // Compact, no whitespace. Numbers without a fractional part are written
+    // as integers, so the patch format looks like that of the PowerShell
+    // chain and both tools can produce the same files.
     std::string dump() const;
 
 private:
@@ -101,11 +101,12 @@ private:
 
 namespace Json
 {
-    // Liest eine Datei. Bei Erfolg true; sonst false und error enthaelt eine
-    // Meldung mit Zeilennummer.
+    // Reads a file. true on success; otherwise false, and error carries a
+    // message with a line number.
     bool parseFile(const std::wstring& path, JsonValue& out, std::string& error);
     bool parseString(const std::string& text, JsonValue& out, std::string& error);
 
-    // Schreibt UTF-8 OHNE BOM - der Leser in TombItemEdit2026 stolpert sonst.
+    // Writes UTF-8 WITHOUT a BOM - the reader in TombItemEdit2026 trips
+    // over one otherwise.
     bool writeFile(const std::wstring& path, const JsonValue& value, std::string& error);
 }

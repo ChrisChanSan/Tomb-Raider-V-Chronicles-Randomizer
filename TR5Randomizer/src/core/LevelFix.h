@@ -22,70 +22,69 @@
 #include <vector>
 
 //----------------------------------------------------------------------------
-// Levelfehler von Core, die bei JEDEM Lauf repariert werden.
+// Core's own level defects, repaired on EVERY run.
 //
-// Abgrenzung zur uebrigen Kuration: die Zonen- und Range-Tabellen in
-// ZoneAnalyse.ps1 sagen, WO der Zufall etwas hinlegen darf - sie arbeiten mit
-// dem Level, wie es ist. Hier steht das Gegenteil: Stellen, an denen das Level
-// SELBST kaputt ist, unabhaengig vom Wuerfeln. Ein solcher Fehler laesst sich
-// nicht umkurieren, er muss weg.
+// Distinction from the rest of the curation: the zone and range tables in
+// ZoneAnalyse.ps1 say WHERE randomness may put things - they work with the
+// level as it is. This here is the opposite: places where the level ITSELF
+// is broken, independent of any shuffling. Such a defect cannot be curated
+// around, it has to go.
 //
-// Bewusst eine kurze, handgepflegte Liste und kein Regelwerk. Jeder Eintrag
-// steht fuer einen Fall, den jemand im Spiel gesehen hat, und traegt seine
-// Begruendung mit.
+// Deliberately a short, hand-maintained list and not a rule system. Every
+// entry stands for a case someone saw in game, and carries its own
+// justification.
 //----------------------------------------------------------------------------
 namespace LevelFix
 {
-    // Ein Trigger, der auf einem zweiten Weg fehlt. Der Zielsektor bekommt
-    // eine gleichlautende Kopie, die Quelle bleibt unberuehrt.
+    // A trigger that is missing on a second route. The target sector gets an
+    // identical copy, the source stays untouched.
     struct TriggerCopy
     {
-        const char* level;                  // Dateiname ohne Endung
+        const char* level;                  // file name without extension
         int fromRoom, fromSx, fromSz;
         int toRoom, toSx, toSz;
         const char* reason;
     };
 
     //------------------------------------------------------------------------
-    // joby5: Der Bodentrigger, der die Electrical Cables 91 und 136 scharf
-    // schaltet, liegt in Raum 138 auf Sektor (1,1) - und nur dort. Der Jump
-    // Switch 190 in Raum 165 schaltet den Strom wieder ab; sein Antitrigger
-    // wirkt aber nur auf Kabel, die BEREITS scharf sind.
+    // joby5: the floor trigger that arms the Electrical Cables 91 and 136
+    // lies in room 138 on sector (1,1) - and only there. Jump Switch 190 in
+    // room 165 turns the power back off; its antitrigger, however, only
+    // affects cables that are ALREADY armed.
     //
-    // Ein Tester ist 2026-08-22 auf dem anderen Weg zum Schalter gekommen,
-    // ohne Raum 138 zu betreten. Damit lief der Antitrigger VOR dem Trigger:
-    // erst schaltete er nichts ab, danach machte der Bodentrigger die Kabel
-    // scharf - und sie blieben es fuer den Rest des Levels. Das Wasser in
-    // 126, 127, 128, 158 und 183 ist dann dauerhaft toedlich (10 Trefferpunkte
-    // je Bild, game/joby.cpp ControlElectricalCables).
+    // On 2026-08-22 a tester reached the switch by the other route, without
+    // ever entering room 138. So the antitrigger ran BEFORE the trigger:
+    // first it turned nothing off, then the floor trigger armed the cables -
+    // and they stayed armed for the rest of the level. The water in rooms
+    // 126, 127, 128, 158 and 183 is then permanently lethal (10 hit points
+    // per frame, game/joby.cpp ControlElectricalCables).
     //
-    // Die Kopie auf Raum 122 Sektor (1,1) deckt diesen zweiten Weg ab: dort
-    // kommt Lara in jedem Fall vorbei, bevor sie den Schalter erreicht.
+    // The copy on room 122 sector (1,1) covers that second route: Lara
+    // passes it in every case before she can reach the switch.
     //
-    // Warum das mehr ist als Bequemlichkeit: die Kuration erlaubt in genau
-    // diesen Wasserraeumen ausdruecklich PUZZLE-Items (Nutzerentscheidung,
-    // NO_KEY_ROOMS in ZoneAnalyse.ps1: "Die Puzzels koennen wir lassen, nur
-    // Keys sind wichtig") - mit der Begruendung, dass sie erst am Ende
-    // gebraucht werden, wenn der Strom laengst aus ist. Genau diese Annahme
-    // bricht der Testerfall. Schluessel sind ohnehin gesperrt; die
-    // Puzzle-Erlaubnis wird durch die Kopie wieder tragfaehig, statt sie
-    // zuruecknehmen zu muessen.
+    // Why this is more than convenience: the curation explicitly allows
+    // PUZZLE items in exactly these water rooms (user decision, NO_KEY_ROOMS
+    // in ZoneAnalyse.ps1: "the puzzles can stay, only keys matter") - on the
+    // grounds that they are only needed at the end, when the power has long
+    // been off. The tester case breaks precisely that assumption. Keys are
+    // barred anyway; the copy makes the puzzle allowance sound again instead
+    // of having to retract it.
     //
-    // An der Datei nachgemessen (SektorPruef): Raum 138 hat genau EINEN
-    // Trigger, auf (1,1), mit den Objektbefehlen 91 und 136. Raum 122 ist
-    // 7x3 Sektoren gross, (1,1) ist begehbarer Boden ohne eigene Kette -
-    // die Kopie legt sich also auf einen freien Sektor.
+    // Measured against the file (SektorPruef): room 138 has exactly ONE
+    // trigger, on (1,1), with the object commands 91 and 136. Room 122 is
+    // 7x3 sectors, (1,1) is walkable floor without a chain of its own - the
+    // copy therefore lands on a free sector.
     //------------------------------------------------------------------------
     static const TriggerCopy kTriggerCopies[] =
     {
         { "joby5", 138, 1, 1, 122, 1, 1,
-          "Kabeltrigger (91/136) auch auf dem zweiten Weg zum Jump Switch 190" },
+          "cable trigger (91/136) also on the second route to Jump Switch 190" },
     };
 
-    // Alle Eintraege fuer dieses Level apply. Fehlgeschlagene Eintraege
-    // landen als Warnung in "warnings"; der Lauf geht weiter, denn ein
-    // nicht angewandter Fix macht das Level nicht schlechter als vorher.
-    // Rueckgabe: Zahl der uebernommenen Fixes.
+    // Apply all entries for this level. Failed entries end up as warnings in
+    // "warnings"; the run continues, because a fix that was not applied does
+    // not make the level any worse than before.
+    // Returns the number of fixes applied.
     int apply(Tr5Level& level, const std::string& levelName,
                  std::vector<std::string>& warnings);
 }

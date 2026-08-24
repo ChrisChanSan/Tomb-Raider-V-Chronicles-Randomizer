@@ -23,42 +23,42 @@ class Tr5Level;
 class JsonValue;
 
 //----------------------------------------------------------------------------
-// Secret-Listen (#53): handgeschriebene Verstecke je Autor und Kategorie.
+// Secret lists (#53): hand-written hiding spots per author and category.
 //
-// Eine Datei = ein Dropdown-Eintrag, Dateiname Autor_Kategorie.txt im
-// Ordner data\secrets. Die Syntax ist die der Kurationslisten (drei Formen
-// plus Make_Portal, dokumentiert im Kopf von ChrisChanSan_Glitchless.txt);
-// dieselbe Grammatik liest auch SecretPlan.ps1 - wer die Syntax aendert,
-// aendert BEIDE Leser.
+// One file = one dropdown entry, file name Author_Category.txt in the folder
+// data\secrets. The syntax is that of the curation lists (three forms plus
+// Make_Portal, documented at the top of ChrisChanSan_Glitchless.txt); the
+// same grammar is also read by SecretPlan.ps1 - whoever changes the syntax
+// changes BOTH readers.
 //
-// Der Weg in den Lauf ist ein ZWEITER Patch-Durchgang: erst laeuft der
-// normale Rando-Patch, dann wird aus der Liste gegen den ECHTEN Stand des
-// Levels ein Secret-Patch gebaut (Positionen aus den Raumurspruengen der
-// geladenen Datei, Itembasis aus ihrer tatsaechlichen Itemzahl) und mit
-// derselben Patch::apply-Maschinerie angewandt. Ohne "itemBase" im Patch
-// verschiebt apply nichts - die Neu<k>-Verweise stimmen damit exakt.
+// The way into the run is a SECOND patch pass: first the normal rando patch
+// runs, then a secret patch is built from the list against the ACTUAL state
+// of the level (positions from the room origins of the loaded file, item
+// base from its real item count) and applied with the same Patch::apply
+// machinery. Without "itemBase" in the patch, apply moves nothing - the
+// Neu<k> references thus match exactly.
 //----------------------------------------------------------------------------
 
 struct SecretSource
 {
     std::string  author;
-    std::string  category;      // "Glitchless" oder "Glitched"
+    std::string  category;      // "Glitchless" or "Glitched"
     std::wstring path;
 };
 
-// Alle Autor_Kategorie.txt eines Ordners. Dateien mit fuehrendem '_'
-// (Referenzlisten) und unpassendem Namen werden uebersprungen.
-std::vector<SecretSource> findSecretSources(const std::wstring& ordner);
+// All Author_Category.txt files of a folder. Files with a leading '_'
+// (reference lists) and files with unsuitable names are skipped.
+std::vector<SecretSource> findSecretSources(const std::wstring& folder);
 
-// Baut aus der Zeile des Levels einen Patch (itemEdits/itemAdds/triggerAdds/
-// portalAdds). Eine Zeile ohne neue Stellen und ohne Extras laesst den Patch
-// leer - das Level bleibt vanilla, genau wie in der Vorlage vereinbart.
-// Nicht verstandene Teile werden gemeldet, nie stillschweigend verschluckt.
+// Builds a patch (itemEdits/itemAdds/triggerAdds/portalAdds) from the
+// level's line. A line without new spots and without extras leaves the patch
+// empty - the level stays vanilla, exactly as agreed in the template.
+// Parts that are not understood are reported, never silently swallowed.
 //
-// secretsMoved zaehlt NUR die umgezogenen Secrets selbst. Der Patch
-// traegt daneben noch Beiwerk (Schluessel, Schalter, Umtypungen), und wer
-// stattdessen edited+added des Reports anzeigt, meldet dem Nutzer "6 Secrets"
-// in einem Level mit dreien - genau so in der Oberflaeche passiert.
+// secretsMoved counts ONLY the relocated secrets themselves. The patch also
+// carries extras (keys, switches, retypings), and whoever displays the
+// report's edited+added instead tells the user "6 secrets" in a level that
+// has three - which is exactly what happened in the UI once.
 bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName,
                       const Tr5Level& lvl, JsonValue& patchOut,
                       int& secretsMoved,

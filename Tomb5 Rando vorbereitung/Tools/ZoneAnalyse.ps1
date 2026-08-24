@@ -412,9 +412,12 @@ $TYPE_EXCLUDE_ROOMS = @{
     'andy3' = @{
         172 = @(136,137,139,140,141,142)      # Kreide
         174 = @(136,137,139,140,141,142)      # Brechstange
-        # Die Muenze braucht hier nichts: ihr erlaubter Bereich steht als
-        # TYPE_ALLOW_ISLAND (ab 142, Riegel 137/97/149) und ist eine
-        # Positivliste - was nicht drinsteht, ist ohnehin verboten.
+        # Die Muenze: ihr GROBER Bereich steht als TYPE_ALLOW_ISLAND (ab 142,
+        # Riegel 137/97/149). Innerhalb dieser Insel gibt es aber Raeume, in
+        # denen sie trotzdem nichts zu suchen hat - Nutzerdurchsicht im
+        # Debug-Level 2026-08-24, mit der die Liste vollstaendig wird.
+        173 = @(37,42,43,45,46,47,50,51,53,55,56,57,77,78,81,
+                143,144,151,195,196,197)
     }
 }
 $typeExclude = @{}
@@ -690,6 +693,10 @@ $noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$Le
 #----------------------------------------------------------------------------
 $TYPE_EXCLUDE_SECTORS = @{
     'joby2' = @{ 172 = @('141,9,3','141,8,3','141,6,2') }
+    # andy3s Muenze (#61): zwei Raeume sind fuer sie ueberwiegend in Ordnung,
+    # nur je zwei Felder darin nicht - Nutzerangabe aus dem Debug-Level
+    # 2026-08-24. Eine Raumsperre waere hier zu grob.
+    'andy3' = @{ 173 = @('38,2,1','38,3,1','34,2,12','34,3,12') }
 }
 
 $TYPE_ALLOW_ROOMS = @{

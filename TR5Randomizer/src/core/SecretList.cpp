@@ -451,7 +451,7 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
         {
             JsonValue w = JsonValue::makeObject();
             w.set("room", JsonValue::makeInt(o.room));
-            w.set("an", JsonValue::makeBool(o.waterOn));
+            w.set("on", JsonValue::makeBool(o.waterOn));
             water.push(w);
             continue;
         }

@@ -2272,7 +2272,7 @@ bool Rando::run(const RandoInput& in,
                 // Nachzuegler-Durchgang weiter unten.
                 if (in.antitriggered.count(indizes[i]))
                 {
-                    e.set("antitriggerImmun", JsonValue::makeBool(true));
+                    e.set("antitriggerImmune", JsonValue::makeBool(true));
                     immunGesetzt.insert(indizes[i]);
                 }
 
@@ -2331,7 +2331,7 @@ bool Rando::run(const RandoInput& in,
 
             JsonValue e = JsonValue::makeObject();
             e.set("index", JsonValue::makeInt(idx));
-            e.set("antitriggerImmun", JsonValue::makeBool(true));
+            e.set("antitriggerImmune", JsonValue::makeBool(true));
             edits.push(e);
             immunGesetzt.insert(idx);
             ++nachgezogen;
@@ -2350,7 +2350,7 @@ bool Rando::run(const RandoInput& in,
         if (immunGesetzt.count(idx)) continue;
         JsonValue e = JsonValue::makeObject();
         e.set("index", JsonValue::makeInt(idx));
-        e.set("antitriggerImmun", JsonValue::makeBool(true));
+        e.set("antitriggerImmune", JsonValue::makeBool(true));
         edits.push(e);
         immunGesetzt.insert(idx);
         report.notes.push_back(fmt("Item %d: kuratierte Antitrigger-Immunitaet gesetzt.", idx));
@@ -2773,7 +2773,7 @@ bool Rando::run(const RandoInput& in,
         {
             JsonValue e = JsonValue::makeObject();
             e.set("slot", JsonValue::makeInt(t));
-            e.set("ausTr3", JsonValue::makeString(c->tr3));
+            e.set("fromTr3", JsonValue::makeString(c->tr3));
             moveables.push(e);
             report.notes.push_back(fmt("Gast aus Tomb Raider 3: Slot %d wird beim Patchen geholt.", t));
             continue;

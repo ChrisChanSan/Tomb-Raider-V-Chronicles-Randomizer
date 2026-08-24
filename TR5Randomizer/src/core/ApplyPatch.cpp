@@ -38,33 +38,31 @@ namespace
 
 long Patch::shuffleMusicTriggers(Tr5Level& level, uint64_t seed)
 {
-    // GLOBAL (Wunsch des Nutzers): keine levelinterne Permutation der
-    // vorhandenen Tracks, sondern EINE Seed-Permutation ueber einen festen
-    // Katalog (unten), die jedes Level gleich anwendet - so wandern Jingles
-    // ueber Levelgrenzen (rich3-Klaenge in joby2), derselbe Track klingt
-    // aber ueberall gleich. Und das CLI braucht keine Sammelphase ueber
-    // fremde Level, die es gar nicht kennt.
+    // GLOBAL (user wish): no level-internal permutation of the existing
+    // tracks, but ONE seed permutation over a fixed catalog (below) that
+    // every level applies the same way - jingles thus travel across level
+    // borders (rich3 sounds in joby2), yet the same track sounds the same
+    // everywhere. And the CLI needs no collection phase over foreign levels
+    // it does not even know.
     //
-    // Die Atmosphaeren bleiben ein eigener Topf, weil die Engine sie anders
-    // behandelt (TriggerNormalCDTrack, control.cpp: 117/118/121/123..130
-    // schalten die laufende Kulisse um, alles andere sind Einmal-Jingles
-    // mit cd_flags-Sperre) - ein Stimmungswechsel bleibt ein
-    // Stimmungswechsel.
-    const auto istAtmo = [](int t)
+    // The atmospheres stay their own pot, because the engine treats them
+    // differently (TriggerNormalCDTrack, control.cpp: 117/118/121/123..130
+    // switch the running backdrop, everything else are one-shot jingles
+    // with a cd_flags lock) - a mood change stays a mood change.
+    const auto isAtmo = [](int t)
     {
         return t == 117 || t == 118 || t == 121 || (t >= 123 && t <= 130);
     };
 
-    // Der Jingle-Topf ist NICHT der ganze Trackraum, sondern nur, was
-    // irgendwo im Spiel ein Trigger tatsaechlich ausloest - gemessen mit
-    // MusikPruef ueber alle 15 Vanilla-Level (2026-08-22, Vereinigung der
-    // TO_CD-Tracks, ohne die Atmosphaeren). Damit bleiben Cutscene-
-    // Dialoge, Titelmusik, Credits-Vorlauf, FMV-nahe Tracks und die
-    // Tutorial-Sprueche (TL_*, laufen ohnehin nur ueber Flipeffects)
-    // draussen: ein Jingle-Trigger spielt nie einen 70-Sekunden-Dialog
-    // (vom Nutzer gehoert und gewuenscht). Drin sind die wenigen im Level
-    // getriggerten Sprachzeilen (1, 26, 42, 47, 48, 52, 54, 59, 67, 79,
-    // 90, 100) - das sind Levelinhalte, keine Zwischensequenzen.
+    // The jingle pot is NOT the whole track space, but only what some
+    // trigger in the game actually fires - measured with MusikPruef over
+    // all 15 vanilla levels (2026-08-22, union of the TO_CD tracks, minus
+    // the atmospheres). That keeps cutscene dialogue, title music, credits
+    // lead-in, FMV-adjacent tracks and the tutorial voice lines (TL_*, they
+    // only run via flipeffects anyway) out: a jingle trigger never plays a
+    // 70-second dialogue (heard and requested by the user). The few voice
+    // lines triggered inside levels (1, 26, 42, 47, 48, 52, 54, 59, 67, 79,
+    // 90, 100) are in - those are level content, not cutscenes.
     static const int kJingles[] =
     {
         1, 8, 10, 11, 14, 15, 16, 17, 18, 21, 24, 25, 26, 27, 28, 29, 31, 32,
@@ -75,31 +73,31 @@ long Patch::shuffleMusicTriggers(Tr5Level& level, uint64_t seed)
 
     std::vector<int> atmo, jingle(std::begin(kJingles), std::end(kJingles));
     for (int t = 0; t < 136; ++t)
-        if (istAtmo(t))
+        if (isAtmo(t))
             atmo.push_back(t);
 
     std::mt19937_64 rng(seed ^ 0x54524B4D5553ull);      // "TRKMUS"
 
     std::map<int, int> mapping;
-    const auto mische = [&](std::vector<int>& topf)
+    const auto shufflePot = [&](std::vector<int>& pot)
     {
-        std::vector<int> ziel = topf;
-        std::shuffle(ziel.begin(), ziel.end(), rng);
-        for (size_t i = 0; i < topf.size(); ++i)
-            mapping[topf[i]] = ziel[i];
+        std::vector<int> target = pot;
+        std::shuffle(target.begin(), target.end(), rng);
+        for (size_t i = 0; i < pot.size(); ++i)
+            mapping[pot[i]] = target[i];
     };
-    mische(atmo);
-    mische(jingle);
+    shufflePot(atmo);
+    shufflePot(jingle);
 
     return level.musicTriggers(&mapping, nullptr);
 }
 
 void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
 {
-    // Pierre-Kampfsatz-Pruefung: traegt das Level Slot 47 nur als
-    // CUTSCENE-Variante (Todesanim +12 hat dort NICHT Zustand 5 -
-    // Andrea2, Trajan-Finale), darf der Pool ihn hier nie einsetzen.
-    // Der Slot bleibt unangetastet, die Cutscene braucht ihn.
+    // Pierre combat set check: if the level carries slot 47 only as the
+    // CUTSCENE variant (death anim +12 there does NOT have state 5 -
+    // Andrea2, Trajan finale), the pool must never place him here. The
+    // slot stays untouched, the cutscene needs it.
     {
         Tr5Level::MoveableInfo mi;
         if (level.moveableInfo(47, mi) && mi.animIndex >= 0)
@@ -107,34 +105,34 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
             size_t animAt; int32_t nAnims;
             if (level.debugAnimBlock(animAt, nAnims) && mi.animIndex + 12 < nAnims)
             {
-                uint16_t zustand = 0;
-                std::memcpy(&zustand,
+                uint16_t state = 0;
+                std::memcpy(&state,
                             level.debugBytes().data() + animAt + (static_cast<size_t>(mi.animIndex) + 12) * 40 + 6, 2);
-                if (zustand != 5)
+                if (state != 5)
                     in.forbiddenTypes.insert(47);
             }
         }
     }
 
-    // Welche Modellslots traegt das Level ueberhaupt? Die Item-Abundance
-    // darf nur streuen, was auch gezeichnet werden kann - ein Pickup ohne
-    // Modell im Level waere nichts als ein unsichtbarer Stolperstein.
+    // Which model slots does the level carry at all? Item abundance may
+    // only scatter what can be drawn - a pickup without a model in the
+    // level would be nothing but an invisible stumbling block.
     {
         const std::vector<int> slots = level.moveableSlots();
         in.presentSlots.insert(slots.begin(), slots.end());
     }
 
-    // Neigungseintraege aller Platzierungssektoren einsammeln - IMMER, auch
-    // wenn unten kein Trigger-Durchgang noetig ist: jede Item-Platzierung
-    // braucht sie fuer Hoehe und Belaufbarkeit (RandoInput::slopes).
+    // Collect the slope entries of all placement sectors - ALWAYS, even if
+    // no trigger pass is needed below: every item placement needs them for
+    // height and walkability (RandoInput::slopes).
     {
         SlopeInfo si;
         int baseY = 0;
         for (const ZoneSector& s : in.sectors)
         {
-            const int art = level.floorSlope(s.room, s.sectorX, s.sectorZ, si, baseY);
-            if (art == 0) continue;                          // eben: kein Eintrag noetig
-            if (art < 0) { si = SlopeInfo(); si.typeWord = kSlopeUnreadable; }
+            const int kind = level.floorSlope(s.room, s.sectorX, s.sectorZ, si, baseY);
+            if (kind == 0) continue;                         // flat: no entry needed
+            if (kind < 0) { si = SlopeInfo(); si.typeWord = kSlopeUnreadable; }
             in.slopes[secKey(s.room, s.sectorX, s.sectorZ)] = si;
         }
     }
@@ -146,7 +144,7 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
     {
         const int idx = level.sectorIndex(s.room, s.sectorX, s.sectorZ);
         if (idx < 0) continue;
-        if (!level.readChain(idx, chain)) continue;          // unlesbar: Finger weg
+        if (!level.readChain(idx, chain)) continue;          // unreadable: hands off
         if (Tr5Level::canAppendTrigger(chain) != nullptr) continue;
         in.triggerSafeSectors.insert(secKey(s.room, s.sectorX, s.sectorZ));
     }
@@ -161,32 +159,32 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
 
     if (patch.has("itemRemoves"))
     {
-        // Klare Ansage statt stiller Ignoranz: wer das Feld setzt, erwartet
-        // eine Wirkung. Ein Entfernen wuerde alle nachfolgenden Item-Indizes
-        // verschieben und damit die "Object N"-Verweise der Trigger ins Leere
-        // zeigen lassen - das Level waere ohne erkennbare Fehlermeldung kaputt.
-        error = "Der Patch enthaelt itemRemoves. Items zu entfernen verschiebt "
-                "alle folgenden Indizes und zerstoert die Triggerzuordnung - "
-                "das wird bewusst nicht unterstuetzt.";
+        // A clear statement instead of silent ignorance: whoever sets the
+        // field expects an effect. Removing would shift all subsequent item
+        // indices and leave the triggers' "Object N" references dangling -
+        // the level would be broken without any visible error message.
+        error = "The patch contains itemRemoves. Removing items shifts all "
+                "subsequent indices and destroys the trigger mapping - "
+                "this is deliberately unsupported.";
         return false;
     }
 
     if (patch.has("triggerRemoves"))
     {
-        // Dieselbe Ansage wie bei itemRemoves, aus demselben Grund: ein
-        // Trigger, den niemand mehr ausloest, ist eine Tuer, die nie aufgeht.
-        // Verschieben ja, wegnehmen nein.
-        error = "Der Patch enthaelt triggerRemoves. Trigger zu entfernen wird "
-                "bewusst nicht unterstuetzt - nur Verschieben (triggerMoves).";
+        // The same statement as for itemRemoves, for the same reason: a
+        // trigger nobody fires anymore is a door that never opens. Moving
+        // yes, removing no.
+        error = "The patch contains triggerRemoves. Removing triggers is "
+                "deliberately unsupported - only moving (triggerMoves).";
         return false;
     }
 
-    // --- Trigger verschieben --------------------------------------------
+    // --- Move triggers ---------------------------------------------------
     //
-    // Bewusst vor den Item-Aenderungen: so steht die Floordata fest, bevor
-    // irgendetwas an den Items geschrieben wird. Notwendig ist die Reihenfolge
-    // nicht - appendChain zieht den Item-Offset selbst nach - aber sie macht
-    // den Ablauf beim Nachlesen eindeutig.
+    // Deliberately before the item changes: that way the floordata is fixed
+    // before anything is written to the items. The order is not strictly
+    // necessary - appendChain adjusts the item offset itself - but it makes
+    // the flow unambiguous when reading back.
     const JsonValue& moves = patch["triggerMoves"];
     for (size_t i = 0; i < moves.size(); ++i)
     {
@@ -200,66 +198,66 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                                static_cast<int>(m["toSectorZ"].asInt(-1)),
                                moveErr))
         {
-            // Hart abbrechen, nicht warnen: wandert das Item, der Trigger aber
-            // nicht, liegt der Schluessel woanders und seine Wirkung bleibt am
-            // alten Fleck zurueck. Ein halb ausgefuehrter Patch waere schlimmer
-            // als gar keiner.
+            // Abort hard, do not warn: if the item travels but the trigger
+            // does not, the key lies elsewhere and its effect stays behind
+            // at the old spot. A half-applied patch would be worse than
+            // none.
             error = "triggerMoves[" + std::to_string(i) + "]: " + moveErr;
             return false;
         }
         ++report.triggersMoved;
     }
 
-    // Spender-Level werden von Outfit UND soundAdds gebraucht und sind mehrere
-    // Megabyte gross - jeder wird hoechstens einmal geladen.
-    std::map<std::string, Tr5Level> quellen;
+    // Donor levels are needed by outfit AND soundAdds and are several
+    // megabytes - each is loaded at most once.
+    std::map<std::string, Tr5Level> sources;
     auto source = [&](const std::string& name) -> Tr5Level* {
-        auto it = quellen.find(name);
-        if (it != quellen.end()) return &it->second;
+        auto it = sources.find(name);
+        if (it != sources.end()) return &it->second;
         if (!levelSource) return nullptr;
         const std::wstring path = levelSource(name, levelSourceUser);
-        std::string ladeErr;
+        std::string loadErr;
         Tr5Level q;
-        if (path.empty() || !q.load(path, ladeErr)) return nullptr;
-        return &quellen.emplace(name, std::move(q)).first->second;
+        if (path.empty() || !q.load(path, loadErr)) return nullptr;
+        return &sources.emplace(name, std::move(q)).first->second;
     };
 
     // --- Outfit ----------------------------------------------------------
     //
-    // Slots 8/9/10 (LARA_SKIN, LARA_SKIN_JOINTS, LARA_SCREAM) aus dem
-    // Spender, dazu sein LaraType-Byte. NIE Slot 0 - der traegt die
-    // Animationen des Levels (im Spiel erlebt: fehlende Schalter- und
-    // Kriechanimationen). Die Spenderregel stammt aus der Waffenarbeit und
-    // ist in allen 13 Leveln gespielt.
+    // Slots 8/9/10 (LARA_SKIN, LARA_SKIN_JOINTS, LARA_SCREAM) from the
+    // donor, plus its LaraType byte. NEVER slot 0 - it carries the level's
+    // animations (experienced in game: missing switch and crawl
+    // animations). The donor rule comes from the weapon work and has been
+    // played in all 13 levels.
     //
-    // Ein halbes Outfit gibt es nicht: schlaegt einer der drei Slots fehl,
-    // bricht der Patch ab, BEVOR gespeichert wird - das Level bleibt dann
-    // die unveraenderte Kopie aus dem Backup.
+    // There is no half outfit: if one of the three slots fails, the patch
+    // aborts BEFORE saving - the level then remains the untouched copy from
+    // the backup.
     const JsonValue& outfit = patch["outfit"];
     if (outfit.has("fromLevel"))
     {
-        const std::string von = outfit["fromLevel"].asString();
-        Tr5Level* donor = source(von);
+        const std::string from = outfit["fromLevel"].asString();
+        Tr5Level* donor = source(from);
         if (!donor)
         {
-            report.warnings.push_back("Outfit: Spender-Level " + von + " nicht ladbar - Outfit bleibt.");
+            report.warnings.push_back("outfit: donor level " + from + " not loadable - outfit stays.");
         }
         else
         {
-            // Haut, Gelenke, Schrei-Kopf - und ZWINGEND das Gefolge:
+            // Skin, joints, scream head - and MANDATORY entourage:
             //
-            // Haar (30): das Haarmodell gehoert zum Kopf. joby2s Lara traegt
-            // eine Muetze, ihr Haarobjekt ist dafuer gebaut; ein fremder Zopf
-            // an diesem Kopf spiesst durch den Koerper (im Spiel gesehen).
+            // Hair (30): the hair model belongs to the head. joby2's Lara
+            // wears a cap, her hair object is built for it; a foreign braid
+            // on this head spikes through the body (seen in game).
             //
-            // Holster (13-16): DrawLara__1 zeichnet bei erwachsener Lara die
-            // beiden Oberschenkel ZUSAETZLICH aus den Holster-Objekten
-            // (drawlara.cpp:227ff). rich- und andy-Level haben diese Objekte
-            // gar nicht - objects[].mesh_index steht dann auf 0, und auf dem
-            // linken Oberschenkel landet ein fremdes Mesh, leicht versetzt
-            // (im Spiel gesehen). Der Catsuit-Pfad (DrawLara__4) braucht
-            // keine Holster, deshalb hat rich2 auch keine zu bieten - fuer
-            // ihn ist die Liste nach den Pflichtslots einfach zu Ende.
+            // Holsters (13-16): with adult Lara, DrawLara__1 draws the two
+            // thighs ADDITIONALLY from the holster objects
+            // (drawlara.cpp:227ff). The rich and andy levels do not even
+            // have these objects - objects[].mesh_index is 0 then, and a
+            // foreign mesh lands on the left thigh, slightly offset (seen
+            // in game). The catsuit path (DrawLara__4) needs no holsters,
+            // which is why rich2 has none to offer - for it the list simply
+            // ends after the mandatory slots.
             std::vector<int> slots = { 8, 9, 10, 30 };
             for (int s : { 13, 14, 15, 16 })
             {
@@ -267,21 +265,21 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                 if (donor->moveableInfo(s, mi)) slots.push_back(s);
             }
 
-            // Sprechkoepfe (17-20): in Dialog-Cutscenes tauscht die Engine
-            // Laras Kopf gegen LARA_SPEECH_HEAD1-4 (deltapak.cpp,
-            // handle_lara_chatting) - die tragen das VANILLA-Gesicht des
-            // Levels (im Spiel gesehen: Catsuit mit Strickmuetze in joby5).
-            // Hat der Spender eigene, wandern sie wie die Holster mit. rich2
-            // hat KEINE - die VCI-Level kennen keine Dialog-Cutscenes; dann
-            // bekommt das Ziel das Fremdkoepfe-Flag (data[2] im Levelkopf)
-            // und die Engine laesst den Tausch aus.
-            bool sprechkoepfeDa = true;
+            // Speech heads (17-20): in dialogue cutscenes the engine swaps
+            // Lara's head for LARA_SPEECH_HEAD1-4 (deltapak.cpp,
+            // handle_lara_chatting) - they carry the level's VANILLA face
+            // (seen in game: catsuit with a knit cap in joby5). If the
+            // donor has its own, they travel along like the holsters. rich2
+            // has NONE - the VCI levels know no dialogue cutscenes; then
+            // the target gets the foreign-heads flag (data[2] in the level
+            // header) and the engine skips the swap.
+            bool talkHeadsPresent = true;
             for (int s : { 17, 18, 19, 20 })
             {
                 Tr5Level::MoveableInfo mi;
-                if (!donor->moveableInfo(s, mi)) { sprechkoepfeDa = false; break; }
+                if (!donor->moveableInfo(s, mi)) { talkHeadsPresent = false; break; }
             }
-            if (sprechkoepfeDa)
+            if (talkHeadsPresent)
                 for (int s : { 17, 18, 19, 20 }) slots.push_back(s);
 
             for (int slot : slots)
@@ -289,206 +287,206 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                 std::string oErr;
                 if (!level.copyMoveableFrom(*donor, slot, oErr))
                 {
-                    error = "Outfit-Slot " + std::to_string(slot) + " aus " + von + ": " + oErr;
+                    error = "outfit slot " + std::to_string(slot) + " from " + from + ": " + oErr;
                     return false;
                 }
             }
 
-            // Das LaraType-Byte ist unser Outfit-Marker fuer die Engine:
-            // hair.cpp und laraskin.cpp machen die Zopf-Sonderbehandlung
-            // (Verankerung UND Schweisstabelle des Zopfansatzes) daran fest -
-            // Core hatte beides am Levelnamen haengen, weil das Outfit
-            // vanilla nie den Abschnitt wechselt. Ohne Marker klebte rich1s
-            // Zopf an den Kopf-Vertexnummern der Muetze (im Spiel gesehen).
-            // Die Entscheidung faellt im Randomizer ("laraType" im Patch,
-            // siehe dort: 2 = Joby-Outfit ueberall, 5 = Andrea-Outfit in
-            // einem Russland-Level); der Rueckfall fuer handgeschriebene
-            // Patches ohne das Feld bleibt die alte Joby-Regel.
+            // The LaraType byte is our outfit marker for the engine:
+            // hair.cpp and laraskin.cpp key the braid special-handling
+            // (anchoring AND the weld table of the braid base) off it -
+            // Core had both hanging off the level name, because in vanilla
+            // the outfit never crosses a section. Without the marker,
+            // rich1's braid stuck to the cap's head vertex numbers (seen in
+            // game). The decision is made in the randomizer ("laraType" in
+            // the patch, see there: 2 = Joby outfit everywhere, 5 = Andrea
+            // outfit in a Russia level); the fallback for hand-written
+            // patches without the field remains the old Joby rule.
             if (outfit.has("laraType"))
                 level.setLaraType(static_cast<int>(outfit["laraType"].asInt(donor->laraType())));
             else
-                level.setLaraType(von == "joby2" ? 2 : donor->laraType());
-            level.setForeignTalkHeads(sprechkoepfeDa ? 0 : 1);
-            report.outfitFrom = von;
+                level.setLaraType(from == "joby2" ? 2 : donor->laraType());
+            level.setForeignTalkHeads(talkHeadsPresent ? 0 : 1);
+            report.outfitFrom = from;
         }
     }
 
-    // Holster nachruesten, wo das Outfit keine mitbringt. Der Catsuit-Spender
-    // rich2 hat die Slots 13-16 nicht (sein Zeichenweg brauchte sie nie);
-    // seit die Engine sie auch auf der Catsuit zeichnet, sollen sie ueberall
-    // liegen. Nur fehlende Slots werden gefuellt - vorhandene (etwa Andrea1s
-    // eigene) bleiben.
+    // Retrofit holsters where the outfit brings none. The catsuit donor
+    // rich2 does not have slots 13-16 (its draw path never needed them);
+    // since the engine draws them on the catsuit too, they should exist
+    // everywhere. Only missing slots are filled - existing ones (say,
+    // Andrea1's own) stay.
     if (outfit.has("holstersFrom"))
     {
-        const std::string von = outfit["holstersFrom"].asString();
-        Tr5Level* donor = source(von);
+        const std::string from = outfit["holstersFrom"].asString();
+        Tr5Level* donor = source(from);
         if (!donor)
-            report.warnings.push_back("Holster: Spender-Level " + von + " nicht ladbar.");
+            report.warnings.push_back("holsters: donor level " + from + " not loadable.");
         else
             for (int s : { 13, 14, 15, 16 })
             {
                 Tr5Level::MoveableInfo mi;
-                if (level.moveableInfo(s, mi)) continue;       // hat es schon
-                if (!donor->moveableInfo(s, mi)) continue;   // hat nicht mal der Spender
+                if (level.moveableInfo(s, mi)) continue;       // already has it
+                if (!donor->moveableInfo(s, mi)) continue;   // not even the donor has it
                 std::string oErr;
                 if (!level.copyMoveableFrom(*donor, s, oErr))
                 {
-                    error = "Holster-Slot " + std::to_string(s) + " aus " + von + ": " + oErr;
+                    error = "holster slot " + std::to_string(s) + " from " + from + ": " + oErr;
                     return false;
                 }
             }
     }
 
-    // --- Waffen ueberall --------------------------------------------------
+    // --- Weapons everywhere -----------------------------------------------
     //
-    // Kopierliste aus dem Randomizer (fertig aufgeloest, Regeln dort). Laeuft
-    // NACH dem Outfit: die Holsterslots 13-16 des Outfit-Spenders sollen
-    // stehen bleiben, die Waffeneintraege dafuer sind "nur was fehlt" und
-    // werden dann hier uebersprungen.
+    // Copy list from the randomizer (fully resolved, rules there). Runs
+    // AFTER the outfit: the outfit donor's holster slots 13-16 are supposed
+    // to stay, the weapon entries for them are "only what is missing" and
+    // are then skipped here.
     //
-    // Fehlerbild mit Absicht zweigeteilt: ein nicht ladbarer SPENDER ist wie
-    // bei Outfit und Sounds nur eine Warnung (das Level bleibt spielbar, ihm
-    // fehlen halt Waffen). Ein GESCHEITERTER Kopiervorgang dagegen bricht ab
-    // wie ein halbes Outfit - dann ist unklar, in welchem Zustand die
-    // angehaengten Bloecke sind, und gespeichert wird so etwas nicht.
-    // weaponAdds und moveableAdds sind dieselbe Operation - beide sind
-    // aufgeloeste Kopierlisten {slot, fromLevel, replace} aus dem Randomizer,
-    // sie zaehlen nur getrennt (Waffen bzw. Cross-Gegner).
-    // Holt einen Gast aus Tomb Raider 3 und setzt ihn ein (#92).
+    // The error picture is deliberately split: a donor that cannot be
+    // LOADED is only a warning, as with outfit and sounds (the level stays
+    // playable, it just lacks weapons). A FAILED copy, however, aborts like
+    // a half outfit - then it is unclear what state the appended blocks are
+    // in, and nothing like that gets saved.
+    // weaponAdds and moveableAdds are the same operation - both are
+    // resolved copy lists {slot, fromLevel, replace} from the randomizer,
+    // they merely count separately (weapons resp. cross enemies).
+    // Fetches a guest from Tomb Raider 3 and installs it (#92).
     //
-    // Alles passiert hier und jetzt auf dem Rechner des Nutzers: entnehmen,
-    // umrechnen, einsetzen. Nichts davon liegt vorbereitet herum, denn
-    // vorbereitete Pakete waeren fremde Spieldaten.
-    auto tr3Bauen = [&](Tr5Level& lvl, int slot, PatchReport& rep, std::string& err) -> bool
+    // Everything happens here and now on the user's machine: extract,
+    // convert, install. None of it lies around prepared, because prepared
+    // packages would be third-party game data.
+    auto buildTr3Guest = [&](Tr5Level& lvl, int slot, PatchReport& rep, std::string& err) -> bool
     {
         const Tr3Source::DinoSource* d = nullptr;
-        static const std::vector<Tr3Source::DinoSource> alle = Tr3Source::dinos();
-        for (const Tr3Source::DinoSource& k : alle) if (k.slot == slot) { d = &k; break; }
-        if (!d) { err = "Kein Gast fuer Slot " + std::to_string(slot) + " bekannt"; return false; }
+        static const std::vector<Tr3Source::DinoSource> all = Tr3Source::dinos();
+        for (const Tr3Source::DinoSource& k : all) if (k.slot == slot) { d = &k; break; }
+        if (!d) { err = "no guest known for slot " + std::to_string(slot); return false; }
 
-        // Ueber das Zwischenlager (#103): einmal entnehmen statt je Level.
-        std::vector<uint8_t> modell, sounds;
+        // Via the cache (#103): extract once instead of per level.
+        std::vector<uint8_t> model, sounds;
         std::string f;
-        if (!Tr3Source::fetchCached(*d, tr3Dir, tr3GoldDir, cacheDir, modell, sounds, f))
+        if (!Tr3Source::fetchCached(*d, tr3Dir, tr3GoldDir, cacheDir, model, sounds, f))
         { err = f; return false; }
 
         // 1. Sounds
         std::vector<std::pair<int,int>> mapping;
         if (!lvl.addSoundsFromTr3(sounds, d->soundBase, mapping, f, &d->volumes))
-        { err = std::string(d->name) + " (Sounds einsetzen): " + f; return false; }
+        { err = std::string(d->name) + " (installing sounds): " + f; return false; }
 
-        // 2. SFX-Nummern der Anim-Kommandos umbiegen. Bleibt eine Nummer
-        //    unresolved, wird ABGEBROCHEN - sie wuerde im Ziel einen fremden
-        //    Vanilla-Klang treffen (beim Compy wurde aus 243 ein wuchtiger
-        //    SFX_GENERIC_HEAVY_FEET, und das zu finden hat Stunden gekostet).
+        // 2. Rewrite the SFX numbers of the anim commands. If a number
+        //    remains unresolved, ABORT - it would hit a foreign vanilla
+        //    sound in the target (with the Compy, 243 turned into a hefty
+        //    SFX_GENERIC_HEAVY_FEET, and finding that cost hours).
         std::vector<int> unresolved;
-        if (!Tr3Source::remapSfx(modell, mapping, d->muted, 411, unresolved, f))
-        { err = std::string(d->name) + " (SFX umbiegen): " + f; return false; }
+        if (!Tr3Source::remapSfx(model, mapping, d->muted, 411, unresolved, f))
+        { err = std::string(d->name) + " (remapping SFX): " + f; return false; }
         if (!unresolved.empty())
         {
-            err = std::string(d->name) + ": SFX-Nummer ohne Zuordnung (" +
-                  std::to_string(unresolved[0]) + ") - sie wuerde einen fremden Klang treffen";
+            err = std::string(d->name) + ": SFX number without a mapping (" +
+                  std::to_string(unresolved[0]) + ") - it would hit a foreign sound";
             return false;
         }
 
-        // 3. Texturen ANHAENGEN, nie verschieben - sonst faellt das Level in
-        //    sich zusammen (Nutzervorgabe, siehe Texturseiten-Regel).
+        // 3. APPEND textures, never shift - otherwise the level collapses
+        //    (user requirement, see the texture page rule).
         std::map<int,int> texMap;
-        if (!lvl.addTexturesFromTr3(modell, texMap, f))
-        { err = std::string(d->name) + " (Texturen): " + f; return false; }
+        if (!lvl.addTexturesFromTr3(model, texMap, f))
+        { err = std::string(d->name) + " (textures): " + f; return false; }
 
-        // Und die Faces darauf zeigen lassen. Ohne diesen Schritt behalten sie
-        // die TR3-Nummern und greifen im Ziel wahllos in dessen Texinfos.
-        if (Tr3Source::remapTextures(modell, texMap) < 0)
-        { err = std::string(d->name) + ": Faces nicht lesbar"; return false; }
+        // And point the faces at them. Without this step they keep the TR3
+        // numbers and grab arbitrarily into the target's texinfos.
+        if (Tr3Source::remapTextures(model, texMap) < 0)
+        { err = std::string(d->name) + ": faces not readable"; return false; }
 
-        // 4. Modell. texBasis -1, weil die Faces schon auf die neuen Texinfos
-        //    zeigen.
-        if (!lvl.addMoveableFromTr3(modell, slot, -1, f))
-        { err = std::string(d->name) + " (Modell): " + f; return false; }
+        // 4. Model. texBase -1, because the faces already point at the new
+        //    texinfos.
+        if (!lvl.addMoveableFromTr3(model, slot, -1, f))
+        { err = std::string(d->name) + " (model): " + f; return false; }
 
-        rep.warnings.push_back(std::string("Gast aus Tomb Raider 3 geholt: ") + d->name +
-                               " auf Slot " + std::to_string(slot));
+        rep.warnings.push_back(std::string("guest fetched from Tomb Raider 3: ") + d->name +
+                               " on slot " + std::to_string(slot));
         return true;
     };
 
-    auto kopiereSlots = [&](const JsonValue& liste, const char* was, int& zaehler) -> bool
+    auto copySlots = [&](const JsonValue& list, const char* what, int& counter) -> bool
     {
-        if (liste.size() > 0 && !levelSource)
+        if (list.size() > 0 && !levelSource)
         {
-            report.warnings.push_back(std::to_string(liste.size()) + " " + was +
-                                      "-Eintraege uebersprungen - kein Zugriff auf die Quell-Level.");
+            report.warnings.push_back(std::to_string(list.size()) + " " + what +
+                                      " entries skipped - no access to the source levels.");
             return true;
         }
-        for (size_t i = 0; i < liste.size(); ++i)
+        for (size_t i = 0; i < list.size(); ++i)
         {
-            const JsonValue& w = liste[i];
+            const JsonValue& w = list[i];
             const int slot = static_cast<int>(w["slot"].asInt(-1));
 
-            // --- Gast aus Tomb Raider 3 (#92) -------------------------------
+            // --- Guest from Tomb Raider 3 (#92) -----------------------------
             //
-            // Kein Spenderlevel: alles wird JETZT aus der Installation des
-            // Nutzers geholt. Genau dafuer ist dieser Weg da - wir liefern
-            // keine Spieldaten mit, also darf nichts vorbereitet sein.
+            // No donor level: everything is fetched NOW from the user's
+            // installation. That is exactly what this path is for - we ship
+            // no game data, so nothing may be prepared.
             //
-            // Reihenfolge ist Vorschrift, nicht Geschmack (siehe Rezept):
-            // SOUNDS -> TEXTUREN -> MODELL. Erst danach steht fest, worauf die
-            // Anim-Kommandos und die Faces zeigen muessen, und beides steckt im
-            // Modellpaket, das zuletzt eingebaut wird.
-            if (w.has("ausTr3"))
+            // The order is a rule, not taste (see the recipe):
+            // SOUNDS -> TEXTURES -> MODEL. Only then is it fixed what the
+            // anim commands and the faces must point at, and both sit in
+            // the model package, which is installed last.
+            if (w.has("fromTr3"))
             {
-                if (!tr3Bauen(level, slot, report, error)) return false;
-                ++zaehler;
+                if (!buildTr3Guest(level, slot, report, error)) return false;
+                ++counter;
                 continue;
             }
 
-            const std::string von = w["fromLevel"].asString();
-            const bool ersetzen = w["replace"].asBool(false);
-            // Abweichender Zielslot (Ausweichslots des Cross-Gegnermix:
-            // Spender-MESHSWAP1 405 landet im Slot DES GEGNERS, seit #111
-            // 401-404 bzw. 462-467), und ob nur die Meshes wandern
-            // (Mesh-Lager ohne eigene Animationen).
-            const int nach = static_cast<int>(w["toSlot"].asInt(-1));
-            const int zielSlot = (nach < 0) ? slot : nach;
+            const std::string from = w["fromLevel"].asString();
+            const bool replace = w["replace"].asBool(false);
+            // Diverging target slot (fallback slots of the cross enemy mix:
+            // the donor's MESHSWAP1 405 lands in the ENEMY'S slot, since
+            // #111 401-404 resp. 462-467), and whether only the meshes
+            // travel (mesh stores without their own animations).
+            const int to = static_cast<int>(w["toSlot"].asInt(-1));
+            const int targetSlot = (to < 0) ? slot : to;
             const bool meshesOnly = w["onlyMeshes"].asBool(false);
-            // Explizite Anim-Scheibenlaenge (Imp: Todesanim liegt jenseits
-            // der Objektgrenze in der globalen Tabelle, siehe Tr5Level.h).
+            // Explicit anim slice length (Imp: the death anim lies beyond
+            // the object boundary in the global table, see Tr5Level.h).
             const int animCount = static_cast<int>(w["animCount"].asInt(-1));
 
             Tr5Level::MoveableInfo mi;
-            if (!ersetzen && level.moveableInfo(zielSlot, mi)) continue;   // hat es schon
+            if (!replace && level.moveableInfo(targetSlot, mi)) continue;   // already has it
 
-            Tr5Level* donor = source(von);
+            Tr5Level* donor = source(from);
             if (!donor)
             {
-                report.warnings.push_back(std::string(was) + ": Spender-Level " + von +
-                                          " nicht ladbar - Slots von dort fehlen.");
+                report.warnings.push_back(std::string(what) + ": donor level " + from +
+                                          " not loadable - its slots are missing.");
                 continue;
             }
 
             std::string wErr;
-            if (!level.copyMoveableFrom(*donor, slot, wErr, nach, meshesOnly, animCount))
+            if (!level.copyMoveableFrom(*donor, slot, wErr, to, meshesOnly, animCount))
             {
-                error = std::string(was) + "-Slot " + std::to_string(slot) + " aus " + von + ": " + wErr;
+                error = std::string(what) + " slot " + std::to_string(slot) + " from " + from + ": " + wErr;
                 return false;
             }
-            ++zaehler;
+            ++counter;
         }
         return true;
     };
-    if (!kopiereSlots(patch["weaponAdds"], "Waffen", report.weaponsCopied)) return false;
-    if (!kopiereSlots(patch["moveableAdds"], "Cross-Gegner", report.moveablesCopied)) return false;
+    if (!copySlots(patch["weaponAdds"], "weapon", report.weaponsCopied)) return false;
+    if (!copySlots(patch["moveableAdds"], "cross-enemy", report.moveablesCopied)) return false;
 
-    // Sobald SWAT (33) und ein Guard zusammen im Level liegen, laeuft der
-    // Guard per Engine-Alias auf SWATs Anim-Satz und feuert dort ueber
-    // Zustand 3 - dessen Anim (+2) ist in Cores rich3-Daten totes Erbe mit
-    // falscher Schrittweite (liest die 34-Wort-Frames der Zielanim in 36ern:
-    // Modell verschwindet ab Keyframe 1, Schatten zerrt, kein Schusssound).
-    // Reparatur: +2 uebernimmt Frame-Daten, Rate und Schusskommando der
-    // gesunden Guard-Feueranim (+2 seines eigenen Satzes) im selben Level.
-    // Als Quelle taugt jeder Guard-Satz: der klassische auf 37 oder der
-    // Joby-Wachmann auf 460 (BLUE_GUARD2, #105) - beide feuern ueber
-    // Zustand 3, ihre Saetze tragen die Anim gesund.
+    // As soon as SWAT (33) and a guard lie in the level together, the guard
+    // runs on SWAT's anim set via the engine alias and fires there via
+    // state 3 - whose anim (+2) is dead heritage in Core's rich3 data with
+    // the wrong stride (reads the target anim's 34-word frames in 36s: the
+    // model disappears from keyframe 1, the shadow smears, no shot sound).
+    // Repair: +2 adopts frame data, rate and shot command of the healthy
+    // guard fire anim (+2 of its own set) in the same level. Any guard set
+    // works as the source: the classic one on 37 or the joby guard on 460
+    // (BLUE_GUARD2, #105) - both fire via state 3, their sets carry the
+    // anim healthy.
     {
         Tr5Level::MoveableInfo swat, guard;
         if (level.moveableInfo(33, swat) && swat.animIndex >= 0)
@@ -503,16 +501,16 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             {
                 std::string rErr;
                 if (!level.adoptAnimData(33, 2, guardSlot, 2, rErr))
-                    report.warnings.push_back("SWAT-Feueranim nicht reparierbar: " + rErr);
+                    report.warnings.push_back("SWAT fire anim not repairable: " + rErr);
             }
         }
     }
 
-    // --- Sound-Samples uebernehmen ---------------------------------------
+    // --- Take over sound samples ------------------------------------------
     const JsonValue& sadds = patch["soundAdds"];
     if (sadds.size() > 0 && !levelSource)
     {
-        report.warnings.push_back(msg("%d soundAdds uebersprungen - kein Zugriff auf die Quell-Level.",
+        report.warnings.push_back(msg("%d soundAdds skipped - no access to the source levels.",
                                       static_cast<int>(sadds.size())));
     }
     else
@@ -520,57 +518,56 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         for (size_t i = 0; i < sadds.size(); ++i)
         {
             const JsonValue& s = sadds[i];
-            const std::string von = s["fromLevel"].asString();
+            const std::string from = s["fromLevel"].asString();
             const int map = static_cast<int>(s["map"].asInt(-1));
-            const int vonMap = static_cast<int>(s["fromMap"].asInt(-1));
+            const int fromMap = static_cast<int>(s["fromMap"].asInt(-1));
 
-            if (level.soundInfoIndex(map) >= 0) continue;      // schon vorhanden
+            if (level.soundInfoIndex(map) >= 0) continue;      // already present
 
-            Tr5Level* q = source(von);
+            Tr5Level* q = source(from);
             if (!q)
             {
-                report.warnings.push_back("soundAdds: Quell-Level " + von + " nicht ladbar - Sound fehlt.");
+                report.warnings.push_back("soundAdds: source level " + from + " not loadable - sound missing.");
                 continue;
             }
 
             std::string sErr;
-            if (!level.copySoundFrom(*q, vonMap, map, sErr))
+            if (!level.copySoundFrom(*q, fromMap, map, sErr))
             {
-                // Kein Abbruch: ein fehlender Klang macht das Level nicht
-                // kaputt, anders als ein fehlender Trigger.
-                report.warnings.push_back("soundAdds: Map " + std::to_string(map) + " - " + sErr);
+                // No abort: a missing sound does not break the level,
+                // unlike a missing trigger.
+                report.warnings.push_back("soundAdds: map " + std::to_string(map) + " - " + sErr);
                 continue;
             }
             ++report.soundsCopied;
         }
     }
 
-    // --- Neue Trigger ---------------------------------------------------
+    // --- New triggers ----------------------------------------------------
     //
-    // Nach den Zuegen, aber vor den Items: so steht die gesamte Floordata fest,
-    // bevor irgendetwas an den Items geschrieben wird. Zwingend ist es nicht -
-    // appendChain zieht den Item-Offset selbst nach -, aber es haelt den Ablauf
-    // beim Nachlesen eindeutig.
-    // --- Lara-Anims aus Spenderleveln (#53) -----------------------------
+    // After the moves but before the items: that way the whole floordata is
+    // fixed before anything is written to the items. It is not mandatory -
+    // appendChain adjusts the item offset itself - but it keeps the flow
+    // unambiguous when reading back.
+    // --- Lara anims from donor levels (#53) ------------------------------
     //
-    // {"anim": 437, "fromLevel": "joby2"} pflanzt eine einzelne Lara-Anim
-    // samt Frames, Kommandos und Sounds ein. Gebraucht fuer ANIM_KEYCARD:
-    // der Platz existiert ueberall, echte Bilddaten hat nur joby2. Ein
-    // nicht ladbarer Spender ist nur eine Warnung (die Engine faellt an
-    // Key Hole 8 dann auf die gewoehnliche Schluesselanim zurueck); ein
-    // GESCHEITERTER Einbau bricht ab.
+    // {"anim": 437, "fromLevel": "joby2"} implants a single Lara anim with
+    // frames, commands and sounds. Needed for ANIM_KEYCARD: the slot exists
+    // everywhere, only joby2 has real image data. A donor that cannot be
+    // loaded is only a warning (the engine then falls back to the ordinary
+    // key anim at Key Hole 8); a FAILED install aborts.
     const JsonValue& lanims = patch["laraAnimAdds"];
     if (lanims.size() > 0 && !levelSource)
         report.warnings.push_back(std::to_string(lanims.size()) +
-                                  " Lara-Anim-Eintraege uebersprungen - kein Zugriff auf die Quell-Level.");
+                                  " Lara anim entries skipped - no access to the source levels.");
     else for (size_t i = 0; i < lanims.size(); ++i)
     {
         const JsonValue& la = lanims[i];
-        const std::string von = la["fromLevel"].asString();
-        Tr5Level* donor = source(von);
+        const std::string from = la["fromLevel"].asString();
+        Tr5Level* donor = source(from);
         if (!donor)
         {
-            report.warnings.push_back("Lara-Anim: Spender-Level " + von + " nicht ladbar.");
+            report.warnings.push_back("Lara anim: donor level " + from + " not loadable.");
             continue;
         }
         std::string aErr;
@@ -581,33 +578,33 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
-    // --- Wasserraeume (#53) ---------------------------------------------
+    // --- Water rooms (#53) -----------------------------------------------
     //
-    // {"room": N, "an": true|false} setzt bzw. loescht ROOM_UNDERWATER.
-    // Harter Fehler wie bei Portal und Kletterwand: ein halb umgestellter
-    // Raum waere schlimmer als gar keiner.
-    const JsonValue& wasser = patch["roomWater"];
-    for (size_t i = 0; i < wasser.size(); ++i)
+    // {"room": N, "on": true|false} sets resp. clears ROOM_UNDERWATER. A
+    // hard error like portal and climbing wall: a half-switched room would
+    // be worse than none.
+    const JsonValue& water = patch["roomWater"];
+    for (size_t i = 0; i < water.size(); ++i)
     {
-        const JsonValue& w = wasser[i];
+        const JsonValue& w = water[i];
         std::string wErr;
-        if (!level.setRoomWater(static_cast<int>(w["room"].asInt(-1)), w["an"].asBool(true), wErr))
+        if (!level.setRoomWater(static_cast<int>(w["room"].asInt(-1)), w["on"].asBool(true), wErr))
         {
             error = "roomWater[" + std::to_string(i) + "]: " + wErr;
             return false;
         }
     }
 
-    // --- Kletterwaende (#53) --------------------------------------------
+    // --- Climbing walls (#53) --------------------------------------------
     //
-    // {"room","sectorX","sectorZ","dirBits"}: der Sektor wird kletterbar.
-    // dirBits nach der Engine-Konvention (control.cpp:2189), berechnet vom
-    // Listenleser aus @Angle. Harter Fehler wie beim Portal - eine halbe
-    // Kletterwand faende niemand.
-    const JsonValue& klettern = patch["climbAdds"];
-    for (size_t i = 0; i < klettern.size(); ++i)
+    // {"room","sectorX","sectorZ","dirBits"}: the sector becomes climbable.
+    // dirBits per the engine convention (control.cpp:2189), computed by the
+    // list reader from @Angle. Hard error like the portal - nobody would
+    // ever find half a climbing wall.
+    const JsonValue& climbs = patch["climbAdds"];
+    for (size_t i = 0; i < climbs.size(); ++i)
     {
-        const JsonValue& c = klettern[i];
+        const JsonValue& c = climbs[i];
         std::string cErr;
         if (!level.makeClimb(static_cast<int>(c["room"].asInt(-1)),
                              static_cast<int>(c["sectorX"].asInt(-1)),
@@ -619,17 +616,17 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
-    // --- Portale (#53) --------------------------------------------------
+    // --- Portals (#53) ---------------------------------------------------
     //
-    // Ein Eintrag oeffnet BEIDE Seiten einer versiegelten Wand: der genannte
-    // Sektor von roomA wird Portal nach roomB und umgekehrt. Die Sichtfenster
-    // (32-Byte-Portale der Raumliste) muessen schon existieren - makePortal
-    // prueft das und bricht sonst hart ab, denn eine begehbare Oeffnung ohne
-    // Fenster waere ein schwarzes Loch im Bild.
-    const JsonValue& portale = patch["portalAdds"];
-    for (size_t i = 0; i < portale.size(); ++i)
+    // One entry opens BOTH sides of a sealed wall: the named sector of
+    // roomA becomes a portal to roomB and vice versa. The view windows (the
+    // room list's 32-byte portals) must already exist - makePortal checks
+    // that and otherwise aborts hard, because a walkable opening without a
+    // window would be a black hole in the picture.
+    const JsonValue& portals = patch["portalAdds"];
+    for (size_t i = 0; i < portals.size(); ++i)
     {
-        const JsonValue& p = portale[i];
+        const JsonValue& p = portals[i];
         std::string pErr;
         if (!level.makePortal(static_cast<int>(p["roomA"].asInt(-1)),
                               static_cast<int>(p["sxA"].asInt(-1)),
@@ -647,24 +644,24 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
 
     const JsonValue& tadds = patch["triggerAdds"];
 
-    // Versatz zwischen Planung und Datei ausgleichen (#107): die Planung
-    // nummeriert neue Items ab der Itemzahl des LEVEL-JSONS (itemBase), die
-    // itemAdds haengen aber an die ECHTE Datei an. Traegt die Quelldatei mehr
-    // Items als das JSON (die Waffen-Basis entstand nach dem JSON-Export),
-    // zeigte jeder Wecker auf das Item ZWEI VOR seinem Gegner, und die
-    // letzten Gegner blieben ohne Trigger fuer immer regungslos stehen
-    // (Andrea1 Seed 1: JSON 151, Datei 153 - in trview gesehen).
-    // Verschoben werden nur TO_OBJECT-Ziele >= itemBase: alles darunter sind
-    // Vanilla-Indizes, und die verschieben sich nicht, weil auch die
-    // Waffen-Basis ihre Extra-Items nur hinten anhaengt.
+    // Compensate the offset between planning and file (#107): the planning
+    // numbers new items from the LEVEL JSON's item count (itemBase), but
+    // the itemAdds append to the REAL file. If the source file carries more
+    // items than the JSON (the weapon base was created after the JSON
+    // export), every waker pointed at the item TWO BEFORE its enemy, and
+    // the last enemies stood without a trigger, motionless forever
+    // (Andrea1 seed 1: JSON 151, file 153 - seen in trview).
+    // Only TO_OBJECT targets >= itemBase are shifted: everything below are
+    // vanilla indices, and those do not shift, because the weapon base also
+    // appends its extra items only at the end.
     const int itemBase = static_cast<int>(patch["itemBase"].asInt(-1));
     const int itemDelta = (itemBase >= 0) ? (level.itemCount() - itemBase) : 0;
     if (itemDelta != 0 && tadds.size() > 0)
     {
         char buf[256];
         std::snprintf(buf, sizeof(buf),
-                      "Trigger-Ziele um %+d verschoben: das Level-JSON kennt %d Items, "
-                      "die Quelldatei traegt %d. JSON-Export und Basislevel laufen auseinander.",
+                      "trigger targets shifted by %+d: the level JSON knows %d items, "
+                      "the source file carries %d. JSON export and base level drift apart.",
                       itemDelta, itemBase, level.itemCount());
         report.warnings.push_back(buf);
     }
@@ -681,14 +678,14 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             cmd.type = static_cast<int>(cl[c]["type"].asInt(0));
             cmd.param = static_cast<int>(cl[c]["param"].asInt(0));
             if (cmd.type == 0 && itemBase >= 0 && cmd.param >= itemBase)
-                cmd.param += itemDelta;                      // TO_OBJECT auf ein NEUES Item
+                cmd.param += itemDelta;                      // TO_OBJECT onto a NEW item
             cmds.push_back(cmd);
         }
 
         std::string addErr;
-        // Vorgaben: art 0 (TRIGGER), Maske voll, oneShot gesetzt. Das ist die
-        // Form, die ein Gegnertrigger braucht - abweichen muss, wer etwas
-        // anderes will.
+        // Defaults: kind 0 (TRIGGER), full mask, oneShot set. That is the
+        // form an enemy trigger needs - whoever wants something else must
+        // deviate explicitly.
         if (!level.addTrigger(static_cast<int>(t["room"].asInt(-1)),
                               static_cast<int>(t["sectorX"].asInt(-1)),
                               static_cast<int>(t["sectorZ"].asInt(-1)),
@@ -699,16 +696,16 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                               cmds, addErr,
                               static_cast<int>(t["refItem"].asInt(-1))))
         {
-            // Hart abbrechen wie beim Zug: ein Gegner ohne seinen Trigger steht
-            // fuer immer regungslos im Level, und das faellt spaeter niemandem
-            // als Fehler auf - es sieht nur kaputt aus.
+            // Abort hard, as with the move: an enemy without its trigger
+            // stands motionless in the level forever, and nobody later
+            // recognizes that as an error - it just looks broken.
             error = "triggerAdds[" + std::to_string(i) + "]: " + addErr;
             return false;
         }
         ++report.triggersAdded;
     }
 
-    // --- Aenderungen ---------------------------------------------------
+    // --- Edits -----------------------------------------------------------
     const JsonValue& edits = patch["itemEdits"];
     for (size_t i = 0; i < edits.size(); ++i)
     {
@@ -718,55 +715,54 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         Tr5Item it{};
         if (index < 0 || !level.getItem(index, it))
         {
-            report.warnings.push_back(msg("itemEdits[%d]: Item %d gibt es im Level nicht - uebersprungen.",
+            report.warnings.push_back(msg("itemEdits[%d]: item %d does not exist in the level - skipped.",
                                           static_cast<int>(i), index));
             continue;
         }
 
-        // Nur gesetzte Felder uebernehmen.
+        // Take over only the fields that are set.
         //
-        // "typeId" tauscht die EnemyKind aus. Der Index bleibt dabei, was er
-        // ist - deshalb bleiben alle "Object N"-Verweise der Trigger gueltig
-        // und der Gegner wacht weiter an derselben Stelle auf. Genau deshalb
-        // ist der Tausch ueberhaupt ungefaehrlich, waehrend ein Entfernen es
-        // nie waere.
+        // "typeId" swaps the enemy kind. The index stays what it is - which
+        // is why all the triggers' "Object N" references stay valid and the
+        // enemy still wakes up at the same spot. That is exactly why the
+        // swap is harmless at all, while a removal never would be.
         if (e.has("typeId")) it.objectNumber = static_cast<int16_t>(e["typeId"].asInt());
         if (e.has("room"))   it.roomNumber = static_cast<int16_t>(e["room"].asInt());
         if (e.has("x"))      it.x = static_cast<int32_t>(e["x"].asInt());
         if (e.has("y"))      it.y = static_cast<int32_t>(e["y"].asInt());
         if (e.has("z"))      it.z = static_cast<int32_t>(e["z"].asInt());
 
-        // "yAuto" auch beim Verschieben (#53): dieselbe Rechnung wie bei den
-        // Hinzufuegungen weiter unten. Gebraucht von Erzeugern, die nur Raum
-        // und Sektor kennen - die Secret-Listen des Nutzers nennen genau das.
+        // "yAuto" also when moving (#53): the same computation as for the
+        // additions further down. Needed by producers that only know room
+        // and sector - the user's secret lists state exactly that.
         if (e["yAuto"].asBool(false) &&
             it.roomNumber >= 0 && static_cast<size_t>(it.roomNumber) < level.rooms().size())
         {
             const Tr5Room& rm = level.rooms()[static_cast<size_t>(it.roomNumber)];
             SlopeInfo si;
             int baseY = 0;
-            const int art = level.floorSlope(it.roomNumber,
+            const int kind = level.floorSlope(it.roomNumber,
                                                (it.x - rm.originX) / 1024,
                                                (it.z - rm.originZ) / 1024, si, baseY);
-            if (art == 0) it.y = static_cast<int32_t>(baseY);
-            else if (art > 0) it.y = static_cast<int32_t>(floorPosAt(si, baseY, it.x & 1023, it.z & 1023).y);
+            if (kind == 0) it.y = static_cast<int32_t>(baseY);
+            else if (kind > 0) it.y = static_cast<int32_t>(floorPosAt(si, baseY, it.x & 1023, it.z & 1023).y);
         }
-        // Versatz gegen die gerechnete Bodenlage. Gebraucht fuer gestapelte
-        // Objekte: eine Doppeltuer aus zwei Tuermodellen, das obere einen
-        // Block ueber dem unteren. y waechst in TR nach UNTEN, ein Objekt
-        // hoeher zu setzen heisst also abzuziehen - die Liste schreibt
-        // deshalb eine Hoehe ueber dem Boden, und der Leser dreht das Zeichen.
+        // Offset against the computed floor position. Needed for stacked
+        // objects: a double door made of two door models, the upper one one
+        // block above the lower. y grows DOWNWARDS in TR, so putting an
+        // object higher means subtracting - the list therefore writes a
+        // height above the floor, and the reader flips the sign.
         if (e.has("xOff")) it.x += static_cast<int32_t>(e["xOff"].asInt(0));
         if (e.has("zOff")) it.z += static_cast<int32_t>(e["zOff"].asInt(0));
         if (e.has("yOff")) it.y += static_cast<int32_t>(e["yOff"].asInt(0));
         if (e.has("angle"))  it.yRot = static_cast<int16_t>(e["angle"].asInt());
         if (e.has("ocb"))
         {
-            // "ocb" setzt die unteren sechs Bit - das ist der Wert, den
-            // PickUpCollision und InitialisePickup als OCB auswerten.
+            // "ocb" sets the lower six bits - that is the value
+            // PickUpCollision and InitialisePickup evaluate as the OCB.
             //
-            // Die Bits 0x40 UND 0x80 bleiben erhalten. Beide wertet
-            // PickUpCollision gemeinsam aus (game/pickup.cpp:989):
+            // Bits 0x40 AND 0x80 are preserved. PickUpCollision evaluates
+            // both together (game/pickup.cpp:989):
             //
             //     if (!(item->trigger_flags & 0xC0))
             //         KillItem(item_number);
@@ -774,68 +770,68 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             //            item->flags |= IFL_TRIGGERED;
             //            item->status = ITEM_INVISIBLE; }
             //
-            // Ohne eines dieser Bits wird das aufgenommene Item schlicht
-            // getoetet. Mit ihnen bleibt es als ITEM_INVISIBLE stehen und
-            // bekommt item_flags[3] = 1 - und genau das sind die beiden
-            // Bedingungen, die PickupTrigger (pickup.cpp:158) verlangt, damit
-            // ein Pickup-Trigger ueberhaupt feuert.
+            // Without one of these bits the picked-up item is simply
+            // killed. With them it stays as ITEM_INVISIBLE and gets
+            // item_flags[3] = 1 - and those are exactly the two conditions
+            // PickupTrigger (pickup.cpp:158) requires for a pickup trigger
+            // to fire at all.
             //
-            // 0x80 markiert zusaetzlich ein regenerierendes Pickup
-            // (game/init.cpp:492). Wuerden wir es loeschen, hoerten mehrere
-            // Munitionsstapel still auf, sich nachzufuellen - Andrea1 Item 66
-            // und 78, Andrea2 Item 69, joby2 Item 8.
+            // 0x80 additionally marks a regenerating pickup
+            // (game/init.cpp:492). If we cleared it, several ammo piles
+            // would quietly stop refilling - Andrea1 items 66 and 78,
+            // Andrea2 item 69, joby2 item 8.
             //
-            // 0x40 stand hier frueher als "reines Editor-Artefakt, traegt kein
-            // Codepfad aus" und wurde geloescht. Das war falsch und hat den
-            // gekoppelten Triggerzug von Andrea1 Item 107 muted gemacht: das
-            // Item kam am neuen Platz ohne 0x40 an, wurde beim Aufnehmen
-            // getoetet, und der mitgewanderte Trigger fand nie die Bedingung,
-            // um Hund und Flame Emitter zu wecken. Sichtbar war das nirgends,
-            // weil jedes Werkzeug die OCB auf 0x3F maskiert anzeigt - Item 107
-            // steht ueberall als "OCB 0" da, roh ist es 0x0040.
+            // 0x40 used to be described here as "a pure editor artifact, no
+            // code path reads it" and was cleared. That was wrong and muted
+            // the coupled trigger move of Andrea1 item 107: the item
+            // arrived at its new spot without 0x40, was killed on pickup,
+            // and the trigger that traveled along never found the condition
+            // to wake dog and flame emitter. It was visible nowhere,
+            // because every tool displays the OCB masked to 0x3F - item 107
+            // shows as "OCB 0" everywhere, raw it is 0x0040.
             //
-            // Gegenprobe: alle sieben Items, die ueber einen Pickup-Trigger
-            // ortsgebunden sind, tragen dieses Bit (Andrea1 107 und 94,
-            // Andrea3 68, andy1 8, Andy2 29, rich1 14, rich3 75).
+            // Cross-check: all seven items pinned via a pickup trigger
+            // carry this bit (Andrea1 107 and 94, Andrea3 68, andy1 8,
+            // Andy2 29, rich1 14, rich3 75).
             //
-            // 0x100 (Mesh unsichtbar) wird dagegen bewusst geloescht: ein
-            // verschobenes Pickup soll an seinem neuen Platz zu sehen sein.
+            // 0x100 (mesh invisible), on the other hand, is deliberately
+            // cleared: a moved pickup should be visible at its new spot.
             const uint16_t keep = static_cast<uint16_t>(it.triggerFlags) & 0x00C0u;
             const uint16_t low = static_cast<uint16_t>(e["ocb"].asInt()) & 0x003Fu;
             it.triggerFlags = static_cast<int16_t>(keep | low);
         }
         if (e.has("flags"))  it.flags = static_cast<int16_t>(e["flags"].asInt());
 
-        // "antitriggerImmun" setzt IFL_ANTITRIGGER_ONESHOT (0x80) im
-        // Flag-Wort. Ein Antitrigger, der auf einen AKTIVEN intelligenten
-        // Gegner zeigt, toetet ihn ohne Umweg: hit_points = -16384,
-        // DisableBaddieAI, KillItem (control.cpp:2422) - kein Sterben, kein
-        // Ausblenden, er ist einfach weg. In Vanilla ist das Absicht, weil
-        // der Gegner an dieser Stelle laengst erledigt sein soll; nach einem
-        // Typentausch stimmt diese Annahme nicht mehr und der neue Gegner
-        // verschwindet mitten im Kampf (im Spiel gesehen: Andrea1 Item 34).
+        // "antitriggerImmune" sets IFL_ANTITRIGGER_ONESHOT (0x80) in the
+        // flag word. An antitrigger pointing at an ACTIVE intelligent enemy
+        // kills it without detour: hit_points = -16384, DisableBaddieAI,
+        // KillItem (control.cpp:2422) - no dying, no fading, it is simply
+        // gone. In vanilla that is intentional, because the enemy is
+        // supposed to be long done at that point; after a type swap that
+        // assumption no longer holds and the new enemy vanishes mid-fight
+        // (seen in game: Andrea1 item 34).
         //
-        // Cores eigene Bremse dagegen ist dieses Bit: steht es, laesst
-        // TestTriggers das Item in Ruhe (control.cpp:2378) - gedacht als
-        // "einmal antigetriggert, nie wieder". Wir setzen es von vornherein,
-        // dann prallt der Antitrigger ab und der Gegner kaempft und stirbt
-        // normal. Das wirkt pro ITEM, nicht pro Trigger: teilen sich mehrere
-        // Gegner einen Antitrigger (Andy2 Items 150-154), bleiben die
-        // uebrigen unberuehrt. Das Bit ist in allen 15 Vanilla-Leveln bei
-        // keinem einzigen der 2094 Items gesetzt (gemessen) und wird von
-        // InitialiseItem nicht angefasst, ueberlebt also aus der Datei.
-        if (e["antitriggerImmun"].asBool(false))
+        // Core's own brake against that is this bit: if it is set,
+        // TestTriggers leaves the item alone (control.cpp:2378) - meant as
+        // "antitriggered once, never again". We set it from the start, then
+        // the antitrigger bounces off and the enemy fights and dies
+        // normally. This acts per ITEM, not per trigger: if several enemies
+        // share one antitrigger (Andy2 items 150-154), the others stay
+        // untouched. The bit is not set on a single one of the 2094 items
+        // across all 15 vanilla levels (measured) and is not touched by
+        // InitialiseItem, so it survives from the file.
+        if (e["antitriggerImmune"].asBool(false))
             it.flags = static_cast<int16_t>(static_cast<uint16_t>(it.flags) | 0x0080u);
 
         if (!level.setItem(index, it))
         {
-            error = msg("Item %d liess sich nicht write.", index);
+            error = msg("item %d could not be written.", index);
             return false;
         }
         ++report.edited;
     }
 
-    // --- Hinzufuegungen -------------------------------------------------
+    // --- Additions --------------------------------------------------------
     const JsonValue& adds = patch["itemAdds"];
     for (size_t i = 0; i < adds.size(); ++i)
     {
@@ -848,15 +844,15 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         it.y = static_cast<int32_t>(a["y"].asInt());
         it.z = static_cast<int32_t>(a["z"].asInt());
 
-        // "yAuto": die echte Bodenhoehe an dieser Stelle ausrechnen statt sie
-        // vom Aufrufer zu uebernehmen (#61). Der Sektorgrundwert ist auf einer
-        // Schraege die HOECHSTE Ecke - ein Item in der Sektormitte haenge damit
-        // bis zu einen halben Sektor in der Luft (#86). Dieselbe Rechnung, mit
-        // der die Engine den Boden findet: floorSlope + floorPosAt.
+        // "yAuto": compute the true floor height at this spot instead of
+        // taking it from the caller (#61). On a slope the sector base value
+        // is the HIGHEST corner - an item in the middle of the sector would
+        // hang up to half a sector in the air (#86). The same computation
+        // the engine uses to find the floor: floorSlope + floorPosAt.
         //
-        // Gebraucht von Erzeugern, die keine Neigungsdaten haben (das
-        // Wandtest-Skript in PowerShell). Ohne das Feld bleibt alles wie
-        // bisher - der Randomizer rechnet sein y selbst und setzt es nicht.
+        // Needed by producers that have no slope data (the wall test script
+        // in PowerShell). Without the field everything stays as before -
+        // the randomizer computes its y itself and does not set it.
         if (a["yAuto"].asBool(false) &&
             it.roomNumber >= 0 && static_cast<size_t>(it.roomNumber) < level.rooms().size())
         {
@@ -865,28 +861,28 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             const int sz = (it.z - rm.originZ) / 1024;
             SlopeInfo si;
             int baseY = 0;
-            const int art = level.floorSlope(it.roomNumber, sx, sz, si, baseY);
-            if (art == 0)
-                it.y = static_cast<int32_t>(baseY);          // eben
-            else if (art > 0)
+            const int kind = level.floorSlope(it.roomNumber, sx, sz, si, baseY);
+            if (kind == 0)
+                it.y = static_cast<int32_t>(baseY);          // flat
+            else if (kind > 0)
             {
-                const FloorPos lage = floorPosAt(si, baseY, it.x & 1023, it.z & 1023);
-                it.y = static_cast<int32_t>(lage.y);
+                const FloorPos pos = floorPosAt(si, baseY, it.x & 1023, it.z & 1023);
+                it.y = static_cast<int32_t>(pos.y);
             }
-            // art < 0 (Kette unlesbar): das mitgegebene y bleibt stehen.
+            // kind < 0 (chain unreadable): the provided y stands.
         }
 
 
-        // Wie bei den Aenderungen: Versatz gegen die gerechnete Bodenlage,
-        // damit sich Objekte stapeln lassen (Doppeltuer).
+        // As with the edits: offset against the computed floor position, so
+        // objects can be stacked (double door).
         if (a.has("xOff")) it.x += static_cast<int32_t>(a["xOff"].asInt(0));
         if (a.has("zOff")) it.z += static_cast<int32_t>(a["zOff"].asInt(0));
         if (a.has("yOff")) it.y += static_cast<int32_t>(a["yOff"].asInt(0));
         it.yRot = static_cast<int16_t>(a["angle"].asInt(0));
         it.triggerFlags = static_cast<int16_t>(a["ocb"].asInt(0));
         it.flags = static_cast<int16_t>(a["flags"].asInt(0));
-        // shade: -1 bedeutet dynamische Beleuchtung. 0 waere pechschwarz, und
-        // ein pechschwarzes Pickup findet niemand.
+        // shade: -1 means dynamic lighting. 0 would be pitch black, and
+        // nobody ever finds a pitch-black pickup.
         it.shade = static_cast<int16_t>(a["shade"].asInt(-1));
 
         std::string addErr;
@@ -898,12 +894,12 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         ++report.added;
     }
 
-    // --- AI-Objekte (Fluchtmarker) ----------------------------------------
+    // --- AI objects (flee markers) ----------------------------------------
     //
-    // NACH den itemAdds: addAiObject rechnet die Lage des AI-Blocks aus der
-    // aktuellen Item-Anzahl. Larson/Pierre bekommen so zu jedem Exemplar
-    // einen AI_AMBUSH auf dem Spawn-Sektor - die 40-LP-Flucht findet ihr
-    // Ziel und despawnt dort, statt endlos hinter Lara herzulaufen.
+    // AFTER the itemAdds: addAiObject computes the AI block's position from
+    // the current item count. Larson/Pierre thus get an AI_AMBUSH on the
+    // spawn sector for every instance - the 40-HP flight finds its target
+    // and despawns there instead of endlessly running after Lara.
     const JsonValue& aiAdds = patch["aiAdds"];
     for (size_t i = 0; i < aiAdds.size(); ++i)
     {
@@ -925,134 +921,133 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
-    // --- Laras Interaktions-Anims nachreichen (#53) ----------------------
+    // --- Backfill Lara's interaction anims (#53) --------------------------
     //
-    // Laras Anim-Tabelle ist in jedem Level gleich lang, die BILDDATEN sind
-    // aber levelspezifisch. Wo ein Level eine Bewegung nie braucht, laesst
-    // Core den Eintrag als Stub stehen (FrameSize 0) - abgespielt wird eine
-    // eingefrorene Pose oder eine viel zu kurze Bewegung. Beim Nutzer
-    // zweimal aufgeschlagen: die Keycard in joby3 (22 Sekunden erstarrt) und
-    // ein Schalter in andy3 ("macht eine Schalteranimation, nur nicht die
-    // richtige - viel zu schnell"). Das zweite ist schlimmer als haesslich:
-    // Lara ist vor dem Ende der OBJEKT-Animation fertig, verlaesst den
-    // Sektor und der Trigger greift nie.
+    // Lara's anim table is the same length in every level, but the IMAGE
+    // DATA is level-specific. Where a level never needs a movement, Core
+    // leaves the entry as a stub (FrameSize 0) - what plays is a frozen
+    // pose or a far too short movement. It hit the user twice: the keycard
+    // in joby3 (22 seconds frozen) and a switch in andy3 ("does a switch
+    // animation, just not the right one - far too fast"). The second is
+    // worse than ugly: Lara finishes before the OBJECT animation ends,
+    // leaves the sector, and the trigger never engages.
     //
-    // Deshalb hier, NACH allen Objektaenderungen: nachsehen, welche
-    // Interaktionen im fertigen Level ueberhaupt vorkommen, und die
-    // zugehoerige Anim aus einem Spenderlevel holen, wenn sie fehlt.
+    // Hence here, AFTER all object changes: look up which interactions even
+    // occur in the finished level, and fetch the corresponding anim from a
+    // donor level if it is missing.
     //
-    // Die Spenderreihenfolge stammt aus der Vermessung aller 13 Level mit
-    // LaraAnim: joby4 traegt fast alles, andy1 fast den Rest. Genommen wird
-    // der erste Spender, der die Anim WIRKLICH traegt - geprueft wird das am
-    // geladenen Spender, nicht geglaubt.
+    // The donor order comes from measuring all 13 levels with LaraAnim:
+    // joby4 carries almost everything, andy1 almost the rest. The first
+    // donor that REALLY carries the anim is taken - verified on the loaded
+    // donor, not believed.
     {
-        struct Bedarf { int typVon, typBis; int ocbVon, ocbBis; int anim; const char* was; };
-        static const Bedarf kBedarf[] = {
-            // Schalter 266..271: die OCB waehlt Laras Bewegung (switch.cpp:246ff)
-            { 266, 271,  0,  0,  64, "Schalter" },
-            { 266, 271,  1,  2, 325, "Schalter (versteckt)" },
-            { 266, 271,  3,  3, 413, "Schalter (klein)" },
-            { 266, 271,  4,  4, 196, "Schalter (Generator)" },
-            { 266, 271,  5,  7, 197, "Schalter (einhaendig)" },
-            { 266, 271,  8, 63, 470, "Schalter (Airlock)" },
-            { 274, 274,  8, 63, 470, "Airlock Switch" },
-            // Schluessel- und Puzzleloecher
-            { 258, 264,  0, 63, 131, "Schluesselloch" },
-            // Key Hole 8 nimmt die Kartenzieh-Geste, WENN das Level ihre
-            // Daten hat (pickup.cpp fragt die FrameSize ab). Deshalb hier
-            // anfordern - dann hat es sie, und die Geste passt zum Objekt.
-            // ANIM_USEKEY bleibt trotzdem noetig: sie ist der Rueckfall.
-            { 265, 265,  0, 63, 437, "Schluesselloch 8 (Karte)" },
-            { 265, 265,  0, 63, 131, "Schluesselloch 8 (Rueckfall)" },
-            { 236, 243,  0, 63, 134, "Puzzleloch" },
-            // Falltueren und Schiebeblock
-            { 109, 110,  0, 63, 317, "Bodenfalltuer" },
-            { 111, 112,  0, 63, 318, "Deckenfalltuer" },
-            { 137, 141,  0, 63, 316, "Schiebeblock" },
+        struct Need { int typeFrom, typeTo; int ocbFrom, ocbTo; int anim; const char* what; };
+        static const Need kNeeds[] = {
+            // Switches 266..271: the OCB picks Lara's movement (switch.cpp:246ff)
+            { 266, 271,  0,  0,  64, "switch" },
+            { 266, 271,  1,  2, 325, "switch (hidden)" },
+            { 266, 271,  3,  3, 413, "switch (small)" },
+            { 266, 271,  4,  4, 196, "switch (generator)" },
+            { 266, 271,  5,  7, 197, "switch (one-handed)" },
+            { 266, 271,  8, 63, 470, "switch (airlock)" },
+            { 274, 274,  8, 63, 470, "airlock switch" },
+            // Keyholes and puzzle holes
+            { 258, 264,  0, 63, 131, "keyhole" },
+            // Key Hole 8 takes the card-swipe gesture IF the level has its
+            // data (pickup.cpp queries the FrameSize). Hence request it
+            // here - then it has it, and the gesture matches the object.
+            // ANIM_USEKEY stays necessary regardless: it is the fallback.
+            { 265, 265,  0, 63, 437, "keyhole 8 (card)" },
+            { 265, 265,  0, 63, 131, "keyhole 8 (fallback)" },
+            { 236, 243,  0, 63, 134, "puzzle hole" },
+            // Trapdoors and push block
+            { 109, 110,  0, 63, 317, "floor trapdoor" },
+            { 111, 112,  0, 63, 318, "ceiling trapdoor" },
+            { 137, 141,  0, 63, 316, "push block" },
         };
 
-        // Spenderreihenfolge, vermessen mit LaraAnim ueber alle 13 Level.
-        static const char* kSpender[] = { "joby4", "andy1", "Andy3", "joby3", "Andrea3", "joby5", "Andy2", "joby2", "rich2" };
+        // Donor order, measured with LaraAnim across all 13 levels.
+        static const char* kDonors[] = { "joby4", "andy1", "Andy3", "joby3", "Andrea3", "joby5", "Andy2", "joby2", "rich2" };
 
-        // Diese Bewegungen haengen an keinem Objekt, sondern an Laras
-        // Steuerung - sie muessen in JEDEM Level liegen. Gefunden vom
-        // Nutzer: die Kriechrolle (Ducken + Sprint, lara.cpp:3288 setzt
-        // Anim 218) ist in rich1 ein Stub, und zwar schon vanilla - Lara
-        // wird nach vorn geschoben, ohne dass sich etwas bewegt. Gemessen
-        // mit LaraAnim: rich1 ist das EINZIGE Level mit FrameSize 0 dort.
-        static const int kImmer[] = {
-            218,   // AS_DUCKROLL - Kriechrolle
-            421,   // ANIM_CRAWLJUMP - Kriechsprung
+        // These movements hang off no object but off Lara's controls - they
+        // must exist in EVERY level. Found by the user: the crawl roll
+        // (duck + sprint, lara.cpp:3288 sets anim 218) is a stub in rich1,
+        // and already in vanilla - Lara is pushed forward without anything
+        // moving. Measured with LaraAnim: rich1 is the ONLY level with
+        // FrameSize 0 there.
+        static const int kAlways[] = {
+            218,   // AS_DUCKROLL - crawl roll
+            421,   // ANIM_CRAWLJUMP - crawl jump
         };
-        std::set<int> gebraucht(std::begin(kImmer), std::end(kImmer));
+        std::set<int> needed(std::begin(kAlways), std::end(kAlways));
         for (int i = 0; i < level.itemCount(); ++i)
         {
             Tr5Item it;
             if (!level.getItem(i, it)) continue;
-            const int typ = it.objectNumber;
+            const int type = it.objectNumber;
             const int ocb = it.triggerFlags & 0x3F;
-            for (const Bedarf& b : kBedarf)
-                if (typ >= b.typVon && typ <= b.typBis && ocb >= b.ocbVon && ocb <= b.ocbBis)
-                    gebraucht.insert(b.anim);
+            for (const Need& b : kNeeds)
+                if (type >= b.typeFrom && type <= b.typeTo && ocb >= b.ocbFrom && ocb <= b.ocbTo)
+                    needed.insert(b.anim);
         }
 
-        // Animationen sind KETTEN. Ein Eintrag zeigt mit next_animation auf
-        // seinen Nachfolger, und eine Bewegung besteht meist aus mehreren
-        // Gliedern: die Kriechrolle in rich1 laeuft 218 -> 219 -> 220 -> 222.
-        // Core stubbt in so einem Fall die GANZE Kette (in rich1 zeigen 218
-        // bis 221 auf denselben Frame-Zeiger). Nur das erste Glied zu
-        // reparieren reicht deshalb nicht: Lara setzt zum Rollen an und
-        // faellt nach sechs Bildern in die Kriechpose zurueck - genau so vom
-        // Nutzer gesehen. Der Bedarf wird darum entlang next_animation
-        // aufgezogen, bevor irgendetwas geholt wird.
+        // Animations are CHAINS. An entry points at its successor via
+        // next_animation, and a movement usually consists of several links:
+        // the crawl roll in rich1 runs 218 -> 219 -> 220 -> 222. In such a
+        // case Core stubs the WHOLE chain (in rich1, 218 through 221 point
+        // at the same frame pointer). Repairing only the first link is
+        // therefore not enough: Lara starts the roll and falls back into
+        // the crawl pose after six frames - exactly what the user saw. The
+        // need is therefore expanded along next_animation before anything
+        // is fetched.
         {
-            std::set<int> unresolved = gebraucht;
-            while (!unresolved.empty())
+            std::set<int> open = needed;
+            while (!open.empty())
             {
-                const int a = *unresolved.begin();
-                unresolved.erase(unresolved.begin());
-                const int weiter = level.laraAnimNext(a);
-                // Selbstbezug beendet die Kette (222 -> 222 ist das
-                // uebliche Halten am Ende), ebenso ein unbekannter Wert.
-                if (weiter < 0 || weiter == a) continue;
-                if (gebraucht.insert(weiter).second) unresolved.insert(weiter);
+                const int a = *open.begin();
+                open.erase(open.begin());
+                const int next = level.laraAnimNext(a);
+                // Self-reference ends the chain (222 -> 222 is the usual
+                // hold at the end), as does an unknown value.
+                if (next < 0 || next == a) continue;
+                if (needed.insert(next).second) open.insert(next);
             }
         }
 
-        for (int animNr : gebraucht)
+        for (int animNr : needed)
         {
             if (level.laraAnimUsable(animNr)) continue;
             if (!levelSource)
             {
-                report.warnings.push_back("Lara-Anim " + std::to_string(animNr) +
-                                          " fehlt und kein Zugriff auf die Spender-Level.");
+                report.warnings.push_back("Lara anim " + std::to_string(animNr) +
+                                          " is missing and no access to the donor levels.");
                 continue;
             }
-            bool geholt = false;
-            for (const char* sp : kSpender)
+            bool fetched = false;
+            for (const char* sp : kDonors)
             {
                 Tr5Level* q = source(sp);
                 if (!q || !q->laraAnimUsable(animNr)) continue;
                 std::string aErr;
                 if (!level.copyLaraAnimFrom(*q, animNr, aErr)) continue;
-                report.warnings.push_back("Lara-Anim " + std::to_string(animNr) +
-                                          " aus " + sp + " nachgereicht.");
-                geholt = true;
+                report.warnings.push_back("Lara anim " + std::to_string(animNr) +
+                                          " backfilled from " + sp + ".");
+                fetched = true;
                 break;
             }
-            if (!geholt)
-                report.warnings.push_back("Lara-Anim " + std::to_string(animNr) +
-                                          " fehlt und kein Spender hat sie - Interaktion bleibt fehlerhaft.");
+            if (!fetched)
+                report.warnings.push_back("Lara anim " + std::to_string(animNr) +
+                                          " is missing and no donor has it - the interaction stays broken.");
         }
     }
 
-    // Texturwerkstatt schliessen (#104): alle Seiten-Importe dieses Laufs
-    // werden jetzt EINMAL gepackt und in die Datei gesetzt. save() weigert
-    // sich, eine schmutzig offene Werkstatt zu write - vergessen faellt
-    // also volumes auf, nicht als kaputtes Level.
+    // Close the texture workshop (#104): all page imports of this run are
+    // now packed ONCE and put into the file. save() refuses to write a
+    // dirty open workshop - forgetting therefore shows up loudly, not as a
+    // broken level.
     if (!level.texWorkshopClose(error))
     {
-        error = "Texturwerkstatt: " + error;
+        error = "texture workshop: " + error;
         return false;
     }
 

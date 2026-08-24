@@ -695,6 +695,12 @@ bool Rando::buildMarkerPatch(const RandoInput& in,
         std::map<int, int> wandTypen;      // typeId -> OCB
         for (const LevelItem& it : in.items)
         {
+            // NUR aufnehmbare Items. OCB 2 und 9 sind keine Kennung fuer
+            // Wandgriffe, sondern gewoehnliche Werte, die auch Tueren,
+            // Gegner und Kulisse tragen - ohne diese Pruefung fuellte der
+            // Debug-Marker das halbe Level (Nutzerbefund 2026-08-24: "der
+            // fuellt jetzt nicht nur Item/Keys/Puzzles aus, sondern alles").
+            if (!isPickupType(it.typeId)) continue;
             if (it.ocb != 2 && it.ocb != 9) continue;
 
             bool hatConstraint = false;

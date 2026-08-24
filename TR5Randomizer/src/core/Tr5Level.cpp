@@ -22,10 +22,10 @@
 
 namespace
 {
-    // Alle Mehrbytewerte im TR-Format sind Little Endian, genau wie x86 - ein
-    // memcpy genuegt also. Trotzdem ueber Hilfsfunktionen, damit jede Lesestelle
-    // die Bereichspruefung mitbekommt: eine beschaedigte Groessenangabe im
-    // Kopfteil darf uns nicht ueber das Dateiende hinauslaufen lassen.
+    // All multi-byte values in the TR format are little endian, just like
+    // x86 - so a memcpy suffices. Still via helper functions, so every read
+    // site gets the range check: a damaged size field in the header must
+    // not run us past the end of the file.
     bool readI32(const std::vector<uint8_t>& b, size_t& pos, int32_t& out)
     {
         if (pos + 4 > b.size()) return false;
@@ -59,37 +59,37 @@ bool Tr5Level::load(const std::wstring& path, std::string& error)
     FILE* f = nullptr;
     if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f)
     {
-        error = "Leveldatei laesst sich nicht oeffnen";
+        error = "cannot open level file";
         return false;
     }
     std::fseek(f, 0, SEEK_END);
     long n = std::ftell(f);
     std::fseek(f, 0, SEEK_SET);
-    if (n <= 0) { std::fclose(f); error = "Leveldatei ist leer"; return false; }
+    if (n <= 0) { std::fclose(f); error = "level file is empty"; return false; }
 
     m_bytes.resize(static_cast<size_t>(n));
     size_t got = std::fread(m_bytes.data(), 1, m_bytes.size(), f);
     std::fclose(f);
-    if (got != m_bytes.size()) { error = "Leveldatei nicht vollstaendig lesbar"; return false; }
+    if (got != m_bytes.size()) { error = "level file not fully readable"; return false; }
 
     if (!readHeader(error)) return false;
     return findItems(error);
 }
 
 //----------------------------------------------------------------------------
-// Laeuft den Hauptblock von vorn ab, bis die Item-Anzahl erreicht ist.
+// Walks the main block from the front until the item count is reached.
 //
-// Es gibt keinen Index und keine Marke, an der die Items stehen - man muss
-// jeden vorangehenden Abschnitt exakt so ueberspringen, wie die Engine ihn
-// liest. Ein einziges falsches Byte verschiebt alles Weitere, deshalb ist die
-// Reihenfolge unten 1:1 aus LoadRooms/LoadObjects/LoadSprites/LoadCameras/
+// There is no index and no marker where the items sit - every preceding
+// section must be skipped exactly as the engine reads it. A single wrong
+// byte shifts everything that follows, which is why the order below is
+// taken 1:1 from LoadRooms/LoadObjects/LoadSprites/LoadCameras/
 // LoadSoundEffects/LoadBoxes/LoadAnimatedTextures/LoadTextureInfos in
-// specific/file.cpp uebernommen, und die Strukturgroessen stammen aus einem
-// sizeof()-Test gegen die Header der Engine, nicht aus einer Schaetzung.
+// specific/file.cpp, and the struct sizes come from a sizeof() test against
+// the engine's headers, not from an estimate.
 //----------------------------------------------------------------------------
 namespace
 {
-    // Groessen, vom Compiler gegen global/types.h ermittelt.
+    // Sizes, determined by the compiler against global/types.h.
     constexpr int SZ_ANIM = 40;   // ANIM_STRUCT
     constexpr int SZ_CHANGE = 6;    // CHANGE_STRUCT
     constexpr int SZ_RANGE = 8;    // RANGE_STRUCT
@@ -99,10 +99,10 @@ namespace
     constexpr int SZ_BOX = 8;    // BOX_INFO
     constexpr int SZ_TEXINFO = 40;   // PHDTEXTURESTRUCT
 
-    // Je Eintrag gelesene Bytes in den Schleifen, die Feld fuer Feld read.
+    // Bytes read per entry in the loops that read field by field.
     constexpr int SZ_OBJECTINFO = 20;   // slot4 + nmeshes2 + meshidx2 + bone4 + frame4 + anim2 + pad2
     constexpr int SZ_STATICINFO = 32;   // slot4 + mesh2 + 12 + 12 + flags2
-    constexpr int SZ_SPRITESLOT = 8;    // slot4 + 2 shorts (beide Zweige gleich lang)
+    constexpr int SZ_SPRITESLOT = 8;    // slot4 + 2 shorts (both branches equally long)
 }
 
 bool Tr5Level::findItems(std::string& error)
@@ -116,10 +116,9 @@ bool Tr5Level::findItems(std::string& error)
         p += 4;
         return true;
     };
-    // Ueberspringen mit Bereichspruefung. count kommt aus der Datei und darf
-    // niemals ungeprueft als Laenge benutzt werden - eine beschaedigte oder
-    // absichtlich manipulierte Zahl wuerde sonst weit hinter das Dateiende
-    // zeigen.
+    // Skipping with a range check. count comes from the file and must never
+    // be used unchecked as a length - a damaged or deliberately manipulated
+    // number would otherwise point far past the end of the file.
     auto skipN = [&](int32_t count, int elemSize) -> bool {
         if (count < 0) return false;
         const uint64_t n = static_cast<uint64_t>(count) * static_cast<uint64_t>(elemSize);
@@ -129,79 +128,78 @@ bool Tr5Level::findItems(std::string& error)
     };
 
     int32_t n = 0;
-    const char* where = "Anfang";
+    const char* where = "start";
 
 #define STEP(what, expr) do { where = what; if (!(expr)) goto broken; } while (0)
 
-    STEP("unbenutztes Feld", skipN(1, 4));
-    STEP("Raumanzahl", i32(n));
+    STEP("unused field", skipN(1, 4));
+    STEP("room count", i32(n));
     m_roomCount = n;
     m_rooms.clear();
     m_roomMismatch = 0;
     for (int i = 0; i < m_roomCount; ++i)
     {
         int32_t roomSize = 0;
-        STEP("Raum-Marke", skipN(1, 4));            // "XELA"
-        STEP("Raumgroesse", i32(roomSize));
-        if (roomSize < 0 || p + static_cast<size_t>(roomSize) > end) { where = "Raumdaten"; goto broken; }
+        STEP("room marker", skipN(1, 4));           // "XELA"
+        STEP("room size", i32(roomSize));
+        if (roomSize < 0 || p + static_cast<size_t>(roomSize) > end) { where = "room data"; goto broken; }
         parseRoom(p, static_cast<size_t>(roomSize), i);
         p += static_cast<size_t>(roomSize);
     }
     m_floorCountOffset = p;
-    STEP("Floordata", i32(n));
+    STEP("floordata", i32(n));
     m_floorCount = n;
     m_floorAt = p;
-    STEP("Floordata", skipN(n, 2));
+    STEP("floordata", skipN(n, 2));
 
-    // Blockkarte fuer den Modelltransfer nebenbei mitschreiben. merk() haelt
-    // fest, wo die Anzahl steht und wo die Daten beginnen - NACHDEM i32 die
-    // Anzahl gelesen hat, zeigt p genau auf das erste Datenbyte.
-    auto merk = [&](Block& b, int32_t anzahl) { b.countAt = p - 4; b.dataAt = p; b.count = anzahl; };
+    // Write the block map for the model transfer along the way. mark()
+    // records where the count sits and where the data begins - AFTER i32
+    // has read the count, p points exactly at the first data byte.
+    auto mark = [&](Block& b, int32_t count) { b.countAt = p - 4; b.dataAt = p; b.count = count; };
 
-    STEP("Mesh-Daten", i32(n));   merk(m_meshData, n);  STEP("Mesh-Daten", skipN(n, 2));
-    STEP("Mesh-Zeiger", i32(n));  merk(m_meshPtrs, n);  STEP("Mesh-Zeiger", skipN(n, 4));
-    STEP("Animationen", i32(n));  merk(m_anims, n);     STEP("Animationen", skipN(n, SZ_ANIM));
-    STEP("Zustandswechsel", i32(n)); merk(m_changes, n); STEP("Zustandswechsel", skipN(n, SZ_CHANGE));
-    STEP("Bereiche", i32(n));     merk(m_ranges, n);    STEP("Bereiche", skipN(n, SZ_RANGE));
-    STEP("Anim-Befehle", i32(n)); merk(m_commands, n);  STEP("Anim-Befehle", skipN(n, 2));
-    STEP("Knochen", i32(n));      merk(m_bones, n);     STEP("Knochen", skipN(n, 4));
-    STEP("Frames", i32(n));       merk(m_frames, n);    STEP("Frames", skipN(n, 2));
-    STEP("Objekte", i32(n));      merk(m_objects, n);   STEP("Objekte", skipN(n, SZ_OBJECTINFO));
-    STEP("Statics", i32(n));      STEP("Statics", skipN(n, SZ_STATICINFO));
+    STEP("mesh data", i32(n));   mark(m_meshData, n);  STEP("mesh data", skipN(n, 2));
+    STEP("mesh pointers", i32(n));  mark(m_meshPtrs, n);  STEP("mesh pointers", skipN(n, 4));
+    STEP("animations", i32(n));  mark(m_anims, n);     STEP("animations", skipN(n, SZ_ANIM));
+    STEP("state changes", i32(n)); mark(m_changes, n); STEP("state changes", skipN(n, SZ_CHANGE));
+    STEP("ranges", i32(n));     mark(m_ranges, n);    STEP("ranges", skipN(n, SZ_RANGE));
+    STEP("anim commands", i32(n)); mark(m_commands, n);  STEP("anim commands", skipN(n, 2));
+    STEP("bones", i32(n));      mark(m_bones, n);     STEP("bones", skipN(n, 4));
+    STEP("frames", i32(n));       mark(m_frames, n);    STEP("frames", skipN(n, 2));
+    STEP("objects", i32(n));      mark(m_objects, n);   STEP("objects", skipN(n, SZ_OBJECTINFO));
+    STEP("statics", i32(n));      STEP("statics", skipN(n, SZ_STATICINFO));
 
-    STEP("SPR-Marke", skipN(1, 4));
-    STEP("Sprites", i32(n));      merk(m_sprites, n);   STEP("Sprites", skipN(n, SZ_SPRITE));
-    STEP("Sprite-Slots", i32(n)); STEP("Sprite-Slots", skipN(n, SZ_SPRITESLOT));
+    STEP("SPR marker", skipN(1, 4));
+    STEP("sprites", i32(n));      mark(m_sprites, n);   STEP("sprites", skipN(n, SZ_SPRITE));
+    STEP("sprite slots", i32(n)); STEP("sprite slots", skipN(n, SZ_SPRITESLOT));
 
-    STEP("Kameras", i32(n));      STEP("Kameras", skipN(n, SZ_OBJVEC));
-    STEP("Spotcams", i32(n));     STEP("Spotcams", skipN(n, SZ_SPOTCAM));
-    STEP("Soundquellen", i32(n)); STEP("Soundquellen", skipN(n, SZ_OBJVEC));
+    STEP("cameras", i32(n));      STEP("cameras", skipN(n, SZ_OBJVEC));
+    STEP("spotcams", i32(n));     STEP("spotcams", skipN(n, SZ_SPOTCAM));
+    STEP("sound sources", i32(n)); STEP("sound sources", skipN(n, SZ_OBJVEC));
 
     {
         int32_t numBoxes = 0;
-        STEP("Boxen", i32(numBoxes));
-        STEP("Boxen", skipN(numBoxes, SZ_BOX));
-        STEP("Overlaps", i32(n)); STEP("Overlaps", skipN(n, 2));
-        // 2 Durchlaeufe zu je 4 + 1 Zonen, alle numBoxes shorts lang.
-        STEP("Zonen", skipN(numBoxes, 2 * 10));
+        STEP("boxes", i32(numBoxes));
+        STEP("boxes", skipN(numBoxes, SZ_BOX));
+        STEP("overlaps", i32(n)); STEP("overlaps", skipN(n, 2));
+        // 2 passes of 4 + 1 zones each, all numBoxes shorts long.
+        STEP("zones", skipN(numBoxes, 2 * 10));
     }
 
-    STEP("Animierte Texturen", i32(n)); STEP("Animierte Texturen", skipN(n, 2));
-    // Ein einzelnes Byte: nAnimUVRanges am Ende von LoadAnimatedTextures.
-    // Leicht zu uebersehen, weil es als ReadChar zwischen lauter Bloecken
-    // steht - und genau dieses eine Byte hat beim ersten Versuch alles
-    // Nachfolgende um eine Stelle verschoben.
-    STEP("Anim-UV-Anzahl", skipN(1, 1));
-    STEP("TEX-Marke", skipN(1, 4));
-    STEP("Texturinfos", i32(n)); merk(m_texinfos, n); STEP("Texturinfos", skipN(n, SZ_TEXINFO));
+    STEP("animated textures", i32(n)); STEP("animated textures", skipN(n, 2));
+    // A single byte: nAnimUVRanges at the end of LoadAnimatedTextures. Easy
+    // to miss, because it sits as a ReadChar between whole blocks - and
+    // exactly this one byte shifted everything that follows by one position
+    // on the first attempt.
+    STEP("anim UV count", skipN(1, 1));
+    STEP("TEX marker", skipN(1, 4));
+    STEP("texture infos", i32(n)); mark(m_texinfos, n); STEP("texture infos", skipN(n, SZ_TEXINFO));
 
-    // Angekommen: hier steht die Item-Anzahl.
+    // Arrived: the item count sits here.
     m_itemCountOffset = p;
-    STEP("Item-Anzahl", i32(m_itemCount));
-    STEP("Item-Daten", skipN(m_itemCount, 24));
-    // Der Sound-Block schliesst sich an. Er darf fehlschlagen, ohne dass das
-    // ganze Level als unlesbar gilt - gebraucht wird er nur, wenn Samples
-    // uebernommen werden sollen.
+    STEP("item count", i32(m_itemCount));
+    STEP("item data", skipN(m_itemCount, 24));
+    // The sound block follows. It may fail without the whole level counting
+    // as unreadable - it is only needed when samples are to be taken over.
     findSound();
     return true;
 
@@ -211,9 +209,9 @@ broken:
     {
         char buf[256];
         std::snprintf(buf, sizeof(buf),
-            "Hauptblock laesst sich nicht durchlaufen - gescheitert bei \"%s\" "
-            "an Offset %zu (n=%d, mainOffset=%zu, end=%zu, file=%zu). "
-            "Passt die Datei zum erwarteten TR5-Format?",
+            "cannot walk the main block - failed at \"%s\" "
+            "at offset %zu (n=%d, mainOffset=%zu, end=%zu, file=%zu). "
+            "Does the file match the expected TR5 format?",
             where, p, n, m_mainOffset, m_mainOffset + m_mainSize, m_bytes.size());
         error = buf;
         m_itemCount = 0;
@@ -223,29 +221,29 @@ broken:
 }
 
 //----------------------------------------------------------------------------
-// Aufbau eines Raum-Blobs, aus den Kopf-Offsets abgeleitet:
+// Layout of a room blob, derived from the header offsets:
 //
-//   [0 .. 207]                 tr5_room_header, feste 208 Byte
-//   208 + start_sd             Sektorfeld, numX * numZ * 8 Byte
-//   danach                     uint16 Portalanzahl, dann je 32 Byte Portal
-//   danach                     uint16 Statics-Anzahl
-//   208 + end_portal           Statics-Feld
+//   [0 .. 207]                 tr5_room_header, fixed 208 bytes
+//   208 + start_sd             sector field, numX * numZ * 8 bytes
+//   after                      uint16 portal count, then 32 bytes per portal
+//   after                      uint16 statics count
+//   208 + end_portal           statics field
 //
-// Die Portalliste hat keinen eigenen Offset im Kopf - sie liegt zwischen
-// Sektoren und Statics. Daraus folgt eine Gleichung, die aufgehen MUSS:
+// The portal list has no offset of its own in the header - it lies between
+// sectors and statics. That yields an equation that MUST hold:
 //
-//   208 + end_portal == Sektorende + 2 + Portalanzahl * 32 + 2
+//   208 + end_portal == sector end + 2 + portal count * 32 + 2
 //
-// Das letzte "+ 2" ist die Statics-Anzahl, die end_portal bereits
-// ueberspringt - sie steht zusaetzlich im Kopf bei +50. Ohne dieses eine Feld
-// ging die Rechnung um genau zwei Byte daneben, und zwar in JEDEM Raum; erst
-// an einem echten Blob nachgemessen wurde es sichtbar. An Andrea1 mit allen
-// 242 Raeumen bestaetigt.
+// The last "+ 2" is the statics count, which end_portal already skips - it
+// additionally sits in the header at +50. Without this one field the
+// arithmetic came out exactly two bytes off, and in EVERY room; it only
+// became visible when measured against a real blob. Confirmed on Andrea1
+// with all 242 rooms.
 //
-// Genau die wird hier geprueft. Geht sie nicht auf, ist die Annahme ueber den
-// Aufbau falsch, und dann sollen die Portale lieber leer bleiben als falsch
-// sein - ein erfundener Nachbar wuerde die Suche nach einem abgeschiedenen
-// Raum genau dort in die Irre fuehren, wo sie stimmen muss.
+// That is exactly what is checked here. If it does not hold, the assumption
+// about the layout is wrong, and then the portals should rather stay empty
+// than be wrong - an invented neighbor would mislead the search for a
+// secluded room exactly where it has to be right.
 //----------------------------------------------------------------------------
 void Tr5Level::parseRoom(size_t offset, size_t size, int index)
 {
@@ -297,9 +295,9 @@ void Tr5Level::parseRoom(size_t offset, size_t size, int index)
     for (uint16_t i = 0; i < numPortals; ++i)
         r.portalRooms.push_back(static_cast<int>(u16(sectorsEnd + 2 + static_cast<size_t>(i) * PORTAL)));
 
-    // Erst hier setzen: bis zu diesem Punkt kann der Raum noch als nicht
-    // aufgegangen abgebrochen werden, und ein Offset auf einen unklaren Raum
-    // waere schlimmer als gar keiner.
+    // Only set here: up to this point the room can still be abandoned as
+    // not parsed, and an offset onto an unclear room would be worse than
+    // none.
     r.sectorsOffset = offset + sectorsAt;
     r.headerOffset = offset;
 
@@ -328,29 +326,30 @@ bool Tr5Level::addItem(const Tr5Item& in, std::string& error)
     {
         char buf[192];
         std::snprintf(buf, sizeof(buf),
-            "Level hat bereits %d Items - die Engine laedt hoechstens %d.",
+            "level already has %d items - the engine loads at most %d.",
             m_itemCount, MAX_ITEMS);
         error = buf;
         return false;
     }
 
-    // 24 Byte hinter dem letzten Item einfuegen. Alles danach im Hauptblock
-    // (AI-Infos, Cutscene-Daten) rueckt mit; das ist unkritisch, weil dort
-    // alles sequentiell gelesen wird und niemand absolute Offsets haelt.
+    // Insert 24 bytes behind the last item. Everything after it in the main
+    // block (AI infos, cutscene data) moves along; that is harmless because
+    // everything there is read sequentially and nobody holds absolute
+    // offsets.
     const size_t itemsEnd = m_itemCountOffset + 4 + static_cast<size_t>(m_itemCount) * 24;
-    if (itemsEnd > m_bytes.size()) { error = "Item-Bereich liegt ausserhalb der Datei"; return false; }
+    if (itemsEnd > m_bytes.size()) { error = "item area lies outside the file"; return false; }
 
     m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(itemsEnd), 24, 0);
-    // Hinter den Items liegt der Sound-Block - seine Offsets wandern mit.
+    // Behind the items lies the sound block - its offsets travel along.
     shiftSound(24, itemsEnd);
 
     ++m_itemCount;
     std::memcpy(m_bytes.data() + m_itemCountOffset, &m_itemCount, 4);
 
-    // Der Hauptblock ist um 24 Byte gewachsen. Seine Groesse steht doppelt im
-    // Kopf davor - als size und als compressedSize, die bei einem
-    // unkomprimierten Block gleich sind. Beide muessen mit, sonst liest die
-    // Engine den Block zu kurz und alles Weitere kippt.
+    // The main block has grown by 24 bytes. Its size sits twice in the
+    // header before it - as size and as compressedSize, which are equal for
+    // an uncompressed block. Both must move, or the engine reads the block
+    // short and everything after tips over.
     m_mainSize += 24;
     const int32_t newSize = static_cast<int32_t>(m_mainSize);
     std::memcpy(m_bytes.data() + m_mainOffset - 8, &newSize, 4);
@@ -377,26 +376,26 @@ bool Tr5Level::setItem(int index, const Tr5Item& in)
 
 bool Tr5Level::addAiObject(const Tr5AiObject& in, std::string& error)
 {
-    // Der AI-Block liegt direkt hinter den Items: int32 Anzahl, dann
-    // AIOBJECT-Eintraege zu je 24 Byte (LoadAIInfo, specific/file.cpp:1209).
-    // Einfuegen am Blockende, dieselbe Mechanik wie addItem: alles dahinter
-    // im Hauptblock (Cutscene-Daten, Sound) rueckt mit.
+    // The AI block lies right behind the items: int32 count, then AIOBJECT
+    // entries of 24 bytes each (LoadAIInfo, specific/file.cpp:1209).
+    // Insertion at the block end, the same mechanics as addItem: everything
+    // behind it in the main block (cutscene data, sound) moves along.
     const size_t aiCountAt = m_itemCountOffset + 4 + static_cast<size_t>(m_itemCount) * 24;
-    if (aiCountAt + 4 > m_bytes.size()) { error = "AI-Block liegt ausserhalb der Datei"; return false; }
+    if (aiCountAt + 4 > m_bytes.size()) { error = "AI block lies outside the file"; return false; }
 
     int32_t nAi = 0;
     std::memcpy(&nAi, m_bytes.data() + aiCountAt, 4);
     if (nAi < 0 || aiCountAt + 4 + static_cast<size_t>(nAi) * 24 > m_bytes.size())
-    { error = "AI-Block unplausibel"; return false; }
+    { error = "AI block implausible"; return false; }
 
-    const size_t einfuegenAn = aiCountAt + 4 + static_cast<size_t>(nAi) * 24;
-    m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(einfuegenAn), 24, 0);
-    shiftSound(24, einfuegenAn);
+    const size_t insertAt = aiCountAt + 4 + static_cast<size_t>(nAi) * 24;
+    m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(insertAt), 24, 0);
+    shiftSound(24, insertAt);
 
     ++nAi;
     std::memcpy(m_bytes.data() + aiCountAt, &nAi, 4);
 
-    uint8_t* p = m_bytes.data() + einfuegenAn;
+    uint8_t* p = m_bytes.data() + insertAt;
     std::memcpy(p + 0, &in.objectNumber, 2);
     std::memcpy(p + 2, &in.roomNumber, 2);
     std::memcpy(p + 4, &in.x, 4);
@@ -418,9 +417,9 @@ bool Tr5Level::addAiObject(const Tr5AiObject& in, std::string& error)
 //----------------------------------------------------------------------------
 // Floordata
 //
-// Das Format ist vollstaendig in "Tomb5 Rando vorbereitung\Trigger\Floordata
-// und Trigger.md" hergeleitet, mit Zeilenangaben in die Engine. Hier nur, was
-// zum Mitlesen des Codes noetig ist.
+// The format is fully derived in "Tomb5 Rando vorbereitung\Trigger\Floordata
+// und Trigger.md", with line references into the engine. Here only what is
+// needed to read the code along.
 //----------------------------------------------------------------------------
 namespace
 {
@@ -428,23 +427,24 @@ namespace
     enum { FN_DOOR = 1, FN_TILT = 2, FN_ROOF = 3, FN_TRIGGER = 4,
            FN_LAVA = 5, FN_CLIMB = 6, FN_MONKEY = 19, FN_TRIGTRIGGER = 20 };
 
-    // SWITCH (2), KEY (3) und PICKUP (4) schieben ein Referenzwort vor die
-    // Befehlsliste: das Item, das bedient bzw. aufgenommen werden muss. Alle
-    // drei liest die Engine gleich - game/control.cpp:2251, :2266, :2274, jedes
-    // Mal "value = *(data++) & 0x3FF". Das Wort ist KEIN Befehl.
+    // SWITCH (2), KEY (3) and PICKUP (4) push a reference word in front of
+    // the command list: the item that must be operated resp. picked up. The
+    // engine reads all three the same way - game/control.cpp:2251, :2266,
+    // :2274, each time "value = *(data++) & 0x3FF". The word is NOT a
+    // command.
     bool hasRefWord(int art) { return art == 2 || art == 3 || art == 4; }
 
-    // Zusatzwoerter eines Eintrags, der kein Trigger ist: genau die Faelle, in
-    // denen GetHeight (control.cpp:977ff) ein "data++" macht.
+    // Extra words of an entry that is not a trigger: exactly the cases
+    // where GetHeight (control.cpp:977ff) does a "data++".
     int extraWords(int fn)
     {
         return (fn == FN_DOOR || fn == FN_TILT || fn == FN_ROOF || (fn >= 7 && fn <= 18)) ? 1 : 0;
     }
 
-    // Befehlsart: 4 Bit, nicht 5. Zweimal unabhaengig belegt - "switch
-    // ((trigger & 0x3FFF) >> 10)" in _TestTriggers (control.cpp:2350) und
-    // "(trigger & 0x3C00) != (TO_OBJECT << 10)" in GetHeight (:1025). Bit 15
-    // ist das Endebit, Bit 14 wertet die Engine gar nicht aus.
+    // Command kind: 4 bits, not 5. Assigned twice independently - "switch
+    // ((trigger & 0x3FFF) >> 10)" in _TestTriggers (control.cpp:2350) and
+    // "(trigger & 0x3C00) != (TO_OBJECT << 10)" in GetHeight (:1025). Bit
+    // 15 is the end bit, bit 14 the engine never evaluates.
     int cmdType(uint16_t c) { return (c & 0x3C00) >> 10; }
 }
 
@@ -455,7 +455,7 @@ int Tr5Level::sectorIndex(int room, int sx, int sz) const
     if (r.sectorsOffset == 0) return -1;
     if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors) return -1;
 
-    // Das Sektorfeld ist x-major: x * numZSectors + z.
+    // The sector field is x-major: x * numZSectors + z.
     const size_t at = r.sectorsOffset + (static_cast<size_t>(sx) * r.numZSectors + sz) * 8;
     if (at + 2 > m_bytes.size()) return -1;
     uint16_t v;
@@ -472,7 +472,7 @@ void Tr5Level::setSectorIndex(const Tr5Room& r, int sx, int sz, uint16_t index)
 bool Tr5Level::readChain(int index, std::vector<Tr5FloorEntry>& out) const
 {
     out.clear();
-    if (index <= 0) return index == 0;              // 0 = keine Floordata
+    if (index <= 0) return index == 0;              // 0 = no floordata
 
     auto word = [&](size_t i) {
         uint16_t v;
@@ -496,7 +496,7 @@ bool Tr5Level::readChain(int index, std::vector<Tr5FloorEntry>& out) const
         if (e.function == FN_TRIGGER)
         {
             if (i >= limit) return false;
-            e.words.push_back(word(i++));         // Timer, OneShot, Maske
+            e.words.push_back(word(i++));         // timer, one-shot, mask
 
             bool more = true;
             if (hasRefWord(e.art))
@@ -511,8 +511,8 @@ bool Tr5Level::readChain(int index, std::vector<Tr5FloorEntry>& out) const
                 if (i >= limit) return false;
                 const uint16_t c = word(i++);
                 e.words.push_back(c);
-                const int akt = cmdType(c);
-                if (akt == 1 /*Kamera*/ || akt == 12 /*Flyby*/)
+                const int act = cmdType(c);
+                if (act == 1 /*camera*/ || act == 12 /*flyby*/)
                 {
                     if (i >= limit) return false;
                     e.words.push_back(word(i++));
@@ -537,15 +537,15 @@ bool Tr5Level::readChain(int index, std::vector<Tr5FloorEntry>& out) const
 
 long Tr5Level::musicTriggers(const std::map<int, int>* mapping, std::set<int>* found)
 {
-    // Der Lauf stuetzt sich bewusst auf readChain: die kennt jede
-    // Wortverteilung (Referenzwort der Schalter/Key/Pickup-Arten,
-    // Zusatzwoerter von Kamera und Flyby, extraWords der uebrigen
-    // Funktionen). Die Dateiposition eines Wortes ergibt sich exakt aus
-    // Kettenanfang + aufsummierten Eintragslaengen, weil readChain streng
-    // linear liest.
-    std::set<int> ketten;
-    std::vector<Tr5FloorEntry> eintraege;
-    long zahl = 0;
+    // The walk deliberately leans on readChain: it knows every word
+    // distribution (the reference word of the switch/key/pickup kinds, the
+    // extra words of camera and flyby, the extraWords of the other
+    // functions). The file position of a word follows exactly from chain
+    // start + summed entry lengths, because readChain reads strictly
+    // linearly.
+    std::set<int> chains;
+    std::vector<Tr5FloorEntry> entries;
+    long count = 0;
 
     for (size_t rm = 0; rm < m_rooms.size(); ++rm)
     {
@@ -556,28 +556,28 @@ long Tr5Level::musicTriggers(const std::map<int, int>* mapping, std::set<int>* f
             for (int sz = 0; sz < r.numZSectors; ++sz)
             {
                 const int start = sectorIndex(static_cast<int>(rm), sx, sz);
-                if (start <= 0 || !ketten.insert(start).second) continue;
-                if (!readChain(start, eintraege)) continue;   // unlesbar: Finger weg
+                if (start <= 0 || !chains.insert(start).second) continue;
+                if (!readChain(start, entries)) continue;     // unreadable: hands off
 
                 size_t pos = static_cast<size_t>(start);
-                for (const Tr5FloorEntry& e : eintraege)
+                for (const Tr5FloorEntry& e : entries)
                 {
                     if (e.function == FN_TRIGGER)
                     {
-                        // Aktionsworte beginnen hinter Kopf + Setup (+ Referenzwort).
+                        // The action words begin behind head + setup (+ reference word).
                         size_t k = hasRefWord(e.art) ? 3 : 2;
                         for (; k < e.words.size(); ++k)
                         {
                             const uint16_t c = e.words[k];
-                            const int akt = cmdType(c);
+                            const int act = cmdType(c);
 
-                            if (akt == 1 || akt == 12)      // Kamera/Flyby: Zusatzwort
+                            if (act == 1 || act == 12)      // camera/flyby: extra word
                             {
                                 ++k;
                                 continue;
                             }
 
-                            if (akt != 8)                   // TO_CD
+                            if (act != 8)                   // TO_CD
                                 continue;
 
                             const int track = c & 0x3FF;
@@ -585,7 +585,7 @@ long Tr5Level::musicTriggers(const std::map<int, int>* mapping, std::set<int>* f
                             if (found)
                             {
                                 found->insert(track);
-                                ++zahl;
+                                ++count;
                             }
 
                             if (mapping)
@@ -593,9 +593,9 @@ long Tr5Level::musicTriggers(const std::map<int, int>* mapping, std::set<int>* f
                                 const auto it = mapping->find(track);
                                 if (it != mapping->end() && it->second != track)
                                 {
-                                    const uint16_t neu = static_cast<uint16_t>((c & 0xFC00) | (it->second & 0x3FF));
-                                    std::memcpy(m_bytes.data() + m_floorAt + (pos + k) * 2, &neu, 2);
-                                    ++zahl;
+                                    const uint16_t nw = static_cast<uint16_t>((c & 0xFC00) | (it->second & 0x3FF));
+                                    std::memcpy(m_bytes.data() + m_floorAt + (pos + k) * 2, &nw, 2);
+                                    ++count;
                                 }
                             }
                         }
@@ -607,7 +607,7 @@ long Tr5Level::musicTriggers(const std::map<int, int>* mapping, std::set<int>* f
         }
     }
 
-    return zahl;
+    return count;
 }
 
 int Tr5Level::floorSlope(int room, int sx, int sz, SlopeInfo& si, int& baseY) const
@@ -619,51 +619,53 @@ int Tr5Level::floorSlope(int room, int sx, int sz, SlopeInfo& si, int& baseY) co
     const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
     if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors) return -1;
 
-    // floor-Byte des Sektors: Vorzeichenbyte an +5 des 8-Byte-Eintrags
-    // (FLOOR_INFO in global/types.h: index, fx/box/stopper, pit_room, floor,
-    // sky_room, ceiling). GetHeight beginnt mit genau diesem Wert << 8.
+    // The sector's floor byte: signed byte at +5 of the 8-byte entry
+    // (FLOOR_INFO in global/types.h: index, fx/box/stopper, pit_room,
+    // floor, sky_room, ceiling). GetHeight starts with exactly this value
+    // << 8.
     const size_t at = r.sectorsOffset + (static_cast<size_t>(sx) * r.numZSectors + sz) * 8;
     baseY = static_cast<int8_t>(m_bytes[at + 5]) << 8;
 
     const int idx = sectorIndex(room, sx, sz);
     if (idx < 0) return -1;
-    if (idx == 0) return 0;                         // keine Floordata = eben
+    if (idx == 0) return 0;                         // no floordata = flat
 
     std::vector<Tr5FloorEntry> chain;
-    if (!readChain(idx, chain)) return -1;          // unlesbar: Finger weg
+    if (!readChain(idx, chain)) return -1;          // unreadable: hands off
 
     for (const Tr5FloorEntry& e : chain)
     {
-        const bool boden = (e.function == FN_TILT || e.function == 7 ||
+        const bool isFloor = (e.function == FN_TILT || e.function == 7 ||
                             e.function == 8 || (e.function >= 11 && e.function <= 14));
-        if (!boden) continue;
-        if (e.words.size() < 2) return -1;        // Eintrag ohne Datenwort: kaputt
+        if (!isFloor) continue;
+        if (e.words.size() < 2) return -1;        // entry without a data word: broken
         si.typeWord = e.words[0];
         si.dataWord = e.words[1];
         return 1;
     }
-    return 0;                                       // nur Portale/Trigger/...: eben
+    return 0;                                       // only portals/triggers/...: flat
 }
 
 const char* Tr5Level::canAppendTrigger(const std::vector<Tr5FloorEntry>& chain)
 {
-    // _TestTriggers bekommt von GetHeight einen Zeiger und ueberspringt ab dort
-    // GENAU vier Eintragsarten - Lava, Climb, Monkey, TrigTrigger
-    // (control.cpp:2151-2195) - und liest dann bedingungslos einen Triggerkopf
-    // (:2197). GetHeight setzt den Zeiger auf den ERSTEN Eintrag aus {Trigger,
-    // Climb, Monkey, TrigTrigger} (1014-1053), Lava sogar bedingungslos neu.
+    // _TestTriggers receives a pointer from GetHeight and from there skips
+    // EXACTLY four entry kinds - lava, climb, monkey, TrigTrigger
+    // (control.cpp:2151-2195) - and then unconditionally reads a trigger
+    // head (:2197). GetHeight sets the pointer onto the FIRST entry from
+    // {trigger, climb, monkey, TrigTrigger} (1014-1053), lava even
+    // unconditionally anew.
     //
-    // Steht eines dieser fuenf schon in der Kette, zeigt der Zeiger dorthin -
-    // und alles, was zwischen ihm und unserem angehaengten Trigger liegt, wird
-    // als Triggerkopf fehlgedeutet. Portale und Neigungen allein sind harmlos:
-    // die frisst GetHeight beim Laufen, ohne den Zeiger zu setzen.
+    // If one of these five already sits in the chain, the pointer points
+    // there - and everything between it and our appended trigger is
+    // misread as a trigger head. Portals and slopes alone are harmless:
+    // GetHeight eats them while walking without setting the pointer.
     for (const Tr5FloorEntry& e : chain)
     {
-        if (e.function == FN_TRIGGER)     return "Sektor hat schon einen Trigger";
-        if (e.function == FN_LAVA)        return "Sektor hat einen Lava-Eintrag";
-        if (e.function == FN_CLIMB)       return "Sektor hat einen Climb-Eintrag";
-        if (e.function == FN_MONKEY)      return "Sektor hat einen Monkey-Eintrag";
-        if (e.function == FN_TRIGTRIGGER) return "Sektor hat einen TrigTrigger-Eintrag";
+        if (e.function == FN_TRIGGER)     return "sector already has a trigger";
+        if (e.function == FN_LAVA)        return "sector has a lava entry";
+        if (e.function == FN_CLIMB)       return "sector has a climb entry";
+        if (e.function == FN_MONKEY)      return "sector has a monkey entry";
+        if (e.function == FN_TRIGTRIGGER) return "sector has a TrigTrigger entry";
     }
     return nullptr;
 }
@@ -671,24 +673,24 @@ const char* Tr5Level::canAppendTrigger(const std::vector<Tr5FloorEntry>& chain)
 bool Tr5Level::appendChain(const std::vector<Tr5FloorEntry>& chain, uint16_t& outIndex,
                            std::string& error)
 {
-    if (chain.empty()) { outIndex = 0; return true; }   // Sektor ohne Floordata
+    if (chain.empty()) { outIndex = 0; return true; }   // sector without floordata
 
     std::vector<uint16_t> words;
     for (size_t n = 0; n < chain.size(); ++n)
     {
         std::vector<uint16_t> w = chain[n].words;
-        if (w.empty()) { error = "leerer Floordata-Eintrag"; return false; }
-        w[0] &= 0x7FFF;                              // Endebit erst mal weg
-        if (n + 1 == chain.size()) w[0] |= 0x8000;   // und nur beim letzten setzen
+        if (w.empty()) { error = "empty floordata entry"; return false; }
+        w[0] &= 0x7FFF;                              // end bit off for now
+        if (n + 1 == chain.size()) w[0] |= 0x8000;   // and set only on the last
         words.insert(words.end(), w.begin(), w.end());
     }
 
-    // FLOOR_INFO.index ist ein ushort (global/types.h). Was jenseits von 65535
-    // liegt, kann kein Sektor mehr adressieren.
+    // FLOOR_INFO.index is a ushort (global/types.h). Whatever lies beyond
+    // 65535 no sector can address anymore.
     const size_t newIndex = static_cast<size_t>(m_floorCount);
     if (newIndex + words.size() > 65535)
     {
-        error = "Floordata wuerde 65535 Shorts ueberschreiten - FLOOR_INFO.index ist ushort";
+        error = "floordata would exceed 65535 shorts - FLOOR_INFO.index is ushort";
         return false;
     }
 
@@ -702,35 +704,35 @@ bool Tr5Level::appendChain(const std::vector<Tr5FloorEntry>& chain, uint16_t& ou
     m_floorCount += static_cast<int32_t>(words.size());
     std::memcpy(m_bytes.data() + m_floorCountOffset, &m_floorCount, 4);
 
-    // Der Hauptblock ist gewachsen; seine Groesse steht doppelt davor.
+    // The main block has grown; its size sits twice in front of it.
     m_mainSize += raw.size();
     const int32_t newSize = static_cast<int32_t>(m_mainSize);
     std::memcpy(m_bytes.data() + m_mainOffset - 8, &newSize, 4);
     std::memcpy(m_bytes.data() + m_mainOffset - 4, &newSize, 4);
 
-    // Und das hier ist der Fallstrick: die Items liegen HINTER der Floordata.
-    // Wer den Block wachsen laesst, ohne diesen Offset nachzuziehen, schreibt
-    // beim naechsten setItem/addItem mitten in fremde Daten. Die Sektorfelder
-    // der Raeume liegen davor und bleiben, wo sie sind.
+    // And here is the pitfall: the items lie BEHIND the floordata. Whoever
+    // grows the block without adjusting this offset writes into foreign
+    // data on the next setItem/addItem. The rooms' sector fields lie before
+    // it and stay where they are.
     m_itemCountOffset += raw.size();
-    shiftSound(raw.size(), at);      // der Sound-Block liegt noch weiter hinten
+    shiftSound(raw.size(), at);      // the sound block lies even further back
 
-    // Und die BLOCKKARTE gleich mit. Mesh-, Anim-, Frame- und Objektbloecke
-    // liegen im Hauptblock ebenfalls hinter der Floordata; ohne diese
-    // Korrektur zeigen sie nach dem ersten angehaengten Trigger daneben.
-    // Lange unbemerkt geblieben, weil niemand nach einem Floordata-Anhang
-    // noch in diese Bloecke gelesen hat - erst die Anim-Pruefung tat es und
-    // meldete prompt, dass Laras Animationen "fehlen" (#53).
-    auto blockNachziehen = [&](Block& b) {
+    // And the BLOCK MAP along with it. Mesh, anim, frame and object blocks
+    // also lie behind the floordata inside the main block; without this
+    // correction they point off after the first appended trigger. It went
+    // unnoticed for a long time, because nobody read these blocks after a
+    // floordata append - only the anim check did, and promptly reported
+    // that Lara's animations were "missing" (#53).
+    auto adjustBlock = [&](Block& b) {
         if (b.countAt >= at) b.countAt += raw.size();
         if (b.dataAt  >= at) b.dataAt  += raw.size();
     };
-    blockNachziehen(m_meshData);  blockNachziehen(m_meshPtrs);
-    blockNachziehen(m_anims);     blockNachziehen(m_changes);
-    blockNachziehen(m_ranges);    blockNachziehen(m_commands);
-    blockNachziehen(m_bones);     blockNachziehen(m_frames);
-    blockNachziehen(m_objects);   blockNachziehen(m_sprites);
-    blockNachziehen(m_texinfos);
+    adjustBlock(m_meshData);  adjustBlock(m_meshPtrs);
+    adjustBlock(m_anims);     adjustBlock(m_changes);
+    adjustBlock(m_ranges);    adjustBlock(m_commands);
+    adjustBlock(m_bones);     adjustBlock(m_frames);
+    adjustBlock(m_objects);   adjustBlock(m_sprites);
+    adjustBlock(m_texinfos);
 
     outIndex = static_cast<uint16_t>(newIndex);
     return true;
@@ -742,26 +744,26 @@ bool Tr5Level::moveTrigger(int fromRoom, int fromSx, int fromSz,
     char buf[256];
 
     if (fromRoom == toRoom && fromSx == toSx && fromSz == toSz)
-    { error = "Quelle und Ziel sind derselbe Sektor"; return false; }
+    { error = "source and target are the same sector"; return false; }
 
     const int fromIdx = sectorIndex(fromRoom, fromSx, fromSz);
     const int toIdx = sectorIndex(toRoom, toSx, toSz);
-    if (fromIdx < 0) { error = "Quellsektor gibt es nicht"; return false; }
-    if (toIdx < 0) { error = "Zielsektor gibt es nicht"; return false; }
+    if (fromIdx < 0) { error = "source sector does not exist"; return false; }
+    if (toIdx < 0) { error = "target sector does not exist"; return false; }
 
     std::vector<Tr5FloorEntry> from, to;
-    if (!readChain(fromIdx, from)) { error = "Quellkette laeuft aus dem Block heraus"; return false; }
-    if (!readChain(toIdx, to)) { error = "Zielkette laeuft aus dem Block heraus"; return false; }
+    if (!readChain(fromIdx, from)) { error = "source chain runs out of the block"; return false; }
+    if (!readChain(toIdx, to)) { error = "target chain runs out of the block"; return false; }
 
-    // Genau einen Triggereintrag erwarten. Zwei waeren mehrdeutig, keiner ein
-    // Bedienfehler - beides lieber abbrechen als raten.
+    // Expect exactly one trigger entry. Two would be ambiguous, none a
+    // usage error - rather abort both than guess.
     size_t found = 0, at = 0;
     for (size_t k = 0; k < from.size(); ++k)
         if (from[k].function == FN_TRIGGER) { ++found; at = k; }
     if (found != 1)
     {
         std::snprintf(buf, sizeof(buf),
-            "Quellsektor %d,%d,%d hat %zu Triggereintraege, erwartet genau einen",
+            "source sector %d,%d,%d has %zu trigger entries, expected exactly one",
             fromRoom, fromSx, fromSz, found);
         error = buf;
         return false;
@@ -769,7 +771,7 @@ bool Tr5Level::moveTrigger(int fromRoom, int fromSx, int fromSz,
 
     if (const char* why = canAppendTrigger(to))
     {
-        std::snprintf(buf, sizeof(buf), "Zielsektor %d,%d,%d ungeeignet: %s",
+        std::snprintf(buf, sizeof(buf), "target sector %d,%d,%d unsuitable: %s",
                       toRoom, toSx, toSz, why);
         error = buf;
         return false;
@@ -779,9 +781,9 @@ bool Tr5Level::moveTrigger(int fromRoom, int fromSx, int fromSz,
     from.erase(from.begin() + static_cast<ptrdiff_t>(at));
     to.push_back(trig);
 
-    // Reihenfolge mit Absicht: erst beide Ketten anhaengen, dann beide Sektoren
-    // umhaengen. Sonst zeigte ein Sektor zwischenzeitlich auf eine Kette, die
-    // noch nicht vollstaendig geschrieben ist.
+    // Order with intent: first append both chains, then repoint both
+    // sectors. Otherwise a sector would momentarily point at a chain that
+    // is not yet fully written.
     uint16_t newFrom = 0, newTo = 0;
     if (!appendChain(from, newFrom, error)) return false;
     if (!appendChain(to, newTo, error)) return false;
@@ -797,26 +799,26 @@ bool Tr5Level::copyTrigger(int fromRoom, int fromSx, int fromSz,
     char buf[256];
 
     if (fromRoom == toRoom && fromSx == toSx && fromSz == toSz)
-    { error = "Quelle und Ziel sind derselbe Sektor"; return false; }
+    { error = "source and target are the same sector"; return false; }
 
     const int fromIdx = sectorIndex(fromRoom, fromSx, fromSz);
     const int toIdx = sectorIndex(toRoom, toSx, toSz);
-    if (fromIdx < 0) { error = "Quellsektor gibt es nicht"; return false; }
-    if (toIdx < 0) { error = "Zielsektor gibt es nicht"; return false; }
+    if (fromIdx < 0) { error = "source sector does not exist"; return false; }
+    if (toIdx < 0) { error = "target sector does not exist"; return false; }
 
     std::vector<Tr5FloorEntry> from, to;
-    if (!readChain(fromIdx, from)) { error = "Quellkette laeuft aus dem Block heraus"; return false; }
-    if (!readChain(toIdx, to)) { error = "Zielkette laeuft aus dem Block heraus"; return false; }
+    if (!readChain(fromIdx, from)) { error = "source chain runs out of the block"; return false; }
+    if (!readChain(toIdx, to)) { error = "target chain runs out of the block"; return false; }
 
-    // Wie bei moveTrigger: genau ein Triggereintrag. Zwei waeren mehrdeutig,
-    // keiner ein Bedienfehler.
+    // As with moveTrigger: exactly one trigger entry. Two would be
+    // ambiguous, none a usage error.
     size_t found = 0, at = 0;
     for (size_t k = 0; k < from.size(); ++k)
         if (from[k].function == FN_TRIGGER) { ++found; at = k; }
     if (found != 1)
     {
         std::snprintf(buf, sizeof(buf),
-            "Quellsektor %d,%d,%d hat %zu Triggereintraege, erwartet genau einen",
+            "source sector %d,%d,%d has %zu trigger entries, expected exactly one",
             fromRoom, fromSx, fromSz, found);
         error = buf;
         return false;
@@ -824,14 +826,14 @@ bool Tr5Level::copyTrigger(int fromRoom, int fromSx, int fromSz,
 
     if (const char* why = canAppendTrigger(to))
     {
-        std::snprintf(buf, sizeof(buf), "Zielsektor %d,%d,%d ungeeignet: %s",
+        std::snprintf(buf, sizeof(buf), "target sector %d,%d,%d unsuitable: %s",
                       toRoom, toSx, toSz, why);
         error = buf;
         return false;
     }
 
-    // Nur die Zielkette waechst. Die Quelle bleibt Wort fuer Wort, wie sie
-    // war - das ist der ganze Unterschied zu moveTrigger.
+    // Only the target chain grows. The source stays word for word as it
+    // was - that is the whole difference from moveTrigger.
     to.push_back(from[at]);
 
     uint16_t newTo = 0;
@@ -847,22 +849,22 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int art, int timer, bool one
 {
     char buf[256];
 
-    if (cmds.empty()) { error = "Trigger ohne Befehle waere wirkungslos"; return false; }
+    if (cmds.empty()) { error = "a trigger without commands would be pointless"; return false; }
 
     const int idx = sectorIndex(room, sx, sz);
     if (idx < 0)
     {
-        std::snprintf(buf, sizeof(buf), "Sektor %d,%d,%d gibt es nicht", room, sx, sz);
+        std::snprintf(buf, sizeof(buf), "sector %d,%d,%d does not exist", room, sx, sz);
         error = buf;
         return false;
     }
 
     std::vector<Tr5FloorEntry> chain;
-    if (!readChain(idx, chain)) { error = "Kette laeuft aus dem Block heraus"; return false; }
+    if (!readChain(idx, chain)) { error = "chain runs out of the block"; return false; }
 
     if (const char* why = canAppendTrigger(chain))
     {
-        std::snprintf(buf, sizeof(buf), "Sektor %d,%d,%d ungeeignet: %s", room, sx, sz, why);
+        std::snprintf(buf, sizeof(buf), "sector %d,%d,%d unsuitable: %s", room, sx, sz, why);
         error = buf;
         return false;
     }
@@ -870,211 +872,210 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int art, int timer, bool one
     Tr5FloorEntry e;
     e.function = FN_TRIGGER;
     e.art = art;
-    // Wort 0: Funktion in Bit 0-4, Art in Bit 8-13. Bit 15 vergibt baueKette.
+    // Word 0: function in bits 0-4, kind in bits 8-13. Bit 15 is assigned
+    // by the chain builder.
     e.words.push_back(static_cast<uint16_t>((art << 8) | FN_TRIGGER));
-    // Wort 1: Timer, OneShot, Codebits.
+    // Word 1: timer, one-shot, code bits.
     e.words.push_back(static_cast<uint16_t>((timer & 0xFF) |
                                               (oneShot ? 0x100 : 0) |
                                               ((mask & 0x1F) << 9)));
 
-    // SWITCH, KEY und PICKUP schieben ein Referenzwort vor die Befehlsliste:
-    // das Item, das bedient bzw. aufgenommen werden muss. Die Engine liest es
-    // dreimal gleich (control.cpp:2251/2266/2274, "value = *(data++) & 0x3FF")
-    // und wertet es NICHT als Befehl.
+    // SWITCH, KEY and PICKUP push a reference word in front of the command
+    // list: the item that must be operated resp. picked up. The engine
+    // reads it three times the same way (control.cpp:2251/2266/2274,
+    // "value = *(data++) & 0x3FF") and does NOT treat it as a command.
     //
-    // Frueher stand hier eine Absage - so ein Trigger ist eben keiner, den man
-    // frei hinstellt, sondern einer, der an ein vorhandenes Objekt gebunden
-    // ist. Mit den Secret-Listen (#53) gibt es diesen Fall jetzt: der Nutzer
-    // setzt ein Schluesselloch und dazu den Key-Trigger, der es mit einer Tuer
-    // verbindet. Wer refItem mitgibt, sagt damit ausdruecklich, an welches
-    // Objekt der Trigger gebunden ist.
+    // A refusal used to stand here - such a trigger is not one you place
+    // freely but one bound to an existing object. With the secret lists
+    // (#53) that case now exists: the user places a keyhole plus the key
+    // trigger that connects it to a door. Whoever passes refItem thereby
+    // says explicitly which object the trigger is bound to.
     if (hasRefWord(art))
     {
         if (refItem < 0)
         {
-            error = "Triggerart braucht ein Referenzwort (refItem) - so nicht anlegbar";
+            error = "this trigger kind needs a reference word (refItem) - cannot be created like this";
             return false;
         }
         e.words.push_back(static_cast<uint16_t>(refItem & 0x3FF));
     }
     else if (refItem >= 0)
     {
-        error = "Diese Triggerart kennt kein Referenzwort - refItem waere wirkungslos";
+        error = "this trigger kind knows no reference word - refItem would be pointless";
         return false;
     }
 
     for (size_t i = 0; i < cmds.size(); ++i)
     {
         uint16_t c = static_cast<uint16_t>(((cmds[i].type & 0xF) << 10) | (cmds[i].param & 0x3FF));
-        if (i + 1 == cmds.size()) c |= 0x8000;       // Endebit auf den letzten
+        if (i + 1 == cmds.size()) c |= 0x8000;       // end bit on the last
         e.words.push_back(c);
 
         if (cmds[i].type == 1 || cmds[i].type == 12)
         {
-            error = "Kamera- und Flyby-Befehle brauchen ein Zusatzwort - hier nicht vorgesehen";
+            error = "camera and flyby commands need an extra word - not provided for here";
             return false;
         }
     }
 
     chain.push_back(e);
 
-    uint16_t neu = 0;
-    if (!appendChain(chain, neu, error)) return false;
-    setSectorIndex(m_rooms[static_cast<size_t>(room)], sx, sz, neu);
+    uint16_t fresh = 0;
+    if (!appendChain(chain, fresh, error)) return false;
+    setSectorIndex(m_rooms[static_cast<size_t>(room)], sx, sz, fresh);
     return true;
 }
 
 //----------------------------------------------------------------------------
-// Einen Wandsektor zum Portal machen (#53, andy3-Doppeltuer).
+// Turn a wall sector into a portal (#53, the andy3 double door).
 //
-// Was ein Portalsektor ist, wurde mit SektorPruef an den funktionierenden
-// Nachbarn in andy3 nachgemessen (Raum 34 Spalte x0, Raum 36 Spalte x4):
+// What a portal sector is was measured with SektorPruef on the working
+// neighbors in andy3 (room 34 column x0, room 36 column x4):
 //
-//   - Boden/Decke tragen die Values des UEBERLAPPTEN begehbaren Sektors des
-//     Zielraums. Die Portalspalten zweier Raeume liegen naemlich uebereinander:
-//     34(0,z) deckt dieselbe Weltflaeche wie 36(3,z). Von dort kommen auch
-//     pit_room und sky_room.
-//   - Das Boxwort ist bei allen Portalsektoren fx=6, box=2047 (keine Box,
-//     0x7FF6) - Portale gehoeren keiner KI-Box.
-//   - Die Kette endet mit DOOR -> Zielraum; Neigungen davor bleiben
+//   - Floor/ceiling carry the values of the OVERLAPPED walkable sector of
+//     the target room. The portal columns of two rooms lie on top of each
+//     other: 34(0,z) covers the same world area as 36(3,z). pit_room and
+//     sky_room come from there too.
+//   - The box word is fx=6, box=2047 on all portal sectors (no box,
+//     0x7FF6) - portals belong to no AI box.
+//   - The chain ends with DOOR -> target room; slopes before it stay
 //     (36(4,4) vanilla: [TILT][SPLIT4][DOOR]).
 //
-// Das SICHTFENSTER (32-Byte-Portaleintrag der Raumliste) wird hier NICHT
-// angelegt - es muss schon existieren. Bei andy3 hat Core beide Fenster
-// fertig eingebaut und nur die Sektoren versiegelt; genau dieser Fall wird
-// geprueft, und sein Fehlen ist ein harter Fehler statt eines schwarzen
-// Lochs im Bild.
+// The VIEW WINDOW (the room list's 32-byte portal entry) is NOT created
+// here - it must already exist. In andy3, Core built both windows in
+// completely and only sealed the sectors; exactly that case is checked, and
+// its absence is a hard error instead of a black hole in the picture.
 //----------------------------------------------------------------------------
 bool Tr5Level::makePortal(int room, int sx, int sz, int targetRoom, std::string& error)
 {
     if (room < 0 || room >= static_cast<int>(m_rooms.size()))
-    { error = "Raum " + std::to_string(room) + " gibt es nicht"; return false; }
+    { error = "room " + std::to_string(room) + " does not exist"; return false; }
     if (targetRoom < 0 || targetRoom >= static_cast<int>(m_rooms.size()))
-    { error = "Zielraum " + std::to_string(targetRoom) + " gibt es nicht"; return false; }
+    { error = "target room " + std::to_string(targetRoom) + " does not exist"; return false; }
 
     const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
     const Tr5Room& z = m_rooms[static_cast<size_t>(targetRoom)];
     if (!r.sectorsOffset || !z.sectorsOffset)
-    { error = "Sektorfeld nicht aufgegangen"; return false; }
+    { error = "sector field did not parse"; return false; }
     if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors)
-    { error = "Sektor ausserhalb des Raums"; return false; }
+    { error = "sector outside the room"; return false; }
 
-    // Sichtfenster-Vorbedingung: der Zielraum muss in der Portalliste stehen.
-    bool fenster = false;
-    for (int p : r.portalRooms) if (p == targetRoom) { fenster = true; break; }
-    if (!fenster)
+    // View window precondition: the target room must be in the portal list.
+    bool window = false;
+    for (int p : r.portalRooms) if (p == targetRoom) { window = true; break; }
+    if (!window)
     {
-        error = "Raum " + std::to_string(room) + " hat kein Sichtfenster nach " +
-                std::to_string(targetRoom) + " - das 32-Byte-Portal fehlt, ohne es "
-                "waere die Oeffnung ein schwarzes Loch";
+        error = "room " + std::to_string(room) + " has no view window to " +
+                std::to_string(targetRoom) + " - the 32-byte portal is missing, without it "
+                "the opening would be a black hole";
         return false;
     }
 
-    // Ueberlappten Sektor des Zielraums finden: gleiche Weltflaeche.
-    const int weltX = r.originX + sx * 1024;
-    const int weltZ = r.originZ + sz * 1024;
-    const int osx = (weltX - z.originX) / 1024;
-    const int osz = (weltZ - z.originZ) / 1024;
+    // Find the overlapped sector of the target room: same world area.
+    const int worldX = r.originX + sx * 1024;
+    const int worldZ = r.originZ + sz * 1024;
+    const int osx = (worldX - z.originX) / 1024;
+    const int osz = (worldZ - z.originZ) / 1024;
     if (osx < 0 || osx >= z.numXSectors || osz < 0 || osz >= z.numZSectors)
-    { error = "Zielraum ueberlappt den Sektor nicht"; return false; }
+    { error = "target room does not overlap the sector"; return false; }
 
-    const size_t eigenAt   = r.sectorsOffset + (static_cast<size_t>(sx) * r.numZSectors + sz) * 8;
-    const size_t druebenAt = z.sectorsOffset + (static_cast<size_t>(osx) * z.numZSectors + osz) * 8;
-    if (eigenAt + 8 > m_bytes.size() || druebenAt + 8 > m_bytes.size())
-    { error = "Sektor liegt ausserhalb der Datei"; return false; }
+    const size_t ownAt    = r.sectorsOffset + (static_cast<size_t>(sx) * r.numZSectors + sz) * 8;
+    const size_t acrossAt = z.sectorsOffset + (static_cast<size_t>(osx) * z.numZSectors + osz) * 8;
+    if (ownAt + 8 > m_bytes.size() || acrossAt + 8 > m_bytes.size())
+    { error = "sector lies outside the file"; return false; }
 
-    // Der ueberlappte Sektor muss walkable sein - eine Wand als Vorlage
-    // hiesse, das Portal fuehrte ins Massiv.
-    if (static_cast<int8_t>(m_bytes[druebenAt + 5]) == -127)
-    { error = "der ueberlappte Sektor im Zielraum ist selbst eine Wand"; return false; }
+    // The overlapped sector must be walkable - a wall as template would
+    // mean the portal leads into the massif.
+    if (static_cast<int8_t>(m_bytes[acrossAt + 5]) == -127)
+    { error = "the overlapped sector in the target room is itself a wall"; return false; }
 
-    // Bestehende Kette read; Geometrie (TILT/ROOF/SPLITs/NOCOLs) bleibt.
-    uint16_t alt;
-    std::memcpy(&alt, m_bytes.data() + eigenAt, 2);
-    std::vector<Tr5FloorEntry> kette;
-    if (alt && !readChain(alt, kette))
-    { error = "Floordata-Kette nicht lesbar"; return false; }
+    // Read the existing chain; geometry (TILT/ROOF/SPLITs/NOCOLs) stays.
+    uint16_t old;
+    std::memcpy(&old, m_bytes.data() + ownAt, 2);
+    std::vector<Tr5FloorEntry> chain;
+    if (old && !readChain(old, chain))
+    { error = "floordata chain not readable"; return false; }
 
-    std::vector<Tr5FloorEntry> neu;
-    for (const Tr5FloorEntry& e : kette)
+    std::vector<Tr5FloorEntry> fresh;
+    for (const Tr5FloorEntry& e : chain)
     {
-        if (e.function == 1)                              // schon ein Portal?
+        if (e.function == 1)                              // already a portal?
         {
             if (e.words.size() >= 2 && e.words[1] == static_cast<uint16_t>(targetRoom))
-                return true;                              // genau dieses: fertig
-            error = "Sektor hat schon ein Portal in einen anderen Raum";
+                return true;                              // exactly this one: done
+            error = "sector already has a portal into another room";
             return false;
         }
         if (e.function == 2 || e.function == 3 ||
             (e.function >= 7 && e.function <= 18))
-            neu.push_back(e);
-        // alles andere (Trigger, Climb, ...) hat auf einem Portalsektor
-        // nichts verloren und faellt weg - vanilla tragen sie so etwas nie.
+            fresh.push_back(e);
+        // everything else (trigger, climb, ...) has no business on a portal
+        // sector and drops away - vanilla never carries such things there.
     }
 
-    Tr5FloorEntry tuer;
-    tuer.function = 1;
-    tuer.words.push_back(0x0001);
-    tuer.words.push_back(static_cast<uint16_t>(targetRoom));
-    neu.push_back(tuer);
+    Tr5FloorEntry door;
+    door.function = 1;
+    door.words.push_back(0x0001);
+    door.words.push_back(static_cast<uint16_t>(targetRoom));
+    fresh.push_back(door);
 
     uint16_t idx = 0;
-    if (!appendChain(neu, idx, error)) return false;
+    if (!appendChain(fresh, idx, error)) return false;
     setSectorIndex(r, sx, sz, idx);
 
-    // Boxwort: fx=6, box=2047 (keine), stopper=0 - wie alle Portalsektoren.
-    const uint16_t boxwort = 0x7FF6;
-    std::memcpy(m_bytes.data() + eigenAt + 2, &boxwort, 2);
+    // Box word: fx=6, box=2047 (none), stopper=0 - like all portal sectors.
+    const uint16_t boxWord = 0x7FF6;
+    std::memcpy(m_bytes.data() + ownAt + 2, &boxWord, 2);
 
-    // pit/floor/sky/ceiling vom ueberlappten Sektor.
-    std::memcpy(m_bytes.data() + eigenAt + 4, m_bytes.data() + druebenAt + 4, 4);
+    // pit/floor/sky/ceiling from the overlapped sector.
+    std::memcpy(m_bytes.data() + ownAt + 4, m_bytes.data() + acrossAt + 4, 4);
     return true;
 }
 
 //----------------------------------------------------------------------------
-// Einen Sektor kletterbar machen (#53, Make_Climb).
+// Make a sector climbable (#53, Make_Climb).
 //
-// Ein CLIMB-Eintrag ist EIN Wort: Funktion 6 in Bit 0-4, die kletterbaren
-// Wandseiten in Bit 8-11. Die Engine prueft in _TestTriggers
-// (control.cpp:2189): quad = (yRot + 0x2000) / 0x4000, Bit = 1 << (quad+8) -
-// 0 Grad -> 0x100, 90 -> 0x200, 180 -> 0x400, 270 -> 0x800. Der Winkel ist
-// Laras BLICKrichtung auf die Wand, dieselbe Konvention wie bei den
-// Wandgriffen.
+// A CLIMB entry is ONE word: function 6 in bits 0-4, the climbable wall
+// sides in bits 8-11. The engine checks in _TestTriggers
+// (control.cpp:2189): quad = (yRot + 0x2000) / 0x4000, bit = 1 << (quad+8)
+// - 0 degrees -> 0x100, 90 -> 0x200, 180 -> 0x400, 270 -> 0x800. The angle
+// is Lara's VIEWING direction onto the wall, the same convention as with
+// the wall grabs.
 //
-// Die KETTENORDNUNG ist Vorschrift, nicht Geschmack: _TestTriggers liest ab
-// trigger_index der Reihe nach [LAVA] -> [CLIMB] -> Rest. Ein CLIMB hinter
-// dem Trigger wuerde als Triggerbefehl fehlgedeutet, einer vor der LAVA
-// liesse die LAVA ungelesen. Deshalb wird die Kette neu zusammengesetzt:
-// Geometrie, dann LAVA, dann CLIMB, dann alles Uebrige in alter Folge.
+// The CHAIN ORDER is a rule, not taste: _TestTriggers reads from
+// trigger_index in order [LAVA] -> [CLIMB] -> rest. A CLIMB behind the
+// trigger would be misread as a trigger command, one before the LAVA would
+// leave the LAVA unread. Hence the chain is reassembled: geometry, then
+// LAVA, then CLIMB, then everything else in the old order.
 //
-// Wiederholbar: vorhandene CLIMB-Bits werden ge-ODER-t, ein zweiter Aufruf
-// mit denselben Bits aendert nichts.
+// Repeatable: existing CLIMB bits are ORed, a second call with the same
+// bits changes nothing.
 //----------------------------------------------------------------------------
 bool Tr5Level::makeClimb(int room, int sx, int sz, int dirBits, std::string& error)
 {
     if (room < 0 || room >= static_cast<int>(m_rooms.size()))
-    { error = "Raum " + std::to_string(room) + " gibt es nicht"; return false; }
+    { error = "room " + std::to_string(room) + " does not exist"; return false; }
     const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
-    if (!r.sectorsOffset) { error = "Sektorfeld nicht aufgegangen"; return false; }
+    if (!r.sectorsOffset) { error = "sector field did not parse"; return false; }
     if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors)
-    { error = "Sektor ausserhalb des Raums"; return false; }
+    { error = "sector outside the room"; return false; }
     if ((dirBits & ~0x0F00) || !(dirBits & 0x0F00))
-    { error = "Kletterbits muessen in 0x100..0x800 liegen"; return false; }
+    { error = "climb bits must lie in 0x100..0x800"; return false; }
 
     const size_t at = r.sectorsOffset + (static_cast<size_t>(sx) * r.numZSectors + sz) * 8;
-    uint16_t alt;
-    std::memcpy(&alt, m_bytes.data() + at, 2);
+    uint16_t old;
+    std::memcpy(&old, m_bytes.data() + at, 2);
 
-    std::vector<Tr5FloorEntry> kette;
-    if (alt && !readChain(alt, kette))
-    { error = "Floordata-Kette nicht lesbar"; return false; }
+    std::vector<Tr5FloorEntry> chain;
+    if (old && !readChain(old, chain))
+    { error = "floordata chain not readable"; return false; }
 
     std::vector<Tr5FloorEntry> geo, lava, rest;
     Tr5FloorEntry* climb = nullptr;
-    Tr5FloorEntry climbAlt;
-    for (Tr5FloorEntry& e : kette)
+    Tr5FloorEntry climbOld;
+    for (Tr5FloorEntry& e : chain)
     {
-        if (e.function == 6)      { climbAlt = e; climb = &climbAlt; }
+        if (e.function == 6)      { climbOld = e; climb = &climbOld; }
         else if (e.function == 5) lava.push_back(e);
         else if (e.function == 1 || e.function == 2 || e.function == 3 ||
                  (e.function >= 7 && e.function <= 18))
@@ -1086,77 +1087,76 @@ bool Tr5Level::makeClimb(int room, int sx, int sz, int dirBits, std::string& err
     if (climb)
     {
         if ((climb->words[0] & 0x0F00 & dirBits) == static_cast<uint16_t>(dirBits))
-            return true;                              // Bits stehen schon
+            return true;                              // bits already set
         climb->words[0] |= static_cast<uint16_t>(dirBits);
     }
     else
     {
-        climbAlt = Tr5FloorEntry();
-        climbAlt.function = 6;
-        climbAlt.words.push_back(static_cast<uint16_t>(0x0006 | dirBits));
-        climb = &climbAlt;
+        climbOld = Tr5FloorEntry();
+        climbOld.function = 6;
+        climbOld.words.push_back(static_cast<uint16_t>(0x0006 | dirBits));
+        climb = &climbOld;
     }
 
-    std::vector<Tr5FloorEntry> neu;
-    for (const Tr5FloorEntry& e : geo)  neu.push_back(e);
-    for (const Tr5FloorEntry& e : lava) neu.push_back(e);
-    neu.push_back(*climb);
-    for (const Tr5FloorEntry& e : rest) neu.push_back(e);
+    std::vector<Tr5FloorEntry> fresh;
+    for (const Tr5FloorEntry& e : geo)  fresh.push_back(e);
+    for (const Tr5FloorEntry& e : lava) fresh.push_back(e);
+    fresh.push_back(*climb);
+    for (const Tr5FloorEntry& e : rest) fresh.push_back(e);
 
     uint16_t idx = 0;
-    if (!appendChain(neu, idx, error)) return false;
+    if (!appendChain(fresh, idx, error)) return false;
     setSectorIndex(r, sx, sz, idx);
     return true;
 }
 
 //----------------------------------------------------------------------------
-// Das Wasserbit eines Raums setzen oder loeschen (#53, Make_Room_Water /
-// Make_Room_Nowater).
+// Set or clear a room's water bit (#53, Make_Room_Water / Make_Room_Nowater).
 //
-// ROOM_UNDERWATER ist Bit 0 der Raumflags (global/types.h:281), im Raumkopf
-// bei +78. Der Motor haengt 44 Stellen daran: Laras Schwimmzustand, Kamera,
-// Sound, KI-Wege, Feuer. Es umzulegen ist damit ein echter Eingriff und
-// keine Optik - der Raum wird wirklich zum Wasserraum.
+// ROOM_UNDERWATER is bit 0 of the room flags (global/types.h:281), in the
+// room header at +78. 44 engine sites hang off it: Lara's swim state,
+// camera, sound, AI paths, fire. Flipping it is therefore a real
+// intervention and not optics - the room truly becomes a water room.
 //
-// Wiederholbar: steht das Bit schon wie gewuenscht, passiert nichts.
+// Repeatable: if the bit already stands as desired, nothing happens.
 //----------------------------------------------------------------------------
-bool Tr5Level::setRoomWater(int room, bool anAus, std::string& error)
+bool Tr5Level::setRoomWater(int room, bool on, std::string& error)
 {
     if (room < 0 || room >= static_cast<int>(m_rooms.size()))
-    { error = "Raum " + std::to_string(room) + " gibt es nicht"; return false; }
+    { error = "room " + std::to_string(room) + " does not exist"; return false; }
 
     Tr5Room& r = m_rooms[static_cast<size_t>(room)];
-    if (!r.headerOffset) { error = "Raumkopf nicht aufgegangen"; return false; }
+    if (!r.headerOffset) { error = "room header did not parse"; return false; }
 
     constexpr size_t OFS_FLAGS = 78;
     const size_t at = r.headerOffset + OFS_FLAGS;
-    if (at + 2 > m_bytes.size()) { error = "Raumkopf liegt ausserhalb der Datei"; return false; }
+    if (at + 2 > m_bytes.size()) { error = "room header lies outside the file"; return false; }
 
     uint16_t f;
     std::memcpy(&f, m_bytes.data() + at, 2);
-    const uint16_t neu = anAus ? static_cast<uint16_t>(f | 0x0001)
-                               : static_cast<uint16_t>(f & ~0x0001);
-    if (neu == f) return true;                    // steht schon so
+    const uint16_t nw = on ? static_cast<uint16_t>(f | 0x0001)
+                           : static_cast<uint16_t>(f & ~0x0001);
+    if (nw == f) return true;                     // already stands that way
 
-    std::memcpy(m_bytes.data() + at, &neu, 2);
-    r.flags = neu;
+    std::memcpy(m_bytes.data() + at, &nw, 2);
+    r.flags = nw;
     return true;
 }
 
 //----------------------------------------------------------------------------
-// Traegt Laras Animation <animNr> in diesem Level echte Bilddaten?
+// Does Lara's animation <animNr> carry real image data in this level?
 //
-// Cores Stub-Kennzeichen ist die FrameSize null (hohes Byte des Feldes
-// "interpolation", ANIM_STRUCT in global/types.h:645). Der Motor rechnet die
-// Bildadresse als frame_ptr[n * FrameSize] - bei null steht sie fuer immer
-// auf demselben Bild, und abgespielt wird eine eingefrorene Pose.
+// Core's stub marker is a FrameSize of zero (the high byte of the
+// "interpolation" field, ANIM_STRUCT in global/types.h:645). The engine
+// computes the image address as frame_ptr[n * FrameSize] - at zero it stays
+// on the same image forever, and what plays is a frozen pose.
 //
-// Zweiter Fall: die Groesse stimmt, aber zwischen dem eigenen Frame-Zeiger
-// und dem naechstgroesseren liegt weniger Platz, als die Keyframes brauchen.
-// Dann gehoeren die Daten dort einer anderen Animation.
+// Second case: the size is right, but between its own frame pointer and the
+// next larger one there is less space than the keyframes need. Then the
+// data there belongs to another animation.
 //
-// Gefunden ueber ANIM_KEYCARD in joby3 (22 Sekunden erstarrt) und den
-// Schalter in andy3 (falsche, viel zu kurze Bewegung). Siehe LaraAnim.
+// Found via ANIM_KEYCARD in joby3 (22 seconds frozen) and the switch in
+// andy3 (wrong, far too short movement). See LaraAnim.
 //----------------------------------------------------------------------------
 bool Tr5Level::laraAnimUsable(int animNr) const
 {
@@ -1167,39 +1167,39 @@ bool Tr5Level::laraAnimUsable(int animNr) const
     if (a < 0 || a >= m_anims.count) return false;
 
     const size_t o = m_anims.dataAt + static_cast<size_t>(a) * 40;
-    const uint8_t groesse = m_bytes[o + 4 + 1];          // hohes Byte
-    if (!groesse) return false;                          // Stub, Form 1
+    const uint8_t size = m_bytes[o + 4 + 1];             // high byte
+    if (!size) return false;                             // stub, form 1
 
     const uint8_t rate = m_bytes[o + 4];
-    uint16_t von, bis;
-    std::memcpy(&von, m_bytes.data() + o + 24, 2);
-    std::memcpy(&bis, m_bytes.data() + o + 26, 2);
-    // Stub, Form 2: leerer Bildbereich. joby4 traegt seine AIRLOCKSW so -
-    // FrameSize 10, aber Frames 0..0. Ein Spender mit dieser Form waere ein
-    // Tausch von Stub gegen Stub.
-    if (bis <= von) return false;
-    const int keyframes = (rate > 0 && bis >= von) ? ((bis - von) / rate + 1) : 1;
-    const long long gebraucht = static_cast<long long>(keyframes) * groesse * 2;
+    uint16_t from, to;
+    std::memcpy(&from, m_bytes.data() + o + 24, 2);
+    std::memcpy(&to, m_bytes.data() + o + 26, 2);
+    // Stub, form 2: an empty frame range. joby4 carries its AIRLOCKSW like
+    // that - FrameSize 10, but frames 0..0. A donor with this form would be
+    // a swap of stub for stub.
+    if (to <= from) return false;
+    const int keyframes = (rate > 0 && to >= from) ? ((to - from) / rate + 1) : 1;
+    const long long needed = static_cast<long long>(keyframes) * size * 2;
 
-    uint32_t eigen;
-    std::memcpy(&eigen, m_bytes.data() + o, 4);
-    uint32_t naechster = static_cast<uint32_t>(m_frames.count) * 2;
+    uint32_t own;
+    std::memcpy(&own, m_bytes.data() + o, 4);
+    uint32_t next = static_cast<uint32_t>(m_frames.count) * 2;
     for (int32_t i = 0; i < m_anims.count; ++i)
     {
         uint32_t z;
         std::memcpy(&z, m_bytes.data() + m_anims.dataAt + static_cast<size_t>(i) * 40, 4);
-        if (z > eigen && z < naechster) naechster = z;
+        if (z > own && z < next) next = z;
     }
-    return gebraucht <= static_cast<long long>(naechster) - eigen;
+    return needed <= static_cast<long long>(next) - own;
 }
 
 //----------------------------------------------------------------------------
-// Auf welche Anim zeigt Laras Anim <animNr> mit next_animation?
+// Which anim does Lara's anim <animNr> point at with next_animation?
 //
-// Gebraucht, um eine Bewegung als KETTE zu reparieren statt gliedweise: die
-// Kriechrolle laeuft 218 -> 219 -> 220 -> 222, und Core stubbt solche
-// Ketten am Stueck. Liefert -1, wenn es die Anim nicht gibt oder der
-// Nachfolger ausserhalb von Laras Satz liegt.
+// Needed to repair a movement as a CHAIN instead of link by link: the crawl
+// roll runs 218 -> 219 -> 220 -> 222, and Core stubs such chains as a
+// whole. Returns -1 if the anim does not exist or the successor lies
+// outside Lara's set.
 //----------------------------------------------------------------------------
 int Tr5Level::laraAnimNext(int animNr) const
 {
@@ -1209,10 +1209,10 @@ int Tr5Level::laraAnimNext(int animNr) const
     const long long a = static_cast<long long>(mv.animIndex) + animNr;
     if (a < 0 || a >= m_anims.count) return -1;
 
-    uint16_t weiter;
-    std::memcpy(&weiter, m_bytes.data() + m_anims.dataAt + static_cast<size_t>(a) * 40 + 28, 2);
+    uint16_t next;
+    std::memcpy(&next, m_bytes.data() + m_anims.dataAt + static_cast<size_t>(a) * 40 + 28, 2);
 
-    const long long rel = static_cast<long long>(weiter) - mv.animIndex;
+    const long long rel = static_cast<long long>(next) - mv.animIndex;
     if (rel < 0 || static_cast<long long>(mv.animIndex) + rel >= m_anims.count) return -1;
     return static_cast<int>(rel);
 }
@@ -1220,28 +1220,28 @@ int Tr5Level::laraAnimNext(int animNr) const
 //----------------------------------------------------------------------------
 // Sound
 //
-// Aufbau, abgelesen an TOMB5s LoadSamples (specific/file.cpp:1232):
+// Layout, read off TOMB5's LoadSamples (specific/file.cpp:1232):
 //
-//   Im Hauptblock, direkt hinter den Items:
-//     long  nAIObjs;  AIOBJECT aiObjs[nAIObjs];    (24 Byte je Eintrag)
+//   In the main block, right behind the items:
+//     long  nAIObjs;  AIOBJECT aiObjs[nAIObjs];    (24 bytes per entry)
 //     short cinematic;
-//     short sample_lut[450];      Map -> Index ins sample_infos, -1 = fehlt
+//     short sample_lut[450];      map -> index into sample_infos, -1 = missing
 //     long  num_infos;
-//     SAMPLE_INFO sample_infos[num_infos];         (8 Byte: short number,
+//     SAMPLE_INFO sample_infos[num_infos];         (8 bytes: short number,
 //                                                   uchar volume, char radius,
 //                                                   randomness, pitch, short flags)
 //     long  num_samples;
-//     ... danach eine Indextabelle, die die Engine NIE liest ...
+//     ... then an index table the engine NEVER reads ...
 //
-//   Hinter dem Hauptblock, bis Dateiende:
-//     long  num_samples;          dasselbe noch einmal
-//     je Sample: long uncompSize, long compSize, compSize Bytes
+//   Behind the main block, up to the end of the file:
+//     long  num_samples;          the same once more
+//     per sample: long uncompSize, long compSize, compSize bytes
 //
-// Dass num_samples zweimal dasteht, ist kein Lesefehler: LoadSamples holt es
-// erst mit ReadLong() aus dem gepufferten Hauptblock (:1252) und gleich darauf
-// noch einmal per fread() direkt aus der Datei (:1261), womit der zweite Wert
-// den ersten ueberschreibt. Wer nur einen der beiden nachzieht, baut eine
-// Datei, die je nach Leser verschieden aussieht.
+// That num_samples appears twice is no misreading: LoadSamples first gets
+// it with ReadLong() from the buffered main block (:1252) and right after
+// once more via fread() straight from the file (:1261), whereby the second
+// value overwrites the first. Whoever adjusts only one of the two builds a
+// file that looks different depending on the reader.
 //----------------------------------------------------------------------------
 namespace
 {
@@ -1249,8 +1249,9 @@ namespace
     constexpr int SZ_SAMPLE_INFO = 8;
     constexpr int SZ_AIOBJECT = 24;
 
-    // specific/dxsound.cpp schreibt DS_Buffers[num] ohne Bereichspruefung; die
-    // Engine bricht darum ab 257 Samples mit einer Meldung ab (file.cpp:1282).
+    // specific/dxsound.cpp writes DS_Buffers[num] without a range check;
+    // the engine therefore aborts with a message from 257 samples on
+    // (file.cpp:1282).
     constexpr int MAX_SAMPLES_PLAYABLE = 256;
 }
 
@@ -1282,24 +1283,24 @@ bool Tr5Level::findSound()
     if (m_numSamplesAt + 4 > m_bytes.size()) return false;
     std::memcpy(&m_nSamples, m_bytes.data() + m_numSamplesAt, 4);
 
-    // Beide Fassungen muessen dasselbe sagen. Tun sie es nicht, sitzt einer der
-    // Offsets falsch - dann lieber gar nichts anfassen.
-    int32_t imBlock = 0;
-    std::memcpy(&imBlock, m_bytes.data() + m_numSamplesInMainAt, 4);
-    if (imBlock != m_nSamples) return false;
+    // Both copies must say the same. If they do not, one of the offsets is
+    // wrong - then rather touch nothing at all.
+    int32_t inBlock = 0;
+    std::memcpy(&inBlock, m_bytes.data() + m_numSamplesInMainAt, 4);
+    if (inBlock != m_nSamples) return false;
 
     m_soundOk = true;
     return true;
 }
 
-void Tr5Level::shiftSound(size_t bytes, size_t abOffset)
+void Tr5Level::shiftSound(size_t bytes, size_t fromOffset)
 {
     if (!m_soundOk || bytes == 0) return;
-    if (m_lutAt >= abOffset)              m_lutAt += bytes;
-    if (m_numInfosAt >= abOffset)         m_numInfosAt += bytes;
-    if (m_infosAt >= abOffset)            m_infosAt += bytes;
-    if (m_numSamplesInMainAt >= abOffset) m_numSamplesInMainAt += bytes;
-    if (m_numSamplesAt >= abOffset)       m_numSamplesAt += bytes;
+    if (m_lutAt >= fromOffset)              m_lutAt += bytes;
+    if (m_numInfosAt >= fromOffset)         m_numInfosAt += bytes;
+    if (m_infosAt >= fromOffset)            m_infosAt += bytes;
+    if (m_numSamplesInMainAt >= fromOffset) m_numSamplesInMainAt += bytes;
+    if (m_numSamplesAt >= fromOffset)       m_numSamplesAt += bytes;
 }
 
 int Tr5Level::soundInfoIndex(int map) const
@@ -1314,55 +1315,55 @@ bool Tr5Level::copySoundFrom(const Tr5Level& src, int srcMap, int dstMap, std::s
 {
     char buf[256];
 
-    if (!m_soundOk) { error = "Ziel-Level: Sound-Block nicht deutbar"; return false; }
-    if (!src.m_soundOk) { error = "Quell-Level: Sound-Block nicht deutbar"; return false; }
-    if (dstMap < 0 || dstMap >= SAMPLE_LUT_SIZE) { error = "Ziel-Map ausserhalb 0..449"; return false; }
+    if (!m_soundOk) { error = "target level: sound block not parseable"; return false; }
+    if (!src.m_soundOk) { error = "source level: sound block not parseable"; return false; }
+    if (dstMap < 0 || dstMap >= SAMPLE_LUT_SIZE) { error = "target map outside 0..449"; return false; }
 
-    if (soundInfoIndex(dstMap) >= 0) return true;      // schon da, nichts zu tun
+    if (soundInfoIndex(dstMap) >= 0) return true;      // already there, nothing to do
 
-    const int erste = src.soundInfoIndex(srcMap);
-    if (erste < 0)
+    const int first = src.soundInfoIndex(srcMap);
+    if (first < 0)
     {
-        std::snprintf(buf, sizeof(buf), "Quell-Level hat Map %d nicht", srcMap);
+        std::snprintf(buf, sizeof(buf), "source level does not have map %d", srcMap);
         error = buf;
         return false;
     }
 
-    // Zufallsvarianten: N aufeinanderfolgende SAMPLES, N in Bit 2-5 der
-    // Flags des Infos - die Engine wuerfelt sample = number + Zufall(N)
-    // (game/sound.cpp:280). Es ist also EIN Info mit N Samples, NICHT N
-    // Infos: die alte Lesart hier kopierte die Samples der NACHBAR-Infos
-    // (= fremde Klaenge) als "Varianten" mit - im Ziel wuerfelte die
-    // Engine dann zwischen dem richtigen Klang und fremden, mit den Flags
-    // des richtigen (im Spiel gehoert, #76: TwoGun spielt beim Laufen
-    // zufaellig seinen Schuss statt der Schritte, Gladiator/Roman God
-    // einen High-Pitch-Schrei beim Treffer - alles Mehrvarianten-Sounds).
+    // Random variants: N consecutive SAMPLES, N in bits 2-5 of the info's
+    // flags - the engine rolls sample = number + random(N)
+    // (game/sound.cpp:280). So it is ONE info with N samples, NOT N infos:
+    // the old reading here copied the NEIGHBOR infos' samples (= foreign
+    // sounds) along as "variants" - in the target the engine then rolled
+    // between the right sound and foreign ones, with the right one's flags
+    // (heard in game, #76: TwoGun randomly plays his shot instead of the
+    // footsteps while walking, gladiator/Roman god a high-pitch scream on
+    // being hit - all multi-variant sounds).
     int16_t flags = 0;
-    std::memcpy(&flags, src.m_bytes.data() + src.m_infosAt + static_cast<size_t>(erste) * SZ_SAMPLE_INFO + 6, 2);
-    int varianten = (static_cast<int>(static_cast<uint16_t>(flags)) >> 2) & 0xF;
-    if (varianten <= 0) varianten = 1;
+    std::memcpy(&flags, src.m_bytes.data() + src.m_infosAt + static_cast<size_t>(first) * SZ_SAMPLE_INFO + 6, 2);
+    int variants = (static_cast<int>(static_cast<uint16_t>(flags)) >> 2) & 0xF;
+    if (variants <= 0) variants = 1;
 
-    int16_t nummer = 0;
-    std::memcpy(&nummer, src.m_bytes.data() + src.m_infosAt + static_cast<size_t>(erste) * SZ_SAMPLE_INFO, 2);
-    if (nummer < 0 || nummer + varianten > src.m_nSamples)
-    { error = "Info zeigt auf Samples, die es nicht gibt"; return false; }
+    int16_t number = 0;
+    std::memcpy(&number, src.m_bytes.data() + src.m_infosAt + static_cast<size_t>(first) * SZ_SAMPLE_INFO, 2);
+    if (number < 0 || number + variants > src.m_nSamples)
+    { error = "info points at samples that do not exist"; return false; }
 
-    if (m_nSamples + varianten > MAX_SAMPLES_PLAYABLE)
+    if (m_nSamples + variants > MAX_SAMPLES_PLAYABLE)
     {
         std::snprintf(buf, sizeof(buf),
-            "Level haette %d Samples - die Engine laedt hoechstens %d",
-            m_nSamples + varianten, MAX_SAMPLES_PLAYABLE);
+            "level would have %d samples - the engine loads at most %d",
+            m_nSamples + variants, MAX_SAMPLES_PLAYABLE);
         error = buf;
         return false;
     }
 
-    // Quellsamples nummer..nummer+varianten-1 in einem Durchlauf einsammeln,
-    // bevor irgendetwas geschrieben wird.
+    // Collect the source samples number..number+variants-1 in one pass
+    // before anything is written.
     std::vector<std::vector<uint8_t>> infos;
     std::vector<std::pair<int32_t, std::vector<uint8_t>>> samples;
     {
         size_t q = src.m_numSamplesAt + 4;
-        for (int32_t i = 0; i < src.m_nSamples && static_cast<int>(samples.size()) < varianten; ++i)
+        for (int32_t i = 0; i < src.m_nSamples && static_cast<int>(samples.size()) < variants; ++i)
         {
             if (q + 8 > src.m_bytes.size()) break;
             int32_t uc = 0, cs = 0;
@@ -1370,49 +1371,49 @@ bool Tr5Level::copySoundFrom(const Tr5Level& src, int srcMap, int dstMap, std::s
             std::memcpy(&cs, src.m_bytes.data() + q + 4, 4);
             q += 8;
             if (cs < 0 || q + static_cast<size_t>(cs) > src.m_bytes.size()) break;
-            if (i >= nummer)
+            if (i >= number)
                 samples.push_back({ uc, std::vector<uint8_t>(src.m_bytes.begin() + q,
                                                              src.m_bytes.begin() + q + cs) });
             q += static_cast<size_t>(cs);
         }
-        if (static_cast<int>(samples.size()) != varianten)
-        { error = "Sampledaten der Quelle nicht auffindbar"; return false; }
+        if (static_cast<int>(samples.size()) != variants)
+        { error = "cannot find the source's sample data"; return false; }
     }
 
     {
-        const size_t o = src.m_infosAt + static_cast<size_t>(erste) * SZ_SAMPLE_INFO;
+        const size_t o = src.m_infosAt + static_cast<size_t>(first) * SZ_SAMPLE_INFO;
         std::vector<uint8_t> info(src.m_bytes.begin() + o, src.m_bytes.begin() + o + SZ_SAMPLE_INFO);
-        const int16_t neuNummer = static_cast<int16_t>(m_nSamples);
-        std::memcpy(info.data(), &neuNummer, 2);        // auf den neuen Platz zeigen
+        const int16_t newNumber = static_cast<int16_t>(m_nSamples);
+        std::memcpy(info.data(), &newNumber, 2);        // point at the new slot
         infos.push_back(info);
     }
 
-    // --- Infos einfuegen. Sie liegen IM Hauptblock, der waechst also. -----
-    const size_t einfuegenAn = m_infosAt + static_cast<size_t>(m_nInfos) * SZ_SAMPLE_INFO;
-    std::vector<uint8_t> roh;
-    for (const std::vector<uint8_t>& i : infos) roh.insert(roh.end(), i.begin(), i.end());
-    m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(einfuegenAn), roh.begin(), roh.end());
+    // --- Insert the infos. They lie IN the main block, so it grows. -------
+    const size_t insertAt = m_infosAt + static_cast<size_t>(m_nInfos) * SZ_SAMPLE_INFO;
+    std::vector<uint8_t> raw;
+    for (const std::vector<uint8_t>& i : infos) raw.insert(raw.end(), i.begin(), i.end());
+    m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(insertAt), raw.begin(), raw.end());
 
-    const int16_t neueLut = static_cast<int16_t>(m_nInfos);
-    std::memcpy(m_bytes.data() + m_lutAt + static_cast<size_t>(dstMap) * 2, &neueLut, 2);
+    const int16_t newLut = static_cast<int16_t>(m_nInfos);
+    std::memcpy(m_bytes.data() + m_lutAt + static_cast<size_t>(dstMap) * 2, &newLut, 2);
 
-    m_nInfos += 1;      // EIN Info; die Varianten sind Samples, keine Infos
+    m_nInfos += 1;      // ONE info; the variants are samples, not infos
     std::memcpy(m_bytes.data() + m_numInfosAt, &m_nInfos, 4);
 
-    // Alles hinter der Einfuegestelle ist gewandert.
-    shiftSound(roh.size(), einfuegenAn);
-    if (m_itemCountOffset >= einfuegenAn) m_itemCountOffset += roh.size();
+    // Everything behind the insertion point has moved.
+    shiftSound(raw.size(), insertAt);
+    if (m_itemCountOffset >= insertAt) m_itemCountOffset += raw.size();
 
-    m_mainSize += roh.size();
-    const int32_t neueGroesse = static_cast<int32_t>(m_mainSize);
-    std::memcpy(m_bytes.data() + m_mainOffset - 8, &neueGroesse, 4);
-    std::memcpy(m_bytes.data() + m_mainOffset - 4, &neueGroesse, 4);
+    m_mainSize += raw.size();
+    const int32_t newSize = static_cast<int32_t>(m_mainSize);
+    std::memcpy(m_bytes.data() + m_mainOffset - 8, &newSize, 4);
+    std::memcpy(m_bytes.data() + m_mainOffset - 4, &newSize, 4);
 
-    m_nSamples += varianten;
+    m_nSamples += variants;
     std::memcpy(m_bytes.data() + m_numSamplesInMainAt, &m_nSamples, 4);
     std::memcpy(m_bytes.data() + m_numSamplesAt, &m_nSamples, 4);
 
-    // --- Sampledaten ans Dateiende ---------------------------------------
+    // --- Sample data at the end of the file -------------------------------
     for (const auto& s : samples)
     {
         const int32_t uc = s.first, cs = static_cast<int32_t>(s.second.size());
@@ -1427,9 +1428,9 @@ bool Tr5Level::copySoundFrom(const Tr5Level& src, int srcMap, int dstMap, std::s
 
 bool Tr5Level::reparse(std::string& error)
 {
-    // Nach einem Einfuegen sind ALLE gemerkten Offsets Vergangenheit. Statt
-    // jeden einzeln nachzuziehen - und einen zu vergessen -, wird die Datei
-    // schlicht neu gedeutet. Sie liegt im Speicher, das kostet nichts.
+    // After an insertion ALL remembered offsets are history. Instead of
+    // adjusting each one - and forgetting one - the file is simply
+    // reinterpreted. It sits in memory, that costs nothing.
     if (!readHeader(error)) return false;
     return findItems(error);
 }
@@ -1460,43 +1461,43 @@ bool Tr5Level::adoptAnimData(int dstSlot, int dstOffset, int srcSlot,
 {
     MoveableInfo dst, src;
     if (!moveableInfo(dstSlot, dst) || dst.animIndex < 0)
-    { error = "Zielslot fehlt oder traegt keine Anims"; return false; }
+    { error = "target slot missing or carries no anims"; return false; }
     if (!moveableInfo(srcSlot, src) || src.animIndex < 0)
-    { error = "Quellslot fehlt oder traegt keine Anims"; return false; }
+    { error = "source slot missing or carries no anims"; return false; }
 
     const long long d = static_cast<long long>(dst.animIndex) + dstOffset;
     const long long s = static_cast<long long>(src.animIndex) + srcOffset;
     if (d < 0 || d >= m_anims.count || s < 0 || s >= m_anims.count)
-    { error = "Anim liegt ausserhalb der Tabelle"; return false; }
+    { error = "anim lies outside the table"; return false; }
 
     uint8_t* dr = m_bytes.data() + m_anims.dataAt + static_cast<size_t>(d) * 40;
     const uint8_t* sr = m_bytes.data() + m_anims.dataAt + static_cast<size_t>(s) * 40;
 
-    // Schablonengleichheit der Familiensaetze absichern: beide Anims muessen
-    // denselben Frame-Bereich tragen, sonst passen Keyframe-Zaehlung und
-    // Kommando-Framenummern nicht.
-    uint16_t dVon, dBis, sVon, sBis;
-    std::memcpy(&dVon, dr + 24, 2); std::memcpy(&dBis, dr + 26, 2);
-    std::memcpy(&sVon, sr + 24, 2); std::memcpy(&sBis, sr + 26, 2);
-    if (dVon != sVon || dBis != sBis)
-    { error = "Frame-Bereiche der beiden Anims sind verschieden"; return false; }
+    // Secure the template equality of the family sets: both anims must
+    // carry the same frame range, or keyframe counting and the commands'
+    // frame numbers will not match.
+    uint16_t dFrom, dTo, sFrom, sTo;
+    std::memcpy(&dFrom, dr + 24, 2); std::memcpy(&dTo, dr + 26, 2);
+    std::memcpy(&sFrom, sr + 24, 2); std::memcpy(&sTo, sr + 26, 2);
+    if (dFrom != sFrom || dTo != sTo)
+    { error = "the two anims' frame ranges differ"; return false; }
 
-    std::memcpy(dr, sr, 6);           // Frame-Zeiger, Rate, frame_size
-    std::memcpy(dr + 8, sr + 8, 16);  // Geschwindigkeit/Beschleunigung
-    std::memcpy(dr + 36, sr + 36, 4); // Kommandozahl + -offset (globaler Block)
+    std::memcpy(dr, sr, 6);           // frame pointer, rate, frame_size
+    std::memcpy(dr + 8, sr + 8, 16);  // speed/acceleration
+    std::memcpy(dr + 36, sr + 36, 4); // command count + offset (global block)
     return true;
 }
 
 std::vector<int> Tr5Level::moveableSlots() const
 {
-    std::vector<int> raus;
+    std::vector<int> out;
     for (int32_t i = 0; i < m_objects.count; ++i)
     {
         int32_t slot;
         std::memcpy(&slot, m_bytes.data() + m_objects.dataAt + static_cast<size_t>(i) * 20, 4);
-        raus.push_back(slot);
+        out.push_back(slot);
     }
-    return raus;
+    return out;
 }
 
 int32_t Tr5Level::debugReadBoneLong(long long i) const
@@ -1526,9 +1527,9 @@ bool Tr5Level::debugMeshHeader(int ptrIndex, int16_t out[6]) const
 }
 
 //----------------------------------------------------------------------------
-// LaraType: das Outfit-Byte. Es liegt in den 32 Bytes zwischen den
-// Texturbloecken und dem Hauptblock (LaraType u16, WeatherType u16, Rest
-// Polsterung) - genau der Bereich, den readHeader mit "+ 32" ueberspringt.
+// LaraType: the outfit byte. It lies in the 32 bytes between the texture
+// blocks and the main block (LaraType u16, WeatherType u16, the rest
+// padding) - exactly the area readHeader skips with "+ 32".
 //----------------------------------------------------------------------------
 int Tr5Level::laraType() const
 {
@@ -1547,12 +1548,12 @@ bool Tr5Level::setLaraType(int value)
 }
 
 //----------------------------------------------------------------------------
-// data[2] derselben 32 Bytes: "Sprechkoepfe passen nicht zum Outfit". Die
-// Engine tauscht Laras Kopf in Dialog-Cutscenes gegen LARA_SPEECH_HEAD1-4
-// (deltapak.cpp, handle_lara_chatting) - die tragen das Vanilla-Outfit des
-// Levels. Kann der Outfit-Spender keine eigenen Sprechkoepfe liefern (rich2:
-// die VCI-Level kennen keine Dialog-Cutscenes), laesst die Engine den Tausch
-// bei gesetztem Flag aus. Vanilla steht hier in allen 16 Dateien 0.
+// data[2] of the same 32 bytes: "speech heads do not match the outfit". In
+// dialogue cutscenes the engine swaps Lara's head for LARA_SPEECH_HEAD1-4
+// (deltapak.cpp, handle_lara_chatting) - they carry the level's vanilla
+// outfit. If the outfit donor can supply no speech heads of its own (rich2:
+// the VCI levels know no dialogue cutscenes), the engine skips the swap
+// with the flag set. In vanilla this is 0 in all 16 files.
 //----------------------------------------------------------------------------
 int Tr5Level::foreignTalkHeads() const
 {
@@ -1574,26 +1575,26 @@ bool Tr5Level::readHeader(std::string& error)
 {
     size_t pos = 0;
 
-    if (!readI32(m_bytes, pos, m_version)) { error = "Datei zu kurz fuer den Versionskopf"; return false; }
+    if (!readI32(m_bytes, pos, m_version)) { error = "file too short for the version header"; return false; }
     if (!readI16(m_bytes, pos, m_rtPages) ||
         !readI16(m_bytes, pos, m_otPages) ||
         !readI16(m_bytes, pos, m_btPages))
     {
-        error = "Datei zu kurz fuer die Texturseiten-Angaben";
+        error = "file too short for the texture page counts";
         return false;
     }
 
-    // DREI Texturbloecke, nicht zwei: 32 Bit, 16 Bit und ein Misc-Block
-    // (Schrift und Himmel). An echten Dateien nachgerechnet, Andrea1 etwa:
-    // 17 Seiten * 4 * 0x10000 = 4456448, dann 17 * 2 * 0x10000 = 2228224,
-    // dann 3 * 4 * 0x10000 = 786432. Die Engine liest je nach Anzeigeformat
-    // einen davon und ueberspringt die anderen.
+    // THREE texture blocks, not two: 32 bit, 16 bit and a misc block (font
+    // and sky). Recomputed on real files, Andrea1 for instance: 17 pages *
+    // 4 * 0x10000 = 4456448, then 17 * 2 * 0x10000 = 2228224, then 3 * 4 *
+    // 0x10000 = 786432. The engine reads one of them depending on the
+    // display format and skips the others.
     //
-    // Ob die Nutzdaten komprimiert sind, steht nicht als Flag in der Datei -
-    // die Engine entscheidet das ueber eine globale Variable. Statt zu raten,
-    // werden beide Auslegungen probiert; gueltig ist die, bei der der
-    // Hauptblock hinterher schluessig daliegt. Sein Erkennungszeichen ist
-    // eindeutig: er ist unkomprimiert, und dann traegt er size == compressedSize.
+    // Whether the payload is compressed is not stored as a flag in the file
+    // - the engine decides that via a global variable. Instead of guessing,
+    // both interpretations are tried; valid is the one after which the main
+    // block lies there consistently. Its telltale is unambiguous: it is
+    // uncompressed, and then it carries size == compressedSize.
     for (int mode = 0; mode < 2; ++mode)
     {
         const bool compressed = (mode == 0);
@@ -1609,7 +1610,7 @@ bool Tr5Level::readHeader(std::string& error)
         }
         if (!ok) continue;
 
-        // short data[16] - LaraDrawType, WeatherType und weitere Levelschalter.
+        // short data[16] - LaraDrawType, WeatherType and further level switches.
         if (!skip(m_bytes, p, 32)) continue;
 
         int32_t mainSize = 0, mainComp = 0;
@@ -1617,42 +1618,42 @@ bool Tr5Level::readHeader(std::string& error)
         if (mainSize <= 0 || mainSize != mainComp) continue;
         if (p + static_cast<size_t>(mainSize) > m_bytes.size()) continue;
 
-        // Hinter dem Hauptblock folgen noch die Sound-Samples, die die Engine
-        // direkt aus der Datei nachliest - ein Rest ist also normal und kein
-        // Zeichen fuer eine Fehldeutung.
+        // Behind the main block follow the sound samples, which the engine
+        // reads directly from the file - a remainder is therefore normal
+        // and no sign of a misinterpretation.
         m_mainOffset = p;
         m_mainSize = static_cast<size_t>(mainSize);
         return true;
     }
 
-    error = "Kopfteil nicht deutbar - weder komprimierte noch unkomprimierte "
-            "Texturbloecke ergeben einen passenden Hauptblock. Ist das wirklich "
-            "eine TR5-Leveldatei?";
+    error = "header not interpretable - neither compressed nor uncompressed "
+            "texture blocks yield a fitting main block. Is this really a "
+            "TR5 level file?";
     return false;
 }
 
 bool Tr5Level::save(const std::wstring& path, std::string& error) const
 {
-    if (m_bytes.empty()) { error = "Kein Level geladen"; return false; }
+    if (m_bytes.empty()) { error = "no level loaded"; return false; }
 
-    // Texturwerkstatt (#104): solange sie schmutzig unresolved ist, tragen die
-    // Texturbloecke in m_bytes den ALTEN Stand. Lieber volumes scheitern als
-    // still ein Level mit veralteten Seiten write (die TR3Setz-Lehre:
-    // eine Warnung liest niemand). Patch::apply schliesst am Ende selbst.
+    // Texture workshop (#104): as long as it is dirty and open, the texture
+    // blocks in m_bytes carry the OLD state. Rather fail loudly than
+    // silently write a level with stale pages (the TR3Setz lesson: nobody
+    // reads a warning). Patch::apply closes at the end itself.
     if (m_texOpen && m_texDirty)
     {
-        error = "Texturwerkstatt noch unresolved - texWorkshopClose() vor dem Speichern rufen";
+        error = "texture workshop still open - call texWorkshopClose() before saving";
         return false;
     }
 
     FILE* f = nullptr;
     if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f)
     {
-        error = "Zieldatei laesst sich nicht write";
+        error = "cannot open the target file for writing";
         return false;
     }
     size_t put = std::fwrite(m_bytes.data(), 1, m_bytes.size(), f);
     std::fclose(f);
-    if (put != m_bytes.size()) { error = "Zieldatei nicht vollstaendig geschrieben"; return false; }
+    if (put != m_bytes.size()) { error = "target file not fully written"; return false; }
     return true;
 }

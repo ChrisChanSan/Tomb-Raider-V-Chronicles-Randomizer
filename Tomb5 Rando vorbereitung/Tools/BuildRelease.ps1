@@ -15,12 +15,16 @@
 # Rechteinhabern; der Nutzer bringt seine eigene Installation mit, und der
 # Randomizer kopiert sie sich beim ersten Start selbst zurecht.
 param(
-    [string]$OutDir = "C:\Cloude AI\Tomb5 Native win 11 fix\Release Paket",
+    [string]$OutDir = "",
     [switch]$Clean
 )
 $ErrorActionPreference = "Stop"
 
-$Root      = "C:\Cloude AI\Tomb5 Native win 11 fix"
+# Alles relativ zum Skriptort (Tools -> zwei Ebenen hoch = Repo-Wurzel),
+# damit das Skript auf jedem Rechner laeuft und keine Entwickler-Pfade
+# traegt (#72).
+$Root      = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+if ($OutDir -eq "") { $OutDir = Join-Path $Root "Release Paket" }
 $EngineSrc = "$Root\TOMB5 Code"
 $EngineExe = "$Root\release\PCtomb5.exe"
 $RandoRoot = "$Root\TR5Randomizer"

@@ -106,3 +106,10 @@ Tomb Raider 5 (I).iso
 Tomb Raider 5 Italy/
 Tomb5 Rando vorbereitung/stb-master/
 Tomb5 Steam Version/savegame/
+
+# Spielinstallation des Nutzers - gehoert nie ins Repo (setup.bat bleibt
+# als bereits getrackte eigene Datei erhalten; Ignore trifft nur Neues)
+Tomb5 Steam Version/
+
+# Sicherungs-Bundles der Historie - enthalten alte Staende, nie hochladen
+*.bundle

@@ -8,16 +8,16 @@
  * any later version. See the LICENSE file at the root of this source tree.
  */
 //----------------------------------------------------------------------------
-// Entnahme aus einem TR3-Level - Umsetzung zu Tr3Source.h (#92).
+// Extraction from a TR3 level - implementation of Tr3Source.h (#92).
 //
-// Wortgleich aus dem Werkzeug TR3Hol uebernommen; geaendert wurden nur der
-// Rahmen (main -> Bibliotheksfunktion), das Laden ueber einen breiten Pfad
-// und die Fehlerausgaenge, die jetzt einen Text liefern statt zu drucken.
-// Die Formatbruecke selbst ist UNANGETASTET - sie ist an genau einer Stelle
-// richtig, und das soll sie bleiben.
+// Taken over word for word from the TR3Hol tool; only the frame changed
+// (main -> library function), loading via a wide path, and the error exits,
+// which now return a text instead of printing. The format bridge itself is
+// UNTOUCHED - it is correct in exactly one place, and it should stay that
+// way.
 //
-// Die Fortschrittsmeldungen bleiben als printf stehen: im Werkzeug sind sie
-// die gewohnte Ausgabe, in der Oberflaeche laufen sie ins Leere.
+// The progress messages remain as printf: in the tool they are the familiar
+// output, in the UI they run into the void.
 //----------------------------------------------------------------------------
 #include "Tr3Source.h"
 #include <sys/stat.h>
@@ -30,13 +30,13 @@
 
 namespace
 {
-    struct Leser
+    struct Reader
     {
         std::vector<uint8_t> b;
         size_t at = 0;
-        bool   kaputt = false;
+        bool   broken = false;
 
-        bool laden(const wchar_t* p)
+        bool load(const wchar_t* p)
         {
             FILE* f = nullptr;
             if (_wfopen_s(&f, p, L"rb") != 0) return false;
@@ -47,10 +47,10 @@ namespace
             std::fclose(f);
             return g == b.size();
         }
-        bool platz(size_t n) { if (at + n > b.size()) { kaputt = true; return false; } return true; }
-        uint16_t u16() { if (!platz(2)) return 0; uint16_t v; std::memcpy(&v, &b[at], 2); at += 2; return v; }
-        uint32_t u32() { if (!platz(4)) return 0; uint32_t v; std::memcpy(&v, &b[at], 4); at += 4; return v; }
-        void spring(size_t n) { if (platz(n)) at += n; }
+        bool fits(size_t n) { if (at + n > b.size()) { broken = true; return false; } return true; }
+        uint16_t u16() { if (!fits(2)) return 0; uint16_t v; std::memcpy(&v, &b[at], 2); at += 2; return v; }
+        uint32_t u32() { if (!fits(4)) return 0; uint32_t v; std::memcpy(&v, &b[at], 4); at += 4; return v; }
+        void skip(size_t n) { if (fits(n)) at += n; }
     };
 
     int16_t  rs16(const std::vector<uint8_t>& b, size_t p) { int16_t v; std::memcpy(&v, &b[p], 2); return v; }
@@ -67,73 +67,73 @@ namespace
     };
 }
 
-bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objektId,
+bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
                              std::vector<uint8_t>& package, std::string& error)
 {
     error.clear();
     package.clear();
-    const int suche = objektId;
+    const int wanted = objectId;
 
-    Leser r;
-    if (!r.laden(levelPath.c_str())) { error = "TR3-Level nicht lesbar"; return false; }
+    Reader r;
+    if (!r.load(levelPath.c_str())) { error = "TR3 level not readable"; return false; }
 
     const uint32_t version = r.u32();
-    if ((version >> 24) != 0xFF) { error = "Datei ist kein TR3-Level"; return false; }
+    if ((version >> 24) != 0xFF) { error = "file is not a TR3 level"; return false; }
 
-    r.spring(768); r.spring(1024);
+    r.skip(768); r.skip(1024);
     const uint32_t nTex = r.u32();
-    r.spring(size_t(nTex) * 65536);              // Textile8 (Palettenfassung)
-    const size_t tex16At = r.at;                 // Textile16: ARGB1555, 131072 je Kachel
-    r.spring(size_t(nTex) * 131072);
+    r.skip(size_t(nTex) * 65536);                // Textile8 (palette version)
+    const size_t tex16At = r.at;                 // Textile16: ARGB1555, 131072 per tile
+    r.skip(size_t(nTex) * 131072);
     r.u32();
 
-    const size_t raumAt = r.at;
+    const size_t roomAt = r.at;
     const uint16_t nRooms = r.u16();
 
-    // Raumkopf-Varianten durchprobieren statt raten (siehe TR3Peek).
-    size_t nachRaeumen = 0;
-    for (int amb = 2; amb <= 6 && !nachRaeumen; amb += 2)
-    for (int licht = 18; licht <= 26 && !nachRaeumen; licht += 2)
+    // Try the room header variants instead of guessing (see TR3Peek).
+    size_t afterRooms = 0;
+    for (int amb = 2; amb <= 6 && !afterRooms; amb += 2)
+    for (int light = 18; light <= 26 && !afterRooms; light += 2)
     {
-        r.at = raumAt + 2; r.kaputt = false;
-        for (uint16_t i = 0; i < nRooms && !r.kaputt; ++i)
+        r.at = roomAt + 2; r.broken = false;
+        for (uint16_t i = 0; i < nRooms && !r.broken; ++i)
         {
-            r.spring(16);
-            r.spring(size_t(r.u32()) * 2);
-            r.spring(size_t(r.u16()) * 32);
+            r.skip(16);
+            r.skip(size_t(r.u32()) * 2);
+            r.skip(size_t(r.u16()) * 32);
             const uint16_t nZ = r.u16(), nX = r.u16();
-            r.spring(size_t(nZ) * nX * 8);
-            r.spring(size_t(amb));
-            r.spring(size_t(r.u16()) * licht);
-            r.spring(size_t(r.u16()) * 20);
-            r.spring(2 + 2 + 3);
+            r.skip(size_t(nZ) * nX * 8);
+            r.skip(size_t(amb));
+            r.skip(size_t(r.u16()) * light);
+            r.skip(size_t(r.u16()) * 20);
+            r.skip(2 + 2 + 3);
         }
-        if (r.kaputt) continue;
-        const size_t merk = r.at;
-        const uint32_t a = r.u32(); r.spring(size_t(a) * 2);
-        const uint32_t b2 = r.u32(); r.spring(size_t(b2) * 2);
-        const uint32_t c = r.u32(); r.spring(size_t(c) * 4);
-        const uint32_t d = r.u32(); r.spring(size_t(d) * 32);
-        if (!r.kaputt && a < 500000 && b2 < 2000000 && c < 20000 && d < 20000) nachRaeumen = merk;
-        r.at = merk;
+        if (r.broken) continue;
+        const size_t mark = r.at;
+        const uint32_t a = r.u32(); r.skip(size_t(a) * 2);
+        const uint32_t b2 = r.u32(); r.skip(size_t(b2) * 2);
+        const uint32_t c = r.u32(); r.skip(size_t(c) * 4);
+        const uint32_t d = r.u32(); r.skip(size_t(d) * 32);
+        if (!r.broken && a < 500000 && b2 < 2000000 && c < 20000 && d < 20000) afterRooms = mark;
+        r.at = mark;
     }
-    if (!nachRaeumen) { error = "Raumdurchlauf gescheitert - unerwarteter Raumkopf"; return false; }
-    r.at = nachRaeumen; r.kaputt = false;
+    if (!afterRooms) { error = "room walk failed - unexpected room header"; return false; }
+    r.at = afterRooms; r.broken = false;
 
-    r.spring(size_t(r.u32()) * 2);                                  // Floordata
+    r.skip(size_t(r.u32()) * 2);                                    // floordata
     const uint32_t nMeshData = r.u32(); const size_t meshAt = r.at;
-    r.spring(size_t(nMeshData) * 2);
+    r.skip(size_t(nMeshData) * 2);
     const uint32_t nPtr = r.u32(); const size_t ptrAt = r.at;
-    r.spring(size_t(nPtr) * 4);
+    r.skip(size_t(nPtr) * 4);
     const uint32_t nAnims = r.u32(); const size_t animAt = r.at;
-    r.spring(size_t(nAnims) * 32);
-    const uint32_t nSC = r.u32(); const size_t scAt = r.at;  r.spring(size_t(nSC) * 6);
-    const uint32_t nAD = r.u32(); const size_t adAt = r.at;  r.spring(size_t(nAD) * 8);
-    const uint32_t nCmd = r.u32(); const size_t cmdAt = r.at; r.spring(size_t(nCmd) * 2);
-    const uint32_t nBone = r.u32(); const size_t boneAt = r.at; r.spring(size_t(nBone) * 4);
-    const uint32_t nFrame = r.u32(); const size_t frameAt = r.at; r.spring(size_t(nFrame) * 2);
+    r.skip(size_t(nAnims) * 32);
+    const uint32_t nSC = r.u32(); const size_t scAt = r.at;  r.skip(size_t(nSC) * 6);
+    const uint32_t nAD = r.u32(); const size_t adAt = r.at;  r.skip(size_t(nAD) * 8);
+    const uint32_t nCmd = r.u32(); const size_t cmdAt = r.at; r.skip(size_t(nCmd) * 2);
+    const uint32_t nBone = r.u32(); const size_t boneAt = r.at; r.skip(size_t(nBone) * 4);
+    const uint32_t nFrame = r.u32(); const size_t frameAt = r.at; r.skip(size_t(nFrame) * 2);
     const uint32_t nMv = r.u32();
-    if (r.kaputt) { error = "Datei endet vor der Moveable-Tabelle"; return false; }
+    if (r.broken) { error = "file ends before the moveable table"; return false; }
 
     std::vector<Moveable> mv;
     for (uint32_t i = 0; i < nMv; ++i)
@@ -144,157 +144,156 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objektId,
         mv.push_back(m);
     }
     const Moveable* z = 0;
-    for (const Moveable& m : mv) if (int(m.objectId) == suche) { z = &m; break; }
-    if (!z) { error = "Objekt " + std::to_string(suche) + " ist in diesem Level nicht vorhanden"; return false; }
+    for (const Moveable& m : mv) if (int(m.objectId) == wanted) { z = &m; break; }
+    if (!z) { error = "object " + std::to_string(wanted) + " does not exist in this level"; return false; }
 
-    uint32_t animEnde = nAnims;
+    uint32_t animEnd = nAnims;
     for (const Moveable& m : mv)
-        if (m.animIndex > z->animIndex && m.animIndex < animEnde) animEnde = m.animIndex;
-    const uint32_t animCount = animEnde - z->animIndex;
+        if (m.animIndex > z->animIndex && m.animIndex < animEnd) animEnd = m.animIndex;
+    const uint32_t animCount = animEnd - z->animIndex;
 
-    std::printf("Objekt %d: %u Meshes, %u Knochen, Anims %u..%u (%u)\n",
-                suche, z->numMeshes, z->numMeshes ? z->numMeshes - 1 : 0,
-                z->animIndex, animEnde - 1, animCount);
+    std::printf("object %d: %u meshes, %u bones, anims %u..%u (%u)\n",
+                wanted, z->numMeshes, z->numMeshes ? z->numMeshes - 1 : 0,
+                z->animIndex, animEnd - 1, animCount);
 
-    // --- Weiter bis zu den Objekttexturen (fuer die Texturarbeit, #90) -----
-    // Die strittigen Feldgroessen im Dateiende werden wieder durchprobiert
-    // statt geraten: richtig ist die Kombination, bei der die letzte Tabelle
-    // exakt am Dateiende endet. Findet sich keine, bleibt objTexAt 0 und der
-    // Bericht faellt eben knapper aus - das Modell wandert trotzdem.
+    // --- On to the object textures (for the texture work, #90) -------------
+    // The contested field sizes at the file end are again tried out instead
+    // of guessed: the right combination is the one where the last table
+    // ends exactly at the end of the file. If none is found, objTexAt stays
+    // 0 and the report is simply shorter - the model travels regardless.
     uint32_t nObjTex = 0;
     size_t objTexAt = 0;
     {
-        const size_t nachMv = r.at;
+        const size_t afterMv = r.at;
         for (int mapN = 256; mapN <= 370 && !objTexAt; mapN += 114)
         for (int itemSz = 22; itemSz <= 24 && !objTexAt; itemSz += 2)
         for (int boxSz = 8; boxSz <= 20 && !objTexAt; boxSz += 12)
         for (int zoneN = 10; zoneN <= 20 && !objTexAt; zoneN += 10)
         {
-            r.at = nachMv; r.kaputt = false;
-            r.spring(size_t(r.u32()) * 32);              // StaticMeshes
-            r.spring(size_t(r.u32()) * 16);              // SpriteTextures
-            r.spring(size_t(r.u32()) * 8);               // SpriteSequences
-            r.spring(size_t(r.u32()) * 16);              // Cameras
-            r.spring(size_t(r.u32()) * 16);              // SoundSources
+            r.at = afterMv; r.broken = false;
+            r.skip(size_t(r.u32()) * 32);                // StaticMeshes
+            r.skip(size_t(r.u32()) * 16);                // SpriteTextures
+            r.skip(size_t(r.u32()) * 8);                 // SpriteSequences
+            r.skip(size_t(r.u32()) * 16);                // Cameras
+            r.skip(size_t(r.u32()) * 16);                // SoundSources
             const uint32_t nBoxes = r.u32();
-            r.spring(size_t(nBoxes) * boxSz);
-            r.spring(size_t(r.u32()) * 2);               // Overlaps
-            r.spring(size_t(nBoxes) * zoneN * 2);        // Zones
-            r.spring(size_t(r.u32()) * 2);               // AnimatedTextures
+            r.skip(size_t(nBoxes) * boxSz);
+            r.skip(size_t(r.u32()) * 2);                 // Overlaps
+            r.skip(size_t(nBoxes) * zoneN * 2);          // Zones
+            r.skip(size_t(r.u32()) * 2);                 // AnimatedTextures
             const uint32_t nOT = r.u32();
             const size_t otAt = r.at;
-            r.spring(size_t(nOT) * 20);
-            r.spring(size_t(r.u32()) * itemSz);          // Items
-            r.spring(8192);                              // LightMap
-            r.spring(size_t(r.u16()) * 16);              // CinematicFrames
-            r.spring(size_t(r.u16()));                   // DemoData
-            r.spring(size_t(mapN) * 2);                  // SoundMap
-            r.spring(size_t(r.u32()) * 8);               // SoundDetails
-            r.spring(size_t(r.u32()) * 4);               // SampleIndices
-            if (r.kaputt || r.at != r.b.size()) continue;
+            r.skip(size_t(nOT) * 20);
+            r.skip(size_t(r.u32()) * itemSz);            // Items
+            r.skip(8192);                                // LightMap
+            r.skip(size_t(r.u16()) * 16);                // CinematicFrames
+            r.skip(size_t(r.u16()));                     // DemoData
+            r.skip(size_t(mapN) * 2);                    // SoundMap
+            r.skip(size_t(r.u32()) * 8);                 // SoundDetails
+            r.skip(size_t(r.u32()) * 4);                 // SampleIndices
+            if (r.broken || r.at != r.b.size()) continue;
             if (!nOT || nOT > 20000) continue;
             nObjTex = nOT; objTexAt = otAt;
         }
-        r.at = nachMv; r.kaputt = false;
+        r.at = afterMv; r.broken = false;
     }
 
-    // --- Meshes umschreiben -------------------------------------------------
+    // --- Rewrite the meshes -------------------------------------------------
     std::vector<std::vector<uint8_t>> meshes;
-    int gesQuads = 0, gesTris = 0, gesFarbig = 0, maxVerts = 0;
-    int erstesTex = -1;                       // erste Textur, die das Modell selbst nutzt
-    struct FarbStelle { std::vector<uint8_t>* puffer; size_t at; };
-    std::vector<FarbStelle> farbigeStellen;
+    int totalQuads = 0, totalTris = 0, totalColored = 0, maxVerts = 0;
+    int firstTex = -1;                        // first texture the model itself uses
+    struct ColorSpot { std::vector<uint8_t>* buffer; size_t at; };
+    std::vector<ColorSpot> coloredSpots;
     for (uint16_t i = 0; i < z->numMeshes; ++i)
     {
         const uint32_t off = ru32(r.b, ptrAt + size_t(z->startingMesh + i) * 4);
         size_t p = meshAt + off;
         std::vector<uint8_t> o;
 
-        for (int k = 0; k < 10; ++k) o.push_back(r.b[p + k]);       // Centre + CollRadius
+        for (int k = 0; k < 10; ++k) o.push_back(r.b[p + k]);       // centre + coll radius
         p += 10;
         const int16_t nVerts = rs16(r.b, p); p += 2;
-        if (nVerts > 255) { error = "Ein Mesh hat mehr als 255 Vertices - mehr liest TR5 nicht"; return false; }
+        if (nVerts > 255) { error = "a mesh has more than 255 vertices - TR5 reads no more"; return false; }
         put16(o, uint16_t(nVerts));
         for (int v = 0; v < nVerts * 3; ++v) { put16(o, ru16(r.b, p)); p += 2; }
         const int16_t nNorms = rs16(r.b, p); p += 2;
         put16(o, uint16_t(nNorms));
-        const int worte = (nNorms >= 0) ? nVerts * 3 : nVerts;
-        for (int v = 0; v < worte; ++v) { put16(o, ru16(r.b, p)); p += 2; }
+        const int words = (nNorms >= 0) ? nVerts * 3 : nVerts;
+        for (int v = 0; v < words; ++v) { put16(o, ru16(r.b, p)); p += 2; }
         if (nVerts > maxVerts) maxVerts = nVerts;
 
-        // Texturierte Quads: 4 Vertexworte + Textur, dazu neu ein Effektwort.
+        // Textured quads: 4 vertex words + texture, plus a new effect word.
         const int16_t nQ = rs16(r.b, p); p += 2;
-        const int16_t nQfarbAt = 0; (void)nQfarbAt;
         std::vector<uint8_t> quads, tris;
-        int qz = 0, tz = 0;
+        int qc = 0, tc = 0;
         for (int q = 0; q < nQ; ++q)
         {
             for (int w = 0; w < 5; ++w) { put16(quads, ru16(r.b, p)); p += 2; }
-            put16(quads, 0);                                        // Effektwort
-            ++qz;
+            put16(quads, 0);                                        // effect word
+            ++qc;
         }
         const int16_t nT = rs16(r.b, p); p += 2;
         for (int t = 0; t < nT; ++t)
         {
             for (int w = 0; w < 4; ++w) { put16(tris, ru16(r.b, p)); p += 2; }
             put16(tris, 0);
-            ++tz;
+            ++tc;
         }
-        // Farbige Faces: TR5 kennt sie nicht. Sie werden texturiert
-        // uebernommen, damit die Geometrie geschlossen bleibt - aber NICHT
-        // mit Textur 0. Die ist im Quelllevel irgendetwas Beliebiges; beim
-        // T-Rex war es ein Stueck von Laras Bein, das dann unter seinem Maul
-        // klebte (im Spiel gesehen). Stattdessen die erste Textur, die das
-        // Modell selbst benutzt - die gehoert garantiert zu ihm.
+        // Colored faces: TR5 does not know them. They are taken over
+        // textured so the geometry stays closed - but NOT with texture 0.
+        // That is something arbitrary in the source level; with the T-Rex
+        // it was a piece of Lara's leg, which then stuck under his jaw
+        // (seen in game). Instead, the first texture the model itself uses
+        // - that one is guaranteed to belong to it.
         const int16_t nCQ = rs16(r.b, p); p += 2;
         for (int q = 0; q < nCQ; ++q)
         {
             for (int w = 0; w < 4; ++w) { put16(quads, ru16(r.b, p)); p += 2; }
-            p += 2;                                                 // Farbindex verwerfen
-            farbigeStellen.push_back({ &quads, quads.size() });
+            p += 2;                                                 // discard color index
+            coloredSpots.push_back({ &quads, quads.size() });
             put16(quads, 0); put16(quads, 0);
-            ++qz; ++gesFarbig;
+            ++qc; ++totalColored;
         }
         const int16_t nCT = rs16(r.b, p); p += 2;
         for (int t = 0; t < nCT; ++t)
         {
             for (int w = 0; w < 3; ++w) { put16(tris, ru16(r.b, p)); p += 2; }
             p += 2;
-            farbigeStellen.push_back({ &tris, tris.size() });
+            coloredSpots.push_back({ &tris, tris.size() });
             put16(tris, 0); put16(tris, 0);
-            ++tz; ++gesFarbig;
+            ++tc; ++totalColored;
         }
 
-        // Erste echte Textur dieses Meshes merken und die farbigen Stellen
-        // darauf setzen, BEVOR die Puffer ins Mesh wandern.
-        if (erstesTex < 0)
+        // Remember this mesh's first real texture and set the colored spots
+        // to it BEFORE the buffers go into the mesh.
+        if (firstTex < 0)
         {
-            if (nQ > 0)      erstesTex = ru16(quads, 8);
-            else if (nT > 0) erstesTex = ru16(tris, 6);
+            if (nQ > 0)      firstTex = ru16(quads, 8);
+            else if (nT > 0) firstTex = ru16(tris, 6);
         }
-        for (const FarbStelle& fs : farbigeStellen)
-            if (erstesTex >= 0)
+        for (const ColorSpot& fs : coloredSpots)
+            if (firstTex >= 0)
             {
-                const uint16_t v = uint16_t(erstesTex);
-                (*fs.puffer)[fs.at]     = uint8_t(v & 0xFF);
-                (*fs.puffer)[fs.at + 1] = uint8_t(v >> 8);
+                const uint16_t v = uint16_t(firstTex);
+                (*fs.buffer)[fs.at]     = uint8_t(v & 0xFF);
+                (*fs.buffer)[fs.at + 1] = uint8_t(v >> 8);
             }
-        farbigeStellen.clear();
+        coloredSpots.clear();
 
-        put16(o, uint16_t(qz)); o.insert(o.end(), quads.begin(), quads.end());
-        put16(o, uint16_t(tz)); o.insert(o.end(), tris.begin(), tris.end());
-        gesQuads += qz; gesTris += tz;
+        put16(o, uint16_t(qc)); o.insert(o.end(), quads.begin(), quads.end());
+        put16(o, uint16_t(tc)); o.insert(o.end(), tris.begin(), tris.end());
+        totalQuads += qc; totalTris += tc;
         meshes.push_back(o);
     }
 
-    // --- Welche Objekttexturen braucht dieses Modell? -----------------------
+    // --- Which object textures does this model need? ------------------------
     //
-    // Die Faces tragen noch die TR3-Indizes; erst der Einsetzer biegt sie um.
-    // Fuer die Texturarbeit (#90) zaehlt, wie viele verschiedene Eintraege und
-    // vor allem wie viele verschiedene KACHELN dahinter stehen - jede Kachel
-    // wird im Ziel eine 256x256-Seite.
-    std::vector<int> texIdx;      // gebrauchte TR3-Objekttexturen, in Fundreihenfolge
-    std::vector<int> kacheln;     // die Kacheln dahinter, in Fundreihenfolge
+    // The faces still carry the TR3 indices; only the installer redirects
+    // them. For the texture work (#90) what counts is how many distinct
+    // entries and above all how many distinct TILES lie behind them - every
+    // tile becomes a 256x256 page in the target.
+    std::vector<int> texIdx;      // used TR3 object textures, in discovery order
+    std::vector<int> tiles;       // the tiles behind them, in discovery order
     for (const std::vector<uint8_t>& m : meshes)
     {
         size_t p = 10;
@@ -307,71 +306,71 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objektId,
             const int16_t nn = rs16(m, p); p += 2;
             p += size_t(nv) * (nn >= 0 ? 6 : 2);
         }
-        auto merke = [&](int t) {
+        auto note = [&](int t) {
             for (int x : texIdx) if (x == t) return;
             texIdx.push_back(t);
             if (t >= 0 && nObjTex && uint32_t(t) < nObjTex)
             {
                 const int k = ru16(r.b, objTexAt + size_t(t) * 20 + 2) & 0x7FFF;
-                for (int x : kacheln) if (x == k) return;
-                kacheln.push_back(k);
+                for (int x : tiles) if (x == k) return;
+                tiles.push_back(k);
             }
         };
         const int16_t nq = rs16(m, p); p += 2;
-        for (int i = 0; i < nq; ++i, p += 12) merke(ru16(m, p + 8) & 0x7FFF);
+        for (int i = 0; i < nq; ++i, p += 12) note(ru16(m, p + 8) & 0x7FFF);
         const int16_t nt = rs16(m, p); p += 2;
-        for (int i = 0; i < nt; ++i, p += 10) merke(ru16(m, p + 6) & 0x7FFF);
+        for (int i = 0; i < nt; ++i, p += 10) note(ru16(m, p + 6) & 0x7FFF);
     }
-    std::printf("  Objekttexturen: %zu verschiedene auf %zu Kacheln (",
-                texIdx.size(), kacheln.size());
-    for (size_t i = 0; i < kacheln.size(); ++i) std::printf("%s%d", i ? ", " : "", kacheln[i]);
+    std::printf("  object textures: %zu distinct on %zu tiles (",
+                texIdx.size(), tiles.size());
+    for (size_t i = 0; i < tiles.size(); ++i) std::printf("%s%d", i ? ", " : "", tiles[i]);
     std::printf(")\n");
 
-    // --- Frame-Scheibe abgrenzen -------------------------------------------
+    // --- Delimit the frame slice -------------------------------------------
     //
-    // Der Frame-Zeiger einer Animation ist ein Byte-Offset in den GLOBALEN
-    // Frameblock des Levels. Wer nur das Objekt herausnimmt, muss die Scheibe
-    // schneiden und die Zeiger auf ihren Anfang beziehen - sonst zeigen sie im
-    // Ziel irgendwohin. Das Ende ist der Anfang des naechsten Objekts, genau
-    // wie bei den Anims.
-    uint32_t frameEnde = nFrame * 2;
+    // An animation's frame pointer is a byte offset into the level's GLOBAL
+    // frame block. Whoever extracts only the object must cut the slice and
+    // rebase the pointers to its start - otherwise they point somewhere in
+    // the target. The end is the start of the next object, exactly as with
+    // the anims.
+    uint32_t frameEnd = nFrame * 2;
     for (const Moveable& m : mv)
-        if (m.frameOffset > z->frameOffset && m.frameOffset < frameEnde) frameEnde = m.frameOffset;
-    const uint32_t frameBytes = frameEnde - z->frameOffset;
+        if (m.frameOffset > z->frameOffset && m.frameOffset < frameEnd) frameEnd = m.frameOffset;
+    const uint32_t frameBytes = frameEnd - z->frameOffset;
 
-    // --- Animationen 32 -> 40 Byte, Frame-Zeiger auf die Scheibe beziehen ---
+    // --- Animations 32 -> 40 bytes, rebase frame pointers onto the slice ----
     std::vector<uint8_t> anims;
-    int ausserhalb = 0;
+    int outside = 0;
     uint16_t animMin = 0xFFFF, animMax = 0;
     for (uint32_t i = 0; i < animCount; ++i)
     {
         const size_t a = animAt + size_t(z->animIndex + i) * 32;
 
         const uint32_t fo = ru32(r.b, a);
-        if (fo < z->frameOffset || fo >= frameEnde) ++ausserhalb;
-        put32(anims, fo - z->frameOffset);                          // rebasiert
+        if (fo < z->frameOffset || fo >= frameEnd) ++outside;
+        put32(anims, fo - z->frameOffset);                          // rebased
 
-        anims.push_back(r.b[a + 4]); anims.push_back(r.b[a + 5]);   // Rate, Size
-        anims.push_back(r.b[a + 6]); anims.push_back(r.b[a + 7]);   // State
-        for (int k = 8; k < 16; ++k) anims.push_back(r.b[a + k]);   // Speed, Accel
-        for (int k = 0; k < 8; ++k) anims.push_back(0);             // Lateral (TR4+)
+        anims.push_back(r.b[a + 4]); anims.push_back(r.b[a + 5]);   // rate, size
+        anims.push_back(r.b[a + 6]); anims.push_back(r.b[a + 7]);   // state
+        for (int k = 8; k < 16; ++k) anims.push_back(r.b[a + k]);   // speed, accel
+        for (int k = 0; k < 8; ++k) anims.push_back(0);             // lateral (TR4+)
 
         for (int k = 16; k < 20; ++k) anims.push_back(r.b[a + k]);  // FrameStart, FrameEnd
         const uint16_t nextAnim = ru16(r.b, a + 20);
         if (nextAnim < animMin) animMin = nextAnim;
         if (nextAnim > animMax) animMax = nextAnim;
-        put16(anims, uint16_t(nextAnim - z->animIndex));            // auf die Scheibe beziehen
-        for (int k = 22; k < 32; ++k) anims.push_back(r.b[a + k]);  // NextFrame, SC, Cmd
+        put16(anims, uint16_t(nextAnim - z->animIndex));            // rebase onto the slice
+        for (int k = 22; k < 32; ++k) anims.push_back(r.b[a + k]);  // NextFrame, SC, cmd
     }
 
-    // --- Ausgabe ------------------------------------------------------------
+    // --- Output -------------------------------------------------------------
     std::vector<uint8_t> out;
     out.push_back('T'); out.push_back('3'); out.push_back('5'); out.push_back('H');
-    put32(out, 2);                 // Version 2: mit Texturteil am Ende
-    put32(out, uint32_t(suche));
+    put32(out, 2);                 // version 2: with texture part at the end
+    put32(out, uint32_t(wanted));
     put32(out, z->numMeshes);
     put32(out, animCount);
-    put32(out, frameBytes / 2);  // nur die Scheibe dieses Objekts, in Worten
+    put32(out, frameBytes / 2);  // only this object's slice, in words
     put32(out, uint32_t(z->numMeshes ? (z->numMeshes - 1) * 4 : 0));
     put32(out, nSC); put32(out, nAD); put32(out, nCmd);
     put32(out, z->frameOffset);
@@ -380,30 +379,30 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objektId,
     for (const std::vector<uint8_t>& m : meshes) { put32(out, uint32_t(m.size())); out.insert(out.end(), m.begin(), m.end()); }
     for (uint32_t i = 0; i < (z->numMeshes ? uint32_t(z->numMeshes - 1) * 4 : 0); ++i)
         put32(out, ru32(r.b, boneAt + (size_t(z->meshTree) + i) * 4));
-    // --- Frames: Einachs-Drehungen auf TR5s Breite umschreiben -------------
+    // --- Frames: rewrite single-axis rotations to TR5's width ---------------
     //
-    // DIE eigentliche Bruecke zwischen den Spielen. Beide packen eine Drehung
-    // in ein oder zwei Worte, die oberen zwei Bits waehlen die Form. Der
-    // Zweiwort-Fall ist IDENTISCH (phd_RotYXZpack rechnet in beiden Spielen
-    // (angles >> 10) & 0x3FF, dann << 6). Der Einachs-Fall aber nicht:
+    // THE actual bridge between the games. Both pack a rotation into one or
+    // two words, the top two bits pick the form. The two-word case is
+    // IDENTICAL (phd_RotYXZpack computes (angles >> 10) & 0x3FF, then << 6,
+    // in both games). The single-axis case is not:
     //
-    //   TR3 (draw.cpp:183):  (wort & 1023)  << 6     10 Bit
-    //   TR5 (draw.cpp:267):  (wort & 0xFFF) << 4     12 Bit
+    //   TR3 (draw.cpp:183):  (word & 1023)  << 6     10 bits
+    //   TR5 (draw.cpp:267):  (word & 0xFFF) << 4     12 bits
     //
-    // Ein unveraendert uebernommenes TR3-Wort liest TR5 also mit einem
-    // Viertel des Winkels - und weil TR3 den Ueberlauf ins Negative nutzt,
-    // kippen grosse Values ganz. Betroffen sind genau die EINACHSGELENKE:
-    // Kiefer, Knoechel, Zehen. Im Spiel gesehen als verdrehte Fuesse und ein
-    // umgestuelptes Maul, waehrend der Rumpf stimmte - der dreht um alle drei
-    // Achsen und laeuft damit durch den identischen Zweiwort-Fall.
+    // A TR3 word taken over unchanged is thus read by TR5 with a quarter of
+    // the angle - and because TR3 uses the overflow into negative, large
+    // values flip entirely. Affected are exactly the SINGLE-AXIS JOINTS:
+    // jaw, ankles, toes. Seen in game as twisted feet and an inverted maw
+    // while the torso was fine - it rotates around all three axes and thus
+    // goes through the identical two-word case.
     //
-    // Umrechnung verlustfrei: TR5 soll v << 6 ergeben, rechnet aber << 4,
-    // also gehoert v << 2 ins 12-Bit-Feld (v <= 1023, passt).
+    // Lossless conversion: TR5 is meant to produce v << 6 but computes
+    // << 4, so v << 2 belongs into the 12-bit field (v <= 1023, fits).
     {
         std::vector<uint8_t> frames(r.b.begin() + frameAt + z->frameOffset,
-                                    r.b.begin() + frameAt + frameEnde);
-        int umgerechnet = 0, ausserhalb = 0;
-        std::vector<uint32_t> erledigt;
+                                    r.b.begin() + frameAt + frameEnd);
+        int converted = 0, outOfSlice = 0;
+        std::vector<uint32_t> done;
 
         for (uint32_t a = 0; a < animCount; ++a)
         {
@@ -418,14 +417,14 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objektId,
             for (int k = 0; k < keyframes; ++k)
             {
                 const long long start = (long long)fo - z->frameOffset + (long long)k * fsize * 2;
-                if (start < 0 || start + 18 > (long long)frames.size()) { ++ausserhalb; continue; }
+                if (start < 0 || start + 18 > (long long)frames.size()) { ++outOfSlice; continue; }
 
-                bool schon = false;
-                for (uint32_t e : erledigt) if (e == uint32_t(start)) { schon = true; break; }
-                if (schon) continue;
-                erledigt.push_back(uint32_t(start));
+                bool seen = false;
+                for (uint32_t e : done) if (e == uint32_t(start)) { seen = true; break; }
+                if (seen) continue;
+                done.push_back(uint32_t(start));
 
-                size_t p2 = size_t(start) + 18;          // BBox (6) + Versatz (3) Worte
+                size_t p2 = size_t(start) + 18;          // bbox (6) + offset (3) words
                 for (uint16_t m = 0; m < z->numMeshes; ++m)
                 {
                     if (p2 + 2 > frames.size()) break;
@@ -433,112 +432,112 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objektId,
                     if (w & 0xC000)
                     {
                         const uint16_t v = w & 0x3FF;
-                        const uint16_t neu = uint16_t((w & 0xC000) | ((v << 2) & 0xFFF));
-                        frames[p2]     = uint8_t(neu & 0xFF);
-                        frames[p2 + 1] = uint8_t(neu >> 8);
-                        ++umgerechnet;
+                        const uint16_t nw = uint16_t((w & 0xC000) | ((v << 2) & 0xFFF));
+                        frames[p2]     = uint8_t(nw & 0xFF);
+                        frames[p2 + 1] = uint8_t(nw >> 8);
+                        ++converted;
                         p2 += 2;
                     }
                     else p2 += 4;
                 }
             }
         }
-        std::printf("  Drehungen: %d Einachs-Worte auf TR5-Breite gebracht (%zu Frames)\n",
-                    umgerechnet, erledigt.size());
-        if (ausserhalb) std::printf("  ACHTUNG: %d Frames lagen ausserhalb der Scheibe\n", ausserhalb);
+        std::printf("  rotations: %d single-axis words brought to TR5 width (%zu frames)\n",
+                    converted, done.size());
+        if (outOfSlice) std::printf("  CAUTION: %d frames lay outside the slice\n", outOfSlice);
 
         out.insert(out.end(), frames.begin(), frames.end());
     }
     out.insert(out.end(), anims.begin(), anims.end());
     out.insert(out.end(), r.b.begin() + scAt,  r.b.begin() + scAt  + size_t(nSC) * 6);
 
-    // Sprungtabelle (AnimDispatch, 8 Byte: Low, High, NextAnim, NextFrame).
-    // Ihr NextAnim ist ein GLOBALER Anim-Index des Quelllevels - genau wie
-    // bei den Anims selbst muss er auf die Scheibe bezogen werden, sonst
-    // zeigt er im Ziel irgendwohin. Das war der Absturz beim ersten Versuch:
-    // die Eintraege wanderten ungerebased mit, und sobald die Steuerung einen
-    // Zustandswechsel nahm, sprang die Engine in eine fremde Animation.
-    // Eintraege ausserhalb der Scheibe gehoeren zu anderen Objekten; sie
-    // werden nie gelesen, bekommen aber 0, damit kein wilder Wert dasteht.
+    // Jump table (AnimDispatch, 8 bytes: low, high, NextAnim, NextFrame).
+    // Its NextAnim is a GLOBAL anim index of the source level - exactly as
+    // with the anims themselves it must be rebased onto the slice, or it
+    // points somewhere in the target. That was the crash on the first
+    // attempt: the entries traveled unrebased, and as soon as the control
+    // took a state change, the engine jumped into a foreign animation.
+    // Entries outside the slice belong to other objects; they are never
+    // read but get 0, so no wild value sits there.
     {
         std::vector<uint8_t> ad(r.b.begin() + adAt, r.b.begin() + adAt + size_t(nAD) * 8);
-        int drin = 0, drauss = 0;
+        int inside = 0, foreign = 0;
         for (size_t o = 0; o + 8 <= ad.size(); o += 8)
         {
             const uint16_t na = uint16_t(ad[o + 4] | (ad[o + 5] << 8));
-            uint16_t neu = 0;
-            if (na >= z->animIndex && na < animEnde) { neu = uint16_t(na - z->animIndex); ++drin; }
-            else ++drauss;
-            ad[o + 4] = uint8_t(neu & 0xFF);
-            ad[o + 5] = uint8_t(neu >> 8);
+            uint16_t nw = 0;
+            if (na >= z->animIndex && na < animEnd) { nw = uint16_t(na - z->animIndex); ++inside; }
+            else ++foreign;
+            ad[o + 4] = uint8_t(nw & 0xFF);
+            ad[o + 5] = uint8_t(nw >> 8);
         }
-        std::printf("  Sprungtabelle: %d Eintraege auf die Scheibe bezogen, %d fremde genullt\n", drin, drauss);
+        std::printf("  jump table: %d entries rebased onto the slice, %d foreign ones zeroed\n", inside, foreign);
         out.insert(out.end(), ad.begin(), ad.end());
     }
     out.insert(out.end(), r.b.begin() + cmdAt, r.b.begin() + cmdAt + size_t(nCmd) * 2);
 
-    // --- Texturteil (Paketversion 2) --------------------------------------
+    // --- Texture part (package version 2) ----------------------------------
     //
-    // Angehaengt, damit alte Pakete weiter lesbar bleiben: wer nur bis zum
-    // Kommandoblock liest, bekommt genau das alte Format.
+    // Appended so old packages stay readable: whoever reads only up to the
+    // command block gets exactly the old format.
     //
-    //   uint32 anzahlTexturen
-    //   je Textur: origIndex(2), drawtype(2), kachelImPaket(2),
-    //              dann 8 Byte u1,v1,u2,v2,u3,v3,u4,v4 als PIXEL
-    //   uint32 anzahlKacheln
-    //   je Kachel: 131072 Byte ARGB1555 (TR3s 16-Bit-Fassung)
+    //   uint32 textureCount
+    //   per texture: origIndex(2), drawtype(2), tileInPackage(2),
+    //                then 8 bytes u1,v1,u2,v2,u3,v3,u4,v4 as PIXELS
+    //   uint32 tileCount
+    //   per tile: 131072 bytes ARGB1555 (TR3's 16-bit version)
     //
-    // Die UVs bleiben hier PIXEL. Erst der Einsetzer schiebt sie um 8 Bit
-    // nach links - TR5 fuehrt sie als 8.8-Festkomma (file.cpp:1096).
+    // The UVs stay PIXELS here. Only the installer shifts them 8 bits to
+    // the left - TR5 stores them as 8.8 fixed point (file.cpp:1096).
     {
         put32(out, uint32_t(texIdx.size()));
-        int geschrieben = 0;
+        int written = 0;
         for (int t : texIdx)
         {
             if (t < 0 || uint32_t(t) >= nObjTex) { put16(out, uint16_t(t)); put16(out, 0); put16(out, 0);
                                                    for (int k = 0; k < 8; ++k) out.push_back(0); continue; }
             const size_t o = objTexAt + size_t(t) * 20;
-            const uint16_t attribut = ru16(r.b, o);
-            const int kachel = ru16(r.b, o + 2) & 0x7FFF;
+            const uint16_t attribute = ru16(r.b, o);
+            const int tile = ru16(r.b, o + 2) & 0x7FFF;
 
-            int lokal = 0;
-            for (size_t i = 0; i < kacheln.size(); ++i) if (kacheln[i] == kachel) { lokal = int(i); break; }
+            int local = 0;
+            for (size_t i = 0; i < tiles.size(); ++i) if (tiles[i] == tile) { local = int(i); break; }
 
             put16(out, uint16_t(t));
-            put16(out, attribut);
-            put16(out, uint16_t(lokal));
+            put16(out, attribute);
+            put16(out, uint16_t(local));
             for (int v = 0; v < 4; ++v)
             {
                 out.push_back(r.b[o + 4 + v * 4 + 1]);   // Xpixel
                 out.push_back(r.b[o + 4 + v * 4 + 3]);   // Ypixel
             }
-            ++geschrieben;
+            ++written;
         }
 
-        put32(out, uint32_t(kacheln.size()));
-        for (int k : kacheln)
+        put32(out, uint32_t(tiles.size()));
+        for (int k : tiles)
         {
             if (k < 0 || uint32_t(k) >= nTex)
-            { error = "Eine Texturkachel liegt ausserhalb der Texturseiten"; return false; }
+            { error = "a texture tile lies outside the texture pages"; return false; }
             const size_t at = tex16At + size_t(k) * 131072;
             out.insert(out.end(), r.b.begin() + at, r.b.begin() + at + 131072);
         }
-        std::printf("  Texturteil: %d Eintraege, %zu Kacheln a 131072 Byte\n",
-                    geschrieben, kacheln.size());
+        std::printf("  texture part: %d entries, %zu tiles of 131072 bytes\n",
+                    written, tiles.size());
     }
 
-    // Frueher wurde hier eine Datei geschrieben. Als Bibliothek give wir das
-    // Paket zurueck - der Aufrufer entscheidet, ob es auf die Platte geht
-    // (Werkzeug) oder direkt weiterverarbeitet wird (Randomizer-Lauf).
+    // A file used to be written here. As a library we return the package -
+    // the caller decides whether it goes to disk (tool) or is processed
+    // directly (randomizer run).
     package = out;
 
-    // --- Gegenprobe: laeuft der TR5-Ableser sauber durch? -------------------
+    // --- Cross-check: does the TR5 walker run through cleanly? --------------
     //
-    // Nachgebaut nach ProcessMeshData der Engine (drawroom.cpp), identisch zu
-    // meshSize() in Tr5Transfer.cpp. Wenn die gerechnete Laenge auf das Byte
-    // mit der geschriebenen uebereinstimmt, passt das Layout - das ist der
-    // eigentliche Beweis der Formatbruecke, nicht die blosse Byteausgabe.
-    int schlecht = 0;
+    // Rebuilt after the engine's ProcessMeshData (drawroom.cpp), identical
+    // to meshSize() in Tr5Transfer.cpp. If the computed length matches the
+    // written one to the byte, the layout is right - that is the real proof
+    // of the format bridge, not the mere byte output.
+    int bad = 0;
     for (size_t i = 0; i < meshes.size(); ++i)
     {
         const std::vector<uint8_t>& m = meshes[i];
@@ -556,38 +555,38 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objektId,
         const int16_t t = rs16(m, p); p += 2; p += size_t(t) * 10;
         if (p != m.size())
         {
-            std::printf("  MESH %zu PASST NICHT: Ableser endet bei %zu, geschrieben %zu\n", i, p, m.size());
-            ++schlecht;
+            std::printf("  MESH %zu DOES NOT FIT: walker ends at %zu, written %zu\n", i, p, m.size());
+            ++bad;
         }
     }
-    std::printf("  Gegenprobe TR5-Ableser: %zu Meshes geprueft, %d Abweichungen\n",
-                meshes.size(), schlecht);
+    std::printf("  cross-check TR5 walker: %zu meshes checked, %d deviations\n",
+                meshes.size(), bad);
 
     size_t meshBytes = 0; for (const std::vector<uint8_t>& m : meshes) meshBytes += m.size();
-    std::printf("  Meshes umgeschrieben: %zu Byte, %d Quads, %d Tris (davon %d aus farbigen Faces)\n",
-                meshBytes, gesQuads, gesTris, gesFarbig);
-    std::printf("  Groesstes Mesh: %d Vertices\n", maxVerts);
-    std::printf("  Anims: %u a 40 Byte, Frame-Scheibe %u Byte (%u..%u), Knochen %u Worte\n",
-                animCount, frameBytes, z->frameOffset, frameEnde,
+    std::printf("  meshes rewritten: %zu bytes, %d quads, %d tris (%d of them from colored faces)\n",
+                meshBytes, totalQuads, totalTris, totalColored);
+    std::printf("  largest mesh: %d vertices\n", maxVerts);
+    std::printf("  anims: %u of 40 bytes, frame slice %u bytes (%u..%u), bones %u words\n",
+                animCount, frameBytes, z->frameOffset, frameEnd,
                 z->numMeshes ? (z->numMeshes - 1) * 4 : 0);
-    std::printf("  Frame-Zeiger ausserhalb der Scheibe: %d   Sprungziele %u..%u (Scheibe %u..%u)\n",
-                ausserhalb, animMin, animMax, z->animIndex, animEnde - 1);
-    if (ausserhalb) std::printf("  ACHTUNG: Frame-Zeiger zeigen aus der Scheibe heraus\n");
-    if (animMin < z->animIndex || animMax >= animEnde)
-        std::printf("  ACHTUNG: eine Anim springt aus der eigenen Scheibe heraus\n");
-    std::printf("  Paket fertig: %zu Byte\n", package.size());
+    std::printf("  frame pointers outside the slice: %d   jump targets %u..%u (slice %u..%u)\n",
+                outside, animMin, animMax, z->animIndex, animEnd - 1);
+    if (outside) std::printf("  CAUTION: frame pointers point out of the slice\n");
+    if (animMin < z->animIndex || animMax >= animEnd)
+        std::printf("  CAUTION: an anim jumps out of its own slice\n");
+    std::printf("  package done: %zu bytes\n", package.size());
     return true;
 }
 
 //----------------------------------------------------------------------------
-// Klangentnahme aus MAIN.SFX (#92, aus TR3Ton uebernommen).
+// Sound extraction from MAIN.SFX (#92, taken over from TR3Ton).
 //----------------------------------------------------------------------------
 namespace
 {
-    // MAIN.SFX ist eine Kette aneinandergehaengter RIFF-WAVs. Ein Verzeichnis
-    // gibt es nicht - man laeuft durch und merkt sich Anfang und Laenge jedes
-    // Blocks. Ungerade Laengen sind auf gerade aufgefuellt.
-    bool wellenVerzeichnis(const std::vector<uint8_t>& b,
+    // MAIN.SFX is a chain of concatenated RIFF WAVs. There is no directory
+    // - you walk through and remember start and length of every block. Odd
+    // lengths are padded to even.
+    bool waveDirectory(const std::vector<uint8_t>& b,
                            std::vector<uint32_t>& at, std::vector<uint32_t>& len)
     {
         for (size_t p = 0; p + 8 <= b.size(); )
@@ -615,14 +614,14 @@ bool Tr3Source::fetchSounds(const std::wstring& sfxPath,
     error.clear();
     package.clear();
 
-    Leser sfx;
-    if (!sfx.laden(sfxPath.c_str())) { error = "MAIN.SFX nicht lesbar"; return false; }
+    Reader sfx;
+    if (!sfx.load(sfxPath.c_str())) { error = "MAIN.SFX not readable"; return false; }
 
     std::vector<uint32_t> at, len;
-    if (!wellenVerzeichnis(sfx.b, at, len))
-    { error = "In MAIN.SFX steht kein einziges RIFF - falsche Datei?"; return false; }
+    if (!waveDirectory(sfx.b, at, len))
+    { error = "not a single RIFF in MAIN.SFX - wrong file?"; return false; }
 
-    // Paketkopf: Kennung, Version 2, Anzahl (wird am Ende nachgetragen).
+    // Package header: magic, version 2, count (filled in at the end).
     std::vector<uint8_t> out;
     out.push_back('T'); out.push_back('3'); out.push_back('5'); out.push_back('S');
     for (int i = 0; i < 4; ++i) out.push_back(i == 0 ? 2 : 0);
@@ -631,25 +630,25 @@ bool Tr3Source::fetchSounds(const std::wstring& sfxPath,
     for (const SoundRequest& k : requests)
     {
         if (k.waves.empty())
-        { error = "Klang " + std::to_string(k.tr3Id) + " ohne Wellenangabe"; return false; }
+        { error = "sound " + std::to_string(k.tr3Id) + " without a wave list"; return false; }
 
         for (int w : k.waves)
             if (w < 1 || size_t(w) > at.size())
             {
-                error = "Wave " + std::to_string(w) + " gibt es in dieser MAIN.SFX nicht ("
-                       + std::to_string(at.size()) + " vorhanden)";
+                error = "wave " + std::to_string(w) + " does not exist in this MAIN.SFX ("
+                       + std::to_string(at.size()) + " present)";
                 return false;
             }
 
-        // Kopf je Klang: ID, dann drei Woerter, die der Einsetzer neu bildet
-        // (Lautstaerke, Chance, Merkmale - eine Vorlage wuerde Tonhoehe und
-        // Zufallsverstimmung mitschleppen, siehe Tr5Tr3Import.cpp).
+        // Header per sound: id, then three words the installer builds anew
+        // (volume, chance, characteristics - a template would drag pitch
+        // and random detune along, see Tr5Tr3Import.cpp).
         put16(out, uint16_t(k.tr3Id)); put16(out, 0); put16(out, 0); put16(out, 0);
         put16(out, uint16_t(k.waves.size()));
 
         for (int w : k.waves)
         {
-            const size_t i = size_t(w) - 1;          // TRsound zaehlt ab 1
+            const size_t i = size_t(w) - 1;          // TRsound counts from 1
             put32(out, len[i]);
             out.insert(out.end(), sfx.b.begin() + at[i], sfx.b.begin() + at[i] + len[i]);
         }
@@ -662,19 +661,19 @@ bool Tr3Source::fetchSounds(const std::wstring& sfxPath,
 }
 
 //----------------------------------------------------------------------------
-// SFX-Nummern der Anim-Kommandos umbiegen (#92, aus TR3Setz uebernommen).
+// Rewrite the SFX numbers of the anim commands (#92, taken over from TR3Setz).
 //
-// ZWEI FALLEN STECKEN HIER DRIN, beide teuer bezahlt:
+// TWO TRAPS LIVE IN HERE, both paid for dearly:
 //
-// 1. "Anzahl" im Anim-Kopf zaehlt KOMMANDOS, nicht Worte. Ein Kommando belegt
-//    je nach Art 1 bis 4 Worte. Wer die Schleife bis "Start + Anzahl" mit dem
-//    WORTindex laufen laesst, sieht nur die ersten Kommandos und merkt nichts
-//    davon - die Meldung ueber offene Nummern kann nur melden, was sie gelesen
-//    hat. Beim Compsognathus blieb so die zweite Fundstelle von 243 stehen,
-//    und 243 ist in TR5 SFX_GENERIC_HEAVY_FEET.
+// 1. "count" in the anim header counts COMMANDS, not words. A command takes
+//    1 to 4 words depending on its kind. Whoever runs the loop up to
+//    "start + count" with the WORD index sees only the first commands and
+//    notices nothing - the report about unresolved numbers can only report
+//    what it has read. With the Compsognathus, the second occurrence of 243
+//    stayed put that way, and 243 in TR5 is SFX_GENERIC_HEAVY_FEET.
 //
-// 2. Nur die Kommandos anfassen, auf die die Animationen DIESES Objekts
-//    zeigen. Das Paket fuehrt den ganzen Kommandoblock des Quelllevels mit.
+// 2. Only touch the commands that THIS object's animations point at. The
+//    package carries the source level's whole command block.
 //----------------------------------------------------------------------------
 bool Tr3Source::remapSfx(std::vector<uint8_t>& package,
                            const std::vector<std::pair<int,int>>& mapping,
@@ -686,7 +685,7 @@ bool Tr3Source::remapSfx(std::vector<uint8_t>& package,
     error.clear();
     unresolved.clear();
 
-    if (package.size() < 48) { error = "Modellpaket zu klein"; return false; }
+    if (package.size() < 48) { error = "model package too small"; return false; }
 
     const uint32_t nMeshes = ru32(package, 12), nAnims = ru32(package, 16);
     const uint32_t nFrameW = ru32(package, 20), nBoneW = ru32(package, 24);
@@ -695,7 +694,7 @@ bool Tr3Source::remapSfx(std::vector<uint8_t>& package,
     size_t p = 48;
     for (uint32_t i = 0; i < nMeshes; ++i)
     {
-        if (p + 4 > package.size()) { error = "Modellpaket bricht in den Meshes ab"; return false; }
+        if (p + 4 > package.size()) { error = "model package breaks off in the meshes"; return false; }
         p += 4 + ru32(package, p);
     }
     p += size_t(nBoneW) * 4 + size_t(nFrameW) * 2 + size_t(nAnims) * 40
@@ -703,93 +702,92 @@ bool Tr3Source::remapSfx(std::vector<uint8_t>& package,
 
     const size_t cmdAt = p;
     if (cmdAt + size_t(nCmd) * 2 > package.size())
-    { error = "Kommandoblock im Modellpaket nicht auffindbar"; return false; }
+    { error = "command block not found in the model package"; return false; }
     const size_t animAt = cmdAt - size_t(nAD) * 8 - size_t(nSC) * 6 - size_t(nAnims) * 40;
 
-    // Stummschaltung ist nur eine weitere Zuordnung - auf einen leeren Platz
-    // der Soundmap, wo die Engine aussteigt statt etwas Fremdes zu spielen.
-    std::vector<std::pair<int,int>> alle = mapping;
-    for (int s : muted) alle.push_back(std::make_pair(s, muteSlot));
+    // Muting is just another mapping - onto an empty soundmap slot, where
+    // the engine bails out instead of playing something foreign.
+    std::vector<std::pair<int,int>> all = mapping;
+    for (int s : muted) all.push_back(std::make_pair(s, muteSlot));
 
     for (uint32_t a = 0; a < nAnims; ++a)
     {
         const size_t ao = animAt + size_t(a) * 40;
-        const uint16_t anzahl = ru16(package, ao + 36);
-        if (!anzahl) continue;
+        const uint16_t count = ru16(package, ao + 36);
+        if (!count) continue;
         const uint16_t start = ru16(package, ao + 38);
 
         uint32_t i = start;
-        for (uint16_t k = 0; k < anzahl && i < nCmd; ++k)      // KOMMANDOS zaehlen
+        for (uint16_t k = 0; k < count && i < nCmd; ++k)       // count COMMANDS
         {
-            const uint16_t art = ru16(package, cmdAt + size_t(i) * 2);
+            const uint16_t kind = ru16(package, cmdAt + size_t(i) * 2);
             ++i;
-            int folge = 0;
-            switch (art)
+            int follow = 0;
+            switch (kind)
             {
-            case 1: folge = 3; break;    // SetPosition
-            case 2: folge = 2; break;    // JumpVelocity
-            case 5: folge = 2; break;    // PlaySound: Frame + SFX
-            case 6: folge = 2; break;    // Flipeffect
-            default: folge = 0; break;
+            case 1: follow = 3; break;   // SetPosition
+            case 2: follow = 2; break;   // JumpVelocity
+            case 5: follow = 2; break;   // PlaySound: frame + SFX
+            case 6: follow = 2; break;   // Flipeffect
+            default: follow = 0; break;
             }
 
-            if (art == 5 && i + 1 < nCmd)
+            if (kind == 5 && i + 1 < nCmd)
             {
-                const size_t stelle = cmdAt + size_t(i + 1) * 2;
-                const uint16_t wort = ru16(package, stelle);
-                const int nr = wort & 0x0FFF;    // Bits 12-15 sind Bedingungen
-                bool getroffen = false;
-                for (const auto& z : alle)
+                const size_t spot = cmdAt + size_t(i + 1) * 2;
+                const uint16_t word = ru16(package, spot);
+                const int nr = word & 0x0FFF;    // bits 12-15 are conditions
+                bool hit = false;
+                for (const auto& z : all)
                     if (z.first == nr)
                     {
-                        const uint16_t neu = uint16_t((wort & 0xF000) | (z.second & 0x0FFF));
-                        std::memcpy(&package[stelle], &neu, 2);
-                        getroffen = true;
+                        const uint16_t nw = uint16_t((word & 0xF000) | (z.second & 0x0FFF));
+                        std::memcpy(&package[spot], &nw, 2);
+                        hit = true;
                         break;
                     }
-                if (!getroffen)
+                if (!hit)
                 {
-                    bool schon = false;
-                    for (int o : unresolved) if (o == nr) { schon = true; break; }
-                    if (!schon) unresolved.push_back(nr);
+                    bool seen = false;
+                    for (int o : unresolved) if (o == nr) { seen = true; break; }
+                    if (!seen) unresolved.push_back(nr);
                 }
             }
-            i += folge;
+            i += follow;
         }
     }
     return true;
 }
 
 //----------------------------------------------------------------------------
-// Die vier Gaeste aus Tomb Raider 3 (#92).
+// The four guests from Tomb Raider 3 (#92).
 //
-// Alle Zahlen sind GEMESSEN, nicht angenommen:
-//   - Objektnummern aus der tomb3-Enum, gegengeprueft (VULTURE steht dort auf
-//     29 und passt zur Notiz des Nutzers)
-//   - Zielslots mit MissMod an allen 16 TR5-Leveln geprueft: keiner traegt
-//     dort ein Modell
-//   - Wave-Nummern im Werkzeug TRsound abgehoert und aus den fertigen
-//     Klangpaketen zurueckgewonnen, indem die Wellendaten in MAIN.SFX
-//     wiedergefunden wurden
-//   - Lautstaerken vom Nutzer im Spiel eingestellt
+// All numbers are MEASURED, not assumed:
+//   - object numbers from the tomb3 enum, cross-checked (VULTURE is 29
+//     there and matches the user's note)
+//   - target slots checked with MissMod against all 16 TR5 levels: none
+//     carries a model there
+//   - wave numbers auditioned in the TRsound tool and recovered from the
+//     finished sound packages by finding the wave data in MAIN.SFX again
+//   - volumes tuned by the user in game
 //----------------------------------------------------------------------------
 std::vector<Tr3Source::DinoSource> Tr3Source::dinos()
 {
     std::vector<DinoSource> d;
 
-    {   // T-Rex auf SAS. Der Laufklang ist die Ausnahme: die Anim-Kommandos
-        // rufen 88, der im Spiel gehoerte Klang ist aber der dumpfe,
-        // zweivariantige von 250 - vom Nutzer am Original gegengehoert.
+    {   // T-Rex on SAS. The footstep is the exception: the anim commands
+        // call 88, but the sound heard in game is the dull two-variant one
+        // of 250 - cross-checked by the user against the original.
         DinoSource t;
         t.slot = 31; t.name = "T-Rex"; t.source = "tr3";
         t.file = "CRASH.TR2"; t.object = 287; t.soundBase = 445;
         t.sounds = { { 84, {87} }, { 87, {89} }, { 88, {256,257} },
                       { 89, {91} }, { 255, {262} } };
-        t.muted = { 143 };                 // TR3 "Falling", in TR5 belegt
+        t.muted = { 143 };                 // TR3 "Falling", taken in TR5
         t.volumes  = { 100, 130, 150, 100, 140 };
         d.push_back(t);
     }
-    {   // Raptor auf REAPER (war eine Wasserqualle).
+    {   // Raptor on REAPER (used to be a water jellyfish).
         DinoSource t;
         t.slot = 75; t.name = "Raptor"; t.source = "tr3";
         t.file = "CRASH.TR2"; t.object = 288; t.soundBase = 438;
@@ -799,7 +797,7 @@ std::vector<Tr3Source::DinoSource> Tr3Source::dinos()
         t.volumes  = { 100, 110, 110, 110, 130, 120, 120 };
         d.push_back(t);
     }
-    {   // Compsognathus auf SAILOR (war ein Matrose ohne Modell).
+    {   // Compsognathus on SAILOR (used to be a sailor without a model).
         DinoSource t;
         t.slot = 53; t.name = "Compy"; t.source = "tr3";
         t.file = "CRASH.TR2"; t.object = 34; t.soundBase = 430;
@@ -808,13 +806,13 @@ std::vector<Tr3Source::DinoSource> Tr3Source::dinos()
         t.volumes  = { 100, 100, 100, 110, 70 };
         d.push_back(t);
     }
-    {   // Geier auf CROW. Modell aus The Lost Artifact, Klaenge aus TR3 -
-        // siehe sfxPath().
+    {   // Vulture on CROW. Model from The Lost Artifact, sounds from TR3 -
+        // see sfxPath().
         DinoSource t;
         t.slot = 43; t.name = "Geier"; t.source = "tr3gold";
         t.file = "chunnel.tr2"; t.object = 29; t.soundBase = 420;
         t.sounds = { { 182, {192} }, { 183, {193,194} }, { 184, {195} }, { 185, {196} } };
-        t.muted = { 56 };                  // TR3: Laras Schritt, in TR5 belegt
+        t.muted = { 56 };                  // TR3: Lara's footstep, taken in TR5
         t.volumes  = { 100, 100, 100, 100 };
         d.push_back(t);
     }
@@ -824,42 +822,42 @@ std::vector<Tr3Source::DinoSource> Tr3Source::dinos()
 std::wstring Tr3Source::sfxPath(const DinoSource&,
                                 const std::wstring& tr3Dir, const std::wstring&)
 {
-    // IMMER die MAIN.SFX von Tomb Raider 3 - auch fuer den Geier. Gold bringt
-    // eine eigene mit, aber die abgehoerten Wave-Nummern beziehen sich auf
-    // die von TR3. Der Parameter fuer Gold bleibt in der Schnittstelle, damit
-    // die Absicht sichtbar ist und niemand spaeter "aufraeumt".
+    // ALWAYS the MAIN.SFX of Tomb Raider 3 - for the vulture too. Gold
+    // ships its own, but the auditioned wave numbers refer to the TR3 one.
+    // The Gold parameter stays in the interface so the intent is visible
+    // and nobody "cleans it up" later.
     return tr3Dir + L"\\MAIN.SFX";
 }
 
 std::wstring Tr3Source::levelPath(const DinoSource& d,
                                   const std::wstring& tr3Dir, const std::wstring& tr3GoldDir)
 {
-    const std::wstring& basis = (std::strcmp(d.source, "tr3gold") == 0) ? tr3GoldDir : tr3Dir;
+    const std::wstring& base = (std::strcmp(d.source, "tr3gold") == 0) ? tr3GoldDir : tr3Dir;
     std::wstring name;
     for (const char* p = d.file; *p; ++p) name.push_back(wchar_t((unsigned char)*p));
-    return basis + L"\\" + name;
+    return base + L"\\" + name;
 }
 
 //----------------------------------------------------------------------------
-// Texturworte der Faces auf die neuen Texinfos umbiegen (#92, aus TR3Setz).
+// Redirect the faces' texture words to the new texinfos (#92, from TR3Setz).
 //
-// Gleicher Ableser wie ueberall: Meshkopf 10 Byte, dann das Vertexwort;
-// 0 Normalen heisst NORMALEN. Bit 15 des Texturworts ist ein Flag und bleibt
-// stehen - es entscheidet, ob AdjustUVs die Halbtexel-Korrektur laufen laesst.
+// The same walker as everywhere: mesh header 10 bytes, then the vertex
+// word; 0 normals means NORMALS. Bit 15 of the texture word is a flag and
+// stays - it decides whether AdjustUVs runs the half-texel correction.
 //----------------------------------------------------------------------------
 int Tr3Source::remapTextures(std::vector<uint8_t>& package, const std::map<int,int>& mapping)
 {
     const uint32_t nMeshes = ru32(package, 12);
     size_t p = 48;
-    int getauscht = 0;
+    int swapped = 0;
 
     for (uint32_t i = 0; i < nMeshes; ++i)
     {
         if (p + 4 > package.size()) return -1;
         const uint32_t len = ru32(package, p); p += 4;
-        const size_t ende = p + len;
+        const size_t end = p + len;
         size_t q = p + 10;
-        if (q + 2 > ende) return -1;
+        if (q + 2 > end) return -1;
 
         const int16_t vw = rs16(package, q); q += 2;
         const int nv = vw & 0xFF;
@@ -871,31 +869,31 @@ int Tr3Source::remapTextures(std::vector<uint8_t>& package, const std::map<int,i
             q += size_t(nv) * (nn >= 0 ? 6 : 2);
         }
 
-        auto biege = [&](size_t at) {
+        auto redirect = [&](size_t at) {
             const uint16_t w = ru16(package, at);
             std::map<int,int>::const_iterator f = mapping.find(w & 0x7FFF);
             if (f == mapping.end()) return;
-            const uint16_t neu = uint16_t((w & 0x8000) | (f->second & 0x7FFF));
-            std::memcpy(&package[at], &neu, 2);
-            ++getauscht;
+            const uint16_t nw = uint16_t((w & 0x8000) | (f->second & 0x7FFF));
+            std::memcpy(&package[at], &nw, 2);
+            ++swapped;
         };
 
         const int16_t nq = rs16(package, q); q += 2;
-        for (int k = 0; k < nq; ++k, q += 12) biege(q + 8);
+        for (int k = 0; k < nq; ++k, q += 12) redirect(q + 8);
         const int16_t nt = rs16(package, q); q += 2;
-        for (int k = 0; k < nt; ++k, q += 10) biege(q + 6);
+        for (int k = 0; k < nt; ++k, q += 10) redirect(q + 6);
 
-        p = ende;
+        p = end;
     }
-    return getauscht;
+    return swapped;
 }
 
 //----------------------------------------------------------------------------
-// Zwischenlager fuer die entnommenen Pakete (#103).
+// Cache for the extracted packages (#103).
 //----------------------------------------------------------------------------
 namespace
 {
-    bool dateiLesen(const std::wstring& p, std::vector<uint8_t>& b)
+    bool readFile(const std::wstring& p, std::vector<uint8_t>& b)
     {
         FILE* f = nullptr;
         if (_wfopen_s(&f, p.c_str(), L"rb") != 0 || !f) return false;
@@ -907,7 +905,7 @@ namespace
         return g == b.size();
     }
 
-    bool dateiSchreiben(const std::wstring& p, const std::vector<uint8_t>& b)
+    bool writeFile(const std::wstring& p, const std::vector<uint8_t>& b)
     {
         FILE* f = nullptr;
         if (_wfopen_s(&f, p.c_str(), L"wb") != 0 || !f) return false;
@@ -916,22 +914,22 @@ namespace
         return g == b.size();
     }
 
-    // Kennzeichen der Quelldatei: Groesse und Aenderungszeit. Beides zusammen
-    // reicht, um eine neu installierte oder gepatchte Fassung zu erkennen -
-    // und es kostet keinen Durchlauf durch 11 MB wie eine Pruefsumme.
-    std::string quellKennung(const std::wstring& path)
+    // Source file fingerprint: size and modification time. The two together
+    // are enough to recognize a reinstalled or patched version - and it
+    // costs no pass over 11 MB like a checksum would.
+    std::string sourceStamp(const std::wstring& path)
     {
         struct _stat64 s;
         if (_wstat64(path.c_str(), &s) != 0) return std::string();
         return std::to_string((long long)s.st_size) + "-" + std::to_string((long long)s.st_mtime);
     }
 
-    std::wstring lagerName(const std::wstring& dir, const char* name, const char* teil)
+    std::wstring cacheName(const std::wstring& dir, const char* name, const char* part)
     {
         std::wstring w = dir + L"\\";
         for (const char* p = name; *p; ++p) w.push_back(wchar_t((unsigned char)*p));
         w += L"_";
-        for (const char* p = teil; *p; ++p) w.push_back(wchar_t((unsigned char)*p));
+        for (const char* p = part; *p; ++p) w.push_back(wchar_t((unsigned char)*p));
         return w + L".bin";
     }
 }
@@ -939,55 +937,54 @@ namespace
 bool Tr3Source::fetchCached(const DinoSource& d,
                              const std::wstring& tr3Dir, const std::wstring& tr3GoldDir,
                              const std::wstring& cacheDir,
-                             std::vector<uint8_t>& modell, std::vector<uint8_t>& sounds,
+                             std::vector<uint8_t>& model, std::vector<uint8_t>& sounds,
                              std::string& error)
 {
-    const std::wstring lvlPfad = levelPath(d, tr3Dir, tr3GoldDir);
+    const std::wstring lvlPath = levelPath(d, tr3Dir, tr3GoldDir);
     const std::wstring sfx     = sfxPath(d, tr3Dir, tr3GoldDir);
 
-    // Erwartete Kennung: beide Quelldateien zusammen. Aendert sich eine, ist
-    // der Eintrag hinfaellig.
-    const std::string kennung = quellKennung(lvlPfad) + "|" + quellKennung(sfx);
+    // Expected stamp: both source files together. If one changes, the entry
+    // is void.
+    const std::string stamp = sourceStamp(lvlPath) + "|" + sourceStamp(sfx);
 
-    const std::wstring mDatei = lagerName(cacheDir, d.name, "modell");
-    const std::wstring kDatei = lagerName(cacheDir, d.name, "sounds");
-    const std::wstring nDatei = lagerName(cacheDir, d.name, "kennung");
+    const std::wstring mFile = cacheName(cacheDir, d.name, "modell");
+    const std::wstring kFile = cacheName(cacheDir, d.name, "sounds");
+    const std::wstring nFile = cacheName(cacheDir, d.name, "kennung");
 
-    if (!cacheDir.empty() && !kennung.empty())
+    if (!cacheDir.empty() && !stamp.empty())
     {
-        std::vector<uint8_t> alt;
-        if (dateiLesen(nDatei, alt))
+        std::vector<uint8_t> old;
+        if (readFile(nFile, old))
         {
-            const std::string war(alt.begin(), alt.end());
-            if (war == kennung && dateiLesen(mDatei, modell) && dateiLesen(kDatei, sounds))
+            const std::string was(old.begin(), old.end());
+            if (was == stamp && readFile(mFile, model) && readFile(kFile, sounds))
             {
-                std::printf("  %s: aus dem Zwischenlager\n", d.name);
+                std::printf("  %s: from the cache\n", d.name);
                 return true;
             }
         }
     }
 
-    modell.clear();
+    model.clear();
     sounds.clear();
-    if (!fetchMoveable(lvlPfad, d.object, modell, error))
+    if (!fetchMoveable(lvlPath, d.object, model, error))
     { error = std::string(d.name) + ": " + error; return false; }
     if (!fetchSounds(sfx, d.sounds, sounds, error))
-    { error = std::string(d.name) + " (Klaenge): " + error; return false; }
+    { error = std::string(d.name) + " (sounds): " + error; return false; }
 
-    // Ablegen ist Kuer: schlaegt es fehl (schreibgeschuetzter Ordner, volle
-    // Platte), laeuft der Durchgang trotzdem - er ist eben beim naechsten Mal
-    // wieder langsam. Ein Zwischenlager darf nie der Grund sein, dass etwas
-    // nicht geht.
-    if (!cacheDir.empty() && !kennung.empty())
+    // Storing is optional: if it fails (write-protected folder, full disk),
+    // the run still works - it is just slow again next time. A cache must
+    // never be the reason something does not work.
+    if (!cacheDir.empty() && !stamp.empty())
     {
-        // Ordner anlegen, falls er fehlt. Frueher stand das beim Aufrufer -
-        // und die Kommandozeile hatte es nicht, weshalb jedes Ablegen still
-        // scheiterte und das Lager leer blieb. Eine Funktion, die einen
-        // Ordner benutzt, soll ihn auch anlegen koennen.
+        // Create the folder if it is missing. This used to sit with the
+        // caller - and the command line did not have it, so every store
+        // silently failed and the cache stayed empty. A function that uses
+        // a folder should be able to create it.
         _wmkdir(cacheDir.c_str());
-        dateiSchreiben(mDatei, modell);
-        dateiSchreiben(kDatei, sounds);
-        dateiSchreiben(nDatei, std::vector<uint8_t>(kennung.begin(), kennung.end()));
+        writeFile(mFile, model);
+        writeFile(kFile, sounds);
+        writeFile(nFile, std::vector<uint8_t>(stamp.begin(), stamp.end()));
     }
     return true;
 }

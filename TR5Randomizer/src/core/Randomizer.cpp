@@ -16,7 +16,7 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 #include "Randomizer.h"
-#include "Levelketten.h"
+#include "LevelChains.h"
 
 #include <algorithm>
 #include <cctype>
@@ -460,17 +460,17 @@ bool Rando::buildInput(const JsonValue& zoneExport,
     return true;
 }
 
-bool Rando::bodenAn(const RandoInput& in, const ZoneSector& s,
-                    int lokalX, int lokalZ, int& yOut)
+bool Rando::floorAt(const RandoInput& in, const ZoneSector& s,
+                    int localX, int localZ, int& yOut)
 {
     yOut = s.floorY;
-    std::map<long long, SchraegeInfo>::const_iterator f =
-        in.schraegen.find(secKey(s.room, s.sectorX, s.sectorZ));
-    if (f == in.schraegen.end()) return true;       // kein Eintrag: eben
+    std::map<long long, SlopeInfo>::const_iterator f =
+        in.slopes.find(secKey(s.room, s.sectorX, s.sectorZ));
+    if (f == in.slopes.end()) return true;       // kein Eintrag: eben
 
-    const BodenLage lage = bodenLageAn(f->second, s.floorY, lokalX, lokalZ);
+    const FloorPos lage = floorPosAt(f->second, s.floorY, localX, localZ);
     yOut = lage.y;
-    return lage.begehbar;
+    return lage.walkable;
 }
 
 bool Rando::sectorAllowedFor(const RandoInput& in,
@@ -561,7 +561,7 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
     // Kein Item auf Rutschen (Neigung > 2 - Lara kann dort nichts aufheben)
     // oder ueber dem kollisionsfreien Dreieck eines NOCOLF-Sektors. Belaufbare
     // Schraegen sind dagegen erlaubt - ihr y rechnen die Ausgabestellen mit
-    // bodenAn auf die echte Bodenhoehe. Entscheidend ist der LANDEPUNKT
+    // floorAt auf die echte Bodenhoehe. Entscheidend ist der LANDEPUNKT
     // (Sektormitte plus Typversatz), denn bei Splits gelten je Dreieck eigene
     // Neigungen. Steht wie typeNoRooms VOR dem Constraint-Zweig und gilt
     // damit auf jedem Platzierungsweg - Schluessel, Pickups, Injektionen,
@@ -570,7 +570,7 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
         std::map<int, PlacementOffset>::const_iterator o = in.typeOffset.find(typeId);
         const PlacementOffset po = (o == in.typeOffset.end()) ? PlacementOffset() : o->second;
         int y = 0;
-        if (!bodenAn(in, s, 512 + po.dx, 512 + po.dz, y)) return false;
+        if (!floorAt(in, s, 512 + po.dx, 512 + po.dz, y)) return false;
     }
 
     // Sperre einzelner Typen fuer einzelne Raeume. Steht bewusst VOR dem
@@ -629,7 +629,7 @@ bool Rando::buildMarkerPatch(const RandoInput& in,
         if (ro == origin.end()) return;
         const PlacementOffset po = offFor(typeId);
         int yBoden = 0;
-        Rando::bodenAn(in, s, 512 + po.dx, 512 + po.dz, yBoden);
+        Rando::floorAt(in, s, 512 + po.dx, 512 + po.dz, yBoden);
         JsonValue a = JsonValue::makeObject();
         a.set("typeId", JsonValue::makeInt(typeId));
         a.set("room", JsonValue::makeInt(s.room));
@@ -702,7 +702,7 @@ bool Rando::buildMarkerPatch(const RandoInput& in,
         // 2026-08-24): Andrea3s typeId 220 haengt am LevelEnd-Trigger und
         // wird ueber triggerPinned gehalten - es steht WEDER in
         // VANILLA_TYPES noch in fixedItems, eine Typliste haette es also
-        // nicht gefunden. joby3s Brechstange (172) steht dagegen in beidem.
+        // nicht found. joby3s Brechstange (172) steht dagegen in beidem.
         std::set<int> festgenagelt(in.triggerPinned);
         for (int i : in.fixedItems) festgenagelt.insert(i);
 
@@ -719,7 +719,7 @@ bool Rando::buildMarkerPatch(const RandoInput& in,
         {
             if (festgenagelt.count(it.index)) continue;
             // NUR aufnehmbare Items. OCB 2 und 9 sind keine Kennung fuer
-            // Wandgriffe, sondern gewoehnliche Werte, die auch Tueren,
+            // Wandgriffe, sondern gewoehnliche Values, die auch Tueren,
             // Gegner und Kulisse tragen - ohne diese Pruefung fuellte der
             // Debug-Marker das halbe Level (Nutzerbefund 2026-08-24: "der
             // fuellt jetzt nicht nur Item/Keys/Puzzles aus, sondern alles").
@@ -958,7 +958,7 @@ bool Rando::run(const RandoInput& in,
         // Echte Bodenhoehe am Landepunkt statt Sektor-Grundwert: auf einer
         // belaufbaren Schraege laege das Item sonst in der Luft (#86/#87).
         int pyBoden = 0;
-        Rando::bodenAn(in, s, 512 + po.dx, 512 + po.dz, pyBoden);
+        Rando::floorAt(in, s, 512 + po.dx, 512 + po.dz, pyBoden);
         const int py = pyBoden + po.dy;
         const int pz = ro.originZ + s.sectorZ * 1024 + 512 + po.dz;
 
@@ -1198,7 +1198,7 @@ bool Rando::run(const RandoInput& in,
 
         const PlacementOffset po = offFor(j.typeId);
         int yBoden = 0;
-        Rando::bodenAn(in, s, 512 + po.dx, 512 + po.dz, yBoden);
+        Rando::floorAt(in, s, 512 + po.dx, 512 + po.dz, yBoden);
         JsonValue a = JsonValue::makeObject();
         a.set("typeId", JsonValue::makeInt(j.typeId));
         a.set("room", JsonValue::makeInt(s.room));
@@ -1270,7 +1270,7 @@ bool Rando::run(const RandoInput& in,
             const RoomOrigin& ro = origin[s.room];
             const PlacementOffset po = offFor(typeId);
             int yBoden = 0;
-            Rando::bodenAn(in, s, 512 + po.dx, 512 + po.dz, yBoden);
+            Rando::floorAt(in, s, 512 + po.dx, 512 + po.dz, yBoden);
             JsonValue a = JsonValue::makeObject();
             a.set("typeId", JsonValue::makeInt(typeId));
             a.set("room", JsonValue::makeInt(s.room));
@@ -1385,7 +1385,7 @@ bool Rando::run(const RandoInput& in,
         // vorbehalten, die sie selbst fuehren).
         const bool waffensetDa = opt.allWeapons && klein != "joby4";
         auto zeichenbar = [&](int typ) -> bool {
-            if (in.vorhandeneSlots.count(typ)) return true;
+            if (in.presentSlots.count(typ)) return true;
             if (!waffensetDa) return false;
             switch (typ)
             {
@@ -1457,7 +1457,7 @@ bool Rando::run(const RandoInput& in,
                 const RoomOrigin& ro = origin[s->room];
                 const PlacementOffset po = offFor(typ);
                 int yBoden = 0;
-                Rando::bodenAn(in, *s, 512 + po.dx, 512 + po.dz, yBoden);
+                Rando::floorAt(in, *s, 512 + po.dx, 512 + po.dz, yBoden);
                 JsonValue a = JsonValue::makeObject();
                 a.set("typeId", JsonValue::makeInt(typ));
                 a.set("room", JsonValue::makeInt(s->room));
@@ -1483,7 +1483,7 @@ bool Rando::run(const RandoInput& in,
         }
     }
 
-    // Anzeigenamen siehe Rando::gegnerarten() am Dateiende - die Liste dort
+    // Anzeigenamen siehe Rando::enemyKinds() am Dateiende - die Liste dort
     // muss mit dieser Tabelle mitwachsen.
     //
     // --- Cross-Gegnermix: den Pool um fremde Typen erweitern ---
@@ -1533,7 +1533,7 @@ bool Rando::run(const RandoInput& in,
     // selbst KEINEN MESHSWAP1 - die Guard-Haende kommen aus joby3, TwoGuns
     // Quellmesh 2 aus rich3.
     struct CrossSound  { int map; const char* vonLevel; int vonMap; };
-    // animZahl (0 = Heuristik): explizite Anim-Scheibenlaenge fuer Typen,
+    // animCount (0 = Heuristik): explizite Anim-Scheibenlaenge fuer Typen,
     // deren Steuerung ueber die Objektgrenze hinaus in die globale
     // Anim-Tabelle greift - bisher nur der Imp (siehe Tabelleneintrag).
     //
@@ -1549,7 +1549,7 @@ bool Rando::run(const RandoInput& in,
     // joby3-Satz, waehrend Slot 37 je Level ein anderes Modell fuehren darf
     // (rich!) - Messdaten bei Zeile 37.
     // "tr3" (0 = aus TR5 selbst): Kennung der Fremdquelle aus
-    // Tr3Quelle::dinos(). Ist sie gesetzt, ist "von" leer - das Modell kommt
+    // Tr3Source::dinos(). Ist sie gesetzt, ist "von" leer - das Modell kommt
     // nicht aus einem TR5-Level, sondern zur Laufzeit aus der Installation des
     // Nutzers. Alles Weitere steht in der Dino-Tabelle, damit es nur EINE
     // Wahrheit gibt.
@@ -1562,21 +1562,21 @@ bool Rando::run(const RandoInput& in,
     // geprueft 2026-08-17.
     struct CrossGegner { int typeId; const char* von; CrossSound sounds[2];
                          int begleiter[2]; const char* swapVon; int swapDst;
-                         int animZahl; int basisSlot; const char* tr3;
+                         int animCount; int basisSlot; const char* tr3;
                          int quellSlot; };
     static const CrossGegner kCross[] = {
         { 33, "rich3",   {},                                    {-1,-1},  "rich3",   462, 0, 0 },  // SWAT
         // Klang 88 (BIO_BREATHE_OUT): das Gasmasken-Atmen des SWAT+ in
         // dunklen Raeumen (sas.cpp:155, fest verdrahtet - steht in keinem
         // Anim-Kommando und reist deshalb nicht von selbst). Ohne den
-        // Eintrag atmet er in fremden Leveln stumm (#111 Teil 3).
+        // Eintrag atmet er in fremden Leveln muted (#111 Teil 3).
         { 35, "rich3",   { {88,"rich3",88} },                   {-1,-1},  "rich3",   463, 0, 33 }, // Advanced SWAT (Anims von SWAT)
         // Slot 37 traegt wieder das RICH-Modell (blaue Weste, rich1) - der
         // #121-Nachtrag vom 2026-08-23. Der Erstfix hatte den Spender auf
         // joby3 gestellt, weil der Satz damals die Anim-Basis der ganzen
         // Stummel-Familie war und Cores Saetze je Level andere TOTE ERBEN
         // tragen: Anims, die sich den Frame-Zeiger mit einer Nachbaranim
-        // teilen, ihn aber mit eigener (falscher) Schrittweite lesen. Beim
+        // teilen, ihn aber mit eigener (falscher) Schrittweite read. Beim
         // nativen Besitzer faellt das nie auf, weil er diese Zustaende
         // nicht spielt - die Stummel-Familie spielt sie.
         //
@@ -1613,7 +1613,7 @@ bool Rando::run(const RandoInput& in,
         { 460, "joby3",  {},                                    {-1,-1},  "joby3",   467, 0, 0, nullptr, 37 }, // Wachmann (Joby)
         // Laserschuss (193) und -einschlag (167): fest verdrahtet in
         // twogun.cpp:616f, in keinem Anim-Kommando - ohne die Eintraege
-        // feuert der Laser in fremden Leveln stumm (#111 Teil 3). Beide
+        // feuert der Laser in fremden Leveln muted (#111 Teil 3). Beide
         // Samples sind in rich1 und rich3 byte-identisch; die 167 setzt
         // auch die Hydra (aus Andrea2), ebenfalls identischer Inhalt.
         { 39, "rich1",   { {167,"rich3",167}, {193,"rich3",193} }, {-1,-1}, "rich3",  464, 0, 0 },  // Two Gun
@@ -1661,7 +1661,7 @@ bool Rando::run(const RandoInput& in,
         { 61,  "Andrea2", {},                                   {367,-1}, "Andrea2", 403 }, // Roman God (Schwert)
         // Sterbelaut 204 (SGOD_SWD_DIE1_Q): die Sterbeanim +16 der
         // Hammer-Fassung ruft ihn, aber nur Andrea2 belegt die Nummer -
-        // zu Hause in Andrea3 starb die Statue stumm (Core-Loch). Mit dem
+        // zu Hause in Andrea3 starb die Statue muted (Core-Loch). Mit dem
         // Eintrag quiekt sie ueberall wie ihr Schwert-Bruder
         // (Nutzerentscheidung 2026-08-19: "dann sind beide komplett").
         { 461, "Andrea3", { {204,"Andrea2",204} },              {-1,-1},  "Andrea3", 404, 0, 0, nullptr, 61 }, // Roman God (Hammer)
@@ -1691,7 +1691,7 @@ bool Rando::run(const RandoInput& in,
         //    Spender ist also derselbe wie fuers Modell.
         // Die drei Vanilla-Exemplare in Andrea2 (Items 91/92/93) sind ueber
         // fixedItems geschuetzt und bleiben unberuehrt.
-        //  - animZahl 17: die Objekttabelle gesteht ihr weniger zu, als ihre
+        //  - animCount 17: die Objekttabelle gesteht ihr weniger zu, als ihre
         //    Steuerung braucht (anim_index+15 ist die Todesanim) - dasselbe
         //    Muster wie beim Imp. Ohne die explizite Laenge bricht der
         //    Transfer mit "Frame-Zeiger ausserhalb der Frame-Scheibe" ab.
@@ -1716,7 +1716,7 @@ bool Rando::run(const RandoInput& in,
         // Mit SlotAnims ueber alle 13 Level gemessen: Slot 85 traegt NUR in
         // joby2 ein Modell (anim_index 579, Scheibe 25 Anims). Seine
         // Steuerung greift bis anim_index+22 (DeathAnims 20/21/22) - die
-        // Scheibe reicht, also kein animZahl noetig (anders als Imp/Hydra).
+        // Scheibe reicht, also kein animCount noetig (anders als Imp/Hydra).
         // Kein MESHSWAP, kein Begleiter, kein Basistyp; die Klaenge haengen
         // alle an Anim-Kommandos und wandern von selbst mit (huskie.cpp
         // ruft SoundEffect nirgends fest verdrahtet auf).
@@ -1742,7 +1742,7 @@ bool Rando::run(const RandoInput& in,
         // bleibt per Kuration vanilla mit OCB 0 - Stealth-Cutscene-Fallback
         // UND Kuechenarbeit haengen beide daran.
         //
-        // animZahl 12: die Scheibe wird auf die 12 ECHTEN Anims begrenzt -
+        // animCount 12: die Scheibe wird auf die 12 ECHTEN Anims begrenzt -
         // erstmals schrumpfend statt wachsend (der Imp dehnt sie). Seine
         // toten Erben +12..+55 zeigen alle in die Frame-Region des
         // NAECHSTEN Slots, daran scheitert der Frame-Zeiger-Pruefer des
@@ -1759,7 +1759,7 @@ bool Rando::run(const RandoInput& in,
         // Lara in andy1 keine Waffen hat. andy3 traegt den vollen Satz
         // (+45 = Frames 45..66 mit KillItem -> after_death -> Fade); Anims
         // 0-12, Geometrie und MESHSWAP1-Tauschsatz sind in beiden identisch
-        // (AnimDump/SucheModell, 2026-08-15). animZahl 46: die Objekttabelle
+        // (AnimDump/SucheModell, 2026-08-15). animCount 46: die Objekttabelle
         // gesteht dem Imp nur 18 Anims zu, +19..+45 liegen physisch in den
         // Bereichen fremder Kulissenslots - ohne explizite Laenge fehlte die
         // Todesanim im Import und die Engine las hinter dem Tabellenende
@@ -1770,7 +1770,7 @@ bool Rando::run(const RandoInput& in,
         //
         // Kein Spenderlevel: "von" bleibt leer, das Modell kommt zur Laufzeit
         // aus der Installation des Nutzers. Alles Naehere - Datei, Objekt,
-        // Klaenge, Lautstaerken - steht in Tr3Quelle::dinos().
+        // Klaenge, Lautstaerken - steht in Tr3Source::dinos().
         //
         // Die vier Zielslots tragen in KEINEM der 16 TR5-Level ein Modell (mit
         // MissMod an allen nachgemessen), sie nehmen also keinem einheimischen
@@ -1782,12 +1782,12 @@ bool Rando::run(const RandoInput& in,
         { 75, nullptr,   {},                                    {-1,-1},  nullptr,   -1, 0, 0, "tr3"     }, // Raptor
     };
 
-    // Verbotene Typen (siehe RandoInput::verboteneTypen) fliegen aus dem
+    // Verbotene Typen (siehe RandoInput::forbiddenTypes) fliegen aus dem
     // Pool, BEVOR irgendetwas waehlt - weder Tausch noch Zusatzgegner noch
     // Cross duerfen sie anfassen.
     std::vector<int> gegnerPool;
     for (int t : in.enemyTypes)
-        if (!in.verboteneTypen.count(t) && !opt.gesperrteGegner.count(t))
+        if (!in.forbiddenTypes.count(t) && !opt.disabledEnemies.count(t))
             gegnerPool.push_back(t);
 
     // Die Notbremse fuer "alles abgewaehlt" steht ABSICHTLICH erst hinter dem
@@ -1814,8 +1814,8 @@ bool Rando::run(const RandoInput& in,
         for (const CrossGegner& c : kCross)
         {
             if (eigene.count(c.typeId)) continue;         // steht schon im Levelpool
-            if (in.verboteneTypen.count(c.typeId)) continue;   // Level vertraegt ihn nicht
-            if (opt.gesperrteGegner.count(c.typeId)) continue; // vom Nutzer abgewaehlt
+            if (in.forbiddenTypes.count(c.typeId)) continue;   // Level vertraegt ihn nicht
+            if (opt.disabledEnemies.count(c.typeId)) continue; // vom Nutzer abgewaehlt
 
             // Gaeste aus Tomb Raider 3 (#92): sie brauchen die Installation
             // des Nutzers. Fehlt sie, fallen sie STILL heraus - ein Lauf darf
@@ -1824,7 +1824,7 @@ bool Rando::run(const RandoInput& in,
             {
                 const bool gold = (std::strcmp(c.tr3, "tr3gold") == 0);
                 // Der Geier braucht BEIDE: sein Modell steckt in Gold, seine
-                // Klaenge in der MAIN.SFX von TR3 (siehe Tr3Quelle::sfxPfad).
+                // Klaenge in der MAIN.SFX von TR3 (siehe Tr3Source::sfxPath).
                 if (opt.tr3Dir.empty()) continue;
                 if (gold && opt.tr3GoldDir.empty()) continue;
                 kandidaten.push_back(&c);
@@ -1891,7 +1891,7 @@ bool Rando::run(const RandoInput& in,
     if (gegnerPool.empty())
     {
         for (int t : in.enemyTypes)
-            if (!in.verboteneTypen.count(t)) gegnerPool.push_back(t);
+            if (!in.forbiddenTypes.count(t)) gegnerPool.push_back(t);
         if (!gegnerPool.empty())
             report.notes.push_back("Gegnerarten: die Auswahl liess fuer dieses Level keinen "
                                    "einzigen Typ uebrig (auch keinen fremden) - fuer dieses "
@@ -1929,14 +1929,14 @@ bool Rando::run(const RandoInput& in,
     //    TR5-Levels folgt dem Baukasten des Editors, nicht dem, was Lara als
     //    Halle wahrnimmt: ihre eigene Arena in Andrea2 besteht aus SIEBEN
     //    Raeumen (71, 72, 116, 117, 121, 140, 194), Raum 116 allein waere nur
-    //    4x8 begehbar. Jede Schwelle auf Raumebene haette ihren eigenen
+    //    4x8 walkable. Jede Schwelle auf Raumebene haette ihren eigenen
     //    Kampfplatz ausgeschlossen.
     //  - Die zusammenhaengende Flaeche ist zu grosszuegig. Sie verschmilzt
     //    alles, was auf gleicher Hoehe verbunden ist - in Andrea1 waren das
     //    619 von 961 Sektoren, Korridore eingeschlossen. Die Hydra haette im
     //    Gang stehen duerfen, nur weil der Gang an eine Halle andockt.
     //
-    // Das Fenster misst genau das, was zaehlt: wie offen es dort ist, wo sie
+    // Das Fenster misst genau das, was zaehlt: wie unresolved es dort ist, wo sie
     // steht. Die Schwelle stammt nicht aus dem Bauch, sondern aus Vanilla -
     // an allen drei Kampfplaetzen in Andrea2 (Items 91/92/93) gemessen:
     // im 3x3-Fenster 9 von 9 Feldern frei, im 7x7 genau 40 von 49.
@@ -1986,7 +1986,7 @@ bool Rando::run(const RandoInput& in,
         { 53, 4 },      // Compsognathus
     };
 
-    // Spawn-OCB: manche Gegner lesen ihre OCB als VERHALTEN, nicht als
+    // Spawn-OCB: manche Gegner read ihre OCB als VERHALTEN, nicht als
     // Ortsangabe - fuer die ist "immer 0" falsch.
     //
     // Der Roman God ist der Anlass (vom Nutzer im Spiel fotografiert). Seine
@@ -2036,7 +2036,7 @@ bool Rando::run(const RandoInput& in,
 
     // Weltraster aller begehbaren Sektoren, Schluessel ist das Feld in
     // Sektorschritten. Bewusst in.sectors und nicht der laufend gefilterte
-    // Pool: gemessen werden soll, wie offen die Umgebung IST, nicht wo gerade
+    // Pool: gemessen werden soll, wie unresolved die Umgebung IST, nicht wo gerade
     // noch etwas hindarf. Genau diese Quelle lag auch der Vanilla-Messung
     // zugrunde, aus der die 40 stammen - Mass und Messlatte muessen aus
     // derselben Quelle kommen, sonst vergleicht man Aepfel mit Birnen.
@@ -2090,7 +2090,7 @@ bool Rando::run(const RandoInput& in,
     if (opt.swapEnemies && (in.enemyTypes.size() > 1 || !crossGewaehlt.empty()))
     {
         std::set<int> erlaubt(in.enemyTypes.begin(), in.enemyTypes.end());
-        for (int t : in.verboteneTypen) erlaubt.erase(t);
+        for (int t : in.forbiddenTypes) erlaubt.erase(t);
 
         std::vector<int> indizes;                 // Item-Indizes der Tauschbaren
         std::vector<int> arten;                   // ihre Typen, gleiche Reihenfolge
@@ -2256,7 +2256,7 @@ bool Rando::run(const RandoInput& in,
 
                 // Die OCB gehoerte dem alten Typ (nur Larson/Pierre kommen
                 // ueberhaupt mit einer hierher, siehe oben). Der neue Typ
-                // wuerde sie als seine eigene lesen - deshalb weg damit.
+                // wuerde sie als seine eigene read - deshalb weg damit.
                 // Fuer Typen, deren OCB ein VERHALTEN waehlt, steht der
                 // richtige Wert in kSpawnOcb (Roman God: Waffenart).
                 const int wunschOcb = spawnOcbFuer(arten[i]);
@@ -2315,10 +2315,10 @@ bool Rando::run(const RandoInput& in,
     // gibt es nichts zu verlieren, und ein Vanilla-Lauf soll vanilla bleiben.
     if (opt.shuffleKeyItems || opt.shuffleOtherPickups)
     {
-        std::set<int> gegnerarten(in.enemyTypes.begin(), in.enemyTypes.end());
+        std::set<int> enemyKinds(in.enemyTypes.begin(), in.enemyTypes.end());
         for (std::map<int, const CrossGegner*>::const_iterator c = crossGewaehlt.begin();
              c != crossGewaehlt.end(); ++c)
-            gegnerarten.insert(c->first);
+            enemyKinds.insert(c->first);
 
         int nachgezogen = 0;
         for (int idx : in.antitriggered)
@@ -2327,7 +2327,7 @@ bool Rando::run(const RandoInput& in,
             std::map<int, LevelItem>::const_iterator f = finalOf.find(idx);
             // Nur Gegner: ein Antitrigger auf eine Tuer oder eine Flipmap
             // muss weiter feuern, sonst steht das Level still.
-            if (f == finalOf.end() || !gegnerarten.count(f->second.typeId)) continue;
+            if (f == finalOf.end() || !enemyKinds.count(f->second.typeId)) continue;
 
             JsonValue e = JsonValue::makeObject();
             e.set("index", JsonValue::makeInt(idx));
@@ -2525,7 +2525,7 @@ bool Rando::run(const RandoInput& in,
             // halben Sektor tief einfallen. Belaufbarkeit ist fuer ihn keine
             // Bedingung, deshalb nur die Hoehe.
             int gyBoden = 0;
-            Rando::bodenAn(in, *p.s, 512, 512, gyBoden);
+            Rando::floorAt(in, *p.s, 512, 512, gyBoden);
 
             // Ein Rudel steht auf EINEM Sektor - wie Andrea2 seine drei
             // Hydra-Glieder. Die Tiere verteilen sich zur Laufzeit selbst:
@@ -2767,7 +2767,7 @@ bool Rando::run(const RandoInput& in,
 
         // Gast aus Tomb Raider 3 (#92): kein Spenderlevel, sondern eine
         // Anweisung an den Patchweg, ihn zur Laufzeit aus der Installation
-        // des Nutzers zu holen. Alles Naehere steht in Tr3Quelle::dinos() -
+        // des Nutzers zu holen. Alles Naehere steht in Tr3Source::dinos() -
         // hier reicht der Slot, denn die Tabelle ist ueber ihn auffindbar.
         if (c->tr3)
         {
@@ -2805,7 +2805,7 @@ bool Rando::run(const RandoInput& in,
             e.set("toSlot", JsonValue::makeInt(t));
         e.set("fromLevel", JsonValue::makeString(c->von));
         e.set("replace", JsonValue::makeBool(true));
-        if (c->animZahl > 0) e.set("animZahl", JsonValue::makeInt(c->animZahl));
+        if (c->animCount > 0) e.set("animCount", JsonValue::makeInt(c->animCount));
         moveables.push(e);
 
         // Pflicht-Gefolge des Typs (siehe Tabellenkommentar).
@@ -2869,33 +2869,33 @@ bool Rando::run(const RandoInput& in,
         e.set("slot", JsonValue::makeInt(89));
         e.set("fromLevel", JsonValue::makeString("andy3"));
         e.set("replace", JsonValue::makeBool(true));
-        e.set("animZahl", JsonValue::makeInt(46));   // wie im kCross-Eintrag
+        e.set("animCount", JsonValue::makeInt(46));   // wie im kCross-Eintrag
         moveables.push(e);
         report.notes.push_back("Imp geheilt: voller Animsatz (mit Tod) aus andy3.");
     }
 
-    // --- Levelketten (Levelketten.h): Modelle der nachreichbaren Items ---
+    // --- LevelChains (LevelChains.h): Modelle der nachreichbaren Items ---
     //
-    // Jedes Level, das laut Kette ein Item aus einem anderen Level brauchen
+    // Jedes Level, das volumes Kette ein Item aus einem anderen Level brauchen
     // KANN, bekommt dessen Modellslot vom Spender - unabhaengig von der
     // Reihenfolge, denn ob die SCRIPT.DAT das Item per GIVEOBJ nachreicht,
     // entscheidet sich erst im Skript-Schritt, und der Level-Schritt kennt
     // die Reihenfolge nicht (CLI!). Ein Slot zu viel kostet nichts; ein
     // Inventar-Item ohne Modell ist der Fehler, den der Nutzer bei
     // Cheat-Items gesehen hat. Ohne "replace": vorhandene Slots bleiben.
-    for (size_t ki = 0; ki < kLevelkettenZahl; ++ki)
+    for (size_t ki = 0; ki < kLevelChainCount; ++ki)
     {
-        const Levelkette& k = kLevelketten[ki];
+        const LevelChain& k = kLevelChains[ki];
         if (!k.slot) continue;                          // Story-Items ohne Modellkopie
-        std::string kn = k.nehmer;
+        std::string kn = k.taker;
         for (char& c : kn) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         if (kn != klein) continue;
 
         JsonValue e = JsonValue::makeObject();
         e.set("slot", JsonValue::makeInt(k.slot));
-        e.set("fromLevel", JsonValue::makeString(k.spender));
+        e.set("fromLevel", JsonValue::makeString(k.donor));
         moveables.push(e);
-        report.notes.push_back(std::string("Levelkette: Modell fuer ") + k.name + " eingelegt.");
+        report.notes.push_back(std::string("LevelChain: Modell fuer ") + k.name + " eingelegt.");
     }
 
     // --- joby3: Key Item 8 (203) muss im Level liegen ---
@@ -3148,7 +3148,7 @@ bool Rando::run(const RandoInput& in,
 // folgen der Pool-Tabelle kCross weiter oben - wer dort eine Zeile ergaenzt,
 // ergaenzt sie hier. Die Namen sind die aus der Nutzerliste "Gegner Pool.txt",
 // nicht die Enum-Bezeichner der Engine.
-std::vector<Gegnerart> Rando::gegnerarten()
+std::vector<EnemyKind> Rando::enemyKinds()
 {
     return {
         { 33, "SWAT",              nullptr },

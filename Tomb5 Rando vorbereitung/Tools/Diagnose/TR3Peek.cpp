@@ -25,9 +25,9 @@ struct Leser
     size_t at = 0;
     bool   kaputt = false;
 
-    bool laden(const char* pfad)
+    bool laden(const char* path)
     {
-        FILE* f = std::fopen(pfad, "rb");
+        FILE* f = std::fopen(path, "rb");
         if (!f) return false;
         std::fseek(f, 0, SEEK_END);
         const long n = std::ftell(f);
@@ -66,7 +66,7 @@ int main(int argc, char** argv)
     const int suche = (argc == 3) ? std::atoi(argv[2]) : -1;
 
     Leser r;
-    if (!r.laden(argv[1])) { std::printf("Datei laesst sich nicht lesen: %s\n", argv[1]); return 2; }
+    if (!r.laden(argv[1])) { std::printf("Datei laesst sich nicht read: %s\n", argv[1]); return 2; }
 
     const uint32_t version = r.u32();
     std::printf("Datei %s (%.1f MB), Version 0x%08X", argv[1], r.b.size() / 1048576.0, version);

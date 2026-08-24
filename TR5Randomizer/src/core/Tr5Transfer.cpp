@@ -100,7 +100,7 @@ namespace
 
     //------------------------------------------------------------------------
     // Ein Einfuegeplan: alle Einfuegungen erst sammeln, dann in EINEM Durchlauf
-    // anwenden. Der Grund steht in Tr5Level.h bei der Blockkarte: jede einzelne
+    // apply. Der Grund steht in Tr5Level.h bei der Blockkarte: jede einzelne
     // Einfuegung wuerde alle gemerkten Offsets entwerten, und neun Einfuegungen
     // mit je einer Handkorrektur aller Offsets sind neun Gelegenheiten, eine zu
     // vergessen.
@@ -211,7 +211,7 @@ namespace
             int16_t nNorms; if (!s16(nNorms)) { err = "Mesh-Normalen abgeschnitten"; return false; }
             // ACHTUNG, null heisst NORMALEN: ProcessMeshData setzt
             // "if (!nNorms) nNorms = nVerts" VOR der Verzweigung
-            // (drawroom.cpp:833) - nur NEGATIVE Werte bedeuten Prelight.
+            // (drawroom.cpp:833) - nur NEGATIVE Values bedeuten Prelight.
             // Wer 0 als Prelight deutet, kopiert das Mesh verkuerzt, und die
             // Faces dahinter sind Muell. So sah joby2s Zopf nach dem Kopieren
             // aus: ein Spiess durch den Koerper, waehrend Andrea1s Haar ohne
@@ -258,7 +258,7 @@ namespace
     }
 
     // Laenge eines Anim-Befehls in Shorts inkl. Opcode (game/control.cpp,
-    // AnimateItem-Befehlsauswertung; dieselben Werte nutzt DumpAnim).
+    // AnimateItem-Befehlsauswertung; dieselben Values nutzt DumpAnim).
     int commandLen(int16_t typ)
     {
         switch (typ)
@@ -311,14 +311,14 @@ bool Tr5Level::debugMeshWalk(int ptrIndex, int& nVerts, int& nNorms,
 // Vorgabe verhindern soll. Angebaut, nicht umgebaut - copyMoveableFrom bleibt
 // unberuehrt.
 //
-// Rueckgabe in "zuordnung": TR3-Objekttexturnummer -> neuer Texinfo-Index.
+// Rueckgabe in "mapping": TR3-Objekttexturnummer -> neuer Texinfo-Index.
 // Damit biegt der Aufrufer anschliessend die Texturworte der Faces um.
 //----------------------------------------------------------------------------
-bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
-                                  std::map<int,int>& zuordnung, std::string& error)
+bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& package,
+                                  std::map<int,int>& mapping, std::string& error)
 {
     char buf[256];
-    zuordnung.clear();
+    mapping.clear();
 
     // Frische Blockkarte holen (#104) - dritter Eingang derselben Art.
     // Beim TR3-Weg laufen VOR den Texturen die Klaenge (Reihenfolge ist
@@ -331,42 +331,42 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
     // dafuer, dass ein Sweep nur die Parameter prueft, die er faehrt.
     if (!reparse(error)) { error = "Blockkarte: " + error; return false; }
 
-    if (paket.size() < 48 || std::memcmp(paket.data(), "T35H", 4) != 0)
+    if (package.size() < 48 || std::memcmp(package.data(), "T35H", 4) != 0)
     { error = "Kein TR3-Modellpaket"; return false; }
-    if (rd32(paket, 4) < 2) { error = "Paket ohne Texturteil (Version < 2)"; return false; }
+    if (rd32(package, 4) < 2) { error = "Paket ohne Texturteil (Version < 2)"; return false; }
 
     // --- An den Texturteil vorspulen (Aufbau siehe TR3Hol) ----------------
-    const uint32_t nMeshes = rd32(paket, 12), nAnims = rd32(paket, 16);
-    const uint32_t nFrameW = rd32(paket, 20), nBoneW = rd32(paket, 24);
-    const uint32_t nSC = rd32(paket, 28), nAD = rd32(paket, 32), nCmd = rd32(paket, 36);
+    const uint32_t nMeshes = rd32(package, 12), nAnims = rd32(package, 16);
+    const uint32_t nFrameW = rd32(package, 20), nBoneW = rd32(package, 24);
+    const uint32_t nSC = rd32(package, 28), nAD = rd32(package, 32), nCmd = rd32(package, 36);
     size_t p = 48;
     for (uint32_t i = 0; i < nMeshes; ++i)
     {
-        if (p + 4 > paket.size()) { error = "Paket endet in der Meshliste"; return false; }
-        p += 4 + rd32(paket, p);
+        if (p + 4 > package.size()) { error = "Paket endet in der Meshliste"; return false; }
+        p += 4 + rd32(package, p);
     }
     p += size_t(nBoneW) * 4 + size_t(nFrameW) * 2 + size_t(nAnims) * SZ_ANIM
        + size_t(nSC) * SZ_CHANGE + size_t(nAD) * SZ_RANGE + size_t(nCmd) * 2;
-    if (p + 4 > paket.size()) { error = "Paket endet vor dem Texturteil"; return false; }
+    if (p + 4 > package.size()) { error = "Paket endet vor dem Texturteil"; return false; }
 
     struct Tr3Tex { int orig; uint16_t drawtype; int kachel; uint8_t uv[8]; };
     std::vector<Tr3Tex> texte;
-    const uint32_t nTexte = rd32(paket, p); p += 4;
+    const uint32_t nTexte = rd32(package, p); p += 4;
     for (uint32_t i = 0; i < nTexte; ++i)
     {
-        if (p + 14 > paket.size()) { error = "Texturteil endet vorzeitig"; return false; }
+        if (p + 14 > package.size()) { error = "Texturteil endet vorzeitig"; return false; }
         Tr3Tex t;
-        t.orig = rd16(paket, p);
-        t.drawtype = rd16(paket, p + 2);
-        t.kachel = rd16(paket, p + 4);
-        std::memcpy(t.uv, paket.data() + p + 6, 8);
+        t.orig = rd16(package, p);
+        t.drawtype = rd16(package, p + 2);
+        t.kachel = rd16(package, p + 4);
+        std::memcpy(t.uv, package.data() + p + 6, 8);
         p += 14;
         texte.push_back(t);
     }
 
-    const uint32_t nKacheln = rd32(paket, p); p += 4;
+    const uint32_t nKacheln = rd32(package, p); p += 4;
     const size_t kachelAt = p;
-    if (p + size_t(nKacheln) * PAGE16 > paket.size())
+    if (p + size_t(nKacheln) * PAGE16 > package.size())
     { error = "Kacheldaten laufen aus dem Paket"; return false; }
 
     // --- Zielbloecke oeffnen ----------------------------------------------
@@ -375,7 +375,7 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
 
     // Ziel ueber die Texturwerkstatt (#104): einmal entpackt, jeder Import
     // arbeitet auf den offenen Bloecken, gepackt wird beim Schliessen.
-    if (!texWerkstattOeffnen(error)) return false;
+    if (!texWorkshopOpen(error)) return false;
     std::vector<uint8_t>& dst32 = m_tex32;
     std::vector<uint8_t>& dst16 = m_tex16;
 
@@ -402,7 +402,7 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
         const int kandidaten[2][3] = { { 2, 1, 0 }, { 0, 1, 2 } };   // BGRA, RGBA
         for (int k = 0; k < 2; ++k)
         {
-            long long fehler = 0;
+            long long error = 0;
             for (size_t px = 0; px < 4096; ++px)
             {
                 const uint16_t w = rd16(dst16, px * 2);
@@ -410,12 +410,12 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
                 const int r8 = (r5 << 3) | (r5 >> 2);
                 const int g8 = (g5 << 3) | (g5 >> 2);
                 const int b8 = (b5 << 3) | (b5 >> 2);
-                fehler += std::abs(int(dst32[px * 4 + kandidaten[k][0]]) - r8);
-                fehler += std::abs(int(dst32[px * 4 + kandidaten[k][1]]) - g8);
-                fehler += std::abs(int(dst32[px * 4 + kandidaten[k][2]]) - b8);
+                error += std::abs(int(dst32[px * 4 + kandidaten[k][0]]) - r8);
+                error += std::abs(int(dst32[px * 4 + kandidaten[k][1]]) - g8);
+                error += std::abs(int(dst32[px * 4 + kandidaten[k][2]]) - b8);
             }
-            if (best < 0 || fehler < best)
-            { best = fehler; posR = kandidaten[k][0]; posG = kandidaten[k][1]; posB = kandidaten[k][2]; }
+            if (best < 0 || error < best)
+            { best = error; posR = kandidaten[k][0]; posG = kandidaten[k][1]; posB = kandidaten[k][2]; }
         }
     }
 
@@ -426,7 +426,7 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
 
     for (uint32_t k = 0; k < nKacheln; ++k)
     {
-        const uint8_t* quelle16 = paket.data() + kachelAt + size_t(k) * PAGE16;
+        const uint8_t* quelle16 = package.data() + kachelAt + size_t(k) * PAGE16;
 
         std::vector<uint8_t> seite32(PAGE32);
         for (size_t px = 0; px < 256 * 256; ++px)
@@ -443,13 +443,13 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
         // Wie beim TR5-Transfer: nur gegen die STABILEN Seiten vor der
         // Einfuegestelle pruefen, damit eine Wiederverwendung nicht durch
         // spaetere Einfuegungen verrutscht.
-        int gefunden = -1;
+        int found = -1;
         const int stabil = einfuegeAb + neueSeiten;
         for (int d = 0; d < stabil; ++d)
             if (std::memcmp(dst32.data() + size_t(d) * PAGE32, seite32.data(), PAGE32) == 0)
-            { gefunden = d; break; }
+            { found = d; break; }
 
-        if (gefunden >= 0) { kachelRemap[int(k)] = gefunden; continue; }
+        if (found >= 0) { kachelRemap[int(k)] = found; continue; }
 
         const int neu = einfuegeAb + neueSeiten;
         dst32.insert(dst32.begin() + size_t(neu) * PAGE32, seite32.begin(), seite32.end());
@@ -465,7 +465,7 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
         // Hauptblock verschiebt sich dadurch nicht, die Blockversaetze fuer
         // das Nachziehen unten bleiben ohne reparse gueltig.
         wr16(m_bytes, 6, static_cast<uint16_t>(dstTex.ot + neueSeiten));
-        m_texSchmutzig = true;
+        m_texDirty = true;
 
         // Alle GESPEICHERTEN Kachelnummern ab der Einfuegestelle nachziehen -
         // Texinfos (Bit 15 ist ein Flag und bleibt stehen) und Sprites.
@@ -517,17 +517,17 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
         }
 
         // Gibt es den Eintrag schon? Dann wiederverwenden.
-        int gefunden = -1;
-        for (int32_t i = 0; i < m_texinfos.count && gefunden < 0; ++i)
+        int found = -1;
+        for (int32_t i = 0; i < m_texinfos.count && found < 0; ++i)
             if (std::memcmp(m_bytes.data() + m_texinfos.dataAt + static_cast<size_t>(i) * SZ_TEXINFO,
                             rec, SZ_TEXINFO) == 0)
-                gefunden = i;
-        for (int k = 0; k < neuAngelegt && gefunden < 0; ++k)
+                found = i;
+        for (int k = 0; k < neuAngelegt && found < 0; ++k)
             if (std::memcmp(neueInfos.data() + static_cast<size_t>(k) * SZ_TEXINFO, rec, SZ_TEXINFO) == 0)
-                gefunden = m_texinfos.count + k;
+                found = m_texinfos.count + k;
 
-        if (gefunden >= 0) { zuordnung[t.orig] = gefunden; continue; }
-        zuordnung[t.orig] = m_texinfos.count + neuAngelegt;
+        if (found >= 0) { mapping[t.orig] = found; continue; }
+        mapping[t.orig] = m_texinfos.count + neuAngelegt;
         neueInfos.insert(neueInfos.end(), rec, rec + SZ_TEXINFO);
         ++neuAngelegt;
     }
@@ -563,27 +563,27 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& paket,
 // Zielbloecke einmal, Schliessen packt sie einmal zurueck und setzt die
 // Datei EINMAL neu zusammen. Dazwischen bleiben Kopf und Hauptblock von
 // m_bytes unangetastet, nur der Seitenzaehler im Kopf (Wort 6) wandert
-// je Import mit - den lesen die MAX_PAGES-Pruefung und die Einfuegestelle.
+// je Import mit - den read die MAX_PAGES-Pruefung und die Einfuegestelle.
 //----------------------------------------------------------------------------
-bool Tr5Level::texWerkstattOeffnen(std::string& error)
+bool Tr5Level::texWorkshopOpen(std::string& error)
 {
-    if (m_texOffen) return true;
+    if (m_texOpen) return true;
 
     TexHeader t;
     if (!parseTexHeader(m_bytes, t, error)) return false;
     if (!inflateBlock(m_bytes, t.block32At, m_tex32, error)) { error = "Ziel 32: " + error; return false; }
     if (!inflateBlock(m_bytes, t.block16At, m_tex16, error)) { error = "Ziel 16: " + error; return false; }
 
-    m_texOffen = true;
-    m_texSchmutzig = false;
+    m_texOpen = true;
+    m_texDirty = false;
     return true;
 }
 
-bool Tr5Level::texWerkstattSchliessen(std::string& error)
+bool Tr5Level::texWorkshopClose(std::string& error)
 {
-    if (!m_texOffen) return true;
+    if (!m_texOpen) return true;
 
-    if (m_texSchmutzig)
+    if (m_texDirty)
     {
         TexHeader t;
         if (!parseTexHeader(m_bytes, t, error)) return false;
@@ -605,21 +605,21 @@ bool Tr5Level::texWerkstattSchliessen(std::string& error)
         if (!reparse(error)) { error = "nach dem Seiteneinfuegen: " + error; return false; }
     }
 
-    m_texOffen = false;
-    m_texSchmutzig = false;
+    m_texOpen = false;
+    m_texDirty = false;
     m_tex32.clear(); m_tex32.shrink_to_fit();
     m_tex16.clear(); m_tex16.shrink_to_fit();
     return true;
 }
 
 bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& error,
-                                int dstSlot, bool nurMeshes, int animZahl)
+                                int dstSlot, bool meshesOnly, int animCount)
 {
     char buf[256];
 
     // Frische Blockkarte holen (#104). Wer vor uns in den Hauptblock
     // geschrieben hat, ohne die Karte nachzuziehen - addTrigger haengt etwa
-    // Floordata an -, hinterlaesst veraltete dataAt-Werte, und die Splices
+    // Floordata an -, hinterlaesst veraltete dataAt-Values, und die Splices
     // unten laegen daneben. Bisher heilte das der Zufall: Phase B baute die
     // Datei je Import neu und rief reparse, BEVOR Phase C die Karte nutzte.
     // Mit der Texturwerkstatt entfaellt dieser Neubau - die Karte muss am
@@ -674,19 +674,19 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         return best;
     };
 
-    // nurMeshes: Anim-, Frame- und Bone-Scheiben bewusst leer lassen -
+    // meshesOnly: Anim-, Frame- und Bone-Scheiben bewusst leer lassen -
     // siehe die Begruendung am Prototyp in Tr5Level.h (MESHSWAP1 traegt
     // einen anim_index ohne eigene Animationen).
-    const long long boneStart = nurMeshes ? 0 : mv.boneIndex;
-    const long long boneEnd = nurMeshes ? 0 : nextStart(boneStart, src.m_bones.count,
+    const long long boneStart = meshesOnly ? 0 : mv.boneIndex;
+    const long long boneEnd = meshesOnly ? 0 : nextStart(boneStart, src.m_bones.count,
                                         [](const MoveableInfo& m) { return static_cast<long long>(m.boneIndex); });
 
-    const long long frameStart = nurMeshes ? 0 : mv.frameOffset;
-    long long frameEnd = nurMeshes ? 0 : nextStart(frameStart, static_cast<long long>(src.m_frames.count) * 2,
+    const long long frameStart = meshesOnly ? 0 : mv.frameOffset;
+    long long frameEnd = meshesOnly ? 0 : nextStart(frameStart, static_cast<long long>(src.m_frames.count) * 2,
                                          [](const MoveableInfo& m) { return static_cast<long long>(m.frameOffset); });
 
     long long animStart = -1, animEnd = -1;
-    if (!nurMeshes && mv.animIndex >= 0)
+    if (!meshesOnly && mv.animIndex >= 0)
     {
         animStart = mv.animIndex;
         animEnd = nextStart(animStart, src.m_anims.count,
@@ -699,9 +699,9 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         // auch die Frame-Scheibe bis hinter den hoechsten Frame-Zeiger der
         // erweiterten Anims wachsen - die Zeiger-Pruefung unten verlangt,
         // dass jeder davon in der Scheibe liegt.
-        if (animZahl > 0)
+        if (animCount > 0)
         {
-            animEnd = animStart + animZahl;
+            animEnd = animStart + animCount;
             if (animEnd > src.m_anims.count)
             { error = "Anim-Scheibe (explizite Laenge) laeuft aus der Tabelle"; return false; }
 
@@ -795,7 +795,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         // Cores Vertonungsfehler in Spendersaetzen, nur in der KOPIE
         // geradegerueckt - das Original bleibt byte-treu, denn zu Hause
         // faellt der Fehler nicht auf (oder gehoert zur Kulisse). Bisher
-        // ein einziger belegter Fall, gefunden ueber das erweiterte SFXLOG
+        // ein einziger belegter Fall, found ueber das erweiterte SFXLOG
         // (anim=886 typ=0x4000 in trockenem Raum, #113):
         //  - joby3, Mafia2 (51), Anim +17 Frame 589: der Wasserschritt
         //    (sfx 17) traegt als EINZIGER im Satz die Marke "nur Land" -
@@ -971,7 +971,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
 
     // Ziel ueber die Texturwerkstatt (#104): einmal entpackt, jeder Import
     // arbeitet auf den offenen Bloecken, gepackt wird beim Schliessen.
-    if (!texWerkstattOeffnen(error)) { error = "Ziel: " + error; return false; }
+    if (!texWorkshopOpen(error)) { error = "Ziel: " + error; return false; }
     std::vector<uint8_t>& dst32 = m_tex32;
     std::vector<uint8_t>& dst16 = m_tex16;
 
@@ -994,13 +994,13 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         // eingefuegten) pruefen: deren Nummern sind stabil. Ein Treffer im
         // Bump-Bereich dahinter wuerde beim naechsten Einfuegen um eins
         // verrutschen - dann lieber eine Seite doppelt als eine falsche.
-        int gefunden = -1;
+        int found = -1;
         const int stabil = einfuegeAb + neueSeiten;
         for (int d = 0; d < stabil; ++d)
             if (std::memcmp(dst32.data() + static_cast<size_t>(d) * PAGE32, seite32, PAGE32) == 0)
-            { gefunden = d; break; }
+            { found = d; break; }
 
-        if (gefunden >= 0) { tileRemap[t] = gefunden; continue; }
+        if (found >= 0) { tileRemap[t] = found; continue; }
 
         const int neu = einfuegeAb + neueSeiten;
         dst32.insert(dst32.begin() + static_cast<size_t>(neu) * PAGE32, seite32, seite32 + PAGE32);
@@ -1026,7 +1026,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         // Hauptblock verschiebt sich dadurch nicht, die Blockversaetze fuer
         // das Nachziehen unten bleiben ohne reparse gueltig.
         wr16(m_bytes, 6, static_cast<uint16_t>(dstTex.ot + neueSeiten));
-        m_texSchmutzig = true;
+        m_texDirty = true;
 
         // Alle GESPEICHERTEN Kachelnummern ab der Einfuegestelle nachziehen -
         // das sind die Texinfos (Bump-Seiten der Raeume) und die Sprites.
@@ -1065,15 +1065,15 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         std::memcpy(rec + 2, &neuW, 2);
 
         // Gibt es den Eintrag schon? Beim zweiten Slot desselben Spenders ja.
-        int gefunden = -1;
-        for (int32_t i = 0; i < m_texinfos.count && gefunden < 0; ++i)
+        int found = -1;
+        for (int32_t i = 0; i < m_texinfos.count && found < 0; ++i)
             if (std::memcmp(m_bytes.data() + m_texinfos.dataAt + static_cast<size_t>(i) * SZ_TEXINFO, rec, SZ_TEXINFO) == 0)
-                gefunden = i;
-        for (int k = 0; k < texinfoNeu && gefunden < 0; ++k)
+                found = i;
+        for (int k = 0; k < texinfoNeu && found < 0; ++k)
             if (std::memcmp(neueTexinfos.data() + static_cast<size_t>(k) * SZ_TEXINFO, rec, SZ_TEXINFO) == 0)
-                gefunden = m_texinfos.count + k;
+                found = m_texinfos.count + k;
 
-        if (gefunden >= 0) { texinfoRemap[t] = gefunden; continue; }
+        if (found >= 0) { texinfoRemap[t] = found; continue; }
         texinfoRemap[t] = m_texinfos.count + texinfoNeu;
         neueTexinfos.insert(neueTexinfos.end(), rec, rec + SZ_TEXINFO);
         ++texinfoNeu;
@@ -1144,18 +1144,18 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         push32(neuePtrs, static_cast<uint32_t>(dstMeshBytesAlt + meshRegion[ofs].first));
 
     // Der Objekteintrag. Ersetzt oder angehaengt - beides ueber dieselben Bytes.
-    // Im nurMeshes-Fall zeigen Bone/Frame/Anim bewusst auf nichts - an einem
+    // Im meshesOnly-Fall zeigen Bone/Frame/Anim bewusst auf nichts - an einem
     // Mesh-Lager liest die Engine nur mesh_index.
     uint8_t objRec[SZ_OBJ];
     {
         const int32_t s32 = zielSlot;                     std::memcpy(objRec + 0, &s32, 4);
         const int16_t nm = static_cast<int16_t>(mv.nmeshes); std::memcpy(objRec + 4, &nm, 2);
         const int16_t mi = static_cast<int16_t>(dstPtrAlt);  std::memcpy(objRec + 6, &mi, 2);
-        const int32_t bi = nurMeshes ? 0 : dstBoneAlt;    std::memcpy(objRec + 8, &bi, 4);
-        const uint32_t fo = nurMeshes ? 0
+        const int32_t bi = meshesOnly ? 0 : dstBoneAlt;    std::memcpy(objRec + 8, &bi, 4);
+        const uint32_t fo = meshesOnly ? 0
                           : static_cast<uint32_t>(dstFrameBytesAlt + (mv.frameOffset - frameStart));
         std::memcpy(objRec + 12, &fo, 4);
-        const uint16_t ai = (nurMeshes || mv.animIndex < 0) ? 0xFFFF
+        const uint16_t ai = (meshesOnly || mv.animIndex < 0) ? 0xFFFF
                           : static_cast<uint16_t>(mv.animIndex - animStart + dstAnimAlt);
         std::memcpy(objRec + 16, &ai, 2);
         objRec[18] = 0; objRec[19] = 0;
@@ -1224,8 +1224,8 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     // Phase D: Sounds. Die Anim-Befehle nennen ihre PlaySound-Nummern selbst;
     // die Schuss- und Stopsounds der Waffen stehen bei KEINER in den
     // Anim-Daten, sondern in fest verdrahteten SoundEffect()-Aufrufen der
-    // Engine. Ohne diese Tabelle blieb die HK damals stumm - der Fehler, bis
-    // er gefunden war (siehe Plan.md der Waffenarbeit).
+    // Engine. Ohne diese Tabelle blieb die HK damals muted - der Fehler, bis
+    // er found war (siehe Plan.md der Waffenarbeit).
     //========================================================================
     struct WaffenSfx { const int* slots; int nSlots; const int* sfx; int nSfx; };
     static const int sPistolen[] = { 1, 334, 335 },        fPistolen[] = { 8 };
@@ -1283,16 +1283,16 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
 // Wiederholbar im Sinne des Patchlaufs nicht noetig - der Lauf startet immer
 // von der Vanilla-Datei. Ein zweiter Aufruf haengte die Daten erneut an.
 //----------------------------------------------------------------------------
-bool Tr5Level::kopiereLaraAnimVon(const Tr5Level& src, int animNr, std::string& fehler)
+bool Tr5Level::copyLaraAnimFrom(const Tr5Level& src, int animNr, std::string& error)
 {
     MoveableInfo dl, sl;
-    if (!moveableInfo(0, dl) || dl.animIndex < 0) { fehler = "Ziel hat keine Lara"; return false; }
-    if (!src.moveableInfo(0, sl) || sl.animIndex < 0) { fehler = "Spender hat keine Lara"; return false; }
+    if (!moveableInfo(0, dl) || dl.animIndex < 0) { error = "Ziel hat keine Lara"; return false; }
+    if (!src.moveableInfo(0, sl) || sl.animIndex < 0) { error = "Spender hat keine Lara"; return false; }
 
     const long long d = static_cast<long long>(dl.animIndex) + animNr;
     const long long s = static_cast<long long>(sl.animIndex) + animNr;
-    if (d < 0 || d >= m_anims.count) { fehler = "Anim liegt im Ziel ausserhalb der Tabelle"; return false; }
-    if (s < 0 || s >= src.m_anims.count) { fehler = "Anim liegt im Spender ausserhalb der Tabelle"; return false; }
+    if (d < 0 || d >= m_anims.count) { error = "Anim liegt im Ziel ausserhalb der Tabelle"; return false; }
+    if (s < 0 || s >= src.m_anims.count) { error = "Anim liegt im Spender ausserhalb der Tabelle"; return false; }
 
     const size_t so = src.m_anims.dataAt + static_cast<size_t>(s) * 40;
     const uint32_t foSrc = rd32(src.m_bytes, so);
@@ -1307,7 +1307,7 @@ bool Tr5Level::kopiereLaraAnimVon(const Tr5Level& src, int animNr, std::string& 
         const uint32_t fo = rd32(src.m_bytes, src.m_anims.dataAt + static_cast<size_t>(i) * 40);
         if (fo > foSrc && fo < foEnde) foEnde = fo;
     }
-    if (foEnde <= foSrc) { fehler = "Frame-Daten des Spenders nicht abgrenzbar"; return false; }
+    if (foEnde <= foSrc) { error = "Frame-Daten des Spenders nicht abgrenzbar"; return false; }
 
     std::vector<uint8_t> frameBytes(src.m_bytes.begin() + src.m_frames.dataAt + foSrc,
                                     src.m_bytes.begin() + src.m_frames.dataAt + foEnde);
@@ -1327,7 +1327,7 @@ bool Tr5Level::kopiereLaraAnimVon(const Tr5Level& src, int animNr, std::string& 
         {
             int16_t typ; std::memcpy(&typ, src.m_bytes.data() + c, 2);
             const int len = commandLen(typ);
-            if (len <= 0) { fehler = "unbekanntes Anim-Kommando im Spender"; return false; }
+            if (len <= 0) { error = "unbekanntes Anim-Kommando im Spender"; return false; }
             std::vector<uint8_t> w(src.m_bytes.begin() + c, src.m_bytes.begin() + c + static_cast<size_t>(len) * 2);
             if (typ == 5 || typ == 6)
             {
@@ -1369,7 +1369,7 @@ bool Tr5Level::kopiereLaraAnimVon(const Tr5Level& src, int animNr, std::string& 
     const int32_t neueGroesse = static_cast<int32_t>(m_mainSize);
     std::memcpy(m_bytes.data() + m_mainOffset - 8, &neueGroesse, 4);
     std::memcpy(m_bytes.data() + m_mainOffset - 4, &neueGroesse, 4);
-    if (!reparse(fehler)) { fehler = "nach dem Anhaengen: " + fehler; return false; }
+    if (!reparse(error)) { error = "nach dem Anhaengen: " + error; return false; }
 
     // Den Ziel-Anim-Satz NACH dem reparse anfassen - die Blockkarte ist frisch.
     uint8_t* dr = m_bytes.data() + m_anims.dataAt + static_cast<size_t>(d) * 40;

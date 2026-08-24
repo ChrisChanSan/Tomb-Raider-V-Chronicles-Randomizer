@@ -71,7 +71,7 @@ uint64_t Rng::below(uint64_t bound)
     // Lemire: multipliziere in die doppelte Breite und verwirf den unteren
     // Randbereich, der die Gleichverteilung verletzen wuerde. Das Verwerfen
     // greift so selten, dass die Schleife praktisch nie zweimal laeuft - aber
-    // sie muss da sein, sonst waeren kleine Werte bevorzugt.
+    // sie muss da sein, sonst waeren kleine Values bevorzugt.
 #if defined(_MSC_VER) && defined(_M_X64)
     unsigned __int64 hi;
     uint64_t lo = _umul128(next(), bound, &hi);
@@ -122,7 +122,7 @@ std::string SeedText::format(uint64_t seed)
 
 uint64_t SeedText::parse(const std::string& text)
 {
-    // Erst versuchen, den Text als unser Base31-Format zu lesen. Trennzeichen
+    // Erst versuchen, den Text als unser Base31-Format zu read. Trennzeichen
     // und Leerraum werden ignoriert, Kleinschreibung akzeptiert.
     std::string clean;
     bool decodable = true;

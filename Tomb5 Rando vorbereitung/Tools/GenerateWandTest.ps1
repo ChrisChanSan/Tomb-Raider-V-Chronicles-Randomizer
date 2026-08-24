@@ -40,7 +40,7 @@ param(
     [string]$Exe = "C:\Cloude AI\Alte sachen\Two gun test\Bittenichtbitdefender\BauWerk.exe"
 )
 
-# Welche Typen je Level an die Wand gehoeren, mit ihrer OCB. Die Werte sind
+# Welche Typen je Level an die Wand gehoeren, mit ihrer OCB. Die Values sind
 # gemessen (ItemPruef an den Vanilla-Dateien), nicht geraten.
 $WANDTYPEN = @{
     'Andrea2' = @( @{ typeId = 174; ocb = 2 }, @{ typeId = 172; ocb = 2 } )
@@ -161,7 +161,7 @@ foreach ($lvl in $Levels) {
         # Je Wandkante ein Item, die hinterlegten Typen reihum - so liegen in
         # einer Ecke zwei verschiedene Modelle nebeneinander und man sieht
         # sofort, ob beide gleich stehen.
-        # Je Wandkante JEDEN Typ setzen, der dort laut seiner Zonengrenze
+        # Je Wandkante JEDEN Typ setzen, der dort volumes seiner Zonengrenze
         # liegen darf. So sieht man in trview typweise, wie weit die Reichweite
         # jeweils traegt - liegen an einer Kante beide, ist der Platz fuer
         # beide erlaubt.

@@ -69,18 +69,18 @@ int main(int argc, char** argv)
 
                     for (const Tr5FloorEntry& fe : kette)
                     {
-                        if (fe.funktion != 4 /* FN_TRIGGER */) continue;
-                        // woerter[0] = Funktionswort, [1] = Setup, dann Befehle.
+                        if (fe.function != 4 /* FN_TRIGGER */) continue;
+                        // words[0] = Funktionswort, [1] = Setup, dann Befehle.
                         size_t i = 2;
                         // SWITCH(2)/KEY(3)/PICKUP(4) schieben ein Referenzwort vor.
                         if (fe.art == 2 || fe.art == 3 || fe.art == 4) i = 3;
-                        for (; i < fe.woerter.size(); ++i)
+                        for (; i < fe.words.size(); ++i)
                         {
-                            const int typ = (fe.woerter[i] >> 10) & 0xF;
+                            const int typ = (fe.words[i] >> 10) & 0xF;
                             ++zaehler[typ];
                             if (typ == zeigeTyp)
                                 std::printf("  %s Raum %3d Sektor %d,%d  Wert %d  Triggerart %d\n",
-                                            n, r.index, sx, sz, fe.woerter[i] & 0x3FF, fe.art);
+                                            n, r.index, sx, sz, fe.words[i] & 0x3FF, fe.art);
                             // FLYBY verbraucht ein Zusatzwort.
                             if (typ == 12) ++i;
                         }

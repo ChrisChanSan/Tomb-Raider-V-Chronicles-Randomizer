@@ -1,6 +1,6 @@
 // Gegenprobe der Dino-Tabelle (#92): erzeugt sie fuer alle vier dieselben
 // Pakete wie die Werkzeuge? Ein Aufruf, vier Gaeste, kein Argumentbasteln.
-#include "core/Tr3Quelle.h"
+#include "core/Tr3Source.h"
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -17,7 +17,7 @@ static std::wstring W(const std::string& s) { return std::wstring(s.begin(), s.e
 // Die drei Kopfwoerter je Klang (Volume, Chance, Chars) werden vom Einsetzer
 // UEBERLESEN - Tr5Tr3Import.cpp:117 springt mit "p += 8" darueber hinweg und
 // baut die SAMPLE_INFOs neu auf. Das aeltere T-Rex-Paket stammt aus dem
-// Tabellenmodus des Werkzeugs und traegt dort noch Werte aus dem Quelllevel;
+// Tabellenmodus des Werkzeugs und traegt dort noch Values aus dem Quelllevel;
 // die Bibliothek schreibt wie der Wellenmodus Nullen. Fuer den Vergleich
 // werden sie deshalb auf beiden Seiten genullt - alles andere MUSS stimmen.
 static void nulleKopfwoerter(std::vector<uint8_t>& b)
@@ -48,16 +48,16 @@ int main(int argc, char** argv)
     const char* mod[4] = { "trex.bin", "raptor_mod.bin", "compy_mod.bin", "geier.bin" };
     const char* ton[4] = { "trex_ton.bin", "raptor_ton.bin", "compy_ton.bin", "geier_ton.bin" };
 
-    int i = 0, fehler = 0;
-    for (const Tr3Quelle::DinoQuelle& d : Tr3Quelle::dinos())
+    int i = 0, error = 0;
+    for (const Tr3Source::DinoSource& d : Tr3Source::dinos())
     {
         std::string f;
         std::vector<uint8_t> m, t, vm, vt;
 
-        if (!Tr3Quelle::holeMoveable(Tr3Quelle::levelPfad(d, tr3, gold), d.objekt, m, f))
-        { std::printf("%-8s Modell GESCHEITERT: %s\n", d.name, f.c_str()); ++fehler; ++i; continue; }
-        if (!Tr3Quelle::holeKlaenge(Tr3Quelle::sfxPfad(d, tr3, gold), d.klaenge, t, f))
-        { std::printf("%-8s Klaenge GESCHEITERT: %s\n", d.name, f.c_str()); ++fehler; ++i; continue; }
+        if (!Tr3Source::fetchMoveable(Tr3Source::levelPath(d, tr3, gold), d.object, m, f))
+        { std::printf("%-8s Modell GESCHEITERT: %s\n", d.name, f.c_str()); ++error; ++i; continue; }
+        if (!Tr3Source::fetchSounds(Tr3Source::sfxPath(d, tr3, gold), d.sounds, t, f))
+        { std::printf("%-8s Klaenge GESCHEITERT: %s\n", d.name, f.c_str()); ++error; ++i; continue; }
 
         const bool okM = lies(ord + "\\" + mod[i], vm) && vm == m;
         bool okT = lies(ord + "\\" + ton[i], vt);
@@ -65,9 +65,9 @@ int main(int argc, char** argv)
         std::printf("%-8s Modell %7zu Byte %-10s Klaenge %7zu Byte %s\n",
                     d.name, m.size(), okM ? "identisch" : "ABWEICHUNG",
                     t.size(), okT ? "identisch" : "ABWEICHUNG");
-        if (!okM || !okT) ++fehler;
+        if (!okM || !okT) ++error;
         ++i;
     }
-    std::printf("\n%s\n", fehler ? "MINDESTENS EINE ABWEICHUNG" : "Alle vier stimmen mit den Werkzeugpaketen ueberein.");
-    return fehler ? 1 : 0;
+    std::printf("\n%s\n", error ? "MINDESTENS EINE ABWEICHUNG" : "Alle vier stimmen mit den Werkzeugpaketen ueberein.");
+    return error ? 1 : 0;
 }

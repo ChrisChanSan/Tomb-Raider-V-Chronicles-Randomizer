@@ -136,7 +136,7 @@ namespace
     void numberTo(double d, std::string& out)
     {
         char buf[64];
-        // Ganzzahlig? Dann ohne Nachkommastelle schreiben - unsere Patches
+        // Ganzzahlig? Dann ohne Nachkommastelle write - unsere Patches
         // enthalten ausschliesslich ganzzahlige Koordinaten und Indizes, und
         // "90624" liest sich in einer Fehlersuche besser als "90624.0".
         if (std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 9.0e15)
@@ -485,7 +485,7 @@ bool Json::writeFile(const std::wstring& path, const JsonValue& value, std::stri
     FILE* f = nullptr;
     if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f)
     {
-        error = "Datei laesst sich nicht schreiben";
+        error = "Datei laesst sich nicht write";
         return false;
     }
     // Kein BOM - der Patch-Leser in TombItemEdit2026 erwartet reines UTF-8.

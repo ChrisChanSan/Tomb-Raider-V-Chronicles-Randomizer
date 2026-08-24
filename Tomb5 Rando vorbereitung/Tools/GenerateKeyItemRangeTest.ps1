@@ -1,6 +1,6 @@
 # Erzeugt je Vanilla-Level eine .trc, in der die ECHTEN Key-/Puzzle-Item-Typen
-# dieses Levels auf allen Sektoren liegen, in denen sie laut Zonen-Flood
-# platzierbar waeren. Nutzerwunsch: das ist leichter zu lesen als eine
+# dieses Levels auf allen Sektoren liegen, in denen sie volumes Zonen-Flood
+# platzierbar waeren. Nutzerwunsch: das ist leichter zu read als eine
 # generische, nur nach Zonennummer eingefaerbte Alias-Palette - man sieht in
 # trview direkt "Key Item1" ausgewaehlt und jeder Sektor leuchtet auf, der fuer
 # genau diesen Typ erlaubt ist.
@@ -77,7 +77,7 @@ if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir | Out
 # Der Randomizer hat diese Absicherung seit jeher; den Vorbereitungswerkzeugen
 # fehlte sie, und das ist aufgeflogen, als der Zielordner eines GUI-Tests
 # derselbe war, aus dem hier gelesen wurde. Das Ergebnis sah plausibel aus und
-# war falsch - die unangenehmste Sorte Fehler. Lieber laut abbrechen.
+# war falsch - die unangenehmste Sorte Fehler. Lieber volumes abbrechen.
 #----------------------------------------------------------------------------
 $ChecksumCsv = Join-Path $LevelInfoDir "VanillaLevelChecksums.csv"
 if (-not (Test-Path $ChecksumCsv)) { throw "Pruefsummenliste fehlt: $ChecksumCsv" }
@@ -105,7 +105,7 @@ foreach($lvl in $Levels){
     $infoJson = "$LevelInfoDir\$lvl.json"
     $srcTrc   = "$VanillaDir\$lvl.trc"
     if (-not (Test-Path $infoJson)) { "SKIP $lvl - kein Level-Info-JSON"; continue }
-    if (-not (Test-Path $srcTrc))   { "SKIP $lvl - keine Vanilla-.trc gefunden"; continue }
+    if (-not (Test-Path $srcTrc))   { "SKIP $lvl - keine Vanilla-.trc found"; continue }
 
     $d = Get-Content $infoJson -Raw | ConvertFrom-Json
     $rooms = @{}; foreach($r in $d.rooms){ $rooms[[int]$r.index] = $r }

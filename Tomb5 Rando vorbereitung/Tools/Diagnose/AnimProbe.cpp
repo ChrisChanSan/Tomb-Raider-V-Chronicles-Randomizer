@@ -1,4 +1,4 @@
-// Einmalige Gegenprobe: was sagt Tr5Level::laraAnimBrauchbar?
+// Einmalige Gegenprobe: was sagt Tr5Level::laraAnimUsable?
 #include "core/Tr5Level.h"
 #include <cstdio>
 #include <cstdlib>
@@ -12,7 +12,7 @@ int main(int argc, char** argv)
     for (int i = 2; i < argc; ++i)
     {
         const int n = std::atoi(argv[i]);
-        std::printf("  Anim %-4d brauchbar: %s\n", n, lvl.laraAnimBrauchbar(n) ? "JA" : "NEIN");
+        std::printf("  Anim %-4d brauchbar: %s\n", n, lvl.laraAnimUsable(n) ? "JA" : "NEIN");
     }
     return 0;
 }

@@ -33,26 +33,26 @@
 // Das Spiel traegt beim naechsten Start alles Uebrige nach - das kann es seit
 // bcb3286 von allein.
 //----------------------------------------------------------------------------
-namespace BalanceDatei
+namespace BalanceFile
 {
-    // Alle drei Werte in Prozent. 100 = unveraendert.
-    struct Werte
+    // Alle drei Values in Prozent. 100 = unveraendert.
+    struct Values
     {
-        int waffenSchaden = 100;
-        int gegnerLeben   = 100;
-        int gegnerSchaden = 100;
+        int weaponDamage = 100;
+        int enemyHealth   = 100;
+        int enemyDamage = 100;
     };
 
-    // Die drei Zeilen in <spielOrdner>\Balance.txt setzen. Vorhandene Zeilen
+    // Die drei Zeilen in <gameDir>\Balance.txt setzen. Vorhandene Zeilen
     // werden an Ort und Stelle ersetzt, fehlende hinten angehaengt, der Rest
     // der Datei bleibt Zeichen fuer Zeichen stehen.
     //
-    // Rueckgabe false nur bei einem echten Schreibfehler; fehlerText traegt
+    // Rueckgabe false nur bei einem echten Schreibfehler; errorText traegt
     // dann den Grund.
-    bool schreiben(const std::wstring& spielOrdner, const Werte& w,
-                   std::string* fehlerText = nullptr);
+    bool write(const std::wstring& gameDir, const Values& w,
+                   std::string* errorText = nullptr);
 
     // Was gerade in der Datei steht. Fehlt sie oder eine Zeile darin, gilt
     // 100 - dasselbe, was die Engine annimmt.
-    Werte lesen(const std::wstring& spielOrdner);
+    Values read(const std::wstring& gameDir);
 }

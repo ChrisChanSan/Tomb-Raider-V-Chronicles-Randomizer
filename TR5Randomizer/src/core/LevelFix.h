@@ -34,16 +34,16 @@
 // steht fuer einen Fall, den jemand im Spiel gesehen hat, und traegt seine
 // Begruendung mit.
 //----------------------------------------------------------------------------
-namespace Levelfix
+namespace LevelFix
 {
     // Ein Trigger, der auf einem zweiten Weg fehlt. Der Zielsektor bekommt
     // eine gleichlautende Kopie, die Quelle bleibt unberuehrt.
-    struct Triggerkopie
+    struct TriggerCopy
     {
         const char* level;                  // Dateiname ohne Endung
-        int vonRaum, vonSx, vonSz;
-        int nachRaum, nachSx, nachSz;
-        const char* grund;
+        int fromRoom, fromSx, fromSz;
+        int toRoom, toSx, toSz;
+        const char* reason;
     };
 
     //------------------------------------------------------------------------
@@ -76,16 +76,16 @@ namespace Levelfix
     // 7x3 Sektoren gross, (1,1) ist begehbarer Boden ohne eigene Kette -
     // die Kopie legt sich also auf einen freien Sektor.
     //------------------------------------------------------------------------
-    static const Triggerkopie kTriggerkopien[] =
+    static const TriggerCopy kTriggerCopies[] =
     {
         { "joby5", 138, 1, 1, 122, 1, 1,
           "Kabeltrigger (91/136) auch auf dem zweiten Weg zum Jump Switch 190" },
     };
 
-    // Alle Eintraege fuer dieses Level anwenden. Fehlgeschlagene Eintraege
-    // landen als Warnung in "warnungen"; der Lauf geht weiter, denn ein
+    // Alle Eintraege fuer dieses Level apply. Fehlgeschlagene Eintraege
+    // landen als Warnung in "warnings"; der Lauf geht weiter, denn ein
     // nicht angewandter Fix macht das Level nicht schlechter als vorher.
     // Rueckgabe: Zahl der uebernommenen Fixes.
-    int anwenden(Tr5Level& level, const std::string& levelName,
-                 std::vector<std::string>& warnungen);
+    int apply(Tr5Level& level, const std::string& levelName,
+                 std::vector<std::string>& warnings);
 }

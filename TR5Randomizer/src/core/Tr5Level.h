@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-#include "Boden.h"
+#include "Floor.h"
 
 //----------------------------------------------------------------------------
 // Eigener Leser und Schreiber fuer TR5-Leveldateien (.trc).
@@ -58,7 +58,7 @@
 // Texturinfos, dann ein int32 mit der Item-Anzahl und danach die Items zu je
 // 24 Bytes. Dass er unkomprimiert und wortwoertlich in der Datei steht, ist
 // der Grund, warum sich Items ueberhaupt an Ort und Stelle aendern lassen,
-// ohne die ganze Datei neu zu schreiben - compressedSize wird fuer diesen
+// ohne die ganze Datei neu zu write - compressedSize wird fuer diesen
 // Block gelesen, aber nie benutzt.
 //----------------------------------------------------------------------------
 
@@ -111,7 +111,7 @@ struct Tr5Room
     size_t sectorsOffset = 0;
 
     // Absolute Dateiposition des Raumkopfes (208 Byte). Gebraucht, um die
-    // Flags bei +78 zu schreiben - das Wasserbit sitzt dort.
+    // Flags bei +78 zu write - das Wasserbit sitzt dort.
     size_t headerOffset = 0;
 
     bool isAlternate() const { return altRoom >= 0; }
@@ -121,16 +121,16 @@ struct Tr5Room
 // Ein Eintrag einer Floordata-Kette, mit allen seinen Woertern.
 //
 // Das Zerlegen in Eintraege ist nicht Bequemlichkeit, sondern Notwendigkeit:
-// woerter[0] traegt in Bit 15 das "letzter Eintrag der Kette"-Kennzeichen. Wer
+// words[0] traegt in Bit 15 das "letzter Eintrag der Kette"-Kennzeichen. Wer
 // eine Kette wortweise kopiert und einen Eintrag herausnimmt, laesst dieses Bit
 // am falschen Wort stehen - die Engine liest dann ueber das Kettenende hinaus.
 // Beim Zusammensetzen wird es darum neu vergeben.
 //----------------------------------------------------------------------------
 struct Tr5FloorEntry
 {
-    int funktion = 0;                   // global/types.h, enum floor_types
-    int art = 0;                        // nur bei funktion == 4 (Trigger)
-    std::vector<uint16_t> woerter;
+    int function = 0;                   // global/types.h, enum floor_types
+    int art = 0;                        // nur bei function == 4 (Trigger)
+    std::vector<uint16_t> words;
 };
 
 //----------------------------------------------------------------------------
@@ -238,21 +238,21 @@ public:
     // Musik-Trigger: besucht jedes TO_CD-Aktionswort (Typ 8) aller
     // Sektorketten genau einmal (geteilte Ketten werden ueber den
     // Kettenanfang dedupliziert - sonst ginge ein Track ZWEIMAL durch die
-    // Abbildung und landete woanders als gewuerfelt). gefunden sammelt die
-    // Tracknummern; abbildung patcht sie IN PLACE - das Wort behaelt Typ,
+    // Abbildung und landete woanders als gewuerfelt). found sammelt die
+    // Tracknummern; mapping patcht sie IN PLACE - das Wort behaelt Typ,
     // Ende-Bit und Platz, nur die Tracknummer (Bits 0..9) wechselt, darum
     // braucht es hier KEIN Ketten-Neubauen. Rueckgabe: Zahl der gepatchten
     // bzw. gefundenen Woerter.
-    long    musikTrigger(const std::map<int, int>* abbildung, std::set<int>* gefunden);
+    long    musicTriggers(const std::map<int, int>* mapping, std::set<int>* found);
 
     // Der Neigungseintrag eines Sektors (TILT, SPLIT1/2, NOCOLF), roh fuer
-    // bodenLageAn (Boden.h) - dort steckt die portierte GetHeight-Mathematik,
+    // floorPosAt (Floor.h) - dort steckt die portierte GetHeight-Mathematik,
     // die aus Eintrag + Punkt die echte Bodenhoehe und die Belaufbarkeit
     // macht. baseY ist der Grundwert des Sektors (floor-Byte << 8), auf einer
     // Schraege die HOECHSTE Ecke.
     // Rueckgabe: -1 Kette unlesbar (Finger weg), 0 eben (kein Eintrag,
     // baseY trotzdem gefuellt), 1 Eintrag steht in si.
-    int     floorNeigung(int room, int sx, int sz, SchraegeInfo& si, int& baseY) const;
+    int     floorSlope(int room, int sx, int sz, SlopeInfo& si, int& baseY) const;
 
     // Baut ein aus einem TR3-Level geholtes Moveable ein (Paket aus TR3Hol,
     // Kennung "T35H"). Implementierung in Tr5Tr3Import.cpp - bewusst neben
@@ -263,7 +263,7 @@ public:
     // Kachelnummer verschoben; der Gegner ist falsch texturiert, aber die
     // Seitenverwaltung bleibt unberuehrt. Echte Texturen sind ein eigener
     // Schritt ueber Tr5Transfer.cpp.
-    bool    addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlot,
+    bool    addMoveableFromTr3(const std::vector<uint8_t>& package, int zielSlot,
                                int texinfoIndex, std::string& error);
 
     // Setzt die Klaenge eines TR3-Pakets ("T35S" aus TR3Ton) auf die
@@ -281,8 +281,8 @@ public:
     // SAMPLE_INFO des Ziels, damit die Groessenordnung stimmt - TR3 fuehrt
     // Volume als ganzes Wort, TR5 als ein Byte, eine direkte Uebernahme waere
     // geraten. 100 oder fehlend heisst unveraendert.
-    bool    addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
-                             std::vector<std::pair<int,int>>& zuordnung,
+    bool    addSoundsFromTr3(const std::vector<uint8_t>& package, int basisId,
+                             std::vector<std::pair<int,int>>& mapping,
                              std::string& error,
                              const std::vector<int>* lautProzent = nullptr);
 
@@ -298,8 +298,8 @@ public:
     // Objekt- und Bump-Seiten.
     //
     // Bei Erfolg steht in error eine Kurzmeldung (neue Seiten, neue Infos).
-    bool    addTexturesFromTr3(const std::vector<uint8_t>& paket,
-                               std::map<int,int>& zuordnung, std::string& error);
+    bool    addTexturesFromTr3(const std::vector<uint8_t>& package,
+                               std::map<int,int>& mapping, std::string& error);
 
     // Nimmt den Triggereintrag des Quellsektors heraus und haengt ihn an die
     // Kette des Zielsektors. Beide Ketten werden neu hinten angebaut, beide
@@ -315,8 +315,8 @@ public:
     // Wie moveTrigger, aber die Quelle behaelt ihren Trigger: der Zielsektor
     // bekommt eine ZWEITE, gleichlautende Kopie. Gebraucht fuer Levelfehler,
     // bei denen ein Trigger nur auf einem von mehreren Wegen liegt - siehe
-    // Levelfix.h.
-    bool    kopiereTrigger(int fromRoom, int fromSx, int fromSz,
+    // LevelFix.h.
+    bool    copyTrigger(int fromRoom, int fromSx, int fromSz,
                            int toRoom, int toSx, int toSz, std::string& error);
 
     // Setzt einen NEUEN Trigger auf einen Sektor. Das ist der Weg, dem Level
@@ -342,7 +342,7 @@ public:
     // Macht einen Wandsektor zum Portal nach targetRoom (EINE Seite - der
     // Aufrufer macht die Gegenseite mit vertauschten Rollen).
     //
-    // Vorbedingung, gefunden mit SektorPruef an andy3: das 32-Byte-SICHTFENSTER
+    // Vorbedingung, found mit SektorPruef an andy3: das 32-Byte-SICHTFENSTER
     // in der Portalliste des Raums muss schon existieren. Diese Funktion
     // schreibt nur die Sektorseite: Boden/Decke vom ueberlappten Sektor des
     // Zielraums (die Portalspalten zweier Raeume liegen uebereinander),
@@ -365,7 +365,7 @@ public:
     //
     // Ein Level fuehrt nur die Samples mit, die es selbst braucht. Kommt ein
     // Gegner darin vanilla nicht vor, fehlen seine Geraeusche - er steht dann
-    // stumm im Level. Pierre ist der Fall, an dem das auffiel.
+    // muted im Level. Pierre ist der Fall, an dem das auffiel.
     int  soundInfoIndex(int map) const;    // -1 = dieses Level kennt den Sound nicht
     int  soundSampleCount() const { return m_nSamples; }
 
@@ -396,14 +396,14 @@ public:
     // die MESHSWAP1 des Spenders (405) landet dort unter 399-402, damit der
     // eigene MESHSWAP1 des Ziels unangetastet bleibt.
     //
-    // nurMeshes: NUR Meshes, Zeiger und Texturen kopieren - keine
+    // meshesOnly: NUR Meshes, Zeiger und Texturen kopieren - keine
     // Animationen, Frames oder Bones. Fuer Mesh-Lager wie MESHSWAP1: dessen
     // Objekteintrag traegt zwar einen anim_index, aber keine eigenen
     // Animationen (Core-Altlast; der generische Zuschnitt liefe damit aus
     // seinen Bloecken). Der Eintrag im Ziel bekommt anim 0xFFFF, bone 0,
     // frame 0 - gelesen wird an einem Lagerslot ohnehin nur mesh_index.
     //
-    // animZahl (<= 0 = Heuristik "bis zum naechsten Objekt"): explizite
+    // animCount (<= 0 = Heuristik "bis zum naechsten Objekt"): explizite
     // Laenge der Anim-Scheibe. Noetig fuer den Imp (89): seine Steuerung
     // greift mit anim_index+45 QUER durch die globale Anim-Tabelle - die
     // Todesanimation liegt physisch in den Bereichen fremder Kulissenslots,
@@ -413,8 +413,8 @@ public:
     // der erweiterten Scheibe; mitkopierte Kulissen-Anims sind harmloser
     // Ballast nach dem Prinzip "nichts entfernen, nichts verschieben".
     bool copyMoveableFrom(const Tr5Level& src, int slotId, std::string& error,
-                          int dstSlot = -1, bool nurMeshes = false,
-                          int animZahl = -1);
+                          int dstSlot = -1, bool meshesOnly = false,
+                          int animCount = -1);
 
     // Laesst eine Anim die Daten- und Bewegungsfelder einer anderen Anim
     // DESSELBEN Levels uebernehmen: Frame-Zeiger, Rate, frame_size,
@@ -427,23 +427,23 @@ public:
     // nur Guard/CRANE_GUY feuern ueber Zustand 3, und kein Vanilla-Level
     // laesst beide Saetze zusammen spielen. Verlangt identische
     // Frame-Bereiche in beiden Anims (Familiensaetze sind schablonengleich).
-    bool uebernehmeAnimDaten(int dstSlot, int dstOffset, int srcSlot,
-                             int srcOffset, std::string& fehler);
+    bool adoptAnimData(int dstSlot, int dstOffset, int srcSlot,
+                             int srcOffset, std::string& error);
 
     // Eine einzelne Lara-Anim samt Frame-Daten, Kommandos und Sounds aus
     // einem SPENDERLEVEL einpflanzen (ANIM_KEYCARD 437, #53). Der Anim-Platz
     // existiert ueberall, die Bilddaten sind levelspezifisch - Begruendung
     // und Grenzen am Rumpf in Tr5Transfer.cpp.
-    bool kopiereLaraAnimVon(const Tr5Level& src, int animNr, std::string& fehler);
+    bool copyLaraAnimFrom(const Tr5Level& src, int animNr, std::string& error);
 
     // Traegt Laras Anim <animNr> hier echte Bilddaten? FrameSize null ist
     // Cores Stub-Kennzeichen; zusaetzlich wird der Platz nachgerechnet.
-    bool    laraAnimBrauchbar(int animNr) const;
+    bool    laraAnimUsable(int animNr) const;
 
     // Auf welche Anim zeigt Laras <animNr> weiter (next_animation)? Fuer die
     // Kettenreparatur - Bewegungen bestehen aus mehreren Gliedern, und Core
     // stubbt sie am Stueck. -1 = gibt es nicht.
-    int     laraAnimNachfolger(int animNr) const;
+    int     laraAnimNext(int animNr) const;
 
     // Der Objektslot, wie er in der Datei steht. anim < 0 heisst: keiner.
     struct MoveableInfo
@@ -455,7 +455,7 @@ public:
     bool moveableInfo(int slotId, MoveableInfo& out) const;
     std::vector<int> moveableSlots() const;
 
-    // Nur fuer Diagnosewerkzeuge: rohe Werte aus den Bloecken. Ausserhalb des
+    // Nur fuer Diagnosewerkzeuge: rohe Values aus den Bloecken. Ausserhalb des
     // Blocks kommt 0 zurueck - die Werkzeuge vergleichen Spender gegen Kopie,
     // da faellt ein Ausreisser als Unterschied auf.
     int32_t debugReadBoneLong(long long i) const;
@@ -471,12 +471,12 @@ public:
     // Anzahl, Datensatzformat siehe SZ_ANIM in Tr5Transfer.cpp (40 Byte).
     bool debugAnimBlock(size_t& dataAt, int32_t& n) const { dataAt = m_anims.dataAt; n = m_anims.count; return m_anims.count > 0; }
     // Klangkette fuer Messwerkzeuge: Soundmap, SAMPLE_INFO-Feld, Samplezahl.
-    bool debugKlangBloecke(size_t& lutAt, size_t& infosAt, int32_t& nInfos, int32_t& nSamples) const
+    bool debugSoundBlocks(size_t& lutAt, size_t& infosAt, int32_t& nInfos, int32_t& nSamples) const
     { if (!m_soundOk) return false;
       lutAt = m_lutAt; infosAt = m_infosAt; nInfos = m_nInfos; nSamples = m_nSamples; return true; }
 
     // Modellbloecke fuer Messwerkzeuge (Objekttabelle und Frame-Scheibe).
-    bool debugModellBloecke(size_t& objAt, int32_t& objN, size_t& frAt, int32_t& frN) const
+    bool debugModelBlocks(size_t& objAt, int32_t& objN, size_t& frAt, int32_t& frN) const
     { objAt = m_objects.dataAt; objN = m_objects.count;
       frAt = m_frames.dataAt;  frN  = m_frames.count;  return objN > 0; }
     bool debugCommandBlock(size_t& dataAt, int32_t& n) const { dataAt = m_commands.dataAt; n = m_commands.count; return m_commands.count > 0; }
@@ -514,13 +514,13 @@ public:
     // Das Outfit-Byte (LaraType) im Levelkopf, hinter den Texturbloecken.
     int  laraType() const;
     bool setLaraType(int value);
-    int  fremdeSprechkoepfe() const;
-    bool setFremdeSprechkoepfe(int value);
+    int  foreignTalkHeads() const;
+    bool setForeignTalkHeads(int value);
 
     // --- Texturwerkstatt (#104) ----------------------------------------
     //
     // Die beiden Texturbloecke des Levels werden beim ersten Seiten-Import
-    // EINMAL entpackt und offen gehalten; jeder weitere Import haengt nur
+    // EINMAL entpackt und unresolved gehalten; jeder weitere Import haengt nur
     // noch an. Gepackt und in die Datei zurueckgesetzt wird EINMAL beim
     // Schliessen - save() ruft es selbst, der Aufrufer muss nichts tun.
     //
@@ -528,18 +528,18 @@ public:
     // je importiertem Typ: bei Allsanity zehnmal je Level ueber 30+ MB, und
     // genau da steckten die gemessenen 5-10 Sekunden des Gegnermixes (ein
     // Level LADEN kostet nur 15 ms). Wichtig fuer alle Zwischenzustaende:
-    // solange die Werkstatt offen ist, tragen die Texturbloecke in m_bytes
+    // solange die Werkstatt unresolved ist, tragen die Texturbloecke in m_bytes
     // den ALTEN Stand - wer sie liest, muss vorher schliessen. Der
     // Hauptblock dahinter verschiebt sich bis zum Schliessen nicht, alle
     // Blockversaetze bleiben gueltig.
-    bool texWerkstattSchliessen(std::string& error);
+    bool texWorkshopClose(std::string& error);
 
 private:
-    bool                 m_texOffen = false;
-    bool                 m_texSchmutzig = false;
+    bool                 m_texOpen = false;
+    bool                 m_texDirty = false;
     std::vector<uint8_t> m_tex32, m_tex16;
 
-    bool texWerkstattOeffnen(std::string& error);
+    bool texWorkshopOpen(std::string& error);
     bool                 m_allowOverLimit = false;
     std::vector<uint8_t> m_bytes;
     int32_t              m_version = 0;
@@ -555,7 +555,7 @@ private:
     // --- Sound-Block ---------------------------------------------------
     // Alles ausser den Sampledaten selbst liegt IM Hauptblock, hinter den
     // Items. Wer davor etwas einfuegt - Items oder Floordata -, muss diese
-    // Offsets mitziehen; genau dafuer gibt es verschiebeSound().
+    // Offsets mitziehen; genau dafuer gibt es shiftSound().
     size_t               m_lutAt = 0;             // short sample_lut[450]
     size_t               m_numInfosAt = 0;
     size_t               m_infosAt = 0;
@@ -566,7 +566,7 @@ private:
     bool                 m_soundOk = false;
 
     bool findSound();                     // nach findItems, darf scheitern
-    void verschiebeSound(size_t bytes, size_t abOffset);
+    void shiftSound(size_t bytes, size_t abOffset);
 
     // --- Blockkarte ----------------------------------------------------
     // Lage der Bloecke, die der Modelltransfer anfassen muss. countAt ist die

@@ -39,27 +39,27 @@ class JsonValue;
 // verschiebt apply nichts - die Neu<k>-Verweise stimmen damit exakt.
 //----------------------------------------------------------------------------
 
-struct SecretQuelle
+struct SecretSource
 {
-    std::string  autor;
-    std::string  kategorie;      // "Glitchless" oder "Glitched"
-    std::wstring pfad;
+    std::string  author;
+    std::string  category;      // "Glitchless" oder "Glitched"
+    std::wstring path;
 };
 
 // Alle Autor_Kategorie.txt eines Ordners. Dateien mit fuehrendem '_'
 // (Referenzlisten) und unpassendem Namen werden uebersprungen.
-std::vector<SecretQuelle> secretQuellenSuchen(const std::wstring& ordner);
+std::vector<SecretSource> findSecretSources(const std::wstring& ordner);
 
 // Baut aus der Zeile des Levels einen Patch (itemEdits/itemAdds/triggerAdds/
 // portalAdds). Eine Zeile ohne neue Stellen und ohne Extras laesst den Patch
 // leer - das Level bleibt vanilla, genau wie in der Vorlage vereinbart.
 // Nicht verstandene Teile werden gemeldet, nie stillschweigend verschluckt.
 //
-// secretsVerschoben zaehlt NUR die umgezogenen Secrets selbst. Der Patch
+// secretsMoved zaehlt NUR die umgezogenen Secrets selbst. Der Patch
 // traegt daneben noch Beiwerk (Schluessel, Schalter, Umtypungen), und wer
 // stattdessen edited+added des Reports anzeigt, meldet dem Nutzer "6 Secrets"
 // in einem Level mit dreien - genau so in der Oberflaeche passiert.
-bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelName,
+bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName,
                       const Tr5Level& lvl, JsonValue& patchOut,
-                      int& secretsVerschoben,
-                      std::vector<std::string>& warnungen, std::string& error);
+                      int& secretsMoved,
+                      std::vector<std::string>& warnings, std::string& error);

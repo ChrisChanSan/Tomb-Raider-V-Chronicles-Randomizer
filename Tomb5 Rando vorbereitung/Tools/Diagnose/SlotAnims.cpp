@@ -41,15 +41,15 @@ int main(int argc, char** argv)
 
     for (int i = 2; i < argc; ++i)
     {
-        std::string pfad(argv[i]);
-        const size_t schnitt = pfad.find_last_of("\\/");
-        std::string name = (schnitt == std::string::npos) ? pfad : pfad.substr(schnitt + 1);
+        std::string path(argv[i]);
+        const size_t schnitt = path.find_last_of("\\/");
+        std::string name = (schnitt == std::string::npos) ? path : path.substr(schnitt + 1);
 
         Tr5Level lvl;
-        std::string fehler;
-        if (!lvl.load(zuW(argv[i]), fehler))
+        std::string error;
+        if (!lvl.load(zuW(argv[i]), error))
         {
-            std::printf("%-14s  nicht ladbar: %s\n", name.c_str(), fehler.c_str());
+            std::printf("%-14s  nicht ladbar: %s\n", name.c_str(), error.c_str());
             continue;
         }
 

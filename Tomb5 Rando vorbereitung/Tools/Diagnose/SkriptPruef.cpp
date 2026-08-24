@@ -97,7 +97,7 @@ int main(int argc, char** argv)
                                                : scrWad + ScriptLen;
 
         // Erst den Dateinamen holen: er steckt im CMD_LEVEL des Blocks.
-        std::string datei;
+        std::string file;
         for (size_t q = start; q < ende; )
         {
             const int len = nutzlast(d[q]);
@@ -105,7 +105,7 @@ int main(int argc, char** argv)
             if (d[q] == 0x81 && q + 4 < d.size() && d[q + 4] < nFileNames)
             {
                 const size_t o = nameWadAt + u16(nameOfsAt + 2ull * d[q + 4]);
-                if (o < d.size()) datei = (const char*)&d[o];
+                if (o < d.size()) file = (const char*)&d[o];
                 break;
             }
             q += 1 + len;
@@ -115,11 +115,11 @@ int main(int argc, char** argv)
         {
             bool gewollt = false;
             for (int a = 2; a < argc; ++a)
-                if (std::strcmp(argv[a],"-") && klein(datei) == klein(argv[a])) { gewollt = true; break; }
+                if (std::strcmp(argv[a],"-") && klein(file) == klein(argv[a])) { gewollt = true; break; }
             if (!gewollt) continue;
         }
 
-        std::printf("Level %2u  %s\n", i, datei.empty() ? "(ohne Dateinamen)" : datei.c_str());
+        std::printf("Level %2u  %s\n", i, file.empty() ? "(ohne Dateinamen)" : file.c_str());
         int objekte = 0;
         for (size_t q = start; q < ende; )
         {

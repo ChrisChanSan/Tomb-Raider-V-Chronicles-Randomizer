@@ -16,7 +16,7 @@ int main(int argc, char** argv)
         Tr5Level lvl; std::string err;
         if (!lvl.load(toW(argv[i]), err)) { std::printf("%s: %s\n", argv[i], err.c_str()); continue; }
         std::set<int> t;
-        lvl.musikTrigger(nullptr, &t);
+        lvl.musicTriggers(nullptr, &t);
         std::printf("%-60s", argv[i]);
         for (int x : t) { std::printf(" %d", x); alle.insert(x); }
         std::printf("\n");

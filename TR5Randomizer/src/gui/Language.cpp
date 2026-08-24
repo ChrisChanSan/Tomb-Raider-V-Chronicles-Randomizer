@@ -15,12 +15,12 @@
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-#include "Sprache.h"
+#include "Language.h"
 
 #include <string>
 #include <unordered_map>
 
-bool gSpracheDeutsch = false;   // Vorgabe Englisch (Nutzerentscheid 2026-08-24)
+bool gGermanUi = false;   // Vorgabe Englisch (Nutzerentscheid 2026-08-24)
 
 // Deutsch -> Englisch. Der SCHLUESSEL ist exakt der String aus dem Quelltext
 // (bei mehrzeiligen Hilfetexten der komplette zusammengesetzte Text). Die
@@ -60,7 +60,7 @@ static const std::unordered_map<std::string, const char*>& tabelle()
         { "Ordner waehlen...", "Choose folder..." },
         { "Leeren", "Clear" },
         { "in Ordnung", "OK" },
-        { "%s nicht gefunden", "%s not found" },
+        { "%s nicht found", "%s not found" },
         { "noch nicht geprueft", "not checked yet" },
         { "Gesucht wird jeweils der data-Ordner der Installation.",
           "In each case, choose the data folder of the installation." },
@@ -133,7 +133,7 @@ static const std::unordered_map<std::string, const char*>& tabelle()
           "Optional: folders of Tomb Raider 3 and The Lost Artifact.\n"
           "Only with these can the dinosaurs be used -\n"
           "we ship no game data." },
-        { "TR3 + LA gefunden", "TR3 + LA found" },
+        { "TR3 + LA found", "TR3 + LA found" },
         { "%d ohne Pfad", "%d without a path" },
 
         // --- Block 2: Seed -----------------------------------------------
@@ -380,7 +380,7 @@ static const std::unordered_map<std::string, const char*>& tabelle()
           "Munition, Medis und Leuchtfackeln bleiben. Was ein Level aus einem "
           "anderen braucht (Key 8 joby3, Key 7 joby5, Catapult Andy2, "
           "Brechstange Andrea3), gibt das Skript immer - samt Modell und Namen. "
-          "Kuratiert in Levelketten.h.",
+          "Kuratiert in LevelChains.h.",
           "Within: Rome/Russia/Ireland/VCI stay blocks, only the levels "
           "inside them shuffle. Free: all 13 levels across all sections "
           "(e.g. rich1 -> Andrea2 -> joby5 -> rich2). The cutscene "
@@ -389,7 +389,7 @@ static const std::unordered_map<std::string, const char*>& tabelle()
           "reset - weapons, ammo, medipacks and flares are kept. Whatever "
           "a level needs from another one (Key 8 joby3, Key 7 joby5, "
           "Catapult Andy2, crowbar Andrea3), the script always grants - "
-          "model and name included. Curated in Levelketten.h." },
+          "model and name included. Curated in LevelChains.h." },
 
         // --- Block 7: Musik ----------------------------------------------
         { "7. Musik", "7. Music" },
@@ -424,9 +424,9 @@ static const std::unordered_map<std::string, const char*>& tabelle()
         { "Im normalen Item-Pool", "In the normal item pool" },
         { "Glitchless-Liste", "Glitchless list" },
         { "Glitched-Liste", "Glitched list" },
-        { "(keine Listen gefunden)", "(no lists found)" },
+        { "(keine Listen found)", "(no lists found)" },
         { "Autor", "Author" },
-        { "Keine %s-Liste in data\\secrets gefunden - die Level bleiben vanilla.",
+        { "Keine %s-Liste in data\\secrets found - die Level bleiben vanilla.",
           "No %s list found in data\\secrets - the levels stay vanilla." },
         { "Die Secrets bleiben, wo Core sie versteckt hat.",
           "The secrets stay where Core hid them." },
@@ -453,7 +453,7 @@ static const std::unordered_map<std::string, const char*>& tabelle()
         { "Remaster-Texturen patchen", "Patch remaster textures" },
         { "Raeume", "Rooms" },
         { "Kulissen einbinden", "Include backdrop areas" },
-        { "Nachbar-Raeume begehbar machen", "Make neighboring rooms walkable" },
+        { "Nachbar-Raeume walkable machen", "Make neighboring rooms walkable" },
         { "Kommt noch: Farbwuerfel ueber die Vanilla-Texturseiten - der "
           "Seed verschiebt die Farbtoene, rein kosmetisch.",
           "Coming later: color dice over the vanilla texture pages - the "
@@ -506,7 +506,7 @@ static const std::unordered_map<std::string, const char*>& tabelle()
 
 const char* T(const char* de)
 {
-    if (gSpracheDeutsch || !de || !*de) return de;
+    if (gGermanUi || !de || !*de) return de;
     const auto& t = tabelle();
     auto it = t.find(de);
     return it == t.end() ? de : it->second;

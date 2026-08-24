@@ -21,7 +21,7 @@
 #include <vector>
 
 //----------------------------------------------------------------------------
-// SCRIPT.DAT: die Levelflags lesen und einzelne Bits loeschen.
+// SCRIPT.DAT: die Levelflags read und einzelne Bits loeschen.
 //
 // Gebraucht wird genau ein Bit: GF_YOUNGLARA. Es steht in den drei
 // Ireland-Leveln (andy1, Andy2, andy3) und schaltet dort das ganze
@@ -81,10 +81,10 @@ public:
     // joby3 bekommt Key Item 8, hat aber kein CMD_KEY8. Vanilla faellt das
     // nie auf, weil joby2 direkt davor laeuft und den Eintrag setzt - nach
     // einem Speichern und Laden in joby3 waere der Schluessel "Load".
-    static constexpr uint8_t CMD_OBJ_ERSTER  = 0x92;   // CMD_KEY1  = 146
-    static constexpr uint8_t CMD_OBJ_LETZTER = 0xD8;   // CMD_PICKUPCOMBO4_2 = 216
-    static constexpr int     OBJEKT_NUTZBYTES    = 14;
-    static constexpr int     OBJEKT_BEFEHL_BYTES = 1 + OBJEKT_NUTZBYTES;
+    static constexpr uint8_t CMD_OBJ_FIRST  = 0x92;   // CMD_KEY1  = 146
+    static constexpr uint8_t CMD_OBJ_LAST = 0xD8;   // CMD_PICKUPCOMBO4_2 = 216
+    static constexpr int     OBJ_PAYLOAD_BYTES    = 14;
+    static constexpr int     OBJ_COMMAND_BYTES = 1 + OBJ_PAYLOAD_BYTES;
 
     static constexpr uint8_t cmdKey(int n)    { return static_cast<uint8_t>(0x92 + (n - 1)); }  // KEY1..12
     static constexpr uint8_t cmdPuzzle(int n) { return static_cast<uint8_t>(0x9E + (n - 1)); }  // PUZZLE1..12
@@ -103,78 +103,78 @@ public:
                            uint8_t cmd, bool& changed, std::string& error);
 
     // Inventarnummern (enum invobj_types, newinv2.h:121), soweit gebraucht.
-    static constexpr int INV_PISTOLEN      = 1;
-    static constexpr int INV_PISTOLEN_MUNI = 19;
+    static constexpr int INV_PISTOLS      = 1;
+    static constexpr int INV_PISTOLS_AMMO = 19;
     static constexpr int TAKEOBJ_BYTES     = 3;   // Opcode + 2 Nutzbytes
 
     // Setzt ein CMD_TAKEOBJ in den Block eines Levels: Lara hat das
     // Inventarobjekt beim Betreten nicht mehr (setup.cpp:160, NailInvItem).
     // Wiederholbar - steht es schon da, passiert nichts.
-    bool addTakeObject(const std::string& levelName, int invObjekt,
+    bool addTakeObject(const std::string& levelName, int invObject,
                        bool& changed, std::string& error);
 
     // Das Gegenstueck: CMD_GIVEOBJ - Lara hat das Inventarobjekt beim
     // Betreten (setup.cpp:122, DEL_picked_up_object). Wiederholbar.
-    bool addGiveObject(const std::string& levelName, int invObjekt,
+    bool addGiveObject(const std::string& levelName, int invObject,
                        bool& changed, std::string& error);
 
     // Nimmt einen GIVEOBJ/TAKEOBJ-Befehl wieder heraus (die Gegenrichtung zu
-    // addInvBefehl, inklusive Offsets und ScriptLen). Wiederholbar: ist er
+    // addInvCommand, inklusive Offsets und ScriptLen). Wiederholbar: ist er
     // nicht da, passiert nichts.
-    bool removeInvBefehl(uint8_t op, const std::string& levelName, int invObjekt,
+    bool removeInvCommand(uint8_t op, const std::string& levelName, int invObject,
                          bool& changed, std::string& error);
 
     // Stufe 2: Reihenfolge INNERHALB der vier Abschnitte wuerfeln (RICHCUT2
-    // bleibt an RICH2 geklebt). Wie abschnitteWuerfeln nur die Offsettabelle;
-    // nicht wiederholbar. reihenfolge: die neue Abfolge als Text.
+    // bleibt an RICH2 geklebt). Wie shuffleSections nur die Offsettabelle;
+    // nicht wiederholbar. orderText: die neue Abfolge als Text.
     // frei = Stufe 3: alle Kampagnen-Level ueber alle Abschnitte hinweg
     // permutieren (RICH2+RICHCUT2 bleiben eine Einheit). Die Videos haengen
     // in der Engine an der Level-Identitaet, das Finale am letzten Slot -
     // beides traegt auch die freie Folge.
-    bool levelWuerfeln(uint64_t seed, bool frei, std::string& reihenfolge, std::string& error);
+    bool shuffleLevels(uint64_t seed, bool frei, std::string& orderText, std::string& error);
 
     // Slot (Platz in der Offsettabelle) eines Levels, -1 wenn unbekannt.
-    int  slotVonLevel(const std::string& levelName) const;
+    int  slotOfLevel(const std::string& levelName) const;
 
-    // Levelketten (Levelketten.h) gegen die JETZIGE Reihenfolge aufloesen:
+    // LevelChains (LevelChains.h) gegen die JETZIGE Reihenfolge aufloesen:
     // liegt der Spender hinter dem Nehmer, bekommt der Nehmer das Item per
     // GIVEOBJ und den Namensbefehl des Spenders. In Vanilla-Reihenfolge
-    // passiert nichts. Jede Massnahme landet als Klartext in notizen.
-    bool kettenAufloesen(std::vector<std::string>& notizen, std::string& error);
+    // passiert nichts. Jede Massnahme landet als Klartext in notes.
+    bool resolveChains(std::vector<std::string>& notes, std::string& error);
 
-    // Inventar-Garbage-Collector (Levelketten.h, Kopfkommentar): beim Start
+    // Inventar-Garbage-Collector (LevelChains.h, Kopfkommentar): beim Start
     // jedes Kampagnen-Levels wird per TAKEOBJ alles aus der Schluesselfamilie
     // weggenommen, was ein frueheres Level anbieten konnte und das weder
     // dieses noch ein spaeteres Level importiert; die Crossbow-Familie
-    // ("Grappling Gun") ueberall ausser rich3. Laeuft NACH kettenAufloesen,
+    // ("Grappling Gun") ueberall ausser rich3. Laeuft NACH resolveChains,
     // damit Ketten-Gaben nicht gleich wieder weggenommen werden.
-    bool inventarAufraeumen(std::vector<std::string>& notizen, std::string& error);
+    bool cleanupInventory(std::vector<std::string>& notes, std::string& error);
 
-    // --- Alle Eingriffe des Randomizers an EINER Stelle -------------------
+    // --- Alle Changes des Randomizers an EINER Stelle -------------------
     //
     // Oberflaeche und CLI treiben dieselben Schritte an. Standen sie doppelt
     // im Code, waere der naechste Eingriff garantiert nur an einer der beiden
     // Stellen gelandet.
     //
-    // Beide Eingriffe sind wiederholbar: ein schon geloeschtes Bit noch einmal
+    // Beide Changes sind wiederholbar: ein schon geloeschtes Bit noch einmal
     // zu loeschen aendert nichts, und ein schon vorhandener Objektbefehl wird
     // nicht ein zweites Mal eingefuegt. Derselbe Lauf darf also mehrfach ueber
     // dieselbe Datei gehen, ohne sie aufzublaehen.
-    struct Eingriffe
+    struct Changes
     {
-        int         flagsGeaendert = 0;   // Ireland-Level, denen das Kind-Bit genommen wurde
-        int         levelFehlend   = 0;   // Ireland-Level, die das Skript gar nicht kennt
-        bool        keyKopiert     = false;
-        int         pistolenWeg    = 0;    // rich2: Pistolen + Munition entzogen
-        std::string keyFehler;            // leer = hat geklappt
-        int         joby3Waffen    = 0;   // entfernte Waffen-Wegnahmen in joby3
-        std::string waffenFehler;
-        std::string pistolenFehler;
+        int         flagsChanged = 0;   // Ireland-Level, denen das Kind-Bit genommen wurde
+        int         levelsMissing   = 0;   // Ireland-Level, die das Skript gar nicht kennt
+        bool        keyCopied     = false;
+        int         pistolsRemoved    = 0;    // rich2: Pistolen + Munition entzogen
+        std::string keyError;            // leer = hat geklappt
+        int         joby3Weapons    = 0;   // entfernte Waffen-Wegnahmen in joby3
+        std::string weaponError;
+        std::string pistolError;
     };
 
-    // Bei levelFehlend > 0 ist das Skript keines von Chronicles - dann bleibt
+    // Bei levelsMissing > 0 ist das Skript keines von Chronicles - dann bleibt
     // alles Weitere aus, und der Aufrufer soll NICHT speichern.
-    void randomizerEingriffe(Eingriffe& e);
+    void randomizerChanges(Changes& e);
 
     // Hintergrundmusik wuerfeln: das Audio-Byte im CMD_LEVEL-Eintrag
     // (CurrentAtmosphere beim Levelstart) wird unter den spielbaren Leveln
@@ -183,7 +183,7 @@ public:
     // wiederholungsfest: jeder Lauf wuerfelt neu, der Aufrufer muss von der
     // unveraenderten Datei ausgehen (die Oberflaeche liest ohnehin aus der
     // Sicherung).
-    bool musikWuerfeln(uint64_t seed, int& getauscht, std::string& error);
+    bool shuffleMusic(uint64_t seed, int& getauscht, std::string& error);
 
     // Levelabschnitte wuerfeln (Stufe 1 des Plans in Level Infos\
     // Levelreihenfolge-Plan.md): die vier Story-Abschnitte Rom (ANDREA*),
@@ -194,8 +194,8 @@ public:
     // bleibt die Reihenfolge, damit alle Schluesselketten gueltig bleiben.
     // BRAUCHT die Engine mit gfLevelId (Identitaet aus dem Dateinamen) -
     // eine aeltere EXE hielte Slot 1 weiter fuer Rom. Nicht wiederholbar.
-    // reihenfolge bekommt die neue Abfolge als Text fuer die Anzeige.
-    bool abschnitteWuerfeln(uint64_t seed, std::string& reihenfolge, std::string& error);
+    // orderText bekommt die neue Abfolge als Text fuer die Anzeige.
+    bool shuffleSections(uint64_t seed, std::string& orderText, std::string& error);
 
     // Was steht heute drin? Fuer Anzeige und Selbsttest.
     struct Eintrag
@@ -209,23 +209,23 @@ private:
     std::vector<uint8_t> m_bytes;
     std::vector<Eintrag> m_levels;
     std::vector<size_t>  m_flagsAt;    // wo die Flags jedes Eintrags stehen
-    std::vector<size_t>  m_blockAn;    // Blockanfang je Level
-    std::vector<size_t>  m_blockBis;   // Blockende (ausschliesslich)
+    std::vector<size_t>  m_blockStart;    // Blockanfang je Level
+    std::vector<size_t>  m_blockEnd;   // Blockende (ausschliesslich)
     std::vector<int>     m_ofsIndex;   // Platz in der Offsettabelle
     size_t               m_scriptOfsAt = 0;
     size_t               m_scriptWad   = 0;
     int                  m_nLevels     = 0;
 
-    bool   findeLevel(const std::string& name, size_t& idx) const;
+    bool   findLevel(const std::string& name, size_t& idx) const;
     // GIVEOBJ/TAKEOBJ gemeinsam. force: auch dann einfuegen, wenn derselbe
     // Befehl schon im Block steht - gebraucht vom Inventar-Reset, der eine
     // Gabe hinter seinen Wegnahmen wiederholen muss.
-    bool   addInvBefehl(uint8_t op, const std::string& levelName, int invObjekt,
+    bool   addInvCommand(uint8_t op, const std::string& levelName, int invObject,
                         bool& changed, std::string& error, bool force = false);
-    bool   nimmtObjekt(size_t idx, int invObjekt) const;     // traegt der Block ein TAKEOBJ dafuer?
-    bool   gibtObjekt(size_t idx, int invObjekt) const;      // ... bzw. ein GIVEOBJ?
-    bool   gibtObjektNachWegnahme(size_t idx, int invObjekt) const;
-    size_t findeBefehl(size_t idx, uint8_t cmd) const;
+    bool   takesObject(size_t idx, int invObject) const;     // traegt der Block ein TAKEOBJ dafuer?
+    bool   givesObject(size_t idx, int invObject) const;      // ... bzw. ein GIVEOBJ?
+    bool   givesObjectAfterTake(size_t idx, int invObject) const;
+    size_t findCommand(size_t idx, uint8_t cmd) const;
 
-    bool zerlege(std::string& error);
+    bool parse(std::string& error);
 };

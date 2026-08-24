@@ -58,19 +58,19 @@ void Config::load()
         else if (key == "seed")  seedText = val;
         else if (key == "winW")            winW = std::atoi(val.c_str());
         else if (key == "winH")            winH = std::atoi(val.c_str());
-        else if (key == "sprache")         spracheDeutsch = (val == "de");
-        else if (key == "ausruestung")     optOtherPickups = (val == "1");
+        else if (key == "language")         germanUi = (val == "de");
+        else if (key == "equipment")     optOtherPickups = (val == "1");
         else if (key == "keyItems")        optKeyItems = (val == "1");
-        else if (key == "gegnerZusatz")    optEnemies = (val == "1");
-        else if (key == "gegnerAnzahl")    enemyCount = std::atoi(val.c_str());
-        else if (key == "gegnerMix")       optEnemySwap = (val == "1");
-        else if (key == "gegnerPool")      enemyPool = std::atoi(val.c_str());
-        else if (key == "gegnerAus")
+        else if (key == "extraEnemies")    optEnemies = (val == "1");
+        else if (key == "enemyCount")    enemyCount = std::atoi(val.c_str());
+        else if (key == "enemySwap")       optEnemySwap = (val == "1");
+        else if (key == "enemyPool")      enemyPool = std::atoi(val.c_str());
+        else if (key == "enemiesDisabled")
         {
             // Kommaliste abgewaehlter typeIds. Leere Felder werden
             // uebersprungen, damit ein Endkomma nicht als Typ 0 (Lara!)
             // ankommt.
-            gegnerAus.clear();
+            enemiesDisabled.clear();
             size_t a = 0;
             while (a <= val.size())
             {
@@ -80,42 +80,42 @@ void Config::load()
                 if (!stueck.empty())
                 {
                     int t = std::atoi(stueck.c_str());
-                    if (t > 0) gegnerAus.insert(t);
+                    if (t > 0) enemiesDisabled.insert(t);
                 }
                 a = e + 1;
             }
         }
         else if (key == "outfits")         optOutfits = (val == "1");
-        else if (key == "itemMenge")       itemMenge = std::atoi(val.c_str());
+        else if (key == "itemAmount")       itemAmount = std::atoi(val.c_str());
         else if (key == "secrets")         secrets = std::atoi(val.c_str());
-        else if (key == "secretAutor")     secretAutor = val;
-        else if (key == "musikSwitch")     optMusikSwitch = (val == "1");
-        else if (key == "musikTrigger")    optMusikTrigger = (val == "1");
-        else if (key == "levelAbschnitte") optLevelAbschnitte = (val == "1");
-        else if (key == "levelFolge")      optLevelFolge = std::atoi(val.c_str());
-        else if (key == "balWaffen")       balWaffen = std::atoi(val.c_str());
-        else if (key == "balGegnerLeben")  balGegnerLeben = std::atoi(val.c_str());
-        else if (key == "balGegnerSchaden") balGegnerSchaden = std::atoi(val.c_str());
-        else if (key == "balWaffenZufall")  balWaffenZufall = (val == "1");
-        else if (key == "balGegnerLebenZufall")   balGegnerLebenZufall = (val == "1");
-        else if (key == "balGegnerSchadenZufall") balGegnerSchadenZufall = (val == "1");
+        else if (key == "secretAuthor")     secretAuthor = val;
+        else if (key == "musicSwitch")     optMusicSwitch = (val == "1");
+        else if (key == "musicTrigger")    optMusicTrigger = (val == "1");
+        else if (key == "levelSections") optLevelSections = (val == "1");
+        else if (key == "levelOrder")      optLevelOrder = std::atoi(val.c_str());
+        else if (key == "balWeapons")       balWeapons = std::atoi(val.c_str());
+        else if (key == "balEnemyHealth")  balEnemyHealth = std::atoi(val.c_str());
+        else if (key == "balEnemyDamage") balEnemyDamage = std::atoi(val.c_str());
+        else if (key == "balWeaponsRandom")  balWeaponsRandom = (val == "1");
+        else if (key == "balEnemyHealthRandom")   balEnemyHealthRandom = (val == "1");
+        else if (key == "balEnemyDamageRandom") balEnemyDamageRandom = (val == "1");
     }
 
-    if (optLevelFolge < 0 || optLevelFolge > 2) optLevelFolge = 0;
+    if (optLevelOrder < 0 || optLevelOrder > 2) optLevelOrder = 0;
 
-    // Grenzen der Regler in der Oberflaeche. Wer die Werte in Balance.txt
+    // Grenzen der Regler in der Oberflaeche. Wer die Values in Balance.txt
     // von Hand weiter aufdreht, behaelt sie dort - hier geht es nur um die
     // Reglerstellung, die sonst ausserhalb ihrer Bahn laege.
-    if (balWaffen < 0)          balWaffen = 0;
-    if (balWaffen > 200)        balWaffen = 200;
-    if (balGegnerLeben < 50)    balGegnerLeben = 50;
-    if (balGegnerLeben > 200)   balGegnerLeben = 200;
-    if (balGegnerSchaden < 50)  balGegnerSchaden = 50;
-    if (balGegnerSchaden > 200) balGegnerSchaden = 200;
+    if (balWeapons < 0)          balWeapons = 0;
+    if (balWeapons > 200)        balWeapons = 200;
+    if (balEnemyHealth < 50)    balEnemyHealth = 50;
+    if (balEnemyHealth > 200)   balEnemyHealth = 200;
+    if (balEnemyDamage < 50)  balEnemyDamage = 50;
+    if (balEnemyDamage > 200) balEnemyDamage = 200;
 
     if (enemyCount < 1)  enemyCount = 1;
     if (enemyCount > 20) enemyCount = 20;
-    if (itemMenge < 0 || itemMenge > 2) itemMenge = 0;
+    if (itemAmount < 0 || itemAmount > 2) itemAmount = 0;
     if (secrets < 0 || secrets > 3) secrets = 0;
     if (enemyPool < 0 || enemyPool > 2) enemyPool = 0;
 }
@@ -133,35 +133,35 @@ bool Config::save() const
     std::fprintf(f, "seed=%s\n", seedText.c_str());
     std::fprintf(f, "winW=%d\n", winW);
     std::fprintf(f, "winH=%d\n", winH);
-    std::fprintf(f, "sprache=%s\n", spracheDeutsch ? "de" : "en");
+    std::fprintf(f, "sprache=%s\n", germanUi ? "de" : "en");
     std::fprintf(f, "ausruestung=%d\n", optOtherPickups ? 1 : 0);
     std::fprintf(f, "keyItems=%d\n", optKeyItems ? 1 : 0);
     std::fprintf(f, "gegnerZusatz=%d\n", optEnemies ? 1 : 0);
     std::fprintf(f, "gegnerAnzahl=%d\n", enemyCount);
     std::fprintf(f, "gegnerMix=%d\n", optEnemySwap ? 1 : 0);
     std::fprintf(f, "gegnerPool=%d\n", enemyPool);
-    std::fprintf(f, "gegnerAus=");
+    std::fprintf(f, "enemiesDisabled=");
     {
         bool erstes = true;
-        for (int t : gegnerAus) { std::fprintf(f, "%s%d", erstes ? "" : ",", t); erstes = false; }
+        for (int t : enemiesDisabled) { std::fprintf(f, "%s%d", erstes ? "" : ",", t); erstes = false; }
     }
     std::fprintf(f, "\n");
     std::fprintf(f, "outfits=%d\n", optOutfits ? 1 : 0);
-    std::fprintf(f, "itemMenge=%d\n", itemMenge);
+    std::fprintf(f, "itemAmount=%d\n", itemAmount);
     std::fprintf(f, "secrets=%d\n", secrets);
     // Wurde gelesen, aber nie geschrieben - die Autorenwahl ging bei jedem
     // Programmstart verloren.
-    std::fprintf(f, "secretAutor=%s\n", secretAutor.c_str());
-    std::fprintf(f, "musikSwitch=%d\n", optMusikSwitch ? 1 : 0);
-    std::fprintf(f, "musikTrigger=%d\n", optMusikTrigger ? 1 : 0);
-    std::fprintf(f, "levelAbschnitte=%d\n", optLevelAbschnitte ? 1 : 0);
-    std::fprintf(f, "levelFolge=%d\n", optLevelFolge);
-    std::fprintf(f, "balWaffen=%d\n", balWaffen);
-    std::fprintf(f, "balGegnerLeben=%d\n", balGegnerLeben);
-    std::fprintf(f, "balGegnerSchaden=%d\n", balGegnerSchaden);
-    std::fprintf(f, "balWaffenZufall=%d\n", balWaffenZufall ? 1 : 0);
-    std::fprintf(f, "balGegnerLebenZufall=%d\n", balGegnerLebenZufall ? 1 : 0);
-    std::fprintf(f, "balGegnerSchadenZufall=%d\n", balGegnerSchadenZufall ? 1 : 0);
+    std::fprintf(f, "secretAuthor=%s\n", secretAuthor.c_str());
+    std::fprintf(f, "musikSwitch=%d\n", optMusicSwitch ? 1 : 0);
+    std::fprintf(f, "musicTriggers=%d\n", optMusicTrigger ? 1 : 0);
+    std::fprintf(f, "levelAbschnitte=%d\n", optLevelSections ? 1 : 0);
+    std::fprintf(f, "levelFolge=%d\n", optLevelOrder);
+    std::fprintf(f, "balWeapons=%d\n", balWeapons);
+    std::fprintf(f, "balEnemyHealth=%d\n", balEnemyHealth);
+    std::fprintf(f, "balEnemyDamage=%d\n", balEnemyDamage);
+    std::fprintf(f, "balWeaponsRandom=%d\n", balWeaponsRandom ? 1 : 0);
+    std::fprintf(f, "balEnemyHealthRandom=%d\n", balEnemyHealthRandom ? 1 : 0);
+    std::fprintf(f, "balEnemyDamageRandom=%d\n", balEnemyDamageRandom ? 1 : 0);
     std::fclose(f);
     return true;
 }

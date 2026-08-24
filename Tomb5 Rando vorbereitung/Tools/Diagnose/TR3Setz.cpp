@@ -1,7 +1,7 @@
 //----------------------------------------------------------------------------
 // TR3Setz - setzt ein mit TR3Hol geholtes Moveable in ein TR5-Level.
 //
-// Aufruf: TR3Setz <ziel.trc> <paket.bin> <zielSlot> <ausgabe.trc> [texinfo]
+// Aufruf: TR3Setz <ziel.trc> <package.bin> <zielSlot> <ausgabe.trc> [texinfo]
 //
 // texinfo (Vorgabe 0): auf diesen vorhandenen Texinfo zeigen danach ALLE
 // Faces. Es wird keine Texturseite angefasst - siehe Tr5Tr3Import.cpp.
@@ -30,12 +30,12 @@ static std::wstring toW(const char* s)
 // Ohne diesen Schritt ruft der Gegner weiter seine TR3-Nummern auf, die im
 // Ziel andere oder gar keine Klaenge sind. Dasselbe Vergessen bei der
 // Sprungtabelle war der Absturz in #88 - deshalb hier ausdruecklich.
-static int biegeSfxUm(std::vector<uint8_t>& paket, const std::vector<std::pair<int,int>>& zuordnung,
-                      std::vector<int>& offen, std::vector<std::pair<int,int>>& genutzt,
+static int remapSfx(std::vector<uint8_t>& package, const std::vector<std::pair<int,int>>& mapping,
+                      std::vector<int>& unresolved, std::vector<std::pair<int,int>>& genutzt,
                       std::vector<std::pair<int,int>>& arten)
 {
-    auto g32 = [&](size_t p) { uint32_t v; std::memcpy(&v, &paket[p], 4); return v; };
-    auto g16 = [&](size_t p) { uint16_t v; std::memcpy(&v, &paket[p], 2); return v; };
+    auto g32 = [&](size_t p) { uint32_t v; std::memcpy(&v, &package[p], 4); return v; };
+    auto g16 = [&](size_t p) { uint16_t v; std::memcpy(&v, &package[p], 2); return v; };
 
     // Kopf des Modellpakets ueberspringen, um an den Kommandoblock zu kommen.
     const uint32_t nMeshes = g32(12), nAnims = g32(16), nFrameW = g32(20);
@@ -45,7 +45,7 @@ static int biegeSfxUm(std::vector<uint8_t>& paket, const std::vector<std::pair<i
     p += size_t(nBoneW) * 4 + size_t(nFrameW) * 2 + size_t(nAnims) * 40
        + size_t(nSC) * 6 + size_t(nAD) * 8;
     const size_t cmdAt = p;
-    if (cmdAt + size_t(nCmd) * 2 > paket.size()) return -1;
+    if (cmdAt + size_t(nCmd) * 2 > package.size()) return -1;
 
     // Nur die Kommandos anfassen, auf die die Animationen DIESES Objekts
     // zeigen. Das Paket fuehrt den ganzen Kommandoblock des Quelllevels mit
@@ -105,11 +105,11 @@ static int biegeSfxUm(std::vector<uint8_t>& paket, const std::vector<std::pair<i
             const uint16_t w = g16(at);
             const int nr = w & 0x0FFF;
             bool zugeordnet = false;
-            for (const auto& z : zuordnung)
+            for (const auto& z : mapping)
                 if (z.first == nr)
                 {
                     const uint16_t neu = static_cast<uint16_t>((w & 0xF000) | (z.second & 0x0FFF));
-                    std::memcpy(&paket[at], &neu, 2);
+                    std::memcpy(&package[at], &neu, 2);
                     ++getauscht;
                     zugeordnet = true;
                     // Mitzaehlen, WELCHE ID wie oft und in welcher Animation
@@ -128,8 +128,8 @@ static int biegeSfxUm(std::vector<uint8_t>& paket, const std::vector<std::pair<i
             if (!zugeordnet)
             {
                 bool schonGemeldet = false;
-                for (int o : offen) if (o == nr) { schonGemeldet = true; break; }
-                if (!schonGemeldet) offen.push_back(nr);
+                for (int o : unresolved) if (o == nr) { schonGemeldet = true; break; }
+                if (!schonGemeldet) unresolved.push_back(nr);
             }
         }
         i += folge;
@@ -147,10 +147,10 @@ static uint32_t paketVersion(const std::vector<uint8_t>& p)
 // Schreibt die Texturworte der Faces auf die neuen Texinfos um. Gleicher
 // Ableser wie ueberall (Kopf 10 Byte, dann das Vertexwort; 0 Normalen heisst
 // NORMALEN). Bit 15 des Texturworts ist ein Flag und bleibt stehen.
-static int biegeTexUm(std::vector<uint8_t>& paket, const std::map<int,int>& zuordnung)
+static int remapTextures(std::vector<uint8_t>& package, const std::map<int,int>& mapping)
 {
-    auto g32 = [&](size_t q) { uint32_t v; std::memcpy(&v, &paket[q], 4); return v; };
-    auto g16 = [&](size_t q) { uint16_t v; std::memcpy(&v, &paket[q], 2); return v; };
+    auto g32 = [&](size_t q) { uint32_t v; std::memcpy(&v, &package[q], 4); return v; };
+    auto g16 = [&](size_t q) { uint16_t v; std::memcpy(&v, &package[q], 2); return v; };
 
     const uint32_t nMeshes = g32(12);
     size_t p = 48;
@@ -158,7 +158,7 @@ static int biegeTexUm(std::vector<uint8_t>& paket, const std::map<int,int>& zuor
 
     for (uint32_t i = 0; i < nMeshes; ++i)
     {
-        if (p + 4 > paket.size()) return -1;
+        if (p + 4 > package.size()) return -1;
         const uint32_t len = g32(p); p += 4;
         const size_t ende = p + len;
         size_t q = p + 10;
@@ -175,10 +175,10 @@ static int biegeTexUm(std::vector<uint8_t>& paket, const std::map<int,int>& zuor
 
         auto biege = [&](size_t at) {
             const uint16_t w = g16(at);
-            std::map<int,int>::const_iterator f = zuordnung.find(w & 0x7FFF);
-            if (f == zuordnung.end()) return;
+            std::map<int,int>::const_iterator f = mapping.find(w & 0x7FFF);
+            if (f == mapping.end()) return;
             const uint16_t neu = static_cast<uint16_t>((w & 0x8000) | (f->second & 0x7FFF));
-            std::memcpy(&paket[at], &neu, 2);
+            std::memcpy(&package[at], &neu, 2);
             ++getauscht;
         };
 
@@ -196,13 +196,13 @@ int main(int argc, char** argv)
 {
     if (argc < 5)
     {
-        std::printf("Aufruf: TR3Setz <ziel.trc> <paket.bin> <zielSlot> <ausgabe.trc> [texinfo] [ton.bin]\n");
+        std::printf("Aufruf: TR3Setz <ziel.trc> <package.bin> <zielSlot> <ausgabe.trc> [texinfo] [ton.bin]\n");
         return 2;
     }
     const int slot = std::atoi(argv[3]);
 
     // Stellungsargumente 5 und 6, danach duerfen Schalter folgen (-basis,
-    // -laut). Ein mit '-' beginnendes Wort ist ein Schalter, kein Wert -
+    // -volumes). Ein mit '-' beginnendes Wort ist ein Schalter, kein Wert -
     // sonst zaehlte argc mit und der Tonpfad fiele lautlos auf NULL zurueck.
     auto stellung = [&](int i) -> const char* {
         return (argc > i && argv[i][0] != '-') ? argv[i] : 0; };
@@ -210,15 +210,15 @@ int main(int argc, char** argv)
     const int   tex      = texArg ? std::atoi(texArg) : 0;
     const char* tonDatei = stellung(6);
 
-    std::vector<uint8_t> paket;
+    std::vector<uint8_t> package;
     {
         FILE* f = std::fopen(argv[2], "rb");
         if (!f) { std::printf("Paket nicht lesbar: %s\n", argv[2]); return 2; }
         std::fseek(f, 0, SEEK_END); const long n = std::ftell(f); std::fseek(f, 0, SEEK_SET);
-        paket.resize(static_cast<size_t>(n));
-        const size_t g = std::fread(paket.data(), 1, paket.size(), f);
+        package.resize(static_cast<size_t>(n));
+        const size_t g = std::fread(package.data(), 1, package.size(), f);
         std::fclose(f);
-        if (g != paket.size()) { std::printf("Paket unvollstaendig gelesen\n"); return 2; }
+        if (g != package.size()) { std::printf("Paket unvollstaendig gelesen\n"); return 2; }
     }
 
     Tr5Level lvl;
@@ -245,7 +245,7 @@ int main(int argc, char** argv)
         if (g != ton.size()) { std::printf("Tonpaket unvollstaendig\n"); return 2; }
 
         const int vorherSamples = lvl.soundSampleCount();
-        std::vector<std::pair<int,int>> zuordnung;
+        std::vector<std::pair<int,int>> mapping;
 
         // 446..449: in allen 16 Leveln frei. Die Soundmap ist ein festes Feld
         // von 450 Plaetzen, ein hoher Platz kostet also kein Byte.
@@ -257,73 +257,73 @@ int main(int argc, char** argv)
         // Grundwert ist 191 und das Feld ein Byte - alles ueber 133 Prozent
         // landet an der Obergrenze 255. Bruellen und Sterben liegen dort,
         // ihre Prozentwerte sind also der Wunsch, nicht das Ergebnis.
-        std::vector<int> laut = { 100, 130, 150, 100, 140 };
+        std::vector<int> volumes = { 100, 130, 150, 100, 140 };
 
-        // -stumm <id,...>: diese Nummern bewusst auf einen LEEREN Platz der
+        // -muted <id,...>: diese Nummern bewusst auf einen LEEREN Platz der
         // Soundmap biegen, statt sie stehen zu lassen.
         //
         // 411 ist in allen 16 TR5-Leveln unbelegt - mit MissMod -ton an jedem
         // einzelnen nachgemessen, nicht angenommen. Der erste Kandidat 405 war
         // in rich3 belegt; frei sind 411 bis 419. Der Platz liegt ausserhalb
         // der Bereiche, die wir fuer Importe vergeben (420-449).
-        std::vector<int> stumm;
-        int stummPlatz = 411;
+        std::vector<int> muted;
+        int muteSlot = 411;
 
         // 445..449: fuenf Plaetze am oberen Ende, in allen Leveln frei.
         int basis = 445;
 
         // Ab dem Raptor (#97) sind Basisplatz und Lautstaerken einstellbar -
-        // vorher standen die T-Rex-Werte fest im Werkzeug. Zwei Gegner teilen
+        // vorher standen die T-Rex-Values fest im Werkzeug. Zwei Gegner teilen
         // sich den oberen Rand der Soundmap nicht mehr von allein:
         //   -basis N        erster Zielplatz
-        //   -laut a,b,c,..  Prozent je Klang in Paketreihenfolge
+        //   -volumes a,b,c,..  Prozent je Klang in Paketreihenfolge
         for (int a = 5; a < argc; ++a)
         {
-            if (std::strcmp(argv[a], "-stumm") == 0 && a + 1 < argc)
+            if (std::strcmp(argv[a], "-muted") == 0 && a + 1 < argc)
             {
                 const char* p = argv[++a];
                 while (*p)
                 {
-                    stumm.push_back(std::atoi(p));
+                    muted.push_back(std::atoi(p));
                     while (*p && *p != ',') ++p;
                     if (*p == ',') ++p;
                 }
             }
             else if (std::strcmp(argv[a], "-stummplatz") == 0 && a + 1 < argc)
-                stummPlatz = std::atoi(argv[++a]);
+                muteSlot = std::atoi(argv[++a]);
             else if (std::strcmp(argv[a], "-basis") == 0 && a + 1 < argc)
                 basis = std::atoi(argv[++a]);
-            else if (std::strcmp(argv[a], "-laut") == 0 && a + 1 < argc)
+            else if (std::strcmp(argv[a], "-volumes") == 0 && a + 1 < argc)
             {
-                laut.clear();
+                volumes.clear();
                 const char* p = argv[++a];
                 while (*p)
                 {
-                    laut.push_back(std::atoi(p));
+                    volumes.push_back(std::atoi(p));
                     while (*p && *p != ',') ++p;
                     if (*p == ',') ++p;
                 }
             }
         }
         std::printf("  Zielplaetze ab %d, %d Lautstaerkeangaben\n",
-                    basis, static_cast<int>(laut.size()));
+                    basis, static_cast<int>(volumes.size()));
 
-        if (!lvl.addSoundsFromTr3(ton, basis, zuordnung, err, &laut))
+        if (!lvl.addSoundsFromTr3(ton, basis, mapping, err, &volumes))
         { std::printf("SOUNDS GESCHEITERT: %s\n", err.c_str()); return 1; }
 
         std::printf("  Sounds: %d -> %d Samples\n", vorherSamples, lvl.soundSampleCount());
-        for (const auto& z : zuordnung)
+        for (const auto& z : mapping)
             std::printf("    TR3-Sound %3d  ->  Map %3d\n", z.first, z.second);
 
-        std::vector<int> offen;
+        std::vector<int> unresolved;
         std::vector<std::pair<int,int>> genutzt;
         std::vector<std::pair<int,int>> arten;
-        const int n2 = biegeSfxUm(paket, zuordnung, offen, genutzt, arten);
+        const int n2 = remapSfx(package, mapping, unresolved, genutzt, arten);
 
         // Je ID zeigen, wie oft und aus welcher Animation sie gerufen wird.
         // Eine blosse Gesamtzahl reicht nicht: beim Compy stimmte die Summe,
-        // und trotzdem war offen, ob der Laufklang ueberhaupt vorkommt.
-        for (const auto& z : zuordnung)
+        // und trotzdem war unresolved, ob der Laufklang ueberhaupt vorkommt.
+        for (const auto& z : mapping)
         {
             std::string wo;
             int mal = 0;
@@ -389,40 +389,40 @@ int main(int argc, char** argv)
         // wollen: TR3 143 "Falling" bei T-Rex und Raptor, TR3 56 (Laras
         // Schritt) beim Geier. Stehenlassen ist keine Option - 143 und 56 sind
         // in TR5 belegt (SFX_GENERIC_BODY_FALL, SFX_LARA_GRABFEET).
-        if (!offen.empty() && !stumm.empty())
+        if (!unresolved.empty() && !muted.empty())
         {
             std::vector<std::pair<int,int>> aufStumm;
-            for (int o : offen)
-                for (int s : stumm)
-                    if (o == s) aufStumm.push_back(std::make_pair(o, stummPlatz));
+            for (int o : unresolved)
+                for (int s : muted)
+                    if (o == s) aufStumm.push_back(std::make_pair(o, muteSlot));
 
             if (!aufStumm.empty())
             {
                 std::vector<int> rest;
                 std::vector<std::pair<int,int>> egal;
-                biegeSfxUm(paket, aufStumm, rest, egal, egal);
-                std::printf("  Stummgeschaltet auf leeren Platz %d:", stummPlatz);
+                remapSfx(package, aufStumm, rest, egal, egal);
+                std::printf("  Stummgeschaltet auf leeren Platz %d:", muteSlot);
                 for (const auto& z : aufStumm) std::printf(" %d", z.first);
                 std::printf("\n");
 
                 std::vector<int> uebrig;
-                for (int o : offen)
+                for (int o : unresolved)
                 {
                     bool weg = false;
                     for (const auto& z : aufStumm) if (z.first == o) weg = true;
                     if (!weg) uebrig.push_back(o);
                 }
-                offen = uebrig;
+                unresolved = uebrig;
             }
         }
 
-        if (!offen.empty())
+        if (!unresolved.empty())
         {
             std::printf("\nABBRUCH: %zu SFX-Nummern OHNE Zuordnung. Sie wuerden ihre\n"
                         "TR3-Nummer behalten und im Ziel einen fremden Klang treffen:\n   ",
-                        offen.size());
-            for (int o : offen) std::printf("%d ", o);
-            std::printf("\n\nNimm sie ins Klangpaket auf (TR3Ton -wellen) oder biege sie\n"
+                        unresolved.size());
+            for (int o : unresolved) std::printf("%d ", o);
+            std::printf("\n\nNimm sie ins Klangpaket auf (TR3Ton -waves) oder biege sie\n"
                         "bewusst auf einen stillen Platz. Es wurde NICHTS geschrieben.\n");
             return 1;
         }
@@ -432,20 +432,20 @@ int main(int argc, char** argv)
     // die Faces zeigen muessen - und die Faces stecken im Modellpaket.
     // Dieselbe Reihenfolge wie bei den Sounds.
     int texBasis = tex;
-    if (paketVersion(paket) >= 2)
+    if (paketVersion(package) >= 2)
     {
         std::map<int,int> texMap;
-        if (!lvl.addTexturesFromTr3(paket, texMap, err))
+        if (!lvl.addTexturesFromTr3(package, texMap, err))
         { std::printf("TEXTUREN GESCHEITERT: %s\n", err.c_str()); return 1; }
         std::printf("  Texturen: %s\n", err.c_str());
 
-        const int n = biegeTexUm(paket, texMap);
+        const int n = remapTextures(package, texMap);
         if (n < 0) { std::printf("Meshes im Paket nicht lesbar\n"); return 1; }
         std::printf("  Faces: %d Texturworte umgebogen\n", n);
         texBasis = -1;                 // Faces stehen jetzt richtig, nicht ueberschreiben
     }
 
-    if (!lvl.addMoveableFromTr3(paket, slot, texBasis, err))
+    if (!lvl.addMoveableFromTr3(package, slot, texBasis, err))
     { std::printf("EINBAU GESCHEITERT: %s\n", err.c_str()); return 1; }
 
     Tr5Level::MoveableInfo mi;

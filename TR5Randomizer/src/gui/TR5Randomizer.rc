@@ -16,5 +16,5 @@ IDI_APPICON ICON "TR5Randomizer.ico"
 //
 // Eingebettet statt als Datei daneben, damit die EXE fuer sich allein
 // lauffaehig bleibt und niemand das Bild versehentlich loescht.
-#define IDR_HINTERGRUND 201
-IDR_HINTERGRUND RCDATA "Hintergrund.jpg"
+#define IDR_BACKGROUND 201
+IDR_BACKGROUND RCDATA "Background.jpg"

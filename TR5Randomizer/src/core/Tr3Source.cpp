@@ -8,7 +8,7 @@
  * any later version. See the LICENSE file at the root of this source tree.
  */
 //----------------------------------------------------------------------------
-// Entnahme aus einem TR3-Level - Umsetzung zu Tr3Quelle.h (#92).
+// Entnahme aus einem TR3-Level - Umsetzung zu Tr3Source.h (#92).
 //
 // Wortgleich aus dem Werkzeug TR3Hol uebernommen; geaendert wurden nur der
 // Rahmen (main -> Bibliotheksfunktion), das Laden ueber einen breiten Pfad
@@ -19,7 +19,7 @@
 // Die Fortschrittsmeldungen bleiben als printf stehen: im Werkzeug sind sie
 // die gewohnte Ausgabe, in der Oberflaeche laufen sie ins Leere.
 //----------------------------------------------------------------------------
-#include "Tr3Quelle.h"
+#include "Tr3Source.h"
 #include <sys/stat.h>
 #include <direct.h>
 #include <cstdio>
@@ -67,18 +67,18 @@ namespace
     };
 }
 
-bool Tr3Quelle::holeMoveable(const std::wstring& levelPfad, int objektId,
-                             std::vector<uint8_t>& paket, std::string& fehler)
+bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objektId,
+                             std::vector<uint8_t>& package, std::string& error)
 {
-    fehler.clear();
-    paket.clear();
+    error.clear();
+    package.clear();
     const int suche = objektId;
 
     Leser r;
-    if (!r.laden(levelPfad.c_str())) { fehler = "TR3-Level nicht lesbar"; return false; }
+    if (!r.laden(levelPath.c_str())) { error = "TR3-Level nicht lesbar"; return false; }
 
     const uint32_t version = r.u32();
-    if ((version >> 24) != 0xFF) { fehler = "Datei ist kein TR3-Level"; return false; }
+    if ((version >> 24) != 0xFF) { error = "Datei ist kein TR3-Level"; return false; }
 
     r.spring(768); r.spring(1024);
     const uint32_t nTex = r.u32();
@@ -117,7 +117,7 @@ bool Tr3Quelle::holeMoveable(const std::wstring& levelPfad, int objektId,
         if (!r.kaputt && a < 500000 && b2 < 2000000 && c < 20000 && d < 20000) nachRaeumen = merk;
         r.at = merk;
     }
-    if (!nachRaeumen) { fehler = "Raumdurchlauf gescheitert - unerwarteter Raumkopf"; return false; }
+    if (!nachRaeumen) { error = "Raumdurchlauf gescheitert - unerwarteter Raumkopf"; return false; }
     r.at = nachRaeumen; r.kaputt = false;
 
     r.spring(size_t(r.u32()) * 2);                                  // Floordata
@@ -133,7 +133,7 @@ bool Tr3Quelle::holeMoveable(const std::wstring& levelPfad, int objektId,
     const uint32_t nBone = r.u32(); const size_t boneAt = r.at; r.spring(size_t(nBone) * 4);
     const uint32_t nFrame = r.u32(); const size_t frameAt = r.at; r.spring(size_t(nFrame) * 2);
     const uint32_t nMv = r.u32();
-    if (r.kaputt) { fehler = "Datei endet vor der Moveable-Tabelle"; return false; }
+    if (r.kaputt) { error = "Datei endet vor der Moveable-Tabelle"; return false; }
 
     std::vector<Moveable> mv;
     for (uint32_t i = 0; i < nMv; ++i)
@@ -145,16 +145,16 @@ bool Tr3Quelle::holeMoveable(const std::wstring& levelPfad, int objektId,
     }
     const Moveable* z = 0;
     for (const Moveable& m : mv) if (int(m.objectId) == suche) { z = &m; break; }
-    if (!z) { fehler = "Objekt " + std::to_string(suche) + " ist in diesem Level nicht vorhanden"; return false; }
+    if (!z) { error = "Objekt " + std::to_string(suche) + " ist in diesem Level nicht vorhanden"; return false; }
 
     uint32_t animEnde = nAnims;
     for (const Moveable& m : mv)
         if (m.animIndex > z->animIndex && m.animIndex < animEnde) animEnde = m.animIndex;
-    const uint32_t animZahl = animEnde - z->animIndex;
+    const uint32_t animCount = animEnde - z->animIndex;
 
     std::printf("Objekt %d: %u Meshes, %u Knochen, Anims %u..%u (%u)\n",
                 suche, z->numMeshes, z->numMeshes ? z->numMeshes - 1 : 0,
-                z->animIndex, animEnde - 1, animZahl);
+                z->animIndex, animEnde - 1, animCount);
 
     // --- Weiter bis zu den Objekttexturen (fuer die Texturarbeit, #90) -----
     // Die strittigen Feldgroessen im Dateiende werden wieder durchprobiert
@@ -213,7 +213,7 @@ bool Tr3Quelle::holeMoveable(const std::wstring& levelPfad, int objektId,
         for (int k = 0; k < 10; ++k) o.push_back(r.b[p + k]);       // Centre + CollRadius
         p += 10;
         const int16_t nVerts = rs16(r.b, p); p += 2;
-        if (nVerts > 255) { fehler = "Ein Mesh hat mehr als 255 Vertices - mehr liest TR5 nicht"; return false; }
+        if (nVerts > 255) { error = "Ein Mesh hat mehr als 255 Vertices - mehr liest TR5 nicht"; return false; }
         put16(o, uint16_t(nVerts));
         for (int v = 0; v < nVerts * 3; ++v) { put16(o, ru16(r.b, p)); p += 2; }
         const int16_t nNorms = rs16(r.b, p); p += 2;
@@ -343,7 +343,7 @@ bool Tr3Quelle::holeMoveable(const std::wstring& levelPfad, int objektId,
     std::vector<uint8_t> anims;
     int ausserhalb = 0;
     uint16_t animMin = 0xFFFF, animMax = 0;
-    for (uint32_t i = 0; i < animZahl; ++i)
+    for (uint32_t i = 0; i < animCount; ++i)
     {
         const size_t a = animAt + size_t(z->animIndex + i) * 32;
 
@@ -370,7 +370,7 @@ bool Tr3Quelle::holeMoveable(const std::wstring& levelPfad, int objektId,
     put32(out, 2);                 // Version 2: mit Texturteil am Ende
     put32(out, uint32_t(suche));
     put32(out, z->numMeshes);
-    put32(out, animZahl);
+    put32(out, animCount);
     put32(out, frameBytes / 2);  // nur die Scheibe dieses Objekts, in Worten
     put32(out, uint32_t(z->numMeshes ? (z->numMeshes - 1) * 4 : 0));
     put32(out, nSC); put32(out, nAD); put32(out, nCmd);
@@ -392,7 +392,7 @@ bool Tr3Quelle::holeMoveable(const std::wstring& levelPfad, int objektId,
     //
     // Ein unveraendert uebernommenes TR3-Wort liest TR5 also mit einem
     // Viertel des Winkels - und weil TR3 den Ueberlauf ins Negative nutzt,
-    // kippen grosse Werte ganz. Betroffen sind genau die EINACHSGELENKE:
+    // kippen grosse Values ganz. Betroffen sind genau die EINACHSGELENKE:
     // Kiefer, Knoechel, Zehen. Im Spiel gesehen als verdrehte Fuesse und ein
     // umgestuelptes Maul, waehrend der Rumpf stimmte - der dreht um alle drei
     // Achsen und laeuft damit durch den identischen Zweiwort-Fall.
@@ -405,7 +405,7 @@ bool Tr3Quelle::holeMoveable(const std::wstring& levelPfad, int objektId,
         int umgerechnet = 0, ausserhalb = 0;
         std::vector<uint32_t> erledigt;
 
-        for (uint32_t a = 0; a < animZahl; ++a)
+        for (uint32_t a = 0; a < animCount; ++a)
         {
             const size_t ao = animAt + size_t(z->animIndex + a) * 32;
             const uint32_t fo = ru32(r.b, ao);
@@ -519,7 +519,7 @@ bool Tr3Quelle::holeMoveable(const std::wstring& levelPfad, int objektId,
         for (int k : kacheln)
         {
             if (k < 0 || uint32_t(k) >= nTex)
-            { fehler = "Eine Texturkachel liegt ausserhalb der Texturseiten"; return false; }
+            { error = "Eine Texturkachel liegt ausserhalb der Texturseiten"; return false; }
             const size_t at = tex16At + size_t(k) * 131072;
             out.insert(out.end(), r.b.begin() + at, r.b.begin() + at + 131072);
         }
@@ -527,10 +527,10 @@ bool Tr3Quelle::holeMoveable(const std::wstring& levelPfad, int objektId,
                     geschrieben, kacheln.size());
     }
 
-    // Frueher wurde hier eine Datei geschrieben. Als Bibliothek geben wir das
+    // Frueher wurde hier eine Datei geschrieben. Als Bibliothek give wir das
     // Paket zurueck - der Aufrufer entscheidet, ob es auf die Platte geht
     // (Werkzeug) oder direkt weiterverarbeitet wird (Randomizer-Lauf).
-    paket = out;
+    package = out;
 
     // --- Gegenprobe: laeuft der TR5-Ableser sauber durch? -------------------
     //
@@ -568,14 +568,14 @@ bool Tr3Quelle::holeMoveable(const std::wstring& levelPfad, int objektId,
                 meshBytes, gesQuads, gesTris, gesFarbig);
     std::printf("  Groesstes Mesh: %d Vertices\n", maxVerts);
     std::printf("  Anims: %u a 40 Byte, Frame-Scheibe %u Byte (%u..%u), Knochen %u Worte\n",
-                animZahl, frameBytes, z->frameOffset, frameEnde,
+                animCount, frameBytes, z->frameOffset, frameEnde,
                 z->numMeshes ? (z->numMeshes - 1) * 4 : 0);
     std::printf("  Frame-Zeiger ausserhalb der Scheibe: %d   Sprungziele %u..%u (Scheibe %u..%u)\n",
                 ausserhalb, animMin, animMax, z->animIndex, animEnde - 1);
     if (ausserhalb) std::printf("  ACHTUNG: Frame-Zeiger zeigen aus der Scheibe heraus\n");
     if (animMin < z->animIndex || animMax >= animEnde)
         std::printf("  ACHTUNG: eine Anim springt aus der eigenen Scheibe heraus\n");
-    std::printf("  Paket fertig: %zu Byte\n", paket.size());
+    std::printf("  Paket fertig: %zu Byte\n", package.size());
     return true;
 }
 
@@ -607,20 +607,20 @@ namespace
     }
 }
 
-bool Tr3Quelle::holeKlaenge(const std::wstring& sfxPfad,
-                            const std::vector<KlangWunsch>& wuensche,
-                            std::vector<uint8_t>& paket,
-                            std::string& fehler)
+bool Tr3Source::fetchSounds(const std::wstring& sfxPath,
+                            const std::vector<SoundRequest>& requests,
+                            std::vector<uint8_t>& package,
+                            std::string& error)
 {
-    fehler.clear();
-    paket.clear();
+    error.clear();
+    package.clear();
 
     Leser sfx;
-    if (!sfx.laden(sfxPfad.c_str())) { fehler = "MAIN.SFX nicht lesbar"; return false; }
+    if (!sfx.laden(sfxPath.c_str())) { error = "MAIN.SFX nicht lesbar"; return false; }
 
     std::vector<uint32_t> at, len;
     if (!wellenVerzeichnis(sfx.b, at, len))
-    { fehler = "In MAIN.SFX steht kein einziges RIFF - falsche Datei?"; return false; }
+    { error = "In MAIN.SFX steht kein einziges RIFF - falsche Datei?"; return false; }
 
     // Paketkopf: Kennung, Version 2, Anzahl (wird am Ende nachgetragen).
     std::vector<uint8_t> out;
@@ -628,15 +628,15 @@ bool Tr3Quelle::holeKlaenge(const std::wstring& sfxPfad,
     for (int i = 0; i < 4; ++i) out.push_back(i == 0 ? 2 : 0);
     for (int i = 0; i < 4; ++i) out.push_back(0);
 
-    for (const KlangWunsch& k : wuensche)
+    for (const SoundRequest& k : requests)
     {
-        if (k.wellen.empty())
-        { fehler = "Klang " + std::to_string(k.tr3Id) + " ohne Wellenangabe"; return false; }
+        if (k.waves.empty())
+        { error = "Klang " + std::to_string(k.tr3Id) + " ohne Wellenangabe"; return false; }
 
-        for (int w : k.wellen)
+        for (int w : k.waves)
             if (w < 1 || size_t(w) > at.size())
             {
-                fehler = "Wave " + std::to_string(w) + " gibt es in dieser MAIN.SFX nicht ("
+                error = "Wave " + std::to_string(w) + " gibt es in dieser MAIN.SFX nicht ("
                        + std::to_string(at.size()) + " vorhanden)";
                 return false;
             }
@@ -645,9 +645,9 @@ bool Tr3Quelle::holeKlaenge(const std::wstring& sfxPfad,
         // (Lautstaerke, Chance, Merkmale - eine Vorlage wuerde Tonhoehe und
         // Zufallsverstimmung mitschleppen, siehe Tr5Tr3Import.cpp).
         put16(out, uint16_t(k.tr3Id)); put16(out, 0); put16(out, 0); put16(out, 0);
-        put16(out, uint16_t(k.wellen.size()));
+        put16(out, uint16_t(k.waves.size()));
 
-        for (int w : k.wellen)
+        for (int w : k.waves)
         {
             const size_t i = size_t(w) - 1;          // TRsound zaehlt ab 1
             put32(out, len[i]);
@@ -655,9 +655,9 @@ bool Tr3Quelle::holeKlaenge(const std::wstring& sfxPfad,
         }
     }
 
-    out[8]  = uint8_t(wuensche.size() & 0xFF);
-    out[9]  = uint8_t((wuensche.size() >> 8) & 0xFF);
-    paket = out;
+    out[8]  = uint8_t(requests.size() & 0xFF);
+    out[9]  = uint8_t((requests.size() >> 8) & 0xFF);
+    package = out;
     return true;
 }
 
@@ -676,52 +676,52 @@ bool Tr3Quelle::holeKlaenge(const std::wstring& sfxPfad,
 // 2. Nur die Kommandos anfassen, auf die die Animationen DIESES Objekts
 //    zeigen. Das Paket fuehrt den ganzen Kommandoblock des Quelllevels mit.
 //----------------------------------------------------------------------------
-bool Tr3Quelle::biegeSfxUm(std::vector<uint8_t>& paket,
-                           const std::vector<std::pair<int,int>>& zuordnung,
-                           const std::vector<int>& stumm,
-                           int stummPlatz,
-                           std::vector<int>& offen,
-                           std::string& fehler)
+bool Tr3Source::remapSfx(std::vector<uint8_t>& package,
+                           const std::vector<std::pair<int,int>>& mapping,
+                           const std::vector<int>& muted,
+                           int muteSlot,
+                           std::vector<int>& unresolved,
+                           std::string& error)
 {
-    fehler.clear();
-    offen.clear();
+    error.clear();
+    unresolved.clear();
 
-    if (paket.size() < 48) { fehler = "Modellpaket zu klein"; return false; }
+    if (package.size() < 48) { error = "Modellpaket zu klein"; return false; }
 
-    const uint32_t nMeshes = ru32(paket, 12), nAnims = ru32(paket, 16);
-    const uint32_t nFrameW = ru32(paket, 20), nBoneW = ru32(paket, 24);
-    const uint32_t nSC = ru32(paket, 28), nAD = ru32(paket, 32), nCmd = ru32(paket, 36);
+    const uint32_t nMeshes = ru32(package, 12), nAnims = ru32(package, 16);
+    const uint32_t nFrameW = ru32(package, 20), nBoneW = ru32(package, 24);
+    const uint32_t nSC = ru32(package, 28), nAD = ru32(package, 32), nCmd = ru32(package, 36);
 
     size_t p = 48;
     for (uint32_t i = 0; i < nMeshes; ++i)
     {
-        if (p + 4 > paket.size()) { fehler = "Modellpaket bricht in den Meshes ab"; return false; }
-        p += 4 + ru32(paket, p);
+        if (p + 4 > package.size()) { error = "Modellpaket bricht in den Meshes ab"; return false; }
+        p += 4 + ru32(package, p);
     }
     p += size_t(nBoneW) * 4 + size_t(nFrameW) * 2 + size_t(nAnims) * 40
        + size_t(nSC) * 6 + size_t(nAD) * 8;
 
     const size_t cmdAt = p;
-    if (cmdAt + size_t(nCmd) * 2 > paket.size())
-    { fehler = "Kommandoblock im Modellpaket nicht auffindbar"; return false; }
+    if (cmdAt + size_t(nCmd) * 2 > package.size())
+    { error = "Kommandoblock im Modellpaket nicht auffindbar"; return false; }
     const size_t animAt = cmdAt - size_t(nAD) * 8 - size_t(nSC) * 6 - size_t(nAnims) * 40;
 
     // Stummschaltung ist nur eine weitere Zuordnung - auf einen leeren Platz
     // der Soundmap, wo die Engine aussteigt statt etwas Fremdes zu spielen.
-    std::vector<std::pair<int,int>> alle = zuordnung;
-    for (int s : stumm) alle.push_back(std::make_pair(s, stummPlatz));
+    std::vector<std::pair<int,int>> alle = mapping;
+    for (int s : muted) alle.push_back(std::make_pair(s, muteSlot));
 
     for (uint32_t a = 0; a < nAnims; ++a)
     {
         const size_t ao = animAt + size_t(a) * 40;
-        const uint16_t anzahl = ru16(paket, ao + 36);
+        const uint16_t anzahl = ru16(package, ao + 36);
         if (!anzahl) continue;
-        const uint16_t start = ru16(paket, ao + 38);
+        const uint16_t start = ru16(package, ao + 38);
 
         uint32_t i = start;
         for (uint16_t k = 0; k < anzahl && i < nCmd; ++k)      // KOMMANDOS zaehlen
         {
-            const uint16_t art = ru16(paket, cmdAt + size_t(i) * 2);
+            const uint16_t art = ru16(package, cmdAt + size_t(i) * 2);
             ++i;
             int folge = 0;
             switch (art)
@@ -736,22 +736,22 @@ bool Tr3Quelle::biegeSfxUm(std::vector<uint8_t>& paket,
             if (art == 5 && i + 1 < nCmd)
             {
                 const size_t stelle = cmdAt + size_t(i + 1) * 2;
-                const uint16_t wort = ru16(paket, stelle);
+                const uint16_t wort = ru16(package, stelle);
                 const int nr = wort & 0x0FFF;    // Bits 12-15 sind Bedingungen
                 bool getroffen = false;
                 for (const auto& z : alle)
                     if (z.first == nr)
                     {
                         const uint16_t neu = uint16_t((wort & 0xF000) | (z.second & 0x0FFF));
-                        std::memcpy(&paket[stelle], &neu, 2);
+                        std::memcpy(&package[stelle], &neu, 2);
                         getroffen = true;
                         break;
                     }
                 if (!getroffen)
                 {
                     bool schon = false;
-                    for (int o : offen) if (o == nr) { schon = true; break; }
-                    if (!schon) offen.push_back(nr);
+                    for (int o : unresolved) if (o == nr) { schon = true; break; }
+                    if (!schon) unresolved.push_back(nr);
                 }
             }
             i += folge;
@@ -773,55 +773,55 @@ bool Tr3Quelle::biegeSfxUm(std::vector<uint8_t>& paket,
 //     wiedergefunden wurden
 //   - Lautstaerken vom Nutzer im Spiel eingestellt
 //----------------------------------------------------------------------------
-std::vector<Tr3Quelle::DinoQuelle> Tr3Quelle::dinos()
+std::vector<Tr3Source::DinoSource> Tr3Source::dinos()
 {
-    std::vector<DinoQuelle> d;
+    std::vector<DinoSource> d;
 
     {   // T-Rex auf SAS. Der Laufklang ist die Ausnahme: die Anim-Kommandos
         // rufen 88, der im Spiel gehoerte Klang ist aber der dumpfe,
         // zweivariantige von 250 - vom Nutzer am Original gegengehoert.
-        DinoQuelle t;
-        t.slot = 31; t.name = "T-Rex"; t.quelle = "tr3";
-        t.datei = "CRASH.TR2"; t.objekt = 287; t.klangBasis = 445;
-        t.klaenge = { { 84, {87} }, { 87, {89} }, { 88, {256,257} },
+        DinoSource t;
+        t.slot = 31; t.name = "T-Rex"; t.source = "tr3";
+        t.file = "CRASH.TR2"; t.object = 287; t.soundBase = 445;
+        t.sounds = { { 84, {87} }, { 87, {89} }, { 88, {256,257} },
                       { 89, {91} }, { 255, {262} } };
-        t.stumm = { 143 };                 // TR3 "Falling", in TR5 belegt
-        t.laut  = { 100, 130, 150, 100, 140 };
+        t.muted = { 143 };                 // TR3 "Falling", in TR5 belegt
+        t.volumes  = { 100, 130, 150, 100, 140 };
         d.push_back(t);
     }
     {   // Raptor auf REAPER (war eine Wasserqualle).
-        DinoQuelle t;
-        t.slot = 75; t.name = "Raptor"; t.quelle = "tr3";
-        t.datei = "CRASH.TR2"; t.objekt = 288; t.klangBasis = 438;
-        t.klaenge = { { 250, {256,257} }, { 251, {258} }, { 252, {259} },
+        DinoSource t;
+        t.slot = 75; t.name = "Raptor"; t.source = "tr3";
+        t.file = "CRASH.TR2"; t.object = 288; t.soundBase = 438;
+        t.sounds = { { 250, {256,257} }, { 251, {258} }, { 252, {259} },
                       { 253, {260} }, { 254, {261} }, { 255, {262} }, { 256, {263} } };
-        t.stumm = { 143 };
-        t.laut  = { 100, 110, 110, 110, 130, 120, 120 };
+        t.muted = { 143 };
+        t.volumes  = { 100, 110, 110, 110, 130, 120, 120 };
         d.push_back(t);
     }
     {   // Compsognathus auf SAILOR (war ein Matrose ohne Modell).
-        DinoQuelle t;
-        t.slot = 53; t.name = "Compy"; t.quelle = "tr3";
-        t.datei = "CRASH.TR2"; t.objekt = 34; t.klangBasis = 430;
-        t.klaenge = { { 239, {242} }, { 240, {243} }, { 241, {244} },
+        DinoSource t;
+        t.slot = 53; t.name = "Compy"; t.source = "tr3";
+        t.file = "CRASH.TR2"; t.object = 34; t.soundBase = 430;
+        t.sounds = { { 239, {242} }, { 240, {243} }, { 241, {244} },
                       { 242, {245} }, { 243, {246,247} } };
-        t.laut  = { 100, 100, 100, 110, 70 };
+        t.volumes  = { 100, 100, 100, 110, 70 };
         d.push_back(t);
     }
     {   // Geier auf CROW. Modell aus The Lost Artifact, Klaenge aus TR3 -
-        // siehe sfxPfad().
-        DinoQuelle t;
-        t.slot = 43; t.name = "Geier"; t.quelle = "tr3gold";
-        t.datei = "chunnel.tr2"; t.objekt = 29; t.klangBasis = 420;
-        t.klaenge = { { 182, {192} }, { 183, {193,194} }, { 184, {195} }, { 185, {196} } };
-        t.stumm = { 56 };                  // TR3: Laras Schritt, in TR5 belegt
-        t.laut  = { 100, 100, 100, 100 };
+        // siehe sfxPath().
+        DinoSource t;
+        t.slot = 43; t.name = "Geier"; t.source = "tr3gold";
+        t.file = "chunnel.tr2"; t.object = 29; t.soundBase = 420;
+        t.sounds = { { 182, {192} }, { 183, {193,194} }, { 184, {195} }, { 185, {196} } };
+        t.muted = { 56 };                  // TR3: Laras Schritt, in TR5 belegt
+        t.volumes  = { 100, 100, 100, 100 };
         d.push_back(t);
     }
     return d;
 }
 
-std::wstring Tr3Quelle::sfxPfad(const DinoQuelle&,
+std::wstring Tr3Source::sfxPath(const DinoSource&,
                                 const std::wstring& tr3Dir, const std::wstring&)
 {
     // IMMER die MAIN.SFX von Tomb Raider 3 - auch fuer den Geier. Gold bringt
@@ -831,12 +831,12 @@ std::wstring Tr3Quelle::sfxPfad(const DinoQuelle&,
     return tr3Dir + L"\\MAIN.SFX";
 }
 
-std::wstring Tr3Quelle::levelPfad(const DinoQuelle& d,
+std::wstring Tr3Source::levelPath(const DinoSource& d,
                                   const std::wstring& tr3Dir, const std::wstring& tr3GoldDir)
 {
-    const std::wstring& basis = (std::strcmp(d.quelle, "tr3gold") == 0) ? tr3GoldDir : tr3Dir;
+    const std::wstring& basis = (std::strcmp(d.source, "tr3gold") == 0) ? tr3GoldDir : tr3Dir;
     std::wstring name;
-    for (const char* p = d.datei; *p; ++p) name.push_back(wchar_t((unsigned char)*p));
+    for (const char* p = d.file; *p; ++p) name.push_back(wchar_t((unsigned char)*p));
     return basis + L"\\" + name;
 }
 
@@ -847,42 +847,42 @@ std::wstring Tr3Quelle::levelPfad(const DinoQuelle& d,
 // 0 Normalen heisst NORMALEN. Bit 15 des Texturworts ist ein Flag und bleibt
 // stehen - es entscheidet, ob AdjustUVs die Halbtexel-Korrektur laufen laesst.
 //----------------------------------------------------------------------------
-int Tr3Quelle::biegeTexUm(std::vector<uint8_t>& paket, const std::map<int,int>& zuordnung)
+int Tr3Source::remapTextures(std::vector<uint8_t>& package, const std::map<int,int>& mapping)
 {
-    const uint32_t nMeshes = ru32(paket, 12);
+    const uint32_t nMeshes = ru32(package, 12);
     size_t p = 48;
     int getauscht = 0;
 
     for (uint32_t i = 0; i < nMeshes; ++i)
     {
-        if (p + 4 > paket.size()) return -1;
-        const uint32_t len = ru32(paket, p); p += 4;
+        if (p + 4 > package.size()) return -1;
+        const uint32_t len = ru32(package, p); p += 4;
         const size_t ende = p + len;
         size_t q = p + 10;
         if (q + 2 > ende) return -1;
 
-        const int16_t vw = rs16(paket, q); q += 2;
+        const int16_t vw = rs16(package, q); q += 2;
         const int nv = vw & 0xFF;
         if (nv == 0) q += (size_t((vw >> 8) & 0xFF) * 6 + 1) * 2;
         else
         {
             q += size_t(nv) * 6;
-            const int16_t nn = rs16(paket, q); q += 2;
+            const int16_t nn = rs16(package, q); q += 2;
             q += size_t(nv) * (nn >= 0 ? 6 : 2);
         }
 
         auto biege = [&](size_t at) {
-            const uint16_t w = ru16(paket, at);
-            std::map<int,int>::const_iterator f = zuordnung.find(w & 0x7FFF);
-            if (f == zuordnung.end()) return;
+            const uint16_t w = ru16(package, at);
+            std::map<int,int>::const_iterator f = mapping.find(w & 0x7FFF);
+            if (f == mapping.end()) return;
             const uint16_t neu = uint16_t((w & 0x8000) | (f->second & 0x7FFF));
-            std::memcpy(&paket[at], &neu, 2);
+            std::memcpy(&package[at], &neu, 2);
             ++getauscht;
         };
 
-        const int16_t nq = rs16(paket, q); q += 2;
+        const int16_t nq = rs16(package, q); q += 2;
         for (int k = 0; k < nq; ++k, q += 12) biege(q + 8);
-        const int16_t nt = rs16(paket, q); q += 2;
+        const int16_t nt = rs16(package, q); q += 2;
         for (int k = 0; k < nt; ++k, q += 10) biege(q + 6);
 
         p = ende;
@@ -919,10 +919,10 @@ namespace
     // Kennzeichen der Quelldatei: Groesse und Aenderungszeit. Beides zusammen
     // reicht, um eine neu installierte oder gepatchte Fassung zu erkennen -
     // und es kostet keinen Durchlauf durch 11 MB wie eine Pruefsumme.
-    std::string quellKennung(const std::wstring& pfad)
+    std::string quellKennung(const std::wstring& path)
     {
         struct _stat64 s;
-        if (_wstat64(pfad.c_str(), &s) != 0) return std::string();
+        if (_wstat64(path.c_str(), &s) != 0) return std::string();
         return std::to_string((long long)s.st_size) + "-" + std::to_string((long long)s.st_mtime);
     }
 
@@ -936,30 +936,30 @@ namespace
     }
 }
 
-bool Tr3Quelle::holeMitLager(const DinoQuelle& d,
+bool Tr3Source::fetchCached(const DinoSource& d,
                              const std::wstring& tr3Dir, const std::wstring& tr3GoldDir,
-                             const std::wstring& lagerDir,
-                             std::vector<uint8_t>& modell, std::vector<uint8_t>& klaenge,
-                             std::string& fehler)
+                             const std::wstring& cacheDir,
+                             std::vector<uint8_t>& modell, std::vector<uint8_t>& sounds,
+                             std::string& error)
 {
-    const std::wstring lvlPfad = levelPfad(d, tr3Dir, tr3GoldDir);
-    const std::wstring sfx     = sfxPfad(d, tr3Dir, tr3GoldDir);
+    const std::wstring lvlPfad = levelPath(d, tr3Dir, tr3GoldDir);
+    const std::wstring sfx     = sfxPath(d, tr3Dir, tr3GoldDir);
 
     // Erwartete Kennung: beide Quelldateien zusammen. Aendert sich eine, ist
     // der Eintrag hinfaellig.
     const std::string kennung = quellKennung(lvlPfad) + "|" + quellKennung(sfx);
 
-    const std::wstring mDatei = lagerName(lagerDir, d.name, "modell");
-    const std::wstring kDatei = lagerName(lagerDir, d.name, "klaenge");
-    const std::wstring nDatei = lagerName(lagerDir, d.name, "kennung");
+    const std::wstring mDatei = lagerName(cacheDir, d.name, "modell");
+    const std::wstring kDatei = lagerName(cacheDir, d.name, "sounds");
+    const std::wstring nDatei = lagerName(cacheDir, d.name, "kennung");
 
-    if (!lagerDir.empty() && !kennung.empty())
+    if (!cacheDir.empty() && !kennung.empty())
     {
         std::vector<uint8_t> alt;
         if (dateiLesen(nDatei, alt))
         {
             const std::string war(alt.begin(), alt.end());
-            if (war == kennung && dateiLesen(mDatei, modell) && dateiLesen(kDatei, klaenge))
+            if (war == kennung && dateiLesen(mDatei, modell) && dateiLesen(kDatei, sounds))
             {
                 std::printf("  %s: aus dem Zwischenlager\n", d.name);
                 return true;
@@ -968,25 +968,25 @@ bool Tr3Quelle::holeMitLager(const DinoQuelle& d,
     }
 
     modell.clear();
-    klaenge.clear();
-    if (!holeMoveable(lvlPfad, d.objekt, modell, fehler))
-    { fehler = std::string(d.name) + ": " + fehler; return false; }
-    if (!holeKlaenge(sfx, d.klaenge, klaenge, fehler))
-    { fehler = std::string(d.name) + " (Klaenge): " + fehler; return false; }
+    sounds.clear();
+    if (!fetchMoveable(lvlPfad, d.object, modell, error))
+    { error = std::string(d.name) + ": " + error; return false; }
+    if (!fetchSounds(sfx, d.sounds, sounds, error))
+    { error = std::string(d.name) + " (Klaenge): " + error; return false; }
 
     // Ablegen ist Kuer: schlaegt es fehl (schreibgeschuetzter Ordner, volle
     // Platte), laeuft der Durchgang trotzdem - er ist eben beim naechsten Mal
     // wieder langsam. Ein Zwischenlager darf nie der Grund sein, dass etwas
     // nicht geht.
-    if (!lagerDir.empty() && !kennung.empty())
+    if (!cacheDir.empty() && !kennung.empty())
     {
         // Ordner anlegen, falls er fehlt. Frueher stand das beim Aufrufer -
         // und die Kommandozeile hatte es nicht, weshalb jedes Ablegen still
         // scheiterte und das Lager leer blieb. Eine Funktion, die einen
         // Ordner benutzt, soll ihn auch anlegen koennen.
-        _wmkdir(lagerDir.c_str());
+        _wmkdir(cacheDir.c_str());
         dateiSchreiben(mDatei, modell);
-        dateiSchreiben(kDatei, klaenge);
+        dateiSchreiben(kDatei, sounds);
         dateiSchreiben(nDatei, std::vector<uint8_t>(kennung.begin(), kennung.end()));
     }
     return true;

@@ -34,7 +34,7 @@
 // TombItemEdit2026s TRFile_RandomizerPatch.cpp, hier von _T()/stdafx geloest
 // und um Schreiben, Gleitkomma und Fehlermeldungen mit Zeilennummer erweitert.
 //
-// UTF-8 ohne BOM ist das erwartete Format (so schreiben es unsere Werkzeuge),
+// UTF-8 ohne BOM ist das erwartete Format (so write es unsere Werkzeuge),
 // ein vorhandenes BOM wird aber uebersprungen statt als Fehler behandelt -
 // PowerShells Out-File setzt eines, und das hat in diesem Projekt schon einmal
 // einen halben Tag gekostet.
@@ -59,7 +59,7 @@ public:
     std::string asString(const std::string& def = std::string()) const;
 
     // Objektzugriff. Fehlt der Schluessel, kommt ein Null-Wert zurueck, kein
-    // Fehler - so lassen sich optionale Felder ohne Vorabpruefung lesen.
+    // Fehler - so lassen sich optionale Felder ohne Vorabpruefung read.
     const JsonValue& operator[](const std::string& key) const;
 
     // Arrayzugriff. Ausserhalb des Bereichs kommt ebenfalls Null zurueck.

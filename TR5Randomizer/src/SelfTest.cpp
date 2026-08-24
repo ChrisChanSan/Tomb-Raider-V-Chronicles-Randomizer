@@ -77,7 +77,7 @@ static void testRng()
     for (int x : v1) { if (x < 0 || x >= 200 || seen[x]) { perm = false; break; } seen[x] = true; }
     check(perm, "Mischung ist eine echte Permutation");
 
-    // below() muss im Bereich bleiben und alle Werte treffen.
+    // below() muss im Bereich bleiben und alle Values treffen.
     Rng g(7);
     std::vector<int> hits(6, 0);
     for (int i = 0; i < 60000; ++i) hits[static_cast<size_t>(g.below(6))]++;
@@ -86,7 +86,7 @@ static void testRng()
     // Grobe Gleichverteilungspruefung: kein Wert darf um mehr als 20 Prozent
     // vom Erwartungswert abweichen. Faengt einen kaputten Modulo zuverlaessig.
     for (int h : hits) { if (h < 8000 || h > 12000) inRange = false; }
-    check(allHit, "below(6) trifft alle sechs Werte");
+    check(allHit, "below(6) trifft alle sechs Values");
     check(inRange, "below(6) ist ausreichend gleichverteilt");
     check(Rng(1).below(0) == 0, "below(0) liefert 0 statt zu stuerzen");
 
@@ -136,7 +136,7 @@ static void testJson()
     check(v["y"].asInt() == -11982, "negative Zahl korrekt");
     check(static_cast<int>(v["f"].asDouble()) == 150, "Exponentialschreibweise korrekt");
 
-    // Schreiben und wieder lesen.
+    // Schreiben und wieder read.
     JsonValue o = JsonValue::makeObject();
     JsonValue arr = JsonValue::makeArray();
     JsonValue e1 = JsonValue::makeObject();
@@ -167,7 +167,7 @@ static void testAgainstRealExport(const char* path)
     std::string err;
     if (!Json::parseFile(wpath, z, err))
     {
-        std::printf("  [FEHL] laesst sich nicht lesen: %s\n", err.c_str());
+        std::printf("  [FEHL] laesst sich nicht read: %s\n", err.c_str());
         ++g_failed;
         return;
     }

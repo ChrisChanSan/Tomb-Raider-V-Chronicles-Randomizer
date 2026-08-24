@@ -93,7 +93,7 @@ private:
 // abtippt. Darum Base32 mit einem Alphabet ohne die Verwechslungspaare 0/O und
 // 1/I/L: 13 Zeichen, gross-/kleinschreibungsunabhaengig lesbar.
 //
-// Jeder Seed-Text ist gueltig: laesst er sich nicht als Base32 lesen, wird er
+// Jeder Seed-Text ist gueltig: laesst er sich nicht als Base32 read, wird er
 // stattdessen als Zeichenkette gehasht. Damit kann ein Nutzer auch einfach
 // "Weihnachten" eintippen und bekommt reproduzierbar dasselbe Level.
 //----------------------------------------------------------------------------

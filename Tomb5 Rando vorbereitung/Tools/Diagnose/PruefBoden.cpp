@@ -1,7 +1,7 @@
 //----------------------------------------------------------------------------
 // PruefBoden - findet Pickups, die falsch zum Boden liegen.
 //
-// Regel (siehe core/Boden.h, woertlich aus der Engine portiert): ein Pickup
+// Regel (siehe core/Floor.h, woertlich aus der Engine portiert): ein Pickup
 // ist in Ordnung, wenn sein Punkt belaufbar ist (keine Rutsche mit Neigung
 // ueber 2, kein kollisionsfreies Dreieck) UND sein y hoechstens 128 Einheiten
 // von der echten Bodenhoehe an seiner Position abweicht (Toleranz fuer
@@ -13,7 +13,7 @@
 //   die portierte Mathematik nicht. (Ausnahme: Items auf Sockeln/Bruecken
 //   liegen bewusst hoch - solche Treffer von Hand gegenlesen.)
 //
-// Aufruf 2: PruefBoden <quelle.trc> <randomisiert.trc>
+// Aufruf 2: PruefBoden <source.trc> <randomisiert.trc>
 //   Flaggt nur Items, die der Randomizer BEWEGT oder HINZUGEFUEGT hat.
 //   Items werden nie entfernt, Indizes sind stabil: gleicher Index + gleiche
 //   Position = unangetastet.
@@ -48,18 +48,18 @@ static bool verstoss(const Tr5Level& lvl, int index, const Tr5Item& it, std::str
     const int sz = (it.z - r.originZ) / 1024;
     if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors) return false;
 
-    SchraegeInfo si;
+    SlopeInfo si;
     int baseY = 0;
-    const int art = lvl.floorNeigung(it.roomNumber, sx, sz, si, baseY);
+    const int art = lvl.floorSlope(it.roomNumber, sx, sz, si, baseY);
     if (art < 0) { warum = "Floordata unlesbar"; return true; }
 
-    BodenLage lage;
+    FloorPos lage;
     lage.y = baseY;
     if (art == 1)
-        lage = bodenLageAn(si, baseY, it.x & 1023, it.z & 1023);
+        lage = floorPosAt(si, baseY, it.x & 1023, it.z & 1023);
 
     char buf[128];
-    if (!lage.begehbar)
+    if (!lage.walkable)
     {
         std::snprintf(buf, sizeof(buf), "unbegehbar (Rutsche/NoCol), Boden %d", lage.y);
         warum = buf;

@@ -51,9 +51,9 @@ struct Kopf
     size_t   restAt = 0, restLen = 0;
 };
 
-bool lies(const std::wstring& pfad, std::vector<uint8_t>& raus)
+bool lies(const std::wstring& path, std::vector<uint8_t>& raus)
 {
-    FILE* f = _wfopen(pfad.c_str(), L"rb");
+    FILE* f = _wfopen(path.c_str(), L"rb");
     if (!f) return false;
     std::fseek(f, 0, SEEK_END);
     const long n = std::ftell(f);
@@ -311,8 +311,8 @@ int main(int argc, char** argv)
 
             size_t lutA = 0, infA = 0, lutB = 0, infB = 0;
             int32_t n1 = 0, n2 = 0;
-            la.debugKlangBloecke(lutA, infA, n1, n2);
-            lb.debugKlangBloecke(lutB, infB, n1, n2);
+            la.debugSoundBlocks(lutA, infA, n1, n2);
+            lb.debugSoundBlocks(lutB, infB, n1, n2);
 
             std::printf("  %-22s %-23s %-23s\n", "", "A", "B");
             std::printf("  %-22s %-23lld %-23lld\n", "Animationen",
@@ -423,9 +423,9 @@ int main(int argc, char** argv)
 
                             for (size_t e = 0; e < ka.size(); ++e)
                             {
-                                if (ka[e].funktion != kb[e].funktion ||
+                                if (ka[e].function != kb[e].function ||
                                     ka[e].art != kb[e].art ||
-                                    ka[e].woerter != kb[e].woerter)
+                                    ka[e].words != kb[e].words)
                                 { sektorenAnders++; break; }
                             }
                         }
@@ -604,8 +604,8 @@ int main(int argc, char** argv)
             {
                 std::vector<size_t> gesehen;
                 summe = 0; hoechstesEnde = 0;
-                size_t basis = 0; int32_t woerter = 0;
-                L.debugMeshDataBlock(basis, woerter);
+                size_t basis = 0; int32_t words = 0;
+                L.debugMeshDataBlock(basis, words);
 
                 for (int i = 0; i < L.debugMeshPtrCount(); ++i)
                 {

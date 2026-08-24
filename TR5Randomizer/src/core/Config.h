@@ -52,8 +52,8 @@ struct Config
 
     // Sprache der Oberflaeche (#128). Vorgabe ENGLISCH (Nutzerentscheid
     // 2026-08-24) - die deutschen Texte sind die Quelltexte, uebersetzt
-    // wird in gui\Sprache.cpp.
-    bool spracheDeutsch = false;
+    // wird in gui\Language.cpp.
+    bool germanUi = false;
 
     // Die Wuerfel-Optionen aus Abschnitt 3, damit der Nutzer seine Auswahl
     // beim naechsten Start wiederfindet. Vorgaben identisch mit denen der
@@ -65,26 +65,26 @@ struct Config
     bool optEnemySwap    = false;
     int  enemyPool       = 0;     // 0 Levelpool, 1 Cross-Mix, 2 Allsanity
     // Abgewaehlte Gegnerarten (#95). Gespeichert wird die ABWAHL, damit eine
-    // spaeter hinzukommende Art nicht durch alte Dateien stumm ausfaellt.
-    std::set<int> gegnerAus;
+    // spaeter hinzukommende Art nicht durch alte Dateien muted ausfaellt.
+    std::set<int> enemiesDisabled;
     bool optOutfits      = false;
-    int  itemMenge       = 0;     // 0 Vanilla, 1 mehr, 2 viel mehr (#36)
+    int  itemAmount       = 0;     // 0 Vanilla, 1 mehr, 2 viel mehr (#36)
     int  secrets         = 0;     // Secrets (#53): 0 Vanilla, 1 Pool, 2/3 Liste
-    std::string secretAutor;      // gewaehlter Listenautor (Art 2/3)
-    bool optMusikSwitch  = false; // Levelmusik in der SCRIPT.DAT wuerfeln
-    bool optMusikTrigger = false; // TO_CD-Tracks der Floordata wuerfeln
-    bool optLevelAbschnitte = false;  // die vier Story-Abschnitte permutieren
-    int  optLevelFolge   = 0;     // 0 aus, 1 innerhalb der Abschnitte, 2 frei ueber alles
+    std::string secretAuthor;      // gewaehlter Listenautor (Art 2/3)
+    bool optMusicSwitch  = false; // Levelmusik in der SCRIPT.DAT wuerfeln
+    bool optMusicTrigger = false; // TO_CD-Tracks der Floordata wuerfeln
+    bool optLevelSections = false;  // die vier Story-Abschnitte permutieren
+    int  optLevelOrder   = 0;     // 0 aus, 1 innerhalb der Abschnitte, 2 frei ueber alles
 
     // Die drei Regler fuer Balance.txt (#108), in Prozent. Gespeichert wird
     // hier nur die Reglerstellung; die Wahrheit steht in Balance.txt neben
     // der PCtomb5.exe und wird beim Start von dort gelesen.
-    int  balWaffen        = 100;
-    int  balGegnerLeben   = 100;
-    int  balGegnerSchaden = 100;
-    bool balWaffenZufall        = false;
-    bool balGegnerLebenZufall   = false;
-    bool balGegnerSchadenZufall = false;
+    int  balWeapons        = 100;
+    int  balEnemyHealth   = 100;
+    int  balEnemyDamage = 100;
+    bool balWeaponsRandom        = false;
+    bool balEnemyHealthRandom   = false;
+    bool balEnemyDamageRandom = false;
 
     // Liest bzw. schreibt <exe-Ordner>\TR5Randomizer.cfg. Fehlt die Datei,
     // bleibt alles auf Vorgabe - das ist kein Fehler, sondern der erste Start.

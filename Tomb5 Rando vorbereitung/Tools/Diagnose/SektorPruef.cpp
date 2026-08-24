@@ -92,15 +92,15 @@ static void zeigeSektor(const Tr5Level& lvl, const Tr5Room& r, int sx, int sz)
 
     for (const Tr5FloorEntry& e : kette)
     {
-        std::printf("  Floordata: %-12s", fnName(e.funktion));
-        if (e.funktion == 1 && e.woerter.size() >= 2)
-            std::printf(" -> Raum %u", e.woerter[1]);
-        else if (e.funktion == 6 && !e.woerter.empty())
+        std::printf("  Floordata: %-12s", fnName(e.function));
+        if (e.function == 1 && e.words.size() >= 2)
+            std::printf(" -> Raum %u", e.words[1]);
+        else if (e.function == 6 && !e.words.empty())
         {
-            const unsigned b6 = (e.woerter[0] >> 8) & 0xF;
+            const unsigned b6 = (e.words[0] >> 8) & 0xF;
             std::printf(" Richtungen:%s%s%s%s", (b6&1)?" 0":"", (b6&2)?" 90":"", (b6&4)?" 180":"", (b6&8)?" 270":"");
         }
-        else if ((e.funktion == 2 || e.funktion == 3) && e.woerter.size() >= 2)
+        else if ((e.function == 2 || e.function == 3) && e.words.size() >= 2)
         {
             // ACHTUNG, Cores Benennung ist verdreht (control.cpp:1013):
             //   xoff = wort >> 8   (HOHES Byte) und neigt entlang Z
@@ -108,16 +108,16 @@ static void zeigeSektor(const Tr5Level& lvl, const Tr5Room& r, int sx, int sz)
             // Hier steht deshalb, worauf sich die Neigung wirklich AUSWIRKT.
             // Frueher stand es genau andersherum und hat bei der Analyse des
             // andy3-Schalters in die Irre gefuehrt.
-            const int nachZ = static_cast<int8_t>(e.woerter[1] >> 8);
-            const int nachX = static_cast<int8_t>(e.woerter[1] & 0xFF);
+            const int nachZ = static_cast<int8_t>(e.words[1] >> 8);
+            const int nachX = static_cast<int8_t>(e.words[1] & 0xFF);
             std::printf(" Neigung X:%d Z:%d (je %d bzw. %d Einheiten je Sektor)",
                         nachX, nachZ, nachX * 256, nachZ * 256);
         }
-        else if (e.funktion == 4)
+        else if (e.function == 4)
             std::printf(" art=%d", e.art);
         std::printf("   [");
-        for (size_t i = 0; i < e.woerter.size(); ++i)
-            std::printf("%s%04X", i ? " " : "", e.woerter[i]);
+        for (size_t i = 0; i < e.words.size(); ++i)
+            std::printf("%s%04X", i ? " " : "", e.words[i]);
         std::printf("]\n");
     }
     std::printf("\n");
@@ -158,8 +158,8 @@ int main(int argc, char** argv)
     }
 
     Tr5Level lvl;
-    std::string fehler;
-    if (!lvl.load(zuW(argv[1]), fehler)) { std::printf("Laden: %s\n", fehler.c_str()); return 1; }
+    std::string error;
+    if (!lvl.load(zuW(argv[1]), error)) { std::printf("Laden: %s\n", error.c_str()); return 1; }
 
     const int raum = std::atoi(argv[2]);
     const std::vector<Tr5Room>& rooms = lvl.rooms();

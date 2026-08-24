@@ -38,20 +38,20 @@ int main(int argc, char** argv)
     }
 
     Tr5Level lvl;
-    std::string fehler;
-    std::string pfad(argv[1]);
-    std::wstring wpfad(pfad.begin(), pfad.end());
-    if (!lvl.load(wpfad, fehler))
+    std::string error;
+    std::string path(argv[1]);
+    std::wstring wpfad(path.begin(), path.end());
+    if (!lvl.load(wpfad, error))
     {
-        std::printf("Laden fehlgeschlagen: %s\n", fehler.c_str());
+        std::printf("Laden fehlgeschlagen: %s\n", error.c_str());
         return 2;
     }
 
     size_t objAt = 0, frAt = 0;
     int32_t objN = 0, frN = 0;
-    if (!lvl.debugModellBloecke(objAt, objN, frAt, frN))
+    if (!lvl.debugModelBlocks(objAt, objN, frAt, frN))
     {
-        std::printf("Keine Objekttabelle gefunden.\n");
+        std::printf("Keine Objekttabelle found.\n");
         return 3;
     }
 
@@ -69,7 +69,7 @@ int main(int argc, char** argv)
     {
         size_t lutAt = 0, infosAt = 0;
         int32_t nInfos = 0, nSamples = 0;
-        if (!lvl.debugKlangBloecke(lutAt, infosAt, nInfos, nSamples))
+        if (!lvl.debugSoundBlocks(lutAt, infosAt, nInfos, nSamples))
         {
             std::printf("Kein lesbarer Klangblock.\n");
             return 4;

@@ -48,7 +48,7 @@ function Test-VanillaHerkunft {
         $m = "Die Level-Info $(Split-Path $LevelJson -Leaf) hat keinen Herkunftsstempel. " +
              "Sie stammt aus einem aelteren Werkzeugstand; ob sie aus einem unberuehrten " +
              "Level erzeugt wurde, laesst sich nicht feststellen. Neu erzeugen mit: " +
-             "TombItemEdit2026.exe -exportinfo <quelle.trc> <ziel.json>"
+             "TombItemEdit2026.exe -exportinfo <source.trc> <ziel.json>"
         if ($Erlauben) { Write-Output "WARNUNG: $m"; return $false }
         throw $m
     }

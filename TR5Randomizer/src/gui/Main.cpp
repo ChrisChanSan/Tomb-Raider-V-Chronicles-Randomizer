@@ -28,8 +28,8 @@
 // Diese Datei enthaelt deshalb keine Spiellogik, nur Bedienung.
 //----------------------------------------------------------------------------
 #include "core/ApplyPatch.h"
-#include "core/BalanceDatei.h"
-#include "core/Levelfix.h"
+#include "core/BalanceFile.h"
+#include "core/LevelFix.h"
 #include "core/BuildId.h"
 #include "core/Config.h"
 #include "core/DataFolder.h"
@@ -37,10 +37,10 @@
 #include "core/Randomizer.h"
 #include "core/Rng.h"
 #include "core/ScriptDat.h"
-#include "core/SecretListe.h"
+#include "core/SecretList.h"
 #include "core/Tr5Level.h"
 
-#include "Sprache.h"
+#include "Language.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_dx11.h"
@@ -86,12 +86,12 @@ namespace
     ID3D11RenderTargetView* g_rtv = nullptr;
 
     // Hintergrundbild: das Banner des Nutzers, als JPEG in der EXE
-    // (TR5Randomizer.rc, IDR_HINTERGRUND). Einmal beim Start entpackt, dann
+    // (TR5Randomizer.rc, IDR_BACKGROUND). Einmal beim Start entpackt, dann
     // je Bild in Fenstergroesse gezeichnet.
     ID3D11ShaderResourceView* g_hintergrund = nullptr;
     int                       g_hgBreite = 0, g_hgHoehe = 0;
 
-    void ladeHintergrund()
+    void loadBackground()
     {
         HRSRC res = FindResourceW(nullptr, MAKEINTRESOURCEW(201), reinterpret_cast<LPCWSTR>(RT_RCDATA));
         if (!res) return;
@@ -137,7 +137,7 @@ namespace
         stbi_image_free(pixel);
     }
 
-    void gibHintergrundFrei()
+    void freeBackground()
     {
         if (g_hintergrund) { g_hintergrund->Release(); g_hintergrund = nullptr; }
     }
@@ -148,8 +148,8 @@ namespace
     // Fensters waere sofort sichtbar, ein Beschnitt faellt nicht auf.
     //
     // Gezeichnet wird sehr dunkel getoent - der Hintergrund soll das Bild
-    // erkennen lassen, ohne dass Text darauf schwer zu lesen wird.
-    void zeichneHintergrund()
+    // erkennen lassen, ohne dass Text darauf schwer zu read wird.
+    void drawBackground()
     {
         if (!g_hintergrund || g_hgBreite <= 0 || g_hgHoehe <= 0) return;
 
@@ -347,10 +347,10 @@ namespace
         // neben der EXE, NICHT in data\ - dort liegen nur die Level. Weil
         // dataDir() aber auf data\ zeigt, sobald es den Ordner gibt, suchte
         // doScriptDat sie jahrelang an der falschen Stelle, fand sie nicht
-        // und stieg still aus ("SCRIPT.DAT nicht gefunden"). Damit lief der
+        // und stieg still aus ("SCRIPT.DAT nicht found"). Damit lief der
         // ganze Skript-Schritt bei keinem einzigen GUI-Lauf: kein
         // Kind-Lara-Bit, kein KEY8 fuer joby3, kein Pistolenentzug fuer
-        // rich2. Vom Nutzer gefunden - die Pistolen kamen trotz Fix weiter
+        // rich2. Vom Nutzer found - die Pistolen kamen trotz Fix weiter
         // aus rich1 mit, und seine SCRIPT.DAT war neun Tage alt.
         //
         // Gesucht wird deshalb an beiden Stellen, Spielordner zuerst.
@@ -368,7 +368,7 @@ namespace
         // hoeher. Anders als bei der SCRIPT.DAT hilft "wo liegt sie schon"
         // nicht weiter, weil wir sie auch anlegen koennen muessen - deshalb
         // wird an der EXE festgemacht.
-        std::wstring spielOrdner() const
+        std::wstring gameDir() const
         {
             if (cfg.sourceDir.empty()) return std::wstring();
             if (PathUtil::fileExists(PathUtil::join(cfg.sourceDir, L"PCtomb5.exe")))
@@ -431,15 +431,15 @@ namespace
         // keine Spiele.
 
         // Secrets (#53): 0 Vanilla, 1 normaler Item-Pool, 2 Glitchless-Liste,
-        // 3 Glitched-Liste. Die Listen selbst liest SecretListe.cpp aus
+        // 3 Glitched-Liste. Die Listen selbst liest SecretList.cpp aus
         // data\secrets; angewandt werden sie als zweiter Patch-Durchgang in
         // doLevel. Kein Seed-Bit: die Listen sind deterministisch, derselbe
         // Seed bleibt mit und ohne Secrets vergleichbar.
         int optSecrets = 0;
 
         // Gefundene Secret-Listen (data\secrets) und der gewaehlte Autor.
-        std::vector<SecretQuelle> secretQuellen;
-        std::string secretAutor;
+        std::vector<SecretSource> secretQuellen;
+        std::string secretAuthor;
 
         // Weitere PLATZHALTER (Nutzerwunsch 2026-08-14), alle ohne Wirkung,
         // ohne Seed-Bit und ohne Persistenz, bis die jeweilige Logik steht.
@@ -451,7 +451,7 @@ namespace
         bool phRoomNachbar = false;     // gesperrte Nachbarraeume oeffnen
         bool phJoby4NoWater = false;    // Deepsea Dive ohne Wasser
         bool phLevelAbschnitte = false; // Abschnitte (Rom/Russland/...) tauschen
-        int  optLevelFolge = 0;         // 0 aus, 1 innerhalb der Abschnitte (Stufe 2), 2 frei ueber alles (Stufe 3)
+        int  optLevelOrder = 0;         // 0 aus, 1 innerhalb der Abschnitte (Stufe 2), 2 frei ueber alles (Stufe 3)
         bool phMusikSwitch = false;     // Audiotrack je Level wuerfeln
         bool phMusikTrigger = false;    // Musik-/Sound-Trigger-IDs wuerfeln
         bool phOutfitTr1 = false;       // klassisches TR1-Outfit im Pool
@@ -498,24 +498,24 @@ namespace
         // Beantwortet die Frage, die keine Zahl beantwortet: liegt die Grenze an
         // der RICHTIGEN Stelle? Der Blick ins Level findet Fehler, die eine
         // Statistik nicht zeigt - so wurde in rich2 das Leck vom Erdgeschoss in
-        // den Aufzugsschacht gefunden.
+        // den Aufzugsschacht found.
         bool dbgOpen = false;
         // Fenster "Gegnerarten" (#95): welche Arten darf der Pool ziehen?
-        // Gehalten wird die ABWAHL - siehe Config::gegnerAus.
+        // Gehalten wird die ABWAHL - siehe Config::enemiesDisabled.
         bool artenOpen = false;
 
         // Regler fuer Balance.txt (#108). Als Faktor gehalten, weil die
         // Oberflaeche "1.25x" zeigt; in der Datei stehen Prozentzahlen.
-        float balWaffen        = 1.0f;
-        float balGegnerLeben   = 1.0f;
-        float balGegnerSchaden = 1.0f;
+        float balWeapons        = 1.0f;
+        float balEnemyHealth   = 1.0f;
+        float balEnemyDamage = 1.0f;
 
         // Je Regler: Wert aus dem Seed wuerfeln statt von Hand einstellen.
         // Der Regler zeigt dann, was gefallen ist, laesst sich aber nicht
         // mehr ziehen.
-        bool balWaffenZufall        = false;
-        bool balGegnerLebenZufall   = false;
-        bool balGegnerSchadenZufall = false;
+        bool balWeaponsRandom        = false;
+        bool balEnemyHealthRandom   = false;
+        bool balEnemyDamageRandom = false;
 
         std::string balHinweis;   // letzte Rueckmeldung unter den Reglern
 
@@ -551,12 +551,12 @@ namespace
 //
 // Gross- und Kleinschreibung ist unter Windows egal, "Data" und "DATA" also
 // mit abgedeckt.
-static std::wstring loeseOrdner(const std::wstring& gewaehlt, const wchar_t* datei)
+static std::wstring loeseOrdner(const std::wstring& gewaehlt, const wchar_t* file)
 {
     if (gewaehlt.empty()) return std::wstring();
-    if (PathUtil::fileExists(PathUtil::join(gewaehlt, datei))) return gewaehlt;
+    if (PathUtil::fileExists(PathUtil::join(gewaehlt, file))) return gewaehlt;
     const std::wstring unten = PathUtil::join(gewaehlt, L"data");
-    if (PathUtil::fileExists(PathUtil::join(unten, datei))) return unten;
+    if (PathUtil::fileExists(PathUtil::join(unten, file))) return unten;
     return std::wstring();
 }
 
@@ -571,7 +571,7 @@ static std::wstring goldOrdner(const App& a) { return loeseOrdner(a.cfg.tr3GoldD
 // MITAUSLIEFERN: der Ordner bekommt dafuer eine Warnung als Textdatei, damit
 // es beim Packen auffaellt.
 
-static std::wstring lagerDir(const App& a)
+static std::wstring cacheDir(const App& a)
 {
     if (tr3Ordner(a).empty()) return std::wstring();     // ohne Quelle kein Lager
     const std::wstring dir = PathUtil::join(PathUtil::exeDir(), L"Import-Export");
@@ -643,7 +643,7 @@ static std::wstring lagerDir(const App& a)
         // Secret-Listen einsammeln - hier statt beim Start, damit ein frisch
         // dazugelegter Autor ohne Neustart auftaucht (inspectSource laeuft bei
         // jedem Ordnerwechsel und nach jedem Lauf).
-        a.secretQuellen = secretQuellenSuchen(PathUtil::join(a.payloadDir(), L"secrets"));
+        a.secretQuellen = findSecretSources(PathUtil::join(a.payloadDir(), L"secrets"));
 
         // Geprueft wird weiterhin die vollstaendige Liste - eine Installation,
         // der Title.trc fehlt, ist keine gueltige Quelle, auch wenn wir die
@@ -678,7 +678,7 @@ static std::wstring lagerDir(const App& a)
         const std::wstring skript = a.scriptPath();
         if (!PathUtil::fileExists(skript))
         {
-            info = "SCRIPT.DAT nicht gefunden - die Andy-Level bleiben Kind-Lara.";
+            info = "SCRIPT.DAT nicht found - die Andy-Level bleiben Kind-Lara.";
             return true;                      // kein Abbruchgrund
         }
 
@@ -686,20 +686,20 @@ static std::wstring lagerDir(const App& a)
         if (PathUtil::dirExists(a.backupDir()) && !PathUtil::fileExists(sicherung))
             CopyFileW(skript.c_str(), sicherung.c_str(), TRUE);
 
-        // Immer aus der Sicherung lesen, wenn es sie gibt: sonst arbeitet ein
+        // Immer aus der Sicherung read, wenn es sie gibt: sonst arbeitet ein
         // zweiter Lauf auf dem Ergebnis des ersten.
         ScriptDat sd;
-        const std::wstring quelle = PathUtil::fileExists(sicherung) ? sicherung : skript;
-        if (!sd.load(quelle, err)) return false;
+        const std::wstring source = PathUtil::fileExists(sicherung) ? sicherung : skript;
+        if (!sd.load(source, err)) return false;
 
-        // Die Eingriffe selbst stehen in ScriptDat - dasselbe ruft die CLI
+        // Die Changes selbst stehen in ScriptDat - dasselbe ruft die CLI
         // auf, damit beide Wege nicht auseinanderlaufen.
-        ScriptDat::Eingriffe e;
-        sd.randomizerEingriffe(e);
+        ScriptDat::Changes e;
+        sd.randomizerChanges(e);
 
-        if (e.levelFehlend > 0)
+        if (e.levelsMissing > 0)
         {
-            info = "SCRIPT.DAT: " + std::to_string(e.levelFehlend) + " Ireland-Level nicht im Skript gefunden.";
+            info = "SCRIPT.DAT: " + std::to_string(e.levelsMissing) + " Ireland-Level nicht im Skript found.";
             return true;
         }
 
@@ -710,59 +710,59 @@ static std::wstring lagerDir(const App& a)
         if (a.phMusikSwitch)
         {
             std::string mErr;
-            if (!sd.musikWuerfeln(a.effectiveSeed(), musikLevel, mErr))
+            if (!sd.shuffleMusic(a.effectiveSeed(), musikLevel, mErr))
                 a.scriptNote = "Hintergrundmusik: " + mErr;
         }
 
         // Levelabschnitte: als LETZTER Eingriff, damit alle Namens-Lookups
-        // davor auf dem bekannten Stand liefen (zerlege laeuft danach neu).
+        // davor auf dem bekannten Stand liefen (parse laeuft danach neu).
         std::string abschnitte, levelFolge;
         std::vector<std::string> ketten;
         // Bei "frei ueber alles" ist der Abschnitts-Wuerfel bedeutungslos - und
         // er darf auch nicht laufen, sonst startet der freie Wuerfel von einer
         // anderen Ausgangsfolge und derselbe Seed ergaebe je nach Haken zwei
         // verschiedene Spiele.
-        if (a.phLevelAbschnitte && a.optLevelFolge != 2)
+        if (a.phLevelAbschnitte && a.optLevelOrder != 2)
         {
             std::string aErr;
-            if (!sd.abschnitteWuerfeln(a.effectiveSeed(), abschnitte, aErr))
+            if (!sd.shuffleSections(a.effectiveSeed(), abschnitte, aErr))
                 a.scriptNote = "Levelabschnitte: " + aErr;
         }
-        if (a.optLevelFolge > 0)
+        if (a.optLevelOrder > 0)
         {
             std::string lErr;
-            if (!sd.levelWuerfeln(a.effectiveSeed(), a.optLevelFolge == 2, levelFolge, lErr))
+            if (!sd.shuffleLevels(a.effectiveSeed(), a.optLevelOrder == 2, levelFolge, lErr))
                 a.scriptNote = "Level-Reihenfolge: " + lErr;
         }
         // Ketten immer auf die JETZIGE Reihenfolge pruefen - in Vanilla-Folge
         // passiert nichts, nach einem Wuerfel reicht das Skript nach.
-        if (a.phLevelAbschnitte || a.optLevelFolge > 0)
+        if (a.phLevelAbschnitte || a.optLevelOrder > 0)
         {
             std::string kErr;
-            // ERST aufraeumen, DANN geben: die Wegnahmen muessen im Block vor den
+            // ERST aufraeumen, DANN give: die Wegnahmen muessen im Block vor den
             // Gaben stehen, damit die Engine sie in der dritten Phase
             // (setup.cpp) nach den Wegnahmen anwendet.
-            if (!sd.inventarAufraeumen(ketten, kErr))
+            if (!sd.cleanupInventory(ketten, kErr))
                 a.scriptNote = "Inventar aufraeumen: " + kErr;
-            else if (!sd.kettenAufloesen(ketten, kErr))
-                a.scriptNote = "Levelketten: " + kErr;
+            else if (!sd.resolveChains(ketten, kErr))
+                a.scriptNote = "LevelChains: " + kErr;
         }
 
         if (!sd.save(skript, err)) return false;
 
-        info = e.flagsGeaendert > 0
-            ? "SCRIPT.DAT: Kind-Lara in " + std::to_string(e.flagsGeaendert) + " Ireland-Leveln abgeschaltet."
+        info = e.flagsChanged > 0
+            ? "SCRIPT.DAT: Kind-Lara in " + std::to_string(e.flagsChanged) + " Ireland-Leveln abgeschaltet."
             : "SCRIPT.DAT: Kind-Lara war bereits abgeschaltet.";
-        if (!e.keyFehler.empty())   info += "  KEY8 fuer joby3 nicht uebernommen: " + e.keyFehler;
-        else if (e.keyKopiert)      info += "  KEY8 fuer joby3 aus joby2 uebernommen.";
-        if (!e.pistolenFehler.empty()) info += "  rich2-Pistolen nicht entzogen: " + e.pistolenFehler;
-        else if (e.pistolenWeg > 0)    info += "  rich2: Pistolen abgenommen.";
-        if (e.joby3Waffen > 0)         info += "  joby3: " + std::to_string(e.joby3Waffen) + " Waffen-Wegnahmen entfernt.";
+        if (!e.keyError.empty())   info += "  KEY8 fuer joby3 nicht uebernommen: " + e.keyError;
+        else if (e.keyCopied)      info += "  KEY8 fuer joby3 aus joby2 uebernommen.";
+        if (!e.pistolError.empty()) info += "  rich2-Pistolen nicht entzogen: " + e.pistolError;
+        else if (e.pistolsRemoved > 0)    info += "  rich2: Pistolen abgenommen.";
+        if (e.joby3Weapons > 0)         info += "  joby3: " + std::to_string(e.joby3Weapons) + " Waffen-Wegnahmen entfernt.";
         if (a.phMusikSwitch && musikLevel > 0)
             info += "  Hintergrundmusik: " + std::to_string(musikLevel) + " Level neu vertont.";
         if (a.phLevelAbschnitte && !abschnitte.empty())
             info += "  Abschnitte: " + abschnitte + ".";
-        if (a.optLevelFolge > 0 && !levelFolge.empty())
+        if (a.optLevelOrder > 0 && !levelFolge.empty())
             info += "  Reihenfolge: " + levelFolge + ".";
         for (const std::string& k : ketten)
             info += "  " + k + ".";
@@ -792,15 +792,15 @@ static std::wstring lagerDir(const App& a)
         if (!lvl.load(target, err)) return false;
 
         // Levelfehler von Core reparieren, BEVOR irgendetwas gewuerfelt wird
-        // (Levelfix.h). Frueh, weil die Platzierung die Floordata liest: ein
+        // (LevelFix.h). Frueh, weil die Platzierung die Floordata liest: ein
         // Trigger, der erst danach dazukaeme, waere fuer die Zonenrechnung
         // nicht da gewesen.
         // Der Bericht entsteht erst weiter unten - bis dahin sammeln.
         std::vector<std::string> fixNotizen;
         {
-            const int fixes = Levelfix::anwenden(lvl, base, fixNotizen);
+            const int fixes = LevelFix::apply(lvl, base, fixNotizen);
             if (fixes > 0)
-                fixNotizen.push_back(std::to_string(fixes) + " Levelfix angewandt");
+                fixNotizen.push_back(std::to_string(fixes) + " LevelFix angewandt");
         }
 
         Patch::markTriggerSafeSectors(lvl, in);
@@ -828,7 +828,7 @@ static std::wstring lagerDir(const App& a)
         opt.swapEnemies = a.optEnemySwap;
         opt.crossEnemies = (a.optEnemyPool == 1);
         opt.allsanity    = (a.optEnemyPool == 2);
-        opt.gesperrteGegner = a.optGegnerAus;
+        opt.disabledEnemies = a.optGegnerAus;
         opt.tr3Dir     = a.cfg.tr3Dir;
         opt.tr3GoldDir = a.cfg.tr3GoldDir;
         opt.randomOutfits = a.optOutfits;
@@ -846,7 +846,7 @@ static std::wstring lagerDir(const App& a)
         // vom Seed nicht mehr nachstellbar.
         static std::wstring soundQuelle;
         soundQuelle = a.haveBackup ? a.backupDir() : a.dataDir();
-        auto quelle = [](const std::string& name, void*) -> std::wstring {
+        auto source = [](const std::string& name, void*) -> std::wstring {
             return PathUtil::join(soundQuelle, PathUtil::widen(name) + L".trc");
         };
 
@@ -856,8 +856,8 @@ static std::wstring lagerDir(const App& a)
         // Die Fremdinstallationen durchreichen: nur damit kann apply() die
         // Gaeste aus Tomb Raider 3 zur Laufzeit holen (#92). Fehlen sie, hat
         // der Randomizer sie gar nicht erst in den Pool genommen.
-        if (!Patch::apply(lvl, patch, pr, err, quelle, nullptr,
-                          tr3Ordner(a), goldOrdner(a), lagerDir(a))) return false;
+        if (!Patch::apply(lvl, patch, pr, err, source, nullptr,
+                          tr3Ordner(a), goldOrdner(a), cacheDir(a))) return false;
         for (const std::string& w : pr.warnings) rep.notes.push_back(w);
 
         // Secrets aus einer Nutzerliste (#53, Art 2/3): ZWEITER Durchgang mit
@@ -871,9 +871,9 @@ static std::wstring lagerDir(const App& a)
         if (a.optSecrets >= 2)
         {
             const char* kat = (a.optSecrets == 2) ? "Glitchless" : "Glitched";
-            const SecretQuelle* liste = nullptr;
-            for (const SecretQuelle& q : a.secretQuellen)
-                if (q.kategorie == kat && q.autor == a.secretAutor) { liste = &q; break; }
+            const SecretSource* liste = nullptr;
+            for (const SecretSource& q : a.secretQuellen)
+                if (q.category == kat && q.author == a.secretAuthor) { liste = &q; break; }
 
             if (!liste)
                 rep.notes.push_back(std::string("Secrets: keine ") + kat + "-Liste gewaehlt - Level bleibt vanilla.");
@@ -883,13 +883,13 @@ static std::wstring lagerDir(const App& a)
                 std::vector<std::string> sWarn;
                 std::string sErr;
                 int sZahl = 0;
-                if (!secretPatchBauen(liste->pfad, base, lvl, sPatch, sZahl, sWarn, sErr))
+                if (!buildSecretPatch(liste->path, base, lvl, sPatch, sZahl, sWarn, sErr))
                 { err = "Secret-Liste: " + sErr; return false; }
                 for (const std::string& w : sWarn) rep.notes.push_back("Secrets: " + w);
 
                 PatchReport spr;
-                if (!Patch::apply(lvl, sPatch, spr, err, quelle, nullptr,
-                                  tr3Ordner(a), goldOrdner(a), lagerDir(a)))
+                if (!Patch::apply(lvl, sPatch, spr, err, source, nullptr,
+                                  tr3Ordner(a), goldOrdner(a), cacheDir(a)))
                 { err = "Secret-Patch: " + err; return false; }
                 for (const std::string& w : spr.warnings) rep.notes.push_back("Secrets: " + w);
                 // NUR die umgezogenen Secrets zaehlen. edited+added des
@@ -905,7 +905,7 @@ static std::wstring lagerDir(const App& a)
         // Secret-Liste gesetzt hat.
         if (a.phMusikTrigger)
         {
-            const long mw = Patch::musikTriggerWuerfeln(lvl, seed);
+            const long mw = Patch::shuffleMusicTriggers(lvl, seed);
             if (mw > 0)
                 rep.notes.push_back("Musik-Trigger: " + std::to_string(mw) + " Woerter neu verteilt");
         }
@@ -1048,12 +1048,12 @@ static std::wstring lagerDir(const App& a)
     //
     // ALLE DREI werden immer geworfen, auch die nicht angehakten. Sonst haenge
     // der Wurf des Waffenschadens davon ab, ob daneben die Gegnerhaken
-    // gesetzt sind - derselbe Seed gaebe unterschiedliche Werte, je nachdem
+    // gesetzt sind - derselbe Seed gaebe unterschiedliche Values, je nachdem
     // was sonst noch angekreuzt ist.
     //------------------------------------------------------------------------
     void balanceWuerfeln(App& a)
     {
-        if (!a.balWaffenZufall && !a.balGegnerLebenZufall && !a.balGegnerSchadenZufall)
+        if (!a.balWeaponsRandom && !a.balEnemyHealthRandom && !a.balEnemyDamageRandom)
             return;
 
         Rng r(a.effectiveSeed() ^ 0x42414C414E434521ull);   // "BALANCE!" - eigener Strom
@@ -1064,28 +1064,28 @@ static std::wstring lagerDir(const App& a)
         const float leben  = wurf();
         const float schaden = wurf();
 
-        if (a.balWaffenZufall)        a.balWaffen        = waffen;
-        if (a.balGegnerLebenZufall)   a.balGegnerLeben   = leben;
-        if (a.balGegnerSchadenZufall) a.balGegnerSchaden = schaden;
+        if (a.balWeaponsRandom)        a.balWeapons        = waffen;
+        if (a.balEnemyHealthRandom)   a.balEnemyHealth   = leben;
+        if (a.balEnemyDamageRandom) a.balEnemyDamage = schaden;
     }
 
-    // Die Reglerstellung in die Balance.txt der Installation schreiben.
+    // Die Reglerstellung in die Balance.txt der Installation write.
     void balanceSchreibenNach(App& a)
     {
-        BalanceDatei::Werte w;
-        w.waffenSchaden = static_cast<int>(a.balWaffen * 100.0f + 0.5f);
-        w.gegnerLeben   = static_cast<int>(a.balGegnerLeben * 100.0f + 0.5f);
-        w.gegnerSchaden = static_cast<int>(a.balGegnerSchaden * 100.0f + 0.5f);
+        BalanceFile::Values w;
+        w.weaponDamage = static_cast<int>(a.balWeapons * 100.0f + 0.5f);
+        w.enemyHealth   = static_cast<int>(a.balEnemyHealth * 100.0f + 0.5f);
+        w.enemyDamage = static_cast<int>(a.balEnemyDamage * 100.0f + 0.5f);
 
-        std::string fehler;
-        if (BalanceDatei::schreiben(a.spielOrdner(), w, &fehler))
+        std::string error;
+        if (BalanceFile::write(a.gameDir(), w, &error))
             a.balHinweis = "Balance.txt geschrieben - gilt ab dem naechsten Spielstart.";
         else
-            a.balHinweis = fehler;
+            a.balHinweis = error;
     }
 
     //------------------------------------------------------------------------
-    // spoiler.txt neben dem Programm schreiben.
+    // spoiler.txt neben dem Programm write.
     //
     // Frueher stand das je Level in einer dritten Tabellenspalte. Das kostete
     // die halbe Fensterbreite fuer eine Zeile Text, die man einmal liest -
@@ -1095,9 +1095,9 @@ static std::wstring lagerDir(const App& a)
     //------------------------------------------------------------------------
     bool schreibeSpoiler(App& a)
     {
-        const std::wstring pfad = PathUtil::join(PathUtil::exeDir(), L"spoiler.txt");
+        const std::wstring path = PathUtil::join(PathUtil::exeDir(), L"spoiler.txt");
         FILE* f = nullptr;
-        if (_wfopen_s(&f, pfad.c_str(), L"wb") != 0 || !f) return false;
+        if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f) return false;
 
         auto zeile = [f](const char* s) { std::fprintf(f, "%s\r\n", s); };
 
@@ -1126,21 +1126,21 @@ static std::wstring lagerDir(const App& a)
                      a.optSecrets == 0 ? "Vanilla" : a.optSecrets == 1 ? "im Item-Pool"
                                                    : a.optSecrets == 2 ? "Glitchless-Liste"
                                                                        : "Glitched-Liste",
-                     a.optSecrets >= 2 && !a.secretAutor.empty() ? ", Autor " : "",
-                     a.optSecrets >= 2 && !a.secretAutor.empty() ? a.secretAutor.c_str() : "");
+                     a.optSecrets >= 2 && !a.secretAuthor.empty() ? ", Autor " : "",
+                     a.optSecrets >= 2 && !a.secretAuthor.empty() ? a.secretAuthor.c_str() : "");
         std::fprintf(f, "  Levelabschnitte:    %s\r\n", a.phLevelAbschnitte ? "getauscht" : "aus");
         std::fprintf(f, "  Levelreihenfolge:   %s\r\n",
-                     a.optLevelFolge == 0 ? "aus"
-                                          : a.optLevelFolge == 1 ? "innerhalb der Abschnitte"
+                     a.optLevelOrder == 0 ? "aus"
+                                          : a.optLevelOrder == 1 ? "innerhalb der Abschnitte"
                                                                  : "frei ueber alles");
         std::fprintf(f, "  Hintergrundmusik:   %s\r\n", a.phMusikSwitch ? "getauscht" : "aus");
         std::fprintf(f, "  Trigger-Musik:      %s\r\n", a.phMusikTrigger ? "getauscht" : "aus");
         std::fprintf(f, "  Waffenschaden:      %d %%%s\r\n",
-                     (int)(a.balWaffen * 100.0f + 0.5f), a.balWaffenZufall ? " (gewuerfelt)" : "");
+                     (int)(a.balWeapons * 100.0f + 0.5f), a.balWeaponsRandom ? " (gewuerfelt)" : "");
         std::fprintf(f, "  Gegnerleben:        %d %%%s\r\n",
-                     (int)(a.balGegnerLeben * 100.0f + 0.5f), a.balGegnerLebenZufall ? " (gewuerfelt)" : "");
+                     (int)(a.balEnemyHealth * 100.0f + 0.5f), a.balEnemyHealthRandom ? " (gewuerfelt)" : "");
         std::fprintf(f, "  Gegnerschaden:      %d %%%s\r\n",
-                     (int)(a.balGegnerSchaden * 100.0f + 0.5f), a.balGegnerSchadenZufall ? " (gewuerfelt)" : "");
+                     (int)(a.balEnemyDamage * 100.0f + 0.5f), a.balEnemyDamageRandom ? " (gewuerfelt)" : "");
         zeile("");
 
         if (!a.scriptNote.empty())
@@ -1190,7 +1190,7 @@ static std::wstring lagerDir(const App& a)
         a.stepIndex = 0;
 
         // Angehakte Regler neu aus dem Seed werfen und die Stellung in die
-        // Installation schreiben (#108). Die Regler schreiben schon beim
+        // Installation write (#108). Die Regler write schon beim
         // Loslassen; hier geht es um den Wurf und darum, dass ein Lauf in
         // einem neu gewaehlten Spielordner nicht ohne Balance.txt dasteht.
         balanceWuerfeln(a);
@@ -1301,7 +1301,7 @@ static std::wstring lagerDir(const App& a)
                           "%d Level randomisiert%s. %s Du kannst das Spiel jetzt starten.",
                           a.doneCount, a.failCount ? " - mit Fehlern, siehe spoiler.txt" : "",
                           spoiler ? "Einzelheiten stehen in spoiler.txt neben dem Programm."
-                                  : "spoiler.txt liess sich nicht schreiben.");
+                                  : "spoiler.txt liess sich nicht write.");
             setStatus(a, buf, a.failCount > 0);
             a.phaseText.clear();
             a.phase = App::Phase::Idle;
@@ -1350,18 +1350,18 @@ static std::wstring lagerDir(const App& a)
 // das, was der Randomizer wirklich tut - nicht eine zweite Beschreibung davon.
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
-// Ist die Fremdinstallation hinter einer Gegnerart nutzbar? (#102)
+// Ist die Fremdinstallation hinter einer EnemyKind nutzbar? (#102)
 //
 // Geprueft wird nicht der Ordner, sondern die Datei, die WIRKLICH gebraucht
 // wird - ein Ordner kann existieren und trotzdem leer sein. CRASH.TR2 traegt
 // T-Rex, Raptor und Compy, chunnel.TR2 den Geier; MAIN.SFX liefert in beiden
 // Faellen die Klaenge.
 //----------------------------------------------------------------------------
-static bool dinoQuelleDa(const App& a, const char* quelle)
+static bool dinoQuelleDa(const App& a, const char* source)
 {
-    if (!quelle) return true;                 // steckt in TR5 selbst
+    if (!source) return true;                 // steckt in TR5 selbst
 
-    if (std::strcmp(quelle, "tr3") == 0)
+    if (std::strcmp(source, "tr3") == 0)
         return !tr3Ordner(a).empty()
             && !loeseOrdner(a.cfg.tr3Dir, L"MAIN.SFX").empty();
 
@@ -1370,7 +1370,7 @@ static bool dinoQuelleDa(const App& a, const char* quelle)
     // Tomb Raider 3. Die beiden Dateien sind verschieden - Gold bringt eine
     // eigene mit (9,8 MB gegen 11,6 MB), und die abgehoerten Wave-Nummern
     // beziehen sich auf die von TR3.
-    if (std::strcmp(quelle, "tr3gold") == 0)
+    if (std::strcmp(source, "tr3gold") == 0)
         return !goldOrdner(a).empty()
             && !loeseOrdner(a.cfg.tr3Dir, L"MAIN.SFX").empty();
 
@@ -1404,8 +1404,8 @@ static void drawPfadeWindow(App& a, HWND hwnd)
         "betroffenen Gegnerarten ausgegraut, sonst laeuft alles wie gewohnt."));
     ImGui::Spacing();
 
-    struct Eintrag { const char* titel; const char* datei; const char* wofuer;
-                     std::wstring* pfad; const char* quelle; };
+    struct Eintrag { const char* titel; const char* file; const char* wofuer;
+                     std::wstring* path; const char* source; };
     Eintrag liste[] = {
         { "Tomb Raider 5 (Chronicles)", nullptr, "die Level, die randomisiert werden",
           &a.cfg.sourceDir, nullptr },
@@ -1421,28 +1421,28 @@ static void drawPfadeWindow(App& a, HWND hwnd)
         ImGui::SeparatorText(e.titel);
         ImGui::TextDisabled(T("fuer %s"), e.wofuer);
 
-        const bool da = e.quelle ? dinoQuelleDa(a, e.quelle) : a.sourceOk;
-        ImGui::TextWrapped(T("%s"), e.pfad->empty() ? T("(nicht gewaehlt)")
-                                                 : PathUtil::narrow(*e.pfad).c_str());
+        const bool da = e.source ? dinoQuelleDa(a, e.source) : a.sourceOk;
+        ImGui::TextWrapped(T("%s"), e.path->empty() ? T("(nicht gewaehlt)")
+                                                 : PathUtil::narrow(*e.path).c_str());
 
         if (ImGui::Button(T("Ordner waehlen...")))
         {
             std::wstring picked;
             if (pickFolder(hwnd, picked))
             {
-                *e.pfad = picked;
+                *e.path = picked;
                 a.cfg.save();
-                if (!e.quelle) inspectSource(a);
+                if (!e.source) inspectSource(a);
             }
         }
-        if (!e.pfad->empty())
+        if (!e.path->empty())
         {
             ImGui::SameLine();
-            if (ImGui::Button(T("Leeren"))) { e.pfad->clear(); a.cfg.save(); }
+            if (ImGui::Button(T("Leeren"))) { e.path->clear(); a.cfg.save(); }
         }
         ImGui::SameLine();
         if (da) ImGui::TextDisabled(T("in Ordnung"));
-        else if (e.datei) ImGui::TextDisabled(T("%s nicht gefunden"), e.datei);
+        else if (e.file) ImGui::TextDisabled(T("%s nicht found"), e.file);
         else ImGui::TextDisabled(T("noch nicht geprueft"));
 
         ImGui::PopID();
@@ -1461,7 +1461,7 @@ static void drawPfadeWindow(App& a, HWND hwnd)
 // Lauf setzt nur noch die.
 //
 // Gehalten und gespeichert wird die ABWAHL, nicht die Auswahl. Eine Art, die
-// spaeter dazukommt, ist dadurch automatisch an und faellt nicht stumm durch
+// spaeter dazukommt, ist dadurch automatisch an und faellt nicht muted durch
 // eine alte Einstellungsdatei.
 //
 // Der Haken beschneidet AUSSCHLIESSLICH die Wahl aus dem Pool. Was eine
@@ -1480,7 +1480,7 @@ static void drawGegnerartenWindow(App& a)
         return;
     }
 
-    const std::vector<Gegnerart> arten = Rando::gegnerarten();
+    const std::vector<EnemyKind> arten = Rando::enemyKinds();
 
     ImGui::TextWrapped(T("Welche Arten darf der Zufall ziehen? Der Haken wirkt auf den Tausch "
         "und auf zusaetzliche Gegner - Gegner, die im Level ohnehin stehen und "
@@ -1497,7 +1497,7 @@ static void drawGegnerartenWindow(App& a)
     if (ImGui::Button(T("Alle an")))  a.optGegnerAus.clear();
     ImGui::SameLine();
     if (ImGui::Button(T("Alle aus")))
-        for (const Gegnerart& g : arten) a.optGegnerAus.insert(g.typeId);
+        for (const EnemyKind& g : arten) a.optGegnerAus.insert(g.typeId);
     ImGui::SameLine();
     ImGui::TextDisabled(T("%d von %d an"),
                         static_cast<int>(arten.size() - a.optGegnerAus.size()),
@@ -1505,12 +1505,12 @@ static void drawGegnerartenWindow(App& a)
 
     ImGui::Separator();
     ImGui::BeginChild("##artenliste", ImVec2(0, -78), true);
-    for (const Gegnerart& g : arten)
+    for (const EnemyKind& g : arten)
     {
         // Arten aus einem anderen Spiel bleiben ausgegraut, solange der Pfad
         // dorthin fehlt (#102). Der Haken bleibt dabei erhalten - traegt der
         // Nutzer den Pfad spaeter nach, ist seine Auswahl noch da.
-        const bool da = dinoQuelleDa(a, g.quelle);
+        const bool da = dinoQuelleDa(a, g.source);
         ImGui::BeginDisabled(!da);
 
         bool an = !a.optGegnerAus.count(g.typeId) && da;
@@ -1529,7 +1529,7 @@ static void drawGegnerartenWindow(App& a)
         {
             ImGui::SameLine();
             ImGui::TextDisabled(T("- braucht %s"),
-                std::strcmp(g.quelle, "tr3gold") == 0 ? "The Lost Artifact" : "Tomb Raider 3");
+                std::strcmp(g.source, "tr3gold") == 0 ? "The Lost Artifact" : "Tomb Raider 3");
         }
     }
     ImGui::EndChild();
@@ -1647,10 +1647,10 @@ static void drawUi(App& a, HWND hwnd)
         // Zwei Knoepfe: links davon die Sprache (#128), rechts Debug.
         ImGui::SameLine(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x
                         - 2.0f * w - ImGui::GetStyle().ItemSpacing.x);
-        if (ImGui::Button(gSpracheDeutsch ? "Sprache: DE###sprache" : "Language: EN###sprache", ImVec2(w, 0)))
+        if (ImGui::Button(gGermanUi ? "Sprache: DE###sprache" : "Language: EN###sprache", ImVec2(w, 0)))
         {
-            gSpracheDeutsch = !gSpracheDeutsch;
-            a.cfg.spracheDeutsch = gSpracheDeutsch;
+            gGermanUi = !gGermanUi;
+            a.cfg.germanUi = gGermanUi;
             a.cfg.save();
         }
         ImGui::SameLine();
@@ -1807,7 +1807,7 @@ static void drawUi(App& a, HWND hwnd)
     {
         const int fehlt = (dinoQuelleDa(a, "tr3") ? 0 : 1) + (dinoQuelleDa(a, "tr3gold") ? 0 : 1);
         ImGui::SameLine();
-        if (fehlt == 0) ImGui::TextDisabled(T("TR3 + LA gefunden"));
+        if (fehlt == 0) ImGui::TextDisabled(T("TR3 + LA found"));
         else            ImGui::TextDisabled(T("%d ohne Pfad"), fehlt);
     }
 
@@ -1968,7 +1968,7 @@ static void drawUi(App& a, HWND hwnd)
     if (!a.optOtherPickups && !a.optKeyItems && !a.optEnemies && !a.optEnemySwap && !a.optOutfits)
         ImGui::TextColored(ImVec4(1, .5f, .3f, 1), T("Keine Wuerfel-Option gewaehlt - die Level bekommen nur das Standard-Waffenset."));
 
-    balanceRegler("Waffenschaden", &a.balWaffen, &a.balWaffenZufall, 0.0f, 2.0f,
+    balanceRegler("Waffenschaden", &a.balWeapons, &a.balWeaponsRandom, 0.0f, 2.0f,
                   "Wirkt auf alle Waffen Laras zugleich - Pistolen, Uzi, "
                   "Schrotflinte, Revolver, HK, Grappling Gun und Fackel. "
                   "0.00x macht sie wirkungslos, 2.00x verdoppelt ihren Schaden.\n\n"
@@ -2069,14 +2069,14 @@ static void drawUi(App& a, HWND hwnd)
     }
     ImGui::EndDisabled();
 
-    balanceRegler("Gegnerleben", &a.balGegnerLeben, &a.balGegnerLebenZufall, 0.5f, 2.0f,
+    balanceRegler("Gegnerleben", &a.balEnemyHealth, &a.balEnemyHealthRandom, 0.5f, 2.0f,
                   "Wie zaeh alle Gegner sind. 0.50x halbiert ihre Lebenspunkte, "
                   "2.00x verdoppelt sie.\n\n"
                   "Geschrieben wird die Zeile GegnerLeben in Balance.txt neben der "
                   "PCtomb5.exe. Wer dort einzelne Gegner von Hand eingestellt hat, "
                   "behaelt sie: der Regler wirkt zusaetzlich obendrauf.");
 
-    balanceRegler("Gegnerschaden", &a.balGegnerSchaden, &a.balGegnerSchadenZufall, 0.5f, 2.0f,
+    balanceRegler("Gegnerschaden", &a.balEnemyDamage, &a.balEnemyDamageRandom, 0.5f, 2.0f,
                   "Wie hart alle Gegner zuschlagen. Fallen, Stuerze, Feuer, Gift "
                   "und Ertrinken bleiben immer so hart wie im Original, ebenso die "
                   "fest eingebauten Levelgefahren wie das Deckengeschuetz.\n\n"
@@ -2085,8 +2085,8 @@ static void drawUi(App& a, HWND hwnd)
 
     if (ImGui::Button(T("Balance zuruecksetzen")))
     {
-        a.balWaffenZufall = a.balGegnerLebenZufall = a.balGegnerSchadenZufall = false;
-        a.balWaffen = a.balGegnerLeben = a.balGegnerSchaden = 1.0f;
+        a.balWeaponsRandom = a.balEnemyHealthRandom = a.balEnemyDamageRandom = false;
+        a.balWeapons = a.balEnemyHealth = a.balEnemyDamage = 1.0f;
         balanceSchreiben();
     }
     hoverHilfe("Nimmt die Zufallshaken zurueck, setzt die drei Regler auf 1.00x "
@@ -2107,7 +2107,7 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::BeginGroup();
 
     blockAuf("k_level", "6. Level", fLevel);
-    ImGui::BeginDisabled(a.optLevelFolge == 2);	// bei "frei ueber alles" bedeutungslos und bewusst ohne Wirkung
+    ImGui::BeginDisabled(a.optLevelOrder == 2);	// bei "frei ueber alles" bedeutungslos und bewusst ohne Wirkung
     ImGui::Checkbox(T("Levelabschnitte switchen"), &a.phLevelAbschnitte);
     ImGui::EndDisabled();
     hoverHilfe("Die vier Story-Abschnitte (Rom, Russland, Irland, VCI) in "
@@ -2118,7 +2118,7 @@ static void drawUi(App& a, HWND hwnd)
                "alte Spielstaende passen nicht zur neuen Reihenfolge.");
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
     const char* folgeNamen[] = { T("Level-Reihenfolge: aus"), T("innerhalb der Abschnitte"), T("frei ueber alles") };
-    ImGui::Combo("##levelfolge", &a.optLevelFolge, folgeNamen, 3);
+    ImGui::Combo("##levelfolge", &a.optLevelOrder, folgeNamen, 3);
     hoverHilfe("Innerhalb: Rom/Russland/Irland/VCI bleiben Bloecke, nur die Level "
                "darin tauschen. Frei: alle 13 Level ueber alle Abschnitte hinweg "
                "(z.B. rich1 -> Andrea2 -> joby5 -> rich2). Die Cutscene richcut2 "
@@ -2127,7 +2127,7 @@ static void drawUi(App& a, HWND hwnd)
                "Munition, Medis und Leuchtfackeln bleiben. Was ein Level aus einem "
                "anderen braucht (Key 8 joby3, Key 7 joby5, Catapult Andy2, "
                "Brechstange Andrea3), gibt das Skript immer - samt Modell und Namen. "
-               "Kuratiert in Levelketten.h.");
+               "Kuratiert in LevelChains.h.");
 
     blockZu(&a.hoehen.level);
 
@@ -2153,7 +2153,7 @@ static void drawUi(App& a, HWND hwnd)
     // Vier Arten: Vanilla (aus), normaler Pool, und zwei Nutzerlisten-
     // Kategorien mit Autoren-Dropdown. Die Listen liegen als
     // Autor_Kategorie.txt in data\secrets neben dem Programm; gelesen
-    // werden sie von SecretListe.cpp - dieselbe Grammatik liest auch
+    // werden sie von SecretList.cpp - dieselbe Grammatik liest auch
     // SecretPlan.ps1 in der Kuration.
     blockZu(&a.hoehen.musik);
 
@@ -2177,26 +2177,26 @@ static void drawUi(App& a, HWND hwnd)
     if (a.optSecrets >= 2)
     {
         const char* kat = (a.optSecrets == 2) ? "Glitchless" : "Glitched";
-        std::vector<const SecretQuelle*> passend;
-        for (const SecretQuelle& q : a.secretQuellen)
-            if (q.kategorie == kat) passend.push_back(&q);
+        std::vector<const SecretSource*> passend;
+        for (const SecretSource& q : a.secretQuellen)
+            if (q.category == kat) passend.push_back(&q);
 
         ImGui::SetNextItemWidth(220.0f);
-        const char* anzeige = T("(keine Listen gefunden)");
-        for (const SecretQuelle* q : passend)
-            if (q->autor == a.secretAutor) anzeige = q->autor.c_str();
+        const char* anzeige = T("(keine Listen found)");
+        for (const SecretSource* q : passend)
+            if (q->author == a.secretAuthor) anzeige = q->author.c_str();
         if (!passend.empty() && anzeige[0] == '(')
-        { a.secretAutor = passend[0]->autor; anzeige = passend[0]->autor.c_str(); }
+        { a.secretAuthor = passend[0]->author; anzeige = passend[0]->author.c_str(); }
 
         if (ImGui::BeginCombo(T("Autor"), anzeige))
         {
-            for (const SecretQuelle* q : passend)
-                if (ImGui::Selectable(q->autor.c_str(), q->autor == a.secretAutor))
-                    a.secretAutor = q->autor;
+            for (const SecretSource* q : passend)
+                if (ImGui::Selectable(q->author.c_str(), q->author == a.secretAuthor))
+                    a.secretAuthor = q->author;
             ImGui::EndCombo();
         }
         if (passend.empty())
-            ImGui::TextDisabled(T("Keine %s-Liste in data\\secrets gefunden - die Level bleiben vanilla."), kat);
+            ImGui::TextDisabled(T("Keine %s-Liste in data\\secrets found - die Level bleiben vanilla."), kat);
     }
     blockZu();
 
@@ -2235,7 +2235,7 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::Checkbox(T("Kulissen einbinden"), &a.phRoomKulissen);
     hoverHilfe("Kommt noch: reine Kulissenbereiche ins Spiel einbinden, damit "
                "dort Items und Gegner liegen koennen.");
-    ImGui::Checkbox(T("Nachbar-Raeume begehbar machen"), &a.phRoomNachbar);
+    ImGui::Checkbox(T("Nachbar-Raeume walkable machen"), &a.phRoomNachbar);
     hoverHilfe("Kommt noch: angrenzende, vanilla gesperrte Raeume oeffnen - "
                "mehr Flaeche fuer die Platzierung.");
     ImGui::Checkbox(T("joby4 NoWater"), &a.phJoby4NoWater);
@@ -2460,11 +2460,11 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_dev, g_ctx);
-    ladeHintergrund();
+    loadBackground();
 
     App app;
     app.cfg.load();
-    gSpracheDeutsch = app.cfg.spracheDeutsch;   // Sprache (#128), Vorgabe Englisch
+    gGermanUi = app.cfg.germanUi;   // Sprache (#128), Vorgabe Englisch
     std::snprintf(app.seedBuf, sizeof(app.seedBuf), "%s",
                   app.cfg.seedText.empty() ? SeedText::format(SeedText::random()).c_str()
                                            : app.cfg.seedText.c_str());
@@ -2477,32 +2477,32 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.optEnemyCount   = app.cfg.enemyCount;
     app.optEnemySwap    = app.cfg.optEnemySwap;
     app.optEnemyPool    = app.cfg.enemyPool;
-    app.optGegnerAus    = app.cfg.gegnerAus;
+    app.optGegnerAus    = app.cfg.enemiesDisabled;
     app.optOutfits      = app.cfg.optOutfits;
-    app.optItemMenge    = app.cfg.itemMenge;
+    app.optItemMenge    = app.cfg.itemAmount;
     app.optSecrets      = app.cfg.secrets;
-    app.secretAutor     = app.cfg.secretAutor;
-    app.phMusikSwitch     = app.cfg.optMusikSwitch;
-    app.phMusikTrigger    = app.cfg.optMusikTrigger;
-    app.phLevelAbschnitte = app.cfg.optLevelAbschnitte;
-    app.optLevelFolge     = app.cfg.optLevelFolge;
+    app.secretAuthor     = app.cfg.secretAuthor;
+    app.phMusikSwitch     = app.cfg.optMusicSwitch;
+    app.phMusikTrigger    = app.cfg.optMusicTrigger;
+    app.phLevelAbschnitte = app.cfg.optLevelSections;
+    app.optLevelOrder     = app.cfg.optLevelOrder;
 
     // Balance.txt (#108): steht sie schon in der Installation, hat SIE recht
     // und nicht unsere cfg - der Nutzer kann sie in Notepad geaendert haben,
     // und dann sollen die Regler zeigen, was wirklich gilt. Nur wenn dort
     // nichts steht, gilt die zuletzt gemerkte Reglerstellung.
     {
-        app.balWaffenZufall        = app.cfg.balWaffenZufall;
-        app.balGegnerLebenZufall   = app.cfg.balGegnerLebenZufall;
-        app.balGegnerSchadenZufall = app.cfg.balGegnerSchadenZufall;
+        app.balWeaponsRandom        = app.cfg.balWeaponsRandom;
+        app.balEnemyHealthRandom   = app.cfg.balEnemyHealthRandom;
+        app.balEnemyDamageRandom = app.cfg.balEnemyDamageRandom;
 
-        const BalanceDatei::Werte da = BalanceDatei::lesen(app.spielOrdner());
+        const BalanceFile::Values da = BalanceFile::read(app.gameDir());
         const bool vorhanden = PathUtil::fileExists(
-            PathUtil::join(app.spielOrdner(), L"Balance.txt"));
+            PathUtil::join(app.gameDir(), L"Balance.txt"));
 
-        app.balWaffen        = (vorhanden ? da.waffenSchaden : app.cfg.balWaffen)        / 100.0f;
-        app.balGegnerLeben   = (vorhanden ? da.gegnerLeben   : app.cfg.balGegnerLeben)   / 100.0f;
-        app.balGegnerSchaden = (vorhanden ? da.gegnerSchaden : app.cfg.balGegnerSchaden) / 100.0f;
+        app.balWeapons        = (vorhanden ? da.weaponDamage : app.cfg.balWeapons)        / 100.0f;
+        app.balEnemyHealth   = (vorhanden ? da.enemyHealth   : app.cfg.balEnemyHealth)   / 100.0f;
+        app.balEnemyDamage = (vorhanden ? da.enemyDamage : app.cfg.balEnemyDamage) / 100.0f;
 
         // Von Hand weiter aufgedreht als die Regler reichen? Dann klemmt der
         // Regler auf seine Bahn - geschrieben wird aber erst, wenn der Nutzer
@@ -2510,12 +2510,12 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         auto klemme = [](float& v, float von, float bis)
         { if (v < von) v = von; if (v > bis) v = bis; };
 
-        klemme(app.balWaffen, 0.0f, 2.0f);
-        klemme(app.balGegnerLeben, 0.5f, 2.0f);
-        klemme(app.balGegnerSchaden, 0.5f, 2.0f);
+        klemme(app.balWeapons, 0.0f, 2.0f);
+        klemme(app.balEnemyHealth, 0.5f, 2.0f);
+        klemme(app.balEnemyDamage, 0.5f, 2.0f);
     }
 
-    // Alles Merkenswerte in die Einstellungsdatei schreiben: Fenstergroesse,
+    // Alles Merkenswerte in die Einstellungsdatei write: Fenstergroesse,
     // Haken, Seed. Laeuft beim Ziehen des Fensters, bei jeder geaenderten
     // Auswahl und beim Beenden - die Datei ist winzig, das darf oft passieren.
     auto merkeEinstellungen = [&app](HWND fenster)
@@ -2532,21 +2532,21 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.enemyCount      = app.optEnemyCount;
         app.cfg.optEnemySwap    = app.optEnemySwap;
         app.cfg.enemyPool       = app.optEnemyPool;
-        app.cfg.gegnerAus       = app.optGegnerAus;
+        app.cfg.enemiesDisabled       = app.optGegnerAus;
         app.cfg.optOutfits      = app.optOutfits;
-        app.cfg.itemMenge       = app.optItemMenge;
+        app.cfg.itemAmount       = app.optItemMenge;
         app.cfg.secrets         = app.optSecrets;
-        app.cfg.secretAutor     = app.secretAutor;
-        app.cfg.optMusikSwitch     = app.phMusikSwitch;
-        app.cfg.optMusikTrigger    = app.phMusikTrigger;
-        app.cfg.optLevelAbschnitte = app.phLevelAbschnitte;
-        app.cfg.optLevelFolge      = app.optLevelFolge;
-        app.cfg.balWaffen        = static_cast<int>(app.balWaffen * 100.0f + 0.5f);
-        app.cfg.balGegnerLeben   = static_cast<int>(app.balGegnerLeben * 100.0f + 0.5f);
-        app.cfg.balGegnerSchaden = static_cast<int>(app.balGegnerSchaden * 100.0f + 0.5f);
-        app.cfg.balWaffenZufall        = app.balWaffenZufall;
-        app.cfg.balGegnerLebenZufall   = app.balGegnerLebenZufall;
-        app.cfg.balGegnerSchadenZufall = app.balGegnerSchadenZufall;
+        app.cfg.secretAuthor     = app.secretAuthor;
+        app.cfg.optMusicSwitch     = app.phMusikSwitch;
+        app.cfg.optMusicTrigger    = app.phMusikTrigger;
+        app.cfg.optLevelSections = app.phLevelAbschnitte;
+        app.cfg.optLevelOrder      = app.optLevelOrder;
+        app.cfg.balWeapons        = static_cast<int>(app.balWeapons * 100.0f + 0.5f);
+        app.cfg.balEnemyHealth   = static_cast<int>(app.balEnemyHealth * 100.0f + 0.5f);
+        app.cfg.balEnemyDamage = static_cast<int>(app.balEnemyDamage * 100.0f + 0.5f);
+        app.cfg.balWeaponsRandom        = app.balWeaponsRandom;
+        app.cfg.balEnemyHealthRandom   = app.balEnemyHealthRandom;
+        app.cfg.balEnemyDamageRandom = app.balEnemyDamageRandom;
         app.cfg.seedText        = app.seedBuf;
         app.cfg.save();
     };
@@ -2558,7 +2558,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     {
         // Haeufigster Fall: die EXE wurde aus dem Build-Ordner gestartet statt
         // aus dem ausgelieferten Paket. Deshalb den erwarteten Pfad nennen -
-        // "Datei nicht gefunden" allein hilft niemandem weiter.
+        // "Datei nicht found" allein hilft niemandem weiter.
         app.payloadError = "Der Ordner \"data\" neben dem Programm fehlt oder ist unvollstaendig ("
                          + err + "). Erwartet wird: " + PathUtil::narrow(csv);
     }
@@ -2600,16 +2600,16 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
             }
         }
 
-        for (const std::wstring& datei : dateien)
+        for (const std::wstring& file : dateien)
         {
             JsonValue z;
             std::string jerr;
-            if (!Json::parseFile(PathUtil::join(app.payloadDir(), datei), z, jerr)) continue;
+            if (!Json::parseFile(PathUtil::join(app.payloadDir(), file), z, jerr)) continue;
 
             const std::string stand = z["kurationStand"].asString();
             const std::string level = z["level"].asString();
             staende[stand.empty() ? std::string("(ohne Stempel)") : stand]
-                .push_back(level.empty() ? PathUtil::narrow(datei) : level);
+                .push_back(level.empty() ? PathUtil::narrow(file) : level);
         }
 
         if (staende.size() > 1)
@@ -2643,7 +2643,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
-        zeichneHintergrund();
+        drawBackground();
 
         drawUi(app, hwnd);
 
@@ -2665,21 +2665,21 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.enemyCount      != app.optEnemyCount ||
                  app.cfg.optEnemySwap    != app.optEnemySwap ||
                  app.cfg.enemyPool       != app.optEnemyPool ||
-                 app.cfg.gegnerAus       != app.optGegnerAus ||
+                 app.cfg.enemiesDisabled       != app.optGegnerAus ||
                  app.cfg.optOutfits      != app.optOutfits ||
-                 app.cfg.itemMenge       != app.optItemMenge ||
+                 app.cfg.itemAmount       != app.optItemMenge ||
                  app.cfg.secrets         != app.optSecrets ||
-                 app.cfg.optMusikSwitch     != app.phMusikSwitch ||
-                 app.cfg.optMusikTrigger    != app.phMusikTrigger ||
-                 app.cfg.optLevelAbschnitte != app.phLevelAbschnitte ||
-                 app.cfg.optLevelFolge      != app.optLevelFolge ||
-                 app.cfg.balWaffen        != static_cast<int>(app.balWaffen * 100.0f + 0.5f) ||
-                 app.cfg.balGegnerLeben   != static_cast<int>(app.balGegnerLeben * 100.0f + 0.5f) ||
-                 app.cfg.balGegnerSchaden != static_cast<int>(app.balGegnerSchaden * 100.0f + 0.5f) ||
-                 app.cfg.balWaffenZufall        != app.balWaffenZufall ||
-                 app.cfg.balGegnerLebenZufall   != app.balGegnerLebenZufall ||
-                 app.cfg.balGegnerSchadenZufall != app.balGegnerSchadenZufall ||
-                 app.cfg.secretAutor     != app.secretAutor)
+                 app.cfg.optMusicSwitch     != app.phMusikSwitch ||
+                 app.cfg.optMusicTrigger    != app.phMusikTrigger ||
+                 app.cfg.optLevelSections != app.phLevelAbschnitte ||
+                 app.cfg.optLevelOrder      != app.optLevelOrder ||
+                 app.cfg.balWeapons        != static_cast<int>(app.balWeapons * 100.0f + 0.5f) ||
+                 app.cfg.balEnemyHealth   != static_cast<int>(app.balEnemyHealth * 100.0f + 0.5f) ||
+                 app.cfg.balEnemyDamage != static_cast<int>(app.balEnemyDamage * 100.0f + 0.5f) ||
+                 app.cfg.balWeaponsRandom        != app.balWeaponsRandom ||
+                 app.cfg.balEnemyHealthRandom   != app.balEnemyHealthRandom ||
+                 app.cfg.balEnemyDamageRandom != app.balEnemyDamageRandom ||
+                 app.cfg.secretAuthor     != app.secretAuthor)
         {
             merkeEinstellungen(hwnd);
         }
@@ -2706,7 +2706,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
-    gibHintergrundFrei();
+    freeBackground();
     destroyDevice();
     DestroyWindow(hwnd);
     UnregisterClassW(wc.lpszClassName, hInst);

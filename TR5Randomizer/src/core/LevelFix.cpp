@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-#include "Levelfix.h"
+#include "LevelFix.h"
 
 #include <cstdio>
 #include <cstring>
@@ -39,33 +39,33 @@ namespace
     }
 }
 
-namespace Levelfix
+namespace LevelFix
 {
 
-int anwenden(Tr5Level& level, const std::string& levelName,
-             std::vector<std::string>& warnungen)
+int apply(Tr5Level& level, const std::string& levelName,
+             std::vector<std::string>& warnings)
 {
     int uebernommen = 0;
 
-    for (const Triggerkopie& k : kTriggerkopien)
+    for (const TriggerCopy& k : kTriggerCopies)
     {
         if (!gleicherName(levelName, k.level)) continue;
 
-        std::string fehler;
-        if (level.kopiereTrigger(k.vonRaum, k.vonSx, k.vonSz,
-                                 k.nachRaum, k.nachSx, k.nachSz, fehler))
+        std::string error;
+        if (level.copyTrigger(k.fromRoom, k.fromSx, k.fromSz,
+                                 k.toRoom, k.toSx, k.toSz, error))
         {
             ++uebernommen;
             continue;
         }
 
         // Nicht abbrechen: ohne den Fix ist das Level so kaputt wie vanilla,
-        // mit einem Abbruch waere der ganze Lauf hin. Aber laut sagen.
+        // mit einem Abbruch waere der ganze Lauf hin. Aber volumes sagen.
         char buf[400];
         std::snprintf(buf, sizeof(buf),
-                      "Levelfix nicht angewandt (%s -> Raum %d Sektor %d,%d): %s",
-                      k.grund, k.nachRaum, k.nachSx, k.nachSz, fehler.c_str());
-        warnungen.push_back(buf);
+                      "LevelFix nicht angewandt (%s -> Raum %d Sektor %d,%d): %s",
+                      k.reason, k.toRoom, k.toSx, k.toSz, error.c_str());
+        warnings.push_back(buf);
     }
 
     return uebernommen;

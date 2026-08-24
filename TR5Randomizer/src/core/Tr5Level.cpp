@@ -99,7 +99,7 @@ namespace
     constexpr int SZ_BOX = 8;    // BOX_INFO
     constexpr int SZ_TEXINFO = 40;   // PHDTEXTURESTRUCT
 
-    // Je Eintrag gelesene Bytes in den Schleifen, die Feld fuer Feld lesen.
+    // Je Eintrag gelesene Bytes in den Schleifen, die Feld fuer Feld read.
     constexpr int SZ_OBJECTINFO = 20;   // slot4 + nmeshes2 + meshidx2 + bone4 + frame4 + anim2 + pad2
     constexpr int SZ_STATICINFO = 32;   // slot4 + mesh2 + 12 + 12 + flags2
     constexpr int SZ_SPRITESLOT = 8;    // slot4 + 2 shorts (beide Zweige gleich lang)
@@ -212,7 +212,7 @@ broken:
         char buf[256];
         std::snprintf(buf, sizeof(buf),
             "Hauptblock laesst sich nicht durchlaufen - gescheitert bei \"%s\" "
-            "an Offset %zu (n=%d, mainOffset=%zu, end=%zu, datei=%zu). "
+            "an Offset %zu (n=%d, mainOffset=%zu, end=%zu, file=%zu). "
             "Passt die Datei zum erwarteten TR5-Format?",
             where, p, n, m_mainOffset, m_mainOffset + m_mainSize, m_bytes.size());
         error = buf;
@@ -342,7 +342,7 @@ bool Tr5Level::addItem(const Tr5Item& in, std::string& error)
 
     m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(itemsEnd), 24, 0);
     // Hinter den Items liegt der Sound-Block - seine Offsets wandern mit.
-    verschiebeSound(24, itemsEnd);
+    shiftSound(24, itemsEnd);
 
     ++m_itemCount;
     std::memcpy(m_bytes.data() + m_itemCountOffset, &m_itemCount, 4);
@@ -391,7 +391,7 @@ bool Tr5Level::addAiObject(const Tr5AiObject& in, std::string& error)
 
     const size_t einfuegenAn = aiCountAt + 4 + static_cast<size_t>(nAi) * 24;
     m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(einfuegenAn), 24, 0);
-    verschiebeSound(24, einfuegenAn);
+    shiftSound(24, einfuegenAn);
 
     ++nAi;
     std::memcpy(m_bytes.data() + aiCountAt, &nAi, 4);
@@ -488,44 +488,44 @@ bool Tr5Level::readChain(int index, std::vector<Tr5FloorEntry>& out) const
 
         Tr5FloorEntry e;
         const uint16_t w = word(i++);
-        e.funktion = w & 0x1F;
+        e.function = w & 0x1F;
         e.art = (w >> 8) & 0x3F;
-        e.woerter.push_back(w);
+        e.words.push_back(w);
         const bool last = (w & 0x8000) != 0;
 
-        if (e.funktion == FN_TRIGGER)
+        if (e.function == FN_TRIGGER)
         {
             if (i >= limit) return false;
-            e.woerter.push_back(word(i++));         // Timer, OneShot, Maske
+            e.words.push_back(word(i++));         // Timer, OneShot, Maske
 
             bool more = true;
             if (hasRefWord(e.art))
             {
                 if (i >= limit) return false;
                 const uint16_t r = word(i++);
-                e.woerter.push_back(r);
+                e.words.push_back(r);
                 more = (r & 0x8000) == 0;
             }
             while (more)
             {
                 if (i >= limit) return false;
                 const uint16_t c = word(i++);
-                e.woerter.push_back(c);
+                e.words.push_back(c);
                 const int akt = cmdType(c);
                 if (akt == 1 /*Kamera*/ || akt == 12 /*Flyby*/)
                 {
                     if (i >= limit) return false;
-                    e.woerter.push_back(word(i++));
+                    e.words.push_back(word(i++));
                 }
                 if (c & 0x8000) break;
             }
         }
         else
         {
-            for (int k = 0; k < extraWords(e.funktion); ++k)
+            for (int k = 0; k < extraWords(e.function); ++k)
             {
                 if (i >= limit) return false;
-                e.woerter.push_back(word(i++));
+                e.words.push_back(word(i++));
             }
         }
 
@@ -535,7 +535,7 @@ bool Tr5Level::readChain(int index, std::vector<Tr5FloorEntry>& out) const
     return true;
 }
 
-long Tr5Level::musikTrigger(const std::map<int, int>* abbildung, std::set<int>* gefunden)
+long Tr5Level::musicTriggers(const std::map<int, int>* mapping, std::set<int>* found)
 {
     // Der Lauf stuetzt sich bewusst auf readChain: die kennt jede
     // Wortverteilung (Referenzwort der Schalter/Key/Pickup-Arten,
@@ -562,13 +562,13 @@ long Tr5Level::musikTrigger(const std::map<int, int>* abbildung, std::set<int>* 
                 size_t pos = static_cast<size_t>(start);
                 for (const Tr5FloorEntry& e : eintraege)
                 {
-                    if (e.funktion == FN_TRIGGER)
+                    if (e.function == FN_TRIGGER)
                     {
                         // Aktionsworte beginnen hinter Kopf + Setup (+ Referenzwort).
                         size_t k = hasRefWord(e.art) ? 3 : 2;
-                        for (; k < e.woerter.size(); ++k)
+                        for (; k < e.words.size(); ++k)
                         {
-                            const uint16_t c = e.woerter[k];
+                            const uint16_t c = e.words[k];
                             const int akt = cmdType(c);
 
                             if (akt == 1 || akt == 12)      // Kamera/Flyby: Zusatzwort
@@ -582,16 +582,16 @@ long Tr5Level::musikTrigger(const std::map<int, int>* abbildung, std::set<int>* 
 
                             const int track = c & 0x3FF;
 
-                            if (gefunden)
+                            if (found)
                             {
-                                gefunden->insert(track);
+                                found->insert(track);
                                 ++zahl;
                             }
 
-                            if (abbildung)
+                            if (mapping)
                             {
-                                const auto it = abbildung->find(track);
-                                if (it != abbildung->end() && it->second != track)
+                                const auto it = mapping->find(track);
+                                if (it != mapping->end() && it->second != track)
                                 {
                                     const uint16_t neu = static_cast<uint16_t>((c & 0xFC00) | (it->second & 0x3FF));
                                     std::memcpy(m_bytes.data() + m_floorAt + (pos + k) * 2, &neu, 2);
@@ -601,7 +601,7 @@ long Tr5Level::musikTrigger(const std::map<int, int>* abbildung, std::set<int>* 
                         }
                     }
 
-                    pos += e.woerter.size();
+                    pos += e.words.size();
                 }
             }
         }
@@ -610,9 +610,9 @@ long Tr5Level::musikTrigger(const std::map<int, int>* abbildung, std::set<int>* 
     return zahl;
 }
 
-int Tr5Level::floorNeigung(int room, int sx, int sz, SchraegeInfo& si, int& baseY) const
+int Tr5Level::floorSlope(int room, int sx, int sz, SlopeInfo& si, int& baseY) const
 {
-    si = SchraegeInfo();
+    si = SlopeInfo();
     baseY = 0;
 
     if (room < 0 || room >= static_cast<int>(m_rooms.size())) return -1;
@@ -634,12 +634,12 @@ int Tr5Level::floorNeigung(int room, int sx, int sz, SchraegeInfo& si, int& base
 
     for (const Tr5FloorEntry& e : chain)
     {
-        const bool boden = (e.funktion == FN_TILT || e.funktion == 7 ||
-                            e.funktion == 8 || (e.funktion >= 11 && e.funktion <= 14));
+        const bool boden = (e.function == FN_TILT || e.function == 7 ||
+                            e.function == 8 || (e.function >= 11 && e.function <= 14));
         if (!boden) continue;
-        if (e.woerter.size() < 2) return -1;        // Eintrag ohne Datenwort: kaputt
-        si.typWort = e.woerter[0];
-        si.datenWort = e.woerter[1];
+        if (e.words.size() < 2) return -1;        // Eintrag ohne Datenwort: kaputt
+        si.typeWord = e.words[0];
+        si.dataWord = e.words[1];
         return 1;
     }
     return 0;                                       // nur Portale/Trigger/...: eben
@@ -659,11 +659,11 @@ const char* Tr5Level::canAppendTrigger(const std::vector<Tr5FloorEntry>& chain)
     // die frisst GetHeight beim Laufen, ohne den Zeiger zu setzen.
     for (const Tr5FloorEntry& e : chain)
     {
-        if (e.funktion == FN_TRIGGER)     return "Sektor hat schon einen Trigger";
-        if (e.funktion == FN_LAVA)        return "Sektor hat einen Lava-Eintrag";
-        if (e.funktion == FN_CLIMB)       return "Sektor hat einen Climb-Eintrag";
-        if (e.funktion == FN_MONKEY)      return "Sektor hat einen Monkey-Eintrag";
-        if (e.funktion == FN_TRIGTRIGGER) return "Sektor hat einen TrigTrigger-Eintrag";
+        if (e.function == FN_TRIGGER)     return "Sektor hat schon einen Trigger";
+        if (e.function == FN_LAVA)        return "Sektor hat einen Lava-Eintrag";
+        if (e.function == FN_CLIMB)       return "Sektor hat einen Climb-Eintrag";
+        if (e.function == FN_MONKEY)      return "Sektor hat einen Monkey-Eintrag";
+        if (e.function == FN_TRIGTRIGGER) return "Sektor hat einen TrigTrigger-Eintrag";
     }
     return nullptr;
 }
@@ -676,7 +676,7 @@ bool Tr5Level::appendChain(const std::vector<Tr5FloorEntry>& chain, uint16_t& ou
     std::vector<uint16_t> words;
     for (size_t n = 0; n < chain.size(); ++n)
     {
-        std::vector<uint16_t> w = chain[n].woerter;
+        std::vector<uint16_t> w = chain[n].words;
         if (w.empty()) { error = "leerer Floordata-Eintrag"; return false; }
         w[0] &= 0x7FFF;                              // Endebit erst mal weg
         if (n + 1 == chain.size()) w[0] |= 0x8000;   // und nur beim letzten setzen
@@ -713,7 +713,7 @@ bool Tr5Level::appendChain(const std::vector<Tr5FloorEntry>& chain, uint16_t& ou
     // beim naechsten setItem/addItem mitten in fremde Daten. Die Sektorfelder
     // der Raeume liegen davor und bleiben, wo sie sind.
     m_itemCountOffset += raw.size();
-    verschiebeSound(raw.size(), at);      // der Sound-Block liegt noch weiter hinten
+    shiftSound(raw.size(), at);      // der Sound-Block liegt noch weiter hinten
 
     // Und die BLOCKKARTE gleich mit. Mesh-, Anim-, Frame- und Objektbloecke
     // liegen im Hauptblock ebenfalls hinter der Floordata; ohne diese
@@ -757,7 +757,7 @@ bool Tr5Level::moveTrigger(int fromRoom, int fromSx, int fromSz,
     // Bedienfehler - beides lieber abbrechen als raten.
     size_t found = 0, at = 0;
     for (size_t k = 0; k < from.size(); ++k)
-        if (from[k].funktion == FN_TRIGGER) { ++found; at = k; }
+        if (from[k].function == FN_TRIGGER) { ++found; at = k; }
     if (found != 1)
     {
         std::snprintf(buf, sizeof(buf),
@@ -791,7 +791,7 @@ bool Tr5Level::moveTrigger(int fromRoom, int fromSx, int fromSz,
     return true;
 }
 
-bool Tr5Level::kopiereTrigger(int fromRoom, int fromSx, int fromSz,
+bool Tr5Level::copyTrigger(int fromRoom, int fromSx, int fromSz,
                               int toRoom, int toSx, int toSz, std::string& error)
 {
     char buf[256];
@@ -812,7 +812,7 @@ bool Tr5Level::kopiereTrigger(int fromRoom, int fromSx, int fromSz,
     // keiner ein Bedienfehler.
     size_t found = 0, at = 0;
     for (size_t k = 0; k < from.size(); ++k)
-        if (from[k].funktion == FN_TRIGGER) { ++found; at = k; }
+        if (from[k].function == FN_TRIGGER) { ++found; at = k; }
     if (found != 1)
     {
         std::snprintf(buf, sizeof(buf),
@@ -868,12 +868,12 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int art, int timer, bool one
     }
 
     Tr5FloorEntry e;
-    e.funktion = FN_TRIGGER;
+    e.function = FN_TRIGGER;
     e.art = art;
     // Wort 0: Funktion in Bit 0-4, Art in Bit 8-13. Bit 15 vergibt baueKette.
-    e.woerter.push_back(static_cast<uint16_t>((art << 8) | FN_TRIGGER));
+    e.words.push_back(static_cast<uint16_t>((art << 8) | FN_TRIGGER));
     // Wort 1: Timer, OneShot, Codebits.
-    e.woerter.push_back(static_cast<uint16_t>((timer & 0xFF) |
+    e.words.push_back(static_cast<uint16_t>((timer & 0xFF) |
                                               (oneShot ? 0x100 : 0) |
                                               ((mask & 0x1F) << 9)));
 
@@ -895,7 +895,7 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int art, int timer, bool one
             error = "Triggerart braucht ein Referenzwort (refItem) - so nicht anlegbar";
             return false;
         }
-        e.woerter.push_back(static_cast<uint16_t>(refItem & 0x3FF));
+        e.words.push_back(static_cast<uint16_t>(refItem & 0x3FF));
     }
     else if (refItem >= 0)
     {
@@ -907,7 +907,7 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int art, int timer, bool one
     {
         uint16_t c = static_cast<uint16_t>(((cmds[i].type & 0xF) << 10) | (cmds[i].param & 0x3FF));
         if (i + 1 == cmds.size()) c |= 0x8000;       // Endebit auf den letzten
-        e.woerter.push_back(c);
+        e.words.push_back(c);
 
         if (cmds[i].type == 1 || cmds[i].type == 12)
         {
@@ -930,7 +930,7 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int art, int timer, bool one
 // Was ein Portalsektor ist, wurde mit SektorPruef an den funktionierenden
 // Nachbarn in andy3 nachgemessen (Raum 34 Spalte x0, Raum 36 Spalte x4):
 //
-//   - Boden/Decke tragen die Werte des UEBERLAPPTEN begehbaren Sektors des
+//   - Boden/Decke tragen die Values des UEBERLAPPTEN begehbaren Sektors des
 //     Zielraums. Die Portalspalten zweier Raeume liegen naemlich uebereinander:
 //     34(0,z) deckt dieselbe Weltflaeche wie 36(3,z). Von dort kommen auch
 //     pit_room und sky_room.
@@ -983,12 +983,12 @@ bool Tr5Level::makePortal(int room, int sx, int sz, int targetRoom, std::string&
     if (eigenAt + 8 > m_bytes.size() || druebenAt + 8 > m_bytes.size())
     { error = "Sektor liegt ausserhalb der Datei"; return false; }
 
-    // Der ueberlappte Sektor muss begehbar sein - eine Wand als Vorlage
+    // Der ueberlappte Sektor muss walkable sein - eine Wand als Vorlage
     // hiesse, das Portal fuehrte ins Massiv.
     if (static_cast<int8_t>(m_bytes[druebenAt + 5]) == -127)
     { error = "der ueberlappte Sektor im Zielraum ist selbst eine Wand"; return false; }
 
-    // Bestehende Kette lesen; Geometrie (TILT/ROOF/SPLITs/NOCOLs) bleibt.
+    // Bestehende Kette read; Geometrie (TILT/ROOF/SPLITs/NOCOLs) bleibt.
     uint16_t alt;
     std::memcpy(&alt, m_bytes.data() + eigenAt, 2);
     std::vector<Tr5FloorEntry> kette;
@@ -998,24 +998,24 @@ bool Tr5Level::makePortal(int room, int sx, int sz, int targetRoom, std::string&
     std::vector<Tr5FloorEntry> neu;
     for (const Tr5FloorEntry& e : kette)
     {
-        if (e.funktion == 1)                              // schon ein Portal?
+        if (e.function == 1)                              // schon ein Portal?
         {
-            if (e.woerter.size() >= 2 && e.woerter[1] == static_cast<uint16_t>(targetRoom))
+            if (e.words.size() >= 2 && e.words[1] == static_cast<uint16_t>(targetRoom))
                 return true;                              // genau dieses: fertig
             error = "Sektor hat schon ein Portal in einen anderen Raum";
             return false;
         }
-        if (e.funktion == 2 || e.funktion == 3 ||
-            (e.funktion >= 7 && e.funktion <= 18))
+        if (e.function == 2 || e.function == 3 ||
+            (e.function >= 7 && e.function <= 18))
             neu.push_back(e);
         // alles andere (Trigger, Climb, ...) hat auf einem Portalsektor
         // nichts verloren und faellt weg - vanilla tragen sie so etwas nie.
     }
 
     Tr5FloorEntry tuer;
-    tuer.funktion = 1;
-    tuer.woerter.push_back(0x0001);
-    tuer.woerter.push_back(static_cast<uint16_t>(targetRoom));
+    tuer.function = 1;
+    tuer.words.push_back(0x0001);
+    tuer.words.push_back(static_cast<uint16_t>(targetRoom));
     neu.push_back(tuer);
 
     uint16_t idx = 0;
@@ -1074,10 +1074,10 @@ bool Tr5Level::makeClimb(int room, int sx, int sz, int dirBits, std::string& err
     Tr5FloorEntry climbAlt;
     for (Tr5FloorEntry& e : kette)
     {
-        if (e.funktion == 6)      { climbAlt = e; climb = &climbAlt; }
-        else if (e.funktion == 5) lava.push_back(e);
-        else if (e.funktion == 1 || e.funktion == 2 || e.funktion == 3 ||
-                 (e.funktion >= 7 && e.funktion <= 18))
+        if (e.function == 6)      { climbAlt = e; climb = &climbAlt; }
+        else if (e.function == 5) lava.push_back(e);
+        else if (e.function == 1 || e.function == 2 || e.function == 3 ||
+                 (e.function >= 7 && e.function <= 18))
             geo.push_back(e);
         else
             rest.push_back(e);
@@ -1085,15 +1085,15 @@ bool Tr5Level::makeClimb(int room, int sx, int sz, int dirBits, std::string& err
 
     if (climb)
     {
-        if ((climb->woerter[0] & 0x0F00 & dirBits) == static_cast<uint16_t>(dirBits))
+        if ((climb->words[0] & 0x0F00 & dirBits) == static_cast<uint16_t>(dirBits))
             return true;                              // Bits stehen schon
-        climb->woerter[0] |= static_cast<uint16_t>(dirBits);
+        climb->words[0] |= static_cast<uint16_t>(dirBits);
     }
     else
     {
         climbAlt = Tr5FloorEntry();
-        climbAlt.funktion = 6;
-        climbAlt.woerter.push_back(static_cast<uint16_t>(0x0006 | dirBits));
+        climbAlt.function = 6;
+        climbAlt.words.push_back(static_cast<uint16_t>(0x0006 | dirBits));
         climb = &climbAlt;
     }
 
@@ -1158,7 +1158,7 @@ bool Tr5Level::setRoomWater(int room, bool anAus, std::string& error)
 // Gefunden ueber ANIM_KEYCARD in joby3 (22 Sekunden erstarrt) und den
 // Schalter in andy3 (falsche, viel zu kurze Bewegung). Siehe LaraAnim.
 //----------------------------------------------------------------------------
-bool Tr5Level::laraAnimBrauchbar(int animNr) const
+bool Tr5Level::laraAnimUsable(int animNr) const
 {
     MoveableInfo mv;
     if (!moveableInfo(0, mv) || mv.animIndex < 0) return false;
@@ -1201,7 +1201,7 @@ bool Tr5Level::laraAnimBrauchbar(int animNr) const
 // Ketten am Stueck. Liefert -1, wenn es die Anim nicht gibt oder der
 // Nachfolger ausserhalb von Laras Satz liegt.
 //----------------------------------------------------------------------------
-int Tr5Level::laraAnimNachfolger(int animNr) const
+int Tr5Level::laraAnimNext(int animNr) const
 {
     MoveableInfo mv;
     if (!moveableInfo(0, mv) || mv.animIndex < 0) return -1;
@@ -1292,7 +1292,7 @@ bool Tr5Level::findSound()
     return true;
 }
 
-void Tr5Level::verschiebeSound(size_t bytes, size_t abOffset)
+void Tr5Level::shiftSound(size_t bytes, size_t abOffset)
 {
     if (!m_soundOk || bytes == 0) return;
     if (m_lutAt >= abOffset)              m_lutAt += bytes;
@@ -1400,7 +1400,7 @@ bool Tr5Level::copySoundFrom(const Tr5Level& src, int srcMap, int dstMap, std::s
     std::memcpy(m_bytes.data() + m_numInfosAt, &m_nInfos, 4);
 
     // Alles hinter der Einfuegestelle ist gewandert.
-    verschiebeSound(roh.size(), einfuegenAn);
+    shiftSound(roh.size(), einfuegenAn);
     if (m_itemCountOffset >= einfuegenAn) m_itemCountOffset += roh.size();
 
     m_mainSize += roh.size();
@@ -1455,19 +1455,19 @@ bool Tr5Level::moveableInfo(int slotId, MoveableInfo& out) const
     return false;
 }
 
-bool Tr5Level::uebernehmeAnimDaten(int dstSlot, int dstOffset, int srcSlot,
-                                   int srcOffset, std::string& fehler)
+bool Tr5Level::adoptAnimData(int dstSlot, int dstOffset, int srcSlot,
+                                   int srcOffset, std::string& error)
 {
     MoveableInfo dst, src;
     if (!moveableInfo(dstSlot, dst) || dst.animIndex < 0)
-    { fehler = "Zielslot fehlt oder traegt keine Anims"; return false; }
+    { error = "Zielslot fehlt oder traegt keine Anims"; return false; }
     if (!moveableInfo(srcSlot, src) || src.animIndex < 0)
-    { fehler = "Quellslot fehlt oder traegt keine Anims"; return false; }
+    { error = "Quellslot fehlt oder traegt keine Anims"; return false; }
 
     const long long d = static_cast<long long>(dst.animIndex) + dstOffset;
     const long long s = static_cast<long long>(src.animIndex) + srcOffset;
     if (d < 0 || d >= m_anims.count || s < 0 || s >= m_anims.count)
-    { fehler = "Anim liegt ausserhalb der Tabelle"; return false; }
+    { error = "Anim liegt ausserhalb der Tabelle"; return false; }
 
     uint8_t* dr = m_bytes.data() + m_anims.dataAt + static_cast<size_t>(d) * 40;
     const uint8_t* sr = m_bytes.data() + m_anims.dataAt + static_cast<size_t>(s) * 40;
@@ -1479,7 +1479,7 @@ bool Tr5Level::uebernehmeAnimDaten(int dstSlot, int dstOffset, int srcSlot,
     std::memcpy(&dVon, dr + 24, 2); std::memcpy(&dBis, dr + 26, 2);
     std::memcpy(&sVon, sr + 24, 2); std::memcpy(&sBis, sr + 26, 2);
     if (dVon != sVon || dBis != sBis)
-    { fehler = "Frame-Bereiche der beiden Anims sind verschieden"; return false; }
+    { error = "Frame-Bereiche der beiden Anims sind verschieden"; return false; }
 
     std::memcpy(dr, sr, 6);           // Frame-Zeiger, Rate, frame_size
     std::memcpy(dr + 8, sr + 8, 16);  // Geschwindigkeit/Beschleunigung
@@ -1554,7 +1554,7 @@ bool Tr5Level::setLaraType(int value)
 // die VCI-Level kennen keine Dialog-Cutscenes), laesst die Engine den Tausch
 // bei gesetztem Flag aus. Vanilla steht hier in allen 16 Dateien 0.
 //----------------------------------------------------------------------------
-int Tr5Level::fremdeSprechkoepfe() const
+int Tr5Level::foreignTalkHeads() const
 {
     if (m_mainOffset < 40) return -1;
     int16_t v;
@@ -1562,7 +1562,7 @@ int Tr5Level::fremdeSprechkoepfe() const
     return v;
 }
 
-bool Tr5Level::setFremdeSprechkoepfe(int value)
+bool Tr5Level::setForeignTalkHeads(int value)
 {
     if (m_mainOffset < 40) return false;
     const int16_t v = static_cast<int16_t>(value);
@@ -1635,20 +1635,20 @@ bool Tr5Level::save(const std::wstring& path, std::string& error) const
 {
     if (m_bytes.empty()) { error = "Kein Level geladen"; return false; }
 
-    // Texturwerkstatt (#104): solange sie schmutzig offen ist, tragen die
-    // Texturbloecke in m_bytes den ALTEN Stand. Lieber laut scheitern als
-    // still ein Level mit veralteten Seiten schreiben (die TR3Setz-Lehre:
+    // Texturwerkstatt (#104): solange sie schmutzig unresolved ist, tragen die
+    // Texturbloecke in m_bytes den ALTEN Stand. Lieber volumes scheitern als
+    // still ein Level mit veralteten Seiten write (die TR3Setz-Lehre:
     // eine Warnung liest niemand). Patch::apply schliesst am Ende selbst.
-    if (m_texOffen && m_texSchmutzig)
+    if (m_texOpen && m_texDirty)
     {
-        error = "Texturwerkstatt noch offen - texWerkstattSchliessen() vor dem Speichern rufen";
+        error = "Texturwerkstatt noch unresolved - texWorkshopClose() vor dem Speichern rufen";
         return false;
     }
 
     FILE* f = nullptr;
     if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f)
     {
-        error = "Zieldatei laesst sich nicht schreiben";
+        error = "Zieldatei laesst sich nicht write";
         return false;
     }
     size_t put = std::fwrite(m_bytes.data(), 1, m_bytes.size(), f);

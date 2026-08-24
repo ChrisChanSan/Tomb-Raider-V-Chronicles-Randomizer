@@ -38,7 +38,7 @@
 //
 // Bei den Edits sind alle Felder ausser index optional - was fehlt, bleibt
 // unveraendert. Das ist der Grund, warum ein verschobenes Item seinen Winkel
-// und seine Beleuchtung behaelt: wir schreiben nur, was wir wirklich meinen.
+// und seine Beleuchtung behaelt: wir write nur, was wir wirklich meinen.
 //
 // triggerMoves nimmt den Triggereintrag des Quellsektors heraus und haengt ihn
 // an die Kette des Zielsektors - ein Vorgang, nicht zwei. Gedacht ist es fuer
@@ -52,12 +52,12 @@
 // ist. oneShot ist dabei kein Feinschliff - siehe Tr5Level::addTrigger.
 //
 // Weder itemRemoves noch triggerRemoves gibt es, und beides soll es nicht
-// geben - siehe Tr5Level::addItem und die Begruendung in apply().
+// give - siehe Tr5Level::addItem und die Begruendung in apply().
 //----------------------------------------------------------------------------
 // soundAdds uebernimmt Sound-Samples aus einem anderen Level. Gebraucht, sobald
 // ein Gegner in ein Level soll, das ihn vanilla nicht enthaelt: ein Level fuehrt
 // nur die Samples mit, die es selbst braucht, und ohne sie steht der Gegner
-// stumm da. Der Quellpfad kommt vom Aufrufer, weil nur der weiss, wo die
+// muted da. Der Quellpfad kommt vom Aufrufer, weil nur der weiss, wo die
 // unberuehrten Level liegen - siehe Patch::apply's levelSource.
 // weaponAdds kopiert Waffen-Modellslots aus anderen Leveln:
 //   "weaponAdds": [ {slot, fromLevel, replace}, ... ]
@@ -99,7 +99,7 @@ namespace Patch
                const std::wstring& tr3GoldDir = std::wstring(),
                // Zwischenlager fuer die entnommenen Pakete (#103). Leer heisst
                // "jedes Mal neu entnehmen" - langsamer, aber immer richtig.
-               const std::wstring& lagerDir = std::wstring());
+               const std::wstring& cacheDir = std::wstring());
 
     // Traegt in die Eingabe ein, welche Sektoren einen mitwandernden Trigger
     // aufnehmen koennen. Muss VOR Rando::run laufen, sonst waehlt die
@@ -124,5 +124,5 @@ namespace Patch
     // cd_flags-Sperre. Ein Atmosphaerentrigger bleibt so ein
     // Atmosphaerentrigger, nur die Stimmung wechselt. Rueckgabe: Zahl der
     // umgeschriebenen Woerter.
-    long musikTriggerWuerfeln(Tr5Level& level, uint64_t seed);
+    long shuffleMusicTriggers(Tr5Level& level, uint64_t seed);
 }

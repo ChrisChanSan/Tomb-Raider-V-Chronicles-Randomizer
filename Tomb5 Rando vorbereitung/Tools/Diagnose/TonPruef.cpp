@@ -1,5 +1,5 @@
 // Gegenprobe fuer Klangentnahme und SFX-Umbiegen (#92).
-#include "core/Tr3Quelle.h"
+#include "core/Tr3Source.h"
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -17,21 +17,21 @@ int main(int argc, char** argv)
     if (argc < 4) { std::printf("Aufruf: TonPruef <MAIN.SFX> <werkzeug.bin> <id:wave,...> ...\n"); return 2; }
     std::string p(argv[1]); std::wstring wp(p.begin(), p.end());
 
-    std::vector<Tr3Quelle::KlangWunsch> w;
+    std::vector<Tr3Source::SoundRequest> w;
     for (int a = 3; a < argc; ++a)
     {
-        Tr3Quelle::KlangWunsch k;
+        Tr3Source::SoundRequest k;
         k.tr3Id = std::atoi(argv[a]);
         const char* d = std::strchr(argv[a], ':');
         if (!d) { std::printf("erwartet <id>:<wave>\n"); return 2; }
         for (const char* q = d + 1; *q; )
-        { k.wellen.push_back(std::atoi(q)); while (*q && *q != ',') ++q; if (*q == ',') ++q; }
+        { k.waves.push_back(std::atoi(q)); while (*q && *q != ',') ++q; if (*q == ',') ++q; }
         w.push_back(k);
     }
 
-    std::vector<uint8_t> neu; std::string fehler;
-    if (!Tr3Quelle::holeKlaenge(wp, w, neu, fehler))
-    { std::printf("GESCHEITERT: %s\n", fehler.c_str()); return 1; }
+    std::vector<uint8_t> neu; std::string error;
+    if (!Tr3Source::fetchSounds(wp, w, neu, error))
+    { std::printf("GESCHEITERT: %s\n", error.c_str()); return 1; }
 
     std::vector<uint8_t> alt;
     if (!lies(argv[2], alt)) { std::printf("Vergleichsdatei nicht lesbar\n"); return 2; }

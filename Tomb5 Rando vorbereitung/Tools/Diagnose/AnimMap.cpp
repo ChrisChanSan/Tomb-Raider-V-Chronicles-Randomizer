@@ -163,9 +163,9 @@ int main(int argc, char** argv)
         if (auffaellig) ++kaputt;
 
         // Rate und frameSize mit ausgeben: die Schrittweiten-Krankheit
-        // ("totes Erbe", siehe uebernehmeAnimDaten in Tr5Level.h) erkennt
+        // ("totes Erbe", siehe adoptAnimData in Tr5Level.h) erkennt
         // man NUR daran, dass zwei Anims denselben frameOffset mit
-        // verschiedener frameSize lesen.
+        // verschiedener frameSize read.
         std::printf("%4d %-4s | %4u %3d..%-3d r%-2u s%-3u %10u  %6d %6d %6d | %4u %3d..%-3d r%-2u s%-3u %10u  %6d %6d %6d\n",
                     i, auffaellig ? "!!" : "", za.state, za.frameStart, za.frameEnd,
                     za.frameRate, za.frameSize,

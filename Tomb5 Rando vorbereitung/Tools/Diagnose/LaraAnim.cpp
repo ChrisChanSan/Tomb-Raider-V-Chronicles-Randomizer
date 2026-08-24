@@ -82,7 +82,7 @@ static bool vermessen(const Tr5Level& lvl, std::vector<AnimInfo>& raus, int& bas
     for (int32_t i = 0; i < nAnims; ++i) zeiger.push_back(r32(animAt + static_cast<size_t>(i) * 40));
 
     size_t objAt = 0, frAt = 0; int32_t objN = 0, frN = 0;
-    lvl.debugModellBloecke(objAt, objN, frAt, frN);
+    lvl.debugModelBlocks(objAt, objN, frAt, frN);
     const uint32_t frameEndeGesamt = static_cast<uint32_t>(frN) * 2;
 
     raus.clear();
@@ -131,8 +131,8 @@ int main(int argc, char** argv)
 
     for (int f = erstes; f < argc; ++f)
     {
-        Tr5Level lvl; std::string fehler;
-        if (!lvl.load(zuW(argv[f]), fehler)) { std::printf("%s: %s\n", argv[f], fehler.c_str()); continue; }
+        Tr5Level lvl; std::string error;
+        if (!lvl.load(zuW(argv[f]), error)) { std::printf("%s: %s\n", argv[f], error.c_str()); continue; }
 
         std::vector<AnimInfo> a; int basis = 0;
         if (!vermessen(lvl, a, basis)) { std::printf("%s: keine Lara\n", argv[f]); continue; }

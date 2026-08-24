@@ -16,7 +16,7 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 #include "ScriptDat.h"
-#include "Levelketten.h"
+#include "LevelChains.h"
 
 #include <algorithm>
 #include <cctype>
@@ -63,8 +63,8 @@ namespace
         case 0x8F:                                  return 3;   // FOG
         case 0xD9: case 0xDA:                       return 2;   // GIVEOBJ/TAKEOBJ
         default:
-            if (cmd >= ScriptDat::CMD_OBJ_ERSTER && cmd <= ScriptDat::CMD_OBJ_LETZTER)
-                return ScriptDat::OBJEKT_NUTZBYTES;
+            if (cmd >= ScriptDat::CMD_OBJ_FIRST && cmd <= ScriptDat::CMD_OBJ_LAST)
+                return ScriptDat::OBJ_PAYLOAD_BYTES;
             return -1;                                          // unbekannt: anhalten
         }
     }
@@ -108,15 +108,15 @@ bool ScriptDat::load(const std::wstring& path, std::string& error)
     std::fclose(f);
     if (!ok) { error = "SCRIPT.DAT unvollstaendig gelesen"; return false; }
 
-    return zerlege(error);
+    return parse(error);
 }
 
-bool ScriptDat::zerlege(std::string& error)
+bool ScriptDat::parse(std::string& error)
 {
     m_levels.clear();
     m_flagsAt.clear();
-    m_blockAn.clear();
-    m_blockBis.clear();
+    m_blockStart.clear();
+    m_blockEnd.clear();
     m_ofsIndex.clear();
 
     if (m_bytes.size() < sizeof(GAMEFLOW) + 40) { error = "SCRIPT.DAT zu klein"; return false; }
@@ -177,8 +177,8 @@ bool ScriptDat::zerlege(std::string& error)
                 }
                 m_levels.push_back(e);
                 m_flagsAt.push_back(fl);
-                m_blockAn.push_back(start);
-                m_blockBis.push_back(ende);
+                m_blockStart.push_back(start);
+                m_blockEnd.push_back(ende);
                 m_ofsIndex.push_back(i);
                 break;
             }
@@ -187,15 +187,15 @@ bool ScriptDat::zerlege(std::string& error)
         }
     }
 
-    if (m_levels.empty()) { error = "SCRIPT.DAT: kein einziger CMD_LEVEL gefunden"; return false; }
+    if (m_levels.empty()) { error = "SCRIPT.DAT: kein einziger CMD_LEVEL found"; return false; }
     return true;
 }
 
 // Sucht einen Objektbefehl im Block eines Levels. Liefert die Stelle des
 // Opcodes oder npos.
-size_t ScriptDat::findeBefehl(size_t idx, uint8_t cmd) const
+size_t ScriptDat::findCommand(size_t idx, uint8_t cmd) const
 {
-    for (size_t q = m_blockAn[idx]; q < m_blockBis[idx]; )
+    for (size_t q = m_blockStart[idx]; q < m_blockEnd[idx]; )
     {
         const int len = nutzlast(m_bytes[q]);
         if (len < 0) break;
@@ -205,7 +205,7 @@ size_t ScriptDat::findeBefehl(size_t idx, uint8_t cmd) const
     return std::string::npos;
 }
 
-bool ScriptDat::findeLevel(const std::string& name, size_t& idx) const
+bool ScriptDat::findLevel(const std::string& name, size_t& idx) const
 {
     for (size_t i = 0; i < m_levels.size(); ++i)
         if (gleichOhneEndung(m_levels[i].fileName.c_str(), name)) { idx = i; return true; }
@@ -217,45 +217,45 @@ bool ScriptDat::copyObjectCommand(const std::string& vonLevel, const std::string
 {
     changed = false;
 
-    if (cmd < CMD_OBJ_ERSTER || cmd > CMD_OBJ_LETZTER)
+    if (cmd < CMD_OBJ_FIRST || cmd > CMD_OBJ_LAST)
     { error = "kein Objektbefehl: " + std::to_string((int)cmd); return false; }
 
     size_t iVon = 0, iNach = 0;
-    if (!findeLevel(vonLevel, iVon))   { error = "Level nicht im Skript: " + vonLevel;  return false; }
-    if (!findeLevel(nachLevel, iNach)) { error = "Level nicht im Skript: " + nachLevel; return false; }
+    if (!findLevel(vonLevel, iVon))   { error = "Level nicht im Skript: " + vonLevel;  return false; }
+    if (!findLevel(nachLevel, iNach)) { error = "Level nicht im Skript: " + nachLevel; return false; }
 
     // Hat das Ziel den Befehl schon, bleibt alles wie es ist. Der Aufruf ist
     // damit wiederholbar - genau wie clearLevelFlags, und aus demselben Grund:
     // der Randomizer laeuft mehrfach ueber dieselbe Installation.
-    if (findeBefehl(iNach, cmd) != std::string::npos) return true;
+    if (findCommand(iNach, cmd) != std::string::npos) return true;
 
-    const size_t quelle = findeBefehl(iVon, cmd);
-    if (quelle == std::string::npos)
+    const size_t source = findCommand(iVon, cmd);
+    if (source == std::string::npos)
     { error = "Level " + vonLevel + " hat den Befehl gar nicht"; return false; }
-    if (quelle + OBJEKT_BEFEHL_BYTES > m_bytes.size())
+    if (source + OBJ_COMMAND_BYTES > m_bytes.size())
     { error = "Befehl in " + vonLevel + " ragt aus der Datei"; return false; }
 
-    std::vector<uint8_t> befehl(m_bytes.begin() + quelle,
-                                m_bytes.begin() + quelle + OBJEKT_BEFEHL_BYTES);
+    std::vector<uint8_t> befehl(m_bytes.begin() + source,
+                                m_bytes.begin() + source + OBJ_COMMAND_BYTES);
 
     // Vorne in den Block: die Objektbefehle stehen vanilla alle vor CMD_LEVEL,
     // und das muessen sie auch - DoGameflow arbeitet EINE Schleife ab, und
     // CMD_LEVEL steigt dort ins Level ab. Was dahinter stuende, wuerde erst
     // nach dem Level gelesen und kaeme fuer die Namensvergabe zu spaet.
-    const size_t einfuegeAn = m_blockAn[iNach];
+    const size_t einfuegeAn = m_blockStart[iNach];
 
     GAMEFLOW gf;
     std::memcpy(&gf, m_bytes.data(), sizeof(gf));
 
-    if (gf.ScriptLen + OBJEKT_BEFEHL_BYTES > 0xFFFF)
+    if (gf.ScriptLen + OBJ_COMMAND_BYTES > 0xFFFF)
     { error = "SCRIPT.DAT: Skript-Wad wuerde ueberlaufen"; return false; }
 
-    // Erst pruefen, dann schreiben: kein halb umgebautes Skript hinterlassen.
+    // Erst pruefen, dann write: kein halb umgebautes Skript hinterlassen.
     for (int i = 0; i < m_nLevels; ++i)
     {
         uint16_t o;
         std::memcpy(&o, m_bytes.data() + m_scriptOfsAt + 2ull * i, 2);
-        if (m_scriptWad + o > einfuegeAn && o + OBJEKT_BEFEHL_BYTES > 0xFFFF)
+        if (m_scriptWad + o > einfuegeAn && o + OBJ_COMMAND_BYTES > 0xFFFF)
         { error = "SCRIPT.DAT: Leveloffset wuerde ueberlaufen"; return false; }
     }
 
@@ -270,15 +270,15 @@ bool ScriptDat::copyObjectCommand(const std::string& vonLevel, const std::string
         std::memcpy(&o, m_bytes.data() + m_scriptOfsAt + 2ull * i, 2);
         if (m_scriptWad + o > einfuegeAn)
         {
-            o = static_cast<uint16_t>(o + OBJEKT_BEFEHL_BYTES);
+            o = static_cast<uint16_t>(o + OBJ_COMMAND_BYTES);
             std::memcpy(m_bytes.data() + m_scriptOfsAt + 2ull * i, &o, 2);
         }
     }
 
-    gf.ScriptLen = static_cast<uint16_t>(gf.ScriptLen + OBJEKT_BEFEHL_BYTES);
+    gf.ScriptLen = static_cast<uint16_t>(gf.ScriptLen + OBJ_COMMAND_BYTES);
     std::memcpy(m_bytes.data() + offsetof(GAMEFLOW, ScriptLen), &gf.ScriptLen, 2);
 
-    if (!zerlege(error)) return false;                // Blockgrenzen neu einlesen
+    if (!parse(error)) return false;                // Blockgrenzen neu einlesen
     changed = true;
     return true;
 }
@@ -321,24 +321,24 @@ bool ScriptDat::clearLevelFlags(const std::string& fileName, uint16_t mask, bool
 // Wiederholbar: steht der Befehl fuer dieses Objekt schon da, passiert
 // nichts.
 //----------------------------------------------------------------------------
-bool ScriptDat::addInvBefehl(uint8_t op, const std::string& levelName, int invObjekt,
+bool ScriptDat::addInvCommand(uint8_t op, const std::string& levelName, int invObject,
                               bool& changed, std::string& error, bool force)
 {
     changed = false;
-    if (invObjekt < 0 || invObjekt > 255)
+    if (invObject < 0 || invObject > 255)
     { error = "Inventarnummer ausserhalb 0..255"; return false; }
 
     size_t idx = 0;
-    if (!findeLevel(levelName, idx)) { error = "Level nicht im Skript: " + levelName; return false; }
+    if (!findLevel(levelName, idx)) { error = "Level nicht im Skript: " + levelName; return false; }
 
     // Schon da? Und wo faengt CMD_LEVEL an?
     size_t vorLevel = std::string::npos;
-    for (size_t q = m_blockAn[idx]; q < m_blockBis[idx]; )
+    for (size_t q = m_blockStart[idx]; q < m_blockEnd[idx]; )
     {
         const int len = nutzlast(m_bytes[q]);
         if (len < 0) break;
         if (!force && m_bytes[q] == op && q + 1 < m_bytes.size() &&
-            m_bytes[q + 1] == static_cast<uint8_t>(invObjekt))
+            m_bytes[q + 1] == static_cast<uint8_t>(invObject))
             return true;                          // nimmt es schon weg
         if (m_bytes[q] == 0x81) { vorLevel = q; break; }
         q += 1 + len;
@@ -358,7 +358,7 @@ bool ScriptDat::addInvBefehl(uint8_t op, const std::string& levelName, int invOb
         { error = "SCRIPT.DAT: Leveloffset wuerde ueberlaufen"; return false; }
     }
 
-    const uint8_t befehl[TAKEOBJ_BYTES] = { op, static_cast<uint8_t>(invObjekt), 0 };
+    const uint8_t befehl[TAKEOBJ_BYTES] = { op, static_cast<uint8_t>(invObject), 0 };
     m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(vorLevel), befehl, befehl + TAKEOBJ_BYTES);
 
     for (int i = 0; i < m_nLevels; ++i)
@@ -374,11 +374,11 @@ bool ScriptDat::addInvBefehl(uint8_t op, const std::string& levelName, int invOb
     gf.ScriptLen = static_cast<uint16_t>(gf.ScriptLen + TAKEOBJ_BYTES);
     std::memcpy(m_bytes.data() + offsetof(GAMEFLOW, ScriptLen), &gf.ScriptLen, 2);
 
-    if (!zerlege(error)) return false;
+    if (!parse(error)) return false;
     changed = true;
     return true;
 }
-bool ScriptDat::musikWuerfeln(uint64_t seed, int& getauscht, std::string& error)
+bool ScriptDat::shuffleMusic(uint64_t seed, int& getauscht, std::string& error)
 {
     getauscht = 0;
 
@@ -434,16 +434,16 @@ bool ScriptDat::musikWuerfeln(uint64_t seed, int& getauscht, std::string& error)
     return true;
 }
 
-bool ScriptDat::abschnitteWuerfeln(uint64_t seed, std::string& reihenfolge, std::string& error)
+bool ScriptDat::shuffleSections(uint64_t seed, std::string& orderText, std::string& error)
 {
-    reihenfolge.clear();
+    orderText.clear();
 
     // Abschnitt je Level ueber den Dateinamen; alles andere (Titel, GIBBY,
     // DEL, TOM) bleibt auf seinem Slot.
-    const auto abschnitt = [](const std::string& datei) -> int
+    const auto abschnitt = [](const std::string& file) -> int
     {
-        const size_t p = datei.find_last_of('\\');
-        const std::string k = (p == std::string::npos) ? datei : datei.substr(p + 1);
+        const size_t p = file.find_last_of('\\');
+        const std::string k = (p == std::string::npos) ? file : file.substr(p + 1);
         if (k.rfind("ANDREA", 0) == 0) return 0;
         if (k.rfind("JOBY", 0) == 0)   return 1;
         if (k.rfind("ANDY", 0) == 0)   return 2;
@@ -493,25 +493,25 @@ bool ScriptDat::abschnitteWuerfeln(uint64_t seed, std::string& reihenfolge, std:
             const uint16_t o = alt[s];
             std::memcpy(m_bytes.data() + m_scriptOfsAt + 2ull * ziele[z++], &o, 2);
         }
-        if (!reihenfolge.empty()) reihenfolge += " -> ";
-        reihenfolge += namen[a];
+        if (!orderText.empty()) orderText += " -> ";
+        orderText += namen[a];
     }
 
-    return zerlege(error);                                // Caches neu, Bloecke liegen jetzt anders
+    return parse(error);                                // Caches neu, Bloecke liegen jetzt anders
 }
 
-bool ScriptDat::levelWuerfeln(uint64_t seed, bool frei, std::string& reihenfolge, std::string& error)
+bool ScriptDat::shuffleLevels(uint64_t seed, bool frei, std::string& orderText, std::string& error)
 {
-    reihenfolge.clear();
+    orderText.clear();
 
-    const auto kurzname = [](const std::string& datei) -> std::string
+    const auto kurzname = [](const std::string& file) -> std::string
     {
-        const size_t p = datei.find_last_of('\\');
-        return (p == std::string::npos) ? datei : datei.substr(p + 1);
+        const size_t p = file.find_last_of('\\');
+        return (p == std::string::npos) ? file : file.substr(p + 1);
     };
-    const auto abschnitt = [&](const std::string& datei) -> int
+    const auto abschnitt = [&](const std::string& file) -> int
     {
-        const std::string k = kurzname(datei);
+        const std::string k = kurzname(file);
         if (k.rfind("ANDREA", 0) == 0) return 0;
         if (k.rfind("JOBY", 0) == 0)   return 1;
         if (k.rfind("ANDY", 0) == 0)   return 2;
@@ -589,7 +589,7 @@ bool ScriptDat::levelWuerfeln(uint64_t seed, bool frei, std::string& reihenfolge
         }
     }
 
-    if (!zerlege(error)) return false;
+    if (!parse(error)) return false;
 
     // Neue Abfolge als Text (nur die Kampagnen-Level, in Slotreihenfolge).
     std::vector<std::pair<int, std::string>> folge;
@@ -599,35 +599,35 @@ bool ScriptDat::levelWuerfeln(uint64_t seed, bool frei, std::string& reihenfolge
     std::sort(folge.begin(), folge.end());
     for (const auto& f : folge)
     {
-        if (!reihenfolge.empty()) reihenfolge += " ";
-        reihenfolge += f.second;
+        if (!orderText.empty()) orderText += " ";
+        orderText += f.second;
     }
     return true;
 }
 
-int ScriptDat::slotVonLevel(const std::string& levelName) const
+int ScriptDat::slotOfLevel(const std::string& levelName) const
 {
     size_t idx = 0;
-    if (!findeLevel(levelName, idx)) return -1;
+    if (!findLevel(levelName, idx)) return -1;
     return m_ofsIndex[idx];
 }
 
-bool ScriptDat::kettenAufloesen(std::vector<std::string>& notizen, std::string& error)
+bool ScriptDat::resolveChains(std::vector<std::string>& notes, std::string& error)
 {
-    for (size_t i = 0; i < kLevelkettenZahl; ++i)
+    for (size_t i = 0; i < kLevelChainCount; ++i)
     {
-        const Levelkette& k = kLevelketten[i];
-        if (!k.geben) continue;
-        const int sn = slotVonLevel(k.nehmer);
-        const int ss = slotVonLevel(k.spender);
+        const LevelChain& k = kLevelChains[i];
+        if (!k.give) continue;
+        const int sn = slotOfLevel(k.taker);
+        const int ss = slotOfLevel(k.donor);
         if (sn < 0 || ss < 0) continue;                      // Level nicht im Skript: nichts zu tun
 
-        // Seit dem Inventar-Reset je Levelstart (Levelketten.h) wandert kein
+        // Seit dem Inventar-Reset je Levelstart (LevelChains.h) wandert kein
         // Schluessel mehr zwischen Leveln - die Gabe ist darum UNBEDINGT,
         // egal wo der Spender liegt. Die alte Fallunterscheidung (Spender
         // davor / ein Level dazwischen nimmt es weg) ist damit hinfaellig.
         bool ch = false;
-        if (!addGiveObject(k.nehmer, k.inv, ch, error))
+        if (!addGiveObject(k.taker, k.inv, ch, error))
         { error = std::string(k.name) + ": " + error; return false; }
 
         if (k.nameCmd)
@@ -636,18 +636,18 @@ bool ScriptDat::kettenAufloesen(std::vector<std::string>& notizen, std::string& 
             // copyObjectCommand ist wiederholbar und laesst vorhandene stehen.
             bool nch = false;
             std::string nErr;
-            if (!copyObjectCommand(k.spender, k.nehmer, k.nameCmd, nch, nErr))
-                notizen.push_back(std::string(k.name) + ": Namensbefehl nicht kopiert (" + nErr + ")");
+            if (!copyObjectCommand(k.donor, k.taker, k.nameCmd, nch, nErr))
+                notes.push_back(std::string(k.name) + ": Namensbefehl nicht kopiert (" + nErr + ")");
         }
 
-        notizen.push_back(std::string(k.name) + ": per GIVEOBJ gegeben");
+        notes.push_back(std::string(k.name) + ": per GIVEOBJ gegeben");
     }
     return true;
 }
 
-void ScriptDat::randomizerEingriffe(Eingriffe& e)
+void ScriptDat::randomizerChanges(Changes& e)
 {
-    e = Eingriffe();
+    e = Changes();
 
     // 1. Den Ireland-Leveln das Kind-Lara-Bit nehmen.
     //
@@ -659,14 +659,14 @@ void ScriptDat::randomizerEingriffe(Eingriffe& e)
     for (const char* lv : kIreland)
     {
         bool ch = false;
-        if (!clearLevelFlags(lv, GF_YOUNGLARA, ch)) ++e.levelFehlend;
-        else if (ch) ++e.flagsGeaendert;
+        if (!clearLevelFlags(lv, GF_YOUNGLARA, ch)) ++e.levelsMissing;
+        else if (ch) ++e.flagsChanged;
     }
 
     // Kennt das Skript die Ireland-Level nicht, ist es keines von Chronicles.
     // Dann wird hier gar nichts mehr angefasst - und der Aufrufer speichert
     // nicht.
-    if (e.levelFehlend > 0) return;
+    if (e.levelsMissing > 0) return;
 
     // 2. joby3 bekommt den KEY8-Eintrag aus joby2.
     //
@@ -680,10 +680,10 @@ void ScriptDat::randomizerEingriffe(Eingriffe& e)
     // Scheitert es, bleibt es bei der Notiz: das Level ist spielbar, der
     // Schluessel heisst halt falsch. Ein Abbruch waere die haertere Strafe.
     bool keyCh = false;
-    if (copyObjectCommand("joby2", "joby3", cmdKey(8), keyCh, e.keyFehler))
+    if (copyObjectCommand("joby2", "joby3", cmdKey(8), keyCh, e.keyError))
     {
-        e.keyKopiert = keyCh;
-        e.keyFehler.clear();
+        e.keyCopied = keyCh;
+        e.keyError.clear();
     }
 
     // 3. rich2 nimmt Lara die Pistolen ab.
@@ -701,14 +701,14 @@ void ScriptDat::randomizerEingriffe(Eingriffe& e)
     // und gibt zwei (7, 30) - die Pistolen stehen nur nicht dabei. Genau da
     // gehoeren sie hin. Munition gleich mit, sonst bleibt ein Eintrag ohne
     // Waffe im Inventar stehen.
-    for (int obj : { INV_PISTOLEN, INV_PISTOLEN_MUNI })
+    for (int obj : { INV_PISTOLS, INV_PISTOLS_AMMO })
     {
         bool ch = false;
         std::string tErr;
         if (!addTakeObject("rich2", obj, ch, tErr))
-            e.pistolenFehler = tErr;
+            e.pistolError = tErr;
         else if (ch)
-            ++e.pistolenWeg;
+            ++e.pistolsRemoved;
     }
 
     // 4. joby3 nimmt Lara NICHT mehr die Waffen ab.
@@ -719,16 +719,16 @@ void ScriptDat::randomizerEingriffe(Eingriffe& e)
     // ChefControl seine Lebenspunkte nie abfragte. Beides passt nicht mehr:
     // der Randomizer stellt ueberall Gegner hin, und der Koch hat jetzt
     // seine Todesbehandlung (chef.cpp). Also weg mit den vier Wegnahmen.
-    static const int kJoby3Waffen[] = { 0 /*Uzi*/, INV_PISTOLEN, 3 /*Revolver*/, 20 /*Lasersight*/ };
+    static const int kJoby3Waffen[] = { 0 /*Uzi*/, INV_PISTOLS, 3 /*Revolver*/, 20 /*Lasersight*/ };
 
     for (int obj : kJoby3Waffen)
     {
         bool ch = false;
         std::string wErr;
-        if (!removeInvBefehl(0xDA, "joby3", obj, ch, wErr))
-            e.waffenFehler = wErr;
+        if (!removeInvCommand(0xDA, "joby3", obj, ch, wErr))
+            e.weaponError = wErr;
         else if (ch)
-            ++e.joby3Waffen;
+            ++e.joby3Weapons;
     }
 }
 
@@ -742,24 +742,24 @@ bool ScriptDat::save(const std::wstring& path, std::string& error) const
     return true;
 }
 
-bool ScriptDat::addTakeObject(const std::string& levelName, int invObjekt, bool& changed, std::string& error)
+bool ScriptDat::addTakeObject(const std::string& levelName, int invObject, bool& changed, std::string& error)
 {
-    return addInvBefehl(0xDA, levelName, invObjekt, changed, error);      // CMD_TAKEOBJ
+    return addInvCommand(0xDA, levelName, invObject, changed, error);      // CMD_TAKEOBJ
 }
 
-bool ScriptDat::addGiveObject(const std::string& levelName, int invObjekt, bool& changed, std::string& error)
+bool ScriptDat::addGiveObject(const std::string& levelName, int invObject, bool& changed, std::string& error)
 {
-    return addInvBefehl(0xD9, levelName, invObjekt, changed, error);      // CMD_GIVEOBJ
+    return addInvCommand(0xD9, levelName, invObject, changed, error);      // CMD_GIVEOBJ
 }
 
-bool ScriptDat::nimmtObjekt(size_t idx, int invObjekt) const
+bool ScriptDat::takesObject(size_t idx, int invObject) const
 {
-    for (size_t q = m_blockAn[idx]; q < m_blockBis[idx]; )
+    for (size_t q = m_blockStart[idx]; q < m_blockEnd[idx]; )
     {
         const int len = nutzlast(m_bytes[q]);
         if (len < 0) break;
         if (m_bytes[q] == 0xDA && q + 1 < m_bytes.size() &&
-            m_bytes[q + 1] == static_cast<uint8_t>(invObjekt))
+            m_bytes[q + 1] == static_cast<uint8_t>(invObject))
             return true;
         if (m_bytes[q] == 0x81) break;                      // CMD_LEVEL: Blockkopf zu Ende
         q += 1 + len;
@@ -767,14 +767,14 @@ bool ScriptDat::nimmtObjekt(size_t idx, int invObjekt) const
     return false;
 }
 
-bool ScriptDat::gibtObjekt(size_t idx, int invObjekt) const
+bool ScriptDat::givesObject(size_t idx, int invObject) const
 {
-    for (size_t q = m_blockAn[idx]; q < m_blockBis[idx]; )
+    for (size_t q = m_blockStart[idx]; q < m_blockEnd[idx]; )
     {
         const int len = nutzlast(m_bytes[q]);
         if (len < 0) break;
         if (m_bytes[q] == 0xD9 && q + 1 < m_bytes.size() &&
-            m_bytes[q + 1] == static_cast<uint8_t>(invObjekt))
+            m_bytes[q + 1] == static_cast<uint8_t>(invObject))
             return true;
         if (m_bytes[q] == 0x81) break;
         q += 1 + len;
@@ -782,18 +782,18 @@ bool ScriptDat::gibtObjekt(size_t idx, int invObjekt) const
     return false;
 }
 
-bool ScriptDat::inventarAufraeumen(std::vector<std::string>& notizen, std::string& error)
+bool ScriptDat::cleanupInventory(std::vector<std::string>& notes, std::string& error)
 {
-    // Siehe Levelketten.h: die Schluesselfamilie ist generisch benannt, ein
+    // Siehe LevelChains.h: die Schluesselfamilie ist generisch benannt, ein
     // mitgeschleppter "Garden Key" WIRD im naechsten Level zu etwas anderem.
     // Also: beim Start jedes Levels alles wegnehmen, was ein FRUEHERES Level
     // anbieten konnte und das weder dieses noch ein spaeteres Level per
     // Kette importiert. Die Crossbow-Familie ("Grappling Gun") ueberall
     // ausser in rich3.
-    const auto kurz = [](const std::string& datei) -> std::string
+    const auto kurz = [](const std::string& file) -> std::string
     {
-        const size_t p = datei.find_last_of('\\');
-        std::string k = (p == std::string::npos) ? datei : datei.substr(p + 1);
+        const size_t p = file.find_last_of('\\');
+        std::string k = (p == std::string::npos) ? file : file.substr(p + 1);
         for (char& c : k) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
         return k;
     };
@@ -841,7 +841,7 @@ bool ScriptDat::inventarAufraeumen(std::vector<std::string>& notizen, std::strin
             // Menge am Ende auf genau eins. Ohne das ueberlebte eine
             // mitgeschleppte Kopie, und ein gezaehltes Puzzle-Item stand
             // doppelt im Inventar ("2 x Katapult", vom Nutzer gesehen).
-            if (gibtObjekt(idx, inv) && !gibtObjektNachWegnahme(idx, inv)) wiedergeben.push_back(inv);
+            if (givesObject(idx, inv) && !givesObjectAfterTake(idx, inv)) wiedergeben.push_back(inv);
             if (std::find(nehmen.begin(), nehmen.end(), inv) == nehmen.end()) nehmen.push_back(inv);
         };
         for (int n = 1; n <= 8; ++n)
@@ -855,12 +855,12 @@ bool ScriptDat::inventarAufraeumen(std::vector<std::string>& notizen, std::strin
         }
         nimm(INV_CROWBAR);
         if (!gleich(name, "RICH3"))
-            for (const int* c = kCrossbowFamilie; *c; ++c) nimm(*c);
+            for (const int* c = kCrossbowFamily; *c; ++c) nimm(*c);
 
         for (int inv : nehmen)
         {
             bool ch = false;
-            if (!addTakeObject(name, inv, ch, error))     // Kurzname - findeLevel vergleicht ohne Pfad
+            if (!addTakeObject(name, inv, ch, error))     // Kurzname - findLevel vergleicht ohne Pfad
             { error = name + ": " + error; return false; }
         }
         if (!nehmen.empty())
@@ -868,7 +868,7 @@ bool ScriptDat::inventarAufraeumen(std::vector<std::string>& notizen, std::strin
             std::string z = name + ": raeumt " + std::to_string(nehmen.size()) + " Inventarplaetze auf (";
             for (size_t n = 0; n < nehmen.size() && n < 6; ++n) z += (n ? "," : "") + std::to_string(nehmen[n]);
             if (nehmen.size() > 6) z += ",...";
-            notizen.push_back(z + ")");
+            notes.push_back(z + ")");
         }
 
         // ... und die Gaben des Blocks danach neu setzen (force: der alte
@@ -876,7 +876,7 @@ bool ScriptDat::inventarAufraeumen(std::vector<std::string>& notizen, std::strin
         for (int inv : wiedergeben)
         {
             bool ch = false;
-            if (!addInvBefehl(0xD9, name, inv, ch, error, true))
+            if (!addInvCommand(0xD9, name, inv, ch, error, true))
             { error = name + ": " + error; return false; }
         }
     }
@@ -885,17 +885,17 @@ bool ScriptDat::inventarAufraeumen(std::vector<std::string>& notizen, std::strin
 
 // Steht im Block ein GIVEOBJ fuer dieses Objekt HINTER einem TAKEOBJ? Genau
 // das legt der Aufraeumer an - die Abfrage macht ihn wiederholbar.
-bool ScriptDat::gibtObjektNachWegnahme(size_t idx, int invObjekt) const
+bool ScriptDat::givesObjectAfterTake(size_t idx, int invObject) const
 {
     bool wegnahmeGesehen = false;
 
-    for (size_t q = m_blockAn[idx]; q < m_blockBis[idx]; )
+    for (size_t q = m_blockStart[idx]; q < m_blockEnd[idx]; )
     {
         const int len = nutzlast(m_bytes[q]);
         if (len < 0) break;
         if (m_bytes[q] == 0xDA) wegnahmeGesehen = true;
         if (wegnahmeGesehen && m_bytes[q] == 0xD9 && q + 1 < m_bytes.size() &&
-            m_bytes[q + 1] == static_cast<uint8_t>(invObjekt))
+            m_bytes[q + 1] == static_cast<uint8_t>(invObject))
             return true;
         if (m_bytes[q] == 0x81) break;
         q += 1 + len;
@@ -903,21 +903,21 @@ bool ScriptDat::gibtObjektNachWegnahme(size_t idx, int invObjekt) const
     return false;
 }
 
-bool ScriptDat::removeInvBefehl(uint8_t op, const std::string& levelName, int invObjekt,
+bool ScriptDat::removeInvCommand(uint8_t op, const std::string& levelName, int invObject,
                                 bool& changed, std::string& error)
 {
     changed = false;
 
     size_t idx = 0;
-    if (!findeLevel(levelName, idx)) { error = "Level nicht im Skript: " + levelName; return false; }
+    if (!findLevel(levelName, idx)) { error = "Level nicht im Skript: " + levelName; return false; }
 
     size_t stelle = std::string::npos;
-    for (size_t q = m_blockAn[idx]; q < m_blockBis[idx]; )
+    for (size_t q = m_blockStart[idx]; q < m_blockEnd[idx]; )
     {
         const int len = nutzlast(m_bytes[q]);
         if (len < 0) break;
         if (m_bytes[q] == op && q + 1 < m_bytes.size() &&
-            m_bytes[q + 1] == static_cast<uint8_t>(invObjekt))
+            m_bytes[q + 1] == static_cast<uint8_t>(invObject))
         { stelle = q; break; }
         if (m_bytes[q] == 0x81) break;
         q += 1 + len;
@@ -927,7 +927,7 @@ bool ScriptDat::removeInvBefehl(uint8_t op, const std::string& levelName, int in
     m_bytes.erase(m_bytes.begin() + static_cast<ptrdiff_t>(stelle),
                   m_bytes.begin() + static_cast<ptrdiff_t>(stelle + TAKEOBJ_BYTES));
 
-    // Genau die Gegenrichtung zu addInvBefehl: jeder Block HINTER der
+    // Genau die Gegenrichtung zu addInvCommand: jeder Block HINTER der
     // Loeschstelle rueckt um die Befehlslaenge vor.
     for (int i = 0; i < m_nLevels; ++i)
     {
@@ -945,7 +945,7 @@ bool ScriptDat::removeInvBefehl(uint8_t op, const std::string& levelName, int in
     gf.ScriptLen = static_cast<uint16_t>(gf.ScriptLen - TAKEOBJ_BYTES);
     std::memcpy(m_bytes.data() + offsetof(GAMEFLOW, ScriptLen), &gf.ScriptLen, 2);
 
-    if (!zerlege(error)) return false;
+    if (!parse(error)) return false;
     changed = true;
     return true;
 }

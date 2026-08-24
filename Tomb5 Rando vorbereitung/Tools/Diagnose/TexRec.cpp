@@ -4,7 +4,7 @@
 // Aufruf: TexRec <level.trc> [erster] [anzahl]
 //
 // Gebraucht fuer #90: um aus TR3-Objekttexturen gueltige TR5-Eintraege zu
-// bauen, muss man wissen, welche Werte drawtype und flag dort ueberhaupt
+// bauen, muss man wissen, welche Values drawtype und flag dort ueberhaupt
 // annehmen - besonders, wie sich Vierecke von Dreiecken unterscheiden.
 // Ablesen statt raten.
 //
@@ -38,7 +38,7 @@ int main(int argc, char** argv)
     size_t at = 0; int32_t n = 0;
     if (!lvl.debugTexinfoBlock(at, n)) { std::printf("Kein Texinfo-Block\n"); return 1; }
     std::printf("%s: %d Texinfos\n\n", argv[1], n);
-    // Verteilung ueber ALLE Eintraege: welche Werte kommen ueberhaupt vor?
+    // Verteilung ueber ALLE Eintraege: welche Values kommen ueberhaupt vor?
     {
         int mitBit15 = 0, ohneBit15 = 0, dreiecke = 0;
         std::vector<int> drawArten, flagArten;
@@ -62,9 +62,9 @@ int main(int argc, char** argv)
         }
         std::printf("  tpage mit Bit15: %d, ohne: %d\n", mitBit15, ohneBit15);
         std::printf("  vermutliche Dreiecke (u4/v4 == u3/v3): %d\n", dreiecke);
-        std::printf("  drawtype-Werte:");
+        std::printf("  drawtype-Values:");
         for (int x : drawArten) std::printf(" %d", x);
-        std::printf("\n  flag-Werte:");
+        std::printf("\n  flag-Values:");
         for (int x : flagArten) std::printf(" %04X", x);
         std::printf("\n\n");
     }

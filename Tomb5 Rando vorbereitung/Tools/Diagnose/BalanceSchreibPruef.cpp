@@ -5,16 +5,16 @@
 // Bauen (64 Bit, im Ordner Bittenichtbitdefender):
 //   set R=..\..\Tomb5 Native win 11 fix\TR5Randomizer\src
 //   cl /nologo /EHsc /std:c++17 /I "%R%" BalanceSchreibPruef.cpp
-//       "%R%\core\BalanceDatei.cpp" "%R%\core\DataFolder.cpp"
+//       "%R%\core\BalanceFile.cpp" "%R%\core\DataFolder.cpp"
 //       /Fe:BalanceSchreibPruef.exe
-#include "core/BalanceDatei.h"
+#include "core/BalanceFile.h"
 #include "core/DataFolder.h"
 
 #include <cstdio>
 #include <string>
 #include <windows.h>
 
-static int fehler = 0;
+static int error = 0;
 
 static void pruefe(const char* was, bool ok, const char* zusatz = "")
 {
@@ -23,7 +23,7 @@ static void pruefe(const char* was, bool ok, const char* zusatz = "")
     else
     {
         std::printf("    FEHLER %s %s\n", was, zusatz);
-        fehler++;
+        error++;
     }
 }
 
@@ -34,7 +34,7 @@ static void pruefeZahl(const char* was, int ist, int soll)
     else
     {
         std::printf("    FEHLER %-32s = %d, erwartet %d\n", was, ist, soll);
-        fehler++;
+        error++;
     }
 }
 
@@ -71,10 +71,10 @@ int main()
 
     std::printf("--- 1) Datei fehlt: kurze Datei mit den drei Zeilen entsteht\n");
     {
-        BalanceDatei::Werte w;
-        w.waffenSchaden = 150; w.gegnerLeben = 75; w.gegnerSchaden = 125;
+        BalanceFile::Values w;
+        w.weaponDamage = 150; w.enemyHealth = 75; w.enemyDamage = 125;
         std::string err;
-        pruefe("schreiben meldet Erfolg", BalanceDatei::schreiben(ordner, w, &err), err.c_str());
+        pruefe("write meldet Erfolg", BalanceFile::write(ordner, w, &err), err.c_str());
 
         const std::string t = liesDatei();
         pruefe("WaffenSchaden steht drin", t.find("WaffenSchaden") != std::string::npos);
@@ -82,10 +82,10 @@ int main()
         pruefe("GegnerSchaden steht drin", t.find("GegnerSchaden") != std::string::npos);
         pruefe("Kopfzeile erklaert die Herkunft", t.find("TR5 Randomizer") != std::string::npos);
 
-        const BalanceDatei::Werte z = BalanceDatei::lesen(ordner);
-        pruefeZahl("gelesen waffenSchaden", z.waffenSchaden, 150);
-        pruefeZahl("gelesen gegnerLeben", z.gegnerLeben, 75);
-        pruefeZahl("gelesen gegnerSchaden", z.gegnerSchaden, 125);
+        const BalanceFile::Values z = BalanceFile::read(ordner);
+        pruefeZahl("gelesen weaponDamage", z.weaponDamage, 150);
+        pruefeZahl("gelesen enemyHealth", z.enemyHealth, 75);
+        pruefeZahl("gelesen enemyDamage", z.enemyDamage, 125);
     }
 
     std::printf("--- 2) Vollstaendige Datei: nur die drei Zeilen aendern sich\n");
@@ -103,9 +103,9 @@ int main()
             "; Schlusskommentar\r\n";
         schreibeDatei(vorher);
 
-        BalanceDatei::Werte w;
-        w.waffenSchaden = 200; w.gegnerLeben = 50; w.gegnerSchaden = 175;
-        BalanceDatei::schreiben(ordner, w, nullptr);
+        BalanceFile::Values w;
+        w.weaponDamage = 200; w.enemyHealth = 50; w.enemyDamage = 175;
+        BalanceFile::write(ordner, w, nullptr);
 
         const std::string t = liesDatei();
         pruefe("Pistolen = 42 unangetastet", t.find("Pistolen               = 42") != std::string::npos);
@@ -116,10 +116,10 @@ int main()
         pruefe("Schlusskommentar steht noch da", t.find("; Schlusskommentar") != std::string::npos);
         pruefe("keine Zeile dazugekommen", t.find("TR5 Randomizer") == std::string::npos);
 
-        const BalanceDatei::Werte z = BalanceDatei::lesen(ordner);
-        pruefeZahl("neu waffenSchaden", z.waffenSchaden, 200);
-        pruefeZahl("neu gegnerLeben", z.gegnerLeben, 50);
-        pruefeZahl("neu gegnerSchaden", z.gegnerSchaden, 175);
+        const BalanceFile::Values z = BalanceFile::read(ordner);
+        pruefeZahl("neu weaponDamage", z.weaponDamage, 200);
+        pruefeZahl("neu enemyHealth", z.enemyHealth, 50);
+        pruefeZahl("neu enemyDamage", z.enemyDamage, 175);
 
         // Zeilenzahl muss gleich geblieben sein.
         auto zaehle = [](const std::string& s)
@@ -130,28 +130,28 @@ int main()
     std::printf("--- 3) Alte Datei ohne die drei Zeilen: sie kommen ans Ende\n");
     {
         schreibeDatei("Pistolen = 1\r\nLP_Hund = 18\r\n");
-        BalanceDatei::Werte w;
-        w.waffenSchaden = 120; w.gegnerLeben = 90; w.gegnerSchaden = 110;
-        BalanceDatei::schreiben(ordner, w, nullptr);
+        BalanceFile::Values w;
+        w.weaponDamage = 120; w.enemyHealth = 90; w.enemyDamage = 110;
+        BalanceFile::write(ordner, w, nullptr);
 
         const std::string t = liesDatei();
         pruefe("Pistolen steht noch da", t.find("Pistolen = 1") != std::string::npos);
         pruefe("LP_Hund steht noch da", t.find("LP_Hund = 18") != std::string::npos);
-        const BalanceDatei::Werte z = BalanceDatei::lesen(ordner);
-        pruefeZahl("nachgetragen waffenSchaden", z.waffenSchaden, 120);
-        pruefeZahl("nachgetragen gegnerSchaden", z.gegnerSchaden, 110);
+        const BalanceFile::Values z = BalanceFile::read(ordner);
+        pruefeZahl("nachgetragen weaponDamage", z.weaponDamage, 120);
+        pruefeZahl("nachgetragen enemyDamage", z.enemyDamage, 110);
     }
 
     std::printf("--- 4) Klein/Grossschreibung, Tabs, letzte Zeile ohne Umbruch\n");
     {
         schreibeDatei("gegnerleben\t=\t42\r\nPistolen = 1");
-        BalanceDatei::Werte w;
-        w.waffenSchaden = 100; w.gegnerLeben = 60; w.gegnerSchaden = 100;
-        BalanceDatei::schreiben(ordner, w, nullptr);
+        BalanceFile::Values w;
+        w.weaponDamage = 100; w.enemyHealth = 60; w.enemyDamage = 100;
+        BalanceFile::write(ordner, w, nullptr);
 
         const std::string t = liesDatei();
-        const BalanceDatei::Werte z = BalanceDatei::lesen(ordner);
-        pruefeZahl("kleingeschriebene Zeile ersetzt", z.gegnerLeben, 60);
+        const BalanceFile::Values z = BalanceFile::read(ordner);
+        pruefeZahl("kleingeschriebene Zeile ersetzt", z.enemyHealth, 60);
         pruefe("nur eine GegnerLeben-Zeile", t.find("egnerLeben") == t.rfind("egnerLeben"));
         pruefe("Pistolen ohne Umbruch ueberlebt", t.find("Pistolen = 1") != std::string::npos);
     }
@@ -159,28 +159,28 @@ int main()
     std::printf("--- 5) Auskommentierte Zeile gilt nicht als Treffer\n");
     {
         schreibeDatei("; GegnerLeben = 999\r\nPistolen = 1\r\n");
-        BalanceDatei::Werte w;
-        w.gegnerLeben = 80;
-        BalanceDatei::schreiben(ordner, w, nullptr);
+        BalanceFile::Values w;
+        w.enemyHealth = 80;
+        BalanceFile::write(ordner, w, nullptr);
 
         const std::string t = liesDatei();
         pruefe("Kommentar unveraendert", t.find("; GegnerLeben = 999") != std::string::npos);
-        pruefeZahl("echte Zeile angehaengt", BalanceDatei::lesen(ordner).gegnerLeben, 80);
+        pruefeZahl("echte Zeile angehaengt", BalanceFile::read(ordner).enemyHealth, 80);
     }
 
     std::printf("--- 6) Ohne Spielordner passiert nichts\n");
     {
         std::string err;
-        BalanceDatei::Werte w;
-        pruefe("schreiben meldet Fehler", !BalanceDatei::schreiben(L"", w, &err));
+        BalanceFile::Values w;
+        pruefe("write meldet Fehler", !BalanceFile::write(L"", w, &err));
         pruefe("mit Begruendung", !err.empty(), err.c_str());
-        pruefeZahl("lesen liefert 100", BalanceDatei::lesen(L"").gegnerLeben, 100);
+        pruefeZahl("read liefert 100", BalanceFile::read(L"").enemyHealth, 100);
     }
 
     DeleteFileW(PathUtil::join(ordner, L"Balance.txt").c_str());
     RemoveDirectoryW(ordner.c_str());
 
     std::printf("\n%s (%d Abweichungen)\n",
-                fehler ? "FEHLGESCHLAGEN" : "ALLES IN ORDNUNG", fehler);
-    return fehler ? 1 : 0;
+                error ? "FEHLGESCHLAGEN" : "ALLES IN ORDNUNG", error);
+    return error ? 1 : 0;
 }

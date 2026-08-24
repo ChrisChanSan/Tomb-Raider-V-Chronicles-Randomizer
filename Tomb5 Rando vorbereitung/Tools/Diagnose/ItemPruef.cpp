@@ -31,10 +31,10 @@ int main(int argc, char** argv)
     }
 
     Tr5Level lvl;
-    std::string fehler;
-    if (!lvl.load(zuW(argv[1]), fehler))
+    std::string error;
+    if (!lvl.load(zuW(argv[1]), error))
     {
-        std::printf("Nicht ladbar: %s\n", fehler.c_str());
+        std::printf("Nicht ladbar: %s\n", error.c_str());
         return 1;
     }
 
@@ -65,7 +65,7 @@ int main(int argc, char** argv)
         // Die OCB steckt in den unteren 6 Bit von trigger_flags - aber die
         // oberen Bits sind KEIN Beiwerk, sie tragen eigene Bedeutungen, und
         // wer nur die 6 Bit ansieht, wird in die Irre gefuehrt. Beispiel
-        // (2026-08-22, kostete eine falsche Levelkette): Andy2s Puzzle Hole 2
+        // (2026-08-22, kostete eine falsche LevelChain): Andy2s Puzzle Hole 2
         // hat trigger_flags 1058. Maskiert sieht das wie OCB 34 aus; in
         // Wahrheit heisst >1024 in PuzzleHoleCollision (pickup.cpp:186)
         // "PuzzleType 2" und startet beim Loesen die Cutscene

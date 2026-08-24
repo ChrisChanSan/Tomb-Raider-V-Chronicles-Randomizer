@@ -155,11 +155,11 @@ int main(int argc, char** argv)
     uint32_t animEnde = nAnims;
     for (const Moveable& m : mv)
         if (m.animIndex > z->animIndex && m.animIndex < animEnde) animEnde = m.animIndex;
-    const uint32_t animZahl = animEnde - z->animIndex;
+    const uint32_t animCount = animEnde - z->animIndex;
 
     std::printf("Objekt %d: %u Meshes, %u Knochen, Anims %u..%u (%u)\n",
                 suche, z->numMeshes, z->numMeshes ? z->numMeshes - 1 : 0,
-                z->animIndex, animEnde - 1, animZahl);
+                z->animIndex, animEnde - 1, animCount);
 
     // --- Weiter bis zu den Objekttexturen (fuer die Texturarbeit, #90) -----
     // Die strittigen Feldgroessen im Dateiende werden wieder durchprobiert
@@ -348,7 +348,7 @@ int main(int argc, char** argv)
     std::vector<uint8_t> anims;
     int ausserhalb = 0;
     uint16_t animMin = 0xFFFF, animMax = 0;
-    for (uint32_t i = 0; i < animZahl; ++i)
+    for (uint32_t i = 0; i < animCount; ++i)
     {
         const size_t a = animAt + size_t(z->animIndex + i) * 32;
 
@@ -375,7 +375,7 @@ int main(int argc, char** argv)
     put32(out, 2);                 // Version 2: mit Texturteil am Ende
     put32(out, uint32_t(suche));
     put32(out, z->numMeshes);
-    put32(out, animZahl);
+    put32(out, animCount);
     put32(out, frameBytes / 2);  // nur die Scheibe dieses Objekts, in Worten
     put32(out, uint32_t(z->numMeshes ? (z->numMeshes - 1) * 4 : 0));
     put32(out, nSC); put32(out, nAD); put32(out, nCmd);
@@ -397,7 +397,7 @@ int main(int argc, char** argv)
     //
     // Ein unveraendert uebernommenes TR3-Wort liest TR5 also mit einem
     // Viertel des Winkels - und weil TR3 den Ueberlauf ins Negative nutzt,
-    // kippen grosse Werte ganz. Betroffen sind genau die EINACHSGELENKE:
+    // kippen grosse Values ganz. Betroffen sind genau die EINACHSGELENKE:
     // Kiefer, Knoechel, Zehen. Im Spiel gesehen als verdrehte Fuesse und ein
     // umgestuelptes Maul, waehrend der Rumpf stimmte - der dreht um alle drei
     // Achsen und laeuft damit durch den identischen Zweiwort-Fall.
@@ -410,7 +410,7 @@ int main(int argc, char** argv)
         int umgerechnet = 0, ausserhalb = 0;
         std::vector<uint32_t> erledigt;
 
-        for (uint32_t a = 0; a < animZahl; ++a)
+        for (uint32_t a = 0; a < animCount; ++a)
         {
             const size_t ao = animAt + size_t(z->animIndex + a) * 32;
             const uint32_t fo = ru32(r.b, ao);
@@ -573,7 +573,7 @@ int main(int argc, char** argv)
                 meshBytes, gesQuads, gesTris, gesFarbig);
     std::printf("  Groesstes Mesh: %d Vertices\n", maxVerts);
     std::printf("  Anims: %u a 40 Byte, Frame-Scheibe %u Byte (%u..%u), Knochen %u Worte\n",
-                animZahl, frameBytes, z->frameOffset, frameEnde,
+                animCount, frameBytes, z->frameOffset, frameEnde,
                 z->numMeshes ? (z->numMeshes - 1) * 4 : 0);
     std::printf("  Frame-Zeiger ausserhalb der Scheibe: %d   Sprungziele %u..%u (Scheibe %u..%u)\n",
                 ausserhalb, animMin, animMax, z->animIndex, animEnde - 1);

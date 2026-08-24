@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-#include "BalanceDatei.h"
+#include "BalanceFile.h"
 #include "DataFolder.h"
 
 #include <cstdio>
@@ -27,7 +27,7 @@ namespace
     struct Zeile
     {
         const char* name;
-        int BalanceDatei::Werte::* feld;
+        int BalanceFile::Values::* feld;
         const char* notiz;
     };
 
@@ -35,22 +35,22 @@ namespace
     // Datei genauso aussieht wie eine vom Spiel erzeugte.
     const Zeile kZeilen[] =
     {
-        { "WaffenSchaden", &BalanceDatei::Werte::waffenSchaden,
+        { "WaffenSchaden", &BalanceFile::Values::weaponDamage,
           "  auf alle Waffen Laras. 0 macht sie wirkungslos" },
-        { "GegnerLeben",   &BalanceDatei::Werte::gegnerLeben,
+        { "GegnerLeben",   &BalanceFile::Values::enemyHealth,
           "  50 = halb so zaeh, 200 = doppelt so zaeh" },
-        { "GegnerSchaden", &BalanceDatei::Werte::gegnerSchaden,
+        { "GegnerSchaden", &BalanceFile::Values::enemyDamage,
           "  0 macht alle Gegner harmlos" },
     };
 
-    std::wstring dateiPfad(const std::wstring& spielOrdner)
+    std::wstring dateiPfad(const std::wstring& gameDir)
     {
-        return PathUtil::join(spielOrdner, L"Balance.txt");
+        return PathUtil::join(gameDir, L"Balance.txt");
     }
 
-    bool lesenRoh(const std::wstring& pfad, std::string& inhalt)
+    bool lesenRoh(const std::wstring& path, std::string& inhalt)
     {
-        FILE* f = _wfopen(pfad.c_str(), L"rb");
+        FILE* f = _wfopen(path.c_str(), L"rb");
         if (!f) return false;
 
         char puffer[4096];
@@ -95,21 +95,21 @@ namespace
     }
 }
 
-namespace BalanceDatei
+namespace BalanceFile
 {
 
-bool schreiben(const std::wstring& spielOrdner, const Werte& w, std::string* fehlerText)
+bool write(const std::wstring& gameDir, const Values& w, std::string* errorText)
 {
-    if (spielOrdner.empty())
+    if (gameDir.empty())
     {
-        if (fehlerText) *fehlerText = "Kein Spielordner gewaehlt.";
+        if (errorText) *errorText = "Kein Spielordner gewaehlt.";
         return false;
     }
 
-    const std::wstring pfad = dateiPfad(spielOrdner);
+    const std::wstring path = dateiPfad(gameDir);
 
     std::string alt;
-    const bool hatDatei = lesenRoh(pfad, alt);
+    const bool hatDatei = lesenRoh(path, alt);
 
     // In Zeilen zerlegen, Zeilenende je Zeile merken. Die Datei der Engine ist
     // CRLF; wer sie in einem anderen Editor speichert, kann LF hinterlassen -
@@ -182,27 +182,27 @@ bool schreiben(const std::wstring& spielOrdner, const Werte& w, std::string* feh
         aus += enden[i];
     }
 
-    FILE* f = _wfopen(pfad.c_str(), L"wb");
+    FILE* f = _wfopen(path.c_str(), L"wb");
     if (!f)
     {
-        if (fehlerText) *fehlerText = "Balance.txt laesst sich nicht schreiben.";
+        if (errorText) *errorText = "Balance.txt laesst sich nicht write.";
         return false;
     }
 
     const bool ok = aus.empty() || std::fwrite(aus.data(), 1, aus.size(), f) == aus.size();
     std::fclose(f);
 
-    if (!ok && fehlerText) *fehlerText = "Balance.txt konnte nicht vollstaendig geschrieben werden.";
+    if (!ok && errorText) *errorText = "Balance.txt konnte nicht vollstaendig geschrieben werden.";
     return ok;
 }
 
-Werte lesen(const std::wstring& spielOrdner)
+Values read(const std::wstring& gameDir)
 {
-    Werte w;
-    if (spielOrdner.empty()) return w;
+    Values w;
+    if (gameDir.empty()) return w;
 
     std::string inhalt;
-    if (!lesenRoh(dateiPfad(spielOrdner), inhalt)) return w;
+    if (!lesenRoh(dateiPfad(gameDir), inhalt)) return w;
 
     for (size_t i = 0; i < inhalt.size();)
     {

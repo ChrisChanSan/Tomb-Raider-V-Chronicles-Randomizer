@@ -215,9 +215,9 @@ function Lies-Option([string]$o) {
     return $e
 }
 
-function Lies-Liste([string]$pfad) {
+function Lies-Liste([string]$path) {
     $level = @(); $warn = @()
-    foreach ($z in (Get-Content $pfad)) {
+    foreach ($z in (Get-Content $path)) {
         if ($z -match '^\s*#') { continue }
         if ($z -notmatch '^\s*(\w+)\.trc\s+(\d+)\s+(\d+)\s+\(([^)]*)\)\s*(.*)$') { continue }
         $lvl = $Matches[1]; $anzahl = [int]$Matches[2]; $typ = [int]$Matches[3]
@@ -286,41 +286,41 @@ function Lies-Liste([string]$pfad) {
 
         $level += [PSCustomObject]@{ level=$lvl; anzahl=$anzahl; typeId=$typ; ids=$ids; stellen=$stellen; extras=$extras }
     }
-    return [PSCustomObject]@{ level = $level; warnungen = $warn }
+    return [PSCustomObject]@{ level = $level; warnings = $warn }
 }
 
-if (-not (Test-Path $Ordner)) { Write-Output "Ordner nicht gefunden: $Ordner"; exit 1 }
+if (-not (Test-Path $Ordner)) { Write-Output "Ordner nicht found: $Ordner"; exit 1 }
 
 # Verfuegbare Listen einsammeln
-$gefunden = @()
+$found = @()
 foreach ($f in (Get-ChildItem $Ordner -Filter *.txt | Sort-Object Name)) {
     if ($f.Name.StartsWith('_')) { continue }
     if ($f.BaseName -notmatch '^(.+)_(Glitchless|Glitched)$') {
         Write-Output "  uebersprungen (Name passt nicht auf Autor_Kategorie): $($f.Name)"
         continue
     }
-    $gefunden += [PSCustomObject]@{ autor = $Matches[1]; kategorie = $Matches[2]; datei = $f.FullName }
+    $found += [PSCustomObject]@{ author = $Matches[1]; category = $Matches[2]; file = $f.FullName }
 }
 
 if ($Liste -or ($Autor -eq "" -and $Kategorie -eq "")) {
     Write-Output "Verfuegbare Secret-Listen in $Ordner :"
     foreach ($k in @('Glitchless','Glitched')) {
-        $inKat = @($gefunden | Where-Object { $_.kategorie -eq $k })
-        Write-Output "  Dropdown ${k}: $(if($inKat.Count){ ($inKat.autor) -join ', ' } else { '(keine)' })"
+        $inKat = @($found | Where-Object { $_.category -eq $k })
+        Write-Output "  Dropdown ${k}: $(if($inKat.Count){ ($inKat.author) -join ', ' } else { '(keine)' })"
     }
     Write-Output "  Ohne Liste immer verfuegbar: Vanilla, Pool"
     if (-not $Liste) { exit 0 }
     exit 0
 }
 
-$treffer = @($gefunden | Where-Object { ($Autor -eq "" -or $_.autor -eq $Autor) -and ($Kategorie -eq "" -or $_.kategorie -eq $Kategorie) })
+$treffer = @($found | Where-Object { ($Autor -eq "" -or $_.author -eq $Autor) -and ($Kategorie -eq "" -or $_.category -eq $Kategorie) })
 if ($treffer.Count -eq 0) { Write-Output "Keine Liste fuer Autor '$Autor' / Kategorie '$Kategorie'"; exit 1 }
 
 $alles = @()
 foreach ($t in $treffer) {
-    $p = Lies-Liste $t.datei
-    foreach ($w in $p.warnungen) { Write-Output "  WARNUNG $($t.autor)_$($t.kategorie): $w" }
-    Write-Output "=== $($t.autor) / $($t.kategorie) ==="
+    $p = Lies-Liste $t.file
+    foreach ($w in $p.warnings) { Write-Output "  WARNUNG $($t.author)_$($t.category): $w" }
+    Write-Output "=== $($t.author) / $($t.category) ==="
     foreach ($l in $p.level) {
         if ($LevelName -ne "" -and $l.level -ne $LevelName) { continue }
         $ziel = if ($l.stellen.Count -gt 0) {
@@ -350,7 +350,7 @@ foreach ($t in $treffer) {
             }
         }
     }
-    $alles += [PSCustomObject]@{ autor=$t.autor; kategorie=$t.kategorie; level=$p.level }
+    $alles += [PSCustomObject]@{ author=$t.author; category=$t.category; level=$p.level }
 }
 
 if ($AlsJson -ne "") {
@@ -375,7 +375,7 @@ if ($AlsJson -ne "") {
 # in der Liste der Hinzufuegungen.
 if ($AlsPatch -ne "") {
     if ($LevelName -eq "" -or $Trc -eq "") { Write-Output "AlsPatch braucht -LevelName und -Trc"; exit 1 }
-    if (-not (Test-Path $Trc)) { Write-Output "Zieldatei nicht gefunden: $Trc"; exit 1 }
+    if (-not (Test-Path $Trc)) { Write-Output "Zieldatei nicht found: $Trc"; exit 1 }
 
     $planLevel = $null
     foreach ($a in $alles) { foreach ($l in $a.level) { if ($l.level -eq $LevelName) { $planLevel = $l } } }
@@ -458,7 +458,7 @@ if ($AlsPatch -ne "") {
             }
             continue
         }
-        # Portal: beide Seiten in einem Eintrag; die Werte gehen unveraendert
+        # Portal: beide Seiten in einem Eintrag; die Values gehen unveraendert
         # an makePortal, das die Vorbedingungen (Sichtfenster!) selbst prueft.
         if ($e.art -eq 'portal') {
             $portale += [PSCustomObject]@{

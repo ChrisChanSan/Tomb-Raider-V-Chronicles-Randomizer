@@ -28,7 +28,7 @@ namespace
 {
     const int SZ_ANIM = 40, SZ_CHANGE = 6, SZ_RANGE = 8, SZ_OBJ = 20;
 
-    // Dieselben Werte wie im Namensraum von Tr5Level.cpp (dort Zeile 794ff).
+    // Dieselben Values wie im Namensraum von Tr5Level.cpp (dort Zeile 794ff).
     // Bewusst abgelesen und nicht geraten; wenn sie sich dort je aendern,
     // faellt es hier auf, weil der Sound-Block nicht mehr aufgeht.
     constexpr int SAMPLE_LUT_SIZE = 450;        // MAX_SAMPLES, global/types.h
@@ -68,20 +68,20 @@ namespace
     }
 }
 
-bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
-                               std::vector<std::pair<int,int>>& zuordnung,
+bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& package, int basisId,
+                               std::vector<std::pair<int,int>>& mapping,
                                std::string& error,
                                const std::vector<int>* lautProzent)
 {
     char buf[256];
-    zuordnung.clear();
+    mapping.clear();
 
     if (!m_soundOk) { error = "Ziel-Level: Sound-Block nicht deutbar"; return false; }
-    if (paket.size() < 12 || std::memcmp(paket.data(), "T35S", 4) != 0)
+    if (package.size() < 12 || std::memcmp(package.data(), "T35S", 4) != 0)
     { error = "Kein TR3-Soundpaket (Kennung T35S fehlt)"; return false; }
-    if (g32(paket, 4) != 2) { error = "Unbekannte Soundpaketversion"; return false; }
+    if (g32(package, 4) != 2) { error = "Unbekannte Soundpaketversion"; return false; }
 
-    const uint32_t anzahl = g32(paket, 8);
+    const uint32_t anzahl = g32(package, 8);
     if (basisId < 0 || basisId + int(anzahl) > SAMPLE_LUT_SIZE)
     { error = "Zielplaetze liegen ausserhalb der Soundmap"; return false; }
 
@@ -94,7 +94,7 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
     // und grundsaetzlich zu hoch - im Spiel gehoert, der Nutzer hat es am
     // Original gegengehoert.
     //
-    // Deshalb feste, neutrale Werte nach dem Muster, das Andrea1s eigene
+    // Deshalb feste, neutrale Values nach dem Muster, das Andrea1s eigene
     // Eintraege zeigen (vol 191, rad 13, pitch 0, Flags 0x0004 = eine
     // Variante, keine Verstimmung). Ein Klang, der so eingetragen ist, klingt
     // genau wie seine Datei.
@@ -102,29 +102,29 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
     const int8_t  RAD = 13;       // Hoerweite in Sektoren, dito
     const uint16_t FLAGS = 0x0004;   // Bits 2-5 = 1 Variante, sonst nichts
 
-    // --- Erst alles einsammeln, dann schreiben ----------------------------
+    // --- Erst alles einsammeln, dann write ----------------------------
     struct Welle { int32_t uncomp; std::vector<uint8_t> wav; };
-    struct Klang { int origId; std::vector<Welle> wellen; };
-    std::vector<Klang> klaenge;
+    struct Klang { int origId; std::vector<Welle> waves; };
+    std::vector<Klang> sounds;
     int32_t samplesGesamt = 0;
     {
         size_t p = 12;
         for (uint32_t i = 0; i < anzahl; ++i)
         {
-            if (p + 10 > paket.size()) { error = "Soundpaket endet vorzeitig"; return false; }
+            if (p + 10 > package.size()) { error = "Soundpaket endet vorzeitig"; return false; }
             Klang k;
-            k.origId = g16(paket, p);
+            k.origId = g16(package, p);
             p += 8;                                   // Volume, Chance, Chars: siehe oben
-            const uint16_t varianten = g16(paket, p); p += 2;
+            const uint16_t varianten = g16(package, p); p += 2;
             if (varianten < 1 || varianten > 15) { error = "Unplausible Variantenzahl"; return false; }
 
             for (uint16_t v = 0; v < varianten; ++v)
             {
-                if (p + 4 > paket.size()) { error = "Soundpaket endet vor einer Variante"; return false; }
-                const uint32_t len = g32(paket, p); p += 4;
-                if (p + len > paket.size()) { error = "Wave laeuft aus dem Paket"; return false; }
+                if (p + 4 > package.size()) { error = "Soundpaket endet vor einer Variante"; return false; }
+                const uint32_t len = g32(package, p); p += 4;
+                if (p + len > package.size()) { error = "Wave laeuft aus dem Paket"; return false; }
                 Welle w;
-                w.wav.assign(paket.begin() + p, paket.begin() + p + len);
+                w.wav.assign(package.begin() + p, package.begin() + p + len);
                 p += len;
 
                 // uncomp_size sauber setzen: Laenge des data-Blocks. Die
@@ -137,10 +137,10 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
                     if (!std::memcmp(&w.wav[q], "data", 4)) { w.uncomp = int32_t(cl); break; }
                     q += 8 + cl + (cl & 1);
                 }
-                k.wellen.push_back(std::move(w));
+                k.waves.push_back(std::move(w));
             }
-            samplesGesamt += int32_t(k.wellen.size());
-            klaenge.push_back(std::move(k));
+            samplesGesamt += int32_t(k.waves.size());
+            sounds.push_back(std::move(k));
         }
     }
 
@@ -155,7 +155,7 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
         return false;
     }
 
-    for (size_t i = 0; i < klaenge.size(); ++i)
+    for (size_t i = 0; i < sounds.size(); ++i)
     {
         const int ziel = basisId + int(i);
         if (soundInfoIndex(ziel) >= 0)
@@ -169,7 +169,7 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
     // --- Infos einfuegen (liegen IM Hauptblock, der waechst) --------------
     std::vector<uint8_t> roh;
     int32_t laufSample = m_nSamples;
-    for (size_t i = 0; i < klaenge.size(); ++i)
+    for (size_t i = 0; i < sounds.size(); ++i)
     {
         // SAMPLE_INFO: short number, uchar volume, char radius,
         //              char randomness, char pitch, short flags
@@ -178,7 +178,7 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
         // SAMPLES - die Engine wuerfelt sample = number + Zufall(N)
         // (sound.cpp:280). Die Zahl steht in Bit 2-5 der Flags. Wer
         // stattdessen N Infos anlegt, holt sich die Falle aus #76.
-        const int varianten = static_cast<int>(klaenge[i].wellen.size());
+        const int varianten = static_cast<int>(sounds[i].waves.size());
         std::vector<uint8_t> info(SZ_SAMPLE_INFO, 0);
         const int16_t nummer = static_cast<int16_t>(laufSample);
         std::memcpy(info.data(), &nummer, 2);
@@ -212,18 +212,18 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
     const size_t einfuegenAn = m_infosAt + static_cast<size_t>(m_nInfos) * SZ_SAMPLE_INFO;
     m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(einfuegenAn), roh.begin(), roh.end());
 
-    for (size_t i = 0; i < klaenge.size(); ++i)
+    for (size_t i = 0; i < sounds.size(); ++i)
     {
         const int ziel = basisId + int(i);
         const int16_t lut = static_cast<int16_t>(m_nInfos + int32_t(i));
         std::memcpy(m_bytes.data() + m_lutAt + static_cast<size_t>(ziel) * 2, &lut, 2);
-        zuordnung.push_back({ klaenge[i].origId, ziel });
+        mapping.push_back({ sounds[i].origId, ziel });
     }
 
-    m_nInfos += int32_t(klaenge.size());
+    m_nInfos += int32_t(sounds.size());
     std::memcpy(m_bytes.data() + m_numInfosAt, &m_nInfos, 4);
 
-    verschiebeSound(roh.size(), einfuegenAn);
+    shiftSound(roh.size(), einfuegenAn);
     if (m_itemCountOffset >= einfuegenAn) m_itemCountOffset += roh.size();
 
     m_mainSize += roh.size();
@@ -238,8 +238,8 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
     // --- Sampledaten ans Dateiende ---------------------------------------
     // Reihenfolge zaehlt: die Varianten eines Klangs muessen unmittelbar
     // aufeinander folgen, sonst greift die Zufallsauswahl der Engine daneben.
-    for (const Klang& k : klaenge)
-        for (const Welle& w : k.wellen)
+    for (const Klang& k : sounds)
+        for (const Welle& w : k.waves)
         {
             const int32_t uc = w.uncomp, cs = static_cast<int32_t>(w.wav.size());
             const uint8_t* pu = reinterpret_cast<const uint8_t*>(&uc);
@@ -251,7 +251,7 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& paket, int basisId,
     return true;
 }
 
-bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlot,
+bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& package, int zielSlot,
                                   int texinfoIndex, std::string& error)
 {
     char buf[256];
@@ -261,7 +261,7 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlo
     // verschoben, ohne die Karte nachzuziehen.
     if (!reparse(error)) { error = "Blockkarte: " + error; return false; }
 
-    if (paket.size() < 48 || std::memcmp(paket.data(), "T35H", 4) != 0)
+    if (package.size() < 48 || std::memcmp(package.data(), "T35H", 4) != 0)
     { error = "Kein TR3-Paket (Kennung T35H fehlt)"; return false; }
     if (zielSlot <= 0) { error = "Zielslot muss groesser 0 sein"; return false; }
     // texinfoIndex < 0 heisst: die Faces tragen schon gueltige Texinfos
@@ -270,15 +270,15 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlo
     { error = "Texinfo-Index liegt nicht im Ziel"; return false; }
 
     size_t p = 4;
-    const uint32_t version   = g32(paket, p); p += 4;
+    const uint32_t version   = g32(package, p); p += 4;
     p += 4;                                              // objectId, hier ohne Belang
-    const uint32_t nMeshes   = g32(paket, p); p += 4;
-    const uint32_t nAnims    = g32(paket, p); p += 4;
-    const uint32_t nFrameW   = g32(paket, p); p += 4;
-    const uint32_t nBoneW    = g32(paket, p); p += 4;
-    const uint32_t nSC       = g32(paket, p); p += 4;
-    const uint32_t nAD       = g32(paket, p); p += 4;
-    const uint32_t nCmd      = g32(paket, p); p += 4;
+    const uint32_t nMeshes   = g32(package, p); p += 4;
+    const uint32_t nAnims    = g32(package, p); p += 4;
+    const uint32_t nFrameW   = g32(package, p); p += 4;
+    const uint32_t nBoneW    = g32(package, p); p += 4;
+    const uint32_t nSC       = g32(package, p); p += 4;
+    const uint32_t nAD       = g32(package, p); p += 4;
+    const uint32_t nCmd      = g32(package, p); p += 4;
     p += 8;                                              // Quell-Offsets, schon rebasiert
     // Version 2 haengt hinter dem Kommandoblock einen Texturteil an. Der wird
     // hier nicht gelesen - dafuer gibt es addTexturesFromTr3 -, stoert aber
@@ -290,12 +290,12 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlo
     std::vector<uint32_t> meshStart;
     for (uint32_t i = 0; i < nMeshes; ++i)
     {
-        if (p + 4 > paket.size()) { error = "Paket endet in der Meshliste"; return false; }
-        const uint32_t len = g32(paket, p); p += 4;
-        if (p + len > paket.size()) { error = "Mesh laeuft aus dem Paket"; return false; }
+        if (p + 4 > package.size()) { error = "Paket endet in der Meshliste"; return false; }
+        const uint32_t len = g32(package, p); p += 4;
+        if (p + len > package.size()) { error = "Mesh laeuft aus dem Paket"; return false; }
         if (len & 1) { error = "Mesh hat ungerade Laenge"; return false; }
         meshStart.push_back(static_cast<uint32_t>(meshPack.size()));
-        meshPack.insert(meshPack.end(), paket.begin() + p, paket.begin() + p + len);
+        meshPack.insert(meshPack.end(), package.begin() + p, package.begin() + p + len);
         p += len;
     }
 
@@ -312,7 +312,7 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlo
                            if (texinfoIndex >= 0) s16(meshPack, texAt, static_cast<uint16_t>(texinfoIndex));
                        }))
         {
-            std::snprintf(buf, sizeof(buf), "Mesh %u laesst sich nicht als TR5-Mesh lesen", i);
+            std::snprintf(buf, sizeof(buf), "Mesh %u laesst sich nicht als TR5-Mesh read", i);
             error = buf;
             return false;
         }
@@ -320,7 +320,7 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlo
 
     auto hol = [&](size_t n) -> std::vector<uint8_t> {
         std::vector<uint8_t> v;
-        if (p + n <= paket.size()) { v.assign(paket.begin() + p, paket.begin() + p + n); p += n; }
+        if (p + n <= package.size()) { v.assign(package.begin() + p, package.begin() + p + n); p += n; }
         return v;
     };
     std::vector<uint8_t> boneBytes  = hol(static_cast<size_t>(nBoneW) * 4);
@@ -331,9 +331,9 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& paket, int zielSlo
     std::vector<uint8_t> cmdBytes   = hol(static_cast<size_t>(nCmd) * 2);
     // Version 1 endet hier genau; Version 2 haengt den Texturteil an, der von
     // addTexturesFromTr3 gelesen wird und hier folgerichtig uebrig bleibt.
-    if (version == 1 && p != paket.size())
+    if (version == 1 && p != package.size())
     { error = "Paketgroesse passt nicht zu den Kopfangaben"; return false; }
-    if (p > paket.size()) { error = "Paket kuerzer als seine Kopfangaben"; return false; }
+    if (p > package.size()) { error = "Paket kuerzer als seine Kopfangaben"; return false; }
 
     // --- Rebasen auf die Zaehlerstaende des Ziels --------------------------
     const int32_t dstMeshBytes = m_meshData.count * 2;

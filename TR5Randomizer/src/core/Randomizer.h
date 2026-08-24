@@ -16,7 +16,7 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 #pragma once
-#include "Boden.h"
+#include "Floor.h"
 #include "Json.h"
 #include "Rng.h"
 
@@ -150,7 +150,7 @@ inline bool isWithinCarryBox(int bx, int by, int bz, int px, int py, int pz)
 }
 
 // numX/numZ sind das ROHMASS aus dem Raumkopf - der Wandring rundherum zaehlt
-// mit, begehbar sind also (numX-2) * (numZ-2) Felder. Gebraucht wird das in
+// mit, walkable sind also (numX-2) * (numZ-2) Felder. Gebraucht wird das in
 // kRaumbedarf (Randomizer.cpp): dort entscheidet die Raumgroesse, welche
 // Gegner ueberhaupt hinein duerfen.
 struct RoomOrigin { int room = 0; int originX = 0; int originZ = 0; int numX = 0; int numZ = 0; };
@@ -297,7 +297,7 @@ struct CoupledTrigger
 // Ein Sound, den ein Gegner braucht, den SEIN Level aber nicht mitfuehrt.
 //
 // Ein Level traegt nur die Samples, die es selbst benoetigt. Kommt ein Gegner
-// darin vanilla nicht vor, fehlen sie - er steht dann stumm da. Woher Ersatz
+// darin vanilla nicht vor, fehlen sie - er steht dann muted da. Woher Ersatz
 // kommt, ist Kuration (ENEMY_SOUND_FIX in ZoneAnalyse.ps1) und steht fertig im
 // Zonen-Export; hier wird nur noch weitergereicht.
 //----------------------------------------------------------------------------
@@ -361,7 +361,7 @@ struct RandoInput
 
     // Items, die ihr Antitrigger nicht mehr anfassen soll (Flagbit 0x80).
     // Kuratiert, unabhaengig von der Gegner-Automatik: rich2s Tuer 171 soll
-    // offen bleiben, sobald sie einmal offen war.
+    // unresolved bleiben, sobald sie einmal unresolved war.
     std::set<int>            antitriggerImmunItems;
 
     // Items, auf die ein AntiTrigger oder HeavyAntiTrigger zeigt. Zeigt so
@@ -387,7 +387,7 @@ struct RandoInput
     // streut nur Typen, deren Modell da ist; ein Pickup ohne Modell waere ein
     // unsichtbarer Stolperstein. Fuer das Waffenset kommt hinzu, was der
     // Import erst hineinbringt - das steht dann nicht in dieser Liste.
-    std::set<int>            vorhandeneSlots;
+    std::set<int>            presentSlots;
 
     // Typen, die dieses Level NICHT tragen darf. Gefuellt von der
     // Levelpruefung in ApplyPatch (markTriggerSafeSectors): Andrea2 traegt
@@ -398,7 +398,7 @@ struct RandoInput
     // ihn meiden - ein dort platzierter Pierre friert ein und stirbt in
     // einer Endlosschleife (im Spiel gesehen). Ersetzen verbietet sich:
     // die Finale-Cutscene braucht genau diesen Satz.
-    std::set<int>            verboteneTypen;
+    std::set<int>            forbiddenTypes;
 
     // Raeume, in denen keine Waffe liegen darf, und was als Waffe zaehlt.
     // joby3: eine zufaellig in den Chef-Bereich gewanderte Schrotflinte loest
@@ -459,7 +459,7 @@ struct RandoInput
     // (markTriggerSafeSectors) - der Zonen-Export kennt je Sektor nur ein
     // floorY und kann eben und geneigt nicht unterscheiden.
     //
-    // Gebraucht fuer zwei Dinge, beide in bodenLageAn (Boden.h):
+    // Gebraucht fuer zwei Dinge, beide in floorPosAt (Floor.h):
     //  1. Das ITEM-y. Ein Item wird von der Engine genau auf seinem y
     //     gezeichnet; das floorY des Sektors ist auf einer Schraege aber die
     //     hoechste Ecke - ohne Umrechnung haengt das Item in der Luft (im
@@ -472,7 +472,7 @@ struct RandoInput
     // Gegner brauchen beides nicht zwingend - die setzt die Engine jeden
     // Frame per GetHeight auf den Boden - bekommen ihr y aber trotzdem
     // ausgerechnet, damit sie nicht einen halben Sektor tief einfallen.
-    std::map<long long, SchraegeInfo> schraegen;
+    std::map<long long, SlopeInfo> slopes;
 };
 
 struct RandoOptions
@@ -515,14 +515,14 @@ struct RandoOptions
     // Vom Nutzer abgewaehlte Gegnerarten (Fenster "Gegnerarten", #95).
     // Gespeichert wird die ABWAHL, nicht die Auswahl: so ist jede spaeter
     // hinzukommende Art automatisch an, ohne dass alte Einstellungsdateien
-    // sie stumm ausschliessen.
+    // sie muted ausschliessen.
     //
     // Der Filter beschneidet AUSSCHLIESSLICH die Wahl aus dem Pool. Was eine
     // gewaehlte Zeile technisch nachzieht, sieht ihn nie: der Anim-Basistyp
     // der Soldatenfamilie (basisSlot), Pflichtbegleiter wie der Geschosskern
     // der Hydra (begleiter) und die MESHSWAP-Haelften (swapVon/swapDst).
     // Sonst stuende ein Gegner ohne seinen Animationssatz im Level.
-    std::set<int> gesperrteGegner;
+    std::set<int> disabledEnemies;
 
     // Fremdinstallationen fuer die Gaeste aus Tomb Raider 3 (#92, #102).
     //
@@ -579,16 +579,16 @@ struct RandoReport
     std::string error;
 };
 
-// Eine im Pool waehlbare Gegnerart, fuer das Fenster "Gegnerarten" (#95).
+// Eine im Pool waehlbare EnemyKind, fuer das Fenster "Gegnerarten" (#95).
 //
-// "quelle" sagt, aus welchem Spiel die Art stammt (#102):
+// "source" sagt, aus welchem Spiel die Art stammt (#102):
 //   nullptr    steckt in Tomb Raider 5 selbst
 //   "tr3"      braucht eine Tomb-Raider-3-Installation
 //   "tr3gold"  braucht The Lost Artifact
 //
 // Wir liefern keine Spieldaten mit. Ohne den passenden Pfad bleibt die Art in
 // der Oberflaeche ausgegraut, statt im Lauf zu scheitern.
-struct Gegnerart { int typeId; const char* name; const char* quelle; };
+struct EnemyKind { int typeId; const char* name; const char* source; };
 
 namespace Rando
 {
@@ -598,7 +598,7 @@ namespace Rando
     // muss mit ihr mitwachsen - wer dort eine Zeile ergaenzt, ergaenzt sie
     // hier. Eine Art, die hier fehlt, laesst sich nicht abwaehlen; eine, die
     // nur hier steht, hat einen wirkungslosen Haken.
-    std::vector<Gegnerart> gegnerarten();
+    std::vector<EnemyKind> enemyKinds();
 
     // Liest Zonen-Export und Level-Info zu einem Eingabesatz zusammen und
     // leitet dabei die triggergebundenen Items ab.
@@ -640,12 +640,12 @@ namespace Rando
                           bool mustBeOnIsland,
                           int itemOcb = 0);
 
-    // Bodenhoehe und Belaufbarkeit an einem Punkt des Sektors (lokalX/lokalZ
+    // Bodenhoehe und Belaufbarkeit an einem Punkt des Sektors (localX/localZ
     // in 0..1023, ueblich 512 + Typversatz). yOut wird IMMER gefuellt - auch
     // auf einer Rutsche stimmt die Hoehe, nur stehen darf dort niemand.
     // Sektoren ohne Neigungseintrag sind eben: yOut = floorY, true.
-    bool bodenAn(const RandoInput& in, const ZoneSector& s,
-                 int lokalX, int lokalZ, int& yOut);
+    bool floorAt(const RandoInput& in, const ZoneSector& s,
+                 int localX, int localZ, int& yOut);
 
     // Debugwerkzeug: legt Marker auf Sektoren, statt Items zu verschieben.
     //

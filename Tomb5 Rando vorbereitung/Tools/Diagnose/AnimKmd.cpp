@@ -31,10 +31,10 @@ int main(int argc, char** argv)
     }
 
     Tr5Level lvl;
-    std::string fehler;
-    if (!lvl.load(zuW(argv[1]), fehler))
+    std::string error;
+    if (!lvl.load(zuW(argv[1]), error))
     {
-        std::printf("Nicht ladbar: %s\n", fehler.c_str());
+        std::printf("Nicht ladbar: %s\n", error.c_str());
         return 1;
     }
 
@@ -42,7 +42,7 @@ int main(int argc, char** argv)
     int32_t nAnims = 0, nCmd = 0;
     if (!lvl.debugAnimBlock(animAt, nAnims) || !lvl.debugCommandBlock(cmdAt, nCmd))
     {
-        std::printf("Anim- oder Kommandoblock nicht gefunden\n");
+        std::printf("Anim- oder Kommandoblock nicht found\n");
         return 1;
     }
     const std::vector<uint8_t>& b = lvl.debugBytes();

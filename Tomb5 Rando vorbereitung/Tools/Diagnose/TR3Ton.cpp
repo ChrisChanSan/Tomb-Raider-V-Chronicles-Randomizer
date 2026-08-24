@@ -2,7 +2,7 @@
 // TR3Ton - loest eine TR3-Sound-ID bis zum Wave in MAIN.SFX auf (#93).
 //
 // Aufruf: TR3Ton <level.TR2> <MAIN.SFX> <soundId> [weitere ids...]
-//         TR3Ton <level.TR2> <MAIN.SFX> -paket <ziel.bin> <id> [ids...]
+//         TR3Ton <level.TR2> <MAIN.SFX> -package <ziel.bin> <id> [ids...]
 //
 // Eine ID darf als "88=250" geschrieben werden: der Klang ist im Ziel unter
 // 88 erreichbar (so rufen ihn die Anim-Kommandos), die Daten kommen aber von
@@ -185,7 +185,7 @@ int main(int argc, char** argv)
 
     // --- Wave-Modus: die Leveltabellen umgehen ----------------------------
     //
-    // Aufruf: TR3Ton <lvl.TR2> <MAIN.SFX> -wellen <ziel.bin> <id>:<wave>[,<wave>...]
+    // Aufruf: TR3Ton <lvl.TR2> <MAIN.SFX> -waves <ziel.bin> <id>:<wave>[,<wave>...]
     //
     // Gebraucht fuer chunnel.TR2 (TR3 Gold): dort liefert der Weg ueber
     // SoundMap/SoundDetails/SampleIndices nachweislich falsche Waves - meine
@@ -197,7 +197,7 @@ int main(int argc, char** argv)
     // Wave-Nummer direkt genommen. Die ID bleibt trotzdem noetig: unter ihr
     // rufen die Anim-Kommandos den Klang, und danach richtet sich das
     // Umbiegen im Einsetzer.
-    if (argc >= 6 && std::strcmp(argv[3], "-wellen") == 0)
+    if (argc >= 6 && std::strcmp(argv[3], "-waves") == 0)
     {
         std::vector<uint8_t> out;
         out.push_back('T'); out.push_back('3'); out.push_back('5'); out.push_back('S');
@@ -216,22 +216,22 @@ int main(int argc, char** argv)
             const char* dp = std::strchr(s, ':');
             if (!dp) { std::printf("  %s: erwartet <id>:<wave>[,<wave>]\n", s); return 2; }
 
-            std::vector<int> wellen;
+            std::vector<int> waves;
             for (const char* q = dp + 1; *q; )
             {
-                wellen.push_back(std::atoi(q));
+                waves.push_back(std::atoi(q));
                 while (*q && *q != ',') ++q;
                 if (*q == ',') ++q;
             }
 
-            for (int w : wellen)
+            for (int w : waves)
                 if (w < 1 || size_t(w) > waveAt.size())
                 { std::printf("  Wave %d gibt es in MAIN.SFX nicht\n", w); return 1; }
 
             p16(uint16_t(id)); p16(0); p16(0); p16(0);
-            p16(uint16_t(wellen.size()));
-            std::printf("  %3d  %9zu ", id, wellen.size());
-            for (int w : wellen)
+            p16(uint16_t(waves.size()));
+            std::printf("  %3d  %9zu ", id, waves.size());
+            for (int w : waves)
             {
                 const size_t k = size_t(w) - 1;              // TRsound zaehlt ab 1
                 p32(waveLen[k]);
@@ -252,11 +252,11 @@ int main(int argc, char** argv)
     }
 
     // Paketmodus? Dann ist argv[3] der Schalter und argv[4] das Ziel.
-    const bool paket = (argc >= 6 && std::strcmp(argv[3], "-paket") == 0);
-    const int erstesId = paket ? 5 : 3;
+    const bool package = (argc >= 6 && std::strcmp(argv[3], "-package") == 0);
+    const int erstesId = package ? 5 : 3;
     std::vector<uint8_t> out;
     int imPaket = 0;
-    if (paket)
+    if (package)
     {
         out.push_back('T'); out.push_back('3'); out.push_back('5'); out.push_back('S');
         for (int i = 0; i < 4; ++i) out.push_back(i == 0 ? 2 : 0);   // Version 2
@@ -268,13 +268,13 @@ int main(int argc, char** argv)
     {
         // "88=250": unter 88 erreichbar, Daten von 250 (siehe Kopf).
         int id = std::atoi(argv[a]);
-        int quelle = id;
+        int source = id;
         if (const char* gl = std::strchr(argv[a], '='))
         {
-            quelle = std::atoi(gl + 1);
-            std::printf("  (Klang %d nimmt die Daten von %d)\n", id, quelle);
+            source = std::atoi(gl + 1);
+            std::printf("  (Klang %d nimmt die Daten von %d)\n", id, source);
         }
-        const int nachschlag = quelle;
+        const int nachschlag = source;
         if (nachschlag < 0 || nachschlag >= gutMap) { std::printf("  %3d  ausserhalb der SoundMap\n", id); continue; }
 
         const int16_t det = static_cast<int16_t>(g16(r.b, soundMapAt + size_t(nachschlag) * 2));
@@ -297,7 +297,7 @@ int main(int argc, char** argv)
         std::printf("  %3d  %7d  %6u  %9d  %4u  %-10u  %u\n",
                     id, det, sample, varianten, nr + 1, waveAt[nr], waveLen[nr]);
 
-        if (!paket) continue;
+        if (!package) continue;
 
         // Lautstaerke, Zufallsanteil und Kennungswort aus den SoundDetails
         // mitnehmen - damit der Klang im Ziel so klingt wie in TR3.
@@ -311,7 +311,7 @@ int main(int argc, char** argv)
         // Alle Varianten mitnehmen: sie liegen als AUFEINANDERFOLGENDE
         // Samples hinter dem ersten (die Engine wuerfelt
         // sample = number + Zufall(N)). Beim Laufklang des T-Rex sind es
-        // zwei - genau die Stelle, an der ein Einzelsample falsch klaenge.
+        // zwei - genau die Stelle, an der ein Einzelsample falsch sounds.
         for (int v = 0; v < varZahl; ++v)
         {
             const uint32_t vnr = g32(r.b, indicesAt + size_t(sample + v) * 4);
@@ -324,7 +324,7 @@ int main(int argc, char** argv)
         ++imPaket;
     }
 
-    if (paket)
+    if (package)
     {
         out[8]  = uint8_t(imPaket & 0xFF);
         out[9]  = uint8_t((imPaket >> 8) & 0xFF);

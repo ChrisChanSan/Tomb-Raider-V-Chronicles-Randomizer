@@ -1,7 +1,7 @@
 // Gegenprobe: liefert die Bibliotheksfassung Byte fuer Byte dasselbe Paket
 // wie das Werkzeug TR3Hol? Ohne diesen Nachweis waere der Port ein Umbau ins
 // Blaue - die Formatbruecke ist die empfindlichste Stelle des Projekts.
-#include "core/Tr3Quelle.h"
+#include "core/Tr3Source.h"
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -14,9 +14,9 @@ int main(int argc, char** argv)
     std::wstring wp(p.begin(), p.end());
 
     std::vector<uint8_t> neu;
-    std::string fehler;
-    if (!Tr3Quelle::holeMoveable(wp, std::atoi(argv[2]), neu, fehler))
-    { std::printf("GESCHEITERT: %s\n", fehler.c_str()); return 1; }
+    std::string error;
+    if (!Tr3Source::fetchMoveable(wp, std::atoi(argv[2]), neu, error))
+    { std::printf("GESCHEITERT: %s\n", error.c_str()); return 1; }
 
     std::vector<uint8_t> alt;
     {

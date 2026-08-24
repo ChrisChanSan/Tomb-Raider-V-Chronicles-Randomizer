@@ -40,8 +40,8 @@ int main(int argc, char** argv)
     if (argc < 2) { std::printf("Aufruf: RaumPruef <level.trc> [raum ...]\n"); return 1; }
 
     Tr5Level lvl;
-    std::string fehler;
-    if (!lvl.load(zuW(argv[1]), fehler)) { std::printf("Nicht ladbar: %s\n", fehler.c_str()); return 1; }
+    std::string error;
+    if (!lvl.load(zuW(argv[1]), error)) { std::printf("Nicht ladbar: %s\n", error.c_str()); return 1; }
 
     if (argc > 2)
     {

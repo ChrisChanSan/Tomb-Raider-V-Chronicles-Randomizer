@@ -19,12 +19,12 @@
 
 // Sprache der Oberflaeche (#128). Die Quelltexte tragen die deutschen
 // Original-Strings; T() liefert bei englischer Sprache die Uebersetzung aus
-// der Tabelle in Sprache.cpp. Unbekannte Strings kommen unveraendert zurueck -
+// der Tabelle in Language.cpp. Unbekannte Strings kommen unveraendert zurueck -
 // eine Luecke faellt damit sofort im Bild auf, statt das Programm zu brechen.
 //
 // Vorgabe ist ENGLISCH (Nutzerentscheid 2026-08-24); der Schalter sitzt neben
 // dem Debug-Knopf und landet in der TR5Randomizer.cfg.
 
-extern bool gSpracheDeutsch;
+extern bool gGermanUi;
 
 const char* T(const char* de);

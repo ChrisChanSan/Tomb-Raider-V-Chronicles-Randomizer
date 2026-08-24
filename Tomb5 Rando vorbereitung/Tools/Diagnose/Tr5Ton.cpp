@@ -41,7 +41,7 @@ static uint32_t fnv(const uint8_t* p, size_t n)
     return h;
 }
 
-// Der gespeicherte Sample-Block ist eine komplette WAV-Datei. Kopf lesen,
+// Der gespeicherte Sample-Block ist eine komplette WAV-Datei. Kopf read,
 // ohne ihm zu trauen - genau die Verwechslung (ADPCM als PCM gelesen)
 // waere ein Kandidat fuer den Kreisch-Klang.
 static void waveKopf(const std::vector<uint8_t>& b, const SampleLage& s, char* aus, size_t ausN)
@@ -86,18 +86,18 @@ int main(int argc, char** argv)
     }
 
     Tr5Level lvl;
-    std::string fehler;
-    if (!lvl.load(zuW(argv[1]), fehler))
+    std::string error;
+    if (!lvl.load(zuW(argv[1]), error))
     {
-        std::printf("Nicht ladbar: %s\n", fehler.c_str());
+        std::printf("Nicht ladbar: %s\n", error.c_str());
         return 1;
     }
 
     size_t lutAt = 0, infosAt = 0, numSamplesAt = 0;
     int32_t nInfos = 0, nSamples = 0;
-    if (!lvl.debugKlangBloecke(lutAt, infosAt, nInfos, nSamples))
+    if (!lvl.debugSoundBlocks(lutAt, infosAt, nInfos, nSamples))
     {
-        std::printf("Klangbloecke nicht gefunden\n");
+        std::printf("Klangbloecke nicht found\n");
         return 1;
     }
     lvl.debugSampleArray(numSamplesAt, nSamples);

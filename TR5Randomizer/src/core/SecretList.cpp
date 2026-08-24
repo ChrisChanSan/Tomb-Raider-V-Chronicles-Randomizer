@@ -15,11 +15,11 @@
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-#include "SecretListe.h"
+#include "SecretList.h"
 
 #include "Json.h"
 #include "Tr5Level.h"
-#include "Boden.h"
+#include "Floor.h"
 
 #include <cctype>
 #include <cmath>
@@ -230,10 +230,10 @@ namespace
         return true;
     }
 
-    bool liesListe(const std::wstring& pfad, std::vector<Zeile>& raus,
-                   std::vector<std::string>& warnungen, std::string& error)
+    bool liesListe(const std::wstring& path, std::vector<Zeile>& raus,
+                   std::vector<std::string>& warnings, std::string& error)
     {
-        const std::filesystem::path p(pfad);
+        const std::filesystem::path p(path);
         std::ifstream f(p);
         if (!f) { error = "Secret-Liste nicht lesbar"; return false; }
 
@@ -287,10 +287,10 @@ namespace
             }
 
             if (static_cast<int>(row.ids.size()) != row.anzahl)
-                warnungen.push_back(row.level + ": Anzahl " + std::to_string(row.anzahl) +
+                warnings.push_back(row.level + ": Anzahl " + std::to_string(row.anzahl) +
                                     ", aber " + std::to_string(row.ids.size()) + " Level_ID");
             if (!row.stellen.empty() && row.stellen.size() != row.ids.size())
-                warnungen.push_back(row.level + ": " + std::to_string(row.ids.size()) +
+                warnings.push_back(row.level + ": " + std::to_string(row.ids.size()) +
                                     " Secrets, aber " + std::to_string(row.stellen.size()) + " neue Stellen");
 
             if (pExtra != std::string::npos)
@@ -299,9 +299,9 @@ namespace
                     Option o;
                     std::string unbekannt;
                     if (!liesOption(g, o, unbekannt))
-                    { warnungen.push_back(row.level + ": Option nicht lesbar -> " + g); continue; }
+                    { warnings.push_back(row.level + ": Option nicht lesbar -> " + g); continue; }
                     if (!unbekannt.empty())
-                        warnungen.push_back(row.level + ": nicht verstandener Teil in einer Option -> '" + unbekannt + "'");
+                        warnings.push_back(row.level + ": nicht verstandener Teil in einer Option -> '" + unbekannt + "'");
                     row.extras.push_back(o);
                 }
 
@@ -312,9 +312,9 @@ namespace
     }
 }
 
-std::vector<SecretQuelle> secretQuellenSuchen(const std::wstring& ordner)
+std::vector<SecretSource> findSecretSources(const std::wstring& ordner)
 {
-    std::vector<SecretQuelle> raus;
+    std::vector<SecretSource> raus;
     std::error_code ec;
     for (const auto& e : std::filesystem::directory_iterator(ordner, ec))
     {
@@ -327,23 +327,23 @@ std::vector<SecretQuelle> secretQuellenSuchen(const std::wstring& ordner)
         if (u == std::string::npos) continue;
         const std::string kat = name.substr(u + 1);
         if (klein(kat) != "glitchless" && klein(kat) != "glitched") continue;
-        SecretQuelle q;
-        q.autor = name.substr(0, u);
-        q.kategorie = (klein(kat) == "glitchless") ? "Glitchless" : "Glitched";
-        q.pfad = p.wstring();
+        SecretSource q;
+        q.author = name.substr(0, u);
+        q.category = (klein(kat) == "glitchless") ? "Glitchless" : "Glitched";
+        q.path = p.wstring();
         raus.push_back(q);
     }
     return raus;
 }
 
-bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelName,
+bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName,
                       const Tr5Level& lvl, JsonValue& patchOut,
-                      int& secretsVerschoben,
-                      std::vector<std::string>& warnungen, std::string& error)
+                      int& secretsMoved,
+                      std::vector<std::string>& warnings, std::string& error)
 {
-    secretsVerschoben = 0;
+    secretsMoved = 0;
     std::vector<Zeile> zeilen;
-    if (!liesListe(listenPfad, zeilen, warnungen, error)) return false;
+    if (!liesListe(listPath, zeilen, warnings, error)) return false;
 
     const Zeile* row = nullptr;
     for (const Zeile& z : zeilen)
@@ -353,7 +353,7 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
         // Kein Eintrag heisst: dieses Level bleibt vanilla. Das ist der
         // Normalfall fuer del und richcut2 (Bonuslevel ohne Secrets) und
         // erlaubt, dass eine Autorenliste nur einen Teil der Level abdeckt.
-        warnungen.push_back(levelName + ": kein Eintrag in der Secret-Liste - bleibt vanilla.");
+        warnings.push_back(levelName + ": kein Eintrag in der Secret-Liste - bleibt vanilla.");
         patchOut = JsonValue::makeObject();
         return true;
     }
@@ -374,7 +374,7 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
     {
         Tr5Item it;
         if (!lvl.getItem(id, it) || it.objectNumber != row->typ)
-            warnungen.push_back(levelName + ": Item " + std::to_string(id) +
+            warnings.push_back(levelName + ": Item " + std::to_string(id) +
                                 " ist in der Datei kein Typ " + std::to_string(row->typ));
     }
 
@@ -396,11 +396,11 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
         // nicht. Andrea3s Secret 75 trug OCB 4 (Sockel, vanilla Raum 81);
         // am neuen Platz sucht PickUpCollision per FindPlinth einen Sockel,
         // der dort nicht steht - das Secret lag sichtbar da und war fuer
-        // immer unaufnehmbar (vom Nutzer gefunden, erst dem Schiebeblock
+        // immer unaufnehmbar (vom Nutzer found, erst dem Schiebeblock
         // zugeschrieben).
         e.set("ocb", JsonValue::makeInt(0));
         edits.push(e);
-        ++secretsVerschoben;
+        ++secretsMoved;
     }
 
     // Extras. Neue Items haengen ab der ECHTEN Itemzahl hinten an.
@@ -420,10 +420,10 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
             {
                 const int k = std::atoi(z.c_str() + 3);
                 if (k >= 1 && k <= addZahl) idx = itemBasis + k - 1;
-                else warnungen.push_back(levelName + ": " + z + " gibt es nicht - die Zeile legt " +
+                else warnings.push_back(levelName + ": " + z + " gibt es nicht - die Zeile legt " +
                                          std::to_string(addZahl) + " Items an.");
             }
-            else warnungen.push_back(levelName + ": Triggerziel '" + z + "' nicht verstanden - uebersprungen.");
+            else warnings.push_back(levelName + ": Triggerziel '" + z + "' nicht verstanden - uebersprungen.");
             if (idx >= 0)
             {
                 JsonValue cmd = JsonValue::makeObject();
@@ -441,7 +441,7 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
         if (a == "switch")  return 2;
         if (a == "pickup")  return 4;
         if (a == "trigger") return 0;
-        warnungen.push_back(levelName + ": unbekannte Triggerart '" + art + "' - als einfacher Trigger behandelt.");
+        warnings.push_back(levelName + ": unbekannte Triggerart '" + art + "' - als einfacher Trigger behandelt.");
         return 0;
     };
 
@@ -525,7 +525,7 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
             t.set("room", JsonValue::makeInt(o.room));
             t.set("sectorX", JsonValue::makeInt(o.sx));
             t.set("sectorZ", JsonValue::makeInt(o.sz));
-            t.set("art", JsonValue::makeInt(triggerArtNr(o.triggerArt)));
+            t.set("kind", JsonValue::makeInt(triggerArtNr(o.triggerArt)));
             t.set("timer", JsonValue::makeInt(0));
             t.set("oneShot", JsonValue::makeInt(1));
             t.set("mask", JsonValue::makeInt(31));
@@ -547,10 +547,10 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
         // nicht bedienen konnte (Raum 202 Sektor 1,1 traegt TILT).
         if ((o.typeId >= 258 && o.typeId <= 274) && o.room >= 0)
         {
-            SchraegeInfo si;
+            SlopeInfo si;
             int baseY = 0;
-            if (lvl.floorNeigung(o.room, o.sx, o.sz, si, baseY) > 0)
-                warnungen.push_back(levelName + ": Typ " + std::to_string(o.typeId) +
+            if (lvl.floorSlope(o.room, o.sx, o.sz, si, baseY) > 0)
+                warnings.push_back(levelName + ": Typ " + std::to_string(o.typeId) +
                                     " auf Raum " + std::to_string(o.room) + "(" + std::to_string(o.sx) +
                                     "," + std::to_string(o.sz) + ") steht auf einer SCHRAEGE - Schalter und "
                                     "Schluessellocher sind dort nicht bedienbar (Y-Fenster ist null breit).");
@@ -594,7 +594,7 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
             // Der Trigger klebt am Sektor - bei @LikeItem ohne @Room ist
             // keiner benannt. Bisher braucht das keine Zeile; wer es doch
             // will, gibt @Room zusaetzlich an.
-            warnungen.push_back(levelName + ": Trigger auf einem LikeItem-Eintrag ohne @Room - uebersprungen.");
+            warnings.push_back(levelName + ": Trigger auf einem LikeItem-Eintrag ohne @Room - uebersprungen.");
         }
         else if (!o.triggerArt.empty())
         {
@@ -602,7 +602,7 @@ bool secretPatchBauen(const std::wstring& listenPfad, const std::string& levelNa
             t.set("room", JsonValue::makeInt(o.room));
             t.set("sectorX", JsonValue::makeInt(o.sx));
             t.set("sectorZ", JsonValue::makeInt(o.sz));
-            t.set("art", JsonValue::makeInt(triggerArtNr(o.triggerArt)));
+            t.set("kind", JsonValue::makeInt(triggerArtNr(o.triggerArt)));
             t.set("timer", JsonValue::makeInt(0));
             t.set("oneShot", JsonValue::makeInt(1));
             t.set("mask", JsonValue::makeInt(31));

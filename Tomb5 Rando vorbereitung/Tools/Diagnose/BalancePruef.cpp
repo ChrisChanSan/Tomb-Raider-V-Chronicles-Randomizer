@@ -10,10 +10,10 @@
 //
 // Geprueft wird: Vorlage anlegen und wieder einlesen (sie muss die
 // Voreinstellungen exakt reproduzieren - die Vorlage wird aus derselben
-// Tabelle erzeugt, aus der die Werte kommen), eine verbogene Datei (BOM,
+// Tabelle erzeugt, aus der die Values kommen), eine verbogene Datei (BOM,
 // Klein/Grossschreibung, Tabs, Kommentar hinter dem Wert, unbekannte Zeile,
 // Zeile ohne Gleichheitszeichen, Wert der keine Zahl ist, letzte Zeile ohne
-// Umbruch, Werte ueber und unter der Grenze), die Waffenzuweisung fuer frueh
+// Umbruch, Values ueber und unter der Grenze), die Waffenzuweisung fuer frueh
 // und spaet, die Lebenspunkte je Gegner samt Prozentzeile obendrauf, und der
 // Gegnerschaden bei 0/25/100/1000 Prozent samt Ueberlaufdeckel.
 #include "tomb5/pch.h"
@@ -27,7 +27,7 @@ OBJECT_INFO objects[NUMBER_OBJECTS];
 uchar gfLevelId = 0;
 void Log(const char* s, ...) { (void)s; }
 
-static int fehler = 0;
+static int error = 0;
 
 static void pruefe(const char* was, long ist, long soll)
 {
@@ -36,7 +36,7 @@ static void pruefe(const char* was, long ist, long soll)
 	else
 	{
 		printf("    FEHLER %-24s = %ld, erwartet %ld\n", was, ist, soll);
-		fehler++;
+		error++;
 	}
 }
 
@@ -101,7 +101,7 @@ int main()
 		else
 		{
 			printf("    FEHLER Vorlage weicht von den Voreinstellungen ab\n");
-			fehler++;
+			error++;
 		}
 	}
 
@@ -140,7 +140,7 @@ int main()
 	pruefe("LP_RoemischerGott", balance.lpRoemischerGott, 1);
 	pruefe("S_Hund_Sprung", balance.sHundSprung, 500);
 	pruefe("S_Autogun", balance.sAutogun, 1);
-	pruefe("GegnerLeben", balance.gegnerLeben, 200);
+	pruefe("GegnerLeben", balance.enemyHealth, 200);
 	pruefe("KulissenReichweite", balance.kulissenReichweite, 10);
 
 	printf("--- 4) Waffen setzen, Revolver frueh (gfLevelId 0) und spaet\n");
@@ -162,22 +162,22 @@ int main()
 	pruefe("Lara unberuehrt", objects[LARA].hit_points, 1000);
 	pruefe("Fackel unberuehrt", objects[FLARE_ITEM].hit_points, 256);
 
-	printf("--- 6) Lebenspunkte bei 100 Prozent: nur die eigenen Werte\n");
-	balance.gegnerLeben = 100;
+	printf("--- 6) Lebenspunkte bei 100 Prozent: nur die eigenen Values\n");
+	balance.enemyHealth = 100;
 	gegnerAufstellen();
 	BalanceGegnerSetzen();
 	pruefe("Hund", objects[DOG].hit_points, 5);
 	pruefe("TwoGun unveraendert", objects[TWOGUN].hit_points, 90);
 
 	printf("--- 7) Gegnerschaden\n");
-	balance.gegnerSchaden = 0;
+	balance.enemyDamage = 0;
 	pruefe("0% aus 80", GegnerSchaden(80), 0);
-	balance.gegnerSchaden = 25;
+	balance.enemyDamage = 25;
 	pruefe("25% aus 80", GegnerSchaden(80), 20);
 	pruefe("25% aus 1 (nie 0)", GegnerSchaden(1), 1);
-	balance.gegnerSchaden = 100;
+	balance.enemyDamage = 100;
 	pruefe("100% aus 10000", GegnerSchaden(10000), 10000);
-	balance.gegnerSchaden = 1000;
+	balance.enemyDamage = 1000;
 	pruefe("1000% aus 10000 gedeckelt", GegnerSchaden(10000), 32767);
 
 	printf("--- 7b) WaffenSchaden-Prozentzeile (Regler des Randomizer)\n");
@@ -193,14 +193,14 @@ int main()
 	pruefe("200% Pistolen 10 -> 20", weapons[WEAPON_PISTOLS].damage, 20);
 	pruefe("200% Revolver 6 -> 12", weapons[WEAPON_REVOLVER].damage, 12);
 	pruefe("200% HK ueber Helfer", WaffenSchaden(balance.hkStand), 6);
-	balance.waffenSchaden = 50;
+	balance.weaponDamage = 50;
 	BalanceWaffenSetzen();
 	pruefe("50% Pistolen 10 -> 5", weapons[WEAPON_PISTOLS].damage, 5);
 	pruefe("50% Schrotflinte 3 -> 1", weapons[WEAPON_SHOTGUN].damage, 1);
 	pruefe("50% aus 1 wird nie 0", WaffenSchaden(1), 1);
-	balance.waffenSchaden = 0;
+	balance.weaponDamage = 0;
 	pruefe("0% macht wirkungslos", WaffenSchaden(10), 0);
-	balance.waffenSchaden = 1000;
+	balance.weaponDamage = 1000;
 	pruefe("1000% auf 127 gedeckelt", WaffenSchaden(100), 127);
 
 	printf("--- 8) Alte Datei aus einer frueheren Fassung: nachtragen,\n");
@@ -212,12 +212,12 @@ int main()
 		"KulissenReichweite = 80\r\n");
 	BalanceLaden();
 	pruefe("Pistolen behalten", balance.pistolen, 42);
-	pruefe("GegnerSchaden behalten", balance.gegnerSchaden, 55);
+	pruefe("GegnerSchaden behalten", balance.enemyDamage, 55);
 	pruefe("KulissenReichweite behalten", balance.kulissenReichweite, 80);
 	pruefe("LP_TRex nachgetragen", balance.lpTRex, 800);
 	pruefe("S_Gott_Blitz nachgetragen", balance.sGottBlitz, 200);
 	{
-		// Jetzt muss die Datei vollstaendig sein: nochmal lesen darf nichts
+		// Jetzt muss die Datei vollstaendig sein: nochmal read darf nichts
 		// mehr nachtragen und nichts mehr veraendern.
 		BALANCE_INFO vorher = balance;
 		BalanceLaden();
@@ -225,12 +225,12 @@ int main()
 			printf("    ok    ergaenzte Datei liest sich unveraendert wieder ein\n");
 		else
 		{
-			printf("    FEHLER die ergaenzte Datei liefert andere Werte\n");
-			fehler++;
+			printf("    FEHLER die ergaenzte Datei liefert andere Values\n");
+			error++;
 		}
 	}
 
 	DeleteFileA("Balance.txt");
-	printf("\n%s (%d Abweichungen)\n", fehler ? "FEHLGESCHLAGEN" : "ALLES IN ORDNUNG", fehler);
-	return fehler ? 1 : 0;
+	printf("\n%s (%d Abweichungen)\n", error ? "FEHLGESCHLAGEN" : "ALLES IN ORDNUNG", error);
+	return error ? 1 : 0;
 }

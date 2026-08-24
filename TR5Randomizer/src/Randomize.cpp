@@ -19,7 +19,7 @@
 // Durchstich: aus einem Seed eine fertige randomisierte Leveldatei.
 //
 // Aufruf:
-//   Randomize.exe <zonen.json> <levelinfo.json> <quelle.trc> <ziel.trc> [seed]
+//   Randomize.exe <zonen.json> <levelinfo.json> <source.trc> <ziel.trc> [seed]
 //
 // Spaeter treibt die Oberflaeche dieselben Schritte an; dieses Programm ist
 // der Nachweis, dass die Kette vollstaendig ist und laesst sich zum Pruefen
@@ -30,7 +30,7 @@
 #include "core/Randomizer.h"
 #include "core/Rng.h"
 #include "core/ScriptDat.h"
-#include "core/SecretListe.h"
+#include "core/SecretList.h"
 #include "core/Tr5Level.h"
 
 #include <cstdio>
@@ -49,7 +49,7 @@ int main(int argc, char** argv)
 {
     if (argc < 5)
     {
-        std::printf("Aufruf: Randomize.exe <zonen.json> <levelinfo.json> <quelle.trc> <ziel.trc> [seed] [schalter...]\n");
+        std::printf("Aufruf: Randomize.exe <zonen.json> <levelinfo.json> <source.trc> <ziel.trc> [seed] [schalter...]\n");
         std::printf("  Zahl:     Anzahl zusaetzlicher Gegner, 0 = keine (Vorgabe)\n");
         std::printf("  nur:      Items unangetastet lassen - fuer Gegner-/Outfittests\n");
         std::printf("  outfit:   zufaelliges Outfit (Lara_Andrea/Joby/Rich)\n");
@@ -67,10 +67,10 @@ int main(int argc, char** argv)
         std::printf("            die Datei erneut). trigger schickt die TO_CD-Tracks der\n");
         std::printf("            Floordata durch eine GLOBALE Permutation der getriggerten Tracks:\n");
         std::printf("            Atmosphaeren unter sich, alles andere unter sich.\n");
-        std::printf("  reihenfolge=abschnitte|level|beides|frei:\n");
+        std::printf("  orderText=abschnitte|level|beides|frei:\n");
         std::printf("            abschnitte permutiert die vier Story-Abschnitte, level die\n");
         std::printf("            Reihenfolge INNERHALB der Abschnitte, frei alle 13 Level ueber\n");
-        std::printf("            alles hinweg (Levelketten aus Levelketten.h werden per GIVEOBJ\n");
+        std::printf("            alles hinweg (LevelChains aus LevelChains.h werden per GIVEOBJ\n");
         std::printf("            aufgeloest). Braucht skript= und die Engine mit gfLevelId;\n");
         std::printf("            NICHT wiederholbar.\n");
         return 2;
@@ -79,12 +79,12 @@ int main(int argc, char** argv)
     const std::string seedText = (argc > 5) ? argv[5] : "Weihnachten";
     int gegner = 0, extraItems = 0;
     bool nurGegner = false, outfits = false, waffen = false, mix = false, cross = false, allsanity = false;
-    bool notizen = false;
-    std::set<int> gegnerAus;         // Abwahl, siehe Argument gegneraus=
+    bool notes = false;
+    std::set<int> enemiesDisabled;         // Abwahl, siehe Argument gegneraus=
     // Fremdinstallationen fuer die Gaeste aus TR3 (#92). Ohne sie fallen die
     // vier Arten still aus dem Pool - genau wie beim Nutzer ohne die Spiele.
     std::wstring tr3Dir, tr3GoldDir;
-    // SCRIPT.DAT mitbehandeln - dieselben Eingriffe wie die Oberflaeche.
+    // SCRIPT.DAT mitbehandeln - dieselben Changes wie die Oberflaeche.
     std::wstring skriptDat;
     // Secret-Liste (#53): zweiter Patch-Durchgang aus einer Autor-Datei.
     std::wstring secretListe;
@@ -92,7 +92,7 @@ int main(int argc, char** argv)
     // (braucht skript=), "trigger" die TO_CD-Tracks in der Floordata,
     // "beides" beides. VORSICHT hintergrund: nicht wiederholbar - jeder Lauf
     // mit skript= wuerfelt die Datei erneut durch.
-    bool musikHintergrund = false, musikTrigger = false;
+    bool musikHintergrund = false, musicTriggers = false;
     // Levelabschnitte permutieren (braucht skript= und die Engine mit gfLevelId).
     bool abschnitte = false;
     int  levelFolge = 0;            // 1 innerhalb der Abschnitte, 2 frei ueber alles
@@ -100,7 +100,7 @@ int main(int argc, char** argv)
     {
         const std::string s = argv[i];
         if (s == "nur")         nurGegner = true;
-        else if (s == "notizen") notizen = true;   // Report-Notizen ausgeben (Diagnose)
+        else if (s == "notes") notes = true;   // Report-Notizen ausgeben (Diagnose)
         else if (s == "outfit") outfits = true;
         else if (s == "waffen") waffen = true;
         else if (s == "mix")    mix = true;
@@ -111,12 +111,12 @@ int main(int argc, char** argv)
         else if (s.rfind("skript=", 0) == 0)  skriptDat  = toW(s.c_str() + 7);
         else if (s.rfind("secrets=", 0) == 0) secretListe = toW(s.c_str() + 8);
         else if (s == "musik=hintergrund") musikHintergrund = true;
-        else if (s == "musik=trigger")     musikTrigger = true;
-        else if (s == "musik=beides")      { musikHintergrund = true; musikTrigger = true; }
-        else if (s == "reihenfolge=abschnitte") abschnitte = true;
-        else if (s == "reihenfolge=level")      levelFolge = 1;
-        else if (s == "reihenfolge=beides")     { abschnitte = true; levelFolge = 1; }
-        else if (s == "reihenfolge=frei")       levelFolge = 2;
+        else if (s == "musik=trigger")     musicTriggers = true;
+        else if (s == "musik=beides")      { musikHintergrund = true; musicTriggers = true; }
+        else if (s == "orderText=abschnitte") abschnitte = true;
+        else if (s == "orderText=level")      levelFolge = 1;
+        else if (s == "orderText=beides")     { abschnitte = true; levelFolge = 1; }
+        else if (s == "orderText=frei")       levelFolge = 2;
         // "gegneraus=47,49" - dieselbe Abwahl wie das Fenster "Gegnerarten"
         // in der Oberflaeche (#95), damit sich der Filter auch aus Skripten
         // pruefen laesst.
@@ -131,7 +131,7 @@ int main(int argc, char** argv)
                 if (!stueck.empty())
                 {
                     int t = std::atoi(stueck.c_str());
-                    if (t > 0) gegnerAus.insert(t);
+                    if (t > 0) enemiesDisabled.insert(t);
                 }
                 a2 = e + 1;
             }
@@ -150,11 +150,11 @@ int main(int argc, char** argv)
 
     // --- SCRIPT.DAT mitbehandeln (Schalter skript=) -----------------------
     //
-    // Dieselben Eingriffe wie die Oberflaeche, aus derselben Quelle: Kind-Lara
+    // Dieselben Changes wie die Oberflaeche, aus derselben Quelle: Kind-Lara
     // aus den Ireland-Leveln und der KEY8-Eintrag fuer joby3. Die Oberflaeche
     // legt sich vorher eine Sicherung an und liest immer aus ihr; hier gibt es
     // keinen Sicherungsordner, deshalb wird die Datei an Ort und Stelle
-    // bearbeitet. Das ist unbedenklich, weil beide Eingriffe wiederholbar sind
+    // bearbeitet. Das ist unbedenklich, weil beide Changes wiederholbar sind
     // - ein schon geloeschtes Bit bleibt geloescht, ein schon vorhandener
     // Objektbefehl wird nicht ein zweites Mal eingefuegt.
     //
@@ -166,17 +166,17 @@ int main(int argc, char** argv)
         std::string sErr;
         if (!sd.load(skriptDat, sErr)) { std::printf("SCRIPT.DAT: %s\n", sErr.c_str()); return 1; }
 
-        ScriptDat::Eingriffe e;
-        sd.randomizerEingriffe(e);
+        ScriptDat::Changes e;
+        sd.randomizerChanges(e);
 
-        if (e.levelFehlend > 0)
-            std::printf("SCRIPT.DAT  %d Ireland-Level nicht im Skript - nichts geaendert.\n", e.levelFehlend);
+        if (e.levelsMissing > 0)
+            std::printf("SCRIPT.DAT  %d Ireland-Level nicht im Skript - nichts geaendert.\n", e.levelsMissing);
         else
         {
             if (musikHintergrund)
             {
                 int mg = 0;
-                if (sd.musikWuerfeln(seed, mg, sErr))
+                if (sd.shuffleMusic(seed, mg, sErr))
                     std::printf("SCRIPT.DAT  Hintergrundmusik: %d Level neu vertont\n", mg);
                 else
                     std::printf("SCRIPT.DAT  Hintergrundmusik: %s\n", sErr.c_str());
@@ -185,7 +185,7 @@ int main(int argc, char** argv)
             if (abschnitte)
             {
                 std::string folge;
-                if (sd.abschnitteWuerfeln(seed, folge, sErr))
+                if (sd.shuffleSections(seed, folge, sErr))
                     std::printf("SCRIPT.DAT  Abschnitte: %s\n", folge.c_str());
                 else
                     std::printf("SCRIPT.DAT  Abschnitte: %s\n", sErr.c_str());
@@ -194,7 +194,7 @@ int main(int argc, char** argv)
             if (levelFolge)
             {
                 std::string folge;
-                if (sd.levelWuerfeln(seed, levelFolge == 2, folge, sErr))
+                if (sd.shuffleLevels(seed, levelFolge == 2, folge, sErr))
                     std::printf("SCRIPT.DAT  Reihenfolge: %s\n", folge.c_str());
                 else
                     std::printf("SCRIPT.DAT  Reihenfolge: %s\n", sErr.c_str());
@@ -202,27 +202,27 @@ int main(int argc, char** argv)
 
             if (abschnitte || levelFolge)
             {
-                // ERST aufraeumen, DANN geben - siehe Main.cpp/setup.cpp.
+                // ERST aufraeumen, DANN give - siehe Main.cpp/setup.cpp.
                 std::vector<std::string> ketten;
-                if (!sd.inventarAufraeumen(ketten, sErr))
+                if (!sd.cleanupInventory(ketten, sErr))
                     std::printf("SCRIPT.DAT  Inventar aufraeumen: %s\n", sErr.c_str());
-                else if (!sd.kettenAufloesen(ketten, sErr))
-                    std::printf("SCRIPT.DAT  Levelketten: %s\n", sErr.c_str());
+                else if (!sd.resolveChains(ketten, sErr))
+                    std::printf("SCRIPT.DAT  LevelChains: %s\n", sErr.c_str());
                 for (const std::string& k : ketten)
                     std::printf("SCRIPT.DAT  %s\n", k.c_str());
             }
 
             if (!sd.save(skriptDat, sErr)) { std::printf("SCRIPT.DAT: %s\n", sErr.c_str()); return 1; }
             std::printf("SCRIPT.DAT  Kind-Lara: %d Level geaendert; KEY8 fuer joby3: %s\n",
-                        e.flagsGeaendert,
-                        !e.keyFehler.empty() ? e.keyFehler.c_str()
-                                             : (e.keyKopiert ? "eingefuegt" : "war schon da"));
+                        e.flagsChanged,
+                        !e.keyError.empty() ? e.keyError.c_str()
+                                             : (e.keyCopied ? "eingefuegt" : "war schon da"));
             std::printf("SCRIPT.DAT  rich2-Pistolen: %s\n",
-                        !e.pistolenFehler.empty() ? e.pistolenFehler.c_str()
-                                                  : (e.pistolenWeg > 0 ? "abgenommen" : "war schon so"));
+                        !e.pistolError.empty() ? e.pistolError.c_str()
+                                                  : (e.pistolsRemoved > 0 ? "abgenommen" : "war schon so"));
 
-            if (e.joby3Waffen > 0)
-                std::printf("SCRIPT.DAT  joby3: %d Waffen-Wegnahmen entfernt\n", e.joby3Waffen);
+            if (e.joby3Weapons > 0)
+                std::printf("SCRIPT.DAT  joby3: %d Waffen-Wegnahmen entfernt\n", e.joby3Weapons);
         }
     }
 
@@ -252,7 +252,7 @@ int main(int argc, char** argv)
     opt.swapEnemies = mix;
     opt.crossEnemies = cross;
     opt.allsanity = allsanity;
-    opt.gesperrteGegner = gegnerAus;
+    opt.disabledEnemies = enemiesDisabled;
     opt.tr3Dir     = tr3Dir;
     opt.tr3GoldDir = tr3GoldDir;
     opt.extraPickups = extraItems;
@@ -273,7 +273,7 @@ int main(int argc, char** argv)
         const size_t schnitt = ordner.find_last_of(L"\\/");
         ordner = (schnitt == std::wstring::npos) ? L"." : ordner.substr(0, schnitt);
     }
-    auto quelle = [](const std::string& name, void*) -> std::wstring {
+    auto source = [](const std::string& name, void*) -> std::wstring {
         std::wstring w;
         for (char c : name) w.push_back(static_cast<wchar_t>(static_cast<unsigned char>(c)));
         return ordner + L"\\" + w + L".trc";
@@ -283,7 +283,7 @@ int main(int argc, char** argv)
     // Zwischenlager neben den Quelldateien (#103): einmal entnehmen statt je
     // Level. Ohne TR3-Pfad gibt es nichts zu lagern.
     const std::wstring lager = tr3Dir.empty() ? std::wstring() : ordner + L"\\Import-Export";
-    if (!Patch::apply(lvl, patch, pr, err, quelle, nullptr, tr3Dir, tr3GoldDir, lager)) { std::printf("Patch: %s\n", err.c_str()); return 1; }
+    if (!Patch::apply(lvl, patch, pr, err, source, nullptr, tr3Dir, tr3GoldDir, lager)) { std::printf("Patch: %s\n", err.c_str()); return 1; }
     for (const std::string& w : pr.warnings) std::printf("  Hinweis: %s\n", w.c_str());
 
     // Secrets aus einer Nutzerliste: zweiter Durchgang gegen den Stand nach
@@ -294,12 +294,12 @@ int main(int argc, char** argv)
         JsonValue sPatch;
         std::vector<std::string> sWarn;
         int sZahl = 0;
-        if (!secretPatchBauen(secretListe, levelName, lvl, sPatch, sZahl, sWarn, err))
+        if (!buildSecretPatch(secretListe, levelName, lvl, sPatch, sZahl, sWarn, err))
         { std::printf("Secret-Liste: %s\n", err.c_str()); return 1; }
         for (const std::string& w : sWarn) std::printf("  Secrets: %s\n", w.c_str());
 
         PatchReport spr;
-        if (!Patch::apply(lvl, sPatch, spr, err, quelle, nullptr, tr3Dir, tr3GoldDir, lager))
+        if (!Patch::apply(lvl, sPatch, spr, err, source, nullptr, tr3Dir, tr3GoldDir, lager))
         { std::printf("Secret-Patch: %s\n", err.c_str()); return 1; }
         for (const std::string& w : spr.warnings) std::printf("  Secrets: %s\n", w.c_str());
         std::printf("  Secrets     %d verschoben, %d Beiwerk (%d Trigger, %zu Portale)\n",
@@ -308,12 +308,12 @@ int main(int argc, char** argv)
     }
 
 
-    if (notizen)
+    if (notes)
         for (const std::string& n : rep.notes) std::printf("  Notiz: %s\n", n.c_str());
 
-    if (musikTrigger)
+    if (musicTriggers)
     {
-        const long mw = Patch::musikTriggerWuerfeln(lvl, seed);
+        const long mw = Patch::shuffleMusicTriggers(lvl, seed);
         std::printf("  Musik-Trigger %ld Woerter neu verteilt\n", mw);
     }
 

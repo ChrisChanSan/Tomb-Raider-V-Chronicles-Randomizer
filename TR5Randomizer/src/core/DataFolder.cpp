@@ -201,7 +201,7 @@ bool DataFolder::loadChecksums(const std::wstring& csvPath, std::string& error)
     FILE* f = nullptr;
     if (_wfopen_s(&f, csvPath.c_str(), L"rb") != 0 || !f)
     {
-        error = "Pruefsummenliste nicht gefunden: " + PathUtil::narrow(csvPath);
+        error = "Pruefsummenliste nicht found: " + PathUtil::narrow(csvPath);
         return false;
     }
 

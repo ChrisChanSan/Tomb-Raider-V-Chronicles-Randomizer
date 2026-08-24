@@ -16,7 +16,7 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 #include "ApplyPatch.h"
-#include "Tr3Quelle.h"
+#include "Tr3Source.h"
 
 #include <algorithm>
 #include <iterator>
@@ -36,7 +36,7 @@ namespace
     }
 }
 
-long Patch::musikTriggerWuerfeln(Tr5Level& level, uint64_t seed)
+long Patch::shuffleMusicTriggers(Tr5Level& level, uint64_t seed)
 {
     // GLOBAL (Wunsch des Nutzers): keine levelinterne Permutation der
     // vorhandenen Tracks, sondern EINE Seed-Permutation ueber einen festen
@@ -80,18 +80,18 @@ long Patch::musikTriggerWuerfeln(Tr5Level& level, uint64_t seed)
 
     std::mt19937_64 rng(seed ^ 0x54524B4D5553ull);      // "TRKMUS"
 
-    std::map<int, int> abbildung;
+    std::map<int, int> mapping;
     const auto mische = [&](std::vector<int>& topf)
     {
         std::vector<int> ziel = topf;
         std::shuffle(ziel.begin(), ziel.end(), rng);
         for (size_t i = 0; i < topf.size(); ++i)
-            abbildung[topf[i]] = ziel[i];
+            mapping[topf[i]] = ziel[i];
     };
     mische(atmo);
     mische(jingle);
 
-    return level.musikTrigger(&abbildung, nullptr);
+    return level.musicTriggers(&mapping, nullptr);
 }
 
 void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
@@ -111,7 +111,7 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
                 std::memcpy(&zustand,
                             level.debugBytes().data() + animAt + (static_cast<size_t>(mi.animIndex) + 12) * 40 + 6, 2);
                 if (zustand != 5)
-                    in.verboteneTypen.insert(47);
+                    in.forbiddenTypes.insert(47);
             }
         }
     }
@@ -121,21 +121,21 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
     // Modell im Level waere nichts als ein unsichtbarer Stolperstein.
     {
         const std::vector<int> slots = level.moveableSlots();
-        in.vorhandeneSlots.insert(slots.begin(), slots.end());
+        in.presentSlots.insert(slots.begin(), slots.end());
     }
 
     // Neigungseintraege aller Platzierungssektoren einsammeln - IMMER, auch
     // wenn unten kein Trigger-Durchgang noetig ist: jede Item-Platzierung
-    // braucht sie fuer Hoehe und Belaufbarkeit (RandoInput::schraegen).
+    // braucht sie fuer Hoehe und Belaufbarkeit (RandoInput::slopes).
     {
-        SchraegeInfo si;
+        SlopeInfo si;
         int baseY = 0;
         for (const ZoneSector& s : in.sectors)
         {
-            const int art = level.floorNeigung(s.room, s.sectorX, s.sectorZ, si, baseY);
+            const int art = level.floorSlope(s.room, s.sectorX, s.sectorZ, si, baseY);
             if (art == 0) continue;                          // eben: kein Eintrag noetig
-            if (art < 0) { si = SchraegeInfo(); si.typWort = kSchraegeUnlesbar; }
-            in.schraegen[secKey(s.room, s.sectorX, s.sectorZ)] = si;
+            if (art < 0) { si = SlopeInfo(); si.typeWord = kSlopeUnreadable; }
+            in.slopes[secKey(s.room, s.sectorX, s.sectorZ)] = si;
         }
     }
 
@@ -155,7 +155,7 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
 bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, std::string& error,
                   LevelSourceFn levelSource, void* levelSourceUser,
                   const std::wstring& tr3Dir, const std::wstring& tr3GoldDir,
-                  const std::wstring& lagerDir)
+                  const std::wstring& cacheDir)
 {
     report = PatchReport();
 
@@ -213,14 +213,14 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     // Spender-Level werden von Outfit UND soundAdds gebraucht und sind mehrere
     // Megabyte gross - jeder wird hoechstens einmal geladen.
     std::map<std::string, Tr5Level> quellen;
-    auto quelle = [&](const std::string& name) -> Tr5Level* {
+    auto source = [&](const std::string& name) -> Tr5Level* {
         auto it = quellen.find(name);
         if (it != quellen.end()) return &it->second;
         if (!levelSource) return nullptr;
-        const std::wstring pfad = levelSource(name, levelSourceUser);
+        const std::wstring path = levelSource(name, levelSourceUser);
         std::string ladeErr;
         Tr5Level q;
-        if (pfad.empty() || !q.load(pfad, ladeErr)) return nullptr;
+        if (path.empty() || !q.load(path, ladeErr)) return nullptr;
         return &quellen.emplace(name, std::move(q)).first->second;
     };
 
@@ -239,8 +239,8 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     if (outfit.has("fromLevel"))
     {
         const std::string von = outfit["fromLevel"].asString();
-        Tr5Level* spender = quelle(von);
-        if (!spender)
+        Tr5Level* donor = source(von);
+        if (!donor)
         {
             report.warnings.push_back("Outfit: Spender-Level " + von + " nicht ladbar - Outfit bleibt.");
         }
@@ -264,7 +264,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             for (int s : { 13, 14, 15, 16 })
             {
                 Tr5Level::MoveableInfo mi;
-                if (spender->moveableInfo(s, mi)) slots.push_back(s);
+                if (donor->moveableInfo(s, mi)) slots.push_back(s);
             }
 
             // Sprechkoepfe (17-20): in Dialog-Cutscenes tauscht die Engine
@@ -279,7 +279,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             for (int s : { 17, 18, 19, 20 })
             {
                 Tr5Level::MoveableInfo mi;
-                if (!spender->moveableInfo(s, mi)) { sprechkoepfeDa = false; break; }
+                if (!donor->moveableInfo(s, mi)) { sprechkoepfeDa = false; break; }
             }
             if (sprechkoepfeDa)
                 for (int s : { 17, 18, 19, 20 }) slots.push_back(s);
@@ -287,7 +287,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             for (int slot : slots)
             {
                 std::string oErr;
-                if (!level.copyMoveableFrom(*spender, slot, oErr))
+                if (!level.copyMoveableFrom(*donor, slot, oErr))
                 {
                     error = "Outfit-Slot " + std::to_string(slot) + " aus " + von + ": " + oErr;
                     return false;
@@ -305,10 +305,10 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             // einem Russland-Level); der Rueckfall fuer handgeschriebene
             // Patches ohne das Feld bleibt die alte Joby-Regel.
             if (outfit.has("laraType"))
-                level.setLaraType(static_cast<int>(outfit["laraType"].asInt(spender->laraType())));
+                level.setLaraType(static_cast<int>(outfit["laraType"].asInt(donor->laraType())));
             else
-                level.setLaraType(von == "joby2" ? 2 : spender->laraType());
-            level.setFremdeSprechkoepfe(sprechkoepfeDa ? 0 : 1);
+                level.setLaraType(von == "joby2" ? 2 : donor->laraType());
+            level.setForeignTalkHeads(sprechkoepfeDa ? 0 : 1);
             report.outfitFrom = von;
         }
     }
@@ -321,17 +321,17 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     if (outfit.has("holstersFrom"))
     {
         const std::string von = outfit["holstersFrom"].asString();
-        Tr5Level* spender = quelle(von);
-        if (!spender)
+        Tr5Level* donor = source(von);
+        if (!donor)
             report.warnings.push_back("Holster: Spender-Level " + von + " nicht ladbar.");
         else
             for (int s : { 13, 14, 15, 16 })
             {
                 Tr5Level::MoveableInfo mi;
                 if (level.moveableInfo(s, mi)) continue;       // hat es schon
-                if (!spender->moveableInfo(s, mi)) continue;   // hat nicht mal der Spender
+                if (!donor->moveableInfo(s, mi)) continue;   // hat nicht mal der Spender
                 std::string oErr;
-                if (!level.copyMoveableFrom(*spender, s, oErr))
+                if (!level.copyMoveableFrom(*donor, s, oErr))
                 {
                     error = "Holster-Slot " + std::to_string(s) + " aus " + von + ": " + oErr;
                     return false;
@@ -361,33 +361,33 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     // vorbereitete Pakete waeren fremde Spieldaten.
     auto tr3Bauen = [&](Tr5Level& lvl, int slot, PatchReport& rep, std::string& err) -> bool
     {
-        const Tr3Quelle::DinoQuelle* d = nullptr;
-        static const std::vector<Tr3Quelle::DinoQuelle> alle = Tr3Quelle::dinos();
-        for (const Tr3Quelle::DinoQuelle& k : alle) if (k.slot == slot) { d = &k; break; }
+        const Tr3Source::DinoSource* d = nullptr;
+        static const std::vector<Tr3Source::DinoSource> alle = Tr3Source::dinos();
+        for (const Tr3Source::DinoSource& k : alle) if (k.slot == slot) { d = &k; break; }
         if (!d) { err = "Kein Gast fuer Slot " + std::to_string(slot) + " bekannt"; return false; }
 
         // Ueber das Zwischenlager (#103): einmal entnehmen statt je Level.
-        std::vector<uint8_t> modell, klaenge;
+        std::vector<uint8_t> modell, sounds;
         std::string f;
-        if (!Tr3Quelle::holeMitLager(*d, tr3Dir, tr3GoldDir, lagerDir, modell, klaenge, f))
+        if (!Tr3Source::fetchCached(*d, tr3Dir, tr3GoldDir, cacheDir, modell, sounds, f))
         { err = f; return false; }
 
         // 1. Sounds
-        std::vector<std::pair<int,int>> zuordnung;
-        if (!lvl.addSoundsFromTr3(klaenge, d->klangBasis, zuordnung, f, &d->laut))
+        std::vector<std::pair<int,int>> mapping;
+        if (!lvl.addSoundsFromTr3(sounds, d->soundBase, mapping, f, &d->volumes))
         { err = std::string(d->name) + " (Sounds einsetzen): " + f; return false; }
 
         // 2. SFX-Nummern der Anim-Kommandos umbiegen. Bleibt eine Nummer
-        //    offen, wird ABGEBROCHEN - sie wuerde im Ziel einen fremden
+        //    unresolved, wird ABGEBROCHEN - sie wuerde im Ziel einen fremden
         //    Vanilla-Klang treffen (beim Compy wurde aus 243 ein wuchtiger
         //    SFX_GENERIC_HEAVY_FEET, und das zu finden hat Stunden gekostet).
-        std::vector<int> offen;
-        if (!Tr3Quelle::biegeSfxUm(modell, zuordnung, d->stumm, 411, offen, f))
+        std::vector<int> unresolved;
+        if (!Tr3Source::remapSfx(modell, mapping, d->muted, 411, unresolved, f))
         { err = std::string(d->name) + " (SFX umbiegen): " + f; return false; }
-        if (!offen.empty())
+        if (!unresolved.empty())
         {
             err = std::string(d->name) + ": SFX-Nummer ohne Zuordnung (" +
-                  std::to_string(offen[0]) + ") - sie wuerde einen fremden Klang treffen";
+                  std::to_string(unresolved[0]) + ") - sie wuerde einen fremden Klang treffen";
             return false;
         }
 
@@ -399,7 +399,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
 
         // Und die Faces darauf zeigen lassen. Ohne diesen Schritt behalten sie
         // die TR3-Nummern und greifen im Ziel wahllos in dessen Texinfos.
-        if (Tr3Quelle::biegeTexUm(modell, texMap) < 0)
+        if (Tr3Source::remapTextures(modell, texMap) < 0)
         { err = std::string(d->name) + ": Faces nicht lesbar"; return false; }
 
         // 4. Modell. texBasis -1, weil die Faces schon auf die neuen Texinfos
@@ -450,16 +450,16 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             // (Mesh-Lager ohne eigene Animationen).
             const int nach = static_cast<int>(w["toSlot"].asInt(-1));
             const int zielSlot = (nach < 0) ? slot : nach;
-            const bool nurMeshes = w["onlyMeshes"].asBool(false);
+            const bool meshesOnly = w["onlyMeshes"].asBool(false);
             // Explizite Anim-Scheibenlaenge (Imp: Todesanim liegt jenseits
             // der Objektgrenze in der globalen Tabelle, siehe Tr5Level.h).
-            const int animZahl = static_cast<int>(w["animZahl"].asInt(-1));
+            const int animCount = static_cast<int>(w["animCount"].asInt(-1));
 
             Tr5Level::MoveableInfo mi;
             if (!ersetzen && level.moveableInfo(zielSlot, mi)) continue;   // hat es schon
 
-            Tr5Level* spender = quelle(von);
-            if (!spender)
+            Tr5Level* donor = source(von);
+            if (!donor)
             {
                 report.warnings.push_back(std::string(was) + ": Spender-Level " + von +
                                           " nicht ladbar - Slots von dort fehlen.");
@@ -467,7 +467,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             }
 
             std::string wErr;
-            if (!level.copyMoveableFrom(*spender, slot, wErr, nach, nurMeshes, animZahl))
+            if (!level.copyMoveableFrom(*donor, slot, wErr, nach, meshesOnly, animCount))
             {
                 error = std::string(was) + "-Slot " + std::to_string(slot) + " aus " + von + ": " + wErr;
                 return false;
@@ -502,7 +502,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             if (guardSlot > 0)
             {
                 std::string rErr;
-                if (!level.uebernehmeAnimDaten(33, 2, guardSlot, 2, rErr))
+                if (!level.adoptAnimData(33, 2, guardSlot, 2, rErr))
                     report.warnings.push_back("SWAT-Feueranim nicht reparierbar: " + rErr);
             }
         }
@@ -526,7 +526,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
 
             if (level.soundInfoIndex(map) >= 0) continue;      // schon vorhanden
 
-            Tr5Level* q = quelle(von);
+            Tr5Level* q = source(von);
             if (!q)
             {
                 report.warnings.push_back("soundAdds: Quell-Level " + von + " nicht ladbar - Sound fehlt.");
@@ -567,14 +567,14 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     {
         const JsonValue& la = lanims[i];
         const std::string von = la["fromLevel"].asString();
-        Tr5Level* spender = quelle(von);
-        if (!spender)
+        Tr5Level* donor = source(von);
+        if (!donor)
         {
             report.warnings.push_back("Lara-Anim: Spender-Level " + von + " nicht ladbar.");
             continue;
         }
         std::string aErr;
-        if (!level.kopiereLaraAnimVon(*spender, static_cast<int>(la["anim"].asInt(-1)), aErr))
+        if (!level.copyLaraAnimFrom(*donor, static_cast<int>(la["anim"].asInt(-1)), aErr))
         {
             error = "laraAnimAdds[" + std::to_string(i) + "]: " + aErr;
             return false;
@@ -692,7 +692,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         if (!level.addTrigger(static_cast<int>(t["room"].asInt(-1)),
                               static_cast<int>(t["sectorX"].asInt(-1)),
                               static_cast<int>(t["sectorZ"].asInt(-1)),
-                              static_cast<int>(t["art"].asInt(0)),
+                              static_cast<int>(t["kind"].asInt(0)),
                               static_cast<int>(t["timer"].asInt(0)),
                               t["oneShot"].asInt(1) != 0,
                               static_cast<int>(t["mask"].asInt(31)),
@@ -725,7 +725,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
 
         // Nur gesetzte Felder uebernehmen.
         //
-        // "typeId" tauscht die Gegnerart aus. Der Index bleibt dabei, was er
+        // "typeId" tauscht die EnemyKind aus. Der Index bleibt dabei, was er
         // ist - deshalb bleiben alle "Object N"-Verweise der Trigger gueltig
         // und der Gegner wacht weiter an derselben Stelle auf. Genau deshalb
         // ist der Tausch ueberhaupt ungefaehrlich, waehrend ein Entfernen es
@@ -743,13 +743,13 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             it.roomNumber >= 0 && static_cast<size_t>(it.roomNumber) < level.rooms().size())
         {
             const Tr5Room& rm = level.rooms()[static_cast<size_t>(it.roomNumber)];
-            SchraegeInfo si;
+            SlopeInfo si;
             int baseY = 0;
-            const int art = level.floorNeigung(it.roomNumber,
+            const int art = level.floorSlope(it.roomNumber,
                                                (it.x - rm.originX) / 1024,
                                                (it.z - rm.originZ) / 1024, si, baseY);
             if (art == 0) it.y = static_cast<int32_t>(baseY);
-            else if (art > 0) it.y = static_cast<int32_t>(bodenLageAn(si, baseY, it.x & 1023, it.z & 1023).y);
+            else if (art > 0) it.y = static_cast<int32_t>(floorPosAt(si, baseY, it.x & 1023, it.z & 1023).y);
         }
         // Versatz gegen die gerechnete Bodenlage. Gebraucht fuer gestapelte
         // Objekte: eine Doppeltuer aus zwei Tuermodellen, das obere einen
@@ -787,7 +787,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             //
             // 0x40 stand hier frueher als "reines Editor-Artefakt, traegt kein
             // Codepfad aus" und wurde geloescht. Das war falsch und hat den
-            // gekoppelten Triggerzug von Andrea1 Item 107 stumm gemacht: das
+            // gekoppelten Triggerzug von Andrea1 Item 107 muted gemacht: das
             // Item kam am neuen Platz ohne 0x40 an, wurde beim Aufnehmen
             // getoetet, und der mitgewanderte Trigger fand nie die Bedingung,
             // um Hund und Flame Emitter zu wecken. Sichtbar war das nirgends,
@@ -829,7 +829,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
 
         if (!level.setItem(index, it))
         {
-            error = msg("Item %d liess sich nicht schreiben.", index);
+            error = msg("Item %d liess sich nicht write.", index);
             return false;
         }
         ++report.edited;
@@ -852,7 +852,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         // vom Aufrufer zu uebernehmen (#61). Der Sektorgrundwert ist auf einer
         // Schraege die HOECHSTE Ecke - ein Item in der Sektormitte haenge damit
         // bis zu einen halben Sektor in der Luft (#86). Dieselbe Rechnung, mit
-        // der die Engine den Boden findet: floorNeigung + bodenLageAn.
+        // der die Engine den Boden findet: floorSlope + floorPosAt.
         //
         // Gebraucht von Erzeugern, die keine Neigungsdaten haben (das
         // Wandtest-Skript in PowerShell). Ohne das Feld bleibt alles wie
@@ -863,14 +863,14 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             const Tr5Room& rm = level.rooms()[static_cast<size_t>(it.roomNumber)];
             const int sx = (it.x - rm.originX) / 1024;
             const int sz = (it.z - rm.originZ) / 1024;
-            SchraegeInfo si;
+            SlopeInfo si;
             int baseY = 0;
-            const int art = level.floorNeigung(it.roomNumber, sx, sz, si, baseY);
+            const int art = level.floorSlope(it.roomNumber, sx, sz, si, baseY);
             if (art == 0)
                 it.y = static_cast<int32_t>(baseY);          // eben
             else if (art > 0)
             {
-                const BodenLage lage = bodenLageAn(si, baseY, it.x & 1023, it.z & 1023);
+                const FloorPos lage = floorPosAt(si, baseY, it.x & 1023, it.z & 1023);
                 it.y = static_cast<int32_t>(lage.y);
             }
             // art < 0 (Kette unlesbar): das mitgegebene y bleibt stehen.
@@ -1006,22 +1006,22 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         // Nutzer gesehen. Der Bedarf wird darum entlang next_animation
         // aufgezogen, bevor irgendetwas geholt wird.
         {
-            std::set<int> offen = gebraucht;
-            while (!offen.empty())
+            std::set<int> unresolved = gebraucht;
+            while (!unresolved.empty())
             {
-                const int a = *offen.begin();
-                offen.erase(offen.begin());
-                const int weiter = level.laraAnimNachfolger(a);
+                const int a = *unresolved.begin();
+                unresolved.erase(unresolved.begin());
+                const int weiter = level.laraAnimNext(a);
                 // Selbstbezug beendet die Kette (222 -> 222 ist das
                 // uebliche Halten am Ende), ebenso ein unbekannter Wert.
                 if (weiter < 0 || weiter == a) continue;
-                if (gebraucht.insert(weiter).second) offen.insert(weiter);
+                if (gebraucht.insert(weiter).second) unresolved.insert(weiter);
             }
         }
 
         for (int animNr : gebraucht)
         {
-            if (level.laraAnimBrauchbar(animNr)) continue;
+            if (level.laraAnimUsable(animNr)) continue;
             if (!levelSource)
             {
                 report.warnings.push_back("Lara-Anim " + std::to_string(animNr) +
@@ -1031,10 +1031,10 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             bool geholt = false;
             for (const char* sp : kSpender)
             {
-                Tr5Level* q = quelle(sp);
-                if (!q || !q->laraAnimBrauchbar(animNr)) continue;
+                Tr5Level* q = source(sp);
+                if (!q || !q->laraAnimUsable(animNr)) continue;
                 std::string aErr;
-                if (!level.kopiereLaraAnimVon(*q, animNr, aErr)) continue;
+                if (!level.copyLaraAnimFrom(*q, animNr, aErr)) continue;
                 report.warnings.push_back("Lara-Anim " + std::to_string(animNr) +
                                           " aus " + sp + " nachgereicht.");
                 geholt = true;
@@ -1048,9 +1048,9 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
 
     // Texturwerkstatt schliessen (#104): alle Seiten-Importe dieses Laufs
     // werden jetzt EINMAL gepackt und in die Datei gesetzt. save() weigert
-    // sich, eine schmutzig offene Werkstatt zu schreiben - vergessen faellt
-    // also laut auf, nicht als kaputtes Level.
-    if (!level.texWerkstattSchliessen(error))
+    // sich, eine schmutzig offene Werkstatt zu write - vergessen faellt
+    // also volumes auf, nicht als kaputtes Level.
+    if (!level.texWorkshopClose(error))
     {
         error = "Texturwerkstatt: " + error;
         return false;

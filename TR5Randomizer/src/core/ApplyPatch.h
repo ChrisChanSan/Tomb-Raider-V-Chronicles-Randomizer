@@ -24,48 +24,48 @@
 #include <vector>
 
 //----------------------------------------------------------------------------
-// Traegt einen Patch (itemEdits / itemAdds / triggerMoves) in ein geladenes
-// Level ein.
+// Applies a patch (itemEdits / itemAdds / triggerMoves) to a loaded level.
 //
-// Das Patch-Format ist dasselbe, das die Platzierungslogik erzeugt:
+// The patch format is the same one the placement logic produces:
 //   { "itemEdits":    [ {index, room?, x?, y?, z?, ocb?}, ... ],
 //     "itemAdds":     [ {typeId, room, x, y, z, ocb?}, ... ],
 //     "triggerMoves": [ {fromRoom, fromSectorX, fromSectorZ,
 //                        toRoom,   toSectorX,   toSectorZ}, ... ],
-//     "triggerAdds":  [ {room, sectorX, sectorZ, art?, timer?, oneShot?, mask?,
+//     "triggerAdds":  [ {room, sectorX, sectorZ, kind?, timer?, oneShot?, mask?,
 //                        commands: [ {type, param}, ... ]}, ... ],
 //     "soundAdds":    [ {map, fromLevel, fromMap}, ... ] }
 //
-// Bei den Edits sind alle Felder ausser index optional - was fehlt, bleibt
-// unveraendert. Das ist der Grund, warum ein verschobenes Item seinen Winkel
-// und seine Beleuchtung behaelt: wir write nur, was wir wirklich meinen.
+// For the edits every field except index is optional - whatever is absent
+// stays unchanged. That is why a moved item keeps its angle and its
+// lighting: we only write what we actually mean.
 //
-// triggerMoves nimmt den Triggereintrag des Quellsektors heraus und haengt ihn
-// an die Kette des Zielsektors - ein Vorgang, nicht zwei. Gedacht ist es fuer
-// den gekoppelten Zug: wandert ein Item, dessen Pickup-Trigger noch etwas
-// anderes ausloest, wandert der Trigger mit, damit die Wirkung erhalten bleibt.
+// triggerMoves takes the trigger entry out of the source sector and appends
+// it to the target sector's chain - one operation, not two. It exists for
+// the coupled move: when an item travels whose pickup trigger also fires
+// something else, the trigger travels along so the effect is preserved.
 //
-// triggerAdds setzt NEUE Trigger. Das ist der Weg, dem Level Gegner
-// hinzuzufuegen: erst das Item per itemAdds anhaengen, dann einen Trigger
-// darauf setzen. Vorgaben mit Absicht: art 0 (TRIGGER), Maske 31 und oneShot
-// true sind die Standardwerte, weil genau das ein "wecke diesen Gegner"-Trigger
-// ist. oneShot ist dabei kein Feinschliff - siehe Tr5Level::addTrigger.
+// triggerAdds sets NEW triggers. That is the way to add enemies to a level:
+// first append the item via itemAdds, then put a trigger on it. The
+// defaults are intentional: kind 0 (TRIGGER), mask 31 and oneShot true are
+// the standard values because that is exactly a "wake this enemy" trigger.
+// oneShot is no fine detail either - see Tr5Level::addTrigger.
 //
-// Weder itemRemoves noch triggerRemoves gibt es, und beides soll es nicht
-// give - siehe Tr5Level::addItem und die Begruendung in apply().
+// There is neither itemRemoves nor triggerRemoves, and neither should ever
+// exist - see Tr5Level::addItem and the reasoning in apply().
 //----------------------------------------------------------------------------
-// soundAdds uebernimmt Sound-Samples aus einem anderen Level. Gebraucht, sobald
-// ein Gegner in ein Level soll, das ihn vanilla nicht enthaelt: ein Level fuehrt
-// nur die Samples mit, die es selbst braucht, und ohne sie steht der Gegner
-// muted da. Der Quellpfad kommt vom Aufrufer, weil nur der weiss, wo die
-// unberuehrten Level liegen - siehe Patch::apply's levelSource.
-// weaponAdds kopiert Waffen-Modellslots aus anderen Leveln:
+// soundAdds takes sound samples over from another level. Needed as soon as
+// an enemy goes into a level that does not contain it in vanilla: a level
+// only carries the samples it needs itself, and without them the enemy
+// stands there mute. The source path comes from the caller, because only
+// the caller knows where the untouched levels are - see Patch::apply's
+// levelSource.
+// weaponAdds copies weapon model slots from other levels:
 //   "weaponAdds": [ {slot, fromLevel, replace}, ... ]
-// replace false heisst "nur was fehlt" - hat das Level den Slot schon, bleibt
-// er unangetastet (so behaelt rich2 seine HK-Spezialpose). Die Liste kommt
-// fertig aufgeloest aus dem Randomizer; die Spenderregeln stehen dort.
-// Ausgefuehrt wird NACH dem Outfit, damit die Holsterslots des
-// Outfit-Spenders nicht wieder ueberschrieben werden.
+// replace false means "only what is missing" - if the level already has the
+// slot, it stays untouched (that is how rich2 keeps its special HK pose).
+// The list arrives fully resolved from the randomizer; the donor rules live
+// there. Executed AFTER the outfit, so the outfit donor's holster slots are
+// not overwritten again.
 struct PatchReport
 {
     int edited = 0;
@@ -73,56 +73,57 @@ struct PatchReport
     int triggersMoved = 0;
     int triggersAdded = 0;
     int soundsCopied = 0;
-    int weaponsCopied = 0;               // uebernommene Waffenslots
-    int moveablesCopied = 0;             // uebernommene Cross-Gegner-Slots
-    std::string outfitFrom;              // leer = Outfit unveraendert
+    int weaponsCopied = 0;               // weapon slots taken over
+    int moveablesCopied = 0;             // cross-enemy slots taken over
+    std::string outfitFrom;              // empty = outfit unchanged
     std::vector<std::string> warnings;
 };
 
-// Woher Quell-Level fuer soundAdds kommen. Bekommt den Namen aus "fromLevel"
-// und liefert den vollen Pfad; leerer Rueckgabewert heisst "gibt es nicht".
+// Where source levels for soundAdds come from. Receives the name from
+// "fromLevel" and returns the full path; an empty return means "does not
+// exist".
 typedef std::wstring (*LevelSourceFn)(const std::string& name, void* user);
 
 namespace Patch
 {
-    // levelSource wird nur fuer soundAdds gebraucht. Ohne sie werden
-    // vorhandene soundAdds als Warnung gemeldet und uebersprungen - der Patch
-    // scheitert daran nicht, denn ein stummer Gegner ist kein kaputtes Level.
-    // tr3Dir/tr3GoldDir: die Installationen des Nutzers fuer die Gaeste aus
-    // Tomb Raider 3 (#92). Sie stehen als Parameter da und NICHT im Patch:
-    // ein Patch wird zum Nachvollziehen aufbewahrt und soll keine Rechnerpfade
-    // tragen. Bleiben sie leer, kommt ohnehin kein Gast im Patch vor - der
-    // Randomizer nimmt sie dann gar nicht erst in den Pool.
+    // levelSource is only needed for soundAdds. Without it, any soundAdds
+    // present are reported as warnings and skipped - the patch does not fail
+    // on that, because a mute enemy is not a broken level.
+    // tr3Dir/tr3GoldDir: the user's installations for the Tomb Raider 3
+    // guests (#92). They are parameters and NOT part of the patch: a patch
+    // is kept around for reproducing things and must not carry machine
+    // paths. If they stay empty, no guest appears in the patch anyway - the
+    // randomizer then never puts them into the pool in the first place.
     bool apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, std::string& error,
                LevelSourceFn levelSource = nullptr, void* levelSourceUser = nullptr,
                const std::wstring& tr3Dir = std::wstring(),
                const std::wstring& tr3GoldDir = std::wstring(),
-               // Zwischenlager fuer die entnommenen Pakete (#103). Leer heisst
-               // "jedes Mal neu entnehmen" - langsamer, aber immer richtig.
+               // Cache for the extracted packages (#103). Empty means
+               // "extract anew every time" - slower, but always correct.
                const std::wstring& cacheDir = std::wstring());
 
-    // Traegt in die Eingabe ein, welche Sektoren einen mitwandernden Trigger
-    // aufnehmen koennen. Muss VOR Rando::run laufen, sonst waehlt die
-    // Platzierung eine Stelle, an der apply() spaeter abbricht.
+    // Records in the input which sectors can accept a traveling trigger.
+    // Must run BEFORE Rando::run, or the placement picks a spot where
+    // apply() later aborts.
     //
-    // Liegt hier und nicht in Randomizer.cpp, weil die Antwort nur in der
-    // Floordata des echten Levels steht - und Randomizer.cpp bewusst nichts
-    // von Tr5Level weiss (der Selbsttest baut ohne). Liegt auch nicht in
-    // Tr5Level, weil das nichts von RandoInput wissen soll. Dies ist die
-    // Stelle, die ohnehin beide Seiten kennt.
+    // Lives here and not in Randomizer.cpp because the answer only exists in
+    // the floordata of the real level - and Randomizer.cpp deliberately
+    // knows nothing about Tr5Level (the self-test builds without it). Nor
+    // does it live in Tr5Level, because that should know nothing about
+    // RandoInput. This is the place that knows both sides anyway.
     //
-    // Ohne gekoppelte Items und ohne Gegnertypen tut sie nichts.
+    // Without coupled items and without enemy types it does nothing.
     void markTriggerSafeSectors(const Tr5Level& level, RandoInput& in);
 
-    // Musik-Trigger wuerfeln (Haken "Trigger-Sound/Musik-IDs switchen"):
-    // schickt alle TO_CD-Tracks des fertigen Levels durch eine GLOBALE
-    // Seed-Permutation ueber den gemessenen Trigger-Katalog (56 Jingles) - Jingles wandern
-    // damit ueber Levelgrenzen, derselbe Track klingt aber in jedem Level
-    // gleich. In ZWEI getrennten Toepfen, weil die Engine sie verschieden
-    // behandelt (TriggerNormalCDTrack, control.cpp): 117/118/121/123..130
-    // schalten die laufende Atmosphaere um, alles andere spielt einmal mit
-    // cd_flags-Sperre. Ein Atmosphaerentrigger bleibt so ein
-    // Atmosphaerentrigger, nur die Stimmung wechselt. Rueckgabe: Zahl der
-    // umgeschriebenen Woerter.
+    // Shuffle the music triggers (checkbox "Shuffle trigger sound/music
+    // IDs"): sends all TO_CD tracks of the finished level through a GLOBAL
+    // seed permutation over the measured trigger catalog (56 jingles) -
+    // jingles thus travel across level borders, but the same track sounds
+    // the same in every level. In TWO separate pots, because the engine
+    // treats them differently (TriggerNormalCDTrack, control.cpp):
+    // 117/118/121/123..130 switch the running atmosphere, everything else
+    // plays once with a cd_flags lock. An atmosphere trigger thus stays an
+    // atmosphere trigger, only the mood changes. Returns the number of
+    // rewritten words.
     long shuffleMusicTriggers(Tr5Level& level, uint64_t seed);
 }

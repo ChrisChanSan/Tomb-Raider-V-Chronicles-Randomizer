@@ -21,35 +21,36 @@
 #include <vector>
 
 //----------------------------------------------------------------------------
-// SCRIPT.DAT: die Levelflags read und einzelne Bits loeschen.
+// SCRIPT.DAT: read the level flags and clear individual bits.
 //
-// Gebraucht wird genau ein Bit: GF_YOUNGLARA. Es steht in den drei
-// Ireland-Leveln (andy1, Andy2, andy3) und schaltet dort das ganze
-// Waffensystem ab - Lara ist als Kind unterwegs und kann nichts tragen. An
-// acht Stellen im Motor haengt das Verhalten daran, unter anderem setup.cpp:111,
-// larafire.cpp:221, drawlara.cpp:227/429 und laraskin.cpp:424.
+// Exactly one bit is needed: GF_YOUNGLARA. It is set in the three Ireland
+// levels (andy1, Andy2, andy3) and disables the entire weapon system there -
+// Lara travels as a child and can carry nothing. Eight places in the engine
+// hang off this behavior, among them setup.cpp:111, larafire.cpp:221,
+// drawlara.cpp:227/429 and laraskin.cpp:424.
 //
-// Fuer den Randomizer ist das untragbar: der Nutzer hat festgelegt, dass die
-// Andy-Level immer Waffen haben muessen ("Wenn wir cross Level Gegner haben
-// waere ohne Waffen gegen ein Two Gun schon echt bloede"). Also wird das Bit
-// beim Randomisieren geloescht.
+// For the randomizer that is unacceptable: the user decreed that the andy
+// levels must always have weapons ("with cross-level enemies, facing a
+// TwoGun without weapons would be really nasty"). So the bit is cleared
+// when randomizing.
 //
-// AUFBAU (aus LoadGameflow, game/gameflow.cpp:956, und struct GAMEFLOW,
+// LAYOUT (from LoadGameflow, game/gameflow.cpp:956, and struct GAMEFLOW,
 // global/types.h:573):
-//   GAMEFLOW   16 Byte
-//   char       40 Byte  "[PCExtensions]"
-//   ushort     nFileNames Dateinamen-Offsets
-//   char       FileNameLen Dateinamen-Wad
-//   ushort     nLevels    Skript-Offsets
-//   uchar      ScriptLen  Skript-Wad
+//   GAMEFLOW   16 bytes
+//   char       40 bytes  "[PCExtensions]"
+//   ushort     nFileNames file name offsets
+//   char       FileNameLen file name wad
+//   ushort     nLevels    script offsets
+//   uchar      ScriptLen  script wad
 //
-// Im Skript-Wad steht je Level eine Befehlsfolge. CMD_LEVEL (0x81) traegt fuenf
-// Nutzbytes: [0] Titel-String, [1..2] gfLevelFlags (16 Bit LE), [3] Dateiname,
-// [4] Argument. Siehe gameflow.cpp:155 - "gfLevelFlags = gf[1] | (gf[2] << 8)".
+// The script wad holds one command sequence per level. CMD_LEVEL (0x81)
+// carries five payload bytes: [0] title string, [1..2] gfLevelFlags (16 bit
+// LE), [3] file name, [4] argument. See gameflow.cpp:155 -
+// "gfLevelFlags = gf[1] | (gf[2] << 8)".
 //
-// Level werden ueber ihren DATEINAMEN gesucht, nicht ueber die Position in der
-// Liste. Die Reihenfolge im Skript ist Spielreihenfolge und kann sich aendern;
-// der Dateiname ist das, was auch der Randomizer benutzt.
+// Levels are looked up by their FILE NAME, not by their position in the
+// list. The order in the script is play order and can change; the file name
+// is what the randomizer uses as well.
 //----------------------------------------------------------------------------
 class ScriptDat
 {
@@ -59,28 +60,28 @@ public:
     bool load(const std::wstring& path, std::string& error);
     bool save(const std::wstring& path, std::string& error) const;
 
-    // Loescht Bits in den Flags des Levels mit diesem Dateinamen (ohne
-    // Endung, Gross-/Kleinschreibung egal). Liefert false, wenn es das Level
-    // im Skript nicht gibt. Schon geloeschte Bits noch einmal zu loeschen ist
-    // ausdruecklich in Ordnung - der Aufruf ist wiederholbar, und genau das
-    // braucht er: der Randomizer laeuft mehrfach ueber dieselbe Installation.
+    // Clears bits in the flags of the level with this file name (without
+    // extension, case-insensitive). Returns false if the script does not
+    // know the level. Clearing an already cleared bit again is explicitly
+    // fine - the call is repeatable, and it needs to be: the randomizer
+    // runs over the same installation more than once.
     bool clearLevelFlags(const std::string& fileName, uint16_t mask, bool& changed);
 
-    // --- Objektbefehle: Name und Inventarpose eines Key-/Puzzle-/Pickup-Items
+    // --- Object commands: name and inventory pose of a key/puzzle/pickup item
     //
-    // Diese Angaben stehen NICHT im Level, sondern im Skriptblock des Levels.
-    // Je Objekt ein Befehl mit 14 Nutzbytes: Namensindex, yoff, Groesse, drei
-    // Drehungen, Flags. gameflow.cpp:371 schreibt sie nach
-    // inventry_objects_list - und diese Tabelle wird zwischen Leveln NIE
-    // zurueckgesetzt. Fehlt einem Level der Befehl, traegt das Item Namen und
-    // Pose des zuletzt gesetzten Levels; bei frischem Start den Werkswert
-    // TXT_Load (newinv2.cpp:325ff, alle acht Key-Items tragen denselben
-    // Platzhalter, vanilla immer vom Skript ueberschrieben).
+    // This information is NOT in the level but in the level's script block.
+    // One command with 14 payload bytes per object: name index, yoff, size,
+    // three rotations, flags. gameflow.cpp:371 writes them into
+    // inventry_objects_list - and that table is NEVER reset between levels.
+    // If a level lacks the command, the item carries the name and pose of
+    // whichever level set them last; on a fresh start the factory value
+    // TXT_Load (newinv2.cpp:325ff - all eight key items carry the same
+    // placeholder, in vanilla always overwritten by the script).
     //
-    // Genau das trifft uns, sobald ein Modell in ein fremdes Level wandert:
-    // joby3 bekommt Key Item 8, hat aber kein CMD_KEY8. Vanilla faellt das
-    // nie auf, weil joby2 direkt davor laeuft und den Eintrag setzt - nach
-    // einem Speichern und Laden in joby3 waere der Schluessel "Load".
+    // That is exactly what hits us once a model travels into a foreign
+    // level: joby3 receives Key Item 8 but has no CMD_KEY8. Vanilla never
+    // notices, because joby2 runs right before it and sets the entry - after
+    // a save and load in joby3 the key would read "Load".
     static constexpr uint8_t CMD_OBJ_FIRST  = 0x92;   // CMD_KEY1  = 146
     static constexpr uint8_t CMD_OBJ_LAST = 0xD8;   // CMD_PICKUPCOMBO4_2 = 216
     static constexpr int     OBJ_PAYLOAD_BYTES    = 14;
@@ -90,114 +91,113 @@ public:
     static constexpr uint8_t cmdPuzzle(int n) { return static_cast<uint8_t>(0x9E + (n - 1)); }  // PUZZLE1..12
     static constexpr uint8_t cmdPickup(int n) { return static_cast<uint8_t>(0xAA + (n - 1)); }  // PICKUP1..4
 
-    // Kopiert einen Objektbefehl samt Pose von einem Level in ein anderes.
-    // Hat das Ziel ihn schon, passiert nichts (changed bleibt false) - der
-    // Aufruf ist wiederholbar, genau wie clearLevelFlags.
+    // Copies an object command including its pose from one level to another.
+    // If the target already has it, nothing happens (changed stays false) -
+    // the call is repeatable, just like clearLevelFlags.
     //
-    // Der Einschub verlaengert die Datei: das Skript-Wad waechst um 15 Byte,
-    // alle dahinterliegenden Leveloffsets und ScriptLen werden nachgezogen.
-    // Unkritisch, weil LoadGameflow (gameflow.cpp:980) rein sequentiell durch
-    // die Datei laeuft und die Texte in eigenen Sprachdateien liegen - es gibt
-    // keine absoluten Offsets, die zeigen koennten.
-    bool copyObjectCommand(const std::string& vonLevel, const std::string& nachLevel,
+    // The insertion lengthens the file: the script wad grows by 15 bytes,
+    // and all level offsets behind it plus ScriptLen are adjusted. Harmless,
+    // because LoadGameflow (gameflow.cpp:980) walks the file strictly
+    // sequentially and the texts live in separate language files - there are
+    // no absolute offsets that could dangle.
+    bool copyObjectCommand(const std::string& fromLevel, const std::string& toLevel,
                            uint8_t cmd, bool& changed, std::string& error);
 
-    // Inventarnummern (enum invobj_types, newinv2.h:121), soweit gebraucht.
+    // Inventory numbers (enum invobj_types, newinv2.h:121), as needed.
     static constexpr int INV_PISTOLS      = 1;
     static constexpr int INV_PISTOLS_AMMO = 19;
-    static constexpr int TAKEOBJ_BYTES     = 3;   // Opcode + 2 Nutzbytes
+    static constexpr int TAKEOBJ_BYTES     = 3;   // opcode + 2 payload bytes
 
-    // Setzt ein CMD_TAKEOBJ in den Block eines Levels: Lara hat das
-    // Inventarobjekt beim Betreten nicht mehr (setup.cpp:160, NailInvItem).
-    // Wiederholbar - steht es schon da, passiert nichts.
+    // Inserts a CMD_TAKEOBJ into a level's block: Lara no longer has the
+    // inventory object on entering (setup.cpp:160, NailInvItem).
+    // Repeatable - if it is already there, nothing happens.
     bool addTakeObject(const std::string& levelName, int invObject,
                        bool& changed, std::string& error);
 
-    // Das Gegenstueck: CMD_GIVEOBJ - Lara hat das Inventarobjekt beim
-    // Betreten (setup.cpp:122, DEL_picked_up_object). Wiederholbar.
+    // The counterpart: CMD_GIVEOBJ - Lara has the inventory object on
+    // entering (setup.cpp:122, DEL_picked_up_object). Repeatable.
     bool addGiveObject(const std::string& levelName, int invObject,
                        bool& changed, std::string& error);
 
-    // Nimmt einen GIVEOBJ/TAKEOBJ-Befehl wieder heraus (die Gegenrichtung zu
-    // addInvCommand, inklusive Offsets und ScriptLen). Wiederholbar: ist er
-    // nicht da, passiert nichts.
+    // Takes a GIVEOBJ/TAKEOBJ command back out (the reverse of
+    // addInvCommand, offsets and ScriptLen included). Repeatable: if it is
+    // not there, nothing happens.
     bool removeInvCommand(uint8_t op, const std::string& levelName, int invObject,
                          bool& changed, std::string& error);
 
-    // Stufe 2: Reihenfolge INNERHALB der vier Abschnitte wuerfeln (RICHCUT2
-    // bleibt an RICH2 geklebt). Wie shuffleSections nur die Offsettabelle;
-    // nicht wiederholbar. orderText: die neue Abfolge als Text.
-    // frei = Stufe 3: alle Kampagnen-Level ueber alle Abschnitte hinweg
-    // permutieren (RICH2+RICHCUT2 bleiben eine Einheit). Die Videos haengen
-    // in der Engine an der Level-Identitaet, das Finale am letzten Slot -
-    // beides traegt auch die freie Folge.
+    // Stage 2: shuffle the order WITHIN the four sections (RICHCUT2 stays
+    // glued to RICH2). Like shuffleSections, only the offset table; not
+    // repeatable. orderText: the new sequence as text.
+    // free = stage 3: permute all campaign levels across all sections
+    // (RICH2+RICHCUT2 remain one unit). The videos hang off the level
+    // identity in the engine, the finale off the last slot - the free order
+    // carries both as well.
     bool shuffleLevels(uint64_t seed, bool frei, std::string& orderText, std::string& error);
 
-    // Slot (Platz in der Offsettabelle) eines Levels, -1 wenn unbekannt.
+    // Slot (position in the offset table) of a level, -1 if unknown.
     int  slotOfLevel(const std::string& levelName) const;
 
-    // LevelChains (LevelChains.h) gegen die JETZIGE Reihenfolge aufloesen:
-    // liegt der Spender hinter dem Nehmer, bekommt der Nehmer das Item per
-    // GIVEOBJ und den Namensbefehl des Spenders. In Vanilla-Reihenfolge
-    // passiert nichts. Jede Massnahme landet als Klartext in notes.
+    // Resolve the level chains (LevelChains.h) against the CURRENT order:
+    // if the donor comes after the taker, the taker receives the item via
+    // GIVEOBJ plus the donor's name command. In vanilla order nothing
+    // happens. Every action lands as plain text in notes.
     bool resolveChains(std::vector<std::string>& notes, std::string& error);
 
-    // Inventar-Garbage-Collector (LevelChains.h, Kopfkommentar): beim Start
-    // jedes Kampagnen-Levels wird per TAKEOBJ alles aus der Schluesselfamilie
-    // weggenommen, was ein frueheres Level anbieten konnte und das weder
-    // dieses noch ein spaeteres Level importiert; die Crossbow-Familie
-    // ("Grappling Gun") ueberall ausser rich3. Laeuft NACH resolveChains,
-    // damit Ketten-Gaben nicht gleich wieder weggenommen werden.
+    // Inventory garbage collector (LevelChains.h, header comment): at the
+    // start of every campaign level, TAKEOBJ removes everything from the key
+    // family that an earlier level could have offered and that neither this
+    // nor a later level imports; the crossbow family ("Grappling Gun")
+    // everywhere except rich3. Runs AFTER resolveChains, so chain grants are
+    // not immediately taken away again.
     bool cleanupInventory(std::vector<std::string>& notes, std::string& error);
 
-    // --- Alle Changes des Randomizers an EINER Stelle -------------------
+    // --- All the randomizer's changes in ONE place ----------------------
     //
-    // Oberflaeche und CLI treiben dieselben Schritte an. Standen sie doppelt
-    // im Code, waere der naechste Eingriff garantiert nur an einer der beiden
-    // Stellen gelandet.
+    // UI and CLI drive the same steps. If they existed twice in the code,
+    // the next change would be guaranteed to land in only one of the two
+    // places.
     //
-    // Beide Changes sind wiederholbar: ein schon geloeschtes Bit noch einmal
-    // zu loeschen aendert nichts, und ein schon vorhandener Objektbefehl wird
-    // nicht ein zweites Mal eingefuegt. Derselbe Lauf darf also mehrfach ueber
-    // dieselbe Datei gehen, ohne sie aufzublaehen.
+    // Both changes are repeatable: clearing an already cleared bit changes
+    // nothing, and an object command that is already present is not
+    // inserted a second time. The same run may therefore pass over the same
+    // file several times without bloating it.
     struct Changes
     {
-        int         flagsChanged = 0;   // Ireland-Level, denen das Kind-Bit genommen wurde
-        int         levelsMissing   = 0;   // Ireland-Level, die das Skript gar nicht kennt
+        int         flagsChanged = 0;   // Ireland levels stripped of the child bit
+        int         levelsMissing   = 0;   // Ireland levels the script does not know
         bool        keyCopied     = false;
-        int         pistolsRemoved    = 0;    // rich2: Pistolen + Munition entzogen
-        std::string keyError;            // leer = hat geklappt
-        int         joby3Weapons    = 0;   // entfernte Waffen-Wegnahmen in joby3
+        int         pistolsRemoved    = 0;    // rich2: pistols + ammo removed
+        std::string keyError;            // empty = it worked
+        int         joby3Weapons    = 0;   // removed weapon take-aways in joby3
         std::string weaponError;
         std::string pistolError;
     };
 
-    // Bei levelsMissing > 0 ist das Skript keines von Chronicles - dann bleibt
-    // alles Weitere aus, und der Aufrufer soll NICHT speichern.
+    // With levelsMissing > 0 the script is not one of Chronicles - then
+    // everything else is skipped, and the caller must NOT save.
     void randomizerChanges(Changes& e);
 
-    // Hintergrundmusik wuerfeln: das Audio-Byte im CMD_LEVEL-Eintrag
-    // (CurrentAtmosphere beim Levelstart) wird unter den spielbaren Leveln
-    // permutiert. Aussen vor bleiben GF_NOLEVEL-Eintraege und die
-    // Cutscene-Level (RICHCUT) - deren Musik gehoert zur Szene. NICHT
-    // wiederholungsfest: jeder Lauf wuerfelt neu, der Aufrufer muss von der
-    // unveraenderten Datei ausgehen (die Oberflaeche liest ohnehin aus der
-    // Sicherung).
+    // Shuffle the level music: the audio byte in the CMD_LEVEL entry
+    // (CurrentAtmosphere at level start) is permuted among the playable
+    // levels. GF_NOLEVEL entries and the cutscene levels (RICHCUT) stay out
+    // - their music belongs to the scene. NOT repeatable: every run rolls
+    // anew, the caller must start from the unmodified file (the UI reads
+    // from the backup anyway).
     bool shuffleMusic(uint64_t seed, int& getauscht, std::string& error);
 
-    // Levelabschnitte wuerfeln (Stufe 1 des Plans in Level Infos\
-    // Levelreihenfolge-Plan.md): die vier Story-Abschnitte Rom (ANDREA*),
-    // Russland (JOBY*), Irland (ANDY*) und VCI (RICH*, inkl. RICHCUT2) werden
-    // als unteilbare Bloecke permutiert. Geaendert wird NUR die Offsettabelle
-    // der Levelbloecke - die Bloecke selbst (FMVs, Cutscenes, Flags, Musik,
-    // Inventarbefehle) wandern unangetastet mit. Innerhalb eines Abschnitts
-    // bleibt die Reihenfolge, damit alle Schluesselketten gueltig bleiben.
-    // BRAUCHT die Engine mit gfLevelId (Identitaet aus dem Dateinamen) -
-    // eine aeltere EXE hielte Slot 1 weiter fuer Rom. Nicht wiederholbar.
-    // orderText bekommt die neue Abfolge als Text fuer die Anzeige.
+    // Shuffle the level sections (stage 1 of the plan in Level Infos\
+    // Levelreihenfolge-Plan.md): the four story sections Rome (ANDREA*),
+    // Russia (JOBY*), Ireland (ANDY*) and VCI (RICH*, incl. RICHCUT2) are
+    // permuted as indivisible blocks. ONLY the offset table of the level
+    // blocks changes - the blocks themselves (FMVs, cutscenes, flags,
+    // music, inventory commands) travel along untouched. Within a section
+    // the order stays, so all key chains remain valid. REQUIRES the engine
+    // with gfLevelId (identity from the file name) - an older EXE would
+    // still take slot 1 for Rome. Not repeatable. orderText receives the
+    // new sequence as text for display.
     bool shuffleSections(uint64_t seed, std::string& orderText, std::string& error);
 
-    // Was steht heute drin? Fuer Anzeige und Selbsttest.
+    // What is in there today? For display and self-test.
     struct Eintrag
     {
         std::string fileName;
@@ -208,22 +208,22 @@ public:
 private:
     std::vector<uint8_t> m_bytes;
     std::vector<Eintrag> m_levels;
-    std::vector<size_t>  m_flagsAt;    // wo die Flags jedes Eintrags stehen
-    std::vector<size_t>  m_blockStart;    // Blockanfang je Level
-    std::vector<size_t>  m_blockEnd;   // Blockende (ausschliesslich)
-    std::vector<int>     m_ofsIndex;   // Platz in der Offsettabelle
+    std::vector<size_t>  m_flagsAt;    // where each entry's flags live
+    std::vector<size_t>  m_blockStart;    // block start per level
+    std::vector<size_t>  m_blockEnd;   // block end (exclusive)
+    std::vector<int>     m_ofsIndex;   // position in the offset table
     size_t               m_scriptOfsAt = 0;
     size_t               m_scriptWad   = 0;
     int                  m_nLevels     = 0;
 
     bool   findLevel(const std::string& name, size_t& idx) const;
-    // GIVEOBJ/TAKEOBJ gemeinsam. force: auch dann einfuegen, wenn derselbe
-    // Befehl schon im Block steht - gebraucht vom Inventar-Reset, der eine
-    // Gabe hinter seinen Wegnahmen wiederholen muss.
+    // GIVEOBJ/TAKEOBJ combined. force: insert even if the same command is
+    // already in the block - needed by the inventory reset, which must
+    // repeat a grant after its take-aways.
     bool   addInvCommand(uint8_t op, const std::string& levelName, int invObject,
                         bool& changed, std::string& error, bool force = false);
-    bool   takesObject(size_t idx, int invObject) const;     // traegt der Block ein TAKEOBJ dafuer?
-    bool   givesObject(size_t idx, int invObject) const;      // ... bzw. ein GIVEOBJ?
+    bool   takesObject(size_t idx, int invObject) const;     // does the block carry a TAKEOBJ for it?
+    bool   givesObject(size_t idx, int invObject) const;      // ... or a GIVEOBJ?
     bool   givesObjectAfterTake(size_t idx, int invObject) const;
     size_t findCommand(size_t idx, uint8_t cmd) const;
 

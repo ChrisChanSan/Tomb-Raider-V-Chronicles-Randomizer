@@ -16,27 +16,26 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 //----------------------------------------------------------------------------
-// Entnahme aus einem Tomb-Raider-3-Level (#92).
+// Extraction from a Tomb Raider 3 level (#92).
 //
-// WARUM DAS HIER LIEGT UND NICHT IN EINEM WERKZEUG
+// WHY THIS LIVES HERE AND NOT IN A TOOL
 //
-// Dieses Projekt liefert keine Spieldaten mit. Wer die Dinosaurier haben
-// will, muss Tomb Raider 3 besitzen - und dann muss der Lauf sie SICH SELBST
-// aus seiner Installation holen, auf seinem Rechner, waehrend er laeuft.
-// Solange die Entnahme nur in einem Standalone-Werkzeug steckt, muessten wir
-// fertige Pakete verteilen, und die enthalten fremde Spieldaten. Deshalb ist
-// das Verlegen dieser Funktionen in den Kern keine Aufraeumarbeit, sondern
-// die Bedingung, unter der die Dinosaurier ueberhaupt ausgeliefert werden
-// duerfen. Siehe [[project-lizenz-auslieferung]].
+// This project ships no game data. Whoever wants the dinosaurs must own
+// Tomb Raider 3 - and then the run must fetch them ITSELF from that
+// installation, on the user's machine, while it runs. As long as the
+// extraction only exists in a standalone tool, we would have to distribute
+// finished packages, and those contain third-party game data. Moving these
+// functions into the core is therefore not housekeeping but the very
+// condition under which the dinosaurs may be shipped at all.
 //
-// Die Gegenrichtung - Einsetzen in ein TR5-Level - liegt bereits im Kern:
-// Tr5Level::addMoveableFromTr3, addSoundsFromTr3, addTexturesFromTr3.
+// The other direction - inserting into a TR5 level - already lives in the
+// core: Tr5Level::addMoveableFromTr3, addSoundsFromTr3, addTexturesFromTr3.
 //
-// Die Werkzeuge TR3Hol und TR3Ton rufen nach dem Port nur noch diese
-// Funktionen auf. Es darf keinen zweiten Ableser give: die Formatbruecke
-// (Einachs-Drehungen 10 Bit -> 12 Bit, Sprungtabelle mit GLOBALEN
-// Anim-Indizes, Faces mit TR5-Effektwort, farbige Faces auf eine echte
-// Textur) ist an genau einer Stelle richtig, und die soll es bleiben.
+// After the port, the tools TR3Hol and TR3Ton only call these functions.
+// There must be no second reader: the format bridge (single-axis rotations
+// 10 bit -> 12 bit, jump table with GLOBAL anim indices, faces with the TR5
+// effect word, colored faces onto a real texture) is correct in exactly one
+// place, and it should stay that way.
 //----------------------------------------------------------------------------
 #pragma once
 
@@ -47,115 +46,114 @@
 
 namespace Tr3Source
 {
-    // Holt Modell, Knochen, Animationen, Frames und Texturen eines Objekts
-    // aus einem TR3-Level und legt sie im Paketformat ab (Version 2, dasselbe,
-    // das Tr5Level::addMoveableFromTr3 und addTexturesFromTr3 erwarten).
+    // Fetches model, bones, animations, frames and textures of one object
+    // from a TR3 level and stores them in the package format (version 2, the
+    // same one Tr5Level::addMoveableFromTr3 and addTexturesFromTr3 expect).
     //
-    // Alle Formatumrechnungen passieren hier - das Paket ist danach
-    // TR5-tauglich. Geprueft wird dabei: jedes Mesh muss aufs Byte genau
-    // enden, kein Frame-Zeiger und kein Sprungziel darf die eigene Scheibe
-    // verlassen. Schlaegt eine Pruefung fehl, wird nichts geliefert.
+    // All format conversions happen here - afterwards the package is
+    // TR5-ready. Verified along the way: every mesh must end byte-exactly,
+    // no frame pointer and no jump target may leave its own slice. If any
+    // check fails, nothing is delivered.
     bool fetchMoveable(const std::wstring& levelPath,
-                      int objektId,
+                      int objectId,
                       std::vector<uint8_t>& package,
                       std::string& error);
 
-    // Ein Klang je Eintrag, mit ausdruecklich angegebenen Wave-Nummern aus
-    // MAIN.SFX. Mehrere Wellen sind Varianten desselben Klangs.
+    // One sound per entry, with explicitly given wave numbers from MAIN.SFX.
+    // Several waves are variants of the same sound.
     //
-    // Die Wave-Nummern werden ABSICHTLICH von aussen gereicht statt aus den
-    // Leveltabellen aufgeloest: bei den Gold-Leveln liefert der Weg ueber
-    // SoundMap/SoundDetails/SampleIndices nachweislich falsche Wellen, und die
-    // Selbstkalibrierung merkt es nicht. Die Nummern stammen aus dem Werkzeug
-    // TRsound und sind vom Nutzer abgehoert.
+    // The wave numbers are DELIBERATELY passed in from outside instead of
+    // resolved from the level tables: for the Gold levels, the route via
+    // SoundMap/SoundDetails/SampleIndices demonstrably yields wrong waves,
+    // and the self-calibration does not notice. The numbers come from the
+    // TRsound tool and were auditioned by the user.
     struct SoundRequest { int tr3Id; std::vector<int> waves; };
 
-    // Schneidet die gewuenschten Wellen aus MAIN.SFX und legt sie im
-    // Klangpaketformat ab (dasselbe, das addSoundsFromTr3 erwartet).
+    // Cuts the requested waves out of MAIN.SFX and stores them in the sound
+    // package format (the same one addSoundsFromTr3 expects).
     //
-    // ACHTUNG: The Lost Artifact bringt eine EIGENE MAIN.SFX mit, die sich von
-    // der aus Tomb Raider 3 unterscheidet (9820544 gegen 11646918 Byte). Die
-    // abgehoerten Wave-Nummern des Geiers beziehen sich auf die von TR3 -
-    // welche Datei gemeint ist, entscheidet der Aufrufer, nicht diese
-    // Funktion.
+    // CAUTION: The Lost Artifact ships its OWN MAIN.SFX, which differs from
+    // the Tomb Raider 3 one (9820544 vs 11646918 bytes). The auditioned wave
+    // numbers of the vulture refer to the TR3 file - which file is meant is
+    // the caller's decision, not this function's.
     bool fetchSounds(const std::wstring& sfxPath,
                      const std::vector<SoundRequest>& requests,
                      std::vector<uint8_t>& package,
                      std::string& error);
 
-    // Ein Gast aus Tomb Raider 3, vollstaendig beschrieben (#92).
+    // A guest from Tomb Raider 3, fully described (#92).
     //
-    // Das ist die EINZIGE Wahrheit ueber die vier Dinosaurier - Randomizer und
-    // Patchweg read beide hier. Frueher standen dieselben Angaben verstreut
-    // in Aufrufzeilen der Werkzeuge, und genau daran ist mir beim Compy die
-    // halbe Klangzuordnung durchgerutscht.
+    // This is the ONLY truth about the four dinosaurs - randomizer and patch
+    // path both read from here. These details used to be scattered across
+    // the tools' call lines, and that is exactly how half of the Compy's
+    // sound mapping slipped past me.
     struct DinoSource
     {
-        int         slot;        // Zielslot in TR5 - in KEINEM Level belegt
+        int         slot;        // target slot in TR5 - occupied in NO level
         const char* name;
-        const char* source;      // "tr3" oder "tr3gold": welche Installation
-        const char* file;       // Levelname darin
-        int         object;      // Objektnummer in dieser Datei
-        int         soundBase;  // erster Zielplatz in der Soundmap
+        const char* source;      // "tr3" or "tr3gold": which installation
+        const char* file;       // level name within it
+        int         object;      // object number in that file
+        int         soundBase;  // first target slot in the soundmap
         std::vector<SoundRequest> sounds;
-        std::vector<int>         muted;   // bewusst nicht mitgenommene Nummern
-        std::vector<int>         volumes;    // Prozent je Klang, in Paketreihenfolge
+        std::vector<int>         muted;   // numbers deliberately left behind
+        std::vector<int>         volumes;    // percent per sound, in package order
     };
 
-    // Die vier Gaeste. Klangplaetze sind kollisionsfrei verteilt und im Level
-    // "Jurassic Raider" gemeinsam erprobt: Geier 420-423, Compy 430-434,
-    // Raptor 438-444, T-Rex 445-449, Stummes auf 411.
+    // The four guests. Sound slots are distributed collision-free and were
+    // tested together in the "Jurassic Raider" level: vulture 420-423,
+    // Compy 430-434, Raptor 438-444, T-Rex 445-449, muted ones on 411.
     std::vector<DinoSource> dinos();
 
-    // Welche MAIN.SFX gilt fuer diesen Gast? ACHTUNG, nicht offensichtlich:
-    // der Geier steckt zwar in The Lost Artifact, seine Klaenge liegen aber in
-    // der MAIN.SFX von Tomb Raider 3. Gold bringt eine eigene mit, die sich
-    // unterscheidet (9820544 gegen 11646918 Byte) - die abgehoerten
-    // Wave-Nummern beziehen sich auf die von TR3.
+    // Which MAIN.SFX applies to this guest? CAUTION, not obvious: the
+    // vulture lives in The Lost Artifact, but its sounds are in the Tomb
+    // Raider 3 MAIN.SFX. Gold ships its own, which differs (9820544 vs
+    // 11646918 bytes) - the auditioned wave numbers refer to the TR3 one.
     std::wstring sfxPath(const DinoSource& d,
                          const std::wstring& tr3Dir, const std::wstring& tr3GoldDir);
 
-    // Und wo liegt sein Level?
+    // And where is its level?
     std::wstring levelPath(const DinoSource& d,
                            const std::wstring& tr3Dir, const std::wstring& tr3GoldDir);
 
-    // Holt Modell und Klaenge eines Gastes - mit ZWISCHENLAGER (#103).
+    // Fetches a guest's model and sounds - with a CACHE (#103).
     //
-    // Die Entnahme kostet je Aufruf rund elf Sekunden: sie liest den TR3-Level
-    // (3,3 MB) und MAIN.SFX (11,6 MB) neu ein. Bei dreizehn Leveln wird
-    // derselbe T-Rex also dreizehnmal entnommen. Einmal reicht.
+    // Extraction costs around eleven seconds per call: it re-reads the TR3
+    // level (3.3 MB) and MAIN.SFX (11.6 MB). Across thirteen levels the same
+    // T-Rex would be extracted thirteen times. Once is enough.
     //
-    // Liegt "cacheDir" vor, werden die fertigen Pakete dort abgelegt und beim
-    // naechsten Mal wiederverwendet. Das ist lizenzrechtlich unbedenklich: die
-    // Dateien entstehen auf dem Rechner dessen, der die Spiele besitzt, und
-    // bleiben dort. AUSGELIEFERT WIRD DIESER ORDNER NIE - er traegt eine
-    // Warnung als Textdatei, damit das auch beim Packen auffaellt.
+    // If "cacheDir" is given, the finished packages are stored there and
+    // reused next time. That is fine license-wise: the files come into being
+    // on the machine of the person who owns the games, and they stay there.
+    // THIS FOLDER IS NEVER SHIPPED - it carries a warning text file so that
+    // this stands out even while packaging.
     //
-    // Erkannt wird ein veralteter Eintrag an Groesse und Aenderungszeit der
-    // Quelldatei. Wer sein Spiel neu installiert oder patcht, bekommt
-    // automatisch eine frische Entnahme statt eines stillen Fehlers.
+    // A stale entry is recognized by size and modification time of the
+    // source file. Whoever reinstalls or patches their game automatically
+    // gets a fresh extraction instead of a silent error.
     bool fetchCached(const DinoSource& d,
                       const std::wstring& tr3Dir, const std::wstring& tr3GoldDir,
                       const std::wstring& cacheDir,
-                      std::vector<uint8_t>& modell, std::vector<uint8_t>& sounds,
+                      std::vector<uint8_t>& model, std::vector<uint8_t>& sounds,
                       std::string& error);
 
-    // Biegt die Texturworte der Faces auf die neuen Texinfos um. Muss NACH
-    // Tr5Level::addTexturesFromTr3 laufen (das liefert die Zuordnung) und VOR
-    // addMoveableFromTr3. Rueckgabe: Anzahl umgebogener Worte, -1 bei Fehler.
+    // Redirects the faces' texture words to the new texinfos. Must run AFTER
+    // Tr5Level::addTexturesFromTr3 (which provides the mapping) and BEFORE
+    // addMoveableFromTr3. Returns the number of redirected words, -1 on
+    // error.
     int remapTextures(std::vector<uint8_t>& package, const std::map<int,int>& mapping);
 
-    // Schreibt die SFX-Nummern der Anim-Kommandos im Modellpaket um.
+    // Rewrites the SFX numbers of the anim commands in the model package.
     //
-    // "mapping" bildet TR3-Nummer auf Zielplatz ab. Nummern, die gerufen
-    // werden und in keiner der beiden Listen stehen, landen in "unresolved" - der
-    // Aufrufer MUSS daraufhin abbrechen. Eine stehen gebliebene TR3-Nummer
-    // trifft im Ziel irgendeinen Vanilla-Klang; beim Compsognathus wurde aus
-    // 243 SFX_GENERIC_HEAVY_FEET, und das zu finden hat Stunden gekostet.
+    // "mapping" maps TR3 number to target slot. Numbers that are called but
+    // appear in neither list end up in "unresolved" - the caller MUST abort
+    // then. A TR3 number left in place hits some random vanilla sound in the
+    // target; with the Compsognathus, 243 turned into
+    // SFX_GENERIC_HEAVY_FEET, and finding that cost hours.
     //
-    // "muted" nennt Nummern, die bewusst nicht mitkommen: sie wandern auf
-    // einen leeren Platz der Soundmap, wo die Engine aussteigt statt etwas
-    // Fremdes zu spielen.
+    // "muted" names numbers that deliberately do not come along: they are
+    // pointed at an empty soundmap slot, where the engine bails out instead
+    // of playing something foreign.
     bool remapSfx(std::vector<uint8_t>& package,
                     const std::vector<std::pair<int,int>>& mapping,
                     const std::vector<int>& muted,

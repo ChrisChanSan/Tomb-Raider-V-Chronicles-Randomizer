@@ -25,41 +25,40 @@
 #include "Floor.h"
 
 //----------------------------------------------------------------------------
-// Eigener Leser und Schreiber fuer TR5-Leveldateien (.trc).
+// Our own reader and writer for TR5 level files (.trc).
 //
-// Warum eigener Code und nicht der vorhandene aus TombItemEdit2026: dessen
-// TR5-Parser (TRFile.cpp) stammt aus TRViewer von Popov Inc. und traegt keine
-// Lizenzangabe. Unsere eigenen Ergaenzungen dort setzen darauf auf, lassen sich
-// also nicht herausloesen. Fuer ein Werkzeug, das weitergegeben werden soll,
-// ist das nicht tragbar - deshalb hier von Grund auf neu.
+// Why our own code and not the existing one from TombItemEdit2026: its TR5
+// parser (TRFile.cpp) comes from TRViewer by Popov Inc. and carries no
+// license statement. Our own additions there build on top of it and cannot
+// be extracted. For a tool that is meant to be redistributed that is not
+// acceptable - hence built from scratch here.
 //
-// Formatquelle: LoadLevel() und LoadTextures() in specific/file.cpp der Engine,
-// die diesem Paket ohnehin im Quelltext beiliegt und unter derselben Lizenz
-// steht (GPLv3). Die Engine ist die autoritative Beschreibung - sie liest diese
-// Dateien seit 2000 korrekt.
+// Format source: LoadLevel() and LoadTextures() in specific/file.cpp of the
+// engine, which ships with this package in source anyway and is under the
+// same license (GPLv3). The engine is the authoritative description - it
+// has read these files correctly since 2000.
 //
-// Dateiaufbau, aus LoadLevel/LoadTextures abgeleitet:
+// File layout, derived from LoadLevel/LoadTextures:
 //
 //   int32  version
-//   int16  RTPages, OTPages, BTPages        Anzahl Texturseiten
-//   -- Texturblock 1 (32 Bit) --
+//   int16  RTPages, OTPages, BTPages        number of texture pages
+//   -- texture block 1 (32 bit) --
 //   int32  size, compressedSize
-//   byte[] Nutzdaten                        compressedSize bzw. size Bytes
-//   -- Texturblock 2 (16 Bit) --
+//   byte[] payload                          compressedSize resp. size bytes
+//   -- texture block 2 (16 bit) --
 //   int32  size, compressedSize
-//   byte[] Nutzdaten
-//   int16  data[16]                         32 Bytes, u.a. LaraDrawType/Weather
-//   -- Hauptblock --
+//   byte[] payload
+//   int16  data[16]                         32 bytes, incl. LaraDrawType/Weather
+//   -- main block --
 //   int32  size, compressedSize
-//   byte[] size Bytes                       UNKOMPRIMIERT, wortwoertlich
+//   byte[] size bytes                       UNCOMPRESSED, verbatim
 //
-// Der Hauptblock ist der interessante Teil: darin liegen nacheinander Raeume,
-// Objekte, Sprites, Kameras, Sounds, Boxen, animierte Texturen und
-// Texturinfos, dann ein int32 mit der Item-Anzahl und danach die Items zu je
-// 24 Bytes. Dass er unkomprimiert und wortwoertlich in der Datei steht, ist
-// der Grund, warum sich Items ueberhaupt an Ort und Stelle aendern lassen,
-// ohne die ganze Datei neu zu write - compressedSize wird fuer diesen
-// Block gelesen, aber nie benutzt.
+// The main block is the interesting part: it holds, in order, rooms,
+// objects, sprites, cameras, sounds, boxes, animated textures and texture
+// infos, then an int32 with the item count and after that the items at 24
+// bytes each. The fact that it sits uncompressed and verbatim in the file
+// is the reason items can be changed in place at all without rewriting the
+// whole file - compressedSize is read for this block but never used.
 //----------------------------------------------------------------------------
 
 struct Tr5Item
@@ -69,74 +68,74 @@ struct Tr5Item
     int32_t x = 0, y = 0, z = 0;
     int16_t yRot = 0;
     int16_t shade = 0;
-    int16_t triggerFlags = 0;   // OCB in den unteren 6 Bit, siehe Randomizer.h
+    int16_t triggerFlags = 0;   // OCB in the lower 6 bits, see Randomizer.h
     int16_t flags = 0;
 };
 
 //----------------------------------------------------------------------------
-// Ein AI-Objekt (AIOBJECT, global/types.h:2295, 24 Byte im Block direkt
-// hinter den Items). Marker wie AI_AMBUSH (Slot 379): Larson/Pierre fliehen
-// ab 40 LP zu einem AIAmbush mit passender OCB in ihrer Zone und despawnen
-// dort (GetAITarget/FindAITargetObject, box.cpp). boxNumber darf 0 sein -
-// die Engine rechnet sie zur Laufzeit selbst (box.cpp:1640).
+// An AI object (AIOBJECT, global/types.h:2295, 24 bytes in the block right
+// behind the items). Markers like AI_AMBUSH (slot 379): Larson/Pierre flee
+// from 40 HP to an AIAmbush with matching OCB in their zone and despawn
+// there (GetAITarget/FindAITargetObject, box.cpp). boxNumber may be 0 - the
+// engine computes it itself at runtime (box.cpp:1640).
 //----------------------------------------------------------------------------
 struct Tr5AiObject
 {
     int16_t objectNumber = 0;
     int16_t roomNumber = 0;
     int32_t x = 0, y = 0, z = 0;
-    int16_t ocb = 0;            // trigger_flags: muss der OCB des Gegners entsprechen
+    int16_t ocb = 0;            // trigger_flags: must match the enemy's OCB
     int16_t flags = 0;
     int16_t yRot = 0;
     int16_t boxNumber = 0;
 };
 
 //----------------------------------------------------------------------------
-// Ein Raum, soweit wir ihn brauchen. Der Raum-Blob wird nicht mehr am Stueck
-// uebersprungen, sondern aufgeschluesselt - Portale, Nachbarn und Flags sind
-// die Grundlage dafuer, einen wirklich abgeschiedenen Raum zu finden.
+// A room, as far as we need it. The room blob is no longer skipped in one
+// piece but broken down - portals, neighbors and flags are the basis for
+// finding a genuinely secluded room.
 //----------------------------------------------------------------------------
 struct Tr5Room
 {
     int   index = 0;
     int   originX = 0, originZ = 0, yBottom = 0;
     int   numXSectors = 0, numZSectors = 0;
-    int   altRoom = -1;                 // Flipmap-Partner, -1 = keiner
-    unsigned flags = 0;                 // Bit 0x1 = unter Wasser
-    std::vector<int> portalRooms;       // Zielraeume der Portalliste
+    int   altRoom = -1;                 // flipmap partner, -1 = none
+    unsigned flags = 0;                 // bit 0x1 = under water
+    std::vector<int> portalRooms;       // target rooms of the portal list
 
-    // Absolute Dateiposition des Sektorfelds (numXSectors * numZSectors
-    // Eintraege zu je 8 Byte). 0, wenn der Raum nicht aufging. Das erste Wort
-    // jedes Eintrags ist FLOOR_INFO.index, der Zeiger in die Floordata.
+    // Absolute file position of the sector field (numXSectors * numZSectors
+    // entries of 8 bytes each). 0 if the room did not parse. The first word
+    // of each entry is FLOOR_INFO.index, the pointer into the floordata.
     size_t sectorsOffset = 0;
 
-    // Absolute Dateiposition des Raumkopfes (208 Byte). Gebraucht, um die
-    // Flags bei +78 zu write - das Wasserbit sitzt dort.
+    // Absolute file position of the room header (208 bytes). Needed to
+    // write the flags at +78 - the water bit sits there.
     size_t headerOffset = 0;
 
     bool isAlternate() const { return altRoom >= 0; }
 };
 
 //----------------------------------------------------------------------------
-// Ein Eintrag einer Floordata-Kette, mit allen seinen Woertern.
+// One entry of a floordata chain, with all its words.
 //
-// Das Zerlegen in Eintraege ist nicht Bequemlichkeit, sondern Notwendigkeit:
-// words[0] traegt in Bit 15 das "letzter Eintrag der Kette"-Kennzeichen. Wer
-// eine Kette wortweise kopiert und einen Eintrag herausnimmt, laesst dieses Bit
-// am falschen Wort stehen - die Engine liest dann ueber das Kettenende hinaus.
-// Beim Zusammensetzen wird es darum neu vergeben.
+// Splitting into entries is not convenience but necessity: words[0] carries
+// in bit 15 the "last entry of the chain" marker. Whoever copies a chain
+// word by word and takes one entry out leaves this bit on the wrong word -
+// the engine then reads past the end of the chain. It is therefore
+// reassigned when reassembling.
 //----------------------------------------------------------------------------
 struct Tr5FloorEntry
 {
     int function = 0;                   // global/types.h, enum floor_types
-    int art = 0;                        // nur bei function == 4 (Trigger)
+    int art = 0;                        // only for function == 4 (trigger)
     std::vector<uint16_t> words;
 };
 
 //----------------------------------------------------------------------------
-// Ein Triggerbefehl. type ist die 4-Bit-Befehlsart (enum trigobj_types,
+// A trigger command. type is the 4-bit command kind (enum trigobj_types,
 // global/types.h:435): 0 = TO_OBJECT, 1 = TO_CAMERA, 3 = TO_FLIPMAP,
-// 8 = TO_CD, 13 = TO_CUTSCENE und so weiter.
+// 8 = TO_CD, 13 = TO_CUTSCENE and so on.
 //----------------------------------------------------------------------------
 struct Tr5TriggerCmd
 {
@@ -147,305 +146,304 @@ struct Tr5TriggerCmd
 class Tr5Level
 {
 public:
-    // Liest die Datei vollstaendig in den Speicher und ermittelt die Lage des
-    // Hauptblocks. Bei Fehlschlag steht der Grund in error.
+    // Reads the file completely into memory and determines the location of
+    // the main block. On failure the reason is in error.
     bool load(const std::wstring& path, std::string& error);
 
-    // Schreibt die - moeglicherweise geaenderte - Datei. Bewusst als eigener
-    // Zielpfad: die Quelldatei bleibt unangetastet, bis der Aufrufer sie
-    // ersetzen will.
+    // Writes the - possibly modified - file. Deliberately to its own target
+    // path: the source file stays untouched until the caller wants to
+    // replace it.
     bool save(const std::wstring& path, std::string& error) const;
 
     int32_t version() const { return m_version; }
     size_t  fileSize() const { return m_bytes.size(); }
 
-    // Absolute Position und Groesse des Hauptblocks in der Datei.
+    // Absolute position and size of the main block in the file.
     size_t  mainBlockOffset() const { return m_mainOffset; }
     size_t  mainBlockSize() const { return m_mainSize; }
 
     // --- Items ---------------------------------------------------------
-    // Absolute Position des int32 mit der Item-Anzahl; direkt dahinter
-    // liegen die Items zu je 24 Byte.
+    // Absolute position of the int32 with the item count; right behind it
+    // lie the items at 24 bytes each.
     size_t  itemCountOffset() const { return m_itemCountOffset; }
     int32_t itemCount() const { return m_itemCount; }
     int     roomCount() const { return m_roomCount; }
 
     const std::vector<Tr5Room>& rooms() const { return m_rooms; }
 
-    // Zaehlt, in wie vielen Raeumen die Portalliste NICHT aufging. Muss 0
-    // sein - siehe die Rechnung in parseRoom().
+    // Counts in how many rooms the portal list did NOT parse. Must be 0 -
+    // see the arithmetic in parseRoom().
     int     roomParseMismatches() const { return m_roomMismatch; }
 
-    // Liest ein Item. index muss < itemCount() sein.
+    // Reads an item. index must be < itemCount().
     bool    getItem(int index, Tr5Item& out) const;
 
-    // Schreibt ein Item an derselben Stelle zurueck. Aendert nur die 24 Byte
-    // dieses Datensatzes - Dateigroesse und alle anderen Offsets bleiben
-    // unberuehrt, weshalb Aendern gefahrlos ist und Entfernen nicht.
+    // Writes an item back to the same place. Changes only the 24 bytes of
+    // this record - file size and all other offsets stay untouched, which
+    // is why changing is safe and removing is not.
     bool    setItem(int index, const Tr5Item& in);
 
-    // Haengt ein AI-Objekt hinten an den AI-Block (direkt hinter den Items).
-    // Fuer den Fluchtmarker von Larson/Pierre: EIN AI_AMBUSH je Level an
-    // Laras Startposition - die 40-LP-Flucht fuehrt Richtung Leveleingang
-    // und despawnt ausser Sicht. NIE auf den Spawn-Sektor eines Gegners
-    // legen: GetAIPickups (setup.cpp:2024) macht AI-Objekte im Umkreis von
-    // 512 Units zur Start-Verhaltensanweisung des Gegners (Dauer-AMBUSH,
-    // er zielt nie) und verbraucht sie danach (room_number = NO_ROOM).
+    // Appends an AI object to the AI block (right behind the items). For
+    // the flee marker of Larson/Pierre: ONE AI_AMBUSH per level at Lara's
+    // start position - the 40-HP flight leads towards the level entrance
+    // and despawns out of sight. NEVER put it on an enemy's spawn sector:
+    // GetAIPickups (setup.cpp:2024) turns AI objects within 512 units into
+    // the enemy's start behavior order (permanent AMBUSH, it never aims)
+    // and consumes them afterwards (room_number = NO_ROOM).
     bool    addAiObject(const Tr5AiObject& in, std::string& error);
 
-    // Haengt ein Item hinten an. Das ist der einzige Weg, Items hinzuzufuegen:
-    // anhaengen verschiebt keine bestehenden Indizes, und die "Object N"-
-    // Verweise der Trigger bleiben damit gueltig. Ein Entfernen gibt es hier
-    // bewusst NICHT - es wuerde alle nachfolgenden Indizes verschieben.
+    // Appends an item at the end. That is the only way to add items:
+    // appending shifts no existing indices, so the triggers' "Object N"
+    // references stay valid. There is deliberately NO removal here - it
+    // would shift all subsequent indices.
     bool    addItem(const Tr5Item& in, std::string& error);
 
-    // Die Engine haelt items[] als festes Feld dieser Groesse (MAX_ITEMS in
-    // global/types.h). Mehr Items laedt sie nicht - rich2 liegt mit 248 schon
-    // dicht darunter, deshalb wird die Grenze hier geprueft und nicht gehofft.
-    // Seit der Engine-Verdopplung 512 (vorher 256; global/types.h der
-    // Engine ist die massgebliche Stelle, beide muessen uebereinstimmen).
+    // The engine holds items[] as a fixed array of this size (MAX_ITEMS in
+    // global/types.h). It loads no more items - rich2 already sits close
+    // underneath with 248, which is why the limit is checked here rather
+    // than hoped for. 512 since the engine doubling (256 before;
+    // global/types.h of the engine is the authoritative place, both must
+    // agree).
     static constexpr int MAX_ITEMS = 512;
 
-    // Hebt genau diese Grenze auf - ausschliesslich fuer die Debug-Level, die
-    // jeden gueltigen Sektor mit einem Marker belegen. Die entstehen mit
-    // mehreren tausend Items und sind deshalb NICHT spielbar; die Engine bricht
-    // beim Laden mit einer Meldung ab. Sie sind zum Ansehen in trview gedacht
-    // und landen darum auch in einem eigenen Ordner, nie in data\.
+    // Lifts exactly that limit - solely for the debug levels that put a
+    // marker on every valid sector. Those come out with several thousand
+    // items and are therefore NOT playable; the engine aborts loading with
+    // a message. They are meant for viewing in trview and accordingly land
+    // in their own folder, never in data\.
     //
-    // Bewusst ein ausdruecklicher Schalter statt eines gelockerten Grenzwerts:
-    // wer ihn setzt, muss wissen, dass das Ergebnis kein Level mehr ist.
+    // Deliberately an explicit switch instead of a loosened limit: whoever
+    // sets it must know that the result is no longer a level.
     void    allowMoreThanMaxItems(bool on) { m_allowOverLimit = on; }
 
     // --- Floordata -----------------------------------------------------
     //
-    // Geaendert wird nach genau einem Muster: die neue Kette hinten an den
-    // Block anhaengen und den FLOOR_INFO.index des Sektors umhaengen. Nie
-    // mittendrin einfuegen oder loeschen - das wuerde JEDEN nachfolgenden
-    // Index verschieben, und zwar lautlos, weil ein falscher Index einfach
-    // eine andere Kette liest. Die alte Kette bleibt als toter Ballast
-    // liegen; auf sie zeigt danach kein Sektor mehr.
+    // Changes follow exactly one pattern: append the new chain to the end
+    // of the block and repoint the sector's FLOOR_INFO.index. Never insert
+    // or delete in the middle - that would shift EVERY subsequent index,
+    // and silently so, because a wrong index simply reads a different
+    // chain. The old chain stays behind as dead ballast; no sector points
+    // at it afterwards.
     int32_t floorDataCount() const { return m_floorCount; }
 
-    // Liest den FLOOR_INFO.index eines Sektors. -1, wenn es den Sektor nicht
-    // gibt. 0 bedeutet: dieser Sektor hat ueberhaupt keine Floordata.
+    // Reads a sector's FLOOR_INFO.index. -1 if the sector does not exist.
+    // 0 means: this sector has no floordata at all.
     int     sectorIndex(int room, int sx, int sz) const;
 
-    // Zerlegt die Kette ab index in ihre Eintraege. Bei index == 0 ist das
-    // Ergebnis leer und der Rueckgabewert trotzdem true. false heisst: die
-    // Kette laeuft aus dem Block heraus, Finger weg.
+    // Splits the chain starting at index into its entries. For index == 0
+    // the result is empty and the return value still true. false means: the
+    // chain runs out of the block, hands off.
     bool    readChain(int index, std::vector<Tr5FloorEntry>& out) const;
 
-    // Musik-Trigger: besucht jedes TO_CD-Aktionswort (Typ 8) aller
-    // Sektorketten genau einmal (geteilte Ketten werden ueber den
-    // Kettenanfang dedupliziert - sonst ginge ein Track ZWEIMAL durch die
-    // Abbildung und landete woanders als gewuerfelt). found sammelt die
-    // Tracknummern; mapping patcht sie IN PLACE - das Wort behaelt Typ,
-    // Ende-Bit und Platz, nur die Tracknummer (Bits 0..9) wechselt, darum
-    // braucht es hier KEIN Ketten-Neubauen. Rueckgabe: Zahl der gepatchten
-    // bzw. gefundenen Woerter.
+    // Music triggers: visits every TO_CD action word (type 8) of all sector
+    // chains exactly once (shared chains are deduplicated via the chain
+    // start - otherwise a track would go through the mapping TWICE and land
+    // somewhere other than rolled). found collects the track numbers;
+    // mapping patches them IN PLACE - the word keeps type, end bit and
+    // position, only the track number (bits 0..9) changes, which is why NO
+    // chain rebuilding is needed here. Returns the number of patched resp.
+    // found words.
     long    musicTriggers(const std::map<int, int>* mapping, std::set<int>* found);
 
-    // Der Neigungseintrag eines Sektors (TILT, SPLIT1/2, NOCOLF), roh fuer
-    // floorPosAt (Floor.h) - dort steckt die portierte GetHeight-Mathematik,
-    // die aus Eintrag + Punkt die echte Bodenhoehe und die Belaufbarkeit
-    // macht. baseY ist der Grundwert des Sektors (floor-Byte << 8), auf einer
-    // Schraege die HOECHSTE Ecke.
-    // Rueckgabe: -1 Kette unlesbar (Finger weg), 0 eben (kein Eintrag,
-    // baseY trotzdem gefuellt), 1 Eintrag steht in si.
+    // A sector's slope entry (TILT, SPLIT1/2, NOCOLF), raw, for floorPosAt
+    // (Floor.h) - the ported GetHeight math lives there, turning entry +
+    // point into the true floor height and walkability. baseY is the
+    // sector's base value (floor byte << 8), on a slope the HIGHEST corner.
+    // Returns: -1 chain unreadable (hands off), 0 flat (no entry, baseY
+    // filled anyway), 1 entry is in si.
     int     floorSlope(int room, int sx, int sz, SlopeInfo& si, int& baseY) const;
 
-    // Baut ein aus einem TR3-Level geholtes Moveable ein (Paket aus TR3Hol,
-    // Kennung "T35H"). Implementierung in Tr5Tr3Import.cpp - bewusst neben
-    // dem erprobten TR5->TR5-Weg und nicht in ihm.
+    // Installs a moveable fetched from a TR3 level (package from TR3Hol,
+    // magic "T35H"). Implemented in Tr5Tr3Import.cpp - deliberately next to
+    // the proven TR5->TR5 path and not inside it.
     //
-    // texinfoIndex: JEDES Face zeigt danach auf diesen im Ziel bereits
-    // vorhandenen Texinfo. Damit wird keine Texturseite eingefuegt und keine
-    // Kachelnummer verschoben; der Gegner ist falsch texturiert, aber die
-    // Seitenverwaltung bleibt unberuehrt. Echte Texturen sind ein eigener
-    // Schritt ueber Tr5Transfer.cpp.
-    bool    addMoveableFromTr3(const std::vector<uint8_t>& package, int zielSlot,
+    // texinfoIndex: EVERY face points at this already existing texinfo of
+    // the target afterwards. That way no texture page is inserted and no
+    // tile number shifts; the enemy is wrongly textured, but the page
+    // management stays untouched. Real textures are a separate step via
+    // Tr5Transfer.cpp.
+    bool    addMoveableFromTr3(const std::vector<uint8_t>& package, int targetSlot,
                                int texinfoIndex, std::string& error);
 
-    // Setzt die Klaenge eines TR3-Pakets ("T35S" aus TR3Ton) auf die
-    // Soundmap-Plaetze basisId, basisId+1, ... und liefert die Zuordnung
-    // urspruengliche TR3-ID -> neuer Platz zurueck. Damit werden anschliessend
-    // die SFX-Nummern in den Anim-Kommandos umgebogen.
+    // Puts the sounds of a TR3 package ("T35S" from TR3Ton) onto the
+    // soundmap slots baseId, baseId+1, ... and returns the mapping original
+    // TR3 id -> new slot. With it the SFX numbers in the anim commands are
+    // rewritten afterwards.
     //
-    // Warum hohe Plaetze statt der TR3-Nummern: die urspruenglichen IDs sind
-    // in TR5 teils belegt (89 in JEDEM Level, 84/87 in einigen). Die Plaetze
-    // 440..449 sind dagegen ueberall frei, und die Soundmap ist ein festes
-    // Feld von 450 Eintraegen - ein hoher Platz kostet also kein Byte.
+    // Why high slots instead of the TR3 numbers: the original ids are
+    // partly taken in TR5 (89 in EVERY level, 84/87 in some). Slots
+    // 440..449 are free everywhere, and the soundmap is a fixed field of
+    // 450 entries - a high slot costs not a single byte.
     //
-    // lautProzent (optional, je Klang in Paketreihenfolge): dehnt die
-    // Lautstaerke prozentual. Der Grundwert kommt aus einem vorhandenen
-    // SAMPLE_INFO des Ziels, damit die Groessenordnung stimmt - TR3 fuehrt
-    // Volume als ganzes Wort, TR5 als ein Byte, eine direkte Uebernahme waere
-    // geraten. 100 oder fehlend heisst unveraendert.
-    bool    addSoundsFromTr3(const std::vector<uint8_t>& package, int basisId,
+    // volumePercent (optional, per sound in package order): stretches the
+    // volume proportionally. The base value comes from an existing
+    // SAMPLE_INFO of the target so the order of magnitude is right - TR3
+    // stores volume as a whole word, TR5 as one byte, a direct takeover
+    // would be a guess. 100 or absent means unchanged.
+    bool    addSoundsFromTr3(const std::vector<uint8_t>& package, int baseId,
                              std::vector<std::pair<int,int>>& mapping,
                              std::string& error,
-                             const std::vector<int>* lautProzent = nullptr);
+                             const std::vector<int>* volumePercent = nullptr);
 
-    // Setzt die Texturen eines TR3-Modellpakets (Version 2) ein: Seiten
-    // anhaengen, Texinfos anlegen. Liefert TR3-Texturnummer -> neuer
-    // Texinfo-Index; damit biegt der Aufrufer die Texturworte der Faces um.
+    // Inserts the textures of a TR3 model package (version 2): append
+    // pages, create texinfos. Returns TR3 texture number -> new texinfo
+    // index; with it the caller redirects the faces' texture words.
     //
-    // Implementierung in Tr5Transfer.cpp - dort liegen die erprobten Helfer
-    // fuer die Seitenverwaltung. Die ist die gefaehrlichste Stelle des
-    // Werkzeugs: eingefuegt wird an derselben Stelle wie beim TR5-Transfer
-    // (rt+ot), danach werden Texinfos und Sprites nachgezogen. Niemals
-    // eigenmaechtig hinten anhaengen - das verschiebt die Grenze zwischen
-    // Objekt- und Bump-Seiten.
+    // Implemented in Tr5Transfer.cpp - the proven helpers for page
+    // management live there. That is the most dangerous spot of the tool:
+    // insertion happens at the same place as in the TR5 transfer (rt+ot),
+    // then texinfos and sprites are adjusted. Never append at the end on
+    // your own - that shifts the boundary between object and bump pages.
     //
-    // Bei Erfolg steht in error eine Kurzmeldung (neue Seiten, neue Infos).
+    // On success, error carries a short summary (new pages, new infos).
     bool    addTexturesFromTr3(const std::vector<uint8_t>& package,
                                std::map<int,int>& mapping, std::string& error);
 
-    // Nimmt den Triggereintrag des Quellsektors heraus und haengt ihn an die
-    // Kette des Zielsektors. Beide Ketten werden neu hinten angebaut, beide
-    // Sektoren umgehaengt. Der Trigger behaelt sein Referenzwort und seine
-    // Befehle wortgleich - er spricht sein Item ueber den Index an, nicht
-    // ueber den Ort, und bleibt darum gueltig.
+    // Takes the trigger entry out of the source sector and appends it to
+    // the target sector's chain. Both chains are rebuilt at the end, both
+    // sectors repointed. The trigger keeps its reference word and its
+    // commands word for word - it addresses its item via the index, not via
+    // the place, and therefore stays valid.
     //
-    // Bricht ab, wenn die Quelle nicht genau einen Trigger hat oder das Ziel
-    // nach canAppendTrigger() ungeeignet ist.
+    // Aborts if the source does not have exactly one trigger or the target
+    // is unsuitable per canAppendTrigger().
     bool    moveTrigger(int fromRoom, int fromSx, int fromSz,
                         int toRoom, int toSx, int toSz, std::string& error);
 
-    // Wie moveTrigger, aber die Quelle behaelt ihren Trigger: der Zielsektor
-    // bekommt eine ZWEITE, gleichlautende Kopie. Gebraucht fuer Levelfehler,
-    // bei denen ein Trigger nur auf einem von mehreren Wegen liegt - siehe
-    // LevelFix.h.
+    // Like moveTrigger, but the source keeps its trigger: the target sector
+    // receives a SECOND, identical copy. Needed for level defects where a
+    // trigger lies on only one of several routes - see LevelFix.h.
     bool    copyTrigger(int fromRoom, int fromSx, int fromSz,
                            int toRoom, int toSx, int toSz, std::string& error);
 
-    // Setzt einen NEUEN Trigger auf einen Sektor. Das ist der Weg, dem Level
-    // Gegner hinzuzufuegen: kein vorhandener Eintrag wird gelesen oder
-    // umgebaut, es kommt nur eine Kette hinten dazu.
+    // Puts a NEW trigger onto a sector. That is the way to add enemies to
+    // the level: no existing entry is read or rebuilt, only a chain is
+    // appended at the end.
     //
-    // art ist die Triggerart (0 = TRIGGER, 1 = PAD, 5 = HEAVY, ...), mask die
-    // fuenf Codebits (31 = alle, der uebliche Wert). oneShot setzt Bit 8 des
-    // Setup-Worts - und das ist mehr als "nur einmal": _TestTriggers
-    // (control.cpp:2415) setzt daraufhin IFL_INVISIBLE am geweckten Item, was
-    // bei manchen Gegnern deren Verhalten aendert. Larson etwa flieht ohne
-    // dieses Bit bei 40 Trefferpunkten und ist gar nicht toetbar
+    // art is the trigger kind (0 = TRIGGER, 1 = PAD, 5 = HEAVY, ...), mask
+    // the five code bits (31 = all, the usual value). oneShot sets bit 8 of
+    // the setup word - and that is more than "only once": _TestTriggers
+    // (control.cpp:2415) then sets IFL_INVISIBLE on the woken item, which
+    // changes the behavior of some enemies. Larson, for instance, flees at
+    // 40 hit points without this bit and cannot be killed at all
     // (pierre.cpp:68).
     bool    addTrigger(int room, int sx, int sz, int art, int timer, bool oneShot,
                        int mask, const std::vector<Tr5TriggerCmd>& cmds,
                        std::string& error, int refItem = -1);
 
-    // Darf an diese Kette hinten ein Trigger? Gibt den Hinderungsgrund zurueck
-    // oder nullptr. Siehe die Herleitung in der Implementierung.
+    // May a trigger be appended to this chain? Returns the obstacle or
+    // nullptr. See the derivation in the implementation.
     static const char* canAppendTrigger(const std::vector<Tr5FloorEntry>& chain);
 
 
-    // Macht einen Wandsektor zum Portal nach targetRoom (EINE Seite - der
-    // Aufrufer macht die Gegenseite mit vertauschten Rollen).
+    // Turns a wall sector into a portal to targetRoom (ONE side - the
+    // caller does the other side with the roles swapped).
     //
-    // Vorbedingung, found mit SektorPruef an andy3: das 32-Byte-SICHTFENSTER
-    // in der Portalliste des Raums muss schon existieren. Diese Funktion
-    // schreibt nur die Sektorseite: Boden/Decke vom ueberlappten Sektor des
-    // Zielraums (die Portalspalten zweier Raeume liegen uebereinander),
-    // Boxwort wie bei allen Portalsektoren (fx=6, box=2047), und an die
-    // Floordata-Kette kommt ein DOOR-Eintrag - vorhandene Neigungen (TILT)
-    // bleiben stehen, Vanilla-Muster [TILT][SPLIT][DOOR].
+    // Precondition, found with SektorPruef on andy3: the 32-byte VIEWPORT
+    // in the room's portal list must already exist. This function writes
+    // only the sector side: floor/ceiling from the overlapped sector of the
+    // target room (the portal columns of two rooms lie on top of each
+    // other), box word as with all portal sectors (fx=6, box=2047), and a
+    // DOOR entry goes onto the floordata chain - existing slopes (TILT)
+    // stay, vanilla pattern [TILT][SPLIT][DOOR].
     //
-    // Wiederholbar: zeigt die Kette schon auf targetRoom, passiert nichts.
+    // Repeatable: if the chain already points at targetRoom, nothing
+    // happens.
     bool    makePortal(int room, int sx, int sz, int targetRoom, std::string& error);
 
-    // Macht einen Sektor kletterbar: CLIMB-Eintrag mit Richtungsbits
-    // (0x100=0 Grad, 0x200=90, 0x400=180, 0x800=270 - Laras Blick auf die
-    // Wand). ODER-t in vorhandene Eintraege; Kettenordnung siehe Rumpf.
+    // Makes a sector climbable: CLIMB entry with direction bits (0x100=0
+    // degrees, 0x200=90, 0x400=180, 0x800=270 - Lara's view onto the
+    // wall). ORs into existing entries; chain ordering see the body.
     bool    makeClimb(int room, int sx, int sz, int dirBits, std::string& error);
 
-    // Wasserbit eines Raums (ROOM_UNDERWATER, Bit 0 der Raumflags bei +78).
-    // Echter Eingriff: 44 Motorstellen haengen daran, nicht nur die Optik.
-    bool    setRoomWater(int room, bool anAus, std::string& error);
+    // A room's water bit (ROOM_UNDERWATER, bit 0 of the room flags at +78).
+    // A real intervention: 44 engine sites hang off it, not just visuals.
+    bool    setRoomWater(int room, bool on, std::string& error);
     // --- Sound ---------------------------------------------------------
     //
-    // Ein Level fuehrt nur die Samples mit, die es selbst braucht. Kommt ein
-    // Gegner darin vanilla nicht vor, fehlen seine Geraeusche - er steht dann
-    // muted im Level. Pierre ist der Fall, an dem das auffiel.
-    int  soundInfoIndex(int map) const;    // -1 = dieses Level kennt den Sound nicht
+    // A level only carries the samples it needs itself. If an enemy does
+    // not appear in it in vanilla, its noises are missing - it then stands
+    // mute in the level. Pierre is the case where that was noticed.
+    int  soundInfoIndex(int map) const;    // -1 = this level does not know the sound
     int  soundSampleCount() const { return m_nSamples; }
 
-    // Uebernimmt das Sample hinter srcMap aus src und legt es hier unter
-    // dstMap ab. Zufallsvarianten ("nimm eines von N") kommen mit.
-    // Tut nichts und meldet Erfolg, wenn dstMap hier schon aufloest.
+    // Takes the sample behind srcMap over from src and stores it here under
+    // dstMap. Random variants ("pick one of N") come along.
+    // Does nothing and reports success if dstMap already resolves here.
     bool copySoundFrom(const Tr5Level& src, int srcMap, int dstMap, std::string& error);
 
-    // --- Modelltransfer ------------------------------------------------
+    // --- Model transfer ------------------------------------------------
     //
-    // Uebernimmt einen kompletten Objektslot aus einem anderen Level: Meshes,
-    // Meshzeiger, Bones, Animationen samt Zustandswechseln, Bereichen,
-    // Befehlen und Frames, die referenzierten Texturinfos, die zugehoerigen
-    // Texturseiten (32- und 16-Bit synchron) und den OBJECT_INFO-Eintrag.
-    // Existiert der Slot im Ziel, wird sein Eintrag ersetzt; die alten Daten
-    // bleiben als toter Ballast liegen - dieselbe Philosophie wie ueberall:
-    // nichts wird entfernt, nichts verschiebt fremde Indizes.
+    // Takes a complete object slot over from another level: meshes, mesh
+    // pointers, bones, animations including state changes, ranges, commands
+    // and frames, the referenced texture infos, the corresponding texture
+    // pages (32 and 16 bit in sync) and the OBJECT_INFO entry. If the slot
+    // exists in the target, its entry is replaced; the old data stays
+    // behind as dead ballast - the same philosophy as everywhere: nothing
+    // is removed, nothing shifts foreign indices.
     //
-    // Slot 0 (LARA) wird verweigert: er traegt die Animationen des Levels,
-    // ein fremder Slot 0 nimmt dem Level seine eigenen Bewegungen (im Spiel
-    // erlebt: fehlende Schalter- und Kriechanimationen).
+    // Slot 0 (LARA) is refused: it carries the level's animations, a
+    // foreign slot 0 takes the level's own movements away (experienced in
+    // game: missing switch and crawl animations).
     //
-    // Sounds kommen NICHT automatisch mit - dafuer gibt es copySoundFrom und
-    // die Wissenstabelle in Tr5Transfer.cpp (hartverdrahtete Waffen-SFX).
+    // Sounds do NOT come along automatically - for that there is
+    // copySoundFrom and the knowledge table in Tr5Transfer.cpp (hard-wired
+    // weapon SFX).
     //
-    // dstSlot (< 0 = wie slotId): der Slot, unter dem die Kopie im ZIEL
-    // eingetragen wird. Gebraucht fuer die Ausweichslots des Cross-Gegnermix:
-    // die MESHSWAP1 des Spenders (405) landet dort unter 399-402, damit der
-    // eigene MESHSWAP1 des Ziels unangetastet bleibt.
+    // dstSlot (< 0 = same as slotId): the slot under which the copy is
+    // registered in the TARGET. Needed for the fallback slots of the cross
+    // enemy mix: the donor's MESHSWAP1 (405) lands there under 399-402, so
+    // the target's own MESHSWAP1 stays untouched.
     //
-    // meshesOnly: NUR Meshes, Zeiger und Texturen kopieren - keine
-    // Animationen, Frames oder Bones. Fuer Mesh-Lager wie MESHSWAP1: dessen
-    // Objekteintrag traegt zwar einen anim_index, aber keine eigenen
-    // Animationen (Core-Altlast; der generische Zuschnitt liefe damit aus
-    // seinen Bloecken). Der Eintrag im Ziel bekommt anim 0xFFFF, bone 0,
-    // frame 0 - gelesen wird an einem Lagerslot ohnehin nur mesh_index.
+    // meshesOnly: copy ONLY meshes, pointers and textures - no animations,
+    // frames or bones. For mesh stores like MESHSWAP1: its object entry
+    // does carry an anim_index but no animations of its own (Core legacy;
+    // the generic slicing would run out of its blocks with it). The entry
+    // in the target gets anim 0xFFFF, bone 0, frame 0 - at a store slot
+    // only mesh_index is ever read anyway.
     //
-    // animCount (<= 0 = Heuristik "bis zum naechsten Objekt"): explizite
-    // Laenge der Anim-Scheibe. Noetig fuer den Imp (89): seine Steuerung
-    // greift mit anim_index+45 QUER durch die globale Anim-Tabelle - die
-    // Todesanimation liegt physisch in den Bereichen fremder Kulissenslots,
-    // die Heuristik schneidet nach 18 Anims ab und die Engine laese im Ziel
-    // hinter dem Tabellenende (im Spiel gesehen: Todes-Flugschleife). Die
-    // Frame-Scheibe waechst dann mit bis hinter den hoechsten Frame-Zeiger
-    // der erweiterten Scheibe; mitkopierte Kulissen-Anims sind harmloser
-    // Ballast nach dem Prinzip "nichts entfernen, nichts verschieben".
+    // animCount (<= 0 = heuristic "up to the next object"): explicit length
+    // of the anim slice. Needed for the Imp (89): its control reaches with
+    // anim_index+45 ACROSS the global anim table - the death animation
+    // physically lies in the ranges of foreign scenery slots, the heuristic
+    // cuts off after 18 anims and the engine would read past the table end
+    // in the target (seen in game: death flight loop). The frame slice then
+    // grows along past the highest frame pointer of the extended slice;
+    // scenery anims copied along are harmless ballast per the principle
+    // "remove nothing, shift nothing".
     bool copyMoveableFrom(const Tr5Level& src, int slotId, std::string& error,
                           int dstSlot = -1, bool meshesOnly = false,
                           int animCount = -1);
 
-    // Laesst eine Anim die Daten- und Bewegungsfelder einer anderen Anim
-    // DESSELBEN Levels uebernehmen: Frame-Zeiger, Rate, frame_size,
-    // Geschwindigkeiten und die Kommandoreferenz. Zustand, Frame-Bereich,
-    // Folgeanim und Changes bleiben stehen. Gedacht fuer tote Erbe-Anims wie
-    // SWATs Zustand-3-Feueranim (+2): sie teilt sich ihren Frame-Zeiger mit
-    // der Zielanim (+3), liest deren 34-Wort-Frames aber mit Schrittweite 36
-    // - ab Keyframe 1 entsteht Muell (Modell verschwindet, Schatten zerrt).
-    // Core hat das nie bemerkt, weil SWAT selbst ueber Zustand 35 feuert;
-    // nur Guard/CRANE_GUY feuern ueber Zustand 3, und kein Vanilla-Level
-    // laesst beide Saetze zusammen spielen. Verlangt identische
-    // Frame-Bereiche in beiden Anims (Familiensaetze sind schablonengleich).
+    // Lets one anim adopt the data and motion fields of another anim of the
+    // SAME level: frame pointer, rate, frame_size, speeds and the command
+    // reference. State, frame range, next anim and changes stay. Meant for
+    // dead heritage anims like SWAT's state-3 fire anim (+2): it shares its
+    // frame pointer with the target anim (+3) but reads its 34-word frames
+    // with stride 36 - from keyframe 1 on, garbage appears (model
+    // disappears, shadow smears). Core never noticed, because SWAT itself
+    // fires via state 35; only Guard/CRANE_GUY fire via state 3, and no
+    // vanilla level lets both sets play together. Requires identical frame
+    // ranges in both anims (family sets are template-identical).
     bool adoptAnimData(int dstSlot, int dstOffset, int srcSlot,
                              int srcOffset, std::string& error);
 
-    // Eine einzelne Lara-Anim samt Frame-Daten, Kommandos und Sounds aus
-    // einem SPENDERLEVEL einpflanzen (ANIM_KEYCARD 437, #53). Der Anim-Platz
-    // existiert ueberall, die Bilddaten sind levelspezifisch - Begruendung
-    // und Grenzen am Rumpf in Tr5Transfer.cpp.
+    // Implants a single Lara anim including frame data, commands and sounds
+    // from a DONOR level (ANIM_KEYCARD 437, #53). The anim slot exists
+    // everywhere, the image data is level-specific - reasoning and limits
+    // at the body in Tr5Transfer.cpp.
     bool copyLaraAnimFrom(const Tr5Level& src, int animNr, std::string& error);
 
-    // Traegt Laras Anim <animNr> hier echte Bilddaten? FrameSize null ist
-    // Cores Stub-Kennzeichen; zusaetzlich wird der Platz nachgerechnet.
+    // Does Lara's anim <animNr> carry real image data here? FrameSize zero
+    // is Core's stub marker; additionally the slot is recomputed.
     bool    laraAnimUsable(int animNr) const;
 
-    // Auf welche Anim zeigt Laras <animNr> weiter (next_animation)? Fuer die
-    // Kettenreparatur - Bewegungen bestehen aus mehreren Gliedern, und Core
-    // stubbt sie am Stueck. -1 = gibt es nicht.
+    // Which anim does Lara's <animNr> continue into (next_animation)? For
+    // the chain repair - movements consist of several links, and Core stubs
+    // them as a whole. -1 = does not exist.
     int     laraAnimNext(int animNr) const;
 
-    // Der Objektslot, wie er in der Datei steht. anim < 0 heisst: keiner.
+    // The object slot as it stands in the file. anim < 0 means: none.
     struct MoveableInfo
     {
         int slot = -1;
@@ -455,45 +453,47 @@ public:
     bool moveableInfo(int slotId, MoveableInfo& out) const;
     std::vector<int> moveableSlots() const;
 
-    // Nur fuer Diagnosewerkzeuge: rohe Values aus den Bloecken. Ausserhalb des
-    // Blocks kommt 0 zurueck - die Werkzeuge vergleichen Spender gegen Kopie,
-    // da faellt ein Ausreisser als Unterschied auf.
+    // For diagnostic tools only: raw values from the blocks. Outside the
+    // block, 0 comes back - the tools compare donor against copy, where an
+    // outlier stands out as a difference.
     int32_t debugReadBoneLong(long long i) const;
     int16_t debugReadFrameShort(long long i) const;
-    // Diagnose der physischen Samplekette: wo das num_samples-Feld hinter dem
-    // Hauptblock liegt und wie viele Samples es zaehlt, plus die Rohbytes.
+    // Diagnosis of the physical sample chain: where the num_samples field
+    // behind the main block lies and how many samples it counts, plus the
+    // raw bytes.
     bool debugSampleArray(size_t& numSamplesAt, int32_t& n) const
     { if (!m_soundOk) return false; numSamplesAt = m_numSamplesAt; n = m_nSamples; return true; }
     const std::vector<uint8_t>& debugBytes() const { return m_bytes; }
     int32_t debugTexinfoCount() const { return m_texinfos.count; }
     bool debugTexinfoBlock(size_t& dataAt, int32_t& n) const { dataAt = m_texinfos.dataAt; n = m_texinfos.count; return m_texinfos.count > 0; }
-    // Anim- und Kommandoblock fuer Diagnosewerkzeuge (AnimDump): Lage und
-    // Anzahl, Datensatzformat siehe SZ_ANIM in Tr5Transfer.cpp (40 Byte).
+    // Anim and command block for diagnostic tools (AnimDump): location and
+    // count, record format see SZ_ANIM in Tr5Transfer.cpp (40 bytes).
     bool debugAnimBlock(size_t& dataAt, int32_t& n) const { dataAt = m_anims.dataAt; n = m_anims.count; return m_anims.count > 0; }
-    // Klangkette fuer Messwerkzeuge: Soundmap, SAMPLE_INFO-Feld, Samplezahl.
+    // Sound chain for measuring tools: soundmap, SAMPLE_INFO field, sample
+    // count.
     bool debugSoundBlocks(size_t& lutAt, size_t& infosAt, int32_t& nInfos, int32_t& nSamples) const
     { if (!m_soundOk) return false;
       lutAt = m_lutAt; infosAt = m_infosAt; nInfos = m_nInfos; nSamples = m_nSamples; return true; }
 
-    // Modellbloecke fuer Messwerkzeuge (Objekttabelle und Frame-Scheibe).
+    // Model blocks for measuring tools (object table and frame slice).
     bool debugModelBlocks(size_t& objAt, int32_t& objN, size_t& frAt, int32_t& frN) const
     { objAt = m_objects.dataAt; objN = m_objects.count;
       frAt = m_frames.dataAt;  frN  = m_frames.count;  return objN > 0; }
     bool debugCommandBlock(size_t& dataAt, int32_t& n) const { dataAt = m_commands.dataAt; n = m_commands.count; return m_commands.count > 0; }
     bool debugChangeBlock(size_t& dataAt, int32_t& n) const { dataAt = m_changes.dataAt; n = m_changes.count; return m_changes.count > 0; }
     bool debugRangeBlock(size_t& dataAt, int32_t& n) const { dataAt = m_ranges.dataAt; n = m_ranges.count; return m_ranges.count > 0; }
-    // Byteposition des SAMPLE_INFO einer Soundmap-ID (8 Byte: number s16,
-    // volume u8, radius s8, randomness s8, pitch s8, flags s16).
+    // Byte position of the SAMPLE_INFO of a soundmap id (8 bytes: number
+    // s16, volume u8, radius s8, randomness s8, pitch s8, flags s16).
     bool debugSoundInfoAt(int map, size_t& at) const
     { const int i = soundInfoIndex(map); if (i < 0) return false; at = m_infosAt + static_cast<size_t>(i) * 8; return true; }
-    // Lage und Umfang der beiden Meshbloecke - fuer Rohvergleiche zweier
-    // Fassungen desselben Levels (LevelDiff).
+    // Location and extent of the two mesh blocks - for raw comparisons of
+    // two versions of the same level (LevelDiff).
     int32_t debugMeshPtrCount() const { return m_meshPtrs.count; }
     bool debugMeshDataBlock(size_t& dataAt, int32_t& n) const
     { dataAt = m_meshData.dataAt; n = m_meshData.count; return m_meshData.count > 0; }
-    // Byteposition eines Meshes ueber seinen Zeigerindex - fuer
-    // Rohvergleiche (Walk-Kennzahlen unterscheiden identische Geometrie
-    // mit verschiedener Texturierung nicht).
+    // Byte position of a mesh via its pointer index - for raw comparisons
+    // (walk metrics do not distinguish identical geometry with different
+    // texturing).
     bool debugMeshAt(int ptrIndex, size_t& at) const
     {
         if (ptrIndex < 0 || ptrIndex >= m_meshPtrs.count) return false;
@@ -502,36 +502,37 @@ public:
         at = m_meshData.dataAt + ofs;
         return true;
     }
-    // Kopf eines Meshes (x, y, z, r, flags, nVerts-Wort) ueber seinen
-    // Zeigerindex. false, wenn es den Zeiger nicht gibt.
+    // Header of a mesh (x, y, z, r, flags, nVerts word) via its pointer
+    // index. false if the pointer does not exist.
     bool    debugMeshHeader(int ptrIndex, int16_t out[6]) const;
-    // Laeuft ein Mesh mit der korrekten Normalen-Regel ab (0 = Normalen,
-    // nur negativ = Prelight) und liefert seine Kennzahlen. In
-    // Tr5Transfer.cpp definiert, wo der Ableser wohnt.
+    // Walks a mesh with the correct normals rule (0 = normals, negative
+    // only = prelight) and returns its metrics. Defined in Tr5Transfer.cpp,
+    // where the walker lives.
     bool    debugMeshWalk(int ptrIndex, int& nVerts, int& nNorms,
                           int& ngt4, int& ngt3, int& bytes) const;
 
-    // Das Outfit-Byte (LaraType) im Levelkopf, hinter den Texturbloecken.
+    // The outfit byte (LaraType) in the level header, behind the texture
+    // blocks.
     int  laraType() const;
     bool setLaraType(int value);
     int  foreignTalkHeads() const;
     bool setForeignTalkHeads(int value);
 
-    // --- Texturwerkstatt (#104) ----------------------------------------
+    // --- Texture workshop (#104) ---------------------------------------
     //
-    // Die beiden Texturbloecke des Levels werden beim ersten Seiten-Import
-    // EINMAL entpackt und unresolved gehalten; jeder weitere Import haengt nur
-    // noch an. Gepackt und in die Datei zurueckgesetzt wird EINMAL beim
-    // Schliessen - save() ruft es selbst, der Aufrufer muss nichts tun.
+    // The level's two texture blocks are unpacked ONCE at the first page
+    // import and kept open; every further import only appends. Packing and
+    // putting them back into the file happens ONCE at closing - save()
+    // calls it itself, the caller need not do anything.
     //
-    // Vorher liefen Entpacken, Packen, Datei-Neuzusammensetzen und reparse
-    // je importiertem Typ: bei Allsanity zehnmal je Level ueber 30+ MB, und
-    // genau da steckten die gemessenen 5-10 Sekunden des Gegnermixes (ein
-    // Level LADEN kostet nur 15 ms). Wichtig fuer alle Zwischenzustaende:
-    // solange die Werkstatt unresolved ist, tragen die Texturbloecke in m_bytes
-    // den ALTEN Stand - wer sie liest, muss vorher schliessen. Der
-    // Hauptblock dahinter verschiebt sich bis zum Schliessen nicht, alle
-    // Blockversaetze bleiben gueltig.
+    // Previously, unpacking, packing, file reassembly and reparse ran per
+    // imported type: under allsanity ten times per level over 30+ MB, and
+    // that is exactly where the measured 5-10 seconds of the enemy mix
+    // lived (LOADING a level costs only 15 ms). Important for all
+    // intermediate states: as long as the workshop is open, the texture
+    // blocks in m_bytes carry the OLD state - whoever reads them must close
+    // first. The main block behind them does not shift until closing, all
+    // block offsets stay valid.
     bool texWorkshopClose(std::string& error);
 
 private:
@@ -544,36 +545,37 @@ private:
     std::vector<uint8_t> m_bytes;
     int32_t              m_version = 0;
     int16_t              m_rtPages = 0, m_otPages = 0, m_btPages = 0;
-    size_t               m_mainOffset = 0;   // Beginn der Hauptblock-Nutzdaten
+    size_t               m_mainOffset = 0;   // start of the main block payload
     size_t               m_mainSize = 0;
     size_t               m_itemCountOffset = 0;
     int32_t              m_itemCount = 0;
-    size_t               m_floorCountOffset = 0;  // das int32 mit numFloorData
-    size_t               m_floorAt = 0;           // erstes Short der Floordata
+    size_t               m_floorCountOffset = 0;  // the int32 with numFloorData
+    size_t               m_floorAt = 0;           // first short of the floordata
     int32_t              m_floorCount = 0;
 
-    // --- Sound-Block ---------------------------------------------------
-    // Alles ausser den Sampledaten selbst liegt IM Hauptblock, hinter den
-    // Items. Wer davor etwas einfuegt - Items oder Floordata -, muss diese
-    // Offsets mitziehen; genau dafuer gibt es shiftSound().
+    // --- Sound block ---------------------------------------------------
+    // Everything except the sample data itself lies IN the main block,
+    // behind the items. Whoever inserts something before it - items or
+    // floordata - must drag these offsets along; that is exactly what
+    // shiftSound() is for.
     size_t               m_lutAt = 0;             // short sample_lut[450]
     size_t               m_numInfosAt = 0;
     size_t               m_infosAt = 0;
     int32_t              m_nInfos = 0;
-    size_t               m_numSamplesInMainAt = 0;  // num_samples, Fassung im Hauptblock
-    size_t               m_numSamplesAt = 0;        // num_samples, Fassung dahinter
+    size_t               m_numSamplesInMainAt = 0;  // num_samples, copy in the main block
+    size_t               m_numSamplesAt = 0;        // num_samples, copy behind it
     int32_t              m_nSamples = 0;
     bool                 m_soundOk = false;
 
-    bool findSound();                     // nach findItems, darf scheitern
-    void shiftSound(size_t bytes, size_t abOffset);
+    bool findSound();                     // after findItems, may fail
+    void shiftSound(size_t bytes, size_t fromOffset);
 
-    // --- Blockkarte ----------------------------------------------------
-    // Lage der Bloecke, die der Modelltransfer anfassen muss. countAt ist die
-    // Position des int32 mit der Anzahl, dataAt der erste Datenbyte. Wird in
-    // findItems mitgeschrieben und ist nach JEDEM Einfuegen ungueltig, bis
-    // reparse() gelaufen ist - deshalb arbeitet der Transfer mit einer
-    // Splice-Liste und fuegt alles auf einen Schlag ein.
+    // --- Block map -----------------------------------------------------
+    // Location of the blocks the model transfer must touch. countAt is the
+    // position of the int32 with the count, dataAt the first data byte.
+    // Written in findItems and invalid after EVERY insertion until
+    // reparse() has run - which is why the transfer works with a splice
+    // list and inserts everything in one stroke.
     struct Block
     {
         size_t  countAt = 0;
@@ -583,25 +585,25 @@ private:
     Block m_meshData, m_meshPtrs, m_anims, m_changes, m_ranges, m_commands,
           m_bones, m_frames, m_objects, m_sprites, m_texinfos;
 
-    // Liest Kopf und Hauptblock neu ein, nachdem Bytes eingefuegt wurden.
-    // copyMoveableFrom ist ein Member und in Tr5Transfer.cpp definiert - die
-    // Trennung haelt Tr5Level.cpp lesbar, mehr nicht.
+    // Re-reads header and main block after bytes were inserted.
+    // copyMoveableFrom is a member and defined in Tr5Transfer.cpp - the
+    // split keeps Tr5Level.cpp readable, nothing more.
     bool reparse(std::string& error);
     int                  m_roomCount = 0;
     std::vector<Tr5Room> m_rooms;
     int                  m_roomMismatch = 0;
 
-    // Setzt eine Kette hinten an den Block und liefert ihren Index. Leere
-    // Kette -> 0 ("keine Floordata"). Zieht numFloorData und die doppelt
-    // gefuehrte Hauptblockgroesse mit.
+    // Appends a chain to the end of the block and returns its index. Empty
+    // chain -> 0 ("no floordata"). Drags numFloorData and the doubly kept
+    // main block size along.
     bool appendChain(const std::vector<Tr5FloorEntry>& chain, uint16_t& outIndex,
                      std::string& error);
     void setSectorIndex(const Tr5Room& r, int sx, int sz, uint16_t index);
 
-    // Schluesselt einen Raum-Blob auf. offset/size zeigen auf den Blob im
-    // Hauptblock, index ist die laufende Raumnummer.
+    // Breaks down a room blob. offset/size point at the blob in the main
+    // block, index is the running room number.
     void parseRoom(size_t offset, size_t size, int index);
 
     bool readHeader(std::string& error);
-    bool findItems(std::string& error);   // laeuft den Hauptblock ab
+    bool findItems(std::string& error);   // walks the main block
 };

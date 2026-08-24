@@ -26,44 +26,43 @@
 #include <vector>
 
 //----------------------------------------------------------------------------
-// Platzierungslogik.
+// Placement logic.
 //
-// Grundregeln, alle aus frueheren Erkenntnissen dieses Projekts und nicht
-// verhandelbar:
+// Ground rules, all earned from earlier findings of this project and not
+// negotiable:
 //
-// 1. KEIN Entfernen von Items. TR-Item-Indizes sind reine Arrayposition; ein
-//    entferntes Item schiebt alle folgenden hoch und die "Object N"-Verweise
-//    der Trigger zeigen anschliessend auf das falsche Objekt. Randomisieren
-//    heisst deshalb: vorhandene Items an ihrem Index UMSCHREIBEN (itemEdits).
-//    itemAdds gibt es nur fuer Pflicht-Injektionen wie Andrea3s Brechstange,
-//    und die haengen sich hinten an, verschieben also nichts.
+// 1. NO removing of items. TR item indices are pure array positions; a
+//    removed item shifts all following ones up and the triggers' "Object N"
+//    references then point at the wrong object. Randomizing therefore
+//    means: REWRITE existing items at their index (itemEdits). itemAdds
+//    exists only for mandatory injections like Andrea3's crowbar, and those
+//    append at the end, shifting nothing.
 //
-// 2. Ein Pickup-Trigger klebt am Sektor, nicht am Item. Wird ein Item bewegt,
-//    bleibt sein Trigger zurueck und feuert nie wieder. Betroffene Items
-//    werden aus den Leveldaten ABGELEITET (siehe findTriggerPinnedItems), nicht
-//    von Hand gepflegt. Ausgenommen sind Trigger, deren einzige weitere Wirkung
-//    PlaySoundtrack ist - ein fehlender Musikeinsatz ist ein bewusst
-//    akzeptiertes Opfer (Nutzerentscheidung), alles andere waere ein Eingriff
-//    in Fortschritt, Geometrie oder Gegner.
-//    Den Trigger spaeter mitzuverschieben ist geplant, verlangt aber
-//    Floordata-Bearbeitung und ist ausdruecklich erst nach dem Grundgeruest dran.
+// 2. A pickup trigger sticks to the sector, not to the item. If an item is
+//    moved, its trigger stays behind and never fires again. Affected items
+//    are DERIVED from the level data (see findTriggerPinnedItems), not
+//    maintained by hand. Excepted are triggers whose only further effect is
+//    PlaySoundtrack - a missing music cue is a deliberately accepted
+//    sacrifice (user decision); anything else would interfere with
+//    progress, geometry or enemies.
+//    Moving the trigger along later is planned, but requires floordata
+//    editing and is explicitly scheduled after the basic framework.
 //
-// 3. OCB wird beim Verschieben auf 0 gesetzt. Ein Pickup mit Sockel-OCB
-//    (3/4/7/8) oder Versteck-OCB (1) braucht eine passende Sonderumgebung am
-//    Zielort; fehlt sie, laesst sich das Item ANSTANDSLOS NICHT AUFNEHMEN -
-//    kein Absturz, keine Meldung, es liegt einfach fuer immer da. Im Projekt
-//    empirisch bestaetigt (Andrea3, Item 101). Nur OCB 0 ueberlebt einen
-//    Ortswechsel zuverlaessig.
+// 3. OCB is set to 0 when moving. A pickup with a pedestal OCB (3/4/7/8) or
+//    a hiding OCB (1) needs a matching special environment at the target;
+//    without it, the item QUIETLY CANNOT BE PICKED UP - no crash, no
+//    message, it just lies there forever. Confirmed empirically in this
+//    project (Andrea3, item 101). Only OCB 0 reliably survives a move.
 //
-// 4. Alles ist seedabhaengig und reihenfolgestabil: Item- und Sektorlisten
-//    werden vor jeder Zufallsentscheidung sortiert, damit derselbe Seed
-//    unabhaengig von Datei- oder Map-Reihenfolge dasselbe Ergebnis liefert.
+// 4. Everything is seed-driven and order-stable: item and sector lists are
+//    sorted before every random decision, so the same seed yields the same
+//    result regardless of file or map ordering.
 //----------------------------------------------------------------------------
 
-// Pickup-Typbereiche, direkt aus game/setup.cpp abgelesen: dort bekommen genau
-// diese beiden zusammenhaengenden Bereiche PickUpCollision zugewiesen
-// (PUZZLE_ITEM1..BURNING_TORCH_ITEM und PISTOLS_ITEM..FLARE_INV_ITEM).
-// Damit ist "was ist ueberhaupt ein aufnehmbares Item" nicht geraten.
+// Pickup type ranges, read straight from game/setup.cpp: exactly these two
+// contiguous ranges get PickUpCollision assigned there
+// (PUZZLE_ITEM1..BURNING_TORCH_ITEM and PISTOLS_ITEM..FLARE_INV_ITEM).
+// So "what even is a pickable item" is not guessed.
 constexpr int PICKUP_LO_1 = 172, PICKUP_HI_1 = 241;
 constexpr int PICKUP_LO_2 = 334, PICKUP_HI_2 = 355;
 
@@ -73,20 +72,20 @@ inline bool isPickupType(int typeId)
         || (typeId >= PICKUP_LO_2 && typeId <= PICKUP_HI_2);
 }
 
-// Bedienelemente: alles, wovor Lara stehen und eine Animation abspielen muss
-// (#120). Ein Gegner darf dort nicht stehen - seine Hitbox schiebt sie weg,
-// die Animation laeuft nie an, und eine Tuer, die daran haengt, bleibt fuer
-// immer zu.
+// Operable fixtures: everything Lara must stand in front of and play an
+// animation at (#120). An enemy must not stand there - its hitbox pushes
+// her away, the animation never starts, and a door hanging off it stays
+// closed forever.
 //
-// Die vier Bereiche sind aus der TR5-Slotliste abgelesen, nicht geraten:
+// The four ranges are read from the TR5 slot list, not guessed:
 //   242-249  Puzzle Hole 1-8
 //   258-265  Key Hole 1-8
 //   266-283  Switch Type 1-8, Airlock, Underwater 1-2, Turn, Cog, Lever,
 //            Jump, Crowbar, Pulley, Crowdove
 //   329-331  Sequence Switch 1-3
 //
-// Puzzle Done (250-257) steht bewusst NICHT dabei: das ist der fertige
-// Zustand, daran bedient niemand mehr etwas.
+// Puzzle Done (250-257) is deliberately NOT included: that is the finished
+// state, nobody operates anything there anymore.
 inline bool istBedienelement(int typeId)
 {
     return (typeId >= 242 && typeId <= 249)
@@ -94,37 +93,37 @@ inline bool istBedienelement(int typeId)
         || (typeId >= 329 && typeId <= 331);
 }
 
-// Schwarmgetier: Fledermaus, Ratte, Spinne und der Spinnengenerator. Loest ein
-// Pickup-Trigger nur so etwas aus, haelt er das Item NICHT fest.
+// Swarm critters: bat, rat, spider and the spider generator. If a pickup
+// trigger fires only one of these, it does NOT pin the item.
 //
-// Begruendung des Nutzers: diese Viecher verfolgen Lara ein paar Sekunden und
-// verschwinden dann von selbst. Sie zu verlieren aendert nichts am Spielablauf.
-// Ein Hund oder ein Swat verschwindet nicht - deshalb bleibt Andrea1s Key Item
-// ortsfest, und genau das war auch die Vorgabe.
+// The user's reasoning: these critters chase Lara for a few seconds and
+// then despawn on their own. Losing them changes nothing about the flow of
+// the game. A dog or a SWAT does not disappear - which is why Andrea1's key
+// item stays in place, and that was exactly the requirement.
 //
-// Ueber alle 16 Level trifft diese Ausnahme exakt einen Fall: Andrea2s Item
-// 121 (Puzzle Item3), dessen Aufnahme eine Ratte spawnt. Alles andere, was
-// Pickup-Trigger im Spiel ausloesen, sind Tueren, Fallen, Steuerobjekte oder
-// echte Gegner.
+// Across all 16 levels this exception hits exactly one case: Andrea2's item
+// 121 (Puzzle Item3), whose pickup spawns a rat. Everything else that
+// pickup triggers fire in the game are doors, traps, control objects or
+// real enemies.
 inline bool isDespawningSwarm(int typeId)
 {
     return typeId >= 93 && typeId <= 96;   // Bat, Rat, Spider, Spider Generator
 }
 
-// Traeger im Sinne von GetCarriedItems (game/setup.cpp:1925): ein Item, das
-// beim Levelstart die Pickups in seiner unmittelbaren Naehe einsammelt. Sie
-// verschwinden dabei aus dem Raum (room_number = NO_ROOM) und kommen erst
-// wieder zum Vorschein, wenn der Gegner stirbt oder die Kiste durchsucht wird.
+// Carriers in the sense of GetCarriedItems (game/setup.cpp:1925): an item
+// that at level start collects the pickups in its immediate vicinity. They
+// vanish from the room (room_number = NO_ROOM) and only reappear when the
+// enemy dies or the crate is searched.
 //
-// Die Engine fragt objects[...].intelligent ab. Das ist eine Eigenschaft, die
-// setup.cpp Slot fuer Slot setzt, kein zusammenhaengender Zahlenbereich - hier
-// stehen deshalb genau die 24 Slots, die sie dort bekommen. Dazu kommt der
-// Bereich SEARCH_OBJECT1..SEARCH_OBJECT3, den GetCarriedItems ausdruecklich
-// zusaetzlich prueft: die durchsuchbaren Kisten und Spinde. In den sechzehn
-// Leveln stellen sie die Mehrheit aller Traeger.
+// The engine queries objects[...].intelligent. That is a property setup.cpp
+// assigns slot by slot, not a contiguous number range - hence exactly the
+// 24 slots that receive it there are listed here. Added to that is the
+// range SEARCH_OBJECT1..SEARCH_OBJECT3, which GetCarriedItems explicitly
+// also checks: the searchable crates and lockers. Across the sixteen levels
+// they make up the majority of all carriers.
 //
-// Ausdruecklich NICHT dabei, weil man es vermuten wuerde: Scientist (69) und
-// Guardian (65) bekommen kein intelligent und tragen nichts.
+// Explicitly NOT included, though one would suspect them: Scientist (69)
+// and Guardian (65) get no intelligent flag and carry nothing.
 inline bool isCarrierType(int typeId)
 {
     switch (typeId)
@@ -134,14 +133,14 @@ inline bool isCarrierType(int typeId)
     case 75: case 77: case 79: case 81: case 83: case 85: case 87: case 89:
         return true;                              // intelligent = 1
     default:
-        return typeId >= 164 && typeId <= 168;    // SEARCH_OBJECT1..3 samt MIPs
+        return typeId >= 164 && typeId <= 168;    // SEARCH_OBJECT1..3 incl. MIPs
     }
 }
 
-// Der Kasten aus GetCarriedItems, unveraendert uebernommen: gleicher Raum,
-// weniger als 512 Einheiten in X und Z, weniger als 256 in Y. Bewusst ein
-// Positionstest in Weltkoordinaten und kein Sektortest - die Engine rechnet so,
-// und ein Sektortest waere an den Raendern falsch.
+// The box from GetCarriedItems, taken over unchanged: same room, less than
+// 512 units in X and Z, less than 256 in Y. Deliberately a position test in
+// world coordinates and not a sector test - the engine computes it this
+// way, and a sector test would be wrong at the edges.
 inline bool isWithinCarryBox(int bx, int by, int bz, int px, int py, int pz)
 {
     return (bx - px < 512) && (px - bx < 512)
@@ -149,10 +148,10 @@ inline bool isWithinCarryBox(int bx, int by, int bz, int px, int py, int pz)
         && (bz - pz < 512) && (pz - bz < 512);
 }
 
-// numX/numZ sind das ROHMASS aus dem Raumkopf - der Wandring rundherum zaehlt
-// mit, walkable sind also (numX-2) * (numZ-2) Felder. Gebraucht wird das in
-// kRaumbedarf (Randomizer.cpp): dort entscheidet die Raumgroesse, welche
-// Gegner ueberhaupt hinein duerfen.
+// numX/numZ are the RAW measure from the room header - the wall ring around
+// counts too, so (numX-2) * (numZ-2) tiles are walkable. Needed in
+// kRaumbedarf (Randomizer.cpp): there the room size decides which enemies
+// may enter at all.
 struct RoomOrigin { int room = 0; int originX = 0; int originZ = 0; int numX = 0; int numZ = 0; };
 
 struct ZoneSector
@@ -161,35 +160,36 @@ struct ZoneSector
     int zone = 0;
     int floorY = 0;
 
-    // Lichte zwischen Boden und Decke (#61). Unter 768 kann Lara nicht
-    // stehen - ihre Kollisionshoehe ist 762 (game\lara.cpp) -, und
-    // PickUpCollision verweigert den Wandgriff im Duck-Zustand ausdruecklich.
+    // Clearance between floor and ceiling (#61). Below 768 Lara cannot
+    // stand - her collision height is 762 (game\lara.cpp) - and
+    // PickUpCollision explicitly refuses the wall grab in the duck state.
     int clearance = 0;
 
-    // Kanten dieses Sektors, an denen eine Wand liegt, als Winkel, die AUF
-    // die Wand zeigen (0 = +Z, 16384 = +X, -32768 = -Z, -16384 = -X). Leer
-    // heisst: keine Wand, also kein Platz fuer ein OCB-2/9-Pickup.
+    // Edges of this sector that have a wall, as angles POINTING AT the wall
+    // (0 = +Z, 16384 = +X, -32768 = -Z, -16384 = -X). Empty means: no wall,
+    // hence no place for an OCB-2/9 pickup.
     //
-    // Warum der Winkel auf die Wand zeigt und nicht von ihr weg: das Mesh
-    // dieser Modelle sitzt rund +450..500 in Modell-Z und landet damit auf
-    // der Wandflaeche, waehrend Lara auf +215 davor rueckt. An Vanilla
-    // Andrea2 Item 121 nachgemessen.
+    // Why the angle points at the wall and not away from it: the mesh of
+    // these models sits around +450..500 in model Z and thus lands on the
+    // wall surface, while Lara steps up to +215 in front of it. Measured
+    // against vanilla Andrea2 item 121.
     std::vector<int> wallAngles;
 
-    // Sektoren, die Lara auf ihrem Erstzugangsweg kurz VOR diesem betritt,
-    // etwa drei Schritte davor, beste Wahl zuerst. Aus dem Zonen-Export; dort
-    // steht der Erstzugangsbaum, hier nur noch die fertige Antwort.
+    // Sectors Lara steps on shortly BEFORE this one on her first-access
+    // path, about three steps ahead, best choice first. From the zone
+    // export; the first-access tree lives there, only the finished answer
+    // arrives here.
     //
-    // Dafuer gibt es genau einen Zweck: der Trigger eines neu gesetzten Gegners.
-    // Er darf nicht auf dem Gegnersektor liegen - sonst spawnt der Gegner in
-    // Lara hinein -, muss aber sicher ueberquert werden, sonst wacht der Gegner
-    // nie auf.
+    // There is exactly one purpose for this: the trigger of a newly placed
+    // enemy. It must not lie on the enemy's own sector - otherwise the
+    // enemy spawns into Lara - but it must be crossed reliably, or the
+    // enemy never wakes up.
     std::vector<long long> approach;
 };
 
-// Sektorschluessel: Raum, Sektor-X und Sektor-Z in eine Zahl gepackt. Die
-// Zonen-Exporte nennen Sektoren als "raum,x,z"; hier wird daraus ein
-// vergleichbarer Wert, damit die Mengen unten mit set<long long> auskommen.
+// Sector key: room, sector X and sector Z packed into one number. The zone
+// exports name sectors as "room,x,z"; here that becomes a comparable value
+// so the sets below can work with set<long long>.
 inline long long secKey(int room, int sx, int sz)
 {
     return (static_cast<long long>(room) << 32) | (static_cast<long long>(sx) << 16) | static_cast<long long>(sz);
@@ -199,29 +199,28 @@ struct KeyConstraint
 {
     int              typeId = 0;
     int              maxZone = 0;
-    std::vector<int> allowRooms;     // leer = keine Einschraenkung
+    std::vector<int> allowRooms;     // empty = no restriction
     std::vector<int> excludeRooms;
 
-    // Hoehengrenze einer Inselgruppe. Y-KONVENTION: in TR liegt KLEINERES y
-    // HOEHER. "Hoechstens 1024 ueber der Baseline" ist deshalb
-    // floorY >= baseline - 1024, und ein Sektor UNTER der Schranke ist zu hoch -
-    // typischerweise die Oberseite eines Kistenstapels, auf den Lara erst mit
-    // genau dem Schluessel kommt, der dort liegen soll.
+    // Height limit of an island group. Y CONVENTION: in TR, SMALLER y is
+    // HIGHER. "At most 1024 above the baseline" is therefore
+    // floorY >= baseline - 1024, and a sector BELOW the bound is too high -
+    // typically the top of a crate stack that Lara can only reach with
+    // exactly the key that is supposed to lie there.
     bool             hasMinFloorY = false;
     int              minFloorY = 0;
-    // Wo diese Schranke gilt. Leer heisst ueberall. Sie ist Eigenschaft der
-    // GRUPPE, nicht der Zone: joby2s Zone 0 hat 7756 Sektoren, die Insel 1900 -
-    // an die Zone gehaengt wirkte sie im halben Level.
+    // Where this bound applies. Empty means everywhere. It is a property of
+    // the GROUP, not the zone: joby2's zone 0 has 7756 sectors, the island
+    // 1900 - attached to the zone it acted on half the level.
     std::set<long long> minFloorYScope;
 
-    std::set<long long> islandSectors;     // Positivliste; leer = keine
-    std::set<long long> bannedSectors;     // Umkehrung: hier gerade nicht
-    std::set<long long> forbiddenSectors;  // hinter der eigenen Tuer
+    std::set<long long> islandSectors;     // allow list; empty = none
+    std::set<long long> bannedSectors;     // the inverse: not here right now
+    std::set<long long> forbiddenSectors;  // behind its own door
 
-    // Von diesem Typ muss MINDESTENS EINE Instanz in dieser Menge liegen.
-    // Anders als alle Felder darueber ist das kein Filter fuer eine einzelne
-    // Instanz, sondern eine Aussage ueber alle Instanzen zusammen - siehe
-    // die Behandlung in run().
+    // At least ONE instance of this type must lie in this set. Unlike all
+    // the fields above this is not a filter for a single instance but a
+    // statement about all instances together - see its handling in run().
     std::set<long long> requireInIsland;
 };
 
@@ -243,24 +242,24 @@ struct Injection
 {
     int         typeId = 0;
     int         room = 0;
-    // Statt EINES Raums eine Auswahl: der Seed sucht sich einen freien
-    // gueltigen Sektor aus allen genannten Raeumen. Gedacht fuer Vorgaben der
-    // Art "irgendwo in diesem Levelabschnitt muss das liegen" - rich2s
-    // Pflicht-Deagle in der Startinsel ist der Fall (Nutzerwunsch: Waffe
-    // garantiert, Ort jedes Mal anders). Ist die Liste leer, gilt "room".
+    // A selection instead of ONE room: the seed picks a free valid sector
+    // from all listed rooms. Meant for requirements of the kind "this must
+    // lie somewhere in this part of the level" - rich2's mandatory Deagle
+    // in the start island is the case (user wish: weapon guaranteed, place
+    // different every time). If the list is empty, "room" applies.
     std::vector<int> rooms;
-    // Optionaler fester Sektor. Ohne ihn sucht sich die Injektion einen
-    // beliebigen freien gueltigen Sektor des Raums - richtig fuer Andrea3s
-    // Brechstange, die irgendwo in Raum 120 liegen darf. rich2 braucht das
-    // Gegenteil: dort sollen drei Items auf genau einem Feld liegen, weil der
-    // Nutzer die Stelle ausgesucht hat. Ein fester Sektor belegt ihn deshalb
-    // auch NICHT fuer die naechste Injektion - Stapeln ist hier gewollt.
+    // Optional fixed sector. Without it, the injection picks any free valid
+    // sector of the room - right for Andrea3's crowbar, which may lie
+    // anywhere in room 120. rich2 needs the opposite: three items on
+    // exactly one tile, because the user picked the spot. A fixed sector
+    // therefore does NOT occupy it for the next injection either -
+    // stacking is intended here.
     bool        hasSector = false;
     int         sectorX = 0;
     int         sectorZ = 0;
-    // Hoehenversatz gegen den Sektorboden. y waechst in TR nach UNTEN, ein
-    // negativer Wert hebt das Item also an. Gebraucht, sobald mehrere
-    // Injektionen auf demselben Feld stehen und nicht ineinander stecken sollen.
+    // Height offset against the sector floor. y grows DOWNWARDS in TR, so a
+    // negative value lifts the item. Needed as soon as several injections
+    // stand on the same tile and should not intersect.
     int         yOffset = 0;
     std::string reason;
 };
@@ -271,40 +270,41 @@ struct LevelItem
     int x = 0, y = 0, z = 0;
     int sectorX = 0, sectorZ = 0;
     int ocb = 0;
-    // Kein Winkel: der Level-Info-Export liefert keinen, und der Patch laesst
-    // "angle" weg - ein verschobenes Item behaelt damit seine Ausrichtung.
+    // No angle: the level info export does not provide one, and the patch
+    // omits "angle" - a moved item thus keeps its orientation.
 };
 
 //----------------------------------------------------------------------------
-// Ein Item, dessen Pickup-Trigger mitwandert.
+// An item whose pickup trigger travels along.
 //
-// Normalerweise haelt ein Pickup-Trigger sein Item fest (Regel 2): der Trigger
-// klebt am Sektor, das Item wuerde ohne ihn wegwandern und seine Wirkung - eine
-// Tuer, ein Gegner - bliebe am alten Fleck zurueck. Der gekoppelte Zug loest
-// das, indem beides zusammen umzieht: ein Vorgang, nicht zwei.
+// Normally a pickup trigger pins its item (rule 2): the trigger sticks to
+// the sector, the item would wander off without it and its effect - a door,
+// an enemy - would stay behind at the old spot. The coupled move solves
+// that by relocating both together: one operation, not two.
 //
-// Erlaubt ist das nicht allgemein, sondern nur, wo es ausdruecklich kuriert
-// wurde. Heute genau ein Fall: Andrea1 Item 107, der Schluessel, dessen Trigger
-// zusaetzlich den Hund und einen Flame Emitter weckt.
+// This is not allowed in general, only where it was explicitly curated.
+// Today exactly one case: Andrea1 item 107, the key whose trigger also
+// wakes the dog and a flame emitter.
 //----------------------------------------------------------------------------
 struct CoupledTrigger
 {
     int itemIndex = 0;
-    int room = 0, sectorX = 0, sectorZ = 0;   // wo der Trigger heute liegt
+    int room = 0, sectorX = 0, sectorZ = 0;   // where the trigger lies today
 };
 
 //----------------------------------------------------------------------------
-// Ein Sound, den ein Gegner braucht, den SEIN Level aber nicht mitfuehrt.
+// A sound an enemy needs but ITS level does not carry.
 //
-// Ein Level traegt nur die Samples, die es selbst benoetigt. Kommt ein Gegner
-// darin vanilla nicht vor, fehlen sie - er steht dann muted da. Woher Ersatz
-// kommt, ist Kuration (ENEMY_SOUND_FIX in ZoneAnalyse.ps1) und steht fertig im
-// Zonen-Export; hier wird nur noch weitergereicht.
+// A level only carries the samples it needs itself. If an enemy does not
+// appear in it in vanilla, they are missing - it then stands there mute.
+// Where the replacement comes from is curation (ENEMY_SOUND_FIX in
+// ZoneAnalyse.ps1) and arrives ready-made in the zone export; here it is
+// only passed on.
 //----------------------------------------------------------------------------
 struct EnemySound
 {
     int typeId = 0;
-    int map = 0;                 // die fehlende SFX-Nummer im Ziellevel
+    int map = 0;                 // the missing SFX number in the target level
     std::string fromLevel;
     int fromMap = 0;
 };
@@ -313,165 +313,163 @@ struct RandoInput
 {
     std::string              level;
     int                      maxZone = 0;
-    std::vector<ZoneSector>  sectors;        // bereits nur validForItems + erreicht
+    std::vector<ZoneSector>  sectors;        // already only validForItems + reached
     std::vector<KeyConstraint> constraints;
-    std::vector<int>         fixedItems;     // aus dem Zonen-Export (Handkuration)
+    std::vector<int>         fixedItems;     // from the zone export (hand curation)
     std::vector<Injection>   injections;
-    // typeId -> Versatz gegen die Sektormitte auf Bodenhoehe. Noetig, wenn der
-    // Mesh-Ursprung eines Objekts nicht dort sitzt, wo das Modell ihn annimmt.
-    // Die Aufloesung global/levelbezogen passiert schon im Export, hier kommt
-    // nur der fertige Wert an. Siehe TYPE_OFFSET in ZoneAnalyse.ps1.
+    // typeId -> offset against the sector center at floor height. Needed
+    // when an object's mesh origin does not sit where the model assumes it.
+    // The global/per-level resolution already happens in the export, only
+    // the final value arrives here. See TYPE_OFFSET in ZoneAnalyse.ps1.
     std::map<int, PlacementOffset> typeOffset;
-    // Typen, deren OCB einen Ortswechsel ueberlebt - die Ausnahme von Regel 3.
-    // Nur fuer Objekte, bei denen die OCB die Aufnahmeart beschreibt und nicht
-    // die alte Stelle. Siehe KEEP_OCB in ZoneAnalyse.ps1.
+    // Types whose OCB survives a move - the exception to rule 3. Only for
+    // objects where the OCB describes the pickup style and not the old
+    // location. See KEEP_OCB in ZoneAnalyse.ps1.
     std::set<int>            keepOcbTypes;
-    std::vector<LevelItem>   items;          // alle Items des Levels
+    std::vector<LevelItem>   items;          // all items of the level
     std::vector<RoomOrigin>  roomOrigins;
-    std::set<int>            triggerPinned;  // abgeleitet, siehe Regel 2
+    std::set<int>            triggerPinned;  // derived, see rule 2
 
-    // Raeume mit Wasser-Flag (waterRoom aus dem Level-Export). Nutzervorgabe
-    // 2026-08-14: dort duerfen keine Gegner gesetzt werden - Landgegner
-    // koennen unter Wasser weder laufen noch angreifen und staenden nur
-    // hilflos herum. Betrifft die Zusatzgegner-Plaetze; getauschte Gegner
-    // stehen an Cores eigenen Positionen und bleiben unberuehrt.
+    // Rooms with the water flag (waterRoom from the level export). User
+    // requirement 2026-08-14: no enemies may be placed there - land enemies
+    // can neither walk nor attack under water and would just stand there
+    // helplessly. Affects the extra-enemy spots; swapped enemies stand at
+    // Core's own positions and remain untouched.
     std::set<int>            waterRooms;
 
-    // Einzelne Typen, die in bestimmten Raeumen nicht liegen duerfen. Anders
-    // als noWeaponRooms (sperrt ALLE Waffen eines Raums) und anders als die
-    // excludeRooms eines KeyConstraint (steuern nur das Verschieben
-    // vorhandener Items) gilt diese Sperre auf JEDEM Platzierungsweg -
-    // Verschieben, Waffenstreuung, Item-Abundance -, weil sie direkt in
-    // sectorAllowedFor sitzt.
+    // Individual types that must not lie in certain rooms. Unlike
+    // noWeaponRooms (bars ALL weapons from a room) and unlike a
+    // KeyConstraint's excludeRooms (which only steer the moving of existing
+    // items), this ban applies on EVERY placement path - moving, weapon
+    // scattering, item abundance - because it sits directly in
+    // sectorAllowedFor.
     //
-    // Einziger Fall bisher: rich2s HK (345) darf nicht in die Startinsel.
-    // Der Roentgenscanner in Raum 9 reagiert im Spiel geprueft NUR auf sie;
-    // andere Waffen duerfen dort liegen, sonst waere der gegnerreiche
-    // Levelanfang allein mit Pistolen zu bestehen.
+    // Only case so far: rich2's HK (345) must not enter the start island.
+    // The X-ray scanner in room 9 reacts - checked in game - ONLY to it;
+    // other weapons may lie there, otherwise the enemy-heavy level start
+    // would have to be survived with pistols alone.
     std::map<int, std::set<int>> typeNoRooms;
 
-    // Dasselbe eine Ebene feiner: einzelne SEKTOREN je Typ (#61,
-    // typeNoSectors im Export). Gebraucht, wenn ein Raum fuer einen Typ
-    // ueberwiegend taugt und nur ein paar Felder darin nicht - und vor allem
-    // fuer Typen OHNE Constraint: andy3s Kreide und Brechstange sind
-    // Werkzeuge ohne Aufnahme, die bannedSectors der Key-Constraints
-    // erreichen sie nie. Wie typeNoRooms ausserhalb des Constraint-Zweigs
-    // geprueft, gilt also auf jedem Platzierungsweg.
+    // The same one level finer: individual SECTORS per type (#61,
+    // typeNoSectors in the export). Needed when a room mostly suits a type
+    // and only a few tiles in it do not - and above all for types WITHOUT a
+    // constraint: andy3's chalk and crowbar are tools without a pickup, the
+    // key constraints' bannedSectors never reach them. Checked outside the
+    // constraint branch like typeNoRooms, so it applies on every placement
+    // path.
     std::map<int, std::set<long long>> typeNoSectors;
 
-    // Items, die ihr Antitrigger nicht mehr anfassen soll (Flagbit 0x80).
-    // Kuratiert, unabhaengig von der Gegner-Automatik: rich2s Tuer 171 soll
-    // unresolved bleiben, sobald sie einmal unresolved war.
+    // Items their antitrigger must no longer touch (flag bit 0x80).
+    // Curated, independent of the enemy automatics: rich2's door 171 is to
+    // stay open once it has been open.
     std::set<int>            antitriggerImmunItems;
 
-    // Items, auf die ein AntiTrigger oder HeavyAntiTrigger zeigt. Zeigt so
-    // ein Trigger auf einen AKTIVEN intelligenten Gegner, loescht er ihn
-    // ohne Sterben und ohne Ausblenden aus dem Level (hit_points = -16384,
-    // DisableBaddieAI, KillItem - control.cpp:2422). In Vanilla ist das
-    // Absicht, weil der Gegner dort erledigt sein soll; ein getauschter
-    // kaempft womoeglich noch und verschwand mitten im Kampf (im Spiel
-    // gesehen: Andrea1 Item 34 unter Allsanity, Antitrigger 46 in Raum 88).
+    // Items an AntiTrigger or HeavyAntiTrigger points at. If such a trigger
+    // points at an ACTIVE intelligent enemy, it deletes it from the level
+    // without dying and without fading (hit_points = -16384,
+    // DisableBaddieAI, KillItem - control.cpp:2422). In vanilla that is
+    // intentional, because the enemy is supposed to be done there; a
+    // swapped one may still be fighting and vanished mid-fight (seen in
+    // game: Andrea1 item 34 under allsanity, antitrigger 46 in room 88).
     //
-    // Solche Items tauschen jetzt mit und bekommen dabei Cores eigene
-    // Antitrigger-Immunitaet (IFL_ANTITRIGGER_ONESHOT) ins Flag-Wort - der
-    // Antitrigger prallt dann ab, der Gegner stirbt normal. Das wirkt pro
-    // ITEM: Andy2s Antitrigger auf die Items 150-154 bleibt fuer die
-    // ungetauschten Geschwister in Kraft. Betroffen sind ueberhaupt nur
-    // fuenf Gegner im ganzen Spiel (Andrea1 34, Andy2 151, rich1 180,
-    // rich2 26 und 111 - gemessen), davon faellt Andrea1 34 schon durch die
-    // OCB-Regel heraus.
+    // Such items now swap along and receive Core's own antitrigger immunity
+    // (IFL_ANTITRIGGER_ONESHOT) in their flag word - the antitrigger then
+    // bounces off and the enemy dies normally. This acts per ITEM: Andy2's
+    // antitrigger on items 150-154 stays in force for the unswapped
+    // siblings. Only five enemies in the whole game are affected at all
+    // (Andrea1 34, Andy2 151, rich1 180, rich2 26 and 111 - measured), and
+    // Andrea1 34 already drops out through the OCB rule.
     std::set<int>            antitriggered;
 
-    // Modellslots, die das Level fuehrt - von der Levelpruefung in ApplyPatch
-    // (markTriggerSafeSectors) aus der Datei gelesen. Die Item-Abundance
-    // streut nur Typen, deren Modell da ist; ein Pickup ohne Modell waere ein
-    // unsichtbarer Stolperstein. Fuer das Waffenset kommt hinzu, was der
-    // Import erst hineinbringt - das steht dann nicht in dieser Liste.
+    // Model slots the level carries - read from the file by the level check
+    // in ApplyPatch (markTriggerSafeSectors). Item abundance only scatters
+    // types whose model is present; a pickup without a model would be an
+    // invisible stumbling block. For the weapon set, whatever the import
+    // brings in comes on top - that is not in this list then.
     std::set<int>            presentSlots;
 
-    // Typen, die dieses Level NICHT tragen darf. Gefuellt von der
-    // Levelpruefung in ApplyPatch (markTriggerSafeSectors): Andrea2 traegt
-    // in Slot 47 nur Pierres CUTSCENE-Variante (Todesanim +12 hat Zustand 9
-    // und springt in eine Lebend-Anim - fuer die Trajan-Finale-Szene, nie
-    // fuer PierreControl gedacht; das Level hat auch keine Typ-47-Items).
-    // Weil der Slot "da ist", wuerde weder Cross importieren noch der Pool
-    // ihn meiden - ein dort platzierter Pierre friert ein und stirbt in
-    // einer Endlosschleife (im Spiel gesehen). Ersetzen verbietet sich:
-    // die Finale-Cutscene braucht genau diesen Satz.
+    // Types this level must NOT carry. Filled by the level check in
+    // ApplyPatch (markTriggerSafeSectors): Andrea2 carries in slot 47 only
+    // Pierre's CUTSCENE variant (death anim +12 has state 9 and jumps into
+    // a living anim - made for the Trajan finale scene, never for
+    // PierreControl; the level has no type-47 items either). Because the
+    // slot "exists", neither cross would import it nor would the pool avoid
+    // it - a Pierre placed there freezes and dies in an endless loop (seen
+    // in game). Replacing is out of the question: the finale cutscene needs
+    // exactly this set.
     std::set<int>            forbiddenTypes;
 
-    // Raeume, in denen keine Waffe liegen darf, und was als Waffe zaehlt.
-    // joby3: eine zufaellig in den Chef-Bereich gewanderte Schrotflinte loest
-    // denselben Glitch aus wie versetzte Pistolen. Das ist keine Eigenschaft
-    // eines Schluesseltyps, sondern des Levels, und trifft deshalb auch
-    // gewoehnliche Pickups.
+    // Rooms in which no weapon may lie, and what counts as a weapon.
+    // joby3: a shotgun that randomly wandered into the chef area triggers
+    // the same glitch as displaced pistols. That is not a property of a key
+    // type but of the level, and therefore also affects ordinary pickups.
     std::set<int>            noWeaponRooms;
     std::set<int>            weaponTypes;
 
-    // Items, deren Trigger mitwandert. Sie duerfen sich trotz triggerPinned
-    // bewegen - eben weil ihr Trigger nicht zurueckbleibt.
+    // Items whose trigger travels along. They may move despite
+    // triggerPinned - precisely because their trigger does not stay behind.
     std::vector<CoupledTrigger> coupledTriggers;
 
-    // Gegnertypen, die diesem Level hinzugefuegt werden duerfen. Handkuration
-    // aus dem Zonen-Export - leer heisst: keine. Ein Gegner gehoert erst hinein,
-    // wenn er im Spiel nachgewiesen hat, dass er ohne Levelskript auskommt.
+    // Enemy types that may be added to this level. Hand curation from the
+    // zone export - empty means: none. An enemy only belongs here once it
+    // has proven in game that it works without a level script.
     std::vector<int>         enemyTypes;
 
-    // Samples, die einzelne dieser Typen im Level nicht vorfinden.
+    // Samples that some of these types will not find in the level.
     std::vector<EnemySound>  enemySounds;
 
-    // Sektoren, die einen Trigger aufnehmen koennen, als secKey. Wird
-    // ausgewertet, sobald coupledTriggers oder enemyTypes nicht leer sind.
+    // Sectors that can accept a trigger, as secKey. Evaluated as soon as
+    // coupledTriggers or enemyTypes is non-empty.
     //
-    // Diese Menge kommt aus der Floordata des echten Levels, nicht aus dem
-    // Level-Info-Export: ob ein Sektor einen Trigger vertraegt, haengt an
-    // Eintragsarten (Lava, Climb, Monkey, TrigTrigger), von denen der Export
-    // nur zwei kennt. Raten waere hier ein stiller Levelschaden - siehe
+    // This set comes from the floordata of the real level, not from the
+    // level info export: whether a sector tolerates a trigger depends on
+    // entry kinds (lava, climb, monkey, TrigTrigger) of which the export
+    // knows only two. Guessing here would be silent level damage - see
     // Tr5Level::canAppendTrigger.
     std::set<long long>      triggerSafeSectors;
 
-    // Sektoren hinter einem Deadstop (NO_KEY_ISLAND im Zonen-Export als
-    // keyBarredSectors). Dort darf kein Schluesselgegenstand liegen.
+    // Sectors behind a deadstop (NO_KEY_ISLAND in the zone export as
+    // keyBarredSectors). No key item may lie there.
     //
-    // Warum als eigene Menge und nicht ueber die Zonengrenze: die Grenze
-    // haengt an einer Key-Constraint, und die gibt es nur fuer Typen mit
-    // einer Aufnahme. andy3s Kreide und Brechstange sind Werkzeuge ohne
-    // Aufnahme - fuer sie leitet ZoneAnalyse gar keine Grenze ab, der
-    // Deadstop erreichte sie also nie (#61).
+    // Why a separate set and not via the zone border: the border hangs off
+    // a key constraint, and those only exist for types with a pickup.
+    // andy3's chalk and crowbar are tools without a pickup - ZoneAnalyse
+    // derives no border for them at all, so the deadstop never reached
+    // them (#61).
     std::set<long long>      keyBarredSectors;
 
-    // Typen, die von keyBarredSectors AUSGENOMMEN sind (#61,
-    // keyBarredExemptTypes im Export). Gebraucht, sobald eine Insel FUER
-    // bestimmte Typen gedacht ist und ein anderer Typ das Gegenteil braucht:
-    // andy3s Insel haelt Kreide und Brechstange auf der Startinsel fest und
-    // sperrt dafuer alles andere - die Muenze aber darf gerade NICHT dorthin.
-    // Ohne Ausnahme griffen beide Regeln, und uebrig blieb ein einziger Raum.
+    // Types EXEMPT from keyBarredSectors (#61, keyBarredExemptTypes in the
+    // export). Needed as soon as an island is meant FOR certain types and
+    // another type needs the opposite: andy3's island keeps chalk and
+    // crowbar on the start island and bars everything else from it - but
+    // the coin of all things must NOT go there. Without the exemption both
+    // rules applied, and a single room was left over.
     std::set<int>            keyBarredExemptTypes;
 
-    // Items, deren Codebits von vornherein gesetzt werden (#61). Dritter Weg
-    // neben "liegen lassen" und "Trigger mitnehmen": ein HeavyTrigger laesst
-    // sich nicht mitnehmen, also nimmt die Kuration dem Item die Bedingung ab.
-    // Wer hier steht, ist damit auch von der Trigger-Fesselung befreit.
-    std::map<int, int>       flagPresets;   // Itemindex -> flags
+    // Items whose code bits are preset (#61). The third way besides "leave
+    // it be" and "take the trigger along": a HeavyTrigger cannot be taken
+    // along, so the curation relieves the item of its condition. Whoever is
+    // listed here is thereby also freed from trigger pinning.
+    std::map<int, int>       flagPresets;   // item index -> flags
 
-    // Neigungseintraege aller Platzierungssektoren (nur Sektoren MIT Eintrag;
-    // wer fehlt, ist eben). Aus der Floordata des ECHTEN Levels gelesen
-    // (markTriggerSafeSectors) - der Zonen-Export kennt je Sektor nur ein
-    // floorY und kann eben und geneigt nicht unterscheiden.
+    // Slope entries of all placement sectors (only sectors WITH an entry;
+    // whoever is missing is flat). Read from the floordata of the REAL
+    // level (markTriggerSafeSectors) - the zone export knows only one
+    // floorY per sector and cannot tell flat and sloped apart.
     //
-    // Gebraucht fuer zwei Dinge, beide in floorPosAt (Floor.h):
-    //  1. Das ITEM-y. Ein Item wird von der Engine genau auf seinem y
-    //     gezeichnet; das floorY des Sektors ist auf einer Schraege aber die
-    //     hoechste Ecke - ohne Umrechnung haengt das Item in der Luft (im
-    //     Spiel gesehen, #86). Belaufbare Schraegen (Neigung bis 2) sind
-    //     vollwertige Itemplaetze, Core legt dort selbst Pickups ab - eine
-    //     Pauschalsperre kostete andy1-3 fast alle Sektoren (Nutzerfund).
-    //  2. Die Sperre der echten Ausnahmen: Rutschen (Neigung > 2, Lara kann
-    //     dort nichts aufheben) und das kollisionsfreie Dreieck der
-    //     NOCOLF-Sektoren (dort gibt es keinen Boden).
-    // Gegner brauchen beides nicht zwingend - die setzt die Engine jeden
-    // Frame per GetHeight auf den Boden - bekommen ihr y aber trotzdem
-    // ausgerechnet, damit sie nicht einen halben Sektor tief einfallen.
+    // Needed for two things, both in floorPosAt (Floor.h):
+    //  1. The ITEM y. An item is drawn by the engine at exactly its y; on a
+    //     slope the sector's floorY is the highest corner - without the
+    //     conversion the item hangs in the air (seen in game, #86).
+    //     Walkable slopes (up to slope 2) are fully valid item spots, Core
+    //     itself places pickups there - a blanket ban cost andy1-3 almost
+    //     all sectors (user find).
+    //  2. Barring the true exceptions: slides (slope > 2, Lara cannot pick
+    //     anything up there) and the collision-free triangle of the NOCOLF
+    //     sectors (there is no floor there).
+    // Enemies do not strictly need either - the engine puts them on the
+    // floor every frame via GetHeight - but they get their y computed
+    // anyway, so they do not drop in half a sector deep.
     std::map<long long, SlopeInfo> slopes;
 };
 
@@ -480,86 +478,88 @@ struct RandoOptions
     bool shuffleKeyItems = true;
     bool shuffleOtherPickups = true;
 
-    // Zusaetzliche Gegner ins Level setzen. Aus wie viele: 0 heisst keine.
-    // Die Typen kommen aus RandoInput::enemyTypes, nicht von hier.
+    // Add extra enemies to the level. How many: 0 means none.
+    // The types come from RandoInput::enemyTypes, not from here.
     bool addEnemies = false;
     int  enemiesPerLevel = 6;
 
-    // Vorhandene Gegner untereinander tauschen. Nur die Art wechselt, der
-    // Item-Index bleibt - damit bleiben alle "Object N"-Verweise der Trigger
-    // gueltig und jeder Gegner wacht weiter dort auf, wo er es sollte.
+    // Swap existing enemies among each other. Only the type changes, the
+    // item index stays - so all the triggers' "Object N" references remain
+    // valid and every enemy still wakes up where it was meant to.
     //
-    // Getauscht wird ausschliesslich unter den kuratierten Typen des Levels
-    // (RandoInput::enemyTypes); handkurierte Items bleiben ausgenommen.
+    // Swapping happens exclusively among the level's curated types
+    // (RandoInput::enemyTypes); hand-curated items stay excluded.
     bool swapEnemies = false;
 
-    // Cross-Gegnermix: der Wuerfelpool fuer Tausch und Zusatzgegner wird um
-    // Typen aus ANDEREN Leveln erweitert (globale Pool-Tabelle in
-    // Randomizer.cpp, aus der Nutzerliste "Gegner Pool.txt"). Je Level
-    // kommen hoechstens drei fremde Typen dazu - jeder kostet Texturseiten
-    // und Sample-Speicher im Ziel. Modelle und Sounds wandern beim Patchen
-    // ueber den nativen Transfer mit (moveableAdds/soundAdds); was das Level
-    // schon kennt, wird uebersprungen. Wirkt nur zusammen mit swapEnemies
-    // oder addEnemies - allein aendert der Haken nichts.
+    // Cross enemy mix: the pool for swapping and extra enemies is extended
+    // with types from OTHER levels (global pool table in Randomizer.cpp,
+    // from the user's list "Gegner Pools.txt"). At most three foreign types
+    // per level - each costs texture pages and sample memory in the
+    // target. Models and sounds travel along during patching via the
+    // native transfer (moveableAdds/soundAdds); whatever the level already
+    // knows is skipped. Only effective together with swapEnemies or
+    // addEnemies - alone the checkbox changes nothing.
     bool crossEnemies = false;
 
-    // Allsanity: wie crossEnemies, aber OHNE die Drei-Typen-Grenze - der
-    // ganze Pool steht dem Level zur Verfuegung, und beim Tausch wuerfelt
-    // jede Rolle frei aus dem vollen Pool statt nur jede vierte. Maximale
-    // Auswahl (Nutzerwunsch). Importiert wird weiterhin nur, was der Lauf
-    // wirklich einsetzt - so bleibt der Texturseiten-Haushalt im Rahmen
-    // (gemessen: 3 Fremdtypen +15..25 Seiten von 256; selbst der volle Pool
-    // bleibt zusammen mit Waffen und Outfit deutlich unter der Grenze).
+    // Allsanity: like crossEnemies but WITHOUT the three-type limit - the
+    // whole pool is available to the level, and when swapping, every role
+    // rolls freely from the full pool instead of only every fourth.
+    // Maximum variety (user wish). Still only what the run actually uses
+    // is imported - so the texture page budget stays in bounds (measured:
+    // 3 foreign types +15..25 pages of 256; even the full pool stays well
+    // below the limit together with weapons and outfit).
     bool allsanity = false;
 
-    // Vom Nutzer abgewaehlte Gegnerarten (Fenster "Gegnerarten", #95).
-    // Gespeichert wird die ABWAHL, nicht die Auswahl: so ist jede spaeter
-    // hinzukommende Art automatisch an, ohne dass alte Einstellungsdateien
-    // sie muted ausschliessen.
+    // Enemy types deselected by the user (window "Enemy types", #95).
+    // The DESELECTION is what gets saved, not the selection: that way any
+    // type added later is automatically on, without old settings files
+    // silently excluding it.
     //
-    // Der Filter beschneidet AUSSCHLIESSLICH die Wahl aus dem Pool. Was eine
-    // gewaehlte Zeile technisch nachzieht, sieht ihn nie: der Anim-Basistyp
-    // der Soldatenfamilie (basisSlot), Pflichtbegleiter wie der Geschosskern
-    // der Hydra (begleiter) und die MESHSWAP-Haelften (swapVon/swapDst).
-    // Sonst stuende ein Gegner ohne seinen Animationssatz im Level.
+    // The filter trims EXCLUSIVELY the choice from the pool. Whatever a
+    // chosen row pulls in technically never sees it: the anim base type of
+    // the soldier family (basisSlot), mandatory companions like the
+    // Hydra's projectile core (begleiter) and the MESHSWAP halves
+    // (swapVon/swapDst). Otherwise an enemy would stand in the level
+    // without its animation set.
     std::set<int> disabledEnemies;
 
-    // Fremdinstallationen fuer die Gaeste aus Tomb Raider 3 (#92, #102).
+    // Third-party installations for the guests from Tomb Raider 3 (#92,
+    // #102).
     //
-    // Wir liefern keine Spieldaten mit - der Lauf holt Modell, Texturen und
-    // Klaenge zur Laufzeit von HIER. Fehlt ein Pfad, fallen die zugehoerigen
-    // Arten still aus dem Pool. Der Lauf darf NIE daran scheitern, dass
-    // jemand die Spiele nicht besitzt.
+    // We ship no game data - the run fetches model, textures and sounds at
+    // runtime from HERE. If a path is missing, the corresponding types
+    // silently drop out of the pool. The run must NEVER fail because
+    // someone does not own the games.
     std::wstring tr3Dir;
     std::wstring tr3GoldDir;
 
-    // Jedes Level bekommt zufaellig eines der drei Outfits: Lara_Andrea
-    // (Spender Andrea1), Lara_Joby (joby2) oder Lara_Rich (rich2, Catsuit).
-    // Uebertragen werden die Slots 8/9/10 (LARA_SKIN, LARA_SKIN_JOINTS,
-    // LARA_SCREAM) plus das LaraType-Byte des Spenders - NIE Slot 0, der
-    // traegt die Animationen des Levels. joby4 ist ausgenommen (Taucheranzug,
-    // bleibt ohnehin vanilla); die andy-Level bekommen immer einen Ersatz,
-    // ihr eigenes Outfit ist die Kind-Lara.
+    // Every level randomly gets one of the three outfits: Lara_Andrea
+    // (donor Andrea1), Lara_Joby (joby2) or Lara_Rich (rich2, catsuit).
+    // Slots 8/9/10 are transferred (LARA_SKIN, LARA_SKIN_JOINTS,
+    // LARA_SCREAM) plus the donor's LaraType byte - NEVER slot 0, which
+    // carries the level's animations. joby4 is exempt (diving suit, stays
+    // vanilla anyway); the andy levels always get a replacement, their own
+    // outfit is the young Lara.
     bool randomOutfits = false;
 
-    // Jedes Level bekommt das volle Waffenset (Pistolen, Uzi, Schrotflinte,
-    // Desert Eagle, HK samt Munitions- und Inventarslots). Die Spenderregeln
-    // stammen aus der Waffenarbeit und sind in allen 13 Leveln gebaut und
-    // geprueft (Import Export\Waffen Tests\Plan.md): Andrea3 fuellt nur, was
-    // fehlt; joby2 ersetzt den Revolver immer durch die Desert Eagle
-    // (Nutzervorgabe); rich1 liefert die HK ausser nach rich2, das seine
-    // eigene Spezialpose behaelt. joby4 bleibt vanilla (Nutzerentscheidung).
+    // Every level gets the full weapon set (pistols, Uzi, shotgun, Desert
+    // Eagle, HK including ammo and inventory slots). The donor rules come
+    // from the weapon work and are built and checked in all 13 levels
+    // (Import Export\Waffen Tests\Plan.md): Andrea3 fills only what is
+    // missing; joby2 always replaces the revolver with the Desert Eagle
+    // (user requirement); rich1 supplies the HK except to rich2, which
+    // keeps its own special pose. joby4 stays vanilla (user decision).
     bool allWeapons = false;
 
-    // Item-Abundance: so viele zusaetzliche Verbrauchsgueter je Level
-    // streuen (0 = aus). Gelegt wird nur, was das Level ohnehin kennt -
-    // Munition, Medipacks, Fackeln -, gewichtet nach Haeufigkeit; Details am
-    // Streublock in Randomizer.cpp. Karge Level sind der Anlass: Andy2 hat
-    // auf 254 Raeume zehn Pickups bei 348 gueltigen Ablageflaechen.
+    // Item abundance: scatter this many extra consumables per level
+    // (0 = off). Only what the level already knows is placed - ammo,
+    // medipacks, flares -, weighted by frequency; details at the scatter
+    // block in Randomizer.cpp. Sparse levels are the reason: Andy2 has ten
+    // pickups across 254 rooms with 348 valid placement tiles.
     //
-    // Eine Gegenrichtung ("weniger als Vanilla") gibt es nicht: Items
-    // entfernen wuerde alle nachfolgenden Indizes verschieben und jeden
-    // "Object N"-Verweis der Trigger brechen.
+    // There is no reverse direction ("fewer than vanilla"): removing items
+    // would shift all subsequent indices and break every "Object N"
+    // reference of the triggers.
     int  extraPickups = 0;
 };
 
@@ -571,68 +571,68 @@ struct RandoReport
     int injected = 0;
     int enemiesAdded = 0;
     int enemiesSwapped = 0;
-    int weaponsScattered = 0;           // gestreute Waffen-/Munitions-Items
-    int extraPickups = 0;               // zusaetzliche Ausruestung (Abundance)
-    int crossTypesUsed = 0;             // fremde Gegnertypen im Einsatz
-    std::vector<std::string> notes;     // Auffaelligkeiten fuer die Oberflaeche
+    int weaponsScattered = 0;           // scattered weapon/ammo items
+    int extraPickups = 0;               // extra equipment (abundance)
+    int crossTypesUsed = 0;             // foreign enemy types in use
+    std::vector<std::string> notes;     // findings for the UI
     bool ok = true;
     std::string error;
 };
 
-// Eine im Pool waehlbare EnemyKind, fuer das Fenster "Gegnerarten" (#95).
+// One selectable enemy kind in the pool, for the "Enemy types" window (#95).
 //
-// "source" sagt, aus welchem Spiel die Art stammt (#102):
-//   nullptr    steckt in Tomb Raider 5 selbst
-//   "tr3"      braucht eine Tomb-Raider-3-Installation
-//   "tr3gold"  braucht The Lost Artifact
+// "source" says which game the kind comes from (#102):
+//   nullptr    lives in Tomb Raider 5 itself
+//   "tr3"      needs a Tomb Raider 3 installation
+//   "tr3gold"  needs The Lost Artifact
 //
-// Wir liefern keine Spieldaten mit. Ohne den passenden Pfad bleibt die Art in
-// der Oberflaeche ausgegraut, statt im Lauf zu scheitern.
+// We ship no game data. Without the matching path the kind stays grayed out
+// in the UI instead of failing during the run.
 struct EnemyKind { int typeId; const char* name; const char* source; };
 
 namespace Rando
 {
-    // Die waehlbaren Gegnerarten mit Anzeigenamen, in Tabellenreihenfolge.
+    // The selectable enemy kinds with display names, in table order.
     //
-    // Die Liste steht neben der Pool-Tabelle kCross in Randomizer.cpp und
-    // muss mit ihr mitwachsen - wer dort eine Zeile ergaenzt, ergaenzt sie
-    // hier. Eine Art, die hier fehlt, laesst sich nicht abwaehlen; eine, die
-    // nur hier steht, hat einen wirkungslosen Haken.
+    // The list lives next to the pool table kCross in Randomizer.cpp and
+    // must grow with it - whoever adds a row there adds one here. A kind
+    // missing here cannot be deselected; one that exists only here has a
+    // checkbox without effect.
     std::vector<EnemyKind> enemyKinds();
 
-    // Liest Zonen-Export und Level-Info zu einem Eingabesatz zusammen und
-    // leitet dabei die triggergebundenen Items ab.
+    // Reads zone export and level info into one input set and derives the
+    // trigger-pinned items along the way.
     bool buildInput(const JsonValue& zoneExport,
                     const JsonValue& levelInfo,
                     RandoInput& out,
                     std::string& error);
 
-    // Regel 2: welche Items sitzen auf einem Pickup-Trigger, dessen Wirkung
-    // ueber PlaySoundtrack hinausgeht? Oeffentlich, damit der Selbsttest und
-    // spaeter die Oberflaeche dieselbe Liste zeigen koennen.
+    // Rule 2: which items sit on a pickup trigger whose effect goes beyond
+    // PlaySoundtrack? Public so the self-test and later the UI can show the
+    // same list.
     std::set<int> findTriggerPinnedItems(const JsonValue& levelInfo,
                                          std::vector<std::string>* explain = nullptr);
 
-    // Erzeugt den Patch. Der Seed bestimmt das Ergebnis vollstaendig.
+    // Produces the patch. The seed determines the result completely.
     bool run(const RandoInput& in,
              const RandoOptions& opt,
              uint64_t seed,
              JsonValue& patchOut,
              RandoReport& report);
 
-    // Darf dieser Typ auf diesem Sektor liegen? Die eine Stelle, an der alle
-    // Zwangsbedingungen einer Instanz geprueft werden - benutzt von der
-    // Platzierung UND vom Debugwerkzeug. Bewusst gemeinsam: eine zweite Kopie
-    // dieses Filters wuerde frueher oder spaeter abweichen, und dann zeigte das
-    // Debugbild etwas anderes, als der Randomizer tut.
+    // May this type lie on this sector? The one place where all constraints
+    // of an instance are checked - used by the placement AND by the debug
+    // tool. Deliberately shared: a second copy of this filter would drift
+    // apart sooner or later, and then the debug picture would show
+    // something different from what the randomizer does.
     //
-    // `mustBeOnIsland` betrifft nur requireInIsland - das ist eine Aussage ueber
-    // alle Instanzen zusammen und gilt deshalb genau fuer die eine, die der Lauf
-    // hineinzwingt.
-    // itemOcb: die OCB des Items, das platziert werden soll. Nur 2 und 9
-    // aendern etwas - das sind die Wandgriffe (Brechstange und Joby-Crow),
-    // und die brauchen eine Wandkante und Stehhoehe (#61). 0 fuer alles
-    // andere und fuer Wege ohne konkretes Item (Injektionen).
+    // `mustBeOnIsland` concerns only requireInIsland - that is a statement
+    // about all instances together and therefore applies exactly to the one
+    // the run forces in.
+    // itemOcb: the OCB of the item to be placed. Only 2 and 9 change
+    // anything - those are the wall grabs (crowbar and joby crow), and they
+    // need a wall edge and standing height (#61). 0 for everything else and
+    // for paths without a concrete item (injections).
     bool sectorAllowedFor(const RandoInput& in,
                           const KeyConstraint* k,
                           const ZoneSector& s,
@@ -640,24 +640,24 @@ namespace Rando
                           bool mustBeOnIsland,
                           int itemOcb = 0);
 
-    // Bodenhoehe und Belaufbarkeit an einem Punkt des Sektors (localX/localZ
-    // in 0..1023, ueblich 512 + Typversatz). yOut wird IMMER gefuellt - auch
-    // auf einer Rutsche stimmt die Hoehe, nur stehen darf dort niemand.
-    // Sektoren ohne Neigungseintrag sind eben: yOut = floorY, true.
+    // Floor height and walkability at a point of the sector (localX/localZ
+    // in 0..1023, usually 512 + type offset). yOut is ALWAYS filled - even
+    // on a slide the height is right, only nobody may stand there.
+    // Sectors without a slope entry are flat: yOut = floorY, true.
     bool floorAt(const RandoInput& in, const ZoneSector& s,
                  int localX, int localZ, int& yOut);
 
-    // Debugwerkzeug: legt Marker auf Sektoren, statt Items zu verschieben.
+    // Debug tool: puts markers on sectors instead of moving items.
     //
-    // Zwei Ebenen uebereinander. `fillType` kommt auf JEDEN gueltigen Sektor -
-    // das ist die Flaeche, auf der ueberhaupt etwas liegen darf. Darueber je
-    // Constraint-Typ dessen eigener, engerer Bereich. Wo beide liegen, sind
-    // beide Itemarten erlaubt; wo nur der Fuelltyp liegt, ausschliesslich
-    // gewoehnliche Ausruestung.
+    // Two layers on top of each other. `fillType` goes onto EVERY valid
+    // sector - that is the area where anything may lie at all. Above it,
+    // per constraint type, its own narrower area. Where both lie, both item
+    // kinds are allowed; where only the fill type lies, exclusively
+    // ordinary equipment.
     //
-    // fillType 0 laesst die Fuellebene weg. Das Ergebnis ist ein Patch mit
-    // itemAdds - nur fuer trview, denn mit ueber 256 Items laedt die Engine das
-    // Level nicht mehr (MAX_ITEMS, harter Abbruch in specific/file.cpp).
+    // fillType 0 omits the fill layer. The result is a patch with itemAdds
+    // - only for trview, because with more than 256 items the engine no
+    // longer loads the level (MAX_ITEMS, hard abort in specific/file.cpp).
     bool buildMarkerPatch(const RandoInput& in,
                           int fillType,
                           JsonValue& patchOut,

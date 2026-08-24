@@ -431,6 +431,14 @@ struct RandoInput
     // Deadstop erreichte sie also nie (#61).
     std::set<long long>      keyBarredSectors;
 
+    // Typen, die von keyBarredSectors AUSGENOMMEN sind (#61,
+    // keyBarredExemptTypes im Export). Gebraucht, sobald eine Insel FUER
+    // bestimmte Typen gedacht ist und ein anderer Typ das Gegenteil braucht:
+    // andy3s Insel haelt Kreide und Brechstange auf der Startinsel fest und
+    // sperrt dafuer alles andere - die Muenze aber darf gerade NICHT dorthin.
+    // Ohne Ausnahme griffen beide Regeln, und uebrig blieb ein einziger Raum.
+    std::set<int>            keyBarredExemptTypes;
+
     // Items, deren Codebits von vornherein gesetzt werden (#61). Dritter Weg
     // neben "liegen lassen" und "Trigger mitnehmen": ein HeavyTrigger laesst
     // sich nicht mitnehmen, also nimmt die Kuration dem Item die Bedingung ab.

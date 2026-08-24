@@ -294,6 +294,10 @@ bool Rando::buildInput(const JsonValue& zoneExport,
             out.keyBarredSectors.insert(secKey(r, x, z));
     }
 
+    const JsonValue& kbe = zoneExport["keyBarredExemptTypes"];
+    for (size_t i = 0; i < kbe.size(); ++i)
+        out.keyBarredExemptTypes.insert(static_cast<int>(kbe[i].asInt()));
+
     const JsonValue& inj = zoneExport["requiredInjections"];
     for (size_t i = 0; i < inj.size(); ++i)
     {
@@ -523,7 +527,11 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
     // Hinter einem Deadstop liegt nichts, was ein Schluessel sein koennte.
     // Gilt fuer JEDEN Typ mit Constraint und zusaetzlich fuer die Wandgriffe,
     // die keine Constraint haben (#61).
+    // Ausgenommene Typen (#61) gehen hier vorbei: die Insel ist FUER andere
+    // Typen gedacht, und der Ausgenommene braucht das Gegenteil. Seine eigene
+    // Schranke steht woanders (ISLAND_GROUP / bannedSectors).
     if ((k != nullptr || itemOcb == 2 || itemOcb == 9) &&
+        !in.keyBarredExemptTypes.count(typeId) &&
         in.keyBarredSectors.count(secKey(s.room, s.sectorX, s.sectorZ)))
         return false;
 

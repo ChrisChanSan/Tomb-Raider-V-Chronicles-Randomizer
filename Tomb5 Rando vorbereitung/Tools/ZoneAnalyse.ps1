@@ -412,6 +412,18 @@ $TYPE_EXCLUDE_ROOMS = @{
     'andy3' = @{
         172 = @(136,137,139,140,141,142)      # Kreide
         174 = @(136,137,139,140,141,142)      # Brechstange
+        # Die Muenze darf nicht HINTER der Wasserhexe liegen (#61,
+        # Nutzerangabe 2026-08-24). Die Raeume sind nicht von Hand gesammelt,
+        # sondern aus dem Portalgraphen geflutet:
+        #   ab 97, Riegel 9/151  -> 97, 99, 152, 153, 155, 158
+        #     (97 ist ihr Becken, 99 sitzt sie selbst; dahinter 152/153/155/158)
+        #   ab 149, Riegel 6/166 -> 149  (zweites Wasserloch, Sackgasse)
+        #
+        # Bewusst als Typsperre und NICHT als zweite NO_KEY_ISLAND: die Muenze
+        # steht in deren ExemptTypes, eine weitere Insel wuerde sie also
+        # gleich wieder durchlassen. TYPE_EXCLUDE_ROOMS ist von Haus aus
+        # typgenau.
+        173 = @(97,99,149,152,153,155,158)    # Muenze: nicht hinter der Hexe
     }
 }
 $typeExclude = @{}
@@ -458,8 +470,18 @@ $NO_KEY_ISLAND = @{
     # Bewusst NICHT ueber TYPE_EXCLUDE_ROOMS: das sperrt nur den Typ in
     # genannten Raeumen und stoppt den Zonenlauf NICHT - in Andrea2 sickerte
     # der Flood deshalb weiter und es brauchte am Ende 14 Raeume von Hand.
+    # ExemptTypes (#61, 2026-08-24): diese Insel ist FUER Kreide und
+    # Brechstange gedacht - sie sollen auf der Startinsel bleiben, also
+    # sperrt sie alles andere (134 Raeume). Die Muenze braucht das exakte
+    # Gegenteil: sie darf NICHT auf die Startinsel. Ohne Ausnahme greifen
+    # beide Regeln gleichzeitig, und uebrig bleibt ein einziger Raum (im
+    # Test ueber 15 Seeds immer Raum 119).
+    #
+    # Die Ausnahme nimmt den Typ aus DIESER Insel heraus - aus der
+    # Sektorliste (keyBarredSectors) wie aus den excludeRooms. Seine eigene
+    # Schranke bleibt: ISLAND_GROUP haelt ihn von der Startinsel fern.
     'andy3' = @(
-        @{ StartRoom = 140; DeadstopRooms = @(18,19,22) }
+        @{ StartRoom = 140; DeadstopRooms = @(18,19,22); ExemptTypes = @(173) }
     )
     # rich2s Aufzugssektion. Der Nutzer: Eingang ist Raum 140, Ausgang Raum 113,
     # und was dazwischen liegt, soll keine Key-Items tragen - gewoehnliche
@@ -769,6 +791,21 @@ $EXTRA_POOL_TYPES = @{
     # Vanilla-Positionen liegen ebenfalls auf Zone-2-Sektoren, die Grenze
     # verbietet also keine von beiden.
     'rich3'   = @{ 180 = 2; 181 = 2 }
+    # andy3s Muenze (typeId 173, Puzzle Item2) - der letzte Rest von #61.
+    #
+    # Sie hat im ganzen Level KEIN Schloss und taucht deshalb von sich aus
+    # nicht in den keyConstraints auf; sie ist der Ausloeser der Sumpfhexe
+    # (swampy.cpp fragt have_i_got_object(PUZZLE_ITEM2) ab). Ohne Eintrag
+    # zaehlt sie als gewoehnliches Pickup, und die Deadstop-Sperre
+    # (keyBarredSectors) fasst sie gar nicht an - die greift nur bei Typen
+    # MIT Constraint oder bei Wandgriffen (Randomizer.cpp).
+    #
+    # maxZone 1 ist der Hoechstwert des Levels, die Zone schraenkt also
+    # nichts ein - das ist Absicht. Die eigentliche Schranke ist der
+    # Deadstop in Raum 137 (NO_KEY_ISLAND weiter oben): dahinter liegt ein
+    # Teleporter auf die Startinsel, und eine Muenze jenseits davon waere
+    # ein Softlock (Nutzerangabe 2026-08-24: Range 142 -> 135).
+    'andy3'   = @{ 173 = 1 }
 }
 
 # rich2s Startinsel: alles, was Lara VOR dem Roentgenscanner betreten kann.
@@ -1107,9 +1144,21 @@ $VANILLA_TYPES = @{
     # CD nicht wandert.
     # andy3: 172 (Kreide, OCB 2) und 174 (Brechstange im Zaun, OCB 9) sind
     # seit #61 frei - die Platzierung waehlt Wandkante und Winkel, KEEP_OCB
-    # haelt ihre OCB. 173 (Muenze, OCB 11) bleibt: sie liegt auf einem
-    # Zierdeckel im Wasser, das ist eine eigene Entscheidung.
-    'andy3'   = @(173)
+    # haelt ihre OCB.
+    #
+    # 173 (Muenze) ist seit 2026-08-24 EBENFALLS FREI - der letzte Rest von
+    # #61. Der alte Grund war ihre OCB 11, und der hat sich als Irrtum
+    # herausgestellt: `PickUpCollision` kennt nur 1, 2, 3/4/7/8 und 9 als
+    # Sonderzweige, ALLES andere (auch 11) laeuft in `default` und wird ganz
+    # normal aufgenommen; die Bodenkorrektur in `InitialisePickup` gilt fuer
+    # 0 und 11 gleichermassen. Eine auf 0 gesetzte Muenze verhaelt sich also
+    # exakt wie vorher - deshalb steht sie auch NICHT in KEEP_OCB.
+    #
+    # Was wirklich verloren geht, ist nur die Inszenierung: sie lag auf einem
+    # Zierdeckel im Wasser (Raum 97, direkt neben der Wasserhexe in Raum 99).
+    # Genau das prueft der Nutzer jetzt im Spiel - samt der Frage, was die
+    # Hexe tut, wenn niemand mehr in ihr Becken steigen muss.
+    'andy3'   = @()
     # rich2: die HK (typeId 345, Item 6 in Raum 8). Sie ist kein Fund, sondern
     # eine Ablage - Lara legt sie am Mesh 15 nieder, um sich zu entwaffnen,
     # damit der Roentgenscanner in Raum 9 keine Fallen ausloest. Das Item traegt
@@ -1902,6 +1951,30 @@ $ISLAND_GROUP = @{
     #   182/183 (Zwille)          Zone 0 -> zwischen Teleporter und Kirche
     #   172 (Herz), 174 (Klapper) Zone 1 -> ab Teleporter bis hinter die Kirche
     'andy1' = @( @{ IslandTypes = @(); NotOnIslandTypes = @(172,174,182,183); DeadstopRooms = @(47,186) } )
+    # andy3 hat denselben Fall wie andy1 - nur andersherum gerichtet (#61,
+    # 2026-08-24). Der Teleporter steht in Raum 137 und bringt Lara auf die
+    # STARTINSEL zurueck; die Muenze (173) darf deshalb nicht dort liegen,
+    # sonst greift sie ins Leere, sobald sie den Abschnitt verlassen hat.
+    # Nutzerangabe: "Key Item Range ist von Raum 142 -> 135. Es darf nicht in
+    # Richtung 137 wandern, da ist ein Teleporter in die Startinsel, dann
+    # waere es Softlock."
+    #
+    # Warum ISLAND_GROUP und nicht NO_KEY_ISLAND: der Teleporter ist KEIN
+    # Portal, der Raumgraph sieht ihn nicht. Eine gewoehnliche Flut kann die
+    # beiden Seiten daher gar nicht trennen - ab 142 laeuft sie ueber normale
+    # Wege bis in die Startinsel weiter (gemessen: 114 Raeume). Die
+    # Insel-Flut dagegen laeuft ab Laras Start MIT GESCHLOSSENEN TUEREN und
+    # bildet damit genau den Bereich ab, den Lara ohne Fortschritt erreicht.
+    #
+    # Erste zwei Versuche waren falsch und stehen hier als Warnung: 137 als
+    # zusaetzlicher Deadstop an der bestehenden NO_KEY_ISLAND schrumpfte die
+    # Sperre von 3227 auf 13 Sektoren (also das Gegenteil), und eine zweite
+    # Flut ab Raum 29 sperrte 64 Raeume, ohne den gemeldeten Fundort zu
+    # treffen.
+    # Raum 97 und 149 kamen 2026-08-24 dazu (Nutzerangabe nach dem ersten
+    # Lauf: "der flood hat fast perfekt gegriffen"). 97 ist der Wasserraum
+    # der Sumpfhexe - also der Vanilla-Platz der Muenze selbst.
+    'andy3' = @( @{ IslandTypes = @(); NotOnIslandTypes = @(173); DeadstopRooms = @(137,97,149) } )
     # DeadstopRooms definiert die Insel ueber einen ZWEITEN, schaerferen Flood.
     # Die Gleisbett-Kette 2/4/5 und Raum 89 sind darin gesperrt, ihre
     # Flippartner 43 und 53 werden abgeleitet. Was dann noch ab Laras Start
@@ -3471,8 +3544,14 @@ if ($null -ne $startKey) {
 # Deadstop sie nicht. Als eigene Sektormenge im Export kann jeder Erzeuger
 # sie anwenden, auch fuer Typen ohne Aufnahme (#61).
 $keyBarred = New-Object System.Collections.Generic.HashSet[string]
+# Raeume, die NUR wegen NO_KEY_ISLAND gesperrt sind, und die Typen, die davon
+# ausgenommen bleiben (#61). Beides wird gebraucht, weil die Sperre an ZWEI
+# Stellen wirkt: als Sektormenge im Export und als excludeRooms je Typ.
+$islandRooms = @()
+$keyBarredExempt = @()
 foreach($ni in $noKeyIslands){
     $stopN = @($ni.DeadstopRooms)
+    if ($ni.ExemptTypes) { $keyBarredExempt += @($ni.ExemptTypes | ForEach-Object { [int]$_ }) }
     $seedN = $null
     foreach($cand in @($d.sectors | Where-Object { [int]$_.room -eq [int]$ni.StartRoom -and -not $_.isWall -and $_.hasFloor } | Sort-Object sectorX,sectorZ)){
         $ck = "$($cand.room),$($cand.sectorX),$($cand.sectorZ)"
@@ -3493,6 +3572,7 @@ foreach($ni in $noKeyIslands){
     }
     foreach($k in $islN){ [void]$keyBarred.Add($k) }
     $rmN = @($islN | ForEach-Object { [int](($_ -split ',')[0]) } | Sort-Object -Unique)
+    $islandRooms = @($islandRooms + $rmN | Sort-Object -Unique)
     $noPlacement = @($noPlacement + $rmN | Sort-Object -Unique)
     Write-Output "NO_KEY_ISLAND (Start $($ni.StartRoom), Deadstops $($stopN -join ', ')): $($islN.Count) Sektoren in $($rmN.Count) Raeumen ohne Key-Items"
 }
@@ -3535,7 +3615,9 @@ foreach($kv in $byType.GetEnumerator()){
     # nicht - und darum macht diese Begrenzung hier eine Inselgruppe mit
     # Deadstops, nicht die Zone.
     $maxZ = ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
-    $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement + $noKeyRooms | Sort-Object -Unique )
+    # Ausgenommene Typen sehen die NO_KEY_ISLAND-Raeume nicht (#61).
+    $npT = if ($keyBarredExempt -contains $nt) { @($noPlacement | Where-Object { $islandRooms -notcontains $_ }) } else { $noPlacement }
+    $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $npT + $noKeyRooms | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
     $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}); bannedSectors=$(if($islandBanned.ContainsKey($nt)){@($islandBanned[$nt])}else{$null}); forbiddenSectors=$(if($forbiddenBehindOwnDoor.ContainsKey($nt)){@($forbiddenBehindOwnDoor[$nt])}else{$null}); minFloorYIsland=$(if($islandHeightScope.ContainsKey($nt)){@($islandHeightScope[$nt])}else{$null}); requireInIsland=$(if($islandRequire.ContainsKey($nt)){@($islandRequire[$nt])}else{$null}) }
 }
@@ -3544,7 +3626,9 @@ foreach($kv in $byType.GetEnumerator()){
 foreach($kv in $extraPool.GetEnumerator()){
     $nt = [int]$kv.Key
     if ($byType.ContainsKey($nt)) { continue }
-    $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $noPlacement + $noKeyRooms | Sort-Object -Unique )
+    # Ausgenommene Typen sehen die NO_KEY_ISLAND-Raeume nicht (#61).
+    $npT = if ($keyBarredExempt -contains $nt) { @($noPlacement | Where-Object { $islandRooms -notcontains $_ }) } else { $noPlacement }
+    $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $npT + $noKeyRooms | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
     $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=[int]$kv.Value; instances=0; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}); bannedSectors=$(if($islandBanned.ContainsKey($nt)){@($islandBanned[$nt])}else{$null}); forbiddenSectors=$(if($forbiddenBehindOwnDoor.ContainsKey($nt)){@($forbiddenBehindOwnDoor[$nt])}else{$null}); minFloorYIsland=$(if($islandHeightScope.ContainsKey($nt)){@($islandHeightScope[$nt])}else{$null}); requireInIsland=$(if($islandRequire.ContainsKey($nt)){@($islandRequire[$nt])}else{$null}) }
 }
@@ -3690,7 +3774,7 @@ if ($ExportZonesJson -ne "") {
     # sieht man den Unterschied, statt ihn im Spiel zu suchen.
     $kurationStand = (Get-FileHash $PSCommandPath -Algorithm SHA256).Hash.Substring(0,16)
 
-    [PSCustomObject]@{ level=$LevelName; kurationStand=$kurationStand; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES); typeNoRooms=@($typeNoRooms); antitriggerImmun=@($antitriggerImmun); keyBarredSectors=@($keyBarred); flagPresets=@($flagPresets) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
+    [PSCustomObject]@{ level=$LevelName; kurationStand=$kurationStand; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES); typeNoRooms=@($typeNoRooms); antitriggerImmun=@($antitriggerImmun); keyBarredSectors=@($keyBarred); keyBarredExemptTypes=@($keyBarredExempt | Sort-Object -Unique); flagPresets=@($flagPresets) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
     Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"
 }
 

@@ -4,20 +4,27 @@
 decompilation project by Troye/Trxyebeep and contributors,
 <https://github.com/Trxyebeep/TOMB5>).
 
-Modified between **2026-07-30 and 2026-08-22** for the *TR5 Randomizer* project.
-The unmodified upstream code is preserved as the first commit of this
-repository (`ebde675`, 2026-07-30), so every change we made is visible as a
-diff against it.
+Modified between **2026-07-30 and 2026-08-24** (ongoing) for the
+*TR5 Randomizer* project. The upstream code as we received it is preserved as
+the **first commit of this repository** (currently `9a43211`; the hash changes
+whenever the history is rewritten for privacy scrubbing, the content does
+not), so every change we made is visible as a diff against it.
 
 Verified on 2026-08-13 against a freshly downloaded copy of the upstream
 repository: 40 files were changed at that point, and of the 214 source files
 we had not touched, 212 were byte-identical while the remaining two differed
 only in line endings. The base is therefore exactly that upstream version.
-Work has continued since, so the count is no longer 40 — every file we changed
+
+Re-verified on **2026-08-24** against another fresh upstream download
+(473 files): our baseline differs from current upstream in exactly three
+files — one upstream commit made after our copy (`setup.cpp`: Two Gun gains
+`undead = 1`) and two small local fixes that predate this repository and are
+documented in their files (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp`
+DO_LOG). 104 files differ between upstream and our head; every one of them
 carries the modification notice at the top, and
-`grep -rl "Modified 2026 by ChrisChanSan" TOMB5/` lists them all (70 at the
-time of writing). The comparison against a fresh upstream checkout is repeated
-as part of the release packaging step.
+`grep -rl "Modified 2026 by ChrisChanSan" TOMB5/` lists them all (108 at the
+time of writing, including files that are entirely new). The project file
+`tomb5.vcxproj` carries the notice as an XML comment.
 
 This modified version remains licensed under the **GNU General Public License
 version 3**, the same licence as the original. See `LICENSE`. The complete

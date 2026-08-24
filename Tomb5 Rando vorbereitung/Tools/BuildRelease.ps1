@@ -166,7 +166,12 @@ EXE selbst nachbauen und musst uns nicht glauben. Was wir geaendert
 haben und warum, steht in Source\TOMB5\MODIFICATIONS.md.
 
 Die Oberflaeche des Randomizers benutzt Dear ImGui von Omar Cornut
-(MIT-Lizenz).
+(MIT-Lizenz). Fuer HQ-Musik und das Hintergrundbild stecken stb_vorbis
+und stb_image von Sean Barrett drin (Public Domain).
+
+Ein besonderer Dank geht an trview (https://github.com/chreden/trview) -
+ohne dieses Werkzeug waere keine einzige Zonengrenze dieses Randomizers
+pruefbar gewesen.
 '@
 [System.IO.File]::WriteAllText("$OutDir\LIESMICH.txt", $readme, (New-Object System.Text.UTF8Encoding($false)))
 Say "Anleitung     : LIESMICH.txt"

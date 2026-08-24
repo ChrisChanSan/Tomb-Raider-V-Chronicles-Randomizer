@@ -36,18 +36,18 @@ namespace
         return std::string(buf);
     }
 
-    // Sektormengen des Zonen-Exports einlesen. Dort steht je Eintrag ein String
-    // "raum,x,z" - die PowerShell-Seite nutzt dieselbe Schreibweise als
-    // Hashset-Schluessel, und beide Werkzeuge muessen exakt dieselben Sektoren
-    // meinen. Fehlt das Feld, kommt hier ein Null-Wert an und die Menge bleibt
-    // leer, was ueberall "keine Einschraenkung" bedeutet.
+    // Read the zone export's sector sets. Each entry there is a string
+    // "room,x,z" - the PowerShell side uses the same spelling as hashset
+    // keys, and both tools must mean exactly the same sectors. If the field
+    // is missing, a null value arrives here and the set stays empty, which
+    // everywhere means "no restriction".
     void readSectorSet(const JsonValue& v, std::set<long long>& out)
     {
         for (size_t i = 0; i < v.size(); ++i)
         {
             const std::string s = v[i].asString();
-            // Von Hand zerlegt statt per sscanf: Raum- und Sektorindizes sind nie
-            // negativ, damit reicht das hier und die CRT-Warnung entfaellt.
+            // Split by hand instead of sscanf: room and sector indices are
+            // never negative, so this suffices and the CRT warning goes away.
             int part[3] = { 0, 0, 0 };
             int n = 0;
             bool ok = !s.empty();
@@ -67,18 +67,18 @@ std::set<int> Rando::findTriggerPinnedItems(const JsonValue& levelInfo,
 {
     std::set<int> pinned;
 
-    // Welches Item der Pickup-Trigger meint, steht in seinem Referenzwort
-    // ("refItem"), nicht in der Befehlsliste - die Befehle sind ausnahmslos
-    // seine Wirkung (Tueren, Gegner, Flipmaps).
+    // Which item the pickup trigger means sits in its reference word
+    // ("refItem"), not in the command list - the commands are without
+    // exception its effect (doors, enemies, flipmaps).
     //
-    // Frueher stand hier ein Umweg: das gemeinte Item wurde daran erkannt, dass
-    // ein Object-Befehl auf ein Item auf dem Triggersektor zeigt. Das lieferte
-    // die richtige Antwort, aber aus dem falschen Grund - der Exporter las das
-    // Referenzwort damals gar nicht und schob es als ersten Object-Befehl in
-    // die Liste. Seit der Exporter es als refItem fuehrt, ist der Umweg leer,
-    // und dieselbe Schleife wuerde ohne diese Umstellung KEIN Item mehr
-    // festhalten. Die Karte bleibt trotzdem stehen: sie wird gebraucht, um den
-    // Typ der per Befehl geweckten Objekte nachzuschlagen (Schwarmgetier).
+    // A detour used to stand here: the meant item was recognized by an
+    // Object command pointing at an item on the trigger sector. That gave
+    // the right answer for the wrong reason - the exporter did not read the
+    // reference word back then and pushed it into the list as the first
+    // Object command. Since the exporter carries it as refItem, the detour
+    // is empty, and the same loop would no longer pin ANY item without this
+    // change. The map still stands: it is needed to look up the type of the
+    // objects woken by command (swarm critters).
     std::map<int, const JsonValue*> byIndex;
     const JsonValue& items = levelInfo["items"];
     for (size_t i = 0; i < items.size(); ++i)
@@ -90,15 +90,15 @@ std::set<int> Rando::findTriggerPinnedItems(const JsonValue& levelInfo,
         const JsonValue& tr = trigs[t];
         if (tr["triggerType"].asString() != "Pickup") continue;
 
-        // Welches Item ist gemeint? Zwei Exportstaende sind zu bedienen, und ein
-        // Stichtag waere hier gefaehrlich: laege eine aeltere Datei daneben,
-        // haette KEIN Trigger mehr ein Item festgehalten, und ortsgebundene
-        // Items waeren klanglos in den Pool gerutscht.
+        // Which item is meant? Two export states must be served, and a
+        // cut-off date would be dangerous here: with an older file lying
+        // around, NO trigger would have pinned an item anymore, and pinned
+        // items would have slipped into the pool without a sound.
         //
-        // Neuer Export: das Referenzwort steht als "refItem" da.
-        // Aelterer Export: das Wort wurde als erster Object-Befehl ausgegeben.
-        //   Es zeigt dann auf ein Item, das auf dem Triggersektor liegt - und
-        //   genau daran ist es erkennbar.
+        // Newer export: the reference word is there as "refItem".
+        // Older export: the word was emitted as the first Object command.
+        //   It then points at an item lying on the trigger sector - and
+        //   that is exactly how it can be recognized.
         const int trRoom = static_cast<int>(tr["room"].asInt());
         const int trSx = static_cast<int>(tr["sectorX"].asInt());
         const int trSz = static_cast<int>(tr["sectorZ"].asInt());
@@ -129,12 +129,12 @@ std::set<int> Rando::findTriggerPinnedItems(const JsonValue& levelInfo,
                         static_cast<int>(target["sectorX"].asInt()) == trSx &&
                         static_cast<int>(target["sectorZ"].asInt()) == trSz)
                     {
-                        // Das ist das Referenzwort des aelteren Exports, kein
-                        // Befehl. Nicht als Wirkung zaehlen.
+                        // That is the older export's reference word, not a
+                        // command. Do not count it as an effect.
                         refItem = idx;
                         continue;
                     }
-                    // Schwarmgetier zaehlt wie Musik: nicht festhaltend.
+                    // Swarm critters count like music: not pinning.
                     harmless = isDespawningSwarm(static_cast<int>(target["typeId"].asInt()));
                 }
             }
@@ -143,17 +143,17 @@ std::set<int> Rando::findTriggerPinnedItems(const JsonValue& levelInfo,
             if (type != "PlaySoundtrack" && !harmless) onlySoundtrack = false;
         }
 
-        if (refItem < 0) continue;                  // kein deutbarer Pickup-Trigger
+        if (refItem < 0) continue;                  // no interpretable pickup trigger
         const std::vector<int> onSector(1, refItem);
 
-        // Ein Trigger, dessen einzige weitere Wirkung Musik ist, haelt das Item
-        // nicht fest - bewusst akzeptiertes Opfer, damit z.B. Andrea2s
-        // Brechstange randomisierbar bleibt.
+        // A trigger whose only further effect is music does not pin the
+        // item - a deliberately accepted sacrifice, so e.g. Andrea2's
+        // crowbar stays randomizable.
         if (effects.empty() || onlySoundtrack)
         {
             if (explain)
                 for (int i : onSector)
-                    explain->push_back(fmt("Item %d bleibt frei - Pickup-Trigger loest nur Musik bzw. Schwarmgetier aus", i));
+                    explain->push_back(fmt("item %d stays free - pickup trigger only fires music or swarm critters", i));
             continue;
         }
 
@@ -164,7 +164,7 @@ std::set<int> Rando::findTriggerPinnedItems(const JsonValue& levelInfo,
             {
                 std::string e;
                 for (size_t k = 0; k < effects.size(); ++k) { if (k) e += "+"; e += effects[k]; }
-                explain->push_back(fmt("Item %d ortsgebunden - Pickup-Trigger loest aus: %s", i, e.c_str()));
+                explain->push_back(fmt("item %d pinned - pickup trigger fires: %s", i, e.c_str()));
             }
         }
     }
@@ -181,7 +181,7 @@ bool Rando::buildInput(const JsonValue& zoneExport,
     out.maxZone = static_cast<int>(zoneExport["maxZone"].asInt());
 
     const JsonValue& secs = zoneExport["sectors"];
-    if (secs.size() == 0) { error = "Zonen-Export enthaelt keine Sektoren"; return false; }
+    if (secs.size() == 0) { error = "zone export contains no sectors"; return false; }
     out.sectors.reserve(secs.size());
     for (size_t i = 0; i < secs.size(); ++i)
     {
@@ -193,14 +193,14 @@ bool Rando::buildInput(const JsonValue& zoneExport,
         s.floorY = static_cast<int>(secs[i]["floorY"].asInt());
         s.clearance = static_cast<int>(secs[i]["clearance"].asInt(0));
 
-        // Wandkanten (#61). Aeltere Exporte kennen das Feld nicht - dann
-        // bleibt die Liste leer, und Wand-Pickups finden keinen Platz statt
-        // an einer falschen Stelle zu landen.
+        // Wall edges (#61). Older exports do not know the field - then the
+        // list stays empty, and wall pickups find no place instead of
+        // landing in a wrong one.
         const JsonValue& wa = secs[i]["wallAngles"];
         for (size_t w = 0; w < wa.size(); ++w)
             s.wallAngles.push_back(static_cast<int>(wa[w].asInt()));
 
-        // Anmarschsektoren stehen als "raum,x,z" da, in Vorzugsreihenfolge.
+        // Approach sectors are listed as "room,x,z", in preference order.
         const JsonValue& ap = secs[i]["approach"];
         for (size_t a = 0; a < ap.size(); ++a)
         {
@@ -225,8 +225,8 @@ bool Rando::buildInput(const JsonValue& zoneExport,
         std::sort(k.allowRooms.begin(), k.allowRooms.end());
         std::sort(k.excludeRooms.begin(), k.excludeRooms.end());
 
-        // Die Felder unten sind alle optional: ein Level ohne Inselgruppe
-        // exportiert sie als null, und dann bleiben die Mengen leer.
+        // The fields below are all optional: a level without an island group
+        // exports them as null, and then the sets stay empty.
         const JsonValue& mf = cons[i]["minFloorY"];
         if (!mf.isNull()) { k.hasMinFloorY = true; k.minFloorY = static_cast<int>(mf.asInt()); }
         readSectorSet(cons[i]["minFloorYIsland"],  k.minFloorYScope);
@@ -279,9 +279,9 @@ bool Rando::buildInput(const JsonValue& zoneExport,
     const JsonValue& ko = zoneExport["keepOcbTypes"];
     for (size_t i = 0; i < ko.size(); ++i) out.keepOcbTypes.insert(static_cast<int>(ko[i].asInt()));
 
-    // Sektoren hinter einem Deadstop (#61), als "raum,x,z" wie die
-    // Anmarschsektoren. Fehlt das Feld (aelterer Export), bleibt die Menge
-    // leer und nichts aendert sich.
+    // Sectors behind a deadstop (#61), as "room,x,z" like the approach
+    // sectors. If the field is missing (older export), the set stays empty
+    // and nothing changes.
     const JsonValue& fp = zoneExport["flagPresets"];
     for (size_t i = 0; i < fp.size(); ++i)
         out.flagPresets[static_cast<int>(fp[i]["item"].asInt())] = static_cast<int>(fp[i]["flags"].asInt());
@@ -335,57 +335,59 @@ bool Rando::buildInput(const JsonValue& zoneExport,
             out.waterRooms.insert(r.room);
     }
 
-    // Typsperren je Raum (siehe RandoInput::typeNoRooms) und kuratierte
-    // Antitrigger-Immunitaeten.
+    // Per-room type bans (see RandoInput::typeNoRooms) and curated
+    // antitrigger immunities.
     {
         const JsonValue& tnr = zoneExport["typeNoRooms"];
         for (size_t i = 0; i < tnr.size(); ++i)
         {
-            const int typ = static_cast<int>(tnr[i]["typeId"].asInt(-1));
-            if (typ < 0) continue;
+            const int type = static_cast<int>(tnr[i]["typeId"].asInt(-1));
+            if (type < 0) continue;
             const JsonValue& rl = tnr[i]["rooms"];
             for (size_t r = 0; r < rl.size(); ++r)
-                out.typeNoRooms[typ].insert(static_cast<int>(rl[r].asInt(-1)));
+                out.typeNoRooms[type].insert(static_cast<int>(rl[r].asInt(-1)));
         }
-        // Typsperren je SEKTOR (#61). Zweck wie typeNoRooms, nur feiner - und
-        // wie dort ausserhalb des Constraint-Zweigs, damit sie auch Typen
-        // ohne Aufnahme trifft: andy3s Kreide und Brechstange haben keine
-        // Constraint, die bannedSectors der Constraints erreichen sie also
-        // nie.
+        // Per-SECTOR type bans (#61). Same purpose as typeNoRooms, only
+        // finer - and like there outside the constraint branch, so it also
+        // hits types without a pickup: andy3's chalk and crowbar have no
+        // constraint, the constraints' bannedSectors never reach them.
         const JsonValue& tns = zoneExport["typeNoSectors"];
         for (size_t i = 0; i < tns.size(); ++i)
         {
-            const int typ = static_cast<int>(tns[i]["typeId"].asInt(-1));
-            if (typ < 0) continue;
+            const int type = static_cast<int>(tns[i]["typeId"].asInt(-1));
+            if (type < 0) continue;
             const JsonValue& sl = tns[i]["sectors"];
             for (size_t q = 0; q < sl.size(); ++q)
             {
                 int r = 0, x = 0, z = 0;
                 if (std::sscanf(sl[q].asString().c_str(), "%d,%d,%d", &r, &x, &z) == 3)
-                    out.typeNoSectors[typ].insert(secKey(r, x, z));
+                    out.typeNoSectors[type].insert(secKey(r, x, z));
             }
         }
 
+        // NOTE (#129): this zone-export KEY deliberately stays German until
+        // the phase-C regeneration renames it in ZoneAnalyse.ps1 and in all
+        // exports on disk together.
         const JsonValue& ai = zoneExport["antitriggerImmun"];
         for (size_t i = 0; i < ai.size(); ++i)
             out.antitriggerImmunItems.insert(static_cast<int>(ai[i].asInt(-1)));
 
     }
 
-    // Antitrigger-Ziele einsammeln - siehe RandoInput::antitriggered.
+    // Collect the antitrigger targets - see RandoInput::antitriggered.
     {
         const JsonValue& trigs = levelInfo["triggers"];
         for (size_t t = 0; t < trigs.size(); ++t)
         {
-            const std::string art = trigs[t]["triggerType"].asString();
-            if (art != "AntiTrigger" && art != "HeavyAntiTrigger") continue;
+            const std::string kind = trigs[t]["triggerType"].asString();
+            if (kind != "AntiTrigger" && kind != "HeavyAntiTrigger") continue;
             const JsonValue& cmds = trigs[t]["commands"];
             for (size_t c = 0; c < cmds.size(); ++c)
                 if (cmds[c]["type"].asString() == "Object")
                     out.antitriggered.insert(static_cast<int>(cmds[c]["index"].asInt(-1)));
         }
     }
-    if (out.roomOrigins.empty()) { error = "Level-Info enthaelt keine Raeume"; return false; }
+    if (out.roomOrigins.empty()) { error = "level info contains no rooms"; return false; }
 
     const JsonValue& items = levelInfo["items"];
     for (size_t i = 0; i < items.size(); ++i)
@@ -407,12 +409,12 @@ bool Rando::buildInput(const JsonValue& zoneExport,
 
     out.triggerPinned = findTriggerPinnedItems(levelInfo);
 
-    // --- Gekoppelte Trigger ---
+    // --- Coupled triggers ---
     //
-    // Aus der Kuration kommt nur der Item-Index. Wo der Trigger heute liegt,
-    // wird hier aus den Leveldaten gelesen und nicht von Hand gepflegt: eine
-    // eingetragene Koordinate waere genau die Angabe, die beim naechsten
-    // Levelumbau still falsch wird.
+    // Only the item index comes from the curation. Where the trigger lies
+    // today is read from the level data here and not maintained by hand: a
+    // written-down coordinate would be exactly the statement that silently
+    // goes wrong at the next level rebuild.
     const JsonValue& ct = zoneExport["coupledTriggers"];
     for (size_t i = 0; i < ct.size(); ++i)
     {
@@ -425,9 +427,9 @@ bool Rando::buildInput(const JsonValue& zoneExport,
             const JsonValue& tr = trigs[t];
             if (tr["triggerType"].asString() != "Pickup") continue;
 
-            // Dasselbe Zwei-Wege-Lesen wie in findTriggerPinnedItems: neuer
-            // Export fuehrt das Referenzwort als refItem, aelterer als ersten
-            // Object-Befehl auf ein Item des eigenen Sektors.
+            // The same two-way reading as in findTriggerPinnedItems: the
+            // newer export carries the reference word as refItem, the older
+            // as the first Object command onto an item of its own sector.
             int ref = tr["refItem"].isNull() ? -1 : static_cast<int>(tr["refItem"].asInt());
             if (ref < 0)
             {
@@ -466,11 +468,11 @@ bool Rando::floorAt(const RandoInput& in, const ZoneSector& s,
     yOut = s.floorY;
     std::map<long long, SlopeInfo>::const_iterator f =
         in.slopes.find(secKey(s.room, s.sectorX, s.sectorZ));
-    if (f == in.slopes.end()) return true;       // kein Eintrag: eben
+    if (f == in.slopes.end()) return true;       // no entry: flat
 
-    const FloorPos lage = floorPosAt(f->second, s.floorY, localX, localZ);
-    yOut = lage.y;
-    return lage.walkable;
+    const FloorPos pos = floorPosAt(f->second, s.floorY, localX, localZ);
+    yOut = pos.y;
+    return pos.walkable;
 }
 
 bool Rando::sectorAllowedFor(const RandoInput& in,
@@ -480,37 +482,37 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
                              bool mustBeOnIsland,
                              int itemOcb)
 {
-    // Wandgriffe (#61): OCB 2 (Brechstange) und OCB 9 (Joby-Crow) verlangen
-    // eine Wand und Stehhoehe. Beides sind Engine-Regeln, keine Optik:
-    //  - PickUpCollision:803 prueft ausdruecklich !lara.IsDucked, im
-    //    Kriechgang ist der Griff also unmoeglich. Laras Kollisionshoehe im
-    //    Stehen ist 762 (game\lara.cpp), 768 ist die naechste Stufe darueber.
-    //  - Die Wand selbst prueft die Engine NIE - sie ist Optik und
-    //    Erreichbarkeit. Ohne Wandkante gaebe es aber keinen sinnvollen
-    //    Winkel, und das Modell (Mesh bei ~+470 in Modell-Z) stuende frei im
-    //    Raum statt in einer Wand.
+    // Wall grabs (#61): OCB 2 (crowbar) and OCB 9 (joby crow) demand a wall
+    // and standing height. Both are engine rules, not optics:
+    //  - PickUpCollision:803 explicitly checks !lara.IsDucked, so in the
+    //    crawl the grab is impossible. Lara's standing collision height is
+    //    762 (game\lara.cpp), 768 is the next step above it.
+    //  - The wall itself the engine NEVER checks - it is optics and
+    //    reachability. Without a wall edge there would be no sensible
+    //    angle, though, and the model (mesh at ~+470 in model Z) would
+    //    stand free in the room instead of inside a wall.
     if (itemOcb == 2 || itemOcb == 9)
     {
         if (s.wallAngles.empty()) return false;
         if (s.clearance < 768) return false;
 
-        // Und niemals unter Wasser: PickUpCollision laeuft ueberhaupt nur bei
-        // water_status LW_ABOVE_WATER oder LW_WADE (pickup.cpp:766). Gilt NUR
-        // fuer diese Griffe - gewoehnliche Pickups und Puzzleteile duerfen
-        // sehr wohl im Wasser liegen (Nutzervorgabe 2026-08-19: "Nur diese
-        // spezielle Art mit Anim nicht").
+        // And never under water: PickUpCollision only runs at water_status
+        // LW_ABOVE_WATER or LW_WADE (pickup.cpp:766). Applies ONLY to
+        // these grabs - ordinary pickups and puzzle pieces may very well
+        // lie in water (user requirement 2026-08-19: "only this special
+        // kind with the anim must not").
         if (in.waterRooms.count(s.room)) return false;
 
-        // Kein Wandgriff in Reichweite eines Traegers (Testlauf 2026-08-20,
-        // joby3): GetCarriedItems (setup.cpp:2085) haengt beim Levelstart
-        // jedes Pickup im Kasten |dx|<512, |dy|<256, |dz|<512 an den
-        // naechsten Gegner oder eine Durchsuchbare. Ein getragener Wandgriff
-        // ist nach dem Tod des Traegers verloren: DropBaddyPickups legt ihn
-        // auf offenen Boden, wo seine Aufnahmeart (Wand + Winkel) nie wieder
-        // erfuellbar ist. Der Kasten ist auf Sektorgroesse aufgeweitet, weil
-        // die endgueltige Wandposition erst beim Schreiben gewuerfelt wird -
-        // jeder Punkt des Sektors muss sicher sein. Die Gegenrichtung (neuer
-        // Gegner neben fertigem Wandgriff) sperrt die Gegnerplatzierung.
+        // No wall grab within a carrier's reach (test run 2026-08-20,
+        // joby3): GetCarriedItems (setup.cpp:2085) attaches every pickup in
+        // the box |dx|<512, |dy|<256, |dz|<512 to the nearest enemy or
+        // searchable at level start. A carried wall grab is lost after the
+        // carrier's death: DropBaddyPickups puts it on open floor, where
+        // its pickup style (wall + angle) can never be satisfied again.
+        // The box is widened to sector size because the final wall position
+        // is only rolled at write time - every point of the sector must be
+        // safe. The reverse direction (new enemy next to a finished wall
+        // grab) bars the enemy placement.
         const RoomOrigin* wro = nullptr;
         for (const RoomOrigin& r : in.roomOrigins)
             if (r.room == s.room) { wro = &r; break; }
@@ -528,13 +530,13 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
         }
     }
 
-    // Kein Item auf den Sektor eines Feuers (Testlauf 2026-08-20, joby5:
-    // Schrotmunition lag in der Flamme). Die Flammenfamilie 120..125 - Flame,
-    // die drei Flame Emitter, der Gaskocher (COOKER_FLAME, #114) und Burning
-    // Roots - brennt an Ort und Stelle; ein Pickup dort ist eine Falle, kein
-    // Fund. Steam Emitter (365) bleiben absichtlich erlaubt: die senkrechten
-    // sind harmlose Kulisse, und ein Pauschalverbot wuerde in den Schiffs-
-    // leveln halbe Korridore sperren.
+    // No item on a fire's sector (test run 2026-08-20, joby5: shotgun ammo
+    // lay in the flame). The flame family 120..125 - Flame, the three flame
+    // emitters, the gas cooker (COOKER_FLAME, #114) and Burning Roots -
+    // burns in place; a pickup there is a trap, not a find. Steam emitters
+    // (365) stay deliberately allowed: the vertical ones are harmless
+    // scenery, and a blanket ban would bar half the corridors in the ship
+    // levels.
     for (const LevelItem& fb : in.items)
     {
         if (fb.typeId < 120 || fb.typeId > 125) continue;
@@ -543,29 +545,29 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
     }
 
 
-    // Hinter einem Deadstop liegt nichts, was ein Schluessel sein koennte.
-    // Gilt fuer JEDEN Typ mit Constraint und zusaetzlich fuer die Wandgriffe,
-    // die keine Constraint haben (#61).
-    // Ausgenommene Typen (#61) gehen hier vorbei: die Insel ist FUER andere
-    // Typen gedacht, und der Ausgenommene braucht das Gegenteil. Seine eigene
-    // Schranke steht woanders (ISLAND_GROUP / bannedSectors).
+    // Behind a deadstop lies nothing that could be a key. Applies to EVERY
+    // type with a constraint and additionally to the wall grabs, which have
+    // no constraint (#61).
+    // Exempt types (#61) pass by here: the island is meant FOR other types,
+    // and the exempt one needs the opposite. Its own bound stands elsewhere
+    // (ISLAND_GROUP / bannedSectors).
     if ((k != nullptr || itemOcb == 2 || itemOcb == 9) &&
         !in.keyBarredExemptTypes.count(typeId) &&
         in.keyBarredSectors.count(secKey(s.room, s.sectorX, s.sectorZ)))
         return false;
 
-    // Das Waffenverbot haengt am LEVEL, nicht am Typ-Constraint: eine
-    // Schrotflinte ist kein Schluessel und wuerde sonst gar nicht geprueft.
+    // The weapon ban hangs off the LEVEL, not the type constraint: a
+    // shotgun is no key and would otherwise not be checked at all.
     if (in.weaponTypes.count(typeId) && in.noWeaponRooms.count(s.room)) return false;
 
-    // Kein Item auf Rutschen (Neigung > 2 - Lara kann dort nichts aufheben)
-    // oder ueber dem kollisionsfreien Dreieck eines NOCOLF-Sektors. Belaufbare
-    // Schraegen sind dagegen erlaubt - ihr y rechnen die Ausgabestellen mit
-    // floorAt auf die echte Bodenhoehe. Entscheidend ist der LANDEPUNKT
-    // (Sektormitte plus Typversatz), denn bei Splits gelten je Dreieck eigene
-    // Neigungen. Steht wie typeNoRooms VOR dem Constraint-Zweig und gilt
-    // damit auf jedem Platzierungsweg - Schluessel, Pickups, Injektionen,
-    // Streuung und Abundance.
+    // No item on slides (slope > 2 - Lara cannot pick anything up there) or
+    // above the collision-free triangle of a NOCOLF sector. Walkable slopes
+    // are allowed - the emitters compute their y onto the true floor height
+    // with floorAt. What matters is the LANDING POINT (sector center plus
+    // type offset), because with splits each triangle has its own slopes.
+    // Sits BEFORE the constraint branch like typeNoRooms and thus applies
+    // on every placement path - keys, pickups, injections, scattering and
+    // abundance.
     {
         std::map<int, PlacementOffset>::const_iterator o = in.typeOffset.find(typeId);
         const PlacementOffset po = (o == in.typeOffset.end()) ? PlacementOffset() : o->second;
@@ -573,9 +575,10 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
         if (!floorAt(in, s, 512 + po.dx, 512 + po.dz, y)) return false;
     }
 
-    // Sperre einzelner Typen fuer einzelne Raeume. Steht bewusst VOR dem
-    // Constraint-Zweig und gilt damit auf jedem Platzierungsweg, auch fuer
-    // Streuung und Abundance, die ohne Constraint hierherkommen.
+    // Bans of individual types for individual rooms. Sits deliberately
+    // BEFORE the constraint branch and thus applies on every placement
+    // path, including scattering and abundance, which arrive here without a
+    // constraint.
     {
         std::map<int, std::set<int>>::const_iterator f = in.typeNoRooms.find(typeId);
         if (f != in.typeNoRooms.end() && f->second.count(s.room)) return false;
@@ -595,8 +598,8 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
     if (!k->islandSectors.empty() && !k->islandSectors.count(sk)) return false;
     if (k->bannedSectors.count(sk)) return false;
     if (k->forbiddenSectors.count(sk)) return false;
-    // Kleineres y liegt hoeher: ein Sektor unterhalb der Schranke ist zu hoch.
-    // Sie gilt nur in ihrem Geltungsbereich, und ohne Geltungsbereich ueberall.
+    // Smaller y lies higher: a sector below the bound is too high. It
+    // applies only within its scope, and everywhere without one.
     if (k->hasMinFloorY && s.floorY < k->minFloorY &&
         (k->minFloorYScope.empty() || k->minFloorYScope.count(sk))) return false;
     if (mustBeOnIsland && !k->requireInIsland.count(sk)) return false;
@@ -628,47 +631,47 @@ bool Rando::buildMarkerPatch(const RandoInput& in,
         std::map<int, RoomOrigin>::const_iterator ro = origin.find(s.room);
         if (ro == origin.end()) return;
         const PlacementOffset po = offFor(typeId);
-        int yBoden = 0;
-        Rando::floorAt(in, s, 512 + po.dx, 512 + po.dz, yBoden);
+        int yFloor = 0;
+        Rando::floorAt(in, s, 512 + po.dx, 512 + po.dz, yFloor);
         JsonValue a = JsonValue::makeObject();
         a.set("typeId", JsonValue::makeInt(typeId));
         a.set("room", JsonValue::makeInt(s.room));
         a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro->second.originX) + s.sectorX * 1024 + 512 + po.dx));
-        a.set("y", JsonValue::makeInt(yBoden + po.dy));
+        a.set("y", JsonValue::makeInt(yFloor + po.dy));
         a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro->second.originZ) + s.sectorZ * 1024 + 512 + po.dz));
         a.set("ocb", JsonValue::makeInt(0));
         adds.push(a);
     };
 
-    // Ebene 1: der Fuelltyp auf JEDEN gueltigen Sektor. Nicht nur auf die, die
-    // kein Constraint abdeckt - sonst fehlte der Marker ueberall dort, wo AUCH
-    // ein Key-Item liegen darf, und diese Sektoren saehen aus, als waeren sie
-    // fuer gewoehnliche Pickups gesperrt.
+    // Layer 1: the fill type onto EVERY valid sector. Not only onto those
+    // no constraint covers - otherwise the marker would be missing wherever
+    // a key item may ALSO lie, and those sectors would look as if they were
+    // barred for ordinary pickups.
     if (fillType > 0)
     {
         for (const ZoneSector& s : in.sectors) { marker(fillType, s); ++fillSectors; }
     }
 
-    // Ebene 2: je Constraint-Typ sein eigener, engerer Bereich. Geprueft wird
-    // mit derselben Funktion, die auch die Platzierung benutzt.
+    // Layer 2: per constraint type its own, narrower area. Checked with the
+    // same function the placement uses.
     //
-    // Hat ein Typ ein requireInIsland, wird der PFLICHTBEREICH gezeichnet, also
-    // der uebliche Bereich UND die Insel. Formal duerfte eine zweite Instanz
-    // desselben Typs auch ausserhalb liegen - requireInIsland sagt nur "eine
-    // davon dort". Gezeichnet wird trotzdem die engere Menge: das ist die, die
-    // der Nutzer festgelegt hat und pruefen will, und genau so macht es auch
-    // das PowerShell-Werkzeug, gegen das er seine Kuration bisher abgeglichen
-    // hat. Zwei Werkzeuge, die dasselbe Level unterschiedlich zeichnen, waeren
-    // schlimmer als eine formale Unschaerfe.
+    // If a type has a requireInIsland, the MANDATORY area is drawn, i.e.
+    // the usual area AND the island. Formally a second instance of the same
+    // type could also lie outside - requireInIsland only says "one of them
+    // there". The narrower set is drawn anyway: it is the one the user laid
+    // down and wants to check, and that is exactly what the PowerShell tool
+    // does, against which he has compared his curation so far. Two tools
+    // drawing the same level differently would be worse than a formal
+    // fuzziness.
     for (const KeyConstraint& k : in.constraints)
     {
-        const bool pflichtbereich = k.islandSectors.empty() && !k.requireInIsland.empty();
+        const bool mandatoryArea = k.islandSectors.empty() && !k.requireInIsland.empty();
         MarkerCount mc;
         mc.typeId = k.typeId;
         std::set<int> rooms;
         for (const ZoneSector& s : in.sectors)
         {
-            if (!sectorAllowedFor(in, &k, s, k.typeId, pflichtbereich)) continue;
+            if (!sectorAllowedFor(in, &k, s, k.typeId, mandatoryArea)) continue;
             marker(k.typeId, s);
             ++mc.sectors;
             rooms.insert(s.room);
@@ -677,63 +680,63 @@ bool Rando::buildMarkerPatch(const RandoInput& in,
         perType.push_back(mc);
     }
 
-    // Ebene 3: Typen OHNE Constraint, die trotzdem eigene Platzregeln haben -
-    // die WANDGRIFFE (OCB 2 und 9).
+    // Layer 3: types WITHOUT a constraint that still have their own
+    // placement rules - the WALL GRABS (OCB 2 and 9).
     //
-    // andy3s Kreide (172) und Brechstange (174) sind der Fall: Werkzeuge ohne
-    // Aufnahme, also leitet ZoneAnalyse fuer sie keine Zonengrenze ab und sie
-    // stehen in keiner Constraint. Ebene 2 zeichnete sie deshalb nie - im
-    // Debug-Level fehlten sie ganz, obwohl sie sehr wohl eigene Regeln haben
-    // (Wandkante, Stehhoehe 768, kein Wasser) und der Deadstop sie ueber den
-    // OCB-Zweig ebenfalls trifft. Genau das wollte der Nutzer sehen koennen:
-    // "damit wir kein Bruch eingebaut haben".
+    // andy3's chalk (172) and crowbar (174) are the case: tools without a
+    // pickup, so ZoneAnalyse derives no zone border for them and they stand
+    // in no constraint. Layer 2 therefore never drew them - in the debug
+    // level they were missing entirely, although they very much have their
+    // own rules (wall edge, standing height 768, no water) and the deadstop
+    // hits them via the OCB branch as well. That is exactly what the user
+    // wanted to be able to see: "so we know we built no break".
     //
-    // Ihre OCB kommt aus den Vanilla-Items - sie ist es ja, die die Regel
-    // ueberhaupt ausloest; geprueft wird mit derselben Funktion wie bei der
-    // echten Platzierung, nur ohne Constraint und mit dem OCB als Argument.
+    // Their OCB comes from the vanilla items - it is what triggers the rule
+    // in the first place; checked with the same function as the real
+    // placement, only without a constraint and with the OCB as an argument.
     {
-        // ORTSFESTE Items zaehlen nicht: ein Typ, dessen Vorkommen alle
-        // liegen bleiben, wandert nirgendwohin und darf im Debug-Level auch
-        // keine Flaeche bekommen. Dieselbe Rechnung wie in run() weiter
-        // unten - Handkuration plus Trigger-Fesselung, abzueglich der
-        // gekoppelten Trigger und der vorgesetzten Codebits.
+        // PINNED items do not count: a type whose occurrences all stay put
+        // travels nowhere and must not get an area in the debug level
+        // either. The same arithmetic as in run() further down - hand
+        // curation plus trigger pinning, minus the coupled triggers and the
+        // preset code bits.
         //
-        // Zwei Faelle aus dem Spiel, die es braucht (Nutzerbefund
-        // 2026-08-24): Andrea3s typeId 220 haengt am LevelEnd-Trigger und
-        // wird ueber triggerPinned gehalten - es steht WEDER in
-        // VANILLA_TYPES noch in fixedItems, eine Typliste haette es also
-        // nicht found. joby3s Brechstange (172) steht dagegen in beidem.
-        std::set<int> festgenagelt(in.triggerPinned);
-        for (int i : in.fixedItems) festgenagelt.insert(i);
+        // Two cases from the game that require it (user find 2026-08-24):
+        // Andrea3's typeId 220 hangs on the LevelEnd trigger and is held
+        // via triggerPinned - it stands NEITHER in VANILLA_TYPES nor in
+        // fixedItems, so a type list would not have found it. joby3's
+        // crowbar (172), by contrast, stands in both.
+        std::set<int> nailedDown(in.triggerPinned);
+        for (int i : in.fixedItems) nailedDown.insert(i);
 
         for (std::map<int, int>::const_iterator f = in.flagPresets.begin(); f != in.flagPresets.end(); ++f)
             if (std::find(in.fixedItems.begin(), in.fixedItems.end(), f->first) == in.fixedItems.end())
-                festgenagelt.erase(f->first);
+                nailedDown.erase(f->first);
 
         for (const CoupledTrigger& c : in.coupledTriggers)
             if (std::find(in.fixedItems.begin(), in.fixedItems.end(), c.itemIndex) == in.fixedItems.end())
-                festgenagelt.erase(c.itemIndex);
+                nailedDown.erase(c.itemIndex);
 
-        std::map<int, int> wandTypen;      // typeId -> OCB
+        std::map<int, int> wallTypes;      // typeId -> OCB
         for (const LevelItem& it : in.items)
         {
-            if (festgenagelt.count(it.index)) continue;
-            // NUR aufnehmbare Items. OCB 2 und 9 sind keine Kennung fuer
-            // Wandgriffe, sondern gewoehnliche Values, die auch Tueren,
-            // Gegner und Kulisse tragen - ohne diese Pruefung fuellte der
-            // Debug-Marker das halbe Level (Nutzerbefund 2026-08-24: "der
-            // fuellt jetzt nicht nur Item/Keys/Puzzles aus, sondern alles").
+            if (nailedDown.count(it.index)) continue;
+            // ONLY pickable items. OCB 2 and 9 are no marker for wall
+            // grabs but ordinary values that doors, enemies and scenery
+            // carry too - without this check the debug marker filled half
+            // the level (user find 2026-08-24: "it now fills not just
+            // items/keys/puzzles but everything").
             if (!isPickupType(it.typeId)) continue;
             if (it.ocb != 2 && it.ocb != 9) continue;
 
-            bool hatConstraint = false;
+            bool hasConstraint = false;
             for (const KeyConstraint& k : in.constraints)
-                if (k.typeId == it.typeId) { hatConstraint = true; break; }
+                if (k.typeId == it.typeId) { hasConstraint = true; break; }
 
-            if (!hatConstraint) wandTypen[it.typeId] = it.ocb;
+            if (!hasConstraint) wallTypes[it.typeId] = it.ocb;
         }
 
-        for (std::map<int, int>::const_iterator w = wandTypen.begin(); w != wandTypen.end(); ++w)
+        for (std::map<int, int>::const_iterator w = wallTypes.begin(); w != wallTypes.end(); ++w)
         {
             MarkerCount mc;
             mc.typeId = w->first;
@@ -764,21 +767,21 @@ bool Rando::run(const RandoInput& in,
 {
     report = RandoReport();
 
-    // Levelname in Kleinbuchstaben - mehrere Bloecke unten entscheiden daran
-    // (Waffenstreuung, Outfit, Waffenregeln).
-    std::string klein;
-    for (char c : in.level) klein.push_back((c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c);
+    // The level name in lower case - several blocks below decide on it
+    // (weapon scattering, outfit, weapon rules).
+    std::string lowerName;
+    for (char c : in.level) lowerName.push_back((c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c);
 
-    // Jedes Level bekommt seinen eigenen Wuerfelstrom. Vorher speiste
-    // DERSELBE globale Seed jeden Levellauf mit derselben Zugfolge - und weil
-    // die Allsanity-Pools fast identisch sind, bekamen alle Level fast
-    // dieselben Gegnertypen in derselben Reihenfolge ("als haette er nur ein
-    // Set ausgewaehlt und das auf alle gleich gemacht", Nutzerbeobachtung im
-    // Spiel). FNV-1a ueber den Levelnamen entkoppelt die Stroeme;
-    // deterministisch bleibt alles: derselbe Seed erzeugt weiterhin dasselbe
-    // Spiel, nur eben je Level ein anderes.
+    // Every level gets its own dice stream. Before, the SAME global seed
+    // fed every level run the same draw sequence - and because the
+    // allsanity pools are nearly identical, all levels got nearly the same
+    // enemy types in the same order ("as if it had picked one set and
+    // applied it to all equally", user observation in game). FNV-1a over
+    // the level name decouples the streams; everything stays deterministic:
+    // the same seed still produces the same game, just a different one per
+    // level.
     uint64_t levelSeed = seed;
-    for (char c : klein)
+    for (char c : lowerName)
     {
         levelSeed ^= static_cast<unsigned char>(c);
         levelSeed *= 0x100000001B3ull;
@@ -794,12 +797,12 @@ bool Rando::run(const RandoInput& in,
     std::set<int> pinned(in.triggerPinned);
     for (int i : in.fixedItems) pinned.insert(i);
 
-    // Der gekoppelte Zug hebt genau die Fesselung auf, die Regel 2 anlegt: das
-    // Item darf wandern, weil sein Trigger mitkommt. Die Handkuration
-    // (fixedItems) bleibt davon unberuehrt - wer dort steht, bleibt liegen,
-    // egal was mit seinem Trigger ginge.
-    // Vorgesetzte Codebits heben die Fesselung ebenfalls auf: die Bedingung,
-    // die der Trigger erfuellt haette, ist damit schon erfuellt (#61).
+    // The coupled move lifts exactly the pinning that rule 2 imposes: the
+    // item may travel because its trigger comes along. The hand curation
+    // (fixedItems) stays untouched by that - whoever stands there stays
+    // put, whatever might work for its trigger.
+    // Preset code bits lift the pinning too: the condition the trigger
+    // would have satisfied is thereby already satisfied (#61).
     for (std::map<int, int>::const_iterator f = in.flagPresets.begin(); f != in.flagPresets.end(); ++f)
         if (std::find(in.fixedItems.begin(), in.fixedItems.end(), f->first) == in.fixedItems.end())
             pinned.erase(f->first);
@@ -813,22 +816,22 @@ bool Rando::run(const RandoInput& in,
         pinned.erase(c.itemIndex);
     }
 
-    // OCB 5 und 10: solche Pickups sind in Vanilla gar nicht aufnehmbar.
-    // InitialisePickup (game/init.cpp:470) setzt ein OCB-5-Item auf
-    // ITEM_INVISIBLE und kehrt zurueck; PickUpCollision (game/pickup.cpp:737)
-    // steigt bei ocb 5 und 10 sofort aus. Sie werden erst durch etwas anderes
-    // freigeschaltet. Wuerden wir sie verschieben und dabei - wie bei jedem
-    // bewegten Item noetig - OCB auf 0 setzen, laegen sie ab sofort sichtbar
-    // und aufnehmbar da. Das ist kein Ortswechsel mehr, sondern eine
-    // Verhaltensaenderung, und im Zweifel wird gesperrt statt geoeffnet.
+    // OCB 5 and 10: such pickups cannot be picked up in vanilla at all.
+    // InitialisePickup (game/init.cpp:470) sets an OCB-5 item to
+    // ITEM_INVISIBLE and returns; PickUpCollision (game/pickup.cpp:737)
+    // bails out immediately at ocb 5 and 10. They are only unlocked by
+    // something else. If we moved them and - as with every moved item -
+    // set the OCB to 0, they would lie there visible and pickable from
+    // then on. That is no longer a change of place but a change of
+    // behavior, and when in doubt we bar instead of unlock.
     //
-    // Genau diese Sperre hebt ein flagPresets-Eintrag auf, und nur der: dort
-    // hat die Kuration nachgesehen, WAS das Item freigeschaltet haette, und
-    // ihm die Bedingung abgenommen (Andrea2 Item 62 - der HeavyTrigger unter
-    // ihm haengt am Tod des Guardians, siehe #61). Mit vorgesetzten Codebits
-    // und genullter OCB liegt es von Anfang an sichtbar da, was hier sonst
-    // gerade verhindert werden soll - deshalb ist es eine Handentscheidung
-    // und keine abgeleitete Regel.
+    // Exactly this bar is lifted by a flagPresets entry, and only by it:
+    // there the curation looked up WHAT would have unlocked the item and
+    // relieved it of the condition (Andrea2 item 62 - the HeavyTrigger
+    // under it hangs on the Guardian's death, see #61). With preset code
+    // bits and a zeroed OCB it lies visible from the start, which is
+    // otherwise exactly what is being prevented here - hence it is a hand
+    // decision and no derived rule.
     for (const LevelItem& it : in.items)
     {
         const int ocb = it.ocb & 0x3F;
@@ -836,9 +839,9 @@ bool Rando::run(const RandoInput& in,
             pinned.insert(it.index);
     }
 
-    // Freie Sektoren. Sortierte Reihenfolge ist Pflicht: die Zufallsauswahl
-    // greift per Index zu, und eine andere Ausgangsreihenfolge waere ein
-    // anderes Ergebnis fuer denselben Seed.
+    // Free sectors. Sorted order is mandatory: the random pick accesses by
+    // index, and a different starting order would be a different result for
+    // the same seed.
     std::vector<ZoneSector> pool = in.sectors;
     std::sort(pool.begin(), pool.end(), [](const ZoneSector& a, const ZoneSector& b) {
         if (a.room != b.room) return a.room < b.room;
@@ -847,34 +850,34 @@ bool Rando::run(const RandoInput& in,
     });
     std::set<long long> used;
 
-    // --- Sektoren von Gegnern sperren, die mit Fracht verschwinden koennen ---
+    // --- Bar the sectors of enemies that can vanish with cargo ---
     //
-    // GetCarriedItems (setup.cpp:1962) haengt beim Levelstart jedes Pickup
-    // im Umkreis von 512 Einheiten an den naechsten Gegner: RemoveDrawnItem,
-    // room_number = NO_ROOM - das Item ist danach nur noch dessen Fracht und
-    // faellt erst bei seinem Tod wieder heraus.
+    // GetCarriedItems (setup.cpp:1962) attaches every pickup within 512
+    // units to the nearest enemy at level start: RemoveDrawnItem,
+    // room_number = NO_ROOM - the item is then nothing but its cargo and
+    // only drops out again at its death.
     //
-    // Fuer alle anderen Gegner ist das harmlos, seit der Antitrigger sie
-    // nicht mehr loeschen kann und die beiden eigenen Todeswege ihre Fracht
-    // ablegen. Ein Fall bleibt: Larson und Pierre, die ihre OCB behalten -
-    // sie finden damit Cores eigenen AI_AMBUSH-Marker und fliehen bei 40
-    // Lebenspunkten aus dem Level. Betroffen sind genau drei Exemplare im
-    // ganzen Spiel (Andrea1 34 und 35, Andrea2 76 - der gescriptete
-    // Miniboss, der als handkuriertes Item ohnehin nie getauscht wird).
+    // For all other enemies this is harmless since the antitrigger can no
+    // longer delete them and the two own death paths lay their cargo down.
+    // One case remains: Larson and Pierre, who keep their OCB - with it
+    // they find Core's own AI_AMBUSH marker and flee the level at 40 hit
+    // points. Exactly three specimens in the whole game are affected
+    // (Andrea1 34 and 35, Andrea2 76 - the scripted miniboss, which as a
+    // hand-curated item is never swapped anyway).
     //
-    // Auf ihren Sektor kommt deshalb kein Pickup. Drei gesperrte Flaechen
-    // von mehreren hundert kosten nichts; ein Schluesselitem, das mit einem
-    // fliehenden Larson das Level verlaesst, kostet den ganzen Durchgang.
+    // No pickup goes onto their sector, therefore. Three barred tiles out
+    // of several hundred cost nothing; a key item leaving the level with a
+    // fleeing Larson costs the whole playthrough.
     for (const LevelItem& it : in.items)
     {
         if ((it.typeId != 45 && it.typeId != 47) || it.ocb == 0) continue;
         used.insert(secKey(it.room, it.sectorX, it.sectorZ));
-        report.notes.push_back(fmt("Sektor %d,%d,%d gesperrt: Item %d (typeId %d, OCB %d) kann "
-                                   "fliehen und wuerde Fracht mitnehmen.",
+        report.notes.push_back(fmt("sector %d,%d,%d barred: item %d (typeId %d, OCB %d) can "
+                                   "flee and would take cargo along.",
                                    it.room, it.sectorX, it.sectorZ, it.index, it.typeId, it.ocb));
     }
 
-    // Welche Items kommen ueberhaupt in Frage?
+    // Which items are candidates at all?
     std::vector<LevelItem> movableKey, movableOther;
     for (const LevelItem& it : in.items)
     {
@@ -884,21 +887,21 @@ bool Rando::run(const RandoInput& in,
         else                            movableOther.push_back(it);
     }
 
-    // RequireTypes: von diesen Typen muss MINDESTENS EINE Instanz innerhalb der
-    // Inselgruppe liegen. joby2 erzwingt die Regel: Key Item8 schaltet ueber den
-    // Kran die Flipmap frei, die den Rest des Levels oeffnet. Liegt keine
-    // Instanz davor, kommt Lara nie an den Kran.
+    // RequireTypes: at least ONE instance of these types must lie inside
+    // the island group. joby2 forces the rule: Key Item8 unlocks the
+    // flipmap via the crane that opens the rest of the level. If no
+    // instance lies before it, Lara never reaches the crane.
     //
-    // Als Sektorfilter ist das nicht ausdrueckbar. Ein Filter beantwortet "darf
-    // DIESE Instanz hierhin?", die Forderung betrifft aber alle Instanzen eines
-    // Typs zusammen - vier einzeln zulaessige Plaetze koennen gemeinsam trotzdem
-    // falsch sein. Deshalb wird eine Instanz ausgewaehlt und ihr Kandidatensatz
-    // auf die Insel eingeschraenkt.
+    // As a sector filter this cannot be expressed. A filter answers "may
+    // THIS instance go here?", but the demand concerns all instances of a
+    // type together - four individually admissible places can still be
+    // jointly wrong. Hence one instance is chosen and its candidate set
+    // restricted to the island.
     //
-    // Erfuellt ein ortsfestes Item die Forderung bereits, ist nichts zu tun - es
-    // bleibt ja liegen, wo es ist. Sonst faellt die Wahl auf die bewegliche
-    // Instanz mit dem kleinsten Index, damit sie nicht vom Seed abhaengt.
-    std::map<int, int> forceIsland;      // typeId -> Item, das auf die Insel muss
+    // If a pinned item already satisfies the demand, nothing is to be done
+    // - it stays where it is. Otherwise the choice falls on the movable
+    // instance with the smallest index, so it does not depend on the seed.
+    std::map<int, int> forceIsland;      // typeId -> item that must go onto the island
     if (opt.shuffleKeyItems)
     {
         for (const KeyConstraint& k : in.constraints)
@@ -907,7 +910,7 @@ bool Rando::run(const RandoInput& in,
 
             bool satisfied = false;
             int  firstMovable = -1;
-            for (const LevelItem& it : in.items)      // nach Index sortiert
+            for (const LevelItem& it : in.items)      // sorted by index
             {
                 if (it.typeId != k.typeId || !isPickupType(it.typeId)) continue;
                 if (pinned.count(it.index))
@@ -921,12 +924,12 @@ bool Rando::run(const RandoInput& in,
             if (firstMovable < 0)
             {
                 report.ok = false;
-                report.error = fmt("Typ %d muss mindestens einmal in der Inselgruppe liegen, hat dort aber "
-                                   "weder ein ortsfestes Vorkommen noch eine bewegliche Instanz.", k.typeId);
+                report.error = fmt("type %d must lie in the island group at least once, but has "
+                                   "neither a pinned occurrence there nor a movable instance.", k.typeId);
                 return false;
             }
             forceIsland[k.typeId] = firstMovable;
-            report.notes.push_back(fmt("Typ %d: Item %d wird in die Inselgruppe gezwungen (Pflichtvorkommen).",
+            report.notes.push_back(fmt("type %d: item %d is forced into the island group (mandatory occurrence).",
                                        k.typeId, firstMovable));
         }
     }
@@ -934,16 +937,16 @@ bool Rando::run(const RandoInput& in,
     JsonValue edits = JsonValue::makeArray();
     JsonValue adds = JsonValue::makeArray();
 
-    // Endstand jedes Items nach dem Lauf. Bewegte bekommen ihre neue Position,
-    // alle anderen behalten die aus Vanilla - beides zusammen braucht die
-    // Traegerpruefung ganz unten.
+    // Each item's final state after the run. Moved ones get their new
+    // position, all others keep the vanilla one - the carrier check at the
+    // very bottom needs both together.
     std::map<int, LevelItem> finalOf;
     for (const LevelItem& it : in.items) finalOf[it.index] = it;
 
-    // Manche Objekte tragen ihren Mesh-Ursprung nicht dort, wo das Modell ihn
-    // annimmt: sie stecken dann im Boden oder stehen am Sektorrand statt in der
-    // Mitte. Gilt fuer JEDE Platzierung dieses Typs - verschoben wie injiziert -,
-    // deshalb hier zentral und nicht am einzelnen Eintrag.
+    // Some objects do not carry their mesh origin where the model assumes
+    // it: they then stick in the floor or stand at the sector edge instead
+    // of the middle. Applies to EVERY placement of that type - moved or
+    // injected - hence central here and not at the single entry.
     auto offFor = [&](int typeId)
     {
         std::map<int, PlacementOffset>::const_iterator f = in.typeOffset.find(typeId);
@@ -955,28 +958,29 @@ bool Rando::run(const RandoInput& in,
         const RoomOrigin& ro = origin[s.room];
         const PlacementOffset po = offFor(it.typeId);
         const int px = ro.originX + s.sectorX * 1024 + 512 + po.dx;
-        // Echte Bodenhoehe am Landepunkt statt Sektor-Grundwert: auf einer
-        // belaufbaren Schraege laege das Item sonst in der Luft (#86/#87).
-        int pyBoden = 0;
-        Rando::floorAt(in, s, 512 + po.dx, 512 + po.dz, pyBoden);
-        const int py = pyBoden + po.dy;
+        // The true floor height at the landing point instead of the sector
+        // base value: on a walkable slope the item would hang in the air
+        // otherwise (#86/#87).
+        int pyFloor = 0;
+        Rando::floorAt(in, s, 512 + po.dx, 512 + po.dz, pyFloor);
+        const int py = pyFloor + po.dy;
         const int pz = ro.originZ + s.sectorZ * 1024 + 512 + po.dz;
 
-        // Regel 3: Sockel- und Versteck-OCB ueberleben einen Ortswechsel nicht.
-        // Ausnahme sind Typen aus KEEP_OCB, bei denen die OCB nicht die alte
-        // Stelle beschreibt, sondern die Aufnahmeart - ohne sie ist das Objekt
-        // am neuen Platz gar nicht aufnehmbar.
-        const int neueOcb = in.keepOcbTypes.count(it.typeId) ? it.ocb : 0;
+        // Rule 3: pedestal and hiding OCBs do not survive a move. Types
+        // from KEEP_OCB are the exception, where the OCB does not describe
+        // the old spot but the pickup style - without it the object cannot
+        // be picked up at the new place at all.
+        const int newOcb = in.keepOcbTypes.count(it.typeId) ? it.ocb : 0;
 
         LevelItem& fin = finalOf[it.index];
         fin.room = s.room;
         fin.x = px;
         fin.y = py;
         fin.z = pz;
-        fin.ocb = neueOcb;
-        // Sektor mitfuehren, nicht nur die Weltkoordinate: der gekoppelte
-        // Triggerzug braucht ihn, und ihn hinterher aus x/z zurueckzurechnen
-        // waere eine zweite Quelle derselben Wahrheit.
+        fin.ocb = newOcb;
+        // Carry the sector along, not only the world coordinate: the
+        // coupled trigger move needs it, and computing it back from x/z
+        // afterwards would be a second source of the same truth.
         fin.sectorX = s.sectorX;
         fin.sectorZ = s.sectorZ;
 
@@ -986,22 +990,23 @@ bool Rando::run(const RandoInput& in,
         e.set("x", JsonValue::makeInt(px));
         e.set("y", JsonValue::makeInt(py));
         e.set("z", JsonValue::makeInt(pz));
-        e.set("ocb", JsonValue::makeInt(neueOcb));
+        e.set("ocb", JsonValue::makeInt(newOcb));
 
-        // Vorgesetzte Codebits mitschreiben, sonst waere das Item am neuen Ort
-        // wieder von seinem alten Trigger abhaengig (#61).
+        // Write the preset code bits along, or the item would again depend
+        // on its old trigger at the new place (#61).
         {
             std::map<int, int>::const_iterator fp = in.flagPresets.find(it.index);
             if (fp != in.flagPresets.end()) e.set("flags", JsonValue::makeInt(fp->second));
         }
 
-        // Wandgriffe brauchen den Winkel ZUR Wand (#61). Sonst behaelt ein
-        // verschobenes Item seine alte Ausrichtung - was fuer gewoehnliche
-        // Pickups richtig ist (die Engine dreht sie beim Aufheben ohnehin auf
-        // Lara), fuer OCB 2 und 9 aber nicht: dort prueft PickUpCollision den
-        // echten Winkel (+-30 Grad), und das Modell soll in der Wand stecken.
-        // Hat der Sektor mehrere Wandkanten, entscheidet der Zufall.
-        if ((neueOcb == 2 || neueOcb == 9) && !s.wallAngles.empty())
+        // Wall grabs need the angle TOWARDS the wall (#61). Otherwise a
+        // moved item keeps its old orientation - which is right for
+        // ordinary pickups (the engine turns them onto Lara when picking
+        // up anyway), but not for OCB 2 and 9: there PickUpCollision
+        // checks the real angle (+-30 degrees), and the model should stick
+        // in the wall. If the sector has several wall edges, chance
+        // decides.
+        if ((newOcb == 2 || newOcb == 9) && !s.wallAngles.empty())
         {
             const size_t w = static_cast<size_t>(rng.below(s.wallAngles.size()));
             e.set("angle", JsonValue::makeInt(s.wallAngles[w]));
@@ -1011,7 +1016,7 @@ bool Rando::run(const RandoInput& in,
         used.insert(secKey(s.room, s.sectorX, s.sectorZ));
     };
 
-    // Kandidatensektoren eines Items unter seinen Zwangsbedingungen.
+    // An item's candidate sectors under its constraints.
     auto candidatesFor = [&](const LevelItem& it, std::vector<const ZoneSector*>& out)
     {
         out.clear();
@@ -1020,10 +1025,10 @@ bool Rando::run(const RandoInput& in,
 
         auto fi = forceIsland.find(it.typeId);
         const bool mustBeOnIsland = (fi != forceIsland.end() && fi->second == it.index);
-        // Wandert der Trigger mit, kommt nur ein Sektor in Frage, der ihn auch
-        // aufnehmen kann. Sonst waehlt die Platzierung eine Stelle, an der der
-        // Patch spaeter abbricht - und ein abgebrochener Patch mitten im Lauf
-        // ist schlechter als eine engere Auswahl.
+        // If the trigger travels along, only a sector that can accept it is
+        // a candidate. Otherwise the placement picks a spot where the patch
+        // later aborts - and an aborted patch mid-run is worse than a
+        // narrower choice.
         const bool needsTriggerRoom = coupled.count(it.index) != 0;
 
         for (const ZoneSector& s : pool)
@@ -1036,65 +1041,64 @@ bool Rando::run(const RandoInput& in,
         }
     };
 
-    // Mindestabstand zwischen den WICHTIGEN Fundstuecken - Schluessel,
-    // Puzzleteile und Waffen (Nutzerwunsch 2026-08-19: "Bisschen mehr Spread
-    // bei den Keys, Puzzels und den Waffen waere cool").
+    // A minimum distance between the IMPORTANT finds - keys, puzzle pieces
+    // and weapons (user wish 2026-08-19: "a bit more spread on the keys,
+    // puzzles and the weapons would be cool").
     //
-    // Vorher zog die Auswahl gleichverteilt aus allen erlaubten Sektoren, ohne
-    // die schon gesetzten anzusehen. Gemessen ueber 20 Andrea2-Seeds landeten
-    // dabei 6 von 200 Paaren naeher als drei Sektoren und 2 im selben Raum -
-    // das ist ungefaehr Zufallserwartung, faellt beim Spielen aber auf, weil
-    // ein Paar nebeneinander im Gedaechtnis bleibt und die gut verteilten
-    // Paare nicht.
+    // Before, the pick drew uniformly from all allowed sectors without
+    // looking at the ones already placed. Measured over 20 Andrea2 seeds, 6
+    // of 200 pairs landed closer than three sectors and 2 in the same room
+    // - about chance expectation, but it stands out in play, because a
+    // close pair sticks in memory and the well-spread pairs do not.
     //
-    // Kein hartes Verbot, sondern Stufen: erst 5 Sektoren Abstand versuchen,
-    // dann 3, dann 2, zuletzt ohne Bedingung. So bleibt eine enge Zone
-    // platzierbar - ein Lauf, der an einer Geschmacksregel scheitert, waere
-    // schlechter als zwei Fundstuecke, die naeher beieinander liegen.
-    std::vector<std::pair<int, int>> gesetztXZ;   // Weltkoordinaten der bisherigen
+    // No hard ban, but stages: first try 5 sectors of distance, then 3,
+    // then 2, finally none. A tight zone thus stays placeable - a run
+    // failing on a taste rule would be worse than two finds lying closer
+    // together.
+    std::vector<std::pair<int, int>> placedXZ;   // world coordinates of the previous ones
 
-    auto waehleMitAbstand = [&](const std::vector<const ZoneSector*>& c) -> const ZoneSector*
+    auto pickWithSpacing = [&](const std::vector<const ZoneSector*>& c) -> const ZoneSector*
     {
-        static const int stufen[] = { 5120, 3072, 2048, 0 };
-        for (int st : stufen)
+        static const int stages[] = { 5120, 3072, 2048, 0 };
+        for (int st : stages)
         {
-            if (st == 0 || gesetztXZ.empty())
+            if (st == 0 || placedXZ.empty())
                 return c[static_cast<size_t>(rng.below(c.size()))];
 
-            std::vector<const ZoneSector*> weit;
+            std::vector<const ZoneSector*> far;
             for (const ZoneSector* s : c)
             {
                 const RoomOrigin& ro = origin[s->room];
                 const int sx = ro.originX + s->sectorX * 1024 + 512;
                 const int sz = ro.originZ + s->sectorZ * 1024 + 512;
                 bool ok = true;
-                for (size_t i = 0; i < gesetztXZ.size() && ok; ++i)
+                for (size_t i = 0; i < placedXZ.size() && ok; ++i)
                 {
-                    const long long dx = sx - gesetztXZ[i].first;
-                    const long long dz = sz - gesetztXZ[i].second;
+                    const long long dx = sx - placedXZ[i].first;
+                    const long long dz = sz - placedXZ[i].second;
                     if (dx * dx + dz * dz < static_cast<long long>(st) * st) ok = false;
                 }
-                if (ok) weit.push_back(s);
+                if (ok) far.push_back(s);
             }
-            if (!weit.empty()) return weit[static_cast<size_t>(rng.below(weit.size()))];
+            if (!far.empty()) return far[static_cast<size_t>(rng.below(far.size()))];
         }
         return c[static_cast<size_t>(rng.below(c.size()))];
     };
 
-    auto merkePlatz = [&](const ZoneSector& s)
+    auto noteSpot = [&](const ZoneSector& s)
     {
         const RoomOrigin& ro = origin[s.room];
-        gesetztXZ.push_back({ ro.originX + s.sectorX * 1024 + 512,
+        placedXZ.push_back({ ro.originX + s.sectorX * 1024 + 512,
                               ro.originZ + s.sectorZ * 1024 + 512 });
     };
 
-    // Zuerst die Key-Items, und darunter die am staerksten eingeschraenkten
-    // zuerst. Sonst belegt ein freier Typ genau den letzten Sektor, den ein
-    // engerer Typ noch gebraucht haette, und die Platzierung scheitert an
-    // etwas, das leicht vermeidbar gewesen waere.
+    // The key items first, and among them the most constrained first.
+    // Otherwise a free type occupies exactly the last sector a narrower
+    // type would still have needed, and the placement fails on something
+    // easily avoidable.
     if (opt.shuffleKeyItems)
     {
-        std::vector<std::pair<size_t, size_t>> order;  // (Anzahl Kandidaten, Position)
+        std::vector<std::pair<size_t, size_t>> order;  // (candidate count, position)
         for (size_t i = 0; i < movableKey.size(); ++i)
         {
             std::vector<const ZoneSector*> c;
@@ -1103,7 +1107,7 @@ bool Rando::run(const RandoInput& in,
         }
         std::sort(order.begin(), order.end(), [&](const std::pair<size_t, size_t>& a, const std::pair<size_t, size_t>& b) {
             if (a.first != b.first) return a.first < b.first;
-            return movableKey[a.second].index < movableKey[b.second].index;   // stabiler Gleichstand
+            return movableKey[a.second].index < movableKey[b.second].index;   // stable tie
         });
 
         for (const auto& o : order)
@@ -1114,13 +1118,13 @@ bool Rando::run(const RandoInput& in,
             if (c.empty())
             {
                 report.ok = false;
-                report.error = fmt("Kein gueltiger Platz fuer Item %d (typeId %d) - Zwangsbedingungen zu eng.",
+                report.error = fmt("no valid place for item %d (typeId %d) - constraints too tight.",
                                    it.index, it.typeId);
                 return false;
             }
-            const ZoneSector* w = waehleMitAbstand(c);
+            const ZoneSector* w = pickWithSpacing(c);
             placeAt(it, *w);
-            merkePlatz(*w);
+            noteSpot(*w);
             ++report.movedKeyItems;
         }
     }
@@ -1133,21 +1137,20 @@ bool Rando::run(const RandoInput& in,
             candidatesFor(it, c);
             if (c.empty())
             {
-                // Kein harter Fehler: gewoehnliche Pickups sind nicht
-                // fortschrittsrelevant, ein nicht verschobenes Item bleibt
-                // schlicht liegen, wo es war.
-                report.notes.push_back(fmt("Item %d (typeId %d) bleibt an Ort und Stelle - keine freien Sektoren mehr.",
+                // No hard error: ordinary pickups are not progress-relevant,
+                // an unmoved item simply stays where it was.
+                report.notes.push_back(fmt("item %d (typeId %d) stays in place - no free sectors left.",
                                            it.index, it.typeId));
                 continue;
             }
-            // Waffen zaehlen zum Spread, gewoehnliche Munition und Medipacks
-            // nicht - die duerfen dicht liegen, sie sind kein Fund, den man
-            // sucht.
+            // Weapons count towards the spread, ordinary ammo and medipacks
+            // do not - those may lie close together, they are no find one
+            // searches for.
             if (in.weaponTypes.count(it.typeId))
             {
-                const ZoneSector* w = waehleMitAbstand(c);
+                const ZoneSector* w = pickWithSpacing(c);
                 placeAt(it, *w);
-                merkePlatz(*w);
+                noteSpot(*w);
             }
             else
                 placeAt(it, *c[static_cast<size_t>(rng.below(c.size()))]);
@@ -1155,28 +1158,28 @@ bool Rando::run(const RandoInput& in,
         }
     }
 
-    // Pflicht-Injektionen. Diese haengen sich hinten an die Itemliste an und
-    // verschieben deshalb keine bestehenden Indizes - anders als ein Entfernen.
+    // Mandatory injections. These append to the item list and therefore
+    // shift no existing indices - unlike a removal.
     for (const Injection& j : in.injections)
     {
-        // Raumauswahl: entweder die Liste (Seed sucht darin) oder der eine Raum.
-        const bool ausListe = !j.rooms.empty();
-        std::set<int> erlaubteRaeume(j.rooms.begin(), j.rooms.end());
+        // Room selection: either the list (seed searches within) or the one room.
+        const bool fromList = !j.rooms.empty();
+        std::set<int> allowedRooms(j.rooms.begin(), j.rooms.end());
 
         std::vector<const ZoneSector*> c;
         for (const ZoneSector& s : pool)
         {
-            if (ausListe ? !erlaubteRaeume.count(s.room) : (s.room != j.room)) continue;
-            // Bei festem Sektor zaehlt nur er, und ob er schon belegt ist,
-            // spielt keine Rolle: mehrere Injektionen duerfen sich dort stapeln.
+            if (fromList ? !allowedRooms.count(s.room) : (s.room != j.room)) continue;
+            // With a fixed sector only it counts, and whether it is already
+            // occupied does not matter: several injections may stack there.
             if (j.hasSector)
             {
                 if (s.sectorX == j.sectorX && s.sectorZ == j.sectorZ) c.push_back(&s);
                 continue;
             }
             if (used.count(secKey(s.room, s.sectorX, s.sectorZ))) continue;
-            // Typsperren gelten auch hier: eine Pflicht-Injektion darf nicht in
-            // einen Raum, den die Kuration fuer genau diesen Typ gesperrt hat.
+            // Type bans apply here too: a mandatory injection must not go
+            // into a room the curation barred for exactly this type.
             if (!Rando::sectorAllowedFor(in, nullptr, s, j.typeId, false)) continue;
             c.push_back(&s);
         }
@@ -1184,12 +1187,12 @@ bool Rando::run(const RandoInput& in,
         {
             report.ok = false;
             report.error = j.hasSector
-                ? fmt("Pflicht-Injektion typeId %d: Sektor %d,%d,%d ist keine gueltige Ablage.",
+                ? fmt("mandatory injection typeId %d: sector %d,%d,%d is no valid spot.",
                       j.typeId, j.room, j.sectorX, j.sectorZ)
-                : ausListe
-                    ? fmt("Pflicht-Injektion typeId %d: in den %d genannten Raeumen ist kein freier "
-                          "gueltiger Sektor.", j.typeId, static_cast<int>(j.rooms.size()))
-                    : fmt("Pflicht-Injektion typeId %d: in Raum %d ist kein freier gueltiger Sektor.",
+                : fromList
+                    ? fmt("mandatory injection typeId %d: no free valid sector in the %d "
+                          "named rooms.", j.typeId, static_cast<int>(j.rooms.size()))
+                    : fmt("mandatory injection typeId %d: no free valid sector in room %d.",
                           j.typeId, j.room);
             return false;
         }
@@ -1197,47 +1200,49 @@ bool Rando::run(const RandoInput& in,
         const RoomOrigin& ro = origin[s.room];
 
         const PlacementOffset po = offFor(j.typeId);
-        int yBoden = 0;
-        Rando::floorAt(in, s, 512 + po.dx, 512 + po.dz, yBoden);
+        int yFloor = 0;
+        Rando::floorAt(in, s, 512 + po.dx, 512 + po.dz, yFloor);
         JsonValue a = JsonValue::makeObject();
         a.set("typeId", JsonValue::makeInt(j.typeId));
         a.set("room", JsonValue::makeInt(s.room));
         a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + s.sectorX * 1024 + 512 + po.dx));
-        a.set("y", JsonValue::makeInt(yBoden + po.dy + j.yOffset));
+        a.set("y", JsonValue::makeInt(yFloor + po.dy + j.yOffset));
         a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s.sectorZ * 1024 + 512 + po.dz));
         a.set("ocb", JsonValue::makeInt(0));
         adds.push(a);
-        // Nur automatisch gewaehlte Sektoren werden belegt. Ein handgesetzter
-        // bleibt frei, sonst koennte dort nur ein einziges Item liegen.
+        // Only automatically chosen sectors are occupied. A hand-set one
+        // stays free, or only a single item could lie there.
         if (!j.hasSector) used.insert(secKey(s.room, s.sectorX, s.sectorZ));
         ++report.injected;
         report.notes.push_back(j.hasSector
-            ? fmt("Injiziert: typeId %d auf %d,%d,%d (%s)", j.typeId, s.room, s.sectorX, s.sectorZ, j.reason.c_str())
-            : fmt("Injiziert: typeId %d in Raum %d (%s)", j.typeId, j.room, j.reason.c_str()));
+            ? fmt("injected: typeId %d onto %d,%d,%d (%s)", j.typeId, s.room, s.sectorX, s.sectorZ, j.reason.c_str())
+            : fmt("injected: typeId %d into room %d (%s)", j.typeId, j.room, j.reason.c_str()));
     }
 
-    // --- Waffen streuen ---
+    // --- Scatter weapons ---
     //
-    // Zufaellige Streuung (Nutzerentscheidung): der Seed bestimmt, WELCHE der
-    // durch den Import nutzbaren Waffen ein Level zusaetzlich als Pickup
-    // bekommt und wie viel Munition dazu. Nur Waffen, die das Level nicht
-    // ohnehin als Item auslegt - vorhandene werden normal mitgemischt, und
-    // mehr Munition fuer Bestandwaffen ist Sache der Item-Abundance (#36).
+    // Random scattering (user decision): the seed determines WHICH of the
+    // weapons made usable by the import a level additionally receives as a
+    // pickup, and how much ammo with it. Only weapons the level does not
+    // lay out as an item anyway - existing ones are mixed normally, and
+    // more ammo for existing weapons is the business of item abundance
+    // (#36).
     //
-    // Pistolen (334) fehlen mit Absicht: Lara startet ueberall mit ihnen,
-    // sobald der Modellslot da ist - und rich2 darf sie gar nicht haben
-    // (Slot 1 traegt dort Cores gescriptete Zweit-HK, siehe Waffenregeln).
+    // Pistols (334) are missing on purpose: Lara starts with them
+    // everywhere as soon as the model slot is there - and rich2 must not
+    // have them at all (slot 1 there carries Core's scripted second HK, see
+    // the weapon rules).
     //
-    // Die Sektorwahl laeuft ueber sectorAllowedFor ohne Constraint: damit
-    // greift genau eine Regel, das Waffenverbot je Raum (noWeaponRooms,
-    // rich1s Scientist). Budget: MAX_ITEMS ist seit der Verdopplung 512,
-    // hier wird bei 500 aufgehoert, und die spaeter gesetzten Zusatzgegner
-    // sind schon abgezogen.
-    // Ein freier, fuer diesen Typ zulaessiger Sektor. Ohne Constraint, damit
-    // genau eine Regel greift: das Waffenverbot je Raum (noWeaponRooms,
-    // rich1s Scientist). Wird von der Waffenstreuung UND der Item-Abundance
-    // genutzt, deshalb steht sie vor beiden.
-    auto freieStelle = [&](int typeId) -> const ZoneSector* {
+    // The sector choice runs via sectorAllowedFor without a constraint: so
+    // exactly one rule applies, the per-room weapon ban (noWeaponRooms,
+    // rich1's Scientist). Budget: MAX_ITEMS is 512 since the doubling, we
+    // stop at 500 here, and the extra enemies placed later are already
+    // subtracted.
+    // A free sector admissible for this type. Without a constraint, so
+    // exactly one rule applies: the per-room weapon ban (noWeaponRooms,
+    // rich1's Scientist). Used by the weapon scattering AND the item
+    // abundance, hence it stands before both.
+    auto freeSpot = [&](int typeId) -> const ZoneSector* {
         std::vector<const ZoneSector*> c;
         for (const ZoneSector& s : pool)
         {
@@ -1248,34 +1253,34 @@ bool Rando::run(const RandoInput& in,
         return c.empty() ? nullptr : c[static_cast<size_t>(rng.below(c.size()))];
     };
 
-    if (opt.allWeapons && klein != "joby4")
+    if (opt.allWeapons && lowerName != "joby4")
     {
-        struct WStreu { int waffe; int munition[2]; };
-        static const WStreu kStreu[] = {
-            { 336, { 337,  -1 } },     // Uzi + Uzi-Munition
-            { 338, { 339, 340 } },     // Schrotflinte + Normal-/Wideshot
-            { 345, { 346,  -1 } },     // HK + HK-Munition
-            { 347, { 348,  -1 } },     // Deagle + Deagle-Munition
+        struct WScatter { int weapon; int ammo[2]; };
+        static const WScatter kScatter[] = {
+            { 336, { 337,  -1 } },     // Uzi + Uzi ammo
+            { 338, { 339, 340 } },     // shotgun + normal/wideshot
+            { 345, { 346,  -1 } },     // HK + HK ammo
+            { 347, { 348,  -1 } },     // Deagle + Deagle ammo
         };
 
-        std::set<int> schonDa;
-        for (const LevelItem& it : in.items) schonDa.insert(it.typeId);
+        std::set<int> alreadyThere;
+        for (const LevelItem& it : in.items) alreadyThere.insert(it.typeId);
 
         int budget = 500 - static_cast<int>(in.items.size())
                          - static_cast<int>(adds.size())
                          - (opt.addEnemies ? opt.enemiesPerLevel : 0);
 
-        auto lege = [&](int typeId, const ZoneSector& s)
+        auto put = [&](int typeId, const ZoneSector& s)
         {
             const RoomOrigin& ro = origin[s.room];
             const PlacementOffset po = offFor(typeId);
-            int yBoden = 0;
-            Rando::floorAt(in, s, 512 + po.dx, 512 + po.dz, yBoden);
+            int yFloor = 0;
+            Rando::floorAt(in, s, 512 + po.dx, 512 + po.dz, yFloor);
             JsonValue a = JsonValue::makeObject();
             a.set("typeId", JsonValue::makeInt(typeId));
             a.set("room", JsonValue::makeInt(s.room));
             a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + s.sectorX * 1024 + 512 + po.dx));
-            a.set("y", JsonValue::makeInt(yBoden + po.dy));
+            a.set("y", JsonValue::makeInt(yFloor + po.dy));
             a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s.sectorZ * 1024 + 512 + po.dz));
             a.set("ocb", JsonValue::makeInt(0));
             adds.push(a);
@@ -1284,110 +1289,109 @@ bool Rando::run(const RandoInput& in,
             --budget;
         };
 
-        for (const WStreu& w : kStreu)
+        for (const WScatter& w : kScatter)
         {
-            if (schonDa.count(w.waffe)) continue;          // legt das Level selbst aus
-            if (rng.below(2) == 0) continue;               // Muenzwurf je Waffe
+            if (alreadyThere.count(w.weapon)) continue;    // the level lays it out itself
+            if (rng.below(2) == 0) continue;               // coin toss per weapon
 
-            if (budget < 2) { report.notes.push_back("Waffenstreuung: Item-Budget erschoepft."); break; }
-            const ZoneSector* sw = freieStelle(w.waffe);
-            if (!sw) { report.notes.push_back(fmt("Waffenstreuung: kein Platz fuer typeId %d.", w.waffe)); continue; }
-            lege(w.waffe, *sw);
+            if (budget < 2) { report.notes.push_back("weapon scattering: item budget exhausted."); break; }
+            const ZoneSector* sw = freeSpot(w.weapon);
+            if (!sw) { report.notes.push_back(fmt("weapon scattering: no place for typeId %d.", w.weapon)); continue; }
+            put(w.weapon, *sw);
 
             const int packs = 1 + static_cast<int>(rng.below(3));   // 1..3
-            int gelegt = 0;
+            int laid = 0;
             for (int n = 0; n < packs && budget > 0; ++n)
             {
-                const int mun = (w.munition[1] < 0) ? w.munition[0]
-                              : w.munition[rng.below(2)];
-                const ZoneSector* sm = freieStelle(mun);
+                const int ammo = (w.ammo[1] < 0) ? w.ammo[0]
+                              : w.ammo[rng.below(2)];
+                const ZoneSector* sm = freeSpot(ammo);
                 if (!sm) break;
-                lege(mun, *sm);
-                ++gelegt;
+                put(ammo, *sm);
+                ++laid;
             }
-            report.notes.push_back(fmt("Waffenstreuung: typeId %d + %d Munitionspacks.", w.waffe, gelegt));
+            report.notes.push_back(fmt("weapon scattering: typeId %d + %d ammo packs.", w.weapon, laid));
         }
     }
 
-    // --- Item-Abundance: zusaetzliche Ausruestung streuen (#36) ---
+    // --- Item abundance: scatter extra equipment (#36) ---
     //
-    // Manche Level sind ausgesprochen karg: Andy2 hat auf 254 Raeume ganze
-    // zehn Pickups, davon drei Secrets - bei 348 gueltigen Ablageflaechen
-    // nach der Kuration. extraPickups legt bis zu N weitere Verbrauchsgueter
-    // aus.
+    // Some levels are decidedly sparse: Andy2 has all of ten pickups across
+    // 254 rooms, three of them secrets - with 348 valid spots after the
+    // curation. extraPickups lays out up to N further consumables.
     //
-    // Gestreut wird nur, was im Level auch ein MODELL hat - sonst gaebe es
-    // nichts zu zeichnen. Das sind zwei Quellen: was das Level ohnehin
-    // auslegt, und was der Waffenimport hineinbringt.
+    // Only what also has a MODEL in the level is scattered - otherwise
+    // there would be nothing to draw. Those are two sources: what the level
+    // lays out anyway, and what the weapon import brings in.
     //
-    // Der Waffenimport ist der wichtigere Fall. Munition liegt vanilla nur in
-    // 3 bis 5 von 15 Leveln (gemessen: Uzi 5, Schrot 3, HK 3, Deagle 4) -
-    // seit jedes Level das volle Waffenset bekommt, stuenden ueber zehn
-    // Level mit Waffen ohne passende Munition da. Deshalb bekommen die
-    // Munitionssorten des Sets ein festes Grundgewicht, unabhaengig vom
-    // Vanilla-Bestand.
+    // The weapon import is the more important case. Ammo lies in vanilla in
+    // only 3 to 5 of 15 levels (measured: Uzi 5, shotgun 3, HK 3, Deagle 4)
+    // - since every level receives the full weapon set, over ten levels
+    // would stand there with weapons and no matching ammo. Hence the set's
+    // ammo kinds get a fixed base weight, independent of the vanilla stock.
     //
-    // Pistolenmunition (335) faellt raus: Pistolen haben unbegrenzt Schuss,
-    // und in keinem der 15 Level liegt ein einziges Stueck davon. Fuer rich2
-    // sind Pistolen samt Munition ganz gesperrt - sein Slot 1 traegt Cores
-    // gescriptete Zweit-HK, und schon das blosse Vorhandensein des
-    // Pistolen-Items gaebe Lara Startpistolen (setup.cpp:111).
+    // Pistol ammo (335) drops out: pistols have unlimited shots, and not a
+    // single piece of it lies in any of the 15 levels. For rich2, pistols
+    // and their ammo are barred entirely - its slot 1 carries Core's
+    // scripted second HK, and the mere presence of the pistol item would
+    // give Lara starting pistols (setup.cpp:111).
     //
-    // Die Waffen selbst kommen nur in den Topf, wenn das Level sie noch
-    // nirgends auslegt: die Streuung oben wuerfelt je Waffe eine Muenze, und
-    // bei Pech ist die Waffe zwar importiert, aber nirgends zu finden. So
-    // ist sie es doch - Doppelstuecke gibt es dadurch keine.
+    // The weapons themselves only enter the pot if the level lays them out
+    // nowhere yet: the scattering above tosses a coin per weapon, and with
+    // bad luck the weapon is imported but nowhere to be found. This way it
+    // is after all - and there are no duplicates.
     //
-    // Alles unter typeId 334 bleibt aussen vor: Schluessel, Puzzleteile,
-    // Quest-Gegenstaende und vor allem die Secrets (PICKUP_ITEM4 = 223) -
-    // ein zusaetzliches Secret wuerde die Levelzaehlung verfaelschen. Ebenso
-    // aussen vor: Einzelstuecke wie Lasersight/Fernglas/Schalldaempfer und
-    // der Armbrustbolzen (Geschoss, kein Pickup).
+    // Everything below typeId 334 stays out: keys, puzzle pieces, quest
+    // items and above all the secrets (PICKUP_ITEM4 = 223) - an extra
+    // secret would falsify the level count. Also out: one-offs like
+    // lasersight/binoculars/silencer and the crossbow bolt (projectile, no
+    // pickup).
     //
-    // "Weniger als Vanilla" gibt es bewusst nicht: Items entfernen wuerde
-    // alle nachfolgenden Indizes verschieben und damit jeden "Object N"-
-    // Verweis der Trigger brechen - die Grundregel des ganzen Werkzeugs.
+    // "Fewer than vanilla" deliberately does not exist: removing items
+    // would shift all subsequent indices and thereby break every
+    // "Object N" reference of the triggers - the ground rule of the whole
+    // tool.
     //
-    // joby4 bleibt aussen vor wie ueberall sonst: Lara steckt dort im
-    // Taucheranzug und traegt keine Waffen. Die Munitionsslots liegen in der
-    // Datei zwar herum, aber Nachschub fuer Waffen, die es im Level nicht
-    // gibt, waere nur Deko.
-    if (opt.extraPickups > 0 && klein == "joby4")
-        report.notes.push_back("Item-Abundance: joby4 bleibt vanilla (Taucheranzug).");
+    // joby4 stays out as everywhere else: Lara is in the diving suit there
+    // and carries no weapons. The ammo slots do lie around in the file, but
+    // supplies for weapons that do not exist in the level would be mere
+    // decoration.
+    if (opt.extraPickups > 0 && lowerName == "joby4")
+        report.notes.push_back("item abundance: joby4 stays vanilla (diving suit).");
     else if (opt.extraPickups > 0)
     {
-        // Alle Waffen und Munitionssorten, die TR5 als Pickup kennt
-        // (Nutzervorgabe: alles in den Topf, was das Level tragen kann).
-        // Zu jeder Waffe ihre Munition - eine Waffe ohne Nachschub ist nach
-        // zwei Kaempfen totes Gewicht.
-        struct Streuwaffe { int waffe; int munition[2]; };
-        static const Streuwaffe kWaffenGut[] = {
+        // All weapons and ammo kinds TR5 knows as pickups (user
+        // requirement: everything into the pot the level can carry). For
+        // every weapon its ammo - a weapon without supplies is dead weight
+        // after two fights.
+        struct ScatterWeapon { int weapon; int ammo[2]; };
+        static const ScatterWeapon kWeaponGoods[] = {
             { 336, { 337,  -1 } },     // Uzi
-            { 338, { 339, 340 } },     // Schrotflinte normal / Wideshot
-            { 341, { 342, 343 } },     // Armbrust normal / explosiv
+            { 338, { 339, 340 } },     // shotgun normal / wideshot
+            { 341, { 342, 343 } },     // crossbow normal / explosive
             { 345, { 346,  -1 } },     // HK
             { 347, { 348,  -1 } },     // Deagle
         };
-        // Verbrauchsgueter ohne zugehoerige Waffe.
-        static const int kSonstiges[] = { 349, 350, 354 };   // Bigmedi, Smallmedi, Fackel
+        // Consumables without an associated weapon.
+        static const int kMisc[] = { 349, 350, 354 };   // big medi, small medi, flare
 
-        // Was liegt im Level - Vanilla-Bestand plus das, was Waffenstreuung
-        // und Pflicht-Injektionen eben erst dazugelegt haben?
-        std::map<int, int> haeufig;
-        for (const LevelItem& it : in.items) ++haeufig[it.typeId];
+        // What lies in the level - vanilla stock plus what weapon
+        // scattering and mandatory injections just added?
+        std::map<int, int> countOf;
+        for (const LevelItem& it : in.items) ++countOf[it.typeId];
         for (size_t i = 0; i < adds.size(); ++i)
-            ++haeufig[static_cast<int>(adds[i]["typeId"].asInt())];
+            ++countOf[static_cast<int>(adds[i]["typeId"].asInt())];
 
-        // Kann das Level diesen Typ zeichnen? Entweder der Modellslot steht
-        // schon in der Datei, oder der Waffenimport bringt ihn mit (Slots aus
-        // kWaffen weiter unten: Andrea3 334-340, joby2 347/348, rich1
-        // 345/346 - die Armbrust ist NICHT dabei, sie bleibt den Leveln
-        // vorbehalten, die sie selbst fuehren).
-        const bool waffensetDa = opt.allWeapons && klein != "joby4";
-        auto zeichenbar = [&](int typ) -> bool {
-            if (in.presentSlots.count(typ)) return true;
-            if (!waffensetDa) return false;
-            switch (typ)
+        // Can the level draw this type? Either the model slot already
+        // stands in the file, or the weapon import brings it along (slots
+        // from kWeaponRules further below: Andrea3 334-340, joby2 347/348,
+        // rich1 345/346 - the crossbow is NOT included, it stays reserved
+        // for the levels that carry it themselves).
+        const bool weaponSetHere = opt.allWeapons && lowerName != "joby4";
+        auto drawable = [&](int type) -> bool {
+            if (in.presentSlots.count(type)) return true;
+            if (!weaponSetHere) return false;
+            switch (type)
             {
             case 334: case 335: case 336: case 337:
             case 338: case 339: case 340:
@@ -1396,655 +1400,645 @@ bool Rando::run(const RandoInput& in,
             }
         };
 
-        // Lose je Typ: ein Los je vorhandenem Stueck erhaelt den Charakter
-        // des Levels, das Grundgewicht sorgt fuer Nachschub.
-        std::map<int, int> lose;
-        auto biete = [&](int typ, int grundgewicht)
+        // Lots per type: one lot per existing piece keeps the level's
+        // character, the base weight provides supplies.
+        std::map<int, int> lots;
+        auto offer = [&](int type, int baseWeight)
         {
-            if (!zeichenbar(typ)) return;
-            std::map<int, int>::const_iterator f = haeufig.find(typ);
-            lose[typ] += grundgewicht + (f == haeufig.end() ? 0 : f->second);
+            if (!drawable(type)) return;
+            std::map<int, int>::const_iterator f = countOf.find(type);
+            lots[type] += baseWeight + (f == countOf.end() ? 0 : f->second);
         };
 
-        for (const Streuwaffe& w : kWaffenGut)
+        for (const ScatterWeapon& w : kWeaponGoods)
         {
             for (int m = 0; m < 2; ++m)
-                if (w.munition[m] > 0) biete(w.munition[m], 4);
-            // Die Waffe selbst nur, wenn sie noch nirgends liegt: die
-            // Streuung oben wuerfelt je Waffe eine Muenze, und bei Pech waere
-            // sie zwar importiert, aber nirgends zu finden. Doppelstuecke
-            // gibt es so keine.
-            if (!haeufig.count(w.waffe)) biete(w.waffe, 2);
+                if (w.ammo[m] > 0) offer(w.ammo[m], 4);
+            // The weapon itself only if it lies nowhere yet: the scattering
+            // above tosses a coin per weapon, and with bad luck it would be
+            // imported but nowhere to find. This way there are no
+            // duplicates.
+            if (!countOf.count(w.weapon)) offer(w.weapon, 2);
         }
-        for (int t : kSonstiges) biete(t, 2);
+        for (int t : kMisc) offer(t, 2);
 
-        // rich2: weder Pistolen noch ihre Munition, nie (siehe oben).
-        if (klein == "rich2") { lose.erase(334); lose.erase(335); }
+        // rich2: neither pistols nor their ammo, ever (see above).
+        if (lowerName == "rich2") { lots.erase(334); lots.erase(335); }
 
-        std::vector<int> topf;                 // Ziehungstopf, ein Eintrag je Los
-        for (std::map<int, int>::const_iterator it = lose.begin(); it != lose.end(); ++it)
-            for (int n = 0; n < it->second; ++n) topf.push_back(it->first);
+        std::vector<int> pot;                 // draw pot, one entry per lot
+        for (std::map<int, int>::const_iterator it = lots.begin(); it != lots.end(); ++it)
+            for (int n = 0; n < it->second; ++n) pot.push_back(it->first);
 
-        if (topf.empty())
-            report.notes.push_back("Item-Abundance: das Level fuehrt keine streubaren "
-                                   "Verbrauchsgueter - nichts hinzugefuegt.");
+        if (pot.empty())
+            report.notes.push_back("item abundance: the level carries no scatterable "
+                                   "consumables - nothing added.");
         else
         {
-            const int typenVorher = static_cast<int>(std::set<int>(topf.begin(), topf.end()).size());
+            const int typesBefore = static_cast<int>(std::set<int>(pot.begin(), pot.end()).size());
             int budget = 500 - static_cast<int>(in.items.size())
                              - static_cast<int>(adds.size())
                              - (opt.addEnemies ? opt.enemiesPerLevel : 0);
-            int wieViele = opt.extraPickups;
-            if (wieViele > budget) wieViele = budget;
+            int howMany = opt.extraPickups;
+            if (howMany > budget) howMany = budget;
 
-            for (int n = 0; n < wieViele && !topf.empty(); ++n)
+            for (int n = 0; n < howMany && !pot.empty(); ++n)
             {
-                const int typ = topf[static_cast<size_t>(rng.below(topf.size()))];
-                const ZoneSector* s = freieStelle(typ);
+                const int type = pot[static_cast<size_t>(rng.below(pot.size()))];
+                const ZoneSector* s = freeSpot(type);
                 if (!s)
                 {
-                    // Fuer diesen Typ gibt es nirgends mehr einen erlaubten
-                    // freien Sektor - in rich2 etwa ist fast das ganze Level
-                    // waffenfreie Zone, dort kommt keine Munition unter. Der
-                    // Typ fliegt aus dem Topf, die uebrigen wuerfeln weiter;
-                    // ein Abbruch hier haette wegen EINES gesperrten Typs auch
-                    // die Medipacks gekostet. Erneut frei werden kann er nicht,
-                    // Sektoren werden im Verlauf nur belegt, nie frei.
-                    topf.erase(std::remove(topf.begin(), topf.end(), typ), topf.end());
+                    // There is nowhere left an allowed free sector for this
+                    // type - in rich2, say, almost the whole level is a
+                    // weapon-free zone, no ammo fits there. The type flies
+                    // out of the pot, the rest keep rolling; an abort here
+                    // would have cost the medipacks too because of ONE
+                    // barred type. It cannot become free again, sectors are
+                    // only ever occupied over the course, never freed.
+                    pot.erase(std::remove(pot.begin(), pot.end(), type), pot.end());
                     --n;
                     continue;
                 }
                 const RoomOrigin& ro = origin[s->room];
-                const PlacementOffset po = offFor(typ);
-                int yBoden = 0;
-                Rando::floorAt(in, *s, 512 + po.dx, 512 + po.dz, yBoden);
+                const PlacementOffset po = offFor(type);
+                int yFloor = 0;
+                Rando::floorAt(in, *s, 512 + po.dx, 512 + po.dz, yFloor);
                 JsonValue a = JsonValue::makeObject();
-                a.set("typeId", JsonValue::makeInt(typ));
+                a.set("typeId", JsonValue::makeInt(type));
                 a.set("room", JsonValue::makeInt(s->room));
                 a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + s->sectorX * 1024 + 512 + po.dx));
-                a.set("y", JsonValue::makeInt(yBoden + po.dy));
+                a.set("y", JsonValue::makeInt(yFloor + po.dy));
                 a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + s->sectorZ * 1024 + 512 + po.dz));
                 a.set("ocb", JsonValue::makeInt(0));
                 adds.push(a);
                 used.insert(secKey(s->room, s->sectorX, s->sectorZ));
                 ++report.extraPickups;
 
-                // Eine Waffe genau einmal: sie liegt im Topf, damit sie
-                // ueberhaupt auffindbar ist - ein zweites Exemplar waere nur
-                // Munition mit unnoetigem Modell davor.
-                bool istWaffe = false;
-                for (const Streuwaffe& w : kWaffenGut) if (w.waffe == typ) istWaffe = true;
-                if (istWaffe)
-                    topf.erase(std::remove(topf.begin(), topf.end(), typ), topf.end());
+                // A weapon exactly once: it sits in the pot so it can be
+                // found at all - a second specimen would only be ammo with
+                // an unnecessary model in front.
+                bool isWeapon = false;
+                for (const ScatterWeapon& w : kWeaponGoods) if (w.weapon == type) isWeapon = true;
+                if (isWeapon)
+                    pot.erase(std::remove(pot.begin(), pot.end(), type), pot.end());
             }
-            report.notes.push_back(fmt("Item-Abundance: %d von %d zusaetzlichen Pickups gestreut "
-                                       "(%d streubare Typen im Level).",
-                                       report.extraPickups, opt.extraPickups, typenVorher));
+            report.notes.push_back(fmt("item abundance: %d of %d extra pickups scattered "
+                                       "(%d scatterable types in the level).",
+                                       report.extraPickups, opt.extraPickups, typesBefore));
         }
     }
 
-    // Anzeigenamen siehe Rando::enemyKinds() am Dateiende - die Liste dort
-    // muss mit dieser Tabelle mitwachsen.
+    // Display names: see Rando::enemyKinds() at the end of the file - the
+    // list there must grow with this table.
     //
-    // --- Cross-Gegnermix: den Pool um fremde Typen erweitern ---
+    // --- Cross enemy mix: extend the pool with foreign types ---
     //
-    // Die globale Pool-Tabelle ist die Nutzerliste "Gegner Pool.txt", je Typ
-    // mit dem Spenderlevel, das ihn MIT Vanilla-Instanzen traegt - nur dort
-    // liegen Modell UND Samples beisammen. Die Sound-Eintraege sind die
-    // bekannten Ausnahmen, deren Samples selbst dem Spender fehlen (Larsons
-    // Sterbeklaenge, Pierres nie ausgelieferter Schuss - beide vom Nutzer im
-    // Soundboard ausgesucht und im Spiel geprueft).
+    // The global pool table is the user's list "Gegner Pools.txt", per type
+    // with the donor level that carries it WITH vanilla instances - only
+    // there do model AND samples lie together. The sound entries are the
+    // known exceptions whose samples even the donor lacks (Larson's death
+    // sounds, Pierre's never-shipped shot - both picked by the user in the
+    // soundboard and checked in game).
     //
-    // Hydra (63) ist seit dem 2026-08-15 dabei - Begruendung an ihrer Zeile.
-    // Der Koch (87) ist seit #124 dabei - Begruendung an seiner Zeile.
-    // Scientist und Guardian stehen aus bekannten Gruenden nirgends im
-    // Pool.
+    // The Hydra (63) has been in since 2026-08-15 - reasoning at its row.
+    // The chef (87) has been in since #124 - reasoning at his row.
+    // Scientist and Guardian stand nowhere in the pool for known reasons.
     //
-    // Je Level hoechstens DREI fremde Typen, vom Seed gewaehlt: jeder Typ
-    // kostet Texturseiten und Samples im Ziel, und das Level soll sein
-    // Gesicht behalten. Importiert wird spaeter nur, was wirklich verwendet
-    // wurde - und zwar mit replace, damit auch ein vorhandener, aber nie
-    // bespielter Slot (joby5s Guard ohne Samples) vollstaendig vom Spender
-    // kommt.
-    // "begleiter": Slots, die der Typ zwingend mitbringen muss. Mafia2 traegt
-    // seinen Oberkoerper als Tauschhaelfte aus MESHSWAP2 = Slot 406
-    // (setup.cpp:1443: Meshes 7/10/13, meshswap_meshbits 0x2400 schon ab
-    // Initialise) - ohne den Slot ist der Torso unsichtbar (im Spiel
-    // gesehen). MESHSWAP2 nutzt sonst niemand, der Import ist konfliktfrei.
+    // Per level at most THREE foreign types, chosen by the seed: every type
+    // costs texture pages and samples in the target, and the level should
+    // keep its face. Only what is really used is imported later - and with
+    // replace, so that even an existing but never-played slot (joby5's
+    // guard without samples) comes completely from the donor.
+    // "companions": slots the type must bring along. Mafia2 carries his
+    // upper body as a swap half from MESHSWAP2 = slot 406 (setup.cpp:1443:
+    // meshes 7/10/13, meshswap_meshbits 0x2400 already from Initialise) -
+    // without the slot the torso is invisible (seen in game). Nobody else
+    // uses MESHSWAP2, the import is conflict-free.
     //
-    // MESHSWAP1 dagegen ist ein GETEILTER Slot mit levelabhaengigem Inhalt
-    // (SWAT-Familie: Meshes 10/13; Imp: 10; TwoGun: 10<-2; Gladiator: 0-15;
-    // Roman God: 0-16; Hitman: 0-19) - den kann man nicht einfach ersetzen,
-    // ohne die einheimischen Nutzer des Ziels zu brechen. Die Folgen sieht
-    // man bei Imp-Kopf und Statuen-Schadensmeshes; die Loesung (eigene
-    // Ausweichslots in der Engine oder Mesh-genaues Einsetzen) ist als
-    // Aufgabe vermerkt und NICHT Teil dieser Tabelle.
-    // "swapVon"/"swapDst": Tauschhaelften des Typs. MESHSWAP1 (405) ist je
-    // Level mit dem Inhalt seiner EIGENEN Gegner belegt - ein fremder Gegner
-    // braucht den Satz eines Levels, das ihn WIRKLICH traegt, und der landet
-    // beim Import unter dem Ausweichslot swapDst. Seit #111 hat JEDER Gegner
-    // seinen eigenen (Soldatenfamilie 462-467 jenseits der Dateigrenze,
-    // Einzelgaenger 401-404) - vorher teilten sich die Familien je Spender
-    // einen Slot, und einheimische Nutzer desselben Slots zogen fremde
-    // Haende (joby2 Item 69). Die Engine greift bevorzugt darauf zu
-    // (MeshSwapQuelle in setup.cpp, Zuordnung als MESHSWAP_CROSS_* in
-    // objects.h - beide Seiten muessen uebereinstimmen). swapVon kann vom
-    // Modellspender abweichen: rich1 (Modell fuer Guard und TwoGun) hat
-    // selbst KEINEN MESHSWAP1 - die Guard-Haende kommen aus joby3, TwoGuns
-    // Quellmesh 2 aus rich3.
-    struct CrossSound  { int map; const char* vonLevel; int vonMap; };
-    // animCount (0 = Heuristik): explizite Anim-Scheibenlaenge fuer Typen,
-    // deren Steuerung ueber die Objektgrenze hinaus in die globale
-    // Anim-Tabelle greift - bisher nur der Imp (siehe Tabelleneintrag).
+    // MESHSWAP1, by contrast, is a SHARED slot with level-dependent content
+    // (SWAT family: meshes 10/13; Imp: 10; TwoGun: 10<-2; gladiator: 0-15;
+    // Roman god: 0-16; Hitman: 0-19) - it cannot simply be replaced without
+    // breaking the target's native users. The consequences show at the Imp
+    // head and the statues' damage meshes; the solution (own fallback slots
+    // in the engine or mesh-exact insertion) is noted as a task and NOT
+    // part of this table.
+    // "swapFrom"/"swapDst": the type's swap halves. MESHSWAP1 (405) is
+    // filled per level with the content of its OWN enemies - a foreign
+    // enemy needs the set of a level that REALLY carries him, and that
+    // lands under the fallback slot swapDst at import. Since #111 EVERY
+    // enemy has his own (soldier family 462-467 beyond the file boundary,
+    // loners 401-404) - before, the families shared one slot per donor, and
+    // native users of the same slot drew foreign hands (joby2 item 69). The
+    // engine prefers it (MeshSwapQuelle in setup.cpp, mapping as
+    // MESHSWAP_CROSS_* in objects.h - both sides must agree). swapFrom can
+    // differ from the model donor: rich1 (model for guard and TwoGun) has
+    // NO MESHSWAP1 itself - the guard hands come from joby3, TwoGun's
+    // source mesh 2 from rich3.
+    struct CrossSound  { int map; const char* fromLevel; int fromMap; };
+    // animCount (0 = heuristic): explicit anim slice length for types whose
+    // control reaches past the object boundary into the global anim table -
+    // so far only the Imp (see its table entry).
     //
-    // basisSlot (0 = keiner): Anim-Basistyp der Soldatenfamilie. SWAT+ und
-    // Mafia tragen in den Dateien nur einen Ein-Frame-Stummel - ihre Anims
-    // holt die Engine zur Laufzeit vom Basistyp (setup.cpp: anim_index wird
-    // auf SWATs Satz umgebogen, sonst Wachmann 460, sonst Guard 37 - die
-    // Mittelstufe ist der #121-Nachtrag). Wer so einen Typ importiert, MUSS
-    // den Basistyp mitbringen, sonst laeuft er ohne gueltigen Satz. Import
-    // mit replace=false: hat das Ziel den Basistyp schon (nativ oder als
-    // eigener Cross-Import), bleibt der stehen. Basis der Stummel ist seit
-    // dem #121-Nachtrag der Wachmann (460): der traegt IMMER den sauberen
-    // joby3-Satz, waehrend Slot 37 je Level ein anderes Modell fuehren darf
-    // (rich!) - Messdaten bei Zeile 37.
-    // "tr3" (0 = aus TR5 selbst): Kennung der Fremdquelle aus
-    // Tr3Source::dinos(). Ist sie gesetzt, ist "von" leer - das Modell kommt
-    // nicht aus einem TR5-Level, sondern zur Laufzeit aus der Installation des
-    // Nutzers. Alles Weitere steht in der Dino-Tabelle, damit es nur EINE
-    // Wahrheit gibt.
-    // "quellSlot" (0 = wie typeId): der Slot, unter dem das Modell BEIM
-    // SPENDER liegt. Gebraucht fuer die neuen Engine-Slots jenseits 460
-    // (#105): der Joby-Wachmann liegt in jedem Spender unter 37, wohnt im
-    // Ziel aber unter 460 - nur so koennen beide Guard-Modelle nebeneinander
-    // existieren. Solche Level laufen NUR auf unserer Engine (die wird per
-    // #31 ohnehin mitgeliefert); trview kommt mit ihnen klar, am Quelltext
-    // geprueft 2026-08-17.
-    struct CrossGegner { int typeId; const char* von; CrossSound sounds[2];
-                         int begleiter[2]; const char* swapVon; int swapDst;
-                         int animCount; int basisSlot; const char* tr3;
-                         int quellSlot; };
-    static const CrossGegner kCross[] = {
+    // baseSlot (0 = none): the soldier family's anim base type. SWAT+ and
+    // Mafia carry only a one-frame stub in the files - the engine fetches
+    // their anims at runtime from the base type (setup.cpp: anim_index is
+    // bent onto SWAT's set, else guard 460, else guard 37 - the middle
+    // stage is the #121 addendum). Whoever imports such a type MUST bring
+    // the base type along, or he runs without a valid set. Import with
+    // replace=false: if the target already has the base type (native or as
+    // its own cross import), it stays. The stubs' base has been the guard
+    // (460) since the #121 addendum: he ALWAYS carries the clean joby3 set,
+    // while slot 37 may carry a different model per level (rich!) -
+    // measurement data at row 37.
+    // "tr3" (0 = from TR5 itself): the foreign-source tag from
+    // Tr3Source::dinos(). If set, "from" is empty - the model does not come
+    // from a TR5 level but at runtime from the user's installation.
+    // Everything else stands in the dino table, so there is only ONE truth.
+    // "sourceSlot" (0 = same as typeId): the slot under which the model
+    // lies AT THE DONOR. Needed for the new engine slots beyond 460 (#105):
+    // the joby guard lies under 37 in every donor but lives under 460 in
+    // the target - only that way can both guard models exist side by side.
+    // Such levels run ONLY on our engine (which ships via #31 anyway);
+    // trview copes with them, checked against its source 2026-08-17.
+    struct CrossEnemy { int typeId; const char* from; CrossSound sounds[2];
+                         int companions[2]; const char* swapFrom; int swapDst;
+                         int animCount; int baseSlot; const char* tr3;
+                         int sourceSlot; };
+    static const CrossEnemy kCross[] = {
         { 33, "rich3",   {},                                    {-1,-1},  "rich3",   462, 0, 0 },  // SWAT
-        // Klang 88 (BIO_BREATHE_OUT): das Gasmasken-Atmen des SWAT+ in
-        // dunklen Raeumen (sas.cpp:155, fest verdrahtet - steht in keinem
-        // Anim-Kommando und reist deshalb nicht von selbst). Ohne den
-        // Eintrag atmet er in fremden Leveln muted (#111 Teil 3).
-        { 35, "rich3",   { {88,"rich3",88} },                   {-1,-1},  "rich3",   463, 0, 33 }, // Advanced SWAT (Anims von SWAT)
-        // Slot 37 traegt wieder das RICH-Modell (blaue Weste, rich1) - der
-        // #121-Nachtrag vom 2026-08-23. Der Erstfix hatte den Spender auf
-        // joby3 gestellt, weil der Satz damals die Anim-Basis der ganzen
-        // Stummel-Familie war und Cores Saetze je Level andere TOTE ERBEN
-        // tragen: Anims, die sich den Frame-Zeiger mit einer Nachbaranim
-        // teilen, ihn aber mit eigener (falscher) Schrittweite read. Beim
-        // nativen Besitzer faellt das nie auf, weil er diese Zustaende
-        // nicht spielt - die Stummel-Familie spielt sie.
+        // Sound 88 (BIO_BREATHE_OUT): the SWAT+'s gas mask breathing in
+        // dark rooms (sas.cpp:155, hard-wired - it stands in no anim
+        // command and therefore does not travel by itself). Without the
+        // entry he breathes mutely in foreign levels (#111 part 3).
+        { 35, "rich3",   { {88,"rich3",88} },                   {-1,-1},  "rich3",   463, 0, 33 }, // Advanced SWAT (anims from SWAT)
+        // Slot 37 again carries the RICH model (blue vest, rich1) - the
+        // #121 addendum of 2026-08-23. The first fix had set the donor to
+        // joby3, because that set was then the anim base of the whole stub
+        // family and Core's sets carry different DEAD HEIRS per level:
+        // anims that share their frame pointer with a neighbor anim but
+        // read it with their own (wrong) stride. With the native owner it
+        // never shows, because he does not play those states - the stub
+        // family does.
         //
-        // Folge des Erstfixes (Nutzerfund, trview-Screenshots): Guard (37)
-        // und Wachmann (460) waren Zwillinge, und in Leveln mit nativem
-        // rich-Guard ueberschrieb der Import sogar das native Modell. Darum
-        // haengt die Familie jetzt am Wachmann 460 (basisSlot der Stummel,
-        // Alias-Kette in setup.cpp) - und 37 darf wieder rich sein.
+        // Consequence of the first fix (user find, trview screenshots):
+        // guard (37) and guard (460) were twins, and in levels with a
+        // native rich guard the import even overwrote the native model.
+        // Hence the family now hangs on the guard 460 (the stubs' baseSlot,
+        // alias chain in setup.cpp) - and 37 may be rich again.
         //
-        // Warum das rich-Modell FUER SICH sicher ist (AnimMap-Messung):
-        //   rich1-Guard krank: +19..23, +24..30, +34/35, +41..45, +50..56 -
-        //     die SONDERPOSEN (Zst 26-31) und Zustand 35, Mafias
-        //     Schuss-Pose. Der Guard SELBST spielt davon nichts: seine
-        //     eigene Schuss-Anim (+2) ist gesund, und die Sonderposen
-        //     brauchen eine Pose-OCB - der Rando setzt bei Swap und
-        //     Zusatzgegnern immer die Wunsch-OCB (kSpawnOcb, Guard = 0).
-        //     Krank wurde der Satz nur als FAMILIENBASIS: Modell weg ab
-        //     Keyframe 1, Schatten bleibt, Schaden kommt an - der
-        //     Blink-Soldat aus andy3 (drei Messlaeufe).
-        //   joby3-Guard: Kampfblock und Sonderposen sauber; toter Rest nur
-        //     +23..28/+30..32/+34f/+57f. Feldbeweis: der Wachmann (460)
-        //     traegt exakt diesen Satz und ist in allen Posen fehlerfrei.
-        { 37, "rich1",   {},                                    {-1,-1},  "joby3",   465, 0, 0 },  // Guard (Blue Guard, rich-Modell)
-        // Der zweite Wachmann (#83/#105, Engine-Slot 460 = BLUE_GUARD2):
-        // das Joby-Modell aus joby3 - dort ist der Guard der Anim-Anker der
-        // Familie und traegt den vollen eigenen Satz (Mafia holt sich seine
-        // Anims von ihm). joby2s Guard laesst sich NICHT kopieren
-        // (Frame-Zeiger, siehe Crane Guy). Kein Basistyp: er bringt alles
-        // mit und behaelt seinen Satz auch neben SWAT/Guard (#111 Teil 2,
-        // kein Umbiegen mehr). Seit dem #121-Nachtrag ist ER die Anim-Basis
-        // der Stummel-Familie (basisSlot 460 bei Mafia und Crane Guy) -
-        // genau weil sein Satz IMMER der saubere aus joby3 ist.
-        // Tauschhaelften (Feuerhaende 10/13) wie der Guard aus joby3.
-        { 460, "joby3",  {},                                    {-1,-1},  "joby3",   467, 0, 0, nullptr, 37 }, // Wachmann (Joby)
-        // Laserschuss (193) und -einschlag (167): fest verdrahtet in
-        // twogun.cpp:616f, in keinem Anim-Kommando - ohne die Eintraege
-        // feuert der Laser in fremden Leveln muted (#111 Teil 3). Beide
-        // Samples sind in rich1 und rich3 byte-identisch; die 167 setzt
-        // auch die Hydra (aus Andrea2), ebenfalls identischer Inhalt.
+        // Why the rich model is safe ON ITS OWN (AnimMap measurement):
+        //   rich1 guard sick: +19..23, +24..30, +34/35, +41..45, +50..56 -
+        //     the SPECIAL POSES (states 26-31) and state 35, Mafia's shot
+        //     pose. The guard HIMSELF plays none of it: his own shot anim
+        //     (+2) is healthy, and the special poses need a pose OCB - the
+        //     rando always sets the wanted OCB on swap and extra enemies
+        //     (kSpawnOcb, guard = 0). The set only became sick as a FAMILY
+        //     BASE: model gone from keyframe 1, shadow stays, damage
+        //     arrives - the blinking soldier from andy3 (three measurement
+        //     runs).
+        //   joby3 guard: combat block and special poses clean; dead rest
+        //     only +23..28/+30..32/+34f/+57f. Field proof: the guard (460)
+        //     carries exactly this set and is flawless in all poses.
+        { 37, "rich1",   {},                                    {-1,-1},  "joby3",   465, 0, 0 },  // Guard (Blue Guard, rich model)
+        // The second guard (#83/#105, engine slot 460 = BLUE_GUARD2): the
+        // joby model from joby3 - there the guard is the family's anim
+        // anchor and carries the full own set (Mafia fetches his anims from
+        // him). joby2's guard CANNOT be copied (frame pointers, see Crane
+        // Guy). No base type: he brings everything along and keeps his set
+        // even next to SWAT/guard (#111 part 2, no bending anymore). Since
+        // the #121 addendum HE is the stub family's anim base (baseSlot 460
+        // at Mafia and Crane Guy) - exactly because his set is ALWAYS the
+        // clean one from joby3. Swap halves (fire hands 10/13) like the
+        // guard from joby3.
+        { 460, "joby3",  {},                                    {-1,-1},  "joby3",   467, 0, 0, nullptr, 37 }, // Guard (Joby)
+        // Laser shot (193) and impact (167): hard-wired in twogun.cpp:616f,
+        // in no anim command - without the entries the laser fires mutely
+        // in foreign levels (#111 part 3). Both samples are byte-identical
+        // in rich1 and rich3; the Hydra (from Andrea2) also sets the 167,
+        // likewise identical content.
         { 39, "rich1",   { {167,"rich3",167}, {193,"rich3",193} }, {-1,-1}, "rich3",  464, 0, 0 },  // Two Gun
         { 41, "Andrea1", {},                                    {-1,-1},  nullptr,   -1 },  // Dog
         { 45, "Andrea1", { {96,"rich1",85}, {98,"rich1",143} }, {-1,-1},  nullptr,   -1 },  // Larson
         { 47, "Andrea3", { {90,"joby5",45}, {91,"joby5",123} }, {-1,-1},  nullptr,   -1 },  // Pierre
-        { 49, "joby3",   {},                                    {-1,-1},  "joby3",   466, 0, 460 }, // Soldier MG (Mafia, Anims vom Wachmann)
+        { 49, "joby3",   {},                                    {-1,-1},  "joby3",   466, 0, 460 }, // Soldier MG (Mafia, anims from the guard)
         { 51, "joby3",   {},                                    {406,-1}, nullptr,   -1 },  // Soldier Pistols (Mafia2) + MESHSWAP2
-        // Crane Guy: der einzige TR5-Gegner mit vollstaendigem Modell, den
-        // Core NIE als Item platziert hat - dieselbe Lage wie bei Pierre.
-        // Modell nur in joby2 (15 Meshes, eigene Anims), Steuerung ist
-        // SasControl, er feuert ueber Zustand 3 wie der Blue Guard
-        // (sas.cpp:344 nennt ihn dort ausdruecklich). Im Testlevel bestaetigt.
+        // Crane Guy: the only TR5 enemy with a complete model that Core
+        // NEVER placed as an item - the same situation as Pierre. Model
+        // only in joby2 (15 meshes, own anims), the control is SasControl,
+        // he fires via state 3 like the Blue Guard (sas.cpp:344 names him
+        // there explicitly). Confirmed in the test level.
         //
-        // basisSlot 460: er holt seinen Anim-Satz zur Laufzeit von SWAT,
-        // sonst vom Wachmann (#121-Nachtrag) - Stummel-Familie wie Mafia
-        // und SWAT+. Der Basisslot wird ueber SEINE eigene kCross-Zeile
-        // geholt, also aus joby3. Das ist wichtig: der Guard aus joby2
-        // laesst sich NICHT kopieren ("Frame-Zeiger ausserhalb der
-        // Frame-Scheibe").
+        // baseSlot 460: he fetches his anim set at runtime from SWAT, else
+        // from the guard (#121 addendum) - stub family like Mafia and
+        // SWAT+. The base slot is fetched via HIS own kCross row, i.e. from
+        // joby3. That matters: the guard from joby2 CANNOT be copied
+        // ("frame pointer outside the frame slice").
         { 55, "joby2",   {},                                    {-1,-1},  nullptr,   -1, 0, 460 }, // Crane Guy
         { 57, "Andrea3", {},                                    {-1,-1},  nullptr,   -1 },  // Lion
         { 59, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Gladiator
-        // Der Roman God, ZWEI Fassungen, zwei Slots (#84, Nutzeridee).
+        // The Roman god, TWO versions, two slots (#84, user idea).
         //
-        // Vanilla teilen sie sich Slot 61 und schliessen sich damit aus:
-        // Andrea2 fuehrt dort das SCHWERT (Item 108, OCB 1 - Fernkampf,
-        // gruener Blitz), Andrea3 den HAMMER (Item 79, OCB 0 - Nahkampf,
-        // blau). Die Waffe waehlt die OCB des ITEMS, das Aussehen der Slot -
-        // passen die nicht zusammen, fuehrt er die Klinge wie einen Hammer
-        // (vom Nutzer im Spiel fotografiert).
+        // In vanilla they share slot 61 and thereby exclude each other:
+        // Andrea2 carries the SWORD there (item 108, OCB 1 - ranged, green
+        // lightning), Andrea3 the HAMMER (item 79, OCB 0 - melee, blue).
+        // The ITEM's OCB picks the weapon, the slot the look - if they do
+        // not match, he wields the blade like a hammer (photographed by the
+        // user in game).
         //
-        // Mit dem eigenen Slot 461 fuer den Hammer passen jetzt BEIDE in
-        // dasselbe Level. Die Spawn-OCB dazu steht in kSpawnOcb.
+        // With the own slot 461 for the hammer, BOTH now fit into the same
+        // level. The spawn OCB for it stands in kSpawnOcb.
         //
-        // Spender: 61 kommt aus Andrea2 (Schwert), 461 aus Andrea3 (Hammer,
-        // dort unter Slot 61 - daher quellSlot). Beide Level fuehren 61 in
-        // ihrer kuratierten Liste und importieren es deshalb nie selbst;
-        // Andrea3 ueberspringt 461 zusaetzlich als eigener Spender.
+        // Donors: 61 comes from Andrea2 (sword), 461 from Andrea3 (hammer,
+        // there under slot 61 - hence sourceSlot). Both levels carry 61 in
+        // their curated list and therefore never import it themselves;
+        // Andrea3 additionally skips 461 as its own donor.
         //
-        // Begleiter BUBBLES (367): das Geschoss der SCHWERT-Fassung ist wie
-        // bei der Hydra kein Sprite, sondern ein Mesh aus diesem Slot
-        // (romangod.cpp:119 und 228). Ohne ihn fliegt in fremden Leveln
-        // etwas Falsches.
-        { 61,  "Andrea2", {},                                   {367,-1}, "Andrea2", 403 }, // Roman God (Schwert)
-        // Sterbelaut 204 (SGOD_SWD_DIE1_Q): die Sterbeanim +16 der
-        // Hammer-Fassung ruft ihn, aber nur Andrea2 belegt die Nummer -
-        // zu Hause in Andrea3 starb die Statue muted (Core-Loch). Mit dem
-        // Eintrag quiekt sie ueberall wie ihr Schwert-Bruder
-        // (Nutzerentscheidung 2026-08-19: "dann sind beide komplett").
-        { 461, "Andrea3", { {204,"Andrea2",204} },              {-1,-1},  "Andrea3", 404, 0, 0, nullptr, 61 }, // Roman God (Hammer)
-        // Hydra: lange bewusst draussen ("drei Items auf einer Position, die
-        // OCB waehlt das Kettenglied"). Nach der Durchsicht am 2026-08-15
-        // aufgenommen - die OCB ist harmlos, alles andere traegt:
-        //  - InitialiseHydra nutzt trigger_flags NUR fuer den Startframe
-        //    (30 * OCB, damit die drei Koepfe nicht synchron zucken) und
-        //    einen Versatz von +-384 in z. Mit OCB 0 faellt beides weg, und
-        //    der Pool setzt ohnehin nur OCB 0.
-        //  - Toetbar trotz objects[].undead: HydraControl rechnet ihren
-        //    Schaden SELBST aus (hydra.cpp:154 und 175) - im Flammenzustand 2
-        //    auf Distanz, in den Angriffszustaenden aus der Naehe, mit der
-        //    Schrotflinte dreifach. 30 Trefferpunkte.
-        //  - Sie raeumt hinter sich auf: Todesanim +15 traegt Kmd 4
-        //    (KillItem), davor sprengt sie sich Knoten fuer Knoten.
-        //  - Ihre Steuerung greift nur auf anim_index+15, also kein Zugriff
-        //    jenseits der Objektgrenze (das Imp-Problem entfaellt), und sie
-        //    braucht weder MESHSWAP noch Begleitslots.
-        //  - Ihre vier Anim-Sounds (406-409) wandern automatisch mit, die
-        //    holt Phase D des Transfers aus den Anim-Befehlen. Der einzige
-        //    fest verdrahtete Klang ist SFX_SMASH_ROCK beim Zerbersten - der
-        //    steht in KEINEM Anim-Befehl und braucht deshalb diesen Eintrag.
-        //    Seine Nummer ist 167, nicht 168: im Spiel nachgewiesen ueber
-        //    "Non present sample:167" im Log, nachdem eine Zaehlung im Enum
-        //    von sound.h um eins danebenlag. Andrea2 hat ihn selbst, der
-        //    Spender ist also derselbe wie fuers Modell.
-        // Die drei Vanilla-Exemplare in Andrea2 (Items 91/92/93) sind ueber
-        // fixedItems geschuetzt und bleiben unberuehrt.
-        //  - animCount 17: die Objekttabelle gesteht ihr weniger zu, als ihre
-        //    Steuerung braucht (anim_index+15 ist die Todesanim) - dasselbe
-        //    Muster wie beim Imp. Ohne die explizite Laenge bricht der
-        //    Transfer mit "Frame-Zeiger ausserhalb der Frame-Scheibe" ab.
-        //  - Begleitslot BUBBLES (367): ihr Feuergeschoss ist KEIN Sprite,
-        //    sondern das 17. Mesh dieses Slots (hydra.cpp:280,
-        //    objects[BUBBLES].mesh_index + 16). Fuehrt das Ziel dort andere
-        //    Meshes, fliegt etwas Falsches durch die Luft - im Spiel gesehen
-        //    in Andrea1. Andrea2 traegt in 367 genau den Geschosskern samt
-        //    Flammenfluegeln (vom Nutzer im Objektbaum nachgesehen).
-        //    Das Ersetzen ist gefahrlos: die LUFTBLASEN im Wasser haben mit
-        //    diesem Slot nichts zu tun, sie laufen ueber ein eigenes
-        //    Partikelsystem (Bubbles[40], CreateBubble in tomb4fx.cpp:1438).
-        //    Auch Andrea2 selbst hat Wasser und trotzdem den Geschosskern
-        //    in 367 - der beste Beleg dafuer.
+        // Companion BUBBLES (367): the SWORD version's projectile is, as
+        // with the Hydra, no sprite but a mesh from this slot
+        // (romangod.cpp:119 and 228). Without it something wrong flies in
+        // foreign levels.
+        { 61,  "Andrea2", {},                                   {367,-1}, "Andrea2", 403 }, // Roman god (sword)
+        // Death sound 204 (SGOD_SWD_DIE1_Q): the hammer version's death
+        // anim +16 calls it, but only Andrea2 fills the number - at home in
+        // Andrea3 the statue died mutely (a Core hole). With the entry it
+        // squeals everywhere like its sword brother (user decision
+        // 2026-08-19: "then both are complete").
+        { 461, "Andrea3", { {204,"Andrea2",204} },              {-1,-1},  "Andrea3", 404, 0, 0, nullptr, 61 }, // Roman god (hammer)
+        // Hydra: long deliberately out ("three items on one position, the
+        // OCB picks the chain link"). Taken in after the review on
+        // 2026-08-15 - the OCB is harmless, everything else holds:
+        //  - InitialiseHydra uses trigger_flags ONLY for the start frame
+        //    (30 * OCB, so the three heads do not twitch in sync) and an
+        //    offset of +-384 in z. With OCB 0 both drop away, and the pool
+        //    only ever sets OCB 0.
+        //  - Killable despite objects[].undead: HydraControl computes its
+        //    damage ITSELF (hydra.cpp:154 and 175) - in flame state 2 at
+        //    range, in the attack states up close, threefold with the
+        //    shotgun. 30 hit points.
+        //  - It cleans up after itself: death anim +15 carries cmd 4
+        //    (KillItem), before that it blasts itself apart node by node.
+        //  - Its control only reaches anim_index+15, so no access beyond
+        //    the object boundary (the Imp problem vanishes), and it needs
+        //    neither MESHSWAP nor companion slots.
+        //  - Its four anim sounds (406-409) travel automatically, phase D
+        //    of the transfer fetches them from the anim commands. The only
+        //    hard-wired sound is SFX_SMASH_ROCK on shattering - it stands
+        //    in NO anim command and therefore needs this entry. Its number
+        //    is 167, not 168: proven in game via "Non present sample:167"
+        //    in the log after a count in sound.h's enum was off by one.
+        //    Andrea2 has it itself, so the donor is the same as for the
+        //    model.
+        // The three vanilla specimens in Andrea2 (items 91/92/93) are
+        // protected via fixedItems and stay untouched.
+        //  - animCount 17: the object table grants it less than its control
+        //    needs (anim_index+15 is the death anim) - the same pattern as
+        //    the Imp. Without the explicit length the transfer aborts with
+        //    "frame pointer outside the frame slice".
+        //  - Companion slot BUBBLES (367): its fire projectile is NO
+        //    sprite but the 17th mesh of this slot (hydra.cpp:280,
+        //    objects[BUBBLES].mesh_index + 16). If the target carries other
+        //    meshes there, something wrong flies through the air - seen in
+        //    game in Andrea1. Andrea2 carries in 367 exactly the projectile
+        //    core with flame wings (looked up by the user in the object
+        //    tree). Replacing is safe: the BUBBLES in water have nothing to
+        //    do with this slot, they run via their own particle system
+        //    (Bubbles[40], CreateBubble in tomb4fx.cpp:1438). Andrea2
+        //    itself has water too and still the projectile core in 367 -
+        //    the best proof of that.
         { 63, "Andrea2", { {167,"Andrea2",167} },               {367,-1}, nullptr,   -1, 17 },  // Hydra
         { 77, "Andy2",   {},                                    {-1,-1},  nullptr,   -1 },  // Maze Monster
-        // Huskie (85): der Hund aus joby2 - ein EIGENER Gegner, nicht der
-        // Hund (41). Eigene Steuerung (HuskieControl), eigenes Initialise,
-        // 24 statt 18 Trefferpunkte, 26 statt 21 Meshes. Der Motor kennt ihn
-        // vollstaendig, es war nur nie jemand im Pool.
+        // Huskie (85): the dog from joby2 - an enemy of its OWN, not the
+        // dog (41). Own control (HuskieControl), own Initialise, 24 instead
+        // of 18 hit points, 26 instead of 21 meshes. The engine knows him
+        // completely, he just was never in the pool.
         //
-        // Mit SlotAnims ueber alle 13 Level gemessen: Slot 85 traegt NUR in
-        // joby2 ein Modell (anim_index 579, Scheibe 25 Anims). Seine
-        // Steuerung greift bis anim_index+22 (DeathAnims 20/21/22) - die
-        // Scheibe reicht, also kein animCount noetig (anders als Imp/Hydra).
-        // Kein MESHSWAP, kein Begleiter, kein Basistyp; die Klaenge haengen
-        // alle an Anim-Kommandos und wandern von selbst mit (huskie.cpp
-        // ruft SoundEffect nirgends fest verdrahtet auf).
+        // Measured with SlotAnims across all 13 levels: slot 85 carries a
+        // model ONLY in joby2 (anim_index 579, slice of 25 anims). His
+        // control reaches to anim_index+22 (death anims 20/21/22) - the
+        // slice suffices, so no animCount needed (unlike Imp/Hydra). No
+        // MESHSWAP, no companion, no base type; the sounds all hang on anim
+        // commands and travel by themselves (huskie.cpp calls SoundEffect
+        // nowhere hard-wired).
         //
-        // OCB: InitialiseHuskie startet bei trigger_flags != 0 auf anim+1
-        // statt +8 und nimmt ITEM_INVISIBLE weg. Der Pool setzt immer OCB 0,
-        // und Items mit OCB != 0 werden ohnehin nie getauscht.
+        // OCB: InitialiseHuskie starts at trigger_flags != 0 on anim+1
+        // instead of +8 and removes ITEM_INVISIBLE. The pool always sets
+        // OCB 0, and items with OCB != 0 are never swapped anyway.
         //
-        // joby2s eigene drei Huskies (Items 4, 86, 153) stehen nicht in
-        // seiner kuratierten Liste - sie bleiben vanilla, joby2 gibt nur ab.
+        // joby2's own three huskies (items 4, 86, 153) do not stand in its
+        // curated list - they stay vanilla, joby2 only gives away.
         { 85, "joby2",   {},                                    {-1,-1},  nullptr,   -1 },  // Huskie
-        // Der Koch (#124, Nutzerentscheid 2026-08-23: "kann er sogar einfach
-        // mit in den Pool"). Reiner Nahkaempfer (Messer), Modell nur in
-        // joby3. Sein Satz traegt nur +0..+11 echte Anims (der Rest sind
-        // tote Erben, die seine Zustaende 1-6 nie beruehren); sein Tod ist
-        // ein 1-Frame-Stummel, deshalb leiht er sich in der Engine den
-        // Soldatentod +16 - Skelett knochengleich mit der Familie
-        // (BonePruef: 0 von 14 abweichend). basisSlot 460: der Wachmann
-        // reist als Todes-Spender immer mit (chef.cpp). Keine
-        // Tauschhaelften, kein Meshswap; seine Anim-Sounds (89/187/190)
-        // reisen ueber die Kommandos mit. Seine Spawn-OCB ist 1 (Jagd statt
-        // Kuechenarbeit, siehe kSpawnOcb). Das native Item 186 in joby3
-        // bleibt per Kuration vanilla mit OCB 0 - Stealth-Cutscene-Fallback
-        // UND Kuechenarbeit haengen beide daran.
+        // The chef (#124, user decision 2026-08-23: "he can simply join the
+        // pool"). A pure melee fighter (knife), model only in joby3. His
+        // set carries only +0..+11 real anims (the rest are dead heirs his
+        // states 1-6 never touch); his death is a 1-frame stub, so in the
+        // engine he borrows the soldier death +16 - skeleton bone-identical
+        // with the family (BonePruef: 0 of 14 deviating). baseSlot 460: the
+        // guard always travels along as the death donor (chef.cpp). No swap
+        // halves, no meshswap; his anim sounds (89/187/190) travel via the
+        // commands. His spawn OCB is 1 (hunt instead of kitchen work, see
+        // kSpawnOcb). The native item 186 in joby3 stays vanilla with OCB 0
+        // per curation - stealth cutscene fallback AND kitchen work both
+        // hang on it.
         //
-        // animCount 12: die Scheibe wird auf die 12 ECHTEN Anims begrenzt -
-        // erstmals schrumpfend statt wachsend (der Imp dehnt sie). Seine
-        // toten Erben +12..+55 zeigen alle in die Frame-Region des
-        // NAECHSTEN Slots, daran scheitert der Frame-Zeiger-Pruefer des
-        // Kopierers ("ausserhalb der Frame-Scheibe" - gemessen am
-        // CLI-Lauf). AnimMap bestaetigt: alle Verkettungen von +0..+11
-        // bleiben innerhalb der 12er-Scheibe (0 falsche), mehr spielt
-        // seine Steuerung nie.
-        { 87, "joby3",   {},                                    {-1,-1},  nullptr,   -1, 12, 460 }, // Koch
-        // Imp: Spender andy3, NICHT andy1. andy1s Imp-Animsatz ist entkernt:
-        // die Todesanimation +45 (ImpControl setzt sie bei hit_points<=0 fest
-        // ein) ist dort ein Ein-Frame-Dummy ohne KillItem-Kommando - der Imp
-        // kann nie sterben (Zustands-Flackern 9<->0, kein Fade, Muell-Pose;
-        // im Spiel gesehen). Core ist das nie aufgefallen, weil die junge
-        // Lara in andy1 keine Waffen hat. andy3 traegt den vollen Satz
-        // (+45 = Frames 45..66 mit KillItem -> after_death -> Fade); Anims
-        // 0-12, Geometrie und MESHSWAP1-Tauschsatz sind in beiden identisch
-        // (AnimDump/SucheModell, 2026-08-15). animCount 46: die Objekttabelle
-        // gesteht dem Imp nur 18 Anims zu, +19..+45 liegen physisch in den
-        // Bereichen fremder Kulissenslots - ohne explizite Laenge fehlte die
-        // Todesanim im Import und die Engine las hinter dem Tabellenende
-        // (die beobachtete Todes-Flugschleife).
+        // animCount 12: the slice is limited to the 12 REAL anims - the
+        // first shrinking use (the Imp stretches it). His dead heirs
+        // +12..+55 all point into the NEXT slot's frame region, on which
+        // the copier's frame pointer checker fails ("outside the frame
+        // slice" - measured on the CLI run). AnimMap confirms: all chains
+        // of +0..+11 stay within the 12-slice (0 wrong ones), more his
+        // control never plays.
+        { 87, "joby3",   {},                                    {-1,-1},  nullptr,   -1, 12, 460 }, // Chef
+        // Imp: donor andy3, NOT andy1. andy1's Imp anim set is gutted: the
+        // death animation +45 (ImpControl sets it fixed at hit_points<=0)
+        // is a one-frame dummy there without a KillItem command - the Imp
+        // can never die (state flicker 9<->0, no fade, garbage pose; seen
+        // in game). Core never noticed, because young Lara in andy1 has no
+        // weapons. andy3 carries the full set (+45 = frames 45..66 with
+        // KillItem -> after_death -> fade); anims 0-12, geometry and the
+        // MESHSWAP1 swap set are identical in both (AnimDump/SucheModell,
+        // 2026-08-15). animCount 46: the object table grants the Imp only
+        // 18 anims, +19..+45 lie physically in the ranges of foreign
+        // scenery slots - without the explicit length the death anim was
+        // missing from the import and the engine read past the table end
+        // (the observed death flight loop).
         { 89, "andy3",   {},                                    {-1,-1},  "andy3",   402, 46 }, // Imp
 
-        // --- Gaeste aus Tomb Raider 3 (#92) ---------------------------------
+        // --- Guests from Tomb Raider 3 (#92) --------------------------------
         //
-        // Kein Spenderlevel: "von" bleibt leer, das Modell kommt zur Laufzeit
-        // aus der Installation des Nutzers. Alles Naehere - Datei, Objekt,
-        // Klaenge, Lautstaerken - steht in Tr3Source::dinos().
+        // No donor level: "from" stays empty, the model comes at runtime
+        // from the user's installation. All details - file, object, sounds,
+        // volumes - stand in Tr3Source::dinos().
         //
-        // Die vier Zielslots tragen in KEINEM der 16 TR5-Level ein Modell (mit
-        // MissMod an allen nachgemessen), sie nehmen also keinem einheimischen
-        // Gegner etwas weg. Weder Basistyp noch Begleiter noch Tauschhaelften -
-        // sie bringen alles selbst mit.
+        // The four target slots carry a model in NONE of the 16 TR5 levels
+        // (measured with MissMod against all of them), so they take nothing
+        // from any native enemy. Neither base type nor companions nor swap
+        // halves - they bring everything themselves.
         { 31, nullptr,   {},                                    {-1,-1},  nullptr,   -1, 0, 0, "tr3"     }, // T-Rex
-        { 43, nullptr,   {},                                    {-1,-1},  nullptr,   -1, 0, 0, "tr3gold" }, // Geier
+        { 43, nullptr,   {},                                    {-1,-1},  nullptr,   -1, 0, 0, "tr3gold" }, // Vulture
         { 53, nullptr,   {},                                    {-1,-1},  nullptr,   -1, 0, 0, "tr3"     }, // Compy
         { 75, nullptr,   {},                                    {-1,-1},  nullptr,   -1, 0, 0, "tr3"     }, // Raptor
     };
 
-    // Verbotene Typen (siehe RandoInput::forbiddenTypes) fliegen aus dem
-    // Pool, BEVOR irgendetwas waehlt - weder Tausch noch Zusatzgegner noch
-    // Cross duerfen sie anfassen.
-    std::vector<int> gegnerPool;
+    // Forbidden types (see RandoInput::forbiddenTypes) fly out of the pool
+    // BEFORE anything chooses - neither swap nor extra enemies nor cross
+    // may touch them.
+    std::vector<int> enemyPool;
     for (int t : in.enemyTypes)
         if (!in.forbiddenTypes.count(t) && !opt.disabledEnemies.count(t))
-            gegnerPool.push_back(t);
+            enemyPool.push_back(t);
 
-    // Die Notbremse fuer "alles abgewaehlt" steht ABSICHTLICH erst hinter dem
-    // Cross-Pool (#109) - sie stand hier und war damit der Grund, dass eine
-    // gezielte Auswahl nicht durchkam.
-    std::map<int, const CrossGegner*> crossGewaehlt;
-    std::set<int> crossBenutzt;
+    // The emergency brake for "everything deselected" DELIBERATELY stands
+    // behind the cross pool (#109) - it used to stand here and was thus the
+    // reason a targeted selection never got through.
+    std::map<int, const CrossEnemy*> crossChosen;
+    std::set<int> crossUsed;
 
-    // Liegt das Modell dieser Zeile schon NATIV im Level? Genau dann, wenn
-    // dieses Level der Spender IST und das Modell dort unter derselben
-    // Nummer wohnt (kein quellSlot). Dann ist nichts zu kopieren - der Typ
-    // wird nur gesetzt (#124). Gaeste aus TR3 haben kein Spenderlevel.
-    auto modellSchonDa = [&klein](const CrossGegner& c) -> bool {
-        if (!c.von || c.quellSlot > 0) return false;
+    // Does this row's model already lie NATIVELY in the level? Exactly when
+    // this level IS the donor and the model lives there under the same
+    // number (no sourceSlot). Then there is nothing to copy - the type is
+    // only placed (#124). Guests from TR3 have no donor level.
+    auto modelAlreadyHere = [&lowerName](const CrossEnemy& c) -> bool {
+        if (!c.from || c.sourceSlot > 0) return false;
         std::string k;
-        for (const char* p = c.von; *p; ++p)
+        for (const char* p = c.from; *p; ++p)
             k.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p);
-        return k == klein;
+        return k == lowerName;
     };
-    if ((opt.crossEnemies || opt.allsanity) && (opt.swapEnemies || opt.addEnemies) && klein != "joby4")
+    if ((opt.crossEnemies || opt.allsanity) && (opt.swapEnemies || opt.addEnemies) && lowerName != "joby4")
     {
-        std::set<int> eigene(in.enemyTypes.begin(), in.enemyTypes.end());
-        std::vector<const CrossGegner*> kandidaten;
-        for (const CrossGegner& c : kCross)
+        std::set<int> own(in.enemyTypes.begin(), in.enemyTypes.end());
+        std::vector<const CrossEnemy*> candidates;
+        for (const CrossEnemy& c : kCross)
         {
-            if (eigene.count(c.typeId)) continue;         // steht schon im Levelpool
-            if (in.forbiddenTypes.count(c.typeId)) continue;   // Level vertraegt ihn nicht
-            if (opt.disabledEnemies.count(c.typeId)) continue; // vom Nutzer abgewaehlt
+            if (own.count(c.typeId)) continue;            // already in the level pool
+            if (in.forbiddenTypes.count(c.typeId)) continue;   // the level cannot take him
+            if (opt.disabledEnemies.count(c.typeId)) continue; // deselected by the user
 
-            // Gaeste aus Tomb Raider 3 (#92): sie brauchen die Installation
-            // des Nutzers. Fehlt sie, fallen sie STILL heraus - ein Lauf darf
-            // nie daran scheitern, dass jemand die Spiele nicht besitzt.
+            // Guests from Tomb Raider 3 (#92): they need the user's
+            // installation. If it is missing, they drop out SILENTLY - a
+            // run must never fail because someone does not own the games.
             if (c.tr3)
             {
                 const bool gold = (std::strcmp(c.tr3, "tr3gold") == 0);
-                // Der Geier braucht BEIDE: sein Modell steckt in Gold, seine
-                // Klaenge in der MAIN.SFX von TR3 (siehe Tr3Source::sfxPath).
+                // The vulture needs BOTH: his model sits in Gold, his
+                // sounds in TR3's MAIN.SFX (see Tr3Source::sfxPath).
                 if (opt.tr3Dir.empty()) continue;
                 if (gold && opt.tr3GoldDir.empty()) continue;
-                kandidaten.push_back(&c);
+                candidates.push_back(&c);
                 continue;
             }
 
-            // "Sich selbst spendet niemand" - das ist ein Grund, den IMPORT
-            // zu lassen, aber KEIN Grund, den Typ auszuschliessen (#124,
-            // Nutzerfrage 2026-08-24: "Er ist ja enthalten, da muesste der
-            // Rando mit Add+OCB ja einfach weiterkommen"). Wessen Modell
-            // schon im Level liegt, der laesst sich ohne jede Kopie setzen -
-            // die Bremse gehoert an die Emission, nicht an die Auswahl.
+            // "Nobody donates to himself" - that is a reason to skip the
+            // IMPORT, but NO reason to exclude the type (#124, user
+            // question 2026-08-24: "he is contained after all, so the rando
+            // should just get on with add+OCB"). Whoever's model already
+            // lies in the level can be placed without any copy - the brake
+            // belongs at the emission, not at the selection.
             //
-            // Anlass ist der Koch in joby3: der Slot ist da, Cores Kuration
-            // benutzt ihn nur fuer ein einziges Item. Dasselbe galt still
-            // fuer den Kranfuehrer in joby2, Pierre in Andrea3 und die Hydra
-            // in Andrea2 - alles Typen, deren Modell im Spenderlevel liegt,
-            // die dort aber nicht in der kuratierten Liste stehen.
+            // The occasion is the chef in joby3: the slot is there, Core's
+            // curation only uses it for a single item. The same silently
+            // held for the crane guy in joby2, Pierre in Andrea3 and the
+            // Hydra in Andrea2 - all types whose model lies in the donor
+            // level but who do not stand in its curated list there.
             //
-            // Eine Ausnahme bleibt: traegt die Zeile einen quellSlot, wohnt
-            // das Modell beim Spender unter einer ANDEREN Nummer (der
-            // Wachmann 460 liegt dort auf 37). Im Spenderlevel selbst waere
-            // das ein Klon seiner selbst - zwei gleiche Modelle auf zwei
-            // Slots. Das bleibt draussen.
-            std::string vonKlein;
-            for (const char* p = c.von; *p; ++p)
-                vonKlein.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p);
-            if (vonKlein == klein && c.quellSlot > 0) continue;   // kloent sich sonst selbst
-            kandidaten.push_back(&c);
+            // One exception remains: if the row carries a sourceSlot, the
+            // model lives at the donor under a DIFFERENT number (the guard
+            // 460 lies there on 37). In the donor level itself that would
+            // be a clone of himself - two equal models on two slots. That
+            // stays out.
+            std::string fromLower;
+            for (const char* p = c.from; *p; ++p)
+                fromLower.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p);
+            if (fromLower == lowerName && c.sourceSlot > 0) continue;   // would clone himself
+            candidates.push_back(&c);
         }
 
-        // Allsanity nimmt den ganzen Pool, Cross-Mix hoechstens drei.
-        const int maxFremd = opt.allsanity ? static_cast<int>(kandidaten.size()) : 3;
-        for (int n = 0; n < maxFremd && !kandidaten.empty(); ++n)
+        // Allsanity takes the whole pool, cross mix at most three.
+        const int maxForeign = opt.allsanity ? static_cast<int>(candidates.size()) : 3;
+        for (int n = 0; n < maxForeign && !candidates.empty(); ++n)
         {
-            const size_t pick = static_cast<size_t>(rng.below(kandidaten.size()));
-            const CrossGegner* c = kandidaten[pick];
-            kandidaten.erase(kandidaten.begin() + static_cast<ptrdiff_t>(pick));
-            gegnerPool.push_back(c->typeId);
-            crossGewaehlt[c->typeId] = c;
+            const size_t pick = static_cast<size_t>(rng.below(candidates.size()));
+            const CrossEnemy* c = candidates[pick];
+            candidates.erase(candidates.begin() + static_cast<ptrdiff_t>(pick));
+            enemyPool.push_back(c->typeId);
+            crossChosen[c->typeId] = c;
         }
-        std::sort(gegnerPool.begin(), gegnerPool.end());
+        std::sort(enemyPool.begin(), enemyPool.end());
         if (opt.allsanity)
-            report.notes.push_back(fmt("Allsanity: Gegnerpool auf %d Typen erweitert.",
-                                       static_cast<int>(gegnerPool.size())));
+            report.notes.push_back(fmt("allsanity: enemy pool extended to %d types.",
+                                       static_cast<int>(enemyPool.size())));
     }
 
-    // Notbremse fuer "der Nutzer hat ALLES abgewaehlt" (#109).
+    // Emergency brake for "the user deselected EVERYTHING" (#109).
     //
-    // Sie steht hier unten und nicht mehr vor dem Cross-Pool - und genau das
-    // war der Fehler, den der Nutzer gemeldet hat: Wer im Fenster
-    // "Gegnerarten" nur die Dinos anhakt, waehlt damit alle einheimischen
-    // Arten ab. Oben war der Pool dann leer, die Bremse fuellte ihn mit der
-    // KOMPLETTEN Vanilla-Liste wieder auf (die Abwahl also ignoriert), und
-    // die Dinos kamen nur obendrauf. Ergebnis: der halbe Level blieb vanilla,
-    // obwohl "nur Dinos" gewaehlt war.
+    // It stands down here and no longer before the cross pool - and exactly
+    // that was the bug the user reported: whoever ticks only the dinos in
+    // the "Enemy types" window thereby deselects all native types. Up
+    // there the pool was then empty, the brake refilled it with the
+    // COMPLETE vanilla list (thus ignoring the deselection), and the dinos
+    // only came on top. Result: half the level stayed vanilla although
+    // "dinos only" was chosen.
     //
-    // Jetzt zaehlt, was am Ende WIRKLICH im Topf liegt. Eine Auswahl, die
-    // durch Cross-Typen erfuellbar ist, kommt unveraendert durch. Die Bremse
-    // greift nur noch im echten Notfall - etwa wenn jemand ausschliesslich
-    // Dinos waehlt, aber die TR3-Pfade fehlen und sie deshalb still
-    // herausfallen. Dann ist ein Level mit Vanilla-Gegnern immer noch besser
-    // als eines, in dem gar nichts mehr passiert.
-    if (gegnerPool.empty())
+    // Now what REALLY lies in the pot at the end counts. A selection
+    // satisfiable through cross types passes unchanged. The brake only
+    // engages in a true emergency - say, someone picks exclusively dinos
+    // but the TR3 paths are missing and they silently drop out. Then a
+    // level with vanilla enemies is still better than one in which nothing
+    // happens at all.
+    if (enemyPool.empty())
     {
         for (int t : in.enemyTypes)
-            if (!in.forbiddenTypes.count(t)) gegnerPool.push_back(t);
-        if (!gegnerPool.empty())
-            report.notes.push_back("Gegnerarten: die Auswahl liess fuer dieses Level keinen "
-                                   "einzigen Typ uebrig (auch keinen fremden) - fuer dieses "
-                                   "Level ignoriert, sonst haette es gar keine Gegner.");
+            if (!in.forbiddenTypes.count(t)) enemyPool.push_back(t);
+        if (!enemyPool.empty())
+            report.notes.push_back("enemy types: the selection left not a single type for "
+                                   "this level (not even a foreign one) - ignored for this "
+                                   "level, or it would have no enemies at all.");
     }
 
-    // --- Vorhandene Gegner tauschen ---
+    // --- Swap existing enemies ---
     //
-    // Nur die ART wechselt, der Item-Index bleibt. Das ist der ganze Trick:
-    // Trigger sprechen ihre Gegner ueber "Object N" an, also ueber den Index.
-    // Bleibt der, wacht jeder Gegner weiter genau dort und genau dann auf, wo
-    // und wann Core es vorgesehen hat - der Fortschritt im Level kann sich
-    // nicht verschieben. Ein Entfernen oder Hinzufuegen an dieser Stelle waere
-    // etwas voellig anderes.
+    // Only the KIND changes, the item index stays. That is the whole trick:
+    // triggers address their enemies via "Object N", i.e. via the index. If
+    // it stays, every enemy still wakes up exactly where and when Core
+    // intended - the level's progress cannot shift. A removal or addition
+    // at this point would be something entirely different.
     //
-    // Getauscht wird nur unter den kuratierten Typen des Levels. Damit sind
-    // Scientist, Guardian und die gescripteten Faelle von selbst aussen
-    // vor - sie stehen dort nicht drin. Der Koch (87) ist seit #124 ein
-    // normaler Cross-Typ; sein EINES natives Item (joby3, 186) bleibt
-    // trotzdem vanilla, weil die Kuration es festnagelt (Stealth-Cutscene).
-    // Mit Cross-Gegnermix gehen einzelne Rollen zusaetzlich an die
-    // gewaehlten fremden Typen.
-    std::set<int> immunGesetzt;      // Items, die schon beim Tausch immun wurden
-    // Platzbedarf: manche Gegner brauchen eine Arena, kein Kaemmerchen.
+    // Swapping happens only among the level's curated types. Scientist,
+    // Guardian and the scripted cases are thereby out by themselves - they
+    // do not stand in there. The chef (87) has been a normal cross type
+    // since #124; his ONE native item (joby3, 186) still stays vanilla
+    // because the curation nails it down (stealth cutscene). With the cross
+    // enemy mix, individual roles additionally go to the chosen foreign
+    // types.
+    std::set<int> immuneSet;         // items already made immune during the swap
+    // Space needs: some enemies need an arena, not a closet.
     //
-    // Die Hydra ist der Anlass. Sie steht fest verwurzelt, dreht sich um volle
-    // 360 Grad und kaempft auf Distanz mit ihrem Flammengeschoss - in einer
-    // engen Kammer kann Lara weder ausweichen noch die Reichweite nutzen.
+    // The Hydra is the occasion. She stands firmly rooted, turns a full 360
+    // degrees and fights at range with her flame projectile - in a tight
+    // chamber Lara can neither dodge nor use the range.
     //
-    // Gemessen wird NICHT der Raum, sondern der freie Platz UM DEN SEKTOR
-    // herum - ein Fenster von 7x7 Feldern, in dessen Mitte der Gegner steht.
-    // Zwei Irrwege liegen dahinter, beide verworfen:
+    // What is measured is NOT the room but the free space AROUND THE SECTOR
+    // - a window of 7x7 tiles with the enemy standing in its middle. Two
+    // wrong paths lie behind that, both discarded:
     //
-    //  - Der einzelne Raum ist das falsche Mass. Die Raumaufteilung eines
-    //    TR5-Levels folgt dem Baukasten des Editors, nicht dem, was Lara als
-    //    Halle wahrnimmt: ihre eigene Arena in Andrea2 besteht aus SIEBEN
-    //    Raeumen (71, 72, 116, 117, 121, 140, 194), Raum 116 allein waere nur
-    //    4x8 walkable. Jede Schwelle auf Raumebene haette ihren eigenen
-    //    Kampfplatz ausgeschlossen.
-    //  - Die zusammenhaengende Flaeche ist zu grosszuegig. Sie verschmilzt
-    //    alles, was auf gleicher Hoehe verbunden ist - in Andrea1 waren das
-    //    619 von 961 Sektoren, Korridore eingeschlossen. Die Hydra haette im
-    //    Gang stehen duerfen, nur weil der Gang an eine Halle andockt.
+    //  - The single room is the wrong measure. A TR5 level's room layout
+    //    follows the editor's construction kit, not what Lara perceives as
+    //    a hall: her own arena in Andrea2 consists of SEVEN rooms (71, 72,
+    //    116, 117, 121, 140, 194), room 116 alone would be only 4x8
+    //    walkable. Any room-level threshold would have excluded her own
+    //    battleground.
+    //  - The contiguous area is too generous. It merges everything
+    //    connected at the same height - in Andrea1 that was 619 of 961
+    //    sectors, corridors included. The Hydra would have been allowed to
+    //    stand in the hallway just because the hallway docks onto a hall.
     //
-    // Das Fenster misst genau das, was zaehlt: wie unresolved es dort ist, wo sie
-    // steht. Die Schwelle stammt nicht aus dem Bauch, sondern aus Vanilla -
-    // an allen drei Kampfplaetzen in Andrea2 (Items 91/92/93) gemessen:
-    // im 3x3-Fenster 9 von 9 Feldern frei, im 7x7 genau 40 von 49.
+    // The window measures exactly what counts: how open it is where she
+    // stands. The threshold does not come from the gut but from vanilla -
+    // measured at all three battlegrounds in Andrea2 (items 91/92/93): in
+    // the 3x3 window 9 of 9 tiles free, in the 7x7 exactly 40 of 49.
     //
-    // Gewaehlt ist 3x3 mit allen neun Feldern (Nutzerentscheidung): kein
-    // einziges Nachbarfeld darf verbaut sein. Das ist scharf genug, um
-    // Kammern, Nischen und Gaenge auszuschliessen, und laesst ihr trotzdem
-    // Kampfplaetze in fast jedem Level. Ein 7x7-Fenster mit 40 Feldern waere
-    // die Halle gewesen - das Mass hielten spielweit nur 255 Sektoren, fuenf
-    // Level haetten die Hydra nie zu sehen bekommen.
+    // Chosen is 3x3 with all nine tiles (user decision): not a single
+    // neighboring tile may be built up. That is sharp enough to exclude
+    // chambers, niches and hallways, and still leaves her battlegrounds in
+    // almost every level. A 7x7 window with 40 tiles would have been the
+    // hall - only 255 sectors game-wide met that measure, five levels
+    // would never have seen the Hydra.
     //
-    // Der Zonen-Export ist dabei ein PLATZIERUNGS-Pool, kein
-    // Begehbarkeitsraster: er fuehrt nur Sektoren, auf denen wirklich etwas
-    // stehen darf. Lueckenlose Bloecke sind darin selten - umso wichtiger,
-    // dass Messlatte und Mass aus derselben Quelle stammen.
+    // The zone export is a PLACEMENT pool in this, not a walkability
+    // raster: it only carries sectors on which something may really stand.
+    // Gapless blocks are rare in it - all the more important that yardstick
+    // and measure come from the same source.
     //
-    // Die Tabelle gilt fuer JEDEN Weg, auf dem ein Typ irgendwo landet, also
-    // fuer Tausch und Zusatzgegner gleichermassen - auch fuer den heimischen
-    // Pool: in Andrea2 steht die Hydra im eigenen Levelpool und koennte sonst
-    // ueber den Tausch in eine Abstellkammer geraten. Die drei Vanilla-Hydras
-    // stehen in fixedItems und bleiben ohnehin unberuehrt.
-    struct Raumbedarf { int typeId; int fenster; int frei; };
-    static const Raumbedarf kRaumbedarf[] = {
-        { 63, 3, 9 },    // Hydra: 3x3-Fenster, alle 9 Felder frei
+    // The table applies to EVERY path by which a type lands somewhere, i.e.
+    // to swap and extra enemies alike - including the home pool: in Andrea2
+    // the Hydra stands in the level's own pool and could otherwise end up
+    // in a closet via the swap. The three vanilla Hydras stand in
+    // fixedItems and stay untouched anyway.
+    struct SpaceNeed { int typeId; int window; int free; };
+    static const SpaceNeed kSpaceNeeds[] = {
+        { 63, 3, 9 },    // Hydra: 3x3 window, all 9 tiles free
     };
 
-    // Rudelgegner: Typen, die allein nicht funktionieren (#98).
+    // Pack enemies: types that do not work alone (#98).
     //
-    // Der Compsognathus ist der Anlass. Seine Steuerung ist ganz auf die
-    // Gruppe gebaut: `bits = 512 * (item_number & 7) - 1792` (compy.cpp)
-    // verteilt die Tiere anhand ihrer ITEM-NUMMER auf acht Winkel eines
-    // Kreises um das Ziel, und der Angriffsentschluss haengt an zwei
-    // GLOBALEN Zaehlern (compy_scared_timer, compys_attack_lara), die alle
-    // Compys gemeinsam fuehren. Ein einzelner Compy umkreist Lara deshalb
-    // nur und traut sich fast nie heran - im Spiel als "die KI spielt
-    // verrueckt" gesehen (Nutzerbefund 2026-08-17).
+    // The Compsognathus is the occasion. His control is built entirely on
+    // the group: `bits = 512 * (item_number & 7) - 1792` (compy.cpp)
+    // distributes the animals by their ITEM NUMBER onto eight angles of a
+    // circle around the target, and the decision to attack hangs on two
+    // GLOBAL counters (compy_scared_timer, compys_attack_lara) all compys
+    // share. A single compy therefore only circles Lara and almost never
+    // dares approach - seen in game as "the AI is going crazy" (user find
+    // 2026-08-17).
     //
-    // Vier aufeinanderfolgende Item-Nummern ergeben vier verschiedene
-    // Winkel - genau das liefert unser Anhaengen von selbst.
+    // Four consecutive item numbers yield four different angles - exactly
+    // what our appending delivers by itself.
     //
-    // Ein Rudel wird als EIN Zusatzgegner-Platz gesetzt: alle Tiere auf
-    // denselben Sektor, geweckt von EINEM Trigger mit mehreren
-    // Object-Kommandos. Mehrere Items auf einer Position sind in TR5
-    // ueblich - Andrea2 fuehrt die drei Hydra-Glieder genauso.
-    struct Herde { int typeId; int anzahl; };
-    static const Herde kHerden[] = {
+    // A pack is placed as ONE extra-enemy slot: all animals on the same
+    // sector, woken by ONE trigger with several Object commands. Several
+    // items on one position are common in TR5 - Andrea2 carries the three
+    // Hydra links the same way.
+    struct Herd { int typeId; int count; };
+    static const Herd kHerds[] = {
         { 53, 4 },      // Compsognathus
     };
 
-    // Spawn-OCB: manche Gegner read ihre OCB als VERHALTEN, nicht als
-    // Ortsangabe - fuer die ist "immer 0" falsch.
+    // Spawn OCB: some enemies read their OCB as BEHAVIOR, not as a place
+    // statement - for them "always 0" is wrong.
     //
-    // Der Roman God ist der Anlass (vom Nutzer im Spiel fotografiert). Seine
-    // Steuerung liest trigger_flags als WAFFENART:
-    //   trigger_flags == 1 -> Fernkampf, wirft ein Geschoss  (romangod.cpp:415)
-    //   trigger_flags == 0 -> Nahkampf mit dem Hammer        (romangod.cpp:417)
-    // sogar die Farbe seiner Blitze haengt daran (romangod.cpp:516).
+    // The Roman god is the occasion (photographed by the user in game). His
+    // control reads trigger_flags as the WEAPON KIND:
+    //   trigger_flags == 1 -> ranged, throws a projectile  (romangod.cpp:415)
+    //   trigger_flags == 0 -> melee with the hammer        (romangod.cpp:417)
+    // even the color of his lightning hangs on it (romangod.cpp:516).
     //
-    // Und die Fassungen unterscheiden sich je Level: Andrea2 fuehrt ihn mit
-    // SCHWERT (Item 108, OCB 1 - gruen, schiesst), Andrea3 mit HAMMER
-    // (Item 79, OCB 0 - blau, schlaegt). Mit unserer Vorgabe OCB 0 bekam ein
-    // in Andrea2 gesetzter Roman God das Hammer-Verhalten zum Schwert-Modell:
-    // er hielt die Klinge wie einen Hammer und der Blitz war blau statt gruen.
-    // Genau das hat der Nutzer gesehen - nur das Vanilla-Item 108 stimmte.
+    // And the versions differ per level: Andrea2 carries him with the SWORD
+    // (item 108, OCB 1 - green, shoots), Andrea3 with the HAMMER (item 79,
+    // OCB 0 - blue, strikes). With our default OCB 0, a Roman god placed in
+    // Andrea2 got the hammer behavior on the sword model: he held the blade
+    // like a hammer and the lightning was blue instead of green. Exactly
+    // what the user saw - only the vanilla item 108 was right.
     //
-    // Die Regel folgt dem MODELL, nicht dem Level an sich: wo das eigene
-    // Schwert-Modell steht, muss OCB 1 hin. Alle anderen Level bekommen das
-    // Hammer-Modell aus Andrea3 importiert und bleiben bei 0.
-    // Seit beide Fassungen einen eigenen Slot haben (Nutzeridee), folgt die
-    // OCB dem SLOT statt dem Level - mit einer Ausnahme: Andrea3 fuehrt in
-    // seinem eigenen Slot 61 den Hammer, nicht das Schwert. Die
-    // levelgenaue Zeile steht deshalb VOR der allgemeinen, erste Treffer
-    // gewinnt.
-    struct SpawnOcb { int typeId; const char* level; int ocb; };  // level 0 = ueberall
+    // The rule follows the MODEL, not the level as such: where the own
+    // sword model stands, OCB 1 must go. All other levels get the hammer
+    // model imported from Andrea3 and stay at 0.
+    // Since both versions have their own slot (user idea), the OCB follows
+    // the SLOT instead of the level - with one exception: Andrea3 carries
+    // the hammer in its own slot 61, not the sword. The level-specific row
+    // therefore stands BEFORE the general one, first hit wins.
+    struct SpawnOcb { int typeId; const char* level; int ocb; };  // level 0 = everywhere
     static const SpawnOcb kSpawnOcb[] = {
-        {  61, "andrea3", 0 },  // Andrea3s eigener Slot 61 IST der Hammer
-        {  61, nullptr,   1 },  // sonst Schwert-Fassung: Fernkampf
-        { 461, nullptr,   0 },  // Hammer-Fassung: Nahkampf
-        // Der Koch (#124, Nutzerbefund im Spieltest): Zustand 1 ist sein
-        // Gemueseschneiden, und Vanilla verlaesst er ihn erst, wenn Lara ihm
-        // auf anderthalb Sektoren nahe kommt (chef.cpp). Fuer einen Gegner,
-        // den wir irgendwohin setzen, ist das falsch - er soll suchen wie
-        // jeder andere. OCB 1 schaltet in chef.cpp auf Jagd; der Vanilla-Koch
-        // in joby3 (Item 186, OCB 0) bleibt unberuehrt bei seiner Arbeit.
-        {  87, nullptr,   1 },  // Koch: Jagd statt Kuechenarbeit
+        {  61, "andrea3", 0 },  // Andrea3's own slot 61 IS the hammer
+        {  61, nullptr,   1 },  // otherwise sword version: ranged
+        { 461, nullptr,   0 },  // hammer version: melee
+        // The chef (#124, user find in the playtest): state 1 is his
+        // vegetable chopping, and in vanilla he only leaves it when Lara
+        // comes within one and a half sectors (chef.cpp). For an enemy we
+        // place anywhere that is wrong - he should seek like anyone else.
+        // OCB 1 switches chef.cpp to the hunt; the vanilla chef in joby3
+        // (item 186, OCB 0) stays untouched at his work.
+        {  87, nullptr,   1 },  // chef: hunt instead of kitchen work
     };
-    auto spawnOcbFuer = [&klein](int typeId) -> int {
+    auto spawnOcbFor = [&lowerName](int typeId) -> int {
         for (const SpawnOcb& s : kSpawnOcb)
-            if (s.typeId == typeId && (!s.level || klein == s.level)) return s.ocb;
+            if (s.typeId == typeId && (!s.level || lowerName == s.level)) return s.ocb;
         return 0;
     };
-    auto herdenGroesse = [](int typeId) -> int {
-        for (const Herde& h : kHerden)
-            if (h.typeId == typeId) return h.anzahl;
+    auto herdSize = [](int typeId) -> int {
+        for (const Herd& h : kHerds)
+            if (h.typeId == typeId) return h.count;
         return 1;
     };
 
-    // Weltraster aller begehbaren Sektoren, Schluessel ist das Feld in
-    // Sektorschritten. Bewusst in.sectors und nicht der laufend gefilterte
-    // Pool: gemessen werden soll, wie unresolved die Umgebung IST, nicht wo gerade
-    // noch etwas hindarf. Genau diese Quelle lag auch der Vanilla-Messung
-    // zugrunde, aus der die 40 stammen - Mass und Messlatte muessen aus
-    // derselben Quelle kommen, sonst vergleicht man Aepfel mit Birnen.
+    // World raster of all walkable sectors, keyed by the tile in sector
+    // steps. Deliberately in.sectors and not the continuously filtered
+    // pool: what is measured is how open the surroundings ARE, not where
+    // something may still go right now. Exactly this source also underlay
+    // the vanilla measurement the 40 came from - measure and yardstick must
+    // come from the same source, or one compares apples with oranges.
     //
-    // Je Feld werden die Bodenhoehen gesammelt, weil uebereinander liegende
-    // Raeume dieselben x/z teilen. Ohne Hoehenvergleich zaehlte der Balkon
-    // ueber ihr als freier Platz neben ihr.
-    std::map<long long, std::vector<int>> freiRaster;
+    // Per tile the floor heights are collected, because rooms stacked above
+    // each other share the same x/z. Without the height comparison, the
+    // balcony above her counted as free space next to her.
+    std::map<long long, std::vector<int>> freeGrid;
     for (const ZoneSector& s : in.sectors)
     {
         std::map<int, RoomOrigin>::const_iterator o = origin.find(s.room);
@@ -2052,365 +2046,365 @@ bool Rando::run(const RandoInput& in,
         const long long gk =
             (static_cast<long long>((o->second.originX + s.sectorX * 1024) / 1024) << 24)
           |  static_cast<long long>((o->second.originZ + s.sectorZ * 1024) / 1024);
-        freiRaster[gk].push_back(s.floorY);
+        freeGrid[gk].push_back(s.floorY);
     }
 
-    auto genugPlatz = [&origin, &freiRaster]
+    auto enoughSpace = [&origin, &freeGrid]
                       (int typeId, int room, int sectorX, int sectorZ, int y) -> bool
     {
-        const Raumbedarf* b = 0;
-        for (const Raumbedarf& r : kRaumbedarf)
+        const SpaceNeed* b = 0;
+        for (const SpaceNeed& r : kSpaceNeeds)
             if (r.typeId == typeId) { b = &r; break; }
-        if (!b) return true;                        // kein Sondermass, alles erlaubt
+        if (!b) return true;                        // no special measure, everything allowed
 
         std::map<int, RoomOrigin>::const_iterator o = origin.find(room);
-        if (o == origin.end()) return false;        // Raum unbekannt: nicht riskieren
+        if (o == origin.end()) return false;        // unknown room: do not risk it
         const int gx = (o->second.originX + sectorX * 1024) / 1024;
         const int gz = (o->second.originZ + sectorZ * 1024) / 1024;
-        const int r  = b->fenster / 2;
+        const int r  = b->window / 2;
 
-        int frei = 0;
+        int free = 0;
         for (int dx = -r; dx <= r; ++dx)
             for (int dz = -r; dz <= r; ++dz)
             {
                 const long long nk = (static_cast<long long>(gx + dx) << 24)
                                    |  static_cast<long long>(gz + dz);
-                std::map<long long, std::vector<int>>::const_iterator f = freiRaster.find(nk);
-                if (f == freiRaster.end()) continue;
+                std::map<long long, std::vector<int>>::const_iterator f = freeGrid.find(nk);
+                if (f == freeGrid.end()) continue;
                 for (int h : f->second)
                 {
                     int dy = h - y;
                     if (dy < 0) dy = -dy;
-                    if (dy <= 512) { ++frei; break; }   // ein Stockwerk zaehlt einmal
+                    if (dy <= 512) { ++free; break; }   // one story counts once
                 }
             }
-        return frei >= b->frei;
+        return free >= b->free;
     };
 
-    if (opt.swapEnemies && (in.enemyTypes.size() > 1 || !crossGewaehlt.empty()))
+    if (opt.swapEnemies && (in.enemyTypes.size() > 1 || !crossChosen.empty()))
     {
-        std::set<int> erlaubt(in.enemyTypes.begin(), in.enemyTypes.end());
-        for (int t : in.forbiddenTypes) erlaubt.erase(t);
+        std::set<int> allowed(in.enemyTypes.begin(), in.enemyTypes.end());
+        for (int t : in.forbiddenTypes) allowed.erase(t);
 
-        std::vector<int> indizes;                 // Item-Indizes der Tauschbaren
-        std::vector<int> arten;                   // ihre Typen, gleiche Reihenfolge
+        std::vector<int> indices;                 // item indices of the swappable
+        std::vector<int> kinds;                   // their types, same order
         for (const LevelItem& it : in.items)
         {
-            if (!erlaubt.count(it.typeId)) continue;
-            // Handkuration schlaegt alles: was dort steht, bleibt wie es ist.
+            if (!allowed.count(it.typeId)) continue;
+            // Hand curation beats everything: what stands there stays as it is.
             if (std::find(in.fixedItems.begin(), in.fixedItems.end(), it.index) != in.fixedItems.end())
                 continue;
-            // Antitrigger-Ziele duerfen mittauschen: der getauschte Gegner
-            // bekommt unten die Antitrigger-Immunitaet mit (siehe dort).
-            // OCB != 0 heisst in der Regel: typspezifischer Spezial-Spawn.
-            // Die OCB steuert Initialise/Control des URSPRUNGSTYPS (Imp
-            // 1/2/3/11/12: Kletter-/Wurfzustaende auf Wandvorspruengen,
-            // imp.cpp:82) - ein fremder Typ versteht sie nicht und steht dann
-            // in der Wand (im Spiel gesehen: andy3 Items 2/3, Klippen-Imps
-            // OCB 3 wurden SWAT/Guard - Grafikloch, Zielerfassung flackert).
+            // Antitrigger targets may join the swap: the swapped enemy gets
+            // the antitrigger immunity below (see there).
+            // OCB != 0 usually means: a type-specific special spawn. The
+            // OCB drives Initialise/Control of the ORIGINAL type (Imp
+            // 1/2/3/11/12: climb/throw states on wall ledges, imp.cpp:82) -
+            // a foreign type does not understand it and then stands in the
+            // wall (seen in game: andy3 items 2/3, cliff imps OCB 3 became
+            // SWAT/guard - graphics hole, target lock flickers).
             //
-            // Larson und Pierre (45/47) sind die begruendete Ausnahme: bei
-            // ihnen beschreibt die OCB KEINE Sonderumgebung, sondern nur drei
-            // harmlose Dinge (pierre.cpp:70-83 und 124-135) - die Kennung
-            // ihres Fluchtmarkers (item_flags[3]), einen Versatz von 384
-            // Einheiten innerhalb desselben Sektors und den Start im
-            // Wachmodus. Nichts davon steckt in der Geometrie. Ein fremder
-            // Typ darf hier also einziehen, solange die OCB dabei auf 0
-            // faellt - sonst deutet er sie als seine eigene.
+            // Larson and Pierre (45/47) are the reasoned exception: with
+            // them the OCB describes NO special environment, only three
+            // harmless things (pierre.cpp:70-83 and 124-135) - the tag of
+            // their flee marker (item_flags[3]), an offset of 384 units
+            // within the same sector and the start in guard mode. None of
+            // it sits in the geometry. A foreign type may thus move in, as
+            // long as the OCB drops to 0 in the process - otherwise he
+            // reads it as his own.
             //
-            // Betroffen sind im ganzen Spiel drei Items: Andrea1 34 (OCB 1)
-            // und 35 (OCB 2), beide mit eigenem AI_AMBUSH-Marker in Raum 89
-            // bzw. 169, sowie Andrea2 76 - der gescriptete Miniboss, der
-            // ueber fixedItems geschuetzt ist und oben schon aussortiert
-            // wurde.
-            // NACHTRAG 2026-08-17 (#109), Nutzerdurchsicht Item fuer Item:
-            // Die Sperre war zu breit. Bei der Soldatenfamilie waehlt die OCB
-            // nur die SPAWN-POSE (InitialiseSas: durchs Fenster einsteigen,
-            // vom Sims abseilen, aus dem Sitzen aufstehen) - das steckt nicht
-            // in der Geometrie, der neue Typ steht danach einfach normal da.
+            // Three items in the whole game are affected: Andrea1 34
+            // (OCB 1) and 35 (OCB 2), both with their own AI_AMBUSH marker
+            // in room 89 resp. 169, plus Andrea2 76 - the scripted
+            // miniboss, protected via fixedItems and already sorted out
+            // above.
+            // ADDENDUM 2026-08-17 (#109), user review item by item: the
+            // bar was too broad. With the soldier family the OCB only
+            // picks the SPAWN POSE (InitialiseSas: climb in through the
+            // window, rappel from the ledge, get up from sitting) - that
+            // does not sit in the geometry, the new type simply stands
+            // there normally afterwards.
             //
-            // Und der Imp ist NICHT der Sonderfall, fuer den ich ihn gehalten
-            // habe: der Nutzer hat den alten Befund als Fehlalarm eingeordnet
-            // ("die sind da faelschlich gelandet, das war ein false Flag
-            // wegen einem anderen Bug"). Der oben beschriebene Grafikfehler
-            // in andy3 kam von woanders. Zu andy1 ausdruecklich: "das wird
-            // eher lustig, wenn auf einmal die alle spawnen."
+            // And the Imp is NOT the special case I took him for: the user
+            // classified the old find as a false alarm ("they landed there
+            // wrongly, that was a false flag due to another bug"). The
+            // graphics bug in andy3 described above came from elsewhere. On
+            // andy1 explicitly: "that will rather be fun when suddenly they
+            // all spawn."
             //
-            // Was NICHT ueber diese Liste laeuft, sondern ueber fixedItems
-            // (eine Typregel kann kein einzelnes Item schuetzen):
-            //   rich3 53 und 54 - haengen am Rope und bleiben vorerst
-            //   joby2 69        - wartet auf die Slot-Entkopplung (#111)
+            // What does NOT run via this list but via fixedItems (a type
+            // rule cannot protect a single item):
+            //   rich3 53 and 54 - hang on the rope and stay for now
+            //   joby2 69        - waits for the slot decoupling (#111)
             const int ot = it.typeId;
-            const bool ocbNurPose =
-                   ot == 45 || ot == 47            // Larson/Pierre: Markerkennung
+            const bool ocbOnlyPose =
+                   ot == 45 || ot == 47            // Larson/Pierre: marker tag
                 || ot == 33 || ot == 35            // SWAT, SWAT+
-                || ot == 37 || ot == 460           // Wachmann, Wachmann (Joby)
+                || ot == 37 || ot == 460           // guard, guard (Joby)
                 || ot == 39                        // Two Gun
                 || ot == 49 || ot == 51            // Mafia, Mafia2
                 || ot == 55                        // Crane Guy
                 || ot == 89;                       // Imp
-            if (it.ocb != 0 && !ocbNurPose) continue;
-            indizes.push_back(it.index);
-            arten.push_back(it.typeId);
+            if (it.ocb != 0 && !ocbOnlyPose) continue;
+            indices.push_back(it.index);
+            kinds.push_back(it.typeId);
         }
 
-        if (indizes.size() > 1 || (!indizes.empty() && !crossGewaehlt.empty()))
+        if (indices.size() > 1 || (!indices.empty() && !crossChosen.empty()))
         {
-            // Fisher-Yates ueber die Typen. Der RNG ist derselbe wie ueberall,
-            // der Seed bestimmt das Ergebnis also vollstaendig.
-            for (size_t i = arten.size() - 1; i > 0; --i)
+            // Fisher-Yates over the types. The RNG is the same as
+            // everywhere, so the seed determines the result completely.
+            for (size_t i = kinds.size() - 1; i > 0; --i)
             {
                 const size_t j = static_cast<size_t>(rng.below(i + 1));
-                std::swap(arten[i], arten[j]);
+                std::swap(kinds[i], kinds[j]);
             }
 
-            // Allsanity: jede Rolle wuerfelt frei aus dem VOLLEN Pool -
-            // maximale Auswahl, das Level darf sein Gesicht verlieren
-            // (Nutzerwunsch). Cross-Mix dagegen bleibt zurueckhaltend:
-            // etwa jede vierte Rolle geht an einen der bis zu drei
-            // gewaehlten fremden Typen, das Level wirkt durchmischt,
-            // nicht ausgetauscht.
-            // Rudelgegner nehmen am Tausch NICHT teil (#98). Ein Tausch
-            // aendert nur die Art eines vorhandenen Items - Begleiter liessen
-            // sich nur unterbringen, indem man Cores bestehende Triggerkette
-            // aufbohrt, und ein einzelner Compy funktioniert nicht (siehe
-            // kHerden). Sie kommen ausschliesslich als Zusatzgegner ins Level,
-            // dort gehoert uns der Trigger. Gefiltert wird schon bei der
-            // Ziehung: sonst faenden Wuerfe reihenweise auf einen Typ, der
-            // hinterher doch abgelehnt wird, und die Rolle bliebe vanilla.
-            std::vector<int> tauschPool;
-            for (int t : gegnerPool)
-                if (herdenGroesse(t) == 1) tauschPool.push_back(t);
+            // Allsanity: every role rolls freely from the FULL pool -
+            // maximum variety, the level may lose its face (user wish).
+            // Cross mix, by contrast, stays restrained: about every fourth
+            // role goes to one of the up to three chosen foreign types,
+            // the level feels mixed through, not exchanged.
+            // Pack enemies do NOT take part in the swap (#98). A swap only
+            // changes an existing item's kind - companions could only be
+            // fitted by drilling open Core's existing trigger chain, and a
+            // single compy does not work (see kHerds). They only enter the
+            // level as extra enemies, where the trigger is ours. Filtered
+            // already at the draw: otherwise rolls would land on a type
+            // repeatedly that is rejected afterwards, and the role would
+            // stay vanilla.
+            std::vector<int> swapPool;
+            for (int t : enemyPool)
+                if (herdSize(t) == 1) swapPool.push_back(t);
 
-            if (opt.allsanity && !tauschPool.empty())
+            if (opt.allsanity && !swapPool.empty())
             {
-                for (size_t i = 0; i < arten.size(); ++i)
-                    arten[i] = tauschPool[static_cast<size_t>(rng.below(tauschPool.size()))];
+                for (size_t i = 0; i < kinds.size(); ++i)
+                    kinds[i] = swapPool[static_cast<size_t>(rng.below(swapPool.size()))];
             }
-            else if (!crossGewaehlt.empty())
+            else if (!crossChosen.empty())
             {
-                std::vector<int> crossTausch;
-                for (std::map<int, const CrossGegner*>::const_iterator w = crossGewaehlt.begin();
-                     w != crossGewaehlt.end(); ++w)
-                    if (herdenGroesse(w->first) == 1) crossTausch.push_back(w->first);
+                std::vector<int> crossSwap;
+                for (std::map<int, const CrossEnemy*>::const_iterator w = crossChosen.begin();
+                     w != crossChosen.end(); ++w)
+                    if (herdSize(w->first) == 1) crossSwap.push_back(w->first);
 
-                for (size_t i = 0; i < arten.size() && !crossTausch.empty(); ++i)
+                for (size_t i = 0; i < kinds.size() && !crossSwap.empty(); ++i)
                 {
                     if (rng.below(4) != 0) continue;
-                    arten[i] = crossTausch[static_cast<size_t>(rng.below(crossTausch.size()))];
+                    kinds[i] = crossSwap[static_cast<size_t>(rng.below(crossSwap.size()))];
                 }
             }
 
-            for (size_t i = 0; i < indizes.size(); ++i)
+            for (size_t i = 0; i < indices.size(); ++i)
             {
-                std::map<int, LevelItem>::iterator f = finalOf.find(indizes[i]);
-                if (f == finalOf.end() || f->second.typeId == arten[i]) continue;
+                std::map<int, LevelItem>::iterator f = finalOf.find(indices[i]);
+                if (f == finalOf.end() || f->second.typeId == kinds[i]) continue;
 
-                // Grosse Gegner brauchen freien Platz um sich (siehe
-                // kRaumbedarf). Passt der ausgewuerfelte Typ hier nicht, bleibt
-                // das Item auf seinem alten Typ stehen - ein Gegner weniger im
-                // Mix ist besser als eine Hydra, die in ihrer Kammer festsitzt.
-                if (!genugPlatz(arten[i], f->second.room,
+                // Big enemies need free space around them (see kSpaceNeeds).
+                // If the rolled type does not fit here, the item stays on
+                // its old type - one enemy fewer in the mix is better than
+                // a Hydra stuck in her chamber.
+                if (!enoughSpace(kinds[i], f->second.room,
                                 f->second.sectorX, f->second.sectorZ, f->second.y))
                 {
-                    report.notes.push_back(fmt("Gegner Item %d: typeId %d braucht mehr freien Platz, als es in Raum %d hat - bleibt typeId %d.",
-                                               indizes[i], arten[i], f->second.room, f->second.typeId));
+                    report.notes.push_back(fmt("enemy item %d: typeId %d needs more free space than it has in room %d - stays typeId %d.",
+                                               indices[i], kinds[i], f->second.room, f->second.typeId));
                     continue;
                 }
 
-                // Steht dieser Gegner an einem Bedienelement, behaelt er
-                // seinen Vanilla-Typ (#120).
+                // If this enemy stands at an operable fixture, he keeps his
+                // vanilla type (#120).
                 //
-                // Die Sperre fuer ZUSATZgegner allein reicht nicht: hier
-                // wechselt kein Ort, sondern eine Art. Wer neben einem
-                // Schluesselloch steht und zum T-Rex wird, blockiert die
-                // Bedienung genauso - nur faellt es beim Wuerfeln nicht auf,
-                // weil der Platz ja vanilla besetzt war.
+                // The bar for EXTRA enemies alone does not suffice: here no
+                // place changes, but a kind. Whoever stands next to a
+                // keyhole and becomes a T-Rex blocks the operation just the
+                // same - it just does not show while rolling, because the
+                // place was occupied in vanilla.
                 //
-                // Core hat den Gegner dort hingestellt und offenbar fuer
-                // vertraeglich befunden; ihn einfach stehen zu lassen ist
-                // deshalb die sichere Antwort und braucht keine Tabelle
-                // darueber, welcher Typ "gross" ist.
+                // Core put the enemy there and evidently found it
+                // tolerable; simply leaving him is therefore the safe
+                // answer and needs no table of which type is "big".
                 {
-                    bool anBedienelement = false;
+                    bool atOperable = false;
                     for (const auto& kv : finalOf)
                     {
-                        if (!istBedienelement(kv.second.typeId)) continue;
+                        if (!isOperableFixture(kv.second.typeId)) continue;
                         if (std::abs(kv.second.x - f->second.x) > 1536) continue;
                         if (std::abs(kv.second.z - f->second.z) > 1536) continue;
                         if (std::abs(kv.second.y - f->second.y) > 512) continue;
-                        anBedienelement = true;
+                        atOperable = true;
                         break;
                     }
-                    if (anBedienelement)
+                    if (atOperable)
                     {
-                        report.notes.push_back(fmt("Gegner Item %d steht an einem Bedienelement - bleibt typeId %d statt %d.",
-                                                   indizes[i], f->second.typeId, arten[i]));
+                        report.notes.push_back(fmt("enemy item %d stands at an operable fixture - stays typeId %d instead of %d.",
+                                                   indices[i], f->second.typeId, kinds[i]));
                         continue;
                     }
                 }
 
                 JsonValue e = JsonValue::makeObject();
-                e.set("index", JsonValue::makeInt(indizes[i]));
-                e.set("typeId", JsonValue::makeInt(arten[i]));
+                e.set("index", JsonValue::makeInt(indices[i]));
+                e.set("typeId", JsonValue::makeInt(kinds[i]));
 
-                // Die OCB gehoerte dem alten Typ (nur Larson/Pierre kommen
-                // ueberhaupt mit einer hierher, siehe oben). Der neue Typ
-                // wuerde sie als seine eigene read - deshalb weg damit.
-                // Fuer Typen, deren OCB ein VERHALTEN waehlt, steht der
-                // richtige Wert in kSpawnOcb (Roman God: Waffenart).
-                const int wunschOcb = spawnOcbFuer(arten[i]);
-                if (f->second.ocb != wunschOcb)
+                // The OCB belonged to the old type (only Larson/Pierre even
+                // arrive here with one, see above). The new type would read
+                // it as his own - hence away with it. For types whose OCB
+                // picks a BEHAVIOR, the right value stands in kSpawnOcb
+                // (Roman god: weapon kind).
+                const int wantedOcb = spawnOcbFor(kinds[i]);
+                if (f->second.ocb != wantedOcb)
                 {
-                    e.set("ocb", JsonValue::makeInt(wunschOcb));
-                    report.notes.push_back(fmt("Item %d: OCB %d -> %d beim Typwechsel auf typeId %d.",
-                                               indizes[i], f->second.ocb, wunschOcb, arten[i]));
-                    f->second.ocb = wunschOcb;
+                    e.set("ocb", JsonValue::makeInt(wantedOcb));
+                    report.notes.push_back(fmt("item %d: OCB %d -> %d on the type change to typeId %d.",
+                                               indices[i], f->second.ocb, wantedOcb, kinds[i]));
+                    f->second.ocb = wantedOcb;
                 }
 
-                // Antitrigger-Immunitaet, falls noetig - Begruendung beim
-                // Nachzuegler-Durchgang weiter unten.
-                if (in.antitriggered.count(indizes[i]))
+                // Antitrigger immunity if needed - reasoning at the
+                // straggler pass further down.
+                if (in.antitriggered.count(indices[i]))
                 {
                     e.set("antitriggerImmune", JsonValue::makeBool(true));
-                    immunGesetzt.insert(indizes[i]);
+                    immuneSet.insert(indices[i]);
                 }
 
                 edits.push(e);
 
-                report.notes.push_back(fmt("Gegner Item %d: typeId %d -> %d",
-                                           indizes[i], f->second.typeId, arten[i]));
-                f->second.typeId = arten[i];
-                if (crossGewaehlt.count(arten[i])) crossBenutzt.insert(arten[i]);
+                report.notes.push_back(fmt("enemy item %d: typeId %d -> %d",
+                                           indices[i], f->second.typeId, kinds[i]));
+                f->second.typeId = kinds[i];
+                if (crossChosen.count(kinds[i])) crossUsed.insert(kinds[i]);
                 ++report.enemiesSwapped;
             }
         }
         else
-            report.notes.push_back(fmt("Gegnertausch: nur %d tauschbare Gegner im Level, nichts zu mischen.",
-                                       static_cast<int>(indizes.size())));
+            report.notes.push_back(fmt("enemy swap: only %d swappable enemies in the level, nothing to mix.",
+                                       static_cast<int>(indices.size())));
     }
 
-    // --- Antitrigger-Immunitaet fuer JEDEN betroffenen Gegner ---
+    // --- Antitrigger immunity for EVERY affected enemy ---
     //
-    // Der Item-Verlust ist der eigentliche Grund, und er haengt NICHT am
-    // Typentausch: GetCarriedItems (setup.cpp:1962) haengt beim Levelstart
-    // jedes Pickup im Umkreis von 512 Einheiten an den naechsten Gegner -
-    // RemoveDrawnItem, room_number = NO_ROOM, das Item ist danach nur noch
-    // dessen Fracht. Stirbt er normal, gibt CreatureDie sie ueber
-    // DropBaddyPickups wieder frei (box.cpp:880). Der Antitrigger dagegen
-    // ruft direkt KillItem (control.cpp:2422) - Gegner UND Fracht sind weg.
+    // The item loss is the real reason, and it does NOT hang on the type
+    // swap: GetCarriedItems (setup.cpp:1962) attaches every pickup within
+    // 512 units to the nearest enemy at level start - RemoveDrawnItem,
+    // room_number = NO_ROOM, the item is then nothing but his cargo. If he
+    // dies normally, CreatureDie releases it via DropBaddyPickups
+    // (box.cpp:880). The antitrigger, by contrast, calls KillItem directly
+    // (control.cpp:2422) - enemy AND cargo are gone.
     //
-    // In Vanilla ist das folgenlos, weil Core neben solche Gegner nichts
-    // legt. Sobald die Items wandern, kann dort aber ein Schluesselitem
-    // liegen, und dann ist das Level nach einem Schritt auf den
-    // Antitrigger-Sektor unloesbar - ohne jede Meldung.
+    // In vanilla that has no consequences, because Core lays nothing next
+    // to such enemies. As soon as the items travel, a key item can lie
+    // there, and then the level is unsolvable after one step onto the
+    // antitrigger sector - without any message.
     //
-    // Deshalb bekommt jeder betroffene Gegner das Immunitaetsbit, auch der
-    // ungetauschte. Wirkung wie "den Zeiger aus dem Antitrigger nehmen", nur
-    // am Item statt an der Floordata: der Antitrigger fuehrt ihn weiter auf,
-    // ueberspringt ihn aber (control.cpp:2378), und alle anderen Zeiger
-    // desselben Triggers arbeiten unveraendert weiter.
+    // Hence every affected enemy gets the immunity bit, the unswapped one
+    // too. Effect like "taking the pointer out of the antitrigger", only at
+    // the item instead of the floordata: the antitrigger still lists him
+    // but skips him (control.cpp:2378), and all other pointers of the same
+    // trigger keep working unchanged.
     //
-    // Nur wenn Items ueberhaupt wandern: bei reiner Gegner-Randomisierung
-    // gibt es nichts zu verlieren, und ein Vanilla-Lauf soll vanilla bleiben.
+    // Only if items travel at all: with pure enemy randomization there is
+    // nothing to lose, and a vanilla run should stay vanilla.
     if (opt.shuffleKeyItems || opt.shuffleOtherPickups)
     {
-        std::set<int> enemyKinds(in.enemyTypes.begin(), in.enemyTypes.end());
-        for (std::map<int, const CrossGegner*>::const_iterator c = crossGewaehlt.begin();
-             c != crossGewaehlt.end(); ++c)
-            enemyKinds.insert(c->first);
+        std::set<int> enemyKindSet(in.enemyTypes.begin(), in.enemyTypes.end());
+        for (std::map<int, const CrossEnemy*>::const_iterator c = crossChosen.begin();
+             c != crossChosen.end(); ++c)
+            enemyKindSet.insert(c->first);
 
-        int nachgezogen = 0;
+        int backfilled = 0;
         for (int idx : in.antitriggered)
         {
-            if (immunGesetzt.count(idx)) continue;
+            if (immuneSet.count(idx)) continue;
             std::map<int, LevelItem>::const_iterator f = finalOf.find(idx);
-            // Nur Gegner: ein Antitrigger auf eine Tuer oder eine Flipmap
-            // muss weiter feuern, sonst steht das Level still.
-            if (f == finalOf.end() || !enemyKinds.count(f->second.typeId)) continue;
+            // Enemies only: an antitrigger on a door or a flipmap must keep
+            // firing, or the level stands still.
+            if (f == finalOf.end() || !enemyKindSet.count(f->second.typeId)) continue;
 
             JsonValue e = JsonValue::makeObject();
             e.set("index", JsonValue::makeInt(idx));
             e.set("antitriggerImmune", JsonValue::makeBool(true));
             edits.push(e);
-            immunGesetzt.insert(idx);
-            ++nachgezogen;
+            immuneSet.insert(idx);
+            ++backfilled;
         }
-        if (!immunGesetzt.empty())
-            report.notes.push_back(fmt("Antitrigger: %d Gegner immun gesetzt (%d davon ungetauscht) - "
-                                       "schuetzt getragene Items vor dem Verschwinden.",
-                                       static_cast<int>(immunGesetzt.size()), nachgezogen));
+        if (!immuneSet.empty())
+            report.notes.push_back(fmt("antitrigger: %d enemies made immune (%d of them unswapped) - "
+                                       "protects carried items from vanishing.",
+                                       static_cast<int>(immuneSet.size()), backfilled));
     }
 
-    // Kuratierte Antitrigger-Immunitaeten: gelten IMMER, unabhaengig davon, ob
-    // Items wandern - sie beschreiben Levellogik, nicht eine Nebenwirkung der
-    // Randomisierung. rich2s Tuer 171 ist der Fall (siehe Kurationstabelle).
+    // Curated antitrigger immunities: they apply ALWAYS, regardless of
+    // whether items travel - they describe level logic, not a side effect
+    // of the randomization. rich2's door 171 is the case (see the curation
+    // table).
     for (int idx : in.antitriggerImmunItems)
     {
-        if (immunGesetzt.count(idx)) continue;
+        if (immuneSet.count(idx)) continue;
         JsonValue e = JsonValue::makeObject();
         e.set("index", JsonValue::makeInt(idx));
         e.set("antitriggerImmune", JsonValue::makeBool(true));
         edits.push(e);
-        immunGesetzt.insert(idx);
-        report.notes.push_back(fmt("Item %d: kuratierte Antitrigger-Immunitaet gesetzt.", idx));
+        immuneSet.insert(idx);
+        report.notes.push_back(fmt("item %d: curated antitrigger immunity set.", idx));
     }
 
-    // --- Zusaetzliche Gegner ---
+    // --- Extra enemies ---
     //
-    // Zwei Dinge muessen zusammenpassen, und beide sind Nutzervorgaben aus
-    // Beobachtungen im Spiel:
+    // Two things must fit together, and both are user requirements from
+    // observations in game:
     //
-    //  1. Der Trigger darf NIE auf dem Gegnersektor liegen. Sonst spawnt der
-    //     Gegner in Lara hinein.
-    //  2. Er muss trotzdem sicher ueberquert werden, sonst wacht der Gegner nie
-    //     auf.
+    //  1. The trigger must NEVER lie on the enemy sector. Otherwise the
+    //     enemy spawns into Lara.
+    //  2. It must still be crossed reliably, or the enemy never wakes up.
     //
-    // Beides erfuellt der Anmarschsektor: er liegt etwa drei Schritte vor dem
-    // Gegner auf Laras Erstzugangsweg. Ausgerechnet wird er im Zonen-Export, wo
-    // der Erstzugangsbaum liegt - hier kommt nur noch die fertige Antwort an.
+    // Both are satisfied by the approach sector: it lies about three steps
+    // before the enemy on Lara's first-access path. It is computed in the
+    // zone export where the first-access tree lives - only the finished
+    // answer arrives here.
     //
-    // Der Trigger bekommt OneShot. Das ist keine Formalie: _TestTriggers
-    // (control.cpp:2415) gibt das Bit als IFL_INVISIBLE ans Item weiter, und
-    // Larson ist ohne es gar nicht toetbar (pierre.cpp:68).
+    // The trigger gets OneShot. That is no formality: _TestTriggers
+    // (control.cpp:2415) passes the bit on to the item as IFL_INVISIBLE,
+    // and Larson cannot be killed at all without it (pierre.cpp:68).
     JsonValue trigAdds = JsonValue::makeArray();
-    if (opt.addEnemies && opt.enemiesPerLevel > 0 && !gegnerPool.empty())
+    if (opt.addEnemies && opt.enemiesPerLevel > 0 && !enemyPool.empty())
     {
-        // Die Engine haelt items[] als festes Feld von 512 Eintraegen
-        // (MAX_ITEMS, global/types.h - seit der Verdopplung; Tr5Level prueft
-        // es beim Anhaengen). Gedeckelt statt gehofft - ein abgewiesener
-        // Patch mitten im Lauf waere schlimmer als ein Gegner weniger.
-        const int platzFrei = 512 - static_cast<int>(in.items.size()) - static_cast<int>(adds.size());
+        // The engine holds items[] as a fixed field of 512 entries
+        // (MAX_ITEMS, global/types.h - since the doubling; Tr5Level checks
+        // it when appending). Capped instead of hoped - a rejected patch
+        // mid-run would be worse than one enemy fewer.
+        const int slotsFree = 512 - static_cast<int>(in.items.size()) - static_cast<int>(adds.size());
 
-        // Wohin darf ein Gegner? Auf einen freien Sektor, dessen Anmarsch
-        // ebenfalls frei ist und einen Trigger vertraegt.
+        // Where may an enemy go? Onto a free sector whose approach is also
+        // free and tolerates a trigger.
         //
-        // ALLE tauglichen Anmarschsektoren mitfuehren, nicht nur den besten:
-        // zwei verschiedene Gegnerfelder koennen denselben Anmarschsektor
-        // haben. Wer sich hier auf einen festlegt, merkt beim zweiten Gegner
-        // nicht mehr, dass dessen Trigger schon vergeben ist - und setzt zwei
-        // Trigger auf ein Feld. Beim Patchen fliegt das dann auf, und zwar
-        // nicht als "ein Gegner weniger", sondern als verlorenes Level.
-        struct Platz { const ZoneSector* s; std::vector<long long> trigger; };
-        std::vector<Platz> plaetze;
+        // Carry ALL suitable approach sectors along, not only the best:
+        // two different enemy tiles can have the same approach sector.
+        // Whoever settles on one here no longer notices at the second
+        // enemy that its trigger is already taken - and sets two triggers
+        // on one tile. That then blows up while patching, and not as "one
+        // enemy fewer" but as a lost level.
+        struct Spot { const ZoneSector* s; std::vector<long long> trigger; };
+        std::vector<Spot> spots;
         for (const ZoneSector& s : pool)
         {
             const long long sk = secKey(s.room, s.sectorX, s.sectorZ);
             if (used.count(sk)) continue;
             if (!origin.count(s.room)) continue;
-            // Nutzervorgabe: kein Gegner in einen Raum mit Wasser-Flag.
+            // User requirement: no enemy into a room with the water flag.
             if (in.waterRooms.count(s.room)) continue;
 
-            // Kein neuer Gegner im Traeger-Kasten eines Wandgriffs (Testlauf
-            // 2026-08-20, joby3: der Imp trug die frisch gesetzte Brechstangen-
-            // Stelle davon, das Item schwebte danach unaufnehmbar in der Luft).
-            // GetCarriedItems prueft |dx|<512, |dy|<256, |dz|<512 gegen die
-            // GEGNERposition beim Levelstart - hier mit Marge (576/320), weil
-            // der Gegner auf der Sektormitte, der Griff aber an einer
-            // Wandkante steht. finalOf traegt die endgueltigen Plaetze samt
-            // OCB, die Wandgriffe stehen also schon fest.
+            // No new enemy in a wall grab's carrier box (test run
+            // 2026-08-20, joby3: the Imp carried the freshly placed crowbar
+            // spot away, the item then floated unpickable in the air).
+            // GetCarriedItems checks |dx|<512, |dy|<256, |dz|<512 against
+            // the ENEMY position at level start - here with a margin
+            // (576/320), because the enemy stands on the sector center but
+            // the grab at a wall edge. finalOf carries the final places
+            // including OCB, so the wall grabs are already fixed.
             {
-                bool wandNah = false;
+                bool wallNear = false;
                 const RoomOrigin& roW = origin[s.room];
                 const int cx = roW.originX + s.sectorX * 1024 + 512;
                 const int cz = roW.originZ + s.sectorZ * 1024 + 512;
@@ -2420,50 +2414,50 @@ bool Rando::run(const RandoInput& in,
                     if ((p2.ocb & 0x3F) != 2 && (p2.ocb & 0x3F) != 9) continue;
                     if (!isPickupType(p2.typeId)) continue;
                     if (std::abs(p2.x - cx) < 576 && std::abs(p2.z - cz) < 576 &&
-                        std::abs(p2.y - s.floorY) < 320) { wandNah = true; break; }
+                        std::abs(p2.y - s.floorY) < 320) { wallNear = true; break; }
                 }
-                if (wandNah) continue;
+                if (wallNear) continue;
             }
 
-            // Kein neuer Gegner an einem BEDIENELEMENT (#120).
+            // No new enemy at an OPERABLE FIXTURE (#120).
             //
-            // Der Nutzer hat den Fall an joby5 gezeigt: das Schloss fuer Tuer
-            // 177 und das Ventil fuer 127 sitzen direkt an ihrer Tuer. Steht
-            // dort ein grosser Gegner - Statue, T-Rex, TwoGun -, schiebt seine
-            // Hitbox Lara weg, bevor die Bedienanimation anlaufen kann. Die
-            // Tuer ist dann nie zu oeffnen, und das Level ist verloren.
+            // The user showed the case on joby5: the lock for door 177 and
+            // the valve for 127 sit directly at their door. If a big enemy
+            // stands there - statue, T-Rex, TwoGun - his hitbox pushes Lara
+            // away before the operating animation can start. The door can
+            // then never be opened, and the level is lost.
             //
-            // Gesperrt wird fuer JEDEN Gegnertyp, nicht nur fuer grosse.
-            // Wo die Grenze zwischen "schiebt weg" und "stoert nicht" genau
-            // liegt, haengt an Radius, Zustand und Anmarschwinkel und waere
-            // eine Tabelle voller Schaetzwerte - ein Softlock ist teurer als
-            // ein Gegner, der woanders steht. Gemessen kostet die Regel je
-            // nach Level 0 bis 18 Prozent der Gegnerplaetze (rich1 ist der
-            // Ausreisser mit 65 von 361); zum Setzen von zwanzig Gegnern
-            // bleibt ueberall reichlich uebrig.
+            // Barred for EVERY enemy type, not only big ones. Where exactly
+            // the line between "pushes away" and "does not disturb" lies
+            // hangs on radius, state and approach angle and would be a
+            // table full of guesses - a softlock is more expensive than an
+            // enemy standing elsewhere. Measured, the rule costs 0 to 18
+            // percent of the enemy spots depending on the level (rich1 is
+            // the outlier with 65 of 361); plenty remains everywhere for
+            // placing twenty enemies.
             //
-            // 1536 Units ist kein runder Daumenwert: Bedienelemente stehen an
-            // der Wandkante, bis zu 512 von der Sektormitte entfernt. Erst
-            // 512 + 1024 deckt sicher den Sektor des Objekts UND die
-            // Nachbarfelder ab, auf denen Lara zum Bedienen steht.
+            // 1536 units is no round thumb value: operable fixtures stand
+            // at the wall edge, up to 512 from the sector center. Only
+            // 512 + 1024 safely covers the object's sector AND the
+            // neighboring tiles Lara stands on to operate.
             {
-                bool bedienNah = false;
+                bool operableNear = false;
                 const RoomOrigin& roB = origin[s.room];
                 const int bx = roB.originX + s.sectorX * 1024 + 512;
                 const int bz = roB.originZ + s.sectorZ * 1024 + 512;
                 for (const auto& kv : finalOf)
                 {
-                    if (!istBedienelement(kv.second.typeId)) continue;
+                    if (!isOperableFixture(kv.second.typeId)) continue;
                     if (std::abs(kv.second.x - bx) > 1536) continue;
                     if (std::abs(kv.second.z - bz) > 1536) continue;
                     if (std::abs(kv.second.y - s.floorY) > 512) continue;
-                    bedienNah = true;
+                    operableNear = true;
                     break;
                 }
-                if (bedienNah) continue;
+                if (operableNear) continue;
             }
 
-            Platz p;
+            Spot p;
             p.s = &s;
             for (long long a : s.approach)
             {
@@ -2471,88 +2465,88 @@ bool Rando::run(const RandoInput& in,
                 if (!in.triggerSafeSectors.count(a)) continue;
                 p.trigger.push_back(a);
             }
-            if (!p.trigger.empty()) plaetze.push_back(p);
+            if (!p.trigger.empty()) spots.push_back(p);
         }
 
-        int wieViele = opt.enemiesPerLevel;
-        if (wieViele > platzFrei) wieViele = platzFrei;
-        if (wieViele > static_cast<int>(plaetze.size())) wieViele = static_cast<int>(plaetze.size());
+        int howMany = opt.enemiesPerLevel;
+        if (howMany > slotsFree) howMany = slotsFree;
+        if (howMany > static_cast<int>(spots.size())) howMany = static_cast<int>(spots.size());
 
-        const int wollte = opt.enemiesPerLevel;
-        const int plaetzeVorher = static_cast<int>(plaetze.size());
+        const int wanted = opt.enemiesPerLevel;
+        const int spotsBefore = static_cast<int>(spots.size());
 
-        int gesetzt = 0;
-        while (gesetzt < wieViele && !plaetze.empty())
+        int placed = 0;
+        while (placed < howMany && !spots.empty())
         {
-            const size_t pick = static_cast<size_t>(rng.below(plaetze.size()));
-            const Platz p = plaetze[pick];
-            plaetze.erase(plaetze.begin() + static_cast<ptrdiff_t>(pick));
+            const size_t pick = static_cast<size_t>(rng.below(spots.size()));
+            const Spot p = spots[pick];
+            spots.erase(spots.begin() + static_cast<ptrdiff_t>(pick));
 
-            // Erst hier entscheidet sich der Trigger: bis zur Auswahl koennen
-            // andere Gegner Sektoren belegt haben.
+            // Only here does the trigger get decided: up to the selection,
+            // other enemies may have occupied sectors.
             long long trigger = -1;
             for (long long a : p.trigger)
                 if (!used.count(a)) { trigger = a; break; }
-            if (trigger < 0) continue;          // alle Anmarschfelder vergeben
+            if (trigger < 0) continue;          // all approach tiles taken
 
-            // Erst die Typen aussieben, die hier genug Platz finden (siehe
-            // kRaumbedarf), dann daraus wuerfeln. Andersherum - wuerfeln und
-            // bei Nichtpassen verwerfen - wuerde der Hydra jedes Mal einen
-            // Platz stehlen, den ein anderer Typ haette nutzen koennen.
-            std::vector<int> passend;
-            for (int t : gegnerPool)
+            // First sift the types that find enough space here (see
+            // kSpaceNeeds), then roll among them. The other way round -
+            // roll and discard on mismatch - would steal the Hydra a spot
+            // every time that another type could have used.
+            std::vector<int> fitting;
+            for (int t : enemyPool)
             {
-                if (!genugPlatz(t, p.s->room, p.s->sectorX, p.s->sectorZ, p.s->floorY)) continue;
-                // Ein Rudel muss KOMPLETT ins Item-Budget passen (#98) -
-                // lieber gar keine Compys als drei ohne den vierten.
-                if (herdenGroesse(t) > wieViele - gesetzt) continue;
-                passend.push_back(t);
+                if (!enoughSpace(t, p.s->room, p.s->sectorX, p.s->sectorZ, p.s->floorY)) continue;
+                // A pack must fit COMPLETELY into the item budget (#98) -
+                // rather no compys at all than three without the fourth.
+                if (herdSize(t) > howMany - placed) continue;
+                fitting.push_back(t);
             }
-            if (passend.empty()) continue;      // hier ist es fuer den ganzen Pool zu eng
+            if (fitting.empty()) continue;      // too tight here for the whole pool
 
-            const int typeId = passend[static_cast<size_t>(rng.below(passend.size()))];
-            const int herde = herdenGroesse(typeId);
-            gesetzt += herde;
-            if (crossGewaehlt.count(typeId)) crossBenutzt.insert(typeId);
+            const int typeId = fitting[static_cast<size_t>(rng.below(fitting.size()))];
+            const int herd = herdSize(typeId);
+            placed += herd;
+            if (crossChosen.count(typeId)) crossUsed.insert(typeId);
             const RoomOrigin& ro = origin[p.s->room];
 
-            // Der Index, den das neue Item bekommt: itemAdds haengt hinten an,
-            // in genau dieser Reihenfolge.
-            const int neuerIndex = static_cast<int>(in.items.size()) + static_cast<int>(adds.size());
+            // The index the new item gets: itemAdds appends at the back, in
+            // exactly this order.
+            const int newIndex = static_cast<int>(in.items.size()) + static_cast<int>(adds.size());
 
-            // Auch der Gegner bekommt die echte Bodenhoehe - er wuerde zwar
-            // von der Engine auf den Boden gesetzt, soll aber nicht einen
-            // halben Sektor tief einfallen. Belaufbarkeit ist fuer ihn keine
-            // Bedingung, deshalb nur die Hoehe.
-            int gyBoden = 0;
-            Rando::floorAt(in, *p.s, 512, 512, gyBoden);
+            // The enemy too gets the true floor height - the engine would
+            // put him on the floor anyway, but he should not drop in half a
+            // sector deep. Walkability is no condition for him, hence only
+            // the height.
+            int gyFloor = 0;
+            Rando::floorAt(in, *p.s, 512, 512, gyFloor);
 
-            // Ein Rudel steht auf EINEM Sektor - wie Andrea2 seine drei
-            // Hydra-Glieder. Die Tiere verteilen sich zur Laufzeit selbst:
-            // ihre Formation haengt an der Item-Nummer, und die vergeben wir
-            // hier fortlaufend. Ein Trigger weckt alle.
+            // A pack stands on ONE sector - like Andrea2 its three Hydra
+            // links. The animals distribute themselves at runtime: their
+            // formation hangs on the item number, and we assign those
+            // consecutively here. One trigger wakes them all.
             JsonValue cmdList = JsonValue::makeArray();
-            for (int k = 0; k < herde; ++k)
+            for (int k = 0; k < herd; ++k)
             {
                 JsonValue a = JsonValue::makeObject();
                 a.set("typeId", JsonValue::makeInt(typeId));
                 a.set("room", JsonValue::makeInt(p.s->room));
                 a.set("x", JsonValue::makeInt(static_cast<int64_t>(ro.originX) + p.s->sectorX * 1024 + 512));
-                a.set("y", JsonValue::makeInt(gyBoden));
+                a.set("y", JsonValue::makeInt(gyFloor));
                 a.set("z", JsonValue::makeInt(static_cast<int64_t>(ro.originZ) + p.s->sectorZ * 1024 + 512));
-                // OCB 0 als Vorgabe: bei Larson setzt eine OCB != 0
-                // ai_bits = GUARD, und dann sucht er AI-Objekte, die an
-                // einer neuen Stelle nicht stehen (pierre.cpp:84).
-                // Ausnahme sind Typen, deren OCB ein VERHALTEN waehlt statt
-                // einer Umgebung - die stehen mit ihrem Wert in kSpawnOcb
-                // (Roman God: Waffenart, siehe dort).
-                a.set("ocb", JsonValue::makeInt(spawnOcbFuer(typeId)));
+                // OCB 0 as the default: with Larson an OCB != 0 sets
+                // ai_bits = GUARD, and then he looks for AI objects that do
+                // not stand at a new place (pierre.cpp:84). Types whose OCB
+                // picks a BEHAVIOR instead of an environment are the
+                // exception - they stand with their value in kSpawnOcb
+                // (Roman god: weapon kind, see there).
+                a.set("ocb", JsonValue::makeInt(spawnOcbFor(typeId)));
                 a.set("angle", JsonValue::makeInt(static_cast<int64_t>(rng.below(4)) * 16384 - 32768));
                 adds.push(a);
 
                 JsonValue cmd = JsonValue::makeObject();
                 cmd.set("type", JsonValue::makeInt(0));          // TO_OBJECT
-                cmd.set("param", JsonValue::makeInt(neuerIndex + k));
+                cmd.set("param", JsonValue::makeInt(newIndex + k));
                 cmdList.push(cmd);
             }
 
@@ -2569,45 +2563,45 @@ bool Rando::run(const RandoInput& in,
 
             used.insert(secKey(p.s->room, p.s->sectorX, p.s->sectorZ));
             used.insert(trigger);
-            report.enemiesAdded += herde;
-            if (herde > 1)
-                report.notes.push_back(fmt("Rudel: %d x typeId %d als Items %d-%d auf %d,%d,%d - ein Trigger auf %d,%d,%d",
-                                           herde, typeId, neuerIndex, neuerIndex + herde - 1,
+            report.enemiesAdded += herd;
+            if (herd > 1)
+                report.notes.push_back(fmt("pack: %d x typeId %d as items %d-%d on %d,%d,%d - one trigger on %d,%d,%d",
+                                           herd, typeId, newIndex, newIndex + herd - 1,
                                            p.s->room, p.s->sectorX, p.s->sectorZ, tr, tx, tz));
             else
-                report.notes.push_back(fmt("Gegner typeId %d als Item %d auf %d,%d,%d - Trigger auf %d,%d,%d",
-                                           typeId, neuerIndex, p.s->room, p.s->sectorX, p.s->sectorZ, tr, tx, tz));
+                report.notes.push_back(fmt("enemy typeId %d as item %d on %d,%d,%d - trigger on %d,%d,%d",
+                                           typeId, newIndex, p.s->room, p.s->sectorX, p.s->sectorZ, tr, tx, tz));
         }
 
-        // Der Lauf setzt so viele, wie das Level hergibt - fehlende Plaetze
-        // sind kein Fehler, sondern eine Eigenschaft des Levels. Gemeldet wird
-        // es trotzdem, sonst wundert sich jemand ueber die Zahl.
-        if (report.enemiesAdded < wollte)
-            report.notes.push_back(fmt("Nur %d von %d zusaetzlichen Gegnern gesetzt "
-                                       "(%d Plaetze zur Auswahl, %d Item-Slots frei).",
-                                       report.enemiesAdded, wollte, plaetzeVorher, platzFrei));
+        // The run places as many as the level yields - missing spots are no
+        // error but a property of the level. It is reported anyway, or
+        // someone wonders about the number.
+        if (report.enemiesAdded < wanted)
+            report.notes.push_back(fmt("only %d of %d extra enemies placed "
+                                       "(%d spots to choose from, %d item slots free).",
+                                       report.enemiesAdded, wanted, spotsBefore, slotsFree));
     }
 
-    // --- Was traegt am Ende wer? ---
+    // --- Who carries what in the end? ---
     //
-    // GetCarriedItems (game/setup.cpp:1925) laeuft beim Levelstart ueber alle
-    // Items und gibt jedem Traeger die Pickups, die dicht genug bei ihm liegen.
-    // Das ist gewollt und vom Nutzer ausdruecklich in Ordnung befunden: ein
-    // Schluessel beim Gegner ist eine gute Fundstelle.
+    // GetCarriedItems (game/setup.cpp:1925) runs over all items at level
+    // start and gives every carrier the pickups lying close enough to him.
+    // That is intended and expressly approved by the user: a key at an
+    // enemy is a good find.
     //
-    // Eine Bedingung gibt es aber. DropBaddyPickups (game/box.cpp:833) legt das
-    // Item beim Tod auf die Sektormitte des Gegners, und PickUpCollision
-    // (game/pickup.cpp:734) faechert ueber die OCB in Sonderfaelle auf, die Lara
-    // per TestLaraPosition an einer Kulisse ausrichten - an einer Kulisse, die
-    // am Fallort nicht steht. Ein getragenes Pickup mit OCB != 0 liegt danach
-    // fuer immer unaufnehmbar herum, ohne Absturz und ohne Meldung.
+    // But there is one condition. DropBaddyPickups (game/box.cpp:833) puts
+    // the item on the enemy's sector center at death, and PickUpCollision
+    // (game/pickup.cpp:734) fans out via the OCB into special cases that
+    // align Lara at a prop via TestLaraPosition - at a prop that does not
+    // stand at the drop site. A carried pickup with OCB != 0 lies there
+    // forever unpickable afterwards, without a crash and without a message.
     //
-    // Alles, was dieser Lauf bewegt, bekommt nach Regel 3 ohnehin OCB 0, und in
-    // Vanilla haben alle 56 getragenen Items ebenfalls OCB 0. Die Regel ist also
-    // erfuellt - nachgerechnet wird sie trotzdem, denn beides ist eine Zusage
-    // von aussen und keine Eigenschaft dieses Codes. Sobald Gegner selbst
-    // bewegt werden, kann ein Traeger auf einem ortsfesten Pickup landen, und
-    // dann faellt es hier auf statt im Spiel.
+    // Everything this run moves gets OCB 0 anyway per rule 3, and in
+    // vanilla all 56 carried items have OCB 0 as well. So the rule is
+    // satisfied - it is recomputed anyway, because both are promises from
+    // outside and no property of this code. As soon as enemies themselves
+    // are moved, a carrier can land on a pinned pickup, and then it shows
+    // up here instead of in game.
     for (const LevelItem& b : in.items)
     {
         if (!isCarrierType(b.typeId)) continue;
@@ -2620,32 +2614,31 @@ bool Rando::run(const RandoInput& in,
 
             if ((p.ocb & 0x3F) != 0)
             {
-                // Kein Abbruch. Bewegte Items bekommen immer OCB 0, ein Wert
-                // ungleich null kann also nur bedeuten, dass Item UND Traeger
-                // beide unveraendert dort liegen, wo Vanilla sie hingestellt
-                // hat. Daran ist dieser Lauf unschuldig, und einen Lauf an einer
-                // Vanilla-Konstellation scheitern zu lassen hat sich in diesem
-                // Projekt schon zweimal als falsch erwiesen.
+                // No abort. Moved items always get OCB 0, so a nonzero
+                // value can only mean that item AND carrier both lie
+                // unchanged where vanilla put them. This run is innocent of
+                // that, and letting a run fail on a vanilla constellation
+                // has already proven wrong twice in this project.
                 //
-                // Sobald Gegner selbst verschoben werden, aendert sich das: dann
-                // kann ein Traeger auf einem ortsfesten Pickup landen, und das
-                // waere sehr wohl unser Werk. Hier ist die Stelle, an der es
-                // dann zum Fehler werden muss.
-                report.notes.push_back(fmt("Item %d (typeId %d) liegt unveraendert bei Traeger %d und hat OCB %d - "
-                                           "abgelegt waere es nicht aufnehmbar (Vanilla-Zustand, nicht veraendert).",
+                // As soon as enemies themselves are moved, that changes:
+                // then a carrier can land on a pinned pickup, and that
+                // would very much be our doing. Here is the place where it
+                // must then become an error.
+                report.notes.push_back(fmt("item %d (typeId %d) lies unchanged at carrier %d and has OCB %d - "
+                                           "dropped it would be unpickable (vanilla state, not changed).",
                                            p.index, p.typeId, b.index, p.ocb & 0x3F));
                 continue;
             }
-            report.notes.push_back(fmt("Item %d (typeId %d) liegt bei Item %d (typeId %d) und wird getragen.",
+            report.notes.push_back(fmt("item %d (typeId %d) lies at item %d (typeId %d) and is carried.",
                                        p.index, p.typeId, b.index, b.typeId));
         }
     }
 
-    // --- Gekoppelte Trigger ---
+    // --- Coupled triggers ---
     //
-    // Erst hier, weil erst jetzt feststeht, wo die Items gelandet sind. Ist ein
-    // gekoppeltes Item liegen geblieben, gibt es auch nichts zu verschieben -
-    // der Trigger liegt dann noch auf seinem Vanilla-Sektor und ist richtig.
+    // Only here, because only now is it fixed where the items landed. If a
+    // coupled item stayed put, there is nothing to move either - the
+    // trigger then still lies on its vanilla sector and is right.
     JsonValue trigMoves = JsonValue::makeArray();
     for (const auto& kv : coupled)
     {
@@ -2656,7 +2649,7 @@ bool Rando::run(const RandoInput& in,
 
         if (fin.room == c.room && fin.sectorX == c.sectorX && fin.sectorZ == c.sectorZ)
         {
-            report.notes.push_back(fmt("Item %d blieb auf seinem Sektor - Trigger bleibt ebenfalls.", c.itemIndex));
+            report.notes.push_back(fmt("item %d stayed on its sector - the trigger stays too.", c.itemIndex));
             continue;
         }
 
@@ -2668,174 +2661,173 @@ bool Rando::run(const RandoInput& in,
         m.set("toSectorX", JsonValue::makeInt(fin.sectorX));
         m.set("toSectorZ", JsonValue::makeInt(fin.sectorZ));
         trigMoves.push(m);
-        report.notes.push_back(fmt("Item %d wandert nach %d,%d,%d - sein Pickup-Trigger zieht von %d,%d,%d mit.",
+        report.notes.push_back(fmt("item %d travels to %d,%d,%d - its pickup trigger moves along from %d,%d,%d.",
                                    c.itemIndex, fin.room, fin.sectorX, fin.sectorZ,
                                    c.room, c.sectorX, c.sectorZ));
     }
 
-    // --- Fehlende Sounds anfordern ---
+    // --- Request missing sounds ---
     //
-    // Nur fuer Typen, die nach diesem Lauf tatsaechlich im Level stehen. Ein
-    // Sample fuer einen Gegner zu holen, den es hier gar nicht gibt, waere
-    // sichtbarer Ballast in der Datei.
+    // Only for types that actually stand in the level after this run.
+    // Fetching a sample for an enemy that does not even exist here would be
+    // visible ballast in the file.
     JsonValue soundAdds = JsonValue::makeArray();
     if (!in.enemySounds.empty())
     {
-        std::set<int> vorhanden;
-        for (const auto& kv : finalOf) vorhanden.insert(kv.second.typeId);
+        std::set<int> present;
+        for (const auto& kv : finalOf) present.insert(kv.second.typeId);
         for (size_t i = 0; i < adds.size(); ++i)
-            vorhanden.insert(static_cast<int>(adds[i]["typeId"].asInt()));
+            present.insert(static_cast<int>(adds[i]["typeId"].asInt()));
 
         for (const EnemySound& s : in.enemySounds)
         {
-            if (!vorhanden.count(s.typeId)) continue;
+            if (!present.count(s.typeId)) continue;
             JsonValue a = JsonValue::makeObject();
             a.set("map", JsonValue::makeInt(s.map));
             a.set("fromLevel", JsonValue::makeString(s.fromLevel));
             a.set("fromMap", JsonValue::makeInt(s.fromMap));
             soundAdds.push(a);
-            report.notes.push_back(fmt("Sound fuer typeId %d: Map %d aus %s Map %d",
+            report.notes.push_back(fmt("sound for typeId %d: map %d from %s map %d",
                                        s.typeId, s.map, s.fromLevel.c_str(), s.fromMap));
         }
     }
 
-    // --- Cross-Gegner: Modelle und Sonder-Sounds anfordern ---
+    // --- Cross enemies: request models and special sounds ---
     //
-    // Nur fuer die Typen, die der Lauf wirklich eingesetzt hat. Der Patchweg
-    // holt das Modell samt der Samples seiner Animationskommandos vom
-    // Spender (replace, siehe Pool-Kommentar oben); die Eintraege hier
-    // decken zusaetzlich die bekannten Luecken ab, die selbst der Spender
-    // hat. Doppelte Sound-Anforderungen sind unschaedlich - der Patchweg
-    // ueberspringt Vorhandenes.
+    // Only for the types the run really used. The patch path fetches the
+    // model with the samples of its animation commands from the donor
+    // (replace, see the pool comment above); the entries here additionally
+    // cover the known holes even the donor has. Duplicate sound requests
+    // are harmless - the patch path skips existing ones.
     JsonValue moveables = JsonValue::makeArray();
     JsonValue laraAnims = JsonValue::makeArray();
-    std::set<int> swapEmittiert;
+    std::set<int> swapEmitted;
 
-    // ZUERST die Anim-Basistypen der Soldatenfamilie, VOR den Typen, die sie
-    // brauchen (#96). Standen sie hinten, brach der Import ab, sobald der
-    // Basistyp wirklich nachgeladen werden musste statt schon dazusein:
-    // "Hauptblock laesst sich nicht durchlaufen - Mesh-Zeiger". Aufgefallen
-    // ist es erst mit dem Fenster "Gegnerarten", weil man den Basistyp jetzt
-    // gezielt abwaehlen kann - vorher zog der Seed ihn fast immer selbst mit,
-    // und dann stand er schon da.
+    // FIRST the soldier family's anim base types, BEFORE the types that
+    // need them (#96). Standing at the back, the import aborted as soon as
+    // the base type really had to be loaded instead of already being
+    // there: "cannot walk the main block - mesh pointers". It only showed
+    // with the "Enemy types" window, because the base type can now be
+    // deselected specifically - before, the seed almost always drew it
+    // itself, and then it was already there.
     //
-    // Wer selbst im Lauf steckt, wird hier uebersprungen: er kommt unten mit
-    // replace=true und damit vollstaendiger vom Spender.
-    std::set<int> basisEmittiert;
-    for (int t : crossBenutzt)
+    // Whoever is himself in the run is skipped here: he comes below with
+    // replace=true and thereby more completely from the donor.
+    std::set<int> baseEmitted;
+    for (int t : crossUsed)
     {
-        const CrossGegner* c = crossGewaehlt[t];
-        if (c->basisSlot <= 0) continue;
-        if (crossBenutzt.count(c->basisSlot)) continue;
-        if (!basisEmittiert.insert(c->basisSlot).second) continue;
+        const CrossEnemy* c = crossChosen[t];
+        if (c->baseSlot <= 0) continue;
+        if (crossUsed.count(c->baseSlot)) continue;
+        if (!baseEmitted.insert(c->baseSlot).second) continue;
 
-        // Der Basistyp kommt aus SEINER EIGENEN Zeile, nicht aus dem
-        // Spenderlevel dessen, der ihn anfordert. Vorher stand hier c->von -
-        // beim Crane Guy holte das den Guard aus joby2, und der laesst sich
-        // nicht kopieren ("Frame-Zeiger ausserhalb der Frame-Scheibe"); aus
-        // rich1 geht er. Bei Mafia und SWAT+ fiel es nie auf, weil deren
-        // Spender zufaellig einen brauchbaren Basistyp fuehren.
-        const char* basisVon = c->von;
-        int basisQuelle = c->basisSlot;
-        for (const CrossGegner& b : kCross)
-            if (b.typeId == c->basisSlot)
+        // The base type comes from HIS OWN row, not from the donor level of
+        // the one requesting him. c->from used to stand here - with the
+        // Crane Guy that fetched the guard from joby2, and he cannot be
+        // copied ("frame pointer outside the frame slice"); from rich1 he
+        // works. With Mafia and SWAT+ it never showed, because their donors
+        // happen to carry a usable base type.
+        const char* baseFrom = c->from;
+        int baseSource = c->baseSlot;
+        for (const CrossEnemy& b : kCross)
+            if (b.typeId == c->baseSlot)
             {
-                basisVon = b.von;
-                // Engine-Slots jenseits 460 liegen beim Spender unter ihrem
-                // quellSlot (der Wachmann 460 unter 37) - dieselbe
-                // toSlot-Mechanik wie bei der eigenen Zeile des Typs.
-                if (b.quellSlot > 0) basisQuelle = b.quellSlot;
+                baseFrom = b.from;
+                // Engine slots beyond 460 lie at the donor under their
+                // sourceSlot (the guard 460 under 37) - the same toSlot
+                // mechanics as with the type's own row.
+                if (b.sourceSlot > 0) baseSource = b.sourceSlot;
                 break;
             }
 
         JsonValue g = JsonValue::makeObject();
-        g.set("slot", JsonValue::makeInt(basisQuelle));
-        if (basisQuelle != c->basisSlot)
-            g.set("toSlot", JsonValue::makeInt(c->basisSlot));
-        g.set("fromLevel", JsonValue::makeString(basisVon));
-        // replace=false laesst einen nativen Basistyp stehen - das Level soll
-        // sein eigenes Modell behalten, wenn es eins hat.
+        g.set("slot", JsonValue::makeInt(baseSource));
+        if (baseSource != c->baseSlot)
+            g.set("toSlot", JsonValue::makeInt(c->baseSlot));
+        g.set("fromLevel", JsonValue::makeString(baseFrom));
+        // replace=false leaves a native base type standing - the level
+        // should keep its own model if it has one.
         g.set("replace", JsonValue::makeBool(false));
         moveables.push(g);
-        report.notes.push_back(fmt("Anim-Basistyp %d aus %s fuer typeId %d nachgeladen.",
-                                   c->basisSlot, basisVon, t));
+        report.notes.push_back(fmt("anim base type %d loaded from %s for typeId %d.",
+                                   c->baseSlot, baseFrom, t));
     }
 
-    for (int t : crossBenutzt)
+    for (int t : crossUsed)
     {
-        const CrossGegner* c = crossGewaehlt[t];
+        const CrossEnemy* c = crossChosen[t];
 
-        // Gast aus Tomb Raider 3 (#92): kein Spenderlevel, sondern eine
-        // Anweisung an den Patchweg, ihn zur Laufzeit aus der Installation
-        // des Nutzers zu holen. Alles Naehere steht in Tr3Source::dinos() -
-        // hier reicht der Slot, denn die Tabelle ist ueber ihn auffindbar.
+        // Guest from Tomb Raider 3 (#92): no donor level but an instruction
+        // to the patch path to fetch him at runtime from the user's
+        // installation. All details stand in Tr3Source::dinos() - the slot
+        // suffices here, since the table is findable via it.
         if (c->tr3)
         {
             JsonValue e = JsonValue::makeObject();
             e.set("slot", JsonValue::makeInt(t));
             e.set("fromTr3", JsonValue::makeString(c->tr3));
             moveables.push(e);
-            report.notes.push_back(fmt("Gast aus Tomb Raider 3: Slot %d wird beim Patchen geholt.", t));
+            report.notes.push_back(fmt("guest from Tomb Raider 3: slot %d is fetched while patching.", t));
             continue;
         }
 
-        // Einheimischer Typ (#124): dieses Level IST der Spender, das Modell
-        // steht also schon unter der richtigen Nummer - samt Meshes,
-        // Tauschhaelften und Samples, denn genau von hier holen die anderen
-        // Level sie. Kopiert wird nichts, gesetzt schon: der Koch in joby3
-        // ist der Anlass, er hatte seinen Slot immer und stand trotzdem nur
-        // ein einziges Mal im Level.
+        // Native type (#124): this level IS the donor, so the model already
+        // stands under the right number - with meshes, swap halves and
+        // samples, because this is exactly where the other levels fetch
+        // them from. Nothing is copied, placing happens all the same: the
+        // chef in joby3 is the occasion, he always had his slot and still
+        // stood in the level only a single time.
         //
-        // Der Anim-Basistyp weiter oben bleibt bewusst unberuehrt: er kommt
-        // mit replace=false und faellt von selbst aus, wenn das Level ihn
-        // schon hat - und wenn nicht, ist er echt gebraucht (der Koch leiht
-        // sich seine Sterbeanimation von ihm, chef.cpp).
-        if (modellSchonDa(*c))
+        // The anim base type above stays deliberately untouched: he comes
+        // with replace=false and drops out by himself if the level already
+        // has him - and if not, he is genuinely needed (the chef borrows
+        // his death animation from him, chef.cpp).
+        if (modelAlreadyHere(*c))
         {
-            report.notes.push_back(fmt("Gegner typeId %d ist hier einheimisch - Modell steht schon, kein Import.", t));
+            report.notes.push_back(fmt("enemy typeId %d is native here - model already stands, no import.", t));
             ++report.crossTypesUsed;
             continue;
         }
 
         JsonValue e = JsonValue::makeObject();
-        // Engine-Slots jenseits 460 (#105): das Modell liegt beim Spender
-        // unter quellSlot und wandert per toSlot in den neuen Slot.
-        e.set("slot", JsonValue::makeInt(c->quellSlot > 0 ? c->quellSlot : t));
-        if (c->quellSlot > 0)
+        // Engine slots beyond 460 (#105): the model lies at the donor under
+        // sourceSlot and travels via toSlot into the new slot.
+        e.set("slot", JsonValue::makeInt(c->sourceSlot > 0 ? c->sourceSlot : t));
+        if (c->sourceSlot > 0)
             e.set("toSlot", JsonValue::makeInt(t));
-        e.set("fromLevel", JsonValue::makeString(c->von));
+        e.set("fromLevel", JsonValue::makeString(c->from));
         e.set("replace", JsonValue::makeBool(true));
         if (c->animCount > 0) e.set("animCount", JsonValue::makeInt(c->animCount));
         moveables.push(e);
 
-        // Pflicht-Gefolge des Typs (siehe Tabellenkommentar).
-        for (int b : c->begleiter)
+        // The type's mandatory entourage (see the table comment).
+        for (int b : c->companions)
         {
             if (b < 0) continue;
             JsonValue g = JsonValue::makeObject();
             g.set("slot", JsonValue::makeInt(b));
-            g.set("fromLevel", JsonValue::makeString(c->von));
+            g.set("fromLevel", JsonValue::makeString(c->from));
             g.set("replace", JsonValue::makeBool(true));
             moveables.push(g);
         }
 
-        // Der Anim-Basistyp der Familie steht schon oben in der Liste - er
-        // MUSS vor dem Typ kommen, der ihn braucht (#96).
+        // The family's anim base type already stands above in the list - he
+        // MUST come before the type that needs him (#96).
 
-        // Tauschhaelften: die MESHSWAP1 des Tauschspenders (swapVon, kann
-        // vom Modellspender abweichen) in den Ausweichslot des Typs. Seit
-        // #111 ist der je Gegner eindeutig; die Menge bleibt als Schutz
-        // gegen doppelte Emission, falls ein Slot je wieder geteilt wird.
-        if (c->swapDst >= 0 && c->swapVon && !swapEmittiert.count(c->swapDst))
+        // Swap halves: the swap donor's MESHSWAP1 (swapFrom, may differ
+        // from the model donor) into the type's fallback slot. Since #111
+        // it is unique per enemy; the set remains as protection against a
+        // double emission, should a slot ever be shared again.
+        if (c->swapDst >= 0 && c->swapFrom && !swapEmitted.count(c->swapDst))
         {
-            swapEmittiert.insert(c->swapDst);
+            swapEmitted.insert(c->swapDst);
             JsonValue g = JsonValue::makeObject();
-            g.set("slot", JsonValue::makeInt(405));         // MESHSWAP1 des Tauschspenders
+            g.set("slot", JsonValue::makeInt(405));         // the swap donor's MESHSWAP1
             g.set("toSlot", JsonValue::makeInt(c->swapDst));
-            g.set("fromLevel", JsonValue::makeString(c->swapVon));
+            g.set("fromLevel", JsonValue::makeString(c->swapFrom));
             g.set("replace", JsonValue::makeBool(true));
-            // MESHSWAP1 traegt einen anim_index ohne eigene Animationen
-            // (Core-Altlast) - nur die Meshes zaehlen.
+            // MESHSWAP1 carries an anim_index without animations of its own
+            // (Core legacy) - only the meshes count.
             g.set("onlyMeshes", JsonValue::makeBool(true));
             moveables.push(g);
         }
@@ -2845,349 +2837,350 @@ bool Rando::run(const RandoInput& in,
             if (c->sounds[k].map == 0) continue;
             JsonValue a = JsonValue::makeObject();
             a.set("map", JsonValue::makeInt(c->sounds[k].map));
-            a.set("fromLevel", JsonValue::makeString(c->sounds[k].vonLevel));
-            a.set("fromMap", JsonValue::makeInt(c->sounds[k].vonMap));
+            a.set("fromLevel", JsonValue::makeString(c->sounds[k].fromLevel));
+            a.set("fromMap", JsonValue::makeInt(c->sounds[k].fromMap));
             soundAdds.push(a);
         }
 
         ++report.crossTypesUsed;
-        report.notes.push_back(fmt("Cross-Gegner: typeId %d kommt aus %s.", t, c->von));
+        report.notes.push_back(fmt("cross enemy: typeId %d comes from %s.", t, c->from));
     }
 
-    // --- andy1: eigenen Imp heilen ---
+    // --- andy1: heal its own Imp ---
     //
-    // andy1s Imp-Slot traegt den entkernten Animsatz (Todesanim +45 ist ein
-    // Dummy ohne KillItem - siehe kCross-Kommentar beim Imp). Vanilla fiel
-    // das nie auf, weil die junge Lara dort keine Waffen hat. Der Randomizer
-    // nimmt das Jung-Flag raus und gibt Pistolen - ab da stirbt der Imp auch
-    // in andy1 und braucht den vollen Satz aus andy3 (Geometrie identisch,
-    // nur die Animationen sind dort vollstaendig). Unbedingt, nicht an
-    // Optionen gebunden: jeder Lauf macht andy1s Imps toetbar.
-    if (klein == "andy1")
+    // andy1's Imp slot carries the gutted anim set (death anim +45 is a
+    // dummy without KillItem - see the kCross comment at the Imp). Vanilla
+    // never noticed, because young Lara there has no weapons. The
+    // randomizer removes the young flag and gives pistols - from then on
+    // the Imp dies in andy1 too and needs the full set from andy3 (geometry
+    // identical, only the animations are complete there). Unconditional,
+    // not bound to options: every run makes andy1's Imps killable.
+    if (lowerName == "andy1")
     {
         JsonValue e = JsonValue::makeObject();
         e.set("slot", JsonValue::makeInt(89));
         e.set("fromLevel", JsonValue::makeString("andy3"));
         e.set("replace", JsonValue::makeBool(true));
-        e.set("animCount", JsonValue::makeInt(46));   // wie im kCross-Eintrag
+        e.set("animCount", JsonValue::makeInt(46));   // as in the kCross entry
         moveables.push(e);
-        report.notes.push_back("Imp geheilt: voller Animsatz (mit Tod) aus andy3.");
+        report.notes.push_back("Imp healed: full anim set (with death) from andy3.");
     }
 
-    // --- LevelChains (LevelChains.h): Modelle der nachreichbaren Items ---
+    // --- Level chains (LevelChains.h): models of the grantable items ---
     //
-    // Jedes Level, das volumes Kette ein Item aus einem anderen Level brauchen
-    // KANN, bekommt dessen Modellslot vom Spender - unabhaengig von der
-    // Reihenfolge, denn ob die SCRIPT.DAT das Item per GIVEOBJ nachreicht,
-    // entscheidet sich erst im Skript-Schritt, und der Level-Schritt kennt
-    // die Reihenfolge nicht (CLI!). Ein Slot zu viel kostet nichts; ein
-    // Inventar-Item ohne Modell ist der Fehler, den der Nutzer bei
-    // Cheat-Items gesehen hat. Ohne "replace": vorhandene Slots bleiben.
+    // Every level that CAN need an item from another level via a chain gets
+    // its model slot from the donor - regardless of the order, because
+    // whether SCRIPT.DAT grants the item via GIVEOBJ is only decided in the
+    // script step, and the level step does not know the order (CLI!). One
+    // slot too many costs nothing; an inventory item without a model is the
+    // bug the user saw with cheat items. Without "replace": existing slots
+    // stay.
     for (size_t ki = 0; ki < kLevelChainCount; ++ki)
     {
         const LevelChain& k = kLevelChains[ki];
-        if (!k.slot) continue;                          // Story-Items ohne Modellkopie
+        if (!k.slot) continue;                          // story items without a model copy
         std::string kn = k.taker;
         for (char& c : kn) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        if (kn != klein) continue;
+        if (kn != lowerName) continue;
 
         JsonValue e = JsonValue::makeObject();
         e.set("slot", JsonValue::makeInt(k.slot));
         e.set("fromLevel", JsonValue::makeString(k.donor));
         moveables.push(e);
-        report.notes.push_back(std::string("LevelChain: Modell fuer ") + k.name + " eingelegt.");
+        report.notes.push_back(std::string("level chain: model for ") + k.name + " installed.");
     }
 
-    // --- joby3: Key Item 8 (203) muss im Level liegen ---
+    // --- joby3: Key Item 8 (203) must lie in the level ---
     //
-    // Nutzervorgabe fuer einen Secret-Spot in joby3 (#53): der Slot soll
-    // VORHANDEN sein, damit ein Secret-Patch spaeter ein Item dieses Typs
-    // setzen kann. Er wird hier ausdruecklich NICHT geworfen - nur das
-    // Modell wandert mit. joby3 hat den Slot vanilla nicht (geprueft mit
-    // SlotAnims: joby2 = 1 Mesh ab Anim 618, joby3 = kein Modell), joby2
-    // liegt als Spender im selben Abschnitt.
+    // A user requirement for a secret spot in joby3 (#53): the slot should
+    // be PRESENT so a secret patch can later place an item of this type. It
+    // is expressly NOT rolled here - only the model travels along. joby3
+    // does not have the slot in vanilla (checked with SlotAnims: joby2 = 1
+    // mesh from anim 618, joby3 = no model), joby2 lies as the donor in the
+    // same section.
     //
-    // Ohne "replace": liegt der Slot schon da (etwa weil ein Secret-Patch
-    // ihn selbst mitgebracht hat), bleibt der vorhandene stehen.
+    // Without "replace": if the slot is already there (say, because a
+    // secret patch brought it itself), the existing one stays.
     //
-    // ACHTUNG fuer den Tag, an dem das Item wirklich aufgesammelt wird:
-    // Name und Inventarpose eines Key-Items stehen NICHT im Level, sondern
-    // im CMD_KEY8-Eintrag des Levelblocks der SCRIPT.DAT
-    // (gameflow.cpp:371ff). inventry_objects_list wird zwischen Leveln nie
-    // zurueckgesetzt - fehlt joby3 der Eintrag, traegt der Schluessel Namen
-    // und Pose, die zuletzt irgendein anderes Level gesetzt hat. Unser
-    // ScriptDat-Weg kann bisher nur Levelflags loeschen, keine Objektnamen.
-    if (klein == "joby3")
+    // CAUTION for the day the item is really collected: a key item's name
+    // and inventory pose stand NOT in the level but in the CMD_KEY8 entry
+    // of joby3's level block in SCRIPT.DAT (gameflow.cpp:371ff).
+    // inventry_objects_list is never reset between levels - if joby3 lacks
+    // the entry, the key carries the name and pose whichever other level
+    // set last. Our ScriptDat path used to only clear level flags, no
+    // object names.
+    if (lowerName == "joby3")
     {
         JsonValue e = JsonValue::makeObject();
         e.set("slot", JsonValue::makeInt(203));
         e.set("fromLevel", JsonValue::makeString("joby2"));
         moveables.push(e);
-        report.notes.push_back("Key Item 8 (203) aus joby2 eingelegt - nur vorhanden, nicht geworfen (Secret-Spot).");
+        report.notes.push_back("Key Item 8 (203) installed from joby2 - present only, not rolled (secret spot).");
 
-        // Und Laras Kartenzieh-Animation dazu (ANIM_KEYCARD 437): der Platz
-        // existiert in jedem Level, echte Bilddaten hat nur joby2 - in joby3
-        // sind die Extra-Anims Core-Stubs (436-439 zeigen auf denselben
-        // Frame-Offset), und die Engine spielt an Key Hole 8 sonst nur die
-        // Ersatz-Schluesselanim ("sieht komisch aus", Nutzer 2026-08-21).
-        // Der Kartensound (sfx 316) wandert im selben Zug mit.
+        // And Lara's card-swipe animation with it (ANIM_KEYCARD 437): the
+        // slot exists in every level, only joby2 has real image data - in
+        // joby3 the extra anims are Core stubs (436-439 point at the same
+        // frame offset), and the engine otherwise only plays the substitute
+        // key anim at Key Hole 8 ("looks weird", user 2026-08-21). The card
+        // sound (sfx 316) travels along in the same move.
         JsonValue la = JsonValue::makeObject();
         la.set("anim", JsonValue::makeInt(437));
         la.set("fromLevel", JsonValue::makeString("joby2"));
         laraAnims.push(la);
-        report.notes.push_back("Kartenzieh-Anim (Lara 437) aus joby2 eingepflanzt.");
+        report.notes.push_back("card-swipe anim (Lara 437) implanted from joby2.");
     }
 
-    // --- Keine Fluchtmarker: Larson und Pierre sollen kaempfen und sterben ---
+    // --- No flee markers: Larson and Pierre shall fight and die ---
     //
-    // Beide fliehen ab 40 Lebenspunkten zu einem AI_AMBUSH-Marker mit
-    // passender OCB und despawnen dort (GetAITarget/FindAITargetObject,
-    // box.cpp; PierreControl klemmt die Lebenspunkte solange bei 40 fest).
-    // Der Randomizer hat solche Marker eine Zeit lang selbst gesetzt, damit
-    // die Flucht ihr Ziel findet - das war die falsche Richtung:
+    // Both flee from 40 hit points to an AI_AMBUSH marker with matching OCB
+    // and despawn there (GetAITarget/FindAITargetObject, box.cpp;
+    // PierreControl clamps the hit points at 40 until then). The randomizer
+    // used to set such markers itself for a while so the flight finds its
+    // target - that was the wrong direction:
     //
-    //  1. Nutzervorgabe: als Pool-Gegner sollen die beiden IMMER kaempfen
-    //     und sterben. Genau dafuer sind Larsons Ausblenden (#65) und
-    //     Pierres schleifenfeste Todesanimation ueberhaupt gebaut worden.
-    //  2. Der Despawn nimmt getragene Items mit. GetCarriedItems
-    //     (setup.cpp:1962) haengt jedes Pickup im Umkreis von 512 Einheiten
-    //     an den naechsten Gegner - ein Schluesselitem neben einem
-    //     fliehenden Larson waere nach seiner Flucht fort.
+    //  1. User requirement: as pool enemies, the two shall ALWAYS fight and
+    //     die. That is exactly what Larson's fade-out (#65) and Pierre's
+    //     loop-proof death animation were built for.
+    //  2. The despawn takes carried items along. GetCarriedItems
+    //     (setup.cpp:1962) attaches every pickup within 512 units to the
+    //     nearest enemy - a key item next to a fleeing Larson would be gone
+    //     after his flight.
     //
-    // Ohne Marker greift PierreKannFliehen() nicht, die 40-LP-Klammer
-    // entfaellt, und beide sterben wie jeder andere Gegner. Cores eigene
-    // Marker in Andrea1 und Andrea2 bleiben unangetastet - dort behalten
-    // die Vanilla-Exemplare mit ihrer OCB ihr Originalverhalten; ein
-    // getauschter Gegner verliert seine OCB (siehe Tauschschleife) und
-    // findet damit ohnehin keinen Marker mehr.
+    // Without a marker, PierreKannFliehen() does not engage, the 40-HP
+    // clamp drops, and both die like any other enemy. Core's own markers in
+    // Andrea1 and Andrea2 stay untouched - there the vanilla specimens keep
+    // their original behavior with their OCB; a swapped enemy loses his OCB
+    // (see the swap loop) and thus finds no marker anymore anyway.
     //
-    // Tr5Level::addAiObject und das Patchfeld "aiAdds" bleiben bestehen -
-    // die Mechanik ist geprueft und wird gebraucht, sobald wir AI-Objekte
-    // fuer etwas anderes setzen wollen.
+    // Tr5Level::addAiObject and the patch field "aiAdds" remain - the
+    // mechanics are proven and will be needed as soon as we want to place
+    // AI objects for something else.
     JsonValue aiAdds = JsonValue::makeArray();
 
-    // --- Outfit wuerfeln ---
+    // --- Roll the outfit ---
     //
-    // Die Wahl faellt hier, damit sie am Seed haengt wie alles andere; die
-    // eigentliche Uebertragung macht der Patchweg, der die Spender-Level
-    // kennt. Faellt die Wahl auf das Outfit, das das Level ohnehin traegt,
-    // steht nichts im Patch - ein Kopieren auf sich selbst waere nur Ballast.
+    // The choice falls here so it hangs on the seed like everything else;
+    // the actual transfer is done by the patch path, which knows the donor
+    // levels. If the choice falls on the outfit the level wears anyway,
+    // nothing goes into the patch - copying onto oneself would be mere
+    // ballast.
     JsonValue outfit = JsonValue::makeObject();
-    bool outfitGesetzt = false;
+    bool outfitSet = false;
     if (opt.randomOutfits)
     {
 
-        // Eigene Familie: andrea VOR andy pruefen, sonst faengt "andy" nie.
-        int eigene = -1;
-        if (klein.rfind("andrea", 0) == 0)     eigene = 0;
-        else if (klein.rfind("andy", 0) == 0)  eigene = -1;   // Kind-Lara, hat keins der drei
-        else if (klein.rfind("joby", 0) == 0)  eigene = 1;
-        else if (klein.rfind("rich", 0) == 0)  eigene = 2;
+        // Own family: check andrea BEFORE andy, or "andy" never matches.
+        int own = -1;
+        if (lowerName.rfind("andrea", 0) == 0)     own = 0;
+        else if (lowerName.rfind("andy", 0) == 0)  own = -1;   // young Lara, has none of the three
+        else if (lowerName.rfind("joby", 0) == 0)  own = 1;
+        else if (lowerName.rfind("rich", 0) == 0)  own = 2;
 
-        static const char* kSpender[3] = { "Andrea1", "joby2", "rich2" };
+        static const char* kDonors[3] = { "Andrea1", "joby2", "rich2" };
 
-        if (klein == "joby4")
-            report.notes.push_back("Outfit: joby4 behaelt den Taucheranzug (bleibt vanilla).");
+        if (lowerName == "joby4")
+            report.notes.push_back("outfit: joby4 keeps the diving suit (stays vanilla).");
         else
         {
-            const int wahl = static_cast<int>(rng.below(3));
-            if (wahl == eigene)
+            const int choice = static_cast<int>(rng.below(3));
+            if (choice == own)
             {
-                report.notes.push_back(fmt("Outfit: %s behaelt sein eigenes.", in.level.c_str()));
-                // Auch die eigene Catsuit soll Holster tragen (Nutzerwunsch) -
-                // die rich-Level haben die Objekte 13-16 vanilla nicht, und
-                // erst mit ihnen zeichnet die Engine dort Holster.
-                if (eigene == 2)
+                report.notes.push_back(fmt("outfit: %s keeps its own.", in.level.c_str()));
+                // The own catsuit shall carry holsters too (user wish) -
+                // the rich levels do not have objects 13-16 in vanilla, and
+                // only with them does the engine draw holsters there.
+                if (own == 2)
                 {
                     outfit.set("holstersFrom", JsonValue::makeString("joby2"));
-                    outfitGesetzt = true;
+                    outfitSet = true;
                 }
             }
             else
             {
-                outfit.set("fromLevel", JsonValue::makeString(kSpender[wahl]));
+                outfit.set("fromLevel", JsonValue::makeString(kDonors[choice]));
 
-                // LaraType-Byte ausdruecklich mitgeben - die Engine macht die
-                // Zopf-Sonderbehandlung (Verankerung in hair.cpp, Schweiss-
-                // tabelle in laraskin.cpp) am Outfit fest, nicht am Level:
-                //   0 = LARA_NORMAL   (Andrea-Outfit, Standardzopf)
-                //   2 = LARA_BUNHEAD  (Joby-Outfit: Muetzenzopf, auch
-                //                      ausserhalb der Russland-Level)
-                //   3 = LARA_CATSUIT  (rich2-Outfit, eigener Zeichenweg)
-                //   5 = LARA_PONYTAIL (Andrea-Outfit IN einem Russland-Level:
-                //                      dort loest LARA_NORMAL faelschlich die
-                //                      Russland-Zopfbehandlung aus, also ein
-                //                      Wert, der wie NORMAL zeichnet, aber
-                //                      nicht NORMAL ist)
+                // Pass the LaraType byte explicitly - the engine keys the
+                // braid special-handling (anchoring in hair.cpp, weld table
+                // in laraskin.cpp) off the outfit, not the level:
+                //   0 = LARA_NORMAL   (Andrea outfit, standard braid)
+                //   2 = LARA_BUNHEAD  (Joby outfit: cap braid, also outside
+                //                      the Russia levels)
+                //   3 = LARA_CATSUIT  (rich2 outfit, its own draw path)
+                //   5 = LARA_PONYTAIL (Andrea outfit IN a Russia level:
+                //                      there LARA_NORMAL wrongly triggers
+                //                      the Russia braid handling, so a
+                //                      value that draws like NORMAL but is
+                //                      not NORMAL)
                 static const int kLaraTypeByte[3] = { 0, 2, 3 };
-                int typByte = kLaraTypeByte[wahl];
-                if (wahl == 0 && klein.rfind("joby", 0) == 0)
-                    typByte = 5;
-                outfit.set("laraType", JsonValue::makeInt(typByte));
+                int typeByte = kLaraTypeByte[choice];
+                if (choice == 0 && lowerName.rfind("joby", 0) == 0)
+                    typeByte = 5;
+                outfit.set("laraType", JsonValue::makeInt(typeByte));
 
-                // Der Catsuit-Spender rich2 bringt keine Holster mit - die
-                // fehlenden Slots kommen dann aus joby2 (dunkle Riemen, passt
-                // zum schwarzen Anzug).
-                if (wahl == 2)
+                // The catsuit donor rich2 brings no holsters - the missing
+                // slots then come from joby2 (dark straps, fits the black
+                // suit).
+                if (choice == 2)
                     outfit.set("holstersFrom", JsonValue::makeString("joby2"));
-                outfitGesetzt = true;
-                report.notes.push_back(fmt("Outfit: %s bekommt die Lara aus %s.",
-                                           in.level.c_str(), kSpender[wahl]));
+                outfitSet = true;
+                report.notes.push_back(fmt("outfit: %s gets the Lara from %s.",
+                                           in.level.c_str(), kDonors[choice]));
             }
         }
     }
 
-    // --- Waffen ueberall ---
+    // --- Weapons everywhere ---
     //
-    // Aufgeloest als fertige Kopierliste, damit die Spenderregeln an EINER
-    // Stelle stehen (hier) und der Patchweg nur noch ausfuehrt - dasselbe
-    // Muster wie beim LaraType-Byte des Outfits. Die Regeln sind die der
-    // Werkzeug-Goldreferenz (Import Export\Waffen Tests\Plan.md, "Alle 13
-    // Level mit dem vollen Set"), mit zwei begruendeten Abweichungen:
+    // Resolved as a finished copy list, so the donor rules stand in ONE
+    // place (here) and the patch path only executes - the same pattern as
+    // with the outfit's LaraType byte. The rules are those of the tool's
+    // gold reference (Import Export\Waffen Tests\Plan.md, "all 13 levels
+    // with the full set"), with two reasoned deviations:
     //
-    // 1. Die Holsterslots 13, 14 und 15 sind "nur was fehlt" und kommen aus
-    //    Andrea3. Slot 16 dagegen kommt IMMER aus joby2 und ersetzt, was da
-    //    ist - so wie es die Goldreferenz von Anfang an hatte.
+    // 1. The holster slots 13, 14 and 15 are "only what is missing" and
+    //    come from Andrea3. Slot 16, by contrast, ALWAYS comes from joby2
+    //    and replaces what is there - as the gold reference had it from the
+    //    start.
     //
-    //    Warum das eine Abwaegung ist und keine Selbstverstaendlichkeit: die
-    //    vier Slots liefern Laras zwei OBERSCHENKEL je Holsterzustand, und
-    //    Bein, Holster und Waffe sind EIN Mesh - trennen laesst sich das
-    //    nicht. Slot 16 aus joby2 heisst also: die Deagle steckt richtig im
-    //    Holster, aber Rom- und Catsuit-Lara tragen waehrenddessen joby2s
-    //    Tarnhosen-Oberschenkel.
+    //    Why that is a trade-off and no matter of course: the four slots
+    //    supply Lara's two THIGHS per holster state, and leg, holster and
+    //    weapon are ONE mesh - they cannot be separated. Slot 16 from
+    //    joby2 thus means: the Deagle sits properly in the holster, but
+    //    Rome and catsuit Lara wear joby2's camo-trousers thighs meanwhile.
     //
-    //    Eine Zeit lang stand hier deshalb Andrea3 auch fuer 16, mit dem
-    //    umgekehrten Preis: stimmige Oberschenkel, dafuer der alte Revolver
-    //    im Holster. Der Nutzer hat sich 2026-08-23 ausdruecklich fuer die
-    //    Waffe entschieden ("Wir wollten den Revolver ja gaenzlich durch die
-    //    Desert Eagle ersetzen") - er sieht die Waffe, die Oberschenkel
-    //    nimmt er in Kauf. Gezogen (6), mit Laser (12), als Pickup (347) und
-    //    im Inventar war die Deagle ohnehin schon ueberall.
-    // 2. Andrea3 liefert zusaetzlich 352/456/457 (Fernglas-Inventarobjekt
-    //    und die Overlays fuer Fernglas und Zielfernrohr) - die fehlen nur
-    //    den andy-Leveln, und ohne 457 zeigt der Blick durchs Scope Laras
-    //    Pistolenhand (Levelabhaengige Eigenheiten.md, Mesh-Index 0).
+    //    For a while Andrea3 also stood here for 16, with the reverse
+    //    price: consistent thighs but the old revolver in the holster. The
+    //    user expressly decided for the weapon on 2026-08-23 ("we wanted to
+    //    replace the revolver with the Desert Eagle entirely") - he sees
+    //    the weapon, the thighs he accepts. Drawn (6), with laser (12), as
+    //    a pickup (347) and in the inventory the Deagle was everywhere
+    //    already anyway.
+    // 2. Andrea3 additionally supplies 352/456/457 (the binoculars
+    //    inventory object and the overlays for binoculars and scope) -
+    //    only the andy levels lack those, and without 457 the view through
+    //    the scope shows Lara's pistol hand (Levelabhaengige
+    //    Eigenheiten.md, mesh index 0).
     //
-    // Der Patchweg ueberspringt "nur was fehlt"-Eintraege, wenn der Slot da
-    // ist - dadurch loest sich auch die rich2-Ausnahme (eigene HK-Spezialpose
-    // bleibt) von selbst. Eintraege, deren Spender das Level selbst ist,
-    // entfallen hier schon.
-    JsonValue waffen = JsonValue::makeArray();
-    if (opt.allWeapons && klein != "joby4")
+    // The patch path skips "only what is missing" entries when the slot is
+    // there - which also resolves the rich2 exception (its own special HK
+    // pose stays) by itself. Entries whose donor is the level itself
+    // already drop out here.
+    JsonValue weapons = JsonValue::makeArray();
+    if (opt.allWeapons && lowerName != "joby4")
     {
-        struct WRegel { const char* von; int slot; bool ersetzen; };
-        static const WRegel kWaffen[] = {
-            // Andrea3: Pistolen/Uzi/Schrotflinte/Holster/Lasersight - nur was fehlt
+        struct WRule { const char* from; int slot; bool replace; };
+        static const WRule kWeaponRules[] = {
+            // Andrea3: pistols/Uzi/shotgun/holsters/lasersight - only what is missing
             {"Andrea3",1,false},{"Andrea3",2,false},{"Andrea3",3,false},
             {"Andrea3",13,false},{"Andrea3",14,false},{"Andrea3",15,false},
             {"Andrea3",334,false},{"Andrea3",335,false},{"Andrea3",336,false},{"Andrea3",337,false},
             {"Andrea3",338,false},{"Andrea3",339,false},{"Andrea3",340,false},{"Andrea3",351,false},
-            // Gefolge (fehlt nur den andy-Leveln)
+            // entourage (only the andy levels lack it)
             {"Andrea3",352,false},{"Andrea3",456,false},{"Andrea3",457,false},
-            // joby2: Desert Eagle ist Vorgabe - immer ersetzen
+            // joby2: the Desert Eagle is the default - always replace
             {"joby2",6,true},{"joby2",12,true},{"joby2",16,true},{"joby2",347,true},{"joby2",348,true},
-            // rich1: HK - "nur was fehlt" laesst rich2 seine Spezialpose
+            // rich1: HK - "only what is missing" leaves rich2 its special pose
             {"rich1",5,false},{"rich1",345,false},{"rich1",346,false},
         };
 
-        int eintraege = 0;
-        for (const WRegel& r : kWaffen)
+        int entries = 0;
+        for (const WRule& r : kWeaponRules)
         {
-            std::string vonKlein;
-            for (const char* p = r.von; *p; ++p)
-                vonKlein.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p);
-            if (vonKlein == klein) continue;          // sich selbst spendet niemand
+            std::string fromLower;
+            for (const char* p = r.from; *p; ++p)
+                fromLower.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p);
+            if (fromLower == lowerName) continue;     // nobody donates to himself
 
-            // rich2 bekommt KEINE Pistolen. Sein Slot 1 (PISTOLS_ANIM) ist
-            // von Core mit einer zweiten HK samt gescriptetem Animationssatz
-            // belegt (mesh-identisch mit Slot 5, eigene Anims mit KILLITEM
-            // und Schusssounds - Sequenzmaterial, richcut2 traegt denselben
-            // Slot). Der Slot bleibt unangetastet, und damit darf auch das
-            // Pistolen-Item nicht ins Level: setup.cpp:111 gibt Lara
-            // Startpistolen, sobald PISTOLS_ITEM geladen ist, und gezogen
-            // liefen die Arme ueber die gescripteten HK-Anims.
-            if (klein == "rich2" && (r.slot == 334 || r.slot == 335)) continue;
+            // rich2 gets NO pistols. Its slot 1 (PISTOLS_ANIM) is filled by
+            // Core with a second HK plus a scripted animation set
+            // (mesh-identical to slot 5, own anims with KILLITEM and shot
+            // sounds - sequence material, richcut2 carries the same slot).
+            // The slot stays untouched, and with it the pistol item must
+            // not enter the level either: setup.cpp:111 gives Lara starting
+            // pistols as soon as PISTOLS_ITEM is loaded, and drawn, her
+            // arms would run over the scripted HK anims.
+            if (lowerName == "rich2" && (r.slot == 334 || r.slot == 335)) continue;
 
             JsonValue e = JsonValue::makeObject();
             e.set("slot", JsonValue::makeInt(r.slot));
-            e.set("fromLevel", JsonValue::makeString(r.von));
-            e.set("replace", JsonValue::makeBool(r.ersetzen));
-            waffen.push(e);
-            ++eintraege;
+            e.set("fromLevel", JsonValue::makeString(r.from));
+            e.set("replace", JsonValue::makeBool(r.replace));
+            weapons.push(e);
+            ++entries;
         }
-        if (eintraege > 0)
-            report.notes.push_back(fmt("Waffen: %d Slot-Regeln (Andrea3/joby2/rich1) im Patch.", eintraege));
+        if (entries > 0)
+            report.notes.push_back(fmt("weapons: %d slot rules (Andrea3/joby2/rich1) in the patch.", entries));
     }
     else if (opt.allWeapons)
-        report.notes.push_back("Waffen: joby4 bleibt vanilla (Taucheranzug).");
+        report.notes.push_back("weapons: joby4 stays vanilla (diving suit).");
 
     patchOut = JsonValue::makeObject();
     patchOut.set("itemEdits", edits);
     if (moveables.size() > 0) patchOut.set("moveableAdds", moveables);
     if (laraAnims.size() > 0) patchOut.set("laraAnimAdds", laraAnims);
-    if (waffen.size() > 0) patchOut.set("weaponAdds", waffen);
+    if (weapons.size() > 0) patchOut.set("weaponAdds", weapons);
     if (aiAdds.size() > 0) patchOut.set("aiAdds", aiAdds);
-    if (outfitGesetzt) patchOut.set("outfit", outfit);
+    if (outfitSet) patchOut.set("outfit", outfit);
     if (soundAdds.size() > 0) patchOut.set("soundAdds", soundAdds);
     if (adds.size() > 0) patchOut.set("itemAdds", adds);
     if (trigMoves.size() > 0) patchOut.set("triggerMoves", trigMoves);
     if (trigAdds.size() > 0) patchOut.set("triggerAdds", trigAdds);
-    // Die Itemzahl, von der aus die Planung neue Items nummeriert hat (#107).
-    // Traegt die Quelldatei MEHR Items als das Level-JSON (die Waffen-Basis
-    // entstand NACH dem JSON-Export), landen die itemAdds weiter hinten als
-    // geplant - und jeder Trigger weckte das Item ZWEI VOR seinem Gegner
-    // (in Andrea1 gesehen: JSON 151, Datei 153, alle Wecker um 2 verrutscht,
-    // die letzten beiden Gegner ohne Trigger). ApplyPatch verschiebt mit
-    // dieser Zahl alle TO_OBJECT-Ziele >= itemBase um die echte Differenz.
+    // The item count from which the planning numbered new items (#107). If
+    // the source file carries MORE items than the level JSON (the weapon
+    // base was created AFTER the JSON export), the itemAdds land further
+    // back than planned - and every trigger woke the item TWO BEFORE its
+    // enemy (seen in Andrea1: JSON 151, file 153, all wakers off by 2, the
+    // last two enemies without a trigger). ApplyPatch shifts all TO_OBJECT
+    // targets >= itemBase by the true difference with this number.
     patchOut.set("itemBase", JsonValue::makeInt(static_cast<int64_t>(in.items.size())));
-    // Bewusst KEIN itemRemoves - siehe Regel 1 im Header.
+    // Deliberately NO itemRemoves - see rule 1 in the header.
     return true;
 }
 
-// Die waehlbaren Gegnerarten mit Anzeigenamen (#95). Reihenfolge und Inhalt
-// folgen der Pool-Tabelle kCross weiter oben - wer dort eine Zeile ergaenzt,
-// ergaenzt sie hier. Die Namen sind die aus der Nutzerliste "Gegner Pool.txt",
-// nicht die Enum-Bezeichner der Engine.
+// The selectable enemy kinds with display names (#95). Order and content
+// follow the pool table kCross further up - whoever adds a row there adds
+// one here. The names are English for the international release; the
+// German UI translates them via the Language table (see gui\Language.cpp).
 std::vector<EnemyKind> Rando::enemyKinds()
 {
     return {
         { 33, "SWAT",              nullptr },
-        { 35, "SWAT (schwer)",     nullptr },
-        { 37, "Wachmann",          nullptr },
-        // Engine-Slot 460 (BLUE_GUARD2, #105): das Joby-Modell des Wachmanns.
-        // Vanilla teilen sich beide Modelle Slot 37 und schliessen sich aus -
-        // der neue Slot macht sie gleichzeitig moeglich. Nur auf unserer
-        // Engine lauffaehig (wird per #31 mitgeliefert).
-        { 460, "Wachmann (Joby)",  nullptr },
+        { 35, "SWAT (heavy)",      nullptr },
+        { 37, "Guard",             nullptr },
+        // Engine slot 460 (BLUE_GUARD2, #105): the guard's joby model. In
+        // vanilla both models share slot 37 and exclude each other - the
+        // new slot makes them possible at the same time. Runs only on our
+        // engine (which ships via #31).
+        { 460, "Guard (Joby)",     nullptr },
         { 39, "Two Gun",           nullptr },
-        { 41, "Hund",              nullptr },
+        { 41, "Dog",               nullptr },
         { 45, "Larson",            nullptr },
         { 47, "Pierre",            nullptr },
-        { 49, "Mafia (MP)",        nullptr },
-        { 51, "Mafia (Pistolen)",  nullptr },
+        { 49, "Mafia (MG)",        nullptr },
+        { 51, "Mafia (pistols)",   nullptr },
         { 55, "Crane Guy",         nullptr },
-        { 57, "Loewe",             nullptr },
+        { 57, "Lion",              nullptr },
         { 59, "Gladiator",         nullptr },
-        { 61, "Soldatenstatue (Schwert)", nullptr },
-        // Engine-Slot 461 (ROMAN_GOD2, #84): die Hammer-Fassung aus Andrea3.
-        // Vanilla teilt sie sich Slot 61 mit dem Schwert und schliesst es aus;
-        // mit dem eigenen Slot koennen beide im selben Level stehen.
-        { 461, "Soldatenstatue (Hammer)", nullptr },
+        { 61, "Soldier statue (sword)", nullptr },
+        // Engine slot 461 (ROMAN_GOD2, #84): the hammer version from
+        // Andrea3. In vanilla it shares slot 61 with the sword and
+        // excludes it; with the own slot both can stand in the same level.
+        { 461, "Soldier statue (hammer)", nullptr },
         { 63, "Hydra",             nullptr },
-        { 77, "Labyrinth-Monster", nullptr },
-        // Der Hund aus joby2 - eigener Gegnertyp mit eigener Steuerung,
-        // nicht zu verwechseln mit "Hund" (41) aus Andrea1.
+        { 77, "Maze monster",      nullptr },
+        // The dog from joby2 - its own enemy type with its own control,
+        // not to be confused with "Dog" (41) from Andrea1.
         { 85, "Huskie",            nullptr },
-        // Der Koch aus joby3 (#124) - Nahkaempfer mit Messer.
-        { 87, "Koch",              nullptr },
+        // The chef from joby3 (#124) - melee fighter with a knife.
+        { 87, "Chef",              nullptr },
         { 89, "Imp",               nullptr },
 
-        // Die Gaeste aus Tomb Raider 3. Sie sitzen auf Slots, die in KEINEM
-        // der 16 TR5-Level ein Modell tragen - deshalb nehmen sie keinem
-        // einheimischen Gegner etwas weg (an allen nachgemessen).
+        // The guests from Tomb Raider 3. They sit on slots that carry a
+        // model in NONE of the 16 TR5 levels - so they take nothing from
+        // any native enemy (measured against all of them).
         { 31, "T-Rex (TR3)",       "tr3" },
         { 75, "Raptor (TR3)",      "tr3" },
         { 53, "Compy (TR3)",       "tr3" },
-        { 43, "Geier (TR3 LA)",    "tr3gold" },
+        { 43, "Vulture (TR3 LA)",  "tr3gold" },
     };
 }

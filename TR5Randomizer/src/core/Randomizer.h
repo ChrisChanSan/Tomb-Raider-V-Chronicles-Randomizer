@@ -86,7 +86,7 @@ inline bool isPickupType(int typeId)
 //
 // Puzzle Done (250-257) is deliberately NOT included: that is the finished
 // state, nobody operates anything there anymore.
-inline bool istBedienelement(int typeId)
+inline bool isOperableFixture(int typeId)
 {
     return (typeId >= 242 && typeId <= 249)
         || (typeId >= 258 && typeId <= 283)
@@ -150,7 +150,7 @@ inline bool isWithinCarryBox(int bx, int by, int bz, int px, int py, int pz)
 
 // numX/numZ are the RAW measure from the room header - the wall ring around
 // counts too, so (numX-2) * (numZ-2) tiles are walkable. Needed in
-// kRaumbedarf (Randomizer.cpp): there the room size decides which enemies
+// kSpaceNeeds (Randomizer.cpp): there the room size decides which enemies
 // may enter at all.
 struct RoomOrigin { int room = 0; int originX = 0; int originZ = 0; int numX = 0; int numZ = 0; };
 

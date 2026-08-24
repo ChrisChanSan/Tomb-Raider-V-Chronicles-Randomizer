@@ -132,7 +132,7 @@ public:
     // (RICH2+RICHCUT2 remain one unit). The videos hang off the level
     // identity in the engine, the finale off the last slot - the free order
     // carries both as well.
-    bool shuffleLevels(uint64_t seed, bool frei, std::string& orderText, std::string& error);
+    bool shuffleLevels(uint64_t seed, bool freeMode, std::string& orderText, std::string& error);
 
     // Slot (position in the offset table) of a level, -1 if unknown.
     int  slotOfLevel(const std::string& levelName) const;
@@ -183,7 +183,7 @@ public:
     // - their music belongs to the scene. NOT repeatable: every run rolls
     // anew, the caller must start from the unmodified file (the UI reads
     // from the backup anyway).
-    bool shuffleMusic(uint64_t seed, int& getauscht, std::string& error);
+    bool shuffleMusic(uint64_t seed, int& swapped, std::string& error);
 
     // Shuffle the level sections (stage 1 of the plan in Level Infos\
     // Levelreihenfolge-Plan.md): the four story sections Rome (ANDREA*),

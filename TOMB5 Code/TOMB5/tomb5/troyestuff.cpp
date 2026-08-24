@@ -8,6 +8,9 @@
 
 #define PAGE0_NUM	12
 #define PAGE1_NUM	13
+// Credits (#33): keine waehlbaren Zeilen, die Zahl schiebt nur die
+// Umschaltpfeile unter den Text.
+#define PAGE2_NUM	12
 
 void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak)
 {
@@ -36,6 +39,10 @@ void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak)
 
 	case 1:
 		changed = Page1(num, textY, selection);
+		break;
+
+	case 2:
+		changed = Page2(num, textY, selection);
 		break;
 	}
 	
@@ -66,16 +73,10 @@ void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak)
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			
-			if (page)
-			{
-				page = 0;
-				num = PAGE0_NUM;
-			}
-			else
-			{
-				page = 1;
-				num = PAGE1_NUM;
-			}
+			// Drei Seiten im Kreis (#33): Optionen -> Optionen 2 ->
+			// Credits -> wieder von vorn.
+			page = (page + 1) % 3;
+			num = page == 0 ? PAGE0_NUM : (page == 1 ? PAGE1_NUM : PAGE2_NUM);
 
 			selection = 1 << num;
 		}
@@ -594,4 +595,34 @@ bool Page1(long& num, long textY, ulong selection)
 	}
 
 	return changed;
+}
+
+// Credits (#33). GPLv3-Hoeflichkeit und Nutzer-Vorgabe: die Namen, ohne die
+// es dieses Projekt nicht gaebe, gehoeren INS SPIEL, nicht nur in die
+// LIESMICH. Nur Text - keine URLs, der Spielfont traegt nicht jede Glyphe
+// (PrintString-Riegel); die Links stehen in der LIESMICH.
+bool Page2(long& num, long textY, ulong selection)
+{
+	long y;
+
+	num = PAGE2_NUM;
+	PrintString(phd_centerx, font_height, 6, "Credits", FF_CENTER);
+
+	y = 2;
+
+	PrintString(phd_centerx, textY + y++ * font_height, 1, "TOMB5 Engine", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 2, "Troye - ChocolateFan", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 2, "thatguyfrombb - Raildex", FF_CENTER);
+	y++;
+	PrintString(phd_centerx, textY + y++ * font_height, 1, "Randomizer and Windows 11 Port", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 2, "ChrisChanSan", FF_CENTER);
+	y++;
+	PrintString(phd_centerx, textY + y++ * font_height, 1, "Tools and Libraries", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 2, "trview by chreden", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 2, "Dear ImGui by Omar Cornut", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 2, "stb by Sean Barrett", FF_CENTER);
+
+	// Nichts zu waehlen - die Seite zeigt nur an. Zurueckgeben, dass sich
+	// nichts geaendert hat; die Umschaltzeile behandelt TroyeMenu selbst.
+	return 0;
 }

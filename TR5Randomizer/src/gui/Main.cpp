@@ -40,6 +40,8 @@
 #include "core/SecretListe.h"
 #include "core/Tr5Level.h"
 
+#include "Sprache.h"
+
 #include "imgui.h"
 #include "backends/imgui_impl_dx11.h"
 #include "backends/imgui_impl_win32.h"
@@ -614,7 +616,7 @@ static std::wstring lagerDir(const App& a)
         // eigentlichen Grund nennen, statt ihn beim Ordnerwaehlen zu verlieren.
         if (!a.payloadOk) { setStatus(a, a.payloadError, true); return; }
 
-        if (a.cfg.sourceDir.empty()) { setStatus(a, "Noch kein Spielordner gewaehlt."); return; }
+        if (a.cfg.sourceDir.empty()) { setStatus(a, T("Noch kein Spielordner gewaehlt.")); return; }
 
         // Existiert schon ein Backup, ist DAS der Massstab - nicht data\, denn
         // dort koennen bereits randomisierte Level liegen. Sonst wuerde beim
@@ -1006,7 +1008,7 @@ static std::wstring lagerDir(const App& a)
         a.doneCount = a.failCount = 0;
         a.stepIndex = 0;
         a.phase = App::Phase::Debug;
-        setStatus(a, "Debug-Level werden gebaut...");
+        setStatus(a, T("Debug-Level werden gebaut..."));
     }
 
     // Legt data\Backup an, falls es fehlt. Das darf NUR passieren, wenn die
@@ -1196,7 +1198,7 @@ static std::wstring lagerDir(const App& a)
 
         a.phase = App::Phase::Copy;
         a.phaseText = "Originale werden zurueckgespielt...";
-        setStatus(a, "Lauf gestartet.");
+        setStatus(a, T("Lauf gestartet."));
     }
 
     void advanceRun(App& a)
@@ -1214,7 +1216,7 @@ static std::wstring lagerDir(const App& a)
             int copied = 0;
             if (!a.data.copyLevels(a.backupDir(), a.dataDir(), err, &copied))
             {
-                setStatus(a, "Kopieren fehlgeschlagen: " + err, true);
+                setStatus(a, T("Kopieren fehlgeschlagen: " )+ err, true);
                 a.phase = App::Phase::Idle;
                 return;
             }
@@ -1316,14 +1318,14 @@ static std::wstring lagerDir(const App& a)
         std::string err;
         if (!PathUtil::dirExists(a.backupDir()))
         {
-            setStatus(a, "Es gibt kein Backup - da wurde noch nie randomisiert, "
-                         "die Level sind also bereits im Originalzustand.", true);
+            setStatus(a, T("Es gibt kein Backup - da wurde noch nie randomisiert, "
+                         "die Level sind also bereits im Originalzustand."), true);
             return;
         }
 
         int copied = 0;
         if (!a.data.copyLevels(a.backupDir(), a.dataDir(), err, &copied))
-            setStatus(a, "Zuruecksetzen fehlgeschlagen: " + err, true);
+            setStatus(a, T("Zuruecksetzen fehlgeschlagen: " )+ err, true);
         else
         {
             for (LevelRow& r : a.levels) r.result.clear();
@@ -1390,17 +1392,16 @@ static void drawPfadeWindow(App& a, HWND hwnd)
     if (!a.pfadeOpen) return;
 
     ImGui::SetNextWindowSize(ImVec2(620, 400), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Installations-Pfade", &a.pfadeOpen))
+    if (!ImGui::Begin((std::string(T("Installations-Pfade")) + "###pfade").c_str(), &a.pfadeOpen))
     {
         ImGui::End();
         return;
     }
 
-    ImGui::TextWrapped(
-        "Die Dinosaurier stammen aus anderen Spielen. Dieses Werkzeug bringt "
+    ImGui::TextWrapped(T("Die Dinosaurier stammen aus anderen Spielen. Dieses Werkzeug bringt "
         "keine Spieldaten mit - gib die Ordner an, dann holt der Lauf sich "
         "Modelle, Texturen und Klaenge von dort. Ohne Pfad bleiben die "
-        "betroffenen Gegnerarten ausgegraut, sonst laeuft alles wie gewohnt.");
+        "betroffenen Gegnerarten ausgegraut, sonst laeuft alles wie gewohnt."));
     ImGui::Spacing();
 
     struct Eintrag { const char* titel; const char* datei; const char* wofuer;
@@ -1418,13 +1419,13 @@ static void drawPfadeWindow(App& a, HWND hwnd)
     {
         ImGui::PushID(e.titel);
         ImGui::SeparatorText(e.titel);
-        ImGui::TextDisabled("fuer %s", e.wofuer);
+        ImGui::TextDisabled(T("fuer %s"), e.wofuer);
 
         const bool da = e.quelle ? dinoQuelleDa(a, e.quelle) : a.sourceOk;
-        ImGui::TextWrapped("%s", e.pfad->empty() ? "(nicht gewaehlt)"
+        ImGui::TextWrapped(T("%s"), e.pfad->empty() ? T("(nicht gewaehlt)")
                                                  : PathUtil::narrow(*e.pfad).c_str());
 
-        if (ImGui::Button("Ordner waehlen..."))
+        if (ImGui::Button(T("Ordner waehlen...")))
         {
             std::wstring picked;
             if (pickFolder(hwnd, picked))
@@ -1437,18 +1438,18 @@ static void drawPfadeWindow(App& a, HWND hwnd)
         if (!e.pfad->empty())
         {
             ImGui::SameLine();
-            if (ImGui::Button("Leeren")) { e.pfad->clear(); a.cfg.save(); }
+            if (ImGui::Button(T("Leeren"))) { e.pfad->clear(); a.cfg.save(); }
         }
         ImGui::SameLine();
-        if (da) ImGui::TextDisabled("in Ordnung");
-        else if (e.datei) ImGui::TextDisabled("%s nicht gefunden", e.datei);
-        else ImGui::TextDisabled("noch nicht geprueft");
+        if (da) ImGui::TextDisabled(T("in Ordnung"));
+        else if (e.datei) ImGui::TextDisabled(T("%s nicht gefunden"), e.datei);
+        else ImGui::TextDisabled(T("noch nicht geprueft"));
 
         ImGui::PopID();
     }
 
     ImGui::Spacing();
-    ImGui::TextDisabled("Gesucht wird jeweils der data-Ordner der Installation.");
+    ImGui::TextDisabled(T("Gesucht wird jeweils der data-Ordner der Installation."));
     ImGui::End();
 }
 
@@ -1473,7 +1474,7 @@ static void drawGegnerartenWindow(App& a)
     if (!a.artenOpen) return;
 
     ImGui::SetNextWindowSize(ImVec2(420, 520), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Gegnerarten", &a.artenOpen))
+    if (!ImGui::Begin((std::string(T("Gegnerarten")) + "###arten").c_str(), &a.artenOpen))
     {
         ImGui::End();
         return;
@@ -1481,25 +1482,24 @@ static void drawGegnerartenWindow(App& a)
 
     const std::vector<Gegnerart> arten = Rando::gegnerarten();
 
-    ImGui::TextWrapped(
-        "Welche Arten darf der Zufall ziehen? Der Haken wirkt auf den Tausch "
+    ImGui::TextWrapped(T("Welche Arten darf der Zufall ziehen? Der Haken wirkt auf den Tausch "
         "und auf zusaetzliche Gegner - Gegner, die im Level ohnehin stehen und "
-        "nicht getauscht werden, bleiben davon unberuehrt.");
+        "nicht getauscht werden, bleiben davon unberuehrt."));
     ImGui::Spacing();
     // Manche Arten teilen sich unter der Haube einen Animationssatz oder
     // brauchen ein unsichtbares Hilfsobjekt (der Geschosskern der Hydra etwa).
     // Das ist Technik, keine Spielerentscheidung - der Lauf holt es selbst, egal
     // wie die Haken stehen. Hier steht nur, DASS es passiert, damit sich niemand
     // fragt, warum ein abgewaehlter Wachmann trotzdem in der Datei auftaucht.
-    ImGui::TextDisabled("Was eine Art technisch braucht, laedt der Randomizer von selbst.");
+    ImGui::TextDisabled(T("Was eine Art technisch braucht, laedt der Randomizer von selbst."));
     ImGui::Spacing();
 
-    if (ImGui::Button("Alle an"))  a.optGegnerAus.clear();
+    if (ImGui::Button(T("Alle an")))  a.optGegnerAus.clear();
     ImGui::SameLine();
-    if (ImGui::Button("Alle aus"))
+    if (ImGui::Button(T("Alle aus")))
         for (const Gegnerart& g : arten) a.optGegnerAus.insert(g.typeId);
     ImGui::SameLine();
-    ImGui::TextDisabled("%d von %d an",
+    ImGui::TextDisabled(T("%d von %d an"),
                         static_cast<int>(arten.size() - a.optGegnerAus.size()),
                         static_cast<int>(arten.size()));
 
@@ -1522,13 +1522,13 @@ static void drawGegnerartenWindow(App& a)
             else    a.optGegnerAus.insert(g.typeId);
         }
         ImGui::SameLine();
-        ImGui::TextDisabled("(%d)", g.typeId);
+        ImGui::TextDisabled(T("(%d)"), g.typeId);
         ImGui::EndDisabled();
 
         if (!da)
         {
             ImGui::SameLine();
-            ImGui::TextDisabled("- braucht %s",
+            ImGui::TextDisabled(T("- braucht %s"),
                 std::strcmp(g.quelle, "tr3gold") == 0 ? "The Lost Artifact" : "Tomb Raider 3");
         }
     }
@@ -1539,12 +1539,12 @@ static void drawGegnerartenWindow(App& a)
     // Arten. Das ist ein gueltiger Zustand, aber keiner, den man versehentlich
     // haben will - deshalb steht es hier und wird nicht stillschweigend getan.
     if (a.optGegnerAus.size() >= arten.size())
-        ImGui::TextWrapped("Alle Arten abgewaehlt: jedes Level bleibt bei seinen "
-                           "eigenen Gegnern, fremde kommen keine dazu.");
+        ImGui::TextWrapped(T("Alle Arten abgewaehlt: jedes Level bleibt bei seinen "
+                           "eigenen Gegnern, fremde kommen keine dazu."));
     else if (!a.optGegnerAus.empty())
-        ImGui::TextWrapped("Waehlst du sehr viele ab, stehen manchen Leveln kaum "
+        ImGui::TextWrapped(T("Waehlst du sehr viele ab, stehen manchen Leveln kaum "
                            "noch fremde Arten zur Verfuegung - sie bleiben dann "
-                           "naeher am Original.");
+                           "naeher am Original."));
 
     ImGui::End();
 }
@@ -1554,51 +1554,50 @@ static void drawDebugWindow(App& a)
     if (!a.dbgOpen) return;
 
     ImGui::SetNextWindowSize(ImVec2(560, 460), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Debug: Sektoren-Marker", &a.dbgOpen))
+    if (!ImGui::Begin((std::string(T("Debug: Sektoren-Marker")) + "###dbgmarker").c_str(), &a.dbgOpen))
     {
         ImGui::End();
         return;
     }
 
-    ImGui::TextWrapped(
-        "Baut zu jedem oben angehakten Level eine Kopie, in der jeder erlaubte "
+    ImGui::TextWrapped(T("Baut zu jedem oben angehakten Level eine Kopie, in der jeder erlaubte "
         "Sektor einen Marker traegt. Zum Ansehen in trview - mit mehreren tausend "
         "Items startet das Spiel diese Dateien NICHT. Deine Installation bleibt "
-        "unberuehrt, geschrieben wird nur nach \"Debug Level\" neben dem Programm.");
+        "unberuehrt, geschrieben wird nur nach \"Debug Level\" neben dem Programm."));
 
     ImGui::Separator();
-    ImGui::Checkbox("Fuellebene: jeden gueltigen Sektor markieren", &a.dbgUseFill);
+    ImGui::Checkbox(T("Fuellebene: jeden gueltigen Sektor markieren"), &a.dbgUseFill);
     ImGui::BeginDisabled(!a.dbgUseFill);
     ImGui::SetNextItemWidth(120);
-    ImGui::InputInt("Typ der Fuellebene", &a.dbgFillType);
+    ImGui::InputInt(T("Typ der Fuellebene"), &a.dbgFillType);
     if (a.dbgFillType < 0) a.dbgFillType = 0;
     ImGui::EndDisabled();
-    ImGui::TextDisabled("223 = Pickup Item4. Im Spiel selten, faellt in der Itemliste sofort auf.");
+    ImGui::TextDisabled(T("223 = Pickup Item4. Im Spiel selten, faellt in der Itemliste sofort auf."));
 
     const bool busy = (a.phase != App::Phase::Idle);
     ImGui::Separator();
     ImGui::BeginDisabled(!a.sourceOk || busy);
-    if (ImGui::Button("Debug-Level bauen", ImVec2(200, 30))) startDebugMarkers(a);
+    if (ImGui::Button(T("Debug-Level bauen"), ImVec2(200, 30))) startDebugMarkers(a);
     ImGui::EndDisabled();
     ImGui::SameLine();
     ImGui::BeginDisabled(!PathUtil::dirExists(a.debugDir()));
-    if (ImGui::Button("Ordner oeffnen", ImVec2(150, 30)))
+    if (ImGui::Button(T("Ordner oeffnen"), ImVec2(150, 30)))
         ShellExecuteW(nullptr, L"open", a.debugDir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     ImGui::EndDisabled();
 
     if (!a.sourceOk)
-        ImGui::TextDisabled("(erst oben eine Installation waehlen)");
+        ImGui::TextDisabled(T("(erst oben eine Installation waehlen)"));
 
     ImGui::Separator();
-    ImGui::TextUnformatted("Ergebnis je Typ:");
+    ImGui::TextUnformatted(T("Ergebnis je Typ:"));
     if (ImGui::BeginChild("dbglog", ImVec2(0, 0), ImGuiChildFlags_Borders))
     {
         for (const std::string& l : a.dbgLog)
         {
             if (l.find("KEIN erlaubter") != std::string::npos)
-                ImGui::TextColored(ImVec4(1, .4f, .4f, 1), "%s", l.c_str());
+                ImGui::TextColored(ImVec4(1, .4f, .4f, 1), T("%s"), l.c_str());
             else if (l.find("FEHLER") != std::string::npos)
-                ImGui::TextColored(ImVec4(1, .4f, .4f, 1), "%s", l.c_str());
+                ImGui::TextColored(ImVec4(1, .4f, .4f, 1), T("%s"), l.c_str());
             else
                 ImGui::TextUnformatted(l.c_str());
         }
@@ -1634,9 +1633,9 @@ static void drawUi(App& a, HWND hwnd)
                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
                  ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-    ImGui::TextUnformatted("TR5 Randomizer");
+    ImGui::TextUnformatted(T("TR5 Randomizer"));
     ImGui::SameLine();
-    ImGui::TextDisabled("Build %s", RANDO_BUILD_STRING);
+    ImGui::TextDisabled(T("Build %s"), RANDO_BUILD_STRING);
 
     // Rechts oben, weil es kein Bedienschritt ist: die vier nummerierten
     // Abschnitte darunter sind der Weg durchs Programm, das hier steht daneben.
@@ -1645,13 +1644,22 @@ static void drawUi(App& a, HWND hwnd)
         // GetContentRegionMax ist im Docking-Zweig (imconfig mit
         // IMGUI_DISABLE_OBSOLETE_FUNCTIONS) nicht mehr da; Cursor-X am
         // Zeilenanfang plus verfuegbare Breite ergibt denselben rechten Rand.
-        ImGui::SameLine(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - w);
-        if (ImGui::Button("Debug", ImVec2(w, 0))) ImGui::OpenPopup("##debugmenu");
+        // Zwei Knoepfe: links davon die Sprache (#128), rechts Debug.
+        ImGui::SameLine(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x
+                        - 2.0f * w - ImGui::GetStyle().ItemSpacing.x);
+        if (ImGui::Button(gSpracheDeutsch ? "Sprache: DE###sprache" : "Language: EN###sprache", ImVec2(w, 0)))
+        {
+            gSpracheDeutsch = !gSpracheDeutsch;
+            a.cfg.spracheDeutsch = gSpracheDeutsch;
+            a.cfg.save();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(T("Debug"), ImVec2(w, 0))) ImGui::OpenPopup("##debugmenu");
         if (ImGui::BeginPopup("##debugmenu"))
         {
-            if (ImGui::MenuItem("Sektoren-Marker...")) a.dbgOpen = true;
+            if (ImGui::MenuItem(T("Sektoren-Marker..."))) a.dbgOpen = true;
             ImGui::Separator();
-            if (ImGui::MenuItem("Ordner \"Debug Level\" oeffnen",
+            if (ImGui::MenuItem(T("Ordner \"Debug Level\" oeffnen"),
                                 nullptr, false, PathUtil::dirExists(a.debugDir())))
                 ShellExecuteW(nullptr, L"open", a.debugDir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             ImGui::EndPopup();
@@ -1693,7 +1701,7 @@ static void drawUi(App& a, HWND hwnd)
 
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(farbe.x, farbe.y, farbe.z, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(farbe.x, farbe.y, farbe.z, 0.6f));
-        ImGui::SeparatorText(titel);
+        ImGui::SeparatorText(T(titel));
         ImGui::PopStyleColor(2);
     };
     // Schliesst einen Kasten und merkt sich seine gemessene Hoehe.
@@ -1759,24 +1767,24 @@ static void drawUi(App& a, HWND hwnd)
         ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(1.0f, .45f, .30f, 0.85f));
         ImGui::BeginChild("k_zonenwarnung", ImVec2(0.0f, 0.0f),
                           ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
-        ImGui::TextColored(ImVec4(1, .55f, .35f, 1), "Achtung: veralteter Kurationsstand");
-        ImGui::TextWrapped("%s", a.zonenWarnung.c_str());
-        ImGui::TextDisabled("Beheben: ZoneAnalyse.ps1 fuer ALLE Level neu nach data\\ exportieren.");
+        ImGui::TextColored(ImVec4(1, .55f, .35f, 1), T("Achtung: veralteter Kurationsstand"));
+        ImGui::TextWrapped(T("%s"), a.zonenWarnung.c_str());
+        ImGui::TextDisabled(T("Beheben: ZoneAnalyse.ps1 fuer ALLE Level neu nach data\\ exportieren."));
         ImGui::EndChild();
         ImGui::PopStyleColor(2);
         ImGui::Spacing();
     }
 
     blockAuf("k_install", "1. Deine Installation", fInstall);
-    ImGui::TextWrapped("Waehle den Ordner deiner Tomb Raider Chronicles-Installation. "
+    ImGui::TextWrapped(T("Waehle den Ordner deiner Tomb Raider Chronicles-Installation. "
                        "Die Level werden direkt dort randomisiert; die Originale sichert "
-                       "das Programm vorher nach data\\Backup.");
+                       "das Programm vorher nach data\\Backup."));
 
-    std::string shown = a.cfg.sourceDir.empty() ? std::string("(nicht gewaehlt)")
+    std::string shown = a.cfg.sourceDir.empty() ? std::string(T("(nicht gewaehlt)"))
                                                 : PathUtil::narrow(a.cfg.sourceDir);
-    ImGui::TextWrapped("%s", shown.c_str());
+    ImGui::TextWrapped(T("%s"), shown.c_str());
 
-    if (ImGui::Button("Ordner waehlen..."))
+    if (ImGui::Button(T("Ordner waehlen...")))
     {
         std::wstring picked;
         if (pickFolder(hwnd, picked))
@@ -1787,37 +1795,37 @@ static void drawUi(App& a, HWND hwnd)
         }
     }
     ImGui::SameLine();
-    if (ImGui::Button("Erneut pruefen")) inspectSource(a);
+    if (ImGui::Button(T("Erneut pruefen"))) inspectSource(a);
     ImGui::SameLine();
-    if (ImGui::Button("Installations-Pfade...")) a.pfadeOpen = true;
+    if (ImGui::Button(T("Installations-Pfade..."))) a.pfadeOpen = true;
     // Die Schwebehilfe der Optionsliste steht hier noch nicht zur Verfuegung -
     // sie wird erst weiter unten angelegt. Der eigene Tooltip tut es auch.
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
-        ImGui::SetTooltip("Optional: Ordner von Tomb Raider 3 und The Lost Artifact.\n"
+        ImGui::SetTooltip(T("Optional: Ordner von Tomb Raider 3 und The Lost Artifact.\n"
                           "Nur damit lassen sich die Dinosaurier verwenden -\n"
-                          "wir liefern keine Spieldaten mit.");
+                          "wir liefern keine Spieldaten mit."));
     {
         const int fehlt = (dinoQuelleDa(a, "tr3") ? 0 : 1) + (dinoQuelleDa(a, "tr3gold") ? 0 : 1);
         ImGui::SameLine();
-        if (fehlt == 0) ImGui::TextDisabled("TR3 + LA gefunden");
-        else            ImGui::TextDisabled("%d ohne Pfad", fehlt);
+        if (fehlt == 0) ImGui::TextDisabled(T("TR3 + LA gefunden"));
+        else            ImGui::TextDisabled(T("%d ohne Pfad"), fehlt);
     }
 
     blockZu(&a.hoehen.install);
 
     // --- 2. Seed ---
     blockAuf("k_seed", "2. Seed", fSeed, restHoehe(a.hoehen.install + lueckeY));
-    ImGui::TextWrapped("Derselbe Seed erzeugt immer dasselbe Spiel. Jede Eingabe ist gueltig - "
-                       "auch ein Wort.");
+    ImGui::TextWrapped(T("Derselbe Seed erzeugt immer dasselbe Spiel. Jede Eingabe ist gueltig - "
+                       "auch ein Wort."));
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 90.0f);
     ImGui::InputText("##seed", a.seedBuf, sizeof(a.seedBuf));
     ImGui::SameLine();
-    if (ImGui::Button("Wuerfeln"))
+    if (ImGui::Button(T("Wuerfeln")))
     {
         const std::string s = SeedText::format(SeedText::random());
         std::snprintf(a.seedBuf, sizeof(a.seedBuf), "%s", s.c_str());
     }
-    ImGui::TextDisabled("wirksam: 0x%016llX", (unsigned long long)a.effectiveSeed());
+    ImGui::TextDisabled(T("wirksam: 0x%016llX"), (unsigned long long)a.effectiveSeed());
     blockZu();
 
     ImGui::EndGroup();
@@ -1836,7 +1844,7 @@ static void drawUi(App& a, HWND hwnd)
         {
             ImGui::BeginTooltip();
             ImGui::PushTextWrapPos(ImGui::GetFontSize() * 28.0f);
-            ImGui::TextUnformatted(text);
+            ImGui::TextUnformatted(T(text));
             ImGui::PopTextWrapPos();
             ImGui::EndTooltip();
         }
@@ -1856,12 +1864,16 @@ static void drawUi(App& a, HWND hwnd)
     auto balanceRegler = [&](const char* beschriftung, float* wert, bool* zufall,
                              float von, float bis, const char* hilfe)
     {
+        // Sprache (#128): einmal am Eingang uebersetzen, dann arbeitet der
+        // ganze Regler mit dem sichtbaren Text.
+        beschriftung = T(beschriftung);
+        hilfe = T(hilfe);
         // Zwei Zeilen statt einer: Beschriftung samt Haken oben, der Regler
         // darunter ueber die volle Kastenbreite. In einer Zeile passten
         // Regler, Name, Prozentzahl und Haken in einer Viertelspalte nicht
         // mehr nebeneinander und wurden rechts abgeschnitten.
         char kennung[64];
-        std::snprintf(kennung, sizeof(kennung), "Zufall##%s", beschriftung);
+        std::snprintf(kennung, sizeof(kennung), "%s##%s", T("Zufall"), beschriftung);
 
         ImGui::TextUnformatted(beschriftung);
         hoverHilfe(hilfe);
@@ -1870,7 +1882,7 @@ static void drawUi(App& a, HWND hwnd)
         // Den Haken rechtsbuendig setzen, damit die drei Regler untereinander
         // eine Linie ergeben statt einer Treppe.
         {
-            const float breite = ImGui::CalcTextSize("Zufall").x
+            const float breite = ImGui::CalcTextSize(T("Zufall")).x
                                + ImGui::GetFrameHeight()
                                + ImGui::GetStyle().ItemInnerSpacing.x;
             const float ziel = ImGui::GetContentRegionAvail().x - breite;
@@ -1919,31 +1931,31 @@ static void drawUi(App& a, HWND hwnd)
 
     blockAuf("k_items", "3. Items", fItems);
 
-    ImGui::Checkbox("Ausruestung (Waffen, Munition, Medipacks)", &a.optOtherPickups);
+    ImGui::Checkbox(T("Ausruestung (Waffen, Munition, Medipacks)"), &a.optOtherPickups);
     // Item-Abundance (#36): zusaetzliche Verbrauchsgueter streuen. Weniger als
     // Vanilla gibt es bewusst nicht - Items entfernen wuerde alle folgenden
     // Indizes verschieben und jeden "Object N"-Verweis der Trigger brechen.
-    ImGui::RadioButton("Vanilla Anzahl", &a.optItemMenge, 0);
+    ImGui::RadioButton(T("Vanilla Anzahl"), &a.optItemMenge, 0);
     hoverHilfe("Das Level behaelt genau so viel Ausruestung, wie Core vorgesehen "
                "hat - nur an anderen Stellen.");
     ImGui::SameLine();
-    ImGui::RadioButton("Mehr", &a.optItemMenge, 1);
+    ImGui::RadioButton(T("Mehr"), &a.optItemMenge, 1);
     hoverHilfe("Streut bis zu zwoelf zusaetzliche Verbrauchsgueter pro Level. "
                "Gelegt wird nur, was das Level ohnehin kennt - Munition, "
                "Medipacks, Fackeln -, gewichtet nach Haeufigkeit: Andy2 (Kind-Lara, "
                "keine Waffen) bekommt also Medipacks, ein Waffenlevel Munition. "
                "Schluessel, Puzzleteile und Secrets bleiben aussen vor.");
     ImGui::SameLine();
-    ImGui::RadioButton("Viel mehr", &a.optItemMenge, 2);
+    ImGui::RadioButton(T("Viel mehr"), &a.optItemMenge, 2);
     hoverHilfe("Wie \"Mehr Items\", aber bis zu dreissig pro Level. Die Grenze "
                "ist erreicht, wenn die freien Ablageflaechen ausgehen oder das "
                "Item-Limit der Engine (512) naeher rueckt - beides deckelt die "
                "Zahl von selbst.");
 
-    ImGui::Checkbox("Schluessel & Puzzles", &a.optKeyItems);
+    ImGui::Checkbox(T("Schluessel & Puzzles"), &a.optKeyItems);
 
     // Kein Haken mehr: volles Waffenset ist Standard (Nutzerentscheidung).
-    ImGui::TextDisabled("Alle Waffen ueberall sind Standard und immer dabei.");
+    ImGui::TextDisabled(T("Alle Waffen ueberall sind Standard und immer dabei."));
     hoverHilfe("Jedes Level bekommt bei jedem Lauf das volle Waffenset: Pistolen, "
                "Uzi, Schrotflinte, Desert Eagle (ersetzt den Revolver, in den "
                "joby-Leveln auch im Namen) und HK samt Munition. Ein Level behaelt "
@@ -1954,8 +1966,7 @@ static void drawUi(App& a, HWND hwnd)
                "kommen zur Laufzeit aus den eigenen Leveldateien des Spielers.");
 
     if (!a.optOtherPickups && !a.optKeyItems && !a.optEnemies && !a.optEnemySwap && !a.optOutfits)
-        ImGui::TextColored(ImVec4(1, .5f, .3f, 1),
-                           "Keine Wuerfel-Option gewaehlt - die Level bekommen nur das Standard-Waffenset.");
+        ImGui::TextColored(ImVec4(1, .5f, .3f, 1), T("Keine Wuerfel-Option gewaehlt - die Level bekommen nur das Standard-Waffenset."));
 
     balanceRegler("Waffenschaden", &a.balWaffen, &a.balWaffenZufall, 0.0f, 2.0f,
                   "Wirkt auf alle Waffen Laras zugleich - Pistolen, Uzi, "
@@ -1969,7 +1980,7 @@ static void drawUi(App& a, HWND hwnd)
 
     blockAuf("k_outfits", "4. Outfits", fOutfits, restHoehe(a.hoehen.items + lueckeY));
 
-    ImGui::Checkbox("Zufaellige Outfits", &a.optOutfits);
+    ImGui::Checkbox(T("Zufaellige Outfits"), &a.optOutfits);
     hoverHilfe("Jeder Abschnitt bekommt zufaellig Lara_Andrea, Lara_Joby oder "
                "Lara_Rich (Catsuit). Uebertragen werden nur Haut und Kopf (Slots "
                "8/9/10) samt Outfit-Byte - nie Slot 0, der traegt die Animationen. "
@@ -1978,15 +1989,15 @@ static void drawUi(App& a, HWND hwnd)
 
     // Platzhalter: klassische Outfits als zusaetzliche Poolauswahl.
     ImGui::BeginDisabled(true);
-    ImGui::Checkbox("TR1 Outfit", &a.phOutfitTr1);
+    ImGui::Checkbox(T("TR1 Outfit"), &a.phOutfitTr1);
     hoverHilfe("Kommt noch: das klassische TR1-Outfit als zusaetzliche Wahl im "
                "Outfit-Pool. Braucht ein passendes TR5-Modell - Spieldaten "
                "anderer Spiele liefern wir nie mit, das Modell muss also "
                "eigens gebaut oder vom Spieler beigesteuert werden.");
-    ImGui::Checkbox("TR2 Outfits", &a.phOutfitTr2);
+    ImGui::Checkbox(T("TR2 Outfits"), &a.phOutfitTr2);
     hoverHilfe("Kommt noch: die TR2-Outfits (u.a. Bomberjacke, Wetsuit) als "
                "zusaetzliche Poolauswahl - gleiche Voraussetzung wie TR1.");
-    ImGui::Checkbox("TR3 Outfits", &a.phOutfitTr3);
+    ImGui::Checkbox(T("TR3 Outfits"), &a.phOutfitTr3);
     hoverHilfe("Kommt noch: die TR3-Outfits (u.a. Dschungel, Antarktis) als "
                "zusaetzliche Poolauswahl - gleiche Voraussetzung wie TR1.");
     ImGui::EndDisabled();
@@ -2000,7 +2011,7 @@ static void drawUi(App& a, HWND hwnd)
 
     blockAuf("k_gegner", "5. Gegner", fGegner);
 
-    ImGui::Checkbox("Zusaetzliche Gegner ins Level setzen", &a.optEnemies);
+    ImGui::Checkbox(T("Zusaetzliche Gegner ins Level setzen"), &a.optEnemies);
     hoverHilfe("Jeder bekommt einen eigenen Trigger, etwa drei Sektoren vor sich "
                "auf Laras Weg - nie auf seinem eigenen Feld, sonst spawnt er in ihr. "
                "Welche Gegnertypen ein Level vertraegt, ist handkuriert; ist die "
@@ -2008,7 +2019,7 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::Indent();
     ImGui::BeginDisabled(!a.optEnemies);
     ImGui::SetNextItemWidth(160.0f);
-    ImGui::SliderInt("pro Level", &a.optEnemyCount, 1, 20);
+    ImGui::SliderInt(T("pro Level"), &a.optEnemyCount, 1, 20);
     ImGui::EndDisabled();
     ImGui::Unindent();
 
@@ -2016,7 +2027,7 @@ static void drawUi(App& a, HWND hwnd)
     // Levelpool" und stiftete Verwirrung (Nutzerfrage). Der Haken sagt, OB
     // vorhandene Gegner die Rollen tauschen; die Poolwahl darunter sagt,
     // WORAUS Tausch und Zusatzgegner wuerfeln.
-    ImGui::Checkbox("Vorhandene Gegner tauschen", &a.optEnemySwap);
+    ImGui::Checkbox(T("Vorhandene Gegner tauschen"), &a.optEnemySwap);
     hoverHilfe("Die Gegner, die im Level ohnehin stehen, tauschen die Rollen. "
                "Nur die Art wechselt, der Item-Index bleibt - jeder Gegner wacht "
                "also weiter dort auf, wo sein Trigger es vorsieht. Anzahl und "
@@ -2027,17 +2038,17 @@ static void drawUi(App& a, HWND hwnd)
     // solange keine der beiden Aktionen aktiv ist - ohne sie hat die Wahl
     // keine Wirkung.
     ImGui::BeginDisabled(!a.optEnemies && !a.optEnemySwap);
-    ImGui::TextUnformatted("Gegnerpool:");
-    ImGui::RadioButton("Nur Levelpool", &a.optEnemyPool, 0);
+    ImGui::TextUnformatted(T("Gegnerpool:"));
+    ImGui::RadioButton(T("Nur Levelpool"), &a.optEnemyPool, 0);
     hoverHilfe("Getauscht und gesetzt wird nur, was das Level selbst kennt "
                "(die handkuratierte Liste je Level).");
-    ImGui::RadioButton("Cross-Mix", &a.optEnemyPool, 1);
+    ImGui::RadioButton(T("Cross-Mix"), &a.optEnemyPool, 1);
     hoverHilfe("Bis zu DREI fremde Typen aus anderen Leveln kommen in den Pool - "
                "SWAT, Guards, Mafia, Larson, Pierre, Loewe, Gladiator, Statue, "
                "Maze Monster, Imp und mehr. Beim Tausch geht etwa jede vierte "
                "Rolle an einen davon, das Level bleibt erkennbar. Modelle und "
                "Sounds wandern zur Laufzeit aus den eigenen Leveldateien mit.");
-    ImGui::RadioButton("Allsanity", &a.optEnemyPool, 2);
+    ImGui::RadioButton(T("Allsanity"), &a.optEnemyPool, 2);
     hoverHilfe("Der KOMPLETTE Gegnerpool steht jedem Level zur Verfuegung, und "
                "beim Tausch wuerfelt jede Rolle frei aus allem - maximale "
                "Auswahl. Uebernommen werden trotzdem nur die Typen, die der "
@@ -2047,14 +2058,14 @@ static void drawUi(App& a, HWND hwnd)
 
     // Feinauswahl in einem eigenen Fenster: die Liste ist zu lang fuer die
     // Hauptseite und der Nutzer fasst sie selten an.
-    if (ImGui::Button("Gegnerarten...")) a.artenOpen = true;
+    if (ImGui::Button(T("Gegnerarten..."))) a.artenOpen = true;
     hoverHilfe("Welche Gegnerarten der Zufall ueberhaupt ziehen darf. Gut, um "
                "Lieblingsgegner haeufiger zu sehen - oder um eine einzelne Art "
                "zu pruefen: alles abwaehlen bis auf eine.");
     if (!a.optGegnerAus.empty())
     {
         ImGui::SameLine();
-        ImGui::TextDisabled("%d abgewaehlt", static_cast<int>(a.optGegnerAus.size()));
+        ImGui::TextDisabled(T("%d abgewaehlt"), static_cast<int>(a.optGegnerAus.size()));
     }
     ImGui::EndDisabled();
 
@@ -2072,7 +2083,7 @@ static void drawUi(App& a, HWND hwnd)
                   "Geschrieben wird die Zeile GegnerSchaden in Balance.txt neben "
                   "der PCtomb5.exe.");
 
-    if (ImGui::Button("Balance zuruecksetzen"))
+    if (ImGui::Button(T("Balance zuruecksetzen")))
     {
         a.balWaffenZufall = a.balGegnerLebenZufall = a.balGegnerSchadenZufall = false;
         a.balWaffen = a.balGegnerLeben = a.balGegnerSchaden = 1.0f;
@@ -2085,7 +2096,7 @@ static void drawUi(App& a, HWND hwnd)
                "sie beim naechsten Start neu und vollstaendig an.");
 
     if (!a.balHinweis.empty())
-        ImGui::TextDisabled("%s", a.balHinweis.c_str());
+        ImGui::TextDisabled(T("%s"), a.balHinweis.c_str());
     blockZu(&a.hoehen.gegner);
 
 
@@ -2097,7 +2108,7 @@ static void drawUi(App& a, HWND hwnd)
 
     blockAuf("k_level", "6. Level", fLevel);
     ImGui::BeginDisabled(a.optLevelFolge == 2);	// bei "frei ueber alles" bedeutungslos und bewusst ohne Wirkung
-    ImGui::Checkbox("Levelabschnitte switchen", &a.phLevelAbschnitte);
+    ImGui::Checkbox(T("Levelabschnitte switchen"), &a.phLevelAbschnitte);
     ImGui::EndDisabled();
     hoverHilfe("Die vier Story-Abschnitte (Rom, Russland, Irland, VCI) in "
                "zufaelliger Reihenfolge spielen. Innerhalb eines Abschnitts "
@@ -2106,7 +2117,7 @@ static void drawUi(App& a, HWND hwnd)
                "Engine ab 2026-08-22 (Levelidentitaet aus dem Dateinamen); "
                "alte Spielstaende passen nicht zur neuen Reihenfolge.");
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-    const char* folgeNamen[] = { "Level-Reihenfolge: aus", "innerhalb der Abschnitte", "frei ueber alles" };
+    const char* folgeNamen[] = { T("Level-Reihenfolge: aus"), T("innerhalb der Abschnitte"), T("frei ueber alles") };
     ImGui::Combo("##levelfolge", &a.optLevelFolge, folgeNamen, 3);
     hoverHilfe("Innerhalb: Rom/Russland/Irland/VCI bleiben Bloecke, nur die Level "
                "darin tauschen. Frei: alle 13 Level ueber alle Abschnitte hinweg "
@@ -2121,13 +2132,13 @@ static void drawUi(App& a, HWND hwnd)
     blockZu(&a.hoehen.level);
 
     blockAuf("k_musik", "7. Musik", fMusik);
-    ImGui::Checkbox("Hintergrundmusik switchen", &a.phMusikSwitch);
+    ImGui::Checkbox(T("Hintergrundmusik switchen"), &a.phMusikSwitch);
     hoverHilfe("Die Levelmusik wird unter den spielbaren Leveln vertauscht - "
                "das Audio-Byte im CMD_LEVEL-Eintrag der SCRIPT.DAT. Cutscene-"
                "Level behalten ihre Musik. Gewuerfelt wird bei jedem Lauf neu "
                "aus der Sicherung heraus; Haken weg = naechster Lauf stellt "
                "die Originalmusik wieder her.");
-    ImGui::Checkbox("Trigger-Sound/Musik-IDs switchen", &a.phMusikTrigger);
+    ImGui::Checkbox(T("Trigger-Sound/Musik-IDs switchen"), &a.phMusikTrigger);
     hoverHilfe("Die Musik-Trigger in den Leveln (TO_CD) bekommen vertauschte "
                "Tracks - GLOBAL ueber alle Level: nur Tracks, die irgendwo im Spiel "
                "ein Trigger ausloest (keine Cutscene-Dialoge, kein FMV-Ton), "
@@ -2149,17 +2160,17 @@ static void drawUi(App& a, HWND hwnd)
     blockAuf("k_secrets", "8. Secrets", fSecrets,
              restHoehe(a.hoehen.level + lueckeY + a.hoehen.musik + lueckeY));
 
-    ImGui::RadioButton("Vanilla", &a.optSecrets, 0);
+    ImGui::RadioButton(T("Vanilla"), &a.optSecrets, 0);
     hoverHilfe("Die Secrets bleiben, wo Core sie versteckt hat.");
-    ImGui::RadioButton("Im normalen Item-Pool", &a.optSecrets, 1);
+    ImGui::RadioButton(T("Im normalen Item-Pool"), &a.optSecrets, 1);
     hoverHilfe("Die Secrets wandern als gewoehnliche Pickups in den Wuerfelpool "
                "und koennen ueberall dort liegen, wo auch Ausruestung liegen darf.");
 
-    ImGui::RadioButton("Glitchless-Liste", &a.optSecrets, 2);
+    ImGui::RadioButton(T("Glitchless-Liste"), &a.optSecrets, 2);
     hoverHilfe("Handverlesene Verstecke eines Autors, ohne Glitches erreichbar. "
                "Eine Liste kann je Level auch Zusatzobjekte setzen - Schluessel, "
                "Schalter, Tueren, sogar neue Portale.");
-    ImGui::RadioButton("Glitched-Liste", &a.optSecrets, 3);
+    ImGui::RadioButton(T("Glitched-Liste"), &a.optSecrets, 3);
     hoverHilfe("Wie die Glitchless-Liste, aber die Verstecke duerfen Glitches "
                "voraussetzen.");
 
@@ -2171,13 +2182,13 @@ static void drawUi(App& a, HWND hwnd)
             if (q.kategorie == kat) passend.push_back(&q);
 
         ImGui::SetNextItemWidth(220.0f);
-        const char* anzeige = "(keine Listen gefunden)";
+        const char* anzeige = T("(keine Listen gefunden)");
         for (const SecretQuelle* q : passend)
             if (q->autor == a.secretAutor) anzeige = q->autor.c_str();
         if (!passend.empty() && anzeige[0] == '(')
         { a.secretAutor = passend[0]->autor; anzeige = passend[0]->autor.c_str(); }
 
-        if (ImGui::BeginCombo("Autor", anzeige))
+        if (ImGui::BeginCombo(T("Autor"), anzeige))
         {
             for (const SecretQuelle* q : passend)
                 if (ImGui::Selectable(q->autor.c_str(), q->autor == a.secretAutor))
@@ -2185,7 +2196,7 @@ static void drawUi(App& a, HWND hwnd)
             ImGui::EndCombo();
         }
         if (passend.empty())
-            ImGui::TextDisabled("Keine %s-Liste in data\secrets gefunden - die Level bleiben vanilla.", kat);
+            ImGui::TextDisabled(T("Keine %s-Liste in data\\secrets gefunden - die Level bleiben vanilla."), kat);
     }
     blockZu();
 
@@ -2209,25 +2220,25 @@ static void drawUi(App& a, HWND hwnd)
     blockAuf("k_vorbereitung", "9. In Vorbereitung", fVorb);
     ImGui::BeginDisabled(true);
 
-    ImGui::TextDisabled("Texturen");
-    ImGui::Checkbox("RGB Vanilla Texturen", &a.phTexRgb);
+    ImGui::TextDisabled(T("Texturen"));
+    ImGui::Checkbox(T("RGB Vanilla Texturen"), &a.phTexRgb);
     hoverHilfe("Kommt noch: Farbwuerfel ueber die Vanilla-Texturseiten - der "
                "Seed verschiebt die Farbtoene, rein kosmetisch.");
-    ImGui::Checkbox("Leveluebergreifend mixen", &a.phTexMix);
+    ImGui::Checkbox(T("Leveluebergreifend mixen"), &a.phTexMix);
     hoverHilfe("Kommt noch: Texturseiten zwischen den Leveln tauschen - Rom in "
                "Russland, U-Boot in Irland.");
-    ImGui::Checkbox("Remaster-Texturen patchen", &a.phTexRemaster);
+    ImGui::Checkbox(T("Remaster-Texturen patchen"), &a.phTexRemaster);
     hoverHilfe("Kommt noch: Remaster-Texturen (sofern der Spieler sie hat) in "
                "die klassischen Level patchen.");
 
-    ImGui::TextDisabled("Raeume");
-    ImGui::Checkbox("Kulissen einbinden", &a.phRoomKulissen);
+    ImGui::TextDisabled(T("Raeume"));
+    ImGui::Checkbox(T("Kulissen einbinden"), &a.phRoomKulissen);
     hoverHilfe("Kommt noch: reine Kulissenbereiche ins Spiel einbinden, damit "
                "dort Items und Gegner liegen koennen.");
-    ImGui::Checkbox("Nachbar-Raeume begehbar machen", &a.phRoomNachbar);
+    ImGui::Checkbox(T("Nachbar-Raeume begehbar machen"), &a.phRoomNachbar);
     hoverHilfe("Kommt noch: angrenzende, vanilla gesperrte Raeume oeffnen - "
                "mehr Flaeche fuer die Platzierung.");
-    ImGui::Checkbox("joby4 NoWater", &a.phJoby4NoWater);
+    ImGui::Checkbox(T("joby4 NoWater"), &a.phJoby4NoWater);
     hoverHilfe("Kommt noch: Deepsea Dive ohne Wasser - damit waere joby4 "
                "endlich voll randomisierbar statt vanilla.");
 
@@ -2258,11 +2269,11 @@ static void drawUi(App& a, HWND hwnd)
                       ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(fListe.x, fListe.y, fListe.z, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(fListe.x, fListe.y, fListe.z, 0.6f));
-    ImGui::SeparatorText("10. Level");
+    ImGui::SeparatorText(T("10. Level"));
     ImGui::PopStyleColor(2);
     if (a.skippedNonPlayable > 0)
-        ImGui::TextWrapped("%d nicht spielbare Dateien (Title, del, richcut2) werden "
-                           "geprueft, aber nicht angetastet.", a.skippedNonPlayable);
+        ImGui::TextWrapped(T("%d nicht spielbare Dateien (Title, del, richcut2) werden "
+                           "geprueft, aber nicht angetastet."), a.skippedNonPlayable);
     // Feste Hoehe nach Levelanzahl statt Scrollleiste (Nutzerwunsch): ohne
     // ScrollY und ohne Hoehenvorgabe waechst die Tabelle genau auf ihre
     // Zeilen - bei 13 spielbaren Leveln ist das ueberschaubar.
@@ -2272,8 +2283,8 @@ static void drawUi(App& a, HWND hwnd)
     if (ImGui::BeginTable("levels", 2,
         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
     {
-        ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_WidthFixed, 160);
-        ImGui::TableSetupColumn("Zustand", ImGuiTableColumnFlags_WidthFixed, 150);
+        ImGui::TableSetupColumn(T("Level"), ImGuiTableColumnFlags_WidthFixed, 160);
+        ImGui::TableSetupColumn(T("Zustand"), ImGuiTableColumnFlags_WidthFixed, 150);
         ImGui::TableHeadersRow();
 
         for (size_t i = 0; i < a.levels.size(); ++i)
@@ -2298,27 +2309,27 @@ static void drawUi(App& a, HWND hwnd)
             {
                 switch (r.state)
                 {
-                case LevelState::Vanilla:  ImGui::TextUnformatted("original"); break;
-                case LevelState::Modified: ImGui::TextColored(ImVec4(1, .5f, .3f, 1), "veraendert"); break;
-                case LevelState::Missing:  ImGui::TextColored(ImVec4(1, .4f, .4f, 1), "fehlt"); break;
-                default:                   ImGui::TextUnformatted("unbekannt"); break;
+                case LevelState::Vanilla:  ImGui::TextUnformatted(T("original")); break;
+                case LevelState::Modified: ImGui::TextColored(ImVec4(1, .5f, .3f, 1), T("veraendert")); break;
+                case LevelState::Missing:  ImGui::TextColored(ImVec4(1, .4f, .4f, 1), T("fehlt")); break;
+                default:                   ImGui::TextUnformatted(T("unbekannt")); break;
                 }
             }
             else if (r.result.rfind("FEHLER", 0) == 0)
             {
-                ImGui::TextColored(ImVec4(1, .4f, .4f, 1), "Fehler");
+                ImGui::TextColored(ImVec4(1, .4f, .4f, 1), T("Fehler"));
                 if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
-                    ImGui::SetTooltip("%s", r.result.c_str());
+                    ImGui::SetTooltip(T("%s"), r.result.c_str());
             }
             else if (r.result == "uebersprungen")
             {
-                ImGui::TextDisabled("uebersprungen");
+                ImGui::TextDisabled(T("uebersprungen"));
             }
             else
             {
-                ImGui::TextColored(ImVec4(.5f, .9f, .5f, 1), "fertig");
+                ImGui::TextColored(ImVec4(.5f, .9f, .5f, 1), T("fertig"));
                 if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
-                    ImGui::SetTooltip("%s", r.result.c_str());
+                    ImGui::SetTooltip(T("%s"), r.result.c_str());
             }
         }
         ImGui::EndTable();
@@ -2339,7 +2350,7 @@ static void drawUi(App& a, HWND hwnd)
                       ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(fStart.x, fStart.y, fStart.z, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(fStart.x, fStart.y, fStart.z, 0.6f));
-    ImGui::SeparatorText("11. Los geht's");
+    ImGui::SeparatorText(T("11. Los geht's"));
     ImGui::PopStyleColor(2);
 
     // Der Fortschritt steht ueber den Knoepfen, weil genau dorthin gesehen
@@ -2348,7 +2359,7 @@ static void drawUi(App& a, HWND hwnd)
     {
         char overlay[96];
         if (a.phase == App::Phase::Copy)
-            std::snprintf(overlay, sizeof(overlay), "Originale werden zurueckgespielt...");
+            std::snprintf(overlay, sizeof(overlay), "%s", T("Originale werden zurueckgespielt..."));
         else
             std::snprintf(overlay, sizeof(overlay), "%s  (%d von %d)",
                           a.phaseText.c_str(), a.doneCount + a.failCount, a.plannedCount);
@@ -2362,19 +2373,19 @@ static void drawUi(App& a, HWND hwnd)
     }
 
     ImGui::BeginDisabled(!a.sourceOk || busy);
-    if (ImGui::Button("Randomisieren", ImVec2(160, 32))) startRandomize(a);
+    if (ImGui::Button(T("Randomisieren"), ImVec2(160, 32))) startRandomize(a);
     ImGui::SameLine();
-    if (ImGui::Button("Auf Original zuruecksetzen", ImVec2(200, 32))) doRestore(a);
+    if (ImGui::Button(T("Auf Original zuruecksetzen"), ImVec2(200, 32))) doRestore(a);
     ImGui::EndDisabled();
 
     if (!a.sourceOk && !busy)
-        ImGui::TextDisabled("(erst eine unveraenderte Installation waehlen)");
+        ImGui::TextDisabled(T("(erst eine unveraenderte Installation waehlen)"));
 
     if (!a.status.empty())
     {
         ImGui::Separator();
-        if (a.statusIsError) ImGui::TextColored(ImVec4(1, .5f, .3f, 1), "%s", a.status.c_str());
-        else                 ImGui::TextWrapped("%s", a.status.c_str());
+        if (a.statusIsError) ImGui::TextColored(ImVec4(1, .5f, .3f, 1), T("%s"), a.status.c_str());
+        else                 ImGui::TextWrapped(T("%s"), a.status.c_str());
     }
     ImGui::EndChild();
     ImGui::PopStyleColor(2);
@@ -2453,6 +2464,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 
     App app;
     app.cfg.load();
+    gSpracheDeutsch = app.cfg.spracheDeutsch;   // Sprache (#128), Vorgabe Englisch
     std::snprintf(app.seedBuf, sizeof(app.seedBuf), "%s",
                   app.cfg.seedText.empty() ? SeedText::format(SeedText::random()).c_str()
                                            : app.cfg.seedText.c_str());

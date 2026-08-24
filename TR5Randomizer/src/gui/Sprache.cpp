@@ -1,0 +1,513 @@
+/*
+ * TR5 Randomizer
+ * Copyright (C) 2026 ChrisChanSan
+ *
+ * This program is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the Free
+ * Software Foundation, either version 3 of the License, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+#include "Sprache.h"
+
+#include <string>
+#include <unordered_map>
+
+bool gSpracheDeutsch = false;   // Vorgabe Englisch (Nutzerentscheid 2026-08-24)
+
+// Deutsch -> Englisch. Der SCHLUESSEL ist exakt der String aus dem Quelltext
+// (bei mehrzeiligen Hilfetexten der komplette zusammengesetzte Text). Die
+// Tabelle wurde aus den T()-Aufrufstellen in Main.cpp abgeleitet - wer dort
+// einen Text aendert, muss den Schluessel hier nachziehen, sonst erscheint
+// im Englischen wieder Deutsch (sichtbar, absichtlich kein Absturz).
+//
+// Strings, die in beiden Sprachen gleich sind ("Vanilla", "Cross-Mix",
+// "Debug", "%s", ...), stehen bewusst NICHT hier - der Fehlgriff in der
+// Tabelle liefert sie unveraendert zurueck.
+static const std::unordered_map<std::string, const char*>& tabelle()
+{
+    static const std::unordered_map<std::string, const char*> t = {
+        // --- Statuszeile -------------------------------------------------
+        { "Noch kein Spielordner gewaehlt.", "No game folder selected yet." },
+        { "Debug-Level werden gebaut...", "Building debug levels..." },
+        { "Lauf gestartet.", "Run started." },
+        { "Kopieren fehlgeschlagen: ", "Copy failed: " },
+        { "Es gibt kein Backup - da wurde noch nie randomisiert, "
+          "die Level sind also bereits im Originalzustand.",
+          "There is no backup - nothing has ever been randomized, "
+          "so the levels are already in their original state." },
+        { "Zuruecksetzen fehlgeschlagen: ", "Restore failed: " },
+
+        // --- Fenster: Installations-Pfade --------------------------------
+        { "Installations-Pfade", "Installation paths" },
+        { "Die Dinosaurier stammen aus anderen Spielen. Dieses Werkzeug bringt "
+          "keine Spieldaten mit - gib die Ordner an, dann holt der Lauf sich "
+          "Modelle, Texturen und Klaenge von dort. Ohne Pfad bleiben die "
+          "betroffenen Gegnerarten ausgegraut, sonst laeuft alles wie gewohnt.",
+          "The dinosaurs come from other games. This tool ships no game data - "
+          "point it at those folders and the run fetches models, textures and "
+          "sounds from there. Without a path the affected enemy types stay "
+          "grayed out; everything else works as usual." },
+        { "fuer %s", "for %s" },
+        { "(nicht gewaehlt)", "(not selected)" },
+        { "Ordner waehlen...", "Choose folder..." },
+        { "Leeren", "Clear" },
+        { "in Ordnung", "OK" },
+        { "%s nicht gefunden", "%s not found" },
+        { "noch nicht geprueft", "not checked yet" },
+        { "Gesucht wird jeweils der data-Ordner der Installation.",
+          "In each case, choose the data folder of the installation." },
+
+        // --- Fenster: Gegnerarten ----------------------------------------
+        { "Gegnerarten", "Enemy types" },
+        { "Welche Arten darf der Zufall ziehen? Der Haken wirkt auf den Tausch "
+          "und auf zusaetzliche Gegner - Gegner, die im Level ohnehin stehen und "
+          "nicht getauscht werden, bleiben davon unberuehrt.",
+          "Which types may the random draw pick? The checkbox affects swapping "
+          "and additional enemies - enemies that are in the level anyway and "
+          "are not swapped remain untouched." },
+        { "Was eine Art technisch braucht, laedt der Randomizer von selbst.",
+          "Whatever a type needs technically, the randomizer loads on its own." },
+        { "Alle an", "All on" },
+        { "Alle aus", "All off" },
+        { "%d von %d an", "%d of %d on" },
+        { "- braucht %s", "- needs %s" },
+        { "Alle Arten abgewaehlt: jedes Level bleibt bei seinen "
+          "eigenen Gegnern, fremde kommen keine dazu.",
+          "All types deselected: every level keeps its own enemies, "
+          "no foreign ones are added." },
+        { "Waehlst du sehr viele ab, stehen manchen Leveln kaum "
+          "noch fremde Arten zur Verfuegung - sie bleiben dann "
+          "naeher am Original.",
+          "If you deselect a lot, some levels have hardly any foreign "
+          "types left to draw from - they will stay closer to the original." },
+
+        // --- Fenster: Debug-Marker ---------------------------------------
+        { "Debug: Sektoren-Marker", "Debug: sector markers" },
+        { "Baut zu jedem oben angehakten Level eine Kopie, in der jeder erlaubte "
+          "Sektor einen Marker traegt. Zum Ansehen in trview - mit mehreren tausend "
+          "Items startet das Spiel diese Dateien NICHT. Deine Installation bleibt "
+          "unberuehrt, geschrieben wird nur nach \"Debug Level\" neben dem Programm.",
+          "Builds a copy of every level checked above in which every allowed "
+          "sector carries a marker. View them in trview - with several thousand "
+          "items the game will NOT start these files. Your installation stays "
+          "untouched; everything is written to \"Debug Level\" next to the program." },
+        { "Fuellebene: jeden gueltigen Sektor markieren",
+          "Fill layer: mark every valid sector" },
+        { "Typ der Fuellebene", "Fill layer type" },
+        { "223 = Pickup Item4. Im Spiel selten, faellt in der Itemliste sofort auf.",
+          "223 = Pickup Item4. Rare in the game, stands out immediately in the item list." },
+        { "Debug-Level bauen", "Build debug levels" },
+        { "Ordner oeffnen", "Open folder" },
+        { "(erst oben eine Installation waehlen)",
+          "(choose an installation above first)" },
+        { "Ergebnis je Typ:", "Result per type:" },
+
+        // --- Kopfzeile + Debug-Menue -------------------------------------
+        { "Sektoren-Marker...", "Sector markers..." },
+        { "Ordner \"Debug Level\" oeffnen", "Open \"Debug Level\" folder" },
+        { "Achtung: veralteter Kurationsstand", "Warning: outdated curation data" },
+        { "Beheben: ZoneAnalyse.ps1 fuer ALLE Level neu nach data\\ exportieren.",
+          "To fix: re-export ZoneAnalyse.ps1 for ALL levels into data\\." },
+
+        // --- Block 1: Installation ---------------------------------------
+        { "1. Deine Installation", "1. Your installation" },
+        { "Waehle den Ordner deiner Tomb Raider Chronicles-Installation. "
+          "Die Level werden direkt dort randomisiert; die Originale sichert "
+          "das Programm vorher nach data\\Backup.",
+          "Choose the folder of your Tomb Raider Chronicles installation. "
+          "The levels are randomized right there; the program first backs up "
+          "the originals to data\\Backup." },
+        { "Erneut pruefen", "Check again" },
+        { "Installations-Pfade...", "Installation paths..." },
+        { "Optional: Ordner von Tomb Raider 3 und The Lost Artifact.\n"
+          "Nur damit lassen sich die Dinosaurier verwenden -\n"
+          "wir liefern keine Spieldaten mit.",
+          "Optional: folders of Tomb Raider 3 and The Lost Artifact.\n"
+          "Only with these can the dinosaurs be used -\n"
+          "we ship no game data." },
+        { "TR3 + LA gefunden", "TR3 + LA found" },
+        { "%d ohne Pfad", "%d without a path" },
+
+        // --- Block 2: Seed -----------------------------------------------
+        { "Derselbe Seed erzeugt immer dasselbe Spiel. Jede Eingabe ist gueltig - "
+          "auch ein Wort.",
+          "The same seed always produces the same game. Any input is valid - "
+          "even a word." },
+        { "Wuerfeln", "Roll" },
+        { "wirksam: 0x%016llX", "effective: 0x%016llX" },
+
+        // --- Balance-Regler ----------------------------------------------
+        { "Zufall", "Random" },
+        { "Waffenschaden", "Weapon damage" },
+        { "Gegnerleben", "Enemy health" },
+        { "Gegnerschaden", "Enemy damage" },
+        { "Statt von Hand: der Seed wuerfelt den Wert aus, in "
+          "Fuenferschritten zwischen 0.50x und 2.00x. Derselbe Seed "
+          "gibt immer denselben Wert, und zwar unabhaengig davon, ob "
+          "die anderen beiden Haken gesetzt sind.\n\n"
+          "Der Regler zeigt sofort, was der aktuelle Seed gibt. In die "
+          "Balance.txt wandert der Wurf beim Anhaken und beim naechsten "
+          "Lauf.\n\n"
+          "Auch der Waffenschaden wird nur ab 0.50x geworfen - ein Seed, "
+          "der Laras Waffen auf ein Zehntel stellt, waere nicht schwer, "
+          "sondern unspielbar. 0.00x bleibt der Handeinstellung.",
+          "Instead of setting it by hand: the seed rolls the value, in "
+          "steps of five between 0.50x and 2.00x. The same seed always "
+          "gives the same value, no matter whether the other two boxes "
+          "are checked.\n\n"
+          "The slider immediately shows what the current seed gives. The "
+          "roll goes into Balance.txt when you check the box and on the "
+          "next run.\n\n"
+          "Weapon damage too is only rolled from 0.50x upward - a seed "
+          "that puts Lara's weapons at a tenth would not be hard, just "
+          "unplayable. 0.00x is reserved for manual tuning." },
+        { "Wirkt auf alle Waffen Laras zugleich - Pistolen, Uzi, "
+          "Schrotflinte, Revolver, HK, Grappling Gun und Fackel. "
+          "0.00x macht sie wirkungslos, 2.00x verdoppelt ihren Schaden.\n\n"
+          "Geschrieben wird die Zeile WaffenSchaden in Balance.txt neben "
+          "der PCtomb5.exe. Wer dort einzelne Waffen von Hand eingestellt "
+          "hat, behaelt sie: der Regler wirkt zusaetzlich obendrauf.",
+          "Affects all of Lara's weapons at once - pistols, Uzi, shotgun, "
+          "revolver, HK, grappling gun and torch. 0.00x makes them "
+          "harmless, 2.00x doubles their damage.\n\n"
+          "This writes the WaffenSchaden line in Balance.txt next to "
+          "PCtomb5.exe. If you tuned individual weapons there by hand, "
+          "they are kept: the slider applies on top." },
+        { "Wie zaeh alle Gegner sind. 0.50x halbiert ihre Lebenspunkte, "
+          "2.00x verdoppelt sie.\n\n"
+          "Geschrieben wird die Zeile GegnerLeben in Balance.txt neben der "
+          "PCtomb5.exe. Wer dort einzelne Gegner von Hand eingestellt hat, "
+          "behaelt sie: der Regler wirkt zusaetzlich obendrauf.",
+          "How tough all enemies are. 0.50x halves their hit points, "
+          "2.00x doubles them.\n\n"
+          "This writes the GegnerLeben line in Balance.txt next to "
+          "PCtomb5.exe. If you tuned individual enemies there by hand, "
+          "they are kept: the slider applies on top." },
+        { "Wie hart alle Gegner zuschlagen. Fallen, Stuerze, Feuer, Gift "
+          "und Ertrinken bleiben immer so hart wie im Original, ebenso die "
+          "fest eingebauten Levelgefahren wie das Deckengeschuetz.\n\n"
+          "Geschrieben wird die Zeile GegnerSchaden in Balance.txt neben "
+          "der PCtomb5.exe.",
+          "How hard all enemies hit. Traps, falls, fire, poison and "
+          "drowning always stay as hard as in the original, as do the "
+          "built-in level hazards like the ceiling gun.\n\n"
+          "This writes the GegnerSchaden line in Balance.txt next to "
+          "PCtomb5.exe." },
+
+        // --- Block 3: Items ----------------------------------------------
+        { "Ausruestung (Waffen, Munition, Medipacks)",
+          "Equipment (weapons, ammo, medipacks)" },
+        { "Vanilla Anzahl", "Vanilla amount" },
+        { "Mehr", "More" },
+        { "Viel mehr", "A lot more" },
+        { "Schluessel & Puzzles", "Keys & puzzles" },
+        { "Alle Waffen ueberall sind Standard und immer dabei.",
+          "All weapons everywhere is standard and always included." },
+        { "Keine Wuerfel-Option gewaehlt - die Level bekommen nur das Standard-Waffenset.",
+          "No shuffle option selected - the levels only get the standard weapon set." },
+        { "Das Level behaelt genau so viel Ausruestung, wie Core vorgesehen "
+          "hat - nur an anderen Stellen.",
+          "The level keeps exactly as much equipment as Core intended - "
+          "just in different places." },
+        { "Streut bis zu zwoelf zusaetzliche Verbrauchsgueter pro Level. "
+          "Gelegt wird nur, was das Level ohnehin kennt - Munition, "
+          "Medipacks, Fackeln -, gewichtet nach Haeufigkeit: Andy2 (Kind-Lara, "
+          "keine Waffen) bekommt also Medipacks, ein Waffenlevel Munition. "
+          "Schluessel, Puzzleteile und Secrets bleiben aussen vor.",
+          "Scatters up to twelve additional consumables per level. Only "
+          "what the level already knows is placed - ammo, medipacks, "
+          "flares -, weighted by frequency: Andy2 (young Lara, no weapons) "
+          "gets medipacks, a weapon level gets ammo. Keys, puzzle pieces "
+          "and secrets are left out." },
+        { "Wie \"Mehr Items\", aber bis zu dreissig pro Level. Die Grenze "
+          "ist erreicht, wenn die freien Ablageflaechen ausgehen oder das "
+          "Item-Limit der Engine (512) naeher rueckt - beides deckelt die "
+          "Zahl von selbst.",
+          "Like \"More items\", but up to thirty per level. The limit is "
+          "reached when the free placement spots run out or the engine's "
+          "item limit (512) draws near - both cap the number on their own." },
+        { "Jedes Level bekommt bei jedem Lauf das volle Waffenset: Pistolen, "
+          "Uzi, Schrotflinte, Desert Eagle (ersetzt den Revolver, in den "
+          "joby-Leveln auch im Namen) und HK samt Munition. Ein Level behaelt "
+          "seine eigene funktionierende Waffe; joby4 bleibt vanilla, und "
+          "rich2 bekommt keine Pistolen (sein Pistolenslot traegt "
+          "Sequenzmaterial von Core). Der Seed streut zusaetzlich einige der "
+          "neuen Waffen samt Munition als Pickups ins Level. Die Modelle "
+          "kommen zur Laufzeit aus den eigenen Leveldateien des Spielers.",
+          "Every level gets the full weapon set on every run: pistols, Uzi, "
+          "shotgun, Desert Eagle (replaces the revolver, in the joby levels "
+          "by name too) and HK, ammo included. A level keeps its own "
+          "working weapon; joby4 stays vanilla, and rich2 gets no pistols "
+          "(its pistol slot carries sequence material from Core). The seed "
+          "additionally scatters some of the new weapons with ammo into the "
+          "level as pickups. The models come from the player's own level "
+          "files at runtime." },
+
+        // --- Block 4: Outfits --------------------------------------------
+        { "Zufaellige Outfits", "Random outfits" },
+        { "TR1 Outfit", "TR1 outfit" },
+        { "TR2 Outfits", "TR2 outfits" },
+        { "TR3 Outfits", "TR3 outfits" },
+        { "Jeder Abschnitt bekommt zufaellig Lara_Andrea, Lara_Joby oder "
+          "Lara_Rich (Catsuit). Uebertragen werden nur Haut und Kopf (Slots "
+          "8/9/10) samt Outfit-Byte - nie Slot 0, der traegt die Animationen. "
+          "joby4 behaelt den Taucheranzug; die andy-Level bekommen immer eine "
+          "erwachsene Lara (Kind-Lara kann keine Waffen tragen).",
+          "Each section randomly gets Lara_Andrea, Lara_Joby or Lara_Rich "
+          "(catsuit). Only skin and head are carried over (slots 8/9/10) "
+          "plus the outfit byte - never slot 0, which carries the "
+          "animations. joby4 keeps the diving suit; the andy levels always "
+          "get an adult Lara (young Lara cannot carry weapons)." },
+        { "Kommt noch: das klassische TR1-Outfit als zusaetzliche Wahl im "
+          "Outfit-Pool. Braucht ein passendes TR5-Modell - Spieldaten "
+          "anderer Spiele liefern wir nie mit, das Modell muss also "
+          "eigens gebaut oder vom Spieler beigesteuert werden.",
+          "Coming later: the classic TR1 outfit as an additional choice in "
+          "the outfit pool. Needs a matching TR5 model - we never ship "
+          "other games' data, so the model has to be built from scratch or "
+          "contributed by the player." },
+        { "Kommt noch: die TR2-Outfits (u.a. Bomberjacke, Wetsuit) als "
+          "zusaetzliche Poolauswahl - gleiche Voraussetzung wie TR1.",
+          "Coming later: the TR2 outfits (bomber jacket, wetsuit and more) "
+          "as additional pool choices - same requirement as TR1." },
+        { "Kommt noch: die TR3-Outfits (u.a. Dschungel, Antarktis) als "
+          "zusaetzliche Poolauswahl - gleiche Voraussetzung wie TR1.",
+          "Coming later: the TR3 outfits (jungle, Antarctica and more) "
+          "as additional pool choices - same requirement as TR1." },
+
+        // --- Block 5: Gegner ---------------------------------------------
+        { "5. Gegner", "5. Enemies" },
+        { "Zusaetzliche Gegner ins Level setzen", "Add extra enemies to the level" },
+        { "pro Level", "per level" },
+        { "Vorhandene Gegner tauschen", "Swap existing enemies" },
+        { "Gegnerpool:", "Enemy pool:" },
+        { "Nur Levelpool", "Level pool only" },
+        { "Gegnerarten...", "Enemy types..." },
+        { "%d abgewaehlt", "%d deselected" },
+        { "Balance zuruecksetzen", "Reset balance" },
+        { "Jeder bekommt einen eigenen Trigger, etwa drei Sektoren vor sich "
+          "auf Laras Weg - nie auf seinem eigenen Feld, sonst spawnt er in ihr. "
+          "Welche Gegnertypen ein Level vertraegt, ist handkuriert; ist die "
+          "Liste leer, bleibt der Haken folgenlos.",
+          "Each one gets its own trigger, about three sectors ahead on "
+          "Lara's path - never on its own tile, or it would spawn inside "
+          "her. Which enemy types a level can take is hand-curated; if the "
+          "list is empty, the checkbox has no effect." },
+        { "Die Gegner, die im Level ohnehin stehen, tauschen die Rollen. "
+          "Nur die Art wechselt, der Item-Index bleibt - jeder Gegner wacht "
+          "also weiter dort auf, wo sein Trigger es vorsieht. Anzahl und "
+          "Verteilung bleiben gleich, gescriptete Gegner bleiben unberuehrt. "
+          "Woraus die neuen Rollen kommen, entscheidet der Gegnerpool unten.",
+          "The enemies already in the level swap roles. Only the type "
+          "changes, the item index stays - every enemy still wakes up "
+          "where its trigger intends. Count and distribution stay the "
+          "same, scripted enemies remain untouched. Where the new roles "
+          "come from is decided by the enemy pool below." },
+        { "Getauscht und gesetzt wird nur, was das Level selbst kennt "
+          "(die handkuratierte Liste je Level).",
+          "Only what the level itself knows is swapped and placed "
+          "(the hand-curated list per level)." },
+        { "Bis zu DREI fremde Typen aus anderen Leveln kommen in den Pool - "
+          "SWAT, Guards, Mafia, Larson, Pierre, Loewe, Gladiator, Statue, "
+          "Maze Monster, Imp und mehr. Beim Tausch geht etwa jede vierte "
+          "Rolle an einen davon, das Level bleibt erkennbar. Modelle und "
+          "Sounds wandern zur Laufzeit aus den eigenen Leveldateien mit.",
+          "Up to THREE foreign types from other levels join the pool - "
+          "SWAT, guards, mafia, Larson, Pierre, lion, gladiator, statue, "
+          "maze monster, imp and more. When swapping, roughly every fourth "
+          "role goes to one of them, so the level stays recognizable. "
+          "Models and sounds travel along from your own level files at "
+          "runtime." },
+        { "Der KOMPLETTE Gegnerpool steht jedem Level zur Verfuegung, und "
+          "beim Tausch wuerfelt jede Rolle frei aus allem - maximale "
+          "Auswahl. Uebernommen werden trotzdem nur die Typen, die der "
+          "Seed wirklich einsetzt; der Texturseiten-Haushalt bleibt "
+          "gemessen deutlich unter der 256er-Grenze. Gescriptete Gegner "
+          "bleiben in jedem Modus unberuehrt.",
+          "The COMPLETE enemy pool is available to every level, and when "
+          "swapping, every role rolls freely from everything - maximum "
+          "variety. Still, only the types the seed actually uses are "
+          "imported; the texture page budget stays, measured, well below "
+          "the 256 limit. Scripted enemies remain untouched in every "
+          "mode." },
+        { "Welche Gegnerarten der Zufall ueberhaupt ziehen darf. Gut, um "
+          "Lieblingsgegner haeufiger zu sehen - oder um eine einzelne Art "
+          "zu pruefen: alles abwaehlen bis auf eine.",
+          "Which enemy types the random draw may pick at all. Good for "
+          "seeing favorite enemies more often - or for testing a single "
+          "type: deselect everything but one." },
+        { "Nimmt die Zufallshaken zurueck, setzt die drei Regler auf 1.00x "
+          "und traegt das in Balance.txt ein. "
+          "Von Hand eingestellte Einzelwerte in der Datei bleiben erhalten - "
+          "wer die auch zurueck will, loescht die Balance.txt; das Spiel legt "
+          "sie beim naechsten Start neu und vollstaendig an.",
+          "Unchecks the random boxes, sets the three sliders to 1.00x and "
+          "writes that to Balance.txt. Individual values tuned by hand in "
+          "the file are kept - if you want those reset too, delete "
+          "Balance.txt; the game recreates it completely on the next "
+          "start." },
+
+        // --- Block 6: Level ----------------------------------------------
+        { "6. Level", "6. Levels" },
+        { "Levelabschnitte switchen", "Shuffle level sections" },
+        { "Level-Reihenfolge: aus", "Level order: off" },
+        { "innerhalb der Abschnitte", "within the sections" },
+        { "frei ueber alles", "free across everything" },
+        { "Die vier Story-Abschnitte (Rom, Russland, Irland, VCI) in "
+          "zufaelliger Reihenfolge spielen. Innerhalb eines Abschnitts "
+          "bleibt die Reihenfolge - alle Schluesselketten bleiben gueltig, "
+          "der Abspann kommt nach dem letzten Abschnitt. BRAUCHT die "
+          "Engine ab 2026-08-22 (Levelidentitaet aus dem Dateinamen); "
+          "alte Spielstaende passen nicht zur neuen Reihenfolge.",
+          "Play the four story sections (Rome, Russia, Ireland, VCI) in "
+          "random order. Within a section the order stays - all key "
+          "chains remain valid, the credits come after the last section. "
+          "REQUIRES the engine from 2026-08-22 on (level identity from "
+          "the file name); old savegames do not match the new order." },
+        { "Innerhalb: Rom/Russland/Irland/VCI bleiben Bloecke, nur die Level "
+          "darin tauschen. Frei: alle 13 Level ueber alle Abschnitte hinweg "
+          "(z.B. rich1 -> Andrea2 -> joby5 -> rich2). Die Cutscene richcut2 "
+          "bleibt immer an rich2. Bei jedem Levelstart werden Keys/Puzzles/"
+          "Pickups und die Grappling Gun (nur rich3) zurueckgesetzt - Waffen, "
+          "Munition, Medis und Leuchtfackeln bleiben. Was ein Level aus einem "
+          "anderen braucht (Key 8 joby3, Key 7 joby5, Catapult Andy2, "
+          "Brechstange Andrea3), gibt das Skript immer - samt Modell und Namen. "
+          "Kuratiert in Levelketten.h.",
+          "Within: Rome/Russia/Ireland/VCI stay blocks, only the levels "
+          "inside them shuffle. Free: all 13 levels across all sections "
+          "(e.g. rich1 -> Andrea2 -> joby5 -> rich2). The cutscene "
+          "richcut2 always stays attached to rich2. On every level start, "
+          "keys/puzzles/pickups and the grappling gun (rich3 only) are "
+          "reset - weapons, ammo, medipacks and flares are kept. Whatever "
+          "a level needs from another one (Key 8 joby3, Key 7 joby5, "
+          "Catapult Andy2, crowbar Andrea3), the script always grants - "
+          "model and name included. Curated in Levelketten.h." },
+
+        // --- Block 7: Musik ----------------------------------------------
+        { "7. Musik", "7. Music" },
+        { "Hintergrundmusik switchen", "Shuffle background music" },
+        { "Trigger-Sound/Musik-IDs switchen", "Shuffle trigger sound/music IDs" },
+        { "Die Levelmusik wird unter den spielbaren Leveln vertauscht - "
+          "das Audio-Byte im CMD_LEVEL-Eintrag der SCRIPT.DAT. Cutscene-"
+          "Level behalten ihre Musik. Gewuerfelt wird bei jedem Lauf neu "
+          "aus der Sicherung heraus; Haken weg = naechster Lauf stellt "
+          "die Originalmusik wieder her.",
+          "The level music is shuffled among the playable levels - the "
+          "audio byte in the CMD_LEVEL entry of SCRIPT.DAT. Cutscene "
+          "levels keep their music. Every run rolls anew from the backup; "
+          "uncheck it and the next run restores the original music." },
+        { "Die Musik-Trigger in den Leveln (TO_CD) bekommen vertauschte "
+          "Tracks - GLOBAL ueber alle Level: nur Tracks, die irgendwo im Spiel "
+          "ein Trigger ausloest (keine Cutscene-Dialoge, kein FMV-Ton), "
+          "und derselbe Track klingt in jedem Level gleich. "
+          "Atmosphaeren tauschen weiter nur unter sich, damit ein "
+          "Stimmungswechsel ein Stimmungswechsel bleibt. Die fest "
+          "einprogrammierte Cutscene- und Tutorial-Ausloesung ist "
+          "nicht betroffen.",
+          "The music triggers in the levels (TO_CD) get shuffled tracks - "
+          "GLOBALLY across all levels: only tracks that some trigger in "
+          "the game actually fires (no cutscene dialogue, no FMV audio), "
+          "and the same track sounds the same in every level. Atmospheres "
+          "still swap only among themselves, so a mood change stays a "
+          "mood change. The hard-coded cutscene and tutorial triggering "
+          "is not affected." },
+
+        // --- Block 8: Secrets --------------------------------------------
+        { "Im normalen Item-Pool", "In the normal item pool" },
+        { "Glitchless-Liste", "Glitchless list" },
+        { "Glitched-Liste", "Glitched list" },
+        { "(keine Listen gefunden)", "(no lists found)" },
+        { "Autor", "Author" },
+        { "Keine %s-Liste in data\\secrets gefunden - die Level bleiben vanilla.",
+          "No %s list found in data\\secrets - the levels stay vanilla." },
+        { "Die Secrets bleiben, wo Core sie versteckt hat.",
+          "The secrets stay where Core hid them." },
+        { "Die Secrets wandern als gewoehnliche Pickups in den Wuerfelpool "
+          "und koennen ueberall dort liegen, wo auch Ausruestung liegen darf.",
+          "The secrets go into the shuffle pool as ordinary pickups and "
+          "can lie anywhere equipment is allowed to lie." },
+        { "Handverlesene Verstecke eines Autors, ohne Glitches erreichbar. "
+          "Eine Liste kann je Level auch Zusatzobjekte setzen - Schluessel, "
+          "Schalter, Tueren, sogar neue Portale.",
+          "Hand-picked hiding spots by one author, reachable without "
+          "glitches. A list can also place extra objects per level - "
+          "keys, switches, doors, even new portals." },
+        { "Wie die Glitchless-Liste, aber die Verstecke duerfen Glitches "
+          "voraussetzen.",
+          "Like the glitchless list, but the hiding spots may require "
+          "glitches." },
+
+        // --- Block 9: In Vorbereitung ------------------------------------
+        { "9. In Vorbereitung", "9. In preparation" },
+        { "Texturen", "Textures" },
+        { "RGB Vanilla Texturen", "RGB vanilla textures" },
+        { "Leveluebergreifend mixen", "Mix across levels" },
+        { "Remaster-Texturen patchen", "Patch remaster textures" },
+        { "Raeume", "Rooms" },
+        { "Kulissen einbinden", "Include backdrop areas" },
+        { "Nachbar-Raeume begehbar machen", "Make neighboring rooms walkable" },
+        { "Kommt noch: Farbwuerfel ueber die Vanilla-Texturseiten - der "
+          "Seed verschiebt die Farbtoene, rein kosmetisch.",
+          "Coming later: color dice over the vanilla texture pages - the "
+          "seed shifts the hues, purely cosmetic." },
+        { "Kommt noch: Texturseiten zwischen den Leveln tauschen - Rom in "
+          "Russland, U-Boot in Irland.",
+          "Coming later: swap texture pages between levels - Rome in "
+          "Russia, the submarine in Ireland." },
+        { "Kommt noch: Remaster-Texturen (sofern der Spieler sie hat) in "
+          "die klassischen Level patchen.",
+          "Coming later: patch remaster textures (if the player owns "
+          "them) into the classic levels." },
+        { "Kommt noch: reine Kulissenbereiche ins Spiel einbinden, damit "
+          "dort Items und Gegner liegen koennen.",
+          "Coming later: bring pure backdrop areas into play so items "
+          "and enemies can be placed there." },
+        { "Kommt noch: angrenzende, vanilla gesperrte Raeume oeffnen - "
+          "mehr Flaeche fuer die Platzierung.",
+          "Coming later: open adjacent rooms that are locked in vanilla - "
+          "more area for placement." },
+        { "Kommt noch: Deepsea Dive ohne Wasser - damit waere joby4 "
+          "endlich voll randomisierbar statt vanilla.",
+          "Coming later: Deepsea Dive without water - joby4 would "
+          "finally be fully randomizable instead of vanilla." },
+
+        // --- Block 10: Levelliste ----------------------------------------
+        { "10. Level", "10. Levels" },
+        { "%d nicht spielbare Dateien (Title, del, richcut2) werden "
+          "geprueft, aber nicht angetastet.",
+          "%d non-playable files (Title, del, richcut2) are checked, "
+          "but never touched." },
+        { "Zustand", "State" },
+        { "veraendert", "modified" },
+        { "fehlt", "missing" },
+        { "unbekannt", "unknown" },
+        { "Fehler", "Error" },
+        { "uebersprungen", "skipped" },
+        { "fertig", "done" },
+
+        // --- Block 11: Los geht's ----------------------------------------
+        { "11. Los geht's", "11. Let's go" },
+        { "Originale werden zurueckgespielt...", "Restoring originals..." },
+        { "Randomisieren", "Randomize" },
+        { "Auf Original zuruecksetzen", "Restore original" },
+        { "(erst eine unveraenderte Installation waehlen)",
+          "(choose an unmodified installation first)" },
+    };
+    return t;
+}
+
+const char* T(const char* de)
+{
+    if (gSpracheDeutsch || !de || !*de) return de;
+    const auto& t = tabelle();
+    auto it = t.find(de);
+    return it == t.end() ? de : it->second;
+}

@@ -50,6 +50,11 @@ struct Config
     // 0 heisst "noch nie gespeichert" - dann gilt die Vorgabegroesse.
     int winW = 0, winH = 0;
 
+    // Sprache der Oberflaeche (#128). Vorgabe ENGLISCH (Nutzerentscheid
+    // 2026-08-24) - die deutschen Texte sind die Quelltexte, uebersetzt
+    // wird in gui\Sprache.cpp.
+    bool spracheDeutsch = false;
+
     // Die Wuerfel-Optionen aus Abschnitt 3, damit der Nutzer seine Auswahl
     // beim naechsten Start wiederfindet. Vorgaben identisch mit denen der
     // Oberflaeche - fehlt ein Schluessel in der Datei, aendert sich nichts.

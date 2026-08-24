@@ -58,6 +58,7 @@ void Config::load()
         else if (key == "seed")  seedText = val;
         else if (key == "winW")            winW = std::atoi(val.c_str());
         else if (key == "winH")            winH = std::atoi(val.c_str());
+        else if (key == "sprache")         spracheDeutsch = (val == "de");
         else if (key == "ausruestung")     optOtherPickups = (val == "1");
         else if (key == "keyItems")        optKeyItems = (val == "1");
         else if (key == "gegnerZusatz")    optEnemies = (val == "1");
@@ -132,6 +133,7 @@ bool Config::save() const
     std::fprintf(f, "seed=%s\n", seedText.c_str());
     std::fprintf(f, "winW=%d\n", winW);
     std::fprintf(f, "winH=%d\n", winH);
+    std::fprintf(f, "sprache=%s\n", spracheDeutsch ? "de" : "en");
     std::fprintf(f, "ausruestung=%d\n", optOtherPickups ? 1 : 0);
     std::fprintf(f, "keyItems=%d\n", optKeyItems ? 1 : 0);
     std::fprintf(f, "gegnerZusatz=%d\n", optEnemies ? 1 : 0);

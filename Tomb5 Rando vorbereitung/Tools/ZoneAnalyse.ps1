@@ -412,18 +412,9 @@ $TYPE_EXCLUDE_ROOMS = @{
     'andy3' = @{
         172 = @(136,137,139,140,141,142)      # Kreide
         174 = @(136,137,139,140,141,142)      # Brechstange
-        # Die Muenze darf nicht HINTER der Wasserhexe liegen (#61,
-        # Nutzerangabe 2026-08-24). Die Raeume sind nicht von Hand gesammelt,
-        # sondern aus dem Portalgraphen geflutet:
-        #   ab 97, Riegel 9/151  -> 97, 99, 152, 153, 155, 158
-        #     (97 ist ihr Becken, 99 sitzt sie selbst; dahinter 152/153/155/158)
-        #   ab 149, Riegel 6/166 -> 149  (zweites Wasserloch, Sackgasse)
-        #
-        # Bewusst als Typsperre und NICHT als zweite NO_KEY_ISLAND: die Muenze
-        # steht in deren ExemptTypes, eine weitere Insel wuerde sie also
-        # gleich wieder durchlassen. TYPE_EXCLUDE_ROOMS ist von Haus aus
-        # typgenau.
-        173 = @(97,99,149,152,153,155,158)    # Muenze: nicht hinter der Hexe
+        # Die Muenze braucht hier nichts: ihr erlaubter Bereich steht als
+        # TYPE_ALLOW_ISLAND (ab 142, Riegel 137/97/149) und ist eine
+        # Positivliste - was nicht drinsteht, ist ohnehin verboten.
     }
 }
 $typeExclude = @{}
@@ -726,9 +717,69 @@ $TYPE_ALLOW_ROOMS = @{
                 86,93,94,95,96,97,98,99,109,117,118,125,128)
     }
 }
+#----------------------------------------------------------------------------
+# Wie TYPE_ALLOW_ROOMS, nur nicht von Hand gezaehlt: die erlaubte Raumliste
+# wird als FLUT ueber den Raumgraphen abgeleitet - Startraum plus Riegel.
+#
+# Gebraucht fuer andy3s Muenze (#61). Der Nutzer hat den Bereich genau so
+# beschrieben, und zwar als Richtungsangabe:
+#
+#   "Raum 137 -> 139 Muenze verboten. Raum 137 -> 142 Muenze erlaubt, bis zu
+#    2 Punkten Raum 97 und Raum 149. Raum 97 muss ein Stop sein, weil das
+#    hinter der Wasserhexe ist - da ist ein Teleporter in einen anderen
+#    Bereich, alles um Raum 157. Raum 149 ist der andere Deadstop, das ist
+#    der Return aus dem anderen Teleporter. Die Insel, in der die Muenze
+#    vorkommen darf, ist (137 -> 142 und alles was danach kommt bis |149|97)."
+#
+# Als Liste waeren das 104 Raumnummern - unlesbar und tot, sobald sich am
+# Levelgraphen etwas aendert. Als Flut steht die ABSICHT da: ab 142, und die
+# drei Riegel sind genau die drei Tueren, hinter denen es schieflaufen wuerde
+# (137 zurueck auf die Startinsel, 97 hinter die Hexe, 149 der Rueckweg des
+# zweiten Teleporters).
+#----------------------------------------------------------------------------
+$TYPE_ALLOW_ISLAND = @{
+    'andy3' = @{
+        173 = @{ StartRoom = 142; DeadstopRooms = @(137,97,149) }
+    }
+}
+
 $typeAllow = @{}
 if ($TYPE_ALLOW_ROOMS.ContainsKey($LevelName)) {
     foreach($kv in $TYPE_ALLOW_ROOMS[$LevelName].GetEnumerator()){ $typeAllow[[int]$kv.Key] = @($kv.Value) }
+}
+if ($TYPE_ALLOW_ISLAND.ContainsKey($LevelName)) {
+    # Raumnachbarschaft aus den Portalen, Deckendurchgaengen und Boeden -
+    # dieselbe Ableitung wie bei ISLAND_YBAND weiter unten.
+    $allowAdj = @{}
+    foreach($sx in $d.sectors){
+        $a = [int]$sx.room
+        foreach($t in @($sx.portalTarget, $sx.roomBelow, $sx.roomAbove)){
+            if ($null -eq $t -or "$t" -eq "") { continue }
+            $b = [int]$t
+            if ($b -lt 0 -or $b -ge $d.rooms.Count) { continue }
+            if (-not $allowAdj.ContainsKey($a)) { $allowAdj[$a] = New-Object System.Collections.Generic.HashSet[int] }
+            if (-not $allowAdj.ContainsKey($b)) { $allowAdj[$b] = New-Object System.Collections.Generic.HashSet[int] }
+            [void]$allowAdj[$a].Add($b); [void]$allowAdj[$b].Add($a)
+        }
+    }
+    foreach($kv in $TYPE_ALLOW_ISLAND[$LevelName].GetEnumerator()){
+        $nt = [int]$kv.Key
+        $stopA = @($kv.Value.DeadstopRooms | ForEach-Object { [int]$_ })
+        $seenA = New-Object System.Collections.Generic.HashSet[int]
+        [void]$seenA.Add([int]$kv.Value.StartRoom)
+        $qa = New-Object System.Collections.Generic.Queue[int]
+        $qa.Enqueue([int]$kv.Value.StartRoom)
+        while($qa.Count -gt 0){
+            $ca = $qa.Dequeue()
+            if (-not $allowAdj.ContainsKey($ca)) { continue }
+            foreach($na in $allowAdj[$ca]){
+                if ($stopA -contains $na -or $seenA.Contains($na)) { continue }
+                [void]$seenA.Add($na); $qa.Enqueue($na)
+            }
+        }
+        $typeAllow[$nt] = @($seenA | Sort-Object)
+        Write-Output "TYPE_ALLOW_ISLAND Typ $nt (ab $($kv.Value.StartRoom), Riegel $($stopA -join ', ')): $($seenA.Count) Raeume erlaubt"
+    }
 }
 $typeExcludeSectors = @{}
 if ($TYPE_EXCLUDE_SECTORS.ContainsKey($LevelName)) {
@@ -1971,10 +2022,11 @@ $ISLAND_GROUP = @{
     # Sperre von 3227 auf 13 Sektoren (also das Gegenteil), und eine zweite
     # Flut ab Raum 29 sperrte 64 Raeume, ohne den gemeldeten Fundort zu
     # treffen.
-    # Raum 97 und 149 kamen 2026-08-24 dazu (Nutzerangabe nach dem ersten
-    # Lauf: "der flood hat fast perfekt gegriffen"). 97 ist der Wasserraum
-    # der Sumpfhexe - also der Vanilla-Platz der Muenze selbst.
-    'andy3' = @( @{ IslandTypes = @(); NotOnIslandTypes = @(173); DeadstopRooms = @(137,97,149) } )
+    # andy3 braucht hier nichts mehr: die Muenze wird ueber
+    # TYPE_ALLOW_ISLAND positiv eingegrenzt (ab 142, Riegel 137/97/149).
+    # Der Zwischenstand mit NotOnIslandTypes ist damit ueberfluessig - drei
+    # einander ueberlappende Sperren fuer denselben Typ waren genau der
+    # Knoten, an dem am 2026-08-24 nur noch ein einziger Raum uebrigblieb.
     # DeadstopRooms definiert die Insel ueber einen ZWEITEN, schaerferen Flood.
     # Die Gleisbett-Kette 2/4/5 und Raum 89 sind darin gesperrt, ihre
     # Flippartner 43 und 53 werden abgeleitet. Was dann noch ab Laras Start

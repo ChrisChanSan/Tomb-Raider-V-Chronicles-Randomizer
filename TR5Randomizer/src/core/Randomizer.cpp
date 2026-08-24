@@ -654,6 +654,52 @@ bool Rando::buildMarkerPatch(const RandoInput& in,
         perType.push_back(mc);
     }
 
+    // Ebene 3: Typen OHNE Constraint, die trotzdem eigene Platzregeln haben -
+    // die WANDGRIFFE (OCB 2 und 9).
+    //
+    // andy3s Kreide (172) und Brechstange (174) sind der Fall: Werkzeuge ohne
+    // Aufnahme, also leitet ZoneAnalyse fuer sie keine Zonengrenze ab und sie
+    // stehen in keiner Constraint. Ebene 2 zeichnete sie deshalb nie - im
+    // Debug-Level fehlten sie ganz, obwohl sie sehr wohl eigene Regeln haben
+    // (Wandkante, Stehhoehe 768, kein Wasser) und der Deadstop sie ueber den
+    // OCB-Zweig ebenfalls trifft. Genau das wollte der Nutzer sehen koennen:
+    // "damit wir kein Bruch eingebaut haben".
+    //
+    // Ihre OCB kommt aus den Vanilla-Items - sie ist es ja, die die Regel
+    // ueberhaupt ausloest; geprueft wird mit derselben Funktion wie bei der
+    // echten Platzierung, nur ohne Constraint und mit dem OCB als Argument.
+    {
+        std::map<int, int> wandTypen;      // typeId -> OCB
+        for (const LevelItem& it : in.items)
+        {
+            if (it.ocb != 2 && it.ocb != 9) continue;
+
+            bool hatConstraint = false;
+            for (const KeyConstraint& k : in.constraints)
+                if (k.typeId == it.typeId) { hatConstraint = true; break; }
+
+            if (!hatConstraint) wandTypen[it.typeId] = it.ocb;
+        }
+
+        for (std::map<int, int>::const_iterator w = wandTypen.begin(); w != wandTypen.end(); ++w)
+        {
+            MarkerCount mc;
+            mc.typeId = w->first;
+            std::set<int> rooms;
+
+            for (const ZoneSector& s : in.sectors)
+            {
+                if (!sectorAllowedFor(in, nullptr, s, w->first, false, w->second)) continue;
+                marker(w->first, s);
+                ++mc.sectors;
+                rooms.insert(s.room);
+            }
+
+            mc.rooms = static_cast<int>(rooms.size());
+            perType.push_back(mc);
+        }
+    }
+
     patchOut.set("itemAdds", adds);
     return true;
 }

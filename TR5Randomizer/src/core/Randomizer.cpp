@@ -692,9 +692,32 @@ bool Rando::buildMarkerPatch(const RandoInput& in,
     // ueberhaupt ausloest; geprueft wird mit derselben Funktion wie bei der
     // echten Platzierung, nur ohne Constraint und mit dem OCB als Argument.
     {
+        // ORTSFESTE Items zaehlen nicht: ein Typ, dessen Vorkommen alle
+        // liegen bleiben, wandert nirgendwohin und darf im Debug-Level auch
+        // keine Flaeche bekommen. Dieselbe Rechnung wie in run() weiter
+        // unten - Handkuration plus Trigger-Fesselung, abzueglich der
+        // gekoppelten Trigger und der vorgesetzten Codebits.
+        //
+        // Zwei Faelle aus dem Spiel, die es braucht (Nutzerbefund
+        // 2026-08-24): Andrea3s typeId 220 haengt am LevelEnd-Trigger und
+        // wird ueber triggerPinned gehalten - es steht WEDER in
+        // VANILLA_TYPES noch in fixedItems, eine Typliste haette es also
+        // nicht gefunden. joby3s Brechstange (172) steht dagegen in beidem.
+        std::set<int> festgenagelt(in.triggerPinned);
+        for (int i : in.fixedItems) festgenagelt.insert(i);
+
+        for (std::map<int, int>::const_iterator f = in.flagPresets.begin(); f != in.flagPresets.end(); ++f)
+            if (std::find(in.fixedItems.begin(), in.fixedItems.end(), f->first) == in.fixedItems.end())
+                festgenagelt.erase(f->first);
+
+        for (const CoupledTrigger& c : in.coupledTriggers)
+            if (std::find(in.fixedItems.begin(), in.fixedItems.end(), c.itemIndex) == in.fixedItems.end())
+                festgenagelt.erase(c.itemIndex);
+
         std::map<int, int> wandTypen;      // typeId -> OCB
         for (const LevelItem& it : in.items)
         {
+            if (festgenagelt.count(it.index)) continue;
             // NUR aufnehmbare Items. OCB 2 und 9 sind keine Kennung fuer
             // Wandgriffe, sondern gewoehnliche Werte, die auch Tueren,
             // Gegner und Kulisse tragen - ohne diese Pruefung fuellte der

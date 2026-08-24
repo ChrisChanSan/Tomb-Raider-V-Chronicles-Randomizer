@@ -24,10 +24,27 @@
 // Umschaltpfeile unter den Text.
 #define PAGE2_NUM	12
 
+// Direkteinstieg (#33-Nachtrag): das Optionsmenue hat eine eigene
+// "Credits"-Zeile bekommen und springt damit unmittelbar auf Seite 2 -
+// als dritte Seite im Umschaltzyklus allein war sie zu versteckt. Die
+// Seite lebt darum auf Dateiebene statt als Funktions-static.
+static long TroyePage = 0;
+
+// Setzt die Startseite und liefert die passende Startauswahl (bei den
+// reinen Anzeigeseiten die Umschaltzeile), damit der Aufrufer sie
+// direkt in sein sel uebernehmen kann.
+ulong TroyeMenuSeite(long seite)
+{
+	long num;
+
+	TroyePage = seite;
+	num = seite == 0 ? PAGE0_NUM : (seite == 1 ? PAGE1_NUM : PAGE2_NUM);
+	return 1ul << num;
+}
+
 void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak)
 {
 	long num;
-	static long page = 0;
 	bool changed;
 
 	num = 0;
@@ -39,11 +56,11 @@ void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak)
 		menu = 0;
 		dbinput &= ~IN_DESELECT;
 		selection = selection_bak;
-		page = 0;
+		TroyePage = 0;
 		return;
 	}
 
-	switch (page)
+	switch (TroyePage)
 	{
 	case 0:
 		changed = Page0(num, textY, selection);
@@ -87,8 +104,8 @@ void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak)
 			
 			// Drei Seiten im Kreis (#33): Optionen -> Optionen 2 ->
 			// Credits -> wieder von vorn.
-			page = (page + 1) % 3;
-			num = page == 0 ? PAGE0_NUM : (page == 1 ? PAGE1_NUM : PAGE2_NUM);
+			TroyePage = (TroyePage + 1) % 3;
+			num = TroyePage == 0 ? PAGE0_NUM : (TroyePage == 1 ? PAGE1_NUM : PAGE2_NUM);
 
 			selection = 1 << num;
 		}

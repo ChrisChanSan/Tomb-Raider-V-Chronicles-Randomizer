@@ -1149,6 +1149,7 @@ const char* EigenText(const char* engl)
 		{ "Pause",           "Pause",           "Pause",          "Pausa",              "Pausa" },
 		{ "Gallery",         "Galerie",         "Galerie",        "Galleria",           "Galeria" },
 		{ "tomb5 options",   "Options tomb5",   "tomb5-Optionen", "Opzioni tomb5",      "Opciones tomb5" },
+		{ "Credits",         "Credits",         "Credits",        "Crediti",            "Creditos" },
 	};
 
 	long spalte;

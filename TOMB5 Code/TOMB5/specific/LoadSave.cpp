@@ -710,7 +710,7 @@ void DoOptions()
 	else if (menu == 0)	//main options menu
 	{
 		f= 3 * font_height;
-		nMask = 7;	// + Language-Zeile
+		nMask = 8;	// + Language-Zeile + Credits
 		PrintString(phd_centerx, 3 * font_height, 6, SCRIPT_TEXT(TXT_Options), FF_CENTER);
 		PrintString(phd_centerx, f + font_height + (font_height >> 1), sel & 1 ? 1 : 2, SCRIPT_TEXT(TXT_Control_Configuration), FF_CENTER);
 		PrintString(phd_centerx >> 2, f + 3 * font_height, sel & 2 ? 1 : 2, SCRIPT_TEXT(TXT_Music_Volume), 0);
@@ -754,16 +754,22 @@ void DoOptions()
 
 		if (gfGameMode == 1)
 		{
-			nMask = 8;
+			nMask = 9;
 			PrintString(phd_centerx, (font_height >> 1) + f + 8 * font_height, sel & 0x40 ? 1 : 2, SCRIPT_TEXT(TXT_Special_Features), FF_CENTER);
 		}
 		else
 			SFMask = 0;
 
 		if (SFMask)
+		{
 			PrintString(phd_centerx, (font_height >> 1) + f + 9 * font_height, sel & 0x80 ? 1 : 2, (char*)EigenText("tomb5 options"), FF_CENTER);
+			PrintString(phd_centerx, (font_height >> 1) + f + 10 * font_height, sel & 0x100 ? 1 : 2, (char*)EigenText("Credits"), FF_CENTER);
+		}
 		else
+		{
 			PrintString(phd_centerx, (font_height >> 1) + f + 8 * font_height, sel & 0x40 ? 1 : 2, (char*)EigenText("tomb5 options"), FF_CENTER);
+			PrintString(phd_centerx, (font_height >> 1) + f + 9 * font_height, sel & 0x80 ? 1 : 2, (char*)EigenText("Credits"), FF_CENTER);
+		}
 
 		if (dbinput & IN_FORWARD)
 		{
@@ -790,6 +796,21 @@ void DoOptions()
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			last_sel = sel;
 			sel = 1;
+			TroyeMenuSeite(0);	// gewohnter Einstieg auf Seite 1
+			menu = 200;
+		}
+
+		// Credits (#33-Nachtrag, Nutzerwunsch): eigene Zeile direkt unter
+		// "tomb5 options" - als dritte Seite des tomb5-Menues allein war
+		// sie zu versteckt. Springt unmittelbar auf die Credits-Seite;
+		// Zurueck landet wie gewohnt wieder hier.
+		i = !SFMask ? 0x80 : 0x100;
+
+		if (dbinput & IN_SELECT && sel & (ulong)i)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			last_sel = sel;
+			sel = TroyeMenuSeite(2);
 			menu = 200;
 		}
 

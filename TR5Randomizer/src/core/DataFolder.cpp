@@ -27,7 +27,7 @@
 #pragma comment(lib, "bcrypt.lib")
 
 //----------------------------------------------------------------------------
-// Pfad- und Textwerkzeug
+// Path and text utilities
 //----------------------------------------------------------------------------
 namespace PathUtil
 {
@@ -57,9 +57,9 @@ namespace PathUtil
         if (path.empty()) return false;
         if (dirExists(path)) return true;
 
-        // Zwischenebenen anlegen. CreateDirectoryW legt immer nur eine Ebene
-        // an, und ein Nutzer darf durchaus einen Pfad angeben, dessen
-        // Elternordner noch nicht existiert.
+        // Create intermediate levels. CreateDirectoryW only ever creates one
+        // level, and a user may well give a path whose parent folder does
+        // not exist yet.
         size_t pos = path.find_last_of(L"\\/");
         if (pos != std::wstring::npos && pos > 2)
         {
@@ -107,7 +107,7 @@ namespace PathUtil
 }
 
 //----------------------------------------------------------------------------
-// SHA-256 ueber Windows CNG
+// SHA-256 via Windows CNG
 //----------------------------------------------------------------------------
 bool FileHash::sha256File(const std::wstring& path, std::string& hexUpper, uint64_t& size, std::string& error)
 {
@@ -116,7 +116,7 @@ bool FileHash::sha256File(const std::wstring& path, std::string& hexUpper, uint6
 
     HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-    if (h == INVALID_HANDLE_VALUE) { error = "Datei laesst sich nicht oeffnen"; return false; }
+    if (h == INVALID_HANDLE_VALUE) { error = "cannot open file"; return false; }
 
     LARGE_INTEGER li{};
     if (GetFileSizeEx(h, &li)) size = static_cast<uint64_t>(li.QuadPart);
@@ -129,32 +129,32 @@ bool FileHash::sha256File(const std::wstring& path, std::string& hexUpper, uint6
     do
     {
         if (BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, nullptr, 0) < 0)
-        { error = "SHA256 nicht verfuegbar"; break; }
+        { error = "SHA256 not available"; break; }
 
         DWORD objLen = 0, digLen = 0, cb = 0;
-        if (BCryptGetProperty(alg, BCRYPT_OBJECT_LENGTH, reinterpret_cast<PUCHAR>(&objLen), sizeof(objLen), &cb, 0) < 0) { error = "BCryptGetProperty fehlgeschlagen"; break; }
-        if (BCryptGetProperty(alg, BCRYPT_HASH_LENGTH, reinterpret_cast<PUCHAR>(&digLen), sizeof(digLen), &cb, 0) < 0) { error = "BCryptGetProperty fehlgeschlagen"; break; }
+        if (BCryptGetProperty(alg, BCRYPT_OBJECT_LENGTH, reinterpret_cast<PUCHAR>(&objLen), sizeof(objLen), &cb, 0) < 0) { error = "BCryptGetProperty failed"; break; }
+        if (BCryptGetProperty(alg, BCRYPT_HASH_LENGTH, reinterpret_cast<PUCHAR>(&digLen), sizeof(digLen), &cb, 0) < 0) { error = "BCryptGetProperty failed"; break; }
 
         hashObj.resize(objLen);
         digest.resize(digLen);
 
         if (BCryptCreateHash(alg, &hash, hashObj.data(), objLen, nullptr, 0, 0) < 0)
-        { error = "BCryptCreateHash fehlgeschlagen"; break; }
+        { error = "BCryptCreateHash failed"; break; }
 
-        std::vector<unsigned char> buf(1 << 20);   // 1 MB - Level sind 3-6 MB
+        std::vector<unsigned char> buf(1 << 20);   // 1 MB - levels are 3-6 MB
         for (;;)
         {
             DWORD got = 0;
             if (!ReadFile(h, buf.data(), static_cast<DWORD>(buf.size()), &got, nullptr))
-            { error = "Lesefehler"; break; }
+            { error = "read error"; break; }
             if (got == 0) { ok = true; break; }
-            if (BCryptHashData(hash, buf.data(), got, 0) < 0) { error = "BCryptHashData fehlgeschlagen"; break; }
+            if (BCryptHashData(hash, buf.data(), got, 0) < 0) { error = "BCryptHashData failed"; break; }
         }
         if (!ok) break;
         ok = false;
 
         if (BCryptFinishHash(hash, digest.data(), digLen, 0) < 0)
-        { error = "BCryptFinishHash fehlgeschlagen"; break; }
+        { error = "BCryptFinishHash failed"; break; }
 
         static const char* HEX = "0123456789ABCDEF";
         hexUpper.reserve(static_cast<size_t>(digLen) * 2);
@@ -174,7 +174,7 @@ bool FileHash::sha256File(const std::wstring& path, std::string& hexUpper, uint6
 }
 
 //----------------------------------------------------------------------------
-// Pruefsummenliste
+// Checksum list
 //----------------------------------------------------------------------------
 namespace
 {
@@ -201,7 +201,7 @@ bool DataFolder::loadChecksums(const std::wstring& csvPath, std::string& error)
     FILE* f = nullptr;
     if (_wfopen_s(&f, csvPath.c_str(), L"rb") != 0 || !f)
     {
-        error = "Pruefsummenliste nicht found: " + PathUtil::narrow(csvPath);
+        error = "checksum list not found: " + PathUtil::narrow(csvPath);
         return false;
     }
 
@@ -238,7 +238,7 @@ bool DataFolder::loadChecksums(const std::wstring& csvPath, std::string& error)
 
     if (m_known.empty())
     {
-        error = "Pruefsummenliste enthaelt keine verwertbaren Eintraege";
+        error = "checksum list contains no usable entries";
         return false;
     }
     return true;
@@ -257,8 +257,8 @@ std::vector<LevelStatus> DataFolder::inspect(const std::wstring& sourceDataDir) 
         const std::wstring path = PathUtil::join(sourceDataDir, PathUtil::widen(lf.name));
         if (!PathUtil::fileExists(path)) { st.state = LevelState::Missing; out.push_back(st); continue; }
 
-        // Erst die Groesse - das spart bei einer Abweichung das Hashen von
-        // 16 mal mehreren Megabyte.
+        // Size first - on a mismatch that saves hashing 16 times several
+        // megabytes.
         std::string err;
         uint64_t sz = 0;
         std::string hash;
@@ -278,13 +278,13 @@ std::vector<LevelStatus> DataFolder::inspect(const std::wstring& sourceDataDir) 
 
 bool DataFolder::isUsableSource(const std::vector<LevelStatus>& status, std::string& reason)
 {
-    // Eine leere Liste ist KEIN Erfolg. Ohne diese Pruefung meldet die
-    // Funktion "alles in Ordnung", wenn gar nichts geprueft wurde - was in der
-    // Oberflaeche als gruene Meldung ueber einer leeren Tabelle erschien.
+    // An empty list is NOT a success. Without this check the function
+    // reports "all fine" when nothing was checked at all - which showed up
+    // in the UI as a green message above an empty table.
     if (status.empty())
     {
-        reason = "Es wurde kein einziges Level geprueft - die mitgelieferte "
-                 "Pruefsummenliste fehlt oder ist leer.";
+        reason = "Not a single level was checked - the bundled checksum "
+                 "list is missing or empty.";
         return false;
     }
 
@@ -302,17 +302,17 @@ bool DataFolder::isUsableSource(const std::vector<LevelStatus>& status, std::str
     char buf[512];
     if (missing && modified)
         std::snprintf(buf, sizeof(buf),
-            "%d Level fehlen, %d weichen von Vanilla ab (zuerst: %s). "
-            "Als Quelle taugt nur eine unveraenderte Installation - sonst laesst sich ein Seed nicht nachstellen.",
+            "%d levels are missing, %d differ from vanilla (first: %s). "
+            "Only an unmodified installation works as a source - otherwise a seed cannot be reproduced.",
             missing, modified, firstBad.c_str());
     else if (missing)
         std::snprintf(buf, sizeof(buf),
-            "%d Level fehlen (zuerst: %s). Zeigt der Pfad wirklich auf den data-Ordner der Installation?",
+            "%d levels are missing (first: %s). Does the path really point at the installation's data folder?",
             missing, firstBad.c_str());
     else
         std::snprintf(buf, sizeof(buf),
-            "%d Level weichen von Vanilla ab (zuerst: %s). Vermutlich wurde dieser Ordner schon einmal "
-            "veraendert - bitte ueber Steam die Dateien pruefen lassen und erneut versuchen.",
+            "%d levels differ from vanilla (first: %s). Most likely this folder was modified before - "
+            "please verify the files via Steam and try again.",
             modified, firstBad.c_str());
 
     reason = buf;
@@ -328,12 +328,12 @@ bool DataFolder::copyLevels(const std::wstring& sourceDataDir,
 
     if (!PathUtil::dirExists(sourceDataDir))
     {
-        error = "Quellordner existiert nicht";
+        error = "source folder does not exist";
         return false;
     }
     if (!PathUtil::ensureDir(targetDataDir))
     {
-        error = "Zielordner laesst sich nicht anlegen";
+        error = "cannot create target folder";
         return false;
     }
 
@@ -344,22 +344,22 @@ bool DataFolder::copyLevels(const std::wstring& sourceDataDir,
 
         if (!PathUtil::fileExists(src))
         {
-            error = "Quelldatei fehlt: " + lf.name;
+            error = "source file missing: " + lf.name;
             return false;
         }
-        // FALSE = vorhandene Zieldatei ueberschreiben. Genau das ist beim
-        // Zuruecksetzen gewollt: die randomisierte Fassung wird ersetzt.
+        // FALSE = overwrite an existing target file. That is exactly what
+        // restoring wants: the randomized version gets replaced.
         if (!CopyFileW(src.c_str(), dst.c_str(), FALSE))
         {
             char buf[256];
-            std::snprintf(buf, sizeof(buf), "Kopieren fehlgeschlagen bei %s (Windows-Fehler %lu)",
+            std::snprintf(buf, sizeof(buf), "copy failed at %s (Windows error %lu)",
                           lf.name.c_str(), static_cast<unsigned long>(GetLastError()));
             error = buf;
             return false;
         }
-        // Schreibschutz mitkopierter Dateien entfernen - Steam-Installationen
-        // haben das gelegentlich, und beim naechsten Randomisieren wollen wir
-        // die Datei ueberschreiben koennen.
+        // Remove the read-only attribute of copied files - Steam installs
+        // occasionally have it, and the next randomize wants to overwrite
+        // the file.
         DWORD attr = GetFileAttributesW(dst.c_str());
         if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_READONLY))
             SetFileAttributesW(dst.c_str(), attr & ~FILE_ATTRIBUTE_READONLY);

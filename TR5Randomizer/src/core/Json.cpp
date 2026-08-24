@@ -124,7 +124,7 @@ namespace
                 }
                 else
                 {
-                    // UTF-8-Bytes werden unveraendert durchgereicht.
+                    // UTF-8 bytes are passed through unchanged.
                     out.push_back(static_cast<char>(c));
                 }
                 break;
@@ -136,9 +136,9 @@ namespace
     void numberTo(double d, std::string& out)
     {
         char buf[64];
-        // Ganzzahlig? Dann ohne Nachkommastelle write - unsere Patches
-        // enthalten ausschliesslich ganzzahlige Koordinaten und Indizes, und
-        // "90624" liest sich in einer Fehlersuche besser als "90624.0".
+        // Integral? Then write without a fractional part - our patches
+        // contain exclusively integer coordinates and indices, and "90624"
+        // reads better in a bug hunt than "90624.0".
         if (std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 9.0e15)
             std::snprintf(buf, sizeof(buf), "%lld", static_cast<long long>(d));
         else
@@ -172,9 +172,9 @@ std::string JsonValue::dump() const
     {
         out.push_back('{');
         bool first = true;
-        // std::map haelt die Schluessel sortiert - dieselbe Eingabe erzeugt
-        // damit bytegleiche Ausgabe, was den Vergleich zweier Laeufe mit
-        // demselben Seed zu einem simplen Dateivergleich macht.
+        // std::map keeps the keys sorted - the same input thus produces
+        // byte-identical output, which turns comparing two runs of the same
+        // seed into a plain file comparison.
         for (const auto& kv : m_object)
         {
             if (!first) out.push_back(',');
@@ -204,9 +204,9 @@ public:
         skipSpace();
         if (m_p != m_t.size())
         {
-            // Nachlaufender Inhalt ist ein Fehler und kein Grund zum Schweigen:
-            // meist eine abgeschnittene oder doppelt geschriebene Datei.
-            fail("Unerwarteter Inhalt nach dem JSON-Wert");
+            // Trailing content is an error and no reason to stay silent:
+            // usually a truncated or doubly written file.
+            fail("unexpected content after the JSON value");
             error = m_error;
             return false;
         }
@@ -221,9 +221,9 @@ private:
 
     void fail(const char* msg)
     {
-        if (!m_error.empty()) return;   // erste Ursache behalten
+        if (!m_error.empty()) return;   // keep the first cause
         char buf[256];
-        std::snprintf(buf, sizeof(buf), "Zeile %d: %s", m_line, msg);
+        std::snprintf(buf, sizeof(buf), "line %d: %s", m_line, msg);
         m_error = buf;
     }
 
@@ -261,7 +261,7 @@ private:
     bool parseValue(JsonValue& out)
     {
         skipSpace();
-        if (m_p >= m_t.size()) { fail("Unerwartetes Dateiende"); return false; }
+        if (m_p >= m_t.size()) { fail("unexpected end of file"); return false; }
 
         char c = m_t[m_p];
         switch (c)
@@ -275,9 +275,9 @@ private:
             out = JsonValue::makeString(s);
             return true;
         }
-        case 't': if (literal("true"))  { out = JsonValue::makeBool(true);  return true; } fail("Ungueltiges Literal"); return false;
-        case 'f': if (literal("false")) { out = JsonValue::makeBool(false); return true; } fail("Ungueltiges Literal"); return false;
-        case 'n': if (literal("null"))  { out = JsonValue(); return true; } fail("Ungueltiges Literal"); return false;
+        case 't': if (literal("true"))  { out = JsonValue::makeBool(true);  return true; } fail("invalid literal"); return false;
+        case 'f': if (literal("false")) { out = JsonValue::makeBool(false); return true; } fail("invalid literal"); return false;
+        case 'n': if (literal("null"))  { out = JsonValue(); return true; } fail("invalid literal"); return false;
         default:  return parseNumber(out);
         }
     }
@@ -293,9 +293,9 @@ private:
         {
             skipSpace();
             std::string key;
-            if (!parseString(key)) { fail("Schluessel erwartet"); return false; }
+            if (!parseString(key)) { fail("key expected"); return false; }
             skipSpace();
-            if (m_p >= m_t.size() || m_t[m_p] != ':') { fail("':' erwartet"); return false; }
+            if (m_p >= m_t.size() || m_t[m_p] != ':') { fail("':' expected"); return false; }
             ++m_p;
 
             JsonValue v;
@@ -303,10 +303,10 @@ private:
             out.set(key, v);
 
             skipSpace();
-            if (m_p >= m_t.size()) { fail("'}' erwartet"); return false; }
+            if (m_p >= m_t.size()) { fail("'}' expected"); return false; }
             if (m_t[m_p] == ',') { ++m_p; continue; }
             if (m_t[m_p] == '}') { ++m_p; return true; }
-            fail("',' oder '}' erwartet");
+            fail("',' or '}' expected");
             return false;
         }
     }
@@ -325,10 +325,10 @@ private:
             out.push(v);
 
             skipSpace();
-            if (m_p >= m_t.size()) { fail("']' erwartet"); return false; }
+            if (m_p >= m_t.size()) { fail("']' expected"); return false; }
             if (m_t[m_p] == ',') { ++m_p; continue; }
             if (m_t[m_p] == ']') { ++m_p; return true; }
-            fail("',' oder ']' erwartet");
+            fail("',' or ']' expected");
             return false;
         }
     }
@@ -336,7 +336,7 @@ private:
     bool parseString(std::string& out)
     {
         skipSpace();
-        if (m_p >= m_t.size() || m_t[m_p] != '"') { fail("'\"' erwartet"); return false; }
+        if (m_p >= m_t.size() || m_t[m_p] != '"') { fail("'\"' expected"); return false; }
         ++m_p;
         out.clear();
 
@@ -360,9 +360,10 @@ private:
                 case 't':  out.push_back('\t'); break;
                 case 'u':
                 {
-                    // \uXXXX nach UTF-8. Ersatzpaare werden zusammengefasst,
-                    // damit Levelnamen mit Sonderzeichen nicht zerfallen.
-                    if (m_p + 4 > m_t.size()) { fail("Unvollstaendige \\u-Sequenz"); return false; }
+                    // \uXXXX to UTF-8. Surrogate pairs are combined, so
+                    // level names with special characters do not fall
+                    // apart.
+                    if (m_p + 4 > m_t.size()) { fail("incomplete \\u sequence"); return false; }
                     unsigned cp = static_cast<unsigned>(std::strtoul(m_t.substr(m_p, 4).c_str(), nullptr, 16));
                     m_p += 4;
                     if (cp >= 0xD800 && cp <= 0xDBFF && m_p + 6 <= m_t.size() &&
@@ -379,7 +380,7 @@ private:
                     break;
                 }
                 default:
-                    fail("Unbekannte Escape-Sequenz");
+                    fail("unknown escape sequence");
                     return false;
                 }
             }
@@ -389,7 +390,7 @@ private:
                 out.push_back(c);
             }
         }
-        fail("Nicht abgeschlossene Zeichenkette");
+        fail("unterminated string");
         return false;
     }
 
@@ -433,7 +434,7 @@ private:
             if (m_p < m_t.size() && (m_t[m_p] == '-' || m_t[m_p] == '+')) ++m_p;
             while (m_p < m_t.size() && m_t[m_p] >= '0' && m_t[m_p] <= '9') ++m_p;
         }
-        if (!any) { fail("Zahl erwartet"); return false; }
+        if (!any) { fail("number expected"); return false; }
 
         out = JsonValue::makeNumber(std::strtod(m_t.substr(start, m_p - start).c_str(), nullptr));
         return true;
@@ -449,18 +450,18 @@ namespace
         FILE* f = nullptr;
         if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f)
         {
-            error = "Datei laesst sich nicht oeffnen";
+            error = "cannot open file";
             return false;
         }
         std::fseek(f, 0, SEEK_END);
         long n = std::ftell(f);
         std::fseek(f, 0, SEEK_SET);
-        if (n < 0) { std::fclose(f); error = "Dateigroesse nicht lesbar"; return false; }
+        if (n < 0) { std::fclose(f); error = "cannot read file size"; return false; }
 
         out.resize(static_cast<size_t>(n));
         size_t got = (n > 0) ? std::fread(&out[0], 1, static_cast<size_t>(n), f) : 0;
         std::fclose(f);
-        if (got != static_cast<size_t>(n)) { error = "Datei nicht vollstaendig lesbar"; return false; }
+        if (got != static_cast<size_t>(n)) { error = "file not fully readable"; return false; }
         return true;
     }
 }
@@ -485,12 +486,12 @@ bool Json::writeFile(const std::wstring& path, const JsonValue& value, std::stri
     FILE* f = nullptr;
     if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f)
     {
-        error = "Datei laesst sich nicht write";
+        error = "cannot open file for writing";
         return false;
     }
-    // Kein BOM - der Patch-Leser in TombItemEdit2026 erwartet reines UTF-8.
+    // No BOM - the patch reader in TombItemEdit2026 expects plain UTF-8.
     size_t put = text.empty() ? 0 : std::fwrite(text.data(), 1, text.size(), f);
     std::fclose(f);
-    if (put != text.size()) { error = "Datei nicht vollstaendig geschrieben"; return false; }
+    if (put != text.size()) { error = "file not fully written"; return false; }
     return true;
 }

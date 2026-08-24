@@ -30,215 +30,215 @@
 #include <string>
 
 //----------------------------------------------------------------------------
-// C++-Fassung des Listenlesers aus SecretPlan.ps1. Die Grammatik ist dieselbe;
-// die Kommentare zu den Fallen stehen dort und im Listenkopf und werden hier
-// nicht wiederholt. Zwei Abweichungen mit Absicht:
+// C++ version of the list reader from SecretPlan.ps1. The grammar is the
+// same; the comments about the pitfalls live there and in the list header
+// and are not repeated here. Two deliberate deviations:
 //
-//   1. Positionen kommen aus der GELADENEN Leveldatei (Raumurspruenge,
-//      Itemzahl, LikeItem-Bezuege), nicht aus dem Level-Info-JSON. Der Lauf
-//      arbeitet damit gegen den Stand NACH dem Rando-Patch - Neu<k> zeigt
-//      exakt auf die Items, die dieser Patch anlegen wird.
-//   2. Der Winkel wird hier von Grad in die rohe TR-Einheit umgerechnet
-//      (65536 = volle Drehung) - die Falle, die in SecretPlan.ps1 schon
-//      einmal zuschlug (@Angle90 als 90 roh = halbe Gradminute).
+//   1. Positions come from the LOADED level file (room origins, item count,
+//      LikeItem references), not from the level info JSON. The run thereby
+//      works against the state AFTER the rando patch - Neu<k> points at
+//      exactly the items this patch will create.
+//   2. The angle is converted here from degrees to the raw TR unit
+//      (65536 = full turn) - the trap that already snapped once in
+//      SecretPlan.ps1 (@Angle90 as raw 90 = half an arc minute).
 //----------------------------------------------------------------------------
 
 namespace
 {
-    // Eine Extra-Option, alle vier Formen in einem Topf.
+    // One extra option, all forms in one pot.
     struct Option
     {
-        enum Art { ITEM, TRIGGER, ERSETZ, PORTAL, CLIMB, WASSER } art = ITEM;
-        bool wasserAn = false;                       // nur WASSER
+        enum Kind { ITEM, TRIGGER, REPLACE, PORTAL, CLIMB, WATER } kind = ITEM;
+        bool waterOn = false;                        // WATER only
         int typeId = -1, index = -1;
         int room = -1, sx = -1, sz = -1;
-        int roomB = -1, sxB = -1, szB = -1;          // nur PORTAL
-        bool hatOcb = false, hatAngle = false, hatHoehe = false;
-        bool hatXOff = false, hatZOff = false;
-        int ocb = 0, angleGrad = 0, hoehe = 0, xOff = 0, zOff = 0;
-        int wieItem = -1;                            // @LikeItem, -1 = keins
-        std::string triggerArt;                      // leer = kein Trigger
-        std::vector<std::string> ziele;              // Zahl oder "Neu<k>"
+        int roomB = -1, sxB = -1, szB = -1;          // PORTAL only
+        bool hasOcb = false, hasAngle = false, hasHeight = false;
+        bool hasXOff = false, hasZOff = false;
+        int ocb = 0, angleDeg = 0, height = 0, xOff = 0, zOff = 0;
+        int likeItem = -1;                           // @LikeItem, -1 = none
+        std::string triggerKind;                     // empty = no trigger
+        std::vector<std::string> targets;            // number or "Neu<k>"
     };
 
-    struct Stelle { int room = 0, sx = 0, sz = 0; };
+    struct Spot { int room = 0, sx = 0, sz = 0; };
 
-    struct Zeile
+    struct Row
     {
         std::string level;
-        int anzahl = 0, typ = 0;
+        int count = 0, type = 0;
         std::vector<int> ids;
-        std::vector<Stelle> stellen;
+        std::vector<Spot> spots;
         std::vector<Option> extras;
     };
 
-    std::string klein(std::string s)
+    std::string lower(std::string s)
     {
         for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         return s;
     }
 
-    int gradInRoh(int grad)
+    int degToRaw(int deg)
     {
-        int roh = static_cast<int>(std::lround(grad * 65536.0 / 360.0)) % 65536;
-        if (roh > 32767)  roh -= 65536;
-        if (roh < -32768) roh += 65536;
-        return roh;
+        int raw = static_cast<int>(std::lround(deg * 65536.0 / 360.0)) % 65536;
+        if (raw > 32767)  raw -= 65536;
+        if (raw < -32768) raw += 65536;
+        return raw;
     }
 
-    // Gruppen auf Klammertiefe 0 trennen; ';' bevorzugt, sonst '+'.
-    std::vector<std::string> gruppenTrennen(const std::string& text)
+    // Split groups at bracket depth 0; ';' preferred, otherwise '+'.
+    std::vector<std::string> splitGroups(const std::string& text)
     {
-        const char trenner = (text.find(';') != std::string::npos) ? ';' : '+';
-        std::vector<std::string> teile;
-        std::string akt;
-        int tiefe = 0;
+        const char sep = (text.find(';') != std::string::npos) ? ';' : '+';
+        std::vector<std::string> parts;
+        std::string cur;
+        int depth = 0;
         for (char c : text)
         {
-            if (c == '(') ++tiefe;
-            else if (c == ')') --tiefe;
-            if (c == trenner && tiefe == 0) { teile.push_back(akt); akt.clear(); }
-            else akt += c;
+            if (c == '(') ++depth;
+            else if (c == ')') --depth;
+            if (c == sep && depth == 0) { parts.push_back(cur); cur.clear(); }
+            else cur += c;
         }
-        teile.push_back(akt);
-        std::vector<std::string> raus;
-        for (std::string& t : teile)
+        parts.push_back(cur);
+        std::vector<std::string> out;
+        for (std::string& t : parts)
         {
             const size_t a = t.find_first_not_of(" \t");
             const size_t b = t.find_last_not_of(" \t");
-            if (a != std::string::npos) raus.push_back(t.substr(a, b - a + 1));
+            if (a != std::string::npos) out.push_back(t.substr(a, b - a + 1));
         }
-        return raus;
+        return out;
     }
 
-    bool liesOption(const std::string& roh, Option& e, std::string& unbekannt)
+    bool readOption(const std::string& raw, Option& e, std::string& unknown)
     {
-        static const std::regex reErsetz(R"(replace\s+Item_Level_ID\(\s*(\d+)\s*\)\s*with\s*->\s*Type_?ID\(\s*(\d+)\s*\))");
+        static const std::regex reReplace(R"(replace\s+Item_Level_ID\(\s*(\d+)\s*\)\s*with\s*->\s*Type_?ID\(\s*(\d+)\s*\))");
         static const std::regex reItem(R"(add\s+Type_ID\(\s*(\d+)\s*\))");
         static const std::regex reRoom(R"(@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\))");
         static const std::regex reTrigForm(R"(add\s+Trigger_Type\()");
         static const std::regex rePortal(R"(Make_Portal\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)\s*->\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\))");
         static const std::regex reClimb(R"(Make_Climb\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\))");
-        static const std::regex reWasser(R"(Make_Room_(No)?[Ww]ater\s*\(\s*(\d+)\s*\))");
+        static const std::regex reWater(R"(Make_Room_(No)?[Ww]ater\s*\(\s*(\d+)\s*\))");
         static const std::regex reOcb(R"(@\s*OCB\(\s*(\d+)\s*\))");
         static const std::regex reAngle(R"(@\s*Angle\s*\(?\s*(-?\d+))");
-        static const std::regex reHoehe(R"(@\s*Height\(\s*(-?\d+)\s*\))");
+        static const std::regex reHeight(R"(@\s*Height\(\s*(-?\d+)\s*\))");
         static const std::regex reXOff(R"(@\s*XOff\(\s*(-?\d+)\s*\))");
         static const std::regex reZOff(R"(@\s*ZOff\(\s*(-?\d+)\s*\))");
         static const std::regex reLike(R"(@\s*LikeItem\(\s*(\d+)\s*\))");
         static const std::regex reTrig(R"(Trigger_Type\(\s*(\w+)\s*\)[\s\S]*?Item_Level_ID\(\s*([^)]*)\))");
 
         std::smatch m;
-        if (std::regex_search(roh, m, reWasser))
+        if (std::regex_search(raw, m, reWater))
         {
-            e.art = Option::WASSER;
-            e.wasserAn = !m[1].matched;              // "No" davor = ausschalten
+            e.kind = Option::WATER;
+            e.waterOn = !m[1].matched;               // leading "No" = turn off
             e.room = std::stoi(m[2]);
         }
-        else if (std::regex_search(roh, m, reClimb))
+        else if (std::regex_search(raw, m, reClimb))
         {
-            e.art = Option::CLIMB;
+            e.kind = Option::CLIMB;
             e.room = std::stoi(m[1]); e.sx = std::stoi(m[2]); e.sz = std::stoi(m[3]);
         }
-        else if (std::regex_search(roh, m, rePortal))
+        else if (std::regex_search(raw, m, rePortal))
         {
-            e.art = Option::PORTAL;
+            e.kind = Option::PORTAL;
             e.room = std::stoi(m[1]); e.sx = std::stoi(m[2]); e.sz = std::stoi(m[3]);
             e.roomB = std::stoi(m[4]); e.sxB = std::stoi(m[5]); e.szB = std::stoi(m[6]);
         }
-        else if (std::regex_search(roh, m, reErsetz))
+        else if (std::regex_search(raw, m, reReplace))
         {
-            e.art = Option::ERSETZ;
+            e.kind = Option::REPLACE;
             e.index = std::stoi(m[1]);
             e.typeId = std::stoi(m[2]);
-            // Wahlweise mit Umzug: @Room verlegt das Item an die Sektormitte
-            // (Boden gerechnet, @Height oben drauf). Ohne @Room bleibt die
-            // Position - das war vorher der EINZIGE Fall, und ein trotzdem
-            // geschriebenes @Room wurde stillschweigend verschluckt (vom
-            // Nutzer bemerkt: die joby5-Falltuer sollte in den unteren Raum
-            // ziehen und nichts geschah).
+            // Optionally with a move: @Room relocates the item to the sector
+            // center (floor computed, @Height on top). Without @Room the
+            // position stays - that used to be the ONLY case, and a @Room
+            // written anyway was silently swallowed (noticed by the user:
+            // the joby5 trapdoor was meant to move into the lower room and
+            // nothing happened).
             std::smatch r;
-            if (std::regex_search(roh, r, reRoom))
+            if (std::regex_search(raw, r, reRoom))
             { e.room = std::stoi(r[1]); e.sx = std::stoi(r[2]); e.sz = std::stoi(r[3]); }
         }
-        else if (std::regex_search(roh, m, reItem))
+        else if (std::regex_search(raw, m, reItem))
         {
-            e.art = Option::ITEM;
+            e.kind = Option::ITEM;
             e.typeId = std::stoi(m[1]);
             std::smatch r;
-            if (std::regex_search(roh, r, reRoom))
+            if (std::regex_search(raw, r, reRoom))
             { e.room = std::stoi(r[1]); e.sx = std::stoi(r[2]); e.sz = std::stoi(r[3]); }
-            else if (!std::regex_search(roh, r, reLike))
-                return false;                        // weder Raum noch Bezugsitem
+            else if (!std::regex_search(raw, r, reLike))
+                return false;                        // neither room nor reference item
         }
-        else if (std::regex_search(roh, m, reTrigForm))
+        else if (std::regex_search(raw, m, reTrigForm))
         {
-            e.art = Option::TRIGGER;
+            e.kind = Option::TRIGGER;
             std::smatch r;
-            if (!std::regex_search(roh, r, reRoom)) return false;
+            if (!std::regex_search(raw, r, reRoom)) return false;
             e.room = std::stoi(r[1]); e.sx = std::stoi(r[2]); e.sz = std::stoi(r[3]);
         }
         else return false;
 
-        if (std::regex_search(roh, m, reOcb))   { e.hatOcb = true;   e.ocb = std::stoi(m[1]); }
-        if (std::regex_search(roh, m, reAngle)) { e.hatAngle = true; e.angleGrad = std::stoi(m[1]); }
-        if (std::regex_search(roh, m, reHoehe)) { e.hatHoehe = true; e.hoehe = std::stoi(m[1]); }
-        if (std::regex_search(roh, m, reXOff))  { e.hatXOff = true;  e.xOff = std::stoi(m[1]); }
-        if (std::regex_search(roh, m, reZOff))  { e.hatZOff = true;  e.zOff = std::stoi(m[1]); }
-        if (std::regex_search(roh, m, reLike))    e.wieItem = std::stoi(m[1]);
-        if (e.art != Option::ERSETZ && e.art != Option::PORTAL && e.art != Option::CLIMB && e.art != Option::WASSER &&
-            std::regex_search(roh, m, reTrig))
+        if (std::regex_search(raw, m, reOcb))   { e.hasOcb = true;   e.ocb = std::stoi(m[1]); }
+        if (std::regex_search(raw, m, reAngle)) { e.hasAngle = true; e.angleDeg = std::stoi(m[1]); }
+        if (std::regex_search(raw, m, reHeight)) { e.hasHeight = true; e.height = std::stoi(m[1]); }
+        if (std::regex_search(raw, m, reXOff))  { e.hasXOff = true;  e.xOff = std::stoi(m[1]); }
+        if (std::regex_search(raw, m, reZOff))  { e.hasZOff = true;  e.zOff = std::stoi(m[1]); }
+        if (std::regex_search(raw, m, reLike))    e.likeItem = std::stoi(m[1]);
+        if (e.kind != Option::REPLACE && e.kind != Option::PORTAL && e.kind != Option::CLIMB && e.kind != Option::WATER &&
+            std::regex_search(raw, m, reTrig))
         {
-            e.triggerArt = m[1];
-            std::string liste = m[2];
+            e.triggerKind = m[1];
+            std::string list = m[2];
             size_t a = 0;
-            while (a <= liste.size())
+            while (a <= list.size())
             {
-                size_t b = liste.find(',', a);
-                if (b == std::string::npos) b = liste.size();
-                std::string t = liste.substr(a, b - a);
+                size_t b = list.find(',', a);
+                if (b == std::string::npos) b = list.size();
+                std::string t = list.substr(a, b - a);
                 const size_t x = t.find_first_not_of(" \t");
                 const size_t y = t.find_last_not_of(" \t");
-                if (x != std::string::npos) e.ziele.push_back(t.substr(x, y - x + 1));
+                if (x != std::string::npos) e.targets.push_back(t.substr(x, y - x + 1));
                 a = b + 1;
             }
         }
-        if (e.art == Option::TRIGGER && e.ziele.empty()) return false;
+        if (e.kind == Option::TRIGGER && e.targets.empty()) return false;
 
-        // Strenge statt Nachsicht: alles Erkannte austragen, was uebrig
-        // bleibt, ist ein Tippfehler und wird gemeldet.
-        std::string rest = roh;
-        auto tilge = [&rest](const std::regex& re) { rest = std::regex_replace(rest, re, ""); };
-        tilge(rePortal);
-        tilge(reClimb);
-        tilge(reWasser);
+        // Strictness over leniency: strike out everything recognized; what
+        // remains is a typo and gets reported.
+        std::string rest = raw;
+        auto strike = [&rest](const std::regex& re) { rest = std::regex_replace(rest, re, ""); };
+        strike(rePortal);
+        strike(reClimb);
+        strike(reWater);
         static const std::regex reWClimb(R"(Make_Climb)");
-        tilge(reWClimb);
+        strike(reWClimb);
         static const std::regex reW1(R"(replace\s+)"), reW2(R"(with\s*->)"), reW3(R"(add\s+)");
         static const std::regex reW4(R"(Type_?ID\(\s*\d+\s*\))");
         static const std::regex reW5(R"(Trigger_Type\(\s*\w+\s*\))");
         static const std::regex reW6(R"(to\s*->\s*\w+)");
         static const std::regex reW7(R"(Item_Level_ID\([^)]*\))");
         static const std::regex reW8(R"([()+;\s])");
-        tilge(reW1); tilge(reW2); tilge(reW3); tilge(reW4);
-        tilge(reRoom); tilge(reOcb);
-        static const std::regex reAngleVoll(R"(@\s*Angle\s*\(?\s*-?\d+\s*\)?)");
-        tilge(reAngleVoll);
-        tilge(reHoehe); tilge(reXOff); tilge(reZOff); tilge(reLike);
-        tilge(reW5); tilge(reW6); tilge(reW7); tilge(reW8);
-        unbekannt = rest;
+        strike(reW1); strike(reW2); strike(reW3); strike(reW4);
+        strike(reRoom); strike(reOcb);
+        static const std::regex reAngleFull(R"(@\s*Angle\s*\(?\s*-?\d+\s*\)?)");
+        strike(reAngleFull);
+        strike(reHeight); strike(reXOff); strike(reZOff); strike(reLike);
+        strike(reW5); strike(reW6); strike(reW7); strike(reW8);
+        unknown = rest;
         return true;
     }
 
-    bool liesListe(const std::wstring& path, std::vector<Zeile>& raus,
+    bool readList(const std::wstring& path, std::vector<Row>& out,
                    std::vector<std::string>& warnings, std::string& error)
     {
         const std::filesystem::path p(path);
         std::ifstream f(p);
-        if (!f) { error = "Secret-Liste nicht lesbar"; return false; }
+        if (!f) { error = "secret list not readable"; return false; }
 
-        static const std::regex reZeile(R"(^\s*(\w+)\.trc\s+(\d+)\s+(\d+)\s+\(([^)]*)\)\s*(.*)$)");
-        static const std::regex reStelle(R"(Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\))");
+        static const std::regex reRow(R"(^\s*(\w+)\.trc\s+(\d+)\s+(\d+)\s+\(([^)]*)\)\s*(.*)$)");
+        static const std::regex reSpot(R"(Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\))");
 
         std::string z;
         while (std::getline(f, z))
@@ -248,12 +248,12 @@ namespace
             if (h == std::string::npos || z[h] == '#') continue;
 
             std::smatch m;
-            if (!std::regex_match(z, m, reZeile)) continue;
+            if (!std::regex_match(z, m, reRow)) continue;
 
-            Zeile row;
+            Row row;
             row.level = m[1];
-            row.anzahl = std::stoi(m[2]);
-            row.typ = std::stoi(m[3]);
+            row.count = std::stoi(m[2]);
+            row.type = std::stoi(m[3]);
             {
                 std::string ids = m[4];
                 size_t a = 0;
@@ -269,71 +269,71 @@ namespace
             }
             const std::string rest = m[5];
 
-            // Grenze zwischen Stellen und Extras: Room(x,z)-Klammern
-            // ausblenden, die erste uebrige Klammer beginnt die Extras -
-            // egal mit welchem Verb (die "(add"-Falle aus SecretPlan.ps1).
-            std::string maske = rest;
-            for (std::sregex_iterator it(rest.begin(), rest.end(), reStelle), e; it != e; ++it)
+            // Boundary between spots and extras: mask out the Room(x,z)
+            // brackets, the first remaining bracket starts the extras -
+            // regardless of the verb (the "(add" trap from SecretPlan.ps1).
+            std::string mask = rest;
+            for (std::sregex_iterator it(rest.begin(), rest.end(), reSpot), e; it != e; ++it)
                 for (size_t i = 0; i < it->length(); ++i)
-                    maske[static_cast<size_t>(it->position()) + i] = ' ';
-            const size_t pExtra = maske.find('(');
-            const std::string vorn = (pExtra != std::string::npos) ? rest.substr(0, pExtra) : rest;
+                    mask[static_cast<size_t>(it->position()) + i] = ' ';
+            const size_t pExtra = mask.find('(');
+            const std::string front = (pExtra != std::string::npos) ? rest.substr(0, pExtra) : rest;
 
-            for (std::sregex_iterator it(vorn.begin(), vorn.end(), reStelle), e; it != e; ++it)
+            for (std::sregex_iterator it(front.begin(), front.end(), reSpot), e; it != e; ++it)
             {
-                Stelle s;
+                Spot s;
                 s.room = std::stoi((*it)[1]); s.sx = std::stoi((*it)[2]); s.sz = std::stoi((*it)[3]);
-                row.stellen.push_back(s);
+                row.spots.push_back(s);
             }
 
-            if (static_cast<int>(row.ids.size()) != row.anzahl)
-                warnings.push_back(row.level + ": Anzahl " + std::to_string(row.anzahl) +
-                                    ", aber " + std::to_string(row.ids.size()) + " Level_ID");
-            if (!row.stellen.empty() && row.stellen.size() != row.ids.size())
+            if (static_cast<int>(row.ids.size()) != row.count)
+                warnings.push_back(row.level + ": count " + std::to_string(row.count) +
+                                    ", but " + std::to_string(row.ids.size()) + " Level_ID");
+            if (!row.spots.empty() && row.spots.size() != row.ids.size())
                 warnings.push_back(row.level + ": " + std::to_string(row.ids.size()) +
-                                    " Secrets, aber " + std::to_string(row.stellen.size()) + " neue Stellen");
+                                    " secrets, but " + std::to_string(row.spots.size()) + " new spots");
 
             if (pExtra != std::string::npos)
-                for (const std::string& g : gruppenTrennen(rest.substr(pExtra)))
+                for (const std::string& g : splitGroups(rest.substr(pExtra)))
                 {
                     Option o;
-                    std::string unbekannt;
-                    if (!liesOption(g, o, unbekannt))
-                    { warnings.push_back(row.level + ": Option nicht lesbar -> " + g); continue; }
-                    if (!unbekannt.empty())
-                        warnings.push_back(row.level + ": nicht verstandener Teil in einer Option -> '" + unbekannt + "'");
+                    std::string unknown;
+                    if (!readOption(g, o, unknown))
+                    { warnings.push_back(row.level + ": option not readable -> " + g); continue; }
+                    if (!unknown.empty())
+                        warnings.push_back(row.level + ": part of an option not understood -> '" + unknown + "'");
                     row.extras.push_back(o);
                 }
 
-            raus.push_back(row);
+            out.push_back(row);
         }
-        if (raus.empty()) { error = "Secret-Liste enthaelt keine einzige Levelzeile"; return false; }
+        if (out.empty()) { error = "secret list contains not a single level row"; return false; }
         return true;
     }
 }
 
-std::vector<SecretSource> findSecretSources(const std::wstring& ordner)
+std::vector<SecretSource> findSecretSources(const std::wstring& folder)
 {
-    std::vector<SecretSource> raus;
+    std::vector<SecretSource> out;
     std::error_code ec;
-    for (const auto& e : std::filesystem::directory_iterator(ordner, ec))
+    for (const auto& e : std::filesystem::directory_iterator(folder, ec))
     {
         if (!e.is_regular_file()) continue;
         const std::filesystem::path p = e.path();
-        if (klein(p.extension().string()) != ".txt") continue;
+        if (lower(p.extension().string()) != ".txt") continue;
         const std::string name = p.stem().string();
         if (name.empty() || name[0] == '_') continue;
         const size_t u = name.find_last_of('_');
         if (u == std::string::npos) continue;
-        const std::string kat = name.substr(u + 1);
-        if (klein(kat) != "glitchless" && klein(kat) != "glitched") continue;
+        const std::string cat = name.substr(u + 1);
+        if (lower(cat) != "glitchless" && lower(cat) != "glitched") continue;
         SecretSource q;
         q.author = name.substr(0, u);
-        q.category = (klein(kat) == "glitchless") ? "Glitchless" : "Glitched";
+        q.category = (lower(cat) == "glitchless") ? "Glitchless" : "Glitched";
         q.path = p.wstring();
-        raus.push_back(q);
+        out.push_back(q);
     }
-    return raus;
+    return out;
 }
 
 bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName,
@@ -342,18 +342,18 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
                       std::vector<std::string>& warnings, std::string& error)
 {
     secretsMoved = 0;
-    std::vector<Zeile> zeilen;
-    if (!liesListe(listPath, zeilen, warnings, error)) return false;
+    std::vector<Row> rows;
+    if (!readList(listPath, rows, warnings, error)) return false;
 
-    const Zeile* row = nullptr;
-    for (const Zeile& z : zeilen)
-        if (klein(z.level) == klein(levelName)) { row = &z; break; }
+    const Row* row = nullptr;
+    for (const Row& z : rows)
+        if (lower(z.level) == lower(levelName)) { row = &z; break; }
     if (!row)
     {
-        // Kein Eintrag heisst: dieses Level bleibt vanilla. Das ist der
-        // Normalfall fuer del und richcut2 (Bonuslevel ohne Secrets) und
-        // erlaubt, dass eine Autorenliste nur einen Teil der Level abdeckt.
-        warnings.push_back(levelName + ": kein Eintrag in der Secret-Liste - bleibt vanilla.");
+        // No entry means: this level stays vanilla. That is the normal case
+        // for del and richcut2 (bonus levels without secrets) and allows an
+        // author list to cover only part of the levels.
+        warnings.push_back(levelName + ": no entry in the secret list - stays vanilla.");
         patchOut = JsonValue::makeObject();
         return true;
     }
@@ -361,29 +361,29 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
     JsonValue edits = JsonValue::makeArray();
     JsonValue adds = JsonValue::makeArray();
     JsonValue trigger = JsonValue::makeArray();
-    JsonValue portale = JsonValue::makeArray();
+    JsonValue portals = JsonValue::makeArray();
     JsonValue climbs = JsonValue::makeArray();
-    JsonValue wasser = JsonValue::makeArray();
+    JsonValue water = JsonValue::makeArray();
 
     const std::vector<Tr5Room>& rooms = lvl.rooms();
-    auto raumOk = [&](int r) { return r >= 0 && r < static_cast<int>(rooms.size()); };
+    auto roomOk = [&](int r) { return r >= 0 && r < static_cast<int>(rooms.size()); };
 
-    // Gegenprobe an der echten Datei: sind die genannten Indizes wirklich
-    // Secrets? Ein Tippfehler verschoebe sonst still ein fremdes Item.
+    // Cross-check against the real file: are the given indices really
+    // secrets? A typo would otherwise silently move a foreign item.
     for (int id : row->ids)
     {
         Tr5Item it;
-        if (!lvl.getItem(id, it) || it.objectNumber != row->typ)
-            warnings.push_back(levelName + ": Item " + std::to_string(id) +
-                                " ist in der Datei kein Typ " + std::to_string(row->typ));
+        if (!lvl.getItem(id, it) || it.objectNumber != row->type)
+            warnings.push_back(levelName + ": item " + std::to_string(id) +
+                                " is not of type " + std::to_string(row->type) + " in the file");
     }
 
-    // Die Secrets an ihre neuen Stellen.
-    for (size_t i = 0; i < row->stellen.size() && i < row->ids.size(); ++i)
+    // The secrets to their new spots.
+    for (size_t i = 0; i < row->spots.size() && i < row->ids.size(); ++i)
     {
-        const Stelle& s = row->stellen[i];
-        if (!raumOk(s.room))
-        { error = levelName + ": Raum " + std::to_string(s.room) + " gibt es nicht"; return false; }
+        const Spot& s = row->spots[i];
+        if (!roomOk(s.room))
+        { error = levelName + ": room " + std::to_string(s.room) + " does not exist"; return false; }
         JsonValue e = JsonValue::makeObject();
         e.set("index", JsonValue::makeInt(row->ids[i]));
         e.set("room", JsonValue::makeInt(s.room));
@@ -391,27 +391,26 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
         e.set("z", JsonValue::makeInt(rooms[static_cast<size_t>(s.room)].originZ + s.sz * 1024 + 512));
         e.set("y", JsonValue::makeInt(0));
         e.set("yAuto", JsonValue::makeBool(true));
-        // Regel 3 des Randomizers gilt auch hier: eine Sockel- oder
-        // Versteck-OCB beschreibt die ALTE Stelle und ueberlebt den Umzug
-        // nicht. Andrea3s Secret 75 trug OCB 4 (Sockel, vanilla Raum 81);
-        // am neuen Platz sucht PickUpCollision per FindPlinth einen Sockel,
-        // der dort nicht steht - das Secret lag sichtbar da und war fuer
-        // immer unaufnehmbar (vom Nutzer found, erst dem Schiebeblock
-        // zugeschrieben).
+        // Rule 3 of the randomizer applies here too: a pedestal or hiding
+        // OCB describes the OLD spot and does not survive the move.
+        // Andrea3's secret 75 carried OCB 4 (pedestal, vanilla room 81); at
+        // the new spot PickUpCollision looks for a pedestal via FindPlinth
+        // that is not there - the secret lay in plain sight and was forever
+        // unpickable (found by the user, first blamed on the push block).
         e.set("ocb", JsonValue::makeInt(0));
         edits.push(e);
         ++secretsMoved;
     }
 
-    // Extras. Neue Items haengen ab der ECHTEN Itemzahl hinten an.
-    const int itemBasis = lvl.itemCount();
-    int addZahl = 0;
-    for (const Option& o : row->extras) if (o.art == Option::ITEM) ++addZahl;
+    // Extras. New items append starting at the REAL item count.
+    const int itemBase = lvl.itemCount();
+    int addCount = 0;
+    for (const Option& o : row->extras) if (o.kind == Option::ITEM) ++addCount;
 
-    auto zielBefehle = [&](const std::vector<std::string>& ziele) -> JsonValue
+    auto targetCommands = [&](const std::vector<std::string>& targets) -> JsonValue
     {
         JsonValue c = JsonValue::makeArray();
-        for (const std::string& z : ziele)
+        for (const std::string& z : targets)
         {
             int idx = -1;
             if (!z.empty() && std::isdigit(static_cast<unsigned char>(z[0])))
@@ -419,11 +418,11 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
             else if (z.rfind("Neu", 0) == 0)
             {
                 const int k = std::atoi(z.c_str() + 3);
-                if (k >= 1 && k <= addZahl) idx = itemBasis + k - 1;
-                else warnings.push_back(levelName + ": " + z + " gibt es nicht - die Zeile legt " +
-                                         std::to_string(addZahl) + " Items an.");
+                if (k >= 1 && k <= addCount) idx = itemBase + k - 1;
+                else warnings.push_back(levelName + ": " + z + " does not exist - the row creates " +
+                                         std::to_string(addCount) + " items.");
             }
-            else warnings.push_back(levelName + ": Triggerziel '" + z + "' nicht verstanden - uebersprungen.");
+            else warnings.push_back(levelName + ": trigger target '" + z + "' not understood - skipped.");
             if (idx >= 0)
             {
                 JsonValue cmd = JsonValue::makeObject();
@@ -434,38 +433,38 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
         }
         return c;
     };
-    auto triggerArtNr = [&](const std::string& art) -> int
+    auto triggerKindNo = [&](const std::string& kind) -> int
     {
-        const std::string a = klein(art);
+        const std::string a = lower(kind);
         if (a == "key")     return 3;
         if (a == "switch")  return 2;
         if (a == "pickup")  return 4;
         if (a == "trigger") return 0;
-        warnings.push_back(levelName + ": unbekannte Triggerart '" + art + "' - als einfacher Trigger behandelt.");
+        warnings.push_back(levelName + ": unknown trigger kind '" + kind + "' - treated as a plain trigger.");
         return 0;
     };
 
     int n = 0;
     for (const Option& o : row->extras)
     {
-        if (o.art == Option::WASSER)
+        if (o.kind == Option::WATER)
         {
             JsonValue w = JsonValue::makeObject();
             w.set("room", JsonValue::makeInt(o.room));
-            w.set("an", JsonValue::makeBool(o.wasserAn));
-            wasser.push(w);
+            w.set("an", JsonValue::makeBool(o.waterOn));
+            water.push(w);
             continue;
         }
 
-        if (o.art == Option::CLIMB)
+        if (o.kind == Option::CLIMB)
         {
-            if (!o.hatAngle)
-            { error = levelName + ": Make_Climb braucht @Angle (Laras Blick auf die Wand)"; return false; }
-            // Engine-Konvention control.cpp:2189: quad = (yRot+0x2000)/0x4000,
-            // Bit = 1 << (quad+8). In Grad: 0->0x100, 90->0x200, 180->0x400,
-            // 270->0x800. Krumme Winkel runden auf das naechste Viertel.
-            const int grad = ((o.angleGrad % 360) + 360) % 360;
-            const int quad = ((grad + 45) / 90) & 3;
+            if (!o.hasAngle)
+            { error = levelName + ": Make_Climb needs @Angle (Lara's view onto the wall)"; return false; }
+            // Engine convention control.cpp:2189: quad = (yRot+0x2000)/0x4000,
+            // bit = 1 << (quad+8). In degrees: 0->0x100, 90->0x200, 180->0x400,
+            // 270->0x800. Odd angles round to the nearest quarter.
+            const int deg = ((o.angleDeg % 360) + 360) % 360;
+            const int quad = ((deg + 45) / 90) & 3;
             JsonValue c = JsonValue::makeObject();
             c.set("room", JsonValue::makeInt(o.room));
             c.set("sectorX", JsonValue::makeInt(o.sx));
@@ -475,7 +474,7 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
             continue;
         }
 
-        if (o.art == Option::PORTAL)
+        if (o.kind == Option::PORTAL)
         {
             JsonValue p = JsonValue::makeObject();
             p.set("roomA", JsonValue::makeInt(o.room));
@@ -484,130 +483,131 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
             p.set("roomB", JsonValue::makeInt(o.roomB));
             p.set("sxB", JsonValue::makeInt(o.sxB));
             p.set("szB", JsonValue::makeInt(o.szB));
-            portale.push(p);
+            portals.push(p);
             continue;
         }
 
-        if (o.art == Option::ERSETZ)
+        if (o.kind == Option::REPLACE)
         {
             JsonValue e = JsonValue::makeObject();
             e.set("index", JsonValue::makeInt(o.index));
             e.set("typeId", JsonValue::makeInt(o.typeId));
-            // Mit @Room zieht das Item um: Sektormitte, Boden gerechnet.
-            // Gebraucht fuer die joby5-Falltuer (#53): eine Falltuer MUSS auf
-            // der Portalebene ihres Sektors stehen (CloseTrapDoor versiegelt
-            // sonst nichts), und die Deckenfalltuer gehoert dafuer in den
-            // UNTEREN Raum an dessen Decke - also Raumwechsel plus @Height.
-            // Frueher wurde ein @Room hier stillschweigend verschluckt; der
-            // Nutzer hat den Umzug erwartet und nichts ist passiert.
+            // With @Room the item moves: sector center, floor computed.
+            // Needed for the joby5 trapdoor (#53): a trapdoor MUST stand on
+            // the portal plane of its sector (CloseTrapDoor seals nothing
+            // otherwise), and the ceiling trapdoor belongs in the LOWER
+            // room at its ceiling for that - so a room change plus @Height.
+            // A @Room here used to be silently swallowed; the user expected
+            // the move and nothing happened.
             if (o.room >= 0)
             {
-                if (!raumOk(o.room))
-                { error = levelName + ": Raum " + std::to_string(o.room) + " gibt es nicht"; return false; }
+                if (!roomOk(o.room))
+                { error = levelName + ": room " + std::to_string(o.room) + " does not exist"; return false; }
                 e.set("room", JsonValue::makeInt(o.room));
                 e.set("x", JsonValue::makeInt(rooms[static_cast<size_t>(o.room)].originX + o.sx * 1024 + 512));
                 e.set("z", JsonValue::makeInt(rooms[static_cast<size_t>(o.room)].originZ + o.sz * 1024 + 512));
                 e.set("y", JsonValue::makeInt(0));
                 e.set("yAuto", JsonValue::makeBool(true));
             }
-            if (o.hatAngle) e.set("angle", JsonValue::makeInt(gradInRoh(o.angleGrad)));
-            if (o.hatOcb)   e.set("ocb", JsonValue::makeInt(o.ocb));
-            if (o.hatHoehe) { e.set("yOff", JsonValue::makeInt(-o.hoehe)); e.set("yAuto", JsonValue::makeBool(true)); }
-            if (o.hatXOff)  e.set("xOff", JsonValue::makeInt(o.xOff));
-            if (o.hatZOff)  e.set("zOff", JsonValue::makeInt(o.zOff));
+            if (o.hasAngle) e.set("angle", JsonValue::makeInt(degToRaw(o.angleDeg)));
+            if (o.hasOcb)   e.set("ocb", JsonValue::makeInt(o.ocb));
+            if (o.hasHeight) { e.set("yOff", JsonValue::makeInt(-o.height)); e.set("yAuto", JsonValue::makeBool(true)); }
+            if (o.hasXOff)  e.set("xOff", JsonValue::makeInt(o.xOff));
+            if (o.hasZOff)  e.set("zOff", JsonValue::makeInt(o.zOff));
             edits.push(e);
             continue;
         }
 
-        if (o.art == Option::TRIGGER)
+        if (o.kind == Option::TRIGGER)
         {
             JsonValue t = JsonValue::makeObject();
             t.set("room", JsonValue::makeInt(o.room));
             t.set("sectorX", JsonValue::makeInt(o.sx));
             t.set("sectorZ", JsonValue::makeInt(o.sz));
-            t.set("kind", JsonValue::makeInt(triggerArtNr(o.triggerArt)));
+            t.set("kind", JsonValue::makeInt(triggerKindNo(o.triggerKind)));
             t.set("timer", JsonValue::makeInt(0));
             t.set("oneShot", JsonValue::makeInt(1));
             t.set("mask", JsonValue::makeInt(31));
-            t.set("commands", zielBefehle(o.ziele));
+            t.set("commands", targetCommands(o.targets));
             trigger.push(t);
             continue;
         }
 
-        // Schalter und Schluesseloecher brauchen EBENEN Boden.
+        // Switches and keyholes need FLAT ground.
         //
-        // Ihr Positionsfenster hat in Y die Breite null (SwitchBounds und
-        // KeyHoleBounds: bounds[2] == bounds[3] == 0), TestLaraPosition
-        // verlangt also Laras y_pos EXAKT gleich der Item-Hoehe
-        // (collide.cpp:1455). Auf einer Schraege nimmt Lara je nach Standort
-        // beliebig viele Hoehen an und trifft die eine nie - das Objekt ist
-        // dann unbedienbar, ohne Absturz und ohne Meldung. Gegenprobe ueber
-        // alle 13 Level: alle 72 Vanilla-Schalter stehen auf ebenem Boden,
-        // keine einzige Ausnahme. Gefunden am andy3-Schalter, den der Nutzer
-        // nicht bedienen konnte (Raum 202 Sektor 1,1 traegt TILT).
+        // Their position window has width zero in Y (SwitchBounds and
+        // KeyHoleBounds: bounds[2] == bounds[3] == 0), so TestLaraPosition
+        // demands Lara's y_pos EXACTLY equal to the item height
+        // (collide.cpp:1455). On a slope Lara takes on arbitrarily many
+        // heights depending on where she stands and never hits the one -
+        // the object is then unusable, without a crash and without a
+        // message. Cross-checked across all 13 levels: all 72 vanilla
+        // switches stand on flat ground, not a single exception. Found at
+        // the andy3 switch the user could not operate (room 202 sector 1,1
+        // carries TILT).
         if ((o.typeId >= 258 && o.typeId <= 274) && o.room >= 0)
         {
             SlopeInfo si;
             int baseY = 0;
             if (lvl.floorSlope(o.room, o.sx, o.sz, si, baseY) > 0)
-                warnings.push_back(levelName + ": Typ " + std::to_string(o.typeId) +
-                                    " auf Raum " + std::to_string(o.room) + "(" + std::to_string(o.sx) +
-                                    "," + std::to_string(o.sz) + ") steht auf einer SCHRAEGE - Schalter und "
-                                    "Schluessellocher sind dort nicht bedienbar (Y-Fenster ist null breit).");
+                warnings.push_back(levelName + ": type " + std::to_string(o.typeId) +
+                                    " on room " + std::to_string(o.room) + "(" + std::to_string(o.sx) +
+                                    "," + std::to_string(o.sz) + ") stands on a SLOPE - switches and "
+                                    "keyholes cannot be operated there (the Y window is zero wide).");
         }
 
-        // Item anhaengen.
+        // Append the item.
         JsonValue e = JsonValue::makeObject();
         e.set("typeId", JsonValue::makeInt(o.typeId));
-        if (o.wieItem >= 0)
+        if (o.likeItem >= 0)
         {
-            Tr5Item bez;
-            if (!lvl.getItem(o.wieItem, bez))
-            { error = levelName + ": LikeItem(" + std::to_string(o.wieItem) + ") gibt es nicht"; return false; }
-            e.set("room", JsonValue::makeInt(bez.roomNumber));
-            e.set("x", JsonValue::makeInt(bez.x));
-            e.set("z", JsonValue::makeInt(bez.z));
-            e.set("y", JsonValue::makeInt(bez.y));
+            Tr5Item ref;
+            if (!lvl.getItem(o.likeItem, ref))
+            { error = levelName + ": LikeItem(" + std::to_string(o.likeItem) + ") does not exist"; return false; }
+            e.set("room", JsonValue::makeInt(ref.roomNumber));
+            e.set("x", JsonValue::makeInt(ref.x));
+            e.set("z", JsonValue::makeInt(ref.z));
+            e.set("y", JsonValue::makeInt(ref.y));
             e.set("yAuto", JsonValue::makeBool(false));
         }
         else
         {
-            if (!raumOk(o.room))
-            { error = levelName + ": Raum " + std::to_string(o.room) + " gibt es nicht"; return false; }
+            if (!roomOk(o.room))
+            { error = levelName + ": room " + std::to_string(o.room) + " does not exist"; return false; }
             e.set("room", JsonValue::makeInt(o.room));
             e.set("x", JsonValue::makeInt(rooms[static_cast<size_t>(o.room)].originX + o.sx * 1024 + 512));
             e.set("z", JsonValue::makeInt(rooms[static_cast<size_t>(o.room)].originZ + o.sz * 1024 + 512));
             e.set("y", JsonValue::makeInt(0));
             e.set("yAuto", JsonValue::makeBool(true));
         }
-        if (o.hatAngle) e.set("angle", JsonValue::makeInt(gradInRoh(o.angleGrad)));
-        if (o.hatOcb)   e.set("ocb", JsonValue::makeInt(o.ocb));
-        if (o.hatHoehe) e.set("yOff", JsonValue::makeInt(-o.hoehe));
-        if (o.hatXOff)  e.set("xOff", JsonValue::makeInt(o.xOff));
-        if (o.hatZOff)  e.set("zOff", JsonValue::makeInt(o.zOff));
+        if (o.hasAngle) e.set("angle", JsonValue::makeInt(degToRaw(o.angleDeg)));
+        if (o.hasOcb)   e.set("ocb", JsonValue::makeInt(o.ocb));
+        if (o.hasHeight) e.set("yOff", JsonValue::makeInt(-o.height));
+        if (o.hasXOff)  e.set("xOff", JsonValue::makeInt(o.xOff));
+        if (o.hasZOff)  e.set("zOff", JsonValue::makeInt(o.zOff));
         adds.push(e);
-        const int meinIndex = itemBasis + n;
+        const int myIndex = itemBase + n;
         ++n;
 
-        if (!o.triggerArt.empty() && o.room < 0)
+        if (!o.triggerKind.empty() && o.room < 0)
         {
-            // Der Trigger klebt am Sektor - bei @LikeItem ohne @Room ist
-            // keiner benannt. Bisher braucht das keine Zeile; wer es doch
-            // will, gibt @Room zusaetzlich an.
-            warnings.push_back(levelName + ": Trigger auf einem LikeItem-Eintrag ohne @Room - uebersprungen.");
+            // The trigger sticks to the sector - with @LikeItem and no
+            // @Room none is named. So far no row needs that; whoever wants
+            // it anyway adds @Room as well.
+            warnings.push_back(levelName + ": trigger on a LikeItem entry without @Room - skipped.");
         }
-        else if (!o.triggerArt.empty())
+        else if (!o.triggerKind.empty())
         {
             JsonValue t = JsonValue::makeObject();
             t.set("room", JsonValue::makeInt(o.room));
             t.set("sectorX", JsonValue::makeInt(o.sx));
             t.set("sectorZ", JsonValue::makeInt(o.sz));
-            t.set("kind", JsonValue::makeInt(triggerArtNr(o.triggerArt)));
+            t.set("kind", JsonValue::makeInt(triggerKindNo(o.triggerKind)));
             t.set("timer", JsonValue::makeInt(0));
             t.set("oneShot", JsonValue::makeInt(1));
             t.set("mask", JsonValue::makeInt(31));
-            t.set("refItem", JsonValue::makeInt(meinIndex));
-            t.set("commands", zielBefehle(o.ziele));
+            t.set("refItem", JsonValue::makeInt(myIndex));
+            t.set("commands", targetCommands(o.targets));
             trigger.push(t);
         }
     }
@@ -616,8 +616,8 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
     if (edits.size() > 0)   patchOut.set("itemEdits", edits);
     if (adds.size() > 0)    patchOut.set("itemAdds", adds);
     if (trigger.size() > 0) patchOut.set("triggerAdds", trigger);
-    if (portale.size() > 0) patchOut.set("portalAdds", portale);
+    if (portals.size() > 0) patchOut.set("portalAdds", portals);
     if (climbs.size() > 0)  patchOut.set("climbAdds", climbs);
-    if (wasser.size() > 0)  patchOut.set("roomWater", wasser);
+    if (water.size() > 0)   patchOut.set("roomWater", water);
     return true;
 }

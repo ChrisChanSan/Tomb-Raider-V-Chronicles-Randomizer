@@ -113,3 +113,10 @@ Tomb5 Steam Version/
 
 # Sicherungs-Bundles der Historie - enthalten alte Staende, nie hochladen
 *.bundle
+
+# Kurations-Screenshots (Spiel-Bildmaterial) - lokal wertvoll, nie ins Repo
+Tomb5 Rando vorbereitung/Level Infos/ZonenReports/**/*.jpg
+Tomb5 Rando vorbereitung/Level Infos/ZonenReports/**/*.png
+
+# Frische Upstream-Downloads fuer Vergleiche - nie versionieren
+Tomb5 frisch*/

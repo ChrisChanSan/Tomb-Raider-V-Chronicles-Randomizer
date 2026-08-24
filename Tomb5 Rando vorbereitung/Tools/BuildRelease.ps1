@@ -29,7 +29,10 @@ $EngineSrc = "$Root\TOMB5 Code"
 $EngineExe = "$Root\release\PCtomb5.exe"
 $RandoRoot = "$Root\TR5Randomizer"
 $RandoExe  = "$RandoRoot\build\TR5Randomizer.exe"
-$ImGui     = "$Root\Tomb5 Rando vorbereitung\imgui-1.92.9b"
+# Die MIT-Lizenz kommt aus dem VERSIONIERTEN imgui (external\imgui) - der
+# lose Download-Ordner unter "Tomb5 Rando vorbereitung" ist untracked und
+# existiert in einem frischen Clone gar nicht.
+$ImGui     = "$Root\TR5Randomizer\external\imgui"
 $ZoneTools = "$Root\Tomb5 Rando vorbereitung\Tools"
 $LevelInfo = "$Root\Tomb5 Rando vorbereitung\Level Infos"
 

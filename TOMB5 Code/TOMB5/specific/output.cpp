@@ -1375,7 +1375,28 @@ void S_InitialisePolyList()
 	r.y1 = App.dx.rViewport.top;
 	r.y2 = App.dx.rViewport.top + App.dx.rViewport.bottom;
 	r.x2 = App.dx.rViewport.left + App.dx.rViewport.right;
-	DXAttempt(App.dx.lpD3DDevice->Clear(1, &r, D3DCLEAR_TARGET, 0, 1.0F, 0));
+
+	// Den TIEFENPUFFER hier mitloeschen, am ANFANG des Bildes (#127).
+	//
+	// Vorher wurde er nur EINMAL pro Bild geraeumt, naemlich in
+	// S_OutputPolyList - und zwar VOR der Visiermaske. Die Maske schrieb
+	// danach ihre Tiefen hinein, und bis zum naechsten Bild loeschte sie
+	// niemand mehr. Die Welt des Folgebildes wurde also gegen die Tiefen
+	// der Maske von GESTERN geprueft und ueberall dort verworfen, wo die
+	// Maske lag.
+	//
+	// Solange das Visier an ist, faellt das nicht auf: die Maske kommt jedes
+	// Bild neu an dieselbe Stelle und deckt genau das ab, was sie blockiert.
+	// Erst in dem einen Bild, in dem sie WEGFAELLT, sieht man ihren Abdruck -
+	// die Welt erscheint nur noch im Kreis, aussen bleibt der Himmel stehen
+	// (der wird ohne Tiefentest gezeichnet). Genau ein Bild, genau in der
+	// Form der Maske; vom Nutzer mit dem Bildmitschnitt belegt.
+	//
+	// Die Raeumung in S_OutputPolyList bleibt, wo sie ist: sie sorgt dafuer,
+	// dass Maske, Aufnahme-Anzeige und Blende ueber der Szene liegen.
+	DXAttempt(App.dx.lpD3DDevice->Clear(1, &r,
+		(App.dx.Flags & DXF_ZBUFFER) ? (D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER) : D3DCLEAR_TARGET,
+		0, 1.0F, 0));
 
 	_BeginScene();
 	InitBuckets();

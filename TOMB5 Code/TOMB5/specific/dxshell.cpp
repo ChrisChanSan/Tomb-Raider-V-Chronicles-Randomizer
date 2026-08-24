@@ -128,10 +128,9 @@ void DXSaveScreen(LPDIRECT3DSURFACE9 surf, const char* name)
 	FILE* file;
 	D3DSURFACE_DESC desc;
 	D3DLOCKED_RECT rect;
-	short* pSurf;
-	short* pDest;
+	uchar* pSurf;
+	uchar* pDest;
 	char* pM;
-	ulong val;
 	static long num = 0;
 	char buf[16];
 
@@ -141,41 +140,50 @@ void DXSaveScreen(LPDIRECT3DSURFACE9 surf, const char* name)
 	if (FAILED(surf->LockRect(&rect, 0, D3DLOCK_READONLY)))
 		return;
 
-	pSurf = (short*)rect.pBits;
+	pSurf = (uchar*)rect.pBits;
 	sprintf(buf, "%s%04d.tga", name, num);
 	num++;
 	file = fopen(buf, "wb");
 
 	if (file)
 	{
+		// 24-Bit-TGA. Cores Fassung schrieb 16 Bit und las die Oberflaeche
+		// mit short-Schritten - das stammt aus der DirectDraw-Zeit, als der
+		// Rueckpuffer wirklich 16 Bit hatte. Unser D3D9-Port legt ihn als
+		// D3DFMT_X8R8G8B8 an, also 32 Bit; die alte Rechnung las damit
+		// Unsinn. Dazu kam ein Zeilenfehler: der Startzeiger stand auf
+		// Height * Pitch, also eine ZEILE HINTER dem Puffer - der erste
+		// Durchlauf las jedes Mal ins Freie. Der Apostroph-Schnappschuss
+		// der Engine haette also immer abgestuerzt; aufgefallen ist es
+		// erst, als der Bildmitschnitt fuer #127 ihn benutzt hat.
+		tga_header[16] = 24;
 		*(short*)&tga_header[12] = (short)desc.Width;
 		*(short*)&tga_header[14] = (short)desc.Height;
 		fwrite(tga_header, sizeof(tga_header), 1, file);
-		pM = (char*)malloc(2 * desc.Width * desc.Height);
-		pDest = (short*)pM;
-		pSurf += desc.Height * (rect.Pitch / 2);
+		pM = (char*)malloc(3 * desc.Width * desc.Height);
+		pDest = (uchar*)pM;
+
+		// TGA hat seinen Ursprung unten links, die Oberflaeche oben links -
+		// deshalb von der LETZTEN Zeile aus rueckwaerts.
+		pSurf += (desc.Height - 1) * rect.Pitch;
 
 		for (ulong h = 0; h < desc.Height; h++)
 		{
 			for (ulong w = 0; w < desc.Width; w++)
 			{
-				val = pSurf[w];
-				*pDest++ = (short)val;
+				// X8R8G8B8 liegt im Speicher als B,G,R,X - und genau diese
+				// Reihenfolge will TGA auch.
+				*pDest++ = pSurf[w * 4 + 0];
+				*pDest++ = pSurf[w * 4 + 1];
+				*pDest++ = pSurf[w * 4 + 2];
 			}
 
-			pSurf -= rect.Pitch / 2;
+			pSurf -= rect.Pitch;
 		}
 
-		fwrite(pM, 2 * desc.Width * desc.Height, 1, file);
+		fwrite(pM, 3 * desc.Width * desc.Height, 1, file);
 		fclose(file);
 		free(pM);
-		buf[7]++;
-
-		if (buf[7] > '9')
-		{
-			buf[7] = '0';
-			buf[6]++;
-		}
 	}
 
 	surf->UnlockRect();

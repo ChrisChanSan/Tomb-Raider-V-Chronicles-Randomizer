@@ -347,6 +347,25 @@ bool Rando::buildInput(const JsonValue& zoneExport,
             for (size_t r = 0; r < rl.size(); ++r)
                 out.typeNoRooms[typ].insert(static_cast<int>(rl[r].asInt(-1)));
         }
+        // Typsperren je SEKTOR (#61). Zweck wie typeNoRooms, nur feiner - und
+        // wie dort ausserhalb des Constraint-Zweigs, damit sie auch Typen
+        // ohne Aufnahme trifft: andy3s Kreide und Brechstange haben keine
+        // Constraint, die bannedSectors der Constraints erreichen sie also
+        // nie.
+        const JsonValue& tns = zoneExport["typeNoSectors"];
+        for (size_t i = 0; i < tns.size(); ++i)
+        {
+            const int typ = static_cast<int>(tns[i]["typeId"].asInt(-1));
+            if (typ < 0) continue;
+            const JsonValue& sl = tns[i]["sectors"];
+            for (size_t q = 0; q < sl.size(); ++q)
+            {
+                int r = 0, x = 0, z = 0;
+                if (std::sscanf(sl[q].asString().c_str(), "%d,%d,%d", &r, &x, &z) == 3)
+                    out.typeNoSectors[typ].insert(secKey(r, x, z));
+            }
+        }
+
         const JsonValue& ai = zoneExport["antitriggerImmun"];
         for (size_t i = 0; i < ai.size(); ++i)
             out.antitriggerImmunItems.insert(static_cast<int>(ai[i].asInt(-1)));
@@ -560,6 +579,10 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
     {
         std::map<int, std::set<int>>::const_iterator f = in.typeNoRooms.find(typeId);
         if (f != in.typeNoRooms.end() && f->second.count(s.room)) return false;
+
+        std::map<int, std::set<long long>>::const_iterator g = in.typeNoSectors.find(typeId);
+        if (g != in.typeNoSectors.end() &&
+            g->second.count(secKey(s.room, s.sectorX, s.sectorZ))) return false;
     }
 
     if (!k) return true;

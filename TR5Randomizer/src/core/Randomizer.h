@@ -350,6 +350,15 @@ struct RandoInput
     // Levelanfang allein mit Pistolen zu bestehen.
     std::map<int, std::set<int>> typeNoRooms;
 
+    // Dasselbe eine Ebene feiner: einzelne SEKTOREN je Typ (#61,
+    // typeNoSectors im Export). Gebraucht, wenn ein Raum fuer einen Typ
+    // ueberwiegend taugt und nur ein paar Felder darin nicht - und vor allem
+    // fuer Typen OHNE Constraint: andy3s Kreide und Brechstange sind
+    // Werkzeuge ohne Aufnahme, die bannedSectors der Key-Constraints
+    // erreichen sie nie. Wie typeNoRooms ausserhalb des Constraint-Zweigs
+    // geprueft, gilt also auf jedem Platzierungsweg.
+    std::map<int, std::set<long long>> typeNoSectors;
+
     // Items, die ihr Antitrigger nicht mehr anfassen soll (Flagbit 0x80).
     // Kuratiert, unabhaengig von der Gegner-Automatik: rich2s Tuer 171 soll
     // offen bleiben, sobald sie einmal offen war.

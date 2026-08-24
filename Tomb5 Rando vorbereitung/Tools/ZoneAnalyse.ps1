@@ -693,10 +693,18 @@ $noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$Le
 #----------------------------------------------------------------------------
 $TYPE_EXCLUDE_SECTORS = @{
     'joby2' = @{ 172 = @('141,9,3','141,8,3','141,6,2') }
-    # andy3s Muenze (#61): zwei Raeume sind fuer sie ueberwiegend in Ordnung,
-    # nur je zwei Felder darin nicht - Nutzerangabe aus dem Debug-Level
-    # 2026-08-24. Eine Raumsperre waere hier zu grob.
-    'andy3' = @{ 173 = @('38,2,1','38,3,1','34,2,12','34,3,12') }
+    # andy3 (#61), Nutzerangaben aus dem Debug-Level 2026-08-24. Eine
+    # Raumsperre waere in allen Faellen zu grob - die Raeume sind fuer den
+    # jeweiligen Typ ueberwiegend in Ordnung.
+    'andy3' = @{
+        173 = @('38,2,1','38,3,1','34,2,12','34,3,12')   # Muenze
+        # Kreide und Brechstange: Raum 31, Feld (2,1) - "die Geometrie ist
+        # dort zu scharf". Beide sind Wandgriffe (OCB 2 bzw. 9) und haben
+        # KEINEN Constraint; sie werden deshalb ueber typeNoSectors gesperrt,
+        # die Liste, die ausserhalb des Constraint-Zweigs greift.
+        172 = @('31,2,1')                                # Kreide
+        174 = @('31,2,1')                                # Brechstange
+    }
 }
 
 $TYPE_ALLOW_ROOMS = @{
@@ -3833,7 +3841,7 @@ if ($ExportZonesJson -ne "") {
     # sieht man den Unterschied, statt ihn im Spiel zu suchen.
     $kurationStand = (Get-FileHash $PSCommandPath -Algorithm SHA256).Hash.Substring(0,16)
 
-    [PSCustomObject]@{ level=$LevelName; kurationStand=$kurationStand; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES); typeNoRooms=@($typeNoRooms); antitriggerImmun=@($antitriggerImmun); keyBarredSectors=@($keyBarred); keyBarredExemptTypes=@($keyBarredExempt | Sort-Object -Unique); flagPresets=@($flagPresets) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
+    [PSCustomObject]@{ level=$LevelName; kurationStand=$kurationStand; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES); typeNoRooms=@($typeNoRooms); typeNoSectors=@($typeExcludeSectors.GetEnumerator() | ForEach-Object { [PSCustomObject]@{ typeId=[int]$_.Key; sectors=@($_.Value) } }); antitriggerImmun=@($antitriggerImmun); keyBarredSectors=@($keyBarred); keyBarredExemptTypes=@($keyBarredExempt | Sort-Object -Unique); flagPresets=@($flagPresets) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
     Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"
 }
 

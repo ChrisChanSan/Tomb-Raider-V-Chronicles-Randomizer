@@ -60,6 +60,30 @@ Traps, falls, fire, poison and drowning always stay as hard as in the
 original, even if you set the enemies to harmless.
 
 
+Playing with a controller
+-------------------------
+The engine reads a controller itself, and the buttons can be bound in
+the options like the keys.
+
+If you start the game through Steam, turn Steam Input OFF for it
+first. Steam's database still lists Tomb Raider Chronicles as a game
+without controller support - which was true of the engine from 2000,
+but is not true of this one. Believing that, Steam translates your
+controller into KEYBOARD presses using a community layout, while the
+engine reads the same controller directly at the same time. Every
+press then arrives twice by two different routes, and the controls
+behave as if possessed.
+
+Turning it off:
+
+    Steam library -> the game -> "View controller settings"
+    under CONTROLLER -> "Disable Steam Input"
+
+After that the engine sees your controller as it is, and everything
+works normally. Nothing needs changing when starting the game
+directly - Steam Input only ever runs when Steam launches the game.
+
+
 If something goes wrong
 -----------------------
 The randomizer has "Restore original". It plays all levels back from

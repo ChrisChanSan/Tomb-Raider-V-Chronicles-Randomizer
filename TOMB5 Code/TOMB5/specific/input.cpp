@@ -223,7 +223,7 @@ long joystick_read;
 long joystick_read_x;
 long joystick_read_y;
 long joystick_read_fire;
-long joystick_is_xinput;	// 1 = XInput liefert (Xbox-Pad oder DS4Windows/Steam), 0 = DirectInput-Fallback; je Poll neu gesetzt (dxshell.cpp)
+long joystick_is_xinput;	// 1 = XInput is delivering (Xbox pad, or DS4Windows/Steam), 0 = DirectInput fallback; set anew on every poll (dxshell.cpp)
 
 static long joy_fire;
 
@@ -710,6 +710,32 @@ long S_UpdateInput()
 
 	if (linput & IN_ROLL && BinocularRange)
 		linput &= ~IN_ROLL;
+
+	// One press must not serve a menu AND the game.
+	//
+	// Circle is the fixed "back" button above, but it is also a rebindable
+	// gameplay button - roll. So the press that closed the inventory or the
+	// pause menu was still held on the first frame afterwards, and Lara
+	// rolled without the player asking for it (reported in game, #115).
+	// Same class as the FMV skip in #78: one press, two consumers, and the
+	// second one has to wait for a fresh edge.
+	//
+	// The latch is armed while a menu is open - InventoryActive covers both,
+	// the ring sets it and S_PauseMenu sets it - and clears only when the
+	// button is really released. A roll that STARTS in the game is
+	// untouched, because there the latch is never armed.
+	{
+		static char backHeldFromMenu = 0;
+		const bool backDown = ControlMethod == 1 && (joy_fire & (1 << JoyBitBack())) != 0;
+
+		if (!backDown)
+			backHeldFromMenu = 0;
+		else if (InventoryActive)
+			backHeldFromMenu = 1;
+
+		if (backHeldFromMenu)
+			linput &= ~IN_ROLL;
+	}
 
 	if ((linput & (IN_RIGHT | IN_LEFT)) == (IN_RIGHT | IN_LEFT))
 		linput -= IN_RIGHT | IN_LEFT;

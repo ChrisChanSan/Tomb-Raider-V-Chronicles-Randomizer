@@ -605,6 +605,25 @@ long S_CallInventory2()
 			fade_ammo_selector();
 		}
 
+		// Circle/B shuts the ring, the way it backs out of every other menu
+		// screen (the convention set in specific/input.cpp). Deliberately
+		// not by giving Circle IN_OPTION: that bit is the inventory TOGGLE,
+		// and a gameplay button carrying it would open the ring on every
+		// roll - which is exactly why the ring used to be the one screen
+		// Circle could not leave, while Escape could (Escape sets both bits).
+		//
+		// Read HERE, at the end of the frame, and only if go_deselect is
+		// still standing: the modes above - keypad, examine, stats, the
+		// combine ring, the ammo selector - consume it for their own way
+		// back, and one press must not both leave a mode and shut the ring
+		// behind it.
+		if (go_deselect)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			go_deselect = 0;
+			val = 1;
+		}
+
 		if (use_the_bitch && !input)
 			val = 1;
 

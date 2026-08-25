@@ -404,6 +404,26 @@ int main(int argc, char** argv)
             if (n) texAvg[k] = { int(sr / n), int(sg / n), int(sb / n), true };
         }
 
+        // Which colours does this model actually ask for? Printed once per
+        // distinct entry - it says at a glance whether a colour exists among
+        // the model's textures at all.
+        {
+            std::vector<int> seen;
+            for (const ColorSpot& fs : coloredSpots)
+            {
+                const int ci = fs.colorIdx & 0xFF;
+                bool had = false;
+                for (int x : seen) if (x == ci) { had = true; break; }
+                if (had) continue;
+                seen.push_back(ci);
+                const size_t e = 772 + size_t(ci) * 4;
+                int cnt = 0;
+                for (const ColorSpot& g : coloredSpots) if ((g.colorIdx & 0xFF) == ci) ++cnt;
+                std::printf("    colour %3d: rgb %3d,%3d,%3d  on %d faces\n",
+                            ci, r.b[e], r.b[e + 1], r.b[e + 2], cnt);
+            }
+        }
+
         int placed = 0, fell = 0;
         for (const ColorSpot& fs : coloredSpots)
         {

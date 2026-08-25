@@ -194,7 +194,7 @@ void ChefControl(short item_number)
 
 		if (!chef->flags && item->touch_bits & 0x2000 && item->frame_number > anims[item->anim_number].frame_base + 10)
 		{
-			lara_item->hit_points -= GegnerSchaden(balance.sKochMesser);
+			lara_item->hit_points -= EnemyDamage(balance.dmgChefKnife);
 			lara_item->hit_status = 1;
 			CreatureEffectT(item, &knife, 20, item->pos.y_rot, DoBloodSplat);
 			SoundEffect(SFX_LARA_THUD, &item->pos, SFX_DEFAULT);

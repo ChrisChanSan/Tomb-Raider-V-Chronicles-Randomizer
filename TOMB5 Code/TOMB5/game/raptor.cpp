@@ -229,7 +229,7 @@ void RaptorControl(short item_number)
 					if (lara_item->hit_points <= 0)
 						raptor->flags |= 2;
 
-					lara_item->hit_points -= GegnerSchaden(balance.sRaptorBiss);
+					lara_item->hit_points -= EnemyDamage(balance.dmgRaptorBite);
 					lara_item->hit_status = 1;
 					item->required_anim_state = RAPTOR_STOP;
 				}
@@ -264,7 +264,7 @@ void RaptorControl(short item_number)
 				{
 					raptor->flags |= 1;
 					CreatureEffect(item, &raptor_bite, DoBloodSplat);
-					lara_item->hit_points -= GegnerSchaden(balance.sRaptorSprung);
+					lara_item->hit_points -= EnemyDamage(balance.dmgRaptorJump);
 					lara_item->hit_status = 1;
 
 					if (lara_item->hit_points <= 0)

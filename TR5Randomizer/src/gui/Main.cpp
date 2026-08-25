@@ -1962,7 +1962,7 @@ static void drawUi(App& a, HWND hwnd)
                   "Affects all of Lara's weapons at once - pistols, Uzi, shotgun, "
                   "revolver, HK, grappling gun and torch. 0.00x makes them "
                   "harmless, 2.00x doubles their damage.\n\n"
-                  "This writes the WaffenSchaden line in Balance.txt next to "
+                  "This writes the WeaponDamage line in Balance.txt next to "
                   "PCtomb5.exe. If you tuned individual weapons there by hand, "
                   "they are kept: the slider applies on top.");
 
@@ -2063,7 +2063,7 @@ static void drawUi(App& a, HWND hwnd)
     balanceSlider("Enemy health", &a.balEnemyHealth, &a.balEnemyHealthRandom, 0.5f, 2.0f,
                   "How tough all enemies are. 0.50x halves their hit points, "
                   "2.00x doubles them.\n\n"
-                  "This writes the GegnerLeben line in Balance.txt next to "
+                  "This writes the EnemyHealth line in Balance.txt next to "
                   "PCtomb5.exe. If you tuned individual enemies there by hand, "
                   "they are kept: the slider applies on top.");
 
@@ -2071,7 +2071,7 @@ static void drawUi(App& a, HWND hwnd)
                   "How hard all enemies hit. Traps, falls, fire, poison and "
                   "drowning always stay as hard as in the original, as do the "
                   "built-in level hazards like the ceiling gun.\n\n"
-                  "This writes the GegnerSchaden line in Balance.txt next to "
+                  "This writes the EnemyDamage line in Balance.txt next to "
                   "PCtomb5.exe.");
 
     if (ImGui::Button(T("Reset balance")))

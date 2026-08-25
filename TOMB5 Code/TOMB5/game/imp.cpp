@@ -240,7 +240,7 @@ void ImpControl(short item_number)
 
 			if (!imp->flags && item->touch_bits & 0x280)
 			{
-				lara_item->hit_points -= GegnerSchaden(balance.sKoboldWurf);
+				lara_item->hit_points -= EnemyDamage(balance.dmgImpThrow);
 				lara_item->hit_status = 1;
 				CreatureEffectT(item, &imp_hit, 10, item->pos.y_rot, DoBloodSplat);
 			}

@@ -442,7 +442,7 @@ void HitmanControl(short item_number)
 			if (frame > base + 6 && frame < base + 16 && ((frame - base) & 1))
 			{
 				item->fired_weapon = 1;
-				ShotLara(item, &info, &hitman_gun, larainfo.angle >> 1, balance.sHitmanSchuss);
+				ShotLara(item, &info, &hitman_gun, larainfo.angle >> 1, balance.dmgHitmanShot);
 			}
 
 			break;

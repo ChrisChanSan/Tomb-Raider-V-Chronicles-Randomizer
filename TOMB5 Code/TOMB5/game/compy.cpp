@@ -273,7 +273,7 @@ void CompyControl(short item_number)
 				if (item->touch_bits & 4 && compys_attack_lara)
 				{
 					compy->flags |= 1;
-					lara_item->hit_points -= GegnerSchaden(balance.sCompyBiss);
+					lara_item->hit_points -= EnemyDamage(balance.dmgCompyBite);
 					lara_item->hit_status = 1;
 					CreatureEffect(item, &compy_hit, DoBloodSplat);
 				}

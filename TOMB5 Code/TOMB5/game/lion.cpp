@@ -131,7 +131,7 @@ void LionControl(short item_number)
 
 			if (!item->required_anim_state && item->touch_bits & 0x200048)
 			{
-				lara_item->hit_points -= GegnerSchaden(balance.sLoeweSprung);
+				lara_item->hit_points -= EnemyDamage(balance.dmgLionJump);
 				lara_item->hit_status = 1;
 				CreatureEffectT(item, &lion_pounce, 10, item->pos.y_rot, DoBloodSplat);
 				item->required_anim_state = 1;
@@ -145,7 +145,7 @@ void LionControl(short item_number)
 			if (!item->required_anim_state && item->touch_bits & 0x200048)
 			{
 				CreatureEffectT(item, &lion_bite, 10, item->pos.y_rot, DoBloodSplat);
-				lara_item->hit_points -= GegnerSchaden(balance.sLoeweTatze);
+				lara_item->hit_points -= EnemyDamage(balance.dmgLionPaw);
 				lara_item->hit_status = 1;
 				item->required_anim_state = 1;
 			}

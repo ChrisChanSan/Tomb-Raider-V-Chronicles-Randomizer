@@ -143,7 +143,7 @@ void UpdateSpiders()
 
 				if (abs(dz) < 85 && abs(dy) < 85 && abs(dx) < 85)
 				{
-					lara_item->hit_points -= GegnerSchaden(balance.sSpinnen);
+					lara_item->hit_points -= EnemyDamage(balance.dmgSpiders);
 					lara_item->hit_status = 1;
 					TriggerBlood(fx->pos.x_pos, fx->pos.y_pos, fx->pos.z_pos, fx->pos.y_rot, 1);
 				}

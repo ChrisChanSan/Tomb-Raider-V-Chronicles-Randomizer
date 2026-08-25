@@ -243,7 +243,7 @@ void MafiaControl(short item_number)
 
 			if (!mafia->flags)
 			{
-				ShotLara(item, &info, &mafia_gun, head, balance.sMafia2Schuss);
+				ShotLara(item, &info, &mafia_gun, head, balance.dmgMafia2Shot);
 				mafia->flags = 1;
 				item->fired_weapon = 2;
 			}

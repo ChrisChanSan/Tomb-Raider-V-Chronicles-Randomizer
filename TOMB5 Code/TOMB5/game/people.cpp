@@ -157,7 +157,7 @@ long ShotLara(ITEM_INFO* item, AI_INFO* info, BITE_INFO* gun, short extra_rotati
 			if (hit)
 			{
 				CreatureEffect(item, gun, GunHit);
-				lara_item->hit_points -= GegnerSchaden((short)damage);
+				lara_item->hit_points -= EnemyDamage((short)damage);
 				lara_item->hit_status = 1;
 			}
 			else if (targetable)

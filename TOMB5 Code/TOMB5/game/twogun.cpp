@@ -594,7 +594,7 @@ void FireTwogunWeapon(ITEM_INFO* item, long lr, long plasma)
 	if (hit)
 	{
 		if (lara_item->hit_points >= 501)
-			lara_item->hit_points -= GegnerSchaden(balance.sTwoGunPlasma);
+			lara_item->hit_points -= EnemyDamage(balance.dmgTwoGunPlasma);
 		else
 		{
 			LaraBurn();

@@ -131,7 +131,7 @@ void SniperControl(short item_number)
 
 					if (!sniper->flags)
 					{
-						ShotLara(item, &info, &sniper_gun, torso_y, balance.sScharfschuetzeSchuss);
+						ShotLara(item, &info, &sniper_gun, torso_y, balance.dmgSniperShot);
 						sniper->flags = 1;
 						item->fired_weapon = 2;
 					}

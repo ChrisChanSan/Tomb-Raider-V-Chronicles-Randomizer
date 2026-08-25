@@ -238,7 +238,7 @@ bool GameInitialise()
 {
 	Log(__FUNCTION__);
 	EnsureSaveGameFolder();
-	BalanceLaden();
+	BalanceLoad();
 	init_game_malloc();
 	clipflags = (short*)malloc(0x8000);
 	init_water_table();

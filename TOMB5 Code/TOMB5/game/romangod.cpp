@@ -370,7 +370,7 @@ void RomangodControl(short item_number)
 			}
 			else if (item->frame_number > anims[item->anim_number].frame_base + 54 && item->frame_number < anims[item->anim_number].frame_base + 74 && item->touch_bits)
 			{
-				lara_item->hit_points -= GegnerSchaden(balance.sGottHieb);
+				lara_item->hit_points -= EnemyDamage(balance.dmgGodStrike);
 				lara_item->hit_status = 1;
 			}
 			else if (item->frame_number == anims[item->anim_number].frame_end)
@@ -582,7 +582,7 @@ void RomangodControl(short item_number)
 
 					if (!roman->flags && item->touch_bits & 0xC000)
 					{
-						lara_item->hit_points -= GegnerSchaden(balance.sGottBlitz);
+						lara_item->hit_points -= EnemyDamage(balance.dmgGodLightning);
 						lara_item->hit_status = 1;
 						CreatureEffectT(item, &romangod_hit, 20, item->pos.y_rot, DoBloodSplat);
 						SoundEffect(SFX_LARA_THUD, &item->pos, SFX_DEFAULT);

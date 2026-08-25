@@ -259,7 +259,7 @@ void ControlGunship(short item_number)
 				{
 					TriggerDynamic(pos2.x, pos2.y, pos2.z, 16, (GetRandomControl() & 0x3F) + 96, (GetRandomControl() & 0x1F) + 64, 0);
 					DoBloodSplat(v.x, v.y, v.z, short((GetRandomControl() & 1) + 2), short(GetRandomControl() << 1), lara_item->room_number);
-					lara_item->hit_points -= (short)balance.sGunship;
+					lara_item->hit_points -= (short)balance.dmgGunship;
 				}
 				else if (items[Target].object_number >= SMASH_OBJECT1 && items[Target].object_number <= SMASH_OBJECT8)
 				{
@@ -371,7 +371,7 @@ void ControlIris(short item_number)
 				}
 				else
 				{
-					lara_item->hit_points -= (short)balance.sIris;
+					lara_item->hit_points -= (short)balance.dmgIris;
 					item->item_flags[3]++;
 				}
 			}
@@ -560,7 +560,7 @@ void ControlArea51Laser(short item_number)
 			item->draw_room = 1;
 		}
 
-		lara_item->hit_points -= (short)balance.sArea51Laser;
+		lara_item->hit_points -= (short)balance.dmgArea51Laser;
 		DoBloodSplat(lara_item->pos.x_pos, item->pos.y_pos - GetRandomControl() - 32, lara_item->pos.z_pos,
 			(GetRandomControl() & 3) + 4, short(GetRandomControl() << 1), lara_item->room_number);
 		AnimateItem(item);

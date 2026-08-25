@@ -17,307 +17,304 @@
 #include "objects.h"
 #include "../specific/function_stubs.h"
 
-#define BALANCE_DATEI	"Balance.txt"
+#define BALANCE_FILE	"Balance.txt"
 
 BALANCE_INFO balance;
 
 /*
- * Eine Zeile der Einstellungsdatei. Diese Tabelle ist die einzige Quelle der
- * Wahrheit: Voreinstellung, erlaubter Bereich, der Text der Vorlage und - bei
- * Lebenspunkten - der Objektplatz stehen alle hier. Die Vorlage wird daraus
- * erzeugt, sie kann also nicht von den Voreinstellungen abweichen.
+ * One line of the tuning file. This table is the single source of truth:
+ * default, allowed range, the template text and - for hit points - the
+ * object slot all live here. The template is generated from it, so it can
+ * never disagree with the defaults.
  *
- * name == 0 heisst: keine Einstellung, nur der Vorlagentext in kopf.
- * slot >= 0 heisst: der Wert gehoert in objects[slot].hit_points.
+ * name == 0 means: no setting, only the template text in header.
+ * slot >= 0 means: the value belongs into objects[slot].hit_points.
  */
-struct BALANCE_ZEILE
+struct BALANCE_LINE
 {
 	const char* name;
-	long* wert;
-	long standard;
+	long* value;
+	long original;
 	long min;
 	long max;
 	short slot;
-	const char* kopf;
-	const char* notiz;
+	const char* header;
+	const char* note;
 };
 
-#define TRENNER(text)	{ 0, 0, 0, 0, 0, -1, text, 0 }
-#define WAFFE(n, f, s, hinweis)		{ n, &balance.f, s, 0, 127, -1, 0, hinweis }
-#define LEBEN(n, f, s, platz)		{ n, &balance.f, s, 1, 32000, platz, 0, 0 }
-#define SCHADEN(n, f, s, hinweis)	{ n, &balance.f, s, 0, 32000, -1, 0, hinweis }
+#define SEPARATOR(text)	{ 0, 0, 0, 0, 0, -1, text, 0 }
+#define WEAPON(n, f, s, hint)	{ n, &balance.f, s, 0, 127, -1, 0, hint }
+#define HEALTH(n, f, s, place)	{ n, &balance.f, s, 1, 32000, place, 0, 0 }
+#define DAMAGE(n, f, s, hint)	{ n, &balance.f, s, 0, 32000, -1, 0, hint }
 
-static const BALANCE_ZEILE balanceZeilen[] =
+static const BALANCE_LINE balanceLines[] =
 {
-	TRENNER(
+	SEPARATOR(
 		"; ---------------------------------------------------------------\r\n"
-		";  Balance.txt - Feineinstellung fuer Tomb Raider Chronicles\r\n"
-		";  Teil des TR5 Randomizer. Aendern, speichern, Spiel neu starten.\r\n"
+		";  Balance.txt - fine tuning for Tomb Raider Chronicles\r\n"
+		";  Part of the TR5 Randomizer. Edit, save, restart the game.\r\n"
 		"; ---------------------------------------------------------------\r\n"
-		";  Aufbau:  Name = Zahl\r\n"
-		";  Zeilen, die mit ; oder # beginnen, sind Kommentare.\r\n"
-		";  Fehlt eine Zeile, gilt der Originalwert in der Klammer.\r\n"
-		";  Wird die Datei geloescht, legt das Spiel sie neu an.\r\n"
-		";  Kommen mit einer neuen Fassung Einstellungen dazu, traegt das\r\n"
-		";  Spiel sie hier nach und behaelt deine Zahlen. Eigene Kommentare\r\n"
-		";  gehen dabei verloren.\r\n"
+		";  Format:  Name = number\r\n"
+		";  Lines starting with ; or # are comments.\r\n"
+		";  If a line is missing, the original value in brackets applies.\r\n"
+		";  If the file is deleted, the game recreates it.\r\n"
+		";  When a new version adds settings, the game fills them in here\r\n"
+		";  and keeps your numbers. Your own comments are lost in the\r\n"
+		";  process.\r\n"
 		"\r\n"
 		"\r\n"
-		"; === Schaden von Laras Waffen ===================================\r\n"
-		";  Treffer je Schuss, 0 bis 127. Lara hat 1000 Lebenspunkte, ein\r\n"
-		";  einfacher Wachmann 24. Die Schrotflinte zaehlt je Schrotkugel,\r\n"
-		";  sie wirkt also staerker als die Zahl vermuten laesst.\r\n"
+		"; === Damage of Lara's weapons ===================================\r\n"
+		";  Hits per shot, 0 to 127. Lara has 1000 hit points, a simple\r\n"
+		";  guard 24. The shotgun counts per pellet, so it hits harder\r\n"
+		";  than the number suggests.\r\n"
 		"\r\n"),
 
-	WAFFE("Pistolen",		pistolen,		1,	0),
-	WAFFE("Uzi",			uzi,			1,	0),
-	WAFFE("Schrotflinte",	schrotflinte,	3,	"  je Schrotkugel"),
-	WAFFE("Armbrust",		armbrust,		5,	"  im Spiel die Grappling Gun"),
-	WAFFE("Fackel",			fackel,			3,	0),
+	WEAPON("Pistols",		pistols,		1,	0),
+	WEAPON("Uzi",			uzi,			1,	0),
+	WEAPON("Shotgun",		shotgun,		3,	"  per pellet"),
+	WEAPON("Crossbow",		crossbow,		5,	"  in game the Grappling Gun"),
+	WEAPON("Torch",			torch,			3,	0),
 
-	TRENNER(
+	SEPARATOR(
 		"\r\n"
-		";  Der Revolver hat zwei Werte: das Spiel setzt ihn in jedem Level\r\n"
-		";  neu, schwach in den Rom-Levels, stark ab dem U-Boot.\r\n"),
+		";  The revolver has two values: the game resets it every level,\r\n"
+		";  weak in the Rome levels, strong from the submarine on.\r\n"),
 
-	WAFFE("RevolverFrueh",	revolverFrueh,	6,	"  bis einschliesslich Kolosseum"),
-	WAFFE("RevolverSpaet",	revolverSpaet,	15,	"  alle spaeteren Level"),
+	WEAPON("RevolverEarly",	revolverEarly,	6,	"  up to and including Colosseum"),
+	WEAPON("RevolverLate",	revolverLate,	15,	"  all later levels"),
 
-	TRENNER(
+	SEPARATOR(
 		"\r\n"
-		";  Die HK hat ebenfalls zwei Werte: gezielt aus dem Stand trifft\r\n"
-		";  sie haerter als aus der Bewegung.\r\n"),
+		";  The HK also has two values: aimed from a standstill it hits\r\n"
+		";  harder than fired while moving.\r\n"),
 
-	WAFFE("HK_Stand",		hkStand,		3,	0),
-	WAFFE("HK_Lauf",		hkLauf,			1,	0),
+	WEAPON("HK_Standing",	hkStanding,		3,	0),
+	WEAPON("HK_Moving",		hkMoving,		1,	0),
 
-	TRENNER(
+	SEPARATOR(
 		"\r\n"
 		"\r\n"
-		"; === Lebenspunkte der Gegner ====================================\r\n"
-		";  Ein Wert je Gegner, absolut wie im Original. Zum Vergleich:\r\n"
-		";  Lara hat 1000, eine Pistolenkugel macht 1 Schaden.\r\n"
+		"; === Enemy hit points ===========================================\r\n"
+		";  One value per enemy, absolute as in the original. For scale:\r\n"
+		";  Lara has 1000, one pistol bullet deals 1 damage.\r\n"
 		"\r\n"),
 
-	LEBEN("LP_WachmannBlau",		lpWachmannBlau,		24,		BLUE_GUARD),
-	LEBEN("LP_WachmannJoby",		lpWachmannJoby,		24,		BLUE_GUARD2),
-	LEBEN("LP_Swat",				lpSwat,				24,		SWAT),
-	LEBEN("LP_SwatPlus",			lpSwatPlus,			24,		SWAT_PLUS),
-	LEBEN("LP_Mafioso",				lpMafioso,			24,		MAFIA),
-	LEBEN("LP_Mafia2",				lpMafia2,			26,		MAFIA2),
-	LEBEN("LP_Wissenschaftler",		lpWissenschaftler,	24,		SCIENTIST),
-	LEBEN("LP_Kranfuehrer",			lpKranfuehrer,		24,		CRANE_GUY),
-	LEBEN("LP_Hitman",				lpHitman,			50,		HITMAN),
-	LEBEN("LP_Scharfschuetze",		lpScharfschuetze,	35,		SNIPER),
-	LEBEN("LP_Koch",				lpKoch,				60,		CHEF),
-	LEBEN("LP_Pierre",				lpPierre,			60,		PIERRE),
-	LEBEN("LP_Larson",				lpLarson,			60,		LARSON),
-	LEBEN("LP_TwoGun",				lpTwoGun,			90,		TWOGUN),
-	LEBEN("LP_Hund",				lpHund,				18,		DOG),
-	LEBEN("LP_Husky",				lpHusky,			24,		HUSKIE),
-	LEBEN("LP_Loewe",				lpLoewe,			40,		LION),
-	LEBEN("LP_Kraehe",				lpKraehe,			10,		CROW),
-	LEBEN("LP_TRex",				lpTRex,				800,	SAS),
-	LEBEN("LP_Raptor",				lpRaptor,			90,		REAPER),
-	LEBEN("LP_Compy",				lpCompy,			10,		SAILOR),
-	LEBEN("LP_MiniUBoot",			lpMiniUBoot,		100,	ATTACK_SUB),
-	LEBEN("LP_Hydra",				lpHydra,			30,		HYDRA),
-	LEBEN("LP_Kobold",				lpKobold,			12,		IMP),
-	LEBEN("LP_Irrlicht",			lpIrrlicht,			256,	WILLOWISP),
-	LEBEN("LP_Labyrinthmonster",	lpLabyrinthmonster,	120,	MAZE_MONSTER),
-	LEBEN("LP_Sumpfmonster",		lpSumpfmonster,		100,	GREEN_TEETH),
-	LEBEN("LP_Skelett",				lpSkelett,			100,	SKELETON),
-	LEBEN("LP_Gladiator",			lpGladiator,		20,		GLADIATOR),
-	LEBEN("LP_RoemischerGott",		lpRoemischerGott,	300,	ROMAN_GOD),
-	LEBEN("LP_RoemischerGott2",		lpRoemischerGott2,	300,	ROMAN_GOD2),
+	HEALTH("HP_GuardBlue",		hpGuardBlue,	24,		BLUE_GUARD),
+	HEALTH("HP_GuardJoby",		hpGuardJoby,	24,		BLUE_GUARD2),
+	HEALTH("HP_Swat",			hpSwat,			24,		SWAT),
+	HEALTH("HP_SwatPlus",		hpSwatPlus,		24,		SWAT_PLUS),
+	HEALTH("HP_Mafia",			hpMafia,		24,		MAFIA),
+	HEALTH("HP_Mafia2",			hpMafia2,		26,		MAFIA2),
+	HEALTH("HP_Scientist",		hpScientist,	24,		SCIENTIST),
+	HEALTH("HP_CraneGuy",		hpCraneGuy,		24,		CRANE_GUY),
+	HEALTH("HP_Hitman",			hpHitman,		50,		HITMAN),
+	HEALTH("HP_Sniper",			hpSniper,		35,		SNIPER),
+	HEALTH("HP_Chef",			hpChef,			60,		CHEF),
+	HEALTH("HP_Pierre",			hpPierre,		60,		PIERRE),
+	HEALTH("HP_Larson",			hpLarson,		60,		LARSON),
+	HEALTH("HP_TwoGun",			hpTwoGun,		90,		TWOGUN),
+	HEALTH("HP_Dog",			hpDog,			18,		DOG),
+	HEALTH("HP_Huskie",			hpHuskie,		24,		HUSKIE),
+	HEALTH("HP_Lion",			hpLion,			40,		LION),
+	HEALTH("HP_Crow",			hpCrow,			10,		CROW),
+	HEALTH("HP_TRex",			hpTRex,			800,	SAS),
+	HEALTH("HP_Raptor",			hpRaptor,		90,		REAPER),
+	HEALTH("HP_Compy",			hpCompy,		10,		SAILOR),
+	HEALTH("HP_MiniSub",		hpMiniSub,		100,	ATTACK_SUB),
+	HEALTH("HP_Hydra",			hpHydra,		30,		HYDRA),
+	HEALTH("HP_Imp",			hpImp,			12,		IMP),
+	HEALTH("HP_WillOWisp",		hpWillOWisp,	256,	WILLOWISP),
+	HEALTH("HP_MazeMonster",	hpMazeMonster,	120,	MAZE_MONSTER),
+	HEALTH("HP_SwampMonster",	hpSwampMonster,	100,	GREEN_TEETH),
+	HEALTH("HP_Skeleton",		hpSkeleton,		100,	SKELETON),
+	HEALTH("HP_Gladiator",		hpGladiator,	20,		GLADIATOR),
+	HEALTH("HP_RomanGod",		hpRomanGod,		300,	ROMAN_GOD),
+	HEALTH("HP_RomanGod2",		hpRomanGod2,	300,	ROMAN_GOD2),
 
-	TRENNER(
+	SEPARATOR(
 		"\r\n"
 		"\r\n"
-		"; === Schaden der Gegner an Lara =================================\r\n"
-		";  Ein Wert je Angriff. Gegner mit mehreren Angriffen haben\r\n"
-		";  mehrere Zeilen - im Original sind die absichtlich verschieden\r\n"
-		";  stark, der Sprung eines Hundes tut mehr weh als sein Biss.\r\n"
+		"; === Enemy damage against Lara ==================================\r\n"
+		";  One value per attack. Enemies with several attacks have\r\n"
+		";  several lines - in the original those differ on purpose, a\r\n"
+		";  dog's jump hurts more than its bite.\r\n"
 		"\r\n"
-		";  Schusswaffen der menschlichen Gegner:\r\n"),
+		";  Firearms of the human enemies:\r\n"),
 
-	SCHADEN("S_Soldat_Frueh",		sSoldatFrueh,		30,		"  Wachmann/SWAT/Mafioso, bis Old Mill"),
-	SCHADEN("S_Soldat_Spaet",		sSoldatSpaet,		60,		"  dieselben ab Old Mill - doppelt so hart"),
-	SCHADEN("S_Soldat_Kurz",		sSoldatKurz,		10,		"  ihr schwaecherer zweiter Schuss"),
-	SCHADEN("S_Hitman_Schuss",		sHitmanSchuss,		12,		0),
-	SCHADEN("S_Mafia2_Schuss",		sMafia2Schuss,		35,		0),
-	SCHADEN("S_Pierre_Schuss",		sPierreSchuss,		20,		"  je Pistole, er schiesst mit zweien"),
-	SCHADEN("S_Larson_Schuss",		sLarsonSchuss,		20,		0),
-	SCHADEN("S_Scharfschuetze",		sScharfschuetzeSchuss, 100,	"  ein Treffer ist ein Zehntel von Lara"),
+	DAMAGE("DMG_Soldier_Early",	dmgSoldierEarly,	30,		"  guard/SWAT/mafia, up to Old Mill"),
+	DAMAGE("DMG_Soldier_Late",	dmgSoldierLate,		60,		"  the same from Old Mill on - twice as hard"),
+	DAMAGE("DMG_Soldier_Short",	dmgSoldierShort,	10,		"  their weaker second shot"),
+	DAMAGE("DMG_Hitman_Shot",	dmgHitmanShot,		12,		0),
+	DAMAGE("DMG_Mafia2_Shot",	dmgMafia2Shot,		35,		0),
+	DAMAGE("DMG_Pierre_Shot",	dmgPierreShot,		20,		"  per pistol, he fires two"),
+	DAMAGE("DMG_Larson_Shot",	dmgLarsonShot,		20,		0),
+	DAMAGE("DMG_Sniper",		dmgSniperShot,		100,	"  one hit is a tenth of Lara"),
 
-	TRENNER(
+	SEPARATOR(
 		"\r\n"
-		";  Tiere:\r\n"),
+		";  Animals:\r\n"),
 
-	SCHADEN("S_Hund_Biss",			sHundBiss,			30,		0),
-	SCHADEN("S_Hund_Sprung",		sHundSprung,		80,		0),
-	SCHADEN("S_Hund_Nachsetzen",	sHundNachsetzen,	50,		0),
-	SCHADEN("S_Husky_Biss",			sHuskyBiss,			20,		0),
-	SCHADEN("S_Husky_Sprung",		sHuskySprung,		10,		0),
-	SCHADEN("S_Loewe_Sprung",		sLoeweSprung,		200,	0),
-	SCHADEN("S_Loewe_Tatze",		sLoeweTatze,		60,		0),
-	SCHADEN("S_Kraehe",				sKraeheHieb,		20,		0),
-	SCHADEN("S_Fledermaeuse",		sFledermaeuse,		2,		"  je Fledermaus und Treffer"),
-	SCHADEN("S_Spinnen",			sSpinnen,			3,		"  je Spinne und Treffer"),
-	SCHADEN("S_TRex_Tritt",			sTRexTritt,			1,		"  wenn er steht"),
-	SCHADEN("S_TRex_TrittLauf",		sTRexTrittLauf,		10,		"  wenn er laeuft"),
-	SCHADEN("S_TRex_Biss",			sTRexBiss,			10000,	"  toedlich gemeint, Lara hat 1000"),
-	SCHADEN("S_Raptor_Biss",		sRaptorBiss,		100,	0),
-	SCHADEN("S_Raptor_Sprung",		sRaptorSprung,		100,	0),
-	SCHADEN("S_Compy_Biss",			sCompyBiss,			90,		0),
+	DAMAGE("DMG_Dog_Bite",		dmgDogBite,			30,		0),
+	DAMAGE("DMG_Dog_Jump",		dmgDogJump,			80,		0),
+	DAMAGE("DMG_Dog_Chase",		dmgDogChase,		50,		0),
+	DAMAGE("DMG_Huskie_Bite",	dmgHuskieBite,		20,		0),
+	DAMAGE("DMG_Huskie_Jump",	dmgHuskieJump,		10,		0),
+	DAMAGE("DMG_Lion_Jump",		dmgLionJump,		200,	0),
+	DAMAGE("DMG_Lion_Paw",		dmgLionPaw,			60,		0),
+	DAMAGE("DMG_Crow",			dmgCrowStrike,		20,		0),
+	DAMAGE("DMG_Bats",			dmgBats,			2,		"  per bat and hit"),
+	DAMAGE("DMG_Spiders",		dmgSpiders,			3,		"  per spider and hit"),
+	DAMAGE("DMG_TRex_Kick",		dmgTRexKick,		1,		"  while it stands"),
+	DAMAGE("DMG_TRex_KickRun",	dmgTRexKickRun,		10,		"  while it runs"),
+	DAMAGE("DMG_TRex_Bite",		dmgTRexBite,		10000,	"  meant to be lethal, Lara has 1000"),
+	DAMAGE("DMG_Raptor_Bite",	dmgRaptorBite,		100,	0),
+	DAMAGE("DMG_Raptor_Jump",	dmgRaptorJump,		100,	0),
+	DAMAGE("DMG_Compy_Bite",	dmgCompyBite,		90,		0),
 
-	TRENNER(
+	SEPARATOR(
 		"\r\n"
-		";  Uebernatuerliches und schweres Geraet:\r\n"),
+		";  The supernatural and heavy machinery:\r\n"),
 
-	SCHADEN("S_Koch_Messer",		sKochMesser,		150,	"  Nahkaempfer im Pool seit #124 - war 80"),
-	SCHADEN("S_Skelett_Hieb",		sSkelettHieb,		400,	0),
-	SCHADEN("S_Gladiator_Hieb",		sGladiatorHieb,		120,	0),
-	SCHADEN("S_Gott_Hieb",			sGottHieb,			40,		"  Roemischer Gott im Nahkampf"),
-	SCHADEN("S_Gott_Blitz",			sGottBlitz,			200,	"  sein Fernangriff"),
-	SCHADEN("S_Hydra_Strahl",		sHydraStrahl,		120,	0),
-	SCHADEN("S_Kobold_Wurf",		sKoboldWurf,		3,		0),
-	SCHADEN("S_Labyrinthmonster",	sLabyrinthmonster,	150,	0),
-	SCHADEN("S_Sumpfmonster",		sSumpfmonster,		100,	0),
-	SCHADEN("S_TwoGun_Plasma",		sTwoGunPlasma,		250,	0),
-	SCHADEN("S_Torpedo",			sTorpedo,			200,	"  vom Mini-U-Boot"),
+	DAMAGE("DMG_Chef_Knife",	dmgChefKnife,		150,	"  melee fighter in the pool since #124 - was 80"),
+	DAMAGE("DMG_Skeleton_Strike", dmgSkeletonStrike, 400,	0),
+	DAMAGE("DMG_Gladiator_Strike", dmgGladiatorStrike, 120,	0),
+	DAMAGE("DMG_God_Strike",	dmgGodStrike,		40,		"  Roman god in melee"),
+	DAMAGE("DMG_God_Lightning",	dmgGodLightning,	200,	"  his ranged attack"),
+	DAMAGE("DMG_Hydra_Beam",	dmgHydraBeam,		120,	0),
+	DAMAGE("DMG_Imp_Throw",		dmgImpThrow,		3,		0),
+	DAMAGE("DMG_MazeMonster",	dmgMazeMonster,		150,	0),
+	DAMAGE("DMG_SwampMonster",	dmgSwampMonster,	100,	0),
+	DAMAGE("DMG_TwoGun_Plasma",	dmgTwoGunPlasma,	250,	0),
+	DAMAGE("DMG_Torpedo",		dmgTorpedo,			200,	"  from the mini submarine"),
 
-	TRENNER(
+	SEPARATOR(
 		"\r\n"
 		"\r\n"
-		"; === Levelgefahren ==============================================\r\n"
-		";  Das sind keine Gegner, sondern fest eingebaute Maschinen. Sie\r\n"
-		";  tauchen im Rando nirgends anders auf, und die Prozentzeile\r\n"
-		";  GegnerSchaden weiter unten laesst sie absichtlich in Ruhe.\r\n"
+		"; === Level hazards ==============================================\r\n"
+		";  These are not enemies but built-in machinery. They appear\r\n"
+		";  nowhere else in the rando, and the percentage line EnemyDamage\r\n"
+		";  further down leaves them alone on purpose.\r\n"
 		"\r\n"),
 
-	SCHADEN("S_Autogun",			sAutogun,			20,		"  Deckengeschuetz"),
-	SCHADEN("S_Gunship",			sGunship,			20,		"  Kampfhubschrauber"),
-	SCHADEN("S_Iris",				sIris,				12,		"  je Bilddurchlauf, solange Lara zu nah steht"),
-	SCHADEN("S_Area51Laser",		sArea51Laser,		100,	0),
-	SCHADEN("S_Stromkabel",			sStromkabel,		10,		"  die Kabel im U-Boot-Stuetzpunkt"),
+	DAMAGE("DMG_Autogun",		dmgAutogun,			20,		"  ceiling gun"),
+	DAMAGE("DMG_Gunship",		dmgGunship,			20,		"  attack helicopter"),
+	DAMAGE("DMG_Iris",			dmgIris,			12,		"  per frame while Lara stands too close"),
+	DAMAGE("DMG_Area51Laser",	dmgArea51Laser,		100,	0),
+	DAMAGE("DMG_PowerCable",	dmgPowerCable,		10,		"  the cables in the submarine base"),
 
-	TRENNER(
+	SEPARATOR(
 		"\r\n"
 		"\r\n"
-		"; === Alles auf einmal ===========================================\r\n"
-		";  Prozentwerte. Sie wirken ZUSAETZLICH auf die Einzelwerte oben,\r\n"
-		";  damit man das ganze Spiel mit einer Zahl haerter oder weicher\r\n"
-		";  stellen kann, ohne die Feinabstimmung anzufassen. 100 laesst\r\n"
-		";  alles wie eingetragen. Die Levelgefahren bleiben unberuehrt.\r\n"
+		"; === Everything at once =========================================\r\n"
+		";  Percentages. They apply ON TOP of the individual values above,\r\n"
+		";  so the whole game can be made harder or softer with one number\r\n"
+		";  without touching the fine tuning. 100 leaves everything as\r\n"
+		";  entered. The level hazards stay untouched.\r\n"
 		"\r\n"
-		";  Diese drei Zeilen stellt auch der Randomizer ueber seine Regler\r\n"
-		";  ein. Alles andere in dieser Datei fasst er nicht an.\r\n"
+		";  These three lines are also set by the randomizer through its\r\n"
+		";  sliders. It touches nothing else in this file.\r\n"
 		"\r\n"),
 
-	{ "WaffenSchaden",	&balance.waffenSchaden,	100, 0, 1000, -1, 0,
-		"  auf alle Waffen Laras. 0 macht sie wirkungslos" },
-	{ "GegnerLeben",	&balance.gegnerLeben,	100, 1, 1000, -1, 0,
-		"  50 = halb so zaeh, 200 = doppelt so zaeh" },
-	{ "GegnerSchaden",	&balance.gegnerSchaden,	100, 0, 1000, -1, 0,
-		"  0 macht alle Gegner harmlos" },
+	{ "WeaponDamage",	&balance.weaponDamage,	100, 0, 1000, -1, 0,
+		"  on all of Lara's weapons. 0 makes them harmless" },
+	{ "EnemyHealth",	&balance.enemyHealth,	100, 1, 1000, -1, 0,
+		"  50 = half as tough, 200 = twice as tough" },
+	{ "EnemyDamage",	&balance.enemyDamage,	100, 0, 1000, -1, 0,
+		"  0 makes all enemies harmless" },
 
-	TRENNER(
+	SEPARATOR(
 		"\r\n"
 		"\r\n"
-		"; === Klang ======================================================\r\n"
-		";  Hoerweite der ortsfesten Levelkulisse in Prozent: Maschinen,\r\n"
-		";  Feuer, tropfendes Wasser. Das Original liess sie durch halbe\r\n"
-		";  Level dringen, der Randomizer hegt sie ein. 100 stellt das\r\n"
-		";  Original wieder her. Gegner und Lara behalten immer ihre volle\r\n"
-		";  Reichweite.\r\n"
+		"; === Sound ======================================================\r\n"
+		";  Audible range of the fixed level scenery in percent: machines,\r\n"
+		";  fire, dripping water. The original let them carry through half\r\n"
+		";  the level, the randomizer reins them in. 100 restores the\r\n"
+		";  original. Enemies and Lara always keep their full range.\r\n"
 		"\r\n"),
 
-	{ "KulissenReichweite", &balance.kulissenReichweite, 65, 10, 400, -1, 0,
-		"  Vanilla waere 100, der Randomizer haelt 65" },
+	{ "SceneryRange", &balance.sceneryRange, 65, 10, 400, -1, 0,
+		"  vanilla would be 100, the randomizer keeps 65" },
 
-	TRENNER(
+	SEPARATOR(
 		"\r\n"
-		";  Fallen, Stuerze, Feuer, Gift und Ertrinken sind hier bewusst\r\n"
-		";  nicht einstellbar. Die bleiben immer so hart wie im Original,\r\n"
-		";  auch wenn du die Gegner harmlos stellst.\r\n")
+		";  Traps, falls, fire, poison and drowning are deliberately not\r\n"
+		";  tunable here. They always stay as hard as in the original,\r\n"
+		";  even if you make the enemies harmless.\r\n")
 };
 
-#define BALANCE_ANZAHL	(sizeof(balanceZeilen) / sizeof(balanceZeilen[0]))
+#define BALANCE_COUNT	(sizeof(balanceLines) / sizeof(balanceLines[0]))
 
-static void BalanceSchreibe(HANDLE datei, const char* text)
+static void BalanceWriteText(HANDLE file, const char* text)
 {
-	DWORD geschrieben;
-	WriteFile(datei, text, (DWORD)strlen(text), &geschrieben, 0);
+	DWORD written;
+	WriteFile(file, text, (DWORD)strlen(text), &written, 0);
 }
 
-/* Welche Zeilen beim Lesen tatsaechlich in der Datei standen. */
-static char balanceGefunden[BALANCE_ANZAHL];
+/* Which lines actually stood in the file while reading. */
+static char balanceFound[BALANCE_COUNT];
 
 /*
- * Die Datei wird aus der Tabelle erzeugt, damit Text und Voreinstellungen
- * nicht auseinanderlaufen koennen. Geschrieben werden die aktuellen Werte -
- * bei einer neuen Datei sind das die Originalwerte, beim Nachtragen die des
- * Spielers.
+ * The file is generated from the table, so text and defaults can never drift
+ * apart. The current values are written - for a new file those are the
+ * original values, when backfilling they are the player's.
  */
-static void BalanceDateiSchreiben(long neu)
+static void BalanceWriteFile(long fresh)
 {
-	HANDLE datei;
-	char zeile[256];
+	HANDLE file;
+	char line[256];
 
-	zeile[sizeof(zeile) - 1] = 0;
+	line[sizeof(line) - 1] = 0;
 
-	datei = CreateFile(BALANCE_DATEI, GENERIC_WRITE, 0, 0,
-		neu ? CREATE_NEW : CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+	file = CreateFile(BALANCE_FILE, GENERIC_WRITE, 0, 0,
+		fresh ? CREATE_NEW : CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 
-	if (datei == INVALID_HANDLE_VALUE)
+	if (file == INVALID_HANDLE_VALUE)
 		return;
 
-	for (int i = 0; i < BALANCE_ANZAHL; i++)
+	for (int i = 0; i < BALANCE_COUNT; i++)
 	{
-		if (balanceZeilen[i].kopf)
-			BalanceSchreibe(datei, balanceZeilen[i].kopf);
+		if (balanceLines[i].header)
+			BalanceWriteText(file, balanceLines[i].header);
 
-		if (!balanceZeilen[i].name)
+		if (!balanceLines[i].name)
 			continue;
 
-		_snprintf(zeile, sizeof(zeile) - 1, "%-22s = %-6ld ; (Original %ld)%s\r\n",
-			balanceZeilen[i].name, *balanceZeilen[i].wert, balanceZeilen[i].standard,
-			balanceZeilen[i].notiz ? balanceZeilen[i].notiz : "");
+		_snprintf(line, sizeof(line) - 1, "%-22s = %-6ld ; (original %ld)%s\r\n",
+			balanceLines[i].name, *balanceLines[i].value, balanceLines[i].original,
+			balanceLines[i].note ? balanceLines[i].note : "");
 
-		BalanceSchreibe(datei, zeile);
+		BalanceWriteText(file, line);
 	}
 
-	CloseHandle(datei);
-	Log(neu ? "Balance.txt neu angelegt" : "Balance.txt um neue Zeilen ergaenzt");
+	CloseHandle(file);
+	Log(fresh ? "Balance.txt newly created" : "Balance.txt extended by new lines");
 }
 
 /*
- * Nach dem Lesen: standen nicht alle Einstellungen in der Datei, wird sie neu
- * geschrieben - mit den Werten des Spielers, aber vollstaendig. Sonst wuerde
- * eine Datei aus einer aelteren Fassung des Spiels alle spaeter
- * hinzugekommenen Einstellungen fuer immer verstecken. Eigene Kommentare des
- * Spielers gehen dabei verloren, seine Zahlen nicht.
+ * After reading: if not all settings stood in the file, it is rewritten -
+ * with the player's values, but complete. Otherwise a file from an older
+ * version of the game would hide all later additions forever. The player's
+ * own comments are lost in the process, his numbers are not.
  */
-static void BalanceNachtragen()
+static void BalanceBackfill()
 {
-	long fehlt = 0;
+	long missing = 0;
 
-	for (int i = 0; i < BALANCE_ANZAHL; i++)
+	for (int i = 0; i < BALANCE_COUNT; i++)
 	{
-		if (balanceZeilen[i].name && !balanceGefunden[i])
+		if (balanceLines[i].name && !balanceFound[i])
 		{
-			Log("Balance.txt: %s fehlte, Originalwert %ld eingetragen",
-				balanceZeilen[i].name, balanceZeilen[i].standard);
-			fehlt++;
+			Log("Balance.txt: %s was missing, original value %ld entered",
+				balanceLines[i].name, balanceLines[i].original);
+			missing++;
 		}
 	}
 
-	if (fehlt)
-		BalanceDateiSchreiben(0);
+	if (missing)
+		BalanceWriteFile(0);
 }
 
-static int BalanceNameGleich(const char* a, const char* b)
+static int BalanceNameEquals(const char* a, const char* b)
 {
 	while (*a && *b)
 	{
@@ -341,18 +338,18 @@ static int BalanceNameGleich(const char* a, const char* b)
 }
 
 /*
- * Eine Zeile der Form "Name = Wert" auswerten. Alles hinter ; oder # ist
- * Kommentar, damit die Erklaerung hinter dem Wert stehen darf.
+ * Evaluate one line of the form "Name = value". Everything after ; or # is a
+ * comment, so the explanation may stand behind the value.
  */
-static void BalanceZeileLesen(char* zeile)
+static void BalanceReadLine(char* line)
 {
-	char* gleich;
+	char* eq;
 	char* name;
-	char* wert;
-	char* ende;
-	long zahl;
+	char* value;
+	char* end;
+	long number;
 
-	for (char* p = zeile; *p; p++)
+	for (char* p = line; *p; p++)
 	{
 		if (*p == ';' || *p == '#')
 		{
@@ -361,248 +358,248 @@ static void BalanceZeileLesen(char* zeile)
 		}
 	}
 
-	gleich = strchr(zeile, '=');
+	eq = strchr(line, '=');
 
-	if (!gleich)
+	if (!eq)
 		return;
 
-	*gleich = 0;
-	name = zeile;
-	wert = gleich + 1;
+	*eq = 0;
+	name = line;
+	value = eq + 1;
 
 	while (*name == ' ' || *name == '\t')
 		name++;
 
-	ende = name + strlen(name);
+	end = name + strlen(name);
 
-	while (ende > name && (ende[-1] == ' ' || ende[-1] == '\t'))
-		ende--;
+	while (end > name && (end[-1] == ' ' || end[-1] == '\t'))
+		end--;
 
-	*ende = 0;
+	*end = 0;
 
-	while (*wert == ' ' || *wert == '\t')
-		wert++;
+	while (*value == ' ' || *value == '\t')
+		value++;
 
-	if (!*name || (*wert != '-' && (*wert < '0' || *wert > '9')))
+	if (!*name || (*value != '-' && (*value < '0' || *value > '9')))
 		return;
 
-	zahl = atol(wert);
+	number = atol(value);
 
-	for (int i = 0; i < BALANCE_ANZAHL; i++)
+	for (int i = 0; i < BALANCE_COUNT; i++)
 	{
-		if (!balanceZeilen[i].name || !BalanceNameGleich(name, balanceZeilen[i].name))
+		if (!balanceLines[i].name || !BalanceNameEquals(name, balanceLines[i].name))
 			continue;
 
-		if (zahl < balanceZeilen[i].min)
-			zahl = balanceZeilen[i].min;
-		else if (zahl > balanceZeilen[i].max)
-			zahl = balanceZeilen[i].max;
+		if (number < balanceLines[i].min)
+			number = balanceLines[i].min;
+		else if (number > balanceLines[i].max)
+			number = balanceLines[i].max;
 
-		*balanceZeilen[i].wert = zahl;
-		balanceGefunden[i] = 1;
+		*balanceLines[i].value = number;
+		balanceFound[i] = 1;
 		return;
 	}
 
-	Log("Balance.txt: unbekannte Zeile \"%s\"", name);
+	Log("Balance.txt: unknown line \"%s\"", name);
 }
 
-void BalanceLaden()
+void BalanceLoad()
 {
-	HANDLE datei;
-	DWORD groesse;
-	DWORD gelesen;
-	char* puffer;
-	char* zeile;
+	HANDLE file;
+	DWORD size;
+	DWORD bytesRead;
+	char* buffer;
+	char* line;
 
-	for (int i = 0; i < BALANCE_ANZAHL; i++)
+	for (int i = 0; i < BALANCE_COUNT; i++)
 	{
-		balanceGefunden[i] = 0;
+		balanceFound[i] = 0;
 
-		if (balanceZeilen[i].wert)
-			*balanceZeilen[i].wert = balanceZeilen[i].standard;
+		if (balanceLines[i].value)
+			*balanceLines[i].value = balanceLines[i].original;
 	}
 
-	datei = CreateFile(BALANCE_DATEI, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+	file = CreateFile(BALANCE_FILE, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 
-	if (datei == INVALID_HANDLE_VALUE)
+	if (file == INVALID_HANDLE_VALUE)
 	{
-		BalanceDateiSchreiben(1);
+		BalanceWriteFile(1);
 		return;
 	}
 
-	groesse = GetFileSize(datei, 0);
+	size = GetFileSize(file, 0);
 
-	if (groesse == INVALID_FILE_SIZE || groesse > 0x20000)
-		groesse = 0x20000;
+	if (size == INVALID_FILE_SIZE || size > 0x20000)
+		size = 0x20000;
 
-	puffer = (char*)malloc(groesse + 1);
+	buffer = (char*)malloc(size + 1);
 
-	if (!puffer)
+	if (!buffer)
 	{
-		CloseHandle(datei);
+		CloseHandle(file);
 		return;
 	}
 
-	gelesen = 0;
-	ReadFile(datei, puffer, groesse, &gelesen, 0);
-	CloseHandle(datei);
-	puffer[gelesen] = 0;
+	bytesRead = 0;
+	ReadFile(file, buffer, size, &bytesRead, 0);
+	CloseHandle(file);
+	buffer[bytesRead] = 0;
 
-	zeile = puffer;
+	line = buffer;
 
-	/* Notepad speichert UTF-8 gern mit Vorzeichen - das ueberspringen. */
-	if (gelesen >= 3 && (uchar)zeile[0] == 0xEF && (uchar)zeile[1] == 0xBB && (uchar)zeile[2] == 0xBF)
-		zeile += 3;
+	/* Notepad likes to save UTF-8 with a signature - skip it. */
+	if (bytesRead >= 3 && (uchar)line[0] == 0xEF && (uchar)line[1] == 0xBB && (uchar)line[2] == 0xBF)
+		line += 3;
 
-	while (*zeile)
+	while (*line)
 	{
-		char* naechste = zeile;
+		char* next = line;
 
-		while (*naechste && *naechste != '\r' && *naechste != '\n')
-			naechste++;
+		while (*next && *next != '\r' && *next != '\n')
+			next++;
 
-		if (*naechste)
+		if (*next)
 		{
-			*naechste = 0;
-			naechste++;
+			*next = 0;
+			next++;
 
-			while (*naechste == '\r' || *naechste == '\n')
-				naechste++;
+			while (*next == '\r' || *next == '\n')
+				next++;
 		}
 
-		BalanceZeileLesen(zeile);
-		zeile = naechste;
+		BalanceReadLine(line);
+		line = next;
 	}
 
-	free(puffer);
-	BalanceNachtragen();
+	free(buffer);
+	BalanceBackfill();
 
-	Log("Balance.txt gelesen: Waffen %d%%, Gegnerleben %d%%, Gegnerschaden %d%%, Kulisse %d%%",
-		balance.waffenSchaden, balance.gegnerLeben, balance.gegnerSchaden, balance.kulissenReichweite);
+	Log("Balance.txt read: weapons %d%%, enemy health %d%%, enemy damage %d%%, scenery %d%%",
+		balance.weaponDamage, balance.enemyHealth, balance.enemyDamage, balance.sceneryRange);
 }
 
 /*
- * Wird je Levelstart aufgerufen, weil setup.cpp den Revolver dort ohnehin neu
- * setzt. Die HK bleibt aussen vor, die stellt lara1gun.cpp je Schuss selbst.
+ * Called at every level start, because setup.cpp resets the revolver there
+ * anyway. The HK stays out - lara1gun.cpp sets it per shot itself.
  */
-void BalanceWaffenSetzen()
+void BalanceSetWeapons()
 {
-	weapons[WEAPON_PISTOLS].damage = WaffenSchaden(balance.pistolen);
-	weapons[WEAPON_UZI].damage = WaffenSchaden(balance.uzi);
-	weapons[WEAPON_SHOTGUN].damage = WaffenSchaden(balance.schrotflinte);
-	weapons[WEAPON_CROSSBOW].damage = WaffenSchaden(balance.armbrust);
-	weapons[WEAPON_TORCH].damage = WaffenSchaden(balance.fackel);
+	weapons[WEAPON_PISTOLS].damage = WeaponDamage(balance.pistols);
+	weapons[WEAPON_UZI].damage = WeaponDamage(balance.uzi);
+	weapons[WEAPON_SHOTGUN].damage = WeaponDamage(balance.shotgun);
+	weapons[WEAPON_CROSSBOW].damage = WeaponDamage(balance.crossbow);
+	weapons[WEAPON_TORCH].damage = WeaponDamage(balance.torch);
 	weapons[WEAPON_REVOLVER].damage =
-		WaffenSchaden(gfLevelId > LVL5_COLOSSEUM ? balance.revolverSpaet : balance.revolverFrueh);
+		WeaponDamage(gfLevelId > LVL5_COLOSSEUM ? balance.revolverLate : balance.revolverEarly);
 }
 
 /*
- * Der Einzelwert einer Waffe mal der Prozentzeile. Der Deckel ist 127, weil
- * die Engine den Schaden in einem char haelt - ohne ihn wuerde eine starke
- * Waffe bei hohen Prozentwerten ins Negative kippen und den Gegner heilen.
+ * A weapon's individual value times the percentage line. The cap is 127
+ * because the engine holds the damage in a char - without it a strong weapon
+ * would flip negative at high percentages and heal the enemy.
  */
-char WaffenSchaden(long basis)
+char WeaponDamage(long base)
 {
-	long wert;
+	long value;
 
-	if (balance.waffenSchaden == 100)
-		wert = basis;
+	if (balance.weaponDamage == 100)
+		value = base;
 	else
 	{
-		wert = basis * balance.waffenSchaden / 100;
+		value = base * balance.weaponDamage / 100;
 
-		/* Abrunden darf eine Waffe nicht wirkungslos machen - das soll nur,
-		   wer ausdruecklich 0 einstellt. */
-		if (wert < 1 && basis > 0 && balance.waffenSchaden > 0)
-			wert = 1;
+		/* Rounding down must not make a weapon harmless - only an explicit 0
+		   setting may do that. */
+		if (value < 1 && base > 0 && balance.weaponDamage > 0)
+			value = 1;
 	}
 
-	if (wert > 127)
-		wert = 127;
+	if (value > 127)
+		value = 127;
 
-	return (char)wert;
+	return (char)value;
 }
 
 /*
- * Lebenspunkte der Gegner. Wird aus InitialiseObjects gerufen, nachdem
- * BaddyObjects/ObjectObjects/TrapObjects die Originalwerte geschrieben haben.
+ * Enemy hit points. Called from InitialiseObjects after BaddyObjects/
+ * ObjectObjects/TrapObjects have written the original values.
  */
-void BalanceGegnerSetzen()
+void BalanceSetEnemies()
 {
 	OBJECT_INFO* obj;
 
-	/* Erst die einzelnen Werte aus der Datei. */
-	for (int i = 0; i < BALANCE_ANZAHL; i++)
+	/* First the individual values from the file. */
+	for (int i = 0; i < BALANCE_COUNT; i++)
 	{
-		if (balanceZeilen[i].slot < 0)
+		if (balanceLines[i].slot < 0)
 			continue;
 
-		obj = &objects[balanceZeilen[i].slot];
+		obj = &objects[balanceLines[i].slot];
 
-		/* hit_points <= 0 heisst: das Level laedt diesen Gegner nicht. */
+		/* hit_points <= 0 means: this level does not load this enemy. */
 		if (obj->hit_points <= 0)
 			continue;
 
-		/* Faellt an, wenn jemand setup.cpp aendert und die Tabelle vergisst. */
-		if (obj->hit_points != balanceZeilen[i].standard)
-			Log("Balance: %s steht in setup.cpp auf %d, die Tabelle kennt %d",
-				balanceZeilen[i].name, obj->hit_points, balanceZeilen[i].standard);
+		/* Trips when someone changes setup.cpp and forgets the table. */
+		if (obj->hit_points != balanceLines[i].original)
+			Log("Balance: %s stands at %d in setup.cpp, the table knows %d",
+				balanceLines[i].name, obj->hit_points, balanceLines[i].original);
 
-		obj->hit_points = (short)*balanceZeilen[i].wert;
+		obj->hit_points = (short)*balanceLines[i].value;
 	}
 
-	if (balance.gegnerLeben == 100)
+	if (balance.enemyHealth == 100)
 		return;
 
 	/*
-	 * Dann die Prozentzeile auf alles Denkende. Absichtlich ueber alle
-	 * Objekte statt ueber die Tabelle: so faellt auch ein Gegner darunter,
-	 * der oben keine eigene Zeile hat. Lara haengt zwar auch an einem
-	 * Objekteintrag, ist aber nicht intelligent, und Objekte ohne eigene
-	 * Lebenspunkte stehen auf -16384.
+	 * Then the percentage line on everything thinking. Deliberately over all
+	 * objects instead of over the table: that way an enemy without its own
+	 * line above is covered too. Lara hangs on an object entry as well but
+	 * is not intelligent, and objects without own hit points stand at
+	 * -16384.
 	 */
 	for (int lp = 0; lp < NUMBER_OBJECTS; lp++)
 	{
-		long punkte;
+		long points;
 
 		obj = &objects[lp];
 
 		if (!obj->intelligent || obj->hit_points <= 0)
 			continue;
 
-		punkte = obj->hit_points * balance.gegnerLeben / 100;
+		points = obj->hit_points * balance.enemyHealth / 100;
 
-		if (punkte < 1)
-			punkte = 1;
-		else if (punkte > 32000)
-			punkte = 32000;
+		if (points < 1)
+			points = 1;
+		else if (points > 32000)
+			points = 32000;
 
-		obj->hit_points = (short)punkte;
+		obj->hit_points = (short)points;
 	}
 }
 
 /*
- * Schaden eines Gegners an Lara. Absichtlich nur fuer Gegner - Fallen,
- * Stuerze, Feuer, Gift, Ertrinken und die fest eingebauten Levelgefahren
- * laufen an dieser Stelle vorbei und bleiben so hart wie im Original.
+ * An enemy's damage against Lara. Deliberately enemies only - traps, falls,
+ * fire, poison, drowning and the built-in level hazards bypass this spot and
+ * stay as hard as in the original.
  */
-short GegnerSchaden(long schaden)
+short EnemyDamage(long damage)
 {
-	long wert;
+	long value;
 
-	if (balance.gegnerSchaden == 100)
-		return (short)schaden;
+	if (balance.enemyDamage == 100)
+		return (short)damage;
 
-	wert = schaden * balance.gegnerSchaden / 100;
+	value = damage * balance.enemyDamage / 100;
 
-	/* Abrunden darf einen Treffer nicht wirkungslos machen. */
-	if (wert < 1 && schaden > 0 && balance.gegnerSchaden > 0)
-		wert = 1;
+	/* Rounding down must not make a hit harmless. */
+	if (value < 1 && damage > 0 && balance.enemyDamage > 0)
+		value = 1;
 
-	/* Der Rueckgabewert ist ein short. Ohne Deckel wuerde der Biss des
-	   T-Rex (10000) bei hohen Prozentwerten ueberlaufen und Lara heilen. */
-	if (wert > 32767)
-		wert = 32767;
+	/* The return value is a short. Without the cap, the T-Rex bite (10000)
+	   would overflow at high percentages and heal Lara. */
+	if (value > 32767)
+		value = 32767;
 
-	return (short)wert;
+	return (short)value;
 }

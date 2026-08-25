@@ -233,7 +233,7 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 	// behalten ihre Reichweite, damit man Schritte und Rufe weiter so
 	// frueh hoert wie vorgesehen.
 	if (SfxQuelleAmbient)
-		radius = radius * balance.kulissenReichweite / 100;
+		radius = radius * balance.sceneryRange / 100;
 
 	pan = 0;
 

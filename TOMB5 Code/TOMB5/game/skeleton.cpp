@@ -100,7 +100,7 @@ void SkeletonControl(short item_number)
 
 		if (!skeleton->flags && item->touch_bits & 0x9470 && item->frame_number > anims[item->anim_number].frame_base + 18)
 		{
-			lara_item->hit_points -= GegnerSchaden(balance.sSkelettHieb);
+			lara_item->hit_points -= EnemyDamage(balance.dmgSkeletonStrike);
 			lara_item->hit_status = 1;
 			CreatureEffectT(item, &skeleton_hit, 10, item->pos.y_rot, DoBloodSplat);
 			skeleton->flags = 1;

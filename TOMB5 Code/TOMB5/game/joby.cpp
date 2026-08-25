@@ -209,7 +209,7 @@ void ControlElectricalCables(short item_number)
 				TriggerLaraSparks(0);
 				TriggerLaraSparks(1);
 				TriggerDynamic(pos.x, pos.y, pos.z, 8, 0, GetRandomControl() & 127, (GetRandomControl() & 63) + 128);
-				lara_item->hit_points -= (short)balance.sStromkabel;
+				lara_item->hit_points -= (short)balance.dmgPowerCable;
 				return;
 			}
 

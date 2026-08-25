@@ -170,7 +170,7 @@ void InitialiseLara(long restore)
 		DEL_picked_up_object((short)convert_invobj_to_obj(gfNachgaben[i]));
 
 	gfNumNachgaben = 0;
-	BalanceWaffenSetzen();
+	BalanceSetWeapons();
 
 	if (gfLevelId == LVL5_DEEPSEA_DIVE)
 	{
@@ -2123,7 +2123,7 @@ void InitialiseObjects()
 	// Gegnerleben aus Balance.txt. Erst hier, weil die drei Aufbaufunktionen
 	// darueber die Originalwerte setzen. Wer dort eine Zahl aendert, muss sie
 	// auch in der Tabelle in balance.cpp aendern - sonst meldet sich das Log.
-	BalanceGegnerSetzen();
+	BalanceSetEnemies();
 
 	InitialiseHair();
 	InitialiseEffects();

@@ -105,7 +105,7 @@ void DinoControl(short item_number)
         angle = CreatureTurn(item, rex->maximum_turn);
 
         if (item->touch_bits)
-            lara_item->hit_points -= GegnerSchaden(item->current_anim_state == DINO_RUN ? balance.sTRexTrittLauf : balance.sTRexTritt);
+            lara_item->hit_points -= EnemyDamage(item->current_anim_state == DINO_RUN ? balance.dmgTRexKickRun : balance.dmgTRexKick);
 
         rex->flags = rex->mood != ESCAPE_MOOD && !info.ahead &&
                      info.enemy_facing > -0x4000 && info.enemy_facing < 0x4000;
@@ -228,7 +228,7 @@ void DinoControl(short item_number)
             {
                 SoundEffect(SFX_TREX_ATTACK, &item->pos, 0);
                 CreatureEffect(item, &trex_hit, DoBloodSplat);
-                lara_item->hit_points -= GegnerSchaden(balance.sTRexBiss);
+                lara_item->hit_points -= EnemyDamage(balance.dmgTRexBite);
                 lara_item->hit_status = 1;
                 rex->maximum_turn = 0;
             }

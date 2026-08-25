@@ -327,9 +327,9 @@ void SasControl(short item_number)
 				item->fired_weapon = 2;
 
 				if (item->current_anim_state == 3)
-					ShotLara(item, &sasAI, &sas_gun, lara_info.angle >> 1, gfLevelId > LVL5_OLD_MILL ? balance.sSoldatSpaet : balance.sSoldatFrueh);
+					ShotLara(item, &sasAI, &sas_gun, lara_info.angle >> 1, gfLevelId > LVL5_OLD_MILL ? balance.dmgSoldierLate : balance.dmgSoldierEarly);
 				else
-					ShotLara(item, &sasAI, &sas_gun, lara_info.angle >> 1, balance.sSoldatKurz);
+					ShotLara(item, &sasAI, &sas_gun, lara_info.angle >> 1, balance.dmgSoldierShort);
 			}
 
 			break;

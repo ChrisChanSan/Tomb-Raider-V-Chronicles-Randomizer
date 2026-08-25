@@ -152,7 +152,7 @@ void AutogunControl(short item_number)
 				pos2.z = 0;
 				GetLaraJointPos((PHD_VECTOR*)&pos2, GetRandomControl() % 15);
 				DoBloodSplat(pos2.x, pos2.y, pos2.z, (GetRandomControl() & 3) + 3, short(GetRandomControl() << 1), lara_item->room_number);
-				lara_item->hit_points -= (short)balance.sAutogun;
+				lara_item->hit_points -= (short)balance.dmgAutogun;
 			}
 			else
 			{

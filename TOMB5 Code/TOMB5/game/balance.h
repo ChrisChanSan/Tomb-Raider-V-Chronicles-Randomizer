@@ -13,122 +13,122 @@
 #pragma once
 
 /*
- * Balance.txt - eine reine Textdatei neben der PCtomb5.exe, mit der Spieler
- * jede Waffe, jeden Gegner und jede Levelgefahr einzeln einstellen koennen,
- * ohne den Quelltext neu zu uebersetzen (Aufgabe #108).
+ * Balance.txt - a plain text file next to PCtomb5.exe that lets players tune
+ * every weapon, every enemy and every level hazard individually without
+ * recompiling the source (task #108).
  *
- * Fehlt die Datei, legt das Spiel sie beim Start mit den Originalwerten und
- * Erklaerungen an. Fehlt eine einzelne Zeile, gilt der Originalwert.
+ * If the file is missing, the game creates it at startup with the original
+ * values and explanations. If a single line is missing, the original value
+ * applies.
  *
- * Alle Werte sind absolut wie im Original. Die beiden Prozentzeilen
- * GegnerLeben und GegnerSchaden wirken zusaetzlich obendrauf, damit man das
- * ganze Spiel mit einer Zahl haerter oder weicher stellen kann, ohne die
- * Feinabstimmung darunter anzufassen.
+ * All values are absolute as in the original. The two percentage lines
+ * EnemyHealth and EnemyDamage apply on top, so the whole game can be made
+ * harder or softer with one number without touching the fine tuning below.
  */
 
 struct BALANCE_INFO
 {
-	/* --- Schaden von Laras Waffen. Die Engine haelt ihn in einem char. --- */
-	long pistolen;
+	/* --- Damage of Lara's weapons. The engine holds it in a char. --- */
+	long pistols;
 	long uzi;
-	long schrotflinte;
-	long armbrust;
-	long fackel;
-	long revolverFrueh;		/* bis einschliesslich Kolosseum */
-	long revolverSpaet;		/* danach - setup.cpp setzt beides je Level neu */
-	long hkStand;			/* HK gezielt; lara1gun.cpp setzt beides je Schuss neu */
-	long hkLauf;			/* HK aus der Bewegung */
+	long shotgun;
+	long crossbow;
+	long torch;
+	long revolverEarly;		/* up to and including Colosseum */
+	long revolverLate;		/* afterwards - setup.cpp sets both per level */
+	long hkStanding;		/* HK aimed; lara1gun.cpp sets both per shot */
+	long hkMoving;			/* HK fired while moving */
 
-	/* --- Lebenspunkte der Gegner, je Objektplatz --- */
-	long lpTRex;			/* liegt auf dem Platz SAS (TR3-Port) */
-	long lpRaptor;			/* liegt auf dem Platz REAPER (TR3-Port) */
-	long lpCompy;			/* liegt auf dem Platz SAILOR (TR3-Port) */
-	long lpWachmannBlau;
-	long lpSwat;
-	long lpSwatPlus;
-	long lpMafioso;
-	long lpWissenschaftler;
-	long lpKranfuehrer;
-	long lpWachmannJoby;	/* BLUE_GUARD2, der zweite Wachmann aus joby3 */
-	long lpMiniUBoot;
-	long lpLoewe;
-	long lpHund;
-	long lpHusky;
-	long lpKraehe;			/* traegt im Rando auch den Geier aus TR3 */
-	long lpMafia2;
-	long lpPierre;
-	long lpLarson;
-	long lpHitman;
-	long lpScharfschuetze;
-	long lpKoch;
-	long lpTwoGun;
-	long lpHydra;
-	long lpKobold;
-	long lpIrrlicht;
-	long lpLabyrinthmonster;
-	long lpSumpfmonster;
-	long lpSkelett;
-	long lpGladiator;
-	long lpRoemischerGott;
-	long lpRoemischerGott2;
+	/* --- Enemy hit points, per object slot --- */
+	long hpTRex;			/* lives on the SAS slot (TR3 port) */
+	long hpRaptor;			/* lives on the REAPER slot (TR3 port) */
+	long hpCompy;			/* lives on the SAILOR slot (TR3 port) */
+	long hpGuardBlue;
+	long hpSwat;
+	long hpSwatPlus;
+	long hpMafia;
+	long hpScientist;
+	long hpCraneGuy;
+	long hpGuardJoby;		/* BLUE_GUARD2, the second guard from joby3 */
+	long hpMiniSub;
+	long hpLion;
+	long hpDog;
+	long hpHuskie;
+	long hpCrow;			/* in the rando this also carries the TR3 vulture */
+	long hpMafia2;
+	long hpPierre;
+	long hpLarson;
+	long hpHitman;
+	long hpSniper;
+	long hpChef;
+	long hpTwoGun;
+	long hpHydra;
+	long hpImp;
+	long hpWillOWisp;
+	long hpMazeMonster;
+	long hpSwampMonster;
+	long hpSkeleton;
+	long hpGladiator;
+	long hpRomanGod;
+	long hpRomanGod2;
 
-	/* --- Schaden der Gegner an Lara, je Angriff --- */
-	long sTRexTritt;
-	long sTRexTrittLauf;
-	long sTRexBiss;
-	long sRaptorBiss;
-	long sRaptorSprung;
-	long sCompyBiss;
-	long sHundBiss;
-	long sHundSprung;
-	long sHundNachsetzen;
-	long sHuskyBiss;
-	long sHuskySprung;
-	long sLoeweSprung;
-	long sLoeweTatze;
-	long sKraeheHieb;
-	long sFledermaeuse;
-	long sSpinnen;
-	long sKochMesser;
-	long sSkelettHieb;
-	long sGladiatorHieb;
-	long sGottHieb;
-	long sGottBlitz;
-	long sHydraStrahl;
-	long sKoboldWurf;
-	long sLabyrinthmonster;
-	long sSumpfmonster;
-	long sTwoGunPlasma;
-	long sTorpedo;
+	/* --- Enemy damage against Lara, per attack --- */
+	long dmgTRexKick;
+	long dmgTRexKickRun;
+	long dmgTRexBite;
+	long dmgRaptorBite;
+	long dmgRaptorJump;
+	long dmgCompyBite;
+	long dmgDogBite;
+	long dmgDogJump;
+	long dmgDogChase;
+	long dmgHuskieBite;
+	long dmgHuskieJump;
+	long dmgLionJump;
+	long dmgLionPaw;
+	long dmgCrowStrike;
+	long dmgBats;
+	long dmgSpiders;
+	long dmgChefKnife;
+	long dmgSkeletonStrike;
+	long dmgGladiatorStrike;
+	long dmgGodStrike;
+	long dmgGodLightning;
+	long dmgHydraBeam;
+	long dmgImpThrow;
+	long dmgMazeMonster;
+	long dmgSwampMonster;
+	long dmgTwoGunPlasma;
+	long dmgTorpedo;
 
-	/* Schusswaffen der menschlichen Gegner (ShotLara) */
-	long sSoldatFrueh;		/* bis einschliesslich Old Mill */
-	long sSoldatSpaet;
-	long sSoldatKurz;
-	long sHitmanSchuss;
-	long sMafia2Schuss;
-	long sPierreSchuss;
-	long sLarsonSchuss;
-	long sScharfschuetzeSchuss;
+	/* Firearms of the human enemies (ShotLara) */
+	long dmgSoldierEarly;	/* up to and including Old Mill */
+	long dmgSoldierLate;
+	long dmgSoldierShort;
+	long dmgHitmanShot;
+	long dmgMafia2Shot;
+	long dmgPierreShot;
+	long dmgLarsonShot;
+	long dmgSniperShot;
 
-	/* --- Levelgefahren. Keine Gegner, deshalb ohne Prozentzeile. --- */
-	long sAutogun;
-	long sGunship;
-	long sIris;
-	long sArea51Laser;
-	long sStromkabel;
+	/* --- Level hazards. Not enemies, hence outside the percentage line. --- */
+	long dmgAutogun;
+	long dmgGunship;
+	long dmgIris;
+	long dmgArea51Laser;
+	long dmgPowerCable;
 
-	/* --- Prozentwerte, 100 = unveraendert --- */
-	long waffenSchaden;
-	long gegnerLeben;
-	long gegnerSchaden;
-	long kulissenReichweite;
+	/* --- Percentages, 100 = unchanged --- */
+	long weaponDamage;
+	long enemyHealth;
+	long enemyDamage;
+	long sceneryRange;
 };
 
 extern BALANCE_INFO balance;
 
-void BalanceLaden();
-void BalanceWaffenSetzen();
-void BalanceGegnerSetzen();
-char WaffenSchaden(long basis);
-short GegnerSchaden(long schaden);
+void BalanceLoad();
+void BalanceSetWeapons();
+void BalanceSetEnemies();
+char WeaponDamage(long base);
+short EnemyDamage(long damage);

@@ -409,11 +409,11 @@ void PierreControl(short item_number)
 			{
 				if (item->object_number == PIERRE)
 				{
-					ShotLara(item, &info, &pierre_gun1, torso_y, balance.sPierreSchuss);
-					ShotLara(item, &info, &pierre_gun2, torso_y, balance.sPierreSchuss);
+					ShotLara(item, &info, &pierre_gun1, torso_y, balance.dmgPierreShot);
+					ShotLara(item, &info, &pierre_gun2, torso_y, balance.dmgPierreShot);
 				}
 				else
-					ShotLara(item, &info, &larson_gun, torso_y, balance.sLarsonSchuss);
+					ShotLara(item, &info, &larson_gun, torso_y, balance.dmgLarsonShot);
 
 				item->fired_weapon = 2;
 			}

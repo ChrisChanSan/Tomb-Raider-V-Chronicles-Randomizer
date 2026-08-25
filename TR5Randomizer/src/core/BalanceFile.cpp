@@ -24,73 +24,73 @@
 
 namespace
 {
-    struct Zeile
+    struct Line
     {
         const char* name;
-        int BalanceFile::Values::* feld;
-        const char* notiz;
+        int BalanceFile::Values::* field;
+        const char* note;
     };
 
-    // Reihenfolge wie in der Vorlage der Engine, damit eine neu geschriebene
-    // Datei genauso aussieht wie eine vom Spiel erzeugte.
-    const Zeile kZeilen[] =
+    // Same order as in the engine's template, so a freshly written file
+    // looks exactly like one the game created.
+    const Line kLines[] =
     {
-        { "WaffenSchaden", &BalanceFile::Values::weaponDamage,
-          "  auf alle Waffen Laras. 0 macht sie wirkungslos" },
-        { "GegnerLeben",   &BalanceFile::Values::enemyHealth,
-          "  50 = halb so zaeh, 200 = doppelt so zaeh" },
-        { "GegnerSchaden", &BalanceFile::Values::enemyDamage,
-          "  0 macht alle Gegner harmlos" },
+        { "WeaponDamage", &BalanceFile::Values::weaponDamage,
+          "  on all of Lara's weapons. 0 makes them harmless" },
+        { "EnemyHealth",  &BalanceFile::Values::enemyHealth,
+          "  50 = half as tough, 200 = twice as tough" },
+        { "EnemyDamage",  &BalanceFile::Values::enemyDamage,
+          "  0 makes all enemies harmless" },
     };
 
-    std::wstring dateiPfad(const std::wstring& gameDir)
+    std::wstring filePath(const std::wstring& gameDir)
     {
         return PathUtil::join(gameDir, L"Balance.txt");
     }
 
-    bool lesenRoh(const std::wstring& path, std::string& inhalt)
+    bool readRaw(const std::wstring& path, std::string& content)
     {
         FILE* f = _wfopen(path.c_str(), L"rb");
         if (!f) return false;
 
-        char puffer[4096];
+        char buffer[4096];
         size_t n;
-        inhalt.clear();
-        while ((n = std::fread(puffer, 1, sizeof(puffer), f)) > 0)
-            inhalt.append(puffer, n);
+        content.clear();
+        while ((n = std::fread(buffer, 1, sizeof(buffer), f)) > 0)
+            content.append(buffer, n);
 
         std::fclose(f);
         return true;
     }
 
-    // Zeigt die Zeile auf diese Einstellung? Vor dem = darf Luft stehen,
-    // Gross/Kleinschreibung ist egal - genauso liest die Engine.
-    bool zeileGehoert(const std::string& zeile, const char* name)
+    // Does this line refer to this setting? Whitespace before the = is
+    // allowed, case does not matter - the engine reads it the same way.
+    bool lineMatches(const std::string& line, const char* name)
     {
-        size_t i = zeile.find_first_not_of(" \t");
+        size_t i = line.find_first_not_of(" \t");
         if (i == std::string::npos) return false;
-        if (zeile[i] == ';' || zeile[i] == '#') return false;
+        if (line[i] == ';' || line[i] == '#') return false;
 
         const size_t len = std::strlen(name);
-        if (zeile.size() - i < len) return false;
+        if (line.size() - i < len) return false;
 
         for (size_t k = 0; k < len; k++)
         {
-            char a = zeile[i + k], b = name[k];
+            char a = line[i + k], b = name[k];
             if (a >= 'A' && a <= 'Z') a = char(a + 32);
             if (b >= 'A' && b <= 'Z') b = char(b + 32);
             if (a != b) return false;
         }
 
-        size_t j = zeile.find_first_not_of(" \t", i + len);
-        return j != std::string::npos && zeile[j] == '=';
+        size_t j = line.find_first_not_of(" \t", i + len);
+        return j != std::string::npos && line[j] == '=';
     }
 
-    std::string baueZeile(const Zeile& z, int wert)
+    std::string buildLine(const Line& z, int value)
     {
         char buf[160];
-        std::snprintf(buf, sizeof(buf), "%-22s = %-6d ; (Original 100)%s",
-                      z.name, wert, z.notiz);
+        std::snprintf(buf, sizeof(buf), "%-22s = %-6d ; (original 100)%s",
+                      z.name, value, z.note);
         return buf;
     }
 }
@@ -102,97 +102,97 @@ bool write(const std::wstring& gameDir, const Values& w, std::string* errorText)
 {
     if (gameDir.empty())
     {
-        if (errorText) *errorText = "Kein Spielordner gewaehlt.";
+        if (errorText) *errorText = "no game folder selected.";
         return false;
     }
 
-    const std::wstring path = dateiPfad(gameDir);
+    const std::wstring path = filePath(gameDir);
 
-    std::string alt;
-    const bool hatDatei = lesenRoh(path, alt);
+    std::string old;
+    const bool hadFile = readRaw(path, old);
 
-    // In Zeilen zerlegen, Zeilenende je Zeile merken. Die Datei der Engine ist
-    // CRLF; wer sie in einem anderen Editor speichert, kann LF hinterlassen -
-    // beides bleibt erhalten, damit unser Schreiben keine Spuren hinterlaesst.
-    std::vector<std::string> zeilen;
-    std::vector<std::string> enden;
+    // Split into lines, remembering each line's ending. The engine's file is
+    // CRLF; whoever saves it in another editor may leave LF behind - both
+    // are preserved, so our writing leaves no traces.
+    std::vector<std::string> lines;
+    std::vector<std::string> endings;
 
-    for (size_t i = 0; i < alt.size();)
+    for (size_t i = 0; i < old.size();)
     {
         size_t e = i;
-        while (e < alt.size() && alt[e] != '\r' && alt[e] != '\n') e++;
+        while (e < old.size() && old[e] != '\r' && old[e] != '\n') e++;
 
-        zeilen.push_back(alt.substr(i, e - i));
+        lines.push_back(old.substr(i, e - i));
 
-        std::string ende;
-        if (e < alt.size() && alt[e] == '\r') { ende += '\r'; e++; }
-        if (e < alt.size() && alt[e] == '\n') { ende += '\n'; e++; }
-        enden.push_back(ende);
+        std::string ending;
+        if (e < old.size() && old[e] == '\r') { ending += '\r'; e++; }
+        if (e < old.size() && old[e] == '\n') { ending += '\n'; e++; }
+        endings.push_back(ending);
 
         i = e;
     }
 
-    const char* umbruch = "\r\n";
-    for (size_t i = 0; i < enden.size(); i++)
-        if (enden[i] == "\n") { umbruch = "\n"; break; }
+    const char* newline = "\r\n";
+    for (size_t i = 0; i < endings.size(); i++)
+        if (endings[i] == "\n") { newline = "\n"; break; }
 
-    for (const Zeile& z : kZeilen)
+    for (const Line& z : kLines)
     {
-        const std::string neu = baueZeile(z, w.*(z.feld));
+        const std::string fresh = buildLine(z, w.*(z.field));
 
-        bool ersetzt = false;
-        for (size_t i = 0; i < zeilen.size(); i++)
+        bool replaced = false;
+        for (size_t i = 0; i < lines.size(); i++)
         {
-            if (!zeileGehoert(zeilen[i], z.name)) continue;
-            zeilen[i] = neu;
-            ersetzt = true;
-            break;      // die Engine nimmt ebenfalls den ersten Treffer
+            if (!lineMatches(lines[i], z.name)) continue;
+            lines[i] = fresh;
+            replaced = true;
+            break;      // the engine also takes the first match
         }
 
-        if (ersetzt) continue;
+        if (replaced) continue;
 
-        // Fehlt die Zeile, kommt sie ans Ende. Beim naechsten Start sortiert
-        // das Spiel die Datei ohnehin wieder in ihre gewohnte Form.
-        if (!zeilen.empty() && enden.back().empty())
-            enden.back() = umbruch;
+        // A missing line goes to the end. On the next start the game sorts
+        // the file back into its usual shape anyway.
+        if (!lines.empty() && endings.back().empty())
+            endings.back() = newline;
 
-        zeilen.push_back(neu);
-        enden.push_back(umbruch);
+        lines.push_back(fresh);
+        endings.push_back(newline);
     }
 
-    // Eine ganz neue Datei bekommt einen Kopf, damit klar ist, woher sie
-    // kommt und dass das Spiel den Rest nachtraegt.
-    std::string aus;
-    if (!hatDatei)
+    // A brand-new file gets a header, so it is clear where it came from and
+    // that the game fills in the rest.
+    std::string out;
+    if (!hadFile)
     {
-        aus += "; Balance.txt - vom TR5 Randomizer angelegt.";
-        aus += umbruch;
-        aus += "; Beim naechsten Start traegt das Spiel hier alle weiteren";
-        aus += umbruch;
-        aus += "; Einstellungen nach: Schaden je Waffe, Lebenspunkte je Gegner,";
-        aus += umbruch;
-        aus += "; Schaden je Angriff, Levelgefahren.";
-        aus += umbruch;
-        aus += umbruch;
+        out += "; Balance.txt - created by the TR5 Randomizer.";
+        out += newline;
+        out += "; On the next start the game fills in all further settings";
+        out += newline;
+        out += "; here: damage per weapon, hit points per enemy, damage per";
+        out += newline;
+        out += "; attack, level hazards.";
+        out += newline;
+        out += newline;
     }
 
-    for (size_t i = 0; i < zeilen.size(); i++)
+    for (size_t i = 0; i < lines.size(); i++)
     {
-        aus += zeilen[i];
-        aus += enden[i];
+        out += lines[i];
+        out += endings[i];
     }
 
     FILE* f = _wfopen(path.c_str(), L"wb");
     if (!f)
     {
-        if (errorText) *errorText = "Balance.txt laesst sich nicht write.";
+        if (errorText) *errorText = "Balance.txt cannot be written.";
         return false;
     }
 
-    const bool ok = aus.empty() || std::fwrite(aus.data(), 1, aus.size(), f) == aus.size();
+    const bool ok = out.empty() || std::fwrite(out.data(), 1, out.size(), f) == out.size();
     std::fclose(f);
 
-    if (!ok && errorText) *errorText = "Balance.txt konnte nicht vollstaendig geschrieben werden.";
+    if (!ok && errorText) *errorText = "Balance.txt could not be written completely.";
     return ok;
 }
 
@@ -201,25 +201,25 @@ Values read(const std::wstring& gameDir)
     Values w;
     if (gameDir.empty()) return w;
 
-    std::string inhalt;
-    if (!lesenRoh(dateiPfad(gameDir), inhalt)) return w;
+    std::string content;
+    if (!readRaw(filePath(gameDir), content)) return w;
 
-    for (size_t i = 0; i < inhalt.size();)
+    for (size_t i = 0; i < content.size();)
     {
         size_t e = i;
-        while (e < inhalt.size() && inhalt[e] != '\r' && inhalt[e] != '\n') e++;
-        const std::string zeile = inhalt.substr(i, e - i);
-        while (e < inhalt.size() && (inhalt[e] == '\r' || inhalt[e] == '\n')) e++;
+        while (e < content.size() && content[e] != '\r' && content[e] != '\n') e++;
+        const std::string line = content.substr(i, e - i);
+        while (e < content.size() && (content[e] == '\r' || content[e] == '\n')) e++;
         i = e;
 
-        for (const Zeile& z : kZeilen)
+        for (const Line& z : kLines)
         {
-            if (!zeileGehoert(zeile, z.name)) continue;
+            if (!lineMatches(line, z.name)) continue;
 
-            const size_t g = zeile.find('=');
+            const size_t g = line.find('=');
             if (g == std::string::npos) break;
 
-            w.*(z.feld) = std::atoi(zeile.c_str() + g + 1);
+            w.*(z.field) = std::atoi(line.c_str() + g + 1);
             break;
         }
     }

@@ -213,34 +213,34 @@ static const std::unordered_map<std::string, const char*>& table()
         { "Affects all of Lara's weapons at once - pistols, Uzi, shotgun, "
           "revolver, HK, grappling gun and torch. 0.00x makes them "
           "harmless, 2.00x doubles their damage.\n\n"
-          "This writes the WaffenSchaden line in Balance.txt next to "
+          "This writes the WeaponDamage line in Balance.txt next to "
           "PCtomb5.exe. If you tuned individual weapons there by hand, "
           "they are kept: the slider applies on top.",
           "Wirkt auf alle Waffen Laras zugleich - Pistolen, Uzi, "
           "Schrotflinte, Revolver, HK, Grappling Gun und Fackel. "
           "0.00x macht sie wirkungslos, 2.00x verdoppelt ihren Schaden.\n\n"
-          "Geschrieben wird die Zeile WaffenSchaden in Balance.txt neben "
+          "Geschrieben wird die Zeile WeaponDamage in Balance.txt neben "
           "der PCtomb5.exe. Wer dort einzelne Waffen von Hand eingestellt "
           "hat, behaelt sie: der Regler wirkt zusaetzlich obendrauf." },
         { "How tough all enemies are. 0.50x halves their hit points, "
           "2.00x doubles them.\n\n"
-          "This writes the GegnerLeben line in Balance.txt next to "
+          "This writes the EnemyHealth line in Balance.txt next to "
           "PCtomb5.exe. If you tuned individual enemies there by hand, "
           "they are kept: the slider applies on top.",
           "Wie zaeh alle Gegner sind. 0.50x halbiert ihre Lebenspunkte, "
           "2.00x verdoppelt sie.\n\n"
-          "Geschrieben wird die Zeile GegnerLeben in Balance.txt neben der "
+          "Geschrieben wird die Zeile EnemyHealth in Balance.txt neben der "
           "PCtomb5.exe. Wer dort einzelne Gegner von Hand eingestellt hat, "
           "behaelt sie: der Regler wirkt zusaetzlich obendrauf." },
         { "How hard all enemies hit. Traps, falls, fire, poison and "
           "drowning always stay as hard as in the original, as do the "
           "built-in level hazards like the ceiling gun.\n\n"
-          "This writes the GegnerSchaden line in Balance.txt next to "
+          "This writes the EnemyDamage line in Balance.txt next to "
           "PCtomb5.exe.",
           "Wie hart alle Gegner zuschlagen. Fallen, Stuerze, Feuer, Gift "
           "und Ertrinken bleiben immer so hart wie im Original, ebenso die "
           "fest eingebauten Levelgefahren wie das Deckengeschuetz.\n\n"
-          "Geschrieben wird die Zeile GegnerSchaden in Balance.txt neben "
+          "Geschrieben wird die Zeile EnemyDamage in Balance.txt neben "
           "der PCtomb5.exe." },
 
         // --- Block 3: items ----------------------------------------------

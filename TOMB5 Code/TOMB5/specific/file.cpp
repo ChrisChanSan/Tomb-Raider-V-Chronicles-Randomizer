@@ -795,6 +795,8 @@ bool LoadObjects()
 	mesh_base = (short*)game_malloc(num * 2);
 	ReadBlock(mesh_base, num * sizeof(short));
 
+	Log("OBJLOG mesh data %d words", num);
+
 	num = ReadLong();
 	meshes = (short**)game_malloc(num * sizeof(long) * 2);	//*2 for meshswaps
 	ReadBlock(meshes, num * sizeof(long));
@@ -803,11 +805,14 @@ bool LoadObjects()
 		meshes[lp] = &mesh_base[(long)meshes[lp] / 2];
 
 	num_meshes = num;
+	Log("OBJLOG %d mesh pointers", num_meshes);
 
 	//anims
 	num_anims = ReadLong();
 	anims = (ANIM_STRUCT*)game_malloc(num_anims * sizeof(ANIM_STRUCT));
 	ReadBlock(anims, num_anims * sizeof(ANIM_STRUCT));
+
+	Log("OBJLOG %d anims", num_anims);
 
 	//changes
 	num = ReadLong();
@@ -872,8 +877,12 @@ bool LoadObjects()
 		ReadShort();	//Skip padding
 	}
 
+	Log("OBJLOG moveables read, skinning next (LaraDrawType %d)", LaraDrawType);
+
 	if (LaraDrawType != LARA_DIVESUIT)
 		CreateSkinningData();
+
+	Log("OBJLOG skinning done");
 
 	for (int i = 0; i < NUMBER_OBJECTS; i++)
 	{
@@ -891,8 +900,10 @@ bool LoadObjects()
 		*mesh++ = *mesh_size++;
 	}
 
+	Log("OBJLOG mesh pointers doubled, objects next");
 	InitialiseObjects();
 	InitialiseClosedDoors();
+	Log("OBJLOG objects initialised, statics next");
 
 	//statics
 	num = ReadLong();

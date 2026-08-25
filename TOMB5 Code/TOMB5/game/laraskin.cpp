@@ -17,6 +17,7 @@
 #include "delstuff.h"
 #include "control.h"
 #include "lara.h"	// LaraDrawType - outfit marker for the braid weld table
+#include "../specific/function_stubs.h"	// Log - the seam in the seam sewing
 
 static uchar SkinJoints[14][4] =
 {
@@ -192,9 +193,25 @@ void OptomiseSkinningData()
 	}
 }
 
+// The stack is XYZList[32], and both of these used to move the pointer with no
+// bound at all. Its push and pop marks come from the level's BONE TREE, so a
+// skin whose bones are not TR5's - a foreign outfit dropped into LARA_SKIN
+// (#122) - walks the pointer clean out of the array. Both directions WRITE,
+// and XYZList is a global, so it took its neighbours with it: a hard crash
+// inside LoadObjects, long before a single vertex had been matched, and with
+// nothing in the log to say a skeleton was to blame.
+//
+// Clamped rather than refused, like the seam cap further down: a wrong
+// skeleton should draw wrongly, not kill the level load.
 void PushXYZ()
 {
 	PHD_VECTOR* ptr;
+
+	if (SkinXYZPtr >= &XYZList[31])
+	{
+		Log("SKINLOG: bone stack full (32), push ignored - is this skin's bone tree Lara's?");
+		return;
+	}
 
 	ptr = SkinXYZPtr++;
 	SkinXYZPtr->x = ptr->x;
@@ -204,6 +221,12 @@ void PushXYZ()
 
 void PopXYZ()
 {
+	if (SkinXYZPtr <= XYZList)
+	{
+		Log("SKINLOG: bone stack empty, pop ignored - more pops than pushes in the bone tree");
+		return;
+	}
+
 	SkinXYZPtr--;
 }
 
@@ -348,6 +371,16 @@ void CreateSkinningData()
 		jointVerts = jointMesh->nVerts & 0xFF;
 		laraVerts = aboveMesh->nVerts & 0xFF;
 
+		// vertBuf is [128] and jointVerts is a byte out of the mesh header, so
+		// it can say up to 255. Vanilla joints stay far below that; a damaged
+		// or foreign one would have cleared past the buffer.
+		if (jointVerts > (long)sizeof(vertBuf))
+		{
+			Log("SKINLOG joint %d: joint mesh claims %d vertices, clamped to %d",
+				i, jointVerts, (long)sizeof(vertBuf));
+			jointVerts = (long)sizeof(vertBuf);
+		}
+
 		if (jointVerts > 0)
 			memset(vertBuf, 0, jointVerts);
 
@@ -372,6 +405,28 @@ void CreateSkinningData()
 				{
 					vertCount++;
 					vertBuf[j] = 1;
+					// SkinVertNums/ScratchVertNums are [40][12] and the row
+					// needs its -1 terminator, so eleven pairs fit. Nothing
+					// used to count. With Lara's own skin that never mattered,
+					// because the joints were authored against exactly these
+					// meshes - but the seam is matched at RUNTIME by
+					// coordinate, so a skin the joints were not built for can
+					// produce far more hits and wrote straight past the row
+					// into the neighbouring one. Both arrays are globals, so
+					// that took the rest with it: loading died inside
+					// CreateSkinningData before a level ever appeared (found
+					// 2026-08-26 while trying a Tomb Raider III outfit in
+					// LARA_SKIN, #122).
+					//
+					// Capped rather than refused: eleven pairs are enough to
+					// sew a seam, and a foreign skin should look wrong, not
+					// crash.
+					if (aboveVerts >= 11)
+					{
+						Log("SKINLOG joint %d: more than 11 upper matches, capped", i);
+						break;
+					}
+
 					SkinVertNums[SkinJoints[i][2]][aboveVerts] = ii;
 					ScratchVertNums[SkinJoints[i][2]][aboveVerts] = j;
 					aboveVerts++;
@@ -404,6 +459,13 @@ void CreateSkinningData()
 				{
 					vertCount++;
 					vertBuf[j] = 1;
+					// Same cap as above, other side of the joint.
+					if (belowVerts >= 11)
+					{
+						Log("SKINLOG joint %d: more than 11 lower matches, capped", i);
+						break;
+					}
+
 					SkinVertNums[SkinJoints[i][3]][belowVerts] = ii;
 					ScratchVertNums[SkinJoints[i][3]][belowVerts] = j;
 					belowVerts++;
@@ -415,21 +477,50 @@ void CreateSkinningData()
 		ScratchVertNums[SkinJoints[i][3]][belowVerts] = -1;
 		calcPointsCounter = 0;
 
-		if (vertCount == jointVerts)
-			jointMesh->nVerts <<= 8;
-		else
+		// This list collects the joint vertices that found NO partner above -
+		// the ones that have to be computed instead of copied. PointsToCalc is
+		// [26][12] and the row needs its 0xFF terminator, so eleven fit, and
+		// nothing counted.
+		//
+		// With Lara's own skin that is ample, because nearly every joint
+		// vertex finds its match and only a handful land here. With a foreign
+		// skin it is the exact opposite: almost nothing matches, so almost the
+		// WHOLE joint mesh ends up in this row and runs straight through the
+		// array. That was the hard crash inside LoadObjects with a Tomb Raider
+		// III body in LARA_SKIN (#122) - and it is why the caps on the two
+		// MATCH lists further up did not help: with a foreign skin those stay
+		// small, and this one explodes for the very same reason.
+		//
+		// jointMeshNum indexes the row and is used as jointMeshNum - 1, so it
+		// is checked as well; it comes out of the joint numbering above.
+		if (jointMeshNum >= 1 && jointMeshNum <= 26)
 		{
-			for (int j = 0; j < jointVerts; j++)
+			if (vertCount == jointVerts)
+				jointMesh->nVerts <<= 8;
+			else
 			{
-				if (!vertBuf[j])
+				for (int j = 0; j < jointVerts; j++)
 				{
-					PointsToCalc[jointMeshNum - 1][calcPointsCounter] = j;
-					calcPointsCounter++;
+					if (!vertBuf[j])
+					{
+						if (calcPointsCounter >= 11)
+						{
+							Log("SKINLOG joint %d: %d of %d joint vertices unmatched, capped at 11 - "
+								"is this skin the one the joints were built for?",
+								i, jointVerts - vertCount, jointVerts);
+							break;
+						}
+
+						PointsToCalc[jointMeshNum - 1][calcPointsCounter] = j;
+						calcPointsCounter++;
+					}
 				}
 			}
-		}
 
-		PointsToCalc[jointMeshNum - 1][calcPointsCounter] = 0xFF;
+			PointsToCalc[jointMeshNum - 1][calcPointsCounter] = 0xFF;
+		}
+		else
+			Log("SKINLOG joint %d: joint mesh number %d out of range 1..26", i, jointMeshNum);
 	}
 
 	for (int i = 0; ; i++)

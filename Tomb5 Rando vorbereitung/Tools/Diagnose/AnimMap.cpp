@@ -1,28 +1,28 @@
-// AnimMap - zwei Betriebsarten rund um die Animationstabelle einer .trc.
+// AnimMap - two modes around a .trc's animation table.
 //
-// Anlass (#121-Nachlese): ein importierter Gegner blinkt - manche Animationen
-// zeichnen, andere liefern Nullen als Bounds und fallen aus Zeichnung UND
-// Trefferpruefung. Die Frage an die Datei: WELCHE Anims sind kaputt, und
-// stimmen ihre Frame-Zeiger noch mit dem Spenderlevel ueberein?
+// Occasion (#121 follow-up): an imported enemy blinks - some animations
+// draw, others deliver zeros as bounds and drop out of drawing AND hit
+// testing. The question to the file: WHICH anims are broken, and do their
+// frame pointers still agree with the donor level?
 //
 //   AnimMap <level.trc>
-//       Alle Moveable-Slots nach anim_index sortiert, mit Meshzahl und der
-//       daraus folgenden Scheibe. Zeigt Ueberlappungen und Luecken im
-//       angehaengten Bereich - die entstehen, wenn zwei Importe kollidieren.
+//       All moveable slots sorted by anim_index, with mesh count and the
+//       slice that follows from it. Shows overlaps and gaps in the
+//       appended area - they arise when two imports collide.
 //
-//   AnimMap <a.trc> <slotA> <b.trc> <slotB> <anzahl>
-//       Vergleicht die ersten <anzahl> Anims beider Scheiben Eintrag fuer
-//       Eintrag: Zustand, Frame-Fenster, Frame-Offset und die ersten sechs
-//       Shorts des Frames (die Bounding-Box, aus der S_GetObjectBounds das
-//       Clip-Fenster baut). Eine Box aus lauter Nullen heisst: der Zeiger
-//       laeuft ins Leere, der Gegner ist fuer diese Anim unsichtbar.
+//   AnimMap <a.trc> <slotA> <b.trc> <slotB> <count>
+//       Compares the first <count> anims of both slices entry by entry:
+//       state, frame window, frame offset and the first six shorts of the
+//       frame (the bounding box from which S_GetObjectBounds builds the
+//       clip window). A box of all zeros means: the pointer runs into the
+//       void, the enemy is invisible for this anim.
 //
-// Anim-Eintrag im Hauptblock, 40 Bytes (an Tr5Level.cpp:1190/1213 verifiziert):
-//   +0  u32 frameOffset (BYTE-Offset in den Frames-Block)
+// Anim entry in the main block, 40 bytes (verified at Tr5Level.cpp:1190/1213):
+//   +0  u32 frameOffset (BYTE offset into the frames block)
 //   +4  u8  frameRate   +5 u8 frameSize   +6 u16 state
 //   +24 s16 frameStart  +26 s16 frameEnd  +28 s16 nextAnim
 //
-// Bauen (64 Bit, im Ordner Bittenichtbitdefender): wie SlotAnims, siehe
+// Build (64 bit, in the Bittenichtbitdefender folder): like SlotAnims, see
 // reference-werkzeugkasten.
 #include "core/Tr5Level.h"
 #include "core/DataFolder.h"
@@ -33,10 +33,10 @@
 #include <string>
 #include <vector>
 
-static std::wstring weit(const char* s)
+static std::wstring toW(const char* s)
 { std::wstring w; while (*s) w += (wchar_t)(unsigned char)*s++; return w; }
 
-struct AnimZeile
+struct AnimRow
 {
     uint32_t frameOffset = 0;
     uint8_t  frameRate = 0, frameSize = 0;
@@ -44,7 +44,7 @@ struct AnimZeile
     int16_t  frameStart = 0, frameEnd = 0, nextAnim = 0;
 };
 
-static bool liesAnim(const Tr5Level& l, int index, AnimZeile& z)
+static bool readAnim(const Tr5Level& l, int index, AnimRow& z)
 {
     size_t at = 0; int32_t n = 0;
     if (!l.debugAnimBlock(at, n) || index < 0 || index >= n) return false;
@@ -63,64 +63,64 @@ int main(int argc, char** argv)
 {
     if (argc != 2 && argc != 6)
     {
-        std::printf("Aufruf: AnimMap <level.trc>\n"
-                    "        AnimMap <a.trc> <slotA> <b.trc> <slotB> <anzahl>\n");
+        std::printf("usage: AnimMap <level.trc>\n"
+                    "       AnimMap <a.trc> <slotA> <b.trc> <slotB> <count>\n");
         return 2;
     }
 
     if (argc == 2)
     {
         Tr5Level l; std::string e;
-        if (!l.load(weit(argv[1]), e)) { std::printf("nicht ladbar: %s\n", e.c_str()); return 1; }
+        if (!l.load(toW(argv[1]), e)) { std::printf("not loadable: %s\n", e.c_str()); return 1; }
 
         size_t at = 0; int32_t nAnims = 0;
         l.debugAnimBlock(at, nAnims);
 
-        struct Eintrag { int slot, animIndex, nmeshes; };
-        std::vector<Eintrag> liste;
+        struct Entry { int slot, animIndex, nmeshes; };
+        std::vector<Entry> list;
         for (int s : l.moveableSlots())
         {
             Tr5Level::MoveableInfo mi;
             if (!l.moveableInfo(s, mi)) continue;
-            liste.push_back({ s, mi.animIndex, mi.nmeshes });
+            list.push_back({ s, mi.animIndex, mi.nmeshes });
         }
-        std::sort(liste.begin(), liste.end(),
-                  [](const Eintrag& a, const Eintrag& b) { return a.animIndex < b.animIndex; });
+        std::sort(list.begin(), list.end(),
+                  [](const Entry& a, const Entry& b) { return a.animIndex < b.animIndex; });
 
-        std::printf("%s: %d Anims gesamt\n", argv[1], nAnims);
-        std::printf("%5s %9s %7s %7s\n", "Slot", "animIdx", "Meshes", "Scheibe");
-        for (size_t i = 0; i < liste.size(); ++i)
+        std::printf("%s: %d anims total\n", argv[1], nAnims);
+        std::printf("%5s %9s %7s %7s\n", "slot", "animIdx", "meshes", "slice");
+        for (size_t i = 0; i < list.size(); ++i)
         {
-            const int ende = (i + 1 < liste.size()) ? liste[i + 1].animIndex : nAnims;
-            const int breite = ende - liste[i].animIndex;
-            std::printf("%5d %9d %7d %7d%s\n", liste[i].slot, liste[i].animIndex,
-                        liste[i].nmeshes, breite, breite < 0 ? "  <-- UEBERLAPPUNG" : "");
+            const int end = (i + 1 < list.size()) ? list[i + 1].animIndex : nAnims;
+            const int width = end - list[i].animIndex;
+            std::printf("%5d %9d %7d %7d%s\n", list[i].slot, list[i].animIndex,
+                        list[i].nmeshes, width, width < 0 ? "  <-- OVERLAP" : "");
         }
         return 0;
     }
 
     Tr5Level a, b; std::string e;
-    if (!a.load(weit(argv[1]), e)) { std::printf("A nicht ladbar: %s\n", e.c_str()); return 1; }
-    if (!b.load(weit(argv[3]), e)) { std::printf("B nicht ladbar: %s\n", e.c_str()); return 1; }
+    if (!a.load(toW(argv[1]), e)) { std::printf("A not loadable: %s\n", e.c_str()); return 1; }
+    if (!b.load(toW(argv[3]), e)) { std::printf("B not loadable: %s\n", e.c_str()); return 1; }
 
     Tr5Level::MoveableInfo ma, mb;
-    if (!a.moveableInfo(std::atoi(argv[2]), ma)) { std::printf("Slot %s fehlt in A\n", argv[2]); return 1; }
-    if (!b.moveableInfo(std::atoi(argv[4]), mb)) { std::printf("Slot %s fehlt in B\n", argv[4]); return 1; }
+    if (!a.moveableInfo(std::atoi(argv[2]), ma)) { std::printf("slot %s missing in A\n", argv[2]); return 1; }
+    if (!b.moveableInfo(std::atoi(argv[4]), mb)) { std::printf("slot %s missing in B\n", argv[4]); return 1; }
 
     const int n = std::atoi(argv[5]);
-    std::printf("A=%s Slot %s ab %d   B=%s Slot %s ab %d   %d Anims\n",
+    std::printf("A=%s slot %s from %d   B=%s slot %s from %d   %d anims\n",
                 argv[1], argv[2], ma.animIndex, argv[3], argv[4], mb.animIndex, n);
-    std::printf("%4s %4s | %4s %6s %10s  Box(A)              | %4s %6s %10s  Box(B)\n",
-                "Nr", "", "Zst", "Frames", "frameOfs", "Zst", "Frames", "frameOfs");
+    std::printf("%4s %4s | %4s %6s %10s  box(A)              | %4s %6s %10s  box(B)\n",
+                "no", "", "st", "frames", "frameOfs", "st", "frames", "frameOfs");
 
-    int kaputt = 0;
+    int broken = 0;
     for (int i = 0; i < n; ++i)
     {
-        AnimZeile za, zb;
-        if (!liesAnim(a, ma.animIndex + i, za) || !liesAnim(b, mb.animIndex + i, zb))
-        { std::printf("%4d  Tabelle zu kurz\n", i); break; }
+        AnimRow za, zb;
+        if (!readAnim(a, ma.animIndex + i, za) || !readAnim(b, mb.animIndex + i, zb))
+        { std::printf("%4d  table too short\n", i); break; }
 
-        // Die ersten sechs Shorts des Frames sind die Bounding-Box.
+        // The first six shorts of the frame are the bounding box.
         int16_t boxA[6] = {}, boxB[6] = {};
         for (int k = 0; k < 6; ++k)
         {
@@ -128,20 +128,21 @@ int main(int argc, char** argv)
             boxB[k] = b.debugReadFrameShort((long long)(zb.frameOffset / 2) + k);
         }
 
-        bool nullA = true, gleich = true;
+        bool zeroA = true, equal = true;
         for (int k = 0; k < 6; ++k)
         {
-            if (boxA[k]) nullA = false;
-            if (boxA[k] != boxB[k]) gleich = false;
+            if (boxA[k]) zeroA = false;
+            if (boxA[k] != boxB[k]) equal = false;
         }
 
-        // Auch den LETZTEN Keyframe vergleichen, nicht nur den ersten. Die
-        // Engine interpoliert zwischen Keyframes (frameRate); reicht der
-        // kopierte Frame-Strom nicht bis zum letzten Keyframe, ist der erste
-        // Keyframe intakt (der Vergleich oben schweigt), aber jedes
-        // interpolierte Bild dahinter liest Muell - der Gegner ist dann nur
-        // auf den Keyframes selbst sichtbar. Genau der Blink-Takt aus andy3.
-        bool endeGleich = true;
+        // Compare the LAST keyframe too, not only the first. The engine
+        // interpolates between keyframes (frameRate); if the copied frame
+        // stream does not reach the last keyframe, the first keyframe is
+        // intact (the comparison above stays silent), but every
+        // interpolated picture behind it reads garbage - the enemy is then
+        // visible only on the keyframes themselves. Exactly the blink
+        // rhythm from andy3.
+        bool endEqual = true;
         {
             const int rateA = za.frameRate ? za.frameRate : 1;
             const int rateB = zb.frameRate ? zb.frameRate : 1;
@@ -151,42 +152,42 @@ int main(int argc, char** argv)
             {
                 const int16_t ea = a.debugReadFrameShort((long long)(za.frameOffset / 2) + (long long)kfA * za.frameSize + k);
                 const int16_t eb = b.debugReadFrameShort((long long)(zb.frameOffset / 2) + (long long)kfB * zb.frameSize + k);
-                if (ea != eb) { endeGleich = false; break; }
+                if (ea != eb) { endEqual = false; break; }
             }
         }
 
-        const bool auffaellig = (nullA && !gleich) || !endeGleich ||
+        const bool conspicuous = (zeroA && !equal) || !endEqual ||
                                 za.state != zb.state ||
                                 za.frameRate != zb.frameRate ||
                                 za.frameSize != zb.frameSize ||
                                 (za.frameEnd - za.frameStart) != (zb.frameEnd - zb.frameStart);
-        if (auffaellig) ++kaputt;
+        if (conspicuous) ++broken;
 
-        // Rate und frameSize mit ausgeben: die Schrittweiten-Krankheit
-        // ("totes Erbe", siehe adoptAnimData in Tr5Level.h) erkennt
-        // man NUR daran, dass zwei Anims denselben frameOffset mit
-        // verschiedener frameSize read.
+        // Print rate and frameSize along: the step-width disease ("dead
+        // inheritance", see adoptAnimData in Tr5Level.h) can ONLY be
+        // recognized by two anims reading the same frameOffset with
+        // different frameSize.
         std::printf("%4d %-4s | %4u %3d..%-3d r%-2u s%-3u %10u  %6d %6d %6d | %4u %3d..%-3d r%-2u s%-3u %10u  %6d %6d %6d\n",
-                    i, auffaellig ? "!!" : "", za.state, za.frameStart, za.frameEnd,
+                    i, conspicuous ? "!!" : "", za.state, za.frameStart, za.frameEnd,
                     za.frameRate, za.frameSize,
                     za.frameOffset, boxA[0], boxA[2], boxA[4],
                     zb.state, zb.frameStart, zb.frameEnd,
                     zb.frameRate, zb.frameSize,
                     zb.frameOffset, boxB[0], boxB[2], boxB[4]);
     }
-    std::printf("%d von %d auffaellig\n", kaputt, n);
+    std::printf("%d of %d conspicuous\n", broken, n);
 
-    // --- Verkettungen pruefen ------------------------------------------
+    // --- Check the linkages --------------------------------------------
     //
-    // nextAnim und die Sprungziele der State-Changes sind ABSOLUTE Indizes
-    // in die Animationstabelle. Beim Import muss jeder um die Differenz der
-    // Scheibenanfaenge verschoben werden. Ein vergessener oder doppelt
-    // verschobener Eintrag faellt im Frame-Vergleich oben NICHT auf - die
-    // Anim selbst ist ja intakt -, schickt den Gegner aber zur Laufzeit in
-    // eine fremde Anim mit fremder Meshzahl: Bounds Null, unsichtbar.
+    // nextAnim and the state changes' jump targets are ABSOLUTE indices
+    // into the animation table. On import each must be shifted by the
+    // difference of the slice starts. A forgotten or doubly shifted entry
+    // does NOT show in the frame comparison above - the anim itself is
+    // intact - but at runtime sends the enemy into a foreign anim with a
+    // foreign mesh count: bounds zero, invisible.
     {
         const int delta = ma.animIndex - mb.animIndex;
-        std::printf("\nVerkettungen (Soll-Verschiebung %+d):\n", delta);
+        std::printf("\nlinkages (expected shift %+d):\n", delta);
 
         size_t chA = 0, chB = 0, rgA = 0, rgB = 0;
         int32_t nChA = 0, nChB = 0, nRgA = 0, nRgB = 0;
@@ -195,21 +196,21 @@ int main(int argc, char** argv)
         const std::vector<uint8_t>& ba = a.debugBytes();
         const std::vector<uint8_t>& bb = b.debugBytes();
 
-        int falsch = 0;
+        int wrong = 0;
         for (int i = 0; i < n; ++i)
         {
-            AnimZeile za, zb;
-            if (!liesAnim(a, ma.animIndex + i, za) || !liesAnim(b, mb.animIndex + i, zb)) break;
+            AnimRow za, zb;
+            if (!readAnim(a, ma.animIndex + i, za) || !readAnim(b, mb.animIndex + i, zb)) break;
 
             if (za.nextAnim != zb.nextAnim + delta)
             {
-                std::printf("  Anim %3d: nextAnim %d, Spender %d -> erwartet %d  <-- FALSCH\n",
+                std::printf("  anim %3d: nextAnim %d, donor %d -> expected %d  <-- WRONG\n",
                             i, za.nextAnim, zb.nextAnim, zb.nextAnim + delta);
-                ++falsch;
+                ++wrong;
             }
 
-            // Change-Eintrag: u16 state, u16 rangeCount, u16 rangeIndex (6 B).
-            // Range-Eintrag: s16 start, s16 end, s16 linkAnim, s16 linkFrame.
+            // Change entry: u16 state, u16 rangeCount, u16 rangeIndex (6 B).
+            // Range entry: s16 start, s16 end, s16 linkAnim, s16 linkFrame.
             uint16_t ncA = 0, ciA = 0, ncB = 0, ciB = 0;
             {
                 size_t at = 0; int32_t cnt = 0; a.debugAnimBlock(at, cnt);
@@ -219,7 +220,7 @@ int main(int argc, char** argv)
                 std::memcpy(&ncB, bb.data() + at + (size_t)(mb.animIndex + i) * 40 + 32, 2);
                 std::memcpy(&ciB, bb.data() + at + (size_t)(mb.animIndex + i) * 40 + 34, 2);
             }
-            if (ncA != ncB) { std::printf("  Anim %3d: %u Changes, Spender %u\n", i, ncA, ncB); ++falsch; continue; }
+            if (ncA != ncB) { std::printf("  anim %3d: %u changes, donor %u\n", i, ncA, ncB); ++wrong; continue; }
 
             for (int c = 0; c < ncA && ciA + c < nChA && ciB + c < nChB; ++c)
             {
@@ -236,14 +237,14 @@ int main(int argc, char** argv)
                     std::memcpy(&laB, bb.data() + rgB + (size_t)(riB + r) * 8 + 4, 2);
                     if (laA != laB + delta)
                     {
-                        std::printf("  Anim %3d Change %d Range %d: Ziel %d, Spender %d -> erwartet %d  <-- FALSCH\n",
+                        std::printf("  anim %3d change %d range %d: target %d, donor %d -> expected %d  <-- WRONG\n",
                                     i, c, r, laA, laB, laB + delta);
-                        ++falsch;
+                        ++wrong;
                     }
                 }
             }
         }
-        std::printf("%d falsche Verkettungen\n", falsch);
+        std::printf("%d wrong linkages\n", wrong);
     }
     return 0;
 }

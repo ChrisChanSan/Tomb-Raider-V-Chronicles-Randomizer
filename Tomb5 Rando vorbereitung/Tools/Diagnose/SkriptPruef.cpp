@@ -1,32 +1,32 @@
-// SkriptPruef - liest die Objektbefehle (Name und Inventarpose) je Level aus
-// einer TR5-SCRIPT.DAT.
+// SkriptPruef - reads the object commands (name and inventory pose) per
+// level from a TR5 SCRIPT.DAT.
 //
-// Warum es das gibt: Name, Y-Versatz, Groesse und Drehung eines Key-, Puzzle-
-// oder Pickup-Items stehen NICHT im Level, sondern im Skriptblock des Levels
-// (gameflow.cpp:371ff, "inventry_objects_list[n].objname = ..."). Wird ein
-// solches Modell in ein Level importiert, das den passenden Befehl nicht hat,
-// traegt es im Inventar Namen und Pose des zuletzt gesetzten Levels -
-// inventry_objects_list wird zwischen Leveln nie zurueckgesetzt.
+// Why this exists: name, y offset, size and rotation of a key, puzzle or
+// pickup item do NOT stand in the level but in the level's script block
+// (gameflow.cpp:371ff, "inventry_objects_list[n].objname = ..."). If such
+// a model is imported into a level that lacks the matching command, it
+// carries in the inventory the name and pose of the last level that set
+// them - inventry_objects_list is never reset between levels.
 //
-// Der Parser in ScriptDat.cpp taugt dafuer nicht: der bricht bei CMD_LEVEL ab.
+// The parser in ScriptDat.cpp is no use for this: it stops at CMD_LEVEL.
 //
-// Aufruf: SkriptPruef <SCRIPT.DAT> [levelname ...]
-//         ohne Levelliste alle Level.
+// Usage: SkriptPruef <SCRIPT.DAT> [levelname ...]
+//        without a level list, all levels.
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <string>
 #include <vector>
 
-static std::string klein(std::string s)
+static std::string lower(std::string s)
 {
     for (auto& c : s) if (c >= 'A' && c <= 'Z') c += 32;
     return s;
 }
 
-// Opcodes aus enum gf_commands (gameflow.h, CMD_FMV = 0x80). Nutzbytelaengen
-// 1:1 aus LoadGameflow (gameflow.cpp).
-static int nutzlast(unsigned char cmd)
+// Opcodes from enum gf_commands (gameflow.h, CMD_FMV = 0x80). Payload byte
+// lengths 1:1 from LoadGameflow (gameflow.cpp).
+static int payload(unsigned char cmd)
 {
     switch (cmd)
     {
@@ -40,12 +40,12 @@ static int nutzlast(unsigned char cmd)
     case 0x8F:                                  return 3;   // FOG
     case 0xD9: case 0xDA:                       return 2;   // GIVEOBJ/TAKEOBJ
     default:
-        if (cmd >= 0x92 && cmd <= 0xD8) return 14;          // Key/Puzzle/Pickup/Examine/Combos
-        return -1;                                          // unbekannt: anhalten
+        if (cmd >= 0x92 && cmd <= 0xD8) return 14;          // key/puzzle/pickup/examine/combos
+        return -1;                                          // unknown: stop
     }
 }
 
-static std::string befehlsname(unsigned char c)
+static std::string commandName(unsigned char c)
 {
     char b[64];
     if (c >= 146 && c <= 157) { std::sprintf(b, "KEY%d",     c - 145); return b; }
@@ -61,20 +61,20 @@ static std::string befehlsname(unsigned char c)
 
 int main(int argc, char** argv)
 {
-    if (argc < 2) { std::printf("Aufruf: SkriptPruef <SCRIPT.DAT> [levelname ...]\n"); return 1; }
+    if (argc < 2) { std::printf("usage: SkriptPruef <SCRIPT.DAT> [levelname ...]\n"); return 1; }
 
-    bool rohModus = false;
+    bool rawMode = false;
     for (int a = 1; a < argc; ++a)
-        if (std::strcmp(argv[a], "-roh") == 0) { rohModus = true; argv[a] = (char*)"-"; }
+        if (std::strcmp(argv[a], "-raw") == 0) { rawMode = true; argv[a] = (char*)"-"; }
 
     FILE* f = std::fopen(argv[1], "rb");
-    if (!f) { std::printf("nicht lesbar: %s\n", argv[1]); return 1; }
+    if (!f) { std::printf("not readable: %s\n", argv[1]); return 1; }
     std::fseek(f, 0, SEEK_END); long n = std::ftell(f); std::fseek(f, 0, SEEK_SET);
     std::vector<unsigned char> d((size_t)n);
-    if (std::fread(d.data(), 1, (size_t)n, f) != (size_t)n) { std::fclose(f); std::printf("unvollstaendig\n"); return 1; }
+    if (std::fread(d.data(), 1, (size_t)n, f) != (size_t)n) { std::fclose(f); std::printf("incomplete\n"); return 1; }
     std::fclose(f);
 
-    // GAMEFLOW (global/types.h:615) ist 16 Byte, dann 40 Byte "[PCExtensions]".
+    // GAMEFLOW (global/types.h:615) is 16 bytes, then 40 bytes "[PCExtensions]".
     const unsigned nLevels    = d[9];
     const unsigned nFileNames = d[10];
     auto u16 = [&](size_t o) { return (unsigned)(d[o] | (d[o + 1] << 8)); };
@@ -87,20 +87,20 @@ int main(int argc, char** argv)
     const size_t scrOfsAt  = p;   p += 2ull * nLevels;
     const size_t scrWad    = p;
 
-    if (scrWad + ScriptLen > d.size()) { std::printf("Kopf passt nicht zur Datei\n"); return 1; }
-    std::printf("%s: %u Level, %u Dateinamen, Skript-Wad %u Byte\n\n", argv[1], nLevels, nFileNames, ScriptLen);
+    if (scrWad + ScriptLen > d.size()) { std::printf("header does not fit the file\n"); return 1; }
+    std::printf("%s: %u levels, %u file names, script wad %u bytes\n\n", argv[1], nLevels, nFileNames, ScriptLen);
 
     for (unsigned i = 0; i < nLevels; ++i)
     {
         const size_t start = scrWad + u16(scrOfsAt + 2ull * i);
-        const size_t ende  = (i + 1 < nLevels) ? scrWad + u16(scrOfsAt + 2ull * (i + 1))
+        const size_t end   = (i + 1 < nLevels) ? scrWad + u16(scrOfsAt + 2ull * (i + 1))
                                                : scrWad + ScriptLen;
 
-        // Erst den Dateinamen holen: er steckt im CMD_LEVEL des Blocks.
+        // Fetch the file name first: it sits in the block's CMD_LEVEL.
         std::string file;
-        for (size_t q = start; q < ende; )
+        for (size_t q = start; q < end; )
         {
-            const int len = nutzlast(d[q]);
+            const int len = payload(d[q]);
             if (len < 0) break;
             if (d[q] == 0x81 && q + 4 < d.size() && d[q + 4] < nFileNames)
             {
@@ -111,27 +111,27 @@ int main(int argc, char** argv)
             q += 1 + len;
         }
 
-        if (argc > 2 + (rohModus ? 1 : 0))
+        if (argc > 2 + (rawMode ? 1 : 0))
         {
-            bool gewollt = false;
+            bool wanted = false;
             for (int a = 2; a < argc; ++a)
-                if (std::strcmp(argv[a],"-") && klein(file) == klein(argv[a])) { gewollt = true; break; }
-            if (!gewollt) continue;
+                if (std::strcmp(argv[a],"-") && lower(file) == lower(argv[a])) { wanted = true; break; }
+            if (!wanted) continue;
         }
 
-        std::printf("Level %2u  %s\n", i, file.empty() ? "(ohne Dateinamen)" : file.c_str());
-        int objekte = 0;
-        for (size_t q = start; q < ende; )
+        std::printf("level %2u  %s\n", i, file.empty() ? "(without a file name)" : file.c_str());
+        int objects = 0;
+        for (size_t q = start; q < end; )
         {
             const unsigned char cmd = d[q];
-            const int len = nutzlast(cmd);
-            if (len < 0) { std::printf("   ! unbekannter Befehl %u bei +%zu - Abbruch\n", cmd, q - start); break; }
+            const int len = payload(cmd);
+            if (len < 0) { std::printf("   ! unknown command %u at +%zu - stopping\n", cmd, q - start); break; }
 
             if (cmd >= 0x92 && cmd <= 0xD8 && q + 14 < d.size())
             {
                 const unsigned char* g = &d[q + 1];
-                std::printf("   %-16s Name=%-5u yoff=%-6d Groesse=%-6u yrot=%-6u xrot=%-6u zrot=%-6u Flags=0x%04X\n",
-                            befehlsname(cmd).c_str(),
+                std::printf("   %-16s name=%-5u yoff=%-6d size=%-6u yrot=%-6u xrot=%-6u zrot=%-6u flags=0x%04X\n",
+                            commandName(cmd).c_str(),
                             (unsigned)(g[0] | (g[1] << 8)),
                             (int)(short)(g[2] | (g[3] << 8)),
                             (unsigned)(g[4] | (g[5] << 8)),
@@ -139,36 +139,36 @@ int main(int argc, char** argv)
                             (unsigned)(g[8] | (g[9] << 8)),
                             (unsigned)(g[10] | (g[11] << 8)),
                             (unsigned)(g[12] | (g[13] << 8)));
-                ++objekte;
+                ++objects;
             }
             q += 1 + len;
         }
-        if (rohModus)
+        if (rawMode)
         {
-            std::printf("   -- Befehlsfolge --\n");
-            for (size_t q = start; q < ende; )
+            std::printf("   -- command sequence --\n");
+            for (size_t q = start; q < end; )
             {
-                const int l = nutzlast(d[q]);
-                const char* zusatz = "";
-                char puffer[64];
-                if (d[q] == 0x81) zusatz = "   <== CMD_LEVEL";
+                const int l = payload(d[q]);
+                const char* extra = "";
+                char buffer[64];
+                if (d[q] == 0x81) extra = "   <== CMD_LEVEL";
                 else if ((d[q] == 0xD9 || d[q] == 0xDA) && q + 1 < d.size())
                 {
-                    // Nutzbyte 0 ist die INVENTAR-Objektnummer (enum
-                    // invobj_types, newinv2.h:121): 0 = Uzi, 1 = Pistolen,
-                    // 19 = Pistolenmunition. setup.cpp:122/160 wendet sie
-                    // beim Levelstart an - GIVEOBJ legt ins Inventar,
-                    // TAKEOBJ nimmt heraus (NailInvItem).
-                    std::snprintf(puffer, sizeof(puffer), "   %s Inventarobjekt %u",
-                                  d[q] == 0xD9 ? "gibt" : "NIMMT", d[q + 1]);
-                    zusatz = puffer;
+                    // Payload byte 0 is the INVENTORY object number (enum
+                    // invobj_types, newinv2.h:121): 0 = Uzi, 1 = pistols,
+                    // 19 = pistol ammo. setup.cpp:122/160 applies it at
+                    // level start - GIVEOBJ puts into the inventory,
+                    // TAKEOBJ takes out (NailInvItem).
+                    std::snprintf(buffer, sizeof(buffer), "   %s inventory object %u",
+                                  d[q] == 0xD9 ? "gives" : "TAKES", d[q + 1]);
+                    extra = buffer;
                 }
-                std::printf("   +%-4zu  %-3u  %s%s\n", q - start, d[q], befehlsname(d[q]).c_str(), zusatz);
+                std::printf("   +%-4zu  %-3u  %s%s\n", q - start, d[q], commandName(d[q]).c_str(), extra);
                 if (l < 0) break;
                 q += 1 + l;
             }
         }
-        if (!objekte) std::printf("   (kein einziger Objektbefehl)\n");
+        if (!objects) std::printf("   (not a single object command)\n");
         std::printf("\n");
     }
     return 0;

@@ -1,14 +1,14 @@
-// MissMod - misst, wo ein TR5-Modell relativ zum Itemursprung sitzt.
+// MissMod - measures where a TR5 model sits relative to the item origin.
 //
-// Hintergrund: der Crane Guy (Slot 55) steht im Spiel 512 Units neben der
-// Sektormitte, obwohl das Item exakt mittig liegt. Core hat ihn in joby2 nur
-// als ANIMATING4 an der Krankonsole verbaut - der Versatz steckt also im
-// Modell selbst, in den Frame-Offsets und der Frame-Box.
+// Background: the Crane Guy (slot 55) stands 512 units off the sector
+// center in game although the item lies exactly centered. Core only built
+// him into joby2 as ANIMATING4 at the crane console - so the offset sits
+// in the model itself, in the frame offsets and the frame box.
 //
-// Aufruf: MissMod <level.trc> [slot ...]
+// Usage: MissMod <level.trc> [slot ...]
 //
-// Ausgabe je Slot: die Box des ersten Frames und ihr Mittelpunkt. Ein sauber
-// zentriertes Modell hat einen Mittelpunkt nahe 0/0 in x und z.
+// Output per slot: the first frame's box and its center. A cleanly
+// centered model has a center near 0/0 in x and z.
 
 #include "core/Tr5Level.h"
 #include <cstdio>
@@ -33,17 +33,17 @@ int main(int argc, char** argv)
 {
     if (argc < 2)
     {
-        std::printf("Aufruf: MissMod <level.trc> [slot ...]\n");
+        std::printf("usage: MissMod <level.trc> [slot ...]\n");
         return 1;
     }
 
     Tr5Level lvl;
     std::string error;
     std::string path(argv[1]);
-    std::wstring wpfad(path.begin(), path.end());
-    if (!lvl.load(wpfad, error))
+    std::wstring wpath(path.begin(), path.end());
+    if (!lvl.load(wpath, error))
     {
-        std::printf("Laden fehlgeschlagen: %s\n", error.c_str());
+        std::printf("load failed: %s\n", error.c_str());
         return 2;
     }
 
@@ -51,71 +51,71 @@ int main(int argc, char** argv)
     int32_t objN = 0, frN = 0;
     if (!lvl.debugModelBlocks(objAt, objN, frAt, frN))
     {
-        std::printf("Keine Objekttabelle found.\n");
+        std::printf("no object table found.\n");
         return 3;
     }
 
     const std::vector<uint8_t>& b = lvl.debugBytes();
-    std::printf("%s: %d Moveables, Frame-Scheibe %d Woerter, %d Samples\n\n",
+    std::printf("%s: %d moveables, frame slice %d words, %d samples\n\n",
                 argv[1], objN, frN, lvl.soundSampleCount());
 
-    // --- Klangkette pruefen: MissMod <level.trc> -ton <mapId ...> ----------
+    // --- Check the sound chain: MissMod <level.trc> -ton <mapId ...> -------
     //
-    // Geht den Weg, den auch die Engine geht: SoundMap[id] -> SAMPLE_INFO ->
-    // dessen Nummer und Variantenzahl. Gebraucht, weil beim Compy ein fremder
-    // Klang dazwischenfuhr und aus der Zuordnungstabelle des Einsetzers allein
-    // nicht zu sehen war, worauf ein Platz am Ende WIRKLICH zeigt.
+    // Walks the same way the engine walks: SoundMap[id] -> SAMPLE_INFO ->
+    // its number and variant count. Needed because with the Compy a
+    // foreign sound cut in, and from the inserter's mapping table alone it
+    // could not be seen what a place REALLY points at in the end.
     if (argc >= 3 && std::strcmp(argv[2], "-ton") == 0)
     {
         size_t lutAt = 0, infosAt = 0;
         int32_t nInfos = 0, nSamples = 0;
         if (!lvl.debugSoundBlocks(lutAt, infosAt, nInfos, nSamples))
         {
-            std::printf("Kein lesbarer Klangblock.\n");
+            std::printf("no readable sound block.\n");
             return 4;
         }
-        std::printf("SAMPLE_INFOs %d, Samples %d\n\n", nInfos, nSamples);
-        std::printf("Map   Info   Nummer  Vol  Rad  Varianten\n");
+        std::printf("SAMPLE_INFOs %d, samples %d\n\n", nInfos, nSamples);
+        std::printf("map   info   number  vol  rad  variants\n");
         for (int i = 3; i < argc; ++i)
         {
             const int map = std::atoi(argv[i]);
-            if (map < 0 || map >= 450) { std::printf("%3d   ausserhalb 0..449\n", map); continue; }
+            if (map < 0 || map >= 450) { std::printf("%3d   outside 0..449\n", map); continue; }
             const int16_t idx = w16(b, lutAt + (size_t)map * 2);
-            if (idx < 0 || idx >= nInfos) { std::printf("%3d   %5d   <- leer oder ausserhalb\n", map, idx); continue; }
+            if (idx < 0 || idx >= nInfos) { std::printf("%3d   %5d   <- empty or out of range\n", map, idx); continue; }
 
             const size_t at = infosAt + (size_t)idx * 8;
-            const int16_t nummer = w16(b, at);
+            const int16_t number = w16(b, at);
             const uint8_t vol = b[at + 2];
             const int8_t  rad = (int8_t)b[at + 3];
             const uint16_t fl = u16(b, at + 6);
-            std::printf("%3d   %5d   %6d  %3u  %3d  %d%s\n", map, idx, nummer, vol, rad,
-                        (fl >> 2) & 0xF, (nummer + ((fl >> 2) & 0xF) > nSamples) ? "   LAEUFT UEBER DAS ENDE" : "");
+            std::printf("%3d   %5d   %6d  %3u  %3d  %d%s\n", map, idx, number, vol, rad,
+                        (fl >> 2) & 0xF, (number + ((fl >> 2) & 0xF) > nSamples) ? "   RUNS PAST THE END" : "");
         }
         return 0;
     }
 
-    std::vector<int> gesucht;
-    for (int i = 2; i < argc; ++i) gesucht.push_back(std::atoi(argv[i]));
+    std::vector<int> wanted;
+    for (int i = 2; i < argc; ++i) wanted.push_back(std::atoi(argv[i]));
 
-    std::printf("Slot  Meshes  minX  maxX  minY  maxY  minZ  maxZ |  MitteX  MitteZ | OffX OffY OffZ\n");
+    std::printf("slot  meshes  minX  maxX  minY  maxY  minZ  maxZ | centerX centerZ | offX offY offZ\n");
 
     for (int i = 0; i < objN; ++i)
     {
-        // TR5-Moveable ist 20 Byte: die 18 aus TR4 plus ein Fuellwort.
+        // A TR5 moveable is 20 bytes: the 18 from TR4 plus one fill word.
         size_t at   = objAt + (size_t)i * 20;
         uint32_t id = u32(b, at);
-        if (!gesucht.empty())
+        if (!wanted.empty())
         {
-            bool drin = false;
-            for (int g : gesucht) if ((int)id == g) drin = true;
-            if (!drin) continue;
+            bool hit = false;
+            for (int g : wanted) if ((int)id == g) hit = true;
+            if (!hit) continue;
         }
 
         uint16_t meshes = u16(b, at + 4);
-        uint32_t frOff  = u32(b, at + 12);      // Byteversatz in die Frame-Scheibe
+        uint32_t frOff  = u32(b, at + 12);      // byte offset into the frame slice
 
         size_t f = frAt + frOff;
-        if (f + 18 > b.size()) { std::printf("%4u  Frame-Zeiger ausserhalb\n", id); continue; }
+        if (f + 18 > b.size()) { std::printf("%4u  frame pointer out of range\n", id); continue; }
 
         int16_t minX = w16(b, f + 0),  maxX = w16(b, f + 2);
         int16_t minY = w16(b, f + 4),  maxY = w16(b, f + 6);

@@ -1,16 +1,15 @@
 //----------------------------------------------------------------------------
-// TexRec - zeigt rohe TR5-Texinfos (PHDTEXTURESTRUCT, 40 Byte).
+// TexRec - shows raw TR5 texinfos (PHDTEXTURESTRUCT, 40 bytes).
 //
-// Aufruf: TexRec <level.trc> [erster] [anzahl]
+// Usage: TexRec <level.trc> [first] [count]
 //
-// Gebraucht fuer #90: um aus TR3-Objekttexturen gueltige TR5-Eintraege zu
-// bauen, muss man wissen, welche Values drawtype und flag dort ueberhaupt
-// annehmen - besonders, wie sich Vierecke von Dreiecken unterscheiden.
-// Ablesen statt raten.
+// Needed for #90: to build valid TR5 entries from TR3 object textures one
+// must know which values drawtype and flag take there at all - especially
+// how quads differ from triangles. Read off instead of guessing.
 //
-// Layout aus global/types.h und specific/file.cpp:1089ff:
-//   +0 drawtype, +2 tpage (Bit 15 wandert beim Laden ins flag),
-//   +4 flag, dann u1,v1,u2,v2,u3,v3,u4,v4 als 8.8-Festkomma.
+// Layout from global/types.h and specific/file.cpp:1089ff:
+//   +0 drawtype, +2 tpage (bit 15 moves into the flag on load),
+//   +4 flag, then u1,v1,u2,v2,u3,v3,u4,v4 as 8.8 fixed point.
 //----------------------------------------------------------------------------
 #include "core/Tr5Level.h"
 
@@ -27,21 +26,21 @@ static std::wstring toW(const char* s)
 
 int main(int argc, char** argv)
 {
-    if (argc < 2) { std::printf("Aufruf: TexRec <level.trc> [erster] [anzahl]\n"); return 2; }
-    const int erster = (argc > 2) ? std::atoi(argv[2]) : 0;
-    const int anzahl = (argc > 3) ? std::atoi(argv[3]) : 12;
+    if (argc < 2) { std::printf("usage: TexRec <level.trc> [first] [count]\n"); return 2; }
+    const int first = (argc > 2) ? std::atoi(argv[2]) : 0;
+    const int count = (argc > 3) ? std::atoi(argv[3]) : 12;
 
     Tr5Level lvl;
     std::string err;
-    if (!lvl.load(toW(argv[1]), err)) { std::printf("Laden: %s\n", err.c_str()); return 2; }
+    if (!lvl.load(toW(argv[1]), err)) { std::printf("load: %s\n", err.c_str()); return 2; }
 
     size_t at = 0; int32_t n = 0;
-    if (!lvl.debugTexinfoBlock(at, n)) { std::printf("Kein Texinfo-Block\n"); return 1; }
-    std::printf("%s: %d Texinfos\n\n", argv[1], n);
-    // Verteilung ueber ALLE Eintraege: welche Values kommen ueberhaupt vor?
+    if (!lvl.debugTexinfoBlock(at, n)) { std::printf("no texinfo block\n"); return 1; }
+    std::printf("%s: %d texinfos\n\n", argv[1], n);
+    // Distribution over ALL entries: which values occur at all?
     {
-        int mitBit15 = 0, ohneBit15 = 0, dreiecke = 0;
-        std::vector<int> drawArten, flagArten;
+        int withBit15 = 0, withoutBit15 = 0, triangles = 0;
+        std::vector<int> drawKinds, flagKinds;
         for (int i = 0; i < n; ++i)
         {
             const size_t o = at + static_cast<size_t>(i) * 40;
@@ -53,26 +52,26 @@ int main(int argc, char** argv)
             std::memcpy(&v3, lvl.debugBytes().data() + o + 16, 2);
             std::memcpy(&u4, lvl.debugBytes().data() + o + 18, 2);
             std::memcpy(&v4, lvl.debugBytes().data() + o + 20, 2);
-            (tp & 0x8000) ? ++mitBit15 : ++ohneBit15;
-            if (u4 == u3 && v4 == v3) ++dreiecke;
-            bool da = false; for (int x : drawArten) if (x == dw) { da = true; break; }
-            if (!da) drawArten.push_back(dw);
-            da = false; for (int x : flagArten) if (x == fl) { da = true; break; }
-            if (!da) flagArten.push_back(fl);
+            (tp & 0x8000) ? ++withBit15 : ++withoutBit15;
+            if (u4 == u3 && v4 == v3) ++triangles;
+            bool seen = false; for (int x : drawKinds) if (x == dw) { seen = true; break; }
+            if (!seen) drawKinds.push_back(dw);
+            seen = false; for (int x : flagKinds) if (x == fl) { seen = true; break; }
+            if (!seen) flagKinds.push_back(fl);
         }
-        std::printf("  tpage mit Bit15: %d, ohne: %d\n", mitBit15, ohneBit15);
-        std::printf("  vermutliche Dreiecke (u4/v4 == u3/v3): %d\n", dreiecke);
-        std::printf("  drawtype-Values:");
-        for (int x : drawArten) std::printf(" %d", x);
-        std::printf("\n  flag-Values:");
-        for (int x : flagArten) std::printf(" %04X", x);
+        std::printf("  tpage with bit15: %d, without: %d\n", withBit15, withoutBit15);
+        std::printf("  presumed triangles (u4/v4 == u3/v3): %d\n", triangles);
+        std::printf("  drawtype values:");
+        for (int x : drawKinds) std::printf(" %d", x);
+        std::printf("\n  flag values:");
+        for (int x : flagKinds) std::printf(" %04X", x);
         std::printf("\n\n");
     }
 
-    std::printf("  Nr   draw  tpage  flag    u1/v1      u2/v2      u3/v3      u4/v4\n");
+    std::printf("  no   draw  tpage  flag    u1/v1      u2/v2      u3/v3      u4/v4\n");
 
     const std::vector<uint8_t>& b = lvl.debugBytes();
-    for (int i = erster; i < erster + anzahl && i < n; ++i)
+    for (int i = first; i < first + count && i < n; ++i)
     {
         const size_t o = at + static_cast<size_t>(i) * 40;
         uint16_t w[11];

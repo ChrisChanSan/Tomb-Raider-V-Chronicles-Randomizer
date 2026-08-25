@@ -187,7 +187,7 @@ foreach ($lvl in $Levels) {
 
     $dstTrc = "$OutDir\$lvl.trc"
     if (Test-Path $dstTrc) { Remove-Item $dstTrc -Force }
-    $argList = @("`"$srcTrc`"", "`"$patchPath`"", "`"$dstTrc`"", '-mehritems')
+    $argList = @("`"$srcTrc`"", "`"$patchPath`"", "`"$dstTrc`"", '-moreitems')
     $p = Start-Process -FilePath $Exe -ArgumentList $argList -Wait -PassThru -NoNewWindow
     $ok = (Test-Path $dstTrc) -and $p.ExitCode -eq 0
     $results += [PSCustomObject]@{ Level = $lvl; WallSectors = $withWall; Water = $outWater; Occupied = $outOccupied; Items = $itemAdds.Count; OK = $ok }

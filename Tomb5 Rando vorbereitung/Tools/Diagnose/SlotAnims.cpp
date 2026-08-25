@@ -1,17 +1,17 @@
-// SlotAnims - misst die Anim-Scheibe eines Objektslots.
+// SlotAnims - measures an object slot's anim slice.
 //
-// Warum es das braucht: die Steuerung eines Gegners greift oft mit
-// anim_index + N quer durch die GLOBALE Anim-Tabelle, waehrend die
-// Objekttabelle ihm nur bis zum naechsten Objekt "gehoert". Ist N groesser
-// als die Scheibe, schneidet die Heuristik des Modelltransfers zu frueh ab -
-// im Ziel liest die Engine dann hinter dem Tabellenende (beim Imp als
-// Todes-Flugschleife im Spiel gesehen, bei der Hydra als Abbruch
-// "Frame-Zeiger ausserhalb der Frame-Scheibe").
+// Why this is needed: an enemy's control code often reaches with
+// anim_index + N across the GLOBAL anim table, while the object table only
+// "owns" it up to the next object. If N is larger than the slice, the
+// model transfer's heuristic cuts off too early - in the target the engine
+// then reads past the table end (seen in game as the Imp's death flight
+// loop, and with the Hydra as the abort "frame pointer outside the frame
+// slice").
 //
-// Aufruf: SlotAnims <slot> <level.trc> [level.trc ...]
+// Usage: SlotAnims <slot> <level.trc> [level.trc ...]
 //
-// Ausgabe je Level: anim_index des Slots, der naechsthoehere anim_index im
-// Level und die Differenz = die Scheibe, die die Heuristik nehmen wuerde.
+// Output per level: the slot's anim_index, the next higher anim_index in
+// the level, and the difference = the slice the heuristic would take.
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -19,7 +19,7 @@
 #include <algorithm>
 #include "core/Tr5Level.h"
 
-static std::wstring zuW(const char* s)
+static std::wstring toW(const char* s)
 {
     std::wstring w;
     for (const char* p = s; *p; ++p) w.push_back((wchar_t)(unsigned char)*p);
@@ -30,64 +30,64 @@ int main(int argc, char** argv)
 {
     if (argc < 3)
     {
-        std::printf("Aufruf: SlotAnims <slot> <level.trc> [level.trc ...]\n");
+        std::printf("usage: SlotAnims <slot> <level.trc> [level.trc ...]\n");
         return 1;
     }
 
     const int slot = std::atoi(argv[1]);
-    std::printf("Slot %d\n", slot);
+    std::printf("slot %d\n", slot);
     std::printf("%-14s %8s %8s %9s %8s  %s\n",
-                "Level", "Meshes", "anim@", "naechster", "Scheibe", "Bemerkung");
+                "level", "meshes", "anim@", "next", "slice", "note");
 
     for (int i = 2; i < argc; ++i)
     {
         std::string path(argv[i]);
-        const size_t schnitt = path.find_last_of("\\/");
-        std::string name = (schnitt == std::string::npos) ? path : path.substr(schnitt + 1);
+        const size_t cut = path.find_last_of("\\/");
+        std::string name = (cut == std::string::npos) ? path : path.substr(cut + 1);
 
         Tr5Level lvl;
         std::string error;
-        if (!lvl.load(zuW(argv[i]), error))
+        if (!lvl.load(toW(argv[i]), error))
         {
-            std::printf("%-14s  nicht ladbar: %s\n", name.c_str(), error.c_str());
+            std::printf("%-14s  not loadable: %s\n", name.c_str(), error.c_str());
             continue;
         }
 
         Tr5Level::MoveableInfo mv;
         if (!lvl.moveableInfo(slot, mv))
         {
-            std::printf("%-14s  -- kein Modell --\n", name.c_str());
+            std::printf("%-14s  -- no model --\n", name.c_str());
             continue;
         }
 
-        // Der naechsthoehere anim_index ueber alle Slots: genau die Grenze,
-        // die die Transfer-Heuristik zieht.
-        int naechster = -1;
+        // The next higher anim_index over all slots: exactly the boundary
+        // the transfer heuristic draws.
+        int next = -1;
         for (int s : lvl.moveableSlots())
         {
             Tr5Level::MoveableInfo o;
             if (!lvl.moveableInfo(s, o)) continue;
             if (o.animIndex <= mv.animIndex) continue;
-            if (naechster < 0 || o.animIndex < naechster) naechster = o.animIndex;
+            if (next < 0 || o.animIndex < next) next = o.animIndex;
         }
 
         if (mv.animIndex < 0)
         {
-            std::printf("%-14s %8d %8s %9s %8s  Slot ohne eigene Animationen\n",
+            std::printf("%-14s %8d %8s %9s %8s  slot without its own animations\n",
                         name.c_str(), mv.nmeshes, "-", "-", "-");
             continue;
         }
 
-        if (naechster < 0)
+        if (next < 0)
         {
-            std::printf("%-14s %8d %8d %9s %8s  letzter Slot - Scheibe reicht bis Tabellenende\n",
-                        name.c_str(), mv.nmeshes, mv.animIndex, "(keiner)", "?");
+            std::printf("%-14s %8d %8d %9s %8s  last slot - the slice runs to the table end\n",
+                        name.c_str(), mv.nmeshes, mv.animIndex, "(none)", "?");
             continue;
         }
 
         std::printf("%-14s %8d %8d %9d %8d\n",
-                    name.c_str(), mv.nmeshes, mv.animIndex, naechster,
-                    naechster - mv.animIndex);
+                    name.c_str(), mv.nmeshes, mv.animIndex, next,
+                    next - mv.animIndex);
     }
     return 0;
 }

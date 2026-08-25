@@ -128,7 +128,7 @@ struct Tr5Room
 struct Tr5FloorEntry
 {
     int function = 0;                   // global/types.h, enum floor_types
-    int art = 0;                        // only for function == 4 (trigger)
+    int kind = 0;                        // only for function == 4 (trigger)
     std::vector<uint16_t> words;
 };
 
@@ -320,14 +320,14 @@ public:
     // the level: no existing entry is read or rebuilt, only a chain is
     // appended at the end.
     //
-    // art is the trigger kind (0 = TRIGGER, 1 = PAD, 5 = HEAVY, ...), mask
+    // kind is the trigger kind (0 = TRIGGER, 1 = PAD, 5 = HEAVY, ...), mask
     // the five code bits (31 = all, the usual value). oneShot sets bit 8 of
     // the setup word - and that is more than "only once": _TestTriggers
     // (control.cpp:2415) then sets IFL_INVISIBLE on the woken item, which
     // changes the behavior of some enemies. Larson, for instance, flees at
     // 40 hit points without this bit and cannot be killed at all
     // (pierre.cpp:68).
-    bool    addTrigger(int room, int sx, int sz, int art, int timer, bool oneShot,
+    bool    addTrigger(int room, int sx, int sz, int kind, int timer, bool oneShot,
                        int mask, const std::vector<Tr5TriggerCmd>& cmds,
                        std::string& error, int refItem = -1);
 

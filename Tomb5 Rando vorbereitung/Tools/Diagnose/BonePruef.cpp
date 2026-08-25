@@ -1,56 +1,57 @@
-// BonePruef - Knochenbaum eines Moveable-Slots anzeigen oder zwei vergleichen.
+// BonePruef - show a moveable slot's bone tree, or compare two.
 //
-// Anlass (#121, dritte Runde): ein Familien-Stummel (Meshes aus Spender A)
-// laeuft zur Laufzeit auf dem Anim-Satz des Basistyps (aus Spender B). Die
-// Frames tragen Rotationen je Mesh, aber die STAPELBEFEHLE (Push/Pop in
-// bone[0] Bit 0/1) kommen aus dem Knochenbaum des Stummels. Sind die Baeume
-// der beiden Spender nicht baugleich, laeuft der Matrix-Stapel beim Zeichnen
-// auseinander - Meshes irgendwo, Koerper unsichtbar, Bounds trotzdem gueltig.
+// Occasion (#121, third round): a family stub (meshes from donor A) runs
+// at runtime on the base type's anim set (from donor B). The frames carry
+// rotations per mesh, but the STACK COMMANDS (push/pop in bone[0] bits
+// 0/1) come from the stub's bone tree. If the two donors' trees are not
+// built alike, the matrix stack drifts apart while drawing - meshes
+// anywhere, body invisible, bounds still valid.
 //
-// Aufruf: BonePruef <level.trc> <slot> [<level2.trc> <slot2>]
-//   Ein Paar:  Baum anzeigen (flags x y z je Knochen).
-//   Zwei Paare: beide Baeume nebeneinander, Abweichungen markiert.
+// Usage: BonePruef <level.trc> <slot> [<level2.trc> <slot2>]
+//   One pair:  show the tree (flags x y z per bone).
+//   Two pairs: both trees side by side, deviations marked.
 //
-// Knochenstrom: je Mesh nach dem ersten 4 Longs (flags, x, y, z);
-// flags Bit0 = Pop, Bit1 = Push, Bits 2..4 = Drehkanaele aus item->data.
+// Bone stream: per mesh after the first, 4 longs (flags, x, y, z);
+// flags bit0 = pop, bit1 = push, bits 2..4 = rotation channels from
+// item->data.
 #include "core/Tr5Level.h"
 #include "core/DataFolder.h"
 
 #include <cstdio>
 #include <string>
 
-static std::wstring weit(const char* s)
+static std::wstring toW(const char* s)
 { std::wstring w; while (*s) w += (wchar_t)(unsigned char)*s++; return w; }
 
 int main(int argc, char** argv)
 {
     if (argc != 3 && argc != 5)
     {
-        std::printf("Aufruf: BonePruef <level.trc> <slot> [<level2.trc> <slot2>]\n");
+        std::printf("usage: BonePruef <level.trc> <slot> [<level2.trc> <slot2>]\n");
         return 2;
     }
 
     Tr5Level a, b;
     std::string e;
-    if (!a.load(weit(argv[1]), e)) { std::printf("A nicht ladbar: %s\n", e.c_str()); return 1; }
+    if (!a.load(toW(argv[1]), e)) { std::printf("A not loadable: %s\n", e.c_str()); return 1; }
     Tr5Level::MoveableInfo ma, mb;
-    if (!a.moveableInfo(std::atoi(argv[2]), ma)) { std::printf("Slot %s fehlt in A\n", argv[2]); return 1; }
+    if (!a.moveableInfo(std::atoi(argv[2]), ma)) { std::printf("slot %s missing in A\n", argv[2]); return 1; }
 
-    const bool zwei = (argc == 5);
-    if (zwei)
+    const bool two = (argc == 5);
+    if (two)
     {
-        if (!b.load(weit(argv[3]), e)) { std::printf("B nicht ladbar: %s\n", e.c_str()); return 1; }
-        if (!b.moveableInfo(std::atoi(argv[4]), mb)) { std::printf("Slot %s fehlt in B\n", argv[4]); return 1; }
+        if (!b.load(toW(argv[3]), e)) { std::printf("B not loadable: %s\n", e.c_str()); return 1; }
+        if (!b.moveableInfo(std::atoi(argv[4]), mb)) { std::printf("slot %s missing in B\n", argv[4]); return 1; }
         if (ma.nmeshes != mb.nmeshes)
-            std::printf("MESHZAHL WEICHT AB: %d gegen %d\n", ma.nmeshes, mb.nmeshes);
+            std::printf("MESH COUNT DEVIATES: %d vs %d\n", ma.nmeshes, mb.nmeshes);
     }
 
-    std::printf("A: %s Slot %s, %d Meshes, boneIndex %d\n", argv[1], argv[2], ma.nmeshes, ma.boneIndex);
-    if (zwei)
-        std::printf("B: %s Slot %s, %d Meshes, boneIndex %d\n", argv[3], argv[4], mb.nmeshes, mb.boneIndex);
+    std::printf("A: %s slot %s, %d meshes, boneIndex %d\n", argv[1], argv[2], ma.nmeshes, ma.boneIndex);
+    if (two)
+        std::printf("B: %s slot %s, %d meshes, boneIndex %d\n", argv[3], argv[4], mb.nmeshes, mb.boneIndex);
 
-    int anders = 0;
-    const int n = zwei ? (ma.nmeshes < mb.nmeshes ? ma.nmeshes : mb.nmeshes) : ma.nmeshes;
+    int differing = 0;
+    const int n = two ? (ma.nmeshes < mb.nmeshes ? ma.nmeshes : mb.nmeshes) : ma.nmeshes;
     for (int i = 0; i < n - 1; ++i)
     {
         long fA = 0, xA = 0, yA = 0, zA = 0;
@@ -59,9 +60,9 @@ int main(int argc, char** argv)
         yA = a.debugReadBoneLong(ma.boneIndex + (long long)i * 4 + 2);
         zA = a.debugReadBoneLong(ma.boneIndex + (long long)i * 4 + 3);
 
-        if (!zwei)
+        if (!two)
         {
-            std::printf("  Knochen %2d: flags=%02lX  %6ld %6ld %6ld\n", i, fA, xA, yA, zA);
+            std::printf("  bone %2d: flags=%02lX  %6ld %6ld %6ld\n", i, fA, xA, yA, zA);
             continue;
         }
 
@@ -70,17 +71,17 @@ int main(int argc, char** argv)
         long yB = b.debugReadBoneLong(mb.boneIndex + (long long)i * 4 + 2);
         long zB = b.debugReadBoneLong(mb.boneIndex + (long long)i * 4 + 3);
 
-        // Entscheidend sind Push/Pop (Bit 0/1) - sie steuern den Stapel.
-        const bool stapelAnders = (fA & 3) != (fB & 3);
-        const bool restAnders = fA != fB || xA != xB || yA != yB || zA != zB;
-        if (stapelAnders || restAnders) ++anders;
+        // Decisive are push/pop (bits 0/1) - they drive the stack.
+        const bool stackDiffers = (fA & 3) != (fB & 3);
+        const bool restDiffers = fA != fB || xA != xB || yA != yB || zA != zB;
+        if (stackDiffers || restDiffers) ++differing;
 
-        std::printf("  Knochen %2d: A flags=%02lX %6ld %6ld %6ld | B flags=%02lX %6ld %6ld %6ld%s\n",
+        std::printf("  bone %2d: A flags=%02lX %6ld %6ld %6ld | B flags=%02lX %6ld %6ld %6ld%s\n",
                     i, fA, xA, yA, zA, fB, xB, yB, zB,
-                    stapelAnders ? "  <-- STAPEL!" : (restAnders ? "  <-- anders" : ""));
+                    stackDiffers ? "  <-- STACK!" : (restDiffers ? "  <-- differs" : ""));
     }
 
-    if (zwei)
-        std::printf("%d von %d Knochen abweichend\n", anders, n - 1);
+    if (two)
+        std::printf("%d of %d bones deviating\n", differing, n - 1);
     return 0;
 }

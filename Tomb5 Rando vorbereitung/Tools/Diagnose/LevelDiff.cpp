@@ -1,20 +1,20 @@
-// LevelDiff <a.trc> <b.trc> - zwei TR5-Leveldateien Block fuer Block
-// vergleichen. Gebaut fuer die Frage "wie weit weicht ein umgebautes Level vom
-// Original ab" - etwa bei einem HD-Texturport.
+// LevelDiff <a.trc> <b.trc> - compare two TR5 level files block by block.
+// Built for the question "how far does a rebuilt level deviate from the
+// original" - e.g. with an HD texture port.
 //
-// Der TR5-Kopf ist:
+// The TR5 header is:
 //     long  version
-//     short rtPages, otPages, btPages       Texturseiten je Art
-//     3 x { long size, long compSize, Nutzdaten }   32bit / 16bit / misc
+//     short rtPages, otPages, btPages       texture pages per kind
+//     3 x { long size, long compSize, payload }   32bit / 16bit / misc
 //     short data[16]                        LaraDrawType, WeatherType, ...
-//     long  mainSize, long mainComp, Hauptblock (unkomprimiert)
-//     dahinter: die Sound-Samples, die die Engine direkt aus der Datei liest
+//     long  mainSize, long mainComp, main block (uncompressed)
+//     behind it: the sound samples the engine reads straight from the file
 //
-// Der Hauptblock traegt ALLES, was kein Bild ist: Raeume, Floordata, Items,
-// Trigger, Meshes, Animationen, Klanginfos, Texinfos. Ist er byteweise gleich,
-// wurden ausschliesslich Bilder getauscht.
+// The main block carries EVERYTHING that is not an image: rooms,
+// floordata, items, triggers, meshes, animations, sound infos, texinfos.
+// If it is byte-equal, only images were exchanged.
 //
-// Bauen (64 Bit, im Ordner Bittenichtbitdefender):
+// Build (64 bit, in the Bittenichtbitdefender folder):
 //   set R=..\..\Tomb5 Native win 11 fix\TR5Randomizer\src
 //   set Z=..\..\Tomb5 Native win 11 fix\TOMB5 Code\TOMB5\tomb5\libs\zlib
 //   cl /nologo /EHsc /O2 /std:c++17 /w /I "%R%" /I "%Z%" LevelDiff.cpp
@@ -35,31 +35,31 @@ struct Block
 {
     int32_t size = 0;
     int32_t comp = 0;
-    size_t  at = 0;         // Beginn der Nutzdaten
-    size_t  len = 0;        // tatsaechlich belegte Bytes
+    size_t  at = 0;         // start of the payload
+    size_t  len = 0;        // bytes actually occupied
 };
 
-struct Kopf
+struct Header
 {
     bool     ok = false;
     int32_t  version = 0;
     int16_t  rt = 0, ot = 0, bt = 0;
-    bool     komprimiert = false;
+    bool     compressed = false;
     Block    tex[3];
     int16_t  data16[16] = {};
     Block    main;
     size_t   restAt = 0, restLen = 0;
 };
 
-bool lies(const std::wstring& path, std::vector<uint8_t>& raus)
+bool readAll(const std::wstring& path, std::vector<uint8_t>& out)
 {
     FILE* f = _wfopen(path.c_str(), L"rb");
     if (!f) return false;
     std::fseek(f, 0, SEEK_END);
     const long n = std::ftell(f);
     std::fseek(f, 0, SEEK_SET);
-    raus.resize(n > 0 ? static_cast<size_t>(n) : 0);
-    if (!raus.empty()) std::fread(raus.data(), 1, raus.size(), f);
+    out.resize(n > 0 ? static_cast<size_t>(n) : 0);
+    if (!out.empty()) std::fread(out.data(), 1, out.size(), f);
     std::fclose(f);
     return true;
 }
@@ -70,12 +70,13 @@ int32_t i32(const std::vector<uint8_t>& b, size_t p)
 int16_t i16(const std::vector<uint8_t>& b, size_t p)
 { int16_t v = 0; std::memcpy(&v, b.data() + p, 2); return v; }
 
-// Dieselbe Zwei-Wege-Deutung wie Tr5Level::readHeader: ob die Texturbloecke
-// komprimiert sind, steht nirgends als Flag - erkannt wird es daran, dass der
-// Hauptblock danach schluessig liegt (size == compSize).
-Kopf leseKopf(const std::vector<uint8_t>& b)
+// The same two-way interpretation as Tr5Level::readHeader: whether the
+// texture blocks are compressed stands nowhere as a flag - it is
+// recognized by the main block lying consistently behind them
+// (size == compSize).
+Header readHeader(const std::vector<uint8_t>& b)
 {
-    Kopf k;
+    Header k;
     if (b.size() < 16) return k;
 
     k.version = i32(b, 0);
@@ -83,26 +84,26 @@ Kopf leseKopf(const std::vector<uint8_t>& b)
     k.ot = i16(b, 6);
     k.bt = i16(b, 8);
 
-    for (int modus = 0; modus < 2; ++modus)
+    for (int mode = 0; mode < 2; ++mode)
     {
-        const bool komp = (modus == 0);
+        const bool comp = (mode == 0);
         size_t p = 10;
-        bool gut = true;
+        bool good = true;
         Block tex[3];
 
-        for (int i = 0; i < 3 && gut; ++i)
+        for (int i = 0; i < 3 && good; ++i)
         {
-            if (p + 8 > b.size()) { gut = false; break; }
+            if (p + 8 > b.size()) { good = false; break; }
             tex[i].size = i32(b, p);
             tex[i].comp = i32(b, p + 4);
             p += 8;
-            if (tex[i].size < 0 || tex[i].comp < 0) { gut = false; break; }
+            if (tex[i].size < 0 || tex[i].comp < 0) { good = false; break; }
             tex[i].at = p;
-            tex[i].len = static_cast<size_t>(komp ? tex[i].comp : tex[i].size);
-            if (p + tex[i].len > b.size()) { gut = false; break; }
+            tex[i].len = static_cast<size_t>(comp ? tex[i].comp : tex[i].size);
+            if (p + tex[i].len > b.size()) { good = false; break; }
             p += tex[i].len;
         }
-        if (!gut) continue;
+        if (!good) continue;
 
         if (p + 32 + 8 > b.size()) continue;
         size_t d16 = p;
@@ -115,7 +116,7 @@ Kopf leseKopf(const std::vector<uint8_t>& b)
         if (p + static_cast<size_t>(mainSize) > b.size()) continue;
 
         k.ok = true;
-        k.komprimiert = komp;
+        k.compressed = comp;
         for (int i = 0; i < 3; ++i) k.tex[i] = tex[i];
         for (int i = 0; i < 16; ++i) k.data16[i] = i16(b, d16 + i * 2);
         k.main.size = mainSize;
@@ -130,45 +131,45 @@ Kopf leseKopf(const std::vector<uint8_t>& b)
     return k;
 }
 
-// Byteweiser Vergleich zweier Bereiche. Liefert die Zahl abweichender Bytes
-// und die erste Fundstelle (relativ zum Bereichsanfang).
-struct Abgleich
+// Byte-wise comparison of two ranges. Delivers the count of deviating
+// bytes and the first hit (relative to the range start).
+struct Match
 {
-    bool     gleicheLaenge = false;
-    long long verschieden = 0;
-    long long ersteStelle = -1;
+    bool     sameLength = false;
+    long long different = 0;
+    long long firstAt = -1;
 };
 
-Abgleich vergleiche(const std::vector<uint8_t>& a, size_t aAt, size_t aLen,
-                    const std::vector<uint8_t>& b, size_t bAt, size_t bLen)
+Match compare(const std::vector<uint8_t>& a, size_t aAt, size_t aLen,
+              const std::vector<uint8_t>& b, size_t bAt, size_t bLen)
 {
-    Abgleich r;
-    r.gleicheLaenge = (aLen == bLen);
+    Match r;
+    r.sameLength = (aLen == bLen);
     const size_t n = aLen < bLen ? aLen : bLen;
 
     for (size_t i = 0; i < n; ++i)
     {
         if (a[aAt + i] != b[bAt + i])
         {
-            if (r.ersteStelle < 0) r.ersteStelle = static_cast<long long>(i);
-            r.verschieden++;
+            if (r.firstAt < 0) r.firstAt = static_cast<long long>(i);
+            r.different++;
         }
     }
 
-    if (aLen != bLen) r.verschieden += static_cast<long long>(aLen > bLen ? aLen - bLen : bLen - aLen);
+    if (aLen != bLen) r.different += static_cast<long long>(aLen > bLen ? aLen - bLen : bLen - aLen);
     return r;
 }
 
-void zeigeBlock(const char* name, const Block& x, const Block& y)
+void showBlock(const char* name, const Block& x, const Block& y)
 {
     std::printf("  %-22s %10d / %-10d %10d / %-10d %s\n", name,
                 x.size, x.comp, y.size, y.comp,
-                (x.size == y.size && x.comp == y.comp) ? "" : "  ABWEICHUNG");
+                (x.size == y.size && x.comp == y.comp) ? "" : "  DEVIATION");
 }
 
-const char* jaNein(bool b) { return b ? "ja" : "NEIN"; }
+const char* yesNo(bool b) { return b ? "yes" : "NO"; }
 
-std::wstring weit(const char* s)
+std::wstring toW(const char* s)
 { std::wstring w; while (*s) w += static_cast<wchar_t>(static_cast<unsigned char>(*s++)); return w; }
 
 }   // namespace
@@ -177,130 +178,130 @@ int main(int argc, char** argv)
 {
     if (argc < 3)
     {
-        std::printf("Aufruf: LevelDiff <a.trc> <b.trc>\n");
+        std::printf("usage: LevelDiff <a.trc> <b.trc>\n");
         return 2;
     }
 
-    const std::wstring pA = weit(argv[1]);
-    const std::wstring pB = weit(argv[2]);
+    const std::wstring pA = toW(argv[1]);
+    const std::wstring pB = toW(argv[2]);
 
     std::vector<uint8_t> a, b;
-    if (!lies(pA, a)) { std::printf("Nicht lesbar: %s\n", argv[1]); return 2; }
-    if (!lies(pB, b)) { std::printf("Nicht lesbar: %s\n", argv[2]); return 2; }
+    if (!readAll(pA, a)) { std::printf("not readable: %s\n", argv[1]); return 2; }
+    if (!readAll(pB, b)) { std::printf("not readable: %s\n", argv[2]); return 2; }
 
-    std::printf("A = %s  (%zu Bytes)\n", argv[1], a.size());
-    std::printf("B = %s  (%zu Bytes)\n", argv[2], b.size());
-    std::printf("Groessenunterschied: %+lld Bytes\n\n",
+    std::printf("A = %s  (%zu bytes)\n", argv[1], a.size());
+    std::printf("B = %s  (%zu bytes)\n", argv[2], b.size());
+    std::printf("size difference: %+lld bytes\n\n",
                 static_cast<long long>(b.size()) - static_cast<long long>(a.size()));
 
-    const Kopf kA = leseKopf(a);
-    const Kopf kB = leseKopf(b);
+    const Header kA = readHeader(a);
+    const Header kB = readHeader(b);
 
     if (!kA.ok || !kB.ok)
     {
-        std::printf("Kopfteil nicht deutbar (A %s, B %s)\n", jaNein(kA.ok), jaNein(kB.ok));
+        std::printf("header not interpretable (A %s, B %s)\n", yesNo(kA.ok), yesNo(kB.ok));
         return 1;
     }
 
-    std::printf("=== KOPF ===\n");
+    std::printf("=== HEADER ===\n");
     std::printf("  %-22s %-23s %-23s\n", "", "A", "B");
-    std::printf("  %-22s %-23d %-23d %s\n", "Version", kA.version, kB.version,
-                kA.version == kB.version ? "" : "  ABWEICHUNG");
-    std::printf("  %-22s %-23s %-23s %s\n", "Texturen komprimiert",
-                jaNein(kA.komprimiert), jaNein(kB.komprimiert),
-                kA.komprimiert == kB.komprimiert ? "" : "  ABWEICHUNG");
-    std::printf("  %-22s %-23d %-23d %s\n", "Raumtexturseiten", kA.rt, kB.rt,
-                kA.rt == kB.rt ? "" : "  ABWEICHUNG");
-    std::printf("  %-22s %-23d %-23d %s\n", "Objekttexturseiten", kA.ot, kB.ot,
-                kA.ot == kB.ot ? "" : "  ABWEICHUNG");
-    std::printf("  %-22s %-23d %-23d %s\n", "Bumpmap-Seiten", kA.bt, kB.bt,
-                kA.bt == kB.bt ? "" : "  ABWEICHUNG");
+    std::printf("  %-22s %-23d %-23d %s\n", "version", kA.version, kB.version,
+                kA.version == kB.version ? "" : "  DEVIATION");
+    std::printf("  %-22s %-23s %-23s %s\n", "textures compressed",
+                yesNo(kA.compressed), yesNo(kB.compressed),
+                kA.compressed == kB.compressed ? "" : "  DEVIATION");
+    std::printf("  %-22s %-23d %-23d %s\n", "room texture pages", kA.rt, kB.rt,
+                kA.rt == kB.rt ? "" : "  DEVIATION");
+    std::printf("  %-22s %-23d %-23d %s\n", "object texture pages", kA.ot, kB.ot,
+                kA.ot == kB.ot ? "" : "  DEVIATION");
+    std::printf("  %-22s %-23d %-23d %s\n", "bumpmap pages", kA.bt, kB.bt,
+                kA.bt == kB.bt ? "" : "  DEVIATION");
 
-    std::printf("\n=== BLOECKE (size / compSize) ===\n");
+    std::printf("\n=== BLOCKS (size / compSize) ===\n");
     std::printf("  %-22s %-23s %-23s\n", "", "A", "B");
-    zeigeBlock("Texturen 32 Bit", kA.tex[0], kB.tex[0]);
-    zeigeBlock("Texturen 16 Bit", kA.tex[1], kB.tex[1]);
-    zeigeBlock("Texturen Misc", kA.tex[2], kB.tex[2]);
-    zeigeBlock("HAUPTBLOCK", kA.main, kB.main);
-    std::printf("  %-22s %10zu %-11s %10zu %-11s %s\n", "Sound-Samples danach",
+    showBlock("textures 32 bit", kA.tex[0], kB.tex[0]);
+    showBlock("textures 16 bit", kA.tex[1], kB.tex[1]);
+    showBlock("textures misc", kA.tex[2], kB.tex[2]);
+    showBlock("MAIN BLOCK", kA.main, kB.main);
+    std::printf("  %-22s %10zu %-11s %10zu %-11s %s\n", "sound samples after",
                 kA.restLen, "", kB.restLen, "",
-                kA.restLen == kB.restLen ? "" : "  ABWEICHUNG");
+                kA.restLen == kB.restLen ? "" : "  DEVIATION");
 
-    std::printf("\n=== LEVELSCHALTER (short data[16]) ===\n");
-    bool d16Gleich = true;
+    std::printf("\n=== LEVEL SWITCHES (short data[16]) ===\n");
+    bool d16Equal = true;
     for (int i = 0; i < 16; ++i)
     {
         if (kA.data16[i] == kB.data16[i]) continue;
-        d16Gleich = false;
+        d16Equal = false;
         const char* name = (i == 0) ? "LaraDrawType"
                          : (i == 1) ? "WeatherType"
-                         : (i == 2) ? "FremdeSprechkoepfe" : "";
+                         : (i == 2) ? "ForeignSpeechHeads" : "";
         std::printf("  data16[%2d] %-20s %6d -> %6d\n", i, name, kA.data16[i], kB.data16[i]);
     }
-    if (d16Gleich) std::printf("  alle 16 identisch\n");
+    if (d16Equal) std::printf("  all 16 identical\n");
 
-    std::printf("\n=== BYTEVERGLEICH ===\n");
+    std::printf("\n=== BYTE COMPARISON ===\n");
     {
-        const Abgleich m = vergleiche(a, kA.main.at, kA.main.len, b, kB.main.at, kB.main.len);
-        std::printf("  Hauptblock:      %s",
-                    (m.gleicheLaenge && m.verschieden == 0) ? "BYTEGLEICH" : "abweichend");
-        if (m.verschieden)
-            std::printf("  (%lld Bytes verschieden, erste Stelle +%lld)", m.verschieden, m.ersteStelle);
+        const Match m = compare(a, kA.main.at, kA.main.len, b, kB.main.at, kB.main.len);
+        std::printf("  main block:      %s",
+                    (m.sameLength && m.different == 0) ? "BYTE-EQUAL" : "deviating");
+        if (m.different)
+            std::printf("  (%lld bytes different, first at +%lld)", m.different, m.firstAt);
         std::printf("\n");
 
-        const Abgleich s = vergleiche(a, kA.restAt, kA.restLen, b, kB.restAt, kB.restLen);
-        std::printf("  Sound-Samples:   %s",
-                    (s.gleicheLaenge && s.verschieden == 0) ? "BYTEGLEICH" : "abweichend");
-        if (s.verschieden)
-            std::printf("  (%lld Bytes verschieden, erste Stelle +%lld)", s.verschieden, s.ersteStelle);
+        const Match s = compare(a, kA.restAt, kA.restLen, b, kB.restAt, kB.restLen);
+        std::printf("  sound samples:   %s",
+                    (s.sameLength && s.different == 0) ? "BYTE-EQUAL" : "deviating");
+        if (s.different)
+            std::printf("  (%lld bytes different, first at +%lld)", s.different, s.firstAt);
         std::printf("\n");
 
         for (int i = 0; i < 3; ++i)
         {
-            const Abgleich t = vergleiche(a, kA.tex[i].at, kA.tex[i].len,
-                                          b, kB.tex[i].at, kB.tex[i].len);
-            const char* nm = i == 0 ? "Texturen 32Bit" : i == 1 ? "Texturen 16Bit" : "Texturen Misc";
+            const Match t = compare(a, kA.tex[i].at, kA.tex[i].len,
+                                    b, kB.tex[i].at, kB.tex[i].len);
+            const char* nm = i == 0 ? "textures 32bit" : i == 1 ? "textures 16bit" : "textures misc";
             std::printf("  %-16s %s", nm,
-                        (t.gleicheLaenge && t.verschieden == 0) ? "BYTEGLEICH" : "abweichend");
-            if (t.verschieden)
-                std::printf("  (%lld Bytes verschieden, erste Stelle +%lld)", t.verschieden, t.ersteStelle);
+                        (t.sameLength && t.different == 0) ? "BYTE-EQUAL" : "deviating");
+            if (t.different)
+                std::printf("  (%lld bytes different, first at +%lld)", t.different, t.firstAt);
             std::printf("\n");
         }
     }
 
-    std::printf("\n=== INHALT (ueber den Levelleser) ===\n");
+    std::printf("\n=== CONTENT (via the level reader) ===\n");
     Tr5Level la, lb;
     std::string eA, eB;
     const bool okA = la.load(pA, eA);
     const bool okB = lb.load(pB, eB);
 
-    if (!okA) std::printf("  A nicht ladbar: %s\n", eA.c_str());
-    if (!okB) std::printf("  B nicht ladbar: %s\n", eB.c_str());
+    if (!okA) std::printf("  A not loadable: %s\n", eA.c_str());
+    if (!okB) std::printf("  B not loadable: %s\n", eB.c_str());
 
     if (okA && okB)
     {
-        auto zeile = [](const char* name, long long x, long long y)
+        auto line = [](const char* name, long long x, long long y)
         {
             std::printf("  %-22s %-23lld %-23lld %s\n", name, x, y,
-                        x == y ? "" : "  ABWEICHUNG");
+                        x == y ? "" : "  DEVIATION");
         };
         std::printf("  %-22s %-23s %-23s\n", "", "A", "B");
-        zeile("Raeume", la.roomCount(), lb.roomCount());
-        zeile("Items", la.itemCount(), lb.itemCount());
-        zeile("Floordata-Woerter", la.floorDataCount(), lb.floorDataCount());
-        zeile("Klangproben", la.soundSampleCount(), lb.soundSampleCount());
-        zeile("Moveable-Slots", (long long)la.moveableSlots().size(),
+        line("rooms", la.roomCount(), lb.roomCount());
+        line("items", la.itemCount(), lb.itemCount());
+        line("floordata words", la.floorDataCount(), lb.floorDataCount());
+        line("sound samples", la.soundSampleCount(), lb.soundSampleCount());
+        line("moveable slots", (long long)la.moveableSlots().size(),
                                 (long long)lb.moveableSlots().size());
-        zeile("Texinfos", la.debugTexinfoCount(), lb.debugTexinfoCount());
-        zeile("Raum-Leseabweichungen", la.roomParseMismatches(), lb.roomParseMismatches());
+        line("texinfos", la.debugTexinfoCount(), lb.debugTexinfoCount());
+        line("room parse mismatches", la.roomParseMismatches(), lb.roomParseMismatches());
 
-        // Wo liegen die bekannten Unterbloecke? Damit laesst sich einordnen,
-        // ob eine Byteabweichung im Hauptblock vor oder hinter den Texturdaten
-        // beginnt - alles hinter einer Einfuegestelle verschiebt sich ohnehin.
-        std::printf("\n=== LAGE DER UNTERBLOECKE (Abstand vom Hauptblockanfang) ===\n");
+        // Where do the known sub-blocks lie? This tells whether a byte
+        // deviation in the main block begins before or behind the texture
+        // data - everything behind an insertion point shifts anyway.
+        std::printf("\n=== POSITION OF THE SUB-BLOCKS (distance from the main block start) ===\n");
         {
-            auto rel = [](size_t abs, size_t basis) -> long long
-            { return static_cast<long long>(abs) - static_cast<long long>(basis); };
+            auto rel = [](size_t abs, size_t base) -> long long
+            { return static_cast<long long>(abs) - static_cast<long long>(base); };
 
             size_t tA = 0, tB = 0, aA = 0, aB = 0;
             int32_t nn = 0;
@@ -315,86 +316,86 @@ int main(int argc, char** argv)
             lb.debugSoundBlocks(lutB, infB, n1, n2);
 
             std::printf("  %-22s %-23s %-23s\n", "", "A", "B");
-            std::printf("  %-22s %-23lld %-23lld\n", "Animationen",
+            std::printf("  %-22s %-23lld %-23lld\n", "animations",
                         rel(aA, kA.main.at), rel(aB, kB.main.at));
-            std::printf("  %-22s %-23lld %-23lld\n", "Texinfos",
+            std::printf("  %-22s %-23lld %-23lld\n", "texinfos",
                         rel(tA, kA.main.at), rel(tB, kB.main.at));
-            std::printf("  %-22s %-23lld %-23lld\n", "Items",
+            std::printf("  %-22s %-23lld %-23lld\n", "items",
                         rel(la.itemCountOffset(), kA.main.at), rel(lb.itemCountOffset(), kB.main.at));
-            std::printf("  %-22s %-23lld %-23lld\n", "Klang-Zuordnung",
+            std::printf("  %-22s %-23lld %-23lld\n", "sound map",
                         rel(lutA, kA.main.at), rel(lutB, kB.main.at));
-            std::printf("  %-22s %-23lld %-23lld\n", "Klang-Infos",
+            std::printf("  %-22s %-23lld %-23lld\n", "sound infos",
                         rel(infA, kA.main.at), rel(infB, kB.main.at));
 
-            // Abschnittsweiser Vergleich zwischen den bekannten Grenzen. Eine
-            // Einfuegung verschiebt alles dahinter, ein reiner Bytevergleich
-            // ueber den ganzen Hauptblock zeigt deshalb Abweichung, wo nur
-            // verschoben wurde. Je Abschnitt mit den EIGENEN Grenzen verglichen
-            // faellt die Verschiebung heraus und es bleibt die echte Aenderung.
-            std::printf("\n=== ABSCHNITTE, JE MIT EIGENEN GRENZEN VERGLICHEN ===\n");
+            // Section-wise comparison between the known boundaries. An
+            // insertion shifts everything behind it, so a plain byte
+            // comparison over the whole main block shows deviation where
+            // only a shift occurred. Compared per section with its OWN
+            // boundaries, the shift drops out and the real change remains.
+            std::printf("\n=== SECTIONS, EACH COMPARED WITH ITS OWN BOUNDARIES ===\n");
 
-            struct Marke { const char* name; size_t a, b; };
-            const Marke marken[] = {
-                { "Raeume+Floordata+Meshes", kA.main.at, kB.main.at },
-                { "Animationen bis Texinfo", aA, aB },
-                { "Texinfos bis Items",      tA, tB },
-                { "Items bis Klangtabelle",  la.itemCountOffset(), lb.itemCountOffset() },
-                { "Klangtabelle bis Infos",  lutA, lutB },
-                { "Klang-Infos bis Ende",    infA, infB },
+            struct Mark { const char* name; size_t a, b; };
+            const Mark marks[] = {
+                { "rooms+floordata+meshes", kA.main.at, kB.main.at },
+                { "animations to texinfo",  aA, aB },
+                { "texinfos to items",      tA, tB },
+                { "items to sound map",     la.itemCountOffset(), lb.itemCountOffset() },
+                { "sound map to infos",     lutA, lutB },
+                { "sound infos to end",     infA, infB },
             };
-            const size_t endeA = kA.main.at + kA.main.len;
-            const size_t endeB = kB.main.at + kB.main.len;
+            const size_t endA = kA.main.at + kA.main.len;
+            const size_t endB = kB.main.at + kB.main.len;
 
             for (int i = 0; i < 6; ++i)
             {
-                const size_t a0 = marken[i].a;
-                const size_t b0 = marken[i].b;
-                const size_t a1 = (i < 5) ? marken[i + 1].a : endeA;
-                const size_t b1 = (i < 5) ? marken[i + 1].b : endeB;
+                const size_t a0 = marks[i].a;
+                const size_t b0 = marks[i].b;
+                const size_t a1 = (i < 5) ? marks[i + 1].a : endA;
+                const size_t b1 = (i < 5) ? marks[i + 1].b : endB;
 
                 if (a0 > a1 || b0 > b1 || a1 > a.size() || b1 > b.size())
-                { std::printf("  %-26s (Grenzen unbrauchbar)\n", marken[i].name); continue; }
+                { std::printf("  %-26s (boundaries unusable)\n", marks[i].name); continue; }
 
-                const Abgleich v = vergleiche(a, a0, a1 - a0, b, b0, b1 - b0);
-                std::printf("  %-26s %8zu -> %8zu Bytes  %s", marken[i].name,
+                const Match v = compare(a, a0, a1 - a0, b, b0, b1 - b0);
+                std::printf("  %-26s %8zu -> %8zu bytes  %s", marks[i].name,
                             a1 - a0, b1 - b0,
-                            (v.gleicheLaenge && v.verschieden == 0) ? "BYTEGLEICH" : "abweichend");
-                if (v.verschieden)
-                    std::printf("  (%lld verschieden, erste Stelle +%lld)",
-                                v.verschieden, v.ersteStelle);
+                            (v.sameLength && v.different == 0) ? "BYTE-EQUAL" : "deviating");
+                if (v.different)
+                    std::printf("  (%lld different, first at +%lld)",
+                                v.different, v.firstAt);
                 std::printf("\n");
             }
         }
 
-        // Der eigentliche Beweis: stimmen die SPIELINHALTE ueberein, auch wenn
-        // sich durch eingefuegte Texturdaten alles dahinter verschoben hat?
-        std::printf("\n=== SPIELINHALTE ===\n");
+        // The actual proof: do the GAME CONTENTS agree, even when inserted
+        // texture data shifted everything behind it?
+        std::printf("\n=== GAME CONTENTS ===\n");
         {
-            int itemsAnders = 0;
+            int itemsDiffer = 0;
             const int n = la.itemCount() < lb.itemCount() ? la.itemCount() : lb.itemCount();
             for (int i = 0; i < n; ++i)
             {
                 Tr5Item x, y;
-                if (!la.getItem(i, x) || !lb.getItem(i, y)) { itemsAnders++; continue; }
+                if (!la.getItem(i, x) || !lb.getItem(i, y)) { itemsDiffer++; continue; }
                 if (x.objectNumber != y.objectNumber || x.roomNumber != y.roomNumber ||
                     x.x != y.x || x.y != y.y || x.z != y.z || x.yRot != y.yRot ||
                     x.shade != y.shade || x.triggerFlags != y.triggerFlags || x.flags != y.flags)
                 {
-                    if (itemsAnders < 12)
-                        std::printf("  Item %3d: Slot %d/%d Raum %d/%d Pos %d,%d,%d / %d,%d,%d "
-                                    "Winkel %d/%d Schatten %d/%d OCB %d/%d Flags %d/%d\n",
+                    if (itemsDiffer < 12)
+                        std::printf("  item %3d: slot %d/%d room %d/%d pos %d,%d,%d / %d,%d,%d "
+                                    "angle %d/%d shade %d/%d OCB %d/%d flags %d/%d\n",
                                     i, x.objectNumber, y.objectNumber, x.roomNumber, y.roomNumber,
                                     x.x, x.y, x.z, y.x, y.y, y.z, x.yRot, y.yRot,
                                     x.shade, y.shade, x.triggerFlags, y.triggerFlags,
                                     x.flags, y.flags);
-                    itemsAnders++;
+                    itemsDiffer++;
                 }
             }
-            std::printf("  Items abweichend:      %d von %d\n", itemsAnders, n);
+            std::printf("  items deviating:       %d of %d\n", itemsDiffer, n);
 
-            // Floordata sektorweise ueber die Ketten vergleichen - das ist die
-            // Ebene, auf der Trigger und Begehbarkeit wirklich stehen.
-            int sektoren = 0, sektorenAnders = 0;
+            // Compare the floordata sector-wise via the chains - that is
+            // the level on which triggers and walkability really stand.
+            int sectors = 0, sectorsDiffer = 0;
             {
                 const std::vector<Tr5Room>& ra2 = la.rooms();
                 const std::vector<Tr5Room>& rb2 = lb.rooms();
@@ -410,7 +411,7 @@ int main(int argc, char** argv)
                     for (int sx = 0; sx < nx; ++sx)
                         for (int sz = 0; sz < nz; ++sz)
                         {
-                            sektoren++;
+                            sectors++;
                             const int ia = la.sectorIndex(static_cast<int>(r), sx, sz);
                             const int ib = lb.sectorIndex(static_cast<int>(r), sx, sz);
 
@@ -419,22 +420,22 @@ int main(int argc, char** argv)
                             const bool ob = ib > 0 && lb.readChain(ib, kb);
 
                             if ((ia > 0) != (ib > 0) || oa != ob || ka.size() != kb.size())
-                            { sektorenAnders++; continue; }
+                            { sectorsDiffer++; continue; }
 
                             for (size_t e = 0; e < ka.size(); ++e)
                             {
                                 if (ka[e].function != kb[e].function ||
-                                    ka[e].art != kb[e].art ||
+                                    ka[e].kind != kb[e].kind ||
                                     ka[e].words != kb[e].words)
-                                { sektorenAnders++; break; }
+                                { sectorsDiffer++; break; }
                             }
                         }
                 }
             }
-            std::printf("  Floordata-Sektoren:    %d abweichend von %d\n",
-                        sektorenAnders, sektoren);
+            std::printf("  floordata sectors:     %d deviating of %d\n",
+                        sectorsDiffer, sectors);
 
-            int raeumeAnders = 0;
+            int roomsDiffer = 0;
             const std::vector<Tr5Room>& ra = la.rooms();
             const std::vector<Tr5Room>& rb = lb.rooms();
             const size_t rn = ra.size() < rb.size() ? ra.size() : rb.size();
@@ -447,27 +448,27 @@ int main(int argc, char** argv)
                     ra[i].altRoom != rb[i].altRoom ||
                     ra[i].portalRooms != rb[i].portalRooms)
                 {
-                    if (raeumeAnders < 8)
-                        std::printf("  Raum %3zu weicht ab (Ursprung %d,%d / %d,%d, "
-                                    "Sektoren %dx%d / %dx%d, Flip %d/%d)\n", i,
+                    if (roomsDiffer < 8)
+                        std::printf("  room %3zu deviates (origin %d,%d / %d,%d, "
+                                    "sectors %dx%d / %dx%d, flip %d/%d)\n", i,
                                     ra[i].originX, ra[i].originZ, rb[i].originX, rb[i].originZ,
                                     ra[i].numXSectors, ra[i].numZSectors,
                                     rb[i].numXSectors, rb[i].numZSectors,
                                     ra[i].altRoom, rb[i].altRoom);
-                    raeumeAnders++;
+                    roomsDiffer++;
                 }
             }
-            std::printf("  Raeume abweichend:     %d von %zu\n", raeumeAnders, rn);
+            std::printf("  rooms deviating:       %d of %zu\n", roomsDiffer, rn);
 
-            // Raumweiser Bytevergleich, jeder Raum mit seinen EIGENEN Grenzen.
-            // Damit faellt die Verschiebung durch vorherige Raeume heraus und
-            // es bleibt, was sich im Raum selbst geaendert hat - Geometrie,
-            // Beleuchtung und die Texturverweise seiner Flaechen.
-            std::printf("\n=== RAEUME EINZELN (eigene Grenzen) ===\n");
+            // Room-wise byte comparison, every room with its OWN
+            // boundaries. The shift through preceding rooms drops out and
+            // what remains is what changed in the room itself - geometry,
+            // lighting and its faces' texture references.
+            std::printf("\n=== ROOMS INDIVIDUALLY (own boundaries) ===\n");
             {
-                int anders = 0, groesser = 0, kleiner = 0;
-                long long summeDelta = 0;
-                std::string erste;
+                int differ = 0, larger = 0, smaller = 0;
+                long long sumDelta = 0;
+                std::string first;
 
                 for (size_t i = 0; i < rn; ++i)
                 {
@@ -478,35 +479,35 @@ int main(int argc, char** argv)
                     if (!a0 || !b0 || !a1 || !b1 || a1 <= a0 || b1 <= b0) continue;
 
                     const size_t la_ = a1 - a0, lb_ = b1 - b0;
-                    const Abgleich v = vergleiche(a, a0, la_, b, b0, lb_);
-                    if (v.gleicheLaenge && v.verschieden == 0) continue;
+                    const Match v = compare(a, a0, la_, b, b0, lb_);
+                    if (v.sameLength && v.different == 0) continue;
 
-                    anders++;
+                    differ++;
                     const long long d = static_cast<long long>(lb_) - static_cast<long long>(la_);
-                    summeDelta += d;
-                    if (d > 0) groesser++; else if (d < 0) kleiner++;
+                    sumDelta += d;
+                    if (d > 0) larger++; else if (d < 0) smaller++;
 
-                    if (anders <= 10)
+                    if (differ <= 10)
                     {
-                        char zeile[160];
-                        std::snprintf(zeile, sizeof(zeile),
-                                      "  Raum %3zu: %6zu -> %6zu Bytes (%+lld), %lld Bytes anders "
-                                      "ab +%lld\n", i, la_, lb_, d, v.verschieden, v.ersteStelle);
-                        erste += zeile;
+                        char line2[160];
+                        std::snprintf(line2, sizeof(line2),
+                                      "  room %3zu: %6zu -> %6zu bytes (%+lld), %lld bytes different "
+                                      "from +%lld\n", i, la_, lb_, d, v.different, v.firstAt);
+                        first += line2;
                     }
                 }
 
-                std::printf("%s", erste.c_str());
-                if (anders > 10) std::printf("  ... und %d weitere\n", anders - 10);
-                std::printf("  %d von %zu Raeumen veraendert (%d groesser, %d kleiner, "
-                            "zusammen %+lld Bytes)\n", anders, rn, groesser, kleiner, summeDelta);
+                std::printf("%s", first.c_str());
+                if (differ > 10) std::printf("  ... and %d more\n", differ - 10);
+                std::printf("  %d of %zu rooms changed (%d larger, %d smaller, "
+                            "together %+lld bytes)\n", differ, rn, larger, smaller, sumDelta);
             }
         }
 
-        // Meshes: Zahl, Blockgroesse und ein Vergleich Mesh fuer Mesh mit
-        // eigenen Grenzen. Ein Mesh traegt seine Texturverweise in den
-        // Flaechen - wer Texturen neu anordnet, aendert genau hier etwas,
-        // ohne die Geometrie anzufassen.
+        // Meshes: count, block size and a mesh-by-mesh comparison with own
+        // boundaries. A mesh carries its texture references in the faces -
+        // whoever rearranges textures changes something exactly here
+        // without touching the geometry.
         std::printf("\n=== MESHES ===\n");
         {
             size_t mdA = 0, mdB = 0;
@@ -515,17 +516,17 @@ int main(int argc, char** argv)
             lb.debugMeshDataBlock(mdB, mnB);
 
             std::printf("  %-22s %-23s %-23s\n", "", "A", "B");
-            std::printf("  %-22s %-23d %-23d %s\n", "Meshzeiger",
+            std::printf("  %-22s %-23d %-23d %s\n", "mesh pointers",
                         la.debugMeshPtrCount(), lb.debugMeshPtrCount(),
-                        la.debugMeshPtrCount() == lb.debugMeshPtrCount() ? "" : "  ABWEICHUNG");
-            std::printf("  %-22s %-23d %-23d %s\n", "Meshdaten (Woerter)", mnA, mnB,
-                        mnA == mnB ? "" : "  ABWEICHUNG");
+                        la.debugMeshPtrCount() == lb.debugMeshPtrCount() ? "" : "  DEVIATION");
+            std::printf("  %-22s %-23d %-23d %s\n", "mesh data (words)", mnA, mnB,
+                        mnA == mnB ? "" : "  DEVIATION");
 
             const int mn = la.debugMeshPtrCount() < lb.debugMeshPtrCount()
                          ? la.debugMeshPtrCount() : lb.debugMeshPtrCount();
-            int anders = 0, gleicheLaenge = 0;
+            int differ = 0, sameLength = 0;
             long long delta = 0;
-            std::string liste;
+            std::string list;
 
             for (int i = 0; i < mn; ++i)
             {
@@ -533,39 +534,39 @@ int main(int argc, char** argv)
                 int vb = 0, nb = 0, q4b = 0, q3b = 0, bb = 0;
                 const bool wa = la.debugMeshWalk(i, va, na, q4a, q3a, ba);
                 const bool wb = lb.debugMeshWalk(i, vb, nb, q4b, q3b, bb);
-                if (!wa || !wb) { anders++; continue; }
+                if (!wa || !wb) { differ++; continue; }
 
                 size_t aa = 0, ab = 0;
                 la.debugMeshAt(i, aa);
                 lb.debugMeshAt(i, ab);
 
-                const Abgleich v = vergleiche(a, aa, static_cast<size_t>(ba),
-                                              b, ab, static_cast<size_t>(bb));
-                if (v.gleicheLaenge && v.verschieden == 0) continue;
+                const Match v = compare(a, aa, static_cast<size_t>(ba),
+                                        b, ab, static_cast<size_t>(bb));
+                if (v.sameLength && v.different == 0) continue;
 
-                anders++;
+                differ++;
                 delta += bb - ba;
-                if (ba == bb) gleicheLaenge++;
+                if (ba == bb) sameLength++;
 
-                if (anders <= 10)
+                if (differ <= 10)
                 {
                     char z[200];
                     std::snprintf(z, sizeof(z),
-                                  "  Mesh %4d: %5d -> %5d Bytes, Ecken %d/%d Normalen %d/%d "
-                                  "Vierecke %d/%d Dreiecke %d/%d\n",
+                                  "  mesh %4d: %5d -> %5d bytes, verts %d/%d normals %d/%d "
+                                  "quads %d/%d triangles %d/%d\n",
                                   i, ba, bb, va, vb, na, nb, q4a, q4b, q3a, q3b);
-                    liste += z;
+                    list += z;
                 }
             }
 
-            std::printf("%s", liste.c_str());
-            if (anders > 10) std::printf("  ... und %d weitere\n", anders - 10);
-            std::printf("  %d von %d Meshes veraendert, davon %d bei GLEICHER Groesse "
-                        "(zusammen %+lld Bytes)\n", anders, mn, gleicheLaenge, delta);
+            std::printf("%s", list.c_str());
+            if (differ > 10) std::printf("  ... and %d more\n", differ - 10);
+            std::printf("  %d of %d meshes changed, %d of them at the SAME size "
+                        "(together %+lld bytes)\n", differ, mn, sameLength, delta);
 
-            // Zu welchem Objekt gehoeren die geaenderten Meshes? Ein Moveable
-            // belegt meshIndex .. meshIndex+nmeshes-1 der Zeigerliste.
-            if (anders > 0 && anders <= 10)
+            // Which object do the changed meshes belong to? A moveable
+            // occupies meshIndex .. meshIndex+nmeshes-1 of the pointer list.
+            if (differ > 0 && differ <= 10)
             {
                 for (int i = 0; i < mn; ++i)
                 {
@@ -576,36 +577,36 @@ int main(int argc, char** argv)
                     size_t aa = 0, ab = 0;
                     la.debugMeshAt(i, aa);
                     lb.debugMeshAt(i, ab);
-                    const Abgleich v = vergleiche(a, aa, (size_t)ba, b, ab, (size_t)bb);
-                    if (v.gleicheLaenge && v.verschieden == 0) continue;
+                    const Match v = compare(a, aa, (size_t)ba, b, ab, (size_t)bb);
+                    if (v.sameLength && v.different == 0) continue;
 
-                    std::string wer;
+                    std::string who;
                     for (int s : la.moveableSlots())
                     {
                         Tr5Level::MoveableInfo mi;
                         if (!la.moveableInfo(s, mi)) continue;
                         if (i >= mi.meshIndex && i < mi.meshIndex + mi.nmeshes)
                         {
-                            wer = "Slot " + std::to_string(s) + ", Teil " +
+                            who = "slot " + std::to_string(s) + ", part " +
                                   std::to_string(i - mi.meshIndex);
                             break;
                         }
                     }
-                    std::printf("  Mesh %4d gehoert zu: %s\n", i,
-                                wer.empty() ? "keinem Moveable (Statik oder ungenutzt)" : wer.c_str());
+                    std::printf("  mesh %4d belongs to: %s\n", i,
+                                who.empty() ? "no moveable (static or unused)" : who.c_str());
                 }
             }
 
-            // Wohin sind die fehlenden Bytes? Wenn jedes einzelne Mesh gleich
-            // gross blieb, der Block aber schrumpfte, lag im Original Ballast:
-            // Daten, auf die kein Zeiger zeigt.
-            auto belegt = [](const Tr5Level& L, long long& summe, int& verschiedene,
-                             long long& hoechstesEnde)
+            // Where did the missing bytes go? If every single mesh stayed
+            // the same size but the block shrank, the original carried
+            // ballast: data no pointer points at.
+            auto occupied = [](const Tr5Level& L, long long& sum, int& distinct,
+                             long long& highestEnd)
             {
-                std::vector<size_t> gesehen;
-                summe = 0; hoechstesEnde = 0;
-                size_t basis = 0; int32_t words = 0;
-                L.debugMeshDataBlock(basis, words);
+                std::vector<size_t> seen;
+                sum = 0; highestEnd = 0;
+                size_t base = 0; int32_t words = 0;
+                L.debugMeshDataBlock(base, words);
 
                 for (int i = 0; i < L.debugMeshPtrCount(); ++i)
                 {
@@ -613,44 +614,44 @@ int main(int argc, char** argv)
                     int v = 0, n = 0, q4 = 0, q3 = 0, by = 0;
                     if (!L.debugMeshAt(i, at) || !L.debugMeshWalk(i, v, n, q4, q3, by)) continue;
 
-                    bool neu = true;
-                    for (size_t g : gesehen) if (g == at) { neu = false; break; }
-                    if (!neu) continue;
+                    bool fresh = true;
+                    for (size_t g : seen) if (g == at) { fresh = false; break; }
+                    if (!fresh) continue;
 
-                    gesehen.push_back(at);
-                    summe += by;
-                    const long long ende = (long long)(at - basis) + by;
-                    if (ende > hoechstesEnde) hoechstesEnde = ende;
+                    seen.push_back(at);
+                    sum += by;
+                    const long long end = (long long)(at - base) + by;
+                    if (end > highestEnd) highestEnd = end;
                 }
-                verschiedene = (int)gesehen.size();
+                distinct = (int)seen.size();
             };
 
             long long sA = 0, sB = 0, eA2 = 0, eB2 = 0;
             int dA = 0, dB = 0;
-            belegt(la, sA, dA, eA2);
-            belegt(lb, sB, dB, eB2);
+            occupied(la, sA, dA, eA2);
+            occupied(lb, sB, dB, eB2);
 
             std::printf("\n  %-26s %-16s %-16s\n", "", "A", "B");
-            std::printf("  %-26s %-16d %-16d\n", "verschiedene Meshes", dA, dB);
-            std::printf("  %-26s %-16lld %-16lld\n", "davon belegte Bytes", sA, sB);
-            std::printf("  %-26s %-16lld %-16lld\n", "hoechstes Meshende", eA2, eB2);
-            std::printf("  %-26s %-16lld %-16lld\n", "Blockgroesse in Bytes",
+            std::printf("  %-26s %-16d %-16d\n", "distinct meshes", dA, dB);
+            std::printf("  %-26s %-16lld %-16lld\n", "occupied bytes of those", sA, sB);
+            std::printf("  %-26s %-16lld %-16lld\n", "highest mesh end", eA2, eB2);
+            std::printf("  %-26s %-16lld %-16lld\n", "block size in bytes",
                         (long long)mnA * 2, (long long)mnB * 2);
-            std::printf("  %-26s %-16lld %-16lld\n", "davon von keinem Zeiger belegt",
+            std::printf("  %-26s %-16lld %-16lld\n", "of which no pointer occupies",
                         (long long)mnA * 2 - sA, (long long)mnB * 2 - sB);
         }
 
-        // Welche Objektplaetze sind dazugekommen oder verschwunden?
+        // Which object slots came in or disappeared?
         const std::vector<int> sa = la.moveableSlots();
         const std::vector<int> sb = lb.moveableSlots();
-        auto drin = [](const std::vector<int>& v, int s)
+        auto contains = [](const std::vector<int>& v, int s)
         { for (int x : v) if (x == s) return true; return false; };
 
-        std::string nurA, nurB;
-        for (int s : sa) if (!drin(sb, s)) { nurA += " " + std::to_string(s); }
-        for (int s : sb) if (!drin(sa, s)) { nurB += " " + std::to_string(s); }
-        if (!nurA.empty()) std::printf("  nur in A:%s\n", nurA.c_str());
-        if (!nurB.empty()) std::printf("  nur in B:%s\n", nurB.c_str());
+        std::string onlyA, onlyB;
+        for (int s : sa) if (!contains(sb, s)) { onlyA += " " + std::to_string(s); }
+        for (int s : sb) if (!contains(sa, s)) { onlyB += " " + std::to_string(s); }
+        if (!onlyA.empty()) std::printf("  only in A:%s\n", onlyA.c_str());
+        if (!onlyB.empty()) std::printf("  only in B:%s\n", onlyB.c_str());
     }
 
     return 0;

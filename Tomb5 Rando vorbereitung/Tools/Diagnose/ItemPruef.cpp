@@ -1,21 +1,21 @@
-// ItemPruef - listet Items eines Levels mit OCB, Flags, Raum und Winkel.
+// ItemPruef - lists a level's items with OCB, flags, room and angle.
 //
-// Gebraucht fuer Fragen, die MissMod nicht beantwortet: MissMod misst
-// MODELLE, dieses Werkzeug die ITEMS. Anlaesse:
-//  - Roman God (#84): traegt ein gesetztes Exemplar die OCB, die zu seinem
-//    Modell gehoert? (trigger_flags 1 = Schwert/Fernkampf, 0 = Hammer)
-//  - Larson/Antitrigger (#110): steht Bit 0x80 (IFL_ANTITRIGGER_ONESHOT)
-//    wirklich an dem Item, das es tragen soll?
+// Needed for questions MissMod does not answer: MissMod measures MODELS,
+// this tool the ITEMS. Occasions:
+//  - Roman god (#84): does a placed instance carry the OCB that belongs to
+//    its model? (trigger_flags 1 = sword/ranged, 0 = hammer)
+//  - Larson/antitrigger (#110): does bit 0x80 (IFL_ANTITRIGGER_ONESHOT)
+//    really stand on the item that is supposed to carry it?
 //
-// Aufruf: ItemPruef <level.trc> [typeId ...]
-// Ohne typeId werden alle Items gelistet.
+// Usage: ItemPruef <level.trc> [typeId ...]
+// Without a typeId all items are listed.
 #include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <vector>
 #include "core/Tr5Level.h"
 
-static std::wstring zuW(const char* s)
+static std::wstring toW(const char* s)
 {
     std::wstring w;
     for (const char* p = s; *p; ++p) w.push_back((wchar_t)(unsigned char)*p);
@@ -26,52 +26,53 @@ int main(int argc, char** argv)
 {
     if (argc < 2)
     {
-        std::printf("Aufruf: ItemPruef <level.trc> [typeId ...]\n");
+        std::printf("usage: ItemPruef <level.trc> [typeId ...]\n");
         return 1;
     }
 
     Tr5Level lvl;
     std::string error;
-    if (!lvl.load(zuW(argv[1]), error))
+    if (!lvl.load(toW(argv[1]), error))
     {
-        std::printf("Nicht ladbar: %s\n", error.c_str());
+        std::printf("not loadable: %s\n", error.c_str());
         return 1;
     }
 
-    std::vector<int> gesucht;
-    for (int i = 2; i < argc; ++i) gesucht.push_back(std::atoi(argv[i]));
+    std::vector<int> wanted;
+    for (int i = 2; i < argc; ++i) wanted.push_back(std::atoi(argv[i]));
 
     std::printf("%s: %d Items\n", argv[1], lvl.itemCount());
-    // Position und ihre Lage im Sektor dazu (#61): Sektormitte liegt bei
-    // x.5 * 1024. "inSekt" zeigt den Versatz zur Mitte in Units - 0 heisst
-    // genau mittig, +-512 waere die Sektorkante.
+    // Position plus its place within the sector (#61): the sector center
+    // lies at x.5 * 1024. "dX/dZ" shows the offset to the center in units -
+    // 0 means dead center, +-512 would be the sector edge.
     std::printf("%5s %5s %5s %6s %6s %8s %7s %6s  %9s %7s %9s  %11s\n",
-                "Item", "Typ", "Raum", "OCB", "roh", "Flags", "Winkel", "Grad",
-                "X", "Y", "Z", "dX/dZ z.Mitte");
+                "item", "type", "room", "OCB", "raw", "flags", "angle", "deg",
+                "X", "Y", "Z", "dX/dZ center");
 
-    int gezeigt = 0;
+    int shown = 0;
     for (int i = 0; i < lvl.itemCount(); ++i)
     {
         Tr5Item it;
         if (!lvl.getItem(i, it)) continue;
 
-        if (!gesucht.empty())
+        if (!wanted.empty())
         {
-            bool drin = false;
-            for (int g : gesucht) if (it.objectNumber == g) drin = true;
-            if (!drin) continue;
+            bool hit = false;
+            for (int g : wanted) if (it.objectNumber == g) hit = true;
+            if (!hit) continue;
         }
 
-        // Die OCB steckt in den unteren 6 Bit von trigger_flags - aber die
-        // oberen Bits sind KEIN Beiwerk, sie tragen eigene Bedeutungen, und
-        // wer nur die 6 Bit ansieht, wird in die Irre gefuehrt. Beispiel
-        // (2026-08-22, kostete eine falsche LevelChain): Andy2s Puzzle Hole 2
-        // hat trigger_flags 1058. Maskiert sieht das wie OCB 34 aus; in
-        // Wahrheit heisst >1024 in PuzzleHoleCollision (pickup.cpp:186)
-        // "PuzzleType 2" und startet beim Loesen die Cutscene
-        // trigger_flags - 1024, hier also 34. Darum steht jetzt beides da.
-        // Versatz zur Sektormitte: die Mitte liegt bei (n + 0.5) * 1024,
-        // also ist der Rest von (koordinate mod 1024) minus 512 der Abstand.
+        // The OCB sits in the lower 6 bits of trigger_flags - but the upper
+        // bits are NO garnish, they carry meanings of their own, and
+        // whoever looks only at the 6 bits gets misled. Example
+        // (2026-08-22, cost one wrong LevelChain): Andy2's Puzzle Hole 2
+        // has trigger_flags 1058. Masked, that looks like OCB 34; in truth
+        // >1024 in PuzzleHoleCollision (pickup.cpp:186) means "PuzzleType
+        // 2" and on solving starts the cutscene trigger_flags - 1024, here
+        // 34. That is why both are printed now.
+        // Offset to the sector center: the center lies at (n + 0.5) * 1024,
+        // so the remainder of (coordinate mod 1024) minus 512 is the
+        // distance.
         const int dx = ((it.x % 1024) + 1024) % 1024 - 512;
         const int dz = ((it.z % 1024) + 1024) % 1024 - 512;
         std::printf("%5d %5d %5d %6d %6d   0x%04X %7d %6d  %9d %7d %9d  %5d /%5d\n",
@@ -80,8 +81,8 @@ int main(int argc, char** argv)
                     (unsigned)(uint16_t)it.flags, (int)it.yRot,
                     (int)((long long)it.yRot * 360 / 65536),
                     it.x, it.y, it.z, dx, dz);
-        ++gezeigt;
+        ++shown;
     }
-    std::printf("%d Items ausgegeben\n", gezeigt);
+    std::printf("%d items printed\n", shown);
     return 0;
 }

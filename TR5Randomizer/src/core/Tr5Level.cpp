@@ -432,7 +432,7 @@ namespace
     // engine reads all three the same way - game/control.cpp:2251, :2266,
     // :2274, each time "value = *(data++) & 0x3FF". The word is NOT a
     // command.
-    bool hasRefWord(int art) { return art == 2 || art == 3 || art == 4; }
+    bool hasRefWord(int kind) { return kind == 2 || kind == 3 || kind == 4; }
 
     // Extra words of an entry that is not a trigger: exactly the cases
     // where GetHeight (control.cpp:977ff) does a "data++".
@@ -489,7 +489,7 @@ bool Tr5Level::readChain(int index, std::vector<Tr5FloorEntry>& out) const
         Tr5FloorEntry e;
         const uint16_t w = word(i++);
         e.function = w & 0x1F;
-        e.art = (w >> 8) & 0x3F;
+        e.kind = (w >> 8) & 0x3F;
         e.words.push_back(w);
         const bool last = (w & 0x8000) != 0;
 
@@ -499,7 +499,7 @@ bool Tr5Level::readChain(int index, std::vector<Tr5FloorEntry>& out) const
             e.words.push_back(word(i++));         // timer, one-shot, mask
 
             bool more = true;
-            if (hasRefWord(e.art))
+            if (hasRefWord(e.kind))
             {
                 if (i >= limit) return false;
                 const uint16_t r = word(i++);
@@ -565,7 +565,7 @@ long Tr5Level::musicTriggers(const std::map<int, int>* mapping, std::set<int>* f
                     if (e.function == FN_TRIGGER)
                     {
                         // The action words begin behind head + setup (+ reference word).
-                        size_t k = hasRefWord(e.art) ? 3 : 2;
+                        size_t k = hasRefWord(e.kind) ? 3 : 2;
                         for (; k < e.words.size(); ++k)
                         {
                             const uint16_t c = e.words[k];
@@ -843,7 +843,7 @@ bool Tr5Level::copyTrigger(int fromRoom, int fromSx, int fromSz,
     return true;
 }
 
-bool Tr5Level::addTrigger(int room, int sx, int sz, int art, int timer, bool oneShot,
+bool Tr5Level::addTrigger(int room, int sx, int sz, int kind, int timer, bool oneShot,
                           int mask, const std::vector<Tr5TriggerCmd>& cmds,
                           std::string& error, int refItem)
 {
@@ -871,10 +871,10 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int art, int timer, bool one
 
     Tr5FloorEntry e;
     e.function = FN_TRIGGER;
-    e.art = art;
+    e.kind = kind;
     // Word 0: function in bits 0-4, kind in bits 8-13. Bit 15 is assigned
     // by the chain builder.
-    e.words.push_back(static_cast<uint16_t>((art << 8) | FN_TRIGGER));
+    e.words.push_back(static_cast<uint16_t>((kind << 8) | FN_TRIGGER));
     // Word 1: timer, one-shot, code bits.
     e.words.push_back(static_cast<uint16_t>((timer & 0xFF) |
                                               (oneShot ? 0x100 : 0) |
@@ -890,7 +890,7 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int art, int timer, bool one
     // (#53) that case now exists: the user places a keyhole plus the key
     // trigger that connects it to a door. Whoever passes refItem thereby
     // says explicitly which object the trigger is bound to.
-    if (hasRefWord(art))
+    if (hasRefWord(kind))
     {
         if (refItem < 0)
         {

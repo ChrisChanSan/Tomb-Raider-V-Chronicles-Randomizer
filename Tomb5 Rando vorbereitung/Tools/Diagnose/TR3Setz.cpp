@@ -1,10 +1,10 @@
 //----------------------------------------------------------------------------
-// TR3Setz - setzt ein mit TR3Hol geholtes Moveable in ein TR5-Level.
+// TR3Setz - inserts a moveable fetched with TR3Hol into a TR5 level.
 //
-// Aufruf: TR3Setz <ziel.trc> <package.bin> <zielSlot> <ausgabe.trc> [texinfo]
+// Usage: TR3Setz <target.trc> <package.bin> <targetSlot> <output.trc> [texinfo]
 //
-// texinfo (Vorgabe 0): auf diesen vorhandenen Texinfo zeigen danach ALLE
-// Faces. Es wird keine Texturseite angefasst - siehe Tr5Tr3Import.cpp.
+// texinfo (default 0): ALL faces point at this existing texinfo afterwards.
+// No texture page is touched - see Tr5Tr3Import.cpp.
 //----------------------------------------------------------------------------
 #include "core/Tr5Level.h"
 
@@ -21,23 +21,23 @@ static std::wstring toW(const char* s)
     return w;
 }
 
-// Schreibt die SFX-Nummern der Anim-Kommandos im Modellpaket um.
+// Rewrites the SFX numbers of the anim commands in the model package.
 //
-// Das Kommandowort 5 (PlaySound) fuehrt zwei Folgeworte: Frame und dann die
-// SFX-Nummer, deren obere Bits (12-15) Ausfuehrungsbedingungen tragen (nur
-// an Land, nur im Wasser) und stehen bleiben MUESSEN.
+// Command word 5 (PlaySound) carries two follow-up words: the frame and
+// then the SFX number, whose upper bits (12-15) carry execution conditions
+// (land only, water only) and MUST stay in place.
 //
-// Ohne diesen Schritt ruft der Gegner weiter seine TR3-Nummern auf, die im
-// Ziel andere oder gar keine Klaenge sind. Dasselbe Vergessen bei der
-// Sprungtabelle war der Absturz in #88 - deshalb hier ausdruecklich.
+// Without this step the enemy keeps calling its TR3 numbers, which in the
+// target are different sounds or none at all. The same omission at the
+// dispatch table was the crash in #88 - hence explicit here.
 static int remapSfx(std::vector<uint8_t>& package, const std::vector<std::pair<int,int>>& mapping,
-                      std::vector<int>& unresolved, std::vector<std::pair<int,int>>& genutzt,
-                      std::vector<std::pair<int,int>>& arten)
+                      std::vector<int>& unresolved, std::vector<std::pair<int,int>>& used,
+                      std::vector<std::pair<int,int>>& kinds)
 {
     auto g32 = [&](size_t p) { uint32_t v; std::memcpy(&v, &package[p], 4); return v; };
     auto g16 = [&](size_t p) { uint16_t v; std::memcpy(&v, &package[p], 2); return v; };
 
-    // Kopf des Modellpakets ueberspringen, um an den Kommandoblock zu kommen.
+    // Skip the model package's header to get to the command block.
     const uint32_t nMeshes = g32(12), nAnims = g32(16), nFrameW = g32(20);
     const uint32_t nBoneW = g32(24), nSC = g32(28), nAD = g32(32), nCmd = g32(36);
     size_t p = 48;
@@ -47,106 +47,106 @@ static int remapSfx(std::vector<uint8_t>& package, const std::vector<std::pair<i
     const size_t cmdAt = p;
     if (cmdAt + size_t(nCmd) * 2 > package.size()) return -1;
 
-    // Nur die Kommandos anfassen, auf die die Animationen DIESES Objekts
-    // zeigen. Das Paket fuehrt den ganzen Kommandoblock des Quelllevels mit
-    // (die Anims verweisen mit globalen Indizes hinein) - wer stumpf ueber
-    // alles laeuft, sieht auch die Klaenge von Raptoren, Tueren und Lara und
-    // meldet Dutzende "fehlender" Zuordnungen, die niemanden interessieren.
-    // Je Anim stehen Anzahl bei +36 und Startindex bei +38.
+    // Only touch the commands that THIS object's animations point at. The
+    // package carries the whole command block of the source level along
+    // (the anims reference into it with global indices) - whoever bluntly
+    // walks over everything also sees the sounds of raptors, doors and
+    // Lara and reports dozens of "missing" mappings nobody cares about.
+    // Per anim the count is at +36 and the start index at +38.
     const size_t animAt = cmdAt - size_t(nAD) * 8 - size_t(nSC) * 6 - size_t(nAnims) * 40;
 
-    int getauscht = 0;
+    int swapped = 0;
     for (uint32_t a = 0; a < nAnims; ++a)
     {
         const size_t ao = animAt + size_t(a) * 40;
-        const uint16_t anzahl = g16(ao + 36);
-        if (!anzahl) continue;
+        const uint16_t count = g16(ao + 36);
+        if (!count) continue;
         const uint16_t start = g16(ao + 38);
 
-    // ANZAHL ZAEHLT KOMMANDOS, NICHT WORTE.
+    // THE COUNT COUNTS COMMANDS, NOT WORDS.
     //
-    // Hier stand "i < start + anzahl" mit i als WORTindex - und weil ein
-    // Kommando je nach Art 1 bis 4 Worte belegt, brach die Schleife viel zu
-    // frueh ab. Sie sah nur die ersten paar Kommandos einer Animation, der
-    // Rest blieb unangetastet UND unbemerkt: die Meldung "ohne Zuordnung"
-    // kann nur melden, was sie ueberhaupt gelesen hat.
+    // "i < start + count" stood here with i as a WORD index - and because
+    // a command occupies 1 to 4 words depending on its kind, the loop
+    // broke off far too early. It saw only the first few commands of an
+    // animation, the rest stayed untouched AND unnoticed: the "without a
+    // mapping" report can only report what it read at all.
     //
-    // Aufgefallen ist es am Compsognathus. Seine Laufanimation ruft den
-    // Schritt mehrfach; die erste Fundstelle wurde umgebogen, die spaeteren
-    // behielten ihre TR3-Nummer 243 - und 243 ist in TR5
-    // SFX_GENERIC_HEAVY_FEET, ein wuchtiger schwerer Schritt. Genau den hat
-    // der Nutzer gehoert, waehrend alle Messungen an Modell, Zuordnung,
-    // Soundmap und Wave-Daten sauber blieben. Sichtbar wurde es erst durch
-    // das Klangprotokoll in der Engine.
+    // It surfaced with the Compsognathus. His walking animation calls the
+    // step several times; the first occurrence was rerouted, the later
+    // ones kept their TR3 number 243 - and 243 in TR5 is
+    // SFX_GENERIC_HEAVY_FEET, a hefty heavy step. Exactly that is what the
+    // user heard while all measurements on model, mapping, soundmap and
+    // wave data stayed clean. It only became visible through the sound log
+    // in the engine.
     uint32_t i = start;
-    for (uint16_t k = 0; k < anzahl && i < nCmd; ++k)
+    for (uint16_t k = 0; k < count && i < nCmd; ++k)
     {
-        const uint16_t art = g16(cmdAt + size_t(i) * 2);
+        const uint16_t kind = g16(cmdAt + size_t(i) * 2);
         ++i;
-        int folge = 0;
-        switch (art)
+        int follow = 0;
+        switch (kind)
         {
-        case 1: folge = 3; break;    // SetPosition
-        case 2: folge = 2; break;    // JumpVelocity
-        case 5: folge = 2; break;    // PlaySound: Frame + SFX
-        case 6: folge = 2; break;    // Flipeffect
-        default: folge = 0; break;   // EmptyHands, KillItem, Unbekanntes
+        case 1: follow = 3; break;   // SetPosition
+        case 2: follow = 2; break;   // JumpVelocity
+        case 5: follow = 2; break;   // PlaySound: frame + SFX
+        case 6: follow = 2; break;   // Flipeffect
+        default: follow = 0; break;  // EmptyHands, KillItem, unknown
         }
 
-        // Kommandoarten mitzaehlen. Ein Flipeffect (6) traegt eine Nummer,
-        // die in TR3 und TR5 VERSCHIEDENE Wirkungen hat und in TR5 durchaus
-        // einen Klang ausloesen kann - er wird hier NICHT umgebogen. Wer nur
-        // die PlaySounds betrachtet, uebersieht das.
-        arten.push_back(std::make_pair((int)art, (int)a));
+        // Count the command kinds along. A flipeffect (6) carries a number
+        // that has DIFFERENT effects in TR3 and TR5 and in TR5 can very
+        // well trigger a sound - it is NOT rerouted here. Whoever looks
+        // only at the PlaySounds misses that.
+        kinds.push_back(std::make_pair((int)kind, (int)a));
 
-        if (art == 5 && i + 1 < nCmd)
+        if (kind == 5 && i + 1 < nCmd)
         {
             const size_t at = cmdAt + size_t(i + 1) * 2;
             const uint16_t w = g16(at);
             const int nr = w & 0x0FFF;
-            bool zugeordnet = false;
+            bool mapped = false;
             for (const auto& z : mapping)
                 if (z.first == nr)
                 {
-                    const uint16_t neu = static_cast<uint16_t>((w & 0xF000) | (z.second & 0x0FFF));
-                    std::memcpy(&package[at], &neu, 2);
-                    ++getauscht;
-                    zugeordnet = true;
-                    // Mitzaehlen, WELCHE ID wie oft und in welcher Animation
-                    // gerufen wird. Eine blosse Gesamtzahl sagt nicht, ob der
-                    // gesuchte Klang ueberhaupt vorkommt - beim Compy hielt
-                    // ich den Laufklang faelschlich fuer belegt, weil die
-                    // Summe stimmte.
-                    genutzt.push_back(std::make_pair(nr, (int)a));
+                    const uint16_t fresh = static_cast<uint16_t>((w & 0xF000) | (z.second & 0x0FFF));
+                    std::memcpy(&package[at], &fresh, 2);
+                    ++swapped;
+                    mapped = true;
+                    // Count WHICH ID is called how often and in which
+                    // animation. A mere total does not say whether the
+                    // sought sound occurs at all - with the Compy I
+                    // wrongly took the walking sound as covered because
+                    // the sum matched.
+                    used.push_back(std::make_pair(nr, (int)a));
                     break;
                 }
 
-            // Nicht zugeordnete Nummern MELDEN. Sie behalten sonst still
-            // ihre TR3-Nummer und treffen im Ziel irgendeinen fremden Klang -
-            // genau die Sorte lautloser Fehler, die dieses Projekt schon
-            // mehrfach Zeit gekostet hat.
-            if (!zugeordnet)
+            // REPORT unmapped numbers. Otherwise they silently keep their
+            // TR3 number and hit some foreign sound in the target -
+            // exactly the sort of silent error that has cost this project
+            // time several times already.
+            if (!mapped)
             {
-                bool schonGemeldet = false;
-                for (int o : unresolved) if (o == nr) { schonGemeldet = true; break; }
-                if (!schonGemeldet) unresolved.push_back(nr);
+                bool alreadyReported = false;
+                for (int o : unresolved) if (o == nr) { alreadyReported = true; break; }
+                if (!alreadyReported) unresolved.push_back(nr);
             }
         }
-        i += folge;
+        i += follow;
     }
     }
-    return getauscht;
+    return swapped;
 }
 
-static uint32_t paketVersion(const std::vector<uint8_t>& p)
+static uint32_t packageVersion(const std::vector<uint8_t>& p)
 {
     if (p.size() < 8) return 0;
     uint32_t v; std::memcpy(&v, p.data() + 4, 4); return v;
 }
 
-// Schreibt die Texturworte der Faces auf die neuen Texinfos um. Gleicher
-// Ableser wie ueberall (Kopf 10 Byte, dann das Vertexwort; 0 Normalen heisst
-// NORMALEN). Bit 15 des Texturworts ist ein Flag und bleibt stehen.
+// Rewrites the faces' texture words onto the new texinfos. The same walker
+// as everywhere (header 10 bytes, then the vertex word; 0 normals means
+// NORMALS). Bit 15 of the texture word is a flag and stays in place.
 static int remapTextures(std::vector<uint8_t>& package, const std::map<int,int>& mapping)
 {
     auto g32 = [&](size_t q) { uint32_t v; std::memcpy(&v, &package[q], 4); return v; };
@@ -154,15 +154,15 @@ static int remapTextures(std::vector<uint8_t>& package, const std::map<int,int>&
 
     const uint32_t nMeshes = g32(12);
     size_t p = 48;
-    int getauscht = 0;
+    int swapped = 0;
 
     for (uint32_t i = 0; i < nMeshes; ++i)
     {
         if (p + 4 > package.size()) return -1;
         const uint32_t len = g32(p); p += 4;
-        const size_t ende = p + len;
+        const size_t end = p + len;
         size_t q = p + 10;
-        if (q + 2 > ende) return -1;
+        if (q + 2 > end) return -1;
         const int16_t vw = static_cast<int16_t>(g16(q)); q += 2;
         const int nv = vw & 0xFF;
         if (nv == 0) q += (size_t((vw >> 8) & 0xFF) * 6 + 1) * 2;
@@ -173,110 +173,111 @@ static int remapTextures(std::vector<uint8_t>& package, const std::map<int,int>&
             q += size_t(nv) * (nn >= 0 ? 6 : 2);
         }
 
-        auto biege = [&](size_t at) {
+        auto reroute = [&](size_t at) {
             const uint16_t w = g16(at);
             std::map<int,int>::const_iterator f = mapping.find(w & 0x7FFF);
             if (f == mapping.end()) return;
-            const uint16_t neu = static_cast<uint16_t>((w & 0x8000) | (f->second & 0x7FFF));
-            std::memcpy(&package[at], &neu, 2);
-            ++getauscht;
+            const uint16_t fresh = static_cast<uint16_t>((w & 0x8000) | (f->second & 0x7FFF));
+            std::memcpy(&package[at], &fresh, 2);
+            ++swapped;
         };
 
         const int16_t nq = static_cast<int16_t>(g16(q)); q += 2;
-        for (int k = 0; k < nq; ++k, q += 12) biege(q + 8);
+        for (int k = 0; k < nq; ++k, q += 12) reroute(q + 8);
         const int16_t nt = static_cast<int16_t>(g16(q)); q += 2;
-        for (int k = 0; k < nt; ++k, q += 10) biege(q + 6);
+        for (int k = 0; k < nt; ++k, q += 10) reroute(q + 6);
 
-        p = ende;
+        p = end;
     }
-    return getauscht;
+    return swapped;
 }
 
 int main(int argc, char** argv)
 {
     if (argc < 5)
     {
-        std::printf("Aufruf: TR3Setz <ziel.trc> <package.bin> <zielSlot> <ausgabe.trc> [texinfo] [ton.bin]\n");
+        std::printf("usage: TR3Setz <target.trc> <package.bin> <targetSlot> <output.trc> [texinfo] [sound.bin]\n");
         return 2;
     }
     const int slot = std::atoi(argv[3]);
 
-    // Stellungsargumente 5 und 6, danach duerfen Schalter folgen (-basis,
-    // -volumes). Ein mit '-' beginnendes Wort ist ein Schalter, kein Wert -
-    // sonst zaehlte argc mit und der Tonpfad fiele lautlos auf NULL zurueck.
-    auto stellung = [&](int i) -> const char* {
+    // Positional arguments 5 and 6, switches may follow afterwards (-base,
+    // -volumes). A word starting with '-' is a switch, not a value -
+    // otherwise argc would count along and the sound path would silently
+    // fall back to NULL.
+    auto positional = [&](int i) -> const char* {
         return (argc > i && argv[i][0] != '-') ? argv[i] : 0; };
-    const char* texArg   = stellung(5);
-    const int   tex      = texArg ? std::atoi(texArg) : 0;
-    const char* tonDatei = stellung(6);
+    const char* texArg    = positional(5);
+    const int   tex       = texArg ? std::atoi(texArg) : 0;
+    const char* soundFile = positional(6);
 
     std::vector<uint8_t> package;
     {
         FILE* f = std::fopen(argv[2], "rb");
-        if (!f) { std::printf("Paket nicht lesbar: %s\n", argv[2]); return 2; }
+        if (!f) { std::printf("package not readable: %s\n", argv[2]); return 2; }
         std::fseek(f, 0, SEEK_END); const long n = std::ftell(f); std::fseek(f, 0, SEEK_SET);
         package.resize(static_cast<size_t>(n));
         const size_t g = std::fread(package.data(), 1, package.size(), f);
         std::fclose(f);
-        if (g != package.size()) { std::printf("Paket unvollstaendig gelesen\n"); return 2; }
+        if (g != package.size()) { std::printf("package read incompletely\n"); return 2; }
     }
 
     Tr5Level lvl;
     std::string err;
-    if (!lvl.load(toW(argv[1]), err)) { std::printf("Level laden: %s\n", err.c_str()); return 2; }
+    if (!lvl.load(toW(argv[1]), err)) { std::printf("level load: %s\n", err.c_str()); return 2; }
 
-    Tr5Level::MoveableInfo vorher;
-    const bool hatte = lvl.moveableInfo(slot, vorher);
-    std::printf("Ziel %s: %d Items, Slot %d %s\n", argv[1], lvl.itemCount(), slot,
-                hatte ? "vorhanden (wird ersetzt)" : "frei (wird angehaengt)");
+    Tr5Level::MoveableInfo before;
+    const bool had = lvl.moveableInfo(slot, before);
+    std::printf("target %s: %d items, slot %d %s\n", argv[1], lvl.itemCount(), slot,
+                had ? "present (will be replaced)" : "free (will be appended)");
 
-    // Sounds ZUERST: erst danach steht fest, auf welche Plaetze die
-    // SFX-Nummern der Anim-Kommandos zeigen muessen - und die Kommandos
-    // stecken im Modellpaket, das gleich eingebaut wird.
-    if (tonDatei)
+    // Sounds FIRST: only afterwards is it fixed which places the SFX
+    // numbers of the anim commands must point at - and the commands sit in
+    // the model package that is about to be built in.
+    if (soundFile)
     {
-        std::vector<uint8_t> ton;
-        FILE* f = std::fopen(tonDatei, "rb");
-        if (!f) { std::printf("Tonpaket nicht lesbar: %s\n", tonDatei); return 2; }
+        std::vector<uint8_t> sound;
+        FILE* f = std::fopen(soundFile, "rb");
+        if (!f) { std::printf("sound package not readable: %s\n", soundFile); return 2; }
         std::fseek(f, 0, SEEK_END); const long n = std::ftell(f); std::fseek(f, 0, SEEK_SET);
-        ton.resize(static_cast<size_t>(n));
-        const size_t g = std::fread(ton.data(), 1, ton.size(), f);
+        sound.resize(static_cast<size_t>(n));
+        const size_t g = std::fread(sound.data(), 1, sound.size(), f);
         std::fclose(f);
-        if (g != ton.size()) { std::printf("Tonpaket unvollstaendig\n"); return 2; }
+        if (g != sound.size()) { std::printf("sound package incomplete\n"); return 2; }
 
-        const int vorherSamples = lvl.soundSampleCount();
+        const int beforeSamples = lvl.soundSampleCount();
         std::vector<std::pair<int,int>> mapping;
 
-        // 446..449: in allen 16 Leveln frei. Die Soundmap ist ein festes Feld
-        // von 450 Plaetzen, ein hoher Platz kostet also kein Byte.
-        // Lautstaerke je Klang in Paketreihenfolge (84 Angriff, 87 Bruellen,
-        // 88 Fussstampfen, 89 Schnuppern, 255 Raptor-Todesschrei). Das
-        // Bruellen soll rund 30 Prozent lauter sein - im Spiel gehoert,
-        // Wunsch des Nutzers.
-        // Alle im Spiel abgehoert und vom Nutzer eingestellt. ACHTUNG: der
-        // Grundwert ist 191 und das Feld ein Byte - alles ueber 133 Prozent
-        // landet an der Obergrenze 255. Bruellen und Sterben liegen dort,
-        // ihre Prozentwerte sind also der Wunsch, nicht das Ergebnis.
+        // 446..449: free in all 16 levels. The soundmap is a fixed field of
+        // 450 places, so a high place costs no byte.
+        // Volume per sound in package order (84 attack, 87 roar, 88 foot
+        // stomp, 89 sniffing, 255 raptor death scream). The roar shall be
+        // about 30 percent louder - heard in game, the user's wish.
+        // All listened to in game and set by the user. ATTENTION: the base
+        // value is 191 and the field one byte - everything above 133
+        // percent lands at the cap 255. Roar and death lie there, so their
+        // percentages are the wish, not the result.
         std::vector<int> volumes = { 100, 130, 150, 100, 140 };
 
-        // -muted <id,...>: diese Nummern bewusst auf einen LEEREN Platz der
-        // Soundmap biegen, statt sie stehen zu lassen.
+        // -muted <id,...>: deliberately reroute these numbers onto an
+        // EMPTY place of the soundmap instead of leaving them in place.
         //
-        // 411 ist in allen 16 TR5-Leveln unbelegt - mit MissMod -ton an jedem
-        // einzelnen nachgemessen, nicht angenommen. Der erste Kandidat 405 war
-        // in rich3 belegt; frei sind 411 bis 419. Der Platz liegt ausserhalb
-        // der Bereiche, die wir fuer Importe vergeben (420-449).
+        // 411 is unoccupied in all 16 TR5 levels - measured with MissMod
+        // -ton on every single one, not assumed. The first candidate 405
+        // was occupied in rich3; free are 411 to 419. The place lies
+        // outside the ranges we assign for imports (420-449).
         std::vector<int> muted;
         int muteSlot = 411;
 
-        // 445..449: fuenf Plaetze am oberen Ende, in allen Leveln frei.
-        int basis = 445;
+        // 445..449: five places at the upper end, free in all levels.
+        int base = 445;
 
-        // Ab dem Raptor (#97) sind Basisplatz und Lautstaerken einstellbar -
-        // vorher standen die T-Rex-Values fest im Werkzeug. Zwei Gegner teilen
-        // sich den oberen Rand der Soundmap nicht mehr von allein:
-        //   -basis N        erster Zielplatz
-        //   -volumes a,b,c,..  Prozent je Klang in Paketreihenfolge
+        // Since the raptor (#97), the base place and the volumes are
+        // adjustable - before, the T-Rex values were fixed in the tool.
+        // Two enemies do not share the top edge of the soundmap by
+        // themselves:
+        //   -base N          first target place
+        //   -volumes a,b,c,..  percent per sound in package order
         for (int a = 5; a < argc; ++a)
         {
             if (std::strcmp(argv[a], "-muted") == 0 && a + 1 < argc)
@@ -289,10 +290,10 @@ int main(int argc, char** argv)
                     if (*p == ',') ++p;
                 }
             }
-            else if (std::strcmp(argv[a], "-stummplatz") == 0 && a + 1 < argc)
+            else if (std::strcmp(argv[a], "-muteslot") == 0 && a + 1 < argc)
                 muteSlot = std::atoi(argv[++a]);
-            else if (std::strcmp(argv[a], "-basis") == 0 && a + 1 < argc)
-                basis = std::atoi(argv[++a]);
+            else if (std::strcmp(argv[a], "-base") == 0 && a + 1 < argc)
+                base = std::atoi(argv[++a]);
             else if (std::strcmp(argv[a], "-volumes") == 0 && a + 1 < argc)
             {
                 volumes.clear();
@@ -305,165 +306,165 @@ int main(int argc, char** argv)
                 }
             }
         }
-        std::printf("  Zielplaetze ab %d, %d Lautstaerkeangaben\n",
-                    basis, static_cast<int>(volumes.size()));
+        std::printf("  target places from %d, %d volume entries\n",
+                    base, static_cast<int>(volumes.size()));
 
-        if (!lvl.addSoundsFromTr3(ton, basis, mapping, err, &volumes))
-        { std::printf("SOUNDS GESCHEITERT: %s\n", err.c_str()); return 1; }
+        if (!lvl.addSoundsFromTr3(sound, base, mapping, err, &volumes))
+        { std::printf("SOUNDS FAILED: %s\n", err.c_str()); return 1; }
 
-        std::printf("  Sounds: %d -> %d Samples\n", vorherSamples, lvl.soundSampleCount());
+        std::printf("  sounds: %d -> %d samples\n", beforeSamples, lvl.soundSampleCount());
         for (const auto& z : mapping)
-            std::printf("    TR3-Sound %3d  ->  Map %3d\n", z.first, z.second);
+            std::printf("    TR3 sound %3d  ->  map %3d\n", z.first, z.second);
 
         std::vector<int> unresolved;
-        std::vector<std::pair<int,int>> genutzt;
-        std::vector<std::pair<int,int>> arten;
-        const int n2 = remapSfx(package, mapping, unresolved, genutzt, arten);
+        std::vector<std::pair<int,int>> used;
+        std::vector<std::pair<int,int>> kinds;
+        const int n2 = remapSfx(package, mapping, unresolved, used, kinds);
 
-        // Je ID zeigen, wie oft und aus welcher Animation sie gerufen wird.
-        // Eine blosse Gesamtzahl reicht nicht: beim Compy stimmte die Summe,
-        // und trotzdem war unresolved, ob der Laufklang ueberhaupt vorkommt.
+        // Show per ID how often and from which animation it is called. A
+        // mere total does not suffice: with the Compy the sum matched, and
+        // it was still open whether the walking sound occurs at all.
         for (const auto& z : mapping)
         {
-            std::string wo;
-            int mal = 0;
-            for (const auto& g : genutzt)
+            std::string where;
+            int times = 0;
+            for (const auto& g : used)
                 if (g.first == z.first)
                 {
-                    ++mal;
-                    char puf[16];
-                    std::snprintf(puf, sizeof(puf), "%s%d", wo.empty() ? "" : ",", g.second);
-                    wo += puf;
+                    ++times;
+                    char buf[16];
+                    std::snprintf(buf, sizeof(buf), "%s%d", where.empty() ? "" : ",", g.second);
+                    where += buf;
                 }
-            std::printf("    ID %3d -> Map %3d : %dx%s%s\n", z.first, z.second, mal,
-                        mal ? ", Anim " : " - WIRD NIE GERUFEN", wo.c_str());
+            std::printf("    ID %3d -> map %3d : %dx%s%s\n", z.first, z.second, times,
+                        times ? ", anim " : " - IS NEVER CALLED", where.c_str());
         }
 
-        // Alle Kommandoarten auflisten. PlaySound ist nicht die einzige, die
-        // im Ziel hoerbar wird: ein Flipeffect traegt eine Nummer, die in TR3
-        // und TR5 verschiedene Wirkungen hat, und wird NICHT umgebogen.
+        // List all command kinds. PlaySound is not the only one that
+        // becomes audible in the target: a flipeffect carries a number
+        // with different effects in TR3 and TR5, and is NOT rerouted.
         {
             const char* name[8] = { "?", "SetPosition", "JumpVelocity", "EmptyHands",
                                     "KillItem", "PlaySound", "Flipeffect", "?" };
             for (int k = 1; k <= 6; ++k)
             {
-                std::string wo;
-                int mal = 0;
-                for (const auto& s : arten)
+                std::string where;
+                int times = 0;
+                for (const auto& s : kinds)
                     if (s.first == k)
                     {
-                        ++mal;
-                        char puf[16];
-                        std::snprintf(puf, sizeof(puf), "%s%d", wo.empty() ? "" : ",", s.second);
-                        wo += puf;
+                        ++times;
+                        char buf[16];
+                        std::snprintf(buf, sizeof(buf), "%s%d", where.empty() ? "" : ",", s.second);
+                        where += buf;
                     }
-                if (mal)
-                    std::printf("    Kommando %d (%s): %dx, Anim %s\n", k, name[k], mal, wo.c_str());
+                if (times)
+                    std::printf("    command %d (%s): %dx, anim %s\n", k, name[k], times, where.c_str());
             }
         }
-        if (n2 < 0) { std::printf("Kommandoblock im Modellpaket nicht auffindbar\n"); return 1; }
-        std::printf("  Anim-Kommandos: %d SFX-Nummern umgebogen\n", n2);
-        // HART ABBRECHEN, nicht nur warnen.
+        if (n2 < 0) { std::printf("command block in the model package not findable\n"); return 1; }
+        std::printf("  anim commands: %d SFX numbers rerouted\n", n2);
+        // ABORT HARD, do not just warn.
         //
-        // Eine stehen gebliebene TR3-Nummer trifft im Ziel irgendeinen
-        // Vanilla-Klang. Das ist kein Schoenheitsfehler: beim Compsognathus
-        // blieb 243 stehen und wurde zu SFX_GENERIC_HEAVY_FEET - ein wuchtiger
-        // schwerer Schritt mitten zwischen den richtigen Klaengen. Die Suche
-        // danach hat Stunden gekostet, weil alle Messungen an den Dateien
-        // sauber waren und nur eine WARNUNG im Bauprotokoll stand, die man
-        // ueberliest.
+        // A TR3 number left in place hits some vanilla sound in the
+        // target. That is no cosmetic flaw: with the Compsognathus, 243
+        // stayed and became SFX_GENERIC_HEAVY_FEET - a hefty heavy step in
+        // the middle of the right sounds. The hunt for it cost hours,
+        // because all measurements on the files were clean and only a
+        // WARNING stood in the build log, which one reads past.
         //
-        // Wo die Zielplaetze liegen, hilft dagegen nicht: sie liegen ohnehin
-        // hoch (420-449) und koennen mit TR3-Nummern (bis etwa 256) nicht
-        // kollidieren. Der Schutz muss an der Quelle greifen - jede gerufene
-        // Nummer MUSS eine Zuordnung haben.
+        // Where the target places lie does not help against that: they lie
+        // high anyway (420-449) and cannot collide with TR3 numbers (up to
+        // about 256). The protection must take hold at the source - every
+        // called number MUST have a mapping.
         //
-        // Wer den Klang bewusst nicht mitnehmen will, biegt ihn auf einen
-        // eigenen stillen Platz. Einfach stehenlassen ist keine Option mehr.
-        // Bewusst stummgeschaltete Nummern: sie werden auf einen LEEREN Platz
-        // der Soundmap gebogen. Die Engine steigt dort aus (sound.cpp: lut ==
-        // -1 -> "Non present sample") und spielt nichts. Das kostet kein
-        // Sample und trifft garantiert nichts Fremdes.
+        // Whoever deliberately does not want to take a sound along
+        // reroutes it onto an own silent place. Simply leaving it is no
+        // longer an option.
+        // Deliberately muted numbers: they are rerouted onto an EMPTY
+        // place of the soundmap. The engine bails out there (sound.cpp:
+        // lut == -1 -> "Non present sample") and plays nothing. That costs
+        // no sample and is guaranteed to hit nothing foreign.
         //
-        // Gebraucht fuer Klaenge, die wir aus dem Quellspiel nicht mitnehmen
-        // wollen: TR3 143 "Falling" bei T-Rex und Raptor, TR3 56 (Laras
-        // Schritt) beim Geier. Stehenlassen ist keine Option - 143 und 56 sind
-        // in TR5 belegt (SFX_GENERIC_BODY_FALL, SFX_LARA_GRABFEET).
+        // Needed for sounds we do not want to take from the source game:
+        // TR3 143 "Falling" with the T-Rex and the raptor, TR3 56 (Lara's
+        // step) with the vulture. Leaving them is no option - 143 and 56
+        // are occupied in TR5 (SFX_GENERIC_BODY_FALL, SFX_LARA_GRABFEET).
         if (!unresolved.empty() && !muted.empty())
         {
-            std::vector<std::pair<int,int>> aufStumm;
+            std::vector<std::pair<int,int>> toMute;
             for (int o : unresolved)
                 for (int s : muted)
-                    if (o == s) aufStumm.push_back(std::make_pair(o, muteSlot));
+                    if (o == s) toMute.push_back(std::make_pair(o, muteSlot));
 
-            if (!aufStumm.empty())
+            if (!toMute.empty())
             {
                 std::vector<int> rest;
-                std::vector<std::pair<int,int>> egal;
-                remapSfx(package, aufStumm, rest, egal, egal);
-                std::printf("  Stummgeschaltet auf leeren Platz %d:", muteSlot);
-                for (const auto& z : aufStumm) std::printf(" %d", z.first);
+                std::vector<std::pair<int,int>> ignore;
+                remapSfx(package, toMute, rest, ignore, ignore);
+                std::printf("  muted onto empty place %d:", muteSlot);
+                for (const auto& z : toMute) std::printf(" %d", z.first);
                 std::printf("\n");
 
-                std::vector<int> uebrig;
+                std::vector<int> remaining;
                 for (int o : unresolved)
                 {
-                    bool weg = false;
-                    for (const auto& z : aufStumm) if (z.first == o) weg = true;
-                    if (!weg) uebrig.push_back(o);
+                    bool gone = false;
+                    for (const auto& z : toMute) if (z.first == o) gone = true;
+                    if (!gone) remaining.push_back(o);
                 }
-                unresolved = uebrig;
+                unresolved = remaining;
             }
         }
 
         if (!unresolved.empty())
         {
-            std::printf("\nABBRUCH: %zu SFX-Nummern OHNE Zuordnung. Sie wuerden ihre\n"
-                        "TR3-Nummer behalten und im Ziel einen fremden Klang treffen:\n   ",
+            std::printf("\nABORT: %zu SFX numbers WITHOUT a mapping. They would keep\n"
+                        "their TR3 number and hit a foreign sound in the target:\n   ",
                         unresolved.size());
             for (int o : unresolved) std::printf("%d ", o);
-            std::printf("\n\nNimm sie ins Klangpaket auf (TR3Ton -waves) oder biege sie\n"
-                        "bewusst auf einen stillen Platz. Es wurde NICHTS geschrieben.\n");
+            std::printf("\n\nTake them into the sound package (TR3Ton -waves) or reroute\n"
+                        "them deliberately onto a silent place. NOTHING was written.\n");
             return 1;
         }
     }
 
-    // Texturen VOR dem Modell: erst danach steht fest, auf welche Texinfos
-    // die Faces zeigen muessen - und die Faces stecken im Modellpaket.
-    // Dieselbe Reihenfolge wie bei den Sounds.
-    int texBasis = tex;
-    if (paketVersion(package) >= 2)
+    // Textures BEFORE the model: only afterwards is it fixed which texinfos
+    // the faces must point at - and the faces sit in the model package.
+    // The same order as with the sounds.
+    int texBase = tex;
+    if (packageVersion(package) >= 2)
     {
         std::map<int,int> texMap;
         if (!lvl.addTexturesFromTr3(package, texMap, err))
-        { std::printf("TEXTUREN GESCHEITERT: %s\n", err.c_str()); return 1; }
-        std::printf("  Texturen: %s\n", err.c_str());
+        { std::printf("TEXTURES FAILED: %s\n", err.c_str()); return 1; }
+        std::printf("  textures: %s\n", err.c_str());
 
         const int n = remapTextures(package, texMap);
-        if (n < 0) { std::printf("Meshes im Paket nicht lesbar\n"); return 1; }
-        std::printf("  Faces: %d Texturworte umgebogen\n", n);
-        texBasis = -1;                 // Faces stehen jetzt richtig, nicht ueberschreiben
+        if (n < 0) { std::printf("meshes in the package not readable\n"); return 1; }
+        std::printf("  faces: %d texture words rerouted\n", n);
+        texBase = -1;                  // faces are right now, do not overwrite
     }
 
-    if (!lvl.addMoveableFromTr3(package, slot, texBasis, err))
-    { std::printf("EINBAU GESCHEITERT: %s\n", err.c_str()); return 1; }
+    if (!lvl.addMoveableFromTr3(package, slot, texBase, err))
+    { std::printf("INSERT FAILED: %s\n", err.c_str()); return 1; }
 
     Tr5Level::MoveableInfo mi;
-    if (!lvl.moveableInfo(slot, mi)) { std::printf("Slot %d nach dem Einbau nicht auffindbar\n", slot); return 1; }
-    std::printf("  Slot %d: %d Meshes, meshIdx %d, bone %d, frameOffset %u, anim %d\n",
+    if (!lvl.moveableInfo(slot, mi)) { std::printf("slot %d not findable after the insert\n", slot); return 1; }
+    std::printf("  slot %d: %d meshes, meshIdx %d, bone %d, frameOffset %u, anim %d\n",
                 slot, mi.nmeshes, mi.meshIndex, mi.boneIndex,
                 static_cast<unsigned>(mi.frameOffset), mi.animIndex);
 
-    // Gegenprobe: laufen die eingebauten Meshes durch den Ableser der Engine?
-    int schlecht = 0;
+    // Cross-check: do the built-in meshes run through the engine's walker?
+    int bad = 0;
     for (int i = 0; i < mi.nmeshes; ++i)
     {
         int nv, nn, q, t, bytes;
-        if (!lvl.debugMeshWalk(mi.meshIndex + i, nv, nn, q, t, bytes)) ++schlecht;
+        if (!lvl.debugMeshWalk(mi.meshIndex + i, nv, nn, q, t, bytes)) ++bad;
     }
-    std::printf("  Meshpruefung: %d von %d nicht lesbar\n", schlecht, mi.nmeshes);
+    std::printf("  mesh check: %d of %d not readable\n", bad, mi.nmeshes);
 
-    if (!lvl.save(toW(argv[4]), err)) { std::printf("Speichern: %s\n", err.c_str()); return 1; }
-    std::printf("  Geschrieben: %s\n", argv[4]);
-    return schlecht ? 1 : 0;
+    if (!lvl.save(toW(argv[4]), err)) { std::printf("save: %s\n", err.c_str()); return 1; }
+    std::printf("  written: %s\n", argv[4]);
+    return bad ? 1 : 0;
 }

@@ -1,12 +1,12 @@
-// Gegenprobe der Dino-Tabelle (#92): erzeugt sie fuer alle vier dieselben
-// Pakete wie die Werkzeuge? Ein Aufruf, vier Gaeste, kein Argumentbasteln.
+// Cross-check of the dino table (#92): does it produce, for all four, the
+// same packages as the tools? One call, four guests, no argument fiddling.
 #include "core/Tr3Source.h"
 #include <cstdio>
 #include <string>
 #include <vector>
 #include <cstring>
 
-static bool lies(const std::string& p, std::vector<uint8_t>& b)
+static bool readAll(const std::string& p, std::vector<uint8_t>& b)
 {
     FILE* f = std::fopen(p.c_str(), "rb"); if (!f) return false;
     std::fseek(f, 0, SEEK_END); long n = std::ftell(f); std::fseek(f, 0, SEEK_SET);
@@ -14,13 +14,13 @@ static bool lies(const std::string& p, std::vector<uint8_t>& b)
 }
 static std::wstring W(const std::string& s) { return std::wstring(s.begin(), s.end()); }
 
-// Die drei Kopfwoerter je Klang (Volume, Chance, Chars) werden vom Einsetzer
-// UEBERLESEN - Tr5Tr3Import.cpp:117 springt mit "p += 8" darueber hinweg und
-// baut die SAMPLE_INFOs neu auf. Das aeltere T-Rex-Paket stammt aus dem
-// Tabellenmodus des Werkzeugs und traegt dort noch Values aus dem Quelllevel;
-// die Bibliothek schreibt wie der Wellenmodus Nullen. Fuer den Vergleich
-// werden sie deshalb auf beiden Seiten genullt - alles andere MUSS stimmen.
-static void nulleKopfwoerter(std::vector<uint8_t>& b)
+// The three header words per sound (volume, chance, chars) are SKIPPED by
+// the inserter - Tr5Tr3Import.cpp:117 jumps over them with "p += 8" and
+// rebuilds the SAMPLE_INFOs. The older T-Rex package comes from the tool's
+// table mode and there still carries values from the source level; the
+// library writes zeros like the wave mode. For the comparison they are
+// therefore zeroed on both sides - everything else MUST match.
+static void zeroHeaderWords(std::vector<uint8_t>& b)
 {
     size_t q = 12;
     while (q + 10 <= b.size())
@@ -40,11 +40,11 @@ static void nulleKopfwoerter(std::vector<uint8_t>& b)
 
 int main(int argc, char** argv)
 {
-    if (argc != 4) { std::printf("Aufruf: DinoPruef <tr3Dir> <tr3GoldDir> <paketOrdner>\n"); return 2; }
+    if (argc != 4) { std::printf("usage: DinoPruef <tr3Dir> <tr3GoldDir> <packageFolder>\n"); return 2; }
     const std::wstring tr3 = W(argv[1]), gold = W(argv[2]);
-    const std::string ord(argv[3]);
+    const std::string dir(argv[3]);
 
-    // Dateinamen der mit den Werkzeugen gebauten Vergleichspakete
+    // File names of the comparison packages built with the tools
     const char* mod[4] = { "trex.bin", "raptor_mod.bin", "compy_mod.bin", "geier.bin" };
     const char* ton[4] = { "trex_ton.bin", "raptor_ton.bin", "compy_ton.bin", "geier_ton.bin" };
 
@@ -55,19 +55,19 @@ int main(int argc, char** argv)
         std::vector<uint8_t> m, t, vm, vt;
 
         if (!Tr3Source::fetchMoveable(Tr3Source::levelPath(d, tr3, gold), d.object, m, f))
-        { std::printf("%-8s Modell GESCHEITERT: %s\n", d.name, f.c_str()); ++error; ++i; continue; }
+        { std::printf("%-8s model FAILED: %s\n", d.name, f.c_str()); ++error; ++i; continue; }
         if (!Tr3Source::fetchSounds(Tr3Source::sfxPath(d, tr3, gold), d.sounds, t, f))
-        { std::printf("%-8s Klaenge GESCHEITERT: %s\n", d.name, f.c_str()); ++error; ++i; continue; }
+        { std::printf("%-8s sounds FAILED: %s\n", d.name, f.c_str()); ++error; ++i; continue; }
 
-        const bool okM = lies(ord + "\\" + mod[i], vm) && vm == m;
-        bool okT = lies(ord + "\\" + ton[i], vt);
-        if (okT) { nulleKopfwoerter(vt); nulleKopfwoerter(t); okT = (vt == t); }
-        std::printf("%-8s Modell %7zu Byte %-10s Klaenge %7zu Byte %s\n",
-                    d.name, m.size(), okM ? "identisch" : "ABWEICHUNG",
-                    t.size(), okT ? "identisch" : "ABWEICHUNG");
+        const bool okM = readAll(dir + "\\" + mod[i], vm) && vm == m;
+        bool okT = readAll(dir + "\\" + ton[i], vt);
+        if (okT) { zeroHeaderWords(vt); zeroHeaderWords(t); okT = (vt == t); }
+        std::printf("%-8s model %7zu bytes %-10s sounds %7zu bytes %s\n",
+                    d.name, m.size(), okM ? "identical" : "DEVIATION",
+                    t.size(), okT ? "identical" : "DEVIATION");
         if (!okM || !okT) ++error;
         ++i;
     }
-    std::printf("\n%s\n", error ? "MINDESTENS EINE ABWEICHUNG" : "Alle vier stimmen mit den Werkzeugpaketen ueberein.");
+    std::printf("\n%s\n", error ? "AT LEAST ONE DEVIATION" : "All four match the tool packages.");
     return error ? 1 : 0;
 }

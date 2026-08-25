@@ -1,6 +1,7 @@
-// Gegenprobe: liefert die Bibliotheksfassung Byte fuer Byte dasselbe Paket
-// wie das Werkzeug TR3Hol? Ohne diesen Nachweis waere der Port ein Umbau ins
-// Blaue - die Formatbruecke ist die empfindlichste Stelle des Projekts.
+// Cross-check: does the library version deliver, byte for byte, the same
+// package as the TR3Hol tool? Without this proof the port would be a
+// rebuild into the blue - the format bridge is the project's most
+// sensitive spot.
 #include "core/Tr3Source.h"
 #include <cstdio>
 #include <string>
@@ -8,31 +9,31 @@
 
 int main(int argc, char** argv)
 {
-    if (argc != 4) { std::printf("Aufruf: TqPruef <level.TR2> <objektId> <werkzeug.bin>\n"); return 2; }
+    if (argc != 4) { std::printf("usage: TqPruef <level.TR2> <objectId> <tool.bin>\n"); return 2; }
 
     std::string p(argv[1]);
     std::wstring wp(p.begin(), p.end());
 
-    std::vector<uint8_t> neu;
+    std::vector<uint8_t> fresh;
     std::string error;
-    if (!Tr3Source::fetchMoveable(wp, std::atoi(argv[2]), neu, error))
-    { std::printf("GESCHEITERT: %s\n", error.c_str()); return 1; }
+    if (!Tr3Source::fetchMoveable(wp, std::atoi(argv[2]), fresh, error))
+    { std::printf("FAILED: %s\n", error.c_str()); return 1; }
 
-    std::vector<uint8_t> alt;
+    std::vector<uint8_t> old;
     {
         FILE* f = std::fopen(argv[3], "rb");
-        if (!f) { std::printf("Vergleichsdatei nicht lesbar\n"); return 2; }
+        if (!f) { std::printf("comparison file not readable\n"); return 2; }
         std::fseek(f, 0, SEEK_END); long n = std::ftell(f); std::fseek(f, 0, SEEK_SET);
-        alt.resize((size_t)n);
-        std::fread(alt.data(), 1, alt.size(), f);
+        old.resize((size_t)n);
+        std::fread(old.data(), 1, old.size(), f);
         std::fclose(f);
     }
 
-    if (alt.size() != neu.size())
-    { std::printf("UNTERSCHIED: Werkzeug %zu Byte, Bibliothek %zu Byte\n", alt.size(), neu.size()); return 1; }
-    for (size_t i = 0; i < alt.size(); ++i)
-        if (alt[i] != neu[i]) { std::printf("UNTERSCHIED ab Byte %zu\n", i); return 1; }
+    if (old.size() != fresh.size())
+    { std::printf("DIFFERENT: tool %zu bytes, library %zu bytes\n", old.size(), fresh.size()); return 1; }
+    for (size_t i = 0; i < old.size(); ++i)
+        if (old[i] != fresh[i]) { std::printf("DIFFERENT from byte %zu\n", i); return 1; }
 
-    std::printf("GLEICH: %zu Byte, Byte fuer Byte identisch\n", neu.size());
+    std::printf("EQUAL: %zu bytes, byte-for-byte identical\n", fresh.size());
     return 0;
 }

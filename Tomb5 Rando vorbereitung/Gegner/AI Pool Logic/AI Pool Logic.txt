@@ -1,31 +1,30 @@
-TOMB5 (TR5/Chronicles) - Gegner AI-Pool fuer den Randomizer
+TOMB5 (TR5/Chronicles) - enemy AI pool for the randomizer
 =============================================================
-Stand: 2026-08-01, ermittelt aus dem TOMB5-Engine-Quellcode
+As of 2026-08-01, determined from the TOMB5 engine source code
 (C:\Cloude AI\Tomb5 Native win 11 fix\TOMB5 Code\TOMB5\game\*.cpp)
 
-Hintergrund
------------
-TR5-Level platzieren an bestimmten Stellen unsichtbare AI-Marker-
-Objekte (AIPatrol1, AIAmbush, ...). Ein Gegner-Item bekommt beim
-Platzieren im Editor ein `ai_bits`-Flag (GUARD/PATROL1/AMBUSH/FOLLOW/
-MODIFY). Nur wenn die Objektart des Gegners die gemeinsame Engine-
-Funktion GetAITarget() aufruft (game/box.cpp), sucht der Gegner
-tatsaechlich so einen Marker und laeuft zu ihm bzw. loest bei Ambush
-einen Trigger aus, sobald er ihn erreicht. Objektarten, die
-GetAITarget() nie aufrufen, ignorieren jeden AI-Marker komplett und
-verfolgen Lara stattdessen ueber ein generisches "Mood"-System
-(CreatureAIInfo/GetCreatureMood/CreatureMood) oder fest verdrahtete
-Skriptlogik.
+Background
+----------
+TR5 levels place invisible AI marker objects (AIPatrol1, AIAmbush,
+...) at certain spots. An enemy item gets an `ai_bits` flag
+(GUARD/PATROL1/AMBUSH/FOLLOW/MODIFY) when placed in the editor. Only
+if the enemy's object kind calls the shared engine function
+GetAITarget() (game/box.cpp) does the enemy actually look for such a
+marker and walk to it, resp. fire a trigger on ambush as soon as it
+reaches it. Object kinds that never call GetAITarget() ignore every
+AI marker completely and pursue Lara instead via a generic "mood"
+system (CreatureAIInfo/GetCreatureMood/CreatureMood) or hard-wired
+script logic.
 
-Für den Randomizer heisst das: Gegner aus Pool A koennen gefahrlos an
-Patrol/Ambush-Spawnpunkte gemischt werden, Gegner aus Pool B brauchen
-eigene Spawns ohne Marker-Abhaengigkeit (sonst wird das beabsichtigte
-Patrol-/Hinterhalt-Verhalten schlicht ignoriert - kein Crash, nur
-falsches/fehlendes Verhalten).
+For the randomizer this means: enemies from Pool A can safely be
+mixed onto patrol/ambush spawn points, enemies from Pool B need their
+own spawns without marker dependency (otherwise the intended
+patrol/ambush behavior is simply ignored - no crash, just
+wrong/missing behavior).
 
-Pool A - unterstuetzt Patrol/Ambush-AI-Marker (ruft GetAITarget auf)
+Pool A - supports patrol/ambush AI markers (calls GetAITarget)
 ---------------------------------------------------------------------
-Objektart(en)                              Control-Funktion     Datei
+Object kind(s)                             control function     file
 SAS, BLUE_GUARD, SWAT, SWAT_PLUS, MAFIA,   SasControl           sas.cpp
   SCIENTIST, CRANE_GUY, SAILOR
 MAFIA2                                     MafiaControl          mafia2.cpp
@@ -33,47 +32,47 @@ PIERRE, LARSON                             PierreControl         pierre.cpp
 HITMAN                                     HitmanControl         hitman.cpp
 HUSKIE                                     HuskieControl         huskie.cpp
 IMP                                        ImpControl            imp.cpp
-ATTACK_SUB                                 MinisubControl        minisub.cpp (Zeile ~427-428)
-REAPER                                     JellyControl          minisub.cpp (Zeile ~634-635)
+ATTACK_SUB                                 MinisubControl        minisub.cpp (line ~427-428)
+REAPER                                     JellyControl          minisub.cpp (line ~634-635)
 CHEF                                       ChefControl           chef.cpp
 SNIPER                                     SniperControl         sniper.cpp
 GREEN_TEETH                                SwampyControl         swampy.cpp
 SKELETON                                   SkeletonControl       skeleton.cpp
 TWOGUN                                     TwogunControl         twogun.cpp
 HYDRA                                      HydraControl          hydra.cpp
-WILLOWISP                                  WillOWispControl      willwisp.cpp (Zeile ~47/56-57, setzt ai_bits=FOLLOW)
-MAZE_MONSTER                               MazeMonsterControl    willwisp.cpp (Zeile ~166-167)
+WILLOWISP                                  WillOWispControl      willwisp.cpp (line ~47/56-57, sets ai_bits=FOLLOW)
+MAZE_MONSTER                               MazeMonsterControl    willwisp.cpp (line ~166-167)
 GLADIATOR                                  GladiatorControl      gladiatr.cpp
 
-Pool B - KEIN Patrol/Ambush-Support (immer direktes Lara-Tracking)
+Pool B - NO patrol/ambush support (always direct Lara tracking)
 ---------------------------------------------------------------------
-Objektart      Control-Funktion    Datei          Begruendung
-DOG             DogControl          dog.cpp        CreatureAIInfo/GetCreatureMood/CreatureMood, kein ai_bits-Bezug
-LION            LionControl         lion.cpp       dito
-CROW            CrowControl         crow.cpp       dito
-ROMAN_GOD       RomangodControl     romangod.cpp    prueft nur "ai_bits & GUARD" fuer einen Zufalls-Angriffs-Roll,
-                                                     ruft GetAITarget NIE auf -> Patrol/Guard-Bit hat keine
-                                                     Wegpunkt-Wirkung, Gegner zielt immer direkt auf Lara
-GUARDIAN        GuardianControl     guardian.cpp    Boss, feste Skriptlogik/LOS-Checks, kein CreatureAIInfo ueberhaupt
-AUTOGUN         AutogunControl      autogun.cpp     stationaeres Geschuetz, zielt direkt per LOS() auf Lara;
-                                                     wird in setup.cpp auch gar nicht als "intelligent" markiert
-GUNSHIP         ControlGunship      tower.cpp       Skript-Helikopter, homed per Positions-Filter auf Lara;
-                                                     ebenfalls nicht "intelligent" markiert
+Object kind    control function    file           reasoning
+DOG             DogControl          dog.cpp        CreatureAIInfo/GetCreatureMood/CreatureMood, no ai_bits use
+LION            LionControl         lion.cpp       ditto
+CROW            CrowControl         crow.cpp       ditto
+ROMAN_GOD       RomangodControl     romangod.cpp    only checks "ai_bits & GUARD" for a random attack roll,
+                                                     NEVER calls GetAITarget -> the patrol/guard bit has no
+                                                     waypoint effect, the enemy always aims straight at Lara
+GUARDIAN        GuardianControl     guardian.cpp    boss, fixed script logic/LOS checks, no CreatureAIInfo at all
+AUTOGUN         AutogunControl      autogun.cpp     stationary gun, aims straight at Lara via LOS();
+                                                     also not marked "intelligent" in setup.cpp at all
+GUNSHIP         ControlGunship      tower.cpp       scripted helicopter, homes on Lara via a position filter;
+                                                     likewise not marked "intelligent"
 
-Sonderfall - keine platzierbaren Einzelgegner, sondern FX-Schwarm-Emitter
+Special case - no placeable single enemies, but FX swarm emitters
 ---------------------------------------------------------------------
-RAT, BAT, SPIDER: TriggerRat/ControlBatEmitter/TriggerSpider spawnen
-Partikel-Schwaerme aus einem festen Pool (rat.cpp/bat.cpp/spider.cpp).
-Kein obj->intelligent, keine CreatureCollision, kein AI-System
-involviert. Fuer die Positions-Pool-Logik generell nicht relevant -
-werden nicht wie normale Gegner-Items behandelt.
+RAT, BAT, SPIDER: TriggerRat/ControlBatEmitter/TriggerSpider spawn
+particle swarms from a fixed pool (rat.cpp/bat.cpp/spider.cpp).
+No obj->intelligent, no CreatureCollision, no AI system involved.
+Generally not relevant for the position pool logic - they are not
+treated like normal enemy items.
 
-Verwandtes, separat untersuchtes Thema (siehe TOMB5-Projektnotizen,
-project_tomb5_native_port.md): Podest-/Hidden-OCB-Pickups (OCB 1, 3,
-4, 7, 8), die per GetCarriedItems() (game/setup.cpp) automatisch als
-carried_item eines Gegners eingesammelt werden, wenn sie zu nah dran
-platziert sind (512 Einheiten X/Z, 256 Y) - werden nach dem Tod des
-Gegners floor-gedroppt, behalten aber ihr altes OCB und werden dadurch
-dauerhaft unsammelbar. Fuer den Randomizer: Items generell auf OCB 0
-normalisieren, dann ist es egal ob sie zufaellig als carried_item
-landen oder nicht - funktioniert so oder so.
+A related, separately investigated topic (see the TOMB5 project
+notes, project_tomb5_native_port.md): plinth/hidden OCB pickups
+(OCB 1, 3, 4, 7, 8) that are automatically collected as an enemy's
+carried_item via GetCarriedItems() (game/setup.cpp) when placed too
+close (512 units X/Z, 256 Y) - they are floor-dropped after the
+enemy's death but keep their old OCB and thereby become permanently
+uncollectable. For the randomizer: normalize items to OCB 0 in
+general, then it does not matter whether they happen to land as a
+carried_item or not - it works either way.

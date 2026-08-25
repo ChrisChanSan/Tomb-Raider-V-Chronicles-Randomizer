@@ -1,26 +1,26 @@
-# Floordata und Trigger in TR5
+# Floordata and triggers in TR5
 
-Alles hier ist am Enginecode abgelesen (`TOMB5 Code\TOMB5`), nicht aus
-Community-Dokumentation übernommen. Die maßgeblichen Stellen:
-`GetHeight` (`game/control.cpp:960`) läuft die Kette ab,
-`_TestTriggers` (`game/control.cpp:2126`) wertet einen Trigger aus,
-`struct FLOOR_INFO` (`global/types.h:603`) ist der Einstieg.
+Everything here was read off the engine code (`TOMB5 Code\TOMB5`), not
+taken from community documentation. The decisive places:
+`GetHeight` (`game/control.cpp:960`) walks the chain,
+`_TestTriggers` (`game/control.cpp:2126`) evaluates a trigger,
+`struct FLOOR_INFO` (`global/types.h:603`) is the entry point.
 
 ---
 
-## 1. Wo die Daten liegen
+## 1. Where the data lies
 
-Im Hauptblock, direkt hinter den Räumen:
+In the main block, right behind the rooms:
 
 ```
 long numFloorData;  ushort floor_data[numFloorData];
 ```
 
-Jeder Sektor eines Raums trägt einen `FLOOR_INFO`:
+Every sector of a room carries a `FLOOR_INFO`:
 
 ```c
 struct FLOOR_INFO {
-    ushort index;       // Offset in floor_data - 0 heisst KEINE Floordata
+    ushort index;       // offset into floor_data - 0 means NO floordata
     ushort fx : 4;
     ushort box : 11;
     ushort stopper : 1;
@@ -29,30 +29,31 @@ struct FLOOR_INFO {
 };
 ```
 
-**`index == 0` bedeutet „nichts".** Damit ist Offset 0 im Floordata-Block
-unbenutzbar — dasselbe Muster wie beim Mesh-Index 0, nur diesmal von Core
-selbst so gemeint (`if (!floor->index) return;`, `control.cpp:968`).
+**`index == 0` means "nothing".** Offset 0 in the floordata block is
+thereby unusable — the same pattern as with mesh index 0, only this time
+meant that way by Core itself (`if (!floor->index) return;`,
+`control.cpp:968`).
 
-## 2. Die Kette
+## 2. The chain
 
-`floor_data[index]` ist der Anfang einer Liste variabler Länge. Je Eintrag:
+`floor_data[index]` is the start of a variable-length list. Per entry:
 
-| Bits | Bedeutung |
+| Bits | Meaning |
 |---|---|
-| 0–4 (`& 0x1F`) | Funktion, siehe Tabelle |
-| 5–14 | funktionsabhängige Nutzdaten (z. B. Höhenversatz bei den Split-Typen) |
-| 15 (`& 0x8000`) | **letzter Eintrag der Kette** |
+| 0–4 (`& 0x1F`) | function, see the table |
+| 5–14 | function-dependent payload (e.g. the height offset for the split types) |
+| 15 (`& 0x8000`) | **last entry of the chain** |
 
-Funktionen aus `enum floor_types` (`types.h:322`) mit der Zahl der
-**zusätzlich** verbrauchten Wörter, abgelesen an `GetHeight`:
+Functions from `enum floor_types` (`types.h:322`) with the number of
+**additionally** consumed words, read off `GetHeight`:
 
-| # | Name | Extra-Wörter |
+| # | Name | Extra words |
 |---|---|---|
 | 0 | FLOOR_TYPE | – |
-| 1 | DOOR_TYPE (Portal) | 1 |
-| 2 | TILT_TYPE (Bodenneigung) | 1 |
-| 3 | ROOF_TYPE (Deckenneigung) | 1 |
-| **4** | **TRIGGER_TYPE** | **1 + variable Befehlsliste** |
+| 1 | DOOR_TYPE (portal) | 1 |
+| 2 | TILT_TYPE (floor tilt) | 1 |
+| 3 | ROOF_TYPE (ceiling tilt) | 1 |
+| **4** | **TRIGGER_TYPE** | **1 + a variable command list** |
 | 5 | LAVA_TYPE | – |
 | 6 | CLIMB_TYPE | – |
 | 7–10 | SPLIT1…SPLIT4 | 1 |
@@ -61,124 +62,130 @@ Funktionen aus `enum floor_types` (`types.h:322`) mit der Zahl der
 | 20 | TRIGTRIGGER_TYPE | – |
 | 21 | MINER_TYPE | – |
 
-## 3. Der Trigger-Eintrag
+## 3. The trigger entry
 
 ```
-Wort 0:  Funktion 4 in Bits 0-4, TRIGGERART in Bits 8-13
-Wort 1:  Timer (Bits 0-7) | OneShot (Bit 8) | Codebits/Maske (Bits 9-13)
-[Wort 2: nur bei SWITCH, KEY und PICKUP - das zu bedienende bzw. aufzunehmende Item]
-Wort n:  Befehle, bis eines Bit 15 gesetzt hat
+Word 0:  function 4 in bits 0-4, TRIGGER KIND in bits 8-13
+Word 1:  timer (bits 0-7) | OneShot (bit 8) | code bits/mask (bits 9-13)
+[Word 2: only for SWITCH, KEY and PICKUP - the item to operate resp. pick up]
+Word n:  commands, until one has bit 15 set
 ```
 
-**PICKUP gehört in diese Zeile.** `_TestTriggers` liest das Wort für alle drei
-Arten gleich: `control.cpp:2251` (SWITCH), `:2266` (KEY), `:2274` (PICKUP), jedes
-Mal `value = *(data++) & 0x3FF;`.
+**PICKUP belongs in that line.** `_TestTriggers` reads the word the same
+way for all three kinds: `control.cpp:2251` (SWITCH), `:2266` (KEY),
+`:2274` (PICKUP), each time `value = *(data++) & 0x3FF;`.
 
-Exporter und FloorTool haben lange nur SWITCH und KEY geprüft. Das hat die
-Kette nicht verschoben — das Wort wurde einfach als **erster Befehl**
-ausgegeben — und weil ein Pickup-Verweis immer als Befehlsart 0 mit dem Index
-des eigenen Items daherkommt, sah er sogar aus wie ein plausibles
-`Object`-Kommando. Das ist er nicht:
+Exporter and FloorTool long checked only SWITCH and KEY. That did not
+shift the chain — the word was simply printed as the **first command** —
+and because a pickup reference always comes along as command kind 0 with
+the index of its own item, it even looked like a plausible `Object`
+command. It is not:
 
-- Es ist kein Befehl, sondern der Bezug des Triggers auf sein Item.
-- Beim **Umbauen** einer Kette hätte er als löschbarer Befehl gegolten. Wer aus
-  einem Pickup-Trigger den Befehl `Object 107` entfernt, entfernt in Wahrheit
-  das Referenzwort und zerstört den Trigger lautlos.
+- It is no command but the trigger's reference to its item.
+- When **rebuilding** a chain it would have counted as a deletable
+  command. Whoever removes the command `Object 107` from a pickup trigger
+  in truth removes the reference word and silently destroys the trigger.
 
-Der frühere Andrea1-Versuch (Befehl `Object 26` aus Trigger 118 entfernen) hat
-das nur überlebt, weil 26 ≠ 107 war. Das war Glück, keine Korrektheit.
+The earlier Andrea1 attempt (removing the command `Object 26` from
+trigger 118) only survived that because 26 ≠ 107. That was luck, not
+correctness.
 
-Aus `_TestTriggers`:
-`type = (*data++ >> 8) & 0x3F;` dann `flags = *data++; timer = flags & 0xff;`
+From `_TestTriggers`:
+`type = (*data++ >> 8) & 0x3F;` then `flags = *data++; timer = flags & 0xff;`
 
-**Triggerarten** (`enum trigger_types`, `types.h:414`): TRIGGER, PAD, SWITCH,
-KEY, PICKUP, HEAVY, ANTIPAD, COMBAT, DUMMY, ANTITRIGGER, HEAVYSWITCH,
-HEAVYANTITRIGGER, MONKEY, SKELETON_T, TIGHTROPE_T, CRAWLDUCK_T, CLIMB_T.
+**Trigger kinds** (`enum trigger_types`, `types.h:414`): TRIGGER, PAD,
+SWITCH, KEY, PICKUP, HEAVY, ANTIPAD, COMBAT, DUMMY, ANTITRIGGER,
+HEAVYSWITCH, HEAVYANTITRIGGER, MONKEY, SKELETON_T, TIGHTROPE_T,
+CRAWLDUCK_T, CLIMB_T.
 
-**Befehlswort:** Parameter in Bits 0–9, Befehlsart in Bits 10–13, Ende in Bit 15.
+**Command word:** parameter in bits 0–9, command kind in bits 10–13, end
+in bit 15.
 
-**Befehlsarten** (`enum trigobj_types`, `types.h:435`): TO_OBJECT, TO_CAMERA,
-TO_SINK, TO_FLIPMAP, TO_FLIPON, TO_FLIPOFF, TO_TARGET, TO_FINISH, TO_CD,
-TO_FLIPEFFECT, TO_SECRET, TO_BODYBAG, TO_FLYBY, TO_CUTSCENE.
+**Command kinds** (`enum trigobj_types`, `types.h:435`): TO_OBJECT,
+TO_CAMERA, TO_SINK, TO_FLIPMAP, TO_FLIPON, TO_FLIPOFF, TO_TARGET,
+TO_FINISH, TO_CD, TO_FLIPEFFECT, TO_SECRET, TO_BODYBAG, TO_FLYBY,
+TO_CUTSCENE.
 
-**TO_CAMERA und TO_FLYBY verbrauchen ein zusätzliches Wort.** Wer das beim
-Ablaufen vergisst, liest den Rest der Kette verschoben — `GetHeight` behandelt
-es an `control.cpp:1027` ausdrücklich.
+**TO_CAMERA and TO_FLYBY consume an additional word.** Whoever forgets
+that while walking reads the rest of the chain shifted — `GetHeight`
+handles it explicitly at `control.cpp:1027`.
 
-### Geklärt: die Befehlsart hat 4 Bit
+### Settled: the command kind has 4 bits
 
-Die Engine belegt das an zwei unabhängigen Stellen:
+The engine proves it at two independent places:
 
 - `_TestTriggers`: `switch ((trigger & 0x3FFF) >> 10)` — `control.cpp:2350`
 - `GetHeight`: `(trigger & 0x3C00) != (TO_OBJECT << 10)` — `control.cpp:1025`
 
-Bit 15 ist das Endebit, **Bit 14 wertet die Engine überhaupt nicht aus**. Der
-Exporter las 5 Bit (`(wCmd & 0x7C00) >> 10`) und hätte ein gesetztes Bit 14
-anders gedeutet als das Spiel. Auf `0x3C00` angeglichen, an beiden Fundstellen
-in `TRFile_RandomizerExport.cpp` und im FloorTool.
+Bit 15 is the end bit, and **the engine does not evaluate bit 14 at
+all**. The exporter read 5 bits (`(wCmd & 0x7C00) >> 10`) and would have
+interpreted a set bit 14 differently than the game. Aligned to `0x3C00`
+at both occurrences in `TRFile_RandomizerExport.cpp` and in the
+FloorTool.
 
 ---
 
-## 4. Wie geändert wird: nur anhängen und umhängen
+## 4. How changes are made: only append and repoint
 
-Vorgabe des Nutzers, dieselbe wie bei den Items: **add und replace, kein
-remove.** Das ist hier keine Einschränkung, sondern die Lösung.
+The user's requirement, the same as with the items: **add and replace, no
+remove.** Here that is not a restriction but the solution.
 
-Floordata ist ein gemeinsamer Block, in den alle Sektoren zeigen. Bytes
-mittendrin zu entfernen würde jeden nachfolgenden Index verschieben — also
-**nie in der bestehenden Kette editieren**. Stattdessen:
+Floordata is a shared block that all sectors point into. Removing bytes
+in the middle would shift every subsequent index — so **never edit inside
+the existing chain**. Instead:
 
-1. Die neue Kette (alte Einträge plus/minus Trigger) **hinten an
-   `floor_data` anhängen**.
-2. `FLOOR_INFO.index` des betroffenen Sektors auf den neuen Offset setzen.
-3. Die alte Kette bleibt als toter Ballast liegen. Sie stört niemanden — auf
-   sie zeigt danach kein Sektor mehr.
+1. **Append the new chain** (old entries plus/minus the trigger) **to the
+   end of `floor_data`**.
+2. Set the affected sector's `FLOOR_INFO.index` to the new offset.
+3. The old chain stays behind as dead ballast. It bothers nobody — no
+   sector points at it anymore afterwards.
 
-Damit verschiebt sich **kein einziger vorhandener Index**. Auch das Entfernen
-eines Triggers von einem Sektor läuft so: neue Kette ohne ihn anhängen,
-umhängen, fertig — im Block wird nichts gelöscht.
+That way **not a single existing index shifts**. Removing a trigger from
+a sector runs the same way: append a new chain without it, repoint, done
+— nothing in the block gets deleted.
 
-**Kopf mitziehen:** `numFloorData` am Anfang des Blocks, die Größe des
-Hauptblocks (steht doppelt davor, size und compressedSize) — genau wie beim
-Anhängen von Items.
+**Update the header along:** `numFloorData` at the block's start, the
+main block's size (it stands twice before it, size and compressedSize) —
+exactly as when appending items.
 
-### Wohin in der Kette ein Trigger darf
+### Where in the chain a trigger may go
 
-Ein Trigger darf **nicht an beliebiger Stelle** stehen. Das Zusammenspiel von
-`GetHeight` und `_TestTriggers` gibt eine feste Reihenfolge vor:
+A trigger may **not** stand at an arbitrary spot. The interplay of
+`GetHeight` and `_TestTriggers` dictates a fixed order:
 
-`GetHeight` (`control.cpp:1014–1053`) merkt sich beim Ablaufen der Kette einen
-Zeiger `trigger_index`. Gesetzt wird er auf den **ersten** Eintrag aus
-{TRIGGER, CLIMB, MONKEY, TRIGTRIGGER}; LAVA setzt ihn sogar bedingungslos neu.
-Portale, Neigungen und die SPLIT/NOCOL-Einträge setzen ihn **nicht** — die
-frisst `GetHeight` beim Laufen einfach mit.
+`GetHeight` (`control.cpp:1014–1053`) remembers a pointer
+`trigger_index` while walking the chain. It is set to the **first** entry
+from {TRIGGER, CLIMB, MONKEY, TRIGTRIGGER}; LAVA even resets it
+unconditionally. Portals, tilts and the SPLIT/NOCOL entries do **not**
+set it — `GetHeight` simply eats those while walking.
 
-`_TestTriggers` beginnt an diesem Zeiger und überspringt ab dort **genau vier**
-Eintragsarten — LAVA, CLIMB, MONKEY, TRIGTRIGGER (`control.cpp:2151–2195`) —
-und liest dann in Zeile 2197 **bedingungslos** einen Triggerkopf:
+`_TestTriggers` starts at this pointer and from there skips **exactly
+four** entry kinds — LAVA, CLIMB, MONKEY, TRIGTRIGGER
+(`control.cpp:2151–2195`) — and then in line 2197 **unconditionally**
+reads a trigger head:
 
 ```c
 type = (*data++ >> 8) & 0x3F;
 ```
 
-Daraus folgt die Regel zum Anhängen:
+From that follows the appending rule:
 
-> **Hinten anhängen ist erlaubt, solange die Kette keinen LAVA-, CLIMB-,
-> MONKEY-, TRIGTRIGGER- oder TRIGGER-Eintrag enthält.**
+> **Appending at the end is allowed as long as the chain contains no
+> LAVA, CLIMB, MONKEY, TRIGTRIGGER or TRIGGER entry.**
 
-Steht eines dieser fünf schon drin, zeigt `trigger_index` dorthin, und alles,
-was zwischen ihm und dem angehängten Trigger liegt — ein Portal, eine Neigung —
-wird von `_TestTriggers` als Triggerkopf fehlgedeutet. Ein Portalwort als
-Trigger gelesen ergibt eine zufällige Triggerart mit zufälligen Befehlen.
+If one of these five is already inside, `trigger_index` points there, and
+everything between it and the appended trigger — a portal, a tilt — gets
+misread by `_TestTriggers` as a trigger head. A portal word read as a
+trigger yields a random trigger kind with random commands.
 
-Portale und Neigungen **allein** sind dagegen harmlos: sie stehen vor dem
-Zeiger, nicht dahinter. Ein Sektor mit reiner Geometrie-Floordata ist also ein
-gültiges Ziel. Geprüft wird das in `FloorTool` von `darfAnhaengen()`.
+Portals and tilts **alone**, by contrast, are harmless: they stand before
+the pointer, not behind it. A sector with pure geometry floordata is thus
+a valid target. `FloorTool` checks this in `darfAnhaengen()`.
 
-### Platz ist genug
+### There is enough room
 
-`FLOOR_INFO.index` ist ein `ushort`, also maximal 65535. Gemessen an allen
-dreizehn Leveln:
+`FLOOR_INFO.index` is a `ushort`, so at most 65535. Measured over all
+thirteen levels:
 
 | Level | Floordata | | Level | Floordata |
 |---|---|---|---|---|
@@ -190,71 +197,72 @@ dreizehn Leveln:
 | Andy2 | 6 169 | | rich3 | 5 189 |
 | joby2 | 8 476 | | | |
 
-Der größte liegt bei 23 % der Grenze. Selbst wenn wir die Floordata
-vervierfachen, bleibt Luft. Die Grenze gehört trotzdem geprüft, bevor
-angehängt wird — ein Level, das sie reißt, muss abgelehnt und nicht
-stillschweigend kaputtgeschrieben werden.
+The largest sits at 23% of the limit. Even if we quadruple the floordata,
+air remains. The limit still deserves a check before appending — a level
+that tears it must be rejected, not silently written broken.
 
 ---
 
-## 4a. Was gezählt wurde
+## 4a. What was counted
 
-Über alle dreizehn Level (aus den `level_*.json`-Exporten):
+Over all thirteen levels (from the `level_*.json` exports):
 
 | | |
 |---|---|
-| Trigger insgesamt | 2 057 |
-| davon wecken einen Gegner | 269 |
-| davon Pickup/Key-Trigger | **7** |
-| Items, die heute festhängen | **7** |
-| Items, die durch reines Gegner-Loslösen frei würden | **0** |
+| Triggers in total | 2 057 |
+| of which wake an enemy | 269 |
+| of which pickup/key triggers | **7** |
+| Items stuck today | **7** |
+| Items that pure enemy-detaching would free | **0** |
 
-Verteilung: Trigger 1366, HeavyTrigger 240, AntiTrigger 181, Switch 82, Pad 53,
-Key 39, Skeleton 36, Dummy 26, **Pickup 11**, HeavyAntiTrigger 10, Monkey 5,
-Tightrope 4, HeavySwitch 2, Antipad 1, Climb 1.
+Distribution: Trigger 1366, HeavyTrigger 240, AntiTrigger 181, Switch 82,
+Pad 53, Key 39, Skeleton 36, Dummy 26, **Pickup 11**, HeavyAntiTrigger
+10, Monkey 5, Tightrope 4, HeavySwitch 2, Antipad 1, Climb 1.
 
-**Folgerung:** Für die Itemfreiheit ist die Triggerarbeit fast wertlos — es geht
-um sieben Items, und in jedem der sieben Fälle hängt neben dem Gegner noch etwas
-anderes am Trigger (Tür, Flipmap, Cutscene). Der Wert liegt beim **Gegner-Pool**
-und beim **Hinzufügen** von Gegnern: 269 Trigger sind die Masse, mit der sich
-arbeiten lässt.
+**Conclusion:** for item freedom the trigger work is almost worthless —
+it is about seven items, and in each of the seven cases something else
+hangs on the trigger besides the enemy (a door, a flipmap, a cutscene).
+The value lies with the **enemy pool** and with **adding** enemies: 269
+triggers are the mass to work with.
 
-## 4b. Regeln für das Verschieben (Vorgabe des Nutzers)
+## 4b. Rules for moving (the user's requirement)
 
-### Entschieden am 13.08.2026: die Items bleiben, wie sie kuriert sind
+### Decided on 2026-08-13: the items stay as curated
 
-Nachdem die Zählung ergeben hatte, dass von 2044 Items nur **zwei** durch
-Trigger-Verschieben frei würden, hat der Nutzer den Item-Zweig geschlossen:
+After the count had shown that of 2044 items only **two** would be freed
+by trigger moving, the user closed the item branch:
 
-> „Ok dann lass die Items so lassen wie wir die manuell kurratiert haben. Dann
-> nutzen wir die Trigger nur für neue Gegner die wir dem Level hinzufügen."
+> "Ok dann lass die Items so lassen wie wir die manuell kurratiert haben.
+> Dann nutzen wir die Trigger nur für neue Gegner die wir dem Level
+> hinzufügen." (Leave the items as we hand-curated them; we use the
+> triggers only for new enemies added to the level.)
 
-Damit gilt:
+Therefore:
 
-- Der **allgemeine gekoppelte Zug** von Item und Trigger wird **nicht**
-  verfolgt. Die Kuration bleibt Maßstab.
-- **Eine Ausnahme**, ebenfalls Nutzervorgabe: **Andrea1 Key 107** darf in den
-  Pool, sein Pickup-Trigger wandert mit („da müssen wir nur den Trigger nur mit
-  verschieben"). Siehe 4e.
-- Der eigentliche Zweck der Triggerarbeit ist das **Hinzufügen neuer Gegner**.
-  Dafür wird keine vorhandene Kette angefasst — siehe 4f.
+- The **general coupled move** of item and trigger is **not** pursued.
+  The curation stays the yardstick.
+- **One exception**, also the user's requirement: **Andrea1 key 107** may
+  enter the pool, its pickup trigger travels along ("we only have to move
+  the trigger with it"). See 4e.
+- The actual purpose of the trigger work is **adding new enemies**. For
+  that, no existing chain is touched — see 4f.
 
-**Trigger und Item bleiben zusammen**, wo überhaupt verschoben wird: der
-Trigger wandert mit auf den neuen Sektor, ein Vorgang, nicht zwei. Der Sektor
-ist neu, die Kopplung bleibt.
+**Trigger and item stay together** wherever anything moves at all: the
+trigger travels onto the new sector with it, one operation, not two. The
+sector is new, the coupling remains.
 
-**Diese Trigger werden NIE verschoben**, weil sie raumspezifische Gegebenheiten
-erwarten:
+**These triggers are NEVER moved**, because they expect room-specific
+circumstances:
 
-- **Flipmap** (alle `TO_FLIPMAP`/`TO_FLIPON`/`TO_FLIPOFF`)
+- **Flipmap** (all `TO_FLIPMAP`/`TO_FLIPON`/`TO_FLIPOFF`)
 - **Antitrigger** (`ANTIPAD`, `ANTITRIGGER`, `HEAVYANTITRIGGER`)
 - **Heavy** (`HEAVY`, `HEAVYSWITCH`, `HEAVYANTITRIGGER`)
-- **Cutscene** (`TO_CUTSCENE`, und `TO_FLYBY` gehört sinngemäß dazu)
+- **Cutscene** (`TO_CUTSCENE`, and `TO_FLYBY` belongs with it in spirit)
 
-Zusammen sind das über 400 der 2057 Trigger. Sie bleiben, wo sie sind, und das
-Item an ihnen bleibt festgenagelt.
+Together that is over 400 of the 2057 triggers. They stay where they are,
+and the item on them stays pinned.
 
-**Diese Items bleiben vorerst vanilla** (Nutzerentscheidung):
+**These items stay vanilla for now** (user decision):
 
 | Level | Items |
 |---|---|
@@ -264,17 +272,17 @@ Item an ihnen bleibt festgenagelt.
 | joby3 | 41, 187 |
 | rich1 | 14, 27 |
 
-Beim Nachschlagen zeigte sich ein Muster, das die Liste erklärt: **fast alle
-haben eine Sonder-OCB** — 121/128/68/26 haben OCB 2, 6/41 haben OCB 9, rich1s
-Iris (14) hat OCB 8, item 27 hat OCB 6. Aus der Reihe fallen nur Andrea2 Item 71
-(ein Animating, gar kein Pickup) und joby3 Item 187 (Key6 auf einem
-Cutscene-Trigger, fällt also schon unter die globale Regel).
+Looking them up revealed a pattern that explains the list: **almost all
+carry a special OCB** — 121/128/68/26 have OCB 2, 6/41 have OCB 9,
+rich1's Iris (14) has OCB 8, item 27 has OCB 6. Out of line are only
+Andrea2 item 71 (an animating, not a pickup at all) and joby3 item 187
+(Key6 on a cutscene trigger, so already covered by the global rule).
 
-## 4b-bis. Bit 0x40: die Bedingung, ohne die kein Pickup-Trigger feuert
+## 4b-bis. Bit 0x40: the condition without which no pickup trigger fires
 
-Ein Pickup-Trigger feuert **nicht**, weil er auf dem richtigen Sektor liegt. Er
-feuert nur, wenn das aufgenommene Item danach überhaupt noch existiert — und das
-entscheidet ein Bit **oberhalb** der sichtbaren OCB.
+A pickup trigger does **not** fire because it lies on the right sector.
+It only fires if the collected item still exists at all afterwards — and
+that is decided by a bit **above** the visible OCB.
 
 `PickUpCollision`, `game/pickup.cpp:989`:
 
@@ -289,7 +297,7 @@ else
 }
 ```
 
-Und `PickupTrigger`, `pickup.cpp:158`, verlangt genau diese beiden Zustände:
+And `PickupTrigger`, `pickup.cpp:158`, demands exactly these two states:
 
 ```c
 if (item->flags & IFL_CLEARBODY || item->status != ITEM_INVISIBLE ||
@@ -297,41 +305,41 @@ if (item->flags & IFL_CLEARBODY || item->status != ITEM_INVISIBLE ||
     return 0;
 ```
 
-Ohne 0x40 (oder 0x80) wird das Item beim Aufnehmen schlicht getötet, erreicht nie
-`ITEM_INVISIBLE`, und `case PICKUP:` in `_TestTriggers` steigt mit `return` aus,
-**bevor** ein einziger Befehl gelesen wird.
+Without 0x40 (or 0x80) the item is simply killed on pickup, never reaches
+`ITEM_INVISIBLE`, and `case PICKUP:` in `_TestTriggers` bails out with
+`return` **before** a single command is read.
 
-> **Merksatz:** Bit 0x40 ist die Eintrittskarte des Pickup-Triggers. Wandert ein
-> Item, muss das Bit mitwandern.
+> **Mnemonic:** bit 0x40 is the pickup trigger's ticket. When an item
+> travels, the bit must travel with it.
 
-**Warum das schwer zu sehen ist:** Jedes Werkzeug — trview, unser JSON-Export,
-`DumpItems` — zeigt die OCB auf `0x3F` maskiert an. Andrea1 Item 107 steht
-überall als „OCB 0" da; roh ist es `0x0040`. Wer nur auf die angezeigte OCB
-schaut, hält das Bit für nicht vorhanden.
+**Why this is hard to see:** every tool — trview, our JSON export,
+`DumpItems` — displays the OCB masked to `0x3F`. Andrea1 item 107 stands
+everywhere as "OCB 0"; raw it is `0x0040`. Whoever looks only at the
+displayed OCB takes the bit for absent.
 
-**Gegenprobe über alle 13 Level:** Alle sieben Items, die über einen
-Pickup-Trigger ortsgebunden sind, tragen das Bit — und nur sie:
+**Cross-check over all 13 levels:** all seven items that are place-bound
+via a pickup trigger carry the bit — and only they:
 
-| Level | Item | roh |
+| Level | Item | raw |
 |---|---|---|
 | Andrea1 | 107, 94 | `0x0040` |
-| Andrea3 | 68 | `0x0042` (OCB 2 + Bit) |
-| andy1 | 8 | `0x0045` (OCB 5 + Bit) |
+| Andrea3 | 68 | `0x0042` (OCB 2 + bit) |
+| andy1 | 8 | `0x0045` (OCB 5 + bit) |
 | Andy2 | 29 | `0x0040` |
-| rich1 | 14 | `0x0048` (OCB 8 + Bit) |
-| rich3 | 75 | `0x0044` (OCB 4 + Bit) |
+| rich1 | 14 | `0x0048` (OCB 8 + bit) |
+| rich3 | 75 | `0x0044` (OCB 4 + bit) |
 
-Das Bit ist damit zugleich ein **Erkennungsmerkmal**: ein Pickup mit 0x40 hat
-einen Pickup-Trigger, der etwas bewirkt.
+The bit is thereby also a **recognition mark**: a pickup with 0x40 has a
+pickup trigger that does something.
 
-Bit 0x80 daneben markiert ein regenerierendes Pickup (`game/init.cpp:492`) und
-zählt für `& 0xC0` genauso — deshalb müssen beim Verschieben **beide** Bits
-erhalten bleiben, nicht nur eines.
+Bit 0x80 next to it marks a regenerating pickup (`game/init.cpp:492`) and
+counts the same for `& 0xC0` — which is why **both** bits must be
+preserved when moving, not just one.
 
-## 4b-ter. OneShot ist kein Schalter, sondern eine Verhaltensänderung
+## 4b-ter. OneShot is no switch but a behavior change
 
-Bit 8 des Setup-Worts heißt „OneShot", tut aber mehr, als den Trigger einmalig
-zu machen. `_TestTriggers` gibt es an das geweckte Item weiter
+Bit 8 of the setup word is called "OneShot" but does more than making the
+trigger fire once. `_TestTriggers` passes it on to the woken item
 (`control.cpp:2415`):
 
 ```c
@@ -339,152 +347,158 @@ if (flags & IFL_INVISIBLE)
     item->flags |= IFL_INVISIBLE;
 ```
 
-Und `IFL_INVISIBLE` (0x100) ist laut `types.h:243` ausdrücklich *„also used as
-oneshot for everything else"* — dasselbe Bit trägt beide Bedeutungen. Manche
-Gegner fragen es ab und verhalten sich dann anders.
+And `IFL_INVISIBLE` (0x100) is, per `types.h:243`, expressly *"also used
+as oneshot for everything else"* — the same bit carries both meanings.
+Some enemies query it and then behave differently.
 
-**Larson (und Pierre) sind der Fall, an dem das auffiel.** `pierre.cpp:68`:
+**Larson (and Pierre) are the case where this surfaced.** `pierre.cpp:68`:
 
 ```c
 if (item->hit_points <= 40 && !(item->flags & IFL_INVISIBLE))
 {
     item->hit_points = 40;
-    pierre->flags++;      // -> :133 setzt sie zurueck auf 60 und schickt ihn weg
+    pierre->flags++;      // -> :133 resets them to 60 and sends him away
 }
 ```
 
-Ohne das Bit ist Larson **gar nicht tötbar** — die Trefferpunkte werden bei 40
-geklemmt und sofort wieder auf 60 gesetzt. Danach flieht er, und außerhalb von
-Trajan's Markets löscht ihn `pierre.cpp:341` beim Erreichen seines Ziels.
+Without the bit Larson is **not killable at all** — his hit points get
+clamped at 40 and immediately reset to 60. Then he flees, and outside of
+Trajan's Markets `pierre.cpp:341` deletes him on reaching his goal.
 
-> **Merksatz:** Wer einen Gegner neu ins Level setzt, gibt seinem Trigger
-> OneShot. Bei den meisten ändert es nichts, bei Larson entscheidet es darüber,
-> ob er überhaupt ein Gegner ist.
+> **Mnemonic:** whoever places a new enemy into a level gives its trigger
+> OneShot. For most it changes nothing; for Larson it decides whether he
+> is an enemy at all.
 
-Im Spiel geprüft (Andrea1, Larson in Raum 2, OneShot-Trigger drei Sektoren
-davor): er bleibt, verfolgt Lara über Raumgrenzen, geht auf 0 Trefferpunkte.
+Verified in game (Andrea1, Larson in room 2, a OneShot trigger three
+sectors before): he stays, pursues Lara across room borders, goes down to
+0 hit points.
 
-### Was Larson sonst noch verlangt
+### What else Larson demands
 
-- **OCB 0.** Bei OCB != 0 setzt `pierre.cpp:84` `ai_bits = GUARD`, und dann
-  sucht er AI-Objekte, die an einer neuen Stelle nicht stehen.
-- **Sein Tod feuert einen Heavy-Trigger an seiner Startposition.**
-  `pierre.cpp:118`, die Position kommt aus `draw_room`/`item_flags[2]`, die
-  `InitialiseCreature` (`box.cpp:30`) aus der Platzierung packt. Landet er auf
-  einem Sektor mit Heavy-Trigger, löst er den beim Sterben aus.
-- **Andrea2s Larson (Item 76) darf nie verschoben werden.** Die Todesprobe folgt
-  seiner Platzierung, der Cutscene-Trigger liegt aber fest auf `72,2,2` — sonst
-  fällt die Todes-Cutscene aus.
-- **Seine Leiche blieb stehen.** Seine Sterbeanimation (Slot 45, relativ 15,
-  Frames 281..488) trägt sieben `PlaySound`-Befehle und keinen Anim-Befehl 4
-  (`KillItem`) — der Hund hat ihn, Larson nicht, weil seine Leiche in Vanilla
-  nur die Andrea2-Cutscene wegräumt. Behoben in unserer Engine: `pierre.cpp`
-  setzt am letzten Frame `after_death = 1`, den Rest macht `draw.cpp:742`.
-  Steht in `MODIFICATIONS.md`.
+- **OCB 0.** At OCB != 0, `pierre.cpp:84` sets `ai_bits = GUARD`, and
+  then he looks for AI objects that do not stand at a new spot.
+- **His death fires a heavy trigger at his start position.**
+  `pierre.cpp:118`; the position comes from `draw_room`/`item_flags[2]`,
+  which `InitialiseCreature` (`box.cpp:30`) packs from the placement. If
+  he lands on a sector with a heavy trigger, he fires it when dying.
+- **Andrea2's Larson (item 76) must never be moved.** The death check
+  follows his placement, but the cutscene trigger lies fixed on `72,2,2`
+  — otherwise the death cutscene never happens.
+- **His corpse used to remain standing.** His death animation (slot 45,
+  relative 15, frames 281..488) carries seven `PlaySound` commands and no
+  anim command 4 (`KillItem`) — the dog has it, Larson does not, because
+  in vanilla his corpse is only cleaned up by the Andrea2 cutscene. Fixed
+  in our engine: `pierre.cpp` sets `after_death = 1` on the last frame,
+  the rest is done by `draw.cpp:742`. Recorded in `MODIFICATIONS.md`.
 
-## 4c. Was die OCB-Werte wirklich verlangen
+## 4c. What the OCB values really demand
 
-Vollständig aus `PickUpCollision` (`game/pickup.cpp:728`) abgelesen:
+Read completely off `PickUpCollision` (`game/pickup.cpp:728`):
 
-| OCB | Verhalten | verschiebbar? |
+| OCB | Behavior | movable? |
 |---|---|---|
-| 0 | gewöhnliches Pickup | ja |
-| 1 | verstecktes Pickup, `ANIM_HIDDENPICKUP` | nein, braucht Sonderumgebung |
-| **2** | **Brechstange**, `CrowbarPickUpBounds` | erst mit Wandfilter |
-| 3, 4, 7, 8 | Sockel, `FindPlinth()` — ohne Sockel **stumm unaufnehmbar** | nein |
-| 5, 10 | nie aufnehmbar (Rücksprung ganz oben) | – |
-| **6** | fällt in den `default`-Zweig, also **gewöhnliches Pickup**, nur animiert | **ja** |
-| **9** | „JobyCrow", `JobyCrowPickUpBounds`, eigene Animation | wie 2 |
-| 11 | Münzglitzern | ja |
+| 0 | ordinary pickup | yes |
+| 1 | hidden pickup, `ANIM_HIDDENPICKUP` | no, needs a special environment |
+| **2** | **crowbar**, `CrowbarPickUpBounds` | only with the wall filter |
+| 3, 4, 7, 8 | plinth, `FindPlinth()` — without a plinth **silently uncollectable** | no |
+| 5, 10 | never collectable (early return at the very top) | – |
+| **6** | falls into the `default` branch, so an **ordinary pickup**, only animated | **yes** |
+| **9** | "JobyCrow", `JobyCrowPickUpBounds`, its own animation | like 2 |
+| 11 | coin glitter | yes |
 
-**OCB 6 ist harmlos:** es steht in keinem `case` der Auswahl und landet im
-Standardzweig; es taucht nur in der Animationsliste (`pickup.cpp:580`) auf.
+**OCB 6 is harmless:** it stands in no `case` of the selection and lands
+in the default branch; it only appears in the animation list
+(`pickup.cpp:580`).
 
-**Bei rich1s Item 27 ist die OCB aber gar nicht der Grund.** Die CD trägt
-vanilla `Invisible=true` und liegt außerhalb der Karte; der Switch in Raum 15
-aktiviert sie zusammen mit Door 4 und Door 2, und im Spiel fällt sie aus dem
-Anzug, sobald dessen Animation läuft. Ein Ortswechsel zerstört die Enthüllung.
-Sie steht deshalb **dauerhaft** in `FIXED_ITEMS['rich1']` *und* in
-`VANILLA_TYPES['rich1']` (ZoneAnalyse.ps1) — **nicht** „vorerst vanilla", sondern
-nie im Pool. Der Wandfilter ändert daran nichts.
+**With rich1's item 27, though, the OCB is not the reason at all.** The
+CD carries `Invisible=true` in vanilla and lies outside the map; the
+switch in room 15 activates it together with Door 4 and Door 2, and in
+game it falls out of the suit as soon as its animation runs. A change of
+place destroys the reveal. It therefore stands **permanently** in
+`FIXED_ITEMS['rich1']` *and* in `VANILLA_TYPES['rich1']` (ZoneAnalyse.ps1)
+— **not** "vanilla for now" but never in the pool. The wall filter
+changes nothing about that.
 
-Merksatz daraus: eine Sonder-OCB ist ein *Hinweis* darauf, dass ein Item
-besonders ist, aber nicht der Beweis — und ihr Fehlen ist kein Freibrief.
+The mnemonic from this: a special OCB is a *hint* that an item is
+special, but not the proof — and its absence is no carte blanche.
 
-## 4d. Wandfilter für OCB 2 und 9
+## 4d. Wall filter for OCB 2 and 9
 
-Beide Zweige setzen `item->pos.y_rot = roty` zurück — den **eigenen** Winkel des
-Items — bevor `TestLaraPosition` prüft (`pickup.cpp:783` bzw. `:872`). Der
-Winkel bestimmt also, aus welcher Richtung Lara herankommen muss. Frei
-schwebend ist es aufnehmbar, sieht aber falsch aus.
+Both branches reset `item->pos.y_rot = roty` — the item's **own** angle —
+before `TestLaraPosition` checks (`pickup.cpp:783` resp. `:872`). The
+angle thus determines from which direction Lara must approach. Floating
+freely it is collectable but looks wrong.
 
-Zum Freigeben braucht es **drei Dinge, von denen zwei noch fehlen**:
+Releasing it needs **three things, two of which were still missing**:
 
-1. Einen **Sektor mit Wandnachbar**. Datenlage: vorhanden — der Sektor-Export
-   führt `isWall` je Sektor, die vier Nachbarn im selben Raum sind prüfbar.
-2. Den **Winkel passend zur Wand** setzen. **Fehlt:** der Level-Export liefert
-   heute gar keinen Item-Winkel.
-3. Den Winkel **schreiben** zu können. **Fehlt:** das Patch-Format kennt kein
-   `angle`; ein verschobenes Item behält bisher bewusst seine Ausrichtung.
+1. A **sector with a wall neighbor**. Data situation: present — the
+   sector export carries `isWall` per sector, the four neighbors in the
+   same room are checkable.
+2. Setting the **angle to match the wall**. **Missing:** the level export
+   delivered no item angle at all back then.
+3. Being able to **write** the angle. **Missing:** the patch format knew
+   no `angle`; a moved item deliberately kept its orientation.
 
-## 4e. Der eine gekoppelte Zug: Andrea1 Key 107
+## 4e. The one coupled move: Andrea1 key 107
 
-Ausgangslage, mit korrekt gelesenem Referenzwort:
+Starting position, with the reference word read correctly:
 
 ```
-192,1,2  [3:0003 0200][4:8404 art=4 timer=0 once=0 maske=31 ref=107 c0:26 c0:108]
+192,1,2  [3:0003 0200][4:8404 kind=4 timer=0 once=0 mask=31 ref=107 c0:26 c0:108]
 ```
 
-Der Sektor trägt zwei Einträge: einen ROOF-Eintrag und den Pickup-Trigger. Der
-Trigger verweist auf Item 107 (Key, Typ 196, OCB 0) und weckt zusätzlich
-Objekt 26 (Hund, Typ 41) und Objekt 108 (Flame Emitter2, Typ 122).
+The sector carries two entries: a ROOF entry and the pickup trigger. The
+trigger references item 107 (key, type 196, OCB 0) and additionally wakes
+object 26 (dog, type 41) and object 108 (Flame Emitter2, type 122).
 
-**Warum das Verschieben das Verhalten erhält:** `PickupTrigger`
-(`pickup.cpp:152`) prüft ausschließlich den **Zustand des Items** —
-`ITEM_INVISIBLE`, `item_flags[3]`, `trigger_flags & 128` — und ruft dann
-`KillItem`. Nichts daran ist ortsgebunden. Der Trigger feuert, sobald Lara auf
-seinem Sektor steht und das Item gerade eingesammelt wurde. Da Lara zum
-Einsammeln ohnehin auf dem Item-Sektor steht, ist „Item und Trigger gemeinsam
-versetzen" verhaltensgleich mit vanilla. Das Referenzwort bleibt gültig, weil
-der Trigger sein Item über den **Index** anspricht, nicht über den Ort.
+**Why moving preserves the behavior:** `PickupTrigger` (`pickup.cpp:152`)
+checks exclusively the **item's state** — `ITEM_INVISIBLE`,
+`item_flags[3]`, `trigger_flags & 128` — and then calls `KillItem`.
+Nothing about that is place-bound. The trigger fires as soon as Lara
+stands on its sector and the item was just collected. Since Lara stands
+on the item's sector to collect it anyway, "move item and trigger
+together" is behavior-equal to vanilla. The reference word stays valid
+because the trigger addresses its item via the **index**, not via the
+place.
 
-**Nachgewiesen** (`FloorTool move`, Ziel 59,1,1 als Probe):
+**Proven** (`FloorTool move`, target 59,1,1 as a probe):
 
-| Prüfung | Ergebnis |
+| Check | Result |
 |---|---|
-| Sektoren geändert | 2 von 6787 |
-| Trigger am Ziel | wortgleich, `ref=107 c0:26 c0:108` |
-| Quellsektor | behält den ROOF-Eintrag, `0003` → `8003` |
-| Items | 151 vs. 151, kein Unterschied |
-| Dateigröße | +14 Bytes (7 Shorts) |
+| Sectors changed | 2 of 6787 |
+| Trigger at the target | word-identical, `ref=107 c0:26 c0:108` |
+| Source sector | keeps the ROOF entry, `0003` → `8003` |
+| Items | 151 vs 151, no difference |
+| File size | +14 bytes (7 shorts) |
 
-Die Zeile `0003` → `8003` ist der Punkt, an dem so ein Umbau kippt: der
-verbliebene Eintrag ist jetzt der **letzte** der Kette und braucht Bit 15. Wer
-die Kette wortweise kopiert statt sie in Einträge zu zerlegen, vergisst das.
+The line `0003` → `8003` is the point where such a rebuild tips over: the
+remaining entry is now the **last** of the chain and needs bit 15.
+Whoever copies the chain word by word instead of decomposing it into
+entries forgets that.
 
-**Zielsektor-Auflage:** Es gilt die Regel aus „Wohin in der Kette ein Trigger
-darf". Am einfachsten und ohne Ausnahme sicher: nur Sektoren **ohne jede
-Floordata** zulassen. In Andrea1 sind das 678 der 971 begehbaren Sektoren —
-für einen einzelnen Schlüssel mehr als genug.
+**Target sector condition:** the rule from "Where in the chain a trigger
+may go" applies. Simplest and safe without exception: allow only sectors
+**without any floordata**. In Andrea1 those are 678 of the 971 walkable
+sectors — more than enough for a single key.
 
-**Nebenwirkung, die bleibt:** Der Flame Emitter2 zündet weiterhin an seinem
-festen Ort, nur eben ausgelöst an der neuen Stelle. Das ist bewusst in Kauf
-genommen, weil der Trigger als Ganzes mitwandert.
+**A side effect that remains:** the Flame Emitter2 still ignites at its
+fixed place, just triggered at the new spot. That is accepted
+deliberately, because the trigger travels as a whole.
 
-## 4f. Neue Gegner: die strengste Variante reicht
+## 4f. New enemies: the strictest variant suffices
 
-Für den eigentlichen Zweck — dem Level Gegner **hinzufügen** — wird gar keine
-vorhandene Kette angefasst. Neue Gegnertrigger kommen ausschließlich auf
-Sektoren mit `index == 0`: eine frische Kette hinten anhängen, Sektor umhängen,
-fertig.
+For the actual purpose — **adding** enemies to the level — no existing
+chain is touched at all. New enemy triggers go exclusively onto sectors
+with `index == 0`: append a fresh chain at the end, repoint the sector,
+done.
 
-Das macht die Prüfregel aus Abschnitt 5 trivial: **jeder Sektor mit
-`index != 0` muss byteidentisch bleiben.** Kein Zerlegen, kein Neuvergeben von
-Endebits, kein Referenzwort im Spiel.
+That makes the check rule from section 5 trivial: **every sector with
+`index != 0` must stay byte-identical.** No decomposing, no reassigning
+of end bits, no reference word in play.
 
-Platz ist reichlich vorhanden — begehbare Sektoren ganz ohne Floordata:
+Room is plentiful — walkable sectors entirely without floordata:
 
-| Level | begehbar | davon ohne Floordata |
+| Level | walkable | of which without floordata |
 |---|---|---|
 | Andrea1 | 971 | 678 |
 | Andrea2 | 1031 | 730 |
@@ -499,76 +513,81 @@ Platz ist reichlich vorhanden — begehbare Sektoren ganz ohne Floordata:
 | rich1 | 405 | 215 |
 | rich2 | 592 | 325 |
 | rich3 | 808 | 408 |
-| **Summe** | **10044** | **5643** |
+| **Total** | **10044** | **5643** |
 
-Selbst joby5 als Schlusslicht hat 190 freie Plätze. Die Einschränkung kostet
-also nichts.
+Even joby5 at the bottom has 190 free places. So the restriction costs
+nothing.
 
-**Platzierung** (Nutzervorgabe): vom Gegner aus den Flutpfad rückwärts etwa
-3 Sektoren. Das garantiert von der Konstruktion her Erreichbarkeit, die richtige
-Zone und dass Lara den Trigger überquert — und hält den nötigen Abstand ein:
-liegt der Trigger auf dem Gegnersektor, spawnt der Gegner in Lara hinein.
+**Placement** (the user's requirement): from the enemy, walk the flood
+path backwards about 3 sectors. By construction that guarantees
+reachability, the right zone and that Lara crosses the trigger — and
+keeps the needed distance: if the trigger lies on the enemy's sector,
+the enemy spawns into Lara.
 
-## 4g. Wie ein neuer Gegner ins Level kommt
+## 4g. How a new enemy enters the level
 
-Der Weg steht seit 13.08.2026 durchgehend. Vier Stationen:
+The path has stood end to end since 2026-08-13. Four stations:
 
-**1. Kuration** — `$ENEMY_TYPES` in `ZoneAnalyse.ps1`, je Level eine Liste von
-typeIds mit Begründung. Bewusst leer, bis ein Gegner im Spiel nachgewiesen hat,
-dass er ohne Levelskript auskommt. Landet als `enemyTypes` im Zonen-Export.
+**1. Curation** — `$ENEMY_TYPES` in `ZoneAnalyse.ps1`, per level a list
+of typeIds with a reason. Deliberately empty until an enemy has proven in
+game that it works without a level script. Lands in the zone export as
+`enemyTypes`.
 
-**2. Anmarschsektoren** — ebenfalls `ZoneAnalyse.ps1`. Zu jedem itemfähigen
-Sektor werden bis zu drei Sektoren mitgegeben, die Lara auf ihrem
-**Erstzugangsweg** kurz davor betritt, etwa drei Schritte, beste Wahl zuerst.
+**2. Approach sectors** — also `ZoneAnalyse.ps1`. For every item-capable
+sector, up to three sectors are provided that Lara steps on shortly
+before it on her **first-access path**, about three steps, best choice
+first.
 
-Quelle ist `$firstParent` — der Baum, der festhält, über welche Kante ein Sektor
-zum **ersten Mal** erreicht wurde. Das ist der Weg, den Lara wirklich nimmt, und
-nicht irgendein Weg durch das fertige Level mit allen offenen Türen. Damit ist
-der Anmarschsektor nicht geschätzt, sondern hergeleitet.
+The source is `$firstParent` — the tree recording via which edge a sector
+was reached for the **first** time. That is the way Lara really takes,
+not some way through the finished level with all doors open. The approach
+sector is thereby derived, not guessed.
 
-Gemessen: 889 von 961 Sektoren in Andrea1 haben einen, über alle Level
-vergleichbar (joby4 ist mit 260 von 394 das Schlusslicht).
+Measured: 889 of 961 sectors in Andrea1 have one, comparable across all
+levels (joby4 brings up the rear with 260 of 394).
 
-**3. Platzierung** — `Rando::run`. Ein Gegner darf auf einen freien Sektor,
-dessen Anmarschsektor ebenfalls frei ist **und** einen Trigger verträgt
-(`Patch::markTriggerSafeSectors` liest das aus der echten Floordata, weil der
-Level-Info-Export Lava und Climb kennt, Monkey und TrigTrigger aber nicht).
-Der Gegner kommt als `itemAdds`, sein Trigger als `triggerAdds`.
+**3. Placement** — `Rando::run`. An enemy may go onto a free sector whose
+approach sector is also free **and** tolerates a trigger
+(`Patch::markTriggerSafeSectors` reads that from the real floordata,
+because the level-info export knows lava and climb but not monkey and
+trigtrigger). The enemy comes as `itemAdds`, its trigger as
+`triggerAdds`.
 
-**4. Eintragen** — `Tr5Level::addTrigger`, rein additiv.
+**4. Writing** — `Tr5Level::addTrigger`, purely additive.
 
-**Die Regeln, die dabei eingehalten werden:**
+**The rules kept in the process:**
 
-| Regel | Warum |
+| Rule | Why |
 |---|---|
-| Trigger nie auf dem Gegnersektor | sonst spawnt der Gegner in Lara hinein |
-| Trigger auf dem Anmarschweg | sonst wacht er nie auf |
-| OneShot gesetzt | siehe 4b-ter — bei Larson entscheidet es über Leben und Tod |
-| OCB 0 | sonst `ai_bits = GUARD` und er sucht AI-Objekte, die dort nicht stehen |
-| höchstens 256 Items | `MAX_ITEMS`; rich2 liegt mit 248 dicht darunter |
+| Never a trigger on the enemy's sector | otherwise the enemy spawns into Lara |
+| The trigger on the approach path | otherwise he never wakes up |
+| OneShot set | see 4b-ter — for Larson it decides over life and death |
+| OCB 0 | otherwise `ai_bits = GUARD` and he looks for AI objects that are not there |
+| At most 256 items | `MAX_ITEMS`; rich2 sits close below it at 248 |
 
-**Nachgemessen** (Andrea1, Seed 4711, 6 Gegner): 6 von 6 haben ihren Trigger,
-alle auf einem anderen Sektor als der Gegner. Floordata: 11 Zeilen betroffen —
-3 Sektoren hatten schon eine Kette (eine Neigung, ein ROOF, der Key-Quellsektor)
-und wurden umgebaut, 4 kamen neu dazu. Items 151 → 157, Datei +202 Bytes.
+**Measured** (Andrea1, seed 4711, 6 enemies): 6 of 6 have their trigger,
+all on a different sector than the enemy. Floordata: 11 rows affected — 3
+sectors already had a chain (a tilt, a ROOF, the key's source sector) and
+were rebuilt, 4 were added fresh. Items 151 → 157, file +202 bytes.
 
-## 5. Prüfregel: die Indizes der anderen müssen stehen bleiben
+## 5. Check rule: the others' indices must stay in place
 
-Vorgabe des Nutzers, und die eigentliche Gefahr an der ganzen Sache:
-**verschiebt sich die Liste, ist alles kaputt** — und zwar lautlos, weil ein
-falscher Index einfach eine andere Kette liest.
+The user's requirement, and the actual danger of the whole thing: **if
+the list shifts, everything is broken** — and silently at that, because a
+wrong index simply reads a different chain.
 
-Daraus folgt eine Prüfung, die nach **jeder** Floordata-Änderung laufen muss:
+From that follows a check that must run after **every** floordata change:
 
-1. Vorher für **jeden** Sektor jedes Raums Index und dekodierte Kette merken.
-2. Nachher dasselbe.
-3. Vergleichen: **jeder Sektor, den wir nicht bewusst umgehängt haben, muss
-   denselben Index und dieselbe Kette haben.** Ein einziger abweichender
-   Eintrag ist ein Abbruchgrund, keine Warnung.
+1. Before: remember index and decoded chain for **every** sector of every
+   room.
+2. After: the same.
+3. Compare: **every sector we did not deliberately repoint must have the
+   same index and the same chain.** A single deviating entry is a reason
+   to abort, not a warning.
 
-Das ist dieselbe Disziplin, die bei den Item-Indizes gilt, und dieselbe, mit
-der heute die Waffenimporte abgesichert wurden: nicht auf das Ergebnis
-schauen, sondern auf das, was sich **nicht** verändert haben darf.
+That is the same discipline that applies to the item indices, and the
+same with which the weapon imports were secured: do not look at the
+result, look at what must **not** have changed.
 
-Ein Werkzeug dafür fehlt noch — es ist das erste, was gebaut werden sollte,
-**vor** dem ersten Schreibversuch.
+A tool for this was still missing — it was the first thing to build,
+**before** the first write attempt.

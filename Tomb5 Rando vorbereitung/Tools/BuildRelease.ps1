@@ -108,74 +108,11 @@ if (Test-Path "$ImGui\LICENSE.txt") { Copy-Item "$ImGui\LICENSE.txt" "$lic\DearI
 Say "Licenses      : GPLv3 (engine), MIT (Dear ImGui)"
 
 # --- 6. Manual ---------------------------------------------------------------
-$readme = @'
-TR5 Randomizer
-==============
-
-What is in here
----------------
-  TR5Randomizer.exe   The tool. This is where you set the seed.
-  PCTomb5.exe         The game engine, native for Windows 11.
-  data\               Precomputed data the randomizer needs.
-  Source\             The complete source code of both.
-  Licenses\           The licenses.
-
-You additionally need your own installation of Tomb Raider
-Chronicles. Game data is deliberately NOT included here - the game
-belongs to its rights holders.
-
-Getting started
----------------
-  1. Start TR5Randomizer.exe.
-  2. On first start it asks for the folder of your Chronicles
-     installation. On the first randomize it creates data\Backup and
-     saves your original levels there. After that, randomization
-     writes directly into data - so you start the game as usual.
-  3. Enter a seed or roll one, randomize, play.
-
-The seed
---------
-The same seed always produces the same game - on any machine. If
-something looks odd to you, note down the seed and the build ID; with
-those, exactly your game can be rebuilt. Both are shown in the pause
-menu, so a screenshot is enough.
-
-Any input is a valid seed. "Christmas" works.
-
-If something goes wrong
------------------------
-The randomizer has "Restore original". It plays all levels back from
-data\Backup. Please do not delete that folder - it is the only copy of
-your original levels the program knows about.
-
-A note on savegames: the save format was changed compared to the
-original. Old savegames are rejected with a message instead of
-breaking silently - so finish a running playthrough before you switch
-to a new version.
-
-Origin and license
-------------------
-The engine is a modified version of TOMB5, the decompilation project
-for PC Tomb Raider Chronicles by Troye (Trxyebeep) and contributors:
-
-    https://github.com/Trxyebeep/TOMB5
-
-TOMB5 is under the GNU GPL v3, and so is this modified version. That
-is why the complete source code is included - you can rebuild the EXE
-yourself and do not have to take our word for it. What we changed and
-why is in Source\TOMB5\MODIFICATIONS.md.
-
-The randomizer's interface uses Dear ImGui by Omar Cornut (MIT
-license). For HQ music and the background image, stb_vorbis and
-stb_image by Sean Barrett are inside (public domain).
-
-Special thanks go to trview (https://github.com/chreden/trview) -
-without this tool, not a single zone boundary of this randomizer
-could have been verified.
-'@
-[System.IO.File]::WriteAllText("$OutDir\README.txt", $readme, (New-Object System.Text.UTF8Encoding($false)))
+# One source of truth: the player README is versioned at
+# TR5Randomizer\README.txt and only copied here - keeping a second copy
+# embedded in this script is how the package and the repo drift apart.
+Copy-Item "$RandoRoot\README.txt" "$OutDir\README.txt" -Force
 Say "Manual        : README.txt"
-
 # --- 7. Mirror the same data into the build folder ---------------------------
 # During development you start the EXE from build\, not from the package -
 # and data\ was missing there, which led to a correct but unnecessary error

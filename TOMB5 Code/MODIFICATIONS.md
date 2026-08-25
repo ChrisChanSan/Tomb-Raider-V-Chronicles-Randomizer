@@ -307,7 +307,7 @@ Also in this group:
   `ANIMATING6_MIP` as there) at the single spot in
   `handle_cutseq_triggering` where every cutscene teardown passes (right
   beside Core's own holster restore); and `handle_lara_chatting` skips the
-  speech-head install when the new `GfFremdeSprechkoepfe` flag is set. That
+  speech-head install when the new `GfForeignSpeechHeads` flag is set. That
   flag comes from `data[2]` of the 32-byte block before the main level chunk
   (`LoadLevel`, next to LaraType/WeatherType) — all 16 vanilla files carry 0
   there (measured), so unpatched levels behave byte-identically. The
@@ -378,9 +378,9 @@ Also in this group:
   cannot drift from the defaults the code actually uses.
   The wiring sits where the engine really decides these numbers rather than in
   one patched-over table, because three of the values in `weapons[9]` are dead:
-  `game/setup.cpp` calls `BalanceWaffenSetzen` at level start (the point where
+  `game/setup.cpp` calls `BalanceSetWeapons` at level start (the point where
   vanilla already re-set the revolver's damage per level) and
-  `BalanceGegnerSetzen` once in `InitialiseObjects`, after the three setup
+  `BalanceSetEnemies` once in `InitialiseObjects`, after the three setup
   routines have written the originals. That function writes the per-enemy hit
   points and then applies the percentage to everything intelligent and
   damageable, so Lara and the flare keep theirs; it also logs a warning if a
@@ -390,7 +390,7 @@ Also in this group:
   range that used to be a compile-time constant. `game/hitman.cpp`,
   `mafia2.cpp`, `pierre.cpp`, `sniper.cpp` and `sas.cpp` pass their own gunshot
   damage into `ShotLara` instead of a literal.
-  The per-attack values are applied through `GegnerSchaden()` at the 33 places
+  The per-attack values are applied through `EnemyDamage()` at the 33 places
   in 23 enemy files that subtract from Lara's hit points, which is also where
   the global percentage is applied. Falls, fire, poison, drowning and the trap
   code in `traps.cpp`, `effect2.cpp`, `tomb4fx.cpp`, `control.cpp` and
@@ -405,12 +405,12 @@ Also in this group:
   discovers on their own and which leaves a tester stuck in flight. The key
   combination now reacts to the rising EDGE and switches the mode off again if
   it is already on; the Walk exit stays. Both exits share one function,
-  `LaraCheatEnde`, which also sets `current_anim_state`/`goal_anim_state` -
+  `LaraCheatEnd`, which also sets `current_anim_state`/`goal_anim_state` -
   upstream left them on the swim-cheat state for one frame.
 
-- `game/balance.cpp` also carries a `WaffenSchaden` percentage next to the two
-  enemy ones, applied in `BalanceWaffenSetzen` and in `lara1gun.cpp` through
-  `WaffenSchaden()`, capped at 127 because the engine holds weapon damage in a
+- `game/balance.cpp` also carries a `WeaponDamage` percentage next to the two
+  enemy ones, applied in `BalanceSetWeapons` and in `lara1gun.cpp` through
+  `WeaponDamage()`, capped at 127 because the engine holds weapon damage in a
   `char`. It exists so the randomizer can offer a single slider for all of
   Lara's weapons without overwriting per-weapon values a player set by hand.
 

@@ -1,204 +1,208 @@
-# Levelreihenfolge würfeln — Befund und Plan
+# Rolling the level order — findings and plan
 
-Stand 2026-08-22. Anlass: die beiden ausgegrauten Haken „Levelabschnitte
-switchen" und „Level-Reihenfolge switchen". Vor dem Bauen: was wandert
-zwischen den Leveln, und woran hängt die Engine?
+As of 2026-08-22. Occasion: the two grayed-out checkboxes "Levelabschnitte
+switchen" and "Level-Reihenfolge switchen" (shuffle level sections / level
+order). Before building: what travels between levels, and what does the
+engine hang on?
 
-## 1. Was die SCRIPT.DAT je Level gibt und nimmt
+## 1. What the SCRIPT.DAT gives and takes per level
 
-Aus der Vanilla-SCRIPT.DAT (`SkriptPruef -roh`), Inventarnummern über
-`invobj_types` aufgelöst:
+From the vanilla SCRIPT.DAT (`SkriptPruef -raw`), inventory numbers
+resolved via `invobj_types`:
 
-| Level | gibt beim Start | nimmt beim Start |
+| Level | gives at start | takes at start |
 |---|---|---|
-| Andrea1 | PICKUP_ITEM1, Uzi | Uzi (Dev-Relikt: geben und gleich nehmen) |
-| joby3 | — | Uzi, Pistolen, Revolver, Lasersight (Lara gefangen) |
+| Andrea1 | PICKUP_ITEM1, Uzi | Uzi (a dev relic: give and immediately take) |
+| joby3 | — | Uzi, pistols, revolver, lasersight (Lara captured) |
 | rich1 | HK | — |
-| rich2 | HK, PUZZLE_ITEM2 | PICKUP_ITEM2, KEY_ITEM7, KEY_ITEM8 (+ unsere Pistolen) |
-| GIBBY (Dev) | Crossbow-Ammo, HK, Lasersight | — |
+| rich2 | HK, PUZZLE_ITEM2 | PICKUP_ITEM2, KEY_ITEM7, KEY_ITEM8 (+ our pistols) |
+| GIBBY (dev) | crossbow ammo, HK, lasersight | — |
 
-Alle anderen Level greifen nicht ins Inventar. **Alles, was ein Level
-nicht nimmt, bleibt im Inventar** — Schlüssel inklusive.
+No other level touches the inventory. **Everything a level does not take
+stays in the inventory** — keys included.
 
-## 2. Schlüsselmatrix (Items vs. Schlösser je Level)
+## 2. Key matrix (items vs locks per level)
 
-`ItemPruef` über alle Vanilla-Level, Familie PUZZLE/KEY/PICKUP (IDs
-172–265 laut Engine-Enum; Zählfalle beachtet, Gegenprobe LARA=0,
-KEY_HOLE8=265). PICKUP_ITEM4 = die drei Secret-Rosen je Level.
+`ItemPruef` over all vanilla levels, family PUZZLE/KEY/PICKUP (IDs
+172–265 per the engine enum; counting trap heeded, cross-check LARA=0,
+KEY_HOLE8=265). PICKUP_ITEM4 = the three secret roses per level.
 
-| Level | Items | Schlösser | Befund |
+| Level | items | locks | finding |
 |---|---|---|---|
-| Andrea1 | PUZZLE1×2, KEY1, PICKUP2 | PUZZLE_HOLE1×2, KEY_HOLE1 | in sich geschlossen; PICKUP2 ohne Schloss |
-| Andrea2 | PUZZLE1,3,4,5, **Brechstange** | PUZZLE_HOLE1,3,4,5 | geschlossen; Brechstange bleibt im Inventar |
-| Andrea3 | PUZZLE4 (2 Hälften), KEY1, KEY2, PICKUP1 | PUZZLE_HOLE4×2, KEY_HOLE1, KEY_HOLE2 | PICKUP1 = Story (Cutscene, `deltapak.cpp:1767`) |
-| joby2 | PUZZLE1, **KEY7×2, KEY8** | PUZZLE_HOLE1, KEY_HOLE7×2, KEY_HOLE8×4 | KEY8 wandert weiter |
-| joby3 | PUZZLE1, PUZZLE3+4 (Hälften), KEY6, KEY7 | PUZZLE_HOLE3,4, KEY_HOLE6,7, **KEY_HOLE8×2** | **braucht KEY8 aus joby2**; PUZZLE1 ohne Schloss |
-| joby4 | — | — | reines Tauchlevel |
-| joby5 | PUZZLE1,2, KEY6, KEY8 | PUZZLE_HOLE1,2, KEY_HOLE6, **KEY_HOLE7**, KEY_HOLE8×2 | **braucht KEY7 aus joby2/joby3** |
-| andy1 | PUZZLE1, PUZZLE3, PUZZLE2 (Hälften), Fackel | PUZZLE_HOLE1 | **PUZZLE2+3 wandern weiter** |
-| Andy2 | — | PUZZLE_HOLE1, PUZZLE_HOLE2 | **braucht Puzzles aus andy1** |
-| andy3 | PUZZLE1,2,3, Fackel | — | Items ohne Schloss (Story/Cutscene) |
-| rich1 | PUZZLE3,4, KEY7, KEY8, PICKUP2, Flaschen, Tuch | PUZZLE_HOLE1,3,4, KEY_HOLE8×4 | **PUZZLE_HOLE1 ohne Item** (Herkunft prüfen); KEY7 wird von rich2 weggenommen |
-| rich2 | PUZZLE3, PICKUP2, Flaschen, Tuch | PUZZLE_HOLE2,3, PUZZLE_HOLE8×2 | HOLE2 über Skript-Gabe PUZZLE2; HOLE8 prüfen |
-| rich3 | PUZZLE1 (Hälften) | PUZZLE_HOLE1 | geschlossen |
-| richcut2 | — | — | Cutscene-Level zwischen rich2 und rich3 |
+| Andrea1 | PUZZLE1×2, KEY1, PICKUP2 | PUZZLE_HOLE1×2, KEY_HOLE1 | self-contained; PICKUP2 without a lock |
+| Andrea2 | PUZZLE1,3,4,5, **crowbar** | PUZZLE_HOLE1,3,4,5 | self-contained; the crowbar stays in the inventory |
+| Andrea3 | PUZZLE4 (2 halves), KEY1, KEY2, PICKUP1 | PUZZLE_HOLE4×2, KEY_HOLE1, KEY_HOLE2 | PICKUP1 = story (cutscene, `deltapak.cpp:1767`) |
+| joby2 | PUZZLE1, **KEY7×2, KEY8** | PUZZLE_HOLE1, KEY_HOLE7×2, KEY_HOLE8×4 | KEY8 travels on |
+| joby3 | PUZZLE1, PUZZLE3+4 (halves), KEY6, KEY7 | PUZZLE_HOLE3,4, KEY_HOLE6,7, **KEY_HOLE8×2** | **needs KEY8 from joby2**; PUZZLE1 without a lock |
+| joby4 | — | — | a pure diving level |
+| joby5 | PUZZLE1,2, KEY6, KEY8 | PUZZLE_HOLE1,2, KEY_HOLE6, **KEY_HOLE7**, KEY_HOLE8×2 | **needs KEY7 from joby2/joby3** |
+| andy1 | PUZZLE1, PUZZLE3, PUZZLE2 (halves), torch | PUZZLE_HOLE1 | **PUZZLE2+3 travel on** |
+| Andy2 | — | PUZZLE_HOLE1, PUZZLE_HOLE2 | **needs puzzles from andy1** |
+| andy3 | PUZZLE1,2,3, torch | — | items without locks (story/cutscene) |
+| rich1 | PUZZLE3,4, KEY7, KEY8, PICKUP2, bottles, cloth | PUZZLE_HOLE1,3,4, KEY_HOLE8×4 | **PUZZLE_HOLE1 without an item** (check its origin); KEY7 is taken away by rich2 |
+| rich2 | PUZZLE3, PICKUP2, bottles, cloth | PUZZLE_HOLE2,3, PUZZLE_HOLE8×2 | HOLE2 via the scripted gift PUZZLE2; check HOLE8 |
+| rich3 | PUZZLE1 (halves) | PUZZLE_HOLE1 | self-contained |
+| richcut2 | — | — | cutscene level between rich2 and rich3 |
 
-Vorsicht: Schlosszahlen können durch Flipmap-Räume aufgebläht sein (Item
-in Normal- und Flip-Raum zählt doppelt). Die *Richtung* der Abhängigkeit
-ist trotzdem eindeutig.
+Caution: lock counts can be inflated by flipmap rooms (an item in both
+the normal and the flip room counts twice). The *direction* of the
+dependency is unambiguous anyway.
 
-**Cross-Level-Abhängigkeiten (vanilla):**
-- joby2 → joby3: KEY_ITEM8 (genau das, was der Nutzer für sein Secret
-  einbauen ließ — jetzt wissen wir, warum joby3 das Modell nie brauchte:
-  der Schlüssel kam im Inventar).
+**Cross-level dependencies (vanilla):**
+- joby2 → joby3: KEY_ITEM8 (exactly what the user had built in for his
+  secret — now we know why joby3 never needed the model: the key came in
+  the inventory).
 - joby2/joby3 → joby5: KEY_ITEM7.
-- andy1 → Andy2: PUZZLE_ITEM2 (kombiniert) und PUZZLE_ITEM3.
-- Andrea2 → (Andrea3?): Brechstange — `door.cpp:314ff` kennt
-  Brechstangen-Türen; welche Türen in Andrea3 das sind, ist noch zu prüfen
-  (kein CROWBAR_SWITCH in irgendeinem Level).
-- rich1 → rich2: nichts (rich2 nimmt KEY7/8 bewusst weg; PUZZLE2 kommt
-  per Skript).
+- andy1 → Andy2: PUZZLE_ITEM2 (combined) and PUZZLE_ITEM3.
+- Andrea2 → (Andrea3?): crowbar — `door.cpp:314ff` knows crowbar doors;
+  which doors those are in Andrea3 remains to be checked (no
+  CROWBAR_SWITCH in any level).
+- rich1 → rich2: nothing (rich2 deliberately takes KEY7/8 away; PUZZLE2
+  comes by script).
 
-Story-Tore, die am Inventar hängen: `control.cpp:781` beendet ein Level
-nur mit PICKUP_ITEM1 im Inventar (Flipeffect 65) — levelgebunden, muss
-mit dem Level mitwandern, nicht mit dem Slot.
+Story gates hanging on the inventory: `control.cpp:781` only ends a
+level with PICKUP_ITEM1 in the inventory (flipeffect 65) — level-bound,
+must travel with the level, not with the slot.
 
-## 3. Woran die Engine hängt
+## 3. What the engine hangs on
 
-- **Levelende ist rein sequenziell:** `TO_FINISH` setzt
-  `gfLevelComplete = gfCurrentLevel + 1`. Reihenfolge = Reihenfolge der
-  Blöcke in der SCRIPT.DAT. Harte Sprungziele gibt es nur für Cheat,
-  Cutscene-Auswahl (`cutsel[].lvl`) und „neues Spiel = Slot 1".
-- **121 Stellen prüfen die Levelnummer**, davon **120 gegen
-  `LVL5_`-Konstanten** (Identität: „bin ich im 13. Stock?") und eine als
-  Index (`wanky_secrets_table[gfCurrentLevel]`, Secrets je Level). Dazu
-  **23 Stellen**, die den Slot als Index/Arithmetik brauchen
-  (`gfLevelNames[]`, `+1`, Savegame, Level-Select).
-- **Was mit einem Block mitwandert:** FMV-Befehle, residente Cutscenes
-  (CUT1–4), Flags (Horizont, Wetter, Kind-Lara), Levelmusik, die
-  Objekt-/Inventarbefehle. Alles, was die Story eines Levels braucht,
-  steht in seinem Block — gut für uns.
-- **Was NICHT mitwandert:** die Levelnummer selbst. Die Engine glaubt
-  nach einer Block-Permutation, Slot 1 sei immer noch Rom.
+- **The level end is purely sequential:** `TO_FINISH` sets
+  `gfLevelComplete = gfCurrentLevel + 1`. Order = the order of the
+  blocks in the SCRIPT.DAT. Hard jump targets exist only for the cheat,
+  the cutscene selection (`cutsel[].lvl`) and "new game = slot 1".
+- **121 places check the level number**, of which **120 against
+  `LVL5_` constants** (identity: "am I on the 13th floor?") and one as
+  an index (`wanky_secrets_table[gfCurrentLevel]`, secrets per level).
+  Plus **23 places** that need the slot as an index/arithmetic
+  (`gfLevelNames[]`, `+1`, savegame, level select).
+- **What travels with a block:** FMV commands, resident cutscenes
+  (CUT1–4), flags (horizon, weather, young Lara), the level music, the
+  object/inventory commands. Everything a level's story needs stands in
+  its block — good for us.
+- **What does NOT travel:** the level number itself. After a block
+  permutation the engine believes slot 1 is still Rome.
 
-## 4. Kernidee A — Identität statt Slot
+## 4. Core idea A — identity instead of slot
 
-Neue Engine-Variable `gfLevelId` (Wert aus `LVL5_*`), beim Levelstart aus
-dem **Dateinamen** des geladenen Levels abgeleitet (`DoLevel(Name)` →
-Dateiindex → „DATA\JOBY3" → `LVL5_SUBMARINE`). Dann:
+A new engine variable `gfLevelId` (a `LVL5_*` value), derived at level
+start from the **file name** of the loaded level (`DoLevel(Name)` →
+file index → "DATA\JOBY3" → `LVL5_SUBMARINE`). Then:
 
-- die 120 Identitätsvergleiche mechanisch auf `gfLevelId` umstellen
-  (alle vergleichen gegen `LVL5_`-Namen — ein Durchlauf mit Gegenprobe);
-- `wanky_secrets_table` über `gfLevelId` indizieren;
-- die 23 Slot-Stellen **unverändert** lassen (Sequenz, Namen, Saves);
-- Cheat-Sprung und Cutscene-Auswahl bekommen eine Umkehrtabelle
-  Id → Slot (aus der SCRIPT.DAT beim Laden aufgebaut).
+- mechanically switch the 120 identity comparisons to `gfLevelId`
+  (all compare against `LVL5_` names — one pass with a cross-check);
+- index `wanky_secrets_table` via `gfLevelId`;
+- leave the 23 slot places **unchanged** (sequence, names, saves);
+- the cheat jump and the cutscene selection get a reverse table
+  id → slot (built from the SCRIPT.DAT at load time).
 
-Ohne Permutation ist `gfLevelId == gfCurrentLevel` — Vanilla verhält
-sich byteidentisch. Das ist der Sicherheitsanker: die Umstellung lässt
-sich ohne Reihenfolge-Würfel durchspielen.
+Without a permutation, `gfLevelId == gfCurrentLevel` — vanilla behaves
+byte-identically. That is the safety anchor: the conversion can be
+played through without any order roll.
 
-## 5. Kernidee B — Abhängigkeiten per Skript auflösen
+## 5. Core idea B — resolve dependencies by script
 
-Wandert ein Level vor sein Spenderlevel, fehlt ein Schlüssel. Statt die
-Abhängigkeit zu verbieten: **das Zielevel bekommt das Item per `GIVEOBJ`
-beim Start** — genau der Befehl, den `ScriptDat` heute schon für KEY8
-und die HK einfügt. Abhängigkeitstabelle (aus Abschnitt 2):
+If a level travels before its donor level, a key is missing. Instead of
+forbidding the dependency: **the target level gets the item via
+`GIVEOBJ` at start** — exactly the command `ScriptDat` already inserts
+today for KEY8 and the HK. Dependency table (from section 2):
 
-| Level | bekommt per GIVEOBJ, wenn der Spender nicht davor liegt |
+| Level | receives via GIVEOBJ when the donor does not lie before it |
 |---|---|
 | joby3 | KEY_ITEM8 |
-| joby5 | KEY_ITEM7 (und KEY8, falls joby2/joby3 nicht davor) |
+| joby5 | KEY_ITEM7 (and KEY8 if joby2/joby3 are not before it) |
 | Andy2 | PUZZLE_ITEM2, PUZZLE_ITEM3 |
-| Andrea3 | Brechstange (nach Prüfung der Türen) |
+| Andrea3 | crowbar (after checking the doors) |
 
-Die Skript-**Wegnahmen** (joby3 Waffen, rich2 Keys) bleiben, wo sie sind
-— sie gehören zur Story des Levels und wandern mit dem Block.
+The scripted **takeaways** (joby3 weapons, rich2 keys) stay where they
+are — they belong to the level's story and travel with the block.
 
-## 6. Stufenplan
+## 6. Staged plan
 
-**Stufe 0 — Engine-Identität (Voraussetzung für alles).** Kernidee A,
-ohne Würfel. Test: Vanilla-Durchlauf, alle levelspezifischen Dinge
-(Cutscenes, Tower, Kind-Lara-Flag, Secrets-Bonus) unverändert.
+**Stage 0 — engine identity (the prerequisite for everything).** Core
+idea A, without a roll. Test: a vanilla playthrough, all level-specific
+things (cutscenes, tower, young-Lara flag, secrets bonus) unchanged.
 
-**Stufe 1 — Levelabschnitte switchen.** Die vier Abschnitte als
-unteilbare Blöcke permutieren: Rom (Andrea1–3), Russland (joby2–5),
-Irland (andy1–3), VCI (rich1, rich2, richcut2, rich3). Innerhalb bleibt
-die Reihenfolge, damit bleiben **alle** Abhängigkeiten aus Abschnitt 2
-gültig — kein GIVEOBJ nötig. Auch die FMV-Reihenfolge ergibt noch einen
-Sinn (jeder Abschnitt bringt seine Videos mit). Risiko: gering.
+**Stage 1 — shuffle the level sections.** Permute the four sections as
+indivisible blocks: Rome (Andrea1–3), Russia (joby2–5), Ireland
+(andy1–3), VCI (rich1, rich2, richcut2, rich3). The order inside stays,
+so **all** dependencies from section 2 stay valid — no GIVEOBJ needed.
+The FMV order also still makes sense (each section brings its own
+videos). Risk: low.
 
-**Stufe 2 — Reihenfolge innerhalb der Abschnitte.** Permutation im
-Abschnitt, `richcut2` bleibt an rich2 geklebt. Braucht Kernidee B für
-joby3/joby5/Andy2. Risiko: mittel (Schlüsselketten im Spiel verifizieren).
+**Stage 2 — order inside the sections.** Permutation within the
+section, `richcut2` stays glued to rich2. Needs core idea B for
+joby3/joby5/Andy2. Risk: medium (verify the key chains in game).
 
-**Stufe 3 — frei über alles.** Beide Haken zusammen. Risiko: mittel
-bis hoch — Schwierigkeitskurve und Waffenstand werden beliebig (joby3
-nimmt Waffen weg, egal wann es kommt; rich1 gibt die HK, egal wann).
+**Stage 3 — free over everything.** Both checkboxes together. Risk:
+medium to high — the difficulty curve and the weapon state become
+arbitrary (joby3 takes the weapons away no matter when it comes; rich1
+gives the HK no matter when).
 
-## 7. Offen / zu prüfen, bevor gebaut wird
+## 7. Open / to check before building
 
-1. Brechstangen-Türen in Andrea3 (`door.cpp:314`) — welche Items/OCBs?
-2. rich1 PUZZLE_HOLE1 und rich2 PUZZLE_HOLE8×2 ohne Item — Flipmap-
-   Dubletten oder echte Importe?
-3. Flipeffect-65-Tor (`control.cpp:781`): in welchem Level, und hängt
-   PICKUP_ITEM1 dort an einer Cutscene desselben Levels?
-4. `available_levels[]` (Level-Select) und Statistik-Tabellen sind
-   slotbasiert — für Anzeige egal, für Level-Select aber nach Permutation
-   neu zu füllen.
-5. Savegames: `savegame.CurrentLevel` ist ein Slot. Ein Spielstand gehört
-   damit zu *seiner* SCRIPT.DAT — wie heute schon bei jedem Seed. Im
-   Randomizer klar sagen.
-6. Kind-Lara-Bit (GF_YOUNGLARA): im Skript des Nutzers bereits 0 —
-   klären, ob Vanilla es überhaupt setzt oder die Irland-Outfits das
-   regeln; sonst wäre „Irland zuerst" ein waffenloses Startlevel.
+1. Crowbar doors in Andrea3 (`door.cpp:314`) — which items/OCBs?
+2. rich1 PUZZLE_HOLE1 and rich2 PUZZLE_HOLE8×2 without items — flipmap
+   duplicates or real imports?
+3. The flipeffect-65 gate (`control.cpp:781`): in which level, and does
+   PICKUP_ITEM1 there hang on a cutscene of the same level?
+4. `available_levels[]` (level select) and the statistics tables are
+   slot-based — irrelevant for display, but for the level select they
+   must be refilled after a permutation.
+5. Savegames: `savegame.CurrentLevel` is a slot. A save thereby belongs
+   to *its* SCRIPT.DAT — as with every seed already today. Say so
+   clearly in the randomizer.
+6. Young-Lara bit (GF_YOUNGLARA): already 0 in the user's script —
+   clarify whether vanilla sets it at all or the Ireland outfits handle
+   it; otherwise "Ireland first" would be a weaponless starting level.
 
-## 8. Aufwand
+## 8. Effort
 
-Stufe 0 ist der Löwenanteil (Engine, ~120 mechanische Stellen +
-Umkehrtabelle + Vanilla-Regression). Stufe 1 danach klein
-(`ScriptDat`: Offsettabelle permutieren, Blöcke bleiben unangetastet).
-Stufe 2 mittel (Abhängigkeitstabelle + GIVEOBJ + Spieltests der
-Schlüsselketten). Vergleichbar mit der Sprachwahl plus ein TR3-Port-Tag.
+Stage 0 is the lion's share (engine, ~120 mechanical places + the
+reverse table + a vanilla regression). Stage 1 afterwards is small
+(`ScriptDat`: permute the offset table, the blocks stay untouched).
+Stage 2 is medium (dependency table + GIVEOBJ + play tests of the key
+chains). Comparable to the language selection plus one TR3-port day.
 
-## 9. Stand nach dem ersten Spieltest (2026-08-22)
+## 9. State after the first play test (2026-08-22)
 
-- Stufe 0 + 1: im Spiel bestätigt (Abschnitte, Videos nach Identität,
-  Finale am letzten Slot, Abspann abbrechbar).
-- Stufe 2 + 3 gebaut (innerhalb / frei, Levelketten.h mit drei aktiven
-  Ketten, GIVEOBJ + Namensbefehl + Modellkopie, Wegnahme-Fall über
-  TAKEOBJ dazwischen). Testseed für „frei": **380**.
-- **Spieltest „frei" (Seed 380): „es passiert, was ich befürchtet habe —
-  das wird was Großes."** Der Nutzer trägt eine große Fehlerliste zusammen;
-  die wird die Grundlage für die nächste Runde. Erwartbare Kandidaten (aus
-  Abschnitt 7): verwaiste Schlösser (rich1 PUZZLE_HOLE1, rich2
-  PUZZLE_HOLE8, Andy2 PUZZLE_HOLE1), Brechstange Andrea3, levelgebundene
-  Story-Tore, Waffenstand nach joby3 (nimmt alles), Irland als Startlevel.
+- Stages 0 + 1: confirmed in game (sections, videos by identity, the
+  finale on the last slot, credits abortable).
+- Stages 2 + 3 built (within / free, LevelChains.h with three active
+  chains, GIVEOBJ + name command + model copy, the takeaway case via a
+  TAKEOBJ in between). Test seed for "free": **380**.
+- **Play test "free" (seed 380): "what I feared is happening — this is
+  going to be something big."** The user is compiling a large error
+  list; it will be the basis for the next round. Expected candidates
+  (from section 7): orphaned locks (rich1 PUZZLE_HOLE1, rich2
+  PUZZLE_HOLE8, Andy2 PUZZLE_HOLE1), the Andrea3 crowbar, level-bound
+  story gates, the weapon state after joby3 (takes everything), Ireland
+  as the starting level.
 
-## 10. Inventar-Garbage-Collector (2026-08-22, Vorschlag des Nutzers)
+## 10. Inventory garbage collector (2026-08-22, the user's proposal)
 
-**Die Einsicht:** die Inventar-Slots sind generisch. `PUZZLE_ITEM1` ist in
-Andrea1 der Garden Key, in joby4 die Chaff flares, in andy1 das Heart, in
-rich3 der Helipad access key — jedes Level benennt denselben Slot um. Ein
-mitgeschleppter Garden Key *wird* in joby4 zu Chaff flares. Und die
-„Grappling Gun" ist der Crossbow-Slot (95 + Munition), der nur in rich3
-Modell und Anims hat (Hard-Crash beim Ausrüsten anderswo).
+**The insight:** the inventory slots are generic. `PUZZLE_ITEM1` is the
+Garden Key in Andrea1, the Chaff flares in joby4, the Heart in andy1,
+the Helipad access key in rich3 — every level renames the same slot. A
+carried-along Garden Key *becomes* Chaff flares in joby4. And the
+"Grappling Gun" is the crossbow slot (95 + ammo), which only has a
+model and anims in rich3 (a hard crash when equipped anywhere else).
 
-**Darum:** beim Start jedes Kampagnen-Levels nimmt das Skript per TAKEOBJ
-alles aus der Schlüsselfamilie weg, was ein früheres Level anbieten konnte
-und das weder dieses noch ein späteres Level per Kette importiert; die
-Crossbow-Familie überall außer rich3. Ketten (`Levelketten.h`) sind jetzt
-„geben" (GIVEOBJ + Name + Modell) oder „nur behalten" (Story-Items
-unterwegs). Engine: `gfPickups`/`gfTakeaways` von 16 auf 64 mit Riegel.
+**Therefore:** at the start of every campaign level the script takes
+away via TAKEOBJ everything from the key family that an earlier level
+could have offered and that neither this nor a later level imports via
+a chain; the crossbow family everywhere except rich3. Chains
+(`LevelChains.h`) are now "give" (GIVEOBJ + name + model) or "keep
+only" (story items en route). Engine: `gfPickups`/`gfTakeaways` from 16
+to 64 with a guard.
 
-Offen für den Spieltest: ob die „nur behalten"-Ketten reichen (Iris,
-Bestiary, Spear, Iron clapper), und ob irgendein Level ein Item braucht,
-das die Matrix nicht zeigt (Flipmap-Dubletten).
+Open for the play test: whether the "keep only" chains suffice (Iris,
+Bestiary, Spear, Iron clapper), and whether any level needs an item the
+matrix does not show (flipmap duplicates).
 
-**Nachtrag (Spieltest des ersten GC):** die „unterwegs behalten"-Regeln
-ließen die Iris durch halb Rom reisen. Entscheidung: **Keys/Puzzles/
-Pickups wandern nie** — jedes Level startet frisch (~64 TAKEOBJ je
-Levelstart), nur Waffen/Munition/Medis/Leuchtfackeln bleiben; die vier
-Gaben (Key 8 joby3, Key 7 joby5, Catapult Andy2, Brechstange Andrea3)
-kommen unbedingt. Anmerkung für später (kein Auftrag): die Gaben könnten
-auch Pickups im Level werden — bräuchte kuratierte Bereiche je Schloss.
+**Addendum (play test of the first GC):** the "keep en route" rules let
+the Iris travel through half of Rome. Decision: **keys/puzzles/pickups
+never travel** — every level starts fresh (~64 TAKEOBJ per level
+start), only weapons/ammo/medis/flares remain; the four gifts (Key 8
+joby3, Key 7 joby5, Catapult Andy2, crowbar Andrea3) always come. A
+note for later (no order yet): the gifts could also become pickups in
+the level — would need curated areas per lock.

@@ -1,12 +1,12 @@
-Name					TypeID	Eigenschafften
+Name					TypeID	Properties
 
-//Generische:{
+//Generic:{
 Lara					0
 Secret1-3				223
 Chloroform_Bottle		235
 Cloth					236
 Lasersight				351
-Crowbar					240		Kann unendllich benutz werden
+Crowbar					240		Can be used infinitely
 Pickup1_Mars			221
 Pickup1_Philo.Stone		220
 ?Portal?				158
@@ -19,14 +19,14 @@ Big_Medi				349
 Flares					355
 }
 
-//Waffen & Munition:{
-Pistolen				334
-Pistol_Ammo				335		Unnötig da Pistolen unendlich Schuss haben
+//Weapons & ammo:{
+Pistols					334
+Pistol_Ammo				335		Pointless since the pistols have infinite shots
 Uzis 					336
 Uzi_Ammo				337
 Shotgun 				338
 Shotgun_Ammo_Red		339
-Shotgun_Ammo_Blue		340	
+Shotgun_Ammo_Blue		340
 Grapplinggun			341
 Grapplinggun_Ammo		342
 ???						343
@@ -37,7 +37,7 @@ Revolver 				347
 Revolver/Deagle_Ammo	348
 }
 
-//Gegner:{
+//Enemies:{
 SWAT					33
 Advanced SWAT			35
 Guard					37
@@ -51,10 +51,10 @@ Soldier Statue			61
 Hydra					63
 Cyborg					67
 Scientist				69
-Geist					71
+Ghost					71
 Skeleton				73
 Mazemonster				77
-Wasserhexe				79
+Water witch				79
 Chef					87
 Imp						89
 Chopper					91
@@ -62,7 +62,7 @@ Rats					94
 Spiders					95
 }
 
-//Türen:{
+//Doors:{
 Door1					284
 Door2					286
 Door3					288
@@ -71,13 +71,13 @@ Door5					292
 Door6					294
 Door7					296
 Door8					298
-Double Doors			326		Schieben zum öffnen
-Floor_Trapdoor			109 	Greifen zum öffnen
-Celing_Trapdoor			111		Springen zum öffnen
-Kick_door				320 	Kicken zum öffnen
+Double Doors			326		Push to open
+Floor_Trapdoor			109 	Grab to open
+Celing_Trapdoor			111		Jump to open
+Kick_door				320 	Kick to open
 }
 
-//Key & Puzzels:
+//Keys & puzzles:
 Puzzle1 				172
 Puzzel2					173
 Puzzel3					174
@@ -100,10 +100,10 @@ Key4					???
 Key5					???
 Key6					???
 Key7					202
-Key8					203		Kann unendlich benutzt werden
+Key8					203		Can be used infinitely
 }
 
-//Puzzel und Schlüssellöcher:{
+//Puzzle slots & keyholes:{
 Keyhole1 				258
 Keyhole2				259
 Keyhole3				???

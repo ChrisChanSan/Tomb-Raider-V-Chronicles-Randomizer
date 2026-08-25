@@ -1,52 +1,52 @@
-TOMB5-Engine-Limits (feste Puffer/Arrays, aus Leveldaten befüllt) - Stand 2026-08-02.
-Alle unten aufgeführten Stellen haben inzwischen einen Bounds-Check (siehe TOMB5 Code Commit
-df39071) - Level, die ein Limit überschreiten, brechen jetzt sauber mit Fehlermeldung ab statt
-den Speicher still zu korrumpieren. Die Zahlen selbst sind trotzdem die tatsächliche Obergrenze,
-die der Randomizer einhalten muss.
+TOMB5 engine limits (fixed buffers/arrays, filled from level data) - as of 2026-08-02.
+All spots listed below meanwhile have a bounds check (see TOMB5 Code commit df39071) -
+levels that exceed a limit now abort cleanly with an error message instead of silently
+corrupting memory. The numbers themselves are still the actual upper bound the
+randomizer must respect.
 
-1# Itemlevel limit 256 (MAX_ITEMS, global\types.h) - Anzahl Items/Moveables pro Level.
-   Nur Check ergänzt, Größe bewusst NICHT erhöht (sollte für den Randomizer reichen).
+1# Item level limit 256 (MAX_ITEMS, global\types.h) - number of items/moveables per level.
+   Only the check was added, the size deliberately NOT raised (should suffice for the
+   randomizer).
 
-2# Texturseiten limit 256 (Textures[], specific\texture.cpp/.h) - RTPages+OTPages+BTPages+1.
-   War ursprünglich nur 64 - DAS war der Fall, an den ich mich erinnert hatte. Auf 256 erhöht
-   UND mit Check versehen. Wichtig, falls der Randomizer Texturen aus mehreren Quell-Leveln
-   kombiniert.
+2# Texture page limit 256 (Textures[], specific\texture.cpp/.h) - RTPages+OTPages+BTPages+1.
+   Was originally only 64 - THAT was the case I had remembered. Raised to 256 AND given a
+   check. Important in case the randomizer combines textures from several source levels.
 
-3# Spotcam limit 256 (SpotCam[], specific\file.cpp) - Anzahl Spot-Kameras pro Level.
-   Nur Check ergänzt, Größe unverändert.
+3# Spotcam limit 256 (SpotCam[], specific\file.cpp) - number of spot cameras per level.
+   Only the check was added, size unchanged.
 
-4# Animierte UV-Textur-Ranges limit 16 Ranges x 8 Einträge (AnimatingTexturesV[16][8][3],
-   specific\file.cpp, S_GetUVRotateTextures) - rotierende/laufband-artige Texturen.
-   Nur Check ergänzt, Größe unverändert.
+4# Animated UV texture ranges limit 16 ranges x 8 entries (AnimatingTexturesV[16][8][3],
+   specific\file.cpp, S_GetUVRotateTextures) - rotating/conveyor-like textures.
+   Only the check was added, size unchanged.
 
-5# Sound-Sample limit 256 (DS_Buffers[], specific\dxsound.cpp) - Anzahl Sound-Samples pro Level.
-   Nur Check ergänzt. WICHTIG: die Engine selbst geht an anderer Stelle (sample_lut,
-   MAX_SAMPLES=450, global\types.h) von bis zu 450 möglichen Samples aus - dieser Puffer war
-   also schon vorher enger als der Rest des Sound-Systems erwartet. Falls der Randomizer eigene
-   SFX für neue/geänderte Gegner einbaut, hier im Auge behalten.
+5# Sound sample limit 256 (DS_Buffers[], specific\dxsound.cpp) - number of sound samples
+   per level. Only the check was added. IMPORTANT: the engine itself assumes up to 450
+   possible samples elsewhere (sample_lut, MAX_SAMPLES=450, global\types.h) - so this
+   buffer was already tighter than the rest of the sound system expects. If the
+   randomizer builds in its own SFX for new/changed enemies, keep an eye on this.
 
-6# Raum-Limit 256 (flipped[], game\setup.cpp, BuildOutsideTable - STACK-Array, nicht Heap!)
-   Nur Check ergänzt, Größe unverändert. Betrifft die Gesamtzahl der Räume pro Level
-   (number_rooms), nicht direkt Items/Gegner - relevant nur falls der Randomizer jemals
-   Level-Geometrie zusammenführt/erweitert.
+6# Room limit 256 (flipped[], game\setup.cpp, BuildOutsideTable - a STACK array, not heap!)
+   Only the check was added, size unchanged. Concerns the total number of rooms per level
+   (number_rooms), not directly items/enemies - only relevant if the randomizer ever
+   merges/extends level geometry.
 
-7# ItemNewRooms[256][2] (game\control.cpp/items.cpp) - Pro-Frame-Warteschlange für
-   Raumwechsel/Tod von Items+Effekten während der Item-Control-Schleife. KEIN Level-Ladezeit-
-   Limit, sondern Laufzeit: mehr als 256 gleichzeitige Raumwechsel/Tode in EINEM Tick würden
-   überlaufen. Extrem seltener Grenzfall, deswegen nur mit sanftem Skip+Log abgesichert statt
-   hartem Abbruch. Bei sehr dichten Randomizer-Setups (viele gleichzeitig reagierende Gegner)
-   im Hinterkopf behalten, aber niedrige Priorität.
+7# ItemNewRooms[256][2] (game\control.cpp/items.cpp) - per-frame queue for room
+   changes/deaths of items+effects during the item control loop. NOT a level load-time
+   limit but runtime: more than 256 simultaneous room changes/deaths in ONE tick would
+   overflow. An extremely rare edge case, hence secured only with a soft skip+log instead
+   of a hard abort. Keep in mind for very dense randomizer setups (many simultaneously
+   reacting enemies), but low priority.
 
-8# Savegame-Puffer 14490 Byte (SAVEGAME_INFO::buffer, global\types.h) - verdoppelt von
-   ursprünglich 7245. Wächst proportional zur Anzahl aktiver/getriggerter Items beim Speichern
-   (grob 90-110 Byte pro voll aktivem KI-Gegner). Overflow-Guard + Checksum-Prüfung beim Laden
-   ergänzt (Details: project_tomb5_native_port.md, project_trviewer_tr5.md).
+8# Savegame buffer 14490 bytes (SAVEGAME_INFO::buffer, global\types.h) - doubled from
+   originally 7245. Grows proportionally to the number of active/triggered items at save
+   time (roughly 90-110 bytes per fully active AI enemy). Overflow guard + checksum check
+   on load added (details: project_tomb5_native_port.md, project_trviewer_tr5.md).
 
-9# Regenerierende Pickups limit 16 (RPickups[], game\pickup.cpp) - Items mit trigger_flags&0x80
-   (Auto-Respawn-Flag). Sanfter Skip statt Abbruch (nur kosmetischer Effekt-Verlust, kein
-   Speicherproblem), niedrige Priorität für den Randomizer.
+9# Regenerating pickups limit 16 (RPickups[], game\pickup.cpp) - items with
+   trigger_flags&0x80 (auto-respawn flag). Soft skip instead of abort (only a cosmetic
+   effect loss, no memory problem), low priority for the randomizer.
 
-TODO: noch nicht auf dieselbe Weise geprüft/dokumentiert - Boxen/Pathfinding, aktive
-KI-Gegner-Slots (MAX_LOT=5, game\lot.cpp - selbst-limitierend per Design, kein Speicherrisiko,
-aber eine spielerische Obergrenze wert im Hinterkopf zu behalten), Partikel-/Sound-Pools
-(alle bereits als sicher/selbst-recycelnd eingestuft, siehe project_tomb5_native_port.md).
+TODO: not yet checked/documented the same way - boxes/pathfinding, active AI enemy slots
+(MAX_LOT=5, game\lot.cpp - self-limiting by design, no memory risk, but a gameplay upper
+bound worth keeping in mind), particle/sound pools (all already classified as
+safe/self-recycling, see project_tomb5_native_port.md).

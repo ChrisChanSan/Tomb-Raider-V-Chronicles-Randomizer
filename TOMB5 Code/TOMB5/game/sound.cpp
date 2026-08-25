@@ -27,25 +27,24 @@ short* sample_lut;
 long sound_active;
 long sound_cut_flag = 0;
 
-// Diagnose: wer hat den laufenden Klang gerufen? AnimateItem setzt beide
-// vor den PlaySound-Kommandos und raeumt danach auf; alle anderen Rufer
-// lassen -1 stehen. Nur fuers SFXLOG, kein Spielverhalten.
-long SfxKommandoRufer = -1;
-long SfxKommandoRaum = -1;
-long SfxKommandoAnim = -1;
-long SfxKommandoTyp = -1;
-long SfxKommandoRaumFlags = -1;
+// Diagnosis: who called the running sound? AnimateItem sets these before
+// the PlaySound commands and cleans up afterwards; all other callers leave
+// -1 in place. Only for the SFXLOG, no game behavior.
+long SfxCommandCaller = -1;
+long SfxCommandRoom = -1;
+long SfxCommandAnim = -1;
+long SfxCommandType = -1;
+long SfxCommandRoomFlags = -1;
 
-// Levelkulisse: gesetzt, solange SoundEffects() die ortsfesten Klangquellen
-// des Levels abarbeitet (Gaskocher, Ventilatoren, Fernseher). Alles andere -
-// Gegner, Lara, Anim-Kommandos - laeuft mit 0 und bleibt unberuehrt.
-long SfxQuelleAmbient = 0;
+// Level scenery: set while SoundEffects() works through the level's fixed
+// sound sources (gas stoves, fans, televisions). Everything else - enemies,
+// Lara, anim commands - runs with 0 and stays untouched.
+long SfxSourceAmbient = 0;
 
-// Reichweite der Levelkulisse in Prozent des Datenwerts (#114). TR5 kennt
-// keine Wanddaempfung: ein Klang mit radius 10 ist 11 Sektoren weit hoerbar,
-// quer durch geschlossene Raeume. In joby3 stapelt sich davon eine ganze
-// Etage. 100 = unveraendert wie Vanilla. Seit #108 stellt Balance.txt den
-// Wert ein, Voreinstellung 65.
+// Range of the level scenery in percent of the data value (#114). TR5 knows
+// no wall damping: a sound with radius 10 is audible 11 sectors out, right
+// through closed rooms. In joby3 a whole story of that piles up. 100 =
+// unchanged, as vanilla. Since #108 Balance.txt sets the value, default 65.
 
 void SoundEffectCS(long sfx, PHD_3DPOS* pos, long flags)
 {
@@ -137,9 +136,9 @@ void GetPanVolume(SoundSlot* slot)
 				else
 					distance = 0;
 
-				// Dasselbe fuer laufende Klaenge (#126) - siehe SoundEffect:
-				// aus naechster Naehe gibt es keine Richtung, sonst kippt
-				// ein Dauerton bei jeder Drehung von links nach rechts.
+				// The same for running sounds (#126) - see SoundEffect: at
+				// point-blank range there is no direction, or a sustained
+				// tone flips from left to right on every turn.
 				nPan = (FirstPersonActive() && !distance) ? 0 : ((CamRot.y << 4) + phd_atan(dz, dx));
 				nVolume = slot->OrigVolume;
 
@@ -229,10 +228,10 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 
 	radius = (info->radius + 1) << 10;
 
-	// Nur die ortsfeste Levelkulisse wird eingehegt - Gegner und Lara
-	// behalten ihre Reichweite, damit man Schritte und Rufe weiter so
-	// frueh hoert wie vorgesehen.
-	if (SfxQuelleAmbient)
+	// Only the fixed level scenery is reined in - enemies and Lara keep
+	// their range, so steps and calls are still heard as early as
+	// intended.
+	if (SfxSourceAmbient)
 		radius = radius * balance.sceneryRange / 100;
 
 	pan = 0;
@@ -271,15 +270,14 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 		else
 			distance = 0;
 
-		// Ego-Sicht (#126): ein Klang, der IM Ohr entsteht, hat keine
-		// Richtung. Die Kamera sitzt in Laras Kopf, ihre eigene Waffe also
-		// eine Handbreit daneben - phd_atan rechnet aus diesem winzigen
-		// Vektor einen vollen Winkel, und weil die Samples mono sind, sprang
-		// der Schuss hart von einem Lautsprecher zum anderen (vom Nutzer
-		// gehoert). "distance" ist hier schon 0, sobald die Quelle naeher
-		// als ein Sektor steht - genau der Fall, den wir mittig legen.
-		// Nur in Ego-Sicht: die normale Kamera steht 1536 hinter Lara, dort
-		// bleibt alles wie bei Core.
+		// First person (#126): a sound born IN the ear has no direction.
+		// The camera sits in Lara's head, her own weapon thus a hand's
+		// width beside it - phd_atan computes a full angle from this tiny
+		// vector, and because the samples are mono, the shot jumped hard
+		// from one speaker to the other (heard by the user). "distance" is
+		// already 0 here once the source stands closer than one sector -
+		// exactly the case we center. First person only: the normal camera
+		// stands 1536 behind Lara, there everything stays as Core had it.
 		if (!(info->flags & 0x1000) && !(FirstPersonActive() && !distance))
 			pan = (CamRot.y << 4) + phd_atan(dz, dx);
 	}
@@ -333,16 +331,16 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 
 	flag = info->flags & 3;
 
-	// Stapelschutz fuer die Levelkulisse (#114). SoundEffects() ruft jede
-	// ortsfeste Quelle JEDEN Frame auf; steht ihr Klang auf Modus 0
-	// ("stapelt"), entstehen 30 uebereinanderliegende Stimmen je Sekunde.
-	// Das ist nie gewollt, sondern ein Datenfehler - belegt am Gaskocher in
-	// joby3: SFX_KITCHEN_HOB_LOOP (220) traegt "LOOP" im Namen, aber Modus 0
-	// und keine Zufallsdrossel (242 Abspielvorgaenge in einem Log-Lauf).
-	// Solche Quellen werden hier wie Modus 1 behandelt: neu anstossen erst,
-	// wenn der vorige Durchlauf zu Ende ist. Einmalklaenge von Gegnern und
-	// Lara bleiben unberuehrt, die laufen nicht ueber diesen Weg.
-	if (SfxQuelleAmbient && flag == 0)
+	// Stacking guard for the level scenery (#114). SoundEffects() calls
+	// every fixed source EVERY frame; if its sound stands on mode 0
+	// ("stacks"), 30 overlapping voices per second arise. That is never
+	// intended but a data error - proven at the gas stove in joby3:
+	// SFX_KITCHEN_HOB_LOOP (220) carries "LOOP" in its name but mode 0 and
+	// no random throttle (242 plays in one log run). Such sources are
+	// treated like mode 1 here: restart only once the previous pass has
+	// finished. One-shot sounds of enemies and Lara stay untouched, they do
+	// not run through this path.
+	if (SfxSourceAmbient && flag == 0)
 		flag = 1;
 
 	switch (flag)
@@ -402,28 +400,28 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 		break;
 	}
 
-	// Klangprotokoll: was wird WIRKLICH abgespielt?
+	// Sound log: what is REALLY being played?
 	//
-	// Gebaut, weil beim Compsognathus-Import ein fremder, basslastiger Klang
-	// dazwischenfuhr, den keine Messung an den Dateien fand: Modell, Zuordnung,
-	// Soundmap, SAMPLE_INFO-Kette und Wave-Daten waren alle nachweislich
-	// richtig. Wer den Verursacher nicht in den Daten findet, muss ihn zur
-	// Laufzeit sehen.
+	// Built because a foreign, bass-heavy sound cut in during the
+	// Compsognathus import that no measurement on the files could find:
+	// model, mapping, soundmap, SAMPLE_INFO chain and wave data were all
+	// provably right. Whoever cannot find the culprit in the data must see
+	// it at runtime.
 	//
-	// Eine Zeile je Abspielvorgang mit allem, was zur Zuordnung noetig ist:
-	// die gerufene SFX-Nummer, der Eintrag der Soundmap, die tatsaechliche
-	// Sample-Nummer samt Variantenzahl und die fertige Lautstaerke. Die Zeile
-	// ist bewusst durchsuchbar aufgebaut ("SFXLOG"), damit sie sich aus dem
-	// uebrigen Protokoll herausfiltern laesst.
-	// Der Rufer wird von AnimateItem (control.cpp) vor dem Aufruf gesetzt -
-	// kommt der Klang nicht aus einem Anim-Kommando, steht dort -1 und die
-	// Zeile bleibt wie gehabt. Gebaut fuer die Frage "WER hat das gespielt?"
-	// (Wasserschritt-Fall 2026-08-19: nur die Nummer im Log, der Verursacher
-	// musste ueber die Anim-Saetze rueckgerechnet werden).
-	if (SfxKommandoRufer >= 0)
-		Log("SFXLOG sfx=%d map=%d sample=%d von %d Varianten vol=%d pitch=%d %s obj=%d raum=%d anim=%d typ=0x%X rflags=0x%X",
-			sfx, lut, sample, rnd, volume, pitch, flag == 3 ? "Schleife" : "einmal",
-			SfxKommandoRufer, SfxKommandoRaum, SfxKommandoAnim, SfxKommandoTyp, SfxKommandoRaumFlags);
+	// One line per play with everything needed for attribution: the called
+	// SFX number, the soundmap entry, the actual sample number with its
+	// variant count and the final volume. The line is deliberately built to
+	// be searchable ("SFXLOG"), so it can be filtered out of the rest of
+	// the log.
+	// The caller is set by AnimateItem (control.cpp) before the call - if
+	// the sound does not come from an anim command, -1 stands there and the
+	// line stays as before. Built for the question "WHO played that?"
+	// (water-step case 2026-08-19: only the number in the log, the culprit
+	// had to be back-computed through the anim sets).
+	if (SfxCommandCaller >= 0)
+		Log("SFXLOG sfx=%d map=%d sample=%d of %d variants vol=%d pitch=%d %s obj=%d room=%d anim=%d type=0x%X rflags=0x%X",
+			sfx, lut, sample, rnd, volume, pitch, flag == 3 ? "loop" : "once",
+			SfxCommandCaller, SfxCommandRoom, SfxCommandAnim, SfxCommandType, SfxCommandRoomFlags);
 	else
 		Log("SFXLOG sfx=%d map=%d sample=%d von %d Varianten vol=%d pitch=%d %s",
 			sfx, lut, sample, rnd, volume, pitch, flag == 3 ? "Schleife" : "einmal");

@@ -35,27 +35,27 @@ extern uchar* gfScriptFile;
 extern uchar* gfLanguageFile;
 extern char* gfLanguageList;
 extern long gfLanguageCount;
-extern long SprachWahl;
+extern long LanguageChoice;
 extern char* gfStringWad;
 extern char* gfFilenameWad;
 extern long gfStatus;
 extern long gfMirrorZPlane;
 extern short gfLevelFlags;
 extern uchar gfCurrentLevel;
-// Levelreihenfolge (Plan: Tomb5 Rando vorbereitung\Level Infos\
-// Levelreihenfolge-Plan.md): gfCurrentLevel ist der SLOT in der SCRIPT.DAT
-// (Reihenfolge, Savegame, Namen), gfLevelId die IDENTITAET des geladenen
-// Levels (LVL5_*, aus dem Dateinamen). Vanilla sind beide gleich; sobald der
-// Randomizer die Bloecke permutiert, fragt alles, was "bin ich im 13. Stock?"
-// wissen will, gfLevelId. gfSlotVonId ist die Umkehrung fuer Spruenge auf
-// eine bestimmte Identitaet (Cheat, Cutscene-Auswahl); gfLetzterSlot der
-// hoechste Kampagnen-Slot - dort, nicht bei "Red Alert", kommt der Abspann.
+// Level order (plan: Tomb5 Rando vorbereitung\Level Infos\
+// Levelreihenfolge-Plan.md): gfCurrentLevel is the SLOT in SCRIPT.DAT
+// (order, savegame, names), gfLevelId the IDENTITY of the loaded level
+// (LVL5_*, from the file name). In vanilla both are equal; as soon as the
+// randomizer permutes the blocks, everything that wants to know "am I on
+// the 13th floor?" asks gfLevelId. gfSlotFromId is the inverse for jumps to
+// a specific identity (cheat, cutscene selection); gfLastSlot the highest
+// campaign slot - the credits come there, not at "Red Alert".
 extern uchar gfLevelId;
-extern uchar gfSlotVonId[18];	// NUM_TR5_LEVELS - das Enum steht weiter unten
-extern uchar gfIdVonSlot[18];	// die Gegenrichtung: welche Identitaet liegt auf Slot n
-extern uchar gfLetzterSlot;
-uchar LevelIdVonDatei(uchar fileIndex);
-long ReihenfolgeGewuerfelt();
+extern uchar gfSlotFromId[18];	// NUM_TR5_LEVELS - the enum stands further down
+extern uchar gfIdFromSlot[18];	// the reverse direction: which identity lies on slot n
+extern uchar gfLastSlot;
+uchar LevelIdFromFile(uchar fileIndex);
+long OrderShuffled();
 extern uchar gfLevelComplete;
 extern uchar gfGameMode;
 extern uchar gfRequiredStartPos;
@@ -66,8 +66,8 @@ extern uchar gfNumTakeaways;
 extern uchar gfNumMips;
 extern uchar gfPickups[128];
 extern uchar gfTakeaways[128];
-extern uchar gfNachgaben[128];
-extern uchar gfNumNachgaben;
+extern uchar gfLateGives[128];
+extern uchar gfNumLateGives;
 extern uchar gfMips[8];
 extern uchar gfResidentCut[4];
 extern uchar gfLevelNames[40];

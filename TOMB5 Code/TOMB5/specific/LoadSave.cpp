@@ -935,7 +935,7 @@ void DoOptions()
 				{
 					if (SwitchLanguage(n))
 					{
-						SprachWahl = n;	// ab jetzt explizite Wahl, Registry "Language"
+						LanguageChoice = n;	// ab jetzt explizite Wahl, Registry "Language"
 						SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 						break;
 					}

@@ -28,7 +28,7 @@ void MoveCamera(GAME_VECTOR* ideal, long speed);
 void BinocularCamera(ITEM_INFO* item);
 void LookCamera(ITEM_INFO* item);
 void FirstPersonCamera(ITEM_INFO* item);
-bool FirstPersonActive();		// laeuft die Ego-Sicht gerade? (Kopf und Zopf bleiben dann aus)
+bool FirstPersonActive();		// is first person running right now? (head and braid stay hidden then)
 
 extern CAMERA_INFO camera;
 extern SHATTER_ITEM ShatterItem;

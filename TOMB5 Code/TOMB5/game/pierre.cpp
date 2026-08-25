@@ -30,18 +30,18 @@ static BITE_INFO larson_gun = { -55, 200, 5, 14 };
 static BITE_INFO pierre_gun1 = { 60, 200, 0, 11 };
 static BITE_INFO pierre_gun2 = { -57, 200, 0, 14 };
 
-// Kann Larson/Pierre von hier aus fliehen? Die Flucht ab 40 LP laeuft ueber
-// ai_bits = AMBUSH zu einem AIAmbush-Marker mit passender OCB in derselben
-// Zone (FindAITargetObject, box.cpp:1631) - dort despawnt er ueber
-// reached_goal. Core garantiert den Marker in den Vanilla-Leveln; als
-// Pool-Gegner steht er auch in Leveln OHNE passenden Marker. Dann fand
-// FindAITargetObject nie ein Ziel, er rannte endlos "fliehend" hinter Lara
-// her, und die 40-LP-Klammer machte ihn unsterblich (im Spiel gesehen:
-// joby2 Item 36). Ohne Fluchtziel greift die Klammer jetzt nicht - er
-// kaempft und stirbt wie ein normaler Gegner (seine Todesanimation bringt
-// ihr KillItem-Kommando selbst mit). Die Marker-Pruefung ist dieselbe wie
-// in FindAITargetObject: Typ, OCB, Zone.
-static long PierreKannFliehen(ITEM_INFO* item, CREATURE_INFO* pierre)
+// Can Larson/Pierre flee from here? The flight from 40 HP on runs via
+// ai_bits = AMBUSH to an AIAmbush marker with a matching OCB in the same
+// zone (FindAITargetObject, box.cpp:1631) - there he despawns via
+// reached_goal. Core guarantees the marker in the vanilla levels; as a pool
+// enemy he also stands in levels WITHOUT a matching marker. Then
+// FindAITargetObject never found a target, he ran endlessly "fleeing"
+// behind Lara, and the 40-HP clamp made him immortal (seen in game: joby2
+// item 36). Without a flight target the clamp no longer engages - he fights
+// and dies like a normal enemy (his death animation brings its own KillItem
+// command). The marker check is the same as in FindAITargetObject: type,
+// OCB, zone.
+static long PierreCanFlee(ITEM_INFO* item, CREATURE_INFO* pierre)
 {
 	AIOBJECT* aiObj;
 	ROOM_INFO* r;
@@ -118,7 +118,7 @@ void PierreControl(short item_number)
 	item = &items[item_number];
 	pierre = (CREATURE_INFO*)item->data;
 
-	if (item->hit_points <= 40 && !(item->flags & IFL_INVISIBLE) && PierreKannFliehen(item, pierre))
+	if (item->hit_points <= 40 && !(item->flags & IFL_INVISIBLE) && PierreCanFlee(item, pierre))
 	{
 		item->hit_points = 40;
 		pierre->flags++;
@@ -170,31 +170,31 @@ void PierreControl(short item_number)
 			GetHeight(floor, x, y, z);
 			TestTriggers(trigger_index, 1, 0);
 
-			// Larson ausblenden lassen wie jeden anderen Gegner.
+			// Let Larson fade out like any other enemy.
 			//
-			// Seine Sterbeanimation traegt keinen Anim-Befehl 4 (KillItem) -
-			// nachgesehen, sie hat sieben PlaySound-Befehle und sonst nichts.
-			// Beim Hund sitzt der Befehl in der Sterbeanimation und setzt ueber
-			// control.cpp:3220 after_death = 1; von da an blendet draw.cpp:742
-			// die Leiche aus und raeumt sie bei 128 weg.
+			// His death animation carries no anim command 4 (KillItem) -
+			// checked, it has seven PlaySound commands and nothing else.
+			// With the dog the command sits in the death animation and sets
+			// after_death = 1 via control.cpp:3220; from then on
+			// draw.cpp:742 fades the corpse and removes it at 128.
 			//
-			// Bei Larson fehlt das, weil Core seine Leiche nur an einer einzigen
-			// Stelle wegraeumt: in Trajan Markets uebernimmt am letzten Frame
-			// dieser Animation die Cutscene, und andrea3b_init (deltapak.cpp)
-			// setzt ihn auf ITEM_INVISIBLE. In jedem anderen Level - wo er in
-			// Vanilla nie stirbt, weil er vorher flieht - bliebe die Leiche
-			// stehen. Seine Sterbeanimation endet naemlich im Stand, sie ist
-			// ein 207 Frames langes Stueck fuer die Kamera und kein Umfallen.
+			// Larson lacks this because Core clears his corpse in exactly
+			// one place: in Trajan Markets the cutscene takes over at this
+			// animation's last frame, and andrea3b_init (deltapak.cpp) sets
+			// him to ITEM_INVISIBLE. In every other level - where he never
+			// dies in vanilla because he flees first - the corpse would
+			// remain. His death animation ends standing, after all: it is a
+			// 207-frame piece for the camera, not a fall.
 			//
-			// Fuer den Gegner-Pool muss er ueberall sterben koennen, deshalb
-			// hier der Anstoss, den seine Animation nicht mitbringt. Andrea2
-			// bleibt unberuehrt: dort blendet die Cutscene ihn im selben
-			// Augenblick aus, das Verblassen wird nie sichtbar.
+			// For the enemy pool he must be able to die everywhere, hence
+			// the push here that his animation does not bring. Andrea2
+			// stays untouched: there the cutscene hides him in the same
+			// moment, the fade never becomes visible.
 			//
-			// Mit dem Fade muss auch die Fracht heraus: getragene Items gibt
-			// sonst NUR CreatureDie frei, und dorthin kommt Larson nie -
-			// seine Sterbeanimation traegt keinen Befehl 4, der ueber
-			// ITEM_DEACTIVATED (control.cpp:3246) dorthin fuehren wuerde.
+			// With the fade the cargo must come out too: carried items are
+			// otherwise released ONLY by CreatureDie, and Larson never gets
+			// there - his death animation carries no command 4 that would
+			// lead there via ITEM_DEACTIVATED (control.cpp:3246).
 			if (!item->after_death)
 			{
 				DropBaddyPickups(item);
@@ -203,19 +203,19 @@ void PierreControl(short item_number)
 		}
 		else if (item->object_number == PIERRE && item->frame_number >= anims[item->anim_number].frame_end - 1)
 		{
-			// Pierres Todesanimation (+12) springt an ihrem Ende in eine
-			// LEBEND-Animation (+8) zurueck - Core hat seinen generischen Tod
-			// nie benutzt, vanilla stirbt er per Cutscene (Colosseum). Ohne
-			// Riegel setzte die Steuerung den Tod im naechsten Tick neu auf:
-			// eine Imp-artige Endlosschleife (im Spiel gesehen). Die Anim
-			// kurz vor dem Ende festhalten - kein Sprung, Pose bleibt liegen,
-			// after_death blendet aus und raeumt bei 128 weg.
+			// Pierre's death animation (+12) jumps back into a LIVING
+			// animation (+8) at its end - Core never used his generic
+			// death, in vanilla he dies by cutscene (Colosseum). Without a
+			// latch the control restarted the death on the next tick: an
+			// Imp-like endless loop (seen in game). Hold the anim just
+			// before its end - no jump, the pose stays down, after_death
+			// fades out and removes at 128.
 			item->frame_number = anims[item->anim_number].frame_end - 1;
 
-			// Fracht freigeben: der Riegel eine Bildnummer vor dem Ende ist
-			// genau der Grund, warum Pierres eigener Befehl 4 nie mehr
-			// ausgeloest wird - und damit auch CreatureDie nicht, das die
-			// getragenen Items sonst ablegen wuerde.
+			// Release the cargo: the latch one frame before the end is
+			// exactly why Pierre's own command 4 never fires anymore - and
+			// with it neither does CreatureDie, which would otherwise drop
+			// the carried items.
 			if (!item->after_death)
 			{
 				DropBaddyPickups(item);
@@ -443,20 +443,19 @@ void PierreControl(short item_number)
 		}
 		else
 		{
-			// Getragenes zuerst ablegen, dann verschwinden.
+			// Drop what he carries first, then vanish.
 			//
-			// GetCarriedItems (setup.cpp:1962) haengt beim Levelstart JEDES
-			// Pickup im Umkreis von 512 Einheiten an den naechsten Gegner:
-			// RemoveDrawnItem, room_number = NO_ROOM - das Item existiert
-			// danach nur noch als seine Fracht. Beim normalen Tod gibt
-			// CreatureDie sie ueber DropBaddyPickups wieder frei; dieser
-			// Fluchtabgang ruft aber direkt KillItem, und damit waere die
-			// Fracht fuer immer fort.
+			// GetCarriedItems (setup.cpp:1962) attaches EVERY pickup within
+			// 512 units to the nearest enemy at level start:
+			// RemoveDrawnItem, room_number = NO_ROOM - the item then exists
+			// only as his cargo. On a normal death CreatureDie releases it
+			// via DropBaddyPickups; this flight exit however calls KillItem
+			// directly, and the cargo would be gone forever.
 			//
-			// In Vanilla faellt das nicht auf, weil Core keinem fliehenden
-			// Larson etwas mitgibt. Mit zufaelliger Itemverteilung kann dort
-			// aber ein Schluesselitem liegen - und dann waere das Level nach
-			// seiner Flucht nicht mehr loesbar.
+			// In vanilla this goes unnoticed because Core gives a fleeing
+			// Larson nothing to carry. With random item distribution a key
+			// item can lie there - and then the level would be unsolvable
+			// after his flight.
 			DropBaddyPickups(item);
 			item->hit_points = -16384;
 			DisableBaddieAI(item_number);

@@ -35,38 +35,35 @@ void CutsceneRopeControl(short item_number);
 void HybridCollision(short item_num, ITEM_INFO* laraitem, COLL_INFO* coll);
 void DrawBaddieGunFlash(ITEM_INFO* item);
 
-// Ausweichslots fuer den Cross-Gegnermix des TR5-Randomizers. MESHSWAP1
-// traegt je Level die Tauschhaelften seiner EIGENEN Gegner (SWAT-Familie:
-// Waffenhaende 10/13, Imp: Kopf 10, TwoGun: 10<-2, Gladiator/Roman God:
-// ganze Schadenssaetze) - ein fremder Gegner braeuchte den Inhalt seines
-// Spenderlevels, und den kann man nicht nach MESHSWAP1 legen, ohne die
-// einheimischen Nutzer des Ziels zu brechen. Der Randomizer kopiert die
-// MESHSWAP1 des Tauschspenders deshalb in den Ausweichslot DES GEGNERS;
-// setup.cpp greift bevorzugt darauf zu (MeshSwapQuelle) und faellt sonst
-// auf MESHSWAP1 zurueck.
+// Fallback slots for the TR5 Randomizer's cross enemy mix. MESHSWAP1
+// carries, per level, the swap halves of its OWN enemies (SWAT family:
+// weapon hands 10/13, Imp: head 10, TwoGun: 10<-2, gladiator/Roman god:
+// whole damage sets) - a foreign enemy would need his donor level's
+// content, and that cannot go into MESHSWAP1 without breaking the target's
+// native users. The randomizer therefore copies the swap donor's MESHSWAP1
+// into THE ENEMY'S fallback slot; setup.cpp accesses it preferably
+// (MeshSwapSource) and otherwise falls back to MESHSWAP1.
 //
-// Seit #111 gilt durchgehend: EIN Slot je GEGNER, nicht je Spenderlevel.
-// Vorher teilten sich SWAT/SWAT+/TwoGun einen Slot (SMASH_OBJECT3) und
-// Guard/Mafia/Wachmann einen zweiten (SMASH_OBJECT4) - wer sich einen
-// Slot teilt, teilt dessen Inhalt, und ein einheimischer Nutzer zog sich
-// fremde Haende (joby2s Guard Item 69: OCB 3 setzt meshswap_meshbits,
-// Slot 4 trug joby3s Satz statt des eigenen). Das Muster stammt vom
-// Roman God (#84): seine zwei Fassungen (Schwert/Hammer) hatten aus
-// genau diesem Grund von Anfang an getrennte Slots - ein importierter
-// Gladiator haette sonst Andrea3s Hammer-Meshes in Andrea2s
-// einheimischen Schwert-Gott gedrueckt (in vier von acht Seeds
-// nachgemessen). SMASH_OBJECT3/4 sind seit der Trennung wieder
-// unbenutzt; die Soldatenfamilie parkt jenseits der Dateigrenze
-// (Enum-Eintraege hinter ROMAN_GOD2, siehe #105 unten).
+// Since #111 it holds throughout: ONE slot per ENEMY, not per donor level.
+// Before, SWAT/SWAT+/TwoGun shared one slot (SMASH_OBJECT3) and
+// guard/Mafia/Joby guard a second (SMASH_OBJECT4) - whoever shares a slot
+// shares its content, and a native user pulled foreign hands (joby2's
+// guard item 69: OCB 3 sets meshswap_meshbits, slot 4 carried joby3's set
+// instead of its own). The pattern comes from the Roman god (#84): his two
+// versions (sword/hammer) had separate slots from the start for exactly
+// this reason - an imported gladiator would otherwise have pressed
+// Andrea3's hammer meshes into Andrea2's native sword god (measured in
+// four of eight seeds). SMASH_OBJECT3/4 are unused again since the split;
+// the soldier family parks beyond the file boundary (enum entries behind
+// ROMAN_GOD2, see #105 below).
 //
-// Die Zuordnung muss mit der kCross-Tabelle des Randomizers
-// uebereinstimmen (Randomizer.cpp, swapDst). Der Tauschspender kann vom
-// Modellspender abweichen: rich1 (Modell fuer Guard und TwoGun) traegt
-// selbst keinen MESHSWAP1 - die Guard-Haende kommen aus joby3, TwoGuns
-// Quellmesh 2 aus rich3.
-#define MESHSWAP_CROSS_GLADIATOR SMASH_OBJECT5	// aus Andrea3
-#define MESHSWAP_CROSS_IMP	SMASH_OBJECT6	// aus andy3
-#define MESHSWAP_CROSS_ROMANGOD	SMASH_OBJECT7	// Schwert, aus Andrea2
+// The mapping must agree with the randomizer's kCross table
+// (Randomizer.cpp, swapDst). The swap donor can differ from the model
+// donor: rich1 (model for guard and TwoGun) carries no MESHSWAP1 itself -
+// the guard hands come from joby3, TwoGun's source mesh 2 from rich3.
+#define MESHSWAP_CROSS_GLADIATOR SMASH_OBJECT5	// from Andrea3
+#define MESHSWAP_CROSS_IMP	SMASH_OBJECT6	// from andy3
+#define MESHSWAP_CROSS_ROMANGOD	SMASH_OBJECT7	// sword, from Andrea2
 #define MESHSWAP_CROSS_ROMANGOD2 SMASH_OBJECT8	// Hammer, aus Andrea3
 
 enum object_types 
@@ -335,32 +332,32 @@ enum object_types
 	// anim_index like the others, InitialiseSas/lot.cpp/sas.cpp know it).
 	BLUE_GUARD2,
 
-	// ROMAN_GOD2: die zweite Fassung des Roman God (#84). Vanilla teilen sich
-	// beide denselben Slot 61 und schliessen sich damit aus - Andrea2 fuehrt
-	// dort das SCHWERT, Andrea3 den HAMMER. Welche Waffe er fuehrt, entscheidet
-	// die OCB des ITEMS (romangod.cpp: trigger_flags 1 = Fernkampf/Schwert,
-	// 0 = Nahkampf/Hammer), das MODELL kommt aus dem Slot. Mit einem zweiten
-	// Slot passen beide in dasselbe Level: 61 traegt das Schwert, hier der
-	// Hammer, und jeder bekommt die OCB, die zu seinem Modell gehoert.
+	// ROMAN_GOD2: the second version of the Roman god (#84). In vanilla both
+	// share slot 61 and thereby exclude each other - Andrea2 wields the
+	// SWORD there, Andrea3 the HAMMER. Which weapon he wields is decided by
+	// the ITEM's OCB (romangod.cpp: trigger_flags 1 = ranged/sword, 0 =
+	// melee/hammer), the MODEL comes from the slot. With a second slot both
+	// fit into the same level: 61 carries the sword, here the hammer, and
+	// each gets the OCB belonging to his model.
 	//
-	// Voraussetzung dafuer war, dass RomangodControl seine Animationen ueber
-	// item->object_number holt statt fest ueber ROMAN_GOD - genau die Lehre
-	// aus der Soldatenfamilie (#80).
+	// The precondition was that RomangodControl fetches its animations via
+	// item->object_number instead of hard-wired ROMAN_GOD - exactly the
+	// lesson from the soldier family (#80).
 	ROMAN_GOD2,
 
-	// Meshswap-Parkplaetze der Soldatenfamilie (#111): ein Slot je Gegner,
-	// siehe den grossen Kommentar bei MESHSWAP_CROSS_GLADIATOR oben. Reine
-	// Mesh-Lager wie die SMASH_OBJECT-Slots - nie ein Item dieses Typs im
-	// Level, deshalb ohne _MIP und ohne Eintrag in trviews types.json.
-	// Belegt werden sie vom Randomizer (kCross: swapDst); in Leveln ohne
-	// Import bleiben sie ungeladen und MeshSwapQuelle faellt auf MESHSWAP1
-	// zurueck.
-	MESHSWAP_CROSS_SWAT,		// 462, aus rich3
-	MESHSWAP_CROSS_SWATPLUS,	// 463, aus rich3
-	MESHSWAP_CROSS_TWOGUN,		// 464, aus rich3 (Quellmesh 2)
-	MESHSWAP_CROSS_GUARD,		// 465, aus joby3
-	MESHSWAP_CROSS_MAFIA,		// 466, aus joby3
-	MESHSWAP_CROSS_GUARD2,		// 467, aus joby3 (Joby-Wachmann, Slot 460)
+	// Meshswap parking spots of the soldier family (#111): one slot per
+	// enemy, see the big comment at MESHSWAP_CROSS_GLADIATOR above. Pure
+	// mesh stores like the SMASH_OBJECT slots - never an item of this type
+	// in a level, hence without _MIP and without an entry in trview's
+	// types.json. They are filled by the randomizer (kCross: swapDst); in
+	// levels without an import they stay unloaded and MeshSwapSource falls
+	// back to MESHSWAP1.
+	MESHSWAP_CROSS_SWAT,		// 462, from rich3
+	MESHSWAP_CROSS_SWATPLUS,	// 463, from rich3
+	MESHSWAP_CROSS_TWOGUN,		// 464, from rich3 (source mesh 2)
+	MESHSWAP_CROSS_GUARD,		// 465, from joby3
+	MESHSWAP_CROSS_MAFIA,		// 466, from joby3
+	MESHSWAP_CROSS_GUARD2,		// 467, from joby3 (Joby guard, slot 460)
 
 	NUMBER_OBJECTS
 };

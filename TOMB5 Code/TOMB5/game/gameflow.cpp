@@ -61,16 +61,16 @@ long gfMirrorZPlane;
 short gfLevelFlags;
 uchar gfCurrentLevel;
 uchar gfLevelId;
-uchar gfSlotVonId[18];
-uchar gfIdVonSlot[18];
-uchar gfLetzterSlot = LVL5_RED_ALERT;
+uchar gfSlotFromId[18];
+uchar gfIdFromSlot[18];
+uchar gfLastSlot = LVL5_RED_ALERT;
 
-// Die Videos haengen an den ABSCHNITTEN, nicht an Slots: Intro vor dem
-// ersten Level eines Abschnitts, Outro nach dem letzten. Vanilla lagen die
-// Paare (Outro, naechstes Intro) als CMD_FMV im Block des Abschnittsendes
-// und das Rom-Intro hart im Titel-Code - nach einer Permutation spielte das
-// Russland-Intro nach Rom, egal was folgte. FMV 8 ist das Finale und kommt
-// nach dem letzten Kampagnen-Slot (gfLetzterSlot), nicht nach "Red Alert".
+// The videos hang on the SECTIONS, not on slots: intro before a section's
+// first level, outro after its last. In vanilla the pairs (outro, next
+// intro) lay as CMD_FMV in the block of the section end, and the Rome intro
+// sat hard-wired in the title code - after a permutation the Russia intro
+// played after Rome no matter what followed. FMV 8 is the finale and comes
+// after the last campaign slot (gfLastSlot), not after "Red Alert".
 static uchar IntroFmv(uchar id)
 {
 	switch (id)
@@ -98,28 +98,28 @@ static uchar OutroFmv(uchar id)
 #define FINALE_FMV	8
 uchar gfLevelComplete;
 
-// Identitaet aus dem Dateinamen des Levels (Dateiindex aus CMD_LEVEL). Die
-// Namen sind die der Vanilla-Auslieferung ("DATA\JOBY3"); unbekannte Namen
-// fallen auf den Slot zurueck, damit ein Fremdlevel nicht als Titel gilt.
-uchar LevelIdVonDatei(uchar fileIndex)
+// Identity from the level's file name (file index from CMD_LEVEL). The
+// names are those of the vanilla shipment ("DATA\JOBY3"); unknown names
+// fall back to the slot, so a foreign level does not count as the title.
+uchar LevelIdFromFile(uchar fileIndex)
 {
-	static const char* namen[18] =
+	static const char* names[18] =
 	{
 		"TITLE", "ANDREA1", "ANDREA2", "ANDREA3", "JOBY2", "JOBY3", "JOBY4", "JOBY5",
 		"ANDY1", "ANDY2", "ANDY3", "RICH1", "RICH2", "RICHCUT2", "RICH3", "GIBBY", "DEL", "TOM"
 	};
 	const char* s;
-	const char* kurz;
+	const char* shortName;
 
 	if (!gfFilenameWad || fileIndex >= Gameflow->nFileNames)
 		return gfCurrentLevel;
 
 	s = &gfFilenameWad[gfFilenameOffset[fileIndex]];
-	kurz = strrchr(s, '\\');
-	kurz = kurz ? kurz + 1 : s;
+	shortName = strrchr(s, '\\');
+	shortName = shortName ? shortName + 1 : s;
 
 	for (int i = 0; i < 18; i++)
-		if (!_stricmp(kurz, namen[i]))
+		if (!_stricmp(shortName, names[i]))
 			return (uchar)i;
 
 	return gfCurrentLevel;
@@ -131,10 +131,10 @@ uchar gfInitialiseGame;
 uchar gfNumPickups;
 uchar gfNumTakeaways;
 uchar gfNumMips = 0;
-uchar gfPickups[128];	// war 16 - der Inventar-Reset des Randomizers setzt ~70 TAKEOBJ je Level
+uchar gfPickups[128];	// was 16 - the randomizer's inventory reset sets ~70 TAKEOBJ per level
 uchar gfTakeaways[128];
-uchar gfNachgaben[128];	// GIVEOBJ, die im Block HINTER einem TAKEOBJ stehen - siehe DoGameflow
-uchar gfNumNachgaben;
+uchar gfLateGives[128];	// GIVEOBJ standing in the block BEHIND a TAKEOBJ - see DoGameflow
+uchar gfNumLateGives;
 uchar gfMips[8];
 uchar gfResidentCut[4];
 uchar gfLevelNames[40];
@@ -247,7 +247,7 @@ void DoGameflow()
 			gfUVRotate = 0;
 			gfNumMips = 0;
 			gfNumPickups = 0;
-			gfNumNachgaben = 0;
+			gfNumLateGives = 0;
 			gfMirrorRoom = -1;
 			gfFog.r = 0;
 			gfFog.g = 0;
@@ -294,7 +294,7 @@ void DoGameflow()
 			gfUVRotate = 0;
 			gfNumMips = 0;
 			gfNumPickups = 0;
-			gfNumNachgaben = 0;
+			gfNumLateGives = 0;
 
 			switch (gfStatus)
 			{
@@ -409,19 +409,20 @@ void DoGameflow()
 			break;
 
 		case CMD_GIVEOBJ:
-			// Ein GIVEOBJ, das im Block HINTER einem TAKEOBJ steht, wird auch
-			// NACH den Wegnahmen angewandt (dritte Phase in setup.cpp) - sonst
-			// gaebe es kein "erst alles wegnehmen, dann gezielt geben": die
-			// Wegnahmen laufen dort bewusst zuletzt, weil sie u.a. die
-			// Pistolen entfernen muessen, die setup.cpp jedem Level mit
-			// geladenem Pistolenmodell vorher wieder in die Hand drueckt.
-			// Vanilla stehen alle Gaben VOR allen Wegnahmen (Andrea1: gibt
-			// Uzi, nimmt Uzi) - dort aendert sich also nichts.
+			// A GIVEOBJ standing in the block BEHIND a TAKEOBJ is also
+			// applied AFTER the takeaways (third phase in setup.cpp) -
+			// otherwise there would be no "take everything first, then give
+			// deliberately": the takeaways deliberately run last there,
+			// because among other things they must remove the pistols that
+			// setup.cpp presses back into the hands of every level with a
+			// loaded pistol model. In vanilla all gifts stand BEFORE all
+			// takeaways (Andrea1: gives Uzi, takes Uzi) - nothing changes
+			// there.
 			if (gfNumTakeaways)
 			{
-				if (gfNumNachgaben < 128) gfNachgaben[gfNumNachgaben++] = *gf;
+				if (gfNumLateGives < 128) gfLateGives[gfNumLateGives++] = *gf;
 			}
-			else if (gfNumPickups < 128) gfPickups[gfNumPickups++] = *gf;	// Riegel: vorher ungeprueft in ein 16er-Feld
+			else if (gfNumPickups < 128) gfPickups[gfNumPickups++] = *gf;	// guard: previously unchecked into a 16-entry array
 			gf += 2;
 			break;
 
@@ -491,9 +492,9 @@ long TitleOptions()
 
 	if (bDoCredits)
 	{
-		// Abspann abbrechbar: Bestaetigen, Zurueck oder Escape springt in den
-		// Titel (vorher half nur Alt+F4). ResetCredits setzt den Lauf zurueck,
-		// damit der naechste Abspann wieder von unten beginnt.
+		// Credits can be aborted: confirm, back or escape jumps to the
+		// title (before, only Alt+F4 helped). ResetCredits resets the roll,
+		// so the next credits start from the bottom again.
 		if (dbinput & (IN_SELECT | IN_DESELECT | IN_OPTION))
 		{
 			ResetCredits();
@@ -657,7 +658,7 @@ long TitleOptions()
 
 		if (cheat_jump)
 		{
-			gfLevelComplete = gfSlotVonId[cheat_jump & 15];	// Cheat nennt eine IDENTITAET - in den Slot uebersetzen
+			gfLevelComplete = gfSlotFromId[cheat_jump & 15];	// the cheat names an IDENTITY - translate it into the slot
 			ret = 3;
 		}
 
@@ -826,10 +827,10 @@ void DoTitle(uchar name, uchar audio)
 	bUseSpotCam = 0;
 	bDisableLaraControl = 0;
 
-	// Neues Spiel: das Intro des Abschnitts, der auf Slot 1 liegt (vanilla
-	// Rom = FMV 2, hier frueher hart verdrahtet).
-	if (gfLevelComplete == 1 && gfStatus != 2 && IntroFmv(gfIdVonSlot[1]))
-		PlayFmv(IntroFmv(gfIdVonSlot[1]));
+	// New game: the intro of the section lying on slot 1 (vanilla Rome =
+	// FMV 2, formerly hard-wired here).
+	if (gfLevelComplete == 1 && gfStatus != 2 && IntroFmv(gfIdFromSlot[1]))
+		PlayFmv(IntroFmv(gfIdFromSlot[1]));
 
 	if (gfStatus != 4 && tomb5.tr4_loadscreens)
 		RenderLoadPic(0);
@@ -875,7 +876,7 @@ long do_dels_cutseq_selector()
 		SoundEffect(SFX_MENU_CHOOSE, 0, SFX_ALWAYS);
 		dels_cutseq_selector_flag = 0;
 		cutrot = 0;
-		gfLevelComplete = gfSlotVonId[cutsel[selection + 1].lvl & 15];	// Cutscene-Auswahl nennt eine IDENTITAET
+		gfLevelComplete = gfSlotFromId[cutsel[selection + 1].lvl & 15];	// the cutscene selection names an IDENTITY
 		dels_cutseq_player = cutsel[selection + 1].num;
 		selection = 0;
 		ret = 3;
@@ -892,7 +893,7 @@ void DoLevel(uchar Name, uchar Audio)
 	long gamestatus;
 
 	gamestatus = 0;
-	gfLevelId = LevelIdVonDatei(Name);	// Identitaet VOR dem Laden - alles Levelspezifische fragt ab jetzt gfLevelId
+	gfLevelId = LevelIdFromFile(Name);	// identity BEFORE loading - everything level-specific asks gfLevelId from here on
 	SetFade(255, 0);
 
 	if (gfGameMode != 4)
@@ -1043,23 +1044,23 @@ void DoLevel(uchar Name, uchar Audio)
 	S_SoundStopAllSamples();
 	S_CDStop();
 
-	// Videos nach IDENTITAET statt aus dem Block (siehe IntroFmv/OutroFmv):
-	// erst das Outro des Abschnitts, der hier endet - am letzten Kampagnen-
-	// Slot stattdessen das Finale -, dann das Intro des Abschnitts, der
-	// auf dem naechsten Slot beginnt. Vanilla ergibt das exakt die alten
-	// Paare (3+4 nach Andrea3, 5+6 nach joby5, 7 nach andy3, 8 nach rich3);
-	// die CMD_FMV der Bloecke (fmv_to_play) werden dafuer nicht mehr
-	// abgespielt, sonst kaemen sie doppelt.
+	// Videos by IDENTITY instead of from the block (see IntroFmv/OutroFmv):
+	// first the outro of the section ending here - at the last campaign
+	// slot the finale instead -, then the intro of the section starting on
+	// the next slot. In vanilla this yields exactly the old pairs (3+4
+	// after Andrea3, 5+6 after joby5, 7 after andy3, 8 after rich3); the
+	// blocks' CMD_FMV (fmv_to_play) are no longer played for this, or they
+	// would come twice.
 	if (gfStatus == 3)
 	{
-		const uchar outro = (gfCurrentLevel == gfLetzterSlot) ? FINALE_FMV : OutroFmv(gfLevelId);
+		const uchar outro = (gfCurrentLevel == gfLastSlot) ? FINALE_FMV : OutroFmv(gfLevelId);
 
 		if (outro)
 			PlayFmv(outro);
 
-		if (gamestatus != 2 && gfCurrentLevel != gfLetzterSlot && gfCurrentLevel + 1 < 18)
+		if (gamestatus != 2 && gfCurrentLevel != gfLastSlot && gfCurrentLevel + 1 < 18)
 		{
-			const uchar intro = IntroFmv(gfIdVonSlot[gfCurrentLevel + 1]);
+			const uchar intro = IntroFmv(gfIdFromSlot[gfCurrentLevel + 1]);
 
 			if (intro)
 				PlayFmv(intro);
@@ -1076,10 +1077,10 @@ void DoLevel(uchar Name, uchar Audio)
 	if (tomb5.tr4_loadscreens)
 		RenderLoadPic(0);
 
-	// Abspann nach dem LETZTEN Kampagnen-Slot - vanilla ist das Red Alert,
-	// nach einer Permutation das Level, das der Randomizer ans Ende gelegt
-	// hat. Haenge das an die Identitaet, kaeme der Abspann mitten im Spiel.
-	if (gfStatus == 3 && gfCurrentLevel == gfLetzterSlot)
+	// Credits after the LAST campaign slot - in vanilla that is Red Alert,
+	// after a permutation whatever level the randomizer put at the end.
+	// Hang this on the identity, and the credits would come mid-game.
+	if (gfStatus == 3 && gfCurrentLevel == gfLastSlot)
 	{
 		gfStatus = 1;
 		bDoCredits = 1;
@@ -1090,18 +1091,18 @@ void DoLevel(uchar Name, uchar Audio)
 }
 
 //----------------------------------------------------------------------------
-// Sprachwechsel im laufenden Spiel: die SCRIPT.DAT traegt am Ende eine Liste
-// von Sprachdateinamen (NUL-getrennt bis zum Dateiende). Das Original nimmt
-// stur die ERSTE Datei, die sich laden laesst - Regionalversionen unterschieden
-// sich nur durch die mitgelieferten Dateien. Wir merken uns die Liste und
-// koennen jederzeit auf eine andere vorhandene Datei umschalten; SCRIPT_TEXT
-// loest jeden Text live ueber gfStringOffset/gfStringWad auf, der Wechsel
-// wirkt also sofort und ohne Neustart.
-char* gfLanguageList;	// erster Name in der Liste (zeigt in gfScriptFile)
+// Language switching at runtime: SCRIPT.DAT carries a list of language file
+// names at its end (NUL-separated up to the end of the file). The original
+// stubbornly takes the FIRST file that loads - regional versions differed
+// only in the files they shipped. We remember the list and can switch to any
+// other present file at any time; SCRIPT_TEXT resolves every text live via
+// gfStringOffset/gfStringWad, so the switch takes effect immediately and
+// without a restart.
+char* gfLanguageList;	// first name in the list (points into gfScriptFile)
 long gfLanguageCount;
-long SprachWahl = -1;	// Registry "Language": -1 = Automatik (erste ladbare Datei)
+long LanguageChoice = -1;	// registry "Language": -1 = automatic (first loadable file)
 
-static char* SprachDateiName(long idx)
+static char* LanguageFileName(long idx)
 {
 	char* s = gfLanguageList;
 
@@ -1114,36 +1115,36 @@ static char* SprachDateiName(long idx)
 	return s;
 }
 
-// Anzeigename fuers Optionsmenue - nur Zeichen, die die Spielschrift kann.
+// Display name for the options menu - only characters the game font knows.
 const char* LanguageName(long idx)
 {
-	static const char* namen[8] = { "English", "Francais", "Deutsch", "Italiano", "Espanol", "English US", "Japanese", "Nederlands" };
-	const char* datei = SprachDateiName(idx);
+	static const char* names[8] = { "English", "Francais", "Deutsch", "Italiano", "Espanol", "English US", "Japanese", "Nederlands" };
+	const char* file = LanguageFileName(idx);
 
-	if (!datei)
+	if (!file)
 		return "---";
 
-	if (idx < 8 && !_strnicmp(datei, "ENGLISH", 7)) return namen[0];
-	if (!_strnicmp(datei, "FRENCH", 6))  return namen[1];
-	if (!_strnicmp(datei, "GERMAN", 6))  return namen[2];
-	if (!_strnicmp(datei, "ITALIAN", 7)) return namen[3];
-	if (!_strnicmp(datei, "SPANISH", 7)) return namen[4];
-	if (!_strnicmp(datei, "US.", 3))     return namen[5];
-	if (!_strnicmp(datei, "JAPAN", 5))   return namen[6];
-	if (!_strnicmp(datei, "DUTCH", 5))   return namen[7];
-	return datei;
+	if (idx < 8 && !_strnicmp(file, "ENGLISH", 7)) return names[0];
+	if (!_strnicmp(file, "FRENCH", 6))  return names[1];
+	if (!_strnicmp(file, "GERMAN", 6))  return names[2];
+	if (!_strnicmp(file, "ITALIAN", 7)) return names[3];
+	if (!_strnicmp(file, "SPANISH", 7)) return names[4];
+	if (!_strnicmp(file, "US.", 3))     return names[5];
+	if (!_strnicmp(file, "JAPAN", 5))   return names[6];
+	if (!_strnicmp(file, "DUTCH", 5))   return names[7];
+	return file;
 }
 
-// Selbst ergaenzte Menuezeilen ("Language", "Level Select", ...) haben keine
-// String-ID im Sprach-Wad - kleine eigene Tabelle je geladener Sprache. Nur
-// Zeichen, die die Spielschrift ohne Escape-Codes kann (ASCII). Hinweis:
-// die ITALIAN.DAT der Steam-Fassung ist nur eine Englisch-Kopie - wer sie
-// noch hat, sieht fuenf italienische Zeilen im englischen Menue; mit einer
-// echten Uebersetzung (der Nutzer hat eine) passt alles zusammen.
+// Self-added menu rows ("Language", "Level Select", ...) have no string ID
+// in the language wad - a small own table per loaded language. Only
+// characters the game font can draw without escape codes (ASCII). Note: the
+// Steam edition's ITALIAN.DAT is just an English copy - whoever still has
+// it sees five Italian rows in an English menu; with a real translation
+// (the user owns one) everything lines up.
 const char* CustomText(const char* engl)
 {
-	static const char* tabelle[][5] =
-	{	// Englisch          Franzoesisch       Deutsch           Italienisch           Spanisch
+	static const char* table[][5] =
+	{	// English           French             German            Italian               Spanish
 		{ "Language",        "Langue",          "Sprache",        "Lingua",             "Idioma" },
 		{ "Level Select",    "Choix du niveau", "Levelauswahl",   "Selezione livello",  "Seleccion de nivel" },
 		{ "Pause",           "Pause",           "Pause",          "Pausa",              "Pausa" },
@@ -1152,87 +1153,87 @@ const char* CustomText(const char* engl)
 		{ "Credits",         "Credits",         "Credits",        "Crediti",            "Creditos" },
 	};
 
-	long spalte;
+	long column;
 
 	switch (Gameflow->Language)
 	{
 	case FRENCH:
-		spalte = 1;
+		column = 1;
 		break;
 	case GERMAN:
-		spalte = 2;
+		column = 2;
 		break;
 	case ITALIAN:
-		spalte = 3;
+		column = 3;
 		break;
 	case SPANISH:
-		spalte = 4;
+		column = 4;
 		break;
 	default:
-		return engl;	// Englisch und US
+		return engl;	// English and US
 	}
 
-	for (long i = 0; i < (long)(sizeof(tabelle) / sizeof(tabelle[0])); i++)
-		if (!strcmp(engl, tabelle[i][0]))
-			return tabelle[i][spalte];
+	for (long i = 0; i < (long)(sizeof(table) / sizeof(table[0])); i++)
+		if (!strcmp(engl, table[i][0]))
+			return table[i][column];
 
 	return engl;
 }
 
-// Zeigertabelle aufbauen und Strings ent-XOR-en (0xA5).
+// Build the pointer table and un-XOR the strings (0xA5).
 //
-// VORSICHT, Altlast: das Original verdichtete den Puffer mit TXT_NUM_STRINGS
-// (309) als FESTER Groesse der Offsettabelle. Die stimmt aber nur fuer
-// ENGLISH/US/FRENCH/ITALIAN/SPANISH (195 Haupt + 56 PSX + 58 PC = 309).
-// GERMAN traegt 58 PSX-Eintraege (311 gesamt), JAPAN/DUTCH sogar 204+96+58
-// (358) - dort begann der Text-Wad mitten in der Offsettabelle, jeder String
-// las verschoben, und die Muell-Glyphen rissen den Zeichner um (Hard-Crash
-// beim Sprachwechsel auf Deutsch). Vanilla fiel das nie auf, weil jede
-// Regionalversion nur Dateien mit passender Zaehlung dabei hatte.
+// CAUTION, legacy: the original compacted the buffer with TXT_NUM_STRINGS
+// (309) as the FIXED size of the offset table. But that is only right for
+// ENGLISH/US/FRENCH/ITALIAN/SPANISH (195 main + 56 PSX + 58 PC = 309).
+// GERMAN carries 58 PSX entries (311 total), JAPAN/DUTCH even 204+96+58
+// (358) - there the text wad began in the middle of the offset table, every
+// string read shifted, and the garbage glyphs tore the renderer down (hard
+// crash when switching the language to German). Vanilla never noticed
+// because each regional version only shipped files with a matching count.
 //
-// Darum jetzt: Blockgrenzen aus dem DATEIKOPF, und die Enum-Indizes werden
-// blockweise zugeordnet (das Enum folgt der englischen Aufteilung 195/56/58).
-// Jede Datei traegt mindestens so viele Eintraege je Block - Ueberzaehlige
-// haengen hinten am Block und bleiben einfach unbenutzt.
-static void SprachPufferAufbereiten(char* d)
+// Hence now: block boundaries from the FILE HEADER, and the enum indices
+// are assigned block-wise (the enum follows the English split 195/56/58).
+// Every file carries at least that many entries per block - surplus ones
+// hang at the block's end and simply stay unused.
+static void PrepareLanguageBuffer(char* d)
 {
 	STRINGHEADER sh;
-	static ushort tabelle[TXT_NUM_STRINGS];
+	static ushort table[TXT_NUM_STRINGS];
 	char* s;
 	char* e;
 	long l, q;
 
 	memcpy(&sh, d, sizeof(STRINGHEADER));
 
-	const long nDatei = sh.nStrings + sh.nPSXStrings + sh.nPCStrings;
+	const long nFile = sh.nStrings + sh.nPSXStrings + sh.nPCStrings;
 	ushort* off = (ushort*)(d + sizeof(STRINGHEADER));
-	char* wad = d + sizeof(STRINGHEADER) + nDatei * sizeof(ushort);
+	char* wad = d + sizeof(STRINGHEADER) + nFile * sizeof(ushort);
 
-	const long enumHaupt = 195;
+	const long enumMain = 195;
 	const long enumPSX = 56;
 
 	for (long i = 0; i < TXT_NUM_STRINGS; i++)
 	{
-		if (i < enumHaupt)
+		if (i < enumMain)
 			q = i;
-		else if (i < enumHaupt + enumPSX)
-			q = sh.nStrings + (i - enumHaupt);
+		else if (i < enumMain + enumPSX)
+			q = sh.nStrings + (i - enumMain);
 		else
-			q = sh.nStrings + sh.nPSXStrings + (i - enumHaupt - enumPSX);
+			q = sh.nStrings + sh.nPSXStrings + (i - enumMain - enumPSX);
 
-		tabelle[i] = q < nDatei ? off[q] : 0;
+		table[i] = q < nFile ? off[q] : 0;
 	}
 
 	gfLanguageFile = (uchar*)d;
-	gfStringOffset = tabelle;
+	gfStringOffset = table;
 	gfStringWad = wad;
 
-	// Entschluesselt wird ueber die DATEI-Offsets (alle nDatei Strings), damit
-	// auch die Eintraege jenseits des Enums konsistent bleiben. Wie im
-	// Original bleibt je String das letzte Byte (der unverschluesselte
-	// NUL-Abschluss) unangetastet, und der allerletzte String der Datei
-	// bleibt kodiert - der liegt ausserhalb jeder Enum-Zuordnung.
-	for (long i = 0; i + 1 < nDatei; i++)
+	// Decoding runs over the FILE offsets (all nFile strings), so the
+	// entries beyond the enum stay consistent too. As in the original, each
+	// string's last byte (the unencrypted NUL terminator) stays untouched,
+	// and the file's very last string stays encoded - it lies outside any
+	// enum assignment.
+	for (long i = 0; i + 1 < nFile; i++)
 	{
 		s = &wad[off[i]];
 		e = &wad[off[i + 1]];
@@ -1247,9 +1248,9 @@ long SwitchLanguage(long idx)
 {
 	STRINGHEADER sh;
 	char* d;
-	char* name = SprachDateiName(idx);
+	char* name = LanguageFileName(idx);
 
-	if (!name || !*name || idx > 7)	// Gameflow->Language ist ein 3-Bit-Feld
+	if (!name || !*name || idx > 7)	// Gameflow->Language is a 3-bit field
 		return 0;
 
 	d = 0;
@@ -1257,15 +1258,15 @@ long SwitchLanguage(long idx)
 	if (!LoadFile(name, &d))
 		return 0;
 
-	// Nur Dateien im TR5-PC-Layout (195 Haupt- / 58 PC-Strings) sind dem
-	// Enum zuordenbar. JAPAN.DAT und DUTCH.DAT sind in JEDER TR5-Fassung
-	// (Steam wie die japanische PC-CD) in Wahrheit TOMB-RAIDER-4-Dateien:
-	// Layout 204/96 wie TR4s English.dat, TR4-Itemnamen ("Hathor Effigy")
-	// und TR4-PSX-Seriennummern (SLES-02238/-02243) mitten im Text. Ein
-	// japanisches oder hollaendisches TR5-PC-Textpaket gab es nie - selbst
-	// die japanische CD fiel beim Start auf ENGLISH.DAT zurueck. Geprueft
-	// wird der KOPF, nicht der Name: eine echte Fassung im TR5-Layout
-	// (so wie die vom Nutzer aufgetriebene ITALIAN.DAT) geht weiterhin.
+	// Only files in the TR5 PC layout (195 main / 58 PC strings) can be
+	// mapped to the enum. JAPAN.DAT and DUTCH.DAT are in EVERY TR5 edition
+	// (Steam and the Japanese PC CD alike) in truth TOMB RAIDER 4 files:
+	// layout 204/96 like TR4's English.dat, TR4 item names ("Hathor
+	// Effigy") and TR4 PSX serial numbers (SLES-02238/-02243) in the middle
+	// of the text. A Japanese or Dutch TR5 PC text package never existed -
+	// even the Japanese CD fell back to ENGLISH.DAT at startup. The HEADER
+	// is checked, not the name: a real edition in the TR5 layout (like the
+	// ITALIAN.DAT the user tracked down) still works.
 	memcpy(&sh, d, sizeof(STRINGHEADER));
 
 	if (sh.nStrings != 195 || sh.nPCStrings != 58)
@@ -1275,8 +1276,8 @@ long SwitchLanguage(long idx)
 	}
 
 	free(gfLanguageFile);
-	SprachPufferAufbereiten(d);
-	Gameflow->Language = idx;	// steuert auch die deutsche Tastaturtabelle (LoadSave.cpp)
+	PrepareLanguageBuffer(d);
+	Gameflow->Language = idx;	// also drives the German keyboard table (LoadSave.cpp)
 	return 1;
 }
 
@@ -1289,7 +1290,7 @@ void LoadGameflow()
 
 	s = 0;
 	l = LoadFile("SCRIPT.DAT", &s);
-	const long scriptGroesse = l;
+	const long scriptSize = l;
 
 	gfScriptFile = (uchar*)s;
 
@@ -1311,16 +1312,16 @@ void LoadGameflow()
 	gfScriptWad = (uchar*)s;
 	s += Gameflow->ScriptLen;
 
-	// Sprachliste vermessen: Namen liegen NUL-getrennt bis zum Dateiende.
+	// Measure the language list: names lie NUL-separated to the file's end.
 	gfLanguageList = s;
 	gfLanguageCount = 0;
 
-	for (char* p = s; p < (char*)gfScriptFile + scriptGroesse && *p; p += strlen(p) + 1)
+	for (char* p = s; p < (char*)gfScriptFile + scriptSize && *p; p += strlen(p) + 1)
 		gfLanguageCount++;
 
-	// Wie das Original: die erste Datei nehmen, die sich laden laesst. Die
-	// gespeicherte Wahl des Nutzers (SprachWahl) zieht WinMain nach dem
-	// LoadSettings-Aufruf nach - die Registry ist hier noch nicht gelesen.
+	// Like the original: take the first file that loads. The user's saved
+	// choice (LanguageChoice) is applied by WinMain after the LoadSettings
+	// call - the registry has not been read here yet.
 	for (l = 0;; l++)
 	{
 		d = 0;
@@ -1331,17 +1332,17 @@ void LoadGameflow()
 		s += strlen(s) + 1;
 	}
 
-	SprachPufferAufbereiten(d);
+	PrepareLanguageBuffer(d);
 	Gameflow->Language = l;
 
-	// Vanilla ist Slot == Identitaet; die Schleife unten ueberschreibt, was
-	// die SCRIPT.DAT anders verteilt hat.
+	// Vanilla has slot == identity; the loop below overwrites whatever the
+	// SCRIPT.DAT distributed differently.
 	for (int i = 0; i < 18; i++)
 	{
-		gfSlotVonId[i] = (uchar)i;
-		gfIdVonSlot[i] = (uchar)i;
+		gfSlotFromId[i] = (uchar)i;
+		gfIdFromSlot[i] = (uchar)i;
 	}
-	gfLetzterSlot = 0;
+	gfLastSlot = 0;
 
 	for (int i = 0; i < Gameflow->nLevels; i++)
 	{
@@ -1367,19 +1368,19 @@ void LoadGameflow()
 
 			case CMD_LEVEL:
 				gfLevelNames[i] = *n;
-				// Slot -> Identitaet merken (Umkehrtabelle) und den letzten
-				// Kampagnen-Slot bestimmen: dort kommt der Abspann, egal
-				// welches Level der Randomizer ans Ende gelegt hat.
+				// Remember slot -> identity (inverse table) and determine
+				// the last campaign slot: the credits come there, no matter
+				// which level the randomizer put at the end.
 				{
-					const uchar id = LevelIdVonDatei(n[3]);
+					const uchar id = LevelIdFromFile(n[3]);
 					if (id < 18)
 					{
-						gfSlotVonId[id] = (uchar)i;
+						gfSlotFromId[id] = (uchar)i;
 						if (i < 18)
-							gfIdVonSlot[i] = id;
+							gfIdFromSlot[i] = id;
 					}
-					if (id >= LVL5_STREETS_OF_ROME && id <= LVL5_RED_ALERT && i > gfLetzterSlot)
-						gfLetzterSlot = (uchar)i;
+					if (id >= LVL5_STREETS_OF_ROME && id <= LVL5_RED_ALERT && i > gfLastSlot)
+						gfLastSlot = (uchar)i;
 				}
 				n += 5;
 				break;
@@ -1414,15 +1415,14 @@ void LoadGameflow()
 	}
 }
 
-// Steht die Kampagne noch in Vanilla-Reihenfolge? Der Randomizer permutiert
-// die Bloecke der SCRIPT.DAT; gfIdVonSlot bildet Slot -> Identitaet ab und
-// ist vanilla die Identitaet selbst. Gebraucht von setup.cpp, um die vier
-// eingebauten Kapitel-Inventarloeschungen nur dann anzuwenden, wenn sie
-// noch Kapitelanfaenge sind.
-long ReihenfolgeGewuerfelt()
+// Is the campaign still in vanilla order? The randomizer permutes the
+// SCRIPT.DAT blocks; gfIdFromSlot maps slot -> identity and in vanilla is
+// the identity itself. Needed by setup.cpp to apply the four built-in
+// chapter inventory wipes only while they are still chapter starts.
+long OrderShuffled()
 {
 	for (int s = 1; s < 18; s++)
-		if (gfIdVonSlot[s] != s)
+		if (gfIdFromSlot[s] != s)
 			return 1;
 
 	return 0;

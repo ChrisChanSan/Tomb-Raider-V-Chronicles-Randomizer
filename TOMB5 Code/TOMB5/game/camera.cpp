@@ -54,18 +54,18 @@ long InfraRed = 0;
 char SniperOverlay = 0;
 char SniperCamActive = 0;
 
-// Ego-Sicht (#126): Merker, ob WIR Laras Kopf ausgeblendet haben, und die
-// Frage, ob die Sicht ueberhaupt laufen darf. Beides steht hier oben, weil
-// CalculateCamera es braucht - die Kamera selbst wohnt weiter unten neben
-// ihrer Vorlage BinocularCamera.
-static long egoKopfWeg = 0;
+// First person view (#126): marker whether WE hid Lara's head, and the
+// question whether the view may run at all. Both stand up here because
+// CalculateCamera needs them - the camera itself lives further down next to
+// its template BinocularCamera.
+static long fpHeadHidden = 0;
 static bool FirstPersonEnabled();
 
-// Wie weit das Auge vor dem Kopfmittelpunkt sitzt, und wieviel Luft davor
-// frei sein muss, damit die nahe Ebene des Zeichners (20, siehe InitWindow)
-// nicht in der Wand steckt.
-#define EGO_VERSATZ	48
-#define EGO_RAND	48
+// How far the eye sits in front of the head center, and how much air must
+// be free in front of it so the renderer's near plane (20, see InitWindow)
+// does not stick in the wall.
+#define FP_EYE_OFFSET	48
+#define FP_MARGIN	48
 static char SniperCount = 0;
 
 uchar WeaponDelay = 0;
@@ -127,12 +127,12 @@ void CalculateCamera()
 	SniperOverlay = 0;
 	SniperCamActive = 0;
 
-	// Ego-Sicht (#126): Merker JEDES BILD zuruecksetzen. Er wird nur wieder
-	// gesetzt, wenn FirstPersonCamera unten wirklich laeuft - sonst stuende Lara in
-	// jeder festen Kamera und jeder Cutscene kopflos da. CalculateCamera
-	// laeuft vor dem Zeichnen, das Bild sieht immer den Stand dieses
-	// Durchlaufs.
-	egoKopfWeg = 0;
+	// First person view (#126): reset the marker EVERY FRAME. It is only
+	// set again when FirstPersonCamera below really runs - otherwise Lara
+	// would stand headless in every fixed camera and every cutscene.
+	// CalculateCamera runs before drawing, the frame always sees this
+	// pass's state.
+	fpHeadHidden = 0;
 
 	if (BinocularRange)
 	{
@@ -302,7 +302,7 @@ void CalculateCamera()
 		}
 
 		if (camera.type != CHASE_CAMERA && camera.flags != 3)
-			FixedCamera();      // Regie des Levels - die bleibt auch in Ego-Sicht
+			FixedCamera();      // the level's direction - it stays even in first person
 		else if (FirstPersonEnabled())
 			FirstPersonCamera(item);
 		else
@@ -1181,62 +1181,61 @@ void MoveCamera(GAME_VECTOR* ideal, long speed)
 }
 
 /*
- * Ego-Sicht (#126): die Kamera haengt an Laras Kopf statt hinter ihr.
+ * First person view (#126): the camera hangs on Lara's head instead of
+ * behind her.
  *
- * Vorlage ist BinocularCamera direkt darunter - die Ferngläser sind dieselbe
- * Idee, Core hat sie also schon gebaut. Drei Unterschiede:
+ * The template is BinocularCamera right below - the binoculars are the same
+ * idea, so Core already built it. Three differences:
  *
- *  - Lara bleibt BEWEGLICH. Das Fernglas setzt lara.Busy und friert sie ein;
- *    hier wird ausschliesslich die Sicht ersetzt, die Steuerung bleibt, wie
- *    sie ist.
- *  - Es verschwindet NUR DER KOPF, nicht der ganze Koerper (Nutzervorgabe):
- *    das Fernglas setzt mesh_bits = 0 und blendet alles aus - dann fehlen im
- *    Bild aber die Arme, mit denen sie greift und schiesst.
- *  - Der Augenpunkt kommt aus dem echten Kopfgelenk (GetLaraJointPos) statt
- *    aus einem festen Versatz. So folgt er Ducken, Kriechen, Schwimmen und
- *    jeder Animation von selbst.
+ *  - Lara stays MOVABLE. The binoculars set lara.Busy and freeze her; here
+ *    only the view is replaced, the controls stay as they are.
+ *  - ONLY THE HEAD disappears, not the whole body (user requirement): the
+ *    binoculars set mesh_bits = 0 and hide everything - but then the frame
+ *    lacks the arms she grabs and shoots with.
+ *  - The eye point comes from the real head joint (GetLaraJointPos) instead
+ *    of a fixed offset. That way it follows crouching, crawling, swimming
+ *    and every animation on its own.
  *
- * Ein erster Versuch, bewusst schlicht: keine Kollisionspruefung fuer die
- * Kamera (sie sitzt in Laras Kopf, der steckt ohnehin nie in der Wand) und
- * keine Glaettung - sie ist an den Kopf genagelt, so war es gedacht.
+ * A first attempt, deliberately plain: no collision check for the camera
+ * (it sits in Lara's head, which never sticks in a wall anyway) and no
+ * smoothing - it is nailed to the head, that was the intent.
  */
 bool FirstPersonActive()
 {
-	// Flybys ZEIGEN Lara - dort muss ihr Kopf da sein.
+	// Flybys SHOW Lara - her head must be there.
 	//
-	// Und sie sind der eine Fall, in dem der Merker allein nicht reicht:
-	// waehrend eines Flybys ruft control.cpp gar nicht CalculateCamera,
-	// sondern CalculateSpotCams. Das Zuruecksetzen oben laeuft also nie, und
-	// der Merker bliebe auf dem Stand des letzten normalen Bildes stehen -
-	// Lara sass kopflos in genau den Kameras, die sie vorfuehren (vom Nutzer
-	// fotografiert). Cutscenes gehen zwar durch CalculateCamera (Zweig
-	// CINEMATIC_CAMERA, hinter dem Zuruecksetzen), stehen hier aber der
-	// Deutlichkeit halber mit.
+	// And they are the one case where the marker alone does not suffice:
+	// during a flyby, control.cpp does not call CalculateCamera at all but
+	// CalculateSpotCams. The reset above thus never runs, and the marker
+	// would stay at the last normal frame's state - Lara sat headless in
+	// exactly the cameras that present her (photographed by the user).
+	// Cutscenes do go through CalculateCamera (CINEMATIC_CAMERA branch,
+	// behind the reset), but stand here for clarity.
 	if (bUseSpotCam || GLOBAL_playing_cutseq)
 		return false;
 
-	return egoKopfWeg != 0;
+	return fpHeadHidden != 0;
 }
 
 static bool FirstPersonEnabled()
 {
-	if (!tomb5.ego_kamera)
+	if (!tomb5.first_person)
 		return false;
 
-	// Fernglas und Laservisier bringen ihre EIGENE Kopfkamera mit, samt
-	// eigenem Ausstieg (ExittingBinos, mesh_bits-Rueckgabe). Dazwischen zu
-	// funken wuerde beide zerlegen.
+	// Binoculars and laser sight bring their OWN head camera, including
+	// their own exit path (ExittingBinos, mesh_bits restore). Interfering
+	// in between would break both.
 	//
-	// NUR solange sie wirklich laufen (BinocularRange). Der Nachlauf danach
-	// (BinocularOn < 0, acht Bilder) gehoerte frueher auch hierher - dann
-	// sah man Lara nach dem Verlassen des Zielfernrohrs kurz von aussen
-	// (Nutzerbefund: "1-2 Frames aus der 3. Person"). Der Nachlauf ist nur
-	// die Anfahrt der normalen Kamera; eine angenagelte braucht sie nicht.
+	// ONLY while they really run (BinocularRange). The tail afterwards
+	// (BinocularOn < 0, eight frames) used to belong here too - then Lara
+	// was briefly seen from outside after leaving the scope (user finding:
+	// "1-2 frames in third person"). The tail is just the normal camera's
+	// approach; a nailed-on camera does not need one.
 	if (BinocularRange)
 		return false;
 
-	// Beim Sterben soll die Kamera zurueckweichen und zeigen, was geschehen
-	// ist - aus Laras eigenen Augen waere ihr Tod nur ein Schwenk ins Nichts.
+	// On death the camera should pull back and show what happened - from
+	// Lara's own eyes her death would just be a pan into nothing.
 	if (!lara_item || lara_item->hit_points <= 0)
 		return false;
 
@@ -1245,20 +1244,20 @@ static bool FirstPersonEnabled()
 
 void FirstPersonCamera(ITEM_INFO* item)
 {
-	PHD_VECTOR kopf;
-	GAME_VECTOR auge, ziel;
-	long weite, rndval, shake;
+	PHD_VECTOR head;
+	GAME_VECTOR eye, dest;
+	long dist, rndval, shake;
 	short yrot, xrot;
 
-	// Den Nachlauf des Fernglases herunterzaehlen. Das erledigt sonst
-	// MoveCamera - und die laeuft hier nie. Ohne das bliebe BinocularOn
-	// fuer immer negativ, und alles, was daran haengt (Kamerageschwindigkeit,
-	// der old_cam-Vergleich), bliebe fuer den Rest des Levels verstellt.
+	// Count down the binoculars' tail. Normally MoveCamera does that - and
+	// it never runs here. Without this, BinocularOn would stay negative
+	// forever, and everything hanging on it (camera speed, the old_cam
+	// comparison) would stay skewed for the rest of the level.
 	if (BinocularOn < 0)
 		BinocularOn++;
 
-	// Blickrichtung: Koerperdrehung plus Kopfdrehung. Die Anschlaege sind die
-	// des Fernglases - so weit und nicht weiter dreht Lara den Hals.
+	// View direction: body rotation plus head rotation. The stops are the
+	// binoculars' - that far and no further does Lara turn her neck.
 	xrot = lara.head_x_rot << 1;
 	yrot = lara.head_y_rot;
 
@@ -1275,85 +1274,86 @@ void FirstPersonCamera(ITEM_INFO* item)
 	xrot += item->pos.x_rot;
 	yrot += item->pos.y_rot;
 
-	// Gelenkmatrizen AUFFRISCHEN, bevor wir den Kopf abfragen.
+	// REFRESH the joint matrices before asking for the head.
 	//
-	// Ohne das hinkt die Kamera ein Bild hinterher: CalcLaraMatrices steht
-	// als erstes in DrawPhaseGame (draw.cpp), also NACH CalculateCamera -
-	// lara_joint_matrices traegt hier normalerweise noch den Stand des
-	// VORIGEN Bildes. Bei ruhigem Laufen faellt das nicht auf, bei schnellen
-	// Bewegungen schon: die Kamera blieb kurz hinter Lara, ihr Koerper
-	// schob sich durchs Bild, dann fing sie sich wieder (vom Nutzer gesehen).
-	// Flag 1 ist der Satz, den GetLaraJointPos liest, und er will eine
-	// Einheitsmatrix auf dem Stapel - genau wie in DrawPhaseGame.
+	// Without this the camera lags one frame behind: CalcLaraMatrices is
+	// the first thing in DrawPhaseGame (draw.cpp), i.e. AFTER
+	// CalculateCamera - lara_joint_matrices normally still carries the
+	// PREVIOUS frame's state here. In calm walking it goes unnoticed, in
+	// fast movement it does not: the camera stayed briefly behind Lara, her
+	// body pushed through the frame, then it caught up again (seen by the
+	// user). Flag 1 is the set GetLaraJointPos reads, and it wants a unit
+	// matrix on the stack - exactly as in DrawPhaseGame.
 	phd_PushUnitMatrix();
 	CalcLaraMatrices(1);
 	phd_PopMatrix();
 
-	// Augenpunkt: das Kopfgelenk, ein Stueck in Blickrichtung geschoben,
-	// damit die Kamera nicht im eigenen Hinterkopf sitzt.
-	kopf.x = 0;
-	kopf.y = 0;
-	kopf.z = 0;
-	GetLaraJointPos(&kopf, LMX_HEAD);
+	// Eye point: the head joint, pushed a bit along the view direction so
+	// the camera does not sit in the back of her own head.
+	head.x = 0;
+	head.y = 0;
+	head.z = 0;
+	GetLaraJointPos(&head, LMX_HEAD);
 
-	// Der Versatz nach vorn muss die WAND FRAGEN. Steht Lara dicht davor und
-	// sieht sich um, schwenkt das Auge um ihren Kopf herum - und 48 Einheiten
-	// reichen, um in der Wand zu landen. Dann stimmt auch die Raumnummer
-	// nicht mehr (GetFloor findet den Raum JENSEITS der Wand), und der
-	// Zeichner malt von dort aus: man sieht durch die Wand (vom Nutzer
-	// gefunden, "mit der Umsehen-Taste bei der richtigen Neigung").
+	// The forward offset must ASK THE WALL. If Lara stands close to one and
+	// looks around, the eye swings around her head - and 48 units are
+	// enough to land inside the wall. Then the room number is wrong too
+	// (GetFloor finds the room BEYOND the wall), and the renderer draws
+	// from there: you see through the wall (found by the user, "with the
+	// look key at the right tilt").
 	//
-	// mgLOS tastet den kurzen Weg vom Kopfmittelpunkt zum Auge ab, zieht
-	// den Punkt vor das Hindernis zurueck UND setzt die Raumnummer dabei
-	// richtig - es laeuft die Portale ab, statt zu raten. Der Kopfmittelpunkt
-	// selbst ist immer gueltiger Raum: er steckt in Lara.
-	auge.x = kopf.x;
-	auge.y = kopf.y - 16;
-	auge.z = kopf.z;
-	auge.room_number = item->room_number;
+	// mgLOS probes the short path from the head center to the eye, pulls
+	// the point back in front of the obstacle AND sets the room number
+	// correctly while at it - it walks the portals instead of guessing. The
+	// head center itself is always a valid room: it sits inside Lara.
+	eye.x = head.x;
+	eye.y = head.y - 16;
+	eye.z = head.z;
+	eye.room_number = item->room_number;
 
-	// Erst mit SICHERHEITSABSTAND tasten, dann erst setzen.
+	// Probe with a SAFETY MARGIN first, only then commit.
 	//
-	// mgLOS geht in acht Schritten und tritt einen zurueck - bei 48 Einheiten
-	// Versatz bleiben also nur sechs Einheiten Abstand zur Wand. Die NAHE
-	// EBENE des Zeichners liegt aber bei 20 (InitWindow in gamemain.cpp), und
-	// sie ist eine Flaeche, keine Spitze: an ihren Ecken steht sie noch
-	// weiter aussen. Sechs Einheiten reichten nicht, mit etwas Muehe sah man
-	// weiter durch die Wand (Nutzerbefund).
+	// mgLOS walks in eight steps and steps one back - with a 48-unit offset
+	// that leaves only six units of distance to the wall. But the
+	// renderer's NEAR PLANE lies at 20 (InitWindow in gamemain.cpp), and it
+	// is a surface, not a point: at its corners it reaches even further
+	// out. Six units were not enough, with some effort you could still see
+	// through the wall (user finding).
 	//
-	// Also wird um EGO_VERSATZ + EGO_RAND getastet. Ist der Weg frei, bekommt
-	// das Auge seinen normalen Versatz; steht etwas im Weg, bleibt es im
-	// Kopfmittelpunkt - der liegt tief in Lara und damit immer weit genug von
-	// jeder Wand entfernt (ihr Kollisionsradius ist 102).
-	ziel.x = auge.x + (phd_sin(yrot) * (EGO_VERSATZ + EGO_RAND) >> W2V_SHIFT);
-	ziel.y = auge.y;
-	ziel.z = auge.z + (phd_cos(yrot) * (EGO_VERSATZ + EGO_RAND) >> W2V_SHIFT);
-	ziel.room_number = auge.room_number;
+	// So the probe runs over FP_EYE_OFFSET + FP_MARGIN. If the path is
+	// free, the eye gets its normal offset; if something is in the way, it
+	// stays at the head center - which lies deep inside Lara and thus
+	// always far enough from any wall (her collision radius is 102).
+	dest.x = eye.x + (phd_sin(yrot) * (FP_EYE_OFFSET + FP_MARGIN) >> W2V_SHIFT);
+	dest.y = eye.y;
+	dest.z = eye.z + (phd_cos(yrot) * (FP_EYE_OFFSET + FP_MARGIN) >> W2V_SHIFT);
+	dest.room_number = eye.room_number;
 
-	weite = mgLOS(&auge, &ziel, 0) ? EGO_VERSATZ : 0;
+	dist = mgLOS(&eye, &dest, 0) ? FP_EYE_OFFSET : 0;
 
-	// Zweiter Lauf auf den ECHTEN Punkt: er liefert die Raumnummer dazu.
-	// Bei weite 0 faellt er auf den Kopfmittelpunkt zurueck (Start gleich
-	// Ziel), was ebenfalls den richtigen Raum ergibt.
-	ziel.x = auge.x + (phd_sin(yrot) * weite >> W2V_SHIFT);
-	ziel.y = auge.y;
-	ziel.z = auge.z + (phd_cos(yrot) * weite >> W2V_SHIFT);
-	ziel.room_number = auge.room_number;
-	mgLOS(&auge, &ziel, 0);
+	// Second pass onto the REAL point: it supplies the room number. With
+	// dist 0 it falls back to the head center (start equals target), which
+	// also yields the right room.
+	dest.x = eye.x + (phd_sin(yrot) * dist >> W2V_SHIFT);
+	dest.y = eye.y;
+	dest.z = eye.z + (phd_cos(yrot) * dist >> W2V_SHIFT);
+	dest.room_number = eye.room_number;
+	mgLOS(&eye, &dest, 0);
 
-	camera.pos.x = ziel.x;
-	camera.pos.y = ziel.y;
-	camera.pos.z = ziel.z;
-	camera.pos.room_number = ziel.room_number;
+	camera.pos.x = dest.x;
+	camera.pos.y = dest.y;
+	camera.pos.z = dest.z;
+	camera.pos.room_number = dest.room_number;
 
-	// Zielpunkt weit voraus in Blickrichtung, gerechnet wie beim Fernglas.
-	weite = (0x5100 * phd_cos(xrot)) >> W2V_SHIFT;
-	camera.target.x = camera.pos.x + (phd_sin(yrot) * weite >> W2V_SHIFT);
+	// Target point far ahead along the view direction, computed like the
+	// binoculars do.
+	dist = (0x5100 * phd_cos(xrot)) >> W2V_SHIFT;
+	camera.target.x = camera.pos.x + (phd_sin(yrot) * dist >> W2V_SHIFT);
 	camera.target.y = camera.pos.y - (0x5100 * phd_sin(xrot) >> W2V_SHIFT);
-	camera.target.z = camera.pos.z + (phd_cos(yrot) * weite >> W2V_SHIFT);
+	camera.target.z = camera.pos.z + (phd_cos(yrot) * dist >> W2V_SHIFT);
 	camera.target.room_number = camera.pos.room_number;
 
-	// Erschuetterungen mitnehmen, sonst haben Explosionen keine Wucht mehr.
+	// Carry the shakes along, or explosions lose all their punch.
 	if (camera.bounce && camera.type == camera.old_type)
 	{
 		if (camera.bounce <= 0)
@@ -1372,21 +1372,20 @@ void FirstPersonCamera(ITEM_INFO* item)
 		}
 	}
 
-	// Merken, dass die Ego-Sicht dieses Bild wirklich lief. Das Ausblenden
-	// von Kopf und Zopf haengt daran (drawlara.cpp) - hier wird mesh_bits
-	// BEWUSST NICHT ANGEFASST:
+	// Remember that first person really ran this frame. Hiding head and
+	// braid hangs on this (drawlara.cpp) - mesh_bits is DELIBERATELY NOT
+	// TOUCHED here:
 	//
-	//  - Laras Haut ist geskinnt. Ein per mesh_bits ausgeblendetes Mesh
-	//    stasht seine Randpunkte nicht mehr (beides steht in derselben
-	//    Klammer), und der Nachbar skinnt dann aus altem Speicher: das
-	//    gestreckte Dreieck, das der Nutzer als "dritter Arm" sah.
-	//  - Fernglas und Laservisier schreiben mesh_bits ebenfalls (0 beim
-	//    Start, -1 beim Verlassen). Zwei Schreiber auf demselben Feld waren
-	//    der Grund, warum der Fehler nach dem Zielfernrohr bis zum Neustart
-	//    stehen blieb.
+	//  - Lara's skin is skinned. A mesh hidden via mesh_bits no longer
+	//    stashes its rim points (both stand in the same bracket), and the
+	//    neighbor then skins from stale memory: the stretched triangle the
+	//    user saw as a "third arm".
+	//  - Binoculars and laser sight write mesh_bits as well (0 on entry,
+	//    -1 on leaving). Two writers on the same field were the reason the
+	//    bug persisted after the scope until a restart.
 	//
-	// Wer ausgeblendet wird, entscheidet jetzt allein die Zeichenroutine.
-	egoKopfWeg = 1;
+	// Who gets hidden is now decided solely by the draw routine.
+	fpHeadHidden = 1;
 
 	GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &camera.pos.room_number);
 	phd_LookAt(camera.pos.x, camera.pos.y, camera.pos.z, camera.target.x, camera.target.y, camera.target.z, 0);

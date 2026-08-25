@@ -34,46 +34,46 @@
 #define NO_HEIGHT -32512
 #define	NO_ITEM	-1
 #define NO_ROOM	255
-// Verdoppelt von 256 (Randomizer: rich2 lag vanilla schon bei 248, mit
-// Zusatzgegnern und Waffenstreuung war die Decke erreicht). items[] wird
-// mit dieser Groesse aus dem game_malloc-Pool geholt (file.cpp), die
-// Frei-Liste laeuft parametrisch (InitialiseItemArray). Trigger sprechen
-// Items ueber ein 10-Bit-Feld an (control.cpp: items[trigger & 0x3FF]),
-// 512 bleibt also adressierbar; die ItemNewRooms-Warteschlange haengt
-// jetzt an derselben Konstante, ihr Kill-Bit 0x8000 vertraegt Indizes
-// bis 0x7FFF. Der Savegame-Puffer waechst mit (siehe SAVEGAME_INFO).
+// Doubled from 256 (randomizer: rich2 already sat at 248 in vanilla, with
+// extra enemies and weapon scattering the ceiling was reached). items[] is
+// taken from the game_malloc pool at this size (file.cpp), the free list
+// runs parametrically (InitialiseItemArray). Triggers address items via a
+// 10-bit field (control.cpp: items[trigger & 0x3FF]), so 512 stays
+// addressable; the ItemNewRooms queue now hangs on the same constant, its
+// kill bit 0x8000 tolerates indices up to 0x7FFF. The savegame buffer
+// grows along (see SAVEGAME_INFO).
 #define MAX_ITEMS	512
 #define MAX_SAMPLES	450
 #define MAX_RIPPLES	128
 #define FVF (D3DFVF_TEX2 | D3DFVF_SPECULAR | D3DFVF_DIFFUSE | D3DFVF_XYZRHW)
-// 15 MB waren Troyes Mass fuer 16 KI-Plaetze. MAX_LOT 48 (#121) holt sich je
-// Platz bis zu ~16 KB mehr aus diesem Topf; 20 MB lassen dafuer und fuer die
-// dichteren Rando-Level Luft. Der Topf ist ein einmaliges malloc beim Start.
+// 15 MB was Troye's measure for 16 AI slots. MAX_LOT 48 (#121) draws up to
+// ~16 KB more per slot from this pool; 20 MB leaves air for that and for
+// the denser rando levels. The pool is a single malloc at startup.
 #define MALLOC_SIZE	20000000	//20MB
 #define GAME_FOV	(80 * 182)
-// Wie viele KI-Gegner gleichzeitig aktiv sein koennen (baddie_slots,
-// lot.cpp). Upstream 5: der sechste ausgeloeste Gegner verdraengte den
-// kamerafernsten aktiven (EnableBaddieAI setzt ihn ITEM_INVISIBLE) - mit
-// den 10-20 Zusatzgegnern des Randomizers standen dann regelmaessig Gegner
-// eingefroren herum. 16 kostet nur Speicher im game_malloc-Pool
-// (je Slot sizeof(CREATURE_INFO) + num_boxes * sizeof(BOX_NODE), also
-// grob 25 KB je Slot beim groessten Level - der Pool hat 15 MB).
-// Die Verdraengung bleibt als Rueckfall fuer den 17. Gegner bestehen.
-// KI-Plaetze (#121). Es gibt nur MAX_LOT gleichzeitige Denker: wer keinen
-// Platz bekommt, wird ITEM_INVISIBLE gesetzt (lot.cpp:256) und faellt damit
-// komplett aus dem Zeichnen UND aus der Trefferpruefung - er holt sich den
-// Platz aber alle paar Bilder zurueck und feuert dann kurz. Das ergibt genau
-// das Blinken, das der Nutzer in andy3 gesehen hat: ~3 Bilder sichtbar,
-// ~15 Bilder weg, Schaden kommt trotzdem an. Vanilla hatte 5, Troye 16; der
-// Randomizer setzt bis zu 20 Zusatzgegner je Level PLUS die eigenen - 48
-// deckt das ab. Kosten: je Platz ein BOX_NODE-Feld (8 Byte x Boxzahl,
-// hoechstens ~16 KB) aus dem game_malloc-Topf, siehe MALLOC_SIZE.
+// How many AI enemies can be active at once (baddie_slots, lot.cpp).
+// Upstream 5: the sixth triggered enemy displaced the active one farthest
+// from the camera (EnableBaddieAI sets it ITEM_INVISIBLE) - with the
+// randomizer's 10-20 extra enemies, frozen enemies then regularly stood
+// around. 16 only costs memory in the game_malloc pool (per slot
+// sizeof(CREATURE_INFO) + num_boxes * sizeof(BOX_NODE), roughly 25 KB per
+// slot in the largest level - the pool has 15 MB).
+// The displacement stays as the fallback for the 17th enemy.
+// AI slots (#121). There are only MAX_LOT simultaneous thinkers: whoever
+// gets no slot is set ITEM_INVISIBLE (lot.cpp:256) and thereby drops
+// completely out of drawing AND out of the hit test - but he reclaims the
+// slot every few frames and then fires briefly. That yields exactly the
+// blinking the user saw in andy3: ~3 frames visible, ~15 frames gone,
+// damage still arrives. Vanilla had 5, Troye 16; the randomizer places up
+// to 20 extra enemies per level PLUS the native ones - 48 covers that.
+// Cost: per slot one BOX_NODE array (8 bytes x box count, at most ~16 KB)
+// from the game_malloc pool, see MALLOC_SIZE.
 #define MAX_LOT		48
 
-// Laras Zielerfassung sammelt bis zu MAX_LOT anvisierbare Gegner plus
-// Endmarke (larafire.cpp, TargetList/LastTargets). Upstream waren beide
-// Felder fest [8] - bei 5 Slots genug, ab 8 aktiven Gegnern ein
-// Pufferueberlauf. Deshalb haengt die Groesse jetzt an MAX_LOT.
+// Lara's targeting collects up to MAX_LOT targetable enemies plus an end
+// marker (larafire.cpp, TargetList/LastTargets). Upstream both arrays were
+// fixed [8] - enough with 5 slots, a buffer overflow from 8 active enemies
+// on. Hence the size now hangs on MAX_LOT.
 #define MAX_TARGETS	(MAX_LOT + 1)
 #define W2V_SHIFT	14
 
@@ -201,12 +201,12 @@ enum lara_draw_type
 	LARA_CATSUIT,
 	LARA_DIVESUIT,
 
-	// Randomizer-Marker (LaraType-Byte 5 in der Leveldatei): Standard-Outfit
-	// mit Pferdeschwanz in einem RUSSLAND-Level. Noetig, weil hair.cpp und
-	// laraskin.cpp die Russland-Sonderbehandlung des Zopfs an
-	// "Russland-Level UND LARA_NORMAL" festmachen - ein Andrea-Outfit dort
-	// braucht einen Wert, der NICHT LARA_NORMAL ist, sonst klebte der Zopf
-	// an den Kopf-Vertexnummern der Muetze. Gezeichnet wie LARA_NORMAL.
+	// Randomizer marker (LaraType byte 5 in the level file): standard
+	// outfit with a ponytail in a RUSSIA level. Needed because hair.cpp and
+	// laraskin.cpp key the Russia special handling of the braid on "Russia
+	// level AND LARA_NORMAL" - an Andrea outfit there needs a value that is
+	// NOT LARA_NORMAL, or the braid stuck to the cap's head vertex numbers.
+	// Drawn like LARA_NORMAL.
 	LARA_PONYTAIL
 };
 
@@ -1329,10 +1329,10 @@ struct SAVEGAME_INFO
 	// and the format/checksum validation in sgRestoreGame() (game/savegame.cpp),
 	// which detects and cleanly rejects old-format saves instead of silently
 	// restoring from a garbage-filled tail.
-	// 7245 upstream, 14490 seit der Pufferrunde 2026-08-02, 28980 seit der
-	// MAX_ITEMS-Verdopplung: der Item-Teil des Spielstands waechst mit der
-	// Itemzahl. Alte Spielstaende werden beim Laden sauber abgewiesen
-	// (Kurz-Lese-Erkennung in sgRestoreGame, siehe savegame.cpp).
+	// 7245 upstream, 14490 since the buffer round of 2026-08-02, 28980
+	// since the MAX_ITEMS doubling: the item part of the savegame grows
+	// with the item count. Old savegames are cleanly rejected on load
+	// (short-read detection in sgRestoreGame, see savegame.cpp).
 	char buffer[28980];
 };
 
@@ -2619,6 +2619,6 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	bool look_transparency;		//on off
 	bool static_lighting;		//on off
 	ulong uw_dust;				//1-> off, 2-> original, 3-> TR4
-	bool ego_kamera;			//on off, Ego-Sicht an Laras Kopf (#126)
+	bool first_person;			//on off, Ego-Sicht an Laras Kopf (#126)
 };
 #pragma pack(pop)

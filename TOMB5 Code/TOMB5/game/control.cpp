@@ -3316,11 +3316,11 @@ void AnimateItem(ITEM_INFO* item)
 					// muss die naechste Wiederholung zeigen, WELCHER Wert zur
 					// Laufzeit luegt (Anim ausserhalb der Scheibe? Typ-Bits
 					// weg? Raumflaggen anders als in der Datei?).
-					SfxKommandoRufer = item->object_number;
-					SfxKommandoRaum = item->room_number;
-					SfxKommandoAnim = item->anim_number;
-					SfxKommandoTyp = type;
-					SfxKommandoRaumFlags = (item->room_number == NO_ROOM) ? -1 : (long)room[item->room_number].flags;
+					SfxCommandCaller = item->object_number;
+					SfxCommandRoom = item->room_number;
+					SfxCommandAnim = item->anim_number;
+					SfxCommandType = type;
+					SfxCommandRoomFlags = (item->room_number == NO_ROOM) ? -1 : (long)room[item->room_number].flags;
 
 					if (objects[item->object_number].water_creature)
 					{
@@ -3345,11 +3345,11 @@ void AnimateItem(ITEM_INFO* item)
 					else if (type == SFX_LANDANDWATER || type == SFX_LANDONLY && !(room[camera.pos.room_number].flags & ROOM_UNDERWATER))
 						SoundEffect(num, &item->pos, SFX_DEFAULT);
 
-					SfxKommandoRufer = -1;
-					SfxKommandoRaum = -1;
-					SfxKommandoAnim = -1;
-					SfxKommandoTyp = -1;
-					SfxKommandoRaumFlags = -1;
+					SfxCommandCaller = -1;
+					SfxCommandRoom = -1;
+					SfxCommandAnim = -1;
+					SfxCommandType = -1;
+					SfxCommandRoomFlags = -1;
 				}
 
 				cmd += 2;

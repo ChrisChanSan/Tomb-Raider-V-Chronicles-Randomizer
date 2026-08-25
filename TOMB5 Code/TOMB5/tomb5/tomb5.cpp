@@ -151,8 +151,8 @@ void init_tomb5_stuff()
 		REG_WriteLong(buf, tomb5.uw_dust);
 
 		sprintf(buf, "ego_cam");
-		tomb5.ego_kamera = 0;							//off (#126)
-		REG_WriteBool(buf, tomb5.ego_kamera);
+		tomb5.first_person = 0;							//off (#126)
+		REG_WriteBool(buf, tomb5.first_person);
 	}
 	else	//Key already exists, settings already written, read them. also falls back to default if a smartass manually deletes a single value
 	{
@@ -229,7 +229,7 @@ void init_tomb5_stuff()
 		REG_ReadLong(buf, tomb5.uw_dust, 2);
 
 		sprintf(buf, "ego_cam");
-		REG_ReadBool(buf, tomb5.ego_kamera, 0);
+		REG_ReadBool(buf, tomb5.first_person, 0);
 	}
 
 	CloseRegistry();
@@ -313,7 +313,7 @@ void save_new_tomb5_settings()
 	REG_WriteLong(buf, tomb5.uw_dust);
 
 	sprintf(buf, "ego_cam");
-	REG_WriteBool(buf, tomb5.ego_kamera);
+	REG_WriteBool(buf, tomb5.first_person);
 
 	CloseRegistry();
 }

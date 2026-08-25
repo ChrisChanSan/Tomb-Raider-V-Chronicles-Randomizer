@@ -16,7 +16,7 @@
 #include "winmain.h"
 #include "input.h"
 #include "setupdlg.h"
-#include "../game/gameflow.h"	// SprachWahl
+#include "../game/gameflow.h"	// LanguageChoice
 
 static HKEY phkResult;
 static DWORD dwDisposition;
@@ -226,7 +226,7 @@ bool LoadSettings()
 		ControlMethod = 0;
 
 	REG_ReadLong((char*)"JoyStyle", (ulong&)JoyStyle, (ulong)-1);	// -1 = Automatik: XInput-Pad -> Xbox-Seite, sonst PS5 (input.cpp)
-	REG_ReadLong((char*)"Language", (ulong&)SprachWahl, (ulong)-1);	// -1 = Automatik: erste ladbare Sprachdatei (gameflow.cpp)
+	REG_ReadLong((char*)"Language", (ulong&)LanguageChoice, (ulong)-1);	// -1 = Automatik: erste ladbare Sprachdatei (gameflow.cpp)
 	REG_ReadLong((char*)"SoundQuality", (ulong&)SoundQuality, 1);
 	REG_ReadLong((char*)"AutoTarget", (ulong&)App.AutoTarget, 1);
 	REG_ReadLong((char*)"WindowX", (ulong&)App.dx.rScreen.left, 0);
@@ -277,7 +277,7 @@ void SaveSettings()
 
 	REG_WriteLong((char*)"ControlMethod", ControlMethod);
 	REG_WriteLong((char*)"JoyStyle", JoyStyle);
-	REG_WriteLong((char*)"Language", SprachWahl);
+	REG_WriteLong((char*)"Language", LanguageChoice);
 	REG_WriteLong((char*)"MusicVolume", MusicVolume);
 	REG_WriteLong((char*)"SFXVolume", SFXVolume);
 	REG_WriteLong((char*)"SoundQuality", SoundQuality);

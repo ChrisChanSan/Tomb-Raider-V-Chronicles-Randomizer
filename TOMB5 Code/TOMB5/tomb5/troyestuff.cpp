@@ -429,7 +429,7 @@ bool Page1(long& num, long textY, ulong selection)
 	strcpy(buffer, tomb5.uw_dust == 1 ? "off" : tomb5.uw_dust == 2 ? "Original" : "TR4");
 	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
 
-	strcpy(buffer, tomb5.ego_kamera ? "on" : "off");
+	strcpy(buffer, tomb5.first_person ? "on" : "off");
 	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
 
 	switch (selection)
@@ -616,7 +616,7 @@ bool Page1(long& num, long textY, ulong selection)
 		if (dbinput & IN_LEFT || dbinput & IN_RIGHT)
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-			tomb5.ego_kamera = !tomb5.ego_kamera;
+			tomb5.first_person = !tomb5.first_person;
 			changed = 1;
 		}
 

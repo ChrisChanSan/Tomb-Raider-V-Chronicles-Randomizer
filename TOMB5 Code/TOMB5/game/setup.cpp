@@ -162,14 +162,13 @@ void InitialiseLara(long restore)
 
 	gfNumTakeaways = 0;
 
-	// Dritte Phase: Gaben, die im Skriptblock hinter den Wegnahmen stehen
-	// (siehe CMD_GIVEOBJ in gameflow.cpp). Damit laesst sich ein Level
-	// "erst leerraeumen, dann gezielt ausstatten" - vanilla ist die Liste
-	// immer leer.
-	for (int i = 0; i < gfNumNachgaben; i++)
-		DEL_picked_up_object((short)convert_invobj_to_obj(gfNachgaben[i]));
+	// Third phase: gifts that stand in the script block behind the takeaways
+	// (see CMD_GIVEOBJ in gameflow.cpp). This allows "clear the level first,
+	// then equip it deliberately" - in vanilla the list is always empty.
+	for (int i = 0; i < gfNumLateGives; i++)
+		DEL_picked_up_object((short)convert_invobj_to_obj(gfLateGives[i]));
 
-	gfNumNachgaben = 0;
+	gfNumLateGives = 0;
 	BalanceSetWeapons();
 
 	if (gfLevelId == LVL5_DEEPSEA_DIVE)
@@ -1002,17 +1001,17 @@ void TrapObjects()
 	obj->save_anim = 1;
 }
 
-// Cross-Gegnermix: liefert die Tauschhaelfte eines Gegners bevorzugt aus
-// seinem Ausweichslot (dort legt der Randomizer die MESHSWAP1 seines
-// Spenderlevels ab - siehe die MESHSWAP_CROSS_*-Definitionen in objects.h),
-// sonst wie upstream aus MESHSWAP1. In unveraenderten Leveln ist der
-// Ausweichslot nie geladen, der Rueckfall macht das Verhalten byte-gleich
-// mit dem Original.
-static short* MeshSwapQuelle(long ausweich, long mesh)
+// Cross enemy mix: delivers an enemy's swap half preferably from its
+// fallback slot (that is where the randomizer stores the MESHSWAP1 of its
+// donor level - see the MESHSWAP_CROSS_* definitions in objects.h), else
+// from MESHSWAP1 as upstream does. In unmodified levels the fallback slot
+// is never loaded, so the fallback makes the behavior byte-identical with
+// the original.
+static short* MeshSwapSource(long fallbackSlot, long mesh)
 {
-	const long basis = objects[ausweich].loaded ? objects[ausweich].mesh_index
+	const long base = objects[fallbackSlot].loaded ? objects[fallbackSlot].mesh_index
 	                                            : objects[MESHSWAP1].mesh_index;
-	return meshes[basis + mesh * 2];
+	return meshes[base + mesh * 2];
 }
 
 void BaddyObjects()
@@ -1031,14 +1030,14 @@ void BaddyObjects()
 	obj->save_flags = 1;
 	obj->save_anim = 1;
 
-	// SLOT 31 = T-REX (#88). Der SAS ist ein Ueberrest aus Tomb Raider 4:
-	// die Steuerung steht hier seit jeher, aber KEIN einziges der 16
-	// TR5-Level traegt ein Modell dafuer (an allen Dateien nachgemessen).
-	// Ein toter Slot mit vollstaendigem Unterbau - genau der richtige Platz
-	// fuer den T-Rex aus TR3, den der Randomizer hier hineinkopiert. CROW
-	// (43) bleibt dadurch fuer den Geier frei, der dort hingehoert.
+	// SLOT 31 = T-REX (#88). The SAS is a leftover from Tomb Raider 4: the
+	// control has been here forever, but NOT ONE of the 16 TR5 levels
+	// carries a model for it (measured against all files). A dead slot with
+	// a complete substructure - exactly the right place for the T-Rex from
+	// TR3, which the randomizer copies in here. CROW (43) thereby stays
+	// free for the vulture, which belongs there.
 	//
-	// Die Werte stammen aus TR3s eigenem Setup fuer den TREX.
+	// The values come from TR3's own setup for the TREX.
 	if (objects[SAS].loaded)
 	{
 		obj = &objects[SAS];
@@ -1056,22 +1055,22 @@ void BaddyObjects()
 		obj->save_flags = 1;
 		obj->save_anim = 1;
 
-		// KEINE Knochen-Drehflags. TR3 setzt hier vier (36, 44, 80, 88;
-		// tomb3 setup.cpp:569-572) fuer sein Kopfnachfuehren - uebernommen
-		// sahen sie im Spiel falsch aus: sporadisch verdrehte Fuesse und ein
-		// umgestuelptes Maul beim Zubeissen (vom Nutzer gesehen).
+		// NO bone rotation flags. TR3 sets four here (36, 44, 80, 88; tomb3
+		// setup.cpp:569-572) for its head tracking - carried over they
+		// looked wrong in game: sporadically twisted feet and an inverted
+		// jaw while biting (seen by the user).
 		//
-		// Der Grund ist die andere Bedeutung des Bits: TR4/TR5 verteilen ueber
-		// die markierten Knochen die joint_rotation der CREATURE_INFO, und
-		// davon gibt es genau vier Werte - DinoControl setzt sie nie, andere
-		// Steuerungen dieser Engine tun es. Vier markierte Knochen an einem
-		// Modell, dessen Steuerung sie nicht fuellt, ergeben Drehungen ohne
-		// Absender.
+		// The reason is the bit's different meaning: TR4/TR5 distribute the
+		// CREATURE_INFO's joint_rotation over the marked bones, and there
+		// are exactly four of those values - DinoControl never sets them,
+		// other controls of this engine do. Four marked bones on a model
+		// whose control does not fill them yield rotations without a
+		// sender.
 		//
-		// Ohne die Flags schaut er Lara nicht mit dem Kopf nach. Das ist der
-		// Preis, und er ist kleiner als zuckende Gliedmassen. Wer es zurueck
-		// will, muss in DinoControl CreatureJoint fuellen - dann aber alle
-		// vier bewusst belegen.
+		// Without the flags he does not track Lara with his head. That is
+		// the price, and it is smaller than twitching limbs. Whoever wants
+		// it back must fill CreatureJoint in DinoControl - but then assign
+		// all four deliberately.
 	}
 
 	if (objects[BLUE_GUARD].loaded)
@@ -1082,29 +1081,29 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
-		// Die Soldatenfamilie teilt sich einen Animationssatz: SWAT_PLUS,
-		// MAFIA, SCIENTIST und CRANE_GUY uebernehmen ihn von SWAT, sonst vom
-		// BLUE_GUARD. Die Saetze sind schablonengleich, deshalb geht das gut.
+		// The soldier family shares one animation set: SWAT_PLUS, MAFIA,
+		// SCIENTIST and CRANE_GUY take it from SWAT, else from BLUE_GUARD.
+		// The sets are template-identical, which is why this works.
 		//
-		// Der zweite Zweig war NICHT geprueft: objects[BLUE_GUARD].anim_index
-		// wurde blind genommen, auch wenn BLUE_GUARD im Level gar nicht
-		// liegt. Fuer ein ungeladenes Objekt steht dort 0 - InitialiseObjects
-		// setzt anim_index nicht zurueck -, der Gegner spielte also Animation
-		// 0 mit FREMDER Meshzahl. Die Frame-Grenzen sind dann Unsinn,
-		// S_GetObjectBounds liefert 0, und damit faellt er aus dem Zeichnen
-		// UND aus der Trefferpruefung (collide.cpp:797, "don't get objects
-		// that are not drawn"). Sichtbar bleibt nur der Schatten, den
-		// draw.cpp:561 schon VOR der Bounds-Pruefung zeichnet. Schaden teilt
-		// er weiter aus, seine Steuerung laeuft ja.
+		// The second branch was NOT checked: objects[BLUE_GUARD].anim_index
+		// was taken blindly even when BLUE_GUARD does not lie in the level
+		// at all. For an unloaded object it holds 0 - InitialiseObjects
+		// does not reset anim_index -, so the enemy played animation 0 with
+		// a FOREIGN mesh count. The frame bounds are then nonsense,
+		// S_GetObjectBounds returns 0, and with that he drops out of
+		// drawing AND out of the hit test (collide.cpp:797, "don't get
+		// objects that are not drawn"). Only the shadow stays visible,
+		// which draw.cpp:561 draws BEFORE the bounds check. He keeps
+		// dealing damage - his control still runs.
 		//
-		// Vom Nutzer in Andy3 gesehen: etwa drei Bilder sichtbar und
-		// treffbar, danach fuenfzehn Bilder nur Schatten und unverwundbar,
-		// im Kreis. In Vanilla faellt es nie auf, weil dort zu jedem
-		// Familienmitglied auch ein Anker im Level liegt - erst der
-		// Randomizer setzt eines allein in ein fremdes Level.
+		// Seen by the user in Andy3: about three frames visible and
+		// hittable, then fifteen frames only shadow and invulnerable, in a
+		// loop. In vanilla it never shows because every family member has
+		// an anchor in the level - only the randomizer puts one alone into
+		// a foreign level.
 		//
-		// Ohne Anker behaelt der Slot jetzt seinen EIGENEN Satz, und genau
-		// den liefert der Randomizer mit. Vanilla aendert sich nicht.
+		// Without an anchor the slot now keeps its OWN set, and that is
+		// exactly what the randomizer delivers. Vanilla does not change.
 		if (objects[SWAT].loaded)
 			obj->anim_index = objects[SWAT].anim_index;
 
@@ -1125,8 +1124,8 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_GUARD, 10);
-		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_GUARD, 13);
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_GUARD, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_GUARD, 13);
 	}
 
 	if (objects[SWAT].loaded)
@@ -1153,8 +1152,8 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_SWAT, 10);
-		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_SWAT, 13);
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_SWAT, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_SWAT, 13);
 	}
 
 	if (objects[SWAT_PLUS].loaded)
@@ -1165,10 +1164,11 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
-		// Familienanker fuer den Animationssatz - Herleitung ueber dem
-		// BLUE_GUARD-Block. Mittelstufe Wachmann (460) seit #121-Nachtrag:
-		// Begruendung beim BLUE_GUARD2-Block unten; in Vanilla ist 460 nie
-		// geladen, dort bleibt die alte Kette SWAT -> BLUE_GUARD.
+		// Family anchor for the animation set - reasoning above the
+		// BLUE_GUARD block. Middle stage guard (460) since the #121
+		// addendum: reasoning at the BLUE_GUARD2 block below; in vanilla
+		// 460 is never loaded, there the old chain SWAT -> BLUE_GUARD
+		// stays.
 		if (objects[SWAT].loaded)
 			obj->anim_index = objects[SWAT].anim_index;
 		else if (objects[BLUE_GUARD2].loaded)
@@ -1192,8 +1192,8 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_SWATPLUS, 10);
-		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_SWATPLUS, 13);
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_SWATPLUS, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_SWATPLUS, 13);
 	}
 
 	if (objects[MAFIA].loaded)
@@ -1204,10 +1204,11 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
-		// Familienanker fuer den Animationssatz - Herleitung ueber dem
-		// BLUE_GUARD-Block. Mittelstufe Wachmann (460) seit #121-Nachtrag:
-		// Begruendung beim BLUE_GUARD2-Block unten; in Vanilla ist 460 nie
-		// geladen, dort bleibt die alte Kette SWAT -> BLUE_GUARD.
+		// Family anchor for the animation set - reasoning above the
+		// BLUE_GUARD block. Middle stage guard (460) since the #121
+		// addendum: reasoning at the BLUE_GUARD2 block below; in vanilla
+		// 460 is never loaded, there the old chain SWAT -> BLUE_GUARD
+		// stays.
 		if (objects[SWAT].loaded)
 			obj->anim_index = objects[SWAT].anim_index;
 		else if (objects[BLUE_GUARD2].loaded)
@@ -1232,8 +1233,8 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_MAFIA, 10);
-		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_MAFIA, 13);
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_MAFIA, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_MAFIA, 13);
 	}
 
 	if (objects[SCIENTIST].loaded)
@@ -1243,10 +1244,11 @@ void BaddyObjects()
 		obj->control = SasControl;
 		obj->collision = CreatureCollision;
 
-		// Familienanker fuer den Animationssatz - Herleitung ueber dem
-		// BLUE_GUARD-Block. Mittelstufe Wachmann (460) seit #121-Nachtrag:
-		// Begruendung beim BLUE_GUARD2-Block unten; in Vanilla ist 460 nie
-		// geladen, dort bleibt die alte Kette SWAT -> BLUE_GUARD.
+		// Family anchor for the animation set - reasoning above the
+		// BLUE_GUARD block. Middle stage guard (460) since the #121
+		// addendum: reasoning at the BLUE_GUARD2 block below; in vanilla
+		// 460 is never loaded, there the old chain SWAT -> BLUE_GUARD
+		// stays.
 		if (objects[SWAT].loaded)
 			obj->anim_index = objects[SWAT].anim_index;
 		else if (objects[BLUE_GUARD2].loaded)
@@ -1282,10 +1284,11 @@ void BaddyObjects()
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
-		// Familienanker fuer den Animationssatz - Herleitung ueber dem
-		// BLUE_GUARD-Block. Mittelstufe Wachmann (460) seit #121-Nachtrag:
-		// Begruendung beim BLUE_GUARD2-Block unten; in Vanilla ist 460 nie
-		// geladen, dort bleibt die alte Kette SWAT -> BLUE_GUARD.
+		// Family anchor for the animation set - reasoning above the
+		// BLUE_GUARD block. Middle stage guard (460) since the #121
+		// addendum: reasoning at the BLUE_GUARD2 block below; in vanilla
+		// 460 is never loaded, there the old chain SWAT -> BLUE_GUARD
+		// stays.
 		if (objects[SWAT].loaded)
 			obj->anim_index = objects[SWAT].anim_index;
 		else if (objects[BLUE_GUARD2].loaded)
@@ -1315,28 +1318,28 @@ void BaddyObjects()
 
 	if (objects[BLUE_GUARD2].loaded)
 	{
-		// Zweites Guard-Modell (#83/#105): Kopie des BLUE_GUARD-Blocks. Der
-		// Slot kommt nur aus dem Randomizer und bringt einen vollen eigenen
-		// Anim-Satz mit - immer den des joby3-Guards.
+		// Second guard model (#83/#105): copy of the BLUE_GUARD block. The
+		// slot only ever comes from the randomizer and brings a full own
+		// anim set - always the joby3 guard's.
 		obj = &objects[BLUE_GUARD2];
 		obj->initialise = InitialiseSas;
 		obj->control = SasControl;
 		obj->collision = CreatureCollision;
 		obj->draw_routine_extra = DrawBaddieGunFlash;
 
-		// Kein Umbiegen auf SWAT/Guard mehr (#111 Teil 2): der Joby-Wachmann
-		// bringt immer seinen vollen eigenen Satz aus joby3 mit (kCross ohne
-		// basisSlot) - auf dem eigenen Satz stimmen Sterbeschrei (84 statt
-		// SWATs 377), Konsolen- und Sitzposen von Haus aus.
+		// No bending onto SWAT/guard anymore (#111 part 2): the Joby guard
+		// always brings his full own set from joby3 (kCross without a
+		// baseSlot) - on his own set the death scream (84 instead of SWAT's
+		// 377) and the console and sitting poses are right out of the box.
 		//
-		// Seit dem #121-Nachtrag ist er darum die ANIM-BASIS der
-		// Stummel-Familie (Mittelstufe der Alias-Kette oben, kCross basisSlot
-		// 460 bei Mafia und Crane Guy): sein joby3-Satz ist an allen Posen
-		// gemessen sauber, waehrend Slot 37 je Level ein anderes Modell
-		// traegt - das rich-Modell dort schleppt tote Erb-Anims mit falscher
-		// Schrittweite genau auf den Zustaenden, die NUR die Stummel spielen
-		// (Zst 35, Mafias Schuss-Pose: der Blink-Soldat aus andy3). Ohne
-		// geladenen Wachmann gilt die alte Vanilla-Kette SWAT -> BLUE_GUARD.
+		// Since the #121 addendum he is therefore the ANIM BASE of the stub
+		// family (middle stage of the alias chain above, kCross baseSlot 460
+		// for Mafia and Crane Guy): his joby3 set measures clean on all
+		// poses, while slot 37 carries a different model per level - the
+		// rich model there drags dead inherited anims with the wrong stride
+		// exactly on the states ONLY the stubs play (state 35, Mafia's shot
+		// pose: the blinking soldier from andy3). Without a loaded guard the
+		// old vanilla chain SWAT -> BLUE_GUARD applies.
 		obj->shadow_size = 128;
 		obj->hit_points = 24;
 		obj->pivot_length = 50;
@@ -1354,8 +1357,8 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_GUARD2, 10);
-		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_GUARD2, 13);
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_GUARD2, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_GUARD2, 13);
 	}
 
 	obj = &objects[CRANE_GUY_MIP];
@@ -1395,16 +1398,16 @@ void BaddyObjects()
 
 	if (objects[SAILOR].loaded)
 	{
-		// SAILOR ist der Compsognathus-Slot (#99), nicht mehr der Matrose.
+		// SAILOR is the Compsognathus slot (#99), no longer the sailor.
 		//
-		// Der Slot hing an InitialiseSas/SasControl und holte seine Anims von
-		// SWAT - benutzt hat ihn nie jemand: in keinem der 16 Level steckt
-		// dort ein Modell (mit MissMod an allen nachgemessen, Gegenprobe ueber
-		// den Hund 41 in zweien). Vierter toter Slot nach SAS 31 (T-Rex),
-		// CROW 43 (Geier) und REAPER 75 (Raptor). Der Anim-Umweg ueber SWAT
-		// faellt weg: der Compy bringt seinen eigenen Satz mit.
+		// The slot hung on InitialiseSas/SasControl and fetched its anims
+		// from SWAT - nobody ever used it: none of the 16 levels carries a
+		// model there (measured with MissMod against all of them, cross-
+		// checked via the dog 41, which stands in two). Fourth dead slot
+		// after SAS 31 (T-Rex), CROW 43 (vulture) and REAPER 75 (Raptor).
+		// The anim detour via SWAT drops away: the Compy brings its own set.
 		//
-		// Alle Werte aus tomb3 setup.cpp ABGELESEN, nicht geraten.
+		// All values READ OFF tomb3's setup.cpp, not guessed.
 		obj = &objects[SAILOR];
 		obj->initialise = InitialiseCompy;
 		obj->control = CompyControl;
@@ -1420,15 +1423,15 @@ void BaddyObjects()
 		obj->save_flags = 1;
 		obj->save_anim = 1;
 
-		// Drehflags fuer Torso und Kopf, Nummern aus tomb3 abgelesen. Sie
-		// kommen mit, weil CompyControl beide Gelenke setzt (CreatureJoint 0
-		// und 1) - genau das fehlte beim T-Rex, wo sie deshalb draussen
-		// bleiben mussten. Die alten Flags des Matrosen (+24 und +52) gehoeren
-		// zu einem Menschenskelett und sind hier sinnlos.
+		// Rotation flags for torso and head, numbers read off tomb3. They
+		// come along because CompyControl sets both joints (CreatureJoint 0
+		// and 1) - exactly what the T-Rex lacked, which is why they had to
+		// stay out there. The sailor's old flags (+24 and +52) belong to a
+		// human skeleton and are meaningless here.
 		bones[obj->bone_index + 4] |= 8;
 		bones[obj->bone_index + 8] |= 8;
 
-		// non_lot bleibt bewusst AUS - Begruendung im Kopf von compy.cpp.
+		// non_lot deliberately stays OFF - reasoning at the top of compy.cpp.
 		bones[obj->bone_index + 52] |= 4;
 	}
 
@@ -1543,18 +1546,18 @@ void BaddyObjects()
 
 	if (objects[REAPER].loaded)
 	{
-		// REAPER ist der Raptor-Slot (#97), nicht mehr die Qualle.
+		// REAPER is the Raptor slot (#97), no longer the jellyfish.
 		//
-		// REAPER war eine Wasserqualle (InitialiseJelly/JellyControl in
-		// minisub.cpp) und traegt in KEINEM der 16 TR5-Level ein Modell - mit
-		// MissMod an allen nachgemessen, Gegenprobe ueber den Hund (41), der in
-		// zweien steht. Dieselbe Lage wie SAS fuer den T-Rex und CROW fuer den
-		// Geier: die Steuerung liegt seit jeher im Setup, benutzt hat sie nie
-		// jemand. JellyControl bleibt im Quelltext stehen, nur der Slot wechselt
-		// den Besitzer.
+		// REAPER was a water jellyfish (InitialiseJelly/JellyControl in
+		// minisub.cpp) and carries a model in NONE of the 16 TR5 levels -
+		// measured with MissMod against all of them, cross-checked via the
+		// dog (41), which stands in two. The same situation as SAS for the
+		// T-Rex and CROW for the vulture: the control has always been in
+		// the setup, nobody ever used it. JellyControl stays in the source,
+		// only the slot changes its owner.
 		//
-		// Alle Werte aus tomb3 setup.cpp:575-594 ABGELESEN, nicht geraten -
-		// das ist die Lehre aus dem T-Rex.
+		// All values READ OFF tomb3 setup.cpp:575-594, not guessed - that
+		// is the lesson from the T-Rex.
 		obj = &objects[REAPER];
 		obj->initialise = InitialiseCreature;
 		obj->control = RaptorControl;
@@ -1570,12 +1573,12 @@ void BaddyObjects()
 		obj->save_flags = 1;
 		obj->save_anim = 1;
 
-		// Knochen-Drehflags fuer das Kopf- und Halsnachfuehren. Beim T-Rex
-		// habe ich sie weggelassen, und das war dort richtig: TR4/TR5
-		// verteilen ueber die markierten Knochen die vier joint_rotation-Werte
-		// der CREATURE_INFO, und DinoControl setzt sie nie - vier Marken ohne
-		// Absender. RaptorControl setzt alle vier (CreatureJoint 0..3), hier
-		// haben sie also einen. Nummern aus tomb3 abgelesen.
+		// Bone rotation flags for the head and neck tracking. On the T-Rex
+		// I left them out, and there that was right: TR4/TR5 distribute the
+		// CREATURE_INFO's four joint_rotation values over the marked bones,
+		// and DinoControl never sets them - four marks without a sender.
+		// RaptorControl sets all four (CreatureJoint 0..3), so here they
+		// have one. Numbers read off tomb3.
 		bones[obj->bone_index + 80] |= 8;
 		bones[obj->bone_index + 84] |= 8;
 		bones[obj->bone_index + 92] |= 8;
@@ -1602,12 +1605,12 @@ void BaddyObjects()
 		obj->save_hitpoints = 1;
 		obj->save_flags = 1;
 		obj->save_anim = 1;
-		// Core-Luecke: als einziger Soldat traegt er einen DAUERHAFTEN
-		// Mesh-Tausch (0x2400 = Pistolen im Holster, nach der Ziehanimation
-		// 0x80 = in der Hand). Ohne save_mesh landet der Zustand nie im
-		// Spielstand - nach dem Laden steckten die Waffen wieder im Holster
-		// und er zog neu (Nutzerfund 2026-08-18). Sichert zugleich
-		// mesh_bits, also auch den abgeschossenen Kopfschmuck (0x4000).
+		// Core gap: as the only soldier he carries a PERMANENT mesh swap
+		// (0x2400 = pistols in the holster, after the draw animation 0x80 =
+		// in hand). Without save_mesh the state never lands in the
+		// savegame - after loading, the weapons sat in the holster again
+		// and he drew anew (user find 2026-08-18). Also saves mesh_bits,
+		// i.e. the shot-off headdress too (0x4000).
 		obj->save_mesh = 1;
 		bones[obj->bone_index + 24] |= 8;
 		bones[obj->bone_index + 24] |= 4;
@@ -1730,10 +1733,10 @@ void BaddyObjects()
 		obj->control = ChefControl;
 		obj->collision = CreatureCollision;
 		obj->shadow_size = 128;
-		obj->hit_points = 60; // war 35 - #124: er geht in den Gegner-Pool,
-		                      // als reiner Nahkaempfer braucht er Substanz
-		                      // (Larson/Pierre-Klasse). Der Spielwert kommt
-		                      // ohnehin aus Balance.txt (LP_Koch).
+		obj->hit_points = 60; // was 35 - #124: he joins the enemy pool, and
+		                      // as a pure melee fighter he needs substance
+		                      // (Larson/Pierre class). The in-game value
+		                      // comes from Balance.txt (HP_Chef) anyway.
 		obj->pivot_length = 50;
 		obj->radius = 102;
 		obj->bite_offset = 0;
@@ -1775,7 +1778,7 @@ void BaddyObjects()
 		bones[obj->bone_index] |= 4;
 		bones[obj->bone_index + 4] |= 8;
 		bones[obj->bone_index + 4] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_TWOGUN, 2);
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_TWOGUN, 2);
 	}
 
 	if (objects[HYDRA].loaded)
@@ -1825,7 +1828,7 @@ void BaddyObjects()
 		bones[obj->bone_index + 16] |= 4;
 		bones[obj->bone_index + 36] |= 16;
 		bones[obj->bone_index + 36] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_IMP, 10);
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_IMP, 10);
 	}
 
 	if (objects[WILLOWISP].loaded)
@@ -1863,8 +1866,8 @@ void BaddyObjects()
 		obj->hit_points = 120;  // was 4000 - upstream built him effectively unkillable
 		                        // (in Andy2 he is a chase set piece, not a combat target).
 		                        // As a cross-mix pool enemy he must be killable; 120 keeps
-		                        // him the toughest regular (user call 2026-08-15: "kann
-		                        // gerne mehr haben, aber nicht so viel").
+		                        // him the toughest regular (user call 2026-08-15: "he can
+		                        // have more, but not that much").
 		obj->pivot_length = 20;
 		obj->radius = 341;
 		obj->bite_offset = 256;
@@ -1981,7 +1984,7 @@ void BaddyObjects()
 		bones[obj->bone_index + 52] |= 4;
 
 		for (lp = 0; lp < 16; lp++)
-			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_GLADIATOR, lp);
+			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_GLADIATOR, lp);
 	}
 
 	if (objects[ROMAN_GOD].loaded)
@@ -2007,16 +2010,16 @@ void BaddyObjects()
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
 
-		// Eigener Ausweichslot, NICHT der des Gladiators - siehe die
-		// Begruendung bei MESHSWAP_CROSS_ROMANGOD in objects.h (#84).
+		// Its own fallback slot, NOT the gladiator's - see the reasoning at
+		// MESHSWAP_CROSS_ROMANGOD in objects.h (#84).
 		for (lp = 0; lp < 17; lp++)
-			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_ROMANGOD, lp);
+			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_ROMANGOD, lp);
 	}
 
-	// Zweite Fassung des Roman God (#84): Block eins zu eins wie oben, nur
-	// mit eigenem Ausweichslot. Beide Fassungen koennen damit im selben Level
-	// stehen; welche Waffe ein Exemplar fuehrt, entscheidet weiterhin die OCB
-	// seines Items, und der Randomizer setzt sie passend zum Modell.
+	// Second version of the Roman god (#84): the block one to one as above,
+	// only with its own fallback slot. Both versions can thereby stand in
+	// the same level; which weapon a specimen wields is still decided by its
+	// item's OCB, and the randomizer sets it to match the model.
 	if (objects[ROMAN_GOD2].loaded)
 	{
 		obj = &objects[ROMAN_GOD2];
@@ -2041,7 +2044,7 @@ void BaddyObjects()
 		bones[obj->bone_index + 52] |= 4;
 
 		for (lp = 0; lp < 17; lp++)
-			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapQuelle(MESHSWAP_CROSS_ROMANGOD2, lp);
+			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_ROMANGOD2, lp);
 	}
 
 	if (objects[GUARDIAN].loaded)
@@ -2120,9 +2123,10 @@ void InitialiseObjects()
 	ObjectObjects();
 	TrapObjects();
 
-	// Gegnerleben aus Balance.txt. Erst hier, weil die drei Aufbaufunktionen
-	// darueber die Originalwerte setzen. Wer dort eine Zahl aendert, muss sie
-	// auch in der Tabelle in balance.cpp aendern - sonst meldet sich das Log.
+	// Enemy hit points from Balance.txt. Only here, because the three build
+	// functions above set the original values. Whoever changes a number
+	// there must also change it in the table in balance.cpp - otherwise the
+	// log speaks up.
 	BalanceSetEnemies();
 
 	InitialiseHair();
@@ -2413,20 +2417,20 @@ void SetupGame()
 	InitTarget();
 	InitialiseGameFlags();
 
-	// Inventar komplett loeschen (InitialiseLara(0)) statt uebernehmen: das
-	// tut Vanilla an den vier KAPITELANFAENGEN - Rom, Russland, Irland, VCI
-	// beginnen je als eigene Ruecklende, Lara startet mit nichts als den
-	// Pistolen (die setup.cpp gleich darauf wieder vergibt).
+	// Wipe the inventory completely (InitialiseLara(0)) instead of carrying
+	// it over: vanilla does that at the four CHAPTER STARTS - Rome, Russia,
+	// Ireland, VCI each begin as their own flashback, Lara starts with
+	// nothing but the pistols (which setup.cpp hands out again right after).
 	//
-	// In gewuerfelter Reihenfolge ist das falsch: die vier Level koennen
-	// ueberall stehen, und Lara verliert ihr Arsenal dann mehrfach mitten
-	// im Lauf (vom Nutzer gesehen: joby5 -> Andrea1, joby3 -> joby2,
-	// rich1 -> andy1). Darum greift die Regel nur noch bei UNVERAENDERTER
-	// Reihenfolge; sonst zaehlt allein "neues Spiel". Waffen, Munition,
-	// Medipacks und Leuchtfackeln wandern damit durch den ganzen Lauf,
-	// genau wie es die Aufraeumlogik des Randomizers vorsieht.
+	// In a shuffled order that is wrong: the four levels can stand anywhere,
+	// and Lara then loses her arsenal several times mid-run (seen by the
+	// user: joby5 -> Andrea1, joby3 -> joby2, rich1 -> andy1). Hence the
+	// rule now only applies with an UNCHANGED order; otherwise only "new
+	// game" counts. Weapons, ammo, medipacks and flares thereby travel
+	// through the whole run, exactly as the randomizer's cleanup logic
+	// intends.
 	if (gfInitialiseGame ||
-		(!ReihenfolgeGewuerfelt() &&
+		(!OrderShuffled() &&
 		 (gfLevelId == LVL5_THIRTEENTH_FLOOR || gfLevelId == LVL5_BASE ||
 		  gfLevelId == LVL5_GALLOWS_TREE || gfLevelId == LVL5_STREETS_OF_ROME)))
 		InitialiseLara(0);

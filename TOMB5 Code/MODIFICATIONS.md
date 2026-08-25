@@ -420,6 +420,27 @@ Also in this group:
   stages still line up when `Balance.txt` scales enemy hit points. With the
   original hit points the numbers are identical to vanilla.
 
+- `specific/function_stubs.cpp`, `specific/winmain.cpp` — **`-log`**.
+  Upstream compiled `Log()` out entirely, so a player who ran into
+  something could never produce a log; the only way was a special build.
+  `Log()` is compiled in here but returns on its first line unless the game
+  was started with `-log`: without the switch nothing is opened, nothing is
+  formatted and no `log.txt` appears. The switch is read by hand as the
+  first thing `WinMain` does rather than through the `commandlines` table,
+  because the run check and the gameflow load have already logged by the
+  time that table is worked off — and those startup lines are the ones a
+  diagnosis needs most. It is matched as a whole word, so a stray "log"
+  inside a path cannot silently turn on per-frame logging.
+
+- `game/draw.cpp`, `game/lot.cpp`, `game/sound.cpp`, `specific/output.cpp` —
+  diagnostic seams behind that switch: `SFXLOG` (which sample a sound
+  really played, and which anim command asked for it), `CLIPLOG`,
+  `SKIPLOG`, `MESHLOG`, `SLOTLOG` and `CLIPDETAIL` (why an enemy is not
+  drawn — bounds check, status branch, slot allocation or mesh discard).
+  They are throttled per item and per 30 frames, and the ones that have to
+  compute something before they can log test the switch at the call site,
+  not just inside `Log()`.
+
 ### 3. Code taken from tomb3 (four Tomb Raider III enemies)
 
 Four enemies from Tomb Raider III can appear in randomized levels: the

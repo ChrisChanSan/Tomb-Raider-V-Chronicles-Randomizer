@@ -71,6 +71,15 @@ original. Old savegames are rejected with a message instead of
 breaking silently - so finish a running playthrough before you switch
 to a new version.
 
+If you want to report something, start the game once with -log:
+
+    PCTomb5.exe -log
+
+It then writes a log.txt next to itself that records what the engine
+loaded and what it played. Send that along with the seed and it can be
+looked at without guessing. Without the switch nothing is written at
+all - no file, no slowdown - so leave it off for normal play.
+
 Origin and license
 ------------------
 The engine is a modified version of TOMB5, the decompilation project

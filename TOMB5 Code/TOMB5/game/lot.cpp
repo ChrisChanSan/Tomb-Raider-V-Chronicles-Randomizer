@@ -235,6 +235,33 @@ long EnableBaddieAI(short item_number, long Always)
 		}
 	}
 
+	// SLOTLOG (#121, fourth measurement): SKIPLOG showed six rejections in
+	// the same tick although the level carries at most ~35 creatures and 48
+	// slots exist. Here stands what the allocation REALLY sees: the counter
+	// and the actually free slots. If the two disagree, the bookkeeping is
+	// the culprit, not a shortage of slots.
+	//
+	// The gate sits at the call site on purpose: this seam COUNTS - it walks
+	// all MAX_LOT slots before it has anything to say. The gate inside Log()
+	// would have saved the writing but not that walk, and this runs from
+	// enemy activation.
+	if (gLogEnabled)
+	{
+		static long lastSlotLog = -1000;
+
+		if (GlobalCounter - lastSlotLog > 30 || GlobalCounter < lastSlotLog)
+		{
+			long free_slots = 0;
+
+			for (long k = 0; k < MAX_LOT; k++)
+				if (baddie_slots[k].item_num == NO_ITEM) free_slots++;
+
+			Log("SLOTLOG item=%d slots_used=%d free=%d MAX_LOT=%d",
+				item_number, slots_used, free_slots, MAX_LOT);
+			lastSlotLog = GlobalCounter;
+		}
+	}
+
 	if (Always)
 		worstdist = 0;
 	else

@@ -604,6 +604,47 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	calc_animating_item_clip_window(item, frm[0]);
 	clip = S_GetObjectBounds(frm[0]);
 
+	// CLIPLOG (#121), second version. The first wrote only at clip == 0 and
+	// stayed EMPTY for the blinking soldier. That ruled out the bounds check
+	// as the culprit and moved the question: does this function RUN at all
+	// during the invisible frames, and if so with which anim and which clip?
+	// Hence every NEW (slot, anim) pair of every thinking enemy, with clip,
+	// room and status. If an anim never shows up in the log, the enemy is
+	// not drawn in it at all - then the fault lies before this function
+	// (room list, status), not inside it.
+	if (gLogEnabled && obj->intelligent)
+	{
+		static long seen[128];
+		static long nSeen;
+		const long id = ((long)item->object_number << 16) | (item->anim_number & 0xFFFF);
+		long fresh = 1;
+
+		for (long k = 0; k < nSeen; k++)
+			if (seen[k] == id) { fresh = 0; break; }
+
+		if (fresh && nSeen < 128)
+		{
+			seen[nSeen++] = id;
+			Log("CLIPLOG obj=%d item=%d anim=%d frame=%d clip=%d room=%d status=%d state=%d goal=%d meshbits=%X swap=%X",
+				item->object_number, (int)(item - items), item->anim_number,
+				item->frame_number, clip, item->room_number, item->status,
+				item->current_anim_state, item->goal_anim_state,
+				(unsigned)item->mesh_bits, (unsigned)item->meshswap_meshbits);
+		}
+	}
+
+	// MESHLOG (#121, sixth measurement): aCheckMeshClip discards meshes
+	// whose box lies entirely outside the current window f_left..f_bottom.
+	// The counter says, after drawing, whether the body died THERE - and the
+	// window says which cutout it was tested against.
+	const long rejectsBefore = gLogEnabled ? aMeshClipRejects : 0;
+
+	// Arm CLIPDETAIL for THIS thinker only - the global throttle otherwise
+	// also caught legitimate clip-aways (doors behind the camera) and made
+	// the lines ambiguous.
+	if (gLogEnabled)
+		aClipMeldeObj = obj->intelligent ? item->object_number : -1;
+
 	if (clip)
 	{
 		CalculateObjectLighting(item, frm[0]);
@@ -721,6 +762,27 @@ void DrawAnimatingItem(ITEM_INFO* item)
 		}
 	}
 
+	if (gLogEnabled)
+	{
+		aClipMeldeObj = -1;
+
+		if (obj->intelligent && aMeshClipRejects > rejectsBefore)
+		{
+			extern float f_left, f_right, f_top, f_bottom;
+			static long lastMesh[64];
+			const long slotM = (long)(item - items) & 63;
+
+			if (GlobalCounter - lastMesh[slotM] > 30 || GlobalCounter < lastMesh[slotM])
+			{
+				lastMesh[slotM] = GlobalCounter;
+				Log("MESHLOG obj=%d item=%d anim=%d frame=%d clip=%d discarded=%d window=%d..%d/%d..%d",
+					item->object_number, (int)(item - items), item->anim_number,
+					item->frame_number, clip, (int)(aMeshClipRejects - rejectsBefore),
+					(int)f_left, (int)f_right, (int)f_top, (int)f_bottom);
+			}
+		}
+	}
+
 	phd_right = phd_winwidth;
 	phd_left = 0;
 	phd_top = 0;
@@ -752,6 +814,32 @@ void PrintObjects(short room_number)
 		ClipRoomNum = room_number;
 		item = &items[i];
 		obj = &objects[item->object_number];
+
+		// SKIPLOG (#121, third measurement): the blinking soldier (Mafia2,
+		// slot 51) NEVER turned up in the CLIPLOG - so he does not even
+		// reach DrawAnimatingItem. The only branch before it is this one.
+		// One line per (item, status, anim), thinkers only: then it is in
+		// black and white which status sorts him out and what his control
+		// code is playing at that moment.
+		// Second version: no longer ONCE per (item, anim) but per item
+		// again every 30 frames - the first version saw only the very first
+		// entry of the blink cycle and was blind afterwards. data is logged
+		// along: if the AI slot survives the invisibility, the status change
+		// does NOT come from slot allocation.
+		if (gLogEnabled && obj->intelligent && item->status == ITEM_INVISIBLE)
+		{
+			static long lastSkip[64];
+			const long slot = i & 63;
+
+			if (GlobalCounter - lastSkip[slot] > 30 || GlobalCounter < lastSkip[slot])
+			{
+				lastSkip[slot] = GlobalCounter;
+				Log("SKIPLOG obj=%d item=%d anim=%d frame=%d state=%d goal=%d flags=%X data=%d tick=%d",
+					item->object_number, i, item->anim_number, item->frame_number,
+					item->current_anim_state, item->goal_anim_state,
+					(unsigned)item->flags, item->data ? 1 : 0, GlobalCounter);
+			}
+		}
 
 		if (item->status != ITEM_INVISIBLE)
 		{

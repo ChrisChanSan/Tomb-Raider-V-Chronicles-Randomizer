@@ -423,8 +423,8 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 			sfx, lut, sample, rnd, volume, pitch, flag == 3 ? "loop" : "once",
 			SfxCommandCaller, SfxCommandRoom, SfxCommandAnim, SfxCommandType, SfxCommandRoomFlags);
 	else
-		Log("SFXLOG sfx=%d map=%d sample=%d von %d Varianten vol=%d pitch=%d %s",
-			sfx, lut, sample, rnd, volume, pitch, flag == 3 ? "Schleife" : "einmal");
+		Log("SFXLOG sfx=%d map=%d sample=%d of %d variants vol=%d pitch=%d %s",
+			sfx, lut, sample, rnd, volume, pitch, flag == 3 ? "loop" : "once");
 
 	if (flag == 3)
 		dx = S_SoundPlaySampleLooped(sample, (ushort)volume, pitch, (short)pan);

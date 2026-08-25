@@ -929,6 +929,16 @@ void S_AnimateTextures(long n)
 	}
 }
 
+// MESHLOG counter (#121, back under -log with #125): how often did
+// aCheckMeshClip discard a mesh COMPLETELY? DrawAnimatingItem reads it
+// before and after drawing a thinker - if it rose, the body died here and
+// not at the bounds check.
+long aMeshClipRejects;
+
+// Set by DrawAnimatingItem while a THINKER is being drawn - only then does
+// the discard branch write its CLIPDETAIL. -1 = off.
+long aClipMeldeObj = -1;
+
 long aCheckMeshClip(MESH_DATA* mesh)
 {
 	float* stash;
@@ -1020,7 +1030,43 @@ long aCheckMeshClip(MESH_DATA* mesh)
 	}
 
 	if (tooNear == 8 || left > f_right || right < f_left || top > f_bottom || bottom < f_top)
+	{
+		// CLIPDETAIL (#121): MESHLOG proved that whole bodies die here at a
+		// FULL-SCREEN window. So the projection itself must be delivering
+		// nonsense - this line says which: where the eight corners were
+		// projected, how many lay in front of the near plane, and where the
+		// mesh sits relative to the camera per the view matrix.
+		//
+		// The counter only counts while logging is on, or MESHLOG's
+		// before/after comparison would drift over a long session for
+		// nothing.
+		if (gLogEnabled)
+		{
+			aMeshClipRejects++;
+
+			if (aClipMeldeObj >= 0)
+			{
+				static long lastDetail;
+
+				if (GlobalCounter - lastDetail > 15 || GlobalCounter < lastDetail)
+				{
+					lastDetail = GlobalCounter;
+					// aMXPtr[M23] alongside: S_GetObjectBounds judges with
+					// the a-stack, this test with D3DMView. If the two
+					// disagree, here it is number against number.
+					Log("CLIPDETAIL obj=%d near=%d L=%d R=%d T=%d B=%d front=%d back=%d camera=%d/%d/%d aM23=%d box=%d,%d,%d..%d,%d,%d",
+						(int)aClipMeldeObj, (int)tooNear, (int)left, (int)right,
+						(int)top, (int)bottom, (int)front, (int)back,
+						(int)D3DMView._41, (int)D3DMView._42, (int)D3DMView._43,
+						(int)aMXPtr[M23],
+						(int)mesh->bbox[0], (int)mesh->bbox[1], (int)mesh->bbox[2],
+						(int)mesh->bbox[3], (int)mesh->bbox[4], (int)mesh->bbox[5]);
+				}
+			}
+		}
+
 		return 0;
+	}
 
 	if (tooNear || offScreen)
 		return 1;

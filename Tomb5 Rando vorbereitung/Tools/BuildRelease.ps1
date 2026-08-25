@@ -1,37 +1,37 @@
-# Baut den auslieferbaren Ordner zusammen: Randomizer, Engine, mitgelieferter
-# Quelltext und die Lizenzen.
+# Assembles the shippable folder: randomizer, engine, bundled source code
+# and the licenses.
 #
-# Warum der VOLLSTAENDIGE Engine-Quelltext mit muss und nicht nur unsere
-# geaenderten Dateien: TOMB5 steht unter der GNU GPL v3. Unsere Fassung ist ein
-# abgeleitetes Werk, und GPLv3 Paragraph 6 verlangt bei der Weitergabe eines
-# Binaerprogramms den vollstaendigen zugehoerigen Quelltext - nicht einen Satz
-# Aenderungen plus Verweis auf das Ursprungsprojekt. Der Baum ist 8 MB gross,
-# ihn komplett beizulegen kostet also praktisch nichts und macht die Frage
-# gegenstandslos. Paragraph 5a verlangt zusaetzlich einen deutlichen Hinweis auf
-# die Aenderung samt Datum: das ist TOMB5 Code\MODIFICATIONS.md.
+# Why the COMPLETE engine source must come along and not only our changed
+# files: TOMB5 is under the GNU GPL v3. Our version is a derivative work,
+# and GPLv3 section 6 demands, when distributing a binary, the complete
+# corresponding source code - not a set of changes plus a pointer to the
+# upstream project. The tree is 8 MB, so including it completely costs
+# practically nothing and makes the question moot. Section 5a additionally
+# demands a clear notice of the modification including a date: that is
+# TOMB5 Code\MODIFICATIONS.md.
 #
-# Was hier BEWUSST NICHT hineinkommt: Spieldaten. Weder Level noch Musik,
-# Videos oder Sprachdateien. Tomb Raider Chronicles gehoert seinen
-# Rechteinhabern; der Nutzer bringt seine eigene Installation mit, und der
-# Randomizer kopiert sie sich beim ersten Start selbst zurecht.
+# What DELIBERATELY does NOT go in here: game data. Neither levels nor
+# music, videos or language files. Tomb Raider Chronicles belongs to its
+# rights holders; the user brings their own installation, and the
+# randomizer copies what it needs on first start by itself.
 param(
     [string]$OutDir = "",
     [switch]$Clean
 )
 $ErrorActionPreference = "Stop"
 
-# Alles relativ zum Skriptort (Tools -> zwei Ebenen hoch = Repo-Wurzel),
-# damit das Skript auf jedem Rechner laeuft und keine Entwickler-Pfade
-# traegt (#72).
+# Everything relative to the script location (Tools -> two levels up = repo
+# root), so the script runs on any machine and carries no developer paths
+# (#72).
 $Root      = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 if ($OutDir -eq "") { $OutDir = Join-Path $Root "Release Paket" }
 $EngineSrc = "$Root\TOMB5 Code"
 $EngineExe = "$Root\release\PCtomb5.exe"
 $RandoRoot = "$Root\TR5Randomizer"
 $RandoExe  = "$RandoRoot\build\TR5Randomizer.exe"
-# Die MIT-Lizenz kommt aus dem VERSIONIERTEN imgui (external\imgui) - der
-# lose Download-Ordner unter "Tomb5 Rando vorbereitung" ist untracked und
-# existiert in einem frischen Clone gar nicht.
+# The MIT license comes from the VERSIONED imgui (external\imgui) - the
+# loose download folder under "Tomb5 Rando vorbereitung" is untracked and
+# does not exist in a fresh clone at all.
 $ImGui     = "$Root\TR5Randomizer\external\imgui"
 $ZoneTools = "$Root\Tomb5 Rando vorbereitung\Tools"
 $LevelInfo = "$Root\Tomb5 Rando vorbereitung\Level Infos"
@@ -39,13 +39,13 @@ $LevelInfo = "$Root\Tomb5 Rando vorbereitung\Level Infos"
 function Say($t) { Write-Output $t }
 
 if ($Clean -and (Test-Path $OutDir)) {
-    Say "Raeume $OutDir"
+    Say "cleaning $OutDir"
     Get-ChildItem $OutDir -Force | Remove-Item -Recurse -Force
 }
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 
 # --- 1. Engine ---------------------------------------------------------------
-if (-not (Test-Path $EngineExe)) { throw "Engine nicht gebaut: $EngineExe" }
+if (-not (Test-Path $EngineExe)) { throw "engine not built: $EngineExe" }
 Copy-Item $EngineExe "$OutDir\PCTomb5.exe" -Force
 Say ("Engine        : PCTomb5.exe ({0:N0} KB)" -f ((Get-Item $EngineExe).Length/1KB))
 
@@ -54,13 +54,13 @@ if (Test-Path $RandoExe) {
     Copy-Item $RandoExe "$OutDir\TR5Randomizer.exe" -Force
     Say ("Randomizer    : TR5Randomizer.exe ({0:N0} KB)" -f ((Get-Item $RandoExe).Length/1KB))
 } else {
-    Say "Randomizer    : noch nicht gebaut - uebersprungen"
+    Say "Randomizer    : not built yet - skipped"
 }
 
-# --- 3. Vorberechnete Daten, die der Randomizer liest ------------------------
-# Damit braucht das Werkzeug zur Laufzeit KEIN PowerShell. Das war eine
-# ausdrueckliche Vorgabe: eine PowerShell-Abhaengigkeit waere fuer normale
-# Nutzer unangemessen und faellt ausserdem regelmaessig Virenscannern auf.
+# --- 3. Precomputed data the randomizer reads --------------------------------
+# This way the tool needs NO PowerShell at runtime. That was an explicit
+# requirement: a PowerShell dependency would be unreasonable for normal
+# users and moreover regularly draws the attention of virus scanners.
 $dataOut = "$OutDir\data"
 New-Item -ItemType Directory -Path $dataOut -Force | Out-Null
 Copy-Item "$LevelInfo\VanillaLevelChecksums.csv" $dataOut -Force
@@ -72,9 +72,9 @@ foreach ($f in (Get-ChildItem "$LevelInfo\*.json" | Sort-Object Name)) {
     Copy-Item $f.FullName "$dataOut\level_$($f.Name)" -Force
     $zones++
 }
-Say "Daten         : $zones Zonen-Exporte + Level-Infos + Pruefsummenliste"
+Say "Data          : $zones zone exports + level infos + checksum list"
 
-# --- 4. Quelltext, GPLv3-Pflicht ---------------------------------------------
+# --- 4. Source code, GPLv3 obligation ----------------------------------------
 $srcOut = "$OutDir\Source\TOMB5"
 New-Item -ItemType Directory -Path $srcOut -Force | Out-Null
 $skipDirs = '\\(Build|Release|Debug|x64|\.vs|ipch)\\'
@@ -89,105 +89,102 @@ foreach ($f in (Get-ChildItem $EngineSrc -Recurse -File)) {
     Copy-Item $f.FullName $dst -Force
     $copied++
 }
-Say ("Quelltext     : $copied Dateien ({0:N1} MB) - GPLv3-Pflicht" -f `
+Say ("Source        : $copied files ({0:N1} MB) - GPLv3 obligation" -f `
     ((Get-ChildItem $srcOut -Recurse -File | Measure-Object Length -Sum).Sum/1MB))
 
-# Der Randomizer ist ein eigenstaendiges Programm, das nur Datendateien liest
-# und schreibt - kein abgeleitetes Werk der Engine. Sein Quelltext geht
-# trotzdem mit, weil das ohnehin der Anspruch ist.
+# The randomizer is a standalone program that only reads and writes data
+# files - no derivative work of the engine. Its source still comes along,
+# because that is the standard we hold ourselves to anyway.
 $rsOut = "$OutDir\Source\TR5Randomizer"
 New-Item -ItemType Directory -Path $rsOut -Force | Out-Null
 Copy-Item "$RandoRoot\src" $rsOut -Recurse -Force
-Say "Quelltext     : Randomizer mitgeliefert"
+Say "Source        : randomizer included"
 
-# --- 5. Lizenzen -------------------------------------------------------------
+# --- 5. Licenses -------------------------------------------------------------
 $lic = "$OutDir\Licenses"
 New-Item -ItemType Directory -Path $lic -Force | Out-Null
 Copy-Item "$EngineSrc\LICENSE" "$lic\TOMB5-GPLv3.txt" -Force
 if (Test-Path "$ImGui\LICENSE.txt") { Copy-Item "$ImGui\LICENSE.txt" "$lic\DearImGui-MIT.txt" -Force }
-Say "Lizenzen      : GPLv3 (Engine), MIT (Dear ImGui)"
+Say "Licenses      : GPLv3 (engine), MIT (Dear ImGui)"
 
-# --- 6. Anleitung ------------------------------------------------------------
+# --- 6. Manual ---------------------------------------------------------------
 $readme = @'
 TR5 Randomizer
 ==============
 
-Was hier drin ist
------------------
-  TR5Randomizer.exe   Das Werkzeug. Hier stellst du den Seed ein.
-  PCTomb5.exe         Die Spiel-Engine, nativ fuer Windows 11.
-  data\               Vorberechnete Daten, die der Randomizer braucht.
-  Source\             Der vollstaendige Quelltext von beidem.
-  Licenses\           Die Lizenzen.
+What is in here
+---------------
+  TR5Randomizer.exe   The tool. This is where you set the seed.
+  PCTomb5.exe         The game engine, native for Windows 11.
+  data\               Precomputed data the randomizer needs.
+  Source\             The complete source code of both.
+  Licenses\           The licenses.
 
-Du brauchst zusaetzlich deine eigene Installation von Tomb Raider
-Chronicles. Spieldaten sind hier bewusst KEINE enthalten - das Spiel
-gehoert seinen Rechteinhabern.
+You additionally need your own installation of Tomb Raider
+Chronicles. Game data is deliberately NOT included here - the game
+belongs to its rights holders.
 
-So faengst du an
-----------------
-  1. TR5Randomizer.exe starten.
-  2. Beim ersten Start fragt er nach dem Ordner deiner
-     Chronicles-Installation. Beim ersten Randomisieren legt er
-     data\Backup an und sichert deine Originallevel dorthin.
-     Randomisiert wird danach direkt in data - du startest das
-     Spiel also wie gewohnt.
-  3. Seed eingeben oder wuerfeln lassen, randomisieren, spielen.
+Getting started
+---------------
+  1. Start TR5Randomizer.exe.
+  2. On first start it asks for the folder of your Chronicles
+     installation. On the first randomize it creates data\Backup and
+     saves your original levels there. After that, randomization
+     writes directly into data - so you start the game as usual.
+  3. Enter a seed or roll one, randomize, play.
 
-Der Seed
+The seed
 --------
-Derselbe Seed erzeugt immer dasselbe Spiel - auf jedem Rechner. Wenn
-dir etwas komisch vorkommt, notiere den Seed und die Build-Kennung;
-damit laesst sich genau dein Spielstand nachbauen. Beides wird im
-Pausenmenue angezeigt, ein Screenshot reicht also.
+The same seed always produces the same game - on any machine. If
+something looks odd to you, note down the seed and the build ID; with
+those, exactly your game can be rebuilt. Both are shown in the pause
+menu, so a screenshot is enough.
 
-Jede Eingabe ist ein gueltiger Seed. "Weihnachten" funktioniert.
+Any input is a valid seed. "Christmas" works.
 
-Wenn etwas schiefgeht
----------------------
-Im Randomizer gibt es "Auf Original zuruecksetzen". Damit werden alle
-Level aus data\Backup zurueckgespielt. Diesen Ordner bitte nicht
-loeschen - er ist die einzige Kopie deiner Originallevel, die das
-Programm kennt.
+If something goes wrong
+-----------------------
+The randomizer has "Restore original". It plays all levels back from
+data\Backup. Please do not delete that folder - it is the only copy of
+your original levels the program knows about.
 
-Hinweis zu Spielstaenden: das Speicherformat wurde gegenueber dem
-Original geaendert. Alte Spielstaende werden mit einer Meldung
-abgelehnt statt stillschweigend kaputtzugehen - beende einen
-laufenden Durchgang also, bevor du auf eine neue Version wechselst.
+A note on savegames: the save format was changed compared to the
+original. Old savegames are rejected with a message instead of
+breaking silently - so finish a running playthrough before you switch
+to a new version.
 
-Herkunft und Lizenz
--------------------
-Die Engine ist eine modifizierte Fassung von TOMB5, dem
-Dekompilationsprojekt zu PC Tomb Raider Chronicles von Troye
-(Trxyebeep) und Mitwirkenden:
+Origin and license
+------------------
+The engine is a modified version of TOMB5, the decompilation project
+for PC Tomb Raider Chronicles by Troye (Trxyebeep) and contributors:
 
     https://github.com/Trxyebeep/TOMB5
 
-TOMB5 steht unter der GNU GPL v3, und diese modifizierte Fassung
-ebenso. Deshalb liegt der vollstaendige Quelltext bei - du kannst die
-EXE selbst nachbauen und musst uns nicht glauben. Was wir geaendert
-haben und warum, steht in Source\TOMB5\MODIFICATIONS.md.
+TOMB5 is under the GNU GPL v3, and so is this modified version. That
+is why the complete source code is included - you can rebuild the EXE
+yourself and do not have to take our word for it. What we changed and
+why is in Source\TOMB5\MODIFICATIONS.md.
 
-Die Oberflaeche des Randomizers benutzt Dear ImGui von Omar Cornut
-(MIT-Lizenz). Fuer HQ-Musik und das Hintergrundbild stecken stb_vorbis
-und stb_image von Sean Barrett drin (Public Domain).
+The randomizer's interface uses Dear ImGui by Omar Cornut (MIT
+license). For HQ music and the background image, stb_vorbis and
+stb_image by Sean Barrett are inside (public domain).
 
-Ein besonderer Dank geht an trview (https://github.com/chreden/trview) -
-ohne dieses Werkzeug waere keine einzige Zonengrenze dieses Randomizers
-pruefbar gewesen.
+Special thanks go to trview (https://github.com/chreden/trview) -
+without this tool, not a single zone boundary of this randomizer
+could have been verified.
 '@
-[System.IO.File]::WriteAllText("$OutDir\LIESMICH.txt", $readme, (New-Object System.Text.UTF8Encoding($false)))
-Say "Anleitung     : LIESMICH.txt"
+[System.IO.File]::WriteAllText("$OutDir\README.txt", $readme, (New-Object System.Text.UTF8Encoding($false)))
+Say "Manual        : README.txt"
 
-# --- 7. Dieselben Daten in den Build-Ordner spiegeln -------------------------
-# Beim Entwickeln startet man die EXE aus build\, nicht aus dem Paket - und
-# dort fehlte data\, was zu einer korrekten, aber unnoetigen Fehlermeldung
-# fuehrte. Die paar Dateien doppelt vorzuhalten ist billiger, als sich das
-# jedes Mal zu merken.
+# --- 7. Mirror the same data into the build folder ---------------------------
+# During development you start the EXE from build\, not from the package -
+# and data\ was missing there, which led to a correct but unnecessary error
+# message. Keeping the few files twice is cheaper than remembering that
+# every time.
 if (Test-Path (Split-Path $RandoExe -Parent)) {
     Copy-Item $dataOut (Split-Path $RandoExe -Parent) -Recurse -Force
-    Say "Build-Ordner  : data\ gespiegelt, EXE laeuft auch von dort"
+    Say "Build folder  : data\ mirrored, the EXE also runs from there"
 }
 
 Say ""
-Say "Fertig: $OutDir"
+Say "Done: $OutDir"

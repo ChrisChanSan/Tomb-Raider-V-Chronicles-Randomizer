@@ -1,35 +1,35 @@
-﻿# Erzeugt ein Testlevel, in dem die WAND-PICKUPS eines Levels auf JEDER
-# gefundenen Wandkante liegen - zum Ansehen in trview (#61).
+# Generates a test level in which the WALL PICKUPS of a level lie on EVERY
+# found wall edge - for viewing in trview (#61).
 #
-# Warum: die vier OCB-Pickups (Brechstange OCB 2, Joby-Crow OCB 9) muessen an
-# einer Wand haengen und mit dem richtigen Winkel dazu. Ob unsere Wandsuche
-# taugt, entscheidet das Auge im Betrachter - so wie bei der Key-Item-Range.
-# Der Nutzer sucht nach Ausreissern: Items, die frei stehen, in der Wand
-# stecken oder falsch herum zeigen.
+# Why: the four OCB pickups (crowbar OCB 2, Joby crow OCB 9) must hang on a
+# wall and with the right angle toward it. Whether our wall search is any
+# good is decided by the eye in the viewer - just like with the key item
+# range. The user looks for outliers: items standing free, stuck in the
+# wall, or pointing the wrong way.
 #
-# GEMESSENE GRUNDLAGEN (Vanilla Andrea2/andy3, siehe Aufgabe #61):
-#   - Position: exakt Sektormitte, wie jedes andere Item auch
-#     (X/Z = Raumursprung + Sektorindex*1024 + 512).
-#   - Y      : Bodenhoehe des Sektors. OCB 2 und 9 bekommen KEINE
-#              Bodenkorrektur in InitialisePickup - der Wert gilt woertlich.
-#   - Winkel : ZEIGT AUF DIE WAND. Nachgemessen an Andrea2 Item 121:
-#              Wand bei -Z, Winkel -32768 (Blick -Z). Das Mesh der Modelle
-#              sitzt rund +450..500 in Modell-Z und landet damit auf der
-#              Wandflaeche; Lara rueckt auf +215 dazwischen.
-#   - Die Engine prueft die Wand NIE (PickUpCollision testet nur Laras Lage
-#     relativ zum Item) - die Wand ist Optik und Erreichbarkeit.
+# MEASURED FOUNDATIONS (vanilla Andrea2/andy3, see task #61):
+#   - Position: exactly sector center, like every other item
+#     (X/Z = room origin + sector index*1024 + 512).
+#   - Y      : floor height of the sector. OCB 2 and 9 get NO floor
+#              correction in InitialisePickup - the value applies literally.
+#   - Angle  : POINTS AT THE WALL. Measured at Andrea2 item 121: wall at
+#              -Z, angle -32768 (facing -Z). The models' mesh sits around
+#              +450..500 in model Z and thereby lands on the wall face;
+#              Lara moves in at +215 in between.
+#   - The engine NEVER checks the wall (PickUpCollision only tests Lara's
+#     position relative to the item) - the wall is looks and reachability.
 #
-# Ablauf:
-#   1. ZoneAnalyse.ps1 -ExportZonesJson liefert je Sektor wallAngles.
-#   2. Fuer jeden Sektor und JEDE seiner Wandkanten ein Item mit diesem Winkel.
-#      Eckensektoren bekommen dadurch mehrere Items uebereinander - gewollt,
-#      man sieht so jede moegliche Ausrichtung.
-#   3. Patch ueber BauWerk.exe (unser eigener Patcher, kennt angle und ocb -
-#      TombItemEdit2026 -patchlevel wird hier bewusst NICHT benutzt).
+# Flow:
+#   1. ZoneAnalyse.ps1 -ExportZonesJson delivers wallAngles per sector.
+#   2. For every sector and EVERY one of its wall edges, an item with that
+#      angle. Corner sectors thereby get several stacked items - intended,
+#      you see every possible orientation this way.
+#   3. Patch via BauWerk.exe (our own patcher, knows angle and ocb -
+#      TombItemEdit2026 -patchlevel is deliberately NOT used here).
 #
-# MAX_ITEMS (512) wird dabei ueberschritten. Das ist Absicht und in Ordnung:
-# das Testlevel wird NUR in trview angesehen, nie geladen. Nutzer dazu:
-# "Nein, ich teste es in TRview das ist egal."
+# MAX_ITEMS (512) gets exceeded in the process. That is intended and fine:
+# the test level is ONLY viewed in trview, never loaded. The user on it:
+# "No, I test it in TRview, that does not matter."
 param(
     [string[]]$Levels = @('Andrea2'),
     [string]$VanillaDir = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Steam Version\data\Vanilla",
@@ -40,19 +40,19 @@ param(
     [string]$Exe = "C:\Cloude AI\Alte sachen\Two gun test\Bittenichtbitdefender\BauWerk.exe"
 )
 
-# Welche Typen je Level an die Wand gehoeren, mit ihrer OCB. Die Values sind
-# gemessen (ItemPruef an den Vanilla-Dateien), nicht geraten.
-$WANDTYPEN = @{
+# Which types belong on the wall per level, with their OCB. The values are
+# measured (ItemPruef on the vanilla files), not guessed.
+$WALL_TYPES = @{
     'Andrea2' = @( @{ typeId = 174; ocb = 2 }, @{ typeId = 172; ocb = 2 } )
     'andy3'   = @( @{ typeId = 172; ocb = 2 }, @{ typeId = 174; ocb = 9 } )
-    # Ueber alle Vanilla-Level gemessen (ItemPruef, OCB 2 oder 9 auf einem
-    # Pickup-Typ) - diese beiden standen bis dahin auf keiner Liste:
-    # Andrea3 (220, Item 68) und joby3 (172, Item 41) haben zwar OCB 2/9,
-    # sind aber aus ANDEREN Gruenden festgenagelt, die die Wandarbeit nicht
-    # aufloest - der Nutzer hat beide schon frueher festgehalten:
-    #   Andrea3 68 klebt am LevelEnd-Trigger.
-    #   joby3 41 wird gleich im Startraum als Brechstange gebraucht; im Raum
-    #   gaebe es nur vier andere Plaetze, der Aufwand lohnt nicht.
+    # Measured over all vanilla levels (ItemPruef, OCB 2 or 9 on a pickup
+    # type) - these two stood on no list until then: Andrea3 (220, item 68)
+    # and joby3 (172, item 41) do have OCB 2/9 but are pinned for OTHER
+    # reasons the wall work does not resolve - the user recorded both
+    # earlier:
+    #   Andrea3 68 sticks to the LevelEnd trigger.
+    #   joby3 41 is needed right in the start room as the crowbar; the room
+    #   would offer only four other spots, not worth the effort.
 }
 
 New-Item -ItemType Directory -Force $OutDir | Out-Null
@@ -62,115 +62,115 @@ $results = @()
 foreach ($lvl in $Levels) {
     $infoJson = "$LevelInfoDir\level_$lvl.json"
     $srcTrc = "$VanillaDir\$lvl.trc"
-    if (-not (Test-Path $infoJson)) { "SKIP $lvl - kein Level-Info-JSON"; continue }
-    if (-not (Test-Path $srcTrc))   { "SKIP $lvl - keine Vanilla-.trc"; continue }
-    if (-not $WANDTYPEN.ContainsKey($lvl)) { "SKIP $lvl - keine Wandtypen hinterlegt"; continue }
+    if (-not (Test-Path $infoJson)) { "SKIP $lvl - no level info JSON"; continue }
+    if (-not (Test-Path $srcTrc))   { "SKIP $lvl - no vanilla .trc"; continue }
+    if (-not $WALL_TYPES.ContainsKey($lvl)) { "SKIP $lvl - no wall types on record"; continue }
 
     $d = Get-Content $infoJson -Raw | ConvertFrom-Json
     $rooms = @{}
     foreach ($r in $d.rooms) { $rooms[[int]$r.index] = $r }
 
-    # --- Sperren aus der Nutzerdurchsicht (2026-08-19) --------------------
+    # --- Bars from the user review (2026-08-19) ---------------------------
     #
-    # (a) WASSERRAEUME. PickUpCollision laeuft nur bei water_status
-    #     LW_ABOVE_WATER oder LW_WADE (game\pickup.cpp:766) - unter Wasser ist
-    #     der Griff unmoeglich, ein Wanditem dort waere unerreichbar.
-    $wasserRaum = @{}
-    foreach ($r in $d.rooms) { if ($r.waterRoom) { $wasserRaum[[int]$r.index] = $true } }
+    # (a) WATER ROOMS. PickUpCollision only runs at water_status
+    #     LW_ABOVE_WATER or LW_WADE (game\pickup.cpp:766) - under water the
+    #     grab is impossible, a wall item there would be unreachable.
+    $waterRoom = @{}
+    foreach ($r in $d.rooms) { if ($r.waterRoom) { $waterRoom[[int]$r.index] = $true } }
 
-    # (b) BELEGTE SEKTOREN. Steht dort schon etwas, das kein Pickup ist -
-    #     eine Aufnahme (Slot), ein Animating, ein Schalter, eine Stange -,
-    #     darf kein Wanditem daneben. Nutzer: "Animatings muessen auch noch
-    #     mit einbezogen werden und Slots die nicht zum Item gehoeren muessen
-    #     als Blocker gelten."
+    # (b) OCCUPIED SECTORS. If something already stands there that is no
+    #     pickup - a receptacle (slot), an animating, a switch, a pole -,
+    #     no wall item may go next to it. User: "Animatings must also be
+    #     included and slots that do not belong to the item must count as
+    #     blockers."
     #
-    #     Statt Slot- und Animating-Nummern zu raten (die TRCatalog-Liste
-    #     zaehlt anders als TR5) gilt die Umkehrung: Pickup-Bereiche sind
-    #     bekannt und belegt (172-241, 334-355) - alles andere ist Kulisse
-    #     oder Mechanik und blockt. Ausgenommen sind nur die unsichtbaren
-    #     Marker: KI-Objekte (378-383) und Kameraziele (409).
+    #     Instead of guessing slot and animating numbers (the TRCatalog
+    #     list counts differently than TR5), the inversion applies: pickup
+    #     ranges are known and set (172-241, 334-355) - everything else is
+    #     scenery or mechanics and blocks. Excepted are only the invisible
+    #     markers: AI objects (378-383) and camera targets (409).
     $blocker = New-Object System.Collections.Generic.HashSet[string]
     foreach ($it in $d.items) {
         $t = [int]$it.typeId
-        $istPickup = (($t -ge 172 -and $t -le 241) -or ($t -ge 334 -and $t -le 355))
-        $istMarker = (($t -ge 378 -and $t -le 383) -or $t -eq 409)
-        if ($istPickup -or $istMarker) { continue }
+        $isPickup = (($t -ge 172 -and $t -le 241) -or ($t -ge 334 -and $t -le 355))
+        $isMarker = (($t -ge 378 -and $t -le 383) -or $t -eq 409)
+        if ($isPickup -or $isMarker) { continue }
         [void]$blocker.Add("$([int]$it.room),$([int]$it.sectorX),$([int]$it.sectorZ)")
     }
 
     $zonesJson = "$ScratchDir\zones_$lvl.json"
     & $ZoneScript -LevelJson $infoJson -LevelName $lvl -ExportZonesJson $zonesJson 2>&1 | Out-Null
-    if (-not (Test-Path $zonesJson)) { "SKIP $lvl - Zonen-Export fehlgeschlagen"; continue }
+    if (-not (Test-Path $zonesJson)) { "SKIP $lvl - zone export failed"; continue }
     $z = Get-Content $zonesJson -Raw | ConvertFrom-Json
 
-    # Key-Item-Range je Typ (#61, Punkt 2 der Durchsicht). Ohne sie reichten
-    # die Wanditems im ersten Testlevel bis ans Levelende - der Filter war
-    # nicht kaputt, er war fuer diese Typen nur nie eingeschaltet, weil sie in
-    # VANILLA_TYPES standen. Jetzt leitet ZoneAnalyse fuer sie eine Grenze ab.
-    $grenze = @{}
+    # Key item range per type (#61, point 2 of the review). Without it the
+    # wall items in the first test level reached all the way to the level's
+    # end - the filter was not broken, it was simply never switched on for
+    # these types because they stood in VANILLA_TYPES. Now ZoneAnalyse
+    # derives a limit for them.
+    $limit = @{}
     foreach ($c in @($z.keyConstraints)) {
         if ($null -eq $c) { continue }
-        $grenze[[int]$c.typeId] = @{
+        $limit[[int]$c.typeId] = @{
             maxZone = [int]$c.maxZone
             ex = @( if ($null -ne $c.excludeRooms) { $c.excludeRooms | ForEach-Object { [int]$_ } } )
         }
     }
-    foreach ($t in $WANDTYPEN[$lvl]) {
-        if (-not $grenze.ContainsKey([int]$t.typeId)) {
-            "  Hinweis ${lvl}: Typ $($t.typeId) hat KEINE Zonengrenze - liegt ueberall"
+    foreach ($t in $WALL_TYPES[$lvl]) {
+        if (-not $limit.ContainsKey([int]$t.typeId)) {
+            "  note ${lvl}: type $($t.typeId) has NO zone limit - lies everywhere"
         } else {
-            "  ${lvl}: Typ $($t.typeId) bis Zone $($grenze[[int]$t.typeId].maxZone), $($grenze[[int]$t.typeId].ex.Count) Raeume ausgeschlossen"
+            "  ${lvl}: type $($t.typeId) up to zone $($limit[[int]$t.typeId].maxZone), $($limit[[int]$t.typeId].ex.Count) rooms excluded"
         }
     }
 
-    # Sektoren hinter einem Deadstop (NO_KEY_ISLAND, neu im Export als
-    # keyBarredSectors). Anders als die Zonengrenze braucht das keine
-    # Key-Constraint - deshalb wirkt es auch fuer Typen ohne Aufnahme wie
-    # andy3s Kreide und Zaun-Brechstange (#61).
-    $gesperrt = New-Object System.Collections.Generic.HashSet[string]
-    foreach ($k in @($z.keyBarredSectors)) { if ($null -ne $k) { [void]$gesperrt.Add([string]$k) } }
-    if ($gesperrt.Count -gt 0) { "  ${lvl}: $($gesperrt.Count) Sektoren hinter einem Deadstop gesperrt" }
+    # Sectors behind a deadstop (NO_KEY_ISLAND, new in the export as
+    # keyBarredSectors). Unlike the zone limit this needs no key constraint
+    # - so it also acts for types without a receptacle like andy3's chalk
+    # and fence crowbar (#61).
+    $barred = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($k in @($z.keyBarredSectors)) { if ($null -ne $k) { [void]$barred.Add([string]$k) } }
+    if ($barred.Count -gt 0) { "  ${lvl}: $($barred.Count) sectors barred behind a deadstop" }
 
     $itemAdds = @()
-    $mitWand = 0; $wegWasser = 0; $wegBelegt = 0; $wegZone = 0; $wegDeadstop = 0; $wegHoehe = 0
+    $withWall = 0; $outWater = 0; $outOccupied = 0; $outZone = 0; $outDeadstop = 0; $outHeight = 0
     foreach ($s in $z.sectors) {
         $wa = @( if ($null -ne $s.wallAngles) { $s.wallAngles } )
         if ($wa.Count -eq 0) { continue }
-        if ($wasserRaum.ContainsKey([int]$s.room)) { $wegWasser++; continue }
-        if ($blocker.Contains("$([int]$s.room),$([int]$s.sectorX),$([int]$s.sectorZ)")) { $wegBelegt++; continue }
-        if ($gesperrt.Contains("$([int]$s.room),$([int]$s.sectorX),$([int]$s.sectorZ)")) { $wegDeadstop++; continue }
-        # Stehhoehe. PickUpCollision verlangt bei OCB 2 ausdruecklich
-        # !lara.IsDucked (game\pickup.cpp:803) - im Kriechgang ist der Griff
-        # unmoeglich, das Item waere unerreichbar. Das ist eine harte
-        # Engine-Regel wie die Wassersperre, keine Optik.
+        if ($waterRoom.ContainsKey([int]$s.room)) { $outWater++; continue }
+        if ($blocker.Contains("$([int]$s.room),$([int]$s.sectorX),$([int]$s.sectorZ)")) { $outOccupied++; continue }
+        if ($barred.Contains("$([int]$s.room),$([int]$s.sectorX),$([int]$s.sectorZ)")) { $outDeadstop++; continue }
+        # Standing height. PickUpCollision expressly demands !lara.IsDucked
+        # at OCB 2 (game\pickup.cpp:803) - in the crawl the grab is
+        # impossible, the item would be unreachable. That is a hard engine
+        # rule like the water bar, not looks.
         #
-        # Schwelle 768: Laras Stehhoehe ist 762 Units, bei clearance 768 passt
-        # sie also stehend hinein - erst darunter zwingt die Decke sie in den
-        # Duck-Zustand. 512 ist der Kriechraum.
+        # Threshold 768: Lara's standing height is 762 units, so at
+        # clearance 768 she fits in standing - only below that does the
+        # ceiling force her into the duck state. 512 is the crawl space.
         #
-        # Zuerst stand hier 1024, abgeleitet aus den vier Vanilla-Wanditems
-        # (die sitzen auf 1024..2048). Das war Korrelation, nicht die Regel:
-        # der Nutzer vermisste daraufhin die guten Plaetze in andy3 Raum 64,
-        # der fast nur aus 768er-Sektoren besteht.
-        if ([int]$s.clearance -lt 768) { $wegHoehe++; continue }
-        $mitWand++
+        # 1024 stood here first, derived from the four vanilla wall items
+        # (they sit on 1024..2048). That was correlation, not the rule: the
+        # user thereupon missed the good spots in andy3 room 64, which
+        # consists almost entirely of 768 sectors.
+        if ([int]$s.clearance -lt 768) { $outHeight++; continue }
+        $withWall++
         $rm = $rooms[[int]$s.room]
         if (-not $rm) { continue }
         $wx = [int]$rm.originX + [int]$s.sectorX * 1024 + 512
         $wz = [int]$rm.originZ + [int]$s.sectorZ * 1024 + 512
-        # Je Wandkante ein Item, die hinterlegten Typen reihum - so liegen in
-        # einer Ecke zwei verschiedene Modelle nebeneinander und man sieht
-        # sofort, ob beide gleich stehen.
-        # Je Wandkante JEDEN Typ setzen, der dort volumes seiner Zonengrenze
-        # liegen darf. So sieht man in trview typweise, wie weit die Reichweite
-        # jeweils traegt - liegen an einer Kante beide, ist der Platz fuer
-        # beide erlaubt.
+        # One item per wall edge, the recorded types in rotation - that way
+        # two different models lie side by side in a corner and you see
+        # immediately whether both stand the same.
+        # Set EVERY type per wall edge that may lie there per its zone
+        # limit. In trview you then see per type how far each range carries
+        # - if both lie at one edge, the spot is allowed for both.
         foreach ($w in $wa) {
-            foreach ($t in $WANDTYPEN[$lvl]) {
+            foreach ($t in $WALL_TYPES[$lvl]) {
                 $tid = [int]$t.typeId
-                if ($grenze.ContainsKey($tid)) {
-                    if ([int]$s.zone -gt $grenze[$tid].maxZone) { $wegZone++; continue }
-                    if ($grenze[$tid].ex -contains [int]$s.room) { $wegZone++; continue }
+                if ($limit.ContainsKey($tid)) {
+                    if ([int]$s.zone -gt $limit[$tid].maxZone) { $outZone++; continue }
+                    if ($limit[$tid].ex -contains [int]$s.room) { $outZone++; continue }
                 }
                 $itemAdds += [PSCustomObject]@{ typeId = $tid; room = [int]$s.room;
                                                 x = $wx; y = [int]$s.floorY; z = $wz;
@@ -179,8 +179,8 @@ foreach ($lvl in $Levels) {
         }
     }
 
-    # UTF-8 ohne BOM - der handgeschriebene JSON-Leser stolpert sonst ueber
-    # den Vorspann (bekannter Fall aus dem Projekt).
+    # UTF-8 without BOM - the hand-written JSON reader otherwise stumbles
+    # over the preamble (known case from the project).
     $patch = [PSCustomObject]@{ itemAdds = $itemAdds } | ConvertTo-Json -Depth 4 -Compress
     $patchPath = "$ScratchDir\patch_wand_$lvl.json"
     [System.IO.File]::WriteAllText($patchPath, $patch, (New-Object System.Text.UTF8Encoding($false)))
@@ -190,12 +190,12 @@ foreach ($lvl in $Levels) {
     $argList = @("`"$srcTrc`"", "`"$patchPath`"", "`"$dstTrc`"", '-mehritems')
     $p = Start-Process -FilePath $Exe -ArgumentList $argList -Wait -PassThru -NoNewWindow
     $ok = (Test-Path $dstTrc) -and $p.ExitCode -eq 0
-    $results += [PSCustomObject]@{ Level = $lvl; Wandsektoren = $mitWand; Wasser = $wegWasser; Belegt = $wegBelegt; Items = $itemAdds.Count; OK = $ok }
-    "{0,-10} Wandsektoren={1,4}  (-{2} Wasser, -{3} belegt, -{4} Deadstop, -{5} Hoehe, -{6} Zone)  Items={7,4}  {8}" -f $lvl, $mitWand, $wegWasser, $wegBelegt, $wegDeadstop, $wegHoehe, $wegZone, $itemAdds.Count, ($(if ($ok) { 'OK' } else { 'FEHLER' }))
+    $results += [PSCustomObject]@{ Level = $lvl; WallSectors = $withWall; Water = $outWater; Occupied = $outOccupied; Items = $itemAdds.Count; OK = $ok }
+    "{0,-10} wallSectors={1,4}  (-{2} water, -{3} occupied, -{4} deadstop, -{5} height, -{6} zone)  items={7,4}  {8}" -f $lvl, $withWall, $outWater, $outOccupied, $outDeadstop, $outHeight, $outZone, $itemAdds.Count, ($(if ($ok) { 'OK' } else { 'ERROR' }))
 }
 
 Write-Output ""
-Write-Output "=== Zusammenfassung ==="
+Write-Output "=== Summary ==="
 $results | Format-Table -AutoSize
-Write-Output "Ausgabe: $OutDir"
+Write-Output "output: $OutDir"
 

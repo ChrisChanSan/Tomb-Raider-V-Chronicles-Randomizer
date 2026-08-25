@@ -521,6 +521,21 @@ long S_CallInventory2()
 	if (input & IN_SELECT)
 		friggrimmer = 1;
 
+	// The same swallow for deselect, and it is needed now: Escape carries
+	// IN_DESELECT and IN_OPTION together (specific/input.cpp). IN_OPTION opens
+	// the ring, and since the ring learned to close on a left-over deselect,
+	// the RELEASE of that very press shut it again in the same breath - one
+	// press, two consumers, the third time today.
+	//
+	// friggrimmer2 makes the ring ignore the deselect belonging to the press
+	// that opened it. The flag clears itself on the first frame the button is
+	// up, so opening with the pad's inventory button is unaffected, and the
+	// next press - Escape or Circle - closes normally.
+	//
+	// P for pause never had this: it carries IN_PAUSE alone.
+	if (input & IN_DESELECT)
+		friggrimmer2 = 1;
+
 	rings[RING_INVENTORY] = &pcring1;
 	rings[RING_AMMO] = &pcring2;
 	CreateMonoScreen();

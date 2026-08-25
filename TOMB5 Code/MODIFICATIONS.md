@@ -261,8 +261,11 @@ Also in this group:
   freezes it as `ITEM_INVISIBLE`). With the randomizer placing 10–20 extra
   enemies per level, frozen bystanders were routine. The slot pool is fully
   parametric (`lot.cpp` allocates per slot `CREATURE_INFO` plus
-  `num_boxes × BOX_NODE` from the 15 MB `game_malloc` pool — roughly 25 KB per
-  slot in the largest level), savegames store creature state per item and
+  `num_boxes × BOX_NODE` from the `game_malloc` pool — roughly 25 KB per
+  slot in the largest level; the pool itself is raised from 15 to 20 MB,
+  not for the slots but because a randomized level carries the imported
+  enemies' meshes, animations and frames and so runs several times the size
+  of a vanilla one), savegames store creature state per item and
   re-acquire slots on load, so no compatibility impact. One genuine hidden
   assumption surfaced in the audit and is fixed alongside: Lara's target
   acquisition (`larafire.cpp`) collected up to `MAX_LOT` targets plus a
@@ -440,6 +443,31 @@ Also in this group:
   They are throttled per item and per 30 frames, and the ones that have to
   compute something before they can log test the switch at the call site,
   not just inside `Log()`.
+
+- `specific/file.cpp`, `game/door.cpp` — **a door wrote through the previous
+  level's AI slots.** `FreeLevel` sets the `game_malloc` pool back to its
+  start, which is the moment every global pointer into it goes stale: the
+  address from the level before now points into the middle of the level
+  about to be loaded. `baddie_slots` is read again before it is
+  reallocated, because `InitialiseLOTarray` runs *after* `S_LoadLevelFile`
+  while `ShutThatDoor` — called by `InitialiseDoor`, i.e. during loading —
+  walks all `MAX_LOT` slots and writes to each. `FreeLevel` now clears the
+  pointer where it dies, and `ShutThatDoor` only runs that loop while the
+  array belongs to the current level; skipping it during loading loses
+  nothing, since it drops the path target of creatures that are already
+  thinking and at load time none are. Upstream bug, not one of ours, but it
+  only became fatal with levels dense enough for the stray writes to hit
+  live data.
+
+- `specific/file.cpp` — `LoadItems` validates the slot and room number of
+  every item as it reads them and stops with a message box instead of a
+  wild access, in the same manner as the existing `MAX_ITEMS` check. Behind
+  `-log` it also writes `ITEMLOG`, one line per item before its
+  `initialise`, so a crash during loading names the item, and `ITEMWATCH`,
+  a scan after each `initialise` that reports both an item whose room
+  number became impossible and the item being initialised when it happened.
+  The scan is quadratic and therefore gated at the call site, and it
+  switches itself off after the first find.
 
 ### 3. Code taken from tomb3 (four Tomb Raider III enemies)
 

@@ -226,6 +226,46 @@ long joystick_read_fire;
 long joystick_is_xinput;	// 1 = XInput is delivering (Xbox pad, or DS4Windows/Steam), 0 = DirectInput fallback; set anew on every poll (dxshell.cpp)
 
 static long joy_fire;
+static long joy_x, joy_y;
+
+// The pad's stick/d-pad as a single menu step, edge triggered: -1 left,
+// +1 right, 0 nothing. Deliberately UNGATED by ControlMethod.
+//
+// The controls screen needs it. ControlMethod carries two meanings at once -
+// which binding page is shown, and whether the pad is read at all - and on
+// the keyboard page the second one leaves the controller completely dead. A
+// player who paged there with the pad could not page back with it; only the
+// arrow keys came back (reported in game, #115). Since that page is where
+// the setting itself lives, it is a trap: the pad cannot undo what the pad
+// just did.
+//
+// Only the CONTROLS SCREEN uses this. Everywhere else ControlMethod keeps its
+// meaning - somebody who chose keyboard does not want a resting stick moving
+// Lara.
+long JoyMenuStep()
+{
+	static char held = 0;
+	long dir;
+
+	dir = 0;
+
+	if (joy_x < -8)
+		dir = -1;
+	else if (joy_x > 8)
+		dir = 1;
+
+	if (!dir)
+	{
+		held = 0;
+		return 0;
+	}
+
+	if (held)
+		return 0;
+
+	held = 1;
+	return dir;
+}
 
 short ammo_change_timer = 0;
 char ammo_change_buf[12];
@@ -447,7 +487,6 @@ long S_UpdateInput()
 	static long med_hotkey_timer;
 	static long cheat_code;
 	static long weird = 0;
-	static long joy_x, joy_y;
 	long flag;
 	short state;
 	static bool flare_no_db = 0;
@@ -459,8 +498,11 @@ long S_UpdateInput()
 	DXUpdateJoystick();
 	DXReadKeyboard(keymap);
 
-	if (ControlMethod == 1)
-		joy_fire = ReadJoystick(joy_x, joy_y);
+	// Read unconditionally. Reading has no effect of its own - every use of
+	// joy_x/joy_y/joy_fire below is still behind ControlMethod - but it keeps
+	// the values current for JoyMenuStep, which the controls screen needs
+	// precisely when ControlMethod says keyboard.
+	joy_fire = ReadJoystick(joy_x, joy_y);
 
 	linput = 0;
 

@@ -23,6 +23,7 @@ long Key(long number);
 long S_UpdateInput();
 long ReadJoystick(long& x, long& y);
 long ActiveJoyStyle();
+long JoyMenuStep();
 const char* JoyButtonName(long idx);
 void ApplyJoyDefaults();
 long JoyBitConfirm();

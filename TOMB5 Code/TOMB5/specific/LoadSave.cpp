@@ -597,7 +597,7 @@ void DoOptions()
 			// running unchanged. The reset position is only the local
 			// reset_row flag (see above) and leaves the method - and with
 			// it the pad - alone.
-			long pos;
+			long pos, padStep;
 
 			if (reset_row)
 				pos = 4;
@@ -606,13 +606,25 @@ void DoOptions()
 			else
 				pos = 1 + ActiveJoyStyle();
 
-			if (dbinput & IN_LEFT)
+			// On the keyboard page the pad delivers no direction bits at all -
+			// every use of the stick in input.cpp hangs on ControlMethod - so
+			// whoever paged over here with the controller could not page back
+			// with it, and only the arrow keys still worked. This row IS the
+			// setting, which makes it a trap: the pad cannot undo what the pad
+			// just did.
+			//
+			// Read the stick directly then, and ONLY then - with ControlMethod
+			// on the pad, dbinput already carries the step and counting it
+			// twice would skip a page.
+			padStep = ControlMethod ? 0 : JoyMenuStep();
+
+			if (dbinput & IN_LEFT || padStep < 0)
 			{
 				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 				pos--;
 			}
 
-			if (dbinput & IN_RIGHT)
+			if (dbinput & IN_RIGHT || padStep > 0)
 			{
 				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 				pos++;

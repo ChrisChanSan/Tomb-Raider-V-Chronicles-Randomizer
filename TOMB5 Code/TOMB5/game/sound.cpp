@@ -140,7 +140,7 @@ void GetPanVolume(SoundSlot* slot)
 				// Dasselbe fuer laufende Klaenge (#126) - siehe SoundEffect:
 				// aus naechster Naehe gibt es keine Richtung, sonst kippt
 				// ein Dauerton bei jeder Drehung von links nach rechts.
-				nPan = (EgoKopfWeg() && !distance) ? 0 : ((CamRot.y << 4) + phd_atan(dz, dx));
+				nPan = (FirstPersonActive() && !distance) ? 0 : ((CamRot.y << 4) + phd_atan(dz, dx));
 				nVolume = slot->OrigVolume;
 
 				if (distance)
@@ -280,7 +280,7 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 		// als ein Sektor steht - genau der Fall, den wir mittig legen.
 		// Nur in Ego-Sicht: die normale Kamera steht 1536 hinter Lara, dort
 		// bleibt alles wie bei Core.
-		if (!(info->flags & 0x1000) && !(EgoKopfWeg() && !distance))
+		if (!(info->flags & 0x1000) && !(FirstPersonActive() && !distance))
 			pan = (CamRot.y << 4) + phd_atan(dz, dx);
 	}
 	else

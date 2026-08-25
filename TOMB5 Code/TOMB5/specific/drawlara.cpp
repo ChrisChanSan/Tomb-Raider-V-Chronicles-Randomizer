@@ -164,7 +164,7 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 			// "dritter Arm" fotografiert. Nach dem Zielfernrohr blieb es
 			// sogar dauerhaft stehen, weil dann auch noch die
 			// mesh_bits-Rueckgabe des Fernglases dagegenhielt.
-			if (!(EgoKopfWeg() && lara_mesh_sweetness_table[i] == LM_HEAD))
+			if (!(FirstPersonActive() && lara_mesh_sweetness_table[i] == LM_HEAD))
 				phd_PutPolygons(lara.mesh_ptrs[lara_mesh_sweetness_table[i]], -1);
 
 			for (int j = 0; j < 4; j++)
@@ -186,7 +186,7 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 	// Kopfgelenk - also genau dort, wo die Kamera sitzt - und wehte dem
 	// Spieler durchs Bild. Die Meshbits des Koerpers erwischen ihn nicht,
 	// er wird getrennt gezeichnet.
-	if (!EgoKopfWeg())
+	if (!FirstPersonActive())
 		DrawHair();
 	phd_PushMatrix();
 	obj = &objects[LARA_SKIN_JOINTS];
@@ -374,7 +374,7 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 		// Ego-Sicht (#126): Kopf nicht zeichnen, Vertices trotzdem stashen -
 		// Begruendung wie in DrawLara__1. Diese Fassung prueft mesh_bits gar
 		// nicht erst, sie haette den Kopf sonst weiter gezeichnet.
-		if (!(EgoKopfWeg() && lara_mesh_sweetness_table[i] == LM_HEAD))
+		if (!(FirstPersonActive() && lara_mesh_sweetness_table[i] == LM_HEAD))
 			phd_PutPolygonsSpcEnvmap(lara.mesh_ptrs[lara_mesh_sweetness_table[i]], -1);
 
 		for (int j = 0; j < 4; j++)
@@ -396,7 +396,7 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 	// Kopfgelenk - also genau dort, wo die Kamera sitzt - und wehte dem
 	// Spieler durchs Bild. Die Meshbits des Koerpers erwischen ihn nicht,
 	// er wird getrennt gezeichnet.
-	if (!EgoKopfWeg())
+	if (!FirstPersonActive())
 		DrawHair();
 	phd_PushMatrix();
 	obj = &objects[LARA_SKIN_JOINTS];

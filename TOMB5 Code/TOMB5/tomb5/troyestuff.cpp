@@ -33,7 +33,7 @@ static long TroyePage = 0;
 // Setzt die Startseite und liefert die passende Startauswahl (bei den
 // reinen Anzeigeseiten die Umschaltzeile), damit der Aufrufer sie
 // direkt in sein sel uebernehmen kann.
-ulong TroyeMenuSeite(long seite)
+ulong TroyeMenuPage(long seite)
 {
 	long num;
 

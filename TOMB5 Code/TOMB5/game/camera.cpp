@@ -59,7 +59,7 @@ char SniperCamActive = 0;
 // CalculateCamera es braucht - die Kamera selbst wohnt weiter unten neben
 // ihrer Vorlage BinocularCamera.
 static long egoKopfWeg = 0;
-static bool EgoSichtAn();
+static bool FirstPersonEnabled();
 
 // Wie weit das Auge vor dem Kopfmittelpunkt sitzt, und wieviel Luft davor
 // frei sein muss, damit die nahe Ebene des Zeichners (20, siehe InitWindow)
@@ -128,7 +128,7 @@ void CalculateCamera()
 	SniperCamActive = 0;
 
 	// Ego-Sicht (#126): Merker JEDES BILD zuruecksetzen. Er wird nur wieder
-	// gesetzt, wenn EgoKamera unten wirklich laeuft - sonst stuende Lara in
+	// gesetzt, wenn FirstPersonCamera unten wirklich laeuft - sonst stuende Lara in
 	// jeder festen Kamera und jeder Cutscene kopflos da. CalculateCamera
 	// laeuft vor dem Zeichnen, das Bild sieht immer den Stand dieses
 	// Durchlaufs.
@@ -303,8 +303,8 @@ void CalculateCamera()
 
 		if (camera.type != CHASE_CAMERA && camera.flags != 3)
 			FixedCamera();      // Regie des Levels - die bleibt auch in Ego-Sicht
-		else if (EgoSichtAn())
-			EgoKamera(item);
+		else if (FirstPersonEnabled())
+			FirstPersonCamera(item);
 		else
 			ChaseCamera(item);
 	}
@@ -333,8 +333,8 @@ void CalculateCamera()
 
 		camera.fixed_camera = 0;
 
-		if (EgoSichtAn())
-			EgoKamera(item);
+		if (FirstPersonEnabled())
+			FirstPersonCamera(item);
 		else if (camera.type == LOOK_CAMERA)
 			LookCamera(item);
 		else
@@ -1200,7 +1200,7 @@ void MoveCamera(GAME_VECTOR* ideal, long speed)
  * Kamera (sie sitzt in Laras Kopf, der steckt ohnehin nie in der Wand) und
  * keine Glaettung - sie ist an den Kopf genagelt, so war es gedacht.
  */
-bool EgoKopfWeg()
+bool FirstPersonActive()
 {
 	// Flybys ZEIGEN Lara - dort muss ihr Kopf da sein.
 	//
@@ -1218,7 +1218,7 @@ bool EgoKopfWeg()
 	return egoKopfWeg != 0;
 }
 
-static bool EgoSichtAn()
+static bool FirstPersonEnabled()
 {
 	if (!tomb5.ego_kamera)
 		return false;
@@ -1243,7 +1243,7 @@ static bool EgoSichtAn()
 	return true;
 }
 
-void EgoKamera(ITEM_INFO* item)
+void FirstPersonCamera(ITEM_INFO* item)
 {
 	PHD_VECTOR kopf;
 	GAME_VECTOR auge, ziel;

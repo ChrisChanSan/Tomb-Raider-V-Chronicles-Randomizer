@@ -390,7 +390,7 @@ void DoOptions()
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Look), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Roll), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Inventory), 0);
-			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, (char*)EigenText("Pause"), 0);
+			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, (char*)CustomText("Pause"), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Save), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Load), 0);
 			PrintString(phd_centerx >> 2, y++ * font_height, sel & (1 << i++) ? 1 : 2, SCRIPT_TEXT(TXT_Small_Medipack), 0);
@@ -660,7 +660,7 @@ void DoOptions()
 		PrintString(phd_centerx, f + 5 * font_height, SpecialFeaturesPage[0] ? (sel & 1 ? 1 : 2) : 3, SCRIPT_TEXT(TXT_Storyboards_Part_1), FF_CENTER);
 		PrintString(phd_centerx, f + 6 * font_height, SpecialFeaturesPage[1] ? (sel & 2 ? 1 : 2) : 3, SCRIPT_TEXT(TXT_Next_Generation_Concept), FF_CENTER);
 		PrintString(phd_centerx, f + 7 * font_height, SpecialFeaturesPage[2] ? (sel & 4 ? 1 : 2) : 3, SCRIPT_TEXT(TXT_Storyboards_Part_2), FF_CENTER);
-		PrintString(phd_centerx, f + 8 * font_height, SpecialFeaturesPage[3] ? (sel & 8 ? 1 : 2) : 3, (char*)EigenText("Gallery"), FF_CENTER);
+		PrintString(phd_centerx, f + 8 * font_height, SpecialFeaturesPage[3] ? (sel & 8 ? 1 : 2) : 3, (char*)CustomText("Gallery"), FF_CENTER);
 
 		if (NumSpecialFeatures)
 		{
@@ -747,8 +747,8 @@ void DoOptions()
 		// Sprachwahl: schaltet live auf eine andere der Sprachdateien um, die
 		// neben der EXE liegen (gameflow.cpp). "Language" hat keine String-ID
 		// im Sprach-Wad, darum als Literal - wie "tomb5 options" darunter.
-		PrintString(phd_centerx >> 2, f + 7 * font_height, sel & 0x20 ? 1 : 2, (char*)EigenText("Language"), 0);
-		PrintString(phd_centerx + (phd_centerx >> 2), f + 7 * font_height, sel & 0x20 ? 1 : 6, (char*)SprachAnzeige(Gameflow->Language), 0);
+		PrintString(phd_centerx >> 2, f + 7 * font_height, sel & 0x20 ? 1 : 2, (char*)CustomText("Language"), 0);
+		PrintString(phd_centerx + (phd_centerx >> 2), f + 7 * font_height, sel & 0x20 ? 1 : 6, (char*)LanguageName(Gameflow->Language), 0);
 
 		SFMask = 0x40;
 
@@ -762,13 +762,13 @@ void DoOptions()
 
 		if (SFMask)
 		{
-			PrintString(phd_centerx, (font_height >> 1) + f + 9 * font_height, sel & 0x80 ? 1 : 2, (char*)EigenText("tomb5 options"), FF_CENTER);
-			PrintString(phd_centerx, (font_height >> 1) + f + 10 * font_height, sel & 0x100 ? 1 : 2, (char*)EigenText("Credits"), FF_CENTER);
+			PrintString(phd_centerx, (font_height >> 1) + f + 9 * font_height, sel & 0x80 ? 1 : 2, (char*)CustomText("tomb5 options"), FF_CENTER);
+			PrintString(phd_centerx, (font_height >> 1) + f + 10 * font_height, sel & 0x100 ? 1 : 2, (char*)CustomText("Credits"), FF_CENTER);
 		}
 		else
 		{
-			PrintString(phd_centerx, (font_height >> 1) + f + 8 * font_height, sel & 0x40 ? 1 : 2, (char*)EigenText("tomb5 options"), FF_CENTER);
-			PrintString(phd_centerx, (font_height >> 1) + f + 9 * font_height, sel & 0x80 ? 1 : 2, (char*)EigenText("Credits"), FF_CENTER);
+			PrintString(phd_centerx, (font_height >> 1) + f + 8 * font_height, sel & 0x40 ? 1 : 2, (char*)CustomText("tomb5 options"), FF_CENTER);
+			PrintString(phd_centerx, (font_height >> 1) + f + 9 * font_height, sel & 0x80 ? 1 : 2, (char*)CustomText("Credits"), FF_CENTER);
 		}
 
 		if (dbinput & IN_FORWARD)
@@ -796,7 +796,7 @@ void DoOptions()
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			last_sel = sel;
 			sel = 1;
-			TroyeMenuSeite(0);	// gewohnter Einstieg auf Seite 1
+			TroyeMenuPage(0);	// gewohnter Einstieg auf Seite 1
 			menu = 200;
 		}
 
@@ -810,7 +810,7 @@ void DoOptions()
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			last_sel = sel;
-			sel = TroyeMenuSeite(2);
+			sel = TroyeMenuPage(2);
 			menu = 200;
 		}
 
@@ -930,10 +930,10 @@ void DoOptions()
 			if (richtung)
 			{
 				// Naechste VORHANDENE Sprachdatei in Blickrichtung - fehlende
-				// werden uebersprungen (WechsleSprache scheitert dann leise).
+				// werden uebersprungen (SwitchLanguage scheitert dann leise).
 				for (long n = Gameflow->Language + richtung; n >= 0 && n < gfLanguageCount; n += richtung)
 				{
-					if (WechsleSprache(n))
+					if (SwitchLanguage(n))
 					{
 						SprachWahl = n;	// ab jetzt explizite Wahl, Registry "Language"
 						SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);

@@ -612,7 +612,7 @@ long TitleOptions()
 		// SCRIPT.DAT/ENGLISH.DAT string wad), so it's printed as a plain literal
 		// instead of going through SCRIPT_TEXT() - PrintString already accepts raw
 		// C strings directly elsewhere (e.g. the "\x18"/"\x1a" arrow glyphs below).
-		PrintString(phd_centerx, phd_winymax - 2 * font_height, (selection & 8) ? 1 : 2, (char*)EigenText("Level Select"), FF_CENTER);
+		PrintString(phd_centerx, phd_winymax - 2 * font_height, (selection & 8) ? 1 : 2, (char*)CustomText("Level Select"), FF_CENTER);
 		PrintString(phd_centerx, phd_winymax - 1 * font_height, (selection & 16) ? 1 : 2, SCRIPT_TEXT(TXT_Exit), FF_CENTER);
 		font_height = default_font_height;
 
@@ -1115,7 +1115,7 @@ static char* SprachDateiName(long idx)
 }
 
 // Anzeigename fuers Optionsmenue - nur Zeichen, die die Spielschrift kann.
-const char* SprachAnzeige(long idx)
+const char* LanguageName(long idx)
 {
 	static const char* namen[8] = { "English", "Francais", "Deutsch", "Italiano", "Espanol", "English US", "Japanese", "Nederlands" };
 	const char* datei = SprachDateiName(idx);
@@ -1140,7 +1140,7 @@ const char* SprachAnzeige(long idx)
 // die ITALIAN.DAT der Steam-Fassung ist nur eine Englisch-Kopie - wer sie
 // noch hat, sieht fuenf italienische Zeilen im englischen Menue; mit einer
 // echten Uebersetzung (der Nutzer hat eine) passt alles zusammen.
-const char* EigenText(const char* engl)
+const char* CustomText(const char* engl)
 {
 	static const char* tabelle[][5] =
 	{	// Englisch          Franzoesisch       Deutsch           Italienisch           Spanisch
@@ -1243,7 +1243,7 @@ static void SprachPufferAufbereiten(char* d)
 	}
 }
 
-long WechsleSprache(long idx)
+long SwitchLanguage(long idx)
 {
 	STRINGHEADER sh;
 	char* d;

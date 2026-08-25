@@ -1664,6 +1664,6 @@ long S_LoadLevelFile(long num)
 		for (int i = 0; i < 200 && !S_DrawLoadBar(); ++i)
 			Sleep(1);
 
-	Log("S_LoadLevelFile: Balken abgeschlossen");
+	Log("S_LoadLevelFile: load bar finished");
 	return 1;
 }

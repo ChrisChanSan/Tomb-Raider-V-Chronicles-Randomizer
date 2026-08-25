@@ -978,7 +978,7 @@ void DoLevel(uchar Name, uchar Audio)
 	nframes = 2;
 	framecount = 0;
 	gfStatus = ControlPhase(2, 0);
-	Log("DoLevel: erste Logikphase fertig");
+	Log("DoLevel: first logic phase done");
 	dbinput = 0;
 	JustLoaded = 0;
 

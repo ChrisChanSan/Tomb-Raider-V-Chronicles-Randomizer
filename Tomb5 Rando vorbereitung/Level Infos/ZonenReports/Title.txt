@@ -1,55 +1,57 @@
-﻿==============================================================
- Progressions-Zonen: Title
+﻿deco doors: 2 doors no trigger brings to 11111 - they do not bar
+  items: 5, 6
 ==============================================================
-Laras Start: Raum 113, Sektor (3,2) -> Zone 0
+ Progression zones: Title
+==============================================================
+Lara's start: room 113, sector (3,2) -> zone 0
 
---- Zonenuebergaenge (Blocker) ---
+--- Zone transitions (blockers) ---
 
---- Sektoren pro Zone ---
-Zone 0:    21 Sektoren in   4 Raeumen
-Nie erreicht: 9292 begehbare Sektoren
+--- Sectors per zone ---
+zone 0:    21 sectors in   4 rooms
+never reached: 9292 walkable sectors
 
---- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+--- Key/puzzle items: allowed placement range ---
 
---- Warum kam der Flood nicht weiter? ---
-Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
-nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
+--- Why did the flood not get further? ---
+No closed door at the edge - the flood stops at the geometry,
+not at a blocker (jump/climb/teleport/water not modeled).
 
---- Groesste unerreichte Gebiete ---
-Gebiet mit  6060 Sektoren in  49 Raeumen
-   Raeume: 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79
-           ... und 29 weitere
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 157x1
-Gebiet mit  1774 Sektoren in  15 Raeumen
-   Raeume: 16, 29, 34, 35, 36, 37, 38, 39, 43, 44, 45, 47, 48, 49, 54
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 290x1, 292x1, 286x1
-Gebiet mit   694 Sektoren in  15 Raeumen
-   Raeume: 0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
-   Enthaelt 2 Objekte, davon KEINES bespielbar - nur Animatings.
-   => vermutlich reine Kamerafahrt-Geometrie, keine echte Luecke.
-Gebiet mit   407 Sektoren in   6 Raeumen
-   Raeume: 40, 41, 42, 50, 51, 57
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 286x1
+--- Largest unreached areas ---
+area with  6060 sectors in  49 rooms
+   rooms: 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79
+           ... and 29 more
+   No portal connects this area with the reached part.
+   So the access is a jump, a climbing spot, monkeyswing, a dive,
+   a teleporter or a cutscene - please clarify in game or trview.
+   playable objects inside: 157x1
+area with  1774 sectors in  15 rooms
+   rooms: 16, 29, 34, 35, 36, 37, 38, 39, 43, 44, 45, 47, 48, 49, 54
+   No portal connects this area with the reached part.
+   So the access is a jump, a climbing spot, monkeyswing, a dive,
+   a teleporter or a cutscene - please clarify in game or trview.
+   playable objects inside: 290x1, 292x1, 286x1
+area with   694 sectors in  15 rooms
+   rooms: 0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+   Contains 2 objects, NONE of them playable - only animatings.
+   => presumably pure camera-flyby geometry, no real gap.
+area with   407 sectors in   6 rooms
+   rooms: 40, 41, 42, 50, 51, 57
+   No portal connects this area with the reached part.
+   So the access is a jump, a climbing spot, monkeyswing, a dive,
+   a teleporter or a cutscene - please clarify in game or trview.
+   playable objects inside: 286x1
 
---- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
-Keine hinterlegt.
+--- Equipment gates (manual, not derivable from level data) ---
+None on record.
 
---- Selbsttest: Level durchspielbar? ---
-Cutscene 28 in Raum   14 Sektor (1,3) -> NICHT ERREICHBAR
-Cutscene 28 in Raum   14 Sektor (1,4) -> NICHT ERREICHBAR
-Cutscene 28 in Raum   14 Sektor (1,5) -> NICHT ERREICHBAR
-Cutscene 30 in Raum   32 Sektor (4,1) -> NICHT ERREICHBAR
-Cutscene 30 in Raum   32 Sektor (5,1) -> NICHT ERREICHBAR
-Cutscene 29 in Raum   42 Sektor (1,1) -> NICHT ERREICHBAR
-Cutscene 29 in Raum   42 Sektor (1,2) -> NICHT ERREICHBAR
-Cutscene 31 in Raum  106 Sektor (1,1) -> NICHT ERREICHBAR
-Cutscene 31 in Raum  107 Sektor (5,1) -> NICHT ERREICHBAR
+--- Self-test: level completable? ---
+Cutscene 28 in room   14 sector (1,3) -> NOT REACHABLE
+Cutscene 28 in room   14 sector (1,4) -> NOT REACHABLE
+Cutscene 28 in room   14 sector (1,5) -> NOT REACHABLE
+Cutscene 30 in room   32 sector (4,1) -> NOT REACHABLE
+Cutscene 30 in room   32 sector (5,1) -> NOT REACHABLE
+Cutscene 29 in room   42 sector (1,1) -> NOT REACHABLE
+Cutscene 29 in room   42 sector (1,2) -> NOT REACHABLE
+Cutscene 31 in room  106 sector (1,1) -> NOT REACHABLE
+Cutscene 31 in room  107 sector (5,1) -> NOT REACHABLE

@@ -2595,7 +2595,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
             std::string jerr;
             if (!Json::parseFile(PathUtil::join(app.payloadDir(), file), z, jerr)) continue;
 
-            const std::string stamp = z["kurationStand"].asString();
+            const std::string stamp = z["curationStamp"].asString();
             const std::string level = z["level"].asString();
             stamps[stamp.empty() ? std::string("(no stamp)") : stamp]
                 .push_back(level.empty() ? PathUtil::narrow(file) : level);

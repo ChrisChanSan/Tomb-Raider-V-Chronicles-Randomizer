@@ -1,147 +1,145 @@
-# Erzeugt je Vanilla-Level eine .trc, in der die ECHTEN Key-/Puzzle-Item-Typen
-# dieses Levels auf allen Sektoren liegen, in denen sie volumes Zonen-Flood
-# platzierbar waeren. Nutzerwunsch: das ist leichter zu read als eine
-# generische, nur nach Zonennummer eingefaerbte Alias-Palette - man sieht in
-# trview direkt "Key Item1" ausgewaehlt und jeder Sektor leuchtet auf, der fuer
-# genau diesen Typ erlaubt ist.
+# Generates per vanilla level a .trc in which the REAL key/puzzle item types
+# of that level lie on all sectors where the zone flood would allow them.
+# User request: that is easier to read than a generic alias palette colored
+# only by zone number - in trview you directly select "Key Item1" and every
+# sector allowed for exactly this type lights up.
 #
-# Ablauf pro Level:
-#   1. ZoneAnalyse.ps1 -ExportZonesJson liefert je validForItems-Sektor Zone+Y,
-#      dazu keyConstraints: [{typeId, maxZone, instances, reusable}, ...] - die
-#      im Level tatsaechlich vorkommenden Key-/Puzzle-Typen mit ihrer lockersten
-#      "muss in Zone <= N liegen"-Grenze (das Maximum ueber alle Slot-Instanzen
-#      dieses Typs, falls mehrere Schloesser denselben Typ brauchen).
-#   2. Fuer jeden Constraint: auf jedem Sektor mit zone <= maxZone ein Item
-#      dieses typeId platzieren. Ein Sektor kann so mehrere uebereinanderliegende
-#      Items bekommen, wenn mehrere Key-Typen dort gleichzeitig erlaubt sind -
-#      gewollt, trview unterscheidet sie ueber die Typ-Liste.
-#   3. Levels ohne abgeleitete Key-Constraints (z.B. Andy2) werden ausgelassen -
-#      da gibt es nichts Key-Spezifisches zu zeigen.
-#   4. Patch-JSON (itemAdds) wird gebaut, TombItemEdit2026.exe -patchlevel
-#      wendet ihn auf die Vanilla-.trc an und schreibt das Ergebnis in den
-#      Zielordner.
+# Flow per level:
+#   1. ZoneAnalyse.ps1 -ExportZonesJson delivers zone+Y per validForItems
+#      sector, plus keyConstraints: [{typeId, maxZone, instances, reusable},
+#      ...] - the key/puzzle types actually occurring in the level with
+#      their loosest "must lie in zone <= N" limit (the maximum over all
+#      slot instances of that type if several locks need the same type).
+#   2. For each constraint: place an item of that typeId on every sector
+#      with zone <= maxZone. A sector can get several stacked items this
+#      way when several key types are allowed there at once - intended,
+#      trview distinguishes them via the type list.
+#   3. Levels without derived key constraints (e.g. Andy2) are skipped -
+#      there is nothing key-specific to show there.
+#   4. A patch JSON (itemAdds) is built, TombItemEdit2026.exe -patchlevel
+#      applies it to the vanilla .trc and writes the result to the target
+#      folder.
 #
-# Y-Konvention verifiziert: Item.y == Sektor.floorY exakt (kein Offset),
-# X/Z = Raumursprung + Sektorindex*1024 + 512 (Sektormitte) - gegengeprueft an
-# einem realen Vanilla-Item (Andrea1 Key Item1, Item 107).
+# Y convention verified: item.y == sector.floorY exactly (no offset),
+# X/Z = room origin + sector index*1024 + 512 (sector center) -
+# cross-checked at a real vanilla item (Andrea1 Key Item1, item 107).
 param(
     [string[]]$Levels = @('Andrea1','Andrea2','Andrea3','andy1','Andy2','andy3','joby2','joby3','joby4','joby5','rich1','rich2','rich3','richcut2'),
-    # JEDEN gueltigen Sektor zusaetzlich mit diesem Typ fuellen. 0 = aus.
+    # Additionally fill EVERY valid sector with this type. 0 = off.
     #
-    # Wozu: die Constraint-Typen zeigen, wo ein KEY-Item liegen darf. Ein
-    # gewoehnliches Pickup darf dagegen ueberall liegen, wo ueberhaupt etwas
-    # liegen darf - also auf jedem Sektor des Exports. Beide Ebenen
-    # uebereinander ergeben genau die Frage, die der Nutzer beantwortet haben
-    # will: welche ITEMARTEN sind auf diesem Sektor zugelassen?
+    # What for: the constraint types show where a KEY item may lie. An
+    # ordinary pickup, by contrast, may lie wherever anything may lie at
+    # all - i.e. on every sector of the export. Both layers on top of each
+    # other answer exactly the question the user wants answered: which ITEM
+    # KINDS are allowed on this sector?
     #
-    # ALLE, nicht der Rest. Der erste Versuch fuellte nur die Sektoren, die kein
-    # Constraint abdeckt - dann fehlte der 223-Marker ueberall dort, wo auch ein
-    # Key-Item liegen darf, und in Andrea1 sahen 654 Sektoren so aus, als waeren
-    # sie fuer normale Pickups gesperrt. Die Ebenen sollen sich ueberlappen.
+    # ALL, not the rest. The first attempt filled only the sectors no
+    # constraint covers - then the 223 marker was missing everywhere a key
+    # item may also lie, and in Andrea1 654 sectors looked as if they were
+    # barred for normal pickups. The layers are meant to overlap.
     #
-    # Sinnvoll ist ein Typ, der im Level vorkommt und sich in trview leicht
-    # herausfiltern laesst - 223 (Pickup Item4, das Secret) hat sich bewaehrt.
+    # Sensible is a type that occurs in the level and is easy to filter out
+    # in trview - 223 (Pickup Item4, the secret) has proven itself.
     [int]$FillAllWith = 0
 )
 $ErrorActionPreference = "Stop"
 
 $LevelInfoDir = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Rando vorbereitung\Level Infos"
-# Bewusst der Backup-Unterordner und NICHT data\ selbst: seit der Randomizer
-# eine Oberflaeche hat, wird data\ regelmaessig randomisiert - die Originale
-# liegen dann in data\Backup. Zeigte dieses Skript weiter auf data\, wuerde es
-# still auf bereits randomisierten Leveln rechnen. Nichts wuerde abstuerzen,
-# die Zonen waeren einfach falsch. Genau dieser Fall ist schon einmal
-# aufgetreten und hat eine Stunde Fehlersuche gekostet, siehe die
-# Pruefsummenpruefung weiter unten.
-# Beide Pfade 2026-08-23 nachgezogen: der eigene Vanilla-Ordner und der alte
-# Ablageort von TombItemEdit2026 gibt es nicht mehr. Quelle ist jetzt die
-# Sicherung der Installation - die Pruefsummenkontrolle darunter belegt, dass
-# sie unveraendert ist, und genau dafuer ist sie da.
+# Deliberately the backup subfolder and NOT data\ itself: since the
+# randomizer has a GUI, data\ is regularly randomized - the originals then
+# lie in data\Backup. If this script kept pointing at data\, it would
+# silently compute on already randomized levels. Nothing would crash, the
+# zones would simply be wrong. Exactly this case has occurred once and cost
+# an hour of bug hunting, see the checksum check further down.
+# Both paths updated 2026-08-23: the own vanilla folder and the old storage
+# location of TombItemEdit2026 no longer exist. The source is now the
+# backup of the installation - the checksum control underneath proves it is
+# unchanged, and that is exactly what it is there for.
 $VanillaDir   = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Steam Version\data\Backup"
 $OutDir       = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Rando vorbereitung\Level Test\KeyItemRange Level Test"
 $ZoneScript   = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Rando vorbereitung\Tools\ZoneAnalyse.ps1"
-# ACHTUNG: nur der Build unter Release\Beta kann -patchlevel. Die gleichnamige
-# EXE in Bittenichtbitdefender ist die GUI-Fassung - die oeffnet ihr Fenster
-# und liefert Exitcode 0 ohne Ausgabedatei (2026-08-23 hineingelaufen).
+# ATTENTION: only the build under Release\Beta can do -patchlevel. The
+# same-named EXE in Bittenichtbitdefender is the GUI version - it opens its
+# window and returns exit code 0 without an output file (ran into that
+# 2026-08-23).
 $Exe          = "C:\Cloude AI\Alte sachen\Two gun test\TombItemEdit2026\Release\Beta\TombItemEdit2026.exe"
-# Kein fester Nutzerpfad (#72): Zwischendateien in den Temp-Ordner des
-# jeweiligen Rechners.
+# No fixed user path (#72): intermediate files go to the machine's temp
+# folder.
 $ScratchDir   = Join-Path $env:TEMP "tr5rando-scratch"
 if (-not (Test-Path $ScratchDir)) { New-Item -ItemType Directory -Path $ScratchDir | Out-Null }
 
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir | Out-Null }
 
 #----------------------------------------------------------------------------
-# Pruefsummen der Quelle kontrollieren, bevor irgendetwas erzeugt wird.
+# Check the source's checksums before anything is generated.
 #
-# Der Randomizer hat diese Absicherung seit jeher; den Vorbereitungswerkzeugen
-# fehlte sie, und das ist aufgeflogen, als der Zielordner eines GUI-Tests
-# derselbe war, aus dem hier gelesen wurde. Das Ergebnis sah plausibel aus und
-# war falsch - die unangenehmste Sorte Fehler. Lieber volumes abbrechen.
+# The randomizer has had this safeguard all along; the preparation tools
+# lacked it, and that came to light when the target folder of a GUI test was
+# the same one being read from here. The result looked plausible and was
+# wrong - the most unpleasant kind of error. Better to abort loudly.
 #----------------------------------------------------------------------------
 $ChecksumCsv = Join-Path $LevelInfoDir "VanillaLevelChecksums.csv"
-if (-not (Test-Path $ChecksumCsv)) { throw "Pruefsummenliste fehlt: $ChecksumCsv" }
+if (-not (Test-Path $ChecksumCsv)) { throw "checksum list missing: $ChecksumCsv" }
 $expect = @{}
 foreach ($row in (Import-Csv $ChecksumCsv)) { $expect[$row.FileName] = $row.SHA256.ToUpper() }
 
 $bad = @()
 foreach ($lvl in $Levels) {
     $trc = Join-Path $VanillaDir "$lvl.trc"
-    if (-not (Test-Path $trc)) { $bad += "$lvl.trc fehlt"; continue }
+    if (-not (Test-Path $trc)) { $bad += "$lvl.trc missing"; continue }
     $have = (Get-FileHash $trc -Algorithm SHA256).Hash.ToUpper()
-    if (-not $expect.ContainsKey("$lvl.trc")) { $bad += "$lvl.trc nicht in der Liste"; continue }
-    if ($have -ne $expect["$lvl.trc"]) { $bad += "$lvl.trc weicht von Vanilla ab" }
+    if (-not $expect.ContainsKey("$lvl.trc")) { $bad += "$lvl.trc not in the list"; continue }
+    if ($have -ne $expect["$lvl.trc"]) { $bad += "$lvl.trc deviates from vanilla" }
 }
 if ($bad.Count -gt 0) {
-    Write-Output "ABBRUCH - die Quelle ist nicht unveraendert:"
+    Write-Output "ABORT - the source is not unchanged:"
     $bad | ForEach-Object { Write-Output "  $_" }
-    Write-Output "Quellordner: $VanillaDir"
-    throw "Quelle nicht vanilla - es wurde nichts erzeugt."
+    Write-Output "source folder: $VanillaDir"
+    throw "source not vanilla - nothing was generated."
 }
-Write-Output "Quelle geprueft: $($Levels.Count) Level unveraendert ($VanillaDir)"
+Write-Output "source checked: $($Levels.Count) levels unchanged ($VanillaDir)"
 
 $results = @()
 foreach($lvl in $Levels){
     $infoJson = "$LevelInfoDir\$lvl.json"
     $srcTrc   = "$VanillaDir\$lvl.trc"
-    if (-not (Test-Path $infoJson)) { "SKIP $lvl - kein Level-Info-JSON"; continue }
-    if (-not (Test-Path $srcTrc))   { "SKIP $lvl - keine Vanilla-.trc found"; continue }
+    if (-not (Test-Path $infoJson)) { "SKIP $lvl - no level info JSON"; continue }
+    if (-not (Test-Path $srcTrc))   { "SKIP $lvl - no vanilla .trc found"; continue }
 
     $d = Get-Content $infoJson -Raw | ConvertFrom-Json
     $rooms = @{}; foreach($r in $d.rooms){ $rooms[[int]$r.index] = $r }
 
     $zonesJson = "$ScratchDir\zones_$lvl.json"
     & $ZoneScript -LevelJson $infoJson -LevelName $lvl -ExportZonesJson $zonesJson 2>&1 | Out-Null
-    if (-not (Test-Path $zonesJson)) { "SKIP $lvl - Zonen-Export fehlgeschlagen"; continue }
+    if (-not (Test-Path $zonesJson)) { "SKIP $lvl - zone export failed"; continue }
     $z = Get-Content $zonesJson -Raw | ConvertFrom-Json
     $constraints = @($z.keyConstraints)
     #------------------------------------------------------------------------
-    # Level ohne Schluesselschloesser trotzdem pruefbar machen.
+    # Make levels without key locks checkable anyway.
     #
-    # Sechs der vierzehn Level haben keine Key-/Puzzle-Constraints - joby4,
-    # Andy2, andy3, rich2, rich3, richcut2 - und wurden bisher uebersprungen.
-    # Damit gab es fuer sie kein aktuelles Testlevel und keine Moeglichkeit,
-    # die Kuration in trview gegenzusehen. Genau das ist bei joby4 aufgefallen:
-    # der Nutzer schaute auf eine vier Tage alte Datei aus einem Werkzeug, das
-    # es nicht mehr gibt.
+    # Six of the fourteen levels have no key/puzzle constraints - joby4,
+    # Andy2, andy3, rich2, rich3, richcut2 - and used to be skipped. So
+    # there was no current test level for them and no way to cross-check
+    # the curation in trview. Exactly that surfaced at joby4: the user was
+    # looking at a four-day-old file from a tool that no longer exists.
     #
-    # Ersatzweise wird ein einzelner Constraint gebaut, der ALLE gueltigen
-    # Sektoren abdeckt. Als Typ dient ein Pickup, das im Level wirklich
-    # vorkommt - ein Typ ohne Eintrag in der Objekttabelle waere im Spiel
-    # unsichtbar. Bevorzugt wird der haeufigste, dann ist er in trview leicht
-    # ueber die Typliste zu finden.
+    # As a substitute, a single constraint is built that covers ALL valid
+    # sectors. The type used is a pickup that really occurs in the level -
+    # a type without an entry in the object table would be invisible in
+    # game. The most frequent one is preferred, then it is easy to find in
+    # trview via the type list.
     #------------------------------------------------------------------------
-    # Mit -FillAllWith braucht es den Ersatz-Constraint gar nicht: die Fuellebene
-    # deckt ohnehin jeden Sektor ab, und ein zweiter Marker desselben Typs auf
-    # demselben Feld waere nur Rauschen.
+    # With -FillAllWith the substitute constraint is not needed at all: the
+    # fill layer covers every sector anyway, and a second marker of the
+    # same type on the same field would only be noise.
     if ($constraints.Count -eq 0 -and $FillAllWith -gt 0) {
-        "  ${lvl}: keine Key-Constraints - es zaehlt allein die Fuellebene"
+        "  ${lvl}: no key constraints - only the fill layer counts"
     }
     elseif ($constraints.Count -eq 0) {
         $cand = @($d.items | Where-Object { $t=[int]$_.typeId; ($t -ge 172 -and $t -le 241) -or ($t -ge 334 -and $t -le 355) } |
                   Group-Object typeId | Sort-Object Count -Descending)
         if ($cand.Count -eq 0) {
-            "SKIP ${lvl} - keine Constraints und kein einziges Pickup im Level, nichts zu zeigen"
+            "SKIP ${lvl} - no constraints and not a single pickup in the level, nothing to show"
             continue
         }
         $genericType = [int]$cand[0].Name
@@ -151,21 +149,23 @@ foreach($lvl in $Levels){
             reusable = $false; excludeRooms = @(); allowRooms = @()
             minFloorY = $null; minFloorYZone = $null
             islandSectors = $null; minFloorYIsland = $null })
-        "  ${lvl}: keine Key-Constraints - alle gueltigen Sektoren mit Typ $genericType gefuellt"
+        "  ${lvl}: no key constraints - all valid sectors filled with type $genericType"
     }
 
-    # Waffenfreie Raeume. Sie haengen am Level, nicht am Typ, und treffen jeden
-    # Waffentyp - auch einen, der hier nur als Ersatz-Constraint auftaucht.
-    # Heute ist das wirkungslos (nur joby3 hat solche Raeume, und joby3 hat
-    # echte Key-Constraints), aber der Randomizer setzt es durch, und die
-    # Testlevel muessen dasselbe zeigen wie das, was am Ende erzeugt wird.
+    # Weapon-free rooms. They hang on the level, not on the type, and hit
+    # every weapon type - even one that only appears here as a substitute
+    # constraint. Today that has no effect (only joby3 has such rooms, and
+    # joby3 has real key constraints), but the randomizer enforces it, and
+    # the test levels must show the same thing that gets generated in the
+    # end.
     $noWeapon = @( if($null -ne $z.noWeaponRooms){ $z.noWeaponRooms | ForEach-Object { [int]$_ } } )
     $wTypes   = @( if($null -ne $z.weaponTypes){ $z.weaponTypes | ForEach-Object { [int]$_ } } )
 
-    # Platzierungsversatz je Typ (TYPE_OFFSET, im Export schon fuer dieses Level
-    # aufgeloest). Muss hier genauso angewandt werden wie im Randomizer, sonst
-    # zeigt das Testlevel die Items woanders, als sie im Seed landen - und genau
-    # dafuer sieht der Nutzer es sich an.
+    # Placement offset per type (TYPE_OFFSET, already resolved for this
+    # level in the export). Must be applied here exactly as in the
+    # randomizer, otherwise the test level shows the items elsewhere than
+    # they land in the seed - and that is exactly what the user looks at it
+    # for.
     $offOf = @{}
     foreach($to in @($z.typeOffsets)){
         if ($null -eq $to) { continue }
@@ -173,51 +173,52 @@ foreach($lvl in $Levels){
     }
 
     $itemAdds = @()
-    $abgedeckt = New-Object System.Collections.Generic.HashSet[string]
+    $covered = New-Object System.Collections.Generic.HashSet[string]
     foreach($c in $constraints){
-        $typIstWaffe = $wTypes -contains [int]$c.typeId
-        # excludeRooms: Raeume, die zwar in der Zone liegen, in denen dieser eine
-        # Typ aber trotzdem nicht liegen darf (Nutzerangabe aus trview).
+        $typeIsWeapon = $wTypes -contains [int]$c.typeId
+        # excludeRooms: rooms that lie in the zone but in which this one
+        # type still may not lie (user statement from trview).
         $ex = @( if($null -ne $c.excludeRooms){ $c.excludeRooms | ForEach-Object { [int]$_ } } )
-        # allowRooms ist eine Positivliste: ist sie gesetzt, zaehlt nur noch
-        # sie (die Zone bleibt trotzdem Obergrenze). Leer = keine Einschraenkung.
+        # allowRooms is a positive list: if set, only it counts (the zone
+        # remains the upper bound anyway). Empty = no restriction.
         $al = @( if($null -ne $c.allowRooms){ $c.allowRooms | ForEach-Object { [int]$_ } } )
-        # minFloorY: Hoehengrenze der Inselgruppe. Kleineres y liegt in TR HOEHER,
-        # ein Sektor unterhalb dieser Schranke ist also zu HOCH - typischerweise
-        # die Oberseite eines Kistenstapels, auf den Lara erst mit dem Schluessel
-        # kommt, der dort liegen soll.
-        # Sie gilt NUR innerhalb der Inselgruppe (minFloorYIsland), denn sie ist
-        # deren Eigenschaft. An die Zone gehaengt war sie zu weit gegriffen:
-        # Zone 0 umfasst in joby2 7756 Sektoren, die Insel nur 1900 - fuer Key
-        # Item7, das ausserhalb der Insel liegen darf, wirkte die Schranke
-        # dadurch im halben Level (vom Nutzer bemerkt).
-        # islandSectors: die Startinsel aus dem zweiten Flood. Ist sie gesetzt,
-        # ist sie eine harte Positivliste - Key Item8 in joby2 darf ausschliess-
-        # lich dort liegen, weil die Flipmap am Kran ihn selbst voraussetzt.
+        # minFloorY: height limit of the island group. Smaller y lies
+        # HIGHER in TR, so a sector below this bound is too HIGH -
+        # typically the top of a crate stack that Lara only reaches with
+        # the key that is supposed to lie there.
+        # It applies ONLY within the island group (minFloorYIsland), for it
+        # is that group's property. Hung on the zone it was too broad: zone
+        # 0 comprises 7756 sectors in joby2, the island only 1900 - for Key
+        # Item7, which may lie outside the island, the bound thereby acted
+        # in half the level (noticed by the user).
+        # islandSectors: the start island from the second flood. If set, it
+        # is a hard positive list - Key Item8 in joby2 may lie exclusively
+        # there, because the flipmap at the crane itself presupposes it.
         $isl = $null
         if ($null -ne $c.islandSectors) {
             $isl = New-Object System.Collections.Generic.HashSet[string]
             foreach($k in $c.islandSectors){ [void]$isl.Add([string]$k) }
         }
-        # requireInIsland ist KEINE Schranke fuer die einzelne Instanz, sondern
-        # eine Aussage ueber alle zusammen: mindestens eine muss dort liegen, die
-        # uebrigen duerfen ueberall hin. Genau genommen ist der "erlaubte
-        # Bereich" dieses Typs also das ganze Level - und genau so hat das
-        # Testlevel es zuerst gezeigt, mit 552 Flaschen quer durch rich2. Das ist
-        # zwar korrekt, aber unbrauchbar: der Nutzer will die Pflichtzone sehen,
-        # denn nur die hat er festgelegt. Deshalb wird sie hier gezeichnet, wenn
-        # es keine echte Insel gibt. Beim Lesen also mitdenken - was hier
-        # leuchtet, ist "hier muss eine liegen", nicht "nur hier darf eine liegen".
+        # requireInIsland is NO bound for the single instance but a
+        # statement about all of them together: at least one must lie
+        # there, the rest may go anywhere. Strictly speaking the "allowed
+        # range" of this type is thus the whole level - and exactly so the
+        # test level showed it at first, with 552 bottles all across rich2.
+        # That is correct but useless: the user wants to see the mandatory
+        # zone, for only that is what he specified. Hence it is drawn here
+        # when there is no real island. So think along when reading - what
+        # lights up here is "one must lie here", not "only here may one
+        # lie".
         elseif ($null -ne $c.requireInIsland) {
             $isl = New-Object System.Collections.Generic.HashSet[string]
             foreach($k in $c.requireInIsland){ [void]$isl.Add([string]$k) }
         }
-        # bannedSectors: die Umkehrung von islandSectors - hier darf der Typ
-        # gerade NICHT liegen. andy1s Zwillenhaelften duerfen nicht vor dem
-        # Teleporter liegen, sonst geht Lara ohne sie durch und kommt nie
-        # zurueck.
-        # forbiddenSectors: hinter der eigenen Tuer - Schnitt ueber alle
-        # Schloesser dieses Typs, siehe ZoneAnalyse.
+        # bannedSectors: the inversion of islandSectors - here the type may
+        # NOT lie. andy1's slingshot halves may not lie before the
+        # teleporter, or Lara walks through without them and never comes
+        # back.
+        # forbiddenSectors: behind its own door - intersection over all
+        # locks of this type, see ZoneAnalyse.
         $fb = $null
         if ($null -ne $c.forbiddenSectors) {
             $fb = New-Object System.Collections.Generic.HashSet[string]
@@ -238,7 +239,7 @@ foreach($lvl in $Levels){
             ($null -eq $isl -or $isl.Contains($kk)) -and
             ($null -eq $bn -or -not $bn.Contains($kk)) -and
             ($null -eq $fb -or -not $fb.Contains($kk)) -and
-            (-not $typIstWaffe -or $noWeapon -notcontains [int]$_.room) -and
+            (-not $typeIsWeapon -or $noWeapon -notcontains [int]$_.room) -and
             [int]$_.zone -le [int]$c.maxZone -and $ex -notcontains [int]$_.room -and
             ($al.Count -eq 0 -or $al -contains [int]$_.room) -and
             ($null -eq $c.minFloorY -or ($null -ne $hs -and -not $hs.Contains($kk)) -or
@@ -251,12 +252,12 @@ foreach($lvl in $Levels){
             $wx = [int]$rm.originX + [int]$s.sectorX*1024 + 512 + $off.dx
             $wz = [int]$rm.originZ + [int]$s.sectorZ*1024 + 512 + $off.dz
             $itemAdds += [PSCustomObject]@{ typeId=[int]$c.typeId; room=[int]$s.room; x=$wx; y=([int]$s.floorY + $off.dy); z=$wz }
-            [void]$abgedeckt.Add($kk2)
+            [void]$covered.Add($kk2)
         }
     }
 
-    # Die Ebene der gewoehnlichen Pickups: JEDER gueltige Sektor bekommt den
-    # Marker, auch die, auf denen zusaetzlich ein Key-Item liegen darf.
+    # The layer of ordinary pickups: EVERY valid sector gets the marker,
+    # including those on which a key item may additionally lie.
     if ($FillAllWith -gt 0) {
         $offR = if ($offOf.ContainsKey($FillAllWith)) { $offOf[$FillAllWith] } else { @{ dx=0; dy=0; dz=0 } }
         $n = 0
@@ -268,33 +269,34 @@ foreach($lvl in $Levels){
             $itemAdds += [PSCustomObject]@{ typeId=$FillAllWith; room=[int]$s.room; x=$wx; y=([int]$s.floorY + $offR.dy); z=$wz }
             $n++
         }
-        $nurKey = @($z.sectors | Where-Object { -not $abgedeckt.Contains("$($_.room),$($_.sectorX),$($_.sectorZ)") }).Count
-        "  ${lvl}: $n Sektoren mit Typ $FillAllWith belegt, davon $nurKey ohne jede Key-Range"
+        $keyOnly = @($z.sectors | Where-Object { -not $covered.Contains("$($_.room),$($_.sectorX),$($_.sectorZ)") }).Count
+        "  ${lvl}: $n sectors filled with type $FillAllWith, $keyOnly of them without any key range"
     }
 
     $patch = [PSCustomObject]@{ itemAdds = $itemAdds } | ConvertTo-Json -Depth 4 -Compress
     $patchPath = "$ScratchDir\patch_$lvl.json"
-    # UTF-8 ohne BOM - der handgeschriebene JSON-Reader in TombItemEdit2026
-    # scheitert sonst am Vorspann (siehe frueherer BOM-Bugfix im Projekt).
+    # UTF-8 without BOM - the hand-written JSON reader in TombItemEdit2026
+    # otherwise fails on the preamble (see the earlier BOM bugfix in the
+    # project).
     [System.IO.File]::WriteAllText($patchPath, $patch, (New-Object System.Text.UTF8Encoding($false)))
 
     $dstTrc = "$OutDir\$lvl.trc"
     if (Test-Path $dstTrc) { Remove-Item $dstTrc -Force }
-    # & mit einzelnen Pfad-Argumenten zerlegt leerzeichenhaltige Pfade
-    # (Projektordner heisst "Tomb5 Native win 11 fix" etc.) falsch - deshalb
-    # ueber Start-Process mit sauber gequoteter ArgumentList aufrufen.
+    # & with individual path arguments splits paths containing spaces (the
+    # project folder is called "Tomb5 Native win 11 fix" etc.) wrongly -
+    # hence call via Start-Process with a cleanly quoted ArgumentList.
     $argList = @('-patchlevel', "`"$srcTrc`"", "`"$dstTrc`"", "`"$patchPath`"")
     $p = Start-Process -FilePath $Exe -ArgumentList $argList -Wait -PassThru -NoNewWindow
     $ok = (Test-Path $dstTrc) -and $p.ExitCode -eq 0
     $typeList = ($constraints | ForEach-Object {
         $x = @( if($null -ne $_.excludeRooms){ $_.excludeRooms } )
         $a = @( if($null -ne $_.allowRooms){ $_.allowRooms } )
-        "$($_.typeId)<=Z$($_.maxZone)$(if($x.Count){" -$($x.Count)R"})$(if($a.Count){" nur$($a.Count)R"})"
+        "$($_.typeId)<=Z$($_.maxZone)$(if($x.Count){" -$($x.Count)R"})$(if($a.Count){" only$($a.Count)R"})"
     }) -join ', '
     $results += [PSCustomObject]@{ Level=$lvl; Types=$constraints.Count; Items=$itemAdds.Count; OK=$ok }
-    "{0,-10} Typen=[{1}]  Items={2,5}  ExitCode={3}  {4}" -f $lvl,$typeList,$itemAdds.Count,$p.ExitCode,($(if($ok){'OK'}else{'FEHLER'}))
+    "{0,-10} types=[{1}]  items={2,5}  exitCode={3}  {4}" -f $lvl,$typeList,$itemAdds.Count,$p.ExitCode,($(if($ok){'OK'}else{'ERROR'}))
 }
 
 Write-Output ""
-Write-Output "=== Zusammenfassung ==="
+Write-Output "=== Summary ==="
 $results | Format-Table -AutoSize

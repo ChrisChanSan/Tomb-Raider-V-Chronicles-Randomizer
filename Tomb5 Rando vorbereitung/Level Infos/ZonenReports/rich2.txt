@@ -1,86 +1,113 @@
-﻿==============================================================
- Progressions-Zonen: rich2
+﻿type bar: typeId 345 is barred in 41 rooms of rich2
+antitrigger immunity: 1 item(s) in rich2
+deco doors: 7 doors no trigger brings to 11111 - they do not bar
+  items: 189, 190, 192, 199, 200, 202, 204
+flipmap: 6 sectors open something the base does not have - 6 of them without a release
+  affected flip rooms: 32, 72, 151
+island group (deadstops 55, 58): 451 sectors in 46 rooms
+island group (deadstops 55, 58, 84, 104): 339 sectors in 29 rooms
+island group (deadstops 58, 120, 152): 377 sectors in 26 rooms
+NO_KEY_ISLAND (start 140, deadstops 141, 46, 113): 636 sectors in 50 rooms without key items
+wall spots: 368 of 544 sectors have at least one wall edge
+approach sectors: 524 of 544 sectors have at least one
+pool type 221 taken in without a zone limit (1 instances in the level)
+pool type 236 taken in without a zone limit (1 instances in the level)
+pool type 235 taken in without a zone limit (4 instances in the level)
+zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_rich2.json (544 sectors, maxZone=6, 4 key constraints)
 ==============================================================
-Laras Start: Raum 129, Sektor (1,1) -> Zone 0
+ Progression zones: rich2
+==============================================================
+Lara's start: room 129, sector (1,1) -> zone 0
 
---- Zonenuebergaenge (Blocker) ---
-Zone 0 -> 1: Tuer Item 171 (typeId 300, Raum 118)  geoeffnet durch: Trigger betreten (118,1,1)
-Zone 0 -> 1: Tuer Item 163 (typeId 302, Raum 96)  geoeffnet durch: AntiTrigger
-Zone 0 -> 1: Tuer Item 162 (typeId 302, Raum 91)  geoeffnet durch: AntiTrigger
-Zone 0 -> 1: Tuer Item 153 (typeId 302, Raum 84)  geoeffnet durch: AntiTrigger
-Zone 0 -> 1: Tuer Item 105 (typeId 300, Raum 55)  geoeffnet durch: Trigger betreten (55,2,1)
-Zone 0 -> 1: Tuer Item 52 (typeId 314, Raum 33)  geoeffnet durch: Schalter Item 110 (Raum 57)
-Zone 0 -> 1: Tuer Item 51 (typeId 312, Raum 33)  geoeffnet durch: Schalter Item 110 (Raum 57)
-Zone 0 -> 1: Tuer Item 103 (typeId 300, Raum 53)  geoeffnet durch: Trigger betreten (53,1,1)
-Zone 0 -> 1: Tuer Item 104 (typeId 300, Raum 54)  geoeffnet durch: Trigger betreten (54,1,1)
-Zone 0 -> 1: Tuer Item 96 (typeId 300, Raum 49)  geoeffnet durch: Trigger betreten (49,1,3)
-Zone 1 -> 2: Tuer Item 246 (typeId 302, Raum 177)  geoeffnet durch: Trigger betreten (177,1,1)
-Zone 1 -> 2: Tuer Item 65 (typeId 314, Raum 39)  geoeffnet durch: Schalter Item 63 (Raum 39)
-Zone 1 -> 2: Tuer Item 47 (typeId 314, Raum 31)  geoeffnet durch: Trigger betreten (31,2,2)
-Zone 1 -> 2: Tuer Item 46 (typeId 312, Raum 31)  geoeffnet durch: Trigger betreten (31,2,2)
-Zone 1 -> 2: Tuer Item 108 (typeId 302, Raum 56)  geoeffnet durch: Trigger betreten (56,3,1)
-Zone 1 -> 2: Tuer Item 64 (typeId 312, Raum 39)  geoeffnet durch: Schalter Item 63 (Raum 39)
-Zone 1 -> 2: Tuer Item 180 (typeId 306, Raum 120)  geoeffnet durch: Schalter Item 43 (Raum 26)
-Zone 1 -> 2: Tuer Item 179 (typeId 304, Raum 120)  geoeffnet durch: Schalter Item 43 (Raum 26)
-Zone 2 -> 3: Tuer Item 53 (typeId 332, Raum 34)  geoeffnet durch: Trigger betreten (34,5,5)
-Zone 2 -> 3: Tuer Item 40 (typeId 306, Raum 23)  geoeffnet durch: Schalter Item 38 (Raum 23)
-Zone 2 -> 3: Tuer Item 39 (typeId 304, Raum 23)  geoeffnet durch: Schalter Item 38 (Raum 23)
-Zone 2 -> 3: Tuer Item 216 (typeId 300, Raum 150)  geoeffnet durch: Trigger betreten (150,1,1)
-Zone 2 -> 3: Tuer Item 37 (typeId 306, Raum 23)  geoeffnet durch: Schalter Item 38 (Raum 23)
-Zone 2 -> 3: Tuer Item 36 (typeId 304, Raum 23)  geoeffnet durch: Schalter Item 38 (Raum 23)
-Zone 2 -> 3: Tuer Item 206 (typeId 302, Raum 145)  geoeffnet durch: Schalter Item 58 (Raum 34)
-Zone 3 -> 4: Tuer Item 220 (typeId 300, Raum 157)  geoeffnet durch: HeavyAntiTrigger
-Zone 4 -> 5: Tuer Item 115 (typeId 300, Raum 59)  geoeffnet durch: Schalter Item 0 (Raum 7)
+--- Zone transitions (blockers) ---
+zone 0 -> 1: door item 171 (typeId 300, room 118)  opened by: enter trigger (118,1,1)
+zone 0 -> 1: door item 163 (typeId 302, room 96)  opened by: AntiTrigger
+zone 0 -> 1: door item 162 (typeId 302, room 91)  opened by: AntiTrigger
+zone 0 -> 1: door item 153 (typeId 302, room 84)  opened by: AntiTrigger
+zone 0 -> 1: door item 105 (typeId 300, room 55)  opened by: enter trigger (55,2,1)
+zone 0 -> 1: door item 103 (typeId 300, room 53)  opened by: enter trigger (53,1,1)
+zone 0 -> 1: door item 104 (typeId 300, room 54)  opened by: enter trigger (54,1,1)
+zone 0 -> 1: door item 96 (typeId 300, room 49)  opened by: enter trigger (49,1,3)
+zone 1 -> 2: door item 246 (typeId 302, room 177)  opened by: enter trigger (177,1,1)
+zone 1 -> 2: door item 108 (typeId 302, room 56)  opened by: enter trigger (56,3,1)
+zone 2 -> 3: door item 47 (typeId 314, room 31)  opened by: enter trigger (31,2,2)
+zone 2 -> 3: door item 46 (typeId 312, room 31)  opened by: enter trigger (31,2,2)
+zone 2 -> 3: door item 180 (typeId 306, room 120)  opened by: switch item 43 (room 26)
+zone 2 -> 3: door item 179 (typeId 304, room 120)  opened by: switch item 43 (room 26)
+zone 3 -> 4: door item 53 (typeId 332, room 34)  opened by: enter trigger (34,5,5)
+zone 3 -> 4: door item 52 (typeId 314, room 33)  opened by: switch item 110 (room 57)
+zone 3 -> 4: door item 51 (typeId 312, room 33)  opened by: switch item 110 (room 57)
+zone 3 -> 4: door item 40 (typeId 306, room 23)  opened by: switch item 38 (room 23)
+zone 3 -> 4: door item 39 (typeId 304, room 23)  opened by: switch item 38 (room 23)
+zone 3 -> 4: door item 216 (typeId 300, room 150)  opened by: enter trigger (150,1,1)
+zone 3 -> 4: door item 37 (typeId 306, room 23)  opened by: switch item 38 (room 23)
+zone 3 -> 4: door item 36 (typeId 304, room 23)  opened by: switch item 38 (room 23)
+zone 3 -> 4: door item 206 (typeId 302, room 145)  opened by: switch item 58 (room 34)
+zone 4 -> 5: door item 65 (typeId 314, room 39)  opened by: switch item 63 (room 39)
+zone 4 -> 5: door item 220 (typeId 300, room 157)  opened by: HeavyAntiTrigger
+zone 4 -> 5: door item 64 (typeId 312, room 39)  opened by: switch item 63 (room 39)
+zone 5 -> 6: door item 115 (typeId 300, room 59)  opened by: switch item 0 (room 7)
 
---- Sektoren pro Zone ---
-Zone 0:   361 Sektoren in  43 Raeumen
-Zone 1:  1285 Sektoren in  95 Raeumen
-Zone 2:   296 Sektoren in  29 Raeumen
-Zone 3:   288 Sektoren in  20 Raeumen
-Zone 4:    72 Sektoren in   6 Raeumen
-Zone 5:     1 Sektoren in   1 Raeumen
-Nie erreicht: 30 begehbare Sektoren
+--- Sectors per zone ---
+zone 0:   331 sectors in  40 rooms
+zone 1:   133 sectors in  19 rooms
+zone 2:  1148 sectors in  77 rooms
+zone 3:   259 sectors in  23 rooms
+zone 4:   307 sectors in  24 rooms
+zone 5:   116 sectors in   9 rooms
+zone 6:     1 sectors in   1 rooms
+never reached: 38 walkable sectors
+stay vanilla (VANILLA_TYPES) - not in the pool: 345
+required injections (REQUIRED_INJECTIONS) - missing in vanilla:
+  typeId  345 -> room  140 (HK - from here on a key item can lie under an enemy; present in the level: 1)
+  typeId  346 -> room  140 (HK ammo next to the HK on the same tile; present in the level: 2)
+  typeId  346 -> room  140 (HK ammo next to the HK on the same tile; present in the level: 2)
+  typeId  347 -> room      (Deagle - the start island is enemy-rich, pistols alone do not suffice; present in the level: 0)
+  typeId  348 -> room      (Deagle ammo for the start island (6 shots); present in the level: 0)
+  typeId  348 -> room      (Deagle ammo for the start island (6 shots); present in the level: 0)
+  typeId  348 -> room      (Deagle ammo for the start island (6 shots); present in the level: 0)
+untouchable items (FIXED_ITEMS) - must not be moved:
+  item  219 - guard (USSR, room 156) - stays vanilla (user list) (room 156, typeId 37)
+  item  155 - guard (USSR, room 84) - stays vanilla (user list) (room 84, typeId 37)
+  item  154 - guard (USSR, room 84) - stays vanilla (user requirement) (room 84, typeId 37)
+  item  209 - secret - stays in place until the dedicated secret list (room 148, typeId 223)
+  item  242 - secret - stays in place until the dedicated secret list (room 167, typeId 223)
+  item  244 - secret - stays in place until the dedicated secret list (room 174, typeId 223)
+  item    6 - VANILLA_TYPES: type 345 stays at its vanilla position (room 8, typeId 345)
 
---- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+--- Key/puzzle items: allowed placement range ---
 
---- Warum kam der Flood nicht weiter? ---
-Tuer Item 204 (typeId 302, Raum  144) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item 189 (typeId 320, Raum  131) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
+--- Why did the flood not get further? ---
+door item 204 (typeId 302, room  144) mask  0/31
+    no trigger in the level switches this door
+door item 189 (typeId 320, room  131) mask  0/31
+    no trigger in the level switches this door
 
---- Groesste unerreichte Gebiete ---
-Gebiet mit    16 Sektoren in   1 Raeumen
-   Raeume: 83
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 375x1
-Gebiet mit     7 Sektoren in   1 Raeumen
-   Raeume: 158
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 131
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 111x1, 320x1
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 138
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 320x1
+--- Largest unreached areas ---
+area with    16 sectors in   1 rooms
+   rooms: 83
+   CLARIFIED - no open question:
+     room   83: flyby scenery
+area with     7 sectors in   1 rooms
+   rooms: 158
+   CLARIFIED - no open question:
+     room  158: out of map
+area with     1 sectors in   1 rooms
+   rooms: 138
+   CLARIFIED - no open question:
+     room  138: niche behind a kick door, Lara kicks it in
+area with     1 sectors in   1 rooms
+   rooms: 137
+   CLARIFIED - no open question:
+     room  137: niche behind a kick door, Lara kicks it in
 
---- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
-Keine hinterlegt.
+--- Equipment gates (manual, not derivable from level data) ---
+None on record.
 
---- Selbsttest: Level durchspielbar? ---
-Cutscene 1 in Raum    7 Sektor (2,4) -> Zone 4
-Cutscene 23 in Raum    8 Sektor (1,5) -> Zone 0
-EndLevel 0 in Raum   14 Sektor (1,1) -> Zone 1
-Cutscene 1 in Raum   46 Sektor (15,2) -> Zone 1
-Cutscene 1 in Raum   57 Sektor (1,1) -> Zone 0
-Cutscene 1 in Raum   84 Sektor (2,3) -> Zone 0
+--- Self-test: level completable? ---
+Cutscene 1 in room    7 sector (2,4) -> zone 5
+Cutscene 23 in room    8 sector (1,5) -> zone 0
+EndLevel 0 in room   14 sector (1,1) -> zone 1
+Cutscene 1 in room   46 sector (15,2) -> zone 2
+Cutscene 1 in room   57 sector (1,1) -> zone 3
+Cutscene 1 in room   84 sector (2,3) -> zone 0

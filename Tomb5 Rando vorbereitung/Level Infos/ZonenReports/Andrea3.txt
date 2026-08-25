@@ -1,77 +1,84 @@
-﻿==============================================================
- Progressions-Zonen: Andrea3
+﻿wall spots: 317 of 591 sectors have at least one wall edge
+approach sectors: 555 of 591 sectors have at least one
+zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_Andrea3.json (591 sectors, maxZone=6, 3 key constraints)
 ==============================================================
-Laras Start: Raum 1, Sektor (5,2) -> Zone 0
+ Progression zones: Andrea3
+==============================================================
+Lara's start: room 1, sector (5,2) -> zone 0
 
---- Zonenuebergaenge (Blocker) ---
-Zone 0 -> 1: Tuer Item 4 (typeId 284, Raum 7)  geoeffnet durch: Schalter Item 3 (Raum 6)
-Zone 1 -> 2: Tuer Item 65 (typeId 284, Raum 63)  geoeffnet durch: Schalter Item 0 (Raum 0)
-Zone 2 -> 3: Tuer Item 70 (typeId 296, Raum 81)  geoeffnet durch: Trigger betreten (76,1,2)
-Zone 2 -> 3: Tuer Item 69 (typeId 284, Raum 78)  geoeffnet durch: Trigger betreten (75,3,2)
-Zone 2 -> 3: Tuer Item 66 (typeId 284, Raum 65)  geoeffnet durch: Trigger betreten (76,2,2)
-Zone 2 -> 3: Tuer Item 54 (typeId 284, Raum 35)  geoeffnet durch: Trigger betreten (35,2,2)
-Zone 2 -> 3: Tuer Item 88 (typeId 284, Raum 96)  geoeffnet durch: Trigger betreten (86,1,1)
-Zone 2 -> 3: Tuer Item 82 (typeId 284, Raum 93)  geoeffnet durch: Trigger betreten (43,1,1)
-Zone 3 -> 4: Tuer Item 25 (typeId 302, Raum 15)  geoeffnet durch: Key Item1 in Schloss Item 27 (Raum 15)
-Zone 3 -> 4: Tuer Item 24 (typeId 300, Raum 15)  geoeffnet durch: Key Item1 in Schloss Item 27 (Raum 15)
-Zone 3 -> 4: Tuer Item 90 (typeId 284, Raum 99)  geoeffnet durch: Schalter Item 87 (Raum 95)
-Zone 3 -> 4: Tuer Item 89 (typeId 284, Raum 98)  geoeffnet durch: Schalter Item 87 (Raum 95)
-Zone 4 -> 5: Tuer Item 103 (typeId 284, Raum 121)  geoeffnet durch: Trigger betreten (90,2,3)
-Zone 4 -> 5: Tuer Item 103 (typeId 284, Raum 121)  geoeffnet durch: Skript-Ereignis (Raum 90 erreicht)
-Zone 5 -> 6: Tuer Item 94 (typeId 302, Raum 102)  geoeffnet durch: Key Item2 in Schloss Item 93 (Raum 102)
-Zone 5 -> 6: Tuer Item 77 (typeId 300, Raum 89)  geoeffnet durch: Key Item2 in Schloss Item 93 (Raum 102)
+--- Zone transitions (blockers) ---
+zone 0 -> 1: door item 4 (typeId 284, room 7)  opened by: switch item 3 (room 6)
+zone 1 -> 2: door item 65 (typeId 284, room 63)  opened by: switch item 0 (room 0)
+zone 2 -> 3: door item 70 (typeId 296, room 81)  opened by: enter trigger (76,1,2)
+zone 2 -> 3: door item 69 (typeId 284, room 78)  opened by: enter trigger (75,3,2)
+zone 2 -> 3: door item 66 (typeId 284, room 65)  opened by: enter trigger (76,2,2)
+zone 2 -> 3: door item 54 (typeId 284, room 35)  opened by: enter trigger (35,2,2)
+zone 2 -> 3: door item 88 (typeId 284, room 96)  opened by: enter trigger (86,1,1)
+zone 2 -> 3: door item 82 (typeId 284, room 93)  opened by: enter trigger (43,1,1)
+zone 3 -> 4: door item 25 (typeId 302, room 15)  opened by: Key Item1 into lock item 27 (room 15)
+zone 3 -> 4: door item 24 (typeId 300, room 15)  opened by: Key Item1 into lock item 27 (room 15)
+zone 3 -> 4: door item 90 (typeId 284, room 99)  opened by: switch item 87 (room 95)
+zone 3 -> 4: door item 89 (typeId 284, room 98)  opened by: switch item 87 (room 95)
+zone 4 -> 5: door item 103 (typeId 284, room 121)  opened by: enter trigger (90,2,3)
+zone 4 -> 5: door item 103 (typeId 284, room 121)  opened by: script event (room 90 reached)
+zone 5 -> 6: door item 94 (typeId 302, room 102)  opened by: Key Item2 into lock item 93 (room 102)
+zone 5 -> 6: door item 77 (typeId 300, room 89)  opened by: Key Item2 into lock item 93 (room 102)
 
---- Sektoren pro Zone ---
-Zone 0:   214 Sektoren in  20 Raeumen
-Zone 1:    33 Sektoren in   5 Raeumen
-Zone 2:   947 Sektoren in  50 Raeumen
-Zone 3:   310 Sektoren in  29 Raeumen
-Zone 4:   302 Sektoren in  22 Raeumen
-Zone 5:    21 Sektoren in   2 Raeumen
-Zone 6:    89 Sektoren in   9 Raeumen
-Nie erreicht: 37 begehbare Sektoren
-  (zusaetzlich 18 Sektoren in 2 reinen Kulissenraeumen, nicht mitgezaehlt)
+--- Sectors per zone ---
+zone 0:   214 sectors in  20 rooms
+zone 1:    33 sectors in   5 rooms
+zone 2:   908 sectors in  46 rooms
+zone 3:   278 sectors in  27 rooms
+zone 4:   274 sectors in  20 rooms
+zone 5:    21 sectors in   2 rooms
+zone 6:    89 sectors in   9 rooms
+never reached: 37 walkable sectors
+hand-barred (EXCLUDE_ROOMS): 99 sectors in 8 rooms - intended, not counted as a gap
+required injections (REQUIRED_INJECTIONS) - missing in vanilla:
+  typeId  240 -> room  120 (level contains no crowbar - vanilla softlock; present in the level: 0)
+untouchable items (FIXED_ITEMS) - must not be moved:
+  item   49 - Puzzle Item4 Combo2 - triggers a door (room 31, typeId 187)
+  item   79 - Roman god (room 90) - stays vanilla (user list 2026-08-14) (room 90, typeId 61)
+  item   75 - secret - stays in place until the dedicated secret list (room 81, typeId 223)
+  item   99 - secret - stays in place until the dedicated secret list (room 112, typeId 223)
+  item  102 - secret - stays in place until the dedicated secret list (room 120, typeId 223)
+  (additionally 18 sectors in 2 pure scenery rooms, not counted)
 
---- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
-TypeId 196: 1 Instanz(en) noetig
-    Instanz 1 -> muss in Zone <= 3 liegen  (Key Item1 in Schloss Item 27 (Raum 15))
-    Vanilla: 1 Instanz(en) vorhanden
-      Item  28 in Raum   15 -> Zone 3            [OK]
-TypeId 197: 1 Instanz(en) noetig
-    Instanz 1 -> muss in Zone <= 5 liegen  (Key Item2 in Schloss Item 93 (Raum 102))
-    Vanilla: 1 Instanz(en) vorhanden
-      Item 101 in Raum  119 -> Zone 5            [OK]
+--- Key/puzzle items: allowed placement range ---
+typeId 196: 1 instance(s) needed
+    instance 1 -> must lie in zone <= 3  (Key Item1 into lock item 27 (room 15))
+    vanilla: 1 instance(s) present
+      item  28 in room   15 -> zone 3            [OK]
+typeId 197: 1 instance(s) needed
+    instance 1 -> must lie in zone <= 5  (Key Item2 into lock item 93 (room 102))
+    vanilla: 1 instance(s) present
+      item 101 in room  119 -> zone 5            [OK]
 
---- Warum kam der Flood nicht weiter? ---
-Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
-nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
+--- Why did the flood not get further? ---
+No closed door at the edge - the flood stops at the geometry,
+not at a blocker (jump/climb/teleport/water not modeled).
 
---- Groesste unerreichte Gebiete ---
-Gebiet mit    18 Sektoren in   1 Raeumen
-   Raeume: 13
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 114x1
-Gebiet mit     9 Sektoren in   1 Raeumen
-   Raeume: 71
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     9 Sektoren in   1 Raeumen
-   Raeume: 72
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 77
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+--- Largest unreached areas ---
+area with    18 sectors in   1 rooms
+   rooms: 13
+   CLARIFIED - no open question:
+     room   13: antitrigger fix of the devs, without meaning for us
+area with     9 sectors in   1 rooms
+   rooms: 71
+   CLARIFIED - no open question:
+     room   71: leftover of the devs, without function
+area with     9 sectors in   1 rooms
+   rooms: 72
+   CLARIFIED - no open question:
+     room   72: leftover of the devs, without function
+area with     1 sectors in   1 rooms
+   rooms: 77
+   CLARIFIED - no open question:
+     room   77: without function
 
---- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
-Keine hinterlegt.
+--- Equipment gates (manual, not derivable from level data) ---
+None on record.
 
---- Selbsttest: Level durchspielbar? ---
-EndLevel 0 in Raum   70 Sektor (1,2) -> Zone 6
-Cutscene 41 in Raum   75 Sektor (3,2) -> Zone 2
+--- Self-test: level completable? ---
+EndLevel 0 in room   70 sector (1,2) -> zone 6
+Cutscene 41 in room   75 sector (3,2) -> zone 2

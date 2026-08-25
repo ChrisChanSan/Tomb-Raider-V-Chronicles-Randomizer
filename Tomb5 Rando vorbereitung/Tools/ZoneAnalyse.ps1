@@ -1,81 +1,81 @@
-# Progressions-Zonen-Analyse fuer TR5-Level (Prototyp)
+# Progression zone analysis for TR5 levels (prototype)
 #
-# Idee: Von Laras Startsektor durch den Sektorgraphen fluten, aber an
-# geschlossenen Tueren stoppen -> Zone 0. Dann pruefen, welche Tueren sich mit
-# dem oeffnen lassen, was in Zone 0 erreichbar ist -> aufschliessen, weiter
-# fluten -> Zone 1. Usw. Ergebnis: jedes Key-Item bekommt "muss in Zone <= N
-# liegen", wobei N die Zone seiner Tuer ist.
+# Idea: flood from Lara's start sector through the sector graph, but stop at
+# closed doors -> zone 0. Then check which doors can be opened with what is
+# reachable in zone 0 -> unlock, keep flooding -> zone 1. And so on. Result:
+# every key item gets "must lie in zone <= N", where N is the zone of its
+# door.
 #
-# Arbeitet auf den JSON-Dateien aus TombItemEdit2026 -exportinfo.
+# Works on the JSON files from TombItemEdit2026 -exportinfo.
 #
-# Das Verstaendnis des TR-Floordata- und Trigger-Formats, auf dem der Export
-# beruht, stammt in wesentlichen Teilen aus trview von Chreden (MIT-Lizenz):
+# The understanding of the TR floordata and trigger format the export rests
+# on comes in essential parts from trview by Chreden (MIT license):
 #   https://github.com/chreden/trview
 #
-# Bekannte Vereinfachungen (bewusst, nicht uebersehen):
-#  - Flipmap-Raeume werden mit ihrem Basisraum dauerhaft verbunden. Ob der
-#    zugehoerige FlipMap-Trigger schon ausgeloest wurde, wird nicht geprueft.
-#  - Springen, Klettern und Sprungweiten sind nicht modelliert; der Graph
-#    verbindet begehbare Nachbarsektoren, unabhaengig vom Hoehenunterschied.
-#  - Einbahn-Uebergaenge und Ausruestungs-Sperren sind handkuratiert
-#    (ONEWAY_OUT bzw. EQUIP_GATE weiter unten).
+# Known simplifications (deliberate, not overlooked):
+#  - Flipmap rooms are permanently connected with their base room. Whether
+#    the corresponding FlipMap trigger has fired is not checked.
+#  - Jumping, climbing and jump distances are not modeled; the graph
+#    connects walkable neighbor sectors regardless of the height difference.
+#  - One-way transitions and equipment gates are hand-curated (ONEWAY_OUT
+#    and EQUIP_GATE further down).
 param(
     [string]$LevelJson,
     [string]$LevelName = "Level",
     [string[]]$DebugSectors = @(),
     [string]$DebugPathTo = "",
     [string]$ExportZonesJson = "",
-    # Maximaler Aufstieg, den Lara ohne Hilfsmittel schafft. Engine-Wert, nicht
-    # Schaetzung: TestLaraVault (game/lara.cpp:1107) behandelt hdif bis -1920
-    # (Vault2/Vault3/Hochsprung) und faellt darueber in
-    # "if (!lara.climb_status) return 0;" - hoeher geht nur an Kletterwaenden.
-    # Der Nutzer hatte es im Spiel exakt richtig eingeschaetzt ("alles ueber
-    # 2x1024 geht nicht aus dem Stand" - die Andrea1-Mauer mit 2048 ist real
-    # unueberwindbar, 1920 ist die praezise Codegrenze darunter).
+    # Maximum climb Lara manages without tools. An engine value, not an
+    # estimate: TestLaraVault (game/lara.cpp:1107) handles hdif down to -1920
+    # (Vault2/Vault3/high jump) and above that falls into
+    # "if (!lara.climb_status) return 0;" - higher only works at climbable
+    # walls. The user had judged it exactly right in game ("anything above
+    # 2x1024 cannot be done from a standstill" - the Andrea1 wall at 2048
+    # really is insurmountable, 1920 is the precise code limit below it).
     [int]$CLIMB_LIMIT = 1920,
-    # PHYSIKMODELL, GEPARKT (2026-08-04): richtungsabhaengige Kletterregel +
-    # Sprungkanten. Drei Messrunden ergaben: die Regel schliesst echte Lecks
-    # (Andrea1-Mauer), zerlegt aber Stockwerk-Level, weil die Sektordaten-
-    # Semantik dafuer nicht ausreicht. Kernbefund aus GetFloor (game/
-    # control.cpp:1206): der Abstieg durch pit_room passiert NUR wenn
-    # y >= Bodenebene - der Floor-Byte ist also echter, solider Boden, AUCH
-    # wenn roomBelow gesetzt ist (gestapelte Stockwerke, Andrea2 Raum 211
-    # ueber 54: beide Ebenen walkable). Eine "Standhoehen-Aufloesung nach
-    # unten" ist damit grundfalsch; ein korrektes Modell braucht die volle
-    # GetHeight-Semantik inkl. NoCol-Dreiecken. Bis dahin: Schalter aus,
-    # Leck-Schliessung stattdessen per GATED_AREA-Kuration.
+    # PHYSICS MODEL, PARKED (2026-08-04): direction-dependent climb rule +
+    # jump edges. Three measurement rounds showed: the rule closes real leaks
+    # (the Andrea1 wall) but tears multi-story levels apart, because the
+    # sector-data semantics do not suffice for it. Core finding from GetFloor
+    # (game/control.cpp:1206): the descent through pit_room happens ONLY when
+    # y >= floor level - the floor byte is thus real, solid ground EVEN when
+    # roomBelow is set (stacked stories, Andrea2 room 211 above 54: both
+    # levels walkable). A "standing-height resolution downwards" is therefore
+    # fundamentally wrong; a correct model needs the full GetHeight semantics
+    # including NoCol triangles. Until then: switch off, leak closing via
+    # GATED_AREA curation instead.
     [switch]$EnableClimbModel
 )
 
 $ErrorActionPreference = "Stop"
 
-# Bevor irgendetwas gerechnet wird: stammt diese Level-Info aus einem
-# unberuehrten Level? Eine aus randomisierten Daten erzeugte Datei sieht genauso
-# aus, und die Zonen waeren dann still falsch statt sichtbar kaputt.
+# Before anything is computed: does this level info come from an untouched
+# level? A file generated from randomized data looks exactly the same, and
+# the zones would then be silently wrong instead of visibly broken.
 . (Join-Path $PSScriptRoot "VanillaGate.ps1")
-[void](Test-VanillaHerkunft -LevelJson $LevelJson)
+[void](Test-VanillaOrigin -LevelJson $LevelJson)
 
 $d = Get-Content $LevelJson -Raw | ConvertFrom-Json
 
-# --- Typ-IDs (aus RESOURCES/TRCatalog2.xml, TR5-Abschnitt) -------------------
+# --- Type IDs (from RESOURCES/TRCatalog2.xml, TR5 section) -------------------
 $DOOR_TYPES = @(284,286,288,290,292,294,296,298,   # Door Type 1-8
                 300,302,304,306,308,310,           # Closed Door 1-6
                 312,314,316,318,320,322,324,326,328,332,
-                98)                                # Cables - siehe unten
-# Kabel (typeId 98) sind keine Tuer, sperren aber genauso: sie stehen von
-# Levelbeginn an unter Strom und sind unpassierbar, bis ein Wandschalter das
-# ganze Level stromlos macht. joby5: der Jump Switch (Item 190, Raum 165)
-# schaltet mit einem Trigger alle vier Kabel (91/136/165/206) UND FlipMap 6.
-# Raum 143 ist ein Korridor, dessen Sektor (1,3) genau so ein Kabel traegt -
-# dahinter liegt Raum 61, und erst nach einem Besuch dort spawnt der Soldat mit
-# Key 6. Die Kabel tragen flags=0, werden von der CODEBITS-Regel also korrekt
-# nicht als "ab Start unresolved" behandelt. Sie in DOOR_TYPES aufzunehmen macht das
-# Modell strenger - die sichere Richtung, weil ein Key-Item hinter einem
-# stromfuehrenden Kabel logisch spaeter liegt, als ein permissives Modell glaubt.
+                98)                                # cables - see below
+# Cables (typeId 98) are no door but block just the same: they are live from
+# level start and impassable until a wall switch cuts the whole level's
+# power. joby5: the jump switch (item 190, room 165) switches all four cables
+# (91/136/165/206) AND FlipMap 6 with one trigger. Room 143 is a corridor
+# whose sector (1,3) carries exactly such a cable - room 61 lies behind it,
+# and only after a visit there does the soldier with Key 6 spawn. The cables
+# carry flags=0, so the CODEBITS rule correctly does not treat them as
+# "unresolved from start". Taking them into DOOR_TYPES makes the model
+# stricter - the safe direction, because a key item behind a live cable
+# logically lies later than a permissive model believes.
 $PUZZLE_ITEM_BASE = 172; $PUZZLE_HOLE_BASE = 242
 $KEY_ITEM_BASE    = 196; $KEY_HOLE_BASE    = 258
 
-# --- Nachschlagetabellen ----------------------------------------------------
+# --- Lookup tables ----------------------------------------------------------
 $rooms = @{}; foreach($r in $d.rooms){ $rooms[[int]$r.index] = $r }
 $items = @{}; foreach($i in $d.items){ $items[[int]$i.index] = $i }
 $sec   = @{}
@@ -91,22 +91,22 @@ function Get-SectorInRoom([int]$targetRoom, [int]$worldX, [int]$worldZ) {
     return $null
 }
 
-# Wasserraeume (waterRoom aus dem Export, ROOM_UNDERWATER-Bit 0x1 des Room-
-# Headers). Beim Schwimmen ist Hoehe irrelevant - jede Kletterregel muss
-# Wasserraeume vollstaendig ausnehmen.
+# Water rooms (waterRoom from the export, ROOM_UNDERWATER bit 0x1 of the room
+# header). While swimming, height is irrelevant - every climb rule must
+# exempt water rooms completely.
 $roomWater = @{}
 foreach($r in $d.rooms){ $roomWater[[int]$r.index] = [bool]$r.waterRoom }
 
-# Effektive Standhoehe eines Sektors. floorY eines Portalsektors ist NICHT die
-# Hoehe, auf der Lara dort steht - das war die Kernursache, warum der erste
-# Hoehenregel-Versuch die Level zerlegte (joby3 -82% usw.). Die Engine macht es
-# in GetHeight()/GetFloor() so: bei einem vertikalen Portal (pit_room) wird in
-# den Raum darunter weitergegangen, bis echter Boden found ist; bei einem
-# horizontalen Portal steht Lara letztlich auf dem Boden des Zielraums. Genau
-# das bildet diese Aufloesung nach: roomBelow zuerst (vertikal faellt man
-# durch), sonst Portalziel, sonst der eigene floorY. Nicht aufloesbar (Zyklen,
-# Wand-Sentinel) => $null, und $null behandelt die Kletterpruefung bewusst als
-# "erlaubt" - lieber eine Kante zu viel als ein Level faelschlich zerschnitten.
+# Effective standing height of a sector. A portal sector's floorY is NOT the
+# height Lara stands on there - that was the core reason the first height
+# rule attempt tore the levels apart (joby3 -82% etc.). The engine does it in
+# GetHeight()/GetFloor() like this: at a vertical portal (pit_room) it walks
+# on into the room below until real floor is found; at a horizontal portal
+# Lara ultimately stands on the target room's floor. Exactly that is what
+# this resolution mirrors: roomBelow first (you fall through vertically),
+# else the portal target, else the own floorY. Not resolvable (cycles, wall
+# sentinel) => $null, and the climb check deliberately treats $null as
+# "allowed" - better one edge too many than a level wrongly cut apart.
 $effFloorCache = @{}
 function Get-EffFloorY([string]$k, [int]$depth = 0) {
     if ($effFloorCache.ContainsKey($k)) { return $effFloorCache[$k] }
@@ -126,36 +126,36 @@ function Get-EffFloorY([string]$k, [int]$depth = 0) {
         }
         else {
             $f = [int]$s.floorY
-            if ($f -gt -30000) { $v = $f }   # Wand-Sentinel (-127 Klicks) => unbekannt
+            if ($f -gt -30000) { $v = $f }   # wall sentinel (-127 clicks) => unknown
         }
     }
     $effFloorCache[$k] = $v
     return $v
 }
 
-# Darf Lara die Kante von $ka nach $kb nehmen? Runter immer (Fallen ist
-# unbegrenzt - der alte Versuch hatte auch Abstiege gedeckelt, DAS war neben
-# der Portalhoehe der zweite Fehler, joby3s tiefe Schaechte fielen deshalb
-# komplett aus). Hoch nur bis CLIMB_LIMIT (1920, TestLaraVault) - es sei denn,
-# einer der Sektoren ist als Kletterwand markiert, einer der Raeume ist Wasser
-# (Schwimmen), oder ein Brueckensektor ist beteiligt (deren floorY beschreibt
-# den Grund unter der Bruecke, nicht die Bruecke).
+# May Lara take the edge from $ka to $kb? Down always (falling is unlimited -
+# the old attempt also capped descents, and THAT was the second mistake
+# besides the portal height, joby3's deep shafts dropped out completely
+# because of it). Up only to CLIMB_LIMIT (1920, TestLaraVault) - unless one
+# of the sectors is marked as a climbable wall, one of the rooms is water
+# (swimming), or a bridge sector is involved (their floorY describes the
+# ground below the bridge, not the bridge).
 function Test-ClimbEdge([string]$ka, [string]$kb) {
-    if (-not $EnableClimbModel) { return $true }   # Physikmodell geparkt, s. Parameterkommentar
+    if (-not $EnableClimbModel) { return $true }   # physics model parked, see the parameter comment
     if ($bridgeSec.ContainsKey($ka) -or $bridgeSec.ContainsKey($kb)) { return $true }
     $sa = $sec[$ka]; $sb = $sec[$kb]
     if ($roomWater[[int]$sa.room] -or $roomWater[[int]$sb.room]) { return $true }
     $fa = Get-EffFloorY $ka
     $fb = Get-EffFloorY $kb
     if ($null -eq $fa -or $null -eq $fb) { return $true }
-    $rise = $fa - $fb    # Y zeigt nach unten: > 0 heisst Ziel liegt HOEHER
+    $rise = $fa - $fb    # Y points down: > 0 means the target lies HIGHER
     if ($rise -le $CLIMB_LIMIT) { return $true }
     if ($sa.climbable -or $sb.climbable) { return $true }
-    # Leitern haengen an WAENDEN: das CLIMB_TYPE-Flag sitzt regelmaessig auf dem
-    # Wandsektor selbst, und Wandsektoren sind nie Endpunkte einer Kante. Lara
-    # steht auf dem Nachbarsektor und klettert die markierte Wand daneben hoch.
-    # Deshalb zaehlt auch ein direkt angrenzender kletterbarer Sektor (egal ob
-    # Wand oder Boden) an einem der beiden Endpunkte.
+    # Ladders hang on WALLS: the CLIMB_TYPE flag regularly sits on the wall
+    # sector itself, and wall sectors are never endpoints of an edge. Lara
+    # stands on the neighbor sector and climbs the marked wall next to it.
+    # Hence a directly adjacent climbable sector (wall or floor) at either
+    # endpoint counts as well.
     foreach($p in @($sa,$sb)){
         foreach($off in @(@(1,0),@(-1,0),@(0,1),@(0,-1))){
             $ak = "$($p.room),$([int]$p.sectorX + $off[0]),$([int]$p.sectorZ + $off[1])"
@@ -165,257 +165,259 @@ function Test-ClimbEdge([string]$ka, [string]$kb) {
     return $false
 }
 
-# --- Sektorgraph aufbauen ---------------------------------------------------
-# Manuell kuratierte Einbahn-Uebergaenge: Raum, den Lara betreten, aber nicht
-# wieder in Richtung anderer Raeume verlassen kann. Aus der Geometrie allein
-# nicht ableitbar (das Portal existiert in beide Richtungen), deshalb Handarbeit
-# - dieselbe Begruendung wie bei boIsManuallyExcludedRoom im Exporter.
+# --- Build the sector graph -------------------------------------------------
+# Manually curated one-way transitions: a room Lara can enter but not leave
+# again toward other rooms. Not derivable from the geometry alone (the portal
+# exists in both directions), hence hand work - the same reasoning as
+# boIsManuallyExcludedRoom in the exporter.
 $ONEWAY_OUT = @{
-    'Andrea1' = @(194)   # Rattenkaefig: rein ja, weiter nach 170 nein
+    'Andrea1' = @(194)   # rat cage: in yes, on to 170 no
 }
 
-# Raeume, die Lara ohne Glitch gar nicht betritt - typischerweise Daecher und
-# Simse, die geometrisch walkable aussehen, aber zu hoch liegen. Das waere
-# eigentlich Sache des Hoehenmodells (-EnableClimbModel): es erkennt diese
-# Faelle nachweislich korrekt (Andrea2 Raum 177/226 fallen damit weg), stuft
-# aber gleichzeitig 86 Raeume als unerreichbar ein, darunter 63 und 69 mit den
-# Puzzle-Slots - als Regel UND als Verdachtsgenerator unbrauchbar. Deshalb
-# Handkuration: eine Zahl pro Raum, in trview direkt ablesbar.
+# Rooms Lara never enters without a glitch - typically roofs and ledges that
+# look geometrically walkable but lie too high. That would really be the
+# height model's job (-EnableClimbModel): it provably detects these cases
+# (Andrea2 rooms 177/226 drop out with it), but at the same time classifies
+# 86 rooms as unreachable, among them 63 and 69 with the puzzle slots -
+# unusable both as a rule and as a suspicion generator. Hence hand curation:
+# one number per room, directly readable in trview.
 $EXCLUDE_ROOMS = @{
-    # Vom Nutzer in trview durchgesehen. Daecher (177/226 und Nachbarn), reine
-    # Luftraeume ueber den Gassen und der Bereich hinter den Dekotueren 89/90.
+    # Reviewed by the user in trview. Roofs (177/226 and neighbors), pure air
+    # rooms above the alleys and the area behind the deco doors 89/90.
     'Andrea2' = @(148,215,83,177,205,220,189,153,226,232,242,47,224,162,237,
                   181,156,124,127,185,112,122,119,118,128,114,115,141,87)
-    # Einbahnraeume, die nur die Skybox zeigen und dem Level Tiefe give.
+    # One-way rooms that only show the skybox and give the level depth.
     'Andrea3' = @(113,114,115,116,64,66,67,69)
-    # joby2: Gelaende, das walkable aussieht und es nicht ist - die grossen
-    # geneigten Flaechen am Rand der Anlage (Raum 158 ist der auffaelligste
-    # Fall, vom Nutzer in trview geprueft). Der Zonen-Flood laeuft ueber sie
-    # hinweg, weil die Sektoren Boden melden; Lara kommt dort nie hin.
-    # Zusammen 296 platzierbare Sektoren, die sonst als Ablage gelten wuerden.
-    # Zweite Runde nach Durchsicht in trview: Daecher, Schiffshuellen, Kaimauern
-    # und andere Flaechen, die Boden melden und keiner sind. Kein einziges
-    # Pickup liegt darin - nur zwei Sniper, Animatings und Bridge-Flats.
+    # joby2: terrain that looks walkable and is not - the big slanted
+    # surfaces at the facility's edge (room 158 is the most striking case,
+    # checked by the user in trview). The zone flood runs across them because
+    # the sectors report floor; Lara never gets there.
+    # Together 296 placeable sectors that would otherwise count as spots.
+    # Second round after a trview review: roofs, ship hulls, quay walls and
+    # other surfaces that report floor and are none. Not a single pickup lies
+    # in them - only two snipers, animatings and bridge flats.
     'joby2' = @(6,7,9,14,149,155,158,
                 8,10,13,15,19,21,139,145,147,148,150,151,153,154,159,
-                # 39, 41 und 44 sind erst durch die Lichtenkorrektur ueberhaupt
-                # aufgetaucht - alle drei Ablagen je Raum sind neu. Der Nutzer
-                # hat sie sofort als ungueltig erkannt. Die Korrektur bringt
-                # also nicht nur Gewinn, sie schafft auch neuen Pruefbedarf.
+                # 39, 41 and 44 only surfaced at all through the lighting
+                # correction - all three spots per room are new. The user
+                # recognized them as invalid immediately. So the correction
+                # does not only bring gains, it also creates new review work.
                 39,41,44)
-    # joby3, vom Nutzer in trview durchgesehen. Kein Pickup liegt darin - nur
-    # ein Electrical Light und ein Animating in Raum 104 sowie je eine
-    # geschlossene Tuer in 118 und 130.
+    # joby3, reviewed by the user in trview. No pickup lies in them - only an
+    # electrical light and an animating in room 104 plus one closed door each
+    # in 118 and 130.
     #
-    # 116, 119, 129 und 184 sind beim Messen dazugekommen: sie haengen nur an
-    # den obigen Raeumen und fielen dadurch heraus. 116, 129 und 184 haben
-    # ohnehin keine einzige Ablage, sind also reine Durchgaenge. Raum 119 hat
-    # vier - die liegen volumes Nutzer hinter einer Dekotuer und sind unerreichbar.
+    # 116, 119, 129 and 184 joined during measuring: they hang only on the
+    # rooms above and thereby dropped out. 116, 129 and 184 have no spot at
+    # all anyway, so they are pure passages. Room 119 has four - per the
+    # user they lie behind a deco door and are unreachable.
     #
-    # Merkposten dazu: unsere Dekotueren-Regel behandelt eine Tuer ohne Trigger
-    # als NICHT sperrend. In joby2 war das richtig, weil Lara die Simse
-    # anspringen konnte. Hier ist es umgekehrt - die Tuer geht nie auf und es
-    # gibt keinen anderen Weg. Beide Faelle sehen in den Daten gleich aus, der
-    # Unterschied steckt allein in der Geometrie dahinter.
+    # Note on that: our deco-door rule treats a door without a trigger as
+    # NOT blocking. In joby2 that was right because Lara could jump onto the
+    # ledges. Here it is the other way round - the door never opens and
+    # there is no other way. Both cases look identical in the data, the
+    # difference sits solely in the geometry behind it.
     'joby3' = @(73,104,115,116,118,119,129,130,163,171,174,177,184)
-    # andy1, vom Nutzer in trview durchgesehen. Raum 236 ist mit 36 Ablagen der
-    # groesste Einzelposten des Levels und liegt hinter dem Levelende - reine
-    # Kulisse. 71, 92, 93, 162 und 211 ebenso. Kein Item liegt in einem davon.
+    # andy1, reviewed by the user in trview. Room 236 is with 36 spots the
+    # level's largest single item and lies behind the level's end - pure
+    # scenery. 71, 92, 93, 162 and 211 likewise. No item lies in any of them.
     #
-    # Ausdruecklich NICHT dabei, obwohl der Verdachtsgenerator sie oben listete:
-    # 113 (dort wird eine Cutscene ausgeloest, Kernbereich) sowie 195, 50, 197,
-    # 170, 38 und 37 - alle bespielbar. Der Generator zeigt Verdaechtige, keine
-    # Ergebnisse; hier lag er in sieben von dreizehn Faellen daneben.
+    # Expressly NOT included although the suspicion generator listed them:
+    # 113 (a cutscene fires there, core area) plus 195, 50, 197, 170, 38 and
+    # 37 - all playable. The generator shows suspects, not results; here it
+    # was wrong in seven of thirteen cases.
     #
-    # Zweite Gruppe: 6, 14, 16, 20, 58, 59 und 185 liegen zusammen in einer
-    # Levelecke und sind samt und sonders nicht erreichbar. Zusammen nur 19
-    # Ablagen und kein einziges Item. Raum 59 war dabei der Anlass - er hat 26
-    # begehbare Sektoren und Portale nach 6, 16 und 185, sieht also nach einem
-    # ordentlichen Raum aus. Er ist einer, nur betritt ihn niemand.
-    # Nutzer: "Das werden wir in dem Level oefter haben."
+    # Second group: 6, 14, 16, 20, 58, 59 and 185 lie together in one level
+    # corner and are unreachable one and all. Together only 19 spots and not
+    # a single item. Room 59 was the occasion - it has 26 walkable sectors
+    # and portals to 6, 16 and 185, so it looks like a proper room. It is
+    # one, only nobody enters it.
+    # User: "We will have that more often in this level."
     #
-    # Dritte und groesste Gruppe, 30 Raeume aus einer weiteren Durchsicht. Der
-    # Nutzer zum Verfahren: "Wir nehmen ganze Raeume, alles andere waere zu
-    # krass." Raum 193 steht beispielhaft dafuer - acht Ablagen, Bodenhoehen
-    # von 5632 bis 8192, also bis zu zweieinhalb Meter Unterschied zwischen
-    # Nachbarsektoren. Geometrisch walkable, mit Laras Bewegungen nicht
-    # anzulaufen. Sektorgenau zu kuratieren waere hier unverhaeltnismaessig.
+    # Third and largest group, 30 rooms from a further review. The user on
+    # the procedure: "We take whole rooms, anything else would be too
+    # extreme." Room 193 stands as the example - eight spots, floor heights
+    # from 5632 to 8192, i.e. up to two and a half meters of difference
+    # between neighboring sectors. Geometrically walkable, unapproachable
+    # with Lara's moves. Curating sector by sector would be out of
+    # proportion here.
     #
-    # Kostet 127 der 502 Ablagen und kein einziges Pickup. Raeume 50 und 195
-    # galten in einer frueheren Durchsicht noch als Kernlevel und sind bei
-    # naeherem Hinsehen doch keiner - die spaetere Angabe gilt.
-    # Die 30 Raeume aus der dritten Durchsicht stehen NICHT hier, sondern in
-    # NO_ITEM_ROOMS: sie sind Kernbereiche, durch die Lara hindurchgeht, nur
-    # ihre Raender sind keine Ablage. Als Begehbarkeitssperre haetten sie die
-    # Schluesselkette gekappt.
+    # Costs 127 of the 502 spots and not a single pickup. Rooms 50 and 195
+    # still counted as core level in an earlier review and on closer
+    # inspection are not - the later statement applies.
+    # The 30 rooms of the third review are NOT here but in NO_ITEM_ROOMS:
+    # they are core areas Lara walks through, only their edges are no spot.
+    # As a walkability bar they would have cut the key chain.
     'andy1' = @(6,14,16,20,58,59,71,92,93,162,185,211,236)
-    # joby5: vier Raeume gleich am Levelanfang. Die Tueren davor - 176, 187,
-    # 193 und 195 - haben KEINEN Trigger, unsere Dekotueren-Regel laesst sie
-    # deshalb als nicht sperrend durchgehen und die Raeume dahinter gelten als
-    # erreichbar. Sie sind es nicht. Drei davon enthalten nur ein Pulse Light.
-    # Dritter Fall dieser Art nach joby3 Raum 119 und joby2 Raum 11: in den
-    # Daten sehen sperrende und nicht sperrende Dekotueren identisch aus.
-    # Raum 112 kommt aus derselben Durchsicht: er haengt an einer Floor
-    # Trapdoor1 (Item 130) mit flags 0 und ohne jeden Trigger - sie geht nie
-    # auf. Vierter Fall der Dekotueren-Grenze in diesem Level.
+    # joby5: four rooms right at the level start. The doors before them -
+    # 176, 187, 193 and 195 - have NO trigger, so our deco-door rule lets
+    # them pass as non-blocking and the rooms behind count as reachable.
+    # They are not. Three of them contain only a pulse light.
+    # Third case of this kind after joby3 room 119 and joby2 room 11: in the
+    # data, blocking and non-blocking deco doors look identical.
+    # Room 112 comes from the same review: it hangs on a Floor Trapdoor1
+    # (item 130) with flags 0 and without any trigger - it never opens.
+    # Fourth case of the deco-door limit in this level.
     'joby5' = @(112,160,169,172,175)
-    # joby4 stand hier zuerst mit den Raeumen 116, 135, 136 - der Schaetzung
-    # 3 x 1024 folgend und damals raumsauber. Die Messung des Nutzers im Spiel
-    # hat die Grenze dann bei rund y 13200 verortet, und dort liegt sie NICHT
-    # mehr raumsauber. Sie steht jetzt als Zahl in $MIN_FLOOR_Y und deckt diese
-    # drei Raeume mit ab.
+    # joby4 first stood here with rooms 116, 135, 136 - following the 3x1024
+    # estimate and room-clean at the time. The user's in-game measurement
+    # then placed the limit at around y 13200, and there it is NOT room-clean
+    # anymore. It now stands as a number in $MIN_FLOOR_Y and covers those
+    # three rooms as well.
     #
-    # 120 und 122 kommen aus der Durchsicht des Nutzers dazu. Sie sind der
-    # groesste Einzelposten des Levels: je 96 Ablagen, zusammen 192 von 586,
-    # also ein knappes Drittel. Kein Item liegt in beiden.
+    # 120 and 122 join from the user's review. They are the level's largest
+    # single item: 96 spots each, together 192 of 586, so a scant third. No
+    # item lies in either.
     'joby4' = @(120,122)
 }
 
-# Einzelne Sektoren sperren, wo ein ganzer Raum zu grob waere. Raum 141 in joby2
-# ist der Fall: er ist bespielbar, nur zwei Felder am Rand sind es nicht.
-# Format wie ueberall sonst "Raum,x,z".
+# Bar individual sectors where a whole room would be too coarse. Room 141 in
+# joby2 is the case: it is playable, only two tiles at its edge are not.
+# Format as everywhere else: "room,x,z".
 $EXCLUDE_SECTORS = @{
-    # Raum 141: zwei Felder am Rand, sonst voll bespielbar.
-    # Raum 152: die grosse schraege Flaeche - x 2 bis 11 auf z 2 und z 3, dazu
-    # die Ausbuchtung (5,4) und (6,4). Den ganzen Raum zu sperren waere falsch
-    # gewesen: Lara landet nach der Cutscene an Tuer 41 genau dort, und die
-    # beiden Cutscene-Trigger auf (11,7) und (11,8) waeren unerreichbar geworden.
-    # Der begehbare Teil liegt bei x 10/11 in den Reihen z 7-13 und 17-18.
+    # Room 141: two tiles at the edge, otherwise fully playable.
+    # Room 152: the big slanted surface - x 2 to 11 on z 2 and z 3, plus the
+    # bulge (5,4) and (6,4). Barring the whole room would have been wrong:
+    # Lara lands right there after the cutscene at door 41, and the two
+    # cutscene triggers on (11,7) and (11,8) would have become unreachable.
+    # The walkable part lies at x 10/11 in rows z 7-13 and 17-18.
     'joby2' = @('141,10,12','141,11,12') +
               @(2..11 | ForEach-Object { "152,$_,2" }) +
               @(2..11 | ForEach-Object { "152,$_,3" }) +
               @('152,5,4','152,6,4')
-    # rich2s Laser (Item 178) zwischen Raum 119 und 57. Er hat als einziger der
-    # vier Laser im Level KEINEN Trigger - 21, 181 und 34 lassen sich abschalten,
-    # dieser nicht -, ist also dauerhaft an und eine echte Wand.
+    # rich2's laser (item 178) between room 119 and 57. It is the only one of
+    # the level's four lasers WITHOUT a trigger - 21, 181 and 34 can be
+    # switched off, this one cannot -, so it is permanently on and a real
+    # wall.
     #
-    # Sie kostete lange 63 Raeume - 590 Ablagen auf 131, Zonen 6 auf 3 - und war
-    # deshalb dreimal wieder ausgebaut worden. Der Grund war nie die Wand: der
-    # Portalgraph kannte nur ZWEI Zugaenge in diesen Bereich, und beide sind zu.
-    # 119->57 ist die Wand selbst, und 58->59 fuehrt durch Tuer 115, die Schalter
-    # 0 in Raum 7 oeffnet - von INNERHALB. Der echte Weg fehlte dem Modell ganz.
+    # It long cost 63 rooms - 590 spots down to 131, zones 6 down to 3 - and
+    # was therefore removed three times. The reason was never the wall: the
+    # portal graph knew only TWO entrances into this area, and both are shut.
+    # 119->57 is the wall itself, and 58->59 leads through door 115, which
+    # switch 0 in room 7 opens - from INSIDE. The real way was missing from
+    # the model entirely.
     #
-    # Jetzt steht er in MANUAL_LINK: Raum 130 -> Raum 139, der Sprung ueber die
-    # WC-Nische in den Fahrstuhlschacht. Damit kostet die Wand GAR NICHTS mehr -
-    # 590 Ablagen mit ihr wie ohne sie -, und die Zonen wachsen von 6 auf 7, weil
-    # die Aufzugssektion nun hinter dem Keypad haengt statt neben der Abkuerzung.
-    # Genau so muss eine richtige Sperre sich verhalten: sie ordnet, sie nimmt
-    # nicht weg.
+    # It now stands in MANUAL_LINK: room 130 -> room 139, the jump across the
+    # WC niche into the elevator shaft. With it the wall costs NOTHING
+    # anymore - 590 spots with it as without it -, and the zones grow from 6
+    # to 7, because the elevator section now hangs behind the keypad instead
+    # of next to the shortcut. Exactly how a proper bar must behave: it
+    # orders, it does not take away.
     #
-    # Merke fuer den naechsten Fall dieser Art: eine Sperre, die das halbe Level
-    # kostet, ist fast nie zu streng - ihr fehlt ein Weg, den das Modell nicht
-    # kennt. Erst den Weg suchen, dann die Sperre bewerten.
+    # Note for the next case of this kind: a bar that costs half the level is
+    # almost never too strict - it is missing a way the model does not know.
+    # Find the way first, then judge the bar.
     #
-    # Vier Sektoren, nicht zwei. (8,1) und (8,2) sind die Felder, auf denen der
-    # Strahl liegt - der Nutzer hat sie so benannt, dort steht Item 178. (9,1)
-    # und (9,2) sind das PORTAL nach Raum 57, einen Sektor dahinter.
+    # Four sectors, not two. (8,1) and (8,2) are the tiles the beam lies on -
+    # the user named them so, item 178 stands there. (9,1) and (9,2) are the
+    # PORTAL to room 57, one sector behind.
     #
-    # Beide zu sperren ist noetig, weil Add-Edge Portale beidseitig anlegt: von
-    # 57 aus kam die Flut ueber die Rueckkante in 119(9,z) an, ohne je an (8,z)
-    # vorbeigemusst zu haben. Fuer die Hauptflut aenderte das nichts, dort war
-    # (8,z) schon die Bremse - aber die Aufzugsinsel griff dadurch nach Raum 119
-    # und damit nach einem Zone-0-Raum der Hauptseite.
+    # Barring both is necessary because Add-Edge creates portals both ways:
+    # from 57 the flood arrived over the back edge into 119(9,z) without ever
+    # having had to pass (8,z). For the main flood that changed nothing,
+    # (8,z) was already the brake there - but the elevator island thereby
+    # reached for room 119 and with it for a zone-0 room of the main side.
     'rich2' = @('119,8,1','119,8,2','119,9,1','119,9,2')
 }
 $excludeRooms = @( if($EXCLUDE_ROOMS.ContainsKey($LevelName)){ $EXCLUDE_ROOMS[$LevelName] } )
 $excludeSectors = @( if($EXCLUDE_SECTORS.ContainsKey($LevelName)){ $EXCLUDE_SECTORS[$LevelName] } )
 
-# Zusaetzliche Sperren pro Item-Typ statt pro Level: der Raum bleibt walkable
-# und Teil des Wegenetzes, nur DIESES Item darf dort nicht liegen. Typischer
-# Fall sind Raeume, die zwar frueh erreichbar sind, aber hinter dem Schloss
-# liegen, das der Schluessel oeffnet - die Zone allein sieht das nicht, weil
-# sie nur "ab wann erreichbar" kennt, nicht "wofuer noch gebraucht".
+# Additional bars per item TYPE instead of per level: the room stays walkable
+# and part of the path network, only THIS item may not lie there. The typical
+# case are rooms that are reachable early but lie behind the lock the key
+# opens - the zone alone does not see that, because it only knows "reachable
+# from when on", not "still needed for what".
 $TYPE_EXCLUDE_ROOMS = @{
     'Andrea2' = @{
         174 = @(17,134,214,46,9,10,207,219)   # Puzzle Item3
         175 = @(70,204)                       # Puzzle Item4
-        176 = @(70,204)                       # Puzzle Item5 (141/87 sind
-                                              # inzwischen ganz gesperrt)
-        # Das Ventil (#61, Nutzerdurchsicht am Wandtest 2026-08-19). Puzzle
-        # Item3 wird von seiner Zonengrenze schon richtig abgefangen, das
-        # Ventil muss frueher stoppen:
-        #  - 31 ist der Leckweg. Von dort laeuft der Flood nach 132 (und
-        #    weiter nach 246 - dem Bossraum der Statue), obwohl das alles
-        #    hinter der Tuer liegt. Nutzer:
-        #    "Raum 31 muss ein Blocker werden."
-        #  - 103 ist erst erreichbar, NACHDEM das Ventil benutzt wurde - ein
-        #    Ventil, das dort liegt, koennte sich selbst nicht freischalten.
-        #  - 246 ist der Bossraum der Statue, vom Nutzer bestaetigt: "das liegt
-        #    hinter der Tuer". Mit ihm ist der Bereich in sich geschlossen.
-        #  - Der Flood laeuft trotz allem weiter: TYPE_EXCLUDE_ROOMS sperrt nur
-        #    den TYP, nicht den Zonenlauf. Die Zone hinter der Tuer bleibt
-        #    deshalb niedrig, und die Raeume dahinter blieben erlaubt. Der
-        #    Nutzer hat sie in trview abgelesen und die Freigabe gegeben, sie
-        #    einzeln zu sperren. Struktureller Fix waere GATED_AREA (Tor +
-        #    Stoppkante wie in Andrea1) - dafuer braucht es die Tuernummern
-        #    und eine geschlossene PreGateRooms-Liste.
+        176 = @(70,204)                       # Puzzle Item5 (141/87 are
+                                              # entirely barred by now)
+        # The valve (#61, user review at the wall test 2026-08-19). Puzzle
+        # Item3 is already caught correctly by its zone limit, the valve
+        # must stop earlier:
+        #  - 31 is the leak path. From there the flood runs to 132 (and on
+        #    to 246 - the statue's boss room) although all of that lies
+        #    behind the door. User:
+        #    "Room 31 must become a blocker."
+        #  - 103 is only reachable AFTER the valve has been used - a valve
+        #    lying there could not unlock itself.
+        #  - 246 is the statue's boss room, confirmed by the user: "that
+        #    lies behind the door". With it the area is self-contained.
+        #  - The flood still runs on: TYPE_EXCLUDE_ROOMS bars only the TYPE,
+        #    not the zone run. The zone behind the door therefore stays low,
+        #    and the rooms behind it stayed allowed. The user read them off
+        #    in trview and gave the go-ahead to bar them individually. The
+        #    structural fix would be GATED_AREA (gate + stop edge as in
+        #    Andrea1) - that needs the door numbers and a closed
+        #    PreGateRooms list.
         172 = @(31,132,246,103,
-                109,175,174,217,136,131,93,86,135,76)   # Puzzle Item1 (Ventil)
+                109,175,174,217,136,131,93,86,135,76)   # Puzzle Item1 (valve)
     }
-    # joby2: Key Item7 darf nicht hinter Tuer 41 landen. Die abgeleitete Regel
-    # "nicht hinter der eigenen Tuer" greift hier fast nicht - sie findet nur
-    # einen einzigen Sektor, weil man ueber den Aussenbereich hinter die Tuer
-    # kommt, ohne sie zu oeffnen. Aus Modellsicht liegt der Bereich damit gar
-    # nicht dahinter, im Spiel schon. Deshalb hier von Hand, vom Nutzer in
-    # trview zusammengestellt.
+    # joby2: Key Item7 must not land behind door 41. The derived rule "not
+    # behind its own door" barely applies here - it finds only a single
+    # sector, because you get behind the door via the outside area without
+    # opening it. From the model's view the area thus does not lie behind it
+    # at all, in game it does. Hence by hand, compiled by the user in trview.
     'joby2' = @{
-        # Raum 67 kam wie 39/41/44 erst mit der Lichtenkorrektur dazu, mit 23
-        # Ablagen auf einen Schlag. Anders als jene bleibt er fuer normale
-        # Items nutzbar - nur Key Item7 darf dort nicht liegen.
+        # Room 67 joined like 39/41/44 only with the lighting correction,
+        # with 23 spots in one stroke. Unlike those it stays usable for
+        # normal items - only Key Item7 may not lie there.
         202 = @(11,12,16,20,24,25,34,40,42,60,61,65,67,73,76,92,93,98,138,152)
         203 = @(83,115)                       # Key Item8
-        # Die Sicherung. Raum 146 aus der letzten Durchsicht des Nutzers; die
-        # drei Einzelfelder in Raum 141 stehen in TYPE_EXCLUDE_SECTORS, weil der
-        # Rest dieses Raums fuer sie in Ordnung ist.
-        172 = @(146)                          # Fuse
+        # The fuse. Room 146 from the user's last review; the three single
+        # tiles in room 141 stand in TYPE_EXCLUDE_SECTORS because the rest of
+        # that room is fine for it.
+        172 = @(146)                          # fuse
     }
-    # joby3: Key Item7 darf nicht hinter Tuer 175 liegen, sie ist sein Deadstop
-    # (Nutzer: "Bis Raum 106 duerfen Key 6/7 auftauchen"). Gemessen mit einer
-    # Flut ab Raum 109, Tuer 175 als Wand, Raum 123 als Grenze: dahinter liegen
-    # 58 Raeume mit Ablagen - aber 52 davon schliesst die Zonengrenze <=Z2
-    # ohnehin schon aus. Uebrig bleiben diese sechs, und nur sie machen den
-    # Unterschied. Raum 109 ist der Fall, den der Nutzer im Testlevel sah.
-    # Key Item6 braucht nichts dergleichen: er bleibt beim Chef in VANILLA_TYPES.
+    # joby3: Key Item7 must not lie behind door 175, it is its deadstop
+    # (user: "Key 6/7 may appear up to room 106"). Measured with a flood from
+    # room 109, door 175 as a wall, room 123 as the boundary: 58 rooms with
+    # spots lie behind it - but 52 of them are already excluded by the zone
+    # limit <=Z2 anyway. These six remain, and only they make the
+    # difference. Room 109 is the case the user saw in the test level.
+    # Key Item6 needs nothing of the kind: it stays with the chef in
+    # VANILLA_TYPES.
     'joby3' = @{
         202 = @(49,60,109,126,152,159)
     }
-    # joby5: Keyhole6 oeffnet die Raeume 18, 54 und 106. Key Item6 darf dort
-    # nicht liegen - er waere hinter der Tuer, die er selbst oeffnet. Genau der
-    # Fall, den die zurueckgenommene automatische Regel abdecken sollte; bis es
-    # dafuer eine tragfaehige Loesung gibt (Aufgabe #49), steht er hier.
-    # Key Item8 (die Keycard fuer Tuer 15) braucht hier KEINEN Eintrag. Am
-    # 2026-08-23 stand hier kurz einer, nach einem Testerbericht ueber
-    # dauerhaft eingeschaltete Kabel - er war ueberfluessig und obendrein
-    # enger als das, was ohnehin gilt: NO_KEY_ROOMS sperrt fuer joby5 bereits
-    # alle fuenf elektrifizierten Wasserraeume (126,127,128,158,183), und das
-    # gilt fuer JEDEN Schluesseltyp. Nachgesehen im Zonenexport: Typ 203 kommt
-    # dort mit maxZone 0 und genau diesen fuenf Raeumen an.
+    # joby5: Keyhole6 opens rooms 18, 54 and 106. Key Item6 must not lie
+    # there - it would be behind the door it opens itself. Exactly the case
+    # the withdrawn automatic rule was meant to cover; until there is a
+    # sound solution for it (task #49), it stands here.
+    # Key Item8 (the keycard for door 15) needs NO entry here. On 2026-08-23
+    # one stood here briefly, after a tester report about permanently live
+    # cables - it was superfluous and moreover narrower than what applies
+    # anyway: NO_KEY_ROOMS already bars all five electrified water rooms for
+    # joby5 (126,127,128,158,183), and that holds for EVERY key type.
+    # Checked in the zone export: type 203 arrives there with maxZone 0 and
+    # exactly these five rooms.
     'joby5' = @{
         201 = @(18,54,106)
     }
-    # andy3: Brechstange (174) und Kreide (172) haengen aneinander und beide
-    # haengen am selben Point of no return. Der Nutzer hat die Kette erklaert:
-    # mit der Brechstange bricht Lara die Kreide aus der Wand (Puzzle Item1
-    # traegt darum OCB 2, den Brechstangen-Pickup), mit der Kreide malt sie in
-    # Raum 18 Sektor (2,5) das Bannsiegel, die Cutscene macht den Teleporter in
-    # Raum 110 erreichbar - und der ist eine Einbahnstrasse.
+    # andy3: crowbar (174) and chalk (172) hang together and both hang on the
+    # same point of no return. The user explained the chain: with the crowbar
+    # Lara breaks the chalk out of the wall (Puzzle Item1 therefore carries
+    # OCB 2, the crowbar pickup), with the chalk she draws the banishing seal
+    # in room 18 sector (2,5), the cutscene makes the teleporter in room 110
+    # reachable - and that is a one-way street.
     #
-    # Im Level gibt es weder Puzzle Hole noch Key Hole, die Zonenlogik sieht von
-    # dieser Kette also gar nichts und leitet keinen einzigen Constraint ab.
+    # The level has neither a puzzle hole nor a key hole, so the zone logic
+    # sees nothing of this chain and derives not a single constraint.
     #
-    # Eine Inselgruppe waere hier mit Kanonen auf Spatzen geschossen. Der
-    # Bereich hinter dem Teleporter ist die Komponente um Raum 140, und die
-    # umfasst gemessen sechs Raeume mit zusammen VIER Ablageflaechen. Im
-    # Portalgraphen haengt sie ueber 142 an Raum 135, im Spiel kommt man nur per
-    # Teleporter hinein und nicht zurueck. Sechs Raumnummern sperren ist
-    # nachvollziehbarer als ein zweiter Flood und wirkt genauso.
+    # An island group would be overkill here. The area behind the teleporter
+    # is the component around room 140, and measured it comprises six rooms
+    # with FOUR spots in total. In the portal graph it hangs on room 135 via
+    # 142, in game you only get in by teleporter and not back. Barring six
+    # room numbers is more traceable than a second flood and works just the
+    # same.
     'andy3' = @{
-        172 = @(136,137,139,140,141,142)      # Kreide
-        174 = @(136,137,139,140,141,142)      # Brechstange
-        # Die Muenze: ihr GROBER Bereich steht als TYPE_ALLOW_ISLAND (ab 142,
-        # Riegel 137/97/149). Innerhalb dieser Insel gibt es aber Raeume, in
-        # denen sie trotzdem nichts zu suchen hat - Nutzerdurchsicht im
-        # Debug-Level 2026-08-24, mit der die Liste vollstaendig wird.
+        172 = @(136,137,139,140,141,142)      # chalk
+        174 = @(136,137,139,140,141,142)      # crowbar
+        # The coin: its COARSE area stands as TYPE_ALLOW_ISLAND (from 142,
+        # stops 137/97/149). Within that island there are still rooms where
+        # it has no business - user review in the debug level 2026-08-24,
+        # which completes the list.
         173 = @(37,42,43,45,46,47,50,51,53,55,56,57,77,78,81,
                 143,144,151,195,196,197)
     }
@@ -425,332 +427,332 @@ if ($TYPE_EXCLUDE_ROOMS.ContainsKey($LevelName)) {
     foreach($kv in $TYPE_EXCLUDE_ROOMS[$LevelName].GetEnumerator()){ $typeExclude[[int]$kv.Key] = @($kv.Value) }
 }
 
-# Raeume, die walkable bleiben und Teil des Wegenetzes sind, in denen aber gar
-# kein Key-/Puzzle-Item liegen darf - unabhaengig vom Typ. Anders als
-# EXCLUDE_ROOMS ist das bewusst KEINE Begehbarkeitssperre: Andrea3s Startinsel
-# enthaelt Laras Startraum 1, den nicht walkable zu machen wuerde die Flut
-# sofort abwuergen. Der Grund ist ein reiner Platzierungsgrund - hinter Raum 3
-# liegt ein Point of no return (Lavapit), ein dort uebersehener Schluessel
-# waere unwiederbringlich.
+# Rooms that stay walkable and part of the path network but in which no key
+# or puzzle item may lie - regardless of type. Unlike EXCLUDE_ROOMS this is
+# deliberately NO walkability bar: Andrea3's start island contains Lara's
+# start room 1, and making that non-walkable would choke the flood
+# immediately. The reason is purely a placement reason - behind room 3 lies
+# a point of no return (lava pit), a key overlooked there would be
+# irrecoverable.
 $NO_PLACEMENT_ROOMS = @{
     'Andrea3' = @(1,2,3,4,5,6,11,19,20,21,22,29,30,34,112,123,124)
 }
 $noPlacement = @( if($NO_PLACEMENT_ROOMS.ContainsKey($LevelName)){ $NO_PLACEMENT_ROOMS[$LevelName] } )
 
-# Dasselbe wie NO_PLACEMENT_ROOMS, nur nicht als Raumliste, sondern als
-# Abschnitt zwischen Eingang und Ausgang: `StartRoom` und `DeadstopRooms`, der
-# Rest ergibt sich aus dem Sektorgraphen. Gedacht fuer geschlossene Sektionen,
-# die man nicht Raum fuer Raum abschreiben will.
+# The same as NO_PLACEMENT_ROOMS, only not as a room list but as a section
+# between entrance and exit: `StartRoom` and `DeadstopRooms`, the rest
+# follows from the sector graph. Meant for closed sections you do not want
+# to write off room by room.
 #
-# Der Flood laeuft auf DEM SEKTORGRAPHEN, nicht auf dem Raumgraphen. Das ist
-# der ganze Unterschied: der Raumgraph kennt keine gesperrten Sektoren, und in
-# rich2 lief er deshalb bei 57 -> 119 mitten durch die Laserwand zurueck ins
-# Level - 128 von 179 Raeumen, bis hinunter zu Laras Startraum. Der
-# Sektorgraph traegt die Wand und bleibt drin.
+# The flood runs on THE SECTOR GRAPH, not on the room graph. That is the
+# whole difference: the room graph knows no barred sectors, and in rich2 it
+# therefore ran at 57 -> 119 straight through the laser wall back into the
+# level - 128 of 179 rooms, down to Lara's start room. The sector graph
+# carries the wall and stays inside.
 $NO_KEY_ISLAND = @{
-    # andy3 (#61): die beiden Wand-Pickups - Kreide (172) und Zaun-Brechstange
-    # (174) - gehoeren in die erste Inselgruppe, in der Lara startet und in
-    # der beide gebraucht werden. Nutzerangabe:
+    # andy3 (#61): the two wall pickups - chalk (172) and fence crowbar
+    # (174) - belong in the first island group, in which Lara starts and in
+    # which both are needed. User statement:
     #
-    #   "Deadstop sind Raum 18, 19, 22. Da wird die Kreide verwendet, womit
-    #    der Teleporter Trigger74 in Raum 110 ueberhaupt erst zu erreichen
-    #    ist. Das sollte jetzt eine Wand bilden, dass die Flood nicht raus
-    #    kann."
+    #   "Deadstops are rooms 18, 19, 22. The chalk is used there, which is
+    #    the only way to reach the teleporter Trigger74 in room 110 at all.
+    #    That should now form a wall so the flood cannot get out."
     #
-    # Eingang ist Raum 140 - derselbe Startraum, den ISLAND_YBAND fuer
-    # Insel 2 fuehrt. Alles, was von dort aus hinter der Wand 18/19/22 liegt,
-    # traegt kein Key-Item mehr; gewoehnliche Pickups bleiben erlaubt.
+    # The entrance is room 140 - the same start room ISLAND_YBAND keeps for
+    # island 2. Everything that lies behind the wall 18/19/22 from there
+    # carries no key item anymore; ordinary pickups stay allowed.
     #
-    # Bewusst NICHT ueber TYPE_EXCLUDE_ROOMS: das sperrt nur den Typ in
-    # genannten Raeumen und stoppt den Zonenlauf NICHT - in Andrea2 sickerte
-    # der Flood deshalb weiter und es brauchte am Ende 14 Raeume von Hand.
-    # ExemptTypes (#61, 2026-08-24): diese Insel ist FUER Kreide und
-    # Brechstange gedacht - sie sollen auf der Startinsel bleiben, also
-    # sperrt sie alles andere (134 Raeume). Die Muenze braucht das exakte
-    # Gegenteil: sie darf NICHT auf die Startinsel. Ohne Ausnahme greifen
-    # beide Regeln gleichzeitig, und uebrig bleibt ein einziger Raum (im
-    # Test ueber 15 Seeds immer Raum 119).
+    # Deliberately NOT via TYPE_EXCLUDE_ROOMS: that only bars the type in
+    # named rooms and does NOT stop the zone run - in Andrea2 the flood
+    # seeped on because of that and in the end it took 14 rooms by hand.
+    # ExemptTypes (#61, 2026-08-24): this island is meant FOR chalk and
+    # crowbar - they should stay on the start island, so it bars everything
+    # else (134 rooms). The coin needs the exact opposite: it must NOT go
+    # onto the start island. Without the exemption both rules apply at once,
+    # and a single room remains (in a test over 15 seeds always room 119).
     #
-    # Die Ausnahme nimmt den Typ aus DIESER Insel heraus - aus der
-    # Sektorliste (keyBarredSectors) wie aus den excludeRooms. Seine eigene
-    # Schranke bleibt: ISLAND_GROUP haelt ihn von der Startinsel fern.
+    # The exemption takes the type out of THIS island - out of the sector
+    # list (keyBarredSectors) as well as out of the excludeRooms. Its own
+    # bound stays: ISLAND_GROUP keeps it off the start island.
     'andy3' = @(
         @{ StartRoom = 140; DeadstopRooms = @(18,19,22); ExemptTypes = @(173) }
     )
-    # rich2s Aufzugssektion. Der Nutzer: Eingang ist Raum 140, Ausgang Raum 113,
-    # und was dazwischen liegt, soll keine Key-Items tragen - gewoehnliche
-    # Pickups schon.
+    # rich2's elevator section. The user: the entrance is room 140, the exit
+    # room 113, and what lies in between should carry no key items -
+    # ordinary pickups yes.
     #
-    # Der Grund steckt in der Sektion selbst. Sie ist eine Kette aus Schaltern,
-    # Lifttueren und fuenf Teleportern, an deren Ende Lara per Cutscene ins EG
-    # versetzt wird; das Modell sieht davon nur die Sektoren und laeuft sie in
-    # beliebiger Reihenfolge ab. Ein Schluessel darin haette eine Zonennummer,
-    # der niemand trauen kann. Ein Medipack dagegen stoert nicht.
+    # The reason sits in the section itself. It is a chain of switches, lift
+    # doors and five teleporters, at whose end Lara is placed into the
+    # ground floor by cutscene; the model sees only the sectors of it and
+    # walks them in arbitrary order. A key inside would have a zone number
+    # nobody can trust. A medipack, by contrast, does no harm.
     'rich2' = @(
-        # Drei Deadstops, und jeder hat seinen eigenen Grund.
+        # Three deadstops, and each has its own reason.
         #
-        # 141 ist der Schacht ueber dem Eingang. Ohne ihn laeuft die Flut ueber
-        # die Handkante 130 -> 139 rueckwaerts wieder ins WC und von dort ins
-        # ganze Level.
+        # 141 is the shaft above the entrance. Without it the flood runs over
+        # the hand edge 130 -> 139 backwards into the WC again and from
+        # there into the whole level.
         #
-        # 46 ist das eigentliche Leck, und es zu finden hat gedauert, weil es
-        # nicht in den Sektordaten steht: der Nutzer hat es in trview gesehen.
-        # Im Erdgeschoss ist bei FlipMap 0 der Schacht unresolved, und FlipMap 0 ist
-        # ab Levelstart gesetzt - Raum 42 haengt damit dauerhaft an Raum 46, der
-        # EG-Halle. Ueber sie lief die Flut jedes Mal bis hinunter zu Laras
-        # Startraum 129. Mein erster Versuch, stattdessen 46s Nachbarn 122 und
-        # 123 zu sperren, war Symptomkur: 46 selbst gehoert nicht mehr zur
-        # Sektion.
+        # 46 is the actual leak, and finding it took a while because it does
+        # not stand in the sector data: the user saw it in trview. On the
+        # ground floor, with FlipMap 0 the shaft is open, and FlipMap 0 is
+        # set from level start - room 42 thereby hangs permanently on room
+        # 46, the ground-floor hall. Over it the flood ran down to Lara's
+        # start room 129 every time. My first attempt to bar 46's neighbors
+        # 122 and 123 instead was symptom treatment: 46 itself no longer
+        # belongs to the section.
         #
-        # 113 ist der Ausgang, den der Nutzer genannt hat. Er wird zusaetzlich
-        # gebraucht - 46 allein reicht nicht, weil 113 auch ueber 115 und 172
-        # von innen erreichbar ist und die Flut von dort weiterlaeuft.
+        # 113 is the exit the user named. It is needed in addition - 46
+        # alone does not suffice, because 113 is also reachable from inside
+        # via 115 and 172 and the flood runs on from there.
         #
-        # Ergebnis: 51 Raeume, 638 Sektoren, 93 der 588 Ablagen. Ohne die
-        # Deadstops waeren es 586 von 588 gewesen - also praktisch das ganze
-        # Level.
+        # Result: 51 rooms, 638 sectors, 93 of the 588 spots. Without the
+        # deadstops it would have been 586 of 588 - practically the whole
+        # level.
         @{ StartRoom = 140; DeadstopRooms = @(141,46,113) }
     )
 }
 $noKeyIslands = @( if($NO_KEY_ISLAND.ContainsKey($LevelName)){ $NO_KEY_ISLAND[$LevelName] } )
 
 #----------------------------------------------------------------------------
-# Raeume, die walkable bleiben, in denen aber GAR NICHTS liegen darf.
+# Rooms that stay walkable but in which NOTHING AT ALL may lie.
 #
-# Die dritte Sperrebene, und sie war noetig, weil die beiden anderen den Fall
-# nicht treffen: EXCLUDE_ROOMS nimmt den Raum auch aus dem Wegenetz,
-# NO_PLACEMENT_ROOMS sperrt nur Key- und Puzzle-Items.
+# The third bar level, and it was needed because the other two do not hit
+# the case: EXCLUDE_ROOMS also takes the room out of the path network,
+# NO_PLACEMENT_ROOMS bars only key and puzzle items.
 #
-# andy1 hat den Fall in Reinform. Der Nutzer beschreibt eine Schlucht, durch die
-# Lara hindurchgeht; an ihren Raendern liegen Stellen, die geometrisch walkable
-# und in Wirklichkeit nicht anzulaufen sind. Sektorgenau waere das
-# unverhaeltnismaessig - "ich muesste jetzt 12 Sektoren als nicht valide suchen,
-# nur um 4 gute zu retten". Als EXCLUDE_ROOMS eingetragen kappte die Liste
-# dagegen den Zugang zu 229 Sektoren mitsamt Puzzle Item1 und seinem Schloss,
-# das Level war im Modell nicht mehr loesbar.
+# andy1 has the case in its pure form. The user describes a gorge Lara walks
+# through; at its edges lie spots that are geometrically walkable and in
+# reality unapproachable. Sector-precise would be out of proportion - "I
+# would now have to hunt 12 sectors as invalid just to save 4 good ones".
+# Entered as EXCLUDE_ROOMS, the list however cut the access to 229 sectors
+# together with Puzzle Item1 and its lock, the level was no longer solvable
+# in the model.
 #
-# Deshalb hier: der Weg bleibt, die Ablagen verschwinden.
+# Hence here: the way stays, the spots vanish.
 #----------------------------------------------------------------------------
 $NO_ITEM_ROOMS = @{
     #------------------------------------------------------------------------
-    # Letzte Durchsicht des Nutzers ueber alle Level, nachdem die Testlevel
-    # beide Ebenen zeigten (223 auf jedem Sektor, Key-Ranges darueber). Diese
-    # sechs Level hatten bis dahin gar keinen Eintrag.
+    # The user's last review across all levels, after the test levels showed
+    # both layers (223 on every sector, key ranges above). These six levels
+    # had no entry at all until then.
     #------------------------------------------------------------------------
     'Andrea1' = @(216,67,155)
-    # Raum 6 kam 2026-08-23 dazu (Nutzer). Er trug 6 Ablagesektoren in Zone 0,
-    # vanilla liegt dort nichts. Bewusst hier und nicht in EXCLUDE_ROOMS: Raum
-    # 6 ist ein Verbinder (Portale zu 4, 7 und 55), und Raum 4 haengt nur an 1
-    # und 6 - als Begehbarkeitssperre koennte er Wege kappen. Der Weg bleibt,
-    # die Ablagen verschwinden.
+    # Room 6 joined 2026-08-23 (user). It carried 6 spot sectors in zone 0,
+    # vanilla has nothing lying there. Deliberately here and not in
+    # EXCLUDE_ROOMS: room 6 is a connector (portals to 4, 7 and 55), and
+    # room 4 hangs only on 1 and 6 - as a walkability bar it could cut
+    # paths. The way stays, the spots vanish.
     'Andrea2' = @(149,6)
     'Andrea3' = @(129,68,75)
     'joby2'   = @(72)
     'joby3'   = @(65)
-    # 16, 40, 41, 42 und 156 kamen 2026-08-23 dazu (Nutzer, im Spiel gesehen):
-    # In allen fuenf lagen noch Gegner und Items. Gleich nach dem Level-Intro
-    # greift Flipmap 0, und alle fuenf sind Flip-ORIGINALE - an der Datei
-    # nachgemessen (RaumPruef): 16->84, 40->80, 41->69, 42->79, 156->90. Ab
-    # diesem Moment steht ueberall die Flip-Fassung, die Originale sind nie zu
-    # begehen. Ein Gegner dort wacht nie auf, ein Item ist nie zu holen.
+    # 16, 40, 41, 42 and 156 joined 2026-08-23 (user, seen in game): enemies
+    # and items still lay in all five. Right after the level intro Flipmap 0
+    # engages, and all five are flip ORIGINALS - measured at the file
+    # (RaumPruef): 16->84, 40->80, 41->69, 42->79, 156->90. From that moment
+    # the flip version stands everywhere, the originals are never walked. An
+    # enemy there never wakes, an item is never to be fetched.
     #
-    # Bewusst hier und nicht in EXCLUDE_ROOMS: als Begehbarkeitssperre wuerden
-    # sie das Wegenetz zerschneiden, obwohl ihre Flip-Fassungen sehr wohl
-    # begangen werden. Der Weg bleibt, die Ablagen verschwinden.
+    # Deliberately here and not in EXCLUDE_ROOMS: as a walkability bar they
+    # would cut the path network although their flip versions are very much
+    # walked. The way stays, the spots vanish.
     'joby5'   = @(181,16,40,41,42,156)
-    # Dritte Durchsicht: 55, 78, 95, 145, 150, 186, 228, 231 - zusammen 20
-    # Ablagen. Raum 186 ist zugleich Deadstop der Inselgruppe - hier nur als
-    # Ablage gesperrt, der Weg bleibt.
+    # Third review: 55, 78, 95, 145, 150, 186, 228, 231 - together 20 spots.
+    # Room 186 is at the same time the island group's deadstop - barred here
+    # only as a spot, the way stays.
     #
-    # 55 und 78 haengen zusammen und sind ein Sonderfall, den der Nutzer
-    # aufgeklaert hat. Der Pickup-Trigger in Raum 51 Sektor (2,2) - genau dort
-    # liegt das Herz - feuert Object:8 (das Herz selbst), Object:12 (die Tuer
-    # in Raum 55) und Cutscene:19. Wird das Herz anderswohin randomisiert,
-    # hebt auf diesem Sektor niemand mehr etwas auf, der Trigger feuert nie und
-    # Tuer 12 bleibt zu. Verschieben laesst er sich nicht, weil er zugleich die
-    # Cutscene traegt.
+    # 55 and 78 hang together and are a special case the user cleared up.
+    # The pickup trigger in room 51 sector (2,2) - exactly where the heart
+    # lies - fires Object:8 (the heart itself), Object:12 (the door in room
+    # 55) and Cutscene:19. If the heart is randomized elsewhere, nobody
+    # picks anything up on this sector anymore, the trigger never fires and
+    # door 12 stays shut. It cannot be moved because it also carries the
+    # cutscene.
     #
-    # Der kleine Bereich dahinter ist damit tot, und das ist so akzeptiert:
-    # "Sollte das Herz mal zufaellig auf seinem Trigger liegen, ok, ist das halt
-    # leer. Sonst egal." Deshalb liegt dort auch nichts.
-    # (Item 15 in Raum 78 ist ein Smallmedi, nicht das Herz - das ist Item 8.)
-    # 27 und 200 kamen in der letzten Durchsicht dazu.
+    # The small area behind it is thereby dead, and that is accepted as
+    # such: "Should the heart ever happen to lie on its trigger, ok, then
+    # it's just empty. Otherwise whatever." That is also why nothing lies
+    # there.
+    # (Item 15 in room 78 is a smallmedi, not the heart - that is item 8.)
+    # 27 and 200 joined in the last review.
     'andy1' = @(2,11,24,27,30,32,33,41,42,50,55,64,65,68,69,72,74,75,76,77,78,
                 95,103,129,139,140,145,147,150,160,161,163,171,174,175,186,191,
                 193,195,198,200,228,231,242)
-    # Andy2, Raum 29: das Dach der Muehle. In einem 11x11-Raum steht mittig ein
-    # Plateau, ringsum ist kein Boden - ein Schacht. Genau die neun
-    # Plateausektoren sind Ablageflaeche, und der Nutzer hat sie in trview als
-    # unerreichbar bestaetigt ("die sind auf der Muehle").
+    # Andy2, room 29: the mill's roof. In an 11x11 room a plateau stands in
+    # the middle, around it there is no floor - a shaft. Exactly the nine
+    # plateau sectors are spot surface, and the user confirmed them in
+    # trview as unreachable ("those are on the mill").
     #
-    # Das Modell haelt sie fuer erreichbar, und zwar nachvollziehbar: die
-    # Sektoren 29(5,1) und (5,2) haben keinen eigenen Boden, Lara steht dort auf
-    # Raum 30 bei y=13568. Von da aufs Plateau bei 12288 sind 1280 Einheiten,
-    # und Test-ClimbEdge laesst bis 1920 zu. Die Kante ist ingame aber nicht
-    # greifbar.
+    # The model considers them reachable, and understandably so: sectors
+    # 29(5,1) and (5,2) have no floor of their own, Lara stands there on
+    # room 30 at y=13568. From there onto the plateau at 12288 is 1280
+    # units, and Test-ClimbEdge allows up to 1920. The edge is not grabbable
+    # in game though.
     #
-    # Zwei automatische Erkennungen sind daran gescheitert. Ein lokaler Test auf
-    # "Aufstieg > 1024" findet den Fall nicht, weil der Torsektor 29(5,3) selbst
-    # keine Ablage ist und die Plateausektoren untereinander eben liegen. Und
-    # ein Test auf "Plateau ueber bodenlosem Umfeld" trifft in Andy2 ueber
-    # achtzig Raeume, weil jeder kleine 3x3-Raum so aussieht - Raum 29 war nicht
-    # einmal darunter. Die tragfaehige Variante waere ein zweiter Flood mit
-    # Kletterschranke 1024; bis dahin steht der Raum hier.
+    # Two automatic detections failed on this. A local test for "ascent >
+    # 1024" does not find the case, because the gate sector 29(5,3) itself
+    # is no spot and the plateau sectors lie level among themselves. And a
+    # test for "plateau above floorless surroundings" hits over eighty rooms
+    # in Andy2, because every small 3x3 room looks like that - room 29 was
+    # not even among them. The viable variant would be a second flood with
+    # climb bound 1024; until then the room stands here.
     #
-    # Der Rest der Liste ist die zweite und dritte Durchsicht des Nutzers in
-    # trview. 31 und 41 sind die Raeume mit den Feuer- und Stachelfallen - die
-    # Sektoren dazwischen sehen als Ablage voellig in Ordnung aus.
+    # The rest of the list is the user's second and third trview review. 31
+    # and 41 are the rooms with the fire and spike traps - the sectors in
+    # between look perfectly fine as spots.
     #
-    # 132 und 134 sind die Flipvarianten von 31 und 41 und haben ohnehin keine
-    # einzige Ablageflaeche: der Exporter sperrt jede Flipvariante grundsaetzlich
-    # (RoomIsAlternate, siehe TRFile_RandomizerExport.cpp). Sie stehen hier als
-    # Sicherheitsnetz, falls diese Regel je gelockert wird - dann duerfen die
-    # Fallenraeume nicht stillschweigend zurueckkommen.
+    # 132 and 134 are the flip variants of 31 and 41 and have no spot
+    # surface at all anyway: the exporter bars every flip variant on
+    # principle (RoomIsAlternate, see TRFile_RandomizerExport.cpp). They
+    # stand here as a safety net in case that rule is ever loosened - then
+    # the trap rooms must not silently come back.
     'Andy2' = @(7,29,31,41,132,134,143,144,145,173,174,175,176,177,179,180,181,248,250)
-    # andy3 ist bei den Sperrlisten eine andere Hausnummer als die uebrigen
-    # Level - der Nutzer schaetzt mindestens hundert Raeume. Die Liste waechst
-    # hier in Bloecken, wie er sie in trview durchgeht.
+    # andy3 is a different beast among the bar lists than the other levels -
+    # the user estimates at least a hundred rooms. The list grows here in
+    # blocks as he works through them in trview.
     #
-    # rich1, erste Durchsicht des Nutzers. Fuenf der genannten Raeume (46, 47,
-    # 87, 90, 92) hatten schon vorher keine Ablage - sie stehen trotzdem hier,
-    # damit die Liste die Durchsicht vollstaendig abbildet.
+    # rich1, the user's first review. Five of the named rooms (46, 47, 87,
+    # 90, 92) already had no spot before - they stand here anyway so the
+    # list fully mirrors the review.
     #
-    # In Raum 123 liegt ein Vanilla-Smallmedi (Item 178). Das ist bewusst so
-    # eingetragen: das Item geht nicht verloren, es wandert nur woanders hin,
-    # und die Abnahmeregel "keine Vanilla-Position verbieten" richtet sich gegen
-    # falsche ABGELEITETE Regeln, nicht gegen eine Handentscheidung des Nutzers.
+    # In room 123 lies a vanilla smallmedi (item 178). That is entered
+    # deliberately: the item is not lost, it only travels elsewhere, and the
+    # acceptance rule "never forbid a vanilla position" is aimed at wrong
+    # DERIVED rules, not at a hand decision of the user.
     #
-    # Raum 17 hat einen eigenen Grund, den nur der Nutzer kennen kann: SOBALD DER
-    # HAMMER BENUTZT WIRD, ist der Bereich unerreichbar. Was dort liegt, ist
-    # danach verloren. In den Leveldaten steht davon nichts - der Raum sieht
-    # walkable aus, ist erreicht und traegt zwoelf tadellose Ablagen. Genau die
-    # Sorte Einbahnstrasse, die das Zonenmodell prinzipiell nicht sehen kann.
-    # Raum 5 kam in der letzten Durchsicht dazu.
+    # Room 17 has its own reason only the user can know: AS SOON AS THE
+    # HAMMER IS USED, the area is unreachable. What lies there is lost
+    # afterwards. Nothing of that stands in the level data - the room looks
+    # walkable, is reached and carries twelve flawless spots. Exactly the
+    # kind of one-way street the zone model can in principle not see.
+    # Room 5 joined in the last review.
     'rich1' = @(5,17,19,20,46,47,68,83,85,87,89,90,92,123,130,154)
-    # rich2, Raum 107 im Fahrstuhlschacht. Der Nutzer: walkable erst, wenn
-    # Flipmap 7 an ist, und dort kommt Lara nur vom Erdgeschoss aus hin - also
-    # NACH der ganzen Aufzugssektion. Das Modell sieht ihn in Zone 2, zusammen
-    # mit dem Schacht selbst, und das ist um mehrere Stationen zu frueh. Ein
-    # FLIP_GATE hilft nicht: 107 ist ein Basisraum ohne eigene Flipvariante, die
-    # Geometrieaenderung kommt aus dem Umschalten benachbarter Raeume. Zwei
-    # Ablagen sind der ganze Preis.
+    # rich2, room 107 in the elevator shaft. The user: walkable only once
+    # Flipmap 7 is on, and Lara only gets there from the ground floor - so
+    # AFTER the whole elevator section. The model sees it in zone 2,
+    # together with the shaft itself, and that is several stations too
+    # early. A FLIP_GATE does not help: 107 is a base room without its own
+    # flip variant, the geometry change comes from neighboring rooms
+    # flipping. Two spots are the whole price.
     #
-    # Ebenfalls vom Nutzer und hier nur vermerkt, weil es sonst verloren geht:
-    # Raum 105 ist der Deadstop nach dem Fahrstuhlabsturz - von dort geht es
-    # zurueck ins Level. Ablagen hat er ohnehin keine, alle seine Sektoren sind
-    # zu steil; fuer eine spaetere Inselgruppe ist er der richtige Stopp.
+    # Likewise from the user and noted here only so it does not get lost:
+    # room 105 is the deadstop after the elevator crash - from there it
+    # goes back into the level. It has no spots anyway, all its sectors are
+    # too steep; for a later island group it is the right stop.
     #
-    # Erste Sperrliste des Nutzers aus dem trview-Durchgang: 19, 42, 43, 44, 60
-    # und 66. Vier davon (42, 43, 44, 66) liegen in der Aufzugsinsel und waren
-    # dort schon fuer Key-Items gesperrt - jetzt darf dort gar nichts liegen.
-    # 34 und 110 kamen in der letzten Durchsicht dazu. Raum 34 ist der mit dem
-    # Motion Sensor, der die Fallen ausloest - damit ist auch diese Frage geklaert.
-    # 14, 15, 16 und 18 kamen am 2026-08-15 dazu: sie liegen volumes Nutzer
-    # hinter Tuer 171 und gehoeren damit weder zur Startinsel noch verlaesslich
-    # zum Bereich dahinter. 19 und 60 standen schon vorher hier.
+    # The user's first bar list from the trview pass: 19, 42, 43, 44, 60
+    # and 66. Four of them (42, 43, 44, 66) lie in the elevator island and
+    # were already barred there for key items - now nothing at all may lie
+    # there.
+    # 34 and 110 joined in the last review. Room 34 is the one with the
+    # motion sensor that sets off the traps - that question is settled too.
+    # 14, 15, 16 and 18 joined on 2026-08-15: per the user they lie behind
+    # door 171 and thus belong neither to the start island nor reliably to
+    # the area behind it. 19 and 60 already stood here before.
     'rich2' = @(107,14,15,16,18,19,34,42,43,44,60,66,110)
-    # rich3, Sperrliste des Nutzers aus dem trview-Durchgang. 28 Raeume; Raum 121
-    # hatte er doppelt genannt, 209 kam als letzter nach. Damit ist rich3 fertig.
+    # rich3, the user's bar list from the trview pass. 28 rooms; room 121 he
+    # had named twice, 209 came last. With that rich3 is done.
     'rich3' = @(2,23,24,33,41,47,51,52,56,58,60,68,71,72,84,85,92,121,151,153,
                 169,170,171,178,193,198,204,209)
-    # Raum 113 ist der erste und zeigt zugleich, warum das Modell hier so wenig
-    # helfen kann: der Raum enthaelt KEIN einziges Item und KEINEN einzigen
-    # Static, seine Stacheln stecken in der Raumgeometrie selbst. Weder die
-    # Item- noch die Statics-Liste weiss von ihnen, und ein Sektor mit Boden und
-    # Kopffreiheit sieht fuer den Exporter tadellos aus. Solche Fallen sind
-    # ausschliesslich mit dem Auge zu finden.
-    # 155 ist zugleich der Deadstop von Insel 2. Das stoert sich nicht: die
-    # Abschnitte werden ueber den Raumgraphen und DeadstopRooms bestimmt,
-    # NO_ITEM_ROOMS wirkt erst danach auf die Ablagen.
-    # 109 kam mit #61 dazu (Nutzerdurchsicht am Wandtest): "Raum 109 darf
-    # nichts sein."
+    # Room 113 is the first and at the same time shows why the model can
+    # help so little here: the room contains NOT ONE item and NOT ONE
+    # static, its spikes sit in the room geometry itself. Neither the item
+    # nor the statics list knows of them, and a sector with floor and head
+    # room looks flawless to the exporter. Such traps can only be found by
+    # eye.
+    # 155 is at the same time island 2's deadstop. That does not clash: the
+    # sections are determined via the room graph and DeadstopRooms,
+    # NO_ITEM_ROOMS acts only afterwards on the spots.
+    # 109 joined with #61 (user review at the wall test): "room 109 may be
+    # nothing."
     'andy3' = @(109,10,12,14,15,16,17,19,22,23,24,25,27,35,36,86,87,108,113,115,116,
                 120,121,133,155,156,158,167,171,172,209)
 }
 $noItemRooms = @( if($NO_ITEM_ROOMS.ContainsKey($LevelName)){ $NO_ITEM_ROOMS[$LevelName] } )
 
-# Positivliste statt Sperrliste: manche Typen duerfen nur in einem klar
-# umrissenen Abschnitt liegen. Andrea3 ist der Fall - beide Keys muessen im
-# Korridor ab Raum 26 ueber 27 Richtung Ende liegen, Key Item1 bis
-# einschliesslich seines Schlosses in Raum 15, Key Item2 bis Raum 102. Die
-# Zonen allein reichen dafuer nicht: der Teleporter ist wegen des Crumble
-# Floor eine Einbahnstrasse, davor liegende Raeume koennen also dieselbe Zone
-# haben und trotzdem die falsche Seite sein. Raumlisten aus dem Portalgraphen
-# abgeleitet (Flut ab 27, Stop an 26 rueckwaerts und am Schloss vorwaerts).
+# A positive list instead of a bar list: some types may only lie in a
+# clearly outlined section. Andrea3 is the case - both keys must lie in the
+# corridor from room 26 via 27 toward the end, Key Item1 up to and including
+# its lock in room 15, Key Item2 up to room 102. The zones alone do not
+# suffice for that: the teleporter is a one-way street because of the
+# crumble floor, so rooms before it can share the same zone and still be the
+# wrong side. Room lists derived from the portal graph (flood from 27, stop
+# at 26 backwards and at the lock forwards).
 #----------------------------------------------------------------------------
-# Wie TYPE_EXCLUDE_ROOMS, nur feiner: einzelne Sektoren statt ganzer Raeume, je
-# Typ. Gebraucht, wenn ein Raum fuer einen Typ ueberwiegend in Ordnung ist und
-# nur ein paar Felder darin nicht - dann waere die Raumsperre zu grob und die
-# allgemeine NO_ITEM_SECTORS-Liste zu weit, weil sie ja ALLE Typen trifft.
+# Like TYPE_EXCLUDE_ROOMS, only finer: individual sectors instead of whole
+# rooms, per type. Needed when a room is mostly fine for a type and only a
+# few tiles in it are not - then the room bar would be too coarse and the
+# general NO_ITEM_SECTORS list too wide, because it hits ALL types.
 #
-# joby2 ist der erste Fall: die Sicherung (typeId 172) darf auf drei Feldern in
-# Raum 141 nicht liegen, waehrend der Rest des Raums fuer sie taugt. Die neun
-# anderen Felder desselben Raums sind dagegen fuer jeden Typ gesperrt und stehen
-# deshalb in NO_ITEM_SECTORS.
+# joby2 is the first case: the fuse (typeId 172) may not lie on three tiles
+# in room 141, while the rest of the room suits it. The nine other tiles of
+# the same room are barred for every type and therefore stand in
+# NO_ITEM_SECTORS.
 #
-# Wird unten zu bannedSectors hinzugefuegt, denselben Weg wie NotOnIslandTypes -
-# damit greift es in beiden Constraint-Pfaden, abgeleitet wie handgesetzt.
+# Added to bannedSectors below, the same path as NotOnIslandTypes - that way
+# it takes effect in both constraint paths, derived as well as hand-set.
 #----------------------------------------------------------------------------
 $TYPE_EXCLUDE_SECTORS = @{
     'joby2' = @{ 172 = @('141,9,3','141,8,3','141,6,2') }
-    # andy3 (#61), Nutzerangaben aus dem Debug-Level 2026-08-24. Eine
-    # Raumsperre waere in allen Faellen zu grob - die Raeume sind fuer den
-    # jeweiligen Typ ueberwiegend in Ordnung.
+    # andy3 (#61), user statements from the debug level 2026-08-24. A room
+    # bar would be too coarse in all cases - the rooms are mostly fine for
+    # the respective type.
     'andy3' = @{
-        173 = @('38,2,1','38,3,1','34,2,12','34,3,12')   # Muenze
-        # Kreide und Brechstange: Raum 31, Feld (2,1) - "die Geometrie ist
-        # dort zu scharf". Beide sind Wandgriffe (OCB 2 bzw. 9) und haben
-        # KEINEN Constraint; sie werden deshalb ueber typeNoSectors gesperrt,
-        # die Liste, die ausserhalb des Constraint-Zweigs greift.
-        172 = @('31,2,1')                                # Kreide
-        174 = @('31,2,1')                                # Brechstange
+        173 = @('38,2,1','38,3,1','34,2,12','34,3,12')   # coin
+        # Chalk and crowbar: room 31, tile (2,1) - "the geometry there is
+        # too sharp". Both are wall grabs (OCB 2 and 9) and have NO
+        # constraint; they are therefore barred via typeNoSectors, the list
+        # that takes effect outside the constraint branch.
+        172 = @('31,2,1')                                # chalk
+        174 = @('31,2,1')                                # crowbar
     }
 }
 
 $TYPE_ALLOW_ROOMS = @{
     'Andrea2' = @{
-        # Vom Nutzer als "save" bestaetigte Raeume fuer die Brechstange.
-        # 240, NICHT 172: typeId 172 heisst zwar ueberall "Puzzle Item1", ist in
-        # Andrea2 aber das Ventil (Item 128, Raum 196), das mit der Brechstange
-        # aufgebrochen wird. Die echte Brechstange ist typeId 240 "Crowbar Item"
-        # (Item 2, Raum 1) - im ganzen Spiel nur hier. In joby3 und rich1 ist die
-        # Brechstange dagegen tatsaechlich als Puzzle-/Key-Item getarnt, daher
-        # die Verwechslungsgefahr.
-        # Raum 26 kam in der letzten Durchsicht dazu.
+        # Rooms confirmed as "safe" by the user for the crowbar.
+        # 240, NOT 172: typeId 172 is called "Puzzle Item1" everywhere, but
+        # in Andrea2 it is the valve (item 128, room 196) that is broken
+        # open with the crowbar. The real crowbar is typeId 240 "Crowbar
+        # Item" (item 2, room 1) - in the whole game only here. In joby3 and
+        # rich1 the crowbar really is disguised as a puzzle/key item, hence
+        # the risk of confusion.
+        # Room 26 joined in the last review.
         240 = @(0,1,10,17,25,26,46,50,54,207)
     }
     'Andrea3' = @{
-        196 = @(15,16,26,27,107,108)                         # Key Item1, Ende 15
-        197 = @(10,15,16,17,18,26,27,28,55,56,70,83,85,87,   # Key Item2, Ende 102
+        196 = @(15,16,26,27,107,108)                         # Key Item1, end 15
+        197 = @(10,15,16,17,18,26,27,28,55,56,70,83,85,87,   # Key Item2, end 102
                 88,89,90,100,101,102,103,104,105,106,107,
                 108,110,111,119,120,121,129)
-        # Puzzle Item4 Combo1: ab Raum 0 Richtung 63. Richtung 58 ist gesperrt -
-        # dort liegt eine Schraege, also eine Einbahnstrasse. Dead Stop volumes
-        # Nutzer ist Raum 35.
+        # Puzzle Item4 Combo1: from room 0 toward 63. The direction toward 58
+        # is barred - a slope lies there, i.e. a one-way street. The dead
+        # stop per the user is room 35.
         186 = @(0,9,31,32,33,35,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,
                 52,53,54,59,60,61,62,63,65,68,75,76,78,79,81,82,84,
                 86,93,94,95,96,97,98,99,109,117,118,125,128)
     }
 }
 #----------------------------------------------------------------------------
-# Wie TYPE_ALLOW_ROOMS, nur nicht von Hand gezaehlt: die erlaubte Raumliste
-# wird als FLUT ueber den Raumgraphen abgeleitet - Startraum plus Riegel.
+# Like TYPE_ALLOW_ROOMS, only not counted by hand: the allowed room list is
+# derived as a FLOOD over the room graph - start room plus stops.
 #
-# Gebraucht fuer andy3s Muenze (#61). Der Nutzer hat den Bereich genau so
-# beschrieben, und zwar als Richtungsangabe:
+# Needed for andy3's coin (#61). The user described the area exactly so, as
+# a directional statement:
 #
-#   "Raum 137 -> 139 Muenze verboten. Raum 137 -> 142 Muenze erlaubt, bis zu
-#    2 Punkten Raum 97 und Raum 149. Raum 97 muss ein Stop sein, weil das
-#    hinter der Wasserhexe ist - da ist ein Teleporter in einen anderen
-#    Bereich, alles um Raum 157. Raum 149 ist der andere Deadstop, das ist
-#    der Return aus dem anderen Teleporter. Die Insel, in der die Muenze
-#    vorkommen darf, ist (137 -> 142 und alles was danach kommt bis |149|97)."
+#   "Room 137 -> 139 coin forbidden. Room 137 -> 142 coin allowed, up to 2
+#    points room 97 and room 149. Room 97 must be a stop because that is
+#    behind the water witch - there is a teleporter into another area,
+#    everything around room 157. Room 149 is the other deadstop, that is
+#    the return from the other teleporter. The island in which the coin may
+#    occur is (137 -> 142 and everything after that up to |149|97)."
 #
-# Als Liste waeren das 104 Raumnummern - unlesbar und tot, sobald sich am
-# Levelgraphen etwas aendert. Als Flut steht die ABSICHT da: ab 142, und die
-# drei Riegel sind genau die drei Tueren, hinter denen es schieflaufen wuerde
-# (137 zurueck auf die Startinsel, 97 hinter die Hexe, 149 der Rueckweg des
-# zweiten Teleporters).
+# As a list that would be 104 room numbers - unreadable and dead as soon as
+# the level graph changes. As a flood, the INTENT stands there: from 142,
+# and the three stops are exactly the three doors behind which it would go
+# wrong (137 back onto the start island, 97 behind the witch, 149 the
+# second teleporter's return path).
 #----------------------------------------------------------------------------
 $TYPE_ALLOW_ISLAND = @{
     'andy3' = @{
@@ -763,8 +765,8 @@ if ($TYPE_ALLOW_ROOMS.ContainsKey($LevelName)) {
     foreach($kv in $TYPE_ALLOW_ROOMS[$LevelName].GetEnumerator()){ $typeAllow[[int]$kv.Key] = @($kv.Value) }
 }
 if ($TYPE_ALLOW_ISLAND.ContainsKey($LevelName)) {
-    # Raumnachbarschaft aus den Portalen, Deckendurchgaengen und Boeden -
-    # dieselbe Ableitung wie bei ISLAND_YBAND weiter unten.
+    # Room adjacency from the portals, ceiling passages and floors - the
+    # same derivation as at ISLAND_YBAND further down.
     $allowAdj = @{}
     foreach($sx in $d.sectors){
         $a = [int]$sx.room
@@ -793,7 +795,7 @@ if ($TYPE_ALLOW_ISLAND.ContainsKey($LevelName)) {
             }
         }
         $typeAllow[$nt] = @($seenA | Sort-Object)
-        Write-Output "TYPE_ALLOW_ISLAND Typ $nt (ab $($kv.Value.StartRoom), Riegel $($stopA -join ', ')): $($seenA.Count) Raeume erlaubt"
+        Write-Output "TYPE_ALLOW_ISLAND type $nt (from $($kv.Value.StartRoom), stops $($stopA -join ', ')): $($seenA.Count) rooms allowed"
     }
 }
 $typeExcludeSectors = @{}
@@ -801,443 +803,441 @@ if ($TYPE_EXCLUDE_SECTORS.ContainsKey($LevelName)) {
     foreach($kv in $TYPE_EXCLUDE_SECTORS[$LevelName].GetEnumerator()){ $typeExcludeSectors[[int]$kv.Key] = @($kv.Value) }
 }
 
-# Typen, die in den Pool gehoeren, deren Zonengrenze das Modell aber nicht
-# selbst herleiten kann, weil ihnen ein eigenes Schloss im Level fehlt.
-# Kombinationsteile sind der Fall: Andrea3s Puzzle Item4 Combo1 (186) und
-# Combo2 (187) werden im Inventar zum Puzzle Item4 vereint, erst das kommt in
-# ein Puzzle Hole4 - und nur das Loch hat eine Zone. Massgeblich ist Item 34 in
-# Raum 24: dort loest das vollstaendige Combo den Teleport aus. Das zweite
-# Puzzle Hole4 (Item 20, Raum 8) ist volumes Nutzer reine Deko, die den Teleport
-# kaschiert, und keine Schranke. Beide liegen ohnehin in Zone 3.
-# Combo2 (187) steht bewusst NICHT hier - siehe FIXED_ITEMS.
-# Wert hier: typeId -> maxZone.
+# Types that belong in the pool but whose zone limit the model cannot derive
+# itself, because they lack a lock of their own in the level. Combination
+# parts are the case: Andrea3's Puzzle Item4 Combo1 (186) and Combo2 (187)
+# are united in the inventory into Puzzle Item4, only that goes into a
+# Puzzle Hole4 - and only the hole has a zone. Decisive is item 34 in room
+# 24: there the complete combo triggers the teleport. The second Puzzle
+# Hole4 (item 20, room 8) is per the user pure decoration masking the
+# teleport, and no bound. Both lie in zone 3 anyway.
+# Combo2 (187) deliberately does NOT stand here - see FIXED_ITEMS.
+# Value here: typeId -> maxZone.
 $EXTRA_POOL_TYPES = @{
     'Andrea3' = @{ 186 = 3 }
-    # Andrea2s Brechstange (typeId 240, Item 2, Raum 1, Zone 0) darf
-    # mitrandomisiert werden - das widerspricht der Regel "Brechstange bleibt
-    # Vanilla" nicht: die gilt fuer joby3 und rich1, wo die Brechstange als
-    # Puzzle-/Key-Item getarnt ist und an einer Aufnahme-Cutscene haengt. Hier
-    # ist es ein normaler Pickup. Zonengrenze 1 = die Zone des Ventils
-    # (Item 128, Raum 196), das ohne Brechstange nicht aufzubrechen ist; die
-    # eigentliche Schranke ist die Raumliste, die der Nutzer als "save"
-    # bestaetigt hat.
+    # Andrea2's crowbar (typeId 240, item 2, room 1, zone 0) may be
+    # randomized along - that does not contradict the rule "the crowbar
+    # stays vanilla": that one holds for joby3 and rich1, where the crowbar
+    # is disguised as a puzzle/key item and hangs on a pickup cutscene. Here
+    # it is a normal pickup. Zone limit 1 = the zone of the valve (item 128,
+    # room 196) that cannot be broken open without the crowbar; the actual
+    # bound is the room list the user confirmed as "safe".
     'Andrea2' = @{ 240 = 1 }
-    # rich2s einziges echtes Key-Item: Puzzle Item3 (typeId 174, Item 234,
-    # Raum 166). Von seinen vier Schloessern findet nur Puzzle Hole3 (Item 207,
-    # Raum 147) ein passendes Item - Hole8 steht zweimal fuer die Keypads, deren
-    # "Schluessel" ein abzulesender Code ist, und Hole2 in Raum 149 hat im ganzen
-    # Level kein Puzzle Item2.
+    # rich2's only real key item: Puzzle Item3 (typeId 174, item 234, room
+    # 166). Of its four locks only Puzzle Hole3 (item 207, room 147) finds a
+    # matching item - Hole8 stands twice for the keypads, whose "key" is a
+    # code to read off, and Hole2 in room 149 has no Puzzle Item2 in the
+    # whole level.
     #
-    # Das Modell leitet hier von sich aus NICHTS ab, und der Grund ist lehrreich:
-    # es kennt nur Schloesser, die eine TUER aufsperren. Alle 27 Zonentueren in
-    # rich2 haengen an Triggern und Schaltern, keine an einem Schloss. Hole3
-    # dagegen hebt einen Raising Block2 (Item 214) in Raum 149 und schaltet vier
-    # Animatings - erst dadurch kommt Lara an Hole2, deren Trigger den Teleporter
-    # nach Raum 152 stellt. Ein Hubblock ist im Zonenmodell keine Schranke, also
-    # sieht es die Kette nicht.
+    # The model derives NOTHING here by itself, and the reason is
+    # instructive: it only knows locks that unlock a DOOR. All 27 zone doors
+    # in rich2 hang on triggers and switches, none on a lock. Hole3, by
+    # contrast, raises a Raising Block2 (item 214) in room 149 and switches
+    # four animatings - only through that does Lara reach Hole2, whose
+    # trigger sets the teleporter to room 152. A lift block is no bound in
+    # the zone model, so it does not see the chain.
     #
-    # Massgeblich ist die Zone des Schlosses: Raum 147 liegt in Zone 4, das Item
-    # muss also spaetestens in Zone 4 liegen. Seine Vanilla-Position in Raum 166
-    # ist ebenfalls Zone 4 - die Grenze verbietet sie nicht.
+    # Decisive is the lock's zone: room 147 lies in zone 4, so the item must
+    # lie in zone 4 at the latest. Its vanilla position in room 166 is
+    # likewise zone 4 - the limit does not forbid it.
     'rich2'   = @{ 174 = 4 }
-    # rich3s Puzzle Item1 gibt es im Level gar nicht - es entsteht im Inventar
-    # aus zwei Haelften, und beide werden von den Cyborgs GETRAGEN:
-    #   Combo1 (180), Item 201, liegt auf Cyborg 200 (Hitman) in Raum 183
-    #   Combo2 (181), Item 184, liegt auf Cyborg 183 (Hitman) in Raum 152
-    # Der Bericht meldete deshalb "kommt per Gameflow, keine Platzierung noetig"
-    # - er sucht Typ 172 und findet ihn nicht. Das war falsch gelesen, die Kette
-    # ist da, nur zweigeteilt. Dieselbe Konstruktion wie Andrea3s Puzzle Item4.
+    # rich3's Puzzle Item1 does not exist in the level at all - it arises in
+    # the inventory from two halves, and both are CARRIED by the cyborgs:
+    #   Combo1 (180), item 201, lies on cyborg 200 (Hitman) in room 183
+    #   Combo2 (181), item 184, lies on cyborg 183 (Hitman) in room 152
+    # The report therefore said "comes via gameflow, no placement needed" -
+    # it looks for type 172 and does not find it. That was misread, the
+    # chain is there, only split in two. The same construction as Andrea3's
+    # Puzzle Item4.
     #
-    # Die beiden Cyborgs sind nicht mit Waffen zu toeten: der eine braucht die
-    # Flutung seines Raums (FlipMap 6, Kurzschluss), der andere den Gasbereich um
-    # Raum 149. Das komplette Puzzle Item1 kommt in Slot 1 (Item 144, Raum 119)
-    # und oeffnet Tuer 213 zum Levelende.
+    # The two cyborgs cannot be killed with weapons: one needs his room
+    # flooded (FlipMap 6, short circuit), the other the gas area around room
+    # 149. The complete Puzzle Item1 goes into slot 1 (item 144, room 119)
+    # and opens door 213 to the level's end.
     #
-    # Massgeblich ist die Zone des Schlosses: Raum 119 liegt in Zone 2. Beide
-    # Vanilla-Positionen liegen ebenfalls auf Zone-2-Sektoren, die Grenze
-    # verbietet also keine von beiden.
+    # Decisive is the lock's zone: room 119 lies in zone 2. Both vanilla
+    # positions also lie on zone-2 sectors, so the limit forbids neither.
     'rich3'   = @{ 180 = 2; 181 = 2 }
-    # andy3s Muenze (typeId 173, Puzzle Item2) - der letzte Rest von #61.
+    # andy3's coin (typeId 173, Puzzle Item2) - the last remnant of #61.
     #
-    # Sie hat im ganzen Level KEIN Schloss und taucht deshalb von sich aus
-    # nicht in den keyConstraints auf; sie ist der Ausloeser der Sumpfhexe
-    # (swampy.cpp fragt have_i_got_object(PUZZLE_ITEM2) ab). Ohne Eintrag
-    # zaehlt sie als gewoehnliches Pickup, und die Deadstop-Sperre
-    # (keyBarredSectors) fasst sie gar nicht an - die greift nur bei Typen
-    # MIT Constraint oder bei Wandgriffen (Randomizer.cpp).
+    # It has NO lock in the whole level and therefore does not appear in the
+    # keyConstraints by itself; it is the trigger of the swamp witch
+    # (swampy.cpp asks have_i_got_object(PUZZLE_ITEM2)). Without an entry it
+    # counts as an ordinary pickup, and the deadstop bar (keyBarredSectors)
+    # does not touch it at all - that one only grips types WITH a constraint
+    # or wall grabs (Randomizer.cpp).
     #
-    # maxZone 1 ist der Hoechstwert des Levels, die Zone schraenkt also
-    # nichts ein - das ist Absicht. Die eigentliche Schranke ist der
-    # Deadstop in Raum 137 (NO_KEY_ISLAND weiter oben): dahinter liegt ein
-    # Teleporter auf die Startinsel, und eine Muenze jenseits davon waere
-    # ein Softlock (Nutzerangabe 2026-08-24: Range 142 -> 135).
+    # maxZone 1 is the level's maximum, so the zone restricts nothing - that
+    # is intentional. The actual bound is the deadstop in room 137
+    # (NO_KEY_ISLAND above): behind it lies a teleporter onto the start
+    # island, and a coin beyond it would be a softlock (user statement
+    # 2026-08-24: range 142 -> 135).
     'andy3'   = @{ 173 = 1 }
 }
 
-# rich2s Startinsel: alles, was Lara VOR dem Roentgenscanner betreten kann.
-# Liste vom Nutzer (2026-08-15) - aus den Daten ist sie nicht ableitbar, der
-# Sektorgraph ist ungerichtet und flutet am Point of no Return vorbei.
-# Wird von REQUIRED_INJECTIONS und TYPE_NO_ROOMS gebraucht, steht deshalb vor
-# beiden.
+# rich2's start island: everything Lara can enter BEFORE the X-ray scanner.
+# List from the user (2026-08-15) - it is not derivable from the data, the
+# sector graph is undirected and floods past the point of no return.
+# Needed by REQUIRED_INJECTIONS and TYPE_NO_ROOMS, hence it stands before
+# both.
 #
-# Nachtrag desselben Tages: 14, 15, 16, 18, 19 und 60 liegen volumes Nutzer
-# HINTER der Tuer und gehoeren nicht zur Insel. Sie stehen jetzt in
-# NO_ITEM_ROOMS - dort landet ueberhaupt nichts mehr, damit erledigt sich fuer
-# sie auch die Frage nach der HK.
-$RICH2_STARTINSEL = @(8,9,10,12,21,29,48,49,50,51,52,53,54,55,56,
+# Addendum of the same day: 14, 15, 16, 18, 19 and 60 lie per the user
+# BEHIND the door and do not belong to the island. They now stand in
+# NO_ITEM_ROOMS - nothing lands there at all anymore, which also settles
+# the HK question for them.
+$RICH2_START_ISLAND = @(8,9,10,12,21,29,48,49,50,51,52,53,54,55,56,
                       84,85,88,89,90,91,95,96,97,116,117,118,119,130,131,132,133,
                       134,135,136,137,138,139,141,170,177)
 
-# Die itemfreien Raeume stehen in NO_ITEM_ROOMS weiter unten - dort sind fuer
-# rich2 auch 14, 15, 16 und 18 nachgetragen (hinter Tuer 171, Nutzerangabe).
+# The item-free rooms stand in NO_ITEM_ROOMS further down - for rich2, 14,
+# 15, 16 and 18 are added there too (behind door 171, user statement).
 
-# Items, die ein Level zwingend BRAUCHT, die in Vanilla aber fehlen. Andrea3
-# enthaelt keine einzige Brechstange (typeId 172, im Level nachgezaehlt: 0
-# Instanzen) - ein latenter Softlock schon in Vanilla. Der Randomizer muss hier
-# also nicht nur umverteilen, sondern hinzufuegen. Raum 120 volumes Nutzer, dort
-# liegt bereits das Secret (Item 102, Pickup Item4).
+# Items a level absolutely NEEDS but that are missing in vanilla. Andrea3
+# contains not a single crowbar (typeId 172, counted in the level: 0
+# instances) - a latent softlock already in vanilla. The randomizer must not
+# only redistribute here but add. Room 120 per the user, the secret (item
+# 102, Pickup Item4) already lies there.
 $REQUIRED_INJECTIONS = @{
-    # typeId 240 "Crowbar Item", NICHT 172: 172 heisst zwar "Puzzle Item1", ist
-    # aber je nach Level etwas anderes (in joby3/rich1 eine getarnte
-    # Brechstange, in Andrea2 ein Ventil). Hier stand zuerst faelschlich 172 -
-    # aufgefallen erst, als der Randomizer den Patch tatsaechlich erzeugt hat.
-    'Andrea3' = @( @{ typeId = 240; room = 120; reason = 'Level enthaelt keine Brechstange - Vanilla-Softlock' } )
-    # rich2: eine HK und zwei Magazine auf 140(1,2), Stelle vom Nutzer gewaehlt.
-    # Anders als Andrea3s Brechstange mit festem SEKTOR, denn hier kommt es auf
-    # das eine Feld an - alle drei sollen dort zusammen liegen.
+    # typeId 240 "Crowbar Item", NOT 172: 172 is called "Puzzle Item1" but is
+    # something different per level (a disguised crowbar in joby3/rich1, a
+    # valve in Andrea2). 172 first stood here wrongly - noticed only when the
+    # randomizer actually produced the patch.
+    'Andrea3' = @( @{ typeId = 240; room = 120; reason = 'level contains no crowbar - vanilla softlock' } )
+    # rich2: one HK and two magazines on 140(1,2), spot chosen by the user.
+    # Unlike Andrea3's crowbar with a fixed SECTOR, because here the one tile
+    # matters - all three should lie there together.
     #
-    # Der Grund ist ein Softlock, den erst der Randomizer erzeugt: ab Raum 140
-    # kann ein Key-Item unter einem Gegner landen, und ohne Waffe kaeme Lara
-    # nicht daran. In Vanilla stellt sich die Frage nicht, weil dort nichts
-    # wandert.
+    # The reason is a softlock only the randomizer creates: from room 140 on,
+    # a key item can land under an enemy, and without a weapon Lara could
+    # not get at it. In vanilla the question does not arise because nothing
+    # travels there.
     #
-    # Das steht NICHT im Widerspruch zu NO_WEAPON_LEVELS, auch wenn es so
-    # aussieht. Die Sperre dort richtet sich gegen zufaellig verteilte Waffen
-    # VOR dem Roentgenscanner in Raum 9 - Lara muss sich am Mesh 15 entwaffnen,
-    # und eine zweite Waffe irgendwo davor macht das gegenstandslos. Raum 140
-    # liegt hinter der Keypad-Tuer und volumes Nutzer hinter einem Point of no
-    # Return, der Scanner ist da laengst passiert. Das Levelende ist ebenfalls
-    # sicher: der Trigger-Triggerer am Feuerloescher haengt an FlipMap 0, die
-    # erst in Raum 58 abgeschaltet wird - eine Waffe allein oeffnet also nichts.
-    # Injektionen laufen ohnehin nicht durch den Waffenfilter, sie werden
-    # direkt platziert; die Sperre bleibt fuer die Verteilung in Kraft.
+    # That does NOT contradict NO_WEAPON_LEVELS, even if it looks like it.
+    # The bar there is aimed at randomly distributed weapons BEFORE the
+    # X-ray scanner in room 9 - Lara must disarm herself at mesh 15, and a
+    # second weapon anywhere before it makes that pointless. Room 140 lies
+    # behind the keypad door and per the user behind a point of no return,
+    # the scanner is long passed by then. The level end is safe as well: the
+    # trigger-triggerer at the fire extinguisher hangs on FlipMap 0, which
+    # is only switched off in room 58 - a weapon alone thus opens nothing.
+    # Injections do not run through the weapon filter anyway, they are
+    # placed directly; the bar stays in force for the distribution.
     'rich2'   = @(
-        # Der Hoehenversatz dieser HK steht NICHT hier, sondern in TYPE_OFFSET
-        # unter rich2 - ein zweiter Eintrag hier wuerde ihn verdoppeln.
-        # Global ist er seit #61 weg: der Motor hebt ein Pickup bei OCB 0 schon
-        # selbst um bounds[3] an, unsere -100 kamen obendrauf und liessen die
-        # HK schweben. Nur an diesem handverlesenen Platz wird er gebraucht.
-        @{ typeId = 345; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK - ab hier kann ein Key-Item unter einem Gegner liegen' }
-        @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK-Munition zur HK auf demselben Feld' }
-        @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK-Munition zur HK auf demselben Feld' }
+        # This HK's height offset does NOT stand here but in TYPE_OFFSET
+        # under rich2 - a second entry here would double it.
+        # Globally it is gone since #61: the engine already lifts a pickup
+        # by bounds[3] at OCB 0, our -100 came on top and left the HK
+        # floating. Only at this hand-picked spot is it needed.
+        @{ typeId = 345; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK - from here on a key item can lie under an enemy' }
+        @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK ammo next to the HK on the same tile' }
+        @{ typeId = 346; room = 140; sectorX = 1; sectorZ = 2; reason = 'HK ammo next to the HK on the same tile' }
 
-        # Pflicht-Deagle fuer die Startinsel (Nutzerwunsch 2026-08-15). Die
-        # Startinsel ist gegnerreich, und seit nur noch die HK dort gesperrt
-        # ist, duerfen andere Waffen liegen - der Zufall allein liefert aber
-        # keine: pro Lauf werden nur drei bis vier Waffen gestreut, und die
-        # Insel stellt 117 der 544 Ablageflaechen (21 Prozent). Ueber sechs
-        # Seeds gemessen landete dort keine einzige.
+        # Mandatory Deagle for the start island (user wish 2026-08-15). The
+        # start island is enemy-rich, and since only the HK is barred there,
+        # other weapons may lie around - but chance alone delivers none:
+        # only three to four weapons are scattered per run, and the island
+        # provides 117 of the 544 spots (21 percent). Measured over six
+        # seeds, not a single one landed there.
         #
-        # Kein fester Raum, sondern die ganze Insel als Auswahl: der Seed
-        # sucht sich jedes Mal einen anderen freien Sektor darin ("Raum kann
-        # immer Zufall sein"). Waffe und Magazine liegen dabei NICHT
-        # zusammen - jede Zeile wuerfelt ihre Stelle selbst.
+        # No fixed room but the whole island as the choice: the seed picks a
+        # different free sector in it every time ("the room can always be
+        # random"). Weapon and magazines do NOT lie together here - each
+        # line rolls its own spot.
         #
-        # Menge: die Deagle bringt beim Aufnehmen 6 Schuss mit, jedes Magazin
-        # weitere 6 (newinv2.cpp:2550 und 2622) - mit drei Magazinen sind das
-        # 24 Schuss, die vom Nutzer gewuenschten "ca. 20".
-        @{ typeId = 347; rooms = $RICH2_STARTINSEL; reason = 'Deagle - Startinsel ist gegnerreich, Pistolen allein reichen nicht' }
-        @{ typeId = 348; rooms = $RICH2_STARTINSEL; reason = 'Deagle-Munition fuer die Startinsel (6 Schuss)' }
-        @{ typeId = 348; rooms = $RICH2_STARTINSEL; reason = 'Deagle-Munition fuer die Startinsel (6 Schuss)' }
-        @{ typeId = 348; rooms = $RICH2_STARTINSEL; reason = 'Deagle-Munition fuer die Startinsel (6 Schuss)' }
+        # Amount: the Deagle brings 6 shots on pickup, each magazine another
+        # 6 (newinv2.cpp:2550 and 2622) - with three magazines that is 24
+        # shots, the "about 20" the user wanted.
+        @{ typeId = 347; rooms = $RICH2_START_ISLAND; reason = 'Deagle - the start island is enemy-rich, pistols alone do not suffice' }
+        @{ typeId = 348; rooms = $RICH2_START_ISLAND; reason = 'Deagle ammo for the start island (6 shots)' }
+        @{ typeId = 348; rooms = $RICH2_START_ISLAND; reason = 'Deagle ammo for the start island (6 shots)' }
+        @{ typeId = 348; rooms = $RICH2_START_ISLAND; reason = 'Deagle ammo for the start island (6 shots)' }
     )
 }
 $requiredInjections = @( if($REQUIRED_INJECTIONS.ContainsKey($LevelName)){ $REQUIRED_INJECTIONS[$LevelName] } )
 
 #----------------------------------------------------------------------------
-# Platzierungsversatz je Typ: dx/dy/dz gegen die Sektormitte auf Bodenhoehe.
-# Gebraucht, wenn der Mesh-Ursprung eines Objekts nicht dort sitzt, wo das
-# Modell ihn annimmt - das Item steht dann im Boden oder am Sektorrand statt in
-# der Mitte. Aus den Leveldaten ist das nicht ablesbar, es faellt nur im Bild
-# auf. y waechst in TR nach unten, ein negatives dy hebt also an.
+# Placement offset per type: dx/dy/dz against the sector center at floor
+# height. Needed when an object's mesh origin does not sit where the model
+# assumes it - the item then stands in the floor or at the sector's edge
+# instead of the center. That is not readable from the level data, it only
+# shows in the picture. y grows downward in TR, so a negative dy lifts.
 #
-# Zwei Ebenen, und beide werden gebraucht:
-#   'ALLE'      - Eigenschaft des Objekts, gilt in jedem Level.
-#   '<Level>'   - dasselbe Objekt verhaelt sich nur dort so. TR5 belegt seine
-#                 Puzzle- und Key-Slots je Level neu, "Puzzle Item3" ist also
-#                 in fuenf Leveln fuenf verschiedene Dinge.
-# Levelwerte ueberschreiben globale je Achse.
+# Two layers, and both are needed:
+#   'ALL'       - a property of the object, holds in every level.
+#   '<level>'   - the same object behaves like that only there. TR5 refills
+#                 its puzzle and key slots per level, so "Puzzle Item3" is
+#                 five different things in five levels.
+# Level values override global ones per axis.
 #
-# Warum ueberhaupt als Regel und nicht als Handeintrag an der einzelnen
-# Injektion: der Naechste, der so ein Item platziert, soll nicht daran denken
-# muessen. Derselbe Merksatz wie bei VANILLA_TYPES - eine Tabelle, die nur eine
-# Absicht beschreibt und nichts durchsetzt, wirkt nicht.
+# Why as a rule at all and not as a hand entry at the individual injection:
+# the next person who places such an item should not have to think of it.
+# The same maxim as with VANILLA_TYPES - a table that only describes an
+# intent and enforces nothing does not work.
 #
-# 345 (HK): steckt sonst im Boden, unsichtbar und unauffindbar. Vom Nutzer
-# beobachtet. Die einzige HK des Spiels (rich2 Item 6, Raum 8) liegt vanilla
-# 384 Units hoch, steht dort aber auf einem Sockel (OCB 4) und ist gescriptet;
-# fuer eine frei platzierte reichen 100.
+# 345 (HK): otherwise sits in the floor, invisible and unfindable. Observed
+# by the user. The game's only HK (rich2 item 6, room 8) lies 384 units up
+# in vanilla, but stands on a pedestal there (OCB 4) and is scripted; for a
+# freely placed one, 100 suffice.
 #
-# Andrea2 / 174: kein Hoehen-, sondern ein Tiefenproblem - das Objekt landet am
-# Sektorrand statt in der Mitte, sein Ursprung sitzt einen halben Sektor zu
-# weit. GILT NUR HIER: typeId 174 kommt in fuenf Leveln vor (Andrea2, andy1,
-# andy3, rich1, rich2), und in allen fuenf liegt das Vanilla-Item exakt auf
-# seinem Sektorboden. Ein globaler Eintrag wuerde vier belegte Vanilla-
-# Positionen ueberstimmen.
+# Andrea2 / 174: not a height but a depth problem - the object lands at the
+# sector's edge instead of the center, its origin sits half a sector off.
+# HOLDS ONLY HERE: typeId 174 occurs in five levels (Andrea2, andy1, andy3,
+# rich1, rich2), and in all five the vanilla item lies exactly on its
+# sector floor. A global entry would override four occupied vanilla
+# positions.
 #----------------------------------------------------------------------------
 $TYPE_OFFSET = @{
-    # Die HK (345) stand hier mit dy -100 und ist wieder raus (#61,
-    # Nutzerbeobachtung 2026-08-19: "die HK schwebt wieder ueber dem Boden").
+    # The HK (345) stood here with dy -100 and is out again (#61, user
+    # observation 2026-08-19: "the HK floats above the floor again").
     #
-    # Nachgerechnet statt geraten. MissMod am Modell in rich2: die Meshes
-    # liegen bei y 23..50, also UNTER dem Ursprung (y waechst nach unten).
-    # InitialisePickup korrigiert bei OCB 0 mit y -= bounds[3], und bounds[3]
-    # ist genau diese 50. Ein Item auf der Bodenhoehe wird vom Motor also
-    # schon auf floorY-50 gehoben, womit die Modellunterkante exakt auf dem
-    # Boden sitzt. Unsere -100 kamen obendrauf: floorY-150, das Modell schwebt
-    # 100 Units in der Luft - genau das Bild, das der Nutzer sieht.
+    # Recomputed instead of guessed. MissMod on the model in rich2: the
+    # meshes lie at y 23..50, i.e. BELOW the origin (y grows downward).
+    # InitialisePickup corrects with y -= bounds[3] at OCB 0, and bounds[3]
+    # is exactly that 50. An item at floor height is thus already lifted by
+    # the engine to floorY-50, putting the model's lower edge exactly on
+    # the floor. Our -100 came on top: floorY-150, the model floats 100
+    # units in the air - exactly the picture the user sees.
     #
-    # Die alte Vorgabe "HK muss 100 hoeher, sonst unsichtbar" stammt aus der
-    # Zeit des fehlerhaften rich2-Imports; sie hat ein anderes Problem
-    # kompensiert. Sollte die HK ohne Versatz doch im Boden stecken, ist -50
-    # der naechste Kandidat, nicht -100.
-    'ALLE'    = @{ }
-    # ... ausser in rich2. Dort setzt REQUIRED_INJECTIONS eine HK auf einen vom
-    # Nutzer handverlesenen Platz (Raum 140, Sektor 1,2), und genau dort wird
-    # der Versatz weiter gebraucht - Nutzerbefund 2026-08-19: "Nur fuer das
-    # rich2 muessen wir den Y offset beibehalten. Die anderen Level koennen
-    # ohne den Offset bleiben."
+    # The old rule "the HK must go 100 higher or it is invisible" dates
+    # from the time of the faulty rich2 import; it compensated a different
+    # problem. Should the HK stick in the floor without an offset after
+    # all, -50 is the next candidate, not -100.
+    'ALL'     = @{ }
+    # ... except in rich2. There REQUIRED_INJECTIONS puts an HK onto a spot
+    # hand-picked by the user (room 140, sector 1,2), and exactly there the
+    # offset is still needed - user finding 2026-08-19: "Only for rich2 we
+    # must keep the Y offset. The other levels can stay without the
+    # offset."
     #
-    # Betrifft praktisch nur diese eine HK: rich2s Vanilla-HK (Item 6) steht in
-    # VANILLA_TYPES und wandert ohnehin nicht.
+    # Practically affects only this one HK: rich2's vanilla HK (item 6)
+    # stands in VANILLA_TYPES and does not travel anyway.
     'rich2'   = @{ 345 = @{ dy = -100 } }
-    # Andrea2 / 174 stand hier mit dz -512 und ist wieder raus: der Typ bleibt
-    # jetzt vanilla (siehe VANILLA_TYPES), er wird also gar nicht mehr bewegt.
-    # Der gemessene Versatz bleibt der Vollstaendigkeit halber notiert, falls das
-    # Objekt je wieder in den Pool soll.
+    # Andrea2 / 174 stood here with dz -512 and is out again: the type now
+    # stays vanilla (see VANILLA_TYPES), so it is not moved at all anymore.
+    # The measured offset stays noted for completeness in case the object
+    # ever returns to the pool.
 }
 
 #----------------------------------------------------------------------------
-# Typen, deren OCB einen Ortswechsel UEBERLEBEN muss - die Ausnahme von Regel 3.
+# Types whose OCB must SURVIVE a relocation - the exception to rule 3.
 #
-# Regel 3 nullt die OCB bei jeder Verschiebung, und das ist fuer Sockel- und
-# Versteck-OCBs richtig: die beschreiben die alte Stelle und waeren an der neuen
-# sinnlos. Bei manchen Objekten ist die OCB aber keine Ortsangabe, sondern die
-# AUFNAHMEART. Andrea2s Puzzle Item3 traegt OCB 2 - den Brechstangen-Pickup mit
-# eigenen Bounds, eigener Animation und Inventarabfrage (pickup.cpp, case 2).
-# Mit OCB 0 landet es im default-Zweig, und dort ist es nachweislich gar nicht
-# aufnehmbar: der Nutzer hat es an drei verschiedenen Stellen probiert, zwei
-# davon ohne jede Triggerbindung. Mit OCB 2 spielt Lara die Animation und nimmt
-# es auf.
+# Rule 3 zeroes the OCB on every move, and for pedestal and hiding-spot
+# OCBs that is right: they describe the old spot and would be meaningless
+# at the new one. For some objects, though, the OCB is no place statement
+# but the PICKUP MANNER. Andrea2's Puzzle Item3 carries OCB 2 - the crowbar
+# pickup with its own bounds, its own animation and inventory check
+# (pickup.cpp, case 2). With OCB 0 it lands in the default branch, and
+# there it is provably not pickable at all: the user tried it at three
+# different spots, two of them without any trigger binding. With OCB 2 Lara
+# plays the animation and picks it up.
 #
-# Auch hier levelbezogen: typeId 174 ist in fuenf Leveln fuenf verschiedene
-# Dinge, und nur in Andrea2 ist es ein Brechstangenobjekt.
+# Level-bound here as well: typeId 174 is five different things in five
+# levels, and only in Andrea2 is it a crowbar object.
 #----------------------------------------------------------------------------
-# ANDREA2 / 174 STAND HIER UND IST WIEDER RAUS - der Versuch war erfolgreich und
-# hat trotzdem zum Gegenteil gefuehrt. Mit OCB 2 nimmt Lara das Objekt an einer
-# beliebigen Stelle auf, die Animation laeuft, das Teil landet im Inventar. Nur
-# steht danach der Rest der Bedingung da: der Brechstangen-Pickup braucht eine
-# WAND hinter sich und einen Angle, der zu dieser Wand passt (der Nutzer hat es
-# im Spiel gesehen und es selbst benannt). Beides liegt unterhalb der
-# Sektoraufloesung - das Modell rechnet in ganzen 1024er-Feldern und kennt keine
-# Wandausrichtung. Es koennte eine gueltige Position also nicht garantieren,
-# sondern nur raten.
+# ANDREA2 / 174 STOOD HERE AND IS OUT AGAIN - the attempt succeeded and
+# still led to the opposite. With OCB 2 Lara picks the object up at any
+# spot, the animation runs, the piece lands in the inventory. Only then the
+# rest of the condition stands there: the crowbar pickup needs a WALL
+# behind it and an angle matching that wall (the user saw it in game and
+# named it himself). Both lie below the sector resolution - the model
+# computes in whole 1024 tiles and knows no wall orientation. It could thus
+# not guarantee a valid position, only guess one.
 #
-# Dieselbe Entscheidung hat der Nutzer in DIESEM Level schon einmal getroffen:
-# Andrea2s Ventil (typeId 172) steht aus exakt diesem Grund in VANILLA_TYPES.
-# 174 folgt ihm.
+# The user made the same decision in THIS level once before: Andrea2's
+# valve (typeId 172) stands in VANILLA_TYPES for exactly this reason. 174
+# follows it.
 #
-# Gemessen und hier festgehalten, falls das Objekt je wieder in den Pool soll:
-# es braucht dann dz -512 (Mesh-Ursprung einen halben Sektor versetzt) und
-# dy +512, weil die Engine die automatische Bodenkorrektur nur fuer OCB 0, 3, 4,
-# 7, 8 und 11 macht (init.cpp:477) und OCB 2 davon ausgenommen ist.
+# Measured and recorded here in case the object ever returns to the pool:
+# it then needs dz -512 (mesh origin offset by half a sector) and dy +512,
+# because the engine does the automatic floor correction only for OCB 0, 3,
+# 4, 7, 8 and 11 (init.cpp:477) and OCB 2 is exempt from it.
 #
-# Der Mechanismus bleibt, er ist gebaut und geprueft - es gibt nur derzeit
-# keinen Typ, fuer den er richtig waere.
+# The mechanism stays, it is built and tested - there is just currently no
+# type for which it would be right.
 $KEEP_OCB = @{
-    # Andrea2s Wand-Pickups (#61). Beide tragen OCB 2 (Brechstangen-Griff);
-    # der Randomizer nullt die OCB sonst beim Verschieben, und mit OCB 0
-    # waere das Objekt gar nicht mehr aufnehmbar.
+    # Andrea2's wall pickups (#61). Both carry OCB 2 (crowbar grip); the
+    # randomizer otherwise zeroes the OCB on moving, and with OCB 0 the
+    # object would not be pickable at all anymore.
     #
-    # Frueher standen sie deshalb in VANILLA_TYPES: die OCB zu erhalten hiess,
-    # die volle Bedingung des Griffs erfuellen zu muessen - Wand dahinter und
-    # passender Winkel -, und das konnte das Modell nicht garantieren. Seit
-    # ZoneAnalyse je Sektor wallAngles liefert und die Platzierung Wandkante
-    # samt Winkel waehlt, ist genau das erfuellt.
+    # They used to stand in VANILLA_TYPES for that reason: keeping the OCB
+    # meant having to satisfy the grip's full condition - a wall behind it
+    # and a matching angle -, and the model could not guarantee that. Since
+    # ZoneAnalyse delivers wallAngles per sector and the placement picks
+    # wall edge and angle, exactly that is satisfied.
     'Andrea2' = @(172,174)
-    # andy3 dasselbe: Kreide (OCB 2) und Zaun-Brechstange (OCB 9).
+    # andy3 the same: chalk (OCB 2) and fence crowbar (OCB 9).
     'andy3'   = @(172,174)
 }
 $keepOcbTypes = @( if($KEEP_OCB.ContainsKey($LevelName)){ $KEEP_OCB[$LevelName] } )
 $typeOffsetOf = @{}
-foreach($ebene in @('ALLE', $LevelName)){
-    if (-not $TYPE_OFFSET.ContainsKey($ebene)) { continue }
-    foreach($kv in $TYPE_OFFSET[$ebene].GetEnumerator()){
+foreach($layer in @('ALL', $LevelName)){
+    if (-not $TYPE_OFFSET.ContainsKey($layer)) { continue }
+    foreach($kv in $TYPE_OFFSET[$layer].GetEnumerator()){
         $t = [int]$kv.Key
         if (-not $typeOffsetOf.ContainsKey($t)) { $typeOffsetOf[$t] = @{ dx=0; dy=0; dz=0 } }
-        foreach($achse in @('dx','dy','dz')){
-            if ($null -ne $kv.Value[$achse]) { $typeOffsetOf[$t][$achse] = [int]$kv.Value[$achse] }
+        foreach($axis in @('dx','dy','dz')){
+            if ($null -ne $kv.Value[$axis]) { $typeOffsetOf[$t][$axis] = [int]$kv.Value[$axis] }
         }
     }
 }
 $typeOffsets = @( $typeOffsetOf.GetEnumerator() | ForEach-Object {
     [PSCustomObject]@{ typeId=[int]$_.Key; dx=[int]$_.Value.dx; dy=[int]$_.Value.dy; dz=[int]$_.Value.dz } } )
 
-# Items, die an ihrer Vanilla-Position bleiben MUESSEN. Nicht verschieben,
-# nicht ersetzen, nicht in den Pool aufnehmen. Grund ist jeweils eine
-# Nebenwirkung, die an der Position und nicht am Item haengt und die aus den
-# Leveldaten nicht ablesbar ist - hier: Andrea3 Item 49 (Puzzle Item4 Combo2)
-# triggert eine Tuer. Wird ins Zonen-JSON exportiert, damit ein spaeterer
-# Randomizer die Sperre uebernehmen kann, statt sie neu entdecken zu muessen.
-# Die Gegner-Eintraege unten stammen aus der Nutzerliste "Gegner die Vanilla
-# bleiben muessen.txt" (2026-08-14): gescriptete Gegner, die fuer Cutscenes,
-# Stealth-Sequenzen oder spaetere Umbauten unangetastet bleiben. FIXED_ITEMS
-# schlaegt sowohl den Gegnertausch als auch jede Platzierung.
+# Items that MUST stay at their vanilla position. Do not move, do not
+# replace, do not take into the pool. The reason is in each case a side
+# effect that hangs on the position and not on the item and that is not
+# readable from the level data - here: Andrea3 item 49 (Puzzle Item4
+# Combo2) triggers a door. Exported into the zones JSON so a later
+# randomizer can adopt the bar instead of having to rediscover it.
+# The enemy entries below come from the user's list "Gegner die Vanilla
+# bleiben muessen.txt" (2026-08-14): scripted enemies that stay untouched
+# for cutscenes, stealth sequences or later reworks. FIXED_ITEMS beats both
+# the enemy swap and every placement.
 $FIXED_ITEMS = @{
     'Andrea3' = @{
-        49 = 'Puzzle Item4 Combo2 - triggert eine Tuer'
-        79 = 'Roman God (Raum 90) - bleibt Vanilla (Nutzerliste 2026-08-14)'
+        49 = 'Puzzle Item4 Combo2 - triggers a door'
+        79 = 'Roman god (room 90) - stays vanilla (user list 2026-08-14)'
     }
     'Andrea2' = @{
-        # Item 128 (das Ventil) stand hier mit der Begruendung "muss an einer
-        # Wand sitzen". Genau das leistet die Platzierung seit #61 selbst:
-        # Wandkante samt Winkel werden gewaehlt, KEEP_OCB haelt die OCB 2.
-        # Der Grund ist damit weg, das Item darf wandern.
-        # Der gescriptete Larson. Cutscene 8 (andrea3_end, deltapak.cpp) weckt
-        # GENAU DIESES Item und macht es toetbar, sein Tod feuert den
-        # Heavy-Trigger auf 72,2,2 und damit die Todes-Cutscene. Ein anderer
-        # Gegnertyp an diesem Index hiesse: Cutscene weckt niemanden mehr.
-        76 = 'Larson - gescripteter Miniboss, haengt an Cutscene 8 und 7'
-        # Die Hydra ist DREI Items auf einer Position; die OCB waehlt das
-        # Kettenglied (hydra.cpp:18). Auseinanderreissen zerstoert den Boss.
-        91 = 'Hydra Kettenglied (Raum 116) - bleibt Vanilla (Nutzerliste)'
-        92 = 'Hydra Kettenglied (Raum 116) - bleibt Vanilla (Nutzerliste)'
-        93 = 'Hydra Kettenglied (Raum 116) - bleibt Vanilla (Nutzerliste)'
-        65 = 'Typ 420 (Raum 69) - gescriptet, bleibt Vanilla (Nutzerliste)'
-        108 = 'Roman God (Raum 131) - bleibt Vanilla (Nutzerliste)'
+        # Item 128 (the valve) stood here with the reason "must sit at a
+        # wall". Exactly that is what the placement does itself since #61:
+        # wall edge and angle are chosen, KEEP_OCB keeps the OCB 2. The
+        # reason is thus gone, the item may travel.
+        # The scripted Larson. Cutscene 8 (andrea3_end, deltapak.cpp) wakes
+        # EXACTLY THIS item and makes it killable, its death fires the heavy
+        # trigger on 72,2,2 and with it the death cutscene. A different
+        # enemy type at this index would mean: the cutscene wakes nobody.
+        76 = 'Larson - scripted miniboss, hangs on cutscenes 8 and 7'
+        # The Hydra is THREE items on one position; the OCB picks the chain
+        # link (hydra.cpp:18). Tearing them apart destroys the boss.
+        91 = 'Hydra chain link (room 116) - stays vanilla (user list)'
+        92 = 'Hydra chain link (room 116) - stays vanilla (user list)'
+        93 = 'Hydra chain link (room 116) - stays vanilla (user list)'
+        65 = 'type 420 (room 69) - scripted, stays vanilla (user list)'
+        108 = 'Roman god (room 131) - stays vanilla (user list)'
     }
     'Andy2'   = @{
-        0  = 'Skelett (Raum 0) - gescripteter Aufsteher (Nutzerliste)'
-        4  = 'Skelett (Raum 5) - gescripteter Aufsteher (Nutzerliste)'
-        5  = 'Skelett (Raum 5) - gescripteter Aufsteher (Nutzerliste)'
-        10 = 'Skelett (Raum 6) - gescripteter Aufsteher (Nutzerliste)'
-        11 = 'Skelett (Raum 6) - gescripteter Aufsteher (Nutzerliste)'
+        0  = 'skeleton (room 0) - scripted riser (user list)'
+        4  = 'skeleton (room 5) - scripted riser (user list)'
+        5  = 'skeleton (room 5) - scripted riser (user list)'
+        10 = 'skeleton (room 6) - scripted riser (user list)'
+        11 = 'skeleton (room 6) - scripted riser (user list)'
     }
-    'andy3'   = @{ 20 = 'Green Teeth (Raum 99) - bleibt Vanilla (Nutzerliste)' }
+    'andy3'   = @{ 20 = 'Green Teeth (room 99) - stays vanilla (user list)' }
     'joby2'   = @{
-        20 = 'Sniper (Raum 19) - gescriptet, bleibt Vanilla (Nutzerliste)'
-        21 = 'Sniper (Raum 21) - gescriptet, bleibt Vanilla (Nutzerliste)'
-        # Item 69 (Guard OCB 3, Raum 58 - steht vom Stuhl auf) stand hier bis
-        # zur Slot-Entkopplung #111: seine OCB setzt meshswap_meshbits, und
-        # der geteilte Slot 400 trug den Satz eines fremden Spenders. Seit
-        # jeder Gegner seinen eigenen Parkplatz hat (462-467), faellt ein
-        # einheimischer Guard auf die level-eigene MESHSWAP1 zurueck - die
-        # Haende stimmen wieder, das Item darf wandern.
+        20 = 'sniper (room 19) - scripted, stays vanilla (user list)'
+        21 = 'sniper (room 21) - scripted, stays vanilla (user list)'
+        # Item 69 (guard OCB 3, room 58 - gets up from the chair) stood here
+        # until the slot decoupling #111: its OCB sets meshswap_meshbits,
+        # and the shared slot 400 carried a foreign donor's set. Since every
+        # enemy has its own parking spot (462-467), a native guard falls
+        # back to the level's own MESHSWAP1 - the hands are right again,
+        # the item may travel.
     }
-    'joby3'   = @{ 186 = 'Chef (Raum 120) - nur per Stealth-Cutscene toetbar, bleibt Vanilla (Nutzerliste)' }
-    'joby5'   = @{ 145 = 'Crane Guy MIP (Raum 121) - Cutscene-Double, bleibt Vanilla (Nutzerliste)' }
+    'joby3'   = @{ 186 = 'chef (room 120) - only killable via the stealth cutscene, stays vanilla (user list)' }
+    'joby5'   = @{ 145 = 'Crane Guy MIP (room 121) - cutscene double, stays vanilla (user list)' }
     'rich1'   = @{
-        27 = 'CD - Invisible, wird per Switch aus dem Anzug enthuellt'
-        85 = 'Scientist (Raum 34) - Anvisier-Cutscene, bleibt Vanilla (Nutzerliste)'
-        180 = 'Twogun (Raum 130) - Stealth-Kill-Sequenz, bleibt Vanilla (Nutzerliste)'
+        27 = 'CD - invisible, revealed from the suit by a switch'
+        85 = 'scientist (room 34) - aim-at cutscene, stays vanilla (user list)'
+        180 = 'Twogun (room 130) - stealth-kill sequence, stays vanilla (user list)'
     }
-    # rich2s Guards (USSR). Nutzervorgabe seit #38, bestaetigt und erweitert
-    # durch die Nutzerliste 2026-08-14.
+    # rich2's guards (USSR). User requirement since #38, confirmed and
+    # extended by the user list 2026-08-14.
     'rich2'   = @{
-        154 = 'Guard (USSR, Raum 84) - bleibt Vanilla (Nutzervorgabe)'
-        155 = 'Guard (USSR, Raum 84) - bleibt Vanilla (Nutzerliste)'
-        219 = 'Guard (USSR, Raum 156) - bleibt Vanilla (Nutzerliste)'
+        154 = 'guard (USSR, room 84) - stays vanilla (user requirement)'
+        155 = 'guard (USSR, room 84) - stays vanilla (user list)'
+        219 = 'guard (USSR, room 156) - stays vanilla (user list)'
     }
     'rich3'   = @{
-        183 = 'Hitman (Raum 152) - bleibt Vanilla (Nutzerliste)'
-        200 = 'Hitman (Raum 183) - bleibt Vanilla (Nutzerliste)'
-        # Nutzerentscheidung 2026-08-17 (#109): die Soldatenfamilie darf jetzt
-        # auch mit OCB getauscht werden - diese beiden aber nicht. Sie stehen
-        # zu zweit in Raum 68 (beide OCB 5) und haengen am ROPE; ein anderer
-        # Typ dort macht die Stelle unspielbar. "53 54 muessen wegen dem Rope
-        # erst mal bleiben."
-        53 = 'SWAT+ (Raum 68) - haengt am Rope, bleibt vorerst Vanilla'
-        54 = 'SWAT (Raum 68) - haengt am Rope, bleibt vorerst Vanilla'
+        183 = 'Hitman (room 152) - stays vanilla (user list)'
+        200 = 'Hitman (room 183) - stays vanilla (user list)'
+        # User decision 2026-08-17 (#109): the soldier family may now be
+        # swapped with an OCB too - but not these two. They stand together
+        # in room 68 (both OCB 5) and hang on the ROPE; a different type
+        # there makes the spot unplayable. "53 54 must stay for now because
+        # of the rope."
+        53 = 'SWAT+ (room 68) - hangs on the rope, stays vanilla for now'
+        54 = 'SWAT (room 68) - hangs on the rope, stays vanilla for now'
     }
 }
 
-# Typen, die komplett an ihren Vanilla-Positionen bleiben. Ihre Zwangsbedingung
-# wird weiter abgeleitet und im Report angezeigt - man soll sehen, dass es sie
-# gibt -, sie wandern aber nicht in den Pool und bekommen keine Marker.
-# Andrea2s Ventil (172) ist der Fall: es muss innerhalb von 512 Units an einer
-# Wand sitzen UND sein Angle muss zu dieser Wand passen. Beides sind
-# Bedingungen unterhalb der Sektoraufloesung - das Modell arbeitet mit ganzen
-# 1024er-Sektoren und kennt keine Wandausrichtung, koennte eine gueltige
-# Position also gar nicht garantieren. Nutzerentscheidung: "Die Brechstange als
-# zufall reicht."
+# Types that stay entirely at their vanilla positions. Their constraint is
+# still derived and shown in the report - one should see that it exists -,
+# but they do not travel into the pool and get no markers.
+# Andrea2's valve (172) is the case: it must sit within 512 units of a wall
+# AND its angle must match that wall. Both are conditions below the sector
+# resolution - the model works with whole 1024 sectors and knows no wall
+# orientation, so it could not guarantee a valid position at all. User
+# decision: "The crowbar as random is enough."
 $VANILLA_TYPES = @{
-    # 174 kam nach langer Suche dazu und aus demselben Grund wie 172. Der
-    # Randomizer nullt die OCB beim Verschieben, und mit OCB 0 ist das Objekt
-    # NICHT aufnehmbar - der Nutzer hat es an drei Stellen probiert, zwei davon
-    # ohne jede Triggerbindung. Mit erhaltener OCB 2 funktioniert es (getestet),
-    # aber dann gilt die volle Bedingung des Brechstangen-Pickups: Wand dahinter
-    # und passender Angle. Das kann ein Modell aus 1024er-Sektoren ohne
-    # Wandausrichtung nicht garantieren. Siehe die lange Begruendung bei KEEP_OCB.
-    # Andrea2 fuehrte hier 172 und 174 - die beiden Wand-Pickups. Seit #61
-    # duerfen sie wandern: die Platzierung waehlt jetzt Wandkante und Winkel,
-    # und KEEP_OCB haelt ihre OCB 2 fest. Der Grund fuer die Stilllegung ist
-    # damit weg. Nebenwirkung, die es zu pruefen galt: fuer stillgelegte Typen
-    # leitet dieses Skript keine Key-Constraint ab - deshalb reichten die
-    # Wanditems im ersten Testlevel bis ans Levelende.
-    # joby3s Puzzle Item1 (Item 41, Raum 22) ist die getarnte Brechstange -
-    # sie sieht wie ein Puzzleteil aus, oeffnet aber die Brechstangentueren 25
-    # und 125. Sie bleibt an ihrem Platz, damit die Pickup-Cutscene stimmt.
+    # 174 joined after a long search and for the same reason as 172. The
+    # randomizer zeroes the OCB when moving, and with OCB 0 the object is
+    # NOT pickable - the user tried it at three spots, two of them without
+    # any trigger binding. With the OCB 2 kept it works (tested), but then
+    # the crowbar pickup's full condition applies: a wall behind it and a
+    # matching angle. A model made of 1024 sectors without wall orientation
+    # cannot guarantee that. See the long reasoning at KEEP_OCB.
+    # Andrea2 listed 172 and 174 here - the two wall pickups. Since #61 they
+    # may travel: the placement now picks wall edge and angle, and KEEP_OCB
+    # holds their OCB 2. The reason for the shutdown is thus gone. A side
+    # effect that had to be checked: for shut-down types this script derives
+    # no key constraint - which is why the wall items in the first test
+    # level reached all the way to the level's end.
+    # joby3's Puzzle Item1 (item 41, room 22) is the disguised crowbar - it
+    # looks like a puzzle piece but opens the crowbar doors 25 and 125. It
+    # stays in place so the pickup cutscene is right.
     #
-    # Dazu zwei Dinge rund um den Chef in Raum 120/107, beide Nutzerangabe:
-    # Key Item6 (201) bleibt beim Chef liegen, und die Pistolen (334) bleiben in
-    # Raum 107 - werden sie verschoben, tritt der Chef-Glitch auf. Deshalb ist
-    # Key6 auch kein Fall fuer einen Deadstop; nur Key Item7 braucht einen, und
-    # den liefert die abgeleitete Regel "nicht hinter der eigenen Tuer" (Tuer
-    # 175) bereits von selbst.
+    # Plus two things around the chef in room 120/107, both user statements:
+    # Key Item6 (201) stays lying with the chef, and the pistols (334) stay
+    # in room 107 - if they are moved, the chef glitch occurs. That is also
+    # why Key6 is no case for a deadstop; only Key Item7 needs one, and the
+    # derived rule "not behind its own door" (door 175) already delivers it
+    # by itself.
     'joby3' = @(172,201,334)
-    # rich1s Puzzle Item3 ist die CD. Sie traegt in Vanilla Invisible=true und
-    # liegt ausserhalb der Karte; der Switch in Raum 15 aktiviert sie zusammen
-    # mit Door 4 und Door 2. Im Spiel faellt sie aus dem Anzug, sobald dessen
-    # Animation laeuft. Ein Ortswechsel wuerde die Enthuellung zerstoeren.
+    # rich1's Puzzle Item3 is the CD. In vanilla it carries Invisible=true
+    # and lies outside the map; the switch in room 15 activates it together
+    # with Door 4 and Door 2. In game it falls out of the suit once its
+    # animation runs. A relocation would destroy the reveal.
     'rich1'   = @(174)
-    # andy3: alle drei Puzzle-Items bleiben liegen. Nutzerentscheidung, und die
-    # Bilder aus trview zeigen warum - jedes steckt in der Kulisse statt auf dem
-    # Boden zu liegen. Die Kreide (172) sitzt in einer Felswand und traegt OCB 2,
-    # den Brechstangen-Pickup; die Brechstange (174, OCB 9) steckt in einem
-    # Gitterzaun; die Muenze (173, OCB 11) liegt auf einem Zierdeckel im Wasser.
-    # Beim Verschieben wird OCB auf 0 gesetzt, alle drei laegen danach flach auf
-    # dem Boden und die Inszenierung waere weg - derselbe Grund, aus dem rich1s
-    # CD nicht wandert.
-    # andy3: 172 (Kreide, OCB 2) und 174 (Brechstange im Zaun, OCB 9) sind
-    # seit #61 frei - die Platzierung waehlt Wandkante und Winkel, KEEP_OCB
-    # haelt ihre OCB.
+    # andy3: all three puzzle items stay put. User decision, and the trview
+    # pictures show why - each sits in the scenery instead of lying on the
+    # floor. The chalk (172) sits in a rock wall and carries OCB 2, the
+    # crowbar pickup; the crowbar (174, OCB 9) sits in a wire fence; the
+    # coin (173, OCB 11) lies on an ornamental lid in the water. On moving,
+    # OCB is set to 0, all three would afterwards lie flat on the floor and
+    # the staging would be gone - the same reason rich1's CD does not
+    # travel.
+    # andy3: 172 (chalk, OCB 2) and 174 (crowbar in the fence, OCB 9) are
+    # free since #61 - the placement picks wall edge and angle, KEEP_OCB
+    # holds their OCB.
     #
-    # 173 (Muenze) ist seit 2026-08-24 EBENFALLS FREI - der letzte Rest von
-    # #61. Der alte Grund war ihre OCB 11, und der hat sich als Irrtum
-    # herausgestellt: `PickUpCollision` kennt nur 1, 2, 3/4/7/8 und 9 als
-    # Sonderzweige, ALLES andere (auch 11) laeuft in `default` und wird ganz
-    # normal aufgenommen; die Bodenkorrektur in `InitialisePickup` gilt fuer
-    # 0 und 11 gleichermassen. Eine auf 0 gesetzte Muenze verhaelt sich also
-    # exakt wie vorher - deshalb steht sie auch NICHT in KEEP_OCB.
+    # 173 (coin) is ALSO FREE since 2026-08-24 - the last remnant of #61.
+    # The old reason was its OCB 11, and that turned out to be an error:
+    # `PickUpCollision` knows only 1, 2, 3/4/7/8 and 9 as special branches,
+    # EVERYTHING else (11 too) runs into `default` and is picked up
+    # perfectly normally; the floor correction in `InitialisePickup` holds
+    # for 0 and 11 alike. A coin set to 0 thus behaves exactly as before -
+    # which is why it does NOT stand in KEEP_OCB either.
     #
-    # Was wirklich verloren geht, ist nur die Inszenierung: sie lag auf einem
-    # Zierdeckel im Wasser (Raum 97, direkt neben der Wasserhexe in Raum 99).
-    # Genau das prueft der Nutzer jetzt im Spiel - samt der Frage, was die
-    # Hexe tut, wenn niemand mehr in ihr Becken steigen muss.
+    # What is really lost is only the staging: it lay on an ornamental lid
+    # in the water (room 97, right next to the water witch in room 99).
+    # Exactly that is what the user is now checking in game - including the
+    # question what the witch does when nobody has to climb into her pool
+    # anymore.
     'andy3'   = @()
-    # rich2: die HK (typeId 345, Item 6 in Raum 8). Sie ist kein Fund, sondern
-    # eine Ablage - Lara legt sie am Mesh 15 nieder, um sich zu entwaffnen,
-    # damit der Roentgenscanner in Raum 9 keine Fallen ausloest. Das Item traegt
-    # entsprechend flags 256 (unsichtbar) und OCB 4 (Sockel); beim Verschieben
-    # faellt die OCB auf 0 und aus der Ablage wuerde ein gewoehnliches Pickup.
+    # rich2: the HK (typeId 345, item 6 in room 8). It is no find but a
+    # deposit - Lara lays it down at mesh 15 to disarm herself so the X-ray
+    # scanner in room 9 sets off no traps. The item accordingly carries
+    # flags 256 (invisible) and OCB 4 (pedestal); on moving, the OCB falls
+    # to 0 and the deposit would become an ordinary pickup.
     'rich2'   = @(345)
-    # rich3s Armbrustmunition (typeId 342). Es gibt im ganzen Level genau DREI
-    # Stueck - Items 10 (Raum 2), 82 (Raum 79) und 209 (Raum 188) -, und von
-    # typeId 343 keine einzige. Der Nutzer wollte je drei in der Armbrust- und
-    # in der Combo-Insel; das ist mit dreien nicht zu verteilen, dafuer muessten
-    # drei injiziert werden. Bis er sich fuer eine Loesung entschieden hat,
-    # bleiben alle drei liegen, wo sie sind - die sichere Richtung, denn eine
-    # falsch verteilte Munition ist ein Softlock, eine liegengebliebene nicht.
+    # rich3's crossbow ammo (typeId 342). There are exactly THREE pieces in
+    # the whole level - items 10 (room 2), 82 (room 79) and 209 (room 188)
+    # - and of typeId 343 not a single one. The user wanted three each in
+    # the crossbow and in the combo island; that cannot be distributed with
+    # three, it would take three injections. Until he has decided on a
+    # solution, all three stay where they are - the safe direction, because
+    # wrongly distributed ammo is a softlock, ammo left in place is not.
     'rich3'   = @(342)
 }
 $vanillaTypes = @( if($VANILLA_TYPES.ContainsKey($LevelName)){ $VANILLA_TYPES[$LevelName] } )
@@ -1248,28 +1248,29 @@ if ($FIXED_ITEMS.ContainsKey($LevelName)) {
     }
 }
 
-# Items, deren Pickup-Trigger MITWANDERT, statt sie festzuhalten.
+# Items whose pickup trigger TRAVELS ALONG instead of pinning them.
 #
-# Normalerweise nagelt ein Pickup-Trigger sein Item fest: der Trigger klebt am
-# Sektor, das Item wuerde ohne ihn wegwandern und seine Wirkung bliebe am alten
-# Fleck zurueck. Steht ein Item hier, wird beides zusammen versetzt - ein
-# Vorgang, nicht zwei.
+# Normally a pickup trigger nails its item down: the trigger sticks to the
+# sector, the item would wander off without it and its effect would stay at
+# the old spot. If an item stands here, both are moved together - one
+# operation, not two.
 #
-# Das ist Kuration und ausdruecklich KEINE allgemeine Regel. Die Zaehlung ueber
-# alle 13 Level ergab, dass von 2044 Items nur zwei ueberhaupt in Frage kaemen;
-# der Nutzer hat den Item-Zweig daraufhin geschlossen und genau diesen einen
-# Fall freigegeben ("Andre1 der Key107 da müssen wir nur den Trigger nur mit
-# verschieben", 13.08.2026).
+# This is curation and expressly NO general rule. The count across all 13
+# levels showed that of 2044 items only two would qualify at all; the user
+# thereupon closed the item branch and released exactly this one case
+# ("Andre1 the Key107, there we only need to move the trigger along",
+# 13.08.2026).
 #
-# Nicht aufnehmen, solange nicht geprueft ist:
-#   - Traegt der Trigger einen Sperrbefehl (Flipmap, Antitrigger, Heavy,
-#     Cutscene)? Die erwarten raumspezifische Gegebenheiten.
-#   - Hat das Item eine Sonder-OCB? Die beschreibt meist die alte Stelle.
-# Der Sektor des Triggers wird NICHT hier gepflegt, sondern zur Laufzeit aus
-# den Leveldaten gelesen - eine von Hand gepflegte Koordinate waere die eine
-# Angabe, die beim naechsten Levelumbau still falsch wird.
+# Do not add without checking:
+#   - Does the trigger carry a blocking command (flipmap, antitrigger,
+#     heavy, cutscene)? Those expect room-specific circumstances.
+#   - Does the item have a special OCB? That usually describes the old
+#     spot.
+# The trigger's sector is NOT maintained here but read from the level data
+# at runtime - a hand-maintained coordinate would be the one entry that
+# silently goes wrong at the next level rework.
 $COUPLED_TRIGGERS = @{
-    'Andrea1' = @{ 107 = 'Key - Trigger weckt zusaetzlich Hund (26) und Flame Emitter2 (108)' }
+    'Andrea1' = @{ 107 = 'key - the trigger additionally wakes dog (26) and Flame Emitter2 (108)' }
 }
 $coupledTriggers = @()
 if ($COUPLED_TRIGGERS.ContainsKey($LevelName)) {
@@ -1279,27 +1280,27 @@ if ($COUPLED_TRIGGERS.ContainsKey($LevelName)) {
 }
 
 #----------------------------------------------------------------------------
-# Items, deren Codebits von vornherein gesetzt werden - dritter Weg neben
-# "liegen lassen" und "Trigger mitnehmen".
+# Items whose codebits are preset - the third way besides "leave in place"
+# and "take the trigger along".
 #
-# Der Fall, der dazu gefuehrt hat (Andrea2 Item 62, Puzzle Item4): auf seinem
-# Sektor liegt ein HeavyTrigger mit Object(62), und auf derselben Position
-# steht der Guardian (Item 51). Nutzer: "Das ist ein Schutz, damit der Death
-# des Guardians den Heavy trigger ausloest und das Pickup auf 11111 setzt."
-# Das Puzzleteil wird also erst durch den Tod des Guardians freigeschaltet.
+# The case that led to it (Andrea2 item 62, Puzzle Item4): on its sector
+# lies a HeavyTrigger with Object(62), and on the same position stands the
+# Guardian (item 51). User: "That is a protection so the Guardian's death
+# fires the heavy trigger and sets the pickup to 11111." The puzzle piece
+# is thus only unlocked by the Guardian's death.
 #
-# Ein HeavyTrigger laesst sich nicht mitnehmen - er braucht etwas Schweres auf
-# genau diesem Feld, und das ist der sterbende Guardian. Statt das Item
-# deswegen ewig festzunageln, nimmt die Kuration ihm die Bedingung ab:
-# Codebits gleich zu Beginn auf 11111, dann ist es von Anfang an da und darf
-# wandern. Nutzerentscheidung: "Kann uns egal sein auf 11111 setzen und ab in
-# den pool."
+# A HeavyTrigger cannot be taken along - it needs something heavy on
+# exactly this tile, and that is the dying Guardian. Instead of nailing the
+# item down forever because of that, the curation relieves it of the
+# condition: codebits to 11111 right at the start, then it is there from
+# the beginning and may travel. User decision: "We don't care, set it to
+# 11111 and off into the pool."
 #
-# Je Eintrag: Itemindex -> @{ flags = <Wert>; reason = <Begruendung> }.
-# 31 ist 11111 binaer, also alle fuenf Codebits.
+# Per entry: item index -> @{ flags = <value>; reason = <reasoning> }.
+# 31 is 11111 in binary, i.e. all five codebits.
 $PRESET_FLAGS = @{
     'Andrea2' = @{
-        62 = @{ flags = 31; reason = 'Puzzle Item4 - HeavyTrigger haengt am Tod des Guardians (Item 51); Codebits vorgesetzt, damit es wandern darf' }
+        62 = @{ flags = 31; reason = 'Puzzle Item4 - the HeavyTrigger hangs on the death of the Guardian (item 51); codebits preset so it may travel' }
     }
 }
 $flagPresets = @()
@@ -1310,81 +1311,84 @@ if ($PRESET_FLAGS.ContainsKey($LevelName)) {
 }
 
 #----------------------------------------------------------------------------
-# GEGNER, die dem Level HINZUGEFUEGT werden duerfen.
+# ENEMIES that may be ADDED to the level.
 #
-# Handkuration, bewusst leer bis geprueft. Ein Gegner gehoert erst hier hinein,
-# wenn er im Spiel nachgewiesen hat, dass er sich ohne Levelskript benimmt.
-# Larson ist der Massstab dafuer: er sieht in den Daten wie ein gewoehnlicher
-# Gegner aus, ist aber ohne OneShot am Trigger gar nicht toetbar und blieb nach
-# dem Tod stehen. Beides fiel erst im Spiel auf, nicht beim Lesen der Datei.
+# Hand curation, deliberately empty until checked. An enemy only belongs in
+# here once it has proven in game that it behaves without a level script.
+# Larson is the yardstick for that: he looks like an ordinary enemy in the
+# data but cannot be killed at all without OneShot on the trigger and
+# stayed standing after death. Both only showed in game, not while reading
+# the file.
 #
-# Je Eintrag: typeId -> Grund/Nachweis. Der Randomizer setzt jeden dieser Typen
-# mit einem eigenen OneShot-Trigger ins Level (siehe addTrigger).
+# Per entry: typeId -> reason/proof. The randomizer sets each of these
+# types into the level with its own OneShot trigger (see addTrigger).
 #
-# NIE aufnehmen (Nutzervorgabe): Scientist, Guardian. Der Chef ist seit #124 im
-# Cross-Pool (kCross joby3, basisSlot 460, geliehener Soldatentod), die Hydra
-# seit 2026-08-15 - beide laufen ueber die Cross-Maschinerie, nicht ueber diese
-# Handkurationsliste.
-# Vor der Aufnahme pruefen:
-#   - Braucht er AI-Objekte (AI_GUARD, AI_AMBUSH, ...)? Die stehen woanders nicht.
-#   - Haengt sein Tod an einem Levelskript oder einer Cutscene?
-#   - Blendet seine Leiche aus? (Anim-Befehl 4 in der Sterbeanimation,
-#     scratchpad\DumpAnim.exe zeigt es.)
-#   - Braucht er Wasser, Deckenhoehe, eine Bahn?
+# NEVER add (user requirement): Scientist, Guardian. The chef has been in
+# the cross pool since #124 (kCross joby3, baseSlot 460, borrowed soldier
+# death), the Hydra since 2026-08-15 - both run through the cross
+# machinery, not through this hand curation list.
+# Before adding, check:
+#   - Does he need AI objects (AI_GUARD, AI_AMBUSH, ...)? Those do not
+#     exist elsewhere.
+#   - Does his death hang on a level script or a cutscene?
+#   - Does his corpse fade out? (anim command 4 in the death animation,
+#     scratchpad\DumpAnim.exe shows it.)
+#   - Does he need water, ceiling height, a track?
 #----------------------------------------------------------------------------
-# Liste des Nutzers vom 13.08.2026 ("Gegner Pool.txt"), je Level auf die Typen
-# eingeschraenkt, deren Modell in DIESEM Level auch geladen ist. Ein Gegnertyp,
-# den das Level nicht kennt, laesst sich nicht setzen - dafuer braeuchte es erst
-# den Objekt-Transfer zwischen Leveln (wie beim Waffenset).
+# The user's list of 13.08.2026 ("Gegner Pool.txt"), restricted per level to
+# the types whose model is also loaded in THIS level. An enemy type the
+# level does not know cannot be placed - that would first need the object
+# transfer between levels (as with the weapon set).
 #
-# Geprueft mit scratchpad\DumpAnim.exe <level.trc> -1 (listet alle Objektslots).
-# Eine Abweichung zur Liste: DOG (41) liegt NUR in Andrea1, nicht in den
-# joby-Leveln.
+# Checked with scratchpad\DumpAnim.exe <level.trc> -1 (lists all object
+# slots). One deviation from the list: DOG (41) lies ONLY in Andrea1, not
+# in the joby levels.
 #
-# HARTE REGEL, aus dem Pierre-Fall gelernt: ein Gegnertyp darf nur in ein Level,
-# in dem er MINDESTENS EINE Vanilla-Instanz hat.
+# HARD RULE, learned from the Pierre case: an enemy type may only go into a
+# level in which it has AT LEAST ONE vanilla instance.
 #
-# "Modell geladen" reicht nicht. Ein Level fuehrt nur die Sound-Samples mit, die
-# es selbst braucht - kommt der Gegner darin nie vor, fehlen sie. Pierre ist der
-# Beweis: sein Modell liegt mit 15 Meshes in Andrea2 UND Andrea3, aber er hat in
-# KEINEM der 13 Level eine Instanz, und sein Schuss-Sample (SFX 90) ist in
-# keinem einzigen Level vorhanden. Im Spiel schiesst er lautlos.
+# "Model loaded" does not suffice. A level only carries the sound samples
+# it needs itself - if the enemy never occurs in it, they are missing.
+# Pierre is the proof: his model lies with 15 meshes in Andrea2 AND
+# Andrea3, but he has no instance in ANY of the 13 levels, and his shot
+# sample (SFX 90) is present in not a single level. In game he shoots
+# silently.
 #
-# Nachpruefen mit scratchpad\SfxPruefung.ps1: sie liest je Gegner GENAU seinen
-# Animationsblock (die Grenze steht im anim_index des naechsten Slots, ein Slot
-# hat keine eigene Anzahl) und schlaegt die SFX im sample_lut des Levels nach.
+# Verify with scratchpad\SfxPruefung.ps1: it reads EXACTLY each enemy's
+# animation block (the limit stands in the next slot's anim_index, a slot
+# has no count of its own) and looks the SFX up in the level's sample_lut.
 $ENEMY_TYPES = @{
     'Andrea1' = @{
         41 = 'Dog'
-        45 = 'Larson - im Spiel geprueft: bleibt, verfolgt, stirbt, blendet aus'
+        45 = 'Larson - checked in game: stays, pursues, dies, fades out'
     }
     'Andrea2' = @{
-        45 = 'Larson - Achtung: Item 76 ist der gescriptete Miniboss und bleibt unberuehrt, das hier sind zusaetzliche'
-        47 = 'Pierre - im Spiel geprueft. AUSNAHME von der Instanz-Regel, braucht ENEMY_SOUND_FIX'
-        61 = 'Roman God (Soldier Statue, sword_green)'
-        # 63 = 'Hydra - stand frueher auf "nie randomisieren"'
+        45 = 'Larson - caution: item 76 is the scripted miniboss and stays untouched, these here are additional'
+        47 = 'Pierre - checked in game. EXCEPTION to the instance rule, needs ENEMY_SOUND_FIX'
+        61 = 'Roman god (Soldier Statue, sword_green)'
+        # 63 = 'Hydra - used to stand on "never randomize"'
     }
     'Andrea3' = @{
-        47 = 'Pierre - im Spiel geprueft. AUSNAHME von der Instanz-Regel, braucht ENEMY_SOUND_FIX'
+        47 = 'Pierre - checked in game. EXCEPTION to the instance rule, needs ENEMY_SOUND_FIX'
         57 = 'Lion'
         59 = 'Gladiator'
-        61 = 'Roman God (Soldier Statue, Hammer_blue)'
+        61 = 'Roman god (Soldier Statue, Hammer_blue)'
     }
-    # Imp im Spiel geprueft (andy1): faellt etwas eigenartig zu Boden, blendet
-    # aber aus. Das Zubodenfallen erklaert sich aus den Daten - seine
-    # Sterbeanimation ist anim_index + 45 (imp.cpp) und in andy1 ein Stummel
-    # mit Frames 0..0 und ohne Befehle.
-    'andy1'   = @{ 89 = 'Imp - im Spiel geprueft: faellt eigenartig, blendet aber aus' }
-    'Andy2'   = @{ 77 = 'Maze Monster - vom Nutzer als "testen ob nutzbar" markiert' }
-    'andy3'   = @{ 89 = 'Imp - in andy1 geprueft, hier noch nicht' }
+    # Imp checked in game (andy1): falls somewhat oddly to the ground but
+    # fades out. The odd fall is explained by the data - his death
+    # animation is anim_index + 45 (imp.cpp) and in andy1 a stub with
+    # frames 0..0 and no commands.
+    'andy1'   = @{ 89 = 'Imp - checked in game: falls oddly but fades out' }
+    'Andy2'   = @{ 77 = 'Maze Monster - marked by the user as "test whether usable"' }
+    'andy3'   = @{ 89 = 'Imp - checked in andy1, not here yet' }
     'joby2'   = @{
         37 = 'Guard (Blue Guard)'
-        # Freigabe des Nutzers 17.08.2026. Der Huskie ist ein EIGENER Gegner,
-        # nicht der Hund (41): eigene Steuerung, 24 statt 18 Trefferpunkte,
-        # 26 statt 21 Meshes. joby2 ist das einzige Level mit einem Modell in
-        # Slot 85 und hat drei Vanilla-Instanzen (Items 4, 86, 153) - die
-        # harte Instanz-Regel oben ist damit erfuellt.
-        85 = 'Huskie - der Hund aus joby2, eigener Typ mit eigener Steuerung'
+        # Released by the user 17.08.2026. The Huskie is an enemy of its
+        # OWN, not the dog (41): its own control, 24 instead of 18 hit
+        # points, 26 instead of 21 meshes. joby2 is the only level with a
+        # model in slot 85 and has three vanilla instances (items 4, 86,
+        # 153) - the hard instance rule above is thereby satisfied.
+        85 = 'Huskie - the dog from joby2, its own type with its own control'
     }
     'joby3'   = @{
         37 = 'Guard (Blue Guard)'
@@ -1392,8 +1396,8 @@ $ENEMY_TYPES = @{
         51 = 'Soldier Pistols (Mafia2)'
     }
     'joby5'   = @{
-        # 37 = 'Guard - RAUS: joby5 hat null Vanilla-Instanzen, und ihm fehlen
-        #       die Samples 72, 74, 82, 85. Gleiche Lage wie Pierre in Andrea3.
+        # 37 = 'Guard - OUT: joby5 has zero vanilla instances, and it lacks
+        #       samples 72, 74, 82, 85. Same situation as Pierre in Andrea3.
         49 = 'Soldier MG (Mafia)'
         51 = 'Soldier Pistols (Mafia2)'
     }
@@ -1419,91 +1423,94 @@ if ($ENEMY_TYPES.ContainsKey($LevelName)) {
 }
 
 #----------------------------------------------------------------------------
-# Sound-Samples, die einem Gegner im Ziellevel fehlen - und woher sie kommen.
+# Sound samples an enemy lacks in the target level - and where they come
+# from.
 #
-# Die Regel oben lautet: ein Gegner nur in ein Level, in dem er Vanilla-Instanzen
-# hat. Pierre ist die begruendete Ausnahme. Er hat in KEINEM der 13 Level eine
-# Instanz, sein Modell liegt aber vollstaendig in Andrea2 und Andrea3 - er ist
-# dort Cutscene-Darsteller. Was ihm fehlt, sind genau seine Samples, und die
-# lassen sich uebernehmen. Sein Schuss-Sample (Map 90) hat Core ueberhaupt nie
-# ausgeliefert; der Nutzer hat im Soundboard von trview passenden Ersatz aus
-# joby5 herausgesucht, im Spiel geprueft.
+# The rule above says: an enemy only into a level in which it has vanilla
+# instances. Pierre is the reasoned exception. He has an instance in NONE
+# of the 13 levels, but his model lies completely in Andrea2 and Andrea3 -
+# he is a cutscene actor there. What he lacks are exactly his samples, and
+# those can be copied over. His shot sample (map 90) was never shipped by
+# Core at all; the user picked matching replacements from joby5 in trview's
+# soundboard, checked in game.
 #
-# WICHTIG: Wer einen Gegner mit einem Eintrag hier in den Pool nimmt, verspricht
-# etwas, das die Platzierung allein nicht einloesen kann - der Patchweg muss die
-# Samples mituebernehmen (Aufgabe #67). Ohne das steht der Gegner muted im Level.
+# IMPORTANT: whoever takes an enemy with an entry here into the pool
+# promises something placement alone cannot deliver - the patch path must
+# copy the samples along (task #67). Without that the enemy stands mute in
+# the level.
 #
-# typeId -> Liste aus: Map (die fehlende SFX-Nummer), VonLevel, VonMap, Was.
+# typeId -> list of: Map (the missing SFX number), FromLevel, FromMap, What.
 $ENEMY_SOUND_FIX = @{
     47 = @(
-        @{ Map = 90; VonLevel = 'joby5'; VonMap = 45;  Was = 'Schuss' },
-        @{ Map = 91; VonLevel = 'joby5'; VonMap = 123; Was = 'Sterben' }
+        @{ Map = 90; FromLevel = 'joby5'; FromMap = 45;  What = 'shot' },
+        @{ Map = 91; FromLevel = 'joby5'; FromMap = 123; What = 'death' }
     )
-    # Larson: 96 und 98 sitzen in seiner Sterbeanimation (rel15, Frames 283 und
-    # 340) und fehlen in Andrea1 UND Andrea2 - auch vanilla, hoerbar wurde das
-    # nie, weil er dort nie stirbt (Flucht bei 40 HP). Seit dem OneShot-Trigger
-    # stirbt er, also braucht er die Klaenge. Ersatz vom Nutzer im Soundboard
-    # von trview ausgesucht (14.08.2026).
+    # Larson: 96 and 98 sit in his death animation (rel15, frames 283 and
+    # 340) and are missing in Andrea1 AND Andrea2 - in vanilla too, it just
+    # never became audible because he never dies there (flight at 40 HP).
+    # Since the OneShot trigger he dies, so he needs the sounds. The
+    # replacements were picked by the user in trview's soundboard
+    # (14.08.2026).
     45 = @(
-        @{ Map = 96; VonLevel = 'rich1'; VonMap = 85;  Was = 'Sterben' },
-        @{ Map = 98; VonLevel = 'rich1'; VonMap = 143; Was = 'Sterben' }
+        @{ Map = 96; FromLevel = 'rich1'; FromMap = 85;  What = 'death' },
+        @{ Map = 98; FromLevel = 'rich1'; FromMap = 143; What = 'death' }
     )
 }
 $enemySounds = @()
 foreach($t in @($enemyTypes | ForEach-Object { [int]$_.typeId })){
     if (-not $ENEMY_SOUND_FIX.ContainsKey($t)) { continue }
     foreach($e in $ENEMY_SOUND_FIX[$t]){
-        $enemySounds += [PSCustomObject]@{ typeId=$t; map=[int]$e.Map; fromLevel=[string]$e.VonLevel;
-                                           fromMap=[int]$e.VonMap; what=[string]$e.Was }
+        $enemySounds += [PSCustomObject]@{ typeId=$t; map=[int]$e.Map; fromLevel=[string]$e.FromLevel;
+                                           fromMap=[int]$e.FromMap; what=[string]$e.What }
     }
 }
 #----------------------------------------------------------------------------
-# Secrets bleiben vorerst liegen, wo sie sind.
+# Secrets stay where they are for now.
 #
-# Welcher Typ ein Secret ist, steht nicht in der Objekttabelle, sondern in der
-# Engine: newinv2.cpp, case PICKUP_ITEM4 zaehlt savegame.Level.Secrets hoch.
-# Das ist typeId 223 und gilt spielweit, unabhaengig vom Level. Zusammen sind
-# es 36 Stueck - genau die Zahl, die der Ladebildschirm anzeigt.
+# Which type is a secret does not stand in the object table but in the
+# engine: newinv2.cpp, case PICKUP_ITEM4 increments savegame.Level.Secrets.
+# That is typeId 223 and holds game-wide, independent of the level.
+# Together there are 36 - exactly the number the loading screen shows.
 #
-# Der Nutzer will die Secrets spaeter gesondert behandeln: eine eigene Liste
-# handverlesener Verstecke plus ein Schalter im Werkzeug, der sie in den Pool
-# aufnimmt. Bis dahin duerfen sie nicht mitwandern - ein Secret, das unresolved im
-# Gang liegt, ist keins mehr, und die Nischenfundstellen (Andy2 Item 142 mit
-# OCB 1 in Raum 163) gingen dabei verloren.
+# The user wants to treat the secrets separately later: an own list of
+# hand-picked hiding spots plus a switch in the tool that takes them into
+# the pool. Until then they must not travel along - a secret lying openly
+# in the corridor is none anymore, and the niche finds (Andy2 item 142 with
+# OCB 1 in room 163) would be lost.
 #
-# VANILLA_TYPES allein reicht dafuer NICHT: das steuert nur die Constraints,
-# der Randomizer bewegt aber jedes Pickup, das nicht ortsfest ist. Erst der
-# Eintrag in fixedItems haelt sie wirklich fest.
+# VANILLA_TYPES alone does NOT suffice for that: it only steers the
+# constraints, but the randomizer moves every pickup that is not pinned.
+# Only the entry in fixedItems really holds them.
 #----------------------------------------------------------------------------
 $SECRET_TYPE = 223
 foreach($it in ($d.items | Where-Object { [int]$_.typeId -eq $SECRET_TYPE })){
-    $fixedItems += [PSCustomObject]@{ item=[int]$it.index; reason='Secret - bleibt bis zur eigenen Secret-Liste an seinem Platz' }
+    $fixedItems += [PSCustomObject]@{ item=[int]$it.index; reason='secret - stays in place until the dedicated secret list' }
 }
 
 #----------------------------------------------------------------------------
-# VANILLA_TYPES muss die Items auch wirklich festhalten.
+# VANILLA_TYPES must really hold the items.
 #
-# Das tat es nicht. Der Eintrag hielt einen Typ nur aus den keyConstraints
-# heraus - also aus dem Pool und aus den Testleveln. Der Randomizer bewegt aber
-# jedes Pickup, das nicht in fixedItems steht, und ein Typ ohne Constraint gilt
-# ihm schlicht als gewoehnliches Item. Die Eintraege waren damit reine
-# Dokumentation.
+# It did not. The entry only kept a type out of the keyConstraints - i.e.
+# out of the pool and out of the test levels. But the randomizer moves
+# every pickup that is not in fixedItems, and a type without a constraint
+# simply counts as an ordinary item to it. The entries were thereby pure
+# documentation.
 #
-# Aufgefallen ist es an joby3: Pistolen (334), Key Item6 beim Chef (201) und die
-# getarnte Brechstange (172) stehen dort seit jeher in VANILLA_TYPES, und alle
-# drei wurden in jedem Seed verschoben - mitsamt dem Chef-Glitch, gegen den der
-# Eintrag gedacht war. Dass rich1s CD trotzdem liegen blieb, lag allein an
-# ihrem zusaetzlichen FIXED_ITEMS-Eintrag.
+# It surfaced at joby3: pistols (334), Key Item6 at the chef (201) and the
+# disguised crowbar (172) have stood in VANILLA_TYPES there forever, and
+# all three were moved in every seed - including the chef glitch the entry
+# was meant to prevent. That rich1's CD stayed put anyway was owed solely
+# to its additional FIXED_ITEMS entry.
 #
-# Beides bleibt nebeneinander bestehen und meint Verschiedenes: VANILLA_TYPES
-# ist "dieser TYP bleibt, wo er ist", FIXED_ITEMS ist "dieses eine ITEM bleibt,
-# wo es ist". Der Grund wird mitgeschrieben, damit im Report sichtbar ist,
-# welcher Eintrag ein Item haelt.
+# Both stay side by side and mean different things: VANILLA_TYPES is "this
+# TYPE stays where it is", FIXED_ITEMS is "this one ITEM stays where it
+# is". The reason is written along so the report shows which entry holds
+# an item.
 #----------------------------------------------------------------------------
-$fixedSchon = @($fixedItems | ForEach-Object { [int]$_.item })
+$fixedAlready = @($fixedItems | ForEach-Object { [int]$_.item })
 foreach($it in ($d.items | Where-Object { $vanillaTypes -contains [int]$_.typeId })){
-    if ($fixedSchon -contains [int]$it.index) { continue }
-    $fixedItems += [PSCustomObject]@{ item=[int]$it.index; reason="VANILLA_TYPES: Typ $($it.typeId) bleibt an seiner Vanilla-Position" }
+    if ($fixedAlready -contains [int]$it.index) { continue }
+    $fixedItems += [PSCustomObject]@{ item=[int]$it.index; reason="VANILLA_TYPES: type $($it.typeId) stays at its vanilla position" }
 }
 
 $extraPool = @{}
@@ -1512,43 +1519,44 @@ if ($EXTRA_POOL_TYPES.ContainsKey($LevelName)) {
 }
 $onewayOut = @( if($ONEWAY_OUT.ContainsKey($LevelName)){ $ONEWAY_OUT[$LevelName] } )
 
-# Umzaeunte Bereiche: ein zusammenhaengender Gebaeude-/Hofkomplex, der im Spiel
-# AUSSCHLIESSLICH durch bestimmte Tueren betreten werden kann, den der Graph
-# aber ueber Portal-Randkanten (Zaeune, Tuerstuerze, Hochparterre-Portale)
-# faelschlich frueher erreicht. Der Innenbereich wird zur Laufzeit als
-# Zusammenhangskomponente ab Seed berechnet (ohne Barrier-Raeume zu betreten,
-# ohne Torsektoren zu durchqueren); danach wird jede Kante von aussen nach
-# innen gekappt, die nicht ueber die Torsektoren laeuft. Vom Nutzer in trview
-# verifizierte Vorgabe fuer Andrea1: "ab dem Tor 53/54 darf alles was dahinter
-# liegt keine KeyItem-Positionen mehr enthalten" - der rote Kasten auf seiner
-# Karte ist genau dieser Komplex, das Doppeltor 53/54 (Raum 112) der einzige
-# legale Zugang. Ein volles Hoehen-/Physikmodell wuerde das automatisch
-# erkennen, ist aber geparkt (siehe -EnableClimbModel).
-# Rooms = explizite Liste der Raeume hinter dem Tor. Drei automatische Ansaetze
-# wurden gemessen und verworfen, die Begruendung gehoert hierher, damit sie
-# niemand blind wiederholt:
-#  1. Insel-Flut ab dem Hof: scheitert prinzipiell, weil der Bereich nur
-#     EINSEITIG versiegelt ist - rein nur durchs Tor, raus per Absprung an
-#     vielen Stellen (Raum 117 grenzt allein an 112,113,116,118,119,144,150,156).
-#     Eine Flut folgt den Abspruengen nach draussen und frisst das Level.
-#  2. Barriere-Raum (Strasse 112) als Stopp: die Flut fand sofort andere
-#     Auswege (117->150->130->113->120->114->...).
-#  3. Hoehenlage als Trennkriterium: widerlegt - Raum 150 (aussen) liegt bei
-#     yBottom -6144 wie 145/165/166/181 (innen), Raum 113 (aussen) bei -2048
-#     wie 118/119 (innen).
-# Sauber loesen wuerde das nur ein vollstaendiges Hoehen-/Kletterodell
-# (-EnableClimbModel), dem die verlaessliche Bodensemantik an Portalen fehlt.
-# Die Liste ist dafuer transparent, in trview direkt ablesbar und je Raum mit
-# einer Zahl korrigierbar.
-# Die Loesung kam vom Nutzer durch UMKEHRUNG der Fragestellung: statt die
-# Innenraeume zu erraten (scheiterte, s.o.), nennt er die Raeume, die VOR dem
-# Tor noch walkable sind. Sie bilden eine geschlossene Stoppkante, gegen die
-# eine Flut ab dem Hof laeuft - damit ergibt sich der Innenbereich automatisch
-# und vollstaendig (Andrea1: 65 Raeume, 1499 Sektoren, kein Fluchtweg mehr).
-# PreGateRooms bleiben ausdruecklich valide fuer Platzierungen; Raum 217 steht
-# mit drin, weil er volumes Nutzer generell auszuschliessen ist und als Stopp
-# ohnehin dieselbe Wirkung hat. Ueber diesen Raeumen liegende reine "Luft"-
-# Raeume sind volumes Nutzer irrelevant. Notfall-Hard-Stop waeren 114/120.
+# Fenced areas: a contiguous building/courtyard complex that in game can be
+# entered EXCLUSIVELY through certain doors, but that the graph wrongly
+# reaches earlier via portal rim edges (fences, door lintels, mezzanine
+# portals). The inner area is computed at runtime as a connected component
+# from the seed (without entering barrier rooms, without crossing the gate
+# sectors); afterwards every edge from outside to inside that does not run
+# through the gate sectors is cut. Requirement verified by the user in
+# trview for Andrea1: "from the gate 53/54 on, everything behind it may
+# contain no key item positions" - the red box on his map is exactly this
+# complex, the double gate 53/54 (room 112) the only legal access. A full
+# height/physics model would detect this automatically but is parked (see
+# -EnableClimbModel).
+# Rooms = the explicit list of rooms behind the gate. Three automatic
+# approaches were measured and discarded; the reasoning belongs here so
+# nobody repeats them blindly:
+#  1. Island flood from the courtyard: fails on principle because the area
+#     is only sealed ON ONE SIDE - in only through the gate, out by jumping
+#     off at many spots (room 117 alone borders 112,113,116,118,119,144,
+#     150,156). A flood follows the jump-offs outward and eats the level.
+#  2. Barrier room (street 112) as the stop: the flood immediately found
+#     other ways out (117->150->130->113->120->114->...).
+#  3. Elevation as the separator: refuted - room 150 (outside) lies at
+#     yBottom -6144 like 145/165/166/181 (inside), room 113 (outside) at
+#     -2048 like 118/119 (inside).
+# Only a complete height/climb model (-EnableClimbModel) would solve this
+# cleanly, and it lacks reliable floor semantics at portals. The list is
+# transparent for that, directly readable in trview and correctable per
+# room with one number.
+# The solution came from the user by INVERTING the question: instead of
+# guessing the inner rooms (failed, see above), he names the rooms that are
+# still walkable BEFORE the gate. They form a closed stop edge against
+# which a flood from the courtyard runs - the inner area thereby results
+# automatically and completely (Andrea1: 65 rooms, 1499 sectors, no escape
+# route left).
+# PreGateRooms expressly stay valid for placements; room 217 is included
+# because per the user it is to be excluded in general and as a stop has
+# the same effect anyway. Pure "air" rooms above these rooms are per the
+# user irrelevant. The emergency hard stop would be 114/120.
 $GATED_AREA = @{
     'Andrea1' = @( @{
         Doors        = @(53,54)
@@ -1558,220 +1566,224 @@ $GATED_AREA = @{
 }
 $gatedAreas = @( if($GATED_AREA.ContainsKey($LevelName)){ $GATED_AREA[$LevelName] } )
 
-# Tueren, die kein Trigger im Level schaltet, weil die Engine sie aus
-# levelspezifischem Skriptcode heraus oeffnet (game/deltapak.cpp ruft dort
-# FlipMap() und TestTriggers() direkt auf - z.B. cranecut_control -> FlipMap(1),
-# die Kran-Cutscene). Solche Oeffnungen stehen nirgends in den Leveldaten und
-# sind aus ihnen grundsaetzlich nicht ableitbar. Wer hier eintraegt, sagt dem
-# Analyser: diese Tuer geht im Spielverlauf auf, behandle sie als unresolved.
-# Die Diagnose "kein Trigger im Level schaltet diese Tuer" listet die Kandidaten.
-# Wichtig: NICHT "immer unresolved", sondern an eine Bedingung geknuepft - erreiche
-# den Raum, in dem das Skript-Ereignis ausgeloest wird. Eine Skript-Tuer pauschal
-# zu oeffnen waere schlimmer als sie zu ignorieren: der Analyser wuerde erlauben,
-# ein frueh benoetigtes Key-Item hinter eine Tuer zu legen, die real erst am Ende
-# einer langen Kette aufgeht - der Randomizer erzeugt dann unloesbare Seeds.
-# joby2: Key 7 -> Tuer -> Keycard vom Guard -> eine Ebene hoeher -> ueber die
-# Kisten springen -> Kranraum (104) -> Flipmap gibt den Weg frei.
-# Noch kein Eintrag verifiziert. joby2 138/141 standen hier kurzzeitig drin und
-# hoben das Level scheinbar von 1 auf 90 Prozent - falsch: kein Key-/Switch-
-# Trigger in joby2 schaltet sie, sie oeffnen also nie und Lara geht daran vorbei.
-# Sie standen nur zufaellig am Rand des erreichten Bereichs. joby2 stoppt in
-# Wahrheit an der Geometrie (Sprung ueber die Kisten), siehe MANUAL_LINK.
-# Merke: "Tuer ohne Trigger" heisst zuerst "Tuer oeffnet nie", nicht
-# "Tuer wird per Skript geoeffnet" - Letzteres erst nach Beleg annehmen.
+# Doors no trigger in the level switches, because the engine opens them
+# from level-specific script code (game/deltapak.cpp calls FlipMap() and
+# TestTriggers() directly there - e.g. cranecut_control -> FlipMap(1), the
+# crane cutscene). Such openings stand nowhere in the level data and are
+# fundamentally not derivable from it. Whoever enters here tells the
+# analyser: this door opens in the course of play, treat it as opened.
+# The diagnosis "no trigger in the level switches this door" lists the
+# candidates.
+# Important: NOT "always open" but tied to a condition - reach the room in
+# which the script event is triggered. Opening a script door wholesale
+# would be worse than ignoring it: the analyser would allow laying an
+# early-needed key item behind a door that in reality only opens at the
+# end of a long chain - the randomizer then produces unsolvable seeds.
+# joby2: Key 7 -> door -> keycard from the guard -> one level up -> jump
+# over the crates -> crane room (104) -> flipmap frees the way.
+# No entry verified yet. joby2 138/141 stood in here briefly and seemingly
+# lifted the level from 1 to 90 percent - wrong: no key/switch trigger in
+# joby2 switches them, so they never open and Lara walks past them. They
+# merely happened to stand at the edge of the reached area. joby2 in truth
+# stops at the geometry (the jump over the crates), see MANUAL_LINK.
+# Note: "door without a trigger" first means "door never opens", not "door
+# is opened by script" - assume the latter only after evidence.
 #
-# joby3, User-Entscheidung (nicht aus Daten bewiesen, sondern bewusst als
-# Randomizer-Regel festgelegt): der Chef in Raum 120 ist per Stealth-Kill zu
-# toeten (proximity-basiert, game/deltapak.cpp stealth3_start/end - siehe
-# Analyse weiter oben, technisch nicht aus Sektor-/Item-Daten ableitbar). Da
-# das Toeten des Chefs zwingend ist, sobald Raum 120 erreicht ist, gelten die
-# beiden Tueren dahinter als sicher passierbar, sobald Raum 120 erreicht wird:
-#   Tuer 190 (Raum 124) <- Key Item6 (typeId 201), Vanilla-Drop des Chefs
-#   Tuer 175 (Raum 106) <- Key Item7 (typeId 202), liegt hinter Tuer 190 in Raum 107
-# Platzierungsregel fuer den Randomizer: Key Item6 bleibt an/bei den Chef
-# gebunden (Zone von Raum 120), Key Item7 darf bis einschliesslich der Zone
-# von Raum 120 liegen - beide Tueren zaehlen ab dort als walkable.
+# joby3, user decision (not proven from data but deliberately set as a
+# randomizer rule): the chef in room 120 is to be killed by stealth kill
+# (proximity-based, game/deltapak.cpp stealth3_start/end - see the analysis
+# further up, technically not derivable from sector/item data). Since
+# killing the chef is mandatory once room 120 is reached, the two doors
+# behind him count as safely passable as soon as room 120 is reached:
+#   door 190 (room 124) <- Key Item6 (typeId 201), the chef's vanilla drop
+#   door 175 (room 106) <- Key Item7 (typeId 202), lies behind door 190 in room 107
+# Placement rule for the randomizer: Key Item6 stays bound to/near the chef
+# (the zone of room 120), Key Item7 may lie up to and including the zone of
+# room 120 - both doors count as walkable from there.
 $SCRIPT_DOORS = @{
     'joby3' = @{ 190 = 120; 175 = 120 }
-    # rich1: der Scientist (Item 85, Raum 34, OCB 9) hat eine Anvisier-Cutscene -
-    # laenger auf ihn zielen oeffnet Tuer 84 direkt (der leichte Weg). Toetet man
-    # ihn stattdessen, braucht es einen Umweg. Gleiche Klasse wie der Chef in
-    # joby3: proximity-/verhaltensbasiert, nicht aus Sektor-/Item-Daten ableitbar.
-    # User-Entscheidung, analog zu joby3: Raum erreicht = Tuer gilt als unresolved.
+    # rich1: the scientist (item 85, room 34, OCB 9) has an aim-at cutscene -
+    # aiming at him longer opens door 84 directly (the easy way). Kill him
+    # instead and a detour is needed. Same class as the chef in joby3:
+    # proximity/behavior-based, not derivable from sector/item data.
+    # User decision, analogous to joby3: room reached = door counts as open.
     'rich1' = @{ 84 = 34 }
-    # Andrea3: der Roman God (Item 79, typeId 61, Raum 90, Sektor 2,3) steht
-    # exakt auf dem HeavyTrigger, der Tuer 103 oeffnet (Object:103, mask 31) -
-    # er faellt beim Sterben buchstaeblich auf seinen eigenen Ausloeser. Anders
-    # als Chef/Scientist ist das kein Stealth-/Anvisier-Sonderfall, sondern ein
-    # normaler bekaempfbarer Boss (kein bekannter Unsterblichkeits-Bug); die
-    # Regel bildet trotzdem denselben Fall ab, weil ein NPC-Tod nicht als
-    # "Lara erreicht Sektor X" modelliert werden kann. Kette danach volumes User:
-    # Tuer 103 -> Key Item2 (Raum 119) -> Key-Schloss Raum 102 -> Tuer 77
-    # (Raum 89) -> Levelende-Bereich (EndLevel-Trigger, Raum 70).
+    # Andrea3: the Roman god (item 79, typeId 61, room 90, sector 2,3)
+    # stands exactly on the HeavyTrigger that opens door 103 (Object:103,
+    # mask 31) - he literally falls onto his own trigger when dying. Unlike
+    # chef/scientist this is no stealth/aim-at special case but a normal
+    # fightable boss (no known immortality bug); the rule still models the
+    # same case, because an NPC death cannot be modeled as "Lara reaches
+    # sector X". The chain afterwards per the user: door 103 -> Key Item2
+    # (room 119) -> key lock room 102 -> door 77 (room 89) -> level end
+    # area (EndLevel trigger, room 70).
     'Andrea3' = @{ 103 = 90 }
 }
 $scriptDoors = @{}
 if ($SCRIPT_DOORS.ContainsKey($LevelName)) { $scriptDoors = $SCRIPT_DOORS[$LevelName] }
 
 #----------------------------------------------------------------------------
-# Flipmap-Raeume.
+# Flipmap rooms.
 #
-# Ein Flipraum ist kein zusaetzlicher Ort, sondern ein ZUSTAND desselben Ortes.
-# Die Sektordaten enthalten beide Fassungen nebeneinander, und wer sie einfach
-# uebereinanderlegt, bekommt eine Geometrie, die es im Spiel nie gibt: jede
-# Wand der Basis UND jeder Durchgang der Flipvariante, alles gleichzeitig, alles
-# ab Levelstart.
+# A flip room is no additional place but a STATE of the same place. The
+# sector data holds both versions side by side, and whoever simply lays
+# them on top of each other gets geometry that never exists in game: every
+# wall of the base AND every passage of the flip variant, all at once, all
+# from level start.
 #
-# Genau daran haette joby2 einen sicheren Softlock produziert. Der Kran schaltet
-# per FlipMap das Rolltor auf (Basis 89/87/80 zu, Flipvariante 53/54/69 unresolved).
-# Die Flut lief durch die Flipvariante, also galt der ganze Bereich dahinter ab
-# Zone 0 als erreichbar - und Key Item8 durfte dort liegen. Nur wird die Flipmap
-# ihrerseits erst durch Key8 ausgeloest. Wer den Schluessel hinter das Tor legt,
-# das er selbst oeffnen soll, hat das Level unloesbar gemacht.
+# Exactly there joby2 would have produced a certain softlock. The crane
+# switches the roll gate open via FlipMap (base 89/87/80 shut, flip
+# variant 53/54/69 open). The flood ran through the flip variant, so the
+# whole area behind it counted as reachable from zone 0 - and Key Item8 was
+# allowed to lie there. Only, the flipmap is itself triggered by Key8.
+# Whoever lays the key behind the gate it is supposed to open has made the
+# level unsolvable.
 #
-# Deshalb die Vorgabe: Sektoren einer Flipvariante tragen NICHT. Das ist die
-# konservative Richtung - sie kann Erreichbarkeit nur verkleinern, nie einen Weg
-# erfinden, und ein zu kleiner Bereich faellt im Bericht auf, ein zu grosser
-# erst im Spiel. Nutzer dazu: "Flipmaps koennen oft Wege blocken."
+# Hence the rule: sectors of a flip variant do NOT carry. That is the
+# conservative direction - it can only shrink reachability, never invent a
+# way, and a too-small area shows in the report, a too-large one only in
+# game. The user on it: "Flipmaps can often block ways."
 #
-# Wo eine Flipvariante wirklich einen Weg oeffnet, wird sie hier freigegeben -
-# gleiche Form wie $SCRIPT_DOORS: erreichter Raum als Bedingung, nicht "immer
-# unresolved". Vorher gilt sie als geschlossen, danach beginnt eine neue Zone.
+# Where a flip variant really opens a way, it is released here - same form
+# as $SCRIPT_DOORS: a reached room as the condition, not "always open".
+# Before that it counts as closed, after it a new zone begins.
 #----------------------------------------------------------------------------
 $FLIP_GATE = @{
-    # andy1, die Kirche. Basis 48 -> Variante 214, Basis 151 -> Variante 213.
-    # Das Holz verbaut den groessten Teil des Levels. Lara baut aus den beiden
-    # Haelften Puzzle Item2 Combo1 (Item 18, Raum 82) und Combo2 (Item 39, Raum
-    # 172) eine Zwille; damit laesst eine Cutscene die Glocken herunterkrachen,
-    # die das Holz wegsprengen - erst danach ist der Rest des Levels walkable.
-    # Deshalb NeedTypes und nicht AfterRoom: der Kirchenraum allein genuegt
-    # nicht, Lara steht dort lange bevor sie die Teile beisammen hat.
-    'andy1' = @( @{ Rooms = @(213,214); NeedTypes = @(182,183); Why = 'Zwille laesst die Glocken fallen' } )
-    # joby2, das Rolltor am Kran. Die Flipmap dahinter wird durch Key Item8
-    # ausgeloest - liegt der Schluessel hinter dem Tor, das er oeffnen soll, ist
-    # das Level unloesbar. Als Deadstop gesetzt: Raum 89 und alles dahinter
-    # bilden eine eigene Inselgruppe, erst ab dem Kran erreichbar.
-    # Gesperrt wird die GLEISBETT-KETTE, nicht nur der Raum hinter dem Tor.
-    # Das Gleisbett liegt 256 Units tiefer als das Rolltor, die Flut laeuft also
-    # schlicht darunter hindurch: 132 -> 5 -> 4 -> 2 und von dort in alles, was
-    # hinter dem Tor liegt. Nur Raum 89 zu sperren liess diesen Umweg unresolved.
-    # 2, 4 und 5 haben selbst keinen einzigen platzierbaren Sektor - sie kosten
-    # als Sperre also nichts und schneiden den Umweg an der Quelle ab.
-    'joby2' = @( @{ BlockRooms = @(2,4,5,89); AfterRoom = 35; Why = 'Rolltor am Kran' } )
-    # rich1: der zweite, schwere Weg zum Hammer, vom Nutzer erklaert. An Tuer 153
-    # in Raum 85 sitzt ein Schloss, das aussieht, als liesse es sich aufschiessen.
-    # Tut man es, loest die Patronenhuelse den HeavyTrigger in Raum 89 aus - der
-    # schaltet FlipMap 0, und Lara faellt in den Raum mit dem Twogun. Das ist kein
-    # Fehler, sondern die Alternative zum Hammer.
+    # andy1, the church. Base 48 -> variant 214, base 151 -> variant 213.
+    # The timber blocks the largest part of the level. Lara builds a
+    # slingshot from the two halves Puzzle Item2 Combo1 (item 18, room 82)
+    # and Combo2 (item 39, room 172); with it a cutscene lets the bells
+    # crash down, which blast the timber away - only after that is the rest
+    # of the level walkable. Hence NeedTypes and not AfterRoom: the church
+    # room alone does not suffice, Lara stands there long before she has
+    # the parts together.
+    'andy1' = @( @{ Rooms = @(213,214); NeedTypes = @(182,183); Why = 'the slingshot lets the bells fall' } )
+    # joby2, the roll gate at the crane. The flipmap behind it is triggered
+    # by Key Item8 - if the key lies behind the gate it is supposed to
+    # open, the level is unsolvable. Set as a deadstop: room 89 and
+    # everything behind it form their own island group, reachable only from
+    # the crane on.
+    # What is barred is the TRACK BED CHAIN, not only the room behind the
+    # gate. The track bed lies 256 units lower than the roll gate, so the
+    # flood simply runs underneath it: 132 -> 5 -> 4 -> 2 and from there
+    # into everything behind the gate. Barring only room 89 left this
+    # detour open. 2, 4 and 5 themselves have not a single placeable
+    # sector - as a bar they cost nothing and cut the detour at its source.
+    'joby2' = @( @{ BlockRooms = @(2,4,5,89); AfterRoom = 35; Why = 'roll gate at the crane' } )
+    # rich1: the second, hard way to the hammer, explained by the user. At
+    # door 153 in room 85 sits a lock that looks as if it could be shot
+    # open. Do it, and the shell casing fires the HeavyTrigger in room 89 -
+    # it switches FlipMap 0, and Lara falls into the room with the Twogun.
+    # That is no bug but the alternative to the hammer.
     #
-    # Die Freigabe haengt deshalb an Raum 85: vorher kann Lara nicht schiessen,
-    # nachher steht ihr der Weg unresolved. Die Gruppen 1 und 2 (Raeume 106 und 107)
-    # haengen an eigenen HeavyTriggern in 101 bzw. 102 und bekommen ihre eigene
-    # Bedingung.
+    # The release therefore hangs on room 85: before it Lara cannot shoot,
+    # after it the way stands open to her. Groups 1 and 2 (rooms 106 and
+    # 107) hang on their own HeavyTriggers in 101 and 102 and get their own
+    # condition.
     'rich1' = @(
-        @{ Rooms = @(86,94,95,122,124); AfterRoom = 85;  Why = 'Fake-Schloss an Tuer 153 anschiessen - schwerer Weg zum Hammer' }
-        @{ Rooms = @(106);              AfterRoom = 101; Why = 'HeavyTrigger in Raum 101' }
-        @{ Rooms = @(107);              AfterRoom = 102; Why = 'HeavyTrigger in Raum 102' }
+        @{ Rooms = @(86,94,95,122,124); AfterRoom = 85;  Why = 'shoot the fake lock at door 153 - hard way to the hammer' }
+        @{ Rooms = @(106);              AfterRoom = 101; Why = 'HeavyTrigger in room 101' }
+        @{ Rooms = @(107);              AfterRoom = 102; Why = 'HeavyTrigger in room 102' }
     )
-    # rich3, alle sieben Gruppen vom Nutzer erklaert. Die Bedingungen stehen
-    # nicht geraten da, sondern kommen aus den Triggerdaten - welcher Sektor
-    # welche FlipMap setzt, ist im Level nachgezaehlt.
+    # rich3, all seven groups explained by the user. The conditions do not
+    # stand there guessed but come from the trigger data - which sector
+    # sets which FlipMap is counted in the level.
     #
-    # Gruppe 0 (Raum 18, Basis 10) fehlt hier bewusst: volumes Nutzer aendert sie
-    # am Treppenhaus um Laras Start nur die Optik. Sie bleibt also gesperrt, und
-    # das kostet nichts.
+    # Group 0 (room 18, base 10) is deliberately missing here: per the user
+    # it only changes the looks of the staircase around Lara's start. It
+    # thus stays barred, and that costs nothing.
     #
-    # Gruppe 7 fehlt ebenfalls, aus dem umgekehrten Grund: sie oeffnet gar
-    # keinen Weg, den die Basis nicht schon hat, taucht also im Bericht nicht
-    # auf. Sie ist der Gasbereich um Raum 149, mit dem der zweite Cyborg
-    # (Item 183) getoetet wird - Mechanik ohne Wegewirkung.
+    # Group 7 is missing as well, for the opposite reason: it opens no way
+    # the base does not already have, so it does not appear in the report.
+    # It is the gas area around room 149, with which the second cyborg
+    # (item 183) is killed - mechanics without path effect.
     'rich3' = @(
-        # Erweitert das Treppenhaus um neue Raeume, darunter Raum 207 mit dem
-        # Secret. FlipMap 1 wird in Raum 12 (4,2) und Raum 119 (5,7) gesetzt;
-        # Raum 12 ist selbst die Basis von Flipraum 45, also die frueheste
-        # Stelle, an der Lara sie ausloesen kann.
-        @{ Rooms = @(43,45);   AfterRoom = 12;  Why = 'Treppenhaus waechst - Raum 207 mit dem Secret' }
-        # Bindet das Treppenhaus ueber Raum 61 an den Levelteil an, in dem die
-        # Armbrust liegt (Raum 79). FlipMap 3 wird unter anderem in Raum 26
-        # gesetzt - der Basis dieses Flipraums.
-        @{ Rooms = @(13);      AfterRoom = 26;  Why = 'Anbindung an Raum 61, dort geht es zur Armbrust' }
-        # Die grosse Gruppe: neun Raeume, die das Treppenhaus ueber Raum 57 in
-        # den Rest des Levels fuehren. Der Nutzer: dafuer braucht Lara ERST die
-        # Grappling Gun - im Level ist das die Armbrust (typeId 341, Items 75
-        # und 76 in Raum 79). Deshalb NeedTypes und nicht AfterRoom: der Raum
-        # allein genuegt nicht, so wie bei andy1s Zwille.
-        @{ Rooms = @(9,20,28,32,48,49,50,53,54); NeedTypes = @(341); Why = 'Weg ueber Raum 57 - braucht die Armbrust aus Raum 79' }
-        # Die beiden Schiessstaende. Sie oeffnen die Gitter, hinter denen es
-        # weitergeht; Lara muss dort bewegliche Ziele treffen. FlipMap 4 und 5
-        # werden beide aus Raum 46 gesetzt, dazu 170 bzw. 169.
-        @{ Rooms = @(74);      AfterRoom = 46;  Why = 'Schiessstand 1 - oeffnet die Gitter in Raum 73, Weg durch Tuer 284' }
-        @{ Rooms = @(87);      AfterRoom = 46;  Why = 'Schiessstand 2 - Tuer 86 zum Secret in Raum 78' }
-        # Der Cyborg. Anschiessen beschaedigt ihn, toeten laesst er sich so
-        # nicht - die Flipmap setzt seinen Raum teilweise unter Wasser, dann gibt
-        # es einen Kurzschluss. FlipOn 6 steht in Raum 183 (4,5), also in seinem
-        # eigenen Raum; Lara muss dort sein, um zu schiessen.
-        @{ Rooms = @(190,192); AfterRoom = 183; Why = 'Cyborg 200 - Raum flutet, Kurzschluss' }
+        # Grows the staircase by new rooms, among them room 207 with the
+        # secret. FlipMap 1 is set in room 12 (4,2) and room 119 (5,7);
+        # room 12 is itself the base of flip room 45, i.e. the earliest
+        # spot where Lara can trigger it.
+        @{ Rooms = @(43,45);   AfterRoom = 12;  Why = 'the staircase grows - room 207 with the secret' }
+        # Connects the staircase via room 61 to the level part in which the
+        # crossbow lies (room 79). FlipMap 3 is set among others in room 26
+        # - the base of this flip room.
+        @{ Rooms = @(13);      AfterRoom = 26;  Why = 'connection to room 61, from there to the crossbow' }
+        # The big group: nine rooms leading the staircase via room 57 into
+        # the rest of the level. The user: for that Lara FIRST needs the
+        # grappling gun - in the level that is the crossbow (typeId 341,
+        # items 75 and 76 in room 79). Hence NeedTypes and not AfterRoom:
+        # the room alone does not suffice, as with andy1's slingshot.
+        @{ Rooms = @(9,20,28,32,48,49,50,53,54); NeedTypes = @(341); Why = 'the way via room 57 - needs the crossbow from room 79' }
+        # The two shooting ranges. They open the grates behind which the
+        # level continues; Lara must hit moving targets there. FlipMap 4
+        # and 5 are both set from room 46, plus 170 and 169.
+        @{ Rooms = @(74);      AfterRoom = 46;  Why = 'shooting range 1 - opens the grates in room 73, way through door 284' }
+        @{ Rooms = @(87);      AfterRoom = 46;  Why = 'shooting range 2 - door 86 to the secret in room 78' }
+        # The cyborg. Shooting damages him, but he cannot be killed that
+        # way - the flipmap puts his room partly under water, then there is
+        # a short circuit. FlipOn 6 stands in room 183 (4,5), i.e. in his
+        # own room; Lara must be there to shoot.
+        @{ Rooms = @(190,192); AfterRoom = 183; Why = 'cyborg 200 - the room floods, short circuit' }
     )
 }
 $flipGates = @( if($FLIP_GATE.ContainsKey($LevelName)){ $FLIP_GATE[$LevelName] } )
 
 #----------------------------------------------------------------------------
-# Inselgruppen: Bodenhoehe als Grenze fuer Schluessel.
+# Island groups: floor height as a limit for keys.
 #
-# Ein Sektor ist noch lange kein erreichbarer Ablageort. In joby2 stehen in Raum
-# 84 Kistenstapel; ihre Oberseiten sind begehbare Sektoren, aber Lara kommt dort
-# ueberhaupt erst hinauf, NACHDEM sie Key Item8 hat. Ein Schluessel obendrauf ist
-# damit unerreichbar - genau der Fall, den der Nutzer an Item 1480 gezeigt hat.
+# A sector is far from being a reachable placement spot. In joby2, crate
+# stacks stand in room 84; their tops are walkable sectors, but Lara only
+# gets up there at all AFTER she has Key Item8. A key on top is thereby
+# unreachable - exactly the case the user showed at item 1480.
 #
-# Statt solche Ablagen einzeln auszuschliessen, gibt ein Raum der Gruppe die
-# Bodenhoehe vor, und Schluessel duerfen nicht mehr als MaxYAbove darueber
-# liegen. Das erspart sehr viel Handarbeit und traegt sofort fuer die ganze
-# Gruppe.
+# Instead of excluding such spots one by one, one room of the group sets
+# the floor height, and keys may lie no more than MaxYAbove above it. That
+# saves a lot of hand work and carries immediately for the whole group.
 #
-# Y-KONVENTION: in TR liegt KLEINERES y HOEHER. "Hoechstens 1024 hoeher" ist
-# also floorY >= baselineY - 1024, nicht <=.
+# Y CONVENTION: in TR, SMALLER y lies HIGHER. "At most 1024 higher" is thus
+# floorY >= baselineY - 1024, not <=.
 #
-# RequireTypes ist zusaetzlich eine Zusicherung, keine blosse Filterung: von
-# jedem dieser Typen muss mindestens eine Instanz INNERHALB der Gruppe liegen,
-# damit sie aus sich heraus loesbar bleibt.
+# RequireTypes is additionally an assurance, not a mere filter: of each of
+# these types at least one instance must lie WITHIN the group, so it stays
+# solvable out of itself.
 #----------------------------------------------------------------------------
-# Typen, die in den Pool sollen, obwohl kein Schloss sie erzwingt - und die
-# dabei KEINE Zonengrenze haben. joby2: die Fuse (Puzzle Item1) hinter den Tueren
-# 105/106. Sie ist Fortschritt, aber keine Sperre fuer irgendetwas Frueheres,
-# deshalb darf sie ueberall liegen. Nutzerentscheidung.
-# Ohne Eintrag taucht so ein Typ gar nicht in den keyConstraints auf und bliebe
-# damit im Testlevel unsichtbar und im Randomizer unangetastet.
+# Types that should go into the pool although no lock forces them - and
+# that have NO zone limit in the process. joby2: the fuse (Puzzle Item1)
+# behind doors 105/106. It is progress but no bound for anything earlier,
+# so it may lie anywhere. User decision.
+# Without an entry such a type does not appear in the keyConstraints at
+# all and would thereby stay invisible in the test level and untouched in
+# the randomizer.
 #----------------------------------------------------------------------------
-# Raeume, in denen keine Waffe liegen darf.
+# Rooms in which no weapon may lie.
 #
-# joby3: die Pistolen muessen in Raum 107 bleiben, sonst tritt der Chef-Glitch
-# auf - das erledigt VANILLA_TYPES. Es reicht aber nicht: VANILLA_TYPES nagelt
-# einen Typ an seinen Platz, hindert aber keinen ANDEREN Typ daran, dorthin zu
-# wandern. Eine zufaellig im Chef-Bereich platzierte Schrotflinte loeste denselben
-# Glitch aus. Nutzerangabe fuer die Chef-Raeume: 105, 106, 120, 124, 125.
+# joby3: the pistols must stay in room 107 or the chef glitch occurs -
+# VANILLA_TYPES handles that. But it does not suffice: VANILLA_TYPES nails
+# one type to its place but keeps no OTHER type from wandering there. A
+# shotgun randomly placed in the chef area triggered the same glitch. User
+# statement for the chef rooms: 105, 106, 120, 124, 125.
 #
-# Gesperrt wird 334-348, also Waffen und ihre Munition. Medipacks (349/350),
-# Lasersight (351), Fernglas (352), Flares (354/355) bleiben erlaubt - keine
-# Waffen. Typ 353 "Silencer" steht bewusst nicht in der Liste: er kommt in
-# keinem der 16 Level vor, ist also ein ungenutzter Engine-Slot.
+# Barred is 334-348, i.e. weapons and their ammo. Medipacks (349/350),
+# lasersight (351), binoculars (352), flares (354/355) stay allowed - no
+# weapons. Type 353 "Silencer" deliberately does not stand in the list: it
+# occurs in none of the 16 levels, so it is an unused engine slot.
 #----------------------------------------------------------------------------
 #----------------------------------------------------------------------------
-# Levelweite Hoehengrenze fuer Ablagen.
+# Level-wide height limit for spots.
 #
-# joby4 ist ein Tauchlevel, und der Nutzer hat im Spiel gemessen: Lara kommt
-# nirgends hoeher als etwa y 13200. Das ist keine Engine-Grenze - der Code kennt
-# fuer vertikalen Zwang nur die Sinks (laraswim.cpp:721, sie ziehen Lara auf
-# ihre eigene Hoehe) - sondern die Wasseroberflaeche. Oberhalb beginnt bei
-# yBottom 13056 die naechste Raumschicht, in die sie vom Wasser aus nicht mehr
-# aufsteigt: 21 Raeume dort, weitere 27 darueber.
+# joby4 is a diving level, and the user measured in game: Lara gets
+# nowhere higher than about y 13200. That is no engine limit - for
+# vertical force the code only knows the sinks (laraswim.cpp:721, they pull
+# Lara to their own height) - but the water surface. Above it, at yBottom
+# 13056, the next room layer begins, into which she no longer ascends from
+# the water: 21 rooms there, another 27 above.
 #
-# Anders als die Inselgruppe in joby2 ist das keine Eigenschaft einer Gruppe und
-# gilt fuer ALLE Typen, nicht nur fuer Schluessel. Und anders als zuerst
-# angenommen ist es nicht raumsauber - Raum 72 etwa hat Boeden bei 11008, 12032
-# und 12544, liegt also teils ueber und teils unter der Linie. Eine Raumliste
-# kann das nicht abbilden, deshalb hier als Zahl.
+# Unlike the island group in joby2 this is no property of a group and
+# holds for ALL types, not only keys. And unlike first assumed it is not
+# room-clean - room 72 for instance has floors at 11008, 12032 and 12544,
+# so it lies partly above and partly below the line. A room list cannot
+# express that, hence here as a number.
 #
-# KLEINERES y liegt HOEHER: die Bedingung ist floorY >= Grenze.
+# SMALLER y lies HIGHER: the condition is floorY >= limit.
 #----------------------------------------------------------------------------
 $MIN_FLOOR_Y = @{
     'joby4' = 13312
@@ -1780,24 +1792,25 @@ $levelMinFloorY = $null
 if ($MIN_FLOOR_Y.ContainsKey($LevelName)) { $levelMinFloorY = [int]$MIN_FLOOR_Y[$LevelName] }
 
 #----------------------------------------------------------------------------
-# Mindestlichte zwischen Boden und Decke.
+# Minimum clearance between floor and ceiling.
 #
-# Der Exporter schneidet von sich aus bei 512 ab - kein Level hat eine Ablage
-# darunter. Der Nutzer hat in joby4 Raum 123 Sektor (3,3) geprueft: floorY
-# 15616, ceilingY 15104, also genau 512, und Lara kommt dort nicht hin. 768 ist
-# die Kriechhoehe der Engine und damit die naechste sinnvolle Stufe.
+# The exporter cuts off at 512 by itself - no level has a spot below that.
+# The user checked joby4 room 123 sector (3,3): floorY 15616, ceilingY
+# 15104, i.e. exactly 512, and Lara does not get there. 768 is the
+# engine's crawl height and thus the next sensible step.
 #
-# BEWUSST NICHT GLOBAL. Die Gegenprobe ueber alle Level findet 25 Vanilla-
-# Pickups auf Sektoren mit clearance < 768 - darunter joby3s Key Item6 in Raum
-# 120 bei 256 und in rich2 ein HK bei 0. Grund: clearance beschreibt den SEKTOR,
-# nicht das Item. Ein Pickup hat seine eigene y-Koordinate und kann auf einem
-# Sims, in einer Nische oder auf einem Sockel liegen, wo der Sektorboden an die
-# Decke stoesst. Die Lichte ist also kein verlaesslicher Stellvertreter fuer
-# "Lara kommt da hin".
+# DELIBERATELY NOT GLOBAL. The cross-check over all levels finds 25
+# vanilla pickups on sectors with clearance < 768 - among them joby3's Key
+# Item6 in room 120 at 256 and in rich2 an HK at 0. Reason: clearance
+# describes the SECTOR, not the item. A pickup has its own y coordinate
+# and can lie on a ledge, in a niche or on a pedestal where the sector
+# floor meets the ceiling. The clearance is thus no reliable proxy for
+# "Lara can get there".
 #
-# joby4 kommt in dieser Trefferliste NICHT vor - dort liegt kein Vanilla-Pickup
-# unter 768. Nur deshalb steht es hier. Jedes weitere Level braucht denselben
-# Nachweis, und fuer joby3, joby5, rich2 und rich3 scheitert er nachweislich.
+# joby4 does NOT occur in this hit list - no vanilla pickup lies below 768
+# there. Only for that reason does it stand here. Every further level
+# needs the same proof, and for joby3, joby5, rich2 and rich3 it provably
+# fails.
 #----------------------------------------------------------------------------
 $MIN_CLEARANCE = @{
     'joby4' = 768
@@ -1806,23 +1819,23 @@ $levelMinClearance = $null
 if ($MIN_CLEARANCE.ContainsKey($LevelName)) { $levelMinClearance = [int]$MIN_CLEARANCE[$LevelName] }
 
 #----------------------------------------------------------------------------
-# Raeume, in denen kein Schluessel- oder Puzzle-Item liegen darf.
+# Rooms in which no key or puzzle item may lie.
 #
-# joby5 hat elektrifiziertes Wasser. Vier Electrical Cables (Typ 98, Items 91,
-# 136, 165, 206) haengen ins Wasser; drei Bodentrigger in den Raeumen 15, 60
-# und 138 schalten sie scharf, der Schalter 190 in Raum 165 schaltet sie wieder
-# aus. Solange sie aktiv sind, kostet der Aufenthalt 10 Trefferpunkte pro Frame
-# und toetet bei <= 32 (game/joby.cpp, ControlElectricalCables).
+# joby5 has electrified water. Four electrical cables (type 98, items 91,
+# 136, 165, 206) hang into the water; three floor triggers in rooms 15, 60
+# and 138 arm them, switch 190 in room 165 switches them off again. While
+# they are active, staying there costs 10 hit points per frame and kills
+# at <= 32 (game/joby.cpp, ControlElectricalCables).
 #
-# Die Reichweite ist dabei nicht der Raum des Kabels - massgeblich ist die
-# FlipNumber der beruehrten Wassermasse, siehe joby.cpp:191. Welche Raeume das
-# sind, steht deshalb nicht in den Leveldaten; die Zuordnung kommt vom Nutzer:
-# Kabel 91 -> Raum 128, Kabel 136 -> 126 und 127, Kabel 206 -> 183,
-# Kabel 165 -> 158.
+# The reach is not the cable's room - decisive is the FlipNumber of the
+# touched water mass, see joby.cpp:191. Which rooms those are therefore
+# does not stand in the level data; the mapping comes from the user:
+# cable 91 -> room 128, cable 136 -> 126 and 127, cable 206 -> 183,
+# cable 165 -> 158.
 #
-# Nutzerentscheidung: dort duerfen NORMALE Items liegen, aber keine Schluessel.
-# Der Grund ist einleuchtend - ein normales Pickup holt Lara nach dem Schalter,
-# ein Schluessel dagegen kann Teil einer Kette sein, die vorher gebraucht wird.
+# User decision: NORMAL items may lie there, but no keys. The reason is
+# obvious - a normal pickup Lara fetches after the switch, a key by
+# contrast can be part of a chain needed earlier.
 #----------------------------------------------------------------------------
 $NO_KEY_ROOMS = @{
     'joby5' = @(126,127,128,158,183)
@@ -1835,39 +1848,38 @@ $NO_WEAPON_ROOMS = @{
     'joby3' = @(105,106,120,124,125)
 }
 #----------------------------------------------------------------------------
-# Einzelne TYPEN, die in bestimmten Raeumen nicht liegen duerfen - anders als
-# NO_WEAPON_ROOMS, das alle Waffen auf einmal sperrt, und anders als
-# TYPE_EXCLUDE_ROOMS, das nur die Verschiebung vorhandener Items steuert:
-# diese Sperre gilt fuer JEDEN Platzierungsweg (Verschieben, Waffenstreuung,
-# Item-Abundance).
+# Individual TYPES that may not lie in certain rooms - unlike
+# NO_WEAPON_ROOMS, which bars all weapons at once, and unlike
+# TYPE_EXCLUDE_ROOMS, which only steers the relocation of existing items:
+# this bar holds for EVERY placement path (moving, weapon scattering, item
+# abundance).
 #
-# rich2: NUR die HK darf nicht in die Startinsel. Der Nutzer hat im Spiel
-# geprueft, dass der Roentgenscanner in Raum 9 ausschliesslich auf sie
-# reagiert - Lara legt sie am Mesh 15 in Raum 8 ab und passiert unbewaffnet.
-# Auf Uzi, Schrotflinte oder Deagle spricht der Scanner NICHT an, die duerfen
-# also dort liegen; ohne sie waere die Startinsel mit ihren vielen Gegnern
-# nur mit Pistolen zu bestehen. HK-Munition (346) ist ohne die Waffe
-# wirkungslos und bleibt erlaubt.
+# rich2: ONLY the HK may not go into the start island. The user checked in
+# game that the X-ray scanner in room 9 reacts exclusively to it - Lara
+# lays it down at mesh 15 in room 8 and passes unarmed. The scanner does
+# NOT respond to Uzi, shotgun or Deagle, so those may lie there; without
+# them the start island with its many enemies would have to be survived
+# with pistols only. HK ammo (346) is useless without the weapon and stays
+# allowed.
 #----------------------------------------------------------------------------
 $TYPE_NO_ROOMS = @{
-    'rich2' = @{ 345 = $RICH2_STARTINSEL }
+    'rich2' = @{ 345 = $RICH2_START_ISLAND }
 }
 
 #----------------------------------------------------------------------------
-# Items, die gegen ihren Antitrigger immun werden sollen (Flagbit 0x80,
-# IFL_ANTITRIGGER_ONESHOT - TestTriggers ueberspringt sie dann,
-# control.cpp:2378). Der Trigger bleibt vollstaendig erhalten und wirkt
-# weiter auf alle anderen Ziele.
+# Items that should become immune to their antitrigger (flag bit 0x80,
+# IFL_ANTITRIGGER_ONESHOT - TestTriggers then skips them,
+# control.cpp:2378). The trigger stays fully intact and keeps acting on
+# all other targets.
 #
-# rich2 Tuer 171 (Raum 118, Typ 300): geoeffnet von einem HeavyTrigger in
-# Raum 118, wieder geschlossen vom AntiTrigger in Raum 18 - der traegt NUR
-# diesen einen Zeiger. Solange die Startinsel waffenfrei war, spielte das
-# keine Rolle. Jetzt darf dort eine Waffe liegen, und damit kann ein Spieler
-# die Tuer frueher oeffnen als vorgesehen; laeuft er danach ueber Raum 18,
-# faellt sie wieder zu. Mit dem Immunitaetsbit bleibt sie unresolved, sobald sie
-# einmal unresolved war.
+# rich2 door 171 (room 118, type 300): opened by a HeavyTrigger in room
+# 118, shut again by the antitrigger in room 18 - which carries ONLY this
+# one pointer. As long as the start island was weapon-free, that did not
+# matter. Now a weapon may lie there, and with it a player can open the
+# door earlier than intended; walk across room 18 afterwards and it falls
+# shut again. With the immunity bit it stays open once it was open.
 #----------------------------------------------------------------------------
-$ANTITRIGGER_IMMUN = @{
+$ANTITRIGGER_IMMUNE = @{
     'rich2' = @(171)
 }
 $typeNoRooms = @(
@@ -1877,112 +1889,112 @@ $typeNoRooms = @(
         }
     }
 )
-$antitriggerImmun = @( if ($ANTITRIGGER_IMMUN.ContainsKey($LevelName)) { $ANTITRIGGER_IMMUN[$LevelName] } )
+$antitriggerImmune = @( if ($ANTITRIGGER_IMMUNE.ContainsKey($LevelName)) { $ANTITRIGGER_IMMUNE[$LevelName] } )
 foreach ($e in $typeNoRooms) {
-    Write-Output "Typsperre: typeId $($e.typeId) ist in $($e.rooms.Count) Raeumen von $LevelName gesperrt"
+    Write-Output "type bar: typeId $($e.typeId) is barred in $($e.rooms.Count) rooms of $LevelName"
 }
-if ($antitriggerImmun.Count -gt 0) {
-    Write-Output "Antitrigger-Immunitaet: $($antitriggerImmun.Count) Item(s) in $LevelName"
+if ($antitriggerImmune.Count -gt 0) {
+    Write-Output "antitrigger immunity: $($antitriggerImmune.Count) item(s) in $LevelName"
 }
 #----------------------------------------------------------------------------
-# Ausruestung, die ein Schalter voraussetzt.
+# Equipment a switch presupposes.
 #
-# Ein Shoot Switch steht in den Leveldaten nur als Schalter - dass er eine
-# bestimmte Waffe braucht, steht nirgends. Andrea1: die Glocke (Item 75) laesst
-# sich nur mit Revolver/Desert Eagle plus Lasersight abschiessen. Item 72
-# dagegen ist NICHT gesperrt - der laesst sich auch mit den Pistolen treffen,
-# indem man im Knien zielt (vom Nutzer im Spiel bestaetigt).
+# A shoot switch stands in the level data only as a switch - that it needs
+# a certain weapon stands nowhere. Andrea1: the bell (item 75) can only be
+# shot down with revolver/Desert Eagle plus lasersight. Item 72, by
+# contrast, is NOT gated - it can be hit with the pistols too by aiming
+# while kneeling (confirmed by the user in game).
 #
-# Wird vor dem Constraint-Aufbau ausgewertet: die Zone, in der der Schalter
-# gebraucht wird, begrenzt die genannten Typen. Vorher stand das nur im
-# Textreport, und der Randomizer durfte die Ausruestung hinter den Schalter
-# legen, den sie bedienen soll.
+# Evaluated before the constraint build: the zone in which the switch is
+# needed limits the named types. Before, this only stood in the text
+# report, and the randomizer was allowed to lay the equipment behind the
+# switch it is meant to operate.
 #----------------------------------------------------------------------------
 $EQUIP_GATE = @{
-    'Andrea1' = @{ 75 = @{ Need = @(347,351); Desc = 'Revolver + Lasersight (Glocke abschiessen)' } }
+    'Andrea1' = @{ 75 = @{ Need = @(347,351); Desc = 'revolver + lasersight (shoot down the bell)' } }
 }
 
-# Ganze Level ohne jede Waffe: steht derzeit keines drin. rich2 war hier
-# eingetragen und ist jetzt raumweise geloest (siehe NO_WEAPON_ROOMS) - die
-# Sperre auf das ganze Level haette dem Level als einzigem die Munition fuer
-# das importierte Waffenset gekostet.
+# Whole levels without any weapon: none is currently listed. rich2 stood
+# here and is now solved room-wise (see NO_WEAPON_ROOMS) - the bar on the
+# whole level would have cost it, as the only level, the ammo for the
+# imported weapon set.
 $NO_WEAPON_LEVELS = @()
 $noWeaponRooms = @( if($NO_WEAPON_ROOMS.ContainsKey($LevelName)){ $NO_WEAPON_ROOMS[$LevelName] } )
 if ($NO_WEAPON_LEVELS -contains $LevelName) {
     $noWeaponRooms = @($d.rooms | ForEach-Object { [int]$_.index })
-    Write-Output "Waffensperre: im ganzen Level $LevelName darf keine Waffe liegen ($($noWeaponRooms.Count) Raeume)"
+    Write-Output "weapon bar: no weapon may lie in the whole level $LevelName ($($noWeaponRooms.Count) rooms)"
 }
 elseif ($noWeaponRooms.Count -gt 0) {
-    Write-Output "Waffensperre: $($noWeaponRooms.Count) Raeume in $LevelName sind waffenfrei"
+    Write-Output "weapon bar: $($noWeaponRooms.Count) rooms in $LevelName are weapon-free"
 }
 
 $POOL_TYPES = @{
     'joby2' = @(172)
-    # andy3 stand hier kurz mit 172 und 174 drin, weil das Level kein einziges
-    # Schloss hat und die Fortschrittskette sonst gar nicht in den
-    # keyConstraints auftaucht. Der Nutzer hat sich dann fuer Vanilla
-    # entschieden - siehe VANILLA_TYPES. Der Eintrag bleibt als Kommentar, weil
-    # die Ueberlegung weiter gilt, falls die Puzzles doch einmal wandern sollen:
-    #   'andy3' = @(172,174)   zusammen mit TYPE_EXCLUDE_ROOMS weiter unten
-    # rich1: der Hammer (Key Item7, typeId 202, Item 35 in Raum 22). Er hat kein
-    # Schloss - seine Tuer 153 geht ueber die Cutscene hamgate auf -, taucht also
-    # ohne diesen Eintrag in keinem Constraint auf. Er braucht ihn aber, denn
-    # "nicht hinter der eigenen Tuer" gilt fuer ihn wie fuer jeden Schluessel.
+    # andy3 stood here briefly with 172 and 174 because the level has not a
+    # single lock and the progress chain otherwise does not appear in the
+    # keyConstraints at all. The user then decided for vanilla - see
+    # VANILLA_TYPES. The entry stays as a comment because the thought still
+    # holds should the puzzles ever travel after all:
+    #   'andy3' = @(172,174)   together with TYPE_EXCLUDE_ROOMS further down
+    # rich1: the hammer (Key Item7, typeId 202, item 35 in room 22). It has
+    # no lock - its door 153 opens via the hamgate cutscene -, so without
+    # this entry it appears in no constraint. But it needs one, because
+    # "not behind its own door" holds for it as for every key.
     #
-    # Die Begrenzung leistet die Inselgruppe oben (Flut ab Lara, Deadstop Raum
-    # 12), nicht die Zone. Die abgeleitete Tuerregel findet fuer sich genommen
-    # nur einen einzigen Sektor - den der Tuer 153 selbst -, weil der Flood um
-    # sie herum kommt; aus Modellsicht liegt dahinter nichts. Eine Zonengrenze
-    # waere mit 150 Ablagen dreimal so locker wie die Insel und wuerde ausserdem
-    # sieben Inselsektoren aus Zone 1 faelschlich verbieten. Deshalb hier ohne
-    # Zonengrenze.
+    # The limiting is done by the island group above (flood from Lara,
+    # deadstop room 12), not the zone. The derived door rule on its own
+    # finds only a single sector - that of door 153 itself - because the
+    # flood comes around it; from the model's view nothing lies behind it.
+    # A zone limit would with 150 spots be three times as loose as the
+    # island and would moreover wrongly forbid seven island sectors from
+    # zone 1. Hence here without a zone limit.
     'rich1' = @(202)
-    # rich2: die drei Typen, die der Nutzer im Startbereich haben will - Pickup
-    # Item2 (221), Bottle (235) und Cloth (236). Keiner hat ein Schloss, also
-    # entsteht ohne diesen Eintrag gar kein Constraint-Objekt, an dem die
-    # Inselgruppe haengen koennte - die Insel wurde brav berechnet und lief ins
-    # Leere. Dieselbe Falle wie bei rich1s Hammer.
+    # rich2: the three types the user wants in the start area - Pickup
+    # Item2 (221), Bottle (235) and Cloth (236). None has a lock, so
+    # without this entry no constraint object arises at all on which the
+    # island group could hang - the island was dutifully computed and ran
+    # into the void. The same trap as with rich1's hammer.
     'rich2' = @(221,235,236)
-    # rich3: die Armbrust (typeId 341, Items 75 und 76 in Raum 79). Sie ist im
-    # Spiel die Grappling Gun und damit ein Fortschrittsgegenstand - FlipMap 2,
-    # der Weg ueber Raum 57 in den Rest des Levels, haengt an ihr (siehe
-    # FLIP_GATE). Ein Schloss hat sie nicht, also braucht sie diesen Eintrag,
-    # damit ueberhaupt ein Constraint entsteht, an dem ihre Inselgruppe haengen
-    # kann. Dieselbe Falle wie rich1s Hammer und rich2s Flasche.
+    # rich3: the crossbow (typeId 341, items 75 and 76 in room 79). In game
+    # it is the grappling gun and thus a progress item - FlipMap 2, the way
+    # via room 57 into the rest of the level, hangs on it (see FLIP_GATE).
+    # It has no lock, so it needs this entry for a constraint to arise at
+    # all on which its island group can hang. The same trap as rich1's
+    # hammer and rich2's bottle.
     'rich3' = @(341)
-    # joby3: die vier Combo-Haelften. Puzzle Item3 Combo1+2 ergeben das
-    # Atemgeraet, Puzzle Item4 Combo1+2 die Batterie; beides wandert in den
-    # Anzug und loest die Schluss-Cutscene aus. Die beiden Slots in Raum 40
-    # liegen uebereinander und taeuschen eine Kombinierbarkeit nur vor.
-    # Nutzer: das Level hat keinen Point of no return, die Teile sind rein
-    # fuers Ende - sie duerfen deshalb ueberall auftauchen.
+    # joby3: the four combo halves. Puzzle Item3 Combo1+2 yield the
+    # breathing apparatus, Puzzle Item4 Combo1+2 the battery; both go into
+    # the suit and trigger the final cutscene. The two slots in room 40 lie
+    # on top of each other and only feign combinability.
+    # User: the level has no point of no return, the parts are purely for
+    # the end - they may therefore appear anywhere.
     'joby3' = @(184,185,186,187)
-    # joby5: Puzzle Item1 und Item2 oeffnen das Levelende. Slot 1 oeffnet Slot 2,
-    # Slot 2 loest das Ende aus. Das erklaert auch, warum der Trigger an Puzzle
-    # Hole2 (Item 108) leer aussieht - er hat kein Object-Kommando, weil er das
-    # Level beendet statt eine Tuer zu oeffnen. Beide duerfen volumes Nutzer
-    # ueberall liegen, ohne jede Einschraenkung.
+    # joby5: Puzzle Item1 and Item2 open the level's end. Slot 1 opens slot
+    # 2, slot 2 triggers the end. That also explains why the trigger at
+    # Puzzle Hole2 (item 108) looks empty - it has no object command
+    # because it ends the level instead of opening a door. Per the user
+    # both may lie anywhere, without any restriction.
     'joby5' = @(172,173)
-    # andy1: drei Typen, zwei verschiedene Grenzen. Als Hashtabelle geschrieben,
-    # weil eine reine Typliste das nicht ausdruecken kann - typeId -> maxZone.
+    # andy1: three types, two different limits. Written as a hashtable
+    # because a pure type list cannot express that - typeId -> maxZone.
     #
-    # 182/183 sind die Zwillenhaelften, die das Kirchen-Flipmap-Tor oeffnen
-    # (FLIP_GATE, NeedTypes). Sie muessen VOR der Kirche liegen, sonst oeffnet
-    # sich das Tor nie, das sie selbst aufziehen - der Uebergang ist Zone 0 -> 1,
-    # also Zone 0. Hinter dem Point of no return duerfen sie liegen, das ist
-    # kein Widerspruch: der Teleporter fuehrt in Zone 0 hinein.
+    # 182/183 are the slingshot halves that open the church flipmap gate
+    # (FLIP_GATE, NeedTypes). They must lie BEFORE the church, or the gate
+    # they themselves pull open never opens - the transition is zone 0 ->
+    # 1, so zone 0. They may lie behind the point of no return, that is no
+    # contradiction: the teleporter leads INTO zone 0.
     #
-    # 174 ist die Eisenklapper, mit der Lara in Cutscene 10 die Imps abwehrt -
-    # ohne sie stirbt sie dort. Der Nutzer laesst sie wie das Herz in beiden
-    # Bereichen zu; die Cutscene liegt im echten Spielverlauf hinter Raum 202,
-    # also nach der Kirche. Zone 1 deckt das ab.
+    # 174 is the iron clapper with which Lara fends off the imps in
+    # cutscene 10 - without it she dies there. The user allows it like the
+    # heart in both areas; in the real course of play the cutscene lies
+    # behind room 202, i.e. after the church. Zone 1 covers that.
     #
-    # 172, das Herz, steht nicht hier - es hat ein Schloss und damit bereits
-    # eine abgeleitete Grenze (Zone <= 1).
+    # 172, the heart, does not stand here - it has a lock and with it an
+    # already derived limit (zone <= 1).
     'andy1' = @{ 174 = 1; 182 = 0; 183 = 0 }
 }
-# Zwei Schreibweisen: eine Liste von typeIds (keine Zonengrenze) oder eine
-# Hashtabelle typeId -> maxZone. Beides wird hier auf dieselbe Form gebracht.
+# Two spellings: a list of typeIds (no zone limit) or a hashtable typeId ->
+# maxZone. Both are brought to the same form here.
 $poolTypes = @{}
 if ($POOL_TYPES.ContainsKey($LevelName)) {
     $pv = $POOL_TYPES[$LevelName]
@@ -1991,369 +2003,382 @@ if ($POOL_TYPES.ContainsKey($LevelName)) {
 }
 
 $ISLAND_GROUP = @{
-    # andy1 hat einen Point of no return: der Teleporter in Raum 47 bringt Lara
-    # nach Raum 109, und von dort geht es nur vorwaerts. Ein Schluessel, der
-    # dahinter liegt und vorher gebraucht wird, waere unerreichbar.
+    # andy1 has a point of no return: the teleporter in room 47 takes Lara
+    # to room 109, and from there it only goes forward. A key lying behind
+    # it and needed earlier would be unreachable.
     #
-    # Der zweite Deadstop ist Raum 186 mit Tuer 52. Das ist der eigentliche Weg
-    # ins Levelende, von Raum 202 aus - die Flut findet ihn aber faelschlich
-    # ueber die Bruecke 43 schon vorher. Nutzerangabe.
+    # The second deadstop is room 186 with door 52. That is the actual way
+    # into the level's end, from room 202 - but the flood wrongly finds it
+    # earlier via bridge 43. User statement.
     #
-    # Die Insel ist berechnet und steht bereit - IslandTypes ist aber bewusst
-    # LEER. Puzzle Item1 gehoert NICHT hinein: sein Schloss (Item 51, Raum 202)
-    # liegt selbst hinter dem Teleporter, genau wie sein Vanilla-Platz in Raum
-    # 51. Beide auf derselben Seite, also kein Softlock - Vanilla macht es so.
+    # The island is computed and stands ready - IslandTypes is however
+    # deliberately EMPTY. Puzzle Item1 does NOT belong in it: its lock
+    # (item 51, room 202) itself lies behind the teleporter, exactly like
+    # its vanilla place in room 51. Both on the same side, so no softlock -
+    # vanilla does it that way.
     #
-    # Daraus die allgemeine Einsicht, die den ersten Versuch korrigiert hat:
-    # ein Schluessel muss nicht vor dem Point of no return liegen, sondern nur
-    # vor SEINEM SCHLOSS. Das prueft die Zonenregel ohnehin (Zone <= 1). Der
-    # Point of no return wird erst dann zur Schranke, wenn ein Schloss davor
-    # liegt und sein Schluessel dahinter landen koennte.
-    # NotOnIslandTypes: alle vier Fortschrittsgegenstaende duerfen NICHT vor dem
-    # Teleporter liegen. Fuer jeden von ihnen gilt derselbe Softlock - Lara geht
-    # hindurch, ohne ihn eingesammelt zu haben, und kommt nie zurueck.
+    # From that the general insight that corrected the first attempt: a key
+    # does not have to lie before the point of no return, only before ITS
+    # LOCK. The zone rule checks that anyway (zone <= 1). The point of no
+    # return only becomes a bound when a lock lies before it and its key
+    # could land behind it.
+    # NotOnIslandTypes: all four progress items may NOT lie before the
+    # teleporter. For each of them the same softlock holds - Lara walks
+    # through without having collected it and never comes back.
     #
-    # Zusammen mit der jeweiligen Zonengrenze ergibt das zwei Korridore:
-    #   182/183 (Zwille)          Zone 0 -> zwischen Teleporter und Kirche
-    #   172 (Herz), 174 (Klapper) Zone 1 -> ab Teleporter bis hinter die Kirche
+    # Together with the respective zone limit that yields two corridors:
+    #   182/183 (slingshot)      zone 0 -> between teleporter and church
+    #   172 (heart), 174 (clapper) zone 1 -> from the teleporter to behind the church
     'andy1' = @( @{ IslandTypes = @(); NotOnIslandTypes = @(172,174,182,183); DeadstopRooms = @(47,186) } )
-    # andy3 hat denselben Fall wie andy1 - nur andersherum gerichtet (#61,
-    # 2026-08-24). Der Teleporter steht in Raum 137 und bringt Lara auf die
-    # STARTINSEL zurueck; die Muenze (173) darf deshalb nicht dort liegen,
-    # sonst greift sie ins Leere, sobald sie den Abschnitt verlassen hat.
-    # Nutzerangabe: "Key Item Range ist von Raum 142 -> 135. Es darf nicht in
-    # Richtung 137 wandern, da ist ein Teleporter in die Startinsel, dann
-    # waere es Softlock."
+    # andy3 has the same case as andy1 - only pointed the other way (#61,
+    # 2026-08-24). The teleporter stands in room 137 and takes Lara back to
+    # the START ISLAND; the coin (173) may therefore not lie there, or it
+    # grasps at nothing once she has left the section. User statement: "Key
+    # item range is from room 142 -> 135. It must not wander toward 137,
+    # there is a teleporter into the start island, then it would be a
+    # softlock."
     #
-    # Warum ISLAND_GROUP und nicht NO_KEY_ISLAND: der Teleporter ist KEIN
-    # Portal, der Raumgraph sieht ihn nicht. Eine gewoehnliche Flut kann die
-    # beiden Seiten daher gar nicht trennen - ab 142 laeuft sie ueber normale
-    # Wege bis in die Startinsel weiter (gemessen: 114 Raeume). Die
-    # Insel-Flut dagegen laeuft ab Laras Start MIT GESCHLOSSENEN TUEREN und
-    # bildet damit genau den Bereich ab, den Lara ohne Fortschritt erreicht.
+    # Why ISLAND_GROUP and not NO_KEY_ISLAND: the teleporter is NO portal,
+    # the room graph does not see it. An ordinary flood can therefore not
+    # separate the two sides at all - from 142 it runs over normal ways all
+    # the way into the start island (measured: 114 rooms). The island
+    # flood, by contrast, runs from Lara's start WITH CLOSED DOORS and
+    # thereby maps exactly the area Lara reaches without progress.
     #
-    # Erste zwei Versuche waren falsch und stehen hier als Warnung: 137 als
-    # zusaetzlicher Deadstop an der bestehenden NO_KEY_ISLAND schrumpfte die
-    # Sperre von 3227 auf 13 Sektoren (also das Gegenteil), und eine zweite
-    # Flut ab Raum 29 sperrte 64 Raeume, ohne den gemeldeten Fundort zu
-    # treffen.
-    # andy3 braucht hier nichts mehr: die Muenze wird ueber
-    # TYPE_ALLOW_ISLAND positiv eingegrenzt (ab 142, Riegel 137/97/149).
-    # Der Zwischenstand mit NotOnIslandTypes ist damit ueberfluessig - drei
-    # einander ueberlappende Sperren fuer denselben Typ waren genau der
-    # Knoten, an dem am 2026-08-24 nur noch ein einziger Raum uebrigblieb.
-    # DeadstopRooms definiert die Insel ueber einen ZWEITEN, schaerferen Flood.
-    # Die Gleisbett-Kette 2/4/5 und Raum 89 sind darin gesperrt, ihre
-    # Flippartner 43 und 53 werden abgeleitet. Was dann noch ab Laras Start
-    # erreichbar ist, IST die Startinsel - dort und nur dort darf Key8 liegen.
-    # Ausdruecklich nicht im Hauptlauf: das Gleisbett ist zugleich der legitime
-    # Hauptweg, und mit dieser Sperre waere Key Item7 in Raum 52 unerreichbar.
+    # The first two attempts were wrong and stand here as a warning: 137 as
+    # an additional deadstop on the existing NO_KEY_ISLAND shrank the bar
+    # from 3227 to 13 sectors (i.e. the opposite), and a second flood from
+    # room 29 barred 64 rooms without hitting the reported find spot.
+    # andy3 needs nothing here anymore: the coin is positively bounded via
+    # TYPE_ALLOW_ISLAND (from 142, stops 137/97/149). The interim state
+    # with NotOnIslandTypes is thereby superfluous - three overlapping bars
+    # for the same type were exactly the knot at which on 2026-08-24 only a
+    # single room remained.
+    # DeadstopRooms defines the island via a SECOND, sharper flood. The
+    # track bed chain 2/4/5 and room 89 are barred in it, their flip
+    # partners 43 and 53 are derived. What is then still reachable from
+    # Lara's start IS the start island - there and only there may Key8 lie.
+    # Expressly not in the main run: the track bed is at the same time the
+    # legitimate main way, and with this bar Key Item7 in room 52 would be
+    # unreachable.
     'joby2' = @( @{ BaselineRoom = 84; MaxYAbove = 1024; RequireTypes = @(202,203)
                     IslandTypes = @(203); DeadstopRooms = @(2,4,5,89) } )
-    # rich1, der Hammer. Vorschlag des Nutzers, und er trifft es besser als die
-    # Zonengrenze: eine Flut ab Laras Start mit Raum 12 als Deadstop.
+    # rich1, the hammer. The user's proposal, and it fits better than the
+    # zone limit: a flood from Lara's start with room 12 as the deadstop.
     #
-    # Die Insel ist keine Teilmenge einer Zone - sie enthaelt Sektoren aus Zone 0
-    # UND Zone 1 -, weil "vor Raum 12" und "vor der ersten Tuer" eben nicht
-    # dasselbe sind. Genau deshalb laesst sich das mit maxZone nicht ausdruecken,
-    # und deshalb ist sie mit rund fuenfzig Ablagen auch dreimal so eng wie die
-    # Zonengrenze, die 150 uebrig liess. Der Hammer liegt vanilla in Raum 22 und
-    # damit innerhalb.
+    # The island is no subset of a zone - it contains sectors from zone 0
+    # AND zone 1 -, because "before room 12" and "before the first door"
+    # are simply not the same. Exactly for that reason it cannot be
+    # expressed with maxZone, and that is why with about fifty spots it is
+    # also three times as tight as the zone limit, which left 150. The
+    # hammer lies vanilla in room 22 and thus inside.
     'rich1' = @(
         @{ IslandTypes = @(202); DeadstopRooms = @(12) }
-        # Key Item8, vier Deadstops vom Nutzer paarweise abgegrenzt: Raum 63 ja /
-        # 111 nein, 28 ja / 27 nein, 81 ja / 31 nein, 43 ja / 42 nein. Der
-        # Schluessel ist mehrfach nutzbar, eine einzige Instanz bedient alle vier
-        # Schloesser - sie muss also vor jedem von ihnen liegen.
+        # Key Item8, four deadstops delimited pairwise by the user: room 63
+        # yes / 111 no, 28 yes / 27 no, 81 yes / 31 no, 43 yes / 42 no. The
+        # key is reusable, a single instance serves all four locks - so it
+        # must lie before each of them.
         @{ IslandTypes = @(203); DeadstopRooms = @(27,31,42,111); DoorsOpen = $true }
-        # Puzzle Item4. Vorgabe des Nutzers: ein Abschnitt zwischen zwei Sperren,
-        # Raum 116 auf der einen und Raum 66 (dort steht Tuer 107) auf der
-        # anderen Seite - dazwischen darf das Teil ueberall liegen. Raum 116 ist
-        # ueber Raum 114 mit Explosionen erreichbar und damit vermutlich selbst
-        # ein Point of no return.
+        # Puzzle Item4. The user's requirement: a section between two bars,
+        # room 116 on one side and room 66 (door 107 stands there) on the
+        # other - in between the part may lie anywhere. Room 116 is
+        # reachable via room 114 with explosions and thus presumably itself
+        # a point of no return.
         #
-        # Das ist der erste Abschnitt, der nicht an Laras Start haengt, daher
-        # StartRoom. Von Lara aus liesse er sich nicht beschreiben: die erste
-        # Sperre laege dann schon davor.
+        # This is the first section that does not hang on Lara's start,
+        # hence StartRoom. From Lara it could not be described: the first
+        # bar would then already lie before it.
         @{ IslandTypes = @(175); StartRoom = 114; DeadstopRooms = @(66,116); DoorsOpen = $true }
     )
-    # rich2s Startbereich: "alles bis Tuer 105" (Nutzer). Das ist die Keypad-Tuer
-    # in Raum 55, hinter der es ins WC und damit in den Rest des Levels geht.
-    # Deshalb Raum 55 als Deadstop und eine Flut ab Laras Start.
+    # rich2's start area: "everything up to door 105" (user). That is the
+    # keypad door in room 55, behind which it goes into the WC and with it
+    # into the rest of the level. Hence room 55 as the deadstop and a flood
+    # from Lara's start.
     #
-    # Drei Sachen sollen dort liegen, alle drei Nutzervorgabe:
-    #   221  Pickup Item2 - genau eine Instanz im Level, muss in den Bereich
-    #   235  Bottle       - vier Instanzen, mindestens eine muss hinein
-    #   236  Cloth        - genau eine Instanz, muss hinein
-    # Flasche und Tuch werden im Inventar zum Chloroformtuch verbunden, mit dem
-    # Lara Gegner lautlos ausschaltet. Fehlt eins von beiden im Startbereich,
-    # steht dieser Weg von Anfang an nicht unresolved.
+    # Three things should lie there, all three user requirements:
+    #   221  Pickup Item2 - exactly one instance in the level, must go in
+    #   235  Bottle       - four instances, at least one must go in
+    #   236  Cloth        - exactly one instance, must go in
+    # Bottle and cloth are combined in the inventory into the chloroform
+    # cloth with which Lara silently takes out enemies. If one of the two
+    # is missing in the start area, this way is closed from the beginning.
     #
-    # IslandTypes fuer 221 (der Typ als Ganzes gehoert hinein), RequireTypes fuer
-    # 235 und 236 ("mindestens eine Instanz in der Gruppe") - bei 236 laeuft
-    # beides aufs selbe hinaus, weil es nur eine gibt.
+    # IslandTypes for 221 (the type as a whole belongs in), RequireTypes
+    # for 235 and 236 ("at least one instance in the group") - for 236 both
+    # come to the same thing because there is only one.
     'rich2' = @(
-    # Zweiter Deadstop ist Raum 58, und der ist nicht offensichtlich: von dort
-    # fuehrt die Deckenluke (Item 7, geoeffnet vom Trigger in 58) zurueck nach
-    # Raum 8. Das ist der Rueckweg vom Levelende, mit dem Lara die HK holt. Ohne
-    # ihn lief die Flut ueber 58 -> 59 -> 7 bis in die Raeume 152, 156 und 161 -
-    # Zone 4 und 5 - und der "Startbereich" haette das halbe Levelende umfasst.
+    # The second deadstop is room 58, and it is not obvious: from there the
+    # ceiling hatch (item 7, opened by the trigger in 58) leads back to
+    # room 8. That is the return way from the level's end with which Lara
+    # fetches the HK. Without it the flood ran via 58 -> 59 -> 7 into
+    # rooms 152, 156 and 161 - zones 4 and 5 - and the "start area" would
+    # have comprised half the level's end.
         @{ IslandTypes = @(221); DeadstopRooms = @(55,58); DoorsOpen = $true }
-        # Flasche und Tuch brauchen einen ENGEREN Bereich als Pickup Item2, auch
-        # wenn beides "Startbereich" heisst. Nutzervorgabe: nicht weiter als Raum
-        # 52, denn ab Raum 84 steht schon der Gegner, fuer den das Chloroformtuch
-        # gedacht ist - liegt eine der beiden Haelften erst dort, kommt Lara zu
-        # spaet an die Kombination.
+        # Bottle and cloth need a TIGHTER area than Pickup Item2, even
+        # though both are called "start area". User requirement: no further
+        # than room 52, because from room 84 the enemy the chloroform cloth
+        # is meant for already stands there - if one of the two halves only
+        # lies there, Lara arrives at the combination too late.
         #
-        # Raum 84 ist deshalb der dritte Deadstop; er grenzt an 52, 85, 97 und
-        # 170, schneidet also genau den Gegnerbereich ab. Das Vanilla-Tuch in
-        # Raum 50 haengt nur an Raum 54 und bleibt drin - wichtig, weil es im
-        # ganzen Level nur eines gibt und RequireTypes es damit zwingend hier
-        # unterbringen muss.
+        # Room 84 is therefore the third deadstop; it borders 52, 85, 97
+        # and 170, so it cuts off exactly the enemy area. The vanilla cloth
+        # in room 50 hangs only on room 54 and stays inside - important,
+        # because there is only one in the whole level and RequireTypes
+        # thereby must place it here.
         @{ IslandTypes = @(); RequireTypes = @(235,236); DeadstopRooms = @(55,58,84); DoorsOpen = $true }
-        # Puzzle Item3 bekommt eine UNTERGRENZE, die die Zone nicht ausdruecken
-        # kann. Nutzervorgabe: es darf erst ab Raum 128 in Richtung Raum 5 liegen,
-        # und die Tueren 180/179 sind der Deadstop - die stehen beide in Raum 120
-        # und werden von Schalter 43 in Raum 26 geoeffnet.
+        # Puzzle Item3 gets a LOWER limit the zone cannot express. User
+        # requirement: it may only lie from room 128 toward room 5, and
+        # doors 180/179 are the deadstop - both stand in room 120 and are
+        # opened by switch 43 in room 26.
         #
-        # maxZone 4 aus EXTRA_POOL_TYPES sagt "nicht spaeter als das Schloss";
-        # diese Insel sagt "nicht frueher als Raum 128". Erst beides zusammen
-        # beschreibt den Korridor, in dem das Teil liegen darf.
-        # Raum 58 muss als zweiter Deadstop dazu, aus demselben Grund wie beim
-        # Startbereich: die Deckenluke von 58 nach 8 ist der Rueckweg vom
-        # Levelende. Mit Raum 120 allein umfasste die Insel 163 Raeume und reichte
-        # bis zu Laras Startraum - also genau das Gegenteil einer Untergrenze.
-        # Mit beiden sind es 586 Sektoren, und zusammen mit maxZone 4 bleiben 214
-        # Ablagen in 26 Raeumen: der Korridor 128 -> 5 -> 23 -> 27 -> ... -> 149
-        # -> 152 -> 166. Der Vanilla-Platz in Raum 166 und das Schloss in Raum 147
-        # liegen beide darin.
-        # Dritter Deadstop ist Raum 152, das Ziel des Teleporters aus Raum 149
-        # (Item 217, ausgeloest vom Trigger auf 149,5,5 - demselben Sektor, auf
-        # dem Puzzle Hole2 steht). Nutzervorgabe: hinter dem Teleporter darf das
-        # Teil nicht mehr liegen. Das kostet 86, 98, 152, 156, 161 und 162; Raum
-        # 166 bleibt erreichbar, ohne durch 152 zu gehen, und damit auch der
-        # Vanilla-Platz.
+        # maxZone 4 from EXTRA_POOL_TYPES says "no later than the lock";
+        # this island says "no earlier than room 128". Only both together
+        # describe the corridor in which the part may lie.
+        # Room 58 must join as the second deadstop, for the same reason as
+        # in the start area: the ceiling hatch from 58 to 8 is the return
+        # way from the level's end. With room 120 alone the island
+        # comprised 163 rooms and reached down to Lara's start room - the
+        # exact opposite of a lower limit. With both it is 586 sectors, and
+        # together with maxZone 4, 214 spots in 26 rooms remain: the
+        # corridor 128 -> 5 -> 23 -> 27 -> ... -> 149 -> 152 -> 166. The
+        # vanilla place in room 166 and the lock in room 147 both lie
+        # inside.
+        # The third deadstop is room 152, the target of the teleporter from
+        # room 149 (item 217, fired by the trigger on 149,5,5 - the same
+        # sector Puzzle Hole2 stands on). User requirement: behind the
+        # teleporter the part may no longer lie. That costs 86, 98, 152,
+        # 156, 161 and 162; room 166 stays reachable without going through
+        # 152, and with it the vanilla place.
         @{ IslandTypes = @(174); StartRoom = 128; DeadstopRooms = @(120,58,152); DoorsOpen = $true }
     )
-    # rich3: die beiden Puzzle-Combos duerfen erst hinter dem Einbahn-Teleporter
-    # liegen. Nutzerangabe, zwei Point of no Return in diesem Level: Raum 58
-    # ueber die Schraege, und Schalter 310 in Raum 133, dessen Teleporter nach
-    # Raum 134 fuehrt - in Raum 134 gibt es keinen Trigger, der Lara zuruecksetzt.
+    # rich3: the two puzzle combos may only lie behind the one-way
+    # teleporter. User statement, two points of no return in this level:
+    # room 58 via the slope, and switch 310 in room 133, whose teleporter
+    # leads to room 134 - in room 134 there is no trigger that sets Lara
+    # back.
     #
-    # Das Schloss (Puzzle Hole1, Item 144) liegt in Raum 119, also jenseits
-    # dieser Einbahnstelle. Laege eine der beiden Haelften davor, koennte Lara
-    # hindurchgehen, ohne sie eingesammelt zu haben, und nie zurueck.
+    # The lock (Puzzle Hole1, item 144) lies in room 119, i.e. beyond this
+    # one-way spot. Were one of the two halves before it, Lara could walk
+    # through without having collected it and never back.
     #
-    # Der Deadstop ist Raum 133, die Quelle des Teleporters - er verhindert nur,
-    # dass die Flut rueckwaerts hinauslaeuft. Mehr braucht es nicht: Raum 134 hat
-    # ueberhaupt nur EINEN Nachbarn, naemlich 119. Der Bereich begrenzt sich also
-    # von selbst und umfasst 76 Raeume, darunter beide Vanilla-Positionen
-    # (Combo1 in Raum 183, Combo2 in Raum 152) und das Schloss - Laras Startraum
-    # dagegen nicht.
+    # The deadstop is room 133, the teleporter's source - it only prevents
+    # the flood from running out backwards. More is not needed: room 134
+    # has only ONE neighbor at all, namely 119. The area thus bounds
+    # itself and comprises 76 rooms, among them both vanilla positions
+    # (Combo1 in room 183, Combo2 in room 152) and the lock - Lara's start
+    # room, by contrast, not.
     'rich3' = @(
         @{ IslandTypes = @(180,181); StartRoom = 134; DeadstopRooms = @(133); DoorsOpen = $true }
-        # Die Armbrust - im Spiel die Grappling Gun. Sie MUSS hier liegen und
-        # DARF nur hier liegen; IslandTypes leistet beides, es ist eine harte
-        # Positivliste ueber alle Instanzen.
+        # The crossbow - in game the grappling gun. It MUST lie here and
+        # may ONLY lie here; IslandTypes delivers both, it is a hard
+        # positive list over all instances.
         #
-        # Der Bereich ist bewusst winzig, und der Nutzer hat ihn zweimal enger
-        # gezogen. Zuerst war es die ganze Route ab Raum 61 (359 Ablagen in 31
-        # Raeumen); dann kam der ausschlaggebende Befund: sobald Lara den
-        # Antitrigger (Item 149, Raum 124) erreicht, kommt sie ohne die Armbrust
-        # nicht mehr heraus. Sie darf deshalb erst ab Raum 79 auftauchen und
-        # nicht weiter als Raum 93 liegen - Raum 167 ist ueberhaupt nur mit ihr
-        # erreichbar.
+        # The area is deliberately tiny, and the user tightened it twice.
+        # First it was the whole route from room 61 (359 spots in 31
+        # rooms); then came the decisive finding: once Lara reaches the
+        # antitrigger (item 149, room 124), she does not get out again
+        # without the crossbow. It may therefore only appear from room 79
+        # on and lie no further than room 93 - room 167 is only reachable
+        # with it at all.
         #
-        # Die drei Raeume 79, 93 und 94 sind eine Kette: 79 -> 94 -> 93. Die
-        # Deadstops kappen beide Enden - 82 den Rueckweg ueber Raum 80, und 167
-        # das, was erst mit der Armbrust aufgeht. Bleiben 85 Ablagen; die
-        # Vanilla-Position (Items 75/76 in Raum 79) liegt darin.
+        # The three rooms 79, 93 and 94 are a chain: 79 -> 94 -> 93. The
+        # deadstops cap both ends - 82 the way back via room 80, and 167
+        # what only opens with the crossbow. 85 spots remain; the vanilla
+        # position (items 75/76 in room 79) lies within.
         #
-        # Woran alles haengt: FlipMap 2 (der Weg ueber Raum 57) braucht sie, und
-        # die drei Ropes (Items 29, 105, 204) sind ohne sie nicht zu nutzen -
-        # ueber Rope 29 geht es zu Raum 58.
+        # What everything hangs on: FlipMap 2 (the way via room 57) needs
+        # it, and the three ropes (items 29, 105, 204) cannot be used
+        # without it - via rope 29 it goes to room 58.
         @{ IslandTypes = @(341); StartRoom = 79; DeadstopRooms = @(82,167); DoorsOpen = $true }
     )
-    # Fuer Puzzle Item4 wurde hier eine zweite Gruppe versucht (Deadstop Raum 66,
-    # in dem Tuer 107 steht) und wieder verworfen: sie verbot dem Teil seinen
-    # eigenen Vanilla-Platz in Raum 153.
+    # For Puzzle Item4 a second group was tried here (deadstop room 66, in
+    # which door 107 stands) and discarded again: it forbade the part its
+    # own vanilla place in room 153.
     #
-    # Der Grund ist keine falsche Raumwahl, sondern ein Denkfehler in der
-    # Zuordnung. Eine Inselgruppe flutet ab Laras Start mit ALLEN Tueren zu -
-    # sie beschreibt "was von Anfang an offensteht". Das passt auf den Hammer,
-    # der frueh im Level liegt, und prinzipiell nicht auf ein Teil, dessen
-    # Vanilla-Platz in Zone 7 hinter einem Dutzend Tueren sitzt. Fuer solche
-    # Faelle braucht es eine Raumliste in TYPE_EXCLUDE_ROOMS.
+    # The reason is no wrong room choice but a thinking error in the
+    # assignment. An island group floods from Lara's start with ALL doors
+    # shut - it describes "what stands open from the beginning". That fits
+    # the hammer, which lies early in the level, and on principle not a
+    # part whose vanilla place sits in zone 7 behind a dozen doors. For
+    # such cases it takes a room list in TYPE_EXCLUDE_ROOMS.
 }
 $islandGroups = @( if($ISLAND_GROUP.ContainsKey($LevelName)){ $ISLAND_GROUP[$LevelName] } )
 
-# Tueren, die eine per-Level-Skriptfunktion (game/deltapak.cpp) ueber ein
-# Cutscene-Kommando oeffnet, statt ueber ein Object-Kommando. Anders als die
-# leere SCRIPT_DOORS-Tabelle oben ist das hier durch den Engine-Code UND die
-# Leveldaten belegt, nicht geraten:
-# rich1 Item 153 (Door Type1, Raum 89) - das anschiessbare Schloss ist eine
-# Falle (loest wahrscheinlich einen Heavy Trigger fuer einen FlipMap-Wechsel
-# aus, der gedachte Weg ist der Hammer). Der Bodentrigger in Raum 89 (1,4)
-# feuert "Cutscene 20"; cutseq_control_routines[20] in deltapak.cpp ist exakt
-# { hamgate_init, hamgate_control, hamgate_end }. hamgate_end() teleportiert
-# Lara nach (31232,-3328,48344) - praktisch identisch mit der Position von
-# Item 153 (31232,-3328,47616). hamgate_init() setzt fuer das gefundene
-# DOOR_TYPE1-Item IFL_CODEBITS, exakt derselbe Mechanismus wie bei den
-# "Flags 11111"-Tueren, nur hier per Skript statt beim Levelstart gesetzt.
-# Kein Hammer-Item (typeId 239) existiert irgendwo in rich1 - Lara braucht ihn
-# hier nicht als Inventarbedingung, der Bodentrigger allein genuegt.
+# Doors a per-level script function (game/deltapak.cpp) opens via a
+# cutscene command instead of an object command. Unlike the empty
+# SCRIPT_DOORS table above, this here is backed by the engine code AND the
+# level data, not guessed:
+# rich1 item 153 (Door Type1, room 89) - the shootable lock is a trap
+# (probably fires a heavy trigger for a FlipMap change, the intended way
+# is the hammer). The floor trigger in room 89 (1,4) fires "Cutscene 20";
+# cutseq_control_routines[20] in deltapak.cpp is exactly { hamgate_init,
+# hamgate_control, hamgate_end }. hamgate_end() teleports Lara to
+# (31232,-3328,48344) - practically identical with the position of item
+# 153 (31232,-3328,47616). hamgate_init() sets IFL_CODEBITS for the found
+# DOOR_TYPE1 item, exactly the same mechanism as with the "flags 11111"
+# doors, only set here by script instead of at level start.
+# No hammer item (typeId 239) exists anywhere in rich1 - Lara does not
+# need it here as an inventory condition, the floor trigger alone
+# suffices.
 $CUTSCENE_DOORS = @{
-    'rich1' = @{ 153 = 20 }   # doorItem -> Cutscene-Index
+    'rich1' = @{ 153 = 20 }   # doorItem -> cutscene index
 }
 
 #----------------------------------------------------------------------------
-# rich2s Levelende - festgehalten, weil das Modell es NICHT richtig abbildet
-# und die naechste Kuration sonst auf einer falschen Zone aufbaut.
+# rich2's level end - recorded because the model does NOT map it correctly
+# and the next curation would otherwise build on a wrong zone.
 #
-# Der Nutzer hat die Kette erklaert:
-#   - Flipmap 0 wird gleich beim Start gesetzt. Sie schaltet den
-#     Trigger-Triggerer (Item 25, Raum 14) ab, der seinerseits den EndLevel-
-#     Trigger in Raum 14 (1,1) sperrt.
-#   - Lara muss das Level bis Raum 58 spielen; dort schaltet der Trigger auf
-#     (2,1) "Object:7, FlipOff:0" die Flipmap wieder aus und gibt das Ende frei.
-#   - Um Tuer 171 zu oeffnen, muss sie den Feuerloescher (Mesh 301, Raum 118)
-#     anschiessen. Der HeavyTrigger in 118 (1,1) feuert Object:171 zusammen mit
-#     Object:172, der Explosion - ausgeloest also nicht von Lara, sondern vom
-#     Geschoss.
-#   - Ohne diese Flipmap-Trickserei koennte Lara sich das Entwaffnen sparen,
-#     durchheilen, direkt zum Feuerloescher sprinten und das Level oeffnen.
+# The user explained the chain:
+#   - Flipmap 0 is set right at the start. It switches off the
+#     trigger-triggerer (item 25, room 14), which in turn blocks the
+#     EndLevel trigger in room 14 (1,1).
+#   - Lara must play the level up to room 58; there the trigger on (2,1)
+#     "Object:7, FlipOff:0" switches the flipmap off again and frees the
+#     end.
+#   - To open door 171 she must shoot the fire extinguisher (mesh 301,
+#     room 118). The HeavyTrigger in 118 (1,1) fires Object:171 together
+#     with Object:172, the explosion - triggered not by Lara but by the
+#     projectile.
+#   - Without this flipmap trickery Lara could skip the disarming, heal
+#     through, sprint straight to the fire extinguisher and open the
+#     level.
 #
-# Was das Modell daraus macht: es liest den HeavyTrigger in Raum 118 wie einen
-# gewoehnlichen Bodentrigger und oeffnet Tuer 171 damit VIEL zu frueh - deshalb
-# steht sie im Report als Zone-0/1-Uebergang und Zone 1 umfasst 1285 Sektoren.
-# Die Flipmap-Sperre des Trigger-Triggerers kennt es gar nicht.
+# What the model makes of it: it reads the HeavyTrigger in room 118 like
+# an ordinary floor trigger and thereby opens door 171 MUCH too early -
+# which is why it stands in the report as a zone-0/1 transition and zone 1
+# comprises 1285 sectors. The flipmap block of the trigger-triggerer it
+# does not know at all.
 #
-# Folgenlos ist das derzeit nur, weil rich2 ueberhaupt keine abgeleiteten
-# Key-Constraints hat: seine vier Schloesser (Puzzle Hole2/3/8/8) finden bis auf
-# Puzzle Item3 kein passendes Item im Level. Sobald hier ein Typ begrenzt werden
-# soll, ist die Zone die falsche Grundlage und es braucht Deadstops.
+# This is currently without consequence only because rich2 has no derived
+# key constraints at all: its four locks (Puzzle Hole2/3/8/8) find, except
+# for Puzzle Item3, no matching item in the level. As soon as a type is to
+# be limited here, the zone is the wrong basis and it takes deadstops.
 #----------------------------------------------------------------------------
 $cutsceneDoors = @{}
 if ($CUTSCENE_DOORS.ContainsKey($LevelName)) { $cutsceneDoors = $CUTSCENE_DOORS[$LevelName] }
 $cutsceneDoorByCutscene = @{}
 foreach($kv in $cutsceneDoors.GetEnumerator()){ $cutsceneDoorByCutscene[[int]$kv.Value] = [int]$kv.Key }
 
-# Uebergaenge, die Lara schafft, der Sektorgraph aber nicht kennt: Spruenge,
-# Kletterstellen, Monkeyswing. Format @{From='Raum,x,z'; To='Raum,x,z'},
-# beidseitig. Das ist die Handkuration fuer "Flood stoppt an der Geometrie".
+# Transitions Lara manages but the sector graph does not know: jumps,
+# climbing spots, monkeyswing. Format @{From='room,x,z'; To='room,x,z'},
+# both ways. This is the hand curation for "the flood stops at the
+# geometry".
 #
-# WARUM HASHTABLES UND KEINE PAARE AUS ZWEI STRINGS: die Tabelle stand lange als
-# @( @('a','b') @('c','d') ) da und hat NIE funktioniert. @(...) ist in
-# PowerShell ein Array-AUSDRUCK, keine Literalliste - jedes innere @(...) ist
-# eine eigene Anweisung, deren Ausgabe der Strom flachzieht. Aus zwei Paaren
-# wurden vier Strings, aus rich2s sieben Paaren vierzehn. Die Schleife las dann
-# $ml[0]/$ml[1] als ZEICHEN eines Strings und legte Kanten wie '1' -> '3' an:
-# lautlos, folgenlos, und drei Level lang unbemerkt. Ein Komma zwischen den
-# Paaren wuerde es auch richten - aber genau das faellt beim naechsten Eintrag
-# wieder weg. Eine Hashtable ist ein einzelner Wert, den der Strom nicht
-# zerlegen kann, und die Feldnamen sagen ausserdem, welche Seite welche ist.
+# WHY HASHTABLES AND NOT PAIRS OF TWO STRINGS: the table long stood as
+# @( @('a','b') @('c','d') ) and NEVER worked. @(...) is an array
+# EXPRESSION in PowerShell, not a literal list - every inner @(...) is its
+# own statement whose output the stream flattens. Two pairs became four
+# strings, rich2's seven pairs became fourteen. The loop then read
+# $ml[0]/$ml[1] as CHARACTERS of a string and created edges like '1' ->
+# '3': silent, without effect, and unnoticed for three levels. A comma
+# between the pairs would fix it too - but exactly that gets lost again at
+# the next entry. A hashtable is a single value the stream cannot take
+# apart, and the field names additionally say which side is which.
 $MANUAL_LINK = @{
-    # joby2: der Weg auf den vorderen Sims von Raum 11, wo Lasersight und
-    # Revolver Ammo liegen. Zweimal derselbe Sprung mit Anlauf ueber eine Luecke
-    # von genau drei Sektoren - erst innerhalb von Raum 152, dann innerhalb von
-    # Raum 11 ueber die bodenlosen Felder x6/x7/x8 hinweg.
-    # Nutzerregel dahinter: Lara ueberwindet mit Anlauf 3 x 1024, sofern beide
-    # Kanten denselben Y-Wert haben. Hier erfuellt, alles liegt auf -4608.
+    # joby2: the way onto the front ledge of room 11, where lasersight and
+    # revolver ammo lie. Twice the same running jump across a gap of
+    # exactly three sectors - first within room 152, then within room 11
+    # across the floorless tiles x6/x7/x8.
+    # The user rule behind it: Lara clears 3 x 1024 with a running start,
+    # provided both edges have the same Y value. Satisfied here,
+    # everything lies on -4608.
     'joby2' = @(
         @{From='152,10,13'; To='152,10,17'}
         @{From='11,9,1';    To='11,5,1'}
     )
-    # rich1: der Teleportlift zwischen den Kabinen in Raum 30 und Raum 82. Im
-    # Portalgraphen fehlt er vollstaendig - Raum 30 grenzt dort nur an 23, Raum
-    # 82 nur an 81 -, weil der Lift Lara per Teleporter versetzt statt sie durch
-    # ein Portal gehen zu lassen.
+    # rich1: the teleport lift between the cabins in room 30 and room 82.
+    # In the portal graph it is missing entirely - room 30 borders only 23
+    # there, room 82 only 81 -, because the lift moves Lara by teleporter
+    # instead of letting her walk through a portal.
     #
-    # Die beiden Schalter 49 (Raum 30) und 175 (Raum 82) bedienen jeweils die
-    # Lifttueren ihrer Seite, den Ruftaster der Gegenseite (42 in Raum 23, 143 in
-    # Raum 81) und den Lift-Teleporter der anderen Kabine. Der Nutzer: die Lifts
-    # sind jederzeit in beide Richtungen benutzbar - deshalb eine gewoehnliche
-    # beidseitige Kante und kein ONEWAY_OUT.
+    # The two switches 49 (room 30) and 175 (room 82) each operate their
+    # side's lift doors, the other side's call button (42 in room 23, 143
+    # in room 81) and the other cabin's lift teleporter. The user: the
+    # lifts are usable at any time in both directions - hence an ordinary
+    # two-way edge and no ONEWAY_OUT.
     'rich1' = @(
         @{From='30,2,2'; To='82,2,2'}
     )
-    # rich2. HIER STANDEN EINMAL SECHS TELEPORTERPAARE - sie sind wieder weg,
-    # und das ist die eigentliche Lehre dieses Levels. Die Aufzugssektion haengt
-    # an sechs Teleportern, ich hatte sie aus den Triggerdaten abgeschrieben und
-    # von Hand eingetragen. Der Code leitet sie aber laengst selbst ab (siehe die
-    # TELEPORT_TYPES-Schleife weiter unten) - und zwar GERICHTET, vom Trigger zum
-    # Teleporter, so wie ControlTeleporter Lara wirklich versetzt.
+    # rich2. SIX TELEPORTER PAIRS ONCE STOOD HERE - they are gone again,
+    # and that is this level's actual lesson. The elevator section hangs on
+    # six teleporters, I had copied them from the trigger data and entered
+    # them by hand. But the code has long derived them itself (see the
+    # TELEPORT_TYPES loop further down) - and DIRECTED at that, from the
+    # trigger to the teleporter, the way ControlTeleporter really moves
+    # Lara.
     #
-    # Meine Handeintraege waren mit denselben Sektoren also reine Dubletten, nur
-    # BEIDSEITIG. Damit lief die Flut die Kette rueckwaerts: sie stand im EG und
-    # ging von dort zurueck in die Liftkabine, die sie nie erreicht hatte. Aus
-    # einer gerichteten Levelmechanik eine Strasse zu machen ist schlimmer, als
-    # sie gar nicht zu kennen.
+    # My hand entries with the same sectors were thus pure duplicates, only
+    # TWO-WAY. With that the flood walked the chain backwards: it stood on
+    # the ground floor and went from there back into the lift cabin it had
+    # never reached. Making a directed level mechanic into a street is
+    # worse than not knowing it at all.
     #
-    # Merke: bevor eine Kante von Hand kommt, nachsehen, ob der Code sie schon
-    # ableitet. Teleporter, Bruecken und Tueren tut er.
+    # Note: before an edge comes by hand, check whether the code already
+    # derives it. Teleporters, bridges and doors it does.
     'rich2' = @(
-        # Der Eintritt in die Aufzugssektion. Der Weg dorthin ist die Kette, die
-        # der Nutzer beschrieben hat: Tuer 105 per Keypad ins WC, von Raum 134
-        # die Kick Door in die Nische 131 eintreten, dort durch die Deckenluke
-        # 188 hinauf nach Raum 139 in den Fahrstuhlschacht, und von da mit
-        # einigen Klettermanoevern zur Falltuer 117, wo die Liftsektion beginnt.
+        # The entry into the elevator section. The way there is the chain
+        # the user described: door 105 by keypad into the WC, from room 134
+        # kick the kick door into niche 131, up through ceiling hatch 188
+        # there to room 139 into the elevator shaft, and from there with
+        # some climbing maneuvers to trapdoor 117, where the lift section
+        # begins.
         #
-        # Der Portalgraph kann diese Kette nicht laufen. Das Portal 134->131
-        # liegt beidseitig auf WANDSEKTOREN (134(2,3) und 131(0,1)), und 131(1,1)
-        # - der einzige Boden der Nische - traegt blockedByStatic. Der Flood
-        # kaeme also selbst mit offener Kick Door nicht hinein; die Tuer ist
-        # unschuldig und steht laengst in der Dekotuerliste.
+        # The portal graph cannot walk this chain. The portal 134->131 lies
+        # on WALL SECTORS on both sides (134(2,3) and 131(0,1)), and
+        # 131(1,1) - the niche's only floor - carries blockedByStatic. The
+        # flood would thus not get in even with the kick door open; the
+        # door is innocent and has long stood in the deco-door list.
         #
-        # Deshalb der vom Nutzer benannte Sprung 130 -> 139, der die Nische
-        # ueberspringt. Lara haelt sich dort ohnehin nicht auf, sie geht
-        # hindurch. 130(1,1) und 139(1,1) sind beide sauberer Boden.
+        # Hence the jump 130 -> 139 named by the user, which skips the
+        # niche. Lara does not linger there anyway, she passes through.
+        # 130(1,1) and 139(1,1) are both clean floor.
         @{From='130,1,1'; To='139,1,1'}
     )
 }
 
-# Einzelne Sektoren, in denen nichts liegen darf - im Gegensatz zu
-# EXCLUDE_SECTORS bleiben sie walkable. Sektorfeine Fassung von NO_ITEM_ROOMS,
-# fuer Raeume, die im Uebrigen voellig in Ordnung sind.
+# Individual sectors in which nothing may lie - unlike EXCLUDE_SECTORS they
+# stay walkable. The sector-fine version of NO_ITEM_ROOMS, for rooms that
+# are otherwise perfectly fine.
 $NO_ITEM_SECTORS = @{
     #------------------------------------------------------------------------
-    # Letzte Durchsicht des Nutzers ueber alle Level. Diese vier hatten bis
-    # dahin keinen Eintrag.
+    # The user's last review across all levels. These four had no entry
+    # until then.
     #------------------------------------------------------------------------
     'Andrea1' = @('214,1,1')
     'Andrea2' = @('6,1,2','33,2,2','51,2,2')
     'Andrea3' = @('49,5,3')
-    # joby2: die neun Felder in Raum 141 bilden einen zusammenhaengenden Block
-    # (x1-x3 auf z3-z5), dazu ein Feld in Raum 138.
+    # joby2: the nine tiles in room 141 form a contiguous block (x1-x3 on
+    # z3-z5), plus one tile in room 138.
     'joby2'   = @('141,1,3','141,1,4','141,1,5','141,2,3','141,2,4','141,2,5',
                   '141,3,3','141,3,4','141,3,5','138,4,1')
     'rich1'   = @('31,3,4')
-    # 1(1,1), 70(5,3), 70(5,5) und 13(2,3) kamen in der letzten Durchsicht dazu.
+    # 1(1,1), 70(5,3), 70(5,5) and 13(2,3) joined in the last review.
     'andy1' = @('176,2,1','176,3,1','170,1,6','170,3,6','170,3,4',
                 '200,2,0','121,1,1','121,2,3','226,1,2','158,2,2',
                 '1,1,1','70,5,3','70,5,5','13,2,3')
-    # rich2s Laser stand hier als Notloesung, solange er als EXCLUDE_SECTORS das
-    # halbe Level kostete. Seit der Sprung 130 -> 139 in MANUAL_LINK steht, ist
-    # er dort richtig aufgehoben - er ist eine Wand, kein Ablageverbot.
+    # rich2's laser stood here as a stopgap while it cost half the level as
+    # EXCLUDE_SECTORS. Since the jump 130 -> 139 stands in MANUAL_LINK, it
+    # is in the right place there - it is a wall, not a placement ban.
     #
-    # Was hier steht, ist die Sektorliste des Nutzers aus dem trview-Durchgang.
-    # 149(5,5) traegt Puzzle Hole2 selbst - auf einem Schloss hat kein Item etwas
-    # zu suchen. Die sechs Felder in Raum 166 sind Nutzerangabe; der Vanilla-Platz
-    # von Puzzle Item3 auf 166(3,2) ist NICHT darunter und bleibt erlaubt.
-    # 9(2,3) kam in der letzten Durchsicht dazu.
+    # What stands here is the user's sector list from the trview pass.
+    # 149(5,5) carries Puzzle Hole2 itself - no item has any business on a
+    # lock. The six tiles in room 166 are the user's; the vanilla place of
+    # Puzzle Item3 on 166(3,2) is NOT among them and stays allowed.
+    # 9(2,3) joined in the last review.
     'rich2' = @('149,5,5','9,2,3',
                 '166,2,1','166,4,1','166,1,3','166,3,3','166,2,4','166,4,4')
-    # andy3, erste Sektor-Durchsicht des Nutzers. Raum 188 traegt ein Secret und
-    # ein grosses Medipack - beide liegen anderswo im Raum, die Sperre trifft
-    # keine Vanilla-Position.
+    # andy3, the user's first sector review. Room 188 carries a secret and
+    # a large medipack - both lie elsewhere in the room, the bar hits no
+    # vanilla position.
     'andy3' = @('150,2,1','188,1,2','188,1,3','58,2,1','58,3,1','58,4,1')
-    # Andy2, zweite und dritte Durchsicht des Nutzers in trview. Die Eintraege
-    # ab 133 sind einzelne Fallensektoren; die in den Flipvarianten 133, 135 und
-    # 136 sind wie die Raeume 132/134 oben schon durch die Flipsperre erledigt
-    # und stehen nur als Sicherheitsnetz.
-    # Die vierte Durchsicht nimmt die restlichen Fallensektoren in den
-    # Bruecken-Raeumen mit. 30, 43, 56 und 57 sind die Basisraeume der Flipmap-
-    # Gruppen 3, 4 und 5 - dieselbe Bauform wie 31 und 41, nur dass hier nicht
-    # der ganze Raum weg muss.
+    # Andy2, the user's second and third trview review. The entries from
+    # 133 on are individual trap sectors; those in the flip variants 133,
+    # 135 and 136 are, like rooms 132/134 above, already handled by the
+    # flip bar and stand only as a safety net.
+    # The fourth review takes the remaining trap sectors in the bridge
+    # rooms along. 30, 43, 56 and 57 are the base rooms of flipmap groups
+    # 3, 4 and 5 - the same construction as 31 and 41, only that here the
+    # whole room does not have to go.
     'Andy2' = @('251,1,3','3,6,4','39,3,1',
                 '133,5,4','135,4,5','135,6,5','136,5,5',
                 '30,5,4','30,5,6',
@@ -2366,34 +2391,35 @@ $NO_ITEM_SECTORS = @{
 $noItemSectors = @( if($NO_ITEM_SECTORS.ContainsKey($LevelName)){ $NO_ITEM_SECTORS[$LevelName] } )
 
 #----------------------------------------------------------------------------
-# Hoehenbaender je Levelabschnitt.
+# Height bands per level section.
 #
-# Idee des Nutzers fuer andy3, und dort zahlt sie sich sofort aus: das Level
-# zerfaellt durch seine Einbahn-Teleporter ohnehin in Abschnitte, und innerhalb
-# eines Abschnitts liegt der bespielbare Boden in einem schmalen Hoehenband.
-# Alles darueber und darunter ist Dach, Kulisse oder Abgrund. Statt hundert
-# Raumnummern von Hand zu sammeln, reicht damit je Abschnitt ein Bandwert.
+# The user's idea for andy3, and there it pays off immediately: the level
+# falls apart into sections through its one-way teleporters anyway, and
+# within a section the playable floor lies in a narrow height band.
+# Everything above and below is roof, scenery or abyss. Instead of
+# collecting a hundred room numbers by hand, one band value per section
+# suffices.
 #
-# Der Abschnitt wird als Raumkomponente bestimmt: ab StartRoom durch Portale und
-# vertikale Verbindungen, ohne DeadstopRooms zu betreten. Bewusst der ROMGRAPH
-# und nicht die begehbare Flut - der Abschnitt soll eine Eigenschaft der
-# Levelarchitektur sein und nicht davon abhaengen, welche Tuer gerade unresolved ist.
-# In andy3 trennt das sauber: 64 Raeume ab Lara mit Stop am Teleporterraum 110,
-# 117 Raeume ab dem Zielraum 140 mit Stop am naechsten Teleporter 155, ohne
-# einen einzigen gemeinsamen Raum.
+# The section is determined as a room component: from StartRoom through
+# portals and vertical connections, without entering DeadstopRooms.
+# Deliberately the ROOM GRAPH and not the walkable flood - the section
+# should be a property of the level architecture and not depend on which
+# door happens to be open. In andy3 that separates cleanly: 64 rooms from
+# Lara with a stop at teleporter room 110, 117 rooms from target room 140
+# with a stop at the next teleporter 155, without a single shared room.
 #
-# Y-KONVENTION: in TR liegt KLEINERES y HOEHER. YMin ist deshalb die OBERE
-# Schranke der Welt und YMax die untere. Die Values kommen aus trview, und dessen
-# Anzeige ist bitgleich mit unserem floorY - an vier Items gegengeprueft, es
-# wird nichts invertiert.
+# Y CONVENTION: in TR, SMALLER y lies HIGHER. YMin is therefore the
+# world's UPPER bound and YMax the lower. The values come from trview, and
+# its display is bit-identical with our floorY - cross-checked at four
+# items, nothing is inverted.
 #
-# $null auf einer Seite heisst "dort unresolved". Insel 2 in andy3 braucht nur eine
-# obere Schranke; nach unten geht es dort einfach immer tiefer ins Level.
+# $null on one side means "open there". Island 2 in andy3 needs only an
+# upper bound; downward it simply goes ever deeper into the level.
 #----------------------------------------------------------------------------
 $ISLAND_YBAND = @{
     'andy3' = @(
-        @{ Name = 'Insel 1'; StartRoom = 29;  DeadstopRooms = @(110); YMin = 451;  YMax = 6495 }
-        @{ Name = 'Insel 2'; StartRoom = 140; DeadstopRooms = @(155); YMin = 7940; YMax = $null }
+        @{ Name = 'island 1'; StartRoom = 29;  DeadstopRooms = @(110); YMin = 451;  YMax = 6495 }
+        @{ Name = 'island 2'; StartRoom = 140; DeadstopRooms = @(155); YMin = 7940; YMax = $null }
     )
 }
 $ybandBarred = New-Object System.Collections.Generic.HashSet[string]
@@ -2424,73 +2450,75 @@ if ($ISLAND_YBAND.ContainsKey($LevelName)) {
                 [void]$seenR.Add($n); $qr.Enqueue($n)
             }
         }
-        $rausHoch = 0; $rausTief = 0
+        $outTooHigh = 0; $outTooLow = 0
         foreach($sx in $d.sectors){
             if (-not $seenR.Contains([int]$sx.room)) { continue }
             $y = [int]$sx.floorY
             if ($null -ne $band.YMin -and $y -lt [int]$band.YMin) {
-                [void]$ybandBarred.Add("$($sx.room),$($sx.sectorX),$($sx.sectorZ)"); $rausHoch++
+                [void]$ybandBarred.Add("$($sx.room),$($sx.sectorX),$($sx.sectorZ)"); $outTooHigh++
             }
             elseif ($null -ne $band.YMax -and $y -gt [int]$band.YMax) {
-                [void]$ybandBarred.Add("$($sx.room),$($sx.sectorX),$($sx.sectorZ)"); $rausTief++
+                [void]$ybandBarred.Add("$($sx.room),$($sx.sectorX),$($sx.sectorZ)"); $outTooLow++
             }
         }
-        $oben  = if ($null -ne $band.YMin) { "y >= $($band.YMin)" } else { 'nach oben unresolved' }
-        $unten = if ($null -ne $band.YMax) { "y <= $($band.YMax)" } else { 'nach unten unresolved' }
-        # Gezaehlt werden alle Sektoren des Abschnitts, nicht nur die itemfaehigen -
-        # wie viele Ablagen es am Ende kostet, steht in der Exportzeile.
-        Write-Output "Hoehenband $($band.Name): $($seenR.Count) Raeume ab $($band.StartRoom) (Stop $($stopR -join ', ')), erlaubt $oben und $unten - ausserhalb: $rausHoch zu hoch, $rausTief zu tief (Sektoren des Abschnitts)"
+        $upperTxt = if ($null -ne $band.YMin) { "y >= $($band.YMin)" } else { 'open upward' }
+        $lowerTxt = if ($null -ne $band.YMax) { "y <= $($band.YMax)" } else { 'open downward' }
+        # Counted are all sectors of the section, not only the item-capable
+        # ones - how many spots it costs in the end stands in the export
+        # line.
+        Write-Output "height band $($band.Name): $($seenR.Count) rooms from $($band.StartRoom) (stop $($stopR -join ', ')), allowed $upperTxt and $lowerTxt - outside: $outTooHigh too high, $outTooLow too low (sectors of the section)"
     }
 }
 
-# Schluessel, die NICHT verbraucht werden. Der Normalfall in TR ist: Key oder
-# Puzzle-Item wandert ins Schloss und ist weg - KeyHoleCollision (game/pickup.cpp:
-# 594) ruft dafuer remove_inventory_item auf. EINE einzige harte Ausnahme steht
-# im Code selbst, nicht in Leveldaten: "if (item->object_number != KEY_HOLE8)
-# remove_inventory_item(...)" - Key Hole 8 (typeId 265) und damit Key Item8
-# (typeId 203) sind ueber ALLE TR5-Level hinweg unverbrauchbar, das ist keine
-# Level-Eigenschaft. joby5 (Item 118, EIN Key fuer ZWEI Keyhole8-Schloesser) und
-# rich1 (EIN Key fuer VIER Keyhole8-Schloesser, Raeume 26/69x2/81) sind beide
-# einfach Anwendungsfaelle derselben globalen Engine-Regel, kein Zufall.
+# Keys that are NOT consumed. The normal case in TR is: key or puzzle item
+# goes into the lock and is gone - KeyHoleCollision (game/pickup.cpp:594)
+# calls remove_inventory_item for that. ONE single hard exception stands in
+# the code itself, not in level data: "if (item->object_number != KEY_HOLE8)
+# remove_inventory_item(...)" - Key Hole 8 (typeId 265) and with it Key Item8
+# (typeId 203) are unconsumable across ALL TR5 levels, that is no level
+# property. joby5 (item 118, ONE key for TWO Keyhole8 locks) and rich1 (ONE
+# key for FOUR Keyhole8 locks, rooms 26/69x2/81) are both simply use cases of
+# the same global engine rule, no coincidence.
 $REUSABLE_KEYS_GLOBAL = @(203)
 $REUSABLE_KEYS = @{
 }
 
-# Raeume, die es nur fuer eine Kamerafahrt gibt und die Lara nie betritt.
-# Die Automatik erkennt solche Gebiete nur, wenn ausser Animatings nichts darin
-# steht (siehe Andy2). Enthaelt die Kulisse auch Tueren oder anderes Inventar,
-# faellt sie durch - dann hilft nur Handkuration.
-# joby3: die Inselgruppe um Raum 140 wird waehrend der Cutscene aus dem
-# Luftschacht (Raum 76) nur GESEHEN, ist aber nicht walkable (Nutzerangabe im
-# Zonenreport). Sie enthaelt drei Tueren und ist deshalb automatisch nicht als
-# Kulisse erkennbar.
+# Rooms that exist only for a camera flyby and that Lara never enters.
+# The automatic detection recognizes such areas only when nothing but
+# animatings stand in them (see Andy2). If the scenery also contains doors
+# or other inventory, it falls through - then only hand curation helps.
+# joby3: the island group around room 140 is only SEEN during the cutscene
+# from the air shaft (room 76) but is not walkable (user statement in the
+# zone report). It contains three doors and is therefore not automatically
+# recognizable as scenery.
 $CAMERA_ROOMS = @{
     'joby3' = @(4,10,11,94,96,97,114,140,185)
-    # Andrea3 Raeume 73/74: je 9 Sektoren, komplett leer (keine Items), isoliert.
-    # User: "Ueberbleibsel wie in Andrea2, da war wohl mal was geplant" - Cut
-    # Content, nicht zum Betreten gedacht.
+    # Andrea3 rooms 73/74: 9 sectors each, completely empty (no items),
+    # isolated. User: "leftovers like in Andrea2, something was probably
+    # planned there once" - cut content, not meant to be entered.
     'Andrea3' = @(73,74)
-    # rich3 Raeume 64/65/66/67: geschlossener 4-Raum-Kreislauf ohne jede
-    # Verbindung zum Rest des Levels. User: liegt in trview sichtbar ausserhalb
-    # der eigentlichen Levelgeometrie ("out of map") - das ist die Intro-Flyby
-    # mit den ums Level kreisenden Helikoptern, rein kosmetisch, nie walkable.
+    # rich3 rooms 64/65/66/67: a closed 4-room circuit without any
+    # connection to the rest of the level. User: lies visibly outside the
+    # actual level geometry in trview ("out of map") - that is the intro
+    # flyby with the helicopters circling the level, purely cosmetic, never
+    # walkable.
     'rich3' = @(64,65,66,67)
 }
 $cameraRooms = @( if($CAMERA_ROOMS.ContainsKey($LevelName)){ $CAMERA_ROOMS[$LevelName] } )
 $reusableKeys = @($REUSABLE_KEYS_GLOBAL) + @( if($REUSABLE_KEYS.ContainsKey($LevelName)){ $REUSABLE_KEYS[$LevelName] } )
 $manualLinks = @( if($MANUAL_LINK.ContainsKey($LevelName)){ $MANUAL_LINK[$LevelName] } )
 
-# Floor-Override-Objekte erzeugen begehbaren Boden, wo die Sektordaten Leere
-# melden. Vollstaendige Liste per grep "obj->floor = " in game/setup.cpp:
-#   BRIDGE_FLAT/TILT1/TILT2  -> BridgeFlatFloor usw.   (448..453 inkl. Mips)
+# Floor-override objects create walkable floor where the sector data reports
+# emptiness. Complete list per grep "obj->floor = " in game/setup.cpp:
+#   BRIDGE_FLAT/TILT1/TILT2  -> BridgeFlatFloor etc.   (448..453 incl. mips)
 #   FALLING_BLOCK/2, CRUMBLING_FLOOR -> FallingBlockFloor (103, 104, 105)
 #   TWOBLOCK_PLATFORM        -> TwoBlockPlatformFloor  (136, "Expanding Platform")
-# Ein rein sektorbasierter Graph kann sie prinzipiell nicht sehen. Die
-# Crumbling Floors fehlten hier zunaechst - mit fatalem Effekt, sobald die
-# Kletterregel kam: Andrea3s Einstieg (12 Crumbling Floors ueber Lava, Raum 8)
-# liegt auf Sektoren, deren aufgeloeste "Standhoehe" der Lavagrund weit unten
-# ist; der Rueckweg von der Bruecke wirkte wie ein unmoeglicher 4000er-Aufstieg
-# und das Level kollabierte auf 8%.
+# A purely sector-based graph cannot see them on principle. The crumbling
+# floors were missing here at first - with fatal effect once the climb rule
+# came: Andrea3's entry (12 crumbling floors above lava, room 8) lies on
+# sectors whose resolved "standing height" is the lava ground far below;
+# the way back from the bridge looked like an impossible 4000-unit ascent
+# and the level collapsed to 8%.
 $BRIDGE_TYPES = @(448,449,450,451,452,453, 103,104,105, 136)
 $bridgeSec = @{}
 foreach($i in $d.items){
@@ -2500,8 +2528,8 @@ foreach($i in $d.items){
 
 function Test-Walkable($key) {
     if (-not $sec.ContainsKey($key)) { return $false }
-    # Handkuratierte Nicht-Betretbar-Raeume zuerst: sie sollen weder als
-    # Platzierungsziel noch als Durchgang dienen (ein Dach ist auch kein Weg).
+    # Hand-curated not-enterable rooms first: they shall serve neither as a
+    # placement target nor as a passage (a roof is no way either).
     if ($excludeRooms -contains [int]$sec[$key].room) { return $false }
     if ($excludeSectors -contains $key) { return $false }
     if ($bridgeSec.ContainsKey($key)) { return $true }
@@ -2510,13 +2538,13 @@ function Test-Walkable($key) {
 
 $adj = @{}
 function Add-Edge($a, $b) {
-    # Handgesperrte Einzelsektoren hier abfangen und nicht in Test-Walkable
-    # allein: Portal-, Bruecken- und Manuallink-Kanten rufen Test-Walkable gar
-    # nicht auf, ein Sektor kaeme also ueber sie doch in den Graphen.
+    # Catch hand-barred single sectors here and not in Test-Walkable alone:
+    # portal, bridge and manual-link edges do not call Test-Walkable at all,
+    # so a sector would still enter the graph through them.
     if ($excludeSectors -contains $a -or $excludeSectors -contains $b) { return }
-    # Dasselbe fuer ganze Raeume. Raum 145 in joby2 stand in EXCLUDE_ROOMS und
-    # tauchte trotzdem mit 36 Ablagen auf: er enthaelt vier Bridge-Flats, und
-    # Brueckenkanten holen ihre Sektoren ohne Test-Walkable in den Graphen.
+    # The same for whole rooms. Room 145 in joby2 stood in EXCLUDE_ROOMS and
+    # still showed up with 36 spots: it contains four bridge flats, and
+    # bridge edges pull their sectors into the graph without Test-Walkable.
     if ($excludeRooms -contains [int](($a -split ',')[0])) { return }
     if ($excludeRooms -contains [int](($b -split ',')[0])) { return }
     if (-not $adj.ContainsKey($a)) { $adj[$a] = New-Object System.Collections.Generic.HashSet[string] }
@@ -2530,9 +2558,10 @@ foreach($s in $d.sectors){
     $wx = $rm.originX + $s.sectorX * 1024
     $wz = $rm.originZ + $s.sectorZ * 1024
 
-    # Nachbarn im selben Raum - gerichtet: die Gegenrichtung entsteht, wenn der
-    # Nachbar selbst an der Reihe ist und SEINE Kletterpruefung besteht. So darf
-    # Lara eine hohe Kante hinunterfallen, ohne dass daraus ein Rueckweg wird.
+    # Neighbors in the same room - directed: the reverse direction arises
+    # when the neighbor itself takes its turn and passes ITS climb check.
+    # This way Lara may fall down a high edge without that becoming a way
+    # back up.
     foreach($dz in @(-1,0,1)){ foreach($dx in @(-1,0,1)){
         if (($dx -eq 0 -and $dz -eq 0) -or ($dx -ne 0 -and $dz -ne 0)) { continue }
         $nk = "$($s.room),$($s.sectorX + $dx),$($s.sectorZ + $dz)"
@@ -2541,18 +2570,19 @@ foreach($s in $d.sectors){
         Add-Edge $key $nk
     }}
 
-    # Sprungkanten: TR-Kernbewegung, die dem reinen Nachbargraphen fehlt.
-    # Standsprung ueberwindet 1 Lueckensektor, Anlaufsprung 2. Das alte Modell
-    # (ohne Hoehenregel) kaschierte das, indem der Flood DURCH das Loch lief
-    # und drueben wieder "hochkam" - physikalisch falsch, aber zufaellig
-    # verbindend. Mit korrekten Fallkanten wurde jedes Loch zur Einbahnfalle
-    # und Schacht-/Sims-Level kollabierten (joby3 8%, rich2s Fahrstuhlschacht,
-    # Andrea3s Colosseum-Simse - vom Nutzer exakt so benannt). Regel: bis zu
-    # 2 aufeinanderfolgende Sektoren, deren aufgeloeste Standhoehe deutlich
-    # (>512) unter der Absprunghoehe liegt, duerfen uebersprungen werden;
-    # die Landung darf hoechstens 1 Klick (256) hoeher liegen, beliebig tief
-    # ist erlaubt. Nur geradlinig und innerhalb desselben Raums - Raumgrenzen
-    # ueberspannende Spruenge sind eine bekannte, noch offene Luecke.
+    # Jump edges: TR core movement the plain neighbor graph lacks. A
+    # standing jump clears 1 gap sector, a running jump 2. The old model
+    # (without the height rule) masked this by letting the flood run
+    # THROUGH the hole and "come back up" on the other side - physically
+    # wrong, but coincidentally connecting. With correct fall edges every
+    # hole became a one-way trap and shaft/ledge levels collapsed (joby3
+    # 8%, rich2's elevator shaft, Andrea3's Colosseum ledges - named
+    # exactly so by the user). Rule: up to 2 consecutive sectors whose
+    # resolved standing height lies clearly (>512) below the takeoff
+    # height may be jumped over; the landing may lie at most 1 click (256)
+    # higher, arbitrarily deep is allowed. Only straight-line and within
+    # the same room - jumps spanning room borders are a known, still open
+    # gap.
     $fa = if ($EnableClimbModel) { Get-EffFloorY $key } else { $null }
     if ($null -ne $fa) {
         foreach($dir in @(@(1,0),@(-1,0),@(0,1),@(0,-1))){
@@ -2564,23 +2594,24 @@ foreach($s in $d.sectors){
                 $fc = Get-EffFloorY $ck
                 $isGap = ($null -eq $fc) -or (($fc - $fa) -gt 512)
                 if ($isGap) { if ($step -eq 3) { break }; continue }
-                # erster nicht-Luecken-Sektor = Landekandidat; bei step 1 ist es
-                # ein gewoehnlicher Nachbar, den die normale Kante schon abdeckt
+                # first non-gap sector = landing candidate; at step 1 it is
+                # an ordinary neighbor the normal edge already covers
                 if ($step -ge 2 -and (Test-Walkable $ck) -and ($fa - $fc) -le 256) { Add-Edge $key $ck }
                 break
             }
         }
     }
 
-    # Portal / vertikale Verbindungen, beidseitig.
-    # Portale stehen in den Leveldaten nur auf der Seite, von der aus sie
-    # eingetragen wurden. Nur der Vorwaertskante zu folgen ist deshalb zu streng:
-    # grenzen zwei Raeume an denselben Nachbarraum (joby3 Raum 23 und 73 zeigen
-    # beide auf 58), fehlt der Rueckweg und ganze Levelteile fallen aus. Beidseitig
-    # gemessen: Andrea1 98->100%, Andrea2 95->100%, richcut2 50->99%, joby5 54->62%,
-    # rich3 21->26%, ohne dass Andrea1 seine Zonenstruktur oder eine Key-Item-Kette
-    # verliert. Echte Einbahn-Uebergaenge bleiben ueber ONEWAY_OUT ausgenommen -
-    # dort darf auch die Rueckkante nicht entstehen, sonst waere die Kuration wirkungslos.
+    # Portal / vertical connections, both ways.
+    # Portals stand in the level data only on the side from which they were
+    # entered. Following only the forward edge is therefore too strict: if
+    # two rooms border the same neighbor room (joby3 rooms 23 and 73 both
+    # point at 58), the way back is missing and whole level parts drop out.
+    # Measured both ways: Andrea1 98->100%, Andrea2 95->100%, richcut2
+    # 50->99%, joby5 54->62%, rich3 21->26%, without Andrea1 losing its
+    # zone structure or a key-item chain. Real one-way transitions stay
+    # excepted via ONEWAY_OUT - there even the back edge must not arise, or
+    # the curation would be void.
     $leavesOneway = $onewayOut -contains [int]$s.room
     $targets = @()
     if ($null -ne $s.portalTarget) { $targets += ,[int]$s.portalTarget }
@@ -2589,43 +2620,44 @@ foreach($s in $d.sectors){
         $t = Get-SectorInRoom $tgt $wx $wz
         if (-not $t) { continue }
         $tk2 = "$($t.room),$($t.sectorX),$($t.sectorZ)"
-        # Auch ueber Portale/roomBelow/roomAbove darf kein ausgeschlossener
-        # Raum betreten werden - sonst waere die Kuration wirkungslos, weil
-        # Daecher fast immer per Portal statt per Nachbarsektor haengen.
-        # Bewusst NUR die Raumsperre, nicht das volle Test-Walkable: ein Portal
-        # darf durchaus auf einem als Wand markierten Sektor landen (Randring
-        # des Zielraums), von dem aus es im Raum weitergeht - das zu kappen
-        # kostete in Andrea2 die Raeume 149/191/197 und in joby2/andy3 je
-        # einige Sektoren, ohne dass dem eine Spielmechanik entspraeche.
+        # No excluded room may be entered via portals/roomBelow/roomAbove
+        # either - otherwise the curation would be void, because roofs
+        # almost always hang by portal rather than by neighbor sector.
+        # Deliberately ONLY the room bar, not the full Test-Walkable: a
+        # portal may well land on a sector marked as wall (border ring of
+        # the target room) from which it continues inside the room -
+        # cutting that cost Andrea2 the rooms 149/191/197 and joby2/andy3 a
+        # few sectors each, without any game mechanic corresponding to it.
         if ($excludeRooms -contains [int]$t.room) { continue }
-        # Kletterpruefung je Richtung einzeln (Test-ClimbEdge: runter frei,
-        # hoch nur bis 1920 bzw. Kletterwand/Wasser/Bruecke). Der erste Versuch
-        # einer Hoehenregel hier scheiterte an zwei Fehlern zugleich: rohes
-        # floorY an Portalsektoren verglichen (statt der ueber Portale/roomBelow
-        # aufgeloesten Standhoehe, siehe Get-EffFloorY) UND auch Abstiege
-        # gedeckelt - gemessen kostete das joby3 -82%, rich2 -40%, joby2 -16%.
+        # Climb check per direction individually (Test-ClimbEdge: down
+        # free, up only to 1920 or climbable wall/water/bridge). The first
+        # attempt at a height rule here failed at two errors at once: raw
+        # floorY compared at portal sectors (instead of the standing height
+        # resolved via portals/roomBelow, see Get-EffFloorY) AND descents
+        # capped too - measured, that cost joby3 -82%, rich2 -40%, joby2 -16%.
         if (-not $leavesOneway -and (Test-ClimbEdge $key $tk2)) { Add-Edge $key $tk2 }
         if ($onewayOut -notcontains $tgt -and (Test-ClimbEdge $tk2 $key)) { Add-Edge $tk2 $key }
     }
 }
 
-# Flipmap: ein Alternate-Raum tauscht die Geometrie des Basisraums an Ort und
-# Stelle aus, Sektor (x,z) gegen Sektor (x,z). Fuer die Item-Platzierung sind
-# Alternate-Raeume gesperrt (FlipMap() stellt item_number des Basisraums wieder
-# her, dort liegen nie Items) - fuer die Progression zaehlen sie aber sehr wohl,
-# weil ihre Trigger feuern. Andrea1 endet genau so: Raum 234 ist der Alternate
-# von 171, und erst nach FlipMap 8 liegt dort der Cutscene-Trigger.
+# Flipmap: an alternate room swaps the base room's geometry in place, sector
+# (x,z) for sector (x,z). For item placement, alternate rooms are barred
+# (FlipMap() restores the base room's item_number, items never lie there) -
+# for progression they very much count, because their triggers fire. Andrea1
+# ends exactly like that: room 234 is the alternate of 171, and only after
+# FlipMap 8 does the cutscene trigger lie there.
 foreach($r in $d.rooms){
     if ($null -eq $r.alternateRoom -or $r.alternateRoom -eq '') { continue }
     $ai = [int]$r.alternateRoom
     if ($ai -eq [int]$r.index) { continue }
-    # Fuer jeden Sektor, der im Alternate walkable ist: mit dem Basisraum
-    # verbinden. Deckungsgleich, wo beide walkable sind - und zusaetzlich ueber
-    # die Nachbarsektoren, wo die Basis eine Wand hat. Genau das ist der Sinn
-    # vieler Flipmaps: der Flip *oeffnet* einen Durchgang, wo vorher Wand war
-    # (joby2: der Kran-Cutscene-Flip auf Raum 4/43 gibt den Levelfortgang frei).
-    # Ohne den zweiten Fall bleibt der ganze Alternate-Teil eine eigene Insel
-    # und der Flood stoppt am Levelanfang.
+    # For every sector that is walkable in the alternate: connect it with
+    # the base room. Congruent where both are walkable - and additionally
+    # via the neighbor sectors where the base has a wall. Exactly that is
+    # the point of many flipmaps: the flip *opens* a passage where there
+    # was wall before (joby2: the crane cutscene flip on room 4/43 frees
+    # the level's continuation). Without the second case the whole
+    # alternate part stays its own island and the flood stops at the
+    # level's beginning.
     foreach($s in $d.sectors){
         if ([int]$s.room -ne $ai -or $s.isWall) { continue }
         $ak = "$ai,$($s.sectorX),$($s.sectorZ)"
@@ -2642,13 +2674,14 @@ foreach($r in $d.rooms){
     }
 }
 
-# Teleporter versetzen Lara an die Position des Teleporter-Items selbst.
-# ControlTeleporter (game/tomb4fx.cpp:531ff): bei trigger_flags == 666 laeuft nur
-# der Effekt, in ALLEN anderen Faellen greift der else-Zweig und setzt
-# lara_item->pos auf item->pos plus ItemNewRoom. Also ist der Teleporter das
-# ZIEL und sein Trigger die Quelle - die Kante ist gerichtet, vom Triggersektor
-# zum Teleportersektor. (Frueher hatte ich mir das genau falsch herum notiert;
-# alle Teleporter der 16 Vanilla-Level haben OCB 0, warpen also tatsaechlich.)
+# Teleporters move Lara to the position of the teleporter item itself.
+# ControlTeleporter (game/tomb4fx.cpp:531ff): at trigger_flags == 666 only
+# the effect runs, in ALL other cases the else branch applies and sets
+# lara_item->pos to item->pos plus ItemNewRoom. So the teleporter is the
+# TARGET and its trigger the source - the edge is directed, from the trigger
+# sector to the teleporter sector. (Earlier I had noted this exactly the
+# wrong way round; all teleporters of the 16 vanilla levels have OCB 0, so
+# they really do warp.)
 $TELEPORT_TYPES = @(387,388)
 foreach($i in $d.items){
     if ($TELEPORT_TYPES -notcontains [int]$i.typeId) { continue }
@@ -2663,7 +2696,7 @@ foreach($i in $d.items){
     }
 }
 
-# --- Tueren: welcher Sektor wird blockiert? ---------------------------------
+# --- Doors: which sector gets blocked? --------------------------------------
 $doorSector = @{}   # itemIndex -> sectorKey
 $openAtStart = @()
 $crowbarDoors = @()
@@ -2671,55 +2704,56 @@ foreach($i in $d.items){
     if ($DOOR_TYPES -notcontains [int]$i.typeId) { continue }
     $k = "$($i.room),$($i.sectorX),$($i.sectorZ)"
     if (-not $sec.ContainsKey($k)) { continue }
-    # Eine Tuer, deren Item-Flags die 5 Code-Bits (IFL_CODEBITS, 0x3E00) schon
-    # beim Laden alle gesetzt haben, gilt der Engine sofort als vollstaendig
-    # getriggert und geht ohne jeden Trigger beim Levelstart auf. In trview
-    # steht dann "Flags 11111". joby2 Item 138 ist genau so ein Fall - er sah
-    # aus wie eine unschaltbare Tuer, ist aber von Anfang an unresolved.
+    # A door whose item flags already have all 5 code bits (IFL_CODEBITS,
+    # 0x3E00) set at load time counts to the engine as fully triggered
+    # right away and opens at level start without any trigger. In trview it
+    # then says "Flags 11111". joby2 item 138 is exactly such a case - it
+    # looked like an unswitchable door but is open from the beginning.
     if (([int]$i.flags -band 0x3E00) -eq 0x3E00) { $openAtStart += ,[int]$i.index; continue }
-    # Brechstangen-Tuer: DoorCollision (game/door.cpp:313) prueft
-    # item->trigger_flags == 2, also OCB 2, und setzt nach dem Aufhebeln
-    # item->flags |= IFL_CODEBITS - dieselbe Mechanik wie oben, nur von Hand
-    # ausgeloest. Kein Trigger im Level schaltet so eine Tuer, sie sah deshalb
-    # aus wie unschaltbar. Braucht das CROWBAR_ITEM (typeId 240; Enum-Reihenfolge
-    # in game/objects.h: HAMMER 239, CROWBAR 240, BURNING_TORCH 241, PUZZLE_HOLE1
-    # 242 - Letzteres unabhaengig bestaetigt).
+    # Crowbar door: DoorCollision (game/door.cpp:313) checks
+    # item->trigger_flags == 2, i.e. OCB 2, and after prying sets
+    # item->flags |= IFL_CODEBITS - the same mechanism as above, only
+    # triggered by hand. No trigger in the level switches such a door,
+    # which is why it looked unswitchable. Needs the CROWBAR_ITEM (typeId
+    # 240; enum order in game/objects.h: HAMMER 239, CROWBAR 240,
+    # BURNING_TORCH 241, PUZZLE_HOLE1 242 - the latter independently
+    # confirmed).
     if ([int]$i.ocb -eq 2) { $crowbarDoors += ,[int]$i.index }
     $doorSector[[int]$i.index] = $k
 }
-# Welcher TypeId die Brechstange in diesem Level ist, steht NICHT in den
-# Leveldaten: Level duerfen sie als Puzzle-Item fuehren und ueber den Gameflow
-# umbenennen (CMD_PUZZLE1 objname, String-Wad in ENGLISH.DAT). joby3 macht genau
-# das - dort ist die Brechstange Item 41, typeId 172 "Puzzle 1" mit OCB 9, und
-# Lara hebt sie mit Aktion plus kleiner Cutscene auf. Deshalb je Level kuratiert.
-# Ohne Eintrag gilt der regulaere CROWBAR_ITEM-Slot 240.
+# Which typeId the crowbar is in this level does NOT stand in the level
+# data: levels may carry it as a puzzle item and rename it via the gameflow
+# (CMD_PUZZLE1 objname, string wad in ENGLISH.DAT). joby3 does exactly that
+# - there the crowbar is item 41, typeId 172 "Puzzle 1" with OCB 9, and
+# Lara picks it up with action plus a small cutscene. Hence curated per
+# level. Without an entry the regular CROWBAR_ITEM slot 240 applies.
 $CROWBAR_TYPE = @{
     'joby3' = 172
 }
 $crowbarType = if($CROWBAR_TYPE.ContainsKey($LevelName)){ [int]$CROWBAR_TYPE[$LevelName] } else { 240 }
 $crowbarInLevel = @($d.items | Where-Object { [int]$_.typeId -eq $crowbarType })
 if ($crowbarDoors.Count -gt 0 -and $crowbarInLevel.Count -eq 0) {
-    # Nirgends im Level platziert -> Lara bringt sie mit bzw. bekommt sie per
-    # CMD_GIVEOBJ, die Tueren sind dann ab Start unresolved.
+    # Placed nowhere in the level -> Lara brings it along or gets it via
+    # CMD_GIVEOBJ, the doors are then open from the start.
     foreach($cd in $crowbarDoors){ $openAtStart += ,$cd; $doorSector.Remove($cd) }
 }
 
-# Der Hammer folgt demselben Umbenennungs-Muster wie die Brechstange: TR5 kann
-# ihn als Key/Puzzle-Item fuehren und per Gameflow (CMD_KEYn/CMD_PUZZLEn
-# objname) umbenennen. rich1: der Hammer ist Item 35, typeId 202 "Key Item7",
-# Raum 22 - die EINZIGE Instanz dieses Typs im Level, ohne zugehoeriges
-# Key Hole7 und ohne Key-Trigger, der es referenziert (verifiziert). Anders als
-# die Brechstange in den meisten Leveln liegt der Hammer hier tatsaechlich im
-# Level und muss erst erreicht werden - Lara bringt ihn NICHT automatisch mit
-# (User-Korrektur: "die bringt Lara beide nicht mit wie in Joby").
+# The hammer follows the same renaming pattern as the crowbar: TR5 can carry
+# it as a key/puzzle item and rename it via gameflow (CMD_KEYn/CMD_PUZZLEn
+# objname). rich1: the hammer is item 35, typeId 202 "Key Item7", room 22 -
+# the ONLY instance of this type in the level, without an accompanying Key
+# Hole7 and without a key trigger referencing it (verified). Unlike the
+# crowbar in most levels, the hammer here actually lies in the level and
+# must first be reached - Lara does NOT bring it along automatically (user
+# correction: "she brings neither of them along like in Joby").
 $HAMMER_TYPE = @{
     'rich1' = 202
 }
 $hammerType = if($HAMMER_TYPE.ContainsKey($LevelName)){ [int]$HAMMER_TYPE[$LevelName] } else { $null }
 $hammerInLevel = @( if($null -ne $hammerType){ $d.items | Where-Object { [int]$_.typeId -eq $hammerType } } )
 
-# --- Was oeffnet welche Tuer? ------------------------------------------------
-# openedBy[itemIndex] = Liste von Anforderungen (je ein Trigger)
+# --- What opens which door? --------------------------------------------------
+# openedBy[itemIndex] = list of requirements (one per trigger)
 $openedBy = @{}
 foreach($t in $d.triggers){
     foreach($c in $t.commands){
@@ -2731,34 +2765,35 @@ foreach($t in $d.triggers){
 }
 
 function Get-TriggerRequirement($t) {
-    # Gibt zurueck: @{ Kind='auto'|'reach'|'item'; Sector=..; NeedItemType=..; Desc=.. }
+    # Returns: @{ Kind='auto'|'reach'|'item'; Sector=..; NeedItemType=..; Desc=.. }
     $tk = "$($t.room),$($t.sectorX),$($t.sectorZ)"
     switch ($t.triggerType) {
         { $_ -in 'Trigger','Pad','HeavyTrigger','Combat','Dummy' } {
-            # Cutscene-Tueren (rich1 hamgate): der Bodentrigger, der die
-            # Skript-Cutscene ausloest, sitzt auf demselben Sektor wie die Tuer
-            # selbst (89/(1,4) fuer Item 153) - derselbe Deadlock wie bei
-            # Schalter/Schloss auf dem Tuersektor, deshalb hier ebenfalls vom
-            # Nachbarsektor aus bedienbar.
+            # Cutscene doors (rich1 hamgate): the floor trigger that fires
+            # the script cutscene sits on the same sector as the door
+            # itself (89/(1,4) for item 153) - the same deadlock as with
+            # switch/lock on the door sector, hence operable from the
+            # neighbor sector here as well.
             $isCutsceneDoor = $false
             foreach($c in $t.commands){ if ($c.type -eq 'Cutscene' -and $cutsceneDoorByCutscene.ContainsKey([int]$c.index)) { $isCutsceneDoor = $true } }
-            return @{ Kind='reach'; Sector=$tk; Operable=$isCutsceneDoor; Desc="Trigger betreten ($tk)" }
+            return @{ Kind='reach'; Sector=$tk; Operable=$isCutsceneDoor; Desc="enter trigger ($tk)" }
         }
         'Switch' {
             $ri = $t.refItem
-            $d2 = if($null -ne $ri -and $items.ContainsKey([int]$ri)){ "Schalter Item $ri (Raum $($items[[int]$ri].room))" } else { "Schalter" }
-            # Operable: Lara bedient einen Schalter vom Nachbarsektor aus, sie
-            # muss den Triggersektor nicht betreten. Das ist nicht kosmetisch -
-            # Tuer-Item und Schalter stehen regelmaessig auf demselben Sektor
-            # (Andrea1: Door 7 Item 71 und Shoot switch 1 Item 72 beide auf
-            # 139/(1,3)). Ohne diese Unterscheidung verlangt der Analyser, einen
-            # Sektor zu betreten, den er selbst wegen der Tuer sperrt -> Deadlock,
-            # und der ganze dahinterliegende Levelteil faellt aus der Zonenkette.
+            $d2 = if($null -ne $ri -and $items.ContainsKey([int]$ri)){ "switch item $ri (room $($items[[int]$ri].room))" } else { "switch" }
+            # Operable: Lara operates a switch from the neighbor sector,
+            # she does not have to enter the trigger sector. That is not
+            # cosmetic - door item and switch regularly stand on the same
+            # sector (Andrea1: Door 7 item 71 and Shoot switch 1 item 72
+            # both on 139/(1,3)). Without this distinction the analyser
+            # demands entering a sector it itself bars because of the door
+            # -> deadlock, and the whole level part behind it drops out of
+            # the zone chain.
             return @{ Kind='reach'; Sector=$tk; Operable=$true; Desc=$d2 }
         }
         'Key' {
             $ri = $t.refItem
-            if ($null -eq $ri -or -not $items.ContainsKey([int]$ri)) { return @{ Kind='reach'; Sector=$tk; Operable=$true; Desc="Schloss (unbekannt)" } }
+            if ($null -eq $ri -or -not $items.ContainsKey([int]$ri)) { return @{ Kind='reach'; Sector=$tk; Operable=$true; Desc="lock (unknown)" } }
             $hole = $items[[int]$ri]; $ht = [int]$hole.typeId
             $needType = $null; $label = $null
             if ($ht -ge $KEY_HOLE_BASE -and $ht -lt ($KEY_HOLE_BASE+8)) {
@@ -2766,41 +2801,42 @@ function Get-TriggerRequirement($t) {
             } elseif ($ht -ge $PUZZLE_HOLE_BASE -and $ht -lt ($PUZZLE_HOLE_BASE+8)) {
                 $n = $ht - $PUZZLE_HOLE_BASE; $needType = $PUZZLE_ITEM_BASE + $n; $label = "Puzzle Item$($n+1)"
             }
-            # Operable, wie beim Schalter: KeyHoleCollision (game/pickup.cpp:594)
-            # prueft eine Naeherungs-/Ausrichtungszone (TestLaraPosition mit
-            # KeyHoleBounds), Lara muss nicht auf dem exakten Sektor des
-            # Schlosses stehen. Ohne diese Angabe deadlockt jedes Schloss, das
-            # auf demselben Sektor wie seine eigene Tuer sitzt (Andrea3:
-            # Keyhole1, Item 27, Raum 15/(2,5) steht auf einem tuerblockierten
-            # Sektor) - derselbe Fehler, der beim Switch-Fall schon behoben war,
-            # hier aber im Hauptzweig (aufgeloestes Schloss) vergessen wurde.
-            return @{ Kind='item'; Sector=$tk; Operable=$true; NeedItemType=$needType; Desc="$label in Schloss Item $ri (Raum $($hole.room))" }
+            # Operable, as with the switch: KeyHoleCollision
+            # (game/pickup.cpp:594) checks a proximity/alignment zone
+            # (TestLaraPosition with KeyHoleBounds), Lara does not have to
+            # stand on the lock's exact sector. Without this, every lock
+            # sitting on the same sector as its own door deadlocks
+            # (Andrea3: Keyhole1, item 27, room 15/(2,5) stands on a
+            # door-blocked sector) - the same error already fixed in the
+            # switch case but forgotten here in the main branch (resolved
+            # lock).
+            return @{ Kind='item'; Sector=$tk; Operable=$true; NeedItemType=$needType; Desc="$label into lock item $ri (room $($hole.room))" }
         }
         'Pickup' {
             $ri = $t.refItem
-            return @{ Kind='reach'; Sector=$tk; Desc="Pickup-Trigger" }
+            return @{ Kind='reach'; Sector=$tk; Desc="pickup trigger" }
         }
         default { return @{ Kind='reach'; Sector=$tk; Desc="$($t.triggerType)" } }
     }
 }
 
 function Test-ReqSector($req, $reached) {
-    # Bodentrigger (Pad/Heavy/Trigger) muss Lara wirklich betreten. Schalter und
-    # Schloesser bedient sie dagegen vom Nachbarsektor aus - deshalb zaehlt dort
-    # auch, wenn nur ein angrenzender Sektor erreicht ist (Operable-Flag).
+    # A floor trigger (Pad/Heavy/Trigger) Lara must really enter. Switches
+    # and locks she operates from the neighbor sector instead - so there it
+    # also counts when only an adjacent sector is reached (Operable flag).
     if ($reached.Contains($req.Sector)) { return $true }
-    # Verallgemeinerung, dritter Fund derselben Deadlock-Klasse (nach Switch und
-    # Key): steht die TUER selbst genau auf dem Triggersektor - egal welcher
-    # Triggertyp -, kann Lara den Sektor per Definition nie *vor* dem Oeffnen
-    # betreten. rich3 Raum 134: Lift Doors (Item 172/173) UND ihr eigener
-    # Boden-Trigger sitzen auf denselben zwei Sektoren (1,1)/(2,1) - ein
-    # gewoehnlicher "Trigger betreten"-Fall, kein Switch/Key, trotzdem derselbe
-    # Widerspruch. Statt jeden Triggertyp einzeln mit Operable zu markieren:
-    # sobald der exakte Sektor durch eine (noch geschlossene) Tuer blockiert ist,
-    # zaehlt ein bereits erreichter Nachbarsektor automatisch mit. Bewusst NICHT
-    # pauschal fuer jeden Trigger - nur wenn eine Tuer nachweislich genau dort
-    # steht, sonst bliebe die Unterscheidung "muss wirklich betreten werden"
-    # wertlos.
+    # Generalization, third find of the same deadlock class (after Switch
+    # and Key): if the DOOR itself stands exactly on the trigger sector -
+    # whatever the trigger type -, Lara can by definition never enter the
+    # sector *before* the opening. rich3 room 134: Lift Doors (item
+    # 172/173) AND their own floor trigger sit on the same two sectors
+    # (1,1)/(2,1) - an ordinary "enter trigger" case, no switch/key, still
+    # the same contradiction. Instead of marking every trigger type
+    # individually with Operable: as soon as the exact sector is blocked by
+    # a (still closed) door, an already reached neighbor sector counts
+    # automatically. Deliberately NOT wholesale for every trigger - only
+    # when a door demonstrably stands exactly there, otherwise the
+    # distinction "must really be entered" would be worthless.
     $doorOnSector = $blocked.ContainsKey($req.Sector)
     if (-not $req.Operable -and -not $doorOnSector) { return $false }
     if (-not $adj.ContainsKey($req.Sector)) { return $false }
@@ -2808,13 +2844,13 @@ function Test-ReqSector($req, $reached) {
     return $false
 }
 
-# --- Zonen-Flut --------------------------------------------------------------
-# Wo Lara wirklich losgeht, steht nicht zwingend im Lara-Item: laeuft am
-# Levelanfang eine Cutscene, setzt sie Lara danach woanders ab. joby5 ist so ein
-# Fall - das Lara-Item liegt in Raum 40, gespielt wird ab Raum 3, und Raum 3 ist
-# selbst ein Flipmap-Alternate, der Flip ist zu Spielbeginn also schon aktiv.
-# Ohne Uebersteuerung flutet der Analyser ab der falschen Stelle und meldet
-# grosse Teile des Levels als unerreichbar.
+# --- Zone flood --------------------------------------------------------------
+# Where Lara really sets off does not necessarily stand in the Lara item: if
+# a cutscene runs at level start, it drops Lara off elsewhere afterwards.
+# joby5 is such a case - the Lara item lies in room 40, play starts from
+# room 3, and room 3 is itself a flipmap alternate, so the flip is already
+# active at game start. Without the override the analyser floods from the
+# wrong spot and reports large parts of the level as unreachable.
 $START_ROOM = @{
     'joby5' = 3
 }
@@ -2829,26 +2865,26 @@ if ($START_ROOM.ContainsKey($LevelName)) {
     if ($startSeeds.Count -gt 0) { $startKey = $startSeeds[0] }
 }
 
-$blocked = @{}   # sectorKey -> itemIndex der Tuer
+$blocked = @{}   # sectorKey -> itemIndex of the door
 foreach($kv in $doorSector.GetEnumerator()){ $blocked[$kv.Value] = $kv.Key }
 
 #----------------------------------------------------------------------------
-# Dekotueren.
+# Decorative doors.
 #
-# Eine Tuer geht in TR erst auf, wenn ihre Maske vollstaendig ist - die Engine
-# prueft (flags & IFL_CODEBITS) == CODEBITS, also alle fuenf Bits. Findet sich im
-# ganzen Level kein Trigger, der eine Tuer auf 11111 bringen kann, dann geht sie
-# nie auf. Da Vanilla durchspielbar ist, kann so eine Tuer nichts versperren, was
-# gebraucht wird: sie ist Deko. Nutzer zu joby2 Raum 11: "Hinter den Tueren ist
-# nichts sind Dekotueren."
+# A door in TR only opens when its mask is complete - the engine checks
+# (flags & IFL_CODEBITS) == CODEBITS, i.e. all five bits. If in the whole
+# level no trigger exists that can bring a door to 11111, then it never
+# opens. Since vanilla is completable, such a door cannot bar anything that
+# is needed: it is decoration. User on joby2 room 11: "There is nothing
+# behind the doors, they are deco doors."
 #
-# Vorher sperrten sie fuer immer, und dahinter lagen echte Pickups (Lasersight
-# und Revolver Ammo), die damit nie in den Pool kamen.
+# Before, they barred forever, and behind them lay real pickups (lasersight
+# and revolver ammo) that thereby never entered the pool.
 #
-# Gezaehlt wird ueber ALLE Trigger des Levels, auch die in der Floordata von
-# Flipraeumen - die existieren erst nach dem Flip, zaehlen aber sehr wohl
-# (Nutzerhinweis). Drei Ausnahmen bleiben Tueren: Skript-Tueren, Cutscene-Tueren
-# und Brechstangentueren haben ebenfalls keinen Trigger, gehen aber trotzdem auf.
+# Counted over ALL triggers of the level, including those in the floordata
+# of flip rooms - they only exist after the flip but very much count (user
+# hint). Three exceptions remain doors: script doors, cutscene doors and
+# crowbar doors likewise have no trigger but still open.
 #----------------------------------------------------------------------------
 $doorMaskTotal = @{}
 foreach($tr in $d.triggers){
@@ -2872,54 +2908,57 @@ foreach($kv in $doorSector.GetEnumerator()){
 }
 foreach($di in $decoDoors){ [void]$blocked.Remove($doorSector[$di]) }
 if ($decoDoors.Count -gt 0) {
-    Write-Output "Dekotueren: $($decoDoors.Count) Tueren bringt kein Trigger auf 11111 - sie sperren nicht"
-    Write-Output "  Items: $(($decoDoors | Sort-Object) -join ', ')"
+    Write-Output "deco doors: $($decoDoors.Count) doors no trigger brings to 11111 - they do not bar"
+    Write-Output "  items: $(($decoDoors | Sort-Object) -join ', ')"
 }
 
-# Flipvarianten bestimmen: das Feld alternateRoom im Raumkopf zeigt von der Basis
-# auf ihre Flipfassung, die Zielraeume sind also genau die Varianten.
+# Determine flip variants: the alternateRoom field in the room header points
+# from the base to its flip version, so the target rooms are exactly the
+# variants.
 $flipVariantRooms = @{}
 foreach($r in $d.rooms){
     $ar = "$($r.alternateRoom)"
     if ($ar -eq '' -or $ar -eq '65535') { continue }
     $flipVariantRooms[[int]$ar] = [int]$r.index
 }
-# Eine Flipvariante darf keinen Weg schaffen, den die Basis nicht auch hat.
+# A flip variant may not create a way the base does not also have.
 #
-# Ein pauschales Sperren aller Flipvarianten waere zwar sicher, ist aber viel zu
-# grob: gemessen ueber alle Level tragen sie ueberwiegend voellig legitime Wege
-# (rich3 stuerzte damit von 4 auf 2098 unerreichte Sektoren ab). Die meisten
-# Flipmaps aendern die Verbindungen naemlich gar nicht - Wasserstand, Trueb-
-# mmer, Beleuchtung -, und ihre Sektoren sind Alias derselben Stelle.
+# Barring all flip variants wholesale would be safe but far too coarse:
+# measured over all levels they mostly carry perfectly legitimate ways
+# (rich3 crashed from 4 to 2098 unreached sectors with that). Most flipmaps
+# do not change the connections at all - water level, debris, lighting -,
+# and their sectors are aliases of the same spot.
 #
-# Gefaehrlich ist nur der andere Fall: die Flipvariante OEFFNET etwas, das in der
-# Basis zu ist - das Rolltor am Kran in joby2. Genau den trifft diese Regel: ein
-# Flipsektor traegt nur, wenn der Sektor gleicher Position im Basisraum ebenfalls
-# walkable ist. Kosmetische Flips bleiben unberuehrt, neue Durchgaenge nicht.
-$flipNeedsGate = @{}   # sectorKey der Variante -> Nummer des Tors (-1 = keins)
+# Only the other case is dangerous: the flip variant OPENS something that is
+# closed in the base - the roll gate at the crane in joby2. Exactly that one
+# this rule hits: a flip sector only carries if the sector at the same
+# position in the base room is walkable too. Cosmetic flips stay untouched,
+# new passages do not.
+$flipNeedsGate = @{}   # sectorKey of the variant -> gate number (-1 = none)
 foreach($s0 in $d.sectors){
     $rn = [int]$s0.room
     if (-not $flipVariantRooms.ContainsKey($rn)) { continue }
     if ($s0.isWall) { continue }
     $baseKey = "$($flipVariantRooms[$rn]),$($s0.sectorX),$($s0.sectorZ)"
-    # Basis an derselben Stelle ebenfalls walkable? Dann ist der Flipsektor nur
-    # eine zweite Schreibweise desselben Weges und braucht keine Freigabe.
+    # Base walkable at the same spot too? Then the flip sector is only a
+    # second spelling of the same way and needs no release.
     if ($sec.ContainsKey($baseKey) -and -not $sec[$baseKey].isWall) { continue }
     $g = -1
     for($gi = 0; $gi -lt $flipGates.Count; $gi++){ if ($flipGates[$gi].Rooms -contains $rn) { $g = $gi; break } }
     $flipNeedsGate["$rn,$($s0.sectorX),$($s0.sectorZ)"] = $g
 }
-# BlockRooms: ganz normale Raeume hinter dasselbe Tor haengen.
+# BlockRooms: hang perfectly normal rooms behind the same gate.
 #
-# Nicht jede Flipmap laesst sich an ihren Variantensektoren fassen. In joby2 ist
-# das Rolltor am Kran echte Wandgeometrie, und die Flut umgeht es ohnehin - der
-# Erstzugang zu Raum 89 laeuft ueber 80 und 4, ohne einen einzigen Flipsektor zu
-# beruehren. Der Blocker liegt also nicht dort, wo die Variante etwas oeffnet.
+# Not every flipmap can be grasped by its variant sectors. In joby2 the roll
+# gate at the crane is real wall geometry, and the flood bypasses it anyway
+# - the first access to room 89 runs via 80 and 4 without touching a single
+# flip sector. So the blocker does not lie where the variant opens
+# something.
 #
-# Deshalb auf Nutzervorschlag der direkte Weg: das Rolltor als Deadstop setzen
-# und die Raeume dahinter als eigene Inselgruppe fuehren. Damit faellt alles
-# Weitere von selbst heraus - die Zonenlogik zwingt Key Item8 in die Startinsel,
-# weil hinter dem Deadstop eine spaetere Zone beginnt.
+# Hence, on the user's suggestion, the direct way: set the roll gate as a
+# deadstop and carry the rooms behind it as their own island group. With
+# that everything else falls out by itself - the zone logic forces Key Item8
+# into the start island, because a later zone begins behind the deadstop.
 foreach($gi0 in 0..([Math]::Max(0,$flipGates.Count-1))){
     if ($flipGates.Count -eq 0) { break }
     if ($null -eq $flipGates[$gi0].BlockRooms) { continue }
@@ -2934,23 +2973,24 @@ $openGates = New-Object System.Collections.Generic.HashSet[int]
 if ($flipGateOf.Count -gt 0) {
     $noGate = @($flipGateOf.GetEnumerator() | Where-Object { $_.Value -lt 0 })
     $rr = @($noGate | ForEach-Object { [int](($_.Key -split ',')[0]) } | Sort-Object -Unique)
-    Write-Output "Flipmap: $($flipGateOf.Count) Sektoren oeffnen etwas, das die Basis nicht hat - $($noGate.Count) davon ohne Freigabe"
-    if ($rr.Count -gt 0) { Write-Output "  betroffene Flipraeume: $($rr -join ', ')" }
+    Write-Output "flipmap: $($flipGateOf.Count) sectors open something the base does not have - $($noGate.Count) of them without a release"
+    if ($rr.Count -gt 0) { Write-Output "  affected flip rooms: $($rr -join ', ')" }
 }
 
 foreach($ml in $manualLinks){ Add-Edge $ml.From $ml.To; Add-Edge $ml.To $ml.From }
 
-# GATED_AREA apply (nach vollstaendigem Graphaufbau inkl. Flipmap-,
-# Teleporter- und Manuallinks, damit wirklich jede Einstiegskante erfasst ist).
+# Apply GATED_AREA (after the complete graph build incl. flipmap, teleporter
+# and manual links, so that really every entry edge is covered).
 foreach($ga in $gatedAreas){
-    # ZWEI getrennte Mengen - sie duerfen nicht vermischt werden:
-    #  $gateSecs  = die Torsektoren. Nur sie sind vom Kappen ausgenommen, denn
-    #               ueber sie fuehrt der einzige legale Weg hinein.
-    #  $stopFlood = Begrenzung der Innenbereichs-Flut: Torsektoren PLUS die
-    #               Vor-Tor-Raeume.
-    # In einer ersten Fassung war beides dieselbe Menge - mit dem Effekt, dass
-    # ausgerechnet die Vor-Tor-Raeume vom Kappen ausgenommen wurden, also genau
-    # die Quelle der illegalen Einstiegskanten ("0 Einstiegskanten gekappt").
+    # TWO separate sets - they must not be mixed:
+    #  $gateSecs  = the gate sectors. Only they are exempt from the
+    #               cutting, because through them runs the only legal way
+    #               inside.
+    #  $stopFlood = boundary of the inner-area flood: gate sectors PLUS the
+    #               pre-gate rooms.
+    # In a first version both were the same set - with the effect that of
+    # all things the pre-gate rooms were exempt from the cutting, i.e.
+    # exactly the source of the illegal entry edges ("0 entry edges cut").
     $gateSecs = New-Object System.Collections.Generic.HashSet[string]
     foreach($di in $ga.Doors){ if ($doorSector.ContainsKey([int]$di)) { [void]$gateSecs.Add($doorSector[[int]$di]) } }
     $stop = New-Object System.Collections.Generic.HashSet[string]
@@ -2959,7 +2999,7 @@ foreach($ga in $gatedAreas){
         if ($ga.PreGateRooms -contains [int]$s0.room) { [void]$stop.Add("$($s0.room),$($s0.sectorX),$($s0.sectorZ)") }
     }
 
-    # Innenbereich = Flut ab den Seed-Raeumen bis zur Stoppkante.
+    # Inner area = flood from the seed rooms up to the stop edge.
     $inside = New-Object System.Collections.Generic.HashSet[string]
     $qg = New-Object System.Collections.Generic.Queue[string]
     foreach($s0 in $d.sectors){
@@ -2976,8 +3016,8 @@ foreach($ga in $gatedAreas){
         }
     }
     $insideRooms = @($inside | ForEach-Object { [int](($_ -split ',')[0]) } | Sort-Object -Unique)
-    Write-Output "GATED_AREA (Tore $($ga.Doors -join '/')): $($inside.Count) Innensektoren in $($insideRooms.Count) Raeumen"
-    Write-Output "  Raeume: $($insideRooms -join ', ')"
+    Write-Output "GATED_AREA (gates $($ga.Doors -join '/')): $($inside.Count) inner sectors in $($insideRooms.Count) rooms"
+    Write-Output "  rooms: $($insideRooms -join ', ')"
 
     $cut = 0
     foreach($u in @($adj.Keys)){
@@ -2986,10 +3026,10 @@ foreach($ga in $gatedAreas){
         foreach($v in $adj[$u]){ if ($inside.Contains($v)) { $toRemove += $v } }
         foreach($v in $toRemove){ [void]$adj[$u].Remove($v); $cut++ }
     }
-    Write-Output "GATED_AREA: $cut Einstiegskanten ausserhalb der Tore gekappt"
+    Write-Output "GATED_AREA: $cut entry edges outside the gates cut"
 }
 
-$zoneOf = @{}    # sectorKey -> Zonennummer
+$zoneOf = @{}    # sectorKey -> zone number
 $openDoors = New-Object System.Collections.Generic.HashSet[int]
 $zone = 0
 $log = @()
@@ -2997,14 +3037,15 @@ $log = @()
 $reached = New-Object System.Collections.Generic.HashSet[string]
 [void]$reached.Add($startKey)
 foreach($ss in $startSeeds){ [void]$reached.Add($ss) }
-$firstParent = @{}   # Sektor -> Sektor, ueber den er ZUERST erreicht wurde
+$firstParent = @{}   # sector -> sector via which it was FIRST reached
 
-# Alle Trigger, die ueberhaupt eine Tuer schalten - einmal vorab aufgeloest.
-# Zusaetzlich zaehlen Trigger, die ein Key-/Puzzle-Item aktivieren: ein Schloss
-# muss nicht zwingend eine Tuer oeffnen. Andrea2 ist der Fall - das Puzzle Hole1
-# (Item 146, Raum 239) schaltet mit "Object: 128" das Ventil (typeId 172), keine
-# Tuer, und fiel damit komplett aus der Betrachtung. Die Kette Brechstange ->
-# Ventil -> Schloss war im Modell schlicht nicht vorhanden.
+# All triggers that switch a door at all - resolved once up front.
+# Additionally, triggers that activate a key/puzzle item count: a lock does
+# not necessarily have to open a door. Andrea2 is the case - the Puzzle
+# Hole1 (item 146, room 239) switches the valve (typeId 172) with
+# "Object: 128", no door, and thereby dropped out of consideration
+# entirely. The chain crowbar -> valve -> lock simply did not exist in the
+# model.
 $KEYPUZZ_LO = $PUZZLE_ITEM_BASE; $KEYPUZZ_HI = $KEY_ITEM_BASE + 7
 $allTrig = @(); $tn = 0
 foreach($t in $d.triggers){
@@ -3022,25 +3063,25 @@ foreach($t in $d.triggers){
     $tn++
 }
 $firedTrig = New-Object System.Collections.Generic.HashSet[int]
-$consumed  = @{}   # typeId -> wie viele Instanzen schon in Slots stecken
-$doorMask  = @{}   # doorItem -> bisher gesetzte Maskenbits
-$doorWhy   = @{}   # doorItem -> Liste der beitragenden Anforderungen
-$itemNeed  = @()   # je Slot-Befuellung: welcher Typ, in welcher Zone gebraucht
-$totalOfType = @{} # wie viele Instanzen jedes Typs existieren im Level ueberhaupt
+$consumed  = @{}   # typeId -> how many instances already sit in slots
+$doorMask  = @{}   # doorItem -> mask bits set so far
+$doorWhy   = @{}   # doorItem -> list of contributing requirements
+$itemNeed  = @()   # per slot fill: which type, needed in which zone
+$totalOfType = @{} # how many instances of each type exist in the level at all
 foreach($i in $d.items){
     $ti = [int]$i.typeId
     if (-not $totalOfType.ContainsKey($ti)) { $totalOfType[$ti] = 0 }
     $totalOfType[$ti]++
 }
 
-# Welche Tueren stehen schon zu Levelbeginn unresolved (IFL_CODEBITS)? Wird fuer den
-# Insel-Flood weiter unten gebraucht, der genau den Zustand vor der ersten
-# geoeffneten Tuer abbildet - also Zone 0.
+# Which doors already stand open at level start (IFL_CODEBITS)? Needed for
+# the island flood further down, which maps exactly the state before the
+# first opened door - i.e. zone 0.
 $doorsOpenAtStart = New-Object System.Collections.Generic.HashSet[int]
 foreach($x in $openDoors){ [void]$doorsOpenAtStart.Add([int]$x) }
 
 while ($true) {
-    # fluten
+    # flood
     $q = New-Object System.Collections.Generic.Queue[string]
     foreach($k in $reached){ $q.Enqueue($k) }
     while($q.Count -gt 0){
@@ -3050,21 +3091,21 @@ while ($true) {
         foreach($n in $adj[$k]){
             if ($reached.Contains($n)) { continue }
             if ($blocked.ContainsKey($n) -and -not $openDoors.Contains($blocked[$n])) { continue }
-            # Sektor einer Flipvariante: traegt erst, wenn sein Tor freigegeben
-            # ist - ohne deklariertes Tor nie.
+            # Sector of a flip variant: only carries once its gate is
+            # released - without a declared gate never.
             if ($flipGateOf.ContainsKey($n) -and -not $openGates.Contains($flipGateOf[$n])) { continue }
-            # Erstzugangs-Elternknoten mitschreiben: nur so laesst sich spaeter
-            # rekonstruieren, ueber WELCHE Kante ein Sektor zum ERSTEN Mal
-            # erreicht wurde. Ein Pfad ueber den Endzustand (alle Tueren unresolved)
-            # zeigt stattdessen irgendeinen spaeteren, legalen Weg und verdeckt
-            # genau die zu frueh oeffnende Kante, die man sucht.
+            # Record the first-access parent node: only this way can it be
+            # reconstructed later via WHICH edge a sector was reached for
+            # the FIRST time. A path over the final state (all doors open)
+            # shows some later, legal way instead and hides exactly the
+            # too-early-opening edge one is looking for.
             $firstParent[$n] = $k
             [void]$reached.Add($n); $zoneOf[$n] = $zone; $q.Enqueue($n)
         }
     }
 
-    # Wie viele Instanzen jedes Typs sind erreichbar? Anzahl, nicht nur "ja/nein" -
-    # zwei Slots desselben Typs brauchen zwei Items.
+    # How many instances of each type are reachable? A count, not just
+    # "yes/no" - two slots of the same type need two items.
     $haveCounts = @{}
     foreach($i in $d.items){
         $k = "$($i.room),$($i.sectorX),$($i.sectorZ)"
@@ -3075,34 +3116,35 @@ while ($true) {
     }
 
     #------------------------------------------------------------------------
-    # Reihenfolge der Schloesser, wenn ein Schluesseltyp knapp ist.
+    # Order of the locks when a key type is scarce.
     #
-    # Die Schleife lief bisher in Arrayreihenfolge, ein Schluessel wurde also an
-    # dem Schloss verbraucht, das die Flut zufaellig zuerst erreichte. Diese Wahl
-    # kann falsch sein und das halbe Level unerreichbar lassen.
+    # The loop used to run in array order, so a key was consumed at whichever
+    # lock the flood happened to reach first. This choice can be wrong and
+    # leave half the level unreachable.
     #
-    # joby2 ist der belegte Fall: Key Item7 existiert zweimal, aber nur eine
-    # Instanz ist anfangs erreichbar. Verbraucht das Modell sie an Tuer 41, ist
-    # Schluss - Tuer 134 bleibt zu, dahinter liegt Key8, und ohne den geht nichts
-    # weiter. Richtig ist die umgekehrte Wahl: Tuer 134 zuerst, sie legt Key8
-    # frei, damit oeffnen sich 105/106, dahinter der zweite Key7, und DER oeffnet
-    # dann Tuer 41. Die Reihenfolge entscheidet ueber das halbe Level.
+    # joby2 is the documented case: Key Item7 exists twice, but only one
+    # instance is reachable at first. If the model consumes it at door 41,
+    # that is the end - door 134 stays shut, behind it lies Key8, and
+    # without it nothing continues. Correct is the reverse choice: door 134
+    # first, it frees Key8, that opens 105/106, behind them the second
+    # Key7, and THAT then opens door 41. The order decides over half the
+    # level.
     #
-    # Regel: ist ein Typ knapp (weniger verfuegbare Instanzen als offene
-    # Schloesser, die ihn brauchen), kommen zuerst die Schloesser dran, hinter
-    # denen ein noch unerreichter Schluessel liegt. Das ist die Standardheuristik
-    # fuer Schluessel-Schloss-Erreichbarkeit und hier nachweislich richtig.
-    # Bewusst NICHT ins Gegenteil gekippt und einfach alle Schloesser geoeffnet -
-    # das waere optimistisch und wuerde unspielbare Seeds erzeugen.
+    # Rule: if a type is scarce (fewer available instances than open locks
+    # that need it), the locks behind which a still-unreached key lies come
+    # first. That is the standard heuristic for key-lock reachability and
+    # demonstrably correct here. Deliberately NOT flipped to the opposite
+    # and simply opening all locks - that would be optimistic and would
+    # produce unplayable seeds.
     #------------------------------------------------------------------------
-    # Bedarf je Typ unter den noch offenen Schloessern.
+    # Demand per type among the still-open locks.
     $trigOrder = @($allTrig)
     $demand = @{}
     foreach($e in $allTrig){
         if ($firedTrig.Contains($e.Id)) { continue }
         if ($e.Req.Kind -ne 'item' -or $null -eq $e.Req.NeedItemType) { continue }
         $nt = [int]$e.Req.NeedItemType
-        if ($reusableKeys -contains $nt) { continue }   # Key8: unbegrenzt, nie knapp
+        if ($reusableKeys -contains $nt) { continue }   # Key8: unlimited, never scarce
         if (-not $demand.ContainsKey($nt)) { $demand[$nt] = 0 }
         $demand[$nt]++
     }
@@ -3115,9 +3157,9 @@ while ($true) {
     }
 
     if ($scarce.Count -gt 0) {
-        # Legt dieses Schloss einen noch unerreichten Schluessel frei? Dazu ab dem
-        # Sektor der Zieltuer fluten - andere geschlossene Tueren bleiben Sperre -
-        # und nachsehen, ob ein noch unerreichtes Key-/Puzzle-Item darin liegt.
+        # Does this lock free a still-unreached key? For that, flood from
+        # the target door's sector - other closed doors remain a bar - and
+        # check whether a still-unreached key/puzzle item lies inside.
         $ord = -1
         $ordered = foreach($e in $allTrig){
             $ord++
@@ -3155,23 +3197,23 @@ while ($true) {
             }
             [PSCustomObject]@{ Rank = $rank; Ord = $ord; E = $e }
         }
-        # Ord als zweites Sortierkriterium: Windows PowerShell 5.1 kennt kein
-        # -Stable, ohne den Index waere die Reihenfolge gleichrangiger Trigger
-        # nicht reproduzierbar - und Reproduzierbarkeit ist hier Bedingung.
+        # Ord as the second sort criterion: Windows PowerShell 5.1 knows no
+        # -Stable; without the index the order of equal-ranked triggers
+        # would not be reproducible - and reproducibility is a requirement
+        # here.
         $trigOrder = @($ordered | Sort-Object Rank,Ord | ForEach-Object { $_.E })
     }
 
-    # Erreichbare Trigger ausloesen bzw. Slots befuellen. Ein eingesetztes Item
-    # ist verbraucht und steht fuer keinen zweiten Slot mehr zur Verfuegung.
+    # Fire reachable triggers / fill slots. An inserted item is consumed and
+    # is no longer available for a second slot.
     foreach($e in $trigOrder){
         if ($firedTrig.Contains($e.Id)) { continue }
         if (-not (Test-ReqSector $e.Req $reached)) { continue }
-        # Cutscene-Tueren, die ein Werkzeug voraussetzen (rich1 hamgate: der
-        # Hammer), duerfen nicht schon beim blossen Erreichen des Trigger-
-        # sektors feuern - Lara muss das Werkzeug vorher tatsaechlich haben.
-        # Ohne diese Sperre wuerde der Hammer als "automatisch vorhanden"
-        # behandelt, obwohl er in rich1 ein echter, erst zu findender Gegen-
-        # stand ist (User-Korrektur).
+        # Cutscene doors that presuppose a tool (rich1 hamgate: the hammer)
+        # must not fire on merely reaching the trigger sector - Lara must
+        # actually have the tool first. Without this bar the hammer would
+        # be treated as "automatically present", although in rich1 it is a
+        # real object that must first be found (user correction).
         if ($null -ne $hammerType) {
             $needsHammer = $false
             foreach($c in $e.T.commands){ if ($c.type -eq 'Cutscene' -and $cutsceneDoorByCutscene.ContainsKey([int]$c.index)) { $needsHammer = $true } }
@@ -3185,16 +3227,16 @@ while ($true) {
             $nt = $e.Req.NeedItemType
             if ($null -eq $nt) { continue }
             $nt = [int]$nt
-            # Gibt es den Schluesseltyp im Level ueberhaupt nicht, bringt Lara ihn
-            # per Gameflow mit (CMD_GIVEOBJ) - dasselbe Muster wie bei der
-            # Brechstange. joby5 hat ein Keyhole7, aber kein Key Item7.
+            # If the key type does not exist in the level at all, Lara
+            # brings it along via gameflow (CMD_GIVEOBJ) - the same pattern
+            # as with the crowbar. joby5 has a Keyhole7 but no Key Item7.
             if (-not $totalOfType.ContainsKey($nt)) {
                 $itemNeed += ,@{ Type=$nt; Zone=$zone; Desc=$e.Req.Desc; Gameflow=$true }
             }
             elseif ($reusableKeys -contains $nt) {
-                # Mehrfachnutzer: belegt keinen Vorrat, konkurriert mit nichts.
+                # Multi-user: occupies no supply, competes with nothing.
                 if ((&{ if($haveCounts.ContainsKey($nt)){$haveCounts[$nt]}else{0} }) -le 0) { continue }
-                $itemNeed += ,@{ Type=$nt; Zone=$zone; Desc="$($e.Req.Desc) [mehrfach nutzbar]"; Reusable=$true }
+                $itemNeed += ,@{ Type=$nt; Zone=$zone; Desc="$($e.Req.Desc) [reusable]"; Reusable=$true }
             }
             else {
                 $has  = if($haveCounts.ContainsKey($nt)){ $haveCounts[$nt] } else { 0 }
@@ -3205,7 +3247,7 @@ while ($true) {
             }
         }
         [void]$firedTrig.Add($e.Id)
-        # Maske dieses Triggers auf alle Ziel-Tueren anrechnen.
+        # Credit this trigger's mask to all target doors.
         foreach($c in $e.T.commands){
             $tgt = $null
             if ($c.type -eq 'Object') { $tgt = [int]$c.index }
@@ -3213,28 +3255,29 @@ while ($true) {
                 $tgt = $cutsceneDoorByCutscene[[int]$c.index]
             }
             if ($null -eq $tgt) { continue }
-            # Kabel stehen von Levelbeginn an unter Strom. Ein normaler
-            # Bodentrigger auf ein Kabel schaltet es ein, nicht aus - nur ein
-            # Schalter (bzw. AntiTrigger) macht stromlos. Ohne diese
-            # Einschraenkung wuerde joby5 die Kabel 91 und 136 schon ueber einen
-            # Bodentrigger in Raum 138 "oeffnen", was die Richtung umdreht.
+            # Cables are live from level start. A normal floor trigger on a
+            # cable switches it ON, not off - only a switch (or
+            # antitrigger) cuts the power. Without this restriction joby5
+            # would "open" cables 91 and 136 via a floor trigger in room
+            # 138 already, which reverses the direction.
             if ($items.ContainsKey($tgt) -and [int]$items[$tgt].typeId -eq 98 -and
                 $e.T.triggerType -notin @('Switch','HeavySwitch','AntiTrigger','HeavyAntiTrigger')) { continue }
             if (-not $doorMask.ContainsKey($tgt)) { $doorMask[$tgt] = 0; $doorWhy[$tgt] = @() }
-            # Cutscene-Tueren (rich1 hamgate) haben keine echte 5-Bit-Maske im
-            # Sinne von IFL_CODEBITS - hamgate_init() setzt sie direkt im Skript.
-            # Volle Maske erzwingen, sobald der Trigger einmal feuert.
+            # Cutscene doors (rich1 hamgate) have no real 5-bit mask in the
+            # IFL_CODEBITS sense - hamgate_init() sets them directly in the
+            # script. Force the full mask once the trigger fires.
             if ($cutsceneDoorByCutscene.Values -contains $tgt -and $c.type -eq 'Cutscene') { $doorMask[$tgt] = 31 }
             else { $doorMask[$tgt] = $doorMask[$tgt] -bor ([int]$e.T.mask) }
             $doorWhy[$tgt] += ,$e.Req
         }
     }
 
-    # Eine Tuer oeffnet erst, wenn ihre Maske vollstaendig ist. TR setzt pro
-    # Trigger Bits in item->flags (IFL_CODEBITS, 5 Bits) und oeffnet erst bei
-    # (flags & CODEBITS) == CODEBITS. Andrea1: Slot 64 liefert Maske 3, Slot 63
-    # Maske 28 - erst zusammen 31. Ohne diese Regel wuerde eine Ein-Item-Loesung
-    # als ausreichend gelten und der Randomizer koennte das Level unloesbar machen.
+    # A door only opens when its mask is complete. TR sets bits in
+    # item->flags per trigger (IFL_CODEBITS, 5 bits) and opens only at
+    # (flags & CODEBITS) == CODEBITS. Andrea1: slot 64 delivers mask 3,
+    # slot 63 mask 28 - only together 31. Without this rule a one-item
+    # solution would count as sufficient and the randomizer could make the
+    # level unsolvable.
     $newlyOpened = @()
     foreach($kv in $doorSector.GetEnumerator()){
         $di = $kv.Key
@@ -3244,10 +3287,10 @@ while ($true) {
         $newlyOpened += ,@{ Door=$di; Req=$doorWhy[$di][-1]; All=$doorWhy[$di] }
     }
 
-    # Brechstangen-Tueren: kein Trigger schaltet sie, die Maske fuellt sich also
-    # nie. Sie gehen auf, sobald Lara die Brechstange hat. Die Brechstange wird
-    # NICHT verbraucht (anders als Keys und Puzzle-Items) - eine reicht fuer
-    # beliebig viele solcher Tueren, deshalb keine Zaehlung, keine Konkurrenz.
+    # Crowbar doors: no trigger switches them, so the mask never fills.
+    # They open as soon as Lara has the crowbar. The crowbar is NOT
+    # consumed (unlike keys and puzzle items) - one suffices for any number
+    # of such doors, hence no counting, no competition.
     if ($crowbarDoors.Count -gt 0) {
         $haveCrowbar = $false
         foreach($ci in $crowbarInLevel){
@@ -3257,40 +3300,40 @@ while ($true) {
             foreach($cd in $crowbarDoors){
                 if ($openDoors.Contains($cd)) { continue }
                 if (-not $doorSector.ContainsKey($cd)) { continue }
-                $newlyOpened += ,@{ Door=$cd; Req=@{ Desc='Brechstange (nicht verbraucht)' } }
+                $newlyOpened += ,@{ Door=$cd; Req=@{ Desc='crowbar (not consumed)' } }
             }
         }
     }
 
-    # Skript-Tueren: gehen auf, sobald der Raum erreicht ist, in dem die Engine
-    # das Ereignis ausloest - nicht frueher.
+    # Script doors: open as soon as the room is reached in which the engine
+    # fires the event - not earlier.
     foreach($sd in $scriptDoors.GetEnumerator()){
         $di = [int]$sd.Key
         if ($openDoors.Contains($di)) { continue }
         $needRoom = [int]$sd.Value
         $hit = $false
         foreach($k in $reached){ if ([int](($k -split ',')[0]) -eq $needRoom) { $hit = $true; break } }
-        if ($hit) { $newlyOpened += ,@{ Door=$di; Req=@{ Desc="Skript-Ereignis (Raum $needRoom erreicht)" } } }
+        if ($hit) { $newlyOpened += ,@{ Door=$di; Req=@{ Desc="script event (room $needRoom reached)" } } }
     }
 
-    # Flipmap-Tore: give ihre Sektoren frei, sobald der ausloesende Raum erreicht
-    # ist - dieselbe Bedingungsform wie die Skript-Tueren.
+    # Flipmap gates: free their sectors as soon as the triggering room is
+    # reached - the same condition form as the script doors.
     $newlyOpenedGates = @()
     for($gi = 0; $gi -lt $flipGates.Count; $gi++){
         if ($openGates.Contains($gi)) { continue }
         $hit = $true
-        # Bedingung "Raum erreicht" - wie bei den Skript-Tueren.
+        # Condition "room reached" - as with the script doors.
         if ($null -ne $flipGates[$gi].AfterRoom) {
             $needRoom = [int]$flipGates[$gi].AfterRoom
             $seenRoom = $false
             foreach($k in $reached){ if ([int](($k -split ',')[0]) -eq $needRoom) { $seenRoom = $true; break } }
             if (-not $seenRoom) { $hit = $false }
         }
-        # Bedingung "Items in der Hand". Manche Flipmaps haengen nicht an einem
-        # Ort, sondern an Ausruestung: andy1 laesst die Glocken erst fallen, wenn
-        # Lara die Zwille aus ihren beiden Combo-Haelften gebaut hat. Nur den
-        # Kirchenraum abzufragen wuerde das Tor zu frueh oeffnen - Lara steht dort
-        # laengst, bevor sie die Teile hat.
+        # Condition "items in hand". Some flipmaps hang not on a place but
+        # on equipment: andy1 only lets the bells fall once Lara has built
+        # the slingshot from its two combo halves. Querying only the church
+        # room would open the gate too early - Lara stands there long
+        # before she has the parts.
         if ($null -ne $flipGates[$gi].NeedTypes) {
             foreach($nt in $flipGates[$gi].NeedTypes){
                 if (-not $haveCounts.ContainsKey([int]$nt)) { $hit = $false; break }
@@ -3306,20 +3349,20 @@ while ($true) {
     }
     foreach($gi in $newlyOpenedGates){
         [void]$openGates.Add($gi)
-        $why = if($flipGates[$gi].Why){ $flipGates[$gi].Why } else { 'Flipmap' }
+        $why = if($flipGates[$gi].Why){ $flipGates[$gi].Why } else { 'flipmap' }
         $cond = @()
-        if ($null -ne $flipGates[$gi].AfterRoom) { $cond += "Raum $($flipGates[$gi].AfterRoom) erreicht" }
-        if ($null -ne $flipGates[$gi].NeedTypes) { $cond += "Typen $($flipGates[$gi].NeedTypes -join '+') vorhanden" }
-        Write-Output "Zone $zone -> $($zone+1): Flipmap-Tor $($flipGates[$gi].Rooms -join '/') frei - $why ($($cond -join ', '))"
+        if ($null -ne $flipGates[$gi].AfterRoom) { $cond += "room $($flipGates[$gi].AfterRoom) reached" }
+        if ($null -ne $flipGates[$gi].NeedTypes) { $cond += "types $($flipGates[$gi].NeedTypes -join '+') present" }
+        Write-Output "zone $zone -> $($zone+1): flipmap gate $($flipGates[$gi].Rooms -join '/') released - $why ($($cond -join ', '))"
     }
     $zone++
 }
 
-# Pro Key-/Puzzle-Item-Typ die lockerste (maximale) "muss in Zone <= N liegen"-
-# Anforderung ueber alle seine Slot-Instanzen - dieselbe Gruppierung, die auch
-# der Textreport weiter unten anzeigt, hier vorgezogen, damit der JSON-Export
-# sie mitliefern kann. Gameflow-Typen (kein Slot im Level platziert) bleiben
-# aussen vor - fuer sie gibt es keine sinnvolle "wo platzieren"-Frage.
+# Per key/puzzle item type the loosest (maximum) "must lie in zone <= N"
+# requirement over all its slot instances - the same grouping the text
+# report further down shows, pulled forward here so the JSON export can
+# deliver it too. Gameflow types (no slot placed in the level) stay out -
+# for them there is no meaningful "where to place" question.
 $byType = @{}
 foreach($n in ($itemNeed | Where-Object { -not $_.Gameflow })){
     $t = [int]$n.Type
@@ -3328,28 +3371,29 @@ foreach($n in ($itemNeed | Where-Object { -not $_.Gameflow })){
 }
 
 #----------------------------------------------------------------------------
-# Ausruestungs-Sperren durchsetzen, nicht nur berichten.
+# Enforce equipment gates, not just report them.
 #
-# EQUIP_GATE stand lange NUR im Textreport: er rechnete aus, in welcher Zone der
-# Schalter gebraucht wird, und zeigte an, ob die noetige Ausruestung heute frueh
-# genug liegt. Im Export tauchte davon nichts auf. Der Randomizer durfte
-# Andrea1s Revolver und Lasersight also frei verschieben - auch hinter die
-# Glocke, die man ohne sie nicht abschiessen kann. Dass es bisher gutging, lag
-# am Zufall der geprueften Seeds.
+# EQUIP_GATE long stood ONLY in the text report: it computed in which zone
+# the switch is needed and showed whether the necessary equipment lies early
+# enough today. Nothing of it appeared in the export. The randomizer was
+# thus free to move Andrea1's revolver and lasersight - even behind the bell
+# that cannot be shot down without them. That it went well so far was owed
+# to the luck of the tested seeds.
 #
-# Dieselbe Lektion wie bei VANILLA_TYPES und den Inselgruppen: eine Tabelle, die
-# eine Absicht beschreibt und nichts durchsetzt, wirkt nicht. Deshalb landet die
-# Zone jetzt in $extraPool und wird daraus zu einem gewoehnlichen Constraint.
+# The same lesson as with VANILLA_TYPES and the island groups: a table that
+# describes an intent and enforces nothing has no effect. Hence the zone now
+# lands in $extraPool and becomes an ordinary constraint from there.
 #
-# Bei mehreren Sperren fuer denselben Typ gilt die STRENGSTE, also die kleinste
-# Zone - die Ausruestung muss vor JEDEM Schalter da sein, der sie braucht.
+# With several gates for the same type, the STRICTEST applies, i.e. the
+# smallest zone - the equipment must be there before EVERY switch that
+# needs it.
 #----------------------------------------------------------------------------
 if ($EQUIP_GATE.ContainsKey($LevelName)) {
     foreach($g in $EQUIP_GATE[$LevelName].GetEnumerator()){
         $swItem = [int]$g.Key
         $gz = ($log | Where-Object { $_.Req.Desc -like "*Item $swItem *" } | ForEach-Object { $_.Zone } | Sort-Object | Select-Object -First 1)
         if ($null -eq $gz) {
-            Write-Output "WARNUNG: EQUIP_GATE - Schalter Item $swItem taucht in keinem Zonenuebergang auf, Sperre wirkungslos"
+            Write-Output "WARNING: EQUIP_GATE - switch item $swItem appears in no zone transition, gate has no effect"
             continue
         }
         foreach($nt in $g.Value.Need){
@@ -3357,26 +3401,26 @@ if ($EQUIP_GATE.ContainsKey($LevelName)) {
             if ($extraPool.ContainsKey($t)) { $extraPool[$t] = [Math]::Min([int]$extraPool[$t], [int]$gz) }
             else                            { $extraPool[$t] = [int]$gz }
         }
-        Write-Output "Ausruestungs-Sperre: Schalter Item $swItem in Zone $gz -> Typen $($g.Value.Need -join ', ') auf Zone <= $gz begrenzt"
+        Write-Output "equipment gate: switch item $swItem in zone $gz -> types $($g.Value.Need -join ', ') limited to zone <= $gz"
     }
 }
 #----------------------------------------------------------------------------
-# Insel-Flood: ein zweiter, schaerferer Durchlauf, der NUR die Gruppe bestimmt.
+# Island flood: a second, sharper pass that determines ONLY the group.
 #
-# Er laeuft ab Laras Start, mit allen Tueren geschlossen (ausser den von Haus aus
-# offenen) und zusaetzlich mit den Deadstop-Raeumen der Gruppe gesperrt. Was
-# uebrigbleibt, ist die Startinsel.
+# It runs from Lara's start, with all doors closed (except those open from
+# the outset) and additionally with the group's deadstop rooms barred. What
+# remains is the start island.
 #
-# Warum getrennt und nicht im Hauptlauf: in joby2 ist das Gleisbett beides -
-# der Schleichweg unter dem Rolltor hindurch UND der legitime Hauptweg. Sperrt
-# man es im Hauptlauf, steigt "nie erreicht" von 463 auf 6751 und Key Item7 in
-# Raum 52 wird unerreichbar, Vanilla faellt also durch. Der Hauptlauf braucht
-# den Weg, die Insel darf ihn nicht haben. Also zwei Laeufe.
+# Why separate and not in the main run: in joby2 the track bed is both -
+# the sneak way underneath the roll gate AND the legitimate main way. Bar
+# it in the main run and "never reached" climbs from 463 to 6751 and Key
+# Item7 in room 52 becomes unreachable, so vanilla fails. The main run
+# needs the way, the island must not have it. Hence two runs.
 #----------------------------------------------------------------------------
-$islandSectors = @{}   # typeId -> HashSet der erlaubten Sektoren
-$islandBanned  = @{}   # typeId -> HashSet der VERBOTENEN Sektoren (Umkehrung)
-$islandHeightScope = @{}   # typeId -> HashSet, in dem die Hoehengrenze gilt
-$islandRequire = @{}   # typeId -> HashSet, in der mindestens eine Instanz liegen MUSS
+$islandSectors = @{}   # typeId -> HashSet of the allowed sectors
+$islandBanned  = @{}   # typeId -> HashSet of the FORBIDDEN sectors (inversion)
+$islandHeightScope = @{}   # typeId -> HashSet in which the height limit applies
+$islandRequire = @{}   # typeId -> HashSet in which at least one instance MUST lie
 foreach($ig in $islandGroups){
     if ($null -eq $ig.IslandTypes -or $null -eq $ig.DeadstopRooms) { continue }
     $stopR = @($ig.DeadstopRooms | ForEach-Object { [int]$_ })
@@ -3386,26 +3430,26 @@ foreach($ig in $islandGroups){
     }
     $stopR = @($stopR | Sort-Object -Unique)
 
-    # Zwei Lesarten von "Insel", und sie meinen wirklich Verschiedenes:
+    # Two readings of "island", and they really mean different things:
     #
-    # OHNE DoorsOpen laeuft die Flut mit ALLEN Tueren zu, nur die von Levelstart
-    # an offenen zaehlen. Das beschreibt "was vom ersten Moment an walkable ist"
-    # und ist richtig fuer andy1s Bereich vor dem Teleporter oder joby2s Insel
-    # vor dem Kran.
+    # WITHOUT DoorsOpen the flood runs with ALL doors shut, only those open
+    # from level start count. That describes "what is walkable from the
+    # first moment" and is right for andy1's area before the teleporter or
+    # joby2's island before the crane.
     #
-    # MIT DoorsOpen zaehlt allein der Deadstop: die Tueren gelten als unresolved, und
-    # die Insel ist schlicht alles diesseits der Sperren. Das ist die Lesart des
-    # Nutzers, wenn er Raumpaare nennt - "63 ja, 111 nein". rich1s Key Item8
-    # braucht sie: seine erlaubten Raeume 81 und 43 liegen hinter Tueren, die
-    # erst im Spielverlauf aufgehen, und die geschlossene Lesart sperrte sie
-    # deshalb faelschlich aus.
+    # WITH DoorsOpen only the deadstop counts: the doors count as open, and
+    # the island is simply everything on this side of the bars. That is the
+    # user's reading when he names room pairs - "63 yes, 111 no". rich1's
+    # Key Item8 needs it: its allowed rooms 81 and 43 lie behind doors that
+    # only open in the course of play, and the closed reading therefore
+    # wrongly barred them.
     $doorsOpen = ($ig.DoorsOpen -eq $true)
 
-    # Normalerweise beginnt die Flut bei Lara. Ein Abschnitt MITTEN im Level
-    # laesst sich so aber nicht beschreiben - rich1s Puzzle Item4 liegt zwischen
-    # zwei Sperren, und von Laras Start aus kaeme man ueber die erste nie hinaus.
-    # StartRoom setzt den Keim deshalb frei; genommen wird der erste begehbare
-    # Sektor des Raums, der ueberhaupt im Graphen haengt.
+    # Normally the flood begins at Lara. A section in the MIDDLE of the
+    # level cannot be described that way though - rich1's Puzzle Item4 lies
+    # between two bars, and from Lara's start one would never get past the
+    # first. StartRoom therefore sets the seed freely; taken is the first
+    # walkable sector of the room that hangs in the graph at all.
     $seedKey = $startKey
     if ($null -ne $ig.StartRoom) {
         $seedKey = $null
@@ -3413,7 +3457,7 @@ foreach($ig in $islandGroups){
             $ck = "$($cand.room),$($cand.sectorX),$($cand.sectorZ)"
             if ($adj.ContainsKey($ck)) { $seedKey = $ck; break }
         }
-        if ($null -eq $seedKey) { Write-Output "WARNUNG: Inselgruppe - StartRoom $($ig.StartRoom) hat keinen begehbaren Sektor im Graphen" }
+        if ($null -eq $seedKey) { Write-Output "WARNING: island group - StartRoom $($ig.StartRoom) has no walkable sector in the graph" }
     }
 
     $isl = New-Object System.Collections.Generic.HashSet[string]
@@ -3433,90 +3477,92 @@ foreach($ig in $islandGroups){
         }
     }
     $islRooms = @($isl | ForEach-Object { [int](($_ -split ',')[0]) } | Sort-Object -Unique)
-    Write-Output "Inselgruppe (Deadstops $($stopR -join ', ')): $($isl.Count) Sektoren in $($islRooms.Count) Raeumen"
+    Write-Output "island group (deadstops $($stopR -join ', ')): $($isl.Count) sectors in $($islRooms.Count) rooms"
     foreach($it in $ig.IslandTypes){ $islandSectors[[int]$it] = $isl }
-    # Umkehrung: Typen, die NICHT auf der Insel liegen duerfen.
+    # Inversion: types that may NOT lie on the island.
     #
-    # andy1 braucht genau das. Der Teleporter erzeugt keinen Zonenuebergang -
-    # die Flut laeuft einfach hindurch -, also umfasst Zone 0 sowohl den Bereich
-    # VOR dem Teleporter als auch den dahinter bis zur Kirche. Eine
-    # Zwillenhaelfte in Laras Startraum 70 erfuellt "Zone 0" und ist trotzdem
-    # der Softlock: Lara geht durch den Teleporter, ohne sie eingesammelt zu
-    # haben, und kommt nie zurueck. Vom Nutzer im Testlevel gesehen.
+    # andy1 needs exactly that. The teleporter creates no zone transition -
+    # the flood simply runs through -, so zone 0 comprises both the area
+    # BEFORE the teleporter and the one behind it up to the church. A
+    # slingshot half in Lara's start room 70 satisfies "zone 0" and is
+    # still the softlock: Lara goes through the teleporter without having
+    # collected it and never comes back. Seen by the user in the test
+    # level.
     #
-    # Zusammen mit der Zonengrenze ergibt das "nach dem Point of no return und
-    # vor der Kirche" - was keine der beiden Bedingungen allein ausdruecken kann.
+    # Together with the zone limit that yields "after the point of no
+    # return and before the church" - which neither of the two conditions
+    # can express alone.
     foreach($it in $ig.NotOnIslandTypes){ $islandBanned[[int]$it] = $isl }
-    # Die Hoehengrenze ist eine Eigenschaft der GRUPPE, nicht der Zone. Sie an
-    # die Zone zu haengen war zu weit gegriffen: Zone 0 umfasst in joby2 7756
-    # Sektoren, die Insel nur 1900 - fuer Key Item7, das ausserhalb der Insel
-    # liegen darf, wirkte die Schranke dadurch im halben Level. Deshalb bekommt
-    # jeder Typ der Gruppe die Inselmenge als Geltungsbereich, auch die, die
-    # nicht auf die Insel beschraenkt sind.
+    # The height limit is a property of the GROUP, not the zone. Hanging it
+    # on the zone was too broad: zone 0 comprises 7756 sectors in joby2,
+    # the island only 1900 - for Key Item7, which may lie outside the
+    # island, the bound thereby acted in half the level. So every type of
+    # the group gets the island set as its scope, including those not
+    # restricted to the island.
     foreach($rt in $ig.RequireTypes){ $islandHeightScope[[int]$rt] = $isl }
-    # RequireTypes ist mehr als ein Filter: von jedem dieser Typen muss
-    # mindestens eine Instanz INNERHALB der Gruppe liegen, sonst ist die Gruppe
-    # aus sich heraus nicht loesbar. Das laesst sich nicht als Sektorfilter
-    # ausdruecken - ein Filter sagt, wo eine EINZELNE Instanz liegen darf, hier
-    # geht es um eine Aussage ueber ALLE Instanzen eines Typs zusammen. Der
-    # Randomizer bekommt die Menge deshalb getrennt und zwingt eine Instanz
-    # hinein; wer nur filtert, kann sie nicht durchsetzen.
+    # RequireTypes is more than a filter: of each of these types at least
+    # one instance must lie WITHIN the group, otherwise the group is not
+    # solvable out of itself. That cannot be expressed as a sector filter -
+    # a filter says where a SINGLE instance may lie, here it is a statement
+    # about ALL instances of a type together. The randomizer therefore gets
+    # the set separately and forces one instance in; whoever only filters
+    # cannot enforce it.
     foreach($rt in $ig.RequireTypes){ $islandRequire[[int]$rt] = $isl }
 }
 
-# Hoehengrenze je Schluesseltyp aus den Inselgruppen ableiten. Baseline ist der
-# haeufigste Bodenwert der begehbaren Sektoren des Baseline-Raums - das Mittel
-# einer einzelnen Ecke waere zu zufaellig, der Modus trifft den eigentlichen
-# Hallenboden.
+# Derive the height limit per key type from the island groups. Baseline is
+# the most frequent floor value of the baseline room's walkable sectors -
+# the average of a single corner would be too random, the mode hits the
+# actual hall floor.
 $keyMinFloorY = @{}
 foreach($ig in $islandGroups){
-    # Ohne BaselineRoom gibt es keine Hoehengrenze - eine Gruppe darf auch nur
-    # aus Deadstops bestehen. Ohne diese Pruefung wuerde [int]$null zu 0 und
-    # damit versehentlich Raum 0 als Baseline genommen.
+    # Without BaselineRoom there is no height limit - a group may also
+    # consist only of deadstops. Without this check [int]$null would become
+    # 0 and thereby accidentally take room 0 as the baseline.
     if ($null -eq $ig.BaselineRoom) { continue }
     $bs = @($d.sectors | Where-Object { [int]$_.room -eq [int]$ig.BaselineRoom -and -not $_.isWall -and $_.hasFloor })
-    if ($bs.Count -eq 0) { Write-Output "WARNUNG: Inselgruppe - Baseline-Raum $($ig.BaselineRoom) hat keine begehbaren Sektoren"; continue }
+    if ($bs.Count -eq 0) { Write-Output "WARNING: island group - baseline room $($ig.BaselineRoom) has no walkable sectors"; continue }
     $baseY = [int](($bs | Group-Object floorY | Sort-Object Count -Descending | Select-Object -First 1).Name)
     $limit = $baseY - [int]$ig.MaxYAbove
-    # Die Grenze gilt NUR in der Zone, in der die Gruppe liegt - sonst trifft sie
-    # das halbe Level mit. Die Zone ergibt sich aus dem Baseline-Raum selbst,
-    # muss also nicht zusaetzlich gepflegt werden.
+    # The limit applies ONLY in the zone in which the group lies -
+    # otherwise it hits half the level along. The zone follows from the
+    # baseline room itself, so it needs no extra maintenance.
     $bz = @()
     foreach($b in $bs){ $bk = "$($b.room),$($b.sectorX),$($b.sectorZ)"; if ($zoneOf.ContainsKey($bk)) { $bz += ,[int]$zoneOf[$bk] } }
-    if ($bz.Count -eq 0) { Write-Output "WARNUNG: Inselgruppe - Baseline-Raum $($ig.BaselineRoom) wird nie erreicht"; continue }
+    if ($bz.Count -eq 0) { Write-Output "WARNING: island group - baseline room $($ig.BaselineRoom) is never reached"; continue }
     $gz = ($bz | Sort-Object | Select-Object -First 1)
     foreach($rt in $ig.RequireTypes){ $keyMinFloorY[[int]$rt] = @{ Limit = $limit; Zone = $gz } }
-    Write-Output "Inselgruppe: Baseline Raum $($ig.BaselineRoom) y=$baseY in Zone $gz, Schluessel dort hoechstens $($ig.MaxYAbove) darueber (floorY >= $limit) fuer Typen $($ig.RequireTypes -join ', ')"
+    Write-Output "island group: baseline room $($ig.BaselineRoom) y=$baseY in zone $gz, keys there at most $($ig.MaxYAbove) above (floorY >= $limit) for types $($ig.RequireTypes -join ', ')"
 }
 
 #----------------------------------------------------------------------------
-# Ein Schluessel darf nie hinter einer Tuer liegen, die er selbst oeffnet.
+# A key may never lie behind a door it itself opens.
 #
-# Zweiter Anlauf. Der erste (Commit 3af3f46, zurueckgenommen mit a7e4a70)
-# scheiterte an der VEREINIGUNG: er sammelte je Typ die Tueren ALLER Schloesser
-# dieses Typs und sperrte alles, was hinter irgendeiner davon lag. In Andrea3
-# ergab das fuer Key Item2 die Tueren 25/24/77/94 aus mehreren Schloessern und
-# verbot dessen Vanilla-Platz in Raum 119.
+# Second attempt. The first (commit 3af3f46, taken back with a7e4a70)
+# failed at the UNION: it collected per type the doors of ALL locks of that
+# type and barred everything that lay behind any of them. In Andrea3 that
+# yielded doors 25/24/77/94 from several locks for Key Item2 and forbade
+# its vanilla place in room 119.
 #
-# Richtig ist der SCHNITT. Ein Schluessel dieses Typs kann an jedem seiner
-# Schloesser gebraucht werden; verboten ist deshalb nur, was hinter JEDER
-# dieser Tueren liegt - dort naemlich koennte er zu keinem einzigen Schloss
-# gelangen. Was hinter der einen, aber vor der anderen liegt, bleibt erlaubt:
-# von dort erreicht Lara zumindest ein Schloss.
+# Correct is the INTERSECTION. A key of this type can be needed at any of
+# its locks; forbidden is therefore only what lies behind EVERY one of
+# these doors - there, namely, it could reach no lock at all. What lies
+# behind one but before another stays allowed: from there Lara reaches at
+# least one lock.
 #
-# Bei genau einem Schloss sind Schnitt und Vereinigung dasselbe, die Faelle,
-# in denen der erste Anlauf richtig lag, bleiben also erhalten.
+# With exactly one lock, intersection and union are the same, so the cases
+# in which the first attempt was right are preserved.
 #
-# Je Schloss ein eigener Flood ab Laras Start mit GENAU DIESER Tuer zu und
-# allen anderen unresolved. Ein Umweg um die Tuer herum aendert daran nichts - er
-# wird ja mitbenutzt.
+# Per lock an own flood from Lara's start with EXACTLY THIS door shut and
+# all others open. A detour around the door changes nothing about that -
+# it is simply used along.
 #----------------------------------------------------------------------------
-# Handgesetzte Sektorsperren je Typ (TYPE_EXCLUDE_SECTORS) in bannedSectors
-# mischen. EINMAL hier, nicht in den Constraint-Schleifen: es gibt DREI Pfade,
-# ueber die ein Constraint entstehen kann - abgeleitet aus einem Schloss,
-# EXTRA_POOL_TYPES und POOL_TYPES -, und beim ersten Versuch hatte ich nur die
-# ersten beiden gepatcht. joby2s Sicherung laeuft ueber den dritten, und
-# bannedSectors blieb still leer.
+# Mix hand-set sector bars per type (TYPE_EXCLUDE_SECTORS) into
+# bannedSectors. ONCE here, not in the constraint loops: there are THREE
+# paths through which a constraint can arise - derived from a lock,
+# EXTRA_POOL_TYPES and POOL_TYPES -, and on the first attempt I had patched
+# only the first two. joby2's safeguard runs via the third, and
+# bannedSectors stayed silently empty.
 foreach($kv in $typeExcludeSectors.GetEnumerator()){
     $nt = [int]$kv.Key
     if (-not $islandBanned.ContainsKey($nt)) { $islandBanned[$nt] = New-Object System.Collections.Generic.HashSet[string] }
@@ -3525,13 +3571,13 @@ foreach($kv in $typeExcludeSectors.GetEnumerator()){
 
 $forbiddenBehindOwnDoor = @{}
 if ($null -ne $startKey) {
-    # Je TUER, nicht je Schloss. Ein Schloss oeffnet oft mehrere Tueren -
-    # Andrea3s Key Hole2 gleich vier (24, 25, 77, 94) -, und alle zusammen zu
-    # schliessen sperrt viel mehr ab als jede einzelne. Ausserdem teilen sich
-    # Schloesser Tueren: 24 und 25 haengen dort auch an Key Hole1, weil TR die
-    # Codebits mehrerer Trigger aufsammelt. Alle vier gleichzeitig zu schliessen
-    # kappte Raum 119 und verbot damit Key Item2 seinen Vanilla-Platz.
-    $typeDoors = @{}   # typeId -> Menge der Tuer-Items
+    # Per DOOR, not per lock. A lock often opens several doors - Andrea3's
+    # Key Hole2 four at once (24, 25, 77, 94) -, and closing all of them
+    # together bars far more than each single one. Locks also share doors:
+    # 24 and 25 there hang on Key Hole1 too, because TR collects the code
+    # bits of several triggers. Closing all four at once cut room 119 and
+    # thereby forbade Key Item2 its vanilla place.
+    $typeDoors = @{}   # typeId -> set of door items
     foreach($e in $allTrig){
         if ($e.Req.Kind -ne 'item' -or $null -eq $e.Req.NeedItemType) { continue }
         $nt = [int]$e.Req.NeedItemType
@@ -3542,15 +3588,15 @@ if ($null -ne $startKey) {
         }
     }
 
-    # Der Hammer hat kein Schloss im ueblichen Sinn - seine Tuer geht nicht ueber
-    # ein Object-Kommando auf, sondern ueber eine Cutscene (rich1: hamgate,
-    # Tuer 153). Fuer die Platzierung gilt aber genau dasselbe: er darf nicht
-    # hinter der Tuer liegen, die er selbst oeffnet. Nutzer: "Der darf nicht
-    # weiter als die Tuer platziert werden."
+    # The hammer has no lock in the usual sense - its door does not open
+    # via an object command but via a cutscene (rich1: hamgate, door 153).
+    # For placement, though, exactly the same holds: it may not lie behind
+    # the door it itself opens. User: "It may not be placed further than
+    # the door."
     #
-    # Der Flood kannte diese Bedingung schon (er laesst die Cutscene-Tuer erst
-    # feuern, wenn der Hammer erreichbar ist); was fehlte, war die Umkehrung fuer
-    # die Platzierung. Beides haengt jetzt an derselben Regel.
+    # The flood already knew this condition (it only lets the cutscene door
+    # fire once the hammer is reachable); what was missing was the
+    # inversion for placement. Both now hang on the same rule.
     if ($null -ne $hammerType -and $cutsceneDoors.Count -gt 0) {
         if (-not $typeDoors.ContainsKey($hammerType)) { $typeDoors[$hammerType] = New-Object System.Collections.Generic.HashSet[int] }
         foreach($cd in $cutsceneDoors.Keys){
@@ -3558,7 +3604,7 @@ if ($null -ne $startKey) {
         }
     }
 
-    $perLock = @{}   # typeId -> Liste von HashSets, eines je Tuer
+    $perLock = @{}   # typeId -> list of HashSets, one per door
     foreach($tdKv in $typeDoors.GetEnumerator()){
       $nt = [int]$tdKv.Key
       foreach($di in $tdKv.Value){
@@ -3577,7 +3623,7 @@ if ($null -ne $startKey) {
                 [void]$rr.Add($n); $qq.Enqueue($n)
             }
         }
-        # Hinter dieser Tuer = im Hauptlauf erreicht, ohne sie aber nicht.
+        # Behind this door = reached in the main run, but not without it.
         $behind = New-Object System.Collections.Generic.HashSet[string]
         foreach($k0 in $reached){ if (-not $rr.Contains($k0)) { [void]$behind.Add($k0) } }
         if ($behind.Count -eq 0) { continue }
@@ -3595,25 +3641,25 @@ if ($null -ne $startKey) {
         for($si = 1; $si -lt $sets.Count; $si++){ $cut.IntersectWith($sets[$si]) }
         if ($cut.Count -eq 0) { continue }
         $forbiddenBehindOwnDoor[$nt] = $cut
-        Write-Output "Hinter eigener Tuer gesperrt: Typ $nt, $($sets.Count) Tuer(en) -> $($cut.Count) Sektoren (Schnitt)"
+        Write-Output "barred behind own door: type $nt, $($sets.Count) door(s) -> $($cut.Count) sectors (intersection)"
     }
 }
 
-# NO_KEY_ISLAND aufloesen: Abschnitt fluten und seine Raeume an $noPlacement
-# haengen. Muss hier stehen - nach dem vollstaendigen Graphaufbau, damit die
-# Sperren und Handkanten drin sind, und vor der Key-Auswertung, die
-# $noPlacement liest.
-# Die geflutete Sektormenge wird zusaetzlich gesammelt und exportiert
-# (keyBarredSectors). Grund: intern endet NO_KEY_ISLAND als RAUMliste in
-# $noPlacement, und die Key-Auswertung liest sie - aber nur fuer Typen, fuer
-# die es ueberhaupt eine Key-Constraint gibt. In andy3 gibt es keine einzige
-# (Kreide und Brechstange sind Werkzeuge ohne Aufnahme), also erreichte der
-# Deadstop sie nicht. Als eigene Sektormenge im Export kann jeder Erzeuger
-# sie apply, auch fuer Typen ohne Aufnahme (#61).
+# Resolve NO_KEY_ISLAND: flood the section and hang its rooms onto
+# $noPlacement. Must stand here - after the complete graph build, so the
+# bars and hand edges are in, and before the key evaluation, which reads
+# $noPlacement.
+# The flooded sector set is additionally collected and exported
+# (keyBarredSectors). Reason: internally NO_KEY_ISLAND ends up as a ROOM
+# list in $noPlacement, and the key evaluation reads it - but only for
+# types for which a key constraint exists at all. In andy3 there is not a
+# single one (chalk and crowbar are tools without a receptacle), so the
+# deadstop never reached them. As its own sector set in the export, every
+# generator can apply it, even for types without a receptacle (#61).
 $keyBarred = New-Object System.Collections.Generic.HashSet[string]
-# Raeume, die NUR wegen NO_KEY_ISLAND gesperrt sind, und die Typen, die davon
-# ausgenommen bleiben (#61). Beides wird gebraucht, weil die Sperre an ZWEI
-# Stellen wirkt: als Sektormenge im Export und als excludeRooms je Typ.
+# Rooms barred ONLY because of NO_KEY_ISLAND, and the types that stay
+# exempt from it (#61). Both are needed because the bar acts in TWO places:
+# as a sector set in the export and as excludeRooms per type.
 $islandRooms = @()
 $keyBarredExempt = @()
 foreach($ni in $noKeyIslands){
@@ -3624,7 +3670,7 @@ foreach($ni in $noKeyIslands){
         $ck = "$($cand.room),$($cand.sectorX),$($cand.sectorZ)"
         if ($adj.ContainsKey($ck)) { $seedN = $ck; break }
     }
-    if ($null -eq $seedN) { Write-Output "WARNUNG: NO_KEY_ISLAND - StartRoom $($ni.StartRoom) hat keinen begehbaren Sektor im Graphen"; continue }
+    if ($null -eq $seedN) { Write-Output "WARNING: NO_KEY_ISLAND - StartRoom $($ni.StartRoom) has no walkable sector in the graph"; continue }
     $islN = New-Object System.Collections.Generic.HashSet[string]
     $qn = New-Object System.Collections.Generic.Queue[string]
     [void]$islN.Add($seedN); $qn.Enqueue($seedN)
@@ -3641,59 +3687,58 @@ foreach($ni in $noKeyIslands){
     $rmN = @($islN | ForEach-Object { [int](($_ -split ',')[0]) } | Sort-Object -Unique)
     $islandRooms = @($islandRooms + $rmN | Sort-Object -Unique)
     $noPlacement = @($noPlacement + $rmN | Sort-Object -Unique)
-    Write-Output "NO_KEY_ISLAND (Start $($ni.StartRoom), Deadstops $($stopN -join ', ')): $($islN.Count) Sektoren in $($rmN.Count) Raeumen ohne Key-Items"
+    Write-Output "NO_KEY_ISLAND (start $($ni.StartRoom), deadstops $($stopN -join ', ')): $($islN.Count) sectors in $($rmN.Count) rooms without key items"
 }
 
-# HINWEIS: Hier stand die abgeleitete Regel "ein Schluessel darf nie hinter
-# einer Tuer liegen, die er selbst oeffnet" (Commit 3af3f46). Sie ist wieder
-# entfernt worden, weil sie nachweislich zu grob war: in Andrea3 sperrte sie
-# die VANILLA-Position von Key Item2 (Item 101, Raum 119) und schrumpfte
-# dessen erlaubte Raeume von 32 auf 6. Ursache war vermutlich, dass sie je
-# Schluesseltyp die Tueren ALLER Schloesser dieses Typs vereinigte statt sie
-# einzeln zu betrachten - der Bericht zeigte fuer Typ 197 die Tueren
-# 25/24/77/94 aus mehreren Schloessern zusammengeworfen.
+# NOTE: here stood the derived rule "a key may never lie behind a door it
+# itself opens" (commit 3af3f46). It has been removed again because it was
+# demonstrably too coarse: in Andrea3 it barred the VANILLA position of Key
+# Item2 (item 101, room 119) and shrank its allowed rooms from 32 to 6.
+# The cause was presumably that per key type it united the doors of ALL
+# locks of that type instead of considering them individually - the report
+# showed for type 197 the doors 25/24/77/94 from several locks thrown
+# together.
 #
-# Der Maszstab bleibt gueltig und ist die Abnahmebedingung fuer jeden neuen
-# Versuch: eine Regel, die verbietet, wo Vanilla das Item hinlegt, ist
-# konstruktionsbedingt falsch. Siehe Aufgabe #49.
+# The yardstick stays valid and is the acceptance condition for every new
+# attempt: a rule that forbids where vanilla puts the item is wrong by
+# construction. See task #49.
 
 
 $keyConstraints = @()
 foreach($kv in $byType.GetEnumerator()){
     $nt = [int]$kv.Key
-    # Bleibt Vanilla: Anforderung oben im Report sichtbar, aber nicht im Pool.
+    # Stays vanilla: requirement visible in the report above, but not in the pool.
     if ($vanillaTypes -contains $nt) { continue }
-    # Das Maximum ueber alle Schloesser - auch bei mehrfach nutzbaren
-    # Schluesseln.
+    # The maximum over all locks - even for reusable keys.
     #
-    # Hier stand kurzzeitig ein Minimum fuer die mehrfach nutzbaren, mit der
-    # Begruendung: eine Instanz bedient alle Schloesser, also muss sie vor dem
-    # fruehesten da sein. Das klingt zwingend und ist trotzdem falsch, und der
-    # Nutzer hat es an rich1 widerlegt. Dort liegt das erste Key-Item8-Schloss
-    # (Item 55, Raum 26) in Zone 0, das Minimum haette den Schluessel also auf
-    # Zone 0 festgenagelt - der Nutzer nennt aber die Raeume 81 und 43 aus den
-    # Zonen 2 und 3 ausdruecklich als erlaubt.
+    # Here briefly stood a minimum for the reusable ones, with the
+    # reasoning: one instance serves all locks, so it must be there before
+    # the earliest. That sounds compelling and is still wrong, and the user
+    # refuted it at rich1. There the first Key-Item8 lock (item 55, room
+    # 26) lies in zone 0, so the minimum would have nailed the key to zone
+    # 0 - but the user expressly names rooms 81 and 43 from zones 2 and 3
+    # as allowed.
     #
-    # Der Denkfehler: ein Schloss in Zone 0 heisst nicht, dass es zuerst bedient
-    # werden MUSS. rich1 hat sieben verschiedene Tueren vom Zone-0- in den
-    # Zone-1-Bereich; die Tueren 64/65 von Schloss 55 sind nur eine davon. Lara
-    # kann anders weiter, den Schluessel spaeter holen und zurueckkommen. Welche
-    # Schloesser wirklich auf dem kritischen Pfad liegen, sieht das Zonenmodell
-    # nicht - und darum macht diese Begrenzung hier eine Inselgruppe mit
-    # Deadstops, nicht die Zone.
+    # The thinking error: a lock in zone 0 does not mean it MUST be served
+    # first. rich1 has seven different doors from the zone-0 into the
+    # zone-1 area; doors 64/65 of lock 55 are only one of them. Lara can
+    # continue another way, fetch the key later and come back. Which locks
+    # really lie on the critical path the zone model does not see - and
+    # that is why this limiting is done by an island group with deadstops
+    # here, not by the zone.
     $maxZ = ($kv.Value | ForEach-Object { [int]$_.Zone } | Measure-Object -Maximum).Maximum
-    # Ausgenommene Typen sehen die NO_KEY_ISLAND-Raeume nicht (#61).
+    # Exempt types do not see the NO_KEY_ISLAND rooms (#61).
     $npT = if ($keyBarredExempt -contains $nt) { @($noPlacement | Where-Object { $islandRooms -notcontains $_ }) } else { $noPlacement }
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $npT + $noKeyRooms | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
     $keyConstraints += [PSCustomObject]@{ typeId=$nt; maxZone=$maxZ; instances=$kv.Value.Count; reusable=($reusableKeys -contains $nt); excludeRooms=$exRooms; allowRooms=$alRooms; minFloorY=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Limit}else{$null}); minFloorYZone=$(if($keyMinFloorY.ContainsKey($nt)){$keyMinFloorY[$nt].Zone}else{$null}); islandSectors=$(if($islandSectors.ContainsKey($nt)){@($islandSectors[$nt])}else{$null}); bannedSectors=$(if($islandBanned.ContainsKey($nt)){@($islandBanned[$nt])}else{$null}); forbiddenSectors=$(if($forbiddenBehindOwnDoor.ContainsKey($nt)){@($forbiddenBehindOwnDoor[$nt])}else{$null}); minFloorYIsland=$(if($islandHeightScope.ContainsKey($nt)){@($islandHeightScope[$nt])}else{$null}); requireInIsland=$(if($islandRequire.ContainsKey($nt)){@($islandRequire[$nt])}else{$null}) }
 }
-# Handgesetzte Zusatztypen anhaengen, sofern das Modell sie nicht ohnehin schon
-# selbst abgeleitet hat (dann gilt die abgeleitete Grenze, nicht die Handangabe).
+# Append hand-set extra types, unless the model has already derived them
+# itself anyway (then the derived limit applies, not the hand entry).
 foreach($kv in $extraPool.GetEnumerator()){
     $nt = [int]$kv.Key
     if ($byType.ContainsKey($nt)) { continue }
-    # Ausgenommene Typen sehen die NO_KEY_ISLAND-Raeume nicht (#61).
+    # Exempt types do not see the NO_KEY_ISLAND rooms (#61).
     $npT = if ($keyBarredExempt -contains $nt) { @($noPlacement | Where-Object { $islandRooms -notcontains $_ }) } else { $noPlacement }
     $exRooms = @( @( if($typeExclude.ContainsKey($nt)){ $typeExclude[$nt] } ) + $npT + $noKeyRooms | Sort-Object -Unique )
     $alRooms = @( if($typeAllow.ContainsKey($nt)){ $typeAllow[$nt] } )
@@ -3701,13 +3746,13 @@ foreach($kv in $extraPool.GetEnumerator()){
 }
 
 if ($ExportZonesJson -ne "") {
-    # Maschinenlesbarer Export: je Sektor, der sowohl im Flood erreicht als auch
-    # volumes Exporter tatsaechlich itemfaehig ist (validForItems), seine Zone.
-    # Nur validForItems-Sektoren, damit ein nachgelagerter Patch-Generator nie
-    # ein Item auf eine Wand, ein Portal oder einen sonst ungeeigneten Sektor
-    # setzt - dieselbe PrÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¼fung, die schon die *_AllValidSectorsFilled.trc-Dateien
-    # sauber gehalten hat, bleibt hier die Grundlage.
-    # In zwei Durchgaengen, weil der zweite die Menge des ersten braucht.
+    # Machine-readable export: for every sector that is both reached in the
+    # flood and actually item-capable per the exporter (validForItems), its
+    # zone. Only validForItems sectors, so a downstream patch generator
+    # never places an item on a wall, a portal or an otherwise unsuitable
+    # sector. The same validity check the exporter itself keeps clean
+    # remains the basis here.
+    # In two passes, because the second needs the first's set.
     $exportKeys = New-Object System.Collections.Generic.HashSet[string]
     foreach($kv in $zoneOf.GetEnumerator()){
         $s = $sec[$kv.Key]
@@ -3720,24 +3765,23 @@ if ($ExportZonesJson -ne "") {
         [void]$exportKeys.Add($kv.Key)
     }
 
-    # ANMARSCH: zu jedem Sektor die Sektoren, die Lara auf ihrem ERSTZUGANGS-Weg
-    # kurz davor betritt.
+    # APPROACH: for every sector, the sectors Lara steps on shortly before
+    # it on her FIRST-ACCESS path.
     #
-    # Gebraucht wird das fuer neue Gegner. Der Trigger darf nie auf dem
-    # Gegnersektor selbst liegen - dann spawnt der Gegner in Lara hinein
-    # (Nutzerbefund) -, er muss aber sicher ueberquert werden, sonst wacht der
-    # Gegner nie auf. Beides zugleich erfuellt genau ein Sektor: einer, der auf
-    # dem Weg dorthin liegt.
+    # Needed for new enemies. The trigger may never lie on the enemy's own
+    # sector - then the enemy spawns into Lara (user finding) -, but it
+    # must be crossed reliably, or the enemy never wakes up. Both at once
+    # is satisfied by exactly one sector: one that lies on the way there.
     #
-    # $firstParent ist dafuer die richtige Quelle und nicht irgendein Weg durch
-    # das fertige Level: es haelt fest, ueber WELCHE Kante ein Sektor zum ersten
-    # Mal erreicht wurde, also den Weg, den Lara wirklich nimmt, wenn sie zum
-    # ersten Mal dort ankommt.
+    # $firstParent is the right source for that and not some path through
+    # the finished level: it records via WHICH edge a sector was reached
+    # for the first time, i.e. the way Lara really takes when she first
+    # arrives there.
     #
-    # Drei Schritte Abstand sind die Vorgabe; 2 bis 8 werden mitgenommen und nach
-    # Naehe zu 3 sortiert, damit der Randomizer ausweichen kann, wenn der beste
-    # Sektor keinen Trigger vertraegt (Lava, Climb, Monkey, TrigTrigger oder
-    # schon ein Trigger - das entscheidet erst das Level selbst).
+    # Three steps of distance are the target; 2 to 8 are taken along and
+    # sorted by closeness to 3, so the randomizer can dodge when the best
+    # sector tolerates no trigger (lava, climb, monkey, trigtrigger or
+    # already a trigger - only the level itself decides that).
     $approachOf = @{}
     foreach($k in $exportKeys){
         $cands = @()
@@ -3753,24 +3797,24 @@ if ($ExportZonesJson -ne "") {
         }
     }
 
-    # Wandkanten je Sektor (#61). Gebraucht fuer die OCB-Pickups, die an einer
-    # Wand haengen muessen (Brechstange OCB 2, Joby-Crow OCB 9).
+    # Wall edges per sector (#61). Needed for the OCB pickups that must
+    # hang on a wall (crowbar OCB 2, Joby crow OCB 9).
     #
-    # Der WINKEL ZEIGT AUF DIE WAND, nicht von ihr weg - an Vanilla Andrea2
-    # Item 121 nachgemessen: Sektor (2,1) in Raum 166, Wand bei -Z, Item-Winkel
-    # -32768 (180 Grad, Blick -Z). Das passt zur Bauweise der Modelle: ihr Mesh
-    # sitzt rund +450..500 in Modell-Z, landet also auf der Wandflaeche, und
-    # Lara rueckt auf +215 dazwischen und schaut die Wand an
+    # The ANGLE POINTS AT THE WALL, not away from it - measured at vanilla
+    # Andrea2 item 121: sector (2,1) in room 166, wall at -Z, item angle
+    # -32768 (180 degrees, facing -Z). That fits how the models are built:
+    # their mesh sits around +450..500 in model Z, so it lands on the wall
+    # face, and Lara moves in at +215 in between and looks at the wall
     # (CrowbarPickUpPosition in game\pickup.cpp).
     #
-    # TR-Richtungen: 0 = +Z, 16384 = +X, -32768 = -Z, -16384 = -X.
-    # Als Wand zaehlt ein Nachbar, der isWall traegt oder gar nicht existiert
-    # (ausserhalb des Sektorgitters des Raums - dort endet der Raum).
-    $wandRichtungen = @(
-        @{ dx = 0; dz =  1; winkel =      0 },
-        @{ dx = 1; dz =  0; winkel =  16384 },
-        @{ dx = 0; dz = -1; winkel = -32768 },
-        @{ dx =-1; dz =  0; winkel = -16384 }
+    # TR directions: 0 = +Z, 16384 = +X, -32768 = -Z, -16384 = -X.
+    # A neighbor counts as wall if it carries isWall or does not exist at
+    # all (outside the room's sector grid - the room ends there).
+    $wallDirections = @(
+        @{ dx = 0; dz =  1; angle =      0 },
+        @{ dx = 1; dz =  0; angle =  16384 },
+        @{ dx = 0; dz = -1; angle = -32768 },
+        @{ dx =-1; dz =  0; angle = -16384 }
     )
 
     $rows = @()
@@ -3778,46 +3822,47 @@ if ($ExportZonesJson -ne "") {
         if (-not $exportKeys.Contains($kv.Key)) { continue }
         $s = $sec[$kv.Key]
         $wa = @()
-        foreach($wr in $wandRichtungen){
+        foreach($wr in $wallDirections){
             $nk = "$([int]$s.room),$([int]$s.sectorX + $wr.dx),$([int]$s.sectorZ + $wr.dz)"
-            if ((-not $sec.ContainsKey($nk)) -or $sec[$nk].isWall) { $wa += [int]$wr.winkel }
+            if ((-not $sec.ContainsKey($nk)) -or $sec[$nk].isWall) { $wa += [int]$wr.angle }
         }
         $rows += [PSCustomObject]@{ room=[int]$s.room; sectorX=[int]$s.sectorX; sectorZ=[int]$s.sectorZ; zone=[int]$kv.Value; floorY=[int]$s.floorY; clearance=[int]$s.clearance;
                                     wallAngles=@($wa);
                                     approach=@( if($approachOf.ContainsKey($kv.Key)){ $approachOf[$kv.Key] } ) }
     }
-    $mitWand = @($rows | Where-Object { $_.wallAngles.Count -gt 0 }).Count
-    Write-Output "Wandplaetze: $mitWand von $($rows.Count) Sektoren haben mindestens eine Wandkante"
-    $mitAnmarsch = @($rows | Where-Object { $_.approach.Count -gt 0 }).Count
-    Write-Output "Anmarschsektoren: $mitAnmarsch von $($rows.Count) Sektoren haben mindestens einen"
+    $withWall = @($rows | Where-Object { $_.wallAngles.Count -gt 0 }).Count
+    Write-Output "wall spots: $withWall of $($rows.Count) sectors have at least one wall edge"
+    $withApproach = @($rows | Where-Object { $_.approach.Count -gt 0 }).Count
+    Write-Output "approach sectors: $withApproach of $($rows.Count) sectors have at least one"
     $maxZoneOut = if($rows.Count -gt 0){ ($rows | Measure-Object -Property zone -Maximum).Maximum } else { 0 }
-    # Pool-Typen ohne Zonengrenze anhaengen. maxZone bekommt den hoechsten im
-    # Level vorkommenden Wert, damit wirklich jede Zone offensteht; Insel- und
-    # Hoehengrenzen bleiben leer, denn diese Typen gehoeren keiner Gruppe an.
+    # Append pool types without a zone limit. maxZone gets the highest value
+    # occurring in the level, so really every zone stands open; island and
+    # height limits stay empty, for these types belong to no group.
     foreach($ptKv in $poolTypes.GetEnumerator()){
         $pt = [int]$ptKv.Key
         $ptZone = if ($null -eq $ptKv.Value) { $maxZoneOut } else { [int]$ptKv.Value }
         if (@($keyConstraints | Where-Object { [int]$_.typeId -eq $pt }).Count -gt 0) { continue }
         $inst = @($d.items | Where-Object { [int]$_.typeId -eq $pt }).Count
-        # NO_KEY_ROOMS gilt hier ausdruecklich NICHT. Pool-Typen haben keine
-        # Kette im Level - joby5s Puzzle 1 und 2 werden erst ganz am Ende
-        # gebraucht, und da ist der Strom laengst abgeschaltet. Nutzer: "Die
-        # Puzzels koennen wir lassen, nur Keys sind wichtig."
-        # TYPE_EXCLUDE_ROOMS gilt hier sehr wohl - hier stand vorher eine leere
-        # Liste, und das war schlicht eine Luecke. Ein Pool-Typ hat kein Schloss
-        # und deshalb keine abgeleitete Zwangsbedingung; die Handkuration ist bei
-        # ihm also das EINZIGE, was ihn irgendwo fernhalten kann. andy3 ist der
-        # Fall, der es aufgedeckt hat: Kreide und Brechstange haben dort kein
-        # Schloss im Level und muessen trotzdem vor dem Teleporter bleiben.
-        # Ein Pool-Typ traegt GENAU DIESELBEN Kurationsfelder wie ein Typ mit
-        # Schloss - die Zeile unten ist bis auf $pt statt $nt die des Hauptpfads.
+        # NO_KEY_ROOMS expressly does NOT apply here. Pool types have no
+        # chain in the level - joby5's Puzzle 1 and 2 are only needed at
+        # the very end, and by then the power has long been switched off.
+        # User: "We can leave the puzzles, only keys matter."
+        # TYPE_EXCLUDE_ROOMS very much applies here - an empty list stood
+        # here before, and that was simply a gap. A pool type has no lock
+        # and therefore no derived forcing condition; the hand curation is
+        # thus the ONLY thing that can keep it away from anywhere. andy3 is
+        # the case that uncovered it: chalk and crowbar have no lock in the
+        # level there and must still stay before the teleporter.
+        # A pool type carries EXACTLY THE SAME curation fields as a type
+        # with a lock - the line below is, apart from $pt instead of $nt,
+        # that of the main path.
         #
-        # Vorher standen hier feste $null-Values, und das hat dreimal
-        # hintereinander stillschweigend Kuration verschluckt: erst
-        # excludeRooms (andy3s Kreide), dann forbiddenSectors und schliesslich
-        # islandSectors (rich1s Hammer). Der Denkfehler war jedesmal derselbe -
-        # ein Pool-Typ hat kein Schloss, ALSO ist die Handkuration bei ihm das
-        # einzige, was ihn irgendwo halten kann, und nicht etwa entbehrlich.
+        # Before, fixed $null values stood here, and that silently
+        # swallowed curation three times in a row: first excludeRooms
+        # (andy3's chalk), then forbiddenSectors and finally islandSectors
+        # (rich1's hammer). The thinking error was the same every time - a
+        # pool type has no lock, SO the hand curation is the only thing
+        # that can hold it anywhere, and not, say, dispensable.
         $ptEx = @( if($typeExclude.ContainsKey($pt)){ $typeExclude[$pt] } )
         $ptAl = @( if($typeAllow.ContainsKey($pt)){ $typeAllow[$pt] } )
         $keyConstraints += [PSCustomObject]@{ typeId=$pt; maxZone=$ptZone; instances=$inst
@@ -3829,151 +3874,151 @@ if ($ExportZonesJson -ne "") {
             forbiddenSectors=$(if($forbiddenBehindOwnDoor.ContainsKey($pt)){@($forbiddenBehindOwnDoor[$pt])}else{$null})
             minFloorYIsland=$(if($islandHeightScope.ContainsKey($pt)){@($islandHeightScope[$pt])}else{$null})
             requireInIsland=$(if($islandRequire.ContainsKey($pt)){@($islandRequire[$pt])}else{$null}) }
-        $wie = if ($null -eq $ptKv.Value) { 'ohne Zonengrenze' } else { "begrenzt auf Zone <= $ptZone" }
-        Write-Output "Pool-Typ $pt $wie aufgenommen ($inst Instanzen im Level)"
+        $how = if ($null -eq $ptKv.Value) { 'without a zone limit' } else { "limited to zone <= $ptZone" }
+        Write-Output "pool type $pt taken in $how ($inst instances in the level)"
     }
-    # Herkunftsstempel: die Pruefsumme DIESES Skripts. Der Randomizer liest
-    # nicht die Kurationstabellen, sondern nur diesen Export - eine Aenderung
-    # an den Tabellen wirkt also erst nach dem Neu-Erzeugen. Genau das ist am
-    # 2026-08-23 aufgefallen: fuenf Exporte im Arbeitsordner stammten vom
-    # 13./14.08 und trugen noch den widerlegten globalen HK-Versatz, waehrend
-    # die Tabelle ihn laengst nur noch fuer rich2 kannte. Mit dem Stempel
-    # sieht man den Unterschied, statt ihn im Spiel zu suchen.
-    $kurationStand = (Get-FileHash $PSCommandPath -Algorithm SHA256).Hash.Substring(0,16)
+    # Origin stamp: the checksum of THIS script. The randomizer does not
+    # read the curation tables, only this export - a change to the tables
+    # thus only acts after regenerating. Exactly that surfaced on
+    # 2026-08-23: five exports in the working folder dated from 13/14 Aug
+    # and still carried the refuted global HK offset, while the table had
+    # long known it only for rich2. With the stamp the difference is
+    # visible instead of being hunted in game.
+    $curationStamp = (Get-FileHash $PSCommandPath -Algorithm SHA256).Hash.Substring(0,16)
 
-    [PSCustomObject]@{ level=$LevelName; kurationStand=$kurationStand; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES); typeNoRooms=@($typeNoRooms); typeNoSectors=@($typeExcludeSectors.GetEnumerator() | ForEach-Object { [PSCustomObject]@{ typeId=[int]$_.Key; sectors=@($_.Value) } }); antitriggerImmun=@($antitriggerImmun); keyBarredSectors=@($keyBarred); keyBarredExemptTypes=@($keyBarredExempt | Sort-Object -Unique); flagPresets=@($flagPresets) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
-    Write-Output "Zonen-Export geschrieben: $ExportZonesJson ($($rows.Count) Sektoren, maxZone=$maxZoneOut, $($keyConstraints.Count) Key-Constraints)"
+    [PSCustomObject]@{ level=$LevelName; curationStamp=$curationStamp; maxZone=$maxZoneOut; sectors=$rows; keyConstraints=$keyConstraints; fixedItems=$fixedItems; coupledTriggers=$coupledTriggers; enemyTypes=$enemyTypes; enemySounds=$enemySounds; requiredInjections=$requiredInjections; typeOffsets=$typeOffsets; keepOcbTypes=@($keepOcbTypes); noWeaponRooms=@($noWeaponRooms); weaponTypes=@($WEAPON_TYPES); typeNoRooms=@($typeNoRooms); typeNoSectors=@($typeExcludeSectors.GetEnumerator() | ForEach-Object { [PSCustomObject]@{ typeId=[int]$_.Key; sectors=@($_.Value) } }); antitriggerImmune=@($antitriggerImmune); keyBarredSectors=@($keyBarred); keyBarredExemptTypes=@($keyBarredExempt | Sort-Object -Unique); flagPresets=@($flagPresets) } | ConvertTo-Json -Depth 4 -Compress | Out-File $ExportZonesJson -Encoding utf8
+    Write-Output "zone export written: $ExportZonesJson ($($rows.Count) sectors, maxZone=$maxZoneOut, $($keyConstraints.Count) key constraints)"
 }
 
 if ($DebugPathTo -ne "") {
-    Write-Output "--- Debug: ERSTZUGANGS-Pfad zu $DebugPathTo ---"
+    Write-Output "--- Debug: FIRST-ACCESS path to $DebugPathTo ---"
     if (-not $zoneOf.ContainsKey($DebugPathTo)) {
-        Write-Output "  Ziel nie erreicht - kein Pfad im begehbaren Graphen."
+        Write-Output "  target never reached - no path in the walkable graph."
     } else {
-        # Nutzt $firstParent aus dem Flood selbst, NICHT eine neue BFS ueber den
-        # Endzustand: gesucht ist die Kante, ueber die der Sektor zum ersten Mal
-        # erreicht wurde. Eine BFS mit allen am Ende offenen Tueren findet
-        # stattdessen irgendeinen spaeteren legalen Weg und verdeckt genau die
-        # zu frueh oeffnende Kante (bei Andrea1/Raum 117 lief sie faelschlich
-        # durch die laengst geoeffnete Tuer 53 statt ueber den echten Frueh-
-        # zugang).
+        # Uses $firstParent from the flood itself, NOT a new BFS over the
+        # final state: sought is the edge via which the sector was reached
+        # for the first time. A BFS with all doors open at the end finds
+        # some later legal way instead and hides exactly the
+        # too-early-opening edge (at Andrea1/room 117 it wrongly ran
+        # through the long-opened door 53 instead of over the real early
+        # access).
         $path = @($DebugPathTo); $cur = $DebugPathTo
         $guard = 0
         while ($firstParent.ContainsKey($cur) -and $guard -lt 10000) { $cur = $firstParent[$cur]; $path = ,$cur + $path; $guard++ }
         for($i=0; $i -lt $path.Count; $i++){
             $zHere = if($zoneOf.ContainsKey($path[$i])){ $zoneOf[$path[$i]] } else { '?' }
             $roomChange = if($i -gt 0){ ($path[$i] -split ',')[0] -ne ($path[$i-1] -split ',')[0] } else { $false }
-            $marker = if($roomChange){ " <- Raumwechsel" } else { "" }
-            "  [{0,3}] {1,-14} Zone {2}{3}" -f $i,$path[$i],$zHere,$marker
+            $marker = if($roomChange){ " <- room change" } else { "" }
+            "  [{0,3}] {1,-14} zone {2}{3}" -f $i,$path[$i],$zHere,$marker
         }
     }
     Write-Output ""
 }
 
-# --- Ausgabe ----------------------------------------------------------------
+# --- Output -----------------------------------------------------------------
 Write-Output "=============================================================="
-Write-Output " Progressions-Zonen: $LevelName"
+Write-Output " Progression zones: $LevelName"
 Write-Output "=============================================================="
 if ($startSeeds.Count -gt 0) {
-    Write-Output "Laras Start: Raum $($START_ROOM[$LevelName]) (nach der Eingangs-Cutscene; Lara-Item liegt in Raum $($lara.room)) -> Zone 0"
+    Write-Output "Lara's start: room $($START_ROOM[$LevelName]) (after the intro cutscene; the Lara item lies in room $($lara.room)) -> zone 0"
 } else {
-    Write-Output "Laras Start: Raum $($lara.room), Sektor ($($lara.sectorX),$($lara.sectorZ)) -> Zone 0"
+    Write-Output "Lara's start: room $($lara.room), sector ($($lara.sectorX),$($lara.sectorZ)) -> zone 0"
 }
 Write-Output ""
-Write-Output "--- Zonenuebergaenge (Blocker) ---"
+Write-Output "--- Zone transitions (blockers) ---"
 foreach($e in $log){
     $di = $e.Door; $it = $items[$di]
-    "Zone {0} -> {1}: Tuer Item {2} (typeId {3}, Raum {4})  geoeffnet durch: {5}" -f `
+    "zone {0} -> {1}: door item {2} (typeId {3}, room {4})  opened by: {5}" -f `
         $e.Zone, ($e.Zone+1), $di, $it.typeId, $it.room, $e.Req.Desc
 }
 Write-Output ""
 if ($DebugSectors.Count -gt 0) {
-    Write-Output "--- Debug: einzelne Sektoren ---"
+    Write-Output "--- Debug: single sectors ---"
     foreach($dk in $DebugSectors){
-        $z = if($zoneOf.ContainsKey($dk)){ "Zone $($zoneOf[$dk])" } else { "NICHT ERREICHT" }
+        $z = if($zoneOf.ContainsKey($dk)){ "zone $($zoneOf[$dk])" } else { "NOT REACHED" }
         $isBlocked = $blocked.ContainsKey($dk)
-        $edges = if($adj.ContainsKey($dk)){ ($adj[$dk] | Sort-Object) -join ', ' } else { '(keine Kanten im Graph)' }
-        "  {0}: {1}  blockiert(Tuer)={2}  Kanten -> {3}" -f $dk,$z,$isBlocked,$edges
+        $edges = if($adj.ContainsKey($dk)){ ($adj[$dk] | Sort-Object) -join ', ' } else { '(no edges in the graph)' }
+        "  {0}: {1}  blocked(door)={2}  edges -> {3}" -f $dk,$z,$isBlocked,$edges
     }
     Write-Output ""
 }
 
 $maxZone = ($zoneOf.Values | Measure-Object -Maximum).Maximum
-Write-Output "--- Sektoren pro Zone ---"
+Write-Output "--- Sectors per zone ---"
 for($z=0; $z -le $maxZone; $z++){
     $cnt = ($zoneOf.GetEnumerator() | Where-Object { $_.Value -eq $z }).Count
     $rms = ($zoneOf.GetEnumerator() | Where-Object { $_.Value -eq $z } | ForEach-Object { ($_.Key -split ',')[0] } | Sort-Object -Unique).Count
-    "Zone {0}: {1,5} Sektoren in {2,3} Raeumen" -f $z,$cnt,$rms
+    "zone {0}: {1,5} sectors in {2,3} rooms" -f $z,$cnt,$rms
 }
-# Kulissenraeume zaehlen nicht als Fehlbestand - sie sind nicht zum Betreten
-# gedacht, ihr Fehlen ist also kein Defizit der Analyse. Dasselbe gilt fuer die
-# handkuratierten EXCLUDE_ROOMS: dass sie nicht erreicht werden, ist das
-# gewuenschte Ergebnis, kein Loch im Modell - sonst saehe Andrea2 mit seinen
-# 763 gesperrten Sektoren aus, als waere die Analyse um 18 Prozent schlechter
-# geworden, obwohl die Restluecke unveraendert klein ist.
+# Scenery rooms do not count as missing stock - they are not meant to be
+# entered, so their absence is no deficit of the analysis. The same holds
+# for the hand-curated EXCLUDE_ROOMS: that they are not reached is the
+# desired result, not a hole in the model - otherwise Andrea2 with its 763
+# barred sectors would look as if the analysis had become 18 percent worse,
+# although the remaining gap is unchanged small.
 $unreachedSec = @($d.sectors | Where-Object {
     -not $_.isWall -and $cameraRooms -notcontains [int]$_.room -and
     $excludeRooms -notcontains [int]$_.room -and
     -not $zoneOf.ContainsKey("$($_.room),$($_.sectorX),$($_.sectorZ)") })
-Write-Output "Nie erreicht: $($unreachedSec.Count) begehbare Sektoren"
+Write-Output "never reached: $($unreachedSec.Count) walkable sectors"
 if ($excludeRooms.Count -gt 0) {
     $exSec = @($d.sectors | Where-Object { -not $_.isWall -and $excludeRooms -contains [int]$_.room })
-    Write-Output "Handgesperrt (EXCLUDE_ROOMS): $($exSec.Count) Sektoren in $($excludeRooms.Count) Raeumen - gewollt, nicht als Luecke gezaehlt"
+    Write-Output "hand-barred (EXCLUDE_ROOMS): $($exSec.Count) sectors in $($excludeRooms.Count) rooms - intended, not counted as a gap"
 }
 if ($vanillaTypes.Count -gt 0) {
-    Write-Output "Bleiben Vanilla (VANILLA_TYPES) - nicht im Pool: $($vanillaTypes -join ', ')"
+    Write-Output "stay vanilla (VANILLA_TYPES) - not in the pool: $($vanillaTypes -join ', ')"
 }
 if ($requiredInjections.Count -gt 0) {
-    Write-Output "Pflicht-Injektionen (REQUIRED_INJECTIONS) - fehlen in Vanilla:"
+    Write-Output "required injections (REQUIRED_INJECTIONS) - missing in vanilla:"
     foreach($ri in $requiredInjections){
         $have = @($d.items | Where-Object { [int]$_.typeId -eq [int]$ri.typeId }).Count
-        Write-Output ("  typeId {0,4} -> Raum {1,4} ({2}; im Level vorhanden: {3})" -f $ri.typeId,$ri.room,$ri.reason,$have)
+        Write-Output ("  typeId {0,4} -> room {1,4} ({2}; present in the level: {3})" -f $ri.typeId,$ri.room,$ri.reason,$have)
     }
 }
 if ($fixedItems.Count -gt 0) {
-    Write-Output "Unantastbare Items (FIXED_ITEMS) - duerfen nicht verschoben werden:"
+    Write-Output "untouchable items (FIXED_ITEMS) - must not be moved:"
     foreach($fi in $fixedItems){
         $inst = @($d.items | Where-Object { [int]$_.index -eq [int]$fi.item })
-        $where = if($inst.Count){ "Raum $($inst[0].room), typeId $($inst[0].typeId)" } else { "im Level nicht found" }
-        Write-Output ("  Item {0,4} - {1} ({2})" -f $fi.item,$fi.reason,$where)
+        $where = if($inst.Count){ "room $($inst[0].room), typeId $($inst[0].typeId)" } else { "not found in the level" }
+        Write-Output ("  item {0,4} - {1} ({2})" -f $fi.item,$fi.reason,$where)
     }
 }
 if ($cameraRooms.Count -gt 0) {
     $camSec = @($d.sectors | Where-Object { -not $_.isWall -and $cameraRooms -contains [int]$_.room })
-    "  (zusaetzlich {0} Sektoren in {1} reinen Kulissenraeumen, nicht mitgezaehlt)" -f $camSec.Count,$cameraRooms.Count
+    "  (additionally {0} sectors in {1} pure scenery rooms, not counted)" -f $camSec.Count,$cameraRooms.Count
 }
 Write-Output ""
-Write-Output "--- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---"
-# Zaehl-Regel statt Typ-Regel: braucht ein Level zwei Slots desselben Typs,
-# reicht es nicht, dass "irgendein" Item frueh genug liegt. Die k-te Instanz
-# muss spaetestens in der Zone liegen, in der der k-te Slot bedient wird.
-# Gameflow-Items bringt Lara mit, sie brauchen keine Platzierung und gehoeren
-# deshalb nicht in die Zaehlregel - sonst meldet sie "0 Instanzen vorhanden,
-# WIDERSPRUCH" fuer etwas, das voellig in Ordnung ist (rich3: Puzzle Hole1 in
-# Raum 119, aber kein Puzzle Item1 im Level).
+Write-Output "--- Key/puzzle items: allowed placement range ---"
+# A counting rule instead of a type rule: if a level needs two slots of the
+# same type, it does not suffice that "some" item lies early enough. The
+# k-th instance must lie no later than the zone in which the k-th slot is
+# served. Gameflow items Lara brings along, they need no placement and
+# therefore do not belong in the counting rule - or it reports "0 instances
+# present, CONTRADICTION" for something perfectly fine (rich3: Puzzle Hole1
+# in room 119, but no Puzzle Item1 in the level).
 $gameflowNeeds = @($itemNeed | Where-Object { $_.Gameflow })
 if ($gameflowNeeds.Count -gt 0) {
-    Write-Output "Nicht im Level vorhanden, kommt per Gameflow (CMD_GIVEOBJ) - keine Platzierung noetig:"
+    Write-Output "not present in the level, comes via gameflow (CMD_GIVEOBJ) - no placement needed:"
     foreach($g in ($gameflowNeeds | Group-Object Type)){
-        "  TypeId {0} - gebraucht ab Zone {1} ({2})" -f $g.Name,(($g.Group | ForEach-Object { $_.Zone } | Measure-Object -Minimum).Minimum),$g.Group[0].Desc
+        "  typeId {0} - needed from zone {1} ({2})" -f $g.Name,(($g.Group | ForEach-Object { $_.Zone } | Measure-Object -Minimum).Minimum),$g.Group[0].Desc
     }
     Write-Output ""
 }
 
-# $byType wurde bereits vor dem ExportZonesJson-Block weiter oben berechnet -
-# hier nur noch die Textausgabe.
+# $byType was already computed above, before the ExportZonesJson block -
+# here only the text output remains.
 foreach($kv in $byType.GetEnumerator() | Sort-Object Name){
     $nt = [int]$kv.Key
     $needs = @($kv.Value | Sort-Object { $_.Zone })
-    # Mehrfach nutzbare Schluessel brauchen nur EINE Instanz, egal wie viele
-    # Schloesser sie bedienen - sonst meldet die Zaehlregel falschen Mangel.
+    # Reusable keys need only ONE instance, no matter how many locks they
+    # serve - otherwise the counting rule reports a false shortage.
     if ($reusableKeys -contains $nt) {
-        "TypeId {0}: mehrfach nutzbar - 1 Instanz reicht fuer {1} Schloss/Schloesser" -f $nt, $needs.Count
+        "typeId {0}: reusable - 1 instance suffices for {1} lock(s)" -f $nt, $needs.Count
         $needs = @($needs | Select-Object -First 1)
     }
-    else { "TypeId {0}: {1} Instanz(en) noetig" -f $nt, $needs.Count }
+    else { "typeId {0}: {1} instance(s) needed" -f $nt, $needs.Count }
     for($j=0; $j -lt $needs.Count; $j++){
-        "    Instanz {0} -> muss in Zone <= {1} liegen  ({2})" -f ($j+1), $needs[$j].Zone, $needs[$j].Desc
+        "    instance {0} -> must lie in zone <= {1}  ({2})" -f ($j+1), $needs[$j].Zone, $needs[$j].Desc
     }
     $cur = @($d.items | Where-Object { [int]$_.typeId -eq $nt })
     $withZone = @($cur | ForEach-Object {
@@ -3981,24 +4026,24 @@ foreach($kv in $byType.GetEnumerator() | Sort-Object Name){
         $z = if($zoneOf.ContainsKey($k)){ [int]$zoneOf[$k] } else { 9999 }
         @{ It=$_; Z=$z }
     } | Sort-Object { $_.Z })
-    "    Vanilla: {0} Instanz(en) vorhanden" -f $withZone.Count
+    "    vanilla: {0} instance(s) present" -f $withZone.Count
     for($j=0; $j -lt $withZone.Count; $j++){
-        $zt = if($withZone[$j].Z -eq 9999){ "nie erreicht" } else { $withZone[$j].Z }
-        $ok = if ($j -ge $needs.Count) { "Reserve" }
+        $zt = if($withZone[$j].Z -eq 9999){ "never reached" } else { $withZone[$j].Z }
+        $ok = if ($j -ge $needs.Count) { "spare" }
               elseif ($withZone[$j].Z -le $needs[$j].Zone) { "OK" }
-              else { "WIDERSPRUCH" }
-        "      Item {0,3} in Raum {1,4} -> Zone {2,-12} [{3}]" -f $withZone[$j].It.index,$withZone[$j].It.room,$zt,$ok
+              else { "CONTRADICTION" }
+        "      item {0,3} in room {1,4} -> zone {2,-12} [{3}]" -f $withZone[$j].It.index,$withZone[$j].It.room,$zt,$ok
     }
-    if ($withZone.Count -lt $needs.Count) { "      [WIDERSPRUCH] zu wenige Instanzen im Level" }
+    if ($withZone.Count -lt $needs.Count) { "      [CONTRADICTION] too few instances in the level" }
 }
 
 Write-Output ""
-Write-Output "--- Warum kam der Flood nicht weiter? ---"
-# Ohne diese Diagnose ist "0 Widersprueche" wertlos: ein Level, in dem der Flood
-# sofort stehenbleibt, leitet gar keine Key-Item-Anforderung ab und meldet
-# deshalb faelschlich "alles in Ordnung". Hier steht, welche Tuer am Rand des
-# erreichten Bereichs zu ist und woran es liegt - und wenn dort gar keine Tuer
-# steht, ist die Ursache Geometrie (nicht modellierter Uebergang), nicht Logik.
+Write-Output "--- Why did the flood not get further? ---"
+# Without this diagnosis, "0 contradictions" is worthless: a level in which
+# the flood stops immediately derives no key-item requirement at all and
+# therefore wrongly reports "all fine". Here stands which door at the edge
+# of the reached area is shut and what it hangs on - and if no door stands
+# there at all, the cause is geometry (an unmodeled transition), not logic.
 $frontier = 0
 foreach($kv in $doorSector.GetEnumerator()){
     $di = $kv.Key; $ks = $kv.Value
@@ -4009,39 +4054,39 @@ foreach($kv in $doorSector.GetEnumerator()){
     $frontier++
     $it = $items[$di]
     $have = if($doorMask.ContainsKey($di)){ $doorMask[$di] } else { 0 }
-    "Tuer Item {0,3} (typeId {1}, Raum {2,4}) Maske {3,2}/31" -f $di,$it.typeId,$it.room,$have
+    "door item {0,3} (typeId {1}, room {2,4}) mask {3,2}/31" -f $di,$it.typeId,$it.room,$have
     $trigs = @($allTrig | Where-Object { $_.T.commands | Where-Object { $_.type -eq 'Object' -and [int]$_.index -eq $di } })
-    if ($trigs.Count -eq 0) { "    kein Trigger im Level schaltet diese Tuer"; continue }
+    if ($trigs.Count -eq 0) { "    no trigger in the level switches this door"; continue }
     foreach($e in $trigs){
-        $st = if ($firedTrig.Contains($e.Id)) { 'ausgeloest' }
-              elseif (-not (Test-ReqSector $e.Req $reached)) { 'Triggersektor nicht erreichbar' }
-              else { 'Item fehlt' }
-        "    Maske {0,2}  {1,-32} -> {2}" -f $e.T.mask, $e.Req.Desc, $st
+        $st = if ($firedTrig.Contains($e.Id)) { 'fired' }
+              elseif (-not (Test-ReqSector $e.Req $reached)) { 'trigger sector not reachable' }
+              else { 'item missing' }
+        "    mask {0,2}  {1,-32} -> {2}" -f $e.T.mask, $e.Req.Desc, $st
     }
 }
 if ($frontier -eq 0) {
-    Write-Output "Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,"
-    Write-Output "nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert)."
+    Write-Output "No closed door at the edge - the flood stops at the geometry,"
+    Write-Output "not at a blocker (jump/climb/teleport/water not modeled)."
 }
 
 Write-Output ""
-Write-Output "--- Groesste unerreichte Gebiete ---"
-# Unerreichte Sektoren zu Komponenten gruppieren und je Komponente den
-# raeumlich naechsten erreichten Sektor suchen. Damit steht im Report, WO in
-# trview nachzusehen ist, statt nur DASS etwas fehlt. Kleine Distanz und
-# geringer Hoehenunterschied = vermutlich ein Sprung oder eine Kletterstelle.
-# Alternate-Raeume bleiben aussen vor: sie sind nie eigenstaendig betretbar,
-# sondern tauschen ihren Basisraum aus. Sie als eigenes "unerreichtes Gebiet" zu
-# melden erzeugt nur Rauschen - zwei Alternates verschiedener Flip-Gruppen
-# koennen raeumlich exakt uebereinanderliegen (joby5 Raum 52 und 86, Abstand 0,
-# Hoehendiff 0) und sehen dann wie eine fehlende Verbindung aus, obwohl sie im
-# Spiel nie gleichzeitig existieren. Die richtige Frage ist immer, wie Lara den
-# BASISraum erreicht.
+Write-Output "--- Largest unreached areas ---"
+# Group unreached sectors into components and per component look for the
+# spatially closest reached sector. That puts into the report WHERE to look
+# in trview, instead of only THAT something is missing. Small distance and
+# small height difference = presumably a jump or a climbing spot.
+# Alternate rooms stay out: they are never independently enterable, they
+# swap out their base room. Reporting them as their own "unreached area"
+# only produces noise - two alternates of different flip groups can lie
+# spatially exactly on top of each other (joby5 rooms 52 and 86, distance
+# 0, height diff 0) and then look like a missing connection, although in
+# game they never exist at the same time. The right question is always how
+# Lara reaches the BASE room.
 $unreach = @{}
 foreach($s in $d.sectors){
     if ($s.isWall -or $s.alternateRoom) { continue }
-    if ($cameraRooms -contains [int]$s.room) { continue }   # reine Kulisse, siehe CAMERA_ROOMS
-    if ($excludeRooms -contains [int]$s.room) { continue }  # handgesperrt, siehe EXCLUDE_ROOMS
+    if ($cameraRooms -contains [int]$s.room) { continue }   # pure scenery, see CAMERA_ROOMS
+    if ($excludeRooms -contains [int]$s.room) { continue }  # hand-barred, see EXCLUDE_ROOMS
     $k = "$($s.room),$($s.sectorX),$($s.sectorZ)"
     if ($zoneOf.ContainsKey($k)) { continue }
     $unreach[$k] = $s
@@ -4061,162 +4106,168 @@ foreach($k in $unreach.Keys){
     }
     $comps += ,$comp
 }
-# KEIN Weltabstand als Hinweis. TR-Raeume ueberlappen sich im Weltkoordinaten-
-# system beliebig; erst die Portale nÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¤hen sie zusammen, wodurch nicht-euklidische
-# Geometrie entsteht (Area 51 in TR3: das UFO ist geometrisch winzig, ingame
-# riesig). Zwei Sektoren an derselben Weltkoordinate koennen im Spiel voellig
-# unverbunden sein - "naechster Anschluss nach Abstand" war deshalb irrefuehrend.
-# Da Portalkanten inzwischen beidseitig sind, gilt: hat ein Gebiet ueberhaupt ein
-# Portal in den erreichten Teil, ist es auch erreicht. Bleibt es uebrig, fuehrt
-# der Weg dorthin ueber etwas, das nicht in den Sektordaten steht.
-# Ein Gebiet, in dem nur Animating-Objekte stehen und kein einziger Pickup,
-# Gegner, Schalter oder Tuerteil, ist mit hoher Wahrscheinlichkeit reine
-# Kamerafahrt-Geometrie und gar nicht zum Betreten gedacht. Andy2 (Labyrinth)
-# ist der belegte Fall: das eigentliche Level ist klein, wirkt durch die
-# beweglichen Bruecken aber gross, und die zusaetzlichen Muehlen-Raeume gibt es
-# nur fuer den Flyby - eine drehbare Muehle waere als Animating nicht walkable,
-# deshalb bekam sie einen eigenen Raum. Solche Gebiete sind KEINE Luecke.
+# NO world distance as a hint. TR rooms overlap arbitrarily in world
+# coordinates; only the portals connect them, and from that a different
+# in-game geometry arises (Area 51 in TR3: the UFO is geometrically tiny,
+# in game huge). Two sectors at the same world coordinate can be completely
+# unconnected in game - "closest connection by distance" was therefore
+# misleading.
+# Since portal edges are by now two-way, the following holds: if an area
+# has any portal into the reached part at all, it is reached too. If it
+# remains, the way there runs over something that does not stand in the
+# sector data.
+# An area in which only animating objects stand and not a single pickup,
+# enemy, switch or door part is with high probability pure camera-flyby
+# geometry and not meant to be entered at all. Andy2 (the labyrinth) is the
+# documented case: the actual level is small, only seems large through the
+# movable bridges, and the additional mill rooms exist only for the flyby -
+# a rotatable mill would not be walkable as an animating, so it got its own
+# room. Such areas are NOT a gap.
 $ANIM_LO = 416; $ANIM_HI = 447
-# Bereits geklaerte Luecken. Ohne das meldet der Report bei jedem Lauf dieselben
-# Raeume als offene Frage, obwohl die Antwort laengst vorliegt - und die Antwort
-# steht dann nur im Chatverlauf statt im Werkzeug. Raum -> Grund.
+# Already clarified gaps. Without this, the report announces the same rooms
+# as an open question on every run, although the answer has long been there
+# - and the answer then stands only in the chat history instead of in the
+# tool. Room -> reason.
 $KNOWN_GAPS = @{
-    # joby3: vier Nischen fuer die Ventilatoren. Alle vier bauartgleich - 3x4
-    # Raum, genau zwei begehbare Sektoren, kein einziges Portal; in Raum 66
-    # sitzt sichtbar ein Electrical Light. Vom Nutzer in trview bestaetigt.
-    # joby4: Raum 0 liegt ausserhalb der Karte, ein Ueberbleibsel der Devs ohne
-    # Funktion - vom Nutzer in trview angesehen. Einer der drei Nicht-Wasser-
-    # raeume des Levels, floorY -1024 bis 256 und damit weit ueber der
-    # Schwimmgrenze. Er meldete sich als mehrere Ein-Sektor-Luecken.
-    # Laut Nutzer sind 0 und 1 der Raum below und above eines Stapels - beide
-    # ausserhalb der Karte. Das deckt sich mit den Daten: gleiche Masse 6x15,
-    # dieselben 52 Nicht-Wand-Sektoren, null Ablagen, keine Items, beide kein
-    # Wasserraum, und Raum 0 hat sein einziges Portal nach Raum 1.
+    # joby3: four niches for the ventilators. All four identically built -
+    # 3x4 room, exactly two walkable sectors, not a single portal; in room
+    # 66 an Electrical Light visibly sits. Confirmed by the user in trview.
+    # joby4: room 0 lies outside the map, a leftover of the devs without
+    # function - looked at by the user in trview. One of the level's three
+    # non-water rooms, floorY -1024 to 256 and thereby far above the
+    # swimming limit. It announced itself as several one-sector gaps.
+    # Per the user, 0 and 1 are the room below and above of a stack - both
+    # outside the map. That matches the data: same dimensions 6x15, the
+    # same 52 non-wall sectors, zero spots, no items, neither a water room,
+    # and room 0 has its only portal into room 1.
     'andy1' = @{
-        49  = 'Nicht angebunden'
-        220 = 'Nicht angebunden'
+        49  = 'not connected'
+        220 = 'not connected'
     }
     'joby4' = @{
-        0 = 'Out of map, Ueberbleibsel der Devs, ohne Funktion (Raum below)'
-        1 = 'Out of map, Ueberbleibsel der Devs, ohne Funktion (Raum above)'
+        0 = 'out of map, leftover of the devs, without function (room below)'
+        1 = 'out of map, leftover of the devs, without function (room above)'
     }
-    # joby5, alle vier Luecken vom Nutzer in trview durchgesehen. Raum 104 ist
-    # dabei der mit dem Keyhole8, dessen Tuer 103 ohnehin 11111 traegt und ab
-    # Levelstart unresolved steht - das Schloss ist gegenstandslos.
+    # joby5, all four gaps reviewed by the user in trview. Room 104 is the
+    # one with the Keyhole8 whose door 103 carries 11111 anyway and stands
+    # open from level start - the lock is moot.
     'joby5' = @{
-        11  = 'Ventilatorraum'
-        22  = 'Out of map, ohne Bedeutung'
-        23  = 'Out of map, ohne Bedeutung'
-        87  = 'Kulisse'
-        95  = 'Kulisse'
-        104 = 'Kulisse (enthaelt das gegenstandslose Keyhole8 zu Tuer 103)'
-        105 = 'Ventilatorraum'
-        166 = 'Kulisse'
-        167 = 'Kulisse'
+        11  = 'ventilator room'
+        22  = 'out of map, without meaning'
+        23  = 'out of map, without meaning'
+        87  = 'scenery'
+        95  = 'scenery'
+        104 = 'scenery (contains the moot Keyhole8 for door 103)'
+        105 = 'ventilator room'
+        166 = 'scenery'
+        167 = 'scenery'
     }
-    # Andy2. Die vier grossen Luecken sind vier fast baugleiche Muehlenmodule -
-    # 270/270/215/215 Sektoren, alle auf yBottom 12544, nebeneinander in der
-    # Welt, und in allen vieren steckt kein einziges bespielbares Objekt. Der
-    # Nutzer hat sie in trview angesehen: "Das sind nur Flyby-Bereiche, kein
-    # Kernsegment." Dasselbe gilt fuer den Bereich um Raum 15.
+    # Andy2. The four large gaps are four almost identically built mill
+    # modules - 270/270/215/215 sectors, all on yBottom 12544, side by side
+    # in the world, and in all four not a single playable object sits. The
+    # user looked at them in trview: "Those are only flyby areas, no core
+    # segment." The same holds for the area around room 15.
     #
-    # Gesperrt werden muss dafuer nichts - in keinem dieser Raeume liegt eine
-    # einzige erreichte Ablageflaeche. Sie stehen hier ausschliesslich, damit
-    # der Report sie nicht bei jedem Lauf neu als ungeklaerte Luecke meldet.
+    # Nothing has to be barred for that - in none of these rooms lies a
+    # single reached placement surface. They stand here exclusively so the
+    # report does not announce them as an unclarified gap on every run.
     'Andy2' = @{
-        15  = 'Out of map, nur Flyby'
-        137 = 'Muehlenmodul, nur Flyby'; 139 = 'Muehlenmodul, nur Flyby'
-        140 = 'Muehlenmodul, nur Flyby'; 146 = 'Muehlenmodul, nur Flyby'
-        148 = 'Muehlenmodul, nur Flyby'; 149 = 'Muehlenmodul, nur Flyby'
-        150 = 'Muehlenmodul, nur Flyby'; 151 = 'Muehlenmodul, nur Flyby'
-        153 = 'Muehlenmodul, nur Flyby'; 154 = 'Muehlenmodul, nur Flyby'
-        156 = 'Muehlenmodul, nur Flyby'; 158 = 'Muehlenmodul, nur Flyby'
-        159 = 'Muehlenmodul, nur Flyby'; 160 = 'Muehlenmodul, nur Flyby'
-        189 = 'Muehlenmodul, nur Flyby'; 190 = 'Muehlenmodul, nur Flyby'
-        192 = 'Muehlenmodul, nur Flyby'; 193 = 'Muehlenmodul, nur Flyby'
-        194 = 'Muehlenmodul, nur Flyby'; 195 = 'Muehlenmodul, nur Flyby'
-        196 = 'Muehlenmodul, nur Flyby'; 197 = 'Muehlenmodul, nur Flyby'
-        198 = 'Muehlenmodul, nur Flyby'; 203 = 'Muehlenmodul, nur Flyby'
-        204 = 'Muehlenmodul, nur Flyby'; 205 = 'Muehlenmodul, nur Flyby'
-        207 = 'Muehlenmodul, nur Flyby'; 242 = 'Muehlenmodul, nur Flyby'
-        246 = 'Muehlenmodul, nur Flyby'; 247 = 'Muehlenmodul, nur Flyby'
+        15  = 'out of map, flyby only'
+        137 = 'mill module, flyby only'; 139 = 'mill module, flyby only'
+        140 = 'mill module, flyby only'; 146 = 'mill module, flyby only'
+        148 = 'mill module, flyby only'; 149 = 'mill module, flyby only'
+        150 = 'mill module, flyby only'; 151 = 'mill module, flyby only'
+        153 = 'mill module, flyby only'; 154 = 'mill module, flyby only'
+        156 = 'mill module, flyby only'; 158 = 'mill module, flyby only'
+        159 = 'mill module, flyby only'; 160 = 'mill module, flyby only'
+        189 = 'mill module, flyby only'; 190 = 'mill module, flyby only'
+        192 = 'mill module, flyby only'; 193 = 'mill module, flyby only'
+        194 = 'mill module, flyby only'; 195 = 'mill module, flyby only'
+        196 = 'mill module, flyby only'; 197 = 'mill module, flyby only'
+        198 = 'mill module, flyby only'; 203 = 'mill module, flyby only'
+        204 = 'mill module, flyby only'; 205 = 'mill module, flyby only'
+        207 = 'mill module, flyby only'; 242 = 'mill module, flyby only'
+        246 = 'mill module, flyby only'; 247 = 'mill module, flyby only'
     }
-    # rich2, alle vier Luecken vom Nutzer erklaert. 137 und 138 sind zwei von
-    # sechs Ein-Sektor-Nischen hinter Kick Doors (131/132/133 haengen an Raum
-    # 134, 136/137/138 an Raum 135) - Lara tritt sie einfach ein, ueber Raum 131
-    # geht das Level weiter. Zu sperren ist dort nichts: der einzige Sektor jeder
-    # Nische traegt die Tuer selbst und ist damit ohnehin keine Ablage.
+    # rich2, all four gaps explained by the user. 137 and 138 are two of
+    # six one-sector niches behind kick doors (131/132/133 hang on room
+    # 134, 136/137/138 on room 135) - Lara simply kicks them in, via room
+    # 131 the level continues. Nothing to bar there: the single sector of
+    # each niche carries the door itself and is thus no spot anyway.
     'rich2' = @{
-        83  = 'Flyby-Kulisse'
-        137 = 'Nische hinter einer Kick Door, Lara tritt sie ein'
-        138 = 'Nische hinter einer Kick Door, Lara tritt sie ein'
-        158 = 'Out of map'
+        83  = 'flyby scenery'
+        137 = 'niche behind a kick door, Lara kicks it in'
+        138 = 'niche behind a kick door, Lara kicks it in'
+        158 = 'out of map'
     }
-    # rich1, alle vier Luecken vom Nutzer erklaert. 98/99 ist die Flyby-Kulisse
-    # mit dem Twogun, 64 ebenfalls Kulisse (ein Scientist und drei Animatings,
-    # ohne ein einziges Portal), 133-135 und 148/149 Kulisse. Raum 142 liegt out
-    # of map und traegt den Triggersektor fuer Tuer 186 - die Tuer kann damit nie
-    # aufgehen, was volumes Nutzer wieder ein Antitrigger-Fix ist.
+    # rich1, all four gaps explained by the user. 98/99 is the flyby
+    # scenery with the Twogun, 64 scenery as well (a scientist and three
+    # animatings, without a single portal), 133-135 and 148/149 scenery.
+    # Room 142 lies out of map and carries the trigger sector for door 186
+    # - so the door can never open, which per the user is again an
+    # antitrigger fix.
     'rich1' = @{
-        64  = 'Kulisse, ohne Portal'
-        98  = 'Flyby-Kulisse'
-        99  = 'Flyby-Kulisse'
-        133 = 'Kulisse'
-        134 = 'Kulisse'
-        135 = 'Kulisse'
-        142 = 'Out of map, Antitrigger-Fix (traegt den Trigger fuer Tuer 186)'
-        148 = 'Kulisse'
-        149 = 'Kulisse'
+        64  = 'scenery, without a portal'
+        98  = 'flyby scenery'
+        99  = 'flyby scenery'
+        133 = 'scenery'
+        134 = 'scenery'
+        135 = 'scenery'
+        142 = 'out of map, antitrigger fix (carries the trigger for door 186)'
+        148 = 'scenery'
+        149 = 'scenery'
     }
-    # andy3, alle vier Luecken vom Nutzer in trview durchgesehen. Es liegt in
-    # keiner von ihnen ein bespielbares Objekt.
+    # andy3, all four gaps reviewed by the user in trview. In none of them
+    # lies a playable object.
     'andy3' = @{
-        148 = 'Out of map'
-        180 = 'Flyby-Kulisse'
-        181 = 'Out of map'
-        189 = 'Flyby-Kulisse'
-        190 = 'Flyby-Kulisse'
-        191 = 'Flyby-Kulisse'
-        # Raum 102 steht bewusst NICHT hier. Er ist Kernlevel und wird auch
-        # erreicht - nur ein paar seiner Sektoren nicht, und die melden sich
-        # zusammen mit dem benachbarten 103 als Vier-Sektor-Luecke.
-        103 = 'Out of map'
+        148 = 'out of map'
+        180 = 'flyby scenery'
+        181 = 'out of map'
+        189 = 'flyby scenery'
+        190 = 'flyby scenery'
+        191 = 'flyby scenery'
+        # Room 102 deliberately does NOT stand here. It is core level and
+        # is reached too - only a few of its sectors are not, and they
+        # announce themselves together with the neighboring 103 as a
+        # four-sector gap.
+        103 = 'out of map'
     }
     'joby3' = @{
-        63  = 'Dekoraum fuer den Ventilator'
-        66  = 'Dekoraum fuer den Ventilator'
-        111 = 'Dekoraum fuer den Ventilator'
-        113 = 'Dekoraum fuer den Ventilator'
-        # 180 kam erst zum Vorschein, nachdem die 13 Kulissenraeume gesperrt
-        # waren. Bauartgleich mit den vier obigen - 3x4, zwei begehbare
-        # Sektoren, kein Portal - und wie Raum 66 mit einem Electrical Light
-        # darin. Aus der Bauweise geschlossen, nicht vom Nutzer bestaetigt.
-        180 = 'Dekoraum fuer den Ventilator (aus der Bauweise geschlossen)'
+        63  = 'deco room for the ventilator'
+        66  = 'deco room for the ventilator'
+        111 = 'deco room for the ventilator'
+        113 = 'deco room for the ventilator'
+        # 180 only came to light after the 13 scenery rooms were barred.
+        # Identically built to the four above - 3x4, two walkable sectors,
+        # no portal - and like room 66 with an Electrical Light inside.
+        # Concluded from the construction, not confirmed by the user.
+        180 = 'deco room for the ventilator (concluded from the construction)'
     }
     'Andrea3' = @{
-        13 = 'Antitrigger-Fix der Devs, fuer uns ohne Bedeutung'
-        71 = 'Ueberbleibsel der Devs, ohne Funktion'
-        72 = 'Ueberbleibsel der Devs, ohne Funktion'
-        77 = 'ohne Funktion'
+        13 = 'antitrigger fix of the devs, without meaning for us'
+        71 = 'leftover of the devs, without function'
+        72 = 'leftover of the devs, without function'
+        77 = 'without function'
     }
     'joby2' = @{
-        # Der Kran, der am Levelende ueber dem U-Boot schwenkt, ist im
-        # eigentlichen Level ein Mesh. Diese Raeume existieren nur fuer die
-        # Animation - warum das nicht am echten Kran haengt, weiss auch der
-        # Nutzer nicht, aber betretbar ist hier nichts.
-        49 = 'Kran-Animation fuers Levelende, im Level selbst ein Mesh'
-        50 = 'Kran-Animation fuers Levelende, im Level selbst ein Mesh'
-        51 = 'Kran-Animation fuers Levelende, im Level selbst ein Mesh'
-        0  = 'nur Animatings, keine bespielbare Geometrie'
+        # The crane that swings over the submarine at the level's end is a
+        # mesh in the actual level. These rooms exist only for the
+        # animation - why that does not hang on the real crane, the user
+        # does not know either, but nothing here is enterable.
+        49 = 'crane animation for the level end, in the level itself a mesh'
+        50 = 'crane animation for the level end, in the level itself a mesh'
+        51 = 'crane animation for the level end, in the level itself a mesh'
+        0  = 'only animatings, no playable geometry'
     }
-    # rich3: drei Ein-Sektor-Raeume ohne Portal, alle drei geklaert.
-    # 212 und 217 enthalten je einen Rollingball - das ist seine Startnische,
-    # von dort rollt er los. Lara geht da nie hin. Raum 217 hat der Nutzer
-    # ausserdem als Antitrigger-Fix-Raum benannt, zusammen mit Raum 112.
+    # rich3: three one-sector rooms without a portal, all three clarified.
+    # 212 and 217 each contain a rollingball - that is its start niche,
+    # from there it rolls off. Lara never goes there. Room 217 the user
+    # additionally named as an antitrigger-fix room, together with room
+    # 112.
     'rich3' = @{
-        205 = 'nur ein Animating, Kamerafahrt-Geometrie'
-        212 = 'Startnische eines Rollingballs (Item 222)'
-        217 = 'Startnische eines Rollingballs (Item 224), zugleich Antitrigger-Fix'
+        205 = 'only an animating, camera-flyby geometry'
+        212 = 'start niche of a rollingball (item 222)'
+        217 = 'start niche of a rollingball (item 224), at the same time an antitrigger fix'
     }
 }
 $knownGaps = @{}
@@ -4228,67 +4279,67 @@ foreach($comp in ($comps | Sort-Object { -$_.Count } | Select-Object -First 4)){
     $itemsIn = @($d.items | Where-Object { $compRooms -contains [int]$_.room })
     $meaningful = @($itemsIn | Where-Object { [int]$_.typeId -lt $ANIM_LO -or [int]$_.typeId -gt $ANIM_HI })
     $allKnown = ($compRooms.Count -gt 0) -and -not (@($compRooms | Where-Object { -not $knownGaps.ContainsKey($_) }).Count)
-    "Gebiet mit {0,5} Sektoren in {1,3} Raeumen" -f $comp.Count,$compRooms.Count
-    "   Raeume: {0}" -f (($compRooms | Select-Object -First 20) -join ', ')
-    if ($compRooms.Count -gt 20) { "           ... und {0} weitere" -f ($compRooms.Count-20) }
+    "area with {0,5} sectors in {1,3} rooms" -f $comp.Count,$compRooms.Count
+    "   rooms: {0}" -f (($compRooms | Select-Object -First 20) -join ', ')
+    if ($compRooms.Count -gt 20) { "           ... and {0} more" -f ($compRooms.Count-20) }
     if ($allKnown) {
-        "   GEKLAERT - keine offene Frage:"
-        foreach($rr in $compRooms){ "     Raum {0,4}: {1}" -f $rr,$knownGaps[$rr] }
+        "   CLARIFIED - no open question:"
+        foreach($rr in $compRooms){ "     room {0,4}: {1}" -f $rr,$knownGaps[$rr] }
     }
     elseif ($itemsIn.Count -gt 0 -and $meaningful.Count -eq 0) {
-        "   Enthaelt {0} Objekte, davon KEINES bespielbar - nur Animatings." -f $itemsIn.Count
-        "   => vermutlich reine Kamerafahrt-Geometrie, keine echte Luecke."
+        "   Contains {0} objects, NONE of them playable - only animatings." -f $itemsIn.Count
+        "   => presumably pure camera-flyby geometry, no real gap."
     } else {
-        "   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil."
-        "   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,"
-        "   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren."
+        "   No portal connects this area with the reached part."
+        "   So the access is a jump, a climbing spot, monkeyswing, a dive,"
+        "   a teleporter or a cutscene - please clarify in game or trview."
         if ($meaningful.Count -gt 0) {
-            "   Bespielbare Objekte darin: {0}" -f (($meaningful | Group-Object typeId | ForEach-Object { "$($_.Name)x$($_.Count)" }) -join ', ')
+            "   playable objects inside: {0}" -f (($meaningful | Group-Object typeId | ForEach-Object { "$($_.Name)x$($_.Count)" }) -join ', ')
         }
     }
 }
 
 Write-Output ""
-Write-Output "--- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---"
-# Die Tabelle steht weiter oben bei den uebrigen Kurationsdaten, weil sie
-# inzwischen nicht nur berichtet, sondern durchgesetzt wird - siehe die
-# Auswertung vor dem Constraint-Aufbau.
+Write-Output "--- Equipment gates (manual, not derivable from level data) ---"
+# The table stands further up with the other curation data, because by now
+# it is not only reported but enforced - see the evaluation before the
+# constraint build.
 if (-not $EQUIP_GATE.ContainsKey($LevelName)) {
-    Write-Output "Keine hinterlegt."
+    Write-Output "None on record."
 } else {
     foreach($g in $EQUIP_GATE[$LevelName].GetEnumerator()){
         $swItem = [int]$g.Key
-        # In welcher Zone wird dieser Schalter gebraucht?
+        # In which zone is this switch needed?
         $z = ($log | Where-Object { $_.Req.Desc -like "*Item $swItem *" } | ForEach-Object { $_.Zone } | Sort-Object | Select-Object -First 1)
         if ($null -eq $z) { $z = '?' }
-        "Schalter Item {0}: {1}" -f $swItem, $g.Value.Desc
-        "  wird gebraucht in Zone {0} -> Ausruestung muss in Zone <= {0} liegen" -f $z
+        "switch item {0}: {1}" -f $swItem, $g.Value.Desc
+        "  needed in zone {0} -> equipment must lie in zone <= {0}" -f $z
         foreach($nt in $g.Value.Need){
             $inst = @($d.items | Where-Object { [int]$_.typeId -eq [int]$nt })
             foreach($c in $inst){
                 $k = "$($c.room),$($c.sectorX),$($c.sectorZ)"
-                $iz = if($zoneOf.ContainsKey($k)){ $zoneOf[$k] } else { 'nie erreicht' }
-                $ok = if($zoneOf.ContainsKey($k) -and $z -ne '?' -and $zoneOf[$k] -le $z){ 'OK' } else { 'PRUEFEN' }
-                "    typeId {0,4} Item {1,3} in Raum {2,4} -> Zone {3,-12} [{4}]" -f $nt,$c.index,$c.room,$iz,$ok
+                $iz = if($zoneOf.ContainsKey($k)){ $zoneOf[$k] } else { 'never reached' }
+                $ok = if($zoneOf.ContainsKey($k) -and $z -ne '?' -and $zoneOf[$k] -le $z){ 'OK' } else { 'CHECK' }
+                "    typeId {0,4} item {1,3} in room {2,4} -> zone {3,-12} [{4}]" -f $nt,$c.index,$c.room,$iz,$ok
             }
         }
     }
 }
 
 Write-Output ""
-Write-Output "--- Selbsttest: Level durchspielbar? ---"
-# Andrea1 hat kein EndLevel-Kommando. Das Level endet ueber einen Cutscene-
-# Trigger: nach der Cutscene startet der Gameflow das naechste Level. Der
-# Cutscene-Trigger ist damit der Terminus der Zonenkette, EndLevel nur der
-# Sonderfall fuer Level, die ihn tatsaechlich benutzen.
+Write-Output "--- Self-test: level completable? ---"
+# Andrea1 has no EndLevel command. The level ends via a cutscene trigger:
+# after the cutscene the gameflow starts the next level. The cutscene
+# trigger is thus the terminus of the zone chain, EndLevel only the special
+# case for levels that actually use it.
 $endTrig = @($d.triggers | Where-Object { $_.commands | Where-Object { $_.type -in @('EndLevel','Cutscene') } })
 if ($endTrig.Count -eq 0) {
-    Write-Output "Weder EndLevel- noch Cutscene-Trigger found - Terminus unbekannt."
+    Write-Output "Neither an EndLevel nor a Cutscene trigger found - terminus unknown."
 } else {
     foreach($t in $endTrig){
         $k = "$($t.room),$($t.sectorX),$($t.sectorZ)"
-        $z = if($zoneOf.ContainsKey($k)){ "Zone $($zoneOf[$k])" } else { "NICHT ERREICHBAR" }
+        $z = if($zoneOf.ContainsKey($k)){ "zone $($zoneOf[$k])" } else { "NOT REACHABLE" }
         $kind = ($t.commands | Where-Object { $_.type -in @('EndLevel','Cutscene') } | Select-Object -First 1)
-        "{0} {1} in Raum {2,4} Sektor ({3},{4}) -> {5}" -f $kind.type,$kind.index,$t.room,$t.sectorX,$t.sectorZ,$z
+        "{0} {1} in room {2,4} sector ({3},{4}) -> {5}" -f $kind.type,$kind.index,$t.room,$t.sectorX,$t.sectorZ,$z
     }
 }

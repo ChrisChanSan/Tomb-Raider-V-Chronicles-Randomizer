@@ -1,51 +1,60 @@
-﻿==============================================================
- Progressions-Zonen: andy1
+﻿flipmap: 5 sectors open something the base does not have - 0 of them without a release
+zone 0 -> 1: flipmap gate 213/214 released - the slingshot lets the bells fall (types 182+183 present)
+island group (deadstops 47, 186): 1044 sectors in 55 rooms
+barred behind own door: type 172, 1 door(s) -> 1 sectors (intersection)
+wall spots: 186 of 325 sectors have at least one wall edge
+approach sectors: 263 of 325 sectors have at least one
+pool type 174 taken in limited to zone <= 1 (1 instances in the level)
+pool type 183 taken in limited to zone <= 0 (1 instances in the level)
+pool type 182 taken in limited to zone <= 0 (1 instances in the level)
+zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_andy1.json (325 sectors, maxZone=2, 4 key constraints)
 ==============================================================
-Laras Start: Raum 70, Sektor (3,4) -> Zone 0
+ Progression zones: andy1
+==============================================================
+Lara's start: room 70, sector (3,4) -> zone 0
 
---- Zonenuebergaenge (Blocker) ---
-Zone 0 -> 1: Tuer Item 52 (typeId 284, Raum 202)  geoeffnet durch: Puzzle Item1 in Schloss Item 51 (Raum 202)
-Zone 0 -> 1: Tuer Item 12 (typeId 284, Raum 55)  geoeffnet durch: Pickup-Trigger
+--- Zone transitions (blockers) ---
+zone 1 -> 2: door item 52 (typeId 284, room 202)  opened by: Puzzle Item1 into lock item 51 (room 202)
+zone 1 -> 2: door item 12 (typeId 284, room 55)  opened by: pickup trigger
 
---- Sektoren pro Zone ---
-Zone 0:  3316 Sektoren in 237 Raeumen
-Zone 1:    28 Sektoren in   6 Raeumen
-Nie erreicht: 6 begehbare Sektoren
+--- Sectors per zone ---
+zone 0:  2575 sectors in 174 rooms
+zone 1:   435 sectors in  53 rooms
+zone 2:    28 sectors in   6 rooms
+never reached: 3 walkable sectors
+hand-barred (EXCLUDE_ROOMS): 309 sectors in 13 rooms - intended, not counted as a gap
+untouchable items (FIXED_ITEMS) - must not be moved:
+  item    9 - secret - stays in place until the dedicated secret list (room 53, typeId 223)
+  item   24 - secret - stays in place until the dedicated secret list (room 114, typeId 223)
+  item   58 - secret - stays in place until the dedicated secret list (room 206, typeId 223)
 
---- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
-TypeId 172: 1 Instanz(en) noetig
-    Instanz 1 -> muss in Zone <= 0 liegen  (Puzzle Item1 in Schloss Item 51 (Raum 202))
-    Vanilla: 1 Instanz(en) vorhanden
-      Item   8 in Raum   51 -> Zone 0            [OK]
+--- Key/puzzle items: allowed placement range ---
+typeId 172: 1 instance(s) needed
+    instance 1 -> must lie in zone <= 1  (Puzzle Item1 into lock item 51 (room 202))
+    vanilla: 1 instance(s) present
+      item   8 in room   51 -> zone 1            [OK]
 
---- Warum kam der Flood nicht weiter? ---
-Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
-nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
+--- Why did the flood not get further? ---
+No closed door at the edge - the flood stops at the geometry,
+not at a blocker (jump/climb/teleport/water not modeled).
 
---- Groesste unerreichte Gebiete ---
-Gebiet mit     3 Sektoren in   1 Raeumen
-   Raeume: 59
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     2 Sektoren in   1 Raeumen
-   Raeume: 49
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 220
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+--- Largest unreached areas ---
+area with     2 sectors in   1 rooms
+   rooms: 49
+   CLARIFIED - no open question:
+     room   49: not connected
+area with     1 sectors in   1 rooms
+   rooms: 220
+   CLARIFIED - no open question:
+     room  220: not connected
 
---- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
-Keine hinterlegt.
+--- Equipment gates (manual, not derivable from level data) ---
+None on record.
 
---- Selbsttest: Level durchspielbar? ---
-EndLevel 0 in Raum    1 Sektor (1,1) -> Zone 0
-Cutscene 19 in Raum   51 Sektor (2,2) -> Zone 0
-Cutscene 21 in Raum  113 Sektor (4,1) -> Zone 0
-Cutscene 14 in Raum  151 Sektor (1,1) -> Zone 0
-Cutscene 14 in Raum  151 Sektor (2,1) -> Zone 0
-Cutscene 10 in Raum  186 Sektor (2,4) -> Zone 0
+--- Self-test: level completable? ---
+EndLevel 0 in room    1 sector (1,1) -> zone 0
+Cutscene 19 in room   51 sector (2,2) -> zone 1
+Cutscene 21 in room  113 sector (4,1) -> zone 0
+Cutscene 14 in room  151 sector (1,1) -> zone 0
+Cutscene 14 in room  151 sector (2,1) -> zone 0
+Cutscene 10 in room  186 sector (2,4) -> zone 0

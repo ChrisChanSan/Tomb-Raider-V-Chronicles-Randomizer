@@ -1,16 +1,16 @@
-# Raumweise Portal-Flut, analog zu trviews "Depth"-Funktion: von Laras Start
-# aus werden Raeume nach Anzahl der Portal-Spruenge (Depth 0, 1, 2, ...)
-# eingeteilt - NICHT sektorweise wie ZoneAnalyse.ps1, sondern rein ueber
-# portalTarget/roomBelow/roomAbove, unabhaengig davon ob eine Tuer im Weg
-# steht oder ein Sektor eine Wand ist.
+# Room-wise portal flood, analogous to trview's "Depth" function: from
+# Lara's start, rooms are grouped by the number of portal hops (depth 0, 1,
+# 2, ...) - NOT sector-wise like ZoneAnalyse.ps1, but purely via
+# portalTarget/roomBelow/roomAbove, regardless of whether a door stands in
+# the way or a sector is a wall.
 #
-# Zweck: Wenn ein Raum hier erreichbar ist, mein sektorweiser Flood in
-# ZoneAnalyse.ps1 ihn aber als unerreicht meldet, zeigt das eine ECHTE
-# Blockade (Tuer, Wand, fehlende Sektorverbindung) - nicht bloss eine Luecke
-# in der Portal-Graph-Konnektivitaet. So laesst sich unterscheiden, ob ein
-# Levelbereich wie der Luftschacht in joby3 durch Bewegung (Klettern/Crawlen)
-# erreicht wird, die in den Sektordaten gar nicht als Portal auftaucht, oder
-# ob er einfach nur hinter einer (noch geschlossenen) Tuer liegt.
+# Purpose: if a room is reachable here but my sector-wise flood in
+# ZoneAnalyse.ps1 reports it as unreached, that shows a REAL blockage
+# (door, wall, missing sector connection) - not just a gap in the portal
+# graph connectivity. This distinguishes whether a level area like the air
+# shaft in joby3 is reached by movement (climbing/crawling) that does not
+# appear as a portal in the sector data at all, or whether it simply lies
+# behind a (still closed) door.
 param(
     [string]$LevelJson,
     [string]$LevelName = "Level",
@@ -56,25 +56,25 @@ $allRooms = @($d.rooms | ForEach-Object { [int]$_.index })
 $unreached = @($allRooms | Where-Object { -not $depth.ContainsKey($_) })
 
 Write-Output "=============================================================="
-Write-Output " Raumweite Portal-Tiefe (wie trview Depth): $LevelName"
+Write-Output " Room-wise portal depth (like trview Depth): $LevelName"
 Write-Output "=============================================================="
-Write-Output "Laras Startraum: $startRoom"
-Write-Output "Raeume gesamt: $($allRooms.Count)   ueber Portale erreicht: $($depth.Count)   nie erreicht: $($unreached.Count)"
+Write-Output "Lara's start room: $startRoom"
+Write-Output "rooms total: $($allRooms.Count)   reached via portals: $($depth.Count)   never reached: $($unreached.Count)"
 if ($unreached.Count -gt 0) {
-    Write-Output "Portal-unerreichbare Raeume: $(($unreached | Sort-Object) -join ', ')"
+    Write-Output "portal-unreachable rooms: $(($unreached | Sort-Object) -join ', ')"
 }
 Write-Output ""
 if ($HighlightRooms.Count -gt 0) {
-    Write-Output "--- Angefragte Raeume ---"
+    Write-Output "--- Requested rooms ---"
     foreach($hr in $HighlightRooms){
-        if ($depth.ContainsKey($hr)) { "  Raum {0,4}: Portal-Tiefe {1}" -f $hr,$depth[$hr] }
-        else { "  Raum {0,4}: UEBER PORTALE NICHT ERREICHBAR" -f $hr }
+        if ($depth.ContainsKey($hr)) { "  room {0,4}: portal depth {1}" -f $hr,$depth[$hr] }
+        else { "  room {0,4}: NOT REACHABLE VIA PORTALS" -f $hr }
     }
     Write-Output ""
 }
-Write-Output "--- Raeume nach Tiefe (erste 15 Stufen) ---"
+Write-Output "--- Rooms by depth (first 15 levels) ---"
 $maxD = ($depth.Values | Measure-Object -Maximum).Maximum
 for($i=0; $i -le [math]::Min(15,$maxD); $i++){
     $rms = @($depth.GetEnumerator() | Where-Object { $_.Value -eq $i } | ForEach-Object { $_.Key } | Sort-Object)
-    "  Tiefe {0,2}: {1,3} Raeume  ({2})" -f $i,$rms.Count,(($rms | Select-Object -First 12) -join ',')
+    "  depth {0,2}: {1,3} rooms  ({2})" -f $i,$rms.Count,(($rms | Select-Object -First 12) -join ',')
 }

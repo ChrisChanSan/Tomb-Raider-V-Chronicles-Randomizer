@@ -1,34 +1,37 @@
-﻿==============================================================
- Progressions-Zonen: richcut2
+﻿wall spots: 22 of 55 sectors have at least one wall edge
+approach sectors: 53 of 55 sectors have at least one
+zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_richcut2.json (55 sectors, maxZone=0, 0 key constraints)
 ==============================================================
-Laras Start: Raum 0, Sektor (5,8) -> Zone 0
+ Progression zones: richcut2
+==============================================================
+Lara's start: room 0, sector (5,8) -> zone 0
 
---- Zonenuebergaenge (Blocker) ---
+--- Zone transitions (blockers) ---
 
---- Sektoren pro Zone ---
-Zone 0:   307 Sektoren in   6 Raeumen
-Nie erreicht: 2 begehbare Sektoren
+--- Sectors per zone ---
+zone 0:   307 sectors in   6 rooms
+never reached: 2 walkable sectors
 
---- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+--- Key/puzzle items: allowed placement range ---
 
---- Warum kam der Flood nicht weiter? ---
-Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
-nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
+--- Why did the flood not get further? ---
+No closed door at the edge - the flood stops at the geometry,
+not at a blocker (jump/climb/teleport/water not modeled).
 
---- Groesste unerreichte Gebiete ---
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 6
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 6
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+--- Largest unreached areas ---
+area with     1 sectors in   1 rooms
+   rooms: 6
+   No portal connects this area with the reached part.
+   So the access is a jump, a climbing spot, monkeyswing, a dive,
+   a teleporter or a cutscene - please clarify in game or trview.
+area with     1 sectors in   1 rooms
+   rooms: 6
+   No portal connects this area with the reached part.
+   So the access is a jump, a climbing spot, monkeyswing, a dive,
+   a teleporter or a cutscene - please clarify in game or trview.
 
---- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
-Keine hinterlegt.
+--- Equipment gates (manual, not derivable from level data) ---
+None on record.
 
---- Selbsttest: Level durchspielbar? ---
-Weder EndLevel- noch Cutscene-Trigger gefunden - Terminus unbekannt.
+--- Self-test: level completable? ---
+Neither an EndLevel nor a Cutscene trigger found - terminus unknown.

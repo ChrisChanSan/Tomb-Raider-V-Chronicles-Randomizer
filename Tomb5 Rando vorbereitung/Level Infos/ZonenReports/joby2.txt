@@ -1,108 +1,119 @@
-﻿==============================================================
- Progressions-Zonen: joby2
+﻿deco doors: 9 doors no trigger brings to 11111 - they do not bar
+  items: 5, 6, 10, 11, 12, 15, 42, 135, 141
+flipmap: 144 sectors open something the base does not have - 6 of them without a release
+  affected flip rooms: 43, 53
+zone 1 -> 2: flipmap gate  released - roll gate at the crane (room 35 reached)
+island group (deadstops 2, 4, 5, 43, 53, 89): 1900 sectors in 60 rooms
+island group: baseline room 84 y=-1024 in zone 0, keys there at most 1024 above (floorY >= -2048) for types 202, 203
+wall spots: 459 of 1098 sectors have at least one wall edge
+approach sectors: 997 of 1098 sectors have at least one
+pool type 172 taken in without a zone limit (1 instances in the level)
+zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_joby2.json (1098 sectors, maxZone=2, 3 key constraints)
 ==============================================================
-Laras Start: Raum 55, Sektor (1,4) -> Zone 0
+ Progression zones: joby2
+==============================================================
+Lara's start: room 55, sector (1,4) -> zone 0
 
---- Zonenuebergaenge (Blocker) ---
-Zone 0 -> 1: Tuer Item 85 (typeId 288, Raum 64)  geoeffnet durch: Schalter Item 145 (Raum 118)
-Zone 0 -> 1: Tuer Item 123 (typeId 288, Raum 104)  geoeffnet durch: Schalter Item 122 (Raum 104)
-Zone 0 -> 1: Tuer Item 82 (typeId 288, Raum 60)  geoeffnet durch: Schalter Item 83 (Raum 60)
-Zone 0 -> 1: Tuer Item 41 (typeId 300, Raum 31)  geoeffnet durch: Key Item7 in Schloss Item 43 (Raum 31)
+--- Zone transitions (blockers) ---
+zone 0 -> 1: door item 106 (typeId 304, room 73)  opened by: Key Item8 into lock item 104 (room 73)
+zone 0 -> 1: door item 105 (typeId 306, room 73)  opened by: Key Item8 into lock item 104 (room 73)
+zone 0 -> 1: door item 85 (typeId 288, room 64)  opened by: switch item 145 (room 118)
+zone 0 -> 1: door item 132 (typeId 306, room 108)  opened by: Key Item8 into lock item 133 (room 108)
+zone 0 -> 1: door item 131 (typeId 304, room 108)  opened by: Key Item8 into lock item 133 (room 108)
+zone 0 -> 1: door item 129 (typeId 306, room 106)  opened by: Key Item8 into lock item 130 (room 106)
+zone 0 -> 1: door item 128 (typeId 304, room 106)  opened by: Key Item8 into lock item 130 (room 106)
+zone 0 -> 1: door item 123 (typeId 288, room 104)  opened by: switch item 122 (room 104)
+zone 0 -> 1: door item 82 (typeId 288, room 60)  opened by: switch item 83 (room 60)
+zone 0 -> 1: door item 41 (typeId 300, room 31)  opened by: Key Item7 into lock item 43 (room 31)
+zone 0 -> 1: door item 3 (typeId 304, room 1)  opened by: Key Item8 into lock item 1 (room 1)
+zone 0 -> 1: door item 2 (typeId 306, room 1)  opened by: Key Item8 into lock item 1 (room 1)
+zone 1 -> 2: door item 134 (typeId 300, room 112)  opened by: Key Item7 into lock item 136 (room 112)
+zone 1 -> 2: door item 50 (typeId 288, room 35)  opened by: enter trigger (78,4,2)
 
---- Sektoren pro Zone ---
-Zone 0:  7816 Sektoren in 137 Raeumen
-Zone 1:   244 Sektoren in  17 Raeumen
-Nie erreicht: 666 begehbare Sektoren
+--- Sectors per zone ---
+zone 0:  5422 sectors in 111 rooms
+zone 1:   365 sectors in  31 rooms
+zone 2:   140 sectors in   6 rooms
+never reached: 578 walkable sectors
+hand-barred (EXCLUDE_ROOMS): 2219 sectors in 25 rooms - intended, not counted as a gap
+untouchable items (FIXED_ITEMS) - must not be moved:
+  item   20 - sniper (room 19) - scripted, stays vanilla (user list) (room 19, typeId 83)
+  item   21 - sniper (room 21) - scripted, stays vanilla (user list) (room 21, typeId 83)
+  item   22 - secret - stays in place until the dedicated secret list (room 23, typeId 223)
+  item  108 - secret - stays in place until the dedicated secret list (room 76, typeId 223)
+  item  172 - secret - stays in place until the dedicated secret list (room 146, typeId 223)
 
---- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
-TypeId 202: 1 Instanz(en) noetig
-    Instanz 1 -> muss in Zone <= 0 liegen  (Key Item7 in Schloss Item 43 (Raum 31))
-    Vanilla: 2 Instanz(en) vorhanden
-      Item 161 in Raum  129 -> Zone 0            [OK]
-      Item  59 in Raum   52 -> Zone nie erreicht [Reserve]
+--- Key/puzzle items: allowed placement range ---
+typeId 202: 2 instance(s) needed
+    instance 1 -> must lie in zone <= 0  (Key Item7 into lock item 43 (room 31))
+    instance 2 -> must lie in zone <= 1  (Key Item7 into lock item 136 (room 112))
+    vanilla: 2 instance(s) present
+      item 161 in room  129 -> zone 0            [OK]
+      item  59 in room   52 -> zone 1            [OK]
+typeId 203: reusable - 1 instance suffices for 4 lock(s)
+    instance 1 -> must lie in zone <= 0  (Key Item8 into lock item 130 (room 106) [reusable])
+    vanilla: 1 instance(s) present
+      item  76 in room   58 -> zone 0            [OK]
 
---- Warum kam der Flood nicht weiter? ---
-Tuer Item  42 (typeId 302, Raum   31) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item 106 (typeId 304, Raum   73) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 104 (Raum 73) -> Item fehlt
-Tuer Item 105 (typeId 306, Raum   73) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 104 (Raum 73) -> Item fehlt
-Tuer Item 141 (typeId 284, Raum  114) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item 135 (typeId 302, Raum  112) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item 134 (typeId 300, Raum  112) Maske  0/31
-    Maske 31  Key Item7 in Schloss Item 136 (Raum 112) -> Item fehlt
-Tuer Item 132 (typeId 306, Raum  108) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 133 (Raum 108) -> Item fehlt
-Tuer Item 131 (typeId 304, Raum  108) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 133 (Raum 108) -> Item fehlt
-Tuer Item 129 (typeId 306, Raum  106) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 130 (Raum 106) -> Item fehlt
-Tuer Item 128 (typeId 304, Raum  106) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 130 (Raum 106) -> Item fehlt
-Tuer Item  15 (typeId 302, Raum   17) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item  12 (typeId 288, Raum   14) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item  11 (typeId 302, Raum   12) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item  10 (typeId 300, Raum   12) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item   6 (typeId 302, Raum   11) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item   5 (typeId 300, Raum   11) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item   3 (typeId 304, Raum    1) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 1 (Raum 1) -> Item fehlt
-Tuer Item   2 (typeId 306, Raum    1) Maske  0/31
-    Maske 31  Key Item8 in Schloss Item 1 (Raum 1) -> Item fehlt
+--- Why did the flood not get further? ---
+door item  42 (typeId 302, room   31) mask  0/31
+    no trigger in the level switches this door
+door item 141 (typeId 284, room  114) mask  0/31
+    no trigger in the level switches this door
+door item 135 (typeId 302, room  112) mask  0/31
+    no trigger in the level switches this door
+door item  15 (typeId 302, room   17) mask  0/31
+    no trigger in the level switches this door
+door item  11 (typeId 302, room   12) mask  0/31
+    no trigger in the level switches this door
+door item  10 (typeId 300, room   12) mask  0/31
+    no trigger in the level switches this door
+door item   6 (typeId 302, room   11) mask  0/31
+    no trigger in the level switches this door
+door item   5 (typeId 300, room   11) mask  0/31
+    no trigger in the level switches this door
 
---- Groesste unerreichte Gebiete ---
-Gebiet mit   411 Sektoren in   3 Raeumen
-   Raeume: 49, 50, 51
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 409x1
-Gebiet mit    79 Sektoren in   6 Raeumen
-   Raeume: 56, 57, 58, 86, 112, 113
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 37x2, 164x1, 152x6, 203x1, 365x1, 336x1, 364x1, 288x1, 300x1, 302x1, 264x1
-Gebiet mit    46 Sektoren in   1 Raeumen
-   Raeume: 0
-   Enthaelt 1 Objekte, davon KEINES bespielbar - nur Animatings.
-   => vermutlich reine Kamerafahrt-Geometrie, keine echte Luecke.
-Gebiet mit    44 Sektoren in   5 Raeumen
-   Raeume: 1, 35, 52, 59, 72
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 265x1, 306x1, 304x1, 85x1, 288x1, 242x1, 202x1, 37x1, 365x2, 266x1
+--- Largest unreached areas ---
+area with   411 sectors in   3 rooms
+   rooms: 49, 50, 51
+   CLARIFIED - no open question:
+     room   49: crane animation for the level end, in the level itself a mesh
+     room   50: crane animation for the level end, in the level itself a mesh
+     room   51: crane animation for the level end, in the level itself a mesh
+area with    60 sectors in   1 rooms
+   rooms: 37
+   No portal connects this area with the reached part.
+   So the access is a jump, a climbing spot, monkeyswing, a dive,
+   a teleporter or a cutscene - please clarify in game or trview.
+area with    46 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: only animatings, no playable geometry
+area with     1 sectors in   1 rooms
+   rooms: 152
+   Contains 2 objects, NONE of them playable - only animatings.
+   => presumably pure camera-flyby geometry, no real gap.
 
---- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
-Keine hinterlegt.
+--- Equipment gates (manual, not derivable from level data) ---
+None on record.
 
---- Selbsttest: Level durchspielbar? ---
-Cutscene 22 in Raum   38 Sektor (2,10) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (2,11) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (2,12) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (2,13) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (2,14) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (2,15) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (2,16) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (2,17) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (3,10) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (3,11) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (3,12) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (3,13) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (3,14) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (3,15) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (3,16) -> Zone 0
-Cutscene 22 in Raum   38 Sektor (3,17) -> Zone 0
-Cutscene 27 in Raum  105 Sektor (1,1) -> Zone 1
-Cutscene 25 in Raum  152 Sektor (11,7) -> Zone 0
-Cutscene 25 in Raum  152 Sektor (11,8) -> Zone 0
+--- Self-test: level completable? ---
+Cutscene 22 in room   38 sector (2,10) -> zone 0
+Cutscene 22 in room   38 sector (2,11) -> zone 0
+Cutscene 22 in room   38 sector (2,12) -> zone 0
+Cutscene 22 in room   38 sector (2,13) -> zone 0
+Cutscene 22 in room   38 sector (2,14) -> zone 0
+Cutscene 22 in room   38 sector (2,15) -> zone 0
+Cutscene 22 in room   38 sector (2,16) -> zone 0
+Cutscene 22 in room   38 sector (2,17) -> zone 0
+Cutscene 22 in room   38 sector (3,10) -> zone 0
+Cutscene 22 in room   38 sector (3,11) -> zone 0
+Cutscene 22 in room   38 sector (3,12) -> zone 0
+Cutscene 22 in room   38 sector (3,13) -> zone 0
+Cutscene 22 in room   38 sector (3,14) -> zone 0
+Cutscene 22 in room   38 sector (3,15) -> zone 0
+Cutscene 22 in room   38 sector (3,16) -> zone 0
+Cutscene 22 in room   38 sector (3,17) -> zone 0
+Cutscene 27 in room  105 sector (1,1) -> zone 1
+Cutscene 25 in room  152 sector (11,7) -> zone 0
+Cutscene 25 in room  152 sector (11,8) -> zone 0

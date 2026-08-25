@@ -1,49 +1,89 @@
-﻿==============================================================
- Progressions-Zonen: Andy2
+﻿deco doors: 3 doors no trigger brings to 11111 - they do not bar
+  items: 15, 145, 157
+wall spots: 242 of 293 sectors have at least one wall edge
+approach sectors: 218 of 293 sectors have at least one
+zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_Andy2.json (293 sectors, maxZone=2, 0 key constraints)
 ==============================================================
-Laras Start: Raum 5, Sektor (3,3) -> Zone 0
+ Progression zones: Andy2
+==============================================================
+Lara's start: room 5, sector (3,3) -> zone 0
 
---- Zonenuebergaenge (Blocker) ---
-Zone 0 -> 1: Tuer Item 25 (typeId 286, Raum 18)  geoeffnet durch: Trigger betreten (1,1,1)
-Zone 0 -> 1: Tuer Item 3 (typeId 286, Raum 4)  geoeffnet durch: Trigger betreten (6,2,1)
-Zone 1 -> 2: Tuer Item 106 (typeId 288, Raum 88)  geoeffnet durch: Pickup-Trigger
-Zone 1 -> 2: Tuer Item 140 (typeId 286, Raum 161)  geoeffnet durch: Schalter Item 148 (Raum 172)
+--- Zone transitions (blockers) ---
+zone 0 -> 1: door item 25 (typeId 286, room 18)  opened by: enter trigger (1,1,1)
+zone 0 -> 1: door item 3 (typeId 286, room 4)  opened by: enter trigger (6,2,1)
+zone 1 -> 2: door item 106 (typeId 288, room 88)  opened by: pickup trigger
+zone 1 -> 2: door item 140 (typeId 286, room 161)  opened by: switch item 148 (room 172)
 
---- Sektoren pro Zone ---
-Zone 0:   166 Sektoren in  12 Raeumen
-Zone 1:  1622 Sektoren in 106 Raeumen
-Zone 2:   559 Sektoren in  78 Raeumen
-Nie erreicht: 1582 begehbare Sektoren
+--- Sectors per zone ---
+zone 0:   166 sectors in  12 rooms
+zone 1:  1622 sectors in 106 rooms
+zone 2:   564 sectors in  80 rooms
+never reached: 1577 walkable sectors
+untouchable items (FIXED_ITEMS) - must not be moved:
+  item   11 - skeleton (room 6) - scripted riser (user list) (room 6, typeId 73)
+  item    5 - skeleton (room 5) - scripted riser (user list) (room 5, typeId 73)
+  item    4 - skeleton (room 5) - scripted riser (user list) (room 5, typeId 73)
+  item   10 - skeleton (room 6) - scripted riser (user list) (room 6, typeId 73)
+  item    0 - skeleton (room 0) - scripted riser (user list) (room 0, typeId 73)
+  item  107 - secret - stays in place until the dedicated secret list (room 103, typeId 223)
+  item  142 - secret - stays in place until the dedicated secret list (room 163, typeId 223)
+  item  156 - secret - stays in place until the dedicated secret list (room 251, typeId 223)
 
---- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+--- Key/puzzle items: allowed placement range ---
 
---- Warum kam der Flood nicht weiter? ---
-Tuer Item 145 (typeId 300, Raum  169) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
+--- Why did the flood not get further? ---
+door item 145 (typeId 300, room  169) mask  0/31
+    no trigger in the level switches this door
 
---- Groesste unerreichte Gebiete ---
-Gebiet mit   270 Sektoren in   8 Raeumen
-   Raeume: 148, 150, 153, 158, 189, 190, 196, 203
-   Enthaelt 5 Objekte, davon KEINES bespielbar - nur Animatings.
-   => vermutlich reine Kamerafahrt-Geometrie, keine echte Luecke.
-Gebiet mit   270 Sektoren in   8 Raeumen
-   Raeume: 149, 154, 159, 160, 197, 198, 242, 246
-   Enthaelt 5 Objekte, davon KEINES bespielbar - nur Animatings.
-   => vermutlich reine Kamerafahrt-Geometrie, keine echte Luecke.
-Gebiet mit   215 Sektoren in   7 Raeumen
-   Raeume: 137, 139, 140, 193, 194, 205, 207
-   Enthaelt 5 Objekte, davon KEINES bespielbar - nur Animatings.
-   => vermutlich reine Kamerafahrt-Geometrie, keine echte Luecke.
-Gebiet mit   215 Sektoren in   7 Raeumen
-   Raeume: 147, 152, 157, 200, 201, 208, 211
-   Enthaelt 5 Objekte, davon KEINES bespielbar - nur Animatings.
-   => vermutlich reine Kamerafahrt-Geometrie, keine echte Luecke.
+--- Largest unreached areas ---
+area with   270 sectors in   8 rooms
+   rooms: 149, 154, 159, 160, 197, 198, 242, 246
+   CLARIFIED - no open question:
+     room  149: mill module, flyby only
+     room  154: mill module, flyby only
+     room  159: mill module, flyby only
+     room  160: mill module, flyby only
+     room  197: mill module, flyby only
+     room  198: mill module, flyby only
+     room  242: mill module, flyby only
+     room  246: mill module, flyby only
+area with   270 sectors in   8 rooms
+   rooms: 148, 150, 153, 158, 189, 190, 196, 203
+   CLARIFIED - no open question:
+     room  148: mill module, flyby only
+     room  150: mill module, flyby only
+     room  153: mill module, flyby only
+     room  158: mill module, flyby only
+     room  189: mill module, flyby only
+     room  190: mill module, flyby only
+     room  196: mill module, flyby only
+     room  203: mill module, flyby only
+area with   215 sectors in   7 rooms
+   rooms: 137, 139, 140, 193, 194, 205, 207
+   CLARIFIED - no open question:
+     room  137: mill module, flyby only
+     room  139: mill module, flyby only
+     room  140: mill module, flyby only
+     room  193: mill module, flyby only
+     room  194: mill module, flyby only
+     room  205: mill module, flyby only
+     room  207: mill module, flyby only
+area with   215 sectors in   7 rooms
+   rooms: 146, 151, 156, 192, 195, 204, 247
+   CLARIFIED - no open question:
+     room  146: mill module, flyby only
+     room  151: mill module, flyby only
+     room  156: mill module, flyby only
+     room  192: mill module, flyby only
+     room  195: mill module, flyby only
+     room  204: mill module, flyby only
+     room  247: mill module, flyby only
 
---- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
-Keine hinterlegt.
+--- Equipment gates (manual, not derivable from level data) ---
+None on record.
 
---- Selbsttest: Level durchspielbar? ---
-Cutscene 6 in Raum    5 Sektor (2,2) -> Zone 0
-Cutscene 42 in Raum   52 Sektor (1,2) -> Zone 1
-Cutscene 42 in Raum   52 Sektor (1,3) -> Zone 1
-Cutscene 33 in Raum  169 Sektor (3,2) -> Zone 2
+--- Self-test: level completable? ---
+Cutscene 6 in room    5 sector (2,2) -> zone 0
+Cutscene 42 in room   52 sector (1,2) -> zone 1
+Cutscene 42 in room   52 sector (1,3) -> zone 1
+Cutscene 33 in room  169 sector (3,2) -> zone 2

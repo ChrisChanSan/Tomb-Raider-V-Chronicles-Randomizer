@@ -1,75 +1,95 @@
-﻿==============================================================
- Progressions-Zonen: Andrea2
+﻿deco doors: 4 doors no trigger brings to 11111 - they do not bar
+  items: 37, 89, 90, 115
+flipmap: 9 sectors open something the base does not have - 9 of them without a release
+  affected flip rooms: 65, 147, 170, 176
+barred behind own door: type 176, 1 door(s) -> 1 sectors (intersection)
+barred behind own door: type 175, 1 door(s) -> 1 sectors (intersection)
+wall spots: 450 of 777 sectors have at least one wall edge
+approach sectors: 747 of 777 sectors have at least one
+zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_Andrea2.json (777 sectors, maxZone=3, 5 key constraints)
 ==============================================================
-Laras Start: Raum 50, Sektor (4,3) -> Zone 0
+ Progression zones: Andrea2
+==============================================================
+Lara's start: room 50, sector (4,3) -> zone 0
 
---- Zonenuebergaenge (Blocker) ---
-Zone 0 -> 1: Tuer Item 47 (typeId 288, Raum 64)  geoeffnet durch: Trigger betreten (230,4,4)
-Zone 0 -> 1: Tuer Item 79 (typeId 288, Raum 76)  geoeffnet durch: AntiTrigger
-Zone 0 -> 1: Tuer Item 112 (typeId 288, Raum 134)  geoeffnet durch: Puzzle Item3 in Schloss Item 41 (Raum 63)
-Zone 0 -> 1: Tuer Item 9 (typeId 296, Raum 17)  geoeffnet durch: Puzzle Item3 in Schloss Item 41 (Raum 63)
-Zone 0 -> 1: Tuer Item 137 (typeId 288, Raum 219)  geoeffnet durch: Trigger betreten (230,3,1)
-Zone 0 -> 1: Tuer Item 0 (typeId 284, Raum 0)  geoeffnet durch: Brechstange (nicht verbraucht)
-Zone 1 -> 2: Tuer Item 105 (typeId 300, Raum 116)  geoeffnet durch: Puzzle Item5 in Schloss Item 95 (Raum 116)
+--- Zone transitions (blockers) ---
+zone 0 -> 1: door item 112 (typeId 288, room 134)  opened by: Puzzle Item3 into lock item 41 (room 63)
+zone 0 -> 1: door item 9 (typeId 296, room 17)  opened by: Puzzle Item3 into lock item 41 (room 63)
+zone 0 -> 1: door item 0 (typeId 284, room 0)  opened by: crowbar (not consumed)
+zone 1 -> 2: door item 47 (typeId 288, room 64)  opened by: enter trigger (230,4,4)
+zone 1 -> 2: door item 79 (typeId 288, room 76)  opened by: AntiTrigger
+zone 1 -> 2: door item 137 (typeId 288, room 219)  opened by: enter trigger (230,3,1)
+zone 2 -> 3: door item 105 (typeId 300, room 116)  opened by: Puzzle Item5 into lock item 95 (room 116)
 
---- Sektoren pro Zone ---
-Zone 0:  3236 Sektoren in 207 Raeumen
-Zone 1:  1021 Sektoren in  49 Raeumen
-Zone 2:     1 Sektoren in   1 Raeumen
-Nie erreicht: 16 begehbare Sektoren
+--- Sectors per zone ---
+zone 0:  1332 sectors in  84 rooms
+zone 1:  1423 sectors in 110 rooms
+zone 2:   582 sectors in  27 rooms
+zone 3:     1 sectors in   1 rooms
+never reached: 134 walkable sectors
+hand-barred (EXCLUDE_ROOMS): 802 sectors in 29 rooms - intended, not counted as a gap
+untouchable items (FIXED_ITEMS) - must not be moved:
+  item   76 - Larson - scripted miniboss, hangs on cutscenes 8 and 7 (room 72, typeId 45)
+  item  108 - Roman god (room 131) - stays vanilla (user list) (room 131, typeId 61)
+  item   93 - Hydra chain link (room 116) - stays vanilla (user list) (room 116, typeId 63)
+  item   92 - Hydra chain link (room 116) - stays vanilla (user list) (room 116, typeId 63)
+  item   91 - Hydra chain link (room 116) - stays vanilla (user list) (room 116, typeId 63)
+  item   65 - type 420 (room 69) - scripted, stays vanilla (user list) (room 69, typeId 420)
+  item   14 - secret - stays in place until the dedicated secret list (room 22, typeId 223)
+  item   87 - secret - stays in place until the dedicated secret list (room 101, typeId 223)
+  item  138 - secret - stays in place until the dedicated secret list (room 219, typeId 223)
 
---- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
-TypeId 174: 1 Instanz(en) noetig
-    Instanz 1 -> muss in Zone <= 0 liegen  (Puzzle Item3 in Schloss Item 41 (Raum 63))
-    Vanilla: 1 Instanz(en) vorhanden
-      Item 121 in Raum  166 -> Zone 0            [OK]
-TypeId 175: 1 Instanz(en) noetig
-    Instanz 1 -> muss in Zone <= 1 liegen  (Puzzle Item4 in Schloss Item 94 (Raum 116))
-    Vanilla: 1 Instanz(en) vorhanden
-      Item  62 in Raum   69 -> Zone 0            [OK]
-TypeId 176: 1 Instanz(en) noetig
-    Instanz 1 -> muss in Zone <= 1 liegen  (Puzzle Item5 in Schloss Item 95 (Raum 116))
-    Vanilla: 1 Instanz(en) vorhanden
-      Item  48 in Raum   64 -> Zone 1            [OK]
+--- Key/puzzle items: allowed placement range ---
+typeId 172: 1 instance(s) needed
+    instance 1 -> must lie in zone <= 1  (Puzzle Item1 into lock item 146 (room 239))
+    vanilla: 1 instance(s) present
+      item 128 in room  196 -> zone 1            [OK]
+typeId 174: 1 instance(s) needed
+    instance 1 -> must lie in zone <= 0  (Puzzle Item3 into lock item 41 (room 63))
+    vanilla: 1 instance(s) present
+      item 121 in room  166 -> zone 0            [OK]
+typeId 175: 1 instance(s) needed
+    instance 1 -> must lie in zone <= 2  (Puzzle Item4 into lock item 94 (room 116))
+    vanilla: 1 instance(s) present
+      item  62 in room   69 -> zone 1            [OK]
+typeId 176: 1 instance(s) needed
+    instance 1 -> must lie in zone <= 2  (Puzzle Item5 into lock item 95 (room 116))
+    vanilla: 1 instance(s) present
+      item  48 in room   64 -> zone 2            [OK]
 
---- Warum kam der Flood nicht weiter? ---
-Tuer Item 115 (typeId 296, Raum  149) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item  90 (typeId 292, Raum  112) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item  89 (typeId 290, Raum  112) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item  37 (typeId 286, Raum   54) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
+--- Why did the flood not get further? ---
+door item 115 (typeId 296, room  149) mask  0/31
+    no trigger in the level switches this door
+door item  37 (typeId 286, room   54) mask  0/31
+    no trigger in the level switches this door
 
---- Groesste unerreichte Gebiete ---
-Gebiet mit     5 Sektoren in   1 Raeumen
-   Raeume: 149
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 296x1
-Gebiet mit     4 Sektoren in   1 Raeumen
-   Raeume: 191
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     4 Sektoren in   1 Raeumen
-   Raeume: 197
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     2 Sektoren in   1 Raeumen
-   Raeume: 112
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 290x1, 292x1
+--- Largest unreached areas ---
+area with    69 sectors in   4 rooms
+   rooms: 70, 204, 233, 241
+   No portal connects this area with the reached part.
+   So the access is a jump, a climbing spot, monkeyswing, a dive,
+   a teleporter or a cutscene - please clarify in game or trview.
+   playable objects inside: 106x3, 117x6
+area with    48 sectors in   2 rooms
+   rooms: 125, 138
+   No portal connects this area with the reached part.
+   So the access is a jump, a climbing spot, monkeyswing, a dive,
+   a teleporter or a cutscene - please clarify in game or trview.
+area with     4 sectors in   1 rooms
+   rooms: 191
+   No portal connects this area with the reached part.
+   So the access is a jump, a climbing spot, monkeyswing, a dive,
+   a teleporter or a cutscene - please clarify in game or trview.
+area with     4 sectors in   1 rooms
+   rooms: 197
+   No portal connects this area with the reached part.
+   So the access is a jump, a climbing spot, monkeyswing, a dive,
+   a teleporter or a cutscene - please clarify in game or trview.
 
---- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
-Keine hinterlegt.
+--- Equipment gates (manual, not derivable from level data) ---
+None on record.
 
---- Selbsttest: Level durchspielbar? ---
-Cutscene 7 in Raum   72 Sektor (2,2) -> Zone 1
-Cutscene 8 in Raum  194 Sektor (2,1) -> Zone 1
-EndLevel 0 in Raum  233 Sektor (4,1) -> Zone 1
+--- Self-test: level completable? ---
+Cutscene 7 in room   72 sector (2,2) -> zone 2
+Cutscene 8 in room  194 sector (2,1) -> zone 2
+EndLevel 0 in room  233 sector (4,1) -> NOT REACHABLE

@@ -1,43 +1,43 @@
 #----------------------------------------------------------------------------
-# Herkunftspruefung fuer die Vorbereitungswerkzeuge.
+# Origin check for the preparation tools.
 #
-# Das Problem, gegen das das hier steht: eine Level-Info, die aus einem bereits
-# randomisierten Level exportiert wurde, sieht exakt aus wie eine echte. Gleiche
-# Felder, gleiche Struktur, plausible Zahlen. Jedes Werkzeug dahinter rechnet
-# dann still weiter und liefert falsche Zonen, ohne dass irgendwo etwas
-# abstuerzt. Genau das ist in diesem Projekt schon einmal passiert und hat eine
-# Stunde Fehlersuche gekostet - der Zielordner eines GUI-Tests war derselbe, aus
-# dem gelesen wurde.
+# The problem this stands against: a level info exported from an already
+# randomized level looks exactly like a genuine one. Same fields, same
+# structure, plausible numbers. Every tool behind it then quietly keeps
+# computing and delivers wrong zones without anything crashing anywhere.
+# Exactly that has happened once in this project and cost an hour of bug
+# hunting - the target folder of a GUI test was the same one being read
+# from.
 #
-# Seit TombItemEdit2026 den Herkunftsstempel setzt, traegt jede Level-Info den
-# Dateinamen, die SHA-256 und die Groesse der .trc, aus der sie stammt. Damit
-# laesst sich gegen VanillaLevelChecksums.csv pruefen, ob das eine unberuehrte
-# Originaldatei war.
+# Since TombItemEdit2026 sets the origin stamp, every level info carries the
+# file name, the SHA-256 and the size of the .trc it came from. With that it
+# can be checked against VanillaLevelChecksums.csv whether it was an
+# untouched original file.
 #
-# Absichtlich ein LAUTER Abbruch und keine Warnung: ein falsches Ergebnis, das
-# plausibel aussieht, ist die unangenehmste Sorte Fehler. Lieber gar nichts
-# liefern.
+# Deliberately a LOUD abort and no warning: a wrong result that looks
+# plausible is the most unpleasant kind of error. Better to deliver nothing
+# at all.
 #
-# Alte Level-Infos ohne Stempel gibt es nach der Neuerzeugung nicht mehr. Taucht
-# doch eine auf, ist sie von einem aelteren Werkzeugstand und ihre Herkunft
-# schlicht unbekannt - auch dann wird abgebrochen, denn "unbekannt" ist hier
-# nicht dasselbe wie "in Ordnung".
+# Old level infos without a stamp no longer exist after the regeneration.
+# Should one turn up anyway, it is from an older tool state and its origin
+# simply unknown - then it aborts too, because "unknown" is not the same as
+# "fine" here.
 #----------------------------------------------------------------------------
 
-function Test-VanillaHerkunft {
+function Test-VanillaOrigin {
     param(
         [Parameter(Mandatory=$true)][string]$LevelJson,
         [string]$ChecksumCsv = "",
-        # Nur fuer den Fall, dass ein Werkzeug bewusst auf veraenderten Daten
-        # rechnen soll - dann muss der Aufrufer das ausdruecklich sagen.
-        [switch]$Erlauben
+        # Only for the case that a tool is meant to compute on changed data
+        # deliberately - then the caller must say so explicitly.
+        [switch]$Allow
     )
 
     if ($ChecksumCsv -eq "") {
         $ChecksumCsv = Join-Path (Split-Path $LevelJson -Parent) "VanillaLevelChecksums.csv"
     }
     if (-not (Test-Path $ChecksumCsv)) {
-        throw "Pruefsummenliste fehlt: $ChecksumCsv - Herkunft nicht pruefbar."
+        throw "checksum list missing: $ChecksumCsv - origin not checkable."
     }
 
     $d = Get-Content $LevelJson -Raw | ConvertFrom-Json
@@ -45,32 +45,32 @@ function Test-VanillaHerkunft {
     $sha  = [string]$d.sourceSha256
 
     if ($name -eq "" -or $sha -eq "") {
-        $m = "Die Level-Info $(Split-Path $LevelJson -Leaf) hat keinen Herkunftsstempel. " +
-             "Sie stammt aus einem aelteren Werkzeugstand; ob sie aus einem unberuehrten " +
-             "Level erzeugt wurde, laesst sich nicht feststellen. Neu erzeugen mit: " +
-             "TombItemEdit2026.exe -exportinfo <source.trc> <ziel.json>"
-        if ($Erlauben) { Write-Output "WARNUNG: $m"; return $false }
+        $m = "The level info $(Split-Path $LevelJson -Leaf) has no origin stamp. " +
+             "It comes from an older tool state; whether it was generated from an " +
+             "untouched level cannot be determined. Regenerate with: " +
+             "TombItemEdit2026.exe -exportinfo <source.trc> <target.json>"
+        if ($Allow) { Write-Output "WARNING: $m"; return $false }
         throw $m
     }
 
-    # Der Exporter uebernimmt den Dateinamen so, wie er auf der Platte steht -
-    # bei den Steam-Dateien in Grossbuchstaben, in der CSV klein. Deshalb ohne
-    # Ruecksicht auf Gross- und Kleinschreibung vergleichen.
-    $erwartet = $null
+    # The exporter takes the file name as it stands on disk - upper case for
+    # the Steam files, lower case in the CSV. Hence compare without regard
+    # to case.
+    $expected = $null
     foreach ($row in (Import-Csv $ChecksumCsv)) {
-        if ($row.FileName -and $row.FileName.ToUpper() -eq $name.ToUpper()) { $erwartet = $row; break }
+        if ($row.FileName -and $row.FileName.ToUpper() -eq $name.ToUpper()) { $expected = $row; break }
     }
-    if ($null -eq $erwartet) {
-        $m = "$name steht nicht in $(Split-Path $ChecksumCsv -Leaf) - unbekannte Quelldatei."
-        if ($Erlauben) { Write-Output "WARNUNG: $m"; return $false }
+    if ($null -eq $expected) {
+        $m = "$name does not stand in $(Split-Path $ChecksumCsv -Leaf) - unknown source file."
+        if ($Allow) { Write-Output "WARNING: $m"; return $false }
         throw $m
     }
 
-    if ($sha.ToUpper() -ne $erwartet.SHA256.ToUpper()) {
-        $m = "$name weicht von Vanilla ab. Die Level-Info wurde aus einer veraenderten - " +
-             "vermutlich bereits randomisierten - Datei erzeugt. Alle daraus abgeleiteten " +
-             "Zonen und Sperrlisten waeren falsch. Erwartet $($erwartet.SHA256), gestempelt $sha."
-        if ($Erlauben) { Write-Output "WARNUNG: $m"; return $false }
+    if ($sha.ToUpper() -ne $expected.SHA256.ToUpper()) {
+        $m = "$name deviates from vanilla. The level info was generated from a changed - " +
+             "presumably already randomized - file. All zones and bar lists derived from " +
+             "it would be wrong. Expected $($expected.SHA256), stamped $sha."
+        if ($Allow) { Write-Output "WARNING: $m"; return $false }
         throw $m
     }
 

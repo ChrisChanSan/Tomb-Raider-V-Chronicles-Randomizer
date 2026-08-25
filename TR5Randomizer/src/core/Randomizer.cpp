@@ -365,10 +365,7 @@ bool Rando::buildInput(const JsonValue& zoneExport,
             }
         }
 
-        // NOTE (#129): this zone-export KEY deliberately stays German until
-        // the phase-C regeneration renames it in ZoneAnalyse.ps1 and in all
-        // exports on disk together.
-        const JsonValue& ai = zoneExport["antitriggerImmun"];
+        const JsonValue& ai = zoneExport["antitriggerImmune"];
         for (size_t i = 0; i < ai.size(); ++i)
             out.antitriggerImmunItems.insert(static_cast<int>(ai[i].asInt(-1)));
 

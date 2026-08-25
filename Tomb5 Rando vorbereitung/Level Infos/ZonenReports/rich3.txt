@@ -1,78 +1,97 @@
-﻿==============================================================
- Progressions-Zonen: rich3
+﻿deco doors: 1 doors no trigger brings to 11111 - they do not bar
+  items: 46
+flipmap: 68 sectors open something the base does not have - 2 of them without a release
+  affected flip rooms: 18
+zone 0 -> 1: flipmap gate 43/45 released - the staircase grows - room 207 with the secret (room 12 reached)
+zone 0 -> 1: flipmap gate 13 released - connection to room 61, from there to the crossbow (room 26 reached)
+zone 2 -> 3: flipmap gate 190/192 released - cyborg 200 - the room floods, short circuit (room 183 reached)
+zone 3 -> 4: flipmap gate 9/20/28/32/48/49/50/53/54 released - the way via room 57 - needs the crossbow from room 79 (types 341 present)
+zone 3 -> 4: flipmap gate 74 released - shooting range 1 - opens the grates in room 73, way through door 284 (room 46 reached)
+zone 3 -> 4: flipmap gate 87 released - shooting range 2 - door 86 to the secret in room 78 (room 46 reached)
+island group (deadstops 133): 1111 sectors in 106 rooms
+island group (deadstops 82, 167): 109 sectors in 4 rooms
+barred behind own door: type 172, 1 door(s) -> 1 sectors (intersection)
+wall spots: 376 of 525 sectors have at least one wall edge
+approach sectors: 488 of 525 sectors have at least one
+pool type 341 taken in without a zone limit (2 instances in the level)
+zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_rich3.json (525 sectors, maxZone=5, 3 key constraints)
 ==============================================================
-Laras Start: Raum 8, Sektor (4,3) -> Zone 0
+ Progression zones: rich3
+==============================================================
+Lara's start: room 8, sector (4,3) -> zone 0
 
---- Zonenuebergaenge (Blocker) ---
-Zone 0 -> 1: Tuer Item 157 (typeId 300, Raum 129)  geoeffnet durch: Schalter Item 156 (Raum 127)
-Zone 0 -> 1: Tuer Item 161 (typeId 314, Raum 130)  geoeffnet durch: Trigger betreten (4,2,4)
-Zone 0 -> 1: Tuer Item 160 (typeId 312, Raum 130)  geoeffnet durch: Trigger betreten (4,2,4)
-Zone 1 -> 2: Tuer Item 170 (typeId 314, Raum 133)  geoeffnet durch: Schalter Item 168 (Raum 132)
-Zone 1 -> 2: Tuer Item 169 (typeId 312, Raum 133)  geoeffnet durch: Schalter Item 168 (Raum 132)
-Zone 1 -> 2: Tuer Item 165 (typeId 314, Raum 131)  geoeffnet durch: Schalter Item 166 (Raum 131)
-Zone 1 -> 2: Tuer Item 164 (typeId 312, Raum 131)  geoeffnet durch: Schalter Item 166 (Raum 131)
-Zone 2 -> 3: Tuer Item 221 (typeId 284, Raum 211)  geoeffnet durch: Trigger betreten (211,1,1)
-Zone 2 -> 3: Tuer Item 108 (typeId 284, Raum 94)  geoeffnet durch: Trigger betreten (94,1,1)
-Zone 2 -> 3: Tuer Item 198 (typeId 288, Raum 180)  geoeffnet durch: Trigger betreten (186,1,1)
-Zone 2 -> 3: Tuer Item 216 (typeId 284, Raum 202)  geoeffnet durch: AntiTrigger
-Zone 2 -> 3: Tuer Item 213 (typeId 300, Raum 199)  geoeffnet durch: Puzzle Item1 in Schloss Item 144 (Raum 119)
-Zone 2 -> 3: Tuer Item 173 (typeId 314, Raum 134)  geoeffnet durch: Trigger betreten (134,2,1)
-Zone 2 -> 3: Tuer Item 172 (typeId 312, Raum 134)  geoeffnet durch: Trigger betreten (134,2,1)
-Zone 2 -> 3: Tuer Item 86 (typeId 284, Raum 83)  geoeffnet durch: AntiTrigger
-Zone 2 -> 3: Tuer Item 212 (typeId 286, Raum 194)  geoeffnet durch: Trigger betreten (185,1,4)
-Zone 2 -> 3: Tuer Item 152 (typeId 300, Raum 125)  geoeffnet durch: AntiTrigger
-Zone 2 -> 3: Tuer Item 186 (typeId 300, Raum 152)  geoeffnet durch: Trigger betreten (152,2,4)
-Zone 3 -> 4: Tuer Item 131 (typeId 300, Raum 103)  geoeffnet durch: AntiTrigger
-Zone 3 -> 4: Tuer Item 84 (typeId 284, Raum 82)  geoeffnet durch: AntiTrigger
-Zone 3 -> 4: Tuer Item 120 (typeId 300, Raum 99)  geoeffnet durch: AntiTrigger
-Zone 3 -> 4: Tuer Item 210 (typeId 302, Raum 193)  geoeffnet durch: Schalter Item 39 (Raum 46)
-Zone 4 -> 5: Tuer Item 137 (typeId 300, Raum 106)  geoeffnet durch: AntiTrigger
+--- Zone transitions (blockers) ---
+zone 0 -> 1: door item 157 (typeId 300, room 129)  opened by: switch item 156 (room 127)
+zone 0 -> 1: door item 161 (typeId 314, room 130)  opened by: enter trigger (4,2,4)
+zone 0 -> 1: door item 160 (typeId 312, room 130)  opened by: enter trigger (4,2,4)
+zone 1 -> 2: door item 170 (typeId 314, room 133)  opened by: switch item 168 (room 132)
+zone 1 -> 2: door item 169 (typeId 312, room 133)  opened by: switch item 168 (room 132)
+zone 1 -> 2: door item 165 (typeId 314, room 131)  opened by: switch item 166 (room 131)
+zone 1 -> 2: door item 164 (typeId 312, room 131)  opened by: switch item 166 (room 131)
+zone 2 -> 3: door item 221 (typeId 284, room 211)  opened by: enter trigger (211,1,1)
+zone 2 -> 3: door item 108 (typeId 284, room 94)  opened by: enter trigger (94,1,1)
+zone 2 -> 3: door item 198 (typeId 288, room 180)  opened by: enter trigger (186,1,1)
+zone 2 -> 3: door item 216 (typeId 284, room 202)  opened by: AntiTrigger
+zone 2 -> 3: door item 213 (typeId 300, room 199)  opened by: Puzzle Item1 into lock item 144 (room 119)
+zone 2 -> 3: door item 173 (typeId 314, room 134)  opened by: enter trigger (134,2,1)
+zone 2 -> 3: door item 172 (typeId 312, room 134)  opened by: enter trigger (134,2,1)
+zone 2 -> 3: door item 86 (typeId 284, room 83)  opened by: AntiTrigger
+zone 2 -> 3: door item 212 (typeId 286, room 194)  opened by: enter trigger (185,1,4)
+zone 2 -> 3: door item 152 (typeId 300, room 125)  opened by: AntiTrigger
+zone 2 -> 3: door item 186 (typeId 300, room 152)  opened by: enter trigger (152,2,4)
+zone 3 -> 4: door item 131 (typeId 300, room 103)  opened by: AntiTrigger
+zone 3 -> 4: door item 84 (typeId 284, room 82)  opened by: AntiTrigger
+zone 3 -> 4: door item 120 (typeId 300, room 99)  opened by: AntiTrigger
+zone 3 -> 4: door item 210 (typeId 302, room 193)  opened by: switch item 39 (room 46)
+zone 4 -> 5: door item 137 (typeId 300, room 106)  opened by: AntiTrigger
 
---- Sektoren pro Zone ---
-Zone 0:   682 Sektoren in  71 Raeumen
-Zone 1:    40 Sektoren in   6 Raeumen
-Zone 2:  1181 Sektoren in  94 Raeumen
-Zone 3:   334 Sektoren in  33 Raeumen
-Zone 4:   113 Sektoren in  19 Raeumen
-Zone 5:    45 Sektoren in   8 Raeumen
-Nie erreicht: 4 begehbare Sektoren
-  (zusaetzlich 384 Sektoren in 4 reinen Kulissenraeumen, nicht mitgezaehlt)
+--- Sectors per zone ---
+zone 0:   627 sectors in  71 rooms
+zone 1:    50 sectors in   9 rooms
+zone 2:  1174 sectors in  94 rooms
+zone 3:   331 sectors in  35 rooms
+zone 4:   167 sectors in  30 rooms
+zone 5:    45 sectors in   8 rooms
+never reached: 5 walkable sectors
+stay vanilla (VANILLA_TYPES) - not in the pool: 342
+untouchable items (FIXED_ITEMS) - must not be moved:
+  item   53 - SWAT+ (room 68) - hangs on the rope, stays vanilla for now (room 68, typeId 35)
+  item   54 - SWAT (room 68) - hangs on the rope, stays vanilla for now (room 68, typeId 33)
+  item  200 - Hitman (room 183) - stays vanilla (user list) (room 183, typeId 67)
+  item  183 - Hitman (room 152) - stays vanilla (user list) (room 152, typeId 67)
+  item   74 - secret - stays in place until the dedicated secret list (room 78, typeId 223)
+  item  218 - secret - stays in place until the dedicated secret list (room 206, typeId 223)
+  item  223 - secret - stays in place until the dedicated secret list (room 216, typeId 223)
+  item   10 - VANILLA_TYPES: type 342 stays at its vanilla position (room 2, typeId 342)
+  item   82 - VANILLA_TYPES: type 342 stays at its vanilla position (room 79, typeId 342)
+  item  209 - VANILLA_TYPES: type 342 stays at its vanilla position (room 188, typeId 342)
+  (additionally 384 sectors in 4 pure scenery rooms, not counted)
 
---- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
-Nicht im Level vorhanden, kommt per Gameflow (CMD_GIVEOBJ) - keine Platzierung noetig:
-  TypeId  - gebraucht ab Zone 2 (Puzzle Item1 in Schloss Item 144 (Raum 119))
+--- Key/puzzle items: allowed placement range ---
+not present in the level, comes via gameflow (CMD_GIVEOBJ) - no placement needed:
+  typeId  - needed from zone 2 (Puzzle Item1 into lock item 144 (room 119))
 
 
---- Warum kam der Flood nicht weiter? ---
-Tuer Item  46 (typeId 320, Raum   60) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
+--- Why did the flood not get further? ---
+door item  46 (typeId 320, room   60) mask  0/31
+    no trigger in the level switches this door
 
---- Groesste unerreichte Gebiete ---
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 212
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 114x1
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 205
-   Enthaelt 1 Objekte, davon KEINES bespielbar - nur Animatings.
-   => vermutlich reine Kamerafahrt-Geometrie, keine echte Luecke.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 60
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 320x1
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 217
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 114x1
+--- Largest unreached areas ---
+area with     1 sectors in   1 rooms
+   rooms: 205
+   CLARIFIED - no open question:
+     room  205: only an animating, camera-flyby geometry
+area with     1 sectors in   1 rooms
+   rooms: 212
+   CLARIFIED - no open question:
+     room  212: start niche of a rollingball (item 222)
+area with     1 sectors in   1 rooms
+   rooms: 217
+   CLARIFIED - no open question:
+     room  217: start niche of a rollingball (item 224), at the same time an antitrigger fix
 
---- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
-Keine hinterlegt.
+--- Equipment gates (manual, not derivable from level data) ---
+None on record.
 
---- Selbsttest: Level durchspielbar? ---
-EndLevel 0 in Raum  198 Sektor (1,2) -> Zone 2
+--- Self-test: level completable? ---
+EndLevel 0 in room  198 sector (1,2) -> zone 2

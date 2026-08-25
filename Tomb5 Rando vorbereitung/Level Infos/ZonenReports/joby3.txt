@@ -1,93 +1,107 @@
-﻿==============================================================
- Progressions-Zonen: joby3
+﻿weapon bar: 5 rooms in joby3 are weapon-free
+deco doors: 12 doors no trigger brings to 11111 - they do not bar
+  items: 119, 122, 123, 185, 192, 212, 221, 229, 231, 232, 233, 241
+barred behind own door: type 202, 1 door(s) -> 710 sectors (intersection)
+barred behind own door: type 201, 1 door(s) -> 10 sectors (intersection)
+wall spots: 210 of 256 sectors have at least one wall edge
+approach sectors: 250 of 256 sectors have at least one
+pool type 187 taken in without a zone limit (1 instances in the level)
+pool type 186 taken in without a zone limit (1 instances in the level)
+pool type 185 taken in without a zone limit (1 instances in the level)
+pool type 184 taken in without a zone limit (1 instances in the level)
+zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_joby3.json (256 sectors, maxZone=5, 5 key constraints)
 ==============================================================
-Laras Start: Raum 23, Sektor (2,1) -> Zone 0
+ Progression zones: joby3
+==============================================================
+Lara's start: room 23, sector (2,1) -> zone 0
 
---- Zonenuebergaenge (Blocker) ---
-Zone 0 -> 1: Tuer Item 25 (typeId 294, Raum 14)  geoeffnet durch: Brechstange (nicht verbraucht)
-Zone 0 -> 1: Tuer Item 125 (typeId 288, Raum 61)  geoeffnet durch: Brechstange (nicht verbraucht)
-Zone 1 -> 2: Tuer Item 156 (typeId 98, Raum 90)  geoeffnet durch: AntiTrigger
-Zone 1 -> 2: Tuer Item 190 (typeId 302, Raum 124)  geoeffnet durch: Key Item6 in Schloss Item 191 (Raum 124)
-Zone 1 -> 2: Tuer Item 190 (typeId 302, Raum 124)  geoeffnet durch: Skript-Ereignis (Raum 120 erreicht)
-Zone 1 -> 2: Tuer Item 175 (typeId 304, Raum 106)  geoeffnet durch: Skript-Ereignis (Raum 120 erreicht)
-Zone 2 -> 3: Tuer Item 222 (typeId 300, Raum 160)  geoeffnet durch: Schalter Item 223 (Raum 160)
-Zone 2 -> 3: Tuer Item 194 (typeId 300, Raum 134)  geoeffnet durch: Schalter Item 195 (Raum 134)
-Zone 2 -> 3: Tuer Item 193 (typeId 304, Raum 133)  geoeffnet durch: Trigger betreten (123,3,6)
-Zone 2 -> 3: Tuer Item 0 (typeId 300, Raum 3)  geoeffnet durch: Schalter Item 223 (Raum 160)
-Zone 3 -> 4: Tuer Item 237 (typeId 300, Raum 181)  geoeffnet durch: Schalter Item 238 (Raum 181)
-Zone 3 -> 4: Tuer Item 234 (typeId 302, Raum 179)  geoeffnet durch: Trigger betreten (164,2,2)
-Zone 4 -> 5: Tuer Item 102 (typeId 300, Raum 46)  geoeffnet durch: Schalter Item 101 (Raum 46)
-Zone 4 -> 5: Tuer Item 97 (typeId 300, Raum 41)  geoeffnet durch: Schalter Item 96 (Raum 41)
+--- Zone transitions (blockers) ---
+zone 0 -> 1: door item 25 (typeId 294, room 14)  opened by: crowbar (not consumed)
+zone 0 -> 1: door item 125 (typeId 288, room 61)  opened by: crowbar (not consumed)
+zone 1 -> 2: door item 156 (typeId 98, room 90)  opened by: AntiTrigger
+zone 1 -> 2: door item 190 (typeId 302, room 124)  opened by: Key Item6 into lock item 191 (room 124)
+zone 1 -> 2: door item 190 (typeId 302, room 124)  opened by: script event (room 120 reached)
+zone 1 -> 2: door item 175 (typeId 304, room 106)  opened by: script event (room 120 reached)
+zone 2 -> 3: door item 222 (typeId 300, room 160)  opened by: switch item 223 (room 160)
+zone 2 -> 3: door item 194 (typeId 300, room 134)  opened by: switch item 195 (room 134)
+zone 2 -> 3: door item 193 (typeId 304, room 133)  opened by: enter trigger (123,3,6)
+zone 2 -> 3: door item 0 (typeId 300, room 3)  opened by: switch item 223 (room 160)
+zone 3 -> 4: door item 237 (typeId 300, room 181)  opened by: switch item 238 (room 181)
+zone 3 -> 4: door item 234 (typeId 302, room 179)  opened by: enter trigger (164,2,2)
+zone 4 -> 5: door item 102 (typeId 300, room 46)  opened by: switch item 101 (room 46)
+zone 4 -> 5: door item 97 (typeId 300, room 41)  opened by: switch item 96 (room 41)
 
---- Sektoren pro Zone ---
-Zone 0:    16 Sektoren in   4 Raeumen
-Zone 1:   166 Sektoren in  40 Raeumen
-Zone 2:   157 Sektoren in  24 Raeumen
-Zone 3:   303 Sektoren in  58 Raeumen
-Zone 4:   156 Sektoren in  24 Raeumen
-Zone 5:    87 Sektoren in  11 Raeumen
-Nie erreicht: 102 begehbare Sektoren
-  (zusaetzlich 136 Sektoren in 9 reinen Kulissenraeumen, nicht mitgezaehlt)
+--- Sectors per zone ---
+zone 0:    18 sectors in   4 rooms
+zone 1:   163 sectors in  39 rooms
+zone 2:   159 sectors in  24 rooms
+zone 3:   304 sectors in  58 rooms
+zone 4:   164 sectors in  26 rooms
+zone 5:    95 sectors in  13 rooms
+never reached: 33 walkable sectors
+hand-barred (EXCLUDE_ROOMS): 51 sectors in 13 rooms - intended, not counted as a gap
+stay vanilla (VANILLA_TYPES) - not in the pool: 172, 201, 334
+untouchable items (FIXED_ITEMS) - must not be moved:
+  item  186 - chef (room 120) - only killable via the stealth cutscene, stays vanilla (user list) (room 120, typeId 87)
+  item    8 - secret - stays in place until the dedicated secret list (room 5, typeId 223)
+  item   26 - secret - stays in place until the dedicated secret list (room 15, typeId 223)
+  item   29 - secret - stays in place until the dedicated secret list (room 19, typeId 223)
+  item   41 - VANILLA_TYPES: type 172 stays at its vanilla position (room 22, typeId 172)
+  item  181 - VANILLA_TYPES: type 334 stays at its vanilla position (room 107, typeId 334)
+  item  187 - VANILLA_TYPES: type 201 stays at its vanilla position (room 120, typeId 201)
+  (additionally 136 sectors in 9 pure scenery rooms, not counted)
 
---- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
-TypeId 201: 1 Instanz(en) noetig
-    Instanz 1 -> muss in Zone <= 1 liegen  (Key Item6 in Schloss Item 191 (Raum 124))
-    Vanilla: 1 Instanz(en) vorhanden
-      Item 187 in Raum  120 -> Zone 1            [OK]
-TypeId 202: 1 Instanz(en) noetig
-    Instanz 1 -> muss in Zone <= 2 liegen  (Key Item7 in Schloss Item 176 (Raum 106))
-    Vanilla: 1 Instanz(en) vorhanden
-      Item 182 in Raum  107 -> Zone 2            [OK]
+--- Key/puzzle items: allowed placement range ---
+typeId 201: 1 instance(s) needed
+    instance 1 -> must lie in zone <= 1  (Key Item6 into lock item 191 (room 124))
+    vanilla: 1 instance(s) present
+      item 187 in room  120 -> zone 1            [OK]
+typeId 202: 1 instance(s) needed
+    instance 1 -> must lie in zone <= 2  (Key Item7 into lock item 176 (room 106))
+    vanilla: 1 instance(s) present
+      item 182 in room  107 -> zone 2            [OK]
 
---- Warum kam der Flood nicht weiter? ---
-Tuer Item 212 (typeId 302, Raum  142) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item 233 (typeId 286, Raum  175) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item 232 (typeId 286, Raum  172) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item 231 (typeId 286, Raum  167) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item 229 (typeId 300, Raum  166) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item 221 (typeId 290, Raum  157) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item 123 (typeId 300, Raum   60) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item 122 (typeId 284, Raum   58) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
-Tuer Item 119 (typeId 300, Raum   54) Maske  0/31
-    kein Trigger im Level schaltet diese Tuer
+--- Why did the flood not get further? ---
+door item 212 (typeId 302, room  142) mask  0/31
+    no trigger in the level switches this door
+door item 233 (typeId 286, room  175) mask  0/31
+    no trigger in the level switches this door
+door item 232 (typeId 286, room  172) mask  0/31
+    no trigger in the level switches this door
+door item 231 (typeId 286, room  167) mask  0/31
+    no trigger in the level switches this door
+door item 229 (typeId 300, room  166) mask  0/31
+    no trigger in the level switches this door
+door item 221 (typeId 290, room  157) mask  0/31
+    no trigger in the level switches this door
+door item 123 (typeId 300, room   60) mask  0/31
+    no trigger in the level switches this door
+door item 122 (typeId 284, room   58) mask  0/31
+    no trigger in the level switches this door
+door item 119 (typeId 300, room   54) mask  0/31
+    no trigger in the level switches this door
 
---- Groesste unerreichte Gebiete ---
-Gebiet mit    39 Sektoren in   8 Raeumen
-   Raeume: 58, 73, 115, 116, 118, 119, 129, 130
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 284x1, 300x2
-Gebiet mit     6 Sektoren in   3 Raeumen
-   Raeume: 175, 176, 177
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 286x1
-Gebiet mit     6 Sektoren in   3 Raeumen
-   Raeume: 157, 162, 163
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 290x1
-Gebiet mit     6 Sektoren in   3 Raeumen
-   Raeume: 172, 173, 174
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-   Bespielbare Objekte darin: 286x1
+--- Largest unreached areas ---
+area with     2 sectors in   1 rooms
+   rooms: 113
+   CLARIFIED - no open question:
+     room  113: deco room for the ventilator
+area with     2 sectors in   1 rooms
+   rooms: 66
+   CLARIFIED - no open question:
+     room   66: deco room for the ventilator
+area with     2 sectors in   1 rooms
+   rooms: 180
+   CLARIFIED - no open question:
+     room  180: deco room for the ventilator (concluded from the construction)
+area with     2 sectors in   1 rooms
+   rooms: 111
+   CLARIFIED - no open question:
+     room  111: deco room for the ventilator
 
---- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
-Keine hinterlegt.
+--- Equipment gates (manual, not derivable from level data) ---
+None on record.
 
---- Selbsttest: Level durchspielbar? ---
-Cutscene 15 in Raum   76 Sektor (1,4) -> Zone 1
-Cutscene 2 in Raum  120 Sektor (3,1) -> Zone 1
+--- Self-test: level completable? ---
+Cutscene 15 in room   76 sector (1,4) -> zone 1
+Cutscene 2 in room  120 sector (3,1) -> zone 1

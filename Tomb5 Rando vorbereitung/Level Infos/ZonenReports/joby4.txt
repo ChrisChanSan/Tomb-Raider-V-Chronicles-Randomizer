@@ -1,546 +1,448 @@
-﻿==============================================================
- Progressions-Zonen: joby4
+﻿wall spots: 11 of 394 sectors have at least one wall edge
+approach sectors: 260 of 394 sectors have at least one
+zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_joby4.json (394 sectors, maxZone=0, 0 key constraints)
 ==============================================================
-Laras Start: Raum 123, Sektor (1,6) -> Zone 0
+ Progression zones: joby4
+==============================================================
+Lara's start: room 123, sector (1,6) -> zone 0
 
---- Zonenuebergaenge (Blocker) ---
+--- Zone transitions (blockers) ---
 
---- Sektoren pro Zone ---
-Zone 0:  6132 Sektoren in 135 Raeumen
-Nie erreicht: 104 begehbare Sektoren
+--- Sectors per zone ---
+zone 0:  5751 sectors in 133 rooms
+never reached: 104 walkable sectors
+hand-barred (EXCLUDE_ROOMS): 381 sectors in 2 rooms - intended, not counted as a gap
+untouchable items (FIXED_ITEMS) - must not be moved:
+  item    4 - secret - stays in place until the dedicated secret list (room 13, typeId 223)
 
---- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+--- Key/puzzle items: allowed placement range ---
 
---- Warum kam der Flood nicht weiter? ---
-Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
-nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
+--- Why did the flood not get further? ---
+No closed door at the edge - the flood stops at the geometry,
+not at a blocker (jump/climb/teleport/water not modeled).
 
---- Groesste unerreichte Gebiete ---
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 0
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
-Gebiet mit     1 Sektoren in   1 Raeumen
-   Raeume: 1
-   Kein Portal verbindet dieses Gebiet mit dem erreichten Teil.
-   Der Zugang ist also Sprung, Kletterstelle, Monkeyswing, Tauchgang,
-   Teleporter oder Cutscene - bitte im Spiel bzw. trview klaeren.
+--- Largest unreached areas ---
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 0
+   CLARIFIED - no open question:
+     room    0: out of map, leftover of the devs, without function (room below)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
+area with     1 sectors in   1 rooms
+   rooms: 1
+   CLARIFIED - no open question:
+     room    1: out of map, leftover of the devs, without function (room above)
 
---- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
-Keine hinterlegt.
+--- Equipment gates (manual, not derivable from level data) ---
+None on record.
 
---- Selbsttest: Level durchspielbar? ---
-Cutscene 40 in Raum   39 Sektor (1,1) -> Zone 0
-Cutscene 65 in Raum  123 Sektor (1,6) -> Zone 0
-Cutscene 65 in Raum  123 Sektor (1,7) -> Zone 0
+--- Self-test: level completable? ---
+Cutscene 40 in room   39 sector (1,1) -> zone 0
+Cutscene 65 in room  123 sector (1,6) -> zone 0
+Cutscene 65 in room  123 sector (1,7) -> zone 0

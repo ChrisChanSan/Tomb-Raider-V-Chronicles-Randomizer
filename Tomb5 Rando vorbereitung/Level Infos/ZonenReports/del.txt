@@ -1,24 +1,27 @@
-﻿==============================================================
- Progressions-Zonen: del
+﻿wall spots: 143 of 418 sectors have at least one wall edge
+approach sectors: 414 of 418 sectors have at least one
+zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_del.json (418 sectors, maxZone=0, 0 key constraints)
 ==============================================================
-Laras Start: Raum 0, Sektor (4,18) -> Zone 0
+ Progression zones: del
+==============================================================
+Lara's start: room 0, sector (4,18) -> zone 0
 
---- Zonenuebergaenge (Blocker) ---
+--- Zone transitions (blockers) ---
 
---- Sektoren pro Zone ---
-Zone 0:   468 Sektoren in   7 Raeumen
-Nie erreicht: 0 begehbare Sektoren
+--- Sectors per zone ---
+zone 0:   468 sectors in   7 rooms
+never reached: 0 walkable sectors
 
---- Key-/Puzzle-Items: erlaubter Platzierungsbereich ---
+--- Key/puzzle items: allowed placement range ---
 
---- Warum kam der Flood nicht weiter? ---
-Keine geschlossene Tuer am Rand - der Flood stoppt an der Geometrie,
-nicht an einem Blocker (Sprung/Klettern/Teleport/Wasser nicht modelliert).
+--- Why did the flood not get further? ---
+No closed door at the edge - the flood stops at the geometry,
+not at a blocker (jump/climb/teleport/water not modeled).
 
---- Groesste unerreichte Gebiete ---
+--- Largest unreached areas ---
 
---- Ausruestungs-Sperren (manuell, nicht aus Leveldaten ableitbar) ---
-Keine hinterlegt.
+--- Equipment gates (manual, not derivable from level data) ---
+None on record.
 
---- Selbsttest: Level durchspielbar? ---
-Cutscene 2 in Raum    0 Sektor (11,5) -> Zone 0
+--- Self-test: level completable? ---
+Cutscene 2 in room    0 sector (11,5) -> zone 0

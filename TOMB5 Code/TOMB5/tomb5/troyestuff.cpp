@@ -20,14 +20,10 @@
 
 #define PAGE0_NUM	12
 #define PAGE1_NUM	14
-// Credits (#33): no selectable rows, the number only pushes the paging
-// arrows below the text.
-#define PAGE2_NUM	12
 
-// Direct entry (#33 addendum): the options menu got its own "Credits" row
-// and thereby jumps straight to page 2 - as the third page in the paging
-// cycle alone it was too hidden. The page therefore lives at file level
-// instead of as a function static.
+// The tomb5 options are two pages that page into each other. The credits are
+// NOT one of them - they are their own screen, reached from the options menu
+// (see CreditsScreen at the bottom of this file).
 static long TroyePage = 0;
 
 // Sets the start page and returns the matching start selection (for the
@@ -38,7 +34,7 @@ ulong TroyeMenuPage(long page)
 	long num;
 
 	TroyePage = page;
-	num = page == 0 ? PAGE0_NUM : (page == 1 ? PAGE1_NUM : PAGE2_NUM);
+	num = page == 0 ? PAGE0_NUM : PAGE1_NUM;
 	return 1ul << num;
 }
 
@@ -69,10 +65,6 @@ void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak)
 	case 1:
 		changed = Page1(num, textY, selection);
 		break;
-
-	case 2:
-		changed = Page2(num, textY, selection);
-		break;
 	}
 	
 	PrintString(phd_centerx - (phd_centerx >> 3), textY + (num + 2) * font_height, selection & (1 << num) ? 1 : 6, "\x19", 0);
@@ -101,11 +93,12 @@ void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak)
 		if (dbinput & IN_LEFT || dbinput & IN_RIGHT)
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-			
-			// Drei Seiten im Kreis (#33): Optionen -> Optionen 2 ->
-			// Credits -> wieder von vorn.
-			TroyePage = (TroyePage + 1) % 3;
-			num = TroyePage == 0 ? PAGE0_NUM : (TroyePage == 1 ? PAGE1_NUM : PAGE2_NUM);
+
+			// Two pages in a circle: options -> options 2 -> back to the
+			// start. The credits used to sit in this cycle as a third page
+			// and turned up unasked while paging through the settings.
+			TroyePage = (TroyePage + 1) % 2;
+			num = TroyePage == 0 ? PAGE0_NUM : PAGE1_NUM;
 
 			selection = 1 << num;
 		}
@@ -645,11 +638,18 @@ bool Page1(long& num, long textY, ulong selection)
 // which this project would not exist belong IN THE GAME, not only in the
 // README. Text only - no URLs, the game font does not carry every glyph
 // (PrintString guard); the links stand in the README.
-bool Page2(long& num, long textY, ulong selection)
+//
+// A SCREEN OF ITS OWN, not a page of the tomb5 options. It was one at
+// first, and that was wrong twice over: paging left/right through the
+// settings ran into the credits unasked, and TroyeMenu draws its paging
+// arrows at a fixed row below the last option - on a page of pure text
+// they landed ACROSS a line of names ("Dear ImGui by Omar Cornut" wore
+// two orange arrows). Nothing here is selectable and nothing pages, so
+// the only input this screen takes is "back".
+void CreditsScreen(long textY, long& menu, ulong& selection, ulong selection_bak)
 {
 	long y;
 
-	num = PAGE2_NUM;
 	PrintString(phd_centerx, font_height, 6, "Credits", FF_CENTER);
 
 	y = 2;
@@ -672,7 +672,14 @@ bool Page2(long& num, long textY, ulong selection)
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "Dear ImGui by Omar Cornut", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "stb by Sean Barrett", FF_CENTER);
 
-	// Nichts zu waehlen - die Seite zeigt nur an. Zurueckgeben, dass sich
-	// nichts geaendert hat; die Umschaltzeile behandelt TroyeMenu selbst.
-	return 0;
+	// Back to the options menu, with the row the player came from restored.
+	// Confirm counts as back as well - there is nothing here to confirm,
+	// and a screen that only reacts to one of the two keys feels stuck.
+	if (dbinput & (IN_DESELECT | IN_SELECT))
+	{
+		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+		menu = 0;
+		selection = selection_bak;
+		dbinput &= ~(IN_DESELECT | IN_SELECT);
+	}
 }

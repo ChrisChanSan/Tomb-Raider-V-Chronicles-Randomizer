@@ -288,7 +288,7 @@ long GetCampaignCheatValue()
 void DoOptions()
 {
 	const char** keyboard_buttons;
-	static long menu;	//0: options, 1: controls, 100: special features
+	static long menu;	//0: options, 1: controls, 100: special features, 200: tomb5 options, 201: credits
 	static ulong sel = 1;	//selection
 	static ulong last_sel;
 	static ulong sel2;		//selection for when mapping keys
@@ -796,22 +796,22 @@ void DoOptions()
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			last_sel = sel;
 			sel = 1;
-			TroyeMenuPage(0);	// gewohnter Einstieg auf Seite 1
+			TroyeMenuPage(0);	// always start on the first page
 			menu = 200;
 		}
 
 		// Credits (#33 addendum, user wish): its own row right under
 		// "tomb5 options" - as the tomb5 menu's third page alone it was
-		// too hidden. Jumps straight to the credits page; back lands here
-		// again as usual.
+		// too hidden. Its OWN screen (menu 201), not a page of the tomb5
+		// options: as a page it turned up while paging through the
+		// settings and the paging arrows were drawn across its text.
 		i = !SFMask ? 0x80 : 0x100;
 
 		if (dbinput & IN_SELECT && sel & (ulong)i)
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			last_sel = sel;
-			sel = TroyeMenuPage(2);
-			menu = 200;
+			menu = 201;
 		}
 
 		if (!sel)
@@ -952,6 +952,8 @@ void DoOptions()
 	}
 	else if (menu == 200)
 		TroyeMenu(font_height - (font_height >> 1), menu, sel, last_sel);
+	else if (menu == 201)
+		CreditsScreen(font_height - (font_height >> 1), menu, sel, last_sel);
 }
 
 void CreateMonoScreen()

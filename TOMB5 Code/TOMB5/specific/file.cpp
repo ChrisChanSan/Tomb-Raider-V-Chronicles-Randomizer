@@ -46,6 +46,7 @@
 #include "../game/effect2.h"
 #include "../game/lara.h"
 #include "drawbars.h"
+#include "../game/lot.h"
 #include "../tomb5/tomb5.h"
 
 TEXTURESTRUCT* textinfo;
@@ -411,6 +412,22 @@ void FreeLevel()
 	DXFreeSounds();
 	malloc_ptr = malloc_buffer;
 	malloc_free = malloc_size;
+
+	// This line is the moment EVERY pointer into the game_malloc pool goes
+	// stale: the bump allocator starts over at the beginning, so an address
+	// from the level before now points into the middle of the level about
+	// to be loaded. baddie_slots is the one that matters, because it is
+	// read again before it is reallocated: InitialiseLOTarray runs AFTER
+	// S_LoadLevelFile (gameflow.cpp), while ShutThatDoor - called from
+	// InitialiseDoor, i.e. DURING loading - walks all MAX_LOT slots and
+	// writes to them.
+	//
+	// Found 2026-08-25 in joby3: a closed door scattered 2047 through the
+	// old array's addresses and one of them landed exactly on item 277's
+	// room number. The engine then read room[2047] out of a 195-room field
+	// and the level died while loading, with nothing in the log pointing at
+	// a door.
+	baddie_slots = 0;
 }
 
 bool LoadTextures(long RTPages, long OTPages, long BTPages)
@@ -1154,6 +1171,41 @@ bool LoadTextureInfos()
 	return 1;
 }
 
+// Small printf for the message below. One buffer is enough - the call ends
+// the process, so nobody comes back for a second string.
+static const char* aFmt(const char* fmt, ...)
+{
+	static char buf[256];
+	va_list list;
+
+	va_start(list, fmt);
+	vsprintf(buf, fmt, list);
+	va_end(list);
+	return buf;
+}
+
+// One exit for level data the engine cannot use, in the same manner as the
+// MAX_ITEMS check below: say what is wrong, say it where the user sees it,
+// then stop. Deliberately not a silent clamp - a level carrying impossible
+// values is either damaged or was written for a different build, and both
+// are worth knowing rather than playing around. The hint at -log is there
+// because the seams that name the culprit only write with it (#125).
+static void FatalLevelData(const char* what)
+{
+	char msg[512];
+
+	Log("FATAL: %s", what);
+	sprintf(msg,
+		"This level file carries data the engine cannot use:\r\n\r\n"
+		"    %s\r\n\r\n"
+		"Starting the game once with -log writes a log.txt that records how "
+		"far loading got.\r\n\r\n"
+		"The game cannot continue and must close.", what);
+
+	MessageBox(0, msg, "Tomb Raider V - Fatal Error", MB_ICONSTOP);
+	ExitProcess(1);
+}
+
 bool LoadItems()
 {
 	ITEM_INFO* item;
@@ -1162,8 +1214,11 @@ bool LoadItems()
 	STATIC_INFO* stat;
 	long x, y, z, num_items;
 
+	bool watchDone = false;
+
 	Log(__FUNCTION__);
 	num_items = ReadLong();
+	Log("Number of items %d, rooms %d", num_items, number_rooms);
 
 	if (!num_items)
 		return 1;
@@ -1203,10 +1258,68 @@ bool LoadItems()
 		item->shade = ReadShort();
 		item->trigger_flags = ReadShort();
 		item->flags = ReadShort();
+
+		// Both fields index an array further down with no check of their
+		// own: object_number goes into objects[] in InitialiseItem, and
+		// room_number into room[] two lines later. A file written by a tool
+		// - ours included - can carry a slot this build does not know or a
+		// room that does not exist. Caught here, that is one clear line;
+		// caught nowhere, it is a wild read and a hard crash.
+		if (item->object_number < 0 || item->object_number >= NUMBER_OBJECTS)
+			FatalLevelData(aFmt("item %d carries slot %d - valid is 0..%d",
+								i, item->object_number, NUMBER_OBJECTS - 1));
+
+		if (item->room_number < 0 || item->room_number >= number_rooms)
+			FatalLevelData(aFmt("item %d sits in room %d - the level has %d",
+								i, item->room_number, number_rooms));
 	}
 
 	for (int i = 0; i < num_items; i++)
+	{
+		// Diagnostic seam (#125). An item's initialise is the one place in
+		// loading where the LEVEL's data meets the ENGINE's slot logic -
+		// anim offsets off the object's anchor, OCB read as a behaviour,
+		// neighbouring items looked up by room. A randomized level produces
+		// slot/OCB pairings no vanilla level ever had, so when loading dies
+		// here the only question that matters is WHICH item. The line is
+		// written before the call, so the last one in log.txt names it.
+		Log("ITEMLOG %d: slot %d (loaded %d anim %d) room %d ocb %d flags 0x%X pos %d,%d,%d",
+			i, items[i].object_number,
+			objects[items[i].object_number].loaded,
+			objects[items[i].object_number].anim_index,
+			items[i].room_number,
+			items[i].trigger_flags & 0x3F, items[i].flags,
+			items[i].pos.x_pos, items[i].pos.y_pos, items[i].pos.z_pos);
+
 		InitialiseItem(i);
+
+		// The room number was checked while reading, so an item standing
+		// somewhere impossible AFTERWARDS can only have been written by one
+		// of the initialise calls above - a stray write, and the seam over
+		// it would only say "it died at item 277", never who did it. This
+		// scan names both sides in one line.
+		//
+		// It is O(n2) and therefore hangs on the call-site gate and not only
+		// on Log()'s own: without -log not a single comparison runs. Once a
+		// culprit is found the scan switches itself off - the first one is
+		// the one that matters, the rest are its consequences.
+		if (gLogEnabled && !watchDone)
+		{
+			for (int j = 0; j < num_items; j++)
+			{
+				if (items[j].room_number >= 0 && items[j].room_number < number_rooms)
+					continue;
+
+				Log("ITEMWATCH: item %d (slot %d) now sits in room %d - written while "
+					"item %d (slot %d, ocb %d, room %d) was initialised",
+					j, items[j].object_number, items[j].room_number,
+					i, items[i].object_number, items[i].trigger_flags & 0x3F,
+					items[i].room_number);
+				watchDone = true;
+				break;
+			}
+		}
+	}
 
 	for (int i = 0; i < number_rooms; i++)
 	{

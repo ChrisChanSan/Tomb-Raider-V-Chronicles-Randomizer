@@ -46,9 +46,11 @@
 #define MAX_SAMPLES	450
 #define MAX_RIPPLES	128
 #define FVF (D3DFVF_TEX2 | D3DFVF_SPECULAR | D3DFVF_DIFFUSE | D3DFVF_XYZRHW)
-// 15 MB was Troye's measure for 16 AI slots. MAX_LOT 48 (#121) draws up to
-// ~16 KB more per slot from this pool; 20 MB leaves air for that and for
-// the denser rando levels. The pool is a single malloc at startup.
+// Upstream is 15 MB. The randomized levels are the reason for 20: they
+// carry the imported enemies' meshes, animations and frames, which makes
+// them several times the size of the vanilla ones (joby3 grows from 4 to
+// 18 MB on disk). The pool is a single malloc at startup and everything a
+// level loads comes out of it.
 #define MALLOC_SIZE	20000000	//20MB
 #define GAME_FOV	(80 * 182)
 // How many AI enemies can be active at once (baddie_slots, lot.cpp).
@@ -57,18 +59,19 @@
 // randomizer's 10-20 extra enemies, frozen enemies then regularly stood
 // around. 16 only costs memory in the game_malloc pool (per slot
 // sizeof(CREATURE_INFO) + num_boxes * sizeof(BOX_NODE), roughly 25 KB per
-// slot in the largest level - the pool has 15 MB).
+// slot in the largest level).
 // The displacement stays as the fallback for the 17th enemy.
-// AI slots (#121). There are only MAX_LOT simultaneous thinkers: whoever
-// gets no slot is set ITEM_INVISIBLE (lot.cpp:256) and thereby drops
-// completely out of drawing AND out of the hit test - but he reclaims the
-// slot every few frames and then fires briefly. That yields exactly the
-// blinking the user saw in andy3: ~3 frames visible, ~15 frames gone,
-// damage still arrives. Vanilla had 5, Troye 16; the randomizer places up
-// to 20 extra enemies per level PLUS the native ones - 48 covers that.
-// Cost: per slot one BOX_NODE array (8 bytes x box count, at most ~16 KB)
-// from the game_malloc pool, see MALLOC_SIZE.
-#define MAX_LOT		48
+//
+// Stood at 48 between 2026-08-23 and 2026-08-25, raised while #121 was
+// still thought to be a shortage of slots. The very next measurement
+// disproved that ("#121 measurement sheet: MAX_LOT was not it"), the real
+// cause turned out to be dead inherited animations in the rich1 guard set,
+// and the raise stayed behind unused. It then made a second bug worse: the
+// stale baddie_slots pointer in ShutThatDoor (see FreeLevel in
+// specific/file.cpp) scattered three times as far through the freshly
+// loaded level and killed joby3 while loading. Back to 16 - user's call,
+// and a value nobody has evidence against.
+#define MAX_LOT		16
 
 // Lara's targeting collects up to MAX_LOT targetable enemies plus an end
 // marker (larafire.cpp, TargetList/LastTargets). Upstream both arrays were

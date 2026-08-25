@@ -61,10 +61,24 @@ void ShutThatDoor(DOORPOS_DATA* d, DOOR_DATA* dd)
 		{
 			boxes[d->block].overlap_index |= 0x4000;
 
-			for (short slot = 0; slot < MAX_LOT; slot++)
+			// Only while the LOT array belongs to THIS level. FreeLevel
+			// clears the pointer because the game_malloc pool restarts
+			// there, and InitialiseLOTarray fills it again only after
+			// S_LoadLevelFile has finished - but this function already runs
+			// inside it, called by InitialiseDoor for every closed door.
+			// Without the test the loop wrote 2047 through the previous
+			// level's addresses, straight into the data just loaded.
+			//
+			// Skipping it during loading loses nothing: the point of the
+			// loop is to drop the path target of creatures that are already
+			// thinking, and at load time not one of them is.
+			if (baddie_slots)
 			{
-				cinfo = &baddie_slots[slot];
-				cinfo->LOT.target_box = 2047;
+				for (short slot = 0; slot < MAX_LOT; slot++)
+				{
+					cinfo = &baddie_slots[slot];
+					cinfo->LOT.target_box = 2047;
+				}
 			}
 		}
 	}

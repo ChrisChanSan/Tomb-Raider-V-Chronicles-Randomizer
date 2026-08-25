@@ -21,7 +21,7 @@
 
 //----------------------------------------------------------------------------
 // Level chains and inventory cleanup (stages 2/3 of the plan in Level Infos\
-// Levelreihenfolge-Plan.md).
+// Level-Order-Plan.md).
 //
 // THE INSIGHT BEHIND ALL OF IT (name resolution of the object commands,
 // 2026-08-22): the inventory slots are GENERIC. PUZZLE_ITEM1 is called
@@ -43,7 +43,7 @@
 //      rich3 (hard crash when equipping it anywhere else, seen by the
 //      user in rich2). Roses (PICKUP_ITEM4) are left untouched.
 //
-// Sources: the key matrix (ItemPruef) and the object commands per block.
+// Sources: the key matrix (ItemCheck) and the object commands per block.
 // Curation happens here, not in the UI.
 //----------------------------------------------------------------------------
 struct LevelChain

@@ -7,7 +7,7 @@
 // to the slice start) and is therefore laid down next to it instead of
 // rebuilding the existing flow.
 //
-// The package comes from TR3Hol: faces, anims and frames were already
+// The package comes from TR3Fetch: faces, anims and frames were already
 // brought into the TR5 layout there. Only what concerns the TARGET happens
 // here - raise all indices by the target's counters and append everything
 // in one stroke.
@@ -345,7 +345,7 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& package, int targe
     const int32_t dstBone      = m_bones.count;
     const int32_t dstFrameByte = m_frames.count * 2;
 
-    // The anims come slice-relative from TR3Hol: frame pointers from 0, jump
+    // The anims come slice-relative from TR3Fetch: frame pointers from 0, jump
     // targets from 0. The appendices (state changes, ranges, commands) were
     // handed over as WHOLE blocks, so their indices are already 0-based -
     // both cases only need the target offset.

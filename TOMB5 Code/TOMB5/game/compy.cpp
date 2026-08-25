@@ -26,7 +26,7 @@
  * In TR5 the Compy sits on slot SAILOR (53). Until now the slot hung on
  * InitialiseSas/SasControl and fetched its anims from SWAT - nobody ever
  * used it: none of the 16 levels carries a model there (measured with
- * MissMod against all of them, cross-checked via the dog). Fourth dead slot
+ * ModelOffset against all of them, cross-checked via the dog). Fourth dead slot
  * after SAS 31 (T-Rex), CROW 43 (vulture) and REAPER 75 (Raptor).
  *
  * FOUR DEVIATIONS from tomb3, all justified here:
@@ -95,7 +95,7 @@ void InitialiseCompy(short item_number)
 {
 	InitialiseCreature(item_number);
 	compys_attack_lara = 0;
-	compy_scared_timer = 0;      // siehe Abweichung 3 im Dateikopf
+	compy_scared_timer = 0;      // see deviation 3 in the file header
 }
 
 void CompyControl(short item_number)
@@ -153,7 +153,7 @@ void CompyControl(short item_number)
 				compy_scared_timer--;
 			}
 
-			// Halbiert, siehe Abweichung 4. Original: 180 (~6 s).
+			// Halved, see deviation 4. Original: 180 (~6 s).
 			if (GetRandomControl() < 0x1F && item->timer > 90)
 				compys_attack_lara = 1;
 		}
@@ -213,7 +213,7 @@ void CompyControl(short item_number)
 		head = -(info.angle / 4);
 		item->timer++;
 
-		// Halbiert, siehe Abweichung 4. Original: 200 (~6,7 s).
+		// Halved, see deviation 4. Original: 200 (~6,7 s).
 		if (item->hit_status && item->timer > 100 && GetRandomControl() < 0xC1C)
 			compys_attack_lara = 1;
 

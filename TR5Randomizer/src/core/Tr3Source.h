@@ -31,7 +31,7 @@
 // The other direction - inserting into a TR5 level - already lives in the
 // core: Tr5Level::addMoveableFromTr3, addSoundsFromTr3, addTexturesFromTr3.
 //
-// After the port, the tools TR3Hol and TR3Ton only call these functions.
+// After the port, the tools TR3Fetch and TR3Sound only call these functions.
 // There must be no second reader: the format bridge (single-axis rotations
 // 10 bit -> 12 bit, jump table with GLOBAL anim indices, faces with the TR5
 // effect word, colored faces onto a real texture) is correct in exactly one

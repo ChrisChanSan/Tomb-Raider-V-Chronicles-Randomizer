@@ -1402,7 +1402,7 @@ void BaddyObjects()
 		//
 		// The slot hung on InitialiseSas/SasControl and fetched its anims
 		// from SWAT - nobody ever used it: none of the 16 levels carries a
-		// model there (measured with MissMod against all of them, cross-
+		// model there (measured with ModelOffset against all of them, cross-
 		// checked via the dog 41, which stands in two). Fourth dead slot
 		// after SAS 31 (T-Rex), CROW 43 (vulture) and REAPER 75 (Raptor).
 		// The anim detour via SWAT drops away: the Compy brings its own set.
@@ -1550,7 +1550,7 @@ void BaddyObjects()
 		//
 		// REAPER was a water jellyfish (InitialiseJelly/JellyControl in
 		// minisub.cpp) and carries a model in NONE of the 16 TR5 levels -
-		// measured with MissMod against all of them, cross-checked via the
+		// measured with ModelOffset against all of them, cross-checked via the
 		// dog (41), which stands in two. The same situation as SAS for the
 		// T-Rex and CROW for the vulture: the control has always been in
 		// the setup, nobody ever used it. JellyControl stays in the source,

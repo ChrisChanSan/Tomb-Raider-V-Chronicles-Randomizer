@@ -298,7 +298,7 @@ struct CoupledTrigger
 // A level only carries the samples it needs itself. If an enemy does not
 // appear in it in vanilla, they are missing - it then stands there mute.
 // Where the replacement comes from is curation (ENEMY_SOUND_FIX in
-// ZoneAnalyse.ps1) and arrives ready-made in the zone export; here it is
+// ZoneAnalysis.ps1) and arrives ready-made in the zone export; here it is
 // only passed on.
 //----------------------------------------------------------------------------
 struct EnemySound
@@ -320,11 +320,11 @@ struct RandoInput
     // typeId -> offset against the sector center at floor height. Needed
     // when an object's mesh origin does not sit where the model assumes it.
     // The global/per-level resolution already happens in the export, only
-    // the final value arrives here. See TYPE_OFFSET in ZoneAnalyse.ps1.
+    // the final value arrives here. See TYPE_OFFSET in ZoneAnalysis.ps1.
     std::map<int, PlacementOffset> typeOffset;
     // Types whose OCB survives a move - the exception to rule 3. Only for
     // objects where the OCB describes the pickup style and not the old
-    // location. See KEEP_OCB in ZoneAnalyse.ps1.
+    // location. See KEEP_OCB in ZoneAnalysis.ps1.
     std::set<int>            keepOcbTypes;
     std::vector<LevelItem>   items;          // all items of the level
     std::vector<RoomOrigin>  roomOrigins;
@@ -433,7 +433,7 @@ struct RandoInput
     //
     // Why a separate set and not via the zone border: the border hangs off
     // a key constraint, and those only exist for types with a pickup.
-    // andy3's chalk and crowbar are tools without a pickup - ZoneAnalyse
+    // andy3's chalk and crowbar are tools without a pickup - ZoneAnalysis
     // derives no border for them at all, so the deadstop never reached
     // them (#61).
     std::set<long long>      keyBarredSectors;
@@ -493,7 +493,7 @@ struct RandoOptions
 
     // Cross enemy mix: the pool for swapping and extra enemies is extended
     // with types from OTHER levels (global pool table in Randomizer.cpp,
-    // from the user's list "Gegner Pools.txt"). At most three foreign types
+    // from the user's list "Enemy Pools.txt"). At most three foreign types
     // per level - each costs texture pages and sample memory in the
     // target. Models and sounds travel along during patching via the
     // native transfer (moveableAdds/soundAdds); whatever the level already

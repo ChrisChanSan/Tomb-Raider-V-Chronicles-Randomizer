@@ -27,7 +27,7 @@
  * GetCreatureMood, CreatureMood, CreatureTurn, CreatureTilt, CreatureJoint,
  * CreatureAnimation) - so the control keeps running almost word for word.
  * In TR5 the Raptor sits on slot REAPER (75); none of the 16 levels carries
- * a model there (measured with MissMod against all of them), exactly as
+ * a model there (measured with ModelOffset against all of them), exactly as
  * with SAS for the T-Rex and CROW for the vulture.
  *
  * THREE DEVIATIONS from tomb3, all justified here:

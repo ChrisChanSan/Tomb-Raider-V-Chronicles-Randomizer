@@ -186,7 +186,7 @@ public:
     bool shuffleMusic(uint64_t seed, int& swapped, std::string& error);
 
     // Shuffle the level sections (stage 1 of the plan in Level Infos\
-    // Levelreihenfolge-Plan.md): the four story sections Rome (ANDREA*),
+    // Level-Order-Plan.md): the four story sections Rome (ANDREA*),
     // Russia (JOBY*), Ireland (ANDY*) and VCI (RICH*, incl. RICHCUT2) are
     // permuted as indivisible blocks. ONLY the offset table of the level
     // blocks changes - the blocks themselves (FMVs, cutscenes, flags,

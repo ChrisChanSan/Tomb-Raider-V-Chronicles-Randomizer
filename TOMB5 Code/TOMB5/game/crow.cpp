@@ -77,8 +77,8 @@ void CrowControl(short item_number)
 			item->pos.y_pos = item->floor;
 		else
 		{
-			// Sturzanimation: Kraehe + 1, Geier + 8 (tomb3 bird.cpp:65-68).
-			// Siehe die Begruendung in InitialiseCrow.
+			// Fall animation: crow + 1, vulture + 8 (tomb3 bird.cpp:65-68).
+			// See the reasoning in InitialiseCrow.
 			item->anim_number = objects[CROW].anim_index + 8;
 			item->frame_number = anims[item->anim_number].frame_base;
 			item->current_anim_state = 4;

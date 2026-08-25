@@ -27,14 +27,14 @@ Tomb5 Steam Version/log.txt
 Tomb5 Steam Version/savegame.*
 Tomb5 Steam Version/*.bak
 
-# Zweite unangetastete Kopie der Spieldaten (Referenz zum Vergleichen)
+# A second untouched copy of the game data (a reference for comparing)
 Vanilla Tomb Raider (V) Chronicles Steam Version ENG/
 
-# Vom Nutzer beiseitegelegte alte EXE-Staende samt SCRIPT.DAT-Kopie -
-# Build-Artefakte und Spieldaten, nichts davon gehoert ins Repository.
+# Old EXE states the user set aside, together with a SCRIPT.DAT copy -
+# build artifacts and game data, none of it belongs in the repository.
 Tomb5 Steam Version/Alte exen/
 
-# Transkript-Dump, kein Projektinhalt
+# A transcript dump, not project content
 full_conversation.txt
 
 # VS user/local files
@@ -44,46 +44,46 @@ full_conversation.txt
 # Randomizer test levels - generated artifacts (~62 MB), regenerated any time
 # via -exportinfo + -patchlevel, and derived from copyrighted game data.
 # The hand-written exclusion list in that folder IS tracked (see below).
-Tomb5 Rando vorbereitung/Level Test/*.trc
-Tomb5 Rando vorbereitung/Level Test/**/*.trc
+Preparation/Level Test/*.trc
+Preparation/Level Test/**/*.trc
 
 # Third-party GPL3 tool, kept locally as reference only (b122251's TRMOD)
-Tomb5 Rando vorbereitung/Tomb Raider Level Modifier By b122251/
+Preparation/Tomb Raider Level Modifier By b122251/
 
-# DIE ORIGINAL-LEVELDATEN. Sie duerfen niemals ins Repository - das waere
-# Weitergabe von Spieldaten. Der Ordner selbst muss auf der Platte bleiben, er
-# ist die einzige unberuehrte Kopie, die das Werkzeug kennt; nur git haelt sich
-# hier heraus. Ein "git add -A" hat sie einmal mitgenommen, der Commit wurde
-# zurueckgenommen, bevor er irgendwo hinging. Deshalb steht die Regel jetzt hier
-# und nicht nur in der Absicht.
+# THE ORIGINAL LEVEL DATA. It must never enter the repository - that would
+# be distributing game data. The folder itself must stay on the disk, it is
+# the only untouched copy the tool knows about; only git keeps out of it.
+# A "git add -A" took it along once; the commit was taken back before it
+# went anywhere. That is why the rule stands here now and not only in the
+# intention.
 data Backup/
 
-# Fertiges Auslieferungspaket - erzeugt, nicht geschrieben. Enthaelt unter
-# anderem eine vollstaendige Kopie des TOMB5-Quellbaums samt Lizenzen; die
-# gehoert an ihren Platz im Baum, nicht ein zweites Mal hierher.
-Release Paket/
+# The finished shipping package - generated, not written. Among other things
+# it contains a complete copy of the TOMB5 source tree including licenses;
+# that belongs in its place in the tree, not a second time here.
+Release Package/
 
-# Dear ImGui als Fremdbibliothek im Original-Release-Stand. Wird nicht
-# geaendert, ihre Historie liegt bei ihrem eigenen Projekt.
-Tomb5 Rando vorbereitung/imgui-*/
+# Dear ImGui as a third-party library in its original release state. It is
+# not modified, its history lives with its own project.
+Preparation/imgui-*/
 
-# Eigener trview-Bau (chreden/trview 2.9.1, GPL) samt Quellkopie - die
-# Historie liegt beim Upstream-Projekt, die EXE ist ein Bauartefakt.
-# Baurezept siehe Aufgabe #105-Umfeld: 8.3-Kurzpfad (Leerzeichen!),
-# DirectXTK-Shader einmal von Hand mit fxc, PreBuildEvent-Quotes.
-Tomb5 Rando vorbereitung/TRView f*r Tomb5 Rando/
+# Our own trview build (chreden/trview 2.9.1, GPL) plus a source copy - the
+# history lives with the upstream project, the EXE is a build artifact.
+# Build recipe see the task #105 context: 8.3 short path (spaces!),
+# DirectXTK shaders once by hand with fxc, PreBuildEvent quotes.
+Preparation/TRView for Tomb5 Rando/
 
-# --- Fremde Spieldaten: NIEMALS mitcommitten ---------------------------------
+# --- Foreign game data: NEVER commit it ---------------------------------------
 #
-# Dieses Projekt steht unter GPLv3 und liefert keine Spieldaten mit. Wer die
-# Dinosaurier will, muss Tomb Raider 3 besitzen; der Randomizer holt sie zur
-# Laufzeit aus SEINER Installation (#92). Alles, was hier beim Entwickeln
-# herumliegt, gehoert jemand anderem und darf nicht ins Repository.
+# This project is under GPLv3 and ships no game data. Whoever wants the
+# dinosaurs must own Tomb Raider 3; the randomizer fetches them at runtime
+# from THEIR installation (#92). Everything lying around here while
+# developing belongs to somebody else and must not enter the repository.
 #
-# Siehe auch den Ordner "Import-Export" neben dem Programm - er traegt aus
-# demselben Grund eine Datei "NICHT MITLIEFERN.txt".
+# See also the "Import-Export" folder next to the program - for the same
+# reason it carries a file "DO NOT REDISTRIBUTE.txt".
 Spiel/
-Neue chechsums/
+New Checksums/
 Import Export/
 Outfit Test/
 *.TR2
@@ -94,29 +94,29 @@ Outfit Test/
 *.bin
 Compy Sounds/
 
-# Erzeugte Wandtest-Level (#61): abgeleitete Spieldaten, nur fuer trview
-Tomb5 Rando vorbereitung/Wandtest/
+# Generated WallTest levels (#61): derived game data, for trview only
+Preparation/WallTest/
 
-# Erzeugte Secret-Testlevel (#53): abgeleitete Spieldaten
-Tomb5 Rando vorbereitung/Secrettest/
+# Generated secret test levels (#53): derived game data
+Preparation/SecretTest/
 
-# Spieldaten und Fremd-Downloads - nie versionieren
+# Game data and third-party downloads - never version these
 TOMB 5 (I).zip
 Tomb Raider 5 (I).iso
 Tomb Raider 5 Italy/
-Tomb5 Rando vorbereitung/stb-master/
+Preparation/stb-master/
 Tomb5 Steam Version/savegame/
 
-# Spielinstallation des Nutzers - gehoert nie ins Repo (setup.bat bleibt
-# als bereits getrackte eigene Datei erhalten; Ignore trifft nur Neues)
+# The user's game installation - never belongs in the repo (setup.bat stays
+# as an already tracked file of our own; the ignore only catches new files)
 Tomb5 Steam Version/
 
-# Sicherungs-Bundles der Historie - enthalten alte Staende, nie hochladen
+# Backup bundles of the history - they contain old states, never upload
 *.bundle
 
-# Kurations-Screenshots (Spiel-Bildmaterial) - lokal wertvoll, nie ins Repo
-Tomb5 Rando vorbereitung/Level Infos/ZonenReports/**/*.jpg
-Tomb5 Rando vorbereitung/Level Infos/ZonenReports/**/*.png
+# Curation screenshots (game imagery) - valuable locally, never in the repo
+Preparation/Level Infos/ZoneReports/**/*.jpg
+Preparation/Level Infos/ZoneReports/**/*.png
 
-# Frische Upstream-Downloads fuer Vergleiche - nie versionieren
+# Fresh upstream downloads for comparisons - never version these
 Tomb5 frisch*/

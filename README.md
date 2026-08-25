@@ -35,7 +35,7 @@ randomizer patches your own files at runtime and backs everything up to
 - **Randomizer:** `TR5Randomizer\build\b1.bat` (command line) and
   `b2.bat` (GUI) — both run relative to the repo; Visual Studio with the
   C++ workload is required.
-- **Package:** `Tomb5 Rando vorbereitung\Tools\BuildRelease.ps1` assembles
+- **Package:** `Preparation\Tools\BuildRelease.ps1` assembles
   the shippable folder including source code and licenses.
 
 ## Thanks and origin

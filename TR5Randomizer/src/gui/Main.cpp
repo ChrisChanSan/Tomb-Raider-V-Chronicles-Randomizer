@@ -412,7 +412,7 @@ namespace
         bool optOtherPickups = true;
         bool optKeyItems = true;
         // Add extra enemies to the level. Which types a level can take is
-        // curated (ENEMY_TYPES in ZoneAnalyse.ps1) - if the list is empty,
+        // curated (ENEMY_TYPES in ZoneAnalysis.ps1) - if the list is empty,
         // the checkbox has no effect.
         bool optEnemies = false;
         int  optEnemyCount = 6;
@@ -1760,7 +1760,7 @@ static void drawUi(App& a, HWND hwnd)
                           ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
         ImGui::TextColored(ImVec4(1, .55f, .35f, 1), T("Warning: outdated curation data"));
         ImGui::TextWrapped(T("%s"), a.zoneWarning.c_str());
-        ImGui::TextDisabled(T("To fix: re-export ZoneAnalyse.ps1 for ALL levels into data\\."));
+        ImGui::TextDisabled(T("To fix: re-export ZoneAnalysis.ps1 for ALL levels into data\\."));
         ImGui::EndChild();
         ImGui::PopStyleColor(2);
         ImGui::Spacing();
@@ -2555,7 +2555,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     //------------------------------------------------------------------------
     // Check the curation stamps of the zone exports.
     //
-    // The randomizer never reads the curation tables from ZoneAnalyse.ps1,
+    // The randomizer never reads the curation tables from ZoneAnalysis.ps1,
     // only the zones_<level>.json generated from them. If the table is
     // changed and not regenerated, it silently keeps working with the old
     // curation - and the folder data\ is a build product, so there is no
@@ -2605,7 +2605,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         {
             std::string t = "The zone exports in data\\ carry different curation stamps - "
                             "part of them was not regenerated after a change to "
-                            "ZoneAnalyse.ps1. Affected:";
+                            "ZoneAnalysis.ps1. Affected:";
             for (const auto& kv : stamps)
             {
                 t += "\n  " + kv.first + ":";

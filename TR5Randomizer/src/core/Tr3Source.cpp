@@ -10,7 +10,7 @@
 //----------------------------------------------------------------------------
 // Extraction from a TR3 level - implementation of Tr3Source.h (#92).
 //
-// Taken over word for word from the TR3Hol tool; only the frame changed
+// Taken over word for word from the TR3Fetch tool; only the frame changed
 // (main -> library function), loading via a wide path, and the error exits,
 // which now return a text instead of printing. The format bridge itself is
 // UNTOUCHED - it is correct in exactly one place, and it should stay that
@@ -579,7 +579,7 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
 }
 
 //----------------------------------------------------------------------------
-// Sound extraction from MAIN.SFX (#92, taken over from TR3Ton).
+// Sound extraction from MAIN.SFX (#92, taken over from TR3Sound).
 //----------------------------------------------------------------------------
 namespace
 {
@@ -661,7 +661,7 @@ bool Tr3Source::fetchSounds(const std::wstring& sfxPath,
 }
 
 //----------------------------------------------------------------------------
-// Rewrite the SFX numbers of the anim commands (#92, taken over from TR3Setz).
+// Rewrite the SFX numbers of the anim commands (#92, taken over from TR3Insert).
 //
 // TWO TRAPS LIVE IN HERE, both paid for dearly:
 //
@@ -765,7 +765,7 @@ bool Tr3Source::remapSfx(std::vector<uint8_t>& package,
 // All numbers are MEASURED, not assumed:
 //   - object numbers from the tomb3 enum, cross-checked (VULTURE is 29
 //     there and matches the user's note)
-//   - target slots checked with MissMod against all 16 TR5 levels: none
+//   - target slots checked with ModelOffset against all 16 TR5 levels: none
 //     carries a model there
 //   - wave numbers auditioned in the TRsound tool and recovered from the
 //     finished sound packages by finding the wave data in MAIN.SFX again
@@ -839,7 +839,7 @@ std::wstring Tr3Source::levelPath(const DinoSource& d,
 }
 
 //----------------------------------------------------------------------------
-// Redirect the faces' texture words to the new texinfos (#92, from TR3Setz).
+// Redirect the faces' texture words to the new texinfos (#92, from TR3Insert).
 //
 // The same walker as everywhere: mesh header 10 bytes, then the vertex
 // word; 0 normals means NORMALS. Bit 15 of the texture word is a flag and

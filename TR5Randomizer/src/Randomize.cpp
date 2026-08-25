@@ -377,11 +377,19 @@ int main(int argc, char** argv)
             continue;
         }
 
+        // Compare the OCB against what the patch ASKED for, not against 0.
+        // Since KEEP_OCB (#61) a moved wall pickup keeps its 2 resp. 9 on
+        // purpose; demanding 0 here made every andy3 run report two
+        // "deviating" items and return exit code 1 on a perfectly correct
+        // result. A self-check that cries wolf is worse than none.
+        const int wantOcb = edits[i].has("ocb")
+                          ? static_cast<int>(edits[i]["ocb"].asInt()) & 0x3F
+                          : 0;
         if (it.roomNumber != static_cast<int16_t>(edits[i]["room"].asInt()) ||
             it.x != static_cast<int32_t>(edits[i]["x"].asInt()) ||
             it.y != static_cast<int32_t>(edits[i]["y"].asInt()) ||
             it.z != static_cast<int32_t>(edits[i]["z"].asInt()) ||
-            (it.triggerFlags & 0x3F) != 0)
+            (it.triggerFlags & 0x3F) != wantOcb)
         {
             ++wrong;
             continue;

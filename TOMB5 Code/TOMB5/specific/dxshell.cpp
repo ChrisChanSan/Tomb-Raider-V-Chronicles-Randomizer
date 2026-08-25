@@ -713,7 +713,7 @@ static long DXUpdateJoystickDirectInput()
 		return 0;
 
 	joystick_read = 1;
-	joystick_is_xinput = 0;	// dieser Pfad liefert rohe HID-Bits (Namenstabellen siehe input.cpp)
+	joystick_is_xinput = 0;	// this path delivers raw HID bits (name tables see input.cpp)
 
 	// Axes were ranged to -1000..1000 in DXInitInput via DIPROP_RANGE, so this
 	// scales to roughly the same -128..127 ballpark XInput's path produces above.
@@ -784,7 +784,7 @@ long DXUpdateJoystick()
 		return DXUpdateJoystickDirectInput();	// no XInput device (e.g. a PS4/PS5 controller with no Steam Input/DS4Windows wrapper active) - fall back to raw DirectInput
 
 	joystick_read = 1;
-	joystick_is_xinput = 1;	// XInput-Bitfolge aktiv (Namenstabellen siehe input.cpp)
+	joystick_is_xinput = 1;	// XInput bit order active (name tables see input.cpp)
 
 	long lx = state.Gamepad.sThumbLX;
 	long ly = state.Gamepad.sThumbLY;

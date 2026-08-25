@@ -29,7 +29,7 @@
 //
 // Rule: RANDO_BUILD_ID is bumped on EVERY change that can alter the outcome
 // of a seed. That is more than one first thinks - it includes the curation
-// tables in ZoneAnalyse.ps1, because a new ban list moves items. Pure UI
+// tables in ZoneAnalysis.ps1, because a new ban list moves items. Pure UI
 // changes, on the other hand, do not count.
 //
 // The engine carries the same constant. If they do not match, the randomizer

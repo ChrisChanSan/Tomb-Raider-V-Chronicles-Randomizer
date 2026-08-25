@@ -18,7 +18,7 @@
 #pragma once
 //----------------------------------------------------------------------------
 // Floor slope of a sector - shared knowledge between ApplyPatch (reads the
-// floordata), the randomizer (places items) and PruefBoden (verifies
+// floordata), the randomizer (places items) and FloorCheck (verifies
 // finished levels).
 //
 // Everything here is ported VERBATIM from the engine, nothing invented:

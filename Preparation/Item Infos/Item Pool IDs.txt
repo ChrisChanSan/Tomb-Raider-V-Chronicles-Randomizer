@@ -1,0 +1,56 @@
+Generic items that can always be anywhere, no logic.
+(Weapons, ammo, medipacks, generic pickups without room/trigger binding. Freely
+swappable/randomizable as long as the OCB is normalized to 0 - see
+project_tomb5_native_port.md, "CONFIRMED BUG": plinth/hidden OCB items (OCB 1/3/4/7/8)
+become permanently uncollectable after GetCarriedItems() pickup by an enemy, because
+DropBaddyPickups() does not reset the OCB on the drop. Randomizer rule: set all items in
+this category to OCB 0 across the board.
+ATTENTION: "normalize OCB to 0" applies ONLY to real pickup items (object_number = a
+pickup object type). On enemy items (e.g. the Hydra) the OCB field has a completely
+different, object-specific meaning - for the Hydra e.g. the position in the chain of 3,
+see Enemy Pools.txt. Never run this rule blindly over all items in the level, always
+filter by object_number first.)
+	1
+	2
+	3
+
+Confirmed TypeIDs for generic pickups (verified 2026-08-02 via RESOURCES\TRCatalog2.xml
+against game/objects.h's object_types enum, plus tested in practice via -patchlevel in
+the fill test of Andrea1.trc, rooms 14/40/41):
+	349 = Bigmedi Item (large medipack)
+	350 = Smallmedi Item (small medipack)
+	348 = Revolver Ammo Item
+	355 = Flare Inv Item ("Flares" - THIS is the collectable pickup ID)
+	354 = Flare Item - ATTENTION, do NOT use for placing! That is the flare
+	      Lara throws away when it is used up (a throw/deco object), no
+	      pickup logic. Wrongly used in the first fill test (mixed up with
+	      355), corrected by the user via trview's item details panel (the
+	      type column "Flare" vs "Flares" makes the difference visible).
+
+Key/puzzle items that must watch rooms, because of doors and triggers.
+(No concrete list yet - would have to be compiled systematically from the level JSONs
+(Level Infos\*.json): every item with an accompanying keyhole/puzzle hole in the same or
+a reachable room. TombItemEdit2026's catalog (RESOURCES\TRCatalog2.xml) already has a
+key-item/key-hole/puzzle-hole/puzzle-done distinction via the icon mapping - a good
+starting point to fill this category automatically instead of by hand.)
+	1
+	2
+	3
+
+Items that fire triggers and are therefore individual cases, like the Iris in rich1.trc
+(Candidates can be found directly from the Level Infos\*.json files: every item whose
+index appears in a trigger command "Object N" with N == this item's own index - i.e. the
+item (also) fires itself or other items/doors. Must be excluded by the randomizer logic,
+otherwise risk of a level softlock.)
+	1 Iris, rich1.trc - item 14 (TypeID 221), room 11, OCB 8 (plinth), sector (5,5).
+	  The pickup trigger on the same sector fires Object 14 + Object 15 + Object 206
+	  (14 presumably itself / deactivation, 15 presumably the X-Ray controller,
+	  206 presumably the end door - not yet verified individually). Already concretely
+	  confirmed in the JSON export (Level Infos\rich1.json), see
+	  project_tomb5_native_port.md.
+	2
+	3
+
+TODO: categories 2 and 3 (apart from the Iris example) are still empty/incomplete - both
+can be derived from the already existing Level Infos\*.json files once a small evaluation
+script is written for it (no manual clicking through per level needed).

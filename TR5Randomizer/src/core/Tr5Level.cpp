@@ -417,7 +417,7 @@ bool Tr5Level::addAiObject(const Tr5AiObject& in, std::string& error)
 //----------------------------------------------------------------------------
 // Floordata
 //
-// The format is fully derived in "Tomb5 Rando vorbereitung\Trigger\Floordata
+// The format is fully derived in "Preparation\Trigger\Floordata
 // und Trigger.md", with line references into the engine. Here only what is
 // needed to read the code along.
 //----------------------------------------------------------------------------
@@ -929,7 +929,7 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int kind, int timer, bool on
 //----------------------------------------------------------------------------
 // Turn a wall sector into a portal (#53, the andy3 double door).
 //
-// What a portal sector is was measured with SektorPruef on the working
+// What a portal sector is was measured with SectorCheck on the working
 // neighbors in andy3 (room 34 column x0, room 36 column x4):
 //
 //   - Floor/ceiling carry the values of the OVERLAPPED walkable sector of
@@ -1638,7 +1638,7 @@ bool Tr5Level::save(const std::wstring& path, std::string& error) const
 
     // Texture workshop (#104): as long as it is dirty and open, the texture
     // blocks in m_bytes carry the OLD state. Rather fail loudly than
-    // silently write a level with stale pages (the TR3Setz lesson: nobody
+    // silently write a level with stale pages (the TR3Insert lesson: nobody
     // reads a warning). Patch::apply closes at the end itself.
     if (m_texOpen && m_texDirty)
     {

@@ -65,7 +65,7 @@ void ChefControl(short item_number)
 	// His own set, however, has no REAL death animation: +11 (state 6) is
 	// a 1-frame stub with KillItem - he collapsed without a transition
 	// (#124, user find). His skeleton is bone-identical with the soldier
-	// family (BonePruef: 0 of 14 bones deviating), so he borrows their
+	// family (BoneCheck: 0 of 14 bones deviating), so he borrows their
 	// gunshot death: anim +16, state 8, 64 frames including the death
 	// scream and KillItem at the end - the corpse stays down like any
 	// soldier's. The same alias mechanics with which the stub family
@@ -91,9 +91,9 @@ void ChefControl(short item_number)
 				item->anim_number = objects[CHEF].anim_index + 11;
 
 			item->frame_number = anims[item->anim_number].frame_base;
-			// Zustand aus der Anim-Tabelle uebernehmen (8 beim geliehenen
-			// Soldatentod, 6 beim eigenen Stummel) - genau wie AnimateItem
-			// ihn beim Weiterschalten nachziehen wuerde.
+			// Take the state from the anim table (8 for the borrowed soldier
+			// death, 6 for his own stub) - exactly as AnimateItem would carry
+			// it over when advancing.
 			item->current_anim_state = anims[item->anim_number].current_anim_state;
 			item->goal_anim_state = item->current_anim_state;
 		}
@@ -154,7 +154,7 @@ void ChefControl(short item_number)
 		// has no foe (box.cpp:74).
 		//
 		// The vanilla chef (joby3 item 186) carries OCB 0 - checked at the
-		// source and with ItemPruef - and thus stays with his vegetables.
+		// source and with ItemCheck - and thus stays with his vegetables.
 		// The curation nails him down anyway (FIXED_ITEMS), so he cannot
 		// lose his OCB at all.
 		if ((item->trigger_flags & 1) ||

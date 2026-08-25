@@ -42,8 +42,8 @@ extern long gfStatus;
 extern long gfMirrorZPlane;
 extern short gfLevelFlags;
 extern uchar gfCurrentLevel;
-// Level order (plan: Tomb5 Rando vorbereitung\Level Infos\
-// Levelreihenfolge-Plan.md): gfCurrentLevel is the SLOT in SCRIPT.DAT
+// Level order (plan: Preparation\Level Infos\
+// Level-Order-Plan.md): gfCurrentLevel is the SLOT in SCRIPT.DAT
 // (order, savegame, names), gfLevelId the IDENTITY of the loaded level
 // (LVL5_*, from the file name). In vanilla both are equal; as soon as the
 // randomizer permutes the blocks, everything that wants to know "am I on

@@ -55,7 +55,7 @@ long Patch::shuffleMusicTriggers(Tr5Level& level, uint64_t seed)
     };
 
     // The jingle pot is NOT the whole track space, but only what some
-    // trigger in the game actually fires - measured with MusikPruef over
+    // trigger in the game actually fires - measured with MusicCheck over
     // all 15 vanilla levels (2026-08-22, union of the TO_CD tracks, minus
     // the atmospheres). That keeps cutscene dialogue, title music, credits
     // lead-in, FMV-adjacent tracks and the tutorial voice lines (TL_*, they

@@ -1,20 +1,20 @@
-// Programmsymbol des Randomizers. Das Logo stammt vom Nutzer (Logos\),
-// TR5Randomizer.ico traegt es in sechs Groessen (16 bis 256) als
-// PNG-Eintraege - Windows waehlt je nach Anzeige die passende.
+// The randomizer's program icon. The logo comes from the user (Logos\),
+// TR5Randomizer.ico carries it in six sizes (16 to 256) as PNG entries -
+// Windows picks the fitting one depending on the display.
 //
-// 101 ist die erste Symbolnummer: Windows nimmt fuer Fenster und
-// Taskleiste das Symbol mit der KLEINSTEN Nummer aus der EXE, wenn kein
-// Code etwas anderes setzt. Main.cpp setzt es zusaetzlich ausdruecklich.
+// 101 is the first icon number: for the window and the taskbar Windows
+// takes the icon with the SMALLEST number from the EXE unless code sets
+// something else. Main.cpp additionally sets it explicitly.
 #define IDI_APPICON 101
 IDI_APPICON ICON "TR5Randomizer.ico"
 
-// Das Hintergrundbild der Oberflaeche - dasselbe Banner des Nutzers, aus
-// Logos\Tomb5 Rando Logo 1920x1080.png. Als JPEG eingebettet und nicht als
-// PNG: dieses Bild ist fotoartig, PNG braucht dafuer 3,1 MB, JPEG mit
-// Qualitaet 88 nur 0,5 MB. Sichtbar ist der Unterschied nicht, weil das Bild
-// stark abgedunkelt hinter der Oberflaeche liegt.
+// The interface's background image - the user's same banner, from
+// Logos\Tomb5 Rando Logo 1920x1080.png. Embedded as JPEG and not as PNG:
+// this image is photo-like, PNG needs 3.1 MB for it, JPEG at quality 88
+// only 0.5 MB. The difference is not visible because the image lies
+// heavily darkened behind the interface.
 //
-// Eingebettet statt als Datei daneben, damit die EXE fuer sich allein
-// lauffaehig bleibt und niemand das Bild versehentlich loescht.
+// Embedded instead of sitting next to it as a file, so the EXE stays
+// runnable on its own and nobody deletes the image by accident.
 #define IDR_BACKGROUND 201
 IDR_BACKGROUND RCDATA "Background.jpg"

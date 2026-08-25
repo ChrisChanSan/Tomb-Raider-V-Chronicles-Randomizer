@@ -253,7 +253,7 @@ public:
     // filled anyway), 1 entry is in si.
     int     floorSlope(int room, int sx, int sz, SlopeInfo& si, int& baseY) const;
 
-    // Installs a moveable fetched from a TR3 level (package from TR3Hol,
+    // Installs a moveable fetched from a TR3 level (package from TR3Fetch,
     // magic "T35H"). Implemented in Tr5Tr3Import.cpp - deliberately next to
     // the proven TR5->TR5 path and not inside it.
     //
@@ -265,7 +265,7 @@ public:
     bool    addMoveableFromTr3(const std::vector<uint8_t>& package, int targetSlot,
                                int texinfoIndex, std::string& error);
 
-    // Puts the sounds of a TR3 package ("T35S" from TR3Ton) onto the
+    // Puts the sounds of a TR3 package ("T35S" from TR3Sound) onto the
     // soundmap slots baseId, baseId+1, ... and returns the mapping original
     // TR3 id -> new slot. With it the SFX numbers in the anim commands are
     // rewritten afterwards.
@@ -339,7 +339,7 @@ public:
     // Turns a wall sector into a portal to targetRoom (ONE side - the
     // caller does the other side with the roles swapped).
     //
-    // Precondition, found with SektorPruef on andy3: the 32-byte VIEWPORT
+    // Precondition, found with SectorCheck on andy3: the 32-byte VIEWPORT
     // in the room's portal list must already exist. This function writes
     // only the sector side: floor/ceiling from the overlapped sector of the
     // target room (the portal columns of two rooms lie on top of each

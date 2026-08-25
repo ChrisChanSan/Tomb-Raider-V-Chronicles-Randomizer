@@ -25,7 +25,7 @@
 // Core's own level defects, repaired on EVERY run.
 //
 // Distinction from the rest of the curation: the zone and range tables in
-// ZoneAnalyse.ps1 say WHERE randomness may put things - they work with the
+// ZoneAnalysis.ps1 say WHERE randomness may put things - they work with the
 // level as it is. This here is the opposite: places where the level ITSELF
 // is broken, independent of any shuffling. Such a defect cannot be curated
 // around, it has to go.
@@ -64,13 +64,13 @@ namespace LevelFix
     //
     // Why this is more than convenience: the curation explicitly allows
     // PUZZLE items in exactly these water rooms (user decision, NO_KEY_ROOMS
-    // in ZoneAnalyse.ps1: "the puzzles can stay, only keys matter") - on the
+    // in ZoneAnalysis.ps1: "the puzzles can stay, only keys matter") - on the
     // grounds that they are only needed at the end, when the power has long
     // been off. The tester case breaks precisely that assumption. Keys are
     // barred anyway; the copy makes the puzzle allowance sound again instead
     // of having to retract it.
     //
-    // Measured against the file (SektorPruef): room 138 has exactly ONE
+    // Measured against the file (SectorCheck): room 138 has exactly ONE
     // trigger, on (1,1), with the object commands 91 and 136. Room 122 is
     // 7x3 sectors, (1,1) is walkable floor without a chain of its own - the
     // copy therefore lands on a free sector.

@@ -681,7 +681,7 @@ bool Rando::buildMarkerPatch(const RandoInput& in,
     // placement rules - the WALL GRABS (OCB 2 and 9).
     //
     // andy3's chalk (172) and crowbar (174) are the case: tools without a
-    // pickup, so ZoneAnalyse derives no zone border for them and they stand
+    // pickup, so ZoneAnalysis derives no zone border for them and they stand
     // in no constraint. Layer 2 therefore never drew them - in the debug
     // level they were missing entirely, although they very much have their
     // own rules (wall edge, standing height 768, no water) and the deadstop
@@ -1489,7 +1489,7 @@ bool Rando::run(const RandoInput& in,
     //
     // --- Cross enemy mix: extend the pool with foreign types ---
     //
-    // The global pool table is the user's list "Gegner Pools.txt", per type
+    // The global pool table is the user's list "Enemy Pools.txt", per type
     // with the donor level that carries it WITH vanilla instances - only
     // there do model AND samples lie together. The sound entries are the
     // known exceptions whose samples even the donor lacks (Larson's death
@@ -1728,7 +1728,7 @@ bool Rando::run(const RandoInput& in,
         // set carries only +0..+11 real anims (the rest are dead heirs his
         // states 1-6 never touch); his death is a 1-frame stub, so in the
         // engine he borrows the soldier death +16 - skeleton bone-identical
-        // with the family (BonePruef: 0 of 14 deviating). baseSlot 460: the
+        // with the family (BoneCheck: 0 of 14 deviating). baseSlot 460: the
         // guard always travels along as the death donor (chef.cpp). No swap
         // halves, no meshswap; his anim sounds (89/187/190) travel via the
         // commands. His spawn OCB is 1 (hunt instead of kitchen work, see
@@ -1766,7 +1766,7 @@ bool Rando::run(const RandoInput& in,
         // volumes - stand in Tr3Source::dinos().
         //
         // The four target slots carry a model in NONE of the 16 TR5 levels
-        // (measured with MissMod against all of them), so they take nothing
+        // (measured with ModelOffset against all of them), so they take nothing
         // from any native enemy. Neither base type nor companions nor swap
         // halves - they bring everything themselves.
         { 31, nullptr,   {},                                    {-1,-1},  nullptr,   -1, 0, 0, "tr3"     }, // T-Rex

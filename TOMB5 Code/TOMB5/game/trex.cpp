@@ -24,7 +24,7 @@
 #include "../specific/function_stubs.h"
 
 //----------------------------------------------------------------------------
-// Sound slots of the TR3 sounds. The importer (TR3Setz) ALWAYS stores them
+// Sound slots of the TR3 sounds. The importer (TR3Insert) ALWAYS stores them
 // from 445 on: the original TR3 numbers are partly taken in TR5 (89 in
 // every level), while slots 445-449 are free everywhere. The same kind of
 // fixed agreement as SFX_SMASH_ROCK for the Hydra.

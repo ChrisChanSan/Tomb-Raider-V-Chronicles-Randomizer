@@ -154,9 +154,9 @@ static const std::unordered_map<std::string, const char*>& table()
         // --- Header + debug menu -----------------------------------------
         { "Sector markers...", "Sektoren-Marker..." },
         { "Open \"Debug Level\" folder", "Ordner \"Debug Level\" oeffnen" },
-        { "Warning: outdated curation data", "Achtung: veralteter Kurationsstand" },
-        { "To fix: re-export ZoneAnalyse.ps1 for ALL levels into data\\.",
-          "Beheben: ZoneAnalyse.ps1 fuer ALLE Level neu nach data\\ exportieren." },
+        { "Warning: outdated curation data", "Achtung: veralteter Curationsstand" },
+        { "To fix: re-export ZoneAnalysis.ps1 for ALL levels into data\\.",
+          "Beheben: ZoneAnalysis.ps1 fuer ALLE Level neu nach data\\ exportieren." },
 
         // --- Block 1: installation ---------------------------------------
         { "1. Your installation", "1. Deine Installation" },

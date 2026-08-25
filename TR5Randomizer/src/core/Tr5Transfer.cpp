@@ -334,7 +334,7 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& package,
     { error = "not a TR3 model package"; return false; }
     if (rd32(package, 4) < 2) { error = "package without a texture part (version < 2)"; return false; }
 
-    // --- Fast-forward to the texture part (layout see TR3Hol) --------------
+    // --- Fast-forward to the texture part (layout see TR3Fetch) --------------
     const uint32_t nMeshes = rd32(package, 12), nAnims = rd32(package, 16);
     const uint32_t nFrameW = rd32(package, 20), nBoneW = rd32(package, 24);
     const uint32_t nSC = rd32(package, 28), nAD = rd32(package, 32), nCmd = rd32(package, 36);
@@ -815,7 +815,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
                 const uint16_t iCmd = rd16(src.m_bytes, o + 38);
                 if (!nCmd || iCmd < cmdStart) continue;
                 // Walk locally in the cut block; the loop counts COMMANDS,
-                // not words (the old TR3Setz lesson).
+                // not words (the old TR3Insert lesson).
                 size_t c = (static_cast<size_t>(iCmd) - static_cast<size_t>(cmdStart)) * 2;
                 for (int k = 0; k < nCmd && c + 2 <= cmdBytes.size(); ++k)
                 {
@@ -841,7 +841,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     // Not every model sits on the item origin. Where Core installed a figure
     // only as decoration on a structure, the offset lives in the FRAMES: in
     // the root displacement and in the frame box. The Crane Guy (55) is only
-    // an ANIMATING4 at the crane console in joby2 - measured with MissMod
+    // an ANIMATING4 at the crane console in joby2 - measured with ModelOffset
     // (center of the frame box | root):
     //
     //   Guard 37      -1 /  29 |   -1 -478  24   <- this is what centered looks like
@@ -904,7 +904,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
             adj(6, v.dx); adj(8, v.dz);     // root x and z (y stays)
             ++corrected;
         }
-        (void)corrected;   // cross-check runs via MissMod on the finished level
+        (void)corrected;   // cross-check runs via ModelOffset on the finished level
         break;
     }
 
@@ -1270,7 +1270,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
 // SLOT exists in every level - Lara's table is the same length everywhere -
 // but the IMAGE DATA is level-specific: outside joby2 the extra anims 435+
 // are Core stubs whose frame pointers all point at the same clump of data
-// (joby3: 436-439 -> one offset; measured with AnimKmd/FrameOfs). Played
+// (joby3: 436-439 -> one offset; measured with AnimCmd/FrameOfs). Played
 // back, that is a frozen pose.
 //
 // Transplanted: the frame data (to the block end), rate/frame_size/state/

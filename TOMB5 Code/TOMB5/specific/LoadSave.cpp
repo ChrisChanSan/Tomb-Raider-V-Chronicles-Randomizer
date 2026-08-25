@@ -919,19 +919,19 @@ void DoOptions()
 		}
 		else if (sel & 0x20)
 		{
-			long richtung = 0;
+			long direction = 0;
 
 			if (dbinput & IN_LEFT)
-				richtung = -1;
+				direction = -1;
 
 			if (dbinput & IN_RIGHT)
-				richtung = 1;
+				direction = 1;
 
-			if (richtung)
+			if (direction)
 			{
-				// Naechste VORHANDENE Sprachdatei in Blickrichtung - fehlende
-				// werden uebersprungen (SwitchLanguage scheitert dann leise).
-				for (long n = Gameflow->Language + richtung; n >= 0 && n < gfLanguageCount; n += richtung)
+				// The next EXISTING language file in the chosen direction - missing
+				// ones are skipped (SwitchLanguage would fail silently otherwise).
+				for (long n = Gameflow->Language + direction; n >= 0 && n < gfLanguageCount; n += direction)
 				{
 					if (SwitchLanguage(n))
 					{

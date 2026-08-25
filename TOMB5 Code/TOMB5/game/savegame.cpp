@@ -39,7 +39,7 @@ static long SGcount = 0;
 tomb5_save_info tomb5_save;
 ulong tomb5_save_size;
 ulong savegame_bytes_read;
-bool  savegame_checksum_ok;	// in S_LoadGame gebildet, siehe dort
+bool  savegame_checksum_ok;	// built in S_LoadGame, see there
 
 void WriteSG(void* pointer, long size)
 {

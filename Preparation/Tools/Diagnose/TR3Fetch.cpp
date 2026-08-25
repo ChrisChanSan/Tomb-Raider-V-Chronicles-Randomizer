@@ -318,7 +318,9 @@ int main(int argc, char** argv)
     // entries and above all how many distinct TILES stand behind them -
     // every tile becomes a 256x256 page in the target.
     std::vector<int> texIdx;      // used TR3 object textures, in discovery order
+    std::vector<uint8_t> texIsTri;// 1 = the entry sits on triangles, 0 = on quads
     std::vector<int> tiles;       // the tiles behind them, in discovery order
+    std::vector<int> mixedUse;    // entries that serve both - reported below
     for (const std::vector<uint8_t>& m : meshes)
     {
         size_t p = 10;
@@ -331,9 +333,14 @@ int main(int argc, char** argv)
             const int16_t nn = rs16(m, p); p += 2;
             p += size_t(nv) * (nn >= 0 ? 6 : 2);
         }
-        auto note = [&](int t) {
-            for (int x : texIdx) if (x == t) return;
+        auto note = [&](int t, uint8_t tri) {
+            for (size_t x = 0; x < texIdx.size(); ++x) if (texIdx[x] == t)
+            {
+                if (texIsTri[x] != tri) mixedUse.push_back(t);
+                return;
+            }
             texIdx.push_back(t);
+            texIsTri.push_back(tri);
             if (t >= 0 && nObjTex && uint32_t(t) < nObjTex)
             {
                 const int k = ru16(r.b, objTexAt + size_t(t) * 20 + 2) & 0x7FFF;
@@ -342,9 +349,81 @@ int main(int argc, char** argv)
             }
         };
         const int16_t nq = rs16(m, p); p += 2;
-        for (int i = 0; i < nq; ++i, p += 12) note(ru16(m, p + 8) & 0x7FFF);
+        for (int i = 0; i < nq; ++i, p += 12) note(ru16(m, p + 8) & 0x7FFF, 0);
         const int16_t nt = rs16(m, p); p += 2;
-        for (int i = 0; i < nt; ++i, p += 10) note(ru16(m, p + 6) & 0x7FFF);
+        for (int i = 0; i < nt; ++i, p += 10) note(ru16(m, p + 6) & 0x7FFF, 1);
+    }
+
+    // --- Split the entries that serve both face kinds -----------------------
+    //
+    // TR5 keeps one corner order per texture entry, and the triangle table
+    // and the quad table share no case. TR3 has no such field at all and
+    // shares entries freely, so an entry used by both kinds cannot be
+    // described in one record.
+    //
+    // Those get a second one: the quads keep the original, the triangles are
+    // sent to an alias carrying the triangle order. Same trick as the flat
+    // colours below and for the same reason - the inserter maps a face by
+    // the number written in it, so a number we invent costs it nothing.
+    // 20000 is above every real TR3 index and below the colours at 30000.
+    const int TRI_ALIAS_BASE = 20000;
+    std::vector<int> aliasOf;                 // per alias: the entry it copies
+    size_t firstAlias = texIdx.size();
+    if (!mixedUse.empty())
+    {
+        std::vector<int> shared;
+        for (int t : mixedUse)
+        {
+            if (t < 0 || uint32_t(t) >= nObjTex) continue;
+            bool had = false;
+            for (int x : shared) if (x == t) { had = true; break; }
+            if (!had) shared.push_back(t);
+        }
+
+        int moved = 0;
+        for (size_t mi = 0; mi < meshes.size(); ++mi)
+        {
+            std::vector<uint8_t>& m = meshes[mi];
+            size_t p = 10;
+            const int16_t vw = rs16(m, p); p += 2;
+            const int nv = vw & 0xFF;
+            if (nv == 0) p += (size_t((vw >> 8) & 0xFF) * 6 + 1) * 2;
+            else
+            {
+                p += size_t(nv) * 6;
+                const int16_t nn = rs16(m, p); p += 2;
+                p += size_t(nv) * (nn >= 0 ? 6 : 2);
+            }
+            const int16_t nq = rs16(m, p); p += 2;
+            p += size_t(nq) * 12;                        // the quads keep theirs
+            const int16_t nt = rs16(m, p); p += 2;
+            for (int i = 0; i < nt; ++i, p += 10)
+            {
+                const uint16_t w = ru16(m, p + 6);
+                const int t = w & 0x7FFF;
+                for (size_t k = 0; k < shared.size(); ++k) if (shared[k] == t)
+                {
+                    const uint16_t nw = uint16_t((w & 0x8000) | uint16_t(TRI_ALIAS_BASE + k));
+                    m[p + 6] = uint8_t(nw & 0xFF);
+                    m[p + 7] = uint8_t(nw >> 8);
+                    ++moved;
+                    break;
+                }
+            }
+        }
+
+        firstAlias = texIdx.size();
+        for (size_t k = 0; k < shared.size(); ++k)
+        {
+            texIdx.push_back(TRI_ALIAS_BASE + int(k));
+            texIsTri.push_back(1);
+            aliasOf.push_back(shared[k]);
+        }
+        for (int t : shared)
+            for (size_t x = 0; x < firstAlias; ++x) if (texIdx[x] == t) texIsTri[x] = 0;
+
+        std::printf("  shared entries: %zu split into a quad and a triangle copy, %d triangle faces moved\n",
+                    shared.size(), moved);
     }
     // --- Place the colored faces on the closest texture ---------------------
     //
@@ -355,6 +434,12 @@ int main(int argc, char** argv)
     //
     // The palette's scale is not assumed but read off - TR1's is 6 bit, and
     // whether TR3 followed is not worth guessing when the maximum says it.
+    // Flat colours for the colored faces: which palette entries are used, in
+    // the order they appear. They become blocks on one extra tile, and the
+    // faces point at them via synthetic texture entries numbered from here.
+    const int FLAT_BASE = 30000;
+    std::vector<int> flatColors;
+
     struct Avg { int r, g, b; bool ok; };
     std::vector<Avg> texAvgOut;
 
@@ -426,42 +511,37 @@ int main(int argc, char** argv)
             }
         }
 
-        int placed = 0, fell = 0;
+        // Each colored face gets its OWN flat colour, on a page built for
+        // exactly that - not the nearest existing texture.
+        //
+        // The nearest one only ever matches the hue; the face still inherits
+        // that texture's IMAGE. On a big surface that passes, on Lara's
+        // forearms - which are colored faces from end to end - it does not,
+        // and the two of them came out differently because they landed on two
+        // different skin textures. TR3 means a flat colour here, so a flat
+        // colour is what it gets.
+        //
+        // One extra tile carries the colours as a 16 by 16 grid of blocks,
+        // and one synthetic texture entry points at each. Their orig numbers
+        // start at 30000, far above any real TR3 index - the inserter maps
+        // entries by that number and needs to know nothing about this.
         for (const ColorSpot& fs : coloredSpots)
         {
-            // TR3 packs TWO palette indices into the colour word of a colored
-            // face: the low byte indexes the 8 bit palette, the HIGH byte the
-            // 16 bit one. Reading the low byte in the 16 bit table returned
-            // almost nothing but zeros - which is why the whole model looked
-            // black to the matcher and Lara's forearms, which are colored
-            // faces and not textured at all (PixStr shows meshes 9 and 12
-            // untextured), came out dark instead of bare skin.
-            const size_t e = 772 + size_t((fs.colorIdx >> 8) & 0xFF) * 4;
-            const int wr = r.b[e] >> palShift, wg = r.b[e + 1] >> palShift, wb = r.b[e + 2] >> palShift;
-
-            int best = -1;
-            long bestD = 0;
-
-            for (size_t k = 0; k < texIdx.size(); ++k)
+            const int ci = (fs.colorIdx >> 8) & 0xFF;
+            int slot = -1;
+            for (size_t k = 0; k < flatColors.size(); ++k) if (flatColors[k] == ci) { slot = int(k); break; }
+            if (slot < 0)
             {
-                if (!texAvg[k].ok) continue;
-                const long dr = texAvg[k].r - wr, dg = texAvg[k].g - wg, db = texAvg[k].b - wb;
-                const long d = dr * dr + dg * dg + db * db;
-                if (best < 0 || d < bestD) { best = texIdx[k]; bestD = d; }
+                if (flatColors.size() >= 256) continue;      // one tile holds 256
+                slot = int(flatColors.size());
+                flatColors.push_back(ci);
             }
-
-            if (best < 0) { best = meshFirstTex[fs.meshNo]; ++fell; }
-            else ++placed;
-
-            if (best < 0) best = firstTex;
-            if (best < 0) continue;
-
-            meshes[fs.meshNo][fs.at]     = uint8_t(uint16_t(best) & 0xFF);
-            meshes[fs.meshNo][fs.at + 1] = uint8_t(uint16_t(best) >> 8);
+            const uint16_t v = uint16_t(FLAT_BASE + slot);
+            meshes[fs.meshNo][fs.at]     = uint8_t(v & 0xFF);
+            meshes[fs.meshNo][fs.at + 1] = uint8_t(v >> 8);
         }
 
-        std::printf("  colored faces: %d placed by colour, %d fell back to the mesh\'s own texture\n",
-                    placed, fell);
+        std::printf("  colored faces: %zu flat colours on their own page\n", flatColors.size());
         texAvgOut = texAvg;
     }
 
@@ -552,7 +632,7 @@ int main(int argc, char** argv)
     // --- Output -------------------------------------------------------------
     std::vector<uint8_t> out;
     out.push_back('T'); out.push_back('3'); out.push_back('5'); out.push_back('H');
-    put32(out, 2);                 // version 2: with the texture part at the end
+    put32(out, 3);                 // version 3: texture part, with the corner order
     put32(out, uint32_t(wanted));
     put32(out, z->numMeshes);
     put32(out, animCount);
@@ -662,27 +742,110 @@ int main(int argc, char** argv)
     }
     out.insert(out.end(), r.b.begin() + cmdAt, r.b.begin() + cmdAt + size_t(nCmd) * 2);
 
-    // --- Texture part (package version 2) ----------------------------------
+    // --- Texture part (package version 3) ----------------------------------
     //
     // Appended so old packages stay readable: whoever reads only up to the
     // command block gets exactly the old format.
     //
     //   uint32 textureCount
     //   per texture: origIndex(2), drawtype(2), tileInPackage(2),
-    //                then 8 bytes u1,v1,u2,v2,u3,v3,u4,v4 as PIXELS
+    //                then 8 bytes u1,v1,u2,v2,u3,v3,u4,v4 as PIXELS,
+    //                then cornerOrder(2)  - version 3 and up
     //   uint32 tileCount
     //   per tile: 131072 bytes ARGB1555 (TR3's 16-bit version)
     //
     // The UVs stay PIXELS here. Only the inserter shifts them left by 8
     // bits - TR5 carries them as 8.8 fixed point (file.cpp:1096).
     {
-        put32(out, uint32_t(texIdx.size()));
-        int written = 0;
-        for (int t : texIdx)
+        // Why cornerOrder exists.
+        //
+        // TR5 pulls every UV half a texel towards the middle of its own
+        // texture area while the level loads (AdjustUV, specific/file.cpp:198).
+        // Which direction that is for each corner it does not work out - it
+        // reads it out of the texinfo: bit 15 of tpage says triangle or quad,
+        // the low three bits of flag say in which order the corners run.
+        //
+        // TR3 has no such field. It has something better: next to every UV
+        // pixel stands a byte that says whether that corner sits at the low
+        // or at the high edge of its area. That is exactly the question, so
+        // nothing here has to be guessed.
+        //
+        // Leaving it at zero is not harmless. Zero means "corner 0 of a
+        // quad", so every imported triangle had its third corner pushed
+        // OUTWARD - half a texel into whatever texture lies next to it in
+        // the page. That is the thin bright line along a seam.
+        //
+        // Two bits per corner: bit 0 = u moves plus, bit 1 = v moves plus.
+        // AdjustUV's eight triangle cases are exactly the eight patterns a
+        // right-angled triangle can have; of the four a quad can have it
+        // knows two, and TR3 uses no others.
+        static const uint8_t TRI_SIGNS[8][3] = {
+            { 3, 2, 1 }, { 2, 0, 3 }, { 0, 1, 2 }, { 1, 3, 0 },
+            { 2, 3, 0 }, { 3, 1, 2 }, { 1, 0, 3 }, { 0, 2, 1 } };
+        static const uint8_t QUAD_SIGNS[2][4] = { { 3, 2, 0, 1 }, { 2, 3, 1, 0 } };
+
+        int orderNoMatch = 0, orderDisagree = 0, orderTris = 0;
+        auto cornerOrder = [&](size_t o, bool isTri) -> uint16_t
         {
-            if (t < 0 || uint32_t(t) >= nObjTex) { put16(out, uint16_t(t)); put16(out, 0); put16(out, 0);
-                                                   for (int k = 0; k < 8; ++k) out.push_back(0); continue; }
-            const size_t o = objTexAt + size_t(t) * 20;
+            const int n = isTri ? 3 : 4;
+            int px[4], py[4], cx[4], cy[4];
+            for (int v = 0; v < 4; ++v)
+            {
+                cx[v] = r.b[o + 4 + v * 4 + 0];      // 1 = low edge, 255 = high edge
+                px[v] = r.b[o + 4 + v * 4 + 1];
+                cy[v] = r.b[o + 4 + v * 4 + 2];
+                py[v] = r.b[o + 4 + v * 4 + 3];
+            }
+            int loU = px[0], hiU = px[0], loV = py[0], hiV = py[0];
+            for (int v = 1; v < n; ++v)
+            {
+                if (px[v] < loU) loU = px[v];
+                if (px[v] > hiU) hiU = px[v];
+                if (py[v] < loV) loV = py[v];
+                if (py[v] > hiV) hiV = py[v];
+            }
+
+            int want = 0;
+            for (int v = 0; v < n; ++v)
+            {
+                const bool uPlus = (cx[v] < 128);
+                const bool vPlus = (cy[v] < 128);
+                // Cross-check where the corners themselves say it plainly. A
+                // count above zero here would mean the byte does not mean what
+                // we read it to mean - so it is worth printing.
+                if (loU != hiU && (px[v] == loU || px[v] == hiU) && uPlus != (px[v] == loU)) ++orderDisagree;
+                if (loV != hiV && (py[v] == loV || py[v] == hiV) && vPlus != (py[v] == loV)) ++orderDisagree;
+                want |= ((uPlus ? 1 : 0) | (vPlus ? 2 : 0)) << (v * 2);
+            }
+
+            int type = -1;
+            if (isTri)
+            {
+                ++orderTris;
+                for (int c = 0; c < 8 && type < 0; ++c)
+                    if ((TRI_SIGNS[c][0] | (TRI_SIGNS[c][1] << 2) | (TRI_SIGNS[c][2] << 4)) == want) type = c;
+            }
+            else
+                for (int c = 0; c < 2 && type < 0; ++c)
+                    if ((QUAD_SIGNS[c][0] | (QUAD_SIGNS[c][1] << 2)
+                       | (QUAD_SIGNS[c][2] << 4) | (QUAD_SIGNS[c][3] << 6)) == want) type = c;
+
+            if (type < 0) { ++orderNoMatch; type = 0; }
+            return uint16_t((isTri ? 0x8000 : 0) | type);
+        };
+
+        put32(out, uint32_t(texIdx.size() + flatColors.size()));
+        int written = 0;
+        for (size_t ti = 0; ti < texIdx.size(); ++ti)
+        {
+            const int t = texIdx[ti];
+            // An alias keeps its own number but copies everything else from
+            // the entry it stands in for - only the corner order differs.
+            const int srcTex = (ti >= firstAlias) ? aliasOf[ti - firstAlias] : t;
+            if (srcTex < 0 || uint32_t(srcTex) >= nObjTex) { put16(out, uint16_t(t)); put16(out, 0); put16(out, 0);
+                                                   for (int k = 0; k < 8; ++k) out.push_back(0);
+                                                   put16(out, 0); continue; }
+            const size_t o = objTexAt + size_t(srcTex) * 20;
             const uint16_t attribute = ru16(r.b, o);
             const int tile = ru16(r.b, o + 2) & 0x7FFF;
 
@@ -697,10 +860,31 @@ int main(int argc, char** argv)
                 out.push_back(r.b[o + 4 + v * 4 + 1]);   // Xpixel
                 out.push_back(r.b[o + 4 + v * 4 + 3]);   // Ypixel
             }
+            put16(out, cornerOrder(o, texIsTri[ti] != 0));
             ++written;
         }
 
-        put32(out, uint32_t(tiles.size()));
+        // The flat colours as synthetic entries: same layout, orig numbers
+        // from FLAT_BASE, and all of them on the extra tile appended below.
+        // Each block is inset by three pixels so a neighbour cannot bleed in.
+        for (size_t k = 0; k < flatColors.size(); ++k)
+        {
+            const int col = int(k) % 16, row = int(k) / 16;
+            const uint8_t x0 = uint8_t(col * 16 + 3), x1 = uint8_t(col * 16 + 12);
+            const uint8_t y0 = uint8_t(row * 16 + 3), y1 = uint8_t(row * 16 + 12);
+            put16(out, uint16_t(FLAT_BASE + k));
+            put16(out, 0);                                   // opaque
+            put16(out, uint16_t(tiles.size()));               // the extra tile
+            out.push_back(x0); out.push_back(y0);
+            out.push_back(x1); out.push_back(y0);
+            out.push_back(x1); out.push_back(y1);
+            out.push_back(x0); out.push_back(y1);
+            put16(out, 0);   // quad, top left corner first - and inside a
+                             // solid block half a texel reaches nothing
+            ++written;
+        }
+
+        put32(out, uint32_t(tiles.size() + (flatColors.empty() ? 0 : 1)));
         for (int k : tiles)
         {
             if (k < 0 || uint32_t(k) >= nTex)
@@ -708,8 +892,39 @@ int main(int argc, char** argv)
             const size_t at = tex16At + size_t(k) * 131072;
             out.insert(out.end(), r.b.begin() + at, r.b.begin() + at + 131072);
         }
+        if (!flatColors.empty())
+        {
+            // One 256x256 ARGB1555 page, 16 by 16 blocks of 16 pixels. The
+            // palette scale is read off its own maximum, not assumed.
+            int palMax2 = 0;
+            for (int q = 0; q < 256; ++q)
+                for (int c = 0; c < 3; ++c)
+                    if (r.b[772 + size_t(q) * 4 + size_t(c)] > palMax2) palMax2 = r.b[772 + size_t(q) * 4 + size_t(c)];
+            const int sh = (palMax2 > 63) ? 3 : 1;
+
+            std::vector<uint16_t> page(256 * 256, 0x8000);    // opaque black
+            for (size_t n = 0; n < flatColors.size(); ++n)
+            {
+                const size_t e = 772 + size_t(flatColors[n]) * 4;
+                const uint16_t v = uint16_t(0x8000
+                                 | ((r.b[e]     >> sh) << 10)
+                                 | ((r.b[e + 1] >> sh) << 5)
+                                 |  (r.b[e + 2] >> sh));
+                const int col = int(n) % 16, row = int(n) / 16;
+                for (int y = 0; y < 16; ++y)
+                    for (int x = 0; x < 16; ++x)
+                        page[size_t(row * 16 + y) * 256 + size_t(col * 16 + x)] = v;
+            }
+            for (uint16_t v : page) put16(out, v);
+            std::printf("    flat colour page added: %zu colours\n", flatColors.size());
+        }
+
         std::printf("  texture part: %d entries, %zu tiles of 131072 bytes each\n",
-                    written, tiles.size());
+                    written, tiles.size() + (flatColors.empty() ? 0 : 1));
+        std::printf("  corner order: %d of %d entries are triangles, %d without a pattern, %d corners where the edge byte and the corner disagree\n",
+                    orderTris, int(texIdx.size()), orderNoMatch, orderDisagree);
+        if (!mixedUse.empty())
+            std::printf("  %zu texture entries sit on triangles AND on quads - one order cannot fit both\n", mixedUse.size());
     }
 
     FILE* f = std::fopen(argv[3], "wb");

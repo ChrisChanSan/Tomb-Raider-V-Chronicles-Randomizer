@@ -283,7 +283,9 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& package, int targe
     // Version 2 appends a texture part behind the command block. It is not
     // read here - that is what addTexturesFromTr3 is for - but it does not
     // hurt either: everything before it sits unchanged at the same place.
-    if (version != 1 && version != 2) { error = "unknown package version"; return false; }
+    // Version 3 only added a field to the texture part at the very end -
+    // the moveable part in front of it is unchanged, so it reads the same.
+    if (version < 1 || version > 3) { error = "unknown package version"; return false; }
 
     // --- Collect the meshes and pack them into one block -------------------
     std::vector<uint8_t> meshPack;

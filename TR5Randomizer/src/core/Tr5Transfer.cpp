@@ -332,7 +332,8 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& package,
 
     if (package.size() < 48 || std::memcmp(package.data(), "T35H", 4) != 0)
     { error = "not a TR3 model package"; return false; }
-    if (rd32(package, 4) < 2) { error = "package without a texture part (version < 2)"; return false; }
+    const uint32_t pkgVersion = rd32(package, 4);
+    if (pkgVersion < 2) { error = "package without a texture part (version < 2)"; return false; }
 
     // --- Fast-forward to the texture part (layout see TR3Fetch) --------------
     const uint32_t nMeshes = rd32(package, 12), nAnims = rd32(package, 16);
@@ -348,18 +349,23 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& package,
        + size_t(nSC) * SZ_CHANGE + size_t(nAD) * SZ_RANGE + size_t(nCmd) * 2;
     if (p + 4 > package.size()) { error = "package ends before the texture part"; return false; }
 
-    struct Tr3Tex { int orig; uint16_t drawtype; int tile; uint8_t uv[8]; };
+    // Version 3 appended the corner order (see TR3Fetch, "Why cornerOrder
+    // exists"). Version 2 packages carry none, and get the old zero - which
+    // is what they were built and tested with.
+    struct Tr3Tex { int orig; uint16_t drawtype; int tile; uint8_t uv[8]; uint16_t order; };
+    const size_t entrySize = (pkgVersion >= 3) ? 16 : 14;
     std::vector<Tr3Tex> texEntries;
     const uint32_t nTexEntries = rd32(package, p); p += 4;
     for (uint32_t i = 0; i < nTexEntries; ++i)
     {
-        if (p + 14 > package.size()) { error = "texture part ends prematurely"; return false; }
+        if (p + entrySize > package.size()) { error = "texture part ends prematurely"; return false; }
         Tr3Tex t;
         t.orig = rd16(package, p);
         t.drawtype = rd16(package, p + 2);
         t.tile = rd16(package, p + 4);
         std::memcpy(t.uv, package.data() + p + 6, 8);
-        p += 14;
+        t.order = (pkgVersion >= 3) ? uint16_t(rd16(package, p + 14)) : uint16_t(0);
+        p += entrySize;
         texEntries.push_back(t);
     }
 
@@ -489,11 +495,17 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& package,
     //   +0 drawtype, +2 tpage, +4 flag, then u1,v1,u2,v2,u3,v3,u4,v4
     //   as 8.8 fixed point. TR3 stores the same four corners as pixels.
     //
-    // tpage DELIBERATELY gets no bit 15: only then does AdjustUV run the
-    // half-texel correction (file.cpp:214 checks flag & 0x8000, and this bit
-    // comes from tpage). Without it, the orientation value in flag & 7 is
-    // never read either - the only quantity one would otherwise have to
-    // guess.
+    // AdjustUV (file.cpp:198) shifts every UV by half a texel at load time -
+    // always, for every texinfo. What the two fields decide is only WHICH
+    // WAY: bit 15 of tpage (the loader moves it into flag, file.cpp:1157)
+    // picks the triangle table over the quad one, and flag's low three bits
+    // pick the corner order inside that table. TR3Fetch worked both out from
+    // TR3's own edge bytes and put them in the package as cornerOrder; here
+    // they are only unpacked.
+    //
+    // They used to be left at zero, which means "corner 0 of a quad". On a
+    // triangle that pushed the third corner outward instead of inward - half
+    // a texel of the neighbouring texture along every seam.
     std::vector<uint8_t> newInfoBytes;
     int newCount = 0;
     for (const Tr3Tex& t : texEntries)
@@ -504,9 +516,11 @@ bool Tr5Level::addTexturesFromTr3(const std::vector<uint8_t>& package,
         uint8_t rec[SZ_TEXINFO];
         std::memset(rec, 0, SZ_TEXINFO);
         const uint16_t draw = t.drawtype;
-        const uint16_t tp = static_cast<uint16_t>(kr->second);
+        const uint16_t tp = static_cast<uint16_t>(kr->second) | uint16_t(t.order & 0x8000);
+        const uint16_t flg = uint16_t(t.order & 7);
         std::memcpy(rec + 0, &draw, 2);
         std::memcpy(rec + 2, &tp, 2);
+        std::memcpy(rec + 4, &flg, 2);
         for (int v = 0; v < 4; ++v)
         {
             const uint16_t u = static_cast<uint16_t>(t.uv[v * 2]) << 8;

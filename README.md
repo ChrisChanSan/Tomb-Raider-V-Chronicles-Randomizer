@@ -55,6 +55,10 @@ randomizer patches your own files at runtime and backs everything up to
 - **stb_vorbis / stb_image** by Sean Barrett (public domain) — HQ music and
   the background image.
 
+**Contributors** — testing, findings and ideas, the people who played the
+seeds and reported what broke: XeNoN3560, Lucifer230, Todesengel1931,
+Crockett, Grylle, Claude AI.
+
 What was changed in the engine and why is recorded in
 `TOMB5 Code\MODIFICATIONS.md`; the player manual ships with the release
 package as `README.txt`.

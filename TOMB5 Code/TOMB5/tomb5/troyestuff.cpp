@@ -652,22 +652,35 @@ void CreditsScreen(long textY, long& menu, ulong& selection, ulong selection_bak
 
 	PrintString(phd_centerx, font_height, 6, "Credits", FF_CENTER);
 
+	// GROUPS ARE SEPARATED BY COLOUR, NOT BY BLANK LINES - and that is a
+	// space decision, not a taste one. The screen holds fifteen rows
+	// (y = 2..16, font_height apart, the last one ending just above the
+	// bottom edge). Fourteen are names; four blank separators would eat
+	// the entire remaining budget and push the tool credits off screen.
+	// Headers therefore use the same gold as the title (colour 6) and the
+	// names stay white (colour 2).
 	y = 2;
 
-	PrintString(phd_centerx, textY + y++ * font_height, 1, "TOMB5 Engine", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 6, "TOMB5 Engine", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "Troye - ChocolateFan", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "thatguyfrombb - Raildex", FF_CENTER);
-	y++;
+
 	// The TR3 enemies (T-Rex, raptor, compy, vulture) are GPLv3 code taken
 	// from Troye's tomb3 decompilation, not our own work - it belongs in the
 	// game's credits, not only in a source comment.
-	PrintString(phd_centerx, textY + y++ * font_height, 1, "TR3 Enemies from tomb3", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 6, "TR3 Enemies from tomb3", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "Troye and contributors", FF_CENTER);
-	y++;
-	PrintString(phd_centerx, textY + y++ * font_height, 1, "Randomizer and Windows 11 Port", FF_CENTER);
+
+	PrintString(phd_centerx, textY + y++ * font_height, 6, "Randomizer and Windows 11 Port", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "ChrisChanSan", FF_CENTER);
-	y++;
-	PrintString(phd_centerx, textY + y++ * font_height, 1, "Tools and Libraries", FF_CENTER);
+
+	// Testing, findings and ideas - the people who played the seeds and
+	// reported what broke.
+	PrintString(phd_centerx, textY + y++ * font_height, 6, "Contributors", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 2, "XeNoN3560 - Lucifer230 - Todesengel1931", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 2, "Crockett - Grylle - Claude AI", FF_CENTER);
+
+	PrintString(phd_centerx, textY + y++ * font_height, 6, "Tools and Libraries", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "trview by chreden", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "Dear ImGui by Omar Cornut", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "stb by Sean Barrett", FF_CENTER);

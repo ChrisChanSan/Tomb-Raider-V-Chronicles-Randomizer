@@ -2,6 +2,8 @@ Special Thanks to all of these awesome peopel. All of these made It possible to 
 
 Tomb5 Decompile: https://github.com/Trxyebeep/TOMB5 (Trxyebeep)
 
+tomb3 Decompile: https://github.com/Trxyebeep/tomb3 (Trxyebeep) - the TR3 enemies (T-Rex, Raptor, Compy, Vulture) come from there
+
 Trview: https://github.com/chreden/trview (Chreden)
 
 TRmod https://b122251.org/tr/tools/index.html (b122251)
@@ -10,6 +12,11 @@ TR Viewer: http://www.evpopov.com/ https://web.archive.org/web/20020320131858/ht
 
 imgui: https://github.com/ocornut/imgui (ocornut)
 
-Tomb Raider Chronicles(2000): https://core-design.com/ 
+stb: https://github.com/nothings/stb (Sean Barrett)
+
+Tomb Raider Chronicles(2000): https://core-design.com/
 
 Claude AI: https://claude.ai/login (ANTHROPIC PBC)
+
+Contributors - testing, findings and ideas:
+XeNoN3560, Lucifer230, Todesengel1931, Crockett, Grylle, Claude AI

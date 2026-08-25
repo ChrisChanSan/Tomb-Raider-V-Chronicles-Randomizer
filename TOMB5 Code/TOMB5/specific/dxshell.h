@@ -31,8 +31,8 @@ long DXGetInfo(DXINFO* dxinfo, HWND hwnd);
 void DXFreeInfo(DXINFO* dxinfo);
 long DXUpdateJoystick();
 void DXInitInput(HWND hwnd, HINSTANCE hinstance);
-// Muss vor dem Freigeben von lpDirectInput aufgerufen werden - die
-// Joystick-Aufzaehlung laeuft in einem eigenen Thread, siehe DXInitJoystick.
+// Must be called before lpDirectInput is released - the joystick
+// enumeration runs in its own thread, see DXInitJoystick.
 void DXWaitJoystickInit();
 const char* DXGetErrorString(HRESULT hr);
 const char* DIGetErrorString(HRESULT hr);

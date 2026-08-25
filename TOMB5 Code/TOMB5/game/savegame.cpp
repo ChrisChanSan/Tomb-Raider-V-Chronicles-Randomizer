@@ -1145,12 +1145,12 @@ void sgRestoreGame()
 	// immediately rather than attempt an unproven partial recovery.
 	bool boValid = (savegame_bytes_read >= sizeof(SAVEGAME_INFO));
 
-	// Die Summe wird NICHT mehr hier gebildet, sondern in S_LoadGame direkt
-	// nach dem Lesen (specific\gamemain.cpp) - dort sind die Bytes noch die
-	// der Datei. Zwischen Lesen und diesem Punkt liegen Ueberblendung und
-	// Levelneuladen, und der Spielloop schreibt in dieser Zeit weiter in
-	// savegame (control.cpp:642). Wer die Summe hier bildet, verwirft
-	// gesunde Spielstaende.
+	// The sum is NO LONGER computed here but in S_LoadGame right after
+	// reading (specific\gamemain.cpp) - there the bytes are still the
+	// file's. Between reading and this point lie the fade and the level
+	// reload, and the game loop keeps writing into savegame during that
+	// time (control.cpp:642). Whoever computes the sum here discards
+	// healthy savegames.
 	if (boValid)
 		boValid = savegame_checksum_ok;
 

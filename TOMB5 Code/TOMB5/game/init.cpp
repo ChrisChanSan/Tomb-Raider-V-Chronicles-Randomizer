@@ -957,8 +957,8 @@ void InitialiseSas(short item_number)
 	{
 		anim_index = objects[BLUE_GUARD].anim_index;
 
-		// Randomizer (#105): steht keiner der beiden Vanilla-Anker im Level,
-		// traegt der importierte zweite Guard den Familiensatz selbst.
+		// Randomizer (#105): if neither vanilla anchor stands in the level,
+		// the imported second guard carries the family set himself.
 		if (!objects[BLUE_GUARD].loaded)
 			anim_index = objects[BLUE_GUARD2].anim_index;
 	}

@@ -2057,16 +2057,15 @@ void special4_end()
 	_special4_end();
 }
 
-// Cutscenes haengen Lara fremde Meshes an (Sprechkoepfe ueber
-// handle_lara_chatting, Anzugteile beim Taucheranzug-Ausstieg in joby5).
-// Zurueckgetauscht wird nur, wenn die jeweilige Tauschtabelle sauber bis zu
-// ihrem Ende laeuft - wer die Cutscene mitten in einer Passage skippt (oder
-// wenn die Passage bis zum letzten Frame reicht), behaelt den letzten
-// Tauschzustand im normalen Spiel (im Spiel gesehen: Catsuit mit
-// Strickmuetze bzw. mit gelben Anzugbeinen in joby5). Deshalb nach JEDEM
-// Cutscene-Ende alle Knoten zurueck auf die Skin - Slot 0 traegt seit
-// LaraInitialiseMeshes die Meshes des aktuellen Outfits. Der Kind-Torso der
-// Ireland-Level kommt wie dort aus ANIMATING6_MIP.
+// Cutscenes attach foreign meshes to Lara (speech heads via
+// handle_lara_chatting, suit parts at the diving-suit exit in joby5). They
+// are only swapped back when the respective swap table runs cleanly to its
+// end - whoever skips the cutscene mid-passage (or when the passage
+// reaches the last frame) keeps the last swap state in normal play (seen
+// in game: catsuit with a knit cap, or with yellow suit legs in joby5).
+// Hence after EVERY cutscene end, all nodes back onto the skin - slot 0
+// has carried the current outfit's meshes since LaraInitialiseMeshes. The
+// Ireland levels' child torso comes from ANIMATING6_MIP as there.
 static void CutseqLaraMeshesZurueck()
 {
 	for (int i = 0; i < 15; i++)
@@ -2749,14 +2748,14 @@ void handle_lara_chatting(short* _ranges)
 		_ranges += 2;
 	}
 
-	// Die Sprechkoepfe 17-20 tragen das VANILLA-Outfit des Levels. Traegt
-	// Lara ein fremdes Outfit, dessen Spender keine eigenen Sprechkoepfe hat
-	// (Catsuit: die VCI-Level kennen keine Dialog-Cutscenes), setzt der
-	// Randomizer GfFremdeSprechkoepfe im Levelkopf - dann bleibt der
-	// Skin-Kopf einfach drauf (Lara spricht ohne Mundbewegung statt mit
-	// Muetze). Passende Sprechkoepfe importiert der Randomizer mit, dann
-	// ist das Flag 0 und alles laeuft wie vanilla.
-	if (!lara_chat_cnt && !GfFremdeSprechkoepfe)
+	// Speech heads 17-20 carry the level's VANILLA outfit. If Lara wears a
+	// foreign outfit whose donor has no speech heads of its own (catsuit:
+	// the VCI levels know no dialogue cutscenes), the randomizer sets
+	// GfForeignSpeechHeads in the level header - then the skin head simply
+	// stays on (Lara speaks without mouth movement instead of with a cap).
+	// Matching speech heads are imported along by the randomizer, then the
+	// flag is 0 and everything runs like vanilla.
+	if (!lara_chat_cnt && !GfForeignSpeechHeads)
 		lara.mesh_ptrs[LM_HEAD] = meshes[objects[(GetRandomControl() & 3) + LARA_SPEECH_HEAD1].mesh_index + LM_HEAD * 2];
 }
 

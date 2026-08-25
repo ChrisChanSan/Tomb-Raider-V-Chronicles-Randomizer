@@ -352,16 +352,17 @@ void MovableBlockCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 }
 
 
-// Steht auf dem Zielsektor nur Aufsammelbares, darf der Block darueber.
+// If only pickables stand on the target sector, the block may move over
+// them.
 //
-// GetCollidedObjects liefert JEDES Item im Weg, und TR5 verweigerte den Zug
-// schon bei einem Medipack auf dem Zielfeld - TR1-4 kannten diesen
-// generellen Itemtest nicht, dort rollte der Block einfach ueber das Pickup
-// (vom Nutzer im Rando gesehen: Andrea3, verschobenes Item blockiert den
-// Schiebeweg zum Raetsel). Ein Pickup unterm Block bleibt liegen und ist
-// wieder da, sobald der Block weiterwandert - genau das alte Verhalten.
-// Alles andere (Gegner, Statuen, zweiter Block) blockiert weiterhin.
-static long NurPickupsImWeg(ITEM_INFO** itemlist)
+// GetCollidedObjects returns EVERY item in the way, and TR5 refused the
+// push already for a medipack on the target tile - TR1-4 did not have
+// this general item test, there the block simply rolled over the pickup
+// (seen by the user in the rando: Andrea3, a relocated item blocks the
+// push path to the puzzle). A pickup under the block stays put and is
+// there again once the block moves on - exactly the old behavior.
+// Everything else (enemies, statues, a second block) still blocks.
+static long OnlyPickupsInTheWay(ITEM_INFO** itemlist)
 {
 	for (long i = 0; itemlist[i]; i++)
 		if (objects[itemlist[i]->object_number].collision != PickUpCollision)
@@ -431,7 +432,7 @@ long TestBlockPush(ITEM_INFO* item, long height, ushort quadrant)
 	GetCollidedObjects(item, 256, 1, itemlist, 0, 0);
 	item->pos.x_pos = rx;
 	item->pos.z_pos = rz;
-	return NurPickupsImWeg(itemlist);
+	return OnlyPickupsInTheWay(itemlist);
 }
 
 long TestBlockPull(ITEM_INFO* item, long height, ushort quadrant)
@@ -491,7 +492,7 @@ long TestBlockPull(ITEM_INFO* item, long height, ushort quadrant)
 	item->pos.x_pos = rx;
 	item->pos.z_pos = rz;
 
-	if (!NurPickupsImWeg(itemlist))
+	if (!OnlyPickupsInTheWay(itemlist))
 		return 0;
 
 	x += destx;

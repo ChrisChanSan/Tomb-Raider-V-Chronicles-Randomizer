@@ -303,12 +303,12 @@ void DoOptions()
 	char buf[256];
 	static char sfx_backup_flag;	//have we backed sfx stuff up?
 	static bool waiting_for_key = 0;
-	static bool action_still_held = 0;	// Action-Knopf hielt beim Betreten von waiting_for_key noch die Zeilenauswahl fest
-	// Die Reset-Stellung der Method-Zeile ist eine MENUEAKTION, kein
-	// Eingabemodus: ControlMethod bleibt beim Blaettern unangetastet. Das
-	// alte ControlMethod=2 schaltete saemtliche Pad-Verarbeitung ab
-	// (alles haengt an "ControlMethod == 1") - auf der Reset-Stellung war
-	// der Controller damit systemisch tot, nur die Tastatur kam zurueck.
+	static bool action_still_held = 0;	// the action button still pinned the row selection when waiting_for_key was entered
+	// The reset position of the method row is a MENU ACTION, not an input
+	// mode: ControlMethod stays untouched while paging. The old
+	// ControlMethod=2 switched off ALL pad processing (everything hangs on
+	// "ControlMethod == 1") - on the reset position the controller was
+	// thereby systemically dead, only the keyboard came back.
 	static bool reset_row = 0;
 
 	if (!(sfx_backup_flag & 1))
@@ -426,10 +426,10 @@ void DoOptions()
 			PrintString(phd_centerx + (phd_centerx >> 2), font_height, sel2 & 1 ? 1 : 6, SCRIPT_TEXT(TXT_Keyboard), 0);
 		else if (ControlMethod == 1)
 		{
-			// Die Joystick-Zeile traegt den Namen der gewaehlten Seite. Die
-			// Seite aendert nur die ANZEIGE der Knopfnamen (und die Vorgaben
-			// beim Reset) - die Bitfolge kommt vom aktiven Eingabeweg, siehe
-			// input.cpp.
+			// The joystick row carries the chosen page's name. The page
+			// only changes the DISPLAY of the button names (and the
+			// defaults on reset) - the bit order comes from the active
+			// input path, see input.cpp.
 			switch (ActiveJoyStyle())
 			{
 			case JOYSTYLE_PS5:
@@ -566,12 +566,12 @@ void DoOptions()
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			sel2 = sel;
 			waiting_for_key = 1;
-			// Der Halte-Schutz unten (Action-Knopf nicht sofort als neue
-			// Bindung einfangen) gilt nur, wenn die Zeile auch WIRKLICH mit
-			// dem Pad-Knopf angewaehlt wurde. Kam die Auswahl von der
-			// Tastatur (Enter), blockte der Schutz frueher DAUERHAFT jeden
-			// Versuch, den Action-Knopf selbst zu binden - nur Esc kam
-			// wieder raus (Befund des Xbox-Testers).
+			// The hold guard below (do not immediately capture the action
+			// button as the new binding) only applies when the row was
+			// REALLY selected with the pad button. If the selection came
+			// from the keyboard (Enter), the guard used to PERMANENTLY
+			// block any attempt to bind the action button itself - only
+			// Esc got you out (the Xbox tester's finding).
 			action_still_held = ControlMethod == 1 && Key(jLayout[4] + 256);
 			memset(keymap, 0, sizeof(keymap));
 		}
@@ -580,23 +580,23 @@ void DoOptions()
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, 2);
 			memcpy(layout[1], layout, 72);
-			ApplyJoyDefaults();	// Vorgaben passend zu Seite UND Eingabeweg (input.cpp) - vorher eine feste Tabelle in DualSense-Bitfolge, auf Xbox-Pads Unsinn
-			// ControlMethod bleibt, was es war (das Original sprang hart auf
-			// Keyboard zurueck - fuer einen Controller-Nutzer hiesse das:
-			// Pad nach dem Reset tot). Die Zeile zeigt wieder die Methode.
+			ApplyJoyDefaults();	// defaults matching page AND input path (input.cpp) - before, a fixed table in DualSense bit order, nonsense on Xbox pads
+			// ControlMethod stays what it was (the original jumped hard
+			// back to keyboard - for a controller user that meant: pad
+			// dead after the reset). The row shows the method again.
 			reset_row = 0;
 		}
 
 		if (sel & 1)
 		{
-			// Fuenf sichtbare Stellungen: Keyboard, PS5 Controller,
-			// Xbox Controller, Joystick (generisch), Reset. Intern bleibt
-			// ControlMethod 0/1 (Keyboard/Joystick) - die drei
-			// Controller-Stellungen sind Methode 1 mit JoyStyle 0/1/2,
-			// damit jede bestehende "ControlMethod == 1"-Pruefung im Spiel
-			// unveraendert weiterlaeuft. Die Reset-Stellung ist nur das
-			// lokale reset_row-Flag (siehe oben) und laesst die Methode -
-			// und damit das Pad - in Ruhe.
+			// Five visible positions: keyboard, PS5 controller, Xbox
+			// controller, joystick (generic), reset. Internally
+			// ControlMethod stays 0/1 (keyboard/joystick) - the three
+			// controller positions are method 1 with JoyStyle 0/1/2, so
+			// every existing "ControlMethod == 1" check in the game keeps
+			// running unchanged. The reset position is only the local
+			// reset_row flag (see above) and leaves the method - and with
+			// it the pad - alone.
 			long pos;
 
 			if (reset_row)
@@ -646,7 +646,7 @@ void DoOptions()
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 
 			if (reset_row)
-				reset_row = 0;	// Zurueck von der Reset-Stellung: erst auf die Methode, nicht gleich aus dem Menue
+				reset_row = 0;	// back from the reset position: onto the method first, not straight out of the menu
 			else
 				menu = 0;
 
@@ -744,9 +744,9 @@ void DoOptions()
 
 		PrintString(phd_centerx + (phd_centerx >> 2), f + 6 * font_height, sel & 0x10 ? 1 : 6, buf, 0);
 
-		// Sprachwahl: schaltet live auf eine andere der Sprachdateien um, die
-		// neben der EXE liegen (gameflow.cpp). "Language" hat keine String-ID
-		// im Sprach-Wad, darum als Literal - wie "tomb5 options" darunter.
+		// Language choice: switches live to another of the language files
+		// lying next to the EXE (gameflow.cpp). "Language" has no string ID
+		// in the language wad, hence a literal - like "tomb5 options" below.
 		PrintString(phd_centerx >> 2, f + 7 * font_height, sel & 0x20 ? 1 : 2, (char*)CustomText("Language"), 0);
 		PrintString(phd_centerx + (phd_centerx >> 2), f + 7 * font_height, sel & 0x20 ? 1 : 6, (char*)LanguageName(Gameflow->Language), 0);
 
@@ -800,10 +800,10 @@ void DoOptions()
 			menu = 200;
 		}
 
-		// Credits (#33-Nachtrag, Nutzerwunsch): eigene Zeile direkt unter
-		// "tomb5 options" - als dritte Seite des tomb5-Menues allein war
-		// sie zu versteckt. Springt unmittelbar auf die Credits-Seite;
-		// Zurueck landet wie gewohnt wieder hier.
+		// Credits (#33 addendum, user wish): its own row right under
+		// "tomb5 options" - as the tomb5 menu's third page alone it was
+		// too hidden. Jumps straight to the credits page; back lands here
+		// again as usual.
 		i = !SFMask ? 0x80 : 0x100;
 
 		if (dbinput & IN_SELECT && sel & (ulong)i)

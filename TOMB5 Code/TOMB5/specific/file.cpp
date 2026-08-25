@@ -632,11 +632,11 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 		else
 			size = LoadFile("data\\logo512.pak", &CompressedData);
 
-		// Sprach-Logos (grlogo/frlogo) gab es nur auf den jeweiligen CDs -
-		// die Steam-Fassung liefert nur logo512/uslogo/uklogo. Fehlt die
-		// Datei, faellt der Titel aufs englische Logo zurueck, statt eine
-		// Nullseite zu dekomprimieren (Hard-Crash beim Ruecksprung ins
-		// Titelmenue mit Deutsch oder Franzoesisch aktiv).
+		// Language logos (grlogo/frlogo) only existed on the respective
+		// CDs - the Steam edition ships only logo512/uslogo/uklogo. If the
+		// file is missing, the title falls back to the English logo
+		// instead of decompressing a null page (hard crash on returning to
+		// the title menu with German or French active).
 		if (!size || !CompressedData)
 		{
 			CompressedData = 0;
@@ -1338,22 +1338,22 @@ bool LoadSamples()
 		fread(&comp_size, 1, 4, level_fp);
 		fread(samples_buffer, comp_size, 1, level_fp);
 
-		// Formatweiche fuer Fremdimporte (#93). Cores eigene Samples liegen
-		// als MS-ADPCM vor und gehen durch den ACM-Dekoder. Die Samples aus
-		// Tomb Raider 3 (MAIN.SFX) sind dagegen reines PCM - und zwar in
-		// genau dem Format, das die Engine ohnehin erwartet: mono, 22050 Hz,
-		// 16 Bit. Sie brauchen also gar keinen Dekoder, nur den direkten Weg
-		// in den XAudio2-Puffer, den DXCreateSample schon bietet.
+		// Format switch for foreign imports (#93). Core's own samples come
+		// as MS-ADPCM and go through the ACM decoder. The samples from
+		// Tomb Raider 3 (MAIN.SFX), by contrast, are plain PCM - and in
+		// exactly the format the engine expects anyway: mono, 22050 Hz,
+		// 16 bit. They need no decoder at all, only the direct way into
+		// the XAudio2 buffer that DXCreateSample already offers.
 		//
-		// Die Kennung steht im fmt-Block bei +20 (RIFF 4 + Groesse 4 +
-		// WAVE 4 + "fmt " 4 + Blockgroesse 4). 1 = PCM, 2 = MS-ADPCM.
-		// Dieselbe Stelle liest auch DXCreateSampleADPCM.
+		// The tag stands in the fmt block at +20 (RIFF 4 + size 4 + WAVE 4
+		// + "fmt " 4 + block size 4). 1 = PCM, 2 = MS-ADPCM. The same spot
+		// is read by DXCreateSampleADPCM.
 		const WAVEFORMATEX* wf = (const WAVEFORMATEX*)(samples_buffer + 20);
 
 		if (comp_size > 20 && wf->wFormatTag == WAVE_FORMAT_PCM)
 		{
-			// Den data-Block suchen statt seine Lage anzunehmen: hinter dem
-			// fmt-Block koennen weitere Bloecke stehen (fact, LIST).
+			// Search for the data block instead of assuming its position:
+			// further blocks can stand behind the fmt block (fact, LIST).
 			long at = 12;
 			long dataAt = 0, dataLen = 0;
 
@@ -1436,10 +1436,10 @@ unsigned int __stdcall LoadLevel(void* name)
 		fread(data, 1, 32, level_fp);
 		LaraDrawType = data[0] + LARA_NORMAL;
 		WeatherType = (char)data[1];
-		// data[2]: Randomizer-Marker "Sprechkoepfe passen nicht zum Outfit"
-		// (Outfit-Spender ohne LARA_SPEECH_HEAD1-4, z.B. Catsuit aus rich2).
-		// Vanilla steht hier in allen 16 Dateien 0 - nachgemessen.
-		GfFremdeSprechkoepfe = (char)data[2];
+		// data[2]: randomizer marker "speech heads do not match the outfit"
+		// (outfit donor without LARA_SPEECH_HEAD1-4, e.g. catsuit from rich2).
+		// In vanilla all 16 files carry 0 here - measured.
+		GfForeignSpeechHeads = (char)data[2];
 
 		fread(&size, 1, 4, level_fp);
 		fread(&compressedSize, 1, 4, level_fp);
@@ -1542,21 +1542,21 @@ unsigned int __stdcall LoadLevel(void* name)
 		}
 
 		FileClose(level_fp);
-		// aInit() und aMakeCutsceneResident() liefen hier urspruenglich noch
-		// im LADETHREAD - beides arbeitet am D3D-Geraet (Raum-Vertexbuffer,
-		// Cutscene-Texturen), waehrend der Hauptthread parallel den Ladebalken
-		// praesentiert. Dieselbe Zwei-Threads-ein-Geraet-Klasse wie der
-		// Level-Lade-Haenger vom 31.07. (damals LoadTextures, Fix
-		// D3DCREATE_MULTITHREADED); seit die randomisierten Level groesser
-		// sind, fror das Spiel sporadisch genau in diesem Fenster ein
-		// (Balken voll, nichts geht mehr - 15.08. auch beim Titel gesehen).
-		// Beide Aufrufe macht jetzt der Hauptthread NACH dem Thread-Ende,
-		// siehe S_LoadLevelFile.
+		// aInit() and aMakeCutsceneResident() originally still ran in the
+		// LOAD THREAD here - both work on the D3D device (room vertex
+		// buffers, cutscene textures) while the main thread presents the
+		// load bar in parallel. The same two-threads-one-device class as
+		// the level-load hang of Jul 31 (then LoadTextures, fix
+		// D3DCREATE_MULTITHREADED); since the randomized levels grew, the
+		// game sporadically froze exactly in this window (bar full,
+		// nothing moves - seen at the title too on Aug 15). Both calls are
+		// now made by the main thread AFTER the thread's end, see
+		// S_LoadLevelFile.
 		ClearFX();
-		LevelLoadingThread.ended = 1;    // Erfolgspfad - Hauptthread darf aInit()
+		LevelLoadingThread.ended = 1;    // success path - main thread may aInit()
 	}
 
-	Log("LoadLevel: Ladethread fertig");
+	Log("LoadLevel: load thread done");
 	LevelLoadingThread.active = 0;
 	_endthreadex(1);
 	return 1;
@@ -1639,25 +1639,25 @@ long S_LoadLevelFile(long num)
 		Sleep(1);
 	}
 
-	Log("S_LoadLevelFile: Ladethread beigetreten");
+	Log("S_LoadLevelFile: load thread joined");
 
-	// Aus dem Ladethread hierher verlegt (siehe Kommentar in LoadLevel):
-	// Raum-Vertexbuffer und residente Cutscenes gehoeren dem Hauptthread,
-	// der das Geraet ohnehin besitzt - kein zweiter Thread mehr am D3D,
-	// waehrend der Balken praesentiert.
-	if (LevelLoadingThread.ended)        // Erfolgspfad des Ladethreads
+	// Moved here from the load thread (see the comment in LoadLevel): room
+	// vertex buffers and resident cutscenes belong to the main thread,
+	// which owns the device anyway - no second thread on the D3D anymore
+	// while the bar presents.
+	if (LevelLoadingThread.ended)        // load thread's success path
 	{
 		aInit();
-		Log("S_LoadLevelFile: aInit fertig");
+		Log("S_LoadLevelFile: aInit done");
 	}
 	aMakeCutsceneResident(gfResidentCut[0], gfResidentCut[1], gfResidentCut[2], gfResidentCut[3]);
 	Log("S_LoadLevelFile: Cutscenes resident");
 
-	// Der Ladethread ist beigetreten - das Laden IST fertig, egal was die
-	// Schrittzaehlung glaubt. S_FinishLoadBar stellt den Balken auf 100 %
-	// (Cores Abschlusskriterium kippte ab ~75 Texturseiten in eine
-	// Endlosschleife, siehe drawbars.cpp), und die Aufholschleife ist
-	// zusaetzlich begrenzt - haengen darf hier nie wieder etwas.
+	// The load thread has joined - loading IS done, no matter what the
+	// step counting believes. S_FinishLoadBar puts the bar at 100%
+	// (Core's completion criterion tipped into an endless loop from ~75
+	// texture pages on, see drawbars.cpp), and the catch-up loop is
+	// additionally bounded - nothing may ever hang here again.
 	S_FinishLoadBar();
 
 	if (App.dx.Flags & DXF_HWR && !S_DrawLoadBar())

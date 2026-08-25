@@ -28,17 +28,18 @@ void InitialiseCrow(short item_number)
 	InitialiseCreature(item_number);
 	item = &items[item_number];
 
-	// GEIER-VERSATZ, nicht Kraehe (#91).
+	// VULTURE offset, not crow (#91).
 	//
-	// In Tomb Raider 3 steuert EINE Funktion beide Voegel und unterscheidet
-	// per object_number (tomb3 bird.cpp:19-32): die Kraehe startet mit
-	// anim_index + 14 im Fresszustand, der Geier mit + 5 im Stehzustand.
-	// TR5 hat nur den Kraehen-Zweig behalten - dort gibt es keinen Geier.
+	// In Tomb Raider 3, ONE function controls both birds and distinguishes
+	// by object_number (tomb3 bird.cpp:19-32): the crow starts with
+	// anim_index + 14 in the feeding state, the vulture with + 5 in the
+	// standing state. TR5 only kept the crow branch - there is no vulture
+	// there.
 	//
-	// Der Slot bleibt trotzdem gefahrlos umzustellen: CROW hat in KEINEM der
-	// 16 TR5-Level ein Modell (an allen Dateien nachgemessen). Diese Funktion
-	// laeuft also ausschliesslich fuer den importierten TR3-Geier, der nur
-	// 12 Animationen hat - mit + 14 liefe sie ins Leere.
+	// The slot is still safe to repurpose: CROW has a model in NONE of the
+	// 16 TR5 levels (measured against all files). This function thus runs
+	// exclusively for the imported TR3 vulture, which has only 12
+	// animations - with + 14 it would run into the void.
 	item->anim_number = objects[CROW].anim_index + 5;
 	item->frame_number = anims[item->anim_number].frame_base;
 	item->goal_anim_state = 1;                 // BIRD_STOP

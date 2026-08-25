@@ -138,15 +138,15 @@ void ImpControl(short item_number)
 
 	if (item->hit_points <= 0)
 	{
-		// Zerfetzen statt Sterbeanimation (Nutzerwunsch 2026-08-20): der
-		// TR4-Granatwerfer-Tod lebt im Code weiter (DoGrenadeDamageOnBaddie
-		// -> CreatureDie(1) -> ExplodingDeath2, tomb4fx.cpp), TR5 nutzt ihn
-		// nur fuer den Roman God. Die Fetzen sind die MESHES DES GEGNERS
-		// selbst, als BODY_PART-Effekte geworfen - kein Zusatzmodell noetig.
-		// CreatureDie(1) erledigt alles, was die Animation erledigt haette:
-		// KillItem, DropBaddyPickups, AI aus, IFL_INVISIBLE fuer den
-		// Spielstand. Die alte Todesanim +45 samt ihrem KillItem-Kommando
-		// bleibt in den Daten, wird aber nicht mehr angespielt.
+		// Shred instead of a death animation (user wish 2026-08-20): the
+		// TR4 grenade-launcher death lives on in the code
+		// (DoGrenadeDamageOnBaddie -> CreatureDie(1) -> ExplodingDeath2,
+		// tomb4fx.cpp), TR5 only uses it for the Roman god. The scraps are
+		// the ENEMY'S OWN MESHES, thrown as BODY_PART effects - no extra
+		// model needed. CreatureDie(1) handles everything the animation
+		// would have: KillItem, DropBaddyPickups, AI off, IFL_INVISIBLE
+		// for the savegame. The old death anim +45 with its KillItem
+		// command stays in the data but is never played anymore.
 		SoundEffect(SFX_IMP_DIE, &item->pos, 0);
 		CreatureDie(item_number, 1);
 		return;

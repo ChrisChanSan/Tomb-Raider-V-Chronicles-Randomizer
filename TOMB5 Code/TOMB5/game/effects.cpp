@@ -300,8 +300,8 @@ void ResetTest(ITEM_INFO* item)
 			else if (objects[BLUE_GUARD].loaded)
 				target_item->anim_number = objects[BLUE_GUARD].anim_index + 0;
 			else
-				// Randomizer (#105): letzter Anker fuer den zweiten Guard,
-				// siehe die gleiche Kette in control.cpp.
+				// Randomizer (#105): last anchor for the second guard, see
+				// the same chain in control.cpp.
 				target_item->anim_number = objects[BLUE_GUARD2].anim_index + 0;
 
 			target_item->current_anim_state = 1;
@@ -485,8 +485,8 @@ void SoundEffects()
 	OBJECT_VECTOR* sound;
 	SoundSlot* slot;
 	
-	// Alles in dieser Schleife ist ortsfeste Levelkulisse - sound.cpp haengt
-	// daran die Reichweitenbremse und den Stapelschutz (#114).
+	// Everything in this loop is fixed level scenery - sound.cpp hangs the
+	// range brake and the stacking guard on it (#114).
 	SfxSourceAmbient = 1;
 
 	for (int i = 0; i < number_sound_effects; i++)

@@ -1376,24 +1376,23 @@ void S_InitialisePolyList()
 	r.y2 = App.dx.rViewport.top + App.dx.rViewport.bottom;
 	r.x2 = App.dx.rViewport.left + App.dx.rViewport.right;
 
-	// Den TIEFENPUFFER hier mitloeschen, am ANFANG des Bildes (#127).
+	// Clear the DEPTH BUFFER here too, at the START of the frame (#127).
 	//
-	// Vorher wurde er nur EINMAL pro Bild geraeumt, naemlich in
-	// S_OutputPolyList - und zwar VOR der Visiermaske. Die Maske schrieb
-	// danach ihre Tiefen hinein, und bis zum naechsten Bild loeschte sie
-	// niemand mehr. Die Welt des Folgebildes wurde also gegen die Tiefen
-	// der Maske von GESTERN geprueft und ueberall dort verworfen, wo die
-	// Maske lag.
+	// Before, it was cleared only ONCE per frame, namely in
+	// S_OutputPolyList - and BEFORE the scope mask. The mask then wrote
+	// its depths in, and nobody cleared them until the next frame. The
+	// next frame's world was thus tested against YESTERDAY's mask depths
+	// and discarded wherever the mask lay.
 	//
-	// Solange das Visier an ist, faellt das nicht auf: die Maske kommt jedes
-	// Bild neu an dieselbe Stelle und deckt genau das ab, was sie blockiert.
-	// Erst in dem einen Bild, in dem sie WEGFAELLT, sieht man ihren Abdruck -
-	// die Welt erscheint nur noch im Kreis, aussen bleibt der Himmel stehen
-	// (der wird ohne Tiefentest gezeichnet). Genau ein Bild, genau in der
-	// Form der Maske; vom Nutzer mit dem Bildmitschnitt belegt.
+	// While the scope is on, it goes unnoticed: the mask arrives anew at
+	// the same spot every frame and covers exactly what it blocks. Only in
+	// the one frame where it DROPS AWAY do you see its imprint - the world
+	// appears only inside the circle, outside the sky remains (it is drawn
+	// without a depth test). Exactly one frame, exactly in the mask's
+	// shape; documented by the user with the frame capture.
 	//
-	// Die Raeumung in S_OutputPolyList bleibt, wo sie ist: sie sorgt dafuer,
-	// dass Maske, Aufnahme-Anzeige und Blende ueber der Szene liegen.
+	// The clear in S_OutputPolyList stays where it is: it makes sure mask,
+	// recording overlay and fade lie above the scene.
 	DXAttempt(App.dx.lpD3DDevice->Clear(1, &r,
 		(App.dx.Flags & DXF_ZBUFFER) ? (D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER) : D3DCLEAR_TARGET,
 		0, 1.0F, 0));

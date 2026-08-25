@@ -315,10 +315,10 @@ void RomangodControl(short item_number)
 		roman = (CREATURE_INFO*) item->data;
 		bits = item->meshswap_meshbits;
 
-		// Die Ruestung platzt bei drei Vierteln, der Haelfte und einem Viertel
-		// der Lebenspunkte. Vanilla stand hier fest auf 225/150/75 bei 300 LP -
-		// seit Balance.txt die Lebenspunkte skaliert, wird der Anteil gerechnet,
-		// sonst faellt die Ruestung bei zaeheren Gegnern zu spaet (#108).
+		// The armor bursts at three quarters, half and one quarter of the
+		// hit points. Vanilla stood fixed at 225/150/75 for 300 HP - since
+		// Balance.txt scales the hit points, the share is computed, or the
+		// armor falls too late on tougher enemies (#108).
 		voll = objects[item->object_number].hit_points;
 
 		if (voll < 4)

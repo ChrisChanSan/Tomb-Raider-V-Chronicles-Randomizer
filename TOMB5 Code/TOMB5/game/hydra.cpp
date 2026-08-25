@@ -292,23 +292,23 @@ void TriggerHydraMissile(PHD_3DPOS* pos, short room_number, short num)
 		fx->speed = (GetRandomControl() & 0x1F) + 64;
 		fx->flag1 = 0;
 
-		// OFFEN (Nutzerfund): Das Geschoss ist ein SPRITE, und Core holt es
-		// sechzehn Bilder hinter dem Anfang der BUBBLES-Sequenz. Das geht nur
-		// auf, solange die Spriteliste so aussieht wie in Trajan Markets, dem
-		// einzigen Level mit einer Hydra - anderswo liegt dort ein anderes
-		// Bild, und sie spuckt einen Farbstreifen.
+		// OPEN (user find): the projectile is a SPRITE, and Core fetches it
+		// sixteen frames behind the start of the BUBBLES sequence. That
+		// only works out as long as the sprite list looks like in Trajan
+		// Markets, the only level with a Hydra - elsewhere a different
+		// image lies there, and she spits a color streak.
 		//
-		// Ein Versuch mit DEFAULT_SPRITES als object_number war FALSCH und ist
-		// zurueckgenommen: object_number entscheidet, OB die Engine ein Sprite
-		// oder ein Mesh zeichnet - mit einem Moveable-Slot landet sie im
-		// Mesh-Zweig und stellt dessen Meshes dar (im Spiel gesehen: zwei
-		// Beinstuecke statt Feuer). Nur frame_number ist der reine
-		// Spriteindex; object_number muss ein Sprite-Objekt bleiben.
+		// An attempt with DEFAULT_SPRITES as object_number was WRONG and
+		// is withdrawn: object_number decides WHETHER the engine draws a
+		// sprite or a mesh - with a moveable slot it lands in the mesh
+		// branch and renders its meshes (seen in game: two leg pieces
+		// instead of fire). Only frame_number is the pure sprite index;
+		// object_number must stay a sprite object.
 		//
-		// Die saubere Loesung braucht also entweder den richtigen Spriteindex
-		// je Level oder eine Sprite-Uebernahme im Transfer. Bis dahin bleibt
-		// Cores Original stehen: die Hydra funktioniert, nur ihr Geschoss
-		// sieht ausserhalb von Trajan Markets falsch aus.
+		// The clean solution thus needs either the right sprite index per
+		// level or a sprite transfer in the copier. Until then Core's
+		// original stands: the Hydra works, only her projectile looks
+		// wrong outside Trajan Markets.
 		fx->object_number = BUBBLES;
 		fx->frame_number = objects[BUBBLES].mesh_index + 16;
 	}

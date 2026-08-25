@@ -15,23 +15,22 @@
 #include "../specific/registry.h"
 
 //----------------------------------------------------------------------------
-// Discord Rich Presence: in diesem Fork abgeschaltet.
+// Discord Rich Presence: switched off in this fork.
 //
-// Zwei Gruende, beide unabhaengig voneinander ausreichend:
+// Two reasons, each sufficient on its own:
 //
-// 1. Die Anwendungs-ID unten gehoert dem urspruenglichen Projekt
-//    (Trxyebeep/TOMB5). Wuerden wir so ausliefern, erschienen unsere Nutzer in
-//    Discord unter seiner Anwendung - das ist nicht unsere Identitaet und
-//    gehoert uns nicht.
-// 2. Die mitgelieferte discord-rpc.lib ist gegen die dynamische C-Laufzeit
-//    (/MD) gebaut. Solange sie eingebunden ist, laesst sich das Spiel nicht
-//    statisch linken, und die EXE braucht auf dem Zielrechner die
-//    Visual-C++-Runtime. Genau das wollen wir dem Nutzer ersparen: eine Datei,
-//    die einfach startet.
+// 1. The application ID below belongs to the original project
+//    (Trxyebeep/TOMB5). Shipped like that, our users would appear in
+//    Discord under his application - that is not our identity and does
+//    not belong to us.
+// 2. The bundled discord-rpc.lib is built against the dynamic C runtime
+//    (/MD). While it is linked in, the game cannot be linked statically,
+//    and the EXE needs the Visual C++ runtime on the target machine.
+//    Exactly what we want to spare the user: one file that simply starts.
 //
-// Der Code bleibt stehen und ist ueber diesen einen Schalter wieder
-// einschaltbar - dann aber bitte mit einer eigenen Anwendungs-ID und dem
-// Wissen, dass die statische Verlinkung damit wieder faellt.
+// The code stays in place and can be re-enabled via this one switch - but
+// then please with an own application ID and the knowledge that static
+// linking falls with it again.
 //----------------------------------------------------------------------------
 #define TOMB5_DISCORD_RPC 0
 

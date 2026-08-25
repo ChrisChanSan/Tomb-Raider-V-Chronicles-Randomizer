@@ -220,13 +220,13 @@ bool LoadSettings()
 	REG_ReadLong((char*)"SFXVolume", (ulong&)SFXVolume, 90);
 	REG_ReadLong((char*)"ControlMethod", (ulong&)ControlMethod, 0);
 
-	// 2 (die alte Reset-Stellung) konnte in frueheren Staenden mitgespeichert
-	// werden - seit Reset eine reine Menueaktion ist, gibt es nur noch 0/1.
+	// 2 (the old reset position) could get saved along in earlier states -
+	// since reset became a pure menu action, only 0/1 exist.
 	if (ControlMethod > 1)
 		ControlMethod = 0;
 
-	REG_ReadLong((char*)"JoyStyle", (ulong&)JoyStyle, (ulong)-1);	// -1 = Automatik: XInput-Pad -> Xbox-Seite, sonst PS5 (input.cpp)
-	REG_ReadLong((char*)"Language", (ulong&)LanguageChoice, (ulong)-1);	// -1 = Automatik: erste ladbare Sprachdatei (gameflow.cpp)
+	REG_ReadLong((char*)"JoyStyle", (ulong&)JoyStyle, (ulong)-1);	// -1 = automatic: XInput pad -> Xbox page, else PS5 (input.cpp)
+	REG_ReadLong((char*)"Language", (ulong&)LanguageChoice, (ulong)-1);	// -1 = automatic: first loadable language file (gameflow.cpp)
 	REG_ReadLong((char*)"SoundQuality", (ulong&)SoundQuality, 1);
 	REG_ReadLong((char*)"AutoTarget", (ulong&)App.AutoTarget, 1);
 	REG_ReadLong((char*)"WindowX", (ulong&)App.dx.rScreen.left, 0);

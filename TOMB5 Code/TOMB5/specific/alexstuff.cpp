@@ -367,9 +367,9 @@ char* aFetchCutData(long n)
 	return data;
 }
 
-// Laufzustand des Abspanns - ausserhalb der Funktion, damit ein Abbruch
-// (ResetCredits, aus TitleOptions) den naechsten Lauf wieder unten beginnen
-// laesst; vorher hing der Zustand als Funktionsstatik fest.
+// The credits' running state - outside the function, so an abort
+// (ResetCredits, from TitleOptions) lets the next roll start at the bottom
+// again; before, the state was stuck as a function static.
 static ulong CreditsStartPos = 0;
 static long CreditsInit = 0;
 

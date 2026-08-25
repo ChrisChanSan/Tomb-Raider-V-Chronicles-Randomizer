@@ -56,26 +56,25 @@ void ChefControl(short item_number)
 	torso_y = 0;
 	torso_x = 0;
 
-	// Der Koch war unsterblich: er hat Lebenspunkte und nimmt Schaden
-	// (HitEffect in setup.cpp), aber ChefControl fragte hit_points nie ab -
-	// es gab keinen Weg aus den Zustaenden 1-5 heraus. Vanilla faellt das
-	// nicht auf, weil joby3 Lara vorher alle Waffen abnimmt; mit dem
-	// Randomizer stehen dort Gegner und Lara ist bewaffnet, also braucht
-	// er einen Tod.
+	// The chef was immortal: he has hit points and takes damage (HitEffect
+	// in setup.cpp), but ChefControl never queried hit_points - there was
+	// no way out of states 1-5. In vanilla it goes unnoticed because joby3
+	// takes all of Lara's weapons beforehand; with the randomizer, enemies
+	// stand there and Lara is armed, so he needs a death.
 	//
-	// Sein eigener Satz hat aber keine ECHTE Sterbeanimation: +11 (Zustand
-	// 6) ist ein 1-Frame-Stummel mit KillItem - er klappte uebergangslos
-	// zusammen (#124, Nutzerfund). Sein Skelett ist knochengleich mit der
-	// Soldatenfamilie (BonePruef: 0 von 14 Knochen abweichend), also leiht
-	// er sich ihren Schusstod: Anim +16, Zustand 8, 64 Frames samt
-	// Sterbeschrei und KillItem am Ende - die Leiche bleibt liegen wie bei
-	// jedem Soldaten. Dieselbe Alias-Mechanik, mit der die Stummel-Familie
-	// ihren ganzen Satz leiht, nur auf den Tod beschraenkt; die Kette ist
-	// dieselbe wie in setup.cpp: SWAT -> Wachmann (460) -> Guard (37), und
-	// +16 ist in allen drei Saetzen gesund (AnimMap; die toten Erben des
-	// rich-Satzes beginnen erst bei +19). Als Pool-Gegner bringt der
-	// Randomizer immer den Wachmann mit (kCross basisSlot 460); ganz ohne
-	// Spender bleibt der Vanilla-Stummel.
+	// His own set, however, has no REAL death animation: +11 (state 6) is
+	// a 1-frame stub with KillItem - he collapsed without a transition
+	// (#124, user find). His skeleton is bone-identical with the soldier
+	// family (BonePruef: 0 of 14 bones deviating), so he borrows their
+	// gunshot death: anim +16, state 8, 64 frames including the death
+	// scream and KillItem at the end - the corpse stays down like any
+	// soldier's. The same alias mechanics with which the stub family
+	// borrows its whole set, only limited to the death; the chain is the
+	// same as in setup.cpp: SWAT -> guard (460) -> guard (37), and +16 is
+	// healthy in all three sets (AnimMap; the rich set's dead heirs only
+	// begin at +19). As a pool enemy the randomizer always brings the
+	// guard along (kCross baseSlot 460); with no donor at all, the vanilla
+	// stub remains.
 	if (item->hit_points <= 0)
 	{
 		item->hit_points = 0;
@@ -141,23 +140,23 @@ void ChefControl(short item_number)
 	{
 	case 1:
 
-		// Zustand 1 ist seine ARBEIT am Schneidebrett. Vanilla legt er das
-		// Messer erst weg, wenn Lara ihm auf anderthalb Sektoren nahe kommt
-		// (0x240000 ist das Quadrat von 1536), hoehengleich steht und dabei
-		// sichtbar, laut oder handgreiflich wird - die Kueche in joby3 ist
-		// genau auf diesen Moment gebaut.
+		// State 1 is his WORK at the cutting board. In vanilla he only
+		// puts the knife down when Lara comes within one and a half
+		// sectors (0x240000 is the square of 1536), stands at the same
+		// height and becomes visible, loud or physical in the process -
+		// the kitchen in joby3 is built exactly for this moment.
 		//
-		// OCB 1 (#124): JAGD-KOCH. Wen der Randomizer irgendwohin ins Level
-		// setzt, der hat keine Kueche und keinen Grund zu warten - er
-		// verlaesst seine Arbeitsanimation, sobald sein Trigger ihn weckt,
-		// und sucht Lara wie jeder andere Gegner. Ein Ziel braucht er dafuer
-		// nicht mitgeliefert zu bekommen: CreatureAIInfo traegt Lara von
-		// selbst ein, wenn der Gegner keinen Feind hat (box.cpp:74).
+		// OCB 1 (#124): HUNTING CHEF. Whoever the randomizer places
+		// somewhere in a level has no kitchen and no reason to wait - he
+		// leaves his work animation as soon as his trigger wakes him and
+		// seeks Lara like any other enemy. He needs no target delivered
+		// for that: CreatureAIInfo enters Lara by itself when the enemy
+		// has no foe (box.cpp:74).
 		//
-		// Der Vanilla-Koch (joby3 Item 186) traegt OCB 0 - am Quelltext und
-		// mit ItemPruef nachgesehen - und bleibt damit bei seinem Gemuese.
-		// Die Kuration nagelt ihn ohnehin fest (FIXED_ITEMS), er kann seine
-		// OCB also gar nicht verlieren.
+		// The vanilla chef (joby3 item 186) carries OCB 0 - checked at the
+		// source and with ItemPruef - and thus stays with his vegetables.
+		// The curation nails him down anyway (FIXED_ITEMS), so he cannot
+		// lose his OCB at all.
 		if ((item->trigger_flags & 1) ||
 			(abs(lara_item->pos.y_pos - item->pos.y_pos) < 1024 && info.distance < 0x240000 &&
 			(item->touch_bits || lara_item->speed > 15 || item->hit_status || TargetVisible(item, &larainfo))))

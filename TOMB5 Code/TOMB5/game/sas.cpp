@@ -47,17 +47,16 @@ void SasControl(short item_number)
 	if (!CreatureActive(item_number))
 		return;
 
-	// Vault-/Zustandsanims aus dem Satz des EIGENEN Objekts, nicht global
-	// "SWATs, sonst Guards": SasControl bedient die ganze Soldatenfamilie
-	// (SWAT, SWAT+, Guard, Mafia), und setup.cpp biegt die anim_index der
-	// Stummel-Typen ohnehin auf den geteilten Satz um - vanilla laeuft
-	// beides auf dasselbe hinaus, weil nie beide Familien in einem Level
-	// stecken. Der Randomizer importiert aber SWAT UND Guard mit je
-	// eigenem vollen Satz: der Guard lief auf seinem (setup laesst ihn in
-	// Ruhe), die alte globale Wahl schob ihm beim Klettern trotzdem SWATs
-	// Satz unter - SWAT-Frames auf Guard-Skelett, Polygonexplosion bei
-	// jedem Vault (im Spiel gesehen: Andrea2 Item 150, Anim 710 = SWATs
-	// anim_index 675 + 35 statt eigener 775 + 35).
+	// Vault/state anims from the OWN object's set, not globally "SWAT's,
+	// else the guard's": SasControl serves the whole soldier family (SWAT,
+	// SWAT+, guard, Mafia), and setup.cpp bends the stub types' anim_index
+	// onto the shared set anyway - in vanilla both come out the same
+	// because both families never sit in one level. But the randomizer
+	// imports SWAT AND guard each with a full own set: the guard ran on
+	// his (setup leaves him alone), yet the old global choice slid SWAT's
+	// set under him while climbing - SWAT frames on a guard skeleton, a
+	// polygon explosion on every vault (seen in game: Andrea2 item 150,
+	// anim 710 = SWAT's anim_index 675 + 35 instead of his own 775 + 35).
 	index = objects[items[item_number].object_number].anim_index;
 
 	item = &items[item_number];

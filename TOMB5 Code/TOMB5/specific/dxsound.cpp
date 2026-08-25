@@ -42,15 +42,16 @@ struct SFX_VOICE
 	long playing;
 };
 
-// Frueher fest 256. Die Soundmap des Levelformats fasst MAX_SAMPLES (450)
-// Eintraege, und sample_lut wird in LoadSamples() auch mit MAX_SAMPLES
-// angelegt - DS_Buffers war also enger als der Rest des eigenen Soundsystems.
-// Cores Level bleiben weit darunter, aber jeder Fremdimport bringt Klaenge
-// mit, und die TR3-Gegner haben den Vorrat spuerbar angeknabbert (#94).
+// Formerly a fixed 256. The level format's soundmap holds MAX_SAMPLES
+// (450) entries, and sample_lut is also created with MAX_SAMPLES in
+// LoadSamples() - DS_Buffers was thus tighter than the rest of its own
+// sound system. Core's levels stay far below, but every foreign import
+// brings sounds along, and the TR3 enemies have nibbled noticeably at the
+// reserve (#94).
 //
-// Kosten: reine Verwaltung, 450 * 12 Byte statt 256 * 12 - die Klangdaten
-// selbst haengen als malloc daran und wachsen nur mit dem, was ein Level
-// wirklich mitbringt.
+// Cost: pure bookkeeping, 450 * 12 bytes instead of 256 * 12 - the sound
+// data itself hangs on it as mallocs and only grows with what a level
+// really brings.
 static SFX_BUFFER DS_Buffers[MAX_SAMPLES];
 static SFX_VOICE DS_Samples[32];
 
@@ -239,15 +240,15 @@ bool FreeSampleDecompress()
 bool DXCreateSampleADPCM(char* data, long comp_size, long uncomp_size, long num)
 {
 	LPWAVEFORMATEX format;
-	ulong dekodiert;
+	ulong decoded;
 
 	Log(__FUNCTION__);
 
 	if (!g_XAudio2)
 		return 0;
 
-	// Siehe DXCreateSample: eigene Schranke, damit der Schreibzugriff unten
-	// nicht am Aufrufer haengt (#94).
+	// See DXCreateSample: its own bound, so the write below does not hang
+	// on the caller (#94).
 	if (num < 0 || num >= MAX_SAMPLES)
 	{
 		Log("DXCreateSampleADPCM: sample %d outside DS_Buffers[%d]", num, MAX_SAMPLES);
@@ -271,23 +272,23 @@ bool DXCreateSampleADPCM(char* data, long comp_size, long uncomp_size, long num)
 		DS_Buffers[num].pcm = 0;
 	}
 
-	// Nur uebernehmen, was die Umsetzung wirklich geliefert hat: sie arbeitet
-	// blockweise und bleibt gern unter uncomp_size - 32. Der alte Code (schon
-	// bei Core so) kopierte trotzdem die volle Laenge - das Ende war dann
-	// Altbestand des zuvor dekodierten Samples und knackte hoerbar.
-	dekodiert = ACMStreamHeader.cbDstLengthUsed;
+	// Take only what the conversion really delivered: it works in blocks
+	// and likes to stay below uncomp_size - 32. The old code (like that
+	// since Core) copied the full length anyway - the end was then
+	// leftovers of the previously decoded sample and crackled audibly.
+	decoded = ACMStreamHeader.cbDstLengthUsed;
 	DS_Buffers[num].bytes = uncomp_size - 32;
 	DS_Buffers[num].pcm = (BYTE*)malloc(DS_Buffers[num].bytes);
 
-	if (dekodiert > DS_Buffers[num].bytes)
-		dekodiert = DS_Buffers[num].bytes;
+	if (decoded > DS_Buffers[num].bytes)
+		decoded = DS_Buffers[num].bytes;
 
-	memcpy(DS_Buffers[num].pcm, decompressed_samples_buffer, dekodiert);
+	memcpy(DS_Buffers[num].pcm, decompressed_samples_buffer, decoded);
 
-	if (dekodiert < DS_Buffers[num].bytes)
+	if (decoded < DS_Buffers[num].bytes)
 	{
-		memset(DS_Buffers[num].pcm + dekodiert, 0, DS_Buffers[num].bytes - dekodiert);
-		Log("Sample %d: %lu Bytes Rest genullt", num, DS_Buffers[num].bytes - dekodiert);
+		memset(DS_Buffers[num].pcm + decoded, 0, DS_Buffers[num].bytes - decoded);
+		Log("Sample %d: %lu Bytes Rest genullt", num, DS_Buffers[num].bytes - decoded);
 	}
 
 	DS_Buffers[num].frequency = pcm_format.nSamplesPerSec;
@@ -460,8 +461,8 @@ bool DXCreateSample(long num, LPWAVEFORMATEX format, LPVOID data, ulong bytes)
 	if (!g_XAudio2)
 		return 0;
 
-	// Eigene Schranke, statt sich auf den Aufrufer zu verlassen: LoadSamples()
-	// prueft die Gesamtzahl, aber diese Funktion schrieb bisher blind in
+	// Its own bound instead of relying on the caller: LoadSamples() checks
+	// the total count, but this function used to write blindly into
 	// DS_Buffers[num] (#94).
 	if (num < 0 || num >= MAX_SAMPLES)
 	{

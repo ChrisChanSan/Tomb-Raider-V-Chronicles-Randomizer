@@ -567,8 +567,8 @@ void LaraGetNewTarget(WEAPON_INFO* winfo)
 {
 	ITEM_INFO* item;
 	ITEM_INFO* bestitem;
-	// Groesse haengt an MAX_LOT - siehe MAX_TARGETS in types.h (upstream
-	// fest [8], mit mehr KI-Slots ein Pufferueberlauf).
+	// Size hangs on MAX_LOT - see MAX_TARGETS in types.h (upstream a fixed
+	// [8], a buffer overflow with more AI slots).
 	static ITEM_INFO* TargetList[MAX_TARGETS];
 	static ITEM_INFO* LastTargets[MAX_TARGETS];
 	CREATURE_INFO* creature;

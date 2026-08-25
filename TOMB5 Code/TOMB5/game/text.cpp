@@ -493,12 +493,12 @@ void PrintString(long x, long y, uchar col, const char* string, ushort flags)
 				def = &CharDef[s - '!'];
 			else
 			{
-				// Glyphe ausserhalb der PC-Schrift: CharDef hat 106 Eintraege
-				// plus die Akzentcodes 128..173 oben - alles darueber (z. B.
-				// die Kana-Indizes der japanischen PSX-Sprachdatei, Bytes bis
-				// 181) las hier bisher ungebremst aus der Tabelle hinaus.
-				// Ueberspringen statt Absturz; angezeigt wird, was die
-				// Schrift kann.
+				// Glyph outside the PC font: CharDef has 106 entries plus
+				// the accent codes 128..173 above - everything beyond
+				// (e.g. the kana indices of the Japanese PSX language
+				// file, bytes up to 181) used to read unchecked past the
+				// table here. Skip instead of crash; what the font can
+				// show is shown.
 				s = *string++;
 				continue;
 			}

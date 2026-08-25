@@ -14,7 +14,7 @@
 #include "../global/types.h"
 
 void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak);
-ulong TroyeMenuPage(long seite);
+ulong TroyeMenuPage(long page);
 bool Page0(long& num, long textY, ulong selection);
 bool Page1(long& num, long textY, ulong selection);
 bool Page2(long& num, long textY, ulong selection);

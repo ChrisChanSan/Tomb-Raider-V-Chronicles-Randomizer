@@ -284,27 +284,27 @@ long ControlPhase(long nframes, long demo_mode)
 			// exactly why the original code checked keymap[DIK_ESCAPE] directly
 			// instead of input & IN_DESELECT too).
 			//
-			// Skip NUR waehrend die Szene wirklich laeuft (cutseq_trig == 2,
-			// gesetzt nach Load_and_Init_Cutseq). Vorher feuerte der Skipper
-			// auch in der STARTPHASE (trig 1): wer schiessend in den Ausloeser
-			// lief, hielt Kreuz (= Feuertaste) noch gedrueckt, der Skipper
-			// wuergte die Szene VOR Load_and_Init ab - damit wurde die
-			// Abspielsperre (SetCutPlayed, deltapak.cpp:3409) nie gesetzt,
-			// der Bodentrigger zuendete im naechsten Frame neu: Endlosschleife
-			// aus Anlauf und Abbruch, Alt+F4 noetig (im Spiel gesehen, #78).
-			// Kreuz skippt ausserdem nur auf FLANKE (frisch gedrueckt), damit
-			// die vom Feuern noch gehaltene Taste die gerade gestartete Szene
-			// nicht sofort ueberspringt - Escape behaelt das gehaltene
-			// Verhalten des Originals.
+			// Skip ONLY while the scene really runs (cutseq_trig == 2, set
+			// after Load_and_Init_Cutseq). Before, the skipper also fired
+			// in the START PHASE (trig 1): whoever ran into the trigger
+			// while shooting still held Cross (= fire key), the skipper
+			// choked the scene BEFORE Load_and_Init - the playback lock
+			// (SetCutPlayed, deltapak.cpp:3409) was thus never set, the
+			// floor trigger fired anew the next frame: an endless loop of
+			// wind-up and abort, Alt+F4 required (seen in game, #78).
+			// Cross additionally skips only on the EDGE (freshly pressed),
+			// so the key still held from firing does not instantly skip
+			// the scene that just started - Escape keeps the original's
+			// held behavior.
 			{
-				static char crossWarGedrueckt = 0;
-				const char crossJetzt = (ControlMethod == 1 && Key(256 + JoyBitConfirm())) ? 1 : 0;	// Kreuz bzw. A - das Bit haengt am Eingabeweg (input.cpp)
+				static char crossWasHeld = 0;
+				const char crossNow = (ControlMethod == 1 && Key(256 + JoyBitConfirm())) ? 1 : 0;	// Cross or A - the bit hangs on the input path (input.cpp)
 
 				if (tomb5.cutseq_skipper && cutseq_trig == 2 && !ScreenFading && !bDoCredits &&
-					(keymap[DIK_ESCAPE] || (crossJetzt && !crossWarGedrueckt)))
+					(keymap[DIK_ESCAPE] || (crossNow && !crossWasHeld)))
 					do_cutseq_skipper_stuff();
 
-				crossWarGedrueckt = crossJetzt;
+				crossWasHeld = crossNow;
 			}
 
 			input = 0;
@@ -3291,31 +3291,31 @@ void AnimateItem(ITEM_INFO* item)
 					num = cmd[1] & 0x3FFF;
 					type = cmd[1] & 0xC000;
 
-					// Joby-Charaktere auf fremdem Anim-Satz (#111 Teil 2):
-					// Crane Guy und Mafia laufen zur Laufzeit auf SWATs Satz,
-					// sobald der geladen ist - dessen Sterbeanim +11 ruft aber
-					// SWATs eigenen Schrei (377, SFX_SWAT_DIE). Die Joby-Saetze
-					// rufen an derselben Stelle den Wachmann-Schrei (84,
-					// SFX_BLUEG_HIT_DIE) - der gehoert zu diesen Figuren
-					// (Nutzerabnahme: Mafia-Soundkulisse != Rich-Soundkulisse).
-					// Das Sample unter 84 ist in allen Leveln byte-identisch
-					// und reist mit jedem Soldatensatz mit; fehlt es doch,
-					// steigt SoundEffect wie immer still aus. In Vanilla
-					// feuert die Weiche nie: dort steht kein Joby-Charakter
-					// neben einem SWAT.
+					// Joby characters on a foreign anim set (#111 part 2):
+					// Crane Guy and Mafia run on SWAT's set at runtime as
+					// soon as it is loaded - but its death anim +11 calls
+					// SWAT's own scream (377, SFX_SWAT_DIE). The Joby sets
+					// call the guard scream (84, SFX_BLUEG_HIT_DIE) at the
+					// same spot - that one belongs to these figures (user
+					// sign-off: Mafia soundscape != rich soundscape). The
+					// sample under 84 is byte-identical in all levels and
+					// travels with every soldier set; should it be missing
+					// after all, SoundEffect bails out silently as always.
+					// In vanilla the switch never fires: no Joby character
+					// stands next to a SWAT there.
 					if (num == SFX_SWAT_DIE &&
 						(item->object_number == BLUE_GUARD2 ||
 						 item->object_number == CRANE_GUY ||
 						 item->object_number == MAFIA))
 						num = SFX_BLUEG_HIT_DIE;
 
-					// Fuers SFXLOG: wer ruft hier? (Diagnose, siehe sound.cpp)
-					// Anim, Typ-Bits und Raumflaggen dazu, seit der
-					// Wasserschritt-Phantomjagd: die Datei ist sauber, die
-					// Raeume sind trocken, die Weiche liest sich dicht - also
-					// muss die naechste Wiederholung zeigen, WELCHER Wert zur
-					// Laufzeit luegt (Anim ausserhalb der Scheibe? Typ-Bits
-					// weg? Raumflaggen anders als in der Datei?).
+					// For the SFXLOG: who calls here? (diagnosis, see
+					// sound.cpp) Anim, type bits and room flags added since
+					// the water-step phantom hunt: the file is clean, the
+					// rooms are dry, the switch reads tight - so the next
+					// recurrence must show WHICH value lies at runtime
+					// (anim outside the slice? type bits gone? room flags
+					// different from the file?).
 					SfxCommandCaller = item->object_number;
 					SfxCommandRoom = item->room_number;
 					SfxCommandAnim = item->anim_number;

@@ -759,12 +759,12 @@ void ProcessMeshData(long num_meshes)
 	for (int i = 0; i < num_meshes; i++)
 	{
 		mesh_ptr = meshes[i];
-		// Der Handgriff unten (gt3[30] umschreiben) ist Cores Korrektur fuer
-		// die KIND-Lara der Ireland-Level. Upstream haengt er nur am
-		// Levelnamen; wer die Level mit erwachsener Lara spielt (GF_YOUNGLARA
-		// in SCRIPT.DAT geloescht), bekaeme ein verbogenes Dreieck an der
-		// linken Hand der Erwachsenenhaut. Ans Flag gebunden wie schon der
-		// Torso-Tausch in laramisc.cpp - mit gesetztem Flag aendert sich nichts.
+		// The hand fix below (rewriting gt3[30]) is Core's correction for
+		// the CHILD Lara of the Ireland levels. Upstream it hangs on the
+		// level name alone; whoever plays those levels with adult Lara
+		// (GF_YOUNGLARA cleared in SCRIPT.DAT) would get a bent triangle
+		// at the adult skin's left hand. Bound to the flag like the torso
+		// swap in laramisc.cpp - with the flag set, nothing changes.
 		hand = i == objects[LARA_SKIN].mesh_index + LM_LHAND * 2 && gfLevelId >= LVL5_GALLOWS_TREE && gfLevelId <= LVL5_OLD_MILL &&
 			(gfLevelFlags & GF_YOUNGLARA);
 

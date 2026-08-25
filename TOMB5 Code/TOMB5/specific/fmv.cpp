@@ -248,12 +248,12 @@ long PlayFmv(long num)
 		BinkDoFrame(Bink);
 		S_UpdateInput();
 
-		// Skip nur auf FLANKE: die Taste, mit der das vorige Video (Eidos-Logo)
-		// uebersprungen wurde, ist beim Start des naechsten (Intro) meist noch
-		// gehalten - mit einer Pegelabfrage flog das Intro gleich mit raus
-		// (vom Nutzer gesehen). Darum zaehlt erst ein Druck, der NACH einem
-		// Loslassen kommt; beim Einstieg gilt die Taste als gehalten.
-		long skipGehalten = 1;
+		// Skip only on the EDGE: the key that skipped the previous video
+		// (Eidos logo) is usually still held when the next one (intro)
+		// starts - with a level check the intro flew out with it (seen by
+		// the user). Hence only a press that comes AFTER a release counts;
+		// on entry the key counts as held.
+		long skipHeld = 1;
 
 		for (int i = 0; i != nFmvFrames[num]; i++)
 		{
@@ -262,10 +262,10 @@ long PlayFmv(long num)
 			// the confirm button everywhere else in the menus.
 			const long skipJetzt = (input & (IN_OPTION | IN_DRAW | IN_SELECT)) != 0;
 
-			if ((skipJetzt && !skipGehalten) || MainThread.ended)
+			if ((skipJetzt && !skipHeld) || MainThread.ended)
 				break;
 
-			skipGehalten = skipJetzt;
+			skipHeld = skipJetzt;
 
 			BinkNextFrame(Bink);
 

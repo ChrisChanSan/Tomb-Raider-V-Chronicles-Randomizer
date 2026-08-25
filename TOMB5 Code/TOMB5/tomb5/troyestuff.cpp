@@ -20,25 +20,25 @@
 
 #define PAGE0_NUM	12
 #define PAGE1_NUM	13
-// Credits (#33): keine waehlbaren Zeilen, die Zahl schiebt nur die
-// Umschaltpfeile unter den Text.
+// Credits (#33): no selectable rows, the number only pushes the paging
+// arrows below the text.
 #define PAGE2_NUM	12
 
-// Direkteinstieg (#33-Nachtrag): das Optionsmenue hat eine eigene
-// "Credits"-Zeile bekommen und springt damit unmittelbar auf Seite 2 -
-// als dritte Seite im Umschaltzyklus allein war sie zu versteckt. Die
-// Seite lebt darum auf Dateiebene statt als Funktions-static.
+// Direct entry (#33 addendum): the options menu got its own "Credits" row
+// and thereby jumps straight to page 2 - as the third page in the paging
+// cycle alone it was too hidden. The page therefore lives at file level
+// instead of as a function static.
 static long TroyePage = 0;
 
-// Setzt die Startseite und liefert die passende Startauswahl (bei den
-// reinen Anzeigeseiten die Umschaltzeile), damit der Aufrufer sie
-// direkt in sein sel uebernehmen kann.
-ulong TroyeMenuPage(long seite)
+// Sets the start page and returns the matching start selection (for the
+// pure display pages the paging row), so the caller can take it straight
+// into its sel.
+ulong TroyeMenuPage(long page)
 {
 	long num;
 
-	TroyePage = seite;
-	num = seite == 0 ? PAGE0_NUM : (seite == 1 ? PAGE1_NUM : PAGE2_NUM);
+	TroyePage = page;
+	num = page == 0 ? PAGE0_NUM : (page == 1 ? PAGE1_NUM : PAGE2_NUM);
 	return 1ul << num;
 }
 
@@ -626,10 +626,10 @@ bool Page1(long& num, long textY, ulong selection)
 	return changed;
 }
 
-// Credits (#33). GPLv3-Hoeflichkeit und Nutzer-Vorgabe: die Namen, ohne die
-// es dieses Projekt nicht gaebe, gehoeren INS SPIEL, nicht nur in die
-// LIESMICH. Nur Text - keine URLs, der Spielfont traegt nicht jede Glyphe
-// (PrintString-Riegel); die Links stehen in der LIESMICH.
+// Credits (#33). GPLv3 courtesy and user requirement: the names without
+// which this project would not exist belong IN THE GAME, not only in the
+// README. Text only - no URLs, the game font does not carry every glyph
+// (PrintString guard); the links stand in the README.
 bool Page2(long& num, long textY, ulong selection)
 {
 	long y;

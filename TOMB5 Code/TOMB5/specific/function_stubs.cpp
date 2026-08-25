@@ -96,11 +96,11 @@ void Log(const char* s, ...)
 	strcat(buf, "\n");
 	va_end(list);
 
-	// Millisekunden seit dem ersten Logeintrag. Ohne diese Angabe laesst sich
-	// eine Startverzoegerung nicht lokalisieren - man sieht die Reihenfolge,
-	// aber nicht, WO die Zeit verloren geht. Bewusst relativ und nicht als
-	// Uhrzeit: gesucht sind Abstaende zwischen zwei Zeilen, nicht der
-	// Zeitpunkt. Kostet einen GetTickCount-Aufruf pro Zeile.
+	// Milliseconds since the first log entry. Without this a startup delay
+	// cannot be localized - you see the order but not WHERE the time is
+	// lost. Deliberately relative and not a clock time: what is sought are
+	// gaps between two lines, not the moment. Costs one GetTickCount call
+	// per line.
 	{
 		static DWORD firstTick = 0;
 		DWORD now = GetTickCount();

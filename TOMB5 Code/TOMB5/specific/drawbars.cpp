@@ -526,15 +526,15 @@ void S_LoadBar()
 	S_UpdateLoadBar();
 }
 
-// Balken auf "fertig" stellen. Noetig, weil Cores Abschlusskriterium in
-// S_DrawLoadBar (loadbar_maxpos <= loadbar_steps) rechnerisch kippt: steps
-// waechst je Schritt um 100/maxpos und erreicht hoechstens ~100 - ab etwa
-// 75 Texturseiten (maxpos = Seiten + 20, file.cpp:1343) wird die Bedingung
-// UNERREICHBAR und die Aufholschleife nach dem Ladethread drehte endlos
-// (im Spiel gesehen: andy1 mit 79 und joby5 mit 82 Seiten froren bei vollem
-// Balken ein; Vanilla-Level liegen bei 9-17 Seiten, da konnte das nie
-// feuern). Der Aufrufer weiss es besser als die Zaehlung: wenn der
-// Ladethread beigetreten ist, IST das Laden fertig.
+// Set the bar to "done". Needed because Core's completion criterion in
+// S_DrawLoadBar (loadbar_maxpos <= loadbar_steps) tips over arithmetically:
+// steps grows by 100/maxpos per step and reaches at most ~100 - from about
+// 75 texture pages on (maxpos = pages + 20, file.cpp:1343) the condition
+// becomes UNREACHABLE and the catch-up loop after the load thread spun
+// forever (seen in game: andy1 with 79 and joby5 with 82 pages froze at a
+// full bar; vanilla levels sit at 9-17 pages, it could never fire there).
+// The caller knows better than the counting: once the load thread has
+// joined, loading IS done.
 void S_FinishLoadBar()
 {
 	loadbar_steps = 100.0F;

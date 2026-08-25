@@ -165,14 +165,14 @@ void MazeMonsterControl(short item_number)
 
 		if (item->hit_points <= 0)
 		{
-			// Zerfetzen statt Sterbeanimation (Nutzerwunsch 2026-08-20, wie
-			// beim Imp - Begruendung dort). Hier ersetzt es zugleich den
-			// Fade-Behelf: Core hat diesen Tod nie fertig gebaut (Liegepose
-			// versinkt im Boden, kein KillItem in der Anim), wir haben ihn
-			// erst ausgeblendet wie Larson. Jetzt uebernimmt CreatureDie(1)
-			// samt ExplodingDeath2 - KillItem, DropBaddyPickups, AI aus,
-			// IFL_INVISIBLE, alles in einem Zug. Der Klang ist sein eigener:
-			// die Daten fuehren den MazeMonster als "Werwolf".
+			// Shred instead of a death animation (user wish 2026-08-20,
+			// like the Imp - reasoning there). Here it also replaces the
+			// fade stopgap: Core never finished this death (the lying pose
+			// sinks into the floor, no KillItem in the anim), we first
+			// faded him like Larson. Now CreatureDie(1) takes over,
+			// including ExplodingDeath2 - KillItem, DropBaddyPickups, AI
+			// off, IFL_INVISIBLE, all in one go. The sound is his own: the
+			// data lists the maze monster as "werewolf".
 			SoundEffect(SFX_WEREWOLF_DIE, &item->pos, 0);
 			CreatureDie(item_number, 1);
 			return;
@@ -221,13 +221,14 @@ void MazeMonsterControl(short item_number)
 				if (distance < 1048576 || monster->mood != ATTACK_MOOD)
 					item->goal_anim_state = 1;
 
-				// Kein Laufklang. Core rief hier jede Frame SFX_IMP_BARREL_ROLL
-				// (250) - aber Andy2 belegt die Nummer nicht, zu Hause lief der
-				// Aufruf immer ins Leere und das Monster war beim Laufen stumm.
-				// In andy1 liegt unter 250 das Fassrollen der Imps, Abspielmodus
-				// 0 (stapelt): jede Frame ein neuer Abspielvorgang uebereinander,
-				// hoerbar als metallisches Kreischen (SFXLOG: 125x sfx=250,
-				// Nutzerfund 2026-08-18). Vanilla-Verhalten ist die Stille.
+				// No running sound. Core called SFX_IMP_BARREL_ROLL (250)
+				// here every frame - but Andy2 does not fill the number,
+				// at home the call always ran into the void and the
+				// monster was mute while running. In andy1, the imps'
+				// barrel rolling lies under 250, play mode 0 (stacks): a
+				// new play on top every frame, audible as a metallic
+				// screech (SFXLOG: 125x sfx=250, user find 2026-08-18).
+				// The vanilla behavior is the silence.
 				break;
 
 			case 4:

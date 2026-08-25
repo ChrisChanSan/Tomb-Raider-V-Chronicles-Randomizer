@@ -111,11 +111,11 @@ static void init_water_table()
 	}
 }
 
-// Die Spielstaende liegen im Unterordner savegame\ neben der EXE statt lose
-// im Spielordner. SaveGamePath baut den Pfad, EnsureSaveGameFolder legt den
-// Ordner beim Start an und zieht dort noch liegende savegame.N aus dem
-// Spielordner um (nur wenn der Slot im Ordner frei ist - MoveFile
-// ueberschreibt nicht).
+// The savegames lie in the subfolder savegame\ next to the EXE instead of
+// loose in the game folder. SaveGamePath builds the path,
+// EnsureSaveGameFolder creates the folder at startup and moves any
+// savegame.N still lying in the game folder over (only when the slot in
+// the folder is free - MoveFile does not overwrite).
 void SaveGamePath(char* buffer, long slot_num)
 {
 	wsprintf(buffer, "savegame\\savegame.%d", slot_num);
@@ -123,21 +123,21 @@ void SaveGamePath(char* buffer, long slot_num)
 
 void EnsureSaveGameFolder()
 {
-	char alt[32], neu[32];
+	char oldPath[32], newPath[32];
 
 	CreateDirectory("savegame", 0);
 
 	for (int i = 0; i < 15; i++)
 	{
-		wsprintf(alt, "savegame.%d", i);
+		wsprintf(oldPath, "savegame.%d", i);
 
-		if (GetFileAttributes(alt) == INVALID_FILE_ATTRIBUTES)
+		if (GetFileAttributes(oldPath) == INVALID_FILE_ATTRIBUTES)
 			continue;
 
-		SaveGamePath(neu, i);
+		SaveGamePath(newPath, i);
 
-		if (MoveFile(alt, neu))
-			Log("Moved %s into savegame folder", alt);
+		if (MoveFile(oldPath, newPath))
+			Log("Moved %s into savegame folder", oldPath);
 	}
 }
 
@@ -200,31 +200,31 @@ long S_LoadGame(long slot_num)
 		ReadFile(file, &savegame, sizeof(SAVEGAME_INFO), &bytes, 0);
 		savegame_bytes_read = bytes; // see sgRestoreGame() - detects an old-format (pre-resize) save
 
-		// Pruefsumme SOFORT bilden, solange die Bytes noch genau die aus der
-		// Datei sind. sgRestoreGame() laeuft erst nach dem Ueberblenden und
-		// dem Neuladen des Levels - bis dahin hat der Spielloop laengst
-		// weitergerechnet und savegame.Level.Timer erhoeht (control.cpp:642,
-		// laeuft solange gfGameMode 0 ist). Genau das traf den Nutzer beim
-		// Laden waehrend Laras Todesanimation: der Loop lief hinter dem Menue
-		// weiter, die Summe stimmte nicht mehr, und der Ladevorgang brach mit
-		// "incompatible or corrupted savegame" ab - bei bytes_read == expected,
-		// also nachweislich vollstaendig gelesener Datei. Nach einem Neustart
-		// derselben Datei ging es, weil dort keine Frames dazwischenlagen.
+		// Compute the checksum IMMEDIATELY, while the bytes are still
+		// exactly those from the file. sgRestoreGame() only runs after the
+		// fade and the level reload - by then the game loop has long since
+		// kept computing and incremented savegame.Level.Timer
+		// (control.cpp:642, runs while gfGameMode is 0). Exactly that hit
+		// the user when loading during Lara's death animation: the loop
+		// kept running behind the menu, the sum no longer matched, and the
+		// load aborted with "incompatible or corrupted savegame" - with
+		// bytes_read == expected, i.e. a provably fully read file. After a
+		// restart the same file worked, because no frames lay in between.
 		{
-			const short gespeichert = savegame.Checksum;
+			const short stored = savegame.Checksum;
 			savegame.Checksum = 0;
 
 			char* p = (char*)&savegame;
-			char summe = 0;
+			char sum = 0;
 
 			for (int i = 0; i < sizeof(SAVEGAME_INFO); i++)
 			{
-				summe += *p;
+				sum += *p;
 				p++;
 			}
 
-			savegame.Checksum = gespeichert;
-			savegame_checksum_ok = (gespeichert == (short)-summe);
+			savegame.Checksum = stored;
+			savegame_checksum_ok = (stored == (short)-sum);
 		}
 		ReadFile(file, &tomb5_save, sizeof(tomb5_save_info), &tomb5_save_size, 0);
 		CloseHandle(file);

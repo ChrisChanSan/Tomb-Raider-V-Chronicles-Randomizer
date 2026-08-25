@@ -162,15 +162,15 @@ void InitialiseSlot(short item_number, long slot)
 
 	switch (item->object_number)
 	{
-	// SAILOR stand hier, solange der Slot der Matrose war: Menschengruppe mit
-	// Schrittweite 1024, Sprungfaehigkeit und HUMAN_ZONE. Als Compsognathus
-	// (#99) gehoert er in die Vorgabegruppe - er ist knietief und springt
-	// nicht ueber Absaetze. Dafuer ist nichts zu tun ausser ihn hier
-	// herauszunehmen; die Vorgaben oben (step 256, drop -512, BASIC_ZONE) sind
-	// dieselben, die schon der Raptor bekommt.
+	// SAILOR stood here while the slot was the sailor: human group with
+	// step 1024, jumping ability and HUMAN_ZONE. As the Compsognathus
+	// (#99) he belongs in the default group - he is knee-high and does not
+	// jump over ledges. Nothing to do for that except taking him out here;
+	// the defaults above (step 256, drop -512, BASIC_ZONE) are the same
+	// ones the Raptor already gets.
 	case SAS:
 	case BLUE_GUARD:
-	case BLUE_GUARD2:	// zweiter Guard (#105): laeuft und springt wie sein Vorbild
+	case BLUE_GUARD2:	// second guard (#105): walks and jumps like his template
 	case MAFIA2:
 		creature->LOT.step = 1024;
 		creature->LOT.drop = -1024;
@@ -178,11 +178,11 @@ void InitialiseSlot(short item_number, long slot)
 		creature->LOT.zone = HUMAN_ZONE;
 		break;
 
-	// REAPER stand hier, solange der Slot die Wasserqualle war: Flugzone,
-	// Schrittweite 20480, fly 16. Als Raptor (#97) gehoert er auf den Boden -
-	// und dafuer ist nichts zu tun ausser ihn hier herauszunehmen. Die
-	// Vorgabewerte oben (step 256, drop -512, fly 0, BASIC_ZONE) sind genau
-	// die, die tomb3 dem Raptor gibt: er steht dort in keinem Sonderfall.
+	// REAPER stood here while the slot was the water jellyfish: fly zone,
+	// step 20480, fly 16. As the Raptor (#97) he belongs on the ground -
+	// and nothing to do for that except taking him out here. The default
+	// values above (step 256, drop -512, fly 0, BASIC_ZONE) are exactly
+	// what tomb3 gives the Raptor: he stands in no special case there.
 	case CROW:
 	case WILLOWISP:
 	case GREEN_TEETH:

@@ -52,20 +52,20 @@ void SwampyControl(short item_number)
 	torso_y = 0;
 	head = 0;
 
-	// Die Sumpfhexe war UNSTERBLICH (#61, Nutzerbefund 2026-08-24): sie hat
-	// 100 Lebenspunkte und nimmt Schaden (HitEffect in setup.cpp), aber
-	// SwampyControl fragte hit_points nie ab - es gab keinen Ausgang aus den
-	// Zustaenden 1-3. Genau dieselbe Luecke wie beim Koch (#124).
+	// The swamp witch was IMMORTAL (#61, user finding 2026-08-24): she has
+	// 100 hit points and takes damage (HitEffect in setup.cpp), but
+	// SwampyControl never queried hit_points - there was no exit from
+	// states 1-3. Exactly the same gap as with the chef (#124).
 	//
-	// In Vanilla faellt das nicht auf: sie erwacht ueberhaupt erst, wenn Lara
-	// die Muenze HAT (die Abfrage gleich darunter), und danach ist der Level
-	// so gut wie vorbei. Seit die Muenze wandern darf, kann Lara ihr aber
-	// lange und bewaffnet gegenueberstehen.
+	// In vanilla it goes unnoticed: she only wakes at all once Lara HAS
+	// the coin (the check right below), and after that the level is as
+	// good as over. Since the coin may travel, Lara can face her long and
+	// armed.
 	//
-	// Sie hat keine Sterbeanimation - deshalb zerfetzen statt sterben, wie
-	// Imp und Labyrinthmonster (Nutzerwunsch): CreatureDie(1) wirft ihre
-	// eigenen Meshes als BODY_PART-Fetzen und erledigt KillItem, Beute, KI
-	// und das Unsichtbar-Flag fuer den Spielstand in einem Zug.
+	// She has no death animation - hence shred instead of die, like Imp
+	// and maze monster (user wish): CreatureDie(1) throws her own meshes
+	// as BODY_PART scraps and handles KillItem, loot, AI and the invisible
+	// flag for the savegame in one go.
 	if (item->hit_points <= 0)
 	{
 		CreatureDie(item_number, 1);

@@ -479,9 +479,9 @@ void WinClose()
 	else
 		Log("%s Attempt To Release NULL Ptr", "Keyboard");
 
-	// Erst den Aufzaehlungsthread einholen: er benutzt lpDirectInput noch.
-	// Beendet man das Spiel innerhalb der ersten Sekunden, laeuft er sonst
-	// weiter, waehrend hier die Schnittstelle freigegeben wird.
+	// Catch up with the enumeration thread first: it still uses
+	// lpDirectInput. Quit the game within the first seconds and it would
+	// otherwise keep running while the interface is released here.
 	DXWaitJoystickInit();
 
 	if (G_dxptr->lpDirectInput)
@@ -591,9 +591,9 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		LoadSettings();
 	}
 
-	// Gespeicherte Sprachwahl nachziehen: LoadGameflow lief VOR LoadSettings
-	// und hat wie das Original die erste ladbare Sprachdatei genommen - erst
-	// jetzt ist die Registry gelesen ("Language", -1 = Automatik).
+	// Apply the saved language choice: LoadGameflow ran BEFORE LoadSettings
+	// and, like the original, took the first loadable language file - only
+	// now has the registry been read ("Language", -1 = automatic).
 	if (LanguageChoice >= 0 && LanguageChoice != (long)Gameflow->Language)
 		SwitchLanguage(LanguageChoice);
 

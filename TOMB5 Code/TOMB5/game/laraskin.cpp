@@ -16,7 +16,7 @@
 #include "gameflow.h"
 #include "delstuff.h"
 #include "control.h"
-#include "lara.h"	// LaraDrawType - Outfit-Marker fuer die Zopf-Schweisstabelle
+#include "lara.h"	// LaraDrawType - outfit marker for the braid weld table
 
 static uchar SkinJoints[14][4] =
 {
@@ -439,18 +439,18 @@ void CreateSkinningData()
 			SkinVertNums[28][i] = HairSkinVertNums[1][i];
 			SkinVertNums[34][i] = HairSkinVertNums[2][i];
 		}
-		// Die Schweisstabelle des Zopfansatzes gehoert zum OUTFIT, nicht zum
-		// Level: HairSkinVertNums[5] nennt die Kopf-Vertexnummern des
-		// RUSSLAND-Kopfes (Muetze), [0] die des Standardkopfes. Core hat das
-		// am Levelnamen festgemacht, weil das Outfit vanilla nie den
-		// Abschnitt wechselt. Der Randomizer markiert das Joby-Outfit mit
-		// LaraType 2 (LARA_BUNHEAD) - dann muss [5] auch ausserhalb der
-		// Russland-Level greifen. Umgekehrt darf in den Russland-Leveln [5]
-		// nur bei LARA_NORMAL greifen (= unveraendertes Vanilla-Level);
-		// traegt Lara dort ein fremdes Outfit (CATSUIT/PONYTAIL), gehoert
-		// der Standardkopf dazu. Ohne diese Zeile klebte der Zopfansatz an
-		// falschen Kopf-Vertices - der "Zopf-Spiess" bei rich1 mit
-		// Joby-Outfit (im Spiel gesehen).
+		// The braid root's weld table belongs to the OUTFIT, not to the
+		// level: HairSkinVertNums[5] names the RUSSIA head's vertex
+		// numbers (cap), [0] the standard head's. Core pinned this to the
+		// level name because the outfit never changes section in vanilla.
+		// The randomizer marks the Joby outfit with LaraType 2
+		// (LARA_BUNHEAD) - then [5] must apply outside the Russia levels
+		// too. Conversely, in the Russia levels [5] may only apply with
+		// LARA_NORMAL (= an unchanged vanilla level); if Lara wears a
+		// foreign outfit there (CATSUIT/PONYTAIL), the standard head comes
+		// with it. Without this line the braid root stuck to wrong head
+		// vertices - the "braid skewer" at rich1 with the Joby outfit
+		// (seen in game).
 		else if ((gfLevelId >= LVL5_BASE && gfLevelId <= LVL5_SINKING_SUBMARINE && LaraDrawType == LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD)
 		{
 			SkinVertNums[28][i] = HairSkinVertNums[5][i];

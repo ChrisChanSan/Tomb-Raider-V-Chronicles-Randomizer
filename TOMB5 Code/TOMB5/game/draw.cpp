@@ -576,28 +576,27 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	phd_TranslateAbs(item->pos.x_pos, item->pos.y_pos, item->pos.z_pos);
 	phd_RotYXZ(item->pos.y_rot, item->pos.x_rot, item->pos.z_rot);
 
-	// Fernmodelle (MIP/LOD) sind fuer GEGNER abgeschaltet - sie werden immer
-	// in voller Aufloesung gezeichnet.
+	// Distance models (MIP/LOD) are switched off for ENEMIES - they are
+	// always drawn at full resolution.
 	//
-	// Der Grund ist nicht Optik, sondern Sicherheit: der Slot dahinter wird
-	// hier BLIND genommen, sobald ueberhaupt etwas geladen ist. In Vanilla
-	// geht das gut, weil Level und Gegner zusammen gebaut wurden; fuer den
-	// Randomizer nicht - er setzt Gegner in Level, deren MIP-Slot voellig
-	// fremdes Material traegt. Der Gegner wuerde ab 5120 Units als dieses
-	// Fremdmaterial gezeichnet, mit SEINEN Bones und SEINEM Frame, also als
-	// zerrissener Klumpen. Ueber alle 13 Level nachgemessen (SlotAnims):
-	// 51 solcher Kombinationen sind moeglich.
+	// The reason is not looks but safety: the slot behind it is taken
+	// BLINDLY here as soon as anything is loaded at all. In vanilla that
+	// works out because level and enemies were built together; for the
+	// randomizer it does not - it puts enemies into levels whose MIP slot
+	// carries entirely foreign material. From 5120 units on, the enemy
+	// would be drawn as that foreign material, with ITS bones and ITS
+	// frame, i.e. as a torn-up lump. Measured across all 13 levels
+	// (SlotAnims): 51 such combinations are possible.
 	//
-	// Was dabei verloren geht, ist fast nichts: MIPs werden in TR5 kaum
-	// benutzt. Es gibt genau SIEBEN echte Faelle - SWAT, SWAT+, Guard und
-	// Two Gun in den drei rich-Leveln -, alle mit derselben Meshzahl wie das
-	// Original (15/15), also praktisch derselben Silhouette auf fuenf
-	// Sektoren Entfernung. Die Rechenersparnis von 2000 braucht heute
-	// niemand mehr.
+	// What is lost is almost nothing: MIPs are barely used in TR5. There
+	// are exactly SEVEN real cases - SWAT, SWAT+, guard and Two Gun in the
+	// three rich levels -, all with the same mesh count as the original
+	// (15/15), i.e. practically the same silhouette at five sectors'
+	// distance. Nobody needs the render savings of 2000 anymore.
 	//
-	// "intelligent" trennt sauber: alle Gegner mit object_mip tragen es
-	// (nachgeprueft), Tueren und Bruecken (mip 2048-4096) tragen es nicht
-	// und behalten ihr Fernmodell.
+	// "intelligent" separates cleanly: all enemies with object_mip carry
+	// it (verified), doors and bridges (mip 2048-4096) do not and keep
+	// their distance model.
 	if (obj->object_mip && !obj->intelligent && (obj + 1)->loaded &&
 		phd_mxptr[M23] >> 16 > obj->object_mip)
 		obj++;

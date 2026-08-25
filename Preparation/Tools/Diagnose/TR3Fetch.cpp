@@ -208,8 +208,24 @@ int main(int argc, char** argv)
     std::vector<std::vector<uint8_t>> meshes;
     int totalQuads = 0, totalTris = 0, totalColored = 0, maxVerts = 0;
     int firstTex = -1;                        // first texture the model itself uses
-    struct ColorSpot { std::vector<uint8_t>* buffer; size_t at; };
+
+    // Colored faces, collected across ALL meshes and resolved at the end.
+    //
+    // TR5 has no colored faces, so they have to become textured ones. Until
+    // now every single one in the model got the SAME substitute - the first
+    // texture the model happened to use - and that is visible: on Lara's TR3
+    // body 61 of 442 triangles came out carrying skin or trouser colour where
+    // something else belonged (seen in game, #122).
+    //
+    // They can be placed far better than that. The face names a palette
+    // entry, and the palette is right there in the file; the object textures
+    // are pieces of tiles whose average colour can be measured. So each
+    // colored face can take the texture that comes CLOSEST to the colour it
+    // asked for. The model's own textures only - a piece of this model is
+    // always more plausible than something borrowed.
+    struct ColorSpot { size_t meshNo; size_t at; uint16_t colorIdx; };
     std::vector<ColorSpot> coloredSpots;
+    std::vector<int> meshFirstTex;            // per mesh, as the fallback
     for (uint16_t i = 0; i < z->numMeshes; ++i)
     {
         const uint32_t off = ru32(r.b, ptrAt + size_t(z->startingMesh + i) * 4);
@@ -253,11 +269,13 @@ int main(int argc, char** argv)
         // (seen in game). Instead the first texture the model itself uses
         // - that one is guaranteed to belong to it.
         const int16_t nCQ = rs16(r.b, p); p += 2;
+        std::vector<std::pair<size_t, uint16_t>> quadSpots, triSpots;
+
         for (int q = 0; q < nCQ; ++q)
         {
             for (int w = 0; w < 4; ++w) { put16(quads, ru16(r.b, p)); p += 2; }
-            p += 2;                                                 // discard the color index
-            coloredSpots.push_back({ &quads, quads.size() });
+            const uint16_t colIdx = ru16(r.b, p); p += 2;
+            quadSpots.push_back({ quads.size(), colIdx });
             put16(quads, 0); put16(quads, 0);
             ++qz; ++totalColored;
         }
@@ -265,30 +283,30 @@ int main(int argc, char** argv)
         for (int t = 0; t < nCT; ++t)
         {
             for (int w = 0; w < 3; ++w) { put16(tris, ru16(r.b, p)); p += 2; }
-            p += 2;
-            coloredSpots.push_back({ &tris, tris.size() });
+            const uint16_t colIdx = ru16(r.b, p); p += 2;
+            triSpots.push_back({ tris.size(), colIdx });
             put16(tris, 0); put16(tris, 0);
             ++tz; ++totalColored;
         }
 
-        // Remember this mesh's first real texture and set the colored spots
-        // to it BEFORE the buffers move into the mesh.
-        if (firstTex < 0)
-        {
-            if (nQ > 0)      firstTex = ru16(quads, 8);
-            else if (nT > 0) firstTex = ru16(tris, 6);
-        }
-        for (const ColorSpot& fs : coloredSpots)
-            if (firstTex >= 0)
-            {
-                const uint16_t v = uint16_t(firstTex);
-                (*fs.buffer)[fs.at]     = uint8_t(v & 0xFF);
-                (*fs.buffer)[fs.at + 1] = uint8_t(v >> 8);
-            }
-        coloredSpots.clear();
+        // This mesh's own first real texture - the fallback if no colour can
+        // be matched, and better than the model's first: a piece of the same
+        // body part is closer than a piece of the boot.
+        int mineFirst = -1;
+        if (nQ > 0)      mineFirst = ru16(quads, 8);
+        else if (nT > 0) mineFirst = ru16(tris, 6);
+        if (firstTex < 0) firstTex = mineFirst;
+        meshFirstTex.push_back(mineFirst);
 
-        put16(o, uint16_t(qz)); o.insert(o.end(), quads.begin(), quads.end());
-        put16(o, uint16_t(tz)); o.insert(o.end(), tris.begin(), tris.end());
+        put16(o, uint16_t(qz));
+        const size_t qBase = o.size();
+        o.insert(o.end(), quads.begin(), quads.end());
+        put16(o, uint16_t(tz));
+        const size_t tBase = o.size();
+        o.insert(o.end(), tris.begin(), tris.end());
+
+        for (const auto& sp : quadSpots) coloredSpots.push_back({ meshes.size(), qBase + sp.first, sp.second });
+        for (const auto& sp : triSpots)  coloredSpots.push_back({ meshes.size(), tBase + sp.first, sp.second });
         totalQuads += qz; totalTris += tz;
         meshes.push_back(o);
     }
@@ -328,6 +346,95 @@ int main(int argc, char** argv)
         const int16_t nt = rs16(m, p); p += 2;
         for (int i = 0; i < nt; ++i, p += 10) note(ru16(m, p + 6) & 0x7FFF);
     }
+    // --- Place the colored faces on the closest texture ---------------------
+    //
+    // The palette sits right behind the file header (256 entries, 4 bytes
+    // each), the 16 bit tiles at tex16At in ARGB1555. So both sides of the
+    // comparison are measurable: what colour the face asked for, and what
+    // colour each of the model's textures actually is.
+    //
+    // The palette's scale is not assumed but read off - TR1's is 6 bit, and
+    // whether TR3 followed is not worth guessing when the maximum says it.
+    if (!coloredSpots.empty() && nObjTex && !texIdx.empty())
+    {
+        int palMax = 0;
+        for (int i = 0; i < 256; ++i)
+            for (int c = 0; c < 3; ++c)
+                if (r.b[772 + size_t(i) * 4 + size_t(c)] > palMax) palMax = r.b[772 + size_t(i) * 4 + size_t(c)];
+        const int palShift = (palMax > 63) ? 3 : 1;      // -> 0..31, like ARGB1555
+
+        // Average colour of one object texture: its own pixel rectangle out of
+        // the 16 bit tile, transparent pixels left out (bit 15 = opaque).
+        struct Avg { int r, g, b; bool ok; };
+        std::vector<Avg> texAvg(texIdx.size(), { 0, 0, 0, false });
+
+        for (size_t k = 0; k < texIdx.size(); ++k)
+        {
+            const int t = texIdx[k];
+            if (t < 0 || uint32_t(t) >= nObjTex) continue;
+            const size_t e = objTexAt + size_t(t) * 20;
+            const int tile = ru16(r.b, e + 2) & 0x7FFF;
+            int x0 = 255, y0 = 255, x1 = 0, y1 = 0;
+
+            for (int v = 0; v < 4; ++v)
+            {
+                const int px = r.b[e + 4 + size_t(v) * 4 + 1];
+                const int py = r.b[e + 4 + size_t(v) * 4 + 3];
+                if (px < x0) x0 = px;
+                if (px > x1) x1 = px;
+                if (py < y0) y0 = py;
+                if (py > y1) y1 = py;
+            }
+
+            const size_t tileAt = tex16At + size_t(tile) * 131072;
+            if (tileAt + 131072 > r.b.size()) continue;
+
+            long sr = 0, sg = 0, sb = 0, n = 0;
+            for (int y = y0; y <= y1; ++y)
+                for (int x = x0; x <= x1; ++x)
+                {
+                    const uint16_t px16 = ru16(r.b, tileAt + (size_t(y) * 256 + size_t(x)) * 2);
+                    if (!(px16 & 0x8000)) continue;              // transparent
+                    sr += (px16 >> 10) & 0x1F;
+                    sg += (px16 >> 5) & 0x1F;
+                    sb += px16 & 0x1F;
+                    ++n;
+                }
+
+            if (n) texAvg[k] = { int(sr / n), int(sg / n), int(sb / n), true };
+        }
+
+        int placed = 0, fell = 0;
+        for (const ColorSpot& fs : coloredSpots)
+        {
+            const size_t e = 772 + size_t(fs.colorIdx & 0xFF) * 4;
+            const int wr = r.b[e] >> palShift, wg = r.b[e + 1] >> palShift, wb = r.b[e + 2] >> palShift;
+
+            int best = -1;
+            long bestD = 0;
+
+            for (size_t k = 0; k < texIdx.size(); ++k)
+            {
+                if (!texAvg[k].ok) continue;
+                const long dr = texAvg[k].r - wr, dg = texAvg[k].g - wg, db = texAvg[k].b - wb;
+                const long d = dr * dr + dg * dg + db * db;
+                if (best < 0 || d < bestD) { best = texIdx[k]; bestD = d; }
+            }
+
+            if (best < 0) { best = meshFirstTex[fs.meshNo]; ++fell; }
+            else ++placed;
+
+            if (best < 0) best = firstTex;
+            if (best < 0) continue;
+
+            meshes[fs.meshNo][fs.at]     = uint8_t(uint16_t(best) & 0xFF);
+            meshes[fs.meshNo][fs.at + 1] = uint8_t(uint16_t(best) >> 8);
+        }
+
+        std::printf("  colored faces: %d placed by colour, %d fell back to the mesh\'s own texture\n",
+                    placed, fell);
+    }
+
     std::printf("  object textures: %zu distinct on %zu tiles (",
                 texIdx.size(), tiles.size());
     for (size_t i = 0; i < tiles.size(); ++i) std::printf("%s%d", i ? ", " : "", tiles[i]);

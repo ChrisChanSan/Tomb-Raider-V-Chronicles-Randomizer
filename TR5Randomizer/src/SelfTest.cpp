@@ -16,15 +16,14 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 //----------------------------------------------------------------------------
-// Selbsttest des Kerns. Laeuft ohne GUI und ohne Leveldateien, prueft aber
-// gegen echte Zonen-Exporte, wenn ein Pfad uebergeben wird.
+// Self-test of the core. Runs without a GUI and without level files, but
+// checks against real zone exports if a path is passed.
 //
-// Aufruf:  TR5RandoSelfTest.exe [<Pfad zu einem Zonen-JSON>]
+// Usage:  TR5RandoSelfTest.exe [<path to a zone JSON>]
 //
-// Zweck: die beiden Eigenschaften absichern, auf denen alles andere aufbaut -
-// dass ein Seed reproduzierbar ist und dass unsere eigenen Exporte fehlerfrei
-// gelesen werden. Beides faellt sonst erst auf, wenn ein Nutzer ein kaputtes
-// Level meldet.
+// Purpose: secure the two properties everything else builds on - that a seed
+// is reproducible and that our own exports are read without errors. Both
+// would otherwise only show once a user reports a broken level.
 //----------------------------------------------------------------------------
 #include "core/DataFolder.h"
 #include "core/Json.h"
@@ -39,7 +38,7 @@ static int g_failed = 0;
 
 static void check(bool ok, const char* what)
 {
-    std::printf("  [%s] %s\n", ok ? "ok " : "FEHL", what);
+    std::printf("  [%s] %s\n", ok ? "ok " : "FAIL", what);
     if (!ok) ++g_failed;
 }
 
@@ -47,50 +46,50 @@ static void testRng()
 {
     std::printf("RNG\n");
 
-    // Derselbe Seed muss dieselbe Folge liefern.
+    // The same seed must yield the same sequence.
     Rng a(12345), b(12345);
     bool same = true;
     for (int i = 0; i < 1000; ++i) if (a.next() != b.next()) { same = false; break; }
-    check(same, "gleicher Seed -> gleiche Folge");
+    check(same, "same seed -> same sequence");
 
     Rng c(12345), d(12346);
     bool diff = false;
     for (int i = 0; i < 8; ++i) if (c.next() != d.next()) { diff = true; break; }
-    check(diff, "anderer Seed -> andere Folge");
+    check(diff, "different seed -> different sequence");
 
-    // Mischen muss reproduzierbar sein - das ist der Punkt, an dem std::shuffle
-    // versagt haette.
+    // Shuffling must be reproducible - this is the point where std::shuffle
+    // would have failed.
     std::vector<int> v1, v2;
     for (int i = 0; i < 200; ++i) { v1.push_back(i); v2.push_back(i); }
     Rng e(999), f(999);
     e.shuffle(v1);
     f.shuffle(v2);
-    check(v1 == v2, "gleicher Seed -> gleiche Mischung");
+    check(v1 == v2, "same seed -> same shuffle");
 
     bool moved = false;
     for (int i = 0; i < 200; ++i) if (v1[i] != i) { moved = true; break; }
-    check(moved, "Mischung veraendert die Reihenfolge tatsaechlich");
+    check(moved, "shuffle actually changes the order");
 
-    // Mischen darf nichts verlieren oder doppeln.
+    // Shuffling must lose or duplicate nothing.
     std::vector<bool> seen(200, false);
     bool perm = true;
     for (int x : v1) { if (x < 0 || x >= 200 || seen[x]) { perm = false; break; } seen[x] = true; }
-    check(perm, "Mischung ist eine echte Permutation");
+    check(perm, "shuffle is a true permutation");
 
-    // below() muss im Bereich bleiben und alle Values treffen.
+    // below() must stay in range and hit all values.
     Rng g(7);
     std::vector<int> hits(6, 0);
     for (int i = 0; i < 60000; ++i) hits[static_cast<size_t>(g.below(6))]++;
     bool inRange = true, allHit = true;
     for (int h : hits) { if (h == 0) allHit = false; }
-    // Grobe Gleichverteilungspruefung: kein Wert darf um mehr als 20 Prozent
-    // vom Erwartungswert abweichen. Faengt einen kaputten Modulo zuverlaessig.
+    // Rough uniformity check: no value may deviate by more than 20 percent
+    // from the expectation. Reliably catches a broken modulo.
     for (int h : hits) { if (h < 8000 || h > 12000) inRange = false; }
-    check(allHit, "below(6) trifft alle sechs Values");
-    check(inRange, "below(6) ist ausreichend gleichverteilt");
-    check(Rng(1).below(0) == 0, "below(0) liefert 0 statt zu stuerzen");
+    check(allHit, "below(6) hits all six values");
+    check(inRange, "below(6) is sufficiently uniform");
+    check(Rng(1).below(0) == 0, "below(0) yields 0 instead of crashing");
 
-    // Seed-Text hin und zurueck.
+    // Seed text round trip.
     bool roundTrip = true;
     const uint64_t probes[] = { 0ull, 1ull, 42ull, 123456789ull, 0xFFFFFFFFFFFFFFFFull };
     for (uint64_t p : probes)
@@ -98,14 +97,14 @@ static void testRng()
         std::string s = SeedText::format(p);
         if (SeedText::parse(s) != p) { roundTrip = false; break; }
     }
-    check(roundTrip, "Seed-Text laesst sich verlustfrei zurueckwandeln");
+    check(roundTrip, "seed text converts back losslessly");
 
     check(SeedText::parse("Weihnachten") == SeedText::parse("Weihnachten"),
-          "freier Text ergibt reproduzierbar denselben Seed");
+          "free text yields the same seed reproducibly");
 
     std::string s42 = SeedText::format(42);
     check(SeedText::parse(s42) == SeedText::parse(s42 + "  "),
-          "Leerraum im Seed-Text stoert nicht");
+          "whitespace in the seed text does not interfere");
 }
 
 static void testJson()
@@ -116,27 +115,28 @@ static void testJson()
     std::string err;
 
     check(Json::parseString("{\"a\":1,\"b\":[1,2,3],\"c\":\"x\",\"d\":true,\"e\":null}", v, err),
-          "einfaches Objekt wird gelesen");
-    check(v["a"].asInt() == 1, "Zahl gelesen");
-    check(v["b"].size() == 3 && v["b"][2].asInt() == 3, "Array gelesen");
-    check(v["c"].asString() == "x", "Zeichenkette gelesen");
-    check(v["d"].asBool(), "Wahrheitswert gelesen");
-    check(v["e"].isNull(), "null gelesen");
-    check(v["gibtsnicht"].isNull(), "fehlender Schluessel liefert null statt Fehler");
-    check(v["b"][99].isNull(), "Zugriff ausserhalb des Arrays liefert null");
+          "simple object is read");
+    check(v["a"].asInt() == 1, "number read");
+    check(v["b"].size() == 3 && v["b"][2].asInt() == 3, "array read");
+    check(v["c"].asString() == "x", "string read");
+    check(v["d"].asBool(), "boolean read");
+    check(v["e"].isNull(), "null read");
+    check(v["doesnotexist"].isNull(), "missing key yields null instead of an error");
+    check(v["b"][99].isNull(), "access outside the array yields null");
 
-    check(Json::parseString("\xEF\xBB\xBF{\"a\":1}", v, err), "BOM wird uebersprungen");
+    check(Json::parseString("\xEF\xBB\xBF{\"a\":1}", v, err), "BOM is skipped");
 
-    check(!Json::parseString("{\"a\":1", v, err), "unvollstaendiges Objekt wird abgelehnt");
-    check(!err.empty(), "Fehlermeldung ist gesetzt");
-    check(!Json::parseString("{\"a\":1} nachlauf", v, err), "Nachlaufender Inhalt wird abgelehnt");
+    check(!Json::parseString("{\"a\":1", v, err), "incomplete object is rejected");
+    check(!err.empty(), "error message is set");
+    check(!Json::parseString("{\"a\":1} trailing", v, err), "trailing content is rejected");
 
-    // Negative Zahlen und Gleitkomma - Levelkoordinaten sind regelmaessig negativ.
-    check(Json::parseString("{\"y\":-11982,\"f\":1.5e2}", v, err), "negative und Exponentialzahlen");
-    check(v["y"].asInt() == -11982, "negative Zahl korrekt");
-    check(static_cast<int>(v["f"].asDouble()) == 150, "Exponentialschreibweise korrekt");
+    // Negative numbers and floating point - level coordinates are regularly
+    // negative.
+    check(Json::parseString("{\"y\":-11982,\"f\":1.5e2}", v, err), "negative and exponential numbers");
+    check(v["y"].asInt() == -11982, "negative number correct");
+    check(static_cast<int>(v["f"].asDouble()) == 150, "exponential notation correct");
 
-    // Schreiben und wieder read.
+    // Write and read back.
     JsonValue o = JsonValue::makeObject();
     JsonValue arr = JsonValue::makeArray();
     JsonValue e1 = JsonValue::makeObject();
@@ -147,18 +147,18 @@ static void testJson()
     o.set("itemAdds", arr);
 
     std::string text = o.dump();
-    check(text.find("\"typeId\":174") != std::string::npos, "Ganzzahl wird ohne Nachkomma geschrieben");
-    check(text.find("-90624") != std::string::npos, "negative Koordinate wird geschrieben");
+    check(text.find("\"typeId\":174") != std::string::npos, "integer is written without decimals");
+    check(text.find("-90624") != std::string::npos, "negative coordinate is written");
 
     JsonValue back;
-    check(Json::parseString(text, back, err), "Selbst geschriebenes JSON ist wieder lesbar");
-    check(back["itemAdds"][0]["room"].asInt() == 166, "Wert nach Hin- und Rueckwandlung gleich");
-    check(o.dump() == back.dump(), "Ausgabe ist stabil (bytegleich)");
+    check(Json::parseString(text, back, err), "self-written JSON is readable again");
+    check(back["itemAdds"][0]["room"].asInt() == 166, "value equal after round trip");
+    check(o.dump() == back.dump(), "output is stable (byte-identical)");
 }
 
 static void testAgainstRealExport(const char* path)
 {
-    std::printf("Echter Zonen-Export: %s\n", path);
+    std::printf("Real zone export: %s\n", path);
 
     std::wstring wpath;
     for (const char* p = path; *p; ++p) wpath.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*p)));
@@ -167,23 +167,23 @@ static void testAgainstRealExport(const char* path)
     std::string err;
     if (!Json::parseFile(wpath, z, err))
     {
-        std::printf("  [FEHL] laesst sich nicht read: %s\n", err.c_str());
+        std::printf("  [FAIL] cannot be read: %s\n", err.c_str());
         ++g_failed;
         return;
     }
-    check(true, "Datei gelesen");
+    check(true, "file read");
 
     const JsonValue& sectors = z["sectors"];
     const JsonValue& cons = z["keyConstraints"];
-    std::printf("  Level=%s  Sektoren=%u  Constraints=%u  maxZone=%lld\n",
+    std::printf("  level=%s  sectors=%u  constraints=%u  maxZone=%lld\n",
                 z["level"].asString("?").c_str(),
                 static_cast<unsigned>(sectors.size()),
                 static_cast<unsigned>(cons.size()),
                 static_cast<long long>(z["maxZone"].asInt(-1)));
 
-    check(sectors.size() > 0, "Sektoren vorhanden");
+    check(sectors.size() > 0, "sectors present");
 
-    // Jeder Sektor muss die Felder tragen, auf die die Platzierung zugreift.
+    // Every sector must carry the fields placement accesses.
     bool fieldsOk = true;
     for (size_t i = 0; i < sectors.size() && fieldsOk; ++i)
     {
@@ -192,7 +192,7 @@ static void testAgainstRealExport(const char* path)
             !s.has("zone") || !s.has("floorY"))
             fieldsOk = false;
     }
-    check(fieldsOk, "jeder Sektor hat room/sectorX/sectorZ/zone/floorY");
+    check(fieldsOk, "every sector has room/sectorX/sectorZ/zone/floorY");
 
     for (size_t i = 0; i < cons.size(); ++i)
     {
@@ -214,14 +214,14 @@ static std::wstring toW(const char* s)
 
 static void testDataFolder(const char* csv, const char* dataDir)
 {
-    std::printf("Datenordner\n");
+    std::printf("Data folder\n");
 
     DataFolder df;
     std::string err;
-    check(df.loadChecksums(toW(csv), err), "Pruefsummenliste gelesen");
+    check(df.loadChecksums(toW(csv), err), "checksum list read");
     if (!err.empty()) { std::printf("       %s\n", err.c_str()); return; }
-    std::printf("  %u bekannte Level\n", static_cast<unsigned>(df.knownLevelCount()));
-    check(df.knownLevelCount() == 16, "16 Level in der Liste");
+    std::printf("  %u known levels\n", static_cast<unsigned>(df.knownLevelCount()));
+    check(df.knownLevelCount() == 16, "16 levels in the list");
 
     if (!dataDir) return;
 
@@ -230,49 +230,49 @@ static void testDataFolder(const char* csv, const char* dataDir)
     for (const auto& s : st)
     {
         if (s.state == LevelState::Vanilla)  ++vanilla;
-        if (s.state == LevelState::Modified) { ++modified; std::printf("       abweichend: %s\n", s.name.c_str()); }
-        if (s.state == LevelState::Missing)  { ++missing;  std::printf("       fehlt:      %s\n", s.name.c_str()); }
+        if (s.state == LevelState::Modified) { ++modified; std::printf("       deviating: %s\n", s.name.c_str()); }
+        if (s.state == LevelState::Missing)  { ++missing;  std::printf("       missing:   %s\n", s.name.c_str()); }
     }
-    std::printf("  vanilla=%d  abweichend=%d  fehlt=%d\n", vanilla, modified, missing);
+    std::printf("  vanilla=%d  deviating=%d  missing=%d\n", vanilla, modified, missing);
 
     std::string reason;
     bool usable = DataFolder::isUsableSource(st, reason);
-    check(usable, "Ordner ist als Quelle brauchbar");
+    check(usable, "folder is usable as a source");
     if (!usable) std::printf("       %s\n", reason.c_str());
 
-    // Eine erfundene Datei muss als "fehlt" erkannt werden, nicht als vanilla.
-    auto stBad = df.inspect(toW("C:\\gibtesnicht_zufallspfad_12345"));
+    // A made-up file must be recognized as "missing", not as vanilla.
+    auto stBad = df.inspect(toW("C:\\doesnotexist_randompath_12345"));
     bool allMissing = true;
     for (const auto& s : stBad) if (s.state != LevelState::Missing) allMissing = false;
-    check(allMissing, "nicht existierender Ordner liefert durchgehend 'fehlt'");
+    check(allMissing, "non-existing folder yields 'missing' throughout");
     std::string r2;
-    check(!DataFolder::isUsableSource(stBad, r2), "leerer Ordner wird als Quelle abgelehnt");
+    check(!DataFolder::isUsableSource(stBad, r2), "empty folder is rejected as a source");
 }
 
 static void testCopyAndRestore(const char* csv, const char* dataDir, const char* targetDir)
 {
-    std::printf("Kopieren und Zuruecksetzen\n");
+    std::printf("Copy and restore\n");
 
     DataFolder df;
     std::string err;
-    if (!df.loadChecksums(toW(csv), err)) { std::printf("  [FEHL] %s\n", err.c_str()); ++g_failed; return; }
+    if (!df.loadChecksums(toW(csv), err)) { std::printf("  [FAIL] %s\n", err.c_str()); ++g_failed; return; }
 
     int copied = 0;
     bool ok = df.copyLevels(toW(dataDir), toW(targetDir), err, &copied);
-    check(ok, "Level in den Zielordner kopiert");
+    check(ok, "levels copied into the target folder");
     if (!ok) { std::printf("       %s\n", err.c_str()); return; }
-    std::printf("  %d Dateien kopiert\n", copied);
+    std::printf("  %d files copied\n", copied);
 
-    // Die Kopie muss byteidentisch sein - sonst waere schon das Ausgangsmaterial
-    // eines Seeds ein anderes als das geprueffte.
+    // The copy must be byte-identical - otherwise even a seed's source
+    // material would already differ from what was checked.
     auto st = df.inspect(toW(targetDir));
     std::string reason;
-    check(DataFolder::isUsableSource(st, reason), "Kopie ist byteidentisch mit Vanilla");
+    check(DataFolder::isUsableSource(st, reason), "copy is byte-identical with vanilla");
     if (!reason.empty()) std::printf("       %s\n", reason.c_str());
 
-    // Eine Datei absichtlich verfaelschen, danach muss die Pruefung anschlagen
-    // und das Zuruecksetzen sie wiederherstellen. Das ist genau der Ablauf
-    // "randomisiertes Level -> Restore to default".
+    // Deliberately corrupt one file; afterwards the check must trip and the
+    // restore must repair it. That is exactly the flow "randomized level ->
+    // restore to default".
     const std::wstring victim = PathUtil::join(toW(targetDir), L"del.trc");
     FILE* f = nullptr;
     if (_wfopen_s(&f, victim.c_str(), L"r+b") == 0 && f)
@@ -284,24 +284,24 @@ static void testCopyAndRestore(const char* csv, const char* dataDir, const char*
 
         auto st2 = df.inspect(toW(targetDir));
         std::string r2;
-        check(!DataFolder::isUsableSource(st2, r2), "veraenderte Datei wird erkannt");
+        check(!DataFolder::isUsableSource(st2, r2), "changed file is detected");
 
         int again = 0;
-        check(df.copyLevels(toW(dataDir), toW(targetDir), err, &again), "Zuruecksetzen ausgefuehrt");
+        check(df.copyLevels(toW(dataDir), toW(targetDir), err, &again), "restore executed");
         auto st3 = df.inspect(toW(targetDir));
         std::string r3;
-        check(DataFolder::isUsableSource(st3, r3), "nach dem Zuruecksetzen wieder Vanilla");
+        check(DataFolder::isUsableSource(st3, r3), "vanilla again after the restore");
     }
     else
     {
-        std::printf("  [FEHL] Testdatei nicht beschreibbar\n");
+        std::printf("  [FAIL] test file not writable\n");
         ++g_failed;
     }
 }
 
 int main(int argc, char** argv)
 {
-    std::printf("TR5Randomizer - Selbsttest des Kerns\n\n");
+    std::printf("TR5Randomizer - core self-test\n\n");
     testRng();
     std::printf("\n");
     testJson();
@@ -320,6 +320,6 @@ int main(int argc, char** argv)
         std::printf("\n");
         testCopyAndRestore(argv[2], argv[3], argv[4]);
     }
-    std::printf("\n%s (%d Fehler)\n", g_failed ? "FEHLGESCHLAGEN" : "Alles gruen", g_failed);
+    std::printf("\n%s (%d errors)\n", g_failed ? "FAILED" : "All green", g_failed);
     return g_failed ? 1 : 0;
 }

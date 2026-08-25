@@ -15,8 +15,8 @@
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-// Prueft den eigenen TR5-Leser gegen die echten Vanilla-Level.
-// Aufruf: TestLevel.exe <data-Ordner mit den .trc>
+// Checks our own TR5 reader against the real vanilla levels.
+// Usage: TestLevel.exe <data folder with the .trc files>
 #include "core/Tr5Level.h"
 
 #include <cstdio>
@@ -25,7 +25,7 @@
 
 int main(int argc, char** argv)
 {
-    if (argc < 2) { std::printf("Aufruf: TestLevel.exe <data-Ordner>\n"); return 2; }
+    if (argc < 2) { std::printf("Usage: TestLevel.exe <data folder>\n"); return 2; }
 
     std::wstring dir;
     for (const char* p = argv[1]; *p; ++p) dir.push_back((wchar_t)(unsigned char)*p);
@@ -47,19 +47,19 @@ int main(int argc, char** argv)
         std::string err;
         if (!lvl.load(path, err))
         {
-            std::printf("  [FEHL] %-10s %s\n", n, err.c_str());
+            std::printf("  [FAIL] %-10s %s\n", n, err.c_str());
             ++fail;
             continue;
         }
 
-        // Der Hauptblock sollte praktisch die gesamte Restdatei ausmachen -
-        // dahinter kommt nichts Grosses mehr. Weicht das stark ab, haben wir
-        // den Kopfteil falsch gedeutet.
-        // R8: welche Items tragen Bits AUSSERHALB der unteren sechs?
-        // Der alte Export maskierte mit 0x3F, dadurch waren 0x80
-        // (regenerierendes Pickup) und 0x100 (Mesh unsichtbar) nicht sichtbar.
-        // Unser Leser liefert das Feld vollstaendig - die Frage laesst sich
-        // also einfach beantworten, statt sie zu vermuten.
+        // The main block should make up practically the whole remaining
+        // file - nothing big comes after it. If that deviates strongly, we
+        // misread the header.
+        // R8: which items carry bits OUTSIDE the lower six? The old export
+        // masked with 0x3F, so 0x80 (regenerating pickup) and 0x100 (mesh
+        // invisible) were not visible. Our reader delivers the field
+        // completely - so the question can simply be answered instead of
+        // guessed.
         int withHigh = 0;
         std::string detail;
         for (int i = 0; i < lvl.itemCount(); ++i)
@@ -76,8 +76,8 @@ int main(int argc, char** argv)
                 detail += buf;
             }
         }
-        // Kandidaten fuer den Ablageraum: kein Portal, kein Alternate-Raum,
-        // und von nirgendwo aus ueber ein Portal einsehbar.
+        // Candidates for the stash room: no portal, no alternate room, and
+        // not visible from anywhere through a portal.
         std::vector<int> seenFrom(lvl.rooms().size(), 0);
         for (const Tr5Room& r : lvl.rooms())
             for (int t : r.portalRooms)
@@ -94,12 +94,12 @@ int main(int argc, char** argv)
             if (nCand <= 6) { char b[16]; std::snprintf(b, sizeof(b), " %d", r.index); cand += b; }
         }
 
-        std::printf("  [%s] %-10s Raeume %3d  OCB-hoch %3d  Portalfehler %d  abgeschiedene Raeume: %d%s\n",
-                    lvl.roomParseMismatches() ? "FEHL" : "ok ",
+        std::printf("  [%s] %-10s rooms %3d  high OCB %3d  portal errors %d  secluded rooms: %d%s\n",
+                    lvl.roomParseMismatches() ? "FAIL" : "ok ",
                     n, lvl.roomCount(), withHigh, lvl.roomParseMismatches(), nCand, cand.c_str());
         if (lvl.roomParseMismatches()) ++fail; else ++ok;
     }
 
-    std::printf("\n%d gelesen, %d fehlgeschlagen\n", ok, fail);
+    std::printf("\n%d read, %d failed\n", ok, fail);
     return fail ? 1 : 0;
 }

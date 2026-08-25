@@ -15,15 +15,15 @@
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-// Stellt die Item-Listen beider Leser gegenueber: unser eigener Tr5Level gegen
-// die Level-Infos-JSON des alten Exporters. Verglichen wird Position fuer
-// Position - Typ, Raum und Koordinaten.
+// Compares the item lists of both readers: our own Tr5Level against the old
+// exporter's level-info JSON. Compared position by position - type, room and
+// coordinates.
 //
-// Anlass: in rich1 meldete der alte Exporter Item 27 in Raum 15, unser Leser
-// und trview zeigen Raum 45. Da die gesamte Kuration ueber Item-Indizes
-// laeuft, muss geklaert werden, ob das ein Einzelfall ist oder ein Muster.
+// Occasion: in rich1 the old exporter reported item 27 in room 15, our
+// reader and trview show room 45. Since the whole curation runs over item
+// indices, it must be settled whether that is an isolated case or a pattern.
 //
-// Aufruf: CompareItems.exe <data-Ordner> <Level-Infos-Ordner>
+// Usage: CompareItems.exe <data folder> <level-info folder>
 #include "core/Json.h"
 #include "core/Tr5Level.h"
 
@@ -40,7 +40,7 @@ static std::wstring toW(const std::string& s)
 
 int main(int argc, char** argv)
 {
-    if (argc < 3) { std::printf("Aufruf: CompareItems.exe <data> <LevelInfos>\n"); return 2; }
+    if (argc < 3) { std::printf("Usage: CompareItems.exe <data> <LevelInfos>\n"); return 2; }
     const std::string dataDir = argv[1], infoDir = argv[2];
 
     const char* names[] = {
@@ -55,14 +55,14 @@ int main(int argc, char** argv)
         std::string err;
         if (!lvl.load(toW(dataDir + "\\" + n + ".trc"), err))
         {
-            std::printf("%-10s Level nicht lesbar: %s\n", n, err.c_str());
+            std::printf("%-10s level not readable: %s\n", n, err.c_str());
             continue;
         }
 
         JsonValue info;
         if (!Json::parseFile(toW(infoDir + "\\" + std::string(n) + ".json"), info, err))
         {
-            std::printf("%-10s JSON nicht lesbar: %s\n", n, err.c_str());
+            std::printf("%-10s JSON not readable: %s\n", n, err.c_str());
             continue;
         }
 
@@ -94,18 +94,18 @@ int main(int argc, char** argv)
         const bool any = (diffType || diffRoom || diffPos || nJson != nOurs);
         if (any) ++levelsWithDiff;
 
-        std::printf("%-10s Items %3d/%-3d  Typ %3d  Raum %3d  Pos %3d   %s\n",
+        std::printf("%-10s items %3d/%-3d  type %3d  room %3d  pos %3d   %s\n",
                     n, nOurs, nJson, diffType, diffRoom, diffPos,
-                    any ? "ABWEICHUNG" : "identisch");
+                    any ? "DEVIATION" : "identical");
 
-        // Beim ersten abweichenden Item beide Fassungen zeigen - daran laesst
-        // sich meist sofort ablesen, ob es ein Versatz oder etwas anderes ist.
+        // On the first deviating item, show both versions - that usually
+        // tells right away whether it is an offset or something else.
         if (firstDiff >= 0)
         {
             Tr5Item a{};
             lvl.getItem(firstDiff, a);
             const JsonValue& b = items[firstDiff];
-            std::printf("           ab Index %d:  unser T%d R%d (%d,%d,%d)  |  JSON T%d R%d (%d,%d,%d)\n",
+            std::printf("           from index %d:  ours T%d R%d (%d,%d,%d)  |  JSON T%d R%d (%d,%d,%d)\n",
                         firstDiff,
                         a.objectNumber, a.roomNumber, a.x, a.y, a.z,
                         (int)b["typeId"].asInt(), (int)b["room"].asInt(),
@@ -113,6 +113,6 @@ int main(int argc, char** argv)
         }
     }
 
-    std::printf("\nLevel mit Abweichungen: %d von 16\n", levelsWithDiff);
+    std::printf("\nlevels with deviations: %d of 16\n", levelsWithDiff);
     return levelsWithDiff ? 1 : 0;
 }

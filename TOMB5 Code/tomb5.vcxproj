@@ -390,7 +390,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
       <AdditionalOptions>/SECTION:.text,RWE /IGNORE:4099 %(AdditionalOptions) /pdbaltpath:%_PDB%</AdditionalOptions>
-      <AdditionalDependencies>dxguid.lib;Dsound.lib;Msacm32.lib;d3d9.lib;Ddraw.lib;dinput8.lib;xaudio2.lib;xinput.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dxguid.lib;Msacm32.lib;d3d9.lib;Ddraw.lib;dinput8.lib;xaudio2.lib;xinput.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(ProjectDir)TOMB5\tomb5\libs\discordRPC;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
@@ -420,7 +420,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
       <AdditionalOptions>/SECTION:.text,RWE %(AdditionalOptions) /pdbaltpath:%_PDB%</AdditionalOptions>
-      <AdditionalDependencies>dxguid.lib;Dsound.lib;Msacm32.lib;d3d9.lib;Ddraw.lib;dinput8.lib;xaudio2.lib;xinput.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dxguid.lib;Msacm32.lib;d3d9.lib;Ddraw.lib;dinput8.lib;xaudio2.lib;xinput.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(ProjectDir)TOMB5\tomb5\libs\discordRPC;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>

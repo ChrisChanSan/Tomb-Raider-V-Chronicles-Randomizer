@@ -466,33 +466,6 @@ long DXToggleFullScreen()
 // enumeration. The DXDIRECTDRAWINFO/DXD3DDEVICE/DXDISPLAYMODE tree shape is kept unchanged so
 // setupdlg.cpp/registry.cpp don't need to change, only how it's populated (see DXGetInfo below).
 
-BOOL __stdcall DXEnumDirectSound(LPGUID lpGuid, LPCSTR lpcstrDescription, LPCSTR lpcstrModule, LPVOID lpContext)
-{
-	DXINFO* dxinfo;
-	DXDIRECTSOUNDINFO* DSInfo;
-	long nDSInfo;
-
-	Log(__FUNCTION__);
-	dxinfo = (DXINFO*)lpContext;
-	nDSInfo = dxinfo->nDSInfo;
-	dxinfo->DSInfo = (DXDIRECTSOUNDINFO*)AddStruct(dxinfo->DSInfo, nDSInfo, sizeof(DXDIRECTSOUNDINFO));
-	DSInfo = &dxinfo->DSInfo[nDSInfo];
-
-	if (lpGuid)
-	{
-		DSInfo->lpGuid = &DSInfo->Guid;
-		DSInfo->Guid = *lpGuid;
-	}
-	else
-		DSInfo->lpGuid = 0;
-
-	lstrcpy(DSInfo->About, lpcstrDescription);
-	lstrcpy(DSInfo->Name, lpcstrModule);
-	Log("Found - %s %s", lpcstrDescription, lpcstrModule);
-	dxinfo->nDSInfo++;
-	return DDENUMRET_OK;
-}
-
 long DXGetInfo(DXINFO* dxinfo, HWND hwnd)
 {
 	DXDIRECTDRAWINFO* ddi;
@@ -647,8 +620,14 @@ long DXGetInfo(DXINFO* dxinfo, HWND hwnd)
 	dxinfo->nD3D = 0;
 	dxinfo->bHardware = 1;
 
-	Log("Enumerating DirectSound Devices");
-	DXAttempt(DirectSoundEnumerate(DXEnumDirectSound, dxinfo));
+	// No sound device enumeration any more. XAudio2 always plays through the
+	// system's default endpoint - the engine never picked a device by GUID,
+	// and the setup dialog's list only ever fed a combo box whose selection
+	// nobody read. Whether sound comes up at all is answered by DXDSCreate,
+	// and sound_active carries that answer (see SOUND_Init).
+	//
+	// With this call goes the last real use of DirectSound, so Dsound.lib
+	// leaves the linker line. dsound.h stays in pch.h, for DSBPLAY_LOOPING.
 	return 1;
 }
 

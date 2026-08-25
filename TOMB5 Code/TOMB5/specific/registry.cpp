@@ -121,6 +121,54 @@ bool LoadSettings()
 		REG_ReadLong((char*)"VMode", (ulong&)App.DXInfo.nDisplayMode, 0);
 		REG_ReadLong((char*)"TFormat", (ulong&)App.DXInfo.nTexture, 0);
 		REG_ReadLong((char*)"DS", (ulong&)App.DXInfo.nDS, 0);
+
+		// Those five are indices into the lists DXGetInfo has just built - it
+		// runs before LoadSettings (winmain.cpp) - and they come out of the
+		// registry exactly as they were written once: possibly by a different
+		// build, on different hardware, or before a monitor was unplugged.
+		// LoadTextures then walks all of them in a single line:
+		//
+		//     DDInfo[nDD].D3DDevices[nD3D].TextureInfos[nTexture]
+		//
+		// Nothing checked any of it. A saved "DD=2" on a machine that now has
+		// one screen reads past the end of the adapter list, and so does any
+		// TFormat above 0 written by an older DirectX 3 build - the D3D9
+		// enumeration yields exactly one texture format per device, where the
+		// old one offered several. Same class as the item and room numbers in
+		// LoadItems: a value from outside indexing an array that has no bounds
+		// check of its own.
+		//
+		// Corrected rather than refused. An out-of-date monitor number should
+		// start the game on the primary screen, not stop it - the setup dialog
+		// writes a fresh, valid choice the moment it is opened again.
+		if (App.DXInfo.nDDInfo > 0)
+		{
+			DXDIRECTDRAWINFO* dd;
+			DXD3DDEVICE* dev;
+
+			if (App.DXInfo.nDD < 0 || App.DXInfo.nDD >= App.DXInfo.nDDInfo)
+				App.DXInfo.nDD = 0;
+
+			dd = &App.DXInfo.DDInfo[App.DXInfo.nDD];
+
+			if (App.DXInfo.nD3D < 0 || App.DXInfo.nD3D >= dd->nD3DDevices)
+				App.DXInfo.nD3D = 0;
+
+			if (dd->nD3DDevices > 0)
+			{
+				dev = &dd->D3DDevices[App.DXInfo.nD3D];
+
+				if (App.DXInfo.nTexture < 0 || App.DXInfo.nTexture >= dev->nTextureInfos)
+					App.DXInfo.nTexture = 0;
+
+				if (App.DXInfo.nDisplayMode < 0 || App.DXInfo.nDisplayMode >= dev->nDisplayModes)
+					App.DXInfo.nDisplayMode = 0;
+			}
+		}
+
+		if (App.DXInfo.nDS < 0 || App.DXInfo.nDS >= App.DXInfo.nDSInfo)
+			App.DXInfo.nDS = 0;
+
 		App.BumpMapping = 0;
 		REG_ReadBool((char*)"Filter", App.Filtering, 1);
 		REG_ReadBool((char*)"DisableSound", App.SoundDisabled, 0);
@@ -297,10 +345,15 @@ bool SaveSetup(HWND hDlg)
 	OpenRegistry("System");
 
 	REG_WriteLong((char*)"DD", SendMessage(GetDlgItem(hDlg, IDC_GRAPHICS_ADAPTER), CB_GETCURSEL, 0, 0));
-	REG_WriteLong((char*)"D3D", SendMessage(GetDlgItem(hDlg, IDC_D3D), CB_GETCURSEL, 0, 0));
+	// D3D, DS and TFormat no longer have a control behind them - one device
+	// per adapter, one texture format, and XAudio2 always on the default
+	// endpoint. Written as 0 rather than left alone, so a value from an older
+	// build is actively cleared instead of sitting in the registry waiting to
+	// index past an array (the read side clamps them too, see LoadSettings).
+	REG_WriteLong((char*)"D3D", 0);
 	REG_WriteLong((char*)"VMode", SendMessage(GetDlgItem(hDlg, IDC_RESOLUTION), CB_GETITEMDATA, SendMessage(GetDlgItem(hDlg, IDC_RESOLUTION), CB_GETCURSEL, 0, 0), 0));
-	REG_WriteLong((char*)"DS", SendMessage(GetDlgItem(hDlg, IDC_SOUND_ADAPTER), CB_GETCURSEL, 0, 0));
-	REG_WriteLong((char*)"TFormat", SendMessage(GetDlgItem(hDlg, IDC_TFORMAT), CB_GETCURSEL, 0, 0));
+	REG_WriteLong((char*)"DS", 0);
+	REG_WriteLong((char*)"TFormat", 0);
 
 	REG_WriteBool((char*)"Filter", SendMessage(GetDlgItem(hDlg, IDC_BILINEAR), BM_GETCHECK, 0, 0));
 	REG_WriteBool((char*)"DisableSound", SendMessage(GetDlgItem(hDlg, IDC_DISABLE_SOUND), BM_GETCHECK, 0, 0));

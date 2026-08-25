@@ -99,6 +99,12 @@ static IXAudio2SourceVoice* CreateSfxVoice(ulong hz)
 	wfx.nBlockAlign = (wfx.nChannels * wfx.wBitsPerSample) / 8;
 	wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;
 
+	// Belt and braces beside sound_active: everything reaching here should
+	// already have been kept out by that flag, but a null engine must never
+	// become a dereference.
+	if (!g_XAudio2)
+		return 0;
+
 	if (FAILED(g_XAudio2->CreateSourceVoice(&voice, &wfx, 0, 8.0F, 0, 0, 0)))
 		return 0;
 

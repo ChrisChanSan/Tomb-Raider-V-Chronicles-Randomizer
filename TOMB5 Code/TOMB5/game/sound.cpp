@@ -75,7 +75,17 @@ void SOUND_Init()
 	for (int i = 0; i < 32; i++)
 		LaSlot[i].nSampleInfo = -1;
 
-	sound_active = 1;
+	// Does NOT switch sound on. Whether there is anything to play through is
+	// decided by DXDSCreate, which sets sound_active only once XAudio2 and the
+	// mastering voice really exist; here the slots are merely cleared.
+	//
+	// It used to set the flag unconditionally, and that was a crash waiting
+	// for a machine without an audio device: XAudio2 fails, g_XAudio2 stays
+	// null, SOUND_Init turns sound "on" anyway and the first effect
+	// dereferences null. It never showed because the setup dialog forced
+	// "Disable" whenever the DirectSound enumeration found no device - a dead
+	// list holding up a live engine by accident. The engine answers for itself
+	// now, and the list could go.
 }
 
 void SOUND_Stop()

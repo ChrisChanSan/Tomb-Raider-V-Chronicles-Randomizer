@@ -14,9 +14,8 @@
 #define IDC_BILINEAR                    1008
 #define IDC_LOW_QUALITY_TEX             1009
 #define IDC_DISABLE_FMV                 1010
-#define IDC_SOUND_ADAPTER               1011
 #define IDC_DISABLE_SOUND               1012
-#define IDC_TFORMAT                     1013
+#define IDC_VERSION                     1014
 #define KA_ALTP                         40001
 #define KA_ALTM                         40002
 #define KA_ALTENTER                     40003

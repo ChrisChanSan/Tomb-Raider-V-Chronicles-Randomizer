@@ -25,33 +25,6 @@ static long nD3DDevice;
 static bool Filter = 1;
 static bool TextLow;
 
-static void InitTFormats(HWND dlg, HWND hwnd)
-{
-	DXD3DDEVICE* device;
-	DXTEXTUREINFO* tex;
-	long bpp, r, g, b, a;
-	char buffer[40];
-
-	SendMessage(hwnd, CB_RESETCONTENT, 0, 0);
-	EnableWindow(GetDlgItem(dlg, IDC_TFORMAT), 1);
-	device = &App.DXInfo.DDInfo[nDDDevice].D3DDevices[nD3DDevice];
-
-	for (int i = 0; i < device->nTextureInfos; i++)
-	{
-		tex = &device->TextureInfos[i];
-		bpp = tex->bpp;
-		r = tex->rbpp;
-		g = tex->gbpp;
-		b = tex->bbpp;
-		a = tex->abpp;
-
-		wsprintf(buffer, "%d %s RGBA %d%d%d%d", bpp, SCRIPT_TEXT(TXT_Bit), r, g, b, a);
-		SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)buffer);
-	}
-
-	SendMessage(hwnd, CB_SETCURSEL, 0, 0);
-}
-
 static void InitResolution(HWND dlg, HWND hwnd, bool resetvms)
 {
 	DXD3DDEVICE* device;
@@ -98,27 +71,23 @@ static void InitResolution(HWND dlg, HWND hwnd, bool resetvms)
 
 	EnableWindow(GetDlgItem(dlg, IDC_LOW_QUALITY_TEX), 1);
 	SendMessage(GetDlgItem(dlg, IDC_LOW_QUALITY_TEX), BM_SETCHECK, TextLow, 0);
-
-	if (resetvms)
-		InitTFormats(dlg, GetDlgItem(dlg, IDC_TFORMAT));
 }
 
 static void InitD3DDevice(HWND dlg, HWND hwnd)
 {
 	DXDIRECTDRAWINFO* ddraw;
 
-	SendMessage(hwnd, CB_RESETCONTENT, 0, 0);
 	ddraw = &App.DXInfo.DDInfo[nDDDevice];
 
-	for (int i = 0; i < ddraw->nD3DDevices; i++)
-		SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)ddraw->D3DDevices[i].About);
-
-	// Originally hardcoded to 1 (index 0 = old RGB software emulation device, index 1 =
-	// hardware) - the D3D9 enumeration only ever produces one device per adapter now
-	// (index 0), so selecting index 1 pointed past the end of the array, leaving this
-	// combo box (and everything InitResolution derives from it) empty.
+	// A label, not a list. The D3D9 enumeration yields exactly ONE device per
+	// adapter, so the combo box that used to stand here could offer a single
+	// entry - a choice that is none. It now states which renderer is running,
+	// which is all the box ever really told anybody. (Before the port it held
+	// "software emulation" and "hardware" and the code picked index 1 blind;
+	// with one device that pointed past the array and left the box - and
+	// everything InitResolution derives from it - empty.)
 	nD3DDevice = 0;
-	SendMessage(hwnd, CB_SETCURSEL, nD3DDevice, 0);
+	SetWindowText(hwnd, ddraw->nD3DDevices > 0 ? ddraw->D3DDevices[0].About : "");
 	InitResolution(dlg, GetDlgItem(dlg, IDC_RESOLUTION), 1);
 }
 
@@ -149,28 +118,24 @@ static void InitDDDevice(HWND dlg, HWND hwnd)
 	InitD3DDevice(dlg, GetDlgItem(dlg, IDC_D3D));
 }
 
-static void InitDSDevice(HWND dlg, HWND hwnd)
-{
-	SendMessage(hwnd, CB_RESETCONTENT, 0, 0);
-
-	for (int i = 0; i < App.DXInfo.nDSInfo; i++)
-		SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)App.DXInfo.DSInfo[i].About);
-
-	if (!App.DXInfo.nDSInfo)
-	{
-		SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)SCRIPT_TEXT(TXT_No_Sound_Card_Installed));
-		EnableWindow(GetDlgItem(dlg, IDC_DISABLE_SOUND), 0);
-		SendMessage(GetDlgItem(dlg, IDC_DISABLE_SOUND), BM_SETCHECK, 1, 0);
-		EnableWindow(hwnd, 0);
-	}
-
-	SendMessage(hwnd, CB_SETCURSEL, 0, 0);
-}
-
 static void InitDialogBox(HWND hwnd)
 {
+	// No sound device list any more: XAudio2 always plays through the system's
+	// default endpoint, and the selection in that box was read by nothing.
+	// What is left of the sound settings is the Disable switch, and that needs
+	// no preparation.
 	InitDDDevice(hwnd, GetDlgItem(hwnd, IDC_GRAPHICS_ADAPTER));
-	InitDSDevice(hwnd, GetDlgItem(hwnd, IDC_SOUND_ADAPTER));
+
+	// The corner used to read "tomb5 V4.0" - a version this build has not been
+	// for a long time. The build date says something true and needs nobody to
+	// remember to raise it, and it is the same stamp the log writes, so a
+	// screenshot of this dialog and a log.txt can be matched up.
+	{
+		char buffer[64];
+
+		wsprintf(buffer, "PCtomb5 build %s", __DATE__);
+		SetDlgItemText(hwnd, IDC_VERSION, buffer);
+	}
 }
 
 static BOOL CALLBACK SetupDlgProc(HWND dlg, UINT message, WPARAM wParam, LPARAM lParam)
@@ -204,14 +169,6 @@ static BOOL CALLBACK SetupDlgProc(HWND dlg, UINT message, WPARAM wParam, LPARAM 
 
 			break;
 
-		case IDC_D3D:
-
-			if (HIWORD(wParam) == CBN_SELCHANGE)
-			{
-				nD3DDevice = SendMessage(GetDlgItem(dlg, IDC_D3D), CB_GETCURSEL, 0, 0);
-				InitResolution(dlg, GetDlgItem(dlg, IDC_RESOLUTION), 1);
-			}
-
 		case IDC_BILINEAR:
 
 			if (HIWORD(wParam) == BN_CLICKED)
@@ -240,17 +197,6 @@ static BOOL CALLBACK SetupDlgProc(HWND dlg, UINT message, WPARAM wParam, LPARAM 
 
 			break;
 
-		case IDC_DISABLE_SOUND:
-
-			if (HIWORD(wParam) == BN_CLICKED)
-			{
-				if (SendMessage(GetDlgItem(dlg, (ushort)wParam), BM_GETCHECK, 0, 0))
-					EnableWindow(GetDlgItem(dlg, IDC_SOUND_ADAPTER), 0);
-				else
-					EnableWindow(GetDlgItem(dlg, IDC_SOUND_ADAPTER), 1);
-			}
-
-			break;
 		}
 	}
 

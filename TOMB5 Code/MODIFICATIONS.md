@@ -469,6 +469,37 @@ Also in this group:
   The scan is quadratic and therefore gated at the call site, and it
   switches itself off after the first find.
 
+- `specific/setupdlg.cpp`, `specific/registry.cpp`, `specific/dxshell.cpp`,
+  `game/sound.cpp`, `tomb5.rc` — **the setup dialog now only offers what the
+  engine still honours.** Three of its controls had quietly died with the
+  port: the 3D device list, because D3D9 enumerates exactly one device per
+  adapter; the texture format list, for the same reason; and the sound device
+  list, whose selection was never read at all, since XAudio2 always plays
+  through the system's default endpoint. A dialog offering a choice that is
+  silently ignored is worse than one that does not offer it, so the two lists
+  are gone and the device becomes a label naming the renderer.
+  - The registry keeps five indices into those lists (`DD`, `D3D`, `VMode`,
+    `TFormat`, `DS`) and `LoadTextures` walks three of them in one
+    expression. Nothing checked them, although they can outlive the machine
+    that wrote them — a saved `DD=2` reads past the adapter list once a
+    monitor is unplugged, and any `TFormat` above 0 from an older DirectX 3
+    build points past a one-element array. They are now clamped on read and
+    written back as 0 where the control is gone.
+  - `SOUND_Init` used to set `sound_active` unconditionally, so a machine
+    without an audio device would have turned sound "on" over a null XAudio2
+    and crashed on the first effect. It never showed because the dialog forced
+    "Disable" whenever the DirectSound enumeration found nothing — a dead list
+    holding up a live engine by accident. Sound is now switched on only by
+    `DXDSCreate`, on success, and the voice creation checks the engine
+    pointer.
+  - With that, `DirectSoundEnumerate` was the last real DirectSound call, so
+    **`Dsound.lib` leaves the linker line** (`dsound.h` stays for
+    `DSBPLAY_LOOPING`). `Ddraw.lib` has to remain: the Bink FMV path still
+    creates a DirectDraw surface.
+  - The corner of the dialog said "tomb5 V4.0"; it now carries the build date,
+    the same stamp the log writes, so a screenshot and a `log.txt` can be
+    matched up.
+
 ### 3. Code taken from tomb3 (four Tomb Raider III enemies)
 
 Four enemies from Tomb Raider III can appear in randomized levels: the

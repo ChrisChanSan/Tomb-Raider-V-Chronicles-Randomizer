@@ -496,6 +496,17 @@ Also in this group:
     **`Dsound.lib` leaves the linker line** (`dsound.h` stays for
     `DSBPLAY_LOOPING`). `Ddraw.lib` has to remain: the Bink FMV path still
     creates a DirectDraw surface.
+  - The resolution list holds one entry per RESOLUTION now, not per mode.
+    `EnumAdapterModes` reports each resolution once per refresh rate the
+    monitor can drive it at, so a 165 Hz screen produced seven identical
+    "2560x1440" lines - the dialog only ever printed width and height. They
+    were seven names for one thing: the rate is never used, because device
+    creation deliberately leaves `FullScreen_RefreshRateInHz` at 0 so the
+    driver keeps the display at its current rate. (The original engine
+    duplicated the same way for a different reason - its DirectDraw
+    enumeration ran over several colour depths.) A saved `VMode` from before
+    this therefore points at a different entry; it is clamped, and re-picking
+    the resolution once settles it.
   - The corner of the dialog said "tomb5 V4.0"; it now carries the build date,
     the same stamp the log writes, so a screenshot and a `log.txt` can be
     matched up.

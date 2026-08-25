@@ -568,9 +568,41 @@ long DXGetInfo(DXINFO* dxinfo, HWND hwnd)
 
 		nModes = G_d3d->GetAdapterModeCount(i, D3DFMT_X8R8G8B8);
 
+		// One entry per RESOLUTION, not per mode. EnumAdapterModes reports every
+		// resolution once per refresh rate the monitor can drive it at, so a
+		// 165 Hz screen produced seven identical "2560x1440" lines in the setup
+		// dialog - it only ever printed width and height.
+		//
+		// They were not merely ugly, they were seven names for one thing: the
+		// rate is never used. Device creation deliberately leaves
+		// FullScreen_RefreshRateInHz at 0 so the driver keeps the display at
+		// its current rate (see DXCreateD3DDevice), and dm->RefreshRate is
+		// carried along for the log alone.
+		//
+		// In the original engine the same duplication existed for a different
+		// reason - the DirectDraw enumeration ran over several colour depths,
+		// so a resolution appeared once per bit depth. The port asks for the
+		// single format D3DFMT_X8R8G8B8, which is why dm->bpp is now always 32.
 		for (UINT m = 0; m < nModes; m++)
 		{
+			bool seen;
+
 			if (FAILED(G_d3d->EnumAdapterModes(i, D3DFMT_X8R8G8B8, m, &mode)))
+				continue;
+
+			seen = false;
+
+			for (long k = 0; k < device->nDisplayModes; k++)
+			{
+				if (device->DisplayModes[k].w == (long)mode.Width &&
+					device->DisplayModes[k].h == (long)mode.Height)
+				{
+					seen = true;
+					break;
+				}
+			}
+
+			if (seen)
 				continue;
 
 			device->DisplayModes = (DXDISPLAYMODE*)AddStruct(device->DisplayModes, device->nDisplayModes, sizeof(DXDISPLAYMODE));

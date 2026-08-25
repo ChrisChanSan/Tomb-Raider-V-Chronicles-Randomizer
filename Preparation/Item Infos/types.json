@@ -1,16 +1,44 @@
+// Slot names for trview (https://github.com/chreden/trview).
+//
+// Copy this file to %LOCALAPPDATA%\trview\types.json and restart trview.
+// It is read ONCE at program start and merged over trview's built-in list:
+// an id already known there is overwritten, an unknown one is added. Missing
+// file is not an error. Comments are allowed - trview parses with comments
+// enabled (tested in game 2026-08-25).
+//
+// Only ten slots need an entry. Everything else trview already names right.
 {
     "games": {
         "tr5": [
-            { "id": 31,  "name": "T-Rex (TR3)", "categories": [ "Enemy" ] },
-            { "id": 43,  "name": "Vulture (TR3 LA)", "categories": [ "Enemy" ] },
-            { "id": 47,  "name": "Pierre", "categories": [ "Enemy" ] },
-            { "id": 53,  "name": "Compy (TR3)", "categories": [ "Enemy" ] },
-            { "id": 55,  "name": "Crane Guy", "categories": [ "Enemy" ] },
-            { "id": 61,  "name": "Soldier Statue (Sword)", "categories": [ "Enemy" ] },
-            { "id": 75,  "name": "Raptor (TR3)", "categories": [ "Enemy" ] },
-            { "id": 85,  "name": "Siberian Husky", "categories": [ "Enemy" ] },
-            { "id": 460, "name": "Guard (Joby)", "categories": [ "Enemy" ] },
-            { "id": 461, "name": "Soldier Statue (Hammer)", "categories": [ "Enemy" ] }
+            // The four guests from Tomb Raider III. They take over slots that
+            // hold something else in vanilla, so trview would name them
+            // confidently and wrongly.
+            { "id": 31,  "name": "T-Rex (TR3)",              "categories": [ "Enemy" ] },   // was SAS
+            { "id": 43,  "name": "Pterodactylus (TR3 LA)",   "categories": [ "Enemy" ] },   // was CROW. Source is the vulture from The Lost Artifact; named for its companions here
+            { "id": 53,  "name": "Compy (TR3)",              "categories": [ "Enemy" ] },   // was SAILOR
+            { "id": 75,  "name": "Raptor (TR3)",             "categories": [ "Enemy" ] },   // was REAPER
+
+            // Vanilla slots trview does not know - its TR5 list has no entry
+            // for them at all.
+            { "id": 47,  "name": "Pierre",                   "categories": [ "Enemy" ] },
+            { "id": 55,  "name": "Crane Guy",                "categories": [ "Enemy" ] },
+
+            // Upstream calls 41 and 85 both "Dog", although only one of them
+            // is the husky.
+            { "id": 85,  "name": "Siberian Husky",           "categories": [ "Enemy" ] },
+
+            // Two Roman gods can stand in one level since the randomizer gave
+            // the second one its own slot, so "Soldier Statue" alone is no
+            // longer enough. The weapon comes from the model, not the OCB.
+            { "id": 61,  "name": "Soldier Statue (Sword)",   "categories": [ "Enemy" ] },
+            { "id": 461, "name": "Soldier Statue (Hammer)",  "categories": [ "Enemy" ] },
+
+            // Slots beyond the original 460 exist in no vanilla level, so
+            // trview's list ends before them (its last TR5 id is 452).
+            { "id": 460, "name": "Guard (Joby)",             "categories": [ "Enemy" ] }
+
+            // Deliberately absent: 462-467, the meshswap stores. They are never
+            // an item in a level, and naming them would suggest otherwise.
         ]
     }
 }

@@ -17,14 +17,14 @@
  */
 #pragma once
 
-// Sprache der Oberflaeche (#128). Die Quelltexte tragen die deutschen
-// Original-Strings; T() liefert bei englischer Sprache die Uebersetzung aus
-// der Tabelle in Language.cpp. Unbekannte Strings kommen unveraendert zurueck -
-// eine Luecke faellt damit sofort im Bild auf, statt das Programm zu brechen.
+// GUI language (#128, inverted for #129). The sources carry the ENGLISH
+// original strings; with German selected, T() returns the translation from
+// the table in Language.cpp. Unknown strings come back unchanged - a gap
+// thus shows up in the picture immediately instead of breaking the program.
 //
-// Vorgabe ist ENGLISCH (Nutzerentscheid 2026-08-24); der Schalter sitzt neben
-// dem Debug-Knopf und landet in der TR5Randomizer.cfg.
+// The default is ENGLISH (user decision 2026-08-24); the switch sits next to
+// the Debug button and lands in TR5Randomizer.cfg.
 
 extern bool gGermanUi;
 
-const char* T(const char* de);
+const char* T(const char* en);

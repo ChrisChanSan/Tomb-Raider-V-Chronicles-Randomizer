@@ -168,7 +168,7 @@ bool ScriptDat::parse(std::string& error)
                 const size_t fl = q + 2;              // opcode + payload[0]
                 const uint8_t nameIdx = m_bytes[q + 4];
 
-                Eintrag e;
+                Entry e;
                 e.flags = static_cast<uint16_t>(m_bytes[fl] | (m_bytes[fl + 1] << 8));
                 if (nameIdx < gf.nFileNames)
                 {

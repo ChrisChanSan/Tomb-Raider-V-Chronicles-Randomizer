@@ -16,16 +16,16 @@
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 //----------------------------------------------------------------------------
-// TR5 Randomizer - Oberflaeche.
+// TR5 Randomizer - the GUI.
 //
-// Eigener Code auf Dear ImGui (MIT, Omar Cornut) mit dem Direct3D-11-Backend.
-// Der Aufbau ist bewusst schlicht: ein Fenster, vier Schritte von oben nach
-// unten. Wer das Werkzeug zum ersten Mal startet, soll ohne Anleitung
-// durchkommen.
+// Own code on Dear ImGui (MIT, Omar Cornut) with the Direct3D 11 backend.
+// The layout is deliberately plain: one window, numbered steps from top to
+// bottom. Whoever starts the tool for the first time should get through
+// without a manual.
 //
-// Alles Fachliche liegt in core/ und ist ohne Oberflaeche lauffaehig - siehe
-// Randomize.cpp, das dieselben Schritte auf der Kommandozeile durchfuehrt.
-// Diese Datei enthaelt deshalb keine Spiellogik, nur Bedienung.
+// Everything substantial lives in core/ and runs without a GUI - see
+// Randomize.cpp, which performs the same steps on the command line. This
+// file therefore contains no game logic, only operation.
 //----------------------------------------------------------------------------
 #include "core/ApplyPatch.h"
 #include "core/BalanceFile.h"
@@ -46,9 +46,9 @@
 #include "backends/imgui_impl_dx11.h"
 #include "backends/imgui_impl_win32.h"
 
-// stb_image (Public Domain, Sean Barrett) - nur fuer das eingebettete
-// Hintergrundbild. Mitgeliefert unter libs/stb, damit das Quellpaket ohne
-// weitere Beschaffung uebersetzbar bleibt.
+// stb_image (Public Domain, Sean Barrett) - only for the embedded background
+// image. Shipped under libs/stb so the source package compiles without any
+// further procurement.
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_JPEG
 #define STBI_ONLY_PNG
@@ -74,44 +74,44 @@
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
 //----------------------------------------------------------------------------
-// D3D11-Geruest. Nichts Besonderes - genau so viel, wie ImGui zum Zeichnen
-// braucht.
+// D3D11 scaffolding. Nothing special - exactly as much as ImGui needs to
+// draw.
 //----------------------------------------------------------------------------
 namespace
 {
     ID3D11Device*           g_dev = nullptr;
     ID3D11DeviceContext*    g_ctx = nullptr;
     IDXGISwapChain*         g_swap = nullptr;
-    bool                    g_fensterGezogen = false;   // WM_EXITSIZEMOVE gesehen
+    bool                    g_windowDragged = false;   // WM_EXITSIZEMOVE seen
     ID3D11RenderTargetView* g_rtv = nullptr;
 
-    // Hintergrundbild: das Banner des Nutzers, als JPEG in der EXE
-    // (TR5Randomizer.rc, IDR_BACKGROUND). Einmal beim Start entpackt, dann
-    // je Bild in Fenstergroesse gezeichnet.
-    ID3D11ShaderResourceView* g_hintergrund = nullptr;
-    int                       g_hgBreite = 0, g_hgHoehe = 0;
+    // Background image: the user's banner, as JPEG inside the EXE
+    // (TR5Randomizer.rc, IDR_BACKGROUND). Unpacked once at startup, then
+    // drawn at window size every frame.
+    ID3D11ShaderResourceView* g_background = nullptr;
+    int                       g_bgWidth = 0, g_bgHeight = 0;
 
     void loadBackground()
     {
         HRSRC res = FindResourceW(nullptr, MAKEINTRESOURCEW(201), reinterpret_cast<LPCWSTR>(RT_RCDATA));
         if (!res) return;
 
-        const DWORD groesse = SizeofResource(nullptr, res);
-        HGLOBAL geladen = LoadResource(nullptr, res);
-        if (!geladen || !groesse) return;
+        const DWORD size = SizeofResource(nullptr, res);
+        HGLOBAL loaded = LoadResource(nullptr, res);
+        if (!loaded || !size) return;
 
-        const void* daten = LockResource(geladen);
-        if (!daten) return;
+        const void* bytes = LockResource(loaded);
+        if (!bytes) return;
 
-        int kanaele = 0;
-        stbi_uc* pixel = stbi_load_from_memory(static_cast<const stbi_uc*>(daten),
-                                               static_cast<int>(groesse),
-                                               &g_hgBreite, &g_hgHoehe, &kanaele, 4);
+        int channels = 0;
+        stbi_uc* pixel = stbi_load_from_memory(static_cast<const stbi_uc*>(bytes),
+                                               static_cast<int>(size),
+                                               &g_bgWidth, &g_bgHeight, &channels, 4);
         if (!pixel) return;
 
         D3D11_TEXTURE2D_DESC td{};
-        td.Width = g_hgBreite;
-        td.Height = g_hgHoehe;
+        td.Width = g_bgWidth;
+        td.Height = g_bgHeight;
         td.MipLevels = 1;
         td.ArraySize = 1;
         td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -121,7 +121,7 @@ namespace
 
         D3D11_SUBRESOURCE_DATA sd{};
         sd.pSysMem = pixel;
-        sd.SysMemPitch = g_hgBreite * 4;
+        sd.SysMemPitch = g_bgWidth * 4;
 
         ID3D11Texture2D* tex = nullptr;
         if (SUCCEEDED(g_dev->CreateTexture2D(&td, &sd, &tex)) && tex)
@@ -130,7 +130,7 @@ namespace
             vd.Format = td.Format;
             vd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
             vd.Texture2D.MipLevels = 1;
-            g_dev->CreateShaderResourceView(tex, &vd, &g_hintergrund);
+            g_dev->CreateShaderResourceView(tex, &vd, &g_background);
             tex->Release();
         }
 
@@ -139,37 +139,37 @@ namespace
 
     void freeBackground()
     {
-        if (g_hintergrund) { g_hintergrund->Release(); g_hintergrund = nullptr; }
+        if (g_background) { g_background->Release(); g_background = nullptr; }
     }
 
-    // Das Bild fuellt das Fenster immer ganz aus und behaelt sein
-    // Seitenverhaeltnis: die knappere Achse bestimmt den Massstab, die andere
-    // laeuft mittig ueber den Rand hinaus. Ein Verzerren beim Ziehen des
-    // Fensters waere sofort sichtbar, ein Beschnitt faellt nicht auf.
+    // The image always fills the window completely and keeps its aspect
+    // ratio: the tighter axis sets the scale, the other runs centered past
+    // the edge. Distortion while dragging the window would be immediately
+    // visible, a crop goes unnoticed.
     //
-    // Gezeichnet wird sehr dunkel getoent - der Hintergrund soll das Bild
-    // erkennen lassen, ohne dass Text darauf schwer zu read wird.
+    // Drawn very darkly tinted - the background should let the image show
+    // without making text on top of it hard to read.
     void drawBackground()
     {
-        if (!g_hintergrund || g_hgBreite <= 0 || g_hgHoehe <= 0) return;
+        if (!g_background || g_bgWidth <= 0 || g_bgHeight <= 0) return;
 
         const ImGuiViewport* vp = ImGui::GetMainViewport();
         const float fw = vp->WorkSize.x, fh = vp->WorkSize.y;
         if (fw <= 0.0f || fh <= 0.0f) return;
 
-        const float massstab = (fw / static_cast<float>(g_hgBreite) >
-                                fh / static_cast<float>(g_hgHoehe))
-                             ? fw / static_cast<float>(g_hgBreite)
-                             : fh / static_cast<float>(g_hgHoehe);
+        const float scale = (fw / static_cast<float>(g_bgWidth) >
+                             fh / static_cast<float>(g_bgHeight))
+                          ? fw / static_cast<float>(g_bgWidth)
+                          : fh / static_cast<float>(g_bgHeight);
 
-        const float bw = g_hgBreite * massstab;
-        const float bh = g_hgHoehe * massstab;
-        const ImVec2 links(vp->WorkPos.x + (fw - bw) * 0.5f,
-                           vp->WorkPos.y + (fh - bh) * 0.5f);
-        const ImVec2 rechts(links.x + bw, links.y + bh);
+        const float bw = g_bgWidth * scale;
+        const float bh = g_bgHeight * scale;
+        const ImVec2 lt(vp->WorkPos.x + (fw - bw) * 0.5f,
+                        vp->WorkPos.y + (fh - bh) * 0.5f);
+        const ImVec2 rb(lt.x + bw, lt.y + bh);
 
         ImDrawList* dl = ImGui::GetBackgroundDrawList();
-        dl->AddImage(reinterpret_cast<ImTextureID>(g_hintergrund), links, rechts,
+        dl->AddImage(reinterpret_cast<ImTextureID>(g_background), lt, rb,
                      ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 70));
     }
 
@@ -199,8 +199,8 @@ namespace
         const D3D_FEATURE_LEVEL want[] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0 };
         HRESULT hr = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0,
                                                    want, 2, D3D11_SDK_VERSION, &sd, &g_swap, &g_dev, &fl, &g_ctx);
-        // Ohne brauchbare Grafikkarte auf den Software-Rasterizer ausweichen -
-        // die Oberflaeche ist ein paar Rechtecke, das reicht dafuer allemal.
+        // Without a usable graphics card, fall back to the software
+        // rasterizer - the GUI is a couple of rectangles, that is plenty.
         if (hr == DXGI_ERROR_UNSUPPORTED)
             hr = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0,
                                                want, 2, D3D11_SDK_VERSION, &sd, &g_swap, &g_dev, &fl, &g_ctx);
@@ -231,21 +231,20 @@ namespace
                 g_swap->ResizeBuffers(0, (UINT)LOWORD(lp), (UINT)HIWORD(lp), DXGI_FORMAT_UNKNOWN, 0);
                 createRTV();
             }
-            // Maximieren/Wiederherstellen kommt ohne WM_EXITSIZEMOVE - auch
-            // das soll die gespeicherte Groesse aktualisieren.
-            if (wp == SIZE_MAXIMIZED || wp == SIZE_RESTORED) g_fensterGezogen = true;
+            // Maximize/restore comes without WM_EXITSIZEMOVE - that too
+            // should update the saved size.
+            if (wp == SIZE_MAXIMIZED || wp == SIZE_RESTORED) g_windowDragged = true;
             return 0;
         case WM_EXITSIZEMOVE:
-            // Der Nutzer hat das Fenster gezogen - die Hauptschleife schreibt
-            // daraufhin die Einstellungsdatei (Nutzerwunsch: Groesse merken).
-            g_fensterGezogen = true;
+            // The user dragged the window - the main loop then writes the
+            // settings file (user wish: remember the size).
+            g_windowDragged = true;
             return 0;
         case WM_GETMINMAXINFO:
-            // Der obere Bereich steht in vier Spalten. Schrumpft das Fenster
-            // unter diese Breite, werden die Kaesten so schmal, dass Regler
-            // und Beschriftungen nicht mehr nebeneinander passen - deshalb
-            // eine harte Untergrenze statt einer kaputt aussehenden
-            // Oberflaeche.
+            // The upper area stands in four columns. If the window shrinks
+            // below this width, the boxes become so narrow that sliders and
+            // labels no longer fit side by side - hence a hard lower bound
+            // instead of a broken-looking GUI.
             {
                 MINMAXINFO* mm = reinterpret_cast<MINMAXINFO*>(lp);
                 mm->ptMinTrackSize.x = 1180;
@@ -253,7 +252,7 @@ namespace
             }
             return 0;
         case WM_SYSCOMMAND:
-            if ((wp & 0xfff0) == SC_KEYMENU) return 0;   // Alt-Menue unterdruecken
+            if ((wp & 0xfff0) == SC_KEYMENU) return 0;   // suppress the Alt menu
             break;
         case WM_DESTROY:
             PostQuitMessage(0);
@@ -262,7 +261,7 @@ namespace
         return DefWindowProcW(hwnd, msg, wp, lp);
     }
 
-    // Ordnerauswahl ueber die Windows-eigene Dialogbox.
+    // Folder selection via the Windows-native dialog box.
     bool pickFolder(HWND owner, std::wstring& out)
     {
         bool ok = false;
@@ -272,7 +271,9 @@ namespace
             DWORD opts = 0;
             dlg->GetOptions(&opts);
             dlg->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
-            dlg->SetTitle(L"Ordner der Tomb Raider Chronicles-Installation waehlen");
+            dlg->SetTitle(gGermanUi
+                ? L"Ordner der Tomb Raider Chronicles-Installation waehlen"
+                : L"Choose the folder of your Tomb Raider Chronicles installation");
             if (SUCCEEDED(dlg->Show(owner)))
             {
                 IShellItem* item = nullptr;
@@ -295,16 +296,15 @@ namespace
 }
 
 //----------------------------------------------------------------------------
-// Zustand der Anwendung
+// Application state
 //----------------------------------------------------------------------------
 namespace
 {
-    // Nicht spielbare Dateien. Sie gehoeren zu einer vollstaendigen
-    // Installation und werden bei der Pruefsummenkontrolle mitgeprueft, aber
-    // sie zu randomisieren hat keinen Sinn: Title ist der Titelbildschirm -
-    // dort etwas zu veraendern kann nur schaden -, del und richcut2 sind reine
-    // Cutscene-Level ohne Spielinhalt (richcut2 hat zwei Items, del zehn,
-    // davon kein einziges aufnehmbares).
+    // Non-playable files. They belong to a complete installation and are
+    // included in the checksum check, but randomizing them makes no sense:
+    // Title is the title screen - changing anything there can only do harm -,
+    // del and richcut2 are pure cutscene levels without game content
+    // (richcut2 has two items, del ten, not a single one of them pickable).
     bool isRandomizable(const std::string& fileName)
     {
         return fileName != "Title.trc" && fileName != "del.trc" && fileName != "richcut2.trc";
@@ -326,16 +326,16 @@ namespace
         std::string              status;
         bool                     statusIsError = false;
         bool                     sourceOk = false;
-        bool                     payloadOk = false;   // Pruefsummenliste geladen?
+        bool                     payloadOk = false;   // checksum list loaded?
         std::string              payloadError;
-        // Gemischter Kurationsstand der Zonen-Exporte in data\ - leer = ok.
-        std::string              zonenWarnung;
+        // Mixed curation stamps of the zone exports in data\ - empty = ok.
+        std::string              zoneWarning;
         char                     seedBuf[64] = {};
         bool                     busy = false;
 
-        // Es wird direkt in der Installation des Nutzers gearbeitet. Die
-        // Originale liegen daneben in data\Backup und sind ab dann der
-        // Massstab - siehe ensureBackup().
+        // The tool works directly in the user's installation. The originals
+        // lie next to it in data\Backup and are the yardstick from then on -
+        // see ensureBackup().
         std::wstring dataDir() const
         {
             const std::wstring sub = PathUtil::join(cfg.sourceDir, L"data");
@@ -343,43 +343,43 @@ namespace
         }
         std::wstring backupDir() const { return PathUtil::join(dataDir(), L"Backup"); }
 
-        // Die SCRIPT.DAT liegt bei einer echten Installation im SPIELORDNER
-        // neben der EXE, NICHT in data\ - dort liegen nur die Level. Weil
-        // dataDir() aber auf data\ zeigt, sobald es den Ordner gibt, suchte
-        // doScriptDat sie jahrelang an der falschen Stelle, fand sie nicht
-        // und stieg still aus ("SCRIPT.DAT nicht found"). Damit lief der
-        // ganze Skript-Schritt bei keinem einzigen GUI-Lauf: kein
-        // Kind-Lara-Bit, kein KEY8 fuer joby3, kein Pistolenentzug fuer
-        // rich2. Vom Nutzer found - die Pistolen kamen trotz Fix weiter
-        // aus rich1 mit, und seine SCRIPT.DAT war neun Tage alt.
+        // In a real installation, SCRIPT.DAT lies in the GAME FOLDER next to
+        // the EXE, NOT in data\ - only the levels lie there. But because
+        // dataDir() points at data\ as soon as that folder exists,
+        // doScriptDat looked for it in the wrong place for ages, did not
+        // find it and silently bailed out ("SCRIPT.DAT not found"). The
+        // whole script step therefore never ran in a single GUI run: no
+        // young-Lara bit, no KEY8 for joby3, no pistol removal for rich2.
+        // Found by the user - the pistols kept coming along from rich1
+        // despite the fix, and his SCRIPT.DAT was nine days old.
         //
-        // Gesucht wird deshalb an beiden Stellen, Spielordner zuerst.
+        // Hence both places are searched, game folder first.
         std::wstring scriptPath() const
         {
-            const std::wstring imSpiel = PathUtil::join(cfg.sourceDir, L"SCRIPT.DAT");
-            if (PathUtil::fileExists(imSpiel)) return imSpiel;
+            const std::wstring inGame = PathUtil::join(cfg.sourceDir, L"SCRIPT.DAT");
+            if (PathUtil::fileExists(inGame)) return inGame;
             return PathUtil::join(dataDir(), L"SCRIPT.DAT");
         }
         std::wstring payloadDir() const { return PathUtil::join(PathUtil::exeDir(), L"data"); }
 
-        // Balance.txt liegt neben der PCtomb5.exe, also im SPIELORDNER - aus
-        // demselben Grund wie die SCRIPT.DAT und mit derselben Falle: hat der
-        // Nutzer den data-Ordner gewaehlt, ist der Spielordner eine Ebene
-        // hoeher. Anders als bei der SCRIPT.DAT hilft "wo liegt sie schon"
-        // nicht weiter, weil wir sie auch anlegen koennen muessen - deshalb
-        // wird an der EXE festgemacht.
+        // Balance.txt lies next to PCtomb5.exe, i.e. in the GAME FOLDER -
+        // for the same reason as SCRIPT.DAT and with the same trap: if the
+        // user picked the data folder, the game folder is one level up.
+        // Unlike SCRIPT.DAT, "where does it already lie" does not help here,
+        // because we must also be able to CREATE it - so it is anchored at
+        // the EXE.
         std::wstring gameDir() const
         {
             if (cfg.sourceDir.empty()) return std::wstring();
             if (PathUtil::fileExists(PathUtil::join(cfg.sourceDir, L"PCtomb5.exe")))
                 return cfg.sourceDir;
 
-            const size_t schnitt = cfg.sourceDir.find_last_of(L"\\/");
-            if (schnitt != std::wstring::npos)
+            const size_t cut = cfg.sourceDir.find_last_of(L"\\/");
+            if (cut != std::wstring::npos)
             {
-                const std::wstring eltern = cfg.sourceDir.substr(0, schnitt);
-                if (PathUtil::fileExists(PathUtil::join(eltern, L"PCtomb5.exe")))
-                    return eltern;
+                const std::wstring parent = cfg.sourceDir.substr(0, cut);
+                if (PathUtil::fileExists(PathUtil::join(parent, L"PCtomb5.exe")))
+                    return parent;
             }
 
             return cfg.sourceDir;
@@ -387,13 +387,13 @@ namespace
 
         bool haveBackup = false;
         int  skippedNonPlayable = 0;
-        std::string scriptNote;      // was SCRIPT.DAT beim letzten Lauf ergab
+        std::string scriptNote;      // what SCRIPT.DAT yielded on the last run
 
-        // Ein Lauf laeuft nicht am Stueck durch, sondern schrittweise: pro Bild
-        // ein Level. Sonst friert das Fenster fuer die Dauer aller 15 Level
-        // ein, Windows meldet "reagiert nicht", und der Nutzer haelt es fuer
-        // einen Absturz - obwohl alles laeuft. Der Fortschrittsbalken braucht
-        // dieselbe Aufteilung, sonst haette er nichts anzuzeigen.
+        // A run does not go through in one piece but step by step: one level
+        // per frame. Otherwise the window freezes for the duration of all 15
+        // levels, Windows reports "not responding", and the user takes it
+        // for a crash - although everything is running. The progress bar
+        // needs the same split, or it would have nothing to show.
         enum class Phase { Idle, Copy, Levels, Finish, Debug };
         Phase phase = Phase::Idle;
         size_t stepIndex = 0;
@@ -408,82 +408,82 @@ namespace
             return static_cast<float>(doneCount + failCount) / static_cast<float>(plannedCount);
         }
 
-        // Was soll ueberhaupt randomisiert werden?
+        // What should be randomized at all?
         bool optOtherPickups = true;
         bool optKeyItems = true;
-        // Zusaetzliche Gegner ins Level setzen. Welche Typen ein Level vertraegt,
-        // steht in der Kuration (ENEMY_TYPES in ZoneAnalyse.ps1) - ist sie leer,
-        // bleibt der Haken folgenlos.
+        // Add extra enemies to the level. Which types a level can take is
+        // curated (ENEMY_TYPES in ZoneAnalyse.ps1) - if the list is empty,
+        // the checkbox has no effect.
         bool optEnemies = false;
         int  optEnemyCount = 6;
 
-        // Vorhandene Gegner untereinander tauschen.
+        // Swap the existing enemies among each other.
         bool optEnemySwap = false;
-        // Gegnerpool-Stufe: 0 nur Levelpool, 1 Cross-Mix (bis zu drei fremde
-        // Typen), 2 Allsanity (der ganze Pool, jede Rolle wuerfelt frei).
-        // Wirkt nur zusammen mit optEnemySwap oder optEnemies.
+        // Enemy pool tier: 0 level pool only, 1 cross mix (up to three
+        // foreign types), 2 allsanity (the whole pool, every role rolls
+        // freely). Only effective together with optEnemySwap or optEnemies.
         int optEnemyPool = 0;
-        // Zufaellige Outfits (Lara_Andrea/Lara_Joby/Lara_Rich) je Abschnitt.
+        // Random outfits (Lara_Andrea/Lara_Joby/Lara_Rich) per section.
         bool optOutfits = false;
-        // Volles Waffenset in jedem Level ist STANDARD (Nutzerentscheidung,
-        // kein Haken): opt.allWeapons wird beim Lauf fest auf true gesetzt.
-        // Deshalb auch kein Seed-Bit dafuer - eine Konstante unterscheidet
-        // keine Spiele.
+        // The full weapon set in every level is STANDARD (user decision, no
+        // checkbox): opt.allWeapons is hard-set to true on every run. Hence
+        // no seed bit for it either - a constant distinguishes no games.
 
-        // Secrets (#53): 0 Vanilla, 1 normaler Item-Pool, 2 Glitchless-Liste,
-        // 3 Glitched-Liste. Die Listen selbst liest SecretList.cpp aus
-        // data\secrets; angewandt werden sie als zweiter Patch-Durchgang in
-        // doLevel. Kein Seed-Bit: die Listen sind deterministisch, derselbe
-        // Seed bleibt mit und ohne Secrets vergleichbar.
+        // Secrets (#53): 0 vanilla, 1 normal item pool, 2 glitchless list,
+        // 3 glitched list. The lists themselves are read by SecretList.cpp
+        // from data\secrets; they are applied as a second patch pass in
+        // doLevel. No seed bit: the lists are deterministic, the same seed
+        // stays comparable with and without secrets.
         int optSecrets = 0;
 
-        // Gefundene Secret-Listen (data\secrets) und der gewaehlte Autor.
-        std::vector<SecretSource> secretQuellen;
+        // Found secret lists (data\secrets) and the chosen author.
+        std::vector<SecretSource> secretSources;
         std::string secretAuthor;
 
-        // Weitere PLATZHALTER (Nutzerwunsch 2026-08-14), alle ohne Wirkung,
-        // ohne Seed-Bit und ohne Persistenz, bis die jeweilige Logik steht.
-        int  optItemMenge = 0;          // 0 Vanilla Anzahl, 1 mehr, 2 viel mehr (#36)
-        bool phTexRgb = false;          // Farbwuerfel ueber Vanilla-Texturen
-        bool phTexMix = false;          // Texturen leveluebergreifend mixen
-        bool phTexRemaster = false;     // Remaster-Texturen patchen
-        bool phRoomKulissen = false;    // Kulissenbereiche einbinden
-        bool phRoomNachbar = false;     // gesperrte Nachbarraeume oeffnen
-        bool phJoby4NoWater = false;    // Deepsea Dive ohne Wasser
-        bool phLevelAbschnitte = false; // Abschnitte (Rom/Russland/...) tauschen
-        int  optLevelOrder = 0;         // 0 aus, 1 innerhalb der Abschnitte (Stufe 2), 2 frei ueber alles (Stufe 3)
-        bool phMusikSwitch = false;     // Audiotrack je Level wuerfeln
-        bool phMusikTrigger = false;    // Musik-/Sound-Trigger-IDs wuerfeln
-        bool phOutfitTr1 = false;       // klassisches TR1-Outfit im Pool
-        bool phOutfitTr2 = false;       // TR2-Outfits im Pool
-        bool phOutfitTr3 = false;       // TR3-Outfits im Pool
+        // Further PLACEHOLDERS (user wish 2026-08-14), all without effect,
+        // without a seed bit and without persistence until the respective
+        // logic exists.
+        int  optItemAmount = 0;         // 0 vanilla amount, 1 more, 2 a lot more (#36)
+        bool phTexRgb = false;          // color dice over vanilla textures
+        bool phTexMix = false;          // mix textures across levels
+        bool phTexRemaster = false;     // patch remaster textures
+        bool phRoomBackdrops = false;   // include backdrop areas
+        bool phRoomNeighbors = false;   // open locked neighboring rooms
+        bool phJoby4NoWater = false;    // Deepsea Dive without water
+        bool phLevelSections = false;   // shuffle sections (Rome/Russia/...)
+        int  optLevelOrder = 0;         // 0 off, 1 within the sections (tier 2), 2 free across everything (tier 3)
+        bool phMusicSwitch = false;     // roll the audio track per level
+        bool phMusicTrigger = false;    // roll music/sound trigger IDs
+        bool phOutfitTr1 = false;       // classic TR1 outfit in the pool
+        bool phOutfitTr2 = false;       // TR2 outfits in the pool
+        bool phOutfitTr3 = false;       // TR3 outfits in the pool
 
-        // Die Auswahl geht in den Seed ein. Sonst erzeugt derselbe Seed mit
-        // anderen Haken ein anderes Spiel, und ein Fehlerbericht "Seed X ist
-        // unspielbar" waere nicht nachstellbar - also genau das, was die
-        // Seed-Mechanik verhindern soll. Der Nutzer sieht deshalb unten auch
-        // den wirksamen Wert, nicht nur den eingegebenen Text.
+        // The selection goes into the seed. Otherwise the same seed with
+        // different checkboxes produces a different game, and a bug report
+        // "seed X is unplayable" would not be reproducible - exactly what
+        // the seed mechanism is supposed to prevent. That is also why the
+        // user sees the effective value below, not just the entered text.
         uint64_t effectiveSeed() const
         {
             uint64_t flags = 0;
             if (optOtherPickups) flags |= 1;
             if (optKeyItems)     flags |= 2;
             if (optEnemies)          flags |= 4;
-            if (optEnemyPool == 1)   flags |= 8;    // Cross-Mix
+            if (optEnemyPool == 1)   flags |= 8;    // cross mix
             if (optEnemySwap)        flags |= 16;
             if (optOutfits)          flags |= 32;
-            if (optEnemyPool == 2)   flags |= 64;   // Allsanity
-            // Bit 64 war kurz "Alle Waffen ueberall" - seit die Standard
-            // sind, traegt es jetzt Allsanity.
-            // Die Anzahl gehoert genauso in den Seed wie die Haken: mit 3 und
-            // mit 12 Gegnern ist es nicht dasselbe Spiel.
+            if (optEnemyPool == 2)   flags |= 64;   // allsanity
+            // Bit 64 was briefly "all weapons everywhere" - since those are
+            // standard, it now carries allsanity.
+            // The count belongs in the seed just like the checkboxes: with 3
+            // and with 12 enemies it is not the same game.
             flags |= static_cast<uint64_t>(optEnemyCount & 0xFF) << 8;
-            // Dasselbe fuer die Item-Menge (#36).
-            flags |= static_cast<uint64_t>(optItemMenge & 0x3) << 16;
+            // The same for the item amount (#36).
+            flags |= static_cast<uint64_t>(optItemAmount & 0x3) << 16;
 
-            // FNV-1a ueber Seed-Text und Auswahl, damit beides gleichwertig
-            // eingeht - eine blosse XOR-Verknuepfung haette bei benachbarten
-            // Flags aehnliche Ergebnisse geliefert.
+            // FNV-1a over seed text and selection, so both enter equally - a
+            // mere XOR would have produced similar results for neighboring
+            // flags.
             uint64_t h = SeedText::parse(seedBuf);
             for (int i = 0; i < 8; ++i)
             {
@@ -493,105 +493,103 @@ namespace
             return h;
         }
 
-        // --- Debugwerkzeug: Sektoren mit Markern befuellen ---
+        // --- Debug tool: fill sectors with markers ---
         //
-        // Beantwortet die Frage, die keine Zahl beantwortet: liegt die Grenze an
-        // der RICHTIGEN Stelle? Der Blick ins Level findet Fehler, die eine
-        // Statistik nicht zeigt - so wurde in rich2 das Leck vom Erdgeschoss in
-        // den Aufzugsschacht found.
+        // Answers the question no number answers: does the boundary lie in
+        // the RIGHT place? Looking into the level finds mistakes a statistic
+        // does not show - that is how the leak from the ground floor into
+        // the elevator shaft was found in rich2.
         bool dbgOpen = false;
-        // Fenster "Gegnerarten" (#95): welche Arten darf der Pool ziehen?
-        // Gehalten wird die ABWAHL - siehe Config::enemiesDisabled.
-        bool artenOpen = false;
+        // Window "Enemy types" (#95): which kinds may the pool draw? What is
+        // held is the DESELECTION - see Config::enemiesDisabled.
+        bool kindsOpen = false;
 
-        // Regler fuer Balance.txt (#108). Als Faktor gehalten, weil die
-        // Oberflaeche "1.25x" zeigt; in der Datei stehen Prozentzahlen.
+        // Sliders for Balance.txt (#108). Held as a factor because the GUI
+        // shows "1.25x"; the file holds percentages.
         float balWeapons        = 1.0f;
         float balEnemyHealth   = 1.0f;
         float balEnemyDamage = 1.0f;
 
-        // Je Regler: Wert aus dem Seed wuerfeln statt von Hand einstellen.
-        // Der Regler zeigt dann, was gefallen ist, laesst sich aber nicht
-        // mehr ziehen.
+        // Per slider: roll the value from the seed instead of setting it by
+        // hand. The slider then shows what was rolled but can no longer be
+        // dragged.
         bool balWeaponsRandom        = false;
         bool balEnemyHealthRandom   = false;
         bool balEnemyDamageRandom = false;
 
-        std::string balHinweis;   // letzte Rueckmeldung unter den Reglern
+        std::string balNote;   // last feedback below the sliders
 
-        // Gemessene Eigenhoehen der Kaesten der oberen Reihe (#Oberflaeche).
-        // Gebraucht, um alle vier Spalten auf dieselbe Unterkante zu bringen:
-        // die Hoehe eines Kastens steht erst fest, nachdem er gezeichnet ist,
-        // also wird sie hier von einem Bild zum naechsten gemerkt. Im ersten
-        // Bild sind alle 0 - dann steht die Reihe einmal ungleich, was
-        // niemand sieht.
-        struct KastenHoehen
+        // Measured intrinsic heights of the top-row boxes (#GUI). Needed to
+        // bring all four columns to the same bottom edge: a box's height is
+        // only known after it has been drawn, so it is remembered here from
+        // one frame to the next. In the first frame all are 0 - the row then
+        // stands uneven once, which nobody sees.
+        struct BoxHeights
         {
-            // Nur Kaesten, die NIE gestreckt werden - sonst entsteht eine
-            // Rueckkopplung, siehe drawUi.
-            float install = 0, items = 0, gegner = 0, level = 0, musik = 0;
-        } hoehen;
-        std::set<int> optGegnerAus;
-        // Fenster "Installations-Pfade" (#102).
-        bool pfadeOpen = false;
+            // Only boxes that are NEVER stretched - otherwise a feedback
+            // loop arises, see drawUi.
+            float install = 0, items = 0, enemies = 0, level = 0, music = 0;
+        } heights;
+        std::set<int> optEnemiesOff;
+        // Window "Installation paths" (#102).
+        bool pathsOpen = false;
         bool dbgUseFill = true;
-        int  dbgFillType = 223;          // Pickup Item4 - im Spiel selten, faellt auf
+        int  dbgFillType = 223;          // Pickup Item4 - rare in the game, stands out
         std::vector<std::string> dbgLog;
 
         std::wstring debugDir() const { return PathUtil::join(PathUtil::exeDir(), L"Debug Level"); }
     };
 
-// Wo liegt die gesuchte Datei wirklich?
+// Where does the wanted file really lie?
 //
-// Der Nutzer waehlt im Dateidialog den SPIELORDNER - das ist das Natuerliche,
-// und genau das hat er getan. Die Leveldateien liegen aber im Unterordner
-// "data". Statt ihn mit einem Hinweistext zu belehren, sucht das Werkzeug an
-// beiden Stellen. Zurueck kommt der Ordner, der die Datei wirklich enthaelt,
-// oder leer.
+// The user picks the GAME FOLDER in the file dialog - that is the natural
+// thing, and exactly what he did. The level files, however, lie in the
+// subfolder "data". Instead of lecturing him with a hint, the tool searches
+// both places. Returned is the folder that really contains the file, or
+// empty.
 //
-// Gross- und Kleinschreibung ist unter Windows egal, "Data" und "DATA" also
-// mit abgedeckt.
-static std::wstring loeseOrdner(const std::wstring& gewaehlt, const wchar_t* file)
+// Case does not matter on Windows, so "Data" and "DATA" are covered too.
+static std::wstring resolveFolder(const std::wstring& chosen, const wchar_t* file)
 {
-    if (gewaehlt.empty()) return std::wstring();
-    if (PathUtil::fileExists(PathUtil::join(gewaehlt, file))) return gewaehlt;
-    const std::wstring unten = PathUtil::join(gewaehlt, L"data");
-    if (PathUtil::fileExists(PathUtil::join(unten, file))) return unten;
+    if (chosen.empty()) return std::wstring();
+    if (PathUtil::fileExists(PathUtil::join(chosen, file))) return chosen;
+    const std::wstring sub = PathUtil::join(chosen, L"data");
+    if (PathUtil::fileExists(PathUtil::join(sub, file))) return sub;
     return std::wstring();
 }
 
-// Die aufgeloesten Ordner, wie sie an Kern und Patchweg gehen.
-static std::wstring tr3Ordner(const App& a)  { return loeseOrdner(a.cfg.tr3Dir, L"CRASH.TR2"); }
-static std::wstring goldOrdner(const App& a) { return loeseOrdner(a.cfg.tr3GoldDir, L"chunnel.TR2"); }
+// The resolved folders as they go to the core and the patch path.
+static std::wstring tr3Folder(const App& a)  { return resolveFolder(a.cfg.tr3Dir, L"CRASH.TR2"); }
+static std::wstring goldFolder(const App& a) { return resolveFolder(a.cfg.tr3GoldDir, L"chunnel.TR2"); }
 
-// Zwischenlager fuer die aus Tomb Raider 3 entnommenen Pakete (#103).
+// Cache for the packages extracted from Tomb Raider 3 (#103).
 //
-// Liegt neben dem Programm. Die Dateien entstehen auf dem Rechner dessen, der
-// die Spiele besitzt, und bleiben dort - lizenzrechtlich unbedenklich. NIE
-// MITAUSLIEFERN: der Ordner bekommt dafuer eine Warnung als Textdatei, damit
-// es beim Packen auffaellt.
+// Lies next to the program. The files are created on the machine of whoever
+// owns the games, and they stay there - unobjectionable license-wise. NEVER
+// SHIP THIS FOLDER: it gets a warning text file so it stands out when
+// packing.
 
 static std::wstring cacheDir(const App& a)
 {
-    if (tr3Ordner(a).empty()) return std::wstring();     // ohne Quelle kein Lager
+    if (tr3Folder(a).empty()) return std::wstring();     // no source, no cache
     const std::wstring dir = PathUtil::join(PathUtil::exeDir(), L"Import-Export");
     if (!PathUtil::ensureDir(dir)) return std::wstring();
 
-    const std::wstring hinweis = PathUtil::join(dir, L"NICHT MITLIEFERN.txt");
-    if (!PathUtil::fileExists(hinweis))
+    const std::wstring note = PathUtil::join(dir, L"DO NOT REDISTRIBUTE.txt");
+    if (!PathUtil::fileExists(note))
     {
         FILE* h = nullptr;
-        if (_wfopen_s(&h, hinweis.c_str(), L"wb") == 0 && h)
+        if (_wfopen_s(&h, note.c_str(), L"wb") == 0 && h)
         {
             std::fputs(
-                "Dieser Ordner ist ein Zwischenlager.\r\n\r\n"
-                "Darin liegen Modelle, Texturen und Klaenge, die das Programm aus\r\n"
-                "DEINER Installation von Tomb Raider 3 entnommen hat. Sie sparen\r\n"
-                "Zeit: ohne sie wird bei jedem Level neu entnommen.\r\n\r\n"
-                "WEITERGEBEN DARFST DU DIESEN ORDNER NICHT. Er enthaelt Daten aus\r\n"
-                "einem Spiel, das jeder selbst besitzen muss. Beim Packen einer\r\n"
-                "Weitergabe gehoert er heraus.\r\n\r\n"
-                "Loeschen ist jederzeit gefahrlos - es wird dann eben neu entnommen.\r\n", h);
+                "This folder is a cache.\r\n\r\n"
+                "It holds models, textures and sounds the program extracted from\r\n"
+                "YOUR installation of Tomb Raider 3. They save time: without them,\r\n"
+                "extraction happens anew for every level.\r\n\r\n"
+                "YOU MUST NOT PASS THIS FOLDER ON. It contains data from a game\r\n"
+                "everyone has to own themselves. When packing a redistribution,\r\n"
+                "it goes out.\r\n\r\n"
+                "Deleting it is safe at any time - it simply gets extracted again.\r\n", h);
             std::fclose(h);
         }
     }
@@ -611,17 +609,17 @@ static std::wstring cacheDir(const App& a)
         a.levels.clear();
         a.sourceOk = false;
 
-        // Ohne geladene Pruefsummenliste hat eine Pruefung keinen Sinn - sie
-        // wuerde eine leere Liste durchwinken. Deshalb hier abbrechen und den
-        // eigentlichen Grund nennen, statt ihn beim Ordnerwaehlen zu verlieren.
+        // Without a loaded checksum list a check is pointless - it would
+        // wave an empty list through. So abort here and name the real
+        // reason instead of losing it during folder selection.
         if (!a.payloadOk) { setStatus(a, a.payloadError, true); return; }
 
-        if (a.cfg.sourceDir.empty()) { setStatus(a, T("Noch kein Spielordner gewaehlt.")); return; }
+        if (a.cfg.sourceDir.empty()) { setStatus(a, T("No game folder selected yet.")); return; }
 
-        // Existiert schon ein Backup, ist DAS der Massstab - nicht data\, denn
-        // dort koennen bereits randomisierte Level liegen. Sonst wuerde beim
-        // zweiten Durchlauf ein randomisiertes Level als "Original" gelten und
-        // das echte Original waere fuer immer weg.
+        // If a backup already exists, THAT is the yardstick - not data\,
+        // because already randomized levels can lie there. Otherwise a
+        // second run would take a randomized level for the "original" and
+        // the real original would be gone forever.
         a.haveBackup = PathUtil::dirExists(a.backupDir());
         const std::wstring master = a.haveBackup ? a.backupDir() : a.dataDir();
 
@@ -629,7 +627,7 @@ static std::wstring cacheDir(const App& a)
         int skipped = 0;
         for (const LevelStatus& s : st)
         {
-            // Nicht spielbare Dateien werden geprueft, aber nicht angeboten.
+            // Non-playable files are checked but not offered.
             if (!isRandomizable(s.name)) { ++skipped; continue; }
 
             LevelRow r;
@@ -640,136 +638,137 @@ static std::wstring cacheDir(const App& a)
         }
         a.skippedNonPlayable = skipped;
 
-        // Secret-Listen einsammeln - hier statt beim Start, damit ein frisch
-        // dazugelegter Autor ohne Neustart auftaucht (inspectSource laeuft bei
-        // jedem Ordnerwechsel und nach jedem Lauf).
-        a.secretQuellen = findSecretSources(PathUtil::join(a.payloadDir(), L"secrets"));
+        // Collect secret lists - here instead of at startup, so a freshly
+        // added author appears without a restart (inspectSource runs on
+        // every folder change and after every run).
+        a.secretSources = findSecretSources(PathUtil::join(a.payloadDir(), L"secrets"));
 
-        // Geprueft wird weiterhin die vollstaendige Liste - eine Installation,
-        // der Title.trc fehlt, ist keine gueltige Quelle, auch wenn wir die
-        // Datei nicht anfassen.
+        // The complete list is still checked - an installation missing
+        // Title.trc is no valid source, even though we never touch the file.
         std::string why;
         a.sourceOk = DataFolder::isUsableSource(st, why);
 
         if (a.sourceOk)
             setStatus(a, a.haveBackup
-                ? "Installation bereit. Originale liegen in data\\Backup."
-                : "Installation geprueft - alle Level unveraendert. Beim ersten "
-                  "Randomisieren wird data\\Backup angelegt.");
+                ? T("Installation ready. The originals are in data\\Backup.")
+                : T("Installation checked - all levels unmodified. data\\Backup "
+                    "is created on the first randomize."));
         else
-            setStatus(a, (a.haveBackup ? "Das Backup ist beschaedigt: " : "") + why, true);
+            setStatus(a, (a.haveBackup ? std::string(T("The backup is damaged: ")) : std::string()) + why, true);
     }
 
-    // SCRIPT.DAT: den Ireland-Leveln das Kind-Lara-Bit nehmen.
+    // SCRIPT.DAT: take the young-Lara bit away from the Ireland levels.
     //
-    // Ohne das laeuft Lara in andy1, Andy2 und andy3 als Kind herum und kann
-    // ueberhaupt keine Waffe tragen - GF_YOUNGLARA schaltet an acht Stellen im
-    // Motor das Waffensystem ab. Nutzervorgabe: die Andy-Level muessen immer
-    // Waffen haben, sonst steht Lara einem Two Gun mit leeren Haenden gegenueber.
+    // Without that, Lara runs around as a child in andy1, Andy2 and andy3
+    // and cannot carry any weapon at all - GF_YOUNGLARA switches the weapon
+    // system off in eight places in the engine. User requirement: the Andy
+    // levels must always have weapons, or Lara faces a Two Gun with empty
+    // hands.
     //
-    // Bedingungslos und wiederholbar: ein schon geloeschtes Bit noch einmal zu
-    // loeschen aendert nichts, und der Randomizer laeuft mehrfach ueber
-    // dieselbe Installation.
+    // Unconditional and repeatable: clearing an already cleared bit changes
+    // nothing, and the randomizer runs over the same installation several
+    // times.
     //
-    // Vor dem ersten Schreiben wird das Original daneben gesichert - dieselbe
-    // Zusage wie bei den Leveln: nichts geht unwiederbringlich verloren.
+    // Before the first write, the original is backed up next to it - the
+    // same promise as with the levels: nothing is lost beyond recovery.
     bool doScriptDat(App& a, std::string& err, std::string& info)
     {
-        const std::wstring skript = a.scriptPath();
-        if (!PathUtil::fileExists(skript))
+        const std::wstring script = a.scriptPath();
+        if (!PathUtil::fileExists(script))
         {
-            info = "SCRIPT.DAT nicht found - die Andy-Level bleiben Kind-Lara.";
-            return true;                      // kein Abbruchgrund
+            info = "SCRIPT.DAT not found - the Andy levels keep young Lara.";
+            return true;                      // no reason to abort
         }
 
-        const std::wstring sicherung = PathUtil::join(a.backupDir(), L"SCRIPT.DAT");
-        if (PathUtil::dirExists(a.backupDir()) && !PathUtil::fileExists(sicherung))
-            CopyFileW(skript.c_str(), sicherung.c_str(), TRUE);
+        const std::wstring backup = PathUtil::join(a.backupDir(), L"SCRIPT.DAT");
+        if (PathUtil::dirExists(a.backupDir()) && !PathUtil::fileExists(backup))
+            CopyFileW(script.c_str(), backup.c_str(), TRUE);
 
-        // Immer aus der Sicherung read, wenn es sie gibt: sonst arbeitet ein
-        // zweiter Lauf auf dem Ergebnis des ersten.
+        // Always read from the backup if it exists: otherwise a second run
+        // works on the result of the first.
         ScriptDat sd;
-        const std::wstring source = PathUtil::fileExists(sicherung) ? sicherung : skript;
+        const std::wstring source = PathUtil::fileExists(backup) ? backup : script;
         if (!sd.load(source, err)) return false;
 
-        // Die Changes selbst stehen in ScriptDat - dasselbe ruft die CLI
-        // auf, damit beide Wege nicht auseinanderlaufen.
+        // The changes themselves live in ScriptDat - the CLI calls the same
+        // code, so the two paths cannot drift apart.
         ScriptDat::Changes e;
         sd.randomizerChanges(e);
 
         if (e.levelsMissing > 0)
         {
-            info = "SCRIPT.DAT: " + std::to_string(e.levelsMissing) + " Ireland-Level nicht im Skript found.";
+            info = "SCRIPT.DAT: " + std::to_string(e.levelsMissing) + " Ireland levels not found in the script.";
             return true;
         }
 
-        // Hintergrundmusik: erst NACH den Pflichteingriffen wuerfeln, und nur
-        // wenn der Haken steht. Weil oben immer aus der Sicherung gelesen
-        // wird, stellt ein Lauf OHNE Haken die Originalmusik wieder her.
-        int musikLevel = 0;
-        if (a.phMusikSwitch)
+        // Background music: roll only AFTER the mandatory edits, and only if
+        // the box is checked. Because the read above always comes from the
+        // backup, a run WITHOUT the box restores the original music.
+        int musicLevels = 0;
+        if (a.phMusicSwitch)
         {
             std::string mErr;
-            if (!sd.shuffleMusic(a.effectiveSeed(), musikLevel, mErr))
-                a.scriptNote = "Hintergrundmusik: " + mErr;
+            if (!sd.shuffleMusic(a.effectiveSeed(), musicLevels, mErr))
+                a.scriptNote = "Background music: " + mErr;
         }
 
-        // Levelabschnitte: als LETZTER Eingriff, damit alle Namens-Lookups
-        // davor auf dem bekannten Stand liefen (parse laeuft danach neu).
-        std::string abschnitte, levelFolge;
-        std::vector<std::string> ketten;
-        // Bei "frei ueber alles" ist der Abschnitts-Wuerfel bedeutungslos - und
-        // er darf auch nicht laufen, sonst startet der freie Wuerfel von einer
-        // anderen Ausgangsfolge und derselbe Seed ergaebe je nach Haken zwei
-        // verschiedene Spiele.
-        if (a.phLevelAbschnitte && a.optLevelOrder != 2)
+        // Level sections: as the LAST edit, so all name lookups before it
+        // ran on the known state (parse runs again afterwards).
+        std::string sections, levelOrder;
+        std::vector<std::string> chains;
+        // With "free across everything" the section roll is meaningless -
+        // and it must not run either, or the free roll would start from a
+        // different base order and the same seed would yield two different
+        // games depending on the checkbox.
+        if (a.phLevelSections && a.optLevelOrder != 2)
         {
             std::string aErr;
-            if (!sd.shuffleSections(a.effectiveSeed(), abschnitte, aErr))
-                a.scriptNote = "Levelabschnitte: " + aErr;
+            if (!sd.shuffleSections(a.effectiveSeed(), sections, aErr))
+                a.scriptNote = "Level sections: " + aErr;
         }
         if (a.optLevelOrder > 0)
         {
             std::string lErr;
-            if (!sd.shuffleLevels(a.effectiveSeed(), a.optLevelOrder == 2, levelFolge, lErr))
-                a.scriptNote = "Level-Reihenfolge: " + lErr;
+            if (!sd.shuffleLevels(a.effectiveSeed(), a.optLevelOrder == 2, levelOrder, lErr))
+                a.scriptNote = "Level order: " + lErr;
         }
-        // Ketten immer auf die JETZIGE Reihenfolge pruefen - in Vanilla-Folge
-        // passiert nichts, nach einem Wuerfel reicht das Skript nach.
-        if (a.phLevelAbschnitte || a.optLevelOrder > 0)
+        // Always check the chains against the CURRENT order - in vanilla
+        // order nothing happens, after a roll the script grants what is
+        // missing.
+        if (a.phLevelSections || a.optLevelOrder > 0)
         {
             std::string kErr;
-            // ERST aufraeumen, DANN give: die Wegnahmen muessen im Block vor den
-            // Gaben stehen, damit die Engine sie in der dritten Phase
-            // (setup.cpp) nach den Wegnahmen anwendet.
-            if (!sd.cleanupInventory(ketten, kErr))
-                a.scriptNote = "Inventar aufraeumen: " + kErr;
-            else if (!sd.resolveChains(ketten, kErr))
+            // FIRST clean up, THEN give: the takeaways must stand in the
+            // block before the gifts, so the engine applies them in the
+            // third phase (setup.cpp) after the takeaways.
+            if (!sd.cleanupInventory(chains, kErr))
+                a.scriptNote = "Inventory cleanup: " + kErr;
+            else if (!sd.resolveChains(chains, kErr))
                 a.scriptNote = "LevelChains: " + kErr;
         }
 
-        if (!sd.save(skript, err)) return false;
+        if (!sd.save(script, err)) return false;
 
         info = e.flagsChanged > 0
-            ? "SCRIPT.DAT: Kind-Lara in " + std::to_string(e.flagsChanged) + " Ireland-Leveln abgeschaltet."
-            : "SCRIPT.DAT: Kind-Lara war bereits abgeschaltet.";
-        if (!e.keyError.empty())   info += "  KEY8 fuer joby3 nicht uebernommen: " + e.keyError;
-        else if (e.keyCopied)      info += "  KEY8 fuer joby3 aus joby2 uebernommen.";
-        if (!e.pistolError.empty()) info += "  rich2-Pistolen nicht entzogen: " + e.pistolError;
-        else if (e.pistolsRemoved > 0)    info += "  rich2: Pistolen abgenommen.";
-        if (e.joby3Weapons > 0)         info += "  joby3: " + std::to_string(e.joby3Weapons) + " Waffen-Wegnahmen entfernt.";
-        if (a.phMusikSwitch && musikLevel > 0)
-            info += "  Hintergrundmusik: " + std::to_string(musikLevel) + " Level neu vertont.";
-        if (a.phLevelAbschnitte && !abschnitte.empty())
-            info += "  Abschnitte: " + abschnitte + ".";
-        if (a.optLevelOrder > 0 && !levelFolge.empty())
-            info += "  Reihenfolge: " + levelFolge + ".";
-        for (const std::string& k : ketten)
+            ? "SCRIPT.DAT: young Lara switched off in " + std::to_string(e.flagsChanged) + " Ireland levels."
+            : "SCRIPT.DAT: young Lara was already switched off.";
+        if (!e.keyError.empty())   info += "  KEY8 for joby3 not carried over: " + e.keyError;
+        else if (e.keyCopied)      info += "  KEY8 for joby3 carried over from joby2.";
+        if (!e.pistolError.empty()) info += "  rich2 pistols not removed: " + e.pistolError;
+        else if (e.pistolsRemoved > 0)    info += "  rich2: pistols taken away.";
+        if (e.joby3Weapons > 0)         info += "  joby3: " + std::to_string(e.joby3Weapons) + " weapon takeaways removed.";
+        if (a.phMusicSwitch && musicLevels > 0)
+            info += "  Background music: " + std::to_string(musicLevels) + " levels rescored.";
+        if (a.phLevelSections && !sections.empty())
+            info += "  Sections: " + sections + ".";
+        if (a.optLevelOrder > 0 && !levelOrder.empty())
+            info += "  Order: " + levelOrder + ".";
+        for (const std::string& k : chains)
             info += "  " + k + ".";
         return true;
     }
 
-    // Ein Level randomisieren. Genau dieselben Schritte wie Randomize.cpp.
+    // Randomize one level. Exactly the same steps as Randomize.cpp.
     bool doLevel(App& a, LevelRow& row, uint64_t seed, std::string& err)
     {
         const std::string base = row.name.substr(0, row.name.find_last_of('.'));
@@ -782,33 +781,32 @@ static std::wstring cacheDir(const App& a)
         RandoInput in;
         if (!Rando::buildInput(zone, info, in, err)) return false;
 
-        // Das Level wird VOR der Platzierung geoeffnet, nicht erst zum Patchen.
-        // Grund ist der gekoppelte Triggerzug: welche Sektoren einen Trigger
-        // aufnehmen koennen, steht nur in der Floordata, und die Platzierung
-        // muss es wissen, bevor sie waehlt - sonst faellt es erst beim Patchen
-        // auf, und dann ist der Lauf schon halb gelaufen.
+        // The level is opened BEFORE placement, not only for patching. The
+        // reason is the coupled trigger move: which sectors can take a
+        // trigger stands only in the floordata, and placement must know it
+        // before it chooses - otherwise it only shows while patching, and by
+        // then the run is half done.
         Tr5Level lvl;
         const std::wstring target = PathUtil::join(a.dataDir(), PathUtil::widen(row.name));
         if (!lvl.load(target, err)) return false;
 
-        // Levelfehler von Core reparieren, BEVOR irgendetwas gewuerfelt wird
-        // (LevelFix.h). Frueh, weil die Platzierung die Floordata liest: ein
-        // Trigger, der erst danach dazukaeme, waere fuer die Zonenrechnung
-        // nicht da gewesen.
-        // Der Bericht entsteht erst weiter unten - bis dahin sammeln.
-        std::vector<std::string> fixNotizen;
+        // Repair Core's level bugs BEFORE anything is rolled (LevelFix.h).
+        // Early, because placement reads the floordata: a trigger added only
+        // afterwards would not have existed for the zone computation.
+        // The report is created further down - collect until then.
+        std::vector<std::string> fixNotes;
         {
-            const int fixes = LevelFix::apply(lvl, base, fixNotizen);
+            const int fixes = LevelFix::apply(lvl, base, fixNotes);
             if (fixes > 0)
-                fixNotizen.push_back(std::to_string(fixes) + " LevelFix angewandt");
+                fixNotes.push_back(std::to_string(fixes) + " level fixes applied");
         }
 
         Patch::markTriggerSafeSectors(lvl, in);
 
-        // Secrets in den Pool (#53, Art 1): die Handkuration pinnt jedes
-        // Secret ueber fixedItems fest. Genau diese Pins nimmt der Modus
-        // heraus - Typ 223 wuerfelt dann als gewoehnliches Pickup mit. Nur
-        // die Secret-Pins fallen, alle anderen Handkurationen bleiben.
+        // Secrets into the pool (#53, kind 1): hand curation pins every
+        // secret via fixedItems. Exactly those pins are taken out in this
+        // mode - type 223 then rolls as an ordinary pickup. Only the secret
+        // pins fall, all other hand curations stay.
         if (a.optSecrets == 1)
         {
             std::set<int> secrets;
@@ -828,119 +826,119 @@ static std::wstring cacheDir(const App& a)
         opt.swapEnemies = a.optEnemySwap;
         opt.crossEnemies = (a.optEnemyPool == 1);
         opt.allsanity    = (a.optEnemyPool == 2);
-        opt.disabledEnemies = a.optGegnerAus;
+        opt.disabledEnemies = a.optEnemiesOff;
         opt.tr3Dir     = a.cfg.tr3Dir;
         opt.tr3GoldDir = a.cfg.tr3GoldDir;
         opt.randomOutfits = a.optOutfits;
-        opt.allWeapons = true;              // Standard, siehe App-Kommentar
-        // Item-Abundance: die drei Stufen der Oberflaeche als Stueckzahl.
-        // Freie Ablageflaechen und das Item-Limit deckeln sie ohnehin.
-        opt.extraPickups = (a.optItemMenge == 1) ? 12 : (a.optItemMenge == 2) ? 30 : 0;
+        opt.allWeapons = true;              // standard, see the App comment
+        // Item abundance: the GUI's three tiers as a count. Free placement
+        // spots and the item limit cap them anyway.
+        opt.extraPickups = (a.optItemAmount == 1) ? 12 : (a.optItemAmount == 2) ? 30 : 0;
 
         JsonValue patch;
         RandoReport rep;
         if (!Rando::run(in, opt, seed, patch, rep)) { err = rep.error; return false; }
 
-        // Quell-Level fuer soundAdds: immer das Backup, nie data\ - dort koennen
-        // schon randomisierte Level liegen, und aus denen Samples zu holen waere
-        // vom Seed nicht mehr nachstellbar.
-        static std::wstring soundQuelle;
-        soundQuelle = a.haveBackup ? a.backupDir() : a.dataDir();
+        // Source levels for soundAdds: always the backup, never data\ -
+        // already randomized levels can lie there, and pulling samples from
+        // those would no longer be reproducible from the seed.
+        static std::wstring soundSource;
+        soundSource = a.haveBackup ? a.backupDir() : a.dataDir();
         auto source = [](const std::string& name, void*) -> std::wstring {
-            return PathUtil::join(soundQuelle, PathUtil::widen(name) + L".trc");
+            return PathUtil::join(soundSource, PathUtil::widen(name) + L".trc");
         };
 
-        for (const std::string& n : fixNotizen) rep.notes.push_back(n);
+        for (const std::string& n : fixNotes) rep.notes.push_back(n);
 
         PatchReport pr;
-        // Die Fremdinstallationen durchreichen: nur damit kann apply() die
-        // Gaeste aus Tomb Raider 3 zur Laufzeit holen (#92). Fehlen sie, hat
-        // der Randomizer sie gar nicht erst in den Pool genommen.
+        // Pass the foreign installations through: only with them can apply()
+        // fetch the guests from Tomb Raider 3 at runtime (#92). If they are
+        // missing, the randomizer never put them into the pool.
         if (!Patch::apply(lvl, patch, pr, err, source, nullptr,
-                          tr3Ordner(a), goldOrdner(a), cacheDir(a))) return false;
+                          tr3Folder(a), goldFolder(a), cacheDir(a))) return false;
         for (const std::string& w : pr.warnings) rep.notes.push_back(w);
 
-        // Secrets aus einer Nutzerliste (#53, Art 2/3): ZWEITER Durchgang mit
-        // derselben apply-Maschinerie, gegen den echten Stand nach dem ersten.
-        // Ohne "itemBase" im Patch verschiebt apply nichts - die Neu<k>-
-        // Verweise der Liste zeigen exakt auf die Items, die dieser Patch
-        // anlegt. Eine fehlende Liste ist kein Abbruch (das Level ist ja
-        // fertig), ein GESCHEITERTER Patch schon - halb gesetzte Secrets
-        // faende niemand wieder.
-        int secretsGesetzt = 0, beiwerk = 0;
+        // Secrets from a user list (#53, kinds 2/3): a SECOND pass with the
+        // same apply machinery, against the real state after the first.
+        // Without "itemBase" in the patch, apply shifts nothing - the
+        // list's Neu<k> references point exactly at the items this patch
+        // creates. A missing list is no abort (the level is done after
+        // all), a FAILED patch is - nobody would ever find half-placed
+        // secrets.
+        int secretsPlaced = 0, extras = 0;
         if (a.optSecrets >= 2)
         {
-            const char* kat = (a.optSecrets == 2) ? "Glitchless" : "Glitched";
-            const SecretSource* liste = nullptr;
-            for (const SecretSource& q : a.secretQuellen)
-                if (q.category == kat && q.author == a.secretAuthor) { liste = &q; break; }
+            const char* cat = (a.optSecrets == 2) ? "Glitchless" : "Glitched";
+            const SecretSource* list = nullptr;
+            for (const SecretSource& q : a.secretSources)
+                if (q.category == cat && q.author == a.secretAuthor) { list = &q; break; }
 
-            if (!liste)
-                rep.notes.push_back(std::string("Secrets: keine ") + kat + "-Liste gewaehlt - Level bleibt vanilla.");
+            if (!list)
+                rep.notes.push_back(std::string("secrets: no ") + cat + " list chosen - level stays vanilla.");
             else
             {
                 JsonValue sPatch;
                 std::vector<std::string> sWarn;
                 std::string sErr;
-                int sZahl = 0;
-                if (!buildSecretPatch(liste->path, base, lvl, sPatch, sZahl, sWarn, sErr))
-                { err = "Secret-Liste: " + sErr; return false; }
-                for (const std::string& w : sWarn) rep.notes.push_back("Secrets: " + w);
+                int sCount = 0;
+                if (!buildSecretPatch(list->path, base, lvl, sPatch, sCount, sWarn, sErr))
+                { err = "secret list: " + sErr; return false; }
+                for (const std::string& w : sWarn) rep.notes.push_back("secrets: " + w);
 
                 PatchReport spr;
                 if (!Patch::apply(lvl, sPatch, spr, err, source, nullptr,
-                                  tr3Ordner(a), goldOrdner(a), cacheDir(a)))
-                { err = "Secret-Patch: " + err; return false; }
-                for (const std::string& w : spr.warnings) rep.notes.push_back("Secrets: " + w);
-                // NUR die umgezogenen Secrets zaehlen. edited+added des
-                // Reports enthaelt das Beiwerk (Schluessel, Schalter,
-                // Umtypungen) - die Statuszeile meldete damit "6 Secrets" in
-                // einem Level mit dreien (vom Nutzer gesehen).
-                secretsGesetzt = sZahl;
-                beiwerk = (spr.edited + spr.added) - sZahl;
+                                  tr3Folder(a), goldFolder(a), cacheDir(a)))
+                { err = "secret patch: " + err; return false; }
+                for (const std::string& w : spr.warnings) rep.notes.push_back("secrets: " + w);
+                // Count ONLY the relocated secrets. The report's
+                // edited+added contains the extras (keys, switches,
+                // retypings) - the status line reported "6 secrets" in a
+                // level with three because of that (seen by the user).
+                secretsPlaced = sCount;
+                extras = (spr.edited + spr.added) - sCount;
             }
         }
-        // Musik-Trigger: als letzter Pass auf dem fertigen Level, direkt vor
-        // dem Speichern - so erwischt er auch Trigger, die erst die
-        // Secret-Liste gesetzt hat.
-        if (a.phMusikTrigger)
+        // Music triggers: as the last pass on the finished level, right
+        // before saving - that way it also catches triggers the secret list
+        // has just placed.
+        if (a.phMusicTrigger)
         {
             const long mw = Patch::shuffleMusicTriggers(lvl, seed);
             if (mw > 0)
-                rep.notes.push_back("Musik-Trigger: " + std::to_string(mw) + " Woerter neu verteilt");
+                rep.notes.push_back("music triggers: " + std::to_string(mw) + " words redistributed");
         }
 
         if (!lvl.save(target, err)) return false;
 
         char buf[200];
-        int len = std::snprintf(buf, sizeof(buf), "%d bewegt, %d neu", pr.edited, pr.added);
+        int len = std::snprintf(buf, sizeof(buf), "%d moved, %d new", pr.edited, pr.added);
         if (rep.enemiesAdded > 0)
-            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Gegner", rep.enemiesAdded);
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d enemies", rep.enemiesAdded);
         if (pr.triggersMoved > 0)
-            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Trigger mit", pr.triggersMoved);
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d triggers along", pr.triggersMoved);
         if (pr.weaponsCopied > 0)
-            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Waffenslots", pr.weaponsCopied);
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d weapon slots", pr.weaponsCopied);
         if (rep.weaponsScattered > 0)
-            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Waffen gestreut", rep.weaponsScattered);
-        if (secretsGesetzt > 0 || beiwerk > 0)
-            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Secrets (+%d Beiwerk)", secretsGesetzt, beiwerk);
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d weapons scattered", rep.weaponsScattered);
+        if (secretsPlaced > 0 || extras > 0)
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d secrets (+%d extras)", secretsPlaced, extras);
         if (rep.crossTypesUsed > 0)
-            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d Cross-Typen", rep.crossTypesUsed);
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d cross types", rep.crossTypesUsed);
         if (!pr.outfitFrom.empty())
-            std::snprintf(buf + len, sizeof(buf) - len, ", Outfit %s", pr.outfitFrom.c_str());
+            std::snprintf(buf + len, sizeof(buf) - len, ", outfit %s", pr.outfitFrom.c_str());
         row.result = buf;
         return true;
     }
 
-    // Ein Debug-Level bauen: statt Items zu verschieben, wird jeder gueltige
-    // Sektor mit einem Marker belegt. Grundlage ist immer das ORIGINAL - liegt
-    // ein Backup vor, kommt die Datei von dort, sonst aus data\. Ein bereits
-    // randomisiertes Level als Vorlage waere zwar geometrisch gleich, aber die
-    // Itemliste im Ergebnis waere nicht die, die der Nutzer erwartet.
+    // Build one debug level: instead of moving items, every valid sector is
+    // covered with a marker. The basis is always the ORIGINAL - if a backup
+    // exists, the file comes from there, else from data\. An already
+    // randomized level as the template would be geometrically identical, but
+    // the item list in the result would not be the one the user expects.
     //
-    // Geschrieben wird ausschliesslich nach "Debug Level" neben der EXE. Diese
-    // Dateien sind nicht spielbar (mehrere tausend Items), und in data\ haetten
-    // sie deshalb nichts verloren.
+    // Written exclusively to "Debug Level" next to the EXE. These files are
+    // not playable (several thousand items), so they have no business in
+    // data\.
     bool doDebugLevel(App& a, LevelRow& row, std::string& err)
     {
         const std::string base = row.name.substr(0, row.name.find_last_of('.'));
@@ -958,7 +956,7 @@ static std::wstring cacheDir(const App& a)
         int fillSectors = 0;
         if (!Rando::buildMarkerPatch(in, a.dbgUseFill ? a.dbgFillType : 0, patch, perType, fillSectors))
         {
-            err = "Marker konnten nicht erzeugt werden.";
+            err = "markers could not be generated.";
             return false;
         }
 
@@ -967,31 +965,31 @@ static std::wstring cacheDir(const App& a)
 
         Tr5Level lvl;
         if (!lvl.load(src, err)) return false;
-        lvl.allowMoreThanMaxItems(true);   // hier ausdruecklich gewollt, siehe Tr5Level.h
+        lvl.allowMoreThanMaxItems(true);   // expressly wanted here, see Tr5Level.h
 
         PatchReport pr;
         if (!Patch::apply(lvl, patch, pr, err)) return false;
 
-        if (!PathUtil::ensureDir(a.debugDir())) { err = "Ordner \"Debug Level\" liess sich nicht anlegen."; return false; }
+        if (!PathUtil::ensureDir(a.debugDir())) { err = "folder \"Debug Level\" could not be created."; return false; }
         if (!lvl.save(PathUtil::join(a.debugDir(), PathUtil::widen(row.name)), err)) return false;
 
         char buf[160];
-        std::snprintf(buf, sizeof(buf), "%d Marker", pr.added);
+        std::snprintf(buf, sizeof(buf), "%d markers", pr.added);
         row.result = buf;
 
-        std::snprintf(buf, sizeof(buf), "%s: %d Sektoren gesamt%s",
+        std::snprintf(buf, sizeof(buf), "%s: %d sectors total%s",
                       row.name.c_str(), fillSectors,
-                      a.dbgUseFill ? "" : " (Fuellebene aus)");
+                      a.dbgUseFill ? "" : " (fill layer off)");
         a.dbgLog.push_back(buf);
         for (const MarkerCount& m : perType)
         {
-            std::snprintf(buf, sizeof(buf), "    Typ %d: %d Sektoren in %d Raeumen",
+            std::snprintf(buf, sizeof(buf), "    type %d: %d sectors in %d rooms",
                           m.typeId, m.sectors, m.rooms);
             a.dbgLog.push_back(buf);
-            // Ein Typ ohne einen einzigen erlaubten Sektor ist kein Randfall,
-            // sondern ein Kurationsfehler - der Lauf wuerde spaeter daran
-            // scheitern, und hier faellt es sofort auf.
-            if (m.sectors == 0) a.dbgLog.push_back("    ^ KEIN erlaubter Sektor!");
+            // A type without a single allowed sector is no edge case but a
+            // curation error - the run would fail on it later, and here it
+            // stands out immediately.
+            if (m.sectors == 0) a.dbgLog.push_back("    ^ NO allowed sector!");
         }
         return true;
     }
@@ -1008,14 +1006,14 @@ static std::wstring cacheDir(const App& a)
         a.doneCount = a.failCount = 0;
         a.stepIndex = 0;
         a.phase = App::Phase::Debug;
-        setStatus(a, T("Debug-Level werden gebaut..."));
+        setStatus(a, T("Building debug levels..."));
     }
 
-    // Legt data\Backup an, falls es fehlt. Das darf NUR passieren, wenn die
-    // Level in data\ nachweislich unveraendert sind - ein Backup aus bereits
-    // randomisierten Dateien waere unbemerkt wertlos und das Original
-    // unwiederbringlich verloren. Deshalb ist die Pruefsummenpruefung hier
-    // keine Bequemlichkeit, sondern die Absicherung.
+    // Creates data\Backup if it is missing. That may ONLY happen when the
+    // levels in data\ are provably unmodified - a backup made from already
+    // randomized files would be worthless without anyone noticing, and the
+    // original lost beyond recovery. The checksum check here is therefore
+    // not a convenience but the safeguard.
     bool ensureBackup(App& a, std::string& err)
     {
         if (PathUtil::dirExists(a.backupDir())) return true;
@@ -1024,9 +1022,9 @@ static std::wstring cacheDir(const App& a)
         std::string why;
         if (!DataFolder::isUsableSource(st, why))
         {
-            err = "Es gibt noch kein Backup, und die Level in data sind nicht im "
-                  "Originalzustand: " + why + " Bitte ueber Steam die Dateien "
-                  "pruefen lassen und erneut versuchen.";
+            err = "There is no backup yet, and the levels in data are not in "
+                  "their original state: " + why + " Please have Steam verify "
+                  "the files and try again.";
             return false;
         }
 
@@ -1036,41 +1034,41 @@ static std::wstring cacheDir(const App& a)
         return true;
     }
 
-    // Startet einen Lauf. Die Arbeit selbst passiert in advanceRun(), damit die
-    // Oberflaeche zwischendurch zeichnen kann.
+    // Starts a run. The work itself happens in advanceRun(), so the GUI can
+    // draw in between.
     //------------------------------------------------------------------------
-    // Die angehakten Balance-Regler aus dem Seed wuerfeln (#108).
+    // Roll the checked balance sliders from the seed (#108).
     //
-    // Gewuerfelt wird in Fuenferschritten von 0.50x bis 2.00x - auch der
-    // Waffenschaden, obwohl sein Regler bis 0.00x reicht. Ein Seed, der Laras
-    // Waffen auf ein Zehntel stellt, waere nicht schwer, sondern unspielbar;
-    // 0.00x gehoert deshalb der Handeinstellung.
+    // Rolled in steps of five from 0.50x to 2.00x - weapon damage too,
+    // although its slider reaches down to 0.00x. A seed that puts Lara's
+    // weapons at a tenth would not be hard, just unplayable; 0.00x therefore
+    // belongs to manual tuning.
     //
-    // ALLE DREI werden immer geworfen, auch die nicht angehakten. Sonst haenge
-    // der Wurf des Waffenschadens davon ab, ob daneben die Gegnerhaken
-    // gesetzt sind - derselbe Seed gaebe unterschiedliche Values, je nachdem
-    // was sonst noch angekreuzt ist.
+    // ALL THREE are always rolled, the unchecked ones too. Otherwise the
+    // weapon damage roll would depend on whether the enemy boxes next to it
+    // are checked - the same seed would give different values depending on
+    // what else is ticked.
     //------------------------------------------------------------------------
-    void balanceWuerfeln(App& a)
+    void rollBalance(App& a)
     {
         if (!a.balWeaponsRandom && !a.balEnemyHealthRandom && !a.balEnemyDamageRandom)
             return;
 
-        Rng r(a.effectiveSeed() ^ 0x42414C414E434521ull);   // "BALANCE!" - eigener Strom
+        Rng r(a.effectiveSeed() ^ 0x42414C414E434521ull);   // "BALANCE!" - its own stream
 
-        auto wurf = [&r]() { return (50 + static_cast<int>(r.below(31)) * 5) / 100.0f; };
+        auto roll = [&r]() { return (50 + static_cast<int>(r.below(31)) * 5) / 100.0f; };
 
-        const float waffen = wurf();
-        const float leben  = wurf();
-        const float schaden = wurf();
+        const float weapons = roll();
+        const float health  = roll();
+        const float damage = roll();
 
-        if (a.balWeaponsRandom)        a.balWeapons        = waffen;
-        if (a.balEnemyHealthRandom)   a.balEnemyHealth   = leben;
-        if (a.balEnemyDamageRandom) a.balEnemyDamage = schaden;
+        if (a.balWeaponsRandom)        a.balWeapons        = weapons;
+        if (a.balEnemyHealthRandom)   a.balEnemyHealth   = health;
+        if (a.balEnemyDamageRandom) a.balEnemyDamage = damage;
     }
 
-    // Die Reglerstellung in die Balance.txt der Installation write.
-    void balanceSchreibenNach(App& a)
+    // Write the slider positions into the installation's Balance.txt.
+    void writeBalanceOut(App& a)
     {
         BalanceFile::Values w;
         w.weaponDamage = static_cast<int>(a.balWeapons * 100.0f + 0.5f);
@@ -1079,100 +1077,99 @@ static std::wstring cacheDir(const App& a)
 
         std::string error;
         if (BalanceFile::write(a.gameDir(), w, &error))
-            a.balHinweis = "Balance.txt geschrieben - gilt ab dem naechsten Spielstart.";
+            a.balNote = T("Balance.txt written - takes effect on the next game start.");
         else
-            a.balHinweis = error;
+            a.balNote = error;
     }
 
     //------------------------------------------------------------------------
-    // spoiler.txt neben dem Programm write.
+    // Write spoiler.txt next to the program.
     //
-    // Frueher stand das je Level in einer dritten Tabellenspalte. Das kostete
-    // die halbe Fensterbreite fuer eine Zeile Text, die man einmal liest -
-    // und die Zeile war zu kurz fuer alles, was man wirklich wissen will. In
-    // der Datei ist Platz fuer den Seed, alle Einstellungen und das, was die
-    // SCRIPT.DAT abbekommen hat.
+    // This used to live in a third table column per level. That cost half
+    // the window width for one line of text read once - and the line was too
+    // short for everything one really wants to know. The file has room for
+    // the seed, all settings and what SCRIPT.DAT received.
     //------------------------------------------------------------------------
-    bool schreibeSpoiler(App& a)
+    bool writeSpoiler(App& a)
     {
         const std::wstring path = PathUtil::join(PathUtil::exeDir(), L"spoiler.txt");
         FILE* f = nullptr;
         if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f) return false;
 
-        auto zeile = [f](const char* s) { std::fprintf(f, "%s\r\n", s); };
+        auto line = [f](const char* s) { std::fprintf(f, "%s\r\n", s); };
 
         std::fprintf(f, "TR5 Randomizer - spoiler.txt\r\n");
         std::fprintf(f, "Build %s\r\n", RANDO_BUILD_STRING);
-        zeile("");
+        line("");
         std::fprintf(f, "Seed:      %s\r\n", a.seedBuf);
-        std::fprintf(f, "wirksam:   0x%016llX\r\n", (unsigned long long)a.effectiveSeed());
-        zeile("");
+        std::fprintf(f, "effective: 0x%016llX\r\n", (unsigned long long)a.effectiveSeed());
+        line("");
 
-        zeile("EINSTELLUNGEN");
-        std::fprintf(f, "  Ausruestung:        %s\r\n", a.optOtherPickups ? "gewuerfelt" : "aus");
-        std::fprintf(f, "  Itemmenge:          %s\r\n",
-                     a.optItemMenge == 0 ? "Vanilla" : a.optItemMenge == 1 ? "mehr" : "viel mehr");
-        std::fprintf(f, "  Schluessel/Puzzles: %s\r\n", a.optKeyItems ? "gewuerfelt" : "aus");
-        std::fprintf(f, "  Outfits:            %s\r\n", a.optOutfits ? "gewuerfelt" : "aus");
-        std::fprintf(f, "  Zusatzgegner:       %s\r\n",
-                     a.optEnemies ? (std::to_string(a.optEnemyCount) + " pro Level").c_str() : "aus");
-        std::fprintf(f, "  Gegner tauschen:    %s\r\n", a.optEnemySwap ? "an" : "aus");
-        std::fprintf(f, "  Gegnerpool:         %s\r\n",
-                     a.optEnemyPool == 0 ? "nur Levelpool"
-                                         : a.optEnemyPool == 1 ? "Cross-Mix" : "Allsanity");
-        if (!a.optGegnerAus.empty())
-            std::fprintf(f, "  abgewaehlte Arten:  %d\r\n", (int)a.optGegnerAus.size());
+        line("SETTINGS");
+        std::fprintf(f, "  Equipment:          %s\r\n", a.optOtherPickups ? "shuffled" : "off");
+        std::fprintf(f, "  Item amount:        %s\r\n",
+                     a.optItemAmount == 0 ? "vanilla" : a.optItemAmount == 1 ? "more" : "a lot more");
+        std::fprintf(f, "  Keys/puzzles:       %s\r\n", a.optKeyItems ? "shuffled" : "off");
+        std::fprintf(f, "  Outfits:            %s\r\n", a.optOutfits ? "shuffled" : "off");
+        std::fprintf(f, "  Extra enemies:      %s\r\n",
+                     a.optEnemies ? (std::to_string(a.optEnemyCount) + " per level").c_str() : "off");
+        std::fprintf(f, "  Enemy swap:         %s\r\n", a.optEnemySwap ? "on" : "off");
+        std::fprintf(f, "  Enemy pool:         %s\r\n",
+                     a.optEnemyPool == 0 ? "level pool only"
+                                         : a.optEnemyPool == 1 ? "cross mix" : "allsanity");
+        if (!a.optEnemiesOff.empty())
+            std::fprintf(f, "  deselected kinds:   %d\r\n", (int)a.optEnemiesOff.size());
         std::fprintf(f, "  Secrets:            %s%s%s\r\n",
-                     a.optSecrets == 0 ? "Vanilla" : a.optSecrets == 1 ? "im Item-Pool"
-                                                   : a.optSecrets == 2 ? "Glitchless-Liste"
-                                                                       : "Glitched-Liste",
-                     a.optSecrets >= 2 && !a.secretAuthor.empty() ? ", Autor " : "",
+                     a.optSecrets == 0 ? "vanilla" : a.optSecrets == 1 ? "in the item pool"
+                                                   : a.optSecrets == 2 ? "glitchless list"
+                                                                       : "glitched list",
+                     a.optSecrets >= 2 && !a.secretAuthor.empty() ? ", author " : "",
                      a.optSecrets >= 2 && !a.secretAuthor.empty() ? a.secretAuthor.c_str() : "");
-        std::fprintf(f, "  Levelabschnitte:    %s\r\n", a.phLevelAbschnitte ? "getauscht" : "aus");
-        std::fprintf(f, "  Levelreihenfolge:   %s\r\n",
-                     a.optLevelOrder == 0 ? "aus"
-                                          : a.optLevelOrder == 1 ? "innerhalb der Abschnitte"
-                                                                 : "frei ueber alles");
-        std::fprintf(f, "  Hintergrundmusik:   %s\r\n", a.phMusikSwitch ? "getauscht" : "aus");
-        std::fprintf(f, "  Trigger-Musik:      %s\r\n", a.phMusikTrigger ? "getauscht" : "aus");
-        std::fprintf(f, "  Waffenschaden:      %d %%%s\r\n",
-                     (int)(a.balWeapons * 100.0f + 0.5f), a.balWeaponsRandom ? " (gewuerfelt)" : "");
-        std::fprintf(f, "  Gegnerleben:        %d %%%s\r\n",
-                     (int)(a.balEnemyHealth * 100.0f + 0.5f), a.balEnemyHealthRandom ? " (gewuerfelt)" : "");
-        std::fprintf(f, "  Gegnerschaden:      %d %%%s\r\n",
-                     (int)(a.balEnemyDamage * 100.0f + 0.5f), a.balEnemyDamageRandom ? " (gewuerfelt)" : "");
-        zeile("");
+        std::fprintf(f, "  Level sections:     %s\r\n", a.phLevelSections ? "shuffled" : "off");
+        std::fprintf(f, "  Level order:        %s\r\n",
+                     a.optLevelOrder == 0 ? "off"
+                                          : a.optLevelOrder == 1 ? "within the sections"
+                                                                 : "free across everything");
+        std::fprintf(f, "  Background music:   %s\r\n", a.phMusicSwitch ? "shuffled" : "off");
+        std::fprintf(f, "  Trigger music:      %s\r\n", a.phMusicTrigger ? "shuffled" : "off");
+        std::fprintf(f, "  Weapon damage:      %d %%%s\r\n",
+                     (int)(a.balWeapons * 100.0f + 0.5f), a.balWeaponsRandom ? " (rolled)" : "");
+        std::fprintf(f, "  Enemy health:       %d %%%s\r\n",
+                     (int)(a.balEnemyHealth * 100.0f + 0.5f), a.balEnemyHealthRandom ? " (rolled)" : "");
+        std::fprintf(f, "  Enemy damage:       %d %%%s\r\n",
+                     (int)(a.balEnemyDamage * 100.0f + 0.5f), a.balEnemyDamageRandom ? " (rolled)" : "");
+        line("");
 
         if (!a.scriptNote.empty())
         {
-            zeile("SCRIPT.DAT");
-            // Die Notiz ist ein langer Satz mit zwei Leerzeichen als Trenner -
-            // je Teil eine Zeile liest sich deutlich besser.
+            line("SCRIPT.DAT");
+            // The note is one long sentence with two spaces as separators -
+            // one part per line reads much better.
             const std::string& s = a.scriptNote;
             size_t i = 0;
             while (i < s.size())
             {
                 size_t e = s.find("  ", i);
                 if (e == std::string::npos) e = s.size();
-                std::string teil = s.substr(i, e - i);
-                while (!teil.empty() && teil.front() == ' ') teil.erase(teil.begin());
-                if (!teil.empty()) std::fprintf(f, "  %s\r\n", teil.c_str());
+                std::string part = s.substr(i, e - i);
+                while (!part.empty() && part.front() == ' ') part.erase(part.begin());
+                if (!part.empty()) std::fprintf(f, "  %s\r\n", part.c_str());
                 i = (e == s.size()) ? e : e + 2;
             }
-            zeile("");
+            line("");
         }
 
-        zeile("LEVEL");
+        line("LEVELS");
         for (const LevelRow& r : a.levels)
         {
-            const char* zustand = r.state == LevelState::Vanilla  ? "original"
-                                : r.state == LevelState::Modified ? "veraendert"
-                                : r.state == LevelState::Missing  ? "fehlt" : "unbekannt";
-            std::fprintf(f, "  %-16s %-11s %s\r\n", r.name.c_str(), zustand,
+            const char* state = r.state == LevelState::Vanilla  ? "original"
+                              : r.state == LevelState::Modified ? "modified"
+                              : r.state == LevelState::Missing  ? "missing" : "unknown";
+            std::fprintf(f, "  %-16s %-11s %s\r\n", r.name.c_str(), state,
                          r.result.empty() ? "-" : r.result.c_str());
         }
-        zeile("");
-        std::fprintf(f, "%d Level randomisiert, %d Fehler.\r\n", a.doneCount, a.failCount);
+        line("");
+        std::fprintf(f, "%d levels randomized, %d errors.\r\n", a.doneCount, a.failCount);
 
         std::fclose(f);
         return true;
@@ -1189,16 +1186,16 @@ static std::wstring cacheDir(const App& a)
         a.doneCount = a.failCount = 0;
         a.stepIndex = 0;
 
-        // Angehakte Regler neu aus dem Seed werfen und die Stellung in die
-        // Installation write (#108). Die Regler write schon beim
-        // Loslassen; hier geht es um den Wurf und darum, dass ein Lauf in
-        // einem neu gewaehlten Spielordner nicht ohne Balance.txt dasteht.
-        balanceWuerfeln(a);
-        balanceSchreibenNach(a);
+        // Roll the checked sliders anew from the seed and write the position
+        // into the installation (#108). The sliders already write when
+        // released; this is about the roll, and about a run in a freshly
+        // chosen game folder not standing there without a Balance.txt.
+        rollBalance(a);
+        writeBalanceOut(a);
 
         a.phase = App::Phase::Copy;
-        a.phaseText = "Originale werden zurueckgespielt...";
-        setStatus(a, T("Lauf gestartet."));
+        a.phaseText = "Restoring originals...";
+        setStatus(a, T("Run started."));
     }
 
     void advanceRun(App& a)
@@ -1207,22 +1204,23 @@ static std::wstring cacheDir(const App& a)
         {
         case App::Phase::Copy:
         {
-            // Immer aus dem Backup kopieren, nie auf ein schon randomisiertes
-            // Level aufsetzen - sonst waere das Ergebnis aus dem Seed nicht
-            // mehr nachstellbar, und genau dafuer gibt es den Seed.
+            // Always copy from the backup, never build on an already
+            // randomized level - otherwise the result would no longer be
+            // reproducible from the seed, and that is exactly what the seed
+            // exists for.
             std::string err;
             if (!ensureBackup(a, err)) { setStatus(a, err, true); a.phase = App::Phase::Idle; return; }
 
             int copied = 0;
             if (!a.data.copyLevels(a.backupDir(), a.dataDir(), err, &copied))
             {
-                setStatus(a, T("Kopieren fehlgeschlagen: " )+ err, true);
+                setStatus(a, T("Copy failed: ") + err, true);
                 a.phase = App::Phase::Idle;
                 return;
             }
-            // SCRIPT.DAT genau hier: einmal je Lauf, bevor das erste Level
-            // angefasst wird. Scheitert es, ist das kein Grund abzubrechen -
-            // die Level sind davon unabhaengig.
+            // SCRIPT.DAT exactly here: once per run, before the first level
+            // is touched. If it fails, that is no reason to abort - the
+            // levels are independent of it.
             {
                 std::string sErr, sInfo;
                 if (!doScriptDat(a, sErr, sInfo))
@@ -1238,11 +1236,10 @@ static std::wstring cacheDir(const App& a)
 
         case App::Phase::Levels:
         {
-            // Nicht bearbeitbare Zeilen ueberspringen, aber pro Bild nur einen
-            // echten Schritt tun.
+            // Skip non-editable rows, but do only one real step per frame.
             while (a.stepIndex < a.levels.size() && !a.levels[a.stepIndex].enabled)
             {
-                a.levels[a.stepIndex].result = "uebersprungen";
+                a.levels[a.stepIndex].result = "skipped";
                 ++a.stepIndex;
             }
             if (a.stepIndex >= a.levels.size()) { a.phase = App::Phase::Finish; return; }
@@ -1252,7 +1249,7 @@ static std::wstring cacheDir(const App& a)
 
             std::string e;
             if (doLevel(a, r, a.effectiveSeed(), e)) ++a.doneCount;
-            else { ++a.failCount; r.result = "FEHLER: " + e; }
+            else { ++a.failCount; r.result = "ERROR: " + e; }
 
             ++a.stepIndex;
             return;
@@ -1262,16 +1259,16 @@ static std::wstring cacheDir(const App& a)
         {
             while (a.stepIndex < a.levels.size() && !a.levels[a.stepIndex].enabled)
             {
-                a.levels[a.stepIndex].result = "uebersprungen";
+                a.levels[a.stepIndex].result = "skipped";
                 ++a.stepIndex;
             }
             if (a.stepIndex >= a.levels.size())
             {
                 char buf[224];
                 std::snprintf(buf, sizeof(buf),
-                              "%d Debug-Level in \"Debug Level\" abgelegt%s. Nur fuer trview - "
-                              "mit so vielen Items startet das Spiel nicht.",
-                              a.doneCount, a.failCount ? " - mit Fehlern, siehe Liste" : "");
+                              T("%d debug levels written to \"Debug Level\"%s. For trview "
+                                "only - the game will not start with this many items."),
+                              a.doneCount, a.failCount ? T(" - with errors, see the list") : "");
                 setStatus(a, buf, a.failCount > 0);
                 a.phaseText.clear();
                 a.phase = App::Phase::Idle;
@@ -1283,7 +1280,7 @@ static std::wstring cacheDir(const App& a)
 
             std::string e;
             if (doDebugLevel(a, r, e)) ++a.doneCount;
-            else { ++a.failCount; r.result = "FEHLER: " + e; a.dbgLog.push_back(r.name + ": FEHLER: " + e); }
+            else { ++a.failCount; r.result = "ERROR: " + e; a.dbgLog.push_back(r.name + ": ERROR: " + e); }
 
             ++a.stepIndex;
             return;
@@ -1294,14 +1291,14 @@ static std::wstring cacheDir(const App& a)
             a.cfg.seedText = a.seedBuf;
             a.cfg.save();
 
-            const bool spoiler = schreibeSpoiler(a);
+            const bool spoiler = writeSpoiler(a);
 
             char buf[256];
             std::snprintf(buf, sizeof(buf),
-                          "%d Level randomisiert%s. %s Du kannst das Spiel jetzt starten.",
-                          a.doneCount, a.failCount ? " - mit Fehlern, siehe spoiler.txt" : "",
-                          spoiler ? "Einzelheiten stehen in spoiler.txt neben dem Programm."
-                                  : "spoiler.txt liess sich nicht write.");
+                          T("%d levels randomized%s. %s You can start the game now."),
+                          a.doneCount, a.failCount ? T(" - with errors, see spoiler.txt") : "",
+                          spoiler ? T("Details are in spoiler.txt next to the program.")
+                                  : T("spoiler.txt could not be written."));
             setStatus(a, buf, a.failCount > 0);
             a.phaseText.clear();
             a.phase = App::Phase::Idle;
@@ -1318,114 +1315,112 @@ static std::wstring cacheDir(const App& a)
         std::string err;
         if (!PathUtil::dirExists(a.backupDir()))
         {
-            setStatus(a, T("Es gibt kein Backup - da wurde noch nie randomisiert, "
-                         "die Level sind also bereits im Originalzustand."), true);
+            setStatus(a, T("There is no backup - nothing has ever been randomized, "
+                           "so the levels are already in their original state."), true);
             return;
         }
 
         int copied = 0;
         if (!a.data.copyLevels(a.backupDir(), a.dataDir(), err, &copied))
-            setStatus(a, T("Zuruecksetzen fehlgeschlagen: " )+ err, true);
+            setStatus(a, T("Restore failed: ") + err, true);
         else
         {
             for (LevelRow& r : a.levels) r.result.clear();
             char buf[128];
-            std::snprintf(buf, sizeof(buf), "%d Level auf den Originalzustand zurueckgesetzt.", copied);
+            std::snprintf(buf, sizeof(buf), T("%d levels restored to their original state."), copied);
             setStatus(a, buf);
         }
     }
 }
 
 //----------------------------------------------------------------------------
-// Debugfenster: Sektoren mit Markern befuellen.
+// Debug window: fill sectors with markers.
 //
-// Was hier entsteht, ist kein Level, sondern ein Bild: auf jedem Sektor, auf
-// dem etwas liegen darf, liegt ein Marker. Der Fuelltyp zeigt die Flaeche fuer
-// gewoehnliche Ausruestung, darueber liegt je Schluesseltyp dessen engerer
-// Bereich - beide UEBERLAPPEN sich. Ein Sektor mit nur dem Fuelltyp erlaubt
-// also ausschliesslich Ausruestung, ein Sektor mit beidem beides.
+// What is produced here is not a level but a picture: on every sector where
+// something may lie, a marker lies. The fill type shows the area for
+// ordinary equipment; on top of it, per key type, lies its narrower area -
+// the two OVERLAP. A sector with only the fill type thus allows equipment
+// exclusively, a sector with both allows both.
 //
-// Geprueft wird mit derselben Funktion, die auch platziert
-// (Rando::sectorAllowedFor). Genau darum geht es: was hier zu sehen ist, ist
-// das, was der Randomizer wirklich tut - nicht eine zweite Beschreibung davon.
+// The check uses the same function that also places
+// (Rando::sectorAllowedFor). That is the whole point: what is visible here
+// is what the randomizer really does - not a second description of it.
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
-// Ist die Fremdinstallation hinter einer EnemyKind nutzbar? (#102)
+// Is the foreign installation behind an EnemyKind usable? (#102)
 //
-// Geprueft wird nicht der Ordner, sondern die Datei, die WIRKLICH gebraucht
-// wird - ein Ordner kann existieren und trotzdem leer sein. CRASH.TR2 traegt
-// T-Rex, Raptor und Compy, chunnel.TR2 den Geier; MAIN.SFX liefert in beiden
-// Faellen die Klaenge.
+// Checked is not the folder but the file that is REALLY needed - a folder
+// can exist and still be empty. CRASH.TR2 carries T-Rex, Raptor and Compy,
+// chunnel.TR2 the vulture; MAIN.SFX supplies the sounds in both cases.
 //----------------------------------------------------------------------------
-static bool dinoQuelleDa(const App& a, const char* source)
+static bool dinoSourcePresent(const App& a, const char* source)
 {
-    if (!source) return true;                 // steckt in TR5 selbst
+    if (!source) return true;                 // lives in TR5 itself
 
     if (std::strcmp(source, "tr3") == 0)
-        return !tr3Ordner(a).empty()
-            && !loeseOrdner(a.cfg.tr3Dir, L"MAIN.SFX").empty();
+        return !tr3Folder(a).empty()
+            && !resolveFolder(a.cfg.tr3Dir, L"MAIN.SFX").empty();
 
-    // Der Geier braucht BEIDE Installationen: sein Modell steckt in chunnel.TR2
-    // von The Lost Artifact, seine Klaenge kommen aber aus der MAIN.SFX von
-    // Tomb Raider 3. Die beiden Dateien sind verschieden - Gold bringt eine
-    // eigene mit (9,8 MB gegen 11,6 MB), und die abgehoerten Wave-Nummern
-    // beziehen sich auf die von TR3.
+    // The vulture needs BOTH installations: its model sits in chunnel.TR2 of
+    // The Lost Artifact, but its sounds come from the MAIN.SFX of Tomb
+    // Raider 3. The two files differ - Gold ships its own (9.8 MB against
+    // 11.6 MB), and the audited wave numbers refer to TR3's.
     if (std::strcmp(source, "tr3gold") == 0)
-        return !goldOrdner(a).empty()
-            && !loeseOrdner(a.cfg.tr3Dir, L"MAIN.SFX").empty();
+        return !goldFolder(a).empty()
+            && !resolveFolder(a.cfg.tr3Dir, L"MAIN.SFX").empty();
 
     return false;
 }
 
 //----------------------------------------------------------------------------
-// Fenster "Installations-Pfade" (#102).
+// Window "Installation paths" (#102).
 //
-// Die Dinosaurier stammen aus Tomb Raider 3 und The Lost Artifact. Wir
-// liefern KEINE Spieldaten mit - wer sie haben will, muss die Spiele
-// besitzen. Der Lauf holt Modell, Texturen und Klaenge zur Laufzeit von dort.
+// The dinosaurs come from Tomb Raider 3 and The Lost Artifact. We ship NO
+// game data - whoever wants them must own the games. The run fetches model,
+// textures and sounds from there at runtime.
 //
-// Ohne gueltigen Pfad bleibt die jeweilige Art im Fenster "Gegnerarten"
-// ausgegraut, statt mitten im Lauf zu scheitern.
+// Without a valid path, the respective kind stays grayed out in the "Enemy
+// types" window instead of failing mid-run.
 //----------------------------------------------------------------------------
-static void drawPfadeWindow(App& a, HWND hwnd)
+static void drawPathsWindow(App& a, HWND hwnd)
 {
-    if (!a.pfadeOpen) return;
+    if (!a.pathsOpen) return;
 
     ImGui::SetNextWindowSize(ImVec2(620, 400), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin((std::string(T("Installations-Pfade")) + "###pfade").c_str(), &a.pfadeOpen))
+    if (!ImGui::Begin((std::string(T("Installation paths")) + "###pfade").c_str(), &a.pathsOpen))
     {
         ImGui::End();
         return;
     }
 
-    ImGui::TextWrapped(T("Die Dinosaurier stammen aus anderen Spielen. Dieses Werkzeug bringt "
-        "keine Spieldaten mit - gib die Ordner an, dann holt der Lauf sich "
-        "Modelle, Texturen und Klaenge von dort. Ohne Pfad bleiben die "
-        "betroffenen Gegnerarten ausgegraut, sonst laeuft alles wie gewohnt."));
+    ImGui::TextWrapped(T("The dinosaurs come from other games. This tool ships no game data - "
+        "point it at those folders and the run fetches models, textures and "
+        "sounds from there. Without a path the affected enemy types stay "
+        "grayed out; everything else works as usual."));
     ImGui::Spacing();
 
-    struct Eintrag { const char* titel; const char* file; const char* wofuer;
-                     std::wstring* path; const char* source; };
-    Eintrag liste[] = {
-        { "Tomb Raider 5 (Chronicles)", nullptr, "die Level, die randomisiert werden",
+    struct Entry { const char* title; const char* file; const char* forWhat;
+                   std::wstring* path; const char* source; };
+    Entry list[] = {
+        { "Tomb Raider 5 (Chronicles)", nullptr, "the levels that get randomized",
           &a.cfg.sourceDir, nullptr },
-        { "Tomb Raider 3",             "CRASH.TR2", "T-Rex, Raptor und Compy",
+        { "Tomb Raider 3",             "CRASH.TR2", "T-Rex, Raptor and Compy",
           &a.cfg.tr3Dir, "tr3" },
-        { "Tomb Raider 3: The Lost Artifact", "chunnel.TR2", "der Geier",
+        { "Tomb Raider 3: The Lost Artifact", "chunnel.TR2", "the vulture",
           &a.cfg.tr3GoldDir, "tr3gold" },
     };
 
-    for (Eintrag& e : liste)
+    for (Entry& e : list)
     {
-        ImGui::PushID(e.titel);
-        ImGui::SeparatorText(e.titel);
-        ImGui::TextDisabled(T("fuer %s"), e.wofuer);
+        ImGui::PushID(e.title);
+        ImGui::SeparatorText(e.title);
+        ImGui::TextDisabled(T("for %s"), T(e.forWhat));
 
-        const bool da = e.source ? dinoQuelleDa(a, e.source) : a.sourceOk;
-        ImGui::TextWrapped(T("%s"), e.path->empty() ? T("(nicht gewaehlt)")
-                                                 : PathUtil::narrow(*e.path).c_str());
+        const bool present = e.source ? dinoSourcePresent(a, e.source) : a.sourceOk;
+        ImGui::TextWrapped(T("%s"), e.path->empty() ? T("(not selected)")
+                                                    : PathUtil::narrow(*e.path).c_str());
 
-        if (ImGui::Button(T("Ordner waehlen...")))
+        if (ImGui::Button(T("Choose folder...")))
         {
             std::wstring picked;
             if (pickFolder(hwnd, picked))
@@ -1438,113 +1433,112 @@ static void drawPfadeWindow(App& a, HWND hwnd)
         if (!e.path->empty())
         {
             ImGui::SameLine();
-            if (ImGui::Button(T("Leeren"))) { e.path->clear(); a.cfg.save(); }
+            if (ImGui::Button(T("Clear"))) { e.path->clear(); a.cfg.save(); }
         }
         ImGui::SameLine();
-        if (da) ImGui::TextDisabled(T("in Ordnung"));
-        else if (e.file) ImGui::TextDisabled(T("%s nicht found"), e.file);
-        else ImGui::TextDisabled(T("noch nicht geprueft"));
+        if (present) ImGui::TextDisabled(T("OK"));
+        else if (e.file) ImGui::TextDisabled(T("%s not found"), e.file);
+        else ImGui::TextDisabled(T("not checked yet"));
 
         ImGui::PopID();
     }
 
     ImGui::Spacing();
-    ImGui::TextDisabled(T("Gesucht wird jeweils der data-Ordner der Installation."));
+    ImGui::TextDisabled(T("In each case, choose the data folder of the installation."));
     ImGui::End();
 }
 
 //----------------------------------------------------------------------------
-// Fenster "Gegnerarten" (#95): welche Arten darf der Pool ueberhaupt ziehen?
+// Window "Enemy types" (#95): which kinds may the pool draw at all?
 //
-// Gut fuer den Spieler, der seine Lieblingsgegner haeufiger sehen will, und
-// gut zum Pruefen einer einzelnen Art - alles abwaehlen bis auf eine, und der
-// Lauf setzt nur noch die.
+// Good for the player who wants to see favorite enemies more often, and good
+// for testing a single kind - deselect everything but one, and the run only
+// places that one.
 //
-// Gehalten und gespeichert wird die ABWAHL, nicht die Auswahl. Eine Art, die
-// spaeter dazukommt, ist dadurch automatisch an und faellt nicht muted durch
-// eine alte Einstellungsdatei.
+// Held and saved is the DESELECTION, not the selection. A kind added later
+// is thereby automatically on and does not fall silently through an old
+// settings file.
 //
-// Der Haken beschneidet AUSSCHLIESSLICH die Wahl aus dem Pool. Was eine
-// gewaehlte Art technisch nachzieht - ihren Anim-Basistyp, Pflichtbegleiter
-// wie den Geschosskern der Hydra, die MESHSWAP-Haelften - sieht ihn nie.
-// Sonst stuende ein Gegner ohne seinen Animationssatz im Level.
+// The checkbox trims EXCLUSIVELY the draw from the pool. Whatever a chosen
+// kind pulls in technically - its anim base type, mandatory companions like
+// the Hydra's projectile core, the MESHSWAP halves - never sees it.
+// Otherwise an enemy would stand in the level without its animation set.
 //----------------------------------------------------------------------------
-static void drawGegnerartenWindow(App& a)
+static void drawEnemyKindsWindow(App& a)
 {
-    if (!a.artenOpen) return;
+    if (!a.kindsOpen) return;
 
     ImGui::SetNextWindowSize(ImVec2(420, 520), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin((std::string(T("Gegnerarten")) + "###arten").c_str(), &a.artenOpen))
+    if (!ImGui::Begin((std::string(T("Enemy types")) + "###arten").c_str(), &a.kindsOpen))
     {
         ImGui::End();
         return;
     }
 
-    const std::vector<EnemyKind> arten = Rando::enemyKinds();
+    const std::vector<EnemyKind> kinds = Rando::enemyKinds();
 
-    ImGui::TextWrapped(T("Welche Arten darf der Zufall ziehen? Der Haken wirkt auf den Tausch "
-        "und auf zusaetzliche Gegner - Gegner, die im Level ohnehin stehen und "
-        "nicht getauscht werden, bleiben davon unberuehrt."));
+    ImGui::TextWrapped(T("Which types may the random draw pick? The checkbox affects swapping "
+        "and additional enemies - enemies that are in the level anyway and "
+        "are not swapped remain untouched."));
     ImGui::Spacing();
-    // Manche Arten teilen sich unter der Haube einen Animationssatz oder
-    // brauchen ein unsichtbares Hilfsobjekt (der Geschosskern der Hydra etwa).
-    // Das ist Technik, keine Spielerentscheidung - der Lauf holt es selbst, egal
-    // wie die Haken stehen. Hier steht nur, DASS es passiert, damit sich niemand
-    // fragt, warum ein abgewaehlter Wachmann trotzdem in der Datei auftaucht.
-    ImGui::TextDisabled(T("Was eine Art technisch braucht, laedt der Randomizer von selbst."));
+    // Some kinds share an animation set under the hood or need an invisible
+    // helper object (the Hydra's projectile core, say). That is technology,
+    // not a player decision - the run fetches it itself no matter how the
+    // boxes stand. This line only says THAT it happens, so nobody wonders
+    // why a deselected guard still appears in the file.
+    ImGui::TextDisabled(T("Whatever a type needs technically, the randomizer loads on its own."));
     ImGui::Spacing();
 
-    if (ImGui::Button(T("Alle an")))  a.optGegnerAus.clear();
+    if (ImGui::Button(T("All on")))  a.optEnemiesOff.clear();
     ImGui::SameLine();
-    if (ImGui::Button(T("Alle aus")))
-        for (const EnemyKind& g : arten) a.optGegnerAus.insert(g.typeId);
+    if (ImGui::Button(T("All off")))
+        for (const EnemyKind& g : kinds) a.optEnemiesOff.insert(g.typeId);
     ImGui::SameLine();
-    ImGui::TextDisabled(T("%d von %d an"),
-                        static_cast<int>(arten.size() - a.optGegnerAus.size()),
-                        static_cast<int>(arten.size()));
+    ImGui::TextDisabled(T("%d of %d on"),
+                        static_cast<int>(kinds.size() - a.optEnemiesOff.size()),
+                        static_cast<int>(kinds.size()));
 
     ImGui::Separator();
     ImGui::BeginChild("##artenliste", ImVec2(0, -78), true);
-    for (const EnemyKind& g : arten)
+    for (const EnemyKind& g : kinds)
     {
-        // Arten aus einem anderen Spiel bleiben ausgegraut, solange der Pfad
-        // dorthin fehlt (#102). Der Haken bleibt dabei erhalten - traegt der
-        // Nutzer den Pfad spaeter nach, ist seine Auswahl noch da.
-        const bool da = dinoQuelleDa(a, g.source);
-        ImGui::BeginDisabled(!da);
+        // Kinds from another game stay grayed out as long as the path to it
+        // is missing (#102). The checkbox state is kept - if the user adds
+        // the path later, his selection is still there.
+        const bool present = dinoSourcePresent(a, g.source);
+        ImGui::BeginDisabled(!present);
 
-        bool an = !a.optGegnerAus.count(g.typeId) && da;
+        bool on = !a.optEnemiesOff.count(g.typeId) && present;
         char label[96];
-        std::snprintf(label, sizeof(label), "%s##art%d", g.name, g.typeId);
-        if (ImGui::Checkbox(label, &an))
+        std::snprintf(label, sizeof(label), "%s##art%d", T(g.name), g.typeId);
+        if (ImGui::Checkbox(label, &on))
         {
-            if (an) a.optGegnerAus.erase(g.typeId);
-            else    a.optGegnerAus.insert(g.typeId);
+            if (on) a.optEnemiesOff.erase(g.typeId);
+            else    a.optEnemiesOff.insert(g.typeId);
         }
         ImGui::SameLine();
         ImGui::TextDisabled(T("(%d)"), g.typeId);
         ImGui::EndDisabled();
 
-        if (!da)
+        if (!present)
         {
             ImGui::SameLine();
-            ImGui::TextDisabled(T("- braucht %s"),
+            ImGui::TextDisabled(T("- needs %s"),
                 std::strcmp(g.source, "tr3gold") == 0 ? "The Lost Artifact" : "Tomb Raider 3");
         }
     }
     ImGui::EndChild();
 
-    // Alles abgewaehlt heisst nicht "keine Gegner": der Cross-Pool faellt dann
-    // leer aus, und jedes Level wuerfelt nur noch aus seinen einheimischen
-    // Arten. Das ist ein gueltiger Zustand, aber keiner, den man versehentlich
-    // haben will - deshalb steht es hier und wird nicht stillschweigend getan.
-    if (a.optGegnerAus.size() >= arten.size())
-        ImGui::TextWrapped(T("Alle Arten abgewaehlt: jedes Level bleibt bei seinen "
-                           "eigenen Gegnern, fremde kommen keine dazu."));
-    else if (!a.optGegnerAus.empty())
-        ImGui::TextWrapped(T("Waehlst du sehr viele ab, stehen manchen Leveln kaum "
-                           "noch fremde Arten zur Verfuegung - sie bleiben dann "
-                           "naeher am Original."));
+    // Everything deselected does not mean "no enemies": the cross pool then
+    // comes up empty, and every level rolls only from its native kinds.
+    // That is a valid state, but not one anyone wants by accident - hence
+    // it is stated here rather than done silently.
+    if (a.optEnemiesOff.size() >= kinds.size())
+        ImGui::TextWrapped(T("All types deselected: every level keeps its own enemies, "
+                             "no foreign ones are added."));
+    else if (!a.optEnemiesOff.empty())
+        ImGui::TextWrapped(T("If you deselect a lot, some levels have hardly any foreign "
+                             "types left to draw from - they will stay closer to the original."));
 
     ImGui::End();
 }
@@ -1554,54 +1548,54 @@ static void drawDebugWindow(App& a)
     if (!a.dbgOpen) return;
 
     ImGui::SetNextWindowSize(ImVec2(560, 460), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin((std::string(T("Debug: Sektoren-Marker")) + "###dbgmarker").c_str(), &a.dbgOpen))
+    if (!ImGui::Begin((std::string(T("Debug: sector markers")) + "###dbgmarker").c_str(), &a.dbgOpen))
     {
         ImGui::End();
         return;
     }
 
-    ImGui::TextWrapped(T("Baut zu jedem oben angehakten Level eine Kopie, in der jeder erlaubte "
-        "Sektor einen Marker traegt. Zum Ansehen in trview - mit mehreren tausend "
-        "Items startet das Spiel diese Dateien NICHT. Deine Installation bleibt "
-        "unberuehrt, geschrieben wird nur nach \"Debug Level\" neben dem Programm."));
+    ImGui::TextWrapped(T("Builds a copy of every level checked above in which every allowed "
+        "sector carries a marker. View them in trview - with several thousand "
+        "items the game will NOT start these files. Your installation stays "
+        "untouched; everything is written to \"Debug Level\" next to the program."));
 
     ImGui::Separator();
-    ImGui::Checkbox(T("Fuellebene: jeden gueltigen Sektor markieren"), &a.dbgUseFill);
+    ImGui::Checkbox(T("Fill layer: mark every valid sector"), &a.dbgUseFill);
     ImGui::BeginDisabled(!a.dbgUseFill);
     ImGui::SetNextItemWidth(120);
-    ImGui::InputInt(T("Typ der Fuellebene"), &a.dbgFillType);
+    ImGui::InputInt(T("Fill layer type"), &a.dbgFillType);
     if (a.dbgFillType < 0) a.dbgFillType = 0;
     ImGui::EndDisabled();
-    ImGui::TextDisabled(T("223 = Pickup Item4. Im Spiel selten, faellt in der Itemliste sofort auf."));
+    ImGui::TextDisabled(T("223 = Pickup Item4. Rare in the game, stands out immediately in the item list."));
 
     const bool busy = (a.phase != App::Phase::Idle);
     ImGui::Separator();
     ImGui::BeginDisabled(!a.sourceOk || busy);
-    if (ImGui::Button(T("Debug-Level bauen"), ImVec2(200, 30))) startDebugMarkers(a);
+    if (ImGui::Button(T("Build debug levels"), ImVec2(200, 30))) startDebugMarkers(a);
     ImGui::EndDisabled();
     ImGui::SameLine();
     ImGui::BeginDisabled(!PathUtil::dirExists(a.debugDir()));
-    if (ImGui::Button(T("Ordner oeffnen"), ImVec2(150, 30)))
+    if (ImGui::Button(T("Open folder"), ImVec2(150, 30)))
         ShellExecuteW(nullptr, L"open", a.debugDir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     ImGui::EndDisabled();
 
     if (!a.sourceOk)
-        ImGui::TextDisabled(T("(erst oben eine Installation waehlen)"));
+        ImGui::TextDisabled(T("(choose an installation above first)"));
 
     ImGui::Separator();
-    ImGui::TextUnformatted(T("Ergebnis je Typ:"));
+    ImGui::TextUnformatted(T("Result per type:"));
     if (ImGui::BeginChild("dbglog", ImVec2(0, 0), ImGuiChildFlags_Borders))
     {
         for (const std::string& l : a.dbgLog)
         {
-            if (l.find("KEIN erlaubter") != std::string::npos)
+            if (l.find("NO allowed") != std::string::npos)
                 ImGui::TextColored(ImVec4(1, .4f, .4f, 1), T("%s"), l.c_str());
-            else if (l.find("FEHLER") != std::string::npos)
+            else if (l.find("ERROR") != std::string::npos)
                 ImGui::TextColored(ImVec4(1, .4f, .4f, 1), T("%s"), l.c_str());
             else
                 ImGui::TextUnformatted(l.c_str());
         }
-        // Waehrend des Laufs mitscrollen, sonst sieht man immer nur den Anfang.
+        // Scroll along during the run, or only the beginning is ever seen.
         if (a.phase == App::Phase::Debug) ImGui::SetScrollHereY(1.0f);
     }
     ImGui::EndChild();
@@ -1610,23 +1604,23 @@ static void drawDebugWindow(App& a)
 }
 
 //----------------------------------------------------------------------------
-// Oberflaeche
+// The GUI
 //----------------------------------------------------------------------------
 static void drawUi(App& a, HWND hwnd)
 {
-    // Angehakte Balance-Regler zeigen immer, was der AKTUELLE Seed gibt -
-    // deshalb je Bild neu geworfen statt nur beim Lauf. Der Wurf ist eine
-    // Handvoll Rechenschritte und beruehrt keine Datei; geschrieben wird er
-    // erst beim Anhaken, beim Zuruecksetzen und beim Lauf.
-    balanceWuerfeln(a);
+    // Checked balance sliders always show what the CURRENT seed gives -
+    // hence rolled anew every frame instead of only on a run. The roll is a
+    // handful of arithmetic steps and touches no file; it is only written on
+    // checking, on reset and on a run.
+    rollBalance(a);
 
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
-    // Durchsichtig, damit das Hintergrundbild ueberhaupt zu sehen ist - es
-    // liegt auf der BackgroundDrawList, also HINTER den Fenstern. Die
-    // Lesbarkeit kommt von der dunklen Grundfarbe und der schwachen Toenung
-    // des Bildes, nicht von einer Flaeche darueber.
+    // Transparent, so the background image can be seen at all - it lies on
+    // the BackgroundDrawList, i.e. BEHIND the windows. Legibility comes from
+    // the dark base color and the weak tint of the image, not from a surface
+    // above it.
     ImGui::SetNextWindowBgAlpha(0.0f);
     ImGui::Begin("TR5 Randomizer", nullptr,
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
@@ -1637,14 +1631,14 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::SameLine();
     ImGui::TextDisabled(T("Build %s"), RANDO_BUILD_STRING);
 
-    // Rechts oben, weil es kein Bedienschritt ist: die vier nummerierten
-    // Abschnitte darunter sind der Weg durchs Programm, das hier steht daneben.
+    // Top right, because it is no operating step: the numbered sections
+    // below are the way through the program, this stands beside it.
     {
         const float w = 110.0f;
-        // GetContentRegionMax ist im Docking-Zweig (imconfig mit
-        // IMGUI_DISABLE_OBSOLETE_FUNCTIONS) nicht mehr da; Cursor-X am
-        // Zeilenanfang plus verfuegbare Breite ergibt denselben rechten Rand.
-        // Zwei Knoepfe: links davon die Sprache (#128), rechts Debug.
+        // GetContentRegionMax is gone in the docking branch (imconfig with
+        // IMGUI_DISABLE_OBSOLETE_FUNCTIONS); cursor X at line start plus
+        // available width yields the same right edge.
+        // Two buttons: language on the left (#128), Debug on the right.
         ImGui::SameLine(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x
                         - 2.0f * w - ImGui::GetStyle().ItemSpacing.x);
         if (ImGui::Button(gGermanUi ? "Sprache: DE###sprache" : "Language: EN###sprache", ImVec2(w, 0)))
@@ -1657,9 +1651,9 @@ static void drawUi(App& a, HWND hwnd)
         if (ImGui::Button(T("Debug"), ImVec2(w, 0))) ImGui::OpenPopup("##debugmenu");
         if (ImGui::BeginPopup("##debugmenu"))
         {
-            if (ImGui::MenuItem(T("Sektoren-Marker..."))) a.dbgOpen = true;
+            if (ImGui::MenuItem(T("Sector markers..."))) a.dbgOpen = true;
             ImGui::Separator();
-            if (ImGui::MenuItem(T("Ordner \"Debug Level\" oeffnen"),
+            if (ImGui::MenuItem(T("Open \"Debug Level\" folder"),
                                 nullptr, false, PathUtil::dirExists(a.debugDir())))
                 ShellExecuteW(nullptr, L"open", a.debugDir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             ImGui::EndPopup();
@@ -1668,123 +1662,120 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::Separator();
 
     //------------------------------------------------------------------------
-    // Aufteilung des oberen Bereichs (Nutzerwunsch): vier gleich breite
-    // Spalten mit umrandeten Kaesten statt einer einzigen langen Spalte.
-    // Vorher liefen die Trennlinien ueber die volle Fensterbreite und der
-    // Inhalt stand als schmales Band ganz links - auf einem breiten Bildschirm
-    // war das viel Weg fuer wenig Inhalt.
+    // Layout of the upper area (user wish): four equally wide columns with
+    // bordered boxes instead of one long column. Before, the separators ran
+    // across the full window width and the content stood as a narrow band on
+    // the far left - on a wide screen that was a lot of distance for little
+    // content.
     //
-    // Die Aufteilung ist so gewaehlt, dass die vier Spalten ungefaehr gleich
-    // hoch werden: Installation+Seed, Items+Outfits, Gegner+Vorbereitung,
-    // Level+Musik+Secrets.
+    // The split is chosen so the four columns come out roughly equally
+    // tall: installation+seed, items+outfits, enemies+preparation,
+    // levels+music+secrets.
     //------------------------------------------------------------------------
-    const float lueckeX = ImGui::GetStyle().ItemSpacing.x;
-    const float spaltenBreite = (ImGui::GetContentRegionAvail().x - 3.0f * lueckeX) / 4.0f;
+    const float gapX = ImGui::GetStyle().ItemSpacing.x;
+    const float columnWidth = (ImGui::GetContentRegionAvail().x - 3.0f * gapX) / 4.0f;
 
-    // Jeder Bereich bekommt seine eigene Farbe (Nutzerwunsch), damit sich die
-    // Kaesten voneinander abheben. Die Flaeche bleibt sehr schwach getoent -
-    // sie soll den Bereich kennzeichnen und den Text vom Hintergrundbild
-    // abheben, nicht selbst auffallen. Rahmen und Ueberschrift tragen
-    // dieselbe Farbe kraeftiger.
-    // hoehe == 0 heisst selbstwachsend. Nur die Kaesten, die eine Spalte auf
-    // die gemeinsame Unterkante strecken, bekommen eine feste Hoehe.
-    auto blockAuf = [spaltenBreite](const char* id, const char* titel, ImVec4 farbe,
-                                    float hoehe = 0.0f)
+    // Each area gets its own color (user wish), so the boxes stand apart
+    // from each other. The surface stays very weakly tinted - it should mark
+    // the area and lift the text off the background image, not stand out
+    // itself. Border and heading carry the same color more strongly.
+    // height == 0 means self-growing. Only the boxes that stretch a column
+    // to the common bottom edge get a fixed height.
+    auto openBlock = [columnWidth](const char* id, const char* title, ImVec4 color,
+                                   float height = 0.0f)
     {
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(farbe.x, farbe.y, farbe.z, 0.13f));
-        ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(farbe.x, farbe.y, farbe.z, 0.75f));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(color.x, color.y, color.z, 0.13f));
+        ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(color.x, color.y, color.z, 0.75f));
 
         ImGuiChildFlags flags = ImGuiChildFlags_Borders;
-        if (hoehe <= 0.0f) flags |= ImGuiChildFlags_AutoResizeY;
+        if (height <= 0.0f) flags |= ImGuiChildFlags_AutoResizeY;
 
-        ImGui::BeginChild(id, ImVec2(spaltenBreite, hoehe), flags);
+        ImGui::BeginChild(id, ImVec2(columnWidth, height), flags);
 
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(farbe.x, farbe.y, farbe.z, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(farbe.x, farbe.y, farbe.z, 0.6f));
-        ImGui::SeparatorText(T(titel));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(color.x, color.y, color.z, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(color.x, color.y, color.z, 0.6f));
+        ImGui::SeparatorText(T(title));
         ImGui::PopStyleColor(2);
     };
-    // Schliesst einen Kasten und merkt sich seine gemessene Hoehe.
-    auto blockZu = [](float* hoehe = nullptr)
+    // Closes a box and remembers its measured height.
+    auto closeBlock = [](float* height = nullptr)
     {
         ImGui::EndChild();
         ImGui::PopStyleColor(2);
-        if (hoehe) *hoehe = ImGui::GetItemRectSize().y;
+        if (height) *height = ImGui::GetItemRectSize().y;
     };
 
     //------------------------------------------------------------------------
-    // Gemeinsame Unterkante der oberen Reihe.
+    // Common bottom edge of the top row.
     //
-    // Der Gegnerkasten gibt die Zielhoehe vor (Nutzerwunsch: "alles an die
-    // Groesse des Gegner Blocks"). Gestreckt werden die jeweils LETZTEN
-    // Kaesten der anderen Spalten - Seed, Outfits, Secrets - und zwar ueber
-    // eine FESTE Hoehe.
+    // The enemy box sets the target height (user wish: "everything to the
+    // size of the enemy block"). Stretched are the LAST boxes of the other
+    // columns - seed, outfits, secrets - and via a FIXED height.
     //
-    // Wichtig ist, was hier NICHT passiert: gemessen werden ausschliesslich
-    // Kaesten, die selbst nie gestreckt werden. Ein erster Versuch hat die
-    // Streckung als Leerraum im Kasten angehaengt und die Eigenhoehe als
-    // "gemessen minus Leerraum" zurueckgerechnet - das ergab eine
-    // Rueckkopplung, weil ImGui die Groesse eines selbstwachsenden
-    // Kindfensters immer aus dem VORIGEN Bild nimmt. Die Rechnung mischte
-    // damit zwei Bilder, der Fehler ging in die Zielhoehe ein, und die
-    // Kaesten wuchsen von Bild zu Bild weiter ins Nichts (vom Nutzer
-    // gesehen). Feste Hoehe fuer die Gestreckten, messen nur die Freien -
-    // damit kann nichts zurueckwirken.
+    // What matters is what does NOT happen here: measured are exclusively
+    // boxes that are themselves never stretched. A first attempt appended
+    // the stretch as blank space inside the box and computed the intrinsic
+    // height back as "measured minus blank" - that produced a feedback
+    // loop, because ImGui always takes a self-growing child window's size
+    // from the PREVIOUS frame. The computation thereby mixed two frames,
+    // the error entered the target height, and the boxes grew frame by
+    // frame into nothing (seen by the user). Fixed height for the
+    // stretched, measure only the free ones - then nothing can feed back.
     //------------------------------------------------------------------------
-    const float lueckeY = ImGui::GetStyle().ItemSpacing.y;
-    const float zielHoehe = a.hoehen.gegner;    // 0 im allerersten Bild
+    const float gapY = ImGui::GetStyle().ItemSpacing.y;
+    const float targetHeight = a.heights.enemies;    // 0 in the very first frame
 
-    auto restHoehe = [zielHoehe](float belegt) -> float
+    auto remainingHeight = [targetHeight](float taken) -> float
     {
-        if (zielHoehe <= 0.0f) return 0.0f;     // noch nichts gemessen
-        const float r = zielHoehe - belegt;
-        // Zu wenig Platz? Dann lieber selbstwachsend als abgeschnitten.
+        if (targetHeight <= 0.0f) return 0.0f;  // nothing measured yet
+        const float r = targetHeight - taken;
+        // Too little room? Then better self-growing than cut off.
         return r > 60.0f ? r : 0.0f;
     };
 
-    // Die Farbtafel an einer Stelle, damit die Bereiche zueinander passen.
-    const ImVec4 fInstall (0.45f, 0.70f, 1.00f, 1.0f);   // Blau
-    const ImVec4 fSeed    (0.40f, 0.85f, 0.80f, 1.0f);   // Tuerkis
-    const ImVec4 fItems   (0.55f, 0.85f, 0.45f, 1.0f);   // Gruen
-    const ImVec4 fOutfits (0.80f, 0.55f, 0.95f, 1.0f);   // Violett
-    const ImVec4 fGegner  (1.00f, 0.50f, 0.40f, 1.0f);   // Rot
-    const ImVec4 fVorb    (0.60f, 0.60f, 0.65f, 1.0f);   // Grau, weil ohne Wirkung
-    const ImVec4 fLevel   (1.00f, 0.80f, 0.35f, 1.0f);   // Gold
-    const ImVec4 fMusik   (0.50f, 0.75f, 1.00f, 1.0f);   // Hellblau
-    const ImVec4 fSecrets (1.00f, 0.60f, 0.80f, 1.0f);   // Rosa
-    const ImVec4 fListe   (0.75f, 0.78f, 0.85f, 1.0f);   // neutral
-    const ImVec4 fStart   (0.55f, 0.90f, 0.60f, 1.0f);   // Gruen
+    // The color chart in one place, so the areas match each other.
+    const ImVec4 fInstall (0.45f, 0.70f, 1.00f, 1.0f);   // blue
+    const ImVec4 fSeed    (0.40f, 0.85f, 0.80f, 1.0f);   // teal
+    const ImVec4 fItems   (0.55f, 0.85f, 0.45f, 1.0f);   // green
+    const ImVec4 fOutfits (0.80f, 0.55f, 0.95f, 1.0f);   // violet
+    const ImVec4 fEnemies (1.00f, 0.50f, 0.40f, 1.0f);   // red
+    const ImVec4 fPrep    (0.60f, 0.60f, 0.65f, 1.0f);   // gray, because inert
+    const ImVec4 fLevel   (1.00f, 0.80f, 0.35f, 1.0f);   // gold
+    const ImVec4 fMusic   (0.50f, 0.75f, 1.00f, 1.0f);   // light blue
+    const ImVec4 fSecrets (1.00f, 0.60f, 0.80f, 1.0f);   // pink
+    const ImVec4 fList    (0.75f, 0.78f, 0.85f, 1.0f);   // neutral
+    const ImVec4 fStart   (0.55f, 0.90f, 0.60f, 1.0f);   // green
 
-    // --- Spalte 1: Installation und Seed ---------------------------------
+    // --- Column 1: installation and seed ---------------------------------
     ImGui::BeginGroup();
 
-    // --- 1. Spielordner ---
-    // Kurationsstand-Warnung ganz oben und quer ueber alle Spalten: sie
-    // betrifft das Ergebnis JEDES Laufs, nicht einen einzelnen Bereich.
-    if (!a.zonenWarnung.empty())
+    // --- 1. Game folder ---
+    // The curation-stamp warning at the very top and across all columns: it
+    // affects the result of EVERY run, not a single area.
+    if (!a.zoneWarning.empty())
     {
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(1.0f, .45f, .30f, 0.16f));
         ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(1.0f, .45f, .30f, 0.85f));
         ImGui::BeginChild("k_zonenwarnung", ImVec2(0.0f, 0.0f),
                           ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
-        ImGui::TextColored(ImVec4(1, .55f, .35f, 1), T("Achtung: veralteter Kurationsstand"));
-        ImGui::TextWrapped(T("%s"), a.zonenWarnung.c_str());
-        ImGui::TextDisabled(T("Beheben: ZoneAnalyse.ps1 fuer ALLE Level neu nach data\\ exportieren."));
+        ImGui::TextColored(ImVec4(1, .55f, .35f, 1), T("Warning: outdated curation data"));
+        ImGui::TextWrapped(T("%s"), a.zoneWarning.c_str());
+        ImGui::TextDisabled(T("To fix: re-export ZoneAnalyse.ps1 for ALL levels into data\\."));
         ImGui::EndChild();
         ImGui::PopStyleColor(2);
         ImGui::Spacing();
     }
 
-    blockAuf("k_install", "1. Deine Installation", fInstall);
-    ImGui::TextWrapped(T("Waehle den Ordner deiner Tomb Raider Chronicles-Installation. "
-                       "Die Level werden direkt dort randomisiert; die Originale sichert "
-                       "das Programm vorher nach data\\Backup."));
+    openBlock("k_install", "1. Your installation", fInstall);
+    ImGui::TextWrapped(T("Choose the folder of your Tomb Raider Chronicles installation. "
+                         "The levels are randomized right there; the program first backs up "
+                         "the originals to data\\Backup."));
 
-    std::string shown = a.cfg.sourceDir.empty() ? std::string(T("(nicht gewaehlt)"))
+    std::string shown = a.cfg.sourceDir.empty() ? std::string(T("(not selected)"))
                                                 : PathUtil::narrow(a.cfg.sourceDir);
     ImGui::TextWrapped(T("%s"), shown.c_str());
 
-    if (ImGui::Button(T("Ordner waehlen...")))
+    if (ImGui::Button(T("Choose folder...")))
     {
         std::wstring picked;
         if (pickFolder(hwnd, picked))
@@ -1795,50 +1786,49 @@ static void drawUi(App& a, HWND hwnd)
         }
     }
     ImGui::SameLine();
-    if (ImGui::Button(T("Erneut pruefen"))) inspectSource(a);
+    if (ImGui::Button(T("Check again"))) inspectSource(a);
     ImGui::SameLine();
-    if (ImGui::Button(T("Installations-Pfade..."))) a.pfadeOpen = true;
-    // Die Schwebehilfe der Optionsliste steht hier noch nicht zur Verfuegung -
-    // sie wird erst weiter unten angelegt. Der eigene Tooltip tut es auch.
+    if (ImGui::Button(T("Installation paths..."))) a.pathsOpen = true;
+    // The option list's hover help is not available up here - it is only
+    // created further down. A plain tooltip does the job.
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
-        ImGui::SetTooltip(T("Optional: Ordner von Tomb Raider 3 und The Lost Artifact.\n"
-                          "Nur damit lassen sich die Dinosaurier verwenden -\n"
-                          "wir liefern keine Spieldaten mit."));
+        ImGui::SetTooltip(T("Optional: folders of Tomb Raider 3 and The Lost Artifact.\n"
+                            "Only with these can the dinosaurs be used -\n"
+                            "we ship no game data."));
     {
-        const int fehlt = (dinoQuelleDa(a, "tr3") ? 0 : 1) + (dinoQuelleDa(a, "tr3gold") ? 0 : 1);
+        const int missing = (dinoSourcePresent(a, "tr3") ? 0 : 1) + (dinoSourcePresent(a, "tr3gold") ? 0 : 1);
         ImGui::SameLine();
-        if (fehlt == 0) ImGui::TextDisabled(T("TR3 + LA found"));
-        else            ImGui::TextDisabled(T("%d ohne Pfad"), fehlt);
+        if (missing == 0) ImGui::TextDisabled(T("TR3 + LA found"));
+        else              ImGui::TextDisabled(T("%d without a path"), missing);
     }
 
-    blockZu(&a.hoehen.install);
+    closeBlock(&a.heights.install);
 
     // --- 2. Seed ---
-    blockAuf("k_seed", "2. Seed", fSeed, restHoehe(a.hoehen.install + lueckeY));
-    ImGui::TextWrapped(T("Derselbe Seed erzeugt immer dasselbe Spiel. Jede Eingabe ist gueltig - "
-                       "auch ein Wort."));
+    openBlock("k_seed", "2. Seed", fSeed, remainingHeight(a.heights.install + gapY));
+    ImGui::TextWrapped(T("The same seed always produces the same game. Any input is valid - "
+                         "even a word."));
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 90.0f);
     ImGui::InputText("##seed", a.seedBuf, sizeof(a.seedBuf));
     ImGui::SameLine();
-    if (ImGui::Button(T("Wuerfeln")))
+    if (ImGui::Button(T("Roll")))
     {
         const std::string s = SeedText::format(SeedText::random());
         std::snprintf(a.seedBuf, sizeof(a.seedBuf), "%s", s.c_str());
     }
-    ImGui::TextDisabled(T("wirksam: 0x%016llX"), (unsigned long long)a.effectiveSeed());
-    blockZu();
+    ImGui::TextDisabled(T("effective: 0x%016llX"), (unsigned long long)a.effectiveSeed());
+    closeBlock();
 
     ImGui::EndGroup();
     ImGui::SameLine();
 
-    // --- 3. Was soll gewuerfelt werden - thematische Bereiche ------------
+    // --- 3. What should be rolled - thematic areas -----------------------
 
-    // Die Erklaerungen haengen als schwebende Box an der Checkbox: kurz mit
-    // der Maus darueber verweilen blendet sie ein, wegbewegen blendet sie
-    // aus (Nutzerwunsch - die Liste bleibt kompakt, die Texte gehen nicht
-    // verloren). AllowWhenDisabled, damit auch der ausgegraute
-    // Cross-Gegnermix seine Erklaerung zeigt.
-    auto hoverHilfe = [](const char* text)
+    // The explanations hang on the checkbox as a floating box: lingering
+    // with the mouse fades them in, moving away fades them out (user wish -
+    // the list stays compact, the texts are not lost). AllowWhenDisabled so
+    // the grayed-out cross enemy mix shows its explanation too.
+    auto hoverHelp = [](const char* text)
     {
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled))
         {
@@ -1850,441 +1840,439 @@ static void drawUi(App& a, HWND hwnd)
         }
     };
 
-    // --- Regler fuer Balance.txt (#108) ----------------------------------
+    // --- Sliders for Balance.txt (#108) ----------------------------------
     //
-    // Geschrieben wird erst, wenn der Regler LOSGELASSEN wird - waehrend des
-    // Ziehens laeuft die Schleife mit 60 Bildern je Sekunde, das waeren 60
-    // Schreibvorgaenge in die Installation des Nutzers je Sekunde.
+    // Written only when the slider is RELEASED - while dragging, the loop
+    // runs at 60 frames per second, which would be 60 writes into the user's
+    // installation per second.
     //
-    // Angefasst werden nur die drei Prozentzeilen. Der Schaden je Waffe, die
-    // Lebenspunkte je Gegner und der Schaden je Angriff bleiben stehen, damit
-    // Handarbeit in der Datei eine Reglerbewegung ueberlebt.
-    auto balanceSchreiben = [&a]() { balanceSchreibenNach(a); };
+    // Only the three percentage lines are touched. The damage per weapon,
+    // the hit points per enemy and the damage per attack stay, so hand work
+    // in the file survives a slider movement.
+    auto writeBalance = [&a]() { writeBalanceOut(a); };
 
-    auto balanceRegler = [&](const char* beschriftung, float* wert, bool* zufall,
-                             float von, float bis, const char* hilfe)
+    auto balanceSlider = [&](const char* label, float* value, bool* random,
+                             float from, float to, const char* help)
     {
-        // Sprache (#128): einmal am Eingang uebersetzen, dann arbeitet der
-        // ganze Regler mit dem sichtbaren Text.
-        beschriftung = T(beschriftung);
-        hilfe = T(hilfe);
-        // Zwei Zeilen statt einer: Beschriftung samt Haken oben, der Regler
-        // darunter ueber die volle Kastenbreite. In einer Zeile passten
-        // Regler, Name, Prozentzahl und Haken in einer Viertelspalte nicht
-        // mehr nebeneinander und wurden rechts abgeschnitten.
-        char kennung[64];
-        std::snprintf(kennung, sizeof(kennung), "%s##%s", T("Zufall"), beschriftung);
+        // Language (#128): translate once at the entrance, then the whole
+        // slider works with the visible text.
+        label = T(label);
+        help = T(help);
+        // Two lines instead of one: label with checkbox on top, the slider
+        // below it across the full box width. In one line, slider, name,
+        // percentage and checkbox no longer fit side by side in a quarter
+        // column and were cut off on the right.
+        char tag[64];
+        std::snprintf(tag, sizeof(tag), "%s##%s", T("Random"), label);
 
-        ImGui::TextUnformatted(beschriftung);
-        hoverHilfe(hilfe);
+        ImGui::TextUnformatted(label);
+        hoverHelp(help);
         ImGui::SameLine();
 
-        // Den Haken rechtsbuendig setzen, damit die drei Regler untereinander
-        // eine Linie ergeben statt einer Treppe.
+        // Right-align the checkbox so the three sliders form a line among
+        // themselves instead of a staircase.
         {
-            const float breite = ImGui::CalcTextSize(T("Zufall")).x
-                               + ImGui::GetFrameHeight()
-                               + ImGui::GetStyle().ItemInnerSpacing.x;
-            const float ziel = ImGui::GetContentRegionAvail().x - breite;
-            if (ziel > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ziel);
+            const float width = ImGui::CalcTextSize(T("Random")).x
+                              + ImGui::GetFrameHeight()
+                              + ImGui::GetStyle().ItemInnerSpacing.x;
+            const float target = ImGui::GetContentRegionAvail().x - width;
+            if (target > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + target);
         }
 
-        if (ImGui::Checkbox(kennung, zufall))
+        if (ImGui::Checkbox(tag, random))
         {
-            // Sofort werfen, damit der Regler nicht auf dem alten Wert
-            // stehen bleibt und der Nutzer gleich sieht, was der Seed gibt.
-            balanceWuerfeln(a);
-            balanceSchreiben();
+            // Roll immediately, so the slider does not stay on the old
+            // value and the user sees right away what the seed gives.
+            rollBalance(a);
+            writeBalance();
         }
-        hoverHilfe("Statt von Hand: der Seed wuerfelt den Wert aus, in "
-                   "Fuenferschritten zwischen 0.50x und 2.00x. Derselbe Seed "
-                   "gibt immer denselben Wert, und zwar unabhaengig davon, ob "
-                   "die anderen beiden Haken gesetzt sind.\n\n"
-                   "Der Regler zeigt sofort, was der aktuelle Seed gibt. In die "
-                   "Balance.txt wandert der Wurf beim Anhaken und beim naechsten "
-                   "Lauf.\n\n"
-                   "Auch der Waffenschaden wird nur ab 0.50x geworfen - ein Seed, "
-                   "der Laras Waffen auf ein Zehntel stellt, waere nicht schwer, "
-                   "sondern unspielbar. 0.00x bleibt der Handeinstellung.");
+        hoverHelp("Instead of setting it by hand: the seed rolls the value, in "
+                  "steps of five between 0.50x and 2.00x. The same seed always "
+                  "gives the same value, no matter whether the other two boxes "
+                  "are checked.\n\n"
+                  "The slider immediately shows what the current seed gives. The "
+                  "roll goes into Balance.txt when you check the box and on the "
+                  "next run.\n\n"
+                  "Weapon damage too is only rolled from 0.50x upward - a seed "
+                  "that puts Lara's weapons at a tenth would not be hard, just "
+                  "unplayable. 0.00x is reserved for manual tuning.");
 
-        // Der Regler traegt seinen Wert selbst als Beschriftung - eine eigene
-        // Prozentzeile daneben braucht es damit nicht mehr.
-        char anzeige[32];
-        std::snprintf(anzeige, sizeof(anzeige), "%%.2fx  (%d %%%%)",
-                      static_cast<int>(*wert * 100.0f + 0.5f));
+        // The slider carries its value as its own label - a separate
+        // percentage line next to it is no longer needed.
+        char display[32];
+        std::snprintf(display, sizeof(display), "%%.2fx  (%d %%%%)",
+                      static_cast<int>(*value * 100.0f + 0.5f));
 
-        char reglerId[64];
-        std::snprintf(reglerId, sizeof(reglerId), "##regler_%s", beschriftung);
+        char sliderId[64];
+        std::snprintf(sliderId, sizeof(sliderId), "##regler_%s", label);
 
-        ImGui::BeginDisabled(*zufall);
+        ImGui::BeginDisabled(*random);
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-        ImGui::SliderFloat(reglerId, wert, von, bis, anzeige, ImGuiSliderFlags_AlwaysClamp);
+        ImGui::SliderFloat(sliderId, value, from, to, display, ImGuiSliderFlags_AlwaysClamp);
         ImGui::EndDisabled();
-        hoverHilfe(hilfe);
+        hoverHelp(help);
 
         if (ImGui::IsItemDeactivatedAfterEdit())
-            balanceSchreiben();
+            writeBalance();
     };
 
-    // --- Spalte 2: Items und Outfits -------------------------------------
+    // --- Column 2: items and outfits -------------------------------------
     ImGui::BeginGroup();
 
-    blockAuf("k_items", "3. Items", fItems);
+    openBlock("k_items", "3. Items", fItems);
 
-    ImGui::Checkbox(T("Ausruestung (Waffen, Munition, Medipacks)"), &a.optOtherPickups);
-    // Item-Abundance (#36): zusaetzliche Verbrauchsgueter streuen. Weniger als
-    // Vanilla gibt es bewusst nicht - Items entfernen wuerde alle folgenden
-    // Indizes verschieben und jeden "Object N"-Verweis der Trigger brechen.
-    ImGui::RadioButton(T("Vanilla Anzahl"), &a.optItemMenge, 0);
-    hoverHilfe("Das Level behaelt genau so viel Ausruestung, wie Core vorgesehen "
-               "hat - nur an anderen Stellen.");
+    ImGui::Checkbox(T("Equipment (weapons, ammo, medipacks)"), &a.optOtherPickups);
+    // Item abundance (#36): scatter additional consumables. Less than
+    // vanilla deliberately does not exist - removing items would shift all
+    // following indices and break every "Object N" reference of the
+    // triggers.
+    ImGui::RadioButton(T("Vanilla amount"), &a.optItemAmount, 0);
+    hoverHelp("The level keeps exactly as much equipment as Core intended - "
+              "just in different places.");
     ImGui::SameLine();
-    ImGui::RadioButton(T("Mehr"), &a.optItemMenge, 1);
-    hoverHilfe("Streut bis zu zwoelf zusaetzliche Verbrauchsgueter pro Level. "
-               "Gelegt wird nur, was das Level ohnehin kennt - Munition, "
-               "Medipacks, Fackeln -, gewichtet nach Haeufigkeit: Andy2 (Kind-Lara, "
-               "keine Waffen) bekommt also Medipacks, ein Waffenlevel Munition. "
-               "Schluessel, Puzzleteile und Secrets bleiben aussen vor.");
+    ImGui::RadioButton(T("More"), &a.optItemAmount, 1);
+    hoverHelp("Scatters up to twelve additional consumables per level. Only "
+              "what the level already knows is placed - ammo, medipacks, "
+              "flares -, weighted by frequency: Andy2 (young Lara, no weapons) "
+              "gets medipacks, a weapon level gets ammo. Keys, puzzle pieces "
+              "and secrets are left out.");
     ImGui::SameLine();
-    ImGui::RadioButton(T("Viel mehr"), &a.optItemMenge, 2);
-    hoverHilfe("Wie \"Mehr Items\", aber bis zu dreissig pro Level. Die Grenze "
-               "ist erreicht, wenn die freien Ablageflaechen ausgehen oder das "
-               "Item-Limit der Engine (512) naeher rueckt - beides deckelt die "
-               "Zahl von selbst.");
+    ImGui::RadioButton(T("A lot more"), &a.optItemAmount, 2);
+    hoverHelp("Like \"More items\", but up to thirty per level. The limit is "
+              "reached when the free placement spots run out or the engine's "
+              "item limit (512) draws near - both cap the number on their own.");
 
-    ImGui::Checkbox(T("Schluessel & Puzzles"), &a.optKeyItems);
+    ImGui::Checkbox(T("Keys & puzzles"), &a.optKeyItems);
 
-    // Kein Haken mehr: volles Waffenset ist Standard (Nutzerentscheidung).
-    ImGui::TextDisabled(T("Alle Waffen ueberall sind Standard und immer dabei."));
-    hoverHilfe("Jedes Level bekommt bei jedem Lauf das volle Waffenset: Pistolen, "
-               "Uzi, Schrotflinte, Desert Eagle (ersetzt den Revolver, in den "
-               "joby-Leveln auch im Namen) und HK samt Munition. Ein Level behaelt "
-               "seine eigene funktionierende Waffe; joby4 bleibt vanilla, und "
-               "rich2 bekommt keine Pistolen (sein Pistolenslot traegt "
-               "Sequenzmaterial von Core). Der Seed streut zusaetzlich einige der "
-               "neuen Waffen samt Munition als Pickups ins Level. Die Modelle "
-               "kommen zur Laufzeit aus den eigenen Leveldateien des Spielers.");
+    // No checkbox anymore: the full weapon set is standard (user decision).
+    ImGui::TextDisabled(T("All weapons everywhere is standard and always included."));
+    hoverHelp("Every level gets the full weapon set on every run: pistols, Uzi, "
+              "shotgun, Desert Eagle (replaces the revolver, in the joby levels "
+              "by name too) and HK, ammo included. A level keeps its own "
+              "working weapon; joby4 stays vanilla, and rich2 gets no pistols "
+              "(its pistol slot carries sequence material from Core). The seed "
+              "additionally scatters some of the new weapons with ammo into the "
+              "level as pickups. The models come from the player's own level "
+              "files at runtime.");
 
     if (!a.optOtherPickups && !a.optKeyItems && !a.optEnemies && !a.optEnemySwap && !a.optOutfits)
-        ImGui::TextColored(ImVec4(1, .5f, .3f, 1), T("Keine Wuerfel-Option gewaehlt - die Level bekommen nur das Standard-Waffenset."));
+        ImGui::TextColored(ImVec4(1, .5f, .3f, 1), T("No shuffle option selected - the levels only get the standard weapon set."));
 
-    balanceRegler("Waffenschaden", &a.balWeapons, &a.balWeaponsRandom, 0.0f, 2.0f,
-                  "Wirkt auf alle Waffen Laras zugleich - Pistolen, Uzi, "
-                  "Schrotflinte, Revolver, HK, Grappling Gun und Fackel. "
-                  "0.00x macht sie wirkungslos, 2.00x verdoppelt ihren Schaden.\n\n"
-                  "Geschrieben wird die Zeile WaffenSchaden in Balance.txt neben "
-                  "der PCtomb5.exe. Wer dort einzelne Waffen von Hand eingestellt "
-                  "hat, behaelt sie: der Regler wirkt zusaetzlich obendrauf.");
+    balanceSlider("Weapon damage", &a.balWeapons, &a.balWeaponsRandom, 0.0f, 2.0f,
+                  "Affects all of Lara's weapons at once - pistols, Uzi, shotgun, "
+                  "revolver, HK, grappling gun and torch. 0.00x makes them "
+                  "harmless, 2.00x doubles their damage.\n\n"
+                  "This writes the WaffenSchaden line in Balance.txt next to "
+                  "PCtomb5.exe. If you tuned individual weapons there by hand, "
+                  "they are kept: the slider applies on top.");
 
-    blockZu(&a.hoehen.items);
+    closeBlock(&a.heights.items);
 
-    blockAuf("k_outfits", "4. Outfits", fOutfits, restHoehe(a.hoehen.items + lueckeY));
+    openBlock("k_outfits", "4. Outfits", fOutfits, remainingHeight(a.heights.items + gapY));
 
-    ImGui::Checkbox(T("Zufaellige Outfits"), &a.optOutfits);
-    hoverHilfe("Jeder Abschnitt bekommt zufaellig Lara_Andrea, Lara_Joby oder "
-               "Lara_Rich (Catsuit). Uebertragen werden nur Haut und Kopf (Slots "
-               "8/9/10) samt Outfit-Byte - nie Slot 0, der traegt die Animationen. "
-               "joby4 behaelt den Taucheranzug; die andy-Level bekommen immer eine "
-               "erwachsene Lara (Kind-Lara kann keine Waffen tragen).");
+    ImGui::Checkbox(T("Random outfits"), &a.optOutfits);
+    hoverHelp("Each section randomly gets Lara_Andrea, Lara_Joby or Lara_Rich "
+              "(catsuit). Only skin and head are carried over (slots 8/9/10) "
+              "plus the outfit byte - never slot 0, which carries the "
+              "animations. joby4 keeps the diving suit; the andy levels always "
+              "get an adult Lara (young Lara cannot carry weapons).");
 
-    // Platzhalter: klassische Outfits als zusaetzliche Poolauswahl.
+    // Placeholders: classic outfits as additional pool choices.
     ImGui::BeginDisabled(true);
-    ImGui::Checkbox(T("TR1 Outfit"), &a.phOutfitTr1);
-    hoverHilfe("Kommt noch: das klassische TR1-Outfit als zusaetzliche Wahl im "
-               "Outfit-Pool. Braucht ein passendes TR5-Modell - Spieldaten "
-               "anderer Spiele liefern wir nie mit, das Modell muss also "
-               "eigens gebaut oder vom Spieler beigesteuert werden.");
-    ImGui::Checkbox(T("TR2 Outfits"), &a.phOutfitTr2);
-    hoverHilfe("Kommt noch: die TR2-Outfits (u.a. Bomberjacke, Wetsuit) als "
-               "zusaetzliche Poolauswahl - gleiche Voraussetzung wie TR1.");
-    ImGui::Checkbox(T("TR3 Outfits"), &a.phOutfitTr3);
-    hoverHilfe("Kommt noch: die TR3-Outfits (u.a. Dschungel, Antarktis) als "
-               "zusaetzliche Poolauswahl - gleiche Voraussetzung wie TR1.");
+    ImGui::Checkbox(T("TR1 outfit"), &a.phOutfitTr1);
+    hoverHelp("Coming later: the classic TR1 outfit as an additional choice in "
+              "the outfit pool. Needs a matching TR5 model - we never ship "
+              "other games' data, so the model has to be built from scratch or "
+              "contributed by the player.");
+    ImGui::Checkbox(T("TR2 outfits"), &a.phOutfitTr2);
+    hoverHelp("Coming later: the TR2 outfits (bomber jacket, wetsuit and more) "
+              "as additional pool choices - same requirement as TR1.");
+    ImGui::Checkbox(T("TR3 outfits"), &a.phOutfitTr3);
+    hoverHelp("Coming later: the TR3 outfits (jungle, Antarctica and more) "
+              "as additional pool choices - same requirement as TR1.");
     ImGui::EndDisabled();
-    blockZu();
+    closeBlock();
 
     ImGui::EndGroup();
     ImGui::SameLine();
 
-    // --- Spalte 3: Gegner und die Platzhalter ----------------------------
+    // --- Column 3: enemies and the placeholders --------------------------
     ImGui::BeginGroup();
 
-    blockAuf("k_gegner", "5. Gegner", fGegner);
+    openBlock("k_gegner", "5. Enemies", fEnemies);
 
-    ImGui::Checkbox(T("Zusaetzliche Gegner ins Level setzen"), &a.optEnemies);
-    hoverHilfe("Jeder bekommt einen eigenen Trigger, etwa drei Sektoren vor sich "
-               "auf Laras Weg - nie auf seinem eigenen Feld, sonst spawnt er in ihr. "
-               "Welche Gegnertypen ein Level vertraegt, ist handkuriert; ist die "
-               "Liste leer, bleibt der Haken folgenlos.");
+    ImGui::Checkbox(T("Add extra enemies to the level"), &a.optEnemies);
+    hoverHelp("Each one gets its own trigger, about three sectors ahead on "
+              "Lara's path - never on its own tile, or it would spawn inside "
+              "her. Which enemy types a level can take is hand-curated; if the "
+              "list is empty, the checkbox has no effect.");
     ImGui::Indent();
     ImGui::BeginDisabled(!a.optEnemies);
     ImGui::SetNextItemWidth(160.0f);
-    ImGui::SliderInt(T("pro Level"), &a.optEnemyCount, 1, 20);
+    ImGui::SliderInt(T("per level"), &a.optEnemyCount, 1, 20);
     ImGui::EndDisabled();
     ImGui::Unindent();
 
-    // Frueher "Vanilla-Gegnermix" - der Name klang wie die Poolstufe "Nur
-    // Levelpool" und stiftete Verwirrung (Nutzerfrage). Der Haken sagt, OB
-    // vorhandene Gegner die Rollen tauschen; die Poolwahl darunter sagt,
-    // WORAUS Tausch und Zusatzgegner wuerfeln.
-    ImGui::Checkbox(T("Vorhandene Gegner tauschen"), &a.optEnemySwap);
-    hoverHilfe("Die Gegner, die im Level ohnehin stehen, tauschen die Rollen. "
-               "Nur die Art wechselt, der Item-Index bleibt - jeder Gegner wacht "
-               "also weiter dort auf, wo sein Trigger es vorsieht. Anzahl und "
-               "Verteilung bleiben gleich, gescriptete Gegner bleiben unberuehrt. "
-               "Woraus die neuen Rollen kommen, entscheidet der Gegnerpool unten.");
+    // Formerly "vanilla enemy mix" - the name sounded like the pool tier
+    // "level pool only" and caused confusion (user question). The checkbox
+    // says WHETHER existing enemies swap roles; the pool choice below says
+    // WHAT swap and extra enemies roll from.
+    ImGui::Checkbox(T("Swap existing enemies"), &a.optEnemySwap);
+    hoverHelp("The enemies already in the level swap roles. Only the type "
+              "changes, the item index stays - every enemy still wakes up "
+              "where its trigger intends. Count and distribution stay the "
+              "same, scripted enemies remain untouched. Where the new roles "
+              "come from is decided by the enemy pool below.");
 
-    // Woraus wuerfeln Tausch und Zusatzgegner? Drei Stufen. Ausgegraut,
-    // solange keine der beiden Aktionen aktiv ist - ohne sie hat die Wahl
-    // keine Wirkung.
+    // What do swap and extra enemies roll from? Three tiers. Grayed out as
+    // long as neither action is active - without them the choice has no
+    // effect.
     ImGui::BeginDisabled(!a.optEnemies && !a.optEnemySwap);
-    ImGui::TextUnformatted(T("Gegnerpool:"));
-    ImGui::RadioButton(T("Nur Levelpool"), &a.optEnemyPool, 0);
-    hoverHilfe("Getauscht und gesetzt wird nur, was das Level selbst kennt "
-               "(die handkuratierte Liste je Level).");
+    ImGui::TextUnformatted(T("Enemy pool:"));
+    ImGui::RadioButton(T("Level pool only"), &a.optEnemyPool, 0);
+    hoverHelp("Only what the level itself knows is swapped and placed "
+              "(the hand-curated list per level).");
     ImGui::RadioButton(T("Cross-Mix"), &a.optEnemyPool, 1);
-    hoverHilfe("Bis zu DREI fremde Typen aus anderen Leveln kommen in den Pool - "
-               "SWAT, Guards, Mafia, Larson, Pierre, Loewe, Gladiator, Statue, "
-               "Maze Monster, Imp und mehr. Beim Tausch geht etwa jede vierte "
-               "Rolle an einen davon, das Level bleibt erkennbar. Modelle und "
-               "Sounds wandern zur Laufzeit aus den eigenen Leveldateien mit.");
+    hoverHelp("Up to THREE foreign types from other levels join the pool - "
+              "SWAT, guards, mafia, Larson, Pierre, lion, gladiator, statue, "
+              "maze monster, imp and more. When swapping, roughly every fourth "
+              "role goes to one of them, so the level stays recognizable. "
+              "Models and sounds travel along from your own level files at "
+              "runtime.");
     ImGui::RadioButton(T("Allsanity"), &a.optEnemyPool, 2);
-    hoverHilfe("Der KOMPLETTE Gegnerpool steht jedem Level zur Verfuegung, und "
-               "beim Tausch wuerfelt jede Rolle frei aus allem - maximale "
-               "Auswahl. Uebernommen werden trotzdem nur die Typen, die der "
-               "Seed wirklich einsetzt; der Texturseiten-Haushalt bleibt "
-               "gemessen deutlich unter der 256er-Grenze. Gescriptete Gegner "
-               "bleiben in jedem Modus unberuehrt.");
+    hoverHelp("The COMPLETE enemy pool is available to every level, and when "
+              "swapping, every role rolls freely from everything - maximum "
+              "variety. Still, only the types the seed actually uses are "
+              "imported; the texture page budget stays, measured, well below "
+              "the 256 limit. Scripted enemies remain untouched in every "
+              "mode.");
 
-    // Feinauswahl in einem eigenen Fenster: die Liste ist zu lang fuer die
-    // Hauptseite und der Nutzer fasst sie selten an.
-    if (ImGui::Button(T("Gegnerarten..."))) a.artenOpen = true;
-    hoverHilfe("Welche Gegnerarten der Zufall ueberhaupt ziehen darf. Gut, um "
-               "Lieblingsgegner haeufiger zu sehen - oder um eine einzelne Art "
-               "zu pruefen: alles abwaehlen bis auf eine.");
-    if (!a.optGegnerAus.empty())
+    // Fine selection in its own window: the list is too long for the main
+    // page and the user rarely touches it.
+    if (ImGui::Button(T("Enemy types..."))) a.kindsOpen = true;
+    hoverHelp("Which enemy types the random draw may pick at all. Good for "
+              "seeing favorite enemies more often - or for testing a single "
+              "type: deselect everything but one.");
+    if (!a.optEnemiesOff.empty())
     {
         ImGui::SameLine();
-        ImGui::TextDisabled(T("%d abgewaehlt"), static_cast<int>(a.optGegnerAus.size()));
+        ImGui::TextDisabled(T("%d deselected"), static_cast<int>(a.optEnemiesOff.size()));
     }
     ImGui::EndDisabled();
 
-    balanceRegler("Gegnerleben", &a.balEnemyHealth, &a.balEnemyHealthRandom, 0.5f, 2.0f,
-                  "Wie zaeh alle Gegner sind. 0.50x halbiert ihre Lebenspunkte, "
-                  "2.00x verdoppelt sie.\n\n"
-                  "Geschrieben wird die Zeile GegnerLeben in Balance.txt neben der "
-                  "PCtomb5.exe. Wer dort einzelne Gegner von Hand eingestellt hat, "
-                  "behaelt sie: der Regler wirkt zusaetzlich obendrauf.");
+    balanceSlider("Enemy health", &a.balEnemyHealth, &a.balEnemyHealthRandom, 0.5f, 2.0f,
+                  "How tough all enemies are. 0.50x halves their hit points, "
+                  "2.00x doubles them.\n\n"
+                  "This writes the GegnerLeben line in Balance.txt next to "
+                  "PCtomb5.exe. If you tuned individual enemies there by hand, "
+                  "they are kept: the slider applies on top.");
 
-    balanceRegler("Gegnerschaden", &a.balEnemyDamage, &a.balEnemyDamageRandom, 0.5f, 2.0f,
-                  "Wie hart alle Gegner zuschlagen. Fallen, Stuerze, Feuer, Gift "
-                  "und Ertrinken bleiben immer so hart wie im Original, ebenso die "
-                  "fest eingebauten Levelgefahren wie das Deckengeschuetz.\n\n"
-                  "Geschrieben wird die Zeile GegnerSchaden in Balance.txt neben "
-                  "der PCtomb5.exe.");
+    balanceSlider("Enemy damage", &a.balEnemyDamage, &a.balEnemyDamageRandom, 0.5f, 2.0f,
+                  "How hard all enemies hit. Traps, falls, fire, poison and "
+                  "drowning always stay as hard as in the original, as do the "
+                  "built-in level hazards like the ceiling gun.\n\n"
+                  "This writes the GegnerSchaden line in Balance.txt next to "
+                  "PCtomb5.exe.");
 
-    if (ImGui::Button(T("Balance zuruecksetzen")))
+    if (ImGui::Button(T("Reset balance")))
     {
         a.balWeaponsRandom = a.balEnemyHealthRandom = a.balEnemyDamageRandom = false;
         a.balWeapons = a.balEnemyHealth = a.balEnemyDamage = 1.0f;
-        balanceSchreiben();
+        writeBalance();
     }
-    hoverHilfe("Nimmt die Zufallshaken zurueck, setzt die drei Regler auf 1.00x "
-               "und traegt das in Balance.txt ein. "
-               "Von Hand eingestellte Einzelwerte in der Datei bleiben erhalten - "
-               "wer die auch zurueck will, loescht die Balance.txt; das Spiel legt "
-               "sie beim naechsten Start neu und vollstaendig an.");
+    hoverHelp("Unchecks the random boxes, sets the three sliders to 1.00x and "
+              "writes that to Balance.txt. Individual values tuned by hand in "
+              "the file are kept - if you want those reset too, delete "
+              "Balance.txt; the game recreates it completely on the next "
+              "start.");
 
-    if (!a.balHinweis.empty())
-        ImGui::TextDisabled(T("%s"), a.balHinweis.c_str());
-    blockZu(&a.hoehen.gegner);
+    if (!a.balNote.empty())
+        ImGui::TextDisabled(T("%s"), a.balNote.c_str());
+    closeBlock(&a.heights.enemies);
 
 
     ImGui::EndGroup();
     ImGui::SameLine();
 
-    // --- Spalte 4: Level, Musik, Secrets ---------------------------------
+    // --- Column 4: levels, music, secrets --------------------------------
     ImGui::BeginGroup();
 
-    blockAuf("k_level", "6. Level", fLevel);
-    ImGui::BeginDisabled(a.optLevelOrder == 2);	// bei "frei ueber alles" bedeutungslos und bewusst ohne Wirkung
-    ImGui::Checkbox(T("Levelabschnitte switchen"), &a.phLevelAbschnitte);
+    openBlock("k_level", "6. Levels", fLevel);
+    ImGui::BeginDisabled(a.optLevelOrder == 2);	// meaningless with "free across everything", deliberately inert
+    ImGui::Checkbox(T("Shuffle level sections"), &a.phLevelSections);
     ImGui::EndDisabled();
-    hoverHilfe("Die vier Story-Abschnitte (Rom, Russland, Irland, VCI) in "
-               "zufaelliger Reihenfolge spielen. Innerhalb eines Abschnitts "
-               "bleibt die Reihenfolge - alle Schluesselketten bleiben gueltig, "
-               "der Abspann kommt nach dem letzten Abschnitt. BRAUCHT die "
-               "Engine ab 2026-08-22 (Levelidentitaet aus dem Dateinamen); "
-               "alte Spielstaende passen nicht zur neuen Reihenfolge.");
+    hoverHelp("Play the four story sections (Rome, Russia, Ireland, VCI) in "
+              "random order. Within a section the order stays - all key "
+              "chains remain valid, the credits come after the last section. "
+              "REQUIRES the engine from 2026-08-22 on (level identity from "
+              "the file name); old savegames do not match the new order.");
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-    const char* folgeNamen[] = { T("Level-Reihenfolge: aus"), T("innerhalb der Abschnitte"), T("frei ueber alles") };
-    ImGui::Combo("##levelfolge", &a.optLevelOrder, folgeNamen, 3);
-    hoverHilfe("Innerhalb: Rom/Russland/Irland/VCI bleiben Bloecke, nur die Level "
-               "darin tauschen. Frei: alle 13 Level ueber alle Abschnitte hinweg "
-               "(z.B. rich1 -> Andrea2 -> joby5 -> rich2). Die Cutscene richcut2 "
-               "bleibt immer an rich2. Bei jedem Levelstart werden Keys/Puzzles/"
-               "Pickups und die Grappling Gun (nur rich3) zurueckgesetzt - Waffen, "
-               "Munition, Medis und Leuchtfackeln bleiben. Was ein Level aus einem "
-               "anderen braucht (Key 8 joby3, Key 7 joby5, Catapult Andy2, "
-               "Brechstange Andrea3), gibt das Skript immer - samt Modell und Namen. "
-               "Kuratiert in LevelChains.h.");
+    const char* orderNames[] = { T("Level order: off"), T("within the sections"), T("free across everything") };
+    ImGui::Combo("##levelfolge", &a.optLevelOrder, orderNames, 3);
+    hoverHelp("Within: Rome/Russia/Ireland/VCI stay blocks, only the levels "
+              "inside them shuffle. Free: all 13 levels across all sections "
+              "(e.g. rich1 -> Andrea2 -> joby5 -> rich2). The cutscene "
+              "richcut2 always stays attached to rich2. On every level start, "
+              "keys/puzzles/pickups and the grappling gun (rich3 only) are "
+              "reset - weapons, ammo, medipacks and flares are kept. Whatever "
+              "a level needs from another one (Key 8 joby3, Key 7 joby5, "
+              "Catapult Andy2, crowbar Andrea3), the script always grants - "
+              "model and name included. Curated in LevelChains.h.");
 
-    blockZu(&a.hoehen.level);
+    closeBlock(&a.heights.level);
 
-    blockAuf("k_musik", "7. Musik", fMusik);
-    ImGui::Checkbox(T("Hintergrundmusik switchen"), &a.phMusikSwitch);
-    hoverHilfe("Die Levelmusik wird unter den spielbaren Leveln vertauscht - "
-               "das Audio-Byte im CMD_LEVEL-Eintrag der SCRIPT.DAT. Cutscene-"
-               "Level behalten ihre Musik. Gewuerfelt wird bei jedem Lauf neu "
-               "aus der Sicherung heraus; Haken weg = naechster Lauf stellt "
-               "die Originalmusik wieder her.");
-    ImGui::Checkbox(T("Trigger-Sound/Musik-IDs switchen"), &a.phMusikTrigger);
-    hoverHilfe("Die Musik-Trigger in den Leveln (TO_CD) bekommen vertauschte "
-               "Tracks - GLOBAL ueber alle Level: nur Tracks, die irgendwo im Spiel "
-               "ein Trigger ausloest (keine Cutscene-Dialoge, kein FMV-Ton), "
-               "und derselbe Track klingt in jedem Level gleich. "
-               "Atmosphaeren tauschen weiter nur unter sich, damit ein "
-               "Stimmungswechsel ein Stimmungswechsel bleibt. Die fest "
-               "einprogrammierte Cutscene- und Tutorial-Ausloesung ist "
-               "nicht betroffen.");
+    openBlock("k_musik", "7. Music", fMusic);
+    ImGui::Checkbox(T("Shuffle background music"), &a.phMusicSwitch);
+    hoverHelp("The level music is shuffled among the playable levels - the "
+              "audio byte in the CMD_LEVEL entry of SCRIPT.DAT. Cutscene "
+              "levels keep their music. Every run rolls anew from the backup; "
+              "uncheck it and the next run restores the original music.");
+    ImGui::Checkbox(T("Shuffle trigger sound/music IDs"), &a.phMusicTrigger);
+    hoverHelp("The music triggers in the levels (TO_CD) get shuffled tracks - "
+              "GLOBALLY across all levels: only tracks that some trigger in "
+              "the game actually fires (no cutscene dialogue, no FMV audio), "
+              "and the same track sounds the same in every level. Atmospheres "
+              "still swap only among themselves, so a mood change stays a "
+              "mood change. The hard-coded cutscene and tutorial triggering "
+              "is not affected.");
 
     // --- Secrets (#53) ---------------------------------------------------
     //
-    // Vier Arten: Vanilla (aus), normaler Pool, und zwei Nutzerlisten-
-    // Kategorien mit Autoren-Dropdown. Die Listen liegen als
-    // Autor_Kategorie.txt in data\secrets neben dem Programm; gelesen
-    // werden sie von SecretList.cpp - dieselbe Grammatik liest auch
-    // SecretPlan.ps1 in der Kuration.
-    blockZu(&a.hoehen.musik);
+    // Four kinds: vanilla (off), the normal pool, and two user-list
+    // categories with an author dropdown. The lists lie as
+    // Author_Category.txt in data\secrets next to the program; they are
+    // read by SecretList.cpp - the same grammar is read by SecretPlan.ps1
+    // during curation.
+    closeBlock(&a.heights.music);
 
-    blockAuf("k_secrets", "8. Secrets", fSecrets,
-             restHoehe(a.hoehen.level + lueckeY + a.hoehen.musik + lueckeY));
+    openBlock("k_secrets", "8. Secrets", fSecrets,
+              remainingHeight(a.heights.level + gapY + a.heights.music + gapY));
 
     ImGui::RadioButton(T("Vanilla"), &a.optSecrets, 0);
-    hoverHilfe("Die Secrets bleiben, wo Core sie versteckt hat.");
-    ImGui::RadioButton(T("Im normalen Item-Pool"), &a.optSecrets, 1);
-    hoverHilfe("Die Secrets wandern als gewoehnliche Pickups in den Wuerfelpool "
-               "und koennen ueberall dort liegen, wo auch Ausruestung liegen darf.");
+    hoverHelp("The secrets stay where Core hid them.");
+    ImGui::RadioButton(T("In the normal item pool"), &a.optSecrets, 1);
+    hoverHelp("The secrets go into the shuffle pool as ordinary pickups and "
+              "can lie anywhere equipment is allowed to lie.");
 
-    ImGui::RadioButton(T("Glitchless-Liste"), &a.optSecrets, 2);
-    hoverHilfe("Handverlesene Verstecke eines Autors, ohne Glitches erreichbar. "
-               "Eine Liste kann je Level auch Zusatzobjekte setzen - Schluessel, "
-               "Schalter, Tueren, sogar neue Portale.");
-    ImGui::RadioButton(T("Glitched-Liste"), &a.optSecrets, 3);
-    hoverHilfe("Wie die Glitchless-Liste, aber die Verstecke duerfen Glitches "
-               "voraussetzen.");
+    ImGui::RadioButton(T("Glitchless list"), &a.optSecrets, 2);
+    hoverHelp("Hand-picked hiding spots by one author, reachable without "
+              "glitches. A list can also place extra objects per level - "
+              "keys, switches, doors, even new portals.");
+    ImGui::RadioButton(T("Glitched list"), &a.optSecrets, 3);
+    hoverHelp("Like the glitchless list, but the hiding spots may require "
+              "glitches.");
 
     if (a.optSecrets >= 2)
     {
-        const char* kat = (a.optSecrets == 2) ? "Glitchless" : "Glitched";
-        std::vector<const SecretSource*> passend;
-        for (const SecretSource& q : a.secretQuellen)
-            if (q.category == kat) passend.push_back(&q);
+        const char* cat = (a.optSecrets == 2) ? "Glitchless" : "Glitched";
+        std::vector<const SecretSource*> matching;
+        for (const SecretSource& q : a.secretSources)
+            if (q.category == cat) matching.push_back(&q);
 
         ImGui::SetNextItemWidth(220.0f);
-        const char* anzeige = T("(keine Listen found)");
-        for (const SecretSource* q : passend)
-            if (q->author == a.secretAuthor) anzeige = q->author.c_str();
-        if (!passend.empty() && anzeige[0] == '(')
-        { a.secretAuthor = passend[0]->author; anzeige = passend[0]->author.c_str(); }
+        const char* display = T("(no lists found)");
+        for (const SecretSource* q : matching)
+            if (q->author == a.secretAuthor) display = q->author.c_str();
+        if (!matching.empty() && display[0] == '(')
+        { a.secretAuthor = matching[0]->author; display = matching[0]->author.c_str(); }
 
-        if (ImGui::BeginCombo(T("Autor"), anzeige))
+        if (ImGui::BeginCombo(T("Author"), display))
         {
-            for (const SecretSource* q : passend)
+            for (const SecretSource* q : matching)
                 if (ImGui::Selectable(q->author.c_str(), q->author == a.secretAuthor))
                     a.secretAuthor = q->author;
             ImGui::EndCombo();
         }
-        if (passend.empty())
-            ImGui::TextDisabled(T("Keine %s-Liste in data\\secrets found - die Level bleiben vanilla."), kat);
+        if (matching.empty())
+            ImGui::TextDisabled(T("No %s list found in data\\secrets - the levels stay vanilla."), cat);
     }
-    blockZu();
+    closeBlock();
 
     ImGui::EndGroup();
 
     //------------------------------------------------------------------------
-    // 9. In Vorbereitung - eigene Reihe unter Spalte 1 (Nutzerwunsch).
+    // 9. In preparation - its own row under column 1 (user wish).
     //
-    // Stand vorher unter dem Gegnerkasten. Dort verhinderte er, dass die vier
-    // Spalten der oberen Reihe auf eine gemeinsame Unterkante kommen: die
-    // Spalte war immer die laengste. Als eigene Reihe darunter stoert er
-    // niemanden, und die obere Reihe schliesst buendig ab.
+    // Used to stand under the enemy box. There it prevented the four columns
+    // of the top row from reaching a common bottom edge: the column was
+    // always the longest. As its own row below, it bothers nobody, and the
+    // top row closes flush.
     //------------------------------------------------------------------------
     ImGui::Spacing();
-    // --- Platzhalter (Nutzerwunsch, alle noch ohne Wirkung) --------------
+    // --- Placeholders (user wish, all still inert) -----------------------
     //
-    // Sichtbar, damit die Oberflaeche ihre endgueltige Form zeigt; ausgegraut,
-    // bis die jeweilige Logik existiert. Erklaerungen als Schwebehilfe.
-    // Texturen und Raeume stehen zusammen in einem Kasten - beide sind
-    // Zukunftsmusik, und getrennt waeren es zwei sehr flache Kaesten.
-    blockAuf("k_vorbereitung", "9. In Vorbereitung", fVorb);
+    // Visible so the GUI shows its final shape; grayed out until the
+    // respective logic exists. Explanations as hover help. Textures and
+    // rooms stand together in one box - both are future work, and separate
+    // they would be two very flat boxes.
+    openBlock("k_vorbereitung", "9. In preparation", fPrep);
     ImGui::BeginDisabled(true);
 
-    ImGui::TextDisabled(T("Texturen"));
-    ImGui::Checkbox(T("RGB Vanilla Texturen"), &a.phTexRgb);
-    hoverHilfe("Kommt noch: Farbwuerfel ueber die Vanilla-Texturseiten - der "
-               "Seed verschiebt die Farbtoene, rein kosmetisch.");
-    ImGui::Checkbox(T("Leveluebergreifend mixen"), &a.phTexMix);
-    hoverHilfe("Kommt noch: Texturseiten zwischen den Leveln tauschen - Rom in "
-               "Russland, U-Boot in Irland.");
-    ImGui::Checkbox(T("Remaster-Texturen patchen"), &a.phTexRemaster);
-    hoverHilfe("Kommt noch: Remaster-Texturen (sofern der Spieler sie hat) in "
-               "die klassischen Level patchen.");
+    ImGui::TextDisabled(T("Textures"));
+    ImGui::Checkbox(T("RGB vanilla textures"), &a.phTexRgb);
+    hoverHelp("Coming later: color dice over the vanilla texture pages - the "
+              "seed shifts the hues, purely cosmetic.");
+    ImGui::Checkbox(T("Mix across levels"), &a.phTexMix);
+    hoverHelp("Coming later: swap texture pages between levels - Rome in "
+              "Russia, the submarine in Ireland.");
+    ImGui::Checkbox(T("Patch remaster textures"), &a.phTexRemaster);
+    hoverHelp("Coming later: patch remaster textures (if the player owns "
+              "them) into the classic levels.");
 
-    ImGui::TextDisabled(T("Raeume"));
-    ImGui::Checkbox(T("Kulissen einbinden"), &a.phRoomKulissen);
-    hoverHilfe("Kommt noch: reine Kulissenbereiche ins Spiel einbinden, damit "
-               "dort Items und Gegner liegen koennen.");
-    ImGui::Checkbox(T("Nachbar-Raeume walkable machen"), &a.phRoomNachbar);
-    hoverHilfe("Kommt noch: angrenzende, vanilla gesperrte Raeume oeffnen - "
-               "mehr Flaeche fuer die Platzierung.");
+    ImGui::TextDisabled(T("Rooms"));
+    ImGui::Checkbox(T("Include backdrop areas"), &a.phRoomBackdrops);
+    hoverHelp("Coming later: bring pure backdrop areas into play so items "
+              "and enemies can be placed there.");
+    ImGui::Checkbox(T("Make neighboring rooms walkable"), &a.phRoomNeighbors);
+    hoverHelp("Coming later: open adjacent rooms that are locked in vanilla - "
+              "more area for placement.");
     ImGui::Checkbox(T("joby4 NoWater"), &a.phJoby4NoWater);
-    hoverHilfe("Kommt noch: Deepsea Dive ohne Wasser - damit waere joby4 "
-               "endlich voll randomisierbar statt vanilla.");
+    hoverHelp("Coming later: Deepsea Dive without water - joby4 would "
+              "finally be fully randomizable instead of vanilla.");
 
     ImGui::EndDisabled();
-    blockZu();
+    closeBlock();
 
     //------------------------------------------------------------------------
-    // 10. Level - mittig unter den vier Spalten (Nutzerwunsch).
+    // 10. Levels - centered under the four columns (user wish).
     //
-    // Die Tabelle ist seit dem Spoiler schmal. Links buendig unter einem
-    // breiten Fenster saehe sie verloren aus; mittig steht sie als eigener
-    // Block da und laesst links und rechts den Hintergrund frei.
+    // The table has been narrow since the spoiler. Left-aligned under a wide
+    // window it would look lost; centered it stands as its own block and
+    // leaves the background free left and right.
     //------------------------------------------------------------------------
     ImGui::Spacing();
 
-    const float tabelleBreite = 340.0f;
-    auto mittig = [](float breite)
+    const float tableWidth = 340.0f;
+    auto centered = [](float width)
     {
-        const float frei = ImGui::GetContentRegionAvail().x;
-        if (frei > breite)
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (frei - breite) * 0.5f);
+        const float free = ImGui::GetContentRegionAvail().x;
+        if (free > width)
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (free - width) * 0.5f);
     };
 
-    mittig(tabelleBreite);
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(fListe.x, fListe.y, fListe.z, 0.13f));
-    ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(fListe.x, fListe.y, fListe.z, 0.75f));
-    ImGui::BeginChild("k_levelliste", ImVec2(tabelleBreite, 0.0f),
+    centered(tableWidth);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(fList.x, fList.y, fList.z, 0.13f));
+    ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(fList.x, fList.y, fList.z, 0.75f));
+    ImGui::BeginChild("k_levelliste", ImVec2(tableWidth, 0.0f),
                       ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(fListe.x, fListe.y, fListe.z, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(fListe.x, fListe.y, fListe.z, 0.6f));
-    ImGui::SeparatorText(T("10. Level"));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(fList.x, fList.y, fList.z, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(fList.x, fList.y, fList.z, 0.6f));
+    ImGui::SeparatorText(T("10. Levels"));
     ImGui::PopStyleColor(2);
     if (a.skippedNonPlayable > 0)
-        ImGui::TextWrapped(T("%d nicht spielbare Dateien (Title, del, richcut2) werden "
-                           "geprueft, aber nicht angetastet."), a.skippedNonPlayable);
-    // Feste Hoehe nach Levelanzahl statt Scrollleiste (Nutzerwunsch): ohne
-    // ScrollY und ohne Hoehenvorgabe waechst die Tabelle genau auf ihre
-    // Zeilen - bei 13 spielbaren Leveln ist das ueberschaubar.
-    // Zwei Spalten statt drei: was ein Lauf im einzelnen getan hat, steht seit
-    // dem Spoiler in spoiler.txt. Die dritte Spalte kostete die halbe
-    // Fensterbreite fuer eine Zeile Text, die man einmal liest.
+        ImGui::TextWrapped(T("%d non-playable files (Title, del, richcut2) are checked, "
+                             "but never touched."), a.skippedNonPlayable);
+    // Fixed height by level count instead of a scrollbar (user wish):
+    // without ScrollY and without a height, the table grows exactly to its
+    // rows - manageable with 13 playable levels.
+    // Two columns instead of three: what a run did in detail has been in
+    // spoiler.txt since the spoiler. The third column cost half the window
+    // width for one line of text read once.
     if (ImGui::BeginTable("levels", 2,
         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
     {
         ImGui::TableSetupColumn(T("Level"), ImGuiTableColumnFlags_WidthFixed, 160);
-        ImGui::TableSetupColumn(T("Zustand"), ImGuiTableColumnFlags_WidthFixed, 150);
+        ImGui::TableSetupColumn(T("State"), ImGuiTableColumnFlags_WidthFixed, 150);
         ImGui::TableHeadersRow();
 
         for (size_t i = 0; i < a.levels.size(); ++i)
@@ -2300,34 +2288,34 @@ static void drawUi(App& a, HWND hwnd)
             ImGui::EndDisabled();
             ImGui::PopID();
 
-            // Solange kein Lauf gelaufen ist, steht hier der Dateizustand;
-            // danach das Ergebnis dieses Laufs. Fehler bleiben also sichtbar,
-            // ohne dass die Tabelle eine Textspalte braucht - die Einzelheiten
-            // stehen in spoiler.txt.
+            // As long as no run has run, the file state stands here; after
+            // that, the result of this run. Errors thus stay visible without
+            // the table needing a text column - the details are in
+            // spoiler.txt.
             ImGui::TableSetColumnIndex(1);
             if (r.result.empty())
             {
                 switch (r.state)
                 {
                 case LevelState::Vanilla:  ImGui::TextUnformatted(T("original")); break;
-                case LevelState::Modified: ImGui::TextColored(ImVec4(1, .5f, .3f, 1), T("veraendert")); break;
-                case LevelState::Missing:  ImGui::TextColored(ImVec4(1, .4f, .4f, 1), T("fehlt")); break;
-                default:                   ImGui::TextUnformatted(T("unbekannt")); break;
+                case LevelState::Modified: ImGui::TextColored(ImVec4(1, .5f, .3f, 1), T("modified")); break;
+                case LevelState::Missing:  ImGui::TextColored(ImVec4(1, .4f, .4f, 1), T("missing")); break;
+                default:                   ImGui::TextUnformatted(T("unknown")); break;
                 }
             }
-            else if (r.result.rfind("FEHLER", 0) == 0)
+            else if (r.result.rfind("ERROR", 0) == 0)
             {
-                ImGui::TextColored(ImVec4(1, .4f, .4f, 1), T("Fehler"));
+                ImGui::TextColored(ImVec4(1, .4f, .4f, 1), T("Error"));
                 if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
                     ImGui::SetTooltip(T("%s"), r.result.c_str());
             }
-            else if (r.result == "uebersprungen")
+            else if (r.result == "skipped")
             {
-                ImGui::TextDisabled(T("uebersprungen"));
+                ImGui::TextDisabled(T("skipped"));
             }
             else
             {
-                ImGui::TextColored(ImVec4(.5f, .9f, .5f, 1), T("fertig"));
+                ImGui::TextColored(ImVec4(.5f, .9f, .5f, 1), T("done"));
                 if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
                     ImGui::SetTooltip(T("%s"), r.result.c_str());
             }
@@ -2337,49 +2325,49 @@ static void drawUi(App& a, HWND hwnd)
     ImGui::EndChild();
     ImGui::PopStyleColor(2);
 
-    // --- 11. Los geht's - ebenfalls mittig, unter der Levelliste ---------
+    // --- 11. Let's go - likewise centered, under the level list ----------
     ImGui::Spacing();
 
-    const float startBreite = 400.0f;
+    const float startWidth = 400.0f;
     const bool busy = (a.phase != App::Phase::Idle);
 
-    mittig(startBreite);
+    centered(startWidth);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(fStart.x, fStart.y, fStart.z, 0.13f));
     ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(fStart.x, fStart.y, fStart.z, 0.75f));
-    ImGui::BeginChild("k_start", ImVec2(startBreite, 0.0f),
+    ImGui::BeginChild("k_start", ImVec2(startWidth, 0.0f),
                       ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(fStart.x, fStart.y, fStart.z, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(fStart.x, fStart.y, fStart.z, 0.6f));
-    ImGui::SeparatorText(T("11. Los geht's"));
+    ImGui::SeparatorText(T("11. Let's go"));
     ImGui::PopStyleColor(2);
 
-    // Der Fortschritt steht ueber den Knoepfen, weil genau dorthin gesehen
-    // wird, sobald man auf "Randomisieren" gedrueckt hat.
+    // The progress stands above the buttons, because that is exactly where
+    // one looks once "Randomize" has been pressed.
     if (busy)
     {
         char overlay[96];
         if (a.phase == App::Phase::Copy)
-            std::snprintf(overlay, sizeof(overlay), "%s", T("Originale werden zurueckgespielt..."));
+            std::snprintf(overlay, sizeof(overlay), "%s", T("Restoring originals..."));
         else
-            std::snprintf(overlay, sizeof(overlay), "%s  (%d von %d)",
+            std::snprintf(overlay, sizeof(overlay), "%s  (%d of %d)",
                           a.phaseText.c_str(), a.doneCount + a.failCount, a.plannedCount);
         ImGui::ProgressBar(a.progress(), ImVec2(-FLT_MIN, 22), overlay);
     }
     else
     {
-        // Platz freihalten, damit die Knoepfe nicht springen, sobald ein Lauf
-        // startet - ein huepfendes Fenster wirkt kaputt.
+        // Keep the space, so the buttons do not jump as soon as a run
+        // starts - a hopping window looks broken.
         ImGui::Dummy(ImVec2(0, 22));
     }
 
     ImGui::BeginDisabled(!a.sourceOk || busy);
-    if (ImGui::Button(T("Randomisieren"), ImVec2(160, 32))) startRandomize(a);
+    if (ImGui::Button(T("Randomize"), ImVec2(160, 32))) startRandomize(a);
     ImGui::SameLine();
-    if (ImGui::Button(T("Auf Original zuruecksetzen"), ImVec2(200, 32))) doRestore(a);
+    if (ImGui::Button(T("Restore original"), ImVec2(200, 32))) doRestore(a);
     ImGui::EndDisabled();
 
     if (!a.sourceOk && !busy)
-        ImGui::TextDisabled(T("(erst eine unveraenderte Installation waehlen)"));
+        ImGui::TextDisabled(T("(choose an unmodified installation first)"));
 
     if (!a.status.empty())
     {
@@ -2392,11 +2380,11 @@ static void drawUi(App& a, HWND hwnd)
 
     ImGui::End();
 
-    // Nach dem Hauptfenster, damit es darueber liegt - das Hauptfenster fuellt
-    // den ganzen Bildschirm und traegt NoBringToFrontOnFocus.
+    // After the main window, so they lie above it - the main window fills
+    // the whole screen and carries NoBringToFrontOnFocus.
     drawDebugWindow(a);
-    drawGegnerartenWindow(a);
-    drawPfadeWindow(a, hwnd);
+    drawEnemyKindsWindow(a);
+    drawPathsWindow(a, hwnd);
 }
 
 //----------------------------------------------------------------------------
@@ -2404,33 +2392,33 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-    // Programmsymbol aus den Ressourcen (TR5Randomizer.rc, Logo des Nutzers).
-    // LoadIconW nimmt aus der ICO-Datei je nach Feld die passende Groesse:
-    // hIcon das grosse (Alt+Tab, Fenstereigenschaften), hIconSm das kleine
-    // (Titelleiste, Taskleiste). Ohne diese beiden Zeilen zeigt Windows das
-    // Standardsymbol, selbst wenn die Ressource in der EXE liegt.
-    HICON symbolGross = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(101), IMAGE_ICON,
+    // Program icon from the resources (TR5Randomizer.rc, the user's logo).
+    // LoadIconW takes the fitting size from the ICO file per field: hIcon
+    // the large one (Alt-Tab, window properties), hIconSm the small one
+    // (title bar, taskbar). Without these two lines, Windows shows the
+    // default icon even though the resource lies in the EXE.
+    HICON iconLarge = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(101), IMAGE_ICON,
                                     GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), 0);
-    HICON symbolKlein = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(101), IMAGE_ICON,
+    HICON iconSmall = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(101), IMAGE_ICON,
                                     GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
 
-    WNDCLASSEXW wc{ sizeof(wc), CS_CLASSDC, WndProc, 0, 0, hInst, symbolGross, nullptr, nullptr, nullptr,
-                    L"TR5RandomizerWnd", symbolKlein };
+    WNDCLASSEXW wc{ sizeof(wc), CS_CLASSDC, WndProc, 0, 0, hInst, iconLarge, nullptr, nullptr, nullptr,
+                    L"TR5RandomizerWnd", iconSmall };
     RegisterClassExW(&wc);
 
-    // Fenstergroesse aus der Einstellungsdatei; beim ersten Start eine
-    // grosszuegige Vorgabe (Nutzerwunsch - das alte 820x780 war zu klein).
-    // Untergrenzen fangen eine von Hand kaputteditierte Datei ab.
-    Config vorab;
-    vorab.load();
-    const int fensterW = (vorab.winW >= 500) ? vorab.winW : 1000;
-    const int fensterH = (vorab.winH >= 400) ? vorab.winH : 920;
+    // Window size from the settings file; a generous default on first start
+    // (user wish - the old 820x780 was too small). Lower bounds catch a
+    // hand-mangled file.
+    Config pre;
+    pre.load();
+    const int windowW = (pre.winW >= 500) ? pre.winW : 1000;
+    const int windowH = (pre.winH >= 400) ? pre.winH : 920;
     HWND hwnd = CreateWindowW(wc.lpszClassName, L"TR5 Randomizer", WS_OVERLAPPEDWINDOW,
-                              100, 100, fensterW, fensterH, nullptr, nullptr, hInst, nullptr);
+                              100, 100, windowW, windowH, nullptr, nullptr, hInst, nullptr);
 
     if (!createDevice(hwnd))
     {
-        MessageBoxW(nullptr, L"Direct3D 11 laesst sich auf diesem Rechner nicht starten.",
+        MessageBoxW(nullptr, L"Direct3D 11 cannot start on this machine.",
                     L"TR5 Randomizer", MB_ICONSTOP);
         DestroyWindow(hwnd);
         UnregisterClassW(wc.lpszClassName, hInst);
@@ -2443,14 +2431,14 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGui::GetIO().IniFilename = nullptr;   // keine Fensterlage-Datei hinterlassen
+    ImGui::GetIO().IniFilename = nullptr;   // leave no window-layout file behind
 
-    // Unterfenster (z.B. der Sektoren-Marker) sollen sich aus dem Hauptfenster
-    // herausziehen lassen, auch auf einen zweiten Bildschirm (Nutzerwunsch).
-    // Dafuer der Docking-Zweig von Dear ImGui mit Viewports: sobald ein
-    // Fenster den Rand verlaesst, bekommt es ein eigenes Betriebssystem-
-    // Fenster. WindowRounding 0 und volle Deckkraft, weil freistehende
-    // Fenster keine runden, durchscheinenden Ecken haben koennen.
+    // Sub-windows (the sector markers, say) should be draggable out of the
+    // main window, even onto a second screen (user wish). Hence the docking
+    // branch of Dear ImGui with viewports: as soon as a window leaves the
+    // edge, it gets its own operating-system window. WindowRounding 0 and
+    // full opacity, because free-standing windows cannot have round,
+    // translucent corners.
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
     ImGui::StyleColorsDark();
@@ -2464,64 +2452,65 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 
     App app;
     app.cfg.load();
-    gGermanUi = app.cfg.germanUi;   // Sprache (#128), Vorgabe Englisch
+    gGermanUi = app.cfg.germanUi;   // language (#128), default English
     std::snprintf(app.seedBuf, sizeof(app.seedBuf), "%s",
                   app.cfg.seedText.empty() ? SeedText::format(SeedText::random()).c_str()
                                            : app.cfg.seedText.c_str());
 
-    // Gespeicherte Auswahl wiederherstellen - der Nutzer soll seine Haken
-    // beim naechsten Start wiederfinden.
+    // Restore the saved selection - the user should find his checkboxes
+    // again on the next start.
     app.optOtherPickups = app.cfg.optOtherPickups;
     app.optKeyItems     = app.cfg.optKeyItems;
     app.optEnemies      = app.cfg.optEnemies;
     app.optEnemyCount   = app.cfg.enemyCount;
     app.optEnemySwap    = app.cfg.optEnemySwap;
     app.optEnemyPool    = app.cfg.enemyPool;
-    app.optGegnerAus    = app.cfg.enemiesDisabled;
+    app.optEnemiesOff   = app.cfg.enemiesDisabled;
     app.optOutfits      = app.cfg.optOutfits;
-    app.optItemMenge    = app.cfg.itemAmount;
+    app.optItemAmount   = app.cfg.itemAmount;
     app.optSecrets      = app.cfg.secrets;
     app.secretAuthor     = app.cfg.secretAuthor;
-    app.phMusikSwitch     = app.cfg.optMusicSwitch;
-    app.phMusikTrigger    = app.cfg.optMusicTrigger;
-    app.phLevelAbschnitte = app.cfg.optLevelSections;
+    app.phMusicSwitch     = app.cfg.optMusicSwitch;
+    app.phMusicTrigger    = app.cfg.optMusicTrigger;
+    app.phLevelSections = app.cfg.optLevelSections;
     app.optLevelOrder     = app.cfg.optLevelOrder;
 
-    // Balance.txt (#108): steht sie schon in der Installation, hat SIE recht
-    // und nicht unsere cfg - der Nutzer kann sie in Notepad geaendert haben,
-    // und dann sollen die Regler zeigen, was wirklich gilt. Nur wenn dort
-    // nichts steht, gilt die zuletzt gemerkte Reglerstellung.
+    // Balance.txt (#108): if it already exists in the installation, IT is
+    // right and not our cfg - the user may have changed it in Notepad, and
+    // then the sliders should show what really applies. Only if nothing
+    // stands there does the last remembered slider position apply.
     {
         app.balWeaponsRandom        = app.cfg.balWeaponsRandom;
         app.balEnemyHealthRandom   = app.cfg.balEnemyHealthRandom;
         app.balEnemyDamageRandom = app.cfg.balEnemyDamageRandom;
 
-        const BalanceFile::Values da = BalanceFile::read(app.gameDir());
-        const bool vorhanden = PathUtil::fileExists(
+        const BalanceFile::Values vals = BalanceFile::read(app.gameDir());
+        const bool present = PathUtil::fileExists(
             PathUtil::join(app.gameDir(), L"Balance.txt"));
 
-        app.balWeapons        = (vorhanden ? da.weaponDamage : app.cfg.balWeapons)        / 100.0f;
-        app.balEnemyHealth   = (vorhanden ? da.enemyHealth   : app.cfg.balEnemyHealth)   / 100.0f;
-        app.balEnemyDamage = (vorhanden ? da.enemyDamage : app.cfg.balEnemyDamage) / 100.0f;
+        app.balWeapons        = (present ? vals.weaponDamage : app.cfg.balWeapons)        / 100.0f;
+        app.balEnemyHealth   = (present ? vals.enemyHealth   : app.cfg.balEnemyHealth)   / 100.0f;
+        app.balEnemyDamage = (present ? vals.enemyDamage : app.cfg.balEnemyDamage) / 100.0f;
 
-        // Von Hand weiter aufgedreht als die Regler reichen? Dann klemmt der
-        // Regler auf seine Bahn - geschrieben wird aber erst, wenn der Nutzer
-        // ihn anfasst, die Datei bleibt bis dahin unangetastet.
-        auto klemme = [](float& v, float von, float bis)
-        { if (v < von) v = von; if (v > bis) v = bis; };
+        // Cranked further by hand than the sliders reach? Then the slider
+        // clamps onto its track - but nothing is written until the user
+        // touches it, the file stays untouched until then.
+        auto clamp = [](float& v, float from, float to)
+        { if (v < from) v = from; if (v > to) v = to; };
 
-        klemme(app.balWeapons, 0.0f, 2.0f);
-        klemme(app.balEnemyHealth, 0.5f, 2.0f);
-        klemme(app.balEnemyDamage, 0.5f, 2.0f);
+        clamp(app.balWeapons, 0.0f, 2.0f);
+        clamp(app.balEnemyHealth, 0.5f, 2.0f);
+        clamp(app.balEnemyDamage, 0.5f, 2.0f);
     }
 
-    // Alles Merkenswerte in die Einstellungsdatei write: Fenstergroesse,
-    // Haken, Seed. Laeuft beim Ziehen des Fensters, bei jeder geaenderten
-    // Auswahl und beim Beenden - die Datei ist winzig, das darf oft passieren.
-    auto merkeEinstellungen = [&app](HWND fenster)
+    // Write everything worth remembering into the settings file: window
+    // size, checkboxes, seed. Runs when the window is dragged, on every
+    // changed selection and on exit - the file is tiny, that may happen
+    // often.
+    auto rememberSettings = [&app](HWND window)
     {
         RECT r;
-        if (GetWindowRect(fenster, &r) && r.right > r.left && r.bottom > r.top)
+        if (GetWindowRect(window, &r) && r.right > r.left && r.bottom > r.top)
         {
             app.cfg.winW = r.right - r.left;
             app.cfg.winH = r.bottom - r.top;
@@ -2532,14 +2521,14 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.enemyCount      = app.optEnemyCount;
         app.cfg.optEnemySwap    = app.optEnemySwap;
         app.cfg.enemyPool       = app.optEnemyPool;
-        app.cfg.enemiesDisabled       = app.optGegnerAus;
+        app.cfg.enemiesDisabled = app.optEnemiesOff;
         app.cfg.optOutfits      = app.optOutfits;
-        app.cfg.itemAmount       = app.optItemMenge;
+        app.cfg.itemAmount      = app.optItemAmount;
         app.cfg.secrets         = app.optSecrets;
         app.cfg.secretAuthor     = app.secretAuthor;
-        app.cfg.optMusicSwitch     = app.phMusikSwitch;
-        app.cfg.optMusicTrigger    = app.phMusikTrigger;
-        app.cfg.optLevelSections = app.phLevelAbschnitte;
+        app.cfg.optMusicSwitch     = app.phMusicSwitch;
+        app.cfg.optMusicTrigger    = app.phMusicTrigger;
+        app.cfg.optLevelSections = app.phLevelSections;
         app.cfg.optLevelOrder      = app.optLevelOrder;
         app.cfg.balWeapons        = static_cast<int>(app.balWeapons * 100.0f + 0.5f);
         app.cfg.balEnemyHealth   = static_cast<int>(app.balEnemyHealth * 100.0f + 0.5f);
@@ -2556,73 +2545,73 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.payloadOk = app.data.loadChecksums(csv, err);
     if (!app.payloadOk)
     {
-        // Haeufigster Fall: die EXE wurde aus dem Build-Ordner gestartet statt
-        // aus dem ausgelieferten Paket. Deshalb den erwarteten Pfad nennen -
-        // "Datei nicht found" allein hilft niemandem weiter.
-        app.payloadError = "Der Ordner \"data\" neben dem Programm fehlt oder ist unvollstaendig ("
-                         + err + "). Erwartet wird: " + PathUtil::narrow(csv);
+        // Most common case: the EXE was started from the build folder
+        // instead of the shipped package. Hence name the expected path -
+        // "file not found" alone helps nobody.
+        app.payloadError = "The folder \"data\" next to the program is missing or incomplete ("
+                         + err + "). Expected: " + PathUtil::narrow(csv);
     }
 
     //------------------------------------------------------------------------
-    // Kurationsstand der Zonen-Exporte pruefen.
+    // Check the curation stamps of the zone exports.
     //
-    // Der Randomizer liest nie die Kurationstabellen aus ZoneAnalyse.ps1,
-    // sondern nur die daraus erzeugten zones_<level>.json. Wird die Tabelle
-    // geaendert und nicht neu erzeugt, arbeitet er lautlos mit der alten
-    // Kuration weiter - und der Ordner data\ ist ein Erzeugnis, also gibt es
-    // auch keinen Commit, der es sichtbar machen wuerde.
+    // The randomizer never reads the curation tables from ZoneAnalyse.ps1,
+    // only the zones_<level>.json generated from them. If the table is
+    // changed and not regenerated, it silently keeps working with the old
+    // curation - and the folder data\ is a build product, so there is no
+    // commit that would make it visible either.
     //
-    // Genau das ist am 2026-08-23 aufgeflogen: fuenf Exporte stammten vom
-    // 13./14.08 und trugen noch den widerlegten globalen HK-Versatz, waehrend
-    // die Tabelle ihn schon seit dem 19.08 nur noch fuer rich2 kannte. Dem
-    // Nutzer war das im Spiel als "greift nur teilweise" aufgefallen, ohne
-    // dass die Ursache zu sehen war.
+    // Exactly that blew up on 2026-08-23: five exports dated from Aug
+    // 13/14 and still carried the refuted global HK offset, while the
+    // table had known it only for rich2 since Aug 19. The user had noticed
+    // it in game as "only partially effective", without the cause being
+    // visible.
     //
-    // Geprueft wird nicht gegen das Skript - das liegt dem Spieler gar nicht
-    // vor -, sondern die Exporte GEGENEINANDER. Ein gemischter Stand heisst
-    // sicher, dass jemand nur einen Teil neu erzeugt hat. Ein einheitlich
-    // alter Stand faellt so nicht auf, aber das ist der seltenere Fall und
-    // beim Paketieren erzeugt BuildRelease.ps1 ohnehin alles frisch.
+    // The check is not against the script - the player does not even have
+    // it - but the exports AGAINST EACH OTHER. A mixed state means for
+    // certain that someone regenerated only a part. A uniformly old state
+    // does not stand out this way, but that is the rarer case, and when
+    // packaging, BuildRelease.ps1 regenerates everything fresh anyway.
     //------------------------------------------------------------------------
     if (app.payloadOk)
     {
-        std::map<std::string, std::vector<std::string>> staende;
+        std::map<std::string, std::vector<std::string>> stamps;
 
-        std::vector<std::wstring> dateien;
+        std::vector<std::wstring> files;
         {
             WIN32_FIND_DATAW fd{};
-            const std::wstring muster = PathUtil::join(app.payloadDir(), L"zones_*.json");
-            HANDLE h = FindFirstFileW(muster.c_str(), &fd);
+            const std::wstring pattern = PathUtil::join(app.payloadDir(), L"zones_*.json");
+            HANDLE h = FindFirstFileW(pattern.c_str(), &fd);
             if (h != INVALID_HANDLE_VALUE)
             {
-                do { dateien.push_back(fd.cFileName); } while (FindNextFileW(h, &fd));
+                do { files.push_back(fd.cFileName); } while (FindNextFileW(h, &fd));
                 FindClose(h);
             }
         }
 
-        for (const std::wstring& file : dateien)
+        for (const std::wstring& file : files)
         {
             JsonValue z;
             std::string jerr;
             if (!Json::parseFile(PathUtil::join(app.payloadDir(), file), z, jerr)) continue;
 
-            const std::string stand = z["kurationStand"].asString();
+            const std::string stamp = z["kurationStand"].asString();
             const std::string level = z["level"].asString();
-            staende[stand.empty() ? std::string("(ohne Stempel)") : stand]
+            stamps[stamp.empty() ? std::string("(no stamp)") : stamp]
                 .push_back(level.empty() ? PathUtil::narrow(file) : level);
         }
 
-        if (staende.size() > 1)
+        if (stamps.size() > 1)
         {
-            std::string t = "Die Zonen-Exporte in data\\ haben verschiedene Kurationsstaende - "
-                            "ein Teil wurde nach einer Aenderung an ZoneAnalyse.ps1 nicht neu "
-                            "erzeugt. Betroffen:";
-            for (const auto& kv : staende)
+            std::string t = "The zone exports in data\\ carry different curation stamps - "
+                            "part of them was not regenerated after a change to "
+                            "ZoneAnalyse.ps1. Affected:";
+            for (const auto& kv : stamps)
             {
                 t += "\n  " + kv.first + ":";
                 for (const std::string& l : kv.second) t += " " + l;
             }
-            app.zonenWarnung = t;
+            app.zoneWarning = t;
         }
     }
 
@@ -2647,17 +2636,17 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
 
         drawUi(app, hwnd);
 
-        // Ein Arbeitsschritt pro Bild, NACH dem Zeichnen. So sieht der Nutzer
-        // erst den neuen Balkenstand und dann passiert der naechste Schritt -
-        // andersherum bliebe der letzte Schritt unsichtbar.
+        // One work step per frame, AFTER drawing. That way the user first
+        // sees the new bar state and then the next step happens - the other
+        // way round, the last step would stay invisible.
         advanceRun(app);
 
-        // Einstellungen festhalten: nach dem Ziehen des Fensters und immer,
-        // wenn sich eine Auswahl gegenueber der Datei geaendert hat.
-        if (g_fensterGezogen)
+        // Persist the settings: after dragging the window, and whenever a
+        // selection changed against the file.
+        if (g_windowDragged)
         {
-            g_fensterGezogen = false;
-            merkeEinstellungen(hwnd);
+            g_windowDragged = false;
+            rememberSettings(hwnd);
         }
         else if (app.cfg.optOtherPickups != app.optOtherPickups ||
                  app.cfg.optKeyItems     != app.optKeyItems ||
@@ -2665,13 +2654,13 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.enemyCount      != app.optEnemyCount ||
                  app.cfg.optEnemySwap    != app.optEnemySwap ||
                  app.cfg.enemyPool       != app.optEnemyPool ||
-                 app.cfg.enemiesDisabled       != app.optGegnerAus ||
+                 app.cfg.enemiesDisabled != app.optEnemiesOff ||
                  app.cfg.optOutfits      != app.optOutfits ||
-                 app.cfg.itemAmount       != app.optItemMenge ||
+                 app.cfg.itemAmount      != app.optItemAmount ||
                  app.cfg.secrets         != app.optSecrets ||
-                 app.cfg.optMusicSwitch     != app.phMusikSwitch ||
-                 app.cfg.optMusicTrigger    != app.phMusikTrigger ||
-                 app.cfg.optLevelSections != app.phLevelAbschnitte ||
+                 app.cfg.optMusicSwitch     != app.phMusicSwitch ||
+                 app.cfg.optMusicTrigger    != app.phMusicTrigger ||
+                 app.cfg.optLevelSections != app.phLevelSections ||
                  app.cfg.optLevelOrder      != app.optLevelOrder ||
                  app.cfg.balWeapons        != static_cast<int>(app.balWeapons * 100.0f + 0.5f) ||
                  app.cfg.balEnemyHealth   != static_cast<int>(app.balEnemyHealth * 100.0f + 0.5f) ||
@@ -2681,7 +2670,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.balEnemyDamageRandom != app.balEnemyDamageRandom ||
                  app.cfg.secretAuthor     != app.secretAuthor)
         {
-            merkeEinstellungen(hwnd);
+            rememberSettings(hwnd);
         }
 
         ImGui::Render();
@@ -2690,8 +2679,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         g_ctx->ClearRenderTargetView(g_rtv, clear);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-        // Herausgezogene Fenster leben in eigenen Betriebssystem-Fenstern mit
-        // eigener Swapchain - die zeichnet und praesentiert dieser Aufruf.
+        // Dragged-out windows live in their own operating-system windows
+        // with their own swapchain - this call draws and presents those.
         if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
         {
             ImGui::UpdatePlatformWindows();
@@ -2701,7 +2690,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         g_swap->Present(1, 0);
     }
 
-    merkeEinstellungen(hwnd);   // letzter Stand, auch Groesse und Seed
+    rememberSettings(hwnd);   // final state, size and seed included
 
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();

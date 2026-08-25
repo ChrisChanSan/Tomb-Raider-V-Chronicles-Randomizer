@@ -198,16 +198,16 @@ public:
     bool shuffleSections(uint64_t seed, std::string& orderText, std::string& error);
 
     // What is in there today? For display and self-test.
-    struct Eintrag
+    struct Entry
     {
         std::string fileName;
         uint16_t    flags = 0;
     };
-    const std::vector<Eintrag>& levels() const { return m_levels; }
+    const std::vector<Entry>& levels() const { return m_levels; }
 
 private:
     std::vector<uint8_t> m_bytes;
-    std::vector<Eintrag> m_levels;
+    std::vector<Entry> m_levels;
     std::vector<size_t>  m_flagsAt;    // where each entry's flags live
     std::vector<size_t>  m_blockStart;    // block start per level
     std::vector<size_t>  m_blockEnd;   // block end (exclusive)

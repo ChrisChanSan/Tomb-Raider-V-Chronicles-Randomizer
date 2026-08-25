@@ -82,6 +82,15 @@ Credits of the original project: Troye (lead programmer and project
 lead), ChocolateFan, thatguyfrombb and Raildex. Our work rests on
 theirs.
 
+The dinosaurs and the vulture are not ours either: their control code
+comes from tomb3, Troye's decompilation of Tomb Raider III, and is
+GPLv3 just like everything else here:
+
+    https://github.com/Trxyebeep/tomb3
+
+The models and sounds behind them are NOT included - the randomizer
+reads them from your own Tomb Raider III installation at runtime.
+
 TOMB5 is under the GNU GPL v3, and so is this modified version. That
 is why the complete source code is included - you can rebuild the EXE
 yourself and do not have to take our word for it. What we changed and

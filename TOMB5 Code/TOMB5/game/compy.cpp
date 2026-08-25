@@ -13,7 +13,8 @@
 /*
  * Compsognathus from Tomb Raider 3, ported to TOMB5 in 2026 (#99).
  *
- * Taken from tomb3 (game/compy.cpp, GPLv3) - the same license as TOMB5 and
+ * Taken from tomb3 by Troye <https://github.com/Trxyebeep/tomb3>
+ * (game/compy.cpp, GPLv3) - the same license as TOMB5 and
  * this project. The code is deliberately taken over directly instead of
  * rewritten: rewriting would obscure its origin.
  *

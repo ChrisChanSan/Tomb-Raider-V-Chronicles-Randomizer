@@ -420,6 +420,33 @@ Also in this group:
   stages still line up when `Balance.txt` scales enemy hit points. With the
   original hit points the numbers are identical to vanilla.
 
+### 3. Code taken from tomb3 (four Tomb Raider III enemies)
+
+Four enemies from Tomb Raider III can appear in randomized levels: the
+T-Rex, the raptor, the Compsognathus and the vulture. **Their control code
+is not ours.** It comes from **tomb3**, Troye's decompilation of Tomb
+Raider III, <https://github.com/Trxyebeep/tomb3>, and is under the GNU GPL
+v3 — the same license as TOMB5 and as this project, which is what makes
+combining them possible in the first place.
+
+- `game/trex.cpp`, `game/raptor.cpp`, `game/compy.cpp` — new files, taken
+  over from tomb3's files of the same name. The code was deliberately
+  **taken over directly rather than rewritten**: a rewrite would obscure
+  where it came from. Each file's header names its origin and lists every
+  deviation from the tomb3 original with a reason.
+- `game/crow.cpp` — not new, but extended: TR5 kept only the crow branch of
+  tomb3's `bird.cpp`, so the vulture's animation offsets and its separate
+  death handling were added back for the imported bird.
+
+The AI substructure made this possible: `CreatureActive`, `CreatureAIInfo`,
+`GetCreatureMood`, `CreatureMood`, `CreatureTurn` and `CreatureAnimation`
+exist word for word in both engines.
+
+**No game data from Tomb Raider III is shipped with this project.** The
+models, animations and sounds are read at runtime from the player's own
+Tomb Raider III installation; without it, those enemies simply do not
+appear.
+
 ---
 
 ## Building this yourself

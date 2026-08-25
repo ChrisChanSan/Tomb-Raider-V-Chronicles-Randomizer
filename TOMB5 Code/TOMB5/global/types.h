@@ -2619,6 +2619,7 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	bool look_transparency;		//on off
 	bool static_lighting;		//on off
 	ulong uw_dust;				//1-> off, 2-> original, 3-> TR4
-	bool first_person;			//on off, Ego-Sicht an Laras Kopf (#126)
+	bool first_person;			//on off, first-person camera at Lara's head (#126)
+	bool level_select;			//on off, shows the "Level Select" row in the title menu (#32)
 };
 #pragma pack(pop)

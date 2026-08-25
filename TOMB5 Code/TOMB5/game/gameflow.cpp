@@ -467,7 +467,7 @@ long TitleOptions()
 	static __int64 selection_bak = 0;
 	__int64 flag, sel;
 	long nLevels, nFirst, lp;
-	long ret, n, load, cheat_jump, y;
+	long ret, n, load, cheat_jump, y, rows;
 	static long load_or_new;
 	static long gfLevelComplete_bak;
 	static long menu = 0;
@@ -606,18 +606,36 @@ long TitleOptions()
 		Chris_Menu = 0;
 
 		font_height = GetFixedScale(36);
-		PrintString(phd_centerx, phd_winymax - 5 * font_height, (selection & 1) ? 1 : 2, SCRIPT_TEXT(TXT_New_Game), FF_CENTER);
-		PrintString(phd_centerx, phd_winymax - 4 * font_height, (selection & 2) ? 1 : 2, SCRIPT_TEXT(TXT_Load_Game), FF_CENTER);
-		PrintString(phd_centerx, phd_winymax - 3 * font_height, (selection & 4) ? 1 : 2, SCRIPT_TEXT(TXT_Options), FF_CENTER);
+
+		// #32: the level select is a development shortcut - it lets anyone jump
+		// straight to the finale. It stays in the build, but the player has to
+		// switch it on first ("Level select" in the Tomb5 options, off by
+		// default). Hidden, the row does not exist at all: the remaining four
+		// move down and Exit takes over the bit that would have been the level
+		// select's, so the keyboard walk keeps working without a gap.
+		rows = tomb5.level_select ? 5 : 4;
+
+		PrintString(phd_centerx, phd_winymax - rows-- * font_height, (selection & 1) ? 1 : 2, SCRIPT_TEXT(TXT_New_Game), FF_CENTER);
+		PrintString(phd_centerx, phd_winymax - rows-- * font_height, (selection & 2) ? 1 : 2, SCRIPT_TEXT(TXT_Load_Game), FF_CENTER);
+		PrintString(phd_centerx, phd_winymax - rows-- * font_height, (selection & 4) ? 1 : 2, SCRIPT_TEXT(TXT_Options), FF_CENTER);
+
 		// "Level Select" has no baked-in localized string id (would need editing the
 		// SCRIPT.DAT/ENGLISH.DAT string wad), so it's printed as a plain literal
 		// instead of going through SCRIPT_TEXT() - PrintString already accepts raw
 		// C strings directly elsewhere (e.g. the "\x18"/"\x1a" arrow glyphs below).
-		PrintString(phd_centerx, phd_winymax - 2 * font_height, (selection & 8) ? 1 : 2, (char*)CustomText("Level Select"), FF_CENTER);
-		PrintString(phd_centerx, phd_winymax - 1 * font_height, (selection & 16) ? 1 : 2, SCRIPT_TEXT(TXT_Exit), FF_CENTER);
+		if (tomb5.level_select)
+			PrintString(phd_centerx, phd_winymax - rows-- * font_height, (selection & 8) ? 1 : 2, (char*)CustomText("Level Select"), FF_CENTER);
+
+		flag = tomb5.level_select ? 16 : 8;
+		PrintString(phd_centerx, phd_winymax - rows * font_height, (selection & flag) ? 1 : 2, SCRIPT_TEXT(TXT_Exit), FF_CENTER);
 		font_height = default_font_height;
 
-		flag = 16;
+		// Switching the option off while sitting on a row that no longer exists
+		// would leave the cursor past the end - the walk clamps against flag,
+		// but only on the next keypress.
+		if (selection > flag)
+			selection = flag;
+
 		break;
 
 	case 3://options menu
@@ -701,6 +719,15 @@ long TitleOptions()
 				break;
 
 			case 8:
+
+				// With the level select hidden (#32) this bit belongs to Exit -
+				// it is the fourth and last row then.
+				if (!tomb5.level_select)
+				{
+					ret = 4;
+					break;
+				}
+
 				// Level Select - reuses the same "select level" screen (menu 1)
 				// New Game already uses when Gameflow->PlayAnyLevel is set, just
 				// always reachable here instead of gated behind that gameflow flag.

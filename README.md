@@ -43,6 +43,11 @@ randomizer patches your own files at runtime and backs everything up to
 - **[TOMB5](https://github.com/Trxyebeep/TOMB5)** by Troye (Trxyebeep),
   ChocolateFan, thatguyfrombb and Raildex — without this decompilation
   there would be nothing here.
+- **[tomb3](https://github.com/Trxyebeep/tomb3)** by Troye (Trxyebeep) and
+  contributors — the T-Rex, raptor, compy and vulture control code comes
+  from there (GPLv3, taken over directly rather than rewritten, so its
+  origin stays visible). Their models and sounds are not shipped; the
+  randomizer reads them from your own Tomb Raider III installation.
 - **[trview](https://github.com/chreden/trview)** by chreden — the tool
   every single zone boundary of this randomizer was verified with.
 - **[Dear ImGui](https://github.com/ocornut/imgui)** by Omar Cornut (MIT) —

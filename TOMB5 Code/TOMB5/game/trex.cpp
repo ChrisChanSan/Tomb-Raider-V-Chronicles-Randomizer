@@ -36,7 +36,8 @@
 #define SFX_TREX_DEATH    449
 
 //----------------------------------------------------------------------------
-// T-Rex from Tomb Raider 3, ported from the tomb3 decompilation
+// T-Rex from Tomb Raider 3, ported from Troye's tomb3 decompilation
+// <https://github.com/Trxyebeep/tomb3>
 // (game/trex.cpp, GPLv3 - the same license as TOMB5 and this project).
 //
 // The AI substructure is the same in both games: CreatureActive,

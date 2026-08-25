@@ -30,6 +30,10 @@ void InitialiseCrow(short item_number)
 
 	// VULTURE offset, not crow (#91).
 	//
+	// The knowledge below is read off tomb3, Troye's Tomb Raider III
+	// decompilation <https://github.com/Trxyebeep/tomb3> (GPLv3, the same
+	// license as this project).
+	//
 	// In Tomb Raider 3, ONE function controls both birds and distinguishes
 	// by object_number (tomb3 bird.cpp:19-32): the crow starts with
 	// anim_index + 14 in the feeding state, the vulture with + 5 in the

@@ -19,7 +19,7 @@
 #include "../specific/input.h"
 
 #define PAGE0_NUM	12
-#define PAGE1_NUM	13
+#define PAGE1_NUM	14
 // Credits (#33): no selectable rows, the number only pushes the paging
 // arrows below the text.
 #define PAGE2_NUM	12
@@ -389,6 +389,7 @@ bool Page1(long& num, long textY, ulong selection)
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Static lighting", 0);
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "UW Effect", 0);
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "First person view", 0);
+	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Level select", 0);
 
 	y = 2;
 	i = 0;
@@ -430,6 +431,9 @@ bool Page1(long& num, long textY, ulong selection)
 	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
 
 	strcpy(buffer, tomb5.first_person ? "on" : "off");
+	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
+
+	strcpy(buffer, tomb5.level_select ? "on" : "off");
 	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
 
 	switch (selection)
@@ -621,6 +625,17 @@ bool Page1(long& num, long textY, ulong selection)
 		}
 
 		break;
+
+	case 1 << 13:
+
+		if (dbinput & IN_LEFT || dbinput & IN_RIGHT)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			tomb5.level_select = !tomb5.level_select;
+			changed = 1;
+		}
+
+		break;
 	}
 
 	return changed;
@@ -642,6 +657,12 @@ bool Page2(long& num, long textY, ulong selection)
 	PrintString(phd_centerx, textY + y++ * font_height, 1, "TOMB5 Engine", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "Troye - ChocolateFan", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "thatguyfrombb - Raildex", FF_CENTER);
+	y++;
+	// The TR3 enemies (T-Rex, raptor, compy, vulture) are GPLv3 code taken
+	// from Troye's tomb3 decompilation, not our own work - it belongs in the
+	// game's credits, not only in a source comment.
+	PrintString(phd_centerx, textY + y++ * font_height, 1, "TR3 Enemies from tomb3", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 2, "Troye and contributors", FF_CENTER);
 	y++;
 	PrintString(phd_centerx, textY + y++ * font_height, 1, "Randomizer and Windows 11 Port", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "ChrisChanSan", FF_CENTER);

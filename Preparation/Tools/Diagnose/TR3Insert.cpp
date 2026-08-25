@@ -464,6 +464,11 @@ int main(int argc, char** argv)
     }
     std::printf("  mesh check: %d of %d not readable\n", bad, mi.nmeshes);
 
+    // Pack the texture pages back down before saving. Adding pages opens the
+    // texture workshop (#104), and save refuses while it is open. Closing is a
+    // no-op when nothing was added, so it can stand unconditionally.
+    if (!lvl.texWorkshopClose(err)) { std::printf("texture workshop: %s\n", err.c_str()); return 1; }
+
     if (!lvl.save(toW(argv[4]), err)) { std::printf("save: %s\n", err.c_str()); return 1; }
     std::printf("  written: %s\n", argv[4]);
     return bad ? 1 : 0;

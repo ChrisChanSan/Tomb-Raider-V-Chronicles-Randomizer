@@ -13,9 +13,17 @@
 #include "../tomb5/pch.h"
 #include "function_stubs.h"
 
-// TEMPORARY: enable Log()'s output (normally compiled out) to diagnose the
-// SFX-missing-on-headset issue via log.txt - remove once done.
+// Log() is COMPILED IN, but silent unless the game is started with -log
+// (#125). Upstream compiled it out entirely, which meant a player who hit
+// something could never produce a log - the only way was a special build.
+// One executable that can be asked for a log is worth more than a second
+// executable nobody has.
 #define DO_LOG
+
+// The gate. Off until the command line says otherwise; see
+// WinCheckLogFlag in winmain.cpp, which reads the flag before ANY other
+// startup step so no early line is lost.
+bool gLogEnabled = 0;
 
 FILE* logF = 0;
 
@@ -87,6 +95,16 @@ void Log(const char* s, ...)
 #ifdef DO_LOG
 	va_list list;
 	char buf[4096];
+
+	// THE FIRST THING IN THE FUNCTION, before the format buffer is even
+	// touched. Without -log this costs a call and a branch per line and
+	// nothing else: no file is opened, nothing is formatted, no log.txt
+	// appears next to the executable. That matters because the seams this
+	// gate exists for (sound, clipping, slots) sit in per-frame code -
+	// with the old unconditional version a long session wrote a file that
+	// grew without end and flushed on every single line.
+	if (!gLogEnabled)
+		return;
 
 	if (!logF)
 		logF = fopen("log.txt", "w+");

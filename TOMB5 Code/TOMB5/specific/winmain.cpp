@@ -39,6 +39,50 @@ static COMMANDLINES commandlines[] =
 	{ "NOFMV", 0, &CLNoFMV }
 };
 
+// -log (#125): switch the log on for this run.
+//
+// This flag DELIBERATELY does not go through the commandlines table above.
+// That table is worked off inside WinProcessCommandLine, and by then the
+// run check and the gameflow load have already run and logged - exactly
+// the startup lines a diagnosis needs most would be missing. It is
+// therefore read by hand as the first thing WinMain does.
+//
+// Matched as a WHOLE WORD, unlike the table entries, which use a plain
+// strstr: a stray "log" inside some path would otherwise silently turn on
+// per-frame logging, which is the one thing this gate exists to prevent.
+static bool WinCheckLogFlag(LPSTR cmd)
+{
+	long len, i;
+
+	if (!cmd)
+		return 0;
+
+	len = (long)strlen(cmd);
+
+	for (i = 0; i + 3 <= len; i++)
+	{
+		// Through unsigned char: a path with umlauts in it hands toupper a
+		// negative value otherwise, which it is not defined for.
+		if (toupper((uchar)cmd[i])     != 'L' ||
+			toupper((uchar)cmd[i + 1]) != 'O' ||
+			toupper((uchar)cmd[i + 2]) != 'G')
+			continue;
+
+		// What stands in front of it: start of line, a space or a switch
+		// character - not a letter of a longer word.
+		if (i > 0 && cmd[i - 1] != ' ' && cmd[i - 1] != '-' && cmd[i - 1] != '/')
+			continue;
+
+		// And what follows: end of line or a space.
+		if (i + 3 < len && cmd[i + 3] != ' ')
+			continue;
+
+		return 1;
+	}
+
+	return 0;
+}
+
 void ClearSurfaces()
 {
 	D3DRECT r;
@@ -549,6 +593,19 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	HWND desktop;
 	HDC hdc;
 	DEVMODE devmode;
+
+	// Before EVERYTHING else (#125): the run check and the gameflow load
+	// below both log, and the regular command line parser only runs after
+	// them. Reading the flag here is what makes "start with -log,
+	// reproduce, send log.txt" cover the startup as well.
+	gLogEnabled = WinCheckLogFlag(lpCmdLine);
+
+	// The build date identifies the executable in a log somebody sends in.
+	// The seed and the curation stamp belong here too, but the engine does
+	// not know them yet - they arrive with the level data, so the seams
+	// that need them have to print them themselves (#125).
+	if (gLogEnabled)
+		Log("Logging enabled by -log. PCtomb5 built " __DATE__ " " __TIME__);
 
 	start_setup = 0;
 	App.mmx = 0;

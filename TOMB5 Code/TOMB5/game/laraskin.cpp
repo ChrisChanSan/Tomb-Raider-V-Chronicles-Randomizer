@@ -475,6 +475,11 @@ void CreateSkinningData()
 
 		SkinVertNums[SkinJoints[i][3]][belowVerts] = -1;
 		ScratchVertNums[SkinJoints[i][3]][belowVerts] = -1;
+		// Nothing matched at all means this seam cannot be sewn. Remembered
+		// for drawing, which then leaves the joint out entirely instead of
+		// placing it by guesswork.
+		SkinJointUsable[i] = (vertCount > 0) ? 1 : 0;
+
 		calcPointsCounter = 0;
 
 		// This list collects the joint vertices that found NO partner above -

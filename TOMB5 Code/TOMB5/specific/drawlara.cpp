@@ -195,6 +195,15 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 
 	for (int i = 0; i < 14; i++)//joints
 	{
+		// Leave out a joint whose seam found nothing to sew. CreateSkinningData
+		// pairs joint and skin vertices by coordinate, so with a skin the
+		// joints were not built for a seam can come up completely empty - and
+		// then the stashed positions it would be drawn from are meaningless.
+		// Drawing it anyway drops a lump of geometry wherever the rest pose
+		// happens to be (seen with a Tomb Raider III body in LARA_SKIN, #122).
+		if (!SkinJointUsable[i])
+			continue;
+
 		SkinVerticesToScratch(NodesToStashToScratch[i][0]);
 		SkinVerticesToScratch(NodesToStashToScratch[i][1]);
 
@@ -405,6 +414,15 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 
 	for (int i = 0; i < 14; i++)//joints
 	{
+		// Leave out a joint whose seam found nothing to sew. CreateSkinningData
+		// pairs joint and skin vertices by coordinate, so with a skin the
+		// joints were not built for a seam can come up completely empty - and
+		// then the stashed positions it would be drawn from are meaningless.
+		// Drawing it anyway drops a lump of geometry wherever the rest pose
+		// happens to be (seen with a Tomb Raider III body in LARA_SKIN, #122).
+		if (!SkinJointUsable[i])
+			continue;
+
 		SkinVerticesToScratch(NodesToStashToScratch[i][0]);
 		SkinVerticesToScratch(NodesToStashToScratch[i][1]);
 		SkinNormalsToScratch(NodesToStashToScratch[i][0]);
@@ -709,6 +727,15 @@ static void DrawLara__6(ITEM_INFO* item, long mirror)
 
 	for (int i = 0; i < 13; i++)
 	{
+		// Leave out a joint whose seam found nothing to sew. CreateSkinningData
+		// pairs joint and skin vertices by coordinate, so with a skin the
+		// joints were not built for a seam can come up completely empty - and
+		// then the stashed positions it would be drawn from are meaningless.
+		// Drawing it anyway drops a lump of geometry wherever the rest pose
+		// happens to be (seen with a Tomb Raider III body in LARA_SKIN, #122).
+		if (!SkinJointUsable[i])
+			continue;
+
 		SkinVerticesToScratch(NodesToStashToScratch[i][0]);
 		SkinVerticesToScratch(NodesToStashToScratch[i][1]);
 

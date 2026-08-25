@@ -14,6 +14,12 @@ float lara_joint_matrices[180];
 long LaraNodeAmbient[2];
 uchar LaraNodeUnderwater[15];
 char SkinVertNums[40][12];
+
+// Did this joint's seam find anything to sew? Set by CreateSkinningData, read
+// by the three joint loops in specific/drawlara.cpp. A joint that matched no
+// vertex at all cannot be computed, and drawing it anyway can only put a lump
+// of geometry somewhere it does not belong.
+char SkinJointUsable[14];
 char ScratchVertNums[40][12];
 
 void GetLaraJointPos(PHD_VECTOR* pos, long node)

@@ -613,18 +613,25 @@ void DoOptions()
 			// setting, which makes it a trap: the pad cannot undo what the pad
 			// just did.
 			//
-			// Read the stick directly then, and ONLY then - with ControlMethod
-			// on the pad, dbinput already carries the step and counting it
-			// twice would skip a page.
-			padStep = ControlMethod ? 0 : JoyMenuStep();
+			// So the stick is read directly here - on BOTH pages, not only the
+			// keyboard one. It has to be both, or one deflection counts twice:
+			// JoyMenuStep takes the step on the keyboard page, ControlMethod
+			// flips to the pad, and in the next frame the direction still being
+			// held reaches dbinput for the first time, which its edge detection
+			// reads as a fresh press. One push, two pages (seen in game).
+			//
+			// While the stick is deflected the step therefore belongs to
+			// JoyMenuStep alone and dbinput is ignored on this row. The arrow
+			// keys keep working through dbinput whenever the stick rests.
+			padStep = JoyMenuStep();
 
-			if (dbinput & IN_LEFT || padStep < 0)
+			if ((dbinput & IN_LEFT && !JoyMenuDeflected()) || padStep < 0)
 			{
 				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 				pos--;
 			}
 
-			if (dbinput & IN_RIGHT || padStep > 0)
+			if ((dbinput & IN_RIGHT && !JoyMenuDeflected()) || padStep > 0)
 			{
 				SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 				pos++;

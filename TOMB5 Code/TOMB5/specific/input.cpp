@@ -267,6 +267,20 @@ long JoyMenuStep()
 	return dir;
 }
 
+// Is the stick/d-pad deflected at all right now? The controls screen needs it
+// to keep ONE deflection from being counted twice.
+//
+// The two paths hand the same deflection over at the moment ControlMethod
+// changes: JoyMenuStep takes the step on the keyboard page, the method flips
+// to the pad, and in the next frame the still-held direction reaches dbinput
+// for the first time - which its edge detection reads as a fresh press. One
+// push, two pages. So while the stick is deflected, the step belongs to
+// JoyMenuStep alone and dbinput is not listened to.
+long JoyMenuDeflected()
+{
+	return joy_x < -8 || joy_x > 8;
+}
+
 short ammo_change_timer = 0;
 char ammo_change_buf[12];
 

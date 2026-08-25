@@ -24,6 +24,7 @@ long S_UpdateInput();
 long ReadJoystick(long& x, long& y);
 long ActiveJoyStyle();
 long JoyMenuStep();
+long JoyMenuDeflected();
 const char* JoyButtonName(long idx);
 void ApplyJoyDefaults();
 long JoyBitConfirm();

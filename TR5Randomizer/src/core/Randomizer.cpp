@@ -2392,28 +2392,54 @@ bool Rando::run(const RandoInput& in,
             // User requirement: no enemy into a room with the water flag.
             if (in.waterRooms.count(s.room)) continue;
 
-            // No new enemy in a wall grab's carrier box (test run
-            // 2026-08-20, joby3: the Imp carried the freshly placed crowbar
-            // spot away, the item then floated unpickable in the air).
-            // GetCarriedItems checks |dx|<512, |dy|<256, |dz|<512 against
-            // the ENEMY position at level start - here with a margin
-            // (576/320), because the enemy stands on the sector center but
-            // the grab at a wall edge. finalOf carries the final places
-            // including OCB, so the wall grabs are already fixed.
+            // No new enemy where he would swallow a pickup.
+            //
+            // GetCarriedItems (setup.cpp) hands every pickup inside an
+            // intelligent enemy's box to that enemy at level start:
+            // RemoveDrawnItem, room_number = NO_ROOM, and it drops out
+            // again only when he dies. Extra enemies stand behind a OneShot
+            // trigger and are invisible until it is crossed, so such a
+            // pickup is gone from the first frame - on a key item that is
+            // the playthrough, and a fleeing Larson or Pierre carries it out
+            // of the level for good (the same reason their own sectors are
+            // barred for items at the top of this function).
+            //
+            // First found on a wall grab (test run 2026-08-20, joby3: the
+            // Imp carried the freshly placed crowbar spot away and the item
+            // then floated unpickable in the air), and the rule stayed
+            // narrowed to OCB 2 and 9 from then on. That was too narrow:
+            // `used` covers everything this run SETS DOWN, but not what
+            // STAYS. A pinned or simply unmoved pickup never enters the set,
+            // and the enemy then lands exactly on it - measured 2026-08-25
+            // over 39 runs, 3 hits, every one at distance 0/0/0 and every
+            // one a PICKUP_ITEM4 that had not moved (#121 side finding).
+            //
+            // Distances as the engine computes them, 512/256, but WITHOUT
+            // its room test: two rooms can occupy the same place (flip
+            // twins), and one enemy standing elsewhere is cheaper than one
+            // key item lost. Wall grabs keep the wider box, because they sit
+            // at the wall edge up to 512 off the sector center while the
+            // enemy stands on it. It bars the SPOT and not the enemy type:
+            // which type goes here is decided further down, and a
+            // non-carrier lying inside another model would be wrong anyway.
             {
-                bool wallNear = false;
+                bool pickupNear = false;
                 const RoomOrigin& roW = origin[s.room];
                 const int cx = roW.originX + s.sectorX * 1024 + 512;
                 const int cz = roW.originZ + s.sectorZ * 1024 + 512;
                 for (const auto& kv : finalOf)
                 {
                     const LevelItem& p2 = kv.second;
-                    if ((p2.ocb & 0x3F) != 2 && (p2.ocb & 0x3F) != 9) continue;
                     if (!isPickupType(p2.typeId)) continue;
-                    if (std::abs(p2.x - cx) < 576 && std::abs(p2.z - cz) < 576 &&
-                        std::abs(p2.y - s.floorY) < 320) { wallNear = true; break; }
+
+                    const bool wallGrab = (p2.ocb & 0x3F) == 2 || (p2.ocb & 0x3F) == 9;
+                    const int reachXZ = wallGrab ? 576 : 512;
+                    const int reachY  = wallGrab ? 320 : 256;
+
+                    if (std::abs(p2.x - cx) < reachXZ && std::abs(p2.z - cz) < reachXZ &&
+                        std::abs(p2.y - s.floorY) < reachY) { pickupNear = true; break; }
                 }
-                if (wallNear) continue;
+                if (pickupNear) continue;
             }
 
             // No new enemy at an OPERABLE FIXTURE (#120).

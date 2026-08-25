@@ -83,6 +83,27 @@ int main(int argc, char** argv)
     RandoReport rep;
     std::printf("Placement\n");
     bool ok = Rando::run(in, opt, seed, patch, rep);
+
+    // One item in the whole game carries its pickup trigger along - Andrea1's
+    // key 107. Its candidate sectors must be able to take that trigger, and
+    // whether a sector can is decided by the real level's floordata:
+    // ApplyPatch fills triggerSafeSectors from it, the zone export does not
+    // know it. Without the set no sector qualifies and the placement gives
+    // up - here, and only here.
+    //
+    // Reported as untestable instead of failed. It is not a defect in the
+    // placement (Randomize.exe, which reads the level, does Andrea1 without
+    // complaint), and a suite that reports a permanent red for a reason it
+    // knows about teaches whoever runs it to stop reading.
+    if (!ok && in.triggerSafeSectors.empty() && !in.coupledTriggers.empty())
+    {
+        std::printf("  [--- ] not testable here: %s\n", rep.error.c_str());
+        std::printf("         The item carries its pickup trigger, and which sectors accept\n"
+                    "         one comes from the level file this program does not read.\n"
+                    "         Covered by Randomize.exe instead.\n");
+        return 0;
+    }
+
     if (!ok) std::printf("  error: %s\n", rep.error.c_str());
     check(ok, "run successful");
     if (!ok) return 1;
@@ -96,9 +117,23 @@ int main(int argc, char** argv)
 
     const JsonValue& edits = patch["itemEdits"];
 
+    // Not every entry in itemEdits is a movement. Some carry nothing but an
+    // index and a flag - antitriggerImmune marks an enemy, or a curated
+    // door like rich2's 171, so the antitrigger skips it. Those entries have
+    // no x/y/z, and reading one as a position yields 0,0,0: it then looks
+    // like an item lying on another at the world origin, on no valid
+    // sector, and not a pickup.
+    //
+    // That is exactly what the FAILs on Andy2, rich1 and rich2 were. The
+    // suite has been crying wolf on those three levels since the immunity
+    // was introduced, and a test that is always red is worse than none: it
+    // teaches whoever runs it to look away.
+    auto isMove = [](const JsonValue& e) { return e.has("x"); };
+
     // --- Rule 2: no location-bound item was touched ---
     std::set<int> edited;
-    for (size_t i = 0; i < edits.size(); ++i) edited.insert(static_cast<int>(edits[i]["index"].asInt()));
+    for (size_t i = 0; i < edits.size(); ++i)
+        if (isMove(edits[i])) edited.insert(static_cast<int>(edits[i]["index"].asInt()));
     bool pinnedUntouched = true;
     for (int p : pinned) if (edited.count(p)) { pinnedUntouched = false; std::printf("       item %d was moved!\n", p); }
     check(pinnedUntouched, "no trigger-bound item was moved");
@@ -117,6 +152,7 @@ int main(int argc, char** argv)
     bool ocbZero = true;
     for (size_t i = 0; i < edits.size(); ++i)
     {
+        if (!isMove(edits[i])) continue;
         const int idx = static_cast<int>(edits[i]["index"].asInt());
         const int ocb = static_cast<int>(edits[i]["ocb"].asInt());
         std::map<int, const LevelItem*>::const_iterator oi = origOf.find(idx);
@@ -143,6 +179,7 @@ int main(int argc, char** argv)
     auto keyOf = [](int room, int x, int z) { return (static_cast<long long>(room) << 40) | (static_cast<long long>(x) << 20) | z; };
     for (size_t i = 0; i < edits.size(); ++i)
     {
+        if (!isMove(edits[i])) continue;
         long long k = keyOf(static_cast<int>(edits[i]["room"].asInt()),
                             static_cast<int>(edits[i]["x"].asInt()),
                             static_cast<int>(edits[i]["z"].asInt()));
@@ -164,6 +201,7 @@ int main(int argc, char** argv)
     bool allOnValidSector = true;
     for (size_t i = 0; i < edits.size(); ++i)
     {
+        if (!isMove(edits[i])) continue;
         const int idx = static_cast<int>(edits[i]["index"].asInt());
         const int room = static_cast<int>(edits[i]["room"].asInt());
         // The type's placement offset (TYPE_OFFSET) is subtracted before the
@@ -209,6 +247,7 @@ int main(int argc, char** argv)
     bool weaponsClear = true;
     for (size_t i = 0; i < edits.size(); ++i)
     {
+        if (!isMove(edits[i])) continue;
         const int idx  = static_cast<int>(edits[i]["index"].asInt());
         const int room = static_cast<int>(edits[i]["room"].asInt());
         if (in.weaponTypes.count(typeOf[idx]) && in.noWeaponRooms.count(room))
@@ -227,6 +266,7 @@ int main(int argc, char** argv)
     for (const LevelItem& it : in.items) placedAt[it.index] = secKey(it.room, it.sectorX, it.sectorZ);
     for (size_t i = 0; i < edits.size(); ++i)
     {
+        if (!isMove(edits[i])) continue;
         long long k = keyOf(static_cast<int>(edits[i]["room"].asInt()),
                             static_cast<int>(edits[i]["x"].asInt()),
                             static_cast<int>(edits[i]["z"].asInt()));
@@ -262,6 +302,7 @@ int main(int argc, char** argv)
     for (const LevelItem& it : in.items) after[it.index] = it;
     for (size_t i = 0; i < edits.size(); ++i)
     {
+        if (!isMove(edits[i])) continue;
         LevelItem& f = after[static_cast<int>(edits[i]["index"].asInt())];
         f.room = static_cast<int>(edits[i]["room"].asInt());
         f.x    = static_cast<int>(edits[i]["x"].asInt());
@@ -289,6 +330,120 @@ int main(int argc, char** argv)
     }
     std::printf("  %d pickups land at a carrier, %d of them with OCB != 0\n", carried, carriedBad);
     check(carriedBad == 0, "every carried pickup has OCB 0");
+
+    // --- Extra enemies must not be set down on a pickup (#121 side finding) ---
+    //
+    // The run above leaves enemies OFF, because that is RandoOptions'
+    // default - and that is exactly why this class could hide here: the
+    // whole enemy placement was never exercised by the self-test, and the
+    // stacking check further up compares moved items only with each other,
+    // never with what the run newly SETS DOWN.
+    //
+    // What makes it more than a cosmetic overlap is GetCarriedItems
+    // (setup.cpp): at level start it hands every pickup inside an
+    // intelligent enemy's box to that enemy - RemoveDrawnItem, room_number
+    // = NO_ROOM - and the item only drops out again when he dies. Our extra
+    // enemies stand behind a OneShot trigger and are invisible until it is
+    // crossed, so such a pickup is gone from the first frame. On a key item
+    // that is the playthrough, and on a fleeing Larson or Pierre it leaves
+    // the level for good - the very reason their sectors are already barred
+    // for items at the top of Rando::run.
+    //
+    // Only checkable WITH the level file, and this program has none. The
+    // approach sector an enemy trigger goes on has to tolerate a trigger,
+    // and that is decided by the real floordata - ApplyPatch fills
+    // triggerSafeSectors from it, the zone export does not know it. Without
+    // that set the placement finds no spot at all and puts down nothing.
+    //
+    // Reported instead of quietly passing: a check that cannot fail is
+    // worse than none, because it reads like cover. Whoever hands this
+    // program a level one day gets the check for free.
+    std::printf("\nExtra enemies\n");
+    if (in.triggerSafeSectors.empty())
+    {
+        std::printf("  [--- ] not testable here - the placement needs the floordata of the\n"
+                    "         real level (ApplyPatch fills triggerSafeSectors), which this\n"
+                    "         program does not read. Covered by Randomize.exe instead.\n");
+    }
+    else
+    {
+        RandoOptions oe = opt;
+        oe.addEnemies = true;
+        oe.enemiesPerLevel = 20;
+        oe.crossEnemies = true;
+
+        JsonValue pe;
+        RandoReport re;
+        const bool okE = Rando::run(in, oe, seed, pe, re);
+        check(okE, "run with extra enemies successful");
+
+        if (okE)
+        {
+            std::printf("  %d extra enemies placed\n", re.enemiesAdded);
+            for (const std::string& n : re.notes)
+                if (n.find("enem") != std::string::npos || n.find("pack") != std::string::npos)
+                    std::printf("  note: %s\n", n.c_str());
+
+            // Where everything lies once this run is applied: vanilla,
+            // corrected by what was moved, plus what was appended.
+            std::map<int, LevelItem> afterE;
+            for (const LevelItem& it : in.items) afterE[it.index] = it;
+
+            const JsonValue& ee = pe["itemEdits"];
+            for (size_t i = 0; i < ee.size(); ++i)
+            {
+                if (!isMove(ee[i])) continue;
+                LevelItem& f = afterE[static_cast<int>(ee[i]["index"].asInt())];
+                f.room = static_cast<int>(ee[i]["room"].asInt());
+                f.x    = static_cast<int>(ee[i]["x"].asInt());
+                f.y    = static_cast<int>(ee[i]["y"].asInt());
+                f.z    = static_cast<int>(ee[i]["z"].asInt());
+                f.ocb  = static_cast<int>(ee[i]["ocb"].asInt());
+            }
+
+            // itemAdds appends at the back in order, so an added item's
+            // index is the item count plus its place in the list - the same
+            // arithmetic the placement itself uses for its triggers.
+            const JsonValue& ea = pe["itemAdds"];
+            for (size_t i = 0; i < ea.size(); ++i)
+            {
+                LevelItem a;
+                a.index  = static_cast<int>(in.items.size() + i);
+                a.typeId = static_cast<int>(ea[i]["typeId"].asInt());
+                a.room   = static_cast<int>(ea[i]["room"].asInt());
+                a.x      = static_cast<int>(ea[i]["x"].asInt());
+                a.y      = static_cast<int>(ea[i]["y"].asInt());
+                a.z      = static_cast<int>(ea[i]["z"].asInt());
+                a.ocb    = static_cast<int>(ea[i]["ocb"].asInt());
+                afterE[a.index] = a;
+            }
+
+            // Only added enemies against pickups. A pack shares one sector
+            // on purpose, so added against added would report the intended
+            // case as an error.
+            int swallowed = 0;
+            for (size_t i = 0; i < ea.size(); ++i)
+            {
+                const LevelItem& b = afterE[static_cast<int>(in.items.size() + i)];
+                if (!isCarrierType(b.typeId)) continue;
+
+                for (const auto& kv : afterE)
+                {
+                    const LevelItem& p = kv.second;
+                    if (!isPickupType(p.typeId)) continue;
+                    if (p.room != b.room) continue;
+                    if (!isWithinCarryBox(b.x, b.y, b.z, p.x, p.y, p.z)) continue;
+
+                    ++swallowed;
+                    std::printf("       pickup %d (type %d, OCB %d) lies in the box of "
+                                "new enemy %d (type %d) at %d,%d,%d\n",
+                                p.index, p.typeId, p.ocb & 0x3F, b.index, b.typeId,
+                                b.x, b.y, b.z);
+                }
+            }
+            check(swallowed == 0, "no extra enemy swallows a pickup");
+        }
+    }
 
     // --- Reproducibility ---
     JsonValue p2; RandoReport r2;

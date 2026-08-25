@@ -355,6 +355,9 @@ int main(int argc, char** argv)
     //
     // The palette's scale is not assumed but read off - TR1's is 6 bit, and
     // whether TR3 followed is not worth guessing when the maximum says it.
+    struct Avg { int r, g, b; bool ok; };
+    std::vector<Avg> texAvgOut;
+
     if (!coloredSpots.empty() && nObjTex && !texIdx.empty())
     {
         int palMax = 0;
@@ -365,7 +368,6 @@ int main(int argc, char** argv)
 
         // Average colour of one object texture: its own pixel rectangle out of
         // the 16 bit tile, transparent pixels left out (bit 15 = opaque).
-        struct Avg { int r, g, b; bool ok; };
         std::vector<Avg> texAvg(texIdx.size(), { 0, 0, 0, false });
 
         for (size_t k = 0; k < texIdx.size(); ++k)
@@ -453,6 +455,49 @@ int main(int argc, char** argv)
 
         std::printf("  colored faces: %d placed by colour, %d fell back to the mesh\'s own texture\n",
                     placed, fell);
+        texAvgOut = texAvg;
+    }
+
+    // Average colour per MESH - which body part carries which colour.
+    //
+    // Answers "should this forearm be dark or bare skin" without a game run:
+    // every face's texture is measured anyway for the colored substitution,
+    // so averaging them per mesh costs nothing and says outright what the
+    // model itself intends. Mesh order is Lara's: 0 hips, 1-3 left leg,
+    // 4-6 right leg, 7 torso, 8-10 right arm, 11-13 left arm, 14 head.
+    if (nObjTex && !texAvgOut.empty())
+    {
+        static const char* part[15] = { "hips", "L thigh", "L shin", "L foot",
+                                        "R thigh", "R shin", "R foot", "torso",
+                                        "R inarm", "R outarm", "R hand",
+                                        "L inarm", "L outarm", "L hand", "head" };
+        for (size_t mi = 0; mi < meshes.size(); ++mi)
+        {
+            const std::vector<uint8_t>& m = meshes[mi];
+            size_t q = 10;
+            const int16_t vw = rs16(m, q); q += 2;
+            const int nv = vw & 0xFF;
+            if (nv == 0) q += (size_t((vw >> 8) & 0xFF) * 6 + 1) * 2;
+            else
+            {
+                q += size_t(nv) * 6;
+                const int16_t nn = rs16(m, q); q += 2;
+                q += size_t(nv) * (nn >= 0 ? 6 : 2);
+            }
+            long sr = 0, sg = 0, sb = 0, n = 0;
+            auto take = [&](int t) {
+                for (size_t k = 0; k < texIdx.size(); ++k)
+                    if (texIdx[k] == t && texAvgOut[k].ok)
+                    { sr += texAvgOut[k].r; sg += texAvgOut[k].g; sb += texAvgOut[k].b; ++n; return; }
+            };
+            const int16_t nq = rs16(m, q); q += 2;
+            for (int i = 0; i < nq; ++i, q += 12) take(ru16(m, q + 8) & 0x7FFF);
+            const int16_t nt = rs16(m, q); q += 2;
+            for (int i = 0; i < nt; ++i, q += 10) take(ru16(m, q + 6) & 0x7FFF);
+            if (n)
+                std::printf("    mesh %2zu %-9s rgb %2ld,%2ld,%2ld of 31  (%ld faces)\n",
+                            mi, mi < 15 ? part[mi] : "?", sr / n, sg / n, sb / n, n);
+        }
     }
 
     std::printf("  object textures: %zu distinct on %zu tiles (",

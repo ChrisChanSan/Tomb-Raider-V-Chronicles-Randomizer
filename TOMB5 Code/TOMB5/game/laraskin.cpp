@@ -475,10 +475,24 @@ void CreateSkinningData()
 
 		SkinVertNums[SkinJoints[i][3]][belowVerts] = -1;
 		ScratchVertNums[SkinJoints[i][3]][belowVerts] = -1;
-		// Nothing matched at all means this seam cannot be sewn. Remembered
-		// for drawing, which then leaves the joint out entirely instead of
-		// placing it by guesswork.
-		SkinJointUsable[i] = (vertCount > 0) ? 1 : 0;
+		// Can this seam be sewn at all? A HALF measure is not enough - the
+		// joint has to sit on the skin with the MAJORITY of its vertices.
+		//
+		// A few unmatched ones are normal and are what PointsToCalc exists
+		// for: they get computed instead of copied. But a joint that finds
+		// only one or two partners by coincidence is not sewn, it is
+		// guessed - and then TR5's own joint geometry hangs in a foreign
+		// body (seen in game with the Tomb Raider III outfit, #122: the
+		// pieces that stayed were exactly the joints with a handful of
+		// accidental hits).
+		//
+		// Lara's own skin is far from this line, it matches almost
+		// everything - measured on vanilla Andrea2, which reports nothing.
+		SkinJointUsable[i] = (jointVerts > 0 && vertCount * 2 >= jointVerts) ? 1 : 0;
+
+		if (!SkinJointUsable[i] && jointVerts > 0)
+			Log("SKINLOG joint %d: only %d of %d vertices sit on the skin - joint left out",
+				i, vertCount, jointVerts);
 
 		calcPointsCounter = 0;
 

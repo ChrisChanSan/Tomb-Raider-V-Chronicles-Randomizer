@@ -8,6 +8,7 @@ What is in here
   data\               Precomputed data the randomizer needs.
   Source\             The complete source code of both.
   Licenses\           The licenses.
+  trview\             Slot names for the trview level viewer (optional).
 
 You additionally need your own installation of Tomb Raider
 Chronicles. Game data is deliberately NOT included here - the game
@@ -82,6 +83,27 @@ Turning it off:
 After that the engine sees your controller as it is, and everything
 works normally. Nothing needs changing when starting the game
 directly - Steam Input only ever runs when Steam launches the game.
+
+
+Looking at a level yourself
+---------------------------
+The folder trview holds a types.json for trview, the level viewer by
+chreden (https://github.com/chreden/trview). Copy it to
+
+    %LOCALAPPDATA%\trview\types.json
+
+and restart trview; it merges the file over its built-in list at
+startup.
+
+It only affects names. Ten slots would otherwise read wrongly or not
+at all: seven are unknown to trview, because its TR5 list ends before
+them, and three carry different contents after randomizing - the four
+guests from Tomb Raider III take over slots that held a SAS man, a
+crow, a sailor and a reaper.
+
+Nothing here is needed to play. It is worth having if you ever report
+something odd: a viewer that shows "Crow" where a vulture stands turns
+a clear report into a confusing one.
 
 
 If something goes wrong

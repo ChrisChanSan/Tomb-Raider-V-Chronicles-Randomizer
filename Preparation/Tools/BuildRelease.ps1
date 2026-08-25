@@ -88,6 +88,24 @@ foreach ($f in (Get-ChildItem "$secretsIn\*.txt" | Sort-Object Name)) {
 }
 Say "Secret lists  : $lists files (data\secrets)"
 
+# --- 3b. trview type names ---------------------------------------------------
+# Ten slots that a level viewer would otherwise name wrongly or not at all:
+# seven are unknown to trview (its built-in TR5 list ends at id 452, and the
+# randomizer places 460/461), and three carry different contents afterwards -
+# the four TR3 guests overwrite SAS, CROW, SAILOR and REAPER, and 41 and 85
+# are both called "Dog" upstream although only one of them is the husky.
+#
+# Not needed to play. It is here because anyone reporting an oddity is asked
+# to look at the level, and a viewer showing "Crow" where a vulture stands
+# turns a clear report into a confusing one.
+$viewOut = "$OutDir\trview"
+$typesIn = "$Root\Preparation\Item Infos\types.json"
+if (Test-Path $typesIn) {
+    New-Item -ItemType Directory -Path $viewOut -Force | Out-Null
+    Copy-Item $typesIn "$viewOut\types.json" -Force
+    Say "trview names  : types.json (trview\)"
+}
+
 # --- 4. Source code, GPLv3 obligation ----------------------------------------
 $srcOut = "$OutDir\Source\TOMB5"
 New-Item -ItemType Directory -Path $srcOut -Force | Out-Null

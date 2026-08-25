@@ -1,0 +1,16 @@
+{
+    "games": {
+        "tr5": [
+            { "id": 31,  "name": "T-Rex (TR3)", "categories": [ "Enemy" ] },
+            { "id": 43,  "name": "Vulture (TR3 LA)", "categories": [ "Enemy" ] },
+            { "id": 47,  "name": "Pierre", "categories": [ "Enemy" ] },
+            { "id": 53,  "name": "Compy (TR3)", "categories": [ "Enemy" ] },
+            { "id": 55,  "name": "Crane Guy", "categories": [ "Enemy" ] },
+            { "id": 61,  "name": "Soldier Statue (Sword)", "categories": [ "Enemy" ] },
+            { "id": 75,  "name": "Raptor (TR3)", "categories": [ "Enemy" ] },
+            { "id": 85,  "name": "Siberian Husky", "categories": [ "Enemy" ] },
+            { "id": 460, "name": "Guard (Joby)", "categories": [ "Enemy" ] },
+            { "id": 461, "name": "Soldier Statue (Hammer)", "categories": [ "Enemy" ] }
+        ]
+    }
+}

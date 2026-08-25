@@ -413,14 +413,14 @@ int main(int argc, char** argv)
             std::vector<int> seen;
             for (const ColorSpot& fs : coloredSpots)
             {
-                const int ci = fs.colorIdx & 0xFF;
+                const int ci = (fs.colorIdx >> 8) & 0xFF;
                 bool had = false;
                 for (int x : seen) if (x == ci) { had = true; break; }
                 if (had) continue;
                 seen.push_back(ci);
                 const size_t e = 772 + size_t(ci) * 4;
                 int cnt = 0;
-                for (const ColorSpot& g : coloredSpots) if ((g.colorIdx & 0xFF) == ci) ++cnt;
+                for (const ColorSpot& g : coloredSpots) if (((g.colorIdx >> 8) & 0xFF) == ci) ++cnt;
                 std::printf("    colour %3d: rgb %3d,%3d,%3d  on %d faces\n",
                             ci, r.b[e], r.b[e + 1], r.b[e + 2], cnt);
             }
@@ -429,7 +429,14 @@ int main(int argc, char** argv)
         int placed = 0, fell = 0;
         for (const ColorSpot& fs : coloredSpots)
         {
-            const size_t e = 772 + size_t(fs.colorIdx & 0xFF) * 4;
+            // TR3 packs TWO palette indices into the colour word of a colored
+            // face: the low byte indexes the 8 bit palette, the HIGH byte the
+            // 16 bit one. Reading the low byte in the 16 bit table returned
+            // almost nothing but zeros - which is why the whole model looked
+            // black to the matcher and Lara's forearms, which are colored
+            // faces and not textured at all (PixStr shows meshes 9 and 12
+            // untextured), came out dark instead of bare skin.
+            const size_t e = 772 + size_t((fs.colorIdx >> 8) & 0xFF) * 4;
             const int wr = r.b[e] >> palShift, wg = r.b[e + 1] >> palShift, wb = r.b[e + 2] >> palShift;
 
             int best = -1;

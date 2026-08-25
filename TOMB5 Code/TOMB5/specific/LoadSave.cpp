@@ -503,6 +503,19 @@ void DoOptions()
 			{
 				jread = ReadJoystick(jx, jy);
 
+				// Drop the hold guard as soon as the button is actually up, and
+				// check that on EVERY frame of the wait.
+				//
+				// It used to sit inside "if (jread)" below - and jread is zero
+				// exactly when the user lets go. So the release was never seen,
+				// action_still_held stayed armed for good, and the Action button
+				// could no longer be bound to itself at all: the row went into
+				// Waiting and stayed there, whatever you pressed (reported in
+				// game). The guard against the press that OPENED the wait is
+				// still right; it just has to end when that press does.
+				if (!Key(jLayout[4] + 256))
+					action_still_held = 0;
+
 				if (jread)
 				{
 					lp = sel >> 2;
@@ -534,12 +547,8 @@ void DoOptions()
 					// joystick equivalent of the keyboard capture loop below excluding
 					// DIK_RETURN for the same reason.
 					// The guard is armed only while that selection press is still
-					// physically down (action_still_held): once released - or when
-					// the row was selected via keyboard Enter in the first place -
-					// the Action button itself becomes bindable like any other.
-					if (!Key(jLayout[4] + 256))
-						action_still_held = 0;
-
+					// physically down (action_still_held); it is dropped above, the
+					// moment the button is really up.
 					if (lp2 != jLayout[4] || !action_still_held)
 					{
 						jLayout[i] = lp2;

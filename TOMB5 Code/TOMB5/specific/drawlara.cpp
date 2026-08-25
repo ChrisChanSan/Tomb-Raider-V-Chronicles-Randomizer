@@ -152,18 +152,18 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 
 		if (lara_item->mesh_bits >> 0x10 & 1 << (15 - i))
 		{
-			// Ego-Sicht (#126): den Kopf NICHT ZEICHNEN - seine Vertices
-			// aber sehr wohl stashen (die Schleife darunter).
+			// First person (#126): do NOT DRAW the head - but very much
+			// stash its vertices (the loop below).
 			//
-			// Deshalb steht das hier und nicht in mesh_bits: Laras Haut ist
-			// GESKINNT, die Nachbarteile ziehen ihre Randpunkte aus dem
-			// Stash dieses Meshes. Blendet man den Kopf ueber mesh_bits aus,
-			// faellt das Stashen mit weg (es steckt in derselben Klammer),
-			// und das Halsgelenk skinnt aus altem Speicher: ein riesiges
-			// gestrecktes Dreieck quer durchs Bild - vom Nutzer als
-			// "dritter Arm" fotografiert. Nach dem Zielfernrohr blieb es
-			// sogar dauerhaft stehen, weil dann auch noch die
-			// mesh_bits-Rueckgabe des Fernglases dagegenhielt.
+			// That is why this stands here and not in mesh_bits: Lara's
+			// skin is SKINNED, the neighboring parts pull their rim points
+			// from this mesh's stash. Hide the head via mesh_bits and the
+			// stashing drops away with it (it sits in the same bracket),
+			// and the neck joint skins from stale memory: a huge stretched
+			// triangle across the frame - photographed by the user as a
+			// "third arm". After the scope it even stayed permanently,
+			// because the binoculars' mesh_bits restore pushed against it
+			// on top.
 			if (!(FirstPersonActive() && lara_mesh_sweetness_table[i] == LM_HEAD))
 				phd_PutPolygons(lara.mesh_ptrs[lara_mesh_sweetness_table[i]], -1);
 
@@ -182,10 +182,10 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 	phd_PopMatrix();
 	bLaraUnderWater = LaraNodeUnderwater[8] != 0 ? 8 : -1;
 
-	// Ego-Sicht (#126): mit dem Kopf muss auch der ZOPF weg. Er haengt am
-	// Kopfgelenk - also genau dort, wo die Kamera sitzt - und wehte dem
-	// Spieler durchs Bild. Die Meshbits des Koerpers erwischen ihn nicht,
-	// er wird getrennt gezeichnet.
+	// First person (#126): with the head, the BRAID must go too. It hangs
+	// on the head joint - exactly where the camera sits - and blew through
+	// the player's view. The body's mesh bits do not catch it, it is drawn
+	// separately.
 	if (!FirstPersonActive())
 		DrawHair();
 	phd_PushMatrix();
@@ -371,9 +371,9 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 
 		aSetViewMatrix();
 
-		// Ego-Sicht (#126): Kopf nicht zeichnen, Vertices trotzdem stashen -
-		// Begruendung wie in DrawLara__1. Diese Fassung prueft mesh_bits gar
-		// nicht erst, sie haette den Kopf sonst weiter gezeichnet.
+		// First person (#126): do not draw the head, stash the vertices
+		// anyway - reasoning as in DrawLara__1. This version does not even
+		// check mesh_bits, it would have kept drawing the head otherwise.
 		if (!(FirstPersonActive() && lara_mesh_sweetness_table[i] == LM_HEAD))
 			phd_PutPolygonsSpcEnvmap(lara.mesh_ptrs[lara_mesh_sweetness_table[i]], -1);
 
@@ -392,10 +392,10 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 	phd_PopMatrix();
 	bLaraUnderWater = LaraNodeUnderwater[8] != 0 ? 8 : -1;
 
-	// Ego-Sicht (#126): mit dem Kopf muss auch der ZOPF weg. Er haengt am
-	// Kopfgelenk - also genau dort, wo die Kamera sitzt - und wehte dem
-	// Spieler durchs Bild. Die Meshbits des Koerpers erwischen ihn nicht,
-	// er wird getrennt gezeichnet.
+	// First person (#126): with the head, the BRAID must go too. It hangs
+	// on the head joint - exactly where the camera sits - and blew through
+	// the player's view. The body's mesh bits do not catch it, it is drawn
+	// separately.
 	if (!FirstPersonActive())
 		DrawHair();
 	phd_PushMatrix();
@@ -469,15 +469,14 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 
 	bLaraUnderWater = (LaraNodeUnderwater[0] != 0) - 1;
 
-	// Holster auch auf der Catsuit. Upstream zeichnet DrawLara__4 keine
-	// Oberschenkel-Holster - die Catsuit-Level haben die Objekte 13-16 gar
-	// nicht geladen, es gab schlicht nichts zu zeichnen. Der Randomizer kann
-	// sie inzwischen hineinkopieren; dann sollen sie auch erscheinen, wie in
-	// DrawLara__1. Die loaded-Pruefung haelt Vanilla byteidentisch im
-	// Verhalten: ohne die Objekte wird weiterhin nichts gezeichnet - und sie
-	// verhindert zugleich, ueber objects[].mesh_index == 0 ein fremdes Mesh
-	// auf den Schenkel zu legen (genau der Fehler, der bei fehlenden
-	// Holstern in DrawLara__1 sichtbar wurde).
+	// Holsters on the catsuit too. Upstream, DrawLara__4 draws no thigh
+	// holsters - the catsuit levels do not even load objects 13-16, there
+	// simply was nothing to draw. The randomizer can copy them in by now;
+	// then they should appear too, as in DrawLara__1. The loaded check
+	// keeps vanilla byte-identical in behavior: without the objects,
+	// nothing is drawn as before - and at the same time it prevents laying
+	// a foreign mesh onto the thigh via objects[].mesh_index == 0 (exactly
+	// the bug that became visible with missing holsters in DrawLara__1).
 	if (!(gfLevelFlags & GF_YOUNGLARA) && objects[LHolster].loaded && objects[lara.holster].loaded)
 	{
 		obj = &objects[LHolster];

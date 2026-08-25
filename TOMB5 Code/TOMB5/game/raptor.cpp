@@ -11,11 +11,11 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 /*
- * Raptor aus Tomb Raider 3, portiert 2026 nach TOMB5 (#97).
+ * Raptor from Tomb Raider 3, ported to TOMB5 in 2026 (#97).
  *
- * Uebernommen aus tomb3 (game/raptor.cpp, GPLv3) - dieselbe Lizenz wie TOMB5
- * und dieses Projekt. Der Code wird bewusst direkt uebernommen statt
- * umgeschrieben: Umschreiben wuerde die Herkunft verschleiern.
+ * Taken from tomb3 (game/raptor.cpp, GPLv3) - the same license as TOMB5 and
+ * this project. The code is deliberately taken over directly instead of
+ * rewritten: rewriting would obscure its origin.
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -23,33 +23,33 @@
  * any later version. See the LICENSE file at the root of this source tree.
  *
  * ----------------------------------------------------------------------------
- * Der KI-Unterbau ist zwischen beiden Spielen derselbe (CreatureAIInfo,
+ * The AI substructure is the same between the two games (CreatureAIInfo,
  * GetCreatureMood, CreatureMood, CreatureTurn, CreatureTilt, CreatureJoint,
- * CreatureAnimation) - deshalb laeuft die Steuerung nahezu wortgleich weiter.
- * Der Raptor sitzt in TR5 auf Slot REAPER (75); in keinem der 16 Level
- * steckt dort ein Modell (mit MissMod an allen nachgemessen), genau wie bei
- * SAS fuer den T-Rex und CROW fuer den Geier.
+ * CreatureAnimation) - so the control keeps running almost word for word.
+ * In TR5 the Raptor sits on slot REAPER (75); none of the 16 levels carries
+ * a model there (measured with MissMod against all of them), exactly as
+ * with SAS for the T-Rex and CROW for the vulture.
  *
- * DREI ABWEICHUNGEN gegenueber tomb3, alle hier begruendet:
+ * THREE DEVIATIONS from tomb3, all justified here:
  *
- * 1. Die Beutesuche ist ganz entfallen (#98) - der Raptor jagt nur noch Lara.
- *    Begruendung an der Stelle selbst, kurz: TR3 stellt ihm Mercenaries
- *    gegenueber, die auch gegen Lara kaempfen; bei uns waeren die naechsten
- *    Ziele immer Laras eigene Verfolger.
+ * 1. The prey search is gone entirely (#98) - the Raptor only hunts Lara.
+ *    Reasoning at the spot itself, in short: TR3 pits mercenaries against
+ *    him who also fight Lara; with us the nearest targets would always be
+ *    Lara's own pursuers.
  *
- * 2. tomb3 prueft im Laufzustand zusaetzlich
- *    `raptor->enemy->object_number != ANIMATING6`. ANIMATING6 ist in TR3 ein
- *    Zielobjekt fuer genau diese Stelle; in TR5 traegt derselbe Slot etwas
- *    voellig anderes, die Abfrage waere also sinnlos bis schaedlich. Sie
- *    entfaellt - Folge: der Raptor darf auch dort sein Warnknurren zeigen, wo
- *    TR3 es unterdrueckte. Das ist Verhalten, keine Funktion.
- *    Der Zeiger wird dabei gegen null geprueft, was tomb3 an der Stelle nicht
- *    tut (dort ist er durch den Ablauf immer gesetzt) - siehe die Lehre aus
- *    dem T-Rex: beim Weglassen einer Bedingung pruefen, was sie trug.
+ * 2. tomb3 additionally checks in the run state
+ *    `raptor->enemy->object_number != ANIMATING6`. In TR3, ANIMATING6 is a
+ *    target object for exactly this spot; in TR5 the same slot carries
+ *    something entirely different, so the check would be pointless to
+ *    harmful. It is dropped - consequence: the Raptor may show his warning
+ *    growl even where TR3 suppressed it. That is behavior, not function.
+ *    The pointer is checked against null in the process, which tomb3 does
+ *    not do there (the flow always sets it) - see the lesson from the
+ *    T-Rex: when dropping a condition, check what it carried.
  *
- * Klaenge kommen wie beim T-Rex ueber die Anim-Kommandos des Modells; hier ist
- * kein Aufruf noetig. Der Raptor greift normal an, es gibt also keine
- * CreatureKill-Luecke wie beim T-Rex.
+ * Sounds come via the model's anim commands as with the T-Rex; no call is
+ * needed here. The Raptor attacks normally, so there is no CreatureKill
+ * gap as with the T-Rex.
  */
 #include "../tomb5/pch.h"
 #include "balance.h"
@@ -105,24 +105,24 @@ void RaptorControl(short item_number)
 	}
 	else
 	{
-		// ABWEICHUNG 3 (#98, Nutzerentscheidung 2026-08-17): der Raptor nimmt
-		// nur noch Lara ins Visier.
+		// DEVIATION 3 (#98, user decision 2026-08-17): the Raptor only
+		// targets Lara anymore.
 		//
-		// Hier stand tomb3s Beutesuche: sie geht alle aktiven Gegnerslots
-		// durch, nimmt den naechsten als Ziel und schuetzt nur Artgenossen
-		// (1 zu 32, und nur auf kurze Distanz). In TR3 ergab das ein schoenes
-		// Bild - in CRASH.TR2 stehen dem Rudel Mercenaries gegenueber, und
-		// die kaempfen ihrerseits gegen Lara. Der Dschungel lebt.
+		// tomb3's prey search stood here: it walks all active enemy slots,
+		// takes the nearest as the target and only spares its own kind
+		// (1 in 32, and only at short range). In TR3 that made a fine
+		// picture - in CRASH.TR2 the pack faces mercenaries, who in turn
+		// fight Lara. The jungle lives.
 		//
-		// Bei uns gibt es diese dritte Fraktion nicht. Der Cross-Gegnermix
-		// stellt dem Raptor Wachmaenner, SWATs und andere Dinos an die
-		// Seite, die alle ebenfalls auf Lara losgehen: die Suche findet
-		// also immer einen Verbuendeten und der Raptor zerfleischt die
-		// eigene Verstaerkung, statt Lara zu jagen (im Testlevel gesehen).
+		// With us this third faction does not exist. The cross enemy mix
+		// puts guards, SWATs and other dinos at the Raptor's side, all of
+		// whom also go after Lara: the search thus always finds an ally,
+		// and the Raptor mauls his own reinforcements instead of hunting
+		// Lara (seen in the test level).
 		//
-		// Jetzt dieselbe Zeile wie bei jedem einheimischen TR5-Gegner. Die
-		// Bisswirkung auf Nicht-Lara-Ziele weiter unten bleibt stehen: ueber
-		// ai_bits kann GetAITarget weiterhin ein AI-Objekt setzen.
+		// Now the same line as for every native TR5 enemy. The bite effect
+		// on non-Lara targets further down stays: via ai_bits, GetAITarget
+		// can still set an AI object.
 		if (item->ai_bits)
 			GetAITarget(raptor);
 		else
@@ -201,8 +201,8 @@ void RaptorControl(short item_number)
 				if (item->goal_anim_state == RAPTOR_RUN)
 					item->goal_anim_state = GetRandomControl() < 0x2000 ? RAPTOR_STOP : RAPTOR_ATTACK2;
 			}
-			// Ohne den ANIMATING6-Vergleich, dafuer gegen null geprueft -
-			// siehe Abweichung 2 im Dateikopf.
+			// Without the ANIMATING6 comparison, but checked against null -
+			// see deviation 2 in the file header.
 			else if (info.ahead && raptor->mood != ESCAPE_MOOD && GetRandomControl() < 128 && raptor->enemy)
 			{
 				item->goal_anim_state = RAPTOR_STOP;

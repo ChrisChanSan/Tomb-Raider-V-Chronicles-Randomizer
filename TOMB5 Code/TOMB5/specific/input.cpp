@@ -81,23 +81,24 @@ const char* GermanKeyboard[272] =
 };
 
 //----------------------------------------------------------------------------
-// Controller-Namenstabellen. Der Bitplatz eines Knopfes haengt vom EINGABEWEG
-// ab, nicht vom Controller-Typ:
-//   - XInput (echte Xbox-Pads, aber auch DualSense hinter Steam Input oder
-//     DS4Windows): Bitfolge aus DXUpdateJoystick (dxshell.cpp) -
+// Controller name tables. A button's bit position depends on the INPUT
+// PATH, not on the controller type:
+//   - XInput (real Xbox pads, but also a DualSense behind Steam Input or
+//     DS4Windows): bit order from DXUpdateJoystick (dxshell.cpp) -
 //     0=A 1=B 2=X 3=Y 4=LB 5=RB 6=View 7=Menu 8=L3 9=R3 10=LT 11=RT.
-//     Der Guide-Knopf kommt ueber XInput nicht an, Bits 12-15 bleiben tot.
-//   - DirectInput-Fallback (DualSense roh, No-Name-Pads): Bit i = HID-Knopf i.
-//     Fuer den DualSense am echten Geraet vermessen (Reihenfolge ist im
-//     HID-Report nicht genormt): 0=Square 1=Cross 2=Circle 3=Triangle 4=L1
-//     5=R1 6=L2 7=R2 8=Share 9=Options 10=L3 11=R3 12=PS Button.
-// Bits 16-19 sind auf beiden Wegen die vier Kipprichtungen des rechten
-// Sticks (dxshell.cpp), damit er wie das Steuerkreuz belegbar ist.
+//     The Guide button never arrives via XInput, bits 12-15 stay dead.
+//   - DirectInput fallback (DualSense raw, no-name pads): bit i = HID
+//     button i. Measured for the DualSense on the real device (the order
+//     is not standardized in the HID report): 0=Square 1=Cross 2=Circle
+//     3=Triangle 4=L1 5=R1 6=L2 7=R2 8=Share 9=Options 10=L3 11=R3
+//     12=PS Button.
+// Bits 16-19 are on both paths the right stick's four tilt directions
+// (dxshell.cpp), so it can be bound like the d-pad.
 //
-// Die Control-Method-Seite (JoyStyle) waehlt nur das VOKABULAR; welche
-// Bitfolge gilt, weiss der Motor selbst (joystick_is_xinput). So stimmen
-// die Namen auch fuer einen DualSense hinter DS4Windows: PS5-Seite plus
-// XInput-Bitfolge.
+// The control-method page (JoyStyle) only picks the VOCABULARY; which bit
+// order applies, the engine knows itself (joystick_is_xinput). That way
+// the names are right even for a DualSense behind DS4Windows: PS5 page
+// plus XInput bit order.
 #define JOYNAME_STICK "Stick R Up", "Stick R Down", "Stick R Left", "Stick R Right"
 
 static const char* JoyNamesPS5DInput[20] =
@@ -128,11 +129,11 @@ static const char* JoyNamesGeneric[20] =
 	JOYNAME_STICK
 };
 
-// -1 = automatisch (XInput-Geraet -> Xbox-Seite, sonst PS5-Seite); ab der
-// ersten Wahl des Nutzers 0=PS5, 1=Xbox, 2=Generisch (Registry "JoyStyle").
+// -1 = automatic (XInput device -> Xbox page, else PS5 page); from the
+// user's first choice on 0=PS5, 1=Xbox, 2=generic (registry "JoyStyle").
 long JoyStyle = -1;
 
-long AktiverJoyStyle()
+long ActiveJoyStyle()
 {
 	if (JoyStyle >= 0)
 		return JoyStyle;
@@ -145,7 +146,7 @@ const char* JoyButtonName(long idx)
 	if (idx < 0 || idx > 19)
 		return "---";
 
-	switch (AktiverJoyStyle())
+	switch (ActiveJoyStyle())
 	{
 	case JOYSTYLE_PS5:
 		return joystick_is_xinput ? JoyNamesPS5XInput[idx] : JoyNamesPS5DInput[idx];
@@ -156,49 +157,49 @@ const char* JoyButtonName(long idx)
 	}
 }
 
-// Standardbelegungen je Seite UND Eingabeweg - Belegungen sind Bit-Indizes,
-// dieselbe Absicht ("Duck auf R2") landet je Weg auf anderen Bits.
-// Zeilen: Duck Dash Walk Jump Action Draw Flare Look Roll Inv Pause Save Load
-// SmallMedi LargeMedi. -1 = unbelegt (Anzeige "---", Key() ignoriert es).
+// Default bindings per page AND input path - bindings are bit indices, the
+// same intent ("duck on R2") lands on different bits per path.
+// Rows: Duck Dash Walk Jump Action Draw Flare Look Roll Inv Pause Save Load
+// SmallMedi LargeMedi. -1 = unbound (display "---", Key() ignores it).
 static const long jDefPS5DInput[15] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14 };
 static const long jDefPS5XInput[15] = { 5, 3, 4, 2, 0, 1, 7, 10, 11, 6, 8, 9, -1, 18, 19 };
-// Xbox-Vorgabe nach dem Layout des Xbox-Testers: RT=Duck LT=Dash RB=Walk
+// Xbox default after the Xbox tester's layout: RT=Duck LT=Dash RB=Walk
 // X=Jump A=Action Y=Draw LB=Look B=Roll View=Inventory Menu=Pause.
 static const long jDefXbox[15] = { 11, 10, 5, 2, 0, 3, 8, 4, 1, 6, 7, -1, -1, 18, 19 };
 static const long jDefGeneric[15] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };
 
-void JoyDefaultsAnwenden()
+void ApplyJoyDefaults()
 {
-	const long* quelle;
+	const long* source;
 
-	switch (AktiverJoyStyle())
+	switch (ActiveJoyStyle())
 	{
 	case JOYSTYLE_PS5:
-		quelle = joystick_is_xinput ? jDefPS5XInput : jDefPS5DInput;
+		source = joystick_is_xinput ? jDefPS5XInput : jDefPS5DInput;
 		break;
 	case JOYSTYLE_XBOX:
-		quelle = joystick_is_xinput ? jDefXbox : jDefGeneric;
+		source = joystick_is_xinput ? jDefXbox : jDefGeneric;
 		break;
 	default:
-		quelle = jDefGeneric;
+		source = jDefGeneric;
 		break;
 	}
 
 	for (int i = 0; i < 15; i++)
-		jLayout[i] = quelle[i];
+		jLayout[i] = source[i];
 
 	for (int i = 15; i < 32; i++)
 		jLayout[i] = 0;
 }
 
-// Bestaetigen (Kreuz/A) und Zurueck (Kreis/B) als Bit des aktiven Wegs.
-// Physisch ist es auf beiden Pads dieselbe Position - nur das Bit wandert.
-long JoyBitBestaetigen()
+// Confirm (Cross/A) and back (Circle/B) as the active path's bit.
+// Physically it is the same position on both pads - only the bit moves.
+long JoyBitConfirm()
 {
 	return joystick_is_xinput ? 0 : 1;
 }
 
-long JoyBitZurueck()
+long JoyBitBack()
 {
 	return joystick_is_xinput ? 1 : 2;
 }
@@ -598,11 +599,11 @@ long S_UpdateInput()
 	// during gameplay also try to open the inventory. IN_DESELECT alone is
 	// enough for "back" in every menu screen that checks it.
 	// Not user-rebindable, for the same reason Escape itself isn't. The BIT
-	// depends on the active input path (JoyBitZurueck): raw DirectInput puts
+	// depends on the active input path (JoyBitBack): raw DirectInput puts
 	// Circle on bit 2, XInput puts B - and Circle via DS4Windows/Steam - on
 	// bit 1. The hardcoded bit 2 here was why an Xbox pad could only leave
 	// menus with its X button.
-	if (ControlMethod == 1 && (joy_fire & (1 << JoyBitZurueck())))
+	if (ControlMethod == 1 && (joy_fire & (1 << JoyBitBack())))
 		linput |= IN_DESELECT;
 
 	if (lara.gun_status == LG_READY)

@@ -17,7 +17,7 @@
 #include "winmain.h"
 #include "input.h"
 #include <Xinput.h>
-#include <process.h>	// _beginthreadex - Joystick-Init laeuft im Hintergrund
+#include <process.h>	// _beginthreadex - joystick init runs in the background
 
 DXPTR* G_dxptr;
 DXINFO* G_dxinfo;
@@ -147,15 +147,15 @@ void DXSaveScreen(LPDIRECT3DSURFACE9 surf, const char* name)
 
 	if (file)
 	{
-		// 24-Bit-TGA. Cores Fassung schrieb 16 Bit und las die Oberflaeche
-		// mit short-Schritten - das stammt aus der DirectDraw-Zeit, als der
-		// Rueckpuffer wirklich 16 Bit hatte. Unser D3D9-Port legt ihn als
-		// D3DFMT_X8R8G8B8 an, also 32 Bit; die alte Rechnung las damit
-		// Unsinn. Dazu kam ein Zeilenfehler: der Startzeiger stand auf
-		// Height * Pitch, also eine ZEILE HINTER dem Puffer - der erste
-		// Durchlauf las jedes Mal ins Freie. Der Apostroph-Schnappschuss
-		// der Engine haette also immer abgestuerzt; aufgefallen ist es
-		// erst, als der Bildmitschnitt fuer #127 ihn benutzt hat.
+		// 24-bit TGA. Core's version wrote 16 bits and read the surface in
+		// short strides - that dates from the DirectDraw era, when the back
+		// buffer really was 16 bits. Our D3D9 port creates it as
+		// D3DFMT_X8R8G8B8, i.e. 32 bits; the old math thus read nonsense.
+		// On top came a row bug: the start pointer stood at Height * Pitch,
+		// one ROW BEHIND the buffer - the first pass read out of bounds
+		// every time. The engine's apostrophe snapshot would thus always
+		// have crashed; it only surfaced when the frame capture for #127
+		// used it.
 		tga_header[16] = 24;
 		*(short*)&tga_header[12] = (short)desc.Width;
 		*(short*)&tga_header[14] = (short)desc.Height;
@@ -163,16 +163,16 @@ void DXSaveScreen(LPDIRECT3DSURFACE9 surf, const char* name)
 		pM = (char*)malloc(3 * desc.Width * desc.Height);
 		pDest = (uchar*)pM;
 
-		// TGA hat seinen Ursprung unten links, die Oberflaeche oben links -
-		// deshalb von der LETZTEN Zeile aus rueckwaerts.
+		// TGA has its origin at the bottom left, the surface at the top
+		// left - hence backwards from the LAST row.
 		pSurf += (desc.Height - 1) * rect.Pitch;
 
 		for (ulong h = 0; h < desc.Height; h++)
 		{
 			for (ulong w = 0; w < desc.Width; w++)
 			{
-				// X8R8G8B8 liegt im Speicher als B,G,R,X - und genau diese
-				// Reihenfolge will TGA auch.
+				// X8R8G8B8 lies in memory as B,G,R,X - exactly the order
+				// TGA wants too.
 				*pDest++ = pSurf[w * 4 + 0];
 				*pDest++ = pSurf[w * 4 + 1];
 				*pDest++ = pSurf[w * 4 + 2];
@@ -841,13 +841,13 @@ long DXUpdateJoystick()
 }
 
 //----------------------------------------------------------------------------
-// Die DirectInput-Initialisierung laeuft im Hintergrund, siehe DXInitJoystick.
-// Solange sie nicht fertig ist, bleibt G_dxptr->Joystick bewusst 0 - der
-// Per-Frame-Leser DXUpdateJoystickDirectInput prueft darauf und ueberspringt
-// den Controller dann einfach. Deshalb wird das Geraet hier NICHT direkt nach
-// G_dxptr->Joystick geschrieben: es ist an dieser Stelle noch unkonfiguriert
-// (kein Datenformat, nicht acquired), und der Hauptthread duerfte es in dem
-// Zustand nicht anfassen. Veroeffentlicht wird erst ganz am Ende.
+// The DirectInput initialization runs in the background, see DXInitJoystick.
+// Until it is done, G_dxptr->Joystick deliberately stays 0 - the per-frame
+// reader DXUpdateJoystickDirectInput checks for that and simply skips the
+// controller. That is why the device is NOT written straight to
+// G_dxptr->Joystick here: at this point it is still unconfigured (no data
+// format, not acquired), and the main thread must not touch it in that
+// state. It is published only at the very end.
 static LPDIRECTINPUTDEVICE8 g_pendingJoystick = 0;
 static HANDLE               g_joystickThread = 0;
 
@@ -868,23 +868,22 @@ static BOOL CALLBACK DIEnumJoysticksCallback(const DIDEVICEINSTANCE* pdidInstanc
 }
 
 //----------------------------------------------------------------------------
-// Laeuft in einem eigenen Thread, weil EnumDevices bei bestimmten
-// Geraetekonstellationen sehr lange braucht und das Spiel sonst schwarz stehen
-// bleibt.
+// Runs in its own thread because EnumDevices takes very long with certain
+// device constellations and the game otherwise sits on a black screen.
 //
-// Gemessen auf dem Rechner des Entwicklers: exakt 10 Sekunden, dreimal
-// reproduzierbar, und identisch in einem eigenstaendigen 40-Zeilen-Programm
-// ohne jeden Bezug zu dieser Engine - es ist also kein Fehler von uns, sondern
-// ein Timeout in DirectInput selbst. Ursache dort: der Controller haengt am
-// USB-Kabel, ist aber ZUSAETZLICH noch per Bluetooth gekoppelt, und dieser
-// gekoppelte Eintrag antwortet nicht. DirectInput wartet ihn aus.
+// Measured on the developer's machine: exactly 10 seconds, reproducible
+// three times, and identical in a standalone 40-line program with no
+// relation to this engine - so it is no bug of ours but a timeout inside
+// DirectInput itself. The cause there: the controller hangs on the USB
+// cable but is ADDITIONALLY still paired via Bluetooth, and that paired
+// entry does not answer. DirectInput waits it out.
 //
-// Wir koennen die Bluetooth-Situation eines Nutzers nicht kontrollieren, und
-// die Aufzaehlung ueberspringen geht nicht: ein DualSense ist kein
-// XInput-Geraet, ohne DirectInput haette er gar keinen Controller. Also darf
-// das schlicht nicht im Startpfad liegen. Das Spiel startet sofort, der
-// Controller steht an, sobald die Aufzaehlung durch ist - bei einem
-// unauffaelligen System sind das Millisekunden.
+// We cannot control a user's Bluetooth situation, and skipping the
+// enumeration is not an option: a DualSense is no XInput device, without
+// DirectInput it would have no controller at all. So this simply must not
+// lie in the startup path. The game starts immediately, the controller
+// comes on as soon as the enumeration is through - on an unremarkable
+// system that is milliseconds.
 //----------------------------------------------------------------------------
 static void DXInitJoystick(HWND hwnd)
 {
@@ -926,10 +925,9 @@ static void DXInitJoystick(HWND hwnd)
 
 	g_pendingJoystick->Acquire();
 
-	// Erst jetzt veroeffentlichen: ab diesem Zeitpunkt darf der Hauptthread das
-	// Geraet benutzen, vorher waere es unkonfiguriert. InterlockedExchangePointer
-	// stellt sicher, dass alle vorherigen Schreibzugriffe auch wirklich vor
-	// diesem sichtbar sind.
+	// Publish only now: from this moment the main thread may use the
+	// device, before it would be unconfigured. InterlockedExchangePointer
+	// makes sure all earlier writes really become visible before this one.
 	InterlockedExchangePointer((void* volatile*)&G_dxptr->Joystick, g_pendingJoystick);
 
 	Log("DirectInput joystick acquired (fallback for non-XInput controllers)");
@@ -941,10 +939,10 @@ static unsigned __stdcall JoystickInitThread(void* param)
 	return 0;
 }
 
-// Wird beim Herunterfahren aufgerufen, BEVOR lpDirectInput freigegeben wird -
-// sonst zieht der Hauptthread dem noch laufenden Aufzaehlungsthread die
-// Schnittstelle unter den Fuessen weg. Beim ueblichen Spielende ist der Thread
-// laengst fertig und die Wartezeit betraegt null.
+// Called on shutdown BEFORE lpDirectInput is released - otherwise the main
+// thread pulls the interface out from under the still-running enumeration
+// thread. At a normal game exit the thread is long done and the wait is
+// zero.
 void DXWaitJoystickInit()
 {
 	if (!g_joystickThread)
@@ -998,16 +996,16 @@ void DXInitInput(HWND hwnd, HINSTANCE hinstance)
 	DXAttempt(G_dxptr->Keyboard->Acquire());
 	memset(keymap, 0, sizeof(keymap));
 
-	// Nicht direkt aufrufen: siehe Kommentar an DXInitJoystick. Der Aufruf kann
-	// je nach Geraetelage zehn Sekunden dauern, und die wuerde der Nutzer als
-	// schwarzen Bildschirm vor dem ersten Video erleben.
+	// Do not call directly: see the comment at DXInitJoystick. Depending on
+	// the device situation the call can take ten seconds, which the user
+	// would experience as a black screen before the first video.
 	G_dxptr->Joystick = 0;
 	g_joystickThread = (HANDLE)_beginthreadex(0, 0, JoystickInitThread, (void*)hwnd, 0, 0);
 
 	if (!g_joystickThread)
 	{
-		// Kein Thread zu bekommen ist so unwahrscheinlich, dass ein Rueckfall
-		// auf den blockierenden Weg besser ist als gar kein Controller.
+		// Getting no thread is so unlikely that falling back to the
+		// blocking path is better than no controller at all.
 		Log("WARNING: could not start joystick init thread - falling back to blocking init");
 		DXInitJoystick(hwnd);
 	}

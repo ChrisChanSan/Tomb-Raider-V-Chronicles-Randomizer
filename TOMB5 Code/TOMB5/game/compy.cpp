@@ -11,11 +11,11 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 /*
- * Compsognathus aus Tomb Raider 3, portiert 2026 nach TOMB5 (#99).
+ * Compsognathus from Tomb Raider 3, ported to TOMB5 in 2026 (#99).
  *
- * Uebernommen aus tomb3 (game/compy.cpp, GPLv3) - dieselbe Lizenz wie TOMB5
- * und dieses Projekt. Der Code wird bewusst direkt uebernommen statt
- * umgeschrieben: Umschreiben wuerde die Herkunft verschleiern.
+ * Taken from tomb3 (game/compy.cpp, GPLv3) - the same license as TOMB5 and
+ * this project. The code is deliberately taken over directly instead of
+ * rewritten: rewriting would obscure its origin.
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -23,55 +23,55 @@
  * any later version. See the LICENSE file at the root of this source tree.
  *
  * ----------------------------------------------------------------------------
- * Der Compy sitzt in TR5 auf Slot SAILOR (53). Der Slot haengt bisher an
- * InitialiseSas/SasControl und holt seine Anims von SWAT - benutzt hat ihn nie
- * jemand: in keinem der 16 Level steckt dort ein Modell (mit MissMod an allen
- * nachgemessen, Gegenprobe ueber den Hund). Vierter toter Slot nach SAS 31
- * (T-Rex), CROW 43 (Geier) und REAPER 75 (Raptor).
+ * In TR5 the Compy sits on slot SAILOR (53). Until now the slot hung on
+ * InitialiseSas/SasControl and fetched its anims from SWAT - nobody ever
+ * used it: none of the 16 levels carries a model there (measured with
+ * MissMod against all of them, cross-checked via the dog). Fourth dead slot
+ * after SAS 31 (T-Rex), CROW 43 (vulture) and REAPER 75 (Raptor).
  *
- * VIER ABWEICHUNGEN gegenueber tomb3, alle hier begruendet:
+ * FOUR DEVIATIONS from tomb3, all justified here:
  *
- * 1. DIE KADAVERSUCHE ENTFAELLT. tomb3 durchsucht den Raum nach einem Objekt
- *    vom Typ ANIMATING6 - in TR3 ist das der tote Raptor, um den sich das
- *    Rudel versammelt und an dem es nagt. In TR5 ist ANIMATING6 ein ganz
- *    normaler Kulissenslot, der in Leveln WIRKLICH belegt ist. Uebernommen
- *    wuerden die Compys also Deko umschwaermen.
+ * 1. THE CARCASS SEARCH IS DROPPED. tomb3 searches the room for an object
+ *    of type ANIMATING6 - in TR3 that is the dead raptor the pack gathers
+ *    around and gnaws on. In TR5, ANIMATING6 is a perfectly normal scenery
+ *    slot that REALLY is occupied in levels. Taken over, the compys would
+ *    swarm around decoration.
  *
- *    Was daran haengt, nachgesehen statt weggelassen (Lehre aus dem T-Rex):
- *      - Im BORED_MOOD war der Kadaver ihr Sammelpunkt. Ohne ihn streifen sie
- *        umher, statt sich zu versammeln.
- *      - Im Zustand COMPY_STOP fuehrte er zu Sprung/Biss aus Langeweile. Der
- *        Zweig entfaellt; der Rueckfall auf COMPY_RUN traegt weiterhin.
- *      - In COMPY_JUMP/COMPY_ATTACK loeste er den Blutspritzer beim Nagen aus.
- *    Der Angriff auf Lara haengt an KEINER dieser Stellen und bleibt komplett.
+ *    What hangs on it, checked rather than dropped blindly (lesson from
+ *    the T-Rex):
+ *      - In BORED_MOOD the carcass was their gathering point. Without it
+ *        they roam instead of gathering.
+ *      - In state COMPY_STOP it led to jump/bite out of boredom. The
+ *        branch is dropped; the fallback to COMPY_RUN still carries.
+ *      - In COMPY_JUMP/COMPY_ATTACK it triggered the blood splatter while
+ *        gnawing.
+ *    The attack on Lara hangs on NONE of these spots and stays complete.
  *
- * 2. non_lot BLEIBT AUS. tomb3 setzt dem Compy das Bit, damit er die
- *    Boxwegfindung umgeht und frei schwaermt. TR5 fuehrt das Bit zwar in
- *    OBJECT_INFO, liest es aber an KEINER Stelle - die Abfragen sind in
- *    TR4/TR5 aus box.cpp verschwunden. Sie zurueckzubauen waere ein Eingriff
- *    in den gemeinsamen Code ALLER Gegner; der Nutzer hat entschieden, dass
- *    sich die Compys wie normale Gegner bewegen duerfen. Damit bleibt
- *    box.cpp unangetastet.
+ * 2. non_lot STAYS OFF. tomb3 sets the bit on the Compy so it bypasses the
+ *    box pathfinding and swarms freely. TR5 carries the bit in OBJECT_INFO
+ *    but reads it NOWHERE - the checks vanished from box.cpp in TR4/TR5.
+ *    Rebuilding them would be an intervention into the shared code of ALL
+ *    enemies; the user decided the compys may move like normal enemies.
+ *    box.cpp thus stays untouched.
  *
- * 3. compy_scared_timer wird beim Initialisieren MIT zurueckgesetzt. tomb3
- *    setzt nur compys_attack_lara zurueck. Beides sind Globale, die einen
- *    Levelwechsel ueberleben - in dieser Engine wird viel neu geladen (Level
- *    Select), und ein uebrig gebliebener Schreckzaehler liesse das erste
- *    Rudel im naechsten Level ohne Grund fliehen.
+ * 3. compy_scared_timer is reset ALONG on initialization. tomb3 only
+ *    resets compys_attack_lara. Both are globals that survive a level
+ *    change - this engine reloads a lot (level select), and a leftover
+ *    scare counter would make the first pack in the next level flee for
+ *    no reason.
  *
- * 4. ZURUECKHALTUNG HALBIERT (Nutzerentscheidung 2026-08-17). Alle drei
- *    Wartezeiten der Feigheit auf die Haelfte:
- *      - Fluchtdauer        compy_scared_timer  280 -> 140  (~9,3 -> ~4,7 s)
- *      - Sperre vor Angriff item->timer > 180   -> 90       (~6   -> ~3   s)
- *      - dieselbe bei Beschuss  > 200           -> 100      (~6,7 -> ~3,3 s)
- *    Grund: TR3 gibt dem Rudel viel Zeit, weil dort ganze Schwaerme in
- *    weiten Dschungelabschnitten leben und Lara sie lange begleitet. Bei
- *    uns steht EIN Rudel aus vier Tieren irgendwo im Level - neun Sekunden
- *    Flucht heisst dort, dass Lara laengst weg ist, bevor etwas passiert.
- *    Die Feigheit als Verhalten bleibt, sie dauert nur halb so lang.
+ * 4. TIMIDITY HALVED (user decision 2026-08-17). All three cowardice
+ *    delays cut in half:
+ *      - flight duration    compy_scared_timer  280 -> 140  (~9.3 -> ~4.7 s)
+ *      - pre-attack lockout item->timer > 180   -> 90       (~6   -> ~3   s)
+ *      - the same under fire    > 200           -> 100      (~6.7 -> ~3.3 s)
+ *    Reason: TR3 gives the pack plenty of time because whole swarms live
+ *    in wide jungle sections there and Lara accompanies them for long.
+ *    With us, ONE pack of four animals stands somewhere in the level -
+ *    nine seconds of flight there means Lara is long gone before anything
+ *    happens. Cowardice as behavior stays, it just lasts half as long.
  *
- * Klaenge kommen ueber die Anim-Kommandos des Modells, hier ist kein Aufruf
- * noetig.
+ * Sounds come via the model's anim commands, no call is needed here.
  */
 #include "../tomb5/pch.h"
 #include "balance.h"
@@ -128,19 +128,19 @@ void CompyControl(short item_number)
 	{
 		CreatureAIInfo(item, &info);
 
-		// Hier stand die Umlenkung auf den Kadaver - siehe Abweichung 1.
+		// The redirection to the carcass stood here - see deviation 1.
 
 		bits = 512 * (item_number & 7) - 1792;
 
 		if (!compy_scared_timer && !compys_attack_lara && (info.enemy_facing < 0x3000 && info.enemy_facing > -0x3000 && lara_item->speed > 15 || lara_item->current_anim_state == AS_ROLL || item->hit_status))
 		{
 			item->item_flags[0] = (bits + 1792) >> 7;
-			// ABWEICHUNG 4 (Nutzerentscheidung 2026-08-17): alle drei
-			// Zurueckhaltungs-Zeiten halbiert. TR3 gab dem Rudel viel Zeit,
-			// weil dort ganze Schwaerme in weiten Dschungelabschnitten
-			// leben; bei uns steht EIN Rudel aus vier Tieren in einem
-			// TR5-Level, und neun Sekunden Flucht sind dort schlicht
-			// langweilig. Original: 280 (~9,3 s bei 30 Bildern/s).
+			// DEVIATION 4 (user decision 2026-08-17): all three timidity
+			// delays halved. TR3 gave the pack plenty of time because
+			// whole swarms live in wide jungle sections there; with us,
+			// ONE pack of four animals stands in a TR5 level, and nine
+			// seconds of flight are simply boring there. Original: 280
+			// (~9.3 s at 30 frames/s).
 			compy_scared_timer = 140;
 		}
 		else if (compy_scared_timer)
@@ -163,19 +163,18 @@ void CompyControl(short item_number)
 		switch (compy->mood)
 		{
 		case BORED_MOOD:
-			// Ersatz fuer den Kadaver-Sammelpunkt (siehe Abweichung 1).
+			// Replacement for the carcass gathering point (see deviation 1).
 			//
-			// Ohne Kadaver setzte dieser Zweig GAR KEIN Ziel, und compy->target
-			// behielt den Wert, mit dem er ins Leben kam - die Compys liefen
-			// auf eine Stelle zu, die niemand gesetzt hatte. Im Spiel gesehen:
-			// nach dem Wecken erst einmal gegen die naechste Wand. In TR3
-			// faellt das nie auf, weil ueberall dort ein Kadaver liegt, wo
-			// Compys vorkommen.
+			// Without a carcass this branch set NO target at all, and
+			// compy->target kept whatever value it was born with - the
+			// compys ran toward a spot nobody had set. Seen in game: after
+			// waking, straight into the nearest wall first. In TR3 it never
+			// shows because a carcass lies wherever compys occur.
 			//
-			// Lara ist der naheliegende Ersatz: sie streifen in ihrer Naehe
-			// umher, ohne sie anzugreifen. Die Feigheit selbst haengt an
-			// compys_attack_lara und ist von diesem Ersatz unberuehrt; ihre
-			// DAUER ist inzwischen halbiert (Abweichung 4 oben).
+			// Lara is the obvious replacement: they roam near her without
+			// attacking. Cowardice itself hangs on compys_attack_lara and
+			// is untouched by this replacement; its DURATION has since been
+			// halved (deviation 4 above).
 			if (compy->enemy)
 			{
 				compy->target.x = compy->enemy->pos.x_pos;
@@ -243,7 +242,7 @@ void CompyControl(short item_number)
 			}
 			else if (compy->mood == BORED_MOOD)
 			{
-				// Der Kadaverzweig entfaellt, der Rueckfall auf RUN traegt.
+				// The carcass branch is dropped, the fallback to RUN carries.
 				if (info.distance > 0x552AB)
 					item->goal_anim_state = COMPY_RUN;
 			}
@@ -267,7 +266,7 @@ void CompyControl(short item_number)
 		case COMPY_ATTACK:
 			compy->maximum_turn = 1820;
 
-			// Der zweite Zweig (Nagen am Kadaver) entfaellt mit Abweichung 1.
+			// The second branch (gnawing at the carcass) drops with deviation 1.
 			if (!(compy->flags & 1))
 			{
 				if (item->touch_bits & 4 && compys_attack_lara)

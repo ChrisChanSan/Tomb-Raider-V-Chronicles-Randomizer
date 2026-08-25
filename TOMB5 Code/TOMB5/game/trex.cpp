@@ -24,10 +24,10 @@
 #include "../specific/function_stubs.h"
 
 //----------------------------------------------------------------------------
-// Soundplaetze der TR3-Klaenge. Der Importeur (TR3Setz) legt sie IMMER ab 445
-// ab: die urspruenglichen TR3-Nummern sind in TR5 teils belegt (89 in jedem
-// Level), die Plaetze 445-449 dagegen ueberall frei. Dieselbe Art fester
-// Absprache wie SFX_SMASH_ROCK bei der Hydra.
+// Sound slots of the TR3 sounds. The importer (TR3Setz) ALWAYS stores them
+// from 445 on: the original TR3 numbers are partly taken in TR5 (89 in
+// every level), while slots 445-449 are free everywhere. The same kind of
+// fixed agreement as SFX_SMASH_ROCK for the Hydra.
 //----------------------------------------------------------------------------
 #define SFX_TREX_ATTACK   445
 #define SFX_TREX_ROAR     446
@@ -36,30 +36,30 @@
 #define SFX_TREX_DEATH    449
 
 //----------------------------------------------------------------------------
-// T-Rex aus Tomb Raider 3, portiert aus der tomb3-Dekompilation
-// (game/trex.cpp, GPLv3 - dieselbe Lizenz wie TOMB5 und dieses Projekt).
+// T-Rex from Tomb Raider 3, ported from the tomb3 decompilation
+// (game/trex.cpp, GPLv3 - the same license as TOMB5 and this project).
 //
-// Der KI-Unterbau ist in beiden Spielen derselbe: CreatureActive,
-// CreatureAIInfo, GetCreatureMood, CreatureMood, CreatureTurn und
-// CreatureAnimation gibt es in TOMB5s box.cpp wortgleich. Deshalb konnte die
-// Zustandsmaschine unveraendert uebernommen werden.
+// The AI substructure is the same in both games: CreatureActive,
+// CreatureAIInfo, GetCreatureMood, CreatureMood, CreatureTurn and
+// CreatureAnimation exist word for word in TOMB5's box.cpp. That is why
+// the state machine could be taken over unchanged.
 //
-// DREI STELLEN wurden bewusst weggelassen, weil TR5 kein Gegenstueck hat:
+// THREE SPOTS were deliberately left out because TR5 has no counterpart:
 //
-// 1. Die Beutesuche. TR3 durchsucht ueber GetNearByRooms/draw_rooms die
-//    Nachbarraeume nach RAPTOR und FLARE_ITEM, damit der T-Rex Raptoren
-//    frisst und nach geworfenen Fackeln schnappt. Beides existiert in TR5
-//    nicht (kein Raptor, andere Raumliste), also ist Lara immer das Ziel.
-//    Faellt der Geier oder ein Raptor spaeter dazu, kann das zurueckkommen.
+// 1. The prey search. TR3 searches the neighboring rooms via
+//    GetNearByRooms/draw_rooms for RAPTOR and FLARE_ITEM, so the T-Rex
+//    eats raptors and snaps at thrown flares. Neither exists in TR5 (no
+//    raptor, a different room list), so Lara is always the target. If the
+//    vulture or a raptor joins later, this can come back.
 //
-// 2. CreatureKill mit EXTRA_DINOKILL. TR3 hat eine eigene Lara-Animation
-//    fuers Gefressenwerden; in TR5 gibt es sie nicht, und ein falscher
-//    Index wuerde Lara in eine fremde Animation zwingen. Stattdessen macht
-//    der Biss toedlichen Schaden - dasselbe Ergebnis ohne Sonderanimation.
+// 2. CreatureKill with EXTRA_DINOKILL. TR3 has its own Lara animation for
+//    being eaten; TR5 does not, and a wrong index would force Lara into a
+//    foreign animation. Instead the bite deals lethal damage - the same
+//    result without the special animation.
 //
-// 3. Laras Zustandsabfrage (AS_STOP/AS_DUCK) beim Schnuppern. Die Nummern
-//    unterscheiden sich zwischen den Spielen; geprueft wird jetzt nur, ob
-//    Lara eine Fackel haelt und ob der T-Rex gerade getroffen wurde.
+// 3. Lara's state query (AS_STOP/AS_DUCK) while sniffing. The numbers
+//    differ between the games; what is checked now is only whether Lara
+//    holds a torch and whether the T-Rex was just hit.
 //----------------------------------------------------------------------------
 
 static BITE_INFO trex_hit = { 0, 32, 64, 13 };
@@ -88,7 +88,7 @@ void DinoControl(short item_number)
     }
     else
     {
-        // Ohne die TR3-Beutesuche ist Lara immer das Ziel (siehe Kopf).
+        // Without the TR3 prey search, Lara is always the target (see the header).
         rex->enemy = lara_item;
 
         CreatureAIInfo(item, &info);
@@ -113,17 +113,17 @@ void DinoControl(short item_number)
         if (!rex->flags && info.distance > 0x225510 && info.distance < 0x1000000 && info.bite)
             rex->flags = 1;
 
-        // Diese Klammer entscheidet, ob der T-Rex Ruhe gibt. TR3 verlangt:
-        // keine Fackel, Lara steht oder duckt UND haelt den Zustand, kein
-        // Treffer. Nur dann laeuft der Zaehler herunter; sobald Lara sich
-        // bewegt, springt er auf 120 zurueck und der Dino bleibt wach.
+        // This bracket decides whether the T-Rex settles down. TR3 demands:
+        // no flare, Lara stands or crouches AND holds the state, no hit.
+        // Only then does the counter run down; as soon as Lara moves it
+        // jumps back to 120 and the dino stays awake.
         //
-        // Beim ersten Versuch hatte ich den Stillstand weggelassen, weil TR5
-        // andere Zustandsnummern hat - dadurch lief der Zaehler IMMER leer,
-        // der Dino war dauerhaft BORED_MOOD und trottete nur herum, statt
-        // Lara zu jagen (im Spiel gesehen). Statt der Zustandsnummern wird
-        // jetzt Laras Geschwindigkeit geprueft: das ist dieselbe Aussage
-        // ("sie bewegt sich nicht") und ueber Spielgrenzen hinweg stabil.
+        // On the first attempt I had left out the standstill because TR5
+        // has different state numbers - the counter thereby ALWAYS drained,
+        // the dino was permanently BORED_MOOD and just trotted around
+        // instead of hunting Lara (seen in game). Instead of the state
+        // numbers, Lara's speed is now checked: the same statement ("she is
+        // not moving") and stable across game boundaries.
         if (lara.gun_type != LG_FLARE && !lara_item->speed && !item->hit_status)
         {
             if (item->item_flags[0] > 0)
@@ -214,16 +214,16 @@ void DinoControl(short item_number)
         case DINO_ATTACK2:
             rex->maximum_turn = 364;
 
-            // Der Biss. In TR3 folgt hier CreatureKill mit einer eigenen
-            // Lara-Animation - dem Zuschnappen, mit dem er sie in einem Zug
-            // frisst. TR5 hat diese Animation nicht, und CreatureKill ist
-            // dort zwar deklariert, wird aber von KEINEM Gegner aufgerufen
-            // (nachgemessen) - eine tote Huelle wie der SAS-Slot. Ohne die
-            // Animation faellt die Engine auf schlichtes Umfallen zurueck.
+            // The bite. In TR3, CreatureKill follows here with its own
+            // Lara animation - the snap with which he eats her in one go.
+            // TR5 does not have that animation, and CreatureKill is
+            // declared there but called by NO enemy (measured) - a dead
+            // shell like the SAS slot. Without the animation the engine
+            // falls back to a plain fall.
             //
-            // Der KLANG haengt in TR3 an eben dieser Animation und bliebe
-            // damit stumm. Er wird deshalb hier direkt ausgeloest: das
-            // Zuschnappen hoert man, auch wenn die Sonderanimation fehlt.
+            // The SOUND hangs on exactly that animation in TR3 and would
+            // thus stay mute. It is therefore triggered directly here: the
+            // snap is heard even though the special animation is missing.
             if (item->touch_bits & 0x3000)
             {
                 SoundEffect(SFX_TREX_ATTACK, &item->pos, 0);

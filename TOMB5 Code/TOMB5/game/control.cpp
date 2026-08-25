@@ -298,7 +298,7 @@ long ControlPhase(long nframes, long demo_mode)
 			// Verhalten des Originals.
 			{
 				static char crossWarGedrueckt = 0;
-				const char crossJetzt = (ControlMethod == 1 && Key(256 + JoyBitBestaetigen())) ? 1 : 0;	// Kreuz bzw. A - das Bit haengt am Eingabeweg (input.cpp)
+				const char crossJetzt = (ControlMethod == 1 && Key(256 + JoyBitConfirm())) ? 1 : 0;	// Kreuz bzw. A - das Bit haengt am Eingabeweg (input.cpp)
 
 				if (tomb5.cutseq_skipper && cutseq_trig == 2 && !ScreenFading && !bDoCredits &&
 					(keymap[DIK_ESCAPE] || (crossJetzt && !crossWarGedrueckt)))

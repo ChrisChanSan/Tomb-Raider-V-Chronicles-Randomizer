@@ -13,8 +13,8 @@
 #pragma once
 #include "../global/types.h"
 
-// Control-Method-Seiten fuer den Joystick: nur das VOKABULAR der Anzeige.
-// Die Bitfolge bestimmt der aktive Eingabeweg (joystick_is_xinput).
+// Control-method pages for the joystick: only the display's VOCABULARY.
+// The bit order is determined by the active input path (joystick_is_xinput).
 #define JOYSTYLE_PS5	0
 #define JOYSTYLE_XBOX	1
 #define JOYSTYLE_GENERIC	2
@@ -22,11 +22,11 @@
 long Key(long number);
 long S_UpdateInput();
 long ReadJoystick(long& x, long& y);
-long AktiverJoyStyle();
+long ActiveJoyStyle();
 const char* JoyButtonName(long idx);
-void JoyDefaultsAnwenden();
-long JoyBitBestaetigen();
-long JoyBitZurueck();
+void ApplyJoyDefaults();
+long JoyBitConfirm();
+long JoyBitBack();
 
 extern const char* KeyboardButtons[272];
 extern const char* GermanKeyboard[272];

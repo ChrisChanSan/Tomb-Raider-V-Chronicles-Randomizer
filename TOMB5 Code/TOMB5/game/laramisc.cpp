@@ -91,19 +91,18 @@ void InitialiseLaraLoad(short item_num)
 	lara_item = &items[item_num];
 }
 
-// Zurueck aus dem Flugmodus in den normalen Zustand.
+// Back from fly mode into the normal state.
 //
-// Stand vorher wortgleich in LaraCheat und war nur ueber die Geh-Taste zu
-// erreichen. Seit die Tastenkombination umschaltet (LaraCheatyBits) gibt es
-// zwei Wege hinaus, und beide sollen dasselbe tun - deshalb hier an einer
-// Stelle.
+// Used to stand word for word in LaraCheat and was only reachable via the
+// walk key. Since the key combination toggles (LaraCheatyBits) there are
+// two ways out, and both should do the same - hence here in one place.
 //
-// current_anim_state und goal_anim_state werden mitgesetzt; im Original
-// standen sie noch auf AS_SWIMCHEAT und wurden erst im naechsten Bild von
-// AnimateLara nachgezogen. Das war folgenlos, aber ein Zustand, der eine
-// Bildlaenge lang nicht zur Animation passt, ist beim Debuggen genau das,
-// worueber man stolpert.
-void LaraCheatEnde(ITEM_INFO* item)
+// current_anim_state and goal_anim_state are set along; in the original
+// they still stood at AS_SWIMCHEAT and were only caught up by AnimateLara
+// in the next frame. That had no consequences, but a state that does not
+// match the animation for one frame's length is exactly what you stumble
+// over while debugging.
+void LaraCheatEnd(ITEM_INFO* item)
 {
 	lara.water_status = LW_ABOVE_WATER;
 	item->anim_number = ANIM_STOP;
@@ -128,10 +127,10 @@ void LaraCheat(ITEM_INFO* item, COLL_INFO* coll)
 	lara_item->hit_points = 1000;
 	LaraUnderWater(item, coll);
 
-	// Vanilla-Ausstieg: Gehen ohne Umsehen. Bleibt, auch wenn die
-	// Tastenkombination inzwischen ebenfalls hinausfuehrt.
+	// Vanilla exit: walk without look. Stays, even though the key
+	// combination now leads out as well.
 	if (input & IN_WALK && !(input & IN_LOOK))
-		LaraCheatEnde(item);
+		LaraCheatEnd(item);
 }
 
 void LaraInitialiseMeshes()
@@ -142,12 +141,13 @@ void LaraInitialiseMeshes()
 		lara.mesh_ptrs[i] = meshes[objects[LARA].mesh_index + 2 * i];
 	}
 
-	// Der Kind-Torso (gruene Weste, weisses Hemd) lagert in den Ireland-Leveln
-	// im Slot ANIMATING6_MIP und wird hier ueber das Skin-Mesh gelegt. Original
-	// hing das allein am Levelnamen - wer per SCRIPT.DAT GF_YOUNGLARA loescht,
-	// um dort die erwachsene Lara zu spielen, behielt dadurch den Kinderbrust-
-	// korb, und der Kopf schwebte ueber dem zu kleinen Torso. Deshalb zusaetzlich
-	// ans Flag gebunden: mit gesetztem Flag (Vanilla) aendert sich nichts.
+	// The child torso (green vest, white shirt) is stored in the Ireland
+	// levels in the ANIMATING6_MIP slot and is laid over the skin mesh
+	// here. Originally this hung on the level name alone - whoever clears
+	// GF_YOUNGLARA via SCRIPT.DAT to play adult Lara there thereby kept the
+	// child ribcage, and the head floated above the too-small torso. Hence
+	// additionally bound to the flag: with the flag set (vanilla) nothing
+	// changes.
 	if (gfLevelId >= LVL5_GALLOWS_TREE && gfLevelId <= LVL5_OLD_MILL &&
 		(gfLevelFlags & GF_YOUNGLARA))
 		lara.mesh_ptrs[LM_TORSO] = meshes[objects[ANIMATING6_MIP].mesh_index + 2 * LM_TORSO];
@@ -225,43 +225,43 @@ void LaraCheatGetStuff()
 void LaraCheatyBits()
 {
 #ifndef _DEBUG	//public releases have cheats in inventory, except for DOZY
-	// D+O+Z+Y schaltet den Flugmodus UM, nicht nur ein.
+	// D+O+Z+Y TOGGLES fly mode, not just on.
 	//
-	// Vanilla kannte nur den Weg hinein; heraus kam man ausschliesslich ueber
-	// die Geh-Taste in LaraCheat - und darauf kommt niemand von selbst (der
-	// Nutzer nicht, und beim Testen ist ein steckengebliebener Flugmodus
-	// genau dann laestig, wenn man es eilig hat).
+	// Vanilla only knew the way in; out you came exclusively via the walk
+	// key in LaraCheat - and nobody figures that out on their own (the user
+	// did not, and while testing, a stuck fly mode is annoying exactly when
+	// you are in a hurry).
 	//
-	// Reagiert wird auf die FLANKE, nicht auf das Halten: bei 30 Bildern je
-	// Sekunde wuerde ein gehaltenes Tastenpaket sonst dreissigmal je Sekunde
-	// vor und zurueck schalten.
+	// The reaction is on the EDGE, not on holding: at 30 frames per second
+	// a held key set would otherwise switch back and forth thirty times a
+	// second.
 	//
-	// Das Anheben um 128 bleibt aber am HALTEN haengen und nur beim
-	// Einschalten - so kommt Lara wie gewohnt aus dem Boden heraus, wenn man
-	// die Tasten einen Moment gedrueckt haelt. Beim Ausschalten waere ein
-	// Anheben sinnlos.
-	static bool dozyGehalten = false;
-	static bool dozyHebt = false;
+	// The 128-unit lift, however, stays tied to HOLDING and only on
+	// switching on - that way Lara comes out of the floor as usual when the
+	// keys are held for a moment. On switching off, a lift would be
+	// pointless.
+	static bool dozyHeld = false;
+	static bool dozyLifts = false;
 
-	const bool dozyJetzt = keymap[DIK_D] && keymap[DIK_O] && keymap[DIK_Z] && keymap[DIK_Y];
+	const bool dozyNow = keymap[DIK_D] && keymap[DIK_O] && keymap[DIK_Z] && keymap[DIK_Y];
 
-	if (dozyJetzt && !dozyGehalten)
+	if (dozyNow && !dozyHeld)
 	{
 		if (lara.water_status == LW_FLYCHEAT)
 		{
-			LaraCheatEnde(lara_item);
-			dozyHebt = false;
+			LaraCheatEnd(lara_item);
+			dozyLifts = false;
 		}
 		else
-			dozyHebt = true;
+			dozyLifts = true;
 	}
 
-	if (!dozyJetzt)
-		dozyHebt = false;
+	if (!dozyNow)
+		dozyLifts = false;
 
-	dozyGehalten = dozyJetzt;
+	dozyHeld = dozyNow;
 
-	if (dozyJetzt && dozyHebt)
+	if (dozyNow && dozyLifts)
 	{
 		lara_item->pos.y_pos -= 128;
 

@@ -430,7 +430,7 @@ void DoOptions()
 			// Seite aendert nur die ANZEIGE der Knopfnamen (und die Vorgaben
 			// beim Reset) - die Bitfolge kommt vom aktiven Eingabeweg, siehe
 			// input.cpp.
-			switch (AktiverJoyStyle())
+			switch (ActiveJoyStyle())
 			{
 			case JOYSTYLE_PS5:
 				text = (char*)"PS5 Controller";
@@ -580,7 +580,7 @@ void DoOptions()
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, 2);
 			memcpy(layout[1], layout, 72);
-			JoyDefaultsAnwenden();	// Vorgaben passend zu Seite UND Eingabeweg (input.cpp) - vorher eine feste Tabelle in DualSense-Bitfolge, auf Xbox-Pads Unsinn
+			ApplyJoyDefaults();	// Vorgaben passend zu Seite UND Eingabeweg (input.cpp) - vorher eine feste Tabelle in DualSense-Bitfolge, auf Xbox-Pads Unsinn
 			// ControlMethod bleibt, was es war (das Original sprang hart auf
 			// Keyboard zurueck - fuer einen Controller-Nutzer hiesse das:
 			// Pad nach dem Reset tot). Die Zeile zeigt wieder die Methode.
@@ -604,7 +604,7 @@ void DoOptions()
 			else if (!ControlMethod)
 				pos = 0;
 			else
-				pos = 1 + AktiverJoyStyle();
+				pos = 1 + ActiveJoyStyle();
 
 			if (dbinput & IN_LEFT)
 			{

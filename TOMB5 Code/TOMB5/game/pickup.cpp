@@ -651,22 +651,22 @@ void KeyHoleCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 				if (item->object_number != KEY_HOLE8)
 					remove_inventory_item(short(hole + KEY_ITEM1));
 
-				// Die Kartenzieh-Animation (ANIM_KEYCARD, 437) gibt es nur
-				// dort, wo der Levelbau ihre Bilddaten hingelegt hat. Laras
-				// Anim-Tabelle ist ueberall gleich lang, die DATEN sind es
-				// nicht - Core laesst ungenutzte Eintraege als Stub stehen.
+				// The card-swipe animation (ANIM_KEYCARD, 437) exists only
+				// where the level build placed its frame data. Lara's anim
+				// table is the same length everywhere, the DATA is not -
+				// Core leaves unused entries standing as stubs.
 				//
-				// Gefragt wird deshalb nach den DATEN, nicht nach dem Level:
-				// das hohe Byte von "interpolation" ist die FrameSize, und
-				// bei null rechnet der Motor frame_ptr[n * 0] und zeigt ewig
-				// dasselbe Bild (in joby3 waren das 22 Sekunden erstarrte
-				// Pose). Vanilla tragen sie joby2, joby4, joby5 und rich1;
-				// der Randomizer pflanzt sie bei Bedarf weiteren Leveln ein
-				// (laraAnimAdds), und die greifen damit automatisch mit.
+				// Hence the DATA is asked, not the level: the high byte of
+				// "interpolation" is the FrameSize, and at zero the engine
+				// computes frame_ptr[n * 0] and shows the same frame
+				// forever (in joby3 that was 22 seconds of frozen pose).
+				// Vanilla carries it in joby2, joby4, joby5 and rich1; the
+				// randomizer implants it into further levels as needed
+				// (laraAnimAdds), and those automatically take this path.
 				//
-				// Vorher stand hier eine Levelliste. Die war zu eng: rich1
-				// hat die Animation, benutzte aber die Schluessel-dreh-Geste
-				// (vom Nutzer im Spiel gesehen).
+				// A level list stood here before. It was too narrow: rich1
+				// has the animation but used the key-turning gesture (seen
+				// by the user in game).
 				if (item->object_number == KEY_HOLE8 &&
 					(anims[ANIM_KEYCARD].interpolation >> 8) != 0)
 					l->anim_number = ANIM_KEYCARD;
@@ -682,24 +682,24 @@ void KeyHoleCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 				lara.torso_y_rot = 0;
 				lara.gun_status = LG_HANDS_BUSY;
 				item->status = ITEM_ACTIVE;
-				// War "flags &= IFL_TRIGGERED" - das loescht ALLE Bits, wenn
-				// IFL_TRIGGERED nicht schon gesetzt ist, und ein frisches
-				// Schluesselloch traegt in der Leveldatei flags 0. Der
-				// Savegame-Schreiber speichert ein Item aber nur, wenn eines
-				// von CODEBITS/INVISIBLE/TRIGGERED gesetzt ist
-				// (savegame.cpp:305): das Schloss fiel also mit flags 0 aus
-				// dem Spielstand heraus und kam beim Laden als "nicht
-				// benutzt" zurueck - waehrend der Schluessel (Inventar WIRD
-				// gespeichert) schon weg war. Die Tuer ging nie wieder auf,
-				// weil KeyTrigger (oben, Zeile 140) ITEM_ACTIVE verlangt.
-				// Reproduziert vom Nutzer in VANILLA Andrea1, Item 25
-				// (Keyhole1): Anim starten, sofort speichern, laden.
-				// Im ganzen Motor ist dies die EINZIGE Stelle mit "&=" - die
-				// 26 anderen setzen das Bit mit "|=". Die Zuweisung behaelt
-				// Cores Absicht ("alle anderen Bits weg") und stellt nur
-				// sicher, dass das Bit wirklich steht. Der Puzzle-Hole macht
-				// es richtig (Zeile 317) und ueberlebt Save/Load deshalb
-				// seit jeher (savegame.cpp:924 stellt ihn wieder her).
+				// Was "flags &= IFL_TRIGGERED" - that clears ALL bits when
+				// IFL_TRIGGERED is not already set, and a fresh keyhole
+				// carries flags 0 in the level file. But the savegame
+				// writer only stores an item when one of
+				// CODEBITS/INVISIBLE/TRIGGERED is set (savegame.cpp:305):
+				// the lock thus fell out of the savegame with flags 0 and
+				// came back as "not used" on loading - while the key (the
+				// inventory IS saved) was already gone. The door never
+				// opened again because KeyTrigger (above, line 140) demands
+				// ITEM_ACTIVE. Reproduced by the user in VANILLA Andrea1,
+				// item 25 (Keyhole1): start the anim, save immediately,
+				// load.
+				// In the whole engine this is the ONLY spot with "&=" - the
+				// 26 others set the bit with "|=". The assignment keeps
+				// Core's intent ("all other bits away") and only makes sure
+				// the bit really stands. The puzzle hole does it right
+				// (line 317) and has therefore survived save/load forever
+				// (savegame.cpp:924 restores it).
 				item->flags = IFL_TRIGGERED;
 
 				if (item->trigger_flags == 1 && item->object_number == KEY_HOLE8)

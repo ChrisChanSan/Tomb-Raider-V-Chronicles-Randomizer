@@ -2,11 +2,11 @@
 #include "../global/types.h"
 
 //----------------------------------------------------------------------------
-// T-Rex aus Tomb Raider 3 (#88). Portiert aus der tomb3-Dekompilation
-// (game/trex.cpp), die wie TOMB5 unter GPLv3 steht.
+// T-Rex from Tomb Raider 3 (#88). Ported from the tomb3 decompilation
+// (game/trex.cpp), which like TOMB5 stands under GPLv3.
 //
-// Die Zustandsnummern sind die des TR3-Modells und muessen es bleiben - sie
-// stehen so in den Animationen, die der Randomizer aus CRASH.TR2 holt.
+// The state numbers are the TR3 model's and must stay so - they are baked
+// into the animations the randomizer fetches from CRASH.TR2.
 //----------------------------------------------------------------------------
 enum TREX_STATES
 {
@@ -29,6 +29,6 @@ enum TREX_STATES
 
 void DinoControl(short item_number);
 
-// setup.cpp bindet box.h nicht ein, braucht aber den Standard-Initialisierer
-// fuer den T-Rex-Slot - deshalb hier mitgereicht.
+// setup.cpp does not include box.h but needs the standard initializer for
+// the T-Rex slot - hence passed along here.
 void InitialiseCreature(short item_number);

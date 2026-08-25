@@ -1,12 +1,12 @@
 /*
- * Compsognathus aus Tomb Raider 3, portiert 2026 nach TOMB5 (#99).
+ * Compsognathus from Tomb Raider 3, ported to TOMB5 in 2026 (#99).
  *
- * Uebernommen aus tomb3 (game/compy.h, GPLv3) - dieselbe Lizenz wie TOMB5
- * und dieses Projekt. Der Code wird bewusst direkt uebernommen statt
- * umgeschrieben: Umschreiben wuerde die Herkunft verschleiern.
+ * Taken from tomb3 (game/compy.h, GPLv3) - the same license as TOMB5 and
+ * this project. The code is deliberately taken over directly instead of
+ * rewritten: rewriting would obscure its origin.
  *
- * CarcassControl aus derselben Quelldatei bleibt draussen - der Kadaver ist
- * ein eigenes TR3-Objekt, das wir nicht mitbringen. Siehe compy.cpp.
+ * CarcassControl from the same source file stays out - the carcass is its
+ * own TR3 object that we do not bring along. See compy.cpp.
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free

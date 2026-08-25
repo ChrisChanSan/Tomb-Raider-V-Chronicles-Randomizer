@@ -178,14 +178,14 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		phd_PushMatrix_I();
 		objptr = lara.mesh_ptrs[LM_TORSO];
 
-		// Die Sonderverankerung des Zopfs gehoert zum RUSSLAND-OUTFIT (Muetze,
-		// Bomberjacke), nicht zum Level - Core hat beides gleichgesetzt, weil
-		// das Outfit vanilla nie den Abschnitt wechselt. Der Randomizer setzt
-		// beim Joby-Outfit LaraType 2 (LARA_BUNHEAD, sonst ungenutzt; die
-		// Zeichenwege behandeln es wie LARA_NORMAL), damit der Zopf dem Outfit
-		// folgt. In unveraenderten Russland-Leveln (LARA_NORMAL) aendert
-		// sich nichts; traegt Lara dort per Randomizer ein fremdes Outfit
-		// (CATSUIT/PONYTAIL), gehoert die Standard-Verankerung dazu.
+		// The braid's special anchoring belongs to the RUSSIA OUTFIT (cap,
+		// bomber jacket), not to the level - Core equated the two because
+		// the outfit never changes section in vanilla. For the Joby outfit
+		// the randomizer sets LaraType 2 (LARA_BUNHEAD, otherwise unused;
+		// the draw paths treat it like LARA_NORMAL), so the braid follows
+		// the outfit. In unmodified Russia levels (LARA_NORMAL) nothing
+		// changes; if Lara wears a foreign outfit there via the randomizer
+		// (CATSUIT/PONYTAIL), the standard anchoring comes with it.
 		if ((gfLevelId >= LVL5_BASE && gfLevelId <= LVL5_SINKING_SUBMARINE && LaraDrawType == LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD)
 			phd_TranslateRel_I(*objptr - 11, objptr[1] - 16, objptr[2] + 25);
 		else
@@ -196,14 +196,14 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		sphere[1].y = (long)aMXPtr[M13];
 		sphere[1].z = (long)aMXPtr[M23];
 
-		// Die Sonderverankerung des Zopfs gehoert zum RUSSLAND-OUTFIT (Muetze,
-		// Bomberjacke), nicht zum Level - Core hat beides gleichgesetzt, weil
-		// das Outfit vanilla nie den Abschnitt wechselt. Der Randomizer setzt
-		// beim Joby-Outfit LaraType 2 (LARA_BUNHEAD, sonst ungenutzt; die
-		// Zeichenwege behandeln es wie LARA_NORMAL), damit der Zopf dem Outfit
-		// folgt. In unveraenderten Russland-Leveln (LARA_NORMAL) aendert
-		// sich nichts; traegt Lara dort per Randomizer ein fremdes Outfit
-		// (CATSUIT/PONYTAIL), gehoert die Standard-Verankerung dazu.
+		// The braid's special anchoring belongs to the RUSSIA OUTFIT (cap,
+		// bomber jacket), not to the level - Core equated the two because
+		// the outfit never changes section in vanilla. For the Joby outfit
+		// the randomizer sets LaraType 2 (LARA_BUNHEAD, otherwise unused;
+		// the draw paths treat it like LARA_NORMAL), so the braid follows
+		// the outfit. In unmodified Russia levels (LARA_NORMAL) nothing
+		// changes; if Lara wears a foreign outfit there via the randomizer
+		// (CATSUIT/PONYTAIL), the standard anchoring comes with it.
 		if ((gfLevelId >= LVL5_BASE && gfLevelId <= LVL5_SINKING_SUBMARINE && LaraDrawType == LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD)
 			sphere[1].r = 94;
 		else
@@ -309,14 +309,14 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		phd_PushMatrix();
 		objptr = lara.mesh_ptrs[LM_TORSO];
 
-		// Die Sonderverankerung des Zopfs gehoert zum RUSSLAND-OUTFIT (Muetze,
-		// Bomberjacke), nicht zum Level - Core hat beides gleichgesetzt, weil
-		// das Outfit vanilla nie den Abschnitt wechselt. Der Randomizer setzt
-		// beim Joby-Outfit LaraType 2 (LARA_BUNHEAD, sonst ungenutzt; die
-		// Zeichenwege behandeln es wie LARA_NORMAL), damit der Zopf dem Outfit
-		// folgt. In unveraenderten Russland-Leveln (LARA_NORMAL) aendert
-		// sich nichts; traegt Lara dort per Randomizer ein fremdes Outfit
-		// (CATSUIT/PONYTAIL), gehoert die Standard-Verankerung dazu.
+		// The braid's special anchoring belongs to the RUSSIA OUTFIT (cap,
+		// bomber jacket), not to the level - Core equated the two because
+		// the outfit never changes section in vanilla. For the Joby outfit
+		// the randomizer sets LaraType 2 (LARA_BUNHEAD, otherwise unused;
+		// the draw paths treat it like LARA_NORMAL), so the braid follows
+		// the outfit. In unmodified Russia levels (LARA_NORMAL) nothing
+		// changes; if Lara wears a foreign outfit there via the randomizer
+		// (CATSUIT/PONYTAIL), the standard anchoring comes with it.
 		if ((gfLevelId >= LVL5_BASE && gfLevelId <= LVL5_SINKING_SUBMARINE && LaraDrawType == LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD)
 			phd_TranslateRel(*objptr - 11, objptr[1] - 16, objptr[2] + 25);
 		else
@@ -326,14 +326,14 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		sphere[1].y = (long)aMXPtr[M13];
 		sphere[1].z = (long)aMXPtr[M23];
 
-		// Die Sonderverankerung des Zopfs gehoert zum RUSSLAND-OUTFIT (Muetze,
-		// Bomberjacke), nicht zum Level - Core hat beides gleichgesetzt, weil
-		// das Outfit vanilla nie den Abschnitt wechselt. Der Randomizer setzt
-		// beim Joby-Outfit LaraType 2 (LARA_BUNHEAD, sonst ungenutzt; die
-		// Zeichenwege behandeln es wie LARA_NORMAL), damit der Zopf dem Outfit
-		// folgt. In unveraenderten Russland-Leveln (LARA_NORMAL) aendert
-		// sich nichts; traegt Lara dort per Randomizer ein fremdes Outfit
-		// (CATSUIT/PONYTAIL), gehoert die Standard-Verankerung dazu.
+		// The braid's special anchoring belongs to the RUSSIA OUTFIT (cap,
+		// bomber jacket), not to the level - Core equated the two because
+		// the outfit never changes section in vanilla. For the Joby outfit
+		// the randomizer sets LaraType 2 (LARA_BUNHEAD, otherwise unused;
+		// the draw paths treat it like LARA_NORMAL), so the braid follows
+		// the outfit. In unmodified Russia levels (LARA_NORMAL) nothing
+		// changes; if Lara wears a foreign outfit there via the randomizer
+		// (CATSUIT/PONYTAIL), the standard anchoring comes with it.
 		if ((gfLevelId >= LVL5_BASE && gfLevelId <= LVL5_SINKING_SUBMARINE && LaraDrawType == LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD)
 			sphere[1].r = 94;
 		else

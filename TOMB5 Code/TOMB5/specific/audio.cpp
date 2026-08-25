@@ -16,19 +16,19 @@
 #include "function_stubs.h"
 #include "dxsound.h"
 #include "../game/control.h"
-#include "../game/gameflow.h"	// Gameflow->Language: waehlt HQ DE oder HQ EN
+#include "../game/gameflow.h"	// Gameflow->Language: picks HQ DE or HQ EN
 #include "LoadSave.h"
 
-// HQ-Musik: liegen unter audio\HQ DE\<nr>.OGG bzw. audio\HQ EN\<nr>.OGG
-// Remaster-Fassungen der Tracks (Nummer = Engine-Tracknummer, per
-// Laufzeitvergleich verifiziert - die HQ-Saetze tragen genau die 52
-// Sprachtracks), spielt die Engine sie statt der Original-WAVs: bei
-// Deutsch die deutsche, sonst die englische; fehlt die Datei, laeuft das
-// Original-WAV wie immer. Die Dateien sind 44,1 kHz stereo - exakt das
-// PCM-Format der MusicVoice, darum reicht dieselbe Warteschlange.
-// Dekoder: stb_vorbis (public domain, Sean Barrett u. a.). NIE mit
-// ausliefern - die OGGs sind Daten des Nutzers, die Engine schaut nur
-// nach, ob sie da sind.
+// HQ music: if remaster versions of the tracks lie under
+// audio\HQ DE\<nr>.OGG or audio\HQ EN\<nr>.OGG (number = engine track
+// number, verified by runtime comparison - the HQ sets carry exactly the
+// 52 language tracks), the engine plays them instead of the original WAVs:
+// the German ones for German, else the English; if the file is missing,
+// the original WAV runs as always. The files are 44.1 kHz stereo - exactly
+// the MusicVoice's PCM format, so the same queue suffices.
+// Decoder: stb_vorbis (public domain, Sean Barrett et al.). NEVER ship
+// them - the OGGs are the user's data, the engine only checks whether
+// they are there.
 #pragma warning(push, 0)
 #define STB_VORBIS_NO_PUSHDATA_API
 #include "../tomb5/libs/stb/stb_vorbis.c"
@@ -190,16 +190,16 @@ bool acm_ready;
 
 long XATrack = -1;
 
-// Musik ueber XAudio2 statt DirectSound (#100, A3 des Portierungsplans).
+// Music via XAudio2 instead of DirectSound (#100, A3 of the porting plan).
 //
-// Die ACM-Dekodierung (MS-ADPCM -> PCM) und die Dateilogik - Schleifen per
-// fseek auf Byte 90, EOF-Nachlauf, Rueckkehr zur Atmosphaere - bleiben 1:1
-// erhalten. Ersetzt ist nur die Geraeteschicht: statt eines DirectSound-
-// Ringpuffers mit Positions-Notifications (dessen Lock unter Windows 11 bei
-// jedem Trackstart mit E_INVALIDARG scheiterte - die Musik war stumm)
-// dekodieren die vier Stream-Header jetzt in eigene PCM-Bloecke, die per
-// SubmitSourceBuffer in die Warteschlange einer Source-Voice gehen. Der
-// Nachschub-Thread bleibt, wird aber von OnBufferEnd der Voice geweckt.
+// The ACM decoding (MS-ADPCM -> PCM) and the file logic - looping via
+// fseek to byte 90, EOF tail, return to the atmosphere - stay 1:1.
+// Replaced is only the device layer: instead of a DirectSound ring buffer
+// with position notifications (whose Lock failed with E_INVALIDARG on
+// every track start under Windows 11 - the music was mute), the four
+// stream headers now decode into their own PCM chunks, which go into a
+// source voice's queue via SubmitSourceBuffer. The refill thread stays but
+// is woken by the voice's OnBufferEnd.
 #define MUSIC_CHUNKS		4
 
 static FILE* audio_stream_fp;
@@ -215,10 +215,10 @@ static long audio_play_mode;
 static long CurrentNotify;
 static long eof_counter;
 
-// HQ-OGG-Strom (siehe Kopfkommentar). Laeuft er, ruht der ACM-Weg: ein
-// Track spielt entweder als OGG oder als WAV, nie beides. Eigene
-// PCM-Bloecke in ADPCM-Blockgroesse (~0,5 s), damit der EOF-Nachlauf
-// (EOF_LEEWAY) im selben Takt tickt wie beim WAV-Weg.
+// HQ OGG stream (see the header comment). While it runs, the ACM path
+// rests: a track plays either as OGG or as WAV, never both. Its own PCM
+// chunks in ADPCM block size (~0.5 s), so the EOF tail (EOF_LEEWAY) ticks
+// in the same rhythm as on the WAV path.
 #define OGG_CHUNK_FRAMES	22050
 static stb_vorbis* OggStream;
 static short* OggChunks[MUSIC_CHUNKS];
@@ -226,8 +226,8 @@ static short* OggChunks[MUSIC_CHUNKS];
 #define ACM_BUFFER_SIZE		0x5800
 #define EOF_LEEWAY			2								//WAS 8.. every 2 = about 1 extra second of playtime
 
-// Weckt nur den Nachschub-Thread: auf dem XAudio2-Mischthread darf nichts
-// blockieren, also passiert die eigentliche Arbeit nicht hier.
+// Only wakes the refill thread: nothing may block on the XAudio2 mixer
+// thread, so the actual work does not happen here.
 struct MusicVoiceCallback : public IXAudio2VoiceCallback
 {
 	void __stdcall OnVoiceProcessingPassStart(UINT32) {}
@@ -306,13 +306,13 @@ void ACMSetVolume()
 	else
 		volume = -4000 * (100 - MusicVolume) / 100;
 
-	// Gleiche Kurve wie zu DirectSound-Zeiten (hundertstel Dezibel),
-	// erst an der API-Grenze in den linearen XAudio2-Faktor uebersetzt.
+	// Same curve as in the DirectSound days (hundredths of a decibel),
+	// translated into the linear XAudio2 factor only at the API boundary.
 	if (MusicVoice)
 		MusicVoice->SetVolume(DSVolumeToLinear(volume));
 }
 
-// Aufrufer haelt audio_cs.
+// Caller holds audio_cs.
 static void OpenStreamFile(char* name)
 {
 	audio_stream_fp = FileOpen(name);
@@ -326,11 +326,11 @@ static void OpenStreamFile(char* name)
 	fseek(audio_stream_fp, 90, SEEK_SET);
 }
 
-// Das OGG-Gegenstueck zu MusicFeedChunk: dekodiert den naechsten Block aus
-// dem stb_vorbis-Strom und haengt ihn an dieselbe Voice-Warteschlange.
-// Aufrufer haelt audio_cs. Am Trackende werden STILLE-Bloecke
-// nachgeschoben, damit OnBufferEnd weitertickt - sonst kaeme der
-// EOF-Nachlauf (Rueckkehr zur Levelatmosphaere) nie zum Zug.
+// The OGG counterpart to MusicFeedChunk: decodes the next block from the
+// stb_vorbis stream and appends it to the same voice queue. Caller holds
+// audio_cs. At the track's end, SILENCE blocks are pushed in so
+// OnBufferEnd keeps ticking - otherwise the EOF tail (return to the level
+// atmosphere) would never get its turn.
 static void OggFeedChunk()
 {
 	XAUDIO2_BUFFER buf;
@@ -384,14 +384,14 @@ static void OggFeedChunk()
 	CurrentNotify = (CurrentNotify + 1) & (MUSIC_CHUNKS - 1);
 }
 
-// Liest den naechsten ADPCM-Block, dekodiert ihn in den naechsten freien
-// PCM-Block und haengt ihn an die Voice-Warteschlange. Aufrufer haelt
-// audio_cs. Bei Trackende laeuft hier auch der alte EOF-Nachlauf samt
-// Rueckkehr zur Levelatmosphaere.
-static void MusicFeedChunk(bool erster)
+// Reads the next ADPCM block, decodes it into the next free PCM block and
+// appends it to the voice queue. Caller holds audio_cs. At the track's end,
+// the old EOF tail including the return to the level atmosphere runs here
+// as well.
+static void MusicFeedChunk(bool first)
 {
 	XAUDIO2_BUFFER buf;
-	ACMSTREAMHEADER* kopf;
+	ACMSTREAMHEADER* header;
 
 	if (OggStream)
 	{
@@ -433,18 +433,18 @@ static void MusicFeedChunk(bool erster)
 		}
 	}
 
-	kopf = &StreamHeaders[CurrentNotify];
+	header = &StreamHeaders[CurrentNotify];
 
-	if (acmStreamConvert(hACMStream, kopf,
-		erster ? ACM_STREAMCONVERTF_BLOCKALIGN | ACM_STREAMCONVERTF_START : ACM_STREAMCONVERTF_BLOCKALIGN))
+	if (acmStreamConvert(hACMStream, header,
+		first ? ACM_STREAMCONVERTF_BLOCKALIGN | ACM_STREAMCONVERTF_START : ACM_STREAMCONVERTF_BLOCKALIGN))
 		return;
 
-	if (!kopf->cbDstLengthUsed)
+	if (!header->cbDstLengthUsed)
 		return;
 
 	memset(&buf, 0, sizeof(buf));
-	buf.pAudioData = kopf->pbDst;
-	buf.AudioBytes = kopf->cbDstLengthUsed;
+	buf.pAudioData = header->pbDst;
+	buf.AudioBytes = header->cbDstLengthUsed;
 
 	if (FAILED(MusicVoice->SubmitSourceBuffer(&buf)))
 		return;
@@ -452,10 +452,10 @@ static void MusicFeedChunk(bool erster)
 	CurrentNotify = (CurrentNotify + 1) & (MUSIC_CHUNKS - 1);
 }
 
-// Fuellt die Warteschlange wieder auf zwei Bloecke auf. Eine Schleife statt
-// eines einzelnen Blocks, weil das Auto-Reset-Ereignis zwei kurz
-// aufeinanderfolgende OnBufferEnd zu einem Aufwachen zusammenzieht - wer
-// dann nur einen Block nachlegt, laesst die Schlange langsam leerlaufen.
+// Refills the queue back up to two blocks. A loop instead of a single
+// block, because the auto-reset event merges two closely spaced
+// OnBufferEnd calls into one wakeup - whoever then adds only one block
+// slowly drains the queue.
 static void MusicFeed()
 {
 	XAUDIO2_VOICE_STATE state;
@@ -490,13 +490,13 @@ void ACMEmulateCDPlay(long track, long mode)
 
 	EnterCriticalSection(&audio_cs);
 
-	// Erst nach einer HQ-Fassung schauen: audio\HQ <Sprache>\<nr>.OGG,
-	// gewaehlt ueber die Sprachwahl im Optionsmenue; fehlt der Satz der
-	// Sprache, springt audio\HQ EN\<nr>.OGG ein, fehlt auch der, laeuft
-	// das Original-WAV. Italienisch hat (noch) keinen eigenen Satz; der
-	// JP-Satz wird erst erreichbar, wenn eine echte japanische
-	// Sprachdatei waehlbar ist (#116).
-	// S_CDPlay hat vorher S_CDStop gerufen, OggStream ist hier immer 0.
+	// Look for an HQ version first: audio\HQ <language>\<nr>.OGG, chosen
+	// via the language choice in the options menu; if the language's set
+	// is missing, audio\HQ EN\<nr>.OGG steps in, and if that is missing
+	// too, the original WAV runs. Italian has no set of its own (yet); the
+	// JP set only becomes reachable once a real Japanese language file is
+	// selectable (#116).
+	// S_CDPlay called S_CDStop beforehand, OggStream is always 0 here.
 	if (track >= 0 && track < 136)
 	{
 		const char* hq;
@@ -573,9 +573,9 @@ void ACMEmulateCDPlay(long track, long mode)
 		return;
 	}
 
-	// Nach Stop+FlushSourceBuffers kann die Mischschleife die alten Bloecke
-	// noch einen Wimpernschlag halten - erst weiterschreiben, wenn sie
-	// wirklich raus sind, sonst knackt der Trackwechsel.
+	// After Stop+FlushSourceBuffers the mixer loop can hold the old blocks
+	// for a blink longer - only write on once they are really out, or the
+	// track change crackles.
 	if (MusicVoice)
 	{
 		for (int i = 0; i < 100; i++)
@@ -589,8 +589,8 @@ void ACMEmulateCDPlay(long track, long mode)
 		}
 	}
 
-	// Zwei Bloecke Vorlauf wie frueher (CurrentNotify begann bei 2); der
-	// START-Umsetzungslauf setzt den ADPCM-Vorhersagezustand zurueck.
+	// Two blocks of lead like before (CurrentNotify used to start at 2);
+	// the START conversion pass resets the ADPCM predictor state.
 	CurrentNotify = 0;
 	MusicFeedChunk(true);
 	MusicFeedChunk(false);
@@ -649,9 +649,9 @@ bool ACMInit()
 	acmStreamOpen(&hACMStream, hACMDriver, (LPWAVEFORMATEX)&source_wav_format, &wav_format, 0, 0, 0, 0);
 	acmStreamSize(hACMStream, ACM_BUFFER_SIZE, &StreamSize, 0);
 
-	// Vier eigene PCM-Bloecke in der von acmStreamSize gemeldeten
-	// Obergrenze - frueher zeigten die Header in den gesperrten
-	// DirectSound-Ring, im Abstand von NotifySize.
+	// Four own PCM blocks at the upper bound reported by acmStreamSize -
+	// the headers used to point into the locked DirectSound ring, spaced
+	// by NotifySize.
 	for (int i = 0; i < MUSIC_CHUNKS; i++)
 	{
 		MusicChunks[i] = (uchar*)malloc(StreamSize);
@@ -664,8 +664,8 @@ bool ACMInit()
 		acmStreamPrepareHeader(hACMStream, &StreamHeaders[i], 0);
 	}
 
-	// Eigene PCM-Bloecke fuer den HQ-OGG-Weg - stereo 16 Bit, dasselbe
-	// Format wie wav_format, darum teilen sich beide Wege die MusicVoice.
+	// Own PCM blocks for the HQ OGG path - stereo 16 bit, the same format
+	// as wav_format, which is why both paths share the MusicVoice.
 	for (int i = 0; i < MUSIC_CHUNKS; i++)
 		OggChunks[i] = (short*)malloc(OGG_CHUNK_FRAMES * 2 * sizeof(short));
 
@@ -697,8 +697,8 @@ void ACMClose()
 	S_CDStop();
 	acm_ready = 0;
 
-	// Erst den Nachschub-Thread einholen, dann die Ereignisse schliessen -
-	// Handles zu schliessen, auf denen noch gewartet wird, ist Gluecksspiel.
+	// Catch up with the refill thread first, then close the events -
+	// closing handles that are still being waited on is a gamble.
 	SetEvent(NotifyEventHandles[1]);
 	WaitForSingleObject(NotificationThreadHandle, 5000);
 	CloseHandle(NotificationThreadHandle);

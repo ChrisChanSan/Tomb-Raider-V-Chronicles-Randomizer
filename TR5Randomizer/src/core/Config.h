@@ -69,10 +69,10 @@ struct Config
     bool optOutfits      = false;
     bool optOutfitsTr3   = false;   // guest outfits from Tomb Raider 3 in the pool
 
-    // The wardrobe: which outfits the roll may draw. EMPTY means everything,
-    // which is what every config written before the wardrobe existed says -
-    // so an old file keeps behaving exactly as it did.
-    std::vector<std::string> outfitPool;
+    // The wardrobe: which outfits the roll may NOT draw. Held is the
+    // DESELECTION, as with enemiesDisabled - an outfit added later is then
+    // automatically on and does not fall through an old settings file.
+    std::set<std::string> outfitsDisabled;
     int  itemAmount       = 0;     // 0 vanilla, 1 more, 2 a lot more (#36)
     int  secrets         = 0;     // secrets (#53): 0 vanilla, 1 pool, 2/3 list
     std::string secretAuthor;      // chosen list author (kinds 2/3)

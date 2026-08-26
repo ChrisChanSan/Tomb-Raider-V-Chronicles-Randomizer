@@ -426,9 +426,10 @@ namespace
         // Random outfits (Lara_Andrea/Lara_Joby/Lara_Rich) per section.
         bool optOutfits = false;
         bool optOutfitsTr3 = false;     // guest outfits from Tomb Raider 3
-        // The wardrobe (#122): which outfits the roll may draw. EMPTY means
-        // everything - so a config from before the wardrobe behaves as it did.
-        std::vector<std::string> outfitPool;
+        // The wardrobe (#122): which outfits the roll may NOT draw. Held is
+        // the DESELECTION, as with the enemy types - an outfit added later is
+        // then automatically on.
+        std::set<std::string> optOutfitsOff;
         bool wardrobeOpen = false;
         // The full weapon set in every level is STANDARD (user decision, no
         // checkbox): opt.allWeapons is hard-set to true on every run. Hence
@@ -498,14 +499,14 @@ namespace
             }
 
             // The wardrobe belongs in the seed just as the checkboxes do: the
-            // same seed with only the catsuit selected is not the same game as
-            // with everything. The list is always built in the order the
-            // outfits are defined, so the hash does not depend on clicking
-            // order.
-            for (size_t i = 0; i < outfitPool.size(); ++i)
-                for (size_t k = 0; k < outfitPool[i].size(); ++k)
+            // same seed with only the catsuit left on is not the same game as
+            // with everything. A std::set walks in sorted order, so the hash
+            // does not depend on the order things were clicked.
+            for (std::set<std::string>::const_iterator it = optOutfitsOff.begin();
+                 it != optOutfitsOff.end(); ++it)
+                for (size_t k = 0; k < it->size(); ++k)
                 {
-                    h ^= static_cast<unsigned char>(outfitPool[i][k]);
+                    h ^= static_cast<unsigned char>((*it)[k]);
                     h *= 0x100000001B3ull;
                 }
             return h;
@@ -849,7 +850,7 @@ static std::wstring cacheDir(const App& a)
         opt.tr3GoldDir = a.cfg.tr3GoldDir;
         opt.randomOutfits = a.optOutfits;
         opt.tr3Outfits    = a.optOutfitsTr3;
-        opt.outfitPool    = a.outfitPool;
+        opt.outfitsOff    = a.optOutfitsOff;
         opt.allWeapons = true;              // standard, see the App comment
         // Item abundance: the GUI's three tiers as a count. Free placement
         // spots and the item limit cap them anyway.
@@ -1471,6 +1472,80 @@ static void drawPathsWindow(App& a, HWND hwnd)
 }
 
 //----------------------------------------------------------------------------
+// Window "Wardrobe" (#122): which outfits may the roll draw?
+//
+// Same idea as the enemy types window, and for the same two reasons: someone
+// wants to see a favourite outfit more often, and a test wants exactly one -
+// deselect everything but one and every level wears it.
+//
+// Held and saved is the DESELECTION. An outfit added later is thereby on by
+// itself and does not fall silently through an old settings file.
+//
+// A guest outfit is greyed out while its game is not configured, or while
+// the TR3 switch is off - but its checkbox STATE is kept either way, so a
+// choice made now survives switching the source on later.
+//----------------------------------------------------------------------------
+static void drawWardrobeWindow(App& a)
+{
+    if (!a.wardrobeOpen) return;
+
+    ImGui::SetNextWindowSize(ImVec2(400, 340), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin((std::string(T("Wardrobe")) + "###kleiderschrank").c_str(), &a.wardrobeOpen))
+    {
+        ImGui::End();
+        return;
+    }
+
+    const std::vector<OutfitKind> kinds = Rando::outfitKinds();
+
+    ImGui::TextWrapped(T("Which outfits may the random draw pick? A level whose own outfit "
+        "is drawn simply keeps it - nothing is copied onto itself."));
+    ImGui::Spacing();
+
+    if (ImGui::Button(T("All on")))  a.optOutfitsOff.clear();
+    ImGui::SameLine();
+    if (ImGui::Button(T("All off")))
+        for (size_t k = 0; k < kinds.size(); ++k) a.optOutfitsOff.insert(kinds[k].id);
+    ImGui::SameLine();
+    ImGui::TextDisabled(T("%d of %d on"),
+                        static_cast<int>(kinds.size() - a.optOutfitsOff.size()),
+                        static_cast<int>(kinds.size()));
+
+    ImGui::Separator();
+    ImGui::BeginChild("##kleiderliste", ImVec2(0, -70), true);
+    for (size_t k = 0; k < kinds.size(); ++k)
+    {
+        const bool guest   = kinds[k].source[0] != 0;
+        const bool present = !guest || (a.optOutfitsTr3 && !tr3Folder(a).empty());
+
+        ImGui::BeginDisabled(!present);
+        bool on = !a.optOutfitsOff.count(kinds[k].id) && present;
+        char label[96];
+        std::snprintf(label, sizeof(label), "%s##kleid%s", T(kinds[k].name), kinds[k].id);
+        if (ImGui::Checkbox(label, &on))
+        {
+            if (on) a.optOutfitsOff.erase(kinds[k].id);
+            else    a.optOutfitsOff.insert(kinds[k].id);
+        }
+        ImGui::EndDisabled();
+
+        if (guest && !present)
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled(T("- needs \"TR3 outfits\" and Tomb Raider 3"));
+        }
+    }
+    ImGui::EndChild();
+
+    // Everything off does not mean "no outfits": every level then simply
+    // keeps its own. A valid state, but not one anyone wants by accident.
+    if (a.optOutfitsOff.size() >= kinds.size())
+        ImGui::TextWrapped(T("Everything deselected: every level keeps its own outfit."));
+
+    ImGui::End();
+}
+
+//----------------------------------------------------------------------------
 // Window "Enemy types" (#95): which kinds may the pool draw at all?
 //
 // Good for the player who wants to see favorite enemies more often, and good
@@ -2015,6 +2090,12 @@ static void drawUi(App& a, HWND hwnd)
           "Folders - the model is read from there at runtime, we ship no game "
           "data.");
 
+    ImGui::BeginDisabled(!a.optOutfits);
+    if (ImGui::Button(T("Wardrobe..."))) a.wardrobeOpen = true;
+    ImGui::EndDisabled();
+    hoverHelp("Which outfits the random draw may pick. Everything is on by "
+              "default.");
+
     // Still placeholders: TR1 and TR2 would need a donor level each, and
     // those games' Lara is built differently again.
     ImGui::BeginDisabled(true);
@@ -2418,6 +2499,7 @@ static void drawUi(App& a, HWND hwnd)
     // the whole screen and carries NoBringToFrontOnFocus.
     drawDebugWindow(a);
     drawEnemyKindsWindow(a);
+    drawWardrobeWindow(a);
     drawPathsWindow(a, hwnd);
 }
 
@@ -2502,7 +2584,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.optEnemiesOff   = app.cfg.enemiesDisabled;
     app.optOutfits      = app.cfg.optOutfits;
     app.optOutfitsTr3   = app.cfg.optOutfitsTr3;
-    app.outfitPool      = app.cfg.outfitPool;
+    app.optOutfitsOff   = app.cfg.outfitsDisabled;
     app.optItemAmount   = app.cfg.itemAmount;
     app.optSecrets      = app.cfg.secrets;
     app.secretAuthor     = app.cfg.secretAuthor;
@@ -2560,7 +2642,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.enemiesDisabled = app.optEnemiesOff;
         app.cfg.optOutfits      = app.optOutfits;
         app.cfg.optOutfitsTr3   = app.optOutfitsTr3;
-        app.cfg.outfitPool      = app.outfitPool;
+        app.cfg.outfitsDisabled = app.optOutfitsOff;
         app.cfg.itemAmount      = app.optItemAmount;
         app.cfg.secrets         = app.optSecrets;
         app.cfg.secretAuthor     = app.secretAuthor;
@@ -2695,7 +2777,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.enemiesDisabled != app.optEnemiesOff ||
                  app.cfg.optOutfits      != app.optOutfits ||
                  app.cfg.optOutfitsTr3   != app.optOutfitsTr3 ||
-                 app.cfg.outfitPool      != app.outfitPool ||
+                 app.cfg.outfitsDisabled != app.optOutfitsOff ||
                  app.cfg.itemAmount      != app.optItemAmount ||
                  app.cfg.secrets         != app.optSecrets ||
                  app.cfg.optMusicSwitch     != app.phMusicSwitch ||

@@ -295,6 +295,26 @@ static const std::unordered_map<std::string, const char*>& table()
         // --- Block 4: outfits --------------------------------------------
         { "Random outfits", "Zufaellige Outfits" },
         { "TR1 outfit", "TR1 Outfit" },
+
+        // --- The wardrobe (#122) -----------------------------------------
+        { "Wardrobe", "Kleiderschrank" },
+        { "Wardrobe...", "Kleiderschrank..." },
+        { "Which outfits the random draw may pick. Everything is on by "
+          "default.",
+          "Welche Outfits der Zufall ziehen darf. Ab Werk ist alles an." },
+        { "Which outfits may the random draw pick? A level whose own outfit "
+          "is drawn simply keeps it - nothing is copied onto itself.",
+          "Welche Outfits darf der Zufall ziehen? Ein Level, dessen eigenes "
+          "Outfit gezogen wird, behaelt es einfach - auf sich selbst wird "
+          "nichts kopiert." },
+        { "- needs \"TR3 outfits\" and Tomb Raider 3",
+          "- braucht \"TR3 Outfits\" und Tomb Raider 3" },
+        { "Everything deselected: every level keeps its own outfit.",
+          "Alles abgewaehlt: jedes Level behaelt sein eigenes Outfit." },
+        { "Lara Andrea", "Lara Andrea" },
+        { "Lara Joby", "Lara Joby" },
+        { "Lara Rich (catsuit)", "Lara Rich (Catsuit)" },
+        { "London (TR3)", "London (TR3)" },
         { "TR2 outfits", "TR2 Outfits" },
         { "TR3 outfits", "TR3 Outfits" },
         { "Each section randomly gets Lara_Andrea, Lara_Joby or Lara_Rich "

@@ -3001,33 +3001,36 @@ bool Rando::run(const RandoInput& in,
         else if (lowerName.rfind("rich", 0) == 0)  own = 2;
 
         static const char* kDonors[3] = { "Andrea1", "joby2", "rich2" };
-        static const char* kVanillaId[3] = { "andrea", "joby", "rich" };
 
-        // The wardrobe, resolved once. Empty means everything - see
-        // Options::outfitPool.
-        auto allowed = [&](const char* id) -> bool
-        {
-            if (opt.outfitPool.empty()) return true;
-            for (size_t k = 0; k < opt.outfitPool.size(); ++k)
-                if (opt.outfitPool[k] == id) return true;
-            return false;
-        };
-
-        // Candidates: the three vanilla outfits, plus every guest outfit if
-        // those are switched on. A vanilla candidate carries its INDEX,
-        // because the donor level and the LaraType byte hang on it; a guest
-        // carries only its id - everything else about it stands in
-        // Tr3Source::outfits() and the patch path reads it from there.
+        // Candidates, out of the SAME list the wardrobe window shows. A
+        // vanilla outfit keeps its index, because the donor level and the
+        // LaraType byte hang on it; a guest carries only its id, and
+        // everything else about it stands in Tr3Source::outfits().
+        //
+        // Deselected outfits fall out here, and guests fall out entirely
+        // while the TR3 switch is off - the wardrobe must not be able to
+        // reach into an installation the user has not enabled.
         struct Cand { int vanilla; std::string id; };
         std::vector<Cand> cand;
-        for (int i = 0; i < 3; ++i)
-            if (allowed(kVanillaId[i])) { Cand c; c.vanilla = i; c.id = kVanillaId[i]; cand.push_back(c); }
-        if (opt.tr3Outfits)
         {
-            const std::vector<Tr3Source::OutfitSource> guests = Tr3Source::outfits();
-            for (size_t k = 0; k < guests.size(); ++k)
-                if (allowed(guests[k].id))
-                { Cand c; c.vanilla = -1; c.id = guests[k].id; cand.push_back(c); }
+            const std::vector<OutfitKind> all = Rando::outfitKinds();
+            int vanillaIdx = 0;
+            for (size_t k = 0; k < all.size(); ++k)
+            {
+                // The counter runs over EVERY vanilla entry, deselected ones
+                // included - it indexes kDonors, and a hole would shift the
+                // rest onto the wrong donor level.
+                const bool guest = all[k].source[0] != 0;
+                const int mine = guest ? -1 : vanillaIdx++;
+
+                if (guest && !opt.tr3Outfits) continue;
+                if (opt.outfitsOff.count(all[k].id)) continue;
+
+                Cand c;
+                c.vanilla = mine;
+                c.id = all[k].id;
+                cand.push_back(c);
+            }
         }
 
         if (lowerName == "joby4")
@@ -3210,6 +3213,25 @@ bool Rando::run(const RandoInput& in,
 // follow the pool table kCross further up - whoever adds a row there adds
 // one here. The names are English for the international release; the
 // German UI translates them via the Language table (see gui\Language.cpp).
+std::vector<OutfitKind> Rando::outfitKinds()
+{
+    std::vector<OutfitKind> v;
+
+    // The three TR5 brings itself. The ids are what the config and the patch
+    // speak; the names are what the user reads.
+    v.push_back({ "andrea", "Lara Andrea", "" });
+    v.push_back({ "joby",   "Lara Joby",   "" });
+    v.push_back({ "rich",   "Lara Rich (catsuit)", "" });
+
+    // And every guest, straight from the one truth about them. Nothing to
+    // keep in step by hand: an outfit added there appears here by itself.
+    const std::vector<Tr3Source::OutfitSource> guests = Tr3Source::outfits();
+    for (size_t k = 0; k < guests.size(); ++k)
+        v.push_back({ guests[k].id, guests[k].name, guests[k].source });
+
+    return v;
+}
+
 std::vector<EnemyKind> Rando::enemyKinds()
 {
     return {

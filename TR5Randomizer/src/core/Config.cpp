@@ -86,18 +86,18 @@ void Config::load()
         }
         else if (key == "outfits")         optOutfits = (val == "1");
         else if (key == "outfitsTr3")      optOutfitsTr3 = (val == "1");
-        else if (key == "outfitPool")
+        else if (key == "outfitsOff")
         {
-            // Comma separated ids. An unknown id is kept rather than dropped:
+            // Comma separated ids. An unknown id is KEPT rather than dropped:
             // it may belong to an outfit that is switched off right now, and
             // silently forgetting the user's choice is worse than carrying a
             // name nobody reads.
-            outfitPool.clear();
+            outfitsDisabled.clear();
             std::string cur;
             for (size_t i = 0; i <= val.size(); ++i)
             {
                 if (i == val.size() || val[i] == ',')
-                { if (!cur.empty()) outfitPool.push_back(cur); cur.clear(); }
+                { if (!cur.empty()) outfitsDisabled.insert(cur); cur.clear(); }
                 else if (val[i] != ' ') cur.push_back(val[i]);
             }
         }
@@ -168,12 +168,13 @@ bool Config::save() const
     std::fprintf(f, "\n");
     std::fprintf(f, "outfits=%d\n", optOutfits ? 1 : 0);
     std::fprintf(f, "outfitsTr3=%d\n", optOutfitsTr3 ? 1 : 0);
-    if (!outfitPool.empty())
+    if (!outfitsDisabled.empty())
     {
         std::string joined;
-        for (size_t i = 0; i < outfitPool.size(); ++i)
-        { if (i) joined += ","; joined += outfitPool[i]; }
-        std::fprintf(f, "outfitPool=%s\n", joined.c_str());
+        for (std::set<std::string>::const_iterator it = outfitsDisabled.begin();
+             it != outfitsDisabled.end(); ++it)
+        { if (!joined.empty()) joined += ","; joined += *it; }
+        std::fprintf(f, "outfitsOff=%s\n", joined.c_str());
     }
     std::fprintf(f, "itemAmount=%d\n", itemAmount);
     std::fprintf(f, "secrets=%d\n", secrets);

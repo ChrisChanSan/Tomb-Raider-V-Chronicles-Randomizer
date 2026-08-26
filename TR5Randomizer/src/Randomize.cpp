@@ -52,7 +52,8 @@ int main(int argc, char** argv)
         std::printf("  number:   count of extra enemies, 0 = none (default)\n");
         std::printf("  only:     leave items untouched - for enemy/outfit tests\n");
         std::printf("  outfit:   random outfit (Lara_Andrea/Joby/Rich)\n"
-                "  outfit-tr3: as outfit, plus the guest outfits from Tomb Raider 3\n");
+                "  outfit-tr3: as outfit, plus the guest outfits from Tomb Raider 3\n"
+                "  outfits-off=a,b: the wardrobe - ids the roll may NOT draw\n");
         std::printf("  weapons:  import the full weapon set (donors Andrea3/joby2/rich1)\n");
         std::printf("  mix:      swap the existing enemies among each other\n");
         std::printf("  cross:    extend the enemy pool by up to three foreign types (with mix/number)\n");
@@ -80,6 +81,7 @@ int main(int argc, char** argv)
     int enemies = 0, extraItems = 0;
     bool enemiesOnly = false, outfits = false, weapons = false, mix = false, cross = false, allsanity = false;
     bool outfitsTr3 = false;   // guest outfits from Tomb Raider 3 in the pool
+    std::set<std::string> outfitsOff;   // the wardrobe: ids the roll may NOT draw
     bool notes = false;
     std::set<int> enemiesDisabled;         // deselection, see argument enemiesoff=
     // Foreign installations for the guests from TR3 (#92). Without them the
@@ -105,6 +107,16 @@ int main(int argc, char** argv)
         else if (s == "notes") notes = true;   // print the report notes (diagnosis)
         else if (s == "outfit") outfits = true;
         else if (s == "outfit-tr3") { outfits = true; outfitsTr3 = true; }
+        else if (s.rfind("outfits-off=", 0) == 0)
+        {
+            std::string cur;
+            for (size_t i = 12; i <= s.size(); ++i)
+            {
+                if (i == s.size() || s[i] == ',')
+                { if (!cur.empty()) outfitsOff.insert(cur); cur.clear(); }
+                else cur.push_back(s[i]);
+            }
+        }
         else if (s == "weapons") weapons = true;
         else if (s == "mix")    mix = true;
         else if (s == "cross")  cross = true;
@@ -251,6 +263,7 @@ int main(int argc, char** argv)
     opt.swapEnemies = enemies > 0;     // combined in the CLI, enough for tests
     opt.randomOutfits = outfits;
     opt.tr3Outfits    = outfitsTr3;
+    opt.outfitsOff    = outfitsOff;
     opt.allWeapons = weapons;
     opt.swapEnemies = mix;
     opt.crossEnemies = cross;

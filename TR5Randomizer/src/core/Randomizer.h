@@ -542,15 +542,16 @@ struct RandoOptions
     // outfit is the young Lara.
     bool randomOutfits = false;
 
-    // Which outfits the roll may draw from. EMPTY means everything that is
-    // available - that is the default, and it is what every config written
-    // before the wardrobe existed says.
+    // The wardrobe: which outfits the roll may NOT draw.
     //
-    // Ids: "andrea", "joby", "rich" for the three vanilla ones, plus the ids
-    // from Tr3Source::outfits() for the imported ones. Names rather than
-    // indices, so a new outfit appearing in the middle of the list cannot
-    // silently shift what an existing config had selected.
-    std::vector<std::string> outfitPool;
+    // Held is the DESELECTION, as with disabledEnemies and for the same
+    // reason: an outfit added later is then automatically on and does not
+    // fall silently through an old settings file.
+    //
+    // Ids rather than indices ("andrea", "joby", "rich" plus the ids from
+    // Tr3Source::outfits()), so a new outfit appearing in the middle of the
+    // list cannot shift what an existing config had chosen.
+    std::set<std::string> outfitsOff;
 
     // Guest outfits from Tomb Raider 3 may be drawn at all. Separate from the
     // pool because it also decides whether the user's TR3 installation is
@@ -605,6 +606,12 @@ struct RandoReport
 // in the UI instead of failing during the run.
 struct EnemyKind { int typeId; const char* name; const char* source; };
 
+// One entry of the wardrobe (#122). source is "" for the three outfits TR5
+// brings itself and the installation key ("tr3") for a guest - the window
+// greys out a guest whose game is not there, exactly as it does with the
+// animals.
+struct OutfitKind { const char* id; const char* name; const char* source; };
+
 namespace Rando
 {
     // The selectable enemy kinds with display names, in table order.
@@ -614,6 +621,12 @@ namespace Rando
     // missing here cannot be deselected; one that exists only here has a
     // checkbox without effect.
     std::vector<EnemyKind> enemyKinds();
+
+    // Every outfit that can be drawn, in the order the user sees. ONE list
+    // for the window and for the roll - the enemy list had to be kept in
+    // step with its pool table by hand, and this one is built from the same
+    // sources the roll reads, so it cannot fall out of step at all.
+    std::vector<OutfitKind> outfitKinds();
 
     // Reads zone export and level info into one input set and derives the
     // trigger-pinned items along the way.

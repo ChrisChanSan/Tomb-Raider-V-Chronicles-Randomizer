@@ -325,8 +325,24 @@ int main(int argc, char** argv)
     // about which of the flat colours is meant.
     struct Recolor { int sr, sg, sb, dr, dg, db; };
     std::vector<Recolor> recolors;
+
+    // -addcolor r,g,b (repeatable): an extra solid block on the flat colour
+    // page that NO face points at. It is there so the inserter has that
+    // exact tone available later - it paints a seam by looking for an
+    // evenly coloured entry, and can only find what the level holds. The
+    // page has 256 slots and a model uses a handful.
+    struct Rgb { int r, g, b; };
+    std::vector<Rgb> extraColors;
     for (int a = 4; a < argc; ++a)
-        if (std::strcmp(argv[a], "-recolor") == 0 && a + 1 < argc)
+        if (std::strcmp(argv[a], "-addcolor") == 0 && a + 1 < argc)
+        {
+            Rgb c;
+            if (std::sscanf(argv[++a], "%d,%d,%d", &c.r, &c.g, &c.b) == 3)
+                extraColors.push_back(c);
+            else
+                std::printf("  -addcolor not readable: %s (expected r,g,b)\n", argv[a]);
+        }
+        else if (std::strcmp(argv[a], "-recolor") == 0 && a + 1 < argc)
         {
             Recolor rc;
             if (std::sscanf(argv[++a], "%d,%d,%d=%d,%d,%d",
@@ -853,7 +869,7 @@ int main(int argc, char** argv)
             return uint16_t((isTri ? 0x8000 : 0) | type);
         };
 
-        put32(out, uint32_t(texIdx.size() + flatColors.size()));
+        put32(out, uint32_t(texIdx.size() + flatColors.size() + extraColors.size()));
         int written = 0;
         for (size_t ti = 0; ti < texIdx.size(); ++ti)
         {
@@ -903,7 +919,26 @@ int main(int argc, char** argv)
             ++written;
         }
 
-        put32(out, uint32_t(tiles.size() + (flatColors.empty() ? 0 : 1)));
+        // The extra colours sit behind them in the same grid.
+        for (size_t k = 0; k < extraColors.size(); ++k)
+        {
+            const size_t n = flatColors.size() + k;
+            const int col = int(n) % 16, row = int(n) / 16;
+            const uint8_t x0 = uint8_t(col * 16 + 3), x1 = uint8_t(col * 16 + 12);
+            const uint8_t y0 = uint8_t(row * 16 + 3), y1 = uint8_t(row * 16 + 12);
+            put16(out, uint16_t(FLAT_BASE + n));
+            put16(out, 0);
+            put16(out, uint16_t(tiles.size()));
+            out.push_back(x0); out.push_back(y0);
+            out.push_back(x1); out.push_back(y0);
+            out.push_back(x1); out.push_back(y1);
+            out.push_back(x0); out.push_back(y1);
+            put16(out, 0);
+            ++written;
+        }
+
+        const bool haveFlatPage = !flatColors.empty() || !extraColors.empty();
+        put32(out, uint32_t(tiles.size() + (haveFlatPage ? 1 : 0)));
         for (int k : tiles)
         {
             if (k < 0 || uint32_t(k) >= nTex)
@@ -911,7 +946,7 @@ int main(int argc, char** argv)
             const size_t at = tex16At + size_t(k) * 131072;
             out.insert(out.end(), r.b.begin() + at, r.b.begin() + at + 131072);
         }
-        if (!flatColors.empty())
+        if (haveFlatPage)
         {
             // One 256x256 ARGB1555 page, 16 by 16 blocks of 16 pixels. The
             // palette scale is read off its own maximum, not assumed.
@@ -943,12 +978,25 @@ int main(int argc, char** argv)
                     for (int x = 0; x < 16; ++x)
                         page[size_t(row * 16 + y) * 256 + size_t(col * 16 + x)] = v;
             }
+            for (size_t k = 0; k < extraColors.size(); ++k)
+            {
+                const uint16_t v = uint16_t(0x8000
+                                 | ((extraColors[k].r >> 3) << 10)
+                                 | ((extraColors[k].g >> 3) << 5)
+                                 |  (extraColors[k].b >> 3));
+                const size_t n = flatColors.size() + k;
+                const int col = int(n) % 16, row = int(n) / 16;
+                for (int y = 0; y < 16; ++y)
+                    for (int x = 0; x < 16; ++x)
+                        page[size_t(row * 16 + y) * 256 + size_t(col * 16 + x)] = v;
+            }
             for (uint16_t v : page) put16(out, v);
-            std::printf("    flat colour page added: %zu colours\n", flatColors.size());
+            std::printf("    flat colour page added: %zu colours, %zu extra\n",
+                        flatColors.size(), extraColors.size());
         }
 
         std::printf("  texture part: %d entries, %zu tiles of 131072 bytes each\n",
-                    written, tiles.size() + (flatColors.empty() ? 0 : 1));
+                    written, tiles.size() + (haveFlatPage ? 1 : 0));
         std::printf("  corner order: %d of %d entries are triangles, %d without a pattern, %d corners where the edge byte and the corner disagree\n",
                     orderTris, int(texIdx.size()), orderNoMatch, orderDisagree);
         if (!mixedUse.empty())

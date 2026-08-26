@@ -425,6 +425,11 @@ namespace
         int optEnemyPool = 0;
         // Random outfits (Lara_Andrea/Lara_Joby/Lara_Rich) per section.
         bool optOutfits = false;
+        bool optOutfitsTr3 = false;     // guest outfits from Tomb Raider 3
+        // The wardrobe (#122): which outfits the roll may draw. EMPTY means
+        // everything - so a config from before the wardrobe behaves as it did.
+        std::vector<std::string> outfitPool;
+        bool wardrobeOpen = false;
         // The full weapon set in every level is STANDARD (user decision, no
         // checkbox): opt.allWeapons is hard-set to true on every run. Hence
         // no seed bit for it either - a constant distinguishes no games.
@@ -472,6 +477,7 @@ namespace
             if (optEnemyPool == 1)   flags |= 8;    // cross mix
             if (optEnemySwap)        flags |= 16;
             if (optOutfits)          flags |= 32;
+            if (optOutfitsTr3)       flags |= 128;
             if (optEnemyPool == 2)   flags |= 64;   // allsanity
             // Bit 64 was briefly "all weapons everywhere" - since those are
             // standard, it now carries allsanity.
@@ -490,6 +496,18 @@ namespace
                 h ^= (flags >> (i * 8)) & 0xFF;
                 h *= 0x100000001B3ull;
             }
+
+            // The wardrobe belongs in the seed just as the checkboxes do: the
+            // same seed with only the catsuit selected is not the same game as
+            // with everything. The list is always built in the order the
+            // outfits are defined, so the hash does not depend on clicking
+            // order.
+            for (size_t i = 0; i < outfitPool.size(); ++i)
+                for (size_t k = 0; k < outfitPool[i].size(); ++k)
+                {
+                    h ^= static_cast<unsigned char>(outfitPool[i][k]);
+                    h *= 0x100000001B3ull;
+                }
             return h;
         }
 
@@ -830,6 +848,8 @@ static std::wstring cacheDir(const App& a)
         opt.tr3Dir     = a.cfg.tr3Dir;
         opt.tr3GoldDir = a.cfg.tr3GoldDir;
         opt.randomOutfits = a.optOutfits;
+        opt.tr3Outfits    = a.optOutfitsTr3;
+        opt.outfitPool    = a.outfitPool;
         opt.allWeapons = true;              // standard, see the App comment
         // Item abundance: the GUI's three tiers as a count. Free placement
         // spots and the item limit cap them anyway.
@@ -1110,7 +1130,9 @@ static std::wstring cacheDir(const App& a)
         std::fprintf(f, "  Item amount:        %s\r\n",
                      a.optItemAmount == 0 ? "vanilla" : a.optItemAmount == 1 ? "more" : "a lot more");
         std::fprintf(f, "  Keys/puzzles:       %s\r\n", a.optKeyItems ? "shuffled" : "off");
-        std::fprintf(f, "  Outfits:            %s\r\n", a.optOutfits ? "shuffled" : "off");
+        std::fprintf(f, "  Outfits:            %s%s\r\n",
+                     a.optOutfits ? "shuffled" : "off",
+                     (a.optOutfits && a.optOutfitsTr3) ? " (with Tomb Raider 3)" : "");
         std::fprintf(f, "  Extra enemies:      %s\r\n",
                      a.optEnemies ? (std::to_string(a.optEnemyCount) + " per level").c_str() : "off");
         std::fprintf(f, "  Enemy swap:         %s\r\n", a.optEnemySwap ? "on" : "off");
@@ -1977,19 +1999,31 @@ static void drawUi(App& a, HWND hwnd)
               "animations. joby4 keeps the diving suit; the andy levels always "
               "get an adult Lara (young Lara cannot carry weapons).");
 
-    // Placeholders: classic outfits as additional pool choices.
+    // TR3 outfits are real (#122). They need the player's own Tomb Raider 3
+    // installation - no game data of ours travels, the model is fetched at
+    // runtime, exactly as with the four animals.
+    const bool tr3Ready = !tr3Folder(a).empty();
+    ImGui::BeginDisabled(!a.optOutfits || !tr3Ready);
+    ImGui::Checkbox(T("TR3 outfits"), &a.optOutfitsTr3);
+    ImGui::EndDisabled();
+    hoverHelp(tr3Ready
+        ? "Puts Lara's outfits from Tomb Raider 3 into the pool. Only the body "
+          "travels - head, braid, holsters and the speech heads stay the "
+          "level's own, which is why they keep working. The model is read from "
+          "your own Tomb Raider 3 at runtime; nothing of it is shipped here."
+        : "Needs your Tomb Raider 3 installation. Enter its folder under "
+          "Folders - the model is read from there at runtime, we ship no game "
+          "data.");
+
+    // Still placeholders: TR1 and TR2 would need a donor level each, and
+    // those games' Lara is built differently again.
     ImGui::BeginDisabled(true);
     ImGui::Checkbox(T("TR1 outfit"), &a.phOutfitTr1);
     hoverHelp("Coming later: the classic TR1 outfit as an additional choice in "
-              "the outfit pool. Needs a matching TR5 model - we never ship "
-              "other games' data, so the model has to be built from scratch or "
-              "contributed by the player.");
+              "the outfit pool.");
     ImGui::Checkbox(T("TR2 outfits"), &a.phOutfitTr2);
     hoverHelp("Coming later: the TR2 outfits (bomber jacket, wetsuit and more) "
-              "as additional pool choices - same requirement as TR1.");
-    ImGui::Checkbox(T("TR3 outfits"), &a.phOutfitTr3);
-    hoverHelp("Coming later: the TR3 outfits (jungle, Antarctica and more) "
-              "as additional pool choices - same requirement as TR1.");
+              "as additional pool choices.");
     ImGui::EndDisabled();
     closeBlock();
 
@@ -2467,6 +2501,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.optEnemyPool    = app.cfg.enemyPool;
     app.optEnemiesOff   = app.cfg.enemiesDisabled;
     app.optOutfits      = app.cfg.optOutfits;
+    app.optOutfitsTr3   = app.cfg.optOutfitsTr3;
+    app.outfitPool      = app.cfg.outfitPool;
     app.optItemAmount   = app.cfg.itemAmount;
     app.optSecrets      = app.cfg.secrets;
     app.secretAuthor     = app.cfg.secretAuthor;
@@ -2523,6 +2559,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.enemyPool       = app.optEnemyPool;
         app.cfg.enemiesDisabled = app.optEnemiesOff;
         app.cfg.optOutfits      = app.optOutfits;
+        app.cfg.optOutfitsTr3   = app.optOutfitsTr3;
+        app.cfg.outfitPool      = app.outfitPool;
         app.cfg.itemAmount      = app.optItemAmount;
         app.cfg.secrets         = app.optSecrets;
         app.cfg.secretAuthor     = app.secretAuthor;
@@ -2656,6 +2694,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.enemyPool       != app.optEnemyPool ||
                  app.cfg.enemiesDisabled != app.optEnemiesOff ||
                  app.cfg.optOutfits      != app.optOutfits ||
+                 app.cfg.optOutfitsTr3   != app.optOutfitsTr3 ||
+                 app.cfg.outfitPool      != app.outfitPool ||
                  app.cfg.itemAmount      != app.optItemAmount ||
                  app.cfg.secrets         != app.optSecrets ||
                  app.cfg.optMusicSwitch     != app.phMusicSwitch ||

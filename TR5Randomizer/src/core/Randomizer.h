@@ -542,6 +542,21 @@ struct RandoOptions
     // outfit is the young Lara.
     bool randomOutfits = false;
 
+    // Which outfits the roll may draw from. EMPTY means everything that is
+    // available - that is the default, and it is what every config written
+    // before the wardrobe existed says.
+    //
+    // Ids: "andrea", "joby", "rich" for the three vanilla ones, plus the ids
+    // from Tr3Source::outfits() for the imported ones. Names rather than
+    // indices, so a new outfit appearing in the middle of the list cannot
+    // silently shift what an existing config had selected.
+    std::vector<std::string> outfitPool;
+
+    // Guest outfits from Tomb Raider 3 may be drawn at all. Separate from the
+    // pool because it also decides whether the user's TR3 installation is
+    // read during a run.
+    bool tr3Outfits = false;
+
     // Every level gets the full weapon set (pistols, Uzi, shotgun, Desert
     // Eagle, HK including ammo and inventory slots). The donor rules come
     // from the weapon work and are built and checked in all 13 levels

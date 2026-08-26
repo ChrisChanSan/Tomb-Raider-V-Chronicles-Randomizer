@@ -17,6 +17,7 @@
  */
 #include "Randomizer.h"
 #include "LevelChains.h"
+#include "Tr3Source.h"
 
 #include <algorithm>
 #include <cctype>
@@ -3000,12 +3001,56 @@ bool Rando::run(const RandoInput& in,
         else if (lowerName.rfind("rich", 0) == 0)  own = 2;
 
         static const char* kDonors[3] = { "Andrea1", "joby2", "rich2" };
+        static const char* kVanillaId[3] = { "andrea", "joby", "rich" };
+
+        // The wardrobe, resolved once. Empty means everything - see
+        // Options::outfitPool.
+        auto allowed = [&](const char* id) -> bool
+        {
+            if (opt.outfitPool.empty()) return true;
+            for (size_t k = 0; k < opt.outfitPool.size(); ++k)
+                if (opt.outfitPool[k] == id) return true;
+            return false;
+        };
+
+        // Candidates: the three vanilla outfits, plus every guest outfit if
+        // those are switched on. A vanilla candidate carries its INDEX,
+        // because the donor level and the LaraType byte hang on it; a guest
+        // carries only its id - everything else about it stands in
+        // Tr3Source::outfits() and the patch path reads it from there.
+        struct Cand { int vanilla; std::string id; };
+        std::vector<Cand> cand;
+        for (int i = 0; i < 3; ++i)
+            if (allowed(kVanillaId[i])) { Cand c; c.vanilla = i; c.id = kVanillaId[i]; cand.push_back(c); }
+        if (opt.tr3Outfits)
+        {
+            const std::vector<Tr3Source::OutfitSource> guests = Tr3Source::outfits();
+            for (size_t k = 0; k < guests.size(); ++k)
+                if (allowed(guests[k].id))
+                { Cand c; c.vanilla = -1; c.id = guests[k].id; cand.push_back(c); }
+        }
 
         if (lowerName == "joby4")
             report.notes.push_back("outfit: joby4 keeps the diving suit (stays vanilla).");
+        else if (cand.empty())
+            report.notes.push_back("outfit: nothing chosen in the wardrobe - every level keeps its own.");
         else
         {
-            const int choice = static_cast<int>(rng.below(3));
+            const Cand picked = cand[static_cast<size_t>(rng.below(cand.size()))];
+
+            // A guest outfit: only the skin travels, and even there the head
+            // stays the level's own - so no LaraType byte, no holsters, no
+            // speech heads. All of that keeps working untouched.
+            if (picked.vanilla < 0)
+            {
+                outfit.set("tr3", JsonValue::makeString(picked.id));
+                outfitSet = true;
+                report.notes.push_back(fmt("outfit: %s gets the guest outfit %s.",
+                                           in.level.c_str(), picked.id.c_str()));
+            }
+            else
+            {
+            const int choice = picked.vanilla;
             if (choice == own)
             {
                 report.notes.push_back(fmt("outfit: %s keeps its own.", in.level.c_str()));
@@ -3048,6 +3093,7 @@ bool Rando::run(const RandoInput& in,
                 outfitSet = true;
                 report.notes.push_back(fmt("outfit: %s gets the Lara from %s.",
                                            in.level.c_str(), kDonors[choice]));
+            }
             }
         }
     }

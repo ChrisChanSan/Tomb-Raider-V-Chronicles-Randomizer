@@ -106,6 +106,53 @@ namespace Tr3Source
                      std::vector<uint8_t>& package,
                      std::string& error);
 
+    // An outfit from Tomb Raider 1-3, fully described (#122).
+    //
+    // Same idea as DinoSource below: ONE place that knows everything about a
+    // donor, so no detail can rot in a call line. Every number here was
+    // measured, not guessed - how, stands with the field.
+    struct OutfitSource
+    {
+        const char* id;          // stable key for config, patch and cache
+        const char* name;        // what the user reads
+        const char* source;      // "tr3" or "tr3gold": which installation
+        const char* file;        // level name within it
+        int         object;      // NOT 0 - in TR1-3 object 0 is a placeholder.
+                                 // The real model is "Lara true appearance".
+
+        // Brings TR3's flat skin onto TR5's 5 bit level. The two tones look
+        // identical as numbers and are not: 224 falls on level 28 and comes
+        // back as 231, TR5's own arm sits on 27 and comes back as 222. That
+        // one step is a visible seam wherever imported skin meets the head,
+        // which we keep from the target level.
+        std::vector<Recolor> recolors;
+
+        // The TR4/TR5 environment map on every textured face. 0x0042 is what
+        // TR5's own catsuit wears in rich1, measured there.
+        int shinyWord;
+
+        // Seams of TR5's joint shell that draw nothing for this outfit.
+        // Numbering as in laraskin.cpp's SkinJoints; the mesh is seam+1.
+        std::vector<int> dropSeams;
+
+        // Seams painted in one flat colour instead of wearing TR5's own
+        // texture, because that texture belongs to a body that is no longer
+        // there.
+        struct SeamColor { int seam, r, g, b; };
+        std::vector<SeamColor> seamColors;
+    };
+
+    // Every outfit we can fetch. The order is the order the user sees.
+    std::vector<OutfitSource> outfits();
+
+    // Like fetchCached below, for an outfit: no sounds, and the treatment
+    // from the OutfitSource is applied on the way.
+    bool fetchOutfitCached(const OutfitSource& o,
+                           const std::wstring& tr3Dir, const std::wstring& tr3GoldDir,
+                           const std::wstring& cacheDir,
+                           std::vector<uint8_t>& model,
+                           std::string& error);
+
     // A guest from Tomb Raider 3, fully described (#92).
     //
     // This is the ONLY truth about the four dinosaurs - randomizer and patch

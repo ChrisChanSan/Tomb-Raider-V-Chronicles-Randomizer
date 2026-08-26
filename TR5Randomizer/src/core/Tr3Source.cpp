@@ -1071,6 +1071,46 @@ std::wstring Tr3Source::sfxPath(const DinoSource&,
     return tr3Dir + L"\\MAIN.SFX";
 }
 
+std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
+{
+    std::vector<OutfitSource> v;
+
+    // Tomb Raider 3, London rooftops. Lara's standard outfit of that game.
+    //
+    // dropSeams: the user judged these five in game. Waist (6) wore a grey
+    // slab, the two ankles (2, 5) sat in the boot, the two shoulders (7, 10)
+    // did not fit. TR1-3 segments overlap on their own, so a missing seam
+    // there costs less than a wrong one.
+    //
+    // seamColors: hips and knees only. Elbows, wrists and neck keep TR5's
+    // own texture - once the skin sits on the right 5 bit level they match
+    // by themselves, and a painted patch would only trade a shaded seam for
+    // a flat one.
+    OutfitSource roofs;
+    roofs.id        = "tr3_london";
+    roofs.name      = "London (TR3)";
+    roofs.source    = "tr3";
+    roofs.file      = "ROOFS.TR2";
+    roofs.object    = 315;
+    roofs.shinyWord = 0x0042;
+    { Recolor rc; rc.sr = 224; rc.sg = 160; rc.sb = 96;
+                  rc.dr = 222; rc.dg = 165; rc.db = 99; roofs.recolors.push_back(rc); }
+    roofs.dropSeams.push_back(6);
+    roofs.dropSeams.push_back(2);
+    roofs.dropSeams.push_back(5);
+    roofs.dropSeams.push_back(7);
+    roofs.dropSeams.push_back(10);
+    for (int seam : { 0, 3, 1, 4 })
+    {
+        OutfitSource::SeamColor sc;
+        sc.seam = seam; sc.r = 48; sc.g = 48; sc.b = 40;
+        roofs.seamColors.push_back(sc);
+    }
+    v.push_back(roofs);
+
+    return v;
+}
+
 std::wstring Tr3Source::levelPath(const DinoSource& d,
                                   const std::wstring& tr3Dir, const std::wstring& tr3GoldDir)
 {
@@ -1085,7 +1125,12 @@ std::wstring Tr3Source::levelPath(const DinoSource& d,
 //
 // The same walker as everywhere: mesh header 10 bytes, then the vertex
 // word; 0 normals means NORMALS. Bit 15 of the texture word is a flag and
-// stays - it decides whether AdjustUVs runs the half-texel correction.
+// stays.
+//
+// (What it is NOT: it does not decide whether AdjustUV runs the half-texel
+// correction. That correction runs for every texinfo, always. Which WAY it
+// pushes is what the texinfo's own fields decide - see cornerOrder above.
+// This comment claimed otherwise for a long time.)
 //----------------------------------------------------------------------------
 int Tr3Source::remapTextures(std::vector<uint8_t>& package, const std::map<int,int>& mapping)
 {
@@ -1174,6 +1219,73 @@ namespace
         for (const char* p = part; *p; ++p) w.push_back(wchar_t((unsigned char)*p));
         return w + L".bin";
     }
+}
+
+bool Tr3Source::fetchOutfitCached(const OutfitSource& o,
+                                  const std::wstring& tr3Dir, const std::wstring& tr3GoldDir,
+                                  const std::wstring& cacheDir,
+                                  std::vector<uint8_t>& model, std::string& error)
+{
+    const std::wstring& base = (std::strcmp(o.source, "tr3gold") == 0) ? tr3GoldDir : tr3Dir;
+    std::wstring lvlPath = base + L"\\";
+    for (const char* p = o.file; *p; ++p) lvlPath.push_back(wchar_t((unsigned char)*p));
+
+    // The stamp carries the converter version for the same reason as with the
+    // guests - and this outfit's own TREATMENT as well. Change a skin tone or
+    // the shine here and the donor level has still not moved by a byte; only
+    // because the treatment is in the stamp does the cached package go.
+    //
+    // Only what lands IN the package belongs here. The dropped and painted
+    // seams are done at install time on the target level, so they are none of
+    // the cache's business.
+    const std::string src = sourceStamp(lvlPath);
+    std::string stamp;
+    if (!src.empty())
+    {
+        stamp = "conv3|" + src;
+        stamp += "|shiny" + std::to_string(o.shinyWord);
+        for (size_t k = 0; k < o.recolors.size(); ++k)
+        {
+            const Recolor& c = o.recolors[k];
+            stamp += "|rc" + std::to_string(c.sr) + "," + std::to_string(c.sg) + "," +
+                     std::to_string(c.sb) + "=" + std::to_string(c.dr) + "," +
+                     std::to_string(c.dg) + "," + std::to_string(c.db);
+        }
+    }
+
+    const std::wstring mFile = cacheName(cacheDir, o.id, "modell");
+    const std::wstring nFile = cacheName(cacheDir, o.id, "kennung");
+
+    if (!cacheDir.empty() && !stamp.empty())
+    {
+        std::vector<uint8_t> old;
+        if (readFile(nFile, old))
+        {
+            const std::string was(old.begin(), old.end());
+            if (was == stamp && readFile(mFile, model))
+            {
+                std::printf("  %s: from the cache\n", o.name);
+                return true;
+            }
+        }
+    }
+
+    model.clear();
+    Options opt;
+    opt.shinyWord = o.shinyWord;
+    opt.recolors  = o.recolors;
+    if (!fetchMoveable(lvlPath, o.object, model, error, &opt))
+    { error = std::string(o.name) + ": " + error; return false; }
+
+    // Storing stays optional, exactly as with the guests: a cache must never
+    // be the reason something does not work.
+    if (!cacheDir.empty() && !stamp.empty())
+    {
+        _wmkdir(cacheDir.c_str());
+        writeFile(mFile, model);
+        writeFile(nFile, std::vector<uint8_t>(stamp.begin(), stamp.end()));
+    }
+    return true;
 }
 
 bool Tr3Source::fetchCached(const DinoSource& d,

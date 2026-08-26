@@ -85,6 +85,22 @@ void Config::load()
             }
         }
         else if (key == "outfits")         optOutfits = (val == "1");
+        else if (key == "outfitsTr3")      optOutfitsTr3 = (val == "1");
+        else if (key == "outfitPool")
+        {
+            // Comma separated ids. An unknown id is kept rather than dropped:
+            // it may belong to an outfit that is switched off right now, and
+            // silently forgetting the user's choice is worse than carrying a
+            // name nobody reads.
+            outfitPool.clear();
+            std::string cur;
+            for (size_t i = 0; i <= val.size(); ++i)
+            {
+                if (i == val.size() || val[i] == ',')
+                { if (!cur.empty()) outfitPool.push_back(cur); cur.clear(); }
+                else if (val[i] != ' ') cur.push_back(val[i]);
+            }
+        }
         else if (key == "itemAmount")       itemAmount = std::atoi(val.c_str());
         else if (key == "secrets")         secrets = std::atoi(val.c_str());
         else if (key == "secretAuthor")     secretAuthor = val;
@@ -151,6 +167,14 @@ bool Config::save() const
     }
     std::fprintf(f, "\n");
     std::fprintf(f, "outfits=%d\n", optOutfits ? 1 : 0);
+    std::fprintf(f, "outfitsTr3=%d\n", optOutfitsTr3 ? 1 : 0);
+    if (!outfitPool.empty())
+    {
+        std::string joined;
+        for (size_t i = 0; i < outfitPool.size(); ++i)
+        { if (i) joined += ","; joined += outfitPool[i]; }
+        std::fprintf(f, "outfitPool=%s\n", joined.c_str());
+    }
     std::fprintf(f, "itemAmount=%d\n", itemAmount);
     std::fprintf(f, "secrets=%d\n", secrets);
     // Was read but never written once - the author choice used to be lost

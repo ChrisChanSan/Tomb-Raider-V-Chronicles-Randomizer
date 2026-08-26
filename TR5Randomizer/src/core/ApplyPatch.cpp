@@ -311,6 +311,78 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
+    // --- An outfit from Tomb Raider 1-3 (#122) -----------------------------
+    //
+    // Beside the vanilla path above this one is small, and deliberately so:
+    // ONLY the skin (slot 8) is replaced, and even there the HEAD stays the
+    // level's own.
+    //
+    // That is not tidiness, it is necessary. TR5 rewrites
+    // lara.mesh_ptrs[LM_HEAD] at RUNTIME - the scream head in
+    // larafire.cpp:405, the speech heads out of the cutscene pak - so a
+    // foreign head pops out mid-game the moment Lara screams. And the braid
+    // takes its anchor point AND its collision radius from the bounding
+    // sphere of whatever mesh sits there (hair.cpp:245). Keeping the head
+    // keeps six heads and the braid right by itself, and joints, holsters
+    // and speech heads never have to be touched at all.
+    //
+    // The seams of the joint shell are the one thing that does need saying,
+    // because TR5's joints were built for TR5's body. Which ones draw
+    // nothing and which get a flat colour stands in the OutfitSource - it
+    // was judged in game, outfit by outfit.
+    if (outfit.has("tr3"))
+    {
+        const int LARA_SKIN = 8, LARA_SKIN_JOINTS = 9, LM_HEAD = 14;
+
+        const std::string id = outfit["tr3"].asString();
+        static const std::vector<Tr3Source::OutfitSource> all = Tr3Source::outfits();
+        const Tr3Source::OutfitSource* o = 0;
+        for (size_t k = 0; k < all.size(); ++k) if (id == all[k].id) { o = &all[k]; break; }
+        if (!o) { error = "no outfit known by the name " + id; return false; }
+
+        std::vector<uint8_t> model;
+        std::string f;
+        if (!Tr3Source::fetchOutfitCached(*o, tr3Dir, tr3GoldDir, cacheDir, model, f))
+        { error = f; return false; }
+
+        // APPEND textures, never shift - the texture page rule holds here as
+        // it does for the guests.
+        std::map<int,int> texMap;
+        if (!level.addTexturesFromTr3(model, texMap, f))
+        { error = std::string(o->name) + " (textures): " + f; return false; }
+        if (Tr3Source::remapTextures(model, texMap) < 0)
+        { error = std::string(o->name) + ": faces not readable"; return false; }
+
+        const std::vector<int> keep(1, LM_HEAD);
+        if (!level.addMoveableFromTr3(model, LARA_SKIN, -1, f, &keep))
+        { error = std::string(o->name) + " (model): " + f; return false; }
+
+        // Seam n sits in mesh n+1 of the joint shell (laraskin.cpp:
+        // jointMeshNum = i + 1). A seam that cannot be treated is a warning,
+        // not an abort: the outfit is already in and looks right, one seam
+        // wearing a foreign texture is not worth throwing the level away.
+        for (size_t k = 0; k < o->dropSeams.size(); ++k)
+            if (!level.clearMeshFaces(LARA_SKIN_JOINTS, o->dropSeams[k] + 1, f))
+                report.warnings.push_back("outfit: seam " + std::to_string(o->dropSeams[k]) +
+                                          " not dropped - " + f);
+
+        for (size_t k = 0; k < o->seamColors.size(); ++k)
+        {
+            const Tr3Source::OutfitSource::SeamColor& sc = o->seamColors[k];
+            int used = 0, gr = 0, gg = 0, gb = 0;
+            if (!level.paintMeshFlat(LARA_SKIN_JOINTS, sc.seam + 1, sc.r, sc.g, sc.b,
+                                     used, gr, gg, gb, f))
+                report.warnings.push_back("outfit: seam " + std::to_string(sc.seam) +
+                                          " not painted - " + f);
+        }
+
+        // The LaraType byte is deliberately NOT touched. It steers the
+        // braid's special handling, and the braid hangs on the head - which
+        // is the level's own. Whatever was right before is still right.
+        report.outfitFrom = o->name;
+        report.warnings.push_back(std::string("outfit fetched from Tomb Raider 3: ") + o->name);
+    }
+
     // Retrofit holsters where the outfit brings none. The catsuit donor
     // rich2 does not have slots 13-16 (its draw path never needed them);
     // since the engine draws them on the catsuit too, they should exist

@@ -307,22 +307,29 @@ static const std::unordered_map<std::string, const char*>& table()
           "8/9/10) samt Outfit-Byte - nie Slot 0, der traegt die Animationen. "
           "joby4 behaelt den Taucheranzug; die andy-Level bekommen immer eine "
           "erwachsene Lara (Kind-Lara kann keine Waffen tragen)." },
+        { "Puts Lara's outfits from Tomb Raider 3 into the pool. Only the body "
+          "travels - head, braid, holsters and the speech heads stay the "
+          "level's own, which is why they keep working. The model is read from "
+          "your own Tomb Raider 3 at runtime; nothing of it is shipped here.",
+          "Nimmt Laras Outfits aus Tomb Raider 3 in den Pool. Uebertragen wird "
+          "nur der Koerper - Kopf, Zopf, Holster und die Sprechkoepfe bleiben "
+          "die des Levels, deshalb funktionieren sie weiter. Das Modell wird "
+          "zur Laufzeit aus deinem eigenen Tomb Raider 3 gelesen; hier ist "
+          "nichts davon mit dabei." },
+        { "Needs your Tomb Raider 3 installation. Enter its folder under "
+          "Folders - the model is read from there at runtime, we ship no game "
+          "data.",
+          "Braucht deine Tomb-Raider-3-Installation. Trage ihren Ordner unter "
+          "Ordner ein - das Modell wird zur Laufzeit von dort gelesen, "
+          "Spieldaten liefern wir keine mit." },
         { "Coming later: the classic TR1 outfit as an additional choice in "
-          "the outfit pool. Needs a matching TR5 model - we never ship "
-          "other games' data, so the model has to be built from scratch or "
-          "contributed by the player.",
+          "the outfit pool.",
           "Kommt noch: das klassische TR1-Outfit als zusaetzliche Wahl im "
-          "Outfit-Pool. Braucht ein passendes TR5-Modell - Spieldaten "
-          "anderer Spiele liefern wir nie mit, das Modell muss also "
-          "eigens gebaut oder vom Spieler beigesteuert werden." },
+          "Outfit-Pool." },
         { "Coming later: the TR2 outfits (bomber jacket, wetsuit and more) "
-          "as additional pool choices - same requirement as TR1.",
+          "as additional pool choices.",
           "Kommt noch: die TR2-Outfits (u.a. Bomberjacke, Wetsuit) als "
-          "zusaetzliche Poolauswahl - gleiche Voraussetzung wie TR1." },
-        { "Coming later: the TR3 outfits (jungle, Antarctica and more) "
-          "as additional pool choices - same requirement as TR1.",
-          "Kommt noch: die TR3-Outfits (u.a. Dschungel, Antarktis) als "
-          "zusaetzliche Poolauswahl - gleiche Voraussetzung wie TR1." },
+          "zusaetzliche Poolauswahl." },
 
         // --- Block 5: enemies --------------------------------------------
         { "5. Enemies", "5. Gegner" },

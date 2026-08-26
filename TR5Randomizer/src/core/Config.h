@@ -18,6 +18,7 @@
 #pragma once
 #include <set>
 #include <string>
+#include <vector>
 
 //----------------------------------------------------------------------------
 // Settings that persist between two starts.
@@ -66,6 +67,12 @@ struct Config
     // a type added later is not silently dropped by old files.
     std::set<int> enemiesDisabled;
     bool optOutfits      = false;
+    bool optOutfitsTr3   = false;   // guest outfits from Tomb Raider 3 in the pool
+
+    // The wardrobe: which outfits the roll may draw. EMPTY means everything,
+    // which is what every config written before the wardrobe existed says -
+    // so an old file keeps behaving exactly as it did.
+    std::vector<std::string> outfitPool;
     int  itemAmount       = 0;     // 0 vanilla, 1 more, 2 a lot more (#36)
     int  secrets         = 0;     // secrets (#53): 0 vanilla, 1 pool, 2/3 list
     std::string secretAuthor;      // chosen list author (kinds 2/3)

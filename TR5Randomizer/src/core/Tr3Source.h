@@ -54,10 +54,35 @@ namespace Tr3Source
     // TR5-ready. Verified along the way: every mesh must end byte-exactly,
     // no frame pointer and no jump target may leave its own slice. If any
     // check fails, nothing is delivered.
+    // Optional treatment of an imported model. Both were needed for a Lara
+    // outfit and mean nothing to the animals, so both default to off.
+    //
+    // recolors: a flat colour of TR3's is written to the page as a different
+    // one. Source and target in full, so nothing has to be guessed about
+    // which of the flat colours is meant. Wanted because TR3's skin and
+    // TR5's differ by ONE 5 bit step in red - 224 falls on level 28 and
+    // returns as 231, TR5 sits on 27 and returns as 222 - and that step is
+    // the visible seam between an imported arm and TR5's own head.
+    //
+    // shinyWord: the effects word behind every TEXTURED face. Bit 1 switches
+    // the TR4/TR5 environment map on, bits 2..6 are its strength
+    // (specific/output.cpp:1645ff). 0x0042 is what TR5's own catsuit wears in
+    // rich1. Textured only, and that is exactly right: a TR1-3 model wears
+    // its outfit as textures and its SKIN as flat colours, so the suit shines
+    // and the skin stays matt without naming a single face.
+    struct Recolor { int sr, sg, sb, dr, dg, db; };
+    struct Options
+    {
+        int shinyWord;
+        std::vector<Recolor> recolors;
+        Options() : shinyWord(0) {}
+    };
+
     bool fetchMoveable(const std::wstring& levelPath,
                       int objectId,
                       std::vector<uint8_t>& package,
-                      std::string& error);
+                      std::string& error,
+                      const Options* opt = 0);
 
     // One sound per entry, with explicitly given wave numbers from MAIN.SFX.
     // Several waves are variants of the same sound.

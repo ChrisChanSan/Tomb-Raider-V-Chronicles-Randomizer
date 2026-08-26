@@ -68,8 +68,11 @@ namespace
 }
 
 bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
-                             std::vector<uint8_t>& package, std::string& error)
+                             std::vector<uint8_t>& package, std::string& error,
+                             const Options* opt)
 {
+    static const Options none;
+    if (!opt) opt = &none;
     error.clear();
     package.clear();
     const int wanted = objectId;
@@ -201,8 +204,10 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
     // --- Rewrite the meshes -------------------------------------------------
     std::vector<std::vector<uint8_t>> meshes;
     int totalQuads = 0, totalTris = 0, totalColored = 0, maxVerts = 0;
-    int firstTex = -1;                        // first texture the model itself uses
-    struct ColorSpot { std::vector<uint8_t>* buffer; size_t at; };
+    // Colored faces are collected across ALL meshes and resolved once at the
+    // end, because the colour they ask for only becomes a texture entry
+    // after the whole model is known.
+    struct ColorSpot { size_t meshNo; size_t at; uint16_t colorIdx; };
     std::vector<ColorSpot> coloredSpots;
     for (uint16_t i = 0; i < z->numMeshes; ++i)
     {
@@ -229,14 +234,14 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
         for (int q = 0; q < nQ; ++q)
         {
             for (int w = 0; w < 5; ++w) { put16(quads, ru16(r.b, p)); p += 2; }
-            put16(quads, 0);                                        // effect word
+            put16(quads, uint16_t(opt->shinyWord));                 // effect word
             ++qc;
         }
         const int16_t nT = rs16(r.b, p); p += 2;
         for (int t = 0; t < nT; ++t)
         {
             for (int w = 0; w < 4; ++w) { put16(tris, ru16(r.b, p)); p += 2; }
-            put16(tris, 0);
+            put16(tris, uint16_t(opt->shinyWord));
             ++tc;
         }
         // Colored faces: TR5 does not know them. They are taken over
@@ -245,12 +250,13 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
         // it was a piece of Lara's leg, which then stuck under his jaw
         // (seen in game). Instead, the first texture the model itself uses
         // - that one is guaranteed to belong to it.
+        std::vector<std::pair<size_t, uint16_t> > quadSpots, triSpots;
         const int16_t nCQ = rs16(r.b, p); p += 2;
         for (int q = 0; q < nCQ; ++q)
         {
             for (int w = 0; w < 4; ++w) { put16(quads, ru16(r.b, p)); p += 2; }
-            p += 2;                                                 // discard color index
-            coloredSpots.push_back({ &quads, quads.size() });
+            const uint16_t colIdx = ru16(r.b, p); p += 2;
+            quadSpots.push_back(std::make_pair(quads.size(), colIdx));
             put16(quads, 0); put16(quads, 0);
             ++qc; ++totalColored;
         }
@@ -258,30 +264,23 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
         for (int t = 0; t < nCT; ++t)
         {
             for (int w = 0; w < 3; ++w) { put16(tris, ru16(r.b, p)); p += 2; }
-            p += 2;
-            coloredSpots.push_back({ &tris, tris.size() });
+            const uint16_t colIdx = ru16(r.b, p); p += 2;
+            triSpots.push_back(std::make_pair(tris.size(), colIdx));
             put16(tris, 0); put16(tris, 0);
             ++tc; ++totalColored;
         }
 
-        // Remember this mesh's first real texture and set the colored spots
-        // to it BEFORE the buffers go into the mesh.
-        if (firstTex < 0)
-        {
-            if (nQ > 0)      firstTex = ru16(quads, 8);
-            else if (nT > 0) firstTex = ru16(tris, 6);
-        }
-        for (const ColorSpot& fs : coloredSpots)
-            if (firstTex >= 0)
-            {
-                const uint16_t v = uint16_t(firstTex);
-                (*fs.buffer)[fs.at]     = uint8_t(v & 0xFF);
-                (*fs.buffer)[fs.at + 1] = uint8_t(v >> 8);
-            }
-        coloredSpots.clear();
+        put16(o, uint16_t(qc));
+        const size_t qBase = o.size();
+        o.insert(o.end(), quads.begin(), quads.end());
+        put16(o, uint16_t(tc));
+        const size_t tBase = o.size();
+        o.insert(o.end(), tris.begin(), tris.end());
 
-        put16(o, uint16_t(qc)); o.insert(o.end(), quads.begin(), quads.end());
-        put16(o, uint16_t(tc)); o.insert(o.end(), tris.begin(), tris.end());
+        for (size_t k = 0; k < quadSpots.size(); ++k)
+            coloredSpots.push_back({ meshes.size(), qBase + quadSpots[k].first, quadSpots[k].second });
+        for (size_t k = 0; k < triSpots.size(); ++k)
+            coloredSpots.push_back({ meshes.size(), tBase + triSpots[k].first, triSpots[k].second });
         totalQuads += qc; totalTris += tc;
         meshes.push_back(o);
     }
@@ -293,7 +292,9 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
     // entries and above all how many distinct TILES lie behind them - every
     // tile becomes a 256x256 page in the target.
     std::vector<int> texIdx;      // used TR3 object textures, in discovery order
+    std::vector<uint8_t> texIsTri;// 1 = the entry sits on triangles, 0 = on quads
     std::vector<int> tiles;       // the tiles behind them, in discovery order
+    std::vector<int> mixedUse;    // entries that serve both - split further down
     for (const std::vector<uint8_t>& m : meshes)
     {
         size_t p = 10;
@@ -306,9 +307,14 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
             const int16_t nn = rs16(m, p); p += 2;
             p += size_t(nv) * (nn >= 0 ? 6 : 2);
         }
-        auto note = [&](int t) {
-            for (int x : texIdx) if (x == t) return;
+        auto note = [&](int t, uint8_t tri) {
+            for (size_t x = 0; x < texIdx.size(); ++x) if (texIdx[x] == t)
+            {
+                if (texIsTri[x] != tri) mixedUse.push_back(t);
+                return;
+            }
             texIdx.push_back(t);
+            texIsTri.push_back(tri);
             if (t >= 0 && nObjTex && uint32_t(t) < nObjTex)
             {
                 const int k = ru16(r.b, objTexAt + size_t(t) * 20 + 2) & 0x7FFF;
@@ -317,14 +323,110 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
             }
         };
         const int16_t nq = rs16(m, p); p += 2;
-        for (int i = 0; i < nq; ++i, p += 12) note(ru16(m, p + 8) & 0x7FFF);
+        for (int i = 0; i < nq; ++i, p += 12) note(ru16(m, p + 8) & 0x7FFF, 0);
         const int16_t nt = rs16(m, p); p += 2;
-        for (int i = 0; i < nt; ++i, p += 10) note(ru16(m, p + 6) & 0x7FFF);
+        for (int i = 0; i < nt; ++i, p += 10) note(ru16(m, p + 6) & 0x7FFF, 1);
     }
     std::printf("  object textures: %zu distinct on %zu tiles (",
                 texIdx.size(), tiles.size());
     for (size_t i = 0; i < tiles.size(); ++i) std::printf("%s%d", i ? ", " : "", tiles[i]);
     std::printf(")\n");
+
+    // --- An entry that serves triangles AND quads gets a second one --------
+    //
+    // TR5 keeps ONE corner order per texture entry and its triangle and quad
+    // tables share no case, so one record cannot describe both. The quads
+    // keep the original, the triangles are sent to an alias. The installer
+    // maps a face by the number written in it, so a number invented here
+    // costs it nothing - 20000 is above every real TR3 index and below the
+    // flat colours at 30000.
+    const int TRI_ALIAS_BASE = 20000;
+    std::vector<int> aliasOf;
+    size_t firstAlias = texIdx.size();
+    if (!mixedUse.empty())
+    {
+        std::vector<int> shared;
+        for (size_t j = 0; j < mixedUse.size(); ++j)
+        {
+            const int t = mixedUse[j];
+            if (t < 0 || !nObjTex || uint32_t(t) >= nObjTex) continue;
+            bool had = false;
+            for (size_t x = 0; x < shared.size(); ++x) if (shared[x] == t) { had = true; break; }
+            if (!had) shared.push_back(t);
+        }
+
+        for (size_t mi = 0; mi < meshes.size(); ++mi)
+        {
+            std::vector<uint8_t>& m = meshes[mi];
+            size_t p = 10;
+            const int16_t vw = rs16(m, p); p += 2;
+            const int nv = vw & 0xFF;
+            if (nv == 0) p += (size_t((vw >> 8) & 0xFF) * 6 + 1) * 2;
+            else
+            {
+                p += size_t(nv) * 6;
+                const int16_t nn = rs16(m, p); p += 2;
+                p += size_t(nv) * (nn >= 0 ? 6 : 2);
+            }
+            const int16_t nq = rs16(m, p); p += 2;
+            p += size_t(nq) * 12;                       // the quads keep theirs
+            const int16_t nt = rs16(m, p); p += 2;
+            for (int i = 0; i < nt; ++i, p += 10)
+            {
+                const uint16_t w = ru16(m, p + 6);
+                const int t = w & 0x7FFF;
+                for (size_t k = 0; k < shared.size(); ++k) if (shared[k] == t)
+                {
+                    const uint16_t nw = uint16_t((w & 0x8000) | uint16_t(TRI_ALIAS_BASE + k));
+                    m[p + 6] = uint8_t(nw & 0xFF);
+                    m[p + 7] = uint8_t(nw >> 8);
+                    break;
+                }
+            }
+        }
+
+        firstAlias = texIdx.size();
+        for (size_t k = 0; k < shared.size(); ++k)
+        {
+            texIdx.push_back(TRI_ALIAS_BASE + int(k));
+            texIsTri.push_back(1);
+            aliasOf.push_back(shared[k]);
+        }
+        for (size_t j = 0; j < shared.size(); ++j)
+            for (size_t x = 0; x < firstAlias; ++x)
+                if (texIdx[x] == shared[j]) texIsTri[x] = 0;
+    }
+
+    // --- Every colored face gets its OWN flat colour -----------------------
+    //
+    // TR5 knows no colored faces. Giving them the model's first texture
+    // keeps the geometry closed but paints them with a picture; on a big
+    // surface that passes, on Lara's forearms - colored from end to end - it
+    // does not. One extra tile carries the colours as 16 by 16 blocks and one
+    // synthetic entry points at each, numbered from 30000.
+    //
+    // TR3 packs TWO palette indices into the colour word: the low byte
+    // indexes the 8 bit palette, the HIGH byte the 16 bit one at offset 772.
+    // Reading the low byte there returns almost only zeros.
+    const int FLAT_BASE = 30000;
+    std::vector<int> flatColors;
+    for (size_t k = 0; k < coloredSpots.size(); ++k)
+    {
+        const int ci = (coloredSpots[k].colorIdx >> 8) & 0xFF;
+        int slot = -1;
+        for (size_t q = 0; q < flatColors.size(); ++q) if (flatColors[q] == ci) { slot = int(q); break; }
+        if (slot < 0)
+        {
+            if (flatColors.size() >= 256) continue;      // one tile holds 256
+            slot = int(flatColors.size());
+            flatColors.push_back(ci);
+        }
+        const uint16_t v = uint16_t(FLAT_BASE + slot);
+        meshes[coloredSpots[k].meshNo][coloredSpots[k].at]     = uint8_t(v & 0xFF);
+        meshes[coloredSpots[k].meshNo][coloredSpots[k].at + 1] = uint8_t(v >> 8);
+    }
+    if (!flatColors.empty())
+        std::printf("  colored faces: %zu flat colours on their own page\n", flatColors.size());
 
     // --- Delimit the frame slice -------------------------------------------
     //
@@ -366,7 +468,7 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
     // --- Output -------------------------------------------------------------
     std::vector<uint8_t> out;
     out.push_back('T'); out.push_back('3'); out.push_back('5'); out.push_back('H');
-    put32(out, 2);                 // version 2: with texture part at the end
+    put32(out, 3);                 // version 3: texture part, with the corner order
     put32(out, uint32_t(wanted));
     put32(out, z->numMeshes);
     put32(out, animCount);
@@ -476,7 +578,7 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
     }
     out.insert(out.end(), r.b.begin() + cmdAt, r.b.begin() + cmdAt + size_t(nCmd) * 2);
 
-    // --- Texture part (package version 2) ----------------------------------
+    // --- Texture part (package version 3) ----------------------------------
     //
     // Appended so old packages stay readable: whoever reads only up to the
     // command block gets exactly the old format.
@@ -490,13 +592,91 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
     // The UVs stay PIXELS here. Only the installer shifts them 8 bits to
     // the left - TR5 stores them as 8.8 fixed point (file.cpp:1096).
     {
-        put32(out, uint32_t(texIdx.size()));
-        int written = 0;
-        for (int t : texIdx)
+        // Why cornerOrder exists.
+        //
+        // TR5 pulls every UV half a texel towards the middle of its own
+        // texture area while the level loads (AdjustUV, specific/file.cpp:198).
+        // Which direction that is per corner it does not work out - it reads
+        // it out of the texinfo: bit 15 of tpage picks the triangle table
+        // over the quad one, the low three bits of flag pick the corner order
+        // inside it.
+        //
+        // TR3 has no such field but it has the answer: next to every UV pixel
+        // stands a byte saying whether that corner is at the low or the high
+        // edge of its area - 1 and 255, NOT 0.
+        //
+        // Zero is not a neutral default, it means "corner 0 of a quad". Every
+        // imported triangle then had its third corner pushed OUTWARD, half a
+        // texel into the neighbouring texture: the thin bright line along
+        // every seam.
+        //
+        // Two bits per corner, bit 0 = u moves plus, bit 1 = v moves plus.
+        static const uint8_t TRI_SIGNS[8][3] = {
+            { 3, 2, 1 }, { 2, 0, 3 }, { 0, 1, 2 }, { 1, 3, 0 },
+            { 2, 3, 0 }, { 3, 1, 2 }, { 1, 0, 3 }, { 0, 2, 1 } };
+        static const uint8_t QUAD_SIGNS[2][4] = { { 3, 2, 0, 1 }, { 2, 3, 1, 0 } };
+
+        int orderNoMatch = 0, orderDisagree = 0, orderTris = 0;
+        auto cornerOrder = [&](size_t o, bool isTri) -> uint16_t
         {
-            if (t < 0 || uint32_t(t) >= nObjTex) { put16(out, uint16_t(t)); put16(out, 0); put16(out, 0);
-                                                   for (int k = 0; k < 8; ++k) out.push_back(0); continue; }
-            const size_t o = objTexAt + size_t(t) * 20;
+            const int n = isTri ? 3 : 4;
+            int px[4], py[4], cx[4], cy[4];
+            for (int v = 0; v < 4; ++v)
+            {
+                cx[v] = r.b[o + 4 + v * 4 + 0];      // 1 = low edge, 255 = high edge
+                px[v] = r.b[o + 4 + v * 4 + 1];
+                cy[v] = r.b[o + 4 + v * 4 + 2];
+                py[v] = r.b[o + 4 + v * 4 + 3];
+            }
+            int loU = px[0], hiU = px[0], loV = py[0], hiV = py[0];
+            for (int v = 1; v < n; ++v)
+            {
+                if (px[v] < loU) loU = px[v];
+                if (px[v] > hiU) hiU = px[v];
+                if (py[v] < loV) loV = py[v];
+                if (py[v] > hiV) hiV = py[v];
+            }
+
+            int want = 0;
+            for (int v = 0; v < n; ++v)
+            {
+                const bool uPlus = (cx[v] < 128);
+                const bool vPlus = (cy[v] < 128);
+                // Cross-check where the corners themselves say it plainly.
+                if (loU != hiU && (px[v] == loU || px[v] == hiU) && uPlus != (px[v] == loU)) ++orderDisagree;
+                if (loV != hiV && (py[v] == loV || py[v] == hiV) && vPlus != (py[v] == loV)) ++orderDisagree;
+                want |= ((uPlus ? 1 : 0) | (vPlus ? 2 : 0)) << (v * 2);
+            }
+
+            int type = -1;
+            if (isTri)
+            {
+                ++orderTris;
+                for (int c = 0; c < 8 && type < 0; ++c)
+                    if ((TRI_SIGNS[c][0] | (TRI_SIGNS[c][1] << 2) | (TRI_SIGNS[c][2] << 4)) == want) type = c;
+            }
+            else
+                for (int c = 0; c < 2 && type < 0; ++c)
+                    if ((QUAD_SIGNS[c][0] | (QUAD_SIGNS[c][1] << 2)
+                       | (QUAD_SIGNS[c][2] << 4) | (QUAD_SIGNS[c][3] << 6)) == want) type = c;
+
+            if (type < 0) { ++orderNoMatch; type = 0; }
+            return uint16_t((isTri ? 0x8000 : 0) | type);
+        };
+
+        put32(out, uint32_t(texIdx.size() + flatColors.size()));
+        int written = 0;
+        for (size_t ti = 0; ti < texIdx.size(); ++ti)
+        {
+            const int t = texIdx[ti];
+            // An alias keeps its own number but copies everything else from
+            // the entry it stands in for - only the corner order differs.
+            const int srcTex = (ti >= firstAlias) ? aliasOf[ti - firstAlias] : t;
+            if (srcTex < 0 || !nObjTex || uint32_t(srcTex) >= nObjTex)
+            { put16(out, uint16_t(t)); put16(out, 0); put16(out, 0);
+              for (int k = 0; k < 8; ++k) out.push_back(0);
+              put16(out, 0); continue; }
+            const size_t o = objTexAt + size_t(srcTex) * 20;
             const uint16_t attribute = ru16(r.b, o);
             const int tile = ru16(r.b, o + 2) & 0x7FFF;
 
@@ -511,10 +691,35 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
                 out.push_back(r.b[o + 4 + v * 4 + 1]);   // Xpixel
                 out.push_back(r.b[o + 4 + v * 4 + 3]);   // Ypixel
             }
+            put16(out, cornerOrder(o, texIsTri[ti] != 0));
             ++written;
         }
 
-        put32(out, uint32_t(tiles.size()));
+        // The flat colours as synthetic entries: same layout, numbers from
+        // FLAT_BASE, all of them on the extra tile appended below. Each block
+        // is inset by three pixels so a neighbour cannot bleed in.
+        for (size_t k = 0; k < flatColors.size(); ++k)
+        {
+            const int col = int(k) % 16, row = int(k) / 16;
+            const uint8_t x0 = uint8_t(col * 16 + 3), x1 = uint8_t(col * 16 + 12);
+            const uint8_t y0 = uint8_t(row * 16 + 3), y1 = uint8_t(row * 16 + 12);
+            put16(out, uint16_t(FLAT_BASE + k));
+            put16(out, 0);                                    // opaque
+            put16(out, uint16_t(tiles.size()));               // the extra tile
+            out.push_back(x0); out.push_back(y0);
+            out.push_back(x1); out.push_back(y0);
+            out.push_back(x1); out.push_back(y1);
+            out.push_back(x0); out.push_back(y1);
+            put16(out, 0);   // quad, top left first - inside a solid block
+                             // half a texel reaches nothing
+            ++written;
+        }
+
+        std::printf("  corner order: %d of %zu entries are triangles, %d without a pattern, "
+                    "%d corners where the edge byte and the corner disagree\n",
+                    orderTris, texIdx.size(), orderNoMatch, orderDisagree);
+
+        put32(out, uint32_t(tiles.size() + (flatColors.empty() ? 0 : 1)));
         for (int k : tiles)
         {
             if (k < 0 || uint32_t(k) >= nTex)
@@ -522,8 +727,45 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
             const size_t at = tex16At + size_t(k) * 131072;
             out.insert(out.end(), r.b.begin() + at, r.b.begin() + at + 131072);
         }
+        if (!flatColors.empty())
+        {
+            // One 256x256 ARGB1555 page, 16 by 16 blocks of 16 pixels. The
+            // palette's scale is read off its own maximum, not assumed -
+            // TR1's is 6 bit and guessing whether TR3 followed is needless.
+            int palMax = 0;
+            for (int q = 0; q < 256; ++q)
+                for (int c = 0; c < 3; ++c)
+                    if (r.b[772 + size_t(q) * 4 + size_t(c)] > palMax) palMax = r.b[772 + size_t(q) * 4 + size_t(c)];
+            const int sh = (palMax > 63) ? 3 : 1;
+
+            std::vector<uint16_t> page(256 * 256, 0x8000);    // opaque black
+            for (size_t n = 0; n < flatColors.size(); ++n)
+            {
+                const size_t e = 772 + size_t(flatColors[n]) * 4;
+                int cr = r.b[e], cg = r.b[e + 1], cb = r.b[e + 2];
+                for (size_t q = 0; q < opt->recolors.size(); ++q)
+                    if (opt->recolors[q].sr == cr && opt->recolors[q].sg == cg
+                     && opt->recolors[q].sb == cb)
+                    {
+                        cr = opt->recolors[q].dr;
+                        cg = opt->recolors[q].dg;
+                        cb = opt->recolors[q].db;
+                        break;
+                    }
+                const uint16_t v = uint16_t(0x8000
+                                 | ((cr >> sh) << 10)
+                                 | ((cg >> sh) << 5)
+                                 |  (cb >> sh));
+                const int col = int(n) % 16, row = int(n) / 16;
+                for (int y = 0; y < 16; ++y)
+                    for (int x = 0; x < 16; ++x)
+                        page[size_t(row * 16 + y) * 256 + size_t(col * 16 + x)] = v;
+            }
+            for (size_t n = 0; n < page.size(); ++n) put16(out, page[n]);
+        }
+
         std::printf("  texture part: %d entries, %zu tiles of 131072 bytes\n",
-                    written, tiles.size());
+                    written, tiles.size() + (flatColors.empty() ? 0 : 1));
     }
 
     // A file used to be written here. As a library we return the package -
@@ -943,9 +1185,15 @@ bool Tr3Source::fetchCached(const DinoSource& d,
     const std::wstring lvlPath = levelPath(d, tr3Dir, tr3GoldDir);
     const std::wstring sfx     = sfxPath(d, tr3Dir, tr3GoldDir);
 
-    // Expected stamp: both source files together. If one changes, the entry
-    // is void.
-    const std::string stamp = sourceStamp(lvlPath) + "|" + sourceStamp(sfx);
+    // Expected stamp: both source files together AND the converter's own
+    // version. If one of them changes, the entry is void.
+    //
+    // The converter version is not decoration. When this code started
+    // writing package version 3 (corner order and flat colour page), the two
+    // source files had not changed by a byte - so every machine with a warm
+    // cache would have gone on using the old packages and nothing would have
+    // improved. Whoever changes what a package LOOKS like raises this.
+    const std::string stamp = "conv3|" + sourceStamp(lvlPath) + "|" + sourceStamp(sfx);
 
     const std::wstring mFile = cacheName(cacheDir, d.name, "modell");
     const std::wstring kFile = cacheName(cacheDir, d.name, "sounds");

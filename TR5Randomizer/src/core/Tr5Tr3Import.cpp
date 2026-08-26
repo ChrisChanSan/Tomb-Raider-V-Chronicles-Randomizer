@@ -445,6 +445,13 @@ bool Tr5Level::meshTones(int targetSlot, int meshNo, std::vector<ToneCount>& out
     struct Bucket { long long r, g, b; int count; };
     std::map<uint32_t, Bucket> hist;
     int faceCount = 0, loTex = 0x7FFFFFFF, hiTex = -1;
+
+    // The effects word sits two bytes behind the texture word, on quads and
+    // on triangles alike (12 and 10 byte records, both ending tex, effects).
+    // Bit 0 draws additively, bit 1 switches the environment map on, bits
+    // 2..6 are its strength - specific/output.cpp:1645ff. Counted here so
+    // the shine of an existing model can be read off instead of guessed.
+    std::map<int, int> fxHist;
     if (!faceTextures(m_bytes, meshAt, meshEnd, [&](size_t texAt)
     {
         const int idx = g16(m_bytes, texAt) & 0x7FFF;
@@ -452,6 +459,7 @@ bool Tr5Level::meshTones(int targetSlot, int meshNo, std::vector<ToneCount>& out
         ++faceCount;
         if (idx < loTex) loTex = idx;
         if (idx > hiTex) hiTex = idx;
+        fxHist[g16(m_bytes, texAt + 2)]++;
         const size_t t = m_texinfos.dataAt + static_cast<size_t>(idx) * SZ_TEXINFO;
         const uint16_t tp = g16(m_bytes, t + 2);
         const int page = tp & 0x7FFF;
@@ -491,6 +499,12 @@ bool Tr5Level::meshTones(int targetSlot, int meshNo, std::vector<ToneCount>& out
 
     std::printf("    (mesh has %d textured faces, texinfos %d..%d, %d pages)\n",
                 faceCount, loTex, hiTex, int(nPages));
+    for (std::map<int, int>::const_iterator it = fxHist.begin(); it != fxHist.end(); ++it)
+        std::printf("    effects word 0x%04X on %d faces: %s%s strength %d\n",
+                    it->first, it->second,
+                    (it->first & 1) ? "additive " : "",
+                    (it->first & 2) ? "envmap" : "plain",
+                    (it->first & 0x7C) << 1);
 
     for (std::map<uint32_t, Bucket>::const_iterator it = hist.begin(); it != hist.end(); ++it)
     {

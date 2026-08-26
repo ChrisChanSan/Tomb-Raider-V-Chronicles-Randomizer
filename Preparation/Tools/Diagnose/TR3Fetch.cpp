@@ -80,6 +80,29 @@ int main(int argc, char** argv)
     if (argc <  4) { std::printf("usage: TR3Fetch <tr3level.TR2> <objectId> <target.bin> [-recolor r,g,b=r,g,b]\n"); return 2; }
     const int wanted = std::atoi(argv[2]);
 
+    // -shiny <strength>: the TR4/TR5 environment map, on every TEXTURED face
+    // of the model. The effects word behind each face carries it - bit 1
+    // switches it on, bits 2..6 are the strength, and the drawer multiplies
+    // by (word & 0x7C) << 1 before laying the environment texture over the
+    // face a second time (specific/output.cpp:1645ff).
+    //
+    // Textured is exactly the right set: a TR1-3 model wears its outfit as
+    // textures and its SKIN as flat colours, so the suit shines and the skin
+    // stays matt without naming a single face.
+    //
+    // Measured on rich1, where TR5's own catsuit lives: word 0x0042, that is
+    // strength 128. Same value here by default.
+    int shinyWord = 0;
+    for (int a = 4; a < argc; ++a)
+        if (std::strcmp(argv[a], "-shiny") == 0)
+        {
+            int strength = 128;
+            if (a + 1 < argc && argv[a + 1][0] != '-') strength = std::atoi(argv[++a]);
+            shinyWord = 2 | ((strength >> 1) & 0x7C);
+            std::printf("  shiny: effects word 0x%04X (strength %d) on every textured face\n",
+                        shinyWord, (shinyWord & 0x7C) << 1);
+        }
+
     Reader r;
     if (!r.load(argv[1])) { std::printf("file not readable: %s\n", argv[1]); return 2; }
 
@@ -252,14 +275,14 @@ int main(int argc, char** argv)
         for (int q = 0; q < nQ; ++q)
         {
             for (int w = 0; w < 5; ++w) { put16(quads, ru16(r.b, p)); p += 2; }
-            put16(quads, 0);                                        // effect word
+            put16(quads, uint16_t(shinyWord));                      // effect word
             ++qz;
         }
         const int16_t nT = rs16(r.b, p); p += 2;
         for (int t = 0; t < nT; ++t)
         {
             for (int w = 0; w < 4; ++w) { put16(tris, ru16(r.b, p)); p += 2; }
-            put16(tris, 0);
+            put16(tris, uint16_t(shinyWord));
             ++tz;
         }
         // Colored faces: TR5 does not know them. They are taken over as

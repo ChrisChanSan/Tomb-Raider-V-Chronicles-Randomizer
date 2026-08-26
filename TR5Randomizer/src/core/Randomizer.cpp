@@ -3000,6 +3000,9 @@ bool Rando::run(const RandoInput& in,
         else if (lowerName.rfind("joby", 0) == 0)  own = 1;
         else if (lowerName.rfind("rich", 0) == 0)  own = 2;
 
+        // The andy levels are the only ones whose own Lara is the YOUNG one.
+        const bool isYoungLara = lowerName.rfind("andy", 0) == 0;
+
         static const char* kDonors[3] = { "Andrea1", "joby2", "rich2" };
 
         // Candidates, out of the SAME list the wardrobe window shows. A
@@ -3046,10 +3049,35 @@ bool Rando::run(const RandoInput& in,
             // speech heads. All of that keeps working untouched.
             if (picked.vanilla < 0)
             {
+                // A guest outfit KEEPS the level's own head, and that is what
+                // makes it work everywhere - except in the andy levels, where
+                // the level's own Lara is the YOUNG one. An adult TR3 body
+                // then wears a child's head (seen in game).
+                //
+                // Handing over just a head would not help: the engine swaps in
+                // LARA_SCREAM and the speech heads at runtime, and in an andy
+                // level those are young too - the child would pop back the
+                // moment Lara screams. So the whole adult head entourage is
+                // fetched first, by the vanilla path that already knows how,
+                // and the guest body is laid over it afterwards. The patch
+                // path runs the two in that order by itself.
+                //
+                // Andrea1 as the donor, and not merely because it is the
+                // simplest: joby2's Lara wears a cap and her hair object is
+                // built for it, so a braid on that head spikes through the
+                // body. TR3's Lara has a ponytail, and Andrea1's standard
+                // braid is the one that fits her.
+                if (isYoungLara)
+                {
+                    outfit.set("fromLevel", JsonValue::makeString("Andrea1"));
+                    outfit.set("laraType", JsonValue::makeInt(0));   // LARA_NORMAL
+                    outfit.set("holstersFrom", JsonValue::makeString("joby2"));
+                }
                 outfit.set("tr3", JsonValue::makeString(picked.id));
                 outfitSet = true;
-                report.notes.push_back(fmt("outfit: %s gets the guest outfit %s.",
-                                           in.level.c_str(), picked.id.c_str()));
+                report.notes.push_back(fmt("outfit: %s gets the guest outfit %s%s.",
+                                           in.level.c_str(), picked.id.c_str(),
+                                           isYoungLara ? " (adult head from Andrea1)" : ""));
             }
             else
             {

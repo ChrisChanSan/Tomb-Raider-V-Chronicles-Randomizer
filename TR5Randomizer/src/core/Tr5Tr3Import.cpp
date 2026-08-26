@@ -22,6 +22,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <algorithm>
 
 namespace
@@ -251,8 +252,265 @@ bool Tr5Level::addSoundsFromTr3(const std::vector<uint8_t>& package, int baseId,
     return true;
 }
 
+bool Tr5Level::paintMeshFlat(int targetSlot, int meshNo, int r, int g, int b,
+                             int& usedTexinfo, int& gotR, int& gotG, int& gotB,
+                             std::string& error)
+{
+    if (!texWorkshopOpen(error)) return false;
+    const size_t PAGE = 256 * 256 * 2;
+    const size_t nPages = m_tex16.size() / PAGE;
+    const size_t SZ_TEXINFO = 40;
+
+    // Look for the entry that comes closest to the wanted colour AND is
+    // even. Evenness is the point: a patterned entry would drag its
+    // pattern onto the seam. Sixteen samples across the area are enough to
+    // tell a solid block from a picture.
+    int best = -1;
+    long bestDist = 0;
+    for (int32_t i = 0; i < m_texinfos.count; ++i)
+    {
+        const size_t t = m_texinfos.dataAt + static_cast<size_t>(i) * SZ_TEXINFO;
+        const uint16_t tp = g16(m_bytes, t + 2);
+        const int page = tp & 0x7FFF;
+        if (page < 0 || static_cast<size_t>(page) >= nPages) continue;
+        const int corners = (tp & 0x8000) ? 3 : 4;
+
+        int loX = 255, hiX = 0, loY = 255, hiY = 0;
+        for (int v = 0; v < corners; ++v)
+        {
+            const int x = (g16(m_bytes, t + 6 + v * 4) >> 8) & 0xFF;
+            const int y = (g16(m_bytes, t + 8 + v * 4) >> 8) & 0xFF;
+            if (x < loX) loX = x;   if (x > hiX) hiX = x;
+            if (y < loY) loY = y;   if (y > hiY) hiY = y;
+        }
+        if (hiX <= loX || hiY <= loY) continue;
+
+        long sr = 0, sg = 0, sb = 0;
+        int n = 0, spread = 0;
+        int fr = -1, fg = 0, fb = 0;
+        for (int yy = 0; yy < 4; ++yy)
+            for (int xx = 0; xx < 4; ++xx)
+            {
+                const int x = loX + (hiX - loX) * xx / 3;
+                const int y = loY + (hiY - loY) * yy / 3;
+                uint16_t w;
+                std::memcpy(&w, m_tex16.data() + static_cast<size_t>(page) * PAGE
+                                               + (static_cast<size_t>(y) * 256 + x) * 2, 2);
+                const int r5 = (w >> 10) & 0x1F, g5 = (w >> 5) & 0x1F, b5 = w & 0x1F;
+                const int r8 = (r5 << 3) | (r5 >> 2);
+                const int g8 = (g5 << 3) | (g5 >> 2);
+                const int b8 = (b5 << 3) | (b5 >> 2);
+                if (fr < 0) { fr = r8; fg = g8; fb = b8; }
+                const int d = abs(r8 - fr) + abs(g8 - fg) + abs(b8 - fb);
+                if (d > spread) spread = d;
+                sr += r8; sg += g8; sb += b8; ++n;
+            }
+        if (!n || spread > 12) continue;                 // not an even block
+
+        const long dist = labs(sr / n - r) + labs(sg / n - g) + labs(sb / n - b);
+        if (best < 0 || dist < bestDist)
+        {
+            best = i; bestDist = dist;
+            gotR = int(sr / n); gotG = int(sg / n); gotB = int(sb / n);
+        }
+    }
+
+    if (best < 0) { error = "the level holds no evenly coloured texture entry"; return false; }
+    usedTexinfo = best;
+
+    int32_t found = -1;
+    for (int32_t i = 0; i < m_objects.count && found < 0; ++i)
+    {
+        const size_t o = m_objects.dataAt + static_cast<size_t>(i) * SZ_OBJ;
+        int32_t slot; std::memcpy(&slot, m_bytes.data() + o, 4);
+        if (slot == targetSlot) found = i;
+    }
+    if (found < 0) { error = "slot not in the level"; return false; }
+
+    const size_t o = m_objects.dataAt + static_cast<size_t>(found) * SZ_OBJ;
+    int16_t nMesh = 0, meshIdx = 0;
+    std::memcpy(&nMesh,   m_bytes.data() + o + 4, 2);
+    std::memcpy(&meshIdx, m_bytes.data() + o + 6, 2);
+    if (meshNo < 0 || meshNo >= nMesh) { error = "mesh number outside the slot"; return false; }
+
+    const size_t pAt = m_meshPtrs.dataAt + (static_cast<size_t>(meshIdx) + static_cast<size_t>(meshNo)) * 4;
+    if (pAt + 4 > m_bytes.size()) { error = "mesh pointer outside the file"; return false; }
+    uint32_t off; std::memcpy(&off, m_bytes.data() + pAt, 4);
+
+    const size_t at  = m_meshData.dataAt + off;
+    const size_t end = m_meshData.dataAt + static_cast<size_t>(m_meshData.count) * 2;
+    if (!faceTextures(m_bytes, at, end, [&](size_t texAt)
+    {
+        s16(m_bytes, texAt, static_cast<uint16_t>(best));
+    }))
+    { error = "mesh cannot be read"; return false; }
+
+    return true;
+}
+
+bool Tr5Level::clearMeshFaces(int targetSlot, int meshNo, std::string& error)
+{
+    int32_t found = -1;
+    for (int32_t i = 0; i < m_objects.count && found < 0; ++i)
+    {
+        const size_t o = m_objects.dataAt + static_cast<size_t>(i) * SZ_OBJ;
+        int32_t slot; std::memcpy(&slot, m_bytes.data() + o, 4);
+        if (slot == targetSlot) found = i;
+    }
+    if (found < 0) { error = "slot not in the level"; return false; }
+
+    const size_t o = m_objects.dataAt + static_cast<size_t>(found) * SZ_OBJ;
+    int16_t nMesh = 0, meshIdx = 0;
+    std::memcpy(&nMesh,   m_bytes.data() + o + 4, 2);
+    std::memcpy(&meshIdx, m_bytes.data() + o + 6, 2);
+    if (meshNo < 0 || meshNo >= nMesh) { error = "mesh number outside the slot"; return false; }
+
+    const size_t pAt = m_meshPtrs.dataAt + (static_cast<size_t>(meshIdx) + static_cast<size_t>(meshNo)) * 4;
+    if (pAt + 4 > m_bytes.size()) { error = "mesh pointer outside the file"; return false; }
+    uint32_t off; std::memcpy(&off, m_bytes.data() + pAt, 4);
+
+    const size_t at  = m_meshData.dataAt + off;
+    const size_t end = m_meshData.dataAt + static_cast<size_t>(m_meshData.count) * 2;
+
+    // Walk the header exactly as the reader does, to land on the quad count.
+    size_t p = at + 10;
+    if (p + 2 > end) { error = "mesh ends before its vertex count"; return false; }
+    const int16_t vw = static_cast<int16_t>(g16(m_bytes, p)); p += 2;
+    const int nv = vw & 0xFF;
+    if (nv == 0) p += (static_cast<size_t>((vw >> 8) & 0xFF) * 6 + 1) * 2;
+    else
+    {
+        p += static_cast<size_t>(nv) * 6;
+        if (p + 2 > end) { error = "mesh ends before its normal count"; return false; }
+        const int16_t nn = static_cast<int16_t>(g16(m_bytes, p)); p += 2;
+        p += static_cast<size_t>(nv) * (nn >= 0 ? 6 : 2);
+    }
+    if (p + 4 > end) { error = "mesh ends before its face counts"; return false; }
+
+    // Both counts are written where the QUAD count stands and right behind
+    // it. The reader takes the triangle count from there once the quads are
+    // gone, so zeroing only the first would leave it reading face data as a
+    // count.
+    s16(m_bytes, p,     0);
+    s16(m_bytes, p + 2, 0);
+    return true;
+}
+
+bool Tr5Level::meshTones(int targetSlot, int meshNo, std::vector<ToneCount>& out,
+                         int& pixels, std::string& error)
+{
+    out.clear();
+    pixels = 0;
+
+    int32_t found = -1;
+    for (int32_t i = 0; i < m_objects.count && found < 0; ++i)
+    {
+        const size_t o = m_objects.dataAt + static_cast<size_t>(i) * SZ_OBJ;
+        int32_t slot; std::memcpy(&slot, m_bytes.data() + o, 4);
+        if (slot == targetSlot) found = i;
+    }
+    if (found < 0) { error = "slot not in the level"; return false; }
+
+    const size_t o = m_objects.dataAt + static_cast<size_t>(found) * SZ_OBJ;
+    int16_t nMesh = 0, meshIdx = 0;
+    std::memcpy(&nMesh,   m_bytes.data() + o + 4, 2);
+    std::memcpy(&meshIdx, m_bytes.data() + o + 6, 2);
+    if (meshNo < 0 || meshNo >= nMesh) { error = "mesh number outside the slot"; return false; }
+
+    const size_t pAt = m_meshPtrs.dataAt + (static_cast<size_t>(meshIdx) + static_cast<size_t>(meshNo)) * 4;
+    if (pAt + 4 > m_bytes.size()) { error = "mesh pointer outside the file"; return false; }
+    uint32_t off; std::memcpy(&off, m_bytes.data() + pAt, 4);
+
+    const size_t meshAt  = m_meshData.dataAt + off;
+    const size_t meshEnd = m_meshData.dataAt + static_cast<size_t>(m_meshData.count) * 2;
+    if (meshAt >= meshEnd) { error = "mesh lies outside the mesh block"; return false; }
+
+    // drawtype(2), tpage(2), flag(2), then 4 corners of u,v as 8.8 fixed
+    // point - and TR5 appends 18 more bytes after those, so the record is
+    // 40, not the 22 the readable part accounts for. Same value as in
+    // Tr5Transfer.cpp, which keeps its constant to itself.
+    const size_t SZ_TEXINFO = 40;
+
+    // The 16 bit pages, not the 32 bit ones: ARGB1555 has no channel order
+    // to work out, which is one guess fewer.
+    if (!texWorkshopOpen(error)) return false;
+    const size_t PAGE = 256 * 256 * 2;
+    const size_t nPages = m_tex16.size() / PAGE;
+
+    // Grouped to 3 bits per channel, but the group's TRUE mean is reported.
+    // At five bits a shaded face falls apart into hundreds of neighbouring
+    // shades and the black background of the pages wins with four percent -
+    // measured. Grouping puts the skin back together without inventing a
+    // colour that is not in the texture.
+    struct Bucket { long long r, g, b; int count; };
+    std::map<uint32_t, Bucket> hist;
+    int faceCount = 0, loTex = 0x7FFFFFFF, hiTex = -1;
+    if (!faceTextures(m_bytes, meshAt, meshEnd, [&](size_t texAt)
+    {
+        const int idx = g16(m_bytes, texAt) & 0x7FFF;
+        if (idx < 0 || idx >= m_texinfos.count) return;
+        ++faceCount;
+        if (idx < loTex) loTex = idx;
+        if (idx > hiTex) hiTex = idx;
+        const size_t t = m_texinfos.dataAt + static_cast<size_t>(idx) * SZ_TEXINFO;
+        const uint16_t tp = g16(m_bytes, t + 2);
+        const int page = tp & 0x7FFF;
+        if (page < 0 || static_cast<size_t>(page) >= nPages) return;
+
+        // Bit 15 marks a TRIANGLE, and then the fourth corner is unused and
+        // usually zero. Taking it along stretches the rectangle into the
+        // empty edge of the page - which is why the first measurement came
+        // back mostly black.
+        const int corners = (tp & 0x8000) ? 3 : 4;
+        int loX = 255, hiX = 0, loY = 255, hiY = 0;
+        for (int v = 0; v < corners; ++v)
+        {
+            const int x = (g16(m_bytes, t + 6 + v * 4) >> 8) & 0xFF;
+            const int y = (g16(m_bytes, t + 8 + v * 4) >> 8) & 0xFF;
+            if (x < loX) loX = x;   if (x > hiX) hiX = x;
+            if (y < loY) loY = y;   if (y > hiY) hiY = y;
+        }
+        for (int y = loY; y <= hiY; ++y)
+            for (int x = loX; x <= hiX; ++x)
+            {
+                uint16_t w;
+                std::memcpy(&w, m_tex16.data() + static_cast<size_t>(page) * PAGE
+                                               + (static_cast<size_t>(y) * 256 + x) * 2, 2);
+                if (!(w & 0x8000)) continue;                 // fully transparent
+                const int r5 = (w >> 10) & 0x1F, g5 = (w >> 5) & 0x1F, b5 = w & 0x1F;
+                const int r8 = (r5 << 3) | (r5 >> 2);
+                const int g8 = (g5 << 3) | (g5 >> 2);
+                const int b8 = (b5 << 3) | (b5 >> 2);
+                const uint32_t key = (uint32_t(r8 >> 5) << 6) | (uint32_t(g8 >> 5) << 3) | uint32_t(b8 >> 5);
+                Bucket& z = hist[key];
+                z.r += r8; z.g += g8; z.b += b8; z.count++;
+                ++pixels;
+            }
+    }))
+    { error = "mesh cannot be read"; return false; }
+
+    std::printf("    (mesh has %d textured faces, texinfos %d..%d, %d pages)\n",
+                faceCount, loTex, hiTex, int(nPages));
+
+    for (std::map<uint32_t, Bucket>::const_iterator it = hist.begin(); it != hist.end(); ++it)
+    {
+        ToneCount tc;
+        tc.count = it->second.count;
+        tc.r = int(it->second.r / tc.count);
+        tc.g = int(it->second.g / tc.count);
+        tc.b = int(it->second.b / tc.count);
+        out.push_back(tc);
+    }
+    for (size_t i = 0; i < out.size(); ++i)
+        for (size_t j = i + 1; j < out.size(); ++j)
+            if (out[j].count > out[i].count) { ToneCount t = out[i]; out[i] = out[j]; out[j] = t; }
+    if (out.size() > 12) out.resize(12);
+    return true;
+}
+
 bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& package, int targetSlot,
-                                  int texinfoIndex, std::string& error)
+                                  int texinfoIndex, std::string& error,
+                                  const std::vector<int>* keepMeshes)
 {
     char buf[256];
 
@@ -363,10 +621,59 @@ bool Tr5Level::addMoveableFromTr3(const std::vector<uint8_t>& package, int targe
     for (size_t o = 0; o + SZ_RANGE <= rngBytes.size(); o += SZ_RANGE)
         s16(rngBytes, o + 4, static_cast<uint16_t>(g16(rngBytes, o + 4) + dstAnim));
 
-    std::vector<uint8_t> ptrBytes;
-    for (uint32_t st : meshStart)
+    // --- Meshes that stay the target's own ---------------------------------
+    //
+    // Their pointer is left pointing at the mesh the slot already uses, so
+    // the imported one is appended but never referenced. Leaving it in place
+    // is deliberate: every offset above was computed over the whole pack, and
+    // cutting one out would move all the others.
+    //
+    // For a Lara outfit this is the head (LM_HEAD = 14), and not for looks.
+    // TR5 writes lara.mesh_ptrs[LM_HEAD] at RUNTIME - the scream head in
+    // larafire.cpp:405, the speech heads out of the cutscene pak - so a
+    // foreign head pops out the moment Lara screams. And the ponytail takes
+    // its anchor point and its collision radius straight from the bounding
+    // sphere of whatever mesh sits there (hair.cpp:245), so a foreign head
+    // hangs the braid in the wrong place the rest of the time.
+    std::vector<uint32_t> keptPtr(nMeshes, 0);
+    std::vector<char>     keptHas(nMeshes, 0);
+    if (keepMeshes && !keepMeshes->empty())
     {
-        const uint32_t v = static_cast<uint32_t>(dstMeshBytes) + st;
+        int32_t found = -1;
+        for (int32_t i = 0; i < m_objects.count && found < 0; ++i)
+        {
+            const size_t o = m_objects.dataAt + static_cast<size_t>(i) * SZ_OBJ;
+            int32_t slot; std::memcpy(&slot, m_bytes.data() + o, 4);
+            if (slot == targetSlot) found = i;
+        }
+        if (found < 0)
+        { error = "nothing to keep: the target has no such slot yet"; return false; }
+
+        const size_t o = m_objects.dataAt + static_cast<size_t>(found) * SZ_OBJ;
+        int16_t oldN = 0, oldIdx = 0;
+        std::memcpy(&oldN,   m_bytes.data() + o + 4, 2);
+        std::memcpy(&oldIdx, m_bytes.data() + o + 6, 2);
+
+        for (size_t j = 0; j < keepMeshes->size(); ++j)
+        {
+            const int k = (*keepMeshes)[j];
+            if (k < 0 || static_cast<uint32_t>(k) >= nMeshes)
+            { error = "mesh to keep lies outside the package"; return false; }
+            if (k >= oldN)
+            { error = "mesh to keep lies outside the slot already in the level"; return false; }
+            const size_t at = m_meshPtrs.dataAt + (static_cast<size_t>(oldIdx) + static_cast<size_t>(k)) * 4;
+            if (at + 4 > m_bytes.size())
+            { error = "mesh pointer to keep lies outside the file"; return false; }
+            std::memcpy(&keptPtr[k], m_bytes.data() + at, 4);
+            keptHas[k] = 1;
+        }
+    }
+
+    std::vector<uint8_t> ptrBytes;
+    for (size_t k = 0; k < meshStart.size(); ++k)
+    {
+        const uint32_t v = keptHas[k] ? keptPtr[k]
+                                      : static_cast<uint32_t>(dstMeshBytes) + meshStart[k];
         ptrBytes.insert(ptrBytes.end(), reinterpret_cast<const uint8_t*>(&v),
                                         reinterpret_cast<const uint8_t*>(&v) + 4);
     }

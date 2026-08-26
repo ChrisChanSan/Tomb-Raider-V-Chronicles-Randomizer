@@ -367,6 +367,19 @@ void CreateSkinningData()
 		}
 
 		vertCount = 0;
+
+		// SKINREACH (#122): how far the seam MISSES, not just whether it
+		// hits. The pairing runs on +-1 unit, so a foreign skin scores zero
+		// and the number alone says nothing about why. What decides whether
+		// the joint layer can be rescued at all is the DISTANCE to the
+		// nearest skin vertex: small, and a wider tolerance would sew a
+		// Tomb Raider III body; large, and the joints stand nowhere near
+		// its rims and only modelling helps. Measured in the loops that
+		// already run, nothing extra walked.
+		long nearMin[2] = { 0x7FFFFFFF, 0x7FFFFFFF };
+		long nearMax[2] = { 0, 0 };
+		int  within8[2] = { 0, 0 };
+		int  within32[2] = { 0, 0 };
 		aboveVerts = 0;
 		jointVerts = jointMesh->nVerts & 0xFF;
 		laraVerts = aboveMesh->nVerts & 0xFF;
@@ -393,6 +406,7 @@ void CreateSkinningData()
 			jointZ = JointMeshXYZ.z + joint[2];
 			joint += 3;
 			LaraMesh = &aboveMesh->nNorms;
+			long nearest = 0x7FFFFFFF;
 
 			for (int ii = 0; ii < laraVerts; ii++)
 			{
@@ -400,6 +414,11 @@ void CreateSkinningData()
 				laraY = AboveMeshXYZ.y + LaraMesh[1];
 				laraZ = AboveMeshXYZ.z + LaraMesh[2];
 				LaraMesh += 3;
+
+				{
+					const long d = abs(laraX - jointX) + abs(laraY - jointY) + abs(laraZ - jointZ);
+					if (d < nearest) nearest = d;
+				}
 
 				if (abs(laraX - jointX) <= 1 && abs(laraY - jointY) <= 1 && abs(laraZ - jointZ) <= 1)
 				{
@@ -432,6 +451,14 @@ void CreateSkinningData()
 					aboveVerts++;
 				}
 			}
+
+			if (laraVerts > 0)
+			{
+				if (nearest < nearMin[0]) nearMin[0] = nearest;
+				if (nearest > nearMax[0]) nearMax[0] = nearest;
+				if (nearest <= 8)  within8[0]++;
+				if (nearest <= 32) within32[0]++;
+			}
 		}
 
 		SkinVertNums[SkinJoints[i][2]][aboveVerts] = -1;
@@ -447,6 +474,7 @@ void CreateSkinningData()
 			jointZ = JointMeshXYZ.z + joint[2];
 			joint += 3;
 			LaraMesh = &belowMesh->nNorms;
+			long nearest = 0x7FFFFFFF;
 
 			for (int ii = 0; ii < laraVerts; ii++)
 			{
@@ -454,6 +482,11 @@ void CreateSkinningData()
 				laraX = BelowMeshXYZ.x + LaraMesh[0];
 				laraZ = BelowMeshXYZ.z + LaraMesh[2];
 				LaraMesh += 3;
+
+				{
+					const long d = abs(laraX - jointX) + abs(laraY - jointY) + abs(laraZ - jointZ);
+					if (d < nearest) nearest = d;
+				}
 
 				if (abs(laraX - jointX) <= 1 && abs(laraY - jointY) <= 1 && abs(laraZ - jointZ) <= 1)
 				{
@@ -471,10 +504,28 @@ void CreateSkinningData()
 					belowVerts++;
 				}
 			}
+
+			if (laraVerts > 0)
+			{
+				if (nearest < nearMin[1]) nearMin[1] = nearest;
+				if (nearest > nearMax[1]) nearMax[1] = nearest;
+				if (nearest <= 8)  within8[1]++;
+				if (nearest <= 32) within32[1]++;
+			}
 		}
 
 		SkinVertNums[SkinJoints[i][3]][belowVerts] = -1;
 		ScratchVertNums[SkinJoints[i][3]][belowVerts] = -1;
+
+		// SKINREACH: the answer to "would a wider tolerance help?". The
+		// numbers are Manhattan distances in world units from a joint vertex
+		// to the CLOSEST skin vertex on that side.
+		if (jointVerts > 0)
+			Log("SKINREACH joint %2d of %2d verts: above nearest %d..%d (%d within 8, %d within 32), "
+				"below nearest %d..%d (%d within 8, %d within 32)",
+				i, jointVerts,
+				nearMin[0] == 0x7FFFFFFF ? -1 : nearMin[0], nearMax[0], within8[0], within32[0],
+				nearMin[1] == 0x7FFFFFFF ? -1 : nearMin[1], nearMax[1], within8[1], within32[1]);
 		// Can this seam be sewn at all? A HALF measure is not enough - the
 		// joint has to sit on the skin with the MAJORITY of its vertices.
 		//
@@ -488,11 +539,182 @@ void CreateSkinningData()
 		//
 		// Lara's own skin is far from this line, it matches almost
 		// everything - measured on vanilla Andrea2, which reports nothing.
-		SkinJointUsable[i] = (jointVerts > 0 && vertCount * 2 >= jointVerts) ? 1 : 0;
+		// BOTH sides have to be sewn, not just enough vertices in total.
+		// A seam joins an upper mesh to a lower one; counting only the sum
+		// lets through a joint that found everything above and nothing
+		// below. It is then drawn from a stash that the lower side never
+		// filled - the long stretched shard across the screen. Seen the
+		// moment TR5's own head was kept on a Tomb Raider III body (#122):
+		// the neck matched perfectly above, not at all below.
+		SkinJointUsable[i] = (jointVerts > 0 && aboveVerts > 0 && belowVerts > 0
+							  && vertCount * 2 >= jointVerts) ? 1 : 0;
 
+		// Second attempt, and only if the first one failed: pair by NEAREST
+		// NEIGHBOUR instead of by exact coordinate.
+		//
+		// Core's seam wants the joint vertex and the skin vertex to sit on
+		// the same spot to within one unit. That holds for the skin the
+		// joints were authored against and for nothing else. A Tomb Raider
+		// III body scores zero - but SKINREACH measured how far off it
+		// really is, and the answer was 2 to 30 units on a Lara some 750
+		// units tall. The joints stand exactly where they belong; they just
+		// miss the needle's eye.
+		//
+		// Pairing by nearest neighbour costs nothing in looks, because a
+		// joint does not bring its own positions: at draw time every one of
+		// its vertices is OVERWRITTEN with the position of the skin vertex
+		// it was paired with (SkinVerticesToScratch in drawlara.cpp). The
+		// joint mesh only contributes the order of its triangles. So it
+		// bridges whatever rim it is given.
+		//
+		// The search only ever runs against the two meshes this seam joins,
+		// never the whole body, so the worst a wrong pairing can do is twist
+		// one seam - it cannot reach across to another limb.
+		//
+		// Vanilla never gets here: its joints are usable after the exact
+		// pass, and this whole block hangs behind that failure.
 		if (!SkinJointUsable[i] && jointVerts > 0)
-			Log("SKINLOG joint %d: only %d of %d vertices sit on the skin - joint left out",
-				i, vertCount, jointVerts);
+		{
+			const long SEAM_REACH = 96;		//manhattan units, roughly a limb's thickness
+
+			// WHICH side a joint vertex belongs to is not a question of
+			// distance but of how the joint is built: it is two rings, one
+			// meant for the mesh above and one for the mesh below. Handing
+			// each vertex to whichever mesh happens to be nearer looks
+			// obvious and is wrong - on a foreign body one side is nearer
+			// systematically, the ring collapses into a flat fan, and that
+			// fan is the grey slab across Lara's waist (seen in game).
+			//
+			// The axis that separates the two rings is known: it is the
+			// offset between the two bones this seam joins. Project every
+			// joint vertex onto it, and the sign says which ring it is in.
+			long axisX = AboveMeshXYZ.x - BelowMeshXYZ.x;
+			long axisY = AboveMeshXYZ.y - BelowMeshXYZ.y;
+			long axisZ = AboveMeshXYZ.z - BelowMeshXYZ.z;
+			const bool haveAxis = (abs(axisX) + abs(axisY) + abs(axisZ)) >= 8;
+
+			long midX = 0, midY = 0, midZ = 0;
+			joint = &jointMesh->nNorms;
+
+			for (int j = 0; j < jointVerts; j++)
+			{
+				midX += joint[0];
+				midY += joint[1];
+				midZ += joint[2];
+				joint += 3;
+			}
+
+			if (jointVerts > 0)
+			{
+				midX /= jointVerts;
+				midY /= jointVerts;
+				midZ /= jointVerts;
+			}
+
+			aboveVerts = 0;
+			belowVerts = 0;
+			vertCount = 0;
+			memset(vertBuf, 0, jointVerts);
+
+			joint = &jointMesh->nNorms;
+			long worst = 0;
+
+			for (int j = 0; j < jointVerts; j++)
+			{
+				jointX = JointMeshXYZ.x + joint[0];
+				jointY = JointMeshXYZ.y + joint[1];
+				jointZ = JointMeshXYZ.z + joint[2];
+				joint += 3;
+
+				long bestAbove = 0x7FFFFFFF, bestBelow = 0x7FFFFFFF;
+				int whoAbove = -1, whoBelow = -1;
+
+				LaraMesh = &aboveMesh->nNorms;
+				laraVerts = aboveMesh->nVerts & 0xFF;
+
+				for (int ii = 0; ii < laraVerts; ii++)
+				{
+					const long d = abs(AboveMeshXYZ.x + LaraMesh[0] - jointX)
+								 + abs(AboveMeshXYZ.y + LaraMesh[1] - jointY)
+								 + abs(AboveMeshXYZ.z + LaraMesh[2] - jointZ);
+					LaraMesh += 3;
+
+					if (d < bestAbove)
+					{
+						bestAbove = d;
+						whoAbove = ii;
+					}
+				}
+
+				LaraMesh = &belowMesh->nNorms;
+				laraVerts = belowMesh->nVerts & 0xFF;
+
+				for (int ii = 0; ii < laraVerts; ii++)
+				{
+					const long d = abs(BelowMeshXYZ.x + LaraMesh[0] - jointX)
+								 + abs(BelowMeshXYZ.y + LaraMesh[1] - jointY)
+								 + abs(BelowMeshXYZ.z + LaraMesh[2] - jointZ);
+					LaraMesh += 3;
+
+					if (d < bestBelow)
+					{
+						bestBelow = d;
+						whoBelow = ii;
+					}
+				}
+
+				// The ring decides, and only where the two bones sit on top
+				// of each other and leave no axis does the distance have to.
+				const long side = (jointX - JointMeshXYZ.x - midX) * axisX
+								+ (jointY - JointMeshXYZ.y - midY) * axisY
+								+ (jointZ - JointMeshXYZ.z - midZ) * axisZ;
+				const bool useAbove = haveAxis ? (side >= 0) : (bestAbove <= bestBelow);
+				const long best = useAbove ? bestAbove : bestBelow;
+				const int who = useAbove ? whoAbove : whoBelow;
+
+				if (who < 0 || best > SEAM_REACH)
+					continue;
+
+				if (useAbove)
+				{
+					if (aboveVerts >= 11)
+						continue;
+
+					SkinVertNums[SkinJoints[i][2]][aboveVerts] = who;
+					ScratchVertNums[SkinJoints[i][2]][aboveVerts] = j;
+					aboveVerts++;
+				}
+				else
+				{
+					if (belowVerts >= 11)
+						continue;
+
+					SkinVertNums[SkinJoints[i][3]][belowVerts] = who;
+					ScratchVertNums[SkinJoints[i][3]][belowVerts] = j;
+					belowVerts++;
+				}
+
+				vertBuf[j] = 1;
+				vertCount++;
+
+				if (best > worst)
+					worst = best;
+			}
+
+			SkinVertNums[SkinJoints[i][2]][aboveVerts] = -1;
+			ScratchVertNums[SkinJoints[i][2]][aboveVerts] = -1;
+			SkinVertNums[SkinJoints[i][3]][belowVerts] = -1;
+			ScratchVertNums[SkinJoints[i][3]][belowVerts] = -1;
+
+			SkinJointUsable[i] = (aboveVerts > 0 && belowVerts > 0
+								  && vertCount * 2 >= jointVerts) ? 1 : 0;
+
+			Log("SKINLOG joint %d: nearest neighbour pass sewed %d of %d (%d above, %d below, split by %s), "
+				"furthest %d units - %s",
+				i, vertCount, jointVerts, aboveVerts, belowVerts,
+				haveAxis ? "seam axis" : "distance", worst,
+				SkinJointUsable[i] ? "joint used" : "still left out");
+		}
 
 		calcPointsCounter = 0;
 

@@ -77,7 +77,7 @@ namespace
 
 int main(int argc, char** argv)
 {
-    if (argc != 4) { std::printf("usage: TR3Fetch <tr3level.TR2> <objectId> <target.bin>\n"); return 2; }
+    if (argc <  4) { std::printf("usage: TR3Fetch <tr3level.TR2> <objectId> <target.bin> [-recolor r,g,b=r,g,b]\n"); return 2; }
     const int wanted = std::atoi(argv[2]);
 
     Reader r;
@@ -317,6 +317,25 @@ int main(int argc, char** argv)
     // them. For the texture work (#90) what counts is how many distinct
     // entries and above all how many distinct TILES stand behind them -
     // every tile becomes a 256x256 page in the target.
+    // -recolor r,g,b=r,g,b (repeatable): a flat colour of TR3's is written
+    // to the page as a different one. Wanted for skin, where TR3 has one
+    // flat value and TR5's own Lara has a painted, shaded texture: the two
+    // can be brought to the same base tone without touching the model.
+    // Source and target are given in full so nothing has to be guessed
+    // about which of the flat colours is meant.
+    struct Recolor { int sr, sg, sb, dr, dg, db; };
+    std::vector<Recolor> recolors;
+    for (int a = 4; a < argc; ++a)
+        if (std::strcmp(argv[a], "-recolor") == 0 && a + 1 < argc)
+        {
+            Recolor rc;
+            if (std::sscanf(argv[++a], "%d,%d,%d=%d,%d,%d",
+                            &rc.sr, &rc.sg, &rc.sb, &rc.dr, &rc.dg, &rc.db) == 6)
+                recolors.push_back(rc);
+            else
+                std::printf("  -recolor not readable: %s (expected r,g,b=r,g,b)\n", argv[a]);
+        }
+
     std::vector<int> texIdx;      // used TR3 object textures, in discovery order
     std::vector<uint8_t> texIsTri;// 1 = the entry sits on triangles, 0 = on quads
     std::vector<int> tiles;       // the tiles behind them, in discovery order
@@ -906,10 +925,19 @@ int main(int argc, char** argv)
             for (size_t n = 0; n < flatColors.size(); ++n)
             {
                 const size_t e = 772 + size_t(flatColors[n]) * 4;
+                int cr = r.b[e], cg = r.b[e + 1], cb = r.b[e + 2];
+                for (size_t q = 0; q < recolors.size(); ++q)
+                    if (recolors[q].sr == cr && recolors[q].sg == cg && recolors[q].sb == cb)
+                    {
+                        std::printf("    recolored %d,%d,%d to %d,%d,%d\n",
+                                    cr, cg, cb, recolors[q].dr, recolors[q].dg, recolors[q].db);
+                        cr = recolors[q].dr; cg = recolors[q].dg; cb = recolors[q].db;
+                        break;
+                    }
                 const uint16_t v = uint16_t(0x8000
-                                 | ((r.b[e]     >> sh) << 10)
-                                 | ((r.b[e + 1] >> sh) << 5)
-                                 |  (r.b[e + 2] >> sh));
+                                 | ((cr >> sh) << 10)
+                                 | ((cg >> sh) << 5)
+                                 |  (cb >> sh));
                 const int col = int(n) % 16, row = int(n) / 16;
                 for (int y = 0; y < 16; ++y)
                     for (int x = 0; x < 16; ++x)

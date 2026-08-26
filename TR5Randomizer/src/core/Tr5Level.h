@@ -262,8 +262,39 @@ public:
     // tile number shifts; the enemy is wrongly textured, but the page
     // management stays untouched. Real textures are a separate step via
     // Tr5Transfer.cpp.
+    //
+    // keepMeshes: indices that are NOT taken from the package - those mesh
+    // pointers keep pointing at the mesh the target slot already uses. For a
+    // Lara outfit that is the head, LM_HEAD = 14; see the comment at the
+    // pointer table in Tr5Tr3Import.cpp for why it has to stay TR5's.
+    // Counts the colours one mesh of a slot actually wears, read off its own
+    // texture pages, and hands back the most frequent ones - brightest share
+    // first. Used to find out what skin tone a target's Lara has, so an
+    // imported flat colour can be set to it instead of guessed.
+    struct ToneCount { int r, g, b, count; };
+
+    // Makes one mesh of a slot draw nothing, by setting its quad and its
+    // triangle count to zero. The face bytes stay where they are and are
+    // simply never reached again - meshes are addressed by pointer, so
+    // nothing behind them moves. Vertices are kept on purpose: Lara's seam
+    // sewing reads them, and a joint that draws nothing should still not
+    // change how its neighbours are stitched.
+    bool    clearMeshFaces(int targetSlot, int meshNo, std::string& error);
+
+    // Paints one mesh of a slot in a single flat colour, by pointing all of
+    // its faces at a texture entry whose area already IS that colour. No page
+    // and no entry is added - the flat colour page an import brings along
+    // carries solid blocks, and this looks for the closest of them. Fails
+    // rather than settling for a patterned entry.
+    bool    paintMeshFlat(int targetSlot, int meshNo, int r, int g, int b,
+                          int& usedTexinfo, int& gotR, int& gotG, int& gotB,
+                          std::string& error);
+    bool    meshTones(int targetSlot, int meshNo, std::vector<ToneCount>& out,
+                      int& pixels, std::string& error);
+
     bool    addMoveableFromTr3(const std::vector<uint8_t>& package, int targetSlot,
-                               int texinfoIndex, std::string& error);
+                               int texinfoIndex, std::string& error,
+                               const std::vector<int>* keepMeshes = 0);
 
     // Puts the sounds of a TR3 package ("T35S" from TR3Sound) onto the
     // soundmap slots baseId, baseId+1, ... and returns the mapping original

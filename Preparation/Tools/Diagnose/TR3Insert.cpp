@@ -196,17 +196,61 @@ int main(int argc, char** argv)
 {
     if (argc < 5)
     {
-        std::printf("usage: TR3Insert <target.trc> <package.bin> <targetSlot> <output.trc> [texinfo] [sound.bin]\n");
+        std::printf("usage: TR3Insert <target.trc> <package.bin> <targetSlot> <output.trc> [texinfo] [sound.bin] [-keepmesh n]\n");
         return 2;
     }
     const int slot = std::atoi(argv[3]);
+
+    // -keepmesh <n>, repeatable: that mesh is NOT taken from the package,
+    // the slot keeps the one it already has. Read here and not down in the
+    // sound block, so it also works without a sound package.
+    std::vector<int> keepMeshes;
+    std::vector<int> dropJoints;
+    struct JointColor { int joint, r, g, b; };
+    std::vector<JointColor> jointColors;
+    int toneMesh = -1;
+    for (int a = 5; a < argc; ++a)
+    {
+        if (std::strcmp(argv[a], "-keepmesh") == 0 && a + 1 < argc)
+            keepMeshes.push_back(std::atoi(argv[++a]));
+        // -tone <mesh>: only report which colours that mesh of the TARGET
+        // wears, before anything is replaced. For matching an imported flat
+        // colour to the skin the target's own Lara already has.
+        else if (std::strcmp(argv[a], "-tone") == 0 && a + 1 < argc)
+            toneMesh = std::atoi(argv[++a]);
+        // -dropjoint <n>, repeatable: seam n of Lara's joint shell draws
+        // nothing any more. Seam n sits in mesh n+1 of LARA_SKIN_JOINTS
+        // (laraskin.cpp: jointMeshNum = i + 1). Wanted for an imported
+        // outfit, where a seam TR5's joints were not built for can look
+        // worse than the gap it was meant to cover.
+        else if (std::strcmp(argv[a], "-dropjoint") == 0 && a + 1 < argc)
+            dropJoints.push_back(std::atoi(argv[++a]));
+        // -jointcolor <n>=r,g,b, repeatable: seam n is painted in one flat
+        // colour instead of TR5's own texture. For an imported outfit, where
+        // the seams otherwise wear the colours of a body that is no longer
+        // there.
+        else if (std::strcmp(argv[a], "-jointcolor") == 0 && a + 1 < argc)
+        {
+            JointColor jc;
+            if (std::sscanf(argv[++a], "%d=%d,%d,%d", &jc.joint, &jc.r, &jc.g, &jc.b) == 4)
+                jointColors.push_back(jc);
+            else
+                std::printf("  -jointcolor not readable: %s (expected n=r,g,b)\n", argv[a]);
+        }
+    }
 
     // Positional arguments 5 and 6, switches may follow afterwards (-base,
     // -volumes). A word starting with '-' is a switch, not a value -
     // otherwise argc would count along and the sound path would silently
     // fall back to NULL.
+    // The FIRST word starting with '-' ends the positional part: everything
+    // behind it belongs to a switch, its value words included. Without that
+    // the value of a switch is taken for the next positional argument - the
+    // sound path swallowed the 14 of "-keepmesh 14".
+    int firstSwitch = argc;
+    for (int a = 5; a < argc; ++a) if (argv[a][0] == '-') { firstSwitch = a; break; }
     auto positional = [&](int i) -> const char* {
-        return (argc > i && argv[i][0] != '-') ? argv[i] : 0; };
+        return (i < firstSwitch && argc > i && argv[i][0] != '-') ? argv[i] : 0; };
     const char* texArg    = positional(5);
     const int   tex       = texArg ? std::atoi(texArg) : 0;
     const char* soundFile = positional(6);
@@ -230,6 +274,22 @@ int main(int argc, char** argv)
     const bool had = lvl.moveableInfo(slot, before);
     std::printf("target %s: %d items, slot %d %s\n", argv[1], lvl.itemCount(), slot,
                 had ? "present (will be replaced)" : "free (will be appended)");
+
+    if (toneMesh >= 0)
+    {
+        std::vector<Tr5Level::ToneCount> tones;
+        int px = 0;
+        if (!lvl.meshTones(slot, toneMesh, tones, px, err))
+            std::printf("  tone of mesh %d: %s\n", toneMesh, err.c_str());
+        else
+        {
+            std::printf("  colours of slot %d mesh %d, %d pixels:\n", slot, toneMesh, px);
+            for (size_t k = 0; k < tones.size(); ++k)
+                std::printf("    rgb %3d,%3d,%3d  %6d px  %4.1f%%\n",
+                            tones[k].r, tones[k].g, tones[k].b, tones[k].count,
+                            px ? 100.0 * tones[k].count / px : 0.0);
+        }
+    }
 
     // Sounds FIRST: only afterwards is it fixed which places the SFX
     // numbers of the anim commands must point at - and the commands sit in
@@ -446,8 +506,33 @@ int main(int argc, char** argv)
         texBase = -1;                  // faces are right now, do not overwrite
     }
 
-    if (!lvl.addMoveableFromTr3(package, slot, texBase, err))
+    for (size_t k = 0; k < keepMeshes.size(); ++k)
+        std::printf("  mesh %d stays the target's own\n", keepMeshes[k]);
+    if (!lvl.addMoveableFromTr3(package, slot, texBase, err, &keepMeshes))
     { std::printf("INSERT FAILED: %s\n", err.c_str()); return 1; }
+
+    for (size_t k = 0; k < dropJoints.size(); ++k)
+    {
+        // 9 is LARA_SKIN_JOINTS (game/objects.h).
+        if (!lvl.clearMeshFaces(9, dropJoints[k] + 1, err))
+            std::printf("  seam %d not dropped: %s\n", dropJoints[k], err.c_str());
+        else
+            std::printf("  seam %d dropped (joint mesh %d draws nothing)\n",
+                        dropJoints[k], dropJoints[k] + 1);
+    }
+
+    for (size_t k = 0; k < jointColors.size(); ++k)
+    {
+        int used = 0, gr = 0, gg = 0, gb = 0;
+        if (!lvl.paintMeshFlat(9, jointColors[k].joint + 1,
+                               jointColors[k].r, jointColors[k].g, jointColors[k].b,
+                               used, gr, gg, gb, err))
+            std::printf("  seam %d not painted: %s\n", jointColors[k].joint, err.c_str());
+        else
+            std::printf("  seam %d painted rgb %d,%d,%d (wanted %d,%d,%d, texinfo %d)\n",
+                        jointColors[k].joint, gr, gg, gb,
+                        jointColors[k].r, jointColors[k].g, jointColors[k].b, used);
+    }
 
     Tr5Level::MoveableInfo mi;
     if (!lvl.moveableInfo(slot, mi)) { std::printf("slot %d not findable after the insert\n", slot); return 1; }

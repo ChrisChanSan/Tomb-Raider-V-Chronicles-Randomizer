@@ -961,13 +961,44 @@ int main(int argc, char** argv)
         }
 
         const bool haveFlatPage = !flatColors.empty() || !extraColors.empty();
+        // A recolour hits the imported TILES as well, not only the flat
+        // colour page.
+        //
+        // TR3 does not always keep skin as a flat colour: London does, the
+        // jungle outfit carries it as a texture - its bare forearm measures
+        // 100 percent one single tone. The 5 bit step that matters (TR3's 224
+        // red lands on level 28 and returns as 231, TR5 sits on 27 and
+        // returns as 222) is in the pixels there, where a flat colour
+        // correction can never reach it.
+        //
+        // Safe to do wholesale: these pages were copied in for this model and
+        // only its own texinfos point into them. Whatever else of the donor
+        // level sits on the same page is never drawn.
+        std::vector<uint16_t> swapFrom, swapTo;
+        for (size_t q = 0; q < recolors.size(); ++q)
+        {
+            const int sr = recolors[q].sr, sg = recolors[q].sg, sb = recolors[q].sb;
+            const int dr = recolors[q].dr, dg = recolors[q].dg, db = recolors[q].db;
+            swapFrom.push_back(uint16_t(((sr >> 3) << 10) | ((sg >> 3) << 5) | (sb >> 3)));
+            swapTo.push_back(  uint16_t(((dr >> 3) << 10) | ((dg >> 3) << 5) | (db >> 3)));
+        }
+
         put32(out, uint32_t(tiles.size() + (haveFlatPage ? 1 : 0)));
         for (int k : tiles)
         {
             if (k < 0 || uint32_t(k) >= nTex)
             { std::printf("  tile %d lies outside the texture pages\n", k); return 1; }
             const size_t at = tex16At + size_t(k) * 131072;
+            const size_t was = out.size();
             out.insert(out.end(), r.b.begin() + at, r.b.begin() + at + 131072);
+            for (size_t px = 0; px < 65536 && !swapFrom.empty(); ++px)
+            {
+                uint16_t w; std::memcpy(&w, out.data() + was + px * 2, 2);
+                for (size_t q = 0; q < swapFrom.size(); ++q)
+                    if ((w & 0x7FFF) == swapFrom[q])
+                    { w = uint16_t((w & 0x8000) | swapTo[q]);
+                      std::memcpy(out.data() + was + px * 2, &w, 2); break; }
+            }
         }
         if (haveFlatPage)
         {

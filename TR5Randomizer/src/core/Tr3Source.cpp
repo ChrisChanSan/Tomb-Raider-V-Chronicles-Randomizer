@@ -719,13 +719,44 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
                     "%d corners where the edge byte and the corner disagree\n",
                     orderTris, texIdx.size(), orderNoMatch, orderDisagree);
 
+        // A recolour hits the imported TILES as well, not only the flat
+        // colour page.
+        //
+        // TR3 does not always keep skin as a flat colour: London does, the
+        // jungle outfit carries it as a texture - its bare forearm measures
+        // 100 percent one single tone. The 5 bit step that matters (TR3's 224
+        // red lands on level 28 and returns as 231, TR5 sits on 27 and
+        // returns as 222) is in the pixels there, where a flat colour
+        // correction can never reach it.
+        //
+        // Safe to do wholesale: these pages were copied in for this model and
+        // only its own texinfos point into them. Whatever else of the donor
+        // level sits on the same page is never drawn.
+        std::vector<uint16_t> swapFrom, swapTo;
+        for (size_t q = 0; q < opt->recolors.size(); ++q)
+        {
+            const int sr = opt->recolors[q].sr, sg = opt->recolors[q].sg, sb = opt->recolors[q].sb;
+            const int dr = opt->recolors[q].dr, dg = opt->recolors[q].dg, db = opt->recolors[q].db;
+            swapFrom.push_back(uint16_t(((sr >> 3) << 10) | ((sg >> 3) << 5) | (sb >> 3)));
+            swapTo.push_back(  uint16_t(((dr >> 3) << 10) | ((dg >> 3) << 5) | (db >> 3)));
+        }
+
         put32(out, uint32_t(tiles.size() + (flatColors.empty() ? 0 : 1)));
         for (int k : tiles)
         {
             if (k < 0 || uint32_t(k) >= nTex)
             { error = "a texture tile lies outside the texture pages"; return false; }
             const size_t at = tex16At + size_t(k) * 131072;
+            const size_t was = out.size();
             out.insert(out.end(), r.b.begin() + at, r.b.begin() + at + 131072);
+            for (size_t px = 0; px < 65536 && !swapFrom.empty(); ++px)
+            {
+                uint16_t w; std::memcpy(&w, out.data() + was + px * 2, 2);
+                for (size_t q = 0; q < swapFrom.size(); ++q)
+                    if ((w & 0x7FFF) == swapFrom[q])
+                    { w = uint16_t((w & 0x8000) | swapTo[q]);
+                      std::memcpy(out.data() + was + px * 2, &w, 2); break; }
+            }
         }
         if (!flatColors.empty())
         {
@@ -1077,10 +1108,15 @@ std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
 
     // Tomb Raider 3, London rooftops. Lara's standard outfit of that game.
     //
-    // dropSeams: the user judged these five in game. Waist (6) wore a grey
-    // slab, the two ankles (2, 5) sat in the boot, the two shoulders (7, 10)
-    // did not fit. TR1-3 segments overlap on their own, so a missing seam
-    // there costs less than a wrong one.
+    // dropSeams: judged in game by the user. The two ankles (2, 5) sit in
+    // the boot and the two shoulders (7, 10) did not fit. TR1-3 segments
+    // overlap on their own, so a missing seam there costs less than a wrong
+    // one.
+    //
+    // The waist (6) is NOT among them, although it was at first: it binds the
+    // back to the backside, and without it a gap opens there. The black
+    // London outfit hid that well enough that we both missed it until the
+    // jungle outfit made it obvious. It is painted instead.
     //
     // seamColors: hips and knees only. Elbows, wrists and neck keep TR5's
     // own texture - once the skin sits on the right 5 bit level they match
@@ -1095,18 +1131,61 @@ std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
     roofs.shinyWord = 0x0042;
     { Recolor rc; rc.sr = 224; rc.sg = 160; rc.sb = 96;
                   rc.dr = 222; rc.dg = 165; rc.db = 99; roofs.recolors.push_back(rc); }
-    roofs.dropSeams.push_back(6);
     roofs.dropSeams.push_back(2);
     roofs.dropSeams.push_back(5);
     roofs.dropSeams.push_back(7);
     roofs.dropSeams.push_back(10);
-    for (int seam : { 0, 3, 1, 4 })
+    for (int seam : { 0, 3, 1, 4, 6 })
     {
         OutfitSource::SeamColor sc;
         sc.seam = seam; sc.r = 48; sc.g = 48; sc.b = 40;
         roofs.seamColors.push_back(sc);
     }
     v.push_back(roofs);
+
+    // Tomb Raider 3, Crash Site. The jungle outfit - and it is built the
+    // other way round from London, which changes two of the three settings.
+    //
+    // Measured: THREE flat colours on five faces in the whole model, against
+    // London's eight on sixty-one. This outfit wears its SKIN as texture too,
+    // so the line that carried London - textured is the suit, flat is the
+    // skin - does not exist here.
+    //
+    // shinyWord therefore 0. The environment map goes on textured faces, and
+    // here that would gloss her bare legs and midriff like lacquer.
+    //
+    // recolors DO apply, but not where London needed them. The flat colours
+    // here are three faces in total - the skin sits in a TEXTURE, and its
+    // bare forearm measures 100 percent 231,165,99, exactly the 5 bit step
+    // away from TR5's own 222,165,99. Since a recolour now also rewrites the
+    // imported tiles, the same line fixes it.
+    //
+    // dropSeams: the hips, judged by the user from the joint textures alone -
+    // "the outfit will not be able to wear them" - and the two shoulders,
+    // which came out glitchy in game. The WAIST is deliberately not among
+    // them: it binds the back to the backside.
+    OutfitSource crash;
+    crash.id        = "tr3_jungle";
+    crash.name      = "Jungle (TR3)";
+    crash.source    = "tr3";
+    crash.file      = "CRASH.TR2";
+    crash.object    = 315;
+    crash.shinyWord = 0;
+    { Recolor rc; rc.sr = 224; rc.sg = 160; rc.sb = 96;
+                  rc.dr = 222; rc.dg = 165; rc.db = 99; crash.recolors.push_back(rc); }
+    crash.dropSeams.push_back(0);    // left hip
+    crash.dropSeams.push_back(3);    // right hip
+    crash.dropSeams.push_back(7);    // right shoulder - glitchy in game
+    crash.dropSeams.push_back(10);   // left shoulder
+    {
+        // The waist, in skin: the midriff is bare here, and this is the tone
+        // TR5's own arm wears - the same one the imported skin is corrected
+        // to, so seam and body meet on one value.
+        OutfitSource::SeamColor sc;
+        sc.seam = 6; sc.r = 222; sc.g = 165; sc.b = 99;
+        crash.seamColors.push_back(sc);
+    }
+    v.push_back(crash);
 
     return v;
 }

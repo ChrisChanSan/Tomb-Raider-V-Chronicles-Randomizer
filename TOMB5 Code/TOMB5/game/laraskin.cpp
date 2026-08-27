@@ -620,6 +620,25 @@ void CreateSkinningData()
 			long worst = 0;
 			float worstTurn = 0.0F;
 
+			// Not done here, and measured rather than assumed: pulling the
+			// paired skin vertex ONTO the joint vertex.
+			//
+			// The idea is right in principle - TR5's skin stops short of a
+			// joint and the joint covers the gap, while a TR1-3 limb runs
+			// through and overlaps, so the seam is asked to bridge a gap that
+			// is not there. Building TR5's construction by moving the rim
+			// ought to fix it at the root.
+			//
+			// It does not, because the two rings are genuinely far apart: the
+			// moves came out at up to 50 units on limbs about 100 units
+			// thick, and the paired vertex is not always a RIM vertex - only
+			// the nearest one. Moving an interior vertex onto the ring tears
+			// the surface, and the whole body came out visibly deformed.
+			//
+			// What it would take is the rim reshaped OFFLINE, in the package:
+			// a proper ring of vertices where TR5 expects one, with the faces
+			// rebuilt around it. That is modelling, not a load-time nudge.
+
 			// The middle of the seam, which every direction is measured from.
 			const long cx = JointMeshXYZ.x + midX;
 			const long cy = JointMeshXYZ.y + midY;

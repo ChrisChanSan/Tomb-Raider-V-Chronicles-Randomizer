@@ -1177,14 +1177,12 @@ std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
     crash.dropSeams.push_back(3);    // right hip
     crash.dropSeams.push_back(7);    // right shoulder - glitchy in game
     crash.dropSeams.push_back(10);   // left shoulder
-    {
-        // The waist, in skin: the midriff is bare here, and this is the tone
-        // TR5's own arm wears - the same one the imported skin is corrected
-        // to, so seam and body meet on one value.
-        OutfitSource::SeamColor sc;
-        sc.seam = 6; sc.r = 222; sc.g = 165; sc.b = 99;
-        crash.seamColors.push_back(sc);
-    }
+    // The waist goes too, unlike in London. It was tried painted in skin
+    // first, because it binds the back to the backside and London needs it -
+    // but on a bare midriff it stayed visibly wrong in game. A missing seam
+    // there costs less than a wrong one, and TR1-3 segments overlap on their
+    // own.
+    crash.dropSeams.push_back(6);
     v.push_back(crash);
 
     return v;

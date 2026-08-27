@@ -618,6 +618,76 @@ void CreateSkinningData()
 
 			joint = &jointMesh->nNorms;
 			long worst = 0;
+			float worstTurn = 0.0F;
+
+			// The middle of the seam, which every direction is measured from.
+			const long cx = JointMeshXYZ.x + midX;
+			const long cy = JointMeshXYZ.y + midY;
+			const long cz = JointMeshXYZ.z + midZ;
+
+			// DISTANCE decides, direction only breaks a tie.
+			//
+			// Letting direction decide outright was tried and measured, and it
+			// is wrong: it pulled pairings out to the full 96 unit reach - a
+			// seam that had been 21 units off became 96 - and stretched the
+			// whole body (seen in game). A vertex on the far side of the seam
+			// plane can share a direction from the middle, so direction alone
+			// says far too little.
+			//
+			// What it IS good for is the case the distance cannot settle: two
+			// candidates almost equally near, where picking the wrong one
+			// crosses the joint's triangles. TIE_SLACK is how much "almost"
+			// is allowed to mean, and it is small on purpose - inside it no
+			// choice can be much wronger than the other.
+			const long TIE_SLACK = 8;
+
+			auto pick = [&](short* mesh, long nv, long ox, long oy, long oz,
+							long jx, long jy, long jz, long& outDist, int& outWho, float& outTurn)
+			{
+				outDist = 0x7FFFFFFF;
+				outWho = -1;
+				outTurn = 1.0F;
+
+				// First pass: how near does it get at all?
+				long nearest = 0x7FFFFFFF;
+				short* p = mesh;
+				for (int ii = 0; ii < nv; ii++, p += 3)
+				{
+					const long d = abs(ox + p[0] - jx) + abs(oy + p[1] - jy) + abs(oz + p[2] - jz);
+					if (d < nearest) nearest = d;
+				}
+				if (nearest > SEAM_REACH)
+					return;
+
+				// Second pass: of those that get that near, the best aligned.
+				const float ax = float(jx - cx), ay = float(jy - cy), az = float(jz - cz);
+				const float al = sqrtf(ax * ax + ay * ay + az * az);
+				float bestCos = -2.0F;
+
+				for (int ii = 0; ii < nv; ii++, mesh += 3)
+				{
+					const long sx = ox + mesh[0], sy = oy + mesh[1], sz = oz + mesh[2];
+					const long d = abs(sx - jx) + abs(sy - jy) + abs(sz - jz);
+
+					if (d > nearest + TIE_SLACK)
+						continue;
+
+					const float bx = float(sx - cx), by = float(sy - cy), bz = float(sz - cz);
+					const float bl = sqrtf(bx * bx + by * by + bz * bz);
+					// A vertex sitting ON the middle has no direction; it can
+					// still be taken, just never in preference to one that has.
+					const float c = (al > 0.5F && bl > 0.5F)
+								  ? (ax * bx + ay * by + az * bz) / (al * bl) : -1.0F;
+
+					if (c > bestCos)
+					{
+						bestCos = c;
+						outDist = d;
+						outWho = ii;
+						outTurn = c;
+					}
+				}
+			};
 
 			for (int j = 0; j < jointVerts; j++)
 			{
@@ -628,40 +698,14 @@ void CreateSkinningData()
 
 				long bestAbove = 0x7FFFFFFF, bestBelow = 0x7FFFFFFF;
 				int whoAbove = -1, whoBelow = -1;
+				float turnAbove = 0.0F, turnBelow = 0.0F;
 
-				LaraMesh = &aboveMesh->nNorms;
-				laraVerts = aboveMesh->nVerts & 0xFF;
-
-				for (int ii = 0; ii < laraVerts; ii++)
-				{
-					const long d = abs(AboveMeshXYZ.x + LaraMesh[0] - jointX)
-								 + abs(AboveMeshXYZ.y + LaraMesh[1] - jointY)
-								 + abs(AboveMeshXYZ.z + LaraMesh[2] - jointZ);
-					LaraMesh += 3;
-
-					if (d < bestAbove)
-					{
-						bestAbove = d;
-						whoAbove = ii;
-					}
-				}
-
-				LaraMesh = &belowMesh->nNorms;
-				laraVerts = belowMesh->nVerts & 0xFF;
-
-				for (int ii = 0; ii < laraVerts; ii++)
-				{
-					const long d = abs(BelowMeshXYZ.x + LaraMesh[0] - jointX)
-								 + abs(BelowMeshXYZ.y + LaraMesh[1] - jointY)
-								 + abs(BelowMeshXYZ.z + LaraMesh[2] - jointZ);
-					LaraMesh += 3;
-
-					if (d < bestBelow)
-					{
-						bestBelow = d;
-						whoBelow = ii;
-					}
-				}
+				pick(&aboveMesh->nNorms, aboveMesh->nVerts & 0xFF,
+					 AboveMeshXYZ.x, AboveMeshXYZ.y, AboveMeshXYZ.z,
+					 jointX, jointY, jointZ, bestAbove, whoAbove, turnAbove);
+				pick(&belowMesh->nNorms, belowMesh->nVerts & 0xFF,
+					 BelowMeshXYZ.x, BelowMeshXYZ.y, BelowMeshXYZ.z,
+					 jointX, jointY, jointZ, bestBelow, whoBelow, turnBelow);
 
 				// The ring decides, and only where the two bones sit on top
 				// of each other and leave no axis does the distance have to.
@@ -699,6 +743,13 @@ void CreateSkinningData()
 
 				if (best > worst)
 					worst = best;
+
+				// 1 means the pair points the same way from the middle of the
+				// seam, 0 means a right angle away. The worst of these says
+				// whether the ring is sewn straight or twisted.
+				const float turn = useAbove ? turnAbove : turnBelow;
+				if (1.0F - turn > worstTurn)
+					worstTurn = 1.0F - turn;
 			}
 
 			SkinVertNums[SkinJoints[i][2]][aboveVerts] = -1;
@@ -710,9 +761,9 @@ void CreateSkinningData()
 								  && vertCount * 2 >= jointVerts) ? 1 : 0;
 
 			Log("SKINLOG joint %d: nearest neighbour pass sewed %d of %d (%d above, %d below, split by %s), "
-				"furthest %d units - %s",
+				"furthest %d units, worst turn %d/1000 - %s",
 				i, vertCount, jointVerts, aboveVerts, belowVerts,
-				haveAxis ? "seam axis" : "distance", worst,
+				haveAxis ? "seam axis" : "distance", worst, (int)(worstTurn * 1000.0F),
 				SkinJointUsable[i] ? "joint used" : "still left out");
 		}
 

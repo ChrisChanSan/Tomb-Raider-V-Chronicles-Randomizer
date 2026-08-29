@@ -511,6 +511,138 @@ Also in this group:
     the same stamp the log writes, so a screenshot and a `log.txt` can be
     matched up.
 
+- `game/gameflow.h`, `game/gameflow.cpp`, `game/tower.cpp`, `game/objects.cpp`,
+  `game/switch.cpp`, `game/footprnt.cpp`, `game/health.cpp` — **level identity
+  separated from level slot.** Upstream has one number, `gfCurrentLevel`, and
+  uses it for two different questions: which entry of `SCRIPT.DAT` is being
+  played (order, savegame, level names) and WHICH LEVEL this is (the places
+  where the engine does something only Old Mill or only Red Alert needs). In
+  vanilla the two are the same number. As soon as the randomizer shuffles the
+  order they are not, and every such place fired in the wrong level - the
+  Iris hazard, the gunship, the Area 51 laser, a shatter sound table indexed
+  per level, footprints, the puzzle-hole special case. `gfLevelId` is the new
+  identity, taken from the level's file name at load time; every level-specific
+  branch now asks it, while `gfCurrentLevel` keeps its slot meaning.
+
+- `game/chef.cpp`, `game/skeleton.cpp`, `game/swampy.cpp` — **three enemies
+  that could not be killed.** All three have hit points and take damage, but
+  their control functions never looked at `hit_points`, so there was no way out
+  of their states. In vanilla it never shows: the chef's level takes Lara's
+  weapons away beforehand, the swamp witch only wakes when the level is as good
+  as over, and the skeletons' level hands Lara nothing to shoot them with. The
+  randomizer scatters weapons and moves the items those assumptions rest on.
+  The chef borrows the soldier family's gunshot death - his skeleton is
+  bone-identical with theirs and his own death animation is a one-frame stub;
+  the other two shred (see the next entry), having no death animation at all.
+
+- `game/imp.cpp`, `game/willwisp.cpp` — **shredding death instead of a death
+  animation.** The TR4 grenade-launcher death lives on in the code
+  (`CreatureDie(item, 1)` -> `ExplodingDeath2`) and TR5 uses it only for the
+  Roman god. The scraps are the enemy's OWN meshes thrown as `BODY_PART`
+  effects, so no extra model is needed, and `CreatureDie` also does everything
+  a death animation would: `KillItem`, dropped loot, AI off, the invisible flag
+  for the savegame. For the maze monster it additionally replaces a stopgap -
+  Core never finished that death, the lying pose sinks into the floor.
+
+- `game/dog.cpp`, `game/huskie.cpp`, `game/lion.cpp`, `game/bat.cpp`,
+  `game/spider.cpp`, `game/people.cpp`, `game/twogun.cpp`, `game/gladiatr.cpp`,
+  `game/joby.cpp`, `game/hydra.cpp`, `game/minisub.cpp`, `game/autogun.cpp`,
+  `game/tower.cpp`, `game/chef.cpp`, `game/skeleton.cpp`, `game/swampy.cpp` —
+  **every damage figure and every enemy's hit points read from `Balance.txt`.**
+  Upstream writes them as literals at the point of use. They are now named
+  fields (`balance.dmgDogBite`, `balance.dmgHydraBeam`, …) fed by the new
+  `game/balance.cpp`/`game/balance.h`, which reads a plain text file beside the executable,
+  writes a commented template when it is missing and fills in settings a newer
+  version has added. Three percentage lines scale everything at once. With no
+  file present, the values are this build's defaults.
+
+- `game/box.cpp` — **a dropped wall pickup becomes an ordinary one.** OCB 2 and
+  9 mark the pickups Lara pulls off a wall; the manner demands a wall behind
+  the item and her angle onto it. When an enemy carries such an item and dies,
+  `DropBaddyPickups` puts it on open floor, where that condition can never be
+  met again - the item is lost for good (seen in the randomizer: an Imp carried
+  a crowbar away). The low OCB bits are cleared on the drop, so it lands as a
+  normal floor pickup. The pickup trigger's own bits are untouched.
+
+- `game/moveblok.cpp` — **a pushable block may roll over pickups.** TR5 refuses
+  the push as soon as `GetCollidedObjects` reports anything at all on the target
+  tile, a medipack included. TR1-4 had no such general test and the block simply
+  rolled over pickups. With items relocated, a stray medipack could block the
+  only push path to a puzzle. The test now asks what is in the way: pickups let
+  the block through and are there again once it moves on; enemies, statues and a
+  second block still stop it.
+
+- `specific/gamemain.cpp`, `specific/gamemain.h`, `specific/LoadSave.h`, `game/savegame.h` —
+  **savegames live in a `savegame\` subfolder**, and any `savegame.N` still
+  lying loose in the game folder is moved there once at startup (never
+  overwriting). Two guards came with it: the number of bytes the read actually
+  returned is kept, so a save written before the struct grew is recognised
+  before it is applied, and **the checksum is computed the moment the file is
+  read** instead of after the fade and level reload. The game loop keeps running
+  behind the menu and increments the level timer, so a load during Lara's death
+  animation failed with "corrupted savegame" on a file that was provably read in
+  full - and worked after a restart, when no frames lay in between.
+
+- `tomb5/troyestuff.cpp`, `tomb5/troyestuff.h`, `specific/input.h`, `specific/dxshell.h`,
+  `specific/output.h`, `specific/texture.h`, `specific/drawbars.h`,
+  `specific/function_table.h`, `specific/dxsound.h`, `specific/audio.h`,
+  `game/camera.h`, `game/lara.h`, `game/laramisc.h`, `resource.h` — **the
+  in-game option pages.** The tomb5 options grew a second page and, when the
+  first-person view is switched on, a third one for it alone; a page only joins
+  the cycle when it has something to say. The rows use stepped values rather
+  than free sliders where a step is plainly visible, the way the sound quality
+  row already behaved. The joystick pages carry the vocabulary of the active
+  input path, so a controller is described the way it actually reports itself.
+  The headers carry the declarations these pages need.
+
+- `specific/alexstuff.cpp`, `specific/alexstuff.h`, `tomb5/troyestuff.cpp` — **a credits screen.**
+  GPLv3 courtesy and a project requirement: the names without which this would
+  not exist belong in the game, not only in a readme. It is a screen of its
+  own, deliberately not a page of the options - as a page it turned up unasked
+  while paging through the settings, and the paging arrows are drawn at a fixed
+  row that landed across a line of names. Groups are separated by colour rather
+  than blank lines, because the screen holds fifteen rows and four separators
+  would push the tool credits off it. The running state moved out of a function
+  static so an abort lets the next roll start from the bottom again.
+
+- `game/text.cpp` — **a glyph outside the font is skipped instead of read past
+  the table.** `CharDef` holds 106 entries plus the accent codes 128..173;
+  everything beyond that - the kana indices of the Japanese PSX language file
+  reach to 181 - indexed the table unchecked. What the font can show is shown.
+
+- `game/effects.cpp` — the second guard slot (see the `#105` entry above) is
+  the last anchor of the same alias chain used elsewhere, so an enemy woken by
+  a flipeffect finds its animation set too. In the same file, the ambient
+  scenery sound sources are marked as such while they are created: the range
+  brake and the stacking guard in `sound.cpp` hang on that mark.
+
+- `game/delstuff.cpp`, `game/delstuff.h` — `SkinJointUsable` records, per joint, whether the
+  seam pairing found anything to sew. A joint that matched no vertex at all
+  cannot be computed, and drawing it anyway can only put a lump of geometry
+  somewhere it does not belong; the three joint loops in `specific/drawlara.cpp`
+  ask this before they draw.
+
+- `specific/function_stubs.h` — `gLogEnabled`. `Log()` writes nothing unless
+  the game was started with `-log`. Diagnostic seams that have to build
+  something before they can log - walking a list, formatting a name - test it
+  themselves at the call site, because the gate inside `Log()` only saves the
+  writing, not the preparing.
+
+- `game/secretreward.cpp`, `game/secretreward.h` — what finding every secret in a level awards is
+  read from `SecretRewards.txt` beside the executable, keyed by level position
+  rather than by file name, because the level order is itself rolled. The
+  randomizer can write that file; a player can edit it. Only weapons,
+  ammunition and medipacks are allowed as rewards - handing out a key or a
+  puzzle item would open a door out of order.
+
+- `specific/audio.cpp`, `tomb5/libs/stb/stb_vorbis.c` — **HQ soundtracks in
+  OGG.** If a file named after the track number lies in `audio\HQ`, it is
+  played instead of the original; without those files nothing changes. The
+  decoder is **stb_vorbis by Sean Barrett**, vendored unchanged and in the
+  public domain (its own header carries the notice), so it adds no license
+  obligation of its own. No music is shipped with this project - the player
+  supplies their own files.
+
 ### 3. Code taken from tomb3 (four Tomb Raider III enemies)
 
 Four enemies from Tomb Raider III can appear in randomized levels: the
@@ -520,7 +652,9 @@ Raider III, <https://github.com/Trxyebeep/tomb3>, and is under the GNU GPL
 v3 — the same license as TOMB5 and as this project, which is what makes
 combining them possible in the first place.
 
-- `game/trex.cpp`, `game/raptor.cpp`, `game/compy.cpp` — new files, taken
+- `game/trex.cpp`, `game/trex.h`, `game/raptor.cpp`, `game/raptor.h`,
+  `game/compy.cpp`, `game/compy.h` — new
+  files, taken
   over from tomb3's files of the same name. The code was deliberately
   **taken over directly rather than rewritten**: a rewrite would obscure
   where it came from. Each file's header names its origin and lists every

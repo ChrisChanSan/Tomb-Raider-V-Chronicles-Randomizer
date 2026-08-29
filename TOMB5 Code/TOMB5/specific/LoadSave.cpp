@@ -659,7 +659,7 @@ void DoOptions()
 			else if (pos < 4)
 			{
 				ControlMethod = 1;
-				JoyStyle = pos - 1;	// ab jetzt explizite Wahl statt Automatik
+				JoyStyle = pos - 1;	// an explicit choice from now on, not automatic
 			}
 		}
 
@@ -963,7 +963,7 @@ void DoOptions()
 				{
 					if (SwitchLanguage(n))
 					{
-						LanguageChoice = n;	// ab jetzt explizite Wahl, Registry "Language"
+						LanguageChoice = n;	// an explicit choice from now on, registry "Language"
 						SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 						break;
 					}
@@ -1720,9 +1720,9 @@ static const char* GetStupidText(long type)	//0: next, 1: both, 2: previous
 		if (!type)
 			strcpy(buf, "Ensuite \x1B");
 		else if (type == 1)
-			strcpy(buf, "\x19 Prï¿½cï¿½dent / Ensuite \x1b");
+			strcpy(buf, "\x19 Précédent / Ensuite \x1b");
 		else
-			strcpy(buf, "\x19 Prï¿½cï¿½dent");
+			strcpy(buf, "\x19 Précédent");
 
 		break;
 
@@ -1731,9 +1731,9 @@ static const char* GetStupidText(long type)	//0: next, 1: both, 2: previous
 		if (!type)
 			strcpy(buf, "Weiter \x1B");
 		else if (type == 1)
-			strcpy(buf, "\x19 Zurï¿½ck / Weiter \x1b");
+			strcpy(buf, "\x19 Zurück / Weiter \x1b");
 		else
-			strcpy(buf, "\x19 Zurï¿½ck");
+			strcpy(buf, "\x19 Zurück");
 
 		break;
 

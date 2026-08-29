@@ -28,52 +28,52 @@ uchar ScaleFlag;
 
 char AccentTable[46][2] =
 {
-	{'{', ' '},		//ï¿½
-	{'u', '^'},		//ï¿½
-	{'e', '\\'},	//ï¿½
-	{'a', ']'},		//ï¿½
-	{'a', '^'},		//ï¿½
-	{'a', '['},		//ï¿½
-	{'a', '\\'},	//ï¿½
-	{'{', ' '},		//ï¿½
-	{'e', ']'},		//ï¿½
-	{'e', '^'},		//ï¿½
-	{'e', '['},		//ï¿½
-	{'|', '^'},		//ï¿½
-	{'|', ']'},		//ï¿½
-	{'|', '['},		//ï¿½
-	{'A', '^'},		//ï¿½
-	{'A', ']'},		//ï¿½
-	{'E', '\\'},	//ï¿½
-	{'A', '\\'},	//ï¿½			//NEW
+	{'{', ' '},		//ç
+	{'u', '^'},		//ü
+	{'e', '\\'},	//é
+	{'a', ']'},		//â
+	{'a', '^'},		//ä
+	{'a', '['},		//à
+	{'a', '\\'},	//á
+	{'{', ' '},		//ç
+	{'e', ']'},		//ê
+	{'e', '^'},		//ë
+	{'e', '['},		//è
+	{'|', '^'},		//ï
+	{'|', ']'},		//î
+	{'|', '['},		//ì
+	{'A', '^'},		//Ä
+	{'A', ']'},		//Â
+	{'E', '\\'},	//É
+	{'A', '\\'},	//Á			//NEW
 	{' ', ' '},		//empty
-	{'o', ']'},		//ï¿½
-	{'o', '^'},		//ï¿½
-	{'o', '['},		//ï¿½
-	{'u', ']'},		//ï¿½
-	{'u', '['},		//ï¿½
-	{'y', '^'},		//ï¿½
-	{'O', '^'},		//ï¿½
-	{'U', '^'},		//ï¿½
+	{'o', ']'},		//ô
+	{'o', '^'},		//ö
+	{'o', '['},		//ò
+	{'u', ']'},		//û
+	{'u', '['},		//ù
+	{'y', '^'},		//ÿ
+	{'O', '^'},		//Ö
+	{'U', '^'},		//Ü
 	{' ', ' '},		//empty
-	{'O', '\\'},	//ï¿½
-	{' ', ' '},		//empty
-	{' ', ' '},		//empty
-	{' ', ' '},		//empty
-	{'a', '\\'},	//ï¿½
-	{'|', '\\'},	//ï¿½
-	{'o', '\\'},	//ï¿½
-	{'u', '\\'},	//ï¿½
-	{'n', '_'},		//ï¿½
-	{'N', '_'},		//ï¿½
-	{' ', ' '},		//empty
-	{' ', ' '},		//empty
-	{'}', ' '},		//ï¿½
+	{'O', '\\'},	//Ó
 	{' ', ' '},		//empty
 	{' ', ' '},		//empty
 	{' ', ' '},		//empty
+	{'a', '\\'},	//á
+	{'|', '\\'},	//í
+	{'o', '\\'},	//ó
+	{'u', '\\'},	//ú
+	{'n', '_'},		//ñ
+	{'N', '_'},		//Ñ
 	{' ', ' '},		//empty
-	{'~', ' '}		//ï¿½
+	{' ', ' '},		//empty
+	{'}', ' '},		//¿
+	{' ', ' '},		//empty
+	{' ', ' '},		//empty
+	{' ', ' '},		//empty
+	{' ', ' '},		//empty
+	{'~', ' '}		//¡
 };
 
 #pragma warning(push)
@@ -253,73 +253,73 @@ void DrawChar(long x, long y, ushort col, CHARDEF* def)
 
 static void AccentToCode(uchar& s)
 {
-	if (s == (uchar)'ï¿½')
+	if (s == (uchar)'¡')
 		s = 128 + 45;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'¿')
 		s = 128 + 40;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'Ñ')
 		s = 128 + 37;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ñ')
 		s = 128 + 36;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ú')
 		s = 128 + 35;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ó')
 		s = 128 + 34;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'í')
 		s = 128 + 33;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'á')
 		s = 128 + 32;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'Ó')
 		s = 128 + 28;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'Ü')
 		s = 128 + 26;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'Ö')
 		s = 128 + 25;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ÿ')
 		s = 128 + 24;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ù')
 		s = 128 + 23;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'û')
 		s = 128 + 22;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ò')
 		s = 128 + 21;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ö')
 		s = 128 + 20;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ô')
 		s = 128 + 19;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'Á')
 		s = 128 + 17;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'É')
 		s = 128 + 16;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'Â')
 		s = 128 + 15;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'Ä')
 		s = 128 + 14;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ì')
 		s = 128 + 13;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'î')
 		s = 128 + 12;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ï')
 		s = 128 + 11;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'è')
 		s = 128 + 10;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ë')
 		s = 128 + 9;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ê')
 		s = 128 + 8;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ç')
 		s = 128 + 0;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'á')
 		s = 128 + 6;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'à')
 		s = 128 + 5;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ä')
 		s = 128 + 4;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'â')
 		s = 128 + 3;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'é')
 		s = 128 + 2;
-	else if (s == (uchar)'ï¿½')
+	else if (s == (uchar)'ü')
 		s = 128 + 1;
 }
 

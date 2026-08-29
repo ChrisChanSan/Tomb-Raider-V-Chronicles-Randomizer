@@ -1,7 +1,26 @@
 # Floordata and triggers in TR5
 
 Everything here was read off the engine code (`TOMB5 Code\TOMB5`), not
-taken from community documentation. The decisive places:
+taken from community documentation.
+
+> **On the tools named below, 2026-08-30.** `FloorTool`, `DumpItems` and
+> `TRFile_RandomizerExport.cpp` appear in this text and nowhere else in
+> the repository. They belonged to an earlier workflow around
+> TombItemEdit2026, which is a separate program. What they measured is
+> measured today by the tools in `Preparation\Tools\Diagnose` -
+> `ItemCheck` for items and OCBs, `SectorCheck` and `FloorCheck` for
+> floordata, `TriggerCommands` for trigger chains.
+
+> **On the line numbers, 2026-08-30.** They were right when written and
+> they drift with every edit to the engine. **The symbol name is what is
+> authoritative here, not the number** - search for it rather than jumping
+> to the line. Measured today: everything in `global/types.h` has moved
+> down by exactly 60 lines, while `game/control.cpp` has drifted
+> unevenly (+1 for `GetHeight`, +23 for `_TestTriggers`), so there is no
+> single offset to apply. The structure and the reasoning below were
+> re-checked against the source and are unchanged.
+
+The decisive places:
 `GetHeight` (`game/control.cpp:960`) walks the chain,
 `_TestTriggers` (`game/control.cpp:2126`) evaluates a trigger,
 `struct FLOOR_INFO` (`global/types.h:603`) is the entry point.
@@ -180,7 +199,7 @@ trigger yields a random trigger kind with random commands.
 
 Portals and tilts **alone**, by contrast, are harmless: they stand before
 the pointer, not behind it. A sector with pure geometry floordata is thus
-a valid target. `FloorTool` checks this in `darfAnhaengen()`.
+a valid target. The randomizer checks this in `canAppendTrigger` (`Tr5Level.cpp`). **2026-08-30:** this used to name a tool `FloorTool` and a function `darfAnhaengen()`; neither exists - the tool was never in the repository and the function was renamed when the project went English.
 
 ### There is enough room
 
@@ -263,6 +282,13 @@ Together that is over 400 of the 2057 triggers. They stay where they are,
 and the item on them stays pinned.
 
 **These items stay vanilla for now** (user decision):
+
+> **Corrected 2026-08-30: nearly all of these have since been released.**
+> Of the eleven, only rich1 item 27 (the CD) is still pinned, and joby3
+> item 41 survives indirectly as typeId 172. Andrea2's valve 128 is
+> explicitly retired in `$FIXED_ITEMS` with the reason that the placement
+> does that job itself since #61. The authoritative list is
+> `$FIXED_ITEMS` in `ZoneAnalysis.ps1`, not this table.
 
 | Level | Items |
 |---|---|
@@ -431,6 +457,13 @@ freely it is collectable but looks wrong.
 
 Releasing it needs **three things, two of which were still missing**:
 
+> **Closed 2026-08-30.** Both gaps were filled when the wall-pickup work
+> (#61) shipped: the patch format carries `angle` for moved and for added
+> items and writes it into the item's yRot, and the placement picks the
+> wall edge and the matching angle itself, while KEEP_OCB preserves OCB 2
+> and 9. This section reads as an open to-do for a finished feature; it is
+> kept because the reasoning is still the reasoning.
+
 1. A **sector with a wall neighbor**. Data situation: present — the
    sector export carries `isWall` per sector, the four neighbors in the
    same room are checkable.
@@ -488,9 +521,16 @@ deliberately, because the trigger travels as a whole.
 ## 4f. New enemies: the strictest variant suffices
 
 For the actual purpose — **adding** enemies to the level — no existing
-chain is touched at all. New enemy triggers go exclusively onto sectors
-with `index == 0`: append a fresh chain at the end, repoint the sector,
-done.
+chain is touched at all. New enemy triggers were meant to go exclusively
+onto sectors with `index == 0`: append a fresh chain at the end, repoint
+the sector, done.
+
+> **Corrected 2026-08-30.** The shipping rule is wider. A sector qualifies
+> when its chain passes `canAppendTrigger` - no trigger, lava, climb,
+> monkey or TrigTrigger entry in it. Sectors that already carry portals,
+> tilts, roof entries or NOCOL/SPLIT entries ARE accepted: their chain is
+> read out and rebuilt with the new trigger appended. Empty sectors are
+> the simple case, not the only one.
 
 That makes the check rule from section 5 trivial: **every sector with
 `index != 0` must stay byte-identical.** No decomposing, no reassigning
@@ -529,9 +569,15 @@ the enemy spawns into Lara.
 The path has stood end to end since 2026-08-13. Four stations:
 
 **1. Curation** — `$ENEMY_TYPES` in `ZoneAnalysis.ps1`, per level a list
-of typeIds with a reason. Deliberately empty until an enemy has proven in
-game that it works without a level script. Lands in the zone export as
-`enemyTypes`.
+of typeIds with a reason. It was deliberately empty until an enemy had
+proven in game that it works without a level script. Lands in the zone
+export as `enemyTypes`.
+
+> **2026-08-30: it has not been empty for a long time.** Essentially every
+> campaign level carries reasoned entries now - dog and Larson in Andrea1,
+> Pierre and the Roman god in Andrea2 and Andrea3, the Imp in the andy
+> levels, the Maze Monster in Andy2, guard and husky in joby2, and so on.
+> Read the table itself; it is the record.
 
 **2. Approach sectors** — also `ZoneAnalysis.ps1`. For every item-capable
 sector, up to three sectors are provided that Lara steps on shortly
@@ -563,7 +609,7 @@ trigtrigger). The enemy comes as `itemAdds`, its trigger as
 | The trigger on the approach path | otherwise he never wakes up |
 | OneShot set | see 4b-ter — for Larson it decides over life and death |
 | OCB 0 | otherwise `ai_bits = GUARD` and he looks for AI objects that are not there |
-| At most 256 items | `MAX_ITEMS`; rich2 sits close below it at 248 |
+| At most 512 items | `MAX_ITEMS` (doubled from 256 - see Tomb5 Limits\Limits.txt); rich2 sits at 248 |
 
 **Measured** (Andrea1, seed 4711, 6 enemies): 6 of 6 have their trigger,
 all on a different sector than the enemy. Floordata: 11 rows affected — 3

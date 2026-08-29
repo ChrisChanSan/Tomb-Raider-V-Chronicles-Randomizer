@@ -1,3 +1,11 @@
+NOTE, added 2026-08-30: this list is NOT filtered. Since it was made,
+28 rich3 rooms have been barred for items (NO_ITEM_ROOMS in
+Preparation\Tools\ZoneAnalysis.ps1), and they still stand below:
+  2, 23, 24, 33, 41, 47, 51, 52, 56, 58, 60, 68, 71, 72, 84, 85, 92, 121, 151, 153, 169, 170, 171, 178, 193, 198, 204, 209
+Their spots are void. The authoritative list is the one in
+ZoneAnalysis.ps1; this file is a snapshot of the surfaces before the
+bans, kept because the per-room counts are still what they were.
+
 rich3 - rooms by placement surfaces, descending
 As of 2026-08-12, 808 spots in 128 rooms
 

@@ -112,6 +112,13 @@ today for KEY8 and the HK. Dependency table (from section 2):
 | Andy2 | PUZZLE_ITEM2, PUZZLE_ITEM3 |
 | Andrea3 | crowbar (after checking the doors) |
 
+The scripted **takeaways** were meant to stay where they are.
+**Corrected 2026-08-30: they do not.** On every run, before any order roll,
+the randomizer deletes joby3's four weapon takeaways and Andrea1's Uzi
+takeaway, and ADDS two to rich2 that vanilla has not - pistols and pistol
+ammo, because rich2's slot 1 is a scripted second HK. The original text
+follows.
+
 The scripted **takeaways** (joby3 weapons, rich2 keys) stay where they
 are — they belong to the level's story and travel with the block.
 
@@ -120,6 +127,10 @@ are — they belong to the level's story and travel with the block.
 **Stage 0 — engine identity (the prerequisite for everything).** Core
 idea A, without a roll. Test: a vanilla playthrough, all level-specific
 things (cutscenes, tower, young-Lara flag, secrets bonus) unchanged.
+
+**Corrected 2026-08-30:** stage 1 is no longer the untouched-inventory case
+below. As soon as either checkbox is set, the full machinery runs -
+cleanupInventory on every level, then resolveChains with its two grants.
 
 **Stage 1 — shuffle the level sections.** Permute the four sections as
 indivisible blocks: Rome (Andrea1–3), Russia (joby2–5), Ireland
@@ -166,9 +177,15 @@ chains). Comparable to the language selection plus one TR3-port day.
 
 - Stages 0 + 1: confirmed in game (sections, videos by identity, the
   finale on the last slot, credits abortable).
-- Stages 2 + 3 built (within / free, LevelChains.h with three active
-  chains, GIVEOBJ + name command + model copy, the takeaway case via a
-  TAKEOBJ in between). Test seed for "free": **380**.
+- Stages 2 + 3 built (within / free, LevelChains.h, GIVEOBJ + name command
+  + model copy). Test seed for "free": **380**.
+  **Corrected 2026-08-30: two chains, not three** - Key 8 (joby2 -> joby3)
+  and the crowbar (Andrea2 -> Andrea3). Key 7 and the catapult were deleted
+  on purpose: joby5's silver key is handed over inside the level by a
+  cutscene, and Andy2's Puzzle Hole 2 was repurposed. The "takeaway case"
+  is gone as a case - since the per-level reset, resolveChains grants
+  unconditionally wherever the donor lies, and the give=false variant is
+  used by no chain at all.
 - **Play test "free" (seed 380): "what I feared is happening — this is
   going to be something big."** The user is compiling a large error
   list; it will be the basis for the next round. Expected candidates
@@ -192,7 +209,8 @@ could have offered and that neither this nor a later level imports via
 a chain; the crossbow family everywhere except rich3. Chains
 (`LevelChains.h`) are now "give" (GIVEOBJ + name + model) or "keep
 only" (story items en route). Engine: `gfPickups`/`gfTakeaways` from 16
-to 64 with a guard.
+to **128** with a guard (**corrected 2026-08-30**; 64 would no longer be
+enough - the cleanup writes 74 takeaways into a campaign level's block).
 
 Open for the play test: whether the "keep only" chains suffice (Iris,
 Bestiary, Spear, Iron clapper), and whether any level needs an item the
@@ -200,8 +218,12 @@ matrix does not show (flipmap duplicates).
 
 **Addendum (play test of the first GC):** the "keep en route" rules let
 the Iris travel through half of Rome. Decision: **keys/puzzles/pickups
-never travel** — every level starts fresh (~64 TAKEOBJ per level
-start), only weapons/ammo/medis/flares remain; the four gifts (Key 8
+never travel** — every level starts fresh (**74 TAKEOBJ** per campaign
+level, 68 in rich3 - **corrected 2026-08-30**: 8 puzzles and 8 keys with
+both halves each = 48, 4 pickups with halves = 12, crowbar, torch, three
+examine objects and the three chloroform slots = 68, plus the six-entry
+crossbow family everywhere except rich3. The secret rose is no longer
+exempt.), only weapons/ammo/medis/flares remain; the four gifts (Key 8
 joby3, Key 7 joby5, Catapult Andy2, crowbar Andrea3) always come. A
 note for later (no order yet): the gifts could also become pickups in
 the level — would need curated areas per lock.

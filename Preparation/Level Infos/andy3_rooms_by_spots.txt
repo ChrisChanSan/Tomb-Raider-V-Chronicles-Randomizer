@@ -1,3 +1,11 @@
+NOTE, added 2026-08-30: this list is NOT filtered. Since it was made,
+31 andy3 rooms have been barred for items (NO_ITEM_ROOMS in
+Preparation\Tools\ZoneAnalysis.ps1), and they still stand below:
+  10, 12, 14, 15, 16, 17, 19, 22, 23, 24, 25, 27, 35, 36, 86, 87, 108, 109, 113, 115, 116, 120, 121, 133, 155, 156, 158, 167, 171, 172, 209
+Their spots are void. The authoritative list is the one in
+ZoneAnalysis.ps1; this file is a snapshot of the surfaces before the
+bans, kept because the per-room counts are still what they were.
+
 andy3 - rooms with placement surfaces, sorted descending
 As of: 2026-08-09 22:43   808 surfaces in 154 rooms
 Room 113 is already barred and no longer stands in the list.

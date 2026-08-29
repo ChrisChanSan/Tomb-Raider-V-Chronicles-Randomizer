@@ -137,7 +137,22 @@ $lic = "$OutDir\Licenses"
 New-Item -ItemType Directory -Path $lic -Force | Out-Null
 Copy-Item "$EngineSrc\LICENSE" "$lic\TOMB5-GPLv3.txt" -Force
 if (Test-Path "$ImGui\LICENSE.txt") { Copy-Item "$ImGui\LICENSE.txt" "$lic\DearImGui-MIT.txt" -Force }
-Say "Licenses      : GPLv3 (engine), MIT (Dear ImGui)"
+# discord-rpc is linked into PCtomb5.exe (Discord_Initialize and friends in
+# tomb5.cpp), so its notice has to travel with the binary.
+$drpc = "$EngineSrc\TOMB5\tomb5\libs\discordRPC\LICENSE"
+if (Test-Path $drpc) { Copy-Item $drpc "$lic\DiscordRPC-MIT.txt" -Force }
+# zlib and stb_vorbis keep their notice inside their own source. It is lifted
+# from there rather than copied into a second file, so the package cannot end
+# up shipping a stale version of someone else's licence.
+$zh = Get-Content "$EngineSrc\TOMB5\tomb5\libs\zlib\zlib.h"
+$zEnd = ($zh | Select-String -Pattern '^\s*\*/' | Select-Object -First 1)
+if ($zEnd) { $zh[0..($zEnd.LineNumber - 1)] | Set-Content "$lic\zlib.txt" -Encoding utf8 }
+$sv = Get-Content "$EngineSrc\TOMB5\tomb5\libs\stb\stb_vorbis.c"
+$sStart = ($sv | Select-String -Pattern 'available under 2 licenses' | Select-Object -First 1)
+if ($sStart) { $sv[($sStart.LineNumber - 3)..($sv.Count - 1)] | Set-Content "$lic\stb_vorbis.txt" -Encoding utf8 }
+Copy-Item "$Root\THIRD-PARTY.md" "$lic\THIRD-PARTY.md" -Force
+$n = (Get-ChildItem $lic -File).Count
+Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, zlib, stb_vorbis)"
 
 # --- 6. Manual ---------------------------------------------------------------
 # One source of truth: the player README is versioned at

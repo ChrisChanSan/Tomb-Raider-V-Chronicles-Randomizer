@@ -48,11 +48,20 @@ namespace
     // One extra option, all forms in one pot.
     struct Option
     {
-        enum Kind { ITEM, TRIGGER, REPLACE, PORTAL, CLIMB, WATER } kind = ITEM;
+        enum Kind { ITEM, TRIGGER, REPLACE, PORTAL, CLIMB, WATER, MOVEROOM } kind = ITEM;
+        long moveX = 0, moveY = 0, moveZ = 0;         // MOVEROOM only
         bool waterOn = false;                        // WATER only
         int typeId = -1, index = -1;
         int room = -1, sx = -1, sz = -1;
         int roomB = -1, sxB = -1, szB = -1;          // PORTAL only
+        // 0 = wall (Make_Portal), 1 = A opens at its CEILING into B,
+        // 2 = A opens at its FLOOR into B. Told apart by NAME rather than
+        // worked out from the geometry - the guess got andy1 wrong.
+        int portalKind = 0;
+        // #136: the wall is a drawn face and stays put unless it is dealt
+        // with. @Clear takes it away, @LikeWall gives it another texture.
+        bool portalClear = false;
+        int  likeWallRoom = -1, likeWallSx = -1, likeWallSz = -1;
         bool hasOcb = false, hasAngle = false, hasHeight = false;
         bool hasXOff = false, hasZOff = false;
         int ocb = 0, angleDeg = 0, height = 0, xOff = 0, zOff = 0;
@@ -117,6 +126,15 @@ namespace
         static const std::regex reItem(R"(add\s+Type_ID\(\s*(\d+)\s*\))");
         static const std::regex reRoom(R"(@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\))");
         static const std::regex reTrigForm(R"(add\s+Trigger_Type\()");
+        // The two vertical forms come first: they are their own words now,
+        // because guessing wall-or-stacked from the geometry is what broke
+        // andy1. "Celing" is tolerated too - the author writes it that way.
+        static const std::regex reMoveRoom(R"(Move_Room(\d+)\s*\(([^)]*)\))", std::regex::icase);
+        static const std::regex reAxis(R"(([xyz])\s*=\s*([+-]?\d+))", std::regex::icase);
+        static const std::regex reClear(R"(@\s*Clear)", std::regex::icase);
+        static const std::regex reLikeWall(R"(@\s*LikeWall\s*\(\s*Room(\d+)\s*\(\s*x(\d+)\s*,\s*z(\d+)\s*\)\s*\))", std::regex::icase);
+        static const std::regex reCeilPortal(R"(Make_Ce[il]+ing_?Portal\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)\s*->\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\))", std::regex::icase);
+        static const std::regex reFloorPortal(R"(Make_Floor_?Portal\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)\s*->\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\))", std::regex::icase);
         static const std::regex rePortal(R"(Make_Portal\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)\s*->\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\))");
         static const std::regex reClimb(R"(Make_Climb\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\))");
         static const std::regex reWater(R"(Make_Room_(No)?[Ww]ater\s*\(\s*(\d+)\s*\))");
@@ -135,16 +153,48 @@ namespace
             e.waterOn = !m[1].matched;               // leading "No" = turn off
             e.room = std::stoi(m[2]);
         }
+        else if (std::regex_search(raw, m, reMoveRoom))
+        {
+            e.kind = Option::MOVEROOM;
+            e.room = std::stoi(m[1]);
+            const std::string body = m[2];
+            for (std::sregex_iterator it(body.begin(), body.end(), reAxis), z; it != z; ++it)
+            {
+                const long v = std::stol((*it)[2]);
+                switch (std::tolower((*it)[1].str()[0]))
+                {
+                    case 'x': e.moveX = v; break;
+                    // PLUS RAISES. Y grows downward in the file, so the
+                    // sign is turned round here: the list is written the way
+                    // a level editor works, the patch carries file values.
+                    case 'y': e.moveY = -v; break;
+                    default:  e.moveZ = v; break;
+                }
+            }
+        }
         else if (std::regex_search(raw, m, reClimb))
         {
             e.kind = Option::CLIMB;
             e.room = std::stoi(m[1]); e.sx = std::stoi(m[2]); e.sz = std::stoi(m[3]);
         }
-        else if (std::regex_search(raw, m, rePortal))
+        else if (std::regex_search(raw, m, reCeilPortal) ||
+                 std::regex_search(raw, m, reFloorPortal) ||
+                 std::regex_search(raw, m, rePortal))
         {
             e.kind = Option::PORTAL;
+            e.portalKind = std::regex_search(raw, reCeilPortal) ? 1
+                         : std::regex_search(raw, reFloorPortal) ? 2 : 0;
             e.room = std::stoi(m[1]); e.sx = std::stoi(m[2]); e.sz = std::stoi(m[3]);
             e.roomB = std::stoi(m[4]); e.sxB = std::stoi(m[5]); e.szB = std::stoi(m[6]);
+
+            std::smatch w;
+            e.portalClear = std::regex_search(raw, w, reClear);
+            if (std::regex_search(raw, w, reLikeWall))
+            {
+                e.likeWallRoom = std::stoi(w[1]);
+                e.likeWallSx = std::stoi(w[2]);
+                e.likeWallSz = std::stoi(w[3]);
+            }
         }
         else if (std::regex_search(raw, m, reReplace))
         {
@@ -186,7 +236,8 @@ namespace
         if (std::regex_search(raw, m, reXOff))  { e.hasXOff = true;  e.xOff = std::stoi(m[1]); }
         if (std::regex_search(raw, m, reZOff))  { e.hasZOff = true;  e.zOff = std::stoi(m[1]); }
         if (std::regex_search(raw, m, reLike))    e.likeItem = std::stoi(m[1]);
-        if (e.kind != Option::REPLACE && e.kind != Option::PORTAL && e.kind != Option::CLIMB && e.kind != Option::WATER &&
+        if (e.kind != Option::REPLACE && e.kind != Option::PORTAL && e.kind != Option::CLIMB &&
+            e.kind != Option::WATER && e.kind != Option::MOVEROOM &&
             std::regex_search(raw, m, reTrig))
         {
             e.triggerKind = m[1];
@@ -209,6 +260,11 @@ namespace
         // remains is a typo and gets reported.
         std::string rest = raw;
         auto strike = [&rest](const std::regex& re) { rest = std::regex_replace(rest, re, ""); };
+        strike(reMoveRoom);
+        strike(reLikeWall);
+        strike(reClear);
+        strike(reCeilPortal);
+        strike(reFloorPortal);
         strike(rePortal);
         strike(reClimb);
         strike(reWater);
@@ -362,6 +418,7 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
     JsonValue adds = JsonValue::makeArray();
     JsonValue trigger = JsonValue::makeArray();
     JsonValue portals = JsonValue::makeArray();
+    JsonValue moves = JsonValue::makeArray();
     JsonValue climbs = JsonValue::makeArray();
     JsonValue water = JsonValue::makeArray();
 
@@ -474,6 +531,17 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
             continue;
         }
 
+        if (o.kind == Option::MOVEROOM)
+        {
+            JsonValue mv = JsonValue::makeObject();
+            mv.set("room", JsonValue::makeInt(o.room));
+            mv.set("dx", JsonValue::makeInt(static_cast<int>(o.moveX)));
+            mv.set("dy", JsonValue::makeInt(static_cast<int>(o.moveY)));
+            mv.set("dz", JsonValue::makeInt(static_cast<int>(o.moveZ)));
+            moves.push(mv);
+            continue;
+        }
+
         if (o.kind == Option::PORTAL)
         {
             JsonValue p = JsonValue::makeObject();
@@ -483,6 +551,11 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
             p.set("roomB", JsonValue::makeInt(o.roomB));
             p.set("sxB", JsonValue::makeInt(o.sxB));
             p.set("szB", JsonValue::makeInt(o.szB));
+            p.set("kind", JsonValue::makeInt(o.portalKind));
+            p.set("clear", JsonValue::makeInt(o.portalClear ? 1 : 0));
+            p.set("likeWallRoom", JsonValue::makeInt(o.likeWallRoom));
+            p.set("likeWallSx", JsonValue::makeInt(o.likeWallSx));
+            p.set("likeWallSz", JsonValue::makeInt(o.likeWallSz));
             portals.push(p);
             continue;
         }
@@ -616,6 +689,7 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
     if (edits.size() > 0)   patchOut.set("itemEdits", edits);
     if (adds.size() > 0)    patchOut.set("itemAdds", adds);
     if (trigger.size() > 0) patchOut.set("triggerAdds", trigger);
+    if (moves.size() > 0)   patchOut.set("roomMoves", moves);
     if (portals.size() > 0) patchOut.set("portalAdds", portals);
     if (climbs.size() > 0)  patchOut.set("climbAdds", climbs);
     if (water.size() > 0)   patchOut.set("roomWater", water);

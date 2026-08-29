@@ -362,6 +362,56 @@ public:
                        int mask, const std::vector<Tr5TriggerCmd>& cmds,
                        std::string& error, int refItem = -1);
 
+    // Takes ONE object command out of the trigger on this sector - the
+    // rest of it stays exactly as it was.
+    //
+    // Needed where Core points a trigger at an item that must not be
+    // touched, while the same trigger does other things that have to
+    // stay. Removing the whole trigger would take those with it.
+    //
+    // The chain is written anew at the end of the floordata and the
+    // sector points at the copy, exactly as moveTrigger and copyTrigger
+    // do; the old words stay behind unreferenced.
+    bool    removeTriggerObject(int room, int sx, int sz, int item,
+                                std::string& error)
+    { return editTriggerObject(room, sx, sz, item, -1, 0, error); }
+
+    // Same surgery, but the command is REPLACED instead of dropped: the
+    // list keeps its length and the trigger keeps working.
+    //
+    // Needed where the object command is the trigger's only one - taking
+    // it out would leave a trigger with nothing to do, which the engine
+    // would still walk over. A void flipeffect (effect_routines index 44,
+    // game/effects.cpp) is the quietest filler there is: it runs and does
+    // nothing, where a music command would be audible.
+    bool    replaceTriggerObject(int room, int sx, int sz, int item,
+                                 int newType, int newParam, std::string& error)
+    { return editTriggerObject(room, sx, sz, item, newType, newParam, error); }
+
+    // Rewrites the trigger on this sector COMPLETELY: kind, timer,
+    // one-shot, mask and command list. Everything else in the chain (a
+    // tilt, a portal) stays where it is.
+    //
+    // Changing the kind is the point of it. A PICKUP, KEY or SWITCH
+    // trigger carries a reference word naming the item it hangs on;
+    // a plain TRIGGER has none, so switching the kind takes that pointer
+    // out - which is the only way to free an item the randomizer pins
+    // because of it (Randomizer.cpp, findTriggerPinnedItems).
+    //
+    // At least one command is required, and that is an engine rule, not
+    // taste: _TestTriggers reads the commands in a do-while
+    // (control.cpp), so it always reads one word. A trigger without one
+    // would send it into the next floordata entry.
+    bool    setTrigger(int room, int sx, int sz, int kind, int timer,
+                       bool oneShot, int mask,
+                       const std::vector<Tr5TriggerCmd>& cmds,
+                       std::string& error, int refItem = -1);
+
+    // One command word of a trigger, dropped (newType < 0) or replaced.
+    // Both public wrappers above lead here - one walk, one truth.
+    bool    editTriggerObject(int room, int sx, int sz, int item,
+                              int newType, int newParam, std::string& error);
+
     // May a trigger be appended to this chain? Returns the obstacle or
     // nullptr. See the derivation in the implementation.
     static const char* canAppendTrigger(const std::vector<Tr5FloorEntry>& chain);
@@ -380,7 +430,89 @@ public:
     //
     // Repeatable: if the chain already points at targetRoom, nothing
     // happens.
-    bool    makePortal(int room, int sx, int sz, int targetRoom, std::string& error);
+    // Both sectors are NAMED by the caller. The far one used to be worked
+    // out from the world position, which lands on the neighbour's INTERIOR
+    // sector rather than its border ring - and an interior sector is read as
+    // "stacked", so Andrea3's room 74 got a window facing the floor.
+    bool    makePortal(int room, int sx, int sz,
+                       int targetRoom, int tsx, int tsz, std::string& error);
+
+    // The VERTICAL kind - two rooms stacked on each other. Nothing like the
+    // horizontal one: no floordata, no view window, no box. One byte of the
+    // sector, and that is the whole connection.
+    bool    makeVerticalPortal(int room, int sx, int sz, int targetRoom,
+                               bool ceiling, std::string& error);
+
+    // Creates the 32-byte view window between two rooms where none exists,
+    // in BOTH directions. makePortal calls this by itself, so a secret list
+    // needs no new spelling for it.
+    //
+    // The winding of the four corners is not invented: it is copied from a
+    // portal the room already has on the same wall, and only the corner
+    // positions are moved. Guessing it wrong does not fail loudly, it draws
+    // a black hole.
+    bool    addViewWindow(int roomA, int sxA, int szA,
+                          int roomB, int sxB, int szB, std::string& error);
+
+    // The raw view windows of one room: target, normal, then four corners.
+    // For holding a generated portal against a hand-built one - the only way
+    // to see whether a record is right, since a wrong one does not fail, it
+    // draws a hole.
+    struct PortalRecord { int toRoom; int nx, ny, nz; int v[4][3]; };
+
+    // One sector as the engine reads it. roomBelow/roomAbove are the VERTICAL
+    // links - a stacked pair of rooms is joined through these, not through a
+    // floordata door.
+    struct SectorInfo { int sx, sz, fdIndex, box, roomBelow, floor, roomAbove, ceiling;
+                       int doorTo; };   // floordata function 1, else -1
+
+    // One drawn face of a room. The wall you look at IS one of these - the
+    // portal underneath does not hide it, which is why a new opening still
+    // shows the old wall (#136). Corners are WORLD coordinates.
+    struct FaceInfo
+    {
+        int  roomlet;
+        bool quad;             // false = triangle, three corners used
+        int  texInfo;          // texword & 0x3FFF
+        bool doubleSided;      // texword bit 15
+        int  effects;          // the word behind the texword
+        int  index[4];         // vertex indices, roomlet-relative
+        long v[4][3];          // world x, y, z, rounded
+        size_t texWordAt;      // where the texword sits in the file
+        size_t indexAt;        // where the four indices sit
+    };
+    bool    roomFaces(int room, std::vector<FaceInfo>& out, std::string& error) const;
+
+    // A raw 4-byte field of the 208-byte room header, for when the engine
+    // reads a structure through a stored offset and our own parser does not.
+    bool    headerField(int room, int offset, unsigned& value, std::string& error) const;
+
+    // #136: a new opening still shows the old wall, because the wall is a
+    // drawn face and the portal underneath does not hide it.
+    // Shift a whole room. dx/dz in whole sectors, dy in whole height steps -
+    // the caller has already rounded, this one refuses anything else.
+    bool    moveRoom(int room, long dx, long dy, long dz, std::string& error);
+
+    // A window belongs to a SECTOR - two rooms can be joined at several.
+    bool    windowAt(int room, int sx, int sz, int targetRoom) const;
+
+    bool    clearWallFaces(int room, int sx, int sz, int& cleared, std::string& error);
+    bool    copyWallTexture(int fromRoom, int fsx, int fsz,
+                            int toRoom, int tsx, int tsz, int& changed, std::string& error);
+    bool    sectorInfo(int room, std::vector<SectorInfo>& out, std::string& error) const;
+    bool    portalRecords(int room, std::vector<PortalRecord>& out, std::string& error) const;
+
+    // The level's fixed cameras (OBJECT_VECTOR), in the order a
+    // trigger's Camera command indexes them.
+    //
+    // flags is the interesting part: bits 0 and 1 make the engine treat
+    // the camera as a GAME camera rather than a cinematic one - it sets
+    // SniperCamActive, which locks the look key and the inventory
+    // (control.cpp) and, with bit 1, aims at Lara's torso and draws the
+    // sniper overlay (camera.cpp). Whether first person may push a
+    // camera aside hangs on exactly that.
+    struct CameraRecord { int x, y, z, room, flags; };
+    bool    cameraRecords(std::vector<CameraRecord>& out, std::string& error) const;
 
     // Makes a sector climbable: CLIMB entry with direction bits (0x100=0
     // degrees, 0x200=90, 0x400=180, 0x800=270 - Lara's view onto the
@@ -614,7 +746,7 @@ private:
         int32_t count = 0;
     };
     Block m_meshData, m_meshPtrs, m_anims, m_changes, m_ranges, m_commands,
-          m_bones, m_frames, m_objects, m_sprites, m_texinfos;
+          m_bones, m_frames, m_objects, m_sprites, m_texinfos, m_cameras;
 
     // Re-reads header and main block after bytes were inserted.
     // copyMoveableFrom is a member and defined in Tr5Transfer.cpp - the

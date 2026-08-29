@@ -494,6 +494,33 @@ bool Rando::sectorAllowedFor(const RandoInput& in,
         if (s.wallAngles.empty()) return false;
         if (s.clearance < 768) return false;
 
+        // And only on a COMPLETELY FLAT sector (user, 2026-08-29). The wall
+        // grab ends with a step BACKWARDS, and that step does not come off
+        // over a sloped field - Lara hangs at its edge. This is the one
+        // difference to an ordinary pickup: walkable slopes up to slope 2
+        // are fully valid spots for those (#86, Core places pickups there
+        // itself), because they are only picked UP, not stepped away from.
+        //
+        // Flat means: the same floor height at all four corners, each of
+        // them walkable. A sector without a slope entry is flat by
+        // definition (Floor.h) and floorAt says so in one call, so the
+        // common case costs a single map lookup.
+        //
+        // The rule hangs off the OCB, not off a level: the animation is the
+        // same everywhere. Wall grabs exist in four levels (#61).
+        {
+            int flatY = 0;
+            if (!floorAt(in, s, 0, 0, flatY)) return false;
+
+            for (int cx = 0; cx <= 1; ++cx)
+                for (int cz = 0; cz <= 1; ++cz)
+                {
+                    int cornerY = 0;
+                    if (!floorAt(in, s, cx * 1023, cz * 1023, cornerY)) return false;
+                    if (cornerY != flatY) return false;
+                }
+        }
+
         // And never under water: PickUpCollision only runs at water_status
         // LW_ABOVE_WATER or LW_WADE (pickup.cpp:766). Applies ONLY to
         // these grabs - ordinary pickups and puzzle pieces may very well
@@ -1371,7 +1398,13 @@ bool Rando::run(const RandoInput& in,
             { 347, { 348,  -1 } },     // Deagle
         };
         // Consumables without an associated weapon.
-        static const int kMisc[] = { 349, 350, 354 };   // big medi, small medi, flare
+        // 355 and NOT 354. The two look alike in the catalogue - "Flare
+        // Item" and "Flare Inv Item" - but in the level they are different
+        // things, and the user named it: 354 is the SINGLE flare that fires
+        // the animation off by itself, 355 are the flares one picks up.
+        // Vanilla Andrea1 carries one 354 and several 355, which says the
+        // same. Scattering 354 hands the player a flare that lights itself.
+        static const int kMisc[] = { 349, 350, 355 };   // big medi, small medi, flares
 
         // What lies in the level - vanilla stock plus what weapon
         // scattering and mandatory injections just added?
@@ -1386,8 +1419,18 @@ bool Rando::run(const RandoInput& in,
         // rich1 345/346 - the crossbow is NOT included, it stays reserved
         // for the levels that carry it themselves).
         const bool weaponSetHere = opt.allWeapons && lowerName != "joby4";
+        // The flare goes into the rich levels further down in this same
+        // run (slots 7, 354, 355 from Andrea1). presentSlots is the state
+        // BEFORE the patch, so without this the scatter would still refuse
+        // to lay a flare it is about to make drawable - which is exactly
+        // what happened on the first attempt: the slots arrived and not one
+        // flare with them.
+        const bool flareComesHere =
+            (lowerName == "rich1" || lowerName == "rich2" || lowerName == "rich3");
+
         auto drawable = [&](int type) -> bool {
             if (in.presentSlots.count(type)) return true;
+            if (type == 355 && flareComesHere) return true;
             if (!weaponSetHere) return false;
             switch (type)
             {
@@ -1418,7 +1461,14 @@ bool Rando::run(const RandoInput& in,
             // duplicates.
             if (!countOf.count(w.weapon)) offer(w.weapon, 2);
         }
-        for (int t : kMisc) offer(t, 2);
+        // A level that carries flares in vanilla brings its own count into
+        // the lots on top of the base weight. The rich levels carry none, so
+        // on the base weight alone they would draw far more rarely than
+        // everywhere else - with twenty extra pickups, often not at all. The
+        // user needs them there for the glitched secrets, so the weight
+        // stands in for the stock the level never had.
+        for (int t : kMisc)
+            offer(t, (t == 355 && flareComesHere) ? 8 : 2);
 
         // rich2: neither pistols nor their ammo, ever (see above).
         if (lowerName == "rich2") { lots.erase(334); lots.erase(335); }
@@ -2914,6 +2964,43 @@ bool Rando::run(const RandoInput& in,
         report.notes.push_back(std::string("level chain: model for ") + k.name + " installed.");
     }
 
+    // --- rich: the flare is missing entirely ---
+    //
+    // The user's finding: every section gets a full set of flares scattered
+    // except the rich levels. The cause is not the scatter but the file -
+    // consumables are only laid down where the level can DRAW them
+    // (presentSlots, from Tr5Level::moveableSlots), and measured with
+    // SlotList the three rich levels carry none of the three slots a flare
+    // needs, while Andrea1 carries all three:
+    //
+    //     7   FLARE_ANIM   Lara's own flare animations AND the mesh in her
+    //                      hand (laraflar.cpp:194 and :201 read both from
+    //                      this object) - the user pointed this one out
+    //   354   Flare Item   the pickup lying in the level
+    //   355   Flare Inv    the model shown in the inventory
+    //
+    // Installed, not rolled: what the scatter then makes of them is its own
+    // business, and it now can. Needed for the glitched secrets, which use
+    // flares.
+    //
+    // Without "replace", as everywhere here: should a slot already be there,
+    // the level's own stays.
+    if (lowerName == "rich1" || lowerName == "rich2" || lowerName == "rich3")
+    {
+        static const int kFlareSlots[] = { 7, 354, 355 };
+
+        for (int slot : kFlareSlots)
+        {
+            JsonValue e = JsonValue::makeObject();
+            e.set("slot", JsonValue::makeInt(slot));
+            e.set("fromLevel", JsonValue::makeString("Andrea1"));
+            moveables.push(e);
+        }
+
+        report.notes.push_back("Flare installed from Andrea1 (slots 7, 354, 355) - "
+                               "the rich levels carry none of them.");
+    }
+
     // --- joby3: Key Item 8 (203) must lie in the level ---
     //
     // A user requirement for a secret spot in joby3 (#53): the slot should
@@ -3000,8 +3087,6 @@ bool Rando::run(const RandoInput& in,
         else if (lowerName.rfind("joby", 0) == 0)  own = 1;
         else if (lowerName.rfind("rich", 0) == 0)  own = 2;
 
-        // The andy levels are the only ones whose own Lara is the YOUNG one.
-        const bool isYoungLara = lowerName.rfind("andy", 0) == 0;
 
         static const char* kDonors[3] = { "Andrea1", "joby2", "rich2" };
 
@@ -3049,35 +3134,56 @@ bool Rando::run(const RandoInput& in,
             // speech heads. All of that keeps working untouched.
             if (picked.vanilla < 0)
             {
-                // A guest outfit KEEPS the level's own head, and that is what
-                // makes it work everywhere - except in the andy levels, where
-                // the level's own Lara is the YOUNG one. An adult TR3 body
-                // then wears a child's head (seen in game).
+                // A guest outfit brings only the BODY; head, braid, joints,
+                // holsters and speech heads come from Andrea1, always.
                 //
-                // Handing over just a head would not help: the engine swaps in
+                // Keeping the level's own head was the first design and it is
+                // wrong in three of the four sections, as a full run with
+                // nothing but TR3 outfits showed:
+                //   andy - the level's own Lara is the YOUNG one, so an adult
+                //          body wore a child's head
+                //   joby - her cap and the camouflage joints of that outfit
+                //          landed on a Tomb Raider III body
+                //   rich - laraType 3 sends the engine down the CATSUIT draw
+                //          path, which does not use this skin the same way,
+                //          so the outfit never appeared at all
+                //
+                // Handing over just a head would not do: the engine swaps in
                 // LARA_SCREAM and the speech heads at runtime, and in an andy
-                // level those are young too - the child would pop back the
-                // moment Lara screams. So the whole adult head entourage is
+                // level those are young as well. So the whole entourage is
                 // fetched first, by the vanilla path that already knows how,
-                // and the guest body is laid over it afterwards. The patch
-                // path runs the two in that order by itself.
+                // and the guest body is laid over it. The patch path runs the
+                // two in that order by itself.
                 //
                 // Andrea1 as the donor, and not merely because it is the
                 // simplest: joby2's Lara wears a cap and her hair object is
                 // built for it, so a braid on that head spikes through the
-                // body. TR3's Lara has a ponytail, and Andrea1's standard
-                // braid is the one that fits her.
-                if (isYoungLara)
-                {
-                    outfit.set("fromLevel", JsonValue::makeString("Andrea1"));
-                    outfit.set("laraType", JsonValue::makeInt(0));   // LARA_NORMAL
-                    outfit.set("holstersFrom", JsonValue::makeString("joby2"));
-                }
+                // body. Every Tomb Raider III Lara has a ponytail, and
+                // Andrea1's standard braid is the one that fits her.
+                //
+                // And laraType 5, LARA_PONYTAIL, NOT 0.
+                //
+                // Zero means LARA_NORMAL, and in a Russia level that is the
+                // engine's word for "an untouched vanilla level, so she is
+                // wearing the cap": hair.cpp and laraskin.cpp then weld the
+                // braid to the CAP head's vertex numbers, which the Andrea1
+                // head we put there does not have. The braid came away from
+                // its four points and stood off the back of her head - seen
+                // in joby2, and only in the Russia section, which is what
+                // gave it away.
+                //
+                // LARA_PONYTAIL exists for exactly this and is drawn like
+                // LARA_NORMAL; it says "standard head with a ponytail" so
+                // the braid takes the standard table. It was already used
+                // for the vanilla Andrea outfit and simply not carried over
+                // to the guests.
+                outfit.set("fromLevel", JsonValue::makeString("Andrea1"));
+                outfit.set("laraType", JsonValue::makeInt(5));   // LARA_PONYTAIL
+                outfit.set("holstersFrom", JsonValue::makeString("joby2"));
                 outfit.set("tr3", JsonValue::makeString(picked.id));
                 outfitSet = true;
-                report.notes.push_back(fmt("outfit: %s gets the guest outfit %s%s.",
-                                           in.level.c_str(), picked.id.c_str(),
-                                           isYoungLara ? " (adult head from Andrea1)" : ""));
+                report.notes.push_back(fmt("outfit: %s gets the guest outfit %s (head from Andrea1).",
+                                           in.level.c_str(), picked.id.c_str()));
             }
             else
             {

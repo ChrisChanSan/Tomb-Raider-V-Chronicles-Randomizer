@@ -452,6 +452,10 @@ bool Tr5Level::meshTones(int targetSlot, int meshNo, std::vector<ToneCount>& out
     // 2..6 are its strength - specific/output.cpp:1645ff. Counted here so
     // the shine of an existing model can be read off instead of guessed.
     std::map<int, int> fxHist;
+    // drawtype at +0: 0 draws opaque, 1 and 2 go through the sorted list
+    // and blend. An imported face that carries 2 by accident looks washed
+    // out in game while a viewer still shows it solid.
+    std::map<int, int> drawHist;
     if (!faceTextures(m_bytes, meshAt, meshEnd, [&](size_t texAt)
     {
         const int idx = g16(m_bytes, texAt) & 0x7FFF;
@@ -460,6 +464,7 @@ bool Tr5Level::meshTones(int targetSlot, int meshNo, std::vector<ToneCount>& out
         if (idx < loTex) loTex = idx;
         if (idx > hiTex) hiTex = idx;
         fxHist[g16(m_bytes, texAt + 2)]++;
+        drawHist[g16(m_bytes, m_texinfos.dataAt + size_t(idx) * SZ_TEXINFO)]++;
         const size_t t = m_texinfos.dataAt + static_cast<size_t>(idx) * SZ_TEXINFO;
         const uint16_t tp = g16(m_bytes, t + 2);
         const int page = tp & 0x7FFF;
@@ -499,6 +504,9 @@ bool Tr5Level::meshTones(int targetSlot, int meshNo, std::vector<ToneCount>& out
 
     std::printf("    (mesh has %d textured faces, texinfos %d..%d, %d pages)\n",
                 faceCount, loTex, hiTex, int(nPages));
+    for (std::map<int, int>::const_iterator it = drawHist.begin(); it != drawHist.end(); ++it)
+        std::printf("    drawtype %d on %d faces%s\n", it->first, it->second,
+                    it->first ? "  <- blended, not opaque" : "");
     for (std::map<int, int>::const_iterator it = fxHist.begin(); it != fxHist.end(); ++it)
         std::printf("    effects word 0x%04X on %d faces: %s%s strength %d\n",
                     it->first, it->second,

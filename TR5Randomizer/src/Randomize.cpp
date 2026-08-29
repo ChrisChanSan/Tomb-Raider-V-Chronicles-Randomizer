@@ -30,6 +30,8 @@
 #include "core/Rng.h"
 #include "core/ScriptDat.h"
 #include "core/SecretList.h"
+#include "core/SecretReward.h"
+#include "core/LevelFix.h"
 #include "core/Tr5Level.h"
 
 #include <cstdio>
@@ -42,6 +44,17 @@ static std::wstring toW(const char* s)
     std::wstring w;
     for (const char* p = s; *p; ++p) w.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*p)));
     return w;
+}
+
+// File name without path and extension - LevelFix compares by level name.
+static std::string baseName(const char* path)
+{
+    std::string s(path);
+    const size_t cut = s.find_last_of("/" "\\");
+    if (cut != std::string::npos) s = s.substr(cut + 1);
+    const size_t dot = s.find_last_of('.');
+    if (dot != std::string::npos) s = s.substr(0, dot);
+    return s;
 }
 
 int main(int argc, char** argv)
@@ -92,6 +105,7 @@ int main(int argc, char** argv)
     std::wstring scriptDat;
     // Secret list (#53): second patch pass from an author file.
     std::wstring secretList;
+    bool secretRewards = false;
     // Music: "background" rolls the audio byte of the CMD_LEVEL entries
     // (needs script=), "trigger" the TO_CD tracks in the floordata, "both"
     // both. CAUTION background: not repeatable - every run with script=
@@ -124,6 +138,7 @@ int main(int argc, char** argv)
         else if (s.rfind("tr3=", 0) == 0)     tr3Dir     = toW(s.c_str() + 4);
         else if (s.rfind("tr3gold=", 0) == 0) tr3GoldDir = toW(s.c_str() + 8);
         else if (s.rfind("script=", 0) == 0)  scriptDat  = toW(s.c_str() + 7);
+        else if (s == "rewards") secretRewards = true;
         else if (s.rfind("secrets=", 0) == 0) secretList = toW(s.c_str() + 8);
         else if (s == "music=background") musicBackground = true;
         else if (s == "music=trigger")    musicTriggers = true;
@@ -237,6 +252,8 @@ int main(int argc, char** argv)
 
             if (e.joby3Weapons > 0)
                 std::printf("SCRIPT.DAT  joby3: %d weapon takeaways removed\n", e.joby3Weapons);
+            if (e.andrea1Uzi > 0)
+                std::printf("SCRIPT.DAT  Andrea1: Uzi takeaway removed\n");
         }
     }
 
@@ -255,6 +272,40 @@ int main(int argc, char** argv)
     Tr5Level lvl;
     if (!lvl.load(toW(argv[3]), err)) { std::printf("load level: %s\n", err.c_str()); return 1; }
     const int itemsBefore = lvl.itemCount();
+
+    // Core's level bugs, exactly as the GUI does it (LevelFix.h). The CLI
+    // used to skip this entirely - it did not even link LevelFix.cpp -, so a
+    // command-line run silently produced a level WITHOUT the fixes. That is
+    // fine for a quick placement test and misleading for everything else.
+    {
+        const std::string base = baseName(argv[3]);
+        std::vector<std::string> fixNotes;
+        std::vector<int> freed;
+        const int fixes = LevelFix::apply(lvl, base, fixNotes, &freed);
+
+        // A rewritten pickup trigger no longer holds its item, but the pin
+        // was decided from level_*.json, which describes the VANILLA level.
+        for (int i : freed)
+            if (in.triggerPinned.erase(i))
+                std::printf("  LevelFix    item %d released - pickup trigger rewritten\n", i);
+
+        if (fixes > 0) std::printf("  LevelFix    %d fixes applied\n", fixes);
+
+        // Which items placement will refuse to move, and why they are on the
+        // list. Cheap to print and it answers "why did that item not travel?"
+        // without a rebuild - the question cost an evening once.
+        {
+            std::string s;
+            for (int i : in.triggerPinned) { if (!s.empty()) s += ","; s += std::to_string(i); }
+            std::printf("  LevelFix    trigger-pinned: [%s]\n", s.c_str());
+
+            s.clear();
+            for (int i : in.fixedItems) { if (!s.empty()) s += ","; s += std::to_string(i); }
+            std::printf("  LevelFix    hand-pinned:    [%s]\n", s.c_str());
+        }
+        for (const std::string& n : fixNotes) std::printf("  LevelFix    %s\n", n.c_str());
+    }
+
     Patch::markTriggerSafeSectors(lvl, in);
 
     RandoOptions opt;
@@ -334,6 +385,25 @@ int main(int argc, char** argv)
     }
 
     if (!lvl.save(toW(argv[4]), err)) { std::printf("save: %s\n", err.c_str()); return 1; }
+
+    // SecretRewards.txt lies beside the EXECUTABLE, and the target level lies
+    // in its data folder - so one step up from there. The file is written
+    // whole out of the seed, which makes running this once per level
+    // harmless: every run writes the same fourteen lines.
+    if (secretRewards)
+    {
+        std::wstring target = toW(argv[4]);
+        const size_t cut = target.find_last_of(L"\\/");
+        std::wstring dataDir = (cut == std::wstring::npos) ? L"." : target.substr(0, cut);
+        const size_t cut2 = dataDir.find_last_of(L"\\/");
+        const std::wstring gameDir = (cut2 == std::wstring::npos) ? L"." : dataDir.substr(0, cut2);
+
+        std::string sum, rerr;
+        if (writeSecretRewards(gameDir, seed, sum, rerr))
+            std::printf("  Rewards     %s\n", sum.c_str());
+        else
+            std::printf("  Rewards     %s\n", rerr.c_str());
+    }
 
     std::printf("Level %s\n", zone["level"].asString("?").c_str());
     std::printf("  Seed        %s  (0x%016llX)\n", seedText.c_str(), (unsigned long long)seed);

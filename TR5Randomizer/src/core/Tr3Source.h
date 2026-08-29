@@ -71,10 +71,20 @@ namespace Tr3Source
     // its outfit as textures and its SKIN as flat colours, so the suit shines
     // and the skin stays matt without naming a single face.
     struct Recolor { int sr, sg, sb, dr, dg, db; };
+    struct Rgb { int r, g, b; };
     struct Options
     {
         int shinyWord;
         std::vector<Recolor> recolors;
+
+        // Extra solid blocks on the flat colour page that NO face points at.
+        // They are there so a tone is AVAILABLE to paint a seam with later:
+        // Tr5Level::paintMeshFlat looks for an evenly coloured entry and can
+        // only find what the level holds. Without them the Antarctica hips
+        // asked for 115,107,90 and got 90,107,90 - green, with the red gone.
+        // The page is a 16 by 16 grid of 256 slots and a model uses a handful.
+        std::vector<Rgb> extraColors;
+
         Options() : shinyWord(0) {}
     };
 
@@ -138,6 +148,10 @@ namespace Tr3Source
         // Seams painted in one flat colour instead of wearing TR5's own
         // texture, because that texture belongs to a body that is no longer
         // there.
+        //
+        // Every tone named here is put on the flat colour page as well, so
+        // the painter finds it exactly rather than settling for the nearest
+        // thing the level happens to contain.
         struct SeamColor { int seam, r, g, b; };
         std::vector<SeamColor> seamColors;
     };

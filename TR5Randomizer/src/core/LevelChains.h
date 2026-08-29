@@ -69,6 +69,15 @@ constexpr int INV_KEY(int n)    { return 53 + (n - 1); }
 constexpr int INV_PICKUP(int n) { return 77 + (n - 1); }
 constexpr int INV_CROWBAR       = 90;
 constexpr int INV_CROSSBOW      = 95;   // "Grappling Gun" in rich3
+constexpr int INV_BURNING_TORCH = 89;
+constexpr int INV_EXAMINE(int n) { return 91 + (n - 1); }   // 91..93
+
+// The chloroform set from rich1 (13th Floor): the bottle, the cloth, and the
+// soaked cloth the two combine into. Three inventory slots of their own,
+// sitting behind the examine objects - which is why a sweep over the puzzle,
+// key and pickup families never touched them, and why they travelled on into
+// rich2 and rich3. Seen by the user in a full playthrough.
+static const int kChloroform[] = { 94 /*wet cloth*/, 97 /*cloth*/, 98 /*bottle*/, 0 };
 
 // ARCHITECTURE (user decision after the playtest, 2026-08-22):
 // keys/puzzles/pickups NEVER travel between levels - at every level start

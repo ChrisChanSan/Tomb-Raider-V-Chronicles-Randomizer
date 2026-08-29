@@ -736,6 +736,27 @@ void ScriptDat::randomizerChanges(Changes& e)
         else if (ch)
             ++e.joby3Weapons;
     }
+
+    // 5. Andrea1 NO longer takes the Uzi away.
+    //
+    // Core's own block hands Lara the Uzi and takes it away again two
+    // commands later, so the grant is dead on arrival. In vanilla that is
+    // invisible: Andrea1 is the first level, there is nothing to carry in,
+    // and nobody misses a weapon that was never there. With a rolled level
+    // order Andrea1 can come sixth, and the take-away then eats an Uzi the
+    // player earned three levels ago. Seen by the user in a full playthrough
+    // ("Andrea1: Uzi is still removed at the start").
+    //
+    // Only the TAKE goes. The GIVE stays: an Uzi at the start of Streets of
+    // Rome is Core's intent, and the weapon scatter is built on top of it.
+    {
+        bool ch = false;
+        std::string uErr;
+        if (!removeInvCommand(0xDA, "Andrea1", 0 /*Uzi*/, ch, uErr))
+            e.weaponError = uErr;
+        else if (ch)
+            ++e.andrea1Uzi;
+    }
 }
 
 bool ScriptDat::save(const std::wstring& path, std::string& error) const
@@ -829,13 +850,26 @@ bool ScriptDat::cleanupInventory(std::vector<std::string>& notes, std::string& e
         const std::string name = shortU(m_levels[idx].fileName);
         if (!isCampaign(name)) continue;
 
-        // Full reset of the key family at EVERY level start (user
+        // Full reset of the level-bound families at EVERY level start (user
         // decision): puzzles 1-8 with halves, keys 1-8 with halves, pickups
-        // 1-3 with halves, crowbar - and the crossbow family everywhere
-        // except rich3. Roses (PICKUP_ITEM4) stay. Whatever a level's own
-        // block grants (the vanilla Iris in rich2, the chain grants) is not
-        // touched - a TAKE behind the GIVE would cancel the grant
-        // (setup.cpp applies grants first, then take-aways).
+        // 1-4 with halves, crowbar, burning torch, the three examine objects
+        // and the chloroform set - and the crossbow family everywhere except
+        // rich3. Whatever a level's own block grants (the vanilla Iris in
+        // rich2, the chain grants) is not touched - a TAKE behind the GIVE
+        // would cancel the grant (setup.cpp applies grants first, then
+        // take-aways).
+        //
+        // Pickup 4 - the secret rose - used to be exempt here, and the
+        // examine objects, the torch and the chloroform were never in the
+        // list at all. All of them travelled: the rose sat in the ring of a
+        // fresh level before a single secret had been found there, and
+        // rich1's chloroform went on into rich2 and rich3. Both seen by the
+        // user in a full playthrough.
+        //
+        // Taking the rose does NOT touch the secret count. The engine keeps
+        // that in savegame.Level.Secrets and resets it itself at every level
+        // start (gameflow.cpp); the "n of 3" line reads that counter, not
+        // the item (newinv2.cpp). Only the ring entry goes.
         std::vector<int> takeList, regive;
         const auto take = [&](int inv)
         {
@@ -854,11 +888,14 @@ bool ScriptDat::cleanupInventory(std::vector<std::string>& notes, std::string& e
             take(INV_PUZZLE(n)); take(INV_PUZZLE_COMBO(n, 1)); take(INV_PUZZLE_COMBO(n, 2));
             take(INV_KEY(n));    take(INV_KEY_COMBO(n, 1));    take(INV_KEY_COMBO(n, 2));
         }
-        for (int n = 1; n <= 3; ++n)
+        for (int n = 1; n <= 4; ++n)
         {
             take(INV_PICKUP(n)); take(INV_PICKUP_COMBO(n, 1)); take(INV_PICKUP_COMBO(n, 2));
         }
         take(INV_CROWBAR);
+        take(INV_BURNING_TORCH);
+        for (int n = 1; n <= 3; ++n) take(INV_EXAMINE(n));
+        for (const int* c = kChloroform; *c; ++c) take(*c);
         if (!equals(name, "RICH3"))
             for (const int* c = kCrossbowFamily; *c; ++c) take(*c);
 

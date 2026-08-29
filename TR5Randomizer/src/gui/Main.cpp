@@ -38,6 +38,7 @@
 #include "core/Rng.h"
 #include "core/ScriptDat.h"
 #include "core/SecretList.h"
+#include "core/SecretReward.h"
 #include "core/Tr5Level.h"
 
 #include "Language.h"
@@ -441,6 +442,11 @@ namespace
         // doLevel. No seed bit: the lists are deterministic, the same seed
         // stays comparable with and without secrets.
         int optSecrets = 0;
+        // Roll what a level awards for every secret found (#53). Off by
+        // default: it writes SecretRewards.txt beside the game, and a file
+        // the player may have set himself is not something to overwrite
+        // without being asked.
+        bool optSecretRewards = false;
 
         // Found secret lists (data\secrets) and the chosen author.
         std::vector<SecretSource> secretSources;
@@ -776,6 +782,7 @@ static std::wstring cacheDir(const App& a)
         if (!e.pistolError.empty()) info += "  rich2 pistols not removed: " + e.pistolError;
         else if (e.pistolsRemoved > 0)    info += "  rich2: pistols taken away.";
         if (e.joby3Weapons > 0)         info += "  joby3: " + std::to_string(e.joby3Weapons) + " weapon takeaways removed.";
+        if (e.andrea1Uzi > 0)           info += "  Andrea1: Uzi takeaway removed.";
         if (a.phMusicSwitch && musicLevels > 0)
             info += "  Background music: " + std::to_string(musicLevels) + " levels rescored.";
         if (a.phLevelSections && !sections.empty())
@@ -815,9 +822,18 @@ static std::wstring cacheDir(const App& a)
         // The report is created further down - collect until then.
         std::vector<std::string> fixNotes;
         {
-            const int fixes = LevelFix::apply(lvl, base, fixNotes);
+            std::vector<int> freed;
+            const int fixes = LevelFix::apply(lvl, base, fixNotes, &freed);
             if (fixes > 0)
                 fixNotes.push_back(std::to_string(fixes) + " level fixes applied");
+
+            // A rewritten pickup trigger no longer holds its item - but the
+            // pin was decided from level_*.json, which still describes the
+            // vanilla trigger. Same pattern as the secrets mode below.
+            for (int i : freed)
+                if (in.triggerPinned.erase(i))
+                    fixNotes.push_back("item " + std::to_string(i) +
+                                       " released - its pickup trigger was rewritten");
         }
 
         Patch::markTriggerSafeSectors(lvl, in);
@@ -972,6 +988,42 @@ static std::wstring cacheDir(const App& a)
         RandoInput in;
         if (!Rando::buildInput(zone, info, in, err)) return false;
 
+        const std::wstring src = PathUtil::join(
+            a.haveBackup ? a.backupDir() : a.dataDir(), PathUtil::widen(row.name));
+
+        Tr5Level lvl;
+        if (!lvl.load(src, err)) return false;
+        lvl.allowMoreThanMaxItems(true);   // expressly wanted here, see Tr5Level.h
+
+        // The level is opened BEFORE the markers are built - exactly as in
+        // the real run above, and for the same reason.
+        //
+        // markTriggerSafeSectors fills RandoInput::slopes from the
+        // floordata. Without that map every sector answers "flat"
+        // (Randomizer.cpp, floorAt: no entry means flat), so every rule
+        // that hangs on the floor shape was blind here: the slide and
+        // NoCol bans of #86 and, since 2026-08-29, the flatness rule for
+        // the wall grabs. The debug level then showed sectors as valid
+        // that the real placement rejects - which is the opposite of what
+        // it is for.
+        //
+        // Found by the user in andy3: four markers on split sectors, his
+        // example room 54, a diagonally split field with a marker on it.
+        //
+        // The level fixes belong here for the very same reason (second find,
+        // the same evening): a rewritten pickup trigger changes the
+        // floordata AND releases the item it used to pin. Without this the
+        // debug level went on showing andy1's heart nailed down while the
+        // real run had long let it go.
+        {
+            std::vector<std::string> dbgFixNotes;
+            std::vector<int> dbgFreed;
+            LevelFix::apply(lvl, base, dbgFixNotes, &dbgFreed);
+            for (int i : dbgFreed) in.triggerPinned.erase(i);
+        }
+
+        Patch::markTriggerSafeSectors(lvl, in);
+
         JsonValue patch;
         std::vector<MarkerCount> perType;
         int fillSectors = 0;
@@ -980,13 +1032,6 @@ static std::wstring cacheDir(const App& a)
             err = "markers could not be generated.";
             return false;
         }
-
-        const std::wstring src = PathUtil::join(
-            a.haveBackup ? a.backupDir() : a.dataDir(), PathUtil::widen(row.name));
-
-        Tr5Level lvl;
-        if (!lvl.load(src, err)) return false;
-        lvl.allowMoreThanMaxItems(true);   // expressly wanted here, see Tr5Level.h
 
         PatchReport pr;
         if (!Patch::apply(lvl, patch, pr, err)) return false;
@@ -1250,6 +1295,19 @@ static std::wstring cacheDir(const App& a)
                     a.scriptNote = "SCRIPT.DAT: " + sErr;
                 else
                     a.scriptNote = sInfo;
+            }
+
+            // And the secret rewards, for the same reason and in the same
+            // place: one file for the whole run, keyed by level position
+            // rather than by file name, because the level order is itself
+            // rolled.
+            if (a.optSecretRewards)
+            {
+                std::string rSum, rErr;
+                if (!writeSecretRewards(a.gameDir(), SeedText::parse(a.seedBuf), rSum, rErr))
+                    a.scriptNote += (a.scriptNote.empty() ? "" : "  |  ") + std::string("rewards: ") + rErr;
+                else
+                    a.scriptNote += (a.scriptNote.empty() ? "" : "  |  ") + rSum;
             }
 
             a.phase = App::Phase::Levels;
@@ -2277,6 +2335,14 @@ static void drawUi(App& a, HWND hwnd)
     hoverHelp("Like the glitchless list, but the hiding spots may require "
               "glitches.");
 
+    ImGui::Spacing();
+    ImGui::Checkbox(T("Roll the reward for finding them all"), &a.optSecretRewards);
+    hoverHelp("Finding every secret in a level awards items. This rolls what "
+              "they are - four to eight, per level, from weapons, ammunition "
+              "and medipacks; no keys or puzzle items. Written to "
+              "SecretRewards.txt beside the game, where it can also be "
+              "edited by hand. Left off, that file is not touched.");
+
     if (a.optSecrets >= 2)
     {
         const char* cat = (a.optSecrets == 2) ? "Glitchless" : "Glitched";
@@ -2587,6 +2653,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.optOutfitsOff   = app.cfg.outfitsDisabled;
     app.optItemAmount   = app.cfg.itemAmount;
     app.optSecrets      = app.cfg.secrets;
+    app.optSecretRewards = app.cfg.secretRewards;
     app.secretAuthor     = app.cfg.secretAuthor;
     app.phMusicSwitch     = app.cfg.optMusicSwitch;
     app.phMusicTrigger    = app.cfg.optMusicTrigger;
@@ -2645,6 +2712,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.outfitsDisabled = app.optOutfitsOff;
         app.cfg.itemAmount      = app.optItemAmount;
         app.cfg.secrets         = app.optSecrets;
+        app.cfg.secretRewards   = app.optSecretRewards;
         app.cfg.secretAuthor     = app.secretAuthor;
         app.cfg.optMusicSwitch     = app.phMusicSwitch;
         app.cfg.optMusicTrigger    = app.phMusicTrigger;
@@ -2780,6 +2848,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.outfitsDisabled != app.optOutfitsOff ||
                  app.cfg.itemAmount      != app.optItemAmount ||
                  app.cfg.secrets         != app.optSecrets ||
+                 app.cfg.secretRewards   != app.optSecretRewards ||
                  app.cfg.optMusicSwitch     != app.phMusicSwitch ||
                  app.cfg.optMusicTrigger    != app.phMusicTrigger ||
                  app.cfg.optLevelSections != app.phLevelSections ||

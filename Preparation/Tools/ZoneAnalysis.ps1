@@ -1302,6 +1302,9 @@ $PRESET_FLAGS = @{
     'Andrea2' = @{
         62 = @{ flags = 31; reason = 'Puzzle Item4 - the HeavyTrigger hangs on the death of the Guardian (item 51); codebits preset so it may travel' }
     }
+    'andy1' = @{
+        8 = @{ flags = 31; reason = 'the heart - OCB 5 makes it invisible and unpickable (InitialisePickup, PickUpCollision:783); with the preset and a zeroed OCB it lies there visible, so its finished KeyItemRange can finally be used' }
+    }
 }
 $flagPresets = @()
 if ($PRESET_FLAGS.ContainsKey($LevelName)) {

@@ -172,7 +172,7 @@ bool Tr5Level::findItems(std::string& error)
     STEP("sprites", i32(n));      mark(m_sprites, n);   STEP("sprites", skipN(n, SZ_SPRITE));
     STEP("sprite slots", i32(n)); STEP("sprite slots", skipN(n, SZ_SPRITESLOT));
 
-    STEP("cameras", i32(n));      STEP("cameras", skipN(n, SZ_OBJVEC));
+    STEP("cameras", i32(n));      mark(m_cameras, n);   STEP("cameras", skipN(n, SZ_OBJVEC));
     STEP("spotcams", i32(n));     STEP("spotcams", skipN(n, SZ_SPOTCAM));
     STEP("sound sources", i32(n)); STEP("sound sources", skipN(n, SZ_OBJVEC));
 
@@ -732,6 +732,7 @@ bool Tr5Level::appendChain(const std::vector<Tr5FloorEntry>& chain, uint16_t& ou
     adjustBlock(m_ranges);    adjustBlock(m_commands);
     adjustBlock(m_bones);     adjustBlock(m_frames);
     adjustBlock(m_objects);   adjustBlock(m_sprites);
+    adjustBlock(m_cameras);
     adjustBlock(m_texinfos);
 
     outIndex = static_cast<uint16_t>(newIndex);
@@ -843,6 +844,213 @@ bool Tr5Level::copyTrigger(int fromRoom, int fromSx, int fromSz,
     return true;
 }
 
+//----------------------------------------------------------------------------
+// Take a single object command out of a trigger (2026-08-29).
+//
+// Occasion: rich1 room 71. Its one-shot trigger names a music track, the
+// sword statue and two doors. Door 129 is REVERSE-ACTIVATED - its item
+// flags carry all five code bits, so InitialiseItem (items.cpp) strips
+// them, sets IFL_REVERSE and activates the item. TriggerActive then reads
+// backwards: incomplete bits mean OPEN, and the trigger, by completing
+// them, SHUTS the door behind Lara. Adding a second trigger cannot undo
+// that - it would complete the bits as well, and the one-shot has by then
+// hung IFL_INVISIBLE on the door, which makes the engine skip every plain
+// trigger on it (control.cpp, top of the TO_OBJECT branch).
+//
+// So the pointer has to go, and only the pointer: the music and the statue
+// belong to the scene.
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+// Rewrite a whole trigger in place (2026-08-29).
+//
+// Occasion: andy1's heart (item 8, type 172). Its PICKUP trigger opens a
+// door the user calls useless and starts a cutscene that can teleport Lara
+// into a softlock. On top of that the randomizer pins the heart where it
+// lies, because the trigger does more than play music
+// (Randomizer.cpp, findTriggerPinnedItems) - so the finished KeyItemRange
+// for type 172 never came into play.
+//
+// Taking only the commands out would not be enough: as a PICKUP trigger it
+// keeps its reference word, and that word IS the pointer at the heart. The
+// user's own suggestion is the clean one - make it a plain TRIGGER. Then
+// there is no reference word at all, and findTriggerPinnedItems skips the
+// entry outright instead of being talked round.
+//----------------------------------------------------------------------------
+bool Tr5Level::setTrigger(int room, int sx, int sz, int kind, int timer,
+                          bool oneShot, int mask,
+                          const std::vector<Tr5TriggerCmd>& cmds,
+                          std::string& error, int refItem)
+{
+    char buf[256];
+
+    if (cmds.empty())
+    {
+        error = "a trigger needs at least one command - the engine's command loop "
+                "is a do-while and would read past the entry";
+        return false;
+    }
+
+    for (const Tr5TriggerCmd& c : cmds)
+        if (c.type == 1 || c.type == 12)
+        {
+            error = "camera and flyby commands need an extra word - not provided for here";
+            return false;
+        }
+
+    if (hasRefWord(kind) && refItem < 0)
+    {
+        error = "this trigger kind needs a reference word (refItem)";
+        return false;
+    }
+    if (!hasRefWord(kind) && refItem >= 0)
+    {
+        error = "this trigger kind knows no reference word - refItem would be pointless";
+        return false;
+    }
+
+    const int idx = sectorIndex(room, sx, sz);
+    if (idx < 0)
+    {
+        std::snprintf(buf, sizeof(buf), "sector %d,%d,%d does not exist", room, sx, sz);
+        error = buf;
+        return false;
+    }
+
+    std::vector<Tr5FloorEntry> chain;
+    if (!readChain(idx, chain)) { error = "chain runs out of the block"; return false; }
+
+    bool hit = false;
+
+    for (Tr5FloorEntry& e : chain)
+    {
+        if (e.function != FN_TRIGGER) continue;
+
+        e.kind = kind;
+        e.words.clear();
+        // Word 0: function in bits 0-4, kind in bits 8-13. Bit 15 is
+        // assigned by the chain builder.
+        e.words.push_back(static_cast<uint16_t>((kind << 8) | FN_TRIGGER));
+        e.words.push_back(static_cast<uint16_t>((timer & 0xFF) |
+                                                  (oneShot ? 0x100 : 0) |
+                                                  ((mask & 0x1F) << 9)));
+        if (hasRefWord(kind))
+            e.words.push_back(static_cast<uint16_t>(refItem & 0x3FF));
+
+        for (size_t i = 0; i < cmds.size(); ++i)
+        {
+            uint16_t w = static_cast<uint16_t>(((cmds[i].type & 0xF) << 10) | (cmds[i].param & 0x3FF));
+            if (i + 1 == cmds.size()) w |= 0x8000;
+            e.words.push_back(w);
+        }
+
+        hit = true;
+    }
+
+    if (!hit)
+    {
+        std::snprintf(buf, sizeof(buf), "sector %d,%d,%d carries no trigger", room, sx, sz);
+        error = buf;
+        return false;
+    }
+
+    uint16_t fresh = 0;
+    if (!appendChain(chain, fresh, error)) return false;
+    setSectorIndex(m_rooms[static_cast<size_t>(room)], sx, sz, fresh);
+    return true;
+}
+
+bool Tr5Level::editTriggerObject(int room, int sx, int sz, int item,
+                                 int newType, int newParam, std::string& error)
+{
+    char buf[256];
+
+    const int idx = sectorIndex(room, sx, sz);
+    if (idx < 0)
+    {
+        std::snprintf(buf, sizeof(buf), "sector %d,%d,%d does not exist", room, sx, sz);
+        error = buf;
+        return false;
+    }
+
+    std::vector<Tr5FloorEntry> chain;
+    if (!readChain(idx, chain)) { error = "chain runs out of the block"; return false; }
+
+    bool hit = false;
+
+    for (Tr5FloorEntry& e : chain)
+    {
+        if (e.function != FN_TRIGGER) continue;
+
+        // Words 0 and 1 are the head, then possibly the reference word of
+        // a SWITCH/KEY/PICKUP trigger. Only what follows are commands.
+        size_t at = 2;
+        if (hasRefWord(e.kind)) ++at;
+        if (at >= e.words.size()) continue;
+
+        std::vector<uint16_t> keep(e.words.begin(), e.words.begin() + static_cast<ptrdiff_t>(at));
+        bool dropped = false;
+
+        while (at < e.words.size())
+        {
+            const uint16_t w = e.words[at];
+            const int type = (w >> 10) & 0xF;
+            const int param = w & 0x3FF;
+
+            // Camera and flyby carry a second word that belongs to them.
+            const size_t width = (type == 1 || type == 12) ? 2 : 1;
+            const bool last = (w & 0x8000) != 0;
+
+            if (type == 0 && param == item)
+            {
+                dropped = true;
+
+                // A replacement keeps the end bit exactly where it was, so a
+                // trigger whose ONLY command this is survives the surgery.
+                if (newType >= 0)
+                    keep.push_back(static_cast<uint16_t>(
+                        (w & 0x8000) | ((newType & 0xF) << 10) | (newParam & 0x3FF)));
+            }
+            else
+                for (size_t k = 0; k < width && at + k < e.words.size(); ++k)
+                    keep.push_back(e.words[at + k]);
+
+            at += width;
+            if (last) break;
+        }
+
+        if (!dropped) continue;
+
+        size_t headWords = hasRefWord(e.kind) ? 3u : 2u;
+        if (keep.size() <= headWords)
+        {
+            error = "that was the trigger's only command - dropping it leaves the trigger pointless; pass a replacement instead";
+            return false;
+        }
+
+        // The end bit sat on the word that is gone or moved - set it
+        // afresh on the new last command and clear it everywhere else.
+        for (size_t k = headWords; k < keep.size(); ++k) keep[k] &= 0x7FFF;
+        keep.back() |= 0x8000;
+
+        e.words = keep;
+        hit = true;
+    }
+
+    if (!hit)
+    {
+        std::snprintf(buf, sizeof(buf),
+                      "sector %d,%d,%d has no trigger command for item %d",
+                      room, sx, sz, item);
+        error = buf;
+        return false;
+    }
+
+    uint16_t fresh = 0;
+    if (!appendChain(chain, fresh, error)) return false;
+    setSectorIndex(m_rooms[static_cast<size_t>(room)], sx, sz, fresh);
+    return true;
+}
+
 bool Tr5Level::addTrigger(int room, int sx, int sz, int kind, int timer, bool oneShot,
                           int mask, const std::vector<Tr5TriggerCmd>& cmds,
                           std::string& error, int refItem)
@@ -941,17 +1149,1055 @@ bool Tr5Level::addTrigger(int room, int sx, int sz, int kind, int timer, bool on
 //   - The chain ends with DOOR -> target room; slopes before it stay
 //     (36(4,4) vanilla: [TILT][SPLIT4][DOOR]).
 //
-// The VIEW WINDOW (the room list's 32-byte portal entry) is NOT created
-// here - it must already exist. In andy3, Core built both windows in
-// completely and only sealed the sectors; exactly that case is checked, and
-// its absence is a hard error instead of a black hole in the picture.
+// The VIEW WINDOW (the room list's 32-byte portal entry) is built by
+// addViewWindow when it is missing. It used to be a hard error, which was
+// right while nothing could create one: in andy3, Core had built both
+// windows in completely and only sealed the sectors, so that was the only
+// case that could work. Three secret lists later asked for walls Core never
+// prepared (#132), so now the window is made rather than demanded.
 //----------------------------------------------------------------------------
-bool Tr5Level::makePortal(int room, int sx, int sz, int targetRoom, std::string& error)
+//----------------------------------------------------------------------------
+// Create the view window between two rooms (#132).
+//
+// A room blob is laid out as
+//
+//   [0 .. 207]                 header, fixed
+//   208 + start_sd             sectors, numX * numZ * 8
+//   after                      uint16 portal count, then 32 bytes per portal
+//   after                      uint16 statics count
+//   208 + end_portal           statics
+//
+// and the rooms lie SEQUENTIALLY in the file behind their XELA marker and a
+// size word - there is no table of room offsets to repair. So inserting one
+// portal is four numbers: the count in front of the list, end_portal in the
+// header, the room's own size word, and the main block size. Everything
+// after simply shifts, which reparse sorts out.
+//
+// One window is written per direction. They are inserted one at a time with
+// a reparse in between, because the first insertion moves the second room.
+//----------------------------------------------------------------------------
+bool Tr5Level::portalRecords(int room, std::vector<PortalRecord>& out, std::string& error) const
+{
+    out.clear();
+    if (room < 0 || room >= static_cast<int>(m_rooms.size()))
+    { error = "room does not exist"; return false; }
+
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    if (!r.sectorsOffset) { error = "room did not parse"; return false; }
+
+    const size_t end = r.sectorsOffset +
+        static_cast<size_t>(r.numXSectors) * r.numZSectors * 8;
+    uint16_t n; std::memcpy(&n, m_bytes.data() + end, 2);
+
+    for (uint16_t i = 0; i < n; ++i)
+    {
+        const size_t at = end + 2 + static_cast<size_t>(i) * 32;
+        PortalRecord p;
+        uint16_t to; std::memcpy(&to, m_bytes.data() + at, 2);
+        p.toRoom = to;
+        int16_t w;
+        std::memcpy(&w, m_bytes.data() + at + 2, 2); p.nx = w;
+        std::memcpy(&w, m_bytes.data() + at + 4, 2); p.ny = w;
+        std::memcpy(&w, m_bytes.data() + at + 6, 2); p.nz = w;
+        for (int k = 0; k < 4; ++k)
+            for (int c = 0; c < 3; ++c)
+            { std::memcpy(&w, m_bytes.data() + at + 8 + k * 6 + c * 2, 2); p.v[k][c] = w; }
+        out.push_back(p);
+    }
+    return true;
+}
+
+/*
+ * The fixed camera table. Sixteen bytes per record: three int32
+ * coordinates, then the room as int16 and the flags as int16.
+ *
+ * Written for one question (2026-08-29): first person pushes a trigger's
+ * Camera command aside, but not where the camera carries flags & 3 -
+ * that is the sniper/game camera, and its overlay is drawn inside
+ * FixedCamera. From the outside two such triggers look identical, so the
+ * flag has to be readable.
+ */
+bool Tr5Level::cameraRecords(std::vector<CameraRecord>& out, std::string& error) const
+{
+    out.clear();
+
+    if (!m_cameras.dataAt)
+    {
+        error = "camera table not located - level not parsed?";
+        return false;
+    }
+
+    for (int i = 0; i < m_cameras.count; ++i)
+    {
+        const size_t at = m_cameras.dataAt + static_cast<size_t>(i) * 16;
+        if (at + 16 > m_bytes.size())
+        {
+            error = "camera table runs past the end of the file";
+            return false;
+        }
+
+        int32_t x, y, z;
+        int16_t room, flags;
+        std::memcpy(&x, m_bytes.data() + at, 4);
+        std::memcpy(&y, m_bytes.data() + at + 4, 4);
+        std::memcpy(&z, m_bytes.data() + at + 8, 4);
+        std::memcpy(&room, m_bytes.data() + at + 12, 2);
+        std::memcpy(&flags, m_bytes.data() + at + 14, 2);
+
+        CameraRecord c;
+        c.x = x; c.y = y; c.z = z;
+        c.room = room; c.flags = static_cast<uint16_t>(flags);
+        out.push_back(c);
+    }
+
+    return true;
+}
+
+//----------------------------------------------------------------------------
+// Every drawn face of a room, in world coordinates (#136).
+//
+// The layout comes from the engine, not from guesswork. ROOM_INFO is the
+// 208-byte room header, and three of its fields matter here:
+//   168  nRoomlets
+//   172  pRoomlets   an array of 56-byte ROOMLETs
+//   176  pRmVtx      7 floats per vertex: x, y, z, nx, ny, nz, prelight
+//   180  pRmFace     one stream of shorts, handed out to the roomlets in
+//                    order (alexstuff.cpp:164-177):
+//                        pFac += 5 * nTri + 6 * nQuad
+// and drawroom.cpp:99ff reads a face as
+//   quad: v0 v1 v2 v3 texword effects     (6 shorts)
+//   tri:  v0 v1 v2    texword effects     (5 shorts)
+//   texword: bit 15 double sided, bits 0-13 the texinfo
+//
+// Vertex indices are relative to the ROOMLET's own block, not the room's.
+bool Tr5Level::roomFaces(int room, std::vector<FaceInfo>& out, std::string& error) const
+{
+    out.clear();
+    if (room < 0 || room >= static_cast<int>(m_rooms.size()))
+    { error = "room does not exist"; return false; }
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    if (!r.headerOffset) { error = "room did not parse"; return false; }
+
+    const size_t hdr = r.headerOffset, body = hdr + 208;
+    int32_t nRoomlets; std::memcpy(&nRoomlets, m_bytes.data() + hdr + 168, 4);
+    uint32_t oRoomlets, oVtx, oFace;
+    std::memcpy(&oRoomlets, m_bytes.data() + hdr + 172, 4);
+    std::memcpy(&oVtx,      m_bytes.data() + hdr + 176, 4);
+    std::memcpy(&oFace,     m_bytes.data() + hdr + 180, 4);
+
+    if (nRoomlets <= 0 || nRoomlets > 4096) return true;      // nothing drawn
+    if ((oRoomlets & 1) || (oVtx & 1) || (oFace & 1)) return true;
+
+    size_t facAt = body + oFace;
+    size_t vtxAt = body + oVtx;
+
+    for (int i = 0; i < nRoomlets; ++i)
+    {
+        const size_t rl = body + oRoomlets + static_cast<size_t>(i) * 56;
+        if (rl + 56 > m_bytes.size()) { error = "roomlet outside the file"; return false; }
+        int16_t nVtx, nQuad, nTri;
+        std::memcpy(&nVtx,  m_bytes.data() + rl,     2);
+        std::memcpy(&nQuad, m_bytes.data() + rl + 6, 2);
+        std::memcpy(&nTri,  m_bytes.data() + rl + 8, 2);
+
+        auto corner = [&](int idx, long* xyz) -> bool
+        {
+            const size_t at = vtxAt + static_cast<size_t>(idx) * 28;
+            if (idx < 0 || idx >= nVtx || at + 12 > m_bytes.size()) return false;
+            float f[3];
+            std::memcpy(f, m_bytes.data() + at, 12);
+            xyz[0] = static_cast<long>(f[0]) + r.originX;
+            xyz[1] = static_cast<long>(f[1]);
+            xyz[2] = static_cast<long>(f[2]) + r.originZ;
+            return true;
+        };
+
+        for (int q = 0; q < nQuad + nTri; ++q)
+        {
+            const bool quad = (q < nQuad);
+            const int  n    = quad ? 4 : 3;
+            const size_t at = facAt;
+            if (at + static_cast<size_t>(n + 2) * 2 > m_bytes.size())
+            { error = "face outside the file"; return false; }
+
+            FaceInfo f;
+            f.roomlet = i; f.quad = quad;
+            f.indexAt = at;
+            f.texWordAt = at + static_cast<size_t>(n) * 2;
+            bool good = true;
+            for (int k = 0; k < 4; ++k) { f.index[k] = 0; f.v[k][0] = f.v[k][1] = f.v[k][2] = 0; }
+            for (int k = 0; k < n; ++k)
+            {
+                uint16_t w; std::memcpy(&w, m_bytes.data() + at + static_cast<size_t>(k) * 2, 2);
+                f.index[k] = w;
+                if (!corner(w, f.v[k])) good = false;
+            }
+            uint16_t tw, ef;
+            std::memcpy(&tw, m_bytes.data() + f.texWordAt, 2);
+            std::memcpy(&ef, m_bytes.data() + f.texWordAt + 2, 2);
+            f.texInfo = tw & 0x3FFF;
+            f.doubleSided = (tw & 0x8000) != 0;
+            f.effects = ef;
+            if (good) out.push_back(f);
+
+            facAt += static_cast<size_t>(n + 2) * 2;
+        }
+
+        vtxAt += static_cast<size_t>(nVtx) * 28;
+    }
+    return true;
+}
+
+namespace {
+
+// Does the face lie wholly on this sector's square of the world, and does it
+// stand UPRIGHT? Floors and ceilings sit on the same square and must not be
+// caught - only a wall gets in the way of looking through.
+bool faceOnSectorWall(const Tr5Level::FaceInfo& f, long x0, long x1, long z0, long z1)
+{
+    const int n = f.quad ? 4 : 3;
+    for (int k = 0; k < n; ++k)
+        if (f.v[k][0] < x0 || f.v[k][0] > x1 || f.v[k][2] < z0 || f.v[k][2] > z1)
+            return false;
+
+    bool sameX = true, sameZ = true, sameY = true;
+    for (int k = 1; k < n; ++k)
+    {
+        if (f.v[k][0] != f.v[0][0]) sameX = false;
+        if (f.v[k][2] != f.v[0][2]) sameZ = false;
+        if (f.v[k][1] != f.v[0][1]) sameY = false;
+    }
+    return (sameX || sameZ) && !sameY;
+}
+
+}  // namespace
+
+//----------------------------------------------------------------------------
+// Take the wall away from a sector (#136, option "@Clear").
+//
+// A genuine portal carries NO face at all - measured: andy1's room 0 at its
+// door to room 70 has none, and neither has either side of joby3's opening.
+// No editor of the old days could put a texture on a portal, which is why
+// they were always "something special" (the user). Andrea3's room 1 at
+// (x6,z2) has exactly one quad, and that is the wall one still bumps into.
+//
+// The face is DEGENERATED rather than removed: all four corner indices are
+// set to the first one, so the quad has no area and nothing is drawn. That
+// keeps every count, every offset and the file length exactly as they are.
+// Cutting the twelve bytes out would match a real portal to the byte, but it
+// means shifting the face stream and nine header offsets with it - the very
+// arithmetic that went wrong twice on 2026-08-27 - and it looks no different.
+bool Tr5Level::clearWallFaces(int room, int sx, int sz, int& cleared, std::string& error)
+{
+    cleared = 0;
+    if (room < 0 || room >= static_cast<int>(m_rooms.size()))
+    { error = "room " + std::to_string(room) + " does not exist"; return false; }
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors)
+    { error = "sector outside room " + std::to_string(room); return false; }
+
+    std::vector<FaceInfo> faces;
+    if (!roomFaces(room, faces, error)) return false;
+
+    const long x0 = r.originX + static_cast<long>(sx) * 1024, x1 = x0 + 1024;
+    const long z0 = r.originZ + static_cast<long>(sz) * 1024, z1 = z0 + 1024;
+
+    for (size_t i = 0; i < faces.size(); ++i)
+    {
+        const FaceInfo& f = faces[i];
+        if (!faceOnSectorWall(f, x0, x1, z0, z1)) continue;
+        const int n = f.quad ? 4 : 3;
+        const uint16_t first = static_cast<uint16_t>(f.index[0]);
+        for (int k = 1; k < n; ++k)
+            std::memcpy(m_bytes.data() + f.indexAt + static_cast<size_t>(k) * 2, &first, 2);
+        ++cleared;
+    }
+    return true;
+}
+
+//----------------------------------------------------------------------------
+// Give a wall the texture of another one (#136, option "@LikeWall").
+//
+// For the case where the opening should NOT be a hole but a pane of glass.
+// A texinfo number says nothing to a human, so the source is a sector one
+// can point at instead. Only the texture word is taken; the effects word of
+// the target stays as it is.
+//
+// This can only retexture a face that EXISTS. Where a sector has no wall -
+// which is what most portals look like - there is nothing to put a texture
+// on, and that is reported rather than silently ignored.
+bool Tr5Level::copyWallTexture(int fromRoom, int fsx, int fsz,
+                               int toRoom, int tsx, int tsz, int& changed, std::string& error)
+{
+    changed = 0;
+    if (fromRoom < 0 || fromRoom >= static_cast<int>(m_rooms.size()))
+    { error = "room " + std::to_string(fromRoom) + " does not exist"; return false; }
+    if (toRoom < 0 || toRoom >= static_cast<int>(m_rooms.size()))
+    { error = "room " + std::to_string(toRoom) + " does not exist"; return false; }
+
+    const Tr5Room& fr = m_rooms[static_cast<size_t>(fromRoom)];
+    std::vector<FaceInfo> src;
+    if (!roomFaces(fromRoom, src, error)) return false;
+    const long fx0 = fr.originX + static_cast<long>(fsx) * 1024, fx1 = fx0 + 1024;
+    const long fz0 = fr.originZ + static_cast<long>(fsz) * 1024, fz1 = fz0 + 1024;
+
+    uint16_t texWord = 0;
+    bool found = false;
+    for (size_t i = 0; i < src.size() && !found; ++i)
+        if (faceOnSectorWall(src[i], fx0, fx1, fz0, fz1))
+        {
+            std::memcpy(&texWord, m_bytes.data() + src[i].texWordAt, 2);
+            found = true;
+        }
+    if (!found)
+    {
+        error = "room " + std::to_string(fromRoom) + " has no wall at (x" +
+                std::to_string(fsx) + ",z" + std::to_string(fsz) + ") to take a texture from";
+        return false;
+    }
+
+    const Tr5Room& tr = m_rooms[static_cast<size_t>(toRoom)];
+    std::vector<FaceInfo> dst;
+    if (!roomFaces(toRoom, dst, error)) return false;
+    const long tx0 = tr.originX + static_cast<long>(tsx) * 1024, tx1 = tx0 + 1024;
+    const long tz0 = tr.originZ + static_cast<long>(tsz) * 1024, tz1 = tz0 + 1024;
+
+    for (size_t i = 0; i < dst.size(); ++i)
+        if (faceOnSectorWall(dst[i], tx0, tx1, tz0, tz1))
+        {
+            std::memcpy(m_bytes.data() + dst[i].texWordAt, &texWord, 2);
+            ++changed;
+        }
+    return true;
+}
+
+bool Tr5Level::headerField(int room, int offset, unsigned& value, std::string& error) const
+{
+    if (room < 0 || room >= static_cast<int>(m_rooms.size()))
+    { error = "room does not exist"; return false; }
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    if (!r.headerOffset || offset < 0 || offset > 204)
+    { error = "no such field"; return false; }
+    uint32_t v; std::memcpy(&v, m_bytes.data() + r.headerOffset + offset, 4);
+    value = v;
+    return true;
+}
+
+bool Tr5Level::sectorInfo(int room, std::vector<SectorInfo>& out, std::string& error) const
+{
+    out.clear();
+    if (room < 0 || room >= static_cast<int>(m_rooms.size()))
+    { error = "room does not exist"; return false; }
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    if (!r.sectorsOffset) { error = "room did not parse"; return false; }
+
+    for (int x = 0; x < r.numXSectors; ++x)
+        for (int z = 0; z < r.numZSectors; ++z)
+        {
+            const size_t at = r.sectorsOffset +
+                (static_cast<size_t>(x) * r.numZSectors + z) * 8;
+            SectorInfo s;
+            s.sx = x; s.sz = z;
+            uint16_t w;
+            std::memcpy(&w, m_bytes.data() + at, 2);     s.fdIndex = w;
+            std::memcpy(&w, m_bytes.data() + at + 2, 2); s.box = w;
+            s.roomBelow = m_bytes[at + 4];
+            s.floor     = static_cast<int8_t>(m_bytes[at + 5]);
+            s.roomAbove = m_bytes[at + 6];
+            s.ceiling   = static_cast<int8_t>(m_bytes[at + 7]);
+
+            // The floordata door too. THAT is the horizontal handover, and
+            // seeing it next to the vertical link bytes is the whole point:
+            // one sector must never carry both.
+            s.doorTo = -1;
+            if (s.fdIndex)
+            {
+                std::vector<Tr5FloorEntry> chain;
+                if (readChain(s.fdIndex, chain))
+                    for (size_t q = 0; q < chain.size(); ++q)
+                        if (chain[q].function == 1 && chain[q].words.size() >= 2)
+                            s.doorTo = chain[q].words[1];
+            }
+            out.push_back(s);
+        }
+    return true;
+}
+
+bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
+                             int roomB, int nsxB, int nszB, std::string& error)
+{
+    constexpr size_t HDR = 208, SECTOR = 8, PORTAL = 32;
+
+    // Which wall of A is this? Portals sit on the border ring of a room, and
+    // that is what says which way the opening faces. A corner sector belongs
+    // to two walls; then the neighbour's own position decides.
+    auto wallOf = [&](const Tr5Room& r, const Tr5Room& other, int x, int zc,
+                      int& ax, int& az) -> bool
+    {
+        ax = az = 0;
+        const bool loX = (x == 0), hiX = (x == r.numXSectors - 1);
+        const bool loZ = (zc == 0), hiZ = (zc == r.numZSectors - 1);
+        if (!loX && !hiX && !loZ && !hiZ) return false;
+
+        const int cxA = r.originX + r.numXSectors * 512;
+        const int czA = r.originZ + r.numZSectors * 512;
+        const int cxB = other.originX + other.numXSectors * 512;
+        const int czB = other.originZ + other.numZSectors * 512;
+        const bool alongX = abs(cxB - cxA) >= abs(czB - czA);
+
+        if (alongX && (loX || hiX)) { ax = loX ? -1 : 1; return true; }
+        if (!alongX && (loZ || hiZ)) { az = loZ ? -1 : 1; return true; }
+        if (loX || hiX) { ax = loX ? -1 : 1; return true; }
+        az = loZ ? -1 : 1;
+        return true;
+    };
+
+    // ONE plane for both windows of a horizontal portal.
+    //
+    // Each side used to take its own: the room below opened at its ceiling,
+    // the room above at its floor. In a hand-built level those coincide -
+    // in andy1 room 227's ceiling and room 93's floor sit 256 units apart,
+    // and the two windows then described different holes. The engine took
+    // it and drew a void to slide through; trview refused the level.
+    //
+    // Filled in below, before anything is inserted, because the second
+    // insertion reparses and moves the rooms.
+    long sharedY = 0;
+    bool haveShared = false;
+
+    // And one HEIGHT for both windows of a wall opening.
+    //
+    // Each side used to take the floor and ceiling of the sector across from
+    // it - and those are two different columns of the world, so on sloping
+    // ground they disagree. Andrea3 came out with one window spanning
+    // -5120..0 and its partner -3072..-768: two windows describing different
+    // holes. Core's pairs always match (joby3's 76 <-> 10 are both
+    // -2048..-1536), and a mismatch is what made trview refuse the level.
+    //
+    // The opening is what BOTH sides allow, so the ranges are intersected.
+    // Should that come out empty - a shell room with no sensible heights -
+    // each side falls back to working it out for itself, as before.
+    long sharedCeil = 0, sharedFloor = 0;
+    bool haveSharedY = false;
+
+    // One direction. Returns the bytes to splice and where they go.
+    auto build = [&](int from, int to, int fx, int fz,
+                     size_t& outAt, std::vector<uint8_t>& rec) -> bool
+    {
+        const Tr5Room& r = m_rooms[static_cast<size_t>(from)];
+        const Tr5Room& o = m_rooms[static_cast<size_t>(to)];
+        if (!r.headerOffset || !r.sectorsOffset)
+        { error = "room " + std::to_string(from) + " did not parse"; return false; }
+
+        // Wall or floor? A sector off the border ring cannot be a wall, and
+        // rooms stacked in Y do not meet on one either - Andrea3's rooms 1
+        // and 74 overlap by TWO columns, so no pair of sectors is on both
+        // rooms' edges, and andy1's room 227 sits bodily inside room 93.
+        //
+        // Y grows DOWNWARD in this format, so the room with the smaller
+        // yBottom is the upper one.
+        int ax = 0, az = 0, ay = 0;
+        if (!wallOf(r, o, fx, fz, ax, az))
+            ay = (o.yBottom < r.yBottom) ? -1 : 1;   // -1 = neighbour above
+
+        const size_t sectorsEnd = r.sectorsOffset +
+            static_cast<size_t>(r.numXSectors) * r.numZSectors * SECTOR;
+        uint16_t nPortals; std::memcpy(&nPortals, m_bytes.data() + sectorsEnd, 2);
+
+        // The winding is DERIVED, not copied off a look-alike.
+        //
+        // First attempt was to find a portal already facing the same way and
+        // copy it. That works only where the room happens to have one -
+        // Andrea3's room 1 has a single portal, on another wall, and the
+        // build failed there for no good reason.
+        //
+        // The convention is the same throughout the format, so ANY portal in
+        // ANY room answers it: take its corners in file order, cross the
+        // first two edges, and see whether that points along its normal or
+        // against it. That sign is what has to be reproduced.
+        int sign = 0;
+        for (size_t rm = 0; rm < m_rooms.size() && !sign; ++rm)
+        {
+            const Tr5Room& q = m_rooms[rm];
+            if (!q.sectorsOffset || q.portalRooms.empty()) continue;
+            const size_t qEnd = q.sectorsOffset +
+                static_cast<size_t>(q.numXSectors) * q.numZSectors * SECTOR;
+            const size_t at = qEnd + 2;
+            int16_t nx, ny, nz, v[4][3];
+            std::memcpy(&nx, m_bytes.data() + at + 2, 2);
+            std::memcpy(&ny, m_bytes.data() + at + 4, 2);
+            std::memcpy(&nz, m_bytes.data() + at + 6, 2);
+            for (int k = 0; k < 4; ++k)
+                for (int c = 0; c < 3; ++c)
+                    std::memcpy(&v[k][c], m_bytes.data() + at + 8 + k * 6 + c * 2, 2);
+
+            const long e1[3] = { v[1][0] - v[0][0], v[1][1] - v[0][1], v[1][2] - v[0][2] };
+            const long e2[3] = { v[2][0] - v[0][0], v[2][1] - v[0][1], v[2][2] - v[0][2] };
+            const long cx = e1[1] * e2[2] - e1[2] * e2[1];
+            const long cy = e1[2] * e2[0] - e1[0] * e2[2];
+            const long cz = e1[0] * e2[1] - e1[1] * e2[0];
+            const long dot = cx * nx + cy * ny + cz * nz;
+            if (dot) sign = (dot > 0) ? 1 : -1;
+        }
+        if (!sign)
+        { error = "the level has no portal at all to read the corner order from"; return false; }
+
+        rec.assign(PORTAL, 0);
+        const uint16_t adj = static_cast<uint16_t>(to);
+        std::memcpy(rec.data(), &adj, 2);
+
+        // The normal points AWAY from the neighbour, into this room - that is
+        // what makes the opening visible from in here.
+        const int16_t nrm[3] = { static_cast<int16_t>(-ax), static_cast<int16_t>(-ay),
+                                 static_cast<int16_t>(-az) };
+        std::memcpy(rec.data() + 2, &nrm[0], 2);
+        std::memcpy(rec.data() + 4, &nrm[1], 2);
+        std::memcpy(rec.data() + 6, &nrm[2], 2);
+
+        // The opening: one sector wide, from the ceiling to the floor of the
+        // sector on the OTHER side - that is the hole one can actually walk
+        // through.
+        const int worldX = r.originX + fx * 1024;
+        const int worldZ = r.originZ + fz * 1024;
+        const int osx = (worldX - o.originX) / 1024;
+        const int osz = (worldZ - o.originZ) / 1024;
+        if (osx < 0 || osx >= o.numXSectors || osz < 0 || osz >= o.numZSectors)
+        { error = "the rooms do not overlap at that sector"; return false; }
+
+        const size_t across = o.sectorsOffset +
+            (static_cast<size_t>(osx) * o.numZSectors + osz) * SECTOR;
+        const int yFloor = haveSharedY ? static_cast<int>(sharedFloor)
+            : static_cast<int>(static_cast<int8_t>(m_bytes[across + 5])) * 256;
+        const int yCeil  = haveSharedY ? static_cast<int>(sharedCeil)
+            : static_cast<int>(static_cast<int8_t>(m_bytes[across + 7])) * 256;
+
+        // A horizontal opening lies in ONE plane: this room's own ceiling
+        // when the neighbour is above, its floor when the neighbour is below.
+        const size_t here = r.sectorsOffset +
+            (static_cast<size_t>(fx) * r.numZSectors + fz) * SECTOR;
+        const int yHere = haveShared
+            ? static_cast<int>(sharedY)
+            : ((ay < 0)
+               ? static_cast<int>(static_cast<int8_t>(m_bytes[here + 7])) * 256
+               : static_cast<int>(static_cast<int8_t>(m_bytes[here + 5])) * 256);
+
+        // The four corners of the opening, laid out in one order and then
+        // flipped if the level's convention runs the other way.
+        const int nx0 = fx * 1024, nx1 = fx * 1024 + 1024;
+        const int nz0 = fz * 1024, nz1 = fz * 1024 + 1024;
+        // A portal does not sit ON its plane - it sits one unit in FRONT of
+        // it, and only on the side whose normal points the positive way.
+        // Measured off vanilla andy1, where all six directions occur:
+        //
+        //   227 -> 226  normal  1,0,0   x 1023   ( = 1024 - 1 )
+        //   227 -> 230  normal -1,0,0   x 2048
+        //   227 -> 114  normal  0,0,1   z 1023
+        //   227 -> 139  normal  0,0,-1  z 4096
+        //   222 -> 227  normal  0,1,0   y 7679   ( = 7680 - 1 )
+        //   222 -> 119  normal  0,-1,0  y 9472
+        //
+        // So: where the normal component is +1, subtract one. Without it the
+        // window lies exactly in the wall or ceiling it is meant to open, and
+        // the two coincident planes are what made trview refuse the level and
+        // the engine draw a void to slide through.
+        //
+        // The normal is (-ax,-ay,-az), so the +1 side is the one where the
+        // axis value is negative.
+        // The window sits on the sector's INNER edge - the one facing the
+        // room's own interior - not on its outer edge. Three vanilla windows
+        // say so, and all three agree:
+        //
+        //   Andrea3 room  1 -> 20  normal  1,0,0 at 1023   ring sector 0,
+        //   joby3   room 76 -> 10  normal  1,0,0 at 1023   inner edge 1024,
+        //   joby3   room 10 -> 76  normal -1,0,0 at 6144   ring sector 6,
+        //                                                  inner edge 6144
+        //
+        // Taking the outer edge put Andrea3's room 1 window at 98304 while
+        // room 74's sat at 97280 - two windows describing different holes,
+        // and from inside room 74 the drawer never looked through at all.
+        //
+        // ax is -1 for the low-side ring sector and +1 for the high one, and
+        // the normal is its opposite, pointing into the room. The one-unit
+        // inset applies where that normal is positive.
+        const int wallX = ax ? ((ax < 0) ? nx1 - 1 : nx0) : 0;
+        const int wallZ = az ? ((az < 0) ? nz1 - 1 : nz0) : 0;
+        const int flatY = yHere - ((ay < 0) ? 1 : 0);
+
+        int corner[4][3];
+        for (int k = 0; k < 4; ++k)
+        {
+            const bool farEnd = (k == 1 || k == 2);
+            const bool low    = (k >= 2);
+            if (ay)
+            {
+                // Flat in one plane: the four corners of the sector itself.
+                corner[k][0] = farEnd ? nx1 : nx0;
+                corner[k][2] = low    ? nz1 : nz0;
+                corner[k][1] = flatY;
+            }
+            else if (ax)
+            {
+                corner[k][0] = wallX;
+                corner[k][2] = farEnd ? nz1 : nz0;
+                corner[k][1] = low ? yFloor : yCeil;
+            }
+            else
+            {
+                corner[k][2] = wallZ;
+                corner[k][0] = farEnd ? nx1 : nx0;
+                corner[k][1] = low ? yFloor : yCeil;
+            }
+        }
+
+        // Does that order match the level's? If not, reverse it - reversing
+        // a quad's order flips its facing, and that is the only degree of
+        // freedom left once the positions are fixed.
+        {
+            const long e1[3] = { corner[1][0] - corner[0][0], corner[1][1] - corner[0][1],
+                                 corner[1][2] - corner[0][2] };
+            const long e2[3] = { corner[2][0] - corner[0][0], corner[2][1] - corner[0][1],
+                                 corner[2][2] - corner[0][2] };
+            const long cx = e1[1] * e2[2] - e1[2] * e2[1];
+            const long cy = e1[2] * e2[0] - e1[0] * e2[2];
+            const long cz = e1[0] * e2[1] - e1[1] * e2[0];
+            const long dot = cx * (-ax) + cy * (-ay) + cz * (-az);
+            const int mine = (dot > 0) ? 1 : -1;
+            if (mine != sign)
+            {
+                for (int k = 0; k < 2; ++k)
+                    for (int c = 0; c < 3; ++c)
+                    { const int t = corner[k][c]; corner[k][c] = corner[3 - k][c]; corner[3 - k][c] = t; }
+            }
+        }
+
+        for (int k = 0; k < 4; ++k)
+            for (int c = 0; c < 3; ++c)
+            {
+                const int16_t val = static_cast<int16_t>(corner[k][c]);
+                std::memcpy(rec.data() + 8 + k * 6 + c * 2, &val, 2);
+            }
+
+        outAt = sectorsEnd + 2 + static_cast<size_t>(nPortals) * PORTAL;
+        return true;
+    };
+
+    // One insertion, then reparse - the second room has moved by then.
+    auto insertOne = [&](int from, int to, int fx, int fz) -> bool
+    {
+        size_t at = 0;
+        std::vector<uint8_t> rec;
+        if (!build(from, to, fx, fz, at, rec)) return false;
+
+        const Tr5Room& r = m_rooms[static_cast<size_t>(from)];
+        const size_t sectorsEnd = r.sectorsOffset +
+            static_cast<size_t>(r.numXSectors) * r.numZSectors * SECTOR;
+        const size_t hdr = r.headerOffset;
+
+        m_bytes.insert(m_bytes.begin() + static_cast<ptrdiff_t>(at), rec.begin(), rec.end());
+
+        uint16_t nPortals; std::memcpy(&nPortals, m_bytes.data() + sectorsEnd, 2);
+        ++nPortals;
+        std::memcpy(m_bytes.data() + sectorsEnd, &nPortals, 2);
+
+        // A room that had NO portals at all carries Core's mark for it in
+        // its door field: an ODD value (Andrea3's room 74 has 0xFFFFFFFF).
+        // The engine tests exactly that and throws the list away before it
+        // ever looks at it - alexstuff.cpp:158
+        //
+        //     if ((long)pR->door & 1) { Log("%X", pR->door); pR->door = 0; }
+        //
+        // (those bare hex lines in the log after LoadRooms are this, one per
+        // portal-less room). So the window sat in the file, our own reader
+        // found it because it works the position out for itself, and the
+        // engine saw no neighbour: standing in room 74 one looked into
+        // blackness with room 1 right there behind the opening.
+        //
+        // The first portal a room ever gets has to set the field. It points
+        // at the count word, which is where the sectors end - and that is in
+        // FRONT of the insertion, so it needs no relocating afterwards.
+        {
+            uint32_t doorOfs;
+            std::memcpy(&doorOfs, m_bytes.data() + hdr + 4, 4);
+            if (doorOfs & 1)
+            {
+                doorOfs = static_cast<uint32_t>(sectorsEnd - (hdr + HDR));
+                std::memcpy(m_bytes.data() + hdr + 4, &doorOfs, 4);
+            }
+        }
+
+        // EVERY offset in the header that points behind the portal list has
+        // to move with it, not just end_portal.
+        //
+        // The 208-byte header IS the engine's ROOM_INFO, and nine of its
+        // fields are stored as offsets that get relocated on load
+        // (alexstuff.cpp:145ff): door, floor, mesh, pclight, fogbulb,
+        // pRoomlets, pRmVtx, pRmFace, pRmPrelight. door and floor point at
+        // the portal list and the sectors, both in front of the insertion,
+        // so they stay. The other seven come after and were left behind on
+        // the first attempt - the level then reread cleanly here, because
+        // this parser only checks the sector and portal arithmetic, and
+        // still made trview fail at generating rooms and the game crash
+        // after a slide through the void.
+        //
+        // An odd value is the engine's "none" marker (it tests door & 1), so
+        // those are left alone.
+        static const size_t RELOC[] = { 16, 144, 148, 172, 176, 180, 184 };
+        const size_t insRel = at - (hdr + HDR);
+        for (size_t f = 0; f < sizeof(RELOC) / sizeof(RELOC[0]); ++f)
+        {
+            uint32_t v; std::memcpy(&v, m_bytes.data() + hdr + RELOC[f], 4);
+            if ((v & 1) || v < insRel) continue;
+            v += PORTAL;
+            std::memcpy(m_bytes.data() + hdr + RELOC[f], &v, 4);
+        }
+
+        // The room's own size word sits in front of the blob, behind XELA.
+        int32_t roomSize; std::memcpy(&roomSize, m_bytes.data() + hdr - 4, 4);
+        roomSize += static_cast<int32_t>(PORTAL);
+        std::memcpy(m_bytes.data() + hdr - 4, &roomSize, 4);
+
+        m_mainSize += PORTAL;
+        const int32_t newSize = static_cast<int32_t>(m_mainSize);
+        std::memcpy(m_bytes.data() + m_mainOffset - 8, &newSize, 4);
+        std::memcpy(m_bytes.data() + m_mainOffset - 4, &newSize, 4);
+
+        return reparse(error);
+    };
+
+    if (roomA < 0 || roomA >= static_cast<int>(m_rooms.size()) ||
+        roomB < 0 || roomB >= static_cast<int>(m_rooms.size()))
+    { error = "room does not exist"; return false; }
+
+    // The counterpart's sector, worked out before anything moves.
+    const Tr5Room& a0 = m_rooms[static_cast<size_t>(roomA)];
+    const Tr5Room& b0 = m_rooms[static_cast<size_t>(roomB)];
+    const int worldX = a0.originX + sx * 1024;
+    const int worldZ = a0.originZ + sz * 1024;
+    const int bsx = (worldX - b0.originX) / 1024;
+    const int bsz = (worldZ - b0.originZ) / 1024;
+    const int bsx2 = nsxB, bsz2 = nszB;
+
+    // Horizontal? Then settle the plane now, from the LOWER room's ceiling -
+    // that is the hole one climbs through. A wall sector has -127 in that
+    // byte and is no height at all; where that happens, fall back to the
+    // upper room's floor, and if that is a wall too, leave each side to work
+    // it out for itself as before.
+    {
+        int ax = 0, az = 0;
+        if (!wallOf(a0, b0, sx, sz, ax, az))
+        {
+            const bool aLower = a0.yBottom > b0.yBottom;
+            const Tr5Room& low  = aLower ? a0 : b0;
+            const Tr5Room& high = aLower ? b0 : a0;
+            const int lx = aLower ? sx  : bsx, lz = aLower ? sz  : bsz;
+            const int hx = aLower ? bsx : sx,  hz = aLower ? bsz : sz;
+
+            const size_t lowSec = low.sectorsOffset +
+                (static_cast<size_t>(lx) * low.numZSectors + lz) * 8;
+            const size_t highSec = high.sectorsOffset +
+                (static_cast<size_t>(hx) * high.numZSectors + hz) * 8;
+
+            const int lowCeil  = static_cast<int8_t>(m_bytes[lowSec + 7]);
+            const int highFloor = static_cast<int8_t>(m_bytes[highSec + 5]);
+
+            if (lowCeil != -127)       { sharedY = lowCeil * 256;   haveShared = true; }
+            else if (highFloor != -127){ sharedY = highFloor * 256; haveShared = true; }
+        }
+    }
+
+    // Both sides' idea of the opening, before anything is inserted - the
+    // insertion reparses and every reference into m_rooms would dangle.
+    {
+        auto across = [&](const Tr5Room& here, int hx, int hz,
+                          const Tr5Room& there, int& cy, int& fy) -> bool
+        {
+            const int wx = here.originX + hx * 1024;
+            const int wz = here.originZ + hz * 1024;
+            const int ox = (wx - there.originX) / 1024;
+            const int oz = (wz - there.originZ) / 1024;
+            if (ox < 0 || ox >= there.numXSectors || oz < 0 || oz >= there.numZSectors)
+                return false;
+            const size_t at = there.sectorsOffset +
+                (static_cast<size_t>(ox) * there.numZSectors + oz) * SECTOR;
+            const int f = static_cast<int8_t>(m_bytes[at + 5]);
+            const int c = static_cast<int8_t>(m_bytes[at + 7]);
+            if (f == -127 || c == -127) return false;      // a wall is no height
+            fy = f * 256; cy = c * 256;
+            return true;
+        };
+
+        int ca, fa, cb, fb;
+        if (across(a0, sx, sz, b0, ca, fa) && across(b0, bsx2, bsz2, a0, cb, fb))
+        {
+            const int c = (ca > cb) ? ca : cb;             // the lower ceiling
+            const int f = (fa < fb) ? fa : fb;             // the higher floor
+            if (c < f) { sharedCeil = c; sharedFloor = f; haveSharedY = true; }
+        }
+    }
+
+    if (!insertOne(roomA, roomB, sx, sz)) return false;
+    if (!insertOne(roomB, roomA, nsxB, nszB)) return false;
+
+    const int before = m_roomMismatch;
+    (void)before;
+    if (m_roomMismatch)
+    { error = "after inserting the view window " + std::to_string(m_roomMismatch) +
+              " rooms no longer parse - the layout arithmetic is off"; return false; }
+    return true;
+}
+
+//----------------------------------------------------------------------------
+// A vertical opening: ceiling into the room above, floor into the room below.
+//
+// This is NOT makePortal with a different direction, and confusing the two
+// cost two sessions. The horizontal kind writes a floordata DOOR (function 1)
+// and the height query follows it into the neighbour at the same x/z. Two
+// rooms stacked on each other cover the SAME x/z, so a door in each sends the
+// query 227 -> 93 -> 227 -> ... forever: the game froze the moment Lara came
+// near it ("Game Thread appeared stuck, skipping suspend to avoid a deadlock").
+//
+// The vertical connection lives in the sector's own bytes instead:
+//   byte 4  room below
+//   byte 6  room above
+// Measured against a level the user built by hand in FexInspect, where the
+// same opening works. There, room 227's sector reads "below 222, above 93"
+// and room 93's reads "below 227" - and NOTHING else differs from vanilla:
+// same box, same floor and ceiling heights, floordata index still 0, and no
+// view window in either room's portal list.
+//
+// Hence: one byte, and hands off everything else. In particular the OTHER
+// link byte stays - overwriting room 227's "below 222" tore out a connection
+// Core had put there.
+//----------------------------------------------------------------------------
+// Shift a whole room (#136, "Move_Room").
+//
+// What has to move, and why each of them:
+//
+//   header 20 / 28   the room's origin. Every vertex and every portal corner
+//                    of the room is measured from it in x and z, so those
+//                    come along by themselves.
+//   header 32 / 36   minfloor and maxceiling, the room's height range - the
+//                    engine tests against them (control.cpp:3142).
+//   sector bytes     floor (+5) and ceiling (+7), in steps of 256. A wall
+//                    marker (-127) is no height and is left alone.
+//   vertices         y only, and as a float. x and z are relative.
+//   own portals      y only, same reason.
+//   foreign portals  a window in ANOTHER room onto this one is written in
+//                    THAT room's coordinates, and that room did not move -
+//                    so its corners take the full shift in all three axes,
+//                    or the two halves of the opening drift apart.
+//
+// Y is quantised to 256 because the sector bytes are, and collision follows
+// them: moving the drawing by an odd amount would leave Lara walking on a
+// floor that is no longer where it looks.
+//
+// Items keep their world position - a room move does not carry its contents.
+bool Tr5Level::moveRoom(int room, long dx, long dy, long dz, std::string& error)
+{
+    if (room < 0 || room >= static_cast<int>(m_rooms.size()))
+    { error = "room " + std::to_string(room) + " does not exist"; return false; }
+    if (dx % 1024 || dz % 1024)
+    { error = "x and z must be whole sectors (1024)"; return false; }
+    if (dy % 256)
+    { error = "y must be a whole height step (256)"; return false; }
+    if (!dx && !dy && !dz) return true;
+
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    if (!r.headerOffset || !r.sectorsOffset)
+    { error = "room " + std::to_string(room) + " did not parse"; return false; }
+    const size_t hdr = r.headerOffset;
+
+    auto addLong = [&](size_t at, long d)
+    {
+        int32_t v; std::memcpy(&v, m_bytes.data() + at, 4);
+        v += static_cast<int32_t>(d);
+        std::memcpy(m_bytes.data() + at, &v, 4);
+    };
+    addLong(hdr + 20, dx);
+    addLong(hdr + 28, dz);
+    addLong(hdr + 32, dy);
+    addLong(hdr + 36, dy);
+
+    if (dy)
+    {
+        const int steps = static_cast<int>(dy / 256);
+        for (int x = 0; x < r.numXSectors; ++x)
+            for (int z = 0; z < r.numZSectors; ++z)
+            {
+                const size_t at = r.sectorsOffset +
+                    (static_cast<size_t>(x) * r.numZSectors + z) * 8;
+                for (int b = 5; b <= 7; b += 2)
+                {
+                    const int v = static_cast<int8_t>(m_bytes[at + b]);
+                    if (v == -127) continue;                  // a wall, no height
+                    const int n = v + steps;
+                    if (n < -126 || n > 127)
+                    { error = "the move would push a floor or ceiling out of range"; return false; }
+                    m_bytes[at + b] = static_cast<uint8_t>(static_cast<int8_t>(n));
+                }
+            }
+
+        // Every vertex of the room, y only.
+        int32_t nRoomlets; std::memcpy(&nRoomlets, m_bytes.data() + hdr + 168, 4);
+        uint32_t oRoomlets, oVtx;
+        std::memcpy(&oRoomlets, m_bytes.data() + hdr + 172, 4);
+        std::memcpy(&oVtx,      m_bytes.data() + hdr + 176, 4);
+        if (nRoomlets > 0 && nRoomlets <= 4096 && !(oRoomlets & 1) && !(oVtx & 1))
+        {
+            const size_t body = hdr + 208;
+            size_t vtxAt = body + oVtx;
+            for (int i = 0; i < nRoomlets; ++i)
+            {
+                int16_t nVtx;
+                std::memcpy(&nVtx, m_bytes.data() + body + oRoomlets + static_cast<size_t>(i) * 56, 2);
+                for (int k = 0; k < nVtx; ++k)
+                {
+                    const size_t at = vtxAt + static_cast<size_t>(k) * 28 + 4;
+                    float f; std::memcpy(&f, m_bytes.data() + at, 4);
+                    f += static_cast<float>(dy);
+                    std::memcpy(m_bytes.data() + at, &f, 4);
+                }
+                vtxAt += static_cast<size_t>(nVtx) * 28;
+            }
+        }
+    }
+
+    // The room's own windows: y only, x and z ride along with the origin.
+    // Windows in other rooms onto this one: all three, they did not move.
+    for (size_t q = 0; q < m_rooms.size(); ++q)
+    {
+        const Tr5Room& o = m_rooms[q];
+        if (!o.sectorsOffset) continue;
+        const bool self = (static_cast<int>(q) == room);
+        if (!self)
+        {
+            bool touches = false;
+            for (int p : o.portalRooms) if (p == room) { touches = true; break; }
+            if (!touches) continue;
+        }
+
+        const size_t end = o.sectorsOffset +
+            static_cast<size_t>(o.numXSectors) * o.numZSectors * 8;
+        uint16_t n; std::memcpy(&n, m_bytes.data() + end, 2);
+        for (uint16_t i = 0; i < n; ++i)
+        {
+            const size_t at = end + 2 + static_cast<size_t>(i) * 32;
+            uint16_t to; std::memcpy(&to, m_bytes.data() + at, 2);
+            if (!self && to != static_cast<uint16_t>(room)) continue;
+            for (int k = 0; k < 4; ++k)
+                for (int c = 0; c < 3; ++c)
+                {
+                    const long d = self ? ((c == 1) ? dy : 0)
+                                        : ((c == 0) ? dx : (c == 1) ? dy : dz);
+                    if (!d) continue;
+                    const size_t w = at + 8 + static_cast<size_t>(k) * 6 + static_cast<size_t>(c) * 2;
+                    int16_t v; std::memcpy(&v, m_bytes.data() + w, 2);
+                    v = static_cast<int16_t>(v + d);
+                    std::memcpy(m_bytes.data() + w, &v, 2);
+                }
+        }
+    }
+
+    // The origins changed, so the room table has to be read again.
+    return reparse(error);
+}
+
+//----------------------------------------------------------------------------
+// Is there already a view window at THIS sector, onto that room?
+//
+// A window belongs to the sector it opens, and a pair of rooms can be joined
+// at several of them. The test is where the record lies: its corners have to
+// sit on the sector's own square of the world. The one-unit inset of a
+// window means a coordinate may fall a single unit outside, so the square is
+// widened by one.
+bool Tr5Level::windowAt(int room, int sx, int sz, int targetRoom) const
+{
+    std::vector<PortalRecord> recs;
+    std::string err;
+    if (!portalRecords(room, recs, err)) return false;
+    if (room < 0 || room >= static_cast<int>(m_rooms.size())) return false;
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+
+    const long x0 = r.originX + static_cast<long>(sx) * 1024 - 1, x1 = x0 + 1026;
+    const long z0 = r.originZ + static_cast<long>(sz) * 1024 - 1, z1 = z0 + 1026;
+
+    for (size_t i = 0; i < recs.size(); ++i)
+    {
+        if (recs[i].toRoom != targetRoom) continue;
+        bool inside = true;
+        for (int k = 0; k < 4 && inside; ++k)
+        {
+            const long wx = recs[i].v[k][0] + r.originX;
+            const long wz = recs[i].v[k][2] + r.originZ;
+            if (wx < x0 || wx > x1 || wz < z0 || wz > z1) inside = false;
+        }
+        if (inside) return true;
+    }
+    return false;
+}
+
+bool Tr5Level::makeVerticalPortal(int room, int sx, int sz, int targetRoom,
+                                  bool ceiling, std::string& error)
+{
+    if (room < 0 || room >= static_cast<int>(m_rooms.size()))
+    { error = "room " + std::to_string(room) + " does not exist"; return false; }
+    if (targetRoom < 0 || targetRoom > 254)
+    { error = "target room " + std::to_string(targetRoom) +
+              " cannot be reached through a sector byte (0..254)"; return false; }
+    if (targetRoom >= static_cast<int>(m_rooms.size()))
+    { error = "target room " + std::to_string(targetRoom) + " does not exist"; return false; }
+
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    if (!r.sectorsOffset) { error = "sector field did not parse"; return false; }
+    if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors)
+    { error = "sector outside room " + std::to_string(room); return false; }
+
+    const size_t at = r.sectorsOffset +
+        (static_cast<size_t>(sx) * r.numZSectors + sz) * 8 + (ceiling ? 6 : 4);
+    if (at >= m_bytes.size()) { error = "sector lies outside the file"; return false; }
+
+    const int had = m_bytes[at];
+    if (had == targetRoom) return true;              // repeatable
+    if (had != 255)
+    {
+        error = "the sector already leads " + std::string(ceiling ? "up" : "down") +
+                " into room " + std::to_string(had) +
+                " - overwriting that would tear out a connection of Core's";
+        return false;
+    }
+
+    m_bytes[at] = static_cast<uint8_t>(targetRoom);
+    return true;
+}
+
+bool Tr5Level::makePortal(int room, int sx, int sz,
+                          int targetRoom, int tsx, int tsz, std::string& error)
 {
     if (room < 0 || room >= static_cast<int>(m_rooms.size()))
     { error = "room " + std::to_string(room) + " does not exist"; return false; }
     if (targetRoom < 0 || targetRoom >= static_cast<int>(m_rooms.size()))
     { error = "target room " + std::to_string(targetRoom) + " does not exist"; return false; }
+
+    // No view window yet? Then build one, in both directions (#132). This
+    // happens FIRST, before any reference into m_rooms is taken: creating a
+    // window reparses the file, and every reference would dangle after it.
+    {
+        const Tr5Room& pre = m_rooms[static_cast<size_t>(room)];
+
+        // Per SECTOR, not per room pair. Two rooms may be joined at several
+        // sectors and each opening needs its own window - Core's joby3 has
+        // two between rooms 76 and 10. Asking only "is there a window to
+        // that room" meant the second and third sector of Andrea3's widened
+        // opening got a passage but no window, so one looked at a wall that
+        // was no longer there.
+        bool have = windowAt(room, sx, sz, targetRoom);
+        if (!have && !addViewWindow(room, sx, sz, targetRoom, tsx, tsz, error))
+        {
+            error = "no view window between room " + std::to_string(room) + " and " +
+                    std::to_string(targetRoom) + ", and none could be built: " + error;
+            return false;
+        }
+    }
 
     const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
     const Tr5Room& z = m_rooms[static_cast<size_t>(targetRoom)];
@@ -960,14 +2206,14 @@ bool Tr5Level::makePortal(int room, int sx, int sz, int targetRoom, std::string&
     if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors)
     { error = "sector outside the room"; return false; }
 
-    // View window precondition: the target room must be in the portal list.
-    bool window = false;
-    for (int p : r.portalRooms) if (p == targetRoom) { window = true; break; }
-    if (!window)
+    // By now the window exists - either it always did, or it was just built.
+    // Checked again rather than assumed: without it the opening is a black
+    // hole in the picture, and that is worth one comparison.
+    if (!windowAt(room, sx, sz, targetRoom))
     {
-        error = "room " + std::to_string(room) + " has no view window to " +
-                std::to_string(targetRoom) + " - the 32-byte portal is missing, without it "
-                "the opening would be a black hole";
+        error = "room " + std::to_string(room) + " still has no view window at (x" +
+                std::to_string(sx) + ",z" + std::to_string(sz) + ") to " +
+                std::to_string(targetRoom) + " after building one";
         return false;
     }
 
@@ -988,6 +2234,33 @@ bool Tr5Level::makePortal(int room, int sx, int sz, int targetRoom, std::string&
     // mean the portal leads into the massif.
     if (static_cast<int8_t>(m_bytes[acrossAt + 5]) == -127)
     { error = "the overlapped sector in the target room is itself a wall"; return false; }
+
+    // Is this sector on the room's BORDER RING? That, and not the rooms'
+    // heights, is what says whether the two lie side by side or on top of
+    // each other.
+    //
+    // The first attempt compared yBottom and the world column, and called
+    // Andrea3's rooms 1 and 74 stacked. They are not: room 74 is a tall
+    // shaft STANDING NEXT to room 1, and a low yBottom only means it is
+    // tall. Every room's border ring overlaps its horizontal neighbour's
+    // interior - that overlap IS the normal arrangement for a wall portal,
+    // so a shared world column proves nothing.
+    //
+    // A sector in the room's interior, on the other hand, has no horizontal
+    // neighbour to reach: the only room it can touch there is one above or
+    // below. A floordata door would then point at the same x/z in a room
+    // covering the same ground, and the height query ping-pongs between the
+    // two until the game locks up (andy1, "Game Thread appeared stuck").
+    if (sx != 0 && sx != r.numXSectors - 1 &&
+        sz != 0 && sz != r.numZSectors - 1)
+    {
+        error = "sector (x" + std::to_string(sx) + ",z" + std::to_string(sz) +
+                ") lies inside room " + std::to_string(room) +
+                ", not on its border ring, so room " + std::to_string(targetRoom) +
+                " can only be above or below it - a Make_Portal would lock the game "
+                "up. Use Make_Ceiling_Portal or Make_Floor_Portal.";
+        return false;
+    }
 
     // Read the existing chain; geometry (TILT/ROOF/SPLITs/NOCOLs) stays.
     uint16_t old;
@@ -1027,8 +2300,13 @@ bool Tr5Level::makePortal(int room, int sx, int sz, int targetRoom, std::string&
     const uint16_t boxWord = 0x7FF6;
     std::memcpy(m_bytes.data() + ownAt + 2, &boxWord, 2);
 
-    // pit/floor/sky/ceiling from the overlapped sector.
-    std::memcpy(m_bytes.data() + ownAt + 4, m_bytes.data() + acrossAt + 4, 4);
+    // Floor and ceiling from the overlapped sector, so the step through is
+    // level - but ONLY those two. Bytes 4 and 6 are the room-below and
+    // room-above links, and copying them carried the neighbour's pit into
+    // this sector: joby3's room 76 came out claiming a drop into room 4.
+    // A hand-built wall portal (andy1 room 0, sector 45) keeps them at 255.
+    m_bytes[ownAt + 5] = m_bytes[acrossAt + 5];
+    m_bytes[ownAt + 7] = m_bytes[acrossAt + 7];
     return true;
 }
 

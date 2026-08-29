@@ -688,6 +688,27 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
+    // --- Room moves (#136) -----------------------------------------------
+    //
+    // BEFORE the portals, deliberately: a window takes its height from the
+    // two rooms as they stand, so the room has to be where it belongs first.
+    // Doing it the other way round would leave the window describing a hole
+    // that has since moved.
+    const JsonValue& roomMoves = patch["roomMoves"];
+    for (size_t i = 0; i < roomMoves.size(); ++i)
+    {
+        const JsonValue& mv = roomMoves[i];
+        std::string mErr;
+        if (!level.moveRoom(static_cast<int>(mv["room"].asInt(-1)),
+                            static_cast<long>(mv["dx"].asInt(0)),
+                            static_cast<long>(mv["dy"].asInt(0)),
+                            static_cast<long>(mv["dz"].asInt(0)), mErr))
+        {
+            error = "roomMoves[" + std::to_string(i) + "]: " + mErr;
+            return false;
+        }
+    }
+
     // --- Portals (#53) ---------------------------------------------------
     //
     // One entry opens BOTH sides of a sealed wall: the named sector of
@@ -699,18 +720,55 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     for (size_t i = 0; i < portals.size(); ++i)
     {
         const JsonValue& p = portals[i];
+        const int rA = static_cast<int>(p["roomA"].asInt(-1));
+        const int rB = static_cast<int>(p["roomB"].asInt(-1));
+        const int xA = static_cast<int>(p["sxA"].asInt(-1));
+        const int zA = static_cast<int>(p["szA"].asInt(-1));
+        const int xB = static_cast<int>(p["sxB"].asInt(-1));
+        const int zB = static_cast<int>(p["szB"].asInt(-1));
+        const int kind = static_cast<int>(p["kind"].asInt(0));
         std::string pErr;
-        if (!level.makePortal(static_cast<int>(p["roomA"].asInt(-1)),
-                              static_cast<int>(p["sxA"].asInt(-1)),
-                              static_cast<int>(p["szA"].asInt(-1)),
-                              static_cast<int>(p["roomB"].asInt(-1)), pErr) ||
-            !level.makePortal(static_cast<int>(p["roomB"].asInt(-1)),
-                              static_cast<int>(p["sxB"].asInt(-1)),
-                              static_cast<int>(p["szB"].asInt(-1)),
-                              static_cast<int>(p["roomA"].asInt(-1)), pErr))
+        bool ok;
+        if (kind == 0)
+        {
+            ok = level.makePortal(rA, xA, zA, rB, xB, zB, pErr) &&
+                 level.makePortal(rB, xB, zB, rA, xA, zA, pErr);
+        }
+        else
+        {
+            // A opens at its ceiling (kind 1) or at its floor (kind 2); B is
+            // the mirror image, so the flag flips for the second call.
+            const bool aCeiling = (kind == 1);
+            ok = level.makeVerticalPortal(rA, xA, zA, rB, aCeiling, pErr) &&
+                 level.makeVerticalPortal(rB, xB, zB, rA, !aCeiling, pErr);
+        }
+        if (!ok)
         {
             error = "portalAdds[" + std::to_string(i) + "]: " + pErr;
             return false;
+        }
+
+        // #136: the passage is open, but the WALL is a drawn face of its own
+        // and would still stand in the way. Both sides are treated - where a
+        // sector has no wall, and that is what most portals look like,
+        // nothing happens and nothing is reported.
+        if (p["clear"].asInt(0))
+        {
+            int n = 0;
+            if (!level.clearWallFaces(rA, xA, zA, n, pErr) ||
+                !level.clearWallFaces(rB, xB, zB, n, pErr))
+            { error = "portalAdds[" + std::to_string(i) + "] @Clear: " + pErr; return false; }
+        }
+
+        const int lwRoom = static_cast<int>(p["likeWallRoom"].asInt(-1));
+        if (lwRoom >= 0)
+        {
+            const int lwx = static_cast<int>(p["likeWallSx"].asInt(-1));
+            const int lwz = static_cast<int>(p["likeWallSz"].asInt(-1));
+            int n = 0;
+            if (!level.copyWallTexture(lwRoom, lwx, lwz, rA, xA, zA, n, pErr) ||
+                !level.copyWallTexture(lwRoom, lwx, lwz, rB, xB, zB, n, pErr))
+            { error = "portalAdds[" + std::to_string(i) + "] @LikeWall: " + pErr; return false; }
         }
     }
 
@@ -1050,6 +1108,15 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         static const int kAlways[] = {
             218,   // AS_DUCKROLL - crawl roll
             421,   // ANIM_CRAWLJUMP - crawl jump
+            // Handling a flare. Found by the user once the rich levels had
+            // flares at all, and measured with LaraAnim: all four are stubs
+            // (size 0) in rich1, rich2 and rich3, and sound in Andrea1 and
+            // joby4. Core left them out because those levels carry no flare
+            // - which is exactly what we changed.
+            189,   // ANIM_THROWFLARE  - throwing one away
+            204,   // ANIM_PICKUPF     - picking one off the floor
+            206,   // ANIM_PICKUPF_UW  - the same under water
+            312,   // ANIM_DUCKPICKUPF - the same while crouched
         };
         std::set<int> needed(std::begin(kAlways), std::end(kAlways));
         for (int i = 0; i < level.itemCount(); ++i)

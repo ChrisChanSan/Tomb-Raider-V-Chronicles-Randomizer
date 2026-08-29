@@ -103,6 +103,7 @@ void Config::load()
         }
         else if (key == "itemAmount")       itemAmount = std::atoi(val.c_str());
         else if (key == "secrets")         secrets = std::atoi(val.c_str());
+        else if (key == "secretRewards")   secretRewards = std::atoi(val.c_str()) != 0;
         else if (key == "secretAuthor")     secretAuthor = val;
         else if (key == "musicSwitch")     optMusicSwitch = (val == "1");
         else if (key == "musicTrigger")    optMusicTrigger = (val == "1");
@@ -178,6 +179,7 @@ bool Config::save() const
     }
     std::fprintf(f, "itemAmount=%d\n", itemAmount);
     std::fprintf(f, "secrets=%d\n", secrets);
+    std::fprintf(f, "secretRewards=%d\n", secretRewards ? 1 : 0);
     // Was read but never written once - the author choice used to be lost
     // on every program start.
     std::fprintf(f, "secretAuthor=%s\n", secretAuthor.c_str());

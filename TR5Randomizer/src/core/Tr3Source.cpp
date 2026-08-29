@@ -664,7 +664,7 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
             return uint16_t((isTri ? 0x8000 : 0) | type);
         };
 
-        put32(out, uint32_t(texIdx.size() + flatColors.size()));
+        put32(out, uint32_t(texIdx.size() + flatColors.size() + opt->extraColors.size()));
         int written = 0;
         for (size_t ti = 0; ti < texIdx.size(); ++ti)
         {
@@ -715,6 +715,25 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
             ++written;
         }
 
+        // The extra tones sit behind them in the same grid. No face points at
+        // them; they exist so the seam painter has them to find.
+        for (size_t k = 0; k < opt->extraColors.size(); ++k)
+        {
+            const size_t n = flatColors.size() + k;
+            const int col = int(n) % 16, row = int(n) / 16;
+            const uint8_t x0 = uint8_t(col * 16 + 3), x1 = uint8_t(col * 16 + 12);
+            const uint8_t y0 = uint8_t(row * 16 + 3), y1 = uint8_t(row * 16 + 12);
+            put16(out, uint16_t(FLAT_BASE + n));
+            put16(out, 0);
+            put16(out, uint16_t(tiles.size()));
+            out.push_back(x0); out.push_back(y0);
+            out.push_back(x1); out.push_back(y0);
+            out.push_back(x1); out.push_back(y1);
+            out.push_back(x0); out.push_back(y1);
+            put16(out, 0);
+            ++written;
+        }
+
         std::printf("  corner order: %d of %zu entries are triangles, %d without a pattern, "
                     "%d corners where the edge byte and the corner disagree\n",
                     orderTris, texIdx.size(), orderNoMatch, orderDisagree);
@@ -741,7 +760,8 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
             swapTo.push_back(  uint16_t(((dr >> 3) << 10) | ((dg >> 3) << 5) | (db >> 3)));
         }
 
-        put32(out, uint32_t(tiles.size() + (flatColors.empty() ? 0 : 1)));
+        const bool haveFlatPage = !flatColors.empty() || !opt->extraColors.empty();
+        put32(out, uint32_t(tiles.size() + (haveFlatPage ? 1 : 0)));
         for (int k : tiles)
         {
             if (k < 0 || uint32_t(k) >= nTex)
@@ -758,7 +778,7 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
                       std::memcpy(out.data() + was + px * 2, &w, 2); break; }
             }
         }
-        if (!flatColors.empty())
+        if (haveFlatPage)
         {
             // One 256x256 ARGB1555 page, 16 by 16 blocks of 16 pixels. The
             // palette's scale is read off its own maximum, not assumed -
@@ -787,6 +807,18 @@ bool Tr3Source::fetchMoveable(const std::wstring& levelPath, int objectId,
                                  | ((cr >> sh) << 10)
                                  | ((cg >> sh) << 5)
                                  |  (cb >> sh));
+                const int col = int(n) % 16, row = int(n) / 16;
+                for (int y = 0; y < 16; ++y)
+                    for (int x = 0; x < 16; ++x)
+                        page[size_t(row * 16 + y) * 256 + size_t(col * 16 + x)] = v;
+            }
+            for (size_t k = 0; k < opt->extraColors.size(); ++k)
+            {
+                const uint16_t v = uint16_t(0x8000
+                                 | ((opt->extraColors[k].r >> 3) << 10)
+                                 | ((opt->extraColors[k].g >> 3) << 5)
+                                 |  (opt->extraColors[k].b >> 3));
+                const size_t n = flatColors.size() + k;
                 const int col = int(n) % 16, row = int(n) / 16;
                 for (int y = 0; y < 16; ++y)
                     for (int x = 0; x < 16; ++x)
@@ -1104,6 +1136,13 @@ std::wstring Tr3Source::sfxPath(const DinoSource&,
 
 std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
 {
+    // The PELVIS is dropped in every outfit - the waist and both hips.
+    //
+    // Not a taste decision but a tally: those three seams produced a
+    // complaint in every single outfit, painted or not, and each fix bought
+    // one look and cost another. TR1-3 segments overlap on their own there,
+    // the pelvis barely bends, and a missing seam costs less than a wrong
+    // one. The knees are the opposite case and stay.
     std::vector<OutfitSource> v;
 
     // Tomb Raider 3, London rooftops. Lara's standard outfit of that game.
@@ -1113,15 +1152,22 @@ std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
     // overlap on their own, so a missing seam there costs less than a wrong
     // one.
     //
-    // The waist (6) is NOT among them, although it was at first: it binds the
-    // back to the backside, and without it a gap opens there. The black
-    // London outfit hid that well enough that we both missed it until the
-    // jungle outfit made it obvious. It is painted instead.
+    // The waist (6) is among them after all. It was dropped, then kept and
+    // painted because it binds the back to the backside - and then judged
+    // wrong in game a second time, on the very outfit whose darkness had
+    // hidden it in the first place. Every one of the four outfits ended up
+    // dropping it.
     //
     // seamColors: hips and knees only. Elbows, wrists and neck keep TR5's
     // own texture - once the skin sits on the right 5 bit level they match
     // by themselves, and a painted patch would only trade a shaded seam for
     // a flat one.
+    //
+    // The tone is COUNTED, not averaged. The average said 48,48,40, a warm
+    // grey; counted, the hips are 23,24,40 and the thigh 39,44,47 - the
+    // outfit is dark blue-grey. Averaging a colour against its own shadow
+    // produces something that is in the texture nowhere, which is what the
+    // user saw as patches on the jeans of the Nevada outfit too.
     OutfitSource roofs;
     roofs.id        = "tr3_london";
     roofs.name      = "London (TR3)";
@@ -1131,14 +1177,17 @@ std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
     roofs.shinyWord = 0x0042;
     { Recolor rc; rc.sr = 224; rc.sg = 160; rc.sb = 96;
                   rc.dr = 222; rc.dg = 165; rc.db = 99; roofs.recolors.push_back(rc); }
+    roofs.dropSeams.push_back(6);
+    roofs.dropSeams.push_back(0);
+    roofs.dropSeams.push_back(3);
     roofs.dropSeams.push_back(2);
     roofs.dropSeams.push_back(5);
     roofs.dropSeams.push_back(7);
     roofs.dropSeams.push_back(10);
-    for (int seam : { 0, 3, 1, 4, 6 })
+    for (int seam : { 1, 4 })
     {
         OutfitSource::SeamColor sc;
-        sc.seam = seam; sc.r = 48; sc.g = 48; sc.b = 40;
+        sc.seam = seam; sc.r = 30; sc.g = 34; sc.b = 44;
         roofs.seamColors.push_back(sc);
     }
     v.push_back(roofs);
@@ -1184,6 +1233,99 @@ std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
     // own.
     crash.dropSeams.push_back(6);
     v.push_back(crash);
+
+    // Tomb Raider 3, Antarctica. The parka - clothed from head to boot, and
+    // measurably so: three flat colours on seventeen faces, and NO skin among
+    // them. Face and hands are texture here.
+    //
+    // shinyWord therefore 0. Nearly every face is textured, so the map would
+    // lacquer her face along with the coat.
+    //
+    // The recolour costs nothing if the tone is absent and fixes it if the
+    // skin is in the tiles, which it is here.
+    OutfitSource antarc;
+    antarc.id        = "tr3_antarctica";
+    antarc.name      = "Antarctica (TR3)";
+    antarc.source    = "tr3";
+    antarc.file      = "ANTARC.TR2";
+    antarc.object    = 315;
+    antarc.shinyWord = 0;
+    { Recolor rc; rc.sr = 224; rc.sg = 160; rc.sb = 96;
+                  rc.dr = 222; rc.dg = 165; rc.db = 99; antarc.recolors.push_back(rc); }
+    antarc.dropSeams.push_back(7);    // shoulders, measurably paired against
+    antarc.dropSeams.push_back(10);   // the opposite rim in every outfit
+    antarc.dropSeams.push_back(2);    // ankles, inside the boot
+    antarc.dropSeams.push_back(5);
+    antarc.dropSeams.push_back(6);    // waist - the user saw it wrong in game
+    antarc.dropSeams.push_back(0);    // hips, see the note on the pelvis below
+    antarc.dropSeams.push_back(3);
+    // Clothed all over, so the pelvis and knees are painted rather than
+    // dropped, the way London does it. The tone is the trousers', measured,
+    // and it is put on the flat colour page so it is hit exactly.
+    for (int seam : { 1, 4 })
+    {
+        OutfitSource::SeamColor sc;
+        sc.seam = seam; sc.r = 115; sc.g = 107; sc.b = 90;
+        antarc.seamColors.push_back(sc);
+    }
+    // The elbows in the sleeve, which is a different tone from the trousers:
+    // both sides of the elbow measure 66 percent 255,122,15, the bright parka
+    // orange. This one is the DOMINANT colour rather than the mesh average -
+    // a flat patch has to read as the suit, and the average is dragged down
+    // by the shading painted around it.
+    for (int seam : { 8, 11 })
+    {
+        OutfitSource::SeamColor sc;
+        sc.seam = seam; sc.r = 255; sc.g = 122; sc.b = 15;
+        antarc.seamColors.push_back(sc);
+    }
+    v.push_back(antarc);
+
+    // Tomb Raider 3, Nevada. Top and shorts - built like the jungle outfit,
+    // not like London: 224,160,96 sits on 95 faces as a FLAT colour, and the
+    // forearm has no textured face at all. Bare arms, bare midriff.
+    //
+    // shinyWord 0x0042 does work here, unlike in the jungle: with the skin
+    // flat and the clothes textured, the map reaches the shorts and the top
+    // and leaves the skin matt - the same split that carried London.
+    OutfitSource nevada;
+    nevada.id        = "tr3_nevada";
+    nevada.name      = "Nevada (TR3)";
+    nevada.source    = "tr3";
+    nevada.file      = "NEVADA.TR2";
+    nevada.object    = 315;
+    // The shine was tried and the user threw it out: the split that carried
+    // London does hold here, but the clothes came out looking greasy rather
+    // than worn. So the rule is not general after all - it hung on London's
+    // leather look.
+    nevada.shinyWord = 0;
+    { Recolor rc; rc.sr = 224; rc.sg = 160; rc.sb = 96;
+                  rc.dr = 222; rc.dg = 165; rc.db = 99; nevada.recolors.push_back(rc); }
+    nevada.dropSeams.push_back(7);
+    nevada.dropSeams.push_back(10);
+    nevada.dropSeams.push_back(2);
+    nevada.dropSeams.push_back(5);
+    nevada.dropSeams.push_back(6);    // bare midriff, as in the jungle
+    nevada.dropSeams.push_back(0);    // hips, see the note on the pelvis below
+    nevada.dropSeams.push_back(3);
+    // Hips and knees sit in the jeans, and here the mesh AVERAGE was the
+    // wrong adviser: it came out 66,58,58, a warm grey, and the user saw
+    // exactly that - grey patches at the crotch and the knee.
+    //
+    // The jeans are dark blue. Counted rather than averaged, the hips are
+    // 47 percent 3,10,11 with 40,50,75 and 11,20,45 behind it, the thigh
+    // 1,17,41 and 16,33,55. Averaging blue against its own shadow gives
+    // grey, which is a colour that appears nowhere in the texture.
+    //
+    // 12,22,45 sits between the dark and the mid blues - dark enough not to
+    // stand out, blue enough to belong.
+    for (int seam : { 1, 4 })
+    {
+        OutfitSource::SeamColor sc;
+        sc.seam = seam; sc.r = 12; sc.g = 22; sc.b = 45;
+        nevada.seamColors.push_back(sc);
+    }
+    v.push_back(nevada);
 
     return v;
 }
@@ -1321,6 +1463,11 @@ bool Tr3Source::fetchOutfitCached(const OutfitSource& o,
     {
         stamp = "conv3|" + src;
         stamp += "|shiny" + std::to_string(o.shinyWord);
+        for (size_t k = 0; k < o.seamColors.size(); ++k)
+            stamp += "|sc" + std::to_string(o.seamColors[k].seam) + ":" +
+                     std::to_string(o.seamColors[k].r) + "," +
+                     std::to_string(o.seamColors[k].g) + "," +
+                     std::to_string(o.seamColors[k].b);
         for (size_t k = 0; k < o.recolors.size(); ++k)
         {
             const Recolor& c = o.recolors[k];
@@ -1351,6 +1498,14 @@ bool Tr3Source::fetchOutfitCached(const OutfitSource& o,
     Options opt;
     opt.shinyWord = o.shinyWord;
     opt.recolors  = o.recolors;
+    // Every seam tone this outfit asks for goes onto the page, so the painter
+    // finds it exactly instead of the nearest thing the level happens to have.
+    for (size_t k = 0; k < o.seamColors.size(); ++k)
+    {
+        Rgb c;
+        c.r = o.seamColors[k].r; c.g = o.seamColors[k].g; c.b = o.seamColors[k].b;
+        opt.extraColors.push_back(c);
+    }
     if (!fetchMoveable(lvlPath, o.object, model, error, &opt))
     { error = std::string(o.name) + ": " + error; return false; }
 

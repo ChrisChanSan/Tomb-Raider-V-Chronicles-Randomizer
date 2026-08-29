@@ -169,6 +169,7 @@ public:
         int         pistolsRemoved    = 0;    // rich2: pistols + ammo removed
         std::string keyError;            // empty = it worked
         int         joby3Weapons    = 0;   // removed weapon take-aways in joby3
+        int         andrea1Uzi      = 0;   // Andrea1: Core's own Uzi take-away removed
         std::string weaponError;
         std::string pistolError;
     };

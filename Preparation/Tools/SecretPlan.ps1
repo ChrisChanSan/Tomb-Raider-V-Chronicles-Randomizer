@@ -139,16 +139,69 @@ function Read-Option([string]$o) {
             ocb = $null; angle = $null; height = $null; xOff = $null; zOff = $null; likeItem = $null; triggerKind = $null; triggerTargets = @()
         }
     }
+    # --- Move a whole room -------------------------------------------------
+    # Move_Room74(y=+768) - x and z in whole sectors (1024), y in whole
+    # clicks (256), because the sector's floor and ceiling bytes count in
+    # clicks and the collision follows them. Any axis may be left out.
+    elseif ($o -match 'Move_Room(\d+)\s*\(([^)]*)\)') {
+        $mr = [int]$Matches[1]; $body = $Matches[2]
+        $mx = 0; $my = 0; $mz = 0
+        foreach ($ax in [regex]::Matches($body, '([xyz])\s*=\s*([+-]?\d+)')) {
+            switch ($ax.Groups[1].Value.ToLower()) {
+                'x' { $mx = [int]$ax.Groups[2].Value }
+                # PLUS RAISES - Y grows downward in the file, so the sign
+                # is turned round here, matching how a level editor works.
+                'y' { $my = -[int]$ax.Groups[2].Value }
+                'z' { $mz = [int]$ax.Groups[2].Value }
+            }
+        }
+        $e = [PSCustomObject]@{
+            kind = 'moveroom'; moveRoomNo = $mr; moveX = $mx; moveY = $my; moveZ = $mz
+            portalKind = 0; portalClear = $false
+            likeWallRoom = -1; likeWallSx = -1; likeWallSz = -1
+            roomA = $null; sxA = $null; szA = $null
+            roomB = $null; sxB = $null; szB = $null
+            room = $null; sectorX = $null; sectorZ = $null; index = $null; typeId = $null
+            ocb = $null; angle = $null; height = $null; xOff = $null; zOff = $null; likeItem = $null; triggerKind = $null; triggerTargets = @()
+        }
+    }
     # --- Form 4: open a portal on both sides ------------------------------
     # Make_Portal@Room34(x0,z5)->Room36(x4,z5) - the "->" is pairing, not
     # direction: ONE line turns both sectors into portals onto each other.
     # The view windows must already exist in the level (a precondition the
     # patch path checks).
-    elseif ($o -match 'Make_Portal\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)\s*->\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)') {
+    #
+    # THREE words, not one. Make_Portal is the horizontal kind - through a
+    # wall, floordata function 1, and the height query follows it sideways.
+    # Make_Ceiling_Portal and Make_Floor_Portal are for rooms stacked on each
+    # other; those write nothing but the sector's room-above / room-below
+    # byte. Using the wall form on a stacked pair sends the height query in a
+    # circle and locks the game up, so the kind is NAMED rather than guessed.
+    # "Celing" is tolerated - the author writes it that way.
+    elseif ($o -match 'Make_(Ce[il]+ing_?|Floor_?)?Portal\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)\s*->\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)') {
+        $pk = 0
+        if     ($Matches[1] -match '^Ce')    { $pk = 1 }
+        elseif ($Matches[1] -match '^Floor') { $pk = 2 }
+        # Held on to BEFORE the option matches below - every -match rewrites
+        # $Matches, and reading it afterwards would give the wrong numbers.
+        $pA = [int]$Matches[2]; $pAx = [int]$Matches[3]; $pAz = [int]$Matches[4]
+        $pB = [int]$Matches[5]; $pBx = [int]$Matches[6]; $pBz = [int]$Matches[7]
+
+        # #136: the wall at the opening is a drawn face of its own and stays
+        # put unless it is dealt with. @Clear takes it away, @LikeWall gives
+        # it the texture of a sector one can point at.
+        $pClear = [bool]($o -match '@\s*Clear')
+        $lwR = -1; $lwX = -1; $lwZ = -1
+        if ($o -match '@\s*LikeWall\s*\(\s*Room(\d+)\s*\(\s*x(\d+)\s*,\s*z(\d+)\s*\)\s*\)') {
+            $lwR = [int]$Matches[1]; $lwX = [int]$Matches[2]; $lwZ = [int]$Matches[3]
+        }
+
         $e = [PSCustomObject]@{
-            kind = 'portal'
-            roomA = [int]$Matches[1]; sxA = [int]$Matches[2]; szA = [int]$Matches[3]
-            roomB = [int]$Matches[4]; sxB = [int]$Matches[5]; szB = [int]$Matches[6]
+            kind = 'portal'; portalKind = $pk
+            portalClear = $pClear
+            likeWallRoom = $lwR; likeWallSx = $lwX; likeWallSz = $lwZ
+            roomA = $pA; sxA = $pAx; szA = $pAz
+            roomB = $pB; sxB = $pBx; szB = $pBz
             room = $null; sectorX = $null; sectorZ = $null; index = $null; typeId = $null
             ocb = $null; angle = $null; height = $null; xOff = $null; zOff = $null; likeItem = $null; triggerKind = $null; triggerTargets = @()
         }
@@ -194,7 +247,10 @@ function Read-Option([string]$o) {
     # Strictness instead of leniency: what the parser did NOT recognize
     # gets reported.
     $rest = $o
-    $rest = $rest -replace 'Make_Portal\s*@\s*Room\d+\(\s*x\d+\s*,\s*z\d+\s*\)\s*->\s*Room\d+\(\s*x\d+\s*,\s*z\d+\s*\)', ''
+    $rest = $rest -replace 'Move_Room\d+\s*\([^)]*\)', ''
+    $rest = $rest -replace '@\s*LikeWall\s*\(\s*Room\d+\s*\(\s*x\d+\s*,\s*z\d+\s*\)\s*\)', ''
+    $rest = $rest -replace '@\s*Clear', ''
+    $rest = $rest -replace 'Make_(?:Ce[il]+ing_?|Floor_?)?Portal\s*@\s*Room\d+\(\s*x\d+\s*,\s*z\d+\s*\)\s*->\s*Room\d+\(\s*x\d+\s*,\s*z\d+\s*\)', ''
     $rest = $rest -replace 'Make_Climb\s*@\s*Room\d+\(\s*x\d+\s*,\s*z\d+\s*\)', ''
     $rest = $rest -replace 'Make_Room_(No)?Water\s*\(\s*\d+\s*\)', ''
     $rest = $rest -replace 'replace\s+', ''
@@ -390,7 +446,7 @@ if ($AsPatch -ne "") {
     if ($head -notmatch ':\s*(\d+)\s+Items') { Write-Output "item count not readable from $Trc"; exit 1 }
     $itemBase = [int]$Matches[1]
 
-    $edits = @(); $adds = @(); $trigger = @(); $portals = @(); $climbs = @(); $water = @()
+    $edits = @(); $adds = @(); $trigger = @(); $portals = @(); $climbs = @(); $water = @(); $roomMoves = @()
 
     for ($i = 0; $i -lt $planLevel.spots.Count; $i++) {
         $s = $planLevel.spots[$i]
@@ -461,10 +517,26 @@ if ($AsPatch -ne "") {
         # Portal: both sides in one entry; the values go unchanged to
         # makePortal, which checks the preconditions (view windows!)
         # itself.
+        # Room moves go into their own list; the patch path applies them
+        # BEFORE the portals, so a window is built against the room where it
+        # ends up rather than where it started.
+        if ($e.kind -eq 'moveroom') {
+            $roomMoves += [PSCustomObject]@{
+                room = [int]$e.moveRoomNo
+                dx = [int]$e.moveX; dy = [int]$e.moveY; dz = [int]$e.moveZ
+            }
+            continue
+        }
+
         if ($e.kind -eq 'portal') {
             $portals += [PSCustomObject]@{
                 roomA = [int]$e.roomA; sxA = [int]$e.sxA; szA = [int]$e.szA
                 roomB = [int]$e.roomB; sxB = [int]$e.sxB; szB = [int]$e.szB
+                kind  = [int]$e.portalKind
+                clear = [int]([bool]$e.portalClear)
+                likeWallRoom = [int]$e.likeWallRoom
+                likeWallSx   = [int]$e.likeWallSx
+                likeWallSz   = [int]$e.likeWallSz
             }
             continue
         }
@@ -570,7 +642,7 @@ if ($AsPatch -ne "") {
         }
     }
 
-    $patch = [PSCustomObject]@{ itemEdits = $edits; itemAdds = $adds; triggerAdds = $trigger; portalAdds = $portals; climbAdds = $climbs; roomWater = $water; itemBase = $itemBase }
+    $patch = [PSCustomObject]@{ itemEdits = $edits; itemAdds = $adds; triggerAdds = $trigger; portalAdds = $portals; roomMoves = $roomMoves; climbAdds = $climbs; roomWater = $water; itemBase = $itemBase }
     $json = $patch | ConvertTo-Json -Depth 8 -Compress
     [System.IO.File]::WriteAllText($AsPatch, $json, (New-Object System.Text.UTF8Encoding($false)))
     $retyped = @($planLevel.extras | Where-Object { $_.kind -eq 'replace' }).Count

@@ -75,6 +75,7 @@ struct Config
     std::set<std::string> outfitsDisabled;
     int  itemAmount       = 0;     // 0 vanilla, 1 more, 2 a lot more (#36)
     int  secrets         = 0;     // secrets (#53): 0 vanilla, 1 pool, 2/3 list
+    bool secretRewards   = false;  // roll SecretRewards.txt beside the game (#53)
     std::string secretAuthor;      // chosen list author (kinds 2/3)
     bool optMusicSwitch  = false; // shuffle level music in SCRIPT.DAT
     bool optMusicTrigger = false; // shuffle the floordata's TO_CD tracks

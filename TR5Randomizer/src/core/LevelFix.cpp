@@ -43,7 +43,8 @@ namespace LevelFix
 {
 
 int apply(Tr5Level& level, const std::string& levelName,
-             std::vector<std::string>& warnings)
+             std::vector<std::string>& warnings,
+             std::vector<int>* freedItems)
 {
     int applied = 0;
 
@@ -65,6 +66,88 @@ int apply(Tr5Level& level, const std::string& levelName,
         std::snprintf(buf, sizeof(buf),
                       "LevelFix not applied (%s -> room %d sector %d,%d): %s",
                       k.reason, k.toRoom, k.toSx, k.toSz, error.c_str());
+        warnings.push_back(buf);
+    }
+
+    for (const TriggerMove& k : kTriggerMoves)
+    {
+        if (!sameName(levelName, k.level)) continue;
+
+        std::string error;
+        if (level.moveTrigger(k.fromRoom, k.fromSx, k.fromSz,
+                              k.toRoom, k.toSx, k.toSz, error))
+        {
+            ++applied;
+            continue;
+        }
+
+        char buf[400];
+        std::snprintf(buf, sizeof(buf),
+                      "LevelFix not applied (%s -> room %d sector %d,%d): %s",
+                      k.reason, k.toRoom, k.toSx, k.toSz, error.c_str());
+        warnings.push_back(buf);
+    }
+
+    for (const TriggerRewrite& k : kTriggerRewrites)
+    {
+        if (!sameName(levelName, k.level)) continue;
+
+        std::vector<Tr5TriggerCmd> cmds;
+        Tr5TriggerCmd c;
+        c.type = k.cmdType;
+        c.param = k.cmdParam;
+        cmds.push_back(c);
+
+        std::string error;
+        if (level.setTrigger(k.room, k.sx, k.sz, k.kind, 0, k.oneShot,
+                             k.mask, cmds, error))
+        {
+            ++applied;
+            if (freedItems && k.freesItem >= 0) freedItems->push_back(k.freesItem);
+            continue;
+        }
+
+        char buf[400];
+        std::snprintf(buf, sizeof(buf),
+                      "LevelFix not applied (%s -> room %d sector %d,%d): %s",
+                      k.reason, k.room, k.sx, k.sz, error.c_str());
+        warnings.push_back(buf);
+    }
+
+    for (const TriggerObjectReplace& k : kTriggerObjectReplaces)
+    {
+        if (!sameName(levelName, k.level)) continue;
+
+        std::string error;
+        if (level.replaceTriggerObject(k.room, k.sx, k.sz, k.item,
+                                       k.newType, k.newParam, error))
+        {
+            ++applied;
+            continue;
+        }
+
+        char buf[400];
+        std::snprintf(buf, sizeof(buf),
+                      "LevelFix not applied (%s -> room %d sector %d,%d): %s",
+                      k.reason, k.room, k.sx, k.sz, error.c_str());
+        warnings.push_back(buf);
+    }
+
+    for (const TriggerObjectRemove& k : kTriggerObjectRemoves)
+    {
+        if (!sameName(levelName, k.level)) continue;
+
+        std::string error;
+        if (level.removeTriggerObject(k.room, k.sx, k.sz, k.item, error))
+        {
+            ++applied;
+            continue;
+        }
+
+        char buf[400];
+        std::snprintf(buf, sizeof(buf),
+                      "LevelFix not applied (%s -> room %d sector %d,%d): %s",
+                      k.reason, k.room, k.sx, k.sz, error.c_str());
         warnings.push_back(buf);
     }
 

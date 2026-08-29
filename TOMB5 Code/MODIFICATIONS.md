@@ -20,10 +20,14 @@ Re-verified on **2026-08-24** against another fresh upstream download
 files — one upstream commit made after our copy (`setup.cpp`: Two Gun gains
 `undead = 1`) and two small local fixes that predate this repository and are
 documented in their files (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp`
-DO_LOG). 104 files differ between upstream and our head; every one of them
-carries the modification notice at the top, and
-`grep -rl "Modified 2026 by ChrisChanSan" TOMB5/` lists them all (108 at the
-time of writing, including files that are entirely new). The project file
+DO_LOG). Measured again on **2026-08-29**: 106 files differ from upstream and
+12 are entirely new, none was deleted - 118 in all. 113 of them carry the
+modification notice at the top, which
+`grep -rl "Modified 2026 by ChrisChanSan" TOMB5/` lists. The remaining five
+carry a different notice for a good reason: `game/trex.h`, `game/raptor.h` and
+`game/compy.h` name tomb3 as their origin instead (section 3 below), and
+`tomb5/libs/stb/stb_vorbis.c` and `tomb5/libs/discordRPC/LICENSE` are other
+people's files that we do not modify at all. The project file
 `tomb5.vcxproj` carries the notice as an XML comment.
 
 This modified version remains licensed under the **GNU General Public License
@@ -191,9 +195,9 @@ Also in this group:
   God's full damage sets); an imported enemy needs the set of a level that
   actually carries him, and that cannot be placed into `MESHSWAP1` without
   breaking the target's native users. The pool enemies' wiring in
-  `BaddyObjects` now goes through `MeshSwapQuelle()`, which prefers a
+  `BaddyObjects` now goes through `MeshSwapSource()`, which prefers a
   designated fallback slot and otherwise behaves exactly like upstream.
-  The fallback ids are `SMASH_OBJECT3..6` (`MESHSWAP_CROSS_*` in
+  The fallback ids are `SMASH_OBJECT5..8` (`MESHSWAP_CROSS_*` in
   objects.h) — loaded by no vanilla level and referenced by the engine
   only through `item->object_number` range checks, so without items of
   those types they are inert mesh warehouses; in unmodified levels the
@@ -305,7 +309,7 @@ Also in this group:
   the head (seen in game: catsuit Lara wearing joby5's knitted beanie, and
   with the yellow suit legs). This is a Core bug that vanilla masks because
   there the grafted meshes match the level outfit. Fix in two parts:
-  `CutseqLaraMeshesZurueck()` resets all 15 `lara.mesh_ptrs` from slot 0
+  `CutseqLaraMeshesBack()` resets all 15 `lara.mesh_ptrs` from slot 0
   (primed with the current skin by `LaraInitialiseMeshes`, child torso from
   `ANIMATING6_MIP` as there) at the single spot in
   `handle_cutseq_triggering` where every cutscene teardown passes (right
@@ -340,7 +344,7 @@ Also in this group:
   needs it; as pool enemies they can land in levels without one — then
   `FindAITargetObject` never finds a target, they chase Lara around
   "fleeing" forever, and the HP clamp makes them immortal (seen in game:
-  joby2 item 36). The new `PierreKannFliehen()` runs the same
+  joby2 item 36). The new `PierreCanFlee()` runs the same
   type/OCB/zone match as `FindAITargetObject` before the clamp: with a
   reachable marker everything behaves exactly as vanilla; without one the
   clamp is skipped and they fight to a normal death (both their death
@@ -393,8 +397,8 @@ Also in this group:
   range that used to be a compile-time constant. `game/hitman.cpp`,
   `mafia2.cpp`, `pierre.cpp`, `sniper.cpp` and `sas.cpp` pass their own gunshot
   damage into `ShotLara` instead of a literal.
-  The per-attack values are applied through `EnemyDamage()` at the 33 places
-  in 23 enemy files that subtract from Lara's hit points, which is also where
+  The per-attack values are applied through `EnemyDamage()` at the 28 places
+  in 20 enemy files that subtract from Lara's hit points, which is also where
   the global percentage is applied. Falls, fire, poison, drowning and the trap
   code in `traps.cpp`, `effect2.cpp`, `tomb4fx.cpp`, `control.cpp` and
   `camera.cpp` deliberately bypass all of it and stay exactly as hard as the
@@ -435,7 +439,8 @@ Also in this group:
   diagnosis needs most. It is matched as a whole word, so a stray "log"
   inside a path cannot silently turn on per-frame logging.
 
-- `game/draw.cpp`, `game/lot.cpp`, `game/sound.cpp`, `specific/output.cpp` —
+- `game/draw.cpp`, `game/lot.cpp`, `game/sound.cpp`, `game/sound.h`,
+  `specific/output.cpp` —
   diagnostic seams behind that switch: `SFXLOG` (which sample a sound
   really played, and which anim command asked for it), `CLIPLOG`,
   `SKIPLOG`, `MESHLOG`, `SLOTLOG` and `CLIPDETAIL` (why an enemy is not
@@ -512,7 +517,7 @@ Also in this group:
     matched up.
 
 - `game/gameflow.h`, `game/gameflow.cpp`, `game/tower.cpp`, `game/objects.cpp`,
-  `game/switch.cpp`, `game/footprnt.cpp`, `game/health.cpp` — **level identity
+  `game/switch.cpp`, `game/footprnt.cpp`, `game/health.cpp`, `game/traps.cpp` — **level identity
   separated from level slot.** Upstream has one number, `gfCurrentLevel`, and
   uses it for two different questions: which entry of `SCRIPT.DAT` is being
   played (order, savegame, level names) and WHICH LEVEL this is (the places
@@ -682,7 +687,11 @@ You do not need to trust our binary. Either:
   platform `x86`; the result is `release/PCtomb5.exe`; or
 - start from upstream <https://github.com/Trxyebeep/TOMB5>, and apply our
   changes on top. Every change is a commit in this repository, so
-  `git diff ebde675 HEAD -- "TOMB5 Code"` is the complete change set.
+  `git diff "$(git rev-list --max-parents=0 HEAD)" HEAD -- "TOMB5 Code"`
+  is the complete change set. That asks git for the repository's first
+  commit - the unmodified decompilation - rather than naming a hash, which
+  is deliberate: this history has been rewritten before, and a written-down
+  hash does not survive that.
 
 Unlike upstream, this build produces a **single self-contained executable**.
 Upstream ships `PCTomb5.exe` plus `tomb5.dll`, where the DLL carries the game

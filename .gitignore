@@ -14,25 +14,8 @@ release/
 *.iobj
 *.ipdb
 
-# Game data (large binary assets, not source)
-Tomb5 Steam Version/audio/
-Tomb5 Steam Version/movie/
-Tomb5 Steam Version/screens/
-Tomb5 Steam Version/data/
-Tomb5 Steam Version/*.dll
-Tomb5 Steam Version/*.exe
-Tomb5 Steam Version/*.dat
-Tomb5 Steam Version/*.tag
-Tomb5 Steam Version/log.txt
-Tomb5 Steam Version/savegame.*
-Tomb5 Steam Version/*.bak
-
 # A second untouched copy of the game data (a reference for comparing)
 Vanilla Tomb Raider (V) Chronicles Steam Version ENG/
-
-# Old EXE states the user set aside, together with a SCRIPT.DAT copy -
-# build artifacts and game data, none of it belongs in the repository.
-Tomb5 Steam Version/Alte exen/
 
 # A transcript dump, not project content
 full_conversation.txt
@@ -105,10 +88,11 @@ TOMB 5 (I).zip
 Tomb Raider 5 (I).iso
 Tomb Raider 5 Italy/
 Preparation/stb-master/
-Tomb5 Steam Version/savegame/
 
-# The user's game installation - never belongs in the repo (setup.bat stays
-# as an already tracked file of our own; the ignore only catches new files)
+# The user's game installation - never belongs in the repo. One rule is
+# enough; the eleven narrower ones that used to stand further up said the
+# same thing again. Nothing of ours lives in there any more - the setup
+# launcher moved to TR5Randomizer\setup.bat.
 Tomb5 Steam Version/
 
 # Backup bundles of the history - they contain old states, never upload

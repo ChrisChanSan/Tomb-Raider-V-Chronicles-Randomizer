@@ -64,6 +64,11 @@ if (Test-Path $RandoExe) {
 $dataOut = "$OutDir\data"
 New-Item -ItemType Directory -Path $dataOut -Force | Out-Null
 Copy-Item "$LevelInfo\VanillaLevelChecksums.csv" $dataOut -Force
+# The Tomb Raider III files the four guests were ported against, by size
+# and SHA256. Nothing reads it at run time - it is there so a player whose
+# dinosaurs look wrong can check whether their installation is the one the
+# port was built from.
+Copy-Item "$Root\Preparation\Tr3Checksums.csv" $dataOut -Force
 $zones = 0
 foreach ($f in (Get-ChildItem "$LevelInfo\*.json" | Sort-Object Name)) {
     if ($f.BaseName -eq 'Title') { continue }

@@ -145,6 +145,9 @@ GPLv3 just like everything else here:
 
 The models and sounds behind them are NOT included - the randomizer
 reads them from your own Tomb Raider III installation at runtime.
+If they come out wrong, check your files against
+data\Tr3Checksums.csv: it lists the size and SHA256 of exactly the
+Tomb Raider III files the four guests were ported from.
 
 TOMB5 is under the GNU GPL v3, and so is this modified version. That
 is why the complete source code is included - you can rebuild the EXE

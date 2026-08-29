@@ -1114,7 +1114,7 @@ std::vector<Tr3Source::DinoSource> Tr3Source::dinos()
     {   // Vulture on CROW. Model from The Lost Artifact, sounds from TR3 -
         // see sfxPath().
         DinoSource t;
-        t.slot = 43; t.name = "Geier"; t.source = "tr3gold";
+        t.slot = 43; t.name = "Vulture"; t.source = "tr3gold";
         t.file = "chunnel.tr2"; t.object = 29; t.soundBase = 420;
         t.sounds = { { 182, {192} }, { 183, {193,194} }, { 184, {195} }, { 185, {196} } };
         t.muted = { 56 };                  // TR3: Lara's footstep, taken in TR5

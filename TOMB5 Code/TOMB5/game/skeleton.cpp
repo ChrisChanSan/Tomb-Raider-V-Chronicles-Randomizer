@@ -56,6 +56,37 @@ void SkeletonControl(short item_number)
 	item = &items[item_number];
 	skeleton = (CREATURE_INFO*)item->data;
 
+	// The skeleton was immortal, exactly like the chef before #124:
+	// SkeletonControl never asked after its hit points. The damage did
+	// arrive - it has hit points, HitEffect and save_hitpoints - it just
+	// never led anywhere, because there is no death branch and no death
+	// animation in the data either.
+	//
+	// In vanilla that never showed: Andy2 hands Lara nothing to shoot
+	// them with. The randomizer scatters weapons through the level, and
+	// then an enemy that soaks up a whole magazine is simply broken
+	// (user, after his full playthrough).
+	//
+	// So the shredding death of the Imp and the maze monster
+	// (imp.cpp/willwisp.cpp, reasoning at the Imp): CreatureDie(1) throws
+	// the enemy's OWN meshes as BODY_PART effects and does everything an
+	// animation would - KillItem, DropBaddyPickups, AI off,
+	// IFL_INVISIBLE for the savegame. For a pile of bones that is the
+	// right picture anyway.
+	//
+	// Without a sound, deliberately. Those two die with their own voice;
+	// a skeleton has no vocal cords (user, 2026-08-29), and the only
+	// bone sounds the data holds are the rattle below and the attack.
+	//
+	// Nothing has to travel with this. Skeletons stay where Core put
+	// them: slot 73 stands in no cross pool, Andy2's enemyTypes lists
+	// only the maze monster, and five fixedItems entries pin them.
+	if (item->hit_points <= 0)
+	{
+		CreatureDie(item_number, 1);
+		return;
+	}
+
 	if (item->ai_bits)
 		GetAITarget(skeleton);
 	else if (skeleton->hurt_by_lara)
@@ -125,7 +156,7 @@ void SkeletonControl(short item_number)
 		if (item->item_flags[0] == 0)
 		{
 			item->item_flags[0] = 1;
-			SoundEffect(186, &item->pos, 0);
+			SoundEffect(SFX_SKELETON_APPEAR, &item->pos, 0);
 		}
 	}
 

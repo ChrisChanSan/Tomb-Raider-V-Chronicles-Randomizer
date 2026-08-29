@@ -59,6 +59,132 @@ char SniperCamActive = 0;
 // CalculateCamera needs them - the camera itself lives further down next to
 // its template BinocularCamera.
 static long fpHeadHidden = 0;
+static long fpFovSet = 0;
+static short fpRoll = 0;
+
+// The smoothed view direction and up vector of the head bone camera (#134).
+//
+// Lara's head bobs with every step and breathes on the spot. As long as the
+// camera only took the head's PLACE that hardly showed; now that it turns
+// with the bone as well, the bob became a jolt ("very rough" - the user).
+//
+// Filtered are the two VECTORS, not the angles: an angle wraps at half a
+// turn and a filter would jump the long way round the moment Lara crosses it.
+//
+// How hard depends on HOW BIG the movement is, and that is the whole point.
+// One fixed strength cannot serve both: enough to still the tremble and the
+// somersault turns to treacle, enough for the somersault and the tremble
+// stays. They differ in size, not in kind - a shiver is a fraction of a
+// degree, a backflip is a quarter turn in a frame - so the strength is read
+// off the angle between where the view stands and where the bone points.
+//
+// Small movement, heavy filter; large movement, almost none. Between the two
+// it slides, so nothing snaps as Lara goes from standing to tumbling.
+// Retuned once the filters actually ran and could be measured. With 0.08 the
+// view trailed the truth by nine degrees while walking and by twenty-seven in
+// fast motion - "a bit sluggish", and no wonder.
+//
+// The slow setting no longer has to be near-zero, because the shiver it has
+// to hold back is small: 0.34 degrees a frame, reversing every other frame.
+// A filter at 0.30 passes under a fifth of an alternation of that speed -
+// well under a pixel - while trailing a steady turn by only about three
+// frames.
+// The strong end is now the player's to set, because which of the two
+// nuisances weighs more is a matter of taste and could not be settled by
+// argument: damping harder hides a shake, and lengthens the tail the camera
+// drags behind a movement that has stopped. One of those is more annoying
+// than the other, and only the person looking at it knows which.
+//
+// Off means no damping at all - the bone as it comes.
+static const float fpSmoothSlow[4] = { 1.00F, 0.30F, 0.18F, 0.10F };
+#define FP_SMOOTH_SLOW	(fpSmoothSlow[tomb5.first_person_smooth & 3])
+// A large movement is passed through WHOLE. At 0.75 the camera went
+// three-quarters of the way on the jump and crept the rest afterwards, and
+// that crawl is heard as the second beat of the "bub bub bub" at the end of
+// every animation. The filter is there to kill small jitter; nothing about a
+// real turn needs holding back.
+#define FP_SMOOTH_FAST	1.00F		// a somersault: followed outright
+// Read off the head bone's own trace (-log, FPHEAD), which is what finally
+// told the two apart. Per frame, the bone's direction moves:
+//
+//   standing (anim 103)   0.60 degrees, and it hardly ever reverses
+//   walking  (anim 0)     0.70 degrees typical, one hard step of 1.53
+//   running  (anim 75)   32     degrees
+//
+// A factor of forty between the wobble and the real turn. So the strength is
+// read off HOW FAST THE BONE ITSELF MOVES, not off how far the view has
+// fallen behind - that was the earlier mistake, and it measured the wrong
+// thing: a slowly drifting but noisy signal keeps that distance moderate the
+// whole time, so the filter never chose either setting properly.
+// And the thresholds came down, because they had the player's own looking
+// about on the wrong side of the line. Measured: the shiver moves the bone
+// 0.34 degrees a frame, looking around moves it 2 to 7. Two degrees was
+// therefore exactly the wrong place to put the boundary.
+#define FP_RATE_SLOW	0.00015F	// 1 - cos(1 degree): only the shiver below
+#define FP_RATE_FAST	0.0055F		// 1 - cos(6 degrees): looking about, follow
+// The same for the eye's own travel, and for the same reason. Off the trace,
+// the head's offset inside Lara moves up to 8 units a frame while walking and
+// reverses constantly - some 8 pixels on screen, which is a shimmer. A jump
+// or a fall moves it far further, and that has to come through.
+#define FP_MOVE_SLOW	1.0F		// units per frame: only the bob below
+#define FP_MOVE_FAST	12.0F		// units per frame: a real move, follow
+static float fpDir[3] = { 0, 0, 0 };
+static float fpUp[3] = { 0, 0, 0 };
+static float fpRel[3] = { 0, 0, 0 };
+
+// The PREVIOUS frame's raw reading, to measure how fast the bone is moving.
+//
+// It used to be averaged with the current one as well, meant against an
+// alternation from frame to frame. The later measurement found no such thing
+// - the walk is a noisy curve, not a clean alternation - and the average
+// cost more than it bought: at every jump it stepped half way and then the
+// rest, which is the first beat of the "bub bub bub" heard at the end of
+// every animation. Removed; only the comparison is kept.
+//
+// Measured off the user's second recording, which he was good enough to
+// record as standing still first and then walking straight: standing, the
+// picture drifts smoothly and does not shiver at all. Walking, it jumps
+// between two places EVERY logic frame - thirty pixels apart, fifteen times
+// a second. A real step bob would be a soft wave over some fifteen frames;
+// something alternating frame by frame is not animation.
+//
+// And the filter could not catch it, because it was built the wrong way
+// round for this: its strength grows with the distance between where the
+// view stands and where the bone points, and for a movement that reverses
+// every frame that distance is ALWAYS large. So it ran permanently at its
+// fast setting and chased the shiver instead of damping it - worse than the
+// fixed strength it replaced.
+//
+// The average of two neighbouring frames cancels an alternation of exactly
+// this rate to nothing, while a somersault - smooth over about a second -
+// passes almost untouched, half a frame late. So the raw reading is paired
+// with the one before it BEFORE the filter sees it, and the filter then does
+// what it is good at: the slow drift.
+static float fpPrevDir[3] = { 0, 0, 0 };
+static float fpPrevUp[3] = { 0, 0, 0 };
+static float fpPrevRel[3] = { 0, 0, 0 };
+static long fpSmoothValid = 0;
+static long fpRanLast = 0;
+static short fpPrevEyeRoom = 0;
+
+// Which way the view has been moving lately, and how much it has moved at
+// all. Their ratio says whether a movement is GOING somewhere or merely
+// shaking: a somersault turns one way for the better part of a second, so
+// the two agree and the ratio is near one; a stutter reverses, the signed
+// part cancels itself, and the ratio falls towards nothing.
+//
+// Speed alone cannot tell them apart, and that is what was missing. Speed
+// said "large, follow it" to the three-beat stumble at the end of an
+// animation just as readily as to a real turn.
+#define FP_TREND	0.30F		// how quickly the trend follows
+static float fpVel[3] = { 0, 0, 0 };
+static float fpSpd = 0;
+static long fpRawX = 0, fpRawY = 0, fpRawZ = 0;
+static float fpLogK = 0;
+static long fpLogLos = 0;
+static long fpLogLRoom = 0, fpLogERoom = 0, fpLogHeadY = 0;
+static long fpLogFloor = 0, fpLogCeil = 0, fpLogClamp = 0, fpLogYBefore = 0;
+static long fpLogEyeH = 0, fpLogEyeC = 0, fpLogEyeY = 0, fpLogReal = 0;
 static bool FirstPersonEnabled();
 
 // How far the eye sits in front of the head center, and how much air must
@@ -66,6 +192,14 @@ static bool FirstPersonEnabled();
 // does not stick in the wall.
 #define FP_EYE_OFFSET	48
 #define FP_MARGIN	48
+// How far the eye is held off floor and ceiling. Larger than the near
+// plane's twenty, because that plane is a surface and its corners reach
+// beyond its centre.
+#define FP_CLEAR	48
+// The most a clamp may shift the camera. Beyond this the floor and
+// ceiling that came back do not describe where the eye is, and moving it
+// that far does more harm than the thing being corrected.
+#define FP_CLAMP_MAX	128
 static char SniperCount = 0;
 
 uchar WeaponDelay = 0;
@@ -82,6 +216,30 @@ static char CameraSnaps = 0;
 
 void InitialiseCamera()
 {
+	// EVERYTHING the first person camera remembers is forgotten here.
+	//
+	// These are statics, and a static outlives a level. fpFovSet is still
+	// standing from the last frame of the level just left, so the guard that
+	// starts the filters afresh never fires - and fpPrevEyeRoom then carries
+	// a room number from the OLD level into the new one. GetFloor is handed
+	// it as its starting room and reads room[] out of range.
+	//
+	// Five crash logs from the user's playthrough, all of them a level
+	// CHANGE - back to the title, Andy1 to Andy3, loading a save, the end of
+	// rich3 - and every one of them stops at the same place: the two
+	// AlterFOV lines of the fresh level, then nothing. First person was on
+	// in all five.
+	//
+	// InitialiseCamera runs once per level, which is exactly the moment
+	// nothing may be carried over.
+	fpFovSet = 0;
+	fpRanLast = 0;
+	fpSmoothValid = 0;
+	fpPrevEyeRoom = lara_item ? lara_item->room_number : 0;
+	fpVel[0] = fpVel[1] = fpVel[2] = 0;
+	fpSpd = 0;
+	fpRoll = 0;
+
 	last_target.x = lara_item->pos.x_pos;
 	last_target.y = lara_item->pos.y_pos - 1024;
 	last_target.z = lara_item->pos.z_pos;
@@ -134,6 +292,33 @@ void CalculateCamera()
 	// pass's state.
 	fpHeadHidden = 0;
 
+	// And the field of view goes back the same way (#134). It has to be
+	// given back whenever the view ends - the option can be switched off,
+	// the binoculars take over, Lara can die - and none of those tell us.
+	// So it is handed back here every frame and taken again below, only
+	// when the first person camera really runs.
+	//
+	// Safe against the other users of AlterFOV: the binoculars set theirs
+	// during DRAWING, which is after this, and a flyby never reaches this
+	// function at all (control.cpp calls CalculateSpotCams instead).
+	// Did the first person camera run LAST frame? That, and not the handing
+	// back of the field of view, is what the filters need to know.
+	//
+	// The reset used to sit inside the block below, and the block runs every
+	// frame the view is on - fpFovSet is set at the end of every one. So the
+	// filters were cleared on every single frame and never filtered anything
+	// at all: they loaded the raw reading afresh each time and handed it
+	// straight on. Proved by the trace, where the filtered numbers came out
+	// exactly equal to the raw ones and k read 0.000 throughout. Every
+	// attempt at the shiver before this was dead code.
+	fpRanLast = fpFovSet;
+
+	if (fpFovSet)
+	{
+		AlterFOV(GAME_FOV);
+		fpFovSet = 0;
+	}
+
 	if (BinocularRange)
 	{
 		BinocularOn = 1;
@@ -146,7 +331,20 @@ void CalculateCamera()
 	if (BinocularOn == 1)
 		BinocularOn = -8;
 
-	if (UseForcedFixedCamera)
+	// A forced fixed camera is Core's cinematic hand-off: it nails the view
+	// a couple of squares away and shows Lara from OUTSIDE for the length
+	// of an animation. Three places still use it - lifting a floor trapdoor
+	// (traps.cpp), the ceiling trapdoor, and the turn switch (switch.cpp).
+	// In first person each of them threw the player out of Lara's eyes and
+	// back in again (user finding: "lifting floor trapdoors is third
+	// person").
+	//
+	// The fourth setter, CreatureKill (box.cpp), is dead code - TR5 has no
+	// Lara animation for it and nothing calls it. Were it ever revived,
+	// FirstPersonEnabled() would answer it correctly on its own: with the
+	// death camera switched off it returns false for a dead Lara, and the
+	// forced camera keeps its old job.
+	if (UseForcedFixedCamera && !FirstPersonEnabled())
 	{
 		camera.type = FIXED_CAMERA;
 
@@ -301,10 +499,58 @@ void CalculateCamera()
 			camera.target.z = last_target.z;
 		}
 
-		if (camera.type != CHASE_CAMERA && camera.flags != 3)
-			FixedCamera();      // the level's direction - it stays even in first person
-		else if (FirstPersonEnabled())
+		// A trigger's Camera command (TO_CAMERA, control.cpp) nails the view
+		// to a camera placed in the level and shows Lara from outside. That is
+		// the same yank out of her eyes as the forced fixed camera further up,
+		// only here the level asks for it - and it happens a lot: every door
+		// shown opening, every lever with a payoff somewhere else (user
+		// finding, Andrea1 triggers 7 and 31).
+		//
+		// The look/combat path below has always let first person win. This
+		// branch was the odd one out; the two agree now.
+		//
+		// EXCEPT the real sniper camera - and that is bit 1 alone, not the
+		// flags & 3 this first read. The two bits are different things:
+		//
+		//   bit 1  the sniper view. FixedCamera aims it at Lara's torso and
+		//          sets SniperOverlay, which draws the scope. Skipping the
+		//          call would leave the player aiming through nothing.
+		//          Measured with CameraCheck: FOUR cameras in the whole game,
+		//          all in rich2.
+		//   bit 0  only feeds SniperCamActive, which locks the look key and
+		//          the inventory (control.cpp, newinv2.cpp). No overlay, no
+		//          special targeting - and it is everywhere: 54 cameras, 11 of
+		//          andy1's 12 alone.
+		//
+		// Testing flags & 3 therefore spared 58 of the game's 92 cameras when
+		// four needed it. The user found it in one glance: two Andrea1
+		// triggers that look identical in trview, camera 4 (0x0000) behaving
+		// and camera 1 (0x0001) not. SniperCamActive keeps its own job either
+		// way - it is assigned further up and the locks stay.
+		const long wouldFix = (camera.type != CHASE_CAMERA && camera.flags != 3);
+		const long sniperCam = wouldFix && camera.number >= 0 &&
+								   (camera.fixed[camera.number].flags & 2);
+
+		if (FirstPersonEnabled() && !sniperCam)
+		{
 			FirstPersonCamera(item);
+
+			// FixedCamera's own countdown, verbatim and only where it would
+			// have run. It has to keep ticking: the reset at the end of this
+			// function leaves a HEAVY_CAMERA alone while its timer is not -1,
+			// so a heavy trigger camera passed over in silence would stay
+			// nailed for good - invisible while first person lasts, and
+			// waiting to spring the moment it ends.
+			if (wouldFix && camera.timer)
+			{
+				camera.timer--;
+
+				if (!camera.timer)
+					camera.timer = -1;
+			}
+		}
+		else if (wouldFix)
+			FixedCamera();      // the level's direction
 		else
 			ChaseCamera(item);
 	}
@@ -1234,9 +1480,14 @@ static bool FirstPersonEnabled()
 	if (BinocularRange)
 		return false;
 
-	// On death the camera should pull back and show what happened - from
-	// Lara's own eyes her death would just be a pan into nothing.
-	if (!lara_item || lara_item->hit_points <= 0)
+	if (!lara_item)
+		return false;
+
+	// On death the camera pulls back by default and shows what happened -
+	// from Lara's own eyes her death is a pan into nothing. But the user
+	// asked to be able to stay in there, so it is a choice ("Death camera"
+	// on the first person page), and off keeps the old behaviour.
+	if (lara_item->hit_points <= 0 && !tomb5.first_person_death)
 		return false;
 
 	return true;
@@ -1248,6 +1499,18 @@ void FirstPersonCamera(ITEM_INFO* item)
 	GAME_VECTOR eye, dest;
 	long dist, rndval, shake;
 	short yrot, xrot;
+
+	// Start the filters afresh when the view was NOT running last frame.
+	// Carrying them across a break - a cutscene, the binoculars, another
+	// room - would sweep the view over from wherever it stood a moment ago
+	// instead of simply being where it belongs.
+	if (!fpRanLast)
+	{
+		fpSmoothValid = 0;
+		fpPrevEyeRoom = item->room_number;
+		fpVel[0] = fpVel[1] = fpVel[2] = 0;
+		fpSpd = 0;
+	}
 
 	// Count down the binoculars' tail. Normally MoveCamera does that - and
 	// it never runs here. Without this, BinocularOn would stay negative
@@ -1295,6 +1558,111 @@ void FirstPersonCamera(ITEM_INFO* item)
 	head.z = 0;
 	GetLaraJointPos(&head, LMX_HEAD);
 
+	// The RAW reading, kept for the trace at the end. Everything below
+	// filters it, and a trace of filtered numbers says nothing about where
+	// the movement comes from.
+	fpRawX = head.x - item->pos.x_pos;
+	fpRawY = head.y - item->pos.y_pos;
+	fpRawZ = head.z - item->pos.z_pos;
+
+	// Damp the bob in POSITION too, when the camera hangs on the bone.
+	//
+	// Measured off the user's recording (60 fps, the logic at 30, which the
+	// doubled values in the trace show): the horizon moves two to eight
+	// pixels per logic frame and turns round on three out of five - a
+	// shiver at about fifteen a second, "as if Lara were cold". The
+	// rotation filter cannot be what is left of that; at its slow setting
+	// it holds an alternation of that speed down to a few per cent. What is
+	// left is the eye itself. It sits on the head joint and walks up and
+	// down with every step, and nothing was damping that.
+	//
+	// Smoothed is the head's OFFSET INSIDE LARA, not its place in the
+	// world. That offset never leaves her body, so the damped eye stays
+	// within a body's width of where it belongs and cannot lag into a wall
+	// - her collision radius is 102 - while walking and falling carry it
+	// along untouched. The forward offset below still asks mgLOS as before.
+	//
+	// Only with the bone camera: plain first person had this bob all along
+	// and nobody minded, because the view did not turn with it.
+	if (tomb5.first_person_head)
+	{
+		float rx, ry, rz, d, k;
+
+		rx = float(head.x - item->pos.x_pos);
+		ry = float(head.y - item->pos.y_pos);
+		rz = float(head.z - item->pos.z_pos);
+
+		if (!fpSmoothValid)
+		{
+			fpRel[0] = rx; fpRel[1] = ry; fpRel[2] = rz;
+			fpPrevRel[0] = rx; fpPrevRel[1] = ry; fpPrevRel[2] = rz;
+		}
+		else
+		{
+			// How far the HEAD moved since last frame - not how far the
+			// filtered eye has fallen behind it. Same correction as for the
+			// direction: a bobbing signal keeps that lag moderate the whole
+			// time and the filter then never chooses properly.
+			d = sqrtf((rx - fpPrevRel[0]) * (rx - fpPrevRel[0]) +
+			          (ry - fpPrevRel[1]) * (ry - fpPrevRel[1]) +
+			          (rz - fpPrevRel[2]) * (rz - fpPrevRel[2]));
+
+			fpPrevRel[0] = rx; fpPrevRel[1] = ry; fpPrevRel[2] = rz;
+
+			if (d < FP_MOVE_SLOW) d = FP_MOVE_SLOW;
+
+			k = (d - FP_MOVE_SLOW) / (FP_MOVE_FAST - FP_MOVE_SLOW);
+
+			if (k > 1.0F) k = 1.0F;
+
+			k = FP_SMOOTH_SLOW + (FP_SMOOTH_FAST - FP_SMOOTH_SLOW) * k;
+
+			fpLogK = k;
+
+			fpRel[0] += (rx - fpRel[0]) * k;
+			fpRel[1] += (ry - fpRel[1]) * k;
+			fpRel[2] += (rz - fpRel[2]) * k;
+		}
+
+		// The damped point has to be REACHABLE from the real head.
+		//
+		// Damping means lagging, and on a fast move the lag lands the eye
+		// where the head no longer is. Pulling up over a ledge is the worst
+		// of them: the head shoots up past the edge in a couple of frames
+		// while the damped point is still below it - inside the floor. The
+		// room then resolves to whatever lies under or beyond that surface
+		// and the camera is drawn from outside the level. Two frames of the
+		// building seen from the void, in the user's recording.
+		//
+		// mgLOS walks the short way from the real head to the damped point,
+		// stops in front of anything solid and hands back a place that is
+		// genuinely there. The head itself is always valid - it sits inside
+		// Lara - so the walk always starts somewhere real. Where nothing is
+		// in the way the damped point survives untouched, which is nearly
+		// always; where something is, the eye simply stays nearer her head
+		// for those few frames.
+		{
+			GAME_VECTOR from, to;
+
+			from.x = head.x;
+			from.y = head.y;
+			from.z = head.z;
+			from.room_number = item->room_number;
+			GetFloor(from.x, from.y, from.z, &from.room_number);
+
+			to.x = item->pos.x_pos + long(fpRel[0]);
+			to.y = item->pos.y_pos + long(fpRel[1]);
+			to.z = item->pos.z_pos + long(fpRel[2]);
+			to.room_number = from.room_number;
+
+			mgLOS(&from, &to, 0);
+
+			head.x = to.x;
+			head.y = to.y;
+			head.z = to.z;
+		}
+	}
+
 	// The forward offset must ASK THE WALL. If Lara stands close to one and
 	// looks around, the eye swings around her head - and 48 units are
 	// enough to land inside the wall. Then the room number is wrong too
@@ -1309,7 +1677,137 @@ void FirstPersonCamera(ITEM_INFO* item)
 	eye.x = head.x;
 	eye.y = head.y - 16;
 	eye.z = head.z;
-	eye.room_number = item->room_number;
+
+	// WHICH ROOM the eye is in has to be worked out, not assumed to be
+	// Lara's.
+	//
+	// The two part company exactly where this went wrong. Pulling up over a
+	// ledge, Lara still hangs below and her item sits in the LOWER room
+	// while her head is already above the edge, in the upper one. Taking her
+	// room for the eye then had everything after it reckoning in the wrong
+	// place: the probe walked from a room the eye is not in, and the floor
+	// clamp obligingly held the camera forty-eight units above the floor of
+	// the room BELOW - which is where the user found it, one storey under
+	// her (Andrea1, room 89).
+	//
+	// GetFloor walks there properly. Starting from Lara's room it follows
+	// the portals and the room-above and room-below links to whatever
+	// actually contains the point, which is the whole purpose of the
+	// function.
+	// The eye is reached FROM LARA, not placed and then asked where it is.
+	//
+	// The head can end up nowhere at all. The trace caught it during a
+	// handstand at a ledge: the head at -2194 while the room it resolves to
+	// has its ceiling at -1280, so the point lies outside that room
+	// altogether - and outside any other. Her head swings over a place the
+	// engine cannot assign. From there the renderer draws the void, and no
+	// amount of correcting afterwards helps, because every height that comes
+	// back belongs somewhere else.
+	//
+	// Her own position always sits in a real room; the engine keeps it so.
+	// mgLOS therefore walks from her body up to the head, follows the
+	// portals on the way and stops in front of anything solid, handing back
+	// a place that exists AND the room it is in. Where the head is fine, and
+	// that is nearly always, it arrives untouched; where it is not, the eye
+	// stays a little lower, inside her, which is somewhere real.
+	//
+	// This replaces asking GetFloor about a point that may not be in any
+	// room - a question with no honest answer.
+	// mgLOS is a QUESTION, not a placement. It always steps one eighth back
+	// from the target at the end and overwrites it, clear path or not:
+	//
+	//     if (lp) { x -= dx; y -= dy; z -= dz; }
+	//     target->x = x; ...
+	//
+	// Handing it the eye directly therefore parked the camera a good fifty
+	// units short of the head - at her chin, with her chest in the picture.
+	// The older code beside this uses it as a yes-or-no for exactly that
+	// reason and works out the point itself; that is what it is for.
+	{
+		FLOOR_INFO* fl;
+		long h, c;
+		short rn;
+
+		// The question is whether the head is somewhere REAL, and that is
+		// not the same as whether one can see it from her chest.
+		//
+		// Asking the sight line was wrong, and pulling up over a ledge shows
+		// why: her chest is below the edge and her head above it, so the
+		// straight line between them goes through the stone. The probe said
+		// "blocked" and threw the eye back to her chest - the camera came
+		// over the edge for a moment and was yanked back down, every time.
+		//
+		// A room contains the head when the head lies between that room's
+		// ceiling and its floor. That is the whole test, and it separates
+		// the two cases cleanly: pulling up, the head really is inside the
+		// room above and is kept; in a handstand it sits above the ceiling
+		// of the only room going, and is not.
+		// Asked from TWO starting rooms, because GetFloor can only walk the
+		// links it is given, and from Lara's room there is not always a way.
+		//
+		// Traced during a pull-up: the eye stands at -2210, room 89 runs
+		// from -4096 to -2048, so it is plainly inside. But the walk starts
+		// at Lara's room 88, and at that x/z room 88 has nothing above it -
+		// solid stone under the ledge - so it hands back 88's own surfaces,
+		// -1280 to -254. The eye is above those, the test says "not inside",
+		// and it is right about the answer it was given.
+		//
+		// One frame earlier the eye WAS in room 89. A camera has continuity
+		// and may use it: the previous room is tried first, Lara's second.
+		// Either may fail at the edge of its reach; between them they cover
+		// the moment of crossing.
+		// Belt and braces: a starting room out of range would read room[]
+		// past its end. It cannot happen now that InitialiseCamera clears
+		// the memory, but a camera must not be the thing that brings a
+		// level down.
+		if (fpPrevEyeRoom < 0 || fpPrevEyeRoom >= number_rooms)
+			fpPrevEyeRoom = item->room_number;
+
+		rn = fpPrevEyeRoom;
+		fl = GetFloor(eye.x, eye.y, eye.z, &rn);
+		h = GetHeight(fl, eye.x, eye.y, eye.z);
+		c = GetCeiling(fl, eye.x, eye.y, eye.z);
+
+		if (!(h != NO_HEIGHT && c != NO_HEIGHT && eye.y < h && eye.y > c))
+		{
+			rn = item->room_number;
+			fl = GetFloor(eye.x, eye.y, eye.z, &rn);
+			h = GetHeight(fl, eye.x, eye.y, eye.z);
+			c = GetCeiling(fl, eye.x, eye.y, eye.z);
+		}
+
+		fpLogEyeH = h;
+		fpLogEyeC = c;
+		fpLogEyeY = eye.y;
+		fpLogReal = (h != NO_HEIGHT && c != NO_HEIGHT && eye.y < h && eye.y > c) ? 1 : 0;
+
+		if (fpLogReal)
+		{
+			eye.room_number = rn;
+		}
+		else
+		{
+			// Nowhere real. Then back towards her, as far as one can get -
+			// and mgLOS is a question, not a placement, so what it hands
+			// back is only used HERE, where being short of the head is the
+			// point.
+			GAME_VECTOR from;
+
+			from.x = item->pos.x_pos;
+			from.y = item->pos.y_pos - 256;		// chest height, inside her
+			from.z = item->pos.z_pos;
+			from.room_number = item->room_number;
+
+			eye.room_number = from.room_number;
+			mgLOS(&from, &eye, 0);
+		}
+	}
+
+	fpPrevEyeRoom = eye.room_number;
+
+	fpLogLRoom = item->room_number;
+	fpLogERoom = eye.room_number;
+	fpLogHeadY = head.y;
 
 	// Probe with a SAFETY MARGIN first, only then commit.
 	//
@@ -1330,6 +1828,8 @@ void FirstPersonCamera(ITEM_INFO* item)
 	dest.room_number = eye.room_number;
 
 	dist = mgLOS(&eye, &dest, 0) ? FP_EYE_OFFSET : 0;
+
+	fpLogLos = dist;
 
 	// Second pass onto the REAL point: it supplies the room number. With
 	// dist 0 it falls back to the head center (start equals target), which
@@ -1352,6 +1852,158 @@ void FirstPersonCamera(ITEM_INFO* item)
 	camera.target.y = camera.pos.y - (0x5100 * phd_sin(xrot) >> W2V_SHIFT);
 	camera.target.z = camera.pos.z + (phd_cos(yrot) * dist >> W2V_SHIFT);
 	camera.target.room_number = camera.pos.room_number;
+
+	// The somersault (#134). Body rotation plus head rotation is not the
+	// whole truth: item->pos.x_rot does NOT turn over during a backflip -
+	// that rotation lives in the animation alone - so the view above stays
+	// level while Lara goes over. The head BONE carries it, and hanging the
+	// camera on the bone lets the world turn with her.
+	//
+	// The matrix is a 3x4 with the local axes in its COLUMNS (see
+	// GetLaraJointPos, delstuff.cpp:25ff, and what phd_TranslateRel does
+	// with it): local +Z - the way a TR mesh faces - is (M02, M12, M22),
+	// and local -Y is up, Y growing downward.
+	//
+	// Off by default and on its own switch, because whether it PLAYS well
+	// is a matter of taste and can only be judged in motion.
+	fpRoll = 0;
+
+	if (tomb5.first_person_head)
+	{
+		const float* m = &lara_joint_matrices[LMX_HEAD * indices_count];
+		float fx, fy, fz, ux, uy, uz, len;
+
+		fx = m[M02]; fy = m[M12]; fz = m[M22];
+		ux = -m[M01]; uy = -m[M11]; uz = -m[M21];
+
+		len = sqrtf(fx * fx + fy * fy + fz * fz);
+
+		if (len > 0.001F)
+		{
+			float rx, rz, rlen, gx, gy, gz;
+
+			fx /= len; fy /= len; fz /= len;
+
+			len = sqrtf(ux * ux + uy * uy + uz * uz);
+
+			if (len > 0.001F)
+			{
+				ux /= len; uy /= len; uz /= len;
+			}
+
+			// Damp the bob. First frame there is nothing to damp against,
+			// so the filter is simply loaded with where we are.
+			if (!fpSmoothValid)
+			{
+				fpDir[0] = fx; fpDir[1] = fy; fpDir[2] = fz;
+				fpUp[0] = ux; fpUp[1] = uy; fpUp[2] = uz;
+				fpPrevDir[0] = fx; fpPrevDir[1] = fy; fpPrevDir[2] = fz;
+				fpPrevUp[0] = ux; fpPrevUp[1] = uy; fpPrevUp[2] = uz;
+				fpSmoothValid = 1;
+			}
+			else
+			{
+				float k, d, mx, my, mz;
+
+				// How far the BONE moved since last frame, and IN WHICH
+				// DIRECTION - both taken before fpPrevDir is written, which
+				// is where this went wrong the first time: the difference
+				// was computed against a value already overwritten with the
+				// current one, so it was always zero, the consistency term
+				// was always zero with it, and k sat at its slow setting in
+				// every animation. Measured: 0.300 even at seven degrees a
+				// frame with two per cent reversals.
+				d = 1.0F - (fpPrevDir[0] * fx + fpPrevDir[1] * fy + fpPrevDir[2] * fz);
+
+				mx = fx - fpPrevDir[0];
+				my = fy - fpPrevDir[1];
+				mz = fz - fpPrevDir[2];
+
+				fpPrevDir[0] = fx; fpPrevDir[1] = fy; fpPrevDir[2] = fz;
+				fpPrevUp[0] = ux; fpPrevUp[1] = uy; fpPrevUp[2] = uz;
+
+
+				// How consistent the recent movement has been. The step
+				// itself is folded into a running average of the SIGNED
+				// movement and one of its SIZE; where the two agree the
+				// movement is going somewhere.
+				{
+					float ml, t;
+
+					ml = sqrtf(mx * mx + my * my + mz * mz);
+
+					fpVel[0] += (mx - fpVel[0]) * FP_TREND;
+					fpVel[1] += (my - fpVel[1]) * FP_TREND;
+					fpVel[2] += (mz - fpVel[2]) * FP_TREND;
+					fpSpd += (ml - fpSpd) * FP_TREND;
+
+					t = sqrtf(fpVel[0] * fpVel[0] + fpVel[1] * fpVel[1] + fpVel[2] * fpVel[2]);
+					t = (fpSpd > 0.00001F) ? t / fpSpd : 0.0F;
+
+					if (t > 1.0F) t = 1.0F;
+
+					if (d < FP_RATE_SLOW) d = FP_RATE_SLOW;
+
+					k = (d - FP_RATE_SLOW) / (FP_RATE_FAST - FP_RATE_SLOW);
+
+					if (k > 1.0F) k = 1.0F;
+
+					// BOTH must speak for it: large AND going somewhere.
+					// Large alone was what let the stutter through.
+					k = FP_SMOOTH_SLOW + (FP_SMOOTH_FAST - FP_SMOOTH_SLOW) * k * t;
+					fpLogK = k;
+				}
+
+				fpDir[0] += (fx - fpDir[0]) * k;
+				fpDir[1] += (fy - fpDir[1]) * k;
+				fpDir[2] += (fz - fpDir[2]) * k;
+				fpUp[0] += (ux - fpUp[0]) * k;
+				fpUp[1] += (uy - fpUp[1]) * k;
+				fpUp[2] += (uz - fpUp[2]) * k;
+			}
+
+			// Filtering shortens a vector, so both are made unit again.
+			// Skipped if the filter has collapsed one to nothing - halfway
+			// through a full turn the old and the new direction can be
+			// opposites - and then the unfiltered value stands in.
+			len = sqrtf(fpDir[0] * fpDir[0] + fpDir[1] * fpDir[1] + fpDir[2] * fpDir[2]);
+
+			if (len > 0.001F)
+			{
+				fx = fpDir[0] / len; fy = fpDir[1] / len; fz = fpDir[2] / len;
+			}
+
+			len = sqrtf(fpUp[0] * fpUp[0] + fpUp[1] * fpUp[1] + fpUp[2] * fpUp[2]);
+
+			if (len > 0.001F)
+			{
+				ux = fpUp[0] / len; uy = fpUp[1] / len; uz = fpUp[2] / len;
+			}
+
+			camera.target.x = camera.pos.x + long(fx * 0x5100);
+			camera.target.y = camera.pos.y + long(fy * 0x5100);
+			camera.target.z = camera.pos.z + long(fz * 0x5100);
+			camera.target.room_number = camera.pos.room_number;
+
+			// How far the head is tilted SIDEWAYS, measured against the
+			// horizon: cross the view direction with world up to get the
+			// horizon's right, and read the head's own up against it.
+			// Looking straight up or down there is no horizon to measure
+			// from, and the roll is left at zero rather than spun at random.
+			rx = fz; rz = -fx;
+			rlen = sqrtf(rx * rx + rz * rz);
+
+			if (rlen > 0.001F)
+			{
+				rx /= rlen; rz /= rlen;
+				gx = -rz * fy;
+				gy = rz * fx - rx * fz;
+				gz = rx * fy;
+				fpRoll = short(atan2f(ux * rx + uz * rz,
+				                      ux * gx + uy * gy + uz * gz) * 32768.0F / 3.14159265F);
+			}
+		}
+	}
 
 	// Carry the shakes along, or explosions lose all their punch.
 	if (camera.bounce && camera.type == camera.old_type)
@@ -1386,9 +2038,109 @@ void FirstPersonCamera(ITEM_INFO* item)
 	//
 	// Who gets hidden is now decided solely by the draw routine.
 	fpHeadHidden = 1;
+	AlterFOV(FIRST_PERSON_FOV);
+	fpFovSet = 1;
+
+	// Hold the eye clear of floor and ceiling.
+	//
+	// The probe further up guards the way AHEAD; nothing guarded up and
+	// down. Pulling up over a ledge puts the eye a few units above the floor
+	// it is rising past, and the near plane is a SURFACE at twenty units,
+	// not a point - at its lower corners it reaches further still, and it
+	// then reaches through the floor. Which is why it depends so much on the
+	// room: where the ledge is thick or the floor below far away nothing
+	// shows, and elsewhere it does.
+	//
+	// Only where there is room for it. In a crawlspace the two clamps would
+	// fight each other, and being pushed about is worse than the odd glimpse
+	// through a floor, so a gap of at least twice the margin is required
+	// before either applies.
+	{
+		FLOOR_INFO* fl;
+		long h, c;
+
+		fl = GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &camera.pos.room_number);
+		h = GetHeight(fl, camera.pos.x, camera.pos.y, camera.pos.z);
+		c = GetCeiling(fl, camera.pos.x, camera.pos.y, camera.pos.z);
+
+		fpLogFloor = h;
+		fpLogCeil = c;
+		fpLogYBefore = camera.pos.y;
+		fpLogClamp = 0;
+
+		// A clamp may nudge; it may never MOVE the camera.
+		//
+		// Measured during a handstand at a ledge: the eye sat correctly at
+		// -2210, the room resolved back from 89 to 88, and 88's ceiling
+		// there reads -1280 - so this pushed the camera to -1232, nearly a
+		// thousand units down, through the floor and into the room below.
+		// Which is exactly what the user saw, and it was this line doing it.
+		//
+		// The head was at -2194, ABOVE that ceiling, so the point is not in
+		// room 88 at all: during the handstand her head swings out over a
+		// place the engine cannot assign to any room, and the heights that
+		// come back then belong somewhere else.
+		//
+		// So a correction is allowed to be small. Grazing a surface is worth
+		// a nudge; anything larger means the reading does not describe where
+		// the eye is, and then the honest thing is to leave the camera where
+		// the head put it. A little geometry seen oddly beats a camera that
+		// jumps a room.
+		if (h != NO_HEIGHT && c != NO_HEIGHT && h - c > 2 * FP_CLEAR)
+		{
+			if (camera.pos.y > h - FP_CLEAR && camera.pos.y - (h - FP_CLEAR) <= FP_CLAMP_MAX)
+			{
+				camera.pos.y = h - FP_CLEAR;
+				fpLogClamp = 1;
+			}
+
+			if (camera.pos.y < c + FP_CLEAR && (c + FP_CLEAR) - camera.pos.y <= FP_CLAMP_MAX)
+			{
+				camera.pos.y = c + FP_CLEAR;
+				fpLogClamp = 2;
+			}
+		}
+	}
 
 	GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &camera.pos.room_number);
-	phd_LookAt(camera.pos.x, camera.pos.y, camera.pos.z, camera.target.x, camera.target.y, camera.target.z, 0);
+	// FPHEAD: one line per frame under -log, and only in first person (#134).
+	//
+	// BOTH the raw reading and what the camera was actually given, because a
+	// trace of one alone cannot say whether a filter is working. Read it so:
+	//
+	//   rel / fwd   the bone as the animation delivers it, untouched
+	//   srel / sfwd what came out of the filters and reached the camera
+	//   k           the strength the position filter chose this frame
+	//   los         what the wall probe granted, 48 or 0
+	//
+	// If fwd jumps about and sfwd is calm, the filter is doing its work and
+	// anything still seen comes from somewhere else. If sfwd jumps too, the
+	// filter is too weak. And srel against rel says the same for the eye's
+	// own bob.
+	{
+		const float* mh = &lara_joint_matrices[LMX_HEAD * indices_count];
+		const float sx = float(camera.target.x - camera.pos.x);
+		const float sy = float(camera.target.y - camera.pos.y);
+		const float sz = float(camera.target.z - camera.pos.z);
+		const float sl = sqrtf(sx * sx + sy * sy + sz * sz) + 0.001F;
+
+		Log("FPHEAD anim %d frame %d state %d | rel %d,%d,%d | fwd %.4f,%.4f,%.4f "
+		    "| srel %d,%d,%d | sfwd %.4f,%.4f,%.4f | k %.3f | roll %d | los %d",
+		    (int)item->anim_number, (int)item->frame_number, (int)item->current_anim_state,
+		    (int)fpRawX, (int)fpRawY, (int)fpRawZ,
+		    mh[M02], mh[M12], mh[M22],
+		    (int)fpRel[0], (int)fpRel[1], (int)fpRel[2],
+		    sx / sl, sy / sl, sz / sl,
+		    fpLogK, (int)fpRoll, (int)fpLogLos);
+
+		// FPROOM was a second line here while the eye's room, the floor clamp
+		// and the field of view were all in question. All three are settled,
+		// so it is gone: two lines a frame is a lot for a log the user reads
+		// for other things. What it measured is written down in the memory
+		// note for this camera, and it is a dozen lines to put back.
+	}
+
+	phd_LookAt(camera.pos.x, camera.pos.y, camera.pos.z, camera.target.x, camera.target.y, camera.target.z, fpRoll);
 	camera.old_type = camera.type;
 }
 

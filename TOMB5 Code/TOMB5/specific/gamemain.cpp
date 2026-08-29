@@ -26,6 +26,7 @@
 #include "specificfx.h"
 #include "../game/savegame.h"
 #include "../game/balance.h"
+#include "../game/secretreward.h"
 #include "../tomb5/tomb5.h"
 
 WATERTAB WaterTable[22][64];
@@ -239,6 +240,9 @@ bool GameInitialise()
 	Log(__FUNCTION__);
 	EnsureSaveGameFolder();
 	BalanceLoad();
+	// Beside it, and for the same reason: the reward for a level's secrets
+	// is the randomizer's to roll and the player's to set.
+	SecretRewardLoad();
 	init_game_malloc();
 	clipflags = (short*)malloc(0x8000);
 	init_water_table();

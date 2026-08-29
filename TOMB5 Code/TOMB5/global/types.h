@@ -53,6 +53,21 @@
 // level loads comes out of it.
 #define MALLOC_SIZE	20000000	//20MB
 #define GAME_FOV	(80 * 182)
+
+// #134: the first person view gets a wider one of its own. 80 degrees suits
+// a camera behind Lara, but from her own eyes it reads as a tunnel - the
+// body that tells you how wide the world is has gone.
+//
+// The number is NOMINAL, for a 4:3 frame: AlterFOV (3dmath.cpp:77) builds
+// the perspective from phd_winheight * 320 / 240 and then uses the same
+// value for x and y, so a wider screen shows more to the sides. On 16:9,
+// 80 comes out as roughly 96 across and 64 down, 100 as roughly 118 and 79.
+//
+// Which one is right is a matter of taste and nothing else - the user likes
+// 100, others who tried it preferred 80 - so it is a setting, on the third
+// page of the tomb5 options. 90 is the default because it is the middle of
+// the range and leaves both camps one step away.
+#define FIRST_PERSON_FOV	(tomb5.first_person_fov * 182)
 // How many AI enemies can be active at once (baddie_slots, lot.cpp).
 // Upstream 5: the sixth triggered enemy displaced the active one farthest
 // from the camera (EnableBaddieAI sets it ITEM_INVISIBLE) - with the
@@ -2623,6 +2638,10 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	bool static_lighting;		//on off
 	ulong uw_dust;				//1-> off, 2-> original, 3-> TR4
 	bool first_person;			//on off, first-person camera at Lara's head (#126)
+	ulong first_person_fov;		//60..100 nominal, the third options page (#134)
+	bool first_person_death;	//on off, stay at Lara's eyes when she dies (#134)
+	bool first_person_head;		//on off, view hangs on the head BONE (#134)
+	ulong first_person_smooth;	//0 off, 1 light, 2 medium, 3 strong (#134)
 	bool level_select;			//on off, shows the "Level Select" row in the title menu (#32)
 };
 #pragma pack(pop)

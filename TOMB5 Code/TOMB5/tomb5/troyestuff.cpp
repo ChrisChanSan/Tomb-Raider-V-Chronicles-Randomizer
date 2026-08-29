@@ -20,6 +20,23 @@
 
 #define PAGE0_NUM	12
 #define PAGE1_NUM	14
+#define PAGE2_NUM	4
+
+// How many pages are in the cycle. The third one belongs to the first person
+// view and only joins when that view is switched ON - a page of settings for
+// something that is off would turn up unasked while paging, which is exactly
+// why the credits were taken out of this cycle again.
+static long TroyePageCount()
+{
+	return tomb5.first_person ? 3 : 2;
+}
+
+static long TroyePageNum(long page)
+{
+	if (page == 0) return PAGE0_NUM;
+	if (page == 1) return PAGE1_NUM;
+	return PAGE2_NUM;
+}
 
 // The tomb5 options are two pages that page into each other. The credits are
 // NOT one of them - they are their own screen, reached from the options menu
@@ -34,7 +51,7 @@ ulong TroyeMenuPage(long page)
 	long num;
 
 	TroyePage = page;
-	num = page == 0 ? PAGE0_NUM : PAGE1_NUM;
+	num = TroyePageNum(page);
 	return 1ul << num;
 }
 
@@ -56,6 +73,15 @@ void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak)
 		return;
 	}
 
+	// The third page can vanish under one's feet: switching the first person
+	// view off on page 2 takes it out of the cycle, and standing on it then
+	// would leave the menu drawing a page that is no longer there.
+	if (TroyePage >= TroyePageCount())
+	{
+		TroyePage = 0;
+		selection = 1;
+	}
+
 	switch (TroyePage)
 	{
 	case 0:
@@ -64,6 +90,10 @@ void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak)
 
 	case 1:
 		changed = Page1(num, textY, selection);
+		break;
+
+	case 2:
+		changed = Page2(num, textY, selection);
 		break;
 	}
 	
@@ -94,11 +124,13 @@ void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak)
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 
-			// Two pages in a circle: options -> options 2 -> back to the
-			// start. The credits used to sit in this cycle as a third page
-			// and turned up unasked while paging through the settings.
-			TroyePage = (TroyePage + 1) % 2;
-			num = TroyePage == 0 ? PAGE0_NUM : PAGE1_NUM;
+			// A circle: options -> options 2 -> (first person, only when it
+			// is on) -> back to the start. The credits used to sit in this
+			// cycle too and turned up unasked while paging through the
+			// settings, which is why a page only joins when it has
+			// something to say.
+			TroyePage = (TroyePage + 1) % TroyePageCount();
+			num = TroyePageNum(TroyePage);
 
 			selection = 1 << num;
 		}
@@ -625,6 +657,113 @@ bool Page1(long& num, long textY, ulong selection)
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			tomb5.level_select = !tomb5.level_select;
+			changed = 1;
+		}
+
+		break;
+	}
+
+	return changed;
+}
+
+// Third page (#134): everything about the first person view. One row for
+// now - the field of view - and it is here rather than squeezed onto page 2
+// because that page is full at fourteen rows.
+//
+// Steps of ten from 60 to 100 rather than a free slider: the difference
+// between neighbouring values is already plain to see, and a stepped choice
+// says what it is doing. LEFT and RIGHT walk the range and stop at its ends,
+// the way the sound quality row behaves.
+bool Page2(long& num, long textY, ulong selection)
+{
+	long y, i;
+	char buffer[80];
+	bool changed;
+
+	changed = 0;
+	num = PAGE2_NUM;
+	PrintString(phd_centerx, font_height, 6, "First person view", FF_CENTER);
+
+	y = 2;
+	i = 0;
+
+	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Field of view", 0);
+	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Death camera", 0);
+	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Follow head bone", 0);
+	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Camera damping", 0);
+
+	y = 2;
+	i = 0;
+
+	sprintf(buffer, "%d", (int)tomb5.first_person_fov);
+	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
+
+	strcpy(buffer, tomb5.first_person_death ? "First person" : "Third person");
+	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
+
+	strcpy(buffer, tomb5.first_person_head ? "on" : "off");
+	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
+
+	strcpy(buffer, tomb5.first_person_smooth == 0 ? "off" :
+	               tomb5.first_person_smooth == 1 ? "Light" :
+	               tomb5.first_person_smooth == 2 ? "Medium" : "Strong");
+	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
+
+	switch (selection)
+	{
+	case 1 << 0:
+
+		if (dbinput & IN_LEFT && tomb5.first_person_fov > 60)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			tomb5.first_person_fov -= 10;
+			changed = 1;
+		}
+
+		if (dbinput & IN_RIGHT && tomb5.first_person_fov < 100)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			tomb5.first_person_fov += 10;
+			changed = 1;
+		}
+
+		break;
+
+	case 1 << 1:
+
+		if (dbinput & IN_LEFT || dbinput & IN_RIGHT)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			tomb5.first_person_death = !tomb5.first_person_death;
+			changed = 1;
+		}
+
+		break;
+
+	case 1 << 2:
+
+		if (dbinput & IN_LEFT || dbinput & IN_RIGHT)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			tomb5.first_person_head = !tomb5.first_person_head;
+			changed = 1;
+		}
+
+		break;
+
+	case 1 << 3:
+
+		if (dbinput & IN_LEFT && tomb5.first_person_smooth > 0)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			tomb5.first_person_smooth--;
+			changed = 1;
+		}
+
+		if (dbinput & IN_RIGHT && tomb5.first_person_smooth < 3)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			tomb5.first_person_smooth++;
 			changed = 1;
 		}
 

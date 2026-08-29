@@ -12,6 +12,7 @@
  */
 #include "../tomb5/pch.h"
 #include "newinv2.h"
+#include "secretreward.h"
 #include "gameflow.h"
 #include "effects.h"
 #include "../specific/d3dmatrix.h"
@@ -195,22 +196,24 @@ static const SECRET_BONUS_ITEM* secret_bonus_table[18] =
 
 void GrantSecretBonus(long level)
 {
-	const SECRET_BONUS_ITEM* bonus;
+	// The reward comes from SecretRewards.txt beside the executable now, so
+	// the randomizer can roll it and a player can set it himself. The table
+	// above is what a fresh file is written from; nothing reads it here any
+	// more (secretreward.cpp).
+	const SECRET_REWARD_ITEM* bonus;
+	long count;
 
-	if (level < 0 || level >= 18)
-		return;
-
-	bonus = secret_bonus_table[level];
+	bonus = SecretRewardFor(level, &count);
 
 	if (!bonus)
 		return;
 
-	for (; bonus->object_number; bonus++)
+	for (long b = 0; b < count; b++)
 	{
-		for (int i = 0; i < bonus->count; i++)
+		for (int i = 0; i < bonus[b].count; i++)
 		{
-			DEL_picked_up_object(bonus->object_number);
-			AddDisplayPickup(bonus->object_number);
+			DEL_picked_up_object(bonus[b].object_number);
+			AddDisplayPickup(bonus[b].object_number);
 		}
 	}
 }

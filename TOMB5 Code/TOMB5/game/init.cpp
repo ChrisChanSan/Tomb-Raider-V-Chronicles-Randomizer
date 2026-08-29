@@ -951,17 +951,29 @@ void InitialiseSas(short item_number)
 
 	item = &items[item_number];
 	InitialiseCreature(item_number);
-	anim_index = objects[SWAT].anim_index;
-
-	if (!objects[SWAT].loaded)
-	{
-		anim_index = objects[BLUE_GUARD].anim_index;
-
-		// Randomizer (#105): if neither vanilla anchor stands in the level,
-		// the imported second guard carries the family set himself.
-		if (!objects[BLUE_GUARD].loaded)
-			anim_index = objects[BLUE_GUARD2].anim_index;
-	}
+	// The family's anim base - read back from where BaddyObjects already
+	// put it, and nowhere else.
+	//
+	// This used to resolve the chain a SECOND time, and in a different
+	// order: SWAT, then the vanilla guard 37, then the imported guard 460 -
+	// while setup.cpp has preferred 460 over 37 ever since the #121
+	// addendum. Two sources of truth for one question, and the later one
+	// won: setup pointed the stub family at 460's clean joby3 set, and this
+	// line pulled every ITEM back onto 37, which in an import level carries
+	// the RICH model's set with its dead heirs.
+	//
+	// Measured in the user's log (Andrea1, seed SCZC2BAC5DQ6B, 2026-08-29):
+	// Mafia item 116 played anim 789 = slot 37's base 734 + 55, right in
+	// the rich1 guard's documented sick range +50..56, and MESHLOG reported
+	// all 15 meshes discarded - the blinking soldier of #121 once more.
+	// Even the guard 460 himself ran on 734 instead of his own 1012.
+	//
+	// Safe to read back: setup.cpp resolves the alias for all seven family
+	// slots inside InitialiseObjects (file.cpp:904), and no item exists
+	// before LoadItems (file.cpp:1609). In a vanilla level the result is
+	// bit-identical to the old chain - 460 is never loaded there, so both
+	// come out at SWAT, else the guard.
+	anim_index = objects[item->object_number].anim_index;
 
 	switch (item->trigger_flags)
 	{

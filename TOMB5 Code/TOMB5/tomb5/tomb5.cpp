@@ -153,6 +153,22 @@ void init_tomb5_stuff()
 		tomb5.first_person = 0;							//off (#126)
 		REG_WriteBool(buf, tomb5.first_person);
 
+		sprintf(buf, "ego_fov");
+		tomb5.first_person_fov = 90;					//middle of 60..100 (#134)
+		REG_WriteLong(buf, tomb5.first_person_fov);
+
+		sprintf(buf, "ego_death");
+		tomb5.first_person_death = 0;					//off, pull back as before (#134)
+		REG_WriteBool(buf, tomb5.first_person_death);
+
+		sprintf(buf, "ego_head");
+		tomb5.first_person_head = 0;					//off (#134)
+		REG_WriteBool(buf, tomb5.first_person_head);
+
+		sprintf(buf, "ego_smooth");
+		tomb5.first_person_smooth = 1;					//light (#134)
+		REG_WriteLong(buf, tomb5.first_person_smooth);
+
 		sprintf(buf, "level_select");
 		tomb5.level_select = 0;							//off (#32)
 		REG_WriteBool(buf, tomb5.level_select);
@@ -233,6 +249,24 @@ void init_tomb5_stuff()
 
 		sprintf(buf, "ego_cam");
 		REG_ReadBool(buf, tomb5.first_person, 0);
+
+		// A value from an older build, or a hand-edited one, must not take
+		// the view apart: anything outside the range falls back to 90.
+		sprintf(buf, "ego_fov");
+		REG_ReadLong(buf, tomb5.first_person_fov, 90);
+		if (tomb5.first_person_fov < 60 || tomb5.first_person_fov > 100)
+			tomb5.first_person_fov = 90;
+
+		sprintf(buf, "ego_death");
+		REG_ReadBool(buf, tomb5.first_person_death, 0);
+
+		sprintf(buf, "ego_head");
+		REG_ReadBool(buf, tomb5.first_person_head, 0);
+
+		sprintf(buf, "ego_smooth");
+		REG_ReadLong(buf, tomb5.first_person_smooth, 1);
+		if (tomb5.first_person_smooth > 3)
+			tomb5.first_person_smooth = 1;
 
 		sprintf(buf, "level_select");
 		REG_ReadBool(buf, tomb5.level_select, 0);
@@ -320,6 +354,18 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "ego_cam");
 	REG_WriteBool(buf, tomb5.first_person);
+
+	sprintf(buf, "ego_fov");
+	REG_WriteLong(buf, tomb5.first_person_fov);
+
+	sprintf(buf, "ego_death");
+	REG_WriteBool(buf, tomb5.first_person_death);
+
+	sprintf(buf, "ego_head");
+	REG_WriteBool(buf, tomb5.first_person_head);
+
+	sprintf(buf, "ego_smooth");
+	REG_WriteLong(buf, tomb5.first_person_smooth);
 
 	sprintf(buf, "level_select");
 	REG_WriteBool(buf, tomb5.level_select);

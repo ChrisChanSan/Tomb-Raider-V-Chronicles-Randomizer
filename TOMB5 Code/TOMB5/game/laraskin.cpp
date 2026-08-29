@@ -539,15 +539,25 @@ void CreateSkinningData()
 		//
 		// Lara's own skin is far from this line, it matches almost
 		// everything - measured on vanilla Andrea2, which reports nothing.
-		// BOTH sides have to be sewn, not just enough vertices in total.
-		// A seam joins an upper mesh to a lower one; counting only the sum
-		// lets through a joint that found everything above and nothing
-		// below. It is then drawn from a stash that the lower side never
-		// filled - the long stretched shard across the screen. Seen the
-		// moment TR5's own head was kept on a Tomb Raider III body (#122):
-		// the neck matched perfectly above, not at all below.
+		// The exact pass counts only if it matched EVERY vertex, and both
+		// sides of the seam.
+		//
+		// A partial match is worse than none, which the neck showed. Keeping
+		// TR5's own head means the upper side of that seam matches perfectly;
+		// on a Tomb Raider III torso the lower side then matches a handful of
+		// vertices by pure coincidence, the joint passes for usable, and the
+		// fallback that would have paired the REST sensibly never runs. The
+		// unmatched vertices go to PointsToCalc instead and are COMPUTED -
+		// and that computation assumes the skin the joints were authored
+		// for. What comes out is a triangle from the chin to the forearm,
+		// photographed by the user as a third arm.
+		//
+		// Vanilla is not affected: its joints match completely, so they are
+		// usable exactly as before. And even a vanilla joint that did not
+		// would come out the same, because the fallback pairs it at distance
+		// zero.
 		SkinJointUsable[i] = (jointVerts > 0 && aboveVerts > 0 && belowVerts > 0
-							  && vertCount * 2 >= jointVerts) ? 1 : 0;
+							  && vertCount == jointVerts) ? 1 : 0;
 
 		// Second attempt, and only if the first one failed: pair by NEAREST
 		// NEIGHBOUR instead of by exact coordinate.

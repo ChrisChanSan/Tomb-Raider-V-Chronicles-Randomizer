@@ -17,6 +17,7 @@ void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak);
 ulong TroyeMenuPage(long page);
 bool Page0(long& num, long textY, ulong selection);
 bool Page1(long& num, long textY, ulong selection);
+bool Page2(long& num, long textY, ulong selection);
 
 // Credits (#33): a screen of its own, deliberately NOT a page of the tomb5
 // options - see the comment at the definition.

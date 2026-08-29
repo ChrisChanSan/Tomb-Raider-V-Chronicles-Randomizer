@@ -1104,8 +1104,20 @@ void BaddyObjects()
 		//
 		// Without an anchor the slot now keeps its OWN set, and that is
 		// exactly what the randomizer delivers. Vanilla does not change.
-		if (objects[SWAT].loaded)
-			obj->anim_index = objects[SWAT].anim_index;
+		// The guard no longer bends onto SWAT at all (2026-08-29). He has
+		// his own full 64-anim set, and Core's alias here is DEAD CODE in
+		// vanilla: measured over all thirteen levels, SWAT (33) and the
+		// guard (37) never lie in one level - 33 only in rich3, 37 in
+		// joby2/3/5 and rich1/2. The line can only ever fire in a level the
+		// randomizer built, and there it does damage:
+		//
+		// rich1 has no SWAT of its own. Once the run imports one from rich3,
+		// this line pulls the whole level's guards onto that FOREIGN set -
+		// including the guard sitting on his chair (item 110, OCB 4), whose
+		// pose is anim +30. In rich3's set anims 28..32 share one frame
+		// block and read it with strides 37/37/36/37/39, so +30 walks it
+		// wrong. User log 2026-08-29: anim 827 = 797 + 30, state 17, and
+		// MESHLOG reported all 15 meshes discarded, frame after frame.
 
 		obj->shadow_size = 128;
 		obj->hit_points = 24;
@@ -1169,10 +1181,20 @@ void BaddyObjects()
 		// addendum: reasoning at the BLUE_GUARD2 block below; in vanilla
 		// 460 is never loaded, there the old chain SWAT -> BLUE_GUARD
 		// stays.
-		if (objects[SWAT].loaded)
-			obj->anim_index = objects[SWAT].anim_index;
-		else if (objects[BLUE_GUARD2].loaded)
+		// Guard 460 FIRST, then the vanilla anchors (2026-08-29). His joby3
+		// set is the only one measured clean on every pose, and the
+		// randomizer imports him along with any stub it places (baseSlot in
+		// kCross), so he is there whenever this matters. A SWAT, by
+		// contrast, may have been carried in from rich3 and brings that
+		// level's dead heirs on exactly the pose anims only the stubs play.
+		//
+		// Vanilla is untouched: slot 460 exists only in levels the
+		// randomizer built, so there the chain falls through to SWAT or the
+		// guard exactly as before.
+		if (objects[BLUE_GUARD2].loaded)
 			obj->anim_index = objects[BLUE_GUARD2].anim_index;
+		else if (objects[SWAT].loaded)
+			obj->anim_index = objects[SWAT].anim_index;
 		else if (objects[BLUE_GUARD].loaded)
 			obj->anim_index = objects[BLUE_GUARD].anim_index;
 
@@ -1209,10 +1231,20 @@ void BaddyObjects()
 		// addendum: reasoning at the BLUE_GUARD2 block below; in vanilla
 		// 460 is never loaded, there the old chain SWAT -> BLUE_GUARD
 		// stays.
-		if (objects[SWAT].loaded)
-			obj->anim_index = objects[SWAT].anim_index;
-		else if (objects[BLUE_GUARD2].loaded)
+		// Guard 460 FIRST, then the vanilla anchors (2026-08-29). His joby3
+		// set is the only one measured clean on every pose, and the
+		// randomizer imports him along with any stub it places (baseSlot in
+		// kCross), so he is there whenever this matters. A SWAT, by
+		// contrast, may have been carried in from rich3 and brings that
+		// level's dead heirs on exactly the pose anims only the stubs play.
+		//
+		// Vanilla is untouched: slot 460 exists only in levels the
+		// randomizer built, so there the chain falls through to SWAT or the
+		// guard exactly as before.
+		if (objects[BLUE_GUARD2].loaded)
 			obj->anim_index = objects[BLUE_GUARD2].anim_index;
+		else if (objects[SWAT].loaded)
+			obj->anim_index = objects[SWAT].anim_index;
 		else if (objects[BLUE_GUARD].loaded)
 			obj->anim_index = objects[BLUE_GUARD].anim_index;
 
@@ -1249,10 +1281,20 @@ void BaddyObjects()
 		// addendum: reasoning at the BLUE_GUARD2 block below; in vanilla
 		// 460 is never loaded, there the old chain SWAT -> BLUE_GUARD
 		// stays.
-		if (objects[SWAT].loaded)
-			obj->anim_index = objects[SWAT].anim_index;
-		else if (objects[BLUE_GUARD2].loaded)
+		// Guard 460 FIRST, then the vanilla anchors (2026-08-29). His joby3
+		// set is the only one measured clean on every pose, and the
+		// randomizer imports him along with any stub it places (baseSlot in
+		// kCross), so he is there whenever this matters. A SWAT, by
+		// contrast, may have been carried in from rich3 and brings that
+		// level's dead heirs on exactly the pose anims only the stubs play.
+		//
+		// Vanilla is untouched: slot 460 exists only in levels the
+		// randomizer built, so there the chain falls through to SWAT or the
+		// guard exactly as before.
+		if (objects[BLUE_GUARD2].loaded)
 			obj->anim_index = objects[BLUE_GUARD2].anim_index;
+		else if (objects[SWAT].loaded)
+			obj->anim_index = objects[SWAT].anim_index;
 		else if (objects[BLUE_GUARD].loaded)
 			obj->anim_index = objects[BLUE_GUARD].anim_index;
 
@@ -1289,10 +1331,20 @@ void BaddyObjects()
 		// addendum: reasoning at the BLUE_GUARD2 block below; in vanilla
 		// 460 is never loaded, there the old chain SWAT -> BLUE_GUARD
 		// stays.
-		if (objects[SWAT].loaded)
-			obj->anim_index = objects[SWAT].anim_index;
-		else if (objects[BLUE_GUARD2].loaded)
+		// Guard 460 FIRST, then the vanilla anchors (2026-08-29). His joby3
+		// set is the only one measured clean on every pose, and the
+		// randomizer imports him along with any stub it places (baseSlot in
+		// kCross), so he is there whenever this matters. A SWAT, by
+		// contrast, may have been carried in from rich3 and brings that
+		// level's dead heirs on exactly the pose anims only the stubs play.
+		//
+		// Vanilla is untouched: slot 460 exists only in levels the
+		// randomizer built, so there the chain falls through to SWAT or the
+		// guard exactly as before.
+		if (objects[BLUE_GUARD2].loaded)
 			obj->anim_index = objects[BLUE_GUARD2].anim_index;
+		else if (objects[SWAT].loaded)
+			obj->anim_index = objects[SWAT].anim_index;
 		else if (objects[BLUE_GUARD].loaded)
 			obj->anim_index = objects[BLUE_GUARD].anim_index;
 
@@ -1922,7 +1974,18 @@ void BaddyObjects()
 		obj->bite_offset = 256;
 		obj->object_mip = 5120;
 		obj->intelligent = 1;
-		obj->HitEffect = 1;
+		// Sparks, not blood (2026-08-29). Core had the skeleton on 1 like
+		// every man in the game - never noticed, because until now nothing
+		// in Andy2 could shoot it. The field decides twice: larafire.cpp
+		// picks the impact effect by it, and CreatureDie picks the
+		// shredding flavour by it too - 1 means flag 258, and bit 2 there
+		// makes every flying bone trail blood (missile.cpp). Both halves
+		// point the same way.
+		//
+		// 3 and not 2: two is the Roman gods' metal clang, and bone is no
+		// metal. TR5 has no bone chip effect - sparks are the closest thing
+		// that still tells the player he is hitting something.
+		obj->HitEffect = 3;
 		obj->save_position = 1;
 		obj->save_hitpoints = 1;
 		obj->save_flags = 1;

@@ -1317,8 +1317,10 @@ void S_DisplayMonoScreen()
 long S_LoadSave(long load_or_save, long mono, long inv_active)
 {
 	long fade, ret;
+	uchar deselect_debounce;
 
 	fade = 0;
+	deselect_debounce = 0;
 
 	if (!mono)
 		CreateMonoScreen();
@@ -1364,6 +1366,36 @@ long S_LoadSave(long load_or_save, long mono, long inv_active)
 		{
 			ret = fade - 1;
 			break;
+		}
+
+		// Circle/B backs out of here too (#133), the convention every other
+		// menu screen follows. Escape keeps its own path below: it carries
+		// IN_OPTION as well, and that is read raw exactly as before.
+		//
+		// Acted on the RELEASE, not the press, for two reasons:
+		//
+		//  - the press that OPENED this screen must not close it again. A
+		//    button already down when the loop starts never sets the
+		//    debounce, so its release does nothing. That is the trap #115
+		//    walked into twice.
+		//  - this screen usually sits INSIDE the inventory ring, and the
+		//    ring also closes on the release of Circle
+		//    (newinv2.cpp:873ff). Leaving on the press would hand the ring
+		//    the release a frame later and shut it behind us - one press,
+		//    two consumers.
+		//
+		// Not while fading: a load is already under way then, and a release
+		// arriving mid-fade would cancel it.
+		if (!fade)
+		{
+			if (input & IN_DESELECT)
+				deselect_debounce = 1;
+			else if (deselect_debounce)
+			{
+				deselect_debounce = 0;
+				ret = -1;
+				break;
+			}
 		}
 
 		if (input & IN_OPTION)

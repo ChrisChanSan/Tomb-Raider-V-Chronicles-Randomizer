@@ -34,7 +34,8 @@ struct BALANCE_LINE
 {
 	const char* name;
 	long* value;
-	long original;
+	long standard;   /* what the game uses when the line is missing */
+	long vanilla;    /* what Core shipped - the self-check and the comment */
 	long min;
 	long max;
 	short slot;
@@ -42,10 +43,20 @@ struct BALANCE_LINE
 	const char* note;
 };
 
-#define SEPARATOR(text)	{ 0, 0, 0, 0, 0, -1, text, 0 }
-#define WEAPON(n, f, s, hint)	{ n, &balance.f, s, 0, 127, -1, 0, hint }
-#define HEALTH(n, f, s, place)	{ n, &balance.f, s, 1, 32000, place, 0, 0 }
-#define DAMAGE(n, f, s, hint)	{ n, &balance.f, s, 0, 32000, -1, 0, hint }
+/*
+ * s = the standard this build ships with - the user's tuning, playtested
+ *     and declared final on 2026-08-29. It is what a missing line falls
+ *     back to and what a fresh Balance.txt is written from.
+ * v = what Core shipped. Only two things read it: the comment in the
+ *     generated file, so a player can see how far we moved, and the
+ *     self-check in BalanceSetEnemies, which compares against setup.cpp.
+ *     Putting our own standard there would make that check fire for every
+ *     enemy we retuned and drown the one case it exists for.
+ */
+#define SEPARATOR(text)	{ 0, 0, 0, 0, 0, 0, -1, text, 0 }
+#define WEAPON(n, f, s, v, hint)	{ n, &balance.f, s, v, 0, 127, -1, 0, hint }
+#define HEALTH(n, f, s, v, place)	{ n, &balance.f, s, v, 1, 32000, place, 0, 0 }
+#define DAMAGE(n, f, s, v, hint)	{ n, &balance.f, s, v, 0, 32000, -1, 0, hint }
 
 static const BALANCE_LINE balanceLines[] =
 {
@@ -56,7 +67,7 @@ static const BALANCE_LINE balanceLines[] =
 		"; ---------------------------------------------------------------\r\n"
 		";  Format:  Name = number\r\n"
 		";  Lines starting with ; or # are comments.\r\n"
-		";  If a line is missing, the original value in brackets applies.\r\n"
+		";  If a line is missing, the default in brackets applies.\r\n"
 		";  If the file is deleted, the game recreates it.\r\n"
 		";  When a new version adds settings, the game fills them in here\r\n"
 		";  and keeps your numbers. Your own comments are lost in the\r\n"
@@ -69,27 +80,27 @@ static const BALANCE_LINE balanceLines[] =
 		";  than the number suggests.\r\n"
 		"\r\n"),
 
-	WEAPON("Pistols",		pistols,		1,	0),
-	WEAPON("Uzi",			uzi,			1,	0),
-	WEAPON("Shotgun",		shotgun,		3,	"  per pellet"),
-	WEAPON("Crossbow",		crossbow,		5,	"  in game the Grappling Gun"),
-	WEAPON("Torch",			torch,			3,	0),
+	WEAPON("Pistols",		pistols,		1,	1,	0),
+	WEAPON("Uzi",			uzi,			3,	1,	0),
+	WEAPON("Shotgun",		shotgun,		4,	3,	"  per pellet"),
+	WEAPON("Crossbow",		crossbow,		5,	5,	"  in game the Grappling Gun"),
+	WEAPON("Torch",			torch,			3,	3,	0),
 
 	SEPARATOR(
 		"\r\n"
 		";  The revolver has two values: the game resets it every level,\r\n"
 		";  weak in the Rome levels, strong from the submarine on.\r\n"),
 
-	WEAPON("RevolverEarly",	revolverEarly,	6,	"  up to and including Colosseum"),
-	WEAPON("RevolverLate",	revolverLate,	15,	"  all later levels"),
+	WEAPON("RevolverEarly",	revolverEarly,	15,	6,	"  up to and including Colosseum"),
+	WEAPON("RevolverLate",	revolverLate,	15,	15,	"  all later levels"),
 
 	SEPARATOR(
 		"\r\n"
 		";  The HK also has two values: aimed from a standstill it hits\r\n"
 		";  harder than fired while moving.\r\n"),
 
-	WEAPON("HK_Standing",	hkStanding,		3,	0),
-	WEAPON("HK_Moving",		hkMoving,		1,	0),
+	WEAPON("HK_Standing",	hkStanding,		4,	3,	0),
+	WEAPON("HK_Moving",		hkMoving,		2,	1,	0),
 
 	SEPARATOR(
 		"\r\n"
@@ -99,37 +110,37 @@ static const BALANCE_LINE balanceLines[] =
 		";  Lara has 1000, one pistol bullet deals 1 damage.\r\n"
 		"\r\n"),
 
-	HEALTH("HP_GuardBlue",		hpGuardBlue,	24,		BLUE_GUARD),
-	HEALTH("HP_GuardJoby",		hpGuardJoby,	24,		BLUE_GUARD2),
-	HEALTH("HP_Swat",			hpSwat,			24,		SWAT),
-	HEALTH("HP_SwatPlus",		hpSwatPlus,		24,		SWAT_PLUS),
-	HEALTH("HP_Mafia",			hpMafia,		24,		MAFIA),
-	HEALTH("HP_Mafia2",			hpMafia2,		26,		MAFIA2),
-	HEALTH("HP_Scientist",		hpScientist,	24,		SCIENTIST),
-	HEALTH("HP_CraneGuy",		hpCraneGuy,		24,		CRANE_GUY),
-	HEALTH("HP_Hitman",			hpHitman,		50,		HITMAN),
-	HEALTH("HP_Sniper",			hpSniper,		35,		SNIPER),
-	HEALTH("HP_Chef",			hpChef,			60,		CHEF),
-	HEALTH("HP_Pierre",			hpPierre,		60,		PIERRE),
-	HEALTH("HP_Larson",			hpLarson,		60,		LARSON),
-	HEALTH("HP_TwoGun",			hpTwoGun,		90,		TWOGUN),
-	HEALTH("HP_Dog",			hpDog,			18,		DOG),
-	HEALTH("HP_Huskie",			hpHuskie,		24,		HUSKIE),
-	HEALTH("HP_Lion",			hpLion,			40,		LION),
-	HEALTH("HP_Crow",			hpCrow,			10,		CROW),
-	HEALTH("HP_TRex",			hpTRex,			800,	SAS),
-	HEALTH("HP_Raptor",			hpRaptor,		90,		REAPER),
-	HEALTH("HP_Compy",			hpCompy,		10,		SAILOR),
-	HEALTH("HP_MiniSub",		hpMiniSub,		100,	ATTACK_SUB),
-	HEALTH("HP_Hydra",			hpHydra,		30,		HYDRA),
-	HEALTH("HP_Imp",			hpImp,			12,		IMP),
-	HEALTH("HP_WillOWisp",		hpWillOWisp,	256,	WILLOWISP),
-	HEALTH("HP_MazeMonster",	hpMazeMonster,	120,	MAZE_MONSTER),
-	HEALTH("HP_SwampMonster",	hpSwampMonster,	100,	GREEN_TEETH),
-	HEALTH("HP_Skeleton",		hpSkeleton,		100,	SKELETON),
-	HEALTH("HP_Gladiator",		hpGladiator,	20,		GLADIATOR),
-	HEALTH("HP_RomanGod",		hpRomanGod,		300,	ROMAN_GOD),
-	HEALTH("HP_RomanGod2",		hpRomanGod2,	300,	ROMAN_GOD2),
+	HEALTH("HP_GuardBlue",		hpGuardBlue,	35,	24,		BLUE_GUARD),
+	HEALTH("HP_GuardJoby",		hpGuardJoby,	35,	24,		BLUE_GUARD2),
+	HEALTH("HP_Swat",			hpSwat,			35,	24,		SWAT),
+	HEALTH("HP_SwatPlus",		hpSwatPlus,		35,	24,		SWAT_PLUS),
+	HEALTH("HP_Mafia",			hpMafia,		35,	24,		MAFIA),
+	HEALTH("HP_Mafia2",			hpMafia2,		35,	26,		MAFIA2),
+	HEALTH("HP_Scientist",		hpScientist,	35,	24,		SCIENTIST),
+	HEALTH("HP_CraneGuy",		hpCraneGuy,		35,	24,		CRANE_GUY),
+	HEALTH("HP_Hitman",			hpHitman,		50,	50,		HITMAN),
+	HEALTH("HP_Sniper",			hpSniper,		35,	35,		SNIPER),
+	HEALTH("HP_Chef",			hpChef,			60,	60,		CHEF),
+	HEALTH("HP_Pierre",			hpPierre,		60,	60,		PIERRE),
+	HEALTH("HP_Larson",			hpLarson,		60,	60,		LARSON),
+	HEALTH("HP_TwoGun",			hpTwoGun,		90,	90,		TWOGUN),
+	HEALTH("HP_Dog",			hpDog,			25,	18,		DOG),
+	HEALTH("HP_Huskie",			hpHuskie,		25,	24,		HUSKIE),
+	HEALTH("HP_Lion",			hpLion,			50,	40,		LION),
+	HEALTH("HP_Crow",			hpCrow,			30,	10,		CROW),
+	HEALTH("HP_TRex",			hpTRex,			350,	800,	SAS),
+	HEALTH("HP_Raptor",			hpRaptor,		80,	90,		REAPER),
+	HEALTH("HP_Compy",			hpCompy,		25,	10,		SAILOR),
+	HEALTH("HP_MiniSub",		hpMiniSub,		100,	100,	ATTACK_SUB),
+	HEALTH("HP_Hydra",			hpHydra,		45,	30,		HYDRA),
+	HEALTH("HP_Imp",			hpImp,			40,	12,		IMP),
+	HEALTH("HP_WillOWisp",		hpWillOWisp,	1000,	256,	WILLOWISP),
+	HEALTH("HP_MazeMonster",	hpMazeMonster,	90,	120,	MAZE_MONSTER),
+	HEALTH("HP_SwampMonster",	hpSwampMonster,	70,	100,	GREEN_TEETH),
+	HEALTH("HP_Skeleton",		hpSkeleton,		35,	100,	SKELETON),
+	HEALTH("HP_Gladiator",		hpGladiator,	60,	20,		GLADIATOR),
+	HEALTH("HP_RomanGod",		hpRomanGod,		190,	300,	ROMAN_GOD),
+	HEALTH("HP_RomanGod2",		hpRomanGod2,	190,	300,	ROMAN_GOD2),
 
 	SEPARATOR(
 		"\r\n"
@@ -141,51 +152,51 @@ static const BALANCE_LINE balanceLines[] =
 		"\r\n"
 		";  Firearms of the human enemies:\r\n"),
 
-	DAMAGE("DMG_Soldier_Early",	dmgSoldierEarly,	30,		"  guard/SWAT/mafia, up to Old Mill"),
-	DAMAGE("DMG_Soldier_Late",	dmgSoldierLate,		60,		"  the same from Old Mill on - twice as hard"),
-	DAMAGE("DMG_Soldier_Short",	dmgSoldierShort,	10,		"  their weaker second shot"),
-	DAMAGE("DMG_Hitman_Shot",	dmgHitmanShot,		12,		0),
-	DAMAGE("DMG_Mafia2_Shot",	dmgMafia2Shot,		35,		0),
-	DAMAGE("DMG_Pierre_Shot",	dmgPierreShot,		20,		"  per pistol, he fires two"),
-	DAMAGE("DMG_Larson_Shot",	dmgLarsonShot,		20,		0),
-	DAMAGE("DMG_Sniper",		dmgSniperShot,		100,	"  one hit is a tenth of Lara"),
+	DAMAGE("DMG_Soldier_Early",	dmgSoldierEarly,	30,	30,		"  guard/SWAT/mafia, up to Old Mill"),
+	DAMAGE("DMG_Soldier_Late",	dmgSoldierLate,		60,	60,		"  the same from Old Mill on - twice as hard"),
+	DAMAGE("DMG_Soldier_Short",	dmgSoldierShort,	10,	10,		"  their weaker second shot"),
+	DAMAGE("DMG_Hitman_Shot",	dmgHitmanShot,		15,	12,		0),
+	DAMAGE("DMG_Mafia2_Shot",	dmgMafia2Shot,		35,	35,		0),
+	DAMAGE("DMG_Pierre_Shot",	dmgPierreShot,		20,	20,		"  per pistol, he fires two"),
+	DAMAGE("DMG_Larson_Shot",	dmgLarsonShot,		20,	20,		0),
+	DAMAGE("DMG_Sniper",		dmgSniperShot,		100,	100,	"  one hit is a tenth of Lara"),
 
 	SEPARATOR(
 		"\r\n"
 		";  Animals:\r\n"),
 
-	DAMAGE("DMG_Dog_Bite",		dmgDogBite,			30,		0),
-	DAMAGE("DMG_Dog_Jump",		dmgDogJump,			80,		0),
-	DAMAGE("DMG_Dog_Chase",		dmgDogChase,		50,		0),
-	DAMAGE("DMG_Huskie_Bite",	dmgHuskieBite,		20,		0),
-	DAMAGE("DMG_Huskie_Jump",	dmgHuskieJump,		10,		0),
-	DAMAGE("DMG_Lion_Jump",		dmgLionJump,		200,	0),
-	DAMAGE("DMG_Lion_Paw",		dmgLionPaw,			60,		0),
-	DAMAGE("DMG_Crow",			dmgCrowStrike,		20,		0),
-	DAMAGE("DMG_Bats",			dmgBats,			2,		"  per bat and hit"),
-	DAMAGE("DMG_Spiders",		dmgSpiders,			3,		"  per spider and hit"),
-	DAMAGE("DMG_TRex_Kick",		dmgTRexKick,		1,		"  while it stands"),
-	DAMAGE("DMG_TRex_KickRun",	dmgTRexKickRun,		10,		"  while it runs"),
-	DAMAGE("DMG_TRex_Bite",		dmgTRexBite,		10000,	"  meant to be lethal, Lara has 1000"),
-	DAMAGE("DMG_Raptor_Bite",	dmgRaptorBite,		100,	0),
-	DAMAGE("DMG_Raptor_Jump",	dmgRaptorJump,		100,	0),
-	DAMAGE("DMG_Compy_Bite",	dmgCompyBite,		90,		0),
+	DAMAGE("DMG_Dog_Bite",		dmgDogBite,			40,	30,		0),
+	DAMAGE("DMG_Dog_Jump",		dmgDogJump,			80,	80,		0),
+	DAMAGE("DMG_Dog_Chase",		dmgDogChase,		50,	50,		0),
+	DAMAGE("DMG_Huskie_Bite",	dmgHuskieBite,		40,	20,		0),
+	DAMAGE("DMG_Huskie_Jump",	dmgHuskieJump,		80,	10,		0),
+	DAMAGE("DMG_Lion_Jump",		dmgLionJump,		200,	200,	0),
+	DAMAGE("DMG_Lion_Paw",		dmgLionPaw,			90,	60,		0),
+	DAMAGE("DMG_Crow",			dmgCrowStrike,		40,	20,		0),
+	DAMAGE("DMG_Bats",			dmgBats,			2,	2,		"  per bat and hit"),
+	DAMAGE("DMG_Spiders",		dmgSpiders,			3,	3,		"  per spider and hit"),
+	DAMAGE("DMG_TRex_Kick",		dmgTRexKick,		1,	1,		"  while it stands"),
+	DAMAGE("DMG_TRex_KickRun",	dmgTRexKickRun,		10,	10,		"  while it runs"),
+	DAMAGE("DMG_TRex_Bite",		dmgTRexBite,		10000,	10000,	"  meant to be lethal, Lara has 1000"),
+	DAMAGE("DMG_Raptor_Bite",	dmgRaptorBite,		100,	100,	0),
+	DAMAGE("DMG_Raptor_Jump",	dmgRaptorJump,		100,	100,	0),
+	DAMAGE("DMG_Compy_Bite",	dmgCompyBite,		100,	90,		0),
 
 	SEPARATOR(
 		"\r\n"
 		";  The supernatural and heavy machinery:\r\n"),
 
-	DAMAGE("DMG_Chef_Knife",	dmgChefKnife,		150,	"  melee fighter in the pool since #124 - was 80"),
-	DAMAGE("DMG_Skeleton_Strike", dmgSkeletonStrike, 400,	0),
-	DAMAGE("DMG_Gladiator_Strike", dmgGladiatorStrike, 120,	0),
-	DAMAGE("DMG_God_Strike",	dmgGodStrike,		40,		"  Roman god in melee"),
-	DAMAGE("DMG_God_Lightning",	dmgGodLightning,	200,	"  his ranged attack"),
-	DAMAGE("DMG_Hydra_Beam",	dmgHydraBeam,		120,	0),
-	DAMAGE("DMG_Imp_Throw",		dmgImpThrow,		3,		0),
-	DAMAGE("DMG_MazeMonster",	dmgMazeMonster,		150,	0),
-	DAMAGE("DMG_SwampMonster",	dmgSwampMonster,	100,	0),
-	DAMAGE("DMG_TwoGun_Plasma",	dmgTwoGunPlasma,	250,	0),
-	DAMAGE("DMG_Torpedo",		dmgTorpedo,			200,	"  from the mini submarine"),
+	DAMAGE("DMG_Chef_Knife",	dmgChefKnife,		200,	150,	"  melee fighter in the pool since #124 - was 80"),
+	DAMAGE("DMG_Skeleton_Strike", dmgSkeletonStrike, 400,	400,	0),
+	DAMAGE("DMG_Gladiator_Strike", dmgGladiatorStrike, 200,	120,	0),
+	DAMAGE("DMG_God_Strike",	dmgGodStrike,		60,	40,		"  Roman god in melee"),
+	DAMAGE("DMG_God_Lightning",	dmgGodLightning,	200,	200,	"  his ranged attack"),
+	DAMAGE("DMG_Hydra_Beam",	dmgHydraBeam,		150,	120,	0),
+	DAMAGE("DMG_Imp_Throw",		dmgImpThrow,		100,	3,		0),
+	DAMAGE("DMG_MazeMonster",	dmgMazeMonster,		250,	150,	0),
+	DAMAGE("DMG_SwampMonster",	dmgSwampMonster,	250,	100,	0),
+	DAMAGE("DMG_TwoGun_Plasma",	dmgTwoGunPlasma,	250,	250,	0),
+	DAMAGE("DMG_Torpedo",		dmgTorpedo,			300,	200,	"  from the mini submarine"),
 
 	SEPARATOR(
 		"\r\n"
@@ -196,11 +207,11 @@ static const BALANCE_LINE balanceLines[] =
 		";  further down leaves them alone on purpose.\r\n"
 		"\r\n"),
 
-	DAMAGE("DMG_Autogun",		dmgAutogun,			20,		"  ceiling gun"),
-	DAMAGE("DMG_Gunship",		dmgGunship,			20,		"  attack helicopter"),
-	DAMAGE("DMG_Iris",			dmgIris,			12,		"  per frame while Lara stands too close"),
-	DAMAGE("DMG_Area51Laser",	dmgArea51Laser,		100,	0),
-	DAMAGE("DMG_PowerCable",	dmgPowerCable,		10,		"  the cables in the submarine base"),
+	DAMAGE("DMG_Autogun",		dmgAutogun,			20,	20,		"  ceiling gun"),
+	DAMAGE("DMG_Gunship",		dmgGunship,			10,	20,		"  attack helicopter"),
+	DAMAGE("DMG_Iris",			dmgIris,			12,	12,		"  per frame while Lara stands too close"),
+	DAMAGE("DMG_Area51Laser",	dmgArea51Laser,		100,	100,	0),
+	DAMAGE("DMG_PowerCable",	dmgPowerCable,		10,	10,		"  the cables in the submarine base"),
 
 	SEPARATOR(
 		"\r\n"
@@ -215,11 +226,11 @@ static const BALANCE_LINE balanceLines[] =
 		";  sliders. It touches nothing else in this file.\r\n"
 		"\r\n"),
 
-	{ "WeaponDamage",	&balance.weaponDamage,	100, 0, 1000, -1, 0,
+	{ "WeaponDamage",	&balance.weaponDamage,	100, 100, 0, 1000, -1, 0,
 		"  on all of Lara's weapons. 0 makes them harmless" },
-	{ "EnemyHealth",	&balance.enemyHealth,	100, 1, 1000, -1, 0,
+	{ "EnemyHealth",	&balance.enemyHealth,	100, 100, 1, 1000, -1, 0,
 		"  50 = half as tough, 200 = twice as tough" },
-	{ "EnemyDamage",	&balance.enemyDamage,	100, 0, 1000, -1, 0,
+	{ "EnemyDamage",	&balance.enemyDamage,	100, 100, 0, 1000, -1, 0,
 		"  0 makes all enemies harmless" },
 
 	SEPARATOR(
@@ -232,8 +243,8 @@ static const BALANCE_LINE balanceLines[] =
 		";  original. Enemies and Lara always keep their full range.\r\n"
 		"\r\n"),
 
-	{ "SceneryRange", &balance.sceneryRange, 65, 10, 400, -1, 0,
-		"  vanilla would be 100, the randomizer keeps 65" },
+	{ "SceneryRange", &balance.sceneryRange, 65, 100, 10, 400, -1, 0,
+		"  the randomizer reins the level scenery in" },
 
 	SEPARATOR(
 		"\r\n"
@@ -255,15 +266,17 @@ static char balanceFound[BALANCE_COUNT];
 
 /*
  * The file is generated from the table, so text and defaults can never drift
- * apart. The current values are written - for a new file those are the
- * original values, when backfilling they are the player's.
+ * apart. The current values are written - for a new file those are this
+ * build's standards, when backfilling they are the player's.
  */
 static void BalanceWriteFile(long fresh)
 {
 	HANDLE file;
 	char line[256];
+	char from[32];
 
 	line[sizeof(line) - 1] = 0;
+	from[sizeof(from) - 1] = 0;
 
 	file = CreateFile(BALANCE_FILE, GENERIC_WRITE, 0, 0,
 		fresh ? CREATE_NEW : CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
@@ -279,8 +292,15 @@ static void BalanceWriteFile(long fresh)
 		if (!balanceLines[i].name)
 			continue;
 
-		_snprintf(line, sizeof(line) - 1, "%-22s = %-6ld ; (original %ld)%s\r\n",
-			balanceLines[i].name, *balanceLines[i].value, balanceLines[i].original,
+		/* Core's number is only worth printing where we moved away from it. */
+		if (balanceLines[i].vanilla != balanceLines[i].standard)
+			_snprintf(from, sizeof(from) - 1, ", vanilla %ld", balanceLines[i].vanilla);
+		else
+			from[0] = 0;
+
+		_snprintf(line, sizeof(line) - 1, "%-22s = %-6ld ; (default %ld%s)%s\r\n",
+			balanceLines[i].name, *balanceLines[i].value,
+			balanceLines[i].standard, from,
 			balanceLines[i].note ? balanceLines[i].note : "");
 
 		BalanceWriteText(file, line);
@@ -304,8 +324,8 @@ static void BalanceBackfill()
 	{
 		if (balanceLines[i].name && !balanceFound[i])
 		{
-			Log("Balance.txt: %s was missing, original value %ld entered",
-				balanceLines[i].name, balanceLines[i].original);
+			Log("Balance.txt: %s was missing, default %ld entered",
+				balanceLines[i].name, balanceLines[i].standard);
 			missing++;
 		}
 	}
@@ -416,7 +436,7 @@ void BalanceLoad()
 		balanceFound[i] = 0;
 
 		if (balanceLines[i].value)
-			*balanceLines[i].value = balanceLines[i].original;
+			*balanceLines[i].value = balanceLines[i].standard;
 	}
 
 	file = CreateFile(BALANCE_FILE, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
@@ -541,9 +561,9 @@ void BalanceSetEnemies()
 			continue;
 
 		/* Trips when someone changes setup.cpp and forgets the table. */
-		if (obj->hit_points != balanceLines[i].original)
+		if (obj->hit_points != balanceLines[i].vanilla)
 			Log("Balance: %s stands at %d in setup.cpp, the table knows %d",
-				balanceLines[i].name, obj->hit_points, balanceLines[i].original);
+				balanceLines[i].name, obj->hit_points, balanceLines[i].vanilla);
 
 		obj->hit_points = (short)*balanceLines[i].value;
 	}

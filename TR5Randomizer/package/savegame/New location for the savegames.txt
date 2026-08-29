@@ -1,0 +1,4 @@
+Savegames live in this folder now instead of loose in the game folder.
+
+A savegame.N still lying next to the EXE is moved in here once, at
+startup, and never overwrites a file that is already here.

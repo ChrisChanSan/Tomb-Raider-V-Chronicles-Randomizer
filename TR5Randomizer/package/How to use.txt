@@ -1,0 +1,10 @@
+Use the Setup.bat or the Steam function to set your resolution once
+and have fun.
+
+If you encounter bugs you can start the game via Log.bat. It writes a
+logfile that will help with troubleshooting.
+
+If you want to use the built-in language function you have to obtain
+the corresponding language.DAT - some language.DAT's in the Steam
+version are not working. You have to find a retail PC version of
+"Tomb Raider (V) Chronicles".

@@ -5,10 +5,16 @@ What is in here
 ---------------
   TR5Randomizer.exe   The tool. This is where you set the seed.
   PCTomb5.exe         The game engine, native for Windows 11.
-  setup.bat           Opens the engine's setup dialog: resolution,
+  Setup.bat           Opens the engine's setup dialog: resolution,
                       renderer, controls.
+  Log.bat             Starts the game writing a logfile - use this if
+                      you want to report a bug.
+  audio\, movie\      Where your HQ soundtracks and FMVs go; each
+                      folder has a note in it.
+  savegame\           Savegames live here now, not loose in the folder.
   data\               Precomputed data the randomizer needs.
-  Source\             The complete source code of both.
+  Source\             The complete source code: TOMB5 engine\ is the
+                      engine, TR5Randomizer\ the tool.
   Licenses\           The licenses.
   trview\             Slot names for the trview level viewer (optional).
 

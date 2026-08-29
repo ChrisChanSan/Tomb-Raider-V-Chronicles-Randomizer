@@ -1,0 +1,4 @@
+Copy your HQ audio files from the TR4-6 Remasters into the folders of
+the languages you want to use with the ingame language switch.
+
+JP is still WIP.

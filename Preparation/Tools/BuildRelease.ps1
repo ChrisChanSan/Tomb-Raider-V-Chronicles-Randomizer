@@ -112,7 +112,7 @@ if (Test-Path $typesIn) {
 }
 
 # --- 4. Source code, GPLv3 obligation ----------------------------------------
-$srcOut = "$OutDir\Source\TOMB5"
+$srcOut = "$OutDir\Source\TOMB5 engine"
 New-Item -ItemType Directory -Path $srcOut -Force | Out-Null
 $skipDirs = '\\(Build|Release|Debug|x64|\.vs|ipch)\\'
 $skipExt  = @('.obj','.pdb','.exe','.dll','.ipdb','.iobj','.tlog','.log','.user','.aps')
@@ -164,10 +164,17 @@ Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, zlib, stb_vorbis)
 # TR5Randomizer\README.txt and only copied here - keeping a second copy
 # embedded in this script is how the package and the repo drift apart.
 Copy-Item "$RandoRoot\README.txt" "$OutDir\README.txt" -Force
-# Opens the engine setup dialog. It used to sit in the game folder and
-# never reached anyone but us.
-Copy-Item "$RandoRoot\setup.bat" "$OutDir\setup.bat" -Force
-Say "Manual        : README.txt + setup.bat"
+# The blank game folder: the layout a Tomb Raider Chronicles install has,
+# with the notes that say what belongs where, and the two launchers
+# (Setup.bat for resolution, Log.bat for a bug report). Unzipping the
+# package into the game folder therefore puts everything in place at
+# once. .gitkeep only exists so git carries the empty HQ audio folders -
+# it has no business in a player's folder.
+Copy-Item "$RandoRoot\package\*" $OutDir -Recurse -Force
+Get-ChildItem $OutDir -Recurse -Force -Filter ".gitkeep" | Remove-Item -Force
+$skel = (Get-ChildItem "$RandoRoot\package" -Recurse -File |
+         Where-Object { $_.Name -ne ".gitkeep" }).Count
+Say "Game folder   : README.txt + $skel files (notes, launchers, audio\, movie\, savegame\)"
 # --- 7. Mirror the same data into the build folder ---------------------------
 # During development you start the EXE from build\, not from the package -
 # and data\ was missing there, which led to a correct but unnecessary error

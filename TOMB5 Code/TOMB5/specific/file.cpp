@@ -1497,7 +1497,7 @@ bool LoadSamples()
 
 			if (dataAt <= 0 || dataAt + dataLen > comp_size)
 			{
-				Log("Sample %d: PCM ohne brauchbaren data-Block", i);
+				Log("Sample %d: PCM without a usable data block", i);
 				FreeSampleDecompress();
 				return 0;
 			}

@@ -417,8 +417,8 @@ bool Tr5Level::addAiObject(const Tr5AiObject& in, std::string& error)
 //----------------------------------------------------------------------------
 // Floordata
 //
-// The format is fully derived in "Preparation\Trigger\Floordata
-// und Trigger.md", with line references into the engine. Here only what is
+// The format is fully derived in "Preparation\Trigger\Floordata and
+// Triggers.md", with line references into the engine. Here only what is
 // needed to read the code along.
 //----------------------------------------------------------------------------
 namespace

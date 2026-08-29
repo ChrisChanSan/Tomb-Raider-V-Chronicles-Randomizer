@@ -64,7 +64,7 @@ void DrawBaddieGunFlash(ITEM_INFO* item);
 #define MESHSWAP_CROSS_GLADIATOR SMASH_OBJECT5	// from Andrea3
 #define MESHSWAP_CROSS_IMP	SMASH_OBJECT6	// from andy3
 #define MESHSWAP_CROSS_ROMANGOD	SMASH_OBJECT7	// sword, from Andrea2
-#define MESHSWAP_CROSS_ROMANGOD2 SMASH_OBJECT8	// Hammer, aus Andrea3
+#define MESHSWAP_CROSS_ROMANGOD2 SMASH_OBJECT8	// hammer, from Andrea3
 
 enum object_types 
 {

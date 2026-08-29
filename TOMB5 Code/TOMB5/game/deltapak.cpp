@@ -2066,7 +2066,7 @@ void special4_end()
 // Hence after EVERY cutscene end, all nodes back onto the skin - slot 0
 // has carried the current outfit's meshes since LaraInitialiseMeshes. The
 // Ireland levels' child torso comes from ANIMATING6_MIP as there.
-static void CutseqLaraMeshesZurueck()
+static void CutseqLaraMeshesBack()
 {
 	for (int i = 0; i < 15; i++)
 		lara.mesh_ptrs[i] = meshes[objects[LARA].mesh_index + 2 * i];
@@ -2209,7 +2209,7 @@ void handle_cutseq_triggering(long name)
 
 		LHolster = old_lara_LHolster;
 		lara.holster = old_lara_holster;
-		CutseqLaraMeshesZurueck();
+		CutseqLaraMeshesBack();
 
 		if (cutseq_num <= 4)
 			DelsHandyTeleportLara(GLOBAL_cutme->orgx, GLOBAL_cutme->orgy, GLOBAL_cutme->orgz, cutrot * 0x4000);

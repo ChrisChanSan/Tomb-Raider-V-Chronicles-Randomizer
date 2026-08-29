@@ -35,10 +35,10 @@
 //      including the name command and the model. give = false means: just
 //      don't clean it up while it travels (story items whose absence
 //      probably blocks nothing - playtesting decides).
-//   2. Cleanup (kAnbieter + kAufraeumen): at the start of every level,
-//      TAKEOBJ removes everything from the key family that an EARLIER
-//      level could have offered and that neither this level nor a later
-//      one imports via a chain. Plus the "Grappling Gun" - that is the
+//   2. Cleanup (cleanupInventory in ScriptDat.cpp): at the start of every
+//      level, TAKEOBJ removes everything from the key family that an
+//      EARLIER level could have offered and that neither this level nor
+//      a later one imports via a chain. Plus the "Grappling Gun" - the
 //      CROSSBOW slot (95 + ammo), which only has a model and anims in
 //      rich3 (hard crash when equipping it anywhere else, seen by the
 //      user in rich2). Roses (PICKUP_ITEM4) are left untouched.

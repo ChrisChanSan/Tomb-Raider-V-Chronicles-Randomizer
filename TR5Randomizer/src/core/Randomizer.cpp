@@ -1802,9 +1802,9 @@ bool Rando::run(const RandoInput& in,
         // in game). Core never noticed, because young Lara in andy1 has no
         // weapons. andy3 carries the full set (+45 = frames 45..66 with
         // KillItem -> after_death -> fade); anims 0-12, geometry and the
-        // MESHSWAP1 swap set are identical in both (AnimDump/SucheModell,
-        // 2026-08-15). animCount 46: the object table grants the Imp only
-        // 18 anims, +19..+45 lie physically in the ranges of foreign
+        // MESHSWAP1 swap set are identical in both (measured with the anim
+        // and model tools, 2026-08-15). animCount 46: the object table grants
+        // the Imp only 18 anims, +19..+45 lie physically in the ranges of
         // scenery slots - without the explicit length the death anim was
         // missing from the import and the engine read past the table end
         // (the observed death flight loop).

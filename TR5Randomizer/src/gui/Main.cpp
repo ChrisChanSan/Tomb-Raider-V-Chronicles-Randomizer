@@ -1468,7 +1468,7 @@ static void drawPathsWindow(App& a, HWND hwnd)
     if (!a.pathsOpen) return;
 
     ImGui::SetNextWindowSize(ImVec2(620, 400), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin((std::string(T("Installation paths")) + "###pfade").c_str(), &a.pathsOpen))
+    if (!ImGui::Begin((std::string(T("Installation paths")) + "###paths").c_str(), &a.pathsOpen))
     {
         ImGui::End();
         return;
@@ -2172,7 +2172,7 @@ static void drawUi(App& a, HWND hwnd)
     // --- Column 3: enemies and the placeholders --------------------------
     ImGui::BeginGroup();
 
-    openBlock("k_gegner", "5. Enemies", fEnemies);
+    openBlock("k_enemies", "5. Enemies", fEnemies);
 
     ImGui::Checkbox(T("Add extra enemies to the level"), &a.optEnemies);
     hoverHelp("Each one gets its own trigger, about three sectors ahead on "
@@ -2294,7 +2294,7 @@ static void drawUi(App& a, HWND hwnd)
 
     closeBlock(&a.heights.level);
 
-    openBlock("k_musik", "7. Music", fMusic);
+    openBlock("k_music", "7. Music", fMusic);
     ImGui::Checkbox(T("Shuffle background music"), &a.phMusicSwitch);
     hoverHelp("The level music is shuffled among the playable levels - the "
               "audio byte in the CMD_LEVEL entry of SCRIPT.DAT. Cutscene "
@@ -2386,7 +2386,7 @@ static void drawUi(App& a, HWND hwnd)
     // respective logic exists. Explanations as hover help. Textures and
     // rooms stand together in one box - both are future work, and separate
     // they would be two very flat boxes.
-    openBlock("k_vorbereitung", "9. In preparation", fPrep);
+    openBlock("k_preparation", "9. In preparation", fPrep);
     ImGui::BeginDisabled(true);
 
     ImGui::TextDisabled(T("Textures"));

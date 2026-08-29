@@ -867,7 +867,7 @@ void DrawLara(ITEM_INFO* item, long mirror)
 		case LARA_NORMAL:
 		case LARA_YOUNG:
 		case LARA_BUNHEAD:
-		case LARA_PONYTAIL:	// Randomizer: Standard-Outfit im Russland-Level
+		case LARA_PONYTAIL:	// Randomizer: the default outfit in the Russia levels
 			DrawLara__1(item, mirror);
 			break;
 

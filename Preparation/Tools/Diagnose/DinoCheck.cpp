@@ -46,7 +46,9 @@ int main(int argc, char** argv)
 
     // File names of the comparison packages built with the tools
     const char* mod[4] = { "trex.bin", "raptor_mod.bin", "compy_mod.bin", "geier.bin" };
-    const char* ton[4] = { "trex_ton.bin", "raptor_ton.bin", "compy_ton.bin", "geier_ton.bin" };
+    // "_ton" is the suffix the sound packages were exported under - an
+    // outside file name, so it stays as it is.
+    const char* snd[4] = { "trex_ton.bin", "raptor_ton.bin", "compy_ton.bin", "geier_ton.bin" };
 
     int i = 0, error = 0;
     for (const Tr3Source::DinoSource& d : Tr3Source::dinos())
@@ -60,7 +62,7 @@ int main(int argc, char** argv)
         { std::printf("%-8s sounds FAILED: %s\n", d.name, f.c_str()); ++error; ++i; continue; }
 
         const bool okM = readAll(dir + "\\" + mod[i], vm) && vm == m;
-        bool okT = readAll(dir + "\\" + ton[i], vt);
+        bool okT = readAll(dir + "\\" + snd[i], vt);
         if (okT) { zeroHeaderWords(vt); zeroHeaderWords(t); okT = (vt == t); }
         std::printf("%-8s model %7zu bytes %-10s sounds %7zu bytes %s\n",
                     d.name, m.size(), okM ? "identical" : "DEVIATION",

@@ -339,13 +339,13 @@ static void OggFeedChunk()
 	if (!MusicVoice || !OggStream || XATrack == -1)
 		return;
 
-	short* ziel = OggChunks[CurrentNotify];
-	frames = stb_vorbis_get_samples_short_interleaved(OggStream, 2, ziel, OGG_CHUNK_FRAMES * 2);
+	short* dst = OggChunks[CurrentNotify];
+	frames = stb_vorbis_get_samples_short_interleaved(OggStream, 2, dst, OGG_CHUNK_FRAMES * 2);
 
 	if (frames <= 0 && audio_play_mode == 1)
 	{
 		stb_vorbis_seek_start(OggStream);
-		frames = stb_vorbis_get_samples_short_interleaved(OggStream, 2, ziel, OGG_CHUNK_FRAMES * 2);
+		frames = stb_vorbis_get_samples_short_interleaved(OggStream, 2, dst, OGG_CHUNK_FRAMES * 2);
 	}
 
 	if (frames <= 0)
@@ -370,12 +370,12 @@ static void OggFeedChunk()
 			}
 		}
 
-		memset(ziel, 0, OGG_CHUNK_FRAMES * 2 * sizeof(short));
+		memset(dst, 0, OGG_CHUNK_FRAMES * 2 * sizeof(short));
 		frames = OGG_CHUNK_FRAMES;
 	}
 
 	memset(&buf, 0, sizeof(buf));
-	buf.pAudioData = (BYTE*)ziel;
+	buf.pAudioData = (BYTE*)dst;
 	buf.AudioBytes = static_cast<UINT32>(frames) * 2 * sizeof(short);
 
 	if (FAILED(MusicVoice->SubmitSourceBuffer(&buf)))
@@ -509,7 +509,7 @@ void ACMEmulateCDPlay(long track, long mode)
 		case ITALIAN: hq = "IT"; break;
 		case SPANISH: hq = "ES"; break;
 		case JAPAN:   hq = "JP"; break;
-		default:      hq = 0;    break;	// Englisch, US, Niederlaendisch
+		default:      hq = 0;    break;	// English, US, Dutch
 		}
 
 		if (hq)

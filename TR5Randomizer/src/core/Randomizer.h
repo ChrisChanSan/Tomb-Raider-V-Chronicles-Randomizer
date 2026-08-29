@@ -561,7 +561,7 @@ struct RandoOptions
     // Every level gets the full weapon set (pistols, Uzi, shotgun, Desert
     // Eagle, HK including ammo and inventory slots). The donor rules come
     // from the weapon work and are built and checked in all 13 levels
-    // (Import Export\Waffen Tests\Plan.md): Andrea3 fills only what is
+    // one by one: Andrea3 fills only what is
     // missing; joby2 always replaces the revolver with the Desert Eagle
     // (user requirement); rich1 supplies the HK except to rich2, which
     // keeps its own special pose. joby4 stays vanilla (user decision).

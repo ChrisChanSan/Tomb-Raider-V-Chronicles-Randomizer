@@ -500,7 +500,7 @@ void ACMEmulateCDPlay(long track, long mode)
 	if (track >= 0 && track < 136)
 	{
 		const char* hq;
-		int fehler = 0;
+		int err = 0;
 
 		switch (Gameflow->Language)
 		{
@@ -515,13 +515,13 @@ void ACMEmulateCDPlay(long track, long mode)
 		if (hq)
 		{
 			wsprintf(name, "audio\\HQ %s\\%d.OGG", hq, track);
-			OggStream = stb_vorbis_open_filename(name, &fehler, 0);
+			OggStream = stb_vorbis_open_filename(name, &err, 0);
 		}
 
 		if (!OggStream)
 		{
 			wsprintf(name, "audio\\HQ EN\\%d.OGG", track);
-			OggStream = stb_vorbis_open_filename(name, &fehler, 0);
+			OggStream = stb_vorbis_open_filename(name, &err, 0);
 		}
 	}
 

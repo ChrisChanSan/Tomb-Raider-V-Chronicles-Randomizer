@@ -1477,8 +1477,8 @@ bool Tr3Source::fetchOutfitCached(const OutfitSource& o,
         }
     }
 
-    const std::wstring mFile = cacheName(cacheDir, o.id, "modell");
-    const std::wstring nFile = cacheName(cacheDir, o.id, "kennung");
+    const std::wstring mFile = cacheName(cacheDir, o.id, "model");
+    const std::wstring nFile = cacheName(cacheDir, o.id, "ident");
 
     if (!cacheDir.empty() && !stamp.empty())
     {
@@ -1539,9 +1539,9 @@ bool Tr3Source::fetchCached(const DinoSource& d,
     // improved. Whoever changes what a package LOOKS like raises this.
     const std::string stamp = "conv3|" + sourceStamp(lvlPath) + "|" + sourceStamp(sfx);
 
-    const std::wstring mFile = cacheName(cacheDir, d.name, "modell");
+    const std::wstring mFile = cacheName(cacheDir, d.name, "model");
     const std::wstring kFile = cacheName(cacheDir, d.name, "sounds");
-    const std::wstring nFile = cacheName(cacheDir, d.name, "kennung");
+    const std::wstring nFile = cacheName(cacheDir, d.name, "ident");
 
     if (!cacheDir.empty() && !stamp.empty())
     {

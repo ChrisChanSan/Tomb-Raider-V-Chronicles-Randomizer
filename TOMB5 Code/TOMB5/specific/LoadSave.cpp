@@ -333,7 +333,7 @@ void DoOptions()
 			keyboard_buttons = KeyboardButtons;
 
 		if (reset_row)
-			nMask = 1;	// nur die Method-Zeile selbst ist waehlbar
+			nMask = 1;	// only the Method row itself can be selected
 		else if (ControlMethod == 1)
 			nMask = 16;	// 15 bindable actions: Duck..Inventory (10) + Pause, Save, Load, Small Medi, Large Medi
 		else
@@ -738,7 +738,7 @@ void DoOptions()
 	else if (menu == 0)	//main options menu
 	{
 		f= 3 * font_height;
-		nMask = 8;	// + Language-Zeile + Credits
+		nMask = 8;	// + Language row + Credits
 		PrintString(phd_centerx, 3 * font_height, 6, SCRIPT_TEXT(TXT_Options), FF_CENTER);
 		PrintString(phd_centerx, f + font_height + (font_height >> 1), sel & 1 ? 1 : 2, SCRIPT_TEXT(TXT_Control_Configuration), FF_CENTER);
 		PrintString(phd_centerx >> 2, f + 3 * font_height, sel & 2 ? 1 : 2, SCRIPT_TEXT(TXT_Music_Volume), 0);
@@ -817,7 +817,7 @@ void DoOptions()
 			menu = 1;
 		}
 
-		i = !SFMask ? 0x40 : 0x80;	// "tomb5 options"-Bit, um die Language-Zeile verschoben
+		i = !SFMask ? 0x40 : 0x80;	// the "tomb5 options" bit, shifted by the Language row
 
 		if (dbinput & IN_SELECT && sel & (ulong)i)
 		{

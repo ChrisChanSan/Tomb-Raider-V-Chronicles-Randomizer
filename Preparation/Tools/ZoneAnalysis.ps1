@@ -1090,7 +1090,8 @@ $typeOffsets = @( $typeOffsetOf.GetEnumerator() | ForEach-Object {
 # Combo2) triggers a door. Exported into the zones JSON so a later
 # randomizer can adopt the bar instead of having to rediscover it.
 # The enemy entries below come from the user's list "Gegner die Vanilla
-# bleiben muessen.txt" (2026-08-14): scripted enemies that stay untouched
+# bleiben muessen.txt" - enemies that must stay vanilla (2026-08-14):
+# scripted enemies that stay untouched
 # for cutscenes, stealth sequences or later reworks. FIXED_ITEMS beats both
 # the enemy swap and every placement.
 $FIXED_ITEMS = @{
@@ -1338,7 +1339,8 @@ if ($PRESET_FLAGS.ContainsKey($LevelName)) {
 #     Diagnose\AnimCmd.exe shows it.)
 #   - Does he need water, ceiling height, a track?
 #----------------------------------------------------------------------------
-# The user's list of 13.08.2026 ("Gegner Pool.txt"), restricted per level to
+# The user's list of 13.08.2026 ("Gegner Pool.txt" - the enemy pool),
+# restricted per level to
 # the types whose model is also loaded in THIS level. An enemy type the
 # level does not know cannot be placed - that would first need the object
 # transfer between levels (as with the weapon set).

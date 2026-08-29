@@ -1814,7 +1814,8 @@ void BaddyObjects()
 		obj->shadow_size = 128;
 		obj->hit_points = 90; // was 24 vanilla, then 60 - raised again per the user's
 		                      // randomizer balancing call after the cross-mix playtest
-		                      // (2026-08-15): "Two Gun kann auch mehr Leben bekommen."
+		                      // (2026-08-15): "Two Gun kann auch mehr Leben
+		                      // bekommen." (Two Gun may have more health too.)
 		obj->pivot_length = 50;
 		obj->radius = 128;
 		obj->explodable_meshbits = 4;

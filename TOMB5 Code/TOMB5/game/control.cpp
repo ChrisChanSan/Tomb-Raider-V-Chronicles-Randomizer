@@ -3734,9 +3734,10 @@ void ResetGuards()
 		else if (objects[BLUE_GUARD].loaded)
 			item->anim_number = objects[BLUE_GUARD].anim_index;
 		else
-			// Randomizer (#105): letzter Anker, wenn nur der importierte
-			// zweite Guard im Level steht. Ohne ihn verhaelt sich die Kette
-			// wie vorher (BLUE_GUARD war der unbedingte Endfall).
+			// Randomizer (#105): the last anchor, for when only the
+			// imported second guard stands in the level. Without it the
+			// chain behaves as before (BLUE_GUARD was the unconditional
+			// final case).
 			item->anim_number = objects[BLUE_GUARD2].anim_index;
 
 		if (object_number == MAZE_MONSTER)

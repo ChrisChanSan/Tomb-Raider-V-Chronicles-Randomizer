@@ -3240,8 +3240,8 @@ bool Rando::run(const RandoInput& in,
     // Resolved as a finished copy list, so the donor rules stand in ONE
     // place (here) and the patch path only executes - the same pattern as
     // with the outfit's LaraType byte. The rules are those of the tool's
-    // gold reference (Import Export\Waffen Tests\Plan.md, "all 13 levels
-    // with the full set"), with two reasoned deviations:
+    // gold reference from the weapon work ("all 13 levels with the full
+    // set"), with two reasoned deviations:
     //
     // 1. The holster slots 13, 14 and 15 are "only what is missing" and
     //    come from Andrea3. Slot 16, by contrast, ALWAYS comes from joby2
@@ -3264,8 +3264,7 @@ bool Rando::run(const RandoInput& in,
     // 2. Andrea3 additionally supplies 352/456/457 (the binoculars
     //    inventory object and the overlays for binoculars and scope) -
     //    only the andy levels lack those, and without 457 the view through
-    //    the scope shows Lara's pistol hand (Levelabhaengige
-    //    Eigenheiten.md, mesh index 0).
+    //    the scope shows Lara's pistol hand (mesh index 0).
     //
     // The patch path skips "only what is missing" entries when the slot is
     // there - which also resolves the rich2 exception (its own special HK

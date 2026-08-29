@@ -44,7 +44,10 @@ int main(int argc, char** argv)
     const std::wstring tr3 = W(argv[1]), gold = W(argv[2]);
     const std::string dir(argv[3]);
 
-    // File names of the comparison packages built with the tools
+    // File names of the comparison packages built with the tools. They are
+    // outside file names the author chose, so "geier" (vulture) and the
+    // "_ton" suffix (sound) stay as they are - renaming them here would
+    // only stop the tool from finding the packages on disk.
     const char* mod[4] = { "trex.bin", "raptor_mod.bin", "compy_mod.bin", "geier.bin" };
     // "_ton" is the suffix the sound packages were exported under - an
     // outside file name, so it stays as it is.

@@ -31,7 +31,7 @@ param(
     # the secrets (type 223) of the vanilla file? People mistype, and a
     # wrong index silently moves the wrong item.
     [string]$VanillaDir = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Steam Version\data\Vanilla",
-    [string]$ItemCheck = "C:\Cloude AI\Alte sachen\Two gun test\Bittenichtbitdefender\ItemCheck.exe",
+    [string]$ItemCheck = "$PSScriptRoot\Diagnose\ItemCheck.exe",
     [string]$AsPatch = "",
     [string]$Trc = "",
     # Level info JSON: delivers the room origins for room+sector -> world.

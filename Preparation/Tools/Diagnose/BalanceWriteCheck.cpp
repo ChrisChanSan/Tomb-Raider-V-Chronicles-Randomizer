@@ -2,7 +2,7 @@
 // (#108): does it really write ONLY the three percentage lines and leave
 // everything else in place character for character?
 //
-// Build (64 bit, in the Bittenichtbitdefender folder):
+// Build (64 bit), from the .bat next to this file:
 //   set R=..\..\Tomb5 Native win 11 fix\TR5Randomizer\src
 //   cl /nologo /EHsc /std:c++17 /I "%R%" BalanceWriteCheck.cpp
 //       "%R%\core\BalanceFile.cpp" "%R%\core\DataFolder.cpp"

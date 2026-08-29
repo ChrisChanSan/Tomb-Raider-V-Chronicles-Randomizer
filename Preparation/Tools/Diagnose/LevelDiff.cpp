@@ -14,7 +14,7 @@
 // floordata, items, triggers, meshes, animations, sound infos, texinfos.
 // If it is byte-equal, only images were exchanged.
 //
-// Build (64 bit, in the Bittenichtbitdefender folder):
+// Build (64 bit), from the .bat next to this file:
 //   set R=..\..\Tomb5 Native win 11 fix\TR5Randomizer\src
 //   set Z=..\..\Tomb5 Native win 11 fix\TOMB5 Code\TOMB5\tomb5\libs\zlib
 //   cl /nologo /EHsc /O2 /std:c++17 /w /I "%R%" /I "%Z%" LevelDiff.cpp

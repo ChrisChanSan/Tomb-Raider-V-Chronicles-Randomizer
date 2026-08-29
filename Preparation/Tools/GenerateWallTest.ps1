@@ -37,7 +37,7 @@ param(
     [string]$OutDir = "C:\Cloude AI\Tomb5 Native win 11 fix\Preparation\WallTest",
     [string]$ScratchDir = "$env:TEMP\wandtest",
     [string]$ZoneScript = "C:\Cloude AI\Tomb5 Native win 11 fix\Preparation\Tools\ZoneAnalysis.ps1",
-    [string]$Exe = "C:\Cloude AI\Alte sachen\Two gun test\Bittenichtbitdefender\LevelBuild.exe"
+    [string]$Exe = "$PSScriptRoot\Diagnose\LevelBuild.exe"
 )
 
 # Which types belong on the wall per level, with their OCB. The values are

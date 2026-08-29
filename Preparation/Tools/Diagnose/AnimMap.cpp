@@ -22,7 +22,7 @@
 //   +4  u8  frameRate   +5 u8 frameSize   +6 u16 state
 //   +24 s16 frameStart  +26 s16 frameEnd  +28 s16 nextAnim
 //
-// Build (64 bit, in the Bittenichtbitdefender folder): like SlotAnims, see
+// Build (64 bit): run the .bat next to this file, like SlotAnims, see
 // reference-werkzeugkasten.
 #include "core/Tr5Level.h"
 #include "core/DataFolder.h"

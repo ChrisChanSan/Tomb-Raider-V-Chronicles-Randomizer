@@ -59,7 +59,7 @@ $VanillaDir   = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Steam Version\data\B
 $OutDir       = "C:\Cloude AI\Tomb5 Native win 11 fix\Preparation\Level Test\KeyItemRange Level Test"
 $ZoneScript   = "C:\Cloude AI\Tomb5 Native win 11 fix\Preparation\Tools\ZoneAnalysis.ps1"
 # ATTENTION: only the build under Release\Beta can do -patchlevel. The
-# same-named EXE in Bittenichtbitdefender is the GUI version - it opens its
+# same-named EXE from the level editor is the GUI version - it opens its
 # window and returns exit code 0 without an output file (ran into that
 # 2026-08-23).
 $Exe          = "C:\Cloude AI\Alte sachen\Two gun test\TombItemEdit2026\Release\Beta\TombItemEdit2026.exe"

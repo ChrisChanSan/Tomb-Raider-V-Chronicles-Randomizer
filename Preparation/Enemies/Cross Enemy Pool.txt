@@ -1,0 +1,108 @@
+The cross-level enemy pool - what governs it
+
+Written 2026-08-30. Until then this folder answered only the question of
+2026-08-01: which enemies may be swapped for which WITHIN a level. The
+feature that actually ships is larger - an enemy can be fetched out of
+another level entirely - and nothing here described it.
+
+This file deliberately does NOT reproduce the pool table. That table is
+TR5Randomizer\src\core\Randomizer.cpp (kCross and its neighbours), it changes
+with the curation, and a copy here would be wrong within a fortnight. What
+follows is what the table has to obey, and why - which is the part that does
+not change and cannot be read off the numbers.
+
+
+THE DONOR RULE
+================================================================
+A type may only be fetched from a level that has AT LEAST ONE VANILLA
+INSTANCE of it. Not "a level whose file contains the model" - an instance.
+
+The reason is sound. A level carries only the sound samples it needs itself.
+A model can sit in a level file complete and still be mute there, because the
+samples that belong to it were never packed.
+
+Pierre is the proof, and the reason the rule is written down. His model lies
+with 15 meshes in BOTH Andrea2 and Andrea3. He has an instance in NONE of
+the thirteen levels, and his shot sample (SFX 90) is present in not a single
+one. Imported anywhere, he shoots in silence.
+
+So each pool row names a donor level, and each donor was chosen because the
+enemy really stands in it.
+
+
+THE ANIMATION BASE
+================================================================
+Several soldier types carry only a ONE-FRAME STUB in the level files. The
+engine bends their anim_index at runtime onto another type's set:
+
+    SWAT, else guard 460, else guard 37
+
+Whoever imports such a type must bring the base type along, or it runs
+without a valid animation set - which does not crash. It goes invisible and
+invulnerable, while its shadow and its damage stay. That is what makes it
+expensive to debug and worth stating here.
+
+The import brings the base with replace=false: if the target already has it,
+natively or from its own cross import, it stays.
+
+Since the #121 addendum the base is the guard 460, not 37. 460 always carries
+the clean joby3 set, while slot 37 may hold a different model per level - the
+rich levels being the case that forced the change.
+
+
+REACHING PAST THE OWN SLICE
+================================================================
+An object slot "owns" its animations up to the next object. Some control
+routines reach past that boundary into the global anim table with
+anim_index + N. If N is larger than the slice, the import's heuristic cuts
+too early and the engine reads past the end of the table.
+
+The pool therefore carries an explicit anim slice length for such types
+(animCount). So far only the Imp needs it - and the reason is instructive:
+andy1's Imp set is gutted, its death animation is a one-frame dummy without a
+KillItem command, so the donor must be andy3.
+
+The tool for this is SlotAnims (Preparation\Tools\Diagnose, bsa.bat).
+
+
+PLACING
+================================================================
+Three small tables decide what a placed enemy needs:
+
+  kSpaceNeeds   how much free room. The Hydra (63) needs a 3x3 window with
+                all nine tiles free.
+  kHerds        which types are placed as a group. Only the Compsognathus
+                (53), four of them - one Compy alone is not the animal.
+  kSpawnOcb     which types get a behaviour OCB set on purpose. The Roman
+                god sword (61) gets 1 outside Andrea3, the hammer version
+                (461) gets 0, the chef (87) gets 1 so he hunts.
+
+Everything else is set to OCB 0 unless its type stands in KEEP_OCB - see
+Item Infos\Item Pool IDs.txt for that rule and its exceptions.
+
+
+THE FOUR GUESTS FROM OUTSIDE
+================================================================
+T-Rex, raptor, Compsognathus and vulture do not come from a TR5 level at all.
+They are read at run time from the player's own Tomb Raider III installation
+(the vulture from TR3 Gold, which is configured separately) and are marked in
+the pool as coming from a foreign source. Without those installations they
+simply do not appear; nothing else is affected.
+
+Which files, and their checksums: Preparation\Tr3Checksums.csv.
+
+
+BEFORE ADDING A TYPE TO THE POOL
+================================================================
+Four checks, each of which has caught something:
+
+1. Does it have a vanilla instance in the donor level? (the donor rule)
+2. Does its control read item->hit_points? If not, the enemy is IMMORTAL.
+   Vanilla hides this because the levels concerned disarm Lara or end
+   immediately after; a randomizer that scatters weapons does not. Three
+   were found this way - chef, skeleton, swamp witch. One grep in the
+   enemy's own .cpp answers it.
+3. Does it need AI markers (Pool A) or not (Pool B)? See Enemy Pools.txt.
+4. Does it hang on a level script or a cutscene? The chef did, through
+   deltapak.cpp, and that is why he was excluded for weeks. The other
+   functions in that file have never been gone through the same way.

@@ -32,8 +32,17 @@
 // tables in ZoneAnalysis.ps1, because a new ban list moves items. Pure UI
 // changes, on the other hand, do not count.
 //
-// The engine carries the same constant. If they do not match, the randomizer
-// refuses to work instead of producing a seed whose result nobody can
+// NOTE 2026-08-30: this used to say that the engine carries the same
+// constant and that a mismatch makes the randomizer refuse to work. It
+// does not. `grep -r RANDO_BUILD_ID "TOMB5 Code"` finds nothing - the
+// check was never built on the engine side, so today NOTHING enforces
+// that the two halves belong together. The id below is still bumped and
+// still lands in spoiler.txt, which makes a bug report readable; it just
+// does not stop anyone. Building the check is worth doing.
+//
+// (original text) The engine carries the same constant. If they do not
+// match, the randomizer refuses to work instead of producing a seed
+// whose result nobody can
 // reproduce. So when bumping it here, always touch the engine as well - the
 // two projects live in separate trees, which is why a shared header cannot
 // enforce this.

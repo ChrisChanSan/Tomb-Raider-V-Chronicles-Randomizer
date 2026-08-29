@@ -89,7 +89,7 @@ void AlterFOV(short fov)
 	// trace reads CurrentFov BEFORE drawing and therefore cannot see anyone
 	// who sets it afterwards - the same blind spot that hid the dead filters
 	// for three sittings. This line sits where every call must pass.
-	Log("ALTERFOV %d (%d Grad) winh %d", (int)fov, (int)fov / 182, (int)phd_winheight);
+	Log("ALTERFOV %d (%d deg) winh %d", (int)fov, (int)fov / 182, (int)phd_winheight);
 
 	CurrentFov = fov;
 	fov /= 2;

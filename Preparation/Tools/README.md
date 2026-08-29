@@ -1,0 +1,93 @@
+# The tools, and which one answers which question
+
+Written 2026-08-30 from the folder itself. Thirty-three diagnostic tools sit
+in `Diagnose\`, twenty-seven of them with a build script beside them, and
+until now there was no index at all - so the way to find the right one was to
+already know it existed.
+
+Every tool prints its own usage when started without arguments, and every
+one carries a header comment saying why it was written. That header is the
+authority; this page only points at it.
+
+## Building
+
+`Diagnose\<b*.bat>` - run it, it builds in place. Every script is relative to
+its own folder, so a fresh clone builds them. They need Visual Studio with
+the C++ workload; the path to `vcvars` is the one absolute thing in them.
+
+Six tools have no script and are built by hand from their header comment:
+BoneCheck, DinoCheck, FaceCheck, TR3FetchCheck, TR3SoundCheck,
+TriggerCommands.
+
+## By subject
+
+**Levels, rooms, sectors**
+| Tool | Script | What it answers |
+|---|---|---|
+| `ItemCheck` | bip | every item with OCB, flags, room and angle - the first thing to run on "why is this item behaving oddly". |
+| `RoomCheck` | brp | room flags and flipmap partners. |
+| `SectorCheck` | bsek | one sector in plain text, including the raw eight FLOOR_INFO bytes. |
+| `FloorCheck` | bb | floor heights and slopes, the rule set behind item placement. |
+| `FaceCheck` | - | which drawn faces cover a sector. |
+| `LevelDiff` | bld | two levels compared block by block. If everything but the images is byte-equal, only textures were exchanged. |
+| `LevelBuild` | bbw | applies a patch JSON to a level - how the hand-built test levels are made. |
+| `FixCheck` | bfc | applies LevelFix and saves the result, so the repairs can be looked at in trview. |
+| `TriggerCommands` | - | counts which trigger commands occur in a level. |
+| `CameraCheck` | bcc | the fixed cameras with their flags. |
+| `TexRec` | btx | texture pages and texinfos. |
+
+**Objects, animations, meshes**
+| Tool | Script | What it answers |
+|---|---|---|
+| `SlotList` | bsl | which moveable slots a level carries at all. |
+| `SlotAnims` | bsa | an object slot's anim slice - the first stop when an import reaches past its own animations. |
+| `AnimMap` | bam | all slots sorted by anim_index, with overlaps and gaps in the appended area. |
+| `AnimCmd` | bak | a slot's anim commands, above all which sound hangs on which frame. |
+| `AnimProbe` | bap | cross-check of `Tr5Level::laraAnimUsable`. |
+| `LaraAnim` | bla | which of Lara's animations a level REALLY carries. Levels stub the ones they do not need, and a stub is not a missing entry - it looks present. |
+| `BoneCheck` | - | a slot's bone tree, or two compared. |
+| `ModelOffset` | bmm | where a model sits relative to the item origin, and with `-sound` the sound chain of a map id. |
+
+**Sound and music**
+| Tool | Script | What it answers |
+|---|---|---|
+| `Tr5Sound` | btp | the whole chain: soundmap entry, SAMPLE_INFO, wave headers. The tool for "the wrong sound plays". |
+| `MusicCheck` | bmp | which TO_CD tracks a level's triggers actually use. |
+| `TR3Sound` / `TR3SoundCheck` | bton / - | the same for Tomb Raider III, for the imported enemies. |
+
+**Script and balance**
+| Tool | Script | What it answers |
+|---|---|---|
+| `ScriptCheck` | bsk | the object commands per level out of SCRIPT.DAT - names and inventory poses. |
+| `ScriptProbe` | bsp | cross-check for the randomizer's own SCRIPT.DAT writer. |
+| `BalanceCheck` | bbc | test rig for the engine's `balance.cpp`. The only 32-bit tool here, because it compiles against the engine. |
+| `BalanceWriteCheck` | bwc | the randomizer's side of Balance.txt. |
+
+**The Tomb Raider III import**
+| Tool | Script | What it answers |
+|---|---|---|
+| `TR3Peek` | bt | look into a TR3 level. |
+| `TR3Fetch` / `TR3FetchCheck` | bh / - | pull a model out and package it; the check compares the library against the tool byte for byte. |
+| `TR3Insert` | bs | insert a package into a TR5 level. |
+| `Tr3Probe` | bpr | cross-check of the conversion. |
+| `DinoCheck` | - | do all four guests still come out identical to their reference packages? |
+
+## The other half: the engine tells you things too
+
+The engine writes nothing unless it is started with `-log`. `Log.bat` in the
+release package does exactly that, which is why it is in there. The seams
+below are permanent - they are not debug leftovers to be tidied away, they
+are how a player's crash report becomes usable.
+
+| Symptom | Seam | What it prints |
+|---|---|---|
+| the wrong sound plays | `SFXLOG` | which sample really played, and which anim command asked for it |
+| an enemy is invisible | `SLOTLOG`, `SKIPLOG`, `MESHLOG`, `CLIPLOG` | the four separate reasons: no free AI slot, control skipped it, no mesh, clipped away |
+| ...and if it is the clipping | `CLIPDETAIL` | the actual window and the camera it was measured against |
+| an item is in the wrong place, or vanishes | `ITEMLOG` | slot, room, OCB, flags per item at load |
+| ...and something moves it later | `ITEMWATCH` | who wrote which room number, and when |
+| the outfit looks wrong, a limb is misplaced | `SKINLOG` | the skin's bone stack |
+| the first-person view sits wrong | `FPHEAD`, `ALTERFOV` | the head bone per frame, and the field of view |
+
+`SLOTLOG` also prints `MAX_LOT`, which is the number that decides how many
+enemies can be active at once - see `Tomb5 Limits\Limits.txt`.

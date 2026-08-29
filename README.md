@@ -25,6 +25,19 @@ GPLv3.
 The same **seed** produces the same game on any machine. Seed and build ID
 are shown in the pause menu, so a screenshot is enough to reproduce a run.
 
+<p align="center">
+  <img src="docs/gui-main.jpg" alt="The randomizer window" width="860">
+</p>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/gui-outfits-enemies.jpg" alt="Wardrobe and enemy pool"><br>
+Pick what the wardrobe may draw, and which enemies belong in the pool.</td>
+<td width="50%"><img src="docs/gui-settings.jpg" alt="Settings"><br>
+Every switch has a tooltip that says what it does and what it costs.</td>
+</tr>
+</table>
+
 ## What this is
 
 Two programs working together:
@@ -40,6 +53,39 @@ Two programs working together:
   needs — and a few extras such as a switchable first-person view.
 
 Both are under the **GNU GPL v3**; the complete source code lives here.
+
+### In the game
+
+<table>
+<tr>
+<td width="50%"><img src="docs/features-1.jpg" alt="New options page"><br>
+An options page of its own: PSX skies, crawl tilting, distance fog, the
+loading bar and screen styles, ammo hotkeys, static lighting, level select.</td>
+<td width="50%"><img src="docs/features-2.jpg" alt="First person view options"><br>
+The first-person view, with field of view, a death camera, the head-bone
+look and how hard the camera is damped.</td>
+</tr>
+<tr>
+<td><img src="docs/gui-language.jpg" alt="Language switching"><br>
+The language can be changed while the game runs.</td>
+<td><img src="docs/gui-credits.jpg" alt="Credits"><br>
+Credits for everyone whose work is in here.</td>
+</tr>
+</table>
+
+<details>
+<summary><b>More from a rolled run</b> (11 screenshots)</summary>
+
+<table>
+<tr><td width="50%"><img src="docs/ingame-01.jpg" alt=""></td><td width="50%"><img src="docs/ingame-02.jpg" alt=""></td></tr>
+<tr><td width="50%"><img src="docs/ingame-03.jpg" alt=""></td><td width="50%"><img src="docs/ingame-04.jpg" alt=""></td></tr>
+<tr><td width="50%"><img src="docs/ingame-05.jpg" alt=""></td><td width="50%"><img src="docs/ingame-06.jpg" alt=""></td></tr>
+<tr><td width="50%"><img src="docs/ingame-07.jpg" alt=""></td><td width="50%"><img src="docs/ingame-08.jpg" alt=""></td></tr>
+<tr><td width="50%"><img src="docs/ingame-09.jpg" alt=""></td><td width="50%"><img src="docs/ingame-10.jpg" alt=""></td></tr>
+<tr><td width="50%"><img src="docs/ingame-11.jpg" alt=""></td><td></td></tr>
+</table>
+
+</details>
 
 ## What you need
 

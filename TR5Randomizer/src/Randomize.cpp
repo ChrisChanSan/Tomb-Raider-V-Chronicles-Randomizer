@@ -33,6 +33,7 @@
 #include "core/SecretReward.h"
 #include "core/LevelFix.h"
 #include "core/Tr5Level.h"
+#include "core/Tr3Source.h"
 
 #include <cstdio>
 #include <set>
@@ -135,8 +136,26 @@ int main(int argc, char** argv)
         else if (s == "mix")    mix = true;
         else if (s == "cross")  cross = true;
         else if (s == "allsanity") allsanity = true;
-        else if (s.rfind("tr3=", 0) == 0)     tr3Dir     = toW(s.c_str() + 4);
-        else if (s.rfind("tr3gold=", 0) == 0) tr3GoldDir = toW(s.c_str() + 8);
+        // Either the game folder or its data\ subfolder is accepted - the
+        // resolution is the same one the GUI uses (Tr3Source::resolveTr3).
+        // Before 2026-08-30 the command line took the string as given and
+        // answered "TR3 level not readable" on a path the GUI swallows.
+        else if (s.rfind("tr3=", 0) == 0)
+        {
+            const std::wstring given = toW(s.c_str() + 4);
+            tr3Dir = Tr3Source::resolveTr3(given);
+            if (tr3Dir.empty() && !given.empty())
+                std::printf("  note: no CRASH.TR2 under the given tr3= path, "
+                            "neither there nor in a data folder inside it\n");
+        }
+        else if (s.rfind("tr3gold=", 0) == 0)
+        {
+            const std::wstring given = toW(s.c_str() + 8);
+            tr3GoldDir = Tr3Source::resolveTr3Gold(given);
+            if (tr3GoldDir.empty() && !given.empty())
+                std::printf("  note: no chunnel.TR2 under the given tr3gold= path, "
+                            "neither there nor in a data folder inside it\n");
+        }
         else if (s.rfind("script=", 0) == 0)  scriptDat  = toW(s.c_str() + 7);
         else if (s == "rewards") secretRewards = true;
         else if (s.rfind("secrets=", 0) == 0) secretList = toW(s.c_str() + 8);

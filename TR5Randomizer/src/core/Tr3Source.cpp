@@ -1580,3 +1580,36 @@ bool Tr3Source::fetchCached(const DinoSource& d,
     }
     return true;
 }
+
+std::wstring Tr3Source::resolveFolder(const std::wstring& chosen, const wchar_t* file)
+{
+    // Self-contained on purpose: PathUtil lives in DataFolder.cpp, which
+    // the command line does not link. Two lines are not worth dragging a
+    // translation unit into every consumer of this file.
+    if (chosen.empty()) return std::wstring();
+
+    auto has = [](const std::wstring& dir, const wchar_t* name) {
+        std::wstring p = dir;
+        if (!p.empty() && p.back() != L'\\' && p.back() != L'/')
+            p.push_back(L'\\');
+        p += name;
+        struct _stat64 st;
+        return _wstat64(p.c_str(), &st) == 0 && (st.st_mode & _S_IFREG) != 0;
+    };
+
+    if (has(chosen, file)) return chosen;
+
+    std::wstring sub = chosen;
+    if (!sub.empty() && sub.back() != L'\\' && sub.back() != L'/')
+        sub.push_back(L'\\');
+    sub += L"data";
+    if (has(sub, file)) return sub;
+
+    return std::wstring();
+}
+
+std::wstring Tr3Source::resolveTr3(const std::wstring& chosen)
+{ return resolveFolder(chosen, L"CRASH.TR2"); }
+
+std::wstring Tr3Source::resolveTr3Gold(const std::wstring& chosen)
+{ return resolveFolder(chosen, L"chunnel.TR2"); }

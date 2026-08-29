@@ -246,4 +246,19 @@ namespace Tr3Source
                     int muteSlot,
                     std::vector<int>& unresolved,
                     std::string& error);
+
+    // Whoever points us at a Tomb Raider 3 installation hands over
+    // whichever folder they happened to open - the game folder or its
+    // data\ subfolder. Both are accepted: the folder itself is tried
+    // first, then data\ inside it. Returns the folder that really holds
+    // the file, or empty if neither does. Case does not matter on
+    // Windows, so "Data" and "DATA" are covered too.
+    //
+    // This lives here, and not in the GUI where it was written, because
+    // the command line needs exactly the same answer. It had its own
+    // behaviour - none - and failed with "TR3 level not readable" on a
+    // path the GUI accepts without a word.
+    std::wstring resolveFolder(const std::wstring& chosen, const wchar_t* file);
+    std::wstring resolveTr3(const std::wstring& chosen);       // CRASH.TR2
+    std::wstring resolveTr3Gold(const std::wstring& chosen);   // chunnel.TR2
 }

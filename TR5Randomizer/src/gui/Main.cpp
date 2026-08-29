@@ -40,6 +40,7 @@
 #include "core/SecretList.h"
 #include "core/SecretReward.h"
 #include "core/Tr5Level.h"
+#include "core/Tr3Source.h"
 
 #include "Language.h"
 
@@ -574,14 +575,11 @@ namespace
 // empty.
 //
 // Case does not matter on Windows, so "Data" and "DATA" are covered too.
+// Moved into Tr3Source (2026-08-30) so the command line gets the same
+// answer - it had no such handling at all and refused paths this
+// accepted.
 static std::wstring resolveFolder(const std::wstring& chosen, const wchar_t* file)
-{
-    if (chosen.empty()) return std::wstring();
-    if (PathUtil::fileExists(PathUtil::join(chosen, file))) return chosen;
-    const std::wstring sub = PathUtil::join(chosen, L"data");
-    if (PathUtil::fileExists(PathUtil::join(sub, file))) return sub;
-    return std::wstring();
-}
+{ return Tr3Source::resolveFolder(chosen, file); }
 
 // The resolved folders as they go to the core and the patch path.
 static std::wstring tr3Folder(const App& a)  { return resolveFolder(a.cfg.tr3Dir, L"CRASH.TR2"); }

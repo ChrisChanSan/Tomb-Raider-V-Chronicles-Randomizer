@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.jpg" alt="Tomb Raider Chronicles Randomizer" width="420">
+  <img src="docs/banner.jpg" alt="Tomb Raider Chronicles Randomizer" width="760">
 </p>
 
 # TR5 Randomizer

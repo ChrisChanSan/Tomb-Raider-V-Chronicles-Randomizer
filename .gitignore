@@ -120,3 +120,8 @@ Preparation/Level Infos/ZoneReports/**/*.png
 
 # Fresh upstream downloads for comparisons - never version these
 Tomb5 frisch*/
+
+# Artwork drafts. The one logo that ships lives in docs/banner.jpg;
+# these are the working files behind it and have no business in a
+# repository people clone.
+Logos/

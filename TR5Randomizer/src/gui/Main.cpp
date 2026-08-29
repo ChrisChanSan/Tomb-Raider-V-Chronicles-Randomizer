@@ -1164,7 +1164,7 @@ static std::wstring cacheDir(const App& a)
 
         auto line = [f](const char* s) { std::fprintf(f, "%s\r\n", s); };
 
-        std::fprintf(f, "TR5 Randomizer - spoiler.txt\r\n");
+        std::fprintf(f, "TR5 Randomizer %s - spoiler.txt\r\n", RANDO_VERSION_STRING);
         std::fprintf(f, "Build %s\r\n", RANDO_BUILD_STRING);
         line("");
         std::fprintf(f, "Seed:      %s\r\n", a.seedBuf);
@@ -1783,6 +1783,8 @@ static void drawUi(App& a, HWND hwnd)
                  ImGuiWindowFlags_NoBringToFrontOnFocus);
 
     ImGui::TextUnformatted(T("TR5 Randomizer"));
+    ImGui::SameLine();
+    ImGui::TextDisabled("%s", RANDO_VERSION_STRING);
     ImGui::SameLine();
     ImGui::TextDisabled(T("Build %s"), RANDO_BUILD_STRING);
 

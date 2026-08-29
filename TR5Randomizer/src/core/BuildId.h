@@ -84,7 +84,10 @@
 #define RANDO_BUILD_ID      18
 #define RANDO_BUILD_STRING  "0.18"
 
-// Name of the file the randomizer puts next to the levels and the engine
-// reads at startup to show seed and build in the pause menu. That makes a
-// bug report a single screenshot instead of a round of questions.
-#define RANDO_SIDECAR_NAME  L"randomizer.txt"
+// The published version, and a different thing from the build id above.
+// That one counts revisions of the curation data and decides whether two
+// runs can produce the same levels; this one is what a player calls the
+// program they downloaded. Both belong in a bug report, so both are shown.
+// The engine carries the same string in its version resource (tomb5.rc);
+// the two source trees build separately, so they are kept in step by hand.
+#define RANDO_VERSION_STRING "Beta_1.0"

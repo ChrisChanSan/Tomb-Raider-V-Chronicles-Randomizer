@@ -1,5 +1,5 @@
-TR5 Randomizer
-==============
+TR5 Randomizer  Beta_1.0
+========================
 
 What is in here
 ---------------

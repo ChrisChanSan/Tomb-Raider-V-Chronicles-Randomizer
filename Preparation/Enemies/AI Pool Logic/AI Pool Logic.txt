@@ -25,15 +25,19 @@ wrong/missing behavior).
 Pool A - supports patrol/ambush AI markers (calls GetAITarget)
 ---------------------------------------------------------------------
 Object kind(s)                             control function     file
-SAS, BLUE_GUARD, SWAT, SWAT_PLUS, MAFIA,   SasControl           sas.cpp
-  SCIENTIST, CRANE_GUY, SAILOR
+BLUE_GUARD, SWAT, SWAT_PLUS, MAFIA,        SasControl           sas.cpp
+  SCIENTIST, CRANE_GUY, BLUE_GUARD2
+  (2026-08-30: SAS and SAILOR left this family - the TR3 guests took
+   their slots. BLUE_GUARD2 = engine slot 460, added by this project.)
 MAFIA2                                     MafiaControl          mafia2.cpp
 PIERRE, LARSON                             PierreControl         pierre.cpp
 HITMAN                                     HitmanControl         hitman.cpp
 HUSKIE                                     HuskieControl         huskie.cpp
 IMP                                        ImpControl            imp.cpp
 ATTACK_SUB                                 MinisubControl        minisub.cpp (line ~427-428)
-REAPER                                     JellyControl          minisub.cpp (line ~634-635)
+REAPER = Raptor (TR3)                      RaptorControl         raptor.cpp
+  (2026-08-30: slot 75 is the raptor. JellyControl still exists in
+   minisub.cpp but is assigned to no object at all.)
 CHEF                                       ChefControl           chef.cpp
 SNIPER                                     SniperControl         sniper.cpp
 GREEN_TEETH                                SwampyControl         swampy.cpp
@@ -49,10 +53,15 @@ Pool B - NO patrol/ambush support (always direct Lara tracking)
 Object kind    control function    file           reasoning
 DOG             DogControl          dog.cpp        CreatureAIInfo/GetCreatureMood/CreatureMood, no ai_bits use
 LION            LionControl         lion.cpp       ditto
-CROW            CrowControl         crow.cpp       ditto
+CROW = Vulture  CrowControl         crow.cpp       ditto (2026-08-30: slot 43
+  (TR3)                                            is the TR3 vulture now)
 ROMAN_GOD       RomangodControl     romangod.cpp    only checks "ai_bits & GUARD" for a random attack roll,
                                                      NEVER calls GetAITarget -> the patrol/guard bit has no
                                                      waypoint effect, the enemy always aims straight at Lara
+SAS = T-Rex     DinoControl         trex.cpp       TR3 guest on slot 31; no GetAITarget, no ai_bits
+  (TR3)
+SAILOR = Compy  CompyControl        compy.cpp      TR3 guest on slot 53; moved as a herd of four
+  (TR3)                                            (kHerds), no marker use
 GUARDIAN        GuardianControl     guardian.cpp    boss, fixed script logic/LOS checks, no CreatureAIInfo at all
 AUTOGUN         AutogunControl      autogun.cpp     stationary gun, aims straight at Lara via LOS();
                                                      also not marked "intelligent" in setup.cpp at all
@@ -67,12 +76,26 @@ No obj->intelligent, no CreatureCollision, no AI system involved.
 Generally not relevant for the position pool logic - they are not
 treated like normal enemy items.
 
-A related, separately investigated topic (see the TOMB5 project
-notes, project_tomb5_native_port.md): plinth/hidden OCB pickups
+A related topic, investigated separately: plinth/hidden OCB pickups
 (OCB 1, 3, 4, 7, 8) that are automatically collected as an enemy's
 carried_item via GetCarriedItems() (game/setup.cpp) when placed too
 close (512 units X/Z, 256 Y) - they are floor-dropped after the
 enemy's death but keep their old OCB and thereby become permanently
-uncollectable. For the randomizer: normalize items to OCB 0 in
-general, then it does not matter whether they happen to land as a
-carried_item or not - it works either way.
+uncollectable. The engine now clears the low OCB bits on the drop
+itself (DropBaddyPickups, game\box.cpp), so such an item lands as an
+ordinary floor pickup.
+
+For the randomizer the rule used to be "normalize everything to OCB 0".
+CORRECTION 2026-08-30: that is no longer true in general - there are two
+exception tables, and both matter.
+  KEEP_OCB keeps the OCB for wall pickups, where it encodes the pickup
+  STYLE rather than a leftover of the old spot (Andrea2 and andy3 items
+  172 and 174: OCB 2 is the crowbar grip, OCB 9 the fence). Set to 0
+  they would not be pickable at all. The table lives in
+  Preparation\Tools\ZoneAnalysis.ps1 and reaches the randomizer through
+  the zone export as keepOcbTypes.
+  kSpawnOcb goes the other way and SETS an OCB on purpose, to choose an
+  enemy's behaviour: the Roman god sword (61) gets OCB 1 outside
+  Andrea3, the hammer version (461) gets 0, and the chef (87) gets 1 so
+  he hunts instead of chopping vegetables.
+Both are in TR5Randomizer\src\core\Randomizer.cpp.

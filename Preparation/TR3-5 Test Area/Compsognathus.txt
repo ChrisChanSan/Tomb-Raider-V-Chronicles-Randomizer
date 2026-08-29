@@ -1,3 +1,7 @@
 Level Crash.tr2(Version_TR3) Type_ID(34) Level_ID(51)
 
 Sounds Sample103/map239(Attack1), Sample104/map240(Attack2), Sample105/map241(random noise), Sample106/map242(Death) Sample107/map243(walking), Sample108/map243(walking)
+
+Outcome, 2026-08-30: done as #99, slot 53, compy.cpp ported from tomb3.
+The Compy is the only guest the randomizer moves as a GROUP - kHerds gives
+type 53 a count of four, because one of them alone is not the animal.

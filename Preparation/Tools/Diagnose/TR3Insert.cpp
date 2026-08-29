@@ -1,7 +1,12 @@
 //----------------------------------------------------------------------------
 // TR3Insert - inserts a moveable fetched with TR3Fetch into a TR5 level.
 //
-// Usage: TR3Insert <target.trc> <package.bin> <targetSlot> <output.trc> [texinfo]
+// Usage: TR3Insert <target.trc> <package.bin> <targetSlot> <output.trc>
+//          [texinfo] [sound.bin]
+//          [-keepmesh n] [-dropjoint n] [-jointcolor n=r,g,b] [-tone n]
+//          [-muted] [-muteslot] [-base] [-volumes]
+//        (sound.bin is a sixth POSITIONAL argument; all eight switches and
+//         that argument were added after this header was first written)
 //
 // texinfo (default 0): ALL faces point at this existing texinfo afterwards.
 // No texture page is touched - see Tr5Tr3Import.cpp.

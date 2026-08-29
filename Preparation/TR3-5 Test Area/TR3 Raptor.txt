@@ -3,3 +3,10 @@
 Level Crash.tr2(Version_TR3) Type_ID(288) Level_ID(138) Careful: hanging Raptor Type_ID(38) Level_ID(110) is something level-specific, a corpse that can be shot down for a Heavy_Trigger.
 
 Sounds I could find in TRView: Sample109/map250(footstep1, same as T-Rex only quieter), Sample110/map250(footstep2, same as T-Rex only quieter), Sample111/map251(Attack1), Sample112/map252(Attack2), Sample113/map253(Attack3), Sample114/map254(Growl), Sample115/map255(Death1, same as T-Rex only quieter), Sample116/map256(Death2)
+
+Outcome, 2026-08-30: done as #97, slot 75, raptor.cpp ported from tomb3.
+One correction to the first line above: the HUSKY is slot 85 (HUSKIE) with
+its own HuskieControl - it was never on 75. Slot 75 held the jellyfish
+(JellyControl), and it was free because no TR5 level loads a model for it;
+that is exactly why it could be taken. JellyControl still exists in
+minisub.cpp and is now assigned to no object at all.

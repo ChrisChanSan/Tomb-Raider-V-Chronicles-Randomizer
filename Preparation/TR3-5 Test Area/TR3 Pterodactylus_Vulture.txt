@@ -3,3 +3,13 @@ Level Chunnel.tr2(Version_TR3) Type_ID(29) Level_ID(188,185,184,183,182)
 In TR5 he shall fill the Crow slot, with a view to the flight controls.
 
 Sounds I could find in TRview: Sample 104/map182(wing beat), Sample105/map183(Attack?), Sample106/map183(Attack?), Sample107/map184(Death), Sample108/map185(random sound when flying)
+
+Outcome, 2026-08-30: done as #103, slot 43, and the vulture is the ONLY
+one of the four guests that does not come from Tomb Raider III. chunnel.tr2
+belongs to TR3 Gold / The Lost Artifact, which the randomizer treats as a
+separate installation with its own configured folder (tr3GoldDir) - without
+it the vulture simply does not appear, while the other three still do.
+The four sound maps above are right (182, 183 twice, 184, 185; the code
+does give 183 two waves), but the note never said WHICH MAIN.SFX the sample
+numbers belong to. Both files and their checksums are in
+Preparation\Tr3Checksums.csv.

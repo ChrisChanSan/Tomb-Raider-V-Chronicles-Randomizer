@@ -6,6 +6,10 @@
 // in the model itself, in the frame offsets and the frame box.
 //
 // Usage: ModelOffset <level.trc> [slot ...]
+//        ModelOffset <level.trc> -sound <mapId ...>
+//          The second mode walks SoundMap -> SAMPLE_INFO and prints number,
+//          volume, radius and variant count per map id. It was documented
+//          only in an inline comment further down.
 //
 // Output per slot: the first frame's box and its center. A cleanly
 // centered model has a center near 0/0 in x and z.

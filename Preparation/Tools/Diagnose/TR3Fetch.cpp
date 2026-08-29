@@ -4,6 +4,10 @@
 // bridge, then insert.
 //
 // Usage: TR3Fetch <tr3level.TR2> <objectId> <target.bin>
+//          [-shiny]            give the meshes the TR4/TR5 environment map
+//          [-addcolor]         keep the source colours and add, do not replace
+//          [-recolor r,g,b=r,g,b]   swap one colour for another
+//        (the three switches were added after this header was first written)
 //
 // What is the same and simply travels along:
 //   - Mesh header: TR3 Centre(6) + CollRadius(4) = 10 bytes, TR5 reads

@@ -29,14 +29,26 @@ Shotgun_Ammo_Red		339
 Shotgun_Ammo_Blue		340
 Grapplinggun			341
 Grapplinggun_Ammo		342
-???						343
-???						344
+Crossbow Ammo2			343
+Crossbow Bolt			344
 HK 						345
 HK_Ammo					346
 Revolver 				347
 Revolver/Deagle_Ammo	348
 }
 
+// Added 2026-08-30: six enemy slots the randomizer itself uses, and a
+// warning. Four vanilla slots were repurposed for the Tomb Raider III
+// guests, so their enum NAME no longer says what stands there. Read the
+// number, not the name - and see Preparation\Enemies\Enemy Pools.txt.
+//   31  = T-Rex        (enum name SAS)
+//   43  = Vulture      (enum name CROW)
+//   53  = Compy        (enum name SAILOR)
+//   75  = Raptor       (enum name REAPER)
+//   460 = Guard (Joby) BLUE_GUARD2, an engine slot added by this project
+//   461 = Hammer statue ROMAN_GOD2, likewise - so 61 is the SWORD statue
+//         only
+// Not to be confused: 41 = DOG, 85 = HUSKIE. Upstream calls both "Dog".
 //Enemies:{
 SWAT					33
 Advanced SWAT			35
@@ -87,18 +99,18 @@ Puzzle1 Combo1			180
 Puzzle1 Combo2			181
 Puzzle2 Combo1			182
 Puzzle2 Combo2			183
-Puzzle3 Combo1			???
-Puzzle3 Combo2 			???
+Puzzle3 Combo1			184
+Puzzle3 Combo2 			185
 Puzzle4 Combo1			186
 Puzzle4 Combo2			187
-Puzzle5 Combo1			???
-Puzzle5 Combo2 			???
+Puzzle5 Combo1			188
+Puzzle5 Combo2 			189
 Key1					196
 Key2					197
-Key3					???
-Key4					???
-Key5					???
-Key6					???
+Key3					198
+Key4					199
+Key5					200
+Key6					201
 Key7					202
 Key8					203		Can be used infinitely
 }
@@ -106,14 +118,14 @@ Key8					203		Can be used infinitely
 //Puzzle slots & keyholes:{
 Keyhole1 				258
 Keyhole2				259
-Keyhole3				???
-Keyhole4				???
-Keyhole5				???
+Keyhole3				260
+Keyhole4				261
+Keyhole5				262
 Keyhole6				263
 Keyhole7				264
 Keyhole8				265
 Slot1					242
-Slot2					???
+Slot2					243
 Slot3					244
 Slot4					245
 Slot5					246
@@ -126,8 +138,9 @@ Switch3					268
 Switch4					269
 Switch5 				270
 Switch6					271
-Switch7					274
-Shoot_Switch1			272
-Shootswitch2			273
+Switch7					272
+Airlock Switch			274
+Shoot_Switch1			272   (= Switch7, the same object)
+Shootswitch2			273   (= Switch8)
 Cog Switch1				278
 }

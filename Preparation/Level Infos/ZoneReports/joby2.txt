@@ -8,7 +8,7 @@ island group: baseline room 84 y=-1024 in zone 0, keys there at most 1024 above 
 wall spots: 459 of 1098 sectors have at least one wall edge
 approach sectors: 997 of 1098 sectors have at least one
 pool type 172 taken in without a zone limit (1 instances in the level)
-zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_joby2.json (1098 sectors, maxZone=2, 3 key constraints)
+zone export written: TR5Randomizer\build\data\zones_joby2.json (1098 sectors, maxZone=2, 3 key constraints)
 ==============================================================
  Progression zones: joby2
 ==============================================================

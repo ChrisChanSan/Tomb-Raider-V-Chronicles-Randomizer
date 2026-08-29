@@ -21,7 +21,7 @@
 #   SecretPlan.ps1 -Author X -Category Y        print this list's plan
 #   ... additionally -LevelName A -AsJson path
 param(
-    [string]$Folder = "C:\Cloude AI\Tomb5 Native win 11 fix\Preparation\Curation\Secrets",
+    [string]$Folder = "$PSScriptRoot\..\Curation\Secrets",
     [switch]$List,
     [string]$Author = "",
     [string]$Category = "",
@@ -30,7 +30,7 @@ param(
     # Cross-check against the real level data: do the Level_IDs really match
     # the secrets (type 223) of the vanilla file? People mistype, and a
     # wrong index silently moves the wrong item.
-    [string]$VanillaDir = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Steam Version\data\Vanilla",
+    [string]$VanillaDir = "$PSScriptRoot\..\..\Tomb5 Steam Version\data\Vanilla",
     [string]$ItemCheck = "$PSScriptRoot\Diagnose\ItemCheck.exe",
     [string]$AsPatch = "",
     [string]$Trc = "",

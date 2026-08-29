@@ -9,7 +9,7 @@ pool type 187 taken in without a zone limit (1 instances in the level)
 pool type 186 taken in without a zone limit (1 instances in the level)
 pool type 185 taken in without a zone limit (1 instances in the level)
 pool type 184 taken in without a zone limit (1 instances in the level)
-zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_joby3.json (256 sectors, maxZone=5, 5 key constraints)
+zone export written: TR5Randomizer\build\data\zones_joby3.json (256 sectors, maxZone=5, 5 key constraints)
 ==============================================================
  Progression zones: joby3
 ==============================================================

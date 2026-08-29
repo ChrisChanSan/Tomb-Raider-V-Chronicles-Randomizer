@@ -13,7 +13,7 @@ barred behind own door: type 175, 1 door(s) -> 1 sectors (intersection)
 wall spots: 281 of 361 sectors have at least one wall edge
 approach sectors: 326 of 361 sectors have at least one
 pool type 202 taken in without a zone limit (1 instances in the level)
-zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_rich1.json (361 sectors, maxZone=8, 3 key constraints)
+zone export written: TR5Randomizer\build\data\zones_rich1.json (361 sectors, maxZone=8, 3 key constraints)
 ==============================================================
  Progression zones: rich1
 ==============================================================

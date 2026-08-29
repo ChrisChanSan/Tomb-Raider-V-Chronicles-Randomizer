@@ -9,7 +9,7 @@ equipment gate: switch item 75 in zone 3 -> types 347, 351 limited to zone <= 3
 barred behind own door: type 196, 1 door(s) -> 1 sectors (intersection)
 wall spots: 585 of 961 sectors have at least one wall edge
 approach sectors: 889 of 961 sectors have at least one
-zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_Andrea1.json (961 sectors, maxZone=5, 4 key constraints)
+zone export written: TR5Randomizer\build\data\zones_Andrea1.json (961 sectors, maxZone=5, 4 key constraints)
 ==============================================================
  Progression zones: Andrea1
 ==============================================================

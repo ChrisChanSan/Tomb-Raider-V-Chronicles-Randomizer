@@ -1,8 +1,7 @@
 # Rolling the level order — findings and plan
 
-As of 2026-08-22. Occasion: the two grayed-out checkboxes "Levelabschnitte
-switchen" and "Level-Reihenfolge switchen" (shuffle level sections / level
-order). Before building: what travels between levels, and what does the
+As of 2026-08-22. Occasion: the two grayed-out checkboxes "Shuffle level
+sections" and "Shuffle level order". Before building: what travels between levels, and what does the
 engine hang on?
 
 ## 1. What the SCRIPT.DAT gives and takes per level

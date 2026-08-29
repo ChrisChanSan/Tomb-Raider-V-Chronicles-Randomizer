@@ -4,7 +4,7 @@
 // a Balance.txt in the working directory and cleans it up again.
 //
 // Build (32 bit), from the .bat next to this file:
-//   set E=..\..\Tomb5 Native win 11 fix\TOMB5 Code\TOMB5
+//   set E=..\..\..\TOMB5 Code\TOMB5
 //   cl /nologo /EHsc /W3 /I "%E%" BalanceCheck.cpp "%E%\game\balance.cpp"
 //       /Fe:BalanceCheck.exe
 //

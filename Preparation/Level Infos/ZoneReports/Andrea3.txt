@@ -1,6 +1,6 @@
 ﻿wall spots: 317 of 591 sectors have at least one wall edge
 approach sectors: 555 of 591 sectors have at least one
-zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_Andrea3.json (591 sectors, maxZone=6, 3 key constraints)
+zone export written: TR5Randomizer\build\data\zones_Andrea3.json (591 sectors, maxZone=6, 3 key constraints)
 ==============================================================
  Progression zones: Andrea3
 ==============================================================

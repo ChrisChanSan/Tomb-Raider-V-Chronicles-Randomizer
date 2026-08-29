@@ -3,7 +3,7 @@
 // everything else in place character for character?
 //
 // Build (64 bit), from the .bat next to this file:
-//   set R=..\..\Tomb5 Native win 11 fix\TR5Randomizer\src
+//   set R=..\..\..\TR5Randomizer\src
 //   cl /nologo /EHsc /std:c++17 /I "%R%" BalanceWriteCheck.cpp
 //       "%R%\core\BalanceFile.cpp" "%R%\core\DataFolder.cpp"
 //       /Fe:BalanceWriteCheck.exe

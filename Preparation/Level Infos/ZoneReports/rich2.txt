@@ -13,7 +13,7 @@ approach sectors: 524 of 544 sectors have at least one
 pool type 221 taken in without a zone limit (1 instances in the level)
 pool type 236 taken in without a zone limit (1 instances in the level)
 pool type 235 taken in without a zone limit (4 instances in the level)
-zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_rich2.json (544 sectors, maxZone=6, 4 key constraints)
+zone export written: TR5Randomizer\build\data\zones_rich2.json (544 sectors, maxZone=6, 4 key constraints)
 ==============================================================
  Progression zones: rich2
 ==============================================================

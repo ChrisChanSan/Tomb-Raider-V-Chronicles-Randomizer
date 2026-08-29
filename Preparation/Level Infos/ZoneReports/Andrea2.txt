@@ -6,7 +6,7 @@ barred behind own door: type 176, 1 door(s) -> 1 sectors (intersection)
 barred behind own door: type 175, 1 door(s) -> 1 sectors (intersection)
 wall spots: 450 of 777 sectors have at least one wall edge
 approach sectors: 747 of 777 sectors have at least one
-zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_Andrea2.json (777 sectors, maxZone=3, 5 key constraints)
+zone export written: TR5Randomizer\build\data\zones_Andrea2.json (777 sectors, maxZone=3, 5 key constraints)
 ==============================================================
  Progression zones: Andrea2
 ==============================================================

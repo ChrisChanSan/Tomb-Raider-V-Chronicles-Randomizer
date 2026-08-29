@@ -1335,7 +1335,7 @@ if ($PRESET_FLAGS.ContainsKey($LevelName)) {
 #     exist elsewhere.
 #   - Does his death hang on a level script or a cutscene?
 #   - Does his corpse fade out? (anim command 4 in the death animation,
-#     scratchpad\DumpAnim.exe shows it.)
+#     Diagnose\AnimCmd.exe shows it.)
 #   - Does he need water, ceiling height, a track?
 #----------------------------------------------------------------------------
 # The user's list of 13.08.2026 ("Gegner Pool.txt"), restricted per level to
@@ -1343,7 +1343,7 @@ if ($PRESET_FLAGS.ContainsKey($LevelName)) {
 # level does not know cannot be placed - that would first need the object
 # transfer between levels (as with the weapon set).
 #
-# Checked with scratchpad\DumpAnim.exe <level.trc> -1 (lists all object
+# Checked with Diagnose\SlotList.exe <level.trc> (lists all object
 # slots). One deviation from the list: DOG (41) lies ONLY in Andrea1, not
 # in the joby levels.
 #
@@ -1357,7 +1357,7 @@ if ($PRESET_FLAGS.ContainsKey($LevelName)) {
 # sample (SFX 90) is present in not a single level. In game he shoots
 # silently.
 #
-# Verify with scratchpad\SfxPruefung.ps1: it reads EXACTLY each enemy's
+# Verify with Diagnose\Tr5Sound.exe: it reads EXACTLY each enemy's
 # animation block (the limit stands in the next slot's anim_index, a slot
 # has no count of its own) and looks the SFX up in the level's sample_lut.
 $ENEMY_TYPES = @{

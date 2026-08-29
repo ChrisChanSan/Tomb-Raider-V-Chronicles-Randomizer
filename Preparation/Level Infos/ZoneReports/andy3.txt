@@ -4,7 +4,7 @@ height band island 2: 117 rooms from 140 (stop 155), allowed y >= 7940 and open 
 NO_KEY_ISLAND (start 140, deadstops 18, 19, 22): 3227 sectors in 134 rooms without key items
 wall spots: 186 of 408 sectors have at least one wall edge
 approach sectors: 346 of 408 sectors have at least one
-zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_andy3.json (408 sectors, maxZone=1, 1 key constraints)
+zone export written: TR5Randomizer\build\data\zones_andy3.json (408 sectors, maxZone=1, 1 key constraints)
 ==============================================================
  Progression zones: andy3
 ==============================================================

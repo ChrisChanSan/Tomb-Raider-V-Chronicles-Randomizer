@@ -1,6 +1,6 @@
 ﻿wall spots: 143 of 418 sectors have at least one wall edge
 approach sectors: 414 of 418 sectors have at least one
-zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_del.json (418 sectors, maxZone=0, 0 key constraints)
+zone export written: TR5Randomizer\build\data\zones_del.json (418 sectors, maxZone=0, 0 key constraints)
 ==============================================================
  Progression zones: del
 ==============================================================

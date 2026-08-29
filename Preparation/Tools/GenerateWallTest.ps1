@@ -32,11 +32,11 @@
 # "No, I test it in TRview, that does not matter."
 param(
     [string[]]$Levels = @('Andrea2'),
-    [string]$VanillaDir = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Steam Version\data\Vanilla",
-    [string]$LevelInfoDir = "C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data",
-    [string]$OutDir = "C:\Cloude AI\Tomb5 Native win 11 fix\Preparation\WallTest",
+    [string]$VanillaDir = "$PSScriptRoot\..\..\Tomb5 Steam Version\data\Vanilla",
+    [string]$LevelInfoDir = "$PSScriptRoot\..\..\TR5Randomizer\build\data",
+    [string]$OutDir = "$PSScriptRoot\..\WallTest",
     [string]$ScratchDir = "$env:TEMP\wandtest",
-    [string]$ZoneScript = "C:\Cloude AI\Tomb5 Native win 11 fix\Preparation\Tools\ZoneAnalysis.ps1",
+    [string]$ZoneScript = "$PSScriptRoot\ZoneAnalysis.ps1",
     [string]$Exe = "$PSScriptRoot\Diagnose\LevelBuild.exe"
 )
 

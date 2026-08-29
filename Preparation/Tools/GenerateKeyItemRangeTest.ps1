@@ -44,7 +44,7 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
-$LevelInfoDir = "C:\Cloude AI\Tomb5 Native win 11 fix\Preparation\Level Infos"
+$LevelInfoDir = "$PSScriptRoot\..\Level Infos"
 # Deliberately the backup subfolder and NOT data\ itself: since the
 # randomizer has a GUI, data\ is regularly randomized - the originals then
 # lie in data\Backup. If this script kept pointing at data\, it would
@@ -55,14 +55,19 @@ $LevelInfoDir = "C:\Cloude AI\Tomb5 Native win 11 fix\Preparation\Level Infos"
 # location of TombItemEdit2026 no longer exist. The source is now the
 # backup of the installation - the checksum control underneath proves it is
 # unchanged, and that is exactly what it is there for.
-$VanillaDir   = "C:\Cloude AI\Tomb5 Native win 11 fix\Tomb5 Steam Version\data\Backup"
-$OutDir       = "C:\Cloude AI\Tomb5 Native win 11 fix\Preparation\Level Test\KeyItemRange Level Test"
-$ZoneScript   = "C:\Cloude AI\Tomb5 Native win 11 fix\Preparation\Tools\ZoneAnalysis.ps1"
+$VanillaDir   = "$PSScriptRoot\..\..\Tomb5 Steam Version\data\Backup"
+$OutDir       = "$PSScriptRoot\..\Level Test\KeyItemRange Level Test"
+$ZoneScript   = "$PSScriptRoot\ZoneAnalysis.ps1"
 # ATTENTION: only the build under Release\Beta can do -patchlevel. The
 # same-named EXE from the level editor is the GUI version - it opens its
 # window and returns exit code 0 without an output file (ran into that
 # 2026-08-23).
-$Exe          = "C:\Cloude AI\Alte sachen\Two gun test\TombItemEdit2026\Release\Beta\TombItemEdit2026.exe"
+# TombItemEdit2026 is a program of its own and not part of this
+# repository. TR5_ITEMEDIT names its executable.
+$Exe          = $env:TR5_ITEMEDIT
+if (-not $Exe) {
+    throw 'Set TR5_ITEMEDIT to the Release\Beta build of TombItemEdit2026.exe (see above - only that build can do -patchlevel).'
+}
 # No fixed user path (#72): intermediate files go to the machine's temp
 # folder.
 $ScratchDir   = Join-Path $env:TEMP "tr5rando-scratch"
@@ -283,7 +288,7 @@ foreach($lvl in $Levels){
     $dstTrc = "$OutDir\$lvl.trc"
     if (Test-Path $dstTrc) { Remove-Item $dstTrc -Force }
     # & with individual path arguments splits paths containing spaces (the
-    # project folder is called "Tomb5 Native win 11 fix" etc.) wrongly -
+    # path to this repository may well contain one) wrongly -
     # hence call via Start-Process with a cleanly quoted ArgumentList.
     $argList = @('-patchlevel', "`"$srcTrc`"", "`"$dstTrc`"", "`"$patchPath`"")
     $p = Start-Process -FilePath $Exe -ArgumentList $argList -Wait -PassThru -NoNewWindow

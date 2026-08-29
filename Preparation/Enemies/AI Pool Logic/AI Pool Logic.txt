@@ -1,7 +1,7 @@
 TOMB5 (TR5/Chronicles) - enemy AI pool for the randomizer
 =============================================================
 As of 2026-08-01, determined from the TOMB5 engine source code
-(C:\Cloude AI\Tomb5 Native win 11 fix\TOMB5 Code\TOMB5\game\*.cpp)
+(TOMB5 Code\TOMB5\game\*.cpp)
 
 Background
 ----------

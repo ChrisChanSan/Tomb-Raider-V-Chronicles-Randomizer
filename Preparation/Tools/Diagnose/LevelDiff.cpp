@@ -15,8 +15,8 @@
 // If it is byte-equal, only images were exchanged.
 //
 // Build (64 bit), from the .bat next to this file:
-//   set R=..\..\Tomb5 Native win 11 fix\TR5Randomizer\src
-//   set Z=..\..\Tomb5 Native win 11 fix\TOMB5 Code\TOMB5\tomb5\libs\zlib
+//   set R=..\..\..\TR5Randomizer\src
+//   set Z=..\..\..\TOMB5 Code\TOMB5\tomb5\libs\zlib
 //   cl /nologo /EHsc /O2 /std:c++17 /w /I "%R%" /I "%Z%" LevelDiff.cpp
 //       "%R%\core\Tr5Level.cpp" "%R%\core\DataFolder.cpp" "%Z%\*.c"
 //       /Fe:LevelDiff.exe

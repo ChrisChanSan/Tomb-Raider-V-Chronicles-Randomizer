@@ -9,8 +9,11 @@
 # in TR5 it is "Crumbling Floor").
 param(
     [string]$LevelName,
-    [string]$InfoDir  = "C:\Cloude AI\Tomb5 Native win 11 fix\Preparation\Level Infos",
-    [string]$Catalog  = "C:\Cloude AI\Two gun test\TombItemEdit2026\RESOURCES\TRCatalog2.xml"
+    [string]$InfoDir  = "$PSScriptRoot\..\Level Infos",
+    # TRCatalog2.xml belongs to TombItemEdit2026, a program of its own and
+    # not part of this repository. TR5_ITEMEDIT names its executable.
+    [string]$Catalog  = $(if ($env:TR5_ITEMEDIT) {
+        Join-Path (Split-Path $env:TR5_ITEMEDIT) "RESOURCES\TRCatalog2.xml" } else { "" })
 )
 $ErrorActionPreference = "Stop"
 

@@ -1,6 +1,6 @@
 ﻿wall spots: 22 of 55 sectors have at least one wall edge
 approach sectors: 53 of 55 sectors have at least one
-zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_richcut2.json (55 sectors, maxZone=0, 0 key constraints)
+zone export written: TR5Randomizer\build\data\zones_richcut2.json (55 sectors, maxZone=0, 0 key constraints)
 ==============================================================
  Progression zones: richcut2
 ==============================================================

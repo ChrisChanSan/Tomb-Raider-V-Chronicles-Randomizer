@@ -7,7 +7,7 @@ approach sectors: 263 of 325 sectors have at least one
 pool type 174 taken in limited to zone <= 1 (1 instances in the level)
 pool type 183 taken in limited to zone <= 0 (1 instances in the level)
 pool type 182 taken in limited to zone <= 0 (1 instances in the level)
-zone export written: C:\Cloude AI\Tomb5 Native win 11 fix\TR5Randomizer\build\data\zones_andy1.json (325 sectors, maxZone=2, 4 key constraints)
+zone export written: TR5Randomizer\build\data\zones_andy1.json (325 sectors, maxZone=2, 4 key constraints)
 ==============================================================
  Progression zones: andy1
 ==============================================================

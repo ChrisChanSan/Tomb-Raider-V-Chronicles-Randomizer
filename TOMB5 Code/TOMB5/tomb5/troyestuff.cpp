@@ -794,7 +794,7 @@ void CreditsScreen(long textY, long& menu, ulong& selection, ulong selection_bak
 	// GROUPS ARE SEPARATED BY COLOUR, NOT BY BLANK LINES - and that is a
 	// space decision, not a taste one. The screen holds fifteen rows
 	// (y = 2..16, font_height apart, the last one ending just above the
-	// bottom edge). Fourteen are names; four blank separators would eat
+	// bottom edge). Fifteen are names; four blank separators would eat
 	// the entire remaining budget and push the tool credits off screen.
 	// Headers therefore use the same gold as the title (colour 6) and the
 	// names stay white (colour 2).
@@ -813,11 +813,17 @@ void CreditsScreen(long textY, long& menu, ulong& selection, ulong selection_bak
 	PrintString(phd_centerx, textY + y++ * font_height, 6, "Randomizer and Windows 11 Port", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "ChrisChanSan", FF_CENTER);
 
+	// The AI belongs HERE, next to the person who directed it - not under
+	// Contributors, where it sat among people who played the seeds and
+	// reported what broke. It did neither, and that placement understated
+	// what it actually did. This is the last free row on the screen.
+	PrintString(phd_centerx, textY + y++ * font_height, 2, "with Claude AI by Anthropic", FF_CENTER);
+
 	// Testing, findings and ideas - the people who played the seeds and
 	// reported what broke.
 	PrintString(phd_centerx, textY + y++ * font_height, 6, "Contributors", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "XeNoN3560 - Lucifer230 - Todesengel1931", FF_CENTER);
-	PrintString(phd_centerx, textY + y++ * font_height, 2, "Crockett - Grylle - Claude AI", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 2, "Crockett - Grylle", FF_CENTER);
 
 	PrintString(phd_centerx, textY + y++ * font_height, 6, "Tools and Libraries", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "trview by chreden", FF_CENTER);

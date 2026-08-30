@@ -169,7 +169,20 @@ Licenses\TOMB5-GPLv3.txt - it is the same one.
 Contributors - testing, findings and ideas, the people who played the
 seeds and reported what broke:
 
-    XeNoN3560, Lucifer230, Todesengel1931, Crockett, Grylle, Claude AI
+    XeNoN3560, Lucifer230, Todesengel1931, Crockett, Grylle
+
+
+MADE WITH AI
+
+This project was built with Claude (Anthropic) as a coding partner, and
+that is too large a part of the work to hide in a credits line. A great
+deal of the code, most of the analysis tools and both manuals were
+written in conversation with it; every commit in the repository carries
+a Co-Authored-By trailer, so the history says exactly where.
+
+What that does not change: the design decisions and the call on what
+shipped were ChrisChanSan's, and nothing went into a release that had
+not been run in the actual game first.
 
 The randomizer's interface uses Dear ImGui by Omar Cornut (MIT
 license).

@@ -117,15 +117,19 @@ void DisplayStatsUCunt()
 	sprintf(buffer, "%d / 36", savegame.Game.Secrets);
 	PrintString(phd_centerx + (phd_centerx >> 2), ypos + 7 * font_height, 6, buffer, 0);
 
-	// The same count for THIS level, under the campaign total. Nobody knows by
-	// heart how many roses each level was built with, and with a rolled order
-	// even a player who did cannot tell which level they are in from the
-	// sequence. TXT_DELSECRET is the wording the game already uses when a
-	// secret is picked up ("secret n of m"), so this line arrives translated
-	// in every language file without a new string being needed.
+	// The same count for THIS level, right under the campaign total and in
+	// exactly the same shape: the label above covers both, the big total is
+	// the campaign, the small one the level. No word in front of it - the
+	// numbers are what is being read, and a second label would only repeat
+	// the first. That also keeps it out of the language file: two integers
+	// need no translation.
+	//
+	// Nobody knows by heart how many roses each level was built with, and
+	// with a rolled level order even a player who does cannot tell which
+	// level they are in from its position in the sequence.
 	if (LevelSecretTotal() > 0)
 	{
-		sprintf(buffer, SCRIPT_TEXT(TXT_DELSECRET), savegame.Level.Secrets, LevelSecretTotal());
+		sprintf(buffer, "%d / %d", savegame.Level.Secrets, LevelSecretTotal());
 		PrintString(phd_centerx + (phd_centerx >> 2), ypos + 8 * font_height, 6, buffer, 0);
 	}
 }

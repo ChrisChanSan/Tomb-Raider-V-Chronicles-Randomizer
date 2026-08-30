@@ -304,9 +304,15 @@ one.
 
 ## The secret counters
 
-**Pause → Statistics** shows two lines now. The campaign total, `n / 36`, as
-it always did — and underneath it the count for **the level you are in**, in
-the game's own wording ("secret 1 of 3").
+**Pause → Statistics** shows two lines under *Secrets Found* now:
+
+```
+Secrets Found            0 / 36     the whole campaign, as it always was
+                         0 / 3      the level you are in
+```
+
+Same shape, same column, one label above both — the big total is the
+campaign, the small one the level.
 
 Nobody knows by heart how many roses each level was built with, and with a
 rolled level order even a player who does cannot tell which level they are in

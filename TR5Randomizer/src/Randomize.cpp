@@ -316,7 +316,18 @@ int main(int argc, char** argv)
     // on hand-built test levels, and demanding a checksum file for those would
     // trade a silent wrong answer for a pointless refusal.
     {
-        const std::wstring csv = PathUtil::join(PathUtil::exeDir(), L"VanillaLevelChecksums.csv");
+        // data\ FIRST, beside the EXE only as a fallback. The first version of
+        // this looked ONLY beside the EXE, and therefore never fired once:
+        // BuildRelease puts the list in data\ and mirrors that into the build
+        // folder, which is exactly where the GUI looks too (payloadDir,
+        // Main.cpp:381). The test that "confirmed" the gate had the file
+        // hand-copied beside the EXE - so it proved the comparison works, not
+        // that the file is ever found. A check that only passes because the
+        // tester arranged for it to pass is not a check.
+        std::wstring csv = PathUtil::join(
+            PathUtil::join(PathUtil::exeDir(), L"data"), L"VanillaLevelChecksums.csv");
+        if (!PathUtil::fileExists(csv))
+            csv = PathUtil::join(PathUtil::exeDir(), L"VanillaLevelChecksums.csv");
         if (PathUtil::fileExists(csv))
         {
             DataFolder df;

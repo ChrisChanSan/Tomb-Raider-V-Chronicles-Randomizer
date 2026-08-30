@@ -527,6 +527,24 @@ bool Tr5Level::readChain(int index, std::vector<Tr5FloorEntry>& out) const
                 {
                     if (i >= limit) return false;
                     e.words.push_back(word(i++));
+
+                    // KNOWN DIVERGENCE FROM THE ENGINE, deliberately left in
+                    // place. For a camera the engine overwrites its loop
+                    // variable with this extra word - "case TO_CAMERA: trigger
+                    // = *data++" at control.cpp:2477 - and the loop below it
+                    // then tests THAT word's end bit (control.cpp:2619, :2744).
+                    // We test the command word instead, three lines down.
+                    //
+                    // In the 16 vanilla levels the two agree everywhere the
+                    // result is used: no caller of readChain reads camera or
+                    // flyby commands, and the old level exports parsed it the
+                    // same way, which is why switching to this reader produced
+                    // byte-identical output. Aligning it with the engine is
+                    // therefore a change with no measurable upside today and a
+                    // real downside: readChain also feeds moveTrigger and
+                    // copyTrigger, so a different chain length there rewrites
+                    // floordata. If anything ever needs camera or flyby
+                    // commands, fix it HERE and re-run the byte comparison.
                 }
                 if (c & 0x8000) break;
             }

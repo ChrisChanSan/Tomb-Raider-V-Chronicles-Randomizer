@@ -100,7 +100,7 @@ bool Rando::levelInfoFromLevel(const Tr5Level& lvl, JsonValue& out, std::string&
         o.set("y",       JsonValue::makeInt(it.y));
         o.set("z",       JsonValue::makeInt(it.z));
         // OCB is the low 6 bits of the raw trigger_flags field - same mask as
-        // ApplyPatch.cpp:1127 and Randomize.cpp:498.
+        // ApplyPatch.cpp:1127 and Randomize.cpp:559.
         o.set("ocb",     JsonValue::makeInt(it.triggerFlags & 0x3F));
         o.set("flags",   JsonValue::makeInt(static_cast<uint16_t>(it.flags)));
         o.set("sectorX", JsonValue::makeInt(sectorX));
@@ -122,7 +122,7 @@ bool Rando::levelInfoFromLevel(const Tr5Level& lvl, JsonValue& out, std::string&
     // instead. Randomizer.cpp then had to guess it back from the trigger's
     // own sector. Here the word is simply read, which is why that guess can
     // go: readChain already separates the reference word from the commands
-    // (Tr5Level.cpp:502-508), exactly as the engine does.
+    // (Tr5Level.cpp:513-519), exactly as the engine does.
     JsonValue trigArr = JsonValue::makeArray();
     for (size_t ri = 0; ri < rooms.size(); ++ri)
     {

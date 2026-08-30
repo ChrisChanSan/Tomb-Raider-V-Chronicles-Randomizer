@@ -58,8 +58,6 @@ Run the game normally, or use the two helpers in the package:
 
 The setup dialog also opens by itself the very first time the game is run.
 
-<p align="center"><img src="features-1.jpg" alt="In-game options" width="700"></p>
-
 **Output Settings** — *Graphics Adapter* (one entry per monitor), the renderer
 named underneath, *Resolution*, and *Fullscreen* / *Windowed*.
 **Render Options** — *Bilinear*, *Disable FMV*, *Low Quality Textures*.
@@ -163,6 +161,8 @@ drawn across the names. It lists names only; the web addresses live in
 
 ## tomb5 options
 
+<p align="center"><img src="features-1.jpg" alt="The tomb5 options page" width="700"></p>
+
 Two pages the original never had, plus a third when first person is on. The
 row of two arrows at the bottom steps forward; there is no going back a page,
 you cycle round.
@@ -208,7 +208,7 @@ Worth spelling out:
 
 ## First person view
 
-<p align="center"><img src="ingame-04.jpg" alt="First person" width="700"></p>
+<p align="center"><img src="features-2.jpg" alt="The first person options" width="700"></p>
 
 Switch it on under *tomb5 options*, page 2. A **third page** then appears with
 four rows of its own:

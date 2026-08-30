@@ -304,15 +304,16 @@ one.
 
 ## The secret counters
 
-**Pause → Statistics** shows two lines under *Secrets Found* now:
+**Pause → Statistics** now shows the level's own count in brackets behind the
+campaign total:
 
 ```
-Secrets Found            0 / 36     the whole campaign, as it always was
-                         0 / 3      the level you are in
+Secrets Found            0 / 36   (0 / 3)
 ```
 
-Same shape, same column, one label above both — the big total is the
-campaign, the small one the level.
+The first pair is the whole campaign, as it always was; the pair in brackets
+is the level you are in. Where a level holds no secrets the bracket is left
+off, which is also what keeps it off the title screen.
 
 Nobody knows by heart how many roses each level was built with, and with a
 rolled level order even a player who does cannot tell which level they are in

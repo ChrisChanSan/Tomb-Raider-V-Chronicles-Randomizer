@@ -114,24 +114,22 @@ void DisplayStatsUCunt()
 	PrintString(phd_centerx + (phd_centerx >> 2), ypos + 5 * font_height, 6, buffer, 0);
 	sprintf(buffer, "%d", savegame.Game.HealthUsed);
 	PrintString(phd_centerx + (phd_centerx >> 2), ypos + 6 * font_height, 6, buffer, 0);
-	sprintf(buffer, "%d / 36", savegame.Game.Secrets);
-	PrintString(phd_centerx + (phd_centerx >> 2), ypos + 7 * font_height, 6, buffer, 0);
-
-	// The same count for THIS level, right under the campaign total and in
-	// exactly the same shape: the label above covers both, the big total is
-	// the campaign, the small one the level. No word in front of it - the
-	// numbers are what is being read, and a second label would only repeat
-	// the first. That also keeps it out of the language file: two integers
-	// need no translation.
+	// Both counts on one line, under the one label that already covers them:
+	// the campaign total as before, and the level in brackets behind it.
+	// A second row needed a second label, and the language file has no word
+	// for it - two integers need none.
 	//
 	// Nobody knows by heart how many roses each level was built with, and
 	// with a rolled level order even a player who does cannot tell which
-	// level they are in from its position in the sequence.
+	// level they are in from its position in the sequence. Where a level
+	// holds no secrets at all the bracket is left off, which is also what
+	// keeps it off the title screen.
 	if (LevelSecretTotal() > 0)
-	{
-		sprintf(buffer, "%d / %d", savegame.Level.Secrets, LevelSecretTotal());
-		PrintString(phd_centerx + (phd_centerx >> 2), ypos + 8 * font_height, 6, buffer, 0);
-	}
+		sprintf(buffer, "%d / 36   (%d / %d)", savegame.Game.Secrets,
+				savegame.Level.Secrets, LevelSecretTotal());
+	else
+		sprintf(buffer, "%d / 36", savegame.Game.Secrets);
+	PrintString(phd_centerx + (phd_centerx >> 2), ypos + 7 * font_height, 6, buffer, 0);
 }
 
 long DoLoadSave(long LoadSave)

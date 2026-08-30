@@ -19,13 +19,21 @@
 // End-to-end: from a seed to a finished randomized level file.
 //
 // Usage:
-//   Randomize.exe <zones.json> <levelinfo.json> <source.trc> <target.trc> [seed]
+//   Randomize.exe <zones.json> <ignored> <source.trc> <target.trc> [seed]
+//
+// The second argument used to be a level_<name>.json. Since 2026-08-30 the
+// rooms, items and triggers are read out of <source.trc> itself, so the
+// argument is accepted and ignored - its position is kept so that existing
+// command lines and the regression comparison against older builds keep
+// working. Pass any string.
 //
 // The GUI drives the same steps; this program is the proof that the chain is
 // complete, and it stays around for checking individual levels.
 //----------------------------------------------------------------------------
 #include "core/ApplyPatch.h"
 #include "core/Json.h"
+#include "core/DataFolder.h"
+#include "core/LevelInfo.h"
 #include "core/Randomizer.h"
 #include "core/Rng.h"
 #include "core/ScriptDat.h"
@@ -62,7 +70,9 @@ int main(int argc, char** argv)
 {
     if (argc < 5)
     {
-        std::printf("Usage: Randomize.exe <zones.json> <levelinfo.json> <source.trc> <target.trc> [seed] [switches...]\n");
+        std::printf("Usage: Randomize.exe <zones.json> <ignored> <source.trc> <target.trc> [seed] [switches...]\n");
+        std::printf("  <ignored>: was the level info; rooms, items and triggers now\n"
+                "             come out of <source.trc>. Pass any string.\n");
         std::printf("  number:   count of extra enemies, 0 = none (default)\n");
         std::printf("  only:     leave items untouched - for enemy/outfit tests\n");
         std::printf("  outfit:   random outfit (Lara_Andrea/Joby/Rich)\n"
@@ -278,18 +288,69 @@ int main(int argc, char** argv)
 
     std::string err;
 
-    JsonValue zone, info;
+    JsonValue zone;
     if (!Json::parseFile(toW(argv[1]), zone, err)) { std::printf("zone export: %s\n", err.c_str()); return 1; }
-    if (!Json::parseFile(toW(argv[2]), info, err)) { std::printf("level info: %s\n", err.c_str()); return 1; }
+
+    // Open the level BEFORE placement, for two reasons. If a trigger travels
+    // along, placement must know which sectors can take it, and that stands
+    // only in the floordata. And the level info is now read out of this file
+    // rather than out of a level_<name>.json, so it has to be open first.
+    Tr5Level lvl;
+    if (!lvl.load(toW(argv[3]), err)) { std::printf("load level: %s\n", err.c_str()); return 1; }
+
+    // THE GATE THIS CHANGE MADE NECESSARY.
+    //
+    // The old level_<name>.json described, by construction, the untouched
+    // level - it was made once from the original and never changed. Reading
+    // the same facts out of argv[3] means reading whatever that file is right
+    // now. Point this at an already randomized level and every typeId is the
+    // SWAPPED one; type-driven rules then decide on the wrong data and the run
+    // still succeeds, because item indices stay valid (items are only ever
+    // appended). It would fail silently, which is the worst way to fail.
+    //
+    // The GUI never had this problem: it restores data\ from Backup before
+    // every run and only offers levels whose checksum matches vanilla. The
+    // CLI took any path at all. It refuses one now.
+    //
+    // Skipped when the list is not next to the program - the tool is also used
+    // on hand-built test levels, and demanding a checksum file for those would
+    // trade a silent wrong answer for a pointless refusal.
+    {
+        const std::wstring csv = PathUtil::join(PathUtil::exeDir(), L"VanillaLevelChecksums.csv");
+        if (PathUtil::fileExists(csv))
+        {
+            DataFolder df;
+            std::string cerr;
+            if (df.loadChecksums(csv, cerr))
+            {
+                std::string hex; uint64_t size = 0;
+                if (FileHash::sha256File(toW(argv[3]), hex, size, cerr))
+                {
+                    // Unknown names pass: a hand-built test level is not one
+                    // of Core's and refusing it would help nobody.
+                    const std::string file = baseName(argv[3]) + ".trc";
+                    if (df.checkOne(file, hex, size) == LevelState::Modified)
+                    {
+                        std::printf("refused: %s is not the vanilla level.\n"
+                                    "  The randomizer reads rooms, items and triggers out of this\n"
+                                    "  file. On an already randomized level those describe the\n"
+                                    "  rolled state, and the run would quietly decide on wrong\n"
+                                    "  data. Point this at an untouched level, or delete\n"
+                                    "  VanillaLevelChecksums.csv beside the program to accept\n"
+                                    "  the risk knowingly.\n", argv[3]);
+                        return 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // Rooms, items and triggers, straight out of the level file.
+    JsonValue info;
+    if (!Rando::levelInfoFromLevel(lvl, info, err)) { std::printf("level info: %s\n", err.c_str()); return 1; }
 
     RandoInput in;
     if (!Rando::buildInput(zone, info, in, err)) { std::printf("input: %s\n", err.c_str()); return 1; }
-
-    // Open the level BEFORE placement, not only for patching: if a trigger
-    // travels along, placement must know which sectors can take it, and that
-    // stands only in the floordata.
-    Tr5Level lvl;
-    if (!lvl.load(toW(argv[3]), err)) { std::printf("load level: %s\n", err.c_str()); return 1; }
     const int itemsBefore = lvl.itemCount();
 
     // Core's level bugs, exactly as the GUI does it (LevelFix.h). The CLI

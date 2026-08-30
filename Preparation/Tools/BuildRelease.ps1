@@ -74,10 +74,16 @@ foreach ($f in (Get-ChildItem "$LevelInfo\*.json" | Sort-Object Name)) {
     if ($f.BaseName -eq 'Title') { continue }
     & "$ZoneTools\ZoneAnalysis.ps1" -LevelJson $f.FullName -LevelName $f.BaseName `
         -ExportZonesJson "$dataOut\zones_$($f.BaseName).json" *> $null
-    Copy-Item $f.FullName "$dataOut\level_$($f.Name)" -Force
     $zones++
 }
-Say "Data          : $zones zone exports + level infos + checksum list"
+# level_<name>.json is NOT shipped any more, and that is the point of the
+# change: it was 45 MB, the randomizer read three arrays out of it (1.2% of
+# the bytes), and those three come out of the .trc it opens anyway - proven
+# level by level with InfoCompare.exe before the switch. What stays is the
+# zone export, which is this project's own curation and not a copy of Core's
+# level data. The level infos are still needed HERE, at build time, because
+# ZoneAnalysis reads the sector grid from them.
+Say "Data          : $zones zone exports + checksum list"
 
 # The secret lists (#53). The GUI looks for them in data\secrets next to the
 # EXE (findSecretSources) - without them both dropdowns stay empty and the

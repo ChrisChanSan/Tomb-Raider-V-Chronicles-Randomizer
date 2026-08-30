@@ -432,6 +432,17 @@ namespace
     // engine reads all three the same way - game/control.cpp:2251, :2266,
     // :2274, each time "value = *(data++) & 0x3FF". The word is NOT a
     // command.
+    // Defined in the Tr5Floor namespace (Tr5Level.h) rather than here, so
+    // LevelInfo.cpp can walk a chain with exactly this knowledge instead of
+    // its own copy. A second copy of a bit layout is a second chance to get
+    // it wrong.
+    using Tr5Floor::hasRefWord;
+    using Tr5Floor::extraWords;
+    using Tr5Floor::cmdType;
+}
+
+namespace Tr5Floor
+{
     bool hasRefWord(int kind) { return kind == 2 || kind == 3 || kind == 4; }
 
     // Extra words of an entry that is not a trigger: exactly the cases

@@ -143,6 +143,26 @@ struct Tr5TriggerCmd
     int param = 0;
 };
 
+//----------------------------------------------------------------------------
+// The three rules for walking a floordata chain. They used to sit in an
+// anonymous namespace inside Tr5Level.cpp, which meant a second reader had to
+// copy them - and a copied bit layout is a second chance to get it wrong.
+// Each one names the engine line it was taken from; see Tr5Level.cpp.
+//----------------------------------------------------------------------------
+namespace Tr5Floor
+{
+    // SWITCH (2), KEY (3) and PICKUP (4) push a reference word in front of
+    // the command list. It is NOT a command.
+    bool hasRefWord(int kind);
+
+    // Extra words of a non-trigger entry - the cases where GetHeight does a
+    // "data++".
+    int extraWords(int fn);
+
+    // Command kind: 4 bits, not 5. Bit 15 is the end bit.
+    int cmdType(uint16_t c);
+}
+
 class Tr5Level
 {
 public:

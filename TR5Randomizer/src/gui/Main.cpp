@@ -34,6 +34,7 @@
 #include "core/Config.h"
 #include "core/DataFolder.h"
 #include "core/Json.h"
+#include "core/LevelInfo.h"
 #include "core/Randomizer.h"
 #include "core/Rng.h"
 #include "core/ScriptDat.h"
@@ -813,21 +814,30 @@ static std::wstring cacheDir(const App& a)
         const std::string base = row.name.substr(0, row.name.find_last_of('.'));
         const std::wstring wbase = PathUtil::widen(base);
 
-        JsonValue zone, info;
+        JsonValue zone;
         if (!Json::parseFile(PathUtil::join(a.payloadDir(), L"zones_" + wbase + L".json"), zone, err)) return false;
-        if (!Json::parseFile(PathUtil::join(a.payloadDir(), L"level_" + wbase + L".json"), info, err)) return false;
 
-        RandoInput in;
-        if (!Rando::buildInput(zone, info, in, err)) return false;
-
-        // The level is opened BEFORE placement, not only for patching. The
-        // reason is the coupled trigger move: which sectors can take a
-        // trigger stands only in the floordata, and placement must know it
-        // before it chooses - otherwise it only shows while patching, and by
-        // then the run is half done.
+        // The level is opened BEFORE placement, not only for patching. Two
+        // reasons now. The older one is the coupled trigger move: which
+        // sectors can take a trigger stands only in the floordata, and
+        // placement must know it before it chooses - otherwise it only shows
+        // while patching, and by then the run is half done. The newer one is
+        // that the level info itself comes from this file (LevelInfo.h), so
+        // it has to be open before buildInput, not after.
         Tr5Level lvl;
         const std::wstring target = PathUtil::join(a.dataDir(), PathUtil::widen(row.name));
         if (!lvl.load(target, err)) return false;
+
+        // Rooms, items and triggers, read out of the level instead of out of
+        // a 3 MB level_<name>.json. Safe here because the caller restored
+        // data\ from Backup first and only enabled levels whose checksum
+        // matches vanilla - the info therefore describes the untouched level,
+        // exactly as the old export did by construction.
+        JsonValue info;
+        if (!Rando::levelInfoFromLevel(lvl, info, err)) return false;
+
+        RandoInput in;
+        if (!Rando::buildInput(zone, info, in, err)) return false;
 
         // Repair Core's level bugs BEFORE anything is rolled (LevelFix.h).
         // Early, because placement reads the floordata: a trigger added only
@@ -994,19 +1004,24 @@ static std::wstring cacheDir(const App& a)
         const std::string base = row.name.substr(0, row.name.find_last_of('.'));
         const std::wstring wbase = PathUtil::widen(base);
 
-        JsonValue zone, info;
+        JsonValue zone;
         if (!Json::parseFile(PathUtil::join(a.payloadDir(), L"zones_" + wbase + L".json"), zone, err)) return false;
-        if (!Json::parseFile(PathUtil::join(a.payloadDir(), L"level_" + wbase + L".json"), info, err)) return false;
 
-        RandoInput in;
-        if (!Rando::buildInput(zone, info, in, err)) return false;
-
+        // The backup by preference, exactly as the comment above this function
+        // demands: the markers must describe the untouched level. That matters
+        // twice now, because the level info is read out of this same file.
         const std::wstring src = PathUtil::join(
             a.haveBackup ? a.backupDir() : a.dataDir(), PathUtil::widen(row.name));
 
         Tr5Level lvl;
         if (!lvl.load(src, err)) return false;
         lvl.allowMoreThanMaxItems(true);   // expressly wanted here, see Tr5Level.h
+
+        JsonValue info;
+        if (!Rando::levelInfoFromLevel(lvl, info, err)) return false;
+
+        RandoInput in;
+        if (!Rando::buildInput(zone, info, in, err)) return false;
 
         // The level is opened BEFORE the markers are built - exactly as in
         // the real run above, and for the same reason.

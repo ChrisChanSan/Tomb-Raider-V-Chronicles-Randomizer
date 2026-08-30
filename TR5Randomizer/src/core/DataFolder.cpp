@@ -276,6 +276,26 @@ std::vector<LevelStatus> DataFolder::inspect(const std::wstring& sourceDataDir) 
     return out;
 }
 
+LevelState DataFolder::checkOne(const std::string& name, const std::string& sha256Upper,
+                                uint64_t size) const
+{
+    // Names are compared without case: the CSV says "Andrea1.trc", a folder
+    // may hold "ANDREA1.TRC", and Windows considers those the same file.
+    auto lower = [](std::string s) {
+        for (char& c : s) if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+        return s;
+    };
+    const std::string want = lower(name);
+
+    for (const LevelFile& lf : m_known)
+    {
+        if (lower(lf.name) != want) continue;
+        return (size == lf.size && sha256Upper == lf.sha256)
+                   ? LevelState::Vanilla : LevelState::Modified;
+    }
+    return LevelState::Unknown;
+}
+
 bool DataFolder::isUsableSource(const std::vector<LevelStatus>& status, std::string& reason)
 {
     // An empty list is NOT a success. Without this check the function

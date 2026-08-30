@@ -20,8 +20,8 @@ are not versioned and drift silently.
         |                             environment variable.
         v
   Preparation\Level Infos\<level>.json     TRACKED. 16 files, one per level.
-        |                                  The measured truth about a level:
-        |                                  items, rooms, sectors, triggers.
+        |                                  The sector grid, which is the only
+        |                                  part still needed - see below.
         v
   Preparation\Tools\ZoneAnalysis.ps1       the curation. Zones, key
         |                                  constraints, banned rooms and
@@ -42,8 +42,25 @@ are not versioned and drift silently.
 2. **The level infos are the measurement, not the curation.** Editing them
    by hand means lying to every tool downstream. If a level really changed,
    re-export it.
-3. **The randomizer never reads `Level Infos\*.json` at run time** - only the
-   zone exports generated from them.
+3. **The randomizer reads no level info at all any more.** Until 2026-08-30 a
+   copy of these files shipped as `data\level_<name>.json`, 45 MB of it, and
+   the run took three arrays out of them: rooms, items, triggers - 1.2% of the
+   bytes. Those three now come out of the `.trc` the randomizer opens anyway
+   (`src\core\LevelInfo.h`), proven level by level with
+   `Tools\Diagnose\InfoCompare.exe` before the switch. What ships is the zone
+   export and nothing else.
+
+   The files here were shrunk to match: everything no tool reads is gone
+   (`boxes`, `statics`, and eleven of the twenty-five sector fields), 51 MB
+   down to 21 MB. The zone exports came out byte-identical afterwards, all
+   fifteen of them, which is how that was checked rather than assumed.
+
+4. **What is left is here because it cannot be computed.** `validForItems` is
+   not a measurement but a curated judgement - a hand-written exclusion list
+   and a reachability call sit among its ten conditions. Recomputing it would
+   mean inventing it again. The other thirteen fields ZoneAnalysis reads could
+   be derived from the `.trc`; they stay because PowerShell cannot read a
+   `.trc`, so the win would be one file format more, not less.
 
 ## What is in here
 

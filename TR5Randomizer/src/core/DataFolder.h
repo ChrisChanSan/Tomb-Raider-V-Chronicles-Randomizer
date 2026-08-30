@@ -92,6 +92,17 @@ public:
                     std::string& error,
                     int* copiedCount = nullptr) const;
 
+    // Is this ONE file the vanilla level of that name? Same comparison as
+    // inspect(), for a caller that has a single path rather than a folder -
+    // the command-line tool, which needs it since it reads rooms, items and
+    // triggers out of the level file itself and must not be handed an
+    // already randomized one.
+    //
+    // A name the list does not carry comes back as Unknown, not Modified: a
+    // hand-built test level is not wrong, it is simply not one of Core's.
+    LevelState checkOne(const std::string& name, const std::string& sha256Upper,
+                        uint64_t size) const;
+
     const std::vector<LevelFile>& knownLevels() const { return m_known; }
 
 private:

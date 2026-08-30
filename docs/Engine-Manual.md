@@ -20,6 +20,7 @@ The randomizer has its own manual — [Randomizer-Manual.md](Randomizer-Manual.m
 - [First person view](#first-person-view)
 - [Language, and HQ music](#language-and-hq-music)
 - [Balance.txt — tuning the whole game](#balancetxt--tuning-the-whole-game)
+- [The secret counters](#the-secret-counters)
 - [Secret rewards](#secret-rewards)
 - [Savegames](#savegames)
 - [What plays differently from the original](#what-plays-differently-from-the-original)
@@ -300,6 +301,17 @@ To undo hand-tuned values, **delete the file** — the next start writes a fresh
 one.
 
 ---
+
+## The secret counters
+
+**Pause → Statistics** shows two lines now. The campaign total, `n / 36`, as
+it always did — and underneath it the count for **the level you are in**, in
+the game's own wording ("secret 1 of 3").
+
+Nobody knows by heart how many roses each level was built with, and with a
+rolled level order even a player who does cannot tell which level they are in
+from the position in the sequence. The line is absent on the title screen and
+in the two cutscene levels, which hold no secrets at all.
 
 ## Secret rewards
 

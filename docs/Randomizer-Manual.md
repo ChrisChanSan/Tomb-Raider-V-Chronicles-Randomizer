@@ -49,9 +49,11 @@ engine that plays the result). The engine has its own manual —
 
 <p align="center"><img src="gui-main.jpg" alt="The randomizer window" width="760"></p>
 
-1. **Press "Choose folder..."** in box *1. Your installation* and pick the
+1. **On the very first start the folder dialog opens by itself.** Pick the
    folder that contains `PCtomb5.exe`.
    **Not the `data` folder inside it** — see the warning below.
+   (Later, or if you cancelled it, the same thing sits behind
+   **"Choose folder..."** in box *1. Your installation*.)
 2. The status line should read *"Installation checked — all levels
    unmodified."*
 3. **Press "Randomize"** at the bottom.

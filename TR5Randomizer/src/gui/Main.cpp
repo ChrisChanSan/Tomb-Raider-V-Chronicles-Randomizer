@@ -1523,7 +1523,14 @@ static void drawPathsWindow(App& a, HWND hwnd)
     }
 
     ImGui::Spacing();
-    ImGui::TextDisabled(T("In each case, choose the data folder of the installation."));
+    // This used to read "In each case, choose the data folder" - which is
+    // right for the two Tomb Raider 3 rows and WRONG for the first one.
+    // Choosing data\ for Chronicles still finds the levels, so nothing
+    // looks amiss, but SCRIPT.DAT is only looked for in the chosen folder
+    // and one data\ below it - the whole script step then vanishes in
+    // silence and shows up in the game as young Lara without weapons.
+    ImGui::TextDisabled(T("For Chronicles pick the folder holding PCTomb5.exe; "
+                          "for the two Tomb Raider 3 rows either that folder or its data folder."));
     ImGui::End();
 }
 
@@ -1930,6 +1937,24 @@ static void drawUi(App& a, HWND hwnd)
                                                 : PathUtil::narrow(a.cfg.sourceDir);
     ImGui::TextWrapped(T("%s"), shown.c_str());
 
+    // On the very first start there is nothing to check and nothing to
+    // press: the window comes up with "(not selected)" and a player who
+    // does not read section 1 sits in front of a program that appears to
+    // do nothing. README.txt has been promising this prompt for a while.
+    // Once only - after this the dialog is the button, not a greeting.
+    static bool askedOnce = false;
+    if (!askedOnce && a.cfg.sourceDir.empty())
+    {
+        askedOnce = true;
+        std::wstring picked;
+        if (pickFolder(hwnd, picked))
+        {
+            a.cfg.sourceDir = picked;
+            a.cfg.save();
+            inspectSource(a);
+        }
+    }
+
     if (ImGui::Button(T("Choose folder...")))
     {
         std::wstring picked;
@@ -2126,7 +2151,7 @@ static void drawUi(App& a, HWND hwnd)
     openBlock("k_outfits", "4. Outfits", fOutfits, remainingHeight(a.heights.items + gapY));
 
     ImGui::Checkbox(T("Random outfits"), &a.optOutfits);
-    hoverHelp("Each section randomly gets Lara_Andrea, Lara_Joby or Lara_Rich "
+    hoverHelp("Every level randomly gets Lara_Andrea, Lara_Joby or Lara_Rich "
               "(catsuit). Only skin and head are carried over (slots 8/9/10) "
               "plus the outfit byte - never slot 0, which carries the "
               "animations. joby4 keeps the diving suit; the andy levels always "
@@ -2144,8 +2169,8 @@ static void drawUi(App& a, HWND hwnd)
           "travels - head, braid, holsters and the speech heads stay the "
           "level's own, which is why they keep working. The model is read from "
           "your own Tomb Raider 3 at runtime; nothing of it is shipped here."
-        : "Needs your Tomb Raider 3 installation. Enter its folder under "
-          "Folders - the model is read from there at runtime, we ship no game "
+        : "Needs your Tomb Raider 3 installation. Set it under "
+          "\"Installation paths...\" in section 1 - the model is read from there "
           "data.");
 
     ImGui::BeginDisabled(!a.optOutfits);
@@ -2288,8 +2313,8 @@ static void drawUi(App& a, HWND hwnd)
               "richcut2 always stays attached to rich2. On every level start, "
               "keys/puzzles/pickups and the grappling gun (rich3 only) are "
               "reset - weapons, ammo, medipacks and flares are kept. Whatever "
-              "a level needs from another one (Key 8 joby3, Key 7 joby5, "
-              "Catapult Andy2, crowbar Andrea3), the script always grants - "
+              "a level needs from another one - the Swipe Card for joby3 and "
+              "the crowbar for Andrea3 - the script grants, "
               "model and name included. Curated in LevelChains.h.");
 
     closeBlock(&a.heights.level);

@@ -226,3 +226,6 @@ enum invobj_types
 
 
 extern INVOBJ inventry_objects_list[NUM_INVOBJ];
+
+// Secrets in the level being played, for the statistics screen.
+long LevelSecretTotal();

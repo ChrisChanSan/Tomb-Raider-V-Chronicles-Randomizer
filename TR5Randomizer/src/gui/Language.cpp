@@ -88,7 +88,8 @@ static const std::unordered_map<std::string, const char*>& table()
         { "OK", "in Ordnung" },
         { "%s not found", "%s nicht gefunden" },
         { "not checked yet", "noch nicht geprueft" },
-        { "In each case, choose the data folder of the installation.",
+        { "For Chronicles pick the folder holding PCTomb5.exe; "
+          "for the two Tomb Raider 3 rows either that folder or its data folder.",
           "Gesucht wird jeweils der data-Ordner der Installation." },
 
         // --- Window: enemy types -----------------------------------------
@@ -317,7 +318,7 @@ static const std::unordered_map<std::string, const char*>& table()
         { "London (TR3)", "London (TR3)" },
         { "TR2 outfits", "TR2 Outfits" },
         { "TR3 outfits", "TR3 Outfits" },
-        { "Each section randomly gets Lara_Andrea, Lara_Joby or Lara_Rich "
+        { "Every level randomly gets Lara_Andrea, Lara_Joby or Lara_Rich "
           "(catsuit). Only skin and head are carried over (slots 8/9/10) "
           "plus the outfit byte - never slot 0, which carries the "
           "animations. joby4 keeps the diving suit; the andy levels always "
@@ -336,11 +337,12 @@ static const std::unordered_map<std::string, const char*>& table()
           "die des Levels, deshalb funktionieren sie weiter. Das Modell wird "
           "zur Laufzeit aus deinem eigenen Tomb Raider 3 gelesen; hier ist "
           "nichts davon mit dabei." },
-        { "Needs your Tomb Raider 3 installation. Enter its folder under "
-          "Folders - the model is read from there at runtime, we ship no game "
-          "data.",
-          "Braucht deine Tomb-Raider-3-Installation. Trage ihren Ordner unter "
-          "Ordner ein - das Modell wird zur Laufzeit von dort gelesen, "
+        { "Needs your Tomb Raider 3 installation. Set it under "
+          "\"Installation paths...\" in section 1 - the model is read from there "
+          "at runtime, we ship no game data.",
+          "Braucht deine Tomb-Raider-3-Installation. Stelle sie unter "
+          "\"Installationspfade...\" in Abschnitt 1 ein - das Modell wird zur "
+          "Laufzeit von dort gelesen, "
           "Spieldaten liefern wir keine mit." },
         { "Coming later: the classic TR1 outfit as an additional choice in "
           "the outfit pool.",
@@ -446,8 +448,8 @@ static const std::unordered_map<std::string, const char*>& table()
           "richcut2 always stays attached to rich2. On every level start, "
           "keys/puzzles/pickups and the grappling gun (rich3 only) are "
           "reset - weapons, ammo, medipacks and flares are kept. Whatever "
-          "a level needs from another one (Key 8 joby3, Key 7 joby5, "
-          "Catapult Andy2, crowbar Andrea3), the script always grants - "
+          "a level needs from another one - the Swipe Card for joby3 and "
+          "the crowbar for Andrea3 - the script grants, "
           "model and name included. Curated in LevelChains.h.",
           "Innerhalb: Rom/Russland/Irland/VCI bleiben Bloecke, nur die Level "
           "darin tauschen. Frei: alle 13 Level ueber alle Abschnitte hinweg "
@@ -455,8 +457,8 @@ static const std::unordered_map<std::string, const char*>& table()
           "bleibt immer an rich2. Bei jedem Levelstart werden Keys/Puzzles/"
           "Pickups und die Grappling Gun (nur rich3) zurueckgesetzt - Waffen, "
           "Munition, Medis und Leuchtfackeln bleiben. Was ein Level aus einem "
-          "anderen braucht (Key 8 joby3, Key 7 joby5, Catapult Andy2, "
-          "Brechstange Andrea3), gibt das Skript immer - samt Modell und Namen. "
+          "anderen braucht - die Magnetkarte fuer joby3 und die Brechstange "
+          "fuer Andrea3 -, gibt das Skript samt Modell und Namen. "
           "Kuratiert in LevelChains.h." },
 
         // --- Block 7: music ----------------------------------------------

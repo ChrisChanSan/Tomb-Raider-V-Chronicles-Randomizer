@@ -132,6 +132,16 @@ static short optmessages[11] =
 
 static uchar wanky_secrets_table[18] = { 0, 3, 3, 3, 3, 3, 1, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3 };
 
+// How many secrets THIS level holds. The table stays private; the statistics
+// screen needs the number and has no business knowing where it comes from.
+// Indexed by gfLevelId, not by the slot - with a rolled level order the two
+// are different numbers, and it is the level's identity that decides how
+// many roses it was built with.
+long LevelSecretTotal()
+{
+	return gfLevelId < 18 ? wanky_secrets_table[gfLevelId] : 0;
+}
+
 //----------------------------------------------------------------------------
 // Secret bonus (TR2-style): collecting every secret in a level awards items.
 //

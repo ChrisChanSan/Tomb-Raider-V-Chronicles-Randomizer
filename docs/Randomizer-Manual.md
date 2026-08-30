@@ -129,8 +129,9 @@ choice is remembered, so it is asked once.
 
 **"Check again"** re-hashes every level and compares it against the shipped
 list. It runs by itself at start and after every run; the button is for
-repeating it by hand. It also re-scans `data\secrets`, which is the only way
-short of a restart to make a newly added secret list appear.
+repeating it by hand. It also re-scans `data\secrets`, which is what makes a newly
+added secret list appear — as does any run and any change of folder, so the
+button is the quick way, not the only one.
 
 The check is deliberately all-or-nothing. One single level that differs from
 vanilla makes the whole installation unusable as a source — *"3 levels differ
@@ -210,8 +211,10 @@ her skin and head travel, never her animations, so her moves never change.
 The three built-in choices are Lara Andrea (Rome), Lara Joby (Russia) and
 Lara Rich (catsuit, VCI). A level that draws what it already wears keeps it.
 
-This is the section's master switch — the other two controls are greyed out
-while it is off.
+This is the section's master switch — "TR3 outfits" and "Wardrobe..." are
+greyed out while it is off. The two rows below them, "TR1 outfit" and
+"TR2 outfits", are permanently disabled placeholders: the section is built
+to grow, those games are not ported yet.
 
 **"TR3 outfits"** — *off.* Adds London, Jungle, Antarctica and Nevada to the
 draw. Needs a Tomb Raider III installation; the models are read from it while
@@ -389,8 +392,9 @@ with the level options off puts the original order back.
 > a fully vanilla game, copy `data\Backup\SCRIPT.DAT` back by hand, press
 > "Reset balance", and delete `SecretRewards.txt`.
 
-**"Debug"** builds copies of the levels with every valid placement sector
-marked, for looking at in trview. Those files will **not** start in the game —
+**"Debug"** opens a small menu; the marked levels are built from the
+**"Sector markers..."** window it leads to. They are copies of the levels
+with every valid placement sector marked, for looking at in trview. Those files will **not** start in the game —
 they carry thousands of markers. Your installation is untouched; everything
 lands in a `Debug Level` folder beside the program.
 
@@ -419,7 +423,8 @@ Jungle, Antarctica, Nevada — are read from your own Tomb Raider III at run
 time. **Nothing from Tomb Raider III ships with this program.**
 
 Set the paths under **"Installation paths..."** in box 1. Each row reports
-`OK`, or names the file it could not find. It checks for the actual file, not
+`OK`, or names the file it could not find; the Chronicles row has no single
+file to look for and reads "not checked yet" until a run touches it. It checks for the actual file, not
 the folder, so an empty folder still says "not found".
 
 **The vulture needs both games.** Its model is in The Lost Artifact's

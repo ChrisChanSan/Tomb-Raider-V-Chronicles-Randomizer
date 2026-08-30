@@ -102,8 +102,9 @@ Chronicles`.
 five positions: *Keyboard*, *PS5 Controller*, *Xbox Controller*, *Joystick*
 and *Reset*.
 
-The three controller positions all mean the same thing to the game — they only
-choose the **vocabulary** the buttons are named with. The engine works out by
+The three controller positions mostly mean the same thing to the game — they
+choose the **vocabulary** the buttons are named with, and with it the default
+layout that *Reset* writes back. The engine works out by
 itself whether your pad reports as XInput or DirectInput, so a DualSense
 behind Steam still gets PS5 names.
 

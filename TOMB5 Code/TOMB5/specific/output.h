@@ -22,7 +22,7 @@ long S_GetObjectBounds(short* bounds);
 void S_AnimateTextures(long n);
 long aCheckMeshClip(MESH_DATA* mesh);
 extern long aMeshClipRejects;
-extern long aClipMeldeObj;
+extern long aClipReportObj;
 HRESULT DDCopyBitmap(LPDIRECT3DSURFACE9 surf, HBITMAP hbm, long x, long y, long dx, long dy);
 HRESULT _LoadBitmap(LPDIRECT3DSURFACE9 surf, LPCSTR name);
 void do_boot_screen(long language);

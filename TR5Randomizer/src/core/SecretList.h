@@ -36,7 +36,7 @@ class JsonValue;
 // of the level (positions from the room origins of the loaded file, item
 // base from its real item count) and applied with the same Patch::apply
 // machinery. Without "itemBase" in the patch, apply moves nothing - the
-// Neu<k> references thus match exactly.
+// New<k> references thus match exactly.
 //----------------------------------------------------------------------------
 
 struct SecretSource

@@ -368,7 +368,7 @@ bool Rando::buildInput(const JsonValue& zoneExport,
 
         const JsonValue& ai = zoneExport["antitriggerImmune"];
         for (size_t i = 0; i < ai.size(); ++i)
-            out.antitriggerImmunItems.insert(static_cast<int>(ai[i].asInt(-1)));
+            out.antitriggerImmuneItems.insert(static_cast<int>(ai[i].asInt(-1)));
 
     }
 
@@ -2387,7 +2387,7 @@ bool Rando::run(const RandoInput& in,
     // whether items travel - they describe level logic, not a side effect
     // of the randomization. rich2's door 171 is the case (see the curation
     // table).
-    for (int idx : in.antitriggerImmunItems)
+    for (int idx : in.antitriggerImmuneItems)
     {
         if (immuneSet.count(idx)) continue;
         JsonValue e = JsonValue::makeObject();

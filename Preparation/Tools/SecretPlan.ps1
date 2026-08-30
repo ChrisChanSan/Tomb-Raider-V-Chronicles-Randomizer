@@ -222,8 +222,8 @@ function Read-Option([string]$o) {
     if ($o -match '@\s*LikeItem\(\s*(\d+)\s*\)') { $e.likeItem = [int]$Matches[1] }
     if ($o -match 'Trigger_Type\(\s*(\w+)\s*\).*?Item_Level_ID\(\s*([^)]*)\)') {
         $e.triggerKind = [string]$Matches[1]
-        # Several targets with commas: "Item_Level_ID(13, Neu1)". An entry
-        # is either an existing item index or "Neu<k>" - the k-th item that
+        # Several targets with commas: "Item_Level_ID(13, New1)". An entry
+        # is either an existing item index or "New<k>" - the k-th item that
         # this level's Extra_Options themselves create. Without that, an
         # item just created could not be addressed, for only the patch run
         # knows its index (double door: bottom retyped, top new, one switch
@@ -231,7 +231,7 @@ function Read-Option([string]$o) {
         foreach ($part in ([string]$Matches[2] -split ',')) {
             $t = $part.Trim()
             if ($t -match '^\d+$')            { $e.triggerTargets += [int]$t }
-            elseif ($t -match '^Neu\s*(\d+)$'){ $e.triggerTargets += "Neu$($Matches[1])" }
+            elseif ($t -match '^Ne[uw]\s*(\d+)$'){ $e.triggerTargets += "New$($Matches[1])" }
             elseif ($t.Length -gt 0)          { $e.triggerTargets += "?$t" }
         }
     }
@@ -465,7 +465,7 @@ if ($AsPatch -ne "") {
 
     $n = 0
 
-    # "Neu<k>" in a trigger target means the k-th item that this level's
+    # "New<k>" in a trigger target means the k-th item that this level's
     # Extra_Options themselves create. Only this run knows its index: the
     # new items append from $itemBase on, in the order they stand in the
     # line. Needed for a double door - the bottom retypes an existing item,
@@ -474,10 +474,10 @@ if ($AsPatch -ne "") {
     function Resolve-Target($z) {
         if ($z -is [int]) { return $z }
         $s = [string]$z
-        if ($s -match '^Neu(\d+)$') {
+        if ($s -match '^Ne[uw](\d+)$') {
             $k = [int]$Matches[1]
             if ($k -lt 1 -or $k -gt $addCount) {
-                Write-Output "  WARNING: Neu$k does not exist - the line creates $addCount items."
+                Write-Output "  WARNING: New$k does not exist - the line creates $addCount items."
                 return $null
             }
             return $itemBase + $k - 1

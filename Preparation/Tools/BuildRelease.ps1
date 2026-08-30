@@ -95,10 +95,12 @@ Say "Secret lists  : $lists files (data\secrets)"
 
 # --- 3b. trview type names ---------------------------------------------------
 # Ten slots that a level viewer would otherwise name wrongly or not at all:
-# seven are unknown to trview (its built-in TR5 list ends at id 452, and the
-# randomizer places 460/461), and three carry different contents afterwards -
-# the four TR3 guests overwrite SAS, CROW, SAILOR and REAPER, and 41 and 85
-# are both called "Dog" upstream although only one of them is the husky.
+# four (31/43/53/75) carry different contents afterwards - the TR3 guests
+# overwrite SAS, CROW, SAILOR and REAPER; two (47/55) are ordinary Chronicles
+# slots trview has no entry for; two (460/461) lie beyond trview's list, which
+# ends at id 452; and two it knows but cannot tell apart - 41 and 85 are both
+# called "Dog" although only one is the husky, and "Soldier Statue" no longer
+# suffices now that two Roman gods can stand in one level.
 #
 # Not needed to play. It is here because anyone reporting an oddity is asked
 # to look at the level, and a viewer showing "Crow" where a vulture stands

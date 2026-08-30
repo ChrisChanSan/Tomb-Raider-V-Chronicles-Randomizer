@@ -643,7 +643,7 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	// also caught legitimate clip-aways (doors behind the camera) and made
 	// the lines ambiguous.
 	if (gLogEnabled)
-		aClipMeldeObj = obj->intelligent ? item->object_number : -1;
+		aClipReportObj = obj->intelligent ? item->object_number : -1;
 
 	if (clip)
 	{
@@ -764,7 +764,7 @@ void DrawAnimatingItem(ITEM_INFO* item)
 
 	if (gLogEnabled)
 	{
-		aClipMeldeObj = -1;
+		aClipReportObj = -1;
 
 		if (obj->intelligent && aMeshClipRejects > rejectsBefore)
 		{

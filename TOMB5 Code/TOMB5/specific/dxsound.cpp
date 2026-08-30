@@ -294,7 +294,7 @@ bool DXCreateSampleADPCM(char* data, long comp_size, long uncomp_size, long num)
 	if (decoded < DS_Buffers[num].bytes)
 	{
 		memset(DS_Buffers[num].pcm + decoded, 0, DS_Buffers[num].bytes - decoded);
-		Log("Sample %d: %lu Bytes Rest genullt", num, DS_Buffers[num].bytes - decoded);
+		Log("Sample %d: %lu remaining bytes zeroed", num, DS_Buffers[num].bytes - decoded);
 	}
 
 	DS_Buffers[num].frequency = pcm_format.nSamplesPerSec;

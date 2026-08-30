@@ -351,9 +351,13 @@ hands over when every secret in it is found: four to eight entries drawn from
 weapons, their ammunition and medipacks. No keys, no puzzle items. Written as
 `SecretRewards.txt` beside `PCtomb5.exe`, editable by hand.
 
-The secret setting is **not** part of the seed, so the same seed gives an
-identical item and enemy layout whether secrets are on or off — the two runs
-are directly comparable.
+How far the secret setting disturbs the rest of the roll depends on which
+mode you pick. **"Vanilla"** and the two list modes leave it alone: the lists
+are applied after the shuffle has already run, so the same seed gives the
+same items and enemies either way. **"In the normal item pool"** does not -
+lifting the pins puts thirty-six more pickups into the shuffle, they consume
+draws and occupy spots, and every other placement shifts with them. Compare
+two runs across that setting and you are comparing two different games.
 
 ---
 

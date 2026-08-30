@@ -183,10 +183,12 @@ Worth spelling out:
 
 - **Cheats** governs DOZY only — type it while playing to fly. The classic
   cheats still need the compass in hand and are unaffected.
-- **Ammotype hotkeys**: 1–4 draw pistols, shotgun, uzis, revolver (key 1
-  becomes the HK from the 13th Floor on); pressing the same number again while
-  the weapon is out cycles its ammunition. 0 uses a small medipack, 9 a large
-  one.
+- **Ammotype hotkeys**: the option governs **only** the ammunition cycling -
+  pressing a weapon's number again while it is already out. Drawing weapons
+  with 1–4 and the medipacks on 0 and 9 work whether it is on or off.
+  1–4 draw pistols, shotgun, uzis, revolver; from the 13th Floor on, key 1
+  becomes the HK and key 2 the crossbow or Grappling Gun instead of the
+  shotgun. 0 uses a small medipack, 9 a large one.
 - **Level select** adds a fifth row to the title screen that jumps straight to
   any level. It is a development shortcut, hidden by default.
 - **Loading text** only shows while *Loadbar style* is TR4.
@@ -266,8 +268,11 @@ next track that starts.
 A plain text file beside `PCTomb5.exe`, created on the first start and never
 touched again unless something is missing from it. Roughly eighty settings in
 six blocks, and **it documents itself**: every line prints its own default in
-a comment behind the value, and where this build moved away from Core's
-number, that number is printed too.
+a comment behind the value, and where the default differs from the number
+the file's own table calls vanilla, that one is printed too. Careful: that
+vanilla figure is what `setup.cpp` assigns, which is not always what Core
+shipped - and where the two agree, no note is printed at all, so Two Gun
+shows nothing even though Core gave him 24.
 
 Format is `Name = number`, one per line; `;` or `#` starts a comment. Names
 are not case-sensitive.
@@ -317,8 +322,15 @@ off, which is also what keeps it off the title screen.
 
 Nobody knows by heart how many roses each level was built with, and with a
 rolled level order even a player who does cannot tell which level they are in
-from the position in the sequence. The line is absent on the title screen and
-in the two cutscene levels, which hold no secrets at all.
+from the position in the sequence.
+
+The bracket is dropped wherever the table says zero, which today means only
+the title screen. Two levels really hold no roses but are entered in the
+table as three - `richcut2` and the dev level `del` - so the bracket would
+read `(0 / 3)` there. Core's table has always been wrong about those two, and
+the same table decides when the all-secrets bonus fires; correcting it would
+make the bonus fire the moment such a level starts. It is left alone
+deliberately.
 
 ## Secret rewards
 
@@ -372,9 +384,11 @@ at all, so they shatter into their own meshes the way the Roman God does. The
 chef borrows the soldiers' gunshot death — his skeleton is bone-for-bone
 identical with theirs.
 
-**Two hit-point figures moved.** The Maze Monster drops from 4000 to 120 — he
+**Two hit-point figures moved.** The Maze Monster drops from 4000 to 90 — he
 was built as an unkillable chase set piece and has to be able to die as a pool
-enemy; 120 still leaves him the toughest regular enemy. Two Gun rises from 24
+enemy. (`setup.cpp` still assigns 120; `balance.cpp` overwrites it at every
+level start, so 90 is what you fight.) That leaves him below the mini-sub,
+the Roman God and the T-Rex. Two Gun rises from 24
 to 90.
 
 **Pushable blocks roll over pickups again.** TR5 refused the push if anything

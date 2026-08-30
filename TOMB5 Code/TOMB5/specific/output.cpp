@@ -937,7 +937,7 @@ long aMeshClipRejects;
 
 // Set by DrawAnimatingItem while a THINKER is being drawn - only then does
 // the discard branch write its CLIPDETAIL. -1 = off.
-long aClipMeldeObj = -1;
+long aClipReportObj = -1;
 
 long aCheckMeshClip(MESH_DATA* mesh)
 {
@@ -1044,7 +1044,7 @@ long aCheckMeshClip(MESH_DATA* mesh)
 		{
 			aMeshClipRejects++;
 
-			if (aClipMeldeObj >= 0)
+			if (aClipReportObj >= 0)
 			{
 				static long lastDetail;
 
@@ -1055,7 +1055,7 @@ long aCheckMeshClip(MESH_DATA* mesh)
 					// the a-stack, this test with D3DMView. If the two
 					// disagree, here it is number against number.
 					Log("CLIPDETAIL obj=%d near=%d L=%d R=%d T=%d B=%d front=%d back=%d camera=%d/%d/%d aM23=%d box=%d,%d,%d..%d,%d,%d",
-						(int)aClipMeldeObj, (int)tooNear, (int)left, (int)right,
+						(int)aClipReportObj, (int)tooNear, (int)left, (int)right,
 						(int)top, (int)bottom, (int)front, (int)back,
 						(int)D3DMView._41, (int)D3DMView._42, (int)D3DMView._43,
 						(int)aMXPtr[M23],

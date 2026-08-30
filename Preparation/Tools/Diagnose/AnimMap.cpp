@@ -22,8 +22,7 @@
 //   +4  u8  frameRate   +5 u8 frameSize   +6 u16 state
 //   +24 s16 frameStart  +26 s16 frameEnd  +28 s16 nextAnim
 //
-// Build (64 bit): bam.bat next to this file. See
-// reference-werkzeugkasten.
+// Build (64 bit): bam.bat next to this file. See Preparation/Tools/README.md.
 #include "core/Tr5Level.h"
 #include "core/DataFolder.h"
 

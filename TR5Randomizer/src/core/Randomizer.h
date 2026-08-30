@@ -362,7 +362,7 @@ struct RandoInput
     // Items their antitrigger must no longer touch (flag bit 0x80).
     // Curated, independent of the enemy automatics: rich2's door 171 is to
     // stay open once it has been open.
-    std::set<int>            antitriggerImmunItems;
+    std::set<int>            antitriggerImmuneItems;
 
     // Items an AntiTrigger or HeavyAntiTrigger points at. If such a trigger
     // points at an ACTIVE intelligent enemy, it deletes it from the level

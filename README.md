@@ -128,8 +128,10 @@ original levels' geometry, which it needs to place anything legally —
 
 - **Engine:** `TOMB5 Code\tomb5.vcxproj` with Visual Studio (Win32, Release).
 - **Randomizer:** `TR5Randomizer\build\b1.bat` (command line) and
-  `b2.bat` (GUI) — both run relative to the repo; Visual Studio with the
-  C++ workload is required.
+  `b2.bat` (GUI) — the source paths are relative to the repo, but line 3 of
+  each script calls `vcvars64.bat` at a hardcoded location
+  (`C:\Program Files\Microsoft Visual Studio\18\Community\...`). Another
+  version, edition or drive means editing that one line.
 - **Package:** `Preparation\Tools\BuildRelease.ps1` assembles
   the shippable folder including source code and licenses.
 

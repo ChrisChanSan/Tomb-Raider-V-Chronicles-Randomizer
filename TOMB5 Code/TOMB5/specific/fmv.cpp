@@ -260,12 +260,12 @@ long PlayFmv(long num)
 			// IN_SELECT added so Cross/Enter also skips FMVs, not just Escape
 			// (IN_OPTION) or Draw Weapon (IN_DRAW) - matches Cross already being
 			// the confirm button everywhere else in the menus.
-			const long skipJetzt = (input & (IN_OPTION | IN_DRAW | IN_SELECT)) != 0;
+			const long skipNow = (input & (IN_OPTION | IN_DRAW | IN_SELECT)) != 0;
 
-			if ((skipJetzt && !skipHeld) || MainThread.ended)
+			if ((skipNow && !skipHeld) || MainThread.ended)
 				break;
 
-			skipHeld = skipJetzt;
+			skipHeld = skipNow;
 
 			BinkNextFrame(Bink);
 

@@ -934,10 +934,10 @@ void DoLevel(uchar Name, uchar Audio)
 	}
 
 	S_LoadLevelFile(Name);
-	Log("DoLevel: Leveldaten geladen");
+	Log("DoLevel: level data loaded");
 	InitialiseFXArray(1);
 	InitialiseLOTarray(1);
-	Log("DoLevel: FX/LOT bereit");
+	Log("DoLevel: FX/LOT ready");
 	GlobalSoftReset = 0;
 	InitSpotCamSequences();
 	InitialisePickUpDisplay();
@@ -998,7 +998,7 @@ void DoLevel(uchar Name, uchar Audio)
 	}
 
 	InitialiseCamera();
-	Log("DoLevel: Kamera bereit, starte erste Logikphase");
+	Log("DoLevel: camera ready, starting first logic phase");
 	bUseSpotCam = 0;
 	gfGameMode = 0;
 	gfLevelComplete = 0;

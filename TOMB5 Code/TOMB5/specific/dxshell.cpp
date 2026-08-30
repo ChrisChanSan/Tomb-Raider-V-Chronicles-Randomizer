@@ -524,7 +524,7 @@ long DXGetInfo(DXINFO* dxinfo, HWND hwnd)
 					p--;
 
 				if (*p)
-					wsprintf(ddi->MonitorLabel, " (Windows Anzeige %s)", p);
+					wsprintf(ddi->MonitorLabel, " (Windows display %s)", p);
 			}
 		}
 

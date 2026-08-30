@@ -911,7 +911,7 @@ static std::wstring cacheDir(const App& a)
         // Secrets from a user list (#53, kinds 2/3): a SECOND pass with the
         // same apply machinery, against the real state after the first.
         // Without "itemBase" in the patch, apply shifts nothing - the
-        // list's Neu<k> references point exactly at the items this patch
+        // list's New<k> references point exactly at the items this patch
         // creates. A missing list is no abort (the level is done after
         // all), a FAILED patch is - nobody would ever find half-placed
         // secrets.
@@ -1568,7 +1568,7 @@ static void drawWardrobeWindow(App& a)
     if (!a.wardrobeOpen) return;
 
     ImGui::SetNextWindowSize(ImVec2(400, 340), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin((std::string(T("Wardrobe")) + "###kleiderschrank").c_str(), &a.wardrobeOpen))
+    if (!ImGui::Begin((std::string(T("Wardrobe")) + "###wardrobe").c_str(), &a.wardrobeOpen))
     {
         ImGui::End();
         return;
@@ -1590,7 +1590,7 @@ static void drawWardrobeWindow(App& a)
                         static_cast<int>(kinds.size()));
 
     ImGui::Separator();
-    ImGui::BeginChild("##kleiderliste", ImVec2(0, -70), true);
+    ImGui::BeginChild("##outfitlist", ImVec2(0, -70), true);
     for (size_t k = 0; k < kinds.size(); ++k)
     {
         const bool guest   = kinds[k].source[0] != 0;
@@ -1599,7 +1599,7 @@ static void drawWardrobeWindow(App& a)
         ImGui::BeginDisabled(!present);
         bool on = !a.optOutfitsOff.count(kinds[k].id) && present;
         char label[96];
-        std::snprintf(label, sizeof(label), "%s##kleid%s", T(kinds[k].name), kinds[k].id);
+        std::snprintf(label, sizeof(label), "%s##outfit%s", T(kinds[k].name), kinds[k].id);
         if (ImGui::Checkbox(label, &on))
         {
             if (on) a.optOutfitsOff.erase(kinds[k].id);
@@ -1644,7 +1644,7 @@ static void drawEnemyKindsWindow(App& a)
     if (!a.kindsOpen) return;
 
     ImGui::SetNextWindowSize(ImVec2(420, 520), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin((std::string(T("Enemy types")) + "###arten").c_str(), &a.kindsOpen))
+    if (!ImGui::Begin((std::string(T("Enemy types")) + "###kinds").c_str(), &a.kindsOpen))
     {
         ImGui::End();
         return;
@@ -1674,7 +1674,7 @@ static void drawEnemyKindsWindow(App& a)
                         static_cast<int>(kinds.size()));
 
     ImGui::Separator();
-    ImGui::BeginChild("##artenliste", ImVec2(0, -78), true);
+    ImGui::BeginChild("##kindlist", ImVec2(0, -78), true);
     for (const EnemyKind& g : kinds)
     {
         // Kinds from another game stay grayed out as long as the path to it
@@ -1685,7 +1685,7 @@ static void drawEnemyKindsWindow(App& a)
 
         bool on = !a.optEnemiesOff.count(g.typeId) && present;
         char label[96];
-        std::snprintf(label, sizeof(label), "%s##art%d", T(g.name), g.typeId);
+        std::snprintf(label, sizeof(label), "%s##kind%d", T(g.name), g.typeId);
         if (ImGui::Checkbox(label, &on))
         {
             if (on) a.optEnemiesOff.erase(g.typeId);
@@ -1818,7 +1818,7 @@ static void drawUi(App& a, HWND hwnd)
         // Two buttons: language on the left (#128), Debug on the right.
         ImGui::SameLine(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x
                         - 2.0f * w - ImGui::GetStyle().ItemSpacing.x);
-        if (ImGui::Button(gGermanUi ? "Sprache: DE###sprache" : "Language: EN###sprache", ImVec2(w, 0)))
+        if (ImGui::Button(gGermanUi ? "Sprache: DE###language" : "Language: EN###language", ImVec2(w, 0)))
         {
             gGermanUi = !gGermanUi;
             a.cfg.germanUi = gGermanUi;
@@ -2086,7 +2086,7 @@ static void drawUi(App& a, HWND hwnd)
                       static_cast<int>(*value * 100.0f + 0.5f));
 
         char sliderId[64];
-        std::snprintf(sliderId, sizeof(sliderId), "##regler_%s", label);
+        std::snprintf(sliderId, sizeof(sliderId), "##slider_%s", label);
 
         ImGui::BeginDisabled(*random);
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
@@ -2308,7 +2308,7 @@ static void drawUi(App& a, HWND hwnd)
               "the file name); old savegames do not match the new order.");
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
     const char* orderNames[] = { T("Level order: off"), T("within the sections"), T("free across everything") };
-    ImGui::Combo("##levelfolge", &a.optLevelOrder, orderNames, 3);
+    ImGui::Combo("##levelorder", &a.optLevelOrder, orderNames, 3);
     hoverHelp("Within: Rome/Russia/Ireland/VCI stay blocks, only the levels "
               "inside them shuffle. Free: all 13 levels across all sections "
               "(e.g. rich1 -> Andrea2 -> joby5 -> rich2). The cutscene "

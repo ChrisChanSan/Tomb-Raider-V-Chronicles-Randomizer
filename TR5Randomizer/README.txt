@@ -35,8 +35,10 @@ The seed
 --------
 The same seed always produces the same game - on any machine. If
 something looks odd to you, note down the seed and the build ID; with
-those, exactly your game can be rebuilt. Both are shown in the pause
-menu, so a screenshot is enough.
+those, exactly your game can be rebuilt. Both stand in the randomizer
+window, and every run writes spoiler.txt beside the program with the
+seed, every setting and one line per level. That file is what a bug
+report should carry - the game itself shows neither.
 
 Any input is a valid seed. "Christmas" works.
 
@@ -104,10 +106,20 @@ and restart trview; it merges the file over its built-in list at
 startup.
 
 It only affects names. Ten slots would otherwise read wrongly or not
-at all: seven are unknown to trview, because its TR5 list ends before
-them, and three carry different contents after randomizing - the four
-guests from Tomb Raider III take over slots that held a SAS man, a
-crow, a sailor and a reaper.
+at all, for four different reasons:
+
+  - Four (31, 43, 53, 75) carry different contents after randomizing:
+    the guests from Tomb Raider III take over slots that held a SAS
+    man, a crow, a sailor and a reaper. trview names them confidently
+    and wrongly.
+  - Two (47, 55) are ordinary Chronicles slots trview has no entry
+    for at all.
+  - Two (460, 461) lie beyond the original 460 and exist in no vanilla
+    level, so trview's list ends before them - its last TR5 id is 452.
+  - Two (85, 61) trview does know but cannot tell apart: it calls both
+    41 and 85 "Dog" although only one is the husky, and "Soldier
+    Statue" is no longer enough now that two Roman gods can stand in
+    one level.
 
 Nothing here is needed to play. It is worth having if you ever report
 something odd: a viewer that shows "Crow" where a vulture stands turns

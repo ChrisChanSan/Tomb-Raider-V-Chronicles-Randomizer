@@ -155,12 +155,17 @@ long LevelSecretTotal()
 // and the on-screen pickup display (AddDisplayPickup, game/health.cpp).
 //
 // wanky_secrets_table was verified against the actual level data before being
-// relied on here: counting PICKUP_ITEM4 (object id 223) placements in all 16
-// vanilla .trc files matches this table exactly for all 14 real gameplay
-// levels, including the two irregular ones (Deepsea Dive = 1, Sinking
-// Submarine = 2). Only LVL5_DEL_LEVEL (a dev/test level with no secrets at
-// all) disagrees, which is harmless: the counter can then never reach the
-// table's value, so the bonus simply never fires there.
+// relied on here: counting PICKUP_ITEM4 (object id 223) placements in the
+// vanilla .trc files matches this table for all 13 PLAYABLE levels, including
+// the two irregular ones (Deepsea Dive = 1, Sinking Submarine = 2).
+//
+// Two entries disagree, and both are Core's error, not ours: LVL5_DEL_LEVEL
+// (a dev/test level) and the cutscene level richcut2 hold no rose at all yet
+// stand at 3. For the bonus that is harmless - the counter can never reach
+// the value, so it simply never fires there. Do NOT 'fix' the table to 0:
+// the test below is an equality test, and 0 == 0 would hand out the bonus
+// the moment such a level starts. The only visible effect is that the
+// statistics line reads (0 / 3) in those two, which is the lesser evil.
 //
 // Object ids below are the ones DEL_picked_up_object() already understands,
 // so each reward behaves exactly like picking that item up normally.

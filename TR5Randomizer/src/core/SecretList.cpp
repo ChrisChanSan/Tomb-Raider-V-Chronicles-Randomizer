@@ -36,7 +36,7 @@
 //
 //   1. Positions come from the LOADED level file (room origins, item count,
 //      LikeItem references), not from the level info JSON. The run thereby
-//      works against the state AFTER the rando patch - Neu<k> points at
+//      works against the state AFTER the rando patch - New<k> points at
 //      exactly the items this patch will create.
 //   2. The angle is converted here from degrees to the raw TR unit
 //      (65536 = full turn) - the trap that already snapped once in
@@ -67,7 +67,7 @@ namespace
         int ocb = 0, angleDeg = 0, height = 0, xOff = 0, zOff = 0;
         int likeItem = -1;                           // @LikeItem, -1 = none
         std::string triggerKind;                     // empty = no trigger
-        std::vector<std::string> targets;            // number or "Neu<k>"
+        std::vector<std::string> targets;            // number or "New<k>"
     };
 
     struct Spot { int room = 0, sx = 0, sz = 0; };
@@ -472,7 +472,11 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
             int idx = -1;
             if (!z.empty() && std::isdigit(static_cast<unsigned char>(z[0])))
                 idx = std::atoi(z.c_str());
-            else if (z.rfind("Neu", 0) == 0)
+            // "New<k>" is the keyword; "Neu<k>" was its German spelling before the
+            // project went English and is still accepted, because lists written
+            // against the old name are out there and both are three letters long,
+            // so the number behind starts at the same offset either way.
+            else if (z.rfind("New", 0) == 0 || z.rfind("Neu", 0) == 0)
             {
                 const int k = std::atoi(z.c_str() + 3);
                 if (k >= 1 && k <= addCount) idx = itemBase + k - 1;

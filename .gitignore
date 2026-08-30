@@ -107,5 +107,7 @@ Tomb5 frisch*/
 
 # Artwork drafts. The one logo that ships lives in docs/banner.jpg;
 # these are the working files behind it and have no business in a
-# repository people clone.
-Logos/
+# repository people clone. The wildcard is deliberate: the plain
+# "Logos/" pattern missed a folder called "Logos Rome fix", which is
+# exactly how nine megabytes of drafts get committed by accident.
+Logos*/

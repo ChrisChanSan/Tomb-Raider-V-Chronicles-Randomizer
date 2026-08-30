@@ -98,7 +98,9 @@ look and how hard the camera is damped.</td>
 The pause screen now counts the secrets of the level you are in, in
 brackets behind the campaign total — useful when the level order is rolled
 and you cannot tell from the sequence which level you are in.</td>
-<td width="50%"></td>
+<td width="50%"><img src="docs/setup-dialog.jpg" alt="The setup dialog"><br>
+The setup dialog, driving a native Direct3D 9 device — resolution,
+fullscreen or windowed, FMVs and sound, with the build date in the corner.</td>
 </tr>
 <tr>
 <td><img src="docs/gui-language.jpg" alt="Language switching"><br>
@@ -109,15 +111,14 @@ Credits for everyone whose work is in here.</td>
 </table>
 
 <details>
-<summary><b>More from a rolled run</b> (11 screenshots)</summary>
+<summary><b>More from a rolled run</b> (10 screenshots)</summary>
 
 <table>
 <tr><td width="50%"><img src="docs/ingame-01.jpg" alt=""></td><td width="50%"><img src="docs/ingame-02.jpg" alt=""></td></tr>
 <tr><td width="50%"><img src="docs/ingame-03.jpg" alt=""></td><td width="50%"><img src="docs/ingame-04.jpg" alt=""></td></tr>
 <tr><td width="50%"><img src="docs/ingame-05.jpg" alt=""></td><td width="50%"><img src="docs/ingame-06.jpg" alt=""></td></tr>
-<tr><td width="50%"><img src="docs/ingame-07.jpg" alt=""></td><td width="50%"><img src="docs/ingame-08.jpg" alt=""></td></tr>
-<tr><td width="50%"><img src="docs/ingame-09.jpg" alt=""></td><td width="50%"><img src="docs/ingame-10.jpg" alt=""></td></tr>
-<tr><td width="50%"><img src="docs/ingame-11.jpg" alt=""></td><td></td></tr>
+<tr><td width="50%"><img src="docs/ingame-07.jpg" alt=""></td><td width="50%"><img src="docs/ingame-09.jpg" alt=""></td></tr>
+<tr><td width="50%"><img src="docs/ingame-10.jpg" alt=""></td><td width="50%"><img src="docs/ingame-11.jpg" alt=""></td></tr>
 </table>
 
 </details>

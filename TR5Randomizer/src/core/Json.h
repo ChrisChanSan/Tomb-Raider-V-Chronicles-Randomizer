@@ -34,6 +34,15 @@
 // TRFile_RandomizerPatch.cpp, detached here from _T()/stdafx and extended
 // with writing, floating point and error messages with line numbers.
 //
+// That is OUR OWN code, and worth saying plainly, because Tr5Level.h rejects
+// a different file of that same tool on licence grounds. The file rejected
+// there is TRFile.cpp, TRViewer's TR5 parser, which carries no licence
+// statement. TRFile_RandomizerPatch.cpp is a file this project added to that
+// tool; its reader announces itself as "minimal hand-rolled JSON reader" and
+// could not have come from TRViewer, which predates JSON's use here by
+// roughly two decades. Only the naming style (boIsArray, lpFind) was matched
+// to the host codebase. Nothing third-party travels with this file.
+//
 // UTF-8 without BOM is the expected format (that is what our tools write),
 // but an existing BOM is skipped instead of treated as an error -
 // PowerShell's Out-File adds one, and that has already cost half a day in

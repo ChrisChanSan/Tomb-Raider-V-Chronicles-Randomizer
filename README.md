@@ -32,8 +32,11 @@ GPLv3.
 | **Difficulty** | Every weapon, enemy and hazard tunable by hand in `Balance.txt`, or by three sliders |
 | **Engine** | Native Direct3D 9 and XAudio2, controller support, a first-person view, and a long list of fixed original bugs |
 
-The same **seed** produces the same game on any machine. Seed and build ID
-are shown in the pause menu, so a screenshot is enough to reproduce a run.
+The same **seed** produces the same game on any machine. The randomizer
+window shows the version and the build id, and every run writes
+`spoiler.txt` beside the program with the seed, every setting and one line
+per level — that file is what makes a run reproducible, and what a bug
+report should carry.
 
 <p align="center">
   <img src="docs/gui-main.jpg" alt="The randomizer window" width="860">
@@ -47,6 +50,20 @@ Pick what the wardrobe may draw, and which enemies belong in the pool.</td>
 Every switch has a tooltip that says what it does and what it costs.</td>
 </tr>
 </table>
+
+## Quick start
+
+1. **[Download the release](../../releases)** and unpack it into your Tomb
+   Raider Chronicles folder — the one holding `PCTomb5.exe`.
+2. Start **`TR5Randomizer.exe`**. On the first start it asks for that
+   folder; either the game folder or its `data` folder is accepted.
+3. Press **Randomize**. Your originals are backed up to `data\Backup`
+   first, and every later run starts from that backup — so re-rolling as
+   often as you like is safe.
+4. Start the game with `PCTomb5.exe`.
+
+Nothing else is required. Every option is optional; **Restore original**
+puts the levels back. The two manuals above cover the rest.
 
 ## What this is
 
@@ -130,10 +147,34 @@ randomizer patches your own files at runtime and backs everything up to
   the interface.
 - **stb_vorbis / stb_image** by Sean Barrett (public domain) — HQ music and
   the background image.
+- **[zlib](https://zlib.net/)** by Jean-loup Gailly and Mark Adler — the
+  level files are compressed with it.
+- **[discord-rpc](https://github.com/discord/discord-rpc)** by Discord, Inc.
+  (MIT) — inherited from upstream and linked into the engine.
+
+Every licence text is in `Licenses\` in the release, and
+[THIRD-PARTY.md](THIRD-PARTY.md) says which is which.
 
 **Contributors** — testing, findings and ideas, the people who played the
 seeds and reported what broke: XeNoN3560, Lucifer230, Todesengel1931,
-Crockett, Grylle, Claude AI.
+Crockett, Grylle.
+
+## Made with AI
+
+This project was built with **[Claude](https://www.anthropic.com/claude)**
+(Anthropic) as a coding partner, and that is too large a part of the work to
+hide in a credits line. A great deal of the code, most of the analysis tools
+and both manuals were written in conversation with it. Every commit in this
+repository carries a `Co-Authored-By: Claude` trailer, so the history says
+exactly where.
+
+What that does not change: the design decisions, the curated lists and the
+call on what shipped were ChrisChanSan's, and nothing went into a release
+that had not been run in the actual game first. An AI is fast and it is
+confident, which is a bad combination — more than one bug in the changelog
+was put there by it and found by playing, not by reading. So the code was
+reviewed and it was tested, by a human, in Tomb Raider Chronicles. Judge it
+the way you would judge any other code: by whether it works.
 
 What was changed in the engine and why is recorded in
 `TOMB5 Code\MODIFICATIONS.md`; the player manual ships with the release

@@ -33,7 +33,7 @@
 param(
     [string[]]$Levels = @('Andrea2'),
     [string]$VanillaDir = "$PSScriptRoot\..\..\Tomb5 Steam Version\data\Vanilla",
-    [string]$LevelInfoDir = "$PSScriptRoot\..\..\TR5Randomizer\build\data",
+    [string]$LevelInfoDir = "$PSScriptRoot\..\Level Infos",
     [string]$OutDir = "$PSScriptRoot\..\WallTest",
     [string]$ScratchDir = "$env:TEMP\wandtest",
     [string]$ZoneScript = "$PSScriptRoot\ZoneAnalysis.ps1",
@@ -60,7 +60,11 @@ New-Item -ItemType Directory -Force $ScratchDir | Out-Null
 $results = @()
 
 foreach ($lvl in $Levels) {
-    $infoJson = "$LevelInfoDir\level_$lvl.json"
+    # The build folder used to hold "level_<name>.json"; those stopped being
+    # generated on 2026-08-30. The tracked exports are the source now, and
+    # they carry no prefix. Without this the tool skipped every level and
+    # said so quietly.
+    $infoJson = "$LevelInfoDir\$lvl.json"
     $srcTrc = "$VanillaDir\$lvl.trc"
     if (-not (Test-Path $infoJson)) { "SKIP $lvl - no level info JSON"; continue }
     if (-not (Test-Path $srcTrc))   { "SKIP $lvl - no vanilla .trc"; continue }

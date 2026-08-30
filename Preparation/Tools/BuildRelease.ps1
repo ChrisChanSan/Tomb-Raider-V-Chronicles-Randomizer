@@ -137,9 +137,12 @@ foreach ($f in (Get-ChildItem $EngineSrc -Recurse -File)) {
 Say ("Source        : $copied files ({0:N1} MB) - GPLv3 obligation" -f `
     ((Get-ChildItem $srcOut -Recurse -File | Measure-Object Length -Sum).Sum/1MB))
 
-# The randomizer is a standalone program that only reads and writes data
-# files - no derivative work of the engine. Its source still comes along,
-# because that is the standard we hold ourselves to anyway.
+# The randomizer is a standalone program that reads and writes data files.
+# It is not a fork of the engine, but it is not wholly independent of it
+# either: src\core\Floor.h ports GetHeight and CheckNoColFloorTriangle
+# VERBATIM from control.cpp, and says so in its own header. Both are
+# GPLv3, so the combination is fine - but the source has to come along for
+# that reason, not merely as a courtesy.
 # src\ ALONE IS NOT ENOUGH. The binary also links Dear ImGui, and the GPL
 # counts "the scripts used to control compilation" as part of the source -
 # so b1.bat and b2.bat travel too, and imgui brings its own MIT licence.
@@ -174,8 +177,10 @@ $lic = "$OutDir\Licenses"
 New-Item -ItemType Directory -Path $lic -Force | Out-Null
 Copy-Item "$EngineSrc\LICENSE" "$lic\TOMB5-GPLv3.txt" -Force
 if (Test-Path "$ImGui\LICENSE.txt") { Copy-Item "$ImGui\LICENSE.txt" "$lic\DearImGui-MIT.txt" -Force }
-# discord-rpc is linked into PCtomb5.exe (Discord_Initialize and friends in
-# tomb5.cpp), so its notice has to travel with the binary.
+# discord-rpc is NOT linked into PCtomb5.exe - tomb5.cpp:35 sets
+# TOMB5_DISCORD_RPC to 0 and every call sits inside the #if. Its notice
+# still has to travel, because the .lib files and headers are part of the
+# source tree this package distributes. See THIRD-PARTY.md.
 $drpc = "$EngineSrc\TOMB5\tomb5\libs\discordRPC\LICENSE"
 if (Test-Path $drpc) { Copy-Item $drpc "$lic\DiscordRPC-MIT.txt" -Force }
 # zlib and stb_vorbis keep their notice inside their own source. It is lifted
@@ -184,12 +189,28 @@ if (Test-Path $drpc) { Copy-Item $drpc "$lic\DiscordRPC-MIT.txt" -Force }
 $zh = Get-Content "$EngineSrc\TOMB5\tomb5\libs\zlib\zlib.h"
 $zEnd = ($zh | Select-String -Pattern '^\s*\*/' | Select-Object -First 1)
 if ($zEnd) { $zh[0..($zEnd.LineNumber - 1)] | Set-Content "$lic\zlib.txt" -Encoding utf8 }
+# Both stb files we use - stb_vorbis.c in the engine and stb_image.h in the
+# randomizer - carry the SAME dual-licence block verbatim, so one file
+# covers both. Shipping two byte-identical texts under different names
+# would only invite the question which one is authoritative.
 $sv = Get-Content "$EngineSrc\TOMB5\tomb5\libs\stb\stb_vorbis.c"
 $sStart = ($sv | Select-String -Pattern 'available under 2 licenses' | Select-Object -First 1)
-if ($sStart) { $sv[($sStart.LineNumber - 3)..($sv.Count - 1)] | Set-Content "$lic\stb_vorbis.txt" -Encoding utf8 }
-Copy-Item "$Root\THIRD-PARTY.md" "$lic\THIRD-PARTY.md" -Force
+if ($sStart) {
+    @("Applies to stb_vorbis.c (engine) and stb_image.h (randomizer) alike -",
+      "both carry this same notice.", "") +
+        $sv[($sStart.LineNumber - 3)..($sv.Count - 1)] | Set-Content "$lic\stb.txt" -Encoding utf8
+}
+# The document gives repository paths. In the package everything sits one
+# level down under Source\, and the engine folder is renamed - so a
+# recipient following those paths finds nothing. Rewrite them in the copy,
+# the same way b1.bat and b2.bat are rewritten above.
+$tp = [IO.File]::ReadAllText("$Root\THIRD-PARTY.md")
+$tp = $tp.Replace('TOMB5 Code/', 'Source/TOMB5 engine/')
+$tp = $tp.Replace('TR5Randomizer/', 'Source/TR5Randomizer/')
+$tp = $tp.Replace('](LICENSE)', '](TOMB5-GPLv3.txt)')
+[IO.File]::WriteAllText("$lic\THIRD-PARTY.md", $tp)
 $n = (Get-ChildItem $lic -File).Count
-Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, zlib, stb_vorbis)"
+Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, zlib, stb)"
 
 # --- 6. Manual ---------------------------------------------------------------
 # One source of truth: the player README is versioned at

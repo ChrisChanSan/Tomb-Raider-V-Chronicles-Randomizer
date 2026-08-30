@@ -68,16 +68,26 @@ at run time, and the four Tomb Raider III enemies are read from a Tomb Raider
 III installation the same way. Without those installations, the affected
 features simply do not appear.
 
-One thing does ship, and it is worth naming rather than glossing over:
-`data\level_*.json`, about 47 MB of **measurements of the original levels**.
-Per level: room and sector layout with floor and ceiling heights and their
-flags, AI boxes, trigger positions, and the coordinates of items and static
-meshes — plus the size and SHA-256 of the `.TRC` they were measured from.
-The randomizer needs them to know where a key may legally be placed, which
-sector an enemy fits on, and which floor is a slope it would slide off.
+Two things are derived from the original levels, and both are worth naming
+rather than glossing over.
 
-They contain no texture, no mesh, no sound and no script, they cannot be
-rendered or played, and they cannot reconstruct a level file. They are a
+**In the release: `data\zones_*.json`, 15 files, about 1.2 MB.** Per level a
+list of sectors with the floor height and headroom the randomizer needs to
+know where an item may legally sit, plus this project's own curation on top
+of it — key constraints, fixed items, coupled triggers, which enemy types
+belong in that level. The curation is ours; the sector coordinates and
+heights are measurements of Core's level design.
+
+**In the repository, not in the release: `Preparation/Level Infos/*.json`,
+16 files, about 21 MB.** The fuller survey the zone files are generated
+from: rooms, items, triggers and the sector grid, keyed to each `.TRC` by
+SHA-256. Until 2026-08-30 a 45 MB copy of these shipped as
+`data\level_*.json`; the randomizer now reads what it needs straight from
+the level file, so they stayed behind in the repository, where the build
+still needs them.
+
+Neither set contains a texture, a mesh, a sound or a script. Neither can be
+rendered or played, and neither can reconstruct a level file. They are a
 survey of geometry, not a copy of it. But they ARE derived from the game's
 level design, so calling this project entirely free of Tomb Raider data
 would be overstating it.

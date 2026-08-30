@@ -47,7 +47,7 @@ Tuning the difficulty yourself
 On first start the game creates a file Balance.txt next to
 PCtomb5.exe. It lists every weapon individually, every enemy with its
 hit points, every single attack with its damage and every built-in
-level hazard. At the very bottom stand two percentage lines that make
+level hazard. Below them stand three percentage lines that make
 all enemies harder or softer in one stroke without touching the fine
 tuning above.
 
@@ -189,8 +189,9 @@ MADE WITH AI
 This project was built with Claude (Anthropic) as a coding partner, and
 that is too large a part of the work to hide in a credits line. A great
 deal of the code, most of the analysis tools and both manuals were
-written in conversation with it; every commit in the repository carries
-a Co-Authored-By trailer, so the history says exactly where.
+written in conversation with it; 360 of the 613 commits carry a Co-Authored-By
+trailer, every one from 2026-08-15 on - the work before that date was
+done the same way, the trailer was not yet being written, so the history says exactly where.
 
 What that does not change: the design decisions and the call on what
 shipped were ChrisChanSan's, and nothing went into a release that had
@@ -201,7 +202,8 @@ license).
 
 The engine can play music in the OGG format (for HQ soundtracks you
 provide yourself - we ship none). The decoder for that is
-stb_vorbis by Sean Barrett and contributors (public domain):
+stb_vorbis and stb_image by Sean Barrett and contributors
+(public domain or MIT, your choice):
 
     https://github.com/nothings/stb
 

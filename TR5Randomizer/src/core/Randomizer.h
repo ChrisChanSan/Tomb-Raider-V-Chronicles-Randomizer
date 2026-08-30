@@ -517,9 +517,9 @@ struct RandoOptions
     //
     // The filter trims EXCLUSIVELY the choice from the pool. Whatever a
     // chosen row pulls in technically never sees it: the anim base type of
-    // the soldier family (basisSlot), mandatory companions like the
-    // Hydra's projectile core (begleiter) and the MESHSWAP halves
-    // (swapVon/swapDst). Otherwise an enemy would stand in the level
+    // the soldier family (baseSlot), mandatory companions like the
+    // Hydra's projectile core (companions) and the MESHSWAP halves
+    // (swapFrom/swapDst). Otherwise an enemy would stand in the level
     // without its animation set.
     std::set<int> disabledEnemies;
 

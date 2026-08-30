@@ -1576,7 +1576,7 @@ bool Rando::run(const RandoInput& in,
     // enemy has his own (soldier family 462-467 beyond the file boundary,
     // loners 401-404) - before, the families shared one slot per donor, and
     // native users of the same slot drew foreign hands (joby2 item 69). The
-    // engine prefers it (MeshSwapQuelle in setup.cpp, mapping as
+    // engine prefers it (MeshSwapSource in setup.cpp, mapping as
     // MESHSWAP_CROSS_* in objects.h - both sides must agree). swapFrom can
     // differ from the model donor: rich1 (model for guard and TwoGun) has
     // NO MESHSWAP1 itself - the guard hands come from joby3, TwoGun's
@@ -3057,7 +3057,7 @@ bool Rando::run(const RandoInput& in,
     //     nearest enemy - a key item next to a fleeing Larson would be gone
     //     after his flight.
     //
-    // Without a marker, PierreKannFliehen() does not engage, the 40-HP
+    // Without a marker, PierreCanFlee() does not engage, the 40-HP
     // clamp drops, and both die like any other enemy. Core's own markers in
     // Andrea1 and Andrea2 stay untouched - there the vanilla specimens keep
     // their original behavior with their OCB; a swapped enemy loses his OCB

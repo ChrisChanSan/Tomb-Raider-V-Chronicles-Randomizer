@@ -1,7 +1,7 @@
 # The tools, and which one answers which question
 
-Written 2026-08-30 from the folder itself. Thirty-three diagnostic tools sit
-in `Diagnose\`, twenty-seven of them with a build script beside them, and
+Written 2026-08-30 from the folder itself. Thirty-four diagnostic tools sit
+in `Diagnose\`, twenty-eight of them with a build script beside them, and
 until now there was no index at all - so the way to find the right one was to
 already know it existed.
 
@@ -26,6 +26,7 @@ TriggerCommands.
 |---|---|---|
 | `ItemCheck` | bip | every item with OCB, flags, room and angle - the first thing to run on "why is this item behaving oddly". |
 | `RoomCheck` | brp | room flags and flipmap partners. |
+| `InfoCompare` | bic | compares what `Rando::levelInfoFromLevel` reads out of a `.trc` against the old `level_<name>.json`, field by field. Written to prove the 45 MB of exports could go; keep it for the next time someone doubts the level file is the better source. |
 | `SectorCheck` | bsek | one sector in plain text, including the raw eight FLOOR_INFO bytes. |
 | `FloorCheck` | bb | floor heights and slopes, the rule set behind item placement. |
 | `FaceCheck` | - | which drawn faces cover a sector. |

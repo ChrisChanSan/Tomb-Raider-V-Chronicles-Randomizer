@@ -1025,7 +1025,7 @@ void DoLevel(uchar Name, uchar Audio)
 
 		if (diagFrames < 3)
 		{
-			Log("DoLevel: Frame %d gezeichnet", diagFrames);
+			Log("DoLevel: frame %d drawn", diagFrames);
 			diagFrames++;
 		}
 		handle_cutseq_triggering(Name);

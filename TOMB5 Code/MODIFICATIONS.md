@@ -6,7 +6,7 @@ decompilation project by Troye/Trxyebeep and contributors,
 
 Modified between **2026-07-30 and 2026-08-30** (ongoing) for the
 *TR5 Randomizer* project. The upstream code as we received it is preserved as
-the **first commit of this repository** (currently `9a43211`; the hash changes
+the **first commit of this repository** (no hash given here on purpose; it changes
 whenever the history is rewritten for privacy scrubbing, the content does
 not), so every change we made is visible as a diff against it.
 
@@ -39,7 +39,8 @@ been missed entirely and was given its notice on 2026-08-30.
 This modified version remains licensed under the **GNU General Public License
 version 3**, the same licence as the original. See `LICENSE`. The complete
 corresponding source is distributed alongside any binary we release.
-Every file we changed carries a modification notice at the top, as required by
+Every file we changed under `TOMB5/` carries a modification notice at the
+top, as required by
 GPLv3 section 5(a).
 
 Original credits are unchanged and remain with the upstream project: Troye

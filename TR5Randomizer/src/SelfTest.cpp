@@ -99,7 +99,7 @@ static void testRng()
     }
     check(roundTrip, "seed text converts back losslessly");
 
-    check(SeedText::parse("Weihnachten") == SeedText::parse("Weihnachten"),
+    check(SeedText::parse("Christmas") == SeedText::parse("Christmas"),
           "free text yields the same seed reproducibly");
 
     std::string s42 = SeedText::format(42);

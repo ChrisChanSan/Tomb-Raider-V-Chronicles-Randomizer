@@ -101,7 +101,7 @@ int main(int argc, char** argv)
         return 2;
     }
 
-    const std::string seedText = (argc > 5) ? argv[5] : "Weihnachten";
+    const std::string seedText = (argc > 5) ? argv[5] : "Christmas";
     int enemies = 0, extraItems = 0;
     bool enemiesOnly = false, outfits = false, weapons = false, mix = false, cross = false, allsanity = false;
     bool outfitsTr3 = false;   // guest outfits from Tomb Raider 3 in the pool

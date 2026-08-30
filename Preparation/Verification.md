@@ -152,7 +152,7 @@ replace ONLY lines that contain the corrupted sequence. Own changes survive.
 
 `build\data` is gitignored. A change to the curation in `ZoneAnalysis.ps1`
 does nothing until the zone exports are regenerated, and nothing warns you.
-`BuildRelease.ps1` regenerates all thirteen; see `Preparation\README.md` for
+`BuildRelease.ps1` regenerates all fifteen; see `Preparation\README.md` for
 the whole chain.
 
 The same applies to the TR3 extraction cache: it is a cache, and the code

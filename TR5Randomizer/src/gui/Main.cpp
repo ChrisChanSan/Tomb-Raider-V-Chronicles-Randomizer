@@ -678,8 +678,9 @@ static std::wstring cacheDir(const App& a)
         a.skippedNonPlayable = skipped;
 
         // Collect secret lists - here instead of at startup, so a freshly
-        // added author appears without a restart (inspectSource runs on
-        // every folder change and after every run).
+        // added author appears without a restart. Careful with the
+        // wording: inspectSource runs at startup, on a folder change and
+        // on "Check again" - NOT after a run.
         a.secretSources = findSecretSources(PathUtil::join(a.payloadDir(), L"secrets"));
 
         // The complete list is still checked - an installation missing
@@ -1948,7 +1949,7 @@ static void drawUi(App& a, HWND hwnd)
     {
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(1.0f, .45f, .30f, 0.16f));
         ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(1.0f, .45f, .30f, 0.85f));
-        ImGui::BeginChild("k_zonenwarnung", ImVec2(0.0f, 0.0f),
+        ImGui::BeginChild("k_zonewarning", ImVec2(0.0f, 0.0f),
                           ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
         ImGui::TextColored(ImVec4(1, .55f, .35f, 1), T("Warning: outdated curation data"));
         ImGui::TextWrapped(T("%s"), a.zoneWarning.c_str());
@@ -2476,7 +2477,7 @@ static void drawUi(App& a, HWND hwnd)
     centered(tableWidth);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(fList.x, fList.y, fList.z, 0.13f));
     ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(fList.x, fList.y, fList.z, 0.75f));
-    ImGui::BeginChild("k_levelliste", ImVec2(tableWidth, 0.0f),
+    ImGui::BeginChild("k_levellist", ImVec2(tableWidth, 0.0f),
                       ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(fList.x, fList.y, fList.z, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(fList.x, fList.y, fList.z, 0.6f));

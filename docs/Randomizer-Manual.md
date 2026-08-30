@@ -22,6 +22,8 @@ up when you need it.
 - [7. Music](#7-music)
 - [8. Secrets](#8-secrets)
 - [9. In preparation](#9-in-preparation)
+- [10. Levels](#10-levels)
+- [11. Let's go](#11-lets-go)
 - [Randomize, and getting back](#randomize-and-getting-back)
 - [spoiler.txt, and reporting a problem](#spoilertxt-and-reporting-a-problem)
 - [The Tomb Raider III guests](#the-tomb-raider-iii-guests)
@@ -130,8 +132,9 @@ choice is remembered, so it is asked once.
 **"Check again"** re-hashes every level and compares it against the shipped
 list. It runs by itself at start and after every run; the button is for
 repeating it by hand. It also re-scans `data\secrets`, which is what makes a newly
-added secret list appear — as does any run and any change of folder, so the
-button is the quick way, not the only one.
+added secret list appear. It also runs at startup and when you choose a
+folder, but NOT after a run - so after dropping a list into `data\secrets`
+while the program is open, the button is what makes it show up.
 
 The check is deliberately all-or-nothing. One single level that differs from
 vanilla makes the whole installation unusable as a source — *"3 levels differ
@@ -372,6 +375,30 @@ control.
 
 ---
 
+## 10. Levels
+
+A table of every level file the installation holds, with its state. The
+checkbox decides whether a run touches that level at all - unticking one
+leaves it exactly as it is.
+
+Three entries are checked and never touched anyway: `Title`, `del` and
+`richcut2` are not playable levels. They stay in the list so that the table
+and the installation check show the same set of files.
+
+The **State** column is what the installation check found: `original` for a
+file whose checksum matches vanilla, and anything else means the run would
+not start from the state you think.
+
+## 11. Let's go
+
+**"Randomize"** does the run. **"Restore original"** copies the untouched
+levels back out of `data\Backup`. The line underneath is the status of the
+last thing that happened, and the place a failure is reported.
+
+The button at the very top right of the window switches the interface
+between English and German. It changes only the interface - not the game,
+and not the seed.
+
 ## Randomize, and getting back
 
 **"Randomize"** plays every level back from `data\Backup`, rewrites
@@ -422,7 +449,8 @@ time. **Nothing from Tomb Raider III ships with this program.**
 
 Set the paths under **"Installation paths..."** in box 1. Each row reports
 `OK`, or names the file it could not find; the Chronicles row has no single
-file to look for and reads "not checked yet" until a run touches it. It checks for the actual file, not
+file to look for and reads "not checked yet" until the installation check
+has succeeded once - it says `OK` from then on, without any run. It checks for the actual file, not
 the folder, so an empty folder still says "not found".
 
 **The vulture needs both games.** Its model is in The Lost Artifact's
@@ -453,7 +481,8 @@ just re-extracted, slower, once.
 reset](#the-inventory-reset--read-this-before-you-panic). It only happens
 with a level option switched on.
 
-**joby4 looks untouched.** It is. Deepsea Dive keeps its diving suit, its
+**joby4 looks almost untouched.** Its pickups do move - it takes part in the
+equipment and key shuffle like every other level. Deepsea Dive keeps its diving suit, its
 vanilla weapon situation and its own enemies.
 
 **rich2 has no pistols.** Its pistol slot carries scripted material from Core

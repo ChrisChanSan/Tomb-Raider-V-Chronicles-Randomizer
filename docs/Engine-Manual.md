@@ -266,6 +266,8 @@ next track that starts.
 
 ## Balance.txt — tuning the whole game
 
+<p align="center"><img src="engine-settings.jpg" alt="Balance.txt and SecretRewards.txt" width="760"></p>
+
 A plain text file beside `PCTomb5.exe`, created on the first start and never
 touched again unless something is missing from it. Roughly eighty settings in
 six blocks, and **it documents itself**: every line prints its own default in
@@ -316,6 +318,8 @@ campaign total:
 ```
 Secrets Found            0 / 36   (0 / 3)
 ```
+
+<p align="center"><img src="features-3.jpg" alt="The statistics screen" width="700"></p>
 
 The first pair is the whole campaign, as it always was; the pair in brackets
 is the level you are in. Where a level holds no secrets the bracket is left

@@ -46,8 +46,9 @@ report should carry.
 <tr>
 <td width="50%"><img src="docs/gui-outfits-enemies.jpg" alt="Wardrobe and enemy pool"><br>
 Pick what the wardrobe may draw, and which enemies belong in the pool.</td>
-<td width="50%"><img src="docs/gui-settings.jpg" alt="Settings"><br>
-Every switch has a tooltip that says what it does and what it costs.</td>
+<td width="50%"><img src="docs/engine-settings.jpg" alt="Balance.txt and SecretRewards.txt"><br>
+Two plain text files beside the game: every enemy’s hit points and every
+weapon’s damage, and what each level awards for all its secrets.</td>
 </tr>
 </table>
 
@@ -91,6 +92,13 @@ loading bar and screen styles, ammo hotkeys, static lighting, level select.</td>
 <td width="50%"><img src="docs/features-2.jpg" alt="First person view options"><br>
 The first-person view, with field of view, a death camera, the head-bone
 look and how hard the camera is damped.</td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/features-3.jpg" alt="Per-level secret counter"><br>
+The pause screen now counts the secrets of the level you are in, in
+brackets behind the campaign total — useful when the level order is rolled
+and you cannot tell from the sequence which level you are in.</td>
+<td width="50%"></td>
 </tr>
 <tr>
 <td><img src="docs/gui-language.jpg" alt="Language switching"><br>

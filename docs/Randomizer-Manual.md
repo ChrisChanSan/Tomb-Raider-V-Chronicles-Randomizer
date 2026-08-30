@@ -160,8 +160,6 @@ Covered above: [The seed](#the-seed).
 
 ## 3. Items
 
-<p align="center"><img src="gui-settings.jpg" alt="Settings" width="700"></p>
-
 **"Equipment (weapons, ammo, medipacks)"** — *on by default.* Shuffles the
 level's non-key pickups among the spots curated for that level. Nothing is
 added or removed by this switch alone; the same things end up elsewhere.

@@ -185,11 +185,21 @@ Worth spelling out:
 - **Cheats** governs DOZY only — type it while playing to fly. The classic
   cheats still need the compass in hand and are unaffected.
 - **Ammotype hotkeys**: the option governs **only** the ammunition cycling -
-  pressing a weapon's number again while it is already out. Drawing weapons
-  with 1–4 and the medipacks on 0 and 9 work whether it is on or off.
-  1–4 draw pistols, shotgun, uzis, revolver; from the 13th Floor on, key 1
-  becomes the HK and key 2 the crossbow or Grappling Gun instead of the
-  shotgun. 0 uses a small medipack, 9 a large one.
+  pressing a weapon's number again while it is already out. Drawing a weapon
+  and the medipacks work whether it is on or off.
+
+  **One key per weapon, the same key in every level:** 1 pistols,
+  2 shotgun, 3 uzis, 4 revolver, 5 HK, 6 crossbow (the Grappling Gun in
+  rich3). 0 uses a small medipack, 9 a large one.
+
+  Core bound only four keys and let two of them change meaning at the 13th
+  Floor - key 1 became the HK, key 2 the crossbow. That works while the
+  campaign runs in its built order, because by then Lara no longer carries
+  the early weapons. A randomized run breaks it twice over: the switch hangs
+  on `gfLevelId`, which is the level's identity and not its position, so
+  with a rolled order it fires in scattered levels rather than "later"; and
+  because the weapons travel too, Lara can carry an HK in the first level,
+  where no key would have drawn it.
 - **Level select** adds a fifth row to the title screen that jumps straight to
   any level. It is a development shortcut, hidden by default.
 - **Loading text** only shows while *Loadbar style* is TR4.

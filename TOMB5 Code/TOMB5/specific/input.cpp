@@ -284,6 +284,32 @@ long JoyMenuDeflected()
 short ammo_change_timer = 0;
 char ammo_change_buf[12];
 
+//----------------------------------------------------------------------------
+// One key per weapon, the same key everywhere (#139).
+//
+// Core bound four keys and let two of them change meaning:
+// "if (gfLevelId < LVL5_THIRTEENTH_FLOOR)" made key 1 the pistols early
+// and the HK later, key 2 the shotgun early and the crossbow later. That
+// works when the campaign is played in its built order, because by then
+// Lara has stopped carrying the early weapons.
+//
+// The randomizer breaks both halves of that assumption. gfLevelId is the
+// level's IDENTITY, not its position, so with a rolled order "from the
+// 13th Floor on" no longer means "later" - it means "in levels that happen
+// to have a high id", scattered through the run. And since the weapons are
+// scattered too, Lara can carry an HK in the first level, where no key
+// would draw it, and still carry the pistols in the last, where key 1 would
+// reach for the HK instead.
+//
+// So: 1 pistols, 2 shotgun, 3 uzis, 4 revolver, 5 HK, 6 crossbow. Nothing
+// depends on the level any more. Keys 5 to 8 were free in play - only the
+// save/load screen uses 1 to 4, and that is a different context.
+//
+// Everything inside the branches is Core's code, moved unchanged: the
+// "is it carried" test, the draw, and the ammunition cycling on a second
+// press (which alone is what the "Ammotype hotkeys" option governs -
+// drawing a weapon works whether it is on or off, and always did).
+//----------------------------------------------------------------------------
 static void DoWeaponHotkey()
 {
 	short state;
@@ -304,105 +330,47 @@ static void DoWeaponHotkey()
 	
 	if (keymap[DIK_1])
 	{
-		if (gfLevelId < LVL5_THIRTEENTH_FLOOR)
-		{
-			if (!(lara.pistols_type_carried & W_PRESENT))
-				return;
+		if (!(lara.pistols_type_carried & W_PRESENT))
+			return;
 
-			lara.request_gun_type = WEAPON_PISTOLS;
+		lara.request_gun_type = WEAPON_PISTOLS;
 
-			if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_PISTOLS)
-				lara.gun_status = LG_DRAW_GUNS;
-		}
-		else
-		{
-			if (!(lara.hk_type_carried & W_PRESENT))
-				return;
-
-			lara.request_gun_type = WEAPON_HK;
-
-			if (lara.gun_type == WEAPON_HK)
-			{
-				if (lara.gun_status == LG_NO_ARMS)
-					lara.gun_status = LG_DRAW_GUNS;
-				else if (lara.gun_status == LG_READY && !ammo_change_timer)
-				{
-					if (!tomb5.ammotype_hotkeys)
-						return;
-
-					memset(ammo_change_buf, 0, sizeof(ammo_change_buf));
-
-					if (lara.hk_type_carried & W_AMMO3)
-					{
-						lara.hk_type_carried &= ~W_AMMO3;
-						lara.hk_type_carried |= W_AMMO2;
-						ammo_change_timer = 30;
-						sprintf(ammo_change_buf, "Burst");
-					}
-					else if (lara.hk_type_carried & W_AMMO2)
-					{
-						lara.hk_type_carried &= ~W_AMMO2;
-						lara.hk_type_carried |= W_AMMO1;
-						ammo_change_timer = 30;
-						sprintf(ammo_change_buf, "Sniper");
-					}
-					else if (lara.hk_type_carried & W_AMMO1)
-					{
-						lara.hk_type_carried &= ~W_AMMO1;
-						lara.hk_type_carried |= W_AMMO3;
-						ammo_change_timer = 30;
-						sprintf(ammo_change_buf, "Rapid");
-					}
-				}
-			}
-		}
+		if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_PISTOLS)
+			lara.gun_status = LG_DRAW_GUNS;
 	}
 	else if (keymap[DIK_2])
 	{
-		if (gfLevelId < LVL5_THIRTEENTH_FLOOR)
+		if (!(lara.shotgun_type_carried & W_PRESENT))
+			return;
+
+		lara.request_gun_type = WEAPON_SHOTGUN;
+
+		if (lara.gun_type == WEAPON_SHOTGUN)
 		{
-			if (!(lara.shotgun_type_carried & W_PRESENT))
-				return;
-
-			lara.request_gun_type = WEAPON_SHOTGUN;
-
-			if (lara.gun_type == WEAPON_SHOTGUN)
+			if (lara.gun_status == LG_NO_ARMS)
+				lara.gun_status = LG_DRAW_GUNS;
+			else if (lara.gun_status == LG_READY && !ammo_change_timer)
 			{
-				if (lara.gun_status == LG_NO_ARMS)
-					lara.gun_status = LG_DRAW_GUNS;
-				else if (lara.gun_status == LG_READY && !ammo_change_timer)
+				if (!tomb5.ammotype_hotkeys)
+					return;
+
+				memset(ammo_change_buf, 0, sizeof(ammo_change_buf));
+
+				if (lara.shotgun_type_carried & W_AMMO2)
 				{
-					if (!tomb5.ammotype_hotkeys)
-						return;
-
-					memset(ammo_change_buf, 0, sizeof(ammo_change_buf));
-
-					if (lara.shotgun_type_carried & W_AMMO2)
-					{
-						lara.shotgun_type_carried &= ~W_AMMO2;
-						lara.shotgun_type_carried |= W_AMMO1;
-						ammo_change_timer = 30;
-						sprintf(ammo_change_buf, "Normal");
-					}
-					else if (lara.shotgun_type_carried & W_AMMO1)
-					{
-						lara.shotgun_type_carried &= ~W_AMMO1;
-						lara.shotgun_type_carried |= W_AMMO2;
-						ammo_change_timer = 30;
-						sprintf(ammo_change_buf, "Wideshot");
-					}
+					lara.shotgun_type_carried &= ~W_AMMO2;
+					lara.shotgun_type_carried |= W_AMMO1;
+					ammo_change_timer = 30;
+					sprintf(ammo_change_buf, "Normal");
+				}
+				else if (lara.shotgun_type_carried & W_AMMO1)
+				{
+					lara.shotgun_type_carried &= ~W_AMMO1;
+					lara.shotgun_type_carried |= W_AMMO2;
+					ammo_change_timer = 30;
+					sprintf(ammo_change_buf, "Wideshot");
 				}
 			}
-		}
-		else
-		{
-			if (!(lara.crossbow_type_carried & W_PRESENT))
-				return;
-
-			lara.request_gun_type = WEAPON_CROSSBOW;
-
-			if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_CROSSBOW)
-				lara.gun_status = LG_DRAW_GUNS;
 		}
 	}
 	else if (keymap[DIK_3])
@@ -423,6 +391,60 @@ static void DoWeaponHotkey()
 		lara.request_gun_type = WEAPON_REVOLVER;
 
 		if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_REVOLVER)
+			lara.gun_status = LG_DRAW_GUNS;
+	}
+	else if (keymap[DIK_5])
+	{
+		// The HK had to share key 1 with the pistols; now it has its own.
+		if (!(lara.hk_type_carried & W_PRESENT))
+			return;
+
+		lara.request_gun_type = WEAPON_HK;
+
+		if (lara.gun_type == WEAPON_HK)
+		{
+			if (lara.gun_status == LG_NO_ARMS)
+				lara.gun_status = LG_DRAW_GUNS;
+			else if (lara.gun_status == LG_READY && !ammo_change_timer)
+			{
+				if (!tomb5.ammotype_hotkeys)
+					return;
+
+				memset(ammo_change_buf, 0, sizeof(ammo_change_buf));
+
+				if (lara.hk_type_carried & W_AMMO3)
+				{
+					lara.hk_type_carried &= ~W_AMMO3;
+					lara.hk_type_carried |= W_AMMO2;
+					ammo_change_timer = 30;
+					sprintf(ammo_change_buf, "Burst");
+				}
+				else if (lara.hk_type_carried & W_AMMO2)
+				{
+					lara.hk_type_carried &= ~W_AMMO2;
+					lara.hk_type_carried |= W_AMMO1;
+					ammo_change_timer = 30;
+					sprintf(ammo_change_buf, "Sniper");
+				}
+				else if (lara.hk_type_carried & W_AMMO1)
+				{
+					lara.hk_type_carried &= ~W_AMMO1;
+					lara.hk_type_carried |= W_AMMO3;
+					ammo_change_timer = 30;
+					sprintf(ammo_change_buf, "Rapid");
+				}
+			}
+		}
+	}
+	else if (keymap[DIK_6])
+	{
+		// The crossbow had to share key 2 with the shotgun; now it has its own.
+		if (!(lara.crossbow_type_carried & W_PRESENT))
+			return;
+
+		lara.request_gun_type = WEAPON_CROSSBOW;
+
+		if (lara.gun_status == LG_NO_ARMS && lara.gun_type == WEAPON_CROSSBOW)
 			lara.gun_status = LG_DRAW_GUNS;
 	}
 }

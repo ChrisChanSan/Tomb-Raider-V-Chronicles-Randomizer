@@ -120,7 +120,9 @@ Your own installation of **Tomb Raider Chronicles**. Game data is
 deliberately **not** part of this project — neither levels nor music,
 videos or language files. The game belongs to its rights holders; the
 randomizer patches your own files at runtime and backs everything up to
-`data\Backup` first.
+`data\Backup` first. What the randomizer does ship is a survey of the
+original levels' geometry, which it needs to place anything legally —
+[THIRD-PARTY.md](THIRD-PARTY.md) says exactly what that is and is not.
 
 ## Building
 

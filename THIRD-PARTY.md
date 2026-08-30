@@ -61,9 +61,23 @@ without them. None of their code is in this repository.
 
 ## No game data
 
-No Tomb Raider content ships with this project — no levels, no scripts, no
-sounds, no music, no videos, no language files, no textures. The randomizer
-reads what it needs from the player's own installation at run time, and the
-four Tomb Raider III enemies are read from a Tomb Raider III installation the
-same way. Without those installations, the affected features simply do not
-appear.
+No playable Tomb Raider content ships with this project — no levels, no
+scripts, no sounds, no music, no videos, no language files, no textures, no
+models. The randomizer reads what it needs from the player's own installation
+at run time, and the four Tomb Raider III enemies are read from a Tomb Raider
+III installation the same way. Without those installations, the affected
+features simply do not appear.
+
+One thing does ship, and it is worth naming rather than glossing over:
+`data\level_*.json`, about 47 MB of **measurements of the original levels**.
+Per level: room and sector layout with floor and ceiling heights and their
+flags, AI boxes, trigger positions, and the coordinates of items and static
+meshes — plus the size and SHA-256 of the `.TRC` they were measured from.
+The randomizer needs them to know where a key may legally be placed, which
+sector an enemy fits on, and which floor is a slope it would slide off.
+
+They contain no texture, no mesh, no sound and no script, they cannot be
+rendered or played, and they cannot reconstruct a level file. They are a
+survey of geometry, not a copy of it. But they ARE derived from the game's
+level design, so calling this project entirely free of Tomb Raider data
+would be overstating it.

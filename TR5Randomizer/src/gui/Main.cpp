@@ -356,10 +356,25 @@ namespace
         // despite the fix, and his SCRIPT.DAT was nine days old.
         //
         // Hence both places are searched, game folder first.
+        // SCRIPT.DAT lies in the GAME folder, next to PCtomb5.exe - never in
+        // data\, where only the levels are. Ask gameDir() for it, because
+        // that is the one place that copes with the user having picked the
+        // data folder: it walks one level up when PCtomb5.exe is not where
+        // it was pointed.
+        //
+        // 2026-08-30: this used to search sourceDir and then dataDir(), and
+        // with the data folder chosen BOTH of those are the same wrong
+        // place. The whole script step then bailed out with "SCRIPT.DAT not
+        // found" - no young-Lara bit, no Key 8 for joby3, no pistol removal
+        // for rich2 - and the only trace was one line in spoiler.txt.
+        // gameDir() already knew how to find it; scriptPath() just never
+        // asked it.
         std::wstring scriptPath() const
         {
-            const std::wstring inGame = PathUtil::join(cfg.sourceDir, L"SCRIPT.DAT");
+            const std::wstring inGame = PathUtil::join(gameDir(), L"SCRIPT.DAT");
             if (PathUtil::fileExists(inGame)) return inGame;
+            const std::wstring chosen = PathUtil::join(cfg.sourceDir, L"SCRIPT.DAT");
+            if (PathUtil::fileExists(chosen)) return chosen;
             return PathUtil::join(dataDir(), L"SCRIPT.DAT");
         }
         std::wstring payloadDir() const { return PathUtil::join(PathUtil::exeDir(), L"data"); }
@@ -1529,8 +1544,8 @@ static void drawPathsWindow(App& a, HWND hwnd)
     // looks amiss, but SCRIPT.DAT is only looked for in the chosen folder
     // and one data\ below it - the whole script step then vanishes in
     // silence and shows up in the game as young Lara without weapons.
-    ImGui::TextDisabled(T("For Chronicles pick the folder holding PCTomb5.exe; "
-                          "for the two Tomb Raider 3 rows either that folder or its data folder."));
+    ImGui::TextWrapped("%s", T("Either the game folder or its data folder - "
+                              "each row takes both."));
     ImGui::End();
 }
 
@@ -1946,29 +1961,16 @@ static void drawUi(App& a, HWND hwnd)
     if (!askedOnce && a.cfg.sourceDir.empty())
     {
         askedOnce = true;
-        std::wstring picked;
-        if (pickFolder(hwnd, picked))
-        {
-            a.cfg.sourceDir = picked;
-            a.cfg.save();
-            inspectSource(a);
-        }
-    }
+        a.pathsOpen = true;      // the window, not a bare folder dialog:
+    }                            // it shows all three rows and what each is for
 
-    if (ImGui::Button(T("Choose folder...")))
-    {
-        std::wstring picked;
-        if (pickFolder(hwnd, picked))
-        {
-            a.cfg.sourceDir = picked;
-            a.cfg.save();
-            inspectSource(a);
-        }
-    }
+
+    // "Choose folder..." used to sit here as well and did exactly what the
+    // first row of the paths window does. One place for paths - and that
+    // window is where Tomb Raider 1, 2 and 4 will be added.
+    if (ImGui::Button(T("Installation paths..."))) a.pathsOpen = true;
     ImGui::SameLine();
     if (ImGui::Button(T("Check again"))) inspectSource(a);
-    ImGui::SameLine();
-    if (ImGui::Button(T("Installation paths..."))) a.pathsOpen = true;
     // The option list's hover help is not available up here - it is only
     // created further down. A plain tooltip does the job.
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))

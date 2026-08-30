@@ -49,11 +49,13 @@ engine that plays the result). The engine has its own manual —
 
 <p align="center"><img src="gui-main.jpg" alt="The randomizer window" width="760"></p>
 
-1. **On the very first start the folder dialog opens by itself.** Pick the
-   folder that contains `PCtomb5.exe`.
-   **Not the `data` folder inside it** — see the warning below.
-   (Later, or if you cancelled it, the same thing sits behind
-   **"Choose folder..."** in box *1. Your installation*.)
+1. **On the very first start the "Installation paths" window opens by
+   itself.** Set the top row to your Tomb Raider Chronicles installation —
+   **either the game folder or its `data` folder, both are accepted.**
+   The two rows below it are optional; see
+   [The Tomb Raider III guests](#the-tomb-raider-iii-guests).
+   Later the same window sits behind **"Installation paths..."** in box
+   *1. Your installation*.
 2. The status line should read *"Installation checked — all levels
    unmodified."*
 3. **Press "Randomize"** at the bottom.
@@ -62,14 +64,14 @@ engine that plays the result). The engine has its own manual —
 That is the whole thing. Every option below is optional; with none of them
 touched you still get the full weapon set in every level.
 
-> **The one trap that costs a whole playthrough.** Pick the folder with
-> `PCtomb5.exe` in it, not `data\`. The levels are found either way, so
-> nothing looks wrong — but `SCRIPT.DAT` is only looked for in the folder you
-> chose and in a `data` folder below it. Choose `data\` itself and the entire
-> script step is skipped **in silence**. You notice it only in the game:
-> young Lara in the three Ireland levels with no weapons, joby3 without its
-> key, rich2 keeping the pistols. The only trace is a line in `spoiler.txt`
-> reading *"SCRIPT.DAT not found — the Andy levels keep young Lara"*.
+> **A note on which folder.** Either works: the program looks for
+> `PCtomb5.exe` and, if it is not where you pointed, one level up. That
+> matters because `SCRIPT.DAT` lives beside the executable and never in
+> `data\` — until 2026-08-30 choosing `data\` meant the whole script step
+> was skipped in silence, and the only trace was a line in `spoiler.txt`
+> reading *"SCRIPT.DAT not found — the Andy levels keep young Lara"*. If
+> you see that line, the folder is not the problem any more — the file is
+> genuinely missing.
 
 ---
 

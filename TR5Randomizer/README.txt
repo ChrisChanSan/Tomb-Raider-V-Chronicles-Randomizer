@@ -44,8 +44,15 @@ Any input is a valid seed. "Christmas" works.
 
 Tuning the difficulty yourself
 ------------------------------
-On first start the game creates a file Balance.txt next to
-PCtomb5.exe. It lists every weapon individually, every enemy with its
+IF YOU LOOK FOR Balance.txt AND SecretRewards.txt AND THEY ARE NOT
+THERE: that is correct. Neither is shipped. The game writes both
+itself, next to PCtomb5.exe, the first time you start it - not when you
+unpack the package, and not when you run the randomizer. They are
+deliberately not delivered, because the game takes its defaults from
+them: a file shipped with the package would pin today's numbers to your
+installation for good, and later corrections would never reach you.
+
+Balance.txt lists every weapon individually, every enemy with its
 hit points, every single attack with its damage and every built-in
 level hazard. Below them stand three percentage lines that make
 all enemies harder or softer in one stroke without touching the fine

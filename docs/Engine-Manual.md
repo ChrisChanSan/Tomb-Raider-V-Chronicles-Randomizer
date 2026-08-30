@@ -268,6 +268,20 @@ next track that starts.
 
 <p align="center"><img src="engine-settings.jpg" alt="Balance.txt and SecretRewards.txt" width="760"></p>
 
+> **Neither file is shipped, and neither exists until the game has run
+> once.** The engine writes both beside `PCTomb5.exe` on its first start -
+> not when the package is unpacked, and not when the randomizer runs. That
+> is deliberate: the engine takes its defaults from these files, so a
+> shipped copy would pin today's numbers to every installation for good and
+> no later correction to the balancing would ever reach a player.
+>
+> All three orders end up the same, which is why it is safe: with no file
+> the engine writes a complete one; with the randomizer's three-line stub it
+> applies those three and completes the rest (`if (missing)
+> BalanceWriteFile(0)`, balance.cpp:334); and with a full file the
+> randomizer edits only its three percentage lines and leaves every hand
+> tuned value alone (BalanceFile.h).
+
 A plain text file beside `PCTomb5.exe`, created on the first start and never
 touched again unless something is missing from it. Roughly eighty settings in
 six blocks, and **it documents itself**: every line prints its own default in

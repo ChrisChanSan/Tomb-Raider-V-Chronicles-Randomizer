@@ -426,8 +426,17 @@
       <AdditionalLibraryDirectories>$(ProjectDir)TOMB5\tomb5\libs\discordRPC;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>
-      </Command>
+      <Command>REM Put the fresh EXE into the game folder, if one is named.
+REM TR5_GAME_DIR is an environment variable on the developer's machine -
+REM no path of anyone's belongs in a file that ships. Set it once with:
+REM   setx TR5_GAME_DIR "D:\path\to\your\Chronicles"
+REM Without it nothing happens and the build behaves exactly as before.
+REM
+REM The copy may fail and must never fail the build: while the game is
+REM running the file is locked, and then release\ is the fallback - which
+REM is what that folder is for.
+if defined TR5_GAME_DIR copy /Y "$(TargetPath)" "%TR5_GAME_DIR%\" &gt;nul 2&gt;&amp;1 &amp;&amp; echo   copied to %TR5_GAME_DIR% || echo   note: game folder locked - EXE stays in release\
+exit /b 0</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

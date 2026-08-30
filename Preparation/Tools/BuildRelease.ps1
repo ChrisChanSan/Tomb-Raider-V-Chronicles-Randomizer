@@ -147,6 +147,17 @@ Copy-Item "$RandoRoot\LICENSE" $rsOut -Force
 New-Item -ItemType Directory -Path "$rsOut\build" -Force | Out-Null
 Copy-Item "$RandoRoot\build\b1.bat" "$rsOut\build" -Force
 Copy-Item "$RandoRoot\build\b2.bat" "$rsOut\build" -Force
+
+# The scripts reach sideways into the engine tree for zlib, and this package
+# renames that folder to "TOMB5 engine" so a user can tell the two apart.
+# Without pulling the path along, the shipped build scripts point at a folder
+# that does not exist HERE - source that looks complete and does not build.
+foreach ($bf in @("b1.bat", "b2.bat")) {
+    $bp = "$rsOut\build\$bf"
+    $t  = [IO.File]::ReadAllText($bp)
+    $t  = $t.Replace("TOMB5 Code", "TOMB5 engine")
+    [IO.File]::WriteAllText($bp, $t)
+}
 $rsCount = (Get-ChildItem $rsOut -Recurse -File).Count
 Say "Source        : randomizer included ($rsCount files, buildable)"
 

@@ -58,6 +58,8 @@ Run the game normally, or use the two helpers in the package:
 
 The setup dialog also opens by itself the very first time the game is run.
 
+<p align="center"><img src="setup-dialog.jpg" alt="The setup dialog" width="670"></p>
+
 **Output Settings** — *Graphics Adapter* (one entry per monitor), the renderer
 named underneath, *Resolution*, and *Fullscreen* / *Windowed*.
 **Render Options** — *Bilinear*, *Disable FMV*, *Low Quality Textures*.
@@ -208,7 +210,7 @@ Worth spelling out:
 
 ## First person view
 
-<p align="center"><img src="features-2.jpg" alt="The first person options" width="700"></p>
+<p align="center"><img src="ingame-08.jpg" alt="First person, aiming the HK" width="700"></p>
 
 Switch it on under *tomb5 options*, page 2. A **third page** then appears with
 four rows of its own:

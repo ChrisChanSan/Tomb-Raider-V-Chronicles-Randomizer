@@ -132,10 +132,23 @@ Say ("Source        : $copied files ({0:N1} MB) - GPLv3 obligation" -f `
 # The randomizer is a standalone program that only reads and writes data
 # files - no derivative work of the engine. Its source still comes along,
 # because that is the standard we hold ourselves to anyway.
+# src\ ALONE IS NOT ENOUGH. The binary also links Dear ImGui, and the GPL
+# counts "the scripts used to control compilation" as part of the source -
+# so b1.bat and b2.bat travel too, and imgui brings its own MIT licence.
+# Without these a recipient holds source that cannot rebuild the program,
+# which is exactly what the obligation exists to prevent. zlib is not
+# repeated here: the build scripts read it out of the engine source, which
+# this package already ships in full.
 $rsOut = "$OutDir\Source\TR5Randomizer"
 New-Item -ItemType Directory -Path $rsOut -Force | Out-Null
 Copy-Item "$RandoRoot\src" $rsOut -Recurse -Force
-Say "Source        : randomizer included"
+Copy-Item "$RandoRoot\external" $rsOut -Recurse -Force
+Copy-Item "$RandoRoot\LICENSE" $rsOut -Force
+New-Item -ItemType Directory -Path "$rsOut\build" -Force | Out-Null
+Copy-Item "$RandoRoot\build\b1.bat" "$rsOut\build" -Force
+Copy-Item "$RandoRoot\build\b2.bat" "$rsOut\build" -Force
+$rsCount = (Get-ChildItem $rsOut -Recurse -File).Count
+Say "Source        : randomizer included ($rsCount files, buildable)"
 
 # --- 5. Licenses -------------------------------------------------------------
 $lic = "$OutDir\Licenses"

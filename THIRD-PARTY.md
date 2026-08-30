@@ -29,14 +29,26 @@ Same licence as this project, which is what allows the combination.
 | **Dear ImGui** — ocornut, <https://github.com/ocornut/imgui> | MIT | `TR5Randomizer/external/imgui/LICENSE.txt` |
 | **zlib** — Jean-loup Gailly and Mark Adler | zlib licence | notice at the top of `TOMB5 Code/TOMB5/tomb5/libs/zlib/zlib.h` |
 | **stb_vorbis** — Sean Barrett, <https://github.com/nothings/stb> | MIT **or** public domain, your choice | notice at the end of `TOMB5 Code/TOMB5/tomb5/libs/stb/stb_vorbis.c` |
+| **stb_image** — Sean Barrett, <https://github.com/nothings/stb> | MIT **or** public domain, your choice | notice at the end of `TR5Randomizer/src/libs/stb/stb_image.h` |
+
+### discord-rpc — shipped in the source tree, not in the binaries
+
+| Library | Licence | Full text in this tree |
+|---|---|---|
 | **discord-rpc** — Discord, Inc., <https://github.com/discord/discord-rpc> | MIT | `TOMB5 Code/TOMB5/tomb5/libs/discordRPC/LICENSE` |
 
 discord-rpc arrived from upstream TOMB5 as two prebuilt static libraries and
-two headers, with no licence file. It is genuinely linked in — `tomb5.cpp`
-calls `Discord_Initialize`, `Discord_UpdatePresence` and `Discord_Shutdown` —
-so its notice has to travel with anything built from this tree. The file above
-was added for that reason and is the project's own verbatim copy of the
-upstream licence.
+two headers, with no licence file. It is Troye's Discord Rich Presence, and
+**this fork switches it off**: `TOMB5 Code/TOMB5/tomb5/tomb5.cpp` opens with
+`#define TOMB5_DISCORD_RPC 0`, and every call site sits inside `#if
+TOMB5_DISCORD_RPC`. The shipped `PCTomb5.exe` accordingly contains no
+occurrence of the string `Discord` at all.
+
+The notice still has to travel, because the two `.lib` files and their headers
+are part of the source tree this project distributes — shipping someone's MIT
+code without its notice is a violation whether or not a compiler used it. The
+licence file above was added for that reason and is the project's own verbatim
+copy of the upstream text.
 
 The release package carries all of these in its `Licenses\` folder;
 `Preparation/Tools/BuildRelease.ps1` puts them there.

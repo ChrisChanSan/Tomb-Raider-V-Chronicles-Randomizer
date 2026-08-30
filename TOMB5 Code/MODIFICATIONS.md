@@ -4,7 +4,7 @@
 decompilation project by Troye/Trxyebeep and contributors,
 <https://github.com/Trxyebeep/TOMB5>).
 
-Modified between **2026-07-30 and 2026-08-24** (ongoing) for the
+Modified between **2026-07-30 and 2026-08-30** (ongoing) for the
 *TR5 Randomizer* project. The upstream code as we received it is preserved as
 the **first commit of this repository** (currently `9a43211`; the hash changes
 whenever the history is rewritten for privacy scrubbing, the content does
@@ -20,15 +20,21 @@ Re-verified on **2026-08-24** against another fresh upstream download
 files — one upstream commit made after our copy (`setup.cpp`: Two Gun gains
 `undead = 1`) and two small local fixes that predate this repository and are
 documented in their files (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp`
-DO_LOG). Measured again on **2026-08-29**: 106 files differ from upstream and
-12 are entirely new, none was deleted - 118 in all. 113 of them carry the
+DO_LOG). Measured again on **2026-08-30**: 107 files differ from upstream and
+12 are entirely new, none was deleted - 119 in all. 117 of them carry the
 modification notice at the top, which
-`grep -rl "Modified 2026 by ChrisChanSan" TOMB5/` lists. The remaining five
-carry a different notice for a good reason: `game/trex.h`, `game/raptor.h` and
-`game/compy.h` name tomb3 as their origin instead (section 3 below), and
+`grep -rl "Modified 2026 by ChrisChanSan" TOMB5/` lists. The project file
+`tomb5.vcxproj` carries the same notice as an XML comment.
+
+Exactly two of the 119 do not carry it, and neither should:
 `tomb5/libs/stb/stb_vorbis.c` and `tomb5/libs/discordRPC/LICENSE` are other
-people's files that we do not modify at all. The project file
-`tomb5.vcxproj` carries the notice as an XML comment.
+people's files that we do not modify at all - stb_vorbis carries its own
+licence at the end of the file, and the second one IS a licence. Putting our
+notice on them would claim an authorship we do not have.
+
+`game/trex.h`, `game/raptor.h` and `game/compy.h` carry the notice AND name
+tomb3 as their origin further down (section 3 below); `game/newinv2.h` had
+been missed entirely and was given its notice on 2026-08-30.
 
 This modified version remains licensed under the **GNU General Public License
 version 3**, the same licence as the original. See `LICENSE`. The complete

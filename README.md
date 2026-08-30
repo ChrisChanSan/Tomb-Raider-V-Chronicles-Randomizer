@@ -150,7 +150,9 @@ randomizer patches your own files at runtime and backs everything up to
 - **[zlib](https://zlib.net/)** by Jean-loup Gailly and Mark Adler — the
   level files are compressed with it.
 - **[discord-rpc](https://github.com/discord/discord-rpc)** by Discord, Inc.
-  (MIT) — inherited from upstream and linked into the engine.
+  (MIT) — Troye's Discord Rich Presence. This fork switches it off, so it is
+  in no binary; its libraries and headers still travel in the source tree,
+  and so does its notice.
 
 Every licence text is in `Licenses\` in the release, and
 [THIRD-PARTY.md](THIRD-PARTY.md) says which is which.

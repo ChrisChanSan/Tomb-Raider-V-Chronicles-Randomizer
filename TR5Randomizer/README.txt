@@ -160,7 +160,7 @@ Tomb Raider III files the four guests were ported from.
 TOMB5 is under the GNU GPL v3, and so is this modified version. That
 is why the complete source code is included - you can rebuild the EXE
 yourself and do not have to take our word for it. What we changed and
-why is in Source\TOMB5\MODIFICATIONS.md.
+why is in Source\TOMB5 engine\MODIFICATIONS.md.
 
 The randomizer itself is also under the GNU GPL v3. Its source code
 lies in Source\TR5Randomizer, the license in

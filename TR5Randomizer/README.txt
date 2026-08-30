@@ -196,9 +196,9 @@ MADE WITH AI
 This project was built with Claude (Anthropic) as a coding partner, and
 that is too large a part of the work to hide in a credits line. A great
 deal of the code, most of the analysis tools and both manuals were
-written in conversation with it; 360 of the 613 commits carry a Co-Authored-By
-trailer, every one from 2026-08-15 on - the work before that date was
-done the same way, the trailer was not yet being written, so the history says exactly where.
+written in conversation with it; every commit from 2026-08-15 on carries a
+Co-Authored-By trailer and the ones before it do not - the work was the
+same, the trailer was not yet being written, so the history says exactly where.
 
 What that does not change: the design decisions and the call on what
 shipped were ChrisChanSan's, and nothing went into a release that had

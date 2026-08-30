@@ -1,0 +1,27 @@
+# Which code is ours and which only travels with us.
+#
+# GitHub guesses a project's languages by counting file extensions, and it
+# counts everything - including the four vendored libraries. zlib alone ships
+# example bindings in Ada, C#, Pascal and Java under contrib, so the language
+# bar announced this project as partly Ada. That is not a small cosmetic point:
+# the bar is the first thing a visitor reads about what the code IS.
+#
+# linguist-vendored says "present, but not written here". The files still ship -
+# they have to, the GPL asks for the complete source - they simply stop being
+# counted as ours. THIRD-PARTY.md remains the place where their origin and
+# licence are named; this file only fixes an arithmetic.
+#
+# The patterns start with **/ ON PURPOSE. Writing the full path would mean
+# writing "TOMB5 Code/...", and a space separates a pattern from its attribute
+# here - git then read "Code/TOMB5/..." as an attribute name and rejected the
+# line. A leading **/ avoids the folder with the space entirely.
+#
+# Deliberately NOT listed: Preparation/Tools. Those PowerShell scripts and
+# diagnostic programs are this project's own work, and the few per cent they
+# contribute to the bar are honest.
+
+**/tomb5/libs/zlib/**        linguist-vendored
+**/tomb5/libs/stb/**         linguist-vendored
+**/tomb5/libs/discordRPC/**  linguist-vendored
+**/external/imgui/**         linguist-vendored
+**/src/libs/stb/**           linguist-vendored

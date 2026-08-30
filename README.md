@@ -11,6 +11,14 @@ game engine that runs natively on Windows 11 (D3D9 + XAudio2, no wrappers).
 Game data is **not** included — bring your own installation. Everything is
 GPLv3.
 
+## Manuals
+
+- **[The engine](docs/Engine-Manual.md)** - every option, every file it
+  reads, what plays differently from the original, and what to do when
+  something looks wrong.
+- **[The randomizer](docs/Randomizer-Manual.md)** - the window section by
+  section, seeds, and what actually changes in a randomized game.
+
 ## At a glance
 
 | | |

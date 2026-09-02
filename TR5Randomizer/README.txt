@@ -78,6 +78,25 @@ Traps, falls, fire, poison and drowning always stay as hard as in the
 original, even if you set the enemies to harmless.
 
 
+Better sound and music, from your own remaster
+----------------------------------------------
+If you own the Tomb Raider 4-6 Remaster, two things from it can be
+used here. Nothing of either is included - the engine only looks
+whether the files are there.
+
+Sound effects: copy MAIN.SFX from the remaster (it sits in 5\DATA)
+into the audio folder, keeping the name. The original stores its
+sounds as 22 kHz ADPCM inside every level file; the remaster's are
+44.1 kHz, and they are not the old ones upsampled - there really is
+more in them. About nine sounds in ten are swapped. The rest keep
+their original version on purpose: enemies the randomizer moved in
+from other levels, and the guests from Tomb Raider III, have no
+counterpart in the remaster and keep the sounds they arrived with.
+
+Music: the HQ soundtracks go into audio\HQ EN, audio\HQ DE and so on,
+named after the track number. There is a note in the audio folder.
+
+
 Playing with a controller
 -------------------------
 The engine reads a controller itself, and the buttons can be bound in

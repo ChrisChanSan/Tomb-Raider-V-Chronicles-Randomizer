@@ -12,6 +12,7 @@
  */
 #include "../tomb5/pch.h"
 #include "../tomb5/libs/zlib/zlib.h"
+#include "hqsfx.h"
 #include "file.h"
 #include "function_stubs.h"
 #include "../game/gameflow.h"
@@ -1408,6 +1409,14 @@ bool LoadSamples()
 	sample_infos = (SAMPLE_INFO*)game_malloc(num_infos * sizeof(SAMPLE_INFO));
 	ReadBlock(sample_infos, num_infos * sizeof(SAMPLE_INFO));
 
+	// Optional: higher quality versions of these same sounds, if the player
+	// put the remaster's MAIN.SFX into audio\. The bridge between this
+	// level's sample numbers and that file's global ones runs over the sound
+	// map, so it can only be built now that the map has been read. Without
+	// the file both calls do nothing and the level plays its own samples.
+	HQSfxOpen();
+	HQSfxBuildMap(sample_lut, MAX_SAMPLES, sample_infos, num_infos);
+
 	num_samples = ReadLong();
 
 	if (!num_samples)
@@ -1460,7 +1469,36 @@ bool LoadSamples()
 	{
 		fread(&uncomp_size, 1, 4, level_fp);
 		fread(&comp_size, 1, 4, level_fp);
+
+		// comp_size comes straight out of the level file. Reading it into a
+		// fixed buffer with no bound is the same hole #94 closed in
+		// DXCreateSample*, and it stopped being theoretical the moment the
+		// randomizer began importing foreign sounds.
+		if (comp_size < 0 || comp_size > SAMPLES_BUFFER_SIZE)
+		{
+			Log("FATAL: sample %d is %d bytes, samples_buffer holds %d",
+				i, comp_size, SAMPLES_BUFFER_SIZE);
+			FreeSampleDecompress();
+			return 0;
+		}
+
 		fread(samples_buffer, comp_size, 1, level_fp);
+
+		// The sample is read either way, so the file position stays right;
+		// only what is handed on changes. HQSfxPayload returns null unless
+		// there is a bank, this sample has a counterpart in it, and that
+		// counterpart is the same length - so a sound the randomizer moved
+		// or imported keeps Core's own version.
+		char* riff = samples_buffer;
+		long riffSize = comp_size;
+		long hqSize = 0;
+		char* hq = HQSfxPayload(i, uncomp_size, &hqSize);
+
+		if (hq)
+		{
+			riff = hq;
+			riffSize = hqSize;
+		}
 
 		// Format switch for foreign imports (#93). Core's own samples come
 		// as MS-ADPCM and go through the ACM decoder. The samples from
@@ -1472,20 +1510,20 @@ bool LoadSamples()
 		// The tag stands in the fmt block at +20 (RIFF 4 + size 4 + WAVE 4
 		// + "fmt " 4 + block size 4). 1 = PCM, 2 = MS-ADPCM. The same spot
 		// is read by DXCreateSampleADPCM.
-		const WAVEFORMATEX* wf = (const WAVEFORMATEX*)(samples_buffer + 20);
+		const WAVEFORMATEX* wf = (const WAVEFORMATEX*)(riff + 20);
 
-		if (comp_size > 20 && wf->wFormatTag == WAVE_FORMAT_PCM)
+		if (riffSize > 20 && wf->wFormatTag == WAVE_FORMAT_PCM)
 		{
 			// Search for the data block instead of assuming its position:
 			// further blocks can stand behind the fmt block (fact, LIST).
 			long at = 12;
 			long dataAt = 0, dataLen = 0;
 
-			while (at + 8 <= comp_size)
+			while (at + 8 <= riffSize)
 			{
-				const long len = *(const long*)(samples_buffer + at + 4);
+				const long len = *(const long*)(riff + at + 4);
 
-				if (!memcmp(samples_buffer + at, "data", 4))
+				if (!memcmp(riff + at, "data", 4))
 				{
 					dataAt = at + 8;
 					dataLen = len;
@@ -1495,14 +1533,14 @@ bool LoadSamples()
 				at += 8 + len + (len & 1);
 			}
 
-			if (dataAt <= 0 || dataAt + dataLen > comp_size)
+			if (dataAt <= 0 || dataAt + dataLen > riffSize)
 			{
 				Log("Sample %d: PCM without a usable data block", i);
 				FreeSampleDecompress();
 				return 0;
 			}
 
-			if (!DXCreateSample(i, (LPWAVEFORMATEX)wf, samples_buffer + dataAt, dataLen))
+			if (!DXCreateSample(i, (LPWAVEFORMATEX)wf, riff + dataAt, dataLen))
 			{
 				FreeSampleDecompress();
 				return 0;
@@ -1519,6 +1557,12 @@ bool LoadSamples()
 	}
 
 	FreeSampleDecompress();
+
+	if (HQSfxSubstituted())
+		Log("HQ SFX: %d of %d samples came from audio\\MAIN.SFX",
+			HQSfxSubstituted(), num_samples);
+
+	HQSfxDropMap();
 	return 1;
 }
 

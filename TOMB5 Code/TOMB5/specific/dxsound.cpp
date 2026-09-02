@@ -55,6 +55,11 @@ struct SFX_VOICE
 static SFX_BUFFER DS_Buffers[MAX_SAMPLES];
 static SFX_VOICE DS_Samples[32];
 
+// The source rate each pooled voice currently stands at. A voice's rate can
+// be changed, but only while its queue is empty, so it is tracked here
+// instead of being set on every play.
+static ulong voice_rate[32];
+
 #pragma warning(push)
 #pragma warning(disable : 4838)
 #pragma warning(disable : 4309)
@@ -105,7 +110,14 @@ static IXAudio2SourceVoice* CreateSfxVoice(ulong hz)
 	if (!g_XAudio2)
 		return 0;
 
-	if (FAILED(g_XAudio2->CreateSourceVoice(&voice, &wfx, 0, 8.0F, 0, 0, 0)))
+	// MaxFrequencyRatio, and it is fixed for the life of the voice. XAudio2
+	// requires MaxFrequencyRatio * source rate to stay inside
+	// XAUDIO2_MAX_SAMPLE_RATE (200000), so at 8.0 a voice can never be
+	// switched to a 44100 Hz source - 8 * 44100 = 352800, and
+	// SetSourceSampleRate just fails. 4.5 clears both rates
+	// (4.5 * 44100 = 198450) and costs nothing that was ever reachable:
+	// DSAdjustPitch has always clamped at 100000/22050 = 4.535.
+	if (FAILED(g_XAudio2->CreateSourceVoice(&voice, &wfx, 0, 4.5F, 0, 0, 0)))
 		return 0;
 
 	return voice;
@@ -131,18 +143,24 @@ void DSChangeVolume(long num, long volume)
 
 void DSAdjustPitch(long num, long pitch)
 {
-	ulong frequency;
-
 	if (DS_Samples[num].voice)
 	{
-		frequency = ulong((float)pitch / 65536.0F * 22050.0F);
+		// pitch is a 16.16 ratio with 65536 meaning "unchanged", and the
+		// voice now runs at its sample's own rate (see DXStartSample), so
+		// the ratio can go straight to XAudio2. The old form multiplied by
+		// 22050 and then divided by pcm_format.nSamplesPerSec, which is the
+		// same 22050 - the two cancelled out, and the rate of the sample
+		// being played never entered the calculation at all. The clamp keeps
+		// the range that arithmetic used to impose; 4.5 is the voice's
+		// MaxFrequencyRatio, above which XAudio2 would clamp silently.
+		float ratio = (float)pitch / 65536.0F;
 
-		if (frequency < 100)
-			frequency = 100;
-		else if (frequency > 100000)
-			frequency = 100000;
+		if (ratio < 100.0F / 22050.0F)
+			ratio = 100.0F / 22050.0F;
+		else if (ratio > 4.5F)
+			ratio = 4.5F;
 
-		DS_Samples[num].voice->SetFrequencyRatio((float)frequency / (float)pcm_format.nSamplesPerSec);
+		DS_Samples[num].voice->SetFrequencyRatio(ratio);
 	}
 }
 
@@ -210,7 +228,7 @@ bool InitSampleDecompress()
 		Log("Stream Open %d", mmresult);
 
 	decompressed_samples_buffer = (char*)malloc(0x40000);
-	samples_buffer = (char*)malloc(0x4005A);
+	samples_buffer = (char*)malloc(SAMPLES_BUFFER_SIZE);
 	memset(&ACMStreamHeader, 0, sizeof(ACMSTREAMHEADER));
 	ACMStreamHeader.pbSrc = (uchar*)(samples_buffer + 90);
 	ACMStreamHeader.cbStruct = sizeof(ACMSTREAMHEADER);
@@ -358,10 +376,32 @@ long DXStartSample(long num, long volume, long pitch, long pan, ulong flags)
 
 		if (!DS_Samples[channel].voice)
 			return -1;
+
+		voice_rate[channel] = pcm_format.nSamplesPerSec;
 	}
 
 	DS_Samples[channel].voice->Stop(0);
 	DS_Samples[channel].voice->FlushSourceBuffers();
+
+	// Voices are pooled and reused, so the one just taken may have been made
+	// for a different rate than this sample needs - with audio\MAIN.SFX in
+	// place, 22050 and 44100 samples stand side by side in one level.
+	// SetSourceSampleRate needs an empty queue, which holds here only because
+	// DSGetFreeChannel hands out nothing but channels with BuffersQueued == 0;
+	// that invariant is what this rests on. The result is checked on purpose:
+	// a silent failure would leave 44100 data in a 22050 voice, which plays an
+	// octave too low at half speed and is easy to miss in one sound among many.
+	if (DS_Buffers[num].frequency && DS_Buffers[num].frequency != voice_rate[channel])
+	{
+		if (FAILED(DS_Samples[channel].voice->SetSourceSampleRate(DS_Buffers[num].frequency)))
+		{
+			Log("DXStartSample: channel %d would not switch to %d Hz for sample %d",
+				channel, DS_Buffers[num].frequency, num);
+			return -1;
+		}
+
+		voice_rate[channel] = DS_Buffers[num].frequency;
+	}
 
 	memset(&buf, 0, sizeof(buf));
 	buf.AudioBytes = DS_Buffers[num].bytes;
@@ -482,8 +522,17 @@ bool DXCreateSample(long num, LPWAVEFORMATEX format, LPVOID data, ulong bytes)
 		DS_Buffers[num].pcm = 0;
 	}
 
-	DS_Buffers[num].bytes = bytes;
 	DS_Buffers[num].pcm = (BYTE*)malloc(bytes);
+
+	// Unchecked until now, with the memcpy right behind it.
+	if (!DS_Buffers[num].pcm)
+	{
+		Log("DXCreateSample: no memory for %d bytes (sample %d)", bytes, num);
+		DS_Buffers[num].bytes = 0;
+		return 0;
+	}
+
+	DS_Buffers[num].bytes = bytes;
 	memcpy(DS_Buffers[num].pcm, data, bytes);
 	DS_Buffers[num].frequency = format->nSamplesPerSec;
 	return 1;

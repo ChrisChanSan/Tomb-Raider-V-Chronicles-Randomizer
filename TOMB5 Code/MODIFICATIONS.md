@@ -26,7 +26,12 @@ modification notice at the top, which
 `grep -rl "Modified 2026 by ChrisChanSan" TOMB5/` lists. The project file
 `tomb5.vcxproj` carries the same notice as an XML comment.
 
-Exactly two of the 119 do not carry it, and neither should:
+Measured again on **2026-09-02**, after the optional HQ sound bank was
+added: still 107 files changed, but **14** are entirely new - **121** in
+all, 119 of them carrying the notice. The two additions are
+`specific/hqsfx.cpp` and `specific/hqsfx.h`.
+
+Exactly two of the 121 do not carry it, and neither should:
 `tomb5/libs/stb/stb_vorbis.c` and `tomb5/libs/discordRPC/LICENSE` are other
 people's files that we do not modify at all - stb_vorbis carries its own
 licence at the end of the file, and the second one IS a licence. Putting our
@@ -80,6 +85,31 @@ approach TR2Main used for Tomb Raider II:
 
 Audio was moved from DirectSound to XAudio2 in `specific/dxsound.cpp`; music
 streaming in `specific/audio.cpp` was deliberately left on the original path.
+
+**Optional HQ sounds** (`specific/hqsfx.cpp` and `.h`, both new). Chronicles
+has no `MAIN.SFX` - that was TR4. From TR5 on, Core moved the samples into the
+level files, so every `.TRC` carries its own bank of MS-ADPCM at 22050 Hz. The
+TR4-6 Remaster went back to one global `MAIN.SFX` of plain PCM at 44100 Hz,
+and that file is not the old material resampled: run a 22050 sample up to
+44100 and back down again and almost nothing is left over, while the
+remaster's samples keep about twenty times as much residue, and their spectrum
+runs through 11025 Hz without the cliff a resampled signal always shows. If
+the player puts that file into `audio\`, the engine takes the samples from it;
+without it nothing changes at all.
+
+The bridge between a level's own sample numbers and the bank's global ones
+runs over the sound ids, which both sides index the same way. Only the audio
+data is swapped - the level's own tables stay in charge, so the sounds the
+randomizer imports from Tomb Raider III keep their original samples and
+`MAX_SAMPLES` is not touched. Playback needed three changes in
+`specific/dxsound.cpp`: a source sample rate per voice (checked, not assumed),
+`DSAdjustPitch` reduced to the plain ratio it had always been computing, and
+`MaxFrequencyRatio` lowered from 8.0 to 4.5 - XAudio2 caps
+`MaxFrequencyRatio * source rate` at 200000, so at 8.0 no voice could ever
+have been switched to 44100 Hz. Two unrelated holes were closed on the way:
+`LoadSamples` read samples into a fixed buffer with no length check, and
+`DXCreateSample` did not check its `malloc`. None of the audio ships - it is
+the player's own data, exactly like the HQ music.
 
 Also in this group:
 

@@ -28,6 +28,7 @@ GPLv3.
 | **Outfits** | Lara's three Chronicles outfits, plus outfits imported from Tomb Raider III — pick what may be rolled in the wardrobe |
 | **Secrets** | Placed in a glitchless or a glitched set, or rolled from a pool |
 | **Music** | Ambience and triggers permuted; HQ soundtracks in OGG are played if you supply them |
+| **Sound** | Drop the remaster's `MAIN.SFX` into `audio\` and the game plays its effects at 44.1 kHz - measurably wider, not upsampled |
 | **Level order** | Optional, from shuffling inside a section up to a free run through the whole game |
 | **Difficulty** | Every weapon, enemy and hazard tunable by hand in `Balance.txt`, or by three sliders |
 | **Engine** | Native Direct3D 9 and XAudio2, controller support, a first-person view, and a long list of fixed original bugs |

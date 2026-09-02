@@ -39,5 +39,12 @@ void S_SoundSetPitch(long num, long pitch);
 bool DXCreateSample(long num, LPWAVEFORMATEX format, LPVOID data, ulong bytes);
 
 extern char* samples_buffer;
+
+// Size of samples_buffer. It used to exist only as the magic number in the
+// malloc down in dxsound.cpp, while LoadSamples() read into it with no bound
+// at all - the same class of hole #94 closed in DXCreateSample*. 0x4005A is
+// 0x40000 of payload plus the 90 byte MS-ADPCM RIFF header that
+// ACMStreamHeader.pbSrc skips over.
+#define SAMPLES_BUFFER_SIZE 0x4005A
 extern IXAudio2* g_XAudio2;
 extern IXAudio2MasteringVoice* g_MasteringVoice;

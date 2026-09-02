@@ -274,6 +274,37 @@ HQ EN and then to the original WAV, so a half-filled folder is fine.
 Changing the language mid-game also changes the music set, but only from the
 next track that starts.
 
+### HQ sounds
+
+The same remaster also has the game's sound effects at twice the sample rate.
+Copy its `MAIN.SFX` into `audio\`:
+
+```
+audio\MAIN.SFX
+```
+
+In your remaster installation it sits in `5\DATA\MAIN.SFX`. Keep the name - the
+engine looks for exactly that, and the original game has no file of that name,
+so nothing can collide.
+
+**Nothing ships**, the same as with the soundtracks. Without the file the game
+plays Core's samples as it always has.
+
+What it buys you: the original stores its sounds as 22 kHz ADPCM inside every
+level file. The remaster's are 44.1 kHz PCM, and they are not the old ones
+upsampled - there is genuinely more in them. Same recordings at the same
+volume, with the bandwidth the 2000 release threw away.
+
+About nine sounds in ten are swapped. The rest keep their original version on
+purpose: enemies the randomizer moved in from other levels, and the four
+guests from Tomb Raider III, have no counterpart in the remaster's bank, so
+they keep the sounds they arrived with. A couple more are held back by a
+length check, which is what stops a swapped-in sound from being handed the
+wrong audio.
+
+Start the game once with `-log` if you want to watch it work: `log.txt` then
+carries a line per level saying how many sounds came out of the bank.
+
 ---
 
 ## Balance.txt — tuning the whole game

@@ -341,7 +341,20 @@ ticked: the mode removes the pins, the equipment shuffle is what moves them.
 
 **"Glitchless list" / "Glitched list"** — hand-picked hiding places from an
 author's list. Such a list can do more than move a rose: it may add keys,
-switches, doors, climbable walls, new portals, and even flood a room.
+switches, doors, climbable walls, new portals, move a whole room, and even
+flood a room.
+
+One form of it is worth naming, because it repairs something Core left
+undone. Seventy-six rooms in Chronicles carry no drawn surface at all — the
+floor data is there, so Lara walks on them, but nothing is painted and you
+look into black. Nobody ever noticed, because no window looks into any of
+them; a list that opens one changes that at a stroke.
+`Make_Room_Geometry<N>(like=Room<M>)` builds the missing surface out of the
+room's own floor data and dresses it in another room's textures, so what you
+see is exactly what you walk on. The floor data itself is never touched: a
+mistake there can look wrong, it cannot make a level unplayable. The full
+syntax, with the per-square and per-band refinements, is written out in the
+header of every list file.
 
 **"Author"** appears while a list mode is selected. Lists are plain text files
 in `data\secrets` named `Author_Category.txt` — anyone can drop their own in

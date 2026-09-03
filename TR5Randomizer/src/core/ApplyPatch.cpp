@@ -772,6 +772,64 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         }
     }
 
+    // --- Room geometry (#137) --------------------------------------------
+    //
+    // Last of the room work, and that order is the whole point. It runs
+    // AFTER roomMoves, so the sector bytes already carry the shift and the
+    // floor and ceiling heights read out right. It runs AFTER portalAdds,
+    // so the view windows exist and the walls are not built across them -
+    // and so @Clear, which only ever meets a room that still has no faces,
+    // finds nothing to take away, exactly as it does today.
+    //
+    // All the lines for one room are gathered into one call: the first that
+    // names like= decides where the textures come from, and every line that
+    // sets a texture becomes a rule, applied in the order written.
+    const JsonValue& geoms = patch["roomGeometry"];
+    if (geoms.size() > 0)
+    {
+        std::vector<int> order;
+        std::map<int, int> likeOf;
+        std::map<int, std::vector<Tr5Level::RoomTexRule>> rulesOf;
+
+        for (size_t i = 0; i < geoms.size(); ++i)
+        {
+            const JsonValue& g = geoms[i];
+            const int room = static_cast<int>(g["room"].asInt(-1));
+            if (room < 0)
+            { error = "roomGeometry[" + std::to_string(i) + "]: no room"; return false; }
+
+            if (likeOf.find(room) == likeOf.end())
+            { order.push_back(room); likeOf[room] = -1; }
+
+            const int like = static_cast<int>(g["like"].asInt(-1));
+            if (like >= 0) likeOf[room] = like;
+
+            Tr5Level::RoomTexRule rule;
+            rule.sx       = static_cast<int>(g["sx"].asInt(-1));
+            rule.sz       = static_cast<int>(g["sz"].asInt(-1));
+            rule.band     = static_cast<int>(g["band"].asInt(-1));
+            rule.floorTex = static_cast<int>(g["floor"].asInt(-1));
+            rule.ceilTex  = static_cast<int>(g["ceiling"].asInt(-1));
+            rule.wallTex  = static_cast<int>(g["wall"].asInt(-1));
+            rule.floorTri = static_cast<int>(g["floorTri"].asInt(-1));
+            rule.ceilTri  = static_cast<int>(g["ceilingTri"].asInt(-1));
+            rule.wallTri  = static_cast<int>(g["wallTri"].asInt(-1));
+            // Six fields now: a texinfo carries the shape it was cut for, so
+            // quads and triangles are named separately. Any one of them makes
+            // the line a rule.
+            if (rule.floorTex >= 0 || rule.ceilTex >= 0 || rule.wallTex >= 0 ||
+                rule.floorTri >= 0 || rule.ceilTri >= 0 || rule.wallTri >= 0)
+                rulesOf[room].push_back(rule);
+        }
+
+        for (int room : order)
+        {
+            std::string gErr;
+            if (!level.buildRoomGeometry(room, likeOf[room], rulesOf[room], gErr))
+            { error = "roomGeometry room " + std::to_string(room) + ": " + gErr; return false; }
+        }
+    }
+
     const JsonValue& tadds = patch["triggerAdds"];
 
     // Compensate the offset between planning and file (#107): the planning

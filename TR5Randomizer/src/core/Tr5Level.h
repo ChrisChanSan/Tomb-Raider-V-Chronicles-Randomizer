@@ -273,6 +273,21 @@ public:
     // filled anyway), 1 entry is in si.
     int     floorSlope(int room, int sx, int sz, SlopeInfo& si, int& baseY) const;
 
+    // Corner-exact floor / ceiling height of a sector (world y, grows
+    // downward), from the floordata the way the engine reads it. cx and cz
+    // are the corner within the sector and must be 0 or 1024.
+    //
+    // Why not floorPosAt (Floor.h): that one answers "where is the floor
+    // under this point", which is what an item needs. Room geometry needs
+    // the CORNER, and the engine's own formula cannot be asked for it - see
+    // the substitution derived above cornerFloor() in Tr5Level.cpp.
+    //
+    // Returns false for a wall (height byte -127), an invalid sector or
+    // corner, and an unreadable chain - the caller then has no height, not a
+    // wrong one.
+    bool    cornerFloor(int room, int sx, int sz, int cx, int cz, long& y) const;
+    bool    cornerCeiling(int room, int sx, int sz, int cx, int cz, long& y) const;
+
     // Installs a moveable fetched from a TR3 level (package from TR3Fetch,
     // magic "T35H"). Implemented in Tr5Tr3Import.cpp - deliberately next to
     // the proven TR5->TR5 path and not inside it.
@@ -474,6 +489,34 @@ public:
     bool    addViewWindow(int roomA, int sxA, int szA,
                           int roomB, int sxB, int szB, std::string& error);
 
+    // #137: what a wall window has to describe, worked out from the
+    // floordata instead of from the two height bytes.
+    //
+    // (sx,sz) is the sector of roomA that hands over to roomB - the very one
+    // addViewWindow puts its window on. The opening at each of the two
+    // corners of the shared edge is
+    //     [ max(ceiling A, ceiling B) .. min(floor A, floor B) ]
+    // and the window is the BOUNDING BOX over both corners, so a sloped
+    // opening is enclosed rather than cut. yCeil comes out above yFloor (y
+    // grows downward).
+    //
+    // Measured over the 2938 one-sector wall windows of the 13 campaign
+    // levels (WinCheck): every single one of them is a rectangle, 0
+    // trapezoids, and of the 2722 whose sector pair can be located again,
+    // 2622 (96.3 %) are exactly this box against 1715 (63.0 %) for the height
+    // bytes. Of the 100 that differ, 99 have Core's window LARGER - the
+    // harmless direction, since the window only clips (SetRoomBounds,
+    // draw.cpp:1687). The one the other way round is rich2 room 73 (x3,z0),
+    // where room 73's own floor drops to +256 at the shared edge and this box
+    // comes out 1280 units taller than Core's; a larger window clips less,
+    // never more.
+    //
+    // false where there is no wall opening to describe - a vertical pair, a
+    // sector off the border ring, an unreadable chain, or two cross sections
+    // that do not overlap at all.
+    bool    wallWindow(int roomA, int sx, int sz, int roomB,
+                       long& yCeil, long& yFloor) const;
+
     // The raw view windows of one room: target, normal, then four corners.
     // For holding a generated portal against a hand-built one - the only way
     // to see whether a record is right, since a wrong one does not fail, it
@@ -502,6 +545,36 @@ public:
         size_t indexAt;        // where the four indices sit
     };
     bool    roomFaces(int room, std::vector<FaceInfo>& out, std::string& error) const;
+
+    // #137: one texture rule for buildRoomGeometry. -1 in a field means "does
+    // not apply", so a rule with sx, sz and band all -1 is the room-wide
+    // default and every later rule refines what an earlier one set. band is
+    // counted from the floor upward, which is how a person looks at a wall;
+    // the data runs the other way and is turned round on the way in.
+    //
+    // Each field names ONE texinfo, and a texinfo carries the shape it was cut
+    // for - which is why quads and triangles have fields of their own. Corner-
+    // exact geometry produces both (a split sector becomes two triangles, and
+    // so does a wall piece that runs out at one corner), and a triangle
+    // wearing a quad's texinfo maps wrongly.
+    //
+    // A triangle takes, in this order: the rule's own *Tri field, else the
+    // commonest TRIANGLE texinfo of the like= room, else the quad number -
+    // and that last case is said out loud instead of mapping wrongly in
+    // silence.
+    struct RoomTexRule
+    {
+        int sx = -1, sz = -1, band = -1;
+        int floorTex = -1, ceilTex = -1, wallTex = -1;      // quads
+        int floorTri = -1, ceilTri = -1, wallTri = -1;      // triangles
+    };
+
+    // Give a room that has no drawn surface one, built from its own floor
+    // data (#137). likeRoom < 0 means the textures come from the rules alone.
+    // Idempotent: a room that already carries faces is left untouched.
+    bool    buildRoomGeometry(int room, int likeRoom,
+                              const std::vector<RoomTexRule>& rules,
+                              std::string& error);
 
     // A raw 4-byte field of the 208-byte room header, for when the engine
     // reads a structure through a stored offset and our own parser does not.
@@ -782,6 +855,27 @@ private:
     bool appendChain(const std::vector<Tr5FloorEntry>& chain, uint16_t& outIndex,
                      std::string& error);
     void setSectorIndex(const Tr5Room& r, int sx, int sz, uint16_t index);
+
+    // Shared front end of cornerFloor/cornerCeiling: checks room, sector and
+    // corner, hands out the file position of the 8-byte sector entry and the
+    // sector's floordata chain (empty if the sector has none). false means
+    // hands off - see there.
+    bool cornerLookup(int room, int sx, int sz, int cx, int cz,
+                      size_t& sectorAt, std::vector<Tr5FloorEntry>& chain) const;
+
+    // The cross section of one sector at a corner named in WORLD x/z. The
+    // neighbour of a sector may live in another room with another origin,
+    // which is why the corner is not given room-locally.
+    bool crossWorld(int room, int sx, int sz, long wx, long wz,
+                    long& fy, long& cy) const;
+
+    // Which wall of `room` a border sector sits on. ax/az is the step
+    // OUTWARD (-1 low side, +1 high side); false means the sector is not on
+    // the border ring at all, and then the two rooms meet vertically. A
+    // corner sector belongs to two walls, and there the neighbour's own
+    // position decides.
+    bool portalWallAxis(int room, int other, int sx, int sz,
+                        int& ax, int& az) const;
 
     // Breaks down a room blob. offset/size point at the blob in the main
     // block, index is the running room number.

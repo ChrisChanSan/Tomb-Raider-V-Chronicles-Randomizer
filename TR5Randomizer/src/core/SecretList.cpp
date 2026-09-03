@@ -48,8 +48,21 @@ namespace
     // One extra option, all forms in one pot.
     struct Option
     {
-        enum Kind { ITEM, TRIGGER, REPLACE, PORTAL, CLIMB, WATER, MOVEROOM } kind = ITEM;
+        enum Kind { ITEM, TRIGGER, REPLACE, PORTAL, CLIMB, WATER, MOVEROOM,
+                    GEOMETRY } kind = ITEM;
         long moveX = 0, moveY = 0, moveZ = 0;         // MOVEROOM only
+        // GEOMETRY only (#137). -1 everywhere means "not given": geomLike
+        // is the room the textures are copied from, the six tex fields are
+        // explicit texinfos, and room/sx/sz/band narrow a rule down to one
+        // square or one band of a wall. Lines add up - the first sets the
+        // rule for the whole room, later ones are exceptions.
+        //
+        // Quads and triangles have fields of their own, because a texinfo
+        // carries the shape it was cut for: floor=/ceiling=/wall= name a
+        // quad's, floortri=/ceilingtri=/walltri= a triangle's.
+        int geomLike = -1, geomBand = -1;
+        int geomFloor = -1, geomCeil = -1, geomWall = -1;
+        int geomFloorTri = -1, geomCeilTri = -1, geomWallTri = -1;
         bool waterOn = false;                        // WATER only
         int typeId = -1, index = -1;
         int room = -1, sx = -1, sz = -1;
@@ -131,6 +144,10 @@ namespace
         // andy1. "Celing" is tolerated too - the author writes it that way.
         static const std::regex reMoveRoom(R"(Move_Room(\d+)\s*\(([^)]*)\))", std::regex::icase);
         static const std::regex reAxis(R"(([xyz])\s*=\s*([+-]?\d+))", std::regex::icase);
+        // #137. The room number hangs on the verb the way Move_Room does,
+        // and the body is a key=value list the way Move_Room's is.
+        static const std::regex reGeom(R"(Make_Room_?Geometry\s*(\d+)\s*\(([^)]*)\))", std::regex::icase);
+        static const std::regex reGeomKey(R"((\w+)\s*=\s*(?:Room)?(\d+))", std::regex::icase);
         static const std::regex reClear(R"(@\s*Clear)", std::regex::icase);
         static const std::regex reLikeWall(R"(@\s*LikeWall\s*\(\s*Room(\d+)\s*\(\s*x(\d+)\s*,\s*z(\d+)\s*\)\s*\))", std::regex::icase);
         static const std::regex reCeilPortal(R"(Make_Ce[il]+ing_?Portal\s*@\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\)\s*->\s*Room(\d+)\(\s*x(\d+)\s*,\s*z(\d+)\s*\))", std::regex::icase);
@@ -152,6 +169,29 @@ namespace
             e.kind = Option::WATER;
             e.waterOn = !m[1].matched;               // leading "No" = turn off
             e.room = std::stoi(m[2]);
+        }
+        else if (std::regex_search(raw, m, reGeom))
+        {
+            e.kind = Option::GEOMETRY;
+            e.room = std::stoi(m[1]);
+            const std::string body = m[2];
+            for (std::sregex_iterator it(body.begin(), body.end(), reGeomKey), z; it != z; ++it)
+            {
+                const std::string key = lower((*it)[1].str());
+                const int val = std::stoi((*it)[2]);
+                if      (key == "like")       e.geomLike     = val;
+                else if (key == "floor")      e.geomFloor    = val;
+                else if (key == "ceiling")    e.geomCeil     = val;
+                else if (key == "ceil")       e.geomCeil     = val;
+                else if (key == "wall")       e.geomWall     = val;
+                else if (key == "floortri")   e.geomFloorTri = val;
+                else if (key == "ceilingtri") e.geomCeilTri  = val;
+                else if (key == "ceiltri")    e.geomCeilTri  = val;
+                else if (key == "walltri")    e.geomWallTri  = val;
+                else if (key == "x")          e.sx           = val;
+                else if (key == "z")          e.sz           = val;
+                else if (key == "band")       e.geomBand     = val;
+            }
         }
         else if (std::regex_search(raw, m, reMoveRoom))
         {
@@ -238,6 +278,7 @@ namespace
         if (std::regex_search(raw, m, reLike))    e.likeItem = std::stoi(m[1]);
         if (e.kind != Option::REPLACE && e.kind != Option::PORTAL && e.kind != Option::CLIMB &&
             e.kind != Option::WATER && e.kind != Option::MOVEROOM &&
+            e.kind != Option::GEOMETRY &&
             std::regex_search(raw, m, reTrig))
         {
             e.triggerKind = m[1];
@@ -261,6 +302,7 @@ namespace
         std::string rest = raw;
         auto strike = [&rest](const std::regex& re) { rest = std::regex_replace(rest, re, ""); };
         strike(reMoveRoom);
+        strike(reGeom);
         strike(reLikeWall);
         strike(reClear);
         strike(reCeilPortal);
@@ -421,6 +463,7 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
     JsonValue moves = JsonValue::makeArray();
     JsonValue climbs = JsonValue::makeArray();
     JsonValue water = JsonValue::makeArray();
+    JsonValue geoms = JsonValue::makeArray();
 
     const std::vector<Tr5Room>& rooms = lvl.rooms();
     auto roomOk = [&](int r) { return r >= 0 && r < static_cast<int>(rooms.size()); };
@@ -543,6 +586,24 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
             mv.set("dy", JsonValue::makeInt(static_cast<int>(o.moveY)));
             mv.set("dz", JsonValue::makeInt(static_cast<int>(o.moveZ)));
             moves.push(mv);
+            continue;
+        }
+
+        if (o.kind == Option::GEOMETRY)
+        {
+            JsonValue g = JsonValue::makeObject();
+            g.set("room", JsonValue::makeInt(o.room));
+            g.set("like", JsonValue::makeInt(o.geomLike));
+            g.set("sx", JsonValue::makeInt(o.sx));
+            g.set("sz", JsonValue::makeInt(o.sz));
+            g.set("band", JsonValue::makeInt(o.geomBand));
+            g.set("floor", JsonValue::makeInt(o.geomFloor));
+            g.set("ceiling", JsonValue::makeInt(o.geomCeil));
+            g.set("wall", JsonValue::makeInt(o.geomWall));
+            g.set("floorTri", JsonValue::makeInt(o.geomFloorTri));
+            g.set("ceilingTri", JsonValue::makeInt(o.geomCeilTri));
+            g.set("wallTri", JsonValue::makeInt(o.geomWallTri));
+            geoms.push(g);
             continue;
         }
 
@@ -697,5 +758,6 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
     if (portals.size() > 0) patchOut.set("portalAdds", portals);
     if (climbs.size() > 0)  patchOut.set("climbAdds", climbs);
     if (water.size() > 0)   patchOut.set("roomWater", water);
+    if (geoms.size() > 0)   patchOut.set("roomGeometry", geoms);
     return true;
 }

@@ -1,9 +1,9 @@
 # The tools, and which one answers which question
 
-Written 2026-08-30 from the folder itself. Thirty-four diagnostic tools sit
-in `Diagnose\`, twenty-eight of them with a build script beside them, and
-until now there was no index at all - so the way to find the right one was to
-already know it existed.
+Written 2026-08-30 from the folder itself, three tools added 2026-09-03.
+Thirty-seven diagnostic tools sit in `Diagnose\`, twenty-eight of them with a
+build script beside them, and until now there was no index at all - so the way
+to find the right one was to already know it existed.
 
 Every tool prints its own usage when started without arguments, and every
 one carries a header comment saying why it was written. That header is the
@@ -15,9 +15,16 @@ authority; this page only points at it.
 its own folder, so a fresh clone builds them. They need Visual Studio with
 the C++ workload; the path to `vcvars` is the one absolute thing in them.
 
-Six tools have no script and are built by hand from their header comment:
-BoneCheck, DinoCheck, FaceCheck, TR3FetchCheck, TR3SoundCheck,
-TriggerCommands.
+Nine tools have no script and are built by hand from their header comment:
+BoneCheck, CornerCheck, DinoCheck, FaceCheck, GeomTest, TR3FetchCheck,
+TR3SoundCheck, TriggerCommands, WinCheck.
+
+CornerCheck, GeomTest and WinCheck were written in a scratch folder outside
+the clone, and their build scripts stayed behind on purpose: those carried
+absolute paths, and two of them were even named `bcc.bat` and `bwc.bat`,
+which belong to CameraCheck and BalanceWriteCheck here. All three take the
+same command line as CameraCheck's script - `Tr5Level.cpp` plus zlib, nothing
+else - with their own name substituted.
 
 ## By subject
 
@@ -30,6 +37,9 @@ TriggerCommands.
 | `SectorCheck` | bsek | one sector in plain text, including the raw eight FLOOR_INFO bytes. |
 | `FloorCheck` | bb | floor heights and slopes, the rule set behind item placement. |
 | `FaceCheck` | - | which drawn faces cover a sector. |
+| `CornerCheck` | - | proof for `cornerFloor` / `cornerCeiling` (#137): every horizontal vanilla face that covers one sector must sit corner for corner on the height the floordata computes. Run it after any change to the floordata reading - it is the only independent witness there is. |
+| `WinCheck` | - | holds `wallWindow` (#137) against the 32-byte view windows Core shipped. A window only ever clips, so when the two differ the direction is what matters: too large costs nothing, too small blacks out part of the neighbouring room. |
+| `GeomTest` | - | tries `buildRoomGeometry` (#137) on one room and reports what came out - face count, triangles, bounding box, degenerate faces. The tool for a room that has no drawn surface at all. |
 | `LevelDiff` | bld | two levels compared block by block. If everything but the images is byte-equal, only textures were exchanged. |
 | `LevelBuild` | bbw | applies a patch JSON to a level - how the hand-built test levels are made. |
 | `FixCheck` | bfc | applies LevelFix and saves the result, so the repairs can be looked at in trview. |

@@ -18,6 +18,7 @@
 #include "Tr5Level.h"
 
 #include <cstdio>
+#include <algorithm>
 #include <cstring>
 
 namespace
@@ -673,6 +674,232 @@ int Tr5Level::floorSlope(int room, int sx, int sz, SlopeInfo& si, int& baseY) co
         return 1;
     }
     return 0;                                       // only portals/triggers/...: flat
+}
+
+namespace
+{
+    // Floor slopes: TILT, SPLIT1/2, NOCOLF1T/1B/2T/2B - exactly the set
+    // GetCeiling skips over (control.cpp:1362-1363).
+    bool isFloorSlope(int fn)
+    {
+        return fn == FN_TILT || fn == 7 || fn == 8 || (fn >= 11 && fn <= 14);
+    }
+
+    // The two families of a split: family 1 (SPLIT1/3, NOCOLF1*/NOCOLC1*)
+    // splits along one diagonal, family 2 along the other.
+    bool isFamily1(int fn)
+    {
+        return fn == 7 || fn == 11 || fn == 12 ||        // floor
+               fn == 9 || fn == 15 || fn == 16;          // ceiling
+    }
+
+    // The height adjustment of one split triangle: 5 signed bits in the type
+    // word, sign-extended the way the engine does it (control.cpp:1086-1091
+    // and :1400-1403).
+    int splitHadj(uint16_t typeWord, int shift)
+    {
+        int hadj = (typeWord >> shift) & 0x1F;
+        if (hadj & 0x10) hadj |= ~0x1F;
+        return hadj;
+    }
+}
+
+bool Tr5Level::cornerLookup(int room, int sx, int sz, int cx, int cz,
+                            size_t& sectorAt, std::vector<Tr5FloorEntry>& chain) const
+{
+    sectorAt = 0;
+    chain.clear();
+
+    if (cx != 0 && cx != 1024) return false;
+    if (cz != 0 && cz != 1024) return false;
+    if (room < 0 || room >= static_cast<int>(m_rooms.size())) return false;
+
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    if (r.sectorsOffset == 0) return false;
+    if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors) return false;
+
+    const size_t at = r.sectorsOffset + (static_cast<size_t>(sx) * r.numZSectors + sz) * 8;
+    if (at + 8 > m_bytes.size()) return false;
+    sectorAt = at;
+
+    const int idx = sectorIndex(room, sx, sz);
+    if (idx < 0) return false;
+    if (idx == 0) return true;                      // no floordata: flat sector
+    return readChain(idx, chain);                   // unreadable: hands off
+}
+
+//----------------------------------------------------------------------------
+// Corner-exact floor and ceiling height - the one substitution in the
+// engine's formula.
+//
+// GetHeight (control.cpp:1013-1035, 1078-1160) and GetCeiling (:1356-1452)
+// are linear in the offset within the sector, but they write that offset as
+//     (v & 1023)   and   ((-1 - v) & 1023)
+// and both of these hit 1023 where the sector edge lies at 1024: the engine
+// can only ever be asked about a point INSIDE the sector, never about the
+// corner. Evaluating the SAME linear function exactly on the edge means one
+// substitution and nothing else:
+//     (v & 1023)        ->  cv              with cv in {0, 1024}
+//     ((-1 - v) & 1023) ->  1024 - cv
+// Check on the substitution: every product is now a multiple of 1024, so
+// the engine's ">> 2" is an exact division and every corner height is an
+// exact multiple of 256. Measured over all 16 vanilla levels: it is.
+//
+// One thing the corner cannot inherit from the engine is the split's
+// triangle test - "dx > 1024 - dz" would sit exactly on the diagonal at two
+// of the four corners. The test therefore runs on a probe point one unit
+// toward the sector centre (1 resp. 1023), which is the triangle the corner
+// belongs to. It does not matter which one is picked: measured over all 16
+// vanilla levels, both triangles of a split deliver the SAME height at their
+// two shared corners (18156 of 18156), so the corner height is unique.
+//----------------------------------------------------------------------------
+bool Tr5Level::cornerFloor(int room, int sx, int sz, int cx, int cz, long& y) const
+{
+    y = 0;
+
+    size_t at = 0;
+    std::vector<Tr5FloorEntry> chain;
+    if (!cornerLookup(room, sx, sz, cx, cz, at, chain)) return false;
+
+    // The sector's floor byte, signed, at +5 of the 8-byte entry. GetHeight
+    // starts with exactly this value << 8; -127 is NO_HEIGHT, the wall.
+    const int floorByte = static_cast<int8_t>(m_bytes[at + 5]);
+    if (floorByte == -127) return false;
+    long h = static_cast<long>(floorByte) * 256;
+
+    const int px = (cx == 0) ? 1 : 1023;            // probe for the triangle test
+    const int pz = (cz == 0) ? 1 : 1023;
+
+    // GetHeight walks the WHOLE chain and adds up every slope entry it meets
+    // (the "height +=" inside its do-while). Ported as it stands, even
+    // though no vanilla chain carries more than one floor slope.
+    for (const Tr5FloorEntry& e : chain)
+    {
+        int xoff = 0, yoff = 0;
+
+        if (e.function == FN_TILT)                              // control.cpp:1013
+        {
+            if (e.words.size() < 2) return false;               // entry without data word
+            xoff = static_cast<int16_t>(e.words[1]) >> 8;
+            yoff = static_cast<int8_t>(e.words[1] & 0xFF);
+        }
+        else if (e.function == 7 || e.function == 8 ||           // SPLIT1/2
+                 (e.function >= 11 && e.function <= 14))         // NOCOLF*
+        {                                                        // control.cpp:1078
+            if (e.words.size() < 2) return false;
+            const uint16_t d = e.words[1];
+            const int t0 = d & 0xF, t1 = (d >> 4) & 0xF;
+            const int t2 = (d >> 8) & 0xF, t3 = (d >> 12) & 0xF;
+            const bool fam1 = isFamily1(e.function);
+            const bool firstHalf = fam1 ? (px > 1024 - pz) : (px > pz);
+
+            if (firstHalf)
+            {
+                h += splitHadj(e.words[0], 5) * 256;
+                xoff = t3 - t0;
+                yoff = fam1 ? (t3 - t2) : (t0 - t1);
+            }
+            else
+            {
+                h += splitHadj(e.words[0], 10) * 256;
+                xoff = t2 - t1;
+                yoff = fam1 ? (t0 - t1) : (t3 - t2);
+            }
+        }
+        else
+            continue;                                            // portal, trigger, climb, ...
+
+        // control.cpp:1024-1032 and :1151-1159, with the substitution above.
+        if (xoff < 0) h -= (xoff * cz) >> 2;
+        else          h += (xoff * (1024 - cz)) >> 2;
+        if (yoff < 0) h -= (yoff * cx) >> 2;
+        else          h += (yoff * (1024 - cx)) >> 2;
+    }
+
+    y = h;
+    return true;
+}
+
+bool Tr5Level::cornerCeiling(int room, int sx, int sz, int cx, int cz, long& y) const
+{
+    y = 0;
+
+    size_t at = 0;
+    std::vector<Tr5FloorEntry> chain;
+    if (!cornerLookup(room, sx, sz, cx, cz, at, chain)) return false;
+
+    // The ceiling byte sits at +7 of the sector entry; -127 is the wall here
+    // as well (GetCeiling:1354).
+    const int ceilByte = static_cast<int8_t>(m_bytes[at + 7]);
+    if (ceilByte == -127) return false;
+    long h = static_cast<long>(ceilByte) * 256;
+
+    // Here GetCeiling parts company with GetHeight: it does NOT walk the
+    // chain. It reads the FIRST entry, and only if that is a floor slope does
+    // it step over it to the second (control.cpp:1360-1370, the "ended"
+    // flag). A ceiling slope any further back in the chain the engine never
+    // sees - reproduced on purpose, because the drawn geometry follows the
+    // engine, not the intention.
+    const Tr5FloorEntry* e = nullptr;
+    if (!chain.empty())
+    {
+        e = &chain[0];
+        if (isFloorSlope(e->function))
+        {
+            const bool last = (e->words[0] & 0x8000) != 0;
+            if (last || chain.size() < 2) e = nullptr;
+            else                          e = &chain[1];
+        }
+    }
+
+    const int px = (cx == 0) ? 1 : 1023;
+    const int pz = (cz == 0) ? 1 : 1023;
+
+    int h1 = 0, h2 = 0;
+    if (e && e->function == FN_ROOF)                             // control.cpp:1377
+    {
+        if (e->words.size() < 2) return false;
+        h1 = static_cast<int16_t>(e->words[1]) >> 8;
+        h2 = static_cast<int8_t>(e->words[1] & 0xFF);
+    }
+    else if (e && (e->function == 9 || e->function == 10 ||       // SPLIT3/4
+                   (e->function >= 15 && e->function <= 18)))     // NOCOLC*
+    {                                                            // control.cpp:1382
+        if (e->words.size() < 2) return false;
+        const uint16_t d = e->words[1];
+        // The ceiling nibbles go in NEGATED (control.cpp:1386-1389).
+        const int t0 = -(d & 0xF), t1 = -((d >> 4) & 0xF);
+        const int t2 = -((d >> 8) & 0xF), t3 = -((d >> 12) & 0xF);
+        const bool fam1 = isFamily1(e->function);
+        const bool firstHalf = fam1 ? (px <= 1024 - pz) : (px <= pz);
+
+        // Mind the shifts: the ceiling takes the hadj fields the other way
+        // round from the floor - 10 for the first triangle, 5 for the second.
+        if (firstHalf)
+        {
+            h += 256 * splitHadj(e->words[0], 10);
+            h1 = t2 - t1;
+            h2 = fam1 ? (t3 - t2) : (t0 - t1);
+        }
+        else
+        {
+            h += 256 * splitHadj(e->words[0], 5);
+            h1 = t3 - t0;
+            h2 = fam1 ? (t0 - t1) : (t3 - t2);
+        }
+    }
+    // Anything else - portal, trigger, or no entry at all - leaves h1 and h2
+    // at 0, which is what the engine's fall-through does.
+
+    // control.cpp:1443-1451. The asymmetry is the engine's: for h1 the
+    // NEGATIVE case takes the offset itself, for h2 the POSITIVE one does.
+    if (h1 < 0) h += (h1 * cz) >> 2;
+    else        h -= (h1 * (1024 - cz)) >> 2;
+    if (h2 < 0) h += (h2 * (1024 - cx)) >> 2;
+    else        h -= (h2 * cx) >> 2;
+
+    y = h;
+    return true;
 }
 
 const char* Tr5Level::canAppendTrigger(const std::vector<Tr5FloorEntry>& chain)
@@ -1552,34 +1779,119 @@ bool Tr5Level::sectorInfo(int room, std::vector<SectorInfo>& out, std::string& e
     return true;
 }
 
+// Which wall of `room` a border sector sits on. Portals sit on the border
+// ring of a room, and that is what says which way the opening faces. A corner
+// sector belongs to two walls; then the neighbour's own position decides.
+bool Tr5Level::portalWallAxis(int room, int other, int sx, int sz,
+                              int& ax, int& az) const
+{
+    ax = az = 0;
+    if (room < 0 || room >= static_cast<int>(m_rooms.size())) return false;
+    if (other < 0 || other >= static_cast<int>(m_rooms.size())) return false;
+
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    const Tr5Room& o = m_rooms[static_cast<size_t>(other)];
+
+    const bool loX = (sx == 0), hiX = (sx == r.numXSectors - 1);
+    const bool loZ = (sz == 0), hiZ = (sz == r.numZSectors - 1);
+    if (!loX && !hiX && !loZ && !hiZ) return false;
+
+    const int cxA = r.originX + r.numXSectors * 512;
+    const int czA = r.originZ + r.numZSectors * 512;
+    const int cxB = o.originX + o.numXSectors * 512;
+    const int czB = o.originZ + o.numZSectors * 512;
+    const bool alongX = abs(cxB - cxA) >= abs(czB - czA);
+
+    if (alongX && (loX || hiX)) { ax = loX ? -1 : 1; return true; }
+    if (!alongX && (loZ || hiZ)) { az = loZ ? -1 : 1; return true; }
+    if (loX || hiX) { ax = loX ? -1 : 1; return true; }
+    az = loZ ? -1 : 1;
+    return true;
+}
+
+bool Tr5Level::crossWorld(int room, int sx, int sz, long wx, long wz,
+                          long& fy, long& cy) const
+{
+    if (room < 0 || room >= static_cast<int>(m_rooms.size())) return false;
+    const Tr5Room& t = m_rooms[static_cast<size_t>(room)];
+    const long lx = wx - (static_cast<long>(t.originX) + static_cast<long>(sx) * 1024);
+    const long lz = wz - (static_cast<long>(t.originZ) + static_cast<long>(sz) * 1024);
+    if ((lx != 0 && lx != 1024) || (lz != 0 && lz != 1024)) return false;
+    return cornerFloor(room, sx, sz, static_cast<int>(lx), static_cast<int>(lz), fy) &&
+           cornerCeiling(room, sx, sz, static_cast<int>(lx), static_cast<int>(lz), cy);
+}
+
+//----------------------------------------------------------------------------
+// The corner-exact opening of a wall portal - see the header for what it is
+// measured against.
+//
+// The pairing is the same one buildRoomGeometry uses for its walls: a portal
+// square is the OTHER room's space, so OUR cross section comes from the
+// sector one step INTO room A, and the target's from room B's sector at the
+// very place that portal square occupies. Those two sectors are neighbours in
+// the world and share the edge the wall stands on.
+//
+// Union, not intersection. The window is a clipping rectangle, and taking the
+// intersection of the two corners would cut away the part of a sloped opening
+// that only one corner reaches - which is exactly the 24 % of Andrea3's new
+// octagon that came out black.
+//----------------------------------------------------------------------------
+bool Tr5Level::wallWindow(int roomA, int sx, int sz, int roomB,
+                          long& yCeil, long& yFloor) const
+{
+    yCeil = yFloor = 0;
+
+    int ax = 0, az = 0;
+    if (!portalWallAxis(roomA, roomB, sx, sz, ax, az)) return false;
+
+    const Tr5Room& a = m_rooms[static_cast<size_t>(roomA)];
+    const Tr5Room& b = m_rooms[static_cast<size_t>(roomB)];
+
+    // Our own cross section: one step inward from the portal square.
+    const int aix = sx - ax, aiz = sz - az;
+
+    // The target's: its sector at the portal square's place in the world.
+    const long wpx = static_cast<long>(a.originX) + static_cast<long>(sx) * 1024;
+    const long wpz = static_cast<long>(a.originZ) + static_cast<long>(sz) * 1024;
+    const long dbx = wpx - b.originX, dbz = wpz - b.originZ;
+    if (dbx < 0 || dbz < 0 || (dbx % 1024) || (dbz % 1024)) return false;
+    const int bix = static_cast<int>(dbx / 1024), biz = static_cast<int>(dbz / 1024);
+
+    // The shared edge: the INNER edge of the portal square, which is where
+    // the wall between the two rooms stands.
+    const long edgeX = static_cast<long>(a.originX) +
+                       static_cast<long>((ax < 0) ? sx + 1 : sx) * 1024;
+    const long edgeZ = static_cast<long>(a.originZ) +
+                       static_cast<long>((az < 0) ? sz + 1 : sz) * 1024;
+
+    long top = 0, bot = 0;
+    for (int i = 0; i < 2; ++i)
+    {
+        const long wx = ax ? edgeX
+                           : (static_cast<long>(a.originX) + static_cast<long>(sx + i) * 1024);
+        const long wz = ax ? (static_cast<long>(a.originZ) + static_cast<long>(sz + i) * 1024)
+                           : edgeZ;
+
+        long fA = 0, cA = 0, fB = 0, cB = 0;
+        if (!crossWorld(roomA, aix, aiz, wx, wz, fA, cA)) return false;
+        if (!crossWorld(roomB, bix, biz, wx, wz, fB, cB)) return false;
+
+        const long o = (cA > cB) ? cA : cB;          // the lower of the two ceilings
+        const long u = (fA < fB) ? fA : fB;          // the higher of the two floors
+        if (i == 0) { top = o; bot = u; }
+        else { if (o < top) top = o; if (u > bot) bot = u; }
+    }
+
+    if (top >= bot) return false;                    // no head room anywhere
+    yCeil = top;
+    yFloor = bot;
+    return true;
+}
+
 bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
                              int roomB, int nsxB, int nszB, std::string& error)
 {
     constexpr size_t HDR = 208, SECTOR = 8, PORTAL = 32;
-
-    // Which wall of A is this? Portals sit on the border ring of a room, and
-    // that is what says which way the opening faces. A corner sector belongs
-    // to two walls; then the neighbour's own position decides.
-    auto wallOf = [&](const Tr5Room& r, const Tr5Room& other, int x, int zc,
-                      int& ax, int& az) -> bool
-    {
-        ax = az = 0;
-        const bool loX = (x == 0), hiX = (x == r.numXSectors - 1);
-        const bool loZ = (zc == 0), hiZ = (zc == r.numZSectors - 1);
-        if (!loX && !hiX && !loZ && !hiZ) return false;
-
-        const int cxA = r.originX + r.numXSectors * 512;
-        const int czA = r.originZ + r.numZSectors * 512;
-        const int cxB = other.originX + other.numXSectors * 512;
-        const int czB = other.originZ + other.numZSectors * 512;
-        const bool alongX = abs(cxB - cxA) >= abs(czB - czA);
-
-        if (alongX && (loX || hiX)) { ax = loX ? -1 : 1; return true; }
-        if (!alongX && (loZ || hiZ)) { az = loZ ? -1 : 1; return true; }
-        if (loX || hiX) { ax = loX ? -1 : 1; return true; }
-        az = loZ ? -1 : 1;
-        return true;
-    };
 
     // ONE plane for both windows of a horizontal portal.
     //
@@ -1603,9 +1915,15 @@ bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
     // holes. Core's pairs always match (joby3's 76 <-> 10 are both
     // -2048..-1536), and a mismatch is what made trview refuse the level.
     //
-    // The opening is what BOTH sides allow, so the ranges are intersected.
-    // Should that come out empty - a shell room with no sensible heights -
-    // each side falls back to working it out for itself, as before.
+    // Both windows therefore get ONE rectangle - and since #137 that is the
+    // corner-exact one out of the floordata (wallWindow), not the two height
+    // bytes. The bytes are one number for a whole square, and the engine
+    // CLIPS the neighbouring room to this rectangle (SetRoomBounds,
+    // draw.cpp:1687-1820, unioned over all portals by GetRoomBounds:1877).
+    // Andrea3's new opening reaches down to -4096 while the bytes said
+    // -3072, and a quarter of the octagon behind it was simply never drawn.
+    // Where the floordata cannot answer - a shell room, an unreadable chain -
+    // the old byte reading stands in, intersected as before.
     long sharedCeil = 0, sharedFloor = 0;
     bool haveSharedY = false;
 
@@ -1626,7 +1944,7 @@ bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
         // Y grows DOWNWARD in this format, so the room with the smaller
         // yBottom is the upper one.
         int ax = 0, az = 0, ay = 0;
-        if (!wallOf(r, o, fx, fz, ax, az))
+        if (!portalWallAxis(from, to, fx, fz, ax, az))
             ay = (o.yBottom < r.yBottom) ? -1 : 1;   // -1 = neighbour above
 
         const size_t sectorsEnd = r.sectorsOffset +
@@ -1913,7 +2231,7 @@ bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
     // it out for itself as before.
     {
         int ax = 0, az = 0;
-        if (!wallOf(a0, b0, sx, sz, ax, az))
+        if (!portalWallAxis(roomA, roomB, sx, sz, ax, az))
         {
             const bool aLower = a0.yBottom > b0.yBottom;
             const Tr5Room& low  = aLower ? a0 : b0;
@@ -1934,8 +2252,16 @@ bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
         }
     }
 
-    // Both sides' idea of the opening, before anything is inserted - the
-    // insertion reparses and every reference into m_rooms would dangle.
+    // The opening, corner-exact, before anything is inserted - the insertion
+    // reparses and every reference into m_rooms would dangle.
+    {
+        long wc = 0, wf = 0;
+        if (wallWindow(roomA, sx, sz, roomB, wc, wf))
+        { sharedCeil = wc; sharedFloor = wf; haveSharedY = true; }
+    }
+
+    // The height bytes as a stand-in, only where the floordata said nothing.
+    if (!haveSharedY)
     {
         auto across = [&](const Tr5Room& here, int hx, int hz,
                           const Tr5Room& there, int& cy, int& fy) -> bool
@@ -2963,4 +3289,765 @@ bool Tr5Level::save(const std::wstring& path, std::string& error) const
     std::fclose(f);
     if (put != m_bytes.size()) { error = "target file not fully written"; return false; }
     return true;
+}
+
+//----------------------------------------------------------------------------
+// Give a room that has none a drawn surface (#137, "Make_Room_Geometry").
+//
+// 89 rooms in Chronicles have no faces at all. Andrea3's room 74 is one of
+// them: five by five sectors, four roomlets, and pRmVtx == pRmFace, which
+// means the vertex block and the face stream are BOTH zero bytes long. The
+// floor data is there, so Lara walks on it and trview draws the sectors, but
+// nothing is drawn and you look into black. It only became visible once a
+// secret opened a window into the room.
+//
+// Nothing here touches the floor data. Collision comes from the sectors, and
+// the sectors already say what the room looks like. This reads that and lays a
+// surface over it, so what you see is exactly what you walk on. A mistake here
+// can look wrong; it cannot make a level unplayable.
+//
+// Not the two height BYTES of a sector, though - those are one number for a
+// whole square, and a Core room is sloped and triangulated. Every height here
+// is a CORNER height, read out of the floordata with the engine's own formula
+// (cornerFloor / cornerCeiling). The rule for what becomes surface, measured
+// over 13 levels against the faces Core actually drew (95.4 % of them exact):
+//
+//     wall(A) = cross section(A) MINUS cross section(B)
+//     opening = cross section(A) INTERSECTED WITH cross section(B)
+//
+// where B is what stands beyond the edge - a sector of our own room, or, past
+// a portal square, the sector of the room the portal hands over to. A portal
+// square itself gets nothing at all: it is the other room's space.
+//
+// Measured over the 16 vanilla levels: 76 rooms have pRmVtx == pRmFace. 74 of
+// them build (10740 faces, 58 triangles); the other two carry nRoomlets == 0
+// and fail the precondition below, as they always did.
+//
+// Where things sit in a room body, measured across all 2958 rooms of the 17
+// vanilla levels:
+//
+//     pRoomlets                   nRoomlets * 56
+//     pRmFace == pRmPrelight      2 * (5*nTri + 6*nQuad)
+//     [2 bytes of padding when the room's total nTri is odd]
+//     pRmVtx                      28 * total nVtx
+//     [padding to the next multiple of 16]
+//
+// Two things there are not what one would guess. The FACE STREAM COMES FIRST,
+// ahead of the vertices. And pRmPrelight is not a block of its own: it equals
+// pRmFace in every single room, the block is empty, and the engine assigns the
+// pointer without ever reading it (drawroom.cpp:90 and :96 are the only two
+// mentions in the whole tree). All the lighting sits in the seventh word of
+// each vertex.
+//
+// Because all three offsets are equal in an empty room, this is an APPEND, not
+// an insert, and exactly one header offset moves. The portal insertion's RELOC
+// loop must NOT be reused here: it moves every offset at or behind the
+// insertion point, and pRmVtx, pRmFace and pRmPrelight are the same number, so
+// it would move all three and leave pRmFace pointing into the middle of the
+// vertices. Three equal numbers cannot be told apart by a comparison - the
+// difference between them is what they mean, not what they are. That is the
+// same stretch of data that has already been got wrong twice.
+bool Tr5Level::buildRoomGeometry(int room, int likeRoom,
+                                 const std::vector<RoomTexRule>& rules,
+                                 std::string& error)
+{
+    if (room < 0 || room >= static_cast<int>(m_rooms.size()))
+    { error = "room " + std::to_string(room) + " does not exist"; return false; }
+
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    if (!r.headerOffset || !r.sectorsOffset)
+    { error = "room " + std::to_string(room) + " did not parse"; return false; }
+
+    const size_t hdr = r.headerOffset;
+    const size_t body = hdr + 208;
+
+    int32_t nRoomlets = 0;
+    uint32_t oRoomlets = 0, oVtx = 0, oFace = 0, oPre = 0;
+    std::memcpy(&nRoomlets, m_bytes.data() + hdr + 168, 4);
+    std::memcpy(&oRoomlets, m_bytes.data() + hdr + 172, 4);
+    std::memcpy(&oVtx,      m_bytes.data() + hdr + 176, 4);
+    std::memcpy(&oFace,     m_bytes.data() + hdr + 180, 4);
+    std::memcpy(&oPre,      m_bytes.data() + hdr + 184, 4);
+
+    // Idempotent on purpose. Patch::apply runs TWICE - once for the level
+    // patch and once for the secret patch - and roomMoves and portalAdds only
+    // ever come from the second one. A room that already carries geometry is
+    // left exactly as it is, the way makePortal returns true for a portal that
+    // is already open. Failing here instead would kill the whole run, and
+    // precisely in the setting where the room becomes visible at all.
+    if (oVtx != oFace) return true;
+
+    // The preconditions that make an append legitimate. Loud rather than
+    // clever: if a room is not shaped the way the measurement says, this stops
+    // instead of writing something that reads back cleanly and crashes later.
+    if (nRoomlets < 1 || nRoomlets > 4096)
+    { error = "room " + std::to_string(room) + ": implausible roomlet count"; return false; }
+    if (oPre != oFace)
+    { error = "room " + std::to_string(room) + ": pRmPrelight is not pRmFace"; return false; }
+    if (oFace != oRoomlets + 56u * static_cast<uint32_t>(nRoomlets))
+    { error = "room " + std::to_string(room) + ": the roomlets do not end at pRmFace"; return false; }
+    if ((oRoomlets | oVtx | oFace) & 1u)
+    { error = "room " + std::to_string(room) + ": odd block offset"; return false; }
+
+    for (int i = 0; i < nRoomlets; ++i)
+    {
+        const size_t at = body + oRoomlets + static_cast<size_t>(i) * 56;
+        if (at + 56 > m_bytes.size())
+        { error = "room " + std::to_string(room) + ": roomlet outside the file"; return false; }
+        int16_t a = 0, b = 0, c = 0;
+        std::memcpy(&a, m_bytes.data() + at + 0, 2);
+        std::memcpy(&b, m_bytes.data() + at + 6, 2);
+        std::memcpy(&c, m_bytes.data() + at + 8, 2);
+        if (a || b || c)
+        { error = "room " + std::to_string(room) + ": roomlet " + std::to_string(i) + " is not empty"; return false; }
+    }
+
+    int32_t roomSize = 0;
+    std::memcpy(&roomSize, m_bytes.data() + hdr - 4, 4);
+    const long tail = static_cast<long>(roomSize) - 208 - static_cast<long>(oVtx);
+    if (tail < 0 || tail > 15)
+    { error = "room " + std::to_string(room) + ": something stands behind the vertex block"; return false; }
+
+    // --- textures ---------------------------------------------------------
+    //
+    // like=Room<n> takes them from a room that already has faces. Which kind a
+    // face is comes from its winding: cross(v1-v0, v2-v0) points AWAY from the
+    // room's inside (measured on all 33 quads of Andrea3 room 36), so a floor
+    // gives +y - y grows downward - a ceiling -y, and anything flat in y is a
+    // wall. The commonest texinfo of each kind wins; a room built from a
+    // single texture, as the neighbouring cave is, answers all three with it.
+    //
+    // Quads and triangles are counted SEPARATELY, six numbers instead of
+    // three. A texinfo carries the shape it was cut for - the cave next door
+    // puts its 24 quads on 2283 and its 42 triangles on 2284..2289 - so a
+    // triangle wearing a quad's texinfo maps wrongly. Corner-exact geometry
+    // does produce triangles: a split sector becomes two, and so does a wall
+    // piece that runs out at one of its corners.
+    int texFloor = -1, texCeil = -1, texWall = -1;      // quads
+    int triFloor = -1, triCeil = -1, triWall = -1;      // triangles
+
+    if (likeRoom >= 0)
+    {
+        std::vector<FaceInfo> src;
+        std::string fErr;
+        if (!roomFaces(likeRoom, src, fErr))
+        { error = "like=Room" + std::to_string(likeRoom) + ": " + fErr; return false; }
+
+        std::map<int, int> cntQ[3], cntT[3];
+        for (const FaceInfo& f : src)
+        {
+            const long ax = f.v[1][0] - f.v[0][0], az = f.v[1][2] - f.v[0][2];
+            const long bx = f.v[2][0] - f.v[0][0], bz = f.v[2][2] - f.v[0][2];
+            const long cy = az * bx - ax * bz;          // y of the cross product
+            const int kind = (cy > 0) ? 0 : (cy < 0) ? 1 : 2;
+            if (f.quad) cntQ[kind][f.texInfo]++;
+            else        cntT[kind][f.texInfo]++;
+        }
+
+        int* outQ[3] = { &texFloor, &texCeil, &texWall };
+        int* outT[3] = { &triFloor, &triCeil, &triWall };
+        for (int k = 0; k < 3; ++k)
+        {
+            int best = -1, bestN = 0;
+            for (const auto& e : cntQ[k])
+                if (e.second > bestN) { bestN = e.second; best = e.first; }
+            *outQ[k] = best;
+
+            best = -1; bestN = 0;
+            for (const auto& e : cntT[k])
+                if (e.second > bestN) { bestN = e.second; best = e.first; }
+            *outT[k] = best;
+        }
+
+        // A room with no wall faces of its own still has to answer for walls.
+        if (texWall < 0)  texWall  = (texFloor >= 0) ? texFloor : texCeil;
+        if (texFloor < 0) texFloor = texWall;
+        if (texCeil < 0)  texCeil  = texWall;
+        if (triWall < 0)  triWall  = (triFloor >= 0) ? triFloor : triCeil;
+        if (triFloor < 0) triFloor = triWall;
+        if (triCeil < 0)  triCeil  = triWall;
+    }
+
+    // Later rules refine earlier ones; a rule without sx/sz/band is the
+    // room-wide default. This runs per face, so every single square can carry
+    // its own texture without any further machinery.
+    //
+    // floor=/ceiling=/wall= name a QUAD's texinfo, floortri=/ceilingtri=/
+    // walltri= a TRIANGLE's - separate fields, because a texinfo carries the
+    // shape it was cut for and a triangle wearing a quad's number maps
+    // wrongly. A triangle takes the rule's own field first, then the triangle
+    // texinfo of the like= room, and only when neither exists does it fall
+    // back to the quad number - which is said out loud rather than done in
+    // silence.
+    int triWarned = 0;
+    auto pick = [&](int sx, int sz, int band, int kind, bool tri) -> int
+    {
+        int ruled = -1, ruledTri = -1;
+        for (const RoomTexRule& q : rules)
+        {
+            if (q.sx >= 0 && q.sx != sx) continue;
+            if (q.sz >= 0 && q.sz != sz) continue;
+            if (q.band >= 0 && q.band != band) continue;
+            const int v = (kind == 0) ? q.floorTex : (kind == 1) ? q.ceilTex : q.wallTex;
+            if (v >= 0) ruled = v;
+            const int t = (kind == 0) ? q.floorTri : (kind == 1) ? q.ceilTri : q.wallTri;
+            if (t >= 0) ruledTri = t;
+        }
+
+        const int likeQ = (kind == 0) ? texFloor : (kind == 1) ? texCeil : texWall;
+        if (!tri) return (ruled >= 0) ? ruled : likeQ;
+
+        if (ruledTri >= 0) return ruledTri;
+
+        const int likeT = (kind == 0) ? triFloor : (kind == 1) ? triCeil : triWall;
+        if (likeT >= 0) return likeT;
+
+        const int fallback = (ruled >= 0) ? ruled : likeQ;
+        if (fallback >= 0 && triWarned < 8)
+        {
+            ++triWarned;
+            std::printf("  room %d: a triangle takes the QUAD texinfo %d (kind %d) - "
+                        "the like= room has no triangle of that kind and no rule names "
+                        "one (floortri=/ceilingtri=/walltri=)\n", room, fallback, kind);
+        }
+        return fallback;
+    };
+
+    // --- build the surface --------------------------------------------------
+    //
+    // The rule, measured over 13 levels against what Core actually drew
+    // (95.4 % of the faces exact):
+    //
+    //     wall(A) = cross section(A) MINUS cross section(B)
+    //     opening = cross section(A) INTERSECTED WITH cross section(B)
+    //
+    // where a cross section is the corner-exact floor and ceiling of a sector,
+    // read out of the floordata with the engine's own formula (cornerFloor /
+    // cornerCeiling). The old build read the two height BYTES instead and cut
+    // its openings to the 32-byte view windows; both are wrong. A room is
+    // sloped and triangulated, and the opening follows from the floordata, not
+    // from a window whose only job is clipping.
+    struct Vtx { float x, y, z, nx, ny, nz; uint32_t light; };
+    std::vector<Vtx> vtx;
+    std::vector<uint16_t> quadFace, triFace;
+
+    // Every face gets its own four corners rather than sharing them along a
+    // plane. It costs a few kilobytes and buys two things: every normal is
+    // exactly its own face's normal with nothing to average, and a vertex
+    // index cannot stray into another face's corner.
+    //
+    // 0xFF181818 is what the neighbouring room carries on 50 of its 72
+    // corners, so the seam at the shared wall matches. The bytes go into the
+    // file as B, G, R, A.
+    const uint32_t PRELIGHT = 0xFF181818u;
+
+    // drop < 0 makes a quad; otherwise that corner is left out and the three
+    // remaining ones become a triangle. Dropping one corner of a convex quad
+    // keeps the cyclic order, so the winding - and with it which side is
+    // visible - survives untouched.
+    //
+    // Corners are doubles rather than integers: a wall piece cut where two
+    // height lines swap over lands between two sector corners, and the file
+    // stores floats anyway.
+    auto emit = [&](const double p[4][3], float nx, float ny, float nz, int tex, int drop)
+    {
+        const size_t base = vtx.size();
+        int n = 0;
+        for (int k = 0; k < 4; ++k)
+        {
+            if (k == drop) continue;
+            vtx.push_back({ static_cast<float>(p[k][0]), static_cast<float>(p[k][1]),
+                            static_cast<float>(p[k][2]), nx, ny, nz, PRELIGHT });
+            ++n;
+        }
+
+        std::vector<uint16_t>& out = (drop < 0) ? quadFace : triFace;
+        for (int k = 0; k < n; ++k)
+            out.push_back(static_cast<uint16_t>(base + k));
+        out.push_back(static_cast<uint16_t>(tex & 0x3FFF));    // bit 15 clear: one sided
+        out.push_back(0);                                      // effects, always 0 in vanilla
+    };
+
+    const int nx = r.numXSectors, nz = r.numZSectors;
+
+    auto sector = [&](int sx, int sz) -> const uint8_t*
+    { return m_bytes.data() + r.sectorsOffset + (static_cast<size_t>(sx) * nz + sz) * 8; };
+    auto solid = [&](int sx, int sz) -> bool
+    {
+        if (sx < 0 || sz < 0 || sx >= nx || sz >= nz) return true;
+        return static_cast<int8_t>(sector(sx, sz)[5]) == -127;
+    };
+
+    // The floordata DOOR (function 1) of a sector: the room it hands over to,
+    // or -1. That word is what makes a square a portal square, and a portal
+    // square is the OTHER room's space - it gets no floor, no ceiling and no
+    // wall of ours. Measured over 13 levels: of 280560 corners Core drew, not
+    // one lies outside the core box, and 1276 portal squares carry not one
+    // horizontal face.
+    auto doorOf = [&](int rm, int ssx, int ssz) -> int
+    {
+        const int idx = sectorIndex(rm, ssx, ssz);
+        if (idx <= 0) return -1;
+        std::vector<Tr5FloorEntry> chain;
+        if (!readChain(idx, chain)) return -1;
+        for (const Tr5FloorEntry& e : chain)
+            if (e.function == FN_DOOR && e.words.size() >= 2)
+                return static_cast<int>(e.words[1]);
+        return -1;
+    };
+
+    // The cross section of ONE sector at a corner named in WORLD x/z. Asked
+    // for our own sector and for the neighbour's, and the neighbour may live
+    // in another room with another origin - hence world coordinates rather
+    // than sector-local ones. false means that sector has no cross section
+    // there (wall, unreadable chain, corner not on it).
+    auto crossAt = [&](int rm, int ssx, int ssz, long wx, long wz,
+                       long& fy, long& cy) -> bool
+    {
+        if (rm < 0 || rm >= static_cast<int>(m_rooms.size())) return false;
+        const Tr5Room& t = m_rooms[static_cast<size_t>(rm)];
+        const long lx = wx - (static_cast<long>(t.originX) + static_cast<long>(ssx) * 1024);
+        const long lz = wz - (static_cast<long>(t.originZ) + static_cast<long>(ssz) * 1024);
+        if ((lx != 0 && lx != 1024) || (lz != 0 && lz != 1024)) return false;
+        return cornerFloor(rm, ssx, ssz, static_cast<int>(lx), static_cast<int>(lz), fy) &&
+               cornerCeiling(rm, ssx, ssz, static_cast<int>(lx), static_cast<int>(lz), cy);
+    };
+
+    // Which diagonal the engine cuts a split sector along. 1 = SPLIT1/3 and
+    // their NOCOL twins, the diagonal dx + dz == 1024; 2 = SPLIT2/4, the
+    // diagonal dx == dz; 0 = no split at all. Only ever asked where the four
+    // corners disagree, and a sector without a split cannot disagree: a TILT
+    // is one plane, and so is a sum of tilts.
+    auto floorFamily = [&](int rm, int ssx, int ssz) -> int
+    {
+        const int idx = sectorIndex(rm, ssx, ssz);
+        if (idx <= 0) return 0;
+        std::vector<Tr5FloorEntry> chain;
+        if (!readChain(idx, chain)) return 0;
+        for (const Tr5FloorEntry& e : chain)
+        {
+            if (e.function == 7 || e.function == 11 || e.function == 12) return 1;
+            if (e.function == 8 || e.function == 13 || e.function == 14) return 2;
+        }
+        return 0;
+    };
+
+    // The ceiling reads at most ONE entry - the first, or the second when the
+    // first is a floor slope (GetCeiling, control.cpp:1360-1370). cornerCeiling
+    // reproduces exactly that, so the diagonal has to be looked up the same
+    // way, or the two triangles would not sit on the heights they were cut for.
+    auto ceilFamily = [&](int rm, int ssx, int ssz) -> int
+    {
+        const int idx = sectorIndex(rm, ssx, ssz);
+        if (idx <= 0) return 0;
+        std::vector<Tr5FloorEntry> chain;
+        if (!readChain(idx, chain) || chain.empty()) return 0;
+        const Tr5FloorEntry* e = &chain[0];
+        if (e->words.empty()) return 0;
+        if (isFloorSlope(e->function))
+        {
+            const bool last = (e->words[0] & 0x8000) != 0;
+            if (last || chain.size() < 2) return 0;
+            e = &chain[1];
+        }
+        if (e->function == 9  || e->function == 15 || e->function == 16) return 1;
+        if (e->function == 10 || e->function == 17 || e->function == 18) return 2;
+        return 0;
+    };
+
+    int anomalies = 0;              // corners disagree, yet no split in the chain
+    int kinks = 0;                  // sides cut where two height lines swap over
+
+    for (int sx = 0; sx < nx; ++sx)
+        for (int sz = 0; sz < nz; ++sz)
+        {
+            if (solid(sx, sz)) continue;
+            if (doorOf(room, sx, sz) >= 0) continue;    // portal square: not ours
+
+            const long X0 = static_cast<long>(sx) * 1024, X1 = X0 + 1024;
+            const long Z0 = static_cast<long>(sz) * 1024, Z1 = Z0 + 1024;
+
+            // Our own cross section: floor and ceiling at all four corners.
+            long fC[2][2], cC[2][2];                    // [x corner][z corner]
+            bool have = true;
+            for (int ix = 0; ix < 2 && have; ++ix)
+                for (int iz = 0; iz < 2 && have; ++iz)
+                    have = cornerFloor(room, sx, sz, ix * 1024, iz * 1024, fC[ix][iz]) &&
+                           cornerCeiling(room, sx, sz, ix * 1024, iz * 1024, cC[ix][iz]);
+            if (!have) continue;                        // unreadable chain: hands off
+
+            // No head room at ANY corner closes the sector. This used to be
+            // the byte-wise test "floor byte <= ceiling byte", and that threw
+            // away 7 core sectors in 3 rooms (rich3 214, Andrea2 102, rich3
+            // 206) which are shut by the bytes and half open at the corners.
+            bool anyOpen = false;
+            for (int ix = 0; ix < 2; ++ix)
+                for (int iz = 0; iz < 2; ++iz)
+                    if (fC[ix][iz] > cC[ix][iz]) anyOpen = true;
+            if (!anyOpen) continue;
+
+            // The grid the wall texture repeats on. The sector's floor BYTE,
+            // as before - a per-sector constant, so the bands of the four
+            // sides line up with each other, and identical to the old
+            // behaviour wherever the sector is flat.
+            const long FBAND = static_cast<long>(static_cast<int8_t>(sector(sx, sz)[5])) * 256;
+
+            // --- floor and ceiling ---------------------------------------
+            //
+            // Four corner heights, the winding unchanged. Four corners of a
+            // split sector do not lie in one plane; then it becomes two
+            // triangles along the engine's own diagonal, which is how Core
+            // drew 1759 of 1768 vanilla split floors.
+            {
+                const double pf[4][3] = { { double(X1), double(fC[1][1]), double(Z1) },
+                                          { double(X1), double(fC[1][0]), double(Z0) },
+                                          { double(X0), double(fC[0][0]), double(Z0) },
+                                          { double(X0), double(fC[0][1]), double(Z1) } };
+                if (fC[0][0] + fC[1][1] == fC[0][1] + fC[1][0])
+                    emit(pf, 0.0F, -1.0F, 0.0F, pick(sx, sz, -1, 0, false), -1);
+                else
+                {
+                    int fam = floorFamily(room, sx, sz);
+                    if (fam == 0) { ++anomalies; fam = 1; }
+                    const int t = pick(sx, sz, -1, 0, true);
+                    // Corner order here is (1,1) (1,0) (0,0) (0,1), so the
+                    // family 1 diagonal (0,1024)-(1024,0) joins corners 3 and
+                    // 1, the family 2 diagonal (0,0)-(1024,1024) corners 2
+                    // and 0. Dropping the other two in turn gives the pair.
+                    if (fam == 1) { emit(pf, 0.0F, -1.0F, 0.0F, t, 2); emit(pf, 0.0F, -1.0F, 0.0F, t, 0); }
+                    else          { emit(pf, 0.0F, -1.0F, 0.0F, t, 1); emit(pf, 0.0F, -1.0F, 0.0F, t, 3); }
+                }
+
+                const double pc[4][3] = { { double(X0), double(cC[0][1]), double(Z1) },
+                                          { double(X0), double(cC[0][0]), double(Z0) },
+                                          { double(X1), double(cC[1][0]), double(Z0) },
+                                          { double(X1), double(cC[1][1]), double(Z1) } };
+                if (cC[0][0] + cC[1][1] == cC[0][1] + cC[1][0])
+                    emit(pc, 0.0F, 1.0F, 0.0F, pick(sx, sz, -1, 1, false), -1);
+                else
+                {
+                    int fam = ceilFamily(room, sx, sz);
+                    if (fam == 0) { ++anomalies; fam = 1; }
+                    const int t = pick(sx, sz, -1, 1, true);
+                    // Corner order (0,1) (0,0) (1,0) (1,1): family 1 joins 0
+                    // and 2, family 2 joins 1 and 3.
+                    if (fam == 1) { emit(pc, 0.0F, 1.0F, 0.0F, t, 1); emit(pc, 0.0F, 1.0F, 0.0F, t, 3); }
+                    else          { emit(pc, 0.0F, 1.0F, 0.0F, t, 0); emit(pc, 0.0F, 1.0F, 0.0F, t, 2); }
+                }
+            }
+
+            // One vertical strip of one side, between the height line yt and
+            // the height line yb, both given at the two ends of the strip.
+            auto strip = [&](const double px[2], const double pz[2],
+                             const double yt[2], const double yb[2],
+                             float fnx, float fnz)
+            {
+                const double h0 = yb[0] - yt[0], h1 = yb[1] - yt[1];
+                if (h0 <= 0.0 && h1 <= 0.0) return;
+
+                const double p[4][3] = { { px[0], yt[0], pz[0] }, { px[1], yt[1], pz[1] },
+                                         { px[1], yb[1], pz[1] }, { px[0], yb[0], pz[0] } };
+                const double low = (yb[0] > yb[1]) ? yb[0] : yb[1];
+                const int band = static_cast<int>((static_cast<double>(FBAND) - low) / 1024.0);
+
+                // A strip that runs out at one of its two ends is a triangle -
+                // drop the corner that has collapsed onto its neighbour.
+                if (h0 <= 0.0 || h1 <= 0.0)
+                {
+                    emit(p, fnx, 0.0F, fnz, pick(sx, sz, band, 2, true), (h0 <= 0.0) ? 3 : 1);
+                    return;
+                }
+
+                // Rectangular strips keep the 1024 band split, so a tall wall
+                // repeats its texture instead of stretching it over the whole
+                // height. A sloped strip stays whole: a band cut across a
+                // slope would need its own corner heights and buys nothing.
+                if (yt[0] == yt[1] && yb[0] == yb[1])
+                {
+                    std::vector<double> cuts;
+                    cuts.push_back(yt[0]);
+                    cuts.push_back(yb[0]);
+                    for (double y = static_cast<double>(FBAND); y > yt[0]; y -= 1024.0)
+                        if (y < yb[0]) cuts.push_back(y);
+                    std::sort(cuts.begin(), cuts.end());
+                    cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
+
+                    for (size_t k = 0; k + 1 < cuts.size(); ++k)
+                    {
+                        const double a = cuts[k], b = cuts[k + 1];
+                        if (b - a < 2.0) continue;
+                        const double q[4][3] = { { px[0], a, pz[0] }, { px[1], a, pz[1] },
+                                                 { px[1], b, pz[1] }, { px[0], b, pz[0] } };
+                        const int bb = static_cast<int>((static_cast<double>(FBAND) - b) / 1024.0);
+                        emit(q, fnx, 0.0F, fnz, pick(sx, sz, bb, 2, false), -1);
+                    }
+                    return;
+                }
+
+                emit(p, fnx, 0.0F, fnz, pick(sx, sz, band, 2, false), -1);
+            };
+
+            // --- the four sides ------------------------------------------
+            for (int d = 0; d < 4; ++d)
+            {
+                const int ox = (d == 0) ? -1 : (d == 1) ? 1 : 0;
+                const int oz = (d == 2) ? -1 : (d == 3) ? 1 : 0;
+
+                // The two corners of this edge, as [x corner][z corner]
+                // indices, in the winding this side has always used - west and
+                // east run the opposite way round, and a hard-coded corner
+                // index would be right for one of them only.
+                int ex[2], ez[2];
+                if (d == 0)      { ex[0] = 0; ez[0] = 0; ex[1] = 0; ez[1] = 1; }   // west
+                else if (d == 1) { ex[0] = 1; ez[0] = 1; ex[1] = 1; ez[1] = 0; }   // east
+                else if (d == 2) { ex[0] = 1; ez[0] = 0; ex[1] = 0; ez[1] = 0; }   // north
+                else             { ex[0] = 0; ez[0] = 1; ex[1] = 1; ez[1] = 1; }   // south
+
+                const float fnx = (d == 0) ? 1.0F : (d == 1) ? -1.0F : 0.0F;
+                const float fnz = (d == 2) ? 1.0F : (d == 3) ? -1.0F : 0.0F;
+
+                double eX[2], eZ[2], cA[2], fA[2];
+                long wCx[2], wCz[2];
+                for (int i = 0; i < 2; ++i)
+                {
+                    eX[i] = static_cast<double>(ex[i] ? X1 : X0);
+                    eZ[i] = static_cast<double>(ez[i] ? Z1 : Z0);
+                    wCx[i] = r.originX + (ex[i] ? X1 : X0);
+                    wCz[i] = r.originZ + (ez[i] ? Z1 : Z0);
+                    cA[i] = static_cast<double>(cC[ex[i]][ez[i]]);
+                    fA[i] = static_cast<double>(fC[ex[i]][ez[i]]);
+                }
+
+                // Whose cross section stands on the other side of that edge.
+                // Three cases, in the order they occur: nothing at all (wall
+                // or outside the room), an open sector of our own room, or a
+                // portal square - and a portal square has no cross section of
+                // its own, it is the window into room T, so T's sector at the
+                // SAME place in the world answers instead.
+                int nbRoom = -1, nbSx = 0, nbSz = 0;
+                if (!solid(sx + ox, sz + oz))
+                {
+                    const int T = doorOf(room, sx + ox, sz + oz);
+                    if (T < 0) { nbRoom = room; nbSx = sx + ox; nbSz = sz + oz; }
+                    else if (T < static_cast<int>(m_rooms.size()))
+                    {
+                        const Tr5Room& t = m_rooms[static_cast<size_t>(T)];
+                        const long dxw = r.originX + static_cast<long>(sx + ox) * 1024 - t.originX;
+                        const long dzw = r.originZ + static_cast<long>(sz + oz) * 1024 - t.originZ;
+                        if (dxw >= 0 && dzw >= 0 && !(dxw % 1024) && !(dzw % 1024) && t.sectorsOffset)
+                        {
+                            const int tsx = static_cast<int>(dxw / 1024);
+                            const int tsz = static_cast<int>(dzw / 1024);
+                            if (tsx < t.numXSectors && tsz < t.numZSectors &&
+                                static_cast<int8_t>(m_bytes[t.sectorsOffset +
+                                    (static_cast<size_t>(tsx) * t.numZSectors + tsz) * 8 + 5]) != -127 &&
+                                doorOf(T, tsx, tsz) < 0)
+                            { nbRoom = T; nbSx = tsx; nbSz = tsz; }
+                        }
+                    }
+                    // Everything else - the target sector lies outside T, is a
+                    // wall there, or is itself a portal - counts as no
+                    // neighbour, which makes the side a full wall. Over 13
+                    // levels that happened twice in all.
+                }
+
+                double cB[2], fB[2];
+                bool haveNb = (nbRoom >= 0);
+                for (int i = 0; i < 2 && haveNb; ++i)
+                {
+                    long fy = 0, cy = 0;
+                    if (crossAt(nbRoom, nbSx, nbSz, wCx[i], wCz[i], fy, cy))
+                    { fB[i] = static_cast<double>(fy); cB[i] = static_cast<double>(cy); }
+                    else haveNb = false;
+                }
+
+                // Along the edge every height runs linearly from one corner to
+                // the other, but max(cA,cB) and min(fA,fB) have a KINK wherever
+                // two of the four lines swap over. A single quad would cut
+                // straight across that kink, so the edge is split there first.
+                std::vector<double> ts;
+                ts.push_back(0.0);
+                ts.push_back(1.0);
+                if (haveNb)
+                {
+                    const double a[4] = { cA[0], fA[0], cB[0], fB[0] };
+                    const double b[4] = { cA[1], fA[1], cB[1], fB[1] };
+                    for (int i = 0; i < 4; ++i)
+                        for (int j = i + 1; j < 4; ++j)
+                        {
+                            const double d0 = a[i] - a[j], d1 = b[i] - b[j];
+                            if ((d0 > 0.0) == (d1 > 0.0)) continue;     // no swap
+                            if (d0 == d1) continue;
+                            const double t = d0 / (d0 - d1);
+                            if (t > 1e-6 && t < 1.0 - 1e-6) { ts.push_back(t); ++kinks; }
+                        }
+                    std::sort(ts.begin(), ts.end());
+                    ts.erase(std::unique(ts.begin(), ts.end()), ts.end());
+                }
+
+                for (size_t si = 0; si + 1 < ts.size(); ++si)
+                {
+                    double px[2], pz[2], cAv[2], fAv[2], top[2], bot[2];
+                    for (int i = 0; i < 2; ++i)
+                    {
+                        const double t = ts[si + static_cast<size_t>(i)];
+                        px[i] = eX[0] + (eX[1] - eX[0]) * t;
+                        pz[i] = eZ[0] + (eZ[1] - eZ[0]) * t;
+                        cAv[i] = cA[0] + (cA[1] - cA[0]) * t;
+                        fAv[i] = fA[0] + (fA[1] - fA[0]) * t;
+
+                        if (haveNb)
+                        {
+                            const double cBv = cB[0] + (cB[1] - cB[0]) * t;
+                            const double fBv = fB[0] + (fB[1] - fB[0]) * t;
+                            // open = [max(cA,cB) .. min(fA,fB)], clamped into
+                            // our own cross section so no piece leaves it.
+                            top[i] = std::min(std::max(cAv[i], cBv), fAv[i]);
+                            bot[i] = std::max(std::min(fAv[i], fBv), cAv[i]);
+                        }
+                        else { top[i] = fAv[i]; bot[i] = fAv[i]; }
+                    }
+
+                    // An opening that is empty at BOTH ends of the strip is no
+                    // opening: the wall runs through from ceiling to floor.
+                    if (bot[0] <= top[0] && bot[1] <= top[1])
+                    { top[0] = fAv[0]; top[1] = fAv[1]; bot[0] = fAv[0]; bot[1] = fAv[1]; }
+
+                    strip(px, pz, cAv, top, fnx, fnz);      // above the opening
+                    strip(px, pz, bot, fAv, fnx, fnz);      // below it
+                }
+            }
+        }
+
+    if (anomalies)
+        std::printf("  room %d: %d sector(s) whose corners disagree without a split "
+                    "entry in the chain - cut along the family 1 diagonal\n", room, anomalies);
+    if (kinks)
+        std::printf("  room %d: %d side(s) cut where two height lines swap over\n", room, kinks);
+
+    if (vtx.empty())
+    { error = "room " + std::to_string(room) + ": nothing to build, every sector is wall or portal"; return false; }
+    if (vtx.size() > 32767)
+    { error = "room " + std::to_string(room) + ": too many vertices for one roomlet"; return false; }
+
+    // --- assemble and append ------------------------------------------------
+    //
+    // Order inside the payload is fixed here, so nothing has to work out
+    // afterwards which of the three equal offsets meant what.
+    std::vector<uint8_t> payload;
+    payload.reserve((quadFace.size() + triFace.size()) * 2 + vtx.size() * 28 + 16);
+
+    // Quads come first in a roomlet's stream, then triangles - measured on
+    // every vanilla room, and the engine's own hand-out relies on it
+    // (pFac += 5*nTri + 6*nQuad).
+    for (uint16_t s : quadFace)
+    {
+        payload.push_back(static_cast<uint8_t>(s & 0xFF));
+        payload.push_back(static_cast<uint8_t>(s >> 8));
+    }
+    for (uint16_t s : triFace)
+    {
+        payload.push_back(static_cast<uint8_t>(s & 0xFF));
+        payload.push_back(static_cast<uint8_t>(s >> 8));
+    }
+
+    // Two bytes of padding when the room's total triangle count is odd - the
+    // face stream is then 2 mod 4 long and pRmVtx has to land on a multiple of
+    // four. True in 319 of the vanilla rooms, and in all of them the count is
+    // odd, so this is the rule and not a coincidence.
+    if ((triFace.size() / 5) & 1)
+    {
+        payload.push_back(0);
+        payload.push_back(0);
+    }
+
+    const size_t faceBytes = payload.size();
+
+    for (const Vtx& v : vtx)
+    {
+        const float f[6] = { v.x, v.y, v.z, v.nx, v.ny, v.nz };
+        const uint8_t* p = reinterpret_cast<const uint8_t*>(f);
+        payload.insert(payload.end(), p, p + 24);
+        const uint8_t* l = reinterpret_cast<const uint8_t*>(&v.light);
+        payload.insert(payload.end(), l, l + 4);
+    }
+
+    while ((static_cast<long>(payload.size()) + tail) % 16) payload.push_back(0);
+    const size_t N = payload.size();
+
+    m_bytes.insert(m_bytes.begin() + static_cast<long>(body + oVtx),
+                   payload.begin(), payload.end());
+
+    // Exactly one header offset moves: the vertices now start behind the face
+    // stream. pRmFace and pRmPrelight keep pointing where they always did.
+    const uint32_t newVtx = oVtx + static_cast<uint32_t>(faceBytes);
+    std::memcpy(m_bytes.data() + hdr + 176, &newVtx, 4);
+
+    // Roomlet 0 takes everything. The engine puts no condition on cell width -
+    // InsertRoom (drawroom.cpp:74) checks nVerts, then each roomlet's bounding
+    // box, then its nVtx, and nothing else - and with a single filled roomlet
+    // the roomlet-relative indexing cannot go wrong at all.
+    {
+        const size_t at = body + oRoomlets;
+        const int16_t nV = static_cast<int16_t>(vtx.size());
+        const int16_t nQ = static_cast<int16_t>(quadFace.size() / 6);
+        const int16_t nT = static_cast<int16_t>(triFace.size() / 5);
+        const int16_t z16 = 0;
+        std::memcpy(m_bytes.data() + at + 0, &nV, 2);
+        std::memcpy(m_bytes.data() + at + 2, &z16, 2);
+        std::memcpy(m_bytes.data() + at + 4, &z16, 2);
+        std::memcpy(m_bytes.data() + at + 6, &nQ, 2);
+        std::memcpy(m_bytes.data() + at + 8, &nT, 2);
+        std::memcpy(m_bytes.data() + at + 10, &z16, 2);
+        std::memcpy(m_bytes.data() + at + 12, &z16, 2);
+        std::memcpy(m_bytes.data() + at + 14, &z16, 2);
+
+        // The bounding box, from the corners we just wrote. Too large only
+        // costs a frustum test; too small makes the roomlet vanish at the edge
+        // of the screen and takes its muzzle flashes with it. moveRoom shifts
+        // vertex y but leaves the box alone, which is harmless here because
+        // this step runs after the move and measures the finished corners.
+        float bb[6] = { vtx[0].x, vtx[0].y, vtx[0].z, vtx[0].x, vtx[0].y, vtx[0].z };
+        for (const Vtx& v : vtx)
+        {
+            bb[0] = std::min(bb[0], v.x); bb[3] = std::max(bb[3], v.x);
+            bb[1] = std::min(bb[1], v.y); bb[4] = std::max(bb[4], v.y);
+            bb[2] = std::min(bb[2], v.z); bb[5] = std::max(bb[5], v.z);
+        }
+        std::memcpy(m_bytes.data() + at + 16, bb, 24);
+
+        const uint32_t zero32 = 0;                      // the four runtime pointers
+        for (int k = 0; k < 4; ++k)
+            std::memcpy(m_bytes.data() + at + 40 + static_cast<size_t>(k) * 4, &zero32, 4);
+    }
+
+    // The engine never reads these three, but they agree with the sums in all
+    // 2958 vanilla rooms. Leaving them behind would produce a room that every
+    // later diagnostic reports as broken.
+    {
+        const int32_t gt3 = static_cast<int32_t>(triFace.size() / 5);
+        const int32_t gt4 = static_cast<int32_t>(quadFace.size() / 6);
+        const int32_t vdump = static_cast<int32_t>(vtx.size() * 28);
+        std::memcpy(m_bytes.data() + hdr + 136, &gt3, 4);
+        std::memcpy(m_bytes.data() + hdr + 140, &gt4, 4);
+        std::memcpy(m_bytes.data() + hdr + 188, &vdump, 4);
+    }
+
+    // nVerts (header +80) is deliberately NOT touched. `if (r->nVerts)` in
+    // drawroom.cpp:74 is its only reader in the whole engine, and it is not
+    // the sum of the roomlet counts anyway - only 1046 of 2958 rooms agree.
+
+    roomSize += static_cast<int32_t>(N);
+    std::memcpy(m_bytes.data() + hdr - 4, &roomSize, 4);
+
+    // The main block carries its length twice, and readHeader throws the file
+    // out when the two disagree.
+    m_mainSize += N;
+    {
+        const int32_t s = static_cast<int32_t>(m_mainSize);
+        std::memcpy(m_bytes.data() + m_mainOffset - 8, &s, 4);
+        std::memcpy(m_bytes.data() + m_mainOffset - 4, &s, 4);
+    }
+
+    return reparse(error);
 }

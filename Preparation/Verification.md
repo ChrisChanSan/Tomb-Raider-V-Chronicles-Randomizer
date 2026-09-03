@@ -42,6 +42,18 @@ code proves nothing. When the change was to the TR3 cache keys, the test had
 to place a TR3 guest - and the proof was that the new build re-extracted from
 Tomb Raider III and produced files byte-identical to the old cache.
 
+**A known break in the chain, 2026-09-03 (#137).** From the commit that
+builds geometry for rooms that have none, `Make_Portal` writes its view
+windows corner-exact out of the floordata instead of out of the sector's two
+height bytes. Every level a secret list opens a portal in therefore comes out
+with DIFFERENT bytes than before that commit, and that is intended, not a
+regression - the old windows were too small and the engine clips the
+neighbouring room to them (`SetRoomBounds`). Andrea3 is the measure: exactly
+20 bytes differ, the six y values of the three new windows, and no geometry
+byte moves. Comparing across that commit, expect this and check that the
+differing bytes are only window corners; from that commit onward the byte
+comparison is meaningful again.
+
 ---
 
 ## 2. What is object id N really?

@@ -33,6 +33,7 @@
 #include "core/ApplyPatch.h"
 #include "core/Json.h"
 #include "core/DataFolder.h"
+#include "core/EmbeddedData.h"
 #include "core/LevelInfo.h"
 #include "core/Randomizer.h"
 #include "core/Rng.h"
@@ -288,8 +289,19 @@ int main(int argc, char** argv)
 
     std::string err;
 
+    // The zone export. argv[1] is a path, and it still wins - but if nothing
+    // lies there, the FILE NAME out of that path decides and the baked copy
+    // is unpacked (EmbeddedData.h). So the usual command line keeps working
+    // untouched even with data\ gone, and a hand-exported zones_rich2.json
+    // put back in its place still outranks the baked one.
     JsonValue zone;
-    if (!Json::parseFile(toW(argv[1]), zone, err)) { std::printf("zone export: %s\n", err.c_str()); return 1; }
+    {
+        std::string text;
+        DataFile::Source src = DataFile::Source::External;
+        if (!DataFile::read(toW(argv[1]), text, src, err)) { std::printf("zone export: %s\n", err.c_str()); return 1; }
+        if (!Json::parseString(text, zone, err)) { std::printf("zone export: %s\n", err.c_str()); return 1; }
+        std::printf("  data        zones: %s\n", DataFile::log().back().c_str());
+    }
 
     // Open the level BEFORE placement, for two reasons. If a trigger travels
     // along, placement must know which sectors can take it, and that stands
@@ -312,9 +324,15 @@ int main(int argc, char** argv)
     // every run and only offers levels whose checksum matches vanilla. The
     // CLI took any path at all. It refuses one now.
     //
-    // Skipped when the list is not next to the program - the tool is also used
-    // on hand-built test levels, and demanding a checksum file for those would
-    // trade a silent wrong answer for a pointless refusal.
+    // The gate no longer has an off switch, and that is a change worth
+    // naming. It used to be skipped when no checksum list lay beside the
+    // program - deliberately, so hand-built test levels were not refused for
+    // want of a file. Since the list is baked into the EXE (EmbeddedData.h)
+    // it is always there, so the gate always runs. Nothing is lost by that:
+    // a name the list does not carry still passes, so a test level called
+    // KeyItemRangeTest.trc goes through as before. Only a file wearing a
+    // CAMPAIGN name while not being that level is refused - which is exactly
+    // the case the gate exists for.
     {
         // data\ FIRST, beside the EXE only as a fallback. The first version of
         // this looked ONLY beside the EXE, and therefore never fired once:
@@ -328,11 +346,14 @@ int main(int argc, char** argv)
             PathUtil::join(PathUtil::exeDir(), L"data"), L"VanillaLevelChecksums.csv");
         if (!PathUtil::fileExists(csv))
             csv = PathUtil::join(PathUtil::exeDir(), L"VanillaLevelChecksums.csv");
-        if (PathUtil::fileExists(csv))
+
+        DataFolder df;
+        std::string cerr, csvText;
+        DataFile::Source csvSrc = DataFile::Source::External;
+        if (DataFile::read(csv, csvText, csvSrc, cerr))
         {
-            DataFolder df;
-            std::string cerr;
-            if (df.loadChecksums(csv, cerr))
+            std::printf("  data        checksums: %s\n", DataFile::log().back().c_str());
+            if (df.loadChecksumsText(csvText, cerr))
             {
                 std::string hex; uint64_t size = 0;
                 if (FileHash::sha256File(toW(argv[3]), hex, size, cerr))
@@ -346,13 +367,17 @@ int main(int argc, char** argv)
                                     "  The randomizer reads rooms, items and triggers out of this\n"
                                     "  file. On an already randomized level those describe the\n"
                                     "  rolled state, and the run would quietly decide on wrong\n"
-                                    "  data. Point this at an untouched level, or delete\n"
-                                    "  VanillaLevelChecksums.csv beside the program to accept\n"
-                                    "  the risk knowingly.\n", argv[3]);
+                                    "  data. Point this at an untouched level - or, for a\n"
+                                    "  hand-built test level, give it a name no campaign level\n"
+                                    "  has; names outside the list are not checked.\n", argv[3]);
                         return 1;
                     }
                 }
             }
+        }
+        else
+        {
+            std::printf("  data        checksums: %s\n", cerr.c_str());
         }
     }
 

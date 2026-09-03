@@ -442,7 +442,10 @@ lands in a `Debug Level` folder beside the program.
 
 After every run, `spoiler.txt` lands beside `TR5Randomizer.exe`. It holds the
 version and build, your seed, the effective seed, **every setting**, what was
-done to `SCRIPT.DAT`, and one line per level.
+done to `SCRIPT.DAT`, one line per level, and — under `DATA` — where the
+precomputed data came from: the program carries its own copy of every
+`zones_*.json` and of the checksum list, so a file of that name in `data\`
+is optional, but if it is there it is used instead of the built-in one.
 
 **Attach it to any bug report.** Handing over the seed alone is not enough —
 the effective seed depends on the settings, and the build number decides

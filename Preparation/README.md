@@ -32,7 +32,13 @@ are not versioned and drift silently.
         |                                  BuildRelease.ps1 for all 15 levels
         |                                  on every package build.
         v
-  the randomizer reads them at run time from data\ beside the EXE.
+  Preparation\Tools\EmbedData.ps1          bakes them, zlib-packed, into
+        |                                  src\core\EmbeddedData.cpp - TRACKED,
+        |                                  so the repository carries the data
+        |                                  and the build needs no generator.
+        v
+  the randomizer carries them built in; a file in data\ beside the EXE
+  still wins at run time (#142).
 ```
 
 **Three rules follow from that, and all three have cost time before:**

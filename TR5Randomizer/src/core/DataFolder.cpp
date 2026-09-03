@@ -213,6 +213,13 @@ bool DataFolder::loadChecksums(const std::wstring& csvPath, std::string& error)
     }
     std::fclose(f);
 
+    return loadChecksumsText(text, error);
+}
+
+bool DataFolder::loadChecksumsText(const std::string& text, std::string& error)
+{
+    m_known.clear();
+
     size_t pos = 0;
     bool firstLine = true;
     while (pos <= text.size())

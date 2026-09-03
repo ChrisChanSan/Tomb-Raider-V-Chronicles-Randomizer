@@ -33,6 +33,7 @@
 #include "core/BuildId.h"
 #include "core/Config.h"
 #include "core/DataFolder.h"
+#include "core/EmbeddedData.h"
 #include "core/Json.h"
 #include "core/LevelInfo.h"
 #include "core/Randomizer.h"
@@ -809,14 +810,25 @@ static std::wstring cacheDir(const App& a)
         return true;
     }
 
+    // The zone export for one level. data\ beside the program wins, the copy
+    // baked into the EXE is the floor - see EmbeddedData.h. Which of the two
+    // it was lands in DataFile::log() and from there in spoiler.txt: a bug
+    // report is worth little without knowing which curation actually ran.
+    bool loadZones(const App& a, const std::string& base, JsonValue& zone, std::string& err)
+    {
+        std::string text;
+        DataFile::Source src = DataFile::Source::External;
+        if (!DataFile::read(a.payloadDir(), "zones_" + base + ".json", text, src, err)) return false;
+        return Json::parseString(text, zone, err);
+    }
+
     // Randomize one level. Exactly the same steps as Randomize.cpp.
     bool doLevel(App& a, LevelRow& row, uint64_t seed, std::string& err)
     {
         const std::string base = row.name.substr(0, row.name.find_last_of('.'));
-        const std::wstring wbase = PathUtil::widen(base);
 
         JsonValue zone;
-        if (!Json::parseFile(PathUtil::join(a.payloadDir(), L"zones_" + wbase + L".json"), zone, err)) return false;
+        if (!loadZones(a, base, zone, err)) return false;
 
         // The level is opened BEFORE placement, not only for patching. Two
         // reasons now. The older one is the coupled trigger move: which
@@ -1003,10 +1015,9 @@ static std::wstring cacheDir(const App& a)
     bool doDebugLevel(App& a, LevelRow& row, std::string& err)
     {
         const std::string base = row.name.substr(0, row.name.find_last_of('.'));
-        const std::wstring wbase = PathUtil::widen(base);
 
         JsonValue zone;
-        if (!Json::parseFile(PathUtil::join(a.payloadDir(), L"zones_" + wbase + L".json"), zone, err)) return false;
+        if (!loadZones(a, base, zone, err)) return false;
 
         // The backup by preference, exactly as the comment above this function
         // demands: the markers must describe the untouched level. That matters
@@ -1253,6 +1264,26 @@ static std::wstring cacheDir(const App& a)
                 if (!part.empty()) std::fprintf(f, "  %s\r\n", part.c_str());
                 i = (e == s.size()) ? e : e + 2;
             }
+            line("");
+        }
+
+        //--------------------------------------------------------------------
+        // Where the precomputed data came from.
+        //
+        // Every zone export and the checksum list exist twice: baked into the
+        // EXE, and possibly as a file in data\ that outranks it
+        // (EmbeddedData.h). Two runs of the same seed give different results
+        // if one of them found a hand-dropped export and the other did not -
+        // and from the outside the two are indistinguishable. So the choice
+        // goes on the record, one line per file. Repeated reads of the same
+        // file collapse; the startup stamp check reads them all once before
+        // the run does.
+        //--------------------------------------------------------------------
+        {
+            line("DATA");
+            std::set<std::string> seen;
+            for (const std::string& l : DataFile::log())
+                if (seen.insert(l).second) std::fprintf(f, "  %s\r\n", l.c_str());
             line("");
         }
 
@@ -2772,15 +2803,23 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     };
 
     std::string err;
-    const std::wstring csv = PathUtil::join(app.payloadDir(), L"VanillaLevelChecksums.csv");
-    app.payloadOk = app.data.loadChecksums(csv, err);
-    if (!app.payloadOk)
+    // data\ beside the program wins, the baked copy is the floor
+    // (EmbeddedData.h). This used to be the one thing that could not go
+    // missing without the whole program being useless - which is precisely
+    // what a copying accident produced once.
     {
-        // Most common case: the EXE was started from the build folder
-        // instead of the shipped package. Hence name the expected path -
-        // "file not found" alone helps nobody.
-        app.payloadError = "The folder \"data\" next to the program is missing or incomplete ("
-                         + err + "). Expected: " + PathUtil::narrow(csv);
+        std::string csvText;
+        DataFile::Source csvSrc = DataFile::Source::External;
+        app.payloadOk = DataFile::read(app.payloadDir(), "VanillaLevelChecksums.csv", csvText, csvSrc, err)
+                     && app.data.loadChecksumsText(csvText, err);
+        if (!app.payloadOk)
+        {
+            // With a built-in copy this can now only mean a broken build or
+            // a damaged file in data\ - hence say what was tried.
+            app.payloadError = "The checksum list could not be read (" + err + "). Tried: "
+                             + PathUtil::narrow(PathUtil::join(app.payloadDir(), L"VanillaLevelChecksums.csv"))
+                             + ", then the copy built into the program.";
+        }
     }
 
     //------------------------------------------------------------------------
@@ -2804,37 +2843,53 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     // does not stand out this way, but that is the rarer case, and when
     // packaging, BuildRelease.ps1 regenerates everything fresh anyway.
     //------------------------------------------------------------------------
+    // Since the exports are baked into the EXE, the set to compare is no
+    // longer "whatever lies in data\": it is every baked name plus anything
+    // extra the folder holds, each one resolved by the same rule the run
+    // uses. That keeps the check honest in the case it now has to cover -
+    // fourteen baked exports and one hand-dropped file with an older stamp
+    // would otherwise never be compared against each other.
     if (app.payloadOk)
     {
         std::map<std::string, std::vector<std::string>> stamps;
 
-        std::vector<std::wstring> files;
+        std::vector<std::string> files = EmbeddedData::names();
+        files.erase(std::remove_if(files.begin(), files.end(), [](const std::string& n) {
+                        return n.rfind("zones_", 0) != 0;
+                    }), files.end());
         {
             WIN32_FIND_DATAW fd{};
             const std::wstring pattern = PathUtil::join(app.payloadDir(), L"zones_*.json");
             HANDLE h = FindFirstFileW(pattern.c_str(), &fd);
             if (h != INVALID_HANDLE_VALUE)
             {
-                do { files.push_back(fd.cFileName); } while (FindNextFileW(h, &fd));
+                do
+                {
+                    const std::string n = PathUtil::narrow(fd.cFileName);
+                    if (std::find(files.begin(), files.end(), n) == files.end()) files.push_back(n);
+                } while (FindNextFileW(h, &fd));
                 FindClose(h);
             }
         }
 
-        for (const std::wstring& file : files)
+        for (const std::string& file : files)
         {
+            std::string text, jerr;
+            DataFile::Source zsrc = DataFile::Source::External;
+            if (!DataFile::read(app.payloadDir(), file, text, zsrc, jerr)) continue;
+
             JsonValue z;
-            std::string jerr;
-            if (!Json::parseFile(PathUtil::join(app.payloadDir(), file), z, jerr)) continue;
+            if (!Json::parseString(text, z, jerr)) continue;
 
             const std::string stamp = z["curationStamp"].asString();
             const std::string level = z["level"].asString();
             stamps[stamp.empty() ? std::string("(no stamp)") : stamp]
-                .push_back(level.empty() ? PathUtil::narrow(file) : level);
+                .push_back(level.empty() ? file : level);
         }
 
         if (stamps.size() > 1)
         {
-            std::string t = "The zone exports in data\\ carry different curation stamps - "
+            std::string t = "The zone exports carry different curation stamps - "
                             "part of them was not regenerated after a change to "
                             "ZoneAnalysis.ps1. Affected:";
             for (const auto& kv : stamps)

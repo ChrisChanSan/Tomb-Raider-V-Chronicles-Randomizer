@@ -12,7 +12,11 @@ What is in here
   audio\, movie\      Where your HQ soundtracks and FMVs go; each
                       folder has a note in it.
   savegame\           Savegames live here now, not loose in the folder.
-  data\               Precomputed data the randomizer needs.
+  data\               Precomputed data. The randomizer carries the same
+                      data inside itself, so these files are optional -
+                      but any one of them that IS there is used instead
+                      of the built-in copy, and spoiler.txt names which
+                      of the two each run took.
   Source\             The complete source code: TOMB5 engine\ is the
                       engine, TR5Randomizer\ the tool.
   Licenses\           The licenses.

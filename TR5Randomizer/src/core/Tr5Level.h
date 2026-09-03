@@ -709,6 +709,51 @@ public:
     bool moveableInfo(int slotId, MoveableInfo& out) const;
     std::vector<int> moveableSlots() const;
 
+    // The bounding box of the model's REST POSE, i.e. of anim 0 / frame 0.
+    //
+    // A TR5 frame begins with six int16 - minX, maxX, minY, maxY, minZ,
+    // maxZ - and the moveable's frameOffset points at exactly that first
+    // frame (byte offset into the frame block). out receives the six values
+    // in that order; maxY - minY is the model's height in world units, and
+    // y grows downward, so a taller model has the larger difference.
+    //
+    // Returns false if the slot is missing or its frame pointer does not
+    // lie inside the frame block. A one-frame STUB (the soldier family,
+    // whose real anims the engine fetches from a base type at runtime)
+    // reads as an all-zero box - present, but no measure; the caller has to
+    // decide what to do with a height of 0.
+    bool frameBounds(int slotId, int16_t out[6]) const;
+
+    // The sector's raw ceiling base: the ceiling byte (offset +7 of the
+    // eight-byte FLOOR_INFO) times 256, i.e. the height before any slope.
+    // The fallback for cornerCeiling, which answers false at a wall corner
+    // and at an unreadable chain - there the flat value is still the best
+    // knowledge there is. false means the sector itself does not exist or
+    // the byte is NO_HEIGHT (-127, wall): then there is no height at all.
+    bool sectorCeilingBase(int room, int sx, int sz, long& y) const;
+
+    // The LOWEST ceiling of a sector - what an object standing there has
+    // over its head. Largest of the four corner values, because y grows
+    // downward.
+    //
+    // Two things separate it from calling cornerCeiling four times:
+    //
+    //  1. It follows the CEILING PORTALS first. GetCeiling walks up through
+    //     sky_room (offset +6 of the FLOOR_INFO, 255 = none) before it even
+    //     looks at a ceiling byte - control.cpp:1340-1349 - because a
+    //     sector whose ceiling is a portal carries the room BOUNDARY there,
+    //     not a ceiling. Reading that boundary as a ceiling calls ten of
+    //     Core's own vanilla enemies too tall for their spot (measured with
+    //     HeightCheck over all 15 levels), among them the guard in joby3
+    //     room 8, who has stood there since 2000.
+    //  2. Where a corner has no value of its own (wall corner, unreadable
+    //     chain), the sector's flat ceiling base stands in - a corner
+    //     without an answer must not silently drop out of the maximum.
+    //
+    // false means there is no ceiling to be had at all: the sector is not
+    // there, or its byte is NO_HEIGHT.
+    bool sectorCeilingLow(int room, int sx, int sz, long& y) const;
+
     // For diagnostic tools only: raw values from the blocks. Outside the
     // block, 0 comes back - the tools compare donor against copy, where an
     // outlier stands out as a difference.

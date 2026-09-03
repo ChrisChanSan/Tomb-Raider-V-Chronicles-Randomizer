@@ -422,7 +422,26 @@ int main(int argc, char** argv)
         for (const std::string& n : fixNotes) std::printf("  LevelFix    %s\n", n.c_str());
     }
 
+    // Source levels for soundAdds and for the cross enemies' models: they
+    // lie next to the source file, which is passed in here anyway. Defined
+    // BEFORE the placement, because the headroom rule (#141) has to measure
+    // a cross enemy in its donor file while it decides.
+    static std::wstring folder = toW(argv[3]);
+    {
+        const size_t cut = folder.find_last_of(L"\\/");
+        folder = (cut == std::wstring::npos) ? L"." : folder.substr(0, cut);
+    }
+    auto source = [](const std::string& name, void*) -> std::wstring {
+        std::wstring w;
+        for (char c : name) w.push_back(static_cast<wchar_t>(static_cast<unsigned char>(c)));
+        return folder + L"\\" + w + L".trc";
+    };
+    // Cache next to the source files (#103): extract once instead of per
+    // level. Without a TR3 path there is nothing to cache.
+    const std::wstring cache = tr3Dir.empty() ? std::wstring() : folder + L"\\Import-Export";
+
     Patch::markTriggerSafeSectors(lvl, in);
+    in.modelHeight = Patch::modelHeightFn(source, nullptr, tr3Dir, tr3GoldDir, cache);
 
     RandoOptions opt;
     opt.addEnemies = enemies > 0;
@@ -449,23 +468,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // Source levels for soundAdds: they lie next to the source file, which
-    // is passed in here anyway.
-    static std::wstring folder = toW(argv[3]);
-    {
-        const size_t cut = folder.find_last_of(L"\\/");
-        folder = (cut == std::wstring::npos) ? L"." : folder.substr(0, cut);
-    }
-    auto source = [](const std::string& name, void*) -> std::wstring {
-        std::wstring w;
-        for (char c : name) w.push_back(static_cast<wchar_t>(static_cast<unsigned char>(c)));
-        return folder + L"\\" + w + L".trc";
-    };
-
     PatchReport pr;
-    // Cache next to the source files (#103): extract once instead of per
-    // level. Without a TR3 path there is nothing to cache.
-    const std::wstring cache = tr3Dir.empty() ? std::wstring() : folder + L"\\Import-Export";
     if (!Patch::apply(lvl, patch, pr, err, source, nullptr, tr3Dir, tr3GoldDir, cache)) { std::printf("patch: %s\n", err.c_str()); return 1; }
     for (const std::string& w : pr.warnings) std::printf("  note: %s\n", w.c_str());
 

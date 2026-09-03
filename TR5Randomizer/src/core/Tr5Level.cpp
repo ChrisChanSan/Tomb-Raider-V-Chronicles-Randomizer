@@ -3089,6 +3089,100 @@ bool Tr5Level::moveableInfo(int slotId, MoveableInfo& out) const
     return false;
 }
 
+bool Tr5Level::frameBounds(int slotId, int16_t out[6]) const
+{
+    for (int k = 0; k < 6; ++k) out[k] = 0;
+
+    MoveableInfo mi;
+    if (!moveableInfo(slotId, mi)) return false;
+
+    // frameOffset is a BYTE offset into the frame block, the block itself is
+    // counted in words - hence the /2. Only an even offset can name a frame;
+    // an odd one would mean the pointer is not a frame pointer at all.
+    if (mi.frameOffset & 1u) return false;
+    const long long w = static_cast<long long>(mi.frameOffset) / 2;
+    if (w < 0 || w + 6 > m_frames.count) return false;
+
+    for (int k = 0; k < 6; ++k) out[k] = debugReadFrameShort(w + k);
+    return true;
+}
+
+bool Tr5Level::sectorCeilingBase(int room, int sx, int sz, long& y) const
+{
+    y = 0;
+    if (room < 0 || room >= static_cast<int>(m_rooms.size())) return false;
+
+    const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+    if (r.sectorsOffset == 0) return false;
+    if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors) return false;
+
+    const size_t at = r.sectorsOffset + (static_cast<size_t>(sx) * r.numZSectors + sz) * 8;
+    if (at + 8 > m_bytes.size()) return false;
+
+    const int ceilByte = static_cast<int8_t>(m_bytes[at + 7]);
+    if (ceilByte == -127) return false;                  // NO_HEIGHT: wall
+    y = static_cast<long>(ceilByte) * 256;
+    return true;
+}
+
+bool Tr5Level::sectorCeilingLow(int room, int sx, int sz, long& y) const
+{
+    y = 0;
+
+    // Step 1: up through the ceiling portals, as GetCeiling does. The step
+    // limit is a cycle brake, nothing more - no vanilla chain is longer than
+    // a handful of rooms.
+    //
+    // One thing of the engine's is missing here on purpose: GetCeiling
+    // breaks the walk when CheckNoColCeilingTriangle answers for the
+    // STARTING sector (control.cpp:1342). That case needs the exact point,
+    // not the sector, and this function answers about the whole sector.
+    // Where it applies, the walk goes one room too far and the answer comes
+    // out generous - which is the harmless direction for the caller this was
+    // written for: an enemy is then allowed somewhere the engine would have
+    // called just as tight, never barred from somewhere it is roomy.
+    for (int step = 0; step < 64; ++step)
+    {
+        if (room < 0 || room >= static_cast<int>(m_rooms.size())) return false;
+        const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
+        if (r.sectorsOffset == 0) return false;
+        if (sx < 0 || sx >= r.numXSectors || sz < 0 || sz >= r.numZSectors) return false;
+
+        const size_t at = r.sectorsOffset + (static_cast<size_t>(sx) * r.numZSectors + sz) * 8;
+        if (at + 8 > m_bytes.size()) return false;
+
+        const int sky = m_bytes[at + 6];
+        if (sky == 255) break;                            // NO_ROOM: this is the ceiling
+        if (sky < 0 || sky >= static_cast<int>(m_rooms.size())) break;
+
+        // Same world column, different room - and the rooms have different
+        // origins, so the sector indices have to be recomputed.
+        const int wx = r.originX + sx * 1024;
+        const int wz = r.originZ + sz * 1024;
+        const Tr5Room& up = m_rooms[static_cast<size_t>(sky)];
+        const int nx = (wx - up.originX) / 1024;
+        const int nz = (wz - up.originZ) / 1024;
+        if (nx < 0 || nx >= up.numXSectors || nz < 0 || nz >= up.numZSectors) break;
+
+        room = sky; sx = nx; sz = nz;
+    }
+
+    // Step 2: the lowest of the four corners of the sector we ended on.
+    bool any = false;
+    long low = 0;
+    for (int cx = 0; cx <= 1024; cx += 1024)
+        for (int cz = 0; cz <= 1024; cz += 1024)
+        {
+            long c = 0;
+            if (!cornerCeiling(room, sx, sz, cx, cz, c) &&
+                !sectorCeilingBase(room, sx, sz, c)) continue;
+            if (!any || c > low) { low = c; any = true; }
+        }
+
+    y = low;
+    return any;
+}
+
 bool Tr5Level::adoptAnimData(int dstSlot, int dstOffset, int srcSlot,
                                    int srcOffset, std::string& error)
 {

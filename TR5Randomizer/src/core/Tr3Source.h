@@ -223,6 +223,15 @@ namespace Tr3Source
                       std::vector<uint8_t>& model, std::vector<uint8_t>& sounds,
                       std::string& error);
 
+    // The rest-pose bounding box of a model package - minX, maxX, minY,
+    // maxY, minZ, maxZ, the same six int16 a TR5 frame starts with (#141).
+    //
+    // The package's frame block starts with exactly the frame the installed
+    // moveable will point at: addMoveableFromTr3 writes the block's start as
+    // the object's frameOffset. So the first six words ARE the rest pose,
+    // and a guest's height can be measured before it is installed anywhere.
+    bool packageFrameBounds(const std::vector<uint8_t>& package, int16_t out[6]);
+
     // Redirects the faces' texture words to the new texinfos. Must run AFTER
     // Tr5Level::addTexturesFromTr3 (which provides the mapping) and BEFORE
     // addMoveableFromTr3. Returns the number of redirected words, -1 on

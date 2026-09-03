@@ -872,7 +872,21 @@ static std::wstring cacheDir(const App& a)
                                        " released - its pickup trigger was rewritten");
         }
 
+        // Source levels for soundAdds and for the cross enemies' models:
+        // always the backup, never data\ - already randomized levels can lie
+        // there, and pulling samples from those would no longer be
+        // reproducible from the seed. Defined BEFORE the placement, because
+        // the headroom rule (#141) has to measure a cross enemy in its donor
+        // file while it decides.
+        static std::wstring soundSource;
+        soundSource = a.haveBackup ? a.backupDir() : a.dataDir();
+        auto source = [](const std::string& name, void*) -> std::wstring {
+            return PathUtil::join(soundSource, PathUtil::widen(name) + L".trc");
+        };
+
         Patch::markTriggerSafeSectors(lvl, in);
+        in.modelHeight = Patch::modelHeightFn(source, nullptr,
+                                              tr3Folder(a), goldFolder(a), cacheDir(a));
 
         // Secrets into the pool (#53, kind 1): hand curation pins every
         // secret via fixedItems. Exactly those pins are taken out in this
@@ -911,15 +925,6 @@ static std::wstring cacheDir(const App& a)
         JsonValue patch;
         RandoReport rep;
         if (!Rando::run(in, opt, seed, patch, rep)) { err = rep.error; return false; }
-
-        // Source levels for soundAdds: always the backup, never data\ -
-        // already randomized levels can lie there, and pulling samples from
-        // those would no longer be reproducible from the seed.
-        static std::wstring soundSource;
-        soundSource = a.haveBackup ? a.backupDir() : a.dataDir();
-        auto source = [](const std::string& name, void*) -> std::wstring {
-            return PathUtil::join(soundSource, PathUtil::widen(name) + L".trc");
-        };
 
         for (const std::string& n : fixNotes) rep.notes.push_back(n);
 

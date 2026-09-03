@@ -20,6 +20,7 @@
 #include "Json.h"
 #include "Rng.h"
 
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -471,6 +472,41 @@ struct RandoInput
     // floor every frame via GetHeight - but they get their y computed
     // anyway, so they do not drop in half a sector deep.
     std::map<long long, SlopeInfo> slopes;
+
+    // --- Headroom for enemies (#141) ---------------------------------------
+    //
+    // The randomizer put enemies into rooms lower than the model, and the
+    // head stuck through the ceiling (user find in game: a soldier statue of
+    // 1546 units in rich1 room 12, where floor and ceiling are 1024 apart).
+    // The rule: a kind may only stand where the sector's clearance reaches
+    // its REST POSE HEIGHT. No safety margin - a 1024 room has to stay open
+    // to an 809 unit human (user decision).
+    //
+    // Both halves of the comparison come out of level files, never out of a
+    // typed table: the height is the bounding box of anim 0 / frame 0
+    // (Tr5Level::frameBounds), the ceiling comes from the floordata
+    // (Tr5Level::sectorCeilingLow, ceiling portals followed the way
+    // GetCeiling does). Filled by the level check in ApplyPatch
+    // (markTriggerSafeSectors) - the one place where the real file and this
+    // input are both at hand.
+
+    // Lowest ceiling per placement sector, as absolute world y. Missing
+    // means: the sector has no ceiling to be had, and then the rule cannot
+    // judge it - it lets the kind pass rather than inventing a number.
+    std::map<long long, long> sectorCeiling;
+
+    // Rest-pose height per model slot, for every slot the level ALREADY
+    // carries.
+    std::map<int, int>        typeHeight;
+
+    // And for the ones it does not: a cross enemy's model is still sitting
+    // in its donor file while the placement decides. This reads it from
+    // there - fromLevel for a TR5 donor, tr3 for a guest from the user's
+    // Tomb Raider 3 installation (exactly one of the two is set). false
+    // means the model could not be reached; the kind then passes unmeasured,
+    // as it does with an unknown ceiling. Empty function = nobody supplied
+    // one (marker patches, tests): then only typeHeight counts.
+    std::function<bool(const char* fromLevel, const char* tr3, int slot, int& height)> modelHeight;
 };
 
 struct RandoOptions

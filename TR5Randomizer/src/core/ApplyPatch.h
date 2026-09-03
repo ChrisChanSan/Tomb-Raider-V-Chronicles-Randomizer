@@ -20,6 +20,7 @@
 #include "Randomizer.h"
 #include "Tr5Level.h"
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -114,6 +115,25 @@ namespace Patch
     //
     // Without coupled items and without enemy types it does nothing.
     void markTriggerSafeSectors(const Tr5Level& level, RandoInput& in);
+
+    // The height reader for models the level does NOT carry yet (#141,
+    // RandoInput::modelHeight). A cross enemy's model still lies in its
+    // donor file while the placement decides whether it fits under the
+    // ceiling somewhere - so the height has to be fetched from there, and
+    // exactly where the import fetches the model itself.
+    //
+    // Same arguments as apply(), and for the same reasons: levelSource
+    // resolves a TR5 donor's name to a path, tr3Dir/tr3GoldDir/cacheDir
+    // reach the user's Tomb Raider 3 installation for the guests. Whatever
+    // is missing simply yields no height, and an unmeasured kind passes.
+    //
+    // Donor levels are loaded at most ONCE per process and then kept - in a
+    // full run every level asks about the same handful of donors.
+    std::function<bool(const char* fromLevel, const char* tr3, int slot, int& height)>
+    modelHeightFn(LevelSourceFn levelSource = nullptr, void* levelSourceUser = nullptr,
+                  const std::wstring& tr3Dir = std::wstring(),
+                  const std::wstring& tr3GoldDir = std::wstring(),
+                  const std::wstring& cacheDir = std::wstring());
 
     // Shuffle the music triggers (checkbox "Shuffle trigger sound/music
     // IDs"): sends all TO_CD tracks of the finished level through a GLOBAL

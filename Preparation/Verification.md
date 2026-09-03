@@ -56,6 +56,40 @@ comparison is meaningful again.
 
 ---
 
+## 1b. Does every enemy still fit under its ceiling? (#141)
+
+`Diagnose\HeightCheck` reads a FINISHED level and compares, for every enemy
+item, the model's rest-pose height (anim 0 / frame 0) against the clearance
+of its sector. Run it over all fifteen output levels after anything that
+touches enemy placement, and over the fifteen vanilla levels as the
+calibration.
+
+```
+HeightCheck <every output .trc>          expected: 0 violations
+HeightCheck <every Backup .trc>          expected: 0 violations - the calibration
+HeightCheck heights <level.trc>          the measured heights, for a spot check
+```
+
+**Why the vanilla run matters more than the output run.** Core's own
+placements are the yardstick. The first version of the measure called ten of
+them too tall, and the measure was what was wrong: `GetCeiling` walks up
+through the ceiling portals (`sky_room`) before it reads a ceiling byte, and
+a sector whose ceiling IS a portal carries the room boundary there, not a
+ceiling. Whoever writes a headroom rule and skips that walk bans spots the
+game has used since 2000.
+
+**What it caught:** 28 enemies with their head through the ceiling in the
+fifteen levels of one seed, among them a 1546 unit soldier statue under a
+1024 unit ceiling (rich1 item 259, the user's find in game).
+
+**A spot check the tool cannot give you:** whether the placement gave up too
+often. That number stands in the run's own notes - `headroom: N of M swap
+places kept their vanilla kind` and `headroom: N extra-enemy spots dropped`.
+Both were 0 in every level of the seed the rule was built on; anything much
+above that means the filter is too tight, not that the level is.
+
+---
+
 ## 2. What is object id N really?
 
 Count the enum, do not trust a name or a list.

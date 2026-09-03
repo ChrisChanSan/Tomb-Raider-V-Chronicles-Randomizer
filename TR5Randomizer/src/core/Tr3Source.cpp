@@ -1351,6 +1351,33 @@ std::wstring Tr3Source::levelPath(const DinoSource& d,
 // pushes is what the texinfo's own fields decide - see cornerOrder above.
 // This comment claimed otherwise for a long time.)
 //----------------------------------------------------------------------------
+bool Tr3Source::packageFrameBounds(const std::vector<uint8_t>& package, int16_t out[6])
+{
+    for (int k = 0; k < 6; ++k) out[k] = 0;
+    if (package.size() < 48 || std::memcmp(package.data(), "T35H", 4) != 0) return false;
+
+    // Header layout as in Tr5Level::addMoveableFromTr3: magic, version,
+    // objectId, then the eight counts. The blocks follow in the order
+    // meshes, bones, frames - so the frame block starts behind the meshes
+    // and the bone words.
+    const uint32_t nMeshes = ru32(package, 12);
+    const uint32_t nBoneW  = ru32(package, 24);
+
+    size_t p = 48;
+    for (uint32_t i = 0; i < nMeshes; ++i)
+    {
+        if (p + 4 > package.size()) return false;
+        const uint32_t len = ru32(package, p);
+        p += 4 + len;
+        if (p > package.size()) return false;
+    }
+    p += static_cast<size_t>(nBoneW) * 4;
+    if (p + 12 > package.size()) return false;
+
+    std::memcpy(out, package.data() + p, 12);
+    return true;
+}
+
 int Tr3Source::remapTextures(std::vector<uint8_t>& package, const std::map<int,int>& mapping)
 {
     const uint32_t nMeshes = ru32(package, 12);

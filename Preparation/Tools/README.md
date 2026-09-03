@@ -1,7 +1,7 @@
 # The tools, and which one answers which question
 
-Written 2026-08-30 from the folder itself, three tools added 2026-09-03.
-Thirty-seven diagnostic tools sit in `Diagnose\`, twenty-eight of them with a
+Written 2026-08-30 from the folder itself, four tools added 2026-09-03.
+Thirty-eight diagnostic tools sit in `Diagnose\`, twenty-nine of them with a
 build script beside them, and until now there was no index at all - so the way
 to find the right one was to already know it existed.
 
@@ -58,6 +58,7 @@ else - with their own name substituted.
 | `LaraAnim` | bla | which of Lara's animations a level REALLY carries. Levels stub the ones they do not need, and a stub is not a missing entry - it looks present. |
 | `BoneCheck` | - | a slot's bone tree, or two compared. |
 | `ModelOffset` | bmm | where a model sits relative to the item origin, and with `-sound` the sound chain of a map id. |
+| `HeightCheck` | bhc | headroom (#141): does every enemy in a finished level have its model's rest-pose height between floor and ceiling? Reads model and floordata out of the level under test and knows nothing about the placement code. `heights` prints the measured heights, `-v` every item. Calibrated: on the 15 vanilla levels it must report 0 violations. |
 
 **Sound and music**
 | Tool | Script | What it answers |

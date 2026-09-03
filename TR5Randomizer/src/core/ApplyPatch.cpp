@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <memory>
 #include <cstdio>
 #include <random>
 #include <set>
@@ -137,6 +138,44 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
         }
     }
 
+    // Headroom for enemies (#141, RandoInput::sectorCeiling / typeHeight).
+    // Also ALWAYS, for the same reason as the slopes above: this is the one
+    // place where the real level file and the placement input are both at
+    // hand, and both halves of the height rule have to come out of files.
+    {
+        for (const ZoneSector& s : in.sectors)
+        {
+            long c = 0;
+            if (level.sectorCeilingLow(s.room, s.sectorX, s.sectorZ, c))
+                in.sectorCeiling[secKey(s.room, s.sectorX, s.sectorZ)] = c;
+        }
+
+        // The existing items' sectors as well, and not only the placement
+        // pool: the enemy SWAP happens at Core's own positions, and those
+        // need not lie in the pool at all (Andrea1's statue in room 222 does
+        // not). Without them the rule would silently pass exactly the places
+        // it was written for.
+        for (const LevelItem& it : in.items)
+        {
+            const long long k = secKey(it.room, it.sectorX, it.sectorZ);
+            if (in.sectorCeiling.count(k)) continue;
+            long c = 0;
+            if (level.sectorCeilingLow(it.room, it.sectorX, it.sectorZ, c))
+                in.sectorCeiling[k] = c;
+        }
+
+        // The rest pose of every model the level carries. Enemies are what
+        // this is for, but filtering here would need a second copy of the
+        // kind list - the placement asks by type anyway.
+        for (int slot : level.moveableSlots())
+        {
+            int16_t b[6] = {};
+            if (!level.frameBounds(slot, b)) continue;
+            const int h = b[3] - b[2];                   // maxY - minY, y grows downward
+            if (h > 0) in.typeHeight[slot] = h;
+        }
+    }
+
     if (in.coupledTriggers.empty() && in.enemyTypes.empty()) return;
 
     std::vector<Tr5FloorEntry> chain;
@@ -148,6 +187,89 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
         if (Tr5Level::canAppendTrigger(chain) != nullptr) continue;
         in.triggerSafeSectors.insert(secKey(s.room, s.sectorX, s.sectorZ));
     }
+}
+
+//----------------------------------------------------------------------------
+// The height reader for models that are not in the level yet (#141).
+//
+// Deliberately no table of numbers anywhere: the donor file is opened and
+// the model measured, exactly as the import will read it a moment later. The
+// two caches are what makes that affordable - a full run asks thirteen
+// levels about the same handful of donors, and the guests from Tomb Raider 3
+// come out of the package cache the import fills anyway (#103).
+//----------------------------------------------------------------------------
+std::function<bool(const char*, const char*, int, int&)>
+Patch::modelHeightFn(LevelSourceFn levelSource, void* levelSourceUser,
+                     const std::wstring& tr3Dir, const std::wstring& tr3GoldDir,
+                     const std::wstring& cacheDir)
+{
+    // Shared by every level of the run. A donor that could not be opened is
+    // remembered as a null entry, so it is not retried thirteen times.
+    struct Cache
+    {
+        std::map<std::string, std::shared_ptr<Tr5Level>> donors;
+        std::map<int, int> guests;          // guest slot -> height, -1 = unreachable
+    };
+    std::shared_ptr<Cache> cache = std::make_shared<Cache>();
+    const std::wstring d3 = tr3Dir, dg = tr3GoldDir, dc = cacheDir;
+
+    return [cache, levelSource, levelSourceUser, d3, dg, dc]
+           (const char* fromLevel, const char* tr3, int slot, int& height) -> bool
+    {
+        height = 0;
+
+        // --- A guest from Tomb Raider 3 -------------------------------------
+        if (tr3 && *tr3)
+        {
+            std::map<int, int>::const_iterator c = cache->guests.find(slot);
+            if (c != cache->guests.end())
+            { if (c->second < 0) return false; height = c->second; return true; }
+
+            const Tr3Source::DinoSource* d = nullptr;
+            static const std::vector<Tr3Source::DinoSource> all = Tr3Source::dinos();
+            for (const Tr3Source::DinoSource& k : all) if (k.slot == slot) { d = &k; break; }
+
+            int h = -1;
+            if (d && !d3.empty())
+            {
+                std::vector<uint8_t> model, sounds;
+                std::string err;
+                int16_t b[6] = {};
+                if (Tr3Source::fetchCached(*d, d3, dg, dc, model, sounds, err) &&
+                    Tr3Source::packageFrameBounds(model, b) && b[3] > b[2])
+                    h = b[3] - b[2];
+            }
+            cache->guests[slot] = h;
+            if (h < 0) return false;
+            height = h;
+            return true;
+        }
+
+        // --- A donor level of our own ---------------------------------------
+        if (!fromLevel || !*fromLevel || !levelSource) return false;
+
+        const std::string key(fromLevel);
+        std::map<std::string, std::shared_ptr<Tr5Level>>::const_iterator f = cache->donors.find(key);
+        if (f == cache->donors.end())
+        {
+            std::shared_ptr<Tr5Level> lvl;
+            const std::wstring path = levelSource(key, levelSourceUser);
+            if (!path.empty())
+            {
+                std::shared_ptr<Tr5Level> tmp = std::make_shared<Tr5Level>();
+                std::string err;
+                if (tmp->load(path, err)) lvl = tmp;
+            }
+            f = cache->donors.insert(std::make_pair(key, lvl)).first;
+        }
+        if (!f->second) return false;
+
+        int16_t b[6] = {};
+        if (!f->second->frameBounds(slot, b)) return false;
+        if (b[3] <= b[2]) return false;                  // stub without a measure
+        height = b[3] - b[2];
+        return true;
+    };
 }
 
 bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, std::string& error,

@@ -2129,6 +2129,76 @@ bool Rando::run(const RandoInput& in,
         return free >= b->free;
     };
 
+    // --- Headroom: does the kind fit UNDER THE CEILING here? (#141) ---------
+    //
+    // The user's find: a soldier statue, 1546 units tall, ended up in rich1
+    // room 12, where floor and ceiling are 1024 apart - the head stuck
+    // through the ceiling. The rule is the plain comparison, without a safety
+    // margin, because a 1024 room has to stay open to an 809 unit human
+    // (user decision).
+    //
+    // Neither number is typed anywhere. The height is the model's rest pose
+    // out of the file that carries it (Tr5Level::frameBounds), the clearance
+    // comes from the floordata of the real level (Tr5Level::sectorCeilingLow)
+    // - both filled by markTriggerSafeSectors, the cross enemies' models read
+    // from their donor files through in.modelHeight. Whoever cannot be
+    // measured PASSES: a rule without a number must not silently bar a kind.
+    //
+    // Calibration: over the 15 vanilla levels the same measure calls 0 of
+    // Core's own 101 enemies too tall (HeightCheck) - the yardstick agrees
+    // with the people who built the game.
+    std::map<int, int> heightCache;
+    auto heightOf = [&](int typeId) -> int
+    {
+        std::map<int, int>::const_iterator c = heightCache.find(typeId);
+        if (c != heightCache.end()) return c->second;
+
+        int h = 0;
+        std::map<int, int>::const_iterator t = in.typeHeight.find(typeId);
+        if (t != in.typeHeight.end()) h = t->second;
+        else if (in.modelHeight)
+        {
+            // Not in the level yet - so it is a cross enemy, and its model
+            // lies in the donor this very table names. sourceSlot, where it
+            // is set, is the number the model has AT THE DONOR (the joby
+            // guard lies there under 37 and lives here under 460).
+            for (const CrossEnemy& k : kCross)
+            {
+                if (k.typeId != typeId) continue;
+                int v = 0;
+                if (in.modelHeight(k.from, k.tr3, k.sourceSlot > 0 ? k.sourceSlot : k.typeId, v))
+                    h = v;
+                break;
+            }
+        }
+        heightCache[typeId] = h;
+        return h;
+    };
+
+    auto fitsHeight = [&](int typeId, int room, int sectorX, int sectorZ, int y) -> bool
+    {
+        const int h = heightOf(typeId);
+        if (h <= 0) return true;                     // no measure: no rule
+        std::map<long long, long>::const_iterator c =
+            in.sectorCeiling.find(secKey(room, sectorX, sectorZ));
+        if (c == in.sectorCeiling.end()) return true;   // no ceiling known: likewise
+        return (static_cast<long>(y) - c->second) >= h;
+    };
+
+    // Only for the report: -1 means the sector's ceiling is unknown.
+    auto clearanceAt = [&](int room, int sectorX, int sectorZ, int y) -> long
+    {
+        std::map<long long, long>::const_iterator c =
+            in.sectorCeiling.find(secKey(room, sectorX, sectorZ));
+        if (c == in.sectorCeiling.end()) return -1;
+        return static_cast<long>(y) - c->second;
+    };
+
+    // How often the height rule struck, so the spoiler can say it (see the
+    // notes at the end of both enemy passes).
+    int heightRejectedSwaps = 0;      // swap places with no fitting kind left
+    int heightRejectedSpots = 0;      // extra-enemy spots the same happened to
+
     if (opt.swapEnemies && (in.enemyTypes.size() > 1 || !crossChosen.empty()))
     {
         std::set<int> allowed(in.enemyTypes.begin(), in.enemyTypes.end());
@@ -2224,10 +2294,33 @@ bool Rando::run(const RandoInput& in,
             for (int t : enemyPool)
                 if (herdSize(t) == 1) swapPool.push_back(t);
 
+            // Where role i stands, and which kinds fit under THAT ceiling
+            // (#141). The filter runs BEFORE the roll, the same pattern the
+            // extra enemies use below - the user's requirement is that a
+            // place gets a swap wherever any kind at all fits, instead of
+            // rolling blindly and falling back to vanilla on a miss.
+            auto placeOf = [&](size_t i) -> const LevelItem*
+            {
+                std::map<int, LevelItem>::const_iterator f = finalOf.find(indices[i]);
+                return (f == finalOf.end()) ? nullptr : &f->second;
+            };
+            auto fittingAt = [&](const std::vector<int>& pool, const LevelItem* p) -> std::vector<int>
+            {
+                if (!p) return pool;
+                std::vector<int> v;
+                for (int t : pool)
+                    if (fitsHeight(t, p->room, p->sectorX, p->sectorZ, p->y)) v.push_back(t);
+                return v;
+            };
+
             if (opt.allsanity && !swapPool.empty())
             {
                 for (size_t i = 0; i < kinds.size(); ++i)
-                    kinds[i] = swapPool[static_cast<size_t>(rng.below(swapPool.size()))];
+                {
+                    const std::vector<int> here = fittingAt(swapPool, placeOf(i));
+                    if (here.empty()) continue;   // the pass below says so and counts it
+                    kinds[i] = here[static_cast<size_t>(rng.below(here.size()))];
+                }
             }
             else if (!crossChosen.empty())
             {
@@ -2239,7 +2332,9 @@ bool Rando::run(const RandoInput& in,
                 for (size_t i = 0; i < kinds.size() && !crossSwap.empty(); ++i)
                 {
                     if (rng.below(4) != 0) continue;
-                    kinds[i] = crossSwap[static_cast<size_t>(rng.below(crossSwap.size()))];
+                    const std::vector<int> here = fittingAt(crossSwap, placeOf(i));
+                    if (here.empty()) continue;   // no foreign kind fits: the own one stays
+                    kinds[i] = here[static_cast<size_t>(rng.below(here.size()))];
                 }
             }
 
@@ -2247,6 +2342,33 @@ bool Rando::run(const RandoInput& in,
             {
                 std::map<int, LevelItem>::iterator f = finalOf.find(indices[i]);
                 if (f == finalOf.end() || f->second.typeId == kinds[i]) continue;
+
+                // Headroom (#141). Where the draw above already came out of a
+                // filtered list this never fires; it catches the plain
+                // permutation, which deals out the level's own kinds without
+                // ever asking about a place. Then a kind that DOES fit is
+                // drawn instead of giving the place up - "we must try
+                // everything to make the switch succeed" (user, 2026-09-03).
+                // Only if not a single pool kind fits does the vanilla enemy
+                // stay: he has stood there since 2000 and fits by measurement
+                // (0 of Core's 101 enemies fail the rule).
+                if (!fitsHeight(kinds[i], f->second.room, f->second.sectorX,
+                                f->second.sectorZ, f->second.y))
+                {
+                    const std::vector<int> here = fittingAt(swapPool, &f->second);
+                    if (here.empty())
+                    {
+                        ++heightRejectedSwaps;
+                        report.notes.push_back(fmt("enemy item %d: no kind of the pool fits under the ceiling in room %d (clearance %d) - stays typeId %d.",
+                                                   indices[i], f->second.room,
+                                                   static_cast<int>(clearanceAt(f->second.room, f->second.sectorX,
+                                                                                f->second.sectorZ, f->second.y)),
+                                                   f->second.typeId));
+                        continue;
+                    }
+                    kinds[i] = here[static_cast<size_t>(rng.below(here.size()))];
+                    if (f->second.typeId == kinds[i]) continue;   // drew its own kind
+                }
 
                 // Big enemies need free space around them (see kSpaceNeeds).
                 // If the rolled type does not fit here, the item stays on
@@ -2325,6 +2447,12 @@ bool Rando::run(const RandoInput& in,
                 if (crossChosen.count(kinds[i])) crossUsed.insert(kinds[i]);
                 ++report.enemiesSwapped;
             }
+
+            // The one number the user asked for by name: how many of Core's
+            // enemy places the height rule left at vanilla because nothing in
+            // the pool fits under their ceiling (#141).
+            report.notes.push_back(fmt("headroom: %d of %d swap places kept their vanilla kind - no pool kind fits under their ceiling.",
+                                       heightRejectedSwaps, static_cast<int>(indices.size())));
         }
         else
             report.notes.push_back(fmt("enemy swap: only %d swappable enemies in the level, nothing to mix.",
@@ -2563,20 +2691,48 @@ bool Rando::run(const RandoInput& in,
                 if (!used.count(a)) { trigger = a; break; }
             if (trigger < 0) continue;          // all approach tiles taken
 
+            // The enemy gets the true floor height - the engine would put
+            // him on the floor anyway, but he should not drop in half a
+            // sector deep. Walkability is no condition for him, hence only
+            // the height.
+            //
+            // It is computed BEFORE the choice, because the headroom rule
+            // needs the y the enemy will really stand at (#141).
+            int gyFloor = 0;
+            Rando::floorAt(in, *p.s, 512, 512, gyFloor);
+
             // First sift the types that find enough space here (see
-            // kSpaceNeeds), then roll among them. The other way round -
-            // roll and discard on mismatch - would steal the Hydra a spot
-            // every time that another type could have used.
+            // kSpaceNeeds) and fit under the ceiling (#141), then roll among
+            // them. The other way round - roll and discard on mismatch -
+            // would steal the Hydra a spot every time that another type
+            // could have used.
             std::vector<int> fitting;
+            int wouldFitButTooTall = 0;
             for (int t : enemyPool)
             {
                 if (!enoughSpace(t, p.s->room, p.s->sectorX, p.s->sectorZ, p.s->floorY)) continue;
                 // A pack must fit COMPLETELY into the item budget (#98) -
                 // rather no compys at all than three without the fourth.
                 if (herdSize(t) > howMany - placed) continue;
+                if (!fitsHeight(t, p.s->room, p.s->sectorX, p.s->sectorZ, gyFloor))
+                { ++wouldFitButTooTall; continue; }
                 fitting.push_back(t);
             }
-            if (fitting.empty()) continue;      // too tight here for the whole pool
+            if (fitting.empty())
+            {
+                // Distinguish the two reasons, or the report cannot say what
+                // the new rule actually cost: only where a kind was barred
+                // for its HEIGHT alone is this spot on the height rule's bill.
+                if (wouldFitButTooTall > 0)
+                {
+                    ++heightRejectedSpots;
+                    report.notes.push_back(fmt("enemy spot %d,%d,%d dropped: clearance %d is too low for every kind of the pool.",
+                                               p.s->room, p.s->sectorX, p.s->sectorZ,
+                                               static_cast<int>(clearanceAt(p.s->room, p.s->sectorX,
+                                                                            p.s->sectorZ, gyFloor))));
+                }
+                continue;                       // too tight here for the whole pool
+            }
 
             const int typeId = fitting[static_cast<size_t>(rng.below(fitting.size()))];
             const int herd = herdSize(typeId);
@@ -2587,13 +2743,6 @@ bool Rando::run(const RandoInput& in,
             // The index the new item gets: itemAdds appends at the back, in
             // exactly this order.
             const int newIndex = static_cast<int>(in.items.size()) + static_cast<int>(adds.size());
-
-            // The enemy too gets the true floor height - the engine would
-            // put him on the floor anyway, but he should not drop in half a
-            // sector deep. Walkability is no condition for him, hence only
-            // the height.
-            int gyFloor = 0;
-            Rando::floorAt(in, *p.s, 512, 512, gyFloor);
 
             // A pack stands on ONE sector - like Andrea2 its three Hydra
             // links. The animals distribute themselves at runtime: their
@@ -2654,6 +2803,9 @@ bool Rando::run(const RandoInput& in,
             report.notes.push_back(fmt("only %d of %d extra enemies placed "
                                        "(%d spots to choose from, %d item slots free).",
                                        report.enemiesAdded, wanted, spotsBefore, slotsFree));
+
+        report.notes.push_back(fmt("headroom: %d extra-enemy spots dropped - too low for every kind of the pool.",
+                                   heightRejectedSpots));
     }
 
     // --- Who carries what in the end? ---

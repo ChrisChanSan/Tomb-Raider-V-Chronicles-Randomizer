@@ -67,12 +67,20 @@ The tool for this is SlotAnims (Preparation\Tools\Diagnose, bsa.bat).
 
 PLACING
 ================================================================
-Three small tables decide what a placed enemy needs:
+Four small tables decide what a placed enemy needs:
 
   kSpaceNeeds   how much free room. The Hydra (63) needs a 3x3 window
                 around her with at least 5 of its 9 tiles free (user
                 decision 2026-09-03; it used to be all nine, and that
                 threw away 93 percent of the spots).
+  kDrawWeights  how many tickets a kind holds in the roll. Only the Hydra
+                (63), with 2 (user decision 2026-09-04). Each roll picks
+                uniformly among the kinds that fit at that very spot, so a
+                kind the space rule keeps off most spots stays rare - she
+                measured 4.2 a run against 32 to 64 Compsognathi. The
+                weight only makes her win more often where she already
+                qualified; it opens no new place, and a kind with weight 1
+                keeps its single entry and its order.
   kHerds        which types are placed as a group. Only the Compsognathus
                 (53), four of them - one Compy alone is not the animal.
   kSpawnOcb     which types get a behaviour OCB set on purpose. The Roman

@@ -2017,6 +2017,38 @@ bool Rando::run(const RandoInput& in,
         { 63, 3, 5 },    // Hydra: 3x3 window, at least 5 of its 9 tiles free
     };
 
+    // Draw weight: how many tickets a kind holds in the lottery.
+    //
+    // Every roll below picks uniformly among the kinds that fit AT THAT
+    // SPOT. That is fair per spot but not per run: a kind barred almost
+    // everywhere by the space rule above only ever enters the few lists it
+    // qualifies for, while a kind with no rule at all is in every single
+    // one. Measured over ten seeds and the twelve campaign levels on
+    // 2026-09-04, the Hydra came out at 4.2 placements per run (spread 1 to
+    // 9, Andrea2's three vanilla heads not counted) against 32 to 64
+    // Compsognathi - close to what the 5-of-9 threshold predicted (about
+    // 4.7), so the space rule works as designed; she is simply rare because
+    // she is only ever a candidate on open ground.
+    //
+    // The user decided (2026-09-04) to double her. Measured over the same
+    // ten seeds afterwards: 9.1 per run (spread 6 to 14), and no other kind
+    // moved by more than about 8 percent - the tickets come out of the same
+    // pot, so the loss spreads over everyone. This changes no PLACE: a kind
+    // only wins more often where it already qualified, and where it is not
+    // in the list nothing about the list, the roll or the seed changes -
+    // proved by a run with the Hydra deselected coming out byte for byte
+    // as before, over ten seeds and twelve levels.
+    struct DrawWeight { int typeId; int weight; };
+    static const DrawWeight kDrawWeights[] = {
+        { 63, 2 },       // Hydra: two tickets instead of one
+    };
+    auto drawWeightOf = [](int typeId) -> int
+    {
+        for (const DrawWeight& w : kDrawWeights)
+            if (w.typeId == typeId) return w.weight;
+        return 1;
+    };
+
     // Pack enemies: types that do not work alone (#98).
     //
     // The Compsognathus is the occasion. His control is built entirely on
@@ -2325,13 +2357,23 @@ bool Rando::run(const RandoInput& in,
                 std::map<int, LevelItem>::const_iterator f = finalOf.find(indices[i]);
                 return (f == finalOf.end()) ? nullptr : &f->second;
             };
+            // A kind carrying a draw weight stands in the list as many times
+            // as it has tickets (kDrawWeights); the roll below is a plain
+            // rng.below(size) over it. Everything else keeps its single
+            // entry and its order, so for a pool without a weighted kind the
+            // list - and with it the whole run - is bit for bit as before.
+            // The list is only ever drawn from, never counted: the type
+            // counts in the report come from enemyPool, which stays
+            // unweighted.
             auto fittingAt = [&](const std::vector<int>& pool, const LevelItem* p) -> std::vector<int>
             {
-                if (!p) return pool;
                 std::vector<int> v;
                 for (int t : pool)
-                    if (fitsHeight(t, p->room, p->sectorX, p->sectorZ, p->y)
-                     && enoughSpace(t, p->room, p->sectorX, p->sectorZ, p->y)) v.push_back(t);
+                {
+                    if (p && !(fitsHeight(t, p->room, p->sectorX, p->sectorZ, p->y)
+                            && enoughSpace(t, p->room, p->sectorX, p->sectorZ, p->y))) continue;
+                    for (int n = drawWeightOf(t); n > 0; --n) v.push_back(t);
+                }
                 return v;
             };
 
@@ -2767,7 +2809,10 @@ bool Rando::run(const RandoInput& in,
                 if (herdSize(t) > howMany - placed) continue;
                 if (!fitsHeight(t, p.s->room, p.s->sectorX, p.s->sectorZ, gyFloor))
                 { ++wouldFitButTooTall; continue; }
-                fitting.push_back(t);
+                // Weighted kinds get several tickets in the same list
+                // (kDrawWeights); the counter above stays a count of KINDS,
+                // because the report asks how many kinds a ceiling barred.
+                for (int n = drawWeightOf(t); n > 0; --n) fitting.push_back(t);
             }
             if (fitting.empty())
             {

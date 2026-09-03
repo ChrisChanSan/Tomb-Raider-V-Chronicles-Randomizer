@@ -158,6 +158,21 @@ Special cases - own rules
 	  longer left at vanilla just because the roll happened to hit the
 	  Hydra.
 
+	  ADDITION 2026-09-04: with that threshold she came out at 4.2 per run
+	  (ten seeds over the twelve campaign levels, spread 1 to 9, Andrea2's
+	  three vanilla heads not counted) against 32 to 64 Compsognathi. The
+	  reason is not the threshold but the roll: every draw picks uniformly
+	  among the kinds that fit AT THAT SPOT, and the Hydra is only ever a
+	  candidate on open ground while a kind with no space rule is in every
+	  single list. The user therefore gave her a draw weight of 2
+	  (kDrawWeights in Randomizer.cpp): she stands twice in the candidate
+	  list and wins about twice as often WHERE SHE ALREADY QUALIFIED. No
+	  place changes by it, and a run in which she is deselected is bit for
+	  bit the run it was before - both measured on the same ten seeds:
+	  9.1 Hydras a run afterwards (spread 6 to 14, no other kind moved by
+	  more than about 8 percent), and with enemiesoff=63 all 120 outputs
+	  byte-identical to the old build.
+
 	4 CHEF (chef.cpp, type 87) - NO LONGER A SPECIAL CASE. Fixed under #124
 	  and now an ordinary pool enemy.
 	  What was true and is worth keeping: ChefControl never read hit_points,

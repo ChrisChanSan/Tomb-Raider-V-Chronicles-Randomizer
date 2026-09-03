@@ -150,9 +150,10 @@ inline bool isWithinCarryBox(int bx, int by, int bz, int px, int py, int pz)
 }
 
 // numX/numZ are the RAW measure from the room header - the wall ring around
-// counts too, so (numX-2) * (numZ-2) tiles are walkable. Needed in
-// kSpaceNeeds (Randomizer.cpp): there the room size decides which enemies
-// may enter at all.
+// counts too, so (numX-2) * (numZ-2) tiles are walkable. The origin feeds
+// the world grid behind kSpaceNeeds (Randomizer.cpp): enoughSpace counts
+// free tiles in a window around the place, across room borders - the room
+// size itself decides nothing there.
 struct RoomOrigin { int room = 0; int originX = 0; int originZ = 0; int numX = 0; int numZ = 0; };
 
 struct ZoneSector

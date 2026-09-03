@@ -1980,16 +1980,27 @@ bool Rando::run(const RandoInput& in,
     //    stand in the hallway just because the hallway docks onto a hall.
     //
     // The window measures exactly what counts: how open it is where she
-    // stands. The threshold does not come from the gut but from vanilla -
-    // measured at all three battlegrounds in Andrea2 (items 91/92/93): in
-    // the 3x3 window 9 of 9 tiles free, in the 7x7 exactly 40 of 49.
+    // stands. The yardstick behind the threshold is vanilla - measured at
+    // all three battlegrounds in Andrea2 (items 91/92/93): in the 3x3
+    // window 9 of 9 tiles free, in the 7x7 exactly 40 of 49.
     //
-    // Chosen is 3x3 with all nine tiles (user decision): not a single
-    // neighboring tile may be built up. That is sharp enough to exclude
-    // chambers, niches and hallways, and still leaves her battlegrounds in
-    // almost every level. A 7x7 window with 40 tiles would have been the
-    // hall - only 255 sectors game-wide met that measure, five levels
-    // would never have seen the Hydra.
+    // The threshold has since been loosened twice, both times by the user:
+    //
+    //  - 7x7 with 40 of 49 was the first measure and would have been the
+    //    hall. Only 255 sectors game-wide met it, five levels would never
+    //    have seen the Hydra.
+    //  - 3x3 with all nine tiles was the second: not a single neighbouring
+    //    tile built up. Measured over twenty seeds it threw away 93 percent
+    //    of the placement spots - 0.65 Hydras per full run, not one of them
+    //    through the swap, and in the Andy levels practically never.
+    //  - 3x3 with 5 of 9 is what stands here (user decision 2026-09-03).
+    //    At that threshold almost every level lands between 30 and 70
+    //    percent usable sectors - Andrea1 60.5, rich1 40.4, joby3 32.4,
+    //    Andy2 30.0 - and a full run is expected to carry about 4.7
+    //    Hydras. The arena idea behind the nine is expressly given up
+    //    ("that was only a rough guideline", user 2026-09-03); what the
+    //    measure still keeps out is the closet - a place whose
+    //    neighbourhood is more wall than floor.
     //
     // The zone export is a PLACEMENT pool in this, not a walkability
     // raster: it only carries sectors on which something may really stand.
@@ -2003,7 +2014,7 @@ bool Rando::run(const RandoInput& in,
     // fixedItems and stay untouched anyway.
     struct SpaceNeed { int typeId; int window; int free; };
     static const SpaceNeed kSpaceNeeds[] = {
-        { 63, 3, 9 },    // Hydra: 3x3 window, all 9 tiles free
+        { 63, 3, 5 },    // Hydra: 3x3 window, at least 5 of its 9 tiles free
     };
 
     // Pack enemies: types that do not work alone (#98).
@@ -2198,6 +2209,11 @@ bool Rando::run(const RandoInput& in,
     // notes at the end of both enemy passes).
     int heightRejectedSwaps = 0;      // swap places with no fitting kind left
     int heightRejectedSpots = 0;      // extra-enemy spots the same happened to
+    // The same two numbers for the space rule (kSpaceNeeds), which since
+    // 2026-09-03 sifts the swap candidates before the roll just as the
+    // height rule does.
+    int spaceRejectedSwaps = 0;       // swap places no kind finds room on
+    int spaceNetSwaps = 0;            // safety net AFTER the roll - must stay 0
 
     if (opt.swapEnemies && (in.enemyTypes.size() > 1 || !crossChosen.empty()))
     {
@@ -2295,10 +2311,15 @@ bool Rando::run(const RandoInput& in,
                 if (herdSize(t) == 1) swapPool.push_back(t);
 
             // Where role i stands, and which kinds fit under THAT ceiling
-            // (#141). The filter runs BEFORE the roll, the same pattern the
-            // extra enemies use below - the user's requirement is that a
-            // place gets a swap wherever any kind at all fits, instead of
-            // rolling blindly and falling back to vanilla on a miss.
+            // (#141) and find enough free space around it (kSpaceNeeds).
+            // BOTH filters run BEFORE the roll, the same pattern the extra
+            // enemies use below - the user's requirement is that a place
+            // gets a swap wherever any kind at all fits, instead of rolling
+            // blindly and falling back to vanilla on a miss. The space rule
+            // joined the height rule here on 2026-09-03: it used to be
+            // asked only after the roll, and a Hydra rolled onto a tight
+            // place then cost the place its swap altogether - 72 places in
+            // twenty seeds.
             auto placeOf = [&](size_t i) -> const LevelItem*
             {
                 std::map<int, LevelItem>::const_iterator f = finalOf.find(indices[i]);
@@ -2309,7 +2330,8 @@ bool Rando::run(const RandoInput& in,
                 if (!p) return pool;
                 std::vector<int> v;
                 for (int t : pool)
-                    if (fitsHeight(t, p->room, p->sectorX, p->sectorZ, p->y)) v.push_back(t);
+                    if (fitsHeight(t, p->room, p->sectorX, p->sectorZ, p->y)
+                     && enoughSpace(t, p->room, p->sectorX, p->sectorZ, p->y)) v.push_back(t);
                 return v;
             };
 
@@ -2343,41 +2365,65 @@ bool Rando::run(const RandoInput& in,
                 std::map<int, LevelItem>::iterator f = finalOf.find(indices[i]);
                 if (f == finalOf.end() || f->second.typeId == kinds[i]) continue;
 
-                // Headroom (#141). Where the draw above already came out of a
-                // filtered list this never fires; it catches the plain
-                // permutation, which deals out the level's own kinds without
-                // ever asking about a place. Then a kind that DOES fit is
-                // drawn instead of giving the place up - "we must try
-                // everything to make the switch succeed" (user, 2026-09-03).
+                // Headroom (#141) and free space (kSpaceNeeds). Where the draw
+                // above already came out of a filtered list this never fires;
+                // it catches the plain permutation, which deals out the level's
+                // own kinds without ever asking about a place. Then a kind that
+                // DOES fit is drawn instead of giving the place up - "we must
+                // try everything to make the switch succeed" (user, 2026-09-03).
                 // Only if not a single pool kind fits does the vanilla enemy
                 // stay: he has stood there since 2000 and fits by measurement
-                // (0 of Core's 101 enemies fail the rule).
+                // (0 of Core's 101 enemies fail the height rule).
                 if (!fitsHeight(kinds[i], f->second.room, f->second.sectorX,
-                                f->second.sectorZ, f->second.y))
+                                f->second.sectorZ, f->second.y)
+                 || !enoughSpace(kinds[i], f->second.room, f->second.sectorX,
+                                 f->second.sectorZ, f->second.y))
                 {
                     const std::vector<int> here = fittingAt(swapPool, &f->second);
                     if (here.empty())
                     {
-                        ++heightRejectedSwaps;
-                        report.notes.push_back(fmt("enemy item %d: no kind of the pool fits under the ceiling in room %d (clearance %d) - stays typeId %d.",
-                                                   indices[i], f->second.room,
-                                                   static_cast<int>(clearanceAt(f->second.room, f->second.sectorX,
-                                                                                f->second.sectorZ, f->second.y)),
-                                                   f->second.typeId));
+                        // Which of the two rules emptied the list? The height
+                        // rule alone answers that: if some kind would fit under
+                        // this ceiling, only the space rule can have taken the
+                        // rest away. Without the distinction the report cannot
+                        // say what either rule actually costs.
+                        bool anyFitsHeight = false;
+                        for (int t : swapPool)
+                            if (fitsHeight(t, f->second.room, f->second.sectorX,
+                                           f->second.sectorZ, f->second.y))
+                            { anyFitsHeight = true; break; }
+                        if (anyFitsHeight)
+                        {
+                            ++spaceRejectedSwaps;
+                            report.notes.push_back(fmt("enemy item %d: no kind of the pool finds enough free space in room %d - stays typeId %d.",
+                                                       indices[i], f->second.room, f->second.typeId));
+                        }
+                        else
+                        {
+                            ++heightRejectedSwaps;
+                            report.notes.push_back(fmt("enemy item %d: no kind of the pool fits under the ceiling in room %d (clearance %d) - stays typeId %d.",
+                                                       indices[i], f->second.room,
+                                                       static_cast<int>(clearanceAt(f->second.room, f->second.sectorX,
+                                                                                    f->second.sectorZ, f->second.y)),
+                                                       f->second.typeId));
+                        }
                         continue;
                     }
                     kinds[i] = here[static_cast<size_t>(rng.below(here.size()))];
                     if (f->second.typeId == kinds[i]) continue;   // drew its own kind
                 }
 
-                // Big enemies need free space around them (see kSpaceNeeds).
-                // If the rolled type does not fit here, the item stays on
-                // its old type - one enemy fewer in the mix is better than
-                // a Hydra stuck in her chamber.
+                // Safety net for the space rule (see kSpaceNeeds). Every kind
+                // that reaches this line came either out of a list already
+                // sifted by enoughSpace or through the repair above, so this
+                // must never strike any more - the counter below is the proof.
+                // If it ever did, the place would keep its old type: one enemy
+                // fewer in the mix is better than a Hydra stuck in her chamber.
                 if (!enoughSpace(kinds[i], f->second.room,
                                 f->second.sectorX, f->second.sectorZ, f->second.y))
                 {
-                    report.notes.push_back(fmt("enemy item %d: typeId %d needs more free space than it has in room %d - stays typeId %d.",
+                    ++spaceNetSwaps;
+                    report.notes.push_back(fmt("safety net: enemy item %d: typeId %d needs more free space than it has in room %d - stays typeId %d.",
                                                indices[i], kinds[i], f->second.room, f->second.typeId));
                     continue;
                 }
@@ -2453,6 +2499,11 @@ bool Rando::run(const RandoInput& in,
             // the pool fits under their ceiling (#141).
             report.notes.push_back(fmt("headroom: %d of %d swap places kept their vanilla kind - no pool kind fits under their ceiling.",
                                        heightRejectedSwaps, static_cast<int>(indices.size())));
+            // The same for the space rule, plus the proof that its safety
+            // net after the roll is dead wood: that number must be 0.
+            report.notes.push_back(fmt("space: %d of %d swap places kept their vanilla kind - no pool kind finds enough free space there; safety net after the roll struck %d times.",
+                                       spaceRejectedSwaps, static_cast<int>(indices.size()),
+                                       spaceNetSwaps));
         }
         else
             report.notes.push_back(fmt("enemy swap: only %d swappable enemies in the level, nothing to mix.",

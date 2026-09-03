@@ -69,8 +69,10 @@ PLACING
 ================================================================
 Three small tables decide what a placed enemy needs:
 
-  kSpaceNeeds   how much free room. The Hydra (63) needs a 3x3 window with
-                all nine tiles free.
+  kSpaceNeeds   how much free room. The Hydra (63) needs a 3x3 window
+                around her with at least 5 of its 9 tiles free (user
+                decision 2026-09-03; it used to be all nine, and that
+                threw away 93 percent of the spots).
   kHerds        which types are placed as a group. Only the Compsognathus
                 (53), four of them - one Compy alone is not the animal.
   kSpawnOcb     which types get a behaviour OCB set on purpose. The Roman

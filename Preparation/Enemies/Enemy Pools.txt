@@ -143,9 +143,20 @@ Special cases - own rules
 	  placed Hydra gets OCB 0 and stands as a single centre head; the pool
 	  never moves a trio, because kHerds contains only the Compy. What the
 	  code demands instead is space: kSpaceNeeds gives type 63 a 3x3 window
-	  with all nine tiles free. Andrea2's three vanilla Hydras are in
-	  fixedItems and are never touched, so the original chain of three
-	  stays intact wherever it already is.
+	  in which at least 5 of the 9 tiles must be free. Andrea2's three
+	  vanilla Hydras are in fixedItems and are never touched, so the
+	  original chain of three stays intact wherever it already is.
+
+	  CORRECTION 2026-09-03: the threshold was all nine tiles until then,
+	  and measured over twenty seeds that discarded 93 percent of the
+	  placement spots - 0.65 Hydras per full run, not one of them through
+	  the swap, and in the Andy levels practically never. The user set it
+	  to 5 of 9 and gave up the arena idea behind the nine ("that was only
+	  a rough guideline"). At the same time the space rule moved into the
+	  swap's pre-filter: candidates are sifted BEFORE the roll, as the
+	  height rule already was, so a place that could take some kind is no
+	  longer left at vanilla just because the roll happened to hit the
+	  Hydra.
 
 	4 CHEF (chef.cpp, type 87) - NO LONGER A SPECIAL CASE. Fixed under #124
 	  and now an ordinary pool enemy.

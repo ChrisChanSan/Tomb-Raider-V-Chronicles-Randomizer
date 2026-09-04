@@ -221,13 +221,14 @@ Copy-Item "$RandoRoot\README.txt" "$OutDir\README.txt" -Force
 # with the notes that say what belongs where, and the two launchers
 # (Setup.bat for resolution, Log.bat for a bug report). Unzipping the
 # package into the game folder therefore puts everything in place at
-# once. .gitkeep only exists so git carries the empty HQ audio folders -
+# once. .gitkeep only exists so git carries the empty HQ audio and HD
+# screens folders -
 # it has no business in a player's folder.
 Copy-Item "$RandoRoot\package\*" $OutDir -Recurse -Force
 Get-ChildItem $OutDir -Recurse -Force -Filter ".gitkeep" | Remove-Item -Force
 $skel = (Get-ChildItem "$RandoRoot\package" -Recurse -File |
          Where-Object { $_.Name -ne ".gitkeep" }).Count
-Say "Game folder   : README.txt + $skel files (notes, launchers, audio\, movie\, savegame\)"
+Say "Game folder   : README.txt + $skel files (notes, launchers, audio\, movie\, savegame\, screens\)"
 # --- 7. Mirror the same data into the build folder ---------------------------
 # During development you start the EXE from build\, not from the package -
 # and data\ was missing there, which led to a correct but unnecessary error

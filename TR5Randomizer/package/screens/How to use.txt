@@ -1,0 +1,9 @@
+Copy the loading screens from the TR4-6 Remasters into the HD folder:
+ANDREA1.DDS to RICH3.DDS, TITLE.DDS and LOGO_DE / LOGO_EU / LOGO_FR /
+LOGO_US.DDS (1920 x 1080, BC7).
+
+With them in place the game shows them as loading screens, builds the
+logo screen from TITLE plus the LOGO of your language, and draws that
+logo in the title menu. Security Breach borrows RICH3.DDS. Without the
+files everything stays as in the original. The logo follows the
+language set in the options after the next restart.

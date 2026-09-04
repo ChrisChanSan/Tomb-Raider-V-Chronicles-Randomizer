@@ -11,6 +11,8 @@ What is in here
                       you want to report a bug.
   audio\, movie\      Where your HQ soundtracks and FMVs go; each
                       folder has a note in it.
+  screens\            Where the remaster's loading screens go; there is
+                      a note in it.
   savegame\           Savegames live here now, not loose in the folder.
   data\               Precomputed data. The randomizer carries the same
                       data inside itself, so these files are optional -
@@ -84,7 +86,7 @@ original, even if you set the enemies to harmless.
 
 Better sound and music, from your own remaster
 ----------------------------------------------
-If you own the Tomb Raider 4-6 Remaster, two things from it can be
+If you own the Tomb Raider 4-6 Remaster, three things from it can be
 used here. Nothing of either is included - the engine only looks
 whether the files are there.
 
@@ -99,6 +101,16 @@ counterpart in the remaster and keep the sounds they arrived with.
 
 Music: the HQ soundtracks go into audio\HQ EN, audio\HQ DE and so on,
 named after the track number. There is a note in the audio folder.
+
+Loading screens and logos: copy the remaster's DDS pictures (ANDREA1
+to RICH3, TITLE, and LOGO_DE, LOGO_EU, LOGO_FR, LOGO_US) into
+screens\HD. The game then shows them while a level loads, builds the
+logo screen from TITLE plus the logo of your language, and draws
+that logo in the title menu - so the German and French titles get
+their own wordmark, which the original never shipped. Security
+Breach borrows RICH3. The logo follows the language you set in the
+options after the next restart. There is a note in the screens
+folder.
 
 
 Playing with a controller

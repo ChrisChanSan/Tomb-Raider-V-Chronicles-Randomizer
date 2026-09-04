@@ -41,6 +41,8 @@
 #include "../tomb5/tomb5.h"
 #include "../game/lara_states.h"
 #include "../game/deltapak.h"
+#include "hdscreen.h"
+#include "LoadSave.h"
 
 long DoFade;
 long snow_outside;
@@ -956,11 +958,151 @@ void OutputSky()
 	InitialiseSortList();
 }
 
+// The title menu's wordmark in HD.
+//
+// Core's own logo is data\logo512.pak: 512x256 pixels of 24 bit colour with
+// magenta for "transparent", cut into two 256x256 texture pages and drawn as
+// two quads (see below). The remaster redrew the same wordmark at 1920x1080
+// with a real alpha channel, one file per language - screens\HD\LOGO_DE,
+// LOGO_FR, LOGO_US, LOGO_EU - and the loading screens already read those
+// (#149). If the player has them, the title menu can have them too, and the
+// languages the CDs never shipped a logo512 for finally get their own
+// lettering: "DIE CHRONIK", "SUR LES TRACES DE LARA CROFT", the flaming US
+// emblem.
+//
+// This is the whole of it: cut the mark out of the file, put it in ONE
+// texture page with its alpha intact, and let SuperShowLogo() draw one quad
+// instead of two. Without the file nothing here runs and the pak logo is
+// drawn exactly as before.
+//
+// -1 when there is no HD wordmark. Otherwise the page in Textures[] holding
+// it, and the part of that page the mark occupies (the page is a power of two,
+// the mark is not).
+static long TitleLogoHDPage = -1;
+static float TitleLogoHDU;
+static float TitleLogoHDV;
+static long TitleLogoHDW;	// the mark's size in texels, for its shape
+static long TitleLogoHDH;
+
+// The page is at most HD_LOGO_PAGE_MAX_W x HD_LOGO_PAGE_MAX_H (hdscreen.h).
+// The title menu never draws the mark wider than twice GetFixedScale(256),
+// which is 1152 pixels on a 1920x1080 screen and 2304 on a 4K one - so 1024
+// is a real but slight downscale even on a large screen, and the height is
+// the generous half of it because three of the four marks are a wide band of
+// lettering and only the US emblem is anywhere near square. A whole page of
+// 1024x512 is 2 MB and lives only as long as the title level.
+long LoadTitleLogoHD(long page)
+{
+	D3DCAPS9 caps;
+	D3DLOCKED_RECT rect;
+	LPDIRECT3DTEXTURE9 tex9;
+	ulong* px;
+	ulong* row;
+	const char* name;
+	long lw, lh, w, h, tw, th, maxW, maxH, y;
+
+	TitleLogoHDPage = -1;
+
+	if (page < 1 || page >= nTextures || !LoadScreenHDReady())
+		return 0;
+
+	name = HDScreenLogo();
+	px = HDScreenRead(name, 2048, &lw, &lh);
+
+	if (!px)
+		return 0;		// no HD folder, or no logo for this language - normal
+
+	if (FAILED(App.dx.lpD3DDevice->GetDeviceCaps(&caps)))
+	{
+		Log("Title logo: the device will not say how big a texture it takes - drawing the pak logo");
+		free(px);
+		return 0;
+	}
+
+	maxW = HD_LOGO_PAGE_MAX_W;
+	maxH = HD_LOGO_PAGE_MAX_H;
+
+	while (maxW > (long)caps.MaxTextureWidth)
+		maxW >>= 1;
+
+	while (maxH > (long)caps.MaxTextureHeight)
+		maxH >>= 1;
+
+	if (maxW < 32 || maxH < 32 || !HDScreenLogoSize(px, lw, lh, maxW, maxH, &w, &h))
+	{
+		Log("Title logo: %s draws nothing this device could hold - drawing the pak logo", name);
+		free(px);
+		return 0;
+	}
+
+	for (tw = 32; tw < w; tw <<= 1);
+	for (th = 32; th < h; th <<= 1);
+
+	// A device that only takes square textures is a museum piece, but the
+	// engine asks nothing else of the hardware that a 2001 card could not do
+	// either (the same reasoning as the HD loading screens, LoadSave.cpp).
+	if (caps.TextureCaps & D3DPTEXTURECAPS_SQUAREONLY)
+	{
+		if (tw < th)
+			tw = th;
+		else
+			th = tw;
+	}
+
+	if (FAILED(App.dx.lpD3DDevice->CreateTexture(tw, th, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &tex9, 0)))
+	{
+		Log("Title logo: CreateTexture(%d x %d) failed - drawing the pak logo", tw, th);
+		free(px);
+		return 0;
+	}
+
+	if (FAILED(tex9->LockRect(0, &rect, 0, 0)))
+	{
+		Log("Title logo: LockRect failed - drawing the pak logo");
+		tex9->Release();
+		free(px);
+		return 0;
+	}
+
+	// Everything the mark does not fill stays fully transparent. The sampler
+	// clamps (see function_table.cpp), so the filter can only ever reach one
+	// texel past the mark, and that texel is this.
+	for (y = 0; y < th; y++)
+	{
+		row = (ulong*)((uchar*)rect.pBits + y * rect.Pitch);
+		memset(row, 0, tw * sizeof(ulong));
+	}
+
+	HDScreenCutLogo(px, lw, lh, (ulong*)rect.pBits, rect.Pitch / (long)sizeof(ulong), w, h);
+	tex9->UnlockRect(0);
+	free(px);
+
+	// The page the pak logo's left half went into is handed over to the mark.
+	// Taking a page away instead of adding one would be the tidier thing, but
+	// every other page in the title level is addressed as a distance from the
+	// END of the array - the font is nTextures-2, the sky nTextures-1 - so
+	// the count has to stay exactly what it was.
+	if (Textures[page].tex)
+		Textures[page].tex->Release();
+
+	Textures[page].tex = tex9;
+	Textures[page].width = tw;
+	Textures[page].height = th;
+	Textures[page].bump = 0;
+	TitleLogoHDPage = page;
+	TitleLogoHDU = (float)w / (float)tw;
+	TitleLogoHDV = (float)h / (float)th;
+	TitleLogoHDW = w;
+	TitleLogoHDH = h;
+	Log("Title logo: %s, wordmark %d x %d in a %d x %d page", name, w, h, tw, th);
+	return 1;
+}
+
 void SuperShowLogo()
 {
 	D3DTLVERTEX* v;
 	TEXTURESTRUCT tex;
-	float x, y, w;
+	float x, y, w, dw, dh;
 
 	v = aVertexBuffer;
 	clipflags[0] = 0;
@@ -980,6 +1122,73 @@ void SuperShowLogo()
 	tex.u4 = 1.0F / 256.0F;
 	tex.v4 = 1.0F - (1.0F / 256.0F);
 	w = (float)GetFixedScale(256);
+
+	// The HD wordmark, when the player has the remaster's LOGO_xx.DDS. It
+	// goes into the rectangle the pak logo fills - 2w wide, w high, centred
+	// on phd_centerx and hanging from the top edge - keeping its own shape
+	// and hugging the top. The three wordmarks are far wider than that 2:1
+	// rectangle and come out as a band across its upper part; the US emblem
+	// is nearly 2:1 and fills it.
+	if (TitleLogoHDPage >= 0)
+	{
+		dw = w * 2.0F;
+		dh = dw * (float)TitleLogoHDH / (float)TitleLogoHDW;
+
+		if (dh > w)
+		{
+			dh = w;
+			dw = dh * (float)TitleLogoHDW / (float)TitleLogoHDH;
+		}
+
+		x = phd_centerx - dw * 0.5F;
+		y = phd_winymin + dh;
+		tex.u1 = 0;
+		tex.v1 = 0;
+		tex.u2 = TitleLogoHDU;
+		tex.v2 = 0;
+		tex.u3 = TitleLogoHDU;
+		tex.v3 = TitleLogoHDV;
+		tex.u4 = 0;
+		tex.v4 = TitleLogoHDV;
+
+		v[0].sx = x;
+		v[0].sy = (float)phd_winymin;
+		v[0].sz = 0;
+		v[0].rhw = f_moneoznear;
+		v[0].color = 0xFFFFFFFF;
+		v[0].specular = 0xFF000000;
+
+		v[1].sx = x + dw;
+		v[1].sy = (float)phd_winymin;
+		v[1].sz = 0;
+		v[1].rhw = f_moneoznear;
+		v[1].color = 0xFFFFFFFF;
+		v[1].specular = 0xFF000000;
+
+		v[2].sx = x + dw;
+		v[2].sy = y;
+		v[2].sz = 0;
+		v[2].rhw = f_moneoznear;
+		v[2].color = 0xFFFFFFFF;
+		v[2].specular = 0xFF000000;
+
+		v[3].sx = x;
+		v[3].sy = y;
+		v[3].sz = 0;
+		v[3].rhw = f_moneoznear;
+		v[3].color = 0xFFFFFFFF;
+		v[3].specular = 0xFF000000;
+
+		// Drawtype 1 is the pak logo's own: alpha blend on, SRCALPHA /
+		// INVSRCALPHA, alpha test against 0 (polyinsert.cpp). The pak logo
+		// only ever has alpha 0 or 255 out of its magenta colour key, but the
+		// path blends properly either way, so the soft edges of the HD mark
+		// come out soft.
+		tex.tpage = (ushort)TitleLogoHDPage;
+		AddQuadSorted(v, 0, 1, 2, 3, &tex, 0);
+		return;
+	}
+
 	x = phd_centerx - w;
 	y = phd_winymin + w;
 

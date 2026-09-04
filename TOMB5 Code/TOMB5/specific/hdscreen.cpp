@@ -295,6 +295,103 @@ static ulong HDScreenSample(const ulong* px, long w, long h, float u, float v)
 		((ulong)(g + 0.5F) << 8) | (ulong)(b + 0.5F);
 }
 
+long HDScreenLogoSize(const ulong* logo, long lw, long lh, long maxW, long maxH, long* outW, long* outH)
+{
+	long x0, y0, x1, y1, w, h;
+
+	if (!logo || maxW < 1 || maxH < 1)
+		return 0;
+
+	if (!HDScreenAlphaBox(logo, lw, lh, &x0, &y0, &x1, &y1))
+		return 0;
+
+	w = x1 - x0 + 1;
+	h = y1 - y0 + 1;
+
+	// Shrink to fit, never enlarge. Enlarging here would only blur: the
+	// title menu scales the mark to the screen anyway, and it does that from
+	// whatever the texture holds - so the texture may as well hold the
+	// sharpest thing there is, which is the file's own pixels.
+	if (w > maxW || h > maxH)
+	{
+		if (w * maxH > h * maxW)	// width is the tighter of the two
+		{
+			h = (h * maxW + w / 2) / w;
+			w = maxW;
+		}
+		else
+		{
+			w = (w * maxH + h / 2) / h;
+			h = maxH;
+		}
+	}
+
+	if (w < 1)
+		w = 1;
+
+	if (h < 1)
+		h = 1;
+
+	*outW = w;
+	*outH = h;
+	return 1;
+}
+
+long HDScreenCutLogo(const ulong* logo, long lw, long lh, ulong* dst, long dstPitch, long outW, long outH)
+{
+	ulong px;
+	long sx0, sy0, sx1, sy1;
+	long srcW, srcH, x, y, i, a, ch[3];
+	float su, sv;
+
+	if (!logo || !dst || outW < 1 || outH < 1 || dstPitch < outW)
+		return 0;
+
+	if (!HDScreenAlphaBox(logo, lw, lh, &sx0, &sy0, &sx1, &sy1))
+		return 0;
+
+	srcW = sx1 - sx0 + 1;
+	srcH = sy1 - sy0 + 1;
+
+	// The same walk HDScreenComposeLogo makes over its destination - one tap
+	// per output pixel, sampled at the pixel's centre.
+	for (y = 0; y < outH; y++)
+	{
+		sv = (float)sy0 + ((float)y + 0.5F) * (float)srcH / (float)outH - 0.5F;
+
+		for (x = 0; x < outW; x++)
+		{
+			su = (float)sx0 + ((float)x + 0.5F) * (float)srcW / (float)outW - 0.5F;
+			px = HDScreenSample(logo, lw, lh, su, sv);
+			a = (long)(px >> 24);
+
+			// The tap comes back premultiplied, because that is the only way
+			// to interpolate across the edge of the mark without dragging the
+			// black of the transparent pixels into it. A texture, though, is
+			// blended by the device with SRCALPHA / INVSRCALPHA - straight
+			// alpha - so the colour has to be divided back out here.
+			if (!a)
+			{
+				dst[y * dstPitch + x] = 0;
+				continue;
+			}
+
+			ch[0] = ((long)((px >> 16) & 0xFF) * 255 + a / 2) / a;
+			ch[1] = ((long)((px >> 8) & 0xFF) * 255 + a / 2) / a;
+			ch[2] = ((long)(px & 0xFF) * 255 + a / 2) / a;
+
+			for (i = 0; i < 3; i++)
+				if (ch[i] > 255)
+					ch[i] = 255;
+
+			dst[y * dstPitch + x] = ((ulong)a << 24) | ((ulong)ch[0] << 16) |
+				((ulong)ch[1] << 8) | (ulong)ch[2];
+		}
+	}
+
+	return 1;
+}
+
 // Builds the picture the title screen used to be a separate file for: the
 // title picture with the localised wordmark over it, horizontally centred and
 // just under the top edge.

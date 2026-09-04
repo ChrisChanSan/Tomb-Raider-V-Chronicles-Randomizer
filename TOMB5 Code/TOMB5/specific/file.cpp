@@ -733,6 +733,16 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 	Textures[nTex].height = 256;
 	Textures[nTex].bump = 0;
 
+	// The title menu's wordmark in HD (LoadTitleLogoHD, specificfx.cpp). If
+	// the player has the remaster's screens\HD\LOGO_<language>.DDS, the mark
+	// out of that file takes over the page the pak logo's left half went into
+	// - the page SuperShowLogo() addresses as nTextures-5 - and the menu
+	// draws one quad from it instead of two from the pak. The pak is decoded
+	// first and stays the fallback, so a missing or unreadable HD file costs
+	// nothing at all. Every other level passes -1, which only clears what the
+	// last title screen left behind.
+	LoadTitleLogoHD(gfLevelId == LVL5_TITLE ? nTextures - 5 : -1);
+
 	Log("Created %d Texture Pages", nTextures - 1);
 
 	free(TextureData);

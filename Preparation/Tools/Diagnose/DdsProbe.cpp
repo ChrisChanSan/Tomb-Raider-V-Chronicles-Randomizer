@@ -13,11 +13,19 @@
  * very same routine (hdscreen.cpp, compiled with HDSCREEN_NO_ENGINE), so the
  * picture in the PNG is the picture the game will show.
  *
+ * The third is the title MENU, which draws the same wordmark once the loading
+ * screen is gone. That one is not composed but cut into a texture page of its
+ * own, and -crop builds that page here - same routines, same size - so the
+ * page can be looked at before the game ever runs.
+ *
  * Usage:
  *   DdsProbe -selftest              table consistency check only
  *   DdsProbe <in.dds> <out.png>     decode, report, write
  *   DdsProbe -logo <title.dds> <logo.dds> <out.png>
  *                                   compose the title screen, report, write
+ *   DdsProbe -crop <logo.dds> <out.png>
+ *                                   the title MENU's logo texture page, report,
+ *                                   write (alpha over a checkerboard)
  *
  * The report lists which BC7 modes and how many distinct partitions the file
  * actually exercised. That matters: a partition table row that is never used
@@ -397,6 +405,94 @@ static int ComposeLogo(const char* titlePath, const char* logoPath, const char* 
 	return 0;
 }
 
+// -crop: the texture page the title menu builds out of a logo file, written
+// out as a PNG. Same two routines the engine calls (HDScreenLogoSize and
+// HDScreenCutLogo), same page size, so what comes out here is texel for texel
+// what LoadTitleLogoHD() uploads. Alpha is shown over a grey checkerboard,
+// because the PNG this tool writes has no alpha channel of its own - and a
+// checkerboard also shows up a dark seam around the lettering, which is the
+// one thing the premultiplied resampling is there to prevent.
+static int CropLogo(const char* logoPath, const char* outPath)
+{
+	unsigned long* logo;
+	unsigned long* page;
+	long lw, lh, w, h, tw, th, x, y, a, i, ch[3];
+
+	logo = Decode(logoPath, &lw, &lh);
+
+	if (!logo)
+		return 1;
+
+	printf("logo picture, as it lies in the file:\n");
+	BoxCensus(logo, lw, lh);
+
+	if (!HDScreenLogoSize(logo, lw, lh, HD_LOGO_PAGE_MAX_W, HD_LOGO_PAGE_MAX_H, &w, &h))
+	{
+		printf("the logo file draws nothing - the title menu keeps the pak logo\n");
+		free(logo);
+		return 1;
+	}
+
+	for (tw = 32; tw < w; tw <<= 1);
+	for (th = 32; th < h; th <<= 1);
+
+	printf("title menu page  : wordmark %ld x %ld in a %ld x %ld page (u %.6f, v %.6f)\n",
+		w, h, tw, th, (double)w / (double)tw, (double)h / (double)th);
+
+	page = (unsigned long*)calloc((size_t)tw * th, sizeof(unsigned long));
+
+	if (!page)
+	{
+		printf("out of memory\n");
+		free(logo);
+		return 1;
+	}
+
+	if (!HDScreenCutLogo(logo, lw, lh, page, tw, w, h))
+	{
+		printf("the cut failed\n");
+		free(page);
+		free(logo);
+		return 1;
+	}
+
+	free(logo);
+	printf("the page, as the device will sample it:\n");
+	BoxCensus(page, tw, th);
+
+	// Straight alpha over the checkerboard, exactly what the device does with
+	// SRCALPHA / INVSRCALPHA.
+	for (y = 0; y < th; y++)
+		for (x = 0; x < tw; x++)
+		{
+			unsigned long c = page[y * tw + x];
+			long bg = ((x >> 4) + (y >> 4)) & 1 ? 96 : 160;
+
+			a = (long)((c >> 24) & 0xFF);
+			ch[0] = ((long)((c >> 16) & 0xFF) * a + bg * (255 - a)) / 255;
+			ch[1] = ((long)((c >> 8) & 0xFF) * a + bg * (255 - a)) / 255;
+			ch[2] = ((long)(c & 0xFF) * a + bg * (255 - a)) / 255;
+
+			for (i = 0; i < 3; i++)
+				if (ch[i] > 255)
+					ch[i] = 255;
+
+			page[y * tw + x] = ((unsigned long)ch[0] << 16) |
+				((unsigned long)ch[1] << 8) | (unsigned long)ch[2];
+		}
+
+	if (!WritePng(outPath, page, tw, th))
+	{
+		printf("cannot write %s\n", outPath);
+		free(page);
+		return 1;
+	}
+
+	printf("wrote            : %s\n", outPath);
+	free(page);
+	return 0;
+}
+
 int main(int argc, char** argv)
 {
 	unsigned char* file;
@@ -419,10 +515,14 @@ int main(int argc, char** argv)
 	if (argc == 5 && !strcmp(argv[1], "-logo"))
 		return ComposeLogo(argv[2], argv[3], argv[4]);
 
+	if (argc == 4 && !strcmp(argv[1], "-crop"))
+		return CropLogo(argv[2], argv[3]);
+
 	if (argc != 3)
 	{
 		printf("usage: DdsProbe <in.dds> <out.png>\n");
 		printf("       DdsProbe -logo <title.dds> <logo.dds> <out.png>\n");
+		printf("       DdsProbe -crop <logo.dds> <out.png>\n");
 		printf("       DdsProbe -selftest\n");
 		return 1;
 	}

@@ -1519,7 +1519,7 @@ void LoadScreen(long screen, long pathNum)
 // Is the HD path usable at all? The decoder checks its own tables once; a
 // player whose build somehow got them wrong keeps Core's pictures rather than
 // a screen full of noise.
-static long LoadScreenHDReady()
+long LoadScreenHDReady()
 {
 	const char* why;
 

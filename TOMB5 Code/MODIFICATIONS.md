@@ -36,7 +36,12 @@ added: still 107 files changed, **18** entirely new - **125** in all, 123 of
 them carrying the notice. The four additions are `specific/bc7.cpp`,
 `specific/bc7.h`, `specific/hdscreen.cpp` and `specific/hdscreen.h`.
 
-Exactly two of the 125 do not carry it, and neither should:
+Measured again on **2026-09-04**, after the title menu learned to draw the HD
+wordmark: **108** files changed, still 18 entirely new - **126** in all, 124 of
+them carrying the notice. Nothing was added; `specific/specificfx.h` is the one
+file that had never been touched before and now is.
+
+Exactly two of the 126 do not carry it, and neither should:
 `tomb5/libs/stb/stb_vorbis.c` and `tomb5/libs/discordRPC/LICENSE` are other
 people's files that we do not modify at all - stb_vorbis carries its own
 licence at the end of the file, and the second one IS a licence. Putting our
@@ -192,6 +197,40 @@ every ink threshold from 2 % to 20 % of the peak, the logo file's is 1020, so
 he moved it and did not scale it - and its top edge lands on the same row, 15.
 The only deliberate difference is that his sits 30 pixels right of centre and
 this one is centred.
+
+**The title menu draws the same wordmark** (`LoadTitleLogoHD` and
+`SuperShowLogo` in `specific/specificfx.cpp`, `HDScreenLogoSize` and
+`HDScreenCutLogo` in `specific/hdscreen.cpp`, call site in `specific/file.cpp`).
+Core's menu logo is `data\logo512.pak`: 512x256 pixels of 24 bit colour with
+magenta standing in for transparent, cut into two 256x256 pages and drawn as
+two quads filling a rectangle 2:1 wide, centred and hanging from the top edge.
+The language logos `grlogo.pak` and `frlogo.pak` only ever existed on the
+respective CDs, so on the Steam edition German and French fall back to the
+English one. If the player has `screens\HD\LOGO_<language>.DDS`, the mark out
+of that file is used instead - and German, French and the US emblem then
+finally appear in the menu at all.
+
+The mark is cut out with the same alpha box the loading screen uses, resampled
+with the same premultiplied bilinear tap, and put into **one** texture page,
+at most 1024x512 and a power of two, with its alpha intact; the page is
+addressed with texture coordinates, so the unused part of it is never drawn.
+The menu then draws one quad instead of two, into exactly the rectangle the pak
+logo filled, scaled to fit it without distortion and hugging the top edge: the
+three wordmarks are far wider than 2:1 and come out as a band across the upper
+part of that rectangle, the US emblem is nearly 2:1 and fills it. The draw type
+is the pak logo's own (`polyinsert.cpp` case 1 - alpha blending on,
+`SRCALPHA`/`INVSRCALPHA`, alpha test against 0), which the pak logo only ever
+exercised at alpha 0 or 255 but which blends the HD mark's soft edges properly.
+
+The new page **takes the place of** the pak logo's left half rather than being
+added to the array. That is not tidiness: every page in the title level is
+addressed as a distance from the end of `Textures[]` - the font is
+`nTextures-2`, the sky `nTextures-1`, the logo `nTextures-5` and `-4` - so the
+count has to stay what it was. The pak is still decoded first and stays the
+fallback, which is why a missing, unreadable or empty HD file costs nothing.
+`DdsProbe -crop <logo.dds> <out.png>` builds the same page out of the same two
+routines and writes it as a PNG over a checkerboard, so the page can be
+inspected without starting the game.
 
 Also in this group:
 

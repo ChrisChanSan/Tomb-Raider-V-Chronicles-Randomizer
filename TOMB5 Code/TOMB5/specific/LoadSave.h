@@ -27,6 +27,9 @@ void S_DisplayMonoScreen();
 long S_LoadSave(long load_or_save, long mono, long inv_active);
 void LoadScreen(long screen, long pathNum);
 
+// Is the HD path usable at all? Checks the BC7 decoder's own tables once.
+long LoadScreenHDReady();
+
 // Optional replacement for LoadScreen(): the picture out of screens\HD named
 // after the level, decoded from BC7. Returns 0 when there is none, and the
 // caller then falls back to LoadScreen().

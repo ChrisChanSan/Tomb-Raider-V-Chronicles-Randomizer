@@ -337,8 +337,25 @@ window. The HD ones are 16:9 and are fitted instead: on a 16:9 window they land
 pixel for pixel, and on anything else you get black bars rather than a
 stretched picture.
 
+The **title menu** takes its wordmark from the same `LOGO_` file. Core's own
+menu logo is `data\logo512.pak`, and the German and French versions of that
+file (`grlogo.pak`, `frlogo.pak`) only ever existed on the German and French
+CDs — the Steam edition does not have them, so those two languages have always
+fallen back to the English lettering. With the HD file in place they get their
+own at last: **DIE CHRONIK**, **SUR LES TRACES DE LARA CROFT**, and for
+American English the flaming emblem. The mark is fitted into the same
+rectangle the old logo filled, so it keeps its shape whatever your window size
+is. Without the file nothing changes and the pak logo is drawn as before.
+
+> The wordmark is picked when the title level loads, so switching the
+> **Language** row in the options changes the menu text at once but not the
+> logo above it. Leave the title screen and come back — start a game and quit
+> to the title, or restart — and the logo follows. This is how the pak logo has
+> always behaved too.
+
 Start the game once with `-log` to watch it: `log.txt` gets a line per picture
-saying which file was decoded and at what size, or why one was refused.
+saying which file was decoded and at what size, or why one was refused, plus a
+`Title logo:` line saying which wordmark went into the menu.
 
 ---
 

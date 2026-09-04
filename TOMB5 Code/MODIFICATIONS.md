@@ -785,6 +785,20 @@ Also in this group:
   obligation of its own. No music is shipped with this project - the player
   supplies their own files.
 
+- `global/types.h`, `game/newinv2.cpp`, `game/setup.cpp` — **keys are counted,
+  not flagged.** `LARA_INFO::keyitems` was a 16-bit field with one bit per
+  `KEY_ITEM1..8`, while puzzle items had always been counters. Picking up a
+  key ORed the bit in and the pickup was removed either way, so a second key
+  of the same type was silently destroyed - vanilla joby2 hands out two Key 7
+  for two separate locks, and a randomized layout can put both of them in
+  front of the first door. The field is now an eight-byte counter array read
+  and written exactly like `puzzleitems`: a lock consumes one copy, a script
+  `TAKEOBJ` clears the slot, the inventory ring shows the number from two
+  copies upwards. This changes `sizeof(SAVEGAME_INFO)`, which is serialized
+  raw; savegames written before it are refused by the existing size and
+  checksum check in `sgRestoreGame()` rather than decoded from a shifted
+  layout.
+
 ### 3. Code taken from tomb3 (four Tomb Raider III enemies)
 
 Four enemies from Tomb Raider III can appear in randomized levels: the

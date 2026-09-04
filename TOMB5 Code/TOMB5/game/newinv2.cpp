@@ -1243,7 +1243,11 @@ void construct_object_list()
 
 	for (int i = 0; i < 8; i++)
 	{
-		if (lara.keyitems & (1 << i))
+		// Counter, not a bit - see LARA_INFO::keyitems in global\types.h.
+		// One entry in the ring no matter how many copies are held; the
+		// count itself is drawn by the "nummeup" block further down, exactly
+		// like puzzle items.
+		if (lara.keyitems[i])
 			insert_object_into_list(INV_KEY_ITEM1 + i);
 	}
 
@@ -1470,6 +1474,18 @@ void draw_current_object_list(long ringnum)
 			else if (objmeup >= PUZZLE_ITEM1 && objmeup <= PUZZLE_ITEM8)
 			{
 				nummeup = lara.puzzleitems[objmeup - PUZZLE_ITEM1];
+
+				if (nummeup <= 1)
+					nummeup = 0;
+			}
+			// Keys are counted since 2026-09-04 (see LARA_INFO::keyitems in
+			// global\types.h), so they get the same "x N" label as puzzle
+			// items - a single copy stays unlabelled, two or more show the
+			// number. Without this the second key was invisible to the
+			// player even though the engine now keeps it.
+			else if (objmeup >= KEY_ITEM1 && objmeup <= KEY_ITEM8)
+			{
+				nummeup = lara.keyitems[objmeup - KEY_ITEM1];
 
 				if (nummeup <= 1)
 					nummeup = 0;
@@ -2298,51 +2314,80 @@ void combine_PuzzleItem8(long flag)
 	lara.puzzleitems[7] = 1;
 }
 
+// Keys are counted, not flagged (LARA_INFO::keyitems, global\types.h).
+// Every place that hands Lara a key goes through here, so the 0..255 ceiling
+// of the one-byte counter is enforced in exactly one spot and can never wrap
+// back to zero - which would look to the rest of the engine like "key lost".
+static void add_key_item(long slot)
+{
+	if (slot < 0 || slot > 7)
+		return;
+
+	if (lara.keyitems[slot] < 255)
+		lara.keyitems[slot]++;
+}
+
+// Counterpart for a single consumed copy (a lock swallowing one key). Floored
+// at zero for the same reason: 0 - 1 on an unsigned byte is 255, i.e. a lock
+// would conjure up 255 keys out of nothing.
+static void sub_key_item(long slot)
+{
+	if (slot < 0 || slot > 7)
+		return;
+
+	if (lara.keyitems[slot])
+		lara.keyitems[slot]--;
+}
+
+// Combining two halves yields one whole key. Deliberately "+1" and not
+// "= 1" like the combine_PuzzleItem* siblings above: the bit field this
+// replaced could never take a key away either, and with counting keys a
+// plain "= 1" would silently discard copies Lara already carries.
 void combine_KeyItem1(long flag)
 {
-	lara.keyitems |= 1;
+	add_key_item(0);
 	lara.keyitemscombo &= ~3;
 }
 
 void combine_KeyItem2(long flag)
 {
-	lara.keyitems |= 2;
+	add_key_item(1);
 	lara.keyitemscombo &= ~0xC;
 }
 
 void combine_KeyItem3(long flag)
 {
-	lara.keyitems |= 4;
+	add_key_item(2);
 	lara.keyitemscombo &= ~0x30;
 }
 
 void combine_KeyItem4(long flag)
 {
-	lara.keyitems |= 8;
+	add_key_item(3);
 	lara.keyitemscombo &= ~0xC0;
 }
 
 void combine_KeyItem5(long flag)
 {
-	lara.keyitems |= 16;
+	add_key_item(4);
 	lara.keyitemscombo &= ~0x300;
 }
 
 void combine_KeyItem6(long flag)
 {
-	lara.keyitems |= 32;
+	add_key_item(5);
 	lara.keyitemscombo &= ~0xC00;
 }
 
 void combine_KeyItem7(long flag)
 {
-	lara.keyitems |= 64;
+	add_key_item(6);
 	lara.keyitemscombo &= ~0x3000;
 }
 
 void combine_KeyItem8(long flag)
 {
-	lara.keyitems |= 128;
+	add_key_item(7);
 	lara.keyitemscombo &= ~0xC000;
 }
 
@@ -2785,7 +2830,7 @@ void DEL_picked_up_object(short objnum)
 		else if (objnum >= PICKUP_ITEM1_COMBO1 && objnum <= PICKUP_ITEM4_COMBO2)
 			lara.pickupitemscombo |= 1 << (objnum - PICKUP_ITEM1_COMBO1);
 		else if (objnum >= KEY_ITEM1 && objnum <= KEY_ITEM8)
-			lara.keyitems |= 1 << (objnum - KEY_ITEM1);
+			add_key_item(objnum - KEY_ITEM1);	// count it, the second copy used to be dropped here
 		else if (objnum >= KEY_ITEM1_COMBO1 && objnum <= KEY_ITEM8_COMBO2)
 			lara.keyitemscombo |= 1 << (objnum - KEY_ITEM1_COMBO1);
 		else if (objnum >= PUZZLE_ITEM1 && objnum <= PUZZLE_ITEM8)
@@ -2893,7 +2938,7 @@ void NailInvItem(short objnum)
 		else if (objnum >= PICKUP_ITEM1_COMBO1 && objnum <= PICKUP_ITEM4_COMBO2)
 			lara.pickupitemscombo &= ~(1 << (objnum - PICKUP_ITEM1_COMBO1));
 		else if (objnum >= KEY_ITEM1 && objnum <= KEY_ITEM8)
-			lara.keyitems &= ~(1 << (objnum - KEY_ITEM1));
+			lara.keyitems[objnum - KEY_ITEM1] = 0;	// script takeaway: ALL copies, like puzzleitems below
 		else if (objnum >= KEY_ITEM1_COMBO1 && objnum <= KEY_ITEM8_COMBO2)
 			lara.keyitemscombo &= ~(1 << (objnum - KEY_ITEM1_COMBO1));
 		else if (objnum >= PUZZLE_ITEM1 && objnum <= PUZZLE_ITEM8)
@@ -2917,7 +2962,7 @@ long have_i_got_object(short object_number)
 		return (lara.keyitemscombo >> (object_number - KEY_ITEM1_COMBO1)) & 1;
 
 	if (object_number >= KEY_ITEM1 && object_number <= KEY_ITEM8)
-		return (lara.keyitems >> (object_number - KEY_ITEM1)) & 1;
+		return lara.keyitems[object_number - KEY_ITEM1];	// count; every caller uses it as a truth value
 
 	if (object_number >= PICKUP_ITEM1_COMBO1 && object_number <= PICKUP_ITEM4_COMBO2)
 		return (lara.pickupitemscombo >> (object_number - PICKUP_ITEM1_COMBO1)) & 1;
@@ -2945,8 +2990,13 @@ void remove_inventory_item(short object_number)
 	if (object_number >= KEY_ITEM1_COMBO1 && object_number <= KEY_ITEM8_COMBO2)
 		lara.keyitemscombo &= ~(1 << (object_number + 52));
 
+	// One copy, not the whole stack - this is the lock swallowing a key
+	// (game\pickup.cpp, KeyHole handling), the exact mirror of the
+	// puzzleitems[]-- two blocks up. The old line's "+ 60" was Core relying
+	// on the x86 shift masking the count to 5 bits; with a counter the slot
+	// index is simply written out.
 	if (object_number >= KEY_ITEM1 && object_number <= KEY_ITEM8)
-		lara.keyitems &= ~(1 << (object_number + 60));
+		sub_key_item(object_number - KEY_ITEM1);
 
 	if (object_number >= PICKUP_ITEM1_COMBO1 && object_number <= PICKUP_ITEM4_COMBO2)
 		lara.pickupitemscombo &= ~(1 << (object_number + 32));
@@ -3173,8 +3223,12 @@ void dels_give_lara_items_cheat()
 
 	for (piss = 0; piss < 8; piss++)
 	{
+		// "piss" is the slot index 0..7 here, so this only ever touched the
+		// eight key bits. Adding a copy rather than forcing the count to 1
+		// keeps the old behaviour: the bit field never took a key away, and
+		// the ITEM cheat must not start eating the player's stock either.
 		if (objects[KEY_ITEM1 + piss].loaded)
-			lara.keyitems |= (1 << (piss & 0x1F));
+			add_key_item(piss);
 	}
 
 	for (piss = 0; piss < 3; piss++)

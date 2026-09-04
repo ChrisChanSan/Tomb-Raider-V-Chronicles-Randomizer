@@ -1296,8 +1296,25 @@ struct LARA_INFO
 	char bottle;
 	char puzzleitems[12];
 	ushort puzzleitemscombo;
-	ushort keyitems;
-	ushort keyitemscombo;
+	// KEY_ITEM1..8 used to be a 16-bit flag field here (one bit per key),
+	// while puzzleitems[] above has always been a counter. That asymmetry
+	// silently ate every second copy of a key: DEL_picked_up_object() ORed
+	// the bit in, AddDisplayPickup()/KillItem() removed the pickup either
+	// way, and a key already held was gone for good. Vanilla joby2 places
+	// two Key 7 for two separate locks; the randomizer can put both of them
+	// in front of the first door, which turned the level into a softlock.
+	// Since 2026-09-04 keys are counted exactly like puzzle items (one
+	// unsigned byte per slot, 0..255, increments capped, decrements floored).
+	// There is deliberately no flag field left in parallel - one source of
+	// truth, so nothing can drift out of sync.
+	//
+	// This changes sizeof(LARA_INFO) and therefore sizeof(SAVEGAME_INFO),
+	// which savegame.cpp serializes raw by sizeof(): saves written before
+	// this change are shorter than the struct and are cleanly rejected by
+	// sgRestoreGame() (size check on savegame_bytes_read, then checksum)
+	// instead of being decoded from a shifted layout.
+	uchar keyitems[8];
+	ushort keyitemscombo;	// halves of a combinable key - genuinely unique, stays a flag field
 	ushort pickupitems;
 	ushort pickupitemscombo;
 	short num_small_medipack;

@@ -182,7 +182,7 @@ void InitialiseLara(long restore)
 		lara.puzzleitemscombo = 0;
 		lara.pickupitems = 0;
 		lara.pickupitemscombo = 0;
-		lara.keyitems = 0;
+		memset(&lara.keyitems, 0, sizeof(lara.keyitems));	// counter array since 2026-09-04, see global\types.h
 		lara.keyitemscombo = 0;
 	}
 	else if (gfLevelId == LVL5_SINKING_SUBMARINE)

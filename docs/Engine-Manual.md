@@ -460,6 +460,11 @@ The key was gone from the inventory, the keyhole came back "unused", and the
 door could never be opened again. If a door has ever refused to open after a
 reload, that was probably why. Fixed here.
 
+Keys now count like puzzle items — a second key of the same type is kept
+instead of being thrown away, and the ring shows how many you carry; the save
+format grew with it, so savegames from an older build are refused rather than
+loaded.
+
 ---
 
 ## What plays differently from the original

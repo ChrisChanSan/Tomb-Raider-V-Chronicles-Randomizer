@@ -22,10 +22,15 @@ void CreateMonoScreen();
 void RGBM_Mono(uchar* r, uchar* g, uchar* b);
 void ConvertSurfaceToTextures(LPDIRECT3DSURFACE9 surface);
 void FreeMonoScreen();
-void S_DrawTile(long x, long y, long w, long h, LPDIRECT3DTEXTURE9 t, long tU, long tV, long tW, long tH, long c0, long c1, long c2, long c3);
+void S_DrawTile(long x, long y, long w, long h, LPDIRECT3DTEXTURE9 t, long tU, long tV, long tW, long tH, long c0, long c1, long c2, long c3, long filter);
 void S_DisplayMonoScreen();
 long S_LoadSave(long load_or_save, long mono, long inv_active);
 void LoadScreen(long screen, long pathNum);
+
+// Optional replacement for LoadScreen(): the picture out of screens\HD named
+// after the level, decoded from BC7. Returns 0 when there is none, and the
+// caller then falls back to LoadScreen().
+long LoadScreenHD(const char* name);
 void ReleaseScreen();
 void DrawLoadingScreen();
 long GetSaveLoadFiles();

@@ -38,6 +38,8 @@
 #include "../tomb5/troyestuff.h"
 #include "../tomb5/tomb5.h"
 #include "drawbars.h"
+#include "hdscreen.h"
+#include "bc7.h"
 
 long sfx_frequencies[3] = { 11025, 22050, 44100 };
 long SoundQuality = 1;
@@ -47,6 +49,15 @@ long ControlMethod;
 
 static DXTEXTURE MonoScreen;
 char MonoScreenOn;
+
+// Set while the picture in MonoScreen is an HD one out of screens\HD. The
+// picture then occupies only the top left MonoScreenPicW x MonoScreenPicH of
+// a square MonoScreenPicSide texture, and is drawn with its own aspect ratio
+// instead of being stretched onto the window. See LoadScreenHD().
+static char MonoScreenHD;
+static long MonoScreenPicW;
+static long MonoScreenPicH;
+static long MonoScreenPicSide;
 
 static long SpecialFeaturesNum = -1;
 static long NumSpecialFeatures;
@@ -1227,6 +1238,7 @@ void ConvertSurfaceToTextures(LPDIRECT3DSURFACE9 surface)
 		MonoScreen.tex->Release();
 
 	MonoScreen.tex = tex9;
+	MonoScreenHD = 0;	// whatever came in here fills the window, as before
 }
 
 void FreeMonoScreen()
@@ -1245,7 +1257,11 @@ void FreeMonoScreen()
 	MonoScreenOn = 0;
 }
 
-void S_DrawTile(long x, long y, long w, long h, LPDIRECT3DTEXTURE9 t, long tU, long tV, long tW, long tH, long c0, long c1, long c2, long c3)
+// filter 0 keeps the original point sampling, which is what a 640x480 picture
+// blown up to the window wants. filter 1 asks for bilinear and is used by the
+// HD pictures, where the scale factor is near 1 and point sampling would show
+// as uneven pixel doubling or as aliasing, depending on the window size.
+void S_DrawTile(long x, long y, long w, long h, LPDIRECT3DTEXTURE9 t, long tU, long tV, long tW, long tH, long c0, long c1, long c2, long c3, long filter)
 {
 	D3DTLBUMPVERTEX v[4];
 	D3DTLBUMPVERTEX tri[3];
@@ -1292,8 +1308,8 @@ void S_DrawTile(long x, long y, long w, long h, LPDIRECT3DTEXTURE9 t, long tU, l
 	v[3].color = c2;
 	v[3].specular = 0xFF000000;
 
-	App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
-	App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+	App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, filter ? D3DTEXF_LINEAR : D3DTEXF_POINT);
+	App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MINFILTER, filter ? D3DTEXF_LINEAR : D3DTEXF_POINT);
 	DXAttempt(App.dx.lpD3DDevice->SetTexture(0, t));
 	tri[0] = v[0];
 	tri[1] = v[2];
@@ -1301,16 +1317,17 @@ void S_DrawTile(long x, long y, long w, long h, LPDIRECT3DTEXTURE9 t, long tU, l
 	HWDrawPrimitive(D3DPT_TRIANGLELIST, v, 3);
 	HWDrawPrimitive(D3DPT_TRIANGLELIST, tri, 3);
 
-	if (App.Filtering)
-	{
-		App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-		App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-	}
+	// Put the sampler back the way the rest of the frame expects it. The
+	// original only did this when App.Filtering was on, which was the same
+	// thing as long as the tile itself was always drawn with POINT.
+	App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, App.Filtering ? D3DTEXF_LINEAR : D3DTEXF_POINT);
+	App.dx.lpD3DDevice->SetSamplerState(0, D3DSAMP_MINFILTER, App.Filtering ? D3DTEXF_LINEAR : D3DTEXF_POINT);
 }
 
 void S_DisplayMonoScreen()
 {
 	ulong col;
+	long x, y, w, h;
 
 	if (MonoScreenOn == 1 || MonoScreenOn == 2)
 	{
@@ -1324,7 +1341,34 @@ void S_DisplayMonoScreen()
 				col = 0xFFFFFF80;
 		}
 
-		S_DrawTile(0, 0, phd_winxmax, phd_winymax, MonoScreen.tex, 0, 0, 256, 256, col, col, col, col);
+		if (MonoScreenHD)
+		{
+			// The 640x480 pictures are stretched onto the window and always
+			// were, distortion included. The HD ones are 16:9 and are fitted
+			// instead: on the 16:9 window they end up pixel for pixel, and on
+			// anything else they get bars rather than a squeeze. The bars
+			// have to be painted, since nothing clears the frame before the
+			// loading screen goes down.
+			w = phd_winxmax;
+			h = phd_winymax;
+
+			if ((long)phd_winxmax * MonoScreenPicH > (long)phd_winymax * MonoScreenPicW)
+				w = (long)phd_winymax * MonoScreenPicW / MonoScreenPicH;
+			else
+				h = (long)phd_winxmax * MonoScreenPicH / MonoScreenPicW;
+
+			x = (phd_winxmax - w) >> 1;
+			y = (phd_winymax - h) >> 1;
+
+			if (x || y)
+				App.dx.lpD3DDevice->Clear(0, 0, D3DCLEAR_TARGET, 0, 1.0F, 0);
+
+			S_DrawTile(x, y, w, h, MonoScreen.tex, 0, 0,
+				256 * MonoScreenPicW / MonoScreenPicSide,
+				256 * MonoScreenPicH / MonoScreenPicSide, col, col, col, col, 1);
+		}
+		else
+			S_DrawTile(0, 0, phd_winxmax, phd_winymax, MonoScreen.tex, 0, 0, 256, 256, col, col, col, col, 0);
 	}
 }
 
@@ -1472,9 +1516,136 @@ void LoadScreen(long screen, long pathNum)
 		Log("WHORE!");
 }
 
+// The HD counterpart of LoadScreen(): screens\HD\<name>.DDS instead of a
+// picture out of SCREENS.STR. Returns 0 when there is no usable file, and the
+// caller then loads the original picture - so a player without the remaster
+// notices nothing at all.
+//
+// Direct3D 9 has no BC7, so bc7.cpp unpacks the blocks and the pixels go into
+// a plain A8R8G8B8 texture. That texture is square and a power of two: 1920 is
+// neither, and while every card this port runs on takes a 1920x1080 texture,
+// the game already asks nothing of the device that a 2001 card could not do,
+// and there is no reason to start here. The picture sits in the top left
+// corner and S_DisplayMonoScreen() addresses it with texture coordinates - the
+// engine counts those in 256ths, and 1920 and 1080 out of 2048 come out as
+// exactly 240 and 135, so nothing is lost to rounding.
+long LoadScreenHD(const char* name)
+{
+	D3DCAPS9 caps;
+	D3DLOCKED_RECT rect;
+	LPDIRECT3DTEXTURE9 tex9;
+	ulong* px;
+	ulong* src;
+	ulong* dst;
+	const char* why;
+	long w, h, side, a;
+
+	if (!name || !*name)
+		return 0;
+
+	if (!BC7SelfTest(&why))
+	{
+		Log("HD screen: BC7 tables inconsistent (%s) - using the original pictures", why);
+		return 0;
+	}
+
+	px = HDScreenRead(name, 2048, &w, &h);
+
+	if (!px)
+		return 0;
+
+	for (side = 32; side < w || side < h; side <<= 1);
+
+	if (FAILED(App.dx.lpD3DDevice->GetDeviceCaps(&caps)) ||
+		(long)caps.MaxTextureWidth < side || (long)caps.MaxTextureHeight < side)
+	{
+		Log("HD screen: device cannot hold a %d x %d texture - using the original picture", side, side);
+		free(px);
+		return 0;
+	}
+
+	if (FAILED(App.dx.lpD3DDevice->CreateTexture(side, side, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &tex9, 0)))
+	{
+		Log("HD screen: CreateTexture(%d) failed - using the original picture", side);
+		free(px);
+		return 0;
+	}
+
+	if (FAILED(tex9->LockRect(0, &rect, 0, 0)))
+	{
+		Log("HD screen: LockRect failed - using the original picture");
+		tex9->Release();
+		free(px);
+		return 0;
+	}
+
+	// Everything outside the picture stays opaque black, so a stray texel at
+	// the seam cannot drag anything bright into the border.
+	for (long y = 0; y < side; y++)
+	{
+		dst = (ulong*)((uchar*)rect.pBits + y * rect.Pitch);
+
+		if (y < h)
+		{
+			src = px + y * w;
+
+			// The logo pictures carry an alpha channel; the level pictures do
+			// not. Compose over black rather than passing alpha on - the tile
+			// is drawn opaque either way, and this makes the two kinds behave
+			// the same.
+			for (long x = 0; x < w; x++)
+			{
+				a = (long)(src[x] >> 24);
+
+				if (a == 255)
+					dst[x] = src[x] | 0xFF000000;
+				else
+					dst[x] = 0xFF000000 |
+						((((src[x] >> 16) & 0xFF) * a / 255) << 16) |
+						((((src[x] >> 8) & 0xFF) * a / 255) << 8) |
+						(((src[x] & 0xFF) * a / 255));
+			}
+
+			for (long x = w; x < side; x++)
+				dst[x] = 0xFF000000;
+		}
+		else
+			for (long x = 0; x < side; x++)
+				dst[x] = 0xFF000000;
+	}
+
+	tex9->UnlockRect(0);
+	free(px);
+
+	if (MonoScreen.tex)
+		MonoScreen.tex->Release();
+
+	MonoScreen.tex = tex9;
+	MonoScreenPicW = w;
+	MonoScreenPicH = h;
+	MonoScreenPicSide = side;
+	MonoScreenHD = 1;
+	MonoScreenOn = 2;
+	return 1;
+}
+
 void ReleaseScreen()
 {
 	MonoScreenOn = 0;
+
+	// An HD picture is a 2048x2048 texture, sixteen megabytes; the original
+	// path leaves its 640x480 one standing until the next picture replaces it,
+	// which would be a lot to leave lying around here.
+	if (MonoScreenHD)
+	{
+		MonoScreenHD = 0;
+
+		if (MonoScreen.tex)
+		{
+			Log("Released %s @ %x - RefCnt = %d", "HD Picture Texture", MonoScreen.tex, MonoScreen.tex->Release());
+			MonoScreen.tex = 0;
+		}
+	}
 
 	if (screen_surface)
 	{
@@ -1734,9 +1905,9 @@ static const char* GetStupidText(long type)	//0: next, 1: both, 2: previous
 		if (!type)
 			strcpy(buf, "Ensuite \x1B");
 		else if (type == 1)
-			strcpy(buf, "\x19 Précédent / Ensuite \x1b");
+			strcpy(buf, "\x19 Prï¿½cï¿½dent / Ensuite \x1b");
 		else
-			strcpy(buf, "\x19 Précédent");
+			strcpy(buf, "\x19 Prï¿½cï¿½dent");
 
 		break;
 
@@ -1745,9 +1916,9 @@ static const char* GetStupidText(long type)	//0: next, 1: both, 2: previous
 		if (!type)
 			strcpy(buf, "Weiter \x1B");
 		else if (type == 1)
-			strcpy(buf, "\x19 Zurück / Weiter \x1b");
+			strcpy(buf, "\x19 Zurï¿½ck / Weiter \x1b");
 		else
-			strcpy(buf, "\x19 Zurück");
+			strcpy(buf, "\x19 Zurï¿½ck");
 
 		break;
 

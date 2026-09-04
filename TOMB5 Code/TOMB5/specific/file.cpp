@@ -13,6 +13,7 @@
 #include "../tomb5/pch.h"
 #include "../tomb5/libs/zlib/zlib.h"
 #include "hqsfx.h"
+#include "hdscreen.h"
 #include "file.h"
 #include "function_stubs.h"
 #include "../game/gameflow.h"
@@ -1734,6 +1735,7 @@ long S_LoadLevelFile(long num)
 {
 	static long lscreen = 0;
 	static long flag = 0;
+	const char* hd_name;
 	long chosen_screen;
 	char name[80];
 
@@ -1743,10 +1745,27 @@ long S_LoadLevelFile(long num)
 	{
 		if (!MonoScreenOn)
 		{
+			// SCREENS.STR holds the pictures in the campaign's own order:
+			// 0 is the logo screen, 3..16 the fourteen levels in the order
+			// the file name table lists them (ANDREA1..RICH3), 17..19 the
+			// three title pictures, 1/2/20 unused.
+			//
+			// num is NOT the slot. It is the file name index out of the
+			// level's CMD_LEVEL - DoLevel() passes gf[3] straight through -
+			// and the randomizer permutes only the script offset table, never
+			// the file name table or the indices pointing into it. So num is
+			// the level's identity in vanilla and in a shuffled campaign
+			// alike, and num + 2 is already the right picture. Measured
+			// against both SCRIPT.DATs, see MODIFICATIONS.md; do not "fix"
+			// this to gfIdFromSlot[num], which would index a slot table with
+			// an identity and break exactly what it looks like it repairs.
 			chosen_screen = num;
+			hd_name = HDScreenLevelName(&gfFilenameWad[gfFilenameOffset[num]]);
 
 			if (!num)
 			{
+				hd_name = "TITLE";
+
 				if (flag)
 				{
 					chosen_screen = lscreen % 3 + 15;
@@ -1756,10 +1775,16 @@ long S_LoadLevelFile(long num)
 				{
 					flag = 1;
 					chosen_screen = -2;
+
+					// Picture 0 is the game's logo screen. The remaster drew
+					// that one per language, so this is the only place that
+					// picks its HD file by language rather than by level.
+					hd_name = HDScreenLogo();
 				}
 			}
 
-			LoadScreen(chosen_screen + 2, 4);
+			if (!LoadScreenHD(hd_name))
+				LoadScreen(chosen_screen + 2, 4);
 		}
 	}
 

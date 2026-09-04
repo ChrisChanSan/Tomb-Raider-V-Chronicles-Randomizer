@@ -31,7 +31,12 @@ added: still 107 files changed, but **14** are entirely new - **121** in
 all, 119 of them carrying the notice. The two additions are
 `specific/hqsfx.cpp` and `specific/hqsfx.h`.
 
-Exactly two of the 121 do not carry it, and neither should:
+Measured again on **2026-09-04**, after the optional HD loading screens were
+added: still 107 files changed, **18** entirely new - **125** in all, 123 of
+them carrying the notice. The four additions are `specific/bc7.cpp`,
+`specific/bc7.h`, `specific/hdscreen.cpp` and `specific/hdscreen.h`.
+
+Exactly two of the 125 do not carry it, and neither should:
 `tomb5/libs/stb/stb_vorbis.c` and `tomb5/libs/discordRPC/LICENSE` are other
 people's files that we do not modify at all - stb_vorbis carries its own
 licence at the end of the file, and the second one IS a licence. Putting our
@@ -110,6 +115,58 @@ have been switched to 44100 Hz. Two unrelated holes were closed on the way:
 `LoadSamples` read samples into a fixed buffer with no length check, and
 `DXCreateSample` did not check its `malloc`. None of the audio ships - it is
 the player's own data, exactly like the HQ music.
+
+**Optional HD loading screens** (`specific/bc7.cpp`, `specific/bc7.h`,
+`specific/hdscreen.cpp`, `specific/hdscreen.h`, all new; call sites in
+`specific/file.cpp` and `specific/LoadSave.cpp`). Chronicles keeps its 21
+loading pictures in `screens\SCREENS.STR`: raw 640x480 A1R5G5B5, 614400 bytes
+each, no header, picture n at offset n * 614400. The remaster ships the same
+pictures redrawn at 1920x1080 as BC7 `.DDS`, one per level and named after the
+level. If the player copies those into `screens\HD\`, the engine uses them; if
+the folder is not there, nothing changes. As with the sounds and the music,
+none of it ships with this project.
+
+Direct3D 9 predates BC7 by about a decade and cannot sample it, so `bc7.cpp`
+unpacks the blocks on the CPU and hands over plain 32 bit pixels. That decoder
+is written here against the format definition - no third-party code was taken
+in, and `THIRD-PARTY.md` therefore gained no entry. Its partition and anchor
+tables check each other at run time (`BC7SelfTest`): every partition must
+start in subset 0, must really use all of its subsets, and the anchor listed
+for subset n must be a pixel that partition actually assigns to subset n. The
+engine refuses the HD path outright if that check ever fails.
+`Preparation\Tools\Diagnose\DdsProbe.cpp` compiles the same `bc7.cpp` and
+writes a `.PNG`, so the decoder is provable without starting the game.
+
+The pixels go into one square power-of-two `A8R8G8B8` texture, 2048 for a
+1920x1080 picture, with the picture in the top left corner - the engine counts
+texture coordinates in 256ths and 1920 and 1080 out of 2048 come out as
+exactly 240 and 135, so the addressing stays lossless. The 640x480 pictures are
+stretched onto the window and always were, distortion included; the HD ones are
+16:9 and are **fitted** instead, so on a 16:9 window they land pixel for pixel
+and on anything else they get black bars rather than a squeeze. Those bars are
+painted with a `Clear`, since nothing clears the frame before a loading screen
+goes down. `S_DrawTile` gained a filter argument for this - point sampling is
+right for a 640x480 picture blown up to the window and wrong for one that is
+already at the window's resolution.
+
+Which picture belongs to which level was **measured, not assumed**, and the
+answer is that the original code was already right. `S_LoadLevelFile(num)` gets
+`num` from `DoLevel(gf[3], ...)`, and `gf[3]` is the file name index out of
+`CMD_LEVEL`, not the slot. The randomizer permutes only the script offset
+table, never the file name table nor the indices pointing into it, so `num` is
+the level's identity in vanilla and in a shuffled campaign alike - checked
+block by block against a vanilla `SCRIPT.DAT` and a shuffled one. `num + 2` is
+therefore the correct picture in both, and the HD file name is taken from the
+same place, `gfFilenameWad[gfFilenameOffset[num]]`. Changing this to
+`gfIdFromSlot[num]` would look like a repair and would in fact index a slot
+table with an identity; there is a comment in `file.cpp` saying so.
+
+The logo picture is the one exception to naming by level. Picture 0 is the
+game's logo screen, and the remaster drew that one per language, so it is the
+only place that picks its HD file by `Gameflow->Language`: `LOGO_DE`, `LOGO_FR`,
+`LOGO_US`, and `LOGO_EU` for English and for every language the remaster did
+not draw a logo for. Those four files carry an alpha channel and are composed
+over black on the way into the texture.
 
 Also in this group:
 

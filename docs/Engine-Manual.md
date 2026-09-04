@@ -305,6 +305,39 @@ wrong audio.
 Start the game once with `-log` if you want to watch it work: `log.txt` then
 carries a line per level saying how many sounds came out of the bank.
 
+### HD loading screens
+
+The same remaster also has the loading pictures redrawn at 1920x1080. Copy them
+into a folder `HD` under `screens\`:
+
+```
+screens\HD\ANDREA1.DDS   ANDREA2  ANDREA3
+screens\HD\JOBY2.DDS     JOBY3  JOBY4  JOBY5
+screens\HD\ANDY1.DDS     ANDY2  ANDY3
+screens\HD\RICH1.DDS     RICH2  RICH3
+screens\HD\TITLE.DDS
+screens\HD\LOGO_DE.DDS   LOGO_EU  LOGO_FR  LOGO_US
+```
+
+Keep the names — the engine looks up the picture by the level's own file name,
+which is what makes it follow the level through a shuffled campaign instead of
+sticking to the slot. `TITLE.DDS` is the title screen; the `LOGO_` files are
+the game's logo, and the one that matches your **Language** row is shown at
+startup.
+
+**Nothing ships**, the same as with the sounds and the soundtracks. Any picture
+you do not copy simply stays the original 640x480 one, so a half-filled folder
+is fine. There is no `RICHCUT2.DDS` in the remaster and none is needed — that
+level keeps Core's picture.
+
+The originals are 4:3 and the engine has always stretched them onto your
+window. The HD ones are 16:9 and are fitted instead: on a 16:9 window they land
+pixel for pixel, and on anything else you get black bars rather than a
+stretched picture.
+
+Start the game once with `-log` to watch it: `log.txt` gets a line per picture
+saying which file was decoded and at what size, or why one was refused.
+
 ---
 
 ## Balance.txt — tuning the whole game

@@ -129,7 +129,26 @@ void HitmanControl(short item_number)
 
 	CreatureAIInfo(item, &info);
 
-	if (item->hit_status && !(GetRandomControl() & 7) && item->item_flags[0] < HITMAN_PANELS)
+	if (item->object_number == CYBORG)
+	{
+		/* The pool cyborg opens his panels with the health he has lost, not
+		 * by the agent's one-in-eight roll per hit frame. That roll fits a
+		 * body that takes fifty to seventy hits; a mortal one with fifty
+		 * health died with a single hand open and every other panel bursting
+		 * at zero (seen in game, 2026-09-04). Same order as the agent's, one
+		 * panel per eleventh of the health bar, all eleven at the end. */
+		const int maxHp = objects[item->object_number].hit_points;
+		int hp = item->hit_points;
+		if (hp < 0) hp = 0;
+		int wanted = maxHp > 0 ? (HITMAN_PANELS * (maxHp - hp)) / maxHp : 0;
+		if (wanted > HITMAN_PANELS) wanted = HITMAN_PANELS;
+		while (item->item_flags[0] < wanted)
+		{
+			item->meshswap_meshbits |= 1 << hitman_nodes[item->item_flags[0]];
+			item->item_flags[0]++;
+		}
+	}
+	else if (item->hit_status && !(GetRandomControl() & 7) && item->item_flags[0] < HITMAN_PANELS)
 	{
 		item->meshswap_meshbits |= 1 << hitman_nodes[item->item_flags[0]];
 		item->item_flags[0]++;

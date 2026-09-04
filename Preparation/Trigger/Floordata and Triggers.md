@@ -518,6 +518,30 @@ sectors — more than enough for a single key.
 fixed place, just triggered at the new spot. That is accepted
 deliberately, because the trigger travels as a whole.
 
+**The flipmap copy (#147b).** The travelling trigger is written into the
+flipmap partner of its NEW room too, by the same rules and the same
+`canAppendTrigger` guard as an enemy waker (section 4g, point 5) — a key
+whose pickup trigger sits in the variant of the room that is currently
+flipped away is a key that cannot be handed in. No flag is needed here:
+unlike a waker, a travelling trigger always wants to be reachable in both
+variants. Counted apart from the wakers, because the two weigh differently
+— a missing waker copy costs one sleeping enemy, a missing copy here costs
+the key.
+
+**Only the writing side is mirrored.** The trigger is taken out of the
+source sector alone, even when that room has a partner. Measured over all
+fifteen vanilla levels (2026-09-04): **not one** pickup trigger lying in a
+room with a flipmap partner has a word-identical twin on the partner's same
+sector. The only pickup that exists in both variants at all is Andy2's item
+29 (rooms 30/113, sector 4,5), and the two entries differ — the base one
+carries an `Object` command, the alternate one does not. So there is never a
+second copy of ours to take away, and removing anything there would delete a
+DIFFERENT vanilla trigger — which is exactly what `ApplyPatch` refuses to do
+(`triggerRemoves`). Today's single coupled item cannot reach the case
+either: key 107 hangs on a pickup trigger in room 192, and room 192 has no
+partner. Should the curation ever add one that does, the run says so in its
+notes instead of leaving it to be found in game.
+
 ## 4f. New enemies: the strictest variant suffices
 
 For the actual purpose — **adding** enemies to the level — no existing

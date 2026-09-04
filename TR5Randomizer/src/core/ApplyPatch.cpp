@@ -88,6 +88,60 @@ namespace
     // of the user's run come out at exactly dy = 0, and a flip that lifts
     // a tile by more than a full sector no longer shows the same place.
     const long kFlipFloorTolerance = 1024;
+
+    // May the flipmap partner take a second copy of a trigger on this
+    // sector? nullptr means yes, otherwise the obstacle in plain words.
+    //
+    // One place for both users - the new enemy waker (triggerAdds) and the
+    // travelling pickup trigger (triggerMoves) ask the identical question,
+    // and two copies of it would be two chances to answer it differently.
+    const char* flipTileTakesTrigger(const Tr5Level& level, int room, int twin, int sx, int sz)
+    {
+        const std::vector<Tr5Room>& rooms = level.rooms();
+        if (room < 0 || room >= static_cast<int>(rooms.size())) return "base room does not exist";
+        if (twin < 0 || twin >= static_cast<int>(rooms.size())) return "partner room does not exist";
+
+        // Copied, not referenced: the caller writes to the level right
+        // after this, and a reference into level.rooms() across that is a
+        // trap waiting for the day the rooms are reparsed.
+        const Tr5Room a = rooms[static_cast<size_t>(room)];
+        const Tr5Room b = rooms[static_cast<size_t>(twin)];
+
+        long bLo = 0, bHi = 0, tLo = 0, tHi = 0;
+        std::vector<Tr5FloorEntry> twinChain;
+        const int twinIdx = level.sectorIndex(twin, sx, sz);
+
+        // Same sector index only means the same place while both rooms
+        // start at the same world corner. Vanilla flip pairs always do, but
+        // that is a measurement, not a law.
+        if (a.originX != b.originX || a.originZ != b.originZ)
+            return "partner room starts at another world corner";
+        if (twinIdx < 0)
+            return "partner room has no such sector";
+        if (!sectorFloorRange(level, twin, sx, sz, tLo, tHi))
+            return "wall";
+        if (!sectorFloorRange(level, room, sx, sz, bLo, bHi))
+            return "base tile has no readable floor";
+        if (std::labs(tLo - bLo) > kFlipFloorTolerance ||
+            std::labs(tHi - bHi) > kFlipFloorTolerance)
+            return "height";
+        if (!level.readChain(twinIdx, twinChain))
+            return "partner floordata unreadable";
+        return Tr5Level::canAppendTrigger(twinChain);
+    }
+
+    // Does this sector carry a trigger at all? Used only to report the
+    // one-sided removal of a travelling trigger - see the moves loop.
+    bool sectorHasTrigger(const Tr5Level& level, int room, int sx, int sz)
+    {
+        const int idx = level.sectorIndex(room, sx, sz);
+        if (idx <= 0) return false;
+        std::vector<Tr5FloorEntry> chain;
+        if (!level.readChain(idx, chain)) return false;
+        for (const Tr5FloorEntry& e : chain)
+            if (e.function == 4 /* FN_TRIGGER */) return true;
+        return false;
+    }
 }
 
 long Patch::shuffleMusicTriggers(Tr5Level& level, uint64_t seed)
@@ -364,14 +418,15 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     for (size_t i = 0; i < moves.size(); ++i)
     {
         const JsonValue& m = moves[i];
+        const int fRoom = static_cast<int>(m["fromRoom"].asInt(-1));
+        const int fSx   = static_cast<int>(m["fromSectorX"].asInt(-1));
+        const int fSz   = static_cast<int>(m["fromSectorZ"].asInt(-1));
+        const int mRoom = static_cast<int>(m["toRoom"].asInt(-1));
+        const int mSx   = static_cast<int>(m["toSectorX"].asInt(-1));
+        const int mSz   = static_cast<int>(m["toSectorZ"].asInt(-1));
+
         std::string moveErr;
-        if (!level.moveTrigger(static_cast<int>(m["fromRoom"].asInt(-1)),
-                               static_cast<int>(m["fromSectorX"].asInt(-1)),
-                               static_cast<int>(m["fromSectorZ"].asInt(-1)),
-                               static_cast<int>(m["toRoom"].asInt(-1)),
-                               static_cast<int>(m["toSectorX"].asInt(-1)),
-                               static_cast<int>(m["toSectorZ"].asInt(-1)),
-                               moveErr))
+        if (!level.moveTrigger(fRoom, fSx, fSz, mRoom, mSx, mSz, moveErr))
         {
             // Abort hard, do not warn: if the item travels but the trigger
             // does not, the key lies elsewhere and its effect stays behind
@@ -381,6 +436,87 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             return false;
         }
         ++report.triggersMoved;
+
+        // --- The travelling trigger into the flipmap partner too (#147b) ---
+        //
+        // The same reasoning as for the enemy waker below, only sharper: a
+        // waker that never fires costs one sleeping enemy, a KEY whose
+        // pickup trigger lies in the wrong variant of the room costs the
+        // key. The trigger is copied out of its NEW home, so the partner
+        // gets exactly the entry that now lies there - reference word,
+        // commands and all.
+        //
+        // Not fatal on failure, and for the same reason as with the waker:
+        // the move itself has succeeded, so the trigger works in the
+        // unflipped variant. Aborting the whole patch over a walled partner
+        // tile would throw away a level that is in itself correct. The skip
+        // is counted and named.
+        const int mTwin = flipPartner(level, mRoom);
+        if (mTwin >= 0)
+        {
+            const char* why = flipTileTakesTrigger(level, mRoom, mTwin, mSx, mSz);
+
+            std::string mirErr;
+            if (!why && !level.copyTrigger(mRoom, mSx, mSz, mTwin, mSx, mSz, mirErr))
+                why = mirErr.c_str();
+
+            if (why)
+            {
+                ++report.triggersMoveMirrorSkipped;
+                char nb[192];
+                std::snprintf(nb, sizeof(nb),
+                              "flipmap: moved trigger %d,%d,%d NOT mirrored into room %d - %s.",
+                              mRoom, mSx, mSz, mTwin, why);
+                report.warnings.push_back(nb);
+            }
+            else
+            {
+                ++report.triggersMoveMirrored;
+                char nb[192];
+                std::snprintf(nb, sizeof(nb),
+                              "flipmap: moved trigger now stands on %d,%d,%d AND in partner room %d.",
+                              mRoom, mSx, mSz, mTwin);
+                report.warnings.push_back(nb);
+            }
+        }
+
+        // The other side of the move is deliberately NOT mirrored: the
+        // trigger is taken out of the source sector only, even when that
+        // room has a partner.
+        //
+        // Measured over all fifteen vanilla levels (FlipProbe, 2026-09-04):
+        // not one PICKUP trigger that lies in a room with a flipmap partner
+        // has a word-identical twin on the partner's same sector. The only
+        // pickup that exists in both variants at all is Andy2's item 29
+        // (rooms 30/113, sector 4,5), and the two entries differ - the base
+        // one carries an Object command, the alternate one does not. So
+        // there is no "second copy of ours" to take away; deleting anything
+        // there would delete a DIFFERENT vanilla trigger, which is exactly
+        // what this file refuses to do a few lines above (triggerRemoves).
+        //
+        // Today's single coupled item cannot even reach the case: Andrea1's
+        // key 107 hangs on a pickup trigger in room 192, and room 192 has no
+        // partner. If the curation ever adds one that does, the run says so
+        // here instead of leaving it to be discovered in game.
+        const int fTwin = flipPartner(level, fRoom);
+        if (fTwin >= 0 && sectorHasTrigger(level, fTwin, fSx, fSz))
+        {
+            char nb[224];
+            std::snprintf(nb, sizeof(nb),
+                          "flipmap: the trigger left %d,%d,%d, but partner room %d carries one on "
+                          "the same sector - it stays (vanilla data is never removed).",
+                          fRoom, fSx, fSz, fTwin);
+            report.warnings.push_back(nb);
+        }
+    }
+
+    if (report.triggersMoveMirrored > 0 || report.triggersMoveMirrorSkipped > 0)
+    {
+        char nb[160];
+        std::snprintf(nb, sizeof(nb),
+                      "flipmap: %d moved triggers mirrored into the partner room, %d skipped (wall/height).",
+                      report.triggersMoveMirrored, report.triggersMoveMirrorSkipped);
+        report.warnings.push_back(nb);
     }
 
     // Donor levels are needed by outfit AND soundAdds and are several
@@ -1086,35 +1222,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             const int twin = flipPartner(level, tRoom);
             if (twin >= 0)
             {
-                // Copied, not referenced: addTrigger below rewrites the
-                // file, and a reference into level.rooms() across that is a
-                // trap waiting for the day the rooms are reparsed.
-                const Tr5Room a = level.rooms()[static_cast<size_t>(tRoom)];
-                const Tr5Room b = level.rooms()[static_cast<size_t>(twin)];
-
-                const char* why = nullptr;
-                long bLo = 0, bHi = 0, tLo = 0, tHi = 0;
-                std::vector<Tr5FloorEntry> twinChain;
-                const int twinIdx = level.sectorIndex(twin, tSx, tSz);
-
-                // Same sector index only means the same place while both
-                // rooms start at the same world corner. Vanilla flip pairs
-                // always do, but that is a measurement, not a law.
-                if (a.originX != b.originX || a.originZ != b.originZ)
-                    why = "partner room starts at another world corner";
-                else if (twinIdx < 0)
-                    why = "partner room has no such sector";
-                else if (!sectorFloorRange(level, twin, tSx, tSz, tLo, tHi))
-                    why = "wall";
-                else if (!sectorFloorRange(level, tRoom, tSx, tSz, bLo, bHi))
-                    why = "base tile has no readable floor";
-                else if (std::labs(tLo - bLo) > kFlipFloorTolerance ||
-                         std::labs(tHi - bHi) > kFlipFloorTolerance)
-                    why = "height";
-                else if (!level.readChain(twinIdx, twinChain))
-                    why = "partner floordata unreadable";
-                else
-                    why = Tr5Level::canAppendTrigger(twinChain);
+                const char* why = flipTileTakesTrigger(level, tRoom, twin, tSx, tSz);
 
                 std::string mirErr;
                 if (!why && !level.addTrigger(twin, tSx, tSz, tKind, tTimer, tOne,

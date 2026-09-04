@@ -45,6 +45,12 @@
 // the coupled move: when an item travels whose pickup trigger also fires
 // something else, the trigger travels along so the effect is preserved.
 //
+// The trigger's new sector is mirrored into the flipmap partner (#147b) the
+// same way a waker is, and by the same rules - no flag is needed, because a
+// travelling trigger always wants to be reachable in both variants. Only
+// the writing side is mirrored: the source sector loses its entry alone,
+// even when its room has a partner. Reason and measurement in apply().
+//
 // triggerAdds sets NEW triggers. That is the way to add enemies to a level:
 // first append the item via itemAdds, then put a trigger on it. The
 // defaults are intentional: kind 0 (TRIGGER), mask 31 and oneShot true are
@@ -87,6 +93,14 @@ struct PatchReport
     // already carries floordata that must not be touched.
     int triggersMirrored = 0;
     int triggersMirrorSkipped = 0;
+    // #147b: the same for a trigger that TRAVELS with its item
+    // (triggerMoves). Counted apart from the wakers on purpose - the two
+    // cases weigh differently. A waker that misses its copy costs one
+    // sleeping enemy; a key whose pickup trigger ends up in the wrong
+    // variant of the room costs the key, so a skip here has to be visible
+    // on its own and must not be diluted by twenty mirrored wakers.
+    int triggersMoveMirrored = 0;
+    int triggersMoveMirrorSkipped = 0;
     int soundsCopied = 0;
     int weaponsCopied = 0;               // weapon slots taken over
     int moveablesCopied = 0;             // cross-enemy slots taken over

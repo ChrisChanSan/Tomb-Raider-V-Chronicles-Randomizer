@@ -1737,6 +1737,7 @@ long S_LoadLevelFile(long num)
 	static long flag = 0;
 	const char* hd_name;
 	long chosen_screen;
+	long hd_logo;
 	char name[80];
 
 	Log(__FUNCTION__);
@@ -1760,6 +1761,7 @@ long S_LoadLevelFile(long num)
 			// this to gfIdFromSlot[num], which would index a slot table with
 			// an identity and break exactly what it looks like it repairs.
 			chosen_screen = num;
+			hd_logo = 0;
 			hd_name = HDScreenLevelName(&gfFilenameWad[gfFilenameOffset[num]]);
 
 			if (!num)
@@ -1777,13 +1779,15 @@ long S_LoadLevelFile(long num)
 					chosen_screen = -2;
 
 					// Picture 0 is the game's logo screen. The remaster drew
-					// that one per language, so this is the only place that
-					// picks its HD file by language rather than by level.
-					hd_name = HDScreenLogo();
+					// that one per language, and drew it WITHOUT the title
+					// picture behind it, so this is the only place that needs
+					// two HD files at once and the only one that picks by
+					// language rather than by level.
+					hd_logo = 1;
 				}
 			}
 
-			if (!LoadScreenHD(hd_name))
+			if (!(hd_logo ? LoadScreenHDLogo() : LoadScreenHD(hd_name)))
 				LoadScreen(chosen_screen + 2, 4);
 		}
 	}

@@ -168,6 +168,31 @@ only place that picks its HD file by `Gameflow->Language`: `LOGO_DE`, `LOGO_FR`,
 not draw a logo for. Those four files carry an alpha channel and are composed
 over black on the way into the texture.
 
+It is also the one picture the engine **builds** rather than loads
+(`HDScreenComposeLogo` in `hdscreen.cpp`, `LoadScreenHDLogo` in
+`LoadSave.cpp`). The remaster draws the wordmark alone on a transparent frame
+and the title picture without any lettering, so the two only ever appeared one
+after the other; the wordmark is now cut out of the `LOGO_` file and blended
+over `TITLE.DDS` at load time, horizontally centred with the top edge of the
+lettering one seventysecond of the picture height down. Whichever of the two
+files is missing simply drops out, so a half-filled `screens\HD\` still works.
+Two bounding boxes are involved, and mixing them up is the trap: what has to be
+**drawn** is every pixel with any alpha at all, because the lettering sits in a
+soft black halo reaching about 20 pixels past it on every side, but what has to
+be **placed** is only the lettering, alpha above 128. The blend premultiplies
+before it interpolates - the files store straight alpha, so interpolating the
+colour would drag the black of the transparent pixels into the letter edges and
+leave a seam. All of this was measured, and none of it needed the game:
+`DdsProbe -logo <title> <logo> <out.png>` compiles the same `hdscreen.cpp`
+(with `HDSCREEN_NO_ENGINE`, which is why that one file is built without the
+precompiled header) and writes the finished screen as a PNG, reporting the
+boxes it used. Against the composite the user built by hand in an image editor,
+the mark comes out the same size to within 0.6 % - his is 1020 pixels wide at
+every ink threshold from 2 % to 20 % of the peak, the logo file's is 1020, so
+he moved it and did not scale it - and its top edge lands on the same row, 15.
+The only deliberate difference is that his sits 30 pixels right of centre and
+this one is centred.
+
 Also in this group:
 
 - **Controller support.** `DXUpdateJoystick` was a stub returning zeros despite

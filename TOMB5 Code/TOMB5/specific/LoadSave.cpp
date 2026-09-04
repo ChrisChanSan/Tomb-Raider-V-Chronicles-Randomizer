@@ -1516,10 +1516,23 @@ void LoadScreen(long screen, long pathNum)
 		Log("WHORE!");
 }
 
-// The HD counterpart of LoadScreen(): screens\HD\<name>.DDS instead of a
-// picture out of SCREENS.STR. Returns 0 when there is no usable file, and the
-// caller then loads the original picture - so a player without the remaster
-// notices nothing at all.
+// Is the HD path usable at all? The decoder checks its own tables once; a
+// player whose build somehow got them wrong keeps Core's pictures rather than
+// a screen full of noise.
+static long LoadScreenHDReady()
+{
+	const char* why;
+
+	if (BC7SelfTest(&why))
+		return 1;
+
+	Log("HD screen: BC7 tables inconsistent (%s) - using the original pictures", why);
+	return 0;
+}
+
+// Puts already decoded pixels into the mono screen texture. Does not free
+// them - the caller owns the buffer, because LoadScreenHDLogo() below composes
+// two pictures into one before it gets here.
 //
 // Direct3D 9 has no BC7, so bc7.cpp unpacks the blocks and the pixels go into
 // a plain A8R8G8B8 texture. That texture is square and a power of two: 1920 is
@@ -1529,29 +1542,16 @@ void LoadScreen(long screen, long pathNum)
 // corner and S_DisplayMonoScreen() addresses it with texture coordinates - the
 // engine counts those in 256ths, and 1920 and 1080 out of 2048 come out as
 // exactly 240 and 135, so nothing is lost to rounding.
-long LoadScreenHD(const char* name)
+static long LoadScreenHDPixels(ulong* px, long w, long h)
 {
 	D3DCAPS9 caps;
 	D3DLOCKED_RECT rect;
 	LPDIRECT3DTEXTURE9 tex9;
-	ulong* px;
 	ulong* src;
 	ulong* dst;
-	const char* why;
-	long w, h, side, a;
+	long side, a;
 
-	if (!name || !*name)
-		return 0;
-
-	if (!BC7SelfTest(&why))
-	{
-		Log("HD screen: BC7 tables inconsistent (%s) - using the original pictures", why);
-		return 0;
-	}
-
-	px = HDScreenRead(name, 2048, &w, &h);
-
-	if (!px)
+	if (!px || w <= 0 || h <= 0)
 		return 0;
 
 	for (side = 32; side < w || side < h; side <<= 1);
@@ -1560,14 +1560,12 @@ long LoadScreenHD(const char* name)
 		(long)caps.MaxTextureWidth < side || (long)caps.MaxTextureHeight < side)
 	{
 		Log("HD screen: device cannot hold a %d x %d texture - using the original picture", side, side);
-		free(px);
 		return 0;
 	}
 
 	if (FAILED(App.dx.lpD3DDevice->CreateTexture(side, side, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &tex9, 0)))
 	{
 		Log("HD screen: CreateTexture(%d) failed - using the original picture", side);
-		free(px);
 		return 0;
 	}
 
@@ -1575,7 +1573,6 @@ long LoadScreenHD(const char* name)
 	{
 		Log("HD screen: LockRect failed - using the original picture");
 		tex9->Release();
-		free(px);
 		return 0;
 	}
 
@@ -1615,7 +1612,6 @@ long LoadScreenHD(const char* name)
 	}
 
 	tex9->UnlockRect(0);
-	free(px);
 
 	if (MonoScreen.tex)
 		MonoScreen.tex->Release();
@@ -1627,6 +1623,76 @@ long LoadScreenHD(const char* name)
 	MonoScreenHD = 1;
 	MonoScreenOn = 2;
 	return 1;
+}
+
+// The HD counterpart of LoadScreen(): screens\HD\<name>.DDS instead of a
+// picture out of SCREENS.STR. Returns 0 when there is no usable file, and the
+// caller then loads the original picture - so a player without the remaster
+// notices nothing at all.
+long LoadScreenHD(const char* name)
+{
+	ulong* px;
+	long w, h, ok;
+
+	if (!name || !*name || !LoadScreenHDReady())
+		return 0;
+
+	px = HDScreenRead(name, 2048, &w, &h);
+
+	if (!px)
+		return 0;
+
+	ok = LoadScreenHDPixels(px, w, h);
+	free(px);
+	return ok;
+}
+
+// The title screen, picture 0: the title picture with the localised wordmark
+// blended over it, centred near the top edge.
+//
+// The remaster keeps the two apart - TITLE.DDS is Lara in front of the
+// lightning with no lettering at all, and the wordmark sits alone on a
+// transparent frame in LOGO_DE/EU/FR/US.DDS - so before this the logo screen
+// showed the wordmark on black. Putting them together is what the user did by
+// hand in an image editor; his file cannot be shipped, because it is remaster
+// material, so the engine does the same job at load time from the player's own
+// two files. Whatever is missing simply drops out of the result.
+long LoadScreenHDLogo()
+{
+	const char* logoName;
+	ulong* title;
+	ulong* logo;
+	long tw, th, lw, lh, ok;
+
+	if (!LoadScreenHDReady())
+		return 0;
+
+	logoName = HDScreenLogo();
+	title = HDScreenRead("TITLE", 2048, &tw, &th);
+	logo = HDScreenRead(logoName, 2048, &lw, &lh);
+
+	if (title && logo)
+	{
+		if (HDScreenComposeLogo(title, tw, th, logo, lw, lh, !strcmp(logoName, "LOGO_US")))
+			Log("HD screen: title picture with the %s wordmark blended over it", logoName);
+		else
+			Log("HD screen: %s draws nothing - showing the title picture on its own", logoName);
+	}
+	else if (title)
+		Log("HD screen: no %s - showing the title picture on its own", logoName);
+	else if (logo)
+		Log("HD screen: no TITLE - showing %s on black", logoName);
+
+	if (title)
+		ok = LoadScreenHDPixels(title, tw, th);
+	else if (logo)
+		ok = LoadScreenHDPixels(logo, lw, lh);
+	else
+		ok = 0;
+
+	free(title);
+	free(logo);
+	return ok;
 }
 
 void ReleaseScreen()

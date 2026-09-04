@@ -10,11 +10,20 @@
  * Foundation, either version 3 of the License, or (at your option) any later
  * version. See the LICENSE file at the root of this source tree.
  */
+// This file is built WITHOUT the precompiled header (see tomb5.vcxproj, the
+// same setting bc7.cpp has), because the tool build below must be able to
+// leave pch.h out altogether - and with /Yu the compiler throws away
+// everything in front of the pch include, conditionals included.
+#ifdef HDSCREEN_NO_ENGINE
+#include <stdlib.h>
+#include "hdscreen.h"
+#else
 #include "../tomb5/pch.h"
 #include "hdscreen.h"
 #include "bc7.h"
 #include "function_stubs.h"
 #include "../game/gameflow.h"
+#endif
 
 // Optional high resolution loading screens.
 //
@@ -38,6 +47,8 @@
 //
 // Direct3D 9 predates BC7 by a decade and cannot sample it, so the blocks are
 // unpacked on the CPU in bc7.cpp and handed over as plain 32 bit pixels.
+
+#ifndef HDSCREEN_NO_ENGINE
 
 static void HDScreenPath(char* dest, const char* name)
 {
@@ -147,4 +158,250 @@ ulong* HDScreenRead(const char* name, long maxSide, long* width, long* height)
 
 	Log("HD screen: %s decoded, %d x %d", path, *width, *height);
 	return px;
+}
+
+#endif	// HDSCREEN_NO_ENGINE
+
+// Everything below composes two decoded pictures and touches nothing else -
+// no engine, no logging, no allocation - so DdsProbe can compile it and prove
+// the result as a PNG without starting the game.
+
+// Alpha below this counts as nothing at all. The remaster's logos fade out
+// into a wide, almost empty halo; without a floor the box would be the whole
+// 1920x1080 frame and the mark would end up a third of its proper size.
+#define HD_LOGO_ALPHA_FLOOR	8
+
+// ...and the alpha the lettering itself starts at. LOGO_DE has 51450 fully
+// opaque pixels, so the letters are solid and this threshold is nowhere near
+// a cliff: the box at alpha > 128 and the box at alpha > 224 differ by one
+// pixel in width and two in height (DdsProbe -logo). See the placement
+// comment in HDScreenComposeLogo for why two boxes are needed at all.
+#define HD_LOGO_ALPHA_INK	128
+
+// How far down the picture the top edge of the lettering sits, as a divisor
+// of the picture height: 1080 / 72 = 15 pixels. Measured off the composite
+// the user built by hand (TITLE_DE), whose lettering starts at y = 15.
+#define HD_LOGO_TOP_DIV		72
+
+static long HDScreenBoxAbove(const ulong* px, long w, long h, long minAlpha,
+	long* x0, long* y0, long* x1, long* y1)
+{
+	const ulong* row;
+	long x, y, loX, loY, hiX, hiY;
+
+	if (!px || w <= 0 || h <= 0)
+		return 0;
+
+	loX = w;
+	loY = h;
+	hiX = -1;
+	hiY = -1;
+
+	for (y = 0; y < h; y++)
+	{
+		row = px + y * w;
+
+		for (x = 0; x < w; x++)
+		{
+			if ((long)((row[x] >> 24) & 0xFF) <= minAlpha)
+				continue;
+
+			if (x < loX)
+				loX = x;
+
+			if (x > hiX)
+				hiX = x;
+
+			if (y < loY)
+				loY = y;
+
+			hiY = y;		// rows are walked top down
+		}
+	}
+
+	if (hiX < 0)
+		return 0;
+
+	*x0 = loX;
+	*y0 = loY;
+	*x1 = hiX;
+	*y1 = hiY;
+	return 1;
+}
+
+long HDScreenAlphaBox(const ulong* px, long w, long h, long* x0, long* y0, long* x1, long* y1)
+{
+	return HDScreenBoxAbove(px, w, h, HD_LOGO_ALPHA_FLOOR, x0, y0, x1, y1);
+}
+
+// One bilinear tap, returned PREMULTIPLIED (r*a, g*a, b*a, a). Interpolating
+// straight colour across the edge of the mark would drag the colour of the
+// transparent pixels next to it - black in these files - into the result and
+// leave a dark seam around every letter; premultiplying first is the standard
+// cure and costs nothing here. Sampling is clamped to the whole picture, not
+// to the box, so the box edge keeps the soft fade that lies just outside it.
+static ulong HDScreenSample(const ulong* px, long w, long h, float u, float v)
+{
+	const ulong* p[4];
+	long ix, iy, jx, jy, i;
+	float fu, fv, wt[4], r, g, b, a;
+
+	// Truncation is not a floor for negative coordinates, and the left and
+	// top edge of the box do sample half a pixel outside it.
+	ix = (long)u;
+
+	if ((float)ix > u)
+		ix--;
+
+	iy = (long)v;
+
+	if ((float)iy > v)
+		iy--;
+
+	fu = u - (float)ix;
+	fv = v - (float)iy;
+	jx = ix + 1;
+	jy = iy + 1;
+
+	if (ix < 0) ix = 0; else if (ix > w - 1) ix = w - 1;
+	if (jx < 0) jx = 0; else if (jx > w - 1) jx = w - 1;
+	if (iy < 0) iy = 0; else if (iy > h - 1) iy = h - 1;
+	if (jy < 0) jy = 0; else if (jy > h - 1) jy = h - 1;
+
+	p[0] = px + iy * w + ix;
+	p[1] = px + iy * w + jx;
+	p[2] = px + jy * w + ix;
+	p[3] = px + jy * w + jx;
+	wt[0] = (1.0F - fu) * (1.0F - fv);
+	wt[1] = fu * (1.0F - fv);
+	wt[2] = (1.0F - fu) * fv;
+	wt[3] = fu * fv;
+	r = 0;
+	g = 0;
+	b = 0;
+	a = 0;
+
+	for (i = 0; i < 4; i++)
+	{
+		float ta = (float)((*p[i] >> 24) & 0xFF) * (1.0F / 255.0F);
+
+		a += wt[i] * ta * 255.0F;
+		r += wt[i] * ta * (float)((*p[i] >> 16) & 0xFF);
+		g += wt[i] * ta * (float)((*p[i] >> 8) & 0xFF);
+		b += wt[i] * ta * (float)(*p[i] & 0xFF);
+	}
+
+	return ((ulong)(a + 0.5F) << 24) | ((ulong)(r + 0.5F) << 16) |
+		((ulong)(g + 0.5F) << 8) | (ulong)(b + 0.5F);
+}
+
+// Builds the picture the title screen used to be a separate file for: the
+// title picture with the localised wordmark over it, horizontally centred and
+// just under the top edge.
+//
+// The remaster draws the wordmark alone on a transparent 1920x1080 frame
+// (LOGO_DE.DDS and its three siblings) and the title picture without it
+// (TITLE.DDS), so the two only ever appeared one after the other. Putting
+// them together is what the user did by hand; a hand made file cannot ship,
+// because it is remaster material - so the engine does it at load time out of
+// the player's own two files instead.
+//
+// The mark keeps the size it has in its own picture, scaled by the ratio of
+// the two picture widths - for the normal case of two 1920x1080 files that is
+// exactly 1:1, and the resampling below is then an exact copy. Measured
+// against the user's hand built composite: his mark is 1020 pixels wide where
+// the logo file's is 1020, at every ink threshold from 2% to 20% of the peak,
+// so he moved the mark and did not scale it.
+//
+// TWO boxes, not one. What has to be DRAWN is everything with any alpha at
+// all: the lettering sits in a soft black halo that reaches about 20 pixels
+// past it on every side. What has to be PLACED is only what the eye can see,
+// the lettering. Anchoring the drawn box instead would hand those 20 pixels
+// of invisible halo to the top margin and push the visible mark that much
+// further down than the picture the user built by hand.
+long HDScreenComposeLogo(ulong* base, long bw, long bh, const ulong* logo, long lw, long lh, long leftAlign)
+{
+	ulong* bd;
+	ulong px;
+	long sx0, sy0, sx1, sy1;
+	long ix0, iy0, ix1, iy1;
+	long srcW, srcH, dstW, dstH, dstX, dstY;
+	long x, y, i, a, ia, ch[4];
+	float su, sv;
+
+	if (!base || !logo || bw <= 0 || bh <= 0 || lw <= 0 || lh <= 0)
+		return 0;
+
+	if (!HDScreenAlphaBox(logo, lw, lh, &sx0, &sy0, &sx1, &sy1))
+		return 0;
+
+	// A logo that is nothing but halo has no lettering to line up on; take
+	// the drawn box for both jobs rather than giving up.
+	if (!HDScreenBoxAbove(logo, lw, lh, HD_LOGO_ALPHA_INK, &ix0, &iy0, &ix1, &iy1))
+	{
+		ix0 = sx0;
+		iy0 = sy0;
+		ix1 = sx1;
+		iy1 = sy1;
+	}
+
+	srcW = sx1 - sx0 + 1;
+	srcH = sy1 - sy0 + 1;
+	dstW = (srcW * bw + lw / 2) / lw;
+	dstH = (srcH * bw + lw / 2) / lw;		// one uniform scale, from the width
+
+	if (dstW < 1 || dstH < 1)
+		return 0;
+
+	// Centre the lettering across the picture and put its top edge one
+	// seventysecond of the way down; the halo follows and is clipped where it
+	// runs off the picture, exactly as it is in the user's own composite.
+	// The US emblem is three lines tall and would sit on Lara's brow when
+	// centred; the user's own composition puts it in the top left corner,
+	// the three wordmarks top centre (2026-09-04). Margin: 1/80 of the width.
+	if (leftAlign)
+		dstX = bw / 80 - ((ix0 - sx0) * bw + lw / 2) / lw;
+	else
+		dstX = (bw - ((ix1 - ix0 + 1) * bw + lw / 2) / lw) / 2 - ((ix0 - sx0) * bw + lw / 2) / lw;
+	dstY = bh / HD_LOGO_TOP_DIV - ((iy0 - sy0) * bw + lw / 2) / lw;
+
+	for (y = 0; y < dstH; y++)
+	{
+		if (dstY + y < 0 || dstY + y >= bh)
+			continue;
+
+		sv = (float)sy0 + ((float)y + 0.5F) * (float)srcH / (float)dstH - 0.5F;
+
+		for (x = 0; x < dstW; x++)
+		{
+			if (dstX + x < 0 || dstX + x >= bw)
+				continue;
+
+			su = (float)sx0 + ((float)x + 0.5F) * (float)srcW / (float)dstW - 0.5F;
+			px = HDScreenSample(logo, lw, lh, su, sv);
+			a = (long)(px >> 24);
+
+			if (!a)
+				continue;
+
+			// Standard "over": the tap is already premultiplied, so the base
+			// only has to be faded by what is left of the alpha. Rounding in
+			// the tap can leave a channel one above its own alpha, which
+			// would carry into the byte above, so every channel is clamped.
+			ia = 255 - a;
+			bd = base + (dstY + y) * bw + dstX + x;
+			ch[0] = a + (long)((*bd >> 24) & 0xFF) * ia / 255;
+			ch[1] = (long)((px >> 16) & 0xFF) + (long)((*bd >> 16) & 0xFF) * ia / 255;
+			ch[2] = (long)((px >> 8) & 0xFF) + (long)((*bd >> 8) & 0xFF) * ia / 255;
+			ch[3] = (long)(px & 0xFF) + (long)(*bd & 0xFF) * ia / 255;
+
+			for (i = 0; i < 4; i++)
+				if (ch[i] > 255)
+					ch[i] = 255;
+
+			*bd = ((ulong)ch[0] << 24) | ((ulong)ch[1] << 16) | ((ulong)ch[2] << 8) | (ulong)ch[3];
+		}
+	}
+
+	return 1;
 }

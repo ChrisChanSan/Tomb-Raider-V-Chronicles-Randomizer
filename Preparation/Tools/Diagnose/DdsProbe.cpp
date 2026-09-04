@@ -7,9 +7,17 @@
  * right here is a picture that comes out right in the game - without starting
  * the game.
  *
+ * The second job is the title screen. The engine composes it out of two of
+ * those files at load time - TITLE.DDS plus the wordmark cut out of the
+ * language's LOGO_xx.DDS - and -logo runs that composition here, through the
+ * very same routine (hdscreen.cpp, compiled with HDSCREEN_NO_ENGINE), so the
+ * picture in the PNG is the picture the game will show.
+ *
  * Usage:
  *   DdsProbe -selftest              table consistency check only
  *   DdsProbe <in.dds> <out.png>     decode, report, write
+ *   DdsProbe -logo <title.dds> <logo.dds> <out.png>
+ *                                   compose the title screen, report, write
  *
  * The report lists which BC7 modes and how many distinct partitions the file
  * actually exercised. That matters: a partition table row that is never used
@@ -25,6 +33,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "bc7.h"
+#define HDSCREEN_NO_ENGINE
+#include "hdscreen.h"
 #include "zlib.h"
 
 static unsigned char* ReadWhole(const char* path, unsigned long* size)
@@ -212,6 +222,181 @@ static void Census(const unsigned char* p, unsigned long size, long w, long h)
 	printf("  partitions used  : %ld of 64 two subset, %ld of 64 three subset\n", n2, n3);
 }
 
+// Decode one file and say what came out. Returns the pixels or 0.
+static unsigned long* Decode(const char* path, long* w, long* h)
+{
+	unsigned char* file;
+	unsigned long size;
+	unsigned long* px;
+	const char* why;
+
+	file = ReadWhole(path, &size);
+
+	if (!file)
+	{
+		printf("cannot read %s\n", path);
+		return 0;
+	}
+
+	px = BC7DecodeDDS(file, size, 4096, w, h, &why);
+	free(file);
+
+	if (!px)
+	{
+		printf("REFUSED %s: %s\n", path, why);
+		return 0;
+	}
+
+	printf("file             : %s (%lu bytes), %ld x %ld\n", path, size, *w, *h);
+	return px;
+}
+
+// The bounding box at four alpha thresholds. The engine draws everything
+// above 8 and lines the mark up on everything above 128, so these numbers say
+// how much of the box is the soft halo around the lettering and how much is
+// the lettering itself.
+static void BoxCensus(const unsigned long* px, long w, long h)
+{
+	static const long thresh[4] = { 8, 64, 128, 224 };
+	long t, x, y, x0, y0, x1, y1;
+
+	for (t = 0; t < 4; t++)
+	{
+		x0 = w; y0 = h; x1 = -1; y1 = -1;
+
+		for (y = 0; y < h; y++)
+			for (x = 0; x < w; x++)
+			{
+				if ((long)((px[y * w + x] >> 24) & 0xFF) <= thresh[t])
+					continue;
+
+				if (x < x0) x0 = x;
+				if (x > x1) x1 = x;
+				if (y < y0) y0 = y;
+				y1 = y;
+			}
+
+		if (x1 < 0)
+			printf("  alpha > %-3ld      : nothing\n", thresh[t]);
+		else
+			printf("  alpha > %-3ld      : x %ld..%ld (%ld wide, centre %ld), y %ld..%ld (%ld high)\n",
+				thresh[t], x0, x1, x1 - x0 + 1, (x0 + x1) / 2, y0, y1, y1 - y0 + 1);
+	}
+}
+
+// Straight or premultiplied? In a premultiplied picture no channel can ever be
+// above its own alpha. One that is proves the file is straight, and that the
+// compositor has to premultiply before it interpolates.
+static void AlphaKind(const unsigned long* px, long w, long h)
+{
+	long x, y, a, opaque, edge, notPre;
+
+	opaque = 0;
+	edge = 0;
+	notPre = 0;
+
+	for (y = 0; y < h; y++)
+		for (x = 0; x < w; x++)
+		{
+			unsigned long c = px[y * w + x];
+
+			a = (long)((c >> 24) & 0xFF);
+
+			if (a == 255)
+			{
+				opaque++;
+				continue;
+			}
+
+			if (!a)
+				continue;
+
+			edge++;
+
+			if ((long)((c >> 16) & 0xFF) > a || (long)((c >> 8) & 0xFF) > a || (long)(c & 0xFF) > a)
+				notPre++;
+		}
+
+	printf("  alpha shape      : %ld opaque, %ld partial, of those %ld with a channel above alpha\n",
+		opaque, edge, notPre);
+	printf("  -> stored as     : %s\n", notPre ? "straight alpha (premultiply before blending)" : "premultiplied or too flat to tell");
+}
+
+// -logo: title picture + wordmark -> PNG, through the engine's own routine.
+static int ComposeLogo(const char* titlePath, const char* logoPath, const char* outPath)
+{
+	unsigned long* title;
+	unsigned long* logo;
+	unsigned long* blank;
+	long tw, th, lw, lh, x0, y0, x1, y1;
+	long leftAlign;
+	const char* logoBase;
+
+	// The engine decides by the logo's name; mirror that here so the PNG
+	// shows what the game will show (US top left, the rest top centre).
+	logoBase = strrchr(logoPath, '/');
+	if (!logoBase) logoBase = strrchr(logoPath, 92);
+	logoBase = logoBase ? logoBase + 1 : logoPath;
+	leftAlign = _strnicmp(logoBase, "LOGO_US", 7) == 0;
+	title = Decode(titlePath, &tw, &th);
+
+	if (!title)
+		return 1;
+
+	logo = Decode(logoPath, &lw, &lh);
+
+	if (!logo)
+	{
+		free(title);
+		return 1;
+	}
+
+	printf("logo picture, as it lies in the file:\n");
+	BoxCensus(logo, lw, lh);
+	AlphaKind(logo, lw, lh);
+
+	if (HDScreenAlphaBox(logo, lw, lh, &x0, &y0, &x1, &y1))
+		printf("  engine cuts      : x %ld..%ld, y %ld..%ld (%ld x %ld)\n",
+			x0, x1, y0, y1, x1 - x0 + 1, y1 - y0 + 1);
+	else
+		printf("  engine cuts      : nothing - the logo file is empty\n");
+
+	// Where it lands: compose onto an empty frame of the base picture's size
+	// and measure that, so the answer comes from the routine itself and not
+	// from a second copy of its arithmetic. The alpha > 128 row is the one to
+	// read - that is the lettering, the rest is halo.
+	blank = (unsigned long*)calloc((size_t)tw * th, sizeof(unsigned long));
+
+	if (blank)
+	{
+		if (HDScreenComposeLogo(blank, tw, th, logo, lw, lh, leftAlign))
+		{
+			printf("logo picture, where it lands on the title:\n");
+			BoxCensus(blank, tw, th);
+		}
+
+		free(blank);
+	}
+
+	if (!HDScreenComposeLogo(title, tw, th, logo, lw, lh, leftAlign))
+		printf("compose          : no wordmark found - the title picture is unchanged\n");
+	else
+		printf("compose          : wordmark blended over the title picture\n");
+
+	free(logo);
+
+	if (!WritePng(outPath, title, tw, th))
+	{
+		printf("cannot write %s\n", outPath);
+		free(title);
+		return 1;
+	}
+
+	printf("wrote            : %s\n", outPath);
+	free(title);
+	return 0;
+}
+
 int main(int argc, char** argv)
 {
 	unsigned char* file;
@@ -231,9 +416,13 @@ int main(int argc, char** argv)
 	if (argc == 2 && !strcmp(argv[1], "-selftest"))
 		return 0;
 
+	if (argc == 5 && !strcmp(argv[1], "-logo"))
+		return ComposeLogo(argv[2], argv[3], argv[4]);
+
 	if (argc != 3)
 	{
 		printf("usage: DdsProbe <in.dds> <out.png>\n");
+		printf("       DdsProbe -logo <title.dds> <logo.dds> <out.png>\n");
 		printf("       DdsProbe -selftest\n");
 		return 1;
 	}

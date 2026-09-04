@@ -321,9 +321,11 @@ screens\HD\LOGO_DE.DDS   LOGO_EU  LOGO_FR  LOGO_US
 
 Keep the names — the engine looks up the picture by the level's own file name,
 which is what makes it follow the level through a shuffled campaign instead of
-sticking to the slot. `TITLE.DDS` is the title screen; the `LOGO_` files are
-the game's logo, and the one that matches your **Language** row is shown at
-startup.
+sticking to the slot. The startup screen is built out of two of these files:
+`TITLE.DDS` is the picture, and the wordmark is cut out of the `LOGO_` file
+that matches your **Language** row and blended over it, centred just under the
+top edge — the remaster keeps the two apart, and either one on its own is shown
+as it is if you did not copy the other.
 
 **Nothing ships**, the same as with the sounds and the soundtracks. Any picture
 you do not copy simply stays the original 640x480 one, so a half-filled folder

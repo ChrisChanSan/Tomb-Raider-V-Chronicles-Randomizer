@@ -31,6 +31,10 @@ void LoadScreen(long screen, long pathNum);
 // after the level, decoded from BC7. Returns 0 when there is none, and the
 // caller then falls back to LoadScreen().
 long LoadScreenHD(const char* name);
+
+// The same for the title screen, which is composed out of two files:
+// screens\HD\TITLE plus the wordmark cut out of the language's LOGO_xx.
+long LoadScreenHDLogo();
 void ReleaseScreen();
 void DrawLoadingScreen();
 long GetSaveLoadFiles();

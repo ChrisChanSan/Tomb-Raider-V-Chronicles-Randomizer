@@ -84,7 +84,7 @@ are not versioned and drift silently.
 | `Tomb5 Limits\` | the engine's fixed buffers, re-measured, including the ones this project raised. |
 | `TR3-5 Test Area\` | the porting notes for the four Tomb Raider III guests, with what each became. |
 | `Verification.md` | how to check things here, and how the obvious way of checking has failed before. |
-`HD-Patch-Plan.md` - the measured plan for #123, painting the Remaster's art into the classic pages: findings, stages, proofs, decisions.
+| `HD-Patch-Plan.md` | the measured plan for #123, painting the Remaster's art into the classic pages: findings, stages, proofs, decisions. |
 | `Outfits.txt` | the wardrobe: what travels, why the head stays, and the LaraType byte. |
 | `Contract.md` | the six places where engine and randomizer must be changed together. |
 | `Credits\`, `Tr3Checksums.csv` | attribution, and the checksums of the TR3 files the guests were ported from. |

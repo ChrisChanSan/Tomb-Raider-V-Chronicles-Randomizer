@@ -358,6 +358,28 @@ enum object_types
 	MESHSWAP_CROSS_GUARD,		// 465, from joby3
 	MESHSWAP_CROSS_MAFIA,		// 466, from joby3
 	MESHSWAP_CROSS_GUARD2,		// 467, from joby3 (Joby guard, slot 460)
+	MESHSWAP_CROSS_HITMAN,		// 468, from rich3 (the cyborg's 20 panels)
+
+	// CYBORG: the VCI cyborg as a pool enemy (#146). Slot 67 stays exactly
+	// what Core built: a puzzle piece of Red Alert that CANNOT be shot
+	// (setup.cpp sets undead there), dies only in the gas or by the water
+	// short circuit, and whose electrocuted body has to lie in the corridor
+	// for good. None of that can travel into a foreign level - a body that
+	// never fades leaks its AI slot, and an enemy no weapon can touch is
+	// not an enemy. So the pool gets its own slot with the same model and
+	// the same control: mortal, with a death of its own, and without the
+	// two rich3-only death triggers.
+	//
+	// Same reasoning as ROMAN_GOD2 above, only the other way round: there
+	// one slot had to hold two models, here one model has to serve two sets
+	// of rules.
+	CYBORG,
+
+	// The crane guy's swap half (#146). He was the last of the soldier
+	// family still pulling meshes 10/13 raw out of MESHSWAP1 - correct in
+	// joby2, where MESHSWAP1 is his own, and wrong wherever the randomizer
+	// carries him. Same warehouse role as the six above.
+	MESHSWAP_CROSS_CRANEGUY,	// 470, from joby2
 
 	NUMBER_OBJECTS
 };

@@ -193,7 +193,11 @@ void InitialiseSlot(short item_number, long slot)
 		creature->LOT.zone = FLYER_ZONE;
 		break;
 
+	// The pool cyborg (#146) moves exactly like the agent - same model,
+	// same animations, and he is the only enemy in the game that can use a
+	// monkey swing, which is what can_monkey below is for.
 	case HITMAN:
+	case CYBORG:
 		creature->LOT.step = 1024;
 		creature->LOT.drop = -1024;
 		creature->LOT.can_jump = 1;

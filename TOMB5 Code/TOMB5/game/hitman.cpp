@@ -30,13 +30,29 @@
 static BITE_INFO hitman_gun = { 0,300,64, 7 };
 static char hitman_nodes[16] = { 15, 14, 13, 6, 5, 12, 7, 4, 10, 11, 19, 0, 0, 0, 0, 0 };
 
+/*
+ * Eleven of the sixteen entries above are real damage panels; the rest are
+ * padding. The routine below counts them out one per hit into
+ * meshswap_meshbits, so eleven is also the cap it stops at.
+ */
+#define HITMAN_PANELS	11
+
+/*
+ * How long the cyborg (#146) lies in his electrocution before the body is
+ * released. The chain +69 (57 frames) -> +70 (35) -> +71 (25, looping)
+ * measures 92 frames before it starts repeating, so 150 shows the whole
+ * thing once and holds the loop for another two seconds - five seconds at
+ * the engine's 30 frames. Only then does CreatureDie hand him to the fade.
+ */
+#define CYBORG_DEATH_FRAMES	150
+
 void InitialiseHitman(short item_number)
 {
 	ITEM_INFO* item;
 
 	item = &items[item_number];
 	InitialiseCreature(item_number);
-	item->anim_number = objects[HITMAN].anim_index + 4;
+	item->anim_number = objects[item->object_number].anim_index + 4;
 	item->frame_number = anims[item->anim_number].frame_base;
 	item->current_anim_state = 1;
 	item->goal_anim_state = 1;
@@ -113,7 +129,7 @@ void HitmanControl(short item_number)
 
 	CreatureAIInfo(item, &info);
 
-	if (item->hit_status && !(GetRandomControl() & 7) && item->item_flags[0] < 11)
+	if (item->hit_status && !(GetRandomControl() & 7) && item->item_flags[0] < HITMAN_PANELS)
 	{
 		item->meshswap_meshbits |= 1 << hitman_nodes[item->item_flags[0]];
 		item->item_flags[0]++;
@@ -148,10 +164,20 @@ void HitmanControl(short item_number)
 			{
 				GetJointAbsPosition(item, &pos2, 6);
 
-				if (room[item->room_number].flags & ROOM_UNDERWATER && item->hit_points > 0)
+				// The water short circuit is Red Alert's puzzle, so slot 67
+				// only (#146). It is not a death but a state: the chain it
+				// starts carries no KillItem, the body stays active for the
+				// rest of the level, and the branch further down makes the
+				// water lethal for Lara from then on. That is the point in
+				// rich3 and a trap anywhere else - a cyborg the randomizer
+				// happens to place near water would poison the lake and
+				// hold his AI slot for good. The pool cyborg (469) keeps
+				// the sparks, which are decoration, and dies of his hit
+				// points like everyone else.
+				if (item->object_number == HITMAN && room[item->room_number].flags & ROOM_UNDERWATER && item->hit_points > 0)
 				{
 					item->current_anim_state = 43;
-					item->anim_number = objects[HITMAN].anim_index + 69;
+					item->anim_number = objects[item->object_number].anim_index + 69;
 					item->frame_number = anims[item->anim_number].frame_base;
 					item->hit_points = 0;
 					DropBaddyPickups(item);
@@ -166,7 +192,57 @@ void HitmanControl(short item_number)
 
 	if (item->hit_points <= 0)
 	{
-		if (item->current_anim_state == 43 && !lara.burn)
+		/*
+		 * The pool cyborg's death (#146). Slot 67 never gets here through
+		 * gunfire - setup.cpp marks him undead and larafire.cpp drops the
+		 * damage on the floor - so this whole branch belongs to 469 alone
+		 * and cannot touch Red Alert.
+		 *
+		 * He dies the way the level kills him: the electrocution chain
+		 * +69 -> +70 -> +71, all eleven damage panels torn open at once
+		 * and the spark counter pinned at its maximum, so the body crackles
+		 * while it lies. What the chain does NOT carry is a KillItem
+		 * command - Core never needed one, because in rich3 the body is
+		 * meant to stay. Hence the frame counter and CreatureDie at the
+		 * end of it; without that the item would loop in +71 forever and
+		 * hold its AI slot.
+		 *
+		 * CreatureDie alone does not fade the body - it frees the slot,
+		 * drops what he carried and marks him dead for the savegame, but
+		 * after_death is what draw.cpp counts up. A normal enemy gets that
+		 * from animation command 4 at the end of its death animation
+		 * (control.cpp), and this chain has none, so it is set here.
+		 */
+		if (item->object_number == CYBORG)
+		{
+			if (item->current_anim_state != 43)
+			{
+				item->current_anim_state = 43;
+				item->goal_anim_state = 43;
+				item->anim_number = objects[item->object_number].anim_index + 69;
+				item->frame_number = anims[item->anim_number].frame_base;
+				item->item_flags[1] = 0;
+				item->item_flags[0] = HITMAN_PANELS;
+
+				for (int i = 0; i < HITMAN_PANELS; i++)
+					item->meshswap_meshbits |= 1 << hitman_nodes[i];
+
+				DropBaddyPickups(item);
+			}
+			else if (++item->item_flags[1] >= CYBORG_DEATH_FRAMES)
+			{
+				item->after_death = 1;
+				CreatureDie(item_number, 0);
+				return;
+			}
+		}
+		// Red Alert, unchanged: while the short-circuited agent lies in the
+		// water, that water kills Lara on contact - the puzzle is to cut
+		// the power first. Reached by slot 67 only, since 469 is taken by
+		// the branch above and can never enter state 43 any other way (the
+		// short circuit itself is gated to 67 further up). A cyborg the
+		// randomizer drops beside a pool must not electrify it.
+		else if (item->current_anim_state == 43 && !lara.burn)
 		{
 			pos.x = 0;
 			pos.y = 0;
@@ -209,7 +285,15 @@ void HitmanControl(short item_number)
 
 		GetCreatureMood(item, &info, hitman->enemy != lara_item);
 
-		if (room[item->room_number].flags & ROOM_NO_LENSFLARE)
+		// The gas, slot 67 only (#146). Core borrows the "no lens flare"
+		// room flag as Red Alert's gas marker; it means nothing of the sort
+		// in the other fifteen levels, where rooms carry it for the reason
+		// its name says. A pool cyborg walking through one of those would
+		// bleed a hit point every eighth frame and drop dead of nothing.
+		// He also could not use the death it starts: +68 ends in KillItem,
+		// which removes the body on the spot instead of fading it, and
+		// state 42 is not the state his own death branch waits on.
+		if (item->object_number == HITMAN && room[item->room_number].flags & ROOM_NO_LENSFLARE)
 		{
 			if (!(GlobalCounter & 7))
 				item->hit_points--;
@@ -219,7 +303,7 @@ void HitmanControl(short item_number)
 			if (item->hit_points <= 0)
 			{
 				item->current_anim_state = 42;
-				item->anim_number = objects[HITMAN].anim_index + 68;
+				item->anim_number = objects[item->object_number].anim_index + 68;
 				item->frame_number = anims[item->anim_number].frame_base;
 			}
 		}
@@ -273,7 +357,7 @@ void HitmanControl(short item_number)
 			else if (jump_ahead || long_jump_ahead)
 			{
 				hitman->maximum_turn = 0;
-				item->anim_number = objects[HITMAN].anim_index + 22;
+				item->anim_number = objects[item->object_number].anim_index + 22;
 				item->frame_number = anims[item->anim_number].frame_base;
 				item->current_anim_state = 15;
 
@@ -317,7 +401,7 @@ void HitmanControl(short item_number)
 			else if (jump_ahead || long_jump_ahead)
 			{
 				hitman->maximum_turn = 0;
-				item->anim_number = objects[HITMAN].anim_index + 22;
+				item->anim_number = objects[item->object_number].anim_index + 22;
 				item->frame_number = anims[item->anim_number].frame_base;
 				item->current_anim_state = 15;
 
@@ -347,7 +431,7 @@ void HitmanControl(short item_number)
 			else if (jump_ahead || long_jump_ahead)
 			{
 				hitman->maximum_turn = 0;
-				item->anim_number = objects[HITMAN].anim_index + 22;
+				item->anim_number = objects[item->object_number].anim_index + 22;
 				item->frame_number = anims[item->anim_number].frame_base;
 				item->current_anim_state = 15;
 
@@ -442,7 +526,13 @@ void HitmanControl(short item_number)
 			if (frame > base + 6 && frame < base + 16 && ((frame - base) & 1))
 			{
 				item->fired_weapon = 1;
-				ShotLara(item, &info, &hitman_gun, larainfo.angle >> 1, balance.dmgHitmanShot);
+
+				// Two tuning lines for one weapon (#146): the agent in Red
+				// Alert keeps DMG_Hitman_Shot, the pool cyborg has his own
+				// so a player can weaken the one he meets everywhere
+				// without touching the scripted encounter.
+				ShotLara(item, &info, &hitman_gun, larainfo.angle >> 1,
+					item->object_number == CYBORG ? balance.dmgCyborgShot : balance.dmgHitmanShot);
 			}
 
 			break;
@@ -484,42 +574,42 @@ void HitmanControl(short item_number)
 		{
 		case -4:
 			hitman->maximum_turn = 0;
-			item->anim_number = objects[HITMAN].anim_index + 35;
+			item->anim_number = objects[item->object_number].anim_index + 35;
 			item->frame_number = anims[item->anim_number].frame_base;
 			item->current_anim_state = 25;
 			break;
 
 		case -3:
 			hitman->maximum_turn = 0;
-			item->anim_number = objects[HITMAN].anim_index + 41;
+			item->anim_number = objects[item->object_number].anim_index + 41;
 			item->frame_number = anims[item->anim_number].frame_base;
 			item->current_anim_state = 24;
 			break;
 
 		case -2:
 			hitman->maximum_turn = 0;
-			item->anim_number = objects[HITMAN].anim_index + 42;
+			item->anim_number = objects[item->object_number].anim_index + 42;
 			item->frame_number = anims[item->anim_number].frame_base;
 			item->current_anim_state = 23;
 			break;
 
 		case 2:
 			hitman->maximum_turn = 0;
-			item->anim_number = objects[HITMAN].anim_index + 29;
+			item->anim_number = objects[item->object_number].anim_index + 29;
 			item->frame_number = anims[item->anim_number].frame_base;
 			item->current_anim_state = 19;
 			break;
 
 		case 3:
 			hitman->maximum_turn = 0;
-			item->anim_number = objects[HITMAN].anim_index + 28;
+			item->anim_number = objects[item->object_number].anim_index + 28;
 			item->frame_number = anims[item->anim_number].frame_base;
 			item->current_anim_state = 18;
 			break;
 
 		case 4:
 			hitman->maximum_turn = 0;
-			item->anim_number = objects[HITMAN].anim_index + 27;
+			item->anim_number = objects[item->object_number].anim_index + 27;
 			item->frame_number = anims[item->anim_number].frame_base;
 			item->current_anim_state = 17;
 			break;

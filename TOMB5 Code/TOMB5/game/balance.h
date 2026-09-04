@@ -59,6 +59,7 @@ struct BALANCE_INFO
 	long hpPierre;
 	long hpLarson;
 	long hpHitman;
+	long hpCyborg;			/* the same model as the pool enemy, but mortal */
 	long hpSniper;
 	long hpChef;
 	long hpTwoGun;
@@ -106,6 +107,7 @@ struct BALANCE_INFO
 	long dmgSoldierLate;
 	long dmgSoldierShort;
 	long dmgHitmanShot;
+	long dmgCyborgShot;
 	long dmgMafia2Shot;
 	long dmgPierreShot;
 	long dmgLarsonShot;

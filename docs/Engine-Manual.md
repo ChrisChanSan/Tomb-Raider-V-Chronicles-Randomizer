@@ -345,7 +345,7 @@ are not case-sensitive.
 | Block | What is in it |
 |---|---|
 | Damage of Lara's weapons | nine lines. The revolver and the HK have two each — the revolver is weak up to Colosseum and strong from the submarine on, and the HK hits harder aimed from a standstill than fired on the move. `Crossbow` is the Grappling Gun. Shotgun damage counts **per pellet**. |
-| Enemy hit points | 31 lines, `HP_<enemy>`, absolute as in the original |
+| Enemy hit points | 32 lines, `HP_<enemy>`, absolute as in the original |
 | Enemy damage against Lara | per attack |
 | Level hazards | the ceiling gun and its kind |
 | Everything at once | `WeaponDamage`, `EnemyHealth`, `EnemyDamage` — percentages applied **on top** of everything above |
@@ -439,6 +439,16 @@ witch had hit points and took damage, but nothing ever checked whether they
 had run out. In the original it never showed: the chef's level takes Lara's
 weapons away first, the skeletons' level hands her nothing that hurts them,
 and the swamp witch only wakes when the level is as good as over.
+
+**The cyborg comes in two versions.** The one in Red Alert is untouched: no
+weapon hurts him, and he dies only in the gas or by the short circuit in the
+water — that is the puzzle, and the body has to stay lying there afterwards.
+None of that can travel. The one the enemy pool places is a second copy on a
+slot of its own: he can be shot, his damage panels blow open as he takes
+hits, and when he goes down he shorts out, lies there for five seconds and
+fades like any other corpse. He has his own two lines in `Balance.txt`
+(`HP_Cyborg`, `DMG_Cyborg_Shot`), so tuning him leaves Red Alert alone. He is
+also the only enemy in the game that can follow Lara along a monkey swing.
 
 **Some deaths burst apart instead of playing an animation.** The skeletons,
 the swamp witch, the Imp and the Maze Monster have no usable death animation

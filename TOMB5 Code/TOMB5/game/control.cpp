@@ -3723,22 +3723,48 @@ void ResetGuards()
 
 		object_number = item->object_number;
 
-		if (object_number == CHEF || object_number == MAZE_MONSTER || object_number == WILLOWISP)
-			item->anim_number = objects[object_number].anim_index;
-		else if (object_number == TWOGUN)
+		/*
+		 * Every reset enemy goes back to its OWN animation set (2026-09-04,
+		 * #146). Upstream picked one animation index for the whole room -
+		 * SWAT's if loaded, else the mini sub's, else the guard's - and
+		 * wrote it into every thinking item there is. That works in the
+		 * four levels where a body bag exists, because everything standing
+		 * in them belongs to the soldier family and shares that family's
+		 * set anyway; it breaks the moment the enemy pool puts a hydra, a
+		 * lion or a dinosaur in the same room, since an absolute animation
+		 * number from a foreign slot streams the wrong frame data over the
+		 * wrong bone tree.
+		 *
+		 * Two vanilla situations change, both of them broken before:
+		 *   Andy2  - the level loads NO anchor at all, so the chain fell
+		 *            through to its last case and handed the skeletons
+		 *            animation 0, which is Lara's first animation.
+		 *   joby3  - Mafia 2 carries a 58-animation set of his own and got
+		 *            the guard's instead.
+		 * Everything else resolves to the same number as before: the four
+		 * stub soldiers (SWAT+, Mafia, scientist, crane guy) have no set of
+		 * their own, and setup.cpp already aliases their anim_index onto
+		 * the very anchor this chain used to pick.
+		 *
+		 * The three former exceptions (chef, maze monster, will-o'-wisp)
+		 * asked for objects[object_number].anim_index, which is what the
+		 * general case now does, so they need no branch. Two Gun keeps his:
+		 * his +0 is a walk (state 2), +6 is the idle - measured.
+		 *
+		 * The forced states below stay exactly as Core wrote them. Measured
+		 * over all thirteen levels, seven types carry something other than
+		 * state 1 in their own +0 (agent 2, husky 8, hydra/imp/mini
+		 * sub/compy 0, Pierre 0 in Trajan's Markets). That mismatch is not
+		 * new and not harmful - the mini sub has it in vanilla joby4 today
+		 * - because AnimateItem takes the state from the animation table
+		 * again when the animation runs out. Forcing the state from the
+		 * table instead would change three vanilla resets, so it is not
+		 * done here.
+		 */
+		if (object_number == TWOGUN)
 			item->anim_number = objects[object_number].anim_index + 6;
-		else if (objects[SWAT].loaded)
-			item->anim_number = objects[SWAT].anim_index;
-		else if (objects[ATTACK_SUB].loaded)
-			item->anim_number = objects[ATTACK_SUB].anim_index;
-		else if (objects[BLUE_GUARD].loaded)
-			item->anim_number = objects[BLUE_GUARD].anim_index;
 		else
-			// Randomizer (#105): the last anchor, for when only the
-			// imported second guard stands in the level. Without it the
-			// chain behaves as before (BLUE_GUARD was the unconditional
-			// final case).
-			item->anim_number = objects[BLUE_GUARD2].anim_index;
+			item->anim_number = objects[object_number].anim_index;
 
 		if (object_number == MAZE_MONSTER)
 		{

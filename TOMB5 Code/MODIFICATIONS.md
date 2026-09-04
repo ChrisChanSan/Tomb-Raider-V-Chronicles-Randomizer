@@ -406,6 +406,49 @@ Also in this group:
   is the very set `InitialiseObjects` already aliased for that type
   (`setup.cpp:1052/1112-1115/1145-1148`) — identical in single-family
   levels, correct in mixed ones.
+- `game/objects.h`, `game/setup.cpp`, `game/hitman.cpp`, `game/lot.cpp`,
+  `game/balance.cpp`/`.h` — **the VCI cyborg as a pool enemy, on a slot of
+  his own (`CYBORG`, 469)**. Slot 67 is not an enemy in the ordinary sense:
+  Core marks it `undead`, so no weapon can reduce its hit points at all
+  (`larafire.cpp` returns before the damage), and its only two deaths are
+  Red Alert's own — the gas, keyed off a room flag that means something
+  entirely different in the other fifteen levels, and the water short
+  circuit, whose animation chain carries no `KillItem` at all. That last
+  one is deliberate there: the electrocuted body has to stay lying in the
+  corridor and keep the water lethal, which is the puzzle. Dropped into a
+  random level the same three properties are a bug each — an enemy nothing
+  can hurt, an enemy that dies of nothing, and a corpse that never fades
+  and holds its AI slot for the rest of the level. So slot 67 is left
+  byte-for-byte as it was and the pool gets a second slot with the same
+  model and the same control routine: mortal, `save_mesh` for its eleven
+  damage panels, its own hit-point and damage lines in `Balance.txt`, and a
+  death of its own — the electrocution animations, all panels torn open,
+  and after five seconds `CreatureDie` plus `after_death`, so the body
+  fades and the slot is released. `HitmanControl` reached for
+  `objects[HITMAN].anim_index` in twelve places and now reads
+  `item->object_number`, the same correction the second Roman god needed
+  (`romangod.cpp`, `#84`). Two further slots come with it:
+  `MESHSWAP_CROSS_HITMAN` (468) as the cyborg's swap warehouse, and
+  `MESHSWAP_CROSS_CRANEGUY` (470), which closes the last raw `MESHSWAP1`
+  read left in the soldier family. Also: the cyborg is excluded from
+  `GetCarriedItems`, so he never swallows a pickup lying beside him.
+- `game/control.cpp` — **a reset enemy goes back to its own animation set.**
+  `ResetGuards` (the body-bag trigger) wrote one globally chosen animation
+  index into every thinking item in the level — SWAT's if loaded, else the
+  mini sub's, else the Guard's. In the four vanilla levels that carry a body
+  bag that is almost harmless, because what stands in them is soldier family
+  and shares that set; with a mixed enemy pool it hands a hydra or a
+  dinosaur an absolute animation number out of a foreign slot, i.e. the
+  wrong frame data over the wrong bone tree. Each item now takes
+  `objects[item->object_number].anim_index`. Two vanilla resets change, both
+  of them broken before: in Andy2 no anchor is loaded at all, so the chain
+  fell through and gave the skeletons animation 0 — *Lara's* first animation
+  — and in joby3 Mafia 2, who carries 58 animations of his own, got the
+  Guard's. The stub soldiers resolve to exactly the same number as before,
+  because `setup.cpp` already aliases their `anim_index` onto that same
+  anchor. Two Gun keeps his `+6` (his `+0` is a walk); the chef, the maze
+  monster and the will-o'-wisp asked for their own set already and now need
+  no branch. The forced rest state is left as Core wrote it.
 
 - `game/balance.cpp`, `.h` (new) — a plain-text settings file, `Balance.txt`,
   read once at startup from the folder the game runs in. It carries an

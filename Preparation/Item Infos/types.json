@@ -6,7 +6,7 @@
 // file is not an error. Comments are allowed - trview parses with comments
 // enabled (tested in game 2026-08-25).
 //
-// Only ten slots need an entry. Everything else trview already names right.
+// Only eleven slots need an entry. Everything else trview already names right.
 {
     "games": {
         "tr5": [
@@ -35,10 +35,16 @@
 
             // Slots beyond the original 460 exist in no vanilla level, so
             // trview's list ends before them (its last TR5 id is 452).
-            { "id": 460, "name": "Guard (Joby)",             "categories": [ "Enemy" ] }
+            { "id": 460, "name": "Guard (Joby)",             "categories": [ "Enemy" ] },
 
-            // Deliberately absent: 462-467, the meshswap stores. They are never
-            // an item in a level, and naming them would suggest otherwise.
+            // The VCI cyborg as a pool enemy. Slot 67 keeps its name and its
+            // Red Alert behaviour; this one is the mortal copy the randomizer
+            // places, so the two have to be told apart at a glance.
+            { "id": 469, "name": "Cyborg (pool)",            "categories": [ "Enemy" ] }
+
+            // Deliberately absent: 462-468 and 470, the meshswap stores. They
+            // are never an item in a level, and naming them would suggest
+            // otherwise.
         ]
     }
 }

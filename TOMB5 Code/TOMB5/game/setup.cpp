@@ -1364,8 +1364,16 @@ void BaddyObjects()
 		bones[obj->bone_index + 24] |= 4;
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
-		meshes[obj->mesh_index + (10 * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (10 * 2)];
-		meshes[obj->mesh_index + (13 * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (13 * 2)];
+
+		// Own fallback slot since #146 - he was the last of the family
+		// still reading MESHSWAP1 raw. Correct in joby2, where MESHSWAP1
+		// is his own; wrong in every level the randomizer carries him to,
+		// where MESHSWAP1 belongs to that level's natives. Reasoning at
+		// MESHSWAP_CROSS_GLADIATOR in objects.h; without an import the
+		// fallback is unloaded and MeshSwapSource returns exactly the two
+		// lines that stood here.
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_CRANEGUY, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_CRANEGUY, 13);
 	}
 
 	if (objects[BLUE_GUARD2].loaded)
@@ -1748,8 +1756,61 @@ void BaddyObjects()
 		bones[obj->bone_index + 52] |= 8;
 		bones[obj->bone_index + 52] |= 4;
 
+		// Deliberately still raw out of MESHSWAP1, unlike the soldier
+		// family: slot 67 exists only in rich3, where MESHSWAP1 is his
+		// own. The randomizer never carries 67 anywhere - it carries 469
+		// below, which has its own fallback slot.
 		for (lp = 0; lp < 20; lp++)
 			meshes[obj->mesh_index + (lp * 2) + 1] = meshes[objects[MESHSWAP1].mesh_index + (lp * 2)];
+	}
+
+	// The cyborg as a pool enemy (#146). Clone of the block above with the
+	// same model and the same control, and exactly three differences:
+	//
+	//   no undead     - 67 cannot be shot at all (larafire.cpp returns
+	//                   before the damage), because Red Alert wants him
+	//                   killed by the gas or by the water. A pool enemy
+	//                   that no weapon touches is not an enemy.
+	//   save_mesh     - his eleven damage panels live in
+	//                   meshswap_meshbits, and HitmanControl opens them one
+	//                   by one as he takes hits. Without this the state
+	//                   never reaches the savegame and he stands there
+	//                   undamaged again after a load - the same Core gap
+	//                   Mafia2 has with his holstered pistols above.
+	//   MeshSwapSource- his twenty panels come from the fallback slot the
+	//                   randomizer fills with rich3's MESHSWAP1.
+	//
+	// hit_points stays the literal 50, not balance.hpCyborg:
+	// BalanceSetEnemies further down overwrites it from the table and
+	// compares what stands here against the table's vanilla column, so a
+	// tuned value here would make that self-check fire every time.
+	if (objects[CYBORG].loaded)
+	{
+		obj = &objects[CYBORG];
+		obj->initialise = InitialiseHitman;
+		obj->control = HitmanControl;
+		obj->collision = CreatureCollision;
+		obj->draw_routine_extra = DrawBaddieGunFlash;
+		obj->shadow_size = 128;
+		obj->hit_points = 50;
+		obj->pivot_length = 50;
+		obj->radius = 102;
+		obj->bite_offset = 5;
+		obj->object_mip = 5120;
+		obj->intelligent = 1;
+		obj->HitEffect = 3;
+		obj->save_position = 1;
+		obj->save_hitpoints = 1;
+		obj->save_flags = 1;
+		obj->save_anim = 1;
+		obj->save_mesh = 1;
+		bones[obj->bone_index + 24] |= 8;
+		bones[obj->bone_index + 24] |= 4;
+		bones[obj->bone_index + 52] |= 8;
+		bones[obj->bone_index + 52] |= 4;
+
+		for (lp = 0; lp < 20; lp++)
+			meshes[obj->mesh_index + (lp * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_HITMAN, lp);
 	}
 
 	if (objects[SNIPER].loaded)
@@ -2238,6 +2299,20 @@ void GetCarriedItems()
 	for (lp = 0; lp < level_items; lp++)
 	{
 		baddy = &items[lp];
+
+		// The pool cyborg (#146) carries nothing. This routine hands an
+		// enemy every pickup within half a sector of him at level start and
+		// takes it off the floor; it comes back only when he dies. Slot 67
+		// is in that list and stays in it - Core placed both him and those
+		// pickups by hand. 469 is placed by the roll, so the pickup he
+		// swallows is one the randomizer put somewhere on purpose, and the
+		// enemy standing on it is a coincidence. He gives it back on death,
+		// but only where he dies, which is not where the item was meant to
+		// be; and while the slot was still undead it never came back at all
+		// - that was the original softlock this came out of. Cheaper to
+		// keep him out of the list than to depend on his death.
+		if (baddy->object_number == CYBORG)
+			continue;
 
 		if (objects[baddy->object_number].intelligent || (baddy->object_number >= SEARCH_OBJECT1 && baddy->object_number <= SEARCH_OBJECT3))
 		{

@@ -119,6 +119,7 @@ static const BALANCE_LINE balanceLines[] =
 	HEALTH("HP_Scientist",		hpScientist,	35,	24,		SCIENTIST),
 	HEALTH("HP_CraneGuy",		hpCraneGuy,		35,	24,		CRANE_GUY),
 	HEALTH("HP_Hitman",			hpHitman,		50,	50,		HITMAN),
+	HEALTH("HP_Cyborg",			hpCyborg,		50,	50,		CYBORG),
 	HEALTH("HP_Sniper",			hpSniper,		35,	35,		SNIPER),
 	HEALTH("HP_Chef",			hpChef,			60,	60,		CHEF),
 	HEALTH("HP_Pierre",			hpPierre,		60,	60,		PIERRE),
@@ -156,6 +157,14 @@ static const BALANCE_LINE balanceLines[] =
 	DAMAGE("DMG_Soldier_Late",	dmgSoldierLate,		60,	60,		"  the same from Old Mill on - twice as hard"),
 	DAMAGE("DMG_Soldier_Short",	dmgSoldierShort,	10,	10,		"  their weaker second shot"),
 	DAMAGE("DMG_Hitman_Shot",	dmgHitmanShot,		15,	12,		0),
+	/*
+	 * The pool cyborg (#146). Same gun as the line above, own number so the
+	 * enemy the roll scatters everywhere can be tuned without touching Red
+	 * Alert's scripted agent. There is no Core value to hold him against -
+	 * the slot is ours - so the vanilla column repeats our own 15; Core
+	 * gave the agent 12, and we already ship 15 for him.
+	 */
+	DAMAGE("DMG_Cyborg_Shot",	dmgCyborgShot,		15,	15,		"  the pool enemy on slot 469"),
 	DAMAGE("DMG_Mafia2_Shot",	dmgMafia2Shot,		35,	35,		0),
 	DAMAGE("DMG_Pierre_Shot",	dmgPierreShot,		20,	20,		"  per pistol, he fires two"),
 	DAMAGE("DMG_Larson_Shot",	dmgLarsonShot,		20,	20,		0),

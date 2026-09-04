@@ -75,7 +75,15 @@ const char* HDScreenLevelName(const char* wadName)
 
 	s = strrchr(wadName, '\\');
 	s = s ? s + 1 : wadName;
-	return *s ? s : 0;
+	if (!*s)
+		return 0;
+
+	// The Remaster ships no picture for the Security Breach cutscene;
+	// it borrows Red Alert's (user decision, 2026-09-04).
+	if (!_stricmp(s, "RICHCUT2"))
+		return "RICH3";
+
+	return s;
 }
 
 ulong* HDScreenRead(const char* name, long maxSide, long* width, long* height)

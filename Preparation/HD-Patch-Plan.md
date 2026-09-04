@@ -1,5 +1,11 @@
 # HD patch (#123) - implementation plan
 
+> **Superseded on 2026-09-05.** This is way A - repainting the classic
+> 256x256 pages with the Remaster's art. The user chose way B, HD at run
+> time (rooms from the `.TRG`, objects and Lara as `.TRM` models); that
+> plan is `HD-Runtime-Plan.md`. Way A stays here for its measurements
+> (loader stride, page ceiling, checksum gate) and as the fallback.
+
 Written 2026-09-05 from a read-only survey of this repository, the TRForge
 library (MIT, `C:\Cloude AI\Todesengel\TRForge-remastered`) and a fresh
 Steam copy of Tomb Raider IV-VI Remastered. Every number below was measured;

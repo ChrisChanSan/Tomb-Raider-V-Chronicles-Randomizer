@@ -102,10 +102,10 @@ counterpart in the remaster and keep the sounds they arrived with.
 Music: the HQ soundtracks go into audio\HQ EN, audio\HQ DE and so on,
 named after the track number. There is a note in the audio folder.
 
-Loading screens and logos: copy the remaster's DDS pictures from 5\PIX\HD
-(ANDREA1
-to RICH3, TITLE, and LOGO_DE, LOGO_EU, LOGO_FR, LOGO_US) into
-screens\HD. The game then shows them while a level loads, builds the
+Loading screens and logos: copy the remaster's DDS pictures from
+5\PIX\HD (ANDREA1 to RICH3, TITLE, and LOGO_DE, LOGO_EU, LOGO_FR,
+LOGO_US) into screens\HD. The game then shows them while a level
+loads, builds the
 logo screen from TITLE plus the logo of your language, and draws
 that logo in the title menu - so the German and French titles get
 their own wordmark, which the original never shipped. Security

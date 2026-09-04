@@ -642,9 +642,12 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 		pComp = 0;
 		CompressedData = 0;
 
-		if (Gameflow->Language == US)
-			size = LoadFile("data\\uslogo.pak", &CompressedData);
-		else if (Gameflow->Language == GERMAN)
+		// The Steam data's uslogo.pak (and the unused uklogo.pak) hold Tomb
+		// Raider IV's "The Last Revelation" logo on BLACK - leftovers, like
+		// JAPAN.DAT. The colour key is magenta, so the black stayed as an
+		// opaque box behind the wrong game's name (seen in game, 2026-09-04).
+		// US takes logo512.pak like everybody else.
+		if (Gameflow->Language == GERMAN)
 			size = LoadFile("data\\grlogo.pak", &CompressedData);
 		else if (Gameflow->Language == FRENCH)
 			size = LoadFile("data\\frlogo.pak", &CompressedData);

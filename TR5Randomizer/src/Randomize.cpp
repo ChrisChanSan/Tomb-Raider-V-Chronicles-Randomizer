@@ -84,6 +84,8 @@ int main(int argc, char** argv)
         std::printf("  cross:    extend the enemy pool by up to three foreign types (with mix/number)\n");
         std::printf("  allsanity: the whole enemy pool, every role rolls freely (with mix/number)\n");
         std::printf("  itemsN:   scatter N additional consumables (e.g. items20)\n");
+        std::printf("  weather:  roll dry/rain/snow for this level. Only levels that can\n"
+                "            show it take part: andy1, Andy2, andy3, joby2, rich2, rich3.\n");
         std::printf("  script=P: also treat the SCRIPT.DAT at P - young Lara out of the\n");
         std::printf("            Ireland levels and KEY8 for joby3 from joby2. Repeatable:\n");
         std::printf("            a second run over the same file changes nothing more.\n");
@@ -123,6 +125,9 @@ int main(int argc, char** argv)
     // both. CAUTION background: not repeatable - every run with script=
     // rolls the file anew.
     bool musicBackground = false, musicTriggers = false;
+    // Weather (#144): roll dry/rain/snow for this level. A level without a
+    // room that could show it keeps its vanilla byte, switch or not.
+    bool weather = false;
     // Permute the level sections (needs script= and the engine with gfLevelId).
     bool sections = false;
     int  levelOrder = 0;            // 1 within the sections, 2 free across everything
@@ -144,6 +149,7 @@ int main(int argc, char** argv)
             }
         }
         else if (s == "weapons") weapons = true;
+        else if (s == "weather") weather = true;
         else if (s == "mix")    mix = true;
         else if (s == "cross")  cross = true;
         else if (s == "allsanity") allsanity = true;
@@ -458,6 +464,7 @@ int main(int argc, char** argv)
     opt.tr3Dir     = tr3Dir;
     opt.tr3GoldDir = tr3GoldDir;
     opt.extraPickups = extraItems;
+    opt.randomWeather = weather;
     if (enemiesOnly) { opt.shuffleKeyItems = false; opt.shuffleOtherPickups = false; }
 
     JsonValue patch;
@@ -543,6 +550,12 @@ int main(int argc, char** argv)
                     rep.enemiesSwapped, pr.soundsCopied);
     if (!pr.outfitFrom.empty())
         std::printf("  Outfit      Lara from %s\n", pr.outfitFrom.c_str());
+    if (pr.weatherTo >= 0)
+    {
+        static const char* kW[3] = { "dry", "rain", "snow" };
+        const int wasW = (pr.weatherFrom >= 0 && pr.weatherFrom <= 2) ? pr.weatherFrom : 0;
+        std::printf("  Weather     %s (vanilla %s)\n", kW[pr.weatherTo], kW[wasW]);
+    }
     if (pr.weaponsCopied > 0 || rep.weaponsScattered > 0)
         std::printf("  Weapons     %d slots copied, %d items scattered\n",
                     pr.weaponsCopied, rep.weaponsScattered);

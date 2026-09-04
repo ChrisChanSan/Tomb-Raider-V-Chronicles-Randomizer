@@ -390,6 +390,19 @@ struct RandoInput
     // brings in comes on top - that is not in this list then.
     std::set<int>            presentSlots;
 
+    // Weather (#144), both read out of the level file by the same level
+    // check as presentSlots (markTriggerSafeSectors).
+    //
+    //   weatherRooms   how many rooms could show rain or snow at all -
+    //                  Tr5Level::weatherRooms(), the engine's own criterion.
+    //                  0 means the weather roll skips this level: a byte
+    //                  written there would change nothing anybody can see.
+    //   vanillaWeather what the file carries now (0 dry, 1 rain, 2 snow).
+    //                  Only for the report, so the spoiler can say what the
+    //                  level used to have.
+    int                      weatherRooms = 0;
+    int                      vanillaWeather = 0;
+
     // Types this level must NOT carry. Filled by the level check in
     // ApplyPatch (markTriggerSafeSectors): Andrea2 carries in slot 47 only
     // Pierre's CUTSCENE variant (death anim +12 has state 9 and jumps into
@@ -614,6 +627,13 @@ struct RandoOptions
     // would shift all subsequent indices and break every "Object N"
     // reference of the triggers.
     int  extraPickups = 0;
+
+    // Roll the weather per level (#144): dry, rain or snow, one draw from
+    // the level's own stream. Only levels that could show it at all take
+    // part (RandoInput::weatherRooms); everyone else keeps the vanilla
+    // byte. The draw sits at the very END of the run, behind every other
+    // one, so switching this on does not move a single existing result.
+    bool randomWeather = false;
 };
 
 struct RandoReport

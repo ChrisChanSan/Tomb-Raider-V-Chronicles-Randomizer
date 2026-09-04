@@ -81,6 +81,7 @@ struct Config
     bool optMusicTrigger = false; // shuffle the floordata's TO_CD tracks
     bool optLevelSections = false;  // permute the four story sections
     int  optLevelOrder   = 0;     // 0 off, 1 within the sections, 2 free across everything
+    bool optWeather      = false; // roll dry/rain/snow per level (#144)
 
     // The three Balance.txt sliders (#108), in percent. Only the slider
     // position is stored here; the truth lives in Balance.txt next to

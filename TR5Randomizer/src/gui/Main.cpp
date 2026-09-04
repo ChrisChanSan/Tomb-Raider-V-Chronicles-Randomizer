@@ -482,6 +482,10 @@ namespace
         bool phJoby4NoWater = false;    // Deepsea Dive without water
         bool phLevelSections = false;   // shuffle sections (Rome/Russia/...)
         int  optLevelOrder = 0;         // 0 off, 1 within the sections (tier 2), 2 free across everything (tier 3)
+        // Weather per level (#144): dry, rain or snow instead of what Core
+        // set. Only the six levels that can show it take part - which ones
+        // is read out of the level files, not listed here.
+        bool optWeather = false;
         bool phMusicSwitch = false;     // roll the audio track per level
         bool phMusicTrigger = false;    // roll music/sound trigger IDs
         bool phOutfitTr1 = false;       // classic TR1 outfit in the pool
@@ -511,6 +515,10 @@ namespace
             flags |= static_cast<uint64_t>(optEnemyCount & 0xFF) << 8;
             // The same for the item amount (#36).
             flags |= static_cast<uint64_t>(optItemAmount & 0x3) << 16;
+            // Weather (#144). Bits 0-7 are the checkboxes above, 8-15 the
+            // enemy count, 16-17 the item amount - so 18 is the next free
+            // one. Whoever adds an option next takes bit 19.
+            if (optWeather) flags |= 1ull << 18;
 
             // FNV-1a over seed text and selection, so both enter equally - a
             // mere XOR would have produced similar results for neighboring
@@ -921,6 +929,7 @@ static std::wstring cacheDir(const App& a)
         // Item abundance: the GUI's three tiers as a count. Free placement
         // spots and the item limit cap them anyway.
         opt.extraPickups = (a.optItemAmount == 1) ? 12 : (a.optItemAmount == 2) ? 30 : 0;
+        opt.randomWeather = a.optWeather;
 
         JsonValue patch;
         RandoReport rep;
@@ -988,7 +997,13 @@ static std::wstring cacheDir(const App& a)
 
         if (!lvl.save(target, err)) return false;
 
-        char buf[200];
+        // 320 and not 200: with everything switched on the pieces below
+        // already added up to just over 200, and snprintf returns the length
+        // it WOULD have written - so "sizeof(buf) - len" turned negative and,
+        // as a size_t, into a huge number. The weather line (#144) is the one
+        // that pushed it over; the room is added here rather than juggling
+        // the pieces.
+        char buf[320];
         int len = std::snprintf(buf, sizeof(buf), "%d moved, %d new", pr.edited, pr.added);
         if (rep.enemiesAdded > 0)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d enemies", rep.enemiesAdded);
@@ -1007,7 +1022,14 @@ static std::wstring cacheDir(const App& a)
         if (rep.crossTypesUsed > 0)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d cross types", rep.crossTypesUsed);
         if (!pr.outfitFrom.empty())
-            std::snprintf(buf + len, sizeof(buf) - len, ", outfit %s", pr.outfitFrom.c_str());
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", outfit %s", pr.outfitFrom.c_str());
+        if (pr.weatherTo >= 0 && len >= 0 && len < static_cast<int>(sizeof(buf)))
+        {
+            static const char* kW[3] = { "dry", "rain", "snow" };
+            const int was = (pr.weatherFrom >= 0 && pr.weatherFrom <= 2) ? pr.weatherFrom : 0;
+            std::snprintf(buf + len, sizeof(buf) - static_cast<size_t>(len),
+                          ", weather: %s (vanilla %s)", kW[pr.weatherTo], kW[was]);
+        }
         row.result = buf;
         return true;
     }
@@ -1247,6 +1269,7 @@ static std::wstring cacheDir(const App& a)
                      a.optLevelOrder == 0 ? "off"
                                           : a.optLevelOrder == 1 ? "within the sections"
                                                                  : "free across everything");
+        std::fprintf(f, "  Weather:            %s\r\n", a.optWeather ? "shuffled" : "original");
         std::fprintf(f, "  Background music:   %s\r\n", a.phMusicSwitch ? "shuffled" : "off");
         std::fprintf(f, "  Trigger music:      %s\r\n", a.phMusicTrigger ? "shuffled" : "off");
         std::fprintf(f, "  Weapon damage:      %d %%%s\r\n",
@@ -2375,6 +2398,15 @@ static void drawUi(App& a, HWND hwnd)
               "the crowbar for Andrea3 - the script grants, "
               "model and name included. Curated in LevelChains.h.");
 
+    ImGui::Checkbox(T("Shuffle weather"), &a.optWeather);
+    hoverHelp("Every level with open sky gets dry weather, rain or snow "
+              "rolled from the seed - the rainy Ireland levels can come up "
+              "dry, the Russian base can get rain instead of snow. Six of "
+              "the thirteen levels can show weather at all (andy1, Andy2, "
+              "andy3, joby2, rich2, rich3); in the others the engine draws "
+              "no drop in any room, so they keep what Core gave them. "
+              "The spoiler lists what each level got.");
+
     closeBlock(&a.heights.level);
 
     openBlock("k_music", "7. Music", fMusic);
@@ -2742,6 +2774,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     app.phMusicTrigger    = app.cfg.optMusicTrigger;
     app.phLevelSections = app.cfg.optLevelSections;
     app.optLevelOrder     = app.cfg.optLevelOrder;
+    app.optWeather        = app.cfg.optWeather;
 
     // Balance.txt (#108): if it already exists in the installation, IT is
     // right and not our cfg - the user may have changed it in Notepad, and
@@ -2801,6 +2834,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         app.cfg.optMusicTrigger    = app.phMusicTrigger;
         app.cfg.optLevelSections = app.phLevelSections;
         app.cfg.optLevelOrder      = app.optLevelOrder;
+        app.cfg.optWeather         = app.optWeather;
         app.cfg.balWeapons        = static_cast<int>(app.balWeapons * 100.0f + 0.5f);
         app.cfg.balEnemyHealth   = static_cast<int>(app.balEnemyHealth * 100.0f + 0.5f);
         app.cfg.balEnemyDamage = static_cast<int>(app.balEnemyDamage * 100.0f + 0.5f);
@@ -2960,6 +2994,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
                  app.cfg.optMusicTrigger    != app.phMusicTrigger ||
                  app.cfg.optLevelSections != app.phLevelSections ||
                  app.cfg.optLevelOrder      != app.optLevelOrder ||
+                 app.cfg.optWeather         != app.optWeather ||
                  app.cfg.balWeapons        != static_cast<int>(app.balWeapons * 100.0f + 0.5f) ||
                  app.cfg.balEnemyHealth   != static_cast<int>(app.balEnemyHealth * 100.0f + 0.5f) ||
                  app.cfg.balEnemyDamage != static_cast<int>(app.balEnemyDamage * 100.0f + 0.5f) ||

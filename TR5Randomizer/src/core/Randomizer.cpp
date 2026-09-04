@@ -3646,8 +3646,50 @@ bool Rando::run(const RandoInput& in,
     else if (opt.allWeapons)
         report.notes.push_back("weapons: joby4 stays vanilla (diving suit).");
 
+    // --- Weather (#144) ---------------------------------------------------
+    //
+    // DELIBERATELY THE LAST DRAW OF THE RUN. Everything above has already
+    // pulled its numbers, so the extra draw cannot shift a single other
+    // result: for the SAME seed, on and off give the same items, enemies,
+    // weapons and outfit, and differ in exactly the one weather byte.
+    // Measured over ten seeds and fifteen levels, plus five seeds against
+    // the previous build with the option off, byte for byte.
+    //
+    // (The GUI checkbox is still part of effectiveSeed, as every option is -
+    // so ticking it in the window does change the game. That is the seed
+    // changing, not the draw order.)
+    //
+    // Only levels that can show weather roll at all (weatherRooms, read out
+    // of the .trc - see Tr5Level::weatherRooms). In the other seven playable
+    // levels rain would fall where the engine refuses to draw it, and the
+    // spoiler would promise something the player never sees. Those keep
+    // their vanilla byte, which for joby3 means it keeps the snow Core set
+    // there and the engine has never shown.
+    //
+    // The three non-playable files stay out by name, exactly as the GUI
+    // keeps them out of a run altogether (Main.cpp, isPlayable). Only the
+    // command line can reach them at all, and del of all things HAS a room
+    // that would show weather - a cutscene is not the place to surprise
+    // anyone with snow.
+    const bool cutsceneFile = (lowerName == "del" || lowerName == "richcut2" || lowerName == "title");
+
+    int weatherRoll = -1;
+    if (opt.randomWeather && !cutsceneFile && in.weatherRooms > 0)
+    {
+        weatherRoll = static_cast<int>(rng.below(3));       // 0 dry, 1 rain, 2 snow
+        static const char* kName[3] = { "dry", "rain", "snow" };
+        const int was = (in.vanillaWeather >= 0 && in.vanillaWeather <= 2) ? in.vanillaWeather : 0;
+        report.notes.push_back(fmt("weather: %s (vanilla %s), %d rooms can show it.",
+                                   kName[weatherRoll], kName[was], in.weatherRooms));
+    }
+    else if (opt.randomWeather && cutsceneFile)
+        report.notes.push_back("weather: cutscene file - stays vanilla.");
+    else if (opt.randomWeather)
+        report.notes.push_back("weather: level has no room that could show rain or snow - stays vanilla.");
+
     patchOut = JsonValue::makeObject();
     patchOut.set("itemEdits", edits);
+    if (weatherRoll >= 0) patchOut.set("weather", JsonValue::makeInt(weatherRoll));
     if (moveables.size() > 0) patchOut.set("moveableAdds", moveables);
     if (laraAnims.size() > 0) patchOut.set("laraAnimAdds", laraAnims);
     if (weapons.size() > 0) patchOut.set("weaponAdds", weapons);

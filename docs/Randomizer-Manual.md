@@ -327,6 +327,24 @@ reads the engine's own counter, so nothing is lost.
 
 > Old savegames do not match a new order. Finish a run before re-rolling.
 
+### Weather
+
+**"Shuffle weather"** — *off.* Every level with open sky is rolled to dry, rain
+or snow. The rainy Ireland levels can come up dry, the Russian base can get
+rain instead of snow.
+
+Six of the thirteen playable levels can show weather at all: **andy1, Andy2,
+andy3, joby2, rich2, rich3**. In the other seven the engine draws no drop in
+any room — it only paints rain and snow where a room carries both the "open
+sky" and the "not inside" flag, and those seven have no such room. They keep
+what Core gave them, which for joby3 means it keeps the snow Core set there
+and the engine has never shown.
+
+The option is part of the seed, like every other checkbox — the same seed text
+with the box ticked is a different game from the same text without it, and the
+effective seed under the seed field shows that. spoiler.txt names what each
+level got, together with what it had before.
+
 ---
 
 ## 7. Music

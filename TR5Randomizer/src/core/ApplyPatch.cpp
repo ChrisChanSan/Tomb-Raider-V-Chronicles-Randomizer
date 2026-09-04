@@ -230,6 +230,12 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
         in.presentSlots.insert(slots.begin(), slots.end());
     }
 
+    // Weather (#144). Both numbers come out of the file for the same reason
+    // the slots above do: the level itself is the only honest source, and a
+    // typed table would drift the moment a level is edited.
+    in.weatherRooms = level.weatherRooms();
+    in.vanillaWeather = level.weatherType();
+
     // Collect the slope entries of all placement sectors - ALWAYS, even if
     // no trigger pass is needed below: every item placement needs them for
     // height and walkability (RandoInput::slopes).
@@ -718,6 +724,36 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                     return false;
                 }
             }
+    }
+
+    // --- Weather (#144) ---------------------------------------------------
+    //
+    // Two bytes in the header block between the texture blocks and the main
+    // block, right beside the LaraType byte written above - which is why it
+    // stands here and not somewhere among the item work.
+    //
+    // Only ever touched when the field is really there. apply() runs a
+    // SECOND time for the secret list, and that patch carries no weather;
+    // without the has() check the second pass would read a missing field as
+    // 0 and quietly dry out every level. Writing the same value twice would
+    // be harmless in itself - this is idempotent - but the report would
+    // then lie about what the level used to have.
+    if (patch.has("weather"))
+    {
+        const int want = static_cast<int>(patch["weather"].asInt(0));
+        if (want < 0 || want > 2)
+        {
+            error = "weather: " + std::to_string(want) +
+                    " is not a weather type - the engine knows 0 (dry), 1 (rain) and 2 (snow).";
+            return false;
+        }
+        report.weatherFrom = level.weatherType();
+        if (!level.setWeatherType(want))
+        {
+            error = "weather: the level header could not be written.";
+            return false;
+        }
+        report.weatherTo = want;
     }
 
     // --- Weapons everywhere -----------------------------------------------

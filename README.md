@@ -31,6 +31,7 @@ GPLv3.
 | **Sound** | Drop the remaster's `MAIN.SFX` into `audio\` and the game plays its effects at 44.1 kHz - measurably wider, not upsampled |
 | **Loading screens** | Drop the remaster's pictures into `screens\HD\` and the loading screens run at 1920x1080 instead of 640x480 |
 | **Level order** | Optional, from shuffling inside a section up to a free run through the whole game |
+| **Weather** | Rolled per level — the rainy Ireland levels can come up dry, the Russian base can get rain instead of snow |
 | **Difficulty** | Every weapon, enemy and hazard tunable by hand in `Balance.txt`, or by three sliders |
 | **Engine** | Native Direct3D 9 and XAudio2, controller support, a first-person view, and a long list of fixed original bugs |
 

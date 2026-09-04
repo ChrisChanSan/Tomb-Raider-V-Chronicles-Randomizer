@@ -461,6 +461,22 @@ static const std::unordered_map<std::string, const char*>& table()
           "anderen braucht - die Magnetkarte fuer joby3 und die Brechstange "
           "fuer Andrea3 -, gibt das Skript samt Modell und Namen. "
           "Kuratiert in LevelChains.h." },
+        { "Shuffle weather", "Wetter switchen" },
+        { "Every level with open sky gets dry weather, rain or snow "
+          "rolled from the seed - the rainy Ireland levels can come up "
+          "dry, the Russian base can get rain instead of snow. Six of "
+          "the thirteen levels can show weather at all (andy1, Andy2, "
+          "andy3, joby2, rich2, rich3); in the others the engine draws "
+          "no drop in any room, so they keep what Core gave them. "
+          "The spoiler lists what each level got.",
+          "Jedes Level mit offenem Himmel bekommt trocken, Regen oder "
+          "Schnee aus dem Seed gewuerfelt - die verregneten Irland-Level "
+          "koennen trocken kommen, die russische Basis Regen statt Schnee. "
+          "Sechs der dreizehn Level koennen ueberhaupt Wetter zeigen "
+          "(andy1, Andy2, andy3, joby2, rich2, rich3); in den uebrigen "
+          "zeichnet die Engine in keinem Raum einen Tropfen, die behalten "
+          "also, was Core ihnen gab. Was jedes Level bekommen hat, steht "
+          "im Spoiler." },
 
         // --- Block 7: music ----------------------------------------------
         { "7. Music", "7. Musik" },

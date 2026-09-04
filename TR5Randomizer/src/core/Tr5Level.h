@@ -819,6 +819,18 @@ public:
     int  foreignTalkHeads() const;
     bool setForeignTalkHeads(int value);
 
+    // The weather byte in the same header block (#144): 0 dry, 1 rain,
+    // 2 snow. Read by the engine in specific\file.cpp (data[1]) and by
+    // nothing else than DoWeather (specific\specificfx.cpp).
+    int  weatherType() const;
+    bool setWeatherType(int value);
+
+    // How many rooms of this level could show rain or snow at all (#144).
+    // The engine's own criterion, not a guess - see the definition in
+    // Tr5Level.cpp for the two conditions and where they come from.
+    // 0 means: a weather byte would be written into the void.
+    int  weatherRooms() const;
+
     // --- Texture workshop (#104) ---------------------------------------
     //
     // The level's two texture blocks are unpacked ONCE at the first page

@@ -3298,6 +3298,79 @@ bool Tr5Level::setForeignTalkHeads(int value)
     return true;
 }
 
+//----------------------------------------------------------------------------
+// data[1] of the same 32 bytes: the weather (#144). 0 dry, 1 rain, 2 snow.
+//
+// LoadLevel reads the block as "short data[16]" and takes
+// WeatherType = (char)data[1] (specific\file.cpp) - so the value sits two
+// bytes behind LaraType. DoWeather (specific\specificfx.cpp) is the only
+// reader in the whole engine: 1 calls DoRain, 2 DoSnow, anything else draws
+// nothing. The script flag GF_WEATHER exists in gameflow.h and is read
+// nowhere.
+//----------------------------------------------------------------------------
+int Tr5Level::weatherType() const
+{
+    if (m_mainOffset < 40) return -1;
+    int16_t v;
+    std::memcpy(&v, m_bytes.data() + m_mainOffset - 8 - 30, 2);
+    return v;
+}
+
+bool Tr5Level::setWeatherType(int value)
+{
+    if (m_mainOffset < 40) return false;
+    const int16_t v = static_cast<int16_t>(value);
+    std::memcpy(m_bytes.data() + m_mainOffset - 8 - 30, &v, 2);
+    return true;
+}
+
+//----------------------------------------------------------------------------
+// In how many rooms could weather be seen at all (#144)?
+//
+// Two conditions have to meet in ONE room, and both are the engine's, not
+// an assumption:
+//
+//   ROOM_OUTSIDE (0x8) - DoRain only creates drops while the global
+//     "outside" is set, and that is exactly r->flags & ROOM_OUTSIDE of the
+//     camera's room resp. of any drawn room (game\draw.cpp:900, 1195,
+//     1864). DoSnow hangs off snow_outside, which is set when a portal
+//     points into a ROOM_OUTSIDE room (draw.cpp:1896).
+//
+//   ROOM_NOT_INSIDE (0x20) - every single drop asks IsRoomOutside for its
+//     own position, and that returns "outside" ONLY for a room with
+//     ROOM_UNDERWATER or ROOM_NOT_INSIDE (game\control.cpp:3155/3182).
+//     Both weather functions then throw away what landed in a water room,
+//     so ROOM_NOT_INSIDE is what is left.
+//
+// Water rooms are dropped for that last reason, flipmap alternatives
+// because BuildOutsideTable (game\setup.cpp:2403) skips them when it builds
+// the lookup IsRoomOutside walks.
+//
+// Measured over the 16 vanilla files: no level has ROOM_NOT_INSIDE rooms
+// without also having such a room carry ROOM_OUTSIDE, so the strict "both
+// in one room" and the loose "somewhere in the level" pick the same six
+// playable levels (andy1, Andy2, andy3, joby2, rich2, rich3).
+//----------------------------------------------------------------------------
+int Tr5Level::weatherRooms() const
+{
+    constexpr unsigned ROOM_UNDERWATER = 0x1, ROOM_OUTSIDE = 0x8, ROOM_NOT_INSIDE = 0x20;
+
+    std::set<int> flipTargets;
+    for (const Tr5Room& r : m_rooms)
+        if (r.altRoom >= 0) flipTargets.insert(r.altRoom);
+
+    int n = 0;
+    for (const Tr5Room& r : m_rooms)
+    {
+        if (!(r.flags & ROOM_OUTSIDE)) continue;
+        if (!(r.flags & ROOM_NOT_INSIDE)) continue;
+        if (r.flags & ROOM_UNDERWATER) continue;
+        if (flipTargets.count(r.index)) continue;
+        ++n;
+    }
+    return n;
+}
+
 bool Tr5Level::readHeader(std::string& error)
 {
     size_t pos = 0;

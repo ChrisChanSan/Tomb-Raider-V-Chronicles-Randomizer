@@ -109,6 +109,7 @@ void Config::load()
         else if (key == "musicTrigger")    optMusicTrigger = (val == "1");
         else if (key == "levelSections") optLevelSections = (val == "1");
         else if (key == "levelOrder")      optLevelOrder = std::atoi(val.c_str());
+        else if (key == "weather")         optWeather = (val == "1");
         else if (key == "balWeapons")       balWeapons = std::atoi(val.c_str());
         else if (key == "balEnemyHealth")  balEnemyHealth = std::atoi(val.c_str());
         else if (key == "balEnemyDamage") balEnemyDamage = std::atoi(val.c_str());
@@ -187,6 +188,7 @@ bool Config::save() const
     std::fprintf(f, "musicTrigger=%d\n", optMusicTrigger ? 1 : 0);
     std::fprintf(f, "levelSections=%d\n", optLevelSections ? 1 : 0);
     std::fprintf(f, "levelOrder=%d\n", optLevelOrder);
+    std::fprintf(f, "weather=%d\n", optWeather ? 1 : 0);
     std::fprintf(f, "balWeapons=%d\n", balWeapons);
     std::fprintf(f, "balEnemyHealth=%d\n", balEnemyHealth);
     std::fprintf(f, "balEnemyDamage=%d\n", balEnemyDamage);

@@ -105,6 +105,11 @@ struct PatchReport
     int weaponsCopied = 0;               // weapon slots taken over
     int moveablesCopied = 0;             // cross-enemy slots taken over
     std::string outfitFrom;              // empty = outfit unchanged
+    // Weather (#144): what the file carried and what was written into it.
+    // Both -1 as long as the patch carries no "weather" field - that is the
+    // signal for "not touched", and it is what every caller tests.
+    int weatherFrom = -1;
+    int weatherTo = -1;
     std::vector<std::string> warnings;
 };
 

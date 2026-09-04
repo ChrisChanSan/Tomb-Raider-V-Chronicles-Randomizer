@@ -601,12 +601,29 @@ trigtrigger). The enemy comes as `itemAdds`, its trigger as
 
 **4. Writing** — `Tr5Level::addTrigger`, purely additive.
 
+**5. Flipmap copy (#147)** — every waker is written a second time, into the
+flipmap partner of its room. `FlipMap()` (`game/control.cpp:2634`) swaps the
+two `ROOM_INFO` structs whole and then hands the base room its own item list
+back: the **items stay**, the **floordata is exchanged**. A trigger that
+lives in only one of the two variants is therefore dead for as long as the
+flip lasts — and a flip need never be turned back. joby5 is the case that
+found this: its intro cutscene (script `PLAYCUT 32` → `joby8`,
+`deltapak.cpp:1802/1852`) fires the `FLIPMAP(0)` heavy trigger in room 40
+before Lara can move, no `FLIPOFF` exists anywhere in the level, and the zone
+export names base rooms only — so nine of twenty-two wakers of a measured run
+sat in rooms whose floordata had already been swapped away. The copy is
+refused, and noted, when the partner tile is a wall, lies more than one
+sector height away, starts at another world corner, or already carries
+floordata (`canAppendTrigger`). Only entries carrying `mirrorFlip` are
+copied; the curated triggers of the secret lists are not.
+
 **The rules kept in the process:**
 
 | Rule | Why |
 |---|---|
 | Never a trigger on the enemy's sector | otherwise the enemy spawns into Lara |
 | The trigger on the approach path | otherwise he never wakes up |
+| The trigger in **both** flip variants | after a flip the base room reads the partner's floordata (#147) |
 | OneShot set | see 4b-ter — for Larson it decides over life and death |
 | OCB 0 | otherwise `ai_bits = GUARD` and he looks for AI objects that are not there |
 | At most 512 items | `MAX_ITEMS` (doubled from 256 - see Tomb5 Limits\Limits.txt); rich2 sits at 248 |

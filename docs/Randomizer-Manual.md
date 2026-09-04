@@ -238,7 +238,9 @@ Two Gun with no weapons.
 **"Add extra enemies to the level"** — *off.* Puts enemies into a level that
 were never there. Each gets its own trigger about three sectors ahead of it on
 your path, never on its own tile, and fires once — so it is invisible until
-you cross that tile and then simply stands there ahead of you.
+you cross that tile and then simply stands there ahead of you. Where a room
+has a flipmap twin, the trigger is written into both variants, so the enemy
+still wakes after the level has flipped that room.
 
 **"per level"** — *6, range 1 to 20.* A maximum, not a promise. A level with
 no free spot left gets fewer, and the run says so.

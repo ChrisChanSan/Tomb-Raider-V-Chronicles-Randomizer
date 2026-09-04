@@ -22,6 +22,7 @@
 #include <iterator>
 #include <memory>
 #include <cstdio>
+#include <cstdlib>
 #include <random>
 #include <set>
 #include <map>
@@ -35,6 +36,58 @@ namespace
         std::snprintf(buf, sizeof(buf), f, a, b);
         return std::string(buf);
     }
+
+    //------------------------------------------------------------------------
+    // #147 - the flipmap partner of a room.
+    //
+    // FlipMap() (game/control.cpp:2634) swaps the two ROOM_INFO structs
+    // wholesale and then hands the base room its own item list back. So the
+    // ITEMS stay where they are, but the FLOORDATA is exchanged: after the
+    // flip the base room index reads the alternate's sector chains. A
+    // trigger that exists in only one of the two variants is dead for the
+    // rest of the flip - and nothing forces a flip to ever be turned back
+    // (joby5 group 0 is switched on by the intro cutscene and has no
+    // FLIPOFF anywhere in the level).
+    //
+    // altRoom points from the BASE room to its alternate; the alternate
+    // itself carries -1, so the way back has to be searched. Both
+    // directions are covered because it costs nothing - today's placement
+    // only ever names base rooms (the zone export lists no alternates).
+    //------------------------------------------------------------------------
+    int flipPartner(const Tr5Level& level, int room)
+    {
+        const std::vector<Tr5Room>& rooms = level.rooms();
+        if (room < 0 || room >= static_cast<int>(rooms.size())) return -1;
+        if (rooms[static_cast<size_t>(room)].altRoom >= 0)
+            return rooms[static_cast<size_t>(room)].altRoom;
+        for (const Tr5Room& r : rooms)
+            if (r.altRoom == room) return r.index;
+        return -1;
+    }
+
+    // Lowest and highest floor corner of a sector. false means: wall,
+    // sector does not exist, or the chain is unreadable - in every one of
+    // those cases the caller has NO height, not a wrong one.
+    bool sectorFloorRange(const Tr5Level& level, int room, int sx, int sz, long& lo, long& hi)
+    {
+        bool any = false;
+        for (int cx = 0; cx <= 1024; cx += 1024)
+            for (int cz = 0; cz <= 1024; cz += 1024)
+            {
+                long y = 0;
+                if (!level.cornerFloor(room, sx, sz, cx, cz, y)) return false;
+                if (!any) { lo = hi = y; any = true; }
+                else { if (y < lo) lo = y; if (y > hi) hi = y; }
+            }
+        return any;
+    }
+
+    // How far the partner tile's floor may sit away from the base tile's
+    // before the copy is refused. One sector height is the measured room:
+    // in joby5 - the level the whole thing was found in - all nine cases
+    // of the user's run come out at exactly dy = 0, and a flip that lifts
+    // a tile by more than a full sector no longer shows the same place.
+    const long kFlipFloorTolerance = 1024;
 }
 
 long Patch::shuffleMusicTriggers(Tr5Level& level, uint64_t seed)
@@ -996,15 +1049,17 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         // Defaults: kind 0 (TRIGGER), full mask, oneShot set. That is the
         // form an enemy trigger needs - whoever wants something else must
         // deviate explicitly.
-        if (!level.addTrigger(static_cast<int>(t["room"].asInt(-1)),
-                              static_cast<int>(t["sectorX"].asInt(-1)),
-                              static_cast<int>(t["sectorZ"].asInt(-1)),
-                              static_cast<int>(t["kind"].asInt(0)),
-                              static_cast<int>(t["timer"].asInt(0)),
-                              t["oneShot"].asInt(1) != 0,
-                              static_cast<int>(t["mask"].asInt(31)),
-                              cmds, addErr,
-                              static_cast<int>(t["refItem"].asInt(-1))))
+        const int tRoom    = static_cast<int>(t["room"].asInt(-1));
+        const int tSx      = static_cast<int>(t["sectorX"].asInt(-1));
+        const int tSz      = static_cast<int>(t["sectorZ"].asInt(-1));
+        const int tKind    = static_cast<int>(t["kind"].asInt(0));
+        const int tTimer   = static_cast<int>(t["timer"].asInt(0));
+        const bool tOne    = t["oneShot"].asInt(1) != 0;
+        const int tMask    = static_cast<int>(t["mask"].asInt(31));
+        const int tRefItem = static_cast<int>(t["refItem"].asInt(-1));
+
+        if (!level.addTrigger(tRoom, tSx, tSz, tKind, tTimer, tOne, tMask,
+                              cmds, addErr, tRefItem))
         {
             // Abort hard, as with the move: an enemy without its trigger
             // stands motionless in the level forever, and nobody later
@@ -1013,6 +1068,81 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             return false;
         }
         ++report.triggersAdded;
+
+        // --- The same trigger into the flipmap partner room (#147) --------
+        //
+        // Only for the entries that ask for it. An enemy waker may exist
+        // twice without doing any harm: it wakes the same item, and the
+        // item itself does not travel with the flip anyway (FlipMap hands
+        // the base room its item list back). A curated trigger from a
+        // secret list carries no mirrorFlip - it is bound to one object at
+        // one place, and duplicating it is a decision nobody made.
+        //
+        // A failure here is deliberately NOT fatal: the base trigger is
+        // already written, so the enemy works in the unflipped variant.
+        // The skip goes into the notes instead.
+        if (t["mirrorFlip"].asInt(0) != 0)
+        {
+            const int twin = flipPartner(level, tRoom);
+            if (twin >= 0)
+            {
+                // Copied, not referenced: addTrigger below rewrites the
+                // file, and a reference into level.rooms() across that is a
+                // trap waiting for the day the rooms are reparsed.
+                const Tr5Room a = level.rooms()[static_cast<size_t>(tRoom)];
+                const Tr5Room b = level.rooms()[static_cast<size_t>(twin)];
+
+                const char* why = nullptr;
+                long bLo = 0, bHi = 0, tLo = 0, tHi = 0;
+                std::vector<Tr5FloorEntry> twinChain;
+                const int twinIdx = level.sectorIndex(twin, tSx, tSz);
+
+                // Same sector index only means the same place while both
+                // rooms start at the same world corner. Vanilla flip pairs
+                // always do, but that is a measurement, not a law.
+                if (a.originX != b.originX || a.originZ != b.originZ)
+                    why = "partner room starts at another world corner";
+                else if (twinIdx < 0)
+                    why = "partner room has no such sector";
+                else if (!sectorFloorRange(level, twin, tSx, tSz, tLo, tHi))
+                    why = "wall";
+                else if (!sectorFloorRange(level, tRoom, tSx, tSz, bLo, bHi))
+                    why = "base tile has no readable floor";
+                else if (std::labs(tLo - bLo) > kFlipFloorTolerance ||
+                         std::labs(tHi - bHi) > kFlipFloorTolerance)
+                    why = "height";
+                else if (!level.readChain(twinIdx, twinChain))
+                    why = "partner floordata unreadable";
+                else
+                    why = Tr5Level::canAppendTrigger(twinChain);
+
+                std::string mirErr;
+                if (!why && !level.addTrigger(twin, tSx, tSz, tKind, tTimer, tOne,
+                                              tMask, cmds, mirErr, tRefItem))
+                    why = mirErr.c_str();
+
+                if (why)
+                {
+                    ++report.triggersMirrorSkipped;
+                    char nb[192];
+                    std::snprintf(nb, sizeof(nb),
+                                  "flipmap: trigger %d,%d,%d NOT mirrored into room %d - %s.",
+                                  tRoom, tSx, tSz, twin, why);
+                    report.warnings.push_back(nb);
+                }
+                else
+                    ++report.triggersMirrored;
+            }
+        }
+    }
+
+    if (report.triggersMirrored > 0 || report.triggersMirrorSkipped > 0)
+    {
+        char nb[160];
+        std::snprintf(nb, sizeof(nb),
+                      "flipmap: %d triggers mirrored into the partner room, %d skipped (wall/height).",
+                      report.triggersMirrored, report.triggersMirrorSkipped);
+        report.warnings.push_back(nb);
     }
 
     // --- Edits -----------------------------------------------------------

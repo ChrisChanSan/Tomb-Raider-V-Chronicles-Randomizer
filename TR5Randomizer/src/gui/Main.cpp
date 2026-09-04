@@ -994,6 +994,8 @@ static std::wstring cacheDir(const App& a)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d enemies", rep.enemiesAdded);
         if (pr.triggersMoved > 0)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d triggers along", pr.triggersMoved);
+        if (pr.triggersMirrored > 0)
+            len += std::snprintf(buf + len, sizeof(buf) - len, ", %d flipmap copies", pr.triggersMirrored);
         if (pr.weaponsCopied > 0)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d weapon slots", pr.weaponsCopied);
         if (rep.weaponsScattered > 0)

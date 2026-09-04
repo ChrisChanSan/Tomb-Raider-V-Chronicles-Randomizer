@@ -11,6 +11,11 @@ TR5Randomizer\src\core\Randomizer.cpp (kCross, kSpaceNeeds, kHerds,
 kSpawnOcb) and by the per-level lists in Preparation\Tools\ZoneAnalysis.ps1.
 This document explains WHY those tables look the way they do.
 
+Independent of type: an added enemy's waker is written into the flipmap
+partner of its room as well (#147), because after a flip the base room reads
+the partner's floordata and a one-sided trigger never fires again. See
+Preparation\Trigger\Floordata and Triggers.md, section 4g.
+
 
 ================================================================
 Pool B - freely swappable

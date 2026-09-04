@@ -2946,6 +2946,17 @@ bool Rando::run(const RandoInput& in,
             t.set("sectorX", JsonValue::makeInt(tx));
             t.set("sectorZ", JsonValue::makeInt(tz));
             t.set("commands", cmdList);
+            // #147: the waker also belongs into the flipmap partner of this
+            // room. The trigger sector always comes out of the zone export,
+            // and that lists BASE rooms only - so as soon as the level flips
+            // that group, the base room reads the alternate's floordata and
+            // the waker is gone. In joby5 the intro cutscene switches group
+            // 0 on before Lara can move (PLAYCUT 32 -> joby8, deltapak.cpp:
+            // 1802/1852 fire the FLIPMAP(0) heavy trigger in room 40), and
+            // nothing in the level ever switches it back: without the copy
+            // nine of twenty-two enemies never wake up. The mirror itself,
+            // with its wall and height test, sits in ApplyPatch.
+            t.set("mirrorFlip", JsonValue::makeInt(1));
             trigAdds.push(t);
 
             used.insert(secKey(p.s->room, p.s->sectorX, p.s->sectorZ));

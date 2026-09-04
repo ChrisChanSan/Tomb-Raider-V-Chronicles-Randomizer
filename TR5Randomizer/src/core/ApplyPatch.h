@@ -33,7 +33,7 @@
 //     "triggerMoves": [ {fromRoom, fromSectorX, fromSectorZ,
 //                        toRoom,   toSectorX,   toSectorZ}, ... ],
 //     "triggerAdds":  [ {room, sectorX, sectorZ, kind?, timer?, oneShot?, mask?,
-//                        commands: [ {type, param}, ... ]}, ... ],
+//                        mirrorFlip?, commands: [ {type, param}, ... ]}, ... ],
 //     "soundAdds":    [ {map, fromLevel, fromMap}, ... ] }
 //
 // For the edits every field except index is optional - whatever is absent
@@ -50,6 +50,12 @@
 // defaults are intentional: kind 0 (TRIGGER), mask 31 and oneShot true are
 // the standard values because that is exactly a "wake this enemy" trigger.
 // oneShot is no fine detail either - see Tr5Level::addTrigger.
+//
+// mirrorFlip (#147) asks for the second copy in the flipmap partner room.
+// The flag is set by whoever knows that the trigger is a plain enemy waker
+// and may exist twice; the curated triggers of the secret lists do NOT
+// carry it, because those are bound to one particular object at one
+// particular place.
 //
 // There is neither itemRemoves nor triggerRemoves, and neither should ever
 // exist - see Tr5Level::addItem and the reasoning in apply().
@@ -73,6 +79,14 @@ struct PatchReport
     int added = 0;
     int triggersMoved = 0;
     int triggersAdded = 0;
+    // #147: a new trigger in a room that owns a flipmap partner is written
+    // into the partner as well - after the flip the base room reads the
+    // PARTNER's floordata, and a trigger that lives in only one of the two
+    // never fires again. Mirrored counts the copies, mirrorSkipped the
+    // cases where the partner tile is a wall, sits at another height or
+    // already carries floordata that must not be touched.
+    int triggersMirrored = 0;
+    int triggersMirrorSkipped = 0;
     int soundsCopied = 0;
     int weaponsCopied = 0;               // weapon slots taken over
     int moveablesCopied = 0;             // cross-enemy slots taken over

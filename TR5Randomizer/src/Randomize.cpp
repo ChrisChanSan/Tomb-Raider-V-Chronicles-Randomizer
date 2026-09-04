@@ -532,6 +532,9 @@ int main(int argc, char** argv)
     if (rep.enemiesAdded > 0 || pr.triggersAdded > 0 || pr.triggersMoved > 0)
         std::printf("  Triggers    %d enemies placed, %d triggers new, %d moved\n",
                     rep.enemiesAdded, pr.triggersAdded, pr.triggersMoved);
+    if (pr.triggersMirrored > 0 || pr.triggersMirrorSkipped > 0)
+        std::printf("  Flipmap     %d triggers mirrored, %d skipped\n",
+                    pr.triggersMirrored, pr.triggersMirrorSkipped);
     if (rep.enemiesSwapped > 0 || pr.soundsCopied > 0)
         std::printf("  Enemies     %d swapped, %d samples copied\n",
                     rep.enemiesSwapped, pr.soundsCopied);

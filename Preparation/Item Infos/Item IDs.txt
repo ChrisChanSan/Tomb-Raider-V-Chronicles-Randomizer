@@ -48,6 +48,11 @@ Revolver/Deagle_Ammo	348
 //   460 = Guard (Joby) BLUE_GUARD2, an engine slot added by this project
 //   461 = Hammer statue ROMAN_GOD2, likewise - so 61 is the SWORD statue
 //         only
+//   469 = Cyborg CYBORG, likewise (#146) - the mortal version of the
+//         HITMAN on 67, which stays immortal for rich3's puzzle. 468 and
+//         470 beside it are not enemies but mesh warehouses (the cyborg's
+//         and the crane guy's swap halves), see
+//         Preparation\Enemies\Cross Enemy Pool.txt
 // Not to be confused: 41 = DOG, 85 = HUSKIE. Upstream calls both "Dog".
 //Enemies:{
 SWAT					33

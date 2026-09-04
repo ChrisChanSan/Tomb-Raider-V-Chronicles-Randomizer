@@ -118,7 +118,8 @@ static const std::unordered_map<std::string, const char*>& table()
 
         // --- Enemy display names (Rando::enemyKinds) ---------------------
         // Only the names that differ; the rest ("SWAT", "Larson", "Hydra",
-        // "Imp", ...) pass through unchanged.
+        // "Imp", "Cyborg", ...) pass through unchanged - German spells them
+        // the same way.
         { "Guard",                    "Wachmann" },
         { "Guard (Joby)",             "Wachmann (Joby)" },
         { "SWAT (heavy)",             "SWAT (schwer)" },

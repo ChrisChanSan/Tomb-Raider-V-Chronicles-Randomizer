@@ -13,8 +13,9 @@ This page is the list. It is short on purpose; the point is that it exists.
 **Object slots beyond the file boundary**
 `SLOT_FILE_BOUNDARY` in `game/objects.h` marks where the level file's own
 slots end and this project's added ones begin (460 BLUE_GUARD2, 461
-ROMAN_GOD2, and the sound slots above them). The randomizer places into those
-numbers. Add a slot on one side only and the other places into nothing.
+ROMAN_GOD2, 469 CYBORG, and the sound slots above them). The randomizer
+places into those numbers. Add a slot on one side only and the other places
+into nothing.
 *Both sides:* `game/objects.h` and `kCross` / `enemyKinds` in
 `core/Randomizer.cpp`.
 
@@ -22,7 +23,9 @@ numbers. Add a slot on one side only and the other places into nothing.
 `MESHSWAP_CROSS_*` in `game/objects.h` name the SMASH_OBJECT slots the engine
 uses as fallback mesh warehouses; the randomizer fills them. The ids must be
 the same on both sides, and the document that got this wrong for weeks said
-3..6 while the header said 5..8.
+3..6 while the header said 5..8. Since #146 that is 401-404, 462-468 and 470;
+the full assignment is written down in
+`Preparation\Enemies\Cross Enemy Pool.txt`.
 *Both sides:* `game/objects.h` and the swap columns in `core/Randomizer.cpp`.
 
 **The version string**

@@ -50,7 +50,9 @@ Pool A enemy when the spot has patrol/ambush markers in range.
 	  the chef borrows its death - see MODIFICATIONS.md.
 	2 MAFIA2 (mafia2.cpp)
 	3 PIERRE, LARSON (pierre.cpp)
-	4 HITMAN (hitman.cpp)
+	4 HITMAN (hitman.cpp) - and with him engine slot 469, the cyborg this
+	  project added under #146: same control, same rules, but mortal. See
+	  the special cases below for why he needed a slot of his own.
 	5 HUSKIE (huskie.cpp) - slot 85, the husky. Not to be confused with
 	  DOG (41); upstream calls both "Dog".
 	6 IMP (imp.cpp)
@@ -194,6 +196,44 @@ Special cases - own rules
 	  only shows once weapons are scattered where Core never put any. Three
 	  were found this way - chef, skeleton, swamp witch. The check is one
 	  grep: hit_points in the enemy's own .cpp.
+
+	5 CYBORG (hitman.cpp, engine slot 469) - added under #146. The VCI
+	  android from rich3, Core's HITMAN. He is the SECOND road into the
+	  immortality bug above, and the grep for hit_points does not find it:
+	  HitmanControl reads them properly, but setup.cpp sets
+	  objects[HITMAN].undead, and that makes larafire.cpp drop the damage
+	  before it ever arrives (the grenade checks the flag too). In vanilla
+	  he dies only through rich3's own geometry - its gas rooms, which carry
+	  a room flag no other level uses, and a short circuit in water, which
+	  needs some fifty hits to open his panels first. Anywhere else he would
+	  simply never go down.
+
+	  The way out is the slot, not a patch to type 67: 469 carries a mortal
+	  version, while rich3's two vanilla specimens (items 183 and 200, each
+	  holding a puzzle half) keep 67, keep the flag, and keep being the
+	  puzzle Core built. They are in fixedItems anyway. The donor rule is
+	  met - the model and all six samples sit in rich3 with him - so the
+	  pool row needs no sound entry.
+
+	  What is different about him in play:
+	    - He is the nimblest human in the game and the ONLY enemy with
+	      can_monkey (lot.cpp), so he crosses monkey bars, vaults and drops
+	      four clicks and jumps gaps no other soldier can. Placed in the
+	      Ireland or the submarine levels, that shows.
+	    - Five-shot bursts, sparks instead of blood on a hit.
+	    - He is not entered in isCarrierType (Randomizer.h), where the
+	      vanilla 67 stands. That list mirrors the engine's intelligent
+	      flag and is used by the placement guards - the wall-pickup
+	      safety box and the carried-OCB check. The project's other added
+	      slots, 460 and 461, are not in it either, so 469 follows the
+	      house rule rather than breaking it; if the engine half ever gives
+	      one of the three an intelligent flag, all three belong in the
+	      list together.
+	    - He is the most expensive guest in the pool - his textures add six
+	      object texture pages and about 1.08 MB to every level he enters.
+	    - Twenty swap meshes out of MESHSWAP1, the largest such case in the
+	      project; they arrive in his own fallback slot 468 (see
+	      Cross Enemy Pool.txt).
 
 
 ================================================================

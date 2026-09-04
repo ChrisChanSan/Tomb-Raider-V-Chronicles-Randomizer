@@ -29,6 +29,13 @@ one. Imported anywhere, he shoots in silence.
 So each pool row names a donor level, and each donor was chosen because the
 enemy really stands in it.
 
+The cyborg (#146) is the clean counter-example, and worth stating because it
+shows what the rule buys. Only rich3 carries his model, and rich3 also holds
+his two vanilla instances - so his samples are packed there, all six of them,
+and every one hangs on an animation command. Phase D of the transfer picks
+them up by itself, and his pool row needs no sound entry at all. Where the
+rule is met, the sound question does not arise.
+
 
 THE ANIMATION BASE
 ================================================================
@@ -48,6 +55,47 @@ natively or from its own cross import, it stays.
 Since the #121 addendum the base is the guard 460, not 37. 460 always carries
 the clean joby3 set, while slot 37 may hold a different model per level - the
 rich levels being the case that forced the change.
+
+
+THE SWAP HALVES, AND WHY EVERY TYPE HAS HIS OWN SLOT
+================================================================
+Several enemies do not carry all their meshes in their own slot. The engine
+copies a few of them at load time out of MESHSWAP1 (object slot 405) - fire
+hands, damage skins, a swapped head. MESHSWAP1 is filled per level with the
+content of THAT level's own enemies, so an imported enemy would draw whatever
+the target happens to keep there, or, in the five levels without a 405, slot
+0, which is Lara.
+
+Since #111 each such type therefore has a fallback slot of his own, which the
+randomizer fills from a level that really carries his set (the swapFrom and
+swapDst columns of the pool table) and which the engine prefers over 405
+(MeshSwapSource in setup.cpp, named MESHSWAP_CROSS_* in objects.h). Both
+sides must agree on the number, which is why the assignment is written down
+here and nowhere else:
+
+    401 gladiator            462 SWAT            466 Mafia
+    402 imp                  463 SWAT heavy      467 guard 460
+    403 Roman god, sword     464 Two Gun         468 cyborg 469
+    404 Roman god, hammer    465 guard 37        470 crane guy
+
+What lands in such a slot is the donor's COMPLETE MESHSWAP1 - the copy does
+not select, and the counts differ per donor (rich3 keeps 20 meshes there,
+joby3 15). The engine then takes out the ones its type needs: the soldier
+family 10 and 13, the imp 10, Two Gun 2, the gladiator 0 to 15, the Roman god
+0 to 16, and the cyborg all twenty. He is the largest case in the project -
+his damage skin is the whole model over again.
+
+The crane guy (470) was the last type still hanging raw on 405. The case had
+gone unnoticed for months because his halves are only ever shown at OCB 3,
+OCB 4 and SasControl state 37, and the pool places every enemy with OCB 0.
+
+Two donors here differ from the model donor, and for the same reason both
+times - the model level has no MESHSWAP1 at all: the guard's hands come from
+joby3 although his model comes from rich1, and the crane guy's come from
+joby3 although his model comes from joby2.
+
+The halves are copied with onlyMeshes: MESHSWAP1 carries an anim_index
+without animations of its own, and only the meshes are wanted.
 
 
 REACHING PAST THE OWN SLICE
@@ -112,6 +160,18 @@ Four checks, each of which has caught something:
    immediately after; a randomizer that scatters weapons does not. Three
    were found this way - chef, skeleton, swamp witch. One grep in the
    enemy's own .cpp answers it.
+
+   There is a SECOND road to the same place, and grepping for hit_points
+   does not find it: objects[...].undead in setup.cpp. The flag makes
+   larafire.cpp skip the damage entirely (the grenade checks it too), so
+   the control may read hit_points as diligently as it likes - nothing ever
+   subtracts from them. The cyborg (#146) is the case: in vanilla he dies
+   only through rich3's own geometry, its gas rooms and a short circuit in
+   water, neither of which exists in another level. Two enemies carried the
+   flag; Two Gun's was removed and confirmed in game, and for the cyborg
+   the mortal version got an engine slot of its own so rich3's puzzle
+   carriers keep theirs. So the check is two greps, not one: hit_points in
+   the control, and undead in setup.cpp.
 3. Does it need AI markers (Pool A) or not (Pool B)? See Enemy Pools.txt.
 4. Does it hang on a level script or a cutscene? The chef did, through
    deltapak.cpp, and that is why he was excluded for weeks. The other

@@ -1680,7 +1680,33 @@ bool Rando::run(const RandoInput& in,
         // SWAT+. The base slot is fetched via HIS own kCross row, i.e. from
         // joby3. That matters: the guard from joby2 CANNOT be copied
         // ("frame pointer outside the frame slice").
-        { 55, "joby2",   {},                                    {-1,-1},  nullptr,   -1, 0, 460 }, // Crane Guy
+        //
+        // Swap halves 405 -> 470 (#146): he was the LAST enemy still
+        // hanging raw on MESHSWAP1 (setup.cpp:1367f, meshes 10 and 13 - the
+        // fire hands of the soldier family). The case was dormant and
+        // therefore never noticed: the halves show only at OCB 3 (fall
+        // through the window), OCB 4 (rappel) and SasControl state 37 (the
+        // keyhole), never on a hit or a death - and the pool always places
+        // him with OCB 0. Where the target lacks a 405 entirely (Andrea1,
+        // Andy2, joby2, joby4, rich1) he would have drawn slot 0, i.e.
+        // Lara's meshes.
+        //
+        // swapFrom is joby3, NOT his model donor joby2: joby2 has no
+        // MESHSWAP1 at all. joby3's 405 is the family's fire-hand set, the
+        // same source the guard (37 -> 465) and the joby guard (460 -> 467)
+        // already draw from - each into his own target slot, so nothing is
+        // shared. If the target level IS joby3, the copy still runs
+        // properly: ApplyPatch loads every donor separately from the backup
+        // (the "source" cache in ApplyPatch.cpp), so the level's native 405
+        // is read out of the untouched file and written to the free slot
+        // 470 - the native one stays where it is.
+        //
+        // One gap stays open, deliberately: in joby2 his model is native,
+        // so the emission takes the modelAlreadyHere branch and copies
+        // NOTHING - not even the halves. There he keeps the old picture.
+        // It costs nothing as long as the pool sets OCB 0, and the guard
+        // (465 in rich1) has stood the same way since #111.
+        { 55, "joby2",   {},                                    {-1,-1},  "joby3",   470, 0, 460 }, // Crane Guy
         { 57, "Andrea3", {},                                    {-1,-1},  nullptr,   -1 },  // Lion
         { 59, "Andrea3", {},                                    {-1,-1},  "Andrea3", 401 }, // Gladiator
         // The Roman god, TWO versions, two slots (#84, user idea).
@@ -1753,6 +1779,48 @@ bool Rando::run(const RandoInput& in,
         //    itself has water too and still the projectile core in 367 -
         //    the best proof of that.
         { 63, "Andrea2", { {167,"Andrea2",167} },               {367,-1}, nullptr,   -1, 17 },  // Hydra
+        // The VCI cyborg (#146) - Core's HITMAN, the armoured android from
+        // rich3. The nimblest human in the game: the ONLY enemy with
+        // can_monkey (lot.cpp), vault and drop of four clicks, long jump,
+        // five-shot bursts, sparks instead of blood on a hit.
+        //
+        // Why his OWN engine slot 469 and not the vanilla 67:
+        // objects[HITMAN].undead is set, so no weapon of Lara's ever
+        // reaches his hit points - in vanilla he dies only through rich3's
+        // LEVEL GEOMETRY (the gas rooms with room flag 0x80, which exist in
+        // no other level, and a short circuit in water). One-to-one he
+        // would therefore be immortal in twelve of thirteen levels. The
+        // engine half of #146 gives 469 a mortal control of his own; the
+        // two vanilla specimens in rich3 (items 183 and 200, each carrying
+        // a puzzle half) keep slot 67, keep their immortality and stay
+        // exactly the puzzle Core built. They stand in fixedItems anyway.
+        //
+        // Donor rich3, sourceSlot 67: only rich3 carries the model at all
+        // (20 meshes, 72 anims in one piece from 577). Through the
+        // sourceSlot the "nobody donates to himself" rule keeps him out of
+        // rich3 - which is exactly right here, since his slot brother
+        // already stands there.
+        //
+        // Swap halves 405 -> 468: setup.cpp copies TWENTY meshes raw out of
+        // MESHSWAP1 for him, the largest such case in the project (SWAT 2,
+        // Imp 1, gladiator 16, Roman god 17) - his damage skin. In foreign
+        // levels he would pull their 405 (the soldier family's fire hands)
+        // or slot 0 (Lara). Hence his own fallback slot, like the ten
+        // enemies already converted. rich3's 405 has 20 meshes and no anims
+        // of its own, so onlyMeshes is the right mode.
+        //
+        // No CrossSound entries: all six of his samples (95/99/119 feet,
+        // 206/207 fire, 247 short circuit) hang on anim commands and travel
+        // by themselves with phase D of the transfer - measured on the test
+        // import. No companions either: his MIP 68 is never drawn for
+        // enemies. No anim base type and no animCount - he brings his own
+        // complete set.
+        //
+        // Price: he is the most expensive guest in the table. His textures
+        // add SIX object texture pages and 211 texinfos, about 1.08 MB per
+        // target level (measured on the test import into Andrea1 and
+        // joby5).
+        { 469, "rich3",  {},                                    {-1,-1},  "rich3",   468, 0, 0, nullptr, 67 }, // Cyborg
         { 77, "Andy2",   {},                                    {-1,-1},  nullptr,   -1 },  // Maze Monster
         // Huskie (85): the dog from joby2 - an enemy of its OWN, not the
         // dog (41). Own control (HuskieControl), own Initialise, 24 instead
@@ -3639,6 +3707,12 @@ std::vector<EnemyKind> Rando::enemyKinds()
         // excludes it; with the own slot both can stand in the same level.
         { 461, "Soldier statue (hammer)", nullptr },
         { 63, "Hydra",             nullptr },
+        // Engine slot 469 (CYBORG, #146): the VCI cyborg from rich3. In
+        // vanilla he sits on slot 67 and is immortal there by design (his
+        // object flag undead, he dies only through rich3's own geometry) -
+        // the new slot carries a mortal version, while the two puzzle
+        // carriers in rich3 keep the old one.
+        { 469, "Cyborg",           nullptr },
         { 77, "Maze monster",      nullptr },
         // The dog from joby2 - its own enemy type with its own control,
         // not to be confused with "Dog" (41) from Andrea1.

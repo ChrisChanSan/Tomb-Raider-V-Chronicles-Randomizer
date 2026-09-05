@@ -42,6 +42,27 @@ code proves nothing. When the change was to the TR3 cache keys, the test had
 to place a TR3 guest - and the proof was that the new build re-extracted from
 Tomb Raider III and produced files byte-identical to the old cache.
 
+**The one difference that is allowed, from 2026-09-05 (#123, stage S7).**
+Every randomized level now carries the HD outfit marker in `data[3]` of its
+header block, and a sidecar `<level>.hdm` beside it. Comparing across that
+commit:
+
+- With no Tomb Raider III outfit in the run, every `.trc` must still be
+  **byte-identical**. That was measured over all thirteen levels of seed 380
+  with `mix cross allsanity 8 weapons`, once plain and once with the glitched
+  secret list - the second one because the marker's recording sits inside
+  `makePortal`, `clearWallFaces` and `moveRoom`, and a run that never opens a
+  portal would not have touched the changed code at all.
+- With a guest outfit rolled, **exactly one byte** per level may differ, and
+  it is `data[3]`: `cmp -l` shows a single line with a value of 5, 6, 7 or 8
+  (octal `10`). Anything else is a regression. Seven of thirteen levels came
+  out identical in that run because their roll landed on a vanilla outfit.
+- The `.hdm` files are part of the reproducibility: the same seed twice must
+  give the same sidecar byte for byte, not only the same level.
+
+`HdmDump <level.trc>` prints `data[3]` with its meaning and the sidecar
+beside it, and says so when the two disagree.
+
 **A known break in the chain, 2026-09-03 (#137).** From the commit that
 builds geometry for rooms that have none, `Make_Portal` writes its view
 windows corner-exact out of the floordata instead of out of the sector's two

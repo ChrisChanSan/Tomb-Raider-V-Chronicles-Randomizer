@@ -1,7 +1,7 @@
 # The tools, and which one answers which question
 
-Written 2026-08-30 from the folder itself, four tools added 2026-09-03 and one
-more 2026-09-05. Thirty-nine diagnostic tools sit in `Diagnose\`, thirty of
+Written 2026-08-30 from the folder itself, four tools added 2026-09-03 and two
+more 2026-09-05. Forty diagnostic tools sit in `Diagnose\`, thirty-one of
 them with a build script beside them, and until now there was no index at all -
 so the way to find the right one was to already know it existed.
 
@@ -46,6 +46,7 @@ else - with their own name substituted.
 | `TriggerCommands` | - | counts which trigger commands occur in a level. |
 | `CameraCheck` | bcc | the fixed cameras with their flags. |
 | `TexRec` | btx | texture pages and texinfos. |
+| `HdmDump` | bhdm | the HD markers of stage S7 (#123): `data[3]` of the level header with its meaning, and the `.hdm` sidecar beside the file. Doubles as the reference reader for the sidecar grammar - the engine's own reader has to answer the same way on the same file. Run it on a finished level; a vanilla one says "no markers", which is what the engine reads too. |
 
 **Objects, animations, meshes**
 | Tool | Script | What it answers |

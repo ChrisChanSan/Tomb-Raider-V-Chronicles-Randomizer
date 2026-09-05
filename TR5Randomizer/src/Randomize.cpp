@@ -512,6 +512,18 @@ int main(int argc, char** argv)
 
     if (!lvl.save(toW(argv[4]), err)) { std::printf("save: %s\n", err.c_str()); return 1; }
 
+    // HD markers (#123, stage S7): the sidecar beside the finished level.
+    // AFTER the save, and unconditionally - a level with nothing to mark
+    // gets the version line alone, so a file left over from an earlier run
+    // can never keep talking about rooms this run did not touch.
+    {
+        int hdRooms = 0, hdDonors = 0;
+        if (!Patch::writeHdMarkers(lvl, toW(argv[4]), err, &hdRooms, &hdDonors))
+        { std::printf("HD markers: %s\n", err.c_str()); return 1; }
+        std::printf("  HD markers  outfit %d, %d rooms, %d donor slots\n",
+                    lvl.hdOutfit(), hdRooms, hdDonors);
+    }
+
     // SecretRewards.txt lies beside the EXECUTABLE, and the target level lies
     // in its data folder - so one step up from there. The file is written
     // whole out of the seed, which makes running this once per level

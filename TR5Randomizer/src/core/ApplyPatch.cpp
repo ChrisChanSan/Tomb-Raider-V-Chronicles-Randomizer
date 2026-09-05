@@ -551,6 +551,21 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     // aborts BEFORE saving - the level then remains the untouched copy from
     // the backup.
     const JsonValue& outfit = patch["outfit"];
+
+    // #123 S7: the HD outfit marker starts at "none" for every run that
+    // decides an outfit at all, and the guest branch far below sets it.
+    // Guarded by has("outfit") for the same reason the weather is: apply()
+    // runs a SECOND time for the secret list, and that patch carries no
+    // outfit - without the guard the second pass would wipe the marker the
+    // first one had just written.
+    //
+    // The one case this does not reach is a run whose roll left the level
+    // its OWN outfit, because then the randomizer puts no "outfit" into the
+    // patch at all. That is harmless as long as the source file is a
+    // vanilla one, where data[3] is 0 - and the checksum gate exists to
+    // make sure it is.
+    if (patch.has("outfit")) level.setHdOutfit(0);
+
     if (outfit.has("fromLevel"))
     {
         const std::string from = outfit["fromLevel"].asString();
@@ -607,6 +622,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                     error = "outfit slot " + std::to_string(slot) + " from " + from + ": " + oErr;
                     return false;
                 }
+                level.hdMarkDonor(slot, slot, from);
             }
 
             // The LaraType byte is our outfit marker for the engine:
@@ -696,6 +712,21 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         // The LaraType byte is deliberately NOT touched. It steers the
         // braid's special handling, and the braid hangs on the head - which
         // is the level's own. Whatever was right before is still right.
+        //
+        // But data[3] IS written (#123, stage S7), and it exists because of
+        // exactly that: LaraType says LARA_PONYTAIL here, and it says the
+        // same for the Rome body in a Russia level. The engine's HD path
+        // cannot tell the two apart from the file and stays classic for
+        // both; this byte is the one thing that can tell it. Nothing else
+        // reads it, so a level whose outfit has no HD twin gets 0 and stays
+        // classic - which is what it would have done anyway.
+        //
+        // No donor line for slot 8: Lara's HD body is chosen by the outfit
+        // path, never by a slot name (see Patch::writeHdMarkers).
+        report.hdOutfit = hdOutfitId(id);
+        if (!level.setHdOutfit(report.hdOutfit))
+        { error = std::string(o->name) + ": the level header could not be written."; return false; }
+
         report.outfitFrom = o->name;
         report.warnings.push_back(std::string("outfit fetched from Tomb Raider 3: ") + o->name);
     }
@@ -723,6 +754,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                     error = "holster slot " + std::to_string(s) + " from " + from + ": " + oErr;
                     return false;
                 }
+                level.hdMarkDonor(s, s, from);
             }
     }
 
@@ -824,6 +856,11 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         if (!lvl.addMoveableFromTr3(model, slot, -1, f))
         { err = std::string(d->name) + " (model): " + f; return false; }
 
+        // #123 S7: the Remaster has no TR5 model for this slot at all, and
+        // the engine is told where it really comes from - the guests have
+        // their own HD models in the Tomb Raider I-III Remaster.
+        lvl.hdMarkDonor(slot, slot, "TR3");
+
         rep.warnings.push_back(std::string("guest fetched from Tomb Raider 3: ") + d->name +
                                " on slot " + std::to_string(slot));
         return true;
@@ -889,6 +926,10 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                 error = std::string(what) + " slot " + std::to_string(slot) + " from " + from + ": " + wErr;
                 return false;
             }
+            // #123 S7: BOTH slot numbers. A mesh store travels into the
+            // enemy's own slot (MESHSWAP1 405 -> 462..467), and only the
+            // slot it came FROM says what the model actually is.
+            level.hdMarkDonor(targetSlot, slot, from);
             ++counter;
         }
         return true;
@@ -1645,4 +1686,99 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
     }
 
     return true;
+}
+
+//----------------------------------------------------------------------------
+// HD markers (#123, stage S7). What they are and why, see ApplyPatch.h.
+//----------------------------------------------------------------------------
+int Patch::hdOutfitId(const std::string& wardrobeId)
+{
+    // The engine's HD_LARA_OUTFIT_* numbers, written out rather than
+    // included: this file builds without the engine (the diagnostic tools
+    // use it), exactly as hd_lara.cpp writes out the LARA_* numbers for the
+    // same reason. The enum they belong to is
+    //   0 NONE, 1 CLASSIC, 2 RUSSIA, 3 SUBSUIT, 4 VCI,
+    //   5 TR3_ANTARC, 6 TR3_NEVADA, 7 TR3_COAST, 8 TR3_CATSUIT.
+    struct Row { const char* id; int hd; };
+    static const Row kTable[] =
+    {
+        { "tr3_london",     8 },   // TR3_CATSUIT
+        { "tr3_jungle",     7 },   // TR3_COAST
+        { "tr3_antarctica", 5 },   // TR3_ANTARC
+        { "tr3_nevada",     6 }    // TR3_NEVADA
+    };
+
+    for (const Row& r : kTable)
+        if (wardrobeId == r.id) return r.hd;
+
+    // An outfit the engine has no HD twin for. 0 means "no marker", and the
+    // engine then dresses her the way it would have without stage S7 - the
+    // level's own classic body. A right classic body beats a wrong HD one.
+    return 0;
+}
+
+bool Patch::writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
+                           std::string& error, int* roomsOut, int* donorsOut)
+{
+    if (roomsOut) *roomsOut = 0;
+    if (donorsOut) *donorsOut = 0;
+
+    // Lara's own block and the slots this project added past vanilla. Both
+    // numbers are the engine's (hd_bind.cpp: lara_block_last = 30, and the
+    // hand table covers BLUE_GUARD2 460 .. MESHSWAP_CROSS_CRANEGUY 470).
+    const int kLaraBlockLast = 30;
+    const int kHandTableFirst = 460, kHandTableLast = 470;
+
+    // <path>.trc -> <path>.hdm. The extension is cut only when the dot
+    // belongs to the file name and not to a folder above it.
+    std::wstring out = levelPath;
+    const size_t slash = out.find_last_of(L"/\\");
+    const size_t dot = out.find_last_of(L'.');
+    if (dot != std::wstring::npos && (slash == std::wstring::npos || dot > slash))
+        out.erase(dot);
+    out += L".hdm";
+
+    FILE* f = nullptr;
+    if (_wfopen_s(&f, out.c_str(), L"wb") != 0 || !f)
+    {
+        error = "HD markers: cannot write the sidecar file";
+        return false;
+    }
+
+    // "wb", and every line ended with a single \n: the file has to come out
+    // byte for byte the same for the same seed, and text mode would make
+    // that depend on the platform's line ending. A reader has to tolerate a
+    // stray \r anyway, since a user may have opened it in an editor.
+    std::fprintf(f, "hdm 1\n");
+
+    // Straight out of the level header, not out of a report - so the byte
+    // the engine reads and the line a person reads cannot say two different
+    // things. No line at all means 0, "no Tomb Raider III outfit".
+    const int outfit = level.hdOutfit();
+    if (outfit > 0) std::fprintf(f, "outfit %d\n", outfit);
+
+    // Ascending, because a std::set is. The same seed therefore gives the
+    // same file, which is part of the proof that a run is reproducible.
+    for (int room : level.hdTouchedRooms())
+    {
+        std::fprintf(f, "room %d\n", room);
+        if (roomsOut) ++*roomsOut;
+    }
+
+    std::vector<Tr5Level::HdDonor> donors = level.hdDonors();
+    std::sort(donors.begin(), donors.end(),
+              [](const Tr5Level::HdDonor& a, const Tr5Level::HdDonor& b)
+              { return a.slot < b.slot; });
+
+    for (const Tr5Level::HdDonor& d : donors)
+    {
+        if (d.slot <= kLaraBlockLast) continue;
+        if (d.slot >= kHandTableFirst && d.slot <= kHandTableLast) continue;
+        std::fprintf(f, "donor %d %s %d\n", d.slot, d.level.c_str(), d.fromSlot);
+        if (donorsOut) ++*donorsOut;
+    }
+
+    const bool ok = (std::fclose(f) == 0);
+    if (!ok) error = "HD markers: the sidecar file could not be closed";
+    return ok;
 }

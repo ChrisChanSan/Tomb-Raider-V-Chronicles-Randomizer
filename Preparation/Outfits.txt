@@ -51,6 +51,52 @@ This is one of the couplings in Contract.md: the byte is written by one tree
 and read by the other, and nothing checks that they agree.
 
 
+THE HD OUTFIT MARKER - THE SECOND BYTE (#123, stage S7)
+================================================================
+The LaraType byte cannot say everything, and the HD path found out where.
+The wardrobe writes LARA_PONYTAIL (5) in TWO quite different cases:
+
+  - the Rome body inside a Russia level, where LARA_NORMAL would send
+    hair.cpp and laraskin.cpp down the cap's braid handling, and
+  - EVERY guest outfit from Tomb Raider III, for the same reason - the
+    guest's head comes from Andrea1 and wants the standard braid.
+
+Nothing else in the file separates the two. So a level that draws its rooms
+from the Remaster's HD data would put a Rome Lara where the player rolled a
+Nevada one, and reading the byte the other way round cannot work either,
+because it does not say WHICH of the four guests.
+
+A second byte says it: data[3] of the same header block, beside LaraType
+(data[0]), the weather (data[1]) and the speech-head flag (data[2]). It was
+free - all seventeen shipped .trc files carry 0 in data[3] through data[15],
+measured, not assumed.
+
+  wardrobe id       data[3]  engine constant
+  ---------------------------------------------------
+  (none)                  0  HD_LARA_OUTFIT_NONE
+  tr3_antarctica          5  HD_LARA_OUTFIT_TR3_ANTARC
+  tr3_nevada              6  HD_LARA_OUTFIT_TR3_NEVADA
+  tr3_jungle              7  HD_LARA_OUTFIT_TR3_COAST
+  tr3_london              8  HD_LARA_OUTFIT_TR3_CATSUIT
+
+The numbers are the ENGINE'S OWN (specific\hd\hd_lara.h), on purpose: the
+byte goes into HDLaraOutfitFor unchanged, so no side has to translate, and a
+translation is the one thing here that could go wrong without anyone
+noticing. They start at 5 because 1..4 are the vanilla outfits - a stale or
+garbled byte therefore cannot be mistaken for a guest, and anything outside
+the enum is refused by that function's own range test.
+
+The table lives in ONE place, Patch::hdOutfitId in core\ApplyPatch.cpp. An
+outfit with no entry gets 0 and stays classic, which is exactly what it did
+before the marker existed: a right classic body beats a wrong HD one.
+
+The vanilla outfits need no marker - LaraType alone identifies the diving
+suit, the catsuit and the cap, and the engine's HD path already reads them.
+
+HdmDump (Tools\Diagnose) prints the byte with its meaning, for any level
+file.
+
+
 THE FOUR GUESTS FROM TOMB RAIDER III
 ================================================================
 London, Jungle, Antarctica and Nevada. All four come from the player's own

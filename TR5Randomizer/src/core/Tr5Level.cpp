@@ -56,6 +56,11 @@ bool Tr5Level::load(const std::wstring& path, std::string& error)
 {
     m_bytes.clear();
     m_mainOffset = m_mainSize = 0;
+    // #123 S7: a fresh file has had nothing done to it yet. Without this a
+    // second load() into the same object would inherit the first level's
+    // touched rooms - and the GUI does reuse level objects.
+    m_hdRooms.clear();
+    m_hdDonors.clear();
 
     FILE* f = nullptr;
     if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f)
@@ -1668,6 +1673,11 @@ bool Tr5Level::clearWallFaces(int room, int sx, int sz, int& cleared, std::strin
             std::memcpy(m_bytes.data() + f.indexAt + static_cast<size_t>(k) * 2, &first, 2);
         ++cleared;
     }
+    // #123 S7: marked even when nothing was cleared. The sector was NAMED as
+    // an opening either way, and the HD art of that room still shows the
+    // closed wall; whether a classic face happened to stand there says
+    // nothing about what the Remaster draws.
+    hdMarkRoom(room);
     return true;
 }
 
@@ -2298,6 +2308,11 @@ bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
     if (m_roomMismatch)
     { error = "after inserting the view window " + std::to_string(m_roomMismatch) +
               " rooms no longer parse - the layout arithmetic is off"; return false; }
+
+    // #123 S7: both rooms now carry a window the Remaster's geometry knows
+    // nothing about.
+    hdMarkRoom(roomA);
+    hdMarkRoom(roomB);
     return true;
 }
 
@@ -2453,6 +2468,12 @@ bool Tr5Level::moveRoom(int room, long dx, long dy, long dz, std::string& error)
         }
     }
 
+    // #123 S7: only a VERTICAL move breaks the Remaster's geometry. A TRG's
+    // vertices are room-local and ride along with the origin, so dx and dz
+    // change nothing about them - dy is written into every vertex above and
+    // is exactly what the HD art would not follow.
+    if (dy) hdMarkRoom(room);
+
     // The origins changed, so the room table has to be read again.
     return reparse(error);
 }
@@ -2522,6 +2543,10 @@ bool Tr5Level::makeVerticalPortal(int room, int sx, int sz, int targetRoom,
     }
 
     m_bytes[at] = static_cast<uint8_t>(targetRoom);
+    // #123 S7: a floor or ceiling one can now pass through. The face that
+    // used to close it is still drawn in the Remaster's geometry.
+    hdMarkRoom(room);
+    hdMarkRoom(targetRoom);
     return true;
 }
 
@@ -2532,6 +2557,15 @@ bool Tr5Level::makePortal(int room, int sx, int sz,
     { error = "room " + std::to_string(room) + " does not exist"; return false; }
     if (targetRoom < 0 || targetRoom >= static_cast<int>(m_rooms.size()))
     { error = "target room " + std::to_string(targetRoom) + " does not exist"; return false; }
+
+    // #123 S7: marked HERE, at the top, and not at each of the two ways out.
+    // A call to this function is the intent to open a wall between these two
+    // rooms; whether a window had to be built or was already there decides
+    // nothing about what the Remaster's geometry shows, and one mark in one
+    // place cannot fall down a branch. (A failed call aborts the whole run,
+    // so a mark left behind by one is never written out.)
+    hdMarkRoom(room);
+    hdMarkRoom(targetRoom);
 
     // No view window yet? Then build one, in both directions (#132). This
     // happens FIRST, before any reference into m_rooms is taken: creating a
@@ -3299,6 +3333,72 @@ bool Tr5Level::setForeignTalkHeads(int value)
 }
 
 //----------------------------------------------------------------------------
+// data[3] of the same 32 bytes: the HD outfit marker (#123, stage S7).
+//
+// The engine's HD path needs to know which Tomb Raider III outfit the
+// wardrobe rolled, and data[0] cannot tell it: LARA_PONYTAIL is written both
+// for the Rome body in a Russia level and for every guest, and the file says
+// nothing else about it (hd_lara.cpp explains the case at length).
+//
+// Where the value comes from, and why data[3] and not a fifth file: the
+// block is "short data[16]" (specific\file.cpp) and the engine reads all 32
+// bytes before it touches anything else, so a byte here is available before
+// a single room is loaded. All 17 shipped .trc files carry 0 in data[3]
+// through data[15] - measured, not assumed - so the slot beside the speech
+// head flag was free.
+//
+// The value is the engine's own HD_LARA_OUTFIT_*, see Tr5Level.h.
+//----------------------------------------------------------------------------
+int Tr5Level::hdOutfit() const
+{
+    if (m_mainOffset < 40) return -1;
+    int16_t v;
+    std::memcpy(&v, m_bytes.data() + m_mainOffset - 8 - 32 + 6, 2);
+    return v;
+}
+
+bool Tr5Level::setHdOutfit(int value)
+{
+    if (m_mainOffset < 40) return false;
+    const int16_t v = static_cast<int16_t>(value);
+    std::memcpy(m_bytes.data() + m_mainOffset - 8 - 32 + 6, &v, 2);
+    return true;
+}
+
+//----------------------------------------------------------------------------
+// The two marker lists (#123, stage S7). Both are plain recording - the
+// judgement about which of them the engine may use lives in
+// Patch::writeHdMarkers, so that this class keeps saying only what happened.
+//----------------------------------------------------------------------------
+void Tr5Level::hdMarkRoom(int room)
+{
+    if (room >= 0) m_hdRooms.insert(room);
+}
+
+void Tr5Level::hdMarkDonor(int slot, int fromSlot, const std::string& level)
+{
+    if (slot < 0 || level.empty()) return;
+
+    // The same slot can be written twice in one run (a weapon slot filled
+    // "only what is missing" and later replaced). Only the LAST write is in
+    // the file, so only the last one is true - and remembering both would
+    // put two contradictory lines in the sidecar.
+    for (size_t i = 0; i < m_hdDonors.size(); ++i)
+        if (m_hdDonors[i].slot == slot)
+        {
+            m_hdDonors[i].fromSlot = (fromSlot < 0) ? slot : fromSlot;
+            m_hdDonors[i].level = level;
+            return;
+        }
+
+    HdDonor d;
+    d.slot = slot;
+    d.fromSlot = (fromSlot < 0) ? slot : fromSlot;
+    d.level = level;
+    m_hdDonors.push_back(d);
+}
+
+//----------------------------------------------------------------------------
 // data[1] of the same 32 bytes: the weather (#144). 0 dry, 1 rain, 2 snow.
 //
 // LoadLevel reads the block as "short data[16]" and takes
@@ -3524,6 +3624,15 @@ bool Tr5Level::buildRoomGeometry(int room, int likeRoom,
     const Tr5Room& r = m_rooms[static_cast<size_t>(room)];
     if (!r.headerOffset || !r.sectorsOffset)
     { error = "room " + std::to_string(room) + " did not parse"; return false; }
+
+    // #123 S7: marked at the top, before the idempotent way out below. A
+    // room named by Make_Room_Geometry has no drawn surface in the vanilla
+    // file - which is why the command exists at all - so the Remaster's
+    // group for it is empty too and the engine falls back to classic there
+    // by itself. The mark says it out loud instead of relying on that, and
+    // it costs nothing: a room the player could not see before is not one
+    // the HD art has anything to show for.
+    hdMarkRoom(room);
 
     const size_t hdr = r.headerOffset;
     const size_t body = hdr + 208;

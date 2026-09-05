@@ -459,6 +459,34 @@ with the level options off puts the original order back.
 > a fully vanilla game, copy `data\Backup\SCRIPT.DAT` back by hand, press
 > "Reset balance", and delete `SecretRewards.txt`.
 
+### The `.hdm` files beside your levels
+
+From build 2026-09-05 a run leaves one small text file per level in `data\`,
+next to the `.trc` it belongs to: `Andrea1.hdm`, `joby2.hdm` and so on, a
+handful of lines each.
+
+They are notes for the engine's **HD mode**, which draws the levels with the
+Remaster's own artwork. That artwork describes the *original* level, so the
+randomizer has to say where it no longer fits: which rooms a secret list
+opened a wall in, which object slots hold a model out of a different level,
+and which Tomb Raider III outfit you rolled. Where the file says so, the
+engine falls back to the classic look for that one room or that one object,
+and everything else stays HD.
+
+You never have to do anything with them:
+
+- **They are written on every run, for every level**, even when there is
+  nothing to report — an empty one is how the tool makes sure an old note
+  cannot outlive the run that wrote it.
+- **Deleting them is safe.** The engine reads a missing file as "nothing to
+  report" and draws that level entirely in HD, which is only wrong if the run
+  really did change something there.
+- **"Restore original" deletes them again**, because a restored level has
+  nothing left to report. Unlike `Balance.txt` and `SecretRewards.txt`, these
+  really do go away.
+- They are not needed in classic mode at all, and they cost a few hundred
+  bytes.
+
 **"Debug"** opens a small menu; the marked levels are built from the
 **"Sector markers..."** window it leads to. They are copies of the levels
 with every valid placement sector marked, for looking at in trview. Those files will **not** start in the game —

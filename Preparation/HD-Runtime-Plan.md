@@ -240,6 +240,67 @@ from `5\FMV\HD\*.OGV` via libogg/libtheora - a project of its own.
   by the user). Level order: outfit hangs on the section and
   `gfFilenameWad` stays vanilla - the TRG name is always right.
   **2 tasks (+1 for the marker).**
+
+  **S7-1 is built (the randomizer half). What it writes, and what S7-2
+  therefore has to read:**
+
+  1. **The outfit**, in `data[3]` of the level header - the block the
+     engine already reads for `LaraDrawType`, `WeatherType` and the
+     speech-head flag. Measured free first: all seventeen shipped `.trc`
+     files carry 0 in `data[3]` through `data[15]`. The value is the
+     engine's own `HD_LARA_OUTFIT_*`, so it goes into `HDLaraOutfitFor`'s
+     `tr3Outfit` argument unchanged: 0 none, 5 `TR3_ANTARC`
+     (`tr3_antarctica`), 6 `TR3_NEVADA` (`tr3_nevada`), 7 `TR3_COAST`
+     (`tr3_jungle`), 8 `TR3_CATSUIT` (`tr3_london`). The table is
+     `Patch::hdOutfitId` in `core\ApplyPatch.cpp`, and it is the only
+     one - if the enum is renumbered, that function goes with it. An
+     outfit with no HD twin gets 0 and stays classic.
+  2. **The touched rooms and the donor slots**, in a sidecar
+     `data\<LEVEL>.hdm` beside the `.trc`. They cannot go in the header:
+     a room bit field needs up to 254 bits and a donor list is
+     unbounded. Plain text, one fact per line, first line the version:
+
+     ```
+     hdm 1
+     outfit 6
+     room 34
+     room 36
+     donor 386 Andrea1 386
+     donor 462 Andrea1 405
+     ```
+
+     `room` lines ascending, `donor` lines ascending by slot, so the same
+     seed gives the same file byte for byte. A donor line names the slot
+     in THIS level, the donor's level stem (or `TR3` for a guest out of
+     Tomb Raider III - then the I-III Remaster has the model), and the
+     slot it was taken FROM, which differs whenever a mesh store travels
+     into an enemy's own slot. Written on EVERY run for EVERY level, even
+     when there is nothing to say; a missing file means "no markers", so
+     an empty file is what keeps an old one from going on talking.
+
+     Recorded in `Tr5Level` itself, at the six functions that change a
+     room's shape - `clearWallFaces`, `addViewWindow`, `makePortal`,
+     `makeVerticalPortal`, `buildRoomGeometry`, `moveRoom` with `dy` -
+     so no caller can forget one. `Make_Room_Water`, `Make_Climb`,
+     triggers and items mark nothing, and `moveRoom` with `dx`/`dz` only
+     marks nothing either.
+
+     Two kinds of slot are deliberately left out of the file, and
+     `Patch::writeHdMarkers` is the only place that decides it: Lara's
+     own block (0..30), because her HD body comes from the outfit path
+     and a donor line there would drop her back to classic exactly where
+     `data[3]` had just got it right; and 460..470, because the engine's
+     hand table above already names those, measured by picture.
+  3. **Nothing else.** `hd_render.cpp` already falls back to classic for
+     a room with an empty group, which covers `Make_Room_Geometry` by
+     itself - the mark only says it out loud.
+
+  The grammar and a reference reader (about forty lines) are
+  `Tools\Diagnose\HdmDump.cpp`, which also prints `data[3]` with its
+  meaning and holds the two halves against each other. **S7-2 owes:**
+  reading both, rooms classic, the donor `.MAP` lookup, `data[3]` into
+  `HDLaraOutfitFor`, `ROMAN_GOD` without a MAP entry, and the I-III
+  Remaster for the `TR3` donors.
 - **S8 - first person and binoculars.** First person does not hide
   Lara; the HD body may show inside the head -> zero `mesh_bits` like
   the binoculars do. The binoculars draw the real mesh in the classic

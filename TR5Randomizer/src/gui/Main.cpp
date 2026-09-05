@@ -997,13 +997,21 @@ static std::wstring cacheDir(const App& a)
 
         if (!lvl.save(target, err)) return false;
 
+        // HD markers (#123, stage S7): the sidecar beside the finished
+        // level. AFTER the save, and for EVERY level - one with nothing to
+        // mark gets the version line alone, so a file left over from an
+        // earlier run can never keep talking about rooms this run did not
+        // touch.
+        int hdRooms = 0, hdDonors = 0;
+        if (!Patch::writeHdMarkers(lvl, target, err, &hdRooms, &hdDonors)) return false;
+
         // 320 and not 200: with everything switched on the pieces below
         // already added up to just over 200, and snprintf returns the length
         // it WOULD have written - so "sizeof(buf) - len" turned negative and,
         // as a size_t, into a huge number. The weather line (#144) is the one
         // that pushed it over; the room is added here rather than juggling
-        // the pieces.
-        char buf[320];
+        // the pieces. The HD markers (#123) got another 64.
+        char buf[384];
         int len = std::snprintf(buf, sizeof(buf), "%d moved, %d new", pr.edited, pr.added);
         if (rep.enemiesAdded > 0)
             len += std::snprintf(buf + len, sizeof(buf) - len, ", %d enemies", rep.enemiesAdded);
@@ -1027,9 +1035,17 @@ static std::wstring cacheDir(const App& a)
         {
             static const char* kW[3] = { "dry", "rain", "snow" };
             const int was = (pr.weatherFrom >= 0 && pr.weatherFrom <= 2) ? pr.weatherFrom : 0;
-            std::snprintf(buf + len, sizeof(buf) - static_cast<size_t>(len),
-                          ", weather: %s (vanilla %s)", kW[pr.weatherTo], kW[was]);
+            len += std::snprintf(buf + len, sizeof(buf) - static_cast<size_t>(len),
+                                 ", weather: %s (vanilla %s)", kW[pr.weatherTo], kW[was]);
         }
+        // The HD markers (#123), so the spoiler says what the sidecar beside
+        // the level carries. Only when there is something to say - in a run
+        // without secret lists and without a guest outfit that is nothing
+        // but donor slots, and those are in the file for whoever wants them.
+        if ((lvl.hdOutfit() > 0 || hdRooms > 0) && len >= 0 && len < static_cast<int>(sizeof(buf)))
+            std::snprintf(buf + len, sizeof(buf) - static_cast<size_t>(len),
+                          ", HD: outfit %d, %d rooms, %d donors",
+                          lvl.hdOutfit(), hdRooms, hdDonors);
         row.result = buf;
         return true;
     }
@@ -1498,6 +1514,19 @@ static std::wstring cacheDir(const App& a)
             setStatus(a, T("Restore failed: ") + err, true);
         else
         {
+            // The HD marker sidecars go with them (#123, stage S7). They
+            // describe changes that no longer exist, and the engine reads a
+            // missing file as "nothing to report" - which is exactly the
+            // truth about a restored original. Levels are not RE-randomized
+            // here, so nothing rewrites them; they have to be removed.
+            // A file that is not there is not an error.
+            for (const LevelRow& r : a.levels)
+            {
+                const size_t dot = r.name.find_last_of('.');
+                const std::string stem = (dot == std::string::npos) ? r.name : r.name.substr(0, dot);
+                DeleteFileW(PathUtil::join(a.dataDir(), PathUtil::widen(stem + ".hdm")).c_str());
+            }
+
             for (LevelRow& r : a.levels) r.result.clear();
             char buf[128];
             std::snprintf(buf, sizeof(buf), T("%d levels restored to their original state."), copied);

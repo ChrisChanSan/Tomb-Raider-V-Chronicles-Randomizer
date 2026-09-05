@@ -110,6 +110,12 @@ struct PatchReport
     // signal for "not touched", and it is what every caller tests.
     int weatherFrom = -1;
     int weatherTo = -1;
+    // HD outfit marker (#123, stage S7): which Tomb Raider III outfit this
+    // pass put on the level, as the engine's HD_LARA_OUTFIT_* number. 0 =
+    // none. Written into the level header (data[3]) by apply() itself; it
+    // stands here as well so the sidecar and the status lines can name it
+    // without reading the file back.
+    int hdOutfit = 0;
     std::vector<std::string> warnings;
 };
 
@@ -167,6 +173,94 @@ namespace Patch
                   const std::wstring& tr3Dir = std::wstring(),
                   const std::wstring& tr3GoldDir = std::wstring(),
                   const std::wstring& cacheDir = std::wstring());
+
+    // --- HD markers (#123, stage S7) ------------------------------------
+    //
+    // The engine can draw a level with the Remaster's own geometry and
+    // models. That data describes the VANILLA level, so the randomizer has
+    // to say where it no longer fits. Three things, and exactly three:
+    //
+    //   1. THE OUTFIT, in data[3] of the level header. Written by apply()
+    //      itself, because it is part of the file. See hdOutfitId.
+    //   2. THE TOUCHED ROOMS - every room whose SHAPE changed.
+    //   3. THE DONOR SLOTS - every model that came out of another level
+    //      file, because the Remaster resolves a slot by the name THIS
+    //      level gives it, and ANIMATING10 means something different in
+    //      every level.
+    //
+    // 2 and 3 do not fit in the header: a room bit field would need up to
+    // 254 bits and a donor list is unbounded. They go into a sidecar file
+    // `<level>.hdm` beside the .trc - plain text, one fact per line:
+    //
+    //     hdm 1
+    //     outfit 6
+    //     room 34
+    //     room 36
+    //     donor 386 Andrea1 386
+    //     donor 462 Andrea1 405
+    //
+    // The first line is the version. `outfit` repeats data[3] for a reader
+    // that has the sidecar open anyway (both come out of the same value, so
+    // they cannot drift); the engine reads the header byte, which is there
+    // before a room is loaded. `room` lines are ascending, `donor` lines
+    // ascending by slot, so the same seed gives the same file byte for
+    // byte. A donor line names the slot in THIS level, the donor level's
+    // stem (or "TR3" for a guest out of Tomb Raider III), and the slot the
+    // model was taken FROM - which differs whenever a mesh store is copied
+    // into an enemy's own slot.
+    //
+    // WRITTEN ON EVERY RUN FOR EVERY LEVEL, even when there is nothing to
+    // say - then it is the version line alone. A missing file means "no
+    // markers", so a level that once had markers and now has none must
+    // still get a file, or the old one would keep talking.
+    //
+    // Two kinds of slot are deliberately LEFT OUT, and this is the only
+    // place that decides it:
+    //   - Lara's own block, slots 0..30 (hd_bind.cpp, lara_block_last).
+    //     Her HD body is chosen by the outfit path out of data[0] and
+    //     data[3], never by a slot name, and a donor line there would tell
+    //     the engine to drop back to classic exactly where the outfit
+    //     marker had just got it right.
+    //   - The slots this project added beyond vanilla, 460..470. The engine
+    //     carries its own hand table for those (hd_bind.cpp), measured by
+    //     picture; a donor's name table has nothing better to offer.
+    //
+    // The file is written next to the finished level, so it is the CALLER
+    // that calls this - after a successful save, with the same target path.
+    // It is not part of save() on purpose: the sidecar belongs to a
+    // randomizer RUN, not to every write of a level file, and the
+    // diagnostic tools that load and save a level would otherwise scatter
+    // sidecars they know nothing about.
+    //
+    // roomsOut/donorsOut receive what actually went INTO the file, not what
+    // the level recorded - the two differ by the slots filtered out above,
+    // and a status line that prints the larger number would not match the
+    // file the user then opens.
+    bool writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
+                        std::string& error,
+                        int* roomsOut = nullptr, int* donorsOut = nullptr);
+
+    // The wardrobe id of a Tomb Raider III outfit ("tr3_london") as the
+    // engine's HD_LARA_OUTFIT_* number, 0 for anything it has no HD twin
+    // for. THE TABLE, and the only one - both sides are documented from
+    // here:
+    //
+    //   tr3_london      8  HD_LARA_OUTFIT_TR3_CATSUIT
+    //   tr3_jungle      7  HD_LARA_OUTFIT_TR3_COAST
+    //   tr3_antarctica  5  HD_LARA_OUTFIT_TR3_ANTARC
+    //   tr3_nevada      6  HD_LARA_OUTFIT_TR3_NEVADA
+    //
+    // The numbers are the engine's own, so data[3] goes into
+    // HDLaraOutfitFor unchanged and neither side translates - a translation
+    // is the one thing here that could go wrong silently and put the player
+    // in a Rome body where he rolled a Nevada one. They start at 5 because
+    // 1..4 are the vanilla outfits; a stale or garbled byte therefore
+    // cannot be mistaken for a TR3 one, and anything outside the enum is
+    // refused by HDLaraOutfitFor's own range test.
+    //
+    // The London->CATSUIT and Jungle->COAST pairings are the plan's, judged
+    // by picture, not by name.
+    int hdOutfitId(const std::string& wardrobeId);
 
     // Shuffle the music triggers (checkbox "Shuffle trigger sound/music
     // IDs"): sends all TO_CD tracks of the finished level through a GLOBAL

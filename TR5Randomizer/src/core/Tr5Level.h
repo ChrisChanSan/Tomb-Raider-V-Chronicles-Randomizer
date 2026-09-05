@@ -819,6 +819,28 @@ public:
     int  foreignTalkHeads() const;
     bool setForeignTalkHeads(int value);
 
+    // data[3] of the same header block: which Tomb Raider III outfit the
+    // randomizer put on this level (#123, stage S7). 0 means "none" - the
+    // body is whatever data[0] says.
+    //
+    // It exists because data[0] cannot say it. The wardrobe writes
+    // LARA_PONYTAIL (5) both for the Rome body in a Russia level and for
+    // EVERY guest outfit, and nothing else in the file separates the two -
+    // so the engine's HD path reads a LARA_PONYTAIL level as "classic" and
+    // would dress a rolled Nevada Lara in Rome clothes.
+    //
+    // The numbers are the engine's own HD_LARA_OUTFIT_* (hd_lara.h), so the
+    // byte goes into HDLaraOutfitFor unchanged and no side has to translate:
+    //   0 none        5 TR3_ANTARC   6 TR3_NEVADA   7 TR3_COAST
+    //                 8 TR3_CATSUIT
+    // The table that maps a wardrobe id onto one of them is
+    // Patch::hdOutfitId - one place, both sides documented from it.
+    //
+    // Measured free before it was used: all 17 shipped .trc files carry 0 in
+    // data[3] through data[15].
+    int  hdOutfit() const;
+    bool setHdOutfit(int value);
+
     // The weather byte in the same header block (#144): 0 dry, 1 rain,
     // 2 snow. Read by the engine in specific\file.cpp (data[1]) and by
     // nothing else than DoWeather (specific\specificfx.cpp).
@@ -830,6 +852,43 @@ public:
     // Tr5Level.cpp for the two conditions and where they come from.
     // 0 means: a weather byte would be written into the void.
     int  weatherRooms() const;
+
+    // --- HD markers (#123, stage S7) -----------------------------------
+    //
+    // The engine can draw a level with the Remaster's own geometry, and
+    // that geometry describes the VANILLA level. Wherever this randomizer
+    // changed a room's shape, the HD art is a lie - it still shows the wall
+    // we just opened - and wherever a model came out of another level file,
+    // the Remaster's name table for THIS level resolves the slot to the
+    // wrong thing (ANIMATING10 means something different in every level).
+    //
+    // Both are recorded HERE, in the level object, and not in the caller:
+    // this is the only place every one of those changes has to pass
+    // through, so nothing can be forgotten by whoever calls it. The two
+    // lists survive the second apply() pass for the secret list by
+    // themselves, because the level object does.
+    //
+    // What counts as touched geometry, and why only these:
+    //   clearWallFaces   takes drawn faces away
+    //   addViewWindow    puts a 32-byte window into the room list
+    //   makePortal       opens a wall (and calls addViewWindow)
+    //   makeVerticalPortal   the stacked kind
+    //   buildRoomGeometry    builds faces for a room that had none
+    //   moveRoom with dy   moves every vertex of the room
+    // NOT counted: moveRoom with dx/dz only (the vertices are room-local
+    // and ride along with the origin), room flags (water, climb), items,
+    // triggers and floordata - none of them is geometry.
+    struct HdDonor
+    {
+        int         slot;       // the slot in THIS level
+        int         fromSlot;   // the slot it was taken from in the donor
+        std::string level;      // donor level stem, or "TR3" for a guest
+    };
+
+    void hdMarkRoom(int room);
+    void hdMarkDonor(int slot, int fromSlot, const std::string& level);
+    const std::set<int>& hdTouchedRooms() const { return m_hdRooms; }
+    const std::vector<HdDonor>& hdDonors() const { return m_hdDonors; }
 
     // --- Texture workshop (#104) ---------------------------------------
     //
@@ -849,6 +908,12 @@ public:
     bool texWorkshopClose(std::string& error);
 
 private:
+    // #123 S7: what the run changed about the geometry and where foreign
+    // models came from. Cleared by load(), so a reused object never carries
+    // the previous level's marks.
+    std::set<int>        m_hdRooms;
+    std::vector<HdDonor> m_hdDonors;
+
     bool                 m_texOpen = false;
     bool                 m_texDirty = false;
     std::vector<uint8_t> m_tex32, m_tex16;

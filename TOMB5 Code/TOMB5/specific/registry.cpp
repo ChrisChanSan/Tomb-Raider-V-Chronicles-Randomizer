@@ -100,6 +100,45 @@ bool REG_ReadBool(char* SubKeyName, bool& value, bool defaultValue)
 	return 0;
 }
 
+void REG_WriteString(char* SubKeyName, const char* value)
+{
+	if (!value)
+		value = "";
+
+	RegSetValueEx(phkResult, SubKeyName, 0, REG_SZ, (CONST BYTE*)value, (ulong)strlen(value) + 1);
+}
+
+bool REG_ReadString(char* SubKeyName, char* value, ulong size, const char* defaultValue)
+{
+	ulong type;
+	ulong cbData;
+
+	if (!value || !size)
+		return 0;
+
+	if (!defaultValue)
+		defaultValue = "";
+
+	cbData = size;
+
+	// RegQueryValueEx does NOT promise a terminating zero for REG_SZ - a
+	// value somebody wrote by hand may have none - so the last byte is
+	// nailed down afterwards, and a value that fills the whole buffer is
+	// treated as a miss rather than silently cut in half.
+	if (RegQueryValueEx(phkResult, SubKeyName, 0, &type, (LPBYTE)value, &cbData) == ERROR_SUCCESS &&
+		type == REG_SZ && cbData < size)
+	{
+		value[cbData] = 0;
+		value[size - 1] = 0;
+		return 1;
+	}
+
+	REG_WriteString(SubKeyName, defaultValue);
+	strncpy(value, defaultValue, size - 1);
+	value[size - 1] = 0;
+	return 0;
+}
+
 bool LoadSettings()
 {
 	ulong key;

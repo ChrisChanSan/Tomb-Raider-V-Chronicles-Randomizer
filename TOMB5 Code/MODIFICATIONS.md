@@ -41,11 +41,23 @@ wordmark: **108** files changed, still 18 entirely new - **126** in all, 124 of
 them carrying the notice. Nothing was added; `specific/specificfx.h` is the one
 file that had never been touched before and now is.
 
-Exactly two of the 126 do not carry it, and neither should:
+Measured again on **2026-09-05**, after stage S0 of "HD art from the Remaster"
+(section 4 below): **110** files changed, **36** entirely new - **146** in all,
+136 of them carrying the notice. Two of the newly changed files
+(`specific/registry.h`, `tomb5/tomb5.h`) had never been touched before and were
+given their notice with this change. The 18 additions are the ten
+`specific/hd/hd_*` files and eight under `vendor/trforge/`.
+
+Ten of the 146 do not carry it, and none of them should:
 `tomb5/libs/stb/stb_vorbis.c` and `tomb5/libs/discordRPC/LICENSE` are other
 people's files that we do not modify at all - stb_vorbis carries its own
 licence at the end of the file, and the second one IS a licence. Putting our
-notice on them would claim an authorship we do not have.
+notice on them would claim an authorship we do not have. The other eight are
+`vendor/trforge/` - five source files copied byte for byte from TRForge (MIT),
+its `LICENSE`, its `NOTICE.md` and our `VERSION.txt` that records where they
+came from. The five sources carry a hidden signature in their first three
+lines; writing anything into them, our notice included, would destroy it, and
+we change nothing in them, so there is nothing to notice.
 
 `game/trex.h`, `game/raptor.h` and `game/compy.h` carry the notice AND name
 tomb3 as their origin further down (section 3 below); `game/newinv2.h` had
@@ -891,6 +903,82 @@ exist word for word in both engines.
 models, animations and sounds are read at runtime from the player's own
 Tomb Raider III installation; without it, those enemies simply do not
 appear.
+
+### 4. HD art from the Remaster, read at run time (#123)
+
+Stage **S0** of that work — the foundation. It draws no pixel differently; it
+finds the installed *Tomb Raider IV-VI Remastered*, reads what that installation
+has for the level being loaded, writes the numbers into the log and frees
+everything again. The whole path is behind the registry setting `hd_enable`,
+which is **0 out of the box**: with it off, `HDEnabled()` returns before any
+folder is searched or any file is opened, and the two calls in `file.cpp` are
+the only way into the new code at all.
+
+New, under `TOMB5/specific/hd/`:
+
+- `hd_install.cpp` / `.h` — finds the installation. The registry value
+  `hd_install` first (same key as every `tomb5.*` setting:
+  `HKCU\Software\Core Design\Tomb Raider Chronicles\tomb5`), then every Steam
+  library. **Carried over from TROne (GPLv3, Todesengel)** — see
+  `THIRD-PARTY.md`; the file names his copyright in its own header.
+- `hd_bind.cpp` / `.h` — which `.TRM` belongs to which slot: the level's own
+  `LEVELn.MAP` first, then a hand table for the slots this project added beyond
+  the original 460, then the slot's own name. The slot name table is generated
+  from `game/objects.h` and a `static_assert` in `hd_level.cpp` catches it
+  drifting away from the enum.
+- `hd_trm.cpp` / `.h` — the header of a `.TRM`, including the trick that gets
+  past the facial rig the head models carry. Written against TRForge's format
+  description, not copied from it (its own file pulls in a level library we do
+  not want).
+- `hd_scan.cpp` / `.h` — reads the `.TRG`, counts groups, pages, vertices,
+  indices and draw ranges, binds the slots, and times our BC7 decoder over every
+  page of the level. Engine-free on purpose: the diagnostic tools `TrgProbe` and
+  `MapProbe` compile the same file, so what they measure is what the game
+  measures.
+- `hd_level.cpp` / `.h` — the level bracket and the `HDLOG` line.
+
+New, under `TOMB5/vendor/trforge/` — **verbatim TRForge (MIT)**, five source
+files plus `LICENSE`, `NOTICE.md` and `VERSION.txt`. Those five do **not** carry
+our modification notice and must not: they are copied byte for byte, their first
+three lines carry a hidden signature, and we change nothing in them.
+
+Changed:
+
+- `specific/bc7.cpp` / `.h` — `BC7DecodeDDSMip` and `BC7DDSMipCount`, so a page
+  can be decoded at any level of its mip chain. `BC7DecodeDDS` is now that call
+  with mip 0 and behaves exactly as before.
+- `specific/file.cpp` — `HDLevelLoad` after `LoadTextureInfos` (the first moment
+  rooms, meshes and slots are all in memory, in their randomized state) and
+  `HDLevelUnload` in `FreeLevel`.
+- `specific/registry.cpp` / `.h` — `REG_ReadString` / `REG_WriteString`, for the
+  one setting that is a path and not a number.
+- `global/types.h`, `tomb5/tomb5.cpp` / `.h` — the `hd_enable` switch and the
+  `hd_install` path.
+- `tomb5.vcxproj` — the new files, `/std:c++17` **per file** for the ones that
+  use `<filesystem>` (the engine keeps its own default), and
+  **`/LARGEADDRESSAWARE`** on both Win32 configurations.
+
+`LARGEADDRESSAWARE` needs the code to survive an address above 2 GB, so the two
+places where a pointer meets a signed comparison were measured with this
+compiler rather than argued about:
+
+- `game/savegame.cpp` — `if (creature->enemy < 0)` compares an `ITEM_INFO*` with
+  the null pointer constant, which MSVC compiles as an **unsigned** comparison:
+  false for every address there is, `0x90000000` included. The guard has done
+  nothing since the cast the original C had was lost in the decompilation, and
+  the save writes `enemy - malloc_buffer`, so a null enemy already comes back as
+  0. It was **removed**, with the reason written where it stood — because
+  "repairing" it to `(long)creature->enemy < 0` would be true for every address
+  above 2 GB and would blank every enemy pointer in a reloaded save.
+- `specific/alexstuff.cpp` — `(long)pR->door & 1` is a check that a `short*` is
+  not odd. `& 1` reads bit 0 whatever the sign, and on Win32 a `long` is exactly
+  as wide as a pointer, so nothing is truncated. Left as it is, with the
+  measurement noted.
+
+A sweep of every `(long)` / `(ulong)` cast in the engine found no other one
+whose operand is an address and whose result meets a comparison, a division or a
+shift. `specific/file.cpp`'s `(long)meshes[lp] / 2` is a division, but what it
+divides is a file offset the loader has just read, not an address.
 
 ---
 

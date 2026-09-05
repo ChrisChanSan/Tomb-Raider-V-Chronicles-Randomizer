@@ -14,6 +14,7 @@
 #include "../tomb5/libs/zlib/zlib.h"
 #include "hqsfx.h"
 #include "hdscreen.h"
+#include "hd/hd_level.h"
 #include "file.h"
 #include "function_stubs.h"
 #include "../game/gameflow.h"
@@ -412,6 +413,7 @@ void FreeLevel()
 
 	FreeTextures();
 	DXFreeSounds();
+	HDLevelUnload();	// #123, the other half of the level bracket
 	malloc_ptr = malloc_buffer;
 	malloc_free = malloc_size;
 
@@ -1652,6 +1654,15 @@ unsigned int __stdcall LoadLevel(void* name)
 		S_LoadBar();
 
 		LoadTextureInfos();
+		S_LoadBar();
+
+		// #123: the HD side of the level. Here and not earlier because
+		// this is the first moment the rooms, the meshes and the object
+		// slots are all in memory - and in the RANDOMIZED state, which is
+		// the state the models have to be bound against. Does nothing at
+		// all while the registry setting hd_enable is 0, which is how it
+		// ships (see HDEnabled in specific\hd\hd_level.cpp).
+		HDLevelLoad((const char*)name);
 		S_LoadBar();
 
 		pBefore = FileData;

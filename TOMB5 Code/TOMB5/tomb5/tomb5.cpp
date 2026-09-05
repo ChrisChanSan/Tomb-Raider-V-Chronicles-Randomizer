@@ -43,6 +43,12 @@
 
 tomb5_options tomb5;
 
+// The path of the installed Tomb Raider IV-VI Remastered, or an empty string
+// (#123). A path is a string and tomb5_options holds only what the registry
+// likes as a DWORD, so it lives beside the struct rather than inside it.
+// Empty means: let the Steam discovery in specific\hd\hd_install.cpp look.
+char tomb5_hd_install[260];
+
 void init_tomb5_stuff()
 {
 	char buf[40];
@@ -172,6 +178,16 @@ void init_tomb5_stuff()
 		sprintf(buf, "level_select");
 		tomb5.level_select = 0;							//off (#32)
 		REG_WriteBool(buf, tomb5.level_select);
+
+		sprintf(buf, "hd_enable");
+		tomb5.hd_enable = 0;							//off (#123)
+		REG_WriteBool(buf, tomb5.hd_enable);
+
+		// Empty: the Steam discovery looks for the Remaster by itself. A
+		// path here overrides it - our only setting that is not a number.
+		sprintf(buf, "hd_install");
+		tomb5_hd_install[0] = 0;
+		REG_WriteString(buf, tomb5_hd_install);
 	}
 	else	//Key already exists, settings already written, read them. also falls back to default if a smartass manually deletes a single value
 	{
@@ -270,6 +286,12 @@ void init_tomb5_stuff()
 
 		sprintf(buf, "level_select");
 		REG_ReadBool(buf, tomb5.level_select, 0);
+
+		sprintf(buf, "hd_enable");
+		REG_ReadBool(buf, tomb5.hd_enable, 0);
+
+		sprintf(buf, "hd_install");
+		REG_ReadString(buf, tomb5_hd_install, sizeof(tomb5_hd_install), "");
 	}
 
 	CloseRegistry();
@@ -369,6 +391,9 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "level_select");
 	REG_WriteBool(buf, tomb5.level_select);
+
+	sprintf(buf, "hd_enable");
+	REG_WriteBool(buf, tomb5.hd_enable);
 
 	CloseRegistry();
 }

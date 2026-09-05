@@ -155,6 +155,13 @@ void aFixUpRoom(ROOM_INFO* r, char* s)
 	pR->pRmPrelight = (long*)((char*)pR->pRmPrelight + offset);
 	pR->pRmVtx = (float*)((char*)pR->pRmVtx + offset);
 
+	// An odd address in a short* is impossible, so this catches a door list
+	// that came out of the file wrong. SIGN-SAFE under /LARGEADDRESSAWARE
+	// (#123): `& 1` reads bit 0 of the address and nothing else, and on Win32
+	// a long is exactly as wide as a pointer, so nothing is truncated either.
+	// Measured for an address above 2 GB: `(long)p & 1` still gives bit 0.
+	// Left as it is on purpose - it is the one place a pointer is cast to a
+	// signed long and USED, and it does not care about the sign.
 	if ((long)pR->door & 1)
 	{
 		Log("%X", pR->door);

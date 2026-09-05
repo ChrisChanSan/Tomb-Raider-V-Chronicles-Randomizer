@@ -425,10 +425,45 @@ static unsigned long BC7DwordAt(const unsigned char* p)
 unsigned long* BC7DecodeDDS(const void* file, unsigned long size, long maxSide,
 	long* width, long* height, const char** why)
 {
+	return BC7DecodeDDSMip(file, size, maxSide, 0, width, height, why);
+}
+
+long BC7DDSMipCount(const void* file, unsigned long size)
+{
+	const unsigned char* p;
+	unsigned long levels;
+
+	if (size < 148)
+		return 0;
+
+	p = (const unsigned char*)file;
+
+	if (BC7DwordAt(p) != DDS_MAGIC || BC7DwordAt(p + 4) != 124)
+		return 0;
+
+	// DDSD_MIPMAPCOUNT is bit 17 of the header flags at +8. A file that does
+	// not set it carries the one picture, whatever the field at +28 says -
+	// which is 0 in a good many DDS writers' output.
+	levels = (BC7DwordAt(p + 8) & 0x20000UL) ? BC7DwordAt(p + 28) : 1;
+
+	if (!levels)
+		levels = 1;
+
+	return (long)levels;
+}
+
+// The mip chain of a BC7 DDS is stored one level after the other, biggest
+// first, each level ceil(w/4) x ceil(h/4) blocks of 16 bytes. The remaster's
+// pages are 512x512 with six levels (512, 256, 128, 64, 32, 16), which is
+// why the sixteenth of a page at the end still divides evenly into blocks.
+unsigned long* BC7DecodeDDSMip(const void* file, unsigned long size, long maxSide,
+	long mip, long* width, long* height, const char** why)
+{
 	const unsigned char* p;
 	unsigned long* out;
 	unsigned long block[16];
-	long w, h, bx, by, x, y, i;
+	unsigned long skip;
+	long w, h, bx, by, x, y, i, level, levels, mw, mh;
 
 	*why = "";
 	*width = 0;
@@ -486,6 +521,44 @@ unsigned long* BC7DecodeDDS(const void* file, unsigned long size, long maxSide,
 		return 0;
 	}
 
+	levels = BC7DDSMipCount(file, size);
+
+	if (mip < 0 || mip >= levels)
+	{
+		*why = "the file does not carry that mip level";
+		return 0;
+	}
+
+	// Walk past the levels in front of the wanted one. Their sizes are
+	// counted in BLOCKS, not pixels: a 2x2 level is still one whole block.
+	skip = 0;
+	mw = w;
+	mh = h;
+
+	for (level = 0; level < mip; level++)
+	{
+		skip += (unsigned long)((mw + 3) / 4) * (unsigned long)((mh + 3) / 4) * 16UL;
+		mw = mw > 1 ? mw / 2 : 1;
+		mh = mh > 1 ? mh / 2 : 1;
+	}
+
+	// Only whole 4x4 blocks are decoded, so a level below 4 pixels on a side
+	// is refused rather than half written. The remaster stops at 16.
+	if (mw < 4 || mh < 4 || (mw & 3) || (mh & 3))
+	{
+		*why = "mip level is not a whole number of 4x4 blocks";
+		return 0;
+	}
+
+	if (size - 148 < skip + (unsigned long)mw * (unsigned long)mh)
+	{
+		*why = "truncated - the mip chain ends before that level";
+		return 0;
+	}
+
+	w = mw;
+	h = mh;
+
 	out = (unsigned long*)malloc((size_t)w * (size_t)h * sizeof(unsigned long));
 
 	if (!out)
@@ -494,7 +567,7 @@ unsigned long* BC7DecodeDDS(const void* file, unsigned long size, long maxSide,
 		return 0;
 	}
 
-	p += 148;
+	p += 148 + skip;
 
 	for (by = 0; by < h; by += 4)
 		for (bx = 0; bx < w; bx += 4)

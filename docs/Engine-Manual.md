@@ -357,6 +357,57 @@ Start the game once with `-log` to watch it: `log.txt` gets a line per picture
 saying which file was decoded and at what size, or why one was refused, plus a
 `Title logo:` line saying which wordmark went into the menu.
 
+### HD from the Remaster — what it is so far
+
+*Tomb Raider IV-VI Remastered* does not repaint the old game. Beside every
+level it keeps a whole second version of the geometry — every room rebuilt and
+lit, with the static objects baked into it — and a model of its own for each
+object, at eight times the texture resolution. The long-term plan (#123) is for
+this engine to draw that art when it finds the remaster installed, and the
+original art when it does not: file present → HD, otherwise vanilla, exactly
+the deal the loading screens and the HQ sounds already have.
+
+**As of this build the first stage is in, and it draws nothing.** What it does
+is find the installation, read what the remaster has for the level you are
+loading, count it, time it, and write one line into the log. That is on purpose:
+the reading has to be right before the drawing can be, and the numbers it
+reports decide how the drawing is built.
+
+It is **off out of the box** and there is no options row for it yet. Two
+registry values, in the same key as every other setting
+(`HKEY_CURRENT_USER\Software\Core Design\Tomb Raider Chronicles\tomb5`):
+
+| Value | Type | Meaning |
+|---|---|---|
+| `hd_enable` | DWORD | `1` switches the HD path on. `0`, the default, and nothing below is read at all. |
+| `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
+
+Empty is the normal case: the engine reads Steam's own folder out of the
+registry, walks every library in `steamapps\libraryfolders.vdf`, and looks one
+level deep in each `steamapps\common` for a folder that holds a `tomb456.exe`
+with a subfolder `5` containing `DATA`, `TEX` and `ITEM`. It goes by what is in
+the folder, never by the folder's name — Steam names the same game differently
+per language and depot. `hd_install` is for a copy Steam does not know about.
+
+With `hd_enable` on and `-log`, `log.txt` gets one `HDLOG` line per level:
+
+```
+HDLOG level=ANDREA1 trg=v3 groups=243 rooms=242 sky=1 empty=4 pages=179
+      verts=955148 idx=2888361 ranges=1823 changes=32287 mixed=0 map=42
+      slots=161 trm_bound=50 trm_missing=73 trm_dummy=14 trm_lara=24 heads=5
+      bc7_ms=1091 bc7_pages=179 bc7_mips=1073 bc7_texels=73374208
+```
+
+(one line, wrapped here), followed by one line per object slot whose model the
+remaster does not have. `ranges` is how many draw calls the HD rooms would
+cost; `bc7_ms` is how long this machine took to unpack all 179 texture pages
+with their whole mip chains, on one core. Those two numbers are the point of the
+stage.
+
+**Nothing is copied out of the remaster and nothing of it ships here**, the
+same rule as everywhere else in this project: the art is read where it lies, in
+your own installation.
+
 ---
 
 ## Balance.txt — tuning the whole game

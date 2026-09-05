@@ -183,6 +183,11 @@ if (Test-Path "$ImGui\LICENSE.txt") { Copy-Item "$ImGui\LICENSE.txt" "$lic\DearI
 # source tree this package distributes. See THIRD-PARTY.md.
 $drpc = "$EngineSrc\TOMB5\tomb5\libs\discordRPC\LICENSE"
 if (Test-Path $drpc) { Copy-Item $drpc "$lic\DiscordRPC-MIT.txt" -Force }
+# TRForge (#123): five files are vendored VERBATIM under TOMB5\vendor\trforge
+# and its .TRG reader IS compiled into PCtomb5.exe, so unlike discord-rpc this
+# notice has to travel with the BINARY, not only with the source.
+$trf = "$EngineSrc\TOMB5\vendor\trforge\LICENSE"
+if (Test-Path $trf) { Copy-Item $trf "$lic\TRForge-MIT.txt" -Force }
 # zlib and stb_vorbis keep their notice inside their own source. It is lifted
 # from there rather than copied into a second file, so the package cannot end
 # up shipping a stale version of someone else's licence.
@@ -210,7 +215,7 @@ $tp = $tp.Replace('TR5Randomizer/', 'Source/TR5Randomizer/')
 $tp = $tp.Replace('](LICENSE)', '](TOMB5-GPLv3.txt)')
 [IO.File]::WriteAllText("$lic\THIRD-PARTY.md", $tp)
 $n = (Get-ChildItem $lic -File).Count
-Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, zlib, stb)"
+Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, zlib, stb, TRForge)"
 
 # --- 6. Manual ---------------------------------------------------------------
 # One source of truth: the player README is versioned at

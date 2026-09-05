@@ -38,6 +38,20 @@ void BC7DecodeBlock(const unsigned char* src, unsigned long* dst);
 unsigned long* BC7DecodeDDS(const void* file, unsigned long size, long maxSide,
 	long* width, long* height, const char** why);
 
+// How many mip levels the file carries; 0 when it is not a DDS at all. A file
+// without the DDSD_MIPMAPCOUNT flag counts as one level whatever its mip count
+// field says. The remaster's 512x512 pages carry six (512..16).
+long BC7DDSMipCount(const void* file, unsigned long size);
+
+// The same as BC7DecodeDDS, but for one level of the mip chain; mip 0 is the
+// full size picture and BC7DecodeDDS is exactly this call with mip = 0.
+// maxSide is still measured against the FULL size, so a page is judged as a
+// whole. *width / *height come back as that level's size. Levels below 4
+// pixels on a side are refused - only whole 4x4 blocks are decoded - which no
+// level of a remaster page ever is (the chain stops at 16x16).
+unsigned long* BC7DecodeDDSMip(const void* file, unsigned long size, long maxSide,
+	long mip, long* width, long* height, const char** why);
+
 // Consistency check of the built-in partition and anchor tables against the
 // invariants the format guarantees (see bc7.cpp). Returns true when all of
 // them hold; on failure *why names the first table and row that broke.

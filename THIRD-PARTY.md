@@ -22,6 +22,20 @@ its origin stays visible. Each of those files names its source in its own
 header; the whole arrangement is set out in section 3 of MODIFICATIONS.md.
 Same licence as this project, which is what allows the combination.
 
+**TROne** — Todesengel — **GPLv3**.
+The HD-at-run-time work (#123) carries code over from TROne, which is the same
+licence as this project and is what allows the combination. What was taken so
+far, file by file:
+
+| Here | From TROne | What |
+|---|---|---|
+| `TOMB5 Code/TOMB5/specific/hd/hd_install.cpp` | `host/fs/discovery.cpp` | Steam discovery: the registry lookup, the `libraryfolders.vdf` reader in both of its shapes, the "recognise by content, never by folder name" rule, and the wording of the diagnostics. Only the IV-VI branch was taken. |
+
+That file names Todesengel's copyright in its own header, beside our
+modification notice, as GPLv3 section 5(a) asks. More of TROne is expected in
+the later stages of that work (the render rules, the mesh-bracket logic, the
+Lara composite); each will be entered here as it arrives.
+
 ## Libraries compiled into the binaries
 
 | Library | Licence | Full text in this tree |
@@ -30,6 +44,17 @@ Same licence as this project, which is what allows the combination.
 | **zlib** — Jean-loup Gailly and Mark Adler | zlib licence | notice at the top of `TOMB5 Code/TOMB5/tomb5/libs/zlib/zlib.h` |
 | **stb_vorbis** — Sean Barrett, <https://github.com/nothings/stb> | MIT **or** public domain, your choice | notice at the end of `TOMB5 Code/TOMB5/tomb5/libs/stb/stb_vorbis.c` |
 | **stb_image** — Sean Barrett, <https://github.com/nothings/stb> | MIT **or** public domain, your choice | notice at the end of `TR5Randomizer/src/libs/stb/stb_image.h` |
+| **TRForge** — TRForge contributors | MIT | `TOMB5 Code/TOMB5/vendor/trforge/LICENSE` |
+
+**TRForge** is vendored, not linked against: five files are copied **byte for
+byte** into `TOMB5 Code/TOMB5/vendor/trforge/src/` — the reader for the
+remasters' `LEVELn.TRG` geometry and the whole-file helpers it needs — and
+compiled into `PCTomb5.exe`. `vendor/trforge/VERSION.txt` names the source, the
+date, the SHA-256 of every file and what was deliberately **not** taken. The
+first three lines of a TRForge module carry a hidden signature, so those files
+are never reformatted and never carry our modification notice; anything we need
+differently is written in our own wrappers under `TOMB5/specific/hd/`.
+`vendor/trforge/NOTICE.md` is the part of TRForge's own notice that applies.
 
 ### discord-rpc — shipped in the source tree, not in the binaries
 

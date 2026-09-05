@@ -892,9 +892,31 @@ void RestoreLevelData(long FullSave)
 						ReadSG(creature, 22);
 						creature->enemy = (ITEM_INFO*)((long)creature->enemy + (long)malloc_buffer);
 
-						if (creature->enemy < 0)
-							creature->enemy = 0;
-
+						// HERE STOOD `if (creature->enemy < 0) creature->enemy = 0;`
+						// and it never did anything. Measured with the compiler
+						// this engine is built with: `pointer < 0` is a
+						// comparison against the NULL POINTER CONSTANT, which
+						// MSVC compiles as an UNSIGNED compare - false for every
+						// address there is, including 0x90000000. The guard the
+						// original C had was `(long)creature->enemy < 0`, and the
+						// cast was lost in the decompilation.
+						//
+						// Removed rather than repaired, for two reasons.
+						//
+						// 1. It is not needed. The save writes
+						//    enemy - malloc_buffer, so a null enemy comes back as
+						//    exactly 0 through the line above, and nothing
+						//    measured says any other value arrives here.
+						// 2. Repairing it would BREAK the game under
+						//    /LARGEADDRESSAWARE (#123): with the cast back in,
+						//    `(long)pointer < 0` is TRUE for every address above
+						//    2 GB - also measured - and every enemy pointer in a
+						//    reloaded save would be blanked. That is exactly the
+						//    kind of address this executable may now be handed.
+						//
+						// If a guard is ever wanted here, it has to be written
+						// unsigned - against the bounds of the game_malloc pool -
+						// and never as a signed comparison of an address.
 						ReadSG(&creature->ai_target.object_number, sizeof(short));
 						ReadSG(&creature->ai_target.room_number, sizeof(short));
 						ReadSG(&creature->ai_target.box_number, sizeof(ushort));

@@ -2660,5 +2660,7 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	bool first_person_head;		//on off, view hangs on the head BONE (#134)
 	ulong first_person_smooth;	//0 off, 1 light, 2 medium, 3 strong (#134)
 	bool level_select;			//on off, shows the "Level Select" row in the title menu (#32)
+	bool hd_enable;				//on off, HD art from an installed Remaster (#123). The PATH is a
+								//string and therefore not in here - see tomb5_hd_install.
 };
 #pragma pack(pop)

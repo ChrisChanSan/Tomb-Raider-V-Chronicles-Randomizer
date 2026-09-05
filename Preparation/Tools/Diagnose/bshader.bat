@@ -27,7 +27,13 @@ if errorlevel 1 exit /b 1
 "%FXC%" /nologo /T ps_3_0 /E RoomPS /O3 /Vn kHDRoomPS /Fh "%SHADERDIR%\hd_room_ps.inc" "%SHADERDIR%\hd_room.hlsl"
 if errorlevel 1 exit /b 1
 
-for %%F in ("%SHADERDIR%\hd_room_vs.inc" "%SHADERDIR%\hd_room_ps.inc") do echo bshader: %%~nxF %%~zF bytes of C source
+"%FXC%" /nologo /T vs_3_0 /E ModelVS /O3 /Vn kHDModelVS /Fh "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model.hlsl"
+if errorlevel 1 exit /b 1
+
+"%FXC%" /nologo /T ps_3_0 /E ModelPS /O3 /Vn kHDModelPS /Fh "%SHADERDIR%\hd_model_ps.inc" "%SHADERDIR%\hd_model.hlsl"
+if errorlevel 1 exit /b 1
+
+for %%F in ("%SHADERDIR%\hd_room_vs.inc" "%SHADERDIR%\hd_room_ps.inc" "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model_ps.inc") do echo bshader: %%~nxF %%~zF bytes of C source
 exit /b 0
 
 :find

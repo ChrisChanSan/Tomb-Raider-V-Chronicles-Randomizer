@@ -78,7 +78,36 @@
  *     -firstperson        draw her the way the seam draws her while the first
  *                         person camera is on (#126): the head node masked
  *                         off the body, no LARA_HEAD and no braid - all three
- *                         sit where the camera does.
+ *                         sit where the camera does. The CAMERA moves with it
+ *                         (#123, stage S8): it goes where game/camera.cpp
+ *                         puts the eye - the head joint of this level's own
+ *                         skeleton, 16 units up and 48 forward - and looks
+ *                         along +z, which is the way she faces. -pitch is
+ *                         then the look-DOWN angle and defaults to 60; -yaw
+ *                         turns the head. The near cut below is on by
+ *                         default, because that is what the game does.
+ *     -fpforward <units>  how far the eye sits in front of the head joint;
+ *                         48 is FP_EYE_OFFSET, what the game uses when the
+ *                         sight line is clear, and 0 is what it falls back to
+ *                         with a wall in the way - the case that puts the
+ *                         neck nearest the camera.
+ *     -cull none|cw|ccw|back
+ *                         which side of her body's triangles is drawn. The
+ *                         HD path draws every model double sided; with the
+ *                         camera inside her that shows her own inside, so
+ *                         first person culls (stage S8). Default: back with
+ *                         -firstperson, none otherwise.
+ *     -nearcut <units>    the first person NEAR CUT, on her body alone: a
+ *                         RADIUS around the eye, and every fragment inside it
+ *                         is discarded. 0 draws the BEFORE picture. The
+ *                         default with -firstperson is the engine's own
+ *                         HD_LARA_FIRST_PERSON_NEAR_CUT.
+ *     -neck               the measurement that number comes from: for every
+ *                         outfit, how many torso-node vertices sit above the
+ *                         shoulder line and how near the nearest of them, of
+ *                         the shoulders and of the chest come to the eye -
+ *                         at both eye positions the game uses, with a
+ *                         PASS/FAIL against the constant.
  *     -laracheck          the two proofs of the Lara seam, as tables, and the
  *                         offline twins of what the engine logs as HDLOG
  *                         laracheck and HDLOG braidcheck on its first HD Lara
@@ -807,6 +836,172 @@ static void PrintNodeTable(int slot, const ClassicSlot* classic, const char* nam
 		printf("  a separate HD face rides rigidly on node %d\n", HDModelHeadNode(slot));
 }
 
+/* ------------------------------------------------------- the neck stump -- */
+/* WHERE THE FIRST PERSON NEAR CUT COMES FROM (#123, stage S8).
+ *
+ * The classic path hides Lara's head MESH in first person, and for a classic
+ * body that is the whole of it - LM_HEAD is head and neck in one piece. An HD
+ * body is a single skinned surface: masking node 14 takes the head off, and
+ * the NECK STUMP below it stays, because those triangles are weighted to the
+ * TORSO. That is what stands in the camera when she looks down (user finding
+ * F3). The diving suit puts its whole helmet on the torso node in the same
+ * way.
+ *
+ * This table measures how near that geometry comes to the eye - for every
+ * outfit, not only the one the level wears, because the cut is one number for
+ * all of them. The eye is the game's: the head joint of THIS level's Lara
+ * skeleton, 16 units up and 48 or 0 units forward (game/camera.cpp,
+ * FirstPersonCamera - mgLOS decides which). The cut is a RADIUS around that
+ * point, so what matters is DISTANCE and not depth: it has to sit above every
+ * stump figure and below every shoulder and chest figure in the table.
+ */
+static std::string TrmPath(const std::string& root5, const char* stem)
+{
+	const std::string leaf = std::string("\\ITEM\\") + stem + ".TRM";
+
+	if (Exists(root5 + leaf))
+		return root5 + leaf;
+
+	const std::string bundle = ParentOf(root5);
+
+	if (Exists(bundle + "\\4" + leaf))
+		return bundle + "\\4" + leaf;
+
+	if (Exists(bundle + "\\6" + leaf))
+		return bundle + "\\6" + leaf;
+
+	return std::string();
+}
+
+static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
+{
+	if (!body.ok || body.nodes <= HD_LARA_HEAD_NODE)
+	{
+		printf("\n-neck needs the level's Lara skeleton and this one has none.\n");
+		return;
+	}
+
+	/* THE TWO EYES. game/camera.cpp asks mgLOS whether it may put the eye
+	 * FP_EYE_OFFSET = 48 units in front of the head joint, and takes 0 when
+	 * something is in the way - a wall, a ledge, a doorway. Both are ordinary
+	 * play, and the cut has to hold at both, so both are measured. The
+	 * shoulder line is the two inner-arm joints of the level's own mesh tree,
+	 * which is where a body stops being neck. */
+	const double kForward[2] = { 48.0, 0.0 };
+	const double shoulder =
+		0.5 * (body.bind[HD_LARA_RINARM][1] + body.bind[HD_LARA_LINARM][1]);
+
+	printf("\n-- the neck stump, per outfit --------------------------------\n");
+	printf("head joint %.0f/%.0f/%.0f, eye 16 above it and 48 or 0 in "
+		"front\nshoulder line y %.0f (nodes %d and %d)\n\n",
+		body.bind[HD_LARA_HEAD_NODE][0], body.bind[HD_LARA_HEAD_NODE][1],
+		body.bind[HD_LARA_HEAD_NODE][2], shoulder, HD_LARA_RINARM,
+		HD_LARA_LINARM);
+	printf("%-19s %7s   %-24s   %-24s\n", "outfit", "stump",
+		"eye 48 forward", "eye at the joint");
+	printf("%-19s %7s   %7s %7s %7s   %7s %7s %7s\n", "", "verts",
+		"stump", "shldr", "chest", "stump", "shldr", "chest");
+	printf("------------------- -------   ------- ------- -------   "
+		"------- ------- -------\n");
+
+	double keepMin = 1.0e9, stumpMax = 0.0;
+
+	for (int outfit = HD_LARA_OUTFIT_NONE + 1; outfit < HD_LARA_OUTFIT_COUNT;
+		outfit++)
+	{
+		const char* stem = HDLaraOutfitModel(outfit);
+		HDTrmModel model;
+		const char* why = "";
+
+		if (!stem)
+			continue;
+
+		const std::string path = TrmPath(root5, stem);
+
+		if (path.empty() || !HDTrmLoad(path.c_str(), &model, &why))
+		{
+			printf("%-19s not read - %s\n", stem,
+				path.empty() ? "no .TRM in 5, 4 or 6" : why);
+			continue;
+		}
+
+		int stumpVerts = 0;
+		double nearest[2][3];  // near is a windows.h macro
+
+		for (int e = 0; e < 2; e++)
+			nearest[e][0] = nearest[e][1] = nearest[e][2] = 1.0e9;
+
+		for (int i = 0; i < model.vertices; i++)
+		{
+			const HDTrmVertex& v = model.vertex[i];
+
+			/* The node a vertex BELONGS to is the one with the biggest of its
+			 * three weights - the same rule the range builder uses, and the
+			 * one that decides which node's bit hides it. */
+			int node = v.bone[0];
+
+			if (v.weight[1] > v.weight[0] && v.weight[1] >= v.weight[2])
+				node = v.bone[1];
+			else if (v.weight[2] > v.weight[0] && v.weight[2] > v.weight[1])
+				node = v.bone[2];
+
+			int kind = -1;
+
+			if (node == HD_LARA_RINARM || node == HD_LARA_LINARM)
+				kind = 1;
+			else if (node == HD_LARA_TORSO)
+				kind = v.y < shoulder ? 0 : 2;
+
+			if (kind < 0)
+				continue;
+
+			if (!kind)
+				stumpVerts++;
+
+			for (int e = 0; e < 2; e++)
+			{
+				const double dx = v.x - body.bind[HD_LARA_HEAD_NODE][0];
+				const double dy = v.y - (body.bind[HD_LARA_HEAD_NODE][1] - 16.0);
+				const double dz = v.z -
+					(body.bind[HD_LARA_HEAD_NODE][2] + kForward[e]);
+				const double d = sqrt(dx * dx + dy * dy + dz * dz);
+
+				if (d < nearest[e][kind])
+					nearest[e][kind] = d;
+			}
+		}
+
+		printf("%-19s %7d   %7.1f %7.1f %7.1f   %7.1f %7.1f %7.1f\n", stem,
+			stumpVerts, nearest[0][0], nearest[0][1], nearest[0][2],
+			nearest[1][0], nearest[1][1], nearest[1][2]);
+
+		for (int e = 0; e < 2; e++)
+		{
+			if (nearest[e][0] > stumpMax && nearest[e][0] < 1.0e8)
+				stumpMax = nearest[e][0];
+
+			for (int k = 1; k < 3; k++)
+				if (nearest[e][k] < keepMin)
+					keepMin = nearest[e][k];
+		}
+
+		HDTrmFree(&model);
+	}
+
+	printf("\nthe nearest stump vertex of any outfit at either eye is %.1f "
+		"units away;\nthe nearest shoulder or chest vertex - the geometry that "
+		"must SURVIVE -\nis %.1f. A radius between the two separates them from "
+		"every angle.\n", stumpMax, keepMin);
+	printf("HD_LARA_FIRST_PERSON_NEAR_CUT is %.0f: %s\n",
+		(double)HD_LARA_FIRST_PERSON_NEAR_CUT,
+		HD_LARA_FIRST_PERSON_NEAR_CUT < keepMin
+			? "PASS - it touches no shoulder and no chest"
+			: "FAIL - it reaches into geometry that has to stay");
+	printf("(a cut at a fixed DEPTH cannot do this: measured at 72 units of "
+		"depth it\ntook the collarbone with the stump and opened a window "
+		"through her chest.)\n");
+}
+
 /* ---------------------------------------------------- Lara's composite -- */
 /* Stage S4-1. Everything the tool needs to know about one wardrobe picture;
  * a struct rather than eighteen arguments. */
@@ -824,12 +1019,17 @@ struct LaraOptions
 	bool nodes;
 	bool mirror;
 	bool firstPerson;
+	bool neck;
 	bool check;
 	bool noDraw;
 	bool managed;
 	int threads;
 	long width, height;
 	double fov, yaw, pitch, dist, shade;
+	double nearCut;			// stage S8, in view units; 0 = off
+	double fpForward;		// FP_EYE_OFFSET; 0 is the eye against a wall
+	int cull;			// HDModelCull, on her body alone
+	bool yawSet, pitchSet;		// did the caller name one?
 	const HDObjLight* lights;
 	int lightCount;
 	const double (*turn)[2];
@@ -1281,6 +1481,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		printf("\nthe braid is its own six node chain and covers no body node.\n");
 	}
 
+	if (o.neck)
+		PrintNeckTable(o.root, body);
+
 	if (o.noDraw)
 	{
 		HDModelLevelEnd();
@@ -1288,6 +1491,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	}
 
 	/* --- the camera ------------------------------------------------------ */
+	/* THE HEAD JOINT of this level's own Lara skeleton, which is where the
+	 * first person camera hangs (stage S8). Node 14 of the bind pose. */
+	const float* const classic14 = body.bind[HD_LARA_HEAD_NODE];
+
 	/* The composite's box is the union of every part's, because the outfit
 	 * alone has an empty skull and a naked wrist. */
 	float mins[3] = { 0, 0, 0 }, maxs[3] = { 0, 0, 0 };
@@ -1339,8 +1546,43 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	float view[16];
 
-	LookAt(cx - f[0] * dist, cy - f[1] * dist, cz - f[2] * dist, o.yaw, o.pitch,
-		view);
+	/* THE EYE OF THE FIRST PERSON CAMERA (#123, stage S8), where
+	 * game/camera.cpp puts it and nowhere else:
+	 *
+	 *     GetLaraJointPos(&head, LMX_HEAD)   the head joint
+	 *     eye.y = head.y - 16                sixteen units up
+	 *     + FP_EYE_OFFSET (48) along yrot    forward, when mgLOS lets it
+	 *
+	 * The joint is the bind pose's node 14 here, and that is the same point:
+	 * the joint is the ORIGIN of the head bone, and turning the head about it
+	 * does not move it. So a bind-pose picture taken from this eye is the
+	 * picture the game gives, minus the animation - and the neck stump this
+	 * stage is about does not move with the animation either, because it
+	 * hangs on the torso.
+	 *
+	 * Looking FORWARD is yaw 0: a TR mesh faces +z, and the tool's own
+	 * default of 180 is the camera standing in front of her. The pitch is the
+	 * look-DOWN angle; the game clamps head_x_rot to 75 degrees and
+	 * item->pos.x_rot can add to that while swimming, so 60 is a plain look
+	 * at one's own feet and 75 the steepest a standing Lara reaches. */
+	if (o.firstPerson)
+	{
+		const double ex = classic14[0];
+		const double ey = classic14[1] - 16.0;
+		const double ez = classic14[2] + o.fpForward;
+		const double fpYaw = o.yawSet ? o.yaw : 0.0;
+		const double fpPitch = o.pitchSet ? o.pitch : 60.0;
+
+		LookAt(ex, ey, ez, fpYaw, fpPitch, view);
+
+		printf("eye     : %.0f/%.0f/%.0f - the head joint %.0f/%.0f/%.0f, "
+			"16 up and %.0f forward; yaw %.0f, pitch %.0f down\n" ,
+			ex, ey, ez, classic14[0], classic14[1], classic14[2],
+			o.fpForward, fpYaw, fpPitch);
+	}
+	else
+		LookAt(cx - f[0] * dist, cy - f[1] * dist, cz - f[2] * dist, o.yaw,
+			o.pitch, view);
 
 	/* THE MIRROR (#123, stage S4-1 proof). A mirror room turns the world
 	 * inside out, and a matrix that does that has a NEGATIVE determinant:
@@ -1668,8 +1910,17 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			HD_LARA_HEAD_NODE);
 	}
 
+	/* THE NEAR CUT (stage S8). The BODY carries it and nothing else, exactly
+	 * as specific/hd/hd_laradraw.cpp pushes it: the hands and the holsters are
+	 * their own models and must never be cut away. */
+	printf("nearcut : %.0f units of radius round the eye, body alone%s\n", o.nearCut,
+		o.nearCut > 0.0 ? "" : " - off, this is the BEFORE picture");
+	printf("cull    : %s\n", o.cull == HD_MODEL_CULL_CW ? "clockwise"
+		: o.cull == HD_MODEL_CULL_CCW ? "counter-clockwise"
+		: "none - both sides drawn, as every other HD model is");
+
 	if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BODY), matrices, HD_LARA_NODES,
-		light, bodyMask, &lighting))
+		light, bodyMask, &lighting, (float)o.nearCut, o.cull))
 		drawn++;
 
 	if (!o.firstPerson &&
@@ -1703,8 +1954,16 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	char path[512];
 
-	sprintf(path, "%s_lara_%s%s%s.png", o.out.c_str(),
-		HDLaraOutfitModel(outfit), o.firstPerson ? "_firstperson" : "",
+	char cut[32] = "";
+
+	if (o.firstPerson)
+		sprintf(cut, "_p%d_f%d_cut%d_%s", (int)(o.pitchSet ? o.pitch : 60.0),
+			(int)o.fpForward, (int)(o.nearCut + 0.5),
+			o.cull == HD_MODEL_CULL_CW ? "cw"
+			: o.cull == HD_MODEL_CULL_CCW ? "ccw" : "nocull");
+
+	sprintf(path, "%s_lara_%s%s%s%s.png", o.out.c_str(),
+		HDLaraOutfitModel(outfit), o.firstPerson ? "_firstperson" : "", cut,
 		o.mirror ? "_mirror" : "");
 	ShotWrite(shot, path);
 	ShotEnd(shot);
@@ -1736,7 +1995,14 @@ int main(int argc, char** argv)
 
 	/* Lara's composite - stage S4-1. */
 	bool lara = false, laraNodes = false, mirror = false;
-	bool laraFirstPerson = false, laraCheck = false;
+	bool laraFirstPerson = false, laraCheck = false, laraNeck = false;
+	/* Stage S8. -1 means "the engine's own constant when -firstperson is on",
+	 * which is what makes the tool's default picture the game's picture; a
+	 * number given on the line overrides it, and 0 is the BEFORE picture. */
+	double nearCut = -1.0;
+	double fpForward = 48.0;
+	int cullMode = -1;		// -1 = "what -firstperson would use"
+	bool yawSet = false, pitchSet = false;
 	std::string outfitName, gunsName, backName;
 	bool holstersFull = true, flare = false, torch = false;
 	int threads = 8;
@@ -1797,6 +2063,24 @@ int main(int argc, char** argv)
 			lara = true;
 			laraFirstPerson = true;
 		}
+		else if (!_stricmp(argv[i], "-nearcut") && i + 1 < argc)
+			nearCut = atof(argv[++i]);
+		else if (!_stricmp(argv[i], "-fpforward") && i + 1 < argc)
+			fpForward = atof(argv[++i]);
+		else if (!_stricmp(argv[i], "-cull") && i + 1 < argc)
+		{
+			const char* what = argv[++i];
+
+			cullMode = !_stricmp(what, "cw") ? HD_MODEL_CULL_CW
+				: !_stricmp(what, "ccw") ? HD_MODEL_CULL_CCW
+				: !_stricmp(what, "back") ? HD_MODEL_CULL_BACK
+				: HD_MODEL_CULL_NONE;
+		}
+		else if (!_stricmp(argv[i], "-neck"))
+		{
+			lara = true;
+			laraNeck = true;
+		}
 		else if (!_stricmp(argv[i], "-laracheck"))
 		{
 			lara = true;
@@ -1824,9 +2108,15 @@ int main(int argc, char** argv)
 		else if (!_stricmp(argv[i], "-fov") && i + 1 < argc)
 			fov = atof(argv[++i]);
 		else if (!_stricmp(argv[i], "-yaw") && i + 1 < argc)
+		{
 			yaw = atof(argv[++i]);
+			yawSet = true;
+		}
 		else if (!_stricmp(argv[i], "-pitch") && i + 1 < argc)
+		{
 			pitch = atof(argv[++i]);
+			pitchSet = true;
+		}
 		else if (!_stricmp(argv[i], "-dist") && i + 1 < argc)
 			dist = atof(argv[++i]);
 		else if (!_stricmp(argv[i], "-shade") && i + 1 < argc)
@@ -1953,6 +2243,7 @@ int main(int argc, char** argv)
 		o.nodes = laraNodes;
 		o.mirror = mirror;
 		o.firstPerson = laraFirstPerson;
+		o.neck = laraNeck;
 		o.check = laraCheck;
 		o.noDraw = noDraw;
 		o.managed = managed;
@@ -1964,6 +2255,15 @@ int main(int argc, char** argv)
 		o.pitch = pitch;
 		o.dist = dist;
 		o.shade = shade;
+		o.nearCut = nearCut < 0.0
+			? (laraFirstPerson ? (double)HD_LARA_FIRST_PERSON_NEAR_CUT : 0.0)
+			: nearCut;
+		o.fpForward = fpForward;
+		o.cull = cullMode < 0
+			? (laraFirstPerson ? HD_MODEL_CULL_BACK : HD_MODEL_CULL_NONE)
+			: cullMode;
+		o.yawSet = yawSet;
+		o.pitchSet = pitchSet;
 		o.lights = lights;
 		o.lightCount = lightCount;
 		o.turn = turn;

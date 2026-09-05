@@ -112,9 +112,11 @@
  * into view space, exactly as the classic path's matrix stack does. */
 float4x4 gProj : register(c0);
 
-/* x = alpha test on/off, y = additive weight on/off, z = spare,
- * w = specular (overbright) on/off - the same four the room shader carries,
- * in the same register, so that one table describes both.
+/* x = alpha test on/off, y = additive weight on/off, z = the NEAR CUT as a
+ * RADIUS around the eye in view units (0 = off, stage S8), w = specular
+ * (overbright) on/off. The room shader
+ * carries the same register and the same x, y and w; only z differs, and it
+ * differs safely - see the note at the cut itself in ModelPS.
  *
  * READ BY THE PIXEL SHADER ONLY, and that is not a detail. The room shader
  * reads gPass in both halves; this one does not need it in the vertex half,
@@ -426,6 +428,36 @@ float4 ModelPS(VS_OUT input) : COLOR0
 	 * gloss MASK and not coverage - TROne's own user report was the golden
 	 * skull left as a single gold fragment because pass 0 discarded on it. */
 	clip(gPass.x * (texel.a - 0.5f));
+
+	/* THE NEAR CUT (#123, stage S8), and it is Lara's alone.
+	 *
+	 * In first person the camera hangs in her head joint, and the classic
+	 * path answers that by leaving the head MESH out. An HD body is one
+	 * skinned surface: dropping the head node drops the head, but the neck
+	 * stump belongs to the TORSO node and stays - triangles eighteen units
+	 * from the eye, inside the near plane, which is what stands in the
+	 * picture when she looks down (user finding F3, with a photograph).
+	 *
+	 * A SPHERE AROUND THE EYE, not a plane across the view, and that is the
+	 * whole design of this line. A plane cuts at a fixed DEPTH, so as soon as
+	 * she looks down it lies flat across her chest and opens a window through
+	 * her - measured, and the two pictures are in the report: at 72 units of
+	 * depth the near cut removed her collarbone and one saw the floor through
+	 * the hole. A sphere cuts at a fixed DISTANCE, which no view direction can
+	 * turn into a hole: the stump is 18 to 42 units from the eye and the
+	 * nearest shoulder or chest vertex of any outfit is 68.9, so one radius
+	 * separates them from every angle. hd_lara.h carries the measurement.
+	 *
+	 * ZERO IS OFF, at no cost: a length is never negative, so clip(len - 0)
+	 * discards nothing. That also makes this line safe against the room
+	 * shader, which reads its own gPass.z in the VERTEX half while
+	 * hd_model.cpp writes c4 to the PIXEL file alone.
+	 *
+	 * Written per DRAW, so only Lara's body carries it: her hands, her
+	 * holsters and the weapon on her back are their own models and get 0,
+	 * which is why the cut can sit close enough to take the neck without
+	 * ever taking a hand that comes up to the camera. */
+	clip(length(input.viewPos) - gPass.z);
 
 	/* The light arrives in the classic path's 0..255 space already - unlike a
 	 * room vertex, whose baked pair is 0..1 and gets multiplied by 127.5 in

@@ -260,15 +260,52 @@ void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount);
 // nothing. ~0u draws everything, which is what an item with no mesh bits set
 // hands over anyway.
 //
+/* WHICH SIDE OF A TRIANGLE IS DRAWN (#123, stage S8).
+ *
+ * The HD path draws every model DOUBLE SIDED, which is what TROne does too
+ * (game_renderer.cpp:3419, glDisable(GL_CULL_FACE)) and what the classic
+ * engine looks like it does - specific/function_table.cpp:105 sets
+ * D3DCULL_NONE for the whole session. It only LOOKS like it: TR5 culls back
+ * faces in SOFTWARE, per polygon, through the IsVisible function pointer, so
+ * the card never sees one. Nobody noticed the difference because no camera
+ * ever stands inside an object - except the first person camera, which stands
+ * inside Lara. Cut her neck away there and the inside of her chest is what
+ * lies behind it (measured: ModelProbe -firstperson, stage S8).
+ *
+ * So the cut and the culling belong together, and both are per DRAW: only
+ * Lara's body in first person asks for either. HD_MODEL_CULL_BACK is the mode
+ * that keeps the OUTSIDE of a .TRM - measured by picture, because the winding
+ * convention of the files is a fact about the files. Their winding is
+ * consistent enough to cull on: over the eight wardrobe bodies, 39,440 to
+ * 25,384 triangles each, at most 59 of them have the geometric normal on the
+ * other side of the vertex normal (0.06 % to 0.18 %). */
+enum HDModelCull
+{
+	HD_MODEL_CULL_NONE = 0,		// double sided - every model but the one
+	HD_MODEL_CULL_CW,		// D3DCULL_CW
+	HD_MODEL_CULL_CCW		// D3DCULL_CCW
+};
+
+#define HD_MODEL_CULL_BACK	HD_MODEL_CULL_CCW
+
+// `nearCut` is the first person near cut of stage S8, in classic units of VIEW
+// DEPTH: every fragment of this model nearer to the eye than that is
+// discarded. 0 is off and costs nothing - a rasterised fragment's view depth
+// never falls below the near plane. Only Lara's body ever asks for it; see
+// HD_LARA_FIRST_PERSON_NEAR_CUT in hd_lara.h for the number and the
+// measurement, and hd_model.hlsl's ModelPS for the cut itself.
+//
 // False when the slot has no model or the frame is not open; the caller then
 // draws it the classic way.
 bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
-	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting);
+	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
+	float nearCut = 0.0f, int cull = HD_MODEL_CULL_NONE);
 
 // The separate HD face, drawn right after the body on the same matrices. Does
 // nothing and returns false when the slot has no <NAME>_HEAD.TRM.
 bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
-	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting);
+	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
+	float nearCut = 0.0f, int cull = HD_MODEL_CULL_NONE);
 
 int HDModelDrawCalls();		// since the last HDModelFrameBegin
 

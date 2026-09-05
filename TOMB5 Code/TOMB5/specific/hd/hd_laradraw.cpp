@@ -94,6 +94,15 @@ namespace
 	bool g_frame_logged = false;
 	int g_dropped = 0;
 
+	/* The two edge trackers of stage S8. They are LEVEL state and not frame
+	 * state: what they remember is the last value that was written to the
+	 * log, so that a view left on across a level boundary says so once more
+	 * in the new level's lines rather than staying silent. */
+	bool g_fp_seen = false;
+	bool g_fp_was = false;
+	bool g_binos_was = false;
+	bool g_binos_pending = false;
+
 	/* ------------------------------------------------------ the wardrobe -- */
 
 	/* WHICH OUTFIT, out of the engine's own facts and nothing else. Every one
@@ -526,6 +535,10 @@ void HDLaraDrawEnd()
 	g_checked = false;
 	g_frame_logged = false;
 	g_dropped = 0;
+	g_fp_seen = false;
+	g_fp_was = false;
+	g_binos_was = false;
+	g_binos_pending = false;
 }
 
 bool HDLaraDrawActive()
@@ -537,7 +550,60 @@ bool HDLaraDrawActive()
 
 void HDLaraDrawFrameReset()
 {
+	/* What the frame that has just ENDED put on the list. Read before the
+	 * counter is cleared, because the binocular line below is a statement
+	 * about a finished frame and not about the one starting now. */
+	const int wasPushed = g_frame_parts;
+
 	g_frame_parts = 0;
+
+	/* THE TWO LINES STAGE S8 OWES THE LOG, and they belong HERE because this
+	 * is the one place in the HD path that runs on every frame whether Lara
+	 * is drawn or not - which is exactly the state the second one reports.
+	 *
+	 * Both are written on the EDGE and not per frame: a line a second for
+	 * hours would bury everything around it, and what one wants to see is
+	 * when the view came on, with which cut, and that the binoculars really
+	 * do keep the whole composite off the list.
+	 *
+	 * Lara is not skipped anywhere in THIS file when the binoculars are up -
+	 * the engine never gets that far. BinocularCamera sets
+	 * lara_item->mesh_bits = 0 (game\camera.cpp:2185) and game\draw.cpp:982
+	 * asks `if (lara_item->mesh_bits && !SCNoDrawLara)` before it calls
+	 * DrawLara at all, so HDLaraDrawFrame does not run and nothing is pushed.
+	 * The count is therefore taken one frame AFTER the scope came up, when
+	 * the frame it describes was wholly inside the binocular view - on the
+	 * edge frame itself she was still being drawn normally. */
+	if (gLogEnabled)
+	{
+		const bool now = FirstPersonActive();
+
+		if (!g_fp_seen || now != g_fp_was)
+		{
+			g_fp_seen = true;
+			g_fp_was = now;
+			Log("HDLOG firstperson %s nearcut=%.0f", now ? "on" : "off",
+				now ? (double)HD_LARA_FIRST_PERSON_NEAR_CUT : 0.0);
+		}
+
+		const bool binos = BinocularRange != 0;
+
+		if (binos && !g_binos_was)
+			g_binos_pending = true;
+		else if (binos && g_binos_pending)
+		{
+			g_binos_pending = false;
+			Log("HDLOG binoculars lara_pushed=%d mesh_bits=%d", wasPushed,
+				(int)(lara_item ? lara_item->mesh_bits : -1));
+		}
+		else if (!binos && g_binos_was)
+		{
+			g_binos_pending = false;
+			Log("HDLOG binoculars off");
+		}
+
+		g_binos_was = binos;
+	}
 }
 
 void HDLaraDrawFrame(long mirror, bool honourMeshBits)
@@ -644,6 +710,32 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	if (firstPerson)
 		mask &= ~(1u << HD_LARA_HEAD_NODE);
 
+	/* AND THE NECK UNDER IT (stage S8, user finding F3). Masking the head
+	 * node is where the classic path stops, and for a classic body that is
+	 * enough: LM_HEAD is head AND neck in one mesh. An HD body is one skinned
+	 * surface and the stump belongs to the TORSO node, so it stays - a collar
+	 * of triangles 18.6 units from the eye when a wall holds the camera at
+	 * the joint, which is inside the near plane and fills the picture. The
+	 * diving suit puts its whole HELMET on the torso node the same way.
+	 *
+	 * Neither can be masked off without taking her chest with it, so they are
+	 * cut in the shader instead: everything within
+	 * HD_LARA_FIRST_PERSON_NEAR_CUT of the eye goes. THE BODY ALONE carries
+	 * it - the hands, the holsters and the weapon on her back are their own
+	 * models and are pushed with 0, so a hand that comes up to the camera is
+	 * never cut away. */
+	const float nearCut = firstPerson ? HD_LARA_FIRST_PERSON_NEAR_CUT : 0.0f;
+
+	/* AND ONE SIDED WITH IT, for the frames the cut runs in. The HD path draws
+	 * every model double sided; cut a hole in a closed body and what shows
+	 * through it is the body's own inside - her chest seen from within, her
+	 * face from behind. The classic engine never shows that because it culls
+	 * back faces in SOFTWARE before the card sees them, and no classic camera
+	 * stands inside an object anyway. This one does. hd_model.h carries the
+	 * measurement that says the wardrobe's winding is consistent enough to
+	 * cull on. */
+	const int cull = firstPerson ? HD_MODEL_CULL_BACK : HD_MODEL_CULL_NONE;
+
 	/* --- which parts ---------------------------------------------------- */
 	now.rightHandSlot = slot_of_hand(LM_RHAND);
 	now.leftHandSlot = slot_of_hand(LM_LHAND);
@@ -668,7 +760,8 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	int drawn = 0;
 
 	if (!HDObjectPush(HDLaraPartSlot(HD_LARA_PART_BODY), matrices,
-		HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale))
+		HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale, nearCut,
+		cull))
 	{
 		g_dropped++;
 		return;
@@ -722,7 +815,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		g_frame_logged = true;
 		Log("HDLOG frame lara parts=%d(%d this frame) outfit=%s right=%s left=%s "
 			"holsters=%s/%s back=%s braid=%d mask=%08x mirror=%d "
-			"firstperson=%d lights=%d dropped=%d",
+			"firstperson=%d nearcut=%.0f lights=%d dropped=%d",
 			drawn, g_frame_parts, HDLaraOutfitModel(HDLaraOutfitNow())
 				? HDLaraOutfitModel(HDLaraOutfitNow()) : "-",
 			HDSlotName(now.rightHandSlot) ? HDSlotName(now.rightHandSlot) : "-",
@@ -731,6 +824,6 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 			HDSlotName(now.rightHolsterSlot) ? HDSlotName(now.rightHolsterSlot) : "-",
 			HDSlotName(now.backGunSlot) ? HDSlotName(now.backGunSlot) : "-",
 			(int)HDLaraHasPart(HD_LARA_PART_BRAID), mask, (int)mirror,
-			(int)firstPerson, lightCount, g_dropped);
+			(int)firstPerson, (double)nearCut, lightCount, g_dropped);
 	}
 }

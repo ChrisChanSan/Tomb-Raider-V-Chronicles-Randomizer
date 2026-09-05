@@ -82,6 +82,8 @@ namespace
 		HDObjLight lights[HD_MAX_OBJ_LIGHTS];
 		int lightCount;
 		float sunScale;
+		float nearCut;		// stage S8: 0 for an item, Lara's body alone
+		int cull;		// and the one-sided draw that goes with it
 	};
 
 	FrameItem g_frame[HD_OBJ_ITEMS];
@@ -1155,6 +1157,12 @@ void HDObjectEnd()
 	fill_lights(entry.lights, HD_MAX_OBJ_LIGHTS, &entry.lightCount,
 		&entry.sunScale, current_item);
 
+	// An ITEM is never cut. The near cut of stage S8 exists because the first
+	// person camera sits inside Lara's own head, and nothing else in the level
+	// has a camera inside it.
+	entry.nearCut = 0.0f;
+	entry.cull = HD_MODEL_CULL_NONE;
+
 	/* The two proofs, on the first HD item of the level and while the
 	 * engine's own light arrays still hold THIS item's answer. */
 	self_test(entry);
@@ -1189,14 +1197,14 @@ void HDObjectFrameDraw(const void* projection, int bulbs)
 		lighting.sunScale = entry.sunScale;
 
 		HDModelDraw(entry.slot, entry.matrix, entry.nodes, entry.light,
-			entry.mask, &lighting);
+			entry.mask, &lighting, entry.nearCut, entry.cull);
 
 		/* THE SEPARATE HD FACE, right after the body and on the same
 		 * matrices. VON_CROY.TRM is a body with an empty collar and
 		 * VON_CROY_HEAD.TRM is the face that fills it, so the two are one
 		 * object and the second is not optional. */
 		HDModelDrawHead(entry.slot, entry.matrix, entry.nodes, entry.light,
-			entry.mask, &lighting);
+			entry.mask, &lighting, entry.nearCut, entry.cull);
 	}
 
 	g_draw_calls = HDModelDrawCalls();
@@ -1241,7 +1249,8 @@ int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale)
 }
 
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
-	unsigned int mask, const HDObjLight* lights, int lightCount, float sunScale)
+	unsigned int mask, const HDObjLight* lights, int lightCount, float sunScale,
+	float nearCut, int cull)
 {
 	/* NOT behind g_active. That flag says "this level has HD OBJECTS", and a
 	 * level can have an HD Lara and not one HD object - JOBY4's diving suit
@@ -1288,6 +1297,8 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	}
 
 	entry.sunScale = sunScale;
+	entry.nearCut = nearCut;
+	entry.cull = cull;
 
 	g_count++;
 	return true;

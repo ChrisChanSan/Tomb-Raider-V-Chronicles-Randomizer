@@ -83,6 +83,54 @@
  * machinery: the same page cache, the same skinning, the same draw call. */
 #define HD_LARA_SLOT_BASE	0x5A00
 
+/* THE FIRST PERSON NEAR CUT (#123, stage S8): a RADIUS around the eye, in
+ * classic units. Every fragment of Lara's BODY nearer to the eye than this is
+ * discarded while the first person view runs; her hands, her holsters and the
+ * weapon on her back are separate models and are never cut. The shader end of
+ * it is hd_model.hlsl, ModelPS.
+ *
+ * WHY THERE HAS TO BE ONE. The classic path hides the head MESH; an HD body is
+ * one skinned surface, and the neck stump under the head belongs to the TORSO
+ * node, so masking node 14 leaves it standing in the camera (user finding F3).
+ *
+ * WHY A SPHERE AND NOT A DEPTH. A cut at a fixed view DEPTH is a plane across
+ * the view, and the moment she looks down that plane lies across her chest:
+ * measured at 72 units of depth it took her collarbone with the stump and one
+ * saw the floor through the hole. A cut at a fixed DISTANCE cannot do that,
+ * because the two are separated in distance from every angle at once.
+ *
+ * WHERE 60 COMES FROM. ModelProbe -neck over all eight outfits, against the
+ * eye the first person camera really uses: the head joint of the level's own
+ * Lara skeleton (ANDREA1: 1 / -247 / -12), 16 units up and up to
+ * FP_EYE_OFFSET = 48 units forward (game\camera.cpp). The forward step is what
+ * mgLOS allows, so BOTH ends of it have to hold - 48 in the open, 0 with a
+ * wall in front of her, which is the case that puts the stump nearest:
+ *
+ *                          eye 48 forward          eye at the joint
+ *     outfit             stump  shoulder chest   stump shoulder chest
+ *     OUTFIT_CLASSIC      41.9   79.8   74.6      18.6   73.5   73.6
+ *     OUTFIT_RUSSIA       40.4   77.8   73.5      18.6   71.6   81.9
+ *     OUTFIT_VCI          37.4   78.3   74.6      18.6   71.9   73.5
+ *     OUTFIT_SUBSUIT      32.7   74.7   87.8      22.2   68.9   99.7
+ *     OUTFIT_TR3_ANTARC   41.9   78.2   74.5      19.1   71.7   78.2
+ *     OUTFIT_TR3_NEVADA   41.9   79.0   74.6      19.1   72.7   81.2
+ *     OUTFIT_TR3_COAST    41.9   79.0   76.3      19.1   72.7   75.3
+ *     OUTFIT_TR3_CATSUIT  41.9   78.6   74.6      19.1   72.4   81.3
+ *
+ * "stump" is the nearest torso-node vertex above the shoulder line, "shoulder"
+ * the nearest of nodes 8 and 11, "chest" the nearest torso-node vertex below
+ * that line. The nearest thing that must SURVIVE, over all sixteen columns, is
+ * 68.9; 60 leaves it 8.9 units of margin, which is what the animation needs -
+ * a shrug moves the shoulder relative to the head, the table does not. The
+ * number is not per outfit and needs no hand work for a new one: the skeleton
+ * it is measured against is the engine's own and every wardrobe body is built
+ * on it.
+ *
+ * IT DOES NOT WORK ALONE. Cutting a closed body open shows the body's inside,
+ * because the HD path draws every model double sided - so the cut is paired
+ * with HD_MODEL_CULL_BACK on the same draw. hd_model.h has that half. */
+#define HD_LARA_FIRST_PERSON_NEAR_CUT	60.0f
+
 /* The classic Lara mesh tree in LM_ order, spelled out so that the tables
  * below and a reader of them do not have to look it up. These are the numbers
  * a .TRM vertex names in its three bone bytes. */

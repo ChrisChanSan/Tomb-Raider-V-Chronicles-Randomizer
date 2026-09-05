@@ -171,7 +171,14 @@
 float4x4 gWorldViewProj : register(c0);
 
 /* x = alpha test on/off, y = additive weight on/off, z = room shadow,
- * w = specular (overbright) on/off. */
+ * w = specular (overbright) on/off.
+ *
+ * hd_model.hlsl shares this register and shares x, y and w with it; only z
+ * differs, and there it is the first person near cut of stage S8. The two do
+ * not collide because this file's z is read in the VERTEX half and written
+ * through SetVertexShaderConstantF, while hd_model.cpp writes c4 to the PIXEL
+ * constant file alone - and a room is drawn before a model in every frame
+ * anyway. */
 float4 gPass : register(c4);
 
 /* float4x3, not float4x4, and three registers rather than four: only the

@@ -809,7 +809,8 @@ namespace
 	}
 
 	void draw_model(const Model& model, const float* nodeMatrix, int nodeCount,
-		const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting)
+		const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
+		float nearCut, int cull)
 	{
 		const int nodes = nodeCount < kJointBudget ? nodeCount : kJointBudget;
 
@@ -895,21 +896,31 @@ namespace
 		g_device->SetStreamSource(0, model.vb, 0, sizeof(HDModelVertex));
 		g_device->SetIndices(model.ib);
 
+		/* THE ONE MODEL THAT IS NOT DOUBLE SIDED. Set here and put back at
+		 * the bottom of this function, so that the state the bracket
+		 * installed (D3DCULL_NONE) is what every other draw finds. */
+		if (cull != HD_MODEL_CULL_NONE)
+			g_device->SetRenderState(D3DRS_CULLMODE,
+				cull == HD_MODEL_CULL_CW ? D3DCULL_CW : D3DCULL_CCW);
+
 		for (int pass = 0; pass < 3; pass++)
 		{
 			if (model.pass[pass].empty())
 				continue;
 
 			/* gPass: x switches the alpha test on, y the additive weighting,
-			 * z is unused here (a room's baked pair needs it, a model has
-			 * none), w the overbright add. The PIXEL constant file only -
-			 * the vertex shader does not read gPass and fxc has put its own
-			 * literals in that register there. */
+			 * z is the first person NEAR CUT in view units (stage S8; 0 for
+			 * every model but Lara's body, and then the shader's clip
+			 * discards nothing), w the overbright add. The PIXEL constant
+			 * file only - the vertex shader does not read gPass and fxc has
+			 * put its own literals in that register there, and the room
+			 * shader's own gPass.z lives in the VERTEX file, which this call
+			 * never touches. */
 			float constants[4] =
 			{
 				pass == 1 ? 1.0f : 0.0f,
 				pass == 2 ? 1.0f : 0.0f,
-				0.0f,
+				nearCut,
 				pass == 2 ? 0.0f : 1.0f
 			};
 
@@ -972,6 +983,14 @@ namespace
 				g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 			}
 		}
+
+		/* AND BACK TO DOUBLE SIDED. The bracket installed D3DCULL_NONE for
+		 * the whole HD path and every other model on this frame's list
+		 * expects to find it; a cull mode left standing here would travel
+		 * from Lara's body to the next item on the list and take a face off
+		 * it - silently, and only in first person. */
+		if (cull != HD_MODEL_CULL_NONE)
+			g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	}
 
 	const Model* find(const std::map<int, Model>& where, int slot)
@@ -1473,7 +1492,8 @@ void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount)
 }
 
 bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
-	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting)
+	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
+	float nearCut, int cull)
 {
 	if (!g_in_frame || !nodeMatrix || nodeCount <= 0)
 		return false;
@@ -1487,12 +1507,14 @@ bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
 	g_device->SetPixelShader(g_ps);
 	g_device->SetVertexDeclaration(g_decl);
 
-	draw_model(*model, nodeMatrix, nodeCount, nodeLight, nodeMask, lighting);
+	draw_model(*model, nodeMatrix, nodeCount, nodeLight, nodeMask, lighting,
+		nearCut, cull);
 	return true;
 }
 
 bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
-	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting)
+	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
+	float nearCut, int cull)
 {
 	if (!g_in_frame || !nodeMatrix || nodeCount <= 0)
 		return false;
@@ -1510,7 +1532,8 @@ bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
 	g_device->SetPixelShader(g_ps);
 	g_device->SetVertexDeclaration(g_decl);
 
-	draw_model(at->second, nodeMatrix, nodeCount, nodeLight, nodeMask, lighting);
+	draw_model(at->second, nodeMatrix, nodeCount, nodeLight, nodeMask, lighting,
+		nearCut, cull);
 	return true;
 }
 

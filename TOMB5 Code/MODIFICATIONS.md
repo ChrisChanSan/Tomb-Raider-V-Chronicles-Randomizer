@@ -2337,6 +2337,137 @@ a notice put into it would be wiped by the next use of the resource editor.
 
 ---
 
+#### Stage S8 — first person, the binoculars, and the neck in the camera
+
+The first person view (#126) hangs the camera in Lara's head joint. The classic
+path answers that by leaving the head *mesh* out, and for a classic body that
+is the whole of it: `LM_HEAD` is head **and** neck in one piece. An HD body is a
+single skinned surface, and the neck stump under the head is weighted to the
+**torso** — so masking node 14 takes the head off and leaves the stump standing
+in the camera. The user photographed it: looking down, her neck and chest fill
+the frame.
+
+**Where the eye is, measured.** `FirstPersonCamera` (`game/camera.cpp`) reads
+the head joint with `GetLaraJointPos(&head, LMX_HEAD)`, lifts it 16 units, and
+asks `mgLOS` whether it may go `FP_EYE_OFFSET` = 48 units forward. Both answers
+are ordinary play — 48 in the open, 0 with a wall, a ledge or a doorway in
+front — so both were measured. `ModelProbe -neck` over all eight wardrobe
+bodies, against ANDREA1's own Lara skeleton (head joint 1 / −247 / −12):
+
+| outfit | stump verts | eye 48 forward: stump / shoulder / chest | eye at the joint: stump / shoulder / chest |
+|---|---|---|---|
+| `OUTFIT_CLASSIC` | 1281 | 41.9 / 79.8 / 74.6 | 18.6 / 73.5 / 73.6 |
+| `OUTFIT_RUSSIA` | 1679 | 40.4 / 77.8 / 73.5 | 18.6 / 71.6 / 81.9 |
+| `OUTFIT_VCI` | 1235 | 37.4 / 78.3 / 74.6 | 18.6 / 71.9 / 73.5 |
+| `OUTFIT_SUBSUIT` | 2210 | 32.7 / 74.7 / 87.8 | 22.2 / 68.9 / 99.7 |
+| `OUTFIT_TR3_ANTARC` | 2093 | 41.9 / 78.2 / 74.5 | 19.1 / 71.7 / 78.2 |
+| `OUTFIT_TR3_NEVADA` | 937 | 41.9 / 79.0 / 74.6 | 19.1 / 72.7 / 81.2 |
+| `OUTFIT_TR3_COAST` | 930 | 41.9 / 79.0 / 76.3 | 19.1 / 72.7 / 75.3 |
+| `OUTFIT_TR3_CATSUIT` | 940 | 41.9 / 78.6 / 74.6 | 19.1 / 72.4 / 81.3 |
+
+"stump" is the nearest torso-node vertex above the shoulder line, "shoulder"
+the nearest of nodes 8 and 11, "chest" the nearest torso-node vertex below that
+line. With the eye at the joint the stump reaches **18.6 units** — inside the
+near plane, which is 20 (`InitWindow`, `gamemain.cpp`). The nearest thing that
+must **survive**, over all sixteen columns, is **68.9**.
+
+**The cut is a sphere, and that is the point.** The first shape tried was the
+obvious one, a cut at a fixed view *depth*: `clip(viewPos.z - gNearCut)`. It
+works looking straight ahead and fails looking down, because a depth is a plane
+across the view, and at 75° down that plane lies flat across her chest. The
+picture is in the report: at 72 units of depth the near cut took her collarbone
+along with the stump and one saw the floor through the hole. A cut at a fixed
+**distance** cannot do that — the stump is 18 to 42 units from the eye and the
+nearest shoulder or chest vertex is 68.9, so a single radius separates them
+from *every* angle at once. `HD_LARA_FIRST_PERSON_NEAR_CUT` is **60**: 8.9
+units of margin below the nearest geometry that has to stay, which is what the
+animation needs, since a shrug moves the shoulder relative to the head and the
+table does not.
+
+**And her body is drawn one-sided while the view runs.** This is the half the
+brief did not ask for and the pictures insisted on. The HD path draws every
+model double sided (`D3DCULL_NONE`, `hd_render.cpp:1395`), which is what TROne
+does as well (`glDisable(GL_CULL_FACE)`) and what the classic engine *looks*
+like it does — `specific/function_table.cpp:105` sets `D3DCULL_NONE` for the
+whole session. It only looks like it: TR5 culls back faces in **software**, per
+polygon, through the `IsVisible` function pointer, so the card never sees one.
+Nobody had ever noticed the difference, because no camera stands inside an
+object — except this one, which stands inside Lara. With the camera in her neck
+the inside of her own chest is the entire picture, and cutting a hole in a
+closed body only shows more of it. The winding of the wardrobe carries the
+culling: over the eight bodies, 25,384 to 39,440 triangles each, at most 59 of
+them have their geometric normal on the other side of the vertex normal
+(0.06 % to 0.18 %). `D3DCULL_CCW` is the mode that keeps the outside — measured,
+not assumed: from a normal camera the same picture with `CCW` and with `NONE`
+has the identical background share and the identical mean brightness (162.1 of
+255), while `CW` differs (160.1). Outside first person the culling is therefore
+a no-op, and it is only ever asked for there.
+
+**Both are per draw, and only her body asks.** `HDModelDraw` gained a `nearCut`
+and a `cull` argument; the cut rides in `gPass.z`, the pixel-side constant
+`hd_model.cpp` already wrote per pass, and the cull mode is set and put back
+around the model's own draw calls. Every other model — every item, and Lara's
+hands, holsters and back weapon, which are models of their own — gets 0 and
+`HD_MODEL_CULL_NONE`, which is why the cut can sit close enough to take the
+neck and still never take a hand that comes up to the camera. The register
+table at the top of `hd_model.hlsl` names `gPass.z` accordingly; it is the one
+component where the two shaders differ, and it is safe because `hd_model.cpp`
+writes `c4` to the **pixel** constant file alone while the room shader reads
+its own `gPass.z` in the **vertex** half.
+
+**The binoculars and the laser sight never reach the seam.** Not by a check in
+`hd_laradraw.cpp` — the engine does not get that far. `BinocularCamera` sets
+`lara_item->mesh_bits = 0` (`game/camera.cpp:2185`) for the scope and the laser
+sight both, and `game/draw.cpp:982` asks `if (lara_item->mesh_bits &&
+!SCNoDrawLara)` before it calls `DrawLara` at all; leaving the scope puts
+`mesh_bits` back to −1 in the same function (`:2173`). So nothing of her is
+pushed while it is up, and there is nothing to leave behind when it comes down.
+The scope's mask lies above the HD world by the order stage S1-2 chose:
+`HDFrameDraw()` runs immediately before `DrawBuckets`, and the depth clear that
+separates the world from mask, pickup display and fade (#127) comes after all
+of it — `DrawBinoculars` is drawn after that clear and is untouched. `AlterFOV`
+moves `f_persp` *inside* the frame while zooming, which is why S1-2 takes the
+projection when the world is collected (`HDFrameCaptureProjection`) rather than
+when it is drawn. The black frame on zooming out is the vanilla inheritance
+#127 identified and is not touched here.
+
+**The braid.** Not drawn in first person, and its simulation runs on
+regardless: `HairControl` is called from `game/control.cpp:583`, in the game
+loop, not from `DrawLara`. Switching back to third person therefore shows it
+hanging where it belongs on the very next frame — the same as the classic path,
+which skips `DrawHair` in exactly the same way (`specific/drawlara.cpp:214`).
+
+**The log.** `HDLOG firstperson on|off nearcut=…` on the edge, once, when the
+view is switched; `HDLOG binoculars lara_pushed=N mesh_bits=N` one frame after
+the scope comes up, when the frame it describes was wholly inside the
+binocular view, and `HDLOG binoculars off` when it goes down. The per-frame
+Lara line carries `nearcut=` as well.
+
+**The proof, without the game.** `ModelProbe -firstperson` now moves the camera
+as well as the mask: it goes where `FirstPersonCamera` puts the eye — the head
+joint of the level's own skeleton, 16 up and `-fpforward` units in front,
+default 48 — and looks along +z, with `-pitch` as the look-down angle.
+`-nearcut` and `-cull` switch the two halves for a before-and-after picture,
+and `-neck` prints the table above with a PASS/FAIL against the constant.
+Pictures made this way, at the eye against a wall (`-fpforward 0`), 60° down:
+`OUTFIT_CLASSIC` and `OUTFIT_VCI` before — the inside of the shirt and of the
+catsuit filling the frame — and after, where the collar is a rim seen from
+above, her body is see-through where the camera is inside it, and her belt,
+her legs and her boots are below; plus the pistols drawn and the view level,
+where both hands and both pistols are whole, untouched by the cut.
+
+*Left over, and named:* in the **diving suit** the helmet rides on the torso
+node too. It cannot be masked with the head and it is far too big for a
+60-unit cut, so looking down inside it shows the helmet from within. The
+classic suit hides it because there the helmet is part of the head mesh.
+
+This stage adds **no new source file**, so the file count above still stands:
+it changes `hd_lara.h`, `hd_model.h`, `hd_model.cpp`, `hd_object.h`,
+`hd_object.cpp`, `hd_laradraw.cpp` and `hd_shader/hd_model.hlsl` (plus its two
+generated `.inc` files), all of which already carried the notice.
+
+---
+
 ---
 
 ## Building this yourself

@@ -229,7 +229,9 @@ that page drops you back to page 1.
 While first person is on, Lara's head and braid are not drawn, close sounds
 are centred instead of panned, and the camera stays behind her eyes where
 vanilla would have torn it away — trapdoors, turn switches and trigger
-cameras all now leave you where you are.
+cameras all now leave you where you are. With *HD textures* on, her HD body
+loses its neck the same way and is drawn one-sided while the view runs; the
+section on the HD Lara below says why both are needed.
 
 **Two things deliberately still switch to third person**: the binoculars and
 the laser sight, which bring their own head camera, and the real sniper camera
@@ -852,13 +854,56 @@ laratype=… data3=…` line.
 
 **First person** (#126) drops the same three things from the HD Lara that it
 drops from the classic one: the head, the face and the braid, all three of
-which sit exactly where the camera does.
+which sit exactly where the camera does. The braid's *physics* keeps running
+the whole time — `HairControl` is part of the game loop and not of the draw —
+so switching back to third person shows it hanging where it belongs on the
+very next frame.
+
+Two things then happen that have no counterpart in the classic body, and both
+are dealt with on **her body's draw alone**, so that her hands, her holsters
+and the weapon on her back are never touched (#123, stage S8):
+
+- **The neck goes with the head.** The classic head *mesh* is head and neck in
+  one piece; an HD body is a single skinned surface whose neck stump hangs off
+  the **torso**, so masking the head node leaves it standing. Measured against
+  the eye the camera really uses, that stump comes to **18.6 units** — inside
+  the near plane. Everything within **60 units** of the eye is therefore
+  discarded in the shader. Sixty is a *radius*, not a depth: the nearest
+  shoulder or chest vertex of any of the eight outfits is 68.9 units away, so
+  one number separates the two from every angle, while a cut at a fixed depth
+  would lie flat across her chest the moment she looks down and open a window
+  through her (measured, and rejected for it).
+- **Her body is drawn one-sided there.** The HD path draws every model double
+  sided; the classic engine only *looks* as if it does, because it culls back
+  faces in software before the card ever sees one. No camera but this one
+  stands inside a body, and with the camera in her neck the difference is the
+  whole picture: the inside of her own chest. Outside first person nothing
+  changes — the same view of her with and without the culling is identical to
+  the pixel.
+
+*Left over, and honestly:* in the **diving suit** the helmet is modelled on the
+torso node too, so it cannot be masked off with the head and it is far too big
+for a 60-unit cut. Looking down inside it you see the helmet from within. The
+classic suit hides it, because there the helmet is part of the head mesh.
 
 **In a mirror room** she is drawn twice, as before. The engine mirrors her by
-*moving* her — the position reflected in the plane, the angles negated — and
-flips its own backface test around the second draw; the HD path culls nothing
-at all, so the reflection comes out whole. Proved with a picture through a view
-matrix of negative determinant.
+*moving* her — the position reflected in the plane, the angles negated — which
+is a rotation and keeps every triangle's winding, so the first person culling
+above is right there too. Proved with a picture through a view matrix of
+negative determinant.
+
+**The binoculars and the laser sight never reach the HD path at all.**
+`BinocularCamera` sets `lara_item->mesh_bits = 0`, and `game/draw.cpp` asks
+`if (lara_item->mesh_bits && !SCNoDrawLara)` before it calls `DrawLara` — so
+nothing of her is put on the HD frame list while the scope is up, and leaving
+it puts `mesh_bits` back to −1 in the same place it was always put back. The
+scope's own mask, the pickup display and the fade lie **above** the HD world:
+the HD rooms and objects are drawn immediately before `DrawBuckets`, and the
+depth clear that separates the world from the overlays (#127) comes after all
+of it. `AlterFOV` moves the field of view *inside* the frame while zooming, and
+the HD path takes its projection when the world is **collected** rather than
+when it is drawn, which is the same field of view the classic path transformed
+its vertices with.
 
 **The two proofs in the log.** Start with `-log` and the first HD Lara frame of
 every level writes two lines. `HDLOG laracheck` puts each of her fifteen joint

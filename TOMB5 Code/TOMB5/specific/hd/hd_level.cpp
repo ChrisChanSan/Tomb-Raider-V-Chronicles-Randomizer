@@ -16,6 +16,7 @@
 #include "hd_bind.h"
 #include "hd_scan.h"
 #include "hd_render.h"
+#include "hd_object.h"
 #include "../function_stubs.h"
 #include "../d3dmatrix.h"
 #include "../3dmath.h"
@@ -92,6 +93,10 @@ namespace
 	float g_oneopersp = 0;
 
 	bool g_matrix_checked = false;
+
+	// Whether THIS frame's projection has been taken yet - by the first HD
+	// room or by the first HD item, whichever the engine reaches first.
+	bool g_projection_taken = false;
 
 	const D3DMATRIX kIdentity =
 	{
@@ -557,6 +562,9 @@ void HDLevelBuild()
 	// see the comment there. This is the main thread; that one is not.
 	if (HDRenderGroupCount())
 	{
+		// The models first: their ranges name page slots in the cache
+		// HDRenderLevelEnd is about to empty.
+		HDObjectRelease();
 		HDRenderLevelEnd();
 		Log("HDLOG the previous level's HD objects are released");
 	}
@@ -682,7 +690,17 @@ void HDLevelBuild()
 	{
 		Log("HDLOG level=%s no room draws HD - releasing again", g_stem);
 		HDRenderLevelEnd();
+		return;
 	}
+
+	/* THE OBJECTS (#123, stage S3-2), after the rooms and never before them:
+	 * a model's pages are APPENDED to the cache the rooms built, and a page
+	 * slot handed out before that cache exists points nowhere.
+	 *
+	 * They ride on the rooms in one more way. A level whose .TRG is missing
+	 * or empty has no page cache at all, so it has no HD objects either -
+	 * which is the same answer the rooms give and one line to explain. */
+	HDObjectLevelBuild(HDInstallRoot(), g_stem);
 }
 
 void HDLevelUnload()
@@ -702,6 +720,7 @@ void HDLevelUnload()
 	g_frame_count = 0;
 	g_room_count = 0;
 	g_stem[0] = 0;
+	HDObjectLevelEnd();
 }
 
 void HDLevelDeviceLost()
@@ -709,6 +728,7 @@ void HDLevelDeviceLost()
 	g_level_active = false;
 	g_frame_count = 0;
 	g_room_count = 0;
+	HDObjectDeviceLost();
 
 	if (!HDRenderReady() && !HDRenderGroupCount())
 		return;
@@ -735,6 +755,31 @@ void HDFrameReset()
 {
 	g_frame_count = 0;
 	g_frame_dropped = 0;
+	g_projection_taken = false;
+	HDObjectFrameReset();
+}
+
+/* THE PROJECTION OF THIS FRAME, taken the moment the first HD thing turns up -
+ * a room out of InsertRoom or an item out of DrawAnimatingItem, whichever the
+ * engine reaches first, and never twice. It has to be taken while the world is
+ * COLLECTED and not when it is drawn, because AlterFOV moves f_persp and the
+ * centre inside a frame (the sky phase does it twice while the binoculars are
+ * up) and the HD path has to project with the field of view the classic path
+ * transformed its vertices with. */
+void HDFrameCaptureProjection()
+{
+	if (g_projection_taken)
+		return;
+
+	g_projection_taken = true;
+	g_persp = f_persp;
+	g_centerx = f_centerx;
+	g_centery = f_centery;
+	g_za = f_a;
+	g_zb = f_b;
+	g_zboo = f_boo;
+	g_znear = f_mznear;
+	g_oneopersp = f_moneopersp;
 }
 
 bool HDFrameRoom(int roomIndex, const float* viewWorld)
@@ -754,18 +799,7 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld)
 		return false;
 	}
 
-	if (!g_frame_count)
-	{
-		// The projection of THIS frame, taken while the rooms are collected.
-		g_persp = f_persp;
-		g_centerx = f_centerx;
-		g_centery = f_centery;
-		g_za = f_a;
-		g_zb = f_b;
-		g_zboo = f_boo;
-		g_znear = f_mznear;
-		g_oneopersp = f_moneopersp;
-	}
+	HDFrameCaptureProjection();
 
 	FrameRoom& entry = g_frame[g_frame_count++];
 	entry.room = roomIndex;
@@ -776,7 +810,9 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld)
 
 void HDFrameDraw()
 {
-	if (!g_frame_count)
+	const int objects_here = HDObjectFrameCount();
+
+	if (!g_frame_count && !objects_here)
 		return;
 
 	D3DMATRIX projection;
@@ -797,17 +833,51 @@ void HDFrameDraw()
 		HDRenderRoom(g_frame[i].room, &g_frame[i].world, &lighting);
 	}
 
+	/* THE OBJECTS, AFTER THE ROOMS AND INSIDE THE SAME BRACKET (#123, S3-2).
+	 *
+	 * One bracket a frame: hd_model sets its own shader, declaration and
+	 * stream and finds the rest of the device state exactly as the room path
+	 * left it, which is why hd_render splits the bracket into a save and a
+	 * restore instead of hiding it inside a room draw. It also means the fog
+	 * and the fog bulbs are already in their registers - a model reads the
+	 * very ones a room was just given.
+	 *
+	 * AFTER THE ROOMS AND BEFORE DrawBuckets, and here is the whole argument.
+	 * The depth buffer is shared and exact (hd_render.cpp, HDRenderSelfTest:
+	 * both paths write a - b/z for the same point), so an opaque HD guard and
+	 * an opaque classic crate sort themselves out by depth whatever order
+	 * they are drawn in - which covers every opaque pixel in the frame and
+	 * needs no rule at all. Only the two passes that do NOT write depth care:
+	 *
+	 *   - A model's ALPHA pass writes depth (it is an alpha test, not a
+	 *     blend), so it behaves like the opaque one.
+	 *   - A model's ADDITIVE pass does not, and it is drawn before the
+	 *     classic buckets. A classic OPAQUE polygon that stands BEHIND such a
+	 *     glow and in front of the wall therefore paints over it. Known hole,
+	 *     and the same one the rooms have had since stage S1-2; it needs a
+	 *     second bracket after DrawBuckets to close and it is worth one only
+	 *     if a picture ever shows it. The classic sort list, which is where
+	 *     TR5 puts its own see-through polygons, still draws last of all and
+	 *     over both.
+	 *
+	 * Drawing the objects INSIDE the room loop would be worse for a reason
+	 * that has nothing to do with depth: a model's state is not a room's, and
+	 * swapping shader, declaration and stream twice per room costs more than
+	 * the whole object path does. */
+	HDObjectFrameDraw(&projection, frame.bulbCount);
+
 	HDRenderFrameEnd();
 
-	if (!g_matrix_checked && gLogEnabled)
+	if (!g_matrix_checked && gLogEnabled && g_frame_count)
 	{
 		g_matrix_checked = true;
 		MatrixCheck(g_frame[0].room, g_frame[0].room, g_frame[0].world, projection);
 		Log("HDLOG frame rooms=%d calls=%d dropped=%d bulbs=%d fog_start=%.0f "
-			"wibble=%d cam_uw=%d shimmer=%d",
+			"wibble=%d cam_uw=%d shimmer=%d objects=%d object_calls=%d",
 			g_frame_count, HDRenderDrawCalls(), g_frame_dropped,
 			frame.bulbCount, frame.distanceFogStart, (int)wibble,
-			frame.cameraUnderwater, tomb5.shimmer ? 1 : 0);
+			frame.cameraUnderwater, tomb5.shimmer ? 1 : 0,
+			objects_here, HDObjectDrawCalls());
 	}
 
 	if (gLogEnabled && (g_clipped_lights || g_clipped_bulbs))

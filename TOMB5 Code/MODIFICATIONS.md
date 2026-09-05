@@ -1378,6 +1378,205 @@ over HD bodies.
 
 ---
 
+#### Stage S3-2 — the seam for objects: enemies, doors and switches in HD
+
+Stage S3-1 built the models and drew none of them. This stage is the seam that
+lets the engine draw them, in `game/draw.cpp`, `DrawAnimatingItem`, at the four
+places where a node's classic mesh used to go into the texture buckets.
+
+**The matrices are the game's own, not a rebuild.** An HD skinned model needs
+one matrix per node, model space to view space. `DrawAnimatingItem` already
+computes exactly those, on the engine's float matrix stack, with the real
+animation, the real frame interpolation, the real `gar_RotYXZsuperpack` and the
+real mesh-tree flags. So the seam records `aMXPtr` where `phd_PutPolygons`
+would have been called and changes nothing else. In the interpolated branch it
+records the matrix `phd_PutPolygons_I` would have drawn with — inside the same
+`phd_PushMatrix()` / `InterpolateMatrix()` / `phd_PopMatrix()` — and not the
+one before the blend.
+
+Five places changed in that function, and the classic path is untouched in
+every one of them when the object is not HD:
+
+| Line | What |
+|---|---|
+| after `phd_RotYXZ` | `const bool hd = HDObjectBegin(item, obj);` — one array lookup |
+| the distance-model branch | now `if (!hd && obj->object_mip && ...)`: an HD object never switches to its MIP slot |
+| node 0, both branches | `if (hd) HDObjectNode(0, ...); else if (item->mesh_bits & 1) ...` |
+| the node loop, both branches | `if (hd) HDObjectNode(i + 1, ...); else if (bit & item->mesh_bits) ...` |
+| after the loop | `if (hd) HDObjectEnd();` — outside `if (clip)`, so the bracket closes on every road out |
+
+The rest is `specific/hd/hd_object.cpp`, which is to objects what `hd_level.cpp`
+is to rooms: engine-facing, and the only file in `specific\hd` besides that one
+that includes an engine header.
+
+**Does the model fit the skeleton in the slot?** It has to be asked, because
+the randomizer puts foreign creatures into slots: ANDREA1's `SAS` holds a
+twenty-five-node mesh tree and `SAS.TRM` was drawn for fifteen. Two tests, per
+slot, at level build:
+
+1. **The node count.** A weighted vertex naming node *n* where the slot has
+   fewer than *n* nodes settles it. `FIREROPE` fails this in eleven of the
+   fourteen levels: TR5's slot is a one-piece rope, the model comes out of
+   `4\ITEM` where the slot had seventeen.
+2. **The bind drift**, for a foreign model with the right node count. For every
+   pair of nodes that carry geometry, the distance between their vertex centres
+   in the model against the distance between their bind positions in the slot's
+   own mesh tree, with each mesh's own RMS size subtracted.
+
+The second one took two attempts and the first attempt is worth recording. It
+measured each node's vertex centre against that node's bind position — and in
+**vanilla** ANDREA1, where nothing can be mismatched at all, it condemned every
+door, every switch and the Rome hammer: `DOOR_TYPE1` came out 748 units
+"wrong". What it was really measuring is where the modeller put the origin,
+which is the model's business and not the skeleton's. The pair form has neither
+problem: a translation of the whole model changes no distance, and taking the
+meshes' own size off removes the long-bone bias that made the hammer look
+broken (a long mesh's centre sits half a bone-length from its joint).
+
+Measured with `ModelProbe -all` over all fourteen randomized levels and their
+vanilla twins:
+
+| | mean drift |
+|---|---|
+| worst model that **belongs** where it stands | 239 (`ANIMATING3`, JOBY3/JOBY5) |
+| then 214, 192, 185, 184, 179, 172, 161, 157 | the rest of the field |
+| best model that does **not** | 308 (`ANIMATING1`, RICH2) |
+| then 330, 375, 428, 466, 484, 522, 687, 690, 807 | up to `SAS` at 807 |
+
+The line is at **256**, inside that gap and nearer the accepted end on purpose:
+a good model refused costs a classic-looking door, a bad one accepted costs a
+body torn across the room. A model with one node has no pair and is never
+refused on drift — rightly, since any one-node model fits any one-node slot.
+
+**Mesh swaps and `mesh_bits`.** Two different things that both hide or replace
+geometry per node, and they get different answers.
+
+`item->meshswap_meshbits` picks the **second** mesh of a node's pair — filled at
+level load from `MESHSWAP1`/`MESHSWAP2` or, for the randomizer's cross-level
+enemies, from the `MESHSWAP_CROSS_*` donor slots (`game/setup.cpp`,
+`MeshSwapSource`). Measured, every site in the engine:
+
+| Slot | Nodes whose second mesh is filled | From |
+|---|---|---|
+| `BLUE_GUARD`, `SWAT`, `SWAT_PLUS`, `MAFIA`, `CRANE_GUY`, `BLUE_GUARD2` (460) | 10, 13 | the matching `MESHSWAP_CROSS_*` donor, else `MESHSWAP1` |
+| `SCIENTIST` | 10, 13 | `MESHSWAP1` raw |
+| `MAFIA2` | 7, 10, 13 | `MESHSWAP2` raw |
+| `TWOGUN` | 10 | `MESHSWAP_CROSS_TWOGUN`, source mesh 2 |
+| `IMP` | 10 | `MESHSWAP_CROSS_IMP` |
+| `HITMAN` | 0-19 | `MESHSWAP1` raw |
+| `CYBORG` (469) | 0-19 | `MESHSWAP_CROSS_HITMAN` |
+| `GLADIATOR` | 0-15 | `MESHSWAP_CROSS_GLADIATOR` |
+| `ROMAN_GOD`, `ROMAN_GOD2` (461) | 0-16 | their own `MESHSWAP_CROSS_*` |
+| `BURNING_ROOTS` | 0-27 | `ANIMATING16_MIP` |
+
+and at run time the bits are set by: every soldier at birth (`0x2400`, nodes 10
+and 13, `game/init.cpp`), the Cyborg one panel per eleventh of his health over
+eleven of the twenty (`game/hitman.cpp`), Mafia2 `0x2400` then `0x80`
+(`game/mafia2.cpp`), the Roman gods one bit per weapon (`game/romangod.cpp`),
+the SAS node 10 while he throws (`game/sas.cpp`), the Imp node 10
+(`game/imp.cpp`), and `-1` — the WHOLE body out of the swap set — for a
+gladiator with trigger flag 1 and for one of the search objects. Two things
+follow. It is always per NODE: no slot has all its meshes replaced by another
+slot's, so "the HD model of the source" never has to be looked up. And even the
+`-1` cases take their swap set from their own family's donor, so the source
+model and the slot's model are the same file anyway. A `.TRM` is one whole model with no
+second geometry for a node, so **the swap is ignored and the model draws what
+the remaster drew** — which for a guard is the guard holding his weapon, as the
+`ModelProbe` picture of `SWAT` shows. TROne tried drawing the swap mesh
+classically over the HD body and took it out again after user reports of
+classic patches on HD bodies (`game_renderer.cpp:1825-1830`, where `covered` is
+forced to `~0u` for exactly this). What is really lost is the Cyborg's panels
+opening; it is counted per level in the log as `swap_ignored`.
+
+`item->mesh_bits` hides whole nodes and **is** honoured. An index buffer cannot
+skip a triangle at draw time, so each model's triangles are sorted by
+`(page, node)` instead of by page alone and every range carries its node — the
+node that carries the most weight over the triangle's three corners. At draw
+time consecutive visible ranges of the same page are merged again, so with
+`mesh_bits` at `-1`, which is nearly always, the draw-call count is exactly the
+one stage S3-1 had: `SWAT` builds 16 ranges and draws 2. `ModelProbe -meshbits`
+proves it — `0xBFFF` on the SWAT takes his head off and leaves the rest whole.
+
+**The light is per vertex, because the classic path is per vertex.** The
+alternative — one colour per node — was rejected by reading the code:
+`aTransformLightClipMesh` (`specific/output.cpp`) runs the light formula with
+the vertex's own normal, and a flat colour per node would draw a chest whose
+front and back are equally bright. So what goes to the card is the light LIST,
+and the shading happens in the vertex shader with the remaster's own normals.
+Three things make that exact rather than an approximation:
+
+- the engine's per-node light vectors are in that node's model space and its
+  normals with them; a skinned normal arrives in view space, and a node matrix
+  is a rotation without scale, so `dot(n, L)` is the same number in either
+  space and one list serves every node;
+- the ambient really is per object, not per node: the shadow lights that lower
+  it read `light->Range`, which `CreateLightList` measures at the ITEM;
+- what remains per node in the classic path — a point light's direction and its
+  falloff, measured from the node's world position — is handed over as the
+  light's **position** instead and worked out from the surface point, which is
+  finer than the classic answer everywhere and identical at the node itself.
+
+The activity flags, the eight-frame fades and the range culling are **not**
+redone: `Active` and the faded colours are the engine's own, computed in
+`CreateLightList` a moment earlier inside `CalculateObjectLighting`, which the
+seam still calls. Registers, vertex side: `c136-c159` twelve lights of two
+registers, `c160` the count and the sun's own factor (0.75 in the game, doubled
+in the inventory — the engine's own quirk). The pixel side is untouched and
+shares `c16` fog, `c17` counts and `c40` bulbs with the room shader, so one
+frame's constants serve both; an object writes `c17.x = 0`, which switches off
+the room shader's per-pixel dynamic-light loop, because for an object those
+lights are already in the vertex list where the classic formula puts them. The
+vertex shader is 358 of the 512 instruction slots `vs_3_0` guarantees.
+
+**Where they are drawn, and why there.** In `HDFrameDraw`, inside the bracket
+the rooms already opened, after the rooms and before `DrawBuckets`. The depth
+buffer is shared and exact (stage S1-1's `HDRenderSelfTest`: both paths write
+`a - b/z` for the same point in space), so an opaque HD guard and an opaque
+classic crate sort themselves out by depth in either order — which covers every
+opaque pixel and needs no rule at all. Only the additive pass, which writes no
+depth, is order-sensitive, and the note in the manual says so. Drawing objects
+inside the room loop instead would swap shader, declaration and stream twice
+per room, for nothing.
+
+**Two proofs in the log**, on the first HD object of every level, with `-log`:
+
+```
+HDLOG itemcheck level=ANDREA1 slot=33(SWAT) nodes=15 used=15 maxdx=... maxdy=...
+HDLOG lightcheck level=ANDREA1 slot=33 classic=r,g,b hd=r,g,b diff=... engine=1sun/2point/0spot
+```
+
+`itemcheck` puts each node's origin on the screen twice — once through the
+classic transform with the live `f_persp` and centre, once through the
+projection matrix the card is handed — and prints the worst disagreement in
+pixels; it is the object twin of stage S1-2's `matrixcheck`. `lightcheck` runs
+the classic formula on the engine's own `SunLights`/`PointLights`/`SpotLights`
+and the HD one on the view-space list that was uploaded, on the same
+non-axis-aligned normal, and prints both. That second one exists because the
+space conversion is the one part of the object path that cannot be seen in a
+picture, only measured.
+
+**One engine global was un-`static`ed**: `aW2VMx` in `specific/3dmath.cpp`, the
+float twin of the long `w2v_matrix` that has always been exported. The object
+path needs the float one to put a light's world position into view space; the
+long matrix carries its rotation in fourteen bits, which is four digits where a
+light direction wants seven.
+
+**The switch.** A new registry value `hd_objects`, `1` by default, in the same
+key as every other setting. No options row: it is not a matter of taste but a
+way back if one level's objects ever go wrong, and it does nothing at all while
+`hd_enable` is off. Both guards are the first line of `HDObjectBegin`, so with
+either off not one byte of this stage is entered.
+
+**Still classic, by plan.** Lara and her whole composite (slots 0-30) — stage
+S4. Objects whose slot has no model, whose model does not fit the skeleton, or
+whose draw routine is not `DrawAnimatingItem` (the scaled spikes, the three
+kinds of laser, the darts, the lift doors, the portal door, the gas cloud, the
+flare in flight, a thrown weapon — fourteen assignments of a routine of their
+own in `game/setup.cpp`). Per level that leaves ANDREA1 drawing 50 of
+its 52 models in HD, JOBY3 65 of 66 and RICH3 65 of 68.
+
+---
+
 ---
 
 ## Building this yourself

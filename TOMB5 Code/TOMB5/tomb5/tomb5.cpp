@@ -183,6 +183,10 @@ void init_tomb5_stuff()
 		tomb5.hd_enable = 0;							//off (#123)
 		REG_WriteBool(buf, tomb5.hd_enable);
 
+		sprintf(buf, "hd_objects");
+		tomb5.hd_objects = 1;							//on (#123, S3-2)
+		REG_WriteBool(buf, tomb5.hd_objects);
+
 		// Empty: the Steam discovery looks for the Remaster by itself. A
 		// path here overrides it - our only setting that is not a number.
 		sprintf(buf, "hd_install");
@@ -290,6 +294,9 @@ void init_tomb5_stuff()
 		sprintf(buf, "hd_enable");
 		REG_ReadBool(buf, tomb5.hd_enable, 0);
 
+		sprintf(buf, "hd_objects");
+		REG_ReadBool(buf, tomb5.hd_objects, 1);
+
 		sprintf(buf, "hd_install");
 		REG_ReadString(buf, tomb5_hd_install, sizeof(tomb5_hd_install), "");
 	}
@@ -394,6 +401,9 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "hd_enable");
 	REG_WriteBool(buf, tomb5.hd_enable);
+
+	sprintf(buf, "hd_objects");
+	REG_WriteBool(buf, tomb5.hd_objects);
 
 	CloseRegistry();
 }

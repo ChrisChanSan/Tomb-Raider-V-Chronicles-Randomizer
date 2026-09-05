@@ -77,3 +77,9 @@ bool HDRoomIsHD(int roomIndex);
 void HDFrameReset();
 bool HDFrameRoom(int roomIndex, const float* viewWorld);
 void HDFrameDraw();
+
+// The field of view of THIS frame, taken the first time anything HD turns up
+// in it - a room in InsertRoom or an item in DrawAnimatingItem. Called by
+// both, does its work once, and is here because AlterFOV moves f_persp inside
+// a frame while the binoculars are up.
+void HDFrameCaptureProjection();

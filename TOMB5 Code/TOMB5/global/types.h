@@ -2662,5 +2662,9 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	bool level_select;			//on off, shows the "Level Select" row in the title menu (#32)
 	bool hd_enable;				//on off, HD art from an installed Remaster (#123). The PATH is a
 								//string and therefore not in here - see tomb5_hd_install.
+	bool hd_objects;			//on off, HD models for enemies, doors and switches (#123, S3-2).
+								//Registry only and ON by default: it is not a taste but a way
+								//back for one level whose objects go wrong, and it does nothing
+								//at all while hd_enable is off.
 };
 #pragma pack(pop)

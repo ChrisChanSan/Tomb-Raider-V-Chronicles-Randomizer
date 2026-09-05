@@ -25,6 +25,7 @@
 #include "hd_trm.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -55,12 +56,25 @@ namespace
 		unsigned char weight0, weight1, weight2, v;
 	};
 
-	// One draw call: a run of indices whose triangles all wear the same page.
+	/* One draw call: a run of indices whose triangles all wear the same page
+	 * AND ride on the same node (#123, stage S3-2).
+	 *
+	 * The node is the second key because `item->mesh_bits` hides whole nodes -
+	 * the gladiator's shield, a body the game blows apart - and an index
+	 * buffer cannot skip a triangle at draw time. Sorted this way the hidden
+	 * node's triangles are a contiguous run that is simply not drawn.
+	 *
+	 * It does not cost draw calls in the normal case: the ranges come off in
+	 * (page, node) order, so consecutive ones of the same page whose nodes are
+	 * all visible are merged back into one call before the draw. With
+	 * mesh_bits at -1, which is nearly always, the count is exactly the one
+	 * stage S3-1 had. */
 	struct Range
 	{
 		unsigned int start = 0;
 		unsigned int count = 0;
 		int pageSlot = -1;
+		int node = 0;
 	};
 
 	struct Model
@@ -78,6 +92,13 @@ namespace
 		int nodes = 0;				// classic nmeshes
 		int nodeVertices[32] = { 0 };
 		unsigned int covered = 0;		// bit per node with geometry
+
+		/* The skeleton fit, measured in build() - see HDModelMaxBone and
+		 * HDModelBindDrift in hd_model.h for what the two numbers mean. */
+		int maxBone = -1;
+		float driftMean = 0;
+		float driftWorst = 0;
+		bool hasDrift = false;
 
 		float mins[3] = { 0, 0, 0 };
 		float maxs[3] = { 0, 0, 0 };
@@ -260,6 +281,12 @@ namespace
 
 		std::vector<HDModelVertex> buffer((size_t)vertices);
 
+		// The bind drift's working set: how many single-weight vertices a
+		// node carries and where their centre is.
+		int single[kJointBudget] = { 0 };
+		double centre[kJointBudget][3] = { { 0, 0, 0 } };
+		double square[kJointBudget] = { 0 };
+
 		for (int i = 0; i < vertices; i++)
 		{
 			const HDTrmVertex& in = trm.vertex[i];
@@ -328,6 +355,124 @@ namespace
 					model.nodeVertices[node]++;
 					model.covered |= 1u << node;
 				}
+
+				/* THE HIGHEST NODE THE MODEL NAMES, before the clamp above
+				 * takes it down to the palette. This is the number that says
+				 * "this .TRM was drawn for a different mesh tree", and it has
+				 * to be the raw one - a clamped 31 would look like a
+				 * legitimate deep node. */
+				if (weight && rigidNode < 0 && (int)in.bone[b] > model.maxBone)
+					model.maxBone = (int)in.bone[b];
+			}
+
+			/* THE BIND DRIFT. Only the vertices that ride on ONE node count:
+			 * a blended vertex sits between two nodes on purpose and would
+			 * make every elbow look like a mismatch. */
+			if (rigidNode < 0 && in.weight[0] == 255)
+			{
+				const int node = out.bone0;
+
+				single[node]++;
+				centre[node][0] += (double)in.x;
+				centre[node][1] += (double)in.y;
+				centre[node][2] += (double)in.z;
+				square[node] += (double)in.x * in.x + (double)in.y * in.y +
+					(double)in.z * in.z;
+			}
+		}
+
+		/* THE BIND DRIFT, BETWEEN PAIRS OF NODES AND NOT AGAINST THE ORIGIN.
+		 *
+		 * The first version of this measured how far a node's own vertices sit
+		 * from that node in the classic bind pose, and it was wrong for
+		 * everything that is not a creature: a door is one node whose mesh
+		 * hangs 750 units off its hinge, so it looked like the worst mismatch
+		 * in the level - in VANILLA, where nothing can be mismatched at all.
+		 * What that number really measures is where a modeller put the origin,
+		 * which is the model's business and not the skeleton's.
+		 *
+		 * What the skeleton question actually asks is whether the DISTANCES
+		 * between the nodes agree. So: for every pair of nodes that both carry
+		 * geometry, the distance between their vertex centres against the
+		 * distance between their bind positions. Both sides then carry each
+		 * mesh's own centring bias and it cancels in the difference; a whole
+		 * model that sits off its origin cancels completely, because a
+		 * translation changes no distance at all.
+		 *
+		 * A model with one node has no pair and no answer - which is right:
+		 * any one-node .TRM fits any one-node slot, there is nothing for the
+		 * skinning to get wrong. */
+		if (model.hasBind)
+		{
+			double centres[kJointBudget][3];
+			double spread[kJointBudget];
+			int have[kJointBudget];
+			int nodes = 0;
+
+			for (int node = 0; node < model.nodes && node < kJointBudget; node++)
+			{
+				if (single[node] < 16)
+					continue;
+
+				have[nodes] = node;
+				centres[nodes][0] = centre[node][0] / single[node];
+				centres[nodes][1] = centre[node][1] / single[node];
+				centres[nodes][2] = centre[node][2] / single[node];
+
+				/* HOW BIG THE MESH ITSELF IS, as the root mean square
+				 * distance of its vertices from their own centre. E[r^2] =
+				 * E[|v|^2] - |c|^2, so the sum of squares gathered above is
+				 * all it takes. */
+				const double mean = square[node] / single[node];
+				const double length = centres[nodes][0] * centres[nodes][0] +
+					centres[nodes][1] * centres[nodes][1] +
+					centres[nodes][2] * centres[nodes][2];
+
+				spread[nodes] = std::sqrt(mean - length > 0.0 ? mean - length : 0.0);
+				nodes++;
+			}
+
+			double sum = 0;
+			int pairs = 0;
+
+			for (int a = 0; a < nodes; a++)
+				for (int b = a + 1; b < nodes; b++)
+				{
+					const double mx = centres[a][0] - centres[b][0];
+					const double my = centres[a][1] - centres[b][1];
+					const double mz = centres[a][2] - centres[b][2];
+
+					const double bx = model.bind[have[a]][0] - model.bind[have[b]][0];
+					const double by = model.bind[have[a]][1] - model.bind[have[b]][1];
+					const double bz = model.bind[have[a]][2] - model.bind[have[b]][2];
+
+					/* THE MESHES' OWN SIZE COMES OFF. A centre is not a
+					 * joint: a long bone's vertices average out at the
+					 * middle of the bone, so two long meshes disagree with
+					 * their joints by half their own length and a hammer
+					 * trap looked like a mismatch in VANILLA. What is left
+					 * after the two spreads are taken off is what neither
+					 * mesh can explain by its own shape - and that is the
+					 * skeleton. */
+					double d = std::fabs(
+						std::sqrt(mx * mx + my * my + mz * mz) -
+						std::sqrt(bx * bx + by * by + bz * bz))
+						- spread[a] - spread[b];
+
+					if (d < 0)
+						d = 0;
+
+					sum += d;
+					pairs++;
+
+					if ((float)d > model.driftWorst)
+						model.driftWorst = (float)d;
+				}
+
+			if (pairs)
+			{
+				model.driftMean = (float)(sum / pairs);
+				model.hasDrift = true;
 			}
 		}
 
@@ -336,8 +481,10 @@ namespace
 		 * list would be a page nobody loaded, and over all 566 models neither
 		 * ever happens. */
 		std::vector<int> page_of_triangle;
+		std::vector<int> node_of_triangle;
 
 		page_of_triangle.reserve((size_t)(trm.indices / 3));
+		node_of_triangle.reserve((size_t)(trm.indices / 3));
 
 		for (int i = 0; i + 2 < trm.indices; i += 3)
 		{
@@ -352,6 +499,40 @@ namespace
 
 			if (a >= 0 && std::find(model.pages.begin(), model.pages.end(), a) == model.pages.end())
 				model.pages.push_back(a);
+
+			/* WHICH NODE A TRIANGLE BELONGS TO: the node that carries the
+			 * most weight over its three corners. A triangle that straddles a
+			 * joint has to fall on one side of it, and the heavier side is
+			 * the side it moves with - the same rule the eye applies when it
+			 * decides whether a polygon "is" the upper arm or the forearm.
+			 * Only used to hide a node, so a wrong answer at a seam costs at
+			 * most one triangle at the cut edge of a blown-off limb. */
+			double weight[kJointBudget] = { 0 };
+			int best = 0;
+			double heaviest = -1;
+
+			for (int corner = 0; corner < 3; corner++)
+			{
+				const HDTrmVertex& v = trm.vertex[trm.index[i + corner]];
+
+				for (int b2 = 0; b2 < 3; b2++)
+				{
+					const int node = rigidNode >= 0 ? rigidNode
+						: (int)(v.bone[b2] < kJointBudget ? v.bone[b2] : kJointBudget - 1);
+					const int w = rigidNode >= 0 ? (b2 == 0 ? 255 : 0) : (int)v.weight[b2];
+
+					weight[node] += (double)w;
+				}
+			}
+
+			for (int node = 0; node < kJointBudget; node++)
+				if (weight[node] > heaviest)
+				{
+					heaviest = weight[node];
+					best = node;
+				}
+
+			node_of_triangle.push_back(best);
 		}
 
 		/* The index list, bucketed by (pass, page). std::stable_sort keeps the
@@ -384,21 +565,33 @@ namespace
 			if (triangles.empty())
 				continue;
 
+			/* (page, node), page first: a page change costs a texture bind
+			 * and a node change costs nothing at all once the two runs are
+			 * merged again at draw time. The additive pass is sorted the same
+			 * way, which changes the order its triangles reach the card in -
+			 * and cannot change the picture, because that pass blends ONE to
+			 * ONE with the depth write off and addition does not care in
+			 * which order it is done. */
 			std::stable_sort(triangles.begin(), triangles.end(),
-				[&page_of_triangle](int a, int b)
+				[&page_of_triangle, &node_of_triangle](int a, int b)
 				{
-					return page_of_triangle[(size_t)a] < page_of_triangle[(size_t)b];
+					if (page_of_triangle[(size_t)a] != page_of_triangle[(size_t)b])
+						return page_of_triangle[(size_t)a] < page_of_triangle[(size_t)b];
+
+					return node_of_triangle[(size_t)a] < node_of_triangle[(size_t)b];
 				});
 
 			Range range;
 			int page = -2;
+			int node = -2;
 
 			for (size_t i = 0; i < triangles.size(); i++)
 			{
 				const int triangle = triangles[i];
 				const int here = page_of_triangle[(size_t)triangle];
+				const int on = node_of_triangle[(size_t)triangle];
 
-				if (here != page)
+				if (here != page || on != node)
 				{
 					if (range.count)
 						model.pass[pass].push_back(range);
@@ -406,7 +599,9 @@ namespace
 					range.start = (unsigned int)indices.size();
 					range.count = 0;
 					range.pageSlot = here < 0 ? -1 : HDPageCacheSlotOf(here);
+					range.node = on;
 					page = here;
+					node = on;
 				}
 
 				indices.push_back(trm.index[(size_t)triangle * 3 + 0]);
@@ -554,7 +749,7 @@ namespace
 	}
 
 	void draw_model(const Model& model, const float* nodeMatrix, int nodeCount,
-		const float* nodeLight, const HDModelLighting* lighting)
+		const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting)
 	{
 		const int nodes = nodeCount < kJointBudget ? nodeCount : kJointBudget;
 
@@ -592,31 +787,50 @@ namespace
 
 		g_device->SetVertexShaderConstantF(104, light, (UINT)kJointBudget);
 
-		/* c17: dynamic lights for this object, fog bulbs for this frame.
-		 * c20: the lights themselves, in VIEW space - see hd_model.hlsl. */
+		/* THE OBJECT'S LIGHTS, in the VERTEX shader (c136) - the classic path
+		 * lights per vertex out of the same list, so this is the same place
+		 * and not an approximation of it. See HDModelLighting in hd_model.h.
+		 *
+		 * c160 carries the count and the sun's factor. */
 		const int count = lighting && lighting->lights
-			? (lighting->lightCount < HD_MAX_LIGHTS ? lighting->lightCount : HD_MAX_LIGHTS)
+			? (lighting->lightCount < HD_MAX_OBJ_LIGHTS ? lighting->lightCount : HD_MAX_OBJ_LIGHTS)
 			: 0;
 
-		float counts[4] = { (float)count, (float)g_frame_bulbs, 0, 0 };
-		float lights[HD_MAX_LIGHTS * 2 * 4] = { 0 };
+		float lights[HD_MAX_OBJ_LIGHTS * 2 * 4] = { 0 };
 
 		for (int i = 0; i < count; i++)
 		{
-			const HDLightSource& source = lighting->lights[i];
+			const HDObjLight& source = lighting->lights[i];
 
 			lights[i * 8 + 0] = source.x;
 			lights[i * 8 + 1] = source.y;
 			lights[i * 8 + 2] = source.z;
-			lights[i * 8 + 3] = source.falloff;
+			lights[i * 8 + 3] = source.kind;
 			lights[i * 8 + 4] = source.r;
 			lights[i * 8 + 5] = source.g;
 			lights[i * 8 + 6] = source.b;
-			lights[i * 8 + 7] = source.falloff > 0.0f ? 1.0f / source.falloff : 0.0f;
+			lights[i * 8 + 7] = source.invRange;
 		}
 
+		float info[4] =
+		{
+			(float)count,
+			lighting ? lighting->sunScale : 0.75f,
+			0.0f,
+			0.0f
+		};
+
+		g_device->SetVertexShaderConstantF(136, lights, HD_MAX_OBJ_LIGHTS * 2);
+		g_device->SetVertexShaderConstantF(160, info, 1);
+
+		/* c17, the PIXEL side: x is the per-pixel dynamic light loop, which
+		 * an object does NOT use - its lights are in the vertex shader above,
+		 * where the classic formula puts them - and y is this frame's fog
+		 * bulbs, which it does. A room drawn a moment ago left its own count
+		 * in this register, so it is written for every object. */
+		float counts[4] = { 0.0f, (float)g_frame_bulbs, 0, 0 };
+
 		g_device->SetPixelShaderConstantF(17, counts, 1);
-		g_device->SetPixelShaderConstantF(20, lights, HD_MAX_LIGHTS * 2);
 
 		g_device->SetStreamSource(0, model.vb, 0, sizeof(HDModelVertex));
 		g_device->SetIndices(model.ib);
@@ -649,18 +863,47 @@ namespace
 				g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 			}
 
-			for (size_t i = 0; i < model.pass[pass].size(); i++)
+			/* THE RANGES, MERGED BACK TOGETHER. They come off in (page, node)
+			 * order and their index runs are contiguous, so a run of visible
+			 * neighbours that share a page is ONE draw call. With mesh_bits
+			 * at -1 that is the same number of calls stage S3-1 made; a
+			 * hidden node splits the run in two and costs one more. */
+			for (size_t i = 0; i < model.pass[pass].size(); )
 			{
-				const Range& range = model.pass[pass][i];
+				const Range& first = model.pass[pass][i];
 
-				g_device->SetTexture(0, range.pageSlot >= 0
-					? (IDirect3DBaseTexture9*)HDPageCacheSlotTexture(range.pageSlot)
+				if (!(nodeMask & (1u << (first.node & 31))))
+				{
+					i++;
+					continue;
+				}
+
+				unsigned int start = first.start;
+				unsigned int count = first.count;
+				size_t next = i + 1;
+
+				while (next < model.pass[pass].size())
+				{
+					const Range& more = model.pass[pass][next];
+
+					if (more.pageSlot != first.pageSlot ||
+						more.start != start + count ||
+						!(nodeMask & (1u << (more.node & 31))))
+						break;
+
+					count += more.count;
+					next++;
+				}
+
+				g_device->SetTexture(0, first.pageSlot >= 0
+					? (IDirect3DBaseTexture9*)HDPageCacheSlotTexture(first.pageSlot)
 					: 0);
 
 				g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0,
-					0, (UINT)model.vertices, range.start, range.count / 3);
+					0, (UINT)model.vertices, start, count / 3);
 
 				g_draw_calls++;
+				i = next;
 			}
 
 			if (pass == 2)
@@ -1133,7 +1376,7 @@ void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount)
 }
 
 bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
-	const float* nodeLight, const HDModelLighting* lighting)
+	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting)
 {
 	if (!g_in_frame || !nodeMatrix || nodeCount <= 0)
 		return false;
@@ -1147,12 +1390,12 @@ bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
 	g_device->SetPixelShader(g_ps);
 	g_device->SetVertexDeclaration(g_decl);
 
-	draw_model(*model, nodeMatrix, nodeCount, nodeLight, lighting);
+	draw_model(*model, nodeMatrix, nodeCount, nodeLight, nodeMask, lighting);
 	return true;
 }
 
 bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
-	const float* nodeLight, const HDModelLighting* lighting)
+	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting)
 {
 	if (!g_in_frame || !nodeMatrix || nodeCount <= 0)
 		return false;
@@ -1162,11 +1405,15 @@ bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
 	if (at == g_heads.end() || !at->second.vb)
 		return false;
 
+	/* THE FACE FOLLOWS ITS NODE'S BIT. A separate <NAME>_HEAD.TRM is built
+	 * rigidly on one node, so every one of its ranges carries that node
+	 * number and the same mask answers for it - a head shot away by
+	 * mesh_bits takes the HD face with it. */
 	g_device->SetVertexShader(g_vs);
 	g_device->SetPixelShader(g_ps);
 	g_device->SetVertexDeclaration(g_decl);
 
-	draw_model(at->second, nodeMatrix, nodeCount, nodeLight, lighting);
+	draw_model(at->second, nodeMatrix, nodeCount, nodeLight, nodeMask, lighting);
 	return true;
 }
 
@@ -1221,6 +1468,29 @@ bool HDModelNodeCovered(int slot, int node)
 		return false;
 
 	return (model->covered & (1u << node)) != 0;
+}
+
+int HDModelMaxBone(int slot)
+{
+	const Model* model = find(g_models, slot);
+
+	return model ? model->maxBone : -1;
+}
+
+bool HDModelBindDrift(int slot, float* mean, float* worst)
+{
+	const Model* model = find(g_models, slot);
+
+	if (!model || !model->hasDrift)
+		return false;
+
+	if (mean)
+		*mean = model->driftMean;
+
+	if (worst)
+		*worst = model->driftWorst;
+
+	return true;
 }
 
 int HDModelVertices(int slot)

@@ -52,7 +52,14 @@ float fcossin_tbl[65536];
 static D3DMATRIX D3DMW2VMatrix;
 
 float* aMXPtr;
-static float aW2VMx[indices_count];
+/* No longer static (#123, stage S3-2). It is the float twin of w2v_matrix,
+ * which has always been exported, and the HD object path needs the FLOAT one:
+ * it turns a light's world position into view space, and the long matrix
+ * carries its rotation in 14 bits, which is four digits where a light
+ * direction wants seven. Rotation in M00..M22, the camera's own world
+ * position in M03 / M13 / M23 - a world point becomes a view point as
+ * R * (p - c), which is exactly what aTranslateAbs computes above. */
+float aW2VMx[indices_count];
 float aFMatrixStack[20 * indices_count];
 
 long* phd_mxptr;

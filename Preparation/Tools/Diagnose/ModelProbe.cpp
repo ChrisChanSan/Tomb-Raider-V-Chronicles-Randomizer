@@ -53,14 +53,24 @@
  *     -yaw <deg>          camera around the model, default 180 (from the front)
  *     -pitch <deg>        default 10, looking slightly down
  *     -dist <units>       camera distance; default frames the bounding box
+ *     -itemcheck          the matrix proof of the object path, as a table:
+ *                         every node's origin put on the screen twice, once
+ *                         by the classic transform and once by the matrix the
+ *                         card is handed. The engine runs the same check on
+ *                         its own matrix stack and logs HDLOG itemcheck; this
+ *                         one runs it without the game.
+ *     -meshbits <mask>    hide nodes exactly as item->mesh_bits does in the
+ *                         game; 0xBFFF takes a SWAT's head off. Decimal or
+ *                         0x. Default: every node drawn.
  *     -pose <node> <yaw> <pitch>
  *                         turn that node of the mesh tree and everything
  *                         below it. Repeat the switch for more nodes.
  *     -head               draw the separate HD face as well, if there is one
- *     -light <x y z r g b falloff>
- *                         one dynamic light in VIEW space (the camera is at
- *                         the origin looking down +z). Up to 8.
- *     -shade <0..255>     the flat node colour, default 128
+ *     -light <x y z r g b range>
+ *                         one POINT light in VIEW space (the camera is at the
+ *                         origin looking down +z), colour 0..255 and the
+ *                         range its falloff reaches zero at. Up to 12.
+ *     -shade <0..255>     the flat node AMBIENT, default 128
  *     -out <prefix>       output path prefix, default .\modelprobe
  *
  *   Everything else:
@@ -761,6 +771,7 @@ int main(int argc, char** argv)
 	std::string name, levelStem, classicPath, out = ".\\modelprobe";
 	int slot = -1;
 	bool all = false, nodes = false, noDraw = false, managed = false, head = false;
+	bool itemcheck = false;
 	int threads = 8;
 	long width = 1024, height = 1024;
 	double fov = 80.0, yaw = 180.0, pitch = 10.0, dist = 0.0;
@@ -769,8 +780,9 @@ int main(int argc, char** argv)
 	double turn[32][2];
 	memset(turn, 0, sizeof(turn));
 
-	HDLightSource lights[HD_MAX_LIGHTS];
+	HDObjLight lights[HD_MAX_OBJ_LIGHTS];
 	int lightCount = 0;
+	unsigned int nodeMask = ~0u;
 
 	for (int i = 2; i < argc; i++)
 	{
@@ -792,6 +804,8 @@ int main(int argc, char** argv)
 			managed = true;
 		else if (!_stricmp(argv[i], "-head"))
 			head = true;
+		else if (!_stricmp(argv[i], "-itemcheck"))
+			itemcheck = true;
 		else if (!_stricmp(argv[i], "-threads") && i + 1 < argc)
 			threads = atoi(argv[++i]);
 		else if (!_stricmp(argv[i], "-out") && i + 1 < argc)
@@ -823,17 +837,26 @@ int main(int argc, char** argv)
 				turn[node][1] = p;
 			}
 		}
-		else if (!_stricmp(argv[i], "-light") && i + 7 < argc && lightCount < HD_MAX_LIGHTS)
+		else if (!_stricmp(argv[i], "-meshbits") && i + 1 < argc)
+			nodeMask = (unsigned int)strtoul(argv[++i], 0, 0);
+		else if (!_stricmp(argv[i], "-light") && i + 7 < argc && lightCount < HD_MAX_OBJ_LIGHTS)
 		{
-			HDLightSource& light = lights[lightCount++];
+			/* x y z r g b range - a POINT light in view space, which is what
+			 * the object shader wants since stage S3-2. The studio camera
+			 * looks down -z at the model, so "0 0 -2000" is in front of it. */
+			HDObjLight& light = lights[lightCount++];
 
 			light.x = (float)atof(argv[++i]);
 			light.y = (float)atof(argv[++i]);
 			light.z = (float)atof(argv[++i]);
+			light.kind = (float)HD_OBJLIGHT_POINT;
 			light.r = (float)atof(argv[++i]);
 			light.g = (float)atof(argv[++i]);
 			light.b = (float)atof(argv[++i]);
-			light.falloff = (float)atof(argv[++i]);
+
+			const float range = (float)atof(argv[++i]);
+
+			light.invRange = range > 0.0f ? 1.0f / range : 0.0f;
 		}
 		else
 			printf("ModelProbe: ignoring %s\n", argv[i]);
@@ -1003,13 +1026,24 @@ int main(int argc, char** argv)
 	/* --- the table ------------------------------------------------------ */
 	if (all)
 	{
+		/* THE SKELETON COLUMNS (#123, stage S3-2). `maxb` is the highest node
+		 * a weighted vertex of the .TRM names and `drift` is how far the
+		 * centre of a node's own vertices sits from that node in the SLOT's
+		 * bind pose, mean over the covered nodes. The engine draws HD only
+		 * when maxb is inside the slot's node count and the drift is under
+		 * its limit - which is why the two numbers stand here beside the slot
+		 * that is really loaded, randomised or not. */
 		printf("\n-- every slot ------------------------------------------------\n");
-		printf("%-5s %-26s %-28s %5s %5s %5s %6s %s\n", "slot", "slot name",
-			"model", "nodes", "cover", "fall", "pages", "notes");
-		printf("----- -------------------------- ---------------------------- "
-			"----- ----- ----- ------ ------------------\n");
+		printf("%-5s %-24s %-24s %5s %5s %5s %5s %6s %5s %s\n", "slot",
+			"slot name", "model", "nodes", "maxb", "cover", "drift", "worst",
+			"pages", "notes");
+		printf("----- ------------------------ ------------------------ "
+			"----- ----- ----- ----- ------ ----- ------------------\n");
 
 		int complete = 0, partial = 0, classicOnly = 0;
+		const float kProbeDriftLimit = HD_SKELETON_DRIFT_LIMIT;
+		int mismatchNodes = 0, mismatchDrift = 0;
+		float worstGood = 0, bestBad = 1e9f;
 
 		for (size_t i = 0; i < wanted.size(); i++)
 		{
@@ -1023,12 +1057,12 @@ int main(int argc, char** argv)
 				const char* asked = HDBindSlot(here, &kind, &fromMap);
 
 				classicOnly++;
-				printf("%-5d %-26s %-28s %5d %5s %5s %6s %s\n", here,
+				printf("%-5d %-24s %-24s %5d %5s %5s %5s %6s %5s %s\n", here,
 					slotName ? slotName : "?",
 					kind == HD_BIND_LARA ? "(Lara - stage S4)"
 						: (kind == HD_BIND_DUMMY ? "(DUMMY on purpose)"
 							: (asked ? asked : "?")),
-					wanted[i].nodes, "-", "-", "-",
+					wanted[i].nodes, "-", "-", "-", "-", "-",
 					kind == HD_BIND_MODEL ? "no .TRM - classic" : "");
 				continue;
 			}
@@ -1073,14 +1107,61 @@ int main(int argc, char** argv)
 				sprintf(note + strlen(note), "%shead on node %d",
 					*note ? "; " : "", HDModelHeadNode(here));
 
-			printf("%-5d %-26s %-28s %5d %5d %5d %6d %s\n", here,
+			const int maxBone = HDModelMaxBone(here);
+			float drift = -1, worst = -1;
+
+			HDModelBindDrift(here, &drift, &worst);
+
+			/* The engine's own verdict, spelled out here so that the table and
+			 * the game cannot drift apart. */
+			const bool badNodes = maxBone >= HDModelNodes(here);
+			const bool badDrift = !badNodes && drift > kProbeDriftLimit;
+
+			if (badNodes)
+			{
+				mismatchNodes++;
+				sprintf(note + strlen(note), "%sSKELETON: names node %d of %d",
+					*note ? "; " : "", maxBone, HDModelNodes(here));
+			}
+			else if (badDrift)
+			{
+				mismatchDrift++;
+				sprintf(note + strlen(note), "%sSKELETON: drift",
+					*note ? "; " : "");
+			}
+
+			if (drift >= 0)
+			{
+				if (badNodes || badDrift)
+				{
+					if (drift < bestBad)
+						bestBad = drift;
+				}
+				else if (drift > worstGood)
+					worstGood = drift;
+			}
+
+			char maxText[16], driftText[16], worstText[16];
+
+			sprintf(maxText, "%d", maxBone);
+			sprintf(driftText, drift >= 0 ? "%.0f" : "-", drift);
+			sprintf(worstText, worst >= 0 ? "%.0f" : "-", worst);
+
+			printf("%-5d %-24s %-24s %5d %5s %5d %5s %6s %5d %s\n", here,
 				slotName ? slotName : "?", HDModelName(here),
-				HDModelNodes(here), covered, HDModelNodes(here) - covered,
+				HDModelNodes(here), maxText, covered, driftText, worstText,
 				HDModelPageCount(here), note);
 		}
 
-		printf("\n%d slots complete, %d partial (per-mesh fallback), "
-			"%d classic only\n", complete, partial, classicOnly);
+		printf("\n%d slots complete, %d partial (an uncovered node draws "
+			"nothing), %d classic only\n", complete, partial, classicOnly);
+		printf("skeleton: %d refused on the node count, %d on the drift; "
+			"worst drift among the models that fit %.0f (limit %.0f)\n",
+			mismatchNodes, mismatchDrift, worstGood, kProbeDriftLimit);
+
+		if (bestBad < 1e8f)
+			printf("          the smallest drift among the refused is %.0f\n",
+				bestBad);
 
 		HDModelShutdown();
 		HDRenderShutdown();
@@ -1199,12 +1280,84 @@ int main(int argc, char** argv)
 
 	BuildNodeMatrices(*here, view, turn, &matrices[0]);
 
+	/* THE MATRIX PROOF OF THE OBJECT PATH (#123, stage S3-2), without the
+	 * game. A node matrix carries the node's ORIGIN into view space all by
+	 * itself - its translation IS that origin's view position - so the two
+	 * roads to a pixel can be compared on it directly:
+	 *
+	 *   classic   sx = vx * f_persp / vz + centre, as aTransformLightClipMesh
+	 *             computes it for every vertex of every mesh
+	 *   device    the row vector through the projection matrix, the w
+	 *             division, and the viewport this engine never sets - the
+	 *             whole back buffer, MinZ 0, MaxZ 1
+	 *
+	 * The engine runs the identical comparison on the FIRST HD item of every
+	 * level, on the matrices its own stack produced, and writes HDLOG
+	 * itemcheck. This is the same arithmetic on the same kind of matrices
+	 * with no game around it. */
+	if (itemcheck)
+	{
+		const float* pm = (const float*)&projection;
+		double worstX = 0, worstY = 0;
+		int used = 0, behind = 0;
+
+		printf("\n-- itemcheck: the node origins, both roads ---------------------\n");
+		printf("%5s %12s %12s %12s %10s %10s %8s %8s\n", "node",
+			"view x", "view y", "view z", "classic x", "device x", "dx", "dy");
+
+		for (int node = 0; node < here->nodes; node++)
+		{
+			const float* m = &matrices[(size_t)node * 16];
+			const double vx = m[12], vy = m[13], vz = m[14];
+
+			if (vz < 20.0)
+			{
+				behind++;
+				continue;
+			}
+
+			const double zv = persp / vz;
+			const double classicX = vx * zv + (double)width * 0.5;
+			const double classicY = vy * zv + (double)height * 0.5;
+
+			const double cxx = vx * pm[0] + vy * pm[4] + vz * pm[8] + pm[12];
+			const double cyy = vx * pm[1] + vy * pm[5] + vz * pm[9] + pm[13];
+			const double cww = vx * pm[3] + vy * pm[7] + vz * pm[11] + pm[15];
+
+			if (cww <= 0.0)
+			{
+				behind++;
+				continue;
+			}
+
+			const double deviceX = (cxx / cww + 1.0) * 0.5 * (double)width;
+			const double deviceY = (1.0 - cyy / cww) * 0.5 * (double)height;
+			const double dx = fabs(deviceX - classicX);
+			const double dy = fabs(deviceY - classicY);
+
+			if (dx > worstX) worstX = dx;
+			if (dy > worstY) worstY = dy;
+
+			used++;
+
+			printf("%5d %12.1f %12.1f %12.1f %10.3f %10.3f %8.5f %8.5f\n",
+				node, vx, vy, vz, classicX, deviceX, dx, dy);
+		}
+
+		printf("\n%d nodes compared, %d behind the near plane; "
+			"worst dx %.5f px, worst dy %.5f px\n", used, behind, worstX, worstY);
+		printf("%s\n", worstX < 1.0 && worstY < 1.0
+			? "PASS - both roads put every node origin in the same pixel"
+			: "FAIL - the projection and the classic transform disagree");
+	}
+
 	std::vector<float> light((size_t)here->nodes * 3, (float)shade);
 
 	HDModelLighting lighting;
 
 	lighting.lights = lightCount ? lights : 0;
 	lighting.lightCount = lightCount;
+	lighting.sunScale = 0.75f;
 
 	/* --- draw ------------------------------------------------------------ */
 	printf("\n-- the picture ------------------------------------------------\n");
@@ -1238,13 +1391,13 @@ int main(int argc, char** argv)
 	HDModelFrameBegin(&projection, 0);
 
 	const bool drew = HDModelDraw(slot, &matrices[0], here->nodes,
-		&light[0], &lighting);
+		&light[0], nodeMask, &lighting);
 
 	bool drewHead = false;
 
 	if (head)
 		drewHead = HDModelDrawHead(slot, &matrices[0], here->nodes,
-			&light[0], &lighting);
+			&light[0], nodeMask, &lighting);
 
 	const int calls = HDModelDrawCalls();
 

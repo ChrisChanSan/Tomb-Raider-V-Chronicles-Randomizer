@@ -55,6 +55,9 @@ extern float f_boo;
 extern float fcossin_tbl[65536];
 
 extern float* aMXPtr;
+// The world-to-view matrix in floats - rotation in M00..M22, the camera's
+// world position in M03 / M13 / M23. The float twin of w2v_matrix below.
+extern float aW2VMx[indices_count];
 extern float aFMatrixStack[20 * indices_count];
 
 extern long* phd_mxptr;

@@ -367,12 +367,13 @@ this engine to draw that art when it finds the remaster installed, and the
 original art when it does not: file present → HD, otherwise vanilla, exactly
 the deal the loading screens and the HQ sounds already have.
 
-**As of this build the rooms are drawn in HD.** Objects, enemies and Lara are
-still the original models — they are the next stages — so what changes is the
-world around them: walls, floors, ceilings, doors as part of the architecture,
-and every static object the remaster baked into the room art, at the remaster's
-resolution and with the remaster's baked light. Everything else is exactly as
-it was.
+**As of this build the rooms and the objects are drawn in HD.** Enemies,
+doors, switches, pickups, traps and machinery come out of the remaster's own
+models, skinned on the classic mesh tree so that they move exactly as they
+always did; the rooms around them were already HD. **Lara is still the
+original model** — she is a composite of an outfit, a head, holsters and a
+braid and she is a stage of her own — so until that stage she is the one
+low-resolution thing on the screen, and that is on purpose.
 
 **Switching it on.** Options → the new *tomb5 options* page → **HD textures**,
 the last row of the first page. Like every row on that page it is remembered at
@@ -393,6 +394,7 @@ same key as every other setting
 | Value | Type | Meaning |
 |---|---|---|
 | `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing below is read at all. |
+| `hd_objects` | DWORD | HD models for the objects, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's objects ever go wrong. Set it to `0` and the rooms stay HD while every object draws the classic way. Does nothing at all while `hd_enable` is off. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
 
 **The light in an HD room now does everything it did before.** An earlier
@@ -424,23 +426,83 @@ pattern** is finer: the table is sampled once per vertex, and an HD room has
 far more vertices than a classic one. Same table, same speed, same strength — a
 denser grid.
 
-**What is still not HD.** The people and the things in the rooms: enemies,
-Lara, doors that open, pickups, vehicles. That is the next stage, and the
-difference is meant to be visible until then.
+### HD objects — what draws, what does not, and why
 
-**Where that next stage stands.** The models themselves are read and skinned
-already — the engine simply does not draw them yet, so nothing in this build
-looks different because of it. What is done: the remaster's own object models
-are loaded per level, put on the graphics card, lit with the engine's own
-object light and posed by the classic mesh tree, and they can be looked at one
-by one outside the game with the `ModelProbe` tool. Over a level that is 52
-models in ANDREA1, 66 in JOBY3 and 68 in RICH3 — 5 to 7 MiB of geometry and
-about a fifth of a second to build, on top of what the rooms already cost. The
-randomizer's own added slots find their model on their own, including the
-Cyborg and the Joby guard. What is left for the next stage is the seam: the
-one place in the drawing code where an object either draws HD or classic, the
-mesh swaps (Lara's holsters, a guard's dropped weapon), and Lara herself, who
-is a stage of her own.
+An object is not a room. A room is one lump of geometry with one matrix; an
+enemy is a tree of fifteen to thirty pieces that the engine walks every frame,
+pushing and popping a matrix per piece and blending between two animation
+frames. The HD model wants exactly those matrices, so the engine does not
+build them a second time: it rides along on the walk it already does. The
+animation, the frame blending and the mesh tree stay the game's own, down to
+the last rounding — only the last step changes, where a piece's classic mesh
+used to go into the texture buckets and its **matrix** now goes to the model
+instead.
+
+**How many.** Per level, of the slots the level really loads: ANDREA1 draws
+50 of its 52 models in HD, JOBY3 65 of 66, RICH3 65 of 68. The rest, and every
+slot with no model at all, draws exactly as it did before — the two paths sit
+side by side in the same frame and in the same depth buffer.
+
+**When an object stays classic.** Four reasons, and every one of them is
+written into the log with the slot it applies to:
+
+| Reason | What it means |
+|---|---|
+| `no_model` | The remaster ships no model under that name. Mostly emitters, markers and inventory-only items — things that draw nothing in the world anyway. |
+| `skeleton_nodes` | The model names a mesh-tree node the slot does not have. `FIREROPE` in eleven of the fourteen levels: TR5's slot is a rope with one piece and the model comes from TR4, where it had seventeen. |
+| `skeleton_drift` | The model fits the node **count** but not the tree. This is the randomizer's case: it puts foreign creatures into slots, and `SAS` in ANDREA1 holds a twenty-five-piece body where `SAS.TRM` was drawn for fifteen. Skinning that would tear the model across the room. |
+| `no_geometry` | A model with nothing in it at all. Has not been seen; the guard is there so that it cannot become a crash. |
+
+The skeleton test is a measurement, not a guess. For every pair of pieces that
+carry geometry it compares the distance between them in the model against the
+distance between them in the slot's own mesh tree, with each piece's own size
+taken off — so where the modeller put an origin does not matter and a model
+that sits off-centre as a whole cancels completely. Over all fourteen
+randomized levels and their vanilla twins the worst model that **belongs**
+where it stands is 239 units out and the best one that does not is 308, and
+the line is drawn at 256 — nearer the good end on purpose, because a good
+model refused is a classic-looking door and a bad one accepted is a body torn
+in half. `ModelProbe -all` prints the whole table for any level.
+
+**What an HD object cannot do yet.**
+
+* **Mesh swaps are ignored.** TR5 keeps a second mesh per piece and swaps it
+  in — a guard's hands the moment he is created, the Cyborg's twenty damage
+  panels as he is shot. A remaster model is one whole thing and has no second
+  geometry to swap to, so it draws what the remaster drew, which for a guard
+  is the guard with his weapon and for the Cyborg is the Cyborg with his
+  panels shut. TROne walked into the same wall and answers it the same way.
+* **A piece the model does not cover draws nothing** — not even its classic
+  mesh. That is deliberate: a door's invisible root and a face that ships as
+  its own `_HEAD.TRM` are *meant* to be empty, and drawing the classic mesh
+  there put classic patches on an HD body in TROne's own user reports.
+* **Distance models are off** for HD objects. TR5 swaps in a coarser model
+  five sectors away; the remaster has no coarse model, and a door that turned
+  from HD to classic as you walked away from it would pop every time.
+* **A glow can be painted over.** A model's additive pass — glowing eyes, a
+  lamp — is drawn before the classic opaque objects, so a classic object
+  standing *behind* such a glow paints over it. Rare, and the same hole the
+  rooms have had since they went HD.
+
+**The light is the engine's own, per vertex.** The classic engine lights an
+object vertex by vertex out of a light list it builds per piece; a flat colour
+per piece would have made a mannequin of every guard, with the front and the
+back of his chest equally bright. So the light list itself goes to the card
+and the shading is worked out per vertex there, with the remaster's own
+normals — the room's lamps, the room's sun, the shadow lights that darken the
+ambient, and every dynamic light the game makes: a flare, a torch, a muzzle
+flash, an explosion. Two of those are finer than the classic engine could
+afford: a point light's direction and its falloff are measured from the
+surface itself rather than from the middle of a limb, so a flare at an enemy's
+feet lights his boots and not his helmet.
+
+**The proof, in the log.** With `-log` the first HD object of each level
+writes two lines. `HDLOG itemcheck` puts each of its pieces on the screen
+twice — once through the classic transform and once through the matrix the
+graphics card is handed — and prints the worst disagreement, which is under a
+pixel. `HDLOG lightcheck` runs the classic lighting formula on the engine's
+own light arrays and the HD one on the list that was sent to the card, on the
+same surface normal, and prints both colours side by side.
 
 **A room the remaster has nothing for stays classic**, on its own, room by
 room. In ANDREA1 that is four rooms out of 242. A room the randomizer built
@@ -472,7 +534,15 @@ HDLOG level=ANDREA1 water stamped=... choppy=... shimmer=... ps_slots=...
 HDLOG matrixcheck level=ANDREA1 room=12 group=12 samples=128 used=85 behind=43
       maxdx=0.00017 maxdy=0.00009 maxdz=0.000000000 persp=572.0 center=960,540
 HDLOG frame rooms=17 calls=131 dropped=0 bulbs=0 fog_start=12288 wibble=930
-      cam_uw=0 shimmer=1
+      cam_uw=0 shimmer=1 objects=9 object_calls=21
+HDLOG slot=33 name=SWAT model=SWAT nodes=15 maxbone=14 cover=15
+      drift=22/114 head=-1 hd=1 reason=ok
+HDLOG slot=31 name=SAS model=SAS nodes=25 maxbone=14 cover=15
+      drift=807/2286 head=-1 hd=0 reason=skeleton_drift
+HDLOG level=ANDREA1 objects hd=50 classic=111 (of 161 loaded slots), ...
+HDLOG itemcheck level=ANDREA1 slot=33(SWAT) nodes=15 used=15
+      maxdx=0.00021 maxdy=0.00013
+HDLOG lightcheck level=ANDREA1 slot=33 classic=... hd=... diff=...
 ```
 
 `hd=1/0` per room with its reason is the whole decision table; `built ms=` is
@@ -480,6 +550,14 @@ what the HD side added to the loading time; `matrixcheck` is the engine
 comparing its own vertex transform with the matrix it hands the graphics card,
 over 128 of the room's own vertices — `maxdx`/`maxdy` are pixels and they have
 to stay far below 1, or an HD wall would stand beside its own floor.
+
+There is one `slot=` line per object slot the level loads: the model it asked
+for, how many pieces the mesh tree has against the highest the model names,
+how much of it is covered, the skeleton drift, and `hd=1/0` with the reason.
+That table answers "why is this door still the old one" without guessing.
+`itemcheck` is the object twin of `matrixcheck` — the same comparison on an
+object's pieces instead of a room's vertices — and `lightcheck` puts the
+classic lighting formula and the HD one side by side on one surface normal.
 
 The two `water` lines say how many of the classic path's water vertices were
 found again in the remaster's geometry — `marks` is what the classic level

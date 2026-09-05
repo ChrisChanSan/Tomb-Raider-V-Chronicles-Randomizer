@@ -40,19 +40,20 @@ struct IDirect3DDevice9;
 // the slot - not into a rig of the model's own. So TRM node n IS classic mesh
 // n, and the "mapping table" a slot needs is not a permutation but a coverage
 // list: which of the slot's nmeshes nodes have vertices weighted to them at
-// all. HDModelNodes / HDModelNodeCovered answer that, and a node the model
-// does not cover is the one stage S3-2 draws the classic way (the per-mesh
-// fallback).
+// all. HDModelNodes / HDModelNodeCovered answer that.
 //
 // The identity is measured, not assumed - ModelProbe -nodes prints the TRM's
 // per-node vertex counts beside the classic mesh tree of the same slot for
 // any level, and ModelProbe -all does it for every bound slot at once.
 //
-// TROne takes the other road here and marks every node of a valid model as
-// covered whatever the counts say (game_renderer.cpp:1826, `model.covered =
-// ~0u`), after user reports of classic patches drawn over an HD body. That is
-// a decision about DRAWING and it belongs to stage S3-2; this module measures
-// and reports, and leaves the decision to its caller.
+// WHAT STAGE S3-2 DID WITH THE ANSWER: nothing is drawn on an uncovered node.
+// Not the classic mesh either - TROne tried that and took it out again after
+// user reports of classic patches sitting on an HD body, and marks every node
+// of a valid model as covered instead (game_renderer.cpp:1826, `model.covered
+// = ~0u`). An uncovered node is nearly always a door's invisible root or a
+// face that ships as its own _HEAD.TRM, and both of those are meant to be
+// empty. This module still only measures and reports; the decision is in
+// hd_object.cpp, where the caller is.
 //
 // Engine-free like the rest of specific\hd: it takes a device, a list of
 // slots with their classic node counts, and the bind pose the engine reads
@@ -124,17 +125,63 @@ struct HDModelStats
 	HDPageCacheStats pageStats;	// what the append to the page cache did
 };
 
+/* THE OBJECT'S LIGHTS (#123, stage S3-2).
+ *
+ * The classic object path lights PER VERTEX with the vertex's own normal
+ * (specific\output.cpp, aTransformLightClipMesh) out of a light list it sets
+ * up PER NODE (specific\lighting.cpp, SuperSetupLight, called from
+ * phd_PutPolygons through InitObjectLighting). One flat colour a node would
+ * therefore not be the classic picture but a mannequin: the front and the
+ * back of a torso are one node and the classic path shades them apart.
+ *
+ * So the directional part is evaluated per vertex here as well, in the vertex
+ * shader, and what the engine hands over is the light list itself. Two things
+ * make that exact rather than an approximation:
+ *
+ *   - The engine's per-node vectors are the light seen from the NODE's world
+ *     position, turned into that node's model space. A skinned normal arrives
+ *     in VIEW space, and the node's rotation is orthonormal, so the dot
+ *     product is the same one in either space. Directions therefore need no
+ *     per-node copy at all.
+ *   - A point or spot light's direction and its falloff are the only things
+ *     the classic path recomputes per node. Handing the shader the light's
+ *     POSITION instead lets it work both out from the surface point, which is
+ *     what the classic formula wanted and could not afford.
+ *
+ * The one part that really is per node is the ambient - and it is measured to
+ * be per OBJECT: the shadow lights that lower it read `light->Range`, which
+ * CreateLightList fills from the ITEM's position and not from the node's. It
+ * travels in HDModelDraw's `nodeLight` all the same, because Lara's composite
+ * (stage S4) has a genuine per-node ambient in LaraNodeAmbient.
+ */
+#define HD_MAX_OBJ_LIGHTS	12
+
+enum HDObjLightKind
+{
+	HD_OBJLIGHT_SUN = 0,	// x, y, z is a unit DIRECTION towards the light
+	HD_OBJLIGHT_POINT = 1,	// x, y, z is a POSITION
+	HD_OBJLIGHT_SPOT = 2	// a position too - the cone test is already done
+};
+
+struct HDObjLight
+{
+	float x, y, z;		// VIEW space, see the kinds above
+	float kind;		// one of HDObjLightKind, as a float for the shader
+	float r, g, b;		// the classic path's 0..255 scale
+	float invRange;		// 1 / Outer, 1 / Cutoff; 0 for a sun
+};
+
 // Per object, handed to HDModelDraw. The bulbs and the fog live in
 // HDRenderFrameBegin's HDFrameLighting, because they are per frame and both
 // paths share them.
 struct HDModelLighting
 {
-	// The engine's dynamics, ALREADY IN VIEW SPACE - a skinned vertex lands
-	// there and nowhere else. Leave the count at 0 and the node colours carry
-	// the light on their own, which is what the classic path does
-	// (InitDynamicLighting folds the dynamics into the object's light list).
-	const HDLightSource* lights;
+	const HDObjLight* lights;
 	int lightCount;
+	// The sun's own factor: aTransformLightClipMesh multiplies a sun by 0.75
+	// in the game and DOUBLES it in the inventory ("fucking shit", says the
+	// original comment). One number rather than two code paths.
+	float sunScale;
 };
 
 // --- the module ------------------------------------------------------------
@@ -178,18 +225,22 @@ void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount);
 // One object. `nodeMatrix` is nodeCount row-major 4x4 matrices, model space
 // to VIEW space - the very matrices the classic path has on its stack when it
 // calls phd_PutPolygons for each mesh. `nodeLight` is nodeCount colour
-// triples in the classic path's 0..255 space, one per node - what
+// triples in the classic path's 0..255 space, one per node - the ambient
 // CalculateObjectLighting works out for this object. Pass 0 for a flat 128.
+//
+// `nodeMask` is the classic `item->mesh_bits`: bit n clear means node n draws
+// nothing. ~0u draws everything, which is what an item with no mesh bits set
+// hands over anyway.
 //
 // False when the slot has no model or the frame is not open; the caller then
 // draws it the classic way.
 bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
-	const float* nodeLight, const HDModelLighting* lighting);
+	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting);
 
 // The separate HD face, drawn right after the body on the same matrices. Does
 // nothing and returns false when the slot has no <NAME>_HEAD.TRM.
 bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
-	const float* nodeLight, const HDModelLighting* lighting);
+	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting);
 
 int HDModelDrawCalls();		// since the last HDModelFrameBegin
 
@@ -200,7 +251,42 @@ const char* HDModelName(int slot);		// the .TRM stem, or 0
 HDModelOrigin HDModelOriginOf(int slot);
 int HDModelNodes(int slot);			// the classic node count handed in
 int HDModelNodeVertices(int slot, int node);	// weighted vertices on that node
-bool HDModelNodeCovered(int slot, int node);	// false -> S3-2 draws it classic
+bool HDModelNodeCovered(int slot, int node);	// false -> nothing is drawn there
+
+/* DOES THE MODEL FIT THE SKELETON THAT IS IN THE SLOT? (#123, stage S3-2.)
+ *
+ * A .TRM's bone numbers are the mesh tree numbers of the model it was made
+ * for, and the randomizer puts foreign creatures into slots - ANDREA1's SAS
+ * carries 25 nodes where SAS.TRM was drawn for 15. Skinning that model on
+ * that tree is a torn lump, so the caller has to be able to tell, and these
+ * two numbers are what it tells from.
+ *
+ * HDModelMaxBone is the highest node number any weighted vertex names. Higher
+ * than the slot's own node count and the model is certainly not this
+ * skeleton's.
+ *
+ * HDModelBindDrift is the softer half, for a foreign model with the RIGHT
+ * node count: for every covered node, the centre of the vertices that ride on
+ * that node alone (weight 255) against the classic bind pose of that node,
+ * in classic units. A model made for this tree keeps that distance inside its
+ * own limb; a foreign one does not. `mean` is over the covered nodes and
+ * `worst` is the largest single one. False when there is no bind pose to
+ * measure against, in which case the caller has to make do with the count.
+ */
+int HDModelMaxBone(int slot);
+bool HDModelBindDrift(int slot, float* mean, float* worst);
+
+/* THE LIMIT, in classic units, measured and not guessed. It lives here rather
+ * than beside the decision in hd_object.cpp so that the diagnostic tool, which
+ * is built without the engine, judges a slot by the same number the game does.
+ *
+ * Read off ModelProbe -all over all fourteen randomized levels and their
+ * vanilla twins: the highest drift of a model that belongs where it stands is
+ * 239 (ANIMATING3 in JOBY3) and the lowest of one that does not is 308
+ * (ANIMATING1 in RICH2). 256 sits in that gap, nearer the accepted end,
+ * because the two mistakes do not cost the same - a good model refused is a
+ * classic-looking door, a bad one accepted is a body torn across the room. */
+#define HD_SKELETON_DRIFT_LIMIT		256.0f
 int HDModelVertices(int slot);
 int HDModelIndices(int slot);
 int HDModelRanges(int slot);

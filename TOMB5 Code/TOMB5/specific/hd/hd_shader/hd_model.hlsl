@@ -16,8 +16,9 @@
  * lights of its own invention, while this engine has the classic path's own
  * per-object light list, its distance fog and its fog bulbs - and a torch has
  * to reach an HD guard exactly as far as it reaches the classic wall behind
- * him. So the node colour comes from the engine's own CalculateObjectLighting
- * and the fog and bulb terms are the very ones hd_room.hlsl runs.
+ * him. So the ambient comes from the engine's own CalculateObjectLighting, the
+ * engine's own light LIST is evaluated per vertex below with the classic
+ * formulas, and the fog and bulb terms are the very ones hd_room.hlsl runs.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git
@@ -81,9 +82,25 @@
  * c0 - c3     gProj               per frame  (view -> clip)
  * c4          gPass               per pass   (the same register hd_room uses)
  * c8 - c103   gJoints[96]         per model  (32 nodes, THREE registers each)
- * c104 - c135 gNodeLight[32]      per model  (one colour per node, 0..255)
+ * c104 - c135 gNodeLight[32]      per model  (the ambient, one per node)
+ * c136 - c159 gObjLights[24]      per object (12 lights, two registers each)
+ * c160        gLightInfo          per object (count, the sun's factor)
  *
- * 136 of the 256 vs_3_0 registers. The palette is 32 nodes because the
+ * THE VERTEX REGISTERS OVERLAP THE ROOM SHADER'S, and on purpose. Direct3D 9
+ * has ONE constant register file behind both shaders, and hd_room.hlsl keeps
+ * its water table in c32-c95 and its wibble table in c96-c127 - straight
+ * through the joint palette above. That is safe because of the ORDER and
+ * because of two lines in hd_render.cpp: rooms are drawn before models in
+ * every frame, HDRenderFrameBegin forces the water table's first upload of
+ * each frame (`g_water_table_up = ~0`), and apply_frame_lighting writes the
+ * wibble table every frame as well. So a model can write over both and the
+ * next frame's first room puts them back before it needs them. The PIXEL side
+ * is the opposite arrangement and just as deliberate: there the two shaders
+ * SHARE the registers - c16 fog, c40 bulbs - so one frame's constants serve
+ * both. What must never happen is writing a register a shader `def`s for
+ * itself, which is why gPass goes to the pixel file alone (see below).
+ *
+ * 161 of the 256 vs_3_0 registers. The palette is 32 nodes because the
  * highest bone index a weighted vertex names over all 566 models of game 5 is
  * 28 (GREEN_TEETH); the only two files past that, PIERRE_HEAD and
  * LARSON_HEAD at 40, are facial-rig heads whose numbers belong to the rig and
@@ -119,11 +136,46 @@ float4 gPass : register(c4);
  * bind offset already folded in. */
 float4 gJoints[96] : register(c8);
 
-/* ONE COLOUR PER NODE, in the classic path's 0..255 space: what
- * CalculateObjectLighting / aTransformLightClipMesh computes for this object,
- * evaluated once per node instead of once per vertex. Weighted by the same
- * three weights as the position, so it crosses a joint smoothly. */
+/* THE AMBIENT, ONE COLOUR PER NODE, in the classic path's 0..255 space: what
+ * InitObjectLighting leaves in aAmbientR/G/B for this object. Weighted by the
+ * same three weights as the position, so it crosses a joint smoothly - which
+ * matters for Lara alone (LaraNodeAmbient), because for every other object
+ * the shadow lights that lower the ambient are measured at the ITEM and the
+ * 32 entries are the same number.
+ *
+ * The DIRECTIONAL part is not in here. It is worked out below, per vertex,
+ * out of gObjLights - because that is where the classic path works it out
+ * (specific\output.cpp, aTransformLightClipMesh, per vertex with the vertex's
+ * own normal), and a flat colour a node would draw a torso whose front and
+ * back are equally bright. */
 float4 gNodeLight[32] : register(c104);
+
+/* THE OBJECT'S LIGHT LIST, in VIEW space. Two registers each:
+ *
+ *   (x, y, z, kind)     kind 0 sun: xyz is a unit DIRECTION towards it
+ *                       kind 1 point, kind 2 spot: xyz is a POSITION
+ *   (r, g, b, invRange) the colour in the classic 0..255 scale;
+ *                       1 / Outer for a point, 1 / Cutoff for a spot, 0 sun
+ *
+ * WHY POSITIONS AND NOT THE ENGINE'S OWN PER-NODE DIRECTIONS. The classic
+ * path recomputes a point light's direction and its falloff once per NODE,
+ * from that node's world position - the finest it could afford in 1999. The
+ * surface point is right here, so both come out of it exactly, and a torch at
+ * a guard's feet lights his boots and not his helmet.
+ *
+ * WHY VIEW SPACE IS ENOUGH FOR THE DOT PRODUCT. The engine's vectors are in
+ * the node's MODEL space and its normals with them; a skinned normal arrives
+ * here in view space. The node matrix is a rotation and a translation with no
+ * scale, so dot(n, L) is the same number in both spaces and one list serves
+ * every node of the object.
+ */
+#define HD_MAX_OBJ_LIGHTS 12
+
+float4 gObjLights[HD_MAX_OBJ_LIGHTS * 2] : register(c136);
+
+/* x = how many of them are filled, y = the factor a SUN is multiplied by
+ * (0.75 in the game, 2 in the inventory - output.cpp:150-157). */
+float4 gLightInfo : register(c160);
 
 /* --------------------------------------------------- THE PARITY BLOCK ------
  *
@@ -217,6 +269,50 @@ VS_OUT ModelVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		view += weight * Skin(pos, node);
 		nrm += weight * Skin(normal, node);
 		light += weight * gNodeLight[node].rgb;
+	}
+
+	/* THE DIRECTIONAL LIGHT, LINE FOR LINE OUT OF aTransformLightClipMesh
+	 * (specific\output.cpp:100-160). Three kinds, and only two shapes behind
+	 * them:
+	 *
+	 *   point  val = ((L.n + 1) * 0.5)^2 * rad,  rad = (Outer - d) / Outer
+	 *   spot   val = max(0, L.n)        * rad,   rad = 1 - d / Cutoff
+	 *   sun    val = max(0, L.n) * gLightInfo.y, no falloff at all
+	 *
+	 * The engine's dynamic lights (a torch, a flare, a gun flash) are point
+	 * lights of exactly this shape - InitDynamicLighting puts them in the
+	 * very same PointLights array - and reach an object the same way.
+	 *
+	 * The normal is renormalised where the classic path does not have to: a
+	 * classic mesh normal is a unit vector on disk, a .TRM normal is a byte
+	 * triple that has been through a weighted sum of up to three rotations. */
+	float3 unit = nrm * rsqrt(max(dot(nrm, nrm), 1e-12f));
+
+	[unroll]
+	for (int j = 0; j < HD_MAX_OBJ_LIGHTS; j++)
+	{
+		if (j < (int)gLightInfo.x)
+		{
+			float4 a = gObjLights[j * 2 + 0];
+			float4 b = gObjLights[j * 2 + 1];
+
+			/* A sun's direction is already the direction; the other two are
+			 * positions and the direction is measured from the surface. */
+			float3 delta = a.xyz - view;
+			float dist = length(delta);
+			float3 L = a.w < 0.5f ? a.xyz : delta / max(dist, 1e-6f);
+
+			float ndl = dot(unit, L);
+			float wrap = (ndl + 1.0f) * 0.5f;
+			float rad = max(0.0f, 1.0f - dist * b.w);
+
+			/* point: the wrapped square; spot and sun: the plain cosine. */
+			float val = a.w > 0.5f && a.w < 1.5f
+				? wrap * wrap * rad
+				: max(0.0f, ndl) * (a.w < 0.5f ? gLightInfo.y : rad);
+
+			light += val * b.rgb;
+		}
 	}
 
 	o.pos = mul(float4(view, 1.0f), gProj);
@@ -318,20 +414,21 @@ float4 ModelPS(VS_OUT input) : COLOR0
 	 * skull left as a single gold fragment because pass 0 discarded on it. */
 	clip(gPass.x * (texel.a - 0.5f));
 
-	/* The node colour arrives in the classic path's 0..255 space already -
-	 * unlike a room vertex, whose baked pair is 0..1 and gets multiplied by
-	 * 127.5 in hd_room.hlsl. */
+	/* The light arrives in the classic path's 0..255 space already - unlike a
+	 * room vertex, whose baked pair is 0..1 and gets multiplied by 127.5 in
+	 * hd_room.hlsl - and it is the ambient plus everything the vertex shader
+	 * worked out of gObjLights. */
 	float3 f = input.light;
 
-	/* THE DYNAMIC LIGHTS, per pixel, in VIEW space. The classic object path
-	 * does not run this loop: InitDynamicLighting folds the engine's dynamics
-	 * into the object's own light list, so the node colour above ALREADY has
-	 * the torch in it and the engine passes gCounts.x = 0. The loop is here
-	 * for the case S3-2 decides to light an HD object per pixel instead of
-	 * per node - a model has fifty times the vertices of the mesh the classic
-	 * formula was written for, and a per-node colour cannot show a torch
-	 * moving across a face. Which of the two the engine uses is one count,
-	 * not two code paths. */
+	/* THE ROOM'S DYNAMIC LIGHTS, per pixel, in VIEW space. AN OBJECT NEVER
+	 * RUNS THIS LOOP: the engine writes gCounts.x = 0 for every object,
+	 * because a dynamic light reaches an object as an ordinary point light in
+	 * the vertex shader's own list (InitDynamicLighting folds the engine's
+	 * dynamics into the object's light list, and that is where they belong -
+	 * the classic path lights an object per VERTEX). The loop is left in
+	 * place - not deleted - so that this file stays the room shader's twin
+	 * register for register, which is what lets one frame's constants serve
+	 * both; the engine turns it off with a count and not with a shader. */
 	[unroll]
 	for (int i = 0; i < HD_MAX_LIGHTS; i++)
 	{

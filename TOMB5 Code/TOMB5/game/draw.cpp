@@ -26,6 +26,7 @@
 #include "../specific/polyinsert.h"
 #include "../specific/function_stubs.h"
 #include "../specific/hd/hd_level.h"
+#include "../specific/hd/hd_object.h"
 #include "../specific/lighting.h"
 #include "items.h"
 #include "../specific/file.h"
@@ -577,6 +578,25 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	phd_TranslateAbs(item->pos.x_pos, item->pos.y_pos, item->pos.z_pos);
 	phd_RotYXZ(item->pos.y_rot, item->pos.x_rot, item->pos.z_rot);
 
+	/* #123 (S3-2): IS THIS ITEM DRAWN BY THE HD PATH?
+	 *
+	 * The answer costs one array lookup and is false for the whole game
+	 * unless hd_enable and hd_objects are both on and the level built its
+	 * models. When it is true, not one classic polygon of this item goes into
+	 * the buckets: the walk below runs exactly as it always did - the same
+	 * animation, the same frames, the same interpolation, the same mesh tree
+	 * - and instead of handing each node's mesh to phd_PutPolygons it hands
+	 * the node's MATRIX to hd_object, which is what a skinned model wants.
+	 *
+	 * Taken here and not further down because the distance model right below
+	 * has to know: an HD item never switches to its MIP slot. The remaster
+	 * ships no reduced model, the MIP slot's own name would bind a different
+	 * .TRM or none at all, and a door that turned from HD to classic at five
+	 * sectors would pop in front of the player every time he walked away from
+	 * it. Enemies already skip the MIP for their own reason; HD items now
+	 * join them, and everything else keeps it. */
+	const bool hd = HDObjectBegin(item, obj);
+
 	// Distance models (MIP/LOD) are switched off for ENEMIES - they are
 	// always drawn at full resolution.
 	//
@@ -598,7 +618,7 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	// "intelligent" separates cleanly: all enemies with object_mip carry
 	// it (verified), doors and bridges (mip 2048-4096) do not and keep
 	// their distance model.
-	if (obj->object_mip && !obj->intelligent && (obj + 1)->loaded &&
+	if (!hd && obj->object_mip && !obj->intelligent && (obj + 1)->loaded &&
 		phd_mxptr[M23] >> 16 > obj->object_mip)
 		obj++;
 
@@ -667,7 +687,20 @@ void DrawAnimatingItem(ITEM_INFO* item)
 			rot2 = frm[1] + 9;
 			gar_RotYXZsuperpack_I(&rot, &rot2, 0);
 
-			if (item->mesh_bits & 1)
+			/* #123 (S3-2): THE SEAM. Either the node's matrix goes to the
+			 * HD path or its mesh goes into the buckets - never both. A node
+			 * the HD model does not cover is drawn by NOBODY: TROne tried
+			 * the classic fallback there and took it out again after user
+			 * reports of classic patches sitting on an HD body
+			 * (game_renderer.cpp:1825-1830).
+			 *
+			 * The matrix is recorded whether or not mesh_bits shows the node,
+			 * because a hidden node still carries the ones below it - the
+			 * mask reaches the model as a mask and hides its triangles
+			 * there. */
+			if (hd)
+				HDObjectNode(0, true);
+			else if (item->mesh_bits & 1)
 			{
 				if (item->meshswap_meshbits & 1)
 					phd_PutPolygons_I(meshpp[1], clip);
@@ -702,7 +735,9 @@ void DrawAnimatingItem(ITEM_INFO* item)
 
 				bit <<= 1;
 
-				if (bit & item->mesh_bits)
+				if (hd)
+					HDObjectNode(i + 1, true);
+				else if (bit & item->mesh_bits)
 				{
 					if (bit & item->meshswap_meshbits)
 						phd_PutPolygons_I(meshpp[1], clip);
@@ -717,7 +752,9 @@ void DrawAnimatingItem(ITEM_INFO* item)
 			rot = frm[0] + 9;
 			gar_RotYXZsuperpack(&rot, 0);
 
-			if (item->mesh_bits & 1)
+			if (hd)
+				HDObjectNode(0, false);
+			else if (item->mesh_bits & 1)
 			{
 				if (item->meshswap_meshbits & 1)
 					phd_PutPolygons(meshpp[1], clip);
@@ -752,7 +789,9 @@ void DrawAnimatingItem(ITEM_INFO* item)
 
 				bit <<= 1;
 
-				if (bit & item->mesh_bits)
+				if (hd)
+					HDObjectNode(i + 1, false);
+				else if (bit & item->mesh_bits)
 				{
 					if (bit & item->meshswap_meshbits)
 						phd_PutPolygons(meshpp[1], clip);
@@ -762,6 +801,14 @@ void DrawAnimatingItem(ITEM_INFO* item)
 			}
 		}
 	}
+
+	/* #123 (S3-2): the item's node walk is over. HDObjectEnd works out the
+	 * light out of the engine's own light lists and puts the item on the
+	 * frame's list; with clip == 0 above, no node was recorded and it drops
+	 * the item again. Outside `if (clip)` so that the bracket HDObjectBegin
+	 * opened is closed on every road out of this function. */
+	if (hd)
+		HDObjectEnd();
 
 	if (gLogEnabled)
 	{

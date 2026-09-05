@@ -367,11 +367,22 @@ this engine to draw that art when it finds the remaster installed, and the
 original art when it does not: file present → HD, otherwise vanilla, exactly
 the deal the loading screens and the HQ sounds already have.
 
-**As of this build the first stage is in, and it draws nothing.** What it does
-is find the installation, read what the remaster has for the level you are
-loading, count it, time it, and write one line into the log. That is on purpose:
-the reading has to be right before the drawing can be, and the numbers it
-reports decide how the drawing is built.
+**As of this build the first two stages are in, and the game still draws
+nothing differently.** The first finds the installation, reads what the
+remaster has for the level you are loading, counts it, times it and writes one
+line into the log. The second builds the renderer that will draw it — shaders,
+buffers, textures and all — but nothing in the game calls it yet, so your
+picture is byte for byte the one you had before. That order is on purpose: the
+reading has to be right before the drawing can be, and a renderer wants to be
+proved on its own before it is let anywhere near the frame.
+
+That proof is a picture, taken outside the game. `RoomProbe`, in
+`Preparation\Tools\Diagnose`, opens a hidden window, makes a real Direct3D
+device and draws one room from a camera you give it straight into a `.PNG` —
+using the engine's own renderer, not a copy of it. Room 69 of ANDREA1 comes out
+as the Piazza dell'Opera facade with its shutters, its cornice and its street
+sign, at the remaster's resolution, lit by the light the remaster baked into
+it.
 
 It is **off out of the box** and there is no options row for it yet. Two
 registry values, in the same key as every other setting
@@ -403,6 +414,15 @@ remaster does not have. `ranges` is how many draw calls the HD rooms would
 cost; `bc7_ms` is how long this machine took to unpack all 179 texture pages
 with their whole mip chains, on one core. Those two numbers are the point of the
 stage.
+
+One number from the second stage is worth knowing in advance, because it is the
+one that decides whether this can work at all in a 32-bit game. The remaster's
+pages are BC7, a format Direct3D 9 has never heard of, so every one of them is
+unpacked on the processor and handed to the card as plain 32-bit pixels — no
+quality lost, which was your call. For the heaviest level that is 376 MB of
+texture. Kept in video memory it costs the process **270 MB** at its peak;
+kept in Direct3D's *managed* pool, where the driver holds a second copy in main
+memory, it costs **545 MB**. The first is what this engine does.
 
 **Nothing is copied out of the remaster and nothing of it ships here**, the
 same rule as everywhere else in this project: the art is read where it lies, in

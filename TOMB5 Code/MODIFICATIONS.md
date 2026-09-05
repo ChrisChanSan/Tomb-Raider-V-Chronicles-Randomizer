@@ -980,6 +980,66 @@ whose operand is an address and whose result meets a comparison, a division or a
 shift. `specific/file.cpp`'s `(long)meshes[lp] / 2` is a division, but what it
 divides is a file offset the loader has just read, not an address.
 
+#### Stage S1-1 — the HD draw path itself, built but not yet hooked up
+
+The engine gained a **second renderer**. It is compiled into `PCTomb5.exe` and
+**nothing calls it**: a rebuild after adding it reported *0 of 3991 functions
+compiled*, which is the plainest possible statement that the game's picture is
+unchanged. Hanging it into `InsertRoom` is stage S1-2.
+
+Where the classic path is fixed-function with vertices it has transformed,
+clipped and lit itself (`FVF = XYZRHW|DIFFUSE|SPECULAR|TEX2`, `DrawPrimitiveUP`,
+no shader anywhere), this one is `vs_3_0` / `ps_3_0` with its own vertex
+declaration, its own buffers and one texture per remaster page. The two share
+the back buffer and the depth buffer and nothing else.
+
+- `specific/hd/hd_render.cpp` / `.h` — the renderer. One vertex buffer and one
+  32-bit index buffer for the whole level; every group's triangles bucketed by
+  `(pass, page)` with a **stable** sort into ranges, one range being one draw
+  call; `HDRenderFrameBegin` / `HDRenderFrameEnd` as a state bracket around
+  every HD block. The structure comes from TROne (`THIRD-PARTY.md`).
+- `specific/hd/hd_pagecache.cpp` / `.h` — the level's `.DDS` pages, BC7 decoded
+  on the processor over a thread pool and uploaded as **A8R8G8B8**, whole mip
+  chain, lossless as the user asked. `D3DPOOL_DEFAULT` through one reused
+  system-memory staging texture, which is not a preference but a measurement:
+  for TITLE's 220 pages the peak commit of the process is **270 MiB** in
+  `DEFAULT` against **545 MiB** in `MANAGED`, and the engine is a 32-bit
+  process. The pages are decoded in **byte-budgeted batches**, because 2391 of
+  the 2406 pages are 512x512 and decode to 1.4 MiB while eleven are 4096x4096
+  and decode to 85 MiB each — a batch counted in pages rather than bytes would
+  occasionally ask for one and a half gigabytes.
+- `specific/hd/hd_shader/hd_room.hlsl` plus the checked-in bytecode
+  `hd_room_vs.inc` / `hd_room_ps.inc` — **no shader compiler is part of the
+  build**, so this project still builds with nothing but the C++ toolset.
+  `Preparation\Tools\Diagnose\bshader.bat` regenerates the two `.inc` files
+  with `fxc` from the Windows SDK; the call is written at the top of the
+  `.hlsl`, and GPLv3 is why the source sits next to the bytecode.
+
+**Why one depth buffer serves both paths.** The classic path writes its own
+depth, `sz = f_a - f_boo * rhw` with `rhw = 2048 / z_view`
+(`polyinsert.cpp:434`, `drawroom.cpp:379`), which is `f_a - f_b / z_view`. A
+Direct3D projection matrix with `_33 = f_a`, `_43 = -f_b`, `_34 = 1`, `_44 = 0`
+produces exactly that after the w division. `HDRenderSelfTest` compares the two
+over 50 view distances spread across the reciprocal of z; the worst difference
+is **8.9e-08**. The device's side of it was read back rather than assumed:
+`D3DZB_TRUE` (the engine sets it in `function_table.cpp:107`), `ZFUNC`
+`LESSEQUAL` (nothing in the engine ever sets it — that is the Direct3D
+default), and the viewport at `MinZ 0 / MaxZ 1` (the engine never calls
+`SetViewport` at all). All three agree with what the matrix assumes.
+
+- `tomb5.vcxproj` — the two new `.cpp` files with `/std:c++17` per file and no
+  precompiled header, the new headers, and the `.hlsl` as a `None` entry so it
+  is visible in the solution without becoming a build step.
+
+New diagnostic tool `Preparation/Tools/Diagnose/RoomProbe.cpp` (`broom.bat`):
+a hidden window, a real Direct3D 9 device and a render target, so one room can
+be drawn from a given camera into a `.PNG` **without starting the game**. It
+links the engine's own sources, so what it shows is what the engine draws. It
+also prints the depth table above and verifies the state bracket by reading 58
+device states before and after an HD block — a check that immediately earned
+its keep by reporting that `SetStreamSource(0, NULL, 0, 0)` leaves the old
+stride readable, which is Direct3D's behaviour and not ours.
+
 ---
 
 ## Building this yourself

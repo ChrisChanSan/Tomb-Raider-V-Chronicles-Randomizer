@@ -84,6 +84,26 @@ else - with their own name substituted.
 | `Tr3Probe` | bpr | cross-check of the conversion. |
 | `DinoCheck` | - | do all four guests still come out identical to their reference packages? |
 
+**The HD art of the Remaster (#123)**
+
+These read the user's own *Tomb Raider IV-VI Remastered* installation where it
+lies. Nothing of it is copied into this tree, and none of them touch
+`tomb456.exe` or `tomb5.dll`.
+
+| Tool | Script | What it answers |
+|---|---|---|
+| `TrgProbe` | btrg | what is in a `LEVELn.TRG`: groups, parts, passes, pages, vertices, indices, and how many draw ranges a level would cost. |
+| `MapProbe` | bmap | the `LEVELn.MAP` — which `.TRM` model the level names for which object slot. |
+| `DdsProbe` | bdp | decodes one BC7 `.DDS` with the engine's own decoder and writes a `.PNG`, so what the tool shows is what the game will show. |
+| `RoomProbe` | broom | **draws one room** with the engine's own HD renderer into a `.PNG`, from a camera you give it, without starting the game. Also prints the depth proof (classic `sz` against the projection matrix over 50 distances), reads back what the device really compares depth with, checks the state bracket over 58 device states, and measures the page cache in both texture pools. Built **x86**, unlike its neighbours: the number it exists to measure is the peak commit of a 32-bit process. |
+
+`bshader` is not a tool but a build step of its own: it runs `fxc` from the
+Windows SDK over `specific\hd\hd_shader\*.hlsl` and writes the bytecode next to
+it as `.inc` byte arrays. The engine's project has **no** shader compile step,
+so this has to be run by hand after every shader change, before `be.bat`. Both
+the `.hlsl` and the generated `.inc` are checked in — GPLv3 wants the source
+that produced the bytecode to sit beside it.
+
 ## The other half: the engine tells you things too
 
 The engine writes nothing unless it is started with `-log`. `Log.bat` in the

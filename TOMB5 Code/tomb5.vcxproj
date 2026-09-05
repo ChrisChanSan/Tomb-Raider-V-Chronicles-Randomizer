@@ -196,6 +196,26 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_pagecache.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|x64'">stdcpp17</LanguageStandard>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_render.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|x64'">stdcpp17</LanguageStandard>
+    </ClCompile>
     <ClCompile Include="TOMB5\specific\hqsfx.cpp" />
     <ClCompile Include="TOMB5\specific\input.cpp" />
     <ClCompile Include="TOMB5\specific\lighting.cpp" />
@@ -350,8 +370,12 @@
     <ClInclude Include="TOMB5\specific\hd\hd_bind.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_install.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_level.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_pagecache.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_render.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_scan.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_trm.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_shader\hd_room_ps.inc" />
+    <ClInclude Include="TOMB5\specific\hd\hd_shader\hd_room_vs.inc" />
     <ClInclude Include="TOMB5\vendor\trforge\src\trf_core\trf_file.h" />
     <ClInclude Include="TOMB5\vendor\trforge\src\trf_core\trf_types.h" />
     <ClInclude Include="TOMB5\vendor\trforge\src\trf_remaster\Trg.h" />
@@ -377,6 +401,15 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="tomb5.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The HD room shader's source. NOT a build step: the bytecode beside it
+         is checked in as hd_room_vs.inc / hd_room_ps.inc, so the project
+         builds on a machine with only the C++ toolset and no Windows SDK
+         shader compiler. Regenerate with Preparation\Tools\Diagnose\bshader.bat
+         after changing it. Listed here so it is visible in the solution and
+         travels with the sources GPLv3 asks for. -->
+    <None Include="TOMB5\specific\hd\hd_shader\hd_room.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="TOMB5\tomb5\libs\discordRPC\discord-rpc.lib" />

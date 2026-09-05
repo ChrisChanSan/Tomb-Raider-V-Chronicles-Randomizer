@@ -65,7 +65,16 @@ writes `LARA_PONYTAIL` both for the Rome body in a Russia level and for every
 guest, and nothing else in the file tells the two apart. **If the enum in
 `specific\hd\hd_lara.h` is ever renumbered, `Patch::hdOutfitId` in
 `core/ApplyPatch.cpp` has to be renumbered with it.**
-*Both sides:* `core/Tr5Level.cpp` (the accessors) and `specific/file.cpp`.
+
+**The engine's half is built (stage S7-2)**, and this is one of the few
+couplings here that a build now catches: `specific/file.cpp` reads `data[3]`
+into `GfHdOutfit` beside `data[0..2]`, `specific/hd/hd_laradraw.cpp` hands it
+to `HDLaraOutfitFor` **unchanged**, and `specific/hd/hd_level.cpp` carries a
+`static_assert` on `HD_LARA_OUTFIT_TR3_ANTARC == 5 && … == 8`. The engine
+accepts 5..8 and **only** 5..8 - 1..4 are the vanilla bodies, so a stale or
+garbled byte cannot overrule the level's own `LaraType`.
+*Both sides:* `core/Tr5Level.cpp` (the accessors), `core/ApplyPatch.cpp`
+(`hdOutfitId`), `specific/file.cpp` and `specific/hd/hd_lara.*`.
 
 **The `.hdm` sidecar beside every randomized level**
 What does not fit in four bytes: which rooms the run changed the SHAPE of,
@@ -75,7 +84,23 @@ unbounded, so they go into `data\<LEVEL>.hdm` - plain text, first line
 `hdm 1`. Written by `Patch::writeHdMarkers` on every run for every level,
 even when empty; a missing file means "no markers". The grammar and the
 reference reader are `Tools\Diagnose\HdmDump.cpp`.
-*Both sides:* `core/ApplyPatch.cpp` and the engine's reader (stage S7-2).
+
+**The engine's half is built (stage S7-2):** `specific/hd/hd_markers.cpp` is
+the engine's reader and answers the way `readHdm()` does on the same file -
+version 1 or the file is refused, a stray `\r` tolerated, an unknown line
+ignored and counted so a newer randomizer is visible rather than silent, a
+missing file "no markers". A `room` line makes that room classic even where
+the `.TRG` has a full group for it (`reason=marker` in `HDLOG`); a `donor`
+line resolves the slot through the DONOR level's `.MAP` instead of this
+level's, and `TR3` through a four-line table and a second installation. The
+`outfit` line is read for the log alone - the header byte is what draws, and a
+disagreement is one `HDLOG` line saying so.
+*Both sides:* `core/ApplyPatch.cpp` (`writeHdMarkers`) and
+`specific/hd/hd_markers.cpp`, with `specific/hd/hd_level.cpp` acting on the
+rooms and `specific/hd/hd_object.cpp` on the donors. **Two numbers inside
+`writeHdMarkers` are the ENGINE'S and nothing enforces them:** Lara's block
+ends at 30 (`hd_bind.cpp`, `lara_block_last`) and the hand table covers
+460..470.
 
 **The sound and animation assumptions**
 The soldier family's animation base (guard 460) is chosen in the engine's

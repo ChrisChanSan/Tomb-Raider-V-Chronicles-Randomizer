@@ -266,16 +266,31 @@ int HDLaraOutfitFromName(const char* name);
  *                 carries LaraType 0, the same byte Rome carries. Passing the
  *                 engine's own test in rather than rebuilding it here is what
  *                 keeps the two from drifting apart.
- *   youngLara     (gfLevelFlags & GF_YOUNGLARA) || the Irish level range ||
- *                 LaraDrawType == LARA_YOUNG. Any of the three and Lara stays
- *                 classic, by the user's decision.
+ *   youngLara     (gfLevelFlags & GF_YOUNGLARA) || LaraDrawType ==
+ *                 LARA_YOUNG. Either and Lara stays classic, by the user's
+ *                 decision.
+ *
+ *                 THE IRISH LEVEL RANGE IS NOT IN THAT TEST, and it was
+ *                 (#123, stage S7-2, the spiel test's F1). The engine builds
+ *                 the child body at exactly two places - LaraInitialiseMeshes
+ *                 in game\laramisc.cpp and its twin in game\deltapak.cpp -
+ *                 and both ask the range AND THE FLAG. The randomizer clears
+ *                 GF_YOUNGLARA out of SCRIPT.DAT for all three Irish levels
+ *                 (core\ScriptDat.cpp) and replaces Lara's skin with an
+ *                 adult's, because young Lara can carry no weapon; the range
+ *                 alone therefore said "child" about a grown Lara and drew
+ *                 every Irish level classic. The flag and the LaraType byte
+ *                 both flip with the change and neither has that hole.
  *   tr3Outfit     one of the four HD_LARA_OUTFIT_TR3_* when the randomizer
  *                 dressed this level in a Tomb Raider III outfit, otherwise
- *                 HD_LARA_OUTFIT_NONE. The engine cannot learn it today: the
- *                 randomizer writes the SAME outfit byte (LARA_PONYTAIL) for
- *                 a guest and for the Rome body in a Russia level, so a
- *                 LARA_PONYTAIL level stays classic until stage S7 puts a
- *                 marker of its own in the level header - see the .cpp.
+ *                 HD_LARA_OUTFIT_NONE. It is data[3] of the level header
+ *                 (#123, stage S7), passed in RAW: the randomizer writes the
+ *                 engine's own numbers so that neither side translates.
+ *                 Anything but 5..8 is ignored - see the .cpp. It exists
+ *                 because the wardrobe writes the SAME outfit byte
+ *                 (LARA_PONYTAIL) for a guest and for the Rome body in a
+ *                 Russia level, and nothing else in the file tells the two
+ *                 apart.
  *
  * *why comes back as a short reason for the log, never 0.
  */

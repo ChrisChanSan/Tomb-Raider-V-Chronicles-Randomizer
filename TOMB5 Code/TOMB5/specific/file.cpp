@@ -1624,6 +1624,16 @@ unsigned int __stdcall LoadLevel(void* name)
 		// (outfit donor without LARA_SPEECH_HEAD1-4, e.g. catsuit from rich2).
 		// In vanilla all 16 files carry 0 here - measured.
 		GfForeignSpeechHeads = (char)data[2];
+		// data[3]: randomizer marker "this level wears a Tomb Raider III
+		// outfit" (#123, stage S7). It carries the ENGINE'S OWN
+		// HD_LARA_OUTFIT_* number - 5 ANTARC, 6 NEVADA, 7 COAST, 8 CATSUIT -
+		// so that neither side translates and a stale byte cannot pass as a
+		// vanilla outfit; hd_laradraw.cpp hands it to HDLaraOutfitFor
+		// unchanged. All 17 shipped files carry 0 in data[3] through
+		// data[15] - measured. Read here beside data[0..2] because this is
+		// the one place the header block is in hand, long before the HD path
+		// asks anything.
+		GfHdOutfit = (char)data[3];
 
 		fread(&size, 1, 4, level_fp);
 		fread(&compressedSize, 1, 4, level_fp);

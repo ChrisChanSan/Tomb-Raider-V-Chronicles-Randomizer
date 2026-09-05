@@ -386,8 +386,12 @@ the engine reads Steam's own folder out of the registry, walks every library in
 `steamapps\common` for a folder that holds a `tomb456.exe` with a subfolder `5`
 containing `DATA`, `TEX` and `ITEM`. It goes by what is in the folder, never by
 the folder's name — Steam names the same game differently per language and
-depot. For a copy Steam does not know about there is a registry value, in the
-same key as every other setting
+depot. The same walk also looks for a `tomb123.exe` with a subfolder `3`
+holding `DATA` and `TEX`, which is *Tomb Raider I-III Remastered*: the four
+Tomb Raider III guests the randomizer can put into a level have their HD
+models there and nowhere else. Not having that game costs those four models
+and nothing else. For a copy Steam does not know about there are registry
+values, in the same key as every other setting
 (`HKEY_CURRENT_USER\Software\Core Design\Tomb Raider Chronicles\tomb5`):
 
 | Value | Type | Meaning |
@@ -397,6 +401,7 @@ same key as every other setting
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface. All three come from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below). Set a number and that number is the ceiling. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
+| `hd_install_tr3` | String | The folder of your *Tomb Raider I-III Remastered* — the one holding `tomb123.exe`. Needed for exactly one thing: the HD models of the four Tomb Raider III guests the randomizer can import (the T-Rex, the vulture, the Compsognathus and the raptor), which live in that bundle and in no other. Leave it **empty** and the engine looks for it in the same walk it uses for the other one; without the game those four enemies draw the classic way and nothing else changes. |
 | `hd_texture_format` | String | `rgba`, the default, keeps every page exactly as the Remaster drew it. `dxt5` compresses them and uses a quarter of the video memory for a small, measurable loss. Anything else reads as `rgba`. |
 
 ### What the HD art asks of your graphics card
@@ -511,9 +516,21 @@ written into the log with the slot it applies to:
 | Reason | What it means |
 |---|---|
 | `no_model` | The remaster ships no model under that name. Mostly emitters, markers and inventory-only items — things that draw nothing in the world anyway. |
+| `donor_dummy` | The slot's model came from another level file and that level says, in its own name table, that the slot draws nothing on purpose. |
+| `tr3_not_installed` | The slot holds one of the four Tomb Raider III guests and *Tomb Raider I-III Remastered* was not found. Its model lives only there. |
 | `skeleton_nodes` | The model names a mesh-tree node the slot does not have. `FIREROPE` in eleven of the fourteen levels: TR5's slot is a rope with one piece and the model comes from TR4, where it had seventeen. |
 | `skeleton_drift` | The model fits the node **count** but not the tree. This is the randomizer's case: it puts foreign creatures into slots, and `SAS` in ANDREA1 holds a twenty-five-piece body where `SAS.TRM` was drawn for fifteen. Skinning that would tear the model across the room. |
 | `no_geometry` | A model with nothing in it at all. Has not been seen; the guard is there so that it cannot become a crash. |
+
+**Which model a slot asks for** comes from three places, in this order: the
+level's own name table beside it in the remaster's `DATA` folder, which lists
+only the deviations; a small hand table of our own for the slots this project
+added past the original 460 and for the one vanilla slot the remaster leaves
+unnamed — `ROMAN_GOD`, for which it ships a sword version and a hammer version
+and only two of the fifteen levels say which; and otherwise the slot's own
+name. A randomized level adds a fourth: a slot the run filled from a donor is
+asked of the **donor's** table instead, because that is where the model came
+from.
 
 The skeleton test is a measurement, not a guess. For every pair of pieces that
 carry geometry it compares the distance between them in the model against the
@@ -571,6 +588,35 @@ room. In ANDREA1 that is four rooms out of 242. A room the randomizer built
 from scratch (a secret's new chamber) is in the same position and behaves the
 same way: classic, without being asked.
 
+**A room the randomizer RESHAPED is a different case, and it has to be told.**
+The remaster's art describes the level as Core shipped it. When a run cuts a
+wall open for a secret, adds a window, joins two rooms or lifts a floor, the
+art still shows the wall that is no longer there — and unlike a room the
+remaster never had, nothing in the file gives it away. So the randomizer
+writes those room numbers into a small text file beside the level,
+`data\<LEVEL>.hdm`, and the engine draws each of them the classic way, whose
+geometry is by definition the geometry the run really built. It costs the HD
+look of a handful of rooms per level — six in RICH3 with the glitched secret
+list, two in ANDREA3 — and it is the difference between a level you can play
+and a wall you can walk through but not see through.
+
+The same file names the object slots whose **model came out of another level
+file**. The remaster resolves a slot by the name *this* level gives it, and
+`ANIMATING10` is a different object in every one of the fifteen files — so a
+cross enemy, a moved key or a mesh warehouse would be painted as whatever
+this level's `ANIMATING10` happens to be. Each of those lines names the donor
+level and the slot the model was taken from, and the engine reads the
+**donor's** `.MAP` for it. A guest out of Tomb Raider III is written `TR3` and
+resolved out of the other bundle (see `hd_install_tr3` above).
+
+The file is written on every run for every level, even when it has nothing to
+say, and "restore original" deletes it again; a level with no such file has
+no markers, which is what a vanilla installation looks like. It is plain text
+and you can read it. A file this engine does not understand — a newer
+randomizer, a version line it has no rule for — is refused whole, with the
+reason in `log.txt`, and the level then draws the way it did before any of
+this existed.
+
 One thing that will look wrong if you go looking for it: a static object you
 destroy — a vase, a crate — disappears from the game but not from the room's
 art, because that art is one baked piece. It belongs to the stage that draws
@@ -602,10 +648,33 @@ HDLOG slot=33 name=SWAT model=SWAT nodes=15 maxbone=14 cover=15
 HDLOG slot=31 name=SAS model=SAS nodes=25 maxbone=14 cover=15
       drift=807/2286 head=-1 hd=0 reason=skeleton_drift
 HDLOG level=ANDREA1 objects hd=50 classic=111 (of 161 loaded slots), ...
+HDLOG donor slot=45 name=LARSON from=Andrea1:45 model=LARSON hd=1
+      reason=donor_slot_name
+HDLOG donor slot=43 name=CROW from=TR3:43 model=VULTURE hd=0
+      reason=tr3_not_installed
+HDLOG level=RICH1 donors=15 donor_maps=4 map_lines=93 tr3_install=absent
 HDLOG itemcheck level=ANDREA1 slot=33(SWAT) nodes=15 used=15
       maxdx=0.00021 maxdy=0.00013
 HDLOG lightcheck level=ANDREA1 slot=33 classic=... hd=... diff=...
 ```
+
+A randomized level adds one more room reason and a block of its own. A room
+the run reshaped reads `hd=0 reason=marker`; the level's `markers` line names
+the sidecar it read, how many rooms and donor slots it held, and whether the
+Tomb Raider I-III bundle was found:
+
+```
+HDLOG level=RICH3 markers file=data\RICH3.hdm rooms=6 donors=14 outfit=0
+      tr3_install=absent
+HDLOG room=46 group=46 tris=980/0/0 ranges=3 statics=1 hd=0 reason=marker
+HDLOG level=RICH3 markers rooms=6 of them classic now=6 donors=14 outfit=0
+```
+
+and one `donor` line per named slot says where its name came from and whether
+the model arrived: `donor_map` (the donor level's own `.MAP` named it),
+`donor_slot_name`, `donor_dummy` (the donor says that slot draws nothing),
+`model_missing`, `tr3_guest`, `tr3_not_installed`, or the skeleton test's own
+reason when the model was there and did not fit.
 
 `hd=1/0` per room with its reason is the whole decision table; `built ms=` is
 what the HD side added to the loading time; `matrixcheck` is the engine
@@ -703,11 +772,23 @@ from a list of level names:
 | The Russia outfit, with the cap | Base, Submarine, Sinking Submarine | `OUTFIT_RUSSIA` | the engine's **own** braid test: a Russia level with `LARA_NORMAL`, or `LARA_BUNHEAD` anywhere. That expression already stands three times in the braid code and once in the skinning code, and it is the only thing in this engine that can tell the cap from the Rome outfit — a vanilla Russia level carries the same outfit byte Rome does. |
 | The diving suit | Deepsea Dive | `OUTFIT_SUBSUIT` | the outfit byte, which has a value of its own for it |
 | The VCI catsuit | The 13th Floor, Escape with the Iris, Red Alert, the title screen | `OUTFIT_VCI` | the outfit byte, likewise |
-| Young Lara | Gallows Tree, Labyrinth, Old Mill | — **stays classic** | the script flag, the level range and the outfit byte, any one of the three. This is your decision, not a limit: `OUTFIT_YOUNG`, `LARA_YOUNG_HEAD` and `HAIR_PIGTAIL` all exist in the remaster. |
-| A Tomb Raider III outfit | wherever the randomizer rolls one | `OUTFIT_TR3_ANTARC`, `_NEVADA`, `_COAST`, `_CATSUIT` | **not yet** — and every level that *might* be one **stays classic**; see below |
+| Young Lara | Gallows Tree, Labyrinth, Old Mill | — **stays classic** | the script flag `GF_YOUNGLARA`, or the outfit byte `LARA_YOUNG`. Either one. **Not the level range** — see the note below the table. This is your decision, not a limit: `OUTFIT_YOUNG`, `LARA_YOUNG_HEAD` and `HAIR_PIGTAIL` all exist in the remaster. |
+| A Tomb Raider III outfit | wherever the randomizer rolls one | `OUTFIT_TR3_ANTARC`, `_NEVADA`, `_COAST`, `_CATSUIT` | `data[3]` of the level header, which the randomizer writes — see below |
 
 Read against all fifteen vanilla level files those rules give the right answer
 fifteen times out of fifteen.
+
+**Why young Lara is not the Irish levels.** She used to be, and it was wrong
+in a randomized run. The engine builds the child body at exactly two places,
+and both of them ask the level range **and** the script flag together — the
+flag is what puts the child's ribcage over the skin. The randomizer clears
+that flag out of `SCRIPT.DAT` for all three Irish levels, because young Lara
+can carry no weapon at all, and puts a grown Lara's skin in the level; the
+range on its own therefore said "child" about an adult and drew the whole
+Irish section the classic way. The flag and the outfit byte both change when
+the randomizer changes her, so either of them is a true answer and the range
+is not. In a vanilla game nothing moves: those three levels carry the flag
+*and* the byte.
 
 **The rest of the wardrobe.** The face is `LARA_HEAD` and it is a *facial rig*
 — its bone numbers run to 31 and mean nothing at all to her 15-piece mesh tree
@@ -738,20 +819,25 @@ judged by, and the answer is comfortable: over every level the mean drift of a
 wardrobe part against that level's own Lara mesh tree is 3 to 9 units and the
 worst single pair 183, against a limit of 256.
 
-**The one thing still open** is the Tomb Raider III outfits. The randomizer
-rolls them (#122) and writes the outfit byte `LARA_PONYTAIL` when it does — but
-that is the same byte it writes for the Rome outfit inside a Russia level, so
-the byte alone cannot say *which* of the four guests she is wearing, or that
-she is wearing one at all. The four models exist and are correct; what is
-missing is a marker in the level file, which is a randomizer change and belongs
-to a later stage.
+**The Tomb Raider III outfits** were the last gap and are closed. The
+randomizer rolls one of the four (#122) and writes the outfit byte
+`LARA_PONYTAIL` when it does — but that is the same byte it writes for the
+Rome outfit inside a Russia level, so the byte alone can say neither *which*
+of the four she is wearing nor that she is wearing one at all. It now writes
+a marker beside it: `data[3]` of the level header, four bytes the engine
+already reads before it loads a single room, carrying the engine's own
+outfit number so that neither side has to translate. `0` in every vanilla
+file — measured over all seventeen — and 5 to 8 for the four guests.
 
-Until it arrives, **a level whose outfit byte is `LARA_PONYTAIL` draws the
-classic Lara.** That is the safe half of the ambiguity: reading the byte as the
-Rome outfit would put a Rome Lara on screen wherever you rolled a Nevada one,
-and a right classic body beats a wrong HD one. In a run without the wardrobe
-switch it costs nothing at all — no vanilla level carries that byte. `log.txt`
-says so per level, in the `HDLOG … lara outfit=none … reason=…` line.
+With the marker there, the `LARA_PONYTAIL` byte means one thing again and
+not two: the Rome body inside a Russia level, `OUTFIT_CLASSIC`. The one case
+left over is a level file randomized by a version **older** than this
+marker: it carries the ponytail byte and a `data[3]` of 0 for a guest as
+well, and now shows a Rome Lara where that run rolled a Nevada one. Nothing
+in the file can tell those apart — that is what the marker was added for —
+and randomizing the level again with the current version says it.
+`log.txt` prints the raw facts per level in the `HDLOG … lara …
+laratype=… data3=…` line.
 
 **What else stays classic, on purpose:**
 

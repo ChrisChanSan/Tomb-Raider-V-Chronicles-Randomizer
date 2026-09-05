@@ -48,6 +48,25 @@ struct IDirect3DTexture9;
 #define HD_PAGE_FORMAT_RGBA	0	// A8R8G8B8, lossless - the default
 #define HD_PAGE_FORMAT_DXT5	1	// BC3 on the processor - a quarter of it
 
+/* A PAGE OUT OF THE OTHER BUNDLE (#123, stage S7-2).
+ *
+ * A page number is a file name, <n>.DDS in a TEX folder, and the remaster
+ * keeps ONE texture pool per game: page 12 of Tomb Raider III and page 12 of
+ * Tomb Raider V are two different pictures with the same number. The four
+ * Tomb Raider III guests the randomizer imports bring their own pages, so the
+ * cache would hand them the level's page 12 and paint a T-Rex in a Rome wall.
+ *
+ * So a page from the other bundle is offered with this base added to it. The
+ * cache keeps the number as it is - the key is opaque to it - and takes the
+ * base off again at the one place a number becomes a file name. The value is
+ * far past any page a remaster ships (the largest measured is in the
+ * thousands) and far below the end of an int, so nothing else has to change.
+ *
+ * The alternate root is set once per level with HDPageCacheAltRoot(); without
+ * one, a page above the base cannot be found and gets the white tile, which
+ * is the same answer as any other missing page. */
+#define HD_PAGE_ALT_BASE	0x40000000
+
 struct HDPageCachePolicy
 {
 	int format;		// HD_PAGE_FORMAT_*
@@ -61,6 +80,15 @@ struct HDPageCachePolicy
 void HDPageCacheConfigure(const HDPageCachePolicy* policy);
 void HDPageCachePolicyNow(HDPageCachePolicy* out);
 
+/* Where a page number at or above HD_PAGE_ALT_BASE is looked for: a GAME
+ * folder of the other bundle, "<Tomb Raider I-III Remastered>\3", with its
+ * siblings 1 and 2 tried after it exactly as 4 and 6 are tried after 5. A
+ * null or empty path (the default) means there is no other bundle, and every
+ * such page falls straight through to the white tile. Set once per level,
+ * before the models are appended; it survives HDPageCacheDestroy so that a
+ * caller does not have to set it twice. */
+void HDPageCacheAltRoot(const char* root);
+
 // The texture bytes the cache holds right now - what a second call has to
 // budget against.
 double HDPageCacheBytes();
@@ -72,6 +100,8 @@ struct HDPageCacheStats
 	int fromGame5;		// found in <install>\TEX
 	int fromGame4;		// found in the sibling 4\TEX (three RICH3 pages)
 	int fromGame6;		// found in the sibling 6\TEX
+	int fromTr3;		// found in the OTHER bundle, 3\TEX or its siblings
+				// (#123, S7-2 - the Tomb Raider III guests)
 	int fromWhite;		// no file anywhere - WHITE.DDS, the remaster's slot 0
 	int failed;		// not even WHITE.DDS - that slot has no texture
 	int mipLevels;		// mip levels uploaded over all pages

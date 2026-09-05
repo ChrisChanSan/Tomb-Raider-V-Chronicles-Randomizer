@@ -105,17 +105,33 @@ namespace
 	 *              engine that can tell the Russia cap from the Rome body,
 	 *              because a vanilla Russia level carries the same outfit
 	 *              byte Rome does.
-	 *   young      the script flag, the Irish level range and the outfit byte
-	 *              - any one of the three. Three, because the randomizer
-	 *              moves outfits between levels and each of them alone has a
-	 *              hole in it.
-	 *   the guest  nothing yet. The randomizer writes LARA_PONYTAIL both for
-	 *              a Tomb Raider III outfit and for the Rome body inside a
-	 *              Russia level (#122, Randomizer.cpp: the wardrobe roll), so
-	 *              the byte cannot say which, and hd_lara answers "classic"
-	 *              for it. Stage S7 puts a marker in the level header and
-	 *              this line then reads it - HDLaraOutfitFor already takes it
-	 *              as an argument. */
+	 *   young      the script flag or the outfit byte. THE SOURCE OF TRUTH IS
+	 *              THE ENGINE'S OWN BODY ASSEMBLY, and it took a spiel test
+	 *              to notice that this line was not (#123, stage S7-2, F1).
+	 *              LaraInitialiseMeshes (game\laramisc.cpp) and its twin in
+	 *              game\deltapak.cpp are the only two places in this engine
+	 *              that build a CHILD Lara - they lay ANIMATING6_MIP's torso
+	 *              over the skin - and both ask `Irish level range AND
+	 *              GF_YOUNGLARA`. The flag is necessary; the range on its own
+	 *              is not sufficient, and this line used to treat it as if it
+	 *              were. The randomizer clears the flag out of SCRIPT.DAT
+	 *              (core\ScriptDat.cpp) and puts an adult skin in the level,
+	 *              because young Lara can carry no weapon at all - so every
+	 *              randomized Irish level was reported "young Lara stays
+	 *              classic" while a grown Lara stood on the screen.
+	 *
+	 *              Measured, seed 380: vanilla ANDY1/2/3 carry data[0] = 1,
+	 *              which is LaraDrawType LARA_YOUNG, and the flag; the
+	 *              randomized three carry 2, 0 and 2 - BUNHEAD, NORMAL,
+	 *              BUNHEAD - and no flag. Both of the two facts left in the
+	 *              test flip with the change, and the range does not.
+	 *   the guest  data[3] of the level header, raw (#123, stage S7). The
+	 *              randomizer writes LARA_PONYTAIL both for a Tomb Raider III
+	 *              outfit and for the Rome body inside a Russia level (#122,
+	 *              Randomizer.cpp: the wardrobe roll), so the outfit byte
+	 *              cannot say which of the two it is; data[3] can, and it
+	 *              carries the engine's own HD_LARA_OUTFIT_* number so that
+	 *              neither side translates. 0 in every vanilla file. */
 	int outfit_of_level(const char** why)
 	{
 		const bool cap =
@@ -123,11 +139,9 @@ namespace
 				LaraDrawType == LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD;
 
 		const bool young = (gfLevelFlags & GF_YOUNGLARA) != 0 ||
-			(gfLevelId >= LVL5_GALLOWS_TREE && gfLevelId <= LVL5_OLD_MILL) ||
 			LaraDrawType == LARA_YOUNG;
 
-		return HDLaraOutfitFor(LaraDrawType, cap, young,
-			HD_LARA_OUTFIT_NONE, why);
+		return HDLaraOutfitFor(LaraDrawType, cap, young, (int)GfHdOutfit, why);
 	}
 
 	/* ---------------------------------------------------------- the frame -- */
@@ -438,19 +452,23 @@ void HDLaraDrawBuild(const char* stem)
 
 	if (!g_planned || g_level.outfit == HD_LARA_OUTFIT_NONE)
 	{
-		Log("HDLOG level=%s lara outfit=none parts=0 reason=%s", stem,
+		Log("HDLOG level=%s lara outfit=none parts=0 laratype=%d data3=%d "
+			"young=%d reason=%s", stem, (int)LaraDrawType, (int)GfHdOutfit,
+			((gfLevelFlags & GF_YOUNGLARA) != 0 || LaraDrawType == LARA_YOUNG) ? 1 : 0,
 			g_why && *g_why ? g_why : "the HD object path is off");
 		return;
 	}
 
 	g_active = HDLaraLevelBuild(&g_level, &stats);
 
-	Log("HDLOG level=%s lara outfit=%s(%s) hd=%d parts=%d/%d missing=%d "
+	Log("HDLOG level=%s lara outfit=%s(%s) laratype=%d data3=%d hd=%d "
+		"parts=%d/%d missing=%d "
 		"slots=%d hands=%d braid=%d verts=%d idx=%d ranges=%d pages=%d "
 		"vb_kib=%.0f ib_kib=%.0f drift=%.0f/%.0f over %d reason=%s",
 		stem, HDLaraOutfitModel(g_level.outfit)
 			? HDLaraOutfitModel(g_level.outfit) : "-",
-		HDLaraOutfitLabel(g_level.outfit), (int)g_active, stats.loaded,
+		HDLaraOutfitLabel(g_level.outfit), (int)LaraDrawType, (int)GfHdOutfit,
+		(int)g_active, stats.loaded,
 		stats.wanted, stats.missing, g_laraSlotCount, g_handSlotCount,
 		(int)HDLaraHasPart(HD_LARA_PART_BRAID), stats.vertices, stats.indices,
 		stats.ranges, stats.pages, stats.vertexBytes / 1024.0,

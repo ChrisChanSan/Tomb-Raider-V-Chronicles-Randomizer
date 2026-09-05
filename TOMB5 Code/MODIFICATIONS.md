@@ -2177,13 +2177,156 @@ level then refuses with `page 130: the card ran out of video memory after
 same pictures out of a build of the S5 commit. Nothing about a normal card's
 picture changed in this stage.
 
+#### Stage S7-2 — the engine reads what the randomizer marked
+
+Stage S7-1 (`TR5Randomizer`) put three facts into the level that the Remaster's
+art cannot know. This stage reads them. Everything here sits behind
+`hd_enable` and changes nothing whatever in a vanilla installation.
+
+**1. `data[3]` — which Tomb Raider III outfit Lara wears.**
+`specific/file.cpp` reads the fourth word of the 32-byte header block into a
+new `GfHdOutfit`, beside the three it already read, and `hd_laradraw.cpp` hands
+it to `HDLaraOutfitFor` **unchanged**: the randomizer writes the engine's own
+`HD_LARA_OUTFIT_*` numbers, so neither side translates. A `static_assert` in
+`hd_level.cpp` holds the enum to 5..8. The engine accepts 5..8 and only those —
+1..4 are the vanilla bodies, and letting one of them through would let a stale
+byte overrule the level's own `LaraType`.
+
+With the marker in hand the `LARA_PONYTAIL` byte means one thing again instead
+of two, so a level that carries it *and* a `data[3]` of 0 now draws
+`OUTFIT_CLASSIC` — the Rome body inside a Russia level — where it used to stay
+classic. Measured over all seventeen shipped files: not one carries that byte,
+so nothing vanilla moves.
+
+**2. The young-Lara test was wrong, and it was the level range.** A spiel test
+found every randomized ANDY level reported `young Lara stays classic` with a
+grown Lara standing in it. The engine builds the child body at exactly two
+places — `LaraInitialiseMeshes` in `game/laramisc.cpp` and its twin in
+`game/deltapak.cpp` — and **both ask the Irish level range AND the script flag
+`GF_YOUNGLARA` together**. The randomizer clears that flag out of `SCRIPT.DAT`
+(`core/ScriptDat.cpp`), because young Lara can carry no weapon at all, and
+replaces her skin with an adult's; the range on its own is therefore not
+sufficient and never was. The test is now the flag or the `LARA_YOUNG` outfit
+byte, both of which change when she changes.
+
+Measured, seed 380: vanilla ANDY1/2/3 carry `data[0] = 1`, which is
+`LARA_YOUNG`, and the flag; the randomized three carry 2, 0 and 2 —
+`LARA_BUNHEAD`, `LARA_NORMAL`, `LARA_BUNHEAD` — and no flag. `ModelProbe -lara`
+says `young Lara stays classic` for the vanilla file and `OUTFIT_RUSSIA` for
+the randomized one. The same hole was in `ModelProbe` itself and is fixed there
+too.
+
+**3. The `.hdm` sidecar.** New `specific/hd/hd_markers.cpp` — engine-free, like
+`hd_bind` and `hd_scan`, so the diagnostic tools run the very same reader. The
+parse loop is sixty lines: `hdm 1` or the file is refused whole, a stray `\r`
+tolerated, an unknown line ignored **and counted**, so that a newer randomizer
+talking to an older engine is visible rather than silent, and a missing file
+"no markers". `HDLevelLoad` reads it from the `.TRC`'s own path with the
+extension swapped, so it is found wherever the level is.
+
+A `room` line makes that room classic **even where the `.TRG` has a full group
+for it** — a third reason beside `no_group` and `empty_group`, and the only one
+that throws HD art away. It has to: when a run cuts a wall open, the Remaster's
+art still shows the wall, and nothing else in the file gives it away.
+
+A `donor` line names a slot whose model came out of another level file. The
+Remaster resolves a slot by the name *this* level gives it, and `ANIMATING10`
+is a different object in each of the fifteen — so `hd_object.cpp` asks
+`HDBindDonorSlot`, which loads the **donor's** `LEVELn.MAP` (cached per donor
+level: one file opened however many slots came from it) and answers with the
+donor's own name for the source slot. A donor slot that resolves to nothing is
+left out of the model list entirely rather than bound by its own name — the
+slot is called `SAS` and holds a T-Rex, so `SAS.TRM` would be a soldier on a
+dinosaur's skeleton.
+
+**4. `ROMAN_GOD` without a map entry.** Measured over the shipped files: there
+is no `ROMAN_GOD.TRM` at all. `5\ITEM` has `ROMAN_GOD_ANDREA_SWORD` and
+`ROMAN_GOD_ANDREA_HAMMER`, and of the fifteen `.MAP` files exactly two mention
+the slot — ANDREA2 says sword, ANDREA3 says hammer. Every other level that
+carries the god therefore fell through to its own name, found nothing and drew
+him classic, and the randomizer makes that the common case. The hand table now
+carries a twelfth line, `ROMAN_GOD` → `ROMAN_GOD_ANDREA_SWORD`, and it is only
+ever consulted **when the level's own `.MAP` is silent** — so ANDREA2 and
+ANDREA3 keep their own answers, and no vanilla level changes at all, those two
+being the only ones that carry the slot.
+
+**5. The guests out of Tomb Raider III.** Their models are in the *other*
+bundle, `Tomb Raider I-III Remastered`, under `3\ITEM`. Three things were
+needed:
+
+* `hd_install.cpp` looks for `tomb123.exe` with a subfolder `3` carrying `DATA`
+  and `TEX`, in the **same walk** as the IV-VI bundle — they sit side by side in
+  the same Steam library — with the registry override `hd_install_tr3`. Not
+  finding it costs those four models and nothing else.
+* `HDModelSlot::fromTr3` sends one slot's model lookup into that bundle and
+  **only** into it (game 3, then the siblings 1 and 2), never into the IV-VI
+  folders, and never the other way round.
+* The page cache had to learn that page 12 of Tomb Raider III and page 12 of
+  Tomb Raider V are two different pictures. A guest's pages are offered with
+  `HD_PAGE_ALT_BASE` added; the cache keeps the number as it is and takes the
+  base off again at the one place a number becomes a file name.
+
+**The names of the four** had to be derived without an installation to look in,
+because the user's copy may be modded and will be fetched fresh later. TRForge
+measured that the Remaster names a model after the **engine's own symbol** for
+the slot unless the level's `.MAP` says otherwise — keyed on the English words
+it found 60 of 211 `.MAP` keys, keyed on the symbol 197 — and that rule holds
+across all five games. TRForge's generated TR3 symbol table then gives the four:
+
+| TR5 slot | Its TR5 name | TR3 slot | TR3 symbol | `.TRM` expected |
+|---:|---|---:|---|---|
+| 31 | `SAS` | 287 | `TREX` | `TREX.TRM` |
+| 43 | `CROW` | 29 | `VULTURE` | `VULTURE.TRM` |
+| 53 | `SAILOR` | 34 | `COMPY` | `COMPY.TRM` |
+| 75 | `REAPER` | 288 | `RAPTOR` | `RAPTOR.TRM` |
+
+A `static_assert` in `hd_level.cpp` holds those four slot numbers against the
+enum. **The names are an inference, not a measurement** — nothing here has an
+I-III installation — so the log says out loud which way it went:
+`tr3_not_installed`, `tr3_model_missing`, or the model with its origin.
+
+**The log.** Per level: `HDLOG level=… markers file=… rooms=N donors=N
+outfit=N tr3_install=found/absent`, a `MISMATCH` line if `data[3]` and the
+sidecar's `outfit` disagree (the header byte wins), one line per line the
+reader had no rule for, `reason=marker` on the room lines it touched, and one
+`HDLOG donor slot=… name=… from=LEVEL:SOURCE model=… hd=0/1 reason=…` per donor
+slot. The Lara line gained `laratype=` and `data3=`, so a garbled header byte
+is visible rather than merely ineffective.
+
+**Proof without the game.** `MapProbe` gained `-hdm` and `-tr3`: it compiles
+`hd_markers.cpp`, `hd_bind.cpp` and `hd_lara.cpp` and prints the engine's own
+answer for every line of a real sidecar. Over a run of seed 380 with the
+glitched secret list:
+
+| Level | Rooms marked | Donors | What the table shows |
+|---|---|---:|---|
+| ANDREA3 | 1, 74 | 4 | the two rooms that list reshapes, and `LARSON` out of ANDREA1 |
+| RICH3 | 46, 85, 86, 120, 121, 150 | 14 | exactly the six rooms of its three portals |
+| JOBY3 | 10, 76 | 10 | `donor 203 KEY_ITEM8 <- joby2:203` resolves to **`KEY_ITEM8_1`** out of JOBY2's map, which JOBY3's own map does not name at all — the donor lookup doing the one thing it exists for |
+| RICH1 | 129, 130 | 15 | `donor 43 CROW <- TR3:43` → `VULTURE`, and `data[3] = 5` → `OUTFIT_TR3_ANTARC` |
+
+A vanilla level answers `no markers … no sidecar file`; a sidecar with `hdm 2`
+is refused with its reason; a sidecar with CRLF line endings and an unknown
+line is read correctly and the unknown line reported. `HdmDump`, the reference
+reader the format was agreed against, gives the same answers on the same files.
+`ModelProbe -lara` on the randomized RICH1 draws the Antarctica outfit out of
+`data[3]` on that level's own Lara skeleton, mean drift 4 and worst 143 against
+a limit of 256.
+
+**What is not proved here.** Whether the Remaster really draws those four names
+for the four guests, and whether a guest's skeleton fits — both need an I-III
+installation, and the code path answers "classic", in the log, when it is not
+there. The eleven hand-table pairings and the `ROMAN_GOD` default are still
+measurements by picture, as they have been since S0.
+
 ---
 
 **Re-measured after this stage** (2026-09-05), counting every source file under
 `TOMB5 Code` (`.c`, `.cpp`, `.h`, `.hlsl`, `.inc`) plus the four licence and
-notice files that came with the vendored code: **171** files changed or added,
-**156** of them carrying the modification notice (stage S6 added two:
-`specific/hd/hd_dxt5.cpp` and its header).
+notice files that came with the vendored code: **173** files changed or added,
+**158** of them carrying the modification notice (stage S6 added two,
+`specific/hd/hd_dxt5.cpp` and its header, and stage S7-2 two more,
+`specific/hd/hd_markers.cpp` and its header).
 
 Fifteen do not, and none of them should. Fourteen are the ones already named
 above — `tomb5/libs/stb/stb_vorbis.c`, `tomb5/libs/discordRPC/LICENSE`, the

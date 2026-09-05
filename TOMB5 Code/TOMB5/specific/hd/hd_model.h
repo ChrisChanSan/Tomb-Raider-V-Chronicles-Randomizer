@@ -83,6 +83,14 @@ struct IDirect3DDevice9;
 // a creature's <NAME>_HEAD.TRM rides on the node nearest its face. The
 // difference to that path is only who chooses the node: there it is measured,
 // here it is the classic head node and there is nothing to measure.
+// `fromTr3` says the model is not in this bundle at all: it is one of the four
+// Tomb Raider III guests the randomizer imports (#92, #123 stage S7-2), and
+// its .TRM and its texture pages come out of the OTHER bundle - Tomb Raider
+// I-III Remastered, game folder 3 with 1 and 2 as siblings. Its pages are
+// offered to the cache with HD_PAGE_ALT_BASE added, because the remaster
+// keeps one texture pool per game and page 12 means two different pictures in
+// the two bundles. False for every ordinary slot, and then not one byte of
+// the other bundle is touched.
 struct HDModelSlot
 {
 	int slot = -1;
@@ -90,6 +98,7 @@ struct HDModelSlot
 	const float* bind = 0;
 	const char* name = 0;
 	int rigidNode = -1;
+	bool fromTr3 = false;
 };
 
 // Where a model's file was found.
@@ -98,7 +107,8 @@ enum HDModelOrigin
 	HD_MODEL_ORIGIN_NONE = 0,
 	HD_MODEL_ORIGIN_5,
 	HD_MODEL_ORIGIN_4,	// the sibling 4\ITEM - SAS and five others live only there
-	HD_MODEL_ORIGIN_6
+	HD_MODEL_ORIGIN_6,
+	HD_MODEL_ORIGIN_TR3	// the other bundle: 3\ITEM, or its siblings 1 and 2
 };
 
 struct HDModelStats
@@ -113,6 +123,7 @@ struct HDModelStats
 	int fromGame5;
 	int fromGame4;
 	int fromGame6;
+	int fromTr3;		// the other bundle - a Tomb Raider III guest (S7-2)
 	int heads;		// <NAME>_HEAD.TRM built and bound to a node
 
 	int fullSlots;		// every classic node covered by the model
@@ -202,10 +213,18 @@ bool HDModelInit(IDirect3DDevice9* device, const char** why);
 void HDModelShutdown();
 bool HDModelReady();
 
+/* Where the models of the OTHER bundle live: the I-III remaster's game 3
+ * folder, or an empty string for "there is none" (#123, stage S7-2). Set
+ * before HDModelLevelBegin; a slot with `fromTr3` then looks there and
+ * nowhere else, and every other slot never touches it. The page cache needs
+ * the same path - HDPageCacheAltRoot - and the caller sets both, because one
+ * module setting another module's state is how two answers drift apart. */
+void HDModelTr3Root(const char* root);
+
 // Loads every slot's .TRM, builds the buffers and adds the models' pages to
 // the page cache. `installRoot` is the remaster's game 5 folder. The level's
 // <LEVEL>.MAP must already be loaded through HDMapLoad - HDBindSlot decides
-// which file a slot asks for.
+// which file a slot asks for, unless the caller named one in HDModelSlot.
 //
 // ORDER. This comes AFTER HDRenderLevelBegin, because the models' pages are
 // appended to the cache the rooms built, and HDModelLevelEnd comes BEFORE

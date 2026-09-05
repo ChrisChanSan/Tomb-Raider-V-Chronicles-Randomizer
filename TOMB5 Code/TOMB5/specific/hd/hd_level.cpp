@@ -14,6 +14,8 @@
 #include "hd_level.h"
 #include "hd_install.h"
 #include "hd_bind.h"
+#include "hd_lara.h"			// HD_LARA_OUTFIT_* - the data[3] agreement
+#include "hd_markers.h"
 #include "hd_scan.h"
 #include "hd_render.h"
 #include "hd_object.h"
@@ -29,6 +31,7 @@
 #include "../../game/camera.h"		// camera.underwater
 #include "../../game/effect2.h"		// dynamics, wibble
 #include "../../game/gameflow.h"		// gfLevelId
+#include "../../game/lara.h"		// GfHdOutfit - data[3] (#123, S7)
 #include "../drawroom.h"			// ActiveFogBulbs, aRoomVertexWaterMarks
 #include "../gamemain.h"			// WaterTable, vert_wibble_table
 #include "hd_light.h"
@@ -43,6 +46,26 @@ static_assert(HD_SLOT_COUNT == NUMBER_OBJECTS,
 	"regenerate the table (see the comment above it) and update HD_SLOT_COUNT");
 static_assert(HAIR == 30,
 	"HDSlotIsLara() covers slots 0..30 because HAIR is 30 - it no longer is");
+
+/* THE FOUR TOMB RAIDER III GUESTS (#92, #123 stage S7-2). hd_bind.cpp's
+ * tr3_guests table maps these four slot NUMBERS to the .TRM names of the I-III
+ * remaster, and it is built without the engine, so the numbers stand there as
+ * numbers. These are the lines that notice when one of the four slots moves -
+ * at build time, and not as a T-Rex wearing a soldier's model. The randomizer
+ * picks the same four in TR5Randomizer\src\core\Tr3Source.cpp, dinos(). */
+static_assert(SAS == 31 && CROW == 43 && SAILOR == 53 && REAPER == 75,
+	"the slots the randomizer imports the Tomb Raider III guests into have "
+	"moved - update tr3_guests in hd_bind.cpp with them");
+
+/* THE OUTFIT MARKER, data[3] of the level header (#123, stage S7). The
+ * randomizer writes these very numbers - Patch::hdOutfitId in
+ * TR5Randomizer\src\core\ApplyPatch.cpp - so that neither side translates.
+ * Renumber the enum and this line stops the build; renumber it without this
+ * line and a Nevada Lara quietly becomes an Antarctica one. */
+static_assert(HD_LARA_OUTFIT_TR3_ANTARC == 5 && HD_LARA_OUTFIT_TR3_NEVADA == 6 &&
+	HD_LARA_OUTFIT_TR3_COAST == 7 && HD_LARA_OUTFIT_TR3_CATSUIT == 8,
+	"data[3] of the level header carries HD_LARA_OUTFIT_* 5..8 by agreement "
+	"with the randomizer (Preparation\\Contract.md) - the enum has moved");
 
 // The engine never has more rooms than this, and draw_rooms (game\draw.cpp)
 // never holds more than 100 of them in one frame. Both are fixed arrays here
@@ -799,6 +822,37 @@ void HDLevelLoad(const char* wadName)
 	if (!g_stem[0])
 		return;
 
+	/* WHAT THE RANDOMIZER CHANGED (#123, stage S7-2), before anything else is
+	 * measured: the sidecar names the rooms whose shape no longer matches the
+	 * Remaster's art and the slots whose model came out of another file, and
+	 * both decide what the rest of this load is allowed to do.
+	 *
+	 * The path is the .TRC's own with .hdm in its place, so the file is found
+	 * wherever the level is - a folder the user moved, a data folder beside a
+	 * second installation. A missing file is the normal case and not a fault;
+	 * an unreadable one falls back to the same answer and says so. */
+	const bool markers = HDMarkersLoad(wadName);
+
+	Log("HDLOG level=%s markers file=%s rooms=%d donors=%d outfit=%d "
+		"tr3_install=%s%s%s",
+		g_stem, markers ? HDMarkersPath() : "none",
+		HDMarkersRoomCount(), HDMarkersDonorCount(), HDMarkersOutfit(),
+		HDInstallRootTr3()[0] ? "found" : "absent",
+		markers ? "" : " reason=", markers ? "" : HDMarkersError());
+
+	/* data[3] and the sidecar's `outfit` line come out of ONE value in the
+	 * randomizer and can only disagree when one of the two halves was written
+	 * by an older run. The header byte wins - it is the one the draw path
+	 * reads, and it is there before a room is loaded - so this is a line in
+	 * the log and nothing else. */
+	if (markers && HDMarkersOutfit() != (int)GfHdOutfit)
+		Log("HDLOG level=%s markers MISMATCH data[3]=%d, the sidecar says %d "
+			"- data[3] wins", g_stem, (int)GfHdOutfit, HDMarkersOutfit());
+
+	for (int i = 0; i < HDMarkersUnknownCount(); i++)
+		Log("HDLOG level=%s markers line this engine has no rule for: %s",
+			g_stem, HDMarkersUnknown(i));
+
 	for (int i = 0; i < NUMBER_OBJECTS; i++)
 		loaded[i] = objects[i].loaded ? 1 : 0;
 
@@ -973,13 +1027,34 @@ void HDLevelBuild()
 
 	g_room_count = number_rooms;
 
+	int marked_rooms = 0;
+
 	for (int r = 0; r < g_room_count; r++)
 	{
 		const int tris = HDRenderGroupTriangles(r, -1);
 		const bool has_group = r < HDRenderGroupCount();
-		const char* reason = !has_group ? "no_group" : (!tris ? "empty_group" : "ok");
 
-		g_room_hd[r] = (unsigned char)((has_group && tris) ? 1 : 0);
+		/* THE THIRD WAY A ROOM STAYS CLASSIC (#123, stage S7-2). The first
+		 * two are the .TRG's own: no group for this room, or a group with no
+		 * triangle in it - which is what a Make_Room_Geometry room looks like
+		 * and needs no marker at all. This one is the randomizer's: the run
+		 * cut a wall open, moved a floor, added a window. The Remaster's art
+		 * still shows the room as it was shipped, so drawing it would show a
+		 * closed wall in front of an open doorway - the gravest of the S7
+		 * cases, and the reason the sidecar exists.
+		 *
+		 * A marked room therefore loses its HD art even when the .TRG has a
+		 * full group for it. The classic geometry IS the randomized geometry:
+		 * it is read out of the level file the run wrote. */
+		const bool marked = HDMarkersRoomTouched(r);
+
+		const char* reason = !has_group ? "no_group"
+			: (!tris ? "empty_group" : (marked ? "marker" : "ok"));
+
+		if (marked && has_group && tris)
+			marked_rooms++;
+
+		g_room_hd[r] = (unsigned char)((has_group && tris && !marked) ? 1 : 0);
 
 		if (g_room_hd[r])
 		{
@@ -999,6 +1074,15 @@ void HDLevelBuild()
 	}
 
 	g_level_active = hd_rooms > 0;
+
+	/* What the sidecar cost this level, in one line: how many rooms it named,
+	 * and how many of those really had HD art to give up. The two differ
+	 * whenever the run reshaped a room the .TRG had nothing for anyway. */
+	if (HDMarkersPresent())
+		Log("HDLOG level=%s markers rooms=%d of them classic now=%d "
+			"donors=%d outfit=%d",
+			g_stem, HDMarkersRoomCount(), marked_rooms,
+			HDMarkersDonorCount(), HDMarkersOutfit());
 
 	Log("HDLOG level=%s built ms=%d rooms=%d hd=%d classic=%d sky_groups=%d "
 		"verts=%d idx=%d(%dbit) ranges=%d split=%d layer0_tris=%d "
@@ -1095,6 +1179,7 @@ void HDLevelUnload()
 	g_frame_count = 0;
 	g_room_count = 0;
 	g_stem[0] = 0;
+	HDMarkersFree();	// text, no device - the same rule as the objects
 	HDObjectLevelEnd();
 }
 

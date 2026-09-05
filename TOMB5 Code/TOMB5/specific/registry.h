@@ -25,7 +25,8 @@ bool REG_ReadBool(char* SubKeyname, bool& value, bool defaultValue);
 // A REG_SZ value. `size` is the whole buffer including the terminating zero,
 // and `value` always comes back terminated - also on the miss, where the
 // default is written into the key the way the two above do it. Added for the
-// one setting that is a path and not a number: hd_install (#123).
+// settings that are a path or a word and not a number: hd_install,
+// hd_install_tr3 and hd_texture_format (#123).
 void REG_WriteString(char* SubKeyName, const char* value);
 bool REG_ReadString(char* SubKeyName, char* value, ulong size, const char* defaultValue);
 bool LoadSettings();

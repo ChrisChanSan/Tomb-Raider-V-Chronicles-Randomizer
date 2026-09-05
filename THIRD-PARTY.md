@@ -29,7 +29,7 @@ far, file by file:
 
 | Here | From TROne | What |
 |---|---|---|
-| `TOMB5 Code/TOMB5/specific/hd/hd_install.cpp` | `host/fs/discovery.cpp` | Steam discovery: the registry lookup, the `libraryfolders.vdf` reader in both of its shapes, the "recognise by content, never by folder name" rule, and the wording of the diagnostics. Only the IV-VI branch was taken. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_install.cpp` | `host/fs/discovery.cpp` | Steam discovery: the registry lookup, the `libraryfolders.vdf` reader in both of its shapes, the "recognise by content, never by folder name" rule, and the wording of the diagnostics. Only the IV-VI branch was taken until #123 stage S7-2; since then the I-III branch is taken as well - the same table row, `tomb123.exe` beside subfolders 1..3 with `DATA` and `TEX` - because the four Tomb Raider III guests the randomizer imports have their HD models in that bundle. The rest of TROne's discovery (the classic installs, the per-game level counts, the PIX / TRACKS / FMV folders) is still not taken. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_render.cpp` | `host/render/game_renderer.cpp`, `hd_load` (1919-2256) and `hd_draw_room` (2259-2312) | The shape of the level build and of the draw: one buffer for the whole level, a range table per group, group *i* is room *i*, groups past the room count are the sky dome, three passes per room in the order opaque / alpha / additive, and the additive pass blended `ONE, ONE` with the depth write off. Also the rule that a vertex whose texture layer is 0 falls back to the level's first page instead of drawing nothing. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_room.hlsl` | the same file's GLSL `k_hd_vert` / `k_hd_frag` (135-236) | The lighting rule — room light is the **sum** `colour1 * roomShadow + colour2`, each byte over 255, and the pixel is `texel * light` — the alpha test living in the alpha pass **only** (an opaque tile's alpha is a gloss mask, and testing on it blanks whole floors), and the additive pass weighting its colour by the texture's alpha. Translated to HLSL for shader model 3; not a line of the GLSL is copied. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_pagecache.cpp` | `host/render/hd_pages.cpp`, `upload2` / `fill_missing_tiles` | Where a page is looked for when it is not in its own game's `TEX` folder — the sibling games next, `WHITE.DDS` last — and the rule that a page that cannot be found is painted **white** and never black. The upload itself is new: TROne hands the driver BC7 blocks in one texture array, and Direct3D 9 has neither. |
@@ -88,6 +88,19 @@ behind its facial rig, and the 24 byte vertex with its three bones and three
 weights. `TOMB5/specific/hd/hd_trm.cpp` is written against that description
 rather than copied from it, and says so in its header; every number in its
 comments was measured again here over the 566 models of the remaster's game 5.
+
+The same file gave one more thing, in stage S7-2: the rule by which a slot
+finds its model at all. TRForge's `bind_level_items` matches a slot on the
+ENGINE'S OWN SYMBOL for it - `ID_` and `O_` prefixes off - and lets the level's
+`.MAP` override where it names something, having measured that keying on the
+English words found 60 of 211 `.MAP` keys while keying on the symbol found 197.
+That rule holds across all five games, which is what lets
+`TOMB5/specific/hd/hd_bind.cpp` name the four Tomb Raider III guests -
+`TREX`, `VULTURE`, `COMPY`, `RAPTOR` - without a Tomb Raider I-III installation
+to look in. The symbols themselves are TRForge's generated TR3 table
+(`trf_level/ObjectNames.generated.inc`, slots 287, 29, 34 and 288); the four
+names are written out in our own table, and nothing of TRForge's is copied for
+it.
 The credit is TRForge's all the same.
 
 ### discord-rpc — shipped in the source tree, not in the binaries

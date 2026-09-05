@@ -20,6 +20,8 @@
 #include "hd_laradraw.h"
 #include "hd_bind.h"
 #include "hd_install.h"
+#include "hd_markers.h"			// the .hdm sidecar - the donor slots (S7-2)
+#include "hd_pagecache.h"		// HDPageCacheAltRoot, for a guest's own pages
 #include "hd_render.h"
 #include "hd_level.h"
 #include "../function_stubs.h"
@@ -599,6 +601,15 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		return;
 	}
 
+	/* WHERE THE OTHER BUNDLE IS (#123, stage S7-2). Set on both modules that
+	 * need it and always, not only when this level has a guest: they name an
+	 * installation, and a level with no guest offers no page and no name that
+	 * could reach it. An empty path is the honest answer for a machine
+	 * without Tomb Raider I-III Remastered, and then a guest's model is
+	 * "missing" with the file name in the log. */
+	HDModelTr3Root(HDInstallRootTr3());
+	HDPageCacheAltRoot(HDInstallRootTr3());
+
 	/* The bind poses first and in one block, because HDModelLevelBegin keeps
 	 * a pointer into it while it runs and a std::vector that grows moves. */
 	std::vector<int> slots;
@@ -612,6 +623,82 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			continue;	// the wardrobe, planned below - HDBindSlot says so too
 
 		slots.push_back(slot);
+	}
+
+	/* THE DONOR SLOTS (#123, stage S7-2). The sidecar says which of this
+	 * level's slots hold a model that came out of ANOTHER level file, and the
+	 * name the Remaster would give such a slot here is the wrong one -
+	 * ANIMATING10 is a different object in every one of the fifteen files.
+	 *
+	 * Resolved BEFORE the loop that fills `wanted`, because the answer is the
+	 * `name` that goes into it; and kept in a list of its own, because the
+	 * log line each of them earns can only be written after the models are
+	 * built and it is known whether the model really arrived. */
+	struct DonorPlan
+	{
+		int slot;
+		const char* level;	// the sidecar's own string - alive until the
+					// next HDMarkersLoad, which is the next level
+		int fromSlot;
+		const char* model;	// 0 = this slot stays classic
+		bool tr3;
+		const char* why;
+	};
+
+	std::vector<DonorPlan> donors;
+
+	for (size_t i = 0; i < slots.size(); i++)
+	{
+		const int slot = slots[i];
+		const HDMarkerDonor* mark = HDMarkersDonorOfSlot(slot);
+
+		if (!mark)
+			continue;
+
+		DonorPlan plan;
+
+		plan.slot = slot;
+		plan.level = mark->level;
+		plan.fromSlot = mark->fromSlot;
+		plan.model = 0;
+		plan.tr3 = false;
+		plan.why = "";
+
+		if (_stricmp(mark->level, "TR3") == 0)
+		{
+			/* A guest out of Tomb Raider III (#92). It comes from no TR5
+			 * level at all, so no .MAP can name it: the name is our own
+			 * four-line table, and the model is in the OTHER bundle. */
+			plan.tr3 = true;
+			plan.model = HDBindTr3Guest(slot);
+			plan.why = plan.model ? "tr3_guest" : "tr3_slot_unknown";
+		}
+		else
+		{
+			HDBindKind kind = HD_BIND_MODEL;
+			bool fromMap = false;
+
+			plan.model = HDBindDonorSlot(HDInstallRoot(), mark->level,
+				mark->fromSlot, &kind, &fromMap);
+
+			if (kind == HD_BIND_DUMMY)
+			{
+				/* The donor level says the source slot draws nothing on
+				 * purpose. Ours must draw nothing HD either - and "nothing
+				 * HD" is the classic mesh, which is a picture. */
+				plan.model = 0;
+				plan.why = "donor_dummy";
+			}
+			else if (kind != HD_BIND_MODEL || !plan.model)
+			{
+				plan.model = 0;
+				plan.why = "donor_no_name";
+			}
+			else
+				plan.why = fromMap ? "donor_map" : "donor_slot_name";
+		}
+
+		donors.push_back(plan);
 	}
 
 	binds.resize(slots.size() * HD_OBJ_NODES * 3, 0.0f);
@@ -630,6 +717,32 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		one.nodes = nodes;
 		one.bind = &binds[i * HD_OBJ_NODES * 3];
 		one.name = 0;
+
+		/* A donor slot that resolved to a name gets it; one that did not is
+		 * LEFT OUT of the list entirely rather than bound by its own name.
+		 * Binding it by name is the one answer that is certainly wrong: the
+		 * slot is called SAS and holds a T-Rex, so SAS.TRM would draw a
+		 * soldier with a dinosaur's skeleton. The skeleton test would very
+		 * likely throw it out a moment later - "very likely" is not a reason
+		 * to try. */
+		const DonorPlan* plan = 0;
+
+		for (size_t d = 0; d < donors.size(); d++)
+			if (donors[d].slot == slot)
+			{
+				plan = &donors[d];
+				break;
+			}
+
+		if (plan)
+		{
+			if (!plan->model)
+				continue;
+
+			one.name = plan->model;
+			one.fromTr3 = plan->tr3;
+		}
+
 		wanted.push_back(one);
 	}
 
@@ -779,6 +892,38 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		"drift limit %.0f units",
 		g_stem, g_hd_slots, g_classic_slots, (int)slots.size(), kDriftLimit);
 
+	/* THE DONOR SLOTS, one line each (#123, stage S7-2), after the verdicts
+	 * because `hd` is only known once the model is either on the card or not.
+	 * A slot the sidecar named and that came out HD is the whole point of the
+	 * stage; one that came out classic says here which of the four ways it
+	 * got there - no name, the donor's DUMMY, no such file, or a skeleton the
+	 * model does not fit. The last of those is the SLOT line above; this one
+	 * says where the name came from. */
+	for (size_t i = 0; i < donors.size(); i++)
+	{
+		const DonorPlan& plan = donors[i];
+		const int slot = plan.slot;
+		const bool hd = HDModelHas(slot) && g_slot[slot].hd != 0;
+		const char* why = plan.why;
+
+		if (plan.model && !HDModelHas(slot))
+			why = plan.tr3
+				? (HDInstallRootTr3()[0] ? "tr3_model_missing" : "tr3_not_installed")
+				: "model_missing";
+		else if (plan.model && !hd)
+			why = g_slot[slot].why;		// the skeleton test said no
+
+		Log("HDLOG donor slot=%d name=%s from=%s:%d model=%s hd=%d reason=%s",
+			slot, HDSlotName(slot) ? HDSlotName(slot) : "?",
+			plan.level, plan.fromSlot, plan.model ? plan.model : "-",
+			hd ? 1 : 0, why);
+	}
+
+	if (!donors.empty())
+		Log("HDLOG level=%s donors=%d donor_maps=%d map_lines=%d "
+			"tr3_install=%s", g_stem, (int)donors.size(), HDDonorMapCount(),
+			HDDonorMapEntries(), HDInstallRootTr3()[0] ? "found" : "absent");
+
 	g_active = g_hd_slots > 0;
 
 	/* LARA'S VERDICT (#123, stage S4-2), after the objects and out of the
@@ -816,6 +961,7 @@ void HDObjectLevelEnd()
 	 * two-threads-one-device window that froze this game twice. The buffers
 	 * go in HDObjectRelease, on the thread that owns the device. */
 	HDLaraDrawEnd();	// flags only as well, and for the same reason
+	HDDonorMapsFree();	// text, no device - the donor levels' .MAP files
 	memset(g_slot, 0, sizeof(g_slot));
 	g_active = false;
 	g_count = 0;

@@ -20,8 +20,10 @@
 //
 // Nothing of the remaster is shipped with this project and nothing is copied
 // out of it - the user's decision for way (a) of the plan: find the installed
-// "Tomb Raider IV-VI Remastered" and read it where it lies. The one thing
-// this project stores is a path.
+// "Tomb Raider IV-VI Remastered" and read it where it lies. The only thing
+// this project stores is a path - two of them since stage S7-2, because the
+// four Tomb Raider III guests the randomizer imports have their HD models in
+// the OTHER bundle, "Tomb Raider I-III Remastered".
 //
 // Two sources, in this order:
 //
@@ -47,6 +49,21 @@
 // Worked out once and remembered; call it as often as you like.
 const char* HDInstallRoot();
 
+/* The game 3 folder of the installed Tomb Raider I-III Remastered -
+ * "<bundle>\3", with DATA, TEX and (normally) ITEM inside it. Empty string
+ * when nothing was found, which is not a fault: it is needed for exactly one
+ * thing, the HD models of the four Tomb Raider III guests the randomizer
+ * imports (#92, T-Rex, vulture, Compsognathus, raptor), and without it those
+ * four draw classic while everything else in the level is HD.
+ *
+ * Found the same way and in the SAME WALK as the IV-VI bundle: recognised by
+ * content - a tomb123.exe with a subfolder "3" carrying DATA and TEX -
+ * overridden by the registry value hd_install_tr3, and otherwise looked for
+ * in every Steam library. TROne's discovery table names both bundles side by
+ * side (host\fs\discovery.cpp), which is where the executable name comes
+ * from. */
+const char* HDInstallRootTr3();
+
 // Why the search ended the way it did: which folders were looked at, what was
 // rejected and for what reason. Never null, possibly empty. For the log.
 const char* HDInstallDiagnostics();
@@ -58,3 +75,5 @@ void HDInstallForget();
 // The path stored in the registry, or an empty string. Public so the setup
 // dialog can show it.
 const char* HDInstallOverride();
+// The same for the I-III bundle: registry value hd_install_tr3.
+const char* HDInstallOverrideTr3();

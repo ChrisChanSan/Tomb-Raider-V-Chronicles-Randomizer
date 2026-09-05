@@ -120,6 +120,10 @@ namespace
 	std::map<int, Model> g_heads;		// slot -> its separate HD face
 	std::vector<std::string> g_notes;
 	std::string g_install;
+	/* The other bundle's game 3 folder, for the four Tomb Raider III guests
+	 * (#123, stage S7-2). Empty unless the caller set it, and then no slot
+	 * can reach that bundle at all. */
+	std::string g_install_tr3;
 	// A refusal whose wording is not a literal - it has to outlive the call
 	// that hands *why out. Never cleared by HDModelLevelEnd.
 	std::string g_error;
@@ -166,10 +170,56 @@ namespace
 	 * remaster ships one model per NAME across the bundle and TR5 inherited
 	 * those slots from TR4. Every substitution is written into the notes, so
 	 * the log says which model came out of which game. */
-	std::string find_model(const std::string& name, HDModelOrigin* origin)
+	std::string find_model(const std::string& name, bool fromTr3, HDModelOrigin* origin)
 	{
-		const std::string bundle = parent_of(g_install);
 		const std::string file = name + ".TRM";
+
+		/* THE OTHER BUNDLE, and only it (#123, stage S7-2). A Tomb Raider III
+		 * guest is looked for in game 3 and its siblings 1 and 2, and NEVER
+		 * in the IV-VI folders - a TR5 model that happened to carry the same
+		 * name would be the wrong enemy drawn with confidence. The other way
+		 * round holds too: an ordinary slot never reaches into game 3. */
+		if (fromTr3)
+		{
+			if (g_install_tr3.empty())
+			{
+				if (origin)
+					*origin = HD_MODEL_ORIGIN_NONE;
+				return std::string();
+			}
+
+			const std::string bundle3 = parent_of(g_install_tr3);
+
+			std::string path = join(join(g_install_tr3, "ITEM"), file.c_str());
+
+			if (file_there(path))
+			{
+				if (origin)
+					*origin = HD_MODEL_ORIGIN_TR3;
+				return path;
+			}
+
+			static const char* siblings3[2] = { "1", "2" };
+
+			for (int i = 0; i < 2; i++)
+			{
+				path = join(join(join(bundle3, siblings3[i]), "ITEM"), file.c_str());
+
+				if (file_there(path))
+				{
+					if (origin)
+						*origin = HD_MODEL_ORIGIN_TR3;
+					return path;
+				}
+			}
+
+			if (origin)
+				*origin = HD_MODEL_ORIGIN_NONE;
+
+			return std::string();
+		}
+
+		const std::string bundle = parent_of(g_install);
 
 		std::string path = join(join(g_install, "ITEM"), file.c_str());
 
@@ -277,8 +327,11 @@ namespace
 	 * triangles of a pass are bucketed by page, so a draw call is one page
 	 * and one SetTexture. That is the same road hd_render takes for a room,
 	 * and the reason is the same - Direct3D 9 has no texture arrays. */
+	// `pageBias` is 0 for everything in this bundle and HD_PAGE_ALT_BASE for a
+	// model out of the other one (#123, S7-2): the .TRM's page numbers are
+	// that game's own, and the cache holds both games at once.
 	bool build(const HDTrmModel& trm, Model& model, int rigidNode,
-		int* mixedTriangles, const char** why)
+		int pageBias, int* mixedTriangles, const char** why)
 	{
 		const int vertices = trm.vertices;
 
@@ -491,9 +544,13 @@ namespace
 
 		for (int i = 0; i + 2 < trm.indices; i += 3)
 		{
-			const int a = HDTrmPageOf(&trm, &trm.vertex[trm.index[i + 0]]);
-			const int b = HDTrmPageOf(&trm, &trm.vertex[trm.index[i + 1]]);
-			const int c = HDTrmPageOf(&trm, &trm.vertex[trm.index[i + 2]]);
+			const int rawA = HDTrmPageOf(&trm, &trm.vertex[trm.index[i + 0]]);
+			const int rawB = HDTrmPageOf(&trm, &trm.vertex[trm.index[i + 1]]);
+			const int rawC = HDTrmPageOf(&trm, &trm.vertex[trm.index[i + 2]]);
+
+			const int a = rawA < 0 ? -1 : rawA + pageBias;
+			const int b = rawB < 0 ? -1 : rawB + pageBias;
+			const int c = rawC < 0 ? -1 : rawC + pageBias;
 
 			if (mixedTriangles && (a != b || b != c))
 				(*mixedTriangles)++;
@@ -1051,6 +1108,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		bool hasHead;
 		std::string name;
 		HDModelOrigin origin;
+		int pageBias;		// 0, or HD_PAGE_ALT_BASE for a TR3 guest
 	};
 
 	std::vector<Pending> pending;
@@ -1091,15 +1149,24 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			continue;
 		}
 
+		const bool tr3 = slots[i].fromTr3;
+
 		HDModelOrigin origin = HD_MODEL_ORIGIN_NONE;
-		const std::string path = find_model(model, &origin);
+		const std::string path = find_model(model, tr3, &origin);
 
 		if (path.empty())
 		{
 			if (stats)
 				stats->missing++;
-			note("%s (slot %d) asks for %s.TRM, which is in no ITEM folder - classic",
-				HDSlotName(slot) ? HDSlotName(slot) : "?", slot, model);
+
+			if (tr3)
+				note("%s (slot %d) asks for %s.TRM out of Tomb Raider I-III "
+					"Remastered, which %s - classic",
+					HDSlotName(slot) ? HDSlotName(slot) : "?", slot, model,
+					g_install_tr3.empty() ? "is not installed" : "does not have it");
+			else
+				note("%s (slot %d) asks for %s.TRM, which is in no ITEM folder - classic",
+					HDSlotName(slot) ? HDSlotName(slot) : "?", slot, model);
 			continue;
 		}
 
@@ -1109,6 +1176,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		here.hasHead = false;
 		here.name = model;
 		here.origin = origin;
+		here.pageBias = tr3 ? HD_PAGE_ALT_BASE : 0;
 		std::memset(&here.trm, 0, sizeof(here.trm));
 		std::memset(&here.head, 0, sizeof(here.head));
 
@@ -1127,14 +1195,17 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			continue;
 		}
 
-		if (origin != HD_MODEL_ORIGIN_5)
+		if (origin == HD_MODEL_ORIGIN_TR3)
+			note("%s (slot %d): %s.TRM is a guest out of Tomb Raider I-III "
+				"Remastered", HDSlotName(slot) ? HDSlotName(slot) : "?", slot, model);
+		else if (origin != HD_MODEL_ORIGIN_5)
 			note("%s (slot %d): %s.TRM comes from the sibling game %d, not from 5",
 				HDSlotName(slot) ? HDSlotName(slot) : "?", slot, model,
 				origin == HD_MODEL_ORIGIN_4 ? 4 : 6);
 
 		/* The separate HD face, if the remaster ships one for this model. */
 		HDModelOrigin head_origin = HD_MODEL_ORIGIN_NONE;
-		const std::string head_path = find_model(std::string(model) + "_HEAD", &head_origin);
+		const std::string head_path = find_model(std::string(model) + "_HEAD", tr3, &head_origin);
 
 		if (!head_path.empty())
 		{
@@ -1150,11 +1221,11 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		}
 
 		for (int t = 0; t < here.trm.textures; t++)
-			pages.push_back((int)here.trm.texture[t]);
+			pages.push_back((int)here.trm.texture[t] + here.pageBias);
 
 		if (here.hasHead)
 			for (int t = 0; t < here.head.textures; t++)
-				pages.push_back((int)here.head.texture[t]);
+				pages.push_back((int)here.head.texture[t] + here.pageBias);
 
 		pending.push_back(here);
 	}
@@ -1233,7 +1304,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 		const char* trouble = "";
 
-		if (!build(here.trm, model, model.rigidNode, &mixed, &trouble))
+		if (!build(here.trm, model, model.rigidNode, here.pageBias, &mixed, &trouble))
 		{
 			if (stats)
 				stats->refused++;
@@ -1262,6 +1333,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				stats->fromGame4++;
 			else if (here.origin == HD_MODEL_ORIGIN_6)
 				stats->fromGame6++;
+			else if (here.origin == HD_MODEL_ORIGIN_TR3)
+				stats->fromTr3++;
 			else
 				stats->fromGame5++;
 		}
@@ -1306,7 +1379,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		const char* trouble = "";
 		int ignore = 0;
 
-		if (!build(here.head, head, head.rigidNode, &ignore, &trouble))
+		if (!build(here.head, head, head.rigidNode, here.pageBias, &ignore, &trouble))
 		{
 			note("%s_HEAD (slot %d): %s", here.name.c_str(), here.slot, trouble);
 			free_model(head);
@@ -1364,6 +1437,13 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 	}
 
 	return true;
+}
+
+/* Kept across a level, like the page cache's own alternate root: it names an
+ * installation, not a level (#123, stage S7-2). */
+void HDModelTr3Root(const char* root)
+{
+	g_install_tr3 = root ? root : "";
 }
 
 void HDModelLevelEnd()

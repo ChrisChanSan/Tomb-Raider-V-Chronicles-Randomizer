@@ -930,29 +930,43 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	}
 	else
 	{
-		/* The engine's own three facts, read out of the level the way the
-		 * engine reads them:
+		/* The engine's own facts, read out of the level the way the engine
+		 * reads them:
 		 *
-		 *   LaraDrawType = data[0] + LARA_NORMAL (specific\file.cpp:1621),
-		 *   so the header byte plus one.
+		 *   LaraDrawType = data[0] + LARA_NORMAL (specific\file.cpp), so the
+		 *   header byte plus one.
 		 *
 		 *   "she wears the cap" is game\hair.cpp's own test - a Russia level
 		 *   with LARA_NORMAL, or LARA_BUNHEAD anywhere. The Russia levels are
 		 *   LVL5_BASE .. LVL5_SINKING_SUBMARINE, which are the four JOBY
 		 *   files.
 		 *
-		 *   young Lara is the Irish section, the ANDY files - plus
-		 *   LARA_YOUNG, which the byte can also say. */
+		 *   YOUNG LARA IS THE BYTE AND NOTHING ELSE (#123, stage S7-2). It
+		 *   used to be "an ANDY file, or the byte", which was the same
+		 *   mistake the engine's own seam carried: the engine builds the
+		 *   child body only where the Irish range AND the script flag
+		 *   GF_YOUNGLARA meet (game\laramisc.cpp, LaraInitialiseMeshes), the
+		 *   randomizer clears that flag and puts an adult skin in the level,
+		 *   and every randomized ANDY level was therefore reported classic
+		 *   with a grown Lara standing in it. This tool reads the level FILE
+		 *   and no SCRIPT.DAT, so the byte is the one fact it has - and it is
+		 *   a true one: the randomizer writes the outfit byte and the flag in
+		 *   the same breath. Vanilla ANDY1/2/3 carry 1, which is LARA_YOUNG.
+		 *
+		 *   THE TOMB RAIDER III OUTFIT is data[3] of the level header, passed
+		 *   in raw, exactly as specific\hd\hd_laradraw.cpp passes it. 0 in
+		 *   every vanilla file. */
 		const int drawType = level.laraType() + 1;
 		const bool joby = !_strnicmp(o.stem.c_str(), "JOBY", 4);
 		const bool andy = !_strnicmp(o.stem.c_str(), "ANDY", 4);
 		const bool cap = (joby && drawType == 1) || drawType == 3;
 
-		outfit = HDLaraOutfitFor(drawType, cap, andy || drawType == 2,
-			HD_LARA_OUTFIT_NONE, &why);
+		outfit = HDLaraOutfitFor(drawType, cap, drawType == 2,
+			level.hdOutfit(), &why);
 
-		printf("header  : LaraType byte %d -> LaraDrawType %d%s%s\n",
-			level.laraType(), drawType, joby ? ", a Russia level" : "",
+		printf("header  : LaraType byte %d -> LaraDrawType %d, data[3] %d%s%s\n",
+			level.laraType(), drawType, level.hdOutfit(),
+			joby ? ", a Russia level" : "",
 			andy ? ", an Ireland level" : "");
 	}
 

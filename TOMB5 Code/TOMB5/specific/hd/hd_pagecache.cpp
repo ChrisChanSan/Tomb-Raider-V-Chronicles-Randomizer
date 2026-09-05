@@ -116,6 +116,11 @@ namespace
 	double g_bytes = 0;
 	int g_format_used = HD_PAGE_FORMAT_RGBA;
 
+	/* The other bundle's game folder (#123, stage S7-2) - see
+	 * HD_PAGE_ALT_BASE. Outlives Destroy for the same reason the policy
+	 * does: it is a property of the installation, not of a level. */
+	std::string g_alt_root;
+
 	double now_ms()
 	{
 		return std::chrono::duration<double, std::milli>(
@@ -299,34 +304,111 @@ namespace
 	 * looks like untextured geometry; painted black it looks like a hole and
 	 * gets reported as a rendering bug. That choice is TROne's and it is the
 	 * right one. */
+	/* A page number as a note should show it: plain, or "TR3 12" for one out
+	 * of the other bundle. A note that printed 1073741836 would be true and
+	 * unreadable. */
+	std::string page_text(int page)
+	{
+		if (page >= HD_PAGE_ALT_BASE)
+			return "TR3 " + std::to_string(page - HD_PAGE_ALT_BASE);
+
+		return std::to_string(page);
+	}
+
+	/* "<TEX folder of game `game` in the other bundle>\<page>.DDS", with
+	 * `game` 0 meaning the alternate root itself. Written into `buffer`,
+	 * which is a caller's 300 characters exactly as HDScanPagePath wants
+	 * them. Empty when there is no alternate root. */
+	void path_of_alt(int page, int game, char* buffer, int size)
+	{
+		buffer[0] = 0;
+
+		if (g_alt_root.empty())
+			return;
+
+		const std::string root = game
+			? join(parent_of(g_alt_root), std::to_string(game))
+			: g_alt_root;
+
+		HDScanPagePath(root.c_str(), page, buffer, size);
+	}
+
 	std::string resolve_page(const std::string& root5, const std::string& bundle,
 		int page, int* origin, bool* white)
 	{
 		char buffer[300];
 
-		*origin = 5;
 		*white = false;
 
-		std::string path = HDScanPagePath(root5.c_str(), page, buffer, sizeof(buffer));
-		if (file_there(path))
-			return path;
-
-		if (!bundle.empty())
+		/* THE OTHER BUNDLE FIRST, because a page above the base is not a page
+		 * of this game at all (#123, stage S7-2). Game 3 of the I-III
+		 * remaster, then its siblings 1 and 2 - the same courtesy the IV-VI
+		 * games do each other below, and needed for the same reason: the
+		 * remaster ships one texture per page number across a bundle, and the
+		 * guests' art was moved between the three games. */
+		if (page >= HD_PAGE_ALT_BASE)
 		{
-			const int siblings[2] = { 4, 6 };
+			const int real = page - HD_PAGE_ALT_BASE;
 
-			for (int i = 0; i < 2; i++)
+			*origin = 3;
+
+			if (!g_alt_root.empty())
 			{
-				const std::string other = join(bundle, std::to_string(siblings[i]));
-				path = HDScanPagePath(other.c_str(), page, buffer, sizeof(buffer));
+				path_of_alt(real, 0, buffer, sizeof(buffer));
+
+				std::string path = buffer;
 
 				if (file_there(path))
-				{
-					*origin = siblings[i];
 					return path;
+
+				const int siblings[2] = { 1, 2 };
+
+				for (int i = 0; i < 2; i++)
+				{
+					path_of_alt(real, siblings[i], buffer, sizeof(buffer));
+					path = buffer;
+
+					if (file_there(path))
+					{
+						*origin = siblings[i];
+						return path;
+					}
+				}
+			}
+
+			/* Falls through to the white tile below, which is looked for in
+			 * the level's OWN bundle - it is four white texels either way and
+			 * the one that is certainly installed is the better bet. */
+			*white = true;
+			*origin = 0;
+		}
+		else
+		{
+			*origin = 5;
+
+			std::string path = HDScanPagePath(root5.c_str(), page, buffer, sizeof(buffer));
+			if (file_there(path))
+				return path;
+
+			if (!bundle.empty())
+			{
+				const int siblings[2] = { 4, 6 };
+
+				for (int i = 0; i < 2; i++)
+				{
+					const std::string other = join(bundle, std::to_string(siblings[i]));
+					path = HDScanPagePath(other.c_str(), page, buffer, sizeof(buffer));
+
+					if (file_there(path))
+					{
+						*origin = siblings[i];
+						return path;
+					}
 				}
 			}
 		}
+
+		std::string path;
 
 		*white = true;
 		*origin = 0;
@@ -643,8 +725,8 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 		if (page.path.empty())
 		{
 			std::snprintf(line, sizeof(line),
-				"page %d has no .DDS and no WHITE.DDS - four white texels "
-				"instead, so the surface shows its baked light", unique[i]);
+				"page %s has no .DDS and no WHITE.DDS - four white texels "
+				"instead, so the surface shows its baked light", page_text(unique[i]).c_str());
 			g_notes.push_back(line);
 			page.synth = true;
 			page.white = true;
@@ -655,13 +737,13 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 		if (white)
 		{
 			std::snprintf(line, sizeof(line),
-				"page %d is not in any TEX folder - WHITE.DDS instead", unique[i]);
+				"page %s is not in any TEX folder - WHITE.DDS instead", page_text(unique[i]).c_str());
 			g_notes.push_back(line);
 		}
 		else if (origin != 5)
 		{
 			std::snprintf(line, sizeof(line),
-				"page %d comes from the sibling game %d, not from 5", unique[i], origin);
+				"page %s comes from the sibling game %d, not from 5", page_text(unique[i]).c_str(), origin);
 			g_notes.push_back(line);
 		}
 
@@ -670,8 +752,8 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 			// Not a BC7 DDS, or too short to say. The decoder would refuse it
 			// as well, so it gets the same white tile a missing file gets.
 			std::snprintf(line, sizeof(line),
-				"page %d does not carry a readable BC7 header - four white "
-				"texels instead", unique[i]);
+				"page %s does not carry a readable BC7 header - four white "
+				"texels instead", page_text(unique[i]).c_str());
 			g_notes.push_back(line);
 			page.synth = true;
 			page.white = true;
@@ -697,8 +779,8 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 		if (page.clamped)
 		{
 			std::snprintf(line, sizeof(line),
-				"page %d is %ldx%ld and the device holds %d - it starts %d level(s) down",
-				unique[i], page.w, page.h, g_policy.maxSide, page.clamped);
+				"page %s is %ldx%ld and the device holds %d - it starts %d level(s) down",
+				page_text(unique[i]).c_str(), page.w, page.h, g_policy.maxSide, page.clamped);
 			g_notes.push_back(line);
 		}
 
@@ -1000,6 +1082,8 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 						stats->fromGame4++;
 					else if (page.origin == 6)
 						stats->fromGame6++;
+					else if (page.origin >= 1 && page.origin <= 3)
+						stats->fromTr3++;	// the other bundle (S7-2)
 					else
 						stats->fromGame5++;
 				}
@@ -1170,6 +1254,14 @@ void HDPageCachePolicyNow(HDPageCachePolicy* out)
 {
 	if (out)
 		*out = g_policy;
+}
+
+/* Not reset by Destroy either, and for the policy's reason: it names an
+ * INSTALLATION, and where the Tomb Raider I-III Remaster lies does not change
+ * because a level ended. */
+void HDPageCacheAltRoot(const char* root)
+{
+	g_alt_root = root ? root : "";
 }
 
 double HDPageCacheBytes()

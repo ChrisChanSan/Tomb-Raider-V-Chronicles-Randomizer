@@ -21,6 +21,13 @@ extern tomb5_options tomb5;
 // a DWORD. Registry value: hd_install, in the same key as every tomb5.* one.
 extern char tomb5_hd_install[260];
 
+// The other bundle (#123, stage S7-2): Tomb Raider I-III Remastered, which
+// holds the HD models of the four Tomb Raider III guests the randomizer can
+// import into a level. Empty for "let the Steam discovery look". Registry
+// value: hd_install_tr3, in the same key. Nothing else in the game reads it,
+// and an installation without it loses those four models and nothing more.
+extern char tomb5_hd_install_tr3[260];
+
 // How the HD pages are held on the card (#123, stage S6): "rgba" for the
 // lossless A8R8G8B8 the user chose as the default, "dxt5" for a quarter of
 // the video memory and a measurable loss of quality. A string for the same

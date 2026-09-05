@@ -355,16 +355,16 @@ int HDLaraOutfitFor(int laraDrawType, bool russiaCap, bool youngLara,
 	/* THE ORDER MATTERS, and it is the order of certainty.
 	 *
 	 * 1. Young Lara first, and before anything else can claim her. The user
-	 *    decided she stays classic (plan section 9), and she is recognised
-	 *    three ways over - the script flag, the Irish level range and the
-	 *    LaraType byte - because the randomizer moves outfits between levels
-	 *    and any one of the three alone has a hole in it.
-	 * 2. A Tomb Raider III guest, because the randomizer put it there and the
-	 *    level's own byte says nothing about it.
+	 *    decided she stays classic (plan section 9), and the caller works the
+	 *    question out the way the ENGINE works it out - see the header, and
+	 *    the note there about the level range, which is the one answer that
+	 *    was wrong.
+	 * 2. A Tomb Raider III guest, out of data[3] of the level header, because
+	 *    the randomizer put it there and the LaraType byte cannot say which.
 	 * 3. The diving suit and the catsuit, which have a LaraType of their own
 	 *    and their own draw path in the engine (DrawLara__5 / __4).
-	 * 4. LARA_PONYTAIL, which is the one byte that means TWO things and so
-	 *    cannot be trusted at all - see below.
+	 * 4. LARA_PONYTAIL, which used to mean two things and, with step 2 above
+	 *    it, now means one - see below.
 	 * 5. The cap, by the engine's own test - see the header.
 	 * 6. Everything else is the Rome outfit. */
 	if (youngLara)
@@ -373,11 +373,24 @@ int HDLaraOutfitFor(int laraDrawType, bool russiaCap, bool youngLara,
 		return HD_LARA_OUTFIT_NONE;
 	}
 
-	if (tr3Outfit > HD_LARA_OUTFIT_NONE && tr3Outfit < HD_LARA_OUTFIT_COUNT)
+	/* 5..8 AND NOTHING ELSE. The four Tomb Raider III outfits are the top of
+	 * the enum precisely so that this test can be a range: 1..4 are the
+	 * vanilla bodies, and a byte that says one of those did not come from the
+	 * randomizer's wardrobe - it came from a file written by something else,
+	 * or from a header word that was never meant to carry an outfit at all.
+	 * Letting such a byte through would let a stale file overrule the level's
+	 * own LaraType, which is the one mistake in this whole path that nobody
+	 * would be able to see the cause of. */
+	if (tr3Outfit >= HD_LARA_OUTFIT_TR3_ANTARC && tr3Outfit <= HD_LARA_OUTFIT_TR3_CATSUIT)
 	{
-		*why = "a Tomb Raider III outfit the randomizer rolled";
+		*why = "a Tomb Raider III outfit the randomizer rolled (data[3])";
 		return tr3Outfit;
 	}
+
+	/* Anything else in that argument - a vanilla outfit number, a byte out of
+	 * a file this engine has never met - falls through to the level's own
+	 * facts below, exactly as a 0 would. The caller writes the raw byte into
+	 * its own log line, so a garbled one is visible there rather than here. */
 
 	/* LARA_DIVESUIT and LARA_CATSUIT, by value. The enum lives in the
 	 * engine's global\types.h, which this file must not include - it is built
@@ -399,28 +412,34 @@ int HDLaraOutfitFor(int laraDrawType, bool russiaCap, bool youngLara,
 		return HD_LARA_OUTFIT_VCI;
 	}
 
-	/* LARA_PONYTAIL, THE BYTE THAT MEANS TWO THINGS (the user's decision,
-	 * 2026-09-05). The randomizer writes 5 in two quite different cases
-	 * (TR5Randomizer\src\core\Randomizer.cpp, the wardrobe roll):
+	/* LARA_PONYTAIL, THE BYTE THAT MEANT TWO THINGS. The randomizer writes 5
+	 * in two quite different cases (TR5Randomizer\src\core\Randomizer.cpp,
+	 * the wardrobe roll):
 	 *
 	 *   - the Rome body inside a Russia level, where LARA_NORMAL would send
 	 *     hair.cpp and laraskin.cpp down the cap's braid handling, and
 	 *   - EVERY Tomb Raider III guest outfit (#122), for the same reason -
 	 *     the guest's head comes from ANDREA1 and wants the standard braid.
 	 *
-	 * Nothing else in the level file separates the two. Reading it as the
-	 * Rome outfit would dress every guest in OUTFIT_CLASSIC and the player
-	 * would get a Rome Lara where he rolled a Nevada one; reading it as a
-	 * guest cannot be done, because the byte does not say which of the four.
-	 * So it says "classic" until the randomizer writes a marker of its own -
-	 * data[3] of the level header, stage S7 - and this function reads it as
-	 * `tr3Outfit` above. A right classic body beats a wrong HD one. */
+	 * Until stage S7 nothing in the level file separated the two, so this
+	 * said "classic" for both: a right classic body beats a wrong HD one.
+	 * data[3] now says it, and it has already been read above - so by the
+	 * time execution reaches this line the guest case is gone and what is
+	 * left is the other one: the Rome body, wearing a ponytail because the
+	 * level around it is a Russia level. OUTFIT_CLASSIC is the body that
+	 * belongs to it (the user's decision, 2026-09-05).
+	 *
+	 * THE ONE CASE THIS GETS WRONG, and it is worth naming: a level file
+	 * written by a run OLDER than stage S7-1 carries the ponytail byte and a
+	 * data[3] of 0 for a guest as well, and now shows a Rome Lara where that
+	 * run rolled a Nevada one. Nothing in the file can tell the two apart -
+	 * that is what the marker was added for - and a level randomized again
+	 * with the current version says it. */
 	if (laraDrawType == 6)
 	{
-		*why = "the ponytail byte, which the randomizer writes both for the "
-			"Rome body in a Russia level and for a Tomb Raider III guest - "
-			"classic until the marker of stage S7";
-		return HD_LARA_OUTFIT_NONE;
+		*why = "the ponytail byte with no Tomb Raider III marker beside it: "
+			"the Rome body in a Russia level";
+		return HD_LARA_OUTFIT_CLASSIC;
 	}
 
 	if (russiaCap)

@@ -49,6 +49,11 @@ tomb5_options tomb5;
 // Empty means: let the Steam discovery in specific\hd\hd_install.cpp look.
 char tomb5_hd_install[260];
 
+// The same for Tomb Raider I-III Remastered (#123, stage S7-2), which holds
+// the HD models of the four Tomb Raider III guests the randomizer can import.
+// Empty means: let the same Steam discovery look for it too.
+char tomb5_hd_install_tr3[260];
+
 // "rgba" or "dxt5" (#123, stage S6). A word rather than a number because a
 // reader of the registry should be able to tell what it says without a
 // table, and because there may one day be a third answer.
@@ -207,6 +212,12 @@ void init_tomb5_stuff()
 		tomb5_hd_install[0] = 0;
 		REG_WriteString(buf, tomb5_hd_install);
 
+		// The I-III bundle, for the Tomb Raider III guests (#123, S7-2).
+		// Same rule: empty means "look for it yourself".
+		sprintf(buf, "hd_install_tr3");
+		tomb5_hd_install_tr3[0] = 0;
+		REG_WriteString(buf, tomb5_hd_install_tr3);
+
 		sprintf(buf, "hd_texture_format");
 		strcpy(tomb5_hd_texture_format, "rgba");		//lossless (#123, S6)
 		REG_WriteString(buf, tomb5_hd_texture_format);
@@ -323,6 +334,10 @@ void init_tomb5_stuff()
 
 		sprintf(buf, "hd_install");
 		REG_ReadString(buf, tomb5_hd_install, sizeof(tomb5_hd_install), "");
+
+		sprintf(buf, "hd_install_tr3");
+		REG_ReadString(buf, tomb5_hd_install_tr3,
+			sizeof(tomb5_hd_install_tr3), "");
 
 		sprintf(buf, "hd_texture_format");
 		REG_ReadString(buf, tomb5_hd_texture_format,

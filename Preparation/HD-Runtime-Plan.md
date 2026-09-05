@@ -301,6 +301,19 @@ from `5\FMV\HD\*.OGV` via libogg/libtheora - a project of its own.
   reading both, rooms classic, the donor `.MAP` lookup, `data[3]` into
   `HDLaraOutfitFor`, `ROMAN_GOD` without a MAP entry, and the I-III
   Remaster for the `TR3` donors.
+
+  **S7-2 IS BUILT.** All six of those, plus one thing the brief did not
+  ask for and the spiel test found: the young-Lara test took the Irish
+  LEVEL RANGE, and the engine's own body assembly takes the range AND
+  the script flag, which the randomizer clears. Every randomized ANDY
+  level was therefore drawn classic with a grown Lara in it. Details and
+  the proof tables in `TOMB5 Code\MODIFICATIONS.md`, stage S7-2; the
+  reader is `specific\hd\hd_markers.cpp` and the offline proof is
+  `MapProbe -hdm`. Still open for a later round: the eleven hand-table
+  pairings and the `ROMAN_GOD` default are measurements BY PICTURE, and
+  the four Tomb Raider III guest names are an inference from TRForge's
+  naming rule - nothing here has a Tomb Raider I-III installation to
+  hold them against.
 - **S8 - first person and binoculars.** First person does not hide
   Lara; the HD body may show inside the head -> zero `mesh_bits` like
   the binoculars do. The binoculars draw the real mesh in the classic

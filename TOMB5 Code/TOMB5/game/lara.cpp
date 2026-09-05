@@ -329,6 +329,7 @@ short DashTimer;
 char LaraDrawType;
 char WeatherType;
 char GfForeignSpeechHeads;
+char GfHdOutfit;
 
 static short LeftClimbTab[4] = { 512, 1024, 2048, 256 };
 static short RightClimbTab[4] = { 2048, 256, 512, 1024 };

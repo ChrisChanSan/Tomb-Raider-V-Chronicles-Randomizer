@@ -39,12 +39,19 @@
 // own. The definition lives in tomb5\tomb5.cpp.
 extern char tomb5_hd_install[260];
 
+// The same for the OTHER bundle, Tomb Raider I-III Remastered (#123, stage
+// S7-2). Only the four Tomb Raider III guests the randomizer imports need it,
+// and only their models - so an installation without it loses those four
+// enemies' HD models and nothing else. Registry value: hd_install_tr3.
+extern char tomb5_hd_install_tr3[260];
+
 namespace fs = std::filesystem;
 
 namespace
 {
 	bool searched = false;
 	std::string found_root;
+	std::string found_root_tr3;
 	std::string notes;
 
 	void note(const std::string& line)
@@ -328,18 +335,60 @@ namespace
 		return sub.string();
 	}
 
+	/* THE OTHER BUNDLE (#123, stage S7-2): Tomb Raider I-III Remastered, for
+	 * the four Tomb Raider III guests the randomizer imports (#92). Same rule
+	 * as above and the same source - TROne's discovery table names
+	 * tomb123.exe beside subfolders 1..3 with DATA and TEX
+	 * (host\fs\discovery.cpp) - with the game folder being "3" instead of
+	 * "5".
+	 *
+	 * DATA and TEX are required and ITEM is NOT, which is the one place this
+	 * differs from the IV-VI rule above. A bundle whose 3\ITEM is missing or
+	 * empty is still worth finding: the model then comes back "missing" with
+	 * the file name in the log, which says far more than an install that
+	 * silently was not there at all. Nothing but models is read from it. */
+	std::string classify_remaster123(const fs::path& dir)
+	{
+		if (child_file(dir, "tomb123.exe").empty())
+			return {};
+
+		const fs::path sub = child_dir(dir, "3");
+		if (sub.empty())
+		{
+			note(dir.string() + ": a tomb123.exe but no folder \"3\" - the third game is not in this bundle.");
+			return {};
+		}
+
+		const fs::path data = child_dir(sub, "DATA");
+		const fs::path tex = child_dir(sub, "TEX");
+		if (data.empty() || tex.empty())
+		{
+			note(sub.string() + ": folder \"3\" without DATA and TEX - skipped.");
+			return {};
+		}
+
+		if (child_dir(sub, "ITEM").empty())
+			note(sub.string() + ": folder \"3\" has no ITEM - the Tomb Raider III guests stay classic.");
+
+		return sub.string();
+	}
+
 	void search()
 	{
 		searched = true;
 		found_root.clear();
+		found_root_tr3.clear();
 		notes.clear();
 
 		std::error_code ec;
 		std::vector<fs::path> scan_roots;
 
-		/* The user's own folder first, so it wins. It may be the bundle folder
-		 * itself or a folder containing it - both are scanned, the user should
-		 * not have to guess which one is meant. */
+		/* The user's own folders first, so they win. Either may be the bundle
+		 * folder itself or a folder containing it - both are scanned, the
+		 * user should not have to guess which one is meant. Both overrides go
+		 * into the same list: a folder that is not the bundle it was named
+		 * for simply does not classify as one, and naming the other one is
+		 * then a kindness rather than a mistake. */
 		const std::string over = tomb5_hd_install;
 		if (!over.empty())
 		{
@@ -347,6 +396,15 @@ namespace
 				scan_roots.push_back(fs::path(over));
 			else
 				note("Configured folder does not exist: " + over);
+		}
+
+		const std::string over3 = tomb5_hd_install_tr3;
+		if (!over3.empty())
+		{
+			if (fs::is_directory(over3, ec))
+				scan_roots.push_back(fs::path(over3));
+			else
+				note("Configured I-III folder does not exist: " + over3);
 		}
 
 		for (const fs::path& lib : steam_libraries())
@@ -365,12 +423,22 @@ namespace
 			return;
 		}
 
+		/* ONE WALK FOR BOTH BUNDLES. The two live side by side in the same
+		 * Steam library in every normal installation, so walking the tree
+		 * twice would open the same directories twice for nothing. The loop
+		 * ends when both are found; a missing I-III is not a reason to keep
+		 * looking for the IV-VI that is already in hand, and the other way
+		 * round it is not a reason to stop. */
 		for (const fs::path& root : scan_roots)
 		{
 			/* The folder itself first, then its children - one level deep.
 			 * Anything deeper belongs to the games, not to this search. */
-			found_root = classify_remaster456(root);
-			if (!found_root.empty())
+			if (found_root.empty())
+				found_root = classify_remaster456(root);
+			if (found_root_tr3.empty())
+				found_root_tr3 = classify_remaster123(root);
+
+			if (!found_root.empty() && !found_root_tr3.empty())
 				break;
 
 			for (const fs::directory_entry& e : fs::directory_iterator(root, ec))
@@ -379,11 +447,14 @@ namespace
 					break;
 				if (!e.is_directory(ec))
 					continue;
-				found_root = classify_remaster456(e.path());
-				if (!found_root.empty())
+				if (found_root.empty())
+					found_root = classify_remaster456(e.path());
+				if (found_root_tr3.empty())
+					found_root_tr3 = classify_remaster123(e.path());
+				if (!found_root.empty() && !found_root_tr3.empty())
 					break;
 			}
-			if (!found_root.empty())
+			if (!found_root.empty() && !found_root_tr3.empty())
 				break;
 		}
 
@@ -391,6 +462,11 @@ namespace
 			note("No Tomb Raider IV-VI Remastered recognised - HD art stays off.");
 		else
 			note("HD art source: " + found_root);
+
+		if (found_root_tr3.empty())
+			note("No Tomb Raider I-III Remastered recognised - the four Tomb Raider III guests stay classic.");
+		else
+			note("Tomb Raider III guest models: " + found_root_tr3);
 	}
 }
 
@@ -408,14 +484,27 @@ const char* HDInstallDiagnostics()
 	return notes.c_str();
 }
 
+const char* HDInstallRootTr3()
+{
+	if (!searched)
+		search();
+	return found_root_tr3.c_str();
+}
+
 void HDInstallForget()
 {
 	searched = false;
 	found_root.clear();
+	found_root_tr3.clear();
 	notes.clear();
 }
 
 const char* HDInstallOverride()
 {
 	return tomb5_hd_install;
+}
+
+const char* HDInstallOverrideTr3()
+{
+	return tomb5_hd_install_tr3;
 }

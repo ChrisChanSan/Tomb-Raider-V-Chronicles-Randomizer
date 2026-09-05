@@ -127,21 +127,37 @@ namespace
 	static_assert(sizeof(slot_names) / sizeof(slot_names[0]) == HD_SLOT_COUNT,
 		"HD_SLOT_COUNT and the generated slot name table have drifted apart");
 
-	/* THE HAND TABLE for the slots this project added beyond the original 460
-	 * (#105, #111, #146). The remaster has all of these models; what it does
-	 * not have is our slot numbers, because no vanilla level uses them.
+	/* THE HAND TABLE - eleven slots this project added beyond the original 460
+	 * (#105, #111, #146) and one vanilla slot the remaster leaves unnamed.
 	 *
-	 * Each line is a measurement waiting to be confirmed by picture in stage
-	 * S7 - which model the remaster really draws for these is only certain
-	 * once it is on screen. Two of them are already certain from the shipped
-	 * .MAP files: the joby levels say BLUE_GUARD=BLUE_GUARD_JOBY, ANDREA3
-	 * says ROMAN_GOD=ROMAN_GOD_ANDREA_HAMMER.
+	 * For the eleven the remaster has all the models; what it does not have is
+	 * our slot numbers, because no vanilla level uses them. Each of those
+	 * lines is a measurement waiting to be confirmed by picture in stage S7 -
+	 * which model the remaster really draws for them is only certain once it
+	 * is on screen. Two are already certain from the shipped .MAP files: the
+	 * joby levels say BLUE_GUARD=BLUE_GUARD_JOBY, ANDREA3 says
+	 * ROMAN_GOD=ROMAN_GOD_ANDREA_HAMMER.
 	 *
 	 * The MESHSWAP_CROSS_* slots are warehouses: they never hold an item, and
 	 * a mesh swap takes single meshes out of them. Binding them to the model
 	 * of the family they belong to is what makes those meshes findable at
 	 * all; whether the HD model's mesh numbering lines up with the classic
-	 * one is a stage S3 question and is not answered here. */
+	 * one is a stage S3 question and is not answered here.
+	 *
+	 * THE TWELFTH LINE IS A DIFFERENT ANIMAL: ROMAN_GOD, slot 61, is vanilla,
+	 * and there is no ROMAN_GOD.TRM. Measured over the shipped files: 5\ITEM
+	 * has ROMAN_GOD_ANDREA_SWORD and ROMAN_GOD_ANDREA_HAMMER (and eight
+	 * numbered ROMAN_GOD_ANDREA2_n / ANDREA3_n), and of the fifteen .MAP
+	 * files exactly two mention the slot - ANDREA2 says SWORD, ANDREA3 says
+	 * HAMMER. Every other level that carries the slot therefore falls through
+	 * to its own name, finds nothing, and draws the god classic. The
+	 * randomizer puts him in levels whose .MAP never expected him, so that
+	 * case is now the common one. The sword is the default because ANDREA2 is
+	 * where the vanilla game first shows him.
+	 *
+	 * The rule this line follows, and the reason it can live in the same
+	 * table: the hand table is only ever asked WHEN THE LEVEL'S .MAP IS
+	 * SILENT. ANDREA2 and ANDREA3 still get their own answer. */
 	struct HandBound { const char* slot; const char* model; };
 
 	const HandBound hand_table[] =
@@ -156,7 +172,23 @@ namespace
 		{ "MESHSWAP_CROSS_MAFIA",    "MAFIA"                    },
 		{ "MESHSWAP_CROSS_GUARD2",   "BLUE_GUARD_JOBY"          },
 		{ "MESHSWAP_CROSS_HITMAN",   "HITMAN"                   },
-		{ "MESHSWAP_CROSS_CRANEGUY", "CRANE_GUY"                }
+		{ "MESHSWAP_CROSS_CRANEGUY", "CRANE_GUY"                },
+
+		{ "ROMAN_GOD",               "ROMAN_GOD_ANDREA_SWORD"   }
+	};
+
+	/* THE GUESTS OUT OF TOMB RAIDER III (#92). The header says what this is
+	 * and how the four names were arrived at; the numbers on the left are TR5
+	 * slots the randomizer installs a guest into, chosen because no vanilla
+	 * level uses them. */
+	struct Tr3Guest { int slot; const char* model; };
+
+	const Tr3Guest tr3_guests[] =
+	{
+		{ 31, "TREX"    },	// SAS
+		{ 43, "VULTURE" },	// CROW
+		{ 53, "COMPY"   },	// SAILOR
+		{ 75, "RAPTOR"  }	// REAPER
 	};
 
 	/* LARA .. HAIR. hd_level.cpp checks this against the enum. */
@@ -165,9 +197,156 @@ namespace
 	struct MapEntry { std::string key, value; };
 	std::vector<MapEntry> map_entries;
 
+	/* THE DONOR MAPS (#123, stage S7-2), kept apart from the level's own -
+	 * the level's is asked for every slot of every frame's worth of building,
+	 * and a donor's only for the handful of slots the sidecar names. One
+	 * entry per donor level, read once and kept until the level ends. */
+	struct DonorMap
+	{
+		std::string level;
+		bool read;			// the file was there
+		std::vector<MapEntry> entries;
+	};
+
+	/* POINTERS, not values. HDBindDonorSlot hands back a pointer INTO one of
+	 * these maps and the caller keeps it until it has built its slot list, by
+	 * which time other donors have been asked for - and a std::vector that
+	 * grows moves its elements, which would leave the earlier answers
+	 * pointing at freed strings. Each map is allocated once and never moves;
+	 * HDDonorMapsFree gives them back. */
+	std::vector<DonorMap*> donor_maps;
+
 	bool same(const std::string& a, const char* b)
 	{
 		return _stricmp(a.c_str(), b) == 0;
+	}
+
+	/* KEY=VALUE a line. The format is TRForge's measurement and the reasons
+	 * for every step of it stand at HDMapLoad, which called this its body
+	 * until the donor maps needed the same parse against a store of their
+	 * own. */
+	bool read_map_file(const char* mapPath, std::vector<MapEntry>& out)
+	{
+		out.clear();
+
+		if (!mapPath || !*mapPath)
+			return false;
+
+		std::FILE* file = std::fopen(mapPath, "rb");
+
+		if (!file)
+			return false;
+
+		std::string text;
+		char chunk[4096];
+		size_t got;
+
+		while ((got = std::fread(chunk, 1, sizeof(chunk), file)) > 0)
+			text.append(chunk, got);
+
+		std::fclose(file);
+
+		size_t at = 0;
+
+		while (at < text.size())
+		{
+			size_t end = text.find('\n', at);
+
+			if (end == std::string::npos)
+				end = text.size();
+
+			std::string line = text.substr(at, end - at);
+			at = end + 1;
+
+			/* The last line of several shipped files has no line break at all
+			 * (JOBY4 ends on CHAFF=PUZZLE_ITEM2_5), so trailing whitespace is
+			 * stripped rather than assumed away. */
+			while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t'))
+				line.pop_back();
+
+			if (line.empty())
+				continue;
+
+			const size_t equals = line.find('=');
+
+			if (equals == std::string::npos)
+				continue;
+
+			MapEntry entry;
+
+			entry.key = line.substr(0, equals);
+			entry.value = line.substr(equals + 1);
+			out.push_back(entry);
+		}
+
+		return true;
+	}
+
+	const char* value_in(const std::vector<MapEntry>& entries, const char* key)
+	{
+		if (!key)
+			return 0;
+
+		for (const MapEntry& entry : entries)
+			if (same(entry.key, key))
+				return entry.value.c_str();
+
+		return 0;
+	}
+
+	/* The one binding rule, against WHICHEVER map is in hand: the map wins,
+	 * then the hand table, then the slot's own name. HDBindSlot asks it with
+	 * the level's map and HDBindDonorSlot with a donor's, which is the whole
+	 * of what those two differ in. */
+	const char* bind_against(const std::vector<MapEntry>& entries, int slot,
+		HDBindKind* kind, bool* fromMap)
+	{
+		HDBindKind local_kind = HD_BIND_NONE;
+		bool local_from_map = false;
+		const char* result = 0;
+
+		const char* name = HDSlotName(slot);
+
+		if (!name)
+			local_kind = HD_BIND_NONE;
+		else if (HDSlotIsLara(slot))
+			local_kind = HD_BIND_LARA;
+		else
+		{
+			const char* mapped = value_in(entries, name);
+
+			if (mapped)
+			{
+				local_from_map = true;
+
+				if (_stricmp(mapped, "DUMMY") == 0)
+					local_kind = HD_BIND_DUMMY;
+				else
+				{
+					local_kind = HD_BIND_MODEL;
+					result = mapped;
+				}
+			}
+			else
+			{
+				local_kind = HD_BIND_MODEL;
+				result = name;
+
+				for (const HandBound& bound : hand_table)
+					if (_stricmp(bound.slot, name) == 0)
+					{
+						result = bound.model;
+						break;
+					}
+			}
+		}
+
+		if (kind)
+			*kind = local_kind;
+		if (fromMap)
+			*fromMap = local_from_map;
+
+		return result;
 	}
 }
 
@@ -186,48 +365,7 @@ bool HDSlotIsLara(int slot)
 bool HDMapLoad(const char* mapPath)
 {
 	HDMapFree();
-
-	if (!mapPath || !*mapPath)
-		return false;
-
-	std::FILE* file = std::fopen(mapPath, "rb");
-	if (!file)
-		return false;
-
-	std::string text;
-	char chunk[4096];
-	size_t got;
-	while ((got = std::fread(chunk, 1, sizeof(chunk), file)) > 0)
-		text.append(chunk, got);
-	std::fclose(file);
-
-	size_t at = 0;
-	while (at < text.size())
-	{
-		size_t end = text.find('\n', at);
-		if (end == std::string::npos)
-			end = text.size();
-		std::string line = text.substr(at, end - at);
-		at = end + 1;
-
-		/* The last line of several shipped files has no line break at all
-		 * (JOBY4 ends on CHAFF=PUZZLE_ITEM2_5), so trailing whitespace is
-		 * stripped rather than assumed away. */
-		while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t'))
-			line.pop_back();
-		if (line.empty())
-			continue;
-
-		const size_t equals = line.find('=');
-		if (equals == std::string::npos)
-			continue;
-
-		MapEntry entry;
-		entry.key = line.substr(0, equals);
-		entry.value = line.substr(equals + 1);
-		map_entries.push_back(entry);
-	}
-	return true;
+	return read_map_file(mapPath, map_entries);
 }
 
 void HDMapFree()
@@ -242,58 +380,97 @@ int HDMapCount()
 
 const char* HDMapValue(const char* key)
 {
-	if (!key)
-		return 0;
-	for (const MapEntry& entry : map_entries)
-		if (same(entry.key, key))
-			return entry.value.c_str();
-	return 0;
+	return value_in(map_entries, key);
 }
 
 const char* HDBindSlot(int slot, HDBindKind* kind, bool* fromMap)
 {
-	HDBindKind local_kind = HD_BIND_NONE;
-	bool local_from_map = false;
-	const char* result = 0;
+	return bind_against(map_entries, slot, kind, fromMap);
+}
 
-	const char* name = HDSlotName(slot);
+const char* HDBindDonorSlot(const char* installRoot, const char* donorLevel,
+	int sourceSlot, HDBindKind* kind, bool* fromMap)
+{
+	static const std::vector<MapEntry> nothing;
 
-	if (!name)
-		local_kind = HD_BIND_NONE;
-	else if (HDSlotIsLara(slot))
-		local_kind = HD_BIND_LARA;
-	else
+	if (!donorLevel || !*donorLevel)
+		return bind_against(nothing, sourceSlot, kind, fromMap);
+
+	DonorMap* have = 0;
+
+	for (DonorMap* one : donor_maps)
+		if (_stricmp(one->level.c_str(), donorLevel) == 0)
+		{
+			have = one;
+			break;
+		}
+
+	if (!have)
 	{
-		const char* mapped = HDMapValue(name);
+		DonorMap& fresh = *new DonorMap;
 
-		if (mapped)
-		{
-			local_from_map = true;
-			if (_stricmp(mapped, "DUMMY") == 0)
-				local_kind = HD_BIND_DUMMY;
-			else
-			{
-				local_kind = HD_BIND_MODEL;
-				result = mapped;
-			}
-		}
-		else
-		{
-			local_kind = HD_BIND_MODEL;
-			result = name;
+		fresh.level = donorLevel;
+		fresh.read = false;
 
-			for (const HandBound& bound : hand_table)
-				if (_stricmp(bound.slot, name) == 0)
-				{
-					result = bound.model;
-					break;
-				}
+		/* "<installRoot>\DATA\<LEVEL>.MAP" - the same place hd_scan.cpp
+		 * builds the level's own path from. The stem is spelled as the
+		 * sidecar spells it ("Andrea1") and the files are upper case, which
+		 * costs nothing: fopen on Windows does not care. */
+		if (installRoot && *installRoot)
+		{
+			std::string path = installRoot;
+
+			if (!path.empty() && path[path.size() - 1] != '\\' && path[path.size() - 1] != '/')
+				path += '\\';
+
+			path += "DATA\\";
+			path += donorLevel;
+			path += ".MAP";
+
+			fresh.read = read_map_file(path.c_str(), fresh.entries);
 		}
+
+		donor_maps.push_back(&fresh);
+		have = &fresh;
 	}
 
-	if (kind)
-		*kind = local_kind;
-	if (fromMap)
-		*fromMap = local_from_map;
-	return result;
+	return bind_against(have->entries, sourceSlot, kind, fromMap);
+}
+
+void HDDonorMapsFree()
+{
+	for (DonorMap* one : donor_maps)
+		delete one;
+
+	donor_maps.clear();
+}
+
+int HDDonorMapCount()
+{
+	int count = 0;
+
+	for (const DonorMap* one : donor_maps)
+		if (one->read)
+			count++;
+
+	return count;
+}
+
+int HDDonorMapEntries()
+{
+	int count = 0;
+
+	for (const DonorMap* one : donor_maps)
+		count += (int)one->entries.size();
+
+	return count;
+}
+
+const char* HDBindTr3Guest(int tr5Slot)
+{
+	for (const Tr3Guest& guest : tr3_guests)
+		if (guest.slot == tr5Slot)
+			return guest.model;
+
+	return 0;
 }

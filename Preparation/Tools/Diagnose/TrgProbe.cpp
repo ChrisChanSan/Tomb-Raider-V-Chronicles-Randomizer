@@ -43,10 +43,13 @@
 #include "hd_install.h"
 #include "hd_scan.h"
 
-// The engine keeps this in tomb5\tomb5.cpp, filled from the registry value
-// hd_install. Here the command line fills it - the tool has no registry of
-// its own and must not write into the game's.
+// The engine keeps these in tomb5\tomb5.cpp, filled from the registry values
+// hd_install and hd_install_tr3. Here the command line fills the first - the
+// tool has no registry of its own and must not write into the game's - and
+// the second stays empty, because nothing this tool measures is in the I-III
+// bundle.
 char tomb5_hd_install[260];
+char tomb5_hd_install_tr3[260];
 
 namespace
 {

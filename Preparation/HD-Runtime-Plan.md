@@ -320,6 +320,23 @@ from `5\FMV\HD\*.OGV` via libogg/libtheora - a project of its own.
   sort path above HD rooms; the mid-frame Z clear must keep working.
   **1 task.**
 
+  **S8 IS BUILT**, and zero `mesh_bits` was the wrong answer: it would
+  take her arms away, which is the one thing #126 kept on purpose. The
+  measurement says what really shows - the neck stump, which hangs on
+  the TORSO node and survives the head mask, at 18.6 units from the eye
+  - and the fix is two things on her body's draw alone: everything
+  within a 60-unit RADIUS of the eye discarded in the shader, and her
+  body drawn one-sided while the view runs. The second half was not in
+  the brief and the pictures insisted on it: the HD path draws double
+  sided, the classic engine culls in software, and this is the only
+  camera that ever stands inside a body. A cut at fixed DEPTH was tried
+  first and rejected by picture - it lies flat across her chest as soon
+  as she looks down. The binoculars needed nothing at all: `mesh_bits =
+  0` keeps `DrawLara` from being called, so the composite is never
+  pushed. Details and the table in `TOMB5 Code\MODIFICATIONS.md`, stage
+  S8; the proof is `ModelProbe -neck` and `-firstperson`. Left over: the
+  diving helmet rides on the torso node and cannot be masked or cut.
+
 
 ## 5. What TROne cannot do - and what of it hits us
 

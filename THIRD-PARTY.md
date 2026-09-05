@@ -41,10 +41,11 @@ far, file by file:
 
 | `TOMB5 Code/TOMB5/specific/hd/hd_lara.cpp` | `host/render/game_renderer.cpp`: `lara_flush` (1547-1679), `lara_build_models` (2462-2604), `lara_load` (2619-2800), `draw_hair` (1498-1546), and `games/tr5/glue/hostglue_file5.cpp`: `RegisterLaraWardrobe` (1856-1922) | The **composite itself**: Lara is not one model but an outfit for the body, a separate `LARA_HEAD` drawn rigidly on the head node, a `HAIR_OG` braid on its own six-bone chain, a `HAND_` model chosen by the slot whose mesh sits at the hand node, and a `HOLSTER_` model for a worn weapon; an empty holster draws nothing because the straps are in the outfit; and the whole wardrobe lives in the shared `4\ITEM` folder, not in the running game's. The role table (which slot means which model) is TROne's, name for name. What is **not** TROne's: the section table - its TR5 glue has `ANDY` and `JOBY` the wrong way round and would put the Russia outfit on Ireland - and the outfit test, which here reads the engine's own `LaraDrawType` and its own braid predicate rather than the level's file name. Also new is the split hand rule: TROne draws one hand model for both hands, which loses TR5's flare, torch and crowbar frames, so a frame whose two hands differ draws both models masked to one arm each. |
 
+| `TOMB5 Code/TOMB5/specific/hd/hd_laradraw.cpp` | `host/render/game_renderer.cpp`: `draw_hair` (1498-1546) | The **braid rule**: `HAIR_OG` has one bone per link, so all six links get a frame of their own built from the link's absolute position and its two angles - where TR5 itself builds a matrix for links 1, 3 and 5 only and draws 0, 2 and 4 as skinned connectors out of stashed vertices. Everything else in that file is this engine's own: the LMX-to-LM turn of `lara_matrices`, the per-node ambient out of `LaraNodeAmbient`, the hand-slot pointer comparison, the first-person mask (#126) and the mirror. |
+
 Those files name Todesengel's copyright in their own headers, beside our
-modification notice, as GPLv3 section 5(a) asks. More of TROne is expected in
-the later stages of that work (the draw seam for Lara's composite); each will
-be entered here as it arrives.
+modification notice, as GPLv3 section 5(a) asks. Anything further will be
+entered here as it arrives.
 
 Not taken, and named here so the absence is on the record rather than an
 oversight: TROne's `hd.light_stage` (an A/B switch that replaces the baked room

@@ -39,10 +39,12 @@
 // what each of them covers, and which of them the draw seam has to put on the
 // card for the frame it is looking at.
 //
-// STAGE S4-1 BUILDS IT AND DRAWS NOTHING. The engine does not call a line of
-// this yet - specific\drawlara.cpp is untouched and the picture in the game is
-// the one it was before. ModelProbe -lara does call it, which is how the
-// pictures in the report were made. The draw seam is stage S4-2.
+// THIS FILE IS THE WARDROBE AND NOT THE SEAM. It knows nothing about this
+// engine and is built into ModelProbe as well, which is how the pictures in
+// the report were made. What reads lara_matrices, lara.mesh_ptrs, hairs[0]
+// and LaraNodeAmbient and turns them into the calls below is
+// specific\hd\hd_laradraw.cpp (stage S4-2), and what calls THAT is
+// specific\drawlara.cpp.
 //
 // THE TWO FACTS THE WHOLE MODULE RESTS ON, both measured over the remaster's
 // 4\ITEM (ModelProbe -name <NAME> -nodraw, the per node vertex counts):
@@ -269,9 +271,11 @@ int HDLaraOutfitFromName(const char* name);
  *                 classic, by the user's decision.
  *   tr3Outfit     one of the four HD_LARA_OUTFIT_TR3_* when the randomizer
  *                 dressed this level in a Tomb Raider III outfit, otherwise
- *                 HD_LARA_OUTFIT_NONE. See the .cpp for how the engine is
- *                 meant to learn that - it cannot today, and stage S4-2 owes
- *                 it a marker byte.
+ *                 HD_LARA_OUTFIT_NONE. The engine cannot learn it today: the
+ *                 randomizer writes the SAME outfit byte (LARA_PONYTAIL) for
+ *                 a guest and for the Rome body in a Russia level, so a
+ *                 LARA_PONYTAIL level stays classic until stage S7 puts a
+ *                 marker of its own in the level header - see the .cpp.
  *
  * *why comes back as a short reason for the log, never 0.
  */

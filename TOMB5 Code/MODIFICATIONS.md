@@ -1784,7 +1784,145 @@ one. `HDLaraOutfitFor` therefore takes the answer as an argument
 What is missing is a marker byte in the level header; the 32-byte block behind
 the texture pages already carries `LaraType` at `data[0]`, the weather at
 `data[1]` and the foreign-speech-head flag at `data[2]`, and `data[3]` is the
-obvious place. That belongs to stage S4-2 together with the seam.
+obvious place. That is a randomizer change and belongs to a later stage.
+
+---
+
+#### Stage S4-2 — the seam for Lara: the composite drawn by the engine
+
+New: `specific/hd/hd_laradraw.cpp` and `specific/hd/hd_laradraw.h` — the
+engine-side half of stage S4-1. `hd_lara.cpp` stays engine-free (ModelProbe
+links it), and this file is what reads TR5's own state and turns it into the
+arguments that module and `hd_model` want.
+
+**Three edits in `specific/drawlara.cpp`, one per draw variant.** Each sits
+directly after `CalculateObjectLightingLara()`, which is the last thing both
+roads need, and each is a single `if`:
+
+* `DrawLara__1` (everything but the catsuit and the diving suit) and
+  `DrawLara__4` (the catsuit) **leave the function**: they pop the one matrix
+  they pushed, put the clipping window back exactly as their own tail does,
+  and return. Everything they would have drawn — the skinned body, the
+  fourteen seam pieces from `LARA_SKIN_JOINTS`, `DrawHair`, the two thigh
+  holsters and the weapon on the back — is what the composite replaces.
+* `DrawLara__5` (the diving suit) does **not** leave: its skin loop is skipped
+  and the two `LARA_EXTRA_MESH1` thrusters below it still draw. They are a
+  separate object on her torso rather than a node of her body, so a classic
+  thruster on an HD suit is not the patchwork the object path refuses — and
+  the wardrobe has no model for them.
+* `DrawLara__6` (the skeleton cheat) is untouched and stays classic.
+
+The `mesh_bits` argument differs per variant on purpose: `true` for
+`DrawLara__1`, which reads them, `false` for the two that do not. A seam that
+read them where the classic path does not would make the catsuit disappear in
+the very cutscenes that hide the classic joints.
+
+**The matrices are the engine's own.** `lara_matrices` already holds fifteen
+3×4 matrices in view space, built this frame by `CalcLaraMatrices`. They are in
+`LMX_` order and a `.TRM`'s bone numbers are mesh-tree nodes, which are `LM_`
+order; the whole difference is the head, which is matrix 8 and node 14. One
+table turns the one into the other and nothing else about the animation is
+touched — the same frames, the same interpolation, the same
+`gar_RotYXZsuperpack`.
+
+**Which parts, per frame**, out of the state `DrawLara` already holds:
+`LHolster`, `lara.holster` and `lara.back_gun` are slot numbers already. The
+hands are not — the engine keeps them in `lara.mesh_ptrs` as **pointers** — so
+the seam compares that pointer against
+`meshes[objects[s].mesh_index + 2 * LM_xHAND]` for Lara's own loaded slots,
+which is exactly what `game/larafire.cpp:331` does when it wants to know
+whether the flare is still in her hand. At most a dozen comparisons, twice a
+frame. No match means a mesh swap from outside the wardrobe, and the rest hands
+are drawn: a hand and not a hole.
+
+**The braid needed three matrices the game never builds.** `HAIR_OG` has one
+bone per link, but TR5 puts a matrix only under links 1, 3 and 5 and draws 0, 2
+and 4 as *skinned connectors* out of their neighbours' stashed vertices
+(`game/hair.cpp`, `DrawHair`). The angles for the other three are there and
+have simply never been used: `HairControl` writes `y_rot` and `x_rot` for every
+one of `hairs[0][0..5]`. So all six are built the same way the three rigid ones
+are — `phd_TranslateAbs`, `phd_RotY`, `phd_RotX` — from the base of the matrix
+stack and **not** from `aW2VMx`, because `phd_GenerateW2V` puts the poison
+shake on the stack's base and leaves `aW2VMx` alone; a braid built from the
+latter would be the one part of her that stood still.
+
+**The light** is the object path's, with one thing an object does not have. The
+list of suns, points and spots goes to the vertex shader in view space through
+`HDObjectLights`, the same conversion and the same twelve. The **ambient is per
+node**: a body half in the water is lit by two rooms at once and the classic
+path switches between them per node through `bLaraUnderWater`. The seam runs
+`InitObjectLighting` once with that flag forced to "dry", which is the branch
+that answers `LaraNodeAmbient[0]`, and reads the wet answer straight out of
+`LaraNodeAmbient[1]` — a second call would push every dynamic light onto the
+list twice.
+
+**First person** (#126) drops the head node, the separate `LARA_HEAD` and the
+braid, which is what the classic path drops. It does *not* have to copy the
+reason the classic path hides the head through the draw and not through
+`mesh_bits` — the neighbours pull their rim points out of the head mesh's stash
+and lose them with it, the user's "third arm" — because an HD model has no
+stash and no seam pieces: the head node is one range of triangles.
+
+**The mirror needs nothing.** TR5 mirrors Lara by *moving* her
+(`game/mirror.cpp`: the z position reflected in the plane, the angles negated,
+`CalcLaraMatrices(2)` scaling by −1) and flips its own software backface test
+with `SetCullCW` / `SetCullCCW` around the second draw. The HD state bracket
+sets `D3DCULL_NONE`, so a negative determinant costs it nothing. The hair is
+mirrored in world space by that same function, so the braid follows for free.
+
+**No new registry key.** `hd_objects` covers Lara: she is a model like the
+creatures and a level's models are one vertex buffer, so a switch of her own
+would only be a second way to end up with half a picture.
+
+**Where her parts are drawn.** On the object path's own frame list, through two
+new calls in `hd_object.h` (`HDObjectLights`, `HDObjectPush`) and its bind-pose
+walk (`HDObjectBindPose`) — one frame list, one light conversion, one bracket,
+one line in the log. `game/draw.cpp` calls `DrawLara` before the `PrintObjects`
+loop, so her parts go on the list first and come off it first, which is the
+classic order.
+
+**One behaviour changed outside the seam**, and it is the user's decision:
+`HDLaraOutfitFor` now answers `HD_LARA_OUTFIT_NONE` for `LARA_PONYTAIL`. That
+byte means two different things — the Rome body inside a Russia level, and
+every Tomb Raider III guest (#122) — and nothing else in the level file
+separates them. Reading it as the Rome outfit would dress every guest in
+`OUTFIT_CLASSIC`. Such a level draws the classic Lara until the randomizer
+writes a marker of its own; `HDLaraOutfitFor` has taken it as an argument since
+stage S4-1. No vanilla level carries the byte, so a run without the wardrobe
+switch loses nothing.
+
+**Known losses, named rather than faked:** the catsuit's environment-map sheen
+(`phd_PutPolygonsSpcEnvmap` is a second, view-dependent pass an HD model does
+not have, and the remaster's `OUTFIT_VCI` carries its shading in its textures),
+the diving suit's two thrusters staying classic, and the muzzle flash, the gun
+shells and the flare in flight, which are drawn by their own routines outside
+`DrawLara` and were never part of the composite. The inventory ring never calls
+`DrawLara` at all.
+
+**The proofs.** Two lines per level with `-log`, on the first HD Lara frame:
+`HDLOG laracheck` puts each of the fifteen joint origins on the screen twice —
+the classic transform against the matrix the card is handed — and `HDLOG
+braidcheck` steps each braid link's own frame one bone along and measures how
+far it misses the next link, which is the identity `HairControl` used to derive
+those positions in the first place and the only part of this seam a still
+picture cannot show. `ModelProbe -laracheck` runs both without the game:
+**0.00000 px** over all fifteen joints and a worst chain gap of **0.00006
+units** over the five braid joints. `ModelProbe -firstperson` and `-mirror`
+draw the two pictures.
+
+---
+
+**Re-measured after this stage** (2026-09-05), counting every source file under
+`TOMB5 Code` (`.c`, `.cpp`, `.h`, `.hlsl`, `.inc`) plus the four licence and
+notice files that came with the vendored code: **169** files changed or added,
+**154** of them carrying the modification notice.
+
+Fifteen do not, and none of them should. Fourteen are the ones already named
+above — `tomb5/libs/stb/stb_vorbis.c`, `tomb5/libs/discordRPC/LICENSE`, the
+eight under `vendor/trforge/` and the four `specific/hd/hd_shader/*.inc`. The
+fifteenth is `resource.h`, which the earlier count had missed: it is a
+*Microsoft Visual C++ generated include file* and says so in its first line, so
+a notice put into it would be wiped by the next use of the resource editor.
 
 ---
 

@@ -68,6 +68,19 @@
  *                         the same as -pose, spelled for the composite.
  *     -mirror             draw through a view matrix of NEGATIVE determinant,
  *                         which is what a mirror room does to the winding.
+ *     -firstperson        draw her the way the seam draws her while the first
+ *                         person camera is on (#126): the head node masked
+ *                         off the body, no LARA_HEAD and no braid - all three
+ *                         sit where the camera does.
+ *     -laracheck          the two proofs of the Lara seam, as tables, and the
+ *                         offline twins of what the engine logs as HDLOG
+ *                         laracheck and HDLOG braidcheck on its first HD Lara
+ *                         frame: every joint's origin put on the screen twice
+ *                         (classic transform against the card's matrix), and
+ *                         the braid's chain rule - a link's own frame stepped
+ *                         one bone offset has to land on the next link, which
+ *                         is how HairControl derives the positions in the
+ *                         first place.
  *
  *   The level:
  *     -level <LEVEL>      stem, e.g. ANDREA1. The classic level is read from
@@ -803,6 +816,8 @@ struct LaraOptions
 	bool torch;
 	bool nodes;
 	bool mirror;
+	bool firstPerson;
+	bool check;
 	bool noDraw;
 	bool managed;
 	int threads;
@@ -1395,6 +1410,189 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		memcpy(chain, &hairMatrices[n * 16], sizeof(chain));
 	}
 
+	/* --- the two proofs of the seam ------------------------------------- */
+	/* Offline twins of what specific\hd\hd_laradraw.cpp logs as HDLOG
+	 * laracheck and HDLOG braidcheck on the first HD Lara frame of a level.
+	 * The engine's run is the one that counts - it measures its own matrix
+	 * stack and its own braid simulation; this one runs the same two
+	 * questions with no game around it, which is what makes a wrong answer
+	 * findable before the game is ever started. */
+	if (o.check)
+	{
+		const float* pm = (const float*)&projection;
+		double worstX = 0, worstY = 0;
+		int used = 0, behind = 0;
+
+		printf("\n-- laracheck: the joint origins, both roads --------------------\n");
+		printf("%5s %-9s %12s %12s %12s %10s %10s %8s %8s\n", "node", "name",
+			"view x", "view y", "view z", "classic x", "device x", "dx", "dy");
+
+		static const char* kName[HD_LARA_NODES] =
+		{
+			"hips", "l thigh", "l shin", "l foot", "r thigh", "r shin",
+			"r foot", "torso", "r inarm", "r outarm", "r hand", "l inarm",
+			"l outarm", "l hand", "head"
+		};
+
+		for (int node = 0; node < HD_LARA_NODES; node++)
+		{
+			const float* m = &matrices[node * 16];
+			const double vx = m[12], vy = m[13], vz = m[14];
+
+			if (vz < 20.0)
+			{
+				behind++;
+				continue;
+			}
+
+			const double zv = persp / vz;
+			const double classicX = vx * zv + (double)o.width * 0.5;
+			const double classicY = vy * zv + (double)o.height * 0.5;
+
+			const double cxx = vx * pm[0] + vy * pm[4] + vz * pm[8] + pm[12];
+			const double cyy = vx * pm[1] + vy * pm[5] + vz * pm[9] + pm[13];
+			const double cww = vx * pm[3] + vy * pm[7] + vz * pm[11] + pm[15];
+
+			if (cww <= 0.0)
+			{
+				behind++;
+				continue;
+			}
+
+			const double deviceX = (cxx / cww + 1.0) * 0.5 * (double)o.width;
+			const double deviceY = (1.0 - cyy / cww) * 0.5 * (double)o.height;
+			const double dx = fabs(deviceX - classicX);
+			const double dy = fabs(deviceY - classicY);
+
+			if (dx > worstX) worstX = dx;
+			if (dy > worstY) worstY = dy;
+
+			used++;
+
+			printf("%5d %-9s %12.1f %12.1f %12.1f %10.3f %10.3f %8.5f %8.5f\n",
+				node, kName[node], vx, vy, vz, classicX, deviceX, dx, dy);
+		}
+
+		printf("\n%d joints compared, %d behind the near plane; "
+			"worst dx %.5f px, worst dy %.5f px\n", used, behind, worstX, worstY);
+		printf("%s\n", worstX < 1.0 && worstY < 1.0
+			? "PASS - both roads put every joint origin in the same pixel"
+			: "FAIL - the projection and the classic transform disagree");
+
+		/* THE BRAID'S CHAIN RULE, which is the one thing about this seam that
+		 * a still picture cannot show. TR5 builds a matrix for links 1, 3 and
+		 * 5 only (game\hair.cpp, DrawHair) and draws 0, 2 and 4 as skinned
+		 * connectors out of stashed vertices; HAIR_OG.TRM has six bones, so
+		 * the seam has to build all six - and nothing in the game has ever
+		 * used the angles of the three it adds.
+		 *
+		 * They are usable, and this is the proof. HairControl derives every
+		 * link's POSITION by putting the link before it at its own position
+		 * and angles - phd_SetTrans, then phd_RotYXZ(y_rot, x_rot, 0), which
+		 * is phd_RotY followed by phd_RotX (specific\3dmath.cpp:435) - and
+		 * stepping one bone offset along that frame. The seam builds the same
+		 * frame with phd_TranslateAbs, phd_RotY, phd_RotX, in that order. So
+		 * frame(n) stepped by the offset must land on position(n + 1).
+		 *
+		 * The chain below is built by the FIRST of those two rules and the
+		 * frames by the SECOND, written apart, so that a swapped rotation
+		 * order or a translation that accumulates instead of being replaced
+		 * comes out as a gap and not as agreement. */
+		printf("\n-- braidcheck: the six links' chain rule -----------------------\n");
+
+		double yawChain[HD_LARA_HAIR_NODES];
+		double pitchChain[HD_LARA_HAIR_NODES];
+		float chainPos[HD_LARA_HAIR_NODES][3];
+		float step[HD_LARA_HAIR_NODES][3];
+
+		for (int n = 0; n < HD_LARA_HAIR_NODES; n++)
+		{
+			// Nothing round or symmetric, so that no sign can cancel itself.
+			yawChain[n] = 25.0 - 11.0 * n;
+			pitchChain[n] = -97.0 - 6.0 * n;
+
+			step[n][0] = 0.0f;
+			step[n][1] = 0.0f;
+			step[n][2] = haveHair && n + 1 < hair.nodes
+				? hair.bind[n + 1][2] - hair.bind[n][2]
+				: 56.0f;
+		}
+
+		chainPos[0][0] = 0.0f;
+		chainPos[0][1] = 0.0f;
+		chainPos[0][2] = 0.0f;
+
+		for (int n = 0; n + 1 < HD_LARA_HAIR_NODES; n++)
+		{
+			float ry[16], rx[16], rot[16];
+
+			MatRotY(yawChain[n], ry);
+			MatRotX(pitchChain[n], rx);
+			MatMul(ry, rx, rot);		// RotY then RotX - phd_RotYXZ(y, x, 0)
+
+			for (int a = 0; a < 3; a++)
+				chainPos[n + 1][a] = chainPos[n][a] +
+					step[n][0] * rot[0 * 4 + a] +
+					step[n][1] * rot[1 * 4 + a] +
+					step[n][2] * rot[2 * 4 + a];
+		}
+
+		float frame[HD_LARA_HAIR_NODES][16];
+
+		for (int n = 0; n < HD_LARA_HAIR_NODES; n++)
+		{
+			float ry[16], rx[16], rot[16], move[16], placed[16];
+
+			MatRotY(yawChain[n], ry);
+			MatRotX(pitchChain[n], rx);
+			MatMul(ry, rx, rot);
+			MatMul(rot, view, frame[n]);
+
+			/* phd_TranslateAbs REPLACES the translation column and leaves the
+			 * rotation alone, so the frame's origin is the link's own view
+			 * position and not the rotated camera's. */
+			MatTranslate(chainPos[n][0], chainPos[n][1], chainPos[n][2], move);
+			MatMul(move, view, placed);
+
+			frame[n][12] = placed[12];
+			frame[n][13] = placed[13];
+			frame[n][14] = placed[14];
+		}
+
+		printf("%5s %8s %12s %12s %12s %10s\n", "link", "step",
+			"stepped x", "stepped y", "stepped z", "gap");
+
+		double worstGap = 0;
+
+		for (int n = 0; n + 1 < HD_LARA_HAIR_NODES; n++)
+		{
+			const float* m = frame[n];
+			const double px = step[n][0] * m[0] + step[n][1] * m[4] +
+				step[n][2] * m[8] + m[12];
+			const double py = step[n][0] * m[1] + step[n][1] * m[5] +
+				step[n][2] * m[9] + m[13];
+			const double pz = step[n][0] * m[2] + step[n][1] * m[6] +
+				step[n][2] * m[10] + m[14];
+
+			const double dx = px - frame[n + 1][12];
+			const double dy = py - frame[n + 1][13];
+			const double dz = pz - frame[n + 1][14];
+			const double gap = sqrt(dx * dx + dy * dy + dz * dz);
+
+			if (gap > worstGap)
+				worstGap = gap;
+
+			printf("%5d %8.0f %12.2f %12.2f %12.2f %10.5f\n", n,
+				step[n][2], px, py, pz, gap);
+		}
+
+		printf("\nworst gap %.5f units over %d joints\n", worstGap,
+			HD_LARA_HAIR_NODES - 1);
+		printf("%s\n", worstGap < 0.01
+			? "PASS - the six rebuilt frames are the chain HairControl walked"
+			: "FAIL - a link's frame does not reach the next link");
+	}
+
 	float light[HD_LARA_NODES * 3];
 
 	for (int i = 0; i < HD_LARA_NODES * 3; i++)
@@ -1437,20 +1635,33 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	int drawn = 0;
 
+	/* FIRST PERSON (#126), the same three omissions the seam makes: the head
+	 * node off the body, no separate face, no braid. All three sit exactly
+	 * where the camera does. */
+	unsigned int bodyMask = ~0u;
+
+	if (o.firstPerson)
+	{
+		bodyMask &= ~(1u << HD_LARA_HEAD_NODE);
+		printf("firstperson: head node %d masked, no LARA_HEAD, no braid\n",
+			HD_LARA_HEAD_NODE);
+	}
+
 	if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BODY), matrices, HD_LARA_NODES,
-		light, ~0u, &lighting))
+		light, bodyMask, &lighting))
 		drawn++;
 
-	if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_FACE), matrices, HD_LARA_NODES,
-		light, ~0u, &lighting))
+	if (!o.firstPerson &&
+		HDModelDraw(HDLaraPartSlot(HD_LARA_PART_FACE), matrices, HD_LARA_NODES,
+		light, bodyMask, &lighting))
 		drawn++;
 
 	for (int i = 0; i < pieces; i++)
 		if (HDModelDraw(HDLaraPartSlot(list[i].part), matrices, HD_LARA_NODES,
-			light, list[i].nodeMask, &lighting))
+			light, list[i].nodeMask & bodyMask, &lighting))
 			drawn++;
 
-	if (HDLaraHasPart(HD_LARA_PART_BRAID))
+	if (!o.firstPerson && HDLaraHasPart(HD_LARA_PART_BRAID))
 	{
 		float hairLight[HD_LARA_HAIR_NODES * 3];
 
@@ -1471,7 +1682,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	char path[512];
 
-	sprintf(path, "%s_lara_%s.png", o.out.c_str(), HDLaraOutfitModel(outfit));
+	sprintf(path, "%s_lara_%s%s%s.png", o.out.c_str(),
+		HDLaraOutfitModel(outfit), o.firstPerson ? "_firstperson" : "",
+		o.mirror ? "_mirror" : "");
 	ShotWrite(shot, path);
 	ShotEnd(shot);
 
@@ -1497,6 +1710,7 @@ int main(int argc, char** argv)
 
 	/* Lara's composite - stage S4-1. */
 	bool lara = false, laraNodes = false, mirror = false;
+	bool laraFirstPerson = false, laraCheck = false;
 	std::string outfitName, gunsName, backName;
 	bool holstersFull = true, flare = false, torch = false;
 	int threads = 8;
@@ -1550,6 +1764,16 @@ int main(int argc, char** argv)
 		}
 		else if (!_stricmp(argv[i], "-mirror"))
 			mirror = true;
+		else if (!_stricmp(argv[i], "-firstperson"))
+		{
+			lara = true;
+			laraFirstPerson = true;
+		}
+		else if (!_stricmp(argv[i], "-laracheck"))
+		{
+			lara = true;
+			laraCheck = true;
+		}
 		else if (!_stricmp(argv[i], "-nodes"))
 			nodes = true;
 		else if (!_stricmp(argv[i], "-nodraw"))
@@ -1700,6 +1924,8 @@ int main(int argc, char** argv)
 		o.torch = torch;
 		o.nodes = laraNodes;
 		o.mirror = mirror;
+		o.firstPerson = laraFirstPerson;
+		o.check = laraCheck;
 		o.noDraw = noDraw;
 		o.managed = managed;
 		o.threads = threads;

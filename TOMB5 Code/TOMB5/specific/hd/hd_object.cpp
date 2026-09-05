@@ -17,6 +17,7 @@
 #include "../../tomb5/pch.h"
 #include "hd_object.h"
 #include "hd_model.h"
+#include "hd_laradraw.h"
 #include "hd_bind.h"
 #include "hd_install.h"
 #include "hd_render.h"
@@ -190,15 +191,25 @@ namespace
 		out[2] = aW2VMx[M20] * x + aW2VMx[M21] * y + aW2VMx[M22] * z;
 	}
 
-	bool add_light(FrameItem& out, const HDObjLight& light)
+	/* WHERE THE LIGHTS GO. A sink rather than the FrameItem itself, so that
+	 * Lara's composite can ask for exactly this list without being an item -
+	 * see HDObjectLights at the bottom of this file (#123, stage S4-2). */
+	struct LightSink
 	{
-		if (out.lightCount >= HD_MAX_OBJ_LIGHTS)
+		HDObjLight* list;
+		int max;
+		int count;
+	};
+
+	bool add_light(LightSink& out, const HDObjLight& light)
+	{
+		if (out.count >= out.max)
 		{
 			g_clipped_lights++;
 			return false;
 		}
 
-		out.lights[out.lightCount++] = light;
+		out.list[out.count++] = light;
 		return true;
 	}
 
@@ -219,14 +230,20 @@ namespace
 	 * points and spots. Only past twelve does anything fall off the end, and
 	 * then it is the least of them.
 	 */
-	void fill_lights(FrameItem& out, ITEM_INFO* lit)
+	void fill_lights(HDObjLight* list, int max, int* countOut, float* sunScale,
+		ITEM_INFO* lit)
 	{
 		HDObjLight light;
+		LightSink out;
 		void* lists[2];
 		long counts[2];
 
-		out.lightCount = 0;
-		out.sunScale = InventoryActive ? 2.0f : 0.75f;
+		out.list = list;
+		out.max = max;
+		out.count = 0;
+
+		if (sunScale)
+			*sunScale = InventoryActive ? 2.0f : 0.75f;
 
 		lists[0] = lit ? lit->il.pCurrentLights : 0;
 		lists[1] = lit ? lit->il.pPrevLights : 0;
@@ -353,6 +370,9 @@ namespace
 				add_light(out, light);
 			}
 		}
+
+		if (countOut)
+			*countOut = out.count;
 	}
 
 	/* ------------------------------------------------------- the self-test -- */
@@ -589,7 +609,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			continue;
 
 		if (HDSlotIsLara(slot))
-			continue;	// stage S4 - and HDBindSlot would say so anyway
+			continue;	// the wardrobe, planned below - HDBindSlot says so too
 
 		slots.push_back(slot);
 	}
@@ -611,6 +631,24 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		one.bind = &binds[i * HD_OBJ_NODES * 3];
 		one.name = 0;
 		wanted.push_back(one);
+	}
+
+	/* LARA'S WARDROBE, in the SAME HDModelLevelBegin (#123, stage S4-2). Her
+	 * parts are models like any other - the same page cache, the same
+	 * buffers, the same measurement - and the level begin call takes the
+	 * whole list in one go, so they have to be in this list and not in a
+	 * second one. hd_laradraw keeps the bind poses it hands over alive until
+	 * the level ends, exactly as the `binds` block above does.
+	 *
+	 * BEFORE the log line below, so that one line counts everything the level
+	 * really loaded, and after the ordinary slots so that a reader of the
+	 * verdict table finds the objects where they were. */
+	{
+		HDModelSlot wardrobe[HD_LARA_PART_COUNT];
+		const int parts = HDLaraDrawPlan(wardrobe, HD_LARA_PART_COUNT);
+
+		for (int i = 0; i < parts; i++)
+			wanted.push_back(wardrobe[i]);
 	}
 
 	if (wanted.empty())
@@ -646,6 +684,14 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	for (size_t i = 0; i < wanted.size(); i++)
 	{
 		const int slot = wanted[i].slot;
+
+		/* The wardrobe's pseudo slots (HD_LARA_SLOT_BASE and up) are not
+		 * engine slots and have no verdict: no item ever carries one as its
+		 * object_number, and g_slot is exactly NUMBER_OBJECTS long.
+		 * hd_laradraw judges them, with its own line. */
+		if (slot >= NUMBER_OBJECTS)
+			continue;
+
 		Verdict& verdict = g_slot[slot];
 
 		verdict.nodes = wanted[i].nodes;
@@ -713,13 +759,22 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 
 	Log("HDLOG level=%s objects hd=%d classic=%d (of %d loaded slots), "
 		"drift limit %.0f units",
-		g_stem, g_hd_slots, g_classic_slots, (int)wanted.size(), kDriftLimit);
+		g_stem, g_hd_slots, g_classic_slots, (int)slots.size(), kDriftLimit);
 
 	g_active = g_hd_slots > 0;
 
-	if (!g_active)
+	/* LARA'S VERDICT (#123, stage S4-2), after the objects and out of the
+	 * models that were just built: which parts arrived, what they cover, how
+	 * far they drift. It writes its own HDLOG lines. */
+	HDLaraDrawBuild(g_stem);
+
+	/* Released only when NEITHER side has anything to draw. A level whose
+	 * every object stayed classic can still have an HD Lara - the two
+	 * verdicts are separate and the models are one buffer. */
+	if (!g_active && !HDLaraDrawActive())
 	{
-		Log("HDLOG level=%s no slot draws HD - the models are released again", g_stem);
+		Log("HDLOG level=%s no slot and no wardrobe part draws HD - "
+			"the models are released again", g_stem);
 		HDModelLevelEnd();
 	}
 }
@@ -732,6 +787,7 @@ void HDObjectRelease()
 	g_active = false;
 	g_count = 0;
 	g_open = false;
+	HDLaraDrawEnd();
 	HDModelLevelEnd();
 }
 
@@ -741,6 +797,7 @@ void HDObjectLevelEnd()
 	 * on the LOAD thread while the main thread presents the loading bar - the
 	 * two-threads-one-device window that froze this game twice. The buffers
 	 * go in HDObjectRelease, on the thread that owns the device. */
+	HDLaraDrawEnd();	// flags only as well, and for the same reason
 	memset(g_slot, 0, sizeof(g_slot));
 	g_active = false;
 	g_count = 0;
@@ -779,6 +836,7 @@ void HDObjectFrameReset()
 	g_items_classic = 0;
 	g_swap_ignored = 0;
 	g_mask_used = 0;
+	HDLaraDrawFrameReset();
 }
 
 bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
@@ -930,7 +988,8 @@ void HDObjectEnd()
 		entry.light[node * 3 + 2] = (float)aAmbientB;
 	}
 
-	fill_lights(entry, current_item);
+	fill_lights(entry.lights, HD_MAX_OBJ_LIGHTS, &entry.lightCount,
+		&entry.sunScale, current_item);
 
 	/* The two proofs, on the first HD item of the level and while the
 	 * engine's own light arrays still hold THIS item's answer. */
@@ -988,4 +1047,84 @@ void HDObjectFrameDraw(const void* projection, int bulbs)
 	}
 
 	g_count = 0;
+}
+
+/* ------------------------------------------------- what Lara borrows -- */
+
+/* The three calls hd_laradraw.cpp needs out of this file, and nothing more.
+ * They exist so that Lara's composite rides the machinery the objects
+ * already have instead of a second copy of it: one frame list, one light
+ * conversion, one bind walk, one draw. See the block at the bottom of
+ * hd_object.h for the argument. */
+
+void HDObjectBindPose(int slot, float* out, int nodes)
+{
+	if (!out || nodes <= 0 || slot < 0 || slot >= NUMBER_OBJECTS)
+		return;
+
+	bind_pose_of(slot, out, nodes < HD_OBJ_NODES ? nodes : HD_OBJ_NODES);
+}
+
+int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale)
+{
+	int count = 0;
+
+	if (!out || max <= 0)
+		return 0;
+
+	fill_lights(out, max, &count, sunScale, lit);
+	return count;
+}
+
+bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
+	unsigned int mask, const HDObjLight* lights, int lightCount, float sunScale)
+{
+	/* NOT behind g_active. That flag says "this level has HD OBJECTS", and a
+	 * level can have an HD Lara and not one HD object - JOBY4's diving suit
+	 * in a level whose creatures the randomizer moved, say. What must be up
+	 * is the model path itself and the part being asked for. */
+	if (!tomb5.hd_objects || !matrix || nodes <= 0 || !HDModelReady() ||
+		!HDModelHas(slot))
+		return false;
+
+	if (g_count >= HD_OBJ_ITEMS)
+	{
+		g_dropped++;
+		return false;
+	}
+
+	// The frame's field of view, if nothing HD has taken it yet - Lara can be
+	// the first HD thing in a frame whose rooms all stayed classic.
+	HDFrameCaptureProjection();
+
+	FrameItem& entry = g_frame[g_count];
+
+	entry.slot = slot;
+	entry.nodes = nodes < HD_OBJ_NODES ? nodes : HD_OBJ_NODES;
+	entry.mask = mask;
+
+	memcpy(entry.matrix, matrix, sizeof(float) * 16 * entry.nodes);
+
+	for (int node = 0; node < entry.nodes; node++)
+	{
+		entry.light[node * 3 + 0] = light ? light[node * 3 + 0] : 128.0f;
+		entry.light[node * 3 + 1] = light ? light[node * 3 + 1] : 128.0f;
+		entry.light[node * 3 + 2] = light ? light[node * 3 + 2] : 128.0f;
+	}
+
+	entry.lightCount = 0;
+
+	if (lights && lightCount > 0)
+	{
+		entry.lightCount = lightCount < HD_MAX_OBJ_LIGHTS
+			? lightCount : HD_MAX_OBJ_LIGHTS;
+
+		for (int i = 0; i < entry.lightCount; i++)
+			entry.lights[i] = lights[i];
+	}
+
+	entry.sunScale = sunScale;
+
+	g_count++;
+	return true;
 }

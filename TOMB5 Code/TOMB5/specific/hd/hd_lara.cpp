@@ -363,10 +363,10 @@ int HDLaraOutfitFor(int laraDrawType, bool russiaCap, bool youngLara,
 	 *    level's own byte says nothing about it.
 	 * 3. The diving suit and the catsuit, which have a LaraType of their own
 	 *    and their own draw path in the engine (DrawLara__5 / __4).
-	 * 4. The cap, by the engine's own test - see the header.
-	 * 5. Everything else is the Rome outfit. That includes LARA_PONYTAIL,
-	 *    which the randomizer writes for "the standard body in a Russia
-	 *    level" precisely so that it is NOT read as the cap. */
+	 * 4. LARA_PONYTAIL, which is the one byte that means TWO things and so
+	 *    cannot be trusted at all - see below.
+	 * 5. The cap, by the engine's own test - see the header.
+	 * 6. Everything else is the Rome outfit. */
 	if (youngLara)
 	{
 		*why = "young Lara stays classic (the user's decision)";
@@ -397,6 +397,30 @@ int HDLaraOutfitFor(int laraDrawType, bool russiaCap, bool youngLara,
 	{
 		*why = "the VCI catsuit";
 		return HD_LARA_OUTFIT_VCI;
+	}
+
+	/* LARA_PONYTAIL, THE BYTE THAT MEANS TWO THINGS (the user's decision,
+	 * 2026-09-05). The randomizer writes 5 in two quite different cases
+	 * (TR5Randomizer\src\core\Randomizer.cpp, the wardrobe roll):
+	 *
+	 *   - the Rome body inside a Russia level, where LARA_NORMAL would send
+	 *     hair.cpp and laraskin.cpp down the cap's braid handling, and
+	 *   - EVERY Tomb Raider III guest outfit (#122), for the same reason -
+	 *     the guest's head comes from ANDREA1 and wants the standard braid.
+	 *
+	 * Nothing else in the level file separates the two. Reading it as the
+	 * Rome outfit would dress every guest in OUTFIT_CLASSIC and the player
+	 * would get a Rome Lara where he rolled a Nevada one; reading it as a
+	 * guest cannot be done, because the byte does not say which of the four.
+	 * So it says "classic" until the randomizer writes a marker of its own -
+	 * data[3] of the level header, stage S7 - and this function reads it as
+	 * `tr3Outfit` above. A right classic body beats a wrong HD one. */
+	if (laraDrawType == 6)
+	{
+		*why = "the ponytail byte, which the randomizer writes both for the "
+			"Rome body in a Russia level and for a Tomb Raider III guest - "
+			"classic until the marker of stage S7";
+		return HD_LARA_OUTFIT_NONE;
 	}
 
 	if (russiaCap)

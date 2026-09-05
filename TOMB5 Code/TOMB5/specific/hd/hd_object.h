@@ -19,6 +19,8 @@
  */
 #pragma once
 
+#include "hd_model.h"		// HDObjLight, for the two calls at the bottom
+
 struct ITEM_INFO;
 struct OBJECT_INFO;
 
@@ -96,3 +98,41 @@ void HDObjectFrameDraw(const void* projection, int bulbs);
 
 // The draw calls the last HDObjectFrameDraw made, for the frame line.
 int HDObjectDrawCalls();
+
+// --- what Lara borrows (#123, stage S4-2) ----------------------------------
+//
+// Lara is not an item and not a slot: she is up to nine models on ONE set of
+// matrices, and hd_laradraw.cpp puts her together. It does not need a second
+// frame list, a second light conversion or a second bind walk - it needs
+// these three, which are the ones this file already had for the objects. The
+// draw is then the same draw: her parts sit on the same list, are drawn in
+// the same bracket by HDObjectFrameDraw, and are counted in the same line.
+//
+// The ORDER that follows from it is the classic one and not a choice.
+// game\draw.cpp calls DrawLara before the PrintObjects loop, so Lara's parts
+// go on the list before the room's items and come off it before them too.
+
+// The slot's classic BIND POSE out of the engine's own mesh tree, three
+// floats a node in node order - the walk DrawAnimatingItem does with every
+// rotation left out. hd_laradraw needs it for LARA (the body) and HAIR (the
+// braid); an ordinary slot gets it from HDObjectLevelBuild itself.
+void HDObjectBindPose(int slot, float* out /* nodes * 3 */, int nodes);
+
+// The item's lights in VIEW space - the very conversion an HD object gets,
+// suns first, then the dynamics, then the room's points and spots. Returns
+// how many were written; `sunScale` comes back with the inventory's doubling
+// already in it. `lit` is the item CalculateObjectLighting last worked on,
+// which for Lara is lara_item.
+int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale);
+
+/* ONE MODEL ON THIS FRAME'S LIST that is not an item. `matrix` is `nodes`
+ * row-major 4x4 matrices in view space, `light` a colour triple a node in the
+ * classic 0..255 space, `mask` the mesh-bits rule (bit n clear -> node n
+ * draws nothing).
+ *
+ * False when the list is full or the HD model path is not up - and then the
+ * caller has to draw nothing at all rather than half a Lara, which is why
+ * hd_laradraw asks HDLaraDrawActive() once for the whole composite instead of
+ * per part. */
+bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
+	unsigned int mask, const HDObjLight* lights, int lightCount, float sunScale);

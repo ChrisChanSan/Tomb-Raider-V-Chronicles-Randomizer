@@ -367,14 +367,12 @@ this engine to draw that art when it finds the remaster installed, and the
 original art when it does not: file present → HD, otherwise vanilla, exactly
 the deal the loading screens and the HQ sounds already have.
 
-**As of this build the rooms and the objects are drawn in HD.** Enemies,
+**As of this build the rooms, the objects and Lara are drawn in HD.** Enemies,
 doors, switches, pickups, traps and machinery come out of the remaster's own
 models, skinned on the classic mesh tree so that they move exactly as they
-always did; the rooms around them were already HD. **Lara is still the
-original model** — she is a composite of an outfit, a head, holsters and a
-braid and she is a stage of her own — so until that stage she is the one
-low-resolution thing on the screen, and that is on purpose. Her wardrobe is
-already loaded and measured though; see *Lara — the wardrobe is loaded* below.
+always did; the rooms around them were already HD; and Lara is drawn out of the
+remaster's wardrobe — see *Lara in HD* below for which of her stays classic and
+why.
 
 **Switching it on.** Options → the new *tomb5 options* page → **HD textures**,
 the last row of the first page. Like every row on that page it is remembered at
@@ -395,7 +393,7 @@ same key as every other setting
 | Value | Type | Meaning |
 |---|---|---|
 | `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing below is read at all. |
-| `hd_objects` | DWORD | HD models for the objects, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's objects ever go wrong. Set it to `0` and the rooms stay HD while every object draws the classic way. Does nothing at all while `hd_enable` is off. |
+| `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Does nothing at all while `hd_enable` is off. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
 
 **The light in an HD room now does everything it did before.** An earlier
@@ -616,21 +614,22 @@ picture you can explain beats a crash.
 same rule as everywhere else in this project: the art is read where it lies, in
 your own installation.
 
-### Lara — the wardrobe is loaded, she is not drawn yet
+### Lara in HD
 
-Lara is the last thing on the screen that is still the original model, and she
-is the hardest one, because she is not an object. Every other creature is one
-slot and one model file. Lara is a **composite**: the engine draws her out of
-five slots at once — the skinned body from `LARA_SKIN`, the seams that close it
-from `LARA_SKIN_JOINTS`, the hands from whichever weapon slot the mesh swap put
-there this frame, the thigh straps from `LARA_HOLSTERS*` and the braid from
+Lara was the last thing on the screen that was still the original model, and
+she is the hardest one, because she is not an object. Every other creature is
+one slot and one model file. Lara is a **composite**: the engine draws her out
+of five slots at once — the skinned body from `LARA_SKIN`, the seams that close
+it from `LARA_SKIN_JOINTS`, the hands from whichever weapon slot the mesh swap
+put there this frame, the thigh straps from `LARA_HOLSTERS*` and the braid from
 `HAIR` — and the remaster does the same thing with a wardrobe of separate
 models.
 
-**As of this build the wardrobe is loaded and measured, and nothing of it is
-drawn.** The picture in the game is unchanged. What exists is the part that had
-to be right before a single pixel could be trusted: which file belongs to which
-level, which piece of her each file covers, and whether it fits her skeleton.
+**She is drawn now.** Her fifteen joint matrices are the engine's own, built by
+the same animation code as before, so she moves exactly as she always did; what
+changed is which geometry hangs off them. Which parts are on her changes from
+frame to frame and is read from the engine's own state: which slot owns each
+hand this frame, what is in the two thigh holsters, what is on her back.
 
 **Which outfit a level wears** is decided out of the engine's own facts, not
 from a list of level names:
@@ -642,7 +641,7 @@ from a list of level names:
 | The diving suit | Deepsea Dive | `OUTFIT_SUBSUIT` | the outfit byte, which has a value of its own for it |
 | The VCI catsuit | The 13th Floor, Escape with the Iris, Red Alert, the title screen | `OUTFIT_VCI` | the outfit byte, likewise |
 | Young Lara | Gallows Tree, Labyrinth, Old Mill | — **stays classic** | the script flag, the level range and the outfit byte, any one of the three. This is your decision, not a limit: `OUTFIT_YOUNG`, `LARA_YOUNG_HEAD` and `HAIR_PIGTAIL` all exist in the remaster. |
-| A Tomb Raider III outfit | wherever the randomizer rolls one | `OUTFIT_TR3_ANTARC`, `_NEVADA`, `_COAST`, `_CATSUIT` | **not yet** — see below |
+| A Tomb Raider III outfit | wherever the randomizer rolls one | `OUTFIT_TR3_ANTARC`, `_NEVADA`, `_COAST`, `_CATSUIT` | **not yet** — and every level that *might* be one **stays classic**; see below |
 
 Read against all fifteen vanilla level files those rules give the right answer
 fifteen times out of fifteen.
@@ -682,7 +681,44 @@ that is the same byte it writes for the Rome outfit inside a Russia level, so
 the byte alone cannot say *which* of the four guests she is wearing, or that
 she is wearing one at all. The four models exist and are correct; what is
 missing is a marker in the level file, which is a randomizer change and belongs
-to the stage that draws her.
+to a later stage.
+
+Until it arrives, **a level whose outfit byte is `LARA_PONYTAIL` draws the
+classic Lara.** That is the safe half of the ambiguity: reading the byte as the
+Rome outfit would put a Rome Lara on screen wherever you rolled a Nevada one,
+and a right classic body beats a wrong HD one. In a run without the wardrobe
+switch it costs nothing at all — no vanilla level carries that byte. `log.txt`
+says so per level, in the `HDLOG … lara outfit=none … reason=…` line.
+
+**What else stays classic, on purpose:**
+
+| What | Why |
+|---|---|
+| Young Lara | your decision. The models exist in the remaster. |
+| The skeleton cheat (`skelebob`) | its own draw path and its own overlay meshes; the wardrobe has neither. |
+| The muzzle flash, the gun shells, the flare in flight | drawn by their own routines outside `DrawLara` and never part of the composite. |
+| The diving suit's two thrusters | they are a separate object on her torso, not a part of her body, and the remaster's wardrobe has no model for them. They keep being drawn the classic way **on top of** the HD suit — two small low-resolution pieces, against a diving suit with nothing on its back. |
+| The catsuit's sheen | the classic catsuit is drawn through the engine's environment map, a second view-dependent pass an HD model does not have. The remaster's own `OUTFIT_VCI` carries its shading in its textures, so the HD catsuit is matte where the classic one glints. Not faked: inventing a specular term would be inventing a look. |
+| The inventory | the ring draws its own objects and never calls `DrawLara`. |
+
+**First person** (#126) drops the same three things from the HD Lara that it
+drops from the classic one: the head, the face and the braid, all three of
+which sit exactly where the camera does.
+
+**In a mirror room** she is drawn twice, as before. The engine mirrors her by
+*moving* her — the position reflected in the plane, the angles negated — and
+flips its own backface test around the second draw; the HD path culls nothing
+at all, so the reflection comes out whole. Proved with a picture through a view
+matrix of negative determinant.
+
+**The two proofs in the log.** Start with `-log` and the first HD Lara frame of
+every level writes two lines. `HDLOG laracheck` puts each of her fifteen joint
+origins on the screen twice — once through the classic transform, once through
+the matrix the graphics card is handed — and reports the worst disagreement in
+pixels; `HDLOG braidcheck` takes each braid link's own frame, steps it one bone
+along, and reports how far it misses the next link. Both are the same checks
+`ModelProbe -laracheck` runs without the game, where they read 0.00000 px and
+0.00006 units.
 
 ---
 

@@ -1,0 +1,718 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * The composite's rules are TROne's (Copyright 2026 Todesengel, GPLv3) and
+ * live in hd_lara.cpp; the braid's six links being rebuilt as
+ * TranslateAbs / RotY / RotX per link rather than TR5's three rigid pieces
+ * plus three skinned connectors is TROne's draw_hair
+ * (host\render\game_renderer.cpp:1498-1546). The seam under all of it - the
+ * LMX to LM turn, the per node ambient, the hand pointer comparison, the
+ * first person mask and the mirror - is new. See THIRD-PARTY.md.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
+#include "../../tomb5/pch.h"
+#include "hd_laradraw.h"
+#include "hd_lara.h"
+#include "hd_model.h"
+#include "hd_object.h"
+#include "hd_render.h"
+#include "hd_bind.h"
+#include "../3dmath.h"
+#include "../d3dmatrix.h"
+#include "../lighting.h"
+#include "../function_stubs.h"
+#include "../../tomb5/tomb5.h"
+#include "../../game/objects.h"
+#include "../../game/control.h"		// meshes, bones
+#include "../../game/lara.h"		// lara, lara_item, LaraDrawType
+#include "../../game/lara2gun.h"	// LHolster
+#include "../../game/delstuff.h"	// lara_matrices, LaraNodeAmbient/Underwater
+#include "../../game/hair.h"		// hairs
+#include "../../game/camera.h"		// FirstPersonActive
+#include "../../game/gameflow.h"	// gfLevelId, gfLevelFlags
+
+#include <math.h>
+
+namespace
+{
+	/* THE ONE TABLE THIS FILE EXISTS FOR. lara_matrices holds fifteen
+	 * matrices in LMX_ order - the order DrawLara walks and the order the
+	 * matrices are BUILT in (game\delstuff.cpp, Rich_CalcLaraMatrices_Normal:
+	 * hips, the left leg, the right leg, the torso, then the HEAD out of
+	 * bone[53..55], then the two arms). A .TRM's three bone bytes are mesh
+	 * tree nodes, which are LM_ order, where the head is last.
+	 *
+	 * So the whole difference between the two orders is the head: LM node 14
+	 * is LMX matrix 8, and LM 8..13 are LMX 9..14. Written out all the same,
+	 * because a reader should not have to work that out, and because the
+	 * classic path's own lara_mesh_sweetness_table is this table's inverse
+	 * and the two have to be readable against each other. */
+	const int kLmxOfNode[HD_LARA_NODES] =
+	{
+		LMX_HIPS,			// LM_HIPS
+		LMX_THIGH_L, LMX_CALF_L, LMX_FOOT_L,	// LM_LTHIGH, LSHIN, LFOOT
+		LMX_THIGH_R, LMX_CALF_R, LMX_FOOT_R,	// LM_RTHIGH, RSHIN, RFOOT
+		LMX_TORSO,			// LM_TORSO
+		LMX_UARM_R, LMX_LARM_R, LMX_HAND_R,	// LM_RINARM, ROUTARM, RHAND
+		LMX_UARM_L, LMX_LARM_L, LMX_HAND_L,	// LM_LINARM, LOUTARM, LHAND
+		LMX_HEAD			// LM_HEAD - the odd one
+	};
+
+	/* ------------------------------------------------------------- state -- */
+
+	/* THE LEVEL'S WARDROBE. The two bind poses have to outlive
+	 * HDModelLevelBegin - it keeps the pointer while it runs - so they are
+	 * here and not on HDLaraDrawPlan's stack. */
+	HDLaraLevel g_level;
+	float g_bodyBind[HD_LARA_NODES * 3];
+	float g_hairBind[HD_LARA_HAIR_NODES * 3];
+	int g_laraSlots[64];
+	int g_laraSlotCount = 0;
+	const char* g_why = "";
+	bool g_active = false;
+	bool g_planned = false;
+
+	/* WHICH SLOTS CAN OWN A HAND. Worked out once per level out of hd_bind's
+	 * name table, so that the per frame answer is a handful of pointer
+	 * comparisons and not a walk over 471 slots. LARA is in here as well:
+	 * putting a gun away puts LARA's own mesh back at LM_RHAND, and that is
+	 * the rest hands. */
+	int g_handSlots[24];
+	int g_handSlotCount = 0;
+
+	/* Per level, for the log. */
+	int g_frame_parts = 0;
+	bool g_checked = false;
+	bool g_frame_logged = false;
+	int g_dropped = 0;
+
+	/* ------------------------------------------------------ the wardrobe -- */
+
+	/* WHICH OUTFIT, out of the engine's own facts and nothing else. Every one
+	 * of the three questions is asked the way the engine asks it elsewhere,
+	 * which is what keeps this from drifting away from the classic path:
+	 *
+	 *   the cap    game\hair.cpp asks this exact expression three times and
+	 *              game\laraskin.cpp once. It is the only thing in this
+	 *              engine that can tell the Russia cap from the Rome body,
+	 *              because a vanilla Russia level carries the same outfit
+	 *              byte Rome does.
+	 *   young      the script flag, the Irish level range and the outfit byte
+	 *              - any one of the three. Three, because the randomizer
+	 *              moves outfits between levels and each of them alone has a
+	 *              hole in it.
+	 *   the guest  nothing yet. The randomizer writes LARA_PONYTAIL both for
+	 *              a Tomb Raider III outfit and for the Rome body inside a
+	 *              Russia level (#122, Randomizer.cpp: the wardrobe roll), so
+	 *              the byte cannot say which, and hd_lara answers "classic"
+	 *              for it. Stage S7 puts a marker in the level header and
+	 *              this line then reads it - HDLaraOutfitFor already takes it
+	 *              as an argument. */
+	int outfit_of_level(const char** why)
+	{
+		const bool cap =
+			(gfLevelId >= LVL5_BASE && gfLevelId <= LVL5_SINKING_SUBMARINE &&
+				LaraDrawType == LARA_NORMAL) || LaraDrawType == LARA_BUNHEAD;
+
+		const bool young = (gfLevelFlags & GF_YOUNGLARA) != 0 ||
+			(gfLevelId >= LVL5_GALLOWS_TREE && gfLevelId <= LVL5_OLD_MILL) ||
+			LaraDrawType == LARA_YOUNG;
+
+		return HDLaraOutfitFor(LaraDrawType, cap, young,
+			HD_LARA_OUTFIT_NONE, why);
+	}
+
+	/* ---------------------------------------------------------- the frame -- */
+
+	/* The engine's 3x4 into the row-major 4x4 hd_model wants - the same eight
+	 * lines hd_object.cpp's HDObjectEnd uses, and for the same reason: it is
+	 * what SetD3DMatrix does for the fixed-function pipe and what stage S1-2
+	 * proved for the rooms. */
+	void to_row_major(const float* in, float* out)
+	{
+		out[0] = in[M00];  out[1] = in[M10];  out[2] = in[M20];  out[3] = 0.0f;
+		out[4] = in[M01];  out[5] = in[M11];  out[6] = in[M21];  out[7] = 0.0f;
+		out[8] = in[M02];  out[9] = in[M12];  out[10] = in[M22]; out[11] = 0.0f;
+		out[12] = in[M03]; out[13] = in[M13]; out[14] = in[M23]; out[15] = 1.0f;
+	}
+
+	/* WHICH SLOT OWNS THIS HAND THIS FRAME. The engine keeps it as a POINTER
+	 * in lara.mesh_ptrs, so the only way back to a slot number is to compare
+	 * it against the candidates - which is precisely what the classic path
+	 * does itself when it wants to know whether the flare is still in her
+	 * hand (game\larafire.cpp:331). Twelve comparisons at most, twice a
+	 * frame.
+	 *
+	 * -1 when none of them matches, which is a mesh swap from outside the
+	 * wardrobe - a cutscene's, or one the randomizer arranged. hd_lara then
+	 * falls back to the rest hands, which is a hand and not a hole. */
+	int slot_of_hand(int node)
+	{
+		short* have = lara.mesh_ptrs[node];
+
+		if (!have || !meshes)
+			return -1;
+
+		for (int i = 0; i < g_handSlotCount; i++)
+		{
+			const int slot = g_handSlots[i];
+
+			if (have == meshes[objects[slot].mesh_index + 2 * node])
+				return slot;
+		}
+
+		return -1;
+	}
+
+	/* THE BRAID'S SIX MATRICES.
+	 *
+	 * TR5 draws the braid out of SIX meshes but only THREE of them stand on
+	 * their own: game\hair.cpp's DrawHair puts meshes 1, 3 and 5 at
+	 * hairs[i][1], [3] and [5] with phd_TranslateAbs / RotY / RotX, and draws
+	 * 0, 2 and 4 as SKINNED connectors out of stashed vertices of their
+	 * neighbours. HAIR_OG.TRM has six bones, one per link, so the three
+	 * connectors need a matrix the classic path never builds.
+	 *
+	 * They are not missing, only unused: the simulation writes a position AND
+	 * an angle pair for every one of hairs[0][0..5] (HairControl's loop sets
+	 * (hair-1)->pos.y_rot / x_rot for i = 1..6, which is links 0 to 5). So
+	 * the connectors are built the same way the rigid ones are, which is what
+	 * TROne does for all six.
+	 *
+	 * phd_TranslateAbs only replaces the TRANSLATION column and leaves the
+	 * rotation where it is, so each link has to start from the BASE of the
+	 * matrix stack - the world-to-view matrix - which is what DrawHair gets
+	 * for free by being called with the stack unwound and what this has to
+	 * put there on purpose, because the seam sits inside DrawLara's own push.
+	 *
+	 * The base and NOT aW2VMx, which is nearly the same matrix and not quite:
+	 * phd_GenerateW2V puts the poison shake on the stack's base through
+	 * ScaleCurrentMatrix and leaves aW2VMx alone (specific\3dmath.cpp,
+	 * aGenerateW2V). Lara's body inherits that shake through lara_matrices;
+	 * a braid built from aW2VMx would be the one part of her that stood
+	 * still. */
+	void braid_matrices(float* out /* HD_LARA_HAIR_NODES * 16 */)
+	{
+		phd_PushMatrix();
+
+		for (int n = 0; n < HD_LARA_HAIR_NODES; n++)
+		{
+			const HAIR_STRUCT* link = &hairs[0][n];
+
+			for (int i = 0; i < indices_count; i++)
+			{
+				aMXPtr[i] = aFMatrixStack[i];
+				phd_mxptr[i] = matrix_stack[i];
+			}
+
+			phd_TranslateAbs(link->pos.x_pos, link->pos.y_pos, link->pos.z_pos);
+			phd_RotY(link->pos.y_rot);
+			phd_RotX(link->pos.x_rot);
+			to_row_major(aMXPtr, out + n * 16);
+		}
+
+		phd_PopMatrix();
+	}
+
+	/* ------------------------------------------------------- the self-test -- */
+
+	/* laracheck - the same proof hd_object.cpp writes as itemcheck, on Lara's
+	 * own matrices: a node matrix carries the node's ORIGIN into view space
+	 * all by itself, so the classic screen position (the three lines of
+	 * aTransformLightClipMesh) and the device's (the projection matrix, the w
+	 * divide and the viewport rule) can be compared on it directly. It runs
+	 * on the first HD Lara frame of a level and once. */
+	void self_test(const float* matrices, int nodes, const float* hairMatrices)
+	{
+		if (!gLogEnabled || g_checked)
+			return;
+
+		g_checked = true;
+
+		const double width = 2.0 * (double)f_centerx;
+		const double height = 2.0 * (double)f_centery;
+
+		D3DMATRIX projection;
+
+		HDRenderMakeProjection((double)f_persp, (double)f_centerx,
+			(double)f_centery, (double)f_a, (double)f_b, &projection);
+
+		const float* p = (const float*)&projection;
+		double worst_x = 0, worst_y = 0;
+		int used = 0, worst_node = -1;
+
+		for (int node = 0; node < nodes; node++)
+		{
+			const float* m = matrices + node * 16;
+			const double vx = m[12];
+			const double vy = m[13];
+			const double vz = m[14];
+
+			if (vz < (double)f_mznear)
+				continue;
+
+			const double zv = (double)f_persp / vz;
+			const double classic_x = vx * zv + (double)f_centerx;
+			const double classic_y = vy * zv + (double)f_centery;
+
+			const double cx = vx * p[0] + vy * p[4] + vz * p[8] + p[12];
+			const double cy = vx * p[1] + vy * p[5] + vz * p[9] + p[13];
+			const double cw = vx * p[3] + vy * p[7] + vz * p[11] + p[15];
+
+			if (cw <= 0.0)
+				continue;
+
+			const double dx = fabs((cx / cw + 1.0) * 0.5 * width - classic_x);
+			const double dy = fabs((1.0 - cy / cw) * 0.5 * height - classic_y);
+
+			if (dx > worst_x || dy > worst_y)
+				worst_node = node;
+
+			if (dx > worst_x) worst_x = dx;
+			if (dy > worst_y) worst_y = dy;
+
+			used++;
+		}
+
+		Log("HDLOG laracheck outfit=%s nodes=%d used=%d node=%d "
+			"maxdx=%.5f maxdy=%.5f",
+			HDLaraOutfitModel(HDLaraOutfitNow())
+				? HDLaraOutfitModel(HDLaraOutfitNow()) : "-",
+			nodes, used, worst_node, worst_x, worst_y);
+
+		/* braidcheck - THE PROOF THAT THE THREE REBUILT CONNECTORS ARE IN THE
+		 * RIGHT PLACE, and the only part of this seam that could be silently
+		 * wrong: the classic path never builds a matrix for links 0, 2 and 4,
+		 * so nothing in the game has ever used their angles.
+		 *
+		 * The identity comes from HairControl itself (game\hair.cpp): it
+		 * derives every link's position by putting the link BEFORE it at its
+		 * own position and angles and stepping one bone offset along that
+		 * frame. So the frame built here for link n, stepped by the HAIR mesh
+		 * tree's own offset, has to land on link n+1's own position - to the
+		 * long/float rounding of the two roads and no further. A swapped
+		 * RotY/RotX, a dropped sign or a stale angle all break it, and none
+		 * of them is visible in a still picture of a braid hanging straight
+		 * down.
+		 *
+		 * Measured in CLASSIC UNITS in view space, which is what the matrices
+		 * carry - one unit is 1/1024 of a sector. */
+		if (!hairMatrices || !g_level.hairBind)
+			return;
+
+		double worst_gap = 0;
+		int worst_link = -1;
+
+		for (int n = 0; n + 1 < HD_LARA_HAIR_NODES; n++)
+		{
+			const float* m = hairMatrices + n * 16;
+			const float* next = hairMatrices + (n + 1) * 16;
+
+			/* The step is the mesh tree's own offset between the two links -
+			 * 56 units in every adult level, and read rather than assumed
+			 * because young Lara's pigtails are half that. */
+			const float step[3] =
+			{
+				g_level.hairBind[(n + 1) * 3 + 0] - g_level.hairBind[n * 3 + 0],
+				g_level.hairBind[(n + 1) * 3 + 1] - g_level.hairBind[n * 3 + 1],
+				g_level.hairBind[(n + 1) * 3 + 2] - g_level.hairBind[n * 3 + 2]
+			};
+
+			const double px = step[0] * m[0] + step[1] * m[4] + step[2] * m[8] + m[12];
+			const double py = step[0] * m[1] + step[1] * m[5] + step[2] * m[9] + m[13];
+			const double pz = step[0] * m[2] + step[1] * m[6] + step[2] * m[10] + m[14];
+
+			const double dx = px - (double)next[12];
+			const double dy = py - (double)next[13];
+			const double dz = pz - (double)next[14];
+			const double gap = sqrt(dx * dx + dy * dy + dz * dz);
+
+			if (gap > worst_gap)
+			{
+				worst_gap = gap;
+				worst_link = n;
+			}
+		}
+
+		Log("HDLOG braidcheck links=%d step=%.0f worst_gap=%.3f at link %d "
+			"(units, view space)", HD_LARA_HAIR_NODES,
+			g_level.hairBind[1 * 3 + 2] - g_level.hairBind[0 * 3 + 2],
+			worst_gap, worst_link);
+	}
+}
+
+/* ------------------------------------------------------------ the level -- */
+
+int HDLaraDrawPlan(HDModelSlot* out, int max)
+{
+	const char* why = "";
+
+	HDLaraDrawEnd();
+
+	if (!out || max <= 0)
+		return 0;
+
+	/* The same guard the objects have, and the same key. Lara is a model like
+	 * every other one and a level's models are one vertex buffer; a switch of
+	 * her own would only be a second way to end up with half a picture. */
+	if (!tomb5.hd_objects)
+		return 0;
+
+	g_level.outfit = outfit_of_level(&why);
+	g_why = why;
+
+	if (g_level.outfit == HD_LARA_OUTFIT_NONE)
+		return 0;
+
+	/* THE BODY'S BIND POSE, out of the slot whose mesh tree the matrices were
+	 * BUILT from - game\delstuff.cpp walks bones[objects[LARA].bone_index],
+	 * so that is the tree the .TRM has to be folded against.
+	 * game\laramisc.cpp copies LARA_SKIN's meshes into LARA at level start
+	 * but never its bones, so the two trees are the same walk read from one
+	 * place instead of two. */
+	if (!objects[LARA].loaded || objects[LARA].nmeshes < HD_LARA_NODES)
+	{
+		g_why = "this level's LARA has no fifteen node mesh tree";
+		g_level.outfit = HD_LARA_OUTFIT_NONE;
+		return 0;
+	}
+
+	HDObjectBindPose(LARA, g_bodyBind, HD_LARA_NODES);
+
+	g_level.bodyBind = g_bodyBind;
+	g_level.bodyNodes = HD_LARA_NODES;
+	g_level.hairBind = 0;
+	g_level.hairNodes = 0;
+
+	if (objects[HAIR].loaded && objects[HAIR].nmeshes >= HD_LARA_HAIR_NODES)
+	{
+		HDObjectBindPose(HAIR, g_hairBind, HD_LARA_HAIR_NODES);
+		g_level.hairBind = g_hairBind;
+		g_level.hairNodes = HD_LARA_HAIR_NODES;
+	}
+
+	/* WHICH OF LARA'S SLOTS THIS LEVEL HAS. A weapon whose slot is not loaded
+	 * cannot be put in her hands by the classic path either, so its wardrobe
+	 * model is not read - which is what keeps a Rome level down to eleven
+	 * files instead of twenty-one. */
+	g_laraSlotCount = 0;
+	g_handSlotCount = 0;
+
+	for (int slot = 0; slot < NUMBER_OBJECTS; slot++)
+	{
+		if (!HDSlotIsLara(slot) || !objects[slot].loaded)
+			continue;
+
+		if (g_laraSlotCount < (int)(sizeof(g_laraSlots) / sizeof(g_laraSlots[0])))
+			g_laraSlots[g_laraSlotCount++] = slot;
+
+		/* A hand candidate needs enough meshes to HAVE an LM_LHAND, or the
+		 * pointer comparison would read past the slot's own mesh table. */
+		if (HDLaraPartForSlot(slot, HD_LARA_ROLE_HAND) >= 0 &&
+			objects[slot].nmeshes > LM_LHAND &&
+			g_handSlotCount < (int)(sizeof(g_handSlots) / sizeof(g_handSlots[0])))
+			g_handSlots[g_handSlotCount++] = slot;
+	}
+
+	g_level.slots = g_laraSlotCount ? g_laraSlots : 0;
+	g_level.slotCount = g_laraSlotCount;
+	g_planned = true;
+
+	return HDLaraPlan(&g_level, out, max);
+}
+
+void HDLaraDrawBuild(const char* stem)
+{
+	HDLaraStats stats;
+
+	if (!stem)
+		stem = "?";
+
+	if (!g_planned || g_level.outfit == HD_LARA_OUTFIT_NONE)
+	{
+		Log("HDLOG level=%s lara outfit=none parts=0 reason=%s", stem,
+			g_why && *g_why ? g_why : "the HD object path is off");
+		return;
+	}
+
+	g_active = HDLaraLevelBuild(&g_level, &stats);
+
+	Log("HDLOG level=%s lara outfit=%s(%s) hd=%d parts=%d/%d missing=%d "
+		"slots=%d hands=%d braid=%d verts=%d idx=%d ranges=%d pages=%d "
+		"vb_kib=%.0f ib_kib=%.0f drift=%.0f/%.0f over %d reason=%s",
+		stem, HDLaraOutfitModel(g_level.outfit)
+			? HDLaraOutfitModel(g_level.outfit) : "-",
+		HDLaraOutfitLabel(g_level.outfit), (int)g_active, stats.loaded,
+		stats.wanted, stats.missing, g_laraSlotCount, g_handSlotCount,
+		(int)HDLaraHasPart(HD_LARA_PART_BRAID), stats.vertices, stats.indices,
+		stats.ranges, stats.pages, stats.vertexBytes / 1024.0,
+		stats.indexBytes / 1024.0, stats.driftMean, stats.driftWorst,
+		stats.driftParts, g_why);
+
+	for (int i = 0; i < HDLaraNoteCount(); i++)
+		Log("HDLOG level=%s lara note: %s", stem, HDLaraNote(i));
+
+	/* Part by part, so that a wrong picture in the game can be looked up
+	 * rather than guessed at - the same reason the objects get a line each.
+	 * At most twenty-one lines and only with -log. */
+	if (!gLogEnabled)
+		return;
+
+	for (int part = 0; part < HD_LARA_PART_COUNT; part++)
+	{
+		if (!HDLaraPartPlanned(part) || !HDLaraPartModel(g_level.outfit, part))
+			continue;
+
+		const int slot = HDLaraPartSlot(part);
+		float mean = 0, worst = 0;
+		int covered = 0;
+
+		for (int node = 0; node < 32; node++)
+			if (HDLaraPartCoverage(part) & (1u << node))
+				covered++;
+
+		HDModelBindDrift(slot, &mean, &worst);
+
+		Log("HDLOG level=%s lara part=%s model=%s hd=%d cover=%d(%08x) "
+			"verts=%d drift=%.0f/%.0f",
+			stem, HDLaraPartLabel(part), HDLaraPartModel(g_level.outfit, part),
+			(int)HDLaraHasPart(part), covered, HDLaraPartCoverage(part),
+			HDLaraHasPart(part) ? HDModelVertices(slot) : 0, mean, worst);
+	}
+}
+
+void HDLaraDrawEnd()
+{
+	/* NOT ONE DIRECT3D CALL - hd_object.cpp's own level end, which calls
+	 * this, runs on the LOAD thread. The models themselves are released by
+	 * HDModelLevelEnd on the main thread, and Lara has nothing of her own
+	 * besides these flags. */
+	HDLaraLevelEnd();
+
+	memset(&g_level, 0, sizeof(g_level));
+	g_level.outfit = HD_LARA_OUTFIT_NONE;
+	g_laraSlotCount = 0;
+	g_handSlotCount = 0;
+	g_why = "";
+	g_active = false;
+	g_planned = false;
+	g_frame_parts = 0;
+	g_checked = false;
+	g_frame_logged = false;
+	g_dropped = 0;
+}
+
+bool HDLaraDrawActive()
+{
+	return g_active && tomb5.hd_objects && HDLaraActive();
+}
+
+/* ------------------------------------------------------------ the frame -- */
+
+void HDLaraDrawFrameReset()
+{
+	g_frame_parts = 0;
+}
+
+void HDLaraDrawFrame(long mirror, bool honourMeshBits)
+{
+	float matrices[HD_LARA_NODES * 16];
+	float nodeLight[HD_LARA_NODES * 3];
+	HDObjLight lights[HD_MAX_OBJ_LIGHTS];
+	HDLaraDraw pieces[8];
+	HDLaraFrame now;
+	float sunScale = 0.75f;
+
+	if (!HDLaraDrawActive())
+		return;
+
+	/* --- the fifteen matrices ------------------------------------------ */
+	for (int node = 0; node < HD_LARA_NODES; node++)
+		to_row_major(&lara_matrices[kLmxOfNode[node] * indices_count],
+			matrices + node * 16);
+
+	/* --- the light ------------------------------------------------------ */
+	/* These three lines are the first three of phd_PutPolygons with the draw
+	 * left out, exactly as hd_object.cpp does them for an item: the view
+	 * matrix of node 0, the reset that builds aLightMatrix, and the setup
+	 * that fills SunLights / PointLights / SpotLights and leaves the ambient
+	 * in aAmbientR/G/B. CalculateObjectLightingLara has run a moment ago in
+	 * the caller and filled lara_item->il.
+	 *
+	 * bLaraUnderWater is forced to -1 for it, which is the classic path's
+	 * "this node is dry": InitObjectLighting then answers with
+	 * LaraNodeAmbient[0] when she is in water at all, and with the item's own
+	 * ambient when she is not. The WET answer is the other branch of the same
+	 * three lines and is read straight out of LaraNodeAmbient[1] below rather
+	 * than by calling the whole setup a second time - a second call would
+	 * push every dynamic light onto the list twice. */
+	const long saved_uw = bLaraUnderWater;
+
+	SetD3DMatrix(&D3DMView, &lara_matrices[LMX_HIPS * indices_count]);
+	SuperResetLights();
+	bLaraUnderWater = -1;
+	InitObjectLighting(lara_item);
+	bLaraUnderWater = saved_uw;
+
+	const float dry[3] =
+	{
+		(float)aAmbientR, (float)aAmbientG, (float)aAmbientB
+	};
+
+	const float wet[3] =
+	{
+		(float)CLRR(LaraNodeAmbient[1]),
+		(float)CLRG(LaraNodeAmbient[1]),
+		(float)CLRB(LaraNodeAmbient[1])
+	};
+
+	/* THE PER NODE AMBIENT, which Lara really has and an object does not: a
+	 * body half in the water is lit by two rooms at once, and the classic
+	 * path switches between them per node through bLaraUnderWater. The index
+	 * is the LMX one, because LaraNodeUnderwater is filled in LMX order
+	 * (specific\drawlara.cpp, SetLaraUnderwaterNodes). */
+	for (int node = 0; node < HD_LARA_NODES; node++)
+	{
+		const bool under = bLaraInWater != 0 &&
+			LaraNodeUnderwater[kLmxOfNode[node]] != 0;
+		const float* from = under ? wet : dry;
+
+		nodeLight[node * 3 + 0] = from[0];
+		nodeLight[node * 3 + 1] = from[1];
+		nodeLight[node * 3 + 2] = from[2];
+	}
+
+	const int lightCount = HDObjectLights(lara_item, lights,
+		HD_MAX_OBJ_LIGHTS, &sunScale);
+
+	/* --- which nodes are drawn at all ------------------------------------ */
+	unsigned int mask = ~0u;
+
+	if (honourMeshBits)
+	{
+		/* LARA'S mesh_bits ARE NOT AN ITEM'S. The skin's fifteen bits sit in
+		 * the HIGH half and are counted BACKWARDS in LMX order - DrawLara__1
+		 * asks `mesh_bits >> 16 & 1 << (15 - i)` with i the LMX index, so the
+		 * head is bit 23 and not bit 14. The low half belongs to the fourteen
+		 * seam pieces, which the HD body does not have. */
+		mask = 0;
+
+		for (int node = 0; node < HD_LARA_NODES; node++)
+			if (lara_item->mesh_bits >> 0x10 & 1 << (15 - kLmxOfNode[node]))
+				mask |= 1u << node;
+	}
+
+	/* FIRST PERSON (#126). The classic path leaves the head mesh out and does
+	 * not call DrawHair, because both sit exactly where the camera does and
+	 * blow through the picture. The HD composite has to do the same three
+	 * things: the body's head node, the separate face, and the braid.
+	 *
+	 * What it does NOT have to copy is the reason the classic path hides the
+	 * head this way rather than through mesh_bits - the skin's neighbours
+	 * pull their rim points out of the head mesh's stash and lose them with
+	 * it ("the third arm"). An HD model has no stash and no seam pieces: the
+	 * head node is one range of triangles and dropping it drops nothing
+	 * else. */
+	const bool firstPerson = FirstPersonActive();
+
+	if (firstPerson)
+		mask &= ~(1u << HD_LARA_HEAD_NODE);
+
+	/* --- which parts ---------------------------------------------------- */
+	now.rightHandSlot = slot_of_hand(LM_RHAND);
+	now.leftHandSlot = slot_of_hand(LM_LHAND);
+	now.leftHolsterSlot = LHolster;
+	now.rightHolsterSlot = lara.holster;
+	now.backGunSlot = lara.back_gun;
+
+	const int pieceCount = HDLaraFrameParts(&now, pieces, 8);
+
+	/* --- on the list ----------------------------------------------------- */
+	/* The body first and the face on top of it, then the hands, the holsters
+	 * and the weapon on the back, then the braid - the order hd_lara.h names,
+	 * which is also the order the classic path draws in. It does not decide
+	 * anything on its own: all of it is opaque and z-buffered, so the depth
+	 * test sorts it whatever order it arrives in. What DOES depend on the
+	 * order is a see-through pass, and the wardrobe has none.
+	 *
+	 * If the body cannot go on the list, nothing else may either - half a
+	 * Lara is worse than the classic one. It cannot happen from here: the
+	 * frame list is empty when DrawLara runs, because game\draw.cpp calls it
+	 * before the PrintObjects loop. The counter is for the day that changes. */
+	int drawn = 0;
+
+	if (!HDObjectPush(HDLaraPartSlot(HD_LARA_PART_BODY), matrices,
+		HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale))
+	{
+		g_dropped++;
+		return;
+	}
+
+	drawn++;
+
+	if (!firstPerson && HDObjectPush(HDLaraPartSlot(HD_LARA_PART_FACE),
+		matrices, HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale))
+		drawn++;
+
+	for (int i = 0; i < pieceCount; i++)
+		if (HDObjectPush(HDLaraPartSlot(pieces[i].part), matrices,
+			HD_LARA_NODES, nodeLight, pieces[i].nodeMask & mask, lights,
+			lightCount, sunScale))
+			drawn++;
+
+	/* THE BRAID, on its own six link chain and its own matrices. It is lit
+	 * with the head's ambient, which is what the classic path does too -
+	 * DrawHair runs with bLaraUnderWater set from LaraNodeUnderwater[8], the
+	 * head. */
+	float hairMatrices[HD_LARA_HAIR_NODES * 16];
+	bool haveBraid = false;
+
+	if (!firstPerson && HDLaraHasPart(HD_LARA_PART_BRAID))
+	{
+		float hairLight[HD_LARA_HAIR_NODES * 3];
+		const int head = HD_LARA_HEAD_NODE;
+
+		braid_matrices(hairMatrices);
+		haveBraid = true;
+
+		for (int n = 0; n < HD_LARA_HAIR_NODES; n++)
+		{
+			hairLight[n * 3 + 0] = nodeLight[head * 3 + 0];
+			hairLight[n * 3 + 1] = nodeLight[head * 3 + 1];
+			hairLight[n * 3 + 2] = nodeLight[head * 3 + 2];
+		}
+
+		if (HDObjectPush(HDLaraPartSlot(HD_LARA_PART_BRAID), hairMatrices,
+			HD_LARA_HAIR_NODES, hairLight, ~0u, lights, lightCount, sunScale))
+			drawn++;
+	}
+
+	g_frame_parts += drawn;
+
+	self_test(matrices, HD_LARA_NODES, haveBraid ? hairMatrices : 0);
+
+	if (gLogEnabled && !g_frame_logged)
+	{
+		g_frame_logged = true;
+		Log("HDLOG frame lara parts=%d(%d this frame) outfit=%s right=%s left=%s "
+			"holsters=%s/%s back=%s braid=%d mask=%08x mirror=%d "
+			"firstperson=%d lights=%d dropped=%d",
+			drawn, g_frame_parts, HDLaraOutfitModel(HDLaraOutfitNow())
+				? HDLaraOutfitModel(HDLaraOutfitNow()) : "-",
+			HDSlotName(now.rightHandSlot) ? HDSlotName(now.rightHandSlot) : "-",
+			HDSlotName(now.leftHandSlot) ? HDSlotName(now.leftHandSlot) : "-",
+			HDSlotName(now.leftHolsterSlot) ? HDSlotName(now.leftHolsterSlot) : "-",
+			HDSlotName(now.rightHolsterSlot) ? HDSlotName(now.rightHolsterSlot) : "-",
+			HDSlotName(now.backGunSlot) ? HDSlotName(now.backGunSlot) : "-",
+			(int)HDLaraHasPart(HD_LARA_PART_BRAID), mask, (int)mirror,
+			(int)firstPerson, lightCount, g_dropped);
+	}
+}

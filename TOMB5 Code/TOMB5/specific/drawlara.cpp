@@ -28,6 +28,7 @@
 #include "../game/subsuit.h"
 #include "../game/savegame.h"
 #include "../game/lara2gun.h"
+#include "hd/hd_laradraw.h"
 #include "../tomb5/tomb5.h"
 
 static long lara_mesh_sweetness_table[15] =	//LM_ in LMX_ order for drawing
@@ -129,6 +130,30 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 
 	if (!mirror)
 		CalculateObjectLightingLara();
+
+	/* #123 (S4-2): THE SEAM. Either this function draws the classic composite
+	 * - the skin, the fourteen seam pieces, the braid, the two thigh holsters
+	 * and the weapon on the back - or hd_laradraw puts the remaster's
+	 * wardrobe on the frame's list. Never both, and never half of each: a
+	 * classic seam piece on an HD body is the very thing TROne tried and took
+	 * out again.
+	 *
+	 * TRUE for the mesh bits, because this variant reads them: `mesh_bits >>
+	 * 0x10 & 1 << (15 - i)` above, which the two other variants do not have.
+	 *
+	 * The single push at the top of this function is popped here, and the
+	 * clipping window is restored exactly as the tail restores it. */
+	if (HDLaraDrawActive())
+	{
+		HDLaraDrawFrame(mirror, true);
+		phd_PopMatrix();
+		bLaraUnderWater = 0;
+		phd_top = top;
+		phd_bottom = bottom;
+		phd_left = left;
+		phd_right = right;
+		return;
+	}
 
 	for (int i = 0; i < 15; i++)//skin
 	{
@@ -358,6 +383,36 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 	if (!mirror)
 		CalculateObjectLightingLara();
 
+	/* #123 (S4-2): THE SEAM, and here it is one road or the other. Everything
+	 * below - the skin, the fourteen seam pieces, the braid, the thigh
+	 * holsters and the weapon on the back - is the classic composite; the HD
+	 * one is the same composite out of the remaster's own models and is put
+	 * on the frame's list in one call. Not a polygon of the classic body may
+	 * go into the buckets beside it, so this leaves the function.
+	 *
+	 * The one push above is the one pop here, and the clipping window is put
+	 * back exactly as the tail of this function does it.
+	 *
+	 * THE CATSUIT'S SHEEN IS THE KNOWN LOSS. This variant draws Lara through
+	 * phd_PutPolygonsSpcEnvmap, which lays the engine's environment map over
+	 * her as a second, view-dependent pass. An HD model has no such pass and
+	 * the remaster's OUTFIT_VCI carries its own shading in its textures, so
+	 * the HD catsuit is matte where the classic one glints. Named here, in
+	 * the manual and in the log rather than faked: inventing a specular term
+	 * would be inventing a look, and the remaster's own picture is the one
+	 * this stage is trying to draw. */
+	if (HDLaraDrawActive())
+	{
+		HDLaraDrawFrame(mirror, false);
+		phd_PopMatrix();
+		bLaraUnderWater = 0;
+		phd_top = top;
+		phd_bottom = bottom;
+		phd_left = left;
+		phd_right = right;
+		return;
+	}
+
 	for (int i = 0; i < 15; i++)//skin
 	{
 		aMXPtr[M00] = lara_matrices[i * indices_count + M00];
@@ -585,7 +640,26 @@ static void DrawLara__5(ITEM_INFO* item, long mirror)
 	S_PrintShadow(obj->shadow_size, GLaraShadowframe, item);
 	CalculateObjectLightingLara();
 
-	for (int i = 0; i < 15; i++)//skin
+	/* #123 (S4-2): THE SEAM, and the one of the three that does not leave the
+	 * function. The diving suit is drawn out of TWO objects: her body, which
+	 * the wardrobe has as OUTFIT_SUBSUIT, and the two propulsion units below,
+	 * which are LARA_EXTRA_MESH1 turned by subsuit.XRot and which the
+	 * remaster's wardrobe has no model for.
+	 *
+	 * They are not a NODE of the body - they are a separate object on the
+	 * torso's matrix - so drawing them classically over an HD suit is not the
+	 * patchwork the object path refuses. It is two small classic meshes where
+	 * the alternative is a diving suit with no thrusters at all. Named in the
+	 * manual; the day the wardrobe grows a model for them this becomes one
+	 * more part.
+	 *
+	 * FALSE for the mesh bits: this variant does not read them either. */
+	const bool hd = HDLaraDrawActive();
+
+	if (hd)
+		HDLaraDrawFrame(mirror, false);
+
+	for (int i = 0; i < 15 && !hd; i++)//skin
 	{
 		aMXPtr[M00] = lara_matrices[i * indices_count + M00];
 		aMXPtr[M01] = lara_matrices[i * indices_count + M01];

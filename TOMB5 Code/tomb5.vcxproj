@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!-- Modified 2026 by ChrisChanSan for the TR5 Randomizer project (GPLv3). Changes are recorded in MODIFICATIONS.md and the git history. -->
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
@@ -190,6 +190,12 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">stdcpp17</LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|x64'">stdcpp17</LanguageStandard>
     </ClCompile>
+    <ClCompile Include="TOMB5\specific\hd\hd_light.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="TOMB5\specific\hd\hd_level.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
@@ -369,6 +375,7 @@
     <ClInclude Include="TOMB5\specific\hdscreen.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_bind.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_install.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_light.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_level.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_pagecache.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_render.h" />

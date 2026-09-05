@@ -34,11 +34,23 @@ far, file by file:
 | `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_room.hlsl` | the same file's GLSL `k_hd_vert` / `k_hd_frag` (135-236) | The lighting rule — room light is the **sum** `colour1 * roomShadow + colour2`, each byte over 255, and the pixel is `texel * light` — the alpha test living in the alpha pass **only** (an opaque tile's alpha is a gloss mask, and testing on it blanks whole floors), and the additive pass weighting its colour by the texture's alpha. Translated to HLSL for shader model 3; not a line of the GLSL is copied. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_pagecache.cpp` | `host/render/hd_pages.cpp`, `upload2` / `fill_missing_tiles` | Where a page is looked for when it is not in its own game's `TEX` folder — the sibling games next, `WHITE.DDS` last — and the rule that a page that cannot be found is painted **white** and never black. The upload itself is new: TROne hands the driver BC7 blocks in one texture array, and Direct3D 9 has neither. |
 | `TOMB5 Code/TOMB5/game/draw.cpp`, `DrawStaticObjects` | `host/render/game_renderer.cpp`, the baked-mesh rule (3722-3736) | The rule itself, not the code: a static mesh the remaster baked into the room art must not be drawn a second time (TROne's "double lantern" bug report). TROne suppresses by mesh pointer and needs an exception for a moveable that claims the same pointer; our seam skips one room's own `MESH_INFO` list, for which that exception cannot arise. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_render.cpp`, the water marks | `host/render/game_renderer.cpp` (2113-2188) | The **road**, not the code: the remaster's geometry carries no water flag, so the classic level's own water vertices are matched to it by room-local position through a hash of the packed int16 x/y/z, per room, once at level build - and which group owns which vertex is recovered by walking the group's index runs. TROne marks a vertex from the classic `RoomVertexMove` flag and from the room's underwater bit; ours marks it from `ROOMLET::nWVtx` and from the engine's own shimmer predicate, and carries three bits rather than one. |
 
 Those files name Todesengel's copyright in their own headers, beside our
 modification notice, as GPLv3 section 5(a) asks. More of TROne is expected in
 the later stages of that work (the mesh-bracket logic, the Lara composite);
 each will be entered here as it arrives.
+
+Not taken, and named here so the absence is on the record rather than an
+oversight: TROne's `hd.light_stage` (an A/B switch that replaces the baked room
+light with a flat ambient - a debugging pole for a renderer whose classic path
+is a fallback; ours has the classic path itself), its `hd.water_effect` (an
+invented wave and a per-pixel caustic, where this engine has Core's own
+`WaterTable` and reproduces that instead), and its HD sky dome (TR5 draws its
+sky procedurally and the HD walls paint over it). TROne has no fog of any kind
+- its `set_fog` is a logged stub and it parses `Trg::fog_boxes` only to drop
+them - so the distance fog and the fog bulbs in `hd_room.hlsl` have no
+counterpart there and are transcriptions of `specific/drawroom.cpp`.
 
 ## Libraries compiled into the binaries
 

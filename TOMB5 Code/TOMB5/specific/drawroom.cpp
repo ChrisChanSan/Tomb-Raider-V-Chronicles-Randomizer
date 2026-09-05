@@ -318,6 +318,80 @@ static bool IsShoreVert(FVECTOR* v)
 	return 0;
 }
 
+/* #123 (S2b): THE WATER MARKS OF ONE ROOM VERTEX.
+ *
+ * An HD room's geometry comes out of the .TRG and the .TRG marks nothing: no
+ * bit in a remaster vertex says "this one is the water surface" or "this one
+ * shimmers". The classic path knows both, and it knows them here - a roomlet
+ * keeps its water vertices first (nWVtx), and the shimmer predicate walks the
+ * neighbouring rooms through the portals with the three static functions
+ * above, which are static because nothing outside this file had any business
+ * with them.
+ *
+ * This is that business: hd_level.cpp asks once per level, for every classic
+ * room vertex, and carries the answer to the HD vertex at the same position.
+ * The answer is geometry - portals and vertex lists - and geometry does not
+ * change while a level runs. What CAN change is the room's flags, and that
+ * part is deliberately NOT baked: which of the three bits the shader looks at
+ * is decided per frame, in hd_level.cpp, out of r->flags.
+ *
+ *   bit 0  one of the roomlet's nWVtx water vertices - it gets the choppy
+ *          displacement (line 357 below)
+ *   bit 1  the answer of the "vertex sits on the water surface" branch
+ *          (line 463), without its height test - mist, reflection or shore
+ *   bit 2  the answer of the "whole room reflects" branch (line 455)
+ *
+ * The two expensive bits are only computed for a room whose flags could ever
+ * ask for them: IsMistVert and IsReflectionVert walk every vertex of every
+ * neighbour behind a downward portal, and doing that for all 240 rooms of a
+ * level would be a load time nobody would forgive. Guarded, ANDREA1 asks for
+ * it in four rooms.
+ */
+uchar aRoomVertexWaterMarks(ROOM_INFO* r, ROOMLET* roomlet, long vertexIndex)
+{
+	ROOM_INFO* saved;
+	FVECTOR pos;
+	float* v;
+	uchar bits;
+
+	if (!r || !roomlet || vertexIndex < 0 || vertexIndex >= roomlet->nVtx)
+		return 0;
+
+	v = roomlet->pSVtx + vertexIndex * 7;
+	pos.x = v[0];
+	pos.y = v[1];
+	pos.z = v[2];
+
+	bits = 0;
+
+	if (vertexIndex < roomlet->nWVtx)
+		bits |= 1;
+
+	saved = CurrentRoomPtr;
+	CurrentRoomPtr = r;
+
+	if (r->flags & ROOM_REFLECT && r->flags & ROOM_REFLECT_CEILING)
+	{
+		if (!IsMistVert(&pos) || abs(pos.y - r->minfloor) > 1536)
+			bits |= 4;
+	}
+	else if (r->flags & ROOM_MIST)
+	{
+		if (IsMistVert(&pos))
+			bits |= 2;
+	}
+	else if (r->flags & ROOM_REFLECT)
+	{
+		// IsReflectionVert is what sets has_water_neighbor, so it has to run
+		// first - the short circuit below keeps the classic order.
+		if (IsReflectionVert(&pos) || IsShoreVert(&pos) || has_water_neighbor)
+			bits |= 2;
+	}
+
+	CurrentRoomPtr = saved;
+	return bits;
+}
+
 void aRoomletTransformLight(float* verts, long nVerts, long nLights, long nWaterVerts, long nShoreVerts)
 {
 	ROOMLET_LIGHT* light;

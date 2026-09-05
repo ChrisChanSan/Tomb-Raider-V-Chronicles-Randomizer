@@ -1136,6 +1136,141 @@ entries, so nothing in `Language.cpp` changes. It takes effect at the next level
 start, and the code enforces that rather than promising it: the frame path tests
 a flag that only `HDLevelBuild` sets.
 
+#### Stage S2 — light and parity: the HD room joins the engine's own effects
+
+Stage S1 drew the remaster's rooms with the remaster's baked light and nothing
+else. Everything the engine computes per room vertex *on top of* the baked
+light — `specific/drawroom.cpp`, `aRoomletTransformLight`, lines 305-685 — was
+missing, so a torch did not light an HD wall, the distance fog stopped at the
+door and three option switches were dead in HD rooms. Stage S2 puts all of it
+back, as shader arithmetic.
+
+**S2a — two questions the plan asked, answered.**
+
+*TROne's `hd.light_stage`: not adopted.* It is not a factor and not an
+ambient blend. It is an A/B switch with three values
+(`host/render/game_renderer.cpp:486`): for rooms, stage 0 throws the baked
+`.TRG` light away and substitutes a flat `vec3(0.75)`, stage 1 and above use
+the measured sum, and stage 2 adds point lights to *objects* only — which is
+our stage S3, not this one. The flat pole is a debugging aid for a renderer
+whose classic path is a fallback nobody looks at; ours is the real port, so the
+comparison that matters is against the classic path, and `hd_enable` already
+gives it. Nothing carried over.
+
+*The sky rule: unchanged, and now verified rather than assumed.* Groups at or
+above the classic room count stay out of the room table, so TR5 keeps drawing
+its sky procedurally and the HD walls paint over it. Measured with
+`RoomProbe -groups`: the last group of every level is an origin-centred dome
+drawn entirely in the **alpha** pass and spanning the full int16 range —
+ANDREA1 group 242, x -17250..17250, y -3956..3956, 1580 alpha triangles; RICH1
+group 165 the same; JOBY4 group 137, ±4098. Real geometry, deliberately not
+drawn. TROne draws its dome instead (`hd_draw_sky`, camera-anchored, depth
+off), because its games have no procedural sky; that is a picture the user can
+ask for later, not a bug here.
+
+**S2b — the parity list.** Every contribution the classic path makes to a room
+vertex colour, and where it now lives:
+
+| contribution | classic | in HD | switched by |
+|---|---|---|---|
+| dynamic lights (torch, flare, muzzle flash, explosions) | `drawroom.cpp:415-436`, per vertex | pixel shader, up to 8 per room | — |
+| WaterTable choppy displacement | `:357-362`, per vertex | vertex shader, on the marked vertices | — |
+| shimmer / mist / reflection | `:451-517`, per vertex | vertex shader, selector per room | `tomb5.shimmer` |
+| underwater darkening | `:477-487` | vertex shader | — |
+| Red Alert gas rooms | `:503-517` | vertex shader | `tomb5.shimmer` |
+| underwater screen wobble | `:381-387`, per vertex | vertex shader, clip-space offset | — |
+| distance fog | `:519-524` | pixel shader | `tomb5.distance_fog` (3..30 blocks) |
+| the 128 overbright split | `:526-545` | pixel shader | — |
+| fog bulbs | `:547-676` | pixel shader, up to 6 per frame | `tomb5.fog` |
+
+Each one hangs off the very global the classic path reads, in one place
+(`specific/hd/hd_level.cpp`, `FillFrameLighting` and `FillRoomLighting`), so a
+switch cannot be on in one path and off in the other. `tomb5.fog` is the
+clearest case: it does not reach the shader at all — it gates
+`aBuildFogBulbList` in `game/draw.cpp:1011`, so with fog off the active bulb
+count is zero and the HD rooms lose their bulbs in the same frame the classic
+ones do.
+
+**The bridge between two brightness scales, and the one deliberate
+deviation.** The classic path builds a colour in 0..255 and then splits it: up
+to 128 it doubles the value into the diffuse colour, above 128 it pins the
+diffuse at 255 and puts the excess, halved, into the **specular** colour, which
+the fixed function pipeline adds after the texture modulation
+(`D3DRS_SPECULARENABLE` is on — `function_table.cpp:104` — except for the
+additive draw type, `polyinsert.cpp:72`). So a classic room surface covers a
+brightness of 0..2, but the *multiply* on the texture never passes 1 and the
+rest arrives as an add. The remaster's baked light covers the same 0..2
+(`colour1 + colour2`, TRForge over 144 `.TRG` files) as a straight multiply,
+and stage S1 drew it that way.
+
+Below 128 the two are the same line, and that is where the bridge is built:
+
+    f = light * 127.5        light = f * 2 / 255
+
+Every contribution is computed in the classic path's own units, in the same
+order, and converted back with that one line. **The split itself is not
+reproduced**, and that is the single place stage S2 leaves the classic path.
+The split is a hardware workaround — a way to fit a brightness of 2 into two
+bytes on a fixed function pipeline — and a shader has floats. Following it
+would have dulled every bright surface the remaster bakes: measured with
+`RoomProbe -paritycheck`, 20 of 384 sampled light channels in ANDREA1 room 19
+are above 1, 111 of 384 in room 69, and RICH1 room 12 reaches the full 2.0.
+Applying the split to those would turn `texel × 1.5` into `texel × 1 + 0.25` —
+a visibly flatter room, and a silent change to the picture stage S1 was already
+judged on. The fog bulbs are the exception that keeps the split, because for
+them it is not a workaround: a bulb is haze *between* the eye and the surface,
+so its density has to darken the multiply and its colour has to be added on
+top, or a bulb in front of a black wall would not glow.
+
+**Proved, not asserted.** `specific/hd/hd_light.cpp` holds two transcriptions
+of one vertex colour — one of `aRoomletTransformLight` with its longs and its
+truncations, one of the HLSL — and `RoomProbe -paritycheck` runs both over 128
+of a room's own vertices. It prints two numbers. The first is the
+**contribution**, in the classic path's own 0..255 before its split; measured
+on ANDREA1 room 19: nothing 0.000, one torch 0.997, distance fog 0.961, one fog
+bulb 0.000, underwater 0.000, shimmer 0.000, all of them together 0.997 —
+against a budget of 2, and the residue is the classic path truncating its float
+sum into a `long`. The second is the **final** brightness on a white texel,
+where the split shows: 73 of 255 with no contribution at all, 578 with the
+torch. That number is the deviation above, quantified rather than claimed.
+
+**What is per pixel and what is per vertex.** The dynamic lights, the fog
+bulbs and the distance fog are smooth functions of a position and are computed
+per pixel — a classic roomlet is a handful of vertices and a torch on a long
+wall was a Gouraud smear. The WaterTable effects stay per vertex, because the
+table is indexed by the position quantised to 64 x 64 x 128 units and per pixel
+would paint visible blocks where the classic path interpolates. One consequence
+is named here rather than found later: an HD room has far more vertices than a
+classic roomlet, so the water pattern's wavelength is finer than the classic
+one. Same table, same counter, same amplitude — a denser sampling lattice.
+
+**The water marks.** The `.TRG` marks nothing: no bit in a remaster vertex says
+"water surface" or "this one shimmers". The classic path knows both — a roomlet
+keeps its water vertices first (`ROOMLET::nWVtx`) and the shimmer predicate
+walks the neighbouring rooms through the portals (`drawroom.cpp:141-320`). So
+the answer is computed once, at level build, on the classic vertices
+(`aRoomVertexWaterMarks`, new, three lines of predicate and the guards that
+keep it cheap) and carried to the HD vertex at the same room-local position
+through a hash — the same road TROne takes for its own water flag
+(`game_renderer.cpp:2127-2188`). Three bits per vertex, in a fifth vertex
+element of four bytes; the vertex grows from 20 to 24. **Which** of the three
+the shader looks at is decided per frame, out of `r->flags`, because a room can
+flood while a level runs and its geometry cannot change.
+
+**Registers, and the one trap in them.** The two shaders are 262 (vs_3_0) and
+313 (ps_3_0) instruction slots, against the 512 shader model 3 guarantees; the
+device's actual figure is read at start-up and refused below 320 rather than
+letting `CreatePixelShader` fail with an HRESULT. `ps_3_0` has **no relative
+addressing of constant registers** — only `vs_3_0` has — so the light loop is
+unrolled against a compile-time maximum with the run-time count as a dynamic
+`if`. Written as a plain loop, fxc emulates `gLights[i]` with 32 `cmp`
+instructions per access: measured, about 140 instructions per light per pixel.
+The fog bulb loop stays dynamic because its body is long and its array is
+short. The full register table lives in `hd_room.hlsl` beside the code, and
+`hd_render.cpp` is its only writer.
+
+---
+
 ---
 
 ## Building this yourself

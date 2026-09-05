@@ -49,6 +49,111 @@ typedef struct _D3DMATRIX D3DMATRIX;
 // is no sorting heuristic and no depth bias anywhere in this file - that is
 // the whole point, and HDRenderSelfTest() is the proof, run at start-up.
 
+/* ------------------------------------------------------ the parity block --
+ *
+ * Everything the classic path does to a room vertex that the .TRG's baked
+ * light does not already contain (#123, stage S2b). The engine fills these in
+ * hd_level.cpp out of its own globals; the diagnostic tool fills them by hand.
+ * Nothing in here is Direct3D and nothing in here is engine - it is the list
+ * of what specific\drawroom.cpp, aRoomletTransformLight, computes per vertex,
+ * turned into shader constants.
+ *
+ * The two maxima are the shader's, not the engine's: ps_3_0 has no relative
+ * addressing of constant registers, so the light loop is unrolled against a
+ * compile time bound (hd_room.hlsl says why). Both are logged when they clip.
+ */
+#define HD_MAX_LIGHTS	8
+#define HD_MAX_BULBS	6
+
+// One entry of the engine's `dynamics` array, made room local and scaled the
+// way aBuildRoomletLights scales it (drawroom.cpp:952-978).
+struct HDLightSource
+{
+	float x, y, z;		// room local
+	float falloff;		// (dynamic->falloff >> 1) + (dynamic->falloff >> 3)
+	float r, g, b;		// 0..1
+};
+
+// One entry of ActiveFogBulbs, already in VIEW space - aBuildFogBulbList puts
+// it there once per frame (drawroom.cpp:738-745) and the shader wants it in
+// exactly that space, because the surface point arrives there too.
+struct HDFogBulb
+{
+	float x, y, z;
+	float rad;
+	float r, g, b;
+	float density;		// bulb->d, which is 1 / den
+};
+
+// Per frame, set once between HDRenderFrameBegin and the first room.
+struct HDFrameLighting
+{
+	float centerX, centerY;		// f_centerx, f_centery
+	float wibble;			// the engine's own counter, as a float
+	int cameraUnderwater;		// camera.underwater
+	float distanceFogStart;		// tomb5.distance_fog * 1024
+	const float* wibbleTable;	// vert_wibble_table, 32 floats
+	const HDFogBulb* bulbs;
+	int bulbCount;
+};
+
+// Per room. `waterTable` is 64 records of four bytes in WATERTAB order
+// (signed shimmer, signed choppy, unsigned random, unsigned abs) - the
+// engine's own WaterTable[room->MeshEffect] rather than a rebuilt one.
+struct HDRoomLighting
+{
+	float originX, originY, originZ;	// r->x, r->y, r->z
+	float surfaceY;				// minfloor - r->y, room local
+	int underwater;				// r->flags & ROOM_UNDERWATER
+	int choppy;				// run the choppy displacement at all
+	int surfaceGate;			// shimmer needs the vertex on surfaceY
+	int redAlert;				// the Red Alert gas branch
+	float sel1[4];				// which baked mark drives flags & 1
+	const void* waterTable;
+	const HDLightSource* lights;
+	int lightCount;
+};
+
+/* THE WATER MARKS. The .TRG marks nothing: no bit in a TrgVertex says "water
+ * surface" or "this one shimmers". The classic path knows, because a roomlet
+ * keeps its water vertices first (ROOMLET::nWVtx) and because the shimmer
+ * predicate walks the neighbouring rooms through the portals
+ * (drawroom.cpp:141-320). So the answer is computed ONCE, at level build, on
+ * the classic vertices, and carried to the HD vertices by position - the same
+ * road TROne takes for its own water flag (game_renderer.cpp:2127-2188, a per
+ * room hash of packed int16 x/y/z), and the reason that road is taken here is
+ * that it was measured to work there.
+ *
+ *   bit 0  the vertex is one of the roomlet's nWVtx water vertices - it gets
+ *          the choppy displacement
+ *   bit 1  the answer of the "vertex sits on the water surface" branch of the
+ *          shimmer, WITHOUT the height test: mist, reflection or shore
+ *   bit 2  the answer of the "whole room reflects" branch: the room carries
+ *          ROOM_REFLECT and ROOM_REFLECT_CEILING and this vertex passes
+ *
+ * Which of the three the shader looks at is a per room decision, taken per
+ * frame on the processor and handed over in HDRoomLighting::sel1 - the room
+ * flags can change while a level runs, the geometry cannot.
+ */
+/* A few of a group's own vertices, kept aside while the vertex buffer is
+ * filled - the .TRG dies at the end of HDRenderLevelBegin and the buffer is
+ * write only, so this is the only chance. The matrix proof reads the three
+ * positions; the parity proof (hd_light.h) reads all of it. */
+struct HDRenderSample
+{
+	short x, y, z;			// room local
+	unsigned char nx, ny, nz;	// biased by 127, as on disk
+	unsigned char c1[3], c2[3];	// the two baked light triples, R G B
+	unsigned char bits;		// the water marks that were found here
+};
+
+struct HDWaterMark
+{
+	short room;
+	short x, y, z;		// room local, classic units
+	unsigned char bits;
+};
+
 struct HDRenderStats
 {
 	int trgVersion;
@@ -61,6 +166,11 @@ struct HDRenderStats
 	int ranges;			// draw calls for a whole level, all rooms, all passes
 	int splitRanges;		// ranges the device's primitive limit forced apart
 	int index32;			// 1 = 32 bit index buffer
+	int waterMarks;			// classic marks handed in
+	int markedVertices;		// HD vertices a mark was found for
+	int markedChoppy;		// of those, the nWVtx set
+	int markedShimmer;		// of those, the surface shimmer set
+	int markedRoomShimmer;		// of those, the whole-room set
 	int biggestRangeTris;
 	int fallbackPageTris;		// layer 0 - drawn on the level's first page
 	double vertexBytes;
@@ -92,6 +202,13 @@ bool HDRenderReady();
 // what the diagnostic tool does).
 bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	bool managedPages, int threads, HDRenderStats* stats, const char** why);
+
+// The classic path's water marks for the level that is about to be built.
+// Call it before HDRenderLevelBegin; it keeps a copy of nothing, it only
+// remembers the pointer for the length of that call. Passing 0 (or never
+// calling it) leaves every HD vertex unmarked, which is what the diagnostic
+// tool does unless it is asked for water.
+void HDRenderSetWaterMarks(const HDWaterMark* marks, int count);
 void HDRenderLevelEnd();
 
 // --- the frame -------------------------------------------------------------
@@ -102,16 +219,18 @@ void HDRenderLevelEnd();
 // them is the first source of garbage on the screen, so the list is not a
 // judgement call: the states are read back from the device and written back
 // unchanged.
-void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection);
+void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
+	const HDFrameLighting* frame = 0);
 void HDRenderFrameEnd();
 
 // One room, three passes, world matrix as the classic path would set it (the
 // room's origin translation). False when the group is missing or empty - the
 // caller then draws that room the classic way.
-bool HDRenderRoom(int group, const D3DMATRIX* world);
+bool HDRenderRoom(int group, const D3DMATRIX* world, const HDRoomLighting* lighting = 0);
 
 // The same for a single pass; only the diagnostic tool needs it.
-bool HDRenderRoomPass(int group, int pass, const D3DMATRIX* world);
+bool HDRenderRoomPass(int group, int pass, const D3DMATRIX* world,
+	const HDRoomLighting* lighting = 0);
 
 int HDRenderGroupCount();
 int HDRenderGroupTriangles(int group, int pass);	// pass < 0 = all three
@@ -126,6 +245,9 @@ int HDRenderGroupRanges(int group, int pass);
 #define HD_RENDER_SAMPLES 128
 int HDRenderGroupSampleCount(int group);
 int HDRenderGroupSamples(int group, short* xyz, int maxVerts);
+// The same samples with their normals, their baked light and their water
+// marks - what the parity proof needs to run both formulas on real data.
+int HDRenderGroupSampleData(int group, HDRenderSample* out, int maxVerts);
 // The room-local bounding box of a group, from the vertices its own indices
 // name. False when the group draws nothing.
 bool HDRenderGroupBounds(int group, float* mins, float* maxs);
@@ -165,3 +287,9 @@ double HDRenderSelfTest(double mznear, double mzfar, double persp,
 // numbers HDRenderSelfTest compares, so the proof names them.
 void HDRenderDepthTruth(IDirect3DDevice9* device, unsigned long* zenable,
 	unsigned long* zfunc, unsigned long* zwrite, float* minZ, float* maxZ);
+
+// How many instruction slots the card allows a ps_3_0 shader. The room shader
+// is 313 of them and shader model 3 guarantees 512, but a card that reports
+// less would refuse CreatePixelShader with no useful message, so the number is
+// read and logged rather than assumed.
+unsigned long HDRenderPixelSlots();

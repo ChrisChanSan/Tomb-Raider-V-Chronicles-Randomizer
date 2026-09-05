@@ -4,6 +4,7 @@
 void InsertRoom(ROOM_INFO* r);
 void InsertRoomlet(ROOMLET* roomlet);
 void aRoomletTransformLight(float* verts, long nVerts, long nLights, long nWaterVerts, long nShoreVerts);
+uchar aRoomVertexWaterMarks(ROOM_INFO* r, ROOMLET* roomlet, long vertexIndex);
 void aBuildFogBulbList();
 void ProcessMeshData(long num_meshes);
 long aBuildRoomletLights(ROOMLET* r);

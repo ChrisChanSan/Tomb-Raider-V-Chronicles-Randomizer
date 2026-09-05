@@ -395,25 +395,53 @@ same key as every other setting
 | `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing below is read at all. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
 
-**What to expect in this stage, and what not to.** The rooms are HD; the people
-and the things in them are not, and the difference is meant to be visible. Two
-kinds of light do not exist in an HD room yet:
+**The light in an HD room now does everything it did before.** An earlier
+build drew the remaster's rooms with the remaster's baked light and nothing
+else, so a torch did not brighten an HD wall and three option switches were
+dead inside one. That is over: every effect the engine computes for a classic
+room vertex is computed for an HD room too, from the same numbers, at the same
+moment, and hanging off the same switch.
 
-- **nothing that moves.** A torch, a flare, a gunshot, an explosion — the room
-  keeps the light the remaster baked into it and does not brighten. So do the
-  distance fog, the water shimmer, the underwater wobble and the fog bulbs:
-  `Fog`, `Distance fog` and `Shimmer` in the options still work everywhere else
-  and do nothing inside an HD room. All of that is the next stage but one
-  (S2b), and it is the reason the plan puts it directly after this one.
-- **a room the remaster has nothing for stays classic**, on its own, room by
-  room. In ANDREA1 that is four rooms out of 242. A room the randomizer built
-  from scratch (a secret's new chamber) is in the same position and behaves the
-  same way: classic, without being asked.
+| What | Where you see it | The switch |
+|---|---|---|
+| Torch, flare, muzzle flash, explosions | any dark room you carry a flare into | — |
+| Distance fog | anywhere with a long view | *Distance fog*, page 2 |
+| Fog bulbs | the Rome levels — Colosseum, Trajan's Markets, the Base | *Fog* |
+| Water shimmer on a surface | any pool, and the mist rooms | *Shimmer* |
+| Underwater darkening and the screen wobble | swimming, anywhere | — |
+| Red Alert's green gas wobble | Red Alert! | *Shimmer* |
+
+Three things are worth knowing about how close it is. The **numbers** are the
+engine's own, proved: both formulas were written out on the processor and run
+against each other over a room's own vertices, and the worst disagreement is
+one part in 255 — the rounding the classic path does when it truncates its own
+sum. The **brightest surfaces** stay brighter than the classic engine would
+draw them: TR5 stops multiplying the texture at a certain point and starts
+adding instead, which is a trick from the days of fixed graphics hardware, and
+the HD path keeps multiplying — which is how the remaster's own art is meant to
+be lit and how the HD rooms already looked before this change. And the **water
+pattern** is finer: the table is sampled once per vertex, and an HD room has
+far more vertices than a classic one. Same table, same speed, same strength — a
+denser grid.
+
+**What is still not HD.** The people and the things in the rooms: enemies,
+Lara, doors that open, pickups, vehicles. That is the next stage, and the
+difference is meant to be visible until then.
+
+**A room the remaster has nothing for stays classic**, on its own, room by
+room. In ANDREA1 that is four rooms out of 242. A room the randomizer built
+from scratch (a secret's new chamber) is in the same position and behaves the
+same way: classic, without being asked.
 
 One thing that will look wrong if you go looking for it: a static object you
 destroy — a vase, a crate — disappears from the game but not from the room's
 art, because that art is one baked piece. It belongs to the stage that draws
 objects.
+
+The sky stays the engine's own. TR5 draws it procedurally, before the rooms and
+without depth, and the HD walls paint over it exactly as the classic ones did.
+The remaster keeps a sky dome of its own in the same file — one extra group per
+level, measured — and it is deliberately not drawn.
 
 **The log.** With `-log`, `log.txt` gets a block of `HDLOG` lines per level.
 The ones worth reading:
@@ -425,8 +453,12 @@ HDLOG room=66 group=66 tris=0/0/0 ranges=0 statics=0 hd=0 reason=empty_group
 HDLOG level=ANDREA1 built ms=1180 rooms=242 hd=238 classic=4 sky_groups=1 ...
 HDLOG level=ANDREA1 pages named=179 distinct=179 from5=179 ... mib=279.9 ...
 HDLOG level=ANDREA1 statics suppressed=255 kept=0 (in 238 HD rooms, 4 classic)
+HDLOG level=ANDREA1 water marks=... rooms=...
+HDLOG level=ANDREA1 water stamped=... choppy=... shimmer=... ps_slots=...
 HDLOG matrixcheck level=ANDREA1 room=12 group=12 samples=128 used=85 behind=43
       maxdx=0.00017 maxdy=0.00009 maxdz=0.000000000 persp=572.0 center=960,540
+HDLOG frame rooms=17 calls=131 dropped=0 bulbs=0 fog_start=12288 wibble=930
+      cam_uw=0 shimmer=1
 ```
 
 `hd=1/0` per room with its reason is the whole decision table; `built ms=` is
@@ -434,6 +466,16 @@ what the HD side added to the loading time; `matrixcheck` is the engine
 comparing its own vertex transform with the matrix it hands the graphics card,
 over 128 of the room's own vertices — `maxdx`/`maxdy` are pixels and they have
 to stay far below 1, or an HD wall would stand beside its own floor.
+
+The two `water` lines say how many of the classic path's water vertices were
+found again in the remaster's geometry — `marks` is what the classic level
+offered, `stamped` is what was matched. The `frame` line repeats the option
+state the HD rooms are actually drawing with, so a "the fog does nothing"
+report can be answered from the log: `fog_start` is `Distance fog` times 1024,
+`bulbs` is zero whenever `Fog` is off, `shimmer` is the switch itself. And a
+`clipped` line appears only if a room ever wanted more than eight dynamic
+lights or more than six fog bulbs at once — if you never see one, the shader's
+maxima never bit.
 
 If the HD path refuses, it says so in one line and the game runs on classic —
 no error box, no changed picture:

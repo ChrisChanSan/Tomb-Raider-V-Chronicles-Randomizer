@@ -23,6 +23,14 @@
 #include "../../tomb5/tomb5.h"
 #include "../../game/objects.h"
 #include "../../game/control.h"		// number_rooms, room
+#include "../../game/camera.h"		// camera.underwater
+#include "../../game/effect2.h"		// dynamics, wibble
+#include "../../game/gameflow.h"		// gfLevelId
+#include "../drawroom.h"			// ActiveFogBulbs, aRoomVertexWaterMarks
+#include "../gamemain.h"			// WaterTable, vert_wibble_table
+#include "hd_light.h"
+
+#include <vector>
 
 // The generated slot name table in hd_bind.cpp has to be the enum, entry for
 // entry. This is the line that notices when a slot was added to objects.h and
@@ -57,6 +65,13 @@ namespace
 
 	unsigned char g_room_hd[HD_MAX_ROOMS];
 	int g_room_count = 0;
+
+	// Stage S2b. The marks are built once per level out of the classic
+	// roomlets and handed to the renderer; the two counters say once per
+	// level whether the shader's fixed maxima ever bit.
+	std::vector<HDWaterMark> g_water_marks;
+	int g_clipped_lights = 0;
+	int g_clipped_bulbs = 0;
 
 	FrameRoom g_frame[HD_MAX_FRAME];
 	int g_frame_count = 0;
@@ -256,6 +271,211 @@ namespace
 	}
 }
 
+/* --------------------------------------------------------- stage S2b -- */
+
+/* THE WATER MARKS, once per level.
+ *
+ * Every classic room vertex is asked the three questions drawroom.cpp answers
+ * per frame (aRoomVertexWaterMarks), and every vertex that answers yes to any
+ * of them is written down with its room local position. hd_render.cpp then
+ * finds the HD vertex at the same position while it fills the vertex buffer.
+ *
+ * Cheap by construction: a room with none of the water flags and no roomlet
+ * water vertices produces nothing, and that is nearly every room. The
+ * expensive predicates behind the two shimmer bits are guarded inside
+ * aRoomVertexWaterMarks by the room's own flags.
+ */
+static void BuildWaterMarks()
+{
+	int water_rooms = 0;
+
+	g_water_marks.clear();
+
+	for (int i = 0; i < number_rooms && i < HD_MAX_ROOMS; i++)
+	{
+		ROOM_INFO* r = &room[i];
+
+		if (!r->pRoomlets || r->nRoomlets <= 0)
+			continue;
+
+		const bool interesting = (r->flags & (ROOM_MIST | ROOM_REFLECT)) != 0;
+		int here = 0;
+
+		for (int n = 0; n < r->nRoomlets; n++)
+		{
+			ROOMLET* roomlet = &r->pRoomlets[n];
+
+			if (!roomlet->pSVtx)
+				continue;
+
+			// Without a water flag only the nWVtx bit can ever be set, so
+			// only those vertices need looking at.
+			const long last = interesting ? roomlet->nVtx : roomlet->nWVtx;
+
+			for (long v = 0; v < last; v++)
+			{
+				const uchar bits = aRoomVertexWaterMarks(r, roomlet, v);
+
+				if (!bits)
+					continue;
+
+				const float* xyz = roomlet->pSVtx + v * 7;
+				HDWaterMark mark;
+
+				mark.room = (short)i;
+				mark.x = (short)xyz[0];
+				mark.y = (short)xyz[1];
+				mark.z = (short)xyz[2];
+				mark.bits = bits;
+				g_water_marks.push_back(mark);
+				here++;
+			}
+		}
+
+		if (here)
+			water_rooms++;
+	}
+
+	if (!g_water_marks.empty())
+		HDRenderSetWaterMarks(&g_water_marks[0], (int)g_water_marks.size());
+	else
+		HDRenderSetWaterMarks(0, 0);
+
+	Log("HDLOG level=%s water marks=%d rooms=%d", g_stem,
+		(int)g_water_marks.size(), water_rooms);
+}
+
+/* WHAT THE WHOLE FRAME SHARES. Every one of these is the engine's own global,
+ * read where the classic path reads it: the fog bulb list that draw.cpp built
+ * behind `if (tomb5.fog)` - so with fog off the count is 0 and the HD rooms
+ * lose their bulbs at exactly the same moment the classic ones do - the
+ * distance in blocks out of the options, the wibble counter, and
+ * camera.underwater for the screen wobble. */
+static void FillFrameLighting(HDFrameLighting& out, HDFogBulb* bulbs)
+{
+	memset(&out, 0, sizeof(out));
+
+	out.centerX = g_centerx;
+	out.centerY = g_centery;
+	out.wibble = (float)wibble;
+	out.cameraUnderwater = camera.underwater ? 1 : 0;
+	out.distanceFogStart = (float)tomb5.distance_fog * 1024.0f;
+	out.wibbleTable = vert_wibble_table;
+	out.bulbs = bulbs;
+	out.bulbCount = 0;
+
+	for (int i = 0; i < NumActiveFogBulbs && i < 64; i++)
+	{
+		const FOGBULB_STRUCT& in = ActiveFogBulbs[i];
+
+		if (!in.visible)
+			continue;
+
+		if (out.bulbCount >= HD_MAX_BULBS)
+		{
+			g_clipped_bulbs++;
+			break;
+		}
+
+		HDFogBulb& b = bulbs[out.bulbCount++];
+
+		b.x = in.pos.x;
+		b.y = in.pos.y;
+		b.z = in.pos.z;
+		b.rad = in.rad;
+		b.r = in.r;
+		b.g = in.g;
+		b.b = in.b;
+		b.density = in.d;
+	}
+}
+
+/* WHAT ONE ROOM ADDS. The dynamic lights are culled against the room's own
+ * bounding box with the very test aBuildRoomletLights uses on a roomlet's
+ * (drawroom.cpp:967-969) - x and z only, as there. A room is bigger than a
+ * roomlet, so this lets a light through that the classic path would have
+ * dropped for one roomlet and kept for the next; the falloff test inside the
+ * shader is a real distance test and throws it out again, so the pixel is the
+ * same and only the constant upload is one longer.
+ *
+ * The shimmer branch of drawroom.cpp:451-475 is a decision about the ROOM,
+ * and it is taken here, per frame, because r->flags can change while a level
+ * runs (a room that floods). What the shader gets is which of the three baked
+ * marks to look at. All three selectors are zero while tomb5.shimmer is off -
+ * that is the option switch, in one place, for the HD path.
+ */
+static void FillRoomLighting(int roomIndex, HDRoomLighting& out, HDLightSource* lights)
+{
+	ROOM_INFO* r = &room[roomIndex];
+	float mins[3], maxs[3];
+
+	memset(&out, 0, sizeof(out));
+
+	out.originX = (float)r->x;
+	out.originY = (float)r->y;
+	out.originZ = (float)r->z;
+	out.surfaceY = (float)(r->minfloor - r->y);
+	out.underwater = (r->flags & ROOM_UNDERWATER) ? 1 : 0;
+	out.choppy = 1;
+	out.lights = lights;
+	out.lightCount = 0;
+
+	const int effect = (int)r->MeshEffect;
+	out.waterTable = (effect >= 0 && effect < 22) ? (const void*)WaterTable[effect] : 0;
+
+	if (tomb5.shimmer)
+	{
+		if (r->flags & ROOM_REFLECT && r->flags & ROOM_REFLECT_CEILING)
+		{
+			if (gfLevelId == LVL5_RED_ALERT)
+				out.redAlert = 1;
+			else
+				out.sel1[2] = 1.0f;	// the whole-room mark, no height test
+		}
+		else
+		{
+			out.sel1[1] = 1.0f;	// the surface mark ...
+			out.surfaceGate = 1;	// ... and the height test that goes with it
+		}
+	}
+
+	if (!HDRenderGroupBounds(roomIndex, mins, maxs))
+		return;
+
+	for (int i = 0; i < 32; i++)
+	{
+		DYNAMIC* dynamic = &dynamics[i];
+
+		if (!dynamic->on)
+			continue;
+
+		const float dx = (float)dynamic->x - r->posx;
+		const float dy = (float)dynamic->y - r->posy;
+		const float dz = (float)dynamic->z - r->posz;
+		const float falloff = float((dynamic->falloff >> 1) + (dynamic->falloff >> 3));
+
+		if (!(dx - falloff <= maxs[0] && falloff + dx >= mins[0] &&
+			dz - falloff <= maxs[2] && falloff + dz >= mins[2]))
+			continue;
+
+		if (out.lightCount >= HD_MAX_LIGHTS)
+		{
+			g_clipped_lights++;
+			break;
+		}
+
+		HDLightSource& l = lights[out.lightCount++];
+
+		l.x = dx;
+		l.y = dy;
+		l.z = dz;
+		l.falloff = falloff;
+		l.r = (float)dynamic->r * (1.0f / 255.0f);
+		l.g = (float)dynamic->g * (1.0f / 255.0f);
+		l.b = (float)dynamic->b * (1.0f / 255.0f);
+	}
+}
+
 bool HDEnabled()
 {
 	// The guard. With hd_enable off nothing below this line ever runs, no
@@ -366,6 +586,10 @@ void HDLevelBuild()
 
 	const DWORD started = GetTickCount();
 
+	g_clipped_lights = 0;
+	g_clipped_bulbs = 0;
+	BuildWaterMarks();
+
 	if (!HDRenderLevelBegin(HDInstallRoot(), g_stem, number_rooms, false,
 		DecodeThreads(), &stats, &why))
 	{
@@ -375,6 +599,15 @@ void HDLevelBuild()
 	}
 
 	const DWORD build_ms = GetTickCount() - started;
+
+	// The marks were only borrowed for the length of that call.
+	HDRenderSetWaterMarks(0, 0);
+	g_water_marks.clear();
+
+	Log("HDLOG level=%s water stamped=%d choppy=%d shimmer=%d room_shimmer=%d "
+		"ps_slots=%lu",
+		g_stem, stats.markedVertices, stats.markedChoppy, stats.markedShimmer,
+		stats.markedRoomShimmer, HDRenderPixelSlots());
 
 	g_room_count = number_rooms;
 
@@ -547,14 +780,22 @@ void HDFrameDraw()
 		return;
 
 	D3DMATRIX projection;
+	HDFrameLighting frame;
+	HDFogBulb bulbs[HD_MAX_BULBS];
+	HDRoomLighting lighting;
+	HDLightSource lights[HD_MAX_LIGHTS];
 
 	HDRenderMakeProjection((double)g_persp, (double)g_centerx, (double)g_centery,
 		(double)g_za, (double)g_zb, &projection);
 
-	HDRenderFrameBegin(&kIdentity, &projection);
+	FillFrameLighting(frame, bulbs);
+	HDRenderFrameBegin(&kIdentity, &projection, &frame);
 
 	for (int i = 0; i < g_frame_count; i++)
-		HDRenderRoom(g_frame[i].room, &g_frame[i].world);
+	{
+		FillRoomLighting(g_frame[i].room, lighting, lights);
+		HDRenderRoom(g_frame[i].room, &g_frame[i].world, &lighting);
+	}
 
 	HDRenderFrameEnd();
 
@@ -562,8 +803,21 @@ void HDFrameDraw()
 	{
 		g_matrix_checked = true;
 		MatrixCheck(g_frame[0].room, g_frame[0].room, g_frame[0].world, projection);
-		Log("HDLOG frame rooms=%d calls=%d dropped=%d",
-			g_frame_count, HDRenderDrawCalls(), g_frame_dropped);
+		Log("HDLOG frame rooms=%d calls=%d dropped=%d bulbs=%d fog_start=%.0f "
+			"wibble=%d cam_uw=%d shimmer=%d",
+			g_frame_count, HDRenderDrawCalls(), g_frame_dropped,
+			frame.bulbCount, frame.distanceFogStart, (int)wibble,
+			frame.cameraUnderwater, tomb5.shimmer ? 1 : 0);
+	}
+
+	if (gLogEnabled && (g_clipped_lights || g_clipped_bulbs))
+	{
+		// Once per level, not once per frame: the two numbers say whether the
+		// shader's fixed maxima ever had to turn a light or a bulb away.
+		Log("HDLOG level=%s clipped lights=%d bulbs=%d (maxima %d / %d)",
+			g_stem, g_clipped_lights, g_clipped_bulbs, HD_MAX_LIGHTS, HD_MAX_BULBS);
+		g_clipped_lights = 0;
+		g_clipped_bulbs = 0;
 	}
 
 	g_frame_count = 0;

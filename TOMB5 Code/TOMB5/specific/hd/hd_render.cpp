@@ -36,6 +36,7 @@
 #include <chrono>
 #include <cstring>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace
@@ -59,6 +60,12 @@ namespace
 		unsigned char nx, ny, nz, layer;
 		unsigned char c1b, c1g, c1r, u;		// D3DCOLOR order: B, G, R, A
 		unsigned char c2b, c2g, c2r, v;
+		/* Stage S2b's four flag bytes - see HDWaterMark in the header. They
+		 * are 0 or 1, not 0 or 255: D3DDECLTYPE_UBYTE4 is UNnormalised, so
+		 * whatever is written here is what the shader adds up. The fourth is
+		 * the constant 1, which lets a selector address a whole room without
+		 * a mark on every vertex - see gSel1 in hd_room.hlsl. */
+		unsigned char wChoppy, wShimmer, wRoomShimmer, wSpare;
 	};
 
 	// One draw call: a run of indices that all name the same page.
@@ -72,7 +79,7 @@ namespace
 	struct HDGroup
 	{
 		std::vector<HDRange> pass[3];
-		std::vector<short> samples;	// 3 shorts per vertex, room local
+		std::vector<HDRenderSample> samples;
 		unsigned int triangles[3] = { 0, 0, 0 };
 		float mins[3] = { 0, 0, 0 };
 		float maxs[3] = { 0, 0, 0 };
@@ -138,6 +145,28 @@ namespace
 	SavedState g_saved;
 	bool g_in_frame = false;
 	int g_draw_calls = 0;
+
+	/* --- stage S2b ----------------------------------------------------- */
+
+	// WATERTAB (global	ypes.h:2485). Two signed bytes and two unsigned ones,
+	// and the mixture is not an accident: init_water_table writes -3 into the
+	// unsigned `abs` (gamemain.cpp:79), aRoomletTransformLight reads it back
+	// as 253, and the shimmer is 253 brighter for that table row. Copied, not
+	// corrected.
+	struct HDWaterTab
+	{
+		signed char shimmer;
+		signed char choppy;
+		unsigned char random;
+		unsigned char abs;
+	};
+
+	const HDWaterMark* g_marks = 0;
+	int g_mark_count = 0;
+
+	const void* g_water_table_up = 0;	// what is on the card right now
+	int g_frame_bulbs = 0;
+	bool g_frame_has_light = false;
 
 	const float kIdentity[16] =
 	{
@@ -207,6 +236,162 @@ namespace
 		g_device->SetVertexShaderConstantF((UINT)reg, columns, 4);
 	}
 
+	/* The classic D3DMView for this room, as three columns rather than four.
+	 * The shader declares it float4x3 and only wants the xyz of the product;
+	 * a fourth register here would land on one of fxc's own def constants and
+	 * overwrite a literal - which is silent, and looks like a maths error
+	 * three files away. */
+	void set_worldview_constant(const float* rowMajor)
+	{
+		float columns[12];
+
+		for (int col = 0; col < 3; col++)
+			for (int row = 0; row < 4; row++)
+				columns[col * 4 + row] = rowMajor[row * 4 + col];
+
+		g_device->SetVertexShaderConstantF(5, columns, 3);
+	}
+
+	/* --- the parity constants ------------------------------------------
+	 *
+	 * The register table lives in hd_room.hlsl and is repeated nowhere:
+	 * these two functions are the only writers, and they write every one of
+	 * their registers on every call - a constant left over from the room
+	 * before is the whole reason this is not done "only when it changes",
+	 * with the single exception of the 64 register water table, which is a
+	 * kilobyte and is keyed on the pointer the engine hands over. */
+	void apply_room_lighting(const HDRoomLighting* r)
+	{
+		float origin[4] = { 0, 0, 0, -1.0e9f };	// a surface no vertex sits on
+		float mode[4] = { 0, 0, 0, 0 };
+		float sel[4] = { 0, 0, 0, 0 };
+		float counts[4] = { 0, (float)g_frame_bulbs, 0, 0 };
+		float lights[HD_MAX_LIGHTS * 2 * 4] = { 0 };
+		const void* table = 0;
+
+		if (r)
+		{
+			origin[0] = r->originX;
+			origin[1] = r->originY;
+			origin[2] = r->originZ;
+			origin[3] = r->surfaceY;
+
+			mode[0] = r->underwater ? 1.0f : 0.0f;
+			mode[1] = r->choppy ? 1.0f : 0.0f;
+			mode[2] = r->surfaceGate ? 1.0f : 0.0f;
+			mode[3] = r->redAlert ? 1.0f : 0.0f;
+
+			sel[0] = r->sel1[0];
+			sel[1] = r->sel1[1];
+			sel[2] = r->sel1[2];
+			sel[3] = r->sel1[3];
+
+			int count = r->lights ? r->lightCount : 0;
+
+			if (count > HD_MAX_LIGHTS)
+				count = HD_MAX_LIGHTS;
+
+			for (int i = 0; i < count; i++)
+			{
+				const HDLightSource& l = r->lights[i];
+
+				lights[i * 8 + 0] = l.x;
+				lights[i * 8 + 1] = l.y;
+				lights[i * 8 + 2] = l.z;
+				lights[i * 8 + 3] = l.falloff;
+				lights[i * 8 + 4] = l.r;
+				lights[i * 8 + 5] = l.g;
+				lights[i * 8 + 6] = l.b;
+				lights[i * 8 + 7] = l.falloff != 0 ? 1.0f / l.falloff : 0.0f;
+			}
+
+			counts[0] = (float)count;
+			table = r->waterTable;
+		}
+
+		if (table != g_water_table_up)
+		{
+			float rows[64 * 4];
+			const HDWaterTab* in = (const HDWaterTab*)table;
+
+			for (int i = 0; i < 64; i++)
+			{
+				rows[i * 4 + 0] = in ? (float)in[i].shimmer : 0.0f;
+				rows[i * 4 + 1] = in ? (float)in[i].choppy : 0.0f;
+				rows[i * 4 + 2] = in ? (float)in[i].random : 0.0f;
+				rows[i * 4 + 3] = in ? (float)in[i].abs : 0.0f;
+			}
+
+			g_device->SetVertexShaderConstantF(32, rows, 64);
+			g_water_table_up = table;
+		}
+
+		g_device->SetVertexShaderConstantF(10, origin, 1);
+		g_device->SetVertexShaderConstantF(11, mode, 1);
+		g_device->SetVertexShaderConstantF(12, sel, 1);
+		g_device->SetPixelShaderConstantF(17, counts, 1);
+		g_device->SetPixelShaderConstantF(20, lights, HD_MAX_LIGHTS * 2);
+	}
+
+	void apply_frame_lighting(const HDFrameLighting* f)
+	{
+		float screen[4] = { 1, 1, 0, 0 };
+		float fog[4] = { 1.0e30f, 0, 0, 0 };	// nothing is ever behind it
+		float wibble[32 * 4] = { 0 };
+		float bulbs[HD_MAX_BULBS * 2 * 4] = { 0 };
+
+		g_frame_bulbs = 0;
+		g_frame_has_light = f != 0;
+
+		if (f)
+		{
+			screen[0] = f->centerX != 0 ? f->centerX : 1.0f;
+			screen[1] = f->centerY != 0 ? f->centerY : 1.0f;
+			screen[2] = f->wibble;
+			screen[3] = f->cameraUnderwater ? 1.0f : 0.0f;
+
+			if (f->distanceFogStart > 0)
+			{
+				fog[0] = f->distanceFogStart;
+				fog[1] = 255.0f / f->distanceFogStart;
+			}
+
+			if (f->wibbleTable)
+				for (int i = 0; i < 32; i++)
+					wibble[i * 4] = f->wibbleTable[i];
+
+			int count = f->bulbs ? f->bulbCount : 0;
+
+			if (count > HD_MAX_BULBS)
+				count = HD_MAX_BULBS;
+
+			for (int j = 0; j < count; j++)
+			{
+				const HDFogBulb& b = f->bulbs[j];
+
+				bulbs[j * 8 + 0] = b.x;
+				bulbs[j * 8 + 1] = b.y;
+				bulbs[j * 8 + 2] = b.z;
+				bulbs[j * 8 + 3] = b.rad;
+				bulbs[j * 8 + 4] = b.r;
+				bulbs[j * 8 + 5] = b.g;
+				bulbs[j * 8 + 6] = b.b;
+				bulbs[j * 8 + 7] = b.density;
+			}
+
+			g_frame_bulbs = count;
+		}
+
+		g_device->SetVertexShaderConstantF(9, screen, 1);
+		g_device->SetVertexShaderConstantF(96, wibble, 32);
+		g_device->SetPixelShaderConstantF(16, fog, 1);
+		g_device->SetPixelShaderConstantF(40, bulbs, HD_MAX_BULBS * 2);
+
+		// And a room with no lighting of its own: neutral, never the last
+		// room's.
+		apply_room_lighting(0);
+	}
+
 	void release_buffers()
 	{
 		if (g_vb) { g_vb->Release(); g_vb = 0; }
@@ -258,6 +443,18 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		return false;
 	}
 
+	/* The room shader is 313 ps_3_0 instruction slots. Shader model 3
+	 * guarantees 512 and every card that reports ps_3_0 has to, but a device
+	 * that answers less would fail CreatePixelShader below with nothing but
+	 * an HRESULT, so the number is read here and named in the log instead. */
+	if (g_caps.PS20Caps.NumInstructionSlots &&
+		g_caps.PS20Caps.NumInstructionSlots < 320)
+	{
+		*why = "the device allows too few pixel shader instruction slots";
+		g_device = 0;
+		return false;
+	}
+
 	if (!(g_caps.DeclTypes & D3DDTCAPS_UBYTE4))
 	{
 		*why = "the device has no UBYTE4 vertex element";
@@ -271,6 +468,7 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		{ 0,  8, D3DDECLTYPE_UBYTE4,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0 },
 		{ 0, 12, D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR,    0 },
 		{ 0, 16, D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR,    1 },
+		{ 0, 20, D3DDECLTYPE_UBYTE4,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },
 		D3DDECL_END()
 	};
 
@@ -320,6 +518,12 @@ bool HDRenderReady()
 }
 
 /* ---------------------------------------------------------------- level -- */
+
+void HDRenderSetWaterMarks(const HDWaterMark* marks, int count)
+{
+	g_marks = count > 0 ? marks : 0;
+	g_mark_count = marks ? count : 0;
+}
 
 bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	bool managedPages, int threads, HDRenderStats* stats, const char** why)
@@ -409,6 +613,61 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		(int)pages.size(), managedPages, threads, &page_stats, why))
 		return false;
 
+	/* --- which group owns which vertex --------------------------------
+	 *
+	 * Only needed for the water marks, and only built when there are any. A
+	 * .TRG names its vertices per group through the index runs and nowhere
+	 * else, so the ownership is read out of the runs - the same walk TROne
+	 * makes for its own water flag (game_renderer.cpp:2113-2124). A vertex
+	 * named by two groups keeps the last one; the marks are per room and a
+	 * shared vertex sits on a portal, where both answers agree. */
+	std::vector<int> vertex_group;
+	std::unordered_map<unsigned long long, unsigned char> mark_map;
+
+	if (g_marks && g_mark_count > 0)
+	{
+		vertex_group.assign((size_t)g_vertex_count, -1);
+
+		for (size_t g = 0; g < trg.groups.size(); g++)
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+				for (int pass = 0; pass < 3; pass++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+					for (unsigned int at = 0; at < run.count; at++)
+					{
+						const unsigned int at_index = run.start + at;
+
+						if (at_index >= trg.indices.size())
+							break;
+
+						const unsigned int v = trg.indices[at_index];
+
+						if (v < (unsigned int)g_vertex_count)
+							vertex_group[v] = (int)g;
+					}
+				}
+
+		mark_map.reserve((size_t)g_mark_count * 2);
+
+		for (int i = 0; i < g_mark_count; i++)
+		{
+			const HDWaterMark& m = g_marks[i];
+			const unsigned long long key =
+				((unsigned long long)(unsigned short)m.room << 48) |
+				((unsigned long long)(unsigned short)m.x << 32) |
+				((unsigned long long)(unsigned short)m.y << 16) |
+				(unsigned long long)(unsigned short)m.z;
+
+			mark_map[key] |= m.bits;
+		}
+	}
+
+	int marked_vertices = 0;
+	int marked_choppy = 0;
+	int marked_shimmer = 0;
+	int marked_room_shimmer = 0;
+
 	/* --- the vertex buffer -------------------------------------------- */
 	if (FAILED(g_device->CreateVertexBuffer((UINT)(g_vertex_count * (int)sizeof(HDVertex)),
 		D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT, &g_vb, 0)))
@@ -450,6 +709,35 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			out[i].c2g = in.colour2[1];
 			out[i].c2r = in.colour2[0];
 			out[i].v = in.v;
+
+			unsigned char bits = 0;
+
+			if (!vertex_group.empty() && vertex_group[(size_t)i] >= 0)
+			{
+				const unsigned long long key =
+					((unsigned long long)(unsigned short)vertex_group[(size_t)i] << 48) |
+					((unsigned long long)(unsigned short)in.x << 32) |
+					((unsigned long long)(unsigned short)in.y << 16) |
+					(unsigned long long)(unsigned short)in.z;
+
+				std::unordered_map<unsigned long long, unsigned char>::const_iterator
+					found = mark_map.find(key);
+
+				if (found != mark_map.end())
+					bits = found->second;
+			}
+
+			out[i].wChoppy = (unsigned char)(bits & 1);
+			out[i].wShimmer = (unsigned char)((bits >> 1) & 1);
+			out[i].wRoomShimmer = (unsigned char)((bits >> 2) & 1);
+			out[i].wSpare = 1;
+
+			if (bits)
+				marked_vertices++;
+
+			marked_choppy += out[i].wChoppy;
+			marked_shimmer += out[i].wShimmer;
+			marked_room_shimmer += out[i].wRoomShimmer;
 		}
 
 		g_vb->Unlock();
@@ -613,7 +901,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				const size_t want = span < (size_t)HD_RENDER_SAMPLES
 					? span : (size_t)HD_RENDER_SAMPLES;
 
-				group.samples.reserve(want * 3);
+				group.samples.reserve(want);
 
 				for (size_t s = 0; s < want; s++)
 				{
@@ -623,9 +911,38 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						continue;
 
 					const trf::remaster::TrgVertex& v = trg.vertices[index];
-					group.samples.push_back(v.x);
-					group.samples.push_back(v.y);
-					group.samples.push_back(v.z);
+					HDRenderSample sample;
+
+					sample.x = v.x;
+					sample.y = v.y;
+					sample.z = v.z;
+					sample.nx = v.nx;
+					sample.ny = v.ny;
+					sample.nz = v.nz;
+					sample.c1[0] = v.colour1[0];
+					sample.c1[1] = v.colour1[1];
+					sample.c1[2] = v.colour1[2];
+					sample.c2[0] = v.colour2[0];
+					sample.c2[1] = v.colour2[1];
+					sample.c2[2] = v.colour2[2];
+					sample.bits = 0;
+
+					if (!vertex_group.empty())
+					{
+						const unsigned long long key =
+							((unsigned long long)(unsigned short)g << 48) |
+							((unsigned long long)(unsigned short)v.x << 32) |
+							((unsigned long long)(unsigned short)v.y << 16) |
+							(unsigned long long)(unsigned short)v.z;
+
+						std::unordered_map<unsigned long long, unsigned char>::const_iterator
+							found = mark_map.find(key);
+
+						if (found != mark_map.end())
+							sample.bits = found->second;
+					}
+
+					group.samples.push_back(sample);
 				}
 			}
 		}
@@ -683,6 +1000,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->vertices = g_vertex_count;
 		stats->indices = (int)sorted.size();
 		stats->index32 = g_index32 ? 1 : 0;
+		stats->waterMarks = g_mark_count;
+		stats->markedVertices = marked_vertices;
+		stats->markedChoppy = marked_choppy;
+		stats->markedShimmer = marked_shimmer;
+		stats->markedRoomShimmer = marked_room_shimmer;
 		stats->splitRanges = split_ranges;
 		stats->biggestRangeTris = biggest;
 		stats->fallbackPageTris = fallback_tris;
@@ -719,7 +1041,8 @@ void HDRenderLevelEnd()
 
 /* ---------------------------------------------------------------- frame -- */
 
-void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection)
+void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
+	const HDFrameLighting* frame)
 {
 	if (!HDRenderReady() || g_in_frame)
 		return;
@@ -788,6 +1111,12 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection)
 	g_device->SetSamplerState(0, D3DSAMP_MAXMIPLEVEL, 0);
 	g_device->SetSamplerState(0, D3DSAMP_MIPMAPLODBIAS, 0);
 	g_device->SetSamplerState(0, D3DSAMP_SRGBTEXTURE, FALSE);
+
+	/* The stage S2b constants. They are set here, inside the bracket, and
+	 * nowhere else: with hd_enable off this function is not reached and not
+	 * one SetShaderConstant is made. */
+	g_water_table_up = (const void*)~(size_t)0;	// force the first upload
+	apply_frame_lighting(frame);
 }
 
 void HDRenderFrameEnd()
@@ -844,13 +1173,16 @@ namespace
 			return;
 
 		/* gPass: x switches the alpha test on, y the additive weighting,
-		 * z is the room shadow (1 until stage S2's shadow maps). */
+		 * z is the room shadow (1 until shadow maps exist), w the specular
+		 * add - the classic path switches D3DRS_SPECULARENABLE off for its
+		 * additive draw type (polyinsert.cpp:72) and the overbright half of
+		 * the room colour goes off with it. */
 		const float constants[4] =
 		{
 			pass == 1 ? 1.0f : 0.0f,
 			pass == 2 ? 1.0f : 0.0f,
 			1.0f,
-			0.0f
+			pass == 2 ? 0.0f : 1.0f
 		};
 
 		g_device->SetVertexShaderConstantF(4, constants, 1);
@@ -888,7 +1220,8 @@ namespace
 		(void)wvp;
 	}
 
-	bool prepare(int group, const D3DMATRIX* world, float* wvp)
+	bool prepare(int group, const D3DMATRIX* world, const HDRoomLighting* lighting,
+		float* wvp)
 	{
 		if (!g_in_frame || !g_vb || !g_ib)
 			return false;
@@ -896,21 +1229,31 @@ namespace
 		if (group < 0 || group >= (int)g_groups.size())
 			return false;
 
-		if (world)
-			multiply((const float*)world, g_viewproj, wvp);
-		else
-			multiply(kIdentity, g_viewproj, wvp);
+		const float* row = world ? (const float*)world : kIdentity;
 
+		/* THE VIEW SPACE THE FOG AND THE BULBS LIVE IN. The classic
+		 * "stash" is the vertex through D3DMView, which is view * world - so
+		 * that is what goes up, not the world matrix alone. In the engine the
+		 * two are the same thing (the caller hands the finished D3DMView in
+		 * and the view is identity); in the diagnostic tool they are not (the
+		 * world is identity and the view is real), and a fog that only worked
+		 * in one of the two would be a fog nobody could measure. */
+		float worldview[16];
+
+		multiply(row, g_view, worldview);
+		multiply(row, g_viewproj, wvp);
 		set_matrix_constant(0, wvp);
+		set_worldview_constant(worldview);
+		apply_room_lighting(lighting);
 		return true;
 	}
 }
 
-bool HDRenderRoom(int group, const D3DMATRIX* world)
+bool HDRenderRoom(int group, const D3DMATRIX* world, const HDRoomLighting* lighting)
 {
 	float wvp[16];
 
-	if (!prepare(group, world, wvp))
+	if (!prepare(group, world, lighting, wvp))
 		return false;
 
 	const HDGroup& room = g_groups[(size_t)group];
@@ -924,11 +1267,12 @@ bool HDRenderRoom(int group, const D3DMATRIX* world)
 	return true;
 }
 
-bool HDRenderRoomPass(int group, int pass, const D3DMATRIX* world)
+bool HDRenderRoomPass(int group, int pass, const D3DMATRIX* world,
+	const HDRoomLighting* lighting)
 {
 	float wvp[16];
 
-	if (pass < 0 || pass > 2 || !prepare(group, world, wvp))
+	if (pass < 0 || pass > 2 || !prepare(group, world, lighting, wvp))
 		return false;
 
 	const HDGroup& room = g_groups[(size_t)group];
@@ -971,6 +1315,20 @@ int HDRenderGroupRanges(int group, int pass)
 		g_groups[(size_t)group].pass[2].size());
 }
 
+int HDRenderGroupSampleData(int group, HDRenderSample* out, int maxVerts)
+{
+	if (group < 0 || group >= (int)g_groups.size() || !out || maxVerts <= 0)
+		return 0;
+
+	const HDGroup& g = g_groups[(size_t)group];
+	const int count = (int)g.samples.size() < maxVerts ? (int)g.samples.size() : maxVerts;
+
+	for (int i = 0; i < count; i++)
+		out[i] = g.samples[(size_t)i];
+
+	return count;
+}
+
 int HDRenderGroupSampleCount(int group)
 {
 	if (group < 0 || group >= (int)g_groups.size())
@@ -981,19 +1339,20 @@ int HDRenderGroupSampleCount(int group)
 
 int HDRenderGroupSamples(int group, short* xyz, int maxVerts)
 {
-	if (!xyz || maxVerts <= 0)
+	if (group < 0 || group >= (int)g_groups.size() || !xyz || maxVerts <= 0)
 		return 0;
 
-	int have = HDRenderGroupSampleCount(group);
+	const HDGroup& g = g_groups[(size_t)group];
+	const int count = (int)g.samples.size() < maxVerts ? (int)g.samples.size() : maxVerts;
 
-	if (have > maxVerts)
-		have = maxVerts;
+	for (int i = 0; i < count; i++)
+	{
+		xyz[i * 3 + 0] = g.samples[(size_t)i].x;
+		xyz[i * 3 + 1] = g.samples[(size_t)i].y;
+		xyz[i * 3 + 2] = g.samples[(size_t)i].z;
+	}
 
-	if (have > 0)
-		std::memcpy(xyz, &g_groups[(size_t)group].samples[0],
-			(size_t)have * 3 * sizeof(short));
-
-	return have;
+	return count;
 }
 
 bool HDRenderGroupBounds(int group, float* mins, float* maxs)
@@ -1125,6 +1484,11 @@ double HDRenderSelfTest(double mznear, double mzfar, double persp,
 	}
 
 	return worst;
+}
+
+unsigned long HDRenderPixelSlots()
+{
+	return (unsigned long)g_caps.PS20Caps.NumInstructionSlots;
 }
 
 void HDRenderDepthTruth(IDirect3DDevice9* device, unsigned long* zenable,

@@ -61,6 +61,38 @@
  *     -nodraw         load and measure only - no window, no picture
  *     -matrixcheck    the world-matrix proof as a table, then stop
  *
+ *   Stage S2b - the parity block. Every one of these makes up a piece of
+ *   engine state the tool has no engine for, and hands it to the very
+ *   structures hd_level.cpp fills in the game.
+ *
+ *     -light <x y z r g b falloff>
+ *                     one dynamic light, room-local position (the printed
+ *                     room box says the range), colour 0..1, falloff in
+ *                     classic units - a torch. Up to 8, repeat the switch.
+ *     -bulb <x y z radius density [r g b]>
+ *                     one fog bulb, room-local; density is the engine's own
+ *                     bulb->d (1 / den, so 0.02 is a thick one). Colour
+ *                     defaults to white. Up to 6, repeat the switch.
+ *     -fog <start end r g b>
+ *                     distance fog. Only `start` reaches the picture, in
+ *                     WORLD units - TR5's fog has no end and no colour: the
+ *                     classic path subtracts a linear ramp of 255 over the
+ *                     same distance again from the vertex colour and never
+ *                     blends towards anything (drawroom.cpp:519). The other
+ *                     four are read and reported so the switch matches the
+ *                     brief rather than silently meaning something else.
+ *     -underwater     the room carries ROOM_UNDERWATER and the camera is in
+ *                     it: the WaterTable darkening on the colour and the
+ *                     screen wobble on the position.
+ *     -shimmer        the whole room shimmers - the selector aimed at the
+ *                     constant fourth flag byte, because a tool with no
+ *                     classic level behind it has no per-vertex marks.
+ *     -wibble <n>     the engine's wibble counter, which drives both. Two
+ *                     runs with two values are two moments in the water.
+ *     -paritycheck    run the classic formula and the shader formula over up
+ *                     to 200 of the room's own vertices on the processor and
+ *                     print the worst difference per channel, then stop.
+ *
  * Everything outside the pixels goes to stdout, so a run can be pasted into a
  * report as it stands.
  */
@@ -83,6 +115,7 @@
  * from both build scripts. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_render.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pagecache.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_light.h"
 
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "psapi.lib")
@@ -865,6 +898,200 @@ static void MatrixProof(int room, const float* view, const D3DMATRIX& projection
 		: "FAIL - the two paths disagree, an HD room would not line up");
 }
 
+/* ------------------------------------------------------- the S2b state -- */
+
+static HDLightSource g_lights[HD_MAX_LIGHTS];
+static int g_light_count = 0;
+static HDFogBulb g_bulbs[HD_MAX_BULBS];
+static int g_bulb_count = 0;
+static double g_fog_start = 0;
+static bool g_underwater = false;
+static bool g_shimmer = false;
+static double g_wibble = 0;
+static int g_mesh_effect = 0;
+static unsigned char g_water_table[22][64][4];
+
+/* The bulbs go in room local and come out in VIEW space, because that is the
+ * space HDFogBulb is in - aBuildFogBulbList (drawroom.cpp:738-745) transforms
+ * every active bulb by the camera matrix once per frame, and the shader
+ * measures the eye ray against it there. Handing a raw room position to the
+ * struct would put the bulb somewhere behind the camera and cost an evening. */
+static void FillLighting(HDFrameLighting& frame, HDRoomLighting& room,
+	float centerX, float centerY, const float* view)
+{
+	static HDFogBulb viewBulbs[HD_MAX_BULBS];
+
+	for (int i = 0; i < g_bulb_count; i++)
+	{
+		const HDFogBulb& in = g_bulbs[i];
+		HDFogBulb& out = viewBulbs[i];
+
+		out = in;
+
+		if (view)
+		{
+			out.x = in.x * view[0] + in.y * view[4] + in.z * view[8] + view[12];
+			out.y = in.x * view[1] + in.y * view[5] + in.z * view[9] + view[13];
+			out.z = in.x * view[2] + in.y * view[6] + in.z * view[10] + view[14];
+		}
+	}
+
+	memset(&frame, 0, sizeof(frame));
+	memset(&room, 0, sizeof(room));
+
+	frame.centerX = centerX;
+	frame.centerY = centerY;
+	frame.wibble = (float)g_wibble;
+	frame.cameraUnderwater = g_underwater ? 1 : 0;
+	frame.distanceFogStart = (float)g_fog_start;
+	frame.wibbleTable = 0;		// filled by the caller
+	frame.bulbs = viewBulbs;
+	frame.bulbCount = g_bulb_count;
+
+	if (g_bulb_count && view)
+		printf("  bulb 1 in view space: %.0f %.0f %.0f (radius %.0f, density %.4f)\n",
+			viewBulbs[0].x, viewBulbs[0].y, viewBulbs[0].z,
+			viewBulbs[0].rad, viewBulbs[0].density);
+
+	room.originX = room.originY = room.originZ = 0;	// the tool's world IS room local
+	room.surfaceY = -1.0e9f;
+	room.underwater = g_underwater ? 1 : 0;
+	room.choppy = 1;
+	room.surfaceGate = 0;
+	room.redAlert = 0;
+	room.sel1[3] = g_shimmer ? 1.0f : 0.0f;
+	room.waterTable = g_water_table[g_mesh_effect];
+	room.lights = g_lights;
+	room.lightCount = g_light_count;
+}
+
+/* THE PARITY PROOF (stage S2b).
+ *
+ * Two implementations of one room vertex colour, on the processor:
+ * hd_light.cpp's transcription of drawroom.cpp and its transcription of
+ * hd_room.hlsl. They are fed the SAME vertex, and the bridge between the two
+ * scales is prelight = (colour1 + colour2) / 2 - the remaster's baked light
+ * divided back into the classic path's 0..255, which is exactly the inverse
+ * of the shader's light * 127.5.
+ *
+ * So this is not a test of whether the remaster's art matches Core's
+ * lighting; it cannot be, they are different art. It is a test of whether
+ * every CONTRIBUTION - the dynamic lights, the water table, the distance fog,
+ * the 128 split, the fog bulbs - lands in the same place with the same
+ * weight. If it does, then switching a room to HD changes the picture by the
+ * baked light and by nothing else.
+ */
+static void ParityProof(int room, const float* view, int wanted)
+{
+	HDRenderSample samples[HD_RENDER_SAMPLES];
+	HDParityVertex verts[HD_RENDER_SAMPLES];
+	HDParityScene scene;
+	HDFrameLighting frame;
+	HDRoomLighting lighting;
+	double worstF[3], worstFinal[3];
+
+	const int have = HDRenderGroupSampleData(room, samples, HD_RENDER_SAMPLES);
+
+	printf("\n-- the parity proof -----------------------------------------\n");
+
+	if (!have)
+	{
+		printf("group %d kept no samples - nothing to compare.\n", room);
+		return;
+	}
+
+	FillLighting(frame, lighting, 1.0f, 1.0f, view);
+
+	memset(&scene, 0, sizeof(scene));
+	memcpy(scene.view, view, sizeof(scene.view));
+	scene.originX = lighting.originX;
+	scene.originY = lighting.originY;
+	scene.originZ = lighting.originZ;
+	scene.surfaceY = lighting.surfaceY;
+	scene.underwater = lighting.underwater;
+	scene.choppy = lighting.choppy;
+	scene.surfaceGate = lighting.surfaceGate;
+	scene.redAlert = lighting.redAlert;
+	scene.sel1[0] = lighting.sel1[0];
+	scene.sel1[1] = lighting.sel1[1];
+	scene.sel1[2] = lighting.sel1[2];
+	scene.sel1[3] = lighting.sel1[3];
+	scene.waterTable = lighting.waterTable;
+	scene.wibble = frame.wibble;
+	scene.distanceFogStart = frame.distanceFogStart;
+	scene.lights = g_lights;
+	scene.lightCount = g_light_count;
+	scene.bulbs = frame.bulbs;
+	scene.bulbCount = frame.bulbCount;
+
+	int count = have < wanted ? have : wanted;
+
+	for (int i = 0; i < count; i++)
+	{
+		const HDRenderSample& in = samples[i];
+
+		verts[i].x = (float)in.x;
+		verts[i].y = (float)in.y;
+		verts[i].z = (float)in.z;
+		verts[i].nx = ((float)in.nx - 127.0f) * (1.0f / 128.0f);
+		verts[i].ny = ((float)in.ny - 127.0f) * (1.0f / 128.0f);
+		verts[i].nz = ((float)in.nz - 127.0f) * (1.0f / 128.0f);
+
+		const unsigned long r = ((unsigned long)in.c1[0] + in.c2[0]) / 2;
+		const unsigned long g = ((unsigned long)in.c1[1] + in.c2[1]) / 2;
+		const unsigned long b = ((unsigned long)in.c1[2] + in.c2[2]) / 2;
+
+		verts[i].prelight = (r << 16) | (g << 8) | b;
+		verts[i].bits = in.bits;
+	}
+
+	{
+		/* HOW BRIGHT THE REMASTER BAKES. The classic overbright split only
+		 * changes anything above a light of 1, so this says whether it ever
+		 * bites in real art. */
+		double sum = 0, top = 0;
+		int over = 0;
+
+		for (int i = 0; i < count; i++)
+			for (int k = 0; k < 3; k++)
+			{
+				const double L = ((double)samples[i].c1[k] + samples[i].c2[k]) / 255.0;
+
+				sum += L;
+				if (L > top) top = L;
+				if (L > 1.0) over++;
+			}
+
+		printf("baked light over %d vertices: mean %.3f, max %.3f, %d of %d "
+			"channels above 1.0\n", count, sum / (count * 3), top, over, count * 3);
+	}
+
+	HDLightParity(&scene, verts, count, worstF, worstFinal);
+
+	printf("%d vertices of group %d, lights %d, bulbs %d, fog start %.0f, "
+		"underwater %d, shimmer %d, wibble %d\n",
+		count, room, g_light_count, g_bulb_count, g_fog_start,
+		g_underwater ? 1 : 0, g_shimmer ? 1 : 0, (int)g_wibble);
+
+	printf("worst |classic - shader| of the CONTRIBUTION, in the classic\n"
+		"path's own 0..255, before its overbright split - this is the parity:\n");
+	printf("  R %.3f   G %.3f   B %.3f\n", worstF[0], worstF[1], worstF[2]);
+	printf("and of the FINAL brightness on a white texel, where the split is\n"
+		"the deliberate deviation (see the long note in hd_room.hlsl):\n");
+	printf("  R %.1f   G %.1f   B %.1f  (of 255)\n",
+		worstFinal[0] * 255.0, worstFinal[1] * 255.0, worstFinal[2] * 255.0);
+
+	double worst = 0;
+
+	for (int k = 0; k < 3; k++)
+		if (worstF[k] > worst)
+			worst = worstF[k];
+
+	printf("verdict: %s (%.3f of 255, budget 2)\n",
+		worst <= 2.0 ? "PASS - every contribution lands with the same weight"
+			: "FAIL - a contribution drifted", worst);
+}
+
 /* ---------------------------------------------------------------- main -- */
 
 int main(int argc, char** argv)
@@ -874,6 +1101,9 @@ int main(int argc, char** argv)
 		printf("usage: RoomProbe <5-folder> <LEVEL> <room> [x y z yaw pitch] [options]\n");
 		printf("       -size <w> <h>  -fov <deg>  -all  -managed  -threads <n>\n");
 		printf("       -rooms <n>  -out <prefix>  -groups  -nodraw  -matrixcheck\n");
+		printf("       -light <x y z r g b falloff>   -bulb <x y z rad den [r g b]>\n");
+		printf("       -fog <start end r g b>  -underwater  -shimmer  -wibble <n>\n");
+		printf("       -effect <0..21>  -paritycheck\n");
 		return 1;
 	}
 
@@ -887,7 +1117,10 @@ int main(int argc, char** argv)
 	double fov = 80.0;
 	bool allPasses = false, managed = false, groupsOnly = false, noDraw = false;
 	bool matrixCheck = false;
+	bool parityCheck = false;
 	int threads = 8, rooms = 0;
+
+	HDLightBuildWaterTable(g_water_table);
 	const char* out = "roomprobe";
 
 	int at = 4;
@@ -930,6 +1163,74 @@ int main(int argc, char** argv)
 			noDraw = true;
 		else if (!strcmp(argv[at], "-matrixcheck"))
 			matrixCheck = true;
+		else if (!strcmp(argv[at], "-paritycheck"))
+			parityCheck = true;
+		else if (!strcmp(argv[at], "-underwater"))
+			g_underwater = true;
+		else if (!strcmp(argv[at], "-shimmer"))
+			g_shimmer = true;
+		else if (!strcmp(argv[at], "-wibble") && at + 1 < argc)
+			g_wibble = atof(argv[++at]);
+		else if (!strcmp(argv[at], "-effect") && at + 1 < argc)
+		{
+			g_mesh_effect = atoi(argv[++at]);
+
+			if (g_mesh_effect < 0 || g_mesh_effect > 21)
+				g_mesh_effect = 0;
+		}
+		else if (!strcmp(argv[at], "-light") && at + 7 < argc)
+		{
+			if (g_light_count < HD_MAX_LIGHTS)
+			{
+				HDLightSource& l = g_lights[g_light_count++];
+
+				l.x = (float)atof(argv[at + 1]);
+				l.y = (float)atof(argv[at + 2]);
+				l.z = (float)atof(argv[at + 3]);
+				l.r = (float)atof(argv[at + 4]);
+				l.g = (float)atof(argv[at + 5]);
+				l.b = (float)atof(argv[at + 6]);
+				l.falloff = (float)atof(argv[at + 7]);
+			}
+			else
+				printf("RoomProbe: more than %d lights - the extra one is dropped, "
+					"as the engine drops it\n", HD_MAX_LIGHTS);
+
+			at += 7;
+		}
+		else if (!strcmp(argv[at], "-bulb") && at + 5 < argc)
+		{
+			const bool coloured = at + 8 < argc && argv[at + 6][0] != '-';
+
+			if (g_bulb_count < HD_MAX_BULBS)
+			{
+				HDFogBulb& b = g_bulbs[g_bulb_count++];
+
+				b.x = (float)atof(argv[at + 1]);
+				b.y = (float)atof(argv[at + 2]);
+				b.z = (float)atof(argv[at + 3]);
+				b.rad = (float)atof(argv[at + 4]);
+				b.density = (float)atof(argv[at + 5]);
+				b.r = coloured ? (float)atof(argv[at + 6]) : 1.0f;
+				b.g = coloured ? (float)atof(argv[at + 7]) : 1.0f;
+				b.b = coloured ? (float)atof(argv[at + 8]) : 1.0f;
+			}
+			else
+				printf("RoomProbe: more than %d fog bulbs - the extra one is "
+					"dropped\n", HD_MAX_BULBS);
+
+			at += coloured ? 8 : 5;
+		}
+		else if (!strcmp(argv[at], "-fog") && at + 5 < argc)
+		{
+			g_fog_start = atof(argv[at + 1]);
+			printf("RoomProbe: fog start %.0f world units. TR5 has no fog end "
+				"and no fog colour - end %s and colour %s/%s/%s are read and "
+				"not used (drawroom.cpp:519 subtracts a ramp of 255 over the "
+				"start distance again, from the vertex colour).\n",
+				g_fog_start, argv[at + 2], argv[at + 3], argv[at + 4], argv[at + 5]);
+			at += 5;
+		}
 		else
 			printf("RoomProbe: ignoring unknown argument \"%s\"\n", argv[at]);
 	}
@@ -1116,6 +1417,14 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
+	if (parityCheck)
+	{
+		ParityProof(room, view, 200);
+		HDRenderShutdown();
+		DropDevice();
+		return 0;
+	}
+
 	/* --- the picture -------------------------------------------------- */
 	printf("\n-- the pictures ---------------------------------------------\n");
 
@@ -1135,10 +1444,25 @@ int main(int argc, char** argv)
 	PoseAsClassicPath();
 	Take(before);
 
+	HDFrameLighting frame;
+	HDRoomLighting lighting;
+	float wibbleTable[32];
+
+	for (int i = 0; i < 32; i++)
+		wibbleTable[i] = (float)(2.0 * sin(i * 0.19634955));
+
+	FillLighting(frame, lighting, (float)width * 0.5f, (float)height * 0.5f, view);
+	frame.wibbleTable = wibbleTable;
+
+	printf("S2b: %d light(s), %d bulb(s), fog start %.0f, underwater %d, "
+		"shimmer %d, wibble %d, water table row %d\n",
+		g_light_count, g_bulb_count, g_fog_start, g_underwater ? 1 : 0,
+		g_shimmer ? 1 : 0, (int)g_wibble, g_mesh_effect);
+
 	g_device->BeginScene();
-	HDRenderFrameBegin((const D3DMATRIX*)view, &projection);
+	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 	PrintDepthTruth("(inside the HD frame)");
-	const bool drew = HDRenderRoom(room, 0);
+	const bool drew = HDRenderRoom(room, 0, &lighting);
 	const int calls = HDRenderDrawCalls();
 	HDRenderFrameEnd();
 	g_device->EndScene();
@@ -1171,8 +1495,8 @@ int main(int argc, char** argv)
 			}
 
 			g_device->BeginScene();
-			HDRenderFrameBegin((const D3DMATRIX*)view, &projection);
-			HDRenderRoomPass(room, pass, 0);
+			HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
+			HDRenderRoomPass(room, pass, 0, &lighting);
 			HDRenderFrameEnd();
 			g_device->EndScene();
 

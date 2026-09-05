@@ -83,14 +83,20 @@
  *
  * THE THREE PASSES are the three index runs of a .TRG part, in this order:
  *
- *   0 opaque    no alpha test. The alpha channel of an opaque tile carries a
- *               gloss/sparkle MASK, not coverage - testing on it blanks whole
- *               floors (TROne, measured on a TR1 snow floor).
+ *   0 opaque    no alpha test, EXCEPT on the three cut-out materials 6, 7
+ *               and 8, whose param[0] is the reference (#123, fix round A2 -
+ *               hd_render.cpp, MaterialAlphaRef). On every other material
+ *               the alpha channel of an opaque tile carries a gloss/wetness
+ *               MASK, not coverage, and testing on it blanks whole floors
+ *               and facades (TROne on a TR1 snow floor; ANDREA1's stucco,
+ *               JOBY2's snow and JOBY3's bulkheads in this game).
  *   1 alpha     clip(a - 0.5), the punch-through pass.
  *   2 additive  colour * alpha, blended ONE/ONE with the depth write off.
  *
  * All three switches ride in one constant so the shader never branches:
- * gPass.x is 1 in the alpha pass and 0 otherwise (clip(0) discards nothing),
+ * gPass.x is the ALPHA REFERENCE - 0.5 in the alpha pass, the material's own
+ * in the opaque pass of a cut-out part, 0 everywhere else, and a texel alpha
+ * is never below 0 so a zero reference discards nothing -
  * gPass.y is 1 in the additive pass and 0 otherwise, gPass.w is 0 in the
  * additive pass and 1 otherwise - the classic path switches
  * D3DRS_SPECULARENABLE off for its additive draw type (polyinsert.cpp:72)
@@ -524,8 +530,40 @@ float BulbIntensity(float3 stash, float4 a, float4 b)
 	float sqrad = rad * rad;
 	float sqlen = dot(P, P);
 
-	if (!(stash.z + rad > 0.0f && abs(stash.x) - rad < abs(stash.z) &&
-		abs(stash.y) - rad < abs(stash.z)))
+	/* THE CLASSIC PATH'S CULL, AND WHY IT CANNOT COME ALONG (#123, fix round
+	 * A2's follow-up, R2).
+	 *
+	 * drawroom.cpp:632 opens this loop with
+	 *
+	 *     stash.z + rad > 0 && |stash.x| - rad < |stash.z| &&
+	 *                          |stash.y| - rad < |stash.z|
+	 *
+	 * on the VERTEX, and it is a cull, not a rule: a cone of 45 degrees
+	 * about the view axis, widened by the bulb's radius, thrown in front of
+	 * the expensive arithmetic below. Core could afford a hard edge on it
+	 * because the game shipped at 4:3, where the frame reaches 40 degrees to
+	 * the side and the cone never crosses the picture.
+	 *
+	 * It does now. AlterFOV (3dmath.cpp:77) builds the perspective from
+	 * height * 320/240 and uses that same value across, so 16:9 turns the
+	 * nominal 80 into about 96 degrees wide - 48 to the side - and the first
+	 * person view of #134 runs at 90 to 100 nominal, which is 107 to 118
+	 * across, 53 to 59 to the side. Past 45 the cone cuts INTO the frame,
+	 * and a per-pixel shader draws that cut as what it is: a hard line down
+	 * the side of the screen with the fog on one side of it and none on the
+	 * other, moving with the camera. That is the reported bug - "in first
+	 * person a fog bulb at the edge jumps away as soon as something leaves
+	 * the field of view".
+	 *
+	 * A cull whose job is to skip pixels that are not drawn has nothing to
+	 * do in a pixel shader, where every pixel IS drawn. What is left of it
+	 * is the one part that is exact rather than conservative: a sphere whose
+	 * every point lies behind the camera plane cannot be crossed by any ray
+	 * leaving the eye forwards, so it contributes nothing. P.z + rad <= 0
+	 * says exactly that, and it also settles the camera-inside-the-bulb case
+	 * on its own - a camera inside means |P| < rad, and then P.z >= -|P| >
+	 * -rad. */
+	if (P.z + rad <= 0.0f)
 		return 0.0f;
 
 	float3 vec = 0.0f;
@@ -612,8 +650,18 @@ float BulbIntensity(float3 stash, float4 a, float4 b)
 	 * kRim 0.35 is the smallest value that hides the outline at the sizes
 	 * TR5 uses (bulb radii 1024 to 8192): a third of the diameter of a
 	 * 4096-unit bulb is 2.7 metres of game world to fade over, which is the
-	 * same order as the vertex spacing the classic path smeared it over. */
-	const float kRim = 1.0f;
+	 * same order as the vertex spacing the classic path smeared it over.
+	 *
+	 * IT SAID 0.35 AND THE CODE SAID 1.0 (#123, fix round A2's follow-up).
+	 * Fix round A shipped `const float kRim = 1.0f`, which is not the
+	 * paragraph above: with 1.0 the weight is below one over the WHOLE bulb
+	 * - 0.5 of it halfway along the diameter - so the promise two paragraphs
+	 * up, "at t >= kRim this function answers what it always answered, to
+	 * the bit", held at the single ray through the exact centre and nowhere
+	 * else, and every bulb in the game came out roughly half as thick as the
+	 * classic path draws it. The number the note measured is the one that
+	 * stands. */
+	const float kRim = 0.35f;
 
 	float chord = length(vec2 - vec);
 	float t = saturate(chord / max(2.0f * rad, 1e-4f));
@@ -625,8 +673,11 @@ float4 RoomPS(VS_OUT input) : COLOR0
 {
 	float4 texel = tex2D(sPage, input.uv);
 
-	/* Alpha pass only - see the note about the gloss mask above. */
-	clip(gPass.x * (texel.a - 0.5f));
+	/* THE ALPHA TEST. gPass.x is the reference, and it is zero wherever
+	 * there is no test to run - an alpha is never below zero, so this line
+	 * costs one subtract and discards nothing (#123, fix round A2; the note
+	 * about the gloss mask above says why per material and not per page). */
+	clip(texel.a - gPass.x);
 
 	/* Into the classic path's 0..255 space. */
 	float3 f = input.light * 127.5f;

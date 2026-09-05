@@ -1663,6 +1663,10 @@ int main(int argc, char** argv)
 	printf("A6: %d moving part(s) (materials 1, 7, 8); %d vertices kept "
 		"their weight, "
 		"%d lost it\n", stats.swayParts, stats.swayVertices, stats.swayDropped);
+	// Fix round A2: the opaque parts that draw with the alpha test on,
+	// which is the three cut-out materials 6, 7 and 8 and nothing else.
+	printf("A2: %d opaque cut-out part(s) (materials 6, 7, 8)\n",
+		stats.cutoutParts);
 	printf("read %.0f ms, build %.0f ms\n", stats.readMs, stats.buildMs);
 
 	printf("\n-- the pages ------------------------------------------------\n");
@@ -1678,6 +1682,22 @@ int main(int argc, char** argv)
 	// and only those, make the OPAQUE pass run its alpha test.
 	printf("%d of them are cut-out pages (alpha below 128 on at least 2%% "
 		"of the top mip)\n", stats.pages.cutoutPages);
+
+	/* WHICH ones, by page number, and how much of each is hole. Without the
+	 * list the count alone cannot be held against the .TRG's own materials,
+	 * and fix round A2's regression was exactly a page in this list that no
+	 * leaf ever touches - see MODIFICATIONS.md, fix round A2. */
+	if (stats.pages.cutoutPages > 0)
+	{
+		printf("   page(hole %%):");
+
+		for (int s = 0; s < HDPageCacheSlots(); s++)
+			if (HDPageCacheSlotCutout(s))
+				printf(" %d(%d%%)", HDPageCachePageOfSlot(s),
+					HDPageCacheSlotCutoutPermille(s) / 10);
+
+		printf("\n");
+	}
 	printf("search %.0f ms, decode %.0f ms (%d threads), upload %.0f ms, total %.0f ms\n",
 		stats.pages.readMs, stats.pages.decodeMs, stats.pages.threads,
 		stats.pages.uploadMs, stats.pages.totalMs);

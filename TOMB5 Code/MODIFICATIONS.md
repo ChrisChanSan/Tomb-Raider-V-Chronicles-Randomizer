@@ -2794,6 +2794,156 @@ slot IS its model.
 
 ---
 
+#### Fix round A2 - what fix round A broke, and the fog at the edge (#123)
+
+The play test after fix round A brought back three pictures of one fault and
+one of another. **No new source file**: the round changes
+`specific/hd/hd_render.{h,cpp}`, `specific/hd/hd_light.cpp`,
+`specific/hd/hd_level.cpp` and `specific/hd/hd_shader/hd_room.hlsl` (with its
+generated `.inc` file), plus the diagnostic tool `RoomProbe`.
+
+**R1 - a Roman shop front as a bare box, a wall missing under the Caffe
+Recco's awning, black holes in the crane yard's snow. All three are A2.** The
+cut-out alpha test of fix round A was switched on per PAGE, out of a measured
+share of texels below alpha 128, on the argument that an ordinary opaque
+page's alpha channel is a flat 255 and a test on it changes nothing. The
+argument is wrong, and it was measured over a handful of pages rather than
+over the game: an opaque page's alpha channel is a MASK - gloss, wetness,
+whatever the remaster's own shader reads it as - and the mask is mostly dark.
+
+*What the flag was really catching*, per level, page number and share of the
+top mip below alpha 128, held against the .TRG material that draws it:
+
+| level | page | hole | material | what it is |
+|---|---|---|---|---|
+| ANDREA1 | 201 | 95 % | 3, opaque | stucco facade with columns and windows |
+| ANDREA1 | 211 | 96 % | 3, opaque | the same facade, other sheet |
+| ANDREA1 | 207 | 78 % | 3, opaque | facade, 2,206 triangles over 6 groups |
+| ANDREA1 | 180 | 35 % | 0, opaque | ordinary wall |
+| JOBY2 | 480 | 99 % | 3, opaque | the snow and ice of the crane yard |
+| JOBY2 | 441 | 61 % | 3, opaque | the same yard |
+| JOBY3 | 3219 | 47 % | 17, opaque | bulkhead panels |
+| JOBY3 | 3220 | 71 % | 17, opaque | bulkhead panels |
+| ANDY1 | 3268 | 74 % | 3, opaque | dirt and gravel ground - NOT a tree |
+| ANDY1 | 3264 | 51 % | 8, opaque | leaves, and really a cut-out |
+| JOBY4 | 3198 | 40 % | 8, opaque | kelp, and really a cut-out |
+
+So the test threw away 95 % of a Roman facade, 99 % of the yard's snow and
+half of a submarine's bulkheads. Fix round A's own note named ANDY1's pages
+3268-3272 "the Irish tree pages"; they are the level's ground and gravel, and
+its vegetation is material 8 on pages 3264, 3267 and 3165.
+
+**What decides it now: the material, and the material alone.** Measured over
+the 15 .TRG files, every distinct `(material, param)` tuple of every part:
+
+| material | `param[0]` | passes | opaque triangles |
+|---|---|---|---|
+| 6 | 0.500 (once 0.503) | opaque only | 513,647 |
+| 7 | 0.500 in all 7 tuples | opaque only | 88,726 |
+| 8 | 0.500 in 10 of 11 tuples | opaque, one alpha | 1,308,742 |
+| 3 | 1, 2, 4, 26, 32, 35, 39, 56, 69, 78, 107, 109, 110, 141, 161, 191 | opaque only | 148,352 |
+| 17 | 22, 25, 36, 38, 63, 70, 72 | opaque only | 17,453 |
+| 2 | 0.5, 1.0, 1.5 | ADDITIVE in all 20 tuples | 0 |
+| 13, 14 | page numbers | mixed | - |
+
+Materials 6, 7 and 8 are the three whose `param[0]` is an alpha reference;
+every other material's `param[0]` is measurably something else - a specular
+exponent, a page number, an intensity - and material 2's 0.5 never meets an
+alpha test because material 2 only ever draws additive. `MaterialAlphaRef`
+(`hd_render.cpp`) answers those three with the file's own threshold and
+everything else with zero, the answer travels with the draw call as part of
+its sort key, and `gPass.x` carries it to `clip(texel.a - gPass.x)`. Zero
+throws nothing away, because an alpha is never below zero - so the alpha pass
+(0.5, the classic `D3DRS_ALPHAREF` 128) and the additive pass are unchanged to
+the bit, and ANDY1's one part at 0.503 now gets 0.503 instead of 0.5.
+
+**The proof, in pictures out of `RoomProbe`,** the same camera before and
+after: ANDREA1 group 167, a facade with a hole through to the sky and only the
+window frames left, comes back whole (75 % of the frame differs); JOBY2 group
+149, a snow floor with every other slab missing, comes back whole (10 %);
+JOBY3 group 30 and JOBY5 group 30, ceilings and bulkheads eaten away, come
+back whole (15 % and 21 %). And the benefit of fix round A stays: JOBY4 group
+69's kelp is unchanged to the pixel, ANDY1 group 195's leaf silhouettes differ
+from the pre-A picture by 39.7 % of the frame and from the post-A picture by
+0.17 %, which is the gravel that stopped being clipped. Per level `RoomProbe`
+now prints `A2: N opaque cut-out part(s)` and the page list with each page's
+hole share, so the two measurements can be held against each other; the level
+log line gained `cutout_parts=`.
+
+**R2 - in first person a fog bulb at the edge of the screen jumps away.** Not
+what it looked like. `BulbIntensity` opens with the classic path's own line
+(`specific/drawroom.cpp:632`)
+
+    stash.z + rad > 0 && |stash.x| - rad < |stash.z| && |stash.y| - rad < |stash.z|
+
+which is a CULL, not a rule: a 45 degree cone about the view axis, widened by
+the bulb's radius, thrown in front of the expensive arithmetic. It is Core's
+and it predates the HD path; stage S2b carried it over with the rest of the
+function, and fix round A did not touch it. Core could afford a hard edge on
+it because the game shipped at 4:3, where the frame reaches 40 degrees to the
+side. `AlterFOV` (`specific/3dmath.cpp:77`) builds the perspective from
+`height * 320/240` and uses that value across as well, so 16:9 turns the
+nominal 80 into about 96 degrees wide - 48 to the side - and #134's first
+person view runs at 90 to 100 nominal, which is 107 to 118 across, 53 to 59 to
+the side. Past 45 the cone cuts INTO the frame, and a per-pixel shader draws
+that cut as what it is: a straight vertical line with fog on one side and none
+on the other, moving with the camera.
+
+A cull whose job is to skip pixels that are not drawn has nothing to do in a
+pixel shader. What is left of it is the half that is exact rather than
+conservative - a sphere whose every point lies behind the camera plane meets
+no ray leaving the eye forwards - so the shader now tests `P.z + rad <= 0` on
+the BULB. That also settles the camera-inside-the-bulb case by itself: inside
+means `|P| < rad`, and then `P.z >= -|P| > -rad`. **The proof:** JOBY2 group
+149 at `-fov 100` with a bulb 3,000 units ahead and 3,700 to the side, drawn
+by `RoomProbe` before and after - a red patch with a straight edge sliced off
+its side becomes a round soft-edged patch.
+
+**And `kRim` said 1.0 where its own note said 0.35.** Fix round A's rim
+weight, the smoothstep that takes the infinite derivative out of the chord at
+the bulb's silhouette, is documented in the shader as 0.35 with a measurement
+behind it - "at `t >= kRim` this function answers what it always answered, to
+the bit" - and shipped as `1.0f`. With 1.0 that promise holds at the single
+ray through the exact centre and nowhere else, and every bulb in the game came
+out about half as thick as the classic path draws it. The number the note
+measured is the one that stands, in the shader and in `hd_light.cpp`'s twin.
+
+**Parity.** `hd_light.cpp`'s `BulbIntensity` keeps the classic answer to the
+bit when `soften` is false and follows the shader when it is true, which is
+the shape fix round A gave it; the cull is now part of that split. The
+verdict of `-paritycheck` is computed on the light contribution BEFORE the
+bulbs (`HDLightParity` reads `out->f[]`, which is written above the bulb
+loop), and it is unchanged: 0.000 of 255, PASS, with and without a bulb. The
+bulb deviation shows in the line below it, the final brightness on a white
+texel, and it grows where the cull used to fire - with a deliberately dense
+test bulb, from 45.6 to 150.5 of 255. That is the deviation being named, not
+hidden: the classic path culls fog at 45 degrees off axis and we do not.
+
+*Measured and NOT changed, and why:*
+
+- **A1 was suspected and is innocent.** `RoomProbe` never calls `HDFlipRoom` -
+  it draws a group, not a room - so the three R1 pictures it reproduces cannot
+  come from the flip table, and switching the cut-out test off alone makes all
+  three identical to the fixed build, to the pixel. ANDREA1 groups 200 and
+  203, the pair fix round A proved itself on, draw identically before and
+  after this round.
+- **A3, A6 and the sway numbers are untouched.** `RoomProbe` reports the same
+  A6 counters per level as before the round (ANDREA1: 29 moving parts, 20,798
+  vertices keeping their weight, 63,610 losing it), and RICH1 group 12 and
+  ANDREA3 group 40 - glow and material 7 - draw identically.
+- **The per-page cut-out measurement stays, as a measurement.**
+  `HDPageCacheSlotCutout` and `HDPageCacheSlotCutoutPermille` no longer decide
+  anything, and they are kept and printed because holding "this page's alpha
+  cuts" against "this part is a cut-out material" is exactly the comparison
+  that would have caught the fault before the play test did.
+- **The material is compared whole, not by its low byte.** A destructible
+  static carries its material with bit 15 set and a counter in bits 8 to 14
+  (`0x8003` is RICH3's material 3). Masking would be more general and is not
+  done: over the 15 files the only low bytes that ever appear with the high
+  bit are 0, 3 and 14, and none of them is a cut-out material.
+
+---
+
 ---
 
 ## Building this yourself

@@ -90,12 +90,74 @@ namespace
 	 *       banners, kelp. 7 and 8 are the same thing in two numbers: no
 	 *       level carries both, ANDREA3 has only 7 and JOBY4 only 8, and
 	 *       TITLE - which is a montage of every level - has both
+	 *    6  the plain CUT-OUT material - gratings, nets, railings, ladders.
+	 *       param[0] is its alpha reference and is 0.5 in 10 of the 11
+	 *       tuples the game has (ANDY1 carries one 0.503)
 	 *   13  the remaster's own four-frame flipbook, the other three pages in
 	 *       param[0..2]. Counted and NOT drawn - see MODIFICATIONS.md */
 #define HD_TRG_MATERIAL_FLOW		1
+#define HD_TRG_MATERIAL_MASK		6
 #define HD_TRG_MATERIAL_WIND		8
 #define HD_TRG_MATERIAL_WIND2		7
 #define HD_TRG_MATERIAL_FLIPBOOK	13
+
+	/* THE ALPHA REFERENCE OF ONE PART (#123, fix round A2).
+	 *
+	 * THE BUG THIS REPLACES. Fix round A switched the opaque pass's alpha
+	 * test on per PAGE, out of a measured share of texels below alpha 128,
+	 * on the argument that an ordinary opaque page's alpha channel is a flat
+	 * 255 and a test on it changes nothing. The argument is false, and the
+	 * play test said where: ANDREA1's stucco facades (page 201, 95 % of it
+	 * below 128, and page 211, 96 %), JOBY2's snow (page 480, 99 %), JOBY3's
+	 * bulkheads (pages 3219 to 4823, 41 to 71 %) and ANDY1's gravel (pages
+	 * 3268 to 3272, 60 to 88 %) all carry a MASK in their alpha channel -
+	 * gloss, wetness, whatever the remaster's own shader reads it as - while
+	 * their RGB is a whole surface. Testing it threw away most of a Roman
+	 * shop front, the wall under the Caffe Recco's awning, and the puddles
+	 * of the crane yard.
+	 *
+	 * WHAT SAYS IT INSTEAD. The material, and the material alone. Measured
+	 * over the 15 .TRG files, the distinct (material, param) tuples:
+	 *
+	 *   material 6   param[0] 0.500 (once 0.503), opaque only, 513,647 tris
+	 *   material 7   param[0] 0.500 in all 7 tuples, opaque, 88,726 tris
+	 *   material 8   param[0] 0.500 in 10 of 11 tuples, the odd one 0.120
+	 *                and in the ALPHA pass, 1,308,742 tris
+	 *   material 3   param[0] 1, 2, 4, 26, 32, 35, 39, 56, 69, 78, 107,
+	 *                109, 110, 141, 161, 191 - a specular exponent
+	 *   material 17  param[0] 22, 25, 36, 38, 63, 70, 72 - the same shape
+	 *   material 13  param[0..2] are page numbers, material 14 likewise
+	 *   material 2   param[0] 0.5, 1.0, 1.5, but ADDITIVE in every one of
+	 *                its 20 tuples, where no alpha test runs at all
+	 *
+	 * So 6, 7 and 8 are the three materials whose param[0] is an alpha
+	 * reference, and every other material's param[0] is measurably
+	 * something else. The test is switched on for those three and reads its
+	 * threshold out of the file rather than assuming 0.5 - which is what
+	 * makes ANDY1's 0.503 right as well.
+	 *
+	 * Zero means "no test": the shader clips on texel.a - gPass.x, and an
+	 * alpha is never below zero.
+	 *
+	 * COMPARED WHOLE, NOT BY ITS LOW BYTE. A destructible static carries its
+	 * material with bit 15 set and a counter in bits 8 to 14 - 0x8003 and
+	 * 0x820E are material 3 and material 14 of RICH3 - so masking would be
+	 * the more general test. It is not done, because it would be a guess
+	 * about an encoding to no measurable end: over the 15 files the only low
+	 * bytes that ever appear with the high bit are 0, 3 and 14, and none of
+	 * the three is a cut-out material. */
+	inline float MaterialAlphaRef(const trf::remaster::TrgPart& part)
+	{
+		if (part.material != HD_TRG_MATERIAL_MASK &&
+			part.material != HD_TRG_MATERIAL_WIND &&
+			part.material != HD_TRG_MATERIAL_WIND2)
+			return 0.0f;
+
+		/* A reference outside 0..1 would clip everything or nothing; no part
+		 * in the game has one, and this says so rather than trusting it. */
+		return part.param[0] > 0.0f && part.param[0] < 1.0f
+			? part.param[0] : 0.5f;
+	}
 
 	struct HDRange
 	{
@@ -104,6 +166,12 @@ namespace
 		int pageSlot = -1;
 		float scrollU = 0.0f;
 		float scrollV = 0.0f;
+		/* The alpha reference of the part this range came out of, or 0 for
+		 * "no test" - see MaterialAlphaRef above (#123, fix round A2). Part
+		 * of the sort key with the page and the scroll, for the same reason
+		 * they are: it is one pixel shader constant per draw call and a
+		 * triangle cannot have half of it. */
+		float alphaRef = 0.0f;
 		/* The lowest vertex number this range names and how many it reaches
 		 * over (#123, stage S6). With a 32 bit index buffer they are only a
 		 * measurement; with a 16 bit one they ARE the draw call - the indices
@@ -190,9 +258,11 @@ namespace
 	SavedState g_saved;
 	bool g_in_frame = false;
 	int g_draw_calls = 0;
-	// A2: draw calls of the opaque pass that switched the alpha test on
-	// because their page is a cut-out sheet. Reset with g_draw_calls.
+	// A2: draw calls of the opaque pass that ran with the alpha test on
+	// because their part is a cut-out material. Reset with g_draw_calls.
 	int g_cutout_calls = 0;
+	// A2, once per level: the opaque parts of materials 6, 7 and 8.
+	int g_cutout_parts = 0;
 
 	/* --- stage S2b ----------------------------------------------------- */
 
@@ -879,6 +949,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	int marked_choppy = 0;
 	int sway_vertices = 0;
 	g_scroll_parts = 0;
+	g_cutout_parts = 0;
 	int marked_shimmer = 0;
 	int marked_room_shimmer = 0;
 
@@ -991,6 +1062,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	{
 		int slot;
 		float scrollU, scrollV;
+		float alphaRef;			// fix round A2, see MaterialAlphaRef
 		unsigned int first;
 	};
 
@@ -1021,6 +1093,13 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					(part.param[0] != 0.0f || part.param[1] != 0.0f);
 				const float su = scrolls ? part.param[0] : 0.0f;
 				const float sv = scrolls ? part.param[1] : 0.0f;
+				/* A2: the cut-out materials only, and only where the test
+				 * belongs - the alpha pass has its own reference and the
+				 * additive pass has none. */
+				const float aref = pass == 0 ? MaterialAlphaRef(part) : 0.0f;
+
+				if (pass == 0 && aref != 0.0f)
+					g_cutout_parts++;
 
 				if (pass == 0 && part.material == HD_TRG_MATERIAL_FLIPBOOK)
 					group.motion.flipbookParts++;
@@ -1062,6 +1141,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.slot = slot;
 					tri.scrollU = su;
 					tri.scrollV = sv;
+					tri.alphaRef = aref;
 					tri.first = first;
 					tris.push_back(tri);
 				}
@@ -1075,7 +1155,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				{
 					if (a.slot != b.slot) return a.slot < b.slot;
 					if (a.scrollU != b.scrollU) return a.scrollU < b.scrollU;
-					return a.scrollV < b.scrollV;
+					if (a.scrollV != b.scrollV) return a.scrollV < b.scrollV;
+					return a.alphaRef < b.alphaRef;
 				});
 
 			group.triangles[pass] = (unsigned int)tris.size();
@@ -1084,6 +1165,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.pageSlot = tris[0].slot;
 			range.scrollU = tris[0].scrollU;
 			range.scrollV = tris[0].scrollV;
+			range.alphaRef = tris[0].alphaRef;
 			range.start = (unsigned int)sorted.size();
 			range.count = 0;
 
@@ -1091,7 +1173,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			{
 				const bool same = tris[i].slot == range.pageSlot &&
 					tris[i].scrollU == range.scrollU &&
-					tris[i].scrollV == range.scrollV;
+					tris[i].scrollV == range.scrollV &&
+					tris[i].alphaRef == range.alphaRef;
 
 				if (!same || range.count / 3 >= max_tris)
 				{
@@ -1122,6 +1205,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.pageSlot = tris[i].slot;
 					range.scrollU = tris[i].scrollU;
 					range.scrollV = tris[i].scrollV;
+					range.alphaRef = tris[i].alphaRef;
 					range.start = (unsigned int)sorted.size();
 					range.count = 0;
 				}
@@ -1422,6 +1506,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->biggestRangeTris = biggest;
 		stats->fallbackPageTris = fallback_tris;
 		stats->scrollParts = g_scroll_parts;
+		stats->cutoutParts = g_cutout_parts;	// A2
 		stats->scrollRanges = 0;
 		stats->scrollTris = 0;
 		stats->swayVertices = sway_vertices;
@@ -1626,14 +1711,19 @@ namespace
 		if (group.pass[pass].empty())
 			return;
 
-		/* gPass: x switches the alpha test on, y the additive weighting,
-		 * z is the room shadow (1 until shadow maps exist), w the specular
-		 * add - the classic path switches D3DRS_SPECULARENABLE off for its
-		 * additive draw type (polyinsert.cpp:72) and the overbright half of
-		 * the room colour goes off with it. */
+		/* gPass: x is the ALPHA REFERENCE - a texel below it is thrown away
+		 * and zero throws nothing away - y the additive weighting, z is the
+		 * room shadow (1 until shadow maps exist), w the specular add - the
+		 * classic path switches D3DRS_SPECULARENABLE off for its additive
+		 * draw type (polyinsert.cpp:72) and the overbright half of the room
+		 * colour goes off with it.
+		 *
+		 * The alpha pass's 0.5 is the classic path's own reference
+		 * (function_table.cpp, D3DRS_ALPHAREF 128 over a 0..255 alpha); the
+		 * opaque pass starts at zero and is raised per range below. */
 		float constants[4] =
 		{
-			pass == 1 ? 1.0f : 0.0f,
+			pass == 1 ? 0.5f : 0.0f,
 			pass == 2 ? 1.0f : 0.0f,
 			1.0f,
 			pass == 2 ? 0.0f : 1.0f
@@ -1642,13 +1732,13 @@ namespace
 		g_device->SetVertexShaderConstantF(4, constants, 1);
 		g_device->SetPixelShaderConstantF(4, constants, 1);
 
-		/* A2: the opaque pass turns the alpha test on again for the ranges
-		 * that land on a CUT-OUT page, and for no others. What such a page is
-		 * and why the answer is per page and not per material is measured in
-		 * hd_pagecache.cpp beside measure_cutout. The switch is written only
-		 * when it changes, and the ranges are sorted by page, so a room pays
-		 * for it once per run of cut-out draw calls. */
-		bool alpha_test = pass == 1;
+		/* A2: the opaque pass turns the alpha test on for the ranges whose
+		 * .TRG MATERIAL is one of the three cut-out materials, and for no
+		 * others - see MaterialAlphaRef at the top of this file for what
+		 * says so and what the per-page answer of fix round A got wrong.
+		 * The constant is written only when it changes, and the ranges are
+		 * sorted by it, so a room pays for it once per run. */
+		float alpha_ref = constants[0];
 		const bool cutout_pass = pass == 0;
 
 		g_motion_dirty = true;		// see the note beside g_motion_dirty
@@ -1672,15 +1762,14 @@ namespace
 
 			if (cutout_pass)
 			{
-				const bool want = HDPageCacheSlotCutout(range.pageSlot);
-
-				if (want != alpha_test)
+				if (range.alphaRef != alpha_ref)
 				{
-					alpha_test = want;
-					constants[0] = want ? 1.0f : 0.0f;
+					alpha_ref = range.alphaRef;
+					constants[0] = range.alphaRef;
 					g_device->SetPixelShaderConstantF(4, constants, 1);
-					g_cutout_calls += want ? 1 : 0;
 				}
+
+				g_cutout_calls += range.alphaRef != 0.0f ? 1 : 0;
 			}
 
 			/* STAGE S5, THE SCROLL OF THIS DRAW CALL. The offset is taken

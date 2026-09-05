@@ -89,7 +89,19 @@ namespace
 		const float P[3] = { bulb.x, bulb.y, bulb.z };
 		const float sqlen = Square(P[0]) + Square(P[1]) + Square(P[2]);
 
-		if (!(stash[2] + rad > 0 && fabsf(stash[0]) - rad < fabsf(stash[2]) &&
+		/* The classic path's 45 degree cull (drawroom.cpp:632) belongs to the
+		 * classic answer and to nothing else: in a pixel shader it draws a
+		 * hard line down the side of a 16:9 or first person frame - see the
+		 * long note beside it in hd_room.hlsl (#123, fix round A2's
+		 * follow-up, R2). What the shader keeps of it is the exact half: a
+		 * sphere entirely behind the camera plane meets no forward ray. */
+		if (soften)
+		{
+			if (P[2] + rad <= 0)
+				return 0;
+		}
+		else if (!(stash[2] + rad > 0 &&
+			fabsf(stash[0]) - rad < fabsf(stash[2]) &&
 			fabsf(stash[1]) - rad < fabsf(stash[2])))
 			return 0;
 
@@ -183,8 +195,10 @@ namespace
 		if (!soften)
 			return chord * bulb.density;
 
-		// A4, the same three lines the shader runs - see hd_room.hlsl.
-		const float kRim = 1.0f;
+		// A4, the same three lines the shader runs - see hd_room.hlsl, where
+		// the note beside kRim says why it is 0.35 and not the 1.0 fix
+		// round A shipped.
+		const float kRim = 0.35f;
 		const float span = 2.0f * rad > 1e-4f ? 2.0f * rad : 1e-4f;
 		float t = chord / span;
 

@@ -1068,12 +1068,16 @@ void HDLevelBuild()
 	// scroll = material 1 parts and the draw calls they cost, sway =
 	// vertices with a wind weight, flipbook = material 13 parts, which are
 	// counted and NOT drawn (see MODIFICATIONS.md).
+	// cutout_parts (fix round A2) is the opaque parts of materials 6, 7 and
+	// 8 - the ones that draw with the alpha test on. Held against
+	// cutout_pages in the frame line below, the two say whether a page the
+	// alpha measurement calls a cut-out sheet is really used as one.
 	Log("HDLOG level=%s motion=%d scroll_parts=%d scroll_ranges=%d "
 		"scroll_tris=%d sway_verts=%d sway_parts=%d sway_dropped=%d "
-		"flipbook_parts=%d",
+		"flipbook_parts=%d cutout_parts=%d",
 		g_stem, tomb5.hd_motion ? 1 : 0, stats.scrollParts, stats.scrollRanges,
 		stats.scrollTris, stats.swayVertices, stats.swayParts,
-		stats.swayDropped, stats.flipbookParts);
+		stats.swayDropped, stats.flipbookParts, stats.cutoutParts);
 
 	g_room_count = number_rooms;
 

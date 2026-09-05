@@ -214,6 +214,10 @@ struct HDRenderStats
 	int biggestRangeTris;
 	int fallbackPageTris;		// layer 0 - drawn on the level's first page
 	int scrollParts;		// .TRG parts carrying a material 1 UV scroll
+	// Opaque parts of the cut-out materials 6, 7 and 8 - the ones whose
+	// param[0] is an alpha reference and that draw with the alpha test on
+	// (#123, fix round A2; hd_render.cpp, MaterialAlphaRef).
+	int cutoutParts;
 	int scrollRanges;		// draw calls that scroll, of `ranges`
 	int scrollTris;			// triangles in them
 	int swayVertices;		// vertices with TrgVertex::sway != 0
@@ -329,7 +333,7 @@ bool HDRenderGroupBounds(int group, float* mins, float* maxs);
 bool HDRenderGroupMotionInfo(int group, HDRenderGroupMotion* out);
 int HDRenderDrawCalls();			// since the last FrameBegin
 // A2: of those, the opaque draw calls that ran with the alpha test on
-// because their page is a cut-out sheet (leaves, gratings, nets).
+// because their .TRG material is a cut-out one (leaves, gratings, nets).
 int HDRenderCutoutCalls();
 
 // The bytes one room vertex takes in the vertex buffer. Named here because the

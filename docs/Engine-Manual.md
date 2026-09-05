@@ -388,14 +388,25 @@ renderer:
   the Deepsea Dive, the trees and grass of Ireland, the ivy of Rome — in the
   pass that has no transparency test, and the pages it draws them on are up to
   95 % hole. They came out as solid green rectangles. The test is now switched
-  on for the pages that really have holes in them, and for no others.
+  on for the remaster's own cut-out materials, and for no others. (The first
+  attempt decided it per texture page instead, from how much of the page was
+  transparent, and that was wrong: an ordinary wall's transparency channel is
+  a polish and wetness mask rather than a shape, so Rome's shop fronts, the
+  snow of the crane yard and the bulkheads of the submarine were eaten full
+  of holes. The second round of fixes replaced the rule.)
 - **Light shafts are light again, not white surfaces.** The remaster bakes
   those at double brightness and its glow meshes at the maximum; the classic
   engine's own rule stops an added glow at one, and now so does this.
 - **A fog bulb is a soft cloud, not a sphere with an outline.** The formula was
   right and exact; the classic engine hides its hard rim by computing it once
   per room vertex, which a per-pixel version cannot borrow. It now fades out
-  over its own edge instead.
+  over its own edge instead. (The second round of fixes took a straight line
+  out of the side of that cloud as well: the classic engine skips fog more
+  than 45 degrees off the centre of the view, which never showed on the 4:3
+  screens the game shipped for. On a wide screen, and above all in first
+  person, that skip cut across the picture and the fog jumped away at the
+  edge. It is gone; only a fog ball entirely behind the camera is skipped
+  now.)
 - **Only what is meant to move in the wind moves.** The remaster marks how far
   a vertex may bend, not that it bends at all, and four fifths of the marked
   vertices of Rome belong to ordinary walls, gates and lamp posts. The bend is

@@ -21,6 +21,8 @@
 #include "../d3dmatrix.h"
 #include "../3dmath.h"
 #include "../winmain.h"
+#include "../dxshell.h"				// DXTextureMemoryAtStart (#123, S6)
+#include "../texture.h"				// nTextures (#123, S6)
 #include "../../tomb5/tomb5.h"
 #include "../../game/objects.h"
 #include "../../game/control.h"		// number_rooms, room
@@ -287,6 +289,69 @@ namespace
 		0, 0, 1, 0,
 		0, 0, 0, 1
 	};
+
+	/* What HDLevelLoad measured of the .TRG, kept for the budget below: the
+	 * vertex and index buffers of this level have to come out of the card's
+	 * memory before a single page does, and this is the only place their size
+	 * is known BEFORE they are made. */
+	int g_scan_vertices = 0;
+	int g_scan_indices = 0;
+
+	/* THE AUTOMATIC TEXTURE BUDGET (#123, stage S6).
+	 *
+	 * hd_texture_budget_mb = 0 means "work it out", and this is the working
+	 * out. It starts from what the device said it had the moment it was made
+	 * (dxshell.cpp, DXTextureMemoryAtStart) and takes off everything else
+	 * that has to live on the card while a level runs:
+	 *
+	 *   the back buffer and the depth buffer, from the present parameters -
+	 *   16.6 MiB at 1920x1080, more on a bigger screen and less on a smaller
+	 *   one, so it is read rather than assumed;
+	 *
+	 *   the classic texture pages, which are still loaded and still drawn:
+	 *   nTextures of App.TextureSize squared in A8R8G8B8. They are
+	 *   D3DPOOL_MANAGED and Direct3D pages them in and out as it likes, so
+	 *   this is the worst case, which is the right case for a budget. A TR5
+	 *   level has between 60 and 160 of them and the array holds 256 - 16 to
+	 *   40 MiB, 64 at the ceiling;
+	 *
+	 *   this level's HD vertex and index buffers, which are D3DPOOL_DEFAULT
+	 *   and are made BEFORE the pages, so they are already spent by the time
+	 *   the budget bites. 61 MiB on TITLE, the largest there is;
+	 *
+	 *   and 64 MiB of slack, because a driver keeps command buffers, shader
+	 *   constants and its own copies of things, and a budget that spends the
+	 *   last byte of what a card admits to is not a budget.
+	 *
+	 * The floor is 16 MiB: below that the pages give up level after level
+	 * until they fit, which is degradation rather than refusal - a page is
+	 * never left out, whatever the number says.
+	 */
+	double AutoBudgetBytes()
+	{
+		const double have = (double)DXTextureMemoryAtStart;
+
+		if (have <= 0)
+			return 0;		// the device did not answer - no cap at all
+
+		const double w = (double)App.dx.PresentParams.BackBufferWidth;
+		const double h = (double)App.dx.PresentParams.BackBufferHeight;
+		const double frame = w * h * 4.0 *
+			(double)(App.dx.PresentParams.BackBufferCount + 1) +
+			(App.dx.PresentParams.EnableAutoDepthStencil ? w * h * 4.0 : 0.0);
+		const double classic = (double)nTextures *
+			(double)App.TextureSize * (double)App.TextureSize * 4.0;
+		const double buffers = (double)g_scan_vertices *
+			(double)HDRenderVertexBytes() + (double)g_scan_indices * 4.0;
+		const double slack = 64.0 * 1048576.0;
+
+		double budget = have - (frame + classic + buffers + slack);
+
+		if (budget < 16.0 * 1048576.0)
+			budget = 16.0 * 1048576.0;
+
+		return budget;
+	}
 
 	int DecodeThreads()
 	{
@@ -716,6 +781,8 @@ void HDLevelLoad(const char* wadName)
 	const char* why;
 
 	g_stem[0] = 0;
+	g_scan_vertices = 0;
+	g_scan_indices = 0;
 
 	/* The name for the frame clock, taken BEFORE the HD guard and kept in its
 	 * own buffer: FPSLOG has nothing to do with hd_enable and has to name the
@@ -746,6 +813,11 @@ void HDLevelLoad(const char* wadName)
 		g_stem[0] = 0;
 		return;
 	}
+
+	// What the buffers of this level will cost, for the budget - see
+	// AutoBudgetBytes. This is the only moment they are known in advance.
+	g_scan_vertices = stats.vertices;
+	g_scan_indices = stats.indices;
 
 	Log("HDLOG level=%s trg=v%d groups=%d rooms=%d sky=%d empty=%d pages=%d "
 		"verts=%d idx=%d ranges=%d changes=%d mixed=%d map=%d slots=%d "
@@ -825,6 +897,36 @@ void HDLevelBuild()
 		Log("HDLOG render init ok");
 	}
 
+	/* THE TEXTURE POLICY OF THIS LEVEL (#123, stage S6), set before anything
+	 * is loaded and in force for the rooms AND for the models and Lara's
+	 * wardrobe that follow them - it is one cache and one budget, not three.
+	 * The device's own size limit is added inside HDRenderLevelBegin, which
+	 * is the one place that has the caps in hand.
+	 *
+	 * Both settings are registry only and neither is in the options menu:
+	 * they are what a card that cannot hold the art needs, not a taste. */
+	{
+		HDPageCachePolicy policy;
+
+		policy.format = _stricmp(tomb5_hd_texture_format, "dxt5") == 0
+			? HD_PAGE_FORMAT_DXT5 : HD_PAGE_FORMAT_RGBA;
+		policy.budgetBytes = tomb5.hd_texture_budget_mb
+			? (double)tomb5.hd_texture_budget_mb * 1048576.0
+			: AutoBudgetBytes();
+		policy.maxSide = 0;
+
+		HDPageCacheConfigure(&policy);
+
+		Log("HDLOG level=%s budget=%.0f MiB (%s) format=%s card=%.0f MiB "
+			"classic_pages=%d framebuffer=%dx%d",
+			g_stem, policy.budgetBytes / 1048576.0,
+			tomb5.hd_texture_budget_mb ? "hd_texture_budget_mb" : "worked out",
+			policy.format == HD_PAGE_FORMAT_DXT5 ? "dxt5" : "rgba",
+			(double)DXTextureMemoryAtStart / 1048576.0, (int)nTextures,
+			(int)App.dx.PresentParams.BackBufferWidth,
+			(int)App.dx.PresentParams.BackBufferHeight);
+	}
+
 	const DWORD started = GetTickCount();
 
 	g_clipped_lights = 0;
@@ -837,6 +939,14 @@ void HDLevelBuild()
 		DecodeThreads(), &stats, &why))
 	{
 		Log("HDLOG level=%s build failed reason=%s", g_stem, why);
+
+		/* The page cache's own notes BEFORE it is emptied - on the way out
+		 * they are the only place that says which page the card gave up on
+		 * (#123, stage S6). Without this the log names the failure and not
+		 * the cause. */
+		for (int i = 0; i < HDPageCacheNoteCount(); i++)
+			Log("HDLOG level=%s page note: %s", g_stem, HDPageCacheNote(i));
+
 		HDRenderLevelEnd();
 		return;
 	}
@@ -901,13 +1011,34 @@ void HDLevelBuild()
 
 	Log("HDLOG level=%s pages named=%d distinct=%d from5=%d from4=%d from6=%d "
 		"white=%d failed=%d mips=%d widest=%d big=%d mib=%.1f "
-		"read_ms=%d decode_ms=%d(%d threads) upload_ms=%d",
+		"read_ms=%d decode_ms=%d(%d threads) upload_ms=%d compress_ms=%d",
 		g_stem, stats.pages.pages, stats.pages.slots, stats.pages.fromGame5,
 		stats.pages.fromGame4, stats.pages.fromGame6, stats.pages.fromWhite,
 		stats.pages.failed, stats.pages.mipLevels, stats.pages.widest,
 		stats.pages.bigPages, stats.pages.bytes / 1048576.0,
 		(int)(stats.pages.readMs + 0.5), (int)(stats.pages.decodeMs + 0.5),
-		stats.pages.threads, (int)(stats.pages.uploadMs + 0.5));
+		stats.pages.threads, (int)(stats.pages.uploadMs + 0.5),
+		(int)(stats.pages.compressMs + 0.5));
+
+	/* THE BUDGET, in the words stage S6 promised: what was allowed, what the
+	 * rooms of this level wanted, and what it cost them to fit. `dropped_mip0`
+	 * is pages that gave up their largest level to the budget; `caps` is
+	 * pages the DEVICE could not hold at full size, which is a different
+	 * thing and not the user's to change. The models and Lara add their own
+	 * line to this from hd_object.cpp - one cache, two callers. */
+	Log("HDLOG level=%s rooms budget=%.0f need=%.0f have=%.0f got=%.0f MiB "
+		"dropped_mip0=%d levels=%d caps=%d max_side=%d format=%s oom=%d",
+		g_stem, stats.pages.budgetBytes / 1048576.0,
+		stats.pages.needBytes / 1048576.0, stats.pages.haveBytes / 1048576.0,
+		stats.pages.bytes / 1048576.0, stats.pages.droppedMip0,
+		stats.pages.droppedLevels, stats.pages.clampedByCaps,
+		stats.maxTextureSide,
+		stats.pages.formatUsed == HD_PAGE_FORMAT_DXT5 ? "dxt5" : "rgba",
+		stats.pages.outOfMemory);
+
+	Log("HDLOG level=%s indices=%dbit window=%d (a 16 bit draw call reaches "
+		"65536) split=%d", g_stem, stats.index32 ? 32 : 16, stats.indexWindow,
+		stats.splitRanges);
 
 	for (int i = 0; i < HDPageCacheNoteCount(); i++)
 		Log("HDLOG level=%s page note: %s", g_stem, HDPageCacheNote(i));

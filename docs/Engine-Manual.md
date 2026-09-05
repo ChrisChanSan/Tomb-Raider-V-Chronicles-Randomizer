@@ -395,7 +395,69 @@ same key as every other setting
 | `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing below is read at all. |
 | `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Does nothing at all while `hd_enable` is off. |
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface. All three come from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
+| `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below). Set a number and that number is the ceiling. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
+| `hd_texture_format` | String | `rgba`, the default, keeps every page exactly as the Remaster drew it. `dxt5` compresses them and uses a quarter of the video memory for a small, measurable loss. Anything else reads as `rgba`. |
+
+### What the HD art asks of your graphics card
+
+The floor is 2004 hardware: **vertex and pixel shader 3.0** (a GeForce 6 or a
+Radeon X1000 and anything since), **A8R8G8B8 textures**, and a **32 bit index
+buffer**. Miss one of those and the game runs classic for the rest of the
+session, with the reason in the log — nothing crashes and no message box
+appears. Textures up to **4096 pixels** are wanted but not required: eleven of
+the Remaster's pages are that big, and a card that stops at 2048 gets those
+eleven one mip level down instead of not at all. (The 32 bit index buffer is
+the one real cut-off, and it is not a judgement: the Remaster's level files
+number their vertices over the whole level, so a single wall tile can name
+three vertices a million entries apart, and no amount of splitting brings that
+under 65536. Only RICHCUT2 is small enough to draw without one.)
+
+Video memory is the real question, and the answer is measured rather than
+guessed. Kept exactly as the Remaster drew them, one level's pages come to
+between **191 MiB** (JOBY4, the submarine) and **424 MiB** (ANDREA2, the
+Colosseum); the title screen is 397. Of that, the rooms are the bulk — 168 to
+376 MiB — the level's models add 5 to 72, and Lara's wardrobe 12 to 28. On top
+of the pages come this level's HD geometry buffers (6 to 62 MiB), the classic
+texture pages, which are still loaded and still drawn (2 to 24 MiB, measured
+over all fifteen levels), and the back buffer with its depth buffer (25 MiB at
+1920x1080). A **gigabyte** card has all of that several times over; the setting
+exists for the ones that do not.
+
+**The budget.** Left at `0`, the engine asks the card how much texture memory
+it is offering at the moment the device is made, and takes off what else has to
+live there: the back buffer and depth buffer at your resolution, the classic
+texture pages of this level, this level's HD geometry buffers, and 64 MiB of
+slack for the driver. What is left is the budget. For the title screen that
+reserve is 155 MiB against 397 MiB of pages, so it loads everything at full
+size on any card offering **552 MiB or more**; for the heaviest level, ANDREA2,
+the number is **595 MiB**. Call it six hundred: a card that offers more than
+that never cuts anything, and a two gigabyte card is nowhere near the line.
+
+**What happens over budget.** Never a missing page — a page that is not there
+is a hole in a wall and reads as a fault. Instead the **largest pages give up
+their largest mip level**, biggest first, until what is left fits: a 512 pixel
+page becomes 256, a 4096 one becomes 2048. Texture coordinates do not notice,
+so the wall is softer and nothing else changes — no colour shift, no missing
+surface, no seam. The log names the budget, what the level wanted, and how many
+pages gave up how many levels. The same rule catches a card that cannot hold a
+4096 pixel texture at all: those pages start one level down and the reason is
+in the log.
+
+**The other way, `hd_texture_format = dxt5`.** Instead of shrinking the pages
+it compresses them, on the processor, while the level loads. Video memory drops
+to a quarter — ANDREA1's rooms from 280 to 70 MiB — and every page keeps its
+full size and its whole mip chain, so distant detail survives where the budget
+would have blurred it. The cost is compression noise: measured over sixteen
+pages of the Rome levels it is 40.3 dB peak signal to noise on average and
+35.4 dB at worst, which shows up as slight banding on smooth gradients and is
+hard to see on the Remaster's stone, plaster and metal. It costs about one and
+a half seconds of loading on eight cores. **`rgba` remains the default and the
+recommendation**; `dxt5` is there for a card that would otherwise have to blur.
+
+If the card genuinely runs out of video memory in the middle of a level load,
+that level goes back to classic as a whole — never half of it — and the log
+names the page it failed on.
 
 **The light in an HD room now does everything it did before.** An earlier
 build drew the remaster's rooms with the remaster's baked light and nothing

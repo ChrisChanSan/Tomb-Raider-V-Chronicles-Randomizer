@@ -193,6 +193,19 @@ struct HDRenderStats
 	int ranges;			// draw calls for a whole level, all rooms, all passes
 	int splitRanges;		// ranges the device's primitive limit forced apart
 	int index32;			// 1 = 32 bit index buffer
+	/* The widest span of vertex numbers ONE draw call reaches over (#123,
+	 * stage S6). It is what decides whether a card with no 32 bit index
+	 * buffer can still draw the level: with 16 bit indices a draw call
+	 * addresses 65536 vertices from its own base, so a level whose every
+	 * range stays inside that window needs no 32 bit buffer at all. */
+	int indexWindow;
+	/* And the same for ONE TRIANGLE: how far apart the three corners of the
+	 * worst triangle in the level are in the vertex array. It is the floor
+	 * under indexWindow - no cutting of ranges can ever go below it - and it
+	 * is what says whether a card with only 16 bit indices could draw this
+	 * level at all. Measured, and the answer is in MODIFICATIONS.md. */
+	int triangleWindow;
+	int maxTextureSide;		// what the device said, 0 = it did not say
 	int waterMarks;			// classic marks handed in
 	int markedVertices;		// HD vertices a mark was found for
 	int markedChoppy;		// of those, the nWVtx set
@@ -223,6 +236,22 @@ struct HDRenderZSample
 
 // Creates the shaders and the vertex declaration. Nothing level-specific.
 bool HDRenderInit(IDirect3DDevice9* device, const char** why);
+
+/* PRETEND THE CARD IS POORER THAN IT IS (#123, stage S6).
+ *
+ * The fallbacks for a small card - pages that start below their top level
+ * because the device cannot hold 4096 pixels, and 16 bit index buffers with a
+ * base vertex per draw call because the device cannot address 1.1 million -
+ * are the two places in the HD path that no machine in this house can reach.
+ * A path nobody ever runs is a path that does not work, so this call bends the
+ * caps that HDRenderInit read from the device, and the diagnostic tool draws
+ * the same picture through them.
+ *
+ * maxTextureSide 0 leaves the device's own answer alone; noIndex32 non-zero
+ * makes the renderer believe MaxVertexIndex is 65535. Call it BEFORE
+ * HDRenderInit. The engine never calls it - there is no registry key and no
+ * option for it, on purpose. */
+void HDRenderCapOverride(int maxTextureSide, int noIndex32);
 void HDRenderShutdown();
 bool HDRenderReady();
 
@@ -297,6 +326,10 @@ bool HDRenderGroupBounds(int group, float* mins, float* maxs);
 // there; a group that draws nothing answers with all zeroes.
 bool HDRenderGroupMotionInfo(int group, HDRenderGroupMotion* out);
 int HDRenderDrawCalls();			// since the last FrameBegin
+
+// The bytes one room vertex takes in the vertex buffer. Named here because the
+// texture budget has to price a level's buffers before they are made.
+int HDRenderVertexBytes();
 
 // --- the projection --------------------------------------------------------
 

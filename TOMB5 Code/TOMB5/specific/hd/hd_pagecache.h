@@ -39,6 +39,32 @@ struct IDirect3DTexture9;
 // page numbers, and it says what it did through the numbers and notes below
 // instead of writing a log line itself.
 
+/* THE POLICY (#123, stage S6). Three answers to "the card is smaller than the
+ * art", set once per level out of the registry and in force until the next
+ * call. They are NOT parameters of Create/Append because they are not
+ * properties of one call: a level's rooms and its models go through this cache
+ * one after the other and must obey ONE budget and ONE format, or the second
+ * call would happily spend what the first one saved. */
+#define HD_PAGE_FORMAT_RGBA	0	// A8R8G8B8, lossless - the default
+#define HD_PAGE_FORMAT_DXT5	1	// BC3 on the processor - a quarter of it
+
+struct HDPageCachePolicy
+{
+	int format;		// HD_PAGE_FORMAT_*
+	double budgetBytes;	// the cap on everything this cache holds; 0 = none
+	int maxSide;		// the device's largest texture; 0 = no limit
+};
+
+// Sets the policy. A null pointer puts back the defaults (RGBA, no budget, no
+// size limit), which is also what the cache starts with, so an engine that
+// never calls this behaves exactly as it did in stage S1.
+void HDPageCacheConfigure(const HDPageCachePolicy* policy);
+void HDPageCachePolicyNow(HDPageCachePolicy* out);
+
+// The texture bytes the cache holds right now - what a second call has to
+// budget against.
+double HDPageCacheBytes();
+
 struct HDPageCacheStats
 {
 	int pages;		// page numbers handed in
@@ -51,13 +77,24 @@ struct HDPageCacheStats
 	int mipLevels;		// mip levels uploaded over all pages
 	int widest;		// widest page seen
 	int bigPages;		// pages past 1024 on a side - 85 MiB each at 4096
-	double bytes;		// texture bytes now on the device
+	double bytes;		// texture bytes this call put on the device
 	double readMs;		// wall clock: reading the files
 	double decodeMs;	// wall clock: BC7 -> A8R8G8B8, over all threads
+	double compressMs;	// wall clock: A8R8G8B8 -> DXT5, 0 in the RGBA case
 	double uploadMs;	// wall clock: lock, copy, UpdateTexture
 	double totalMs;
 	int managed;		// 1 = D3DPOOL_MANAGED, 0 = D3DPOOL_DEFAULT
 	int threads;
+
+	/* --- stage S6, the budget ---------------------------------------- */
+	double needBytes;	// what this call's pages cost at full size
+	double budgetBytes;	// the cap in force, 0 = none
+	double haveBytes;	// what the cache already held when this call began
+	int formatUsed;		// HD_PAGE_FORMAT_*, after the device had its say
+	int droppedMip0;	// pages loaded without their largest level
+	int droppedLevels;	// levels given up over all of them
+	int clampedByCaps;	// pages shrunk because the device cannot hold them
+	int outOfMemory;	// 1 = the device ran out of video memory mid-level
 };
 
 // Builds the cache. `installRoot` is the remaster's game 5 folder (the one
@@ -102,6 +139,7 @@ IDirect3DTexture9* HDPageCacheTexture(int page);
 // in its ranges so that a draw call is one array lookup, not a search.
 int HDPageCacheSlots();
 int HDPageCacheSlotOf(int page);			// -1 when unknown
+int HDPageCachePageOfSlot(int slot);			// -1 when out of range
 IDirect3DTexture9* HDPageCacheSlotTexture(int slot);
 
 // Everything that was not found where it should have been, in words, for the

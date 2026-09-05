@@ -673,6 +673,24 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		stats.indexBytes / 1024.0, (int)(stats.readMs + 0.5),
 		(int)(stats.buildMs + 0.5));
 
+	/* The models' half of the texture budget (#123, stage S6). They arrive
+	 * after the rooms and into the same cache, so `have` is what the rooms
+	 * already put on the card and `budget` is the same number the rooms were
+	 * measured against - one cap for the level, not one per caller. Most of a
+	 * level's model pages are pages its rooms already wear, so `need` is
+	 * usually a fraction of the rooms' and drops are rare. */
+	Log("HDLOG level=%s models budget=%.0f need=%.0f have=%.0f got=%.0f MiB "
+		"pages=%d dropped_mip0=%d levels=%d caps=%d format=%s oom=%d "
+		"cache=%.0f MiB",
+		g_stem, stats.pageStats.budgetBytes / 1048576.0,
+		stats.pageStats.needBytes / 1048576.0,
+		stats.pageStats.haveBytes / 1048576.0,
+		stats.pageStats.bytes / 1048576.0, stats.pageStats.slots,
+		stats.pageStats.droppedMip0, stats.pageStats.droppedLevels,
+		stats.pageStats.clampedByCaps,
+		stats.pageStats.formatUsed == HD_PAGE_FORMAT_DXT5 ? "dxt5" : "rgba",
+		stats.pageStats.outOfMemory, HDPageCacheBytes() / 1048576.0);
+
 	for (int i = 0; i < HDModelNoteCount(); i++)
 		Log("HDLOG level=%s model note: %s", g_stem, HDModelNote(i));
 

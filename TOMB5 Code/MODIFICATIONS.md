@@ -2007,12 +2007,183 @@ the shaft whose classic twin is the `UVROT` tile; `JOBY4` room 123, where the
 kelp bends and the rock walls do not (1.9 % of the frame, all of it in the
 columns the kelp occupies).
 
+#### Stage S6 — the texture budget, the small card, and the missing page
+
+Stage S1 put every page on the card exactly as the Remaster drew it, because
+that is what the user chose: lossless, whatever it costs. This stage is what
+happens when the card cannot pay. Two new registry values, both registry-only
+and neither in the options menu, because neither is a taste:
+
+| Value | Type | Default | Meaning |
+|---|---|---|---|
+| `hd_texture_budget_mb` | DWORD | `0` | The ceiling on the HD pages, in mebibytes. `0` = work it out from the card. |
+| `hd_texture_format` | String | `rgba` | `rgba` = A8R8G8B8, lossless. `dxt5` = BC3, a quarter of the memory. |
+
+**What a level actually costs**, measured over all fifteen, in mebibytes of
+A8R8G8B8 on the card (`RoomProbe -nodraw` for the rooms, `ModelProbe -all
+-withrooms` for the models, `ModelProbe -lara` for the wardrobe):
+
+| Level | Rooms | Models | Lara | Total | Vertices | VB+IB |
+|---|---:|---:|---:|---:|---:|---:|
+| ANDREA1 | 279.9 | 61.3 | 25.3 | 366.5 | 955,148 | 32.9 |
+| ANDREA2 | 331.9 | 64.0 | 28.0 | **423.9** | 1,814,770 | 62.4 |
+| ANDREA3 | 251.9 | 57.3 | 28.0 | 337.2 | 1,095,516 | 39.7 |
+| ANDY1 | 297.2 | 62.7 | — | 359.9 | 657,035 | 24.4 |
+| ANDY2 | 295.9 | 34.7 | — | 330.6 | 554,726 | 22.0 |
+| ANDY3 | 283.9 | 61.3 | — | 345.2 | 673,746 | 27.3 |
+| JOBY2 | 251.9 | 62.7 | 26.7 | 341.3 | 1,082,551 | 42.1 |
+| JOBY3 | 204.0 | 69.3 | — | 273.3 | 713,265 | 24.7 |
+| JOBY4 | 167.9 | 10.7 | 12.0 | **190.6** | 269,655 | 10.7 |
+| JOBY5 | 219.9 | 50.7 | — | 270.6 | 862,703 | 31.5 |
+| RICH1 | 246.6 | 60.0 | 26.7 | 333.3 | 556,988 | 19.9 |
+| RICH2 | 319.9 | 65.3 | 25.3 | 410.5 | 1,427,263 | 50.8 |
+| RICH3 | 206.6 | 72.0 | 28.0 | 306.6 | 701,878 | 24.9 |
+| RICHCUT2 | 194.6 | 0.0 | 26.7 | 221.3 | 44,268 | 1.3 |
+| TITLE | 375.8 | 5.3 | 16.0 | 397.1 | 1,853,159 | 61.6 |
+
+A dash is a level where Lara stays classic today — young Lara in the Irish
+levels, and the two levels whose outfit byte is the ponytail the randomizer
+also writes for a Tomb Raider III guest (stage S7's marker). The three columns
+add up without overlap: a page number the rooms use and a page number a model
+uses are different name spaces in the Remaster's own art, so nothing is paid
+for twice — measured, not assumed (`-withrooms` appends the models to the
+cache the rooms filled and reports what it really added).
+
+**The automatic budget.** `DXCreateD3DDevice` asks `GetAvailableTextureMem()`
+one instruction after the device exists — the only moment the answer means
+what it says, because nothing has been loaded yet — and `hd_level.cpp` takes
+off what else has to live on the card: the back buffer and depth buffer out of
+the present parameters, `nTextures` classic pages of `App.TextureSize` squared
+(measured 7 to 96 pages, 1.8 to 24.0 MiB, never near the 256 the array holds),
+this level's HD vertex and index buffers, which are made *before* the pages,
+and 64 MiB of slack for the driver. The floor is 16 MiB. For the title screen
+the reserve is 155 MiB against 397 MiB of pages, so **any card offering 552 MiB
+loads it whole**; for ANDREA2, the heaviest, the number is 595 MiB. A two
+gigabyte card is nowhere near either.
+
+**What happens over budget: mip 0 goes, pages never do.** A missing page is a
+hole in a wall and reads as a rendering fault; a page that starts one level
+down is a softer wall and nothing else, because the texture coordinates are
+0..1 of whatever the texture turns out to be. So the pages are ordered by what
+they cost, biggest first, and the biggest give up their top level until what is
+left fits — repeatedly, if one pass is not enough, and never past a page's last
+level. The sort is **stable**, which matters: 2391 of the Remaster's 2406 pages
+are the same size, so almost every comparison is a tie, and an unstable sort
+would pick a different set each run and make two screenshots of the same wall
+disagree for no findable reason.
+
+The whole decision is taken from the pages' 148-byte DDS headers before a
+single block is decoded (`BC7DDSShape`, new in `bc7.cpp`). Stage S1 estimated a
+page's cost as four times its file length; an estimate is not a thing to
+promise a card. The estimate now equals the outcome to the mebibyte — TITLE
+plans 375.8 MiB and loads 375.8 MiB.
+
+**The format switch.** `hd_dxt5.cpp` is a BC3 encoder of our own, about 150
+lines: the bounding box of each 4x4 block pulled in by a sixteenth at each end,
+endpoints quantised to RGB565, indices chosen as the nearest of the four
+palette entries in the colour *the card* will produce, with the classic 2:4:1
+weighting; alpha always in the eight-value mode. No `d3dx` — this port depends
+on `d3d9.dll` and nothing else. The file carries its own decoder as well, which
+the engine never calls and the proof does: `RoomProbe -psnr` decodes a page,
+compresses it, decodes it back and prints the peak signal to noise ratio, so
+the quality is a number rather than an opinion. **Measured over sixteen pages
+of ANDREA1: mean 40.28 dB, worst 35.41 dB, best 41.54 dB**, and the pages go
+from 279.9 to 70.0 MiB — a quarter, exactly. It costs 1.46 s of compression on
+eight cores, and it *lowers* the peak process memory (270 → 136 MiB) because
+the pixels are let go on the worker thread as soon as the blocks exist.
+`rgba` stays the default and the recommendation.
+
+**The card's own limits, asked and not assumed.**
+
+| The device says | What happens |
+|---|---|
+| no `vs_3_0` / `ps_3_0` | classic for the session, one line in the log |
+| fewer than 320 pixel shader slots | classic for the session |
+| no `UBYTE4` vertex element | classic for the session |
+| no `A8R8G8B8` texture (`CheckDeviceFormat`) | classic for the session |
+| no `DXT5` while `hd_texture_format = dxt5` | quietly back to `rgba`, one note |
+| `MaxTextureWidth/Height` below a page | that page starts far enough down to fit, one note each |
+| `MaxVertexIndex` = 65535 | see below |
+| `CreateTexture` out of video memory mid-level | the **whole** level back to classic, naming the page |
+
+That last one is a change of behaviour, not only a new message. Before, a page
+that failed to upload left its slot empty, the draw calls naming it were
+skipped, and the surfaces simply were not there — a level half in HD with holes
+in it. Now an out-of-memory answer stops the load, `HDRenderLevelBegin` fails,
+and `HDLevelBuild` puts the level on the classic path as a whole. The same
+rule was extended to the models: `HDModelLevelBegin` used to note a page
+failure and carry on building models whose draw calls named textureless slots,
+which would have made the enemies *invisible* rather than classic.
+
+**The 16 bit index buffer — checked, and honestly reported.** The plan asked
+whether the index buffer could be split for a card without 32 bit indices. It
+can be, in principle: every draw call here is one range, and a range can be
+given 16 bit indices rebased on its own lowest vertex with the vertex stream
+moved to that vertex (`SetStreamSource`'s byte offset, which is plainly inside
+what such a card can address, unlike adding a base to the index). That path is
+built and it runs today — RICHCUT2 has 44,268 vertices and uses it, and its
+picture is byte-identical to the S5 build's.
+
+What cannot be done is the *large* levels, and the reason is a measurement.
+Cutting a range only helps while the pieces stay inside a 65536 vertex window,
+and the floor under that is one triangle, which cannot be cut. The `.TRG`
+numbers its vertices over the whole level rather than room by room, so the
+three corners of one wall tile sit far apart: the widest single triangle
+reaches over **235,507 vertices in JOBY4 and 1,391,696 in RICH2**, and only
+RICHCUT2 (33,585) is under the line. So such a card draws RICHCUT2 in HD and
+every other level classic, with the number in the log. Making the rest work
+would mean a second vertex buffer layout compacted per room, for hardware that
+has not shipped since about 2002; it is not built, and this paragraph is the
+record of why.
+
+**The missing page, and a bug found while checking it.** TROne's rule is that a
+page which cannot be found is white and never black, and stage S1 followed it
+by reaching for the Remaster's own `TEX\WHITE.DDS`. Measured now: **that file
+exists in `4\TEX` only** — not in `5\TEX`, not in `6\TEX`. An installation
+without the fourth game therefore had no white tile at all, the page ended with
+no texture, its draw calls were skipped, and the wall was not white but *gone*.
+The cache now makes four white texels itself when nothing can be found, so the
+rule holds without any file on disk; `WHITE.DDS` is still preferred where it
+is there. Proved with a bundle holding only `5` (a junction, nothing copied):
+RICH3's three pages that live in `4\TEX` go from `3 failed` to `3 white, 0
+failed`, the rooms load, and Lara's nineteen wardrobe parts — the whole
+wardrobe lives in `4\ITEM` — report "is in no ITEM folder - classic", one line
+each, and she draws the classic way.
+
+**The level change holds one level, not two.** `HDLevelBuild` releases the
+previous level's objects, buffers and pages at its top, before it builds
+anything, and `HDLevelUnload` makes no Direct3D call at all (it runs on the
+load thread). `RoomProbe -seq TITLE,ANDREA2,TITLE` walks the same road without
+the game: free texture memory returns to its starting value after every level,
+and TITLE's numbers repeat exactly the second time (3658 MiB free both times).
+The process's own commit rises about 43 MiB per large level for the first five
+and then stops — the C runtime keeping large freed blocks rather than a leak;
+a small level (RICHCUT2, 1.3 MiB of buffers) shows 4 MiB of drift over four
+builds, which is the same effect in proportion.
+
+**New and changed proofs.** `RoomProbe` gained `-budget <MiB>`,
+`-format rgba|dxt5`, `-psnr`, `-caps maxtex <n>`, `-caps noidx32`,
+`-seq <A,B,C>` and `-vramhog`; `ModelProbe` gained `-withrooms <LEVEL>`. The
+two `-caps` switches bend the caps `HDRenderInit` read from the device
+(`HDRenderCapOverride`, which the engine never calls and for which there is no
+registry value) — a fallback nobody can run is a fallback that does not work.
+`-vramhog` fills the card with 64 MiB blocks until it refuses, which is the
+only way to see the out-of-memory path: 1477 blocks taken, 0 MiB left, and the
+level then refuses with `page 130: the card ran out of video memory after
+19 MiB - the level goes back to classic`.
+
+**Regression.** ANDREA1 rooms 12 and 69 and the three separate passes of room
+19, and RICHCUT2 room 3 through the 16 bit path, are byte-identical to the
+same pictures out of a build of the S5 commit. Nothing about a normal card's
+picture changed in this stage.
+
 ---
 
 **Re-measured after this stage** (2026-09-05), counting every source file under
 `TOMB5 Code` (`.c`, `.cpp`, `.h`, `.hlsl`, `.inc`) plus the four licence and
-notice files that came with the vendored code: **169** files changed or added,
-**154** of them carrying the modification notice.
+notice files that came with the vendored code: **171** files changed or added,
+**156** of them carrying the modification notice (stage S6 added two:
+`specific/hd/hd_dxt5.cpp` and its header).
 
 Fifteen do not, and none of them should. Fourteen are the ones already named
 above — `tomb5/libs/stb/stb_vorbis.c`, `tomb5/libs/discordRPC/LICENSE`, the

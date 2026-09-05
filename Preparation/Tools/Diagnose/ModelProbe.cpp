@@ -39,6 +39,13 @@
  *     -slot <n>           the model bound to slot n of the level, which needs
  *                         -level
  *     -all                every slot of the level, as a table, then stop
+ *     -withrooms <LEVEL>  load that level's ROOM pages into the cache first
+ *                         (#123, stage S6). The models are then appended to
+ *                         it, exactly as HDLevelBuild does in the game, so
+ *                         "pages added" is the marginal cost of the models
+ *                         rather than their cost in isolation - a page a room
+ *                         and a model both wear is paid for once. Prints the
+ *                         level's total page bytes as well.
  *     -lara <LEVEL>       LARA'S COMPOSITE (#123, stage S4-1). Loads the
  *                         wardrobe that level wears - the outfit, the face,
  *                         the braid, the hands and the holsters - against the
@@ -1704,6 +1711,11 @@ int main(int argc, char** argv)
 
 	std::string root = argv[1];
 	std::string name, levelStem, classicPath, out = ".\\modelprobe";
+	/* Stage S6: load that level's ROOM pages first, so the model page count
+	 * that comes out is the one the engine really pays - most of a level's
+	 * model pages are pages its rooms already wear, and appending them to a
+	 * cache that already holds the rooms is exactly what HDLevelBuild does. */
+	std::string withRooms;
 	int slot = -1;
 	bool all = false, nodes = false, noDraw = false, managed = false, head = false;
 	bool itemcheck = false;
@@ -1735,6 +1747,8 @@ int main(int argc, char** argv)
 			levelStem = argv[++i];
 		else if (!_stricmp(argv[i], "-classic") && i + 1 < argc)
 			classicPath = argv[++i];
+		else if (!_stricmp(argv[i], "-withrooms") && i + 1 < argc)
+			withRooms = argv[++i];
 		else if (!_stricmp(argv[i], "-all"))
 			all = true;
 		else if (!_stricmp(argv[i], "-lara") && i + 1 < argc)
@@ -2007,6 +2021,26 @@ int main(int argc, char** argv)
 		}
 	}
 
+	/* --- the rooms first, if asked (#123, stage S6) --------------------- */
+	double roomsBytes = 0;
+
+	if (!withRooms.empty())
+	{
+		HDRenderStats roomStats;
+		const char* roomWhy = "";
+
+		if (HDRenderLevelBegin(root.c_str(), withRooms.c_str(), 0, managed,
+			threads, &roomStats, &roomWhy))
+		{
+			roomsBytes = roomStats.pages.bytes;
+			printf("rooms first        %s: %d page(s), %.1f MiB - the models "
+				"are appended to that cache\n", withRooms.c_str(),
+				roomStats.pages.slots, roomsBytes / 1048576.0);
+		}
+		else
+			printf("rooms first        %s FAILED - %s\n", withRooms.c_str(), roomWhy);
+	}
+
 	/* --- load ----------------------------------------------------------- */
 	HDModelStats stats;
 
@@ -2041,6 +2075,12 @@ int main(int argc, char** argv)
 		stats.pages, stats.pageStats.bytes / 1048576.0, stats.pageStats.decodeMs);
 	printf("time               %.0f ms reading the .TRM files, %.0f ms building\n",
 		stats.readMs, stats.buildMs);
+
+	if (!withRooms.empty())
+		printf("level total        %.1f MiB of pages on the card "
+			"(%.1f rooms + %.1f models and wardrobe)\n",
+			HDPageCacheBytes() / 1048576.0, roomsBytes / 1048576.0,
+			(HDPageCacheBytes() - roomsBytes) / 1048576.0);
 
 	for (int i = 0; i < HDModelNoteCount(); i++)
 		printf("  note: %s\n", HDModelNote(i));

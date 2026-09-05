@@ -25,6 +25,7 @@ DXINFO* G_dxinfo;
 LPDIRECT3D9 G_d3d;
 HWND G_hwnd;
 char keymap[256];
+ulong DXTextureMemoryAtStart = 0;	// see dxshell.h (#123, stage S6)
 
 static char tga_header[18] = { 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 1, 0, 1, 16, 0 };
 
@@ -120,7 +121,26 @@ long DXCreateD3DDevice(LPDIRECT3D9 d3d, UINT adapter, HWND hwnd, D3DPRESENT_PARA
 		return 0;
 	}
 
-	Log("DXCreateD3DDevice Successful");
+	/* HOW MUCH TEXTURE MEMORY THIS CARD HAS (#123, stage S6). Asked HERE and
+	 * nowhere else, because this is the only moment the answer means what it
+	 * says: the device is one instruction old, it owns its back buffer and
+	 * its depth buffer and nothing else, and no level has been loaded. Asked
+	 * later - at a level start, say - the number is already reduced by
+	 * whatever the last level left on the card, and a budget built on it
+	 * would shrink a little with every level the player passes through.
+	 *
+	 * The number is what Direct3D 9 is willing to promise, not what the card
+	 * physically holds: it counts the driver's shared system memory too and
+	 * it is rounded, and on a large card it stops at four gigabytes because
+	 * it is a UINT of bytes. All three are fine for what it is used for -
+	 * deciding whether a level's pages fit with room to spare.
+	 *
+	 * Zero when the device does not answer; the budget then falls back to
+	 * "no limit", which is stage S1's behaviour. */
+	DXTextureMemoryAtStart = *device ? (*device)->GetAvailableTextureMem() : 0;
+
+	Log("DXCreateD3DDevice Successful - the device offers %.0f MiB of texture memory",
+		(double)DXTextureMemoryAtStart / 1048576.0);
 	return 1;
 }
 

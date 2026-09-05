@@ -2671,5 +2671,10 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 								//the water surface wobble. Registry only and ON by default, for
 								//the same reason as hd_objects, and equally dead while
 								//hd_enable is off.
+	ulong hd_texture_budget_mb;	//0 = work it out from the card's own texture memory (#123, S6),
+								//otherwise the cap in mebibytes. Over it, the largest pages
+								//give up their largest mip level - never a whole page.
+								//The FORMAT is a string and therefore not in here - see
+								//tomb5_hd_texture_format.
 };
 #pragma pack(pop)

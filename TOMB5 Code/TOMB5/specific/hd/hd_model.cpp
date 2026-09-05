@@ -120,6 +120,9 @@ namespace
 	std::map<int, Model> g_heads;		// slot -> its separate HD face
 	std::vector<std::string> g_notes;
 	std::string g_install;
+	// A refusal whose wording is not a literal - it has to outlive the call
+	// that hands *why out. Never cleared by HDModelLevelEnd.
+	std::string g_error;
 
 	bool g_in_frame = false;
 	int g_draw_calls = 0;
@@ -1169,7 +1172,20 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		if (!HDPageCacheAppend(device, installRoot, pages.empty() ? 0 : &pages[0],
 			(int)pages.size(), managedPages, threads, &page_stats, &page_why))
 		{
-			note("the model pages could not be loaded: %s", page_why);
+			/* The pages did not load - the card ran out of video memory, or
+			 * it cannot make the format at all (#123, stage S6). Going on
+			 * would build models whose draw calls name page slots with no
+			 * texture behind them, and a draw call with no texture is
+			 * skipped, so the enemies would be INVISIBLE rather than classic.
+			 * Refusing the whole model build hands every slot back to the
+			 * classic path, which is a picture. */
+			if (stats)
+				stats->pageStats = page_stats;
+
+			g_error = std::string("the model pages could not be loaded: ") + page_why;
+			HDModelLevelEnd();
+			*why = g_error.c_str();
+			return false;
 		}
 		else if (stats)
 		{

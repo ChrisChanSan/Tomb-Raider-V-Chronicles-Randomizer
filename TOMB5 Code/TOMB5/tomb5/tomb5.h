@@ -20,6 +20,12 @@ extern tomb5_options tomb5;
 // of tomb5_options because that struct holds only what the registry likes as
 // a DWORD. Registry value: hd_install, in the same key as every tomb5.* one.
 extern char tomb5_hd_install[260];
+
+// How the HD pages are held on the card (#123, stage S6): "rgba" for the
+// lossless A8R8G8B8 the user chose as the default, "dxt5" for a quarter of
+// the video memory and a measurable loss of quality. A string for the same
+// reason hd_install is one. Registry value: hd_texture_format.
+extern char tomb5_hd_texture_format[16];
 void init_tomb5_stuff();
 void save_new_tomb5_settings();
 void RPC_Init();

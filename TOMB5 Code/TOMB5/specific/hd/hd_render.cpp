@@ -84,6 +84,14 @@ namespace
 		int pageSlot = -1;
 		float scrollU = 0.0f;
 		float scrollV = 0.0f;
+		/* The lowest vertex number this range names and how many it reaches
+		 * over (#123, stage S6). With a 32 bit index buffer they are only a
+		 * measurement; with a 16 bit one they ARE the draw call - the indices
+		 * are written relative to `baseVertex` and the vertex stream is moved
+		 * to that vertex before the draw, which is how 16 bit indices address
+		 * a level with more than 65536 vertices. */
+		unsigned int baseVertex = 0;
+		unsigned int vertexSpan = 0;
 	};
 
 	struct HDGroup
@@ -152,6 +160,12 @@ namespace
 	int g_vertex_count = 0;
 	bool g_index32 = false;
 	D3DCAPS9 g_caps;
+
+	/* The two caps the diagnostic tool is allowed to bend (#123, stage S6).
+	 * Zero means "leave the device's own answer alone", which is what the
+	 * engine always uses. */
+	int g_cap_max_side = 0;
+	int g_cap_no_index32 = 0;
 
 	SavedState g_saved;
 	bool g_in_frame = false;
@@ -471,6 +485,19 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		return false;
 	}
 
+	/* The overrides, if a diagnostic tool asked for them. They are applied to
+	 * the copy of the caps, so everything below - the level build, the page
+	 * budget, the draw calls - reads the small card's answer and not the real
+	 * one. */
+	if (g_cap_max_side > 0)
+	{
+		g_caps.MaxTextureWidth = (DWORD)g_cap_max_side;
+		g_caps.MaxTextureHeight = (DWORD)g_cap_max_side;
+	}
+
+	if (g_cap_no_index32)
+		g_caps.MaxVertexIndex = 0xFFFF;
+
 	/* What the HD path needs of the card, all of it 2004 hardware:
 	 * vs_3_0 / ps_3_0, and the two packed declaration types the 20 byte
 	 * vertex is made of. */
@@ -534,6 +561,12 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 	}
 
 	return true;
+}
+
+void HDRenderCapOverride(int maxTextureSide, int noIndex32)
+{
+	g_cap_max_side = maxTextureSide > 0 ? maxTextureSide : 0;
+	g_cap_no_index32 = noIndex32 ? 1 : 0;
 }
 
 void HDRenderShutdown()
@@ -618,28 +651,59 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		return false;
 	}
 
-	/* 32 bit indices unless the level is small enough not to need them.
-	 * ANDREA2 has 5,471,013 indices over 1.1 M vertices; there is no 16 bit
-	 * reading of that. Every Direct3D 9 HAL device supports 32 bit indices,
-	 * but the cap is asked rather than assumed. */
-	g_index32 = g_vertex_count > 65535;
+	/* 32 bit indices unless the level is small enough not to need them, or
+	 * the device cannot do them. ANDREA2 has 5,471,013 indices over 1.1 M
+	 * vertices; there is no 16 bit reading of that AS ONE STREAM.
+	 *
+	 * A device that answers 65535 to MaxVertexIndex is not turned away any
+	 * more (#123, stage S6). Every draw call in this renderer is one range,
+	 * and a range reaches over far fewer vertices than the level has - so the
+	 * 16 bit path rebases each range's indices on the lowest vertex it names
+	 * and moves the STREAM to that vertex instead, with SetStreamSource's
+	 * byte offset. Sixteen bit indices then address 65536 vertices from
+	 * wherever the range sits, and the level's 1.1 million are reached a
+	 * window at a time. Whether every range really fits in such a window is a
+	 * measurement, taken below and refused out loud when it fails.
+	 *
+	 * The stream offset was chosen over DrawIndexedPrimitive's BaseVertexIndex
+	 * on purpose: a device that reports 65535 is telling us what it can
+	 * address, and adding a base to the index does not obviously stay under
+	 * that ceiling, while a moved stream plainly does - it never shows the
+	 * device more than 65536 vertices at once. */
+	const bool device_index32 = g_caps.MaxVertexIndex > 0xFFFFu;
 
-	if (g_index32 && g_caps.MaxVertexIndex <= 0xFFFF)
-	{
-		*why = "the device cannot address more than 65535 vertices";
-		return false;
-	}
+	g_index32 = g_vertex_count > 65535 && device_index32;
 
 	/* The HIGHEST index, not the count: MaxVertexIndex is a DWORD and a card
 	 * that reports 0xFFFFFFFF makes "count > MaxVertexIndex + 1" wrap to
-	 * "count > 0" and refuses every level there is. */
-	if ((unsigned)(g_vertex_count - 1) > g_caps.MaxVertexIndex)
+	 * "count > 0" and refuses every level there is. Only the 32 bit path has
+	 * to pass it; the 16 bit path never offers the device more than one
+	 * window. */
+	if (g_index32 && (unsigned)(g_vertex_count - 1) > g_caps.MaxVertexIndex)
 	{
 		*why = "the level has more vertices than the device can index";
 		return false;
 	}
 
-	/* --- the pages ---------------------------------------------------- */
+	/* --- the pages ----------------------------------------------------
+	 *
+	 * THE DEVICE'S SIZE LIMIT GOES INTO THE POLICY HERE (#123, stage S6) and
+	 * not in hd_level: the format and the budget are the user's settings, but
+	 * how wide a texture this card can hold is a fact of the device, and this
+	 * is the one place that has both the caps and the cache in hand. Eleven
+	 * remaster pages are 4096x4096 and a card that stops at 2048 gets them
+	 * one level down instead of not at all. */
+	{
+		HDPageCachePolicy policy;
+
+		HDPageCachePolicyNow(&policy);
+		policy.maxSide = g_caps.MaxTextureWidth && g_caps.MaxTextureHeight
+			? (int)(g_caps.MaxTextureWidth < g_caps.MaxTextureHeight
+				? g_caps.MaxTextureWidth : g_caps.MaxTextureHeight)
+			: 0;
+		HDPageCacheConfigure(&policy);
+	}
+
 	std::vector<int> pages;
 	pages.reserve(trg.textures.size());
 
@@ -1083,8 +1147,6 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		}
 	}
 
-	const size_t index_bytes = sorted.size() * (g_index32 ? 4u : 2u);
-
 	if (sorted.empty())
 	{
 		// Every part of every group was empty. CreateIndexBuffer(0) would
@@ -1093,6 +1155,109 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		release_buffers();
 		return false;
 	}
+
+	/* --- THE VERTEX WINDOW OF EVERY DRAW CALL (#123, stage S6) ---------
+	 *
+	 * The lowest and highest vertex number each range names. On a normal card
+	 * this is a number for the log; on a card with no 32 bit index buffer it
+	 * is the whole question, because a 16 bit index reaches 65536 vertices
+	 * from wherever the stream is moved to. One pass over the sorted stream,
+	 * a few milliseconds on the largest level, and it answers both. */
+	int index_window = 0;
+	int triangle_window = 0;
+
+	for (HDGroup& group : g_groups)
+		for (int pass = 0; pass < 3; pass++)
+			for (HDRange& range : group.pass[pass])
+			{
+				unsigned int lo = 0xFFFFFFFFu;
+				unsigned int hi = 0;
+
+				for (unsigned int at = 0; at + 2 < range.count; at += 3)
+				{
+					const unsigned int a = sorted[range.start + at];
+					const unsigned int b = sorted[range.start + at + 1];
+					const unsigned int c = sorted[range.start + at + 2];
+
+					unsigned int tlo = a < b ? a : b;
+					unsigned int thi = a > b ? a : b;
+
+					if (c < tlo) tlo = c;
+					if (c > thi) thi = c;
+
+					if ((int)(thi - tlo + 1) > triangle_window)
+						triangle_window = (int)(thi - tlo + 1);
+
+					if (tlo < lo) lo = tlo;
+					if (thi > hi) hi = thi;
+				}
+
+				if (!range.count)
+					continue;
+
+				range.baseVertex = lo;
+				range.vertexSpan = hi - lo + 1;
+
+				if ((int)range.vertexSpan > index_window)
+					index_window = (int)range.vertexSpan;
+			}
+
+	/* --- WHAT A CARD WITH NO 32 BIT INDEX BUFFER CAN DO (#123, stage S6) --
+	 *
+	 * Nothing, on this art, and that is a measurement rather than a shrug.
+	 * The obvious rescue is to cut a draw call into pieces that each stay
+	 * inside a 65536 vertex window and move the vertex stream to each piece;
+	 * the floor under that is ONE TRIANGLE, which cannot be cut. Measured
+	 * over all fifteen levels, the widest single triangle reaches over
+	 * 33,585 vertices in RICHCUT2 and between 235,507 (JOBY4) and 1,391,696
+	 * (RICH2) in every other one - the .TRG deduplicates its vertices over
+	 * the whole level rather than writing them room by room, so the three
+	 * corners of one wall tile can sit a million entries apart.
+	 *
+	 * So RICHCUT2 draws in HD on such a card and the other fourteen levels
+	 * stay classic, with the number in the log. The way to change that is to
+	 * give the 16 bit path a vertex buffer of its own, compacted per room -
+	 * a second buffer layout, for hardware that has not shipped since about
+	 * 2002. It is not built, and MODIFICATIONS.md says so.
+	 */
+	if (!g_index32 && triangle_window > 65536)
+	{
+		char line[220];
+
+		std::snprintf(line, sizeof(line),
+			"the device has no 32 bit index buffer and one triangle of this "
+			"level reaches over %d vertices - no cut can go below that",
+			triangle_window);
+		g_error = line;
+		*why = g_error.c_str();
+		release_buffers();
+		return false;
+	}
+
+	if (!g_index32 && index_window > 65536)
+	{
+		/* Cannot be reached while the test above stands - a range is at least
+		 * as wide as its widest triangle - but a .TRG that broke that would
+		 * otherwise write indices no card could follow. */
+		g_error = "one draw call reaches over more than 65536 vertices and the "
+			"device has no 32 bit index buffer";
+		*why = g_error.c_str();
+		release_buffers();
+		return false;
+	}
+
+	/* THE REBASE. With 16 bit indices every range's numbers are written
+	 * relative to the lowest vertex it names, and the draw call moves the
+	 * stream to that vertex - see HDRenderRoomPass. Done in place because
+	 * `sorted` is not read again after this. */
+	if (!g_index32)
+		for (const HDGroup& group : g_groups)
+			for (int pass = 0; pass < 3; pass++)
+				for (const HDRange& range : group.pass[pass])
+					for (unsigned int at = 0; at < range.count; at++)
+						sorted[range.start + at] -= range.baseVertex;
+
+	const size_t index_bytes = sorted.size() * (g_index32 ? 4u : 2u);
 
 	if (FAILED(g_device->CreateIndexBuffer((UINT)index_bytes, D3DUSAGE_WRITEONLY,
 		g_index32 ? D3DFMT_INDEX32 : D3DFMT_INDEX16, D3DPOOL_DEFAULT, &g_ib, 0)))
@@ -1135,6 +1300,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->vertices = g_vertex_count;
 		stats->indices = (int)sorted.size();
 		stats->index32 = g_index32 ? 1 : 0;
+		stats->indexWindow = index_window;
+		stats->triangleWindow = triangle_window;
+		stats->maxTextureSide = (int)(g_caps.MaxTextureWidth < g_caps.MaxTextureHeight
+			? g_caps.MaxTextureWidth : g_caps.MaxTextureHeight);
 		stats->waterMarks = g_mark_count;
 		stats->markedVertices = marked_vertices;
 		stats->markedChoppy = marked_choppy;
@@ -1415,8 +1584,26 @@ namespace
 			}
 
 			g_device->SetTexture(0, page);
-			g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
-				(UINT)g_vertex_count, range.start, range.count / 3);
+
+			if (g_index32)
+				g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
+					(UINT)g_vertex_count, range.start, range.count / 3);
+			else
+			{
+				/* THE 16 BIT PATH (#123, stage S6). The indices of this range
+				 * were written relative to its own lowest vertex, so the
+				 * stream is moved there and the device is shown that window
+				 * and no more - which is the whole point on a card that says
+				 * it cannot address more than 65535 vertices. On a level
+				 * small enough to fit in 16 bits anyway the base is simply
+				 * the first vertex the range names and this costs one extra
+				 * SetStreamSource per draw call. */
+				g_device->SetStreamSource(0, g_vb,
+					range.baseVertex * (UINT)sizeof(HDVertex), sizeof(HDVertex));
+				g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
+					range.vertexSpan, range.start, range.count / 3);
+			}
+
 			g_draw_calls++;
 		}
 
@@ -1601,6 +1788,11 @@ bool HDRenderGroupBounds(int group, float* mins, float* maxs)
 int HDRenderDrawCalls()
 {
 	return g_draw_calls;
+}
+
+int HDRenderVertexBytes()
+{
+	return (int)sizeof(HDVertex);
 }
 
 /* ----------------------------------------------------------- projection -- */

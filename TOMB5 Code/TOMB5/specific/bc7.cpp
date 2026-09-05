@@ -452,6 +452,44 @@ long BC7DDSMipCount(const void* file, unsigned long size)
 	return (long)levels;
 }
 
+bool BC7DDSShape(const void* file, unsigned long size, long* width, long* height,
+	long* mips)
+{
+	const unsigned char* p;
+
+	*width = 0;
+	*height = 0;
+	*mips = 0;
+
+	if (size < 148)
+		return false;
+
+	p = (const unsigned char*)file;
+
+	if (BC7DwordAt(p) != DDS_MAGIC || BC7DwordAt(p + 4) != 124)
+		return false;
+
+	if (BC7DwordAt(p + 80) != 4 || BC7DwordAt(p + 84) != DDS_FOURCC)
+		return false;
+
+	if (BC7DwordAt(p + 128) != DXGI_BC7_UNORM && BC7DwordAt(p + 128) != DXGI_BC7_UNORM_SRGB)
+		return false;
+
+	*height = (long)BC7DwordAt(p + 12);
+	*width = (long)BC7DwordAt(p + 16);
+	*mips = BC7DDSMipCount(file, size);
+
+	if (*width <= 0 || *height <= 0 || *mips <= 0)
+	{
+		*width = 0;
+		*height = 0;
+		*mips = 0;
+		return false;
+	}
+
+	return true;
+}
+
 // The mip chain of a BC7 DDS is stored one level after the other, biggest
 // first, each level ceil(w/4) x ceil(h/4) blocks of 16 bytes. The remaster's
 // pages are 512x512 with six levels (512, 256, 128, 64, 32, 16), which is

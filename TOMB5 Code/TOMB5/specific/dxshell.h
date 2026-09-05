@@ -13,6 +13,12 @@
 #pragma once
 #include "../global/types.h"
 
+/* The texture memory the device offered the moment it was made, in bytes
+ * (#123, stage S6). Zero when the device did not answer. The HD texture
+ * budget is worked out from it; nothing else reads it. See the note in
+ * DXCreateD3DDevice for why it is taken there and not later. */
+extern ulong DXTextureMemoryAtStart;
+
 void DXReadKeyboard(char* KeyMap);
 void DXBitMask2ShiftCnt(ulong mask, uchar* shift, uchar* count);
 long DXAttempt(HRESULT r);

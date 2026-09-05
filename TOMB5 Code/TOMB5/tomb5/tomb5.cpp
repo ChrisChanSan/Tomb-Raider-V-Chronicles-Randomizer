@@ -49,6 +49,11 @@ tomb5_options tomb5;
 // Empty means: let the Steam discovery in specific\hd\hd_install.cpp look.
 char tomb5_hd_install[260];
 
+// "rgba" or "dxt5" (#123, stage S6). A word rather than a number because a
+// reader of the registry should be able to tell what it says without a
+// table, and because there may one day be a third answer.
+char tomb5_hd_texture_format[16];
+
 void init_tomb5_stuff()
 {
 	char buf[40];
@@ -191,11 +196,20 @@ void init_tomb5_stuff()
 		tomb5.hd_motion = 1;							//on (#123, S5)
 		REG_WriteBool(buf, tomb5.hd_motion);
 
+		sprintf(buf, "hd_texture_budget_mb");
+		tomb5.hd_texture_budget_mb = 0;					//work it out (#123, S6)
+		REG_WriteLong(buf, tomb5.hd_texture_budget_mb);
+
 		// Empty: the Steam discovery looks for the Remaster by itself. A
-		// path here overrides it - our only setting that is not a number.
+		// path here overrides it - one of the two settings that is not a
+		// number.
 		sprintf(buf, "hd_install");
 		tomb5_hd_install[0] = 0;
 		REG_WriteString(buf, tomb5_hd_install);
+
+		sprintf(buf, "hd_texture_format");
+		strcpy(tomb5_hd_texture_format, "rgba");		//lossless (#123, S6)
+		REG_WriteString(buf, tomb5_hd_texture_format);
 	}
 	else	//Key already exists, settings already written, read them. also falls back to default if a smartass manually deletes a single value
 	{
@@ -304,8 +318,21 @@ void init_tomb5_stuff()
 		sprintf(buf, "hd_motion");
 		REG_ReadBool(buf, tomb5.hd_motion, 1);
 
+		sprintf(buf, "hd_texture_budget_mb");
+		REG_ReadLong(buf, tomb5.hd_texture_budget_mb, 0);
+
 		sprintf(buf, "hd_install");
 		REG_ReadString(buf, tomb5_hd_install, sizeof(tomb5_hd_install), "");
+
+		sprintf(buf, "hd_texture_format");
+		REG_ReadString(buf, tomb5_hd_texture_format,
+			sizeof(tomb5_hd_texture_format), "rgba");
+
+		// A word this engine does not know is the default word, not a reason
+		// to stop: the setting is typed by hand into the registry.
+		if (_stricmp(tomb5_hd_texture_format, "dxt5") &&
+			_stricmp(tomb5_hd_texture_format, "rgba"))
+			strcpy(tomb5_hd_texture_format, "rgba");
 	}
 
 	CloseRegistry();

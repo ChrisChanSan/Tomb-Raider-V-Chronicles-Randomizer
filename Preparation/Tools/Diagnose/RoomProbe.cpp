@@ -94,6 +94,34 @@
  *                     to 200 of the room's own vertices on the processor and
  *                     print the worst difference per channel, then stop.
  *
+ *   Stage S6 - the texture budget and the small card. These four are the only
+ *   way to see the fallbacks work: no machine here has a card that needs them,
+ *   and a path nobody has run is a path that does not work.
+ *
+ *     -budget <MiB>   force a texture budget. Over it the largest pages give
+ *                     up their largest mip level, biggest first, until what
+ *                     is left fits - never a whole page. 0 means no cap,
+ *                     which is what the tool does by default.
+ *     -format dxt5    hold the pages as DXT5 instead of A8R8G8B8: a quarter
+ *                     of the video memory, a measurable loss of quality.
+ *                     `-format rgba` is the default and says so out loud.
+ *     -psnr           decode one page both ways on the processor and print
+ *                     the peak signal to noise ratio of DXT5 against the
+ *                     lossless original, per channel and over all four.
+ *     -caps maxtex <n>  pretend the device holds no texture wider than n
+ *     -caps noidx32     pretend the device has no 32 bit index buffer, so
+ *                     every draw call goes through a 16 bit index and a moved
+ *                     vertex stream
+ *     -seq <A,B,C>    build those levels one after the other, printing commit
+ *                     and free texture memory between each - the proof that a
+ *                     level change never holds two levels at once.
+ *     -vramhog        fill the card's texture memory with 64 MiB blocks until
+ *                     it will take no more, THEN load the level. That is the
+ *                     one way to see what happens when CreateTexture fails in
+ *                     the middle of a level: the pages stop, the reason is
+ *                     said, and the whole level goes back to classic instead
+ *                     of half of it drawing without textures.
+ *
  * Everything outside the pixels goes to stdout, so a run can be pasted into a
  * report as it stands.
  */
@@ -107,6 +135,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <vector>
+
 #include "zlib.h"
 
 /* By path, not through a /I of specific\: that folder holds the engine's own
@@ -117,6 +147,9 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_render.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pagecache.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_light.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_dxt5.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
+#include "../../../TOMB5 Code/TOMB5/specific/bc7.h"
 
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "psapi.lib")
@@ -1103,6 +1136,180 @@ static void ParityProof(int room, const float* view, int wanted)
 			: "FAIL - a contribution drifted", worst);
 }
 
+/* ------------------------------------------------------ stage S6 proofs -- */
+
+/* WHAT THE DXT5 SWITCH COSTS, as a number rather than an opinion.
+ *
+ * One page is decoded from BC7 to A8R8G8B8 - the picture the lossless default
+ * puts on the card - then compressed with the engine's own encoder and
+ * decoded again with its inverse, which follows the block layout the hardware
+ * decodes. The peak signal to noise ratio between the two is what the switch
+ * costs, and it is measured over the whole page, not a corner of it.
+ */
+static bool ReadWholeFile(const char* path, unsigned char** out, unsigned long* size)
+{
+	FILE* file = fopen(path, "rb");
+
+	*out = 0;
+	*size = 0;
+
+	if (!file)
+		return false;
+
+	fseek(file, 0, SEEK_END);
+	const long length = ftell(file);
+	fseek(file, 0, SEEK_SET);
+
+	if (length <= 0)
+	{
+		fclose(file);
+		return false;
+	}
+
+	*out = (unsigned char*)malloc((size_t)length);
+
+	if (!*out)
+	{
+		fclose(file);
+		return false;
+	}
+
+	const size_t got = fread(*out, 1, (size_t)length, file);
+
+	fclose(file);
+	*size = (unsigned long)length;
+	return got == (size_t)length;
+}
+
+static void PrintPsnr(const char* root, int howMany)
+{
+	printf("\n-- what DXT5 costs ------------------------------------------\n");
+
+	if (HDPageCacheSlots() <= 0)
+	{
+		printf("no page is loaded - nothing to measure\n");
+		return;
+	}
+
+	double sum = 0, worst = 999, best = 0;
+	int measured = 0;
+
+	for (int slot = 0; slot < HDPageCacheSlots() && measured < howMany; slot++)
+	{
+		const int page = HDPageCachePageOfSlot(slot);
+		char buffer[300];
+		unsigned char* file = 0;
+		unsigned long size = 0;
+
+		if (page < 0 || !ReadWholeFile(HDScanPagePath(root, page, buffer, sizeof(buffer)),
+			&file, &size))
+			continue;
+
+		long w = 0, h = 0;
+		const char* why = "";
+		unsigned long* pixels = BC7DecodeDDS(file, size, 4096, &w, &h, &why);
+
+		free(file);
+
+		if (!pixels)
+			continue;
+
+		unsigned char* blocks = (unsigned char*)malloc(DXT5Size(w, h));
+		unsigned long* back = (unsigned long*)malloc((size_t)w * (size_t)h * 4);
+
+		if (blocks && back)
+		{
+			DXT5Encode(pixels, w, h, blocks);
+			DXT5Decode(blocks, w, h, back);
+
+			const double db = DXT5Psnr(pixels, back, w * h);
+
+			if (measured < 4)
+				printf("page %-5d %4ldx%-4ld  %7.2f dB   %ld KiB -> %ld KiB\n",
+					page, w, h, db, (long)(w * h * 4 / 1024),
+					(long)(DXT5Size(w, h) / 1024));
+
+			sum += db;
+			measured++;
+
+			if (db < worst) worst = db;
+			if (db > best) best = db;
+		}
+
+		free(blocks);
+		free(back);
+		free(pixels);
+	}
+
+	if (!measured)
+	{
+		printf("no page could be decoded - nothing to measure\n");
+		return;
+	}
+
+	printf("%d page(s) measured: mean %.2f dB, worst %.2f dB, best %.2f dB\n",
+		measured, sum / measured, worst, best);
+	printf("(mip 0 only; a quarter of the video memory is what is bought with it)\n");
+}
+
+/* THE LEVEL CHANGE (#123, stage S6). HDLevelBuild frees the previous level's
+ * buffers and pages before it builds the new one - so the card never holds two
+ * levels at once, and the process never commits two levels' worth of transient
+ * pixels. This walks the same road without the game: build, measure, end,
+ * measure, build the next. If the free were not happening, the free texture
+ * memory after the second level would be lower than after the first by the
+ * whole of the first. */
+static void RunSequence(const char* root, const char* list, int rooms,
+	bool managed, int threads)
+{
+	char names[512];
+	const char* why = "";
+
+	strncpy(names, list, sizeof(names) - 1);
+	names[sizeof(names) - 1] = 0;
+
+	printf("\n-- the level change -----------------------------------------\n");
+	printf("%-10s %10s %10s %10s %10s %10s\n", "level", "pages MiB",
+		"vb+ib MiB", "commit", "peak", "free vram");
+
+	char* save = 0;
+	char* one = strtok_s(names, ",;", &save);
+
+	while (one)
+	{
+		while (*one == ' ')
+			one++;
+
+		HDRenderStats stats;
+
+		if (!HDRenderLevelBegin(root, one, rooms, managed, threads, &stats, &why))
+		{
+			printf("%-10s FAILED - %s\n", one, why);
+			HDRenderLevelEnd();
+			one = strtok_s(0, ",;", &save);
+			continue;
+		}
+
+		printf("%-10s %10.1f %10.1f %10.1f %10.1f %10.1f\n", one,
+			stats.pages.bytes / 1048576.0,
+			(stats.vertexBytes + stats.indexBytes) / 1048576.0,
+			CommitMiB(), PeakCommitMiB(),
+			(double)g_device->GetAvailableTextureMem() / 1048576.0);
+
+		HDRenderLevelEnd();
+
+		printf("%-10s %10s %10s %10.1f %10.1f %10.1f\n", "  (freed)", "-", "-",
+			CommitMiB(), PeakCommitMiB(),
+			(double)g_device->GetAvailableTextureMem() / 1048576.0);
+
+		one = strtok_s(0, ",;", &save);
+	}
+
+	printf("\nA level's own numbers must repeat when it comes round again: if\n"
+		"the free texture memory after the second TITLE is lower than after\n"
+		"the first, something of the level in between is still on the card.\n");
+}
+
 /* ---------------------------------------------------------------- main -- */
 
 int main(int argc, char** argv)
@@ -1116,6 +1323,8 @@ int main(int argc, char** argv)
 		printf("       -fog <start end r g b>  -underwater  -shimmer  -wibble <n>\n");
 		printf("       -effect <0..21>  -paritycheck\n");
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
+		printf("       -budget <MiB>  -format rgba|dxt5  -psnr\n");
+		printf("       -caps maxtex <n>  -caps noidx32  -seq <A,B,C>  -vramhog\n");
 		return 1;
 	}
 
@@ -1133,6 +1342,14 @@ int main(int argc, char** argv)
 	bool animTex = false;
 	bool wibbleGiven = false;
 	int threads = 8, rooms = 0;
+
+	// Stage S6.
+	double budgetMiB = 0;
+	int pageFormat = HD_PAGE_FORMAT_RGBA;
+	bool psnr = false;
+	int capMaxTex = 0, capNoIndex32 = 0;
+	const char* sequence = 0;
+	bool vramHog = false;
 
 	HDLightBuildWaterTable(g_water_table);
 	const char* out = "roomprobe";
@@ -1259,6 +1476,38 @@ int main(int argc, char** argv)
 				g_fog_start, argv[at + 2], argv[at + 3], argv[at + 4], argv[at + 5]);
 			at += 5;
 		}
+		else if (!strcmp(argv[at], "-budget") && at + 1 < argc)
+		{
+			budgetMiB = atof(argv[at + 1]);
+			at += 1;
+		}
+		else if (!strcmp(argv[at], "-format") && at + 1 < argc)
+		{
+			pageFormat = !_stricmp(argv[at + 1], "dxt5")
+				? HD_PAGE_FORMAT_DXT5 : HD_PAGE_FORMAT_RGBA;
+			at += 1;
+		}
+		else if (!strcmp(argv[at], "-psnr"))
+			psnr = true;
+		else if (!strcmp(argv[at], "-caps") && at + 1 < argc &&
+			!strcmp(argv[at + 1], "noidx32"))
+		{
+			capNoIndex32 = 1;
+			at += 1;
+		}
+		else if (!strcmp(argv[at], "-caps") && at + 2 < argc &&
+			!strcmp(argv[at + 1], "maxtex"))
+		{
+			capMaxTex = atoi(argv[at + 2]);
+			at += 2;
+		}
+		else if (!strcmp(argv[at], "-seq") && at + 1 < argc)
+		{
+			sequence = argv[at + 1];
+			at += 1;
+		}
+		else if (!strcmp(argv[at], "-vramhog"))
+			vramHog = true;
 		else
 			printf("RoomProbe: ignoring unknown argument \"%s\"\n", argv[at]);
 	}
@@ -1287,6 +1536,21 @@ int main(int argc, char** argv)
 	const UINT vramBefore = g_device->GetAvailableTextureMem();
 	const char* why = "";
 
+	/* STAGE S6 - the small card, before anything reads the device's caps.
+	 * HDRenderInit copies the caps once and everything after it reads that
+	 * copy, so the overrides have to be in place first. */
+	if (capMaxTex || capNoIndex32)
+	{
+		printf("caps override: max texture %s, 32 bit index buffer %s\n",
+			capMaxTex ? "forced down" : "as the device says",
+			capNoIndex32 ? "FORCED OFF" : "as the device says");
+
+		if (capMaxTex)
+			printf("  MaxTextureWidth/Height := %d\n", capMaxTex);
+
+		HDRenderCapOverride(capMaxTex, capNoIndex32);
+	}
+
 	if (!HDRenderInit(g_device, &why))
 	{
 		printf("RoomProbe: HDRenderInit failed - %s\n", why);
@@ -1294,7 +1558,62 @@ int main(int argc, char** argv)
 		return 3;
 	}
 
+	/* The texture policy. The device's own size limit is added inside
+	 * HDRenderLevelBegin, exactly as it is in the game - this sets only the
+	 * two the user owns. */
+	{
+		HDPageCachePolicy policy;
+
+		policy.format = pageFormat;
+		policy.budgetBytes = budgetMiB > 0 ? budgetMiB * 1048576.0 : 0.0;
+		policy.maxSide = 0;
+		HDPageCacheConfigure(&policy);
+
+		printf("pages: format %s, budget %s\n",
+			pageFormat == HD_PAGE_FORMAT_DXT5 ? "DXT5" : "A8R8G8B8",
+			budgetMiB > 0 ? "" : "none");
+
+		if (budgetMiB > 0)
+			printf("  budget %.0f MiB\n", budgetMiB);
+	}
+
+	/* THE CARD, FILLED UP (#123, stage S6). 4096x4096 A8R8G8B8 is 64 MiB a
+	 * block, taken in D3DPOOL_DEFAULT so it really lives on the card, until
+	 * CreateTexture says no. Nothing is ever released - the process ends and
+	 * Direct3D takes it all back - because the point is to leave the card
+	 * full while the level loads. */
+	std::vector<IDirect3DTexture9*> hogs;
+
+	if (vramHog)
+	{
+		printf("\n-- filling the card -----------------------------------------\n");
+		printf("free texture memory before: %.0f MiB\n",
+			(double)g_device->GetAvailableTextureMem() / 1048576.0);
+
+		for (;;)
+		{
+			IDirect3DTexture9* block = 0;
+
+			if (FAILED(g_device->CreateTexture(4096, 4096, 1, 0, D3DFMT_A8R8G8B8,
+				D3DPOOL_DEFAULT, &block, 0)) || !block)
+				break;
+
+			hogs.push_back(block);
+		}
+
+		printf("%d block(s) of 64 MiB taken, %.0f MiB of texture memory left\n",
+			(int)hogs.size(), (double)g_device->GetAvailableTextureMem() / 1048576.0);
+	}
+
 	PrintDepthTruth("(device fresh)");
+
+	if (sequence)
+	{
+		RunSequence(root, sequence, rooms, managed, threads);
+		HDRenderShutdown();
+		DropDevice();
+		return 0;
+	}
 
 	HDRenderStats stats;
 	const double commitBefore = CommitMiB();
@@ -1302,6 +1621,12 @@ int main(int argc, char** argv)
 	if (!HDRenderLevelBegin(root, stem, rooms, managed, threads, &stats, &why))
 	{
 		printf("RoomProbe: HDRenderLevelBegin failed - %s\n", why);
+
+		// The page cache's notes before the shutdown empties them: on the way
+		// out they are the only place that says which page it was.
+		for (int i = 0; i < HDPageCacheNoteCount(); i++)
+			printf("  note: %s\n", HDPageCacheNote(i));
+
 		HDRenderShutdown();
 		DropDevice();
 		return 4;
@@ -1325,6 +1650,10 @@ int main(int argc, char** argv)
 		stats.ranges, stats.splitRanges ? " (some split by the primitive limit)" : "");
 	printf("biggest range %d triangles, %d triangles on the fallback page\n",
 		stats.biggestRangeTris, stats.fallbackPageTris);
+	printf("S6: widest draw call reaches over %d vertices, widest single "
+		"triangle %d (a 16 bit index reaches 65536), device holds textures "
+		"up to %d\n",
+		stats.indexWindow, stats.triangleWindow, stats.maxTextureSide);
 	printf("S5: %d scrolling part(s) in %d draw calls (%d triangles), "
 		"%d vertices with a wind weight, %d flipbook part(s) not drawn\n",
 		stats.scrollParts, stats.scrollRanges, stats.scrollTris,
@@ -1336,9 +1665,10 @@ int main(int argc, char** argv)
 		stats.pages.pages, stats.pages.slots, stats.pages.fromGame5,
 		stats.pages.fromGame4, stats.pages.fromGame6, stats.pages.fromWhite,
 		stats.pages.failed);
-	printf("%d mip levels, widest %d, %d past 1024, %.1f MiB of A8R8G8B8 "
+	printf("%d mip levels, widest %d, %d past 1024, %.1f MiB of %s "
 		"on the device\n", stats.pages.mipLevels, stats.pages.widest,
-		stats.pages.bigPages, stats.pages.bytes / 1048576.0);
+		stats.pages.bigPages, stats.pages.bytes / 1048576.0,
+		stats.pages.formatUsed == HD_PAGE_FORMAT_DXT5 ? "DXT5" : "A8R8G8B8");
 	printf("search %.0f ms, decode %.0f ms (%d threads), upload %.0f ms, total %.0f ms\n",
 		stats.pages.readMs, stats.pages.decodeMs, stats.pages.threads,
 		stats.pages.uploadMs, stats.pages.totalMs);
@@ -1349,8 +1679,25 @@ int main(int argc, char** argv)
 		(double)vramBefore / 1048576.0, (double)vramAfter / 1048576.0,
 		((double)vramBefore - (double)vramAfter) / 1048576.0);
 
+	printf("S6 budget %s: need %.1f MiB, already there %.1f, got %.1f - "
+		"%d page(s) gave up %d level(s), %d shrunk by the device, format %s, "
+		"out of memory %d\n",
+		stats.pages.budgetBytes > 0 ? "in force" : "none",
+		stats.pages.needBytes / 1048576.0, stats.pages.haveBytes / 1048576.0,
+		stats.pages.bytes / 1048576.0, stats.pages.droppedMip0,
+		stats.pages.droppedLevels, stats.pages.clampedByCaps,
+		stats.pages.formatUsed == HD_PAGE_FORMAT_DXT5 ? "DXT5" : "A8R8G8B8",
+		stats.pages.outOfMemory);
+
+	if (stats.pages.compressMs > 0)
+		printf("compress %.0f ms (over the same threads as the decode)\n",
+			stats.pages.compressMs);
+
 	for (int i = 0; i < HDPageCacheNoteCount(); i++)
 		printf("  note: %s\n", HDPageCacheNote(i));
+
+	if (psnr)
+		PrintPsnr(root, 16);
 
 	if (groupsOnly)
 	{

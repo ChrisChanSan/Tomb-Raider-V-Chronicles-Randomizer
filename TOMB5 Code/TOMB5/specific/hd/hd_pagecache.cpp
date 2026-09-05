@@ -21,9 +21,11 @@
 #include <d3d9.h>
 
 #include "hd_pagecache.h"
+#include "hd_dxt5.h"
 #include "hd_scan.h"
 #include "../bc7.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -38,10 +40,14 @@ namespace
 {
 	/* ONE DECODED PAGE, mip chain and all. The pixels are malloc'd by
 	 * BC7DecodeDDSMip and freed here; nothing of a page survives its
-	 * upload. */
+	 * upload. In the DXT5 case (#123, stage S6) the compression happens on
+	 * the same worker thread that decoded the level, and the pixels are let
+	 * go the moment the blocks exist - so the batch below holds a quarter of
+	 * what it would otherwise carry into the upload. */
 	struct DecodedMip
 	{
 		unsigned long* pixels = 0;
+		unsigned char* blocks = 0;
 		long w = 0, h = 0;
 	};
 
@@ -51,16 +57,40 @@ namespace
 		int page = 0;
 		int slot = 0;
 		int origin = 0;			// 5, 4, 6, or 0 for WHITE.DDS
+		int firstMip = 0;		// the level this page starts at - stage S6
+		double compressMs = 0;		// this page's share of the DXT5 work
 		bool white = false;
 		bool ok = false;
 
 		void free_all()
 		{
 			for (DecodedMip& mip : mips)
+			{
 				if (mip.pixels)
 					std::free(mip.pixels);
+				if (mip.blocks)
+					std::free(mip.blocks);
+			}
 			mips.clear();
 		}
+	};
+
+	/* WHAT ONE PAGE WILL COST, worked out from its 148 byte header before a
+	 * single block is decoded (#123, stage S6). `firstMip` is the level the
+	 * page will start at: 0 normally, 1 or more when the device cannot hold
+	 * the full size or when the budget said no. */
+	struct PagePlan
+	{
+		std::string path;
+		int origin = 5;
+		bool white = false;
+		long w = 0, h = 0, mips = 0;
+		int firstMip = 0;
+		int clamped = 0;		// levels the device's size limit took
+		bool synth = false;		// no file at all - a white tile made here
+		double bytes = 0;		// cost of firstMip..end in the chosen format
+		double full = 0;		// the same at firstMip = 0
+		double decodeBytes = 0;		// A8R8G8B8 transient, whatever the format
 	};
 
 	IDirect3DDevice9* g_device = 0;
@@ -75,6 +105,16 @@ namespace
 	 * with six mips. */
 	IDirect3DTexture9* g_staging = 0;
 	long g_staging_w = 0, g_staging_h = 0, g_staging_levels = 0;
+	int g_staging_format = HD_PAGE_FORMAT_RGBA;
+
+	/* THE POLICY AND THE RUNNING TOTAL (#123, stage S6). Both outlive a
+	 * single call: a level fills this cache twice - once for its rooms and
+	 * once for its models and Lara's wardrobe - and one budget has to cover
+	 * the two of them. `g_bytes` is what is on the device now, `g_format_used`
+	 * what the device let us have after CheckDeviceFormat had its say. */
+	HDPageCachePolicy g_policy = { HD_PAGE_FORMAT_RGBA, 0.0, 0 };
+	double g_bytes = 0;
+	int g_format_used = HD_PAGE_FORMAT_RGBA;
 
 	double now_ms()
 	{
@@ -107,11 +147,7 @@ namespace
 		return out.substr(0, cut);
 	}
 
-	// The length of a file, or 0 when it is not there. Doubles as the
-	// existence test, and the length is worth having: four times it is a
-	// good estimate of the pixels a BC7 page decodes to (BC7 is one byte a
-	// texel, A8R8G8B8 is four), and the batching below needs that estimate
-	// before it decodes anything.
+	// The length of a file, or 0 when it is not there.
 	long file_size(const std::string& path)
 	{
 		std::FILE* file = std::fopen(path.c_str(), "rb");
@@ -128,6 +164,107 @@ namespace
 	bool file_there(const std::string& path)
 	{
 		return file_size(path) > 0;
+	}
+
+	/* THE SHAPE OF A PAGE WITHOUT DECODING IT (#123, stage S6). 148 bytes off
+	 * the front of the file say how wide it is and how many levels it
+	 * carries, and that is the whole basis of the budget: four times the
+	 * file's length used to be the estimate the batching ran on, and an
+	 * estimate is not a thing to promise a card with two gigabytes. */
+	bool page_shape(const std::string& path, long* w, long* h, long* mips)
+	{
+		unsigned char header[148];
+		std::FILE* file = std::fopen(path.c_str(), "rb");
+
+		*w = *h = *mips = 0;
+
+		if (!file)
+			return false;
+
+		const size_t got = std::fread(header, 1, sizeof(header), file);
+		std::fclose(file);
+
+		if (got != sizeof(header))
+			return false;
+
+		return BC7DDSShape(header, (unsigned long)sizeof(header), w, h, mips);
+	}
+
+	/* HOW MANY LEVELS OF A PAGE CAN ACTUALLY BE DECODED, starting at `first`.
+	 * The rule is the decoder's own and not a guess: BC7DecodeDDSMip refuses
+	 * a level that is not a whole number of 4x4 blocks, so the chain stops
+	 * where that stops - which for a remaster page is 16x16, its sixth
+	 * level. */
+	long usable_levels(long w, long h, long mips, int first)
+	{
+		long levels = 0;
+
+		for (long m = first; m < mips; m++)
+		{
+			const long mw = w >> m;
+			const long mh = h >> m;
+
+			if (mw < 4 || mh < 4 || (mw & 3) || (mh & 3))
+				break;
+
+			levels++;
+		}
+
+		return levels;
+	}
+
+	// What those levels cost on the device in the chosen format.
+	double level_bytes(long w, long h, long mips, int first, int format)
+	{
+		double total = 0;
+
+		for (long m = first; m < mips; m++)
+		{
+			const long mw = w >> m;
+			const long mh = h >> m;
+
+			if (mw < 4 || mh < 4 || (mw & 3) || (mh & 3))
+				break;
+
+			total += format == HD_PAGE_FORMAT_DXT5
+				? (double)DXT5Size(mw, mh)
+				: (double)mw * (double)mh * 4.0;
+		}
+
+		return total;
+	}
+
+	/* Whether the device can make a texture of that format at all. Asked of
+	 * the device rather than assumed, because the whole HD path rests on it:
+	 * without A8R8G8B8 there is no page and no picture, and without DXT5 the
+	 * switch has to go quietly back to A8R8G8B8 instead of handing the driver
+	 * a format it will refuse page by page. */
+	bool device_can_make(IDirect3DDevice9* device, D3DFORMAT format)
+	{
+		IDirect3D9* d3d = 0;
+		D3DDEVICE_CREATION_PARAMETERS made;
+		D3DDISPLAYMODE mode;
+
+		if (!device || FAILED(device->GetDirect3D(&d3d)) || !d3d)
+			return false;
+
+		if (FAILED(device->GetCreationParameters(&made)) ||
+			FAILED(device->GetDisplayMode(0, &mode)))
+		{
+			d3d->Release();
+			return false;
+		}
+
+		const HRESULT hr = d3d->CheckDeviceFormat(made.AdapterOrdinal,
+			made.DeviceType, mode.Format, 0, D3DRTYPE_TEXTURE, format);
+
+		d3d->Release();
+		return SUCCEEDED(hr);
+	}
+
+	bool out_of_memory(HRESULT hr)
+	{
+		return hr == D3DERR_OUTOFVIDEOMEMORY || hr == E_OUTOFMEMORY;
 	}
 
 	bool read_whole(const std::string& path, std::vector<unsigned char>& out)
@@ -214,7 +351,65 @@ namespace
 		return std::string();
 	}
 
-	void decode_one(const std::string& path, DecodedPage& out)
+	/* `first` is the level the page starts at (#123, stage S6): 0 is the whole
+	 * picture, 1 halves it in both directions and quarters what it costs on
+	 * the card. The texture coordinates never notice - they are 0..1 of
+	 * whatever the texture turns out to be - so a dropped level is a blurrier
+	 * wall and nothing else.
+	 *
+	 * `format` decides whether the pixels stay as they are or are compressed
+	 * here, on this worker thread, and let go straight away. */
+	/* A WHITE TILE MADE HERE, out of nothing (#123, stage S6).
+	 *
+	 * TROne's rule is that a page which cannot be found is white and never
+	 * black, and stage S1 followed it by reaching for the remaster's own
+	 * TEX\WHITE.DDS. Measured in stage S6: that file exists in 4\TEX ONLY -
+	 * not in 5\TEX and not in 6\TEX - so an installation without the fourth
+	 * game (or one where the file has been deleted) had no white tile at all,
+	 * and the page ended up with no texture. A draw call with no texture is
+	 * skipped, so the surface did not go white - it went AWAY, and a wall you
+	 * can see through reads as a rendering fault rather than as a missing
+	 * file. Four white texels cost 64 bytes and remove the whole class of
+	 * failure. WHITE.DDS is still preferred when it is there: it is the
+	 * remaster's own tile, and using it keeps the two paths agreeing. */
+	void make_white(DecodedPage& out, int format)
+	{
+		DecodedMip level;
+
+		level.w = 4;
+		level.h = 4;
+
+		if (format == HD_PAGE_FORMAT_DXT5)
+		{
+			unsigned long white[16];
+
+			for (int i = 0; i < 16; i++)
+				white[i] = 0xFFFFFFFFul;
+
+			level.blocks = (unsigned char*)std::malloc(DXT5Size(4, 4));
+
+			if (!level.blocks)
+				return;
+
+			DXT5Encode(white, 4, 4, level.blocks);
+		}
+		else
+		{
+			level.pixels = (unsigned long*)std::malloc(16 * sizeof(unsigned long));
+
+			if (!level.pixels)
+				return;
+
+			for (int i = 0; i < 16; i++)
+				level.pixels[i] = 0xFFFFFFFFul;
+		}
+
+		out.mips.push_back(level);
+		out.ok = true;
+	}
+
+	void decode_one(const std::string& path, int first, int format,
+		DecodedPage& out)
 	{
 		std::vector<unsigned char> file;
 
@@ -223,7 +418,9 @@ namespace
 
 		const long levels = BC7DDSMipCount(&file[0], (unsigned long)file.size());
 
-		for (long mip = 0; mip < levels; mip++)
+		out.firstMip = first;
+
+		for (long mip = first; mip < levels; mip++)
 		{
 			DecodedMip level;
 			const char* why = "";
@@ -233,15 +430,39 @@ namespace
 			if (!level.pixels)
 				break;		// the chain ends where whole 4x4 blocks end
 
+			if (format == HD_PAGE_FORMAT_DXT5)
+			{
+				const double started = now_ms();
+				const unsigned long size = DXT5Size(level.w, level.h);
+
+				level.blocks = (unsigned char*)std::malloc(size ? size : 1);
+
+				if (level.blocks)
+					DXT5Encode(level.pixels, level.w, level.h, level.blocks);
+
+				std::free(level.pixels);
+				level.pixels = 0;
+
+				/* Counted into the page, not into a shared total: this runs
+				 * on a worker thread and two of them adding to one double is
+				 * a race that costs a wrong number for nothing. The batch
+				 * sums them after the join. */
+				out.compressMs += now_ms() - started;
+
+				if (!level.blocks)
+					break;
+			}
+
 			out.mips.push_back(level);
 		}
 
 		out.ok = !out.mips.empty();
 	}
 
-	bool ensure_staging(long w, long h, long levels)
+	bool ensure_staging(long w, long h, long levels, int format)
 	{
-		if (g_staging && g_staging_w == w && g_staging_h == h && g_staging_levels == levels)
+		if (g_staging && g_staging_w == w && g_staging_h == h &&
+			g_staging_levels == levels && g_staging_format == format)
 			return true;
 
 		if (g_staging)
@@ -251,7 +472,8 @@ namespace
 		}
 
 		if (FAILED(g_device->CreateTexture((UINT)w, (UINT)h, (UINT)levels, 0,
-			D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &g_staging, 0)))
+			format == HD_PAGE_FORMAT_DXT5 ? D3DFMT_DXT5 : D3DFMT_A8R8G8B8,
+			D3DPOOL_SYSTEMMEM, &g_staging, 0)))
 		{
 			g_staging = 0;
 			return false;
@@ -260,10 +482,12 @@ namespace
 		g_staging_w = w;
 		g_staging_h = h;
 		g_staging_levels = levels;
+		g_staging_format = format;
 		return true;
 	}
 
-	void copy_into(IDirect3DTexture9* texture, const DecodedPage& page, DWORD lockFlags)
+	void copy_into(IDirect3DTexture9* texture, const DecodedPage& page,
+		int format, DWORD lockFlags)
 	{
 		for (size_t mip = 0; mip < page.mips.size(); mip++)
 		{
@@ -273,14 +497,34 @@ namespace
 				continue;
 
 			const DecodedMip& level = page.mips[mip];
-			const unsigned char* src = (const unsigned char*)level.pixels;
 			unsigned char* dst = (unsigned char*)rect.pBits;
 
-			for (long y = 0; y < level.h; y++)
+			if (format == HD_PAGE_FORMAT_DXT5)
 			{
-				std::memcpy(dst, src, (size_t)level.w * 4);
-				src += (size_t)level.w * 4;
-				dst += rect.Pitch;
+				/* A compressed surface is locked in ROWS OF BLOCKS: the pitch
+				 * is the bytes of one row of 4x4 blocks, and there are h/4 of
+				 * them. Copying it as h rows would write four times too much
+				 * and off the end of the surface. */
+				const unsigned char* src = level.blocks;
+				const size_t row = (size_t)((level.w + 3) / 4) * 16;
+
+				for (long by = 0; by < level.h; by += 4)
+				{
+					std::memcpy(dst, src, row);
+					src += row;
+					dst += rect.Pitch;
+				}
+			}
+			else
+			{
+				const unsigned char* src = (const unsigned char*)level.pixels;
+
+				for (long y = 0; y < level.h; y++)
+				{
+					std::memcpy(dst, src, (size_t)level.w * 4);
+					src += (size_t)level.w * 4;
+					dst += rect.Pitch;
+				}
 			}
 
 			texture->UnlockRect((UINT)mip);
@@ -314,6 +558,26 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 	}
 
 	g_device = device;
+
+	/* WHAT THE DEVICE WILL ACTUALLY MAKE (#123, stage S6), asked once per
+	 * call rather than assumed. A8R8G8B8 as a texture is the floor the whole
+	 * HD path stands on and a device without it has no business trying;
+	 * DXT5 is a switch, so a device without it goes quietly back to the
+	 * lossless default with a line in the log rather than failing 220 times
+	 * in a row with an HRESULT nobody reads. */
+	if (!device_can_make(device, D3DFMT_A8R8G8B8))
+	{
+		*why = "the device cannot make A8R8G8B8 textures";
+		return false;
+	}
+
+	g_format_used = g_policy.format;
+
+	if (g_format_used == HD_PAGE_FORMAT_DXT5 && !device_can_make(device, D3DFMT_DXT5))
+	{
+		g_notes.push_back("the device has no DXT5 - the pages stay A8R8G8B8");
+		g_format_used = HD_PAGE_FORMAT_RGBA;
+	}
 
 	const std::string root5 = installRoot;
 	const std::string bundle = parent_of(root5);
@@ -357,33 +621,38 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 
 	/* The paths first, on this thread: resolving a page is three or four
 	 * fopen calls and the notes have to come out in page order, not in
-	 * whatever order the threads happen to finish in. */
-	std::vector<std::string> paths(unique.size());
-	std::vector<int> origins(unique.size(), 5);
-	std::vector<char> whites(unique.size(), 0);
-	std::vector<long> sizes(unique.size(), 0);
+	 * whatever order the threads happen to finish in. The 148 byte header
+	 * comes along at the same time, because everything the budget below
+	 * decides rests on it. */
+	std::vector<PagePlan> plan(unique.size());
 
 	const double resolve_started = now_ms();
 
 	for (size_t i = 0; i < unique.size(); i++)
 	{
+		PagePlan& page = plan[i];
 		int origin = 5;
 		bool white = false;
-		paths[i] = resolve_page(root5, bundle, unique[i], &origin, &white);
-		origins[i] = origin;
-		whites[i] = white ? 1 : 0;
-		sizes[i] = paths[i].empty() ? 0 : file_size(paths[i]);
+
+		page.path = resolve_page(root5, bundle, unique[i], &origin, &white);
+		page.origin = origin;
+		page.white = white;
 
 		char line[256];
 
-		if (paths[i].empty())
+		if (page.path.empty())
 		{
 			std::snprintf(line, sizeof(line),
-				"page %d has no .DDS and no WHITE.DDS - that page stays untextured",
-				unique[i]);
+				"page %d has no .DDS and no WHITE.DDS - four white texels "
+				"instead, so the surface shows its baked light", unique[i]);
 			g_notes.push_back(line);
+			page.synth = true;
+			page.white = true;
+			page.origin = 0;
+			continue;
 		}
-		else if (white)
+
+		if (white)
 		{
 			std::snprintf(line, sizeof(line),
 				"page %d is not in any TEX folder - WHITE.DDS instead", unique[i]);
@@ -393,6 +662,145 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 		{
 			std::snprintf(line, sizeof(line),
 				"page %d comes from the sibling game %d, not from 5", unique[i], origin);
+			g_notes.push_back(line);
+		}
+
+		if (!page_shape(page.path, &page.w, &page.h, &page.mips))
+		{
+			// Not a BC7 DDS, or too short to say. The decoder would refuse it
+			// as well, so it gets the same white tile a missing file gets.
+			std::snprintf(line, sizeof(line),
+				"page %d does not carry a readable BC7 header - four white "
+				"texels instead", unique[i]);
+			g_notes.push_back(line);
+			page.synth = true;
+			page.white = true;
+			continue;
+		}
+
+		/* THE DEVICE'S OWN LIMIT FIRST, before the budget gets a say. Eleven
+		 * remaster pages are 4096x4096, and a card whose MaxTextureWidth is
+		 * 2048 cannot hold one of them at all - the CreateTexture would fail
+		 * and the page would be a hole. Starting it one level down is not a
+		 * compromise, it is the only picture that card can show. */
+		if (g_policy.maxSide > 0)
+			while ((page.w >> page.firstMip) > g_policy.maxSide ||
+				(page.h >> page.firstMip) > g_policy.maxSide)
+			{
+				if (usable_levels(page.w, page.h, page.mips, page.firstMip + 1) <= 0)
+					break;		// nothing left to give - the decode refuses it
+
+				page.firstMip++;
+				page.clamped++;
+			}
+
+		if (page.clamped)
+		{
+			std::snprintf(line, sizeof(line),
+				"page %d is %ldx%ld and the device holds %d - it starts %d level(s) down",
+				unique[i], page.w, page.h, g_policy.maxSide, page.clamped);
+			g_notes.push_back(line);
+		}
+
+		page.full = level_bytes(page.w, page.h, page.mips, page.firstMip, g_format_used);
+		page.bytes = page.full;
+		page.decodeBytes = level_bytes(page.w, page.h, page.mips, page.firstMip,
+			HD_PAGE_FORMAT_RGBA);
+	}
+
+	/* --- THE BUDGET (#123, stage S6) ----------------------------------
+	 *
+	 * The rule the user chose: never leave a page out - a missing page is a
+	 * white hole in the middle of a wall and reads as a rendering fault - but
+	 * give up the largest level of the largest pages until what is left fits.
+	 * A page that starts at level 1 is half as wide and a quarter as dear,
+	 * and it costs nothing anywhere else: the texture coordinates are 0..1 of
+	 * whatever the texture is, so the wall is simply softer.
+	 *
+	 * Biggest first, and repeatedly: one pass takes the top level off every
+	 * page that has one to give, in order of what they cost, and if that is
+	 * still not enough the next pass takes the next one. The loop ends when
+	 * it fits or when no page can give anything more - it cannot spin.
+	 *
+	 * The budget covers the WHOLE cache, not this call: `have` is what the
+	 * rooms already put there when the models arrive. */
+	double need = 0;
+
+	for (const PagePlan& page : plan)
+		need += page.bytes;
+
+	const double need_full = need;
+	const double have = g_bytes;
+	const double budget = g_policy.budgetBytes;
+	int dropped_pages = 0;
+	int dropped_levels = 0;
+
+	if (budget > 0 && have + need > budget)
+	{
+		std::vector<size_t> order;
+		order.reserve(plan.size());
+
+		for (size_t i = 0; i < plan.size(); i++)
+			if (plan[i].bytes > 0)
+				order.push_back(i);
+
+		bool gave = true;
+
+		while (have + need > budget && gave)
+		{
+			gave = false;
+
+			/* STABLE, and that is not a nicety: 2391 of the remaster's 2406
+			 * pages are the same size, so almost every comparison here is a
+			 * tie, and an unstable sort would break those ties differently
+			 * from one run to the next. The same level with the same budget
+			 * would then load a different set of pages at full size each
+			 * time, and two screenshots of the same wall would disagree for
+			 * no reason anybody could find. Stable means ties keep the
+			 * level's own page order. */
+			std::stable_sort(order.begin(), order.end(),
+				[&plan](size_t a, size_t b)
+				{ return plan[a].bytes > plan[b].bytes; });
+
+			for (size_t at : order)
+			{
+				PagePlan& page = plan[at];
+
+				if (usable_levels(page.w, page.h, page.mips, page.firstMip + 1) <= 0)
+					continue;	// its last level - that one stays
+
+				const double before = page.bytes;
+
+				if (!page.firstMip)
+					dropped_pages++;
+
+				page.firstMip++;
+				dropped_levels++;
+				page.bytes = level_bytes(page.w, page.h, page.mips, page.firstMip,
+					g_format_used);
+				need -= before - page.bytes;
+				gave = true;
+
+				if (have + need <= budget)
+					break;
+			}
+		}
+
+		char line[256];
+
+		std::snprintf(line, sizeof(line),
+			"budget %.0f MiB: %.0f MiB already on the card and %.0f MiB asked "
+			"for - %d page(s) gave up %d level(s), %.0f MiB left to load",
+			budget / 1048576.0, have / 1048576.0, need_full / 1048576.0,
+			dropped_pages, dropped_levels, need / 1048576.0);
+		g_notes.push_back(line);
+
+		if (have + need > budget)
+		{
+			std::snprintf(line, sizeof(line),
+				"budget %.0f MiB is smaller than the smallest the pages go "
+				"(%.0f MiB) - loading them anyway rather than leaving holes",
+				budget / 1048576.0, (have + need) / 1048576.0);
 			g_notes.push_back(line);
 		}
 	}
@@ -409,26 +817,31 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 	 * 85 MiB each. A batch of "threads * 2 + 2" pages that happened to catch
 	 * several of those would ask for one and a half gigabytes in a process
 	 * that has three, and it would do it rarely enough to look like a random
-	 * crash. Four times the file's length is the estimate - BC7 is one byte
-	 * per texel where A8R8G8B8 is four, and the mip chain scales both the
-	 * same way - and a batch always holds at least one page, however big. */
+	 * crash. The estimate is the page's own header, read above - and a batch
+	 * always holds at least one page, however big.
+	 *
+	 * It is the A8R8G8B8 size that is budgeted even when the pages end up as
+	 * DXT5 (#123, stage S6): the decode goes through the full pixels either
+	 * way, and it is the transient peak that has to fit, not the result. */
 	const size_t batch_pages = (size_t)threads * 2 + 2;
 	const double batch_budget = 96.0 * 1048576.0;
 
 	std::vector<DecodedPage> batch;
 	std::atomic<int> next(0);
 
-	double decode_ms = 0, upload_ms = 0;
+	double decode_ms = 0, upload_ms = 0, compress_ms = 0;
+	double loaded_bytes = 0;
 	const double started = now_ms();
+	bool oom = false;
 
-	for (size_t base = 0; base < unique.size(); )
+	for (size_t base = 0; base < unique.size() && !oom; )
 	{
 		size_t here = 0;
 		double bytes = 0;
 
 		while (base + here < unique.size() && here < batch_pages)
 		{
-			const double next_bytes = 4.0 * (double)sizes[base + here];
+			const double next_bytes = plan[base + here].decodeBytes;
 
 			if (here && bytes + next_bytes > batch_budget)
 				break;
@@ -444,8 +857,8 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 		{
 			batch[i].page = unique[base + i];
 			batch[i].slot = (int)(slot_base + base + i);
-			batch[i].origin = origins[base + i];
-			batch[i].white = whites[base + i] != 0;
+			batch[i].origin = plan[base + i].origin;
+			batch[i].white = plan[base + i].white;
 		}
 
 		next.store(0);
@@ -460,8 +873,13 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 				if (at >= (int)here)
 					break;
 
-				if (!paths[base + (size_t)at].empty())
-					decode_one(paths[base + (size_t)at], batch[(size_t)at]);
+				const PagePlan& page = plan[base + (size_t)at];
+
+				if (page.synth || page.path.empty())
+					make_white(batch[(size_t)at], g_format_used);
+				else
+					decode_one(page.path, page.firstMip, g_format_used,
+						batch[(size_t)at]);
 			}
 		};
 
@@ -481,7 +899,12 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 
 		decode_ms += now_ms() - decode_started;
 
+		for (size_t i = 0; i < here; i++)
+			compress_ms += batch[i].compressMs;
+
 		const double upload_started = now_ms();
+		const D3DFORMAT surface = g_format_used == HD_PAGE_FORMAT_DXT5
+			? D3DFMT_DXT5 : D3DFMT_A8R8G8B8;
 
 		for (size_t i = 0; i < here; i++)
 		{
@@ -501,25 +924,30 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 			const long levels = (long)page.mips.size();
 
 			IDirect3DTexture9* texture = 0;
+			HRESULT hr = S_OK;
 
 			if (managed)
 			{
-				if (SUCCEEDED(g_device->CreateTexture((UINT)w, (UINT)h, (UINT)levels, 0,
-					D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &texture, 0)))
-					copy_into(texture, page, 0);
+				hr = g_device->CreateTexture((UINT)w, (UINT)h, (UINT)levels, 0,
+					surface, D3DPOOL_MANAGED, &texture, 0);
+
+				if (SUCCEEDED(hr))
+					copy_into(texture, page, g_format_used, 0);
 				else
 					texture = 0;
 			}
-			else if (ensure_staging(w, h, levels))
+			else if (ensure_staging(w, h, levels, g_format_used))
 			{
 				/* D3DPOOL_DEFAULT cannot be locked, so the pixels go into
 				 * the one staging texture and from there straight across
 				 * the bus. The staging texture is the ONLY system memory
 				 * this path ever holds - 1.4 MiB, not 293. */
-				copy_into(g_staging, page, 0);
+				copy_into(g_staging, page, g_format_used, 0);
 
-				if (SUCCEEDED(g_device->CreateTexture((UINT)w, (UINT)h, (UINT)levels, 0,
-					D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &texture, 0)))
+				hr = g_device->CreateTexture((UINT)w, (UINT)h, (UINT)levels, 0,
+					surface, D3DPOOL_DEFAULT, &texture, 0);
+
+				if (SUCCEEDED(hr))
 				{
 					if (FAILED(g_device->UpdateTexture(g_staging, texture)))
 					{
@@ -535,8 +963,29 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 			{
 				g_textures[page.slot] = texture;
 
+				for (const DecodedMip& mip : page.mips)
+					loaded_bytes += g_format_used == HD_PAGE_FORMAT_DXT5
+						? (double)DXT5Size(mip.w, mip.h)
+						: (double)mip.w * (double)mip.h * 4.0;
+
 				if (stats)
 				{
+					/* The two reasons a page can start below its own top
+					 * level are counted apart, because they mean different
+					 * things to a reader of the log: the budget is a choice
+					 * this build made and can be taken back with a bigger
+					 * number, the device's size limit is not. */
+					const int gave = page.firstMip - plan[base + i].clamped;
+
+					if (gave > 0)
+					{
+						stats->droppedMip0++;
+						stats->droppedLevels += gave;
+					}
+
+					if (plan[base + i].clamped)
+						stats->clampedByCaps++;
+
 					stats->mipLevels += (int)levels;
 
 					if (w > stats->widest)
@@ -544,9 +993,6 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 
 					if (w > 1024 || h > 1024)
 						stats->bigPages++;
-
-					for (const DecodedMip& mip : page.mips)
-						stats->bytes += (double)mip.w * (double)mip.h * 4.0;
 
 					if (page.white)
 						stats->fromWhite++;
@@ -558,8 +1004,41 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 						stats->fromGame5++;
 				}
 			}
-			else if (stats)
-				stats->failed++;
+			else
+			{
+				if (stats)
+					stats->failed++;
+
+				/* OUT OF VIDEO MEMORY IN THE MIDDLE OF A LEVEL (#123, stage
+				 * S6). Every other refusal is one page's business - a broken
+				 * file, a page that is not BC7 - and the level goes on with a
+				 * hole where that page was. This one is not: the card is
+				 * full, every page after this would fail the same way, and
+				 * half a level in HD is worse than none. Stop here, say why,
+				 * and let the caller put the whole level back on classic. */
+				if (out_of_memory(hr))
+				{
+					char line[200];
+
+					std::snprintf(line, sizeof(line),
+						"page %d: the card ran out of video memory after "
+						"%.0f MiB - the level goes back to classic",
+						page.page, loaded_bytes / 1048576.0);
+					g_notes.push_back(line);
+
+					if (stats)
+						stats->outOfMemory = 1;
+
+					oom = true;
+
+					// Nothing of this batch is uploaded any more, so nothing
+					// of it may stay malloc'd either.
+					for (size_t k = i; k < here; k++)
+						batch[k].free_all();
+
+					break;
+				}
+			}
 
 			page.free_all();
 		}
@@ -592,13 +1071,29 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 
 	if (stats)
 	{
-		// readMs is the path search - the three or four fopen calls per page
-		// that decide which TEX folder a page comes out of. The reading of
-		// the bytes themselves sits inside decodeMs, where the threads are.
+		// readMs is the path search plus the 148 byte header of every page -
+		// the three or four fopen calls that decide which TEX folder a page
+		// comes out of and what it will cost. The reading of the bytes
+		// themselves sits inside decodeMs, where the threads are.
 		stats->readMs = started - resolve_started;
 		stats->decodeMs = decode_ms;
+		stats->compressMs = compress_ms;
 		stats->uploadMs = upload_ms;
 		stats->totalMs = now_ms() - resolve_started;
+
+		stats->bytes = loaded_bytes;
+		stats->needBytes = need_full;
+		stats->budgetBytes = budget;
+		stats->haveBytes = have;
+		stats->formatUsed = g_format_used;
+	}
+
+	g_bytes += loaded_bytes;
+
+	if (oom)
+	{
+		*why = "the card ran out of video memory while loading the pages";
+		return false;
 	}
 
 	return true;
@@ -640,7 +1135,46 @@ void HDPageCacheDestroy()
 	}
 
 	g_staging_w = g_staging_h = g_staging_levels = 0;
+	g_staging_format = HD_PAGE_FORMAT_RGBA;
+	g_bytes = 0;
 	g_device = 0;
+}
+
+/* The policy is NOT reset by Destroy: it is the user's setting for the run,
+ * and a level change must not quietly put a card that was given a budget back
+ * on to no budget at all. HDPageCacheConfigure(0) is the way back. */
+void HDPageCacheConfigure(const HDPageCachePolicy* policy)
+{
+	if (policy)
+	{
+		g_policy = *policy;
+
+		if (g_policy.format != HD_PAGE_FORMAT_DXT5)
+			g_policy.format = HD_PAGE_FORMAT_RGBA;
+
+		if (g_policy.budgetBytes < 0)
+			g_policy.budgetBytes = 0;
+
+		if (g_policy.maxSide < 0)
+			g_policy.maxSide = 0;
+	}
+	else
+	{
+		g_policy.format = HD_PAGE_FORMAT_RGBA;
+		g_policy.budgetBytes = 0;
+		g_policy.maxSide = 0;
+	}
+}
+
+void HDPageCachePolicyNow(HDPageCachePolicy* out)
+{
+	if (out)
+		*out = g_policy;
+}
+
+double HDPageCacheBytes()
+{
+	return g_bytes;
 }
 
 IDirect3DTexture9* HDPageCacheTexture(int page)
@@ -662,6 +1196,14 @@ int HDPageCacheSlotOf(int page)
 {
 	const std::unordered_map<int, int>::const_iterator at = g_slot_of_page.find(page);
 	return at == g_slot_of_page.end() ? -1 : at->second;
+}
+
+int HDPageCachePageOfSlot(int slot)
+{
+	if (slot < 0 || slot >= (int)g_page_of_slot.size())
+		return -1;
+
+	return g_page_of_slot[(size_t)slot];
 }
 
 IDirect3DTexture9* HDPageCacheSlotTexture(int slot)

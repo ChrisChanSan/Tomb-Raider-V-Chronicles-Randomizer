@@ -566,8 +566,28 @@ state the HD rooms are actually drawing with, so a "the fog does nothing"
 report can be answered from the log: `fog_start` is `Distance fog` times 1024,
 `bulbs` is zero whenever `Fog` is off, `shimmer` is the switch itself. And a
 `clipped` line appears only if a room ever wanted more than eight dynamic
-lights or more than six fog bulbs at once — if you never see one, the shader's
-maxima never bit.
+lights or more than eight fog bulbs at once — if you never see one, the
+shader's maxima never bit:
+
+```
+HDLOG level=TITLE clipped first frame lights=0 bulbs=1 room=-1
+      offered_lights=0 offered_bulbs=9 (maxima 8 / 8)
+HDLOG level=TITLE clipped summary frames=173 lights=0 bulbs=173
+      worst_lights=0(room -1) worst_bulbs=9 (maxima 8 / 8)
+```
+
+The first line is written by the first frame that clipped, the second at the
+end of the level — **never once per frame**, which is what an earlier version
+did and what got the fog bulb maximum raised from six to eight in the first
+place. `offered_` is what the engine wanted, the `maxima` are what the shader
+has room for. Eight is a measured number, not a guess: counted out of all
+sixteen level files, a level holds up to seventeen fog bulbs (`ANDREA2`, and
+`TITLE` has seventeen too), and sweeping every camera position a level allows,
+up to sixteen of them can be alight at once — 16 in `ANDREA2`, 14 in `RICH2`,
+13 in `ANDY1`, 11 in `TITLE`, 10 in `RICH1`. So a `clipped bulbs` line in those
+levels is expected: the bulbs that are dropped are the ones furthest down the
+engine's own list. Eight is where the title screen stopped visibly losing one;
+the engine's own ceiling is sixteen.
 
 If the HD path refuses, it says so in one line and the game runs on classic —
 no error box, no changed picture:
@@ -798,9 +818,44 @@ wrote it, and each seam answers a different question:
 | …and something moved it later | `ITEMWATCH` — who wrote which room number, and when |
 | the outfit looks wrong, a limb is misplaced | `SKINLOG` — the skin's bone stack |
 | the first person view sits wrong | `FPHEAD`, `ALTERFOV` — the head bone per frame, and the field of view |
+| it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
 
 These seams are permanent, not debug leftovers. They exist so that a report
 carries something to work with.
+
+**The frame rate, measured.** "It felt slow in that room" is not something
+anybody can check by looking, so with `-log` the engine writes one `FPSLOG`
+line per second of wall clock, and one summary per level:
+
+```
+FPSLOG level=ANDREA1 frames=30 min_ms=32.9 max_ms=34.1 avg_ms=33.3 slow=13
+       late=0 hd_rooms=17 hd_items=9 hd_draws=152
+FPSLOG level=ANDREA1 frames=24 min_ms=33.0 max_ms=66.9 avg_ms=41.6 slow=11
+       late=6 hd_rooms=23 hd_items=14 hd_draws=241
+FPSLOG level=ANDREA1 summary seconds=418 frames=12461 worst_ms=83.4
+       slow_frames=5602 late_frames=39
+```
+
+The game's logic is a fixed **30 frames a second** — that is the engine, not
+this build — so a healthy second reads `frames=30` and every gap between two
+presented frames sits on 33.3 ms. Read the line like this:
+
+- **`frames=`** is the frame rate itself. Anything under 30 is a second in
+  which the game did not keep up.
+- **`late=`** counts the frames that actually missed their slot (over 41.7 ms).
+  This is the number that matters. `worst_ms`/`max_ms` say how badly.
+- **`slow=`** counts every gap over the 33.3 ms budget. Half of a perfectly
+  healthy second lands here on measurement jitter alone, so a large `slow=`
+  with `late=0` means nothing at all.
+- **`hd_rooms` / `hd_items` / `hd_draws`** are the heaviest HD frame of that
+  second — rooms drawn, objects drawn, draw calls — so a drop can be put next
+  to what was on the screen when it happened. They are zero with the HD path
+  off, and `FPSLOG` still works: the frame clock has nothing to do with
+  `hd_enable`.
+
+The measurement is taken where the finished picture is handed to the graphics
+card, so every frame counts once — the game, the inventory, the title menu, the
+loading bar and the movies alike. Without `-log` not one clock is read.
 
 **For a complete report, attach four things:** `log.txt`, `spoiler.txt` from
 beside the randomizer, the `PCtomb5 build <date>` line from the setup dialog,

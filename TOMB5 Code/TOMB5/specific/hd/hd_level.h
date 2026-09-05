@@ -78,6 +78,23 @@ void HDFrameReset();
 bool HDFrameRoom(int roomIndex, const float* viewWorld);
 void HDFrameDraw();
 
+// THE FRAME CLOCK (#123 diagnostics). Called from DXShowFrame
+// (specific\dxshell.cpp) directly after IDirect3DDevice9::Present returns -
+// the one function in this engine that presents anything, so the game frame,
+// the loading bar, the inventory, the title menu, the credits and an FMV all
+// come through it exactly once each.
+//
+// With -log it writes one `FPSLOG` line per second of wall clock: how many
+// frames were presented, the shortest, longest and average gap between two
+// presents, how many of those gaps missed the 30 Hz budget, and the heaviest
+// HD room / object / draw call counts seen in that second. At the end of a
+// level it writes one summary line. Without -log its first line returns and
+// nothing at all is measured - it does not even read the clock.
+//
+// This is NOT behind hd_enable: the frame rate is a property of the whole
+// engine, and a report about it has to be possible with the HD path off.
+void HDFramePresented();
+
 // The field of view of THIS frame, taken the first time anything HD turns up
 // in it - a room in InsertRoom or an item in DrawAnimatingItem. Called by
 // both, does its work once, and is here because AlterFOV moves f_persp inside

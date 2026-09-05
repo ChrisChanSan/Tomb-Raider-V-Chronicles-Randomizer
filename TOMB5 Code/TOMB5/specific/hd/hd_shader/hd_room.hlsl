@@ -220,7 +220,7 @@ float4 gWibbleTable[32] : register(c96);
  * c16         gFog                per frame
  * c17         gCounts             per room
  * c20 - c35   gLights[16]         per room  (8 lights, two registers each)
- * c40 - c51   gBulbs[12]          per frame (6 bulbs, two registers each)
+ * c40 - c71   gBulbs[32]          per frame (16 bulbs, two registers each)
  *
  * Deliberately disjoint from the vertex numbers although the two constant
  * files are separate in Direct3D 9: one table of "register -> meaning" that
@@ -246,12 +246,24 @@ float4 gCounts : register(c17);
  *
  * 8 lights: the engine holds 32 dynamics (drawroom.cpp:952) but they are
  * flare, torch, muzzle flash and explosions, and a single room seeing more
- * than eight of them at once does not happen in TR5. 6 bulbs: the classic
- * path's own RoomletFogBulbs is 16, and the Rome levels are the only ones
- * with a real count. Both are logged when they clip, so the number is a
- * measurement and not a hope. */
+ * than eight of them at once does not happen in TR5.
+ *
+ * 8 bulbs, raised from 6 because the title screen was visibly losing one. The
+ * count is MEASURED, out of all sixteen vanilla .TRC files: a level holds up
+ * to 17 fog bulbs (ANDREA2, TITLE), a single room up to 5 (ANDY3), and - over
+ * a sweep of every camera position a level allows - up to 16 of them fall
+ * inside the 20480-unit circle aBuildFogBulbList keeps around the camera at
+ * once (drawroom.cpp:800): 16 ANDREA2, 14 RICH2, 13 ANDY1, 11 TITLE, 10
+ * RICH1. So eight is NOT the engine's ceiling; it is where the title screen
+ * stops visibly losing one. 16 is the ceiling, and the classic path agrees
+ * without meaning to: RoomletFogBulbs is 16 and is filled with no bound check
+ * at all. Each further bulb costs about 4.5 instruction slots in each of the
+ * two pixel shaders (6 -> 310/295, 8 -> 319/304, 16 -> 355/340 of the 512
+ * ps_3_0 guarantees), so 16 would fit as well - it needs c40-c71 here, in
+ * hd_model.hlsl and in hd_render.h, and nothing else. The `clipped` line in
+ * the log says when eight bit, once per level. */
 #define HD_MAX_LIGHTS 8
-#define HD_MAX_BULBS  6
+#define HD_MAX_BULBS  16
 
 /* Two registers per light: (x, y, z, falloff) room local, then
  * (r, g, b, 1 / falloff). */

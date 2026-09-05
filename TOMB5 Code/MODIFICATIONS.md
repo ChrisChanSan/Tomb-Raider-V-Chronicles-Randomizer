@@ -1575,6 +1575,70 @@ flare in flight, a thrown weapon — fourteen assignments of a routine of their
 own in `game/setup.cpp`). Per level that leaves ANDREA1 drawing 50 of
 its 52 models in HD, JOBY3 65 of 66 and RICH3 65 of 68.
 
+#### The frame clock, and the fog bulb maximum
+
+Two small things that came out of reading a real play session's log.
+
+**`FPSLOG` — the frame rate, measured.** A new seam in `DXShowFrame`
+(`specific/dxshell.cpp`), one line directly after
+`IDirect3DDevice9::Present`. That function is the whole engine's only
+present — `S_DumpScreen` (the game frame, the inventory, the title menu),
+`S_DumpScreenFrame` (the loading bar, the credits) and `fmv.cpp` all end
+there — so one call counts every frame the player sees, exactly once, and
+counts it including the wait and the driver time. Measuring inside
+`S_OutputPolyList` would have missed the loading bar and the movies;
+measuring in the main loop would have counted message pumps that drew
+nothing.
+
+The counting lives in `specific/hd/hd_level.cpp` beside the other frame-path
+diagnostics (`HDFramePresented`). With `-log` it writes one line per second
+of wall clock — frames presented, shortest / longest / average gap, how many
+gaps missed the 30 Hz budget, and the heaviest HD room, object and draw-call
+counts of that second — and one summary per level, flushed at the top of
+`HDLevelBuild` for the level before and in `HDLevelDeviceLost` so the level
+the player quits from gets one too. Both are on the main thread, after the
+load thread has joined.
+
+Two counters and not one, because the logic is a fixed 30 Hz built on a 60 Hz
+tick: `slow` is every gap over the 33.3 ms budget, which half a healthy
+second reaches on jitter alone, and `late` is every gap over 41.7 ms, which
+jitter cannot reach because a missed slot costs a whole tick. Without `-log`
+the first line of `HDFramePresented` returns — no clock read, no counter,
+nothing allocated anywhere in the path.
+
+**`HD_MAX_BULBS` 6 → 8**, in `hd_render.h` and in both pixel shaders, which
+share one frame's constant upload and must agree. Registers `c40-c55`
+(sixteen, two per bulb); `c52-c55` were free in both. The pixel shaders grow
+from 310 to 319 (room) and 295 to 304 (model) of the 512 instruction slots
+`ps_3_0` guarantees — about 4.5 slots per bulb, because `ps_3_0` has no
+relative addressing of constants and `fxc` emulates the array access with a
+chain of `cmp`.
+
+The number is measured out of all sixteen level files: a level holds up to
+17 fog bulbs (ANDREA2, and TITLE has 17 as well) and one room up to 5
+(ANDY3); sweeping every camera position, up to **16** of a level's bulbs fall
+inside the 20480-unit circle `aBuildFogBulbList` keeps around the camera at
+once (16 ANDREA2, 14 RICH2, 13 ANDY1, 11 TITLE, 10 RICH1). So 8 is not the
+ceiling — it is where the title screen stopped visibly losing one. The
+engine's own ceiling is 16, and that is not a coincidence:
+`RoomletFogBulbs[16]` in `drawroom.cpp` is filled with no bound check at all,
+so 16 is also where the classic path itself would start writing past its
+array. Raising this cap to 16 would cost 355 / 340 slots and `c40-c71`, both
+still well inside the 512 and 224 `ps_3_0` guarantees.
+
+The **`clipped` line goes with it**: it used to reset its counters every
+frame, so the comment saying "once per level" produced 173 identical lines
+out of one title screen. It now counts for the whole level — one line at the
+first frame that clips, naming the room and how many lights and bulbs were
+offered, and one total at the level's end. Both `Fill…Lighting` functions
+count what they turn away instead of stopping at the cap, so the numbers say
+*how many* and not just *that*.
+
+Proved with `RoomProbe` — the same room, the same camera, six harmless bulbs
+in both runs, and a seventh and eighth that only the raised cap can reach:
+they show up as a red and a blue glow that are not in the six-bulb picture,
+and a ninth is reported dropped at the new maximum.
+
 ---
 
 ---

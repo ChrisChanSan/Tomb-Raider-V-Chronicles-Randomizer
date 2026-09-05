@@ -217,6 +217,17 @@ HRESULT DXShowFrame()
 
 	hr = G_dxptr->lpD3DDevice->Present(0, 0, 0, 0);
 
+	/* THE FRAME CLOCK, and the only place it can be taken. This function is
+	 * the whole engine's one present: S_DumpScreen (the game frame, the
+	 * inventory, the title menu), S_DumpScreenFrame (the loading bar and the
+	 * credits) and fmv.cpp all end here and nowhere else, so one call here
+	 * counts every frame the player ever sees, once. It is deliberately AFTER
+	 * Present and before the device-lost branch below - the interval it
+	 * measures is present-to-present, which is the frame rate as felt, wait
+	 * and driver time included. Without -log it is a bool test and a return
+	 * (hd_level.h). */
+	HDFramePresented();
+
 	if (hr == D3DERR_DEVICELOST)
 	{
 		// "Fullscreen" now always runs as a border-less windowed device (see DXCreate),

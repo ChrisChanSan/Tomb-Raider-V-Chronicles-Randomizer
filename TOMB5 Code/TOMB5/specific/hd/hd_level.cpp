@@ -68,11 +68,158 @@ namespace
 	int g_room_count = 0;
 
 	// Stage S2b. The marks are built once per level out of the classic
-	// roomlets and handed to the renderer; the two counters say once per
+	// roomlets and handed to the renderer; the counters below say once per
 	// level whether the shader's fixed maxima ever bit.
 	std::vector<HDWaterMark> g_water_marks;
-	int g_clipped_lights = 0;
-	int g_clipped_bulbs = 0;
+
+	/* WHY THESE ARE TOTALS AND NOT A PER FRAME FLAG. The first version reset
+	 * them after every frame that clipped, so the "once per level" line came
+	 * out once per FRAME - 173 identical lines out of one title screen, which
+	 * is how the 6 bulb cap was found in the first place. They now count for
+	 * the whole level: the first frame that clips writes one line naming the
+	 * room, and the level's end writes one total. Nothing else logs them. */
+	int g_clipped_lights = 0;	// dynamic lights turned away, whole level
+	int g_clipped_bulbs = 0;	// fog bulbs turned away, whole level
+	int g_clip_frames = 0;		// frames in which either happened
+	int g_clip_lights_worst = 0;	// most lights one room ever offered
+	int g_clip_lights_room = -1;	// and which room that was
+	int g_clip_bulbs_worst = 0;	// most bulbs one frame ever offered
+	bool g_clip_reported = false;	// the one line has been written
+	bool g_clip_this_frame = false;
+
+	/* ------------------------------------------------------ the frame clock --
+	 *
+	 * "It felt like the frame rate dropped below 30 sometimes" is not
+	 * something anybody can answer by looking at the picture, so the engine
+	 * measures it: one FPSLOG line per second of wall clock, written from the
+	 * one place every presented frame goes through.
+	 *
+	 * WHERE IT IS TAKEN. HDFramePresented() is called from DXShowFrame
+	 * (specific\dxshell.cpp) directly after IDirect3DDevice9::Present returns.
+	 * That is the only function in this engine that presents anything, and
+	 * every path reaches it: the game frame (S_DumpScreen), the loading bar
+	 * and the credits (S_DumpScreenFrame), the inventory, the title menu and
+	 * an FMV (fmv.cpp calls it itself). Measuring inside S_OutputPolyList
+	 * would miss the loading bar and the movies; measuring in the main loop
+	 * would count message pumps that drew nothing.
+	 *
+	 * WHAT THE NUMBERS MEAN. The logic is a fixed 30 Hz: S_DumpScreen waits
+	 * for two ticks of the engine's own 60 Hz counter (specific\time.cpp)
+	 * before it presents, so a healthy second is `frames=30` and every
+	 * interval sits on 33.3 ms. That quantisation is why there are TWO
+	 * counters and not one:
+	 *
+	 *   slow   intervals over the 33.3 ms budget. Half a healthy second lands
+	 *          here on jitter alone, so a number here on its own means
+	 *          nothing - it is the budget line the brief asked for.
+	 *   late   intervals over 41.7 ms, which is the budget plus half a 60 Hz
+	 *          tick. Jitter cannot reach it; a frame that MISSED its slot
+	 *          costs a whole tick and lands at 50 ms or beyond. This is the
+	 *          number that says the frame rate really fell under 30.
+	 *
+	 * NOTHING HAPPENS WITHOUT -log. The first line of HDFramePresented is
+	 * `if (!gLogEnabled) return;` - one bool test per present, no counter
+	 * kept, no clock read. Nothing here allocates, ever: the accumulators are
+	 * plain integers and doubles in this file.
+	 */
+	const double kFrameBudgetMs = 1000.0 / 30.0;		// 33.33
+	const double kMissedSlotMs = kFrameBudgetMs + 1000.0 / 120.0;	// 41.67
+
+	char g_fps_level[64] = { 0 };	// the level the frame clock is counting for
+	char g_log_stem[64] = { 0 };	// what HDLevelLoad saw, whatever hd_enable says
+
+	__int64 g_qpc_freq = 0;		// 0 = the clock has not been read yet
+	__int64 g_qpc_last = 0;		// the previous present, 0 = none yet
+	__int64 g_qpc_second = 0;	// when the second being filled started
+
+	int g_sec_frames = 0;
+	double g_sec_min = 0;
+	double g_sec_max = 0;
+	double g_sec_sum = 0;
+	int g_sec_slow = 0;
+	int g_sec_late = 0;
+	int g_sec_rooms = 0;		// the HD counters, MAXIMUM over the second -
+	int g_sec_items = 0;		// the heaviest frame is the one that explains
+	int g_sec_draws = 0;		// a drop, not the last one before the flush
+
+	int g_lvl_seconds = 0;
+	int g_lvl_frames = 0;
+	double g_lvl_worst = 0;
+	int g_lvl_slow = 0;
+	int g_lvl_late = 0;
+
+	void FrameClockNewSecond()
+	{
+		g_sec_frames = 0;
+		g_sec_min = 0;
+		g_sec_max = 0;
+		g_sec_sum = 0;
+		g_sec_slow = 0;
+		g_sec_late = 0;
+		g_sec_rooms = 0;
+		g_sec_items = 0;
+		g_sec_draws = 0;
+	}
+
+	void FrameClockFlushSecond()
+	{
+		if (g_sec_frames <= 0)
+			return;
+
+		Log("FPSLOG level=%s frames=%d min_ms=%.1f max_ms=%.1f avg_ms=%.1f "
+			"slow=%d late=%d hd_rooms=%d hd_items=%d hd_draws=%d",
+			g_fps_level[0] ? g_fps_level : "?", g_sec_frames, g_sec_min,
+			g_sec_max, g_sec_sum / g_sec_frames, g_sec_slow, g_sec_late,
+			g_sec_rooms, g_sec_items, g_sec_draws);
+
+		g_lvl_seconds++;
+		g_lvl_frames += g_sec_frames;
+		g_lvl_slow += g_sec_slow;
+		g_lvl_late += g_sec_late;
+
+		if (g_sec_max > g_lvl_worst)
+			g_lvl_worst = g_sec_max;
+	}
+
+	/* The end of a level, main thread: the frame clock's summary and the one
+	 * total of what the shader maxima turned away. Called from HDLevelBuild
+	 * (for the level BEFORE the one being built, after the load thread has
+	 * joined) and from HDLevelDeviceLost, which is where DXClose comes
+	 * through at the end of the session - so the last level gets its line
+	 * too. Both counters start again afterwards. */
+	void LevelDiagnosticsEnd()
+	{
+		if (gLogEnabled && g_lvl_seconds)
+			Log("FPSLOG level=%s summary seconds=%d frames=%d worst_ms=%.1f "
+				"slow_frames=%d late_frames=%d",
+				g_fps_level[0] ? g_fps_level : "?", g_lvl_seconds,
+				g_lvl_frames, g_lvl_worst, g_lvl_slow, g_lvl_late);
+
+		if (gLogEnabled && (g_clipped_lights || g_clipped_bulbs))
+			Log("HDLOG level=%s clipped summary frames=%d lights=%d bulbs=%d "
+				"worst_lights=%d(room %d) worst_bulbs=%d (maxima %d / %d)",
+				g_fps_level[0] ? g_fps_level : "?", g_clip_frames,
+				g_clipped_lights, g_clipped_bulbs, g_clip_lights_worst,
+				g_clip_lights_room, g_clip_bulbs_worst,
+				HD_MAX_LIGHTS, HD_MAX_BULBS);
+
+		g_lvl_seconds = 0;
+		g_lvl_frames = 0;
+		g_lvl_worst = 0;
+		g_lvl_slow = 0;
+		g_lvl_late = 0;
+		g_qpc_last = 0;
+		FrameClockNewSecond();
+
+		g_clipped_lights = 0;
+		g_clipped_bulbs = 0;
+		g_clip_frames = 0;
+		g_clip_lights_worst = 0;
+		g_clip_lights_room = -1;
+		g_clip_bulbs_worst = 0;
+		g_clip_reported = false;
+		g_clip_this_frame = false;
+	}
 
 	FrameRoom g_frame[HD_MAX_FRAME];
 	int g_frame_count = 0;
@@ -369,6 +516,8 @@ static void FillFrameLighting(HDFrameLighting& out, HDFogBulb* bulbs)
 	out.bulbs = bulbs;
 	out.bulbCount = 0;
 
+	int offered = 0;
+
 	for (int i = 0; i < NumActiveFogBulbs && i < 64; i++)
 	{
 		const FOGBULB_STRUCT& in = ActiveFogBulbs[i];
@@ -376,11 +525,13 @@ static void FillFrameLighting(HDFrameLighting& out, HDFogBulb* bulbs)
 		if (!in.visible)
 			continue;
 
+		// Counted to the end rather than left at the cap: "one bulb was
+		// dropped" and "nine were dropped" are two different reports, and
+		// the loop is at most 64 long.
+		offered++;
+
 		if (out.bulbCount >= HD_MAX_BULBS)
-		{
-			g_clipped_bulbs++;
-			break;
-		}
+			continue;
 
 		HDFogBulb& b = bulbs[out.bulbCount++];
 
@@ -392,6 +543,15 @@ static void FillFrameLighting(HDFrameLighting& out, HDFogBulb* bulbs)
 		b.g = in.g;
 		b.b = in.b;
 		b.density = in.d;
+	}
+
+	if (offered > HD_MAX_BULBS)
+	{
+		g_clipped_bulbs += offered - HD_MAX_BULBS;
+		g_clip_this_frame = true;
+
+		if (offered > g_clip_bulbs_worst)
+			g_clip_bulbs_worst = offered;
 	}
 }
 
@@ -447,6 +607,8 @@ static void FillRoomLighting(int roomIndex, HDRoomLighting& out, HDLightSource* 
 	if (!HDRenderGroupBounds(roomIndex, mins, maxs))
 		return;
 
+	int offered = 0;
+
 	for (int i = 0; i < 32; i++)
 	{
 		DYNAMIC* dynamic = &dynamics[i];
@@ -463,11 +625,13 @@ static void FillRoomLighting(int roomIndex, HDRoomLighting& out, HDLightSource* 
 			dz - falloff <= maxs[2] && falloff + dz >= mins[2]))
 			continue;
 
+		// As with the bulbs above: counted to the end, so that the level's
+		// one line can say how many were turned away and not just that some
+		// were. The loop is 32 long whatever happens.
+		offered++;
+
 		if (out.lightCount >= HD_MAX_LIGHTS)
-		{
-			g_clipped_lights++;
-			break;
-		}
+			continue;
 
 		HDLightSource& l = lights[out.lightCount++];
 
@@ -478,6 +642,18 @@ static void FillRoomLighting(int roomIndex, HDRoomLighting& out, HDLightSource* 
 		l.r = (float)dynamic->r * (1.0f / 255.0f);
 		l.g = (float)dynamic->g * (1.0f / 255.0f);
 		l.b = (float)dynamic->b * (1.0f / 255.0f);
+	}
+
+	if (offered > HD_MAX_LIGHTS)
+	{
+		g_clipped_lights += offered - HD_MAX_LIGHTS;
+		g_clip_this_frame = true;
+
+		if (offered > g_clip_lights_worst)
+		{
+			g_clip_lights_worst = offered;
+			g_clip_lights_room = roomIndex;
+		}
 	}
 }
 
@@ -499,6 +675,13 @@ void HDLevelLoad(const char* wadName)
 	const char* why;
 
 	g_stem[0] = 0;
+
+	/* The name for the frame clock, taken BEFORE the HD guard and kept in its
+	 * own buffer: FPSLOG has nothing to do with hd_enable and has to name the
+	 * level either way. This is the load thread, so nobody reads it here -
+	 * HDLevelBuild copies it across on the main thread once that thread has
+	 * joined (specific\file.cpp, S_LoadLevelFile). */
+	LevelStem(wadName, g_log_stem, sizeof(g_log_stem));
 
 	if (!HDEnabled())
 		return;
@@ -557,6 +740,15 @@ void HDLevelBuild()
 	g_matrix_checked = false;
 	memset(g_room_hd, 0, sizeof(g_room_hd));
 	g_room_count = 0;
+
+	/* THE LEVEL BEFORE THIS ONE, for the two diagnostic counters: its frame
+	 * clock summary and its one clipped total. Here and not in HDLevelUnload,
+	 * because this is the main thread and the load thread has joined - the
+	 * counters are written by the thread that presents frames, and reading
+	 * them from the load thread while it does would be a race for nothing.
+	 * NOT behind HDEnabled(): FPSLOG counts frames whatever hd_enable says. */
+	LevelDiagnosticsEnd();
+	strcpy(g_fps_level, g_log_stem);
 
 	// The level before this one, released here rather than in HDLevelUnload -
 	// see the comment there. This is the main thread; that one is not.
@@ -725,6 +917,13 @@ void HDLevelUnload()
 
 void HDLevelDeviceLost()
 {
+	/* The device is going away - a resolution change, Alt+Enter, or DXClose
+	 * at the end of the session. The last one is why the summary is flushed
+	 * here as well as in HDLevelBuild: without it the level the player quit
+	 * from would be the one level that never got its FPSLOG summary. Main
+	 * thread in every one of those cases. */
+	LevelDiagnosticsEnd();
+
 	g_level_active = false;
 	g_frame_count = 0;
 	g_room_count = 0;
@@ -824,6 +1023,10 @@ void HDFrameDraw()
 	HDRenderMakeProjection((double)g_persp, (double)g_centerx, (double)g_centery,
 		(double)g_za, (double)g_zb, &projection);
 
+	// Cleared before the two Fill functions, which are the only two that set
+	// it, and read at the bottom of this function: one frame's worth.
+	g_clip_this_frame = false;
+
 	FillFrameLighting(frame, bulbs);
 	HDRenderFrameBegin(&kIdentity, &projection, &frame);
 
@@ -880,15 +1083,123 @@ void HDFrameDraw()
 			objects_here, HDObjectDrawCalls());
 	}
 
-	if (gLogEnabled && (g_clipped_lights || g_clipped_bulbs))
+	/* THE FRAME'S HD COUNTERS, handed to the frame clock as MAXIMA over the
+	 * second (see FrameClockFlushSecond). Draw calls are rooms plus objects,
+	 * which is every call the HD path made in this frame. Costs three
+	 * comparisons and only when the log is on. */
+	if (gLogEnabled)
 	{
-		// Once per level, not once per frame: the two numbers say whether the
-		// shader's fixed maxima ever had to turn a light or a bulb away.
-		Log("HDLOG level=%s clipped lights=%d bulbs=%d (maxima %d / %d)",
-			g_stem, g_clipped_lights, g_clipped_bulbs, HD_MAX_LIGHTS, HD_MAX_BULBS);
-		g_clipped_lights = 0;
-		g_clipped_bulbs = 0;
+		/* HDRenderDrawCalls is reset by HDRenderFrameBegin and is therefore
+		 * this frame's. HDObjectDrawCalls is NOT - hd_object.cpp resets it
+		 * per LEVEL - so it is only read when this frame actually had
+		 * objects; otherwise it would carry the last frame that did. */
+		const int draws = HDRenderDrawCalls() +
+			(objects_here ? HDObjectDrawCalls() : 0);
+
+		if (g_frame_count > g_sec_rooms)
+			g_sec_rooms = g_frame_count;
+
+		if (objects_here > g_sec_items)
+			g_sec_items = objects_here;
+
+		if (draws > g_sec_draws)
+			g_sec_draws = draws;
+	}
+
+	if (g_clip_this_frame)
+	{
+		g_clip_frames++;
+
+		/* ONCE PER LEVEL, at the first frame that clips - not once per frame,
+		 * which is what the old reset-every-frame version did (173 identical
+		 * lines out of one title screen). The total goes into the level's
+		 * summary in LevelDiagnosticsEnd. */
+		if (gLogEnabled && !g_clip_reported)
+		{
+			g_clip_reported = true;
+			Log("HDLOG level=%s clipped first frame lights=%d bulbs=%d "
+				"room=%d offered_lights=%d offered_bulbs=%d (maxima %d / %d)",
+				g_stem, g_clipped_lights, g_clipped_bulbs, g_clip_lights_room,
+				g_clip_lights_worst, g_clip_bulbs_worst,
+				HD_MAX_LIGHTS, HD_MAX_BULBS);
+		}
 	}
 
 	g_frame_count = 0;
+}
+
+/* ONE PRESENTED FRAME. Called from DXShowFrame (specific\dxshell.cpp) straight
+ * after Present returns - the long note beside the frame clock's counters says
+ * why that call site and no other. */
+void HDFramePresented()
+{
+	// THE GUARD. Without -log this is a single bool test and a return: no
+	// clock is read, no counter moves, nothing is written.
+	if (!gLogEnabled)
+		return;
+
+	LARGE_INTEGER now;
+
+	if (!g_qpc_freq)
+	{
+		LARGE_INTEGER f;
+
+		if (!QueryPerformanceFrequency(&f) || !f.QuadPart)
+		{
+			g_qpc_freq = -1;	// no clock on this machine - stay quiet
+			return;
+		}
+
+		g_qpc_freq = f.QuadPart;
+	}
+
+	if (g_qpc_freq < 0)
+		return;
+
+	QueryPerformanceCounter(&now);
+
+	if (!g_qpc_last)
+	{
+		// The first present of the session or of a level: there is no
+		// interval yet, only a start.
+		g_qpc_last = now.QuadPart;
+		g_qpc_second = now.QuadPart;
+		FrameClockNewSecond();
+		return;
+	}
+
+	const double ms = (double)(now.QuadPart - g_qpc_last) * 1000.0 / (double)g_qpc_freq;
+
+	g_qpc_last = now.QuadPart;
+
+	if (!g_sec_frames || ms < g_sec_min)
+		g_sec_min = ms;
+
+	if (ms > g_sec_max)
+		g_sec_max = ms;
+
+	g_sec_sum += ms;
+	g_sec_frames++;
+
+	if (ms > kFrameBudgetMs)
+		g_sec_slow++;
+
+	if (ms > kMissedSlotMs)
+		g_sec_late++;
+
+	if (now.QuadPart - g_qpc_second < g_qpc_freq)
+		return;
+
+	FrameClockFlushSecond();
+
+	/* The next second starts one second after this one UNLESS the gap was
+	 * bigger than two - a level load presents nothing for a while, and a
+	 * catch-up loop would write a run of empty lines about a second nobody
+	 * drew in. Then it simply starts again here. */
+	if (now.QuadPart - g_qpc_second < 2 * g_qpc_freq)
+		g_qpc_second += g_qpc_freq;
+	else
+		g_qpc_second = now.QuadPart;
+
+	FrameClockNewSecond();
 }

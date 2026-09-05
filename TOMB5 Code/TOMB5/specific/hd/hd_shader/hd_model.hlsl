@@ -185,7 +185,7 @@ float4 gLightInfo : register(c160);
  * c16         gFog                per frame
  * c17         gCounts             per object
  * c20 - c35   gLights[16]         per object (8 lights, two registers each)
- * c40 - c51   gBulbs[12]          per frame  (6 bulbs, two registers each)
+ * c40 - c71   gBulbs[32]          per frame  (16 bulbs, two registers each)
  *
  * The same numbers hd_room.hlsl uses, and for the same things - one table of
  * "register -> meaning" for the whole HD path. The ONE difference is the
@@ -202,9 +202,15 @@ float4 gCounts : register(c17);
 
 /* Unrolled against a compile time maximum for the reason hd_room.hlsl gives
  * at length: ps_3_0 has no relative addressing of constant registers, and a
- * run time loop makes fxc emulate every access with a chain of comparisons. */
+ * run time loop makes fxc emulate every access with a chain of comparisons.
+ *
+ * BOTH NUMBERS MUST MATCH hd_room.hlsl AND HD_MAX_BULBS IN hd_render.h: one
+ * frame's constant upload serves both shaders, so a bulb this file does not
+ * know about is a register the room shader reads and this one ignores - an
+ * object standing in a haze the wall behind it has. The 6 -> 8 raise is
+ * measured and explained in hd_room.hlsl. */
 #define HD_MAX_LIGHTS 8
-#define HD_MAX_BULBS  6
+#define HD_MAX_BULBS  16
 
 /* Two registers per light: (x, y, z, falloff) in VIEW space, then
  * (r, g, b, 1 / falloff). */

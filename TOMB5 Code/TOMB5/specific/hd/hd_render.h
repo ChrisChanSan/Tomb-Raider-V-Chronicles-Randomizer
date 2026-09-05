@@ -60,10 +60,12 @@ typedef struct _D3DMATRIX D3DMATRIX;
  *
  * The two maxima are the shader's, not the engine's: ps_3_0 has no relative
  * addressing of constant registers, so the light loop is unrolled against a
- * compile time bound (hd_room.hlsl says why). Both are logged when they clip.
+ * compile time bound (hd_room.hlsl says why). Both are logged when they clip -
+ * once per level with the room that did it, and again as a total at the end of
+ * the level, never once per frame.
  */
 #define HD_MAX_LIGHTS	8
-#define HD_MAX_BULBS	6
+#define HD_MAX_BULBS	16
 
 // One entry of the engine's `dynamics` array, made room local and scaled the
 // way aBuildRoomletLights scales it (drawroom.cpp:952-978).
@@ -298,7 +300,7 @@ void HDRenderDepthTruth(IDirect3DDevice9* device, unsigned long* zenable,
 	unsigned long* zfunc, unsigned long* zwrite, float* minZ, float* maxZ);
 
 // How many instruction slots the card allows a ps_3_0 shader. The room shader
-// is 313 of them and shader model 3 guarantees 512, but a card that reports
+// is 319 of them and shader model 3 guarantees 512, but a card that reports
 // less would refuse CreatePixelShader with no useful message, so the number is
 // read and logged rather than assumed.
 unsigned long HDRenderPixelSlots();

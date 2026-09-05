@@ -72,7 +72,8 @@
  *     -bulb <x y z radius density [r g b]>
  *                     one fog bulb, room-local; density is the engine's own
  *                     bulb->d (1 / den, so 0.02 is a thick one). Colour
- *                     defaults to white. Up to 6, repeat the switch.
+ *                     defaults to white. Up to HD_MAX_BULBS (8 since the cap
+ *                     was raised from 6), repeat the switch.
  *     -fog <start end r g b>
  *                     distance fog. Only `start` reaches the picture, in
  *                     WORLD units - TR5's fog has no end and no colour: the

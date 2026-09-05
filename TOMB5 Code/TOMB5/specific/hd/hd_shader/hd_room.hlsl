@@ -25,7 +25,7 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 
-/* THE HD ROOM SHADER (#123, stages S1 and S2).
+/* THE HD ROOM SHADER (#123, stages S1, S2 and S5).
  *
  * HOW IT IS BUILT. There is no fxc step in tomb5.vcxproj on purpose - the
  * project must build on a machine with nothing but the Visual Studio C++
@@ -51,7 +51,9 @@
  * reason below. Stage S2 appends a fifth element, four bytes the .TRG does
  * not have: the water marks the classic path keeps in its roomlets.
  *
- *   +0   SHORT4    x, y, z, sway     POSITION   room local, classic units
+ *   +0   SHORT4    x, y, z, sway     POSITION   room local, classic units;
+ *                                              sway is the remaster's wind
+ *                                              weight and stage S5 reads it
  *   +8   UBYTE4    nx, ny, nz, layer NORMAL     biased by 127; layer unused
  *                                               here (one page per draw call)
  *   +12  D3DCOLOR  b, g, r, u        COLOR0     first light triple + u
@@ -162,6 +164,7 @@
  * c10         gRoomOrigin         per room
  * c11         gWaterMode          per room
  * c12         gSel1               per room
+ * c13         gMotion             per DRAW CALL (#123, stage S5)
  * c32 - c95   gWaterTable[64]     per room, only when the row changes
  * c96 - c127  gWibbleTable[32]    per level (it never changes)
  */
@@ -201,6 +204,41 @@ float4 gWaterMode : register(c11);
  * vertex. The engine never uses it; the diagnostic tool's -shimmer does, and
  * that is a picture with no classic level behind it. */
 float4 gSel1 : register(c12);
+
+/* WHAT MOVES (#123, stage S5). Three motions, all of them the .TRG's own data
+ * and none of them a clock of this file's making:
+ *
+ *   x, y  the UV offset of THIS draw call in THIS frame. A .TRG part carries
+ *         a material and four parameters (Trg.h), and material 1 is a UV
+ *         SCROLL whose param.xy is a speed in page units per second - measured
+ *         over all 15 levels, and calibrated against the classic path in
+ *         RICH2, the one level where both exist: the classic UVROT tile moves
+ *         7.5 tile heights a second there, the remaster's own scroll on the
+ *         same surface 4.0. The offset itself is computed on the processor,
+ *         wrapped, so this is one add.
+ *   z     the game clock in seconds, counted from the engine's own
+ *         GlobalCounter (30 Hz, stops when the game stops).
+ *   w     1 while tomb5.hd_motion is on, 0 otherwise - the one switch for all
+ *         three motions below.
+ */
+float4 gMotion : register(c13);
+
+/* THE WIND AND THE WATER WOBBLE, in classic units and radians per second.
+ * These five numbers are the only ones in this file that are a judgement
+ * rather than a measurement, and they are here, named, for that reason. The
+ * shape is TROne's (game_renderer.cpp, k_hd_vert: a sine of x + z, a second
+ * one across it); 24 units of travel and a wavelength of about 1.4 blocks is
+ * what that shader uses for its own water, and grass, ivy and kelp are the
+ * same size of thing. */
+#define HD_WIND_TRAVEL     24.0f
+#define HD_WIND_WAVELENGTH 0.0045f
+#define HD_WIND_SPEED      2.1f
+
+/* Four texels of a 512 page. TROne moves its water UV by six; ours has the
+ * classic scroll beside it wherever the remaster authored one, so this is the
+ * remainder and not the effect. */
+#define HD_WATER_UV        (4.0f / 512.0f)
+#define HD_WATER_WAVE      0.004f
 
 /* WaterTable[room->MeshEffect], 64 entries: x = shimmer, y = choppy,
  * z = random, w = abs. The engine hands over its OWN table rather than a
@@ -367,9 +405,33 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		waterAdd = float3(0.0f, abs((e.x + e.w) * 8.0f), 0.0f);
 	}
 
+	/* 2b. THE WIND (#123, stage S5). The fourth SHORT of the position is
+	 * TrgVertex::sway, the remaster's own per vertex weight for what moves in
+	 * the wind or the current - "wind and water weight, divided by 32767"
+	 * (Trg.h, read off the remaster's own shaders). Measured over the 15
+	 * levels it is the ivy and the banners of Rome, the grass of Ireland and
+	 * the kelp of the Deepsea Dive, and it is disjoint from the classic
+	 * engine's water vertices except in JOBY4, where the kelp stands in the
+	 * water. The classic path has NO counterpart, so the weight is the
+	 * remaster's and the wave is ours.
+	 *
+	 * It moves `drawn`, not `pos`: everything above - the water hash, the
+	 * surface test, the WaterTable - reads the position the .TRG stores, and
+	 * stage S2's parity is measured against exactly that. */
+	float wind = inPos.w * (1.0f / 32767.0f) * gMotion.w;
+	float3 drawn = pos;
+
+	if (wind > 0.002f)
+	{
+		float phase = (pos.x + pos.z) * HD_WIND_WAVELENGTH + gMotion.z * HD_WIND_SPEED;
+
+		drawn.x += wind * HD_WIND_TRAVEL * sin(phase);
+		drawn.z += wind * HD_WIND_TRAVEL * 0.6f * sin(phase * 0.73f + 1.3f);
+	}
+
 	/* 3. THE TRANSFORM. */
-	float4 clip = mul(float4(pos, 1.0f), gWorldViewProj);
-	float3 view = mul(float4(pos, 1.0f), gWorldView);
+	float4 clip = mul(float4(drawn, 1.0f), gWorldViewProj);
+	float3 view = mul(float4(drawn, 1.0f), gWorldView);
 
 	/* 4. THE UNDERWATER SCREEN WOBBLE (drawroom.cpp:381-387). A pixel offset
 	 * on the projected position, so it is added in clip space scaled by w:
@@ -394,7 +456,31 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	}
 
 	o.pos = clip;
-	o.uv = float2(inC0.a, inC1.a);
+
+	/* 5. THE UV (#123, stage S5). Two terms, both zero without stage S5:
+	 *
+	 * gMotion.xy is this draw call's own scroll - the .TRG part's material 1,
+	 * already turned into an offset on the processor. It is the HD twin of
+	 * S_AnimateTextures' UVROT branch (output.cpp:909-931), which scrolls the
+	 * water tile of ANDY3 and RICH2 vertically, and it is wider than that
+	 * branch: the remaster authored a scroll on 14 of the 15 levels, on
+	 * waterfalls, drifting sky and light shafts as well.
+	 *
+	 * The wobble is the remainder of TROne's water_effect: where the classic
+	 * path marks a water surface but the remaster authored no scroll, the
+	 * surface's own UV moves a little, so an HD water plane is not a mirror.
+	 * It rides on the engine's wibble counter (gScreen.z, 0..252 in steps of
+	 * four, one full turn per 64 game frames - so the cycle closes over the
+	 * wrap instead of jumping) and it dies with tomb5.shimmer, because gSel1
+	 * does. No caustic: TR5 has its own, it is the WaterTable shimmer in step
+	 * 2 above, and a second one on top would count it twice. */
+	float waterUV = gMotion.w * saturate(max(gWaterMode.y * inFlags.x, shimmerOn));
+	float turn = gScreen.z * (6.2831853f / 256.0f);
+
+	o.uv = float2(inC0.a, inC1.a) + gMotion.xy + waterUV * HD_WATER_UV *
+		float2(sin((pos.x + pos.z) * HD_WATER_WAVE + turn),
+		       cos((pos.z - pos.y) * HD_WATER_WAVE + turn * 2.0f));
+
 	o.light = inC0.rgb * gPass.z + inC1.rgb;
 	o.viewPos = view;
 	o.roomPos = pos;

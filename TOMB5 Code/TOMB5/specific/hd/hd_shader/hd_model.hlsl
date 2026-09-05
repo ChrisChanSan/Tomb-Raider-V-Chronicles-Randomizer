@@ -133,7 +133,14 @@ float4 gPass : register(c4);
  * exactly these columns.
  *
  * Each matrix is the node's classic transform - model space to VIEW space,
- * bind offset already folded in. */
+ * bind offset already folded in.
+ *
+ * THIS RANGE OVERLAPS THE ROOM SHADER'S c9 to c13 and its water and wibble
+ * tables, and that is fine as long as every path writes its own constants
+ * before it draws - which is why hd_render.cpp's room draw marks register 13
+ * dirty at the top of every pass rather than trusting the value it left there
+ * last time (g_motion_dirty). Named here because that is the kind of thing
+ * that is only visible from the other file. */
 float4 gJoints[96] : register(c8);
 
 /* THE AMBIENT, ONE COLOUR PER NODE, in the classic path's 0..255 space: what

@@ -43,6 +43,8 @@ far, file by file:
 
 | `TOMB5 Code/TOMB5/specific/hd/hd_laradraw.cpp` | `host/render/game_renderer.cpp`: `draw_hair` (1498-1546) | The **braid rule**: `HAIR_OG` has one bone per link, so all six links get a frame of their own built from the link's absolute position and its two angles - where TR5 itself builds a matrix for links 1, 3 and 5 only and draws 0, 2 and 4 as skinned connectors out of stashed vertices. Everything else in that file is this engine's own: the LMX-to-LM turn of `lara_matrices`, the per-node ambient out of `LaraNodeAmbient`, the hand-slot pointer comparison, the first-person mask (#126) and the mirror. |
 
+| `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_room.hlsl`, the wind and the water UV | `host/render/game_renderer.cpp`: `k_hd_vert`'s `hd.water_effect` block (154-176) and `k_hd_frag`'s caustic (211-224) | The **wave shape and its scale**: two sines of the position taken across each other, about 24 classic units of travel and a wavelength of roughly one and a half blocks, plus a UV displacement of a few texels driven by the same phase. Half of it is not taken and the reason is in the file: TROne's water flag is a room bit, ours is the classic path's own water marks (stage S2), and TROne's per-pixel caustic is left out because TR5 has one already - the `WaterTable` shimmer, reproduced exactly in stage S2 - so a second one would count it twice. Translated to HLSL; the weight the wave rides on is the `.TRG`'s own `TrgVertex::sway`, which TROne does not read. |
+
 Those files name Todesengel's copyright in their own headers, beside our
 modification notice, as GPLv3 section 5(a) asks. Anything further will be
 entered here as it arrives.
@@ -50,9 +52,8 @@ entered here as it arrives.
 Not taken, and named here so the absence is on the record rather than an
 oversight: TROne's `hd.light_stage` (an A/B switch that replaces the baked room
 light with a flat ambient - a debugging pole for a renderer whose classic path
-is a fallback; ours has the classic path itself), its `hd.water_effect` (an
-invented wave and a per-pixel caustic, where this engine has Core's own
-`WaterTable` and reproduces that instead), and its HD sky dome (TR5 draws its
+is a fallback; ours has the classic path itself), the **caustic** half of its
+`hd.water_effect` (see the row above), and its HD sky dome (TR5 draws its
 sky procedurally and the HD walls paint over it). TROne has no fog of any kind
 - its `set_fog` is a logged stub and it parses `Trg::fog_boxes` only to drop
 them - so the distance fog and the fog bulbs in `hd_room.hlsl` have no

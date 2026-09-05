@@ -910,6 +910,14 @@ static bool g_underwater = false;
 static bool g_shimmer = false;
 static double g_wibble = 0;
 static int g_mesh_effect = 0;
+
+/* Stage S5. -time sets the game clock the UV scroll and the wind ride on;
+ * -water turns the water surface wobble on for the whole drawn room (through
+ * sel1[3], the same fourth flag byte -shimmer uses); -motion off takes all
+ * three motions away again, which is what the engine's hd_motion does. */
+static double g_time = 0;
+static bool g_water = false;
+static bool g_motion = true;
 static unsigned char g_water_table[22][64][4];
 
 /* The bulbs go in room local and come out in VIEW space, because that is the
@@ -948,6 +956,8 @@ static void FillLighting(HDFrameLighting& frame, HDRoomLighting& room,
 	frame.wibbleTable = 0;		// filled by the caller
 	frame.bulbs = viewBulbs;
 	frame.bulbCount = g_bulb_count;
+	frame.clock = (float)g_time;
+	frame.motion = g_motion ? 1 : 0;
 
 	if (g_bulb_count && view)
 		printf("  bulb 1 in view space: %.0f %.0f %.0f (radius %.0f, density %.4f)\n",
@@ -960,7 +970,7 @@ static void FillLighting(HDFrameLighting& frame, HDRoomLighting& room,
 	room.choppy = 1;
 	room.surfaceGate = 0;
 	room.redAlert = 0;
-	room.sel1[3] = g_shimmer ? 1.0f : 0.0f;
+	room.sel1[3] = (g_shimmer || g_water) ? 1.0f : 0.0f;
 	room.waterTable = g_water_table[g_mesh_effect];
 	room.lights = g_lights;
 	room.lightCount = g_light_count;
@@ -1105,6 +1115,7 @@ int main(int argc, char** argv)
 		printf("       -light <x y z r g b falloff>   -bulb <x y z rad den [r g b]>\n");
 		printf("       -fog <start end r g b>  -underwater  -shimmer  -wibble <n>\n");
 		printf("       -effect <0..21>  -paritycheck\n");
+		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
 		return 1;
 	}
 
@@ -1119,6 +1130,8 @@ int main(int argc, char** argv)
 	bool allPasses = false, managed = false, groupsOnly = false, noDraw = false;
 	bool matrixCheck = false;
 	bool parityCheck = false;
+	bool animTex = false;
+	bool wibbleGiven = false;
 	int threads = 8, rooms = 0;
 
 	HDLightBuildWaterTable(g_water_table);
@@ -1168,10 +1181,24 @@ int main(int argc, char** argv)
 			parityCheck = true;
 		else if (!strcmp(argv[at], "-underwater"))
 			g_underwater = true;
+		else if (!strcmp(argv[at], "-time") && at + 1 < argc)
+		{
+			g_time = atof(argv[at + 1]);
+			at++;
+		}
+		else if (!strcmp(argv[at], "-water"))
+			g_water = true;
+		else if (!strcmp(argv[at], "-nomotion"))
+			g_motion = false;
+		else if (!strcmp(argv[at], "-animtex"))
+			animTex = true;
 		else if (!strcmp(argv[at], "-shimmer"))
 			g_shimmer = true;
 		else if (!strcmp(argv[at], "-wibble") && at + 1 < argc)
+		{
 			g_wibble = atof(argv[++at]);
+			wibbleGiven = true;
+		}
 		else if (!strcmp(argv[at], "-effect") && at + 1 < argc)
 		{
 			g_mesh_effect = atoi(argv[++at]);
@@ -1236,6 +1263,16 @@ int main(int argc, char** argv)
 			printf("RoomProbe: ignoring unknown argument \"%s\"\n", argv[at]);
 	}
 
+	/* ONE KNOB FOR ALL THE MOTION. -time is the game clock the stage S5
+	 * scroll and wind ride on; the water wobble and everything of stage S2
+	 * ride on the engine's wibble counter, which the engine steps by four per
+	 * game frame at 30 Hz and wraps at 256 (control.cpp:599). So unless
+	 * -wibble says otherwise, -time sets that counter to the value the engine
+	 * would have at that second, and two -time values are two moments of the
+	 * whole picture rather than of half of it. */
+	if (!wibbleGiven)
+		g_wibble = (double)(((int)(g_time * 30.0) * 4) & 0xFC);
+
 	printf("RoomProbe - %s room %d, %s pages, %d decoding threads\n",
 		stem, room, managed ? "MANAGED" : "DEFAULT", threads);
 	printf("install: %s\n", root);
@@ -1288,6 +1325,10 @@ int main(int argc, char** argv)
 		stats.ranges, stats.splitRanges ? " (some split by the primitive limit)" : "");
 	printf("biggest range %d triangles, %d triangles on the fallback page\n",
 		stats.biggestRangeTris, stats.fallbackPageTris);
+	printf("S5: %d scrolling part(s) in %d draw calls (%d triangles), "
+		"%d vertices with a wind weight, %d flipbook part(s) not drawn\n",
+		stats.scrollParts, stats.scrollRanges, stats.scrollTris,
+		stats.swayVertices, stats.flipbookParts);
 	printf("read %.0f ms, build %.0f ms\n", stats.readMs, stats.buildMs);
 
 	printf("\n-- the pages ------------------------------------------------\n");
@@ -1328,6 +1369,61 @@ int main(int argc, char** argv)
 				HDRenderGroupTriangles(g, 2), HDRenderGroupRanges(g, -1),
 				mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2]);
 		}
+
+		HDRenderShutdown();
+		DropDevice();
+		return 0;
+	}
+
+	if (animTex)
+	{
+		/* WHAT MOVES IN THIS LEVEL, ROOM BY ROOM (#123, stage S5).
+		 *
+		 * All three columns come out of the .TRG itself and none of them is
+		 * a guess about the classic level:
+		 *
+		 *   scroll    a part whose material is 1 and whose param.xy is not
+		 *             zero - a UV scroll in page units per second. It is the
+		 *             HD twin of the classic UVROT branch
+		 *             (output.cpp:909-931), and it is drawn.
+		 *   sway      vertices whose TrgVertex::sway is not zero - the
+		 *             remaster's own wind weight, 0..32767. Drawn.
+		 *   flipbook  parts whose material is 13, the remaster's own four
+		 *             frame page animation. COUNTED AND NOT DRAWN: a range
+		 *             names one page and the animation names four, which is
+		 *             a different piece of work. This column is the size of
+		 *             that gap, per level, in one number.
+		 */
+		printf("\n-- what moves ------------------------------------------------\n");
+		printf("  %-6s %8s %8s %10s %8s %8s %9s\n",
+			"room", "ranges", "scroll", "page/s", "swayV", "swayMax", "flipbook");
+
+		int rooms = 0, scroll = 0, sway = 0, flip = 0;
+
+		for (int g = 0; g < HDRenderGroupCount(); g++)
+		{
+			HDRenderGroupMotion m;
+
+			if (!HDRenderGroupMotionInfo(g, &m))
+				continue;
+
+			if (!m.scrollRanges && !m.swayVertices && !m.flipbookParts)
+				continue;
+
+			rooms++;
+			scroll += m.scrollRanges;
+			sway += m.swayVertices;
+			flip += m.flipbookParts;
+
+			printf("  %-6d %8d %8d %5.2f/%-4.2f %8d %8d %9d\n",
+				g, HDRenderGroupRanges(g, -1), m.scrollRanges,
+				m.scrollU, m.scrollV, m.swayVertices, m.swayMax,
+				m.flipbookParts);
+		}
+
+		printf("  %d room(s) move: %d scrolling draw calls (%d parts, %d triangles), "
+			"%d swaying vertices, %d flipbook parts NOT drawn\n",
+			rooms, scroll, stats.scrollParts, stats.scrollTris, sway, flip);
 
 		HDRenderShutdown();
 		DropDevice();
@@ -1459,6 +1555,8 @@ int main(int argc, char** argv)
 		"shimmer %d, wibble %d, water table row %d\n",
 		g_light_count, g_bulb_count, g_fog_start, g_underwater ? 1 : 0,
 		g_shimmer ? 1 : 0, (int)g_wibble, g_mesh_effect);
+	printf("S5 : motion %d, clock %.2f s, water wobble %d\n",
+		g_motion ? 1 : 0, g_time, (g_water || g_shimmer) ? 1 : 0);
 
 	g_device->BeginScene();
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);

@@ -72,6 +72,41 @@ namespace
 	// level whether the shader's fixed maxima ever bit.
 	std::vector<HDWaterMark> g_water_marks;
 
+	/* STAGE S5: THE GAME CLOCK, IN SECONDS.
+	 *
+	 * The UV scroll a .TRG part carries is a speed, and a speed needs a clock
+	 * that runs forward. The engine has exactly one counter that does:
+	 * GlobalCounter (control.cpp:262), incremented once per game update in
+	 * the same loop that steps `wibble`, so 30 a second, and standing still
+	 * whenever the game stands still - the inventory, the pause, a load.
+	 *
+	 * It is a ushort and turns over every 36 minutes, which would put a jump
+	 * in the middle of a waterfall, so what is kept here is the DIFFERENCE
+	 * since the last frame, accumulated. The subtraction is done in ushort,
+	 * where the turn-over is exactly what unsigned arithmetic gives back.
+	 *
+	 * Not a clock of our own: no timeGetTime, no steady_clock. A frame drawn
+	 * twice while the game is paused draws the same picture, which is what
+	 * the classic path does too. */
+	double g_clock = 0.0;
+	unsigned short g_clock_last = 0;
+	bool g_clock_started = false;
+
+	void AdvanceClock()
+	{
+		const unsigned short now = GlobalCounter;
+
+		if (!g_clock_started)
+		{
+			g_clock_started = true;
+			g_clock_last = now;
+			return;
+		}
+
+		g_clock += (double)(unsigned short)(now - g_clock_last) / 30.0;
+		g_clock_last = now;
+	}
+
 	/* WHY THESE ARE TOTALS AND NOT A PER FRAME FLAG. The first version reset
 	 * them after every frame that clipped, so the "once per level" line came
 	 * out once per FRAME - 173 identical lines out of one title screen, which
@@ -516,6 +551,12 @@ static void FillFrameLighting(HDFrameLighting& out, HDFogBulb* bulbs)
 	out.bulbs = bulbs;
 	out.bulbCount = 0;
 
+	// Stage S5. The clock is stepped once per frame, here, because this is
+	// the one function the frame path cannot skip.
+	AdvanceClock();
+	out.clock = (float)g_clock;
+	out.motion = tomb5.hd_motion ? 1 : 0;
+
 	int offered = 0;
 
 	for (int i = 0; i < NumActiveFogBulbs && i < 64; i++)
@@ -788,6 +829,8 @@ void HDLevelBuild()
 
 	g_clipped_lights = 0;
 	g_clipped_bulbs = 0;
+	g_clock = 0.0;
+	g_clock_started = false;
 	BuildWaterMarks();
 
 	if (!HDRenderLevelBegin(HDInstallRoot(), g_stem, number_rooms, false,
@@ -808,6 +851,15 @@ void HDLevelBuild()
 		"ps_slots=%lu",
 		g_stem, stats.markedVertices, stats.markedChoppy, stats.markedShimmer,
 		stats.markedRoomShimmer, HDRenderPixelSlots());
+
+	// Stage S5. Everything that moves, counted out of the .TRG itself:
+	// scroll = material 1 parts and the draw calls they cost, sway =
+	// vertices with a wind weight, flipbook = material 13 parts, which are
+	// counted and NOT drawn (see MODIFICATIONS.md).
+	Log("HDLOG level=%s motion=%d scroll_parts=%d scroll_ranges=%d "
+		"scroll_tris=%d sway_verts=%d flipbook_parts=%d",
+		g_stem, tomb5.hd_motion ? 1 : 0, stats.scrollParts, stats.scrollRanges,
+		stats.scrollTris, stats.swayVertices, stats.flipbookParts);
 
 	g_room_count = number_rooms;
 

@@ -97,6 +97,15 @@ struct HDFrameLighting
 	const float* wibbleTable;	// vert_wibble_table, 32 floats
 	const HDFogBulb* bulbs;
 	int bulbCount;
+
+	/* Stage S5. `clock` is the game clock in seconds - the engine's own
+	 * GlobalCounter divided by 30, made monotonic, so it stops with the game
+	 * and never wraps. `motion` is tomb5.hd_motion: the UV scroll a .TRG part
+	 * carries itself, the wind weight of its vertices and the water surface
+	 * wobble, all three at once. Zero on both leaves the frame exactly as
+	 * stages S1 and S2 drew it. */
+	float clock;
+	int motion;
 };
 
 // Per room. `waterTable` is 64 records of four bytes in WATERTAB order
@@ -149,6 +158,22 @@ struct HDRenderSample
 	unsigned char bits;		// the water marks that were found here
 };
 
+/* What moves in ONE room (#123, stage S5), for the log and for RoomProbe
+ * -animtex. All of it is read out of the .TRG, none of it is a guess: the
+ * scroll is material 1's param.xy, the sway is TrgVertex::sway, the flipbook
+ * is material 13, whose param[0..2] name three further texture layers of the
+ * file's own list - the remaster's own animated texture, and the one thing of
+ * stage S5 that is NOT implemented (see MODIFICATIONS.md). */
+struct HDRenderGroupMotion
+{
+	int scrollRanges;		// draw calls in this room that scroll
+	int scrollTris;
+	float scrollU, scrollV;		// the fastest of them, page units per second
+	int swayVertices;		// vertices with a wind weight
+	int swayMax;			// the largest weight found, 0..32767
+	int flipbookParts;		// material 13 parts, counted and not drawn
+};
+
 struct HDWaterMark
 {
 	short room;
@@ -175,6 +200,11 @@ struct HDRenderStats
 	int markedRoomShimmer;		// of those, the whole-room set
 	int biggestRangeTris;
 	int fallbackPageTris;		// layer 0 - drawn on the level's first page
+	int scrollParts;		// .TRG parts carrying a material 1 UV scroll
+	int scrollRanges;		// draw calls that scroll, of `ranges`
+	int scrollTris;			// triangles in them
+	int swayVertices;		// vertices with TrgVertex::sway != 0
+	int flipbookParts;		// material 13 parts - see HDRenderGroupAnim
 	double vertexBytes;
 	double indexBytes;
 	double readMs;			// reading and parsing the .TRG
@@ -262,6 +292,10 @@ int HDRenderGroupSampleData(int group, HDRenderSample* out, int maxVerts);
 // The room-local bounding box of a group, from the vertices its own indices
 // name. False when the group draws nothing.
 bool HDRenderGroupBounds(int group, float* mins, float* maxs);
+
+// What moves in one room (#123, stage S5). False for a group that is not
+// there; a group that draws nothing answers with all zeroes.
+bool HDRenderGroupMotionInfo(int group, HDRenderGroupMotion* out);
 int HDRenderDrawCalls();			// since the last FrameBegin
 
 // --- the projection --------------------------------------------------------

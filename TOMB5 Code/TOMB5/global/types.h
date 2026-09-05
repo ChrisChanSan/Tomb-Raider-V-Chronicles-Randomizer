@@ -2666,5 +2666,10 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 								//Registry only and ON by default: it is not a taste but a way
 								//back for one level whose objects go wrong, and it does nothing
 								//at all while hd_enable is off.
+	bool hd_motion;				//on off, what MOVES in an HD room (#123, S5): the UV scroll a
+								//.TRG part carries itself, the wind weight of its vertices and
+								//the water surface wobble. Registry only and ON by default, for
+								//the same reason as hd_objects, and equally dead while
+								//hd_enable is off.
 };
 #pragma pack(pop)

@@ -34,6 +34,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <unordered_map>
@@ -68,12 +69,21 @@ namespace
 		unsigned char wChoppy, wShimmer, wRoomShimmer, wSpare;
 	};
 
-	// One draw call: a run of indices that all name the same page.
+	/* One draw call: a run of indices that all name the same page AND the same
+	 * UV scroll. The scroll is stage S5: a .TRG part carries a material and
+	 * four parameters, and material 1 is a scroll whose param.xy is a speed in
+	 * page units per second (Trg.h has the part layout; hd_room.hlsl has the
+	 * calibration against the classic UVROT branch). It has to be part of the
+	 * sort key, because a range is one SetTexture and one constant and a
+	 * triangle cannot have half of each. Costs nothing where nothing scrolls:
+	 * over all 15 levels only 5 to 65 parts per level carry one. */
 	struct HDRange
 	{
 		unsigned int start = 0;
 		unsigned int count = 0;
 		int pageSlot = -1;
+		float scrollU = 0.0f;
+		float scrollV = 0.0f;
 	};
 
 	struct HDGroup
@@ -84,6 +94,7 @@ namespace
 		float mins[3] = { 0, 0, 0 };
 		float maxs[3] = { 0, 0, 0 };
 		bool hasBounds = false;
+		HDRenderGroupMotion motion = {};
 	};
 
 	/* WHAT THE CLASSIC PATH LEFT ON THE DEVICE. Read back, not remembered
@@ -167,6 +178,24 @@ namespace
 	const void* g_water_table_up = 0;	// what is on the card right now
 	int g_frame_bulbs = 0;
 	bool g_frame_has_light = false;
+
+	/* Stage S5. The register the three motions ride on, kept here because its
+	 * first two components change per DRAW CALL and the other two per frame -
+	 * so the frame writes into this array and every range rewrites register
+	 * 13 out of it. `g_wrapping` remembers whether the sampler is currently in
+	 * WRAP, so a level with no scroll in it never touches the state at all. */
+	float g_motion[4] = { 0, 0, 0, 0 };
+	bool g_wrapping = false;
+	int g_scroll_parts = 0;
+
+	/* Set at the top of every pass, so the first draw call of a room always
+	 * writes register 13 even when its offset happens to equal the last
+	 * room's. It has to: the MODEL shader's gJoints occupy c8 to c103
+	 * (hd_model.hlsl), so an object drawn between two rooms overwrites this
+	 * register, and a skipped upload would then hand the room shader a joint
+	 * matrix where it expects a clock. Within one room the compare still
+	 * saves the upload, which is where the thousand draw calls are. */
+	bool g_motion_dirty = true;
 
 	const float kIdentity[16] =
 	{
@@ -382,7 +411,17 @@ namespace
 			g_frame_bulbs = count;
 		}
 
+		/* Stage S5: the clock and the switch. The scroll offset in xy belongs
+		 * to a draw call and is written by draw_pass; here only the two the
+		 * whole frame shares. With motion off both are zero and every term in
+		 * the shader that reads them is multiplied out. */
+		g_motion[0] = 0.0f;
+		g_motion[1] = 0.0f;
+		g_motion[2] = f ? f->clock : 0.0f;
+		g_motion[3] = (f && f->motion) ? 1.0f : 0.0f;
+
 		g_device->SetVertexShaderConstantF(9, screen, 1);
+		g_device->SetVertexShaderConstantF(13, g_motion, 1);
 		g_device->SetVertexShaderConstantF(96, wibble, 32);
 		g_device->SetPixelShaderConstantF(16, fog, 1);
 		g_device->SetPixelShaderConstantF(40, bulbs, HD_MAX_BULBS * 2);
@@ -665,6 +704,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	int marked_vertices = 0;
 	int marked_choppy = 0;
+	int sway_vertices = 0;
+	g_scroll_parts = 0;
 	int marked_shimmer = 0;
 	int marked_room_shimmer = 0;
 
@@ -697,6 +738,12 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			out[i].y = in.y;
 			out[i].z = in.z;
 			out[i].sway = in.sway;
+
+			// Stage S5 reads this one in the shader; the count is for the log
+			// and for the tool, and it is the whole level in one number.
+			if (in.sway)
+				sway_vertices++;
+
 			out[i].nx = in.nx;
 			out[i].ny = in.ny;
 			out[i].nz = in.nz;
@@ -765,7 +812,17 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	int fallback_tris = 0;
 	const unsigned int max_tris = g_caps.MaxPrimitiveCount ? g_caps.MaxPrimitiveCount : 0xFFFFFFFFu;
 
-	std::vector<std::pair<int, unsigned int> > tris;	// page slot, first index
+	/* page slot, the part's scroll, first index - the sort key of a draw call
+	 * and the triangle it names. */
+	struct HDTri
+	{
+		int slot;
+		float scrollU, scrollV;
+		unsigned int first;
+	};
+
+	std::vector<HDTri> tris;
+	std::vector<unsigned char> sway_seen(trg.vertices.size(), 0);
 
 	for (size_t g = 0; g < trg.groups.size(); g++)
 	{
@@ -780,6 +837,23 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			for (const trf::remaster::TrgPart& part : source.parts)
 			{
 				const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+				/* MATERIAL 1 IS THE UV SCROLL (stage S5). Everything else
+				 * draws still; material 13 - the remaster's own four frame
+				 * page flipbook - is counted here and not drawn, because a
+				 * range names one page and swapping it per frame is a
+				 * different piece of work (MODIFICATIONS.md says so out
+				 * loud). */
+				const bool scrolls = (part.material == 1) &&
+					(part.param[0] != 0.0f || part.param[1] != 0.0f);
+				const float su = scrolls ? part.param[0] : 0.0f;
+				const float sv = scrolls ? part.param[1] : 0.0f;
+
+				if (pass == 0 && part.material == 13)
+					group.motion.flipbookParts++;
+
+				if (pass == 0 && scrolls)
+					g_scroll_parts++;
 
 				for (unsigned int at = 0; at + 2 < run.count; at += 3)
 				{
@@ -810,7 +884,13 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						}
 					}
 
-					tris.push_back(std::make_pair(slot, first));
+					HDTri tri;
+
+					tri.slot = slot;
+					tri.scrollU = su;
+					tri.scrollV = sv;
+					tri.first = first;
+					tris.push_back(tri);
 				}
 			}
 
@@ -818,37 +898,62 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				continue;
 
 			std::stable_sort(tris.begin(), tris.end(),
-				[](const std::pair<int, unsigned int>& a, const std::pair<int, unsigned int>& b)
-				{ return a.first < b.first; });
+				[](const HDTri& a, const HDTri& b)
+				{
+					if (a.slot != b.slot) return a.slot < b.slot;
+					if (a.scrollU != b.scrollU) return a.scrollU < b.scrollU;
+					return a.scrollV < b.scrollV;
+				});
 
 			group.triangles[pass] = (unsigned int)tris.size();
 
 			HDRange range;
-			range.pageSlot = tris[0].first;
+			range.pageSlot = tris[0].slot;
+			range.scrollU = tris[0].scrollU;
+			range.scrollV = tris[0].scrollV;
 			range.start = (unsigned int)sorted.size();
 			range.count = 0;
 
 			for (size_t i = 0; i < tris.size(); i++)
 			{
-				if (tris[i].first != range.pageSlot || range.count / 3 >= max_tris)
+				const bool same = tris[i].slot == range.pageSlot &&
+					tris[i].scrollU == range.scrollU &&
+					tris[i].scrollV == range.scrollV;
+
+				if (!same || range.count / 3 >= max_tris)
 				{
 					if (range.count)
 					{
-						if (tris[i].first == range.pageSlot)
+						if (same)
 							split_ranges++;
 
 						group.pass[pass].push_back(range);
+
+						if (range.scrollU != 0.0f || range.scrollV != 0.0f)
+						{
+							group.motion.scrollRanges++;
+							group.motion.scrollTris += (int)(range.count / 3);
+
+							if (fabsf(range.scrollU) + fabsf(range.scrollV) >
+								fabsf(group.motion.scrollU) + fabsf(group.motion.scrollV))
+							{
+								group.motion.scrollU = range.scrollU;
+								group.motion.scrollV = range.scrollV;
+							}
+						}
 
 						if ((int)(range.count / 3) > biggest)
 							biggest = (int)(range.count / 3);
 					}
 
-					range.pageSlot = tris[i].first;
+					range.pageSlot = tris[i].slot;
+					range.scrollU = tris[i].scrollU;
+					range.scrollV = tris[i].scrollV;
 					range.start = (unsigned int)sorted.size();
 					range.count = 0;
 				}
 
-				const unsigned int first = tris[i].second;
+				const unsigned int first = tris[i].first;
 
 				for (int corner = 0; corner < 3; corner++)
 				{
@@ -859,6 +964,23 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					{
 						const trf::remaster::TrgVertex& v = trg.vertices[index];
 						const float p[3] = { (float)v.x, (float)v.y, (float)v.z };
+
+						/* Stage S5, per room: which of this room's vertices
+						 * carry a wind weight and how strong the strongest
+						 * is. Counted here because this is the one place a
+						 * vertex and its group are both in hand, and counted
+						 * once per vertex rather than once per triangle -
+						 * hence the seen flag. */
+						if (v.sway && index < sway_seen.size() && !sway_seen[index])
+						{
+							const int weight = v.sway < 0 ? -(int)v.sway : (int)v.sway;
+
+							sway_seen[index] = 1;
+							group.motion.swayVertices++;
+
+							if (weight > group.motion.swayMax)
+								group.motion.swayMax = weight;
+						}
 
 						if (!group.hasBounds)
 						{
@@ -882,6 +1004,19 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			if (range.count)
 			{
 				group.pass[pass].push_back(range);
+
+				if (range.scrollU != 0.0f || range.scrollV != 0.0f)
+				{
+					group.motion.scrollRanges++;
+					group.motion.scrollTris += (int)(range.count / 3);
+
+					if (fabsf(range.scrollU) + fabsf(range.scrollV) >
+						fabsf(group.motion.scrollU) + fabsf(group.motion.scrollV))
+					{
+						group.motion.scrollU = range.scrollU;
+						group.motion.scrollV = range.scrollV;
+					}
+				}
 
 				if ((int)(range.count / 3) > biggest)
 					biggest = (int)(range.count / 3);
@@ -1008,6 +1143,18 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->splitRanges = split_ranges;
 		stats->biggestRangeTris = biggest;
 		stats->fallbackPageTris = fallback_tris;
+		stats->scrollParts = g_scroll_parts;
+		stats->scrollRanges = 0;
+		stats->scrollTris = 0;
+		stats->swayVertices = sway_vertices;
+		stats->flipbookParts = 0;
+
+		for (size_t g = 0; g < g_groups.size(); g++)
+		{
+			stats->scrollRanges += g_groups[g].motion.scrollRanges;
+			stats->scrollTris += g_groups[g].motion.scrollTris;
+			stats->flipbookParts += g_groups[g].motion.flipbookParts;
+		}
 		stats->vertexBytes = (double)g_vertex_count * (double)sizeof(HDVertex);
 		stats->indexBytes = (double)index_bytes;
 		stats->readMs = read_ms;
@@ -1097,6 +1244,7 @@ void HDRenderStateSave()
 	g_device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
 	g_device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
 	g_device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	g_wrapping = false;			// stage S5 switches this per range
 	g_device->SetSamplerState(0, D3DSAMP_MAXMIPLEVEL, 0);
 	g_device->SetSamplerState(0, D3DSAMP_MIPMAPLODBIAS, 0);
 	g_device->SetSamplerState(0, D3DSAMP_SRGBTEXTURE, FALSE);
@@ -1212,6 +1360,8 @@ namespace
 		g_device->SetVertexShaderConstantF(4, constants, 1);
 		g_device->SetPixelShaderConstantF(4, constants, 1);
 
+		g_motion_dirty = true;		// see the note beside g_motion_dirty
+
 		if (pass == 2)
 		{
 			// The additive pass paints light, not surface: it must not hide
@@ -1229,10 +1379,52 @@ namespace
 			if (!page)
 				continue;
 
+			/* STAGE S5, THE SCROLL OF THIS DRAW CALL. The offset is taken
+			 * modulo one page here rather than in the shader: a game running
+			 * for an hour would otherwise hand a float a number in the
+			 * thousands and spend its whole mantissa on the integer part,
+			 * and the texture would visibly quantise. fmodf keeps it in
+			 * (-1, 1), which is where a wrapped coordinate belongs.
+			 *
+			 * The address mode follows the scroll and nothing else: an HD
+			 * page is one whole texture, not an atlas, so WRAP is safe, but
+			 * a still surface whose UV sits exactly on 0 or 1 filters
+			 * differently under the two modes - so the mode is switched only
+			 * for the ranges that need it, and switched back. */
+			const bool scroll = g_motion[3] != 0.0f &&
+				(range.scrollU != 0.0f || range.scrollV != 0.0f);
+
+			if (scroll != g_wrapping)
+			{
+				const DWORD mode = scroll ? D3DTADDRESS_WRAP : D3DTADDRESS_CLAMP;
+
+				g_device->SetSamplerState(0, D3DSAMP_ADDRESSU, mode);
+				g_device->SetSamplerState(0, D3DSAMP_ADDRESSV, mode);
+				g_wrapping = scroll;
+			}
+
+			const float u = scroll ? fmodf(range.scrollU * g_motion[2], 1.0f) : 0.0f;
+			const float v = scroll ? fmodf(range.scrollV * g_motion[2], 1.0f) : 0.0f;
+
+			if (g_motion_dirty || u != g_motion[0] || v != g_motion[1])
+			{
+				g_motion[0] = u;
+				g_motion[1] = v;
+				g_motion_dirty = false;
+				g_device->SetVertexShaderConstantF(13, g_motion, 1);
+			}
+
 			g_device->SetTexture(0, page);
 			g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
 				(UINT)g_vertex_count, range.start, range.count / 3);
 			g_draw_calls++;
+		}
+
+		if (g_wrapping)
+		{
+			g_device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			g_device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			g_wrapping = false;
 		}
 
 		if (pass == 2)
@@ -1337,6 +1529,15 @@ int HDRenderGroupRanges(int group, int pass)
 	return (int)(g_groups[(size_t)group].pass[0].size() +
 		g_groups[(size_t)group].pass[1].size() +
 		g_groups[(size_t)group].pass[2].size());
+}
+
+bool HDRenderGroupMotionInfo(int group, HDRenderGroupMotion* out)
+{
+	if (!out || group < 0 || group >= (int)g_groups.size())
+		return false;
+
+	*out = g_groups[(size_t)group].motion;
+	return true;
 }
 
 int HDRenderGroupSampleData(int group, HDRenderSample* out, int maxVerts)

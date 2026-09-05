@@ -1910,6 +1910,103 @@ picture cannot show. `ModelProbe -laracheck` runs both without the game:
 units** over the five braid joints. `ModelProbe -firstperson` and `-mirror`
 draw the two pictures.
 
+#### Stage S5 — what moves in an HD room
+
+An HD room drawn by stages S1 to S4 was a photograph: the light was right, the
+geometry was right, and nothing in it moved except the water vertices the
+classic path itself displaces. This stage makes three things move, and all
+three of them are the remaster's own data rather than an invention.
+
+**What the classic engine does, measured first.** `S_AnimateTextures`
+(`specific\output.cpp:864`) has two branches, and the level file's
+`aranges`/`nAnimUVRanges` (`file.cpp:1102`) decide which one a range takes:
+
+- a **sequence**: every five game frames the `TEXTURESTRUCT`s of a range are
+  cyclically permuted, so a face keeps its texinfo number and shows the next
+  tile of the range. Twelve of the fifteen levels carry one to ten such
+  ranges, three to thirty-two tiles each; `TITLE`, `RICH3` and `DEL` have
+  none.
+- a **UV rotation**: the first `nAnimUVRanges` ranges scroll their tile
+  downwards by 32 of 256 texels per cycle, at the speed the script's `UVROT`
+  command sets. Over the whole vanilla `SCRIPT.DAT` that command appears in
+  exactly **two** levels: `ANDY3` (speed 3) and `RICH2` (speed 8) - which is
+  also why `LoadAnimatedTextures` patches `aranges[2]` to 2076 for `RICH2`
+  alone.
+
+**What the .TRG has, measured against it.** A `.TRG` part carries a material
+number and four floats (`vendor/trforge/src/trf_remaster/Trg.h`), and over all
+fifteen levels three of those materials matter here:
+
+| material | meaning | where |
+|---|---|---|
+| 1 | UV scroll, `param.xy` in page units per second | 5 to 65 parts in 14 of 15 levels |
+| 8 | wind, with the weight per vertex in `TrgVertex::sway` | ivy and banners in Rome, grass in Ireland, kelp in JOBY4 |
+| 13 | a four frame page flipbook - `param[0..2]` name three further texture layers | 3 to 8 parts in JOBY2, JOBY3, JOBY5, RICH1, RICH2 |
+
+The scroll and the classic UV rotation are the same thing, and `RICH2` is the
+one level where both exist on the same wall: the classic tile moves 7.5 tile
+heights a second there, the remaster's own scroll 4.0. Same axis, same sign,
+the same order of magnitude - which is what says the unit is page-per-second
+and not something else.
+
+**What was implemented.**
+
+1. **The scroll** (`hd_render.cpp`). A draw call is a run of triangles that
+   name one page; from now on it is a run that names one page *and* one
+   scroll, because the offset is a shader constant and a triangle cannot have
+   half of one. The offset itself is computed on the processor and taken
+   modulo one page, so a game running for an hour does not spend a float's
+   mantissa on the integer part. The sampler goes to `WRAP` for those ranges
+   and back to `CLAMP` after them - an HD page is one whole texture and not an
+   atlas, so wrapping is safe, but a still surface whose UV sits exactly on 0
+   or 1 filters differently under the two modes.
+2. **The wind** (`hd_shader/hd_room.hlsl`). `TrgVertex::sway` was already on
+   the card: it is the fourth `short` of the position, which the vertex
+   declaration hands the shader as `POSITION.w`. No vertex format change, no
+   second buffer. The weight is the remaster's, the wave is ours (the shape
+   is TROne's `water_effect`); it moves the drawn position only, so the water
+   hash, the surface test and everything stage S2's parity is measured
+   against still read the position the `.TRG` stores.
+3. **The water surface**. The classic path already moves its water vertices
+   and brightens them, and stage S2 reproduces both exactly. What is left is
+   the tile scroll, and where the remaster authored none, the marked vertices
+   get a small wobble of their own UV instead - four texels of a 512 page, on
+   the engine's `wibble` counter, dying with `tomb5.shimmer` because the
+   selector does. **No caustic**: TR5 has one, it is the `WaterTable` shimmer
+   of stage S2, and a second one would count it twice.
+
+**The clock.** A speed needs a counter that runs forward, and the engine has
+exactly one: `GlobalCounter` (`control.cpp:262`), stepped once per game update
+in the same loop as `wibble`, standing still whenever the game stands still.
+It is a `ushort` and turns over every 36 minutes, so what `hd_level.cpp` keeps
+is the accumulated difference. No `timeGetTime`, no `steady_clock`: a frame
+drawn twice while the game is paused draws the same picture.
+
+**The switch.** A new registry value `hd_motion`, `1` by default, no options
+row - the same shape and the same reason as `hd_objects`. `0` and an HD room
+is the still photograph again; `hd_enable` off and it is not read at all.
+
+**The named loss: material 13.** The remaster's own flipbook is counted and
+not drawn. A range names one page, and a four frame animation names four; the
+page would have to be chosen at draw time out of the part's parameters rather
+than at build time out of the vertex layer. It is a handful of parts in five
+levels - screens and monitors - and the log and `RoomProbe -animtex` say
+exactly how many, per level and per room, so the size of the gap is a number
+and not a shrug. The classic sequence ranges have no HD counterpart at all
+where material 13 is absent, because the classic tile numbers and the HD page
+numbers are two different name spaces with no bridge between them; that is the
+same loss seen from the other side.
+
+**The proofs.** `RoomProbe` gained `-time <seconds>` (which also sets the
+wibble counter to the value the engine would have at that second, so two
+`-time` values are two moments of the whole picture), `-water`, `-nomotion`
+and `-animtex`. Pictures at two moments: the Rome courtyard fountain
+(`ANDREA1` room 59) - the falling water scrolls and the banner on the left
+wall sways, 7.3 % of the frame changes and nothing else does; `RICH2` room 83,
+the shaft whose classic twin is the `UVROT` tile; `JOBY4` room 123, where the
+kelp bends and the rock walls do not (1.9 % of the frame, all of it in the
+columns the kelp occupies).
+
 ---
 
 **Re-measured after this stage** (2026-09-05), counting every source file under

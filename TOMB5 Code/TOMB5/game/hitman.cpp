@@ -28,14 +28,14 @@
 #include "lara.h"
 
 static BITE_INFO hitman_gun = { 0,300,64, 7 };
-static char hitman_nodes[16] = { 15, 14, 13, 6, 5, 12, 7, 4, 10, 11, 19, 0, 0, 0, 0, 0 };
-
 /*
- * Eleven of the sixteen entries above are real damage panels; the rest are
- * padding. The routine below counts them out one per hit into
- * meshswap_meshbits, so eleven is also the cap it stops at.
+ * Eleven of the sixteen entries below are real damage panels; the rest are
+ * padding. The routine further down counts them out one per hit into
+ * meshswap_meshbits, so eleven is also the cap it stops at - HITMAN_PANELS
+ * in hitman.h, which is also where the array is declared for the HD object
+ * path (#123, fix round B).
  */
-#define HITMAN_PANELS	11
+char hitman_nodes[16] = { 15, 14, 13, 6, 5, 12, 7, 4, 10, 11, 19, 0, 0, 0, 0, 0 };
 
 /*
  * How long the cyborg (#146) lies in his electrocution before the body is

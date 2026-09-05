@@ -103,6 +103,21 @@ names are written out in our own table, and nothing of TRForge's is copied for
 it.
 The credit is TRForge's all the same.
 
+And once more in fix round B of #123: **what a `DUMMY` line in a `.MAP` means.**
+`trf_remaster/HdMesh.cpp` (the note beside `items_dummy`, in the vendored copy
+in this tree) has it measured and written out - `DUMMY.TRM` is a real file with
+no parts in it, 240 of the 2,940 bindings across both installs point at it, and
+the remaster is saying *draw nothing here as an object*, "sometimes because it
+has baked the thing into the room mesh instead, which is where the lanterns of
+Rome live". TRForge names the consequence too: read the empty model, count it
+among the ones you could not draw, and let the 1996 object be drawn instead,
+and the lantern stands twice, one inside the other. That is exactly the bug
+this project's own play test reported, and
+`TOMB5/specific/hd/hd_object.cpp` acts on TRForge's answer: a slot the level's
+own `.MAP` calls `DUMMY` is drawn by nobody. The finding is TRForge's; the
+seam, the per-item room test and the measurement that confirmed it over
+ANDREA1's items are ours.
+
 ### discord-rpc — shipped in the source tree, not in the binaries
 
 | Library | Licence | Full text in this tree |

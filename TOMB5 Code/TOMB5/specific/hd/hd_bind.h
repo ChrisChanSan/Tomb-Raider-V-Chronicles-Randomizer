@@ -54,6 +54,12 @@ bool HDSlotIsLara(int slot);
 // not an error - JOBY4 has twelve lines and RICHCUT2 five, and a level with
 // none would simply bind everything by slot name.
 bool HDMapLoad(const char* mapPath);
+// The same, with the path built the way hd_scan.cpp builds it:
+// "<installRoot>\DATA\<stem>.MAP". Every caller that has the install root and
+// the level stem in hand should use this rather than spell the path again -
+// fix round B found the model build binding a whole level by slot name alone
+// because the map had been read, freed and never read back.
+bool HDMapLoadForLevel(const char* installRoot, const char* stem);
 void HDMapFree();
 // How many KEY=VALUE lines the map held.
 int HDMapCount();

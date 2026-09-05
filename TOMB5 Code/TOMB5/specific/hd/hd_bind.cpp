@@ -368,6 +368,25 @@ bool HDMapLoad(const char* mapPath)
 	return read_map_file(mapPath, map_entries);
 }
 
+bool HDMapLoadForLevel(const char* installRoot, const char* stem)
+{
+	HDMapFree();
+
+	if (!installRoot || !*installRoot || !stem || !*stem)
+		return false;
+
+	std::string path = installRoot;
+
+	if (path[path.size() - 1] != '\\' && path[path.size() - 1] != '/')
+		path += '\\';
+
+	path += "DATA\\";
+	path += stem;
+	path += ".MAP";
+
+	return read_map_file(path.c_str(), map_entries);
+}
+
 void HDMapFree()
 {
 	map_entries.clear();

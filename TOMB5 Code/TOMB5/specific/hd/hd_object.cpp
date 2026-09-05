@@ -34,9 +34,12 @@
 #include "../../game/control.h"		// items, bones, room
 #include "../../game/draw.h"		// InterpolateMatrix
 #include "../../game/effect2.h"		// dynamics
+#include "../../game/hitman.h"		// hitman_nodes - the cyborg's panel order
 #include "../../game/newinv2.h"		// InventoryActive - the sun is doubled in there
 
 #include <math.h>
+#include <stdio.h>
+#include <string>
 #include <vector>
 
 /* A classic TR5 moveable has at most 32 meshes and the joint palette in the
@@ -50,12 +53,21 @@
  * is the price of a frame path that cannot fail. */
 #define HD_OBJ_ITEMS	128
 
+/* PSEUDO SLOTS FOR THE ALTERNATIVE MODELS (#123, fix round B, B3). Chosen
+ * clear of the engine's 471 slots and of Lara's wardrobe block
+ * (HD_LARA_SLOT_BASE, 0x5A00), because hd_model keeps its models in one map
+ * keyed by slot number and two of them must never collide. */
+#define HD_SWAP_SLOT_BASE	0x6000
+#define HD_SWAP_NODE_BASE	0x8000
+
 namespace
 {
 	/* WHAT ONE SLOT IS ALLOWED TO DO, decided once at level build. */
 	struct Verdict
 	{
 		unsigned char hd;	// 1 = this slot's items draw HD
+		unsigned char baked;	// 1 = the art already has it, draw NOTHING
+		unsigned char head;	// 1 = the slot has its own <NAME>_HEAD.TRM
 		const char* why;	// why not, for the log
 		int nodes;		// the classic mesh tree's node count
 		int maxBone;		// the highest node the .TRM names
@@ -75,6 +87,8 @@ namespace
 	struct FrameItem
 	{
 		int slot;
+		int drawSlot;			// the alternative model, or == slot (B3)
+		bool head;			// this slot has a separate HD face (B7)
 		int nodes;
 		unsigned int mask;		// item->mesh_bits
 		float matrix[HD_OBJ_NODES * 16];
@@ -93,6 +107,7 @@ namespace
 	/* The item the engine is walking right now. */
 	bool g_open = false;
 	int g_open_slot = -1;
+	int g_open_swap = -1;		// the alternative model this item wants (B3)
 	int g_open_nodes = 0;
 	unsigned int g_open_mask = 0;
 	float g_raw[HD_OBJ_NODES * 12];		// the engine's own 3x4, per node
@@ -102,7 +117,136 @@ namespace
 	 * says "frame", so they have to mean one. */
 	int g_items_classic = 0;
 	int g_swap_ignored = 0;
+	int g_swap_drawn = 0;
 	int g_mask_used = 0;
+	int g_items_baked = 0;
+
+	/* THE BAKED SLOTS (#123, fix round B, B1). Set per level and read in
+	 * HDObjectBegin BEFORE the object path's own guard, because an object
+	 * that is already in the room art is drawn twice whether hd_objects is on
+	 * or off - the second copy comes out of the .TRG either way. */
+	bool g_baked_any = false;
+	int g_baked_slots = 0;
+
+	/* ------------------------------------------------ THE MESH SWAPS (B3) --
+	 *
+	 * Stage S3-2 ignored them, on the argument that a .TRM is one whole model
+	 * and carries no second geometry for a node. That argument was wrong: the
+	 * remaster ships whole ALTERNATIVE models, and which they are was
+	 * measured over 5\ITEM against the engine's own swap code.
+	 *
+	 *   MAFIA2_SWAP.TRM   MAFIA2.TRM has his pistols in the shoulder holsters
+	 *                     and empty fists - which is his INITIAL state,
+	 *                     meshswap_meshbits 0x2400 (game\mafia2.cpp:37, the
+	 *                     hands swapped out of MESHSWAP2). When he draws them
+	 *                     the engine writes 0x80 instead, the TORSO swap, and
+	 *                     MAFIA2_SWAP.TRM is the same man with the guns in
+	 *                     his hands and the holsters empty. Two pictures,
+	 *                     one bit. This is the user's screenshot: he aims
+	 *                     with a bare fist.
+	 *   HITMAN_<n+1>.TRM  the cyborg's ELEVEN damage stages, cumulative. The
+	 *                     file numbers are 5,6,7,8,11,12,13,14,15,16,20 and
+	 *                     the panel nodes are 4,5,6,7,10,11,12,13,14,15,19 -
+	 *                     the same eleven, off by one, and the same eleven
+	 *                     game\hitman.cpp opens. Their vertex counts rise
+	 *                     along the OPENING ORDER (16,15,14,7,6,13,8,5,11,
+	 *                     12,20 -> 4115..5548 against the closed body's
+	 *                     4035), which is what "cumulative" means: the right
+	 *                     file is the one for the panel opened LAST.
+	 *
+	 * Every other swap in the game is a soldier's hands out of MESHSWAP1
+	 * (setup.cpp), and there the remaster has no second file because it does
+	 * not need one - MAFIA.TRM already holds the pistol in the hand, and so
+	 * do SWAT, SWAT_PLUS and the guards. Those keep stage S3-2's answer.
+	 *
+	 * The table is keyed on the MODEL NAME, not on the slot: the randomizer's
+	 * MESHSWAP_CROSS_HITMAN and CYBORG both bind HITMAN.TRM, and a donor slot
+	 * carries its donor's model into a slot with any name at all. */
+	enum SwapKind
+	{
+		SWAP_NONE = 0,
+		SWAP_WHOLE,		// one alternative model, chosen by a bit
+		SWAP_HITMAN		// the cyborg's eleven stages
+	};
+
+	struct SwapRule
+	{
+		const char* model;
+		SwapKind kind;
+		unsigned int bits;	// SWAP_WHOLE: the bit that picks the model
+		const char* suffix;
+	};
+
+	const SwapRule kSwapRules[] =
+	{
+		{ "MAFIA2", SWAP_WHOLE, 0x80, "_SWAP" },
+		{ "HITMAN", SWAP_HITMAN, 0, 0 }
+	};
+
+	/* One slot's swap plan: the pseudo slots its alternative models were
+	 * loaded into. HD_OBJ_NODES wide because SWAP_HITMAN needs one per panel
+	 * node; SWAP_WHOLE uses [0] alone. */
+	struct SwapPlanSlot
+	{
+		int slot;
+		SwapKind kind;
+		unsigned int bits;
+		int model[HD_OBJ_NODES];	// -1 where no file arrived
+	};
+
+	/* Eight is four times what the whole game needs: MAFIA2 and CYBORG, plus
+	 * the randomizer's cross slots for the same two. */
+	SwapPlanSlot g_swap_plan[8];
+	int g_swap_plans = 0;
+	int g_swap_models = 0;
+
+	const SwapPlanSlot* swap_plan_of(int slot)
+	{
+		for (int i = 0; i < g_swap_plans; i++)
+			if (g_swap_plan[i].slot == slot)
+				return &g_swap_plan[i];
+
+		return 0;
+	}
+
+	/* WHICH ALTERNATIVE MODEL THIS ITEM WANTS, or -1 for the plain one. */
+	int swap_model_for(const SwapPlanSlot* plan, ITEM_INFO* item)
+	{
+		if (!plan || !item)
+			return -1;
+
+		if (plan->kind == SWAP_WHOLE)
+			return ((unsigned int)item->meshswap_meshbits & plan->bits)
+				? plan->model[0] : -1;
+
+		if (plan->kind == SWAP_HITMAN)
+		{
+			/* item_flags[0] counts the panels the control has opened, and
+			 * hitman_nodes says in which order - so the last one opened is
+			 * the stage the remaster drew, and its file is the cumulative
+			 * body up to and including it. Read from the item and not from
+			 * the bit mask, because the mask alone cannot say which of two
+			 * set bits came second. */
+			int stage = item->item_flags[0];
+
+			if (stage > HITMAN_PANELS)
+				stage = HITMAN_PANELS;
+
+			while (stage > 0)
+			{
+				const int node = hitman_nodes[stage - 1];
+
+				if (node >= 0 && node < HD_OBJ_NODES && plan->model[node] >= 0)
+					return plan->model[node];
+
+				/* A stage whose file did not arrive falls back to the one
+				 * before it rather than to the undamaged body. */
+				stage--;
+			}
+		}
+
+		return -1;
+	}
 
 	/* Per LEVEL: how often a light had to be turned away at the shader's
 	 * twelve. Once is worth knowing, every frame is noise. */
@@ -137,14 +281,30 @@ namespace
 	 * The same walk stands in ModelProbe (ReadClassicSlot) against the .TRC
 	 * on disk; this one reads the loaded level, so what the game binds is
 	 * what the tool measured. */
-	void bind_pose_of(int slot, float* out /* nodes * 3 */, int nodes)
+	/* `tree`, when given, comes back as the PARENT of every node - the node
+	 * whose frame this one's offset was added to, and -1 for the root
+	 * (#123, fix round B, B4). It falls out of the same walk for nothing: the
+	 * frame `current` holds at any moment belongs to exactly one node, and
+	 * the push/pop stack carries that number along with the position. A
+	 * separate HD face needs it, because its NECK belongs to the node the
+	 * head node hangs off. */
+	void bind_pose_of(int slot, float* out /* nodes * 3 */, int nodes,
+		int* tree = 0 /* nodes */)
 	{
 		const OBJECT_INFO& object = objects[slot];
 		float current[3] = { 0, 0, 0 };
 		float stack[HD_OBJ_NODES][3];
+		int owner = 0;
+		int ownerStack[HD_OBJ_NODES];
 		int top = 0;
 
 		memset(out, 0, sizeof(float) * 3 * nodes);
+
+		if (tree)
+		{
+			for (int node = 0; node < nodes; node++)
+				tree[node] = node ? 0 : -1;
+		}
 
 		if (!bones)
 			return;
@@ -155,11 +315,16 @@ namespace
 			const long flags = bone[0];
 
 			if ((flags & 1) && top > 0)
-				memcpy(current, stack[--top], sizeof(current));
+			{
+				--top;
+				memcpy(current, stack[top], sizeof(current));
+				owner = ownerStack[top];
+			}
 
 			if (flags & 2)
 			{
 				memcpy(stack[top], current, sizeof(current));
+				ownerStack[top] = owner;
 
 				if (top < HD_OBJ_NODES - 1)
 					++top;
@@ -172,6 +337,11 @@ namespace
 			out[node * 3 + 0] = current[0];
 			out[node * 3 + 1] = current[1];
 			out[node * 3 + 2] = current[2];
+
+			if (tree)
+				tree[node] = owner;
+
+			owner = node;
 		}
 	}
 
@@ -591,7 +761,86 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 
 	g_stem[sizeof(g_stem) - 1] = 0;
 
-	if (!tomb5.hd_objects || !installRoot || !*installRoot)
+	if (!installRoot || !*installRoot)
+		return;
+
+	/* THE LEVEL'S OWN .MAP, BACK IN HAND (#123, fix round B).
+	 *
+	 * hd_scan reads it during the level scan and frees it again at the end of
+	 * that scan, and nothing read it back - so everything below bound by the
+	 * SLOT'S OWN NAME, which is the third and last of the three rules in
+	 * hd_bind.h and the wrong one for every slot the map names. Measured on
+	 * the user's own run: ANDREA1 built 46 models with `dummy=0`, while the
+	 * scan of the same level over the same files reported 55 bound and 14
+	 * DUMMY. ANIMATING10 asked for ANIMATING10.TRM, which is in no ITEM
+	 * folder, while the map says ANIMATING10_ANDREA1; the lantern, the lamp
+	 * post and the wall arm asked for names that do not exist and drew
+	 * classic on top of the art that already had them - bug B1.
+	 *
+	 * Loaded here rather than kept from the scan because the scan runs on
+	 * another call and may not have run at all. Freed in HDObjectLevelEnd,
+	 * which the next level's build calls first. */
+	const bool haveMap = HDMapLoadForLevel(installRoot, g_stem);
+
+	/* WHICH SLOTS THE ART ALREADY HAS (#123, fix round B, B1).
+	 *
+	 * A .MAP entry of DUMMY is not "no model for this slot" - it is the
+	 * remaster saying it draws NOTHING here, and the reason it can is that
+	 * the object is baked into the .TRG room art. Measured with BakeProbe
+	 * over ANDREA1: every one of the 14 DUMMY slots that has items has the
+	 * remaster's own triangles standing inside the item's own bounding box -
+	 * the wall lantern (ANIMATING12) 1250 of them in 633x417x132 units, the
+	 * lamp post (ANIMATING11) 730, the alcove (SEARCH_OBJECT3) 5001 - and no
+	 * slot the map does NOT call DUMMY has more than 18, which is the room's
+	 * own floor and wall inside a big enemy's box.
+	 *
+	 * So they must be drawn by nobody, exactly as a room's static meshes are.
+	 * This is TROne's baked-mesh rule (game_renderer.cpp:3722-3736) arrived
+	 * at from the other end: TROne keys on the mesh pointer of a static, we
+	 * key on the remaster's own word for it.
+	 *
+	 * A DONOR slot is never baked. Its model came out of ANOTHER level file,
+	 * so whatever this level's map says about the slot's vanilla content says
+	 * nothing about what stands there now - and the art of THIS level has
+	 * never seen it. */
+	g_baked_slots = 0;
+	g_baked_any = false;
+
+	if (haveMap)
+	{
+		for (int slot = 0; slot < NUMBER_OBJECTS; slot++)
+		{
+			if (!objects[slot].loaded || objects[slot].nmeshes <= 0)
+				continue;
+
+			if (HDSlotIsLara(slot) || HDMarkersDonorOfSlot(slot))
+				continue;
+
+			HDBindKind kind = HD_BIND_NONE;
+			bool fromMap = false;
+
+			HDBindSlot(slot, &kind, &fromMap);
+
+			if (kind != HD_BIND_DUMMY || !fromMap)
+				continue;
+
+			g_slot[slot].baked = 1;
+			g_baked_slots++;
+		}
+
+		g_baked_any = g_baked_slots > 0;
+	}
+
+	Log("HDLOG level=%s map=%s lines=%d baked_slots=%d", g_stem,
+		haveMap ? "read" : "none", HDMapCount(), g_baked_slots);
+
+	/* The swap plans are filled further down, once the slot list exists; the
+	 * counters are cleared here so that a level that returns early below
+	 * leaves none of the previous level's behind. */
+	g_swap_plans = 0;
+	g_swap_models = 0;
+
+	if (!tomb5.hd_objects)
 		return;
 
 	// The two shaders and the vertex declaration, made once and kept as long
@@ -704,6 +953,15 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	}
 
 	binds.resize(slots.size() * HD_OBJ_NODES * 3, 0.0f);
+	/* The classic mesh TREE beside the bind pose, and kept alive for exactly
+	 * as long (#123, fix round B, B4). */
+	std::vector<int> trees(slots.size() * HD_OBJ_NODES, -1);
+
+	/* The names of the alternative models (B3). Kept alive next to `binds`
+	 * and for the same reason: HDModelSlot holds a pointer, not a copy, and
+	 * a vector that grows moves its strings - so the room is taken once. */
+	std::vector<std::string> swapNames;
+	swapNames.reserve(sizeof(g_swap_plan) / sizeof(g_swap_plan[0]) * HD_OBJ_NODES);
 
 	for (size_t i = 0; i < slots.size(); i++)
 	{
@@ -711,13 +969,15 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		const int nodes = objects[slot].nmeshes < HD_OBJ_NODES
 			? objects[slot].nmeshes : HD_OBJ_NODES;
 
-		bind_pose_of(slot, &binds[i * HD_OBJ_NODES * 3], nodes);
+		bind_pose_of(slot, &binds[i * HD_OBJ_NODES * 3], nodes,
+			&trees[i * HD_OBJ_NODES]);
 
 		HDModelSlot one;
 
 		one.slot = slot;
 		one.nodes = nodes;
 		one.bind = &binds[i * HD_OBJ_NODES * 3];
+		one.parent = &trees[i * HD_OBJ_NODES];
 		one.name = 0;
 
 		/* A donor slot that resolved to a name gets it; one that did not is
@@ -746,6 +1006,98 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		}
 
 		wanted.push_back(one);
+
+		/* THE ALTERNATIVE MODELS OF THIS SLOT (#123, fix round B, B3).
+		 *
+		 * They are ordinary models on ordinary pseudo slots - the same list,
+		 * the same page cache, the same skeleton, the same bind pose - so
+		 * nothing below this line has to know they exist. A guest out of
+		 * Tomb Raider I-III is left out: the four TR3 slots have no swap in
+		 * the engine and no second file in that bundle. */
+		if (plan && plan->tr3)
+			continue;
+
+		const char* base = one.name;
+		HDBindKind baseKind = HD_BIND_MODEL;
+
+		if (!base)
+			base = HDBindSlot(slot, &baseKind, 0);
+
+		if (!base || baseKind != HD_BIND_MODEL)
+			continue;
+
+		const SwapRule* rule = 0;
+
+		for (size_t r = 0; r < sizeof(kSwapRules) / sizeof(kSwapRules[0]); r++)
+			if (_stricmp(kSwapRules[r].model, base) == 0)
+			{
+				rule = &kSwapRules[r];
+				break;
+			}
+
+		if (!rule || g_swap_plans >= (int)(sizeof(g_swap_plan) / sizeof(g_swap_plan[0])))
+			continue;
+
+		/* AND ONLY IF THE LEVEL REALLY PUTS ONE DOWN. The cyborg's eleven
+		 * stages are eleven whole bodies, and MESHSWAP_CROSS_HITMAN binds the
+		 * same model while being a mesh warehouse that never has an item -
+		 * loading its stages would be two megabytes for a slot nothing draws.
+		 * A TR5 level's items are all in the file, so this is decided once
+		 * and for good. */
+		bool anyItem = false;
+
+		for (int k = 0; k < level_items && !anyItem; k++)
+			if (items[k].object_number == slot)
+				anyItem = true;
+
+		if (!anyItem)
+			continue;
+
+		SwapPlanSlot& swap = g_swap_plan[g_swap_plans];
+
+		swap.slot = slot;
+		swap.kind = rule->kind;
+		swap.bits = rule->bits;
+
+		for (int n = 0; n < HD_OBJ_NODES; n++)
+			swap.model[n] = -1;
+
+		if (rule->kind == SWAP_WHOLE)
+		{
+			swapNames.push_back(std::string(base) + rule->suffix);
+
+			HDModelSlot alt = one;
+
+			alt.slot = HD_SWAP_SLOT_BASE + slot;
+			alt.name = swapNames.back().c_str();
+			swap.model[0] = alt.slot;
+			wanted.push_back(alt);
+			g_swap_models++;
+		}
+		else if (rule->kind == SWAP_HITMAN)
+		{
+			for (int stage = 0; stage < HITMAN_PANELS; stage++)
+			{
+				const int node = hitman_nodes[stage];
+
+				if (node < 0 || node >= one.nodes || node >= HD_OBJ_NODES)
+					continue;
+
+				char tail[16];
+				std::sprintf(tail, "_%d", node + 1);
+				swapNames.push_back(std::string(base) + tail);
+
+				HDModelSlot alt = one;
+
+				alt.slot = HD_SWAP_NODE_BASE + slot * HD_OBJ_NODES + node;
+				alt.name = swapNames.back().c_str();
+				swap.model[node] = alt.slot;
+				wanted.push_back(alt);
+				g_swap_models++;
+			}
+		}
+
+		g_swap_plans++;
 	}
 
 	/* LARA'S WARDROBE, in the SAME HDModelLevelBegin (#123, stage S4-2). Her
@@ -828,16 +1180,36 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		Verdict& verdict = g_slot[slot];
 
 		verdict.nodes = wanted[i].nodes;
+		verdict.head = HDModelHasHead(slot) ? 1 : 0;
 		verdict.maxBone = HDModelMaxBone(slot);
 		verdict.covered = 0;
 		verdict.drift = 0;
 		verdict.worst = 0;
 		verdict.hd = 0;
-		verdict.why = "no_model";
+		verdict.why = verdict.baked ? "baked" : "no_model";
 
 		if (!HDModelHas(slot))
 		{
-			g_classic_slots++;
+			/* A baked slot is not a classic one: nothing draws it. Counting
+			 * it as classic would make the level line say a picture is being
+			 * drawn that is not. */
+			if (!verdict.baked)
+			{
+				g_classic_slots++;
+				verdict.why = "model_missing";
+			}
+
+			/* #123, fix round B (B6): a LINE PER SLOT, including the ones
+			 * that never reached the card. Until now only a slot with a
+			 * model got one, so the level line's "classic" number was a
+			 * total nobody could take apart - the user's report of
+			 * "hd=22 classic=114" against the tool's 52 bound models had
+			 * nothing to read. The model NOTE above names the file that is
+			 * missing; this names the slot and the verdict. */
+			Log("HDLOG slot=%d name=%s model=- nodes=%d maxbone=- cover=0 "
+				"drift=-/- head=-1 hd=0 reason=%s",
+				slot, HDSlotName(slot) ? HDSlotName(slot) : "?",
+				wanted[i].nodes, verdict.why);
 			continue;
 		}
 
@@ -861,7 +1233,19 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		if (verdict.maxBone >= wanted[i].nodes)
 			verdict.why = "skeleton_nodes";
 		else if (!verdict.covered)
-			verdict.why = "no_geometry";
+		{
+			/* A model that read but carries no triangle is the same
+			 * statement DUMMY makes, and TRForge says so in as many words
+			 * (vendor's HdMesh.cpp: "a model with nothing in it is an
+			 * answer, not a failure ... either way the classic object must
+			 * not stand in for it"). So it counts as baked and draws
+			 * nothing, rather than falling back to the classic mesh on top
+			 * of art that already has it. */
+			verdict.why = "baked_empty";
+			verdict.baked = 1;
+			g_baked_slots++;
+			g_baked_any = true;
+		}
 		else if (verdict.drift > kDriftLimit)
 			verdict.why = "skeleton_drift";
 		else
@@ -872,7 +1256,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 
 		if (verdict.hd)
 			g_hd_slots++;
-		else
+		else if (!verdict.baked)
 			g_classic_slots++;
 
 		int covered = 0;
@@ -890,9 +1274,52 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			(int)verdict.hd, verdict.why);
 	}
 
-	Log("HDLOG level=%s objects hd=%d classic=%d (of %d loaded slots), "
-		"drift limit %.0f units",
-		g_stem, g_hd_slots, g_classic_slots, (int)slots.size(), kDriftLimit);
+	Log("HDLOG level=%s objects hd=%d classic=%d baked=%d (of %d loaded "
+		"slots), drift limit %.0f units",
+		g_stem, g_hd_slots, g_classic_slots, g_baked_slots, (int)slots.size(),
+		kDriftLimit);
+
+	/* THE ALTERNATIVE MODELS, after the build because only now is it known
+	 * which of them really arrived (#123, fix round B, B3). One that did not
+	 * is struck out of the plan, so swap_model_for falls back to the plain
+	 * body rather than to an empty slot number - and a cyborg stage that is
+	 * missing falls back to the stage before it, which is why they are
+	 * counted per plan and not once. */
+	if (g_swap_plans)
+		Log("HDLOG level=%s swap plans=%d models=%d", g_stem, g_swap_plans,
+			g_swap_models);
+
+	for (int p = 0; p < g_swap_plans; p++)
+	{
+		SwapPlanSlot& swap = g_swap_plan[p];
+		int have = 0, lost = 0;
+
+		for (int n = 0; n < HD_OBJ_NODES; n++)
+		{
+			if (swap.model[n] < 0)
+				continue;
+
+			if (HDModelHas(swap.model[n]))
+				have++;
+			else
+			{
+				swap.model[n] = -1;
+				lost++;
+			}
+		}
+
+		/* A slot whose own body did not come out HD cannot draw an
+		 * alternative either - the item goes down the classic path and never
+		 * reaches this file's frame list. */
+		if (swap.slot >= 0 && swap.slot < NUMBER_OBJECTS && !g_slot[swap.slot].hd)
+			for (int n = 0; n < HD_OBJ_NODES; n++)
+				swap.model[n] = -1;
+
+		Log("HDLOG level=%s swap slot=%d name=%s kind=%s models=%d missing=%d",
+			g_stem, swap.slot,
+			HDSlotName(swap.slot) ? HDSlotName(swap.slot) : "?",
+			swap.kind == SWAP_WHOLE ? "whole" : "hitman_stages", have, lost);
+	}
 
 	/* THE DONOR SLOTS, one line each (#123, stage S7-2), after the verdicts
 	 * because `hd` is only known once the model is either on the card or not.
@@ -964,8 +1391,15 @@ void HDObjectLevelEnd()
 	 * go in HDObjectRelease, on the thread that owns the device. */
 	HDLaraDrawEnd();	// flags only as well, and for the same reason
 	HDDonorMapsFree();	// text, no device - the donor levels' .MAP files
+	HDMapFree();		// and the level's own, which the build reads back
 	memset(g_slot, 0, sizeof(g_slot));
 	g_active = false;
+	g_baked_any = false;
+	g_baked_slots = 0;
+	g_items_baked = 0;
+	g_swap_plans = 0;
+	g_swap_models = 0;
+	g_swap_drawn = 0;
 	g_count = 0;
 	g_dropped = 0;
 	g_open = false;
@@ -1001,16 +1435,50 @@ void HDObjectFrameReset()
 	g_open = false;
 	g_items_classic = 0;
 	g_swap_ignored = 0;
+	g_swap_drawn = 0;
 	g_mask_used = 0;
+	g_items_baked = 0;
 	HDLaraDrawFrameReset();
 }
 
 bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 {
+	if (!item || !obj)
+		return false;
+
+	/* THE ART ALREADY HAS IT (#123, fix round B, B1). Before every other
+	 * guard, and on purpose: this item is not drawn HD, it is not drawn at
+	 * all, and the reason sits in the ROOM path rather than in the object
+	 * path - the .TRG group the room draws carries the object's geometry
+	 * whether hd_objects is on or off.
+	 *
+	 * Per ITEM and not per slot, because only a room that really draws HD has
+	 * the baked copy: a room the sidecar marked classic, or one whose group
+	 * is empty, still needs its lamp post drawn the old way. That is the same
+	 * test DrawStaticObjects makes for a room's static meshes, one line up
+	 * from here in the same rule.
+	 *
+	 * Returning TRUE with no node recorded is what makes it vanish:
+	 * DrawAnimatingItem then puts no classic polygon in, HDObjectNode is
+	 * never reached because g_open stays false, and HDObjectEnd sees nothing
+	 * and drops the item. */
+	if (g_baked_any)
+	{
+		const int baked_slot = (int)item->object_number;
+
+		if (baked_slot >= 0 && baked_slot < NUMBER_OBJECTS &&
+			g_slot[baked_slot].baked && HDRoomIsHD(item->room_number))
+		{
+			g_items_baked++;
+			g_open = false;
+			return true;
+		}
+	}
+
 	// The guard. With hd_objects off, or before a level built its models,
 	// this is where DrawAnimatingItem turns round and draws what it always
 	// drew.
-	if (!g_active || !tomb5.hd_objects || !item || !obj)
+	if (!g_active || !tomb5.hd_objects)
 		return false;
 
 	const int slot = (int)item->object_number;
@@ -1037,22 +1505,31 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	g_open_mask = (unsigned int)item->mesh_bits;
 	g_seen = 0;
 
-	/* THE MESH SWAP IS IGNORED, AND THAT IS TROne'S ANSWER TOO. A swap
-	 * replaces ONE node's mesh with the pair's second pointer - a guard's
-	 * hands (bits 10 and 13, set for every soldier the moment he is
-	 * initialised), the cyborg's twenty damage panels. A .TRM is one whole
-	 * model and carries no second geometry for a node, so there is nothing to
-	 * swap TO; TROne walked into the same wall, tried drawing the swap mesh
-	 * classically over the HD body and took it out again after user reports
-	 * of classic patches on an HD model (game_renderer.cpp:1825-1830, where
-	 * `covered` is forced to ~0u for exactly this).
+	/* THE MESH SWAP (#123, fix round B, B3).
 	 *
-	 * So the model is what the remaster drew - and what the remaster drew is
-	 * the swapped look, because the remaster's own picture of a SWAT is the
-	 * SWAT with his weapon. What is really lost is the cyborg's panels
-	 * opening; it is counted here and named in the manual. */
-	if (item->meshswap_meshbits && (unsigned int)item->meshswap_meshbits & g_slot[slot].covered)
+	 * A swap replaces ONE node's mesh with the pair's second pointer - a
+	 * guard's hands (bits 10 and 13, set for every soldier the moment he is
+	 * initialised), the cyborg's eleven damage panels, the Mafia's pistols
+	 * coming out of their holsters. Stage S3-2 ignored all of it, because a
+	 * .TRM carries no second geometry for a node. What it missed is that the
+	 * remaster does not swap a node: it ships a whole SECOND MODEL for the
+	 * swapped look, and the table at the top of this file says which.
+	 *
+	 * Where such a model exists the item draws it instead of the plain one -
+	 * one model, one draw, the same joints. Where none exists the old answer
+	 * stands and the count goes into the frame line: the soldiers' hands need
+	 * no second file because MAFIA.TRM and SWAT.TRM already hold the weapon,
+	 * which is measured and not assumed (ModelProbe -name MAFIA). Drawing the
+	 * classic swap mesh over the HD body stays out of the question - that is
+	 * the road TROne took and reversed after user reports of classic patches
+	 * on an HD model (game_renderer.cpp:1825-1830). */
+	g_open_swap = swap_model_for(swap_plan_of(slot), item);
+
+	if (g_open_swap < 0 && item->meshswap_meshbits &&
+		(unsigned int)item->meshswap_meshbits & g_slot[slot].covered)
 		g_swap_ignored++;
+	else if (g_open_swap >= 0)
+		g_swap_drawn++;
 
 	if (g_open_mask != 0xFFFFFFFFu)
 		g_mask_used++;
@@ -1096,6 +1573,9 @@ void HDObjectEnd()
 	FrameItem& entry = g_frame[g_count];
 
 	entry.slot = g_open_slot;
+	entry.drawSlot = g_open_swap >= 0 ? g_open_swap : g_open_slot;
+	entry.head = g_open_slot >= 0 && g_open_slot < NUMBER_OBJECTS &&
+		g_slot[g_open_slot].head != 0;
 	entry.nodes = g_open_nodes;
 	entry.mask = g_open_mask;
 
@@ -1196,15 +1676,27 @@ void HDObjectFrameDraw(const void* projection, int bulbs)
 		lighting.lightCount = entry.lightCount;
 		lighting.sunScale = entry.sunScale;
 
-		HDModelDraw(entry.slot, entry.matrix, entry.nodes, entry.light,
+		/* drawSlot is the SWAPPED model when the item asked for one and it
+		 * arrived (B3), and the item's own slot otherwise. It is the same
+		 * skeleton, the same node count and the same bind pose, so nothing
+		 * else in this call changes. */
+		HDModelDraw(entry.drawSlot, entry.matrix, entry.nodes, entry.light,
 			entry.mask, &lighting, entry.nearCut, entry.cull);
 
 		/* THE SEPARATE HD FACE, right after the body and on the same
 		 * matrices. VON_CROY.TRM is a body with an empty collar and
 		 * VON_CROY_HEAD.TRM is the face that fills it, so the two are one
-		 * object and the second is not optional. */
-		HDModelDrawHead(entry.slot, entry.matrix, entry.nodes, entry.light,
-			entry.mask, &lighting, entry.nearCut, entry.cull);
+		 * object and the second is not optional.
+		 *
+		 * Only for a slot that HAS one (#123, fix round B, B7): the call
+		 * used to be made for every entry of every frame and to end in a map
+		 * lookup that found nothing, which is a lookup per item per frame
+		 * for a thing five slots in a level own. The head belongs to the
+		 * item's own slot, not to the swapped model - a damage stage or a
+		 * drawn pistol does not change a face. */
+		if (entry.head)
+			HDModelDrawHead(entry.slot, entry.matrix, entry.nodes, entry.light,
+				entry.mask, &lighting, entry.nearCut, entry.cull);
 	}
 
 	g_draw_calls = HDModelDrawCalls();
@@ -1212,10 +1704,11 @@ void HDObjectFrameDraw(const void* projection, int bulbs)
 	if (gLogEnabled && !g_frame_logged)
 	{
 		g_frame_logged = true;
-		Log("HDLOG frame objects hd=%d classic=%d dropped=%d calls=%d "
-			"swap_ignored=%d meshbits=%d clipped_lights=%d(level)",
-			g_count, g_items_classic, g_dropped, g_draw_calls,
-			g_swap_ignored, g_mask_used, g_clipped_lights);
+		Log("HDLOG frame objects hd=%d classic=%d baked=%d dropped=%d "
+			"calls=%d swap_drawn=%d swap_ignored=%d meshbits=%d "
+			"clipped_lights=%d(level)",
+			g_count, g_items_classic, g_items_baked, g_dropped, g_draw_calls,
+			g_swap_drawn, g_swap_ignored, g_mask_used, g_clipped_lights);
 	}
 
 	g_count = 0;
@@ -1273,6 +1766,8 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	FrameItem& entry = g_frame[g_count];
 
 	entry.slot = slot;
+	entry.drawSlot = slot;
+	entry.head = HDModelHasHead(slot);
 	entry.nodes = nodes < HD_OBJ_NODES ? nodes : HD_OBJ_NODES;
 	entry.mask = mask;
 

@@ -555,6 +555,7 @@ written into the log with the slot it applies to:
 | `skeleton_nodes` | The model names a mesh-tree node the slot does not have. `FIREROPE` in eleven of the fourteen levels: TR5's slot is a rope with one piece and the model comes from TR4, where it had seventeen. |
 | `skeleton_drift` | The model fits the node **count** but not the tree. This is the randomizer's case: it puts foreign creatures into slots, and `SAS` in ANDREA1 holds a twenty-five-piece body where `SAS.TRM` was drawn for fifteen. Skinning that would tear the model across the room. |
 | `no_geometry` | A model with nothing in it at all. Has not been seen; the guard is there so that it cannot become a crash. |
+| `baked` | Not classic at all: **nothing** draws it. The level's own name table says `DUMMY` for that slot, which is the remaster saying it draws nothing there as an object — usually because it has baked the thing into the room's art instead. Rome's lamp posts and its wall lanterns are the clearest case: draw the classic mesh on top and the lamp stands twice, a hand's width apart, which is exactly what the first play-through showed. Only in a room that really draws HD; a room that stayed classic keeps its lamp post. |
 
 **Which model a slot asks for** comes from three places, in this order: the
 level's own name table beside it in the remaster's `DATA` folder, which lists
@@ -579,16 +580,33 @@ in half. `ModelProbe -all` prints the whole table for any level.
 
 **What an HD object cannot do yet.**
 
-* **Mesh swaps are ignored.** TR5 keeps a second mesh per piece and swaps it
-  in — a guard's hands the moment he is created, the Cyborg's twenty damage
-  panels as he is shot. A remaster model is one whole thing and has no second
-  geometry to swap to, so it draws what the remaster drew, which for a guard
-  is the guard with his weapon and for the Cyborg is the Cyborg with his
-  panels shut. TROne walked into the same wall and answers it the same way.
+* **Mesh swaps are answered with a second model, where the remaster ships
+  one.** TR5 keeps a second mesh per piece and swaps it in — a guard's hands
+  the moment he is created, the Cyborg's damage panels as he is shot, the
+  Mafia's pistols coming out of their holsters. A remaster model is one whole
+  thing and has no second geometry for a piece, but for two of those cases it
+  ships a whole second *model*, and the engine draws that instead: the Mafia
+  in the white shirt has one file with his guns holstered and one with them in
+  his hands, and the Cyborg has eleven, one per damage stage, cumulative in
+  the order the game opens his panels. Every other swap in the game is a
+  soldier's hands, and there the remaster needs no second file because its
+  Mafia, SWAT and guard models already hold the weapon. What is never done is
+  painting the classic swap mesh over the HD body — that is the road TROne
+  took and reversed after its own users reported classic patches on an HD
+  model.
 * **A piece the model does not cover draws nothing** — not even its classic
   mesh. That is deliberate: a door's invisible root and a face that ships as
   its own `_HEAD.TRM` are *meant* to be empty, and drawing the classic mesh
   there put classic patches on an HD body in TROne's own user reports.
+* **A separate face brings its neck with it.** Where the remaster ships the
+  face as its own file — Pierre, Larson, the guards, Von Croy — that file is
+  not only the face: it carries the neck and a piece of the collar as well,
+  and Pierre's reaches 165 units below the joint the head turns on. Bolting
+  the whole file to the head node made the neck swing with the skull and tear
+  a hole at the collar, which is what his death animation showed. The one
+  piece of that file that hangs below the head now follows the node the head
+  hangs off — the torso — with the file's own weights kept, so the seam bends
+  instead of tearing.
 * **Distance models are off** for HD objects. TR5 swaps in a coarser model
   five sectors away; the remaster has no coarse model, and a door that turned
   from HD to classic as you walked away from it would pop every time.
@@ -616,6 +634,16 @@ graphics card is handed — and prints the worst disagreement, which is under a
 pixel. `HDLOG lightcheck` runs the classic lighting formula on the engine's
 own light arrays and the HD one on the list that was sent to the card, on the
 same surface normal, and prints both colours side by side.
+
+**The actors of a cutscene draw HD as well.** A cutscene does not run the
+ordinary object path: the actors are packed animation nodes played back by a
+routine of their own, with their own frame buffer and their own light. Lara
+was HD there from the start because she is drawn by her own routine either
+way, so a cutscene showed an HD Lara talking to a 1999 Von Croy until the same
+seam was put into the actor routine. One actor stays classic on purpose: the
+one the script fades in and out of the picture. That fade is a half-transparent
+draw an HD model has no pass for, and a fade that jumped to solid halfway
+would be worse than a classic model.
 
 **A room the remaster has nothing for stays classic**, on its own, room by
 room. In ANDREA1 that is four rooms out of 242. A room the randomizer built
@@ -677,11 +705,17 @@ HDLOG matrixcheck level=ANDREA1 room=12 group=12 samples=128 used=85 behind=43
       maxdx=0.00017 maxdy=0.00009 maxdz=0.000000000 persp=572.0 center=960,540
 HDLOG frame rooms=17 calls=131 dropped=0 bulbs=0 fog_start=12288 wibble=930
       cam_uw=0 shimmer=1 objects=9 object_calls=21
+HDLOG frame objects hd=6 classic=4 baked=3 dropped=0 calls=20 swap_drawn=1
+      swap_ignored=0 meshbits=0 clipped_lights=0(level)
 HDLOG slot=33 name=SWAT model=SWAT nodes=15 maxbone=14 cover=15
       drift=22/114 head=-1 hd=1 reason=ok
 HDLOG slot=31 name=SAS model=SAS nodes=25 maxbone=14 cover=15
       drift=807/2286 head=-1 hd=0 reason=skeleton_drift
-HDLOG level=ANDREA1 objects hd=50 classic=111 (of 161 loaded slots), ...
+HDLOG slot=436 name=ANIMATING11 model=- nodes=2 ... hd=0 reason=baked
+HDLOG level=ANDREA1 map=read lines=42 baked_slots=14
+HDLOG level=ANDREA1 swap slot=469 name=CYBORG kind=hitman_stages
+      models=11 missing=0
+HDLOG level=ANDREA1 objects hd=50 classic=111 baked=14 (of 161 loaded ...
 HDLOG donor slot=45 name=LARSON from=Andrea1:45 model=LARSON hd=1
       reason=donor_slot_name
 HDLOG donor slot=43 name=CROW from=TR3:43 model=VULTURE hd=0

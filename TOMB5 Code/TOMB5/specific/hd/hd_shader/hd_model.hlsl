@@ -507,6 +507,19 @@ float4 ModelPS(VS_OUT input) : COLOR0
 	 * ceiling taken off, the same line hd_room.hlsl carries and for the same
 	 * reason (the long note at the top of that file). */
 	float3 c = f * (2.0f / 255.0f);
+
+	/* THE ADDITIVE PASS HAS A CEILING (#123, fix round B, B2 - the same line
+	 * and the same argument as hd_room.hlsl carries since fix round A, A3).
+	 *
+	 * The classic path builds its colour in bytes and hands the device a
+	 * D3DCOLOR: a channel over 255 is simply dropped there. This shader
+	 * carries the 128 split as a multiply of up to two, which the opaque pass
+	 * wants - stage S2 measured it - but which doubles a glow. gPass.y is 1
+	 * in the additive pass and 0 in the other two, so the opaque pass is
+	 * untouched, to the bit. Before the fog bulbs, because that is where the
+	 * classic path splits. */
+	c = lerp(c, min(c, 1.0f), gPass.y);
+
 	float3 s = 0.0f;
 
 	/* THE FOG BULBS. These keep the classic split: the density darkens the

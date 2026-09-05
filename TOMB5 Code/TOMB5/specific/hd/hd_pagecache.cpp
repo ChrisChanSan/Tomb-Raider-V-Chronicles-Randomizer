@@ -107,6 +107,12 @@ namespace
 	// alpha channel, so a draw call on it wants the alpha test even in the
 	// opaque pass. Grown and cleared exactly with g_textures.
 	std::vector<unsigned char> g_cutout;
+	/* The measured share itself, in per mille (#123, fix round B). The bool
+	 * above is that number against HD_CUTOUT_PERMILLE; the number itself is
+	 * what a diagnostic tool needs to say WHY a page counts as a cut-out
+	 * sheet - and it is how fix round B established that an ITEM page's
+	 * alpha is not a cut-out mask at all. */
+	std::vector<short> g_cutout_share;
 	std::vector<int> g_page_of_slot;
 	std::unordered_map<int, int> g_slot_of_page;
 	std::vector<std::string> g_notes;
@@ -778,6 +784,7 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 	// A2. resize, not assign: HDPageCacheAppend keeps the slots that are
 	// already there, and their answer with them.
 	g_cutout.resize(g_textures.size(), 0);
+	g_cutout_share.resize(g_textures.size(), 0);
 	g_page_of_slot.insert(g_page_of_slot.end(), unique.begin(), unique.end());
 
 	if (stats)
@@ -1136,7 +1143,12 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 				g_textures[page.slot] = texture;
 
 				if ((size_t)page.slot < g_cutout.size())
+				{
 					g_cutout[(size_t)page.slot] = page.cutout ? 1 : 0;
+					g_cutout_share[(size_t)page.slot] = page.cutoutTexels > 0
+						? (short)((page.cutoutLow * 1000) / page.cutoutTexels)
+						: (short)0;
+				}
 
 				for (const DecodedMip& mip : page.mips)
 					loaded_bytes += g_format_used == HD_PAGE_FORMAT_DXT5
@@ -1303,6 +1315,7 @@ void HDPageCacheDestroy()
 
 	g_textures.clear();
 	g_cutout.clear();
+	g_cutout_share.clear();
 	g_page_of_slot.clear();
 	g_slot_of_page.clear();
 	g_notes.clear();
@@ -1399,6 +1412,14 @@ bool HDPageCacheSlotCutout(int slot)
 		return false;
 
 	return g_cutout[(size_t)slot] != 0;
+}
+
+int HDPageCacheSlotCutoutPermille(int slot)
+{
+	if (slot < 0 || slot >= (int)g_cutout_share.size())
+		return 0;
+
+	return g_cutout_share[(size_t)slot];
 }
 
 int HDPageCacheCutoutPages()

@@ -186,6 +186,10 @@ IDirect3DTexture9* HDPageCacheSlotTexture(int slot);
  * solid green rectangles. Measured per page rather than per material so that
  * a page with nothing to cut cannot lose a pixel - see hd_pagecache.cpp. */
 bool HDPageCacheSlotCutout(int slot);
+// The measured hole share of that page, in per mille of the texels looked
+// at (#123, fix round B). The bool above is this against
+// HD_CUTOUT_PERMILLE; the number is for the diagnostic tools.
+int HDPageCacheSlotCutoutPermille(int slot);
 // How many of the cache's slots answered true - for the level's log line.
 int HDPageCacheCutoutPages();
 

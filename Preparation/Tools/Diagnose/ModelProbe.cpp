@@ -2320,6 +2320,10 @@ int main(int argc, char** argv)
 			one.slot = slots[i];
 			one.nodes = classic[i].nodes;
 			one.bind = &classic[i].bind[0][0];
+			/* The mesh TREE as well since #123 fix round B (B4): a separate
+			 * HD face's neck bone follows the head node's PARENT, and this
+			 * tool has walked the tree for its own node table anyway. */
+			one.parent = classic[i].parent;
 			one.name = 0;
 			wanted.push_back(one);
 			order.push_back((int)i);
@@ -2387,6 +2391,17 @@ int main(int argc, char** argv)
 		(stats.vertexBytes + stats.indexBytes) / 1024.0);
 	printf("pages              %d added, %.1f MiB of texture, %.0f ms decode\n",
 		stats.pages, stats.pageStats.bytes / 1048576.0, stats.pageStats.decodeMs);
+	/* #123, fix round B (B2): how many of the models' pages are CUT-OUT
+	 * sheets - a hole share over HD_CUTOUT_PERMILLE of the top mip. The
+	 * opaque pass has to switch the alpha test on for exactly these, which is
+	 * what hd_render has done for the rooms since fix round A (A2). */
+	printf("cut-out pages      %d of %d in the cache carry holes\n",
+		HDPageCacheCutoutPages(), HDPageCacheSlots());
+
+	for (int s = 0; s < HDPageCacheSlots(); s++)
+		printf("  page %5d  holes %4.1f %%%s\n", HDPageCachePageOfSlot(s),
+			HDPageCacheSlotCutoutPermille(s) / 10.0,
+			HDPageCacheSlotCutout(s) ? "  <- counted as a cut-out sheet" : "");
 	printf("time               %.0f ms reading the .TRM files, %.0f ms building\n",
 		stats.readMs, stats.buildMs);
 

@@ -2603,6 +2603,197 @@ level's log line carries `sway_parts=` and `sway_dropped=`.
 
 ---
 
+#### Fix round B - the objects (#123)
+
+The other half of the same play-through. **No new source file**: the round
+changes `game/deltapak.cpp`, `game/draw.cpp`'s neighbours only through the
+seam it already had, `game/hitman.{h,cpp}`, `specific/hd/hd_bind.{h,cpp}`,
+`specific/hd/hd_model.{h,cpp}`, `specific/hd/hd_object.cpp`,
+`specific/hd/hd_pagecache.{h,cpp}` and `specific/hd/hd_shader/hd_model.hlsl`
+(with its two generated `.inc` files), plus the diagnostic tool `ModelProbe`.
+
+**B0 - the level's own .MAP was never in hand when the models were built.**
+This is the root of two of the reports and it was found by reading the
+player's own log against the tool. `hd_scan` reads `<LEVEL>.MAP` during the
+level scan and frees it again at the end of that scan, and nothing read it
+back - so `HDModelLevelBegin` bound every slot by the third and last of
+`hd_bind.h`'s three rules, the slot's own name. The log says it plainly:
+ANDREA1 built `loaded=46 dummy=0 missing=107` where the scan of the same level
+over the same files had reported 55 bound and 14 DUMMY, and 18 of those 46
+came out of **game 4** - `SAS.TRM`, `DOOR_TYPE1.TRM` and the rest of the names
+TR5 inherited from TR4, drawn in Rome. `ANIMATING10` asked for
+`ANIMATING10.TRM`, which is in no ITEM folder, while ANDREA1's map says
+`ANIMATING10_ANDREA1`. The level's map is now loaded in `HDObjectLevelBuild`
+(`HDMapLoadForLevel`) and freed in `HDObjectLevelEnd`. Donor slots are
+untouched by it: the sidecar resolves them first and hands the name over
+directly.
+
+**B1 - statics and animatings drawn twice, vanilla and HD in one place.**
+Stage S1-2 suppressed a room's own `MESH_INFO` list and argued that TROne's
+case - a thing baked into the .TRG that a moveable also carries - could not
+arise here. It does, and the user photographed it: ANDREA1's lamp post and the
+lantern on its wall arm, each standing twice, slightly apart. **What a DUMMY
+line in the .MAP means** is the answer, and it is Todesengel's own measurement
+before it is ours (`vendor/trforge/src/trf_remaster/HdMesh.cpp`, the note at
+`items_dummy`): `DUMMY.TRM` is a real file with no parts in it, 240 of the
+2,940 bindings across both installs point at it, and the remaster is saying
+*draw nothing here as an object* - "sometimes because it has baked the thing
+into the room mesh instead, which is where the lanterns of Rome live". Since
+B0 the engine never saw a single DUMMY line, so those objects fell through to
+the classic mesh and stood inside their own HD copy.
+
+Measured before changing anything, with a scratch tool that reads the classic
+level and the .TRG together and counts the remaster's triangles inside each
+object's own bounding box: in ANDREA1 every DUMMY slot that has items has the
+art standing in it and no other slot does. The wall lantern (ANIMATING12,
+eight items) carries 1,045 to 1,332 triangles in a box of 633x417x132 units -
+169 per million cubic units; the alcove (SEARCH_OBJECT3) 44, the lamp post
+(ANIMATING11) 59, the arch (ANIMATING1_MIP) 30, the waterfall (WATERFALL1) 12.
+The highest of any slot the map does NOT call DUMMY is 4.0, and the big ones
+sit at 0.01 to 0.04 - the room's own floor and wall inside an enemy's box.
+`RoomProbe` draws both objects out of the .TRG alone, with nothing else in the
+scene: ANDREA1 room 116 has the two lamp posts and room 2 the wall arm.
+
+So a slot the LEVEL'S OWN map calls DUMMY is drawn by nobody, and a model that
+reads but carries no triangle counts as the same statement. The test is per
+ITEM and not per slot - only a room that really draws HD has the baked copy,
+so a room the sidecar marked classic keeps its lamp post the old way - and it
+sits ahead of the object path's own guard, because the second copy comes out
+of the .TRG whether `hd_objects` is on or off. A DONOR slot is never baked:
+its model came out of another level file and this level's art has never seen
+it. The log carries `baked_slots=` per level, `reason=baked` per slot and
+`baked=` per frame.
+
+**B2 - transparency on objects.** Half of it was B1: the lantern glass the
+player saw as solid white is the CLASSIC lamp standing in front of the HD one,
+and the .TRG's own glass is see-through (the `RoomProbe` picture shows the
+background through it). The other half was a measurement that said **no**. Fix
+round A switched the alpha test on in the opaque pass for the pages whose
+alpha really is a coverage mask (A2), and the obvious next step was to do the
+same for models. It is wrong: `ROMAN_GOD_ANDREA_SWORD`'s three body pages
+measure **64.1, 48.7 and 56.4 percent** of texels below alpha 128, and with
+the test on, half the statue is discarded - the picture is unambiguous.
+PIERRE and BLUE_GUARD share a page at 26.2 percent. An ITEM page's alpha is
+not a coverage mask, and no threshold separates the two cases because a solid
+statue sits ABOVE a leaf sheet. The models keep the remaster's own rule, which
+is TROne's too: the alpha test runs in the alpha pass and nowhere else.
+`hd_pagecache` gained `HDPageCacheSlotCutoutPermille` so the number can be
+looked at, and `ModelProbe` prints it per page.
+
+What DID change is the additive ceiling, A3's line in the model shader as
+well: the classic path builds its colour in bytes and drops a channel over
+255, while this shader carries the 128 split as a multiply of up to two. With
+the engine's own neutral ambient of 128 the additive pass already draws at
+1.004, and a lit object well above that. `gPass.y` is 1 in the additive pass
+and 0 in the other two, so the opaque pass keeps stage S2's deliberate
+deviation to the bit.
+
+**B3 - the Mafia's empty fist and the cyborg without damage.** Stage S3-2
+ignored mesh swaps on the argument that a .TRM is one whole model and carries
+no second geometry for a node. The argument was wrong, and 5\ITEM says so:
+
+- `MAFIA2_SWAP.TRM`. `MAFIA2.TRM` has his pistols in the shoulder holsters and
+  empty fists, which is his INITIAL state - `meshswap_meshbits` 0x2400, the
+  hands swapped out of MESHSWAP2 (`game/mafia2.cpp:37`). When he draws them
+  the engine writes 0x80 instead, the TORSO swap, and `MAFIA2_SWAP.TRM` is the
+  same man with the guns in his hands and the holsters empty. Two pictures,
+  one bit - and the user's screenshot is the first one while he aims.
+- `HITMAN_<n+1>.TRM`, eleven of them. The file numbers are
+  5,6,7,8,11,12,13,14,15,16,20 and the cyborg's panel nodes are
+  4,5,6,7,10,11,12,13,14,15,19 (`hitman_nodes`, `game/hitman.cpp`): the same
+  eleven, off by one, 11 of 11. They are CUMULATIVE bodies, not single panels
+  - along the opening order 16,15,14,7,6,13,8,5,11,12,20 their vertex counts
+  climb 4115, 4099, 4310, 4301, 4489, 4734, 4972, 5381, 5469, 5555, 5548
+  against the closed body's 4035 - so the right file is the one for the panel
+  opened LAST, which `item_flags[0]` counts and `hitman_nodes` orders.
+
+Both are ordinary models on pseudo slots: the same list, the same page cache,
+the same skeleton, the same bind pose, and one entry in the frame list gets a
+`drawSlot` instead of its own. Everything else keeps stage S3-2's answer,
+which is measured too: the soldiers' hands need no second file because
+`MAFIA.TRM` already holds the pistol in the hand, and so do SWAT, SWAT_PLUS
+and the guards. `hitman_nodes` moved from a `static` in `hitman.cpp` into
+`hitman.h` rather than being copied - one array, one truth.
+
+**B4 - Pierre's neck and chest in his death animation.** A `<NAME>_HEAD.TRM`
+carries a facial rig, so its bone numbers mean nothing to the mesh tree and
+stage S3-1 nailed the whole file rigidly to the head node. Measured per bone
+over all twelve head files of game 5: the file is not a face.
+`PIERRE_HEAD.TRM` spans y -376..-177 while `PIERRE.TRM`'s whole body ends at
+-286 and the head node sits at -342 - it carries head, NECK and a piece of
+collar, reaching **165 units below the joint it was nailed to**. Turn that
+node, which is exactly what a death animation does, and the neck and the
+collar swing with the skull and tear a hole; the picture shows the head as an
+open bowl with the collar black underneath.
+
+The rig has a shape. Eight of the twelve files use both base bones 0 and 1,
+and in every one of the eight one of them is the body of the head (2,305 to
+7,817 vertices) and the other a small strip (16 to 469). In seven of those
+eight the small one reaches BELOW the big one - PIERRE 85 units, LARSON 88,
+VON_CROY_ELDER 42, BLUE_GUARD 32, ADMIRAL and VON_CROY_SENIOR 16 - and that
+strip is the neck. The eighth is PATRICK, whose 16-vertex bone sits INSIDE the
+head's own range and is no neck at all, which the test catches. The other four
+name one base bone and have no neck to split off. So that bone now hangs off
+the head node's PARENT, with the file's own weights kept so the seam blends
+rather than tears; everything else stays on the head. It needs the classic
+mesh TREE, which `bind_pose_of` now returns beside the bind pose for nothing -
+the frame it carries belongs to exactly one node and the push/pop stack
+carries that number along. **The proof:** `ModelProbe -slot 47 -head -pose 8
+40 55`, before and after - the hollow bowl and the black collar become a neck
+that stays in the collar; the rest pose is 3 pixels of 268,800 different.
+
+**B5 - cutscenes took the vanilla models.** A cutscene does not go through
+`DrawAnimatingItem`. `DrawCutSeqActors` (`game/deltapak.cpp:3167`) plays the
+actors back from packed nodes with its own frame buffer and its own light, so
+the object seam of stage S3-2 never saw them - and every actor but Lara, who
+IS drawn by `DrawLara` and is HD, kept his 1999 mesh. The same seam sits there
+now, in the same shape: the node walk is untouched and hands its MATRIX to the
+HD path instead of its mesh, with `duff_item` - the light stand-in the
+function already fills - carrying the slot number and the mesh bits. **Actor 1
+with the see-through fade stays classic**: `cut_seethrough` fades him with
+`phd_PutPolygons_seethrough` and an HD model has no such pass, so a fade that
+jumped to solid would be worse than a classic model.
+
+**B6 - the object gap in the log.** `hd=29 classic=108 of 137 loaded slots`
+against a tool that counted 57 bound models had nothing to read, because a
+slot that never reached the card got no line at all - only the level's totals.
+Every slot in the list now writes one, with the reason (`baked`,
+`model_missing`, `skeleton_nodes`, `skeleton_drift`, `no_geometry`), and the
+level line carries `baked=` beside `hd=` and `classic=`, because a baked slot
+is neither. The two remaining differences are arithmetic and named here: the
+engine counts `objects[slot].loaded && nmeshes > 0` and leaves Lara's 24 slots
+out, where the tool counts every moveable slot in the file (ANDREA1: 162 in
+the file, 24 of them Lara, 137 loaded); and `hd` counts slots, not models, so
+a slot that binds a model which then fails the skeleton test counts as
+classic. With B0 fixed the numbers move: MapProbe over the player's own levels
+says 55 bound and 14 DUMMY for ANDREA1, 87 and 3 for RICH1, 68 and 17 for
+JOBY3.
+
+**B7 - cosmetic.** `HDModelDrawHead` was called for every entry of every
+frame and ended in a map lookup that found nothing, for a thing five slots in
+a level own; the frame list carries the answer now, decided once at level
+build. And a note that read `? (slot 23041)` names the model instead: 23041 is
+`HD_LARA_SLOT_BASE + 1`, a pseudo slot `HDSlotName` cannot know, and a pseudo
+slot IS its model.
+
+*Measured and NOT changed, and why:*
+
+- **21 static meshes of ANDREA1 are in NO .TRG group at all** - rooms 121 and
+  221 above all - so the room seam suppresses them and they are simply gone.
+  They are not the doubling bug and not its fix; whoever picks this up should
+  start at ANDREA1 room 221, whose nine statics of slots 40 and 42 the .TRG
+  has nothing for. The same measurement shows why a wider rule would be wrong:
+  another 13 are baked into a NEIGHBOUR's group (room 136's static sits in
+  group 154 with 1,925 triangles), and suppressing those in their own room is
+  right.
+- **A DUMMY slot with no baked geometry.** Six of ANDREA1's DUMMY items -
+  ANIMATING2 in rooms 8 and 22, ANIMATING3, 4, 5 and 6 - have no remaster
+  triangles inside their box either, so nothing is drawn where the classic
+  mesh used to be. That is the remaster's own picture, and the alternative is
+  the double the round is about.
+
+---
+
 ---
 
 ## Building this yourself

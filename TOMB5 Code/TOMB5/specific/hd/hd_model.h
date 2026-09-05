@@ -91,11 +91,19 @@ struct IDirect3DDevice9;
 // keeps one texture pool per game and page 12 means two different pictures in
 // the two bundles. False for every ordinary slot, and then not one byte of
 // the other bundle is touched.
+// `parent` is the classic mesh TREE, one entry a node: the node this one hangs
+// off, and -1 for the root. 0 means "not handed over", and then a separate HD
+// face is bound rigidly to one node the way it was until #123 fix round B.
+// With the tree in hand the face's NECK bone follows the head node's PARENT
+// instead - see neck_bone_of in hd_model.cpp for the measurement and the
+// reason (the user's report of Pierre's neck and chest in his death
+// animation).
 struct HDModelSlot
 {
 	int slot = -1;
 	int nodes = 0;
 	const float* bind = 0;
+	const int* parent = 0;
 	const char* name = 0;
 	int rigidNode = -1;
 	bool fromTr3 = false;

@@ -105,8 +105,16 @@ namespace
 
 		float bind[32][3] = { { 0, 0, 0 } };
 		bool hasBind = false;
+		/* The classic mesh tree, for the head pass (#123, fix round B, B4).
+		 * -1 everywhere when the caller handed none over. */
+		int parent[32] = { 0 };
+		bool hasTree = false;
 
 		int rigidNode = -1;			// >= 0 for a <NAME>_HEAD.TRM
+		/* A rigid face's NECK: the file's OWN bone number that is bound to
+		 * `neckNode` instead of `rigidNode`, and -1 when there is none. */
+		int neckBone = -1;
+		int neckNode = -1;
 	};
 
 	const int kJointBudget = 32;
@@ -358,10 +366,37 @@ namespace
 
 			if (rigidNode >= 0)
 			{
-				out.bone0 = out.bone1 = out.bone2 = (unsigned char)rigidNode;
-				out.weight0 = 255;
-				out.weight1 = 0;
-				out.weight2 = 0;
+				/* THE FACE'S NECK GOES ON THE PARENT NODE (#123, fix round
+				 * B, B4). Everything else of a facial-rig file hangs off the
+				 * head node, which is what "rigid" meant until now; the one
+				 * bone that reaches down into the collar hangs off the node
+				 * the head node hangs off - the torso. The weights are kept
+				 * as the file has them, so the seam between the two BLENDS
+				 * instead of tearing. neck_bone_of says which bone that is
+				 * and how it was measured. */
+				const int b0 = model.neckBone >= 0 && (int)in.bone[0] == model.neckBone
+					? model.neckNode : rigidNode;
+				const int b1 = model.neckBone >= 0 && (int)in.bone[1] == model.neckBone
+					? model.neckNode : rigidNode;
+				const int b2 = model.neckBone >= 0 && (int)in.bone[2] == model.neckBone
+					? model.neckNode : rigidNode;
+
+				out.bone0 = (unsigned char)b0;
+				out.bone1 = (unsigned char)b1;
+				out.bone2 = (unsigned char)b2;
+
+				if (model.neckBone < 0 || (b0 == b1 && b1 == b2))
+				{
+					out.weight0 = 255;
+					out.weight1 = 0;
+					out.weight2 = 0;
+				}
+				else
+				{
+					out.weight0 = in.weight[0];
+					out.weight1 = in.weight[1];
+					out.weight2 = in.weight[2];
+				}
 			}
 			else
 			{
@@ -403,8 +438,12 @@ namespace
 			 * bones whatever it uses. */
 			for (int b = 0; b < 3; b++)
 			{
-				const int node = rigidNode >= 0 ? rigidNode : (int)in.bone[b];
-				const int weight = rigidNode >= 0 ? (b == 0 ? 255 : 0) : (int)in.weight[b];
+				const int node = rigidNode >= 0
+					? (b == 0 ? (int)out.bone0 : b == 1 ? (int)out.bone1 : (int)out.bone2)
+					: (int)in.bone[b];
+				const int weight = rigidNode >= 0
+					? (b == 0 ? (int)out.weight0 : b == 1 ? (int)out.weight1 : (int)out.weight2)
+					: (int)in.weight[b];
 
 				if (weight && node < kJointBudget)
 				{
@@ -577,9 +616,18 @@ namespace
 
 				for (int b2 = 0; b2 < 3; b2++)
 				{
-					const int node = rigidNode >= 0 ? rigidNode
+					/* The rigid case reads the vertex as it was WRITTEN, not
+					 * as it arrived: since fix round B a facial-rig file's
+					 * neck bone lands on the head node's parent, and a neck
+					 * triangle belongs to that node when mesh_bits hides one
+					 * of the two. */
+					const int node = rigidNode >= 0
+						? (model.neckBone >= 0 && (int)v.bone[b2] == model.neckBone
+							? model.neckNode : rigidNode)
 						: (int)(v.bone[b2] < kJointBudget ? v.bone[b2] : kJointBudget - 1);
-					const int w = rigidNode >= 0 ? (b2 == 0 ? 255 : 0) : (int)v.weight[b2];
+					const int w = rigidNode >= 0
+						? (model.neckBone >= 0 ? (int)v.weight[b2] : (b2 == 0 ? 255 : 0))
+						: (int)v.weight[b2];
 
 					weight[node] += (double)w;
 				}
@@ -766,6 +814,74 @@ namespace
 		return best;
 	}
 
+	/* WHICH BONE OF A SEPARATE HD FACE IS THE NECK (#123, fix round B, B4).
+	 *
+	 * The user's report: "Pierre's neck and chest are wrong in his death
+	 * animation". Measured (scratch tool TrmBones over all twelve
+	 * <NAME>_HEAD.TRM of game 5, per bone bounding boxes in the model's own
+	 * bind pose):
+	 *
+	 *   - the file is not a face. PIERRE_HEAD.TRM spans y -376..-177 while
+	 *     PIERRE.TRM's whole body ends at -286 and the head node sits at
+	 *     -342: the file carries head, NECK and a piece of collar, reaching
+	 *     165 units below the joint it was being nailed to.
+	 *   - it carries a facial rig, so its bone numbers mean nothing to the
+	 *     mesh tree and the whole file rode rigidly on the head node. Turn
+	 *     that node - which is what a death animation does - and the neck and
+	 *     the collar swing with the skull and tear a hole.
+	 *   - the rig has a shape. Eight of the twelve files use BOTH base bones
+	 *     0 and 1, and in every one of the eight one of them is the body of
+	 *     the head (2305 to 7817 vertices) and the other a small strip
+	 *     (16 to 469). In seven of those eight the small one reaches BELOW
+	 *     the big one - PIERRE 85 units, LARSON 88, VON_CROY_ELDER 42,
+	 *     BLUE_GUARD 32, ADMIRAL and VON_CROY_SENIOR 16 - and that strip is
+	 *     the neck. The eighth is PATRICK, whose 16-vertex bone sits INSIDE
+	 *     the head's own range and is no neck at all, which the test below
+	 *     catches. The other four files name only one base bone and have no
+	 *     neck to split off.
+	 *
+	 * So: of the two base bones, the minority one is the neck IF its geometry
+	 * really reaches below the majority's. Nothing else is touched - the
+	 * facial bones stay on the head, where they belong. */
+	int neck_bone_of(const HDTrmModel& head)
+	{
+		int count[2] = { 0, 0 };
+		float lowest[2] = { -1e30f, -1e30f };	// y grows DOWNWARDS in TR
+
+		for (int i = 0; i < head.vertices; i++)
+		{
+			const HDTrmVertex& v = head.vertex[i];
+			int best = 0;
+
+			for (int b = 1; b < 3; b++)
+				if (v.weight[b] > v.weight[best])
+					best = b;
+
+			const int bone = (int)v.bone[best];
+
+			if (bone > 1)
+				continue;
+
+			count[bone]++;
+
+			if (v.y > lowest[bone])
+				lowest[bone] = v.y;
+		}
+
+		if (!count[0] || !count[1])
+			return -1;		// one base bone: nothing to split
+
+		const int minor = count[0] < count[1] ? 0 : 1;
+		const int major = 1 - minor;
+
+		/* A strip that does not hang below the head is a detail of the head,
+		 * not a neck - PATRICK's sixteen vertices. */
+		if (lowest[minor] <= lowest[major])
+			return -1;
+
+		return minor;
+	}
+
 	/* ---------------------------------------------------------- drawing -- */
 
 	/* THE BIND FOLD. A .TRM vertex is in the model's bind pose, so the node's
@@ -926,6 +1042,29 @@ namespace
 
 			g_device->SetPixelShaderConstantF(4, constants, 1);
 
+			/* NO CUT-OUT ALPHA TEST IN THE OPAQUE PASS - MEASURED, NOT
+			 * ASSUMED (#123, fix round B, B2).
+			 *
+			 * The rooms got exactly that in fix round A (A2, hd_render.cpp's
+			 * draw_pass): the remaster puts its vegetation in the opaque
+			 * pass, where no alpha test runs, so a leaf sheet drew as a solid
+			 * rectangle until the test was switched on for the pages whose
+			 * alpha really is a coverage mask. The obvious next step was to
+			 * do the same for models. It is wrong, and the picture says so:
+			 * ROMAN_GOD_ANDREA_SWORD's three body pages measure 64.1, 48.7
+			 * and 56.4 percent of texels below alpha 128, and with the test
+			 * on, half the statue is discarded (ModelProbe -name
+			 * ROMAN_GOD_ANDREA_SWORD, with and without -nocutout). PIERRE and
+			 * BLUE_GUARD share a page at 26.2 percent.
+			 *
+			 * So an ITEM page's alpha channel is not a coverage mask - it
+			 * carries something else, and no threshold separates the two
+			 * cases because a solid statue sits ABOVE a leaf sheet. The
+			 * models keep the remaster's own rule, which is the one TROne
+			 * carries too: the alpha test runs in the ALPHA pass and nowhere
+			 * else. hd_pagecache still measures the share, and
+			 * HDPageCacheSlotCutoutPermille is where the numbers above come
+			 * from. */
 			if (pass == 2)
 			{
 				g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -998,6 +1137,25 @@ namespace
 		const std::map<int, Model>::const_iterator at = where.find(slot);
 
 		return at == where.end() ? 0 : &at->second;
+	}
+
+	/* WHAT TO CALL A SLOT IN A NOTE (#123, fix round B, B7).
+	 *
+	 * HDSlotName knows the engine's 471 slots and nothing else, and this
+	 * module is handed PSEUDO slots as well - Lara's wardrobe parts
+	 * (hd_lara.h) and the alternative models of a mesh swap (hd_object.cpp).
+	 * For those it used to print "?", so a note read "? (slot 23041) asks for
+	 * LARA_HEAD.TRM", which names the file and hides who wanted it. The
+	 * model's own name is the honest label there, because a pseudo slot IS
+	 * its model. */
+	const char* slot_label(int slot, const char* model)
+	{
+		const char* name = HDSlotName(slot);
+
+		if (name)
+			return name;
+
+		return model ? model : "?";
 	}
 }
 
@@ -1181,11 +1339,11 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			if (tr3)
 				note("%s (slot %d) asks for %s.TRM out of Tomb Raider I-III "
 					"Remastered, which %s - classic",
-					HDSlotName(slot) ? HDSlotName(slot) : "?", slot, model,
+					slot_label(slot, model), slot, model,
 					g_install_tr3.empty() ? "is not installed" : "does not have it");
 			else
 				note("%s (slot %d) asks for %s.TRM, which is in no ITEM folder - classic",
-					HDSlotName(slot) ? HDSlotName(slot) : "?", slot, model);
+					slot_label(slot, model), slot, model);
 			continue;
 		}
 
@@ -1210,16 +1368,16 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			if (stats)
 				stats->refused++;
 			note("%s (slot %d): %s.TRM %s - classic",
-				HDSlotName(slot) ? HDSlotName(slot) : "?", slot, model, trouble);
+				slot_label(slot, model), slot, model, trouble);
 			continue;
 		}
 
 		if (origin == HD_MODEL_ORIGIN_TR3)
 			note("%s (slot %d): %s.TRM is a guest out of Tomb Raider I-III "
-				"Remastered", HDSlotName(slot) ? HDSlotName(slot) : "?", slot, model);
+				"Remastered", slot_label(slot, model), slot, model);
 		else if (origin != HD_MODEL_ORIGIN_5)
 			note("%s (slot %d): %s.TRM comes from the sibling game %d, not from 5",
-				HDSlotName(slot) ? HDSlotName(slot) : "?", slot, model,
+				slot_label(slot, model), slot, model,
 				origin == HD_MODEL_ORIGIN_4 ? 4 : 6);
 
 		/* The separate HD face, if the remaster ships one for this model. */
@@ -1236,7 +1394,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 			if (!here.hasHead)
 				note("%s (slot %d): %s_HEAD.TRM %s - the body draws without it",
-					HDSlotName(slot) ? HDSlotName(slot) : "?", slot, model, head_trouble);
+					slot_label(slot, model), slot, model, head_trouble);
 		}
 
 		for (int t = 0; t < here.trm.textures; t++)
@@ -1318,6 +1476,18 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 					model.hasBind = true;
 				}
+
+				/* The classic mesh TREE, for the head pass (B4). */
+				if (slots[k].parent)
+				{
+					const int use = model.nodes < kJointBudget ? model.nodes : kJointBudget;
+
+					for (int node = 0; node < use; node++)
+						model.parent[node] = slots[k].parent[node];
+
+					model.hasTree = true;
+				}
+
 				break;
 			}
 
@@ -1395,6 +1565,23 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 		head.rigidNode = node < 0 ? 0 : node;
 
+		/* THE NECK (#123, fix round B, B4). It needs the classic TREE, which
+		 * only a caller that walked the mesh tree can hand over - without it
+		 * the face stays rigid the way it was, which is the old picture and
+		 * not a wrong one. */
+		if (body.hasTree)
+		{
+			const int neck = neck_bone_of(here.head);
+			const int up = neck >= 0 && head.rigidNode < kJointBudget
+				? body.parent[head.rigidNode] : -1;
+
+			if (neck >= 0 && up >= 0 && up != head.rigidNode && up < head.nodes)
+			{
+				head.neckBone = neck;
+				head.neckNode = up;
+			}
+		}
+
 		const char* trouble = "";
 		int ignore = 0;
 
@@ -1408,9 +1595,16 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 		g_heads[here.slot] = head;
 
-		note("%s (slot %d): the HD face %s rides on node %d of %d",
-			HDSlotName(here.slot) ? HDSlotName(here.slot) : "?", here.slot,
-			head.name.c_str(), head.rigidNode, head.nodes);
+		if (head.neckBone >= 0)
+			note("%s (slot %d): the HD face %s rides on node %d of %d, its "
+				"neck (own bone %d) on node %d",
+				slot_label(here.slot, here.name.c_str()), here.slot,
+				head.name.c_str(), head.rigidNode, head.nodes,
+				head.neckBone, head.neckNode);
+		else
+			note("%s (slot %d): the HD face %s rides on node %d of %d",
+				slot_label(here.slot, here.name.c_str()), here.slot,
+				head.name.c_str(), head.rigidNode, head.nodes);
 
 		if (stats)
 		{
@@ -1541,6 +1735,7 @@ int HDModelDrawCalls()
 {
 	return g_draw_calls;
 }
+
 
 /* ------------------------------------------------------------ what is up -- */
 

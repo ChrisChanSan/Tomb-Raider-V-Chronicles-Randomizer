@@ -43,6 +43,7 @@
 #include "lara.h"
 #include "savegame.h"
 #include "../tomb5/tomb5.h"
+#include "../specific/hd/hd_object.h"	// #123 fix round B (B5): the actors
 
 ushort old_lara_LHolster;
 
@@ -3191,16 +3192,48 @@ void DrawCutSeqActors()
 			rot = &temp_rotation_buffer[9];
 			gar_RotYXZsuperpack(&rot, 0);
 
-			if (cutseq_meshbits[i] & 1)
+			/* #123 (fix round B, B5): THE SEAM FOR A CUTSCENE ACTOR.
+			 *
+			 * A cutscene does not go through DrawAnimatingItem: the actors
+			 * are packed nodes played back here, with their own frame
+			 * buffer and their own light. So the object seam of stage S3-2
+			 * never saw them and every actor but Lara - who IS drawn by
+			 * DrawLara and is HD - kept his classic mesh. That is the user's
+			 * "cutscenes take the vanilla models partly": an HD Lara talking
+			 * to a 1999 Von Croy.
+			 *
+			 * The seam is the same one and the same shape: the node walk
+			 * below is untouched and hands its MATRIX to the HD path instead
+			 * of its mesh. duff_item is the light stand-in this function
+			 * already fills through CalcActorLighting; it needs the slot
+			 * number and the mesh bits on it as well, because that is what
+			 * the HD path reads an item for.
+			 *
+			 * ACTOR 1 WITH THE SEE-THROUGH FADE stays classic. cut_seethrough
+			 * fades him in and out of the picture with phd_PutPolygons_
+			 * seethrough, and an HD model has no such pass - a fade that
+			 * jumped to solid would be worse than a classic model. */
+			ITEM_INFO* actor = &duff_item[i - 1];
+			const bool fading = (i == 1 && cut_seethrough != 128);
+
+			actor->object_number = (short)GLOBAL_cutme->actor_data[i].objslot;
+			actor->mesh_bits = (long)cutseq_meshbits[i];
+			actor->meshswap_meshbits = (long)cutseq_meshswapbits[i];
+
+			const bool hd = !fading && HDObjectBegin(actor, obj);
+
+			if (hd)
+				HDObjectNode(0, false);
+			else if (cutseq_meshbits[i] & 1)
 			{
 				if (cutseq_meshswapbits[i] & 1)
 				{
-					if (i != 1 || cut_seethrough == 128)
+					if (!fading)
 						phd_PutPolygons(mesh[1], -1);
 					else
 						phd_PutPolygons_seethrough(mesh[1], cut_seethrough);
 				}
-				else if (i != 1 || cut_seethrough == 128)
+				else if (!fading)
 					phd_PutPolygons(mesh[0], -1);
 				else
 					phd_PutPolygons_seethrough(mesh[0], cut_seethrough);
@@ -3220,21 +3253,26 @@ void DrawCutSeqActors()
 				gar_RotYXZsuperpack(&rot, 0);
 				n <<= 1;
 
-				if (cutseq_meshbits[i] & n)
+				if (hd)
+					HDObjectNode(j + 1, false);
+				else if (cutseq_meshbits[i] & n)
 				{
 					if (n & cutseq_meshswapbits[i])
 					{
-						if (i != 1 || cut_seethrough == 128)
+						if (!fading)
 							phd_PutPolygons(mesh[1], -1);
 						else
 							phd_PutPolygons_seethrough(mesh[1], cut_seethrough);
 					}
-					else if (i != 1 || cut_seethrough == 128)
+					else if (!fading)
 						phd_PutPolygons(mesh[0], -1);
 					else
 						phd_PutPolygons_seethrough(mesh[0], cut_seethrough);
 				}
 			}
+
+			if (hd)
+				HDObjectEnd();
 		}
 
 		phd_PopMatrix();

@@ -1041,21 +1041,16 @@ void HDRenderLevelEnd()
 
 /* ---------------------------------------------------------------- frame -- */
 
-void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
-	const HDFrameLighting* frame)
+/* THE STATE BRACKET, WITH NO ROOM IN IT (#123, stage S3-1). Everything the
+ * classic path set or relies on, saved and put back; everything the HD path
+ * needs, set. It sits here rather than in each HD module because there is ONE
+ * HD path and there must be ONE list of states - hd_model.cpp draws inside
+ * this very bracket, and a second list would be a second chance to forget a
+ * state and to spend an evening looking at garbage. */
+void HDRenderStateSave()
 {
-	if (!HDRenderReady() || g_in_frame)
+	if (!g_device)
 		return;
-
-	g_in_frame = true;
-	g_draw_calls = 0;
-
-	if (view)
-		std::memcpy(g_view, view, sizeof(g_view));
-	if (projection)
-		std::memcpy(g_proj, projection, sizeof(g_proj));
-
-	multiply(g_view, g_proj, g_viewproj);
 
 	/* --- save ---------------------------------------------------------- */
 	g_saved = SavedState();
@@ -1075,12 +1070,6 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 		g_device->GetSamplerState(0, kSavedSamplerStates[i], &g_saved.samp[i]);
 
 	/* --- the HD path's own state --------------------------------------- */
-	g_device->SetVertexShader(g_vs);
-	g_device->SetPixelShader(g_ps);
-	g_device->SetVertexDeclaration(g_decl);
-	g_device->SetStreamSource(0, g_vb, 0, sizeof(HDVertex));
-	g_device->SetIndices(g_ib);
-
 	// Real geometry has to be clipped; the classic path switched clipping off
 	// because it hands the device vertices it has already clipped itself.
 	g_device->SetRenderState(D3DRS_CLIPPING, TRUE);
@@ -1111,6 +1100,34 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 	g_device->SetSamplerState(0, D3DSAMP_MAXMIPLEVEL, 0);
 	g_device->SetSamplerState(0, D3DSAMP_MIPMAPLODBIAS, 0);
 	g_device->SetSamplerState(0, D3DSAMP_SRGBTEXTURE, FALSE);
+}
+
+void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
+	const HDFrameLighting* frame)
+{
+	if (!HDRenderReady() || g_in_frame)
+		return;
+
+	g_in_frame = true;
+	g_draw_calls = 0;
+
+	if (view)
+		std::memcpy(g_view, view, sizeof(g_view));
+	if (projection)
+		std::memcpy(g_proj, projection, sizeof(g_proj));
+
+	multiply(g_view, g_proj, g_viewproj);
+
+	HDRenderStateSave();
+
+	/* The room path's own buffers and shaders. Everything above is shared
+	 * with hd_model.cpp; these five lines are what makes the bracket a ROOM
+	 * bracket, and hd_model sets its own in their place. */
+	g_device->SetVertexShader(g_vs);
+	g_device->SetPixelShader(g_ps);
+	g_device->SetVertexDeclaration(g_decl);
+	g_device->SetStreamSource(0, g_vb, 0, sizeof(HDVertex));
+	g_device->SetIndices(g_ib);
 
 	/* The stage S2b constants. They are set here, inside the bracket, and
 	 * nowhere else: with hd_enable off this function is not reached and not
@@ -1119,12 +1136,10 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 	apply_frame_lighting(frame);
 }
 
-void HDRenderFrameEnd()
+void HDRenderStateRestore()
 {
-	if (!g_in_frame)
+	if (!g_device)
 		return;
-
-	g_in_frame = false;
 
 	for (int i = 0; i < kRenderStateCount; i++)
 		g_device->SetRenderState(kSavedRenderStates[i], g_saved.rs[i]);
@@ -1163,6 +1178,15 @@ void HDRenderFrameEnd()
 	if (g_saved.decl) { g_saved.decl->Release(); g_saved.decl = 0; }
 	if (g_saved.vs) { g_saved.vs->Release(); g_saved.vs = 0; }
 	if (g_saved.ps) { g_saved.ps->Release(); g_saved.ps = 0; }
+}
+
+void HDRenderFrameEnd()
+{
+	if (!g_in_frame)
+		return;
+
+	g_in_frame = false;
+	HDRenderStateRestore();
 }
 
 namespace

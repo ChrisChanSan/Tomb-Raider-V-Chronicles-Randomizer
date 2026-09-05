@@ -223,6 +223,15 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 	const HDFrameLighting* frame = 0);
 void HDRenderFrameEnd();
 
+// The bracket alone, with no room in it (#123, stage S3-1). FrameBegin and
+// FrameEnd are these two plus the room path's own buffers, shaders and
+// constants; hd_model.cpp draws inside the very same bracket, because there
+// is ONE HD path and one list of states to save. A caller that opens the
+// bracket itself must close it itself, and must not nest it inside a
+// FrameBegin.
+void HDRenderStateSave();
+void HDRenderStateRestore();
+
 // One room, three passes, world matrix as the classic path would set it (the
 // room's origin translation). False when the group is missing or empty - the
 // caller then draws that room the classic way.

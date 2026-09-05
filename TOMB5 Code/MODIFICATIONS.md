@@ -1269,6 +1269,113 @@ The fog bulb loop stays dynamic because its body is long and its array is
 short. The full register table lives in `hd_room.hlsl` beside the code, and
 `hd_render.cpp` is its only writer.
 
+#### Stage S3-1 — the HD object models: read, skinned, and proved by picture
+
+The remaster does not repaint an object's classic tiles. It throws the mesh
+away and draws a model of its own — one `.TRM` file per slot in `<game>\ITEM`,
+with its own art. Stage S3-1 reads those models, puts them on the card and
+skins them; **the engine does not call any of it yet**, so the game's picture
+is unchanged. The seam in `DrawAnimatingItem` is stage S3-2.
+
+**What a `.TRM` is** (`specific/hd/hd_trm.cpp`, extended from the stage S0
+header reader). The format is TRForge's measurement (MIT, `ItemModels.h`); the
+byte offsets were measured again here over the 566 models of game 5. A 24 byte
+vertex: three floats of position, a byte normal biased by 127, a 1-based
+texture layer, **three** bone indices, **three** weights, and the two texture
+coordinates tucked into the fourth byte of the bone triple and of the weight
+triple. What the re-measurement says, because the object path is built on it:
+
+- the three weights sum to exactly 255 in **all** 1,260,496 vertices, and
+  174,896 of them (13.9 %) carry more than one — a two-weight reader tears
+  every elbow;
+- the highest bone index a weighted vertex names is **28** (GREEN_TEETH), which
+  is what lets the joint palette be 32. The only two files past that,
+  `PIERRE_HEAD` and `LARSON_HEAD` at 40, are facial-rig heads whose numbers
+  belong to the rig and which are drawn rigidly on one node anyway;
+- the layer is never 0 and never past the texture list — 1-based and always
+  valid;
+- **not one** of the 1,561,395 triangles spans two pages. One page per draw
+  call, exactly as the `.TRG` measurement found for rooms;
+- a model has at most three parts, and a part's three passes are contiguous:
+  `opaqueEnd == start + opaque` and `alphaEnd == opaqueEnd + alpha`, in every
+  part of every file.
+
+**The node question, and why it is not a mapping.** A `.TRM` vertex's three
+bone indices are indices into the **classic mesh tree of the slot** — so TRM
+node *n* is classic mesh *n*, and there is no permutation to discover. What a
+slot needs instead is a **coverage list**: which of its `nmeshes` nodes the
+model has geometry for. `hd_model.cpp` counts the weighted vertices per node
+and `ModelProbe -nodes` prints that beside the classic bind pose, so the claim
+is measured per slot and not assumed. The identity was confirmed on SWAT: the
+classic mesh tree of slot 33 puts the head node at y −256 and the feet at
+y +425, and the model's own bounding box runs y −331 (helmet) to y +478 (boot
+sole) — same units, same axis, same origin.
+
+**The bind pose, folded on the processor.** A `.TRM` vertex sits in the model's
+bind pose, so the node's own bind offset has to come off before the node matrix
+goes on. TROne subtracts it in the shader with a second constant array of 32
+vectors; here the two fold into one matrix, `M' = M` with
+`t' = t − bind · R`, which costs three dot products per node per object and
+saves 32 registers and three vector subtractions **per vertex**. The bind pose
+itself is the mesh tree's accumulated offsets with every rotation left out —
+the same walk, push and pop included, that `DrawAnimatingItem` makes.
+
+**The shader** (`hd_shader/hd_model.hlsl`, `vs_3_0` / `ps_3_0`, 65 and 295
+instruction slots). The vertex on the card **is** the vertex on disk, all 24
+bytes of it: a declaration of `FLOAT3` + `UBYTE4` + `UBYTE4` + `UBYTE4N` reads
+the remaster's bytes where they lie, and the unnormalised/normalised pair is
+what makes `u` arrive as 0..255 and `v` as 0..1. 32 joints × 3 registers at
+c8, one colour per node at c104, the projection at c0 — 136 of 256. The pixel
+half carries the **same** registers as the room shader, for the same things
+(`gPass` c4, `gFog` c16, `gCounts` c17, `gLights` c20, `gBulbs` c40), because a
+Direct3D 9 constant register belongs to the device and not to a shader: the
+distance fog and the fog bulbs a frame sets for the rooms are the ones an
+object reads. One trap is written into the file next to the declaration: the
+model's **vertex** shader does not read `gPass`, so fxc puts two of its own
+`def` constants in c4 and c5 there — writing `gPass` to the vertex constant
+file would overwrite a literal, silently. `hd_model.cpp` sets it through
+`SetPixelShaderConstantF` alone.
+
+**Object light.** One colour per node in the classic path's 0..255 space —
+what `CalculateObjectLighting` works out for the object — interpolated by the
+same three weights as the position, so it crosses a joint smoothly. The
+per-pixel dynamic-light loop of the room shader is there but the engine will
+pass a count of zero: `InitDynamicLighting` folds the engine's dynamics into
+the object's own light list already, so the node colour has the torch in it,
+and running the loop as well would light it twice. Which of the two S3-2 uses
+is one count, not two code paths.
+
+**Two shared pieces, so that there is one of each.** The page cache grew an
+`HDPageCacheAppend`: a level's models name pages the rooms already wear, and
+appending keeps one texture and one slot number per page. The state bracket
+moved out of `HDRenderFrameBegin` into `HDRenderStateSave` /
+`HDRenderStateRestore`, which the object path opens too — there is one HD path
+and there must be one list of states to save, or a forgotten one costs an
+evening.
+
+**What it measures** (`ModelProbe`, `Preparation\Tools\Diagnose`, built with
+`bmodel.bat`; it links the engine's own sources, so a picture out of it is a
+picture out of the engine). Over a whole level: ANDREA1 52 models, 341 of 364
+nodes covered, 6.8 MiB of vertex and index buffers, 12 ms to read the files and
+152 ms to build them; JOBY3 66 models, 454 of 462 nodes, 5.0 MiB; RICH3 68
+models, 528 of 535 nodes, 5.3 MiB. The randomizer's own slots resolve on their
+own: `CYBORG` (469) to `HITMAN` and `BLUE_GUARD2` (460) to `BLUE_GUARD_JOBY`,
+through the hand table in `hd_bind.cpp`.
+
+**Three findings for stage S3-2, from those tables.** First, an uncovered node
+is **not** automatically a classic fallback: in nearly every door slot it is
+node 0, the invisible root a TR5 door hangs from, and drawing the classic mesh
+there would put a door leaf inside the HD one. Second, `PIERRE` has no head
+geometry on node 8 **because** its face is the separate `PIERRE_HEAD.TRM`,
+which this stage binds to exactly that node — measured, as the bind-pose node
+nearest the face's own centre, not hard-coded. Third, a randomized level can
+hand a slot a classic mesh tree with **more** nodes than the remaster's model
+has: ANDREA1's `SAS` carries 25 and `SAS.TRM` covers 15. Those three are why
+`hd_model.cpp` reports coverage and leaves the decision to its caller, where
+TROne marks every node of a valid model as covered outright
+(`game_renderer.cpp:1826`) after its own users reported classic patches drawn
+over HD bodies.
+
 ---
 
 ---

@@ -1,9 +1,9 @@
 # The tools, and which one answers which question
 
-Written 2026-08-30 from the folder itself, four tools added 2026-09-03.
-Thirty-eight diagnostic tools sit in `Diagnose\`, twenty-nine of them with a
-build script beside them, and until now there was no index at all - so the way
-to find the right one was to already know it existed.
+Written 2026-08-30 from the folder itself, four tools added 2026-09-03 and one
+more 2026-09-05. Thirty-nine diagnostic tools sit in `Diagnose\`, thirty of
+them with a build script beside them, and until now there was no index at all -
+so the way to find the right one was to already know it existed.
 
 Every tool prints its own usage when started without arguments, and every
 one carries a header comment saying why it was written. That header is the
@@ -96,9 +96,10 @@ lies. Nothing of it is copied into this tree, and none of them touch
 | `MapProbe` | bmap | the `LEVELn.MAP` — which `.TRM` model the level names for which object slot. |
 | `DdsProbe` | bdp | decodes one BC7 `.DDS` with the engine's own decoder and writes a `.PNG`, so what the tool shows is what the game will show. |
 | `RoomProbe` | broom | **draws one room** with the engine's own HD renderer into a `.PNG`, from a camera you give it, without starting the game. Also prints the depth proof (classic `sz` against the projection matrix over 50 distances), reads back what the device really compares depth with, checks the state bracket over 58 device states, measures the page cache in both texture pools, and with `-matrixcheck` prints the world-matrix proof: the engine's own three transform lines against the matrix that goes to the card, over up to 128 of the room's vertices, worst difference in **pixels**. Built **x86**, unlike its neighbours: the number it exists to measure is the peak commit of a 32-bit process.<br><br>The stage S2b switches make up the engine state the tool has no engine for and hand it to the very structures `hd_level.cpp` fills in the game: `-light <x y z r g b falloff>` a torch (room-local, repeat for up to 8), `-bulb <x y z rad den [r g b]>` a fog bulb (room-local; the tool transforms it into view space as `aBuildFogBulbList` does, up to 6), `-fog <start end r g b>` the distance fog (only `start` reaches the picture - TR5's fog has no end and no colour, and the tool says so rather than pretending), `-underwater`, `-shimmer`, `-effect <0..21>` the WaterTable row, `-wibble <n>` the engine's own counter - two runs with two values are two moments in the water. `-paritycheck` runs the classic formula and the shader formula over up to 200 of the room's own vertices on the processor and prints the worst difference per channel; the budget is 2 of 255. |
+| `ModelProbe` | bmodel | **draws one object model** with the engine's own HD object path into a `.PNG`, and prints how its nodes line up with the classic mesh tree. `-name <NAME>` takes a `.TRM` by name with no level behind it (bind pose; `4\ITEM` and `6\ITEM` are searched too, which is where `SAS` and five others live), `-slot <n>` takes the model a level binds to that slot, `-all` walks every slot of the level as a table. The level comes from `-level <STEM>` (the `.MAP` beside the remaster's `DATA`) and `-classic <path.trc>` (the classic level the mesh trees are read from — point it at a randomized level and it says what the randomizer's slots would draw).<br><br>`-pose <node> <yaw> <pitch>` turns one node of the mesh tree **and everything below it**: that is the skinning proof, because a model that comes back with a turned head and a body that stayed put has been skinned, one that turns as a lump has not, and one that tears at the neck has the wrong bind pose. Repeat the switch for more nodes. `-nodes` prints the node table (TRM vertices per node beside the classic bind offsets, and which nodes have no geometry at all), `-head` draws a separate `<NAME>_HEAD.TRM` as well, `-light <x y z r g b falloff>` puts a dynamic light in view space, and `-yaw`/`-pitch`/`-dist`/`-fov`/`-size` move the camera, which otherwise frames the model's own bounding box. Built **x86** for the same reason `RoomProbe` is. |
 
-One thing the tool cannot make up: it has no classic level, so it cannot read
-a room's flags or its roomlets. `-underwater` and `-shimmer` are therefore
+One thing the two picture tools cannot make up: they have no classic level, so
+`RoomProbe` cannot read a room's flags or its roomlets. `-underwater` and `-shimmer` are therefore
 switches rather than answers, and `-shimmer` lights the WHOLE room (the
 selector is aimed at the vertex's constant fourth flag byte) where the engine
 lights only the vertices its own predicate marked. The picture proves the

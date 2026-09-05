@@ -428,6 +428,20 @@ denser grid.
 Lara, doors that open, pickups, vehicles. That is the next stage, and the
 difference is meant to be visible until then.
 
+**Where that next stage stands.** The models themselves are read and skinned
+already — the engine simply does not draw them yet, so nothing in this build
+looks different because of it. What is done: the remaster's own object models
+are loaded per level, put on the graphics card, lit with the engine's own
+object light and posed by the classic mesh tree, and they can be looked at one
+by one outside the game with the `ModelProbe` tool. Over a level that is 52
+models in ANDREA1, 66 in JOBY3 and 68 in RICH3 — 5 to 7 MiB of geometry and
+about a fifth of a second to build, on top of what the rooms already cost. The
+randomizer's own added slots find their model on their own, including the
+Cyborg and the Joby guard. What is left for the next stage is the seam: the
+one place in the drawing code where an object either draws HD or classic, the
+mesh swaps (Lara's holsters, a guard's dropped weapon), and Lara herself, who
+is a stage of her own.
+
 **A room the remaster has nothing for stays classic**, on its own, room by
 room. In ANDREA1 that is four rooms out of 242. A room the randomizer built
 from scratch (a secret's new chamber) is in the same position and behaves the

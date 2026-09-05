@@ -80,6 +80,18 @@ bool HDPageCacheCreate(IDirect3DDevice9* device, const char* installRoot,
 	const int* pages, int count, bool managed, int threads,
 	HDPageCacheStats* stats, const char** why);
 
+// The same, but keeping what is already there (#123, stage S3-1). The models
+// of a level name their own pages and a good many of them are pages the rooms
+// already wear - a level's item pages and room pages overlap - so the models
+// are ADDED to the cache rather than given a cache of their own: one texture
+// per page for the whole level, one slot number, one place that frees them.
+// Pages already in the cache are skipped silently; `stats` counts only what
+// this call brought in. Creates the cache when there is none yet, which is
+// what the diagnostic tool does when it draws a model with no level behind it.
+bool HDPageCacheAppend(IDirect3DDevice9* device, const char* installRoot,
+	const int* pages, int count, bool managed, int threads,
+	HDPageCacheStats* stats, const char** why);
+
 void HDPageCacheDestroy();
 
 // The texture of a page number, or null when the level never named it.

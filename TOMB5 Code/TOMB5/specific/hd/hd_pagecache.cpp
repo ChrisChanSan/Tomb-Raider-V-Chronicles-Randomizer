@@ -288,8 +288,14 @@ namespace
 	}
 }
 
-bool HDPageCacheCreate(IDirect3DDevice9* device, const char* installRoot,
-	const int* pages, int count, bool managed, int threads,
+/* THE ONE BUILDER. Create empties the cache first and Append does not; every
+ * other line is the same, and a second copy of the batching, the decoding and
+ * the two upload paths would be a second place for the 4096x4096 budget to be
+ * got wrong. `append` is the whole difference, and it shows up in exactly
+ * three places below: the slot numbers start at what is already there, the
+ * texture array grows instead of being replaced, and the notes are kept. */
+static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
+	const int* pages, int count, bool managed, int threads, bool append,
 	HDPageCacheStats* stats, const char** why)
 {
 	static const char* nothing = "";
@@ -297,8 +303,6 @@ bool HDPageCacheCreate(IDirect3DDevice9* device, const char* installRoot,
 	if (!why)
 		why = &dummy;
 	*why = nothing;
-
-	HDPageCacheDestroy();
 
 	if (stats)
 		std::memset(stats, 0, sizeof(*stats));
@@ -323,17 +327,22 @@ bool HDPageCacheCreate(IDirect3DDevice9* device, const char* installRoot,
 	std::vector<int> unique;
 	unique.reserve((size_t)(count > 0 ? count : 0));
 
+	/* Where this call's first new slot lands. Zero for Create (the cache was
+	 * just emptied), the count so far for Append - which is what lets a page
+	 * a room and a model both wear keep ONE texture and ONE slot number. */
+	const size_t slot_base = append ? g_page_of_slot.size() : 0;
+
 	for (int i = 0; i < count; i++)
 	{
 		if (g_slot_of_page.count(pages[i]))
 			continue;
 
-		g_slot_of_page[pages[i]] = (int)unique.size();
+		g_slot_of_page[pages[i]] = (int)(slot_base + unique.size());
 		unique.push_back(pages[i]);
 	}
 
-	g_textures.assign(unique.size(), (IDirect3DTexture9*)0);
-	g_page_of_slot = unique;
+	g_textures.resize(slot_base + unique.size(), (IDirect3DTexture9*)0);
+	g_page_of_slot.insert(g_page_of_slot.end(), unique.begin(), unique.end());
 
 	if (stats)
 	{
@@ -434,7 +443,7 @@ bool HDPageCacheCreate(IDirect3DDevice9* device, const char* installRoot,
 		for (size_t i = 0; i < here; i++)
 		{
 			batch[i].page = unique[base + i];
-			batch[i].slot = (int)(base + i);
+			batch[i].slot = (int)(slot_base + base + i);
 			batch[i].origin = origins[base + i];
 			batch[i].white = whites[base + i] != 0;
 		}
@@ -593,6 +602,24 @@ bool HDPageCacheCreate(IDirect3DDevice9* device, const char* installRoot,
 	}
 
 	return true;
+}
+
+bool HDPageCacheCreate(IDirect3DDevice9* device, const char* installRoot,
+	const int* pages, int count, bool managed, int threads,
+	HDPageCacheStats* stats, const char** why)
+{
+	HDPageCacheDestroy();
+
+	return build_cache(device, installRoot, pages, count, managed, threads,
+		false, stats, why);
+}
+
+bool HDPageCacheAppend(IDirect3DDevice9* device, const char* installRoot,
+	const int* pages, int count, bool managed, int threads,
+	HDPageCacheStats* stats, const char** why)
+{
+	return build_cache(device, installRoot, pages, count, managed, threads,
+		true, stats, why);
 }
 
 void HDPageCacheDestroy()

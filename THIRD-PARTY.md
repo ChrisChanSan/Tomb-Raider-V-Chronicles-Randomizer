@@ -34,6 +34,8 @@ far, file by file:
 | `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_room.hlsl` | the same file's GLSL `k_hd_vert` / `k_hd_frag` (135-236) | The lighting rule — room light is the **sum** `colour1 * roomShadow + colour2`, each byte over 255, and the pixel is `texel * light` — the alpha test living in the alpha pass **only** (an opaque tile's alpha is a gloss mask, and testing on it blanks whole floors), and the additive pass weighting its colour by the texture's alpha. Translated to HLSL for shader model 3; not a line of the GLSL is copied. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_pagecache.cpp` | `host/render/hd_pages.cpp`, `upload2` / `fill_missing_tiles` | Where a page is looked for when it is not in its own game's `TEX` folder — the sibling games next, `WHITE.DDS` last — and the rule that a page that cannot be found is painted **white** and never black. The upload itself is new: TROne hands the driver BC7 blocks in one texture array, and Direct3D 9 has neither. |
 | `TOMB5 Code/TOMB5/game/draw.cpp`, `DrawStaticObjects` | `host/render/game_renderer.cpp`, the baked-mesh rule (3722-3736) | The rule itself, not the code: a static mesh the remaster baked into the room art must not be drawn a second time (TROne's "double lantern" bug report). TROne suppresses by mesh pointer and needs an exception for a moveable that claims the same pointer; our seam skips one room's own `MESH_INFO` list, for which that exception cannot arise. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_model.cpp` | `host/render/game_renderer.cpp`: `build_skinned_model` (1807-1913), `bind_pose_of_slot` (1752-1805), the model and head loops of `hd_load` (1978-2100) | The rules of the object path: one `.TRM` replaces the **whole** classic model; a vertex's three bone indices are nodes of the classic mesh tree; the bind pose is that tree's accumulated offsets with the rotations left out, walked with the same push and pop; a `<NAME>_HEAD.TRM` is drawn **rigidly** on the node nearest the face geometry's own centre (measured, not hard-coded); a part's three index runs are the three passes, additive blended `ONE, ONE` with the depth write off; and a node the caller never gave a matrix for gets the last one it did give rather than collapsing to the origin (`fill_unseen_joints`, 1389). The renderer under them is new: TROne is OpenGL 3.3 with vertex arrays and texture arrays, this is Direct3D 9 with a vertex declaration, one texture per page and compiled bytecode. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_model.hlsl` | the same file's GLSL `k_trm_vert` / `k_trm_frag` (317-405) | The skinning rule — three bones and three weights per vertex, the bind offset off before the node matrix goes on, the normal through the same matrix's 3×3 part — and the alpha test in the alpha pass **only** (TROne's golden-skull report). Translated to HLSL for shader model 3, with the bind offset folded into the matrix on the processor instead of subtracted per vertex; not a line of the GLSL is copied. The lighting is **not** TROne's: its item light is a flat ambient blown into a six-face cube plus four point lights of its own invention, while this engine has the classic path's own per-object light list, distance fog and fog bulbs. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_render.cpp`, the water marks | `host/render/game_renderer.cpp` (2113-2188) | The **road**, not the code: the remaster's geometry carries no water flag, so the classic level's own water vertices are matched to it by room-local position through a hash of the packed int16 x/y/z, per room, once at level build - and which group owns which vertex is recovered by walking the group's index runs. TROne marks a vertex from the classic `RoomVertexMove` flag and from the room's underwater bit; ours marks it from `ROOMLET::nWVtx` and from the engine's own shimmer predicate, and carries three bits rather than one. |
 
 Those files name Todesengel's copyright in their own headers, beside our
@@ -71,6 +73,17 @@ first three lines of a TRForge module carry a hidden signature, so those files
 are never reformatted and never carry our modification notice; anything we need
 differently is written in our own wrappers under `TOMB5/specific/hd/`.
 `vendor/trforge/NOTICE.md` is the part of TRForge's own notice that applies.
+
+One TRForge file could **not** be vendored and was used as a description
+instead: `trf_remaster/ItemModels.h` / `.cpp`, which includes TRForge's own
+level library and would drag it in with it. What it gave us is the **format**
+of a `.TRM` object model — the header, the part table, the meaning of the word
+that is zero in every model but a head, the trick that finds a head's geometry
+behind its facial rig, and the 24 byte vertex with its three bones and three
+weights. `TOMB5/specific/hd/hd_trm.cpp` is written against that description
+rather than copied from it, and says so in its header; every number in its
+comments was measured again here over the 566 models of the remaster's game 5.
+The credit is TRForge's all the same.
 
 ### discord-rpc — shipped in the source tree, not in the binaries
 

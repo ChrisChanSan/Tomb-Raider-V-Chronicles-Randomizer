@@ -48,7 +48,19 @@ Measured again on **2026-09-05**, after stage S0 of "HD art from the Remaster"
 given their notice with this change. The 18 additions are the ten
 `specific/hd/hd_*` files and eight under `vendor/trforge/`.
 
-Ten of the 146 do not carry it, and none of them should:
+Measured again on **2026-09-05**, after stages S1 to S4-1 of the same section:
+**112** files changed, **54** entirely new - **166** in all, **152** of them
+carrying the notice. The additions since the count above are the rest of
+`specific/hd/` (`hd_lara`, `hd_level`, `hd_light`, `hd_model`, `hd_object`,
+`hd_pagecache`, `hd_render` and their headers) and the four generated shader
+files under `specific/hd/hd_shader/`. Two headers that had been changed by an
+earlier stage and never given the notice - `specific/3dmath.h` and
+`specific/drawroom.h` - were given it with this change.
+
+Fourteen of the 166 do not carry it, and none of them should - the ten below
+plus the four `specific/hd/hd_shader/*.inc`, which are compiler output
+(`fxc` bytecode as a C array) regenerated from the `.hlsl` beside them and
+carrying no source of ours at all:
 `tomb5/libs/stb/stb_vorbis.c` and `tomb5/libs/discordRPC/LICENSE` are other
 people's files that we do not modify at all - stb_vorbis carries its own
 licence at the end of the file, and the second one IS a licence. Putting our
@@ -1638,6 +1650,141 @@ Proved with `RoomProbe` — the same room, the same camera, six harmless bulbs
 in both runs, and a seventh and eighth that only the raised cap can reach:
 they show up as a red and a blue glow that are not in the six-bulb picture,
 and a ninth is reported dropped at the new maximum.
+
+---
+
+#### Stage S4-1 — Lara's composite: the wardrobe loaded, measured, and drawn without the game
+
+New: `specific/hd/hd_lara.cpp` and `specific/hd/hd_lara.h`. **The engine calls
+neither.** `hd_lara.cpp` compiles into the executable and nothing in the game
+references it, so the frame is unchanged, exactly as `hd_model.cpp` stood after
+stage S3-1. The seam in `DrawLara` is stage S4-2.
+
+**Why Lara needs a module of her own.** Every other creature is one slot and
+one `.TRM`, which is why `hd_object.cpp` can decide per slot and be done. Lara
+is drawn out of five slots in one pass (`specific/drawlara.cpp`): the skinned
+body from `LARA_SKIN`, the fourteen seam pieces from `LARA_SKIN_JOINTS`, the
+hands from whichever weapon slot the mesh swap put at `LM_RHAND` / `LM_LHAND`,
+the thigh straps from `LHolster` and `lara.holster`, the weapon on the back
+from `lara.back_gun`, and the braid from `HAIR` through `DrawHair`. The
+remaster answers with a wardrobe of separate models, and which of them to draw
+changes from frame to frame. So the module has two halves: a level half that
+loads the wardrobe, and a frame half that answers "which parts, on which
+nodes" from the slot numbers `DrawLara` already holds.
+
+**The measurements it is built on**, all taken with `ModelProbe -name <NAME>
+-nodraw` over the remaster's `4\ITEM` (the whole wardrobe lives there, not in
+`5\ITEM` — the same shared-folder rule TROne found):
+
+* Every `OUTFIT_` model skins to nodes **0..14** and names no sixteenth, so the
+  composite's skeleton is Lara's classic mesh tree and the fifteen matrices in
+  `lara_matrices` are the joint palette. `OUTFIT_SUBSUIT` is the one exception
+  and covers thirteen: the diving suit has no feet, it ends in flippers that
+  belong to the shins.
+* `LARA_HEAD.TRM` covers 31 nodes — it carries a **facial rig**, whose bone
+  numbers are not mesh-tree nodes at all — so it rides rigidly on node 14, the
+  same treatment a creature's `<NAME>_HEAD.TRM` gets. `hd_model` already had
+  the rigid path; it only needed a way in, which is the new `rigidNode` field
+  of `HDModelSlot`.
+* `HAIR_OG.TRM` has six bones. The classic `HAIR` object's own mesh tree is a
+  straight chain at z = 0, 56, 112, 168, 224, 280 in every adult level — six
+  links, the exact spacing of the model. Young Lara's `HAIR` is the same six
+  nodes at half the spacing (27 units), which is the pigtails.
+* A `HAND_` model covers 9 and 10 on the right and 12 and 13 on the left;
+  `HAND_BARE_REST` adds the two upper-arm stubs 8 and 11. Three of them are
+  one-sided: `HAND_BARE_FLARE` and `HAND_BARE_TORCH` cover 12 and 13 only,
+  `HAND_BARE_CROWBAR` 9 and 10 only.
+* `HOLSTER_PISTOL` and `HOLSTER_UZI` cover nodes 1 and 4, `HOLSTER_REVOLVER`
+  node 4 alone, and `HOLSTER_SHOTGUN` / `_HK` / `_GRAPPLE` node 7 — the two
+  thighs and the torso, which is where `DrawLara` puts the classic ones.
+
+**Which outfit a level wears** is decided in `HDLaraOutfitFor` out of three
+things the engine already knows, and out of nothing else. `LaraDrawType` (the
+level header's outfit byte plus one) answers for the diving suit and the
+catsuit, which have values of their own. It cannot answer for the cap: a
+vanilla Russia level carries the same byte Rome does. So the caller passes in
+the engine's **own** test for that — `(gfLevelId >= LVL5_BASE && gfLevelId <=
+LVL5_SINKING_SUBMARINE && LaraDrawType == LARA_NORMAL) || LaraDrawType ==
+LARA_BUNHEAD`, the expression that already stands three times in
+`game/hair.cpp` and once in `game/laraskin.cpp` — rather than a second copy of
+it written here, which would be a thing that can drift. Young Lara is
+recognised three ways over (the script flag, the Irish level range, the byte)
+and stays classic by the user's decision. Read against all fifteen vanilla
+level files the rules answer correctly fifteen times out of fifteen.
+
+**TROne's TR5 glue has ANDY and JOBY the wrong way round** and the table here
+deliberately does not follow it: `games/tr5/glue/hostglue_file5.cpp` gives
+`OUTFIT_RUSSIA` to the `ANDY` files and treats the `JOBY` ones as young Lara,
+where in this game — and in the level files, measured — `JOBY` is the Russian
+submarine section and `ANDY` is Ireland. The part of that file that *was*
+carried over is the wardrobe itself: which model plays which role.
+
+**Only what the level can use is loaded.** `HDLaraLevel::slots` takes the list
+of Lara's slots the level really loaded, and a weapon or holster model is
+planned only when its slot is there. A weapon whose slot is missing cannot be
+drawn by the classic path either — that path reads
+`meshes[objects[slot].mesh_index]` — so nothing is lost. Measured over the
+vanilla levels: the full wardrobe is 21 models, 3.5 MiB of buffers and 30 MiB
+of pages; ANDREA1 needs 11 models and 20 MiB, JOBY5 16 and 27 MiB, RICH1 6 and
+17 MiB, JOBY4 two models and 12 MiB. Build time 34 to 79 ms.
+
+**The frame half** is `HDLaraFrameParts`, and it is TROne's rule with one
+addition. TROne picks ONE hand model — the first of nodes 10 and 13 whose mesh
+came from a non-body slot — and draws it whole
+(`game_renderer.cpp:1594-1616`). That is right for every two-handed frame and
+wrong for the three TR5 frames where the two hands differ: flare and torch are
+in the left hand alone, the crowbar in the right hand alone. So when the two
+sides disagree, both models are drawn and each is masked to its own arm through
+the `mesh_bits` argument `hd_model` already has — 8, 9, 10 on the right, 11,
+12, 13 on the left. When they agree, which is every other frame, it is one draw
+with every node, exactly as before. The same split answers the holsters, whose
+two slots the engine keeps apart as well (`LHolster` and `lara.holster`).
+
+**An empty holster draws nothing extra**, and that is the picture and not a
+gap: the straps are painted into every `OUTFIT_` model, which is why the
+remaster ships no "empty holster" file. TROne reaches the same result by
+registering the slot with an empty model name.
+
+**One thing hd_model needed:** `HDModelSlot` gained `rigidNode` (default -1,
+so every existing caller is unchanged) and `HDModelLevelBegin` passes it to
+`build()`, which has taken a rigid node since stage S3-1 for the separate
+faces. That is the whole engine-side change outside the new files.
+
+**The proof, without the game.** `ModelProbe -lara <LEVEL>` builds the
+composite against that level's own Lara mesh tree and draws it: body, face,
+braid, hands, holsters, back weapon. `-outfit` wears another one, `-guns`
+puts a weapon in her hands (and empties the holsters, as `draw_pistol_meshes`
+does), `-flare` / `-torch` fill the left hand alone, `-lara-nodes` prints every
+node 0..14 against every source with the `.TRM` that covers it, `-lara-pose`
+turns a node, and `-mirror` draws through a view matrix of negative
+determinant. Pictures made this way: the Rome Lara complete from the front and
+the back (the braid, the backpack, the pistols in their holsters), the pistols
+in her hands with the holsters empty, the diving suit with her face inside the
+helmet, the VCI catsuit, an Antarctica outfit, the mirror, and a head turned
+55° with the braid following it.
+
+**The mirror is a non-event, and the picture says so.** A mirror room turns the
+world inside out and a matrix that does that has a negative determinant, so
+every triangle's winding flips. The HD path does not care: `hd_render`'s state
+bracket sets `D3DCULL_NONE`, which is also what the classic engine does
+globally (`specific/function_table.cpp:105`) — TR5 culls back faces in
+*software*, through an `IsVisible` function pointer that `game/mirror.cpp`
+switches with `SetCullCW` / `SetCullCCW`. And TR5's own mirror does not even
+produce a negative determinant: it mirrors Lara by *moving* her (`z_pos = plane
+- z`, the three angles negated), which is a rotation.
+
+**Still open, and it is a randomizer change:** the four Tomb Raider III outfits
+(#122). The randomizer rolls them and writes `LARA_PONYTAIL` into the outfit
+byte when it does — the same value it writes for the Rome outfit inside a
+Russia level — so the byte cannot say which guest she wears, or that she wears
+one. `HDLaraOutfitFor` therefore takes the answer as an argument
+(`tr3Outfit`), and the mapping is measured and in place:
+`tr3_london` → `OUTFIT_TR3_CATSUIT`, `tr3_jungle` → `OUTFIT_TR3_COAST`,
+`tr3_antarctica` → `OUTFIT_TR3_ANTARC`, `tr3_nevada` → `OUTFIT_TR3_NEVADA`.
+What is missing is a marker byte in the level header; the 32-byte block behind
+the texture pages already carries `LaraType` at `data[0]`, the weather at
+`data[1]` and the foreign-speech-head flag at `data[2]`, and `data[3]` is the
+obvious place. That belongs to stage S4-2 together with the seam.
 
 ---
 

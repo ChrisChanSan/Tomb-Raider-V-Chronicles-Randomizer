@@ -75,12 +75,21 @@ struct IDirect3DDevice9;
 // load. The diagnostic tool draws a model by name with no level behind it
 // that way, and stage S7 will need it for a slot the randomizer filled from a
 // donor level, where the slot number no longer says what the model is.
+// `rigidNode` is -1 for a skinned model, which is every ordinary object, and
+// a node number for a file whose bone indices are NOT mesh tree nodes: every
+// vertex then hangs off that one node with weight 255. Only the wardrobe uses
+// it so far - LARA_HEAD.TRM carries a FACIAL rig whose bones run to 31 and
+// mean nothing to Lara's 15 node tree, so it rides rigidly on node 14 the way
+// a creature's <NAME>_HEAD.TRM rides on the node nearest its face. The
+// difference to that path is only who chooses the node: there it is measured,
+// here it is the classic head node and there is nothing to measure.
 struct HDModelSlot
 {
-	int slot;
-	int nodes;
-	const float* bind;
-	const char* name;
+	int slot = -1;
+	int nodes = 0;
+	const float* bind = 0;
+	const char* name = 0;
+	int rigidNode = -1;
 };
 
 // Where a model's file was found.

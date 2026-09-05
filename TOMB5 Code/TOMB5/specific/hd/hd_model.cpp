@@ -1197,6 +1197,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			if (slots[k].slot == here.slot)
 			{
 				model.nodes = slots[k].nodes;
+				model.rigidNode = slots[k].rigidNode;
 
 				if (slots[k].bind)
 				{
@@ -1216,7 +1217,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 		const char* trouble = "";
 
-		if (!build(here.trm, model, -1, &mixed, &trouble))
+		if (!build(here.trm, model, model.rigidNode, &mixed, &trouble))
 		{
 			if (stats)
 				stats->refused++;

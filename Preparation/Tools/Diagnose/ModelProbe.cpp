@@ -39,6 +39,35 @@
  *     -slot <n>           the model bound to slot n of the level, which needs
  *                         -level
  *     -all                every slot of the level, as a table, then stop
+ *     -lara <LEVEL>       LARA'S COMPOSITE (#123, stage S4-1). Loads the
+ *                         wardrobe that level wears - the outfit, the face,
+ *                         the braid, the hands and the holsters - against the
+ *                         level's OWN Lara skeleton, and draws the lot in
+ *                         bind pose. Short for -level <LEVEL> plus the mode.
+ *
+ *   Lara only:
+ *     -outfit <NAME>      wear this one instead of the level's own.
+ *                         OUTFIT_VCI, VCI, TR3_COAST or the randomizer's own
+ *                         guest id (tr3_london, tr3_jungle, tr3_antarctica,
+ *                         tr3_nevada) all work.
+ *     -guns <what>        pistols, uzi, shotgun, hk, revolver,
+ *                         revolver_laser, grapple, grapple_laser, crowbar or
+ *                         none - which slot the meshes at the hand nodes come
+ *                         from, exactly as the game's mesh swap sets it.
+ *     -holsters full|empty
+ *                         full = LARA_HOLSTERS_PISTOLS on both thighs (the
+ *                         guns are away), empty = LARA_HOLSTERS (they are in
+ *                         her hands). -guns implies empty.
+ *     -flare / -torch     the LEFT hand alone, as laraflar.cpp / flmtorch.cpp
+ *                         set it.
+ *     -back <what>        shotgun, hk or grapple on her back.
+ *     -lara-nodes         the table this stage owes the report: every classic
+ *                         node 0..14 against every source, and which .TRM
+ *                         part covers it.
+ *     -lara-pose <node> <yaw> <pitch>
+ *                         the same as -pose, spelled for the composite.
+ *     -mirror             draw through a view matrix of NEGATIVE determinant,
+ *                         which is what a mirror room does to the winding.
  *
  *   The level:
  *     -level <LEVEL>      stem, e.g. ANDREA1. The classic level is read from
@@ -105,6 +134,7 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_render.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pagecache.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_model.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_lara.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_bind.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_trm.h"
 
@@ -757,6 +787,698 @@ static void PrintNodeTable(int slot, const ClassicSlot* classic, const char* nam
 		printf("  a separate HD face rides rigidly on node %d\n", HDModelHeadNode(slot));
 }
 
+/* ---------------------------------------------------- Lara's composite -- */
+/* Stage S4-1. Everything the tool needs to know about one wardrobe picture;
+ * a struct rather than eighteen arguments. */
+struct LaraOptions
+{
+	std::string root;
+	std::string stem;
+	std::string outfit;
+	std::string guns;
+	std::string back;
+	std::string out;
+	bool holstersFull;
+	bool flare;
+	bool torch;
+	bool nodes;
+	bool mirror;
+	bool noDraw;
+	bool managed;
+	int threads;
+	long width, height;
+	double fov, yaw, pitch, dist, shade;
+	const HDObjLight* lights;
+	int lightCount;
+	const double (*turn)[2];
+};
+
+/* The engine's slot number for a name, out of the level that is loaded. Every
+ * table in hd_lara speaks names, and this is the one place that turns them
+ * back into the numbers the game keeps in LHolster, lara.holster and
+ * lara.back_gun. */
+static int SlotByName(const Tr5Level& level, const char* want)
+{
+	const std::vector<int> slots = level.moveableSlots();
+
+	for (size_t i = 0; i < slots.size(); i++)
+	{
+		const char* name = HDSlotName(slots[i]);
+
+		if (name && !_stricmp(name, want))
+			return slots[i];
+	}
+
+	return -1;
+}
+
+/* The classic Lara mesh tree this level really carries. LARA_SKIN is the
+ * skinned body the engine draws (laramisc.cpp copies its meshes into LARA at
+ * level start), and LARA is the fallback for a level that has no skin - the
+ * two trees are identical, which is why TROne accepts either. */
+static bool LaraBodySlot(const Tr5Level& level, ClassicSlot& out, int* slotOut)
+{
+	static const char* kTry[2] = { "LARA_SKIN", "LARA" };
+
+	for (int i = 0; i < 2; i++)
+	{
+		const int slot = SlotByName(level, kTry[i]);
+
+		if (slot >= 0 && ReadClassicSlot(level, slot, out) &&
+			out.nodes >= HD_LARA_NODES)
+		{
+			if (slotOut)
+				*slotOut = slot;
+
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static int RunLara(const LaraOptions& o, const Tr5Level& level)
+{
+	/* --- the two skeletons the composite is folded against ------------- */
+	ClassicSlot body, hair;
+	int bodySlot = -1;
+
+	if (!LaraBodySlot(level, body, &bodySlot))
+	{
+		printf("ModelProbe: this level has no Lara mesh tree - nothing to build\n");
+		return 6;
+	}
+
+	printf("body    : %s, %d nodes\n", HDSlotName(bodySlot), body.nodes);
+
+	const int hairSlot = SlotByName(level, "HAIR");
+	bool haveHair = false;
+
+	if (hairSlot >= 0 && ReadClassicSlot(level, hairSlot, hair) &&
+		hair.nodes >= HD_LARA_HAIR_NODES)
+	{
+		haveHair = true;
+		printf("braid   : HAIR, %d nodes, bind", hair.nodes);
+
+		for (int n = 0; n < HD_LARA_HAIR_NODES; n++)
+			printf(" %.0f/%.0f/%.0f", hair.bind[n][0], hair.bind[n][1],
+				hair.bind[n][2]);
+
+		printf("\n");
+	}
+	else
+		printf("braid   : this level has no usable HAIR tree - the braid stays classic\n");
+
+	/* --- which outfit --------------------------------------------------- */
+	int outfit = HD_LARA_OUTFIT_NONE;
+	const char* why = "";
+
+	if (!o.outfit.empty())
+	{
+		outfit = HDLaraOutfitFromName(o.outfit.c_str());
+
+		if (outfit == HD_LARA_OUTFIT_NONE)
+		{
+			printf("ModelProbe: %s is no outfit this wardrobe knows\n",
+				o.outfit.c_str());
+			return 2;
+		}
+
+		why = "asked for on the command line";
+	}
+	else
+	{
+		/* The engine's own three facts, read out of the level the way the
+		 * engine reads them:
+		 *
+		 *   LaraDrawType = data[0] + LARA_NORMAL (specific\file.cpp:1621),
+		 *   so the header byte plus one.
+		 *
+		 *   "she wears the cap" is game\hair.cpp's own test - a Russia level
+		 *   with LARA_NORMAL, or LARA_BUNHEAD anywhere. The Russia levels are
+		 *   LVL5_BASE .. LVL5_SINKING_SUBMARINE, which are the four JOBY
+		 *   files.
+		 *
+		 *   young Lara is the Irish section, the ANDY files - plus
+		 *   LARA_YOUNG, which the byte can also say. */
+		const int drawType = level.laraType() + 1;
+		const bool joby = !_strnicmp(o.stem.c_str(), "JOBY", 4);
+		const bool andy = !_strnicmp(o.stem.c_str(), "ANDY", 4);
+		const bool cap = (joby && drawType == 1) || drawType == 3;
+
+		outfit = HDLaraOutfitFor(drawType, cap, andy || drawType == 2,
+			HD_LARA_OUTFIT_NONE, &why);
+
+		printf("header  : LaraType byte %d -> LaraDrawType %d%s%s\n",
+			level.laraType(), drawType, joby ? ", a Russia level" : "",
+			andy ? ", an Ireland level" : "");
+	}
+
+	printf("outfit  : %s (%s) - %s\n",
+		HDLaraOutfitModel(outfit) ? HDLaraOutfitModel(outfit) : "none",
+		HDLaraOutfitLabel(outfit), why);
+
+	if (outfit == HD_LARA_OUTFIT_NONE)
+	{
+		printf("\nnothing to draw - and that is the answer this level gives.\n");
+		return 0;
+	}
+
+	/* --- plan, load, build ---------------------------------------------- */
+	/* Which of Lara's slots this level really loaded - the same list the
+	 * engine would build out of objects[n].loaded, and what keeps the
+	 * wardrobe down to the weapons the level can actually hand her. */
+	std::vector<int> present;
+
+	{
+		const std::vector<int> all = level.moveableSlots();
+
+		for (size_t i = 0; i < all.size(); i++)
+			if (HDSlotIsLara(all[i]))
+				present.push_back(all[i]);
+	}
+
+	HDLaraLevel wardrobe;
+
+	wardrobe.outfit = outfit;
+	wardrobe.bodyBind = &body.bind[0][0];
+	wardrobe.bodyNodes = HD_LARA_NODES;
+	wardrobe.hairBind = haveHair ? &hair.bind[0][0] : 0;
+	wardrobe.hairNodes = haveHair ? HD_LARA_HAIR_NODES : 0;
+	wardrobe.slots = present.empty() ? 0 : &present[0];
+	wardrobe.slotCount = (int)present.size();
+
+	printf("slots   : %d of Lara's own slots loaded in this level\n",
+		(int)present.size());
+
+	HDModelSlot wanted[HD_LARA_PART_COUNT];
+	const int count = HDLaraPlan(&wardrobe, wanted, HD_LARA_PART_COUNT);
+
+	printf("wardrobe: %d parts planned\n", count);
+
+	HDModelStats stats;
+	const char* trouble = "";
+
+	if (!HDModelLevelBegin(g_device, o.root.c_str(), wanted, count, o.managed,
+		o.threads, &stats, &trouble))
+	{
+		printf("ModelProbe: HDModelLevelBegin failed - %s\n", trouble);
+		return 5;
+	}
+
+	HDLaraStats laraStats;
+	const bool ok = HDLaraLevelBuild(&wardrobe, &laraStats);
+
+	printf("\n-- what was loaded -------------------------------------------\n");
+	printf("parts              %d wanted, %d on the card, %d missing\n",
+		laraStats.wanted, laraStats.loaded, laraStats.missing);
+	printf("geometry           %d vertices, %d indices, %d draw calls\n",
+		laraStats.vertices, laraStats.indices, laraStats.ranges);
+	printf("buffers            %.1f KiB vertices + %.1f KiB indices = %.1f KiB\n",
+		laraStats.vertexBytes / 1024.0, laraStats.indexBytes / 1024.0,
+		(laraStats.vertexBytes + laraStats.indexBytes) / 1024.0);
+	printf("pages              %d distinct in the cache, %.1f MiB, %.0f ms decode\n",
+		stats.pages, stats.pageStats.bytes / 1048576.0, stats.pageStats.decodeMs);
+	printf("time               %.0f ms reading the .TRM files, %.0f ms building\n",
+		stats.readMs, stats.buildMs);
+	printf("skeleton drift     %.0f mean over %d skinned parts, worst %.0f "
+		"(the limit for an object is %.0f)\n",
+		laraStats.driftMean, laraStats.driftParts, laraStats.driftWorst,
+		(double)HD_SKELETON_DRIFT_LIMIT);
+
+	for (int i = 0; i < HDModelNoteCount(); i++)
+		printf("  note: %s\n", HDModelNote(i));
+
+	for (int i = 0; i < HDLaraNoteCount(); i++)
+		printf("  lara: %s\n", HDLaraNote(i));
+
+	/* Part by part, because a mean drift hides the one part that does not
+	 * belong - and because the coverage column is the answer to "which node
+	 * does this file actually paint". */
+	printf("\n%-26s %-28s %7s %7s %7s %s\n", "part", "model", "verts",
+		"drift", "worst", "nodes");
+	printf("-------------------------- ---------------------------- "
+		"------- ------- ------- ------------------------\n");
+
+	for (int part = 0; part < HD_LARA_PART_COUNT; part++)
+	{
+		if (!HDLaraPartModel(outfit, part) || !HDLaraPartPlanned(part))
+			continue;
+
+		const int pslot = HDLaraPartSlot(part);
+
+		if (!HDLaraHasPart(part))
+		{
+			printf("%-26s %-28s %7s %7s %7s %s\n", HDLaraPartLabel(part),
+				HDLaraPartModel(outfit, part), "-", "-", "-", "NOT LOADED");
+			continue;
+		}
+
+		/* No number means there was no PAIR of nodes to measure - a part that
+		 * covers one node, or the rigid face. The drift is a pairwise
+		 * measurement and one node has no pair. */
+		float mean = -1, worst = -1;
+		char driftText[16] = "-", worstText[16] = "-";
+
+		if (HDModelBindDrift(pslot, &mean, &worst))
+		{
+			sprintf(driftText, "%.0f", mean);
+			sprintf(worstText, "%.0f", worst);
+		}
+
+		std::string cover;
+
+		for (int node = 0; node < 32; node++)
+			if (HDLaraPartCoverage(part) & (1u << node))
+			{
+				char text[8];
+
+				sprintf(text, "%s%d", cover.empty() ? "" : ",", node);
+				cover += text;
+			}
+
+		printf("%-26s %-28s %7d %7s %7s %s\n", HDLaraPartLabel(part),
+			HDModelName(pslot), HDModelVertices(pslot), driftText, worstText,
+			cover.c_str());
+	}
+
+	if (!ok)
+	{
+		printf("\nHDLaraLevelBuild says classic - see the notes above.\n");
+		HDModelLevelEnd();
+		return 6;
+	}
+
+	/* --- the frame ------------------------------------------------------ */
+	const int slotLara = SlotByName(level, "LARA");
+	const int slotHolstersEmpty = SlotByName(level, "LARA_HOLSTERS");
+	const int slotHolstersFull = SlotByName(level, "LARA_HOLSTERS_PISTOLS");
+	const int slotFlare = SlotByName(level, "FLARE_ANIM");
+	const int slotTorch = SlotByName(level, "TORCH_ANIM");
+
+	static const struct { const char* word; const char* slot; } kGun[] =
+	{
+		{ "pistols",        "PISTOLS_ANIM" },
+		{ "uzi",            "UZI_ANIM" },
+		{ "shotgun",        "SHOTGUN_ANIM" },
+		{ "hk",             "HK_ANIM" },
+		{ "revolver",       "REVOLVER_ANIM" },
+		{ "revolver_laser", "LARA_REVOLVER_LASER" },
+		{ "grapple",        "CROSSBOW_ANIM" },
+		{ "grapple_laser",  "LARA_CROSSBOW_LASER" },
+		{ "crowbar",        "CROWBAR_ANIM" }
+	};
+
+	HDLaraFrame now;
+
+	now.rightHandSlot = slotLara;
+	now.leftHandSlot = slotLara;
+	now.leftHolsterSlot = o.holstersFull ? slotHolstersFull : slotHolstersEmpty;
+	now.rightHolsterSlot = now.leftHolsterSlot;
+	now.backGunSlot = -1;
+
+	if (!o.guns.empty() && _stricmp(o.guns.c_str(), "none"))
+	{
+		int found = -1;
+
+		for (int i = 0; i < (int)(sizeof(kGun) / sizeof(kGun[0])); i++)
+			if (!_stricmp(o.guns.c_str(), kGun[i].word))
+				found = SlotByName(level, kGun[i].slot);
+
+		if (found < 0)
+			printf("ModelProbe: -guns %s is not a weapon this level has\n",
+				o.guns.c_str());
+		else
+		{
+			now.rightHandSlot = found;
+			now.leftHandSlot = found;
+			/* The gun is in her hands, so the holsters are empty - which is
+			 * what the engine does too (draw_pistol_meshes: LHolster and
+			 * lara.holster both go back to LARA_HOLSTERS). */
+			now.leftHolsterSlot = slotHolstersEmpty;
+			now.rightHolsterSlot = slotHolstersEmpty;
+		}
+	}
+
+	if (o.flare && slotFlare >= 0)
+		now.leftHandSlot = slotFlare;
+
+	if (o.torch && slotTorch >= 0)
+		now.leftHandSlot = slotTorch;
+
+	if (!o.back.empty())
+	{
+		static const struct { const char* word; const char* slot; } kBack[] =
+		{
+			{ "shotgun", "SHOTGUN_ANIM" },
+			{ "hk",      "HK_ANIM" },
+			{ "grapple", "CROSSBOW_ANIM" }
+		};
+
+		for (int i = 0; i < (int)(sizeof(kBack) / sizeof(kBack[0])); i++)
+			if (!_stricmp(o.back.c_str(), kBack[i].word))
+				now.backGunSlot = SlotByName(level, kBack[i].slot);
+	}
+
+	HDLaraDraw list[8];
+	const int pieces = HDLaraFrameParts(&now, list, 8);
+
+	printf("\n-- this frame ------------------------------------------------\n");
+	printf("hands   : right from %s, left from %s\n",
+		HDSlotName(now.rightHandSlot) ? HDSlotName(now.rightHandSlot) : "-",
+		HDSlotName(now.leftHandSlot) ? HDSlotName(now.leftHandSlot) : "-");
+	printf("holsters: left %s, right %s\n",
+		HDSlotName(now.leftHolsterSlot) ? HDSlotName(now.leftHolsterSlot) : "-",
+		HDSlotName(now.rightHolsterSlot) ? HDSlotName(now.rightHolsterSlot) : "-");
+	printf("back    : %s\n",
+		HDSlotName(now.backGunSlot) ? HDSlotName(now.backGunSlot) : "nothing");
+	printf("drawn   : %s%s", HDLaraOutfitModel(outfit),
+		HDLaraHasPart(HD_LARA_PART_FACE) ? " + LARA_HEAD" : "");
+
+	for (int i = 0; i < pieces; i++)
+		printf(" + %s(%08x)", HDModelName(HDLaraPartSlot(list[i].part)),
+			list[i].nodeMask);
+
+	if (HDLaraHasPart(HD_LARA_PART_BRAID))
+		printf(" + HAIR_OG");
+
+	printf("\n");
+
+	/* --- the node table -------------------------------------------------- */
+	if (o.nodes)
+	{
+		static const char* kNodeName[HD_LARA_NODES] =
+		{
+			"hips", "l thigh", "l shin", "l foot", "r thigh", "r shin",
+			"r foot", "torso", "r inarm", "r outarm", "r hand", "l inarm",
+			"l outarm", "l hand", "head"
+		};
+
+		/* The columns are the SOURCES a node's mesh can come from in the
+		 * classic path: the skin, the weapon slot the mesh swap put at the
+		 * hands, the holster slot at the thighs, the flare in the left hand,
+		 * and the weapon on the back. The cell is the .TRM that covers the
+		 * node when the source is that one. */
+		struct Column { const char* head; int part; };
+
+		Column column[6];
+		int columns = 0;
+
+		column[columns].head = "skin";
+		column[columns++].part = HD_LARA_PART_BODY;
+		column[columns].head = "face";
+		column[columns++].part = HD_LARA_PART_FACE;
+
+		/* The weapon column is the RIGHT hand's part - the one the game
+		 * decides through WeaponObjectMesh - and the flare column the left
+		 * hand's own model, which is the only one that can differ. */
+		int weapon = HDLaraPartForSlot(now.rightHandSlot, HD_LARA_ROLE_HAND);
+
+		if (weapon < 0)
+			weapon = HD_LARA_PART_HAND_REST;
+
+		int back = -1;
+
+		for (int part = HD_LARA_PART_BACK_SHOTGUN;
+			part <= HD_LARA_PART_BACK_GRAPPLE && back < 0; part++)
+			if (HDLaraHasPart(part))
+				back = part;
+
+		column[columns].head = "weapon";
+		column[columns++].part = weapon;
+		column[columns].head = "holster";
+		column[columns++].part = HD_LARA_PART_HOLSTER_PISTOL;
+		column[columns].head = "flare";
+		column[columns++].part = HD_LARA_PART_HAND_FLARE;
+		column[columns].head = "back";
+		column[columns++].part = back;
+
+		printf("\n-- every Lara node against every source -----------------------\n");
+		printf("%-5s %-9s %-24s %-4s %-6s", "node", "name",
+			"classic bind (x y z)", "flag", "parent");
+
+		for (int c = 0; c < columns; c++)
+			printf(" %-26s", column[c].head);
+
+		printf("\n");
+
+		for (int node = 0; node < HD_LARA_NODES; node++)
+		{
+			printf("%-5d %-9s %7.0f %7.0f %7.0f %-4ld %-6d", node,
+				kNodeName[node], body.bind[node][0], body.bind[node][1],
+				body.bind[node][2], body.flags[node], body.parent[node]);
+
+			for (int c = 0; c < columns; c++)
+			{
+				const int part = column[c].part;
+				const bool has = HDLaraHasPart(part) &&
+					(HDLaraPartCoverage(part) & (1u << node)) != 0;
+
+				printf(" %-26s", has
+					? HDModelName(HDLaraPartSlot(part))
+					: (HDLaraHasPart(part) ? "-" : "(not loaded)"));
+			}
+
+			printf("\n");
+		}
+
+		printf("\nthe braid is its own six node chain and covers no body node.\n");
+	}
+
+	if (o.noDraw)
+	{
+		HDModelLevelEnd();
+		return 0;
+	}
+
+	/* --- the camera ------------------------------------------------------ */
+	/* The composite's box is the union of every part's, because the outfit
+	 * alone has an empty skull and a naked wrist. */
+	float mins[3] = { 0, 0, 0 }, maxs[3] = { 0, 0, 0 };
+	bool first = true;
+
+	for (int part = 0; part < HD_LARA_PART_COUNT; part++)
+	{
+		if (!HDLaraHasPart(part) || part == HD_LARA_PART_BRAID)
+			continue;
+
+		float lo[3], hi[3];
+
+		if (!HDModelBounds(HDLaraPartSlot(part), lo, hi))
+			continue;
+
+		for (int i = 0; i < 3; i++)
+		{
+			if (first || lo[i] < mins[i]) mins[i] = lo[i];
+			if (first || hi[i] > maxs[i]) maxs[i] = hi[i];
+		}
+
+		first = false;
+	}
+
+	printf("\nbounds  : x %.0f..%.0f  y %.0f..%.0f  z %.0f..%.0f\n",
+		mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2]);
+
+	const double persp = EnginePersp(o.height, o.fov);
+	const double cx = 0.5 * (mins[0] + maxs[0]);
+	const double cy = 0.5 * (mins[1] + maxs[1]);
+	const double cz = 0.5 * (mins[2] + maxs[2]);
+	const double radius = 0.5 * sqrt(
+		(maxs[0] - mins[0]) * (maxs[0] - mins[0]) +
+		(maxs[1] - mins[1]) * (maxs[1] - mins[1]) +
+		(maxs[2] - mins[2]) * (maxs[2] - mins[2]));
+
+	double dist = o.dist;
+
+	if (dist <= 0.0)
+		dist = persp * radius / (0.45 * (double)o.height);
+
+	const double d2r = 3.14159265358979323846 / 180.0;
+	const double f[3] =
+	{
+		sin(o.yaw * d2r) * cos(o.pitch * d2r),
+		sin(o.pitch * d2r),
+		cos(o.yaw * d2r) * cos(o.pitch * d2r)
+	};
+
+	float view[16];
+
+	LookAt(cx - f[0] * dist, cy - f[1] * dist, cz - f[2] * dist, o.yaw, o.pitch,
+		view);
+
+	/* THE MIRROR (#123, stage S4-1 proof). A mirror room turns the world
+	 * inside out, and a matrix that does that has a NEGATIVE determinant:
+	 * every triangle's winding flips, and a renderer that culls by winding
+	 * loses the whole body. This one negates the view space x, which is the
+	 * cheapest such matrix there is, and the picture that comes back says
+	 * whether the HD path minds. It does not - hd_render's state bracket sets
+	 * D3DCULL_NONE, the same thing the classic engine does globally
+	 * (specific\function_table.cpp:105), and TR5's own mirror does not even
+	 * need it: game\mirror.cpp mirrors Lara by MOVING her (z_pos = plane - z,
+	 * the three angles negated), which is a rotation with determinant +1, and
+	 * switches the SOFTWARE backface test with SetCullCW/SetCullCCW. */
+	if (o.mirror)
+	{
+		float flip[16], mirrored[16];
+
+		MatIdentity(flip);
+		flip[0] = -1.0f;
+		MatMul(view, flip, mirrored);
+		memcpy(view, mirrored, sizeof(view));
+
+		printf("mirror  : the view is flipped in x - determinant negative\n");
+	}
+
+	D3DMATRIX projection;
+	double a = 0, b = 0, boo = 0;
+
+	HDRenderZConstants(20.0, 20480.0, &a, &b, &boo);
+	HDRenderMakeProjection(persp, (double)o.width * 0.5, (double)o.height * 0.5,
+		a, b, &projection);
+
+	printf("camera  : %.0f units away, yaw %.0f, pitch %.0f, persp %.1f at %ldx%ld\n",
+		dist, o.yaw, o.pitch, persp, o.width, o.height);
+
+	/* --- the joint matrices ----------------------------------------------- */
+	/* The body: the very walk DrawAnimatingItem does, with the animation left
+	 * out - which is the bind pose, and which is what lara_matrices holds
+	 * when the game calls phd_PutPolygons for each of the fifteen. */
+	float matrices[HD_LARA_NODES * 16];
+
+	BuildNodeMatrices(body, view, o.turn, matrices);
+
+	/* THE BRAID. In the game the six links come from hairs[0][n], which the
+	 * simulation writes as ABSOLUTE world positions and angles - there is no
+	 * mesh tree walk for the braid at all, which is why the classic HAIR
+	 * object's own tree is a straight line along +z (measured: 0, 56, 112,
+	 * 168, 224, 280 in every adult level, half that for young Lara's
+	 * pigtails) and the .TRM is drawn in exactly that pose.
+	 *
+	 * A studio picture has no simulation, so the tool builds the chain the
+	 * way HairControl would have it hang at rest: the whole braid turned out
+	 * of its +z bind direction to point downwards and a little backwards, and
+	 * each further link bent a few degrees more, so that the picture proves
+	 * what it is meant to prove - the six bones move independently and the
+	 * chain hangs together. The angles are the TOOL'S, and only the tool's;
+	 * stage S4-2 takes the real ones out of hairs[0][n].
+	 *
+	 * The chain is built the way a chain is: link n's frame is a bend, then a
+	 * step of one link's length along the previous link's own z, then the
+	 * previous frame. */
+	const double kBraidRest = -100.0;	// +z -> down and slightly behind her
+	const double kBraidBend = -5.0;		// per link, so the six are visible
+
+	float hairMatrices[HD_LARA_HAIR_NODES * 16];
+	float chain[16];
+
+	{
+		float rest[16];
+
+		MatRotX(kBraidRest, rest);
+		MatMul(rest, &matrices[HD_LARA_HEAD_NODE * 16], chain);
+	}
+
+	memcpy(&hairMatrices[0], chain, sizeof(chain));
+
+	for (int n = 1; n < HD_LARA_HAIR_NODES; n++)
+	{
+		const float length = haveHair
+			? hair.bind[n][2] - hair.bind[n - 1][2]
+			: 56.0f;
+
+		float bend[16], step[16], tmp[16];
+
+		MatRotX(kBraidBend, bend);
+		MatTranslate(0.0f, 0.0f, length, step);
+		MatMul(bend, step, tmp);
+		MatMul(tmp, chain, &hairMatrices[n * 16]);
+		memcpy(chain, &hairMatrices[n * 16], sizeof(chain));
+	}
+
+	float light[HD_LARA_NODES * 3];
+
+	for (int i = 0; i < HD_LARA_NODES * 3; i++)
+		light[i] = (float)o.shade;
+
+	HDModelLighting lighting;
+
+	lighting.lights = o.lightCount ? o.lights : 0;
+	lighting.lightCount = o.lightCount;
+	lighting.sunScale = 0.75f;
+
+	/* --- draw -------------------------------------------------------------- */
+	printf("\n-- the picture ------------------------------------------------\n");
+
+	Shot shot;
+
+	if (!ShotBegin(shot, o.width, o.height))
+	{
+		ShotEnd(shot);
+		HDModelLevelEnd();
+		return 7;
+	}
+
+	HDFrameLighting frame;
+	float wibble[32];
+
+	memset(&frame, 0, sizeof(frame));
+
+	for (int i = 0; i < 32; i++)
+		wibble[i] = 0.0f;
+
+	frame.centerX = (float)o.width * 0.5f;
+	frame.centerY = (float)o.height * 0.5f;
+	frame.distanceFogStart = 1.0e9f;
+	frame.wibbleTable = wibble;
+
+	g_device->BeginScene();
+	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
+	HDModelFrameBegin(&projection, 0);
+
+	int drawn = 0;
+
+	if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BODY), matrices, HD_LARA_NODES,
+		light, ~0u, &lighting))
+		drawn++;
+
+	if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_FACE), matrices, HD_LARA_NODES,
+		light, ~0u, &lighting))
+		drawn++;
+
+	for (int i = 0; i < pieces; i++)
+		if (HDModelDraw(HDLaraPartSlot(list[i].part), matrices, HD_LARA_NODES,
+			light, list[i].nodeMask, &lighting))
+			drawn++;
+
+	if (HDLaraHasPart(HD_LARA_PART_BRAID))
+	{
+		float hairLight[HD_LARA_HAIR_NODES * 3];
+
+		for (int i = 0; i < HD_LARA_HAIR_NODES * 3; i++)
+			hairLight[i] = (float)o.shade;
+
+		if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BRAID), hairMatrices,
+			HD_LARA_HAIR_NODES, hairLight, ~0u, &lighting))
+			drawn++;
+	}
+
+	const int calls = HDModelDrawCalls();
+
+	HDRenderFrameEnd();
+	g_device->EndScene();
+
+	printf("%d models drawn in %d draw calls\n", drawn, calls);
+
+	char path[512];
+
+	sprintf(path, "%s_lara_%s.png", o.out.c_str(), HDLaraOutfitModel(outfit));
+	ShotWrite(shot, path);
+	ShotEnd(shot);
+
+	HDModelLevelEnd();
+	return 0;
+}
+
 int main(int argc, char** argv)
 {
 	if (argc < 2)
@@ -772,6 +1494,11 @@ int main(int argc, char** argv)
 	int slot = -1;
 	bool all = false, nodes = false, noDraw = false, managed = false, head = false;
 	bool itemcheck = false;
+
+	/* Lara's composite - stage S4-1. */
+	bool lara = false, laraNodes = false, mirror = false;
+	std::string outfitName, gunsName, backName;
+	bool holstersFull = true, flare = false, torch = false;
 	int threads = 8;
 	long width = 1024, height = 1024;
 	double fov = 80.0, yaw = 180.0, pitch = 10.0, dist = 0.0;
@@ -796,6 +1523,33 @@ int main(int argc, char** argv)
 			classicPath = argv[++i];
 		else if (!_stricmp(argv[i], "-all"))
 			all = true;
+		else if (!_stricmp(argv[i], "-lara") && i + 1 < argc)
+		{
+			lara = true;
+			levelStem = argv[++i];
+		}
+		else if (!_stricmp(argv[i], "-outfit") && i + 1 < argc)
+		{
+			lara = true;
+			outfitName = argv[++i];
+		}
+		else if (!_stricmp(argv[i], "-guns") && i + 1 < argc)
+			gunsName = argv[++i];
+		else if (!_stricmp(argv[i], "-back") && i + 1 < argc)
+			backName = argv[++i];
+		else if (!_stricmp(argv[i], "-holsters") && i + 1 < argc)
+			holstersFull = !_stricmp(argv[++i], "full");
+		else if (!_stricmp(argv[i], "-flare"))
+			flare = true;
+		else if (!_stricmp(argv[i], "-torch"))
+			torch = true;
+		else if (!_stricmp(argv[i], "-lara-nodes"))
+		{
+			lara = true;
+			laraNodes = true;
+		}
+		else if (!_stricmp(argv[i], "-mirror"))
+			mirror = true;
 		else if (!_stricmp(argv[i], "-nodes"))
 			nodes = true;
 		else if (!_stricmp(argv[i], "-nodraw"))
@@ -825,7 +1579,8 @@ int main(int argc, char** argv)
 			dist = atof(argv[++i]);
 		else if (!_stricmp(argv[i], "-shade") && i + 1 < argc)
 			shade = atof(argv[++i]);
-		else if (!_stricmp(argv[i], "-pose") && i + 3 < argc)
+		else if ((!_stricmp(argv[i], "-pose") || !_stricmp(argv[i], "-lara-pose"))
+			&& i + 3 < argc)
 		{
 			const int node = atoi(argv[++i]);
 			const double y = atof(argv[++i]);
@@ -862,9 +1617,9 @@ int main(int argc, char** argv)
 			printf("ModelProbe: ignoring %s\n", argv[i]);
 	}
 
-	if (name.empty() && slot < 0 && !all)
+	if (name.empty() && slot < 0 && !all && !lara)
 	{
-		printf("ModelProbe: nothing to look at - give -name, -slot or -all\n");
+		printf("ModelProbe: nothing to look at - give -name, -slot, -all or -lara\n");
 		return 2;
 	}
 
@@ -901,9 +1656,10 @@ int main(int argc, char** argv)
 		}
 	}
 
-	if ((all || slot >= 0) && !haveLevel)
+	if ((all || slot >= 0 || lara) && !haveLevel)
 	{
-		printf("ModelProbe: -slot and -all need a level (-level or -classic)\n");
+		printf("ModelProbe: -slot, -all and -lara need a level "
+			"(-lara <LEVEL>, -level or -classic)\n");
 		return 2;
 	}
 
@@ -926,6 +1682,46 @@ int main(int argc, char** argv)
 		HDRenderShutdown();
 		DropDevice();
 		return 4;
+	}
+
+	/* --- Lara's composite (#123, stage S4-1) ---------------------------- */
+	if (lara)
+	{
+		LaraOptions o;
+
+		o.root = root;
+		o.stem = levelStem;
+		o.outfit = outfitName;
+		o.guns = gunsName;
+		o.back = backName;
+		o.out = out;
+		o.holstersFull = holstersFull;
+		o.flare = flare;
+		o.torch = torch;
+		o.nodes = laraNodes;
+		o.mirror = mirror;
+		o.noDraw = noDraw;
+		o.managed = managed;
+		o.threads = threads;
+		o.width = width;
+		o.height = height;
+		o.fov = fov;
+		o.yaw = yaw;
+		o.pitch = pitch;
+		o.dist = dist;
+		o.shade = shade;
+		o.lights = lights;
+		o.lightCount = lightCount;
+		o.turn = turn;
+
+		const int result = RunLara(o, level);
+
+		HDLaraLevelEnd();
+		HDModelShutdown();
+		HDRenderShutdown();
+		DropDevice();
+		printf("\npeak commit of the whole run: %.1f MiB\n", PeakCommitMiB());
+		return result;
 	}
 
 	/* --- which slots ---------------------------------------------------- */

@@ -373,7 +373,8 @@ models, skinned on the classic mesh tree so that they move exactly as they
 always did; the rooms around them were already HD. **Lara is still the
 original model** — she is a composite of an outfit, a head, holsters and a
 braid and she is a stage of her own — so until that stage she is the one
-low-resolution thing on the screen, and that is on purpose.
+low-resolution thing on the screen, and that is on purpose. Her wardrobe is
+already loaded and measured though; see *Lara — the wardrobe is loaded* below.
 
 **Switching it on.** Options → the new *tomb5 options* page → **HD textures**,
 the last row of the first page. Like every row on that page it is remembered at
@@ -614,6 +615,74 @@ picture you can explain beats a crash.
 **Nothing is copied out of the remaster and nothing of it ships here**, the
 same rule as everywhere else in this project: the art is read where it lies, in
 your own installation.
+
+### Lara — the wardrobe is loaded, she is not drawn yet
+
+Lara is the last thing on the screen that is still the original model, and she
+is the hardest one, because she is not an object. Every other creature is one
+slot and one model file. Lara is a **composite**: the engine draws her out of
+five slots at once — the skinned body from `LARA_SKIN`, the seams that close it
+from `LARA_SKIN_JOINTS`, the hands from whichever weapon slot the mesh swap put
+there this frame, the thigh straps from `LARA_HOLSTERS*` and the braid from
+`HAIR` — and the remaster does the same thing with a wardrobe of separate
+models.
+
+**As of this build the wardrobe is loaded and measured, and nothing of it is
+drawn.** The picture in the game is unchanged. What exists is the part that had
+to be right before a single pixel could be trusted: which file belongs to which
+level, which piece of her each file covers, and whether it fits her skeleton.
+
+**Which outfit a level wears** is decided out of the engine's own facts, not
+from a list of level names:
+
+| Lara | Where | The model | How it is recognised |
+|---|---|---|---|
+| The Rome outfit | Streets of Rome, Trajan's Markets, Colosseum | `OUTFIT_CLASSIC` | everything the three rules below do not claim |
+| The Russia outfit, with the cap | Base, Submarine, Sinking Submarine | `OUTFIT_RUSSIA` | the engine's **own** braid test: a Russia level with `LARA_NORMAL`, or `LARA_BUNHEAD` anywhere. That expression already stands three times in the braid code and once in the skinning code, and it is the only thing in this engine that can tell the cap from the Rome outfit — a vanilla Russia level carries the same outfit byte Rome does. |
+| The diving suit | Deepsea Dive | `OUTFIT_SUBSUIT` | the outfit byte, which has a value of its own for it |
+| The VCI catsuit | The 13th Floor, Escape with the Iris, Red Alert, the title screen | `OUTFIT_VCI` | the outfit byte, likewise |
+| Young Lara | Gallows Tree, Labyrinth, Old Mill | — **stays classic** | the script flag, the level range and the outfit byte, any one of the three. This is your decision, not a limit: `OUTFIT_YOUNG`, `LARA_YOUNG_HEAD` and `HAIR_PIGTAIL` all exist in the remaster. |
+| A Tomb Raider III outfit | wherever the randomizer rolls one | `OUTFIT_TR3_ANTARC`, `_NEVADA`, `_COAST`, `_CATSUIT` | **not yet** — see below |
+
+Read against all fifteen vanilla level files those rules give the right answer
+fifteen times out of fifteen.
+
+**The rest of the wardrobe.** The face is `LARA_HEAD` and it is a *facial rig*
+— its bone numbers run to 31 and mean nothing at all to her 15-piece mesh tree
+— so it is nailed rigidly to the head, the same way an enemy's separate face
+is. The braid is `HAIR_OG`, six bones over 280 units, which is exactly the six
+links TR5's braid has, measured out of the level files themselves. The hands
+come from `HAND_BARE_*`, one file per weapon, and the worn weapons from
+`HOLSTER_*`: pistols and uzis on both thighs, the revolver on the right one
+alone, the shotgun, the HK and the grappling gun on the back. An **empty**
+holster draws nothing extra on purpose — the straps are painted into every
+outfit already, which is why the game's empty-holster slot has no model in the
+remaster either.
+
+Two frames need two hand models at once and get them: a flare or a torch is in
+the left hand while the right is empty, and the crowbar is in the right hand
+while the left is empty. Each model is then masked to its own arm, so no hand
+is drawn twice.
+
+**Only what the level can use is loaded.** The whole wardrobe is 21 models,
+3.5 MB of geometry and 30 MB of texture; a level that has no HK slot cannot
+hand her an HK, so its wardrobe is smaller. In practice: Streets of Rome 11
+models and 20 MB, Sinking Submarine 16 and 27 MB, The 13th Floor 6 and 17 MB,
+Deepsea Dive 2 and 12 MB — the diving suit needs neither hands nor braid nor
+holsters, it *is* all three.
+
+**Does it fit her skeleton?** The same pairwise measurement the objects are
+judged by, and the answer is comfortable: over every level the mean drift of a
+wardrobe part against that level's own Lara mesh tree is 3 to 9 units and the
+worst single pair 183, against a limit of 256.
+
+**The one thing still open** is the Tomb Raider III outfits. The randomizer
+rolls them (#122) and writes the outfit byte `LARA_PONYTAIL` when it does — but
+that is the same byte it writes for the Rome outfit inside a Russia level, so
+the byte alone cannot say *which* of the four guests she is wearing, or that
+she is wearing one at all. The four models exist and are correct; what is
+missing is a marker in the level file, which is a randomizer change and belongs
+to the stage that draws her.
 
 ---
 

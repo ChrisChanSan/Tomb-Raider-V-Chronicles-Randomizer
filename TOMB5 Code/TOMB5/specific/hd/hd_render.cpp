@@ -77,6 +77,26 @@ namespace
 	 * sort key, because a range is one SetTexture and one constant and a
 	 * triangle cannot have half of each. Costs nothing where nothing scrolls:
 	 * over all 15 levels only 5 to 65 parts per level carry one. */
+	/* THE THREE .TRG MATERIALS THIS FILE KNOWS BY NUMBER. Measured over all
+	 * 15 TR5 levels (Preparation\Tools\Diagnose and the notes in
+	 * MODIFICATIONS.md); everything else is drawn the same way and needs no
+	 * name here.
+	 *
+	 *    1  the FLOW material: a UV scroll, speed in param.xy - waterfalls,
+	 *       rivers, conveyor belts. Its vertices may also carry a bend, and
+	 *       that bend is the water's own (fix round A, A6)
+	 *    7  a WIND material, param (alphaRef 0.5, strength, scale, scale)
+	 *    8  the other WIND material, the same param shape - foliage, ivy,
+	 *       banners, kelp. 7 and 8 are the same thing in two numbers: no
+	 *       level carries both, ANDREA3 has only 7 and JOBY4 only 8, and
+	 *       TITLE - which is a montage of every level - has both
+	 *   13  the remaster's own four-frame flipbook, the other three pages in
+	 *       param[0..2]. Counted and NOT drawn - see MODIFICATIONS.md */
+#define HD_TRG_MATERIAL_FLOW		1
+#define HD_TRG_MATERIAL_WIND		8
+#define HD_TRG_MATERIAL_WIND2		7
+#define HD_TRG_MATERIAL_FLIPBOOK	13
+
 	struct HDRange
 	{
 		unsigned int start = 0;
@@ -170,6 +190,9 @@ namespace
 	SavedState g_saved;
 	bool g_in_frame = false;
 	int g_draw_calls = 0;
+	// A2: draw calls of the opaque pass that switched the alpha test on
+	// because their page is a cut-out sheet. Reset with g_draw_calls.
+	int g_cutout_calls = 0;
 
 	/* --- stage S2b ----------------------------------------------------- */
 
@@ -581,6 +604,7 @@ void HDRenderShutdown()
 	g_device = 0;
 	g_in_frame = false;
 	g_draw_calls = 0;
+	g_cutout_calls = 0;
 	g_error.clear();
 }
 
@@ -766,6 +790,91 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		}
 	}
 
+	/* --- THE WIND BELONGS TO MATERIAL 8 (#123, fix round A, A6) --------
+	 *
+	 * TrgVertex::sway is a weight and nothing else - it says how far a vertex
+	 * may travel, not that it travels at all. Stage S5 read it as permission,
+	 * and the result is the reported bug: "the lamp post must not move at
+	 * all", and with it a long list of statics and animatings that sway.
+	 *
+	 * MEASURED over all 15 levels, vertices with a non-zero sway, by the
+	 * material of the part that names them:
+	 *
+	 *     material  8   416,153     material  0   160,620
+	 *     material  1    92,896     material 14     2,016
+	 *     material  7    46,611     material  3       867
+	 *                               material 16       594
+	 *                               material  6       222
+	 *
+	 * The left column moves and the right column must not, and the parts
+	 * themselves say which is which:
+	 *
+	 *   8 and 7 are the WIND materials, and they are the same thing under two
+	 *     numbers - param (alphaRef 0.5, strength, scale, scale) in both, the
+	 *     cut-out sheets of leaves A2 is about, and no level carries both
+	 *     (ANDREA3 has only 7, JOBY4 only 8; TITLE, a montage of every level,
+	 *     has both). Ivy, banners, grass, kelp.
+	 *   1 is the FLOW material, the UV scroll of a river or a waterfall, and
+	 *     its bend is the water's own - JOBY5's sub pens are 63,198 of those
+	 *     92,896. Taking it away would be the OTHER reported bug, the one
+	 *     that says water animation is missing in places.
+	 *   0, 3, 6, 14 and 16 are ordinary geometry, glass, glow and light
+	 *     shafts. In ANDREA1 - the level the lamp post stands in - material 0
+	 *     alone is 61,208 of the level's 84,408 swaying vertices, FOUR FIFTHS
+	 *     of them, and that is the reported bug.
+	 *
+	 * The weight is therefore taken away from every vertex that no part of
+	 * material 1, 7 or 8 names, once, here, before the vertex buffer is
+	 * filled - so the shader keeps its one multiplication, the log's counters
+	 * and HDRenderGroupMotionInfo report what really moves, and nothing
+	 * downstream has to know about materials.
+	 *
+	 * A vertex named by BOTH a moving part and a still one keeps its weight:
+	 * it is part of the moving mesh, and the alternative would be to split
+	 * it. */
+	int wind_parts = 0;
+	int wind_vertices = 0;
+	int sway_dropped = 0;
+
+	{
+		std::vector<unsigned char> wind_ok(trg.vertices.size(), 0);
+
+		for (const trf::remaster::TrgGroup& group : trg.groups)
+			for (const trf::remaster::TrgPart& part : group.parts)
+			{
+				if (part.material != HD_TRG_MATERIAL_WIND &&
+					part.material != HD_TRG_MATERIAL_WIND2 &&
+					part.material != HD_TRG_MATERIAL_FLOW)
+					continue;
+
+				wind_parts++;
+
+				for (int p = 0; p < 3; p++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[p];
+
+					for (unsigned int at = run.start;
+						at < run.start + run.count && at < trg.indices.size(); at++)
+					{
+						const unsigned int v = trg.indices[at];
+
+						if (v < wind_ok.size() && !wind_ok[v])
+						{
+							wind_ok[v] = 1;
+							wind_vertices++;
+						}
+					}
+				}
+			}
+
+		for (size_t i = 0; i < trg.vertices.size(); i++)
+			if (trg.vertices[i].sway && !wind_ok[i])
+			{
+				trg.vertices[i].sway = 0;
+				sway_dropped++;
+			}
+	}
+
 	int marked_vertices = 0;
 	int marked_choppy = 0;
 	int sway_vertices = 0;
@@ -908,12 +1017,12 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				 * range names one page and swapping it per frame is a
 				 * different piece of work (MODIFICATIONS.md says so out
 				 * loud). */
-				const bool scrolls = (part.material == 1) &&
+				const bool scrolls = (part.material == HD_TRG_MATERIAL_FLOW) &&
 					(part.param[0] != 0.0f || part.param[1] != 0.0f);
 				const float su = scrolls ? part.param[0] : 0.0f;
 				const float sv = scrolls ? part.param[1] : 0.0f;
 
-				if (pass == 0 && part.material == 13)
+				if (pass == 0 && part.material == HD_TRG_MATERIAL_FLIPBOOK)
 					group.motion.flipbookParts++;
 
 				if (pass == 0 && scrolls)
@@ -1316,6 +1425,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->scrollRanges = 0;
 		stats->scrollTris = 0;
 		stats->swayVertices = sway_vertices;
+		stats->swayParts = wind_parts;
+		(void)wind_vertices;
+		stats->swayDropped = sway_dropped;
 		stats->flipbookParts = 0;
 
 		for (size_t g = 0; g < g_groups.size(); g++)
@@ -1427,6 +1539,7 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 
 	g_in_frame = true;
 	g_draw_calls = 0;
+	g_cutout_calls = 0;
 
 	if (view)
 		std::memcpy(g_view, view, sizeof(g_view));
@@ -1518,7 +1631,7 @@ namespace
 		 * add - the classic path switches D3DRS_SPECULARENABLE off for its
 		 * additive draw type (polyinsert.cpp:72) and the overbright half of
 		 * the room colour goes off with it. */
-		const float constants[4] =
+		float constants[4] =
 		{
 			pass == 1 ? 1.0f : 0.0f,
 			pass == 2 ? 1.0f : 0.0f,
@@ -1528,6 +1641,15 @@ namespace
 
 		g_device->SetVertexShaderConstantF(4, constants, 1);
 		g_device->SetPixelShaderConstantF(4, constants, 1);
+
+		/* A2: the opaque pass turns the alpha test on again for the ranges
+		 * that land on a CUT-OUT page, and for no others. What such a page is
+		 * and why the answer is per page and not per material is measured in
+		 * hd_pagecache.cpp beside measure_cutout. The switch is written only
+		 * when it changes, and the ranges are sorted by page, so a room pays
+		 * for it once per run of cut-out draw calls. */
+		bool alpha_test = pass == 1;
+		const bool cutout_pass = pass == 0;
 
 		g_motion_dirty = true;		// see the note beside g_motion_dirty
 
@@ -1547,6 +1669,19 @@ namespace
 
 			if (!page)
 				continue;
+
+			if (cutout_pass)
+			{
+				const bool want = HDPageCacheSlotCutout(range.pageSlot);
+
+				if (want != alpha_test)
+				{
+					alpha_test = want;
+					constants[0] = want ? 1.0f : 0.0f;
+					g_device->SetPixelShaderConstantF(4, constants, 1);
+					g_cutout_calls += want ? 1 : 0;
+				}
+			}
 
 			/* STAGE S5, THE SCROLL OF THIS DRAW CALL. The offset is taken
 			 * modulo one page here rather than in the shader: a game running
@@ -1783,6 +1918,12 @@ bool HDRenderGroupBounds(int group, float* mins, float* maxs)
 		std::memcpy(maxs, room.maxs, sizeof(room.maxs));
 
 	return true;
+}
+
+// A2, for the log: of those, how many turned the opaque pass's alpha test on.
+int HDRenderCutoutCalls()
+{
+	return g_cutout_calls;
 }
 
 int HDRenderDrawCalls()

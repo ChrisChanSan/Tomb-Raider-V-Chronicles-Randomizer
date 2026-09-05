@@ -2468,6 +2468,141 @@ generated `.inc` files), all of which already carried the notice.
 
 ---
 
+#### Fix round A - the rooms (#123)
+
+The first play-through of the whole HD path produced a list of faults. These
+are the five of them that live in the room renderer. Each was measured against
+the remaster's own files or the classic path before anything was changed, and
+each carries the numbers that decided it. **No new source file**: the round
+changes `game/control.cpp`, `specific/hd/hd_level.{h,cpp}`,
+`specific/hd/hd_render.{h,cpp}`, `specific/hd/hd_pagecache.{h,cpp}`,
+`specific/hd/hd_light.cpp` and `specific/hd/hd_shader/hd_room.hlsl` (with its
+two generated `.inc` files), plus the diagnostic tool `RoomProbe`.
+
+**A1 - a flipped room kept the art it no longer had.** `FlipMap`
+(`game/control.cpp:2634`) does not move a room, it swaps the CONTENTS of two
+`ROOM_INFO` records and leaves their numbers alone. Stage S1-2 drew room *i*
+out of .TRG group *i*, so after a flip the wall that had gone was still
+standing as an HD texture - the reported bug in the player's own words. The
+identity is now a table, `g_room_group`, swapped in the same statement as the
+records (`HDFlipRoom`, called from `FlipMap` itself), and everything decided
+per room reads through it: whether the room is HD at all (which also decides
+whether its static meshes are suppressed), which group's bounding box the
+dynamic lights are culled against, and which group is drawn. It follows a
+loaded save for free, because the engine restores a flip by calling `FlipMap`
+once per set flip (`game/savegame.cpp:684`). The water marks need no thought:
+they are built before any flip, on every room including the alternates, so
+they already sit on the right group. **The proof:** the two halves of a pair
+carry different art at the same place - ANDY1 179 has 450 triangles and its
+partner 215 has 2,754; ANDREA1 200 has a barred window on a wall where its
+partner 203 has none, and `RoomProbe` draws both from one camera. With `-log`
+the level writes one `HDLOG flippair` line per pair and one `HDLOG flip` line
+per swap.
+
+**A2 - the kelp and the trees were solid rectangles.** The alpha test lived in
+the alpha pass only, which is the measured rule for the pages that pass
+usually gets. The remaster puts its vegetation in the OPAQUE pass instead:
+material 8, 23,040 triangles of it in JOBY4 and 260,756 in ANDY1. Counting
+texels below alpha 128 on the top mip settles it per page rather than per
+material: JOBY4's kelp pages 3198 and 3257 are 52 % and 95 % hole, ANDY1's
+tree pages 3268-3272 are 62-87 %, and every ordinary page - material 0's
+walls, material 16's light shafts, material 2's glow - is 0 %. A page with no
+hole cannot lose a pixel to a test it always passes, so the test is switched
+on for the opaque pass exactly on the pages that have something to cut. The
+threshold is the remaster's own: material 6 and material 8 carry 0.5 in
+`param[0]` in every level. **The proof:** ANDY1 room 202, the same camera,
+background 2.9 % -> 15.9 % and the picture goes from sheets of leaf texture
+with hard edges to leaf silhouettes with sky between them.
+
+**A3 - the light shafts were white surfaces.** The classic path splits a room
+colour at 128 into a diffuse that stops at 255 and a specular that carries the
+rest, and for its additive draw type it switches the specular off
+(`specific/polyinsert.cpp:72`). So a classic additive polygon is `texel * 1`
+at the very most; ours went on multiplying to `texel * 2` and blended it
+ONE/ONE. Measured over the remaster's own vertices, channels of
+colour1+colour2 above 1.0 in the additive pass: RICH1 **56.3 %**, mean 1.26,
+max 2.00, of which material 2 alone is 81.6 %; ANDREA1 10.9 %, material 14
+41.6 %. And the pages carry no weight to hold it back - JOBY4's shaft page
+3255 is a flat grey with alpha 255 over the whole sheet. The ceiling is now
+applied in the additive pass and only there (`gPass.y`), so the opaque pass
+keeps the deliberate deviation stage S2 measured and argued for. **The
+proof:** RICH1 room 50, where every vertex of the glow carries the full 2.0 -
+the solid white blob becomes a glow with the grating, the floor and the far
+panel visible through it again.
+
+**A4 - the fog bulb was a sphere with an outline.** The chord through the
+sphere is the exact classic formula and exact is the trouble: `2*sqrt(r^2 -
+d^2)` has an infinite derivative at `d = r`, so the intensity stands up
+vertically at the silhouette. The classic path has the identical formula and
+does not show it, because it evaluates it once per VERTEX and lets the
+rasteriser smear the cusp over a whole polygon. A per-pixel version cannot
+borrow that, and rebuilding it would give up the one thing per-pixel is better
+at, so the chord is weighted with a `smoothstep` over its own range instead:
+one at the centre, zero with zero slope at the rim. `hd_light.cpp` carries the
+same three lines behind a `soften` flag, so `RoomProbe -paritycheck` runs the
+classic formula and the shader formula side by side and still says **PASS**
+(worst contribution 0.999 of 255, budget 2); the deviation appears where it
+belongs, in the final-brightness row (229.1 -> 239.0 on a white texel under a
+4096-unit bulb). One quirk goes with it: the branch that returned one density
+for a bulb behind the camera now returns zero, which is what the classic path
+truncates it to anyway.
+
+**A6 - the lamp post swayed.** `TrgVertex::sway` is a weight, not permission,
+and stage S5 read it as permission. Counted over all 15 levels by the material
+of the part that names them, the vertices with a non-zero sway are
+
+| moves | | must not move | |
+|---|---|---|---|
+| material 8 | 416,153 | material 0 | 160,620 |
+| material 1 | 92,896 | material 14 | 2,016 |
+| material 7 | 46,611 | material 3 | 867 |
+| | | material 16 | 594 |
+| | | material 6 | 222 |
+
+and the parts themselves say which column is which. **8 and 7** are the wind
+material under two numbers — `param` is (alphaRef 0.5, strength, scale, scale)
+in both, their pages are the cut-out sheets A2 is about, and no level carries
+both (ANDREA3 has only 7, JOBY4 only 8; TITLE, which is a montage of every
+level, has both). **1** is the flow material, the UV scroll of a river or a
+waterfall, and its bend is the water's own — JOBY5's sub pens are 63,198 of
+those 92,896, so taking it away would have caused the *other* reported fault,
+the one about missing water animation. Everything else is ordinary geometry,
+glass, glow and light shafts; in ANDREA1, the level the lamp post stands in,
+material 0 alone is **61,208 of the level's 84,408** swaying vertices. The
+weight is now taken away from every vertex that no part of material 1, 7 or 8
+names, once, at level build, so the shader keeps its one multiplication.
+ANDREA1 loses 63,610 of 84,408 and ANDREA2 63,022 of 89,141; ANDY3, JOBY2,
+JOBY4 and RICH3 lose nothing at all, because there only the water and the
+plants ever swayed. `RoomProbe` prints the split as an `A6:` line and the
+level's log line carries `sway_parts=` and `sway_dropped=`.
+
+*Measured and NOT changed, and why:*
+
+- **A5, light that stops at a room border.** The HD path's dynamic lights are
+  a line-for-line copy of `aBuildRoomletLights` (`specific/drawroom.cpp:1017`)
+  and do cross a portal: the cull is the room's box grown by the falloff, and
+  the falloff test inside the shader is a real distance test. What the picture
+  shows is a hard-edged rectangle of unlit floor beside a lit one, which is a
+  border in the BAKED art - either two rooms the remaster lit differently, or,
+  more likely, an HD room next to one drawn classic. The player's own log
+  names every one of those: 4 in RICH2, 9 in JOBY4, 10 in ANDY1, 14 in
+  ANDREA3, all with `reason=empty_group` - rooms the .TRG has a group for that
+  draws nothing. Closing that seam means lighting a classic room out of the
+  .TRG's light cubes, which is a stage of its own and not a fix.
+- **"the light rays are static".** Materials 2, 14, 15 and 16 carry four
+  `param` floats each (material 16: `(0.1, 1.0, 0.035, 0)` in JOBY4,
+  `(0.8, 0.7, 0.2, 0)` in JOBY5), and nothing in the .TRG says what they mean.
+  Reading the remaster's own shaders is out of bounds for this project, so
+  they are measured, written down, and not guessed at.
+- **A7, the material 13 flipbook** (RICH1 7 parts, RICH2 3, JOBY5 3) and
+  **A8, static meshes that cannot be shot to pieces**, are untouched in this
+  round. A8's lead, for whoever picks it up: RICH2 carries five parts of
+  exactly 2,226 triangles each whose material numbers are `0x8100`, `0x8200`,
+  `0x8300`, `0x8400` and `0x8500` - bit 15 set and a counter in the high byte,
+  which no other level does.
+
+---
+
 ---
 
 ## Building this yourself

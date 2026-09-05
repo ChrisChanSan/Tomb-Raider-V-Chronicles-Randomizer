@@ -1658,6 +1658,11 @@ int main(int argc, char** argv)
 		"%d vertices with a wind weight, %d flipbook part(s) not drawn\n",
 		stats.scrollParts, stats.scrollRanges, stats.scrollTris,
 		stats.swayVertices, stats.flipbookParts);
+	// Fix round A (A6): the wind belongs to material 8, and this says how
+	// much of the .TRG's own sway weight was on other materials.
+	printf("A6: %d moving part(s) (materials 1, 7, 8); %d vertices kept "
+		"their weight, "
+		"%d lost it\n", stats.swayParts, stats.swayVertices, stats.swayDropped);
 	printf("read %.0f ms, build %.0f ms\n", stats.readMs, stats.buildMs);
 
 	printf("\n-- the pages ------------------------------------------------\n");
@@ -1669,6 +1674,10 @@ int main(int argc, char** argv)
 		"on the device\n", stats.pages.mipLevels, stats.pages.widest,
 		stats.pages.bigPages, stats.pages.bytes / 1048576.0,
 		stats.pages.formatUsed == HD_PAGE_FORMAT_DXT5 ? "DXT5" : "A8R8G8B8");
+	// Fix round A (A2): the pages whose alpha channel really cuts. Those,
+	// and only those, make the OPAQUE pass run its alpha test.
+	printf("%d of them are cut-out pages (alpha below 128 on at least 2%% "
+		"of the top mip)\n", stats.pages.cutoutPages);
 	printf("search %.0f ms, decode %.0f ms (%d threads), upload %.0f ms, total %.0f ms\n",
 		stats.pages.readMs, stats.pages.decodeMs, stats.pages.threads,
 		stats.pages.uploadMs, stats.pages.totalMs);

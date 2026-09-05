@@ -217,6 +217,8 @@ struct HDRenderStats
 	int scrollRanges;		// draw calls that scroll, of `ranges`
 	int scrollTris;			// triangles in them
 	int swayVertices;		// vertices with TrgVertex::sway != 0
+	int swayParts;			// parts of the moving materials 1, 7, 8 (A6)
+	int swayDropped;		// vertices whose weight was taken away again (A6)
 	int flipbookParts;		// material 13 parts - see HDRenderGroupAnim
 	double vertexBytes;
 	double indexBytes;
@@ -326,6 +328,9 @@ bool HDRenderGroupBounds(int group, float* mins, float* maxs);
 // there; a group that draws nothing answers with all zeroes.
 bool HDRenderGroupMotionInfo(int group, HDRenderGroupMotion* out);
 int HDRenderDrawCalls();			// since the last FrameBegin
+// A2: of those, the opaque draw calls that ran with the alpha test on
+// because their page is a cut-out sheet (leaves, gratings, nets).
+int HDRenderCutoutCalls();
 
 // The bytes one room vertex takes in the vertex buffer. Named here because the
 // texture budget has to price a level's buffers before they are made.

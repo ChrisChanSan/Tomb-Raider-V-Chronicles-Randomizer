@@ -74,6 +74,17 @@ bool HDEnabled();
 // not be drawn a second time - that is the one other caller of this.
 bool HDRoomIsHD(int roomIndex);
 
+// ONE FlipMap SWAP (#123, fix round A, A1). Called from FlipMap
+// (game\control.cpp) at the line where the two ROOM_INFO records change
+// places, once per pair. FlipMap swaps the CONTENTS of two rooms and leaves
+// their numbers alone, so the HD art of the pair has to change places with
+// them or room r goes on being drawn with the art of the room that is no
+// longer there - the wall that is gone and whose HD texture still stands.
+//
+// Safe to call at any time and from anywhere: with HD off, or before a level
+// is built, it returns on its first test.
+void HDFlipRoom(int roomIndex, int otherIndex);
+
 void HDFrameReset();
 bool HDFrameRoom(int roomIndex, const float* viewWorld);
 void HDFrameDraw();

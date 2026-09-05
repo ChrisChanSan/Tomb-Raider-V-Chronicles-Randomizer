@@ -78,6 +78,7 @@ namespace
 	struct FrameRoom
 	{
 		int room;
+		int group;		// A1: the .TRG group that draws it right now
 		D3DMATRIX world;	// view * world, as the classic path set it
 	};
 
@@ -89,8 +90,48 @@ namespace
 	// says it does.
 	bool g_level_active = false;
 
-	unsigned char g_room_hd[HD_MAX_ROOMS];
+	/* WHICH .TRG GROUP DRAWS WHICH ROOM (#123, fix round A, A1).
+	 *
+	 * Group i is room i - until FlipMap runs. FlipMap (game\control.cpp,
+	 * 2634) does not move a room, it SWAPS THE CONTENTS of two ROOM_INFO
+	 * records: after FlipMap(n) the record at index r holds the geometry, the
+	 * floor data, the statics and the lights of what used to be room
+	 * r->flipped_room. The engine goes on calling that room r, so InsertRoom
+	 * hands us r, and stage S1-2 drew group r - the art of the room that is
+	 * no longer there. That is the reported bug in its exact words: "the wall
+	 * is gone, but the HD texture is still standing".
+	 *
+	 * So the identity is replaced by a table, and the table is swapped in the
+	 * same breath as the ROOM_INFO records (HDFlipRoom, called from FlipMap
+	 * itself). Everything that is decided per room then has to be read
+	 * through it:
+	 *
+	 *   g_group_hd    is per GROUP, not per room - "this art exists and may
+	 *                 be drawn" is a property of the .TRG, and it must travel
+	 *                 with the art. HDRoomIsHD, which also decides whether a
+	 *                 room's static meshes are suppressed, reads
+	 *                 g_group_hd[g_room_group[r]].
+	 *   water marks   are built once, before any flip, on the classic
+	 *                 vertices of every room INCLUDING the alternates, and
+	 *                 they are carried into the group of the room they were
+	 *                 found in. So they already sit on the right group and
+	 *                 need no second thought - they follow the art.
+	 *   lighting      reads the room's own flags (they were swapped with the
+	 *                 record, so they are the alternate's) and the GROUP's
+	 *                 bounding box.
+	 *
+	 * A flip pair stands at the same place in the world - that is what makes
+	 * it a flip pair - so the world matrix the engine hands in is right for
+	 * either group of the pair, and nothing about the matrix changes here.
+	 *
+	 * The table survives a save: the engine restores a flip by calling
+	 * FlipMap once per set flip (game\savegame.cpp:684), so a loaded game
+	 * walks through the very same hook. A level starts with it as the
+	 * identity, which is what an unflipped level is. */
+	unsigned char g_group_hd[HD_MAX_ROOMS];
+	short g_room_group[HD_MAX_ROOMS];
 	int g_room_count = 0;
+	int g_flips_done = 0;		// for the log, once per level
 
 	// Stage S2b. The marks are built once per level out of the classic
 	// roomlets and handed to the renderer; the counters below say once per
@@ -698,7 +739,8 @@ static void FillFrameLighting(HDFrameLighting& out, HDFogBulb* bulbs)
  * marks to look at. All three selectors are zero while tomb5.shimmer is off -
  * that is the option switch, in one place, for the HD path.
  */
-static void FillRoomLighting(int roomIndex, HDRoomLighting& out, HDLightSource* lights)
+static void FillRoomLighting(int roomIndex, int group, HDRoomLighting& out,
+	HDLightSource* lights)
 {
 	ROOM_INFO* r = &room[roomIndex];
 	float mins[3], maxs[3];
@@ -733,7 +775,9 @@ static void FillRoomLighting(int roomIndex, HDRoomLighting& out, HDLightSource* 
 		}
 	}
 
-	if (!HDRenderGroupBounds(roomIndex, mins, maxs))
+	/* The GROUP's box, not the room's number - after a flip the two are
+	 * different rooms of the same pair (A1). */
+	if (!HDRenderGroupBounds(group, mins, maxs))
 		return;
 
 	int offered = 0;
@@ -905,8 +949,12 @@ void HDLevelBuild()
 	g_frame_count = 0;
 	g_frame_dropped = 0;
 	g_matrix_checked = false;
-	memset(g_room_hd, 0, sizeof(g_room_hd));
+	memset(g_group_hd, 0, sizeof(g_group_hd));
 	g_room_count = 0;
+	g_flips_done = 0;
+
+	for (int i = 0; i < HD_MAX_ROOMS; i++)
+		g_room_group[i] = (short)i;
 
 	/* THE LEVEL BEFORE THIS ONE, for the two diagnostic counters: its frame
 	 * clock summary and its one clipped total. Here and not in HDLevelUnload,
@@ -1021,9 +1069,11 @@ void HDLevelBuild()
 	// vertices with a wind weight, flipbook = material 13 parts, which are
 	// counted and NOT drawn (see MODIFICATIONS.md).
 	Log("HDLOG level=%s motion=%d scroll_parts=%d scroll_ranges=%d "
-		"scroll_tris=%d sway_verts=%d flipbook_parts=%d",
+		"scroll_tris=%d sway_verts=%d sway_parts=%d sway_dropped=%d "
+		"flipbook_parts=%d",
 		g_stem, tomb5.hd_motion ? 1 : 0, stats.scrollParts, stats.scrollRanges,
-		stats.scrollTris, stats.swayVertices, stats.flipbookParts);
+		stats.scrollTris, stats.swayVertices, stats.swayParts,
+		stats.swayDropped, stats.flipbookParts);
 
 	g_room_count = number_rooms;
 
@@ -1054,9 +1104,14 @@ void HDLevelBuild()
 		if (marked && has_group && tris)
 			marked_rooms++;
 
-		g_room_hd[r] = (unsigned char)((has_group && tris && !marked) ? 1 : 0);
+		/* Per GROUP, and the loop runs over rooms only because group i is
+		 * room i while this runs - no flip has happened yet, and the marker
+		 * that can take a group away is about the ROOM the randomizer
+		 * reshaped. A flipped room's alternate is a room of its own with a
+		 * group of its own, so both halves of a pair are decided here. */
+		g_group_hd[r] = (unsigned char)((has_group && tris && !marked) ? 1 : 0);
 
-		if (g_room_hd[r])
+		if (g_group_hd[r])
 		{
 			hd_rooms++;
 			suppressed_statics += room[r].num_meshes;
@@ -1070,10 +1125,40 @@ void HDLevelBuild()
 		Log("HDLOG room=%d group=%d tris=%d/%d/%d ranges=%d statics=%d hd=%d reason=%s",
 			r, r, HDRenderGroupTriangles(r, 0), HDRenderGroupTriangles(r, 1),
 			HDRenderGroupTriangles(r, 2), HDRenderGroupRanges(r, -1),
-			(int)room[r].num_meshes, (int)g_room_hd[r], reason);
+			(int)room[r].num_meshes, (int)g_group_hd[r], reason);
 	}
 
 	g_level_active = hd_rooms > 0;
+
+	/* THE FLIP PAIRS OF THIS LEVEL (#123, fix round A, A1), one line each and
+	 * only with -log. A pair whose two halves disagree about HD is the one
+	 * that can still show the bug in a milder form: the room turns classic in
+	 * mid-level (or HD in mid-level), which is a picture change nobody asked
+	 * for, so it is named rather than left to be discovered. */
+	if (gLogEnabled)
+	{
+		int pairs = 0, mixed = 0;
+
+		for (int r = 0; r < g_room_count; r++)
+		{
+			const int other = room[r].flipped_room;
+
+			if (other < 0 || other >= g_room_count || other < r)
+				continue;
+
+			pairs++;
+
+			if (g_group_hd[r] != g_group_hd[other])
+				mixed++;
+
+			Log("HDLOG flippair room=%d alt=%d flip=%d hd=%d/%d tris=%d/%d",
+				r, other, (int)room[r].FlipNumber,
+				(int)g_group_hd[r], (int)g_group_hd[other],
+				HDRenderGroupTriangles(r, -1), HDRenderGroupTriangles(other, -1));
+		}
+
+		Log("HDLOG level=%s flip pairs=%d mixed_hd=%d", g_stem, pairs, mixed);
+	}
 
 	/* What the sidecar cost this level, in one line: how many rooms it named,
 	 * and how many of those really had HD art to give up. The two differ
@@ -1210,12 +1295,60 @@ void HDLevelDeviceLost()
 	Log("HDLOG device lost - HD released, classic until the next level");
 }
 
-bool HDRoomIsHD(int roomIndex)
+/* The group that draws room `roomIndex` right now, or -1. The one place the
+ * flip table is read; everything else asks this. */
+static int GroupOfRoom(int roomIndex)
 {
 	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
-		return false;
+		return -1;
 
-	return g_room_hd[roomIndex] != 0;
+	const int group = g_room_group[roomIndex];
+
+	if (group < 0 || group >= HD_MAX_ROOMS || !g_group_hd[group])
+		return -1;
+
+	return group;
+}
+
+bool HDRoomIsHD(int roomIndex)
+{
+	return GroupOfRoom(roomIndex) >= 0;
+}
+
+/* ONE HALF OF ONE FlipMap SWAP (#123, fix round A, A1).
+ *
+ * Called from FlipMap (game\control.cpp) at the exact line where the two
+ * ROOM_INFO records change places, once per pair, so the art follows the
+ * geometry in the same statement. Cheap enough to be unconditional: two
+ * bounds tests and a swap, and it is called at most once per room per flip.
+ *
+ * With HD off, or in a level the .TRG had nothing for, g_level_active is
+ * false, the table is never read, and this returns on its first test - so the
+ * classic path pays one bool for the whole hook. */
+void HDFlipRoom(int roomIndex, int otherIndex)
+{
+	if (!g_level_active)
+		return;
+
+	if (roomIndex < 0 || otherIndex < 0 ||
+		roomIndex >= g_room_count || otherIndex >= g_room_count)
+		return;
+
+	const short keep = g_room_group[roomIndex];
+
+	g_room_group[roomIndex] = g_room_group[otherIndex];
+	g_room_group[otherIndex] = keep;
+
+	/* The first ten swaps of a level, and then a count - a flip that runs on
+	 * a timer would otherwise fill the log with the same two lines. */
+	if (gLogEnabled && g_flips_done < 10)
+		Log("HDLOG flip room=%d <-> room=%d now group=%d / group=%d hd=%d/%d",
+			roomIndex, otherIndex, (int)g_room_group[roomIndex],
+			(int)g_room_group[otherIndex],
+			(int)g_group_hd[g_room_group[roomIndex]],
+			(int)g_group_hd[g_room_group[otherIndex]]);
+
+	g_flips_done++;
 }
 
 void HDFrameReset()
@@ -1251,10 +1384,12 @@ void HDFrameCaptureProjection()
 
 bool HDFrameRoom(int roomIndex, const float* viewWorld)
 {
-	if (!g_level_active || !viewWorld)
+	if (!viewWorld)
 		return false;
 
-	if (roomIndex < 0 || roomIndex >= g_room_count || !g_room_hd[roomIndex])
+	const int group = GroupOfRoom(roomIndex);
+
+	if (group < 0)
 		return false;
 
 	if (g_frame_count >= HD_MAX_FRAME)
@@ -1270,6 +1405,7 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld)
 
 	FrameRoom& entry = g_frame[g_frame_count++];
 	entry.room = roomIndex;
+	entry.group = group;
 	SetD3DMatrix(&entry.world, (float*)viewWorld);
 
 	return true;
@@ -1300,8 +1436,8 @@ void HDFrameDraw()
 
 	for (int i = 0; i < g_frame_count; i++)
 	{
-		FillRoomLighting(g_frame[i].room, lighting, lights);
-		HDRenderRoom(g_frame[i].room, &g_frame[i].world, &lighting);
+		FillRoomLighting(g_frame[i].room, g_frame[i].group, lighting, lights);
+		HDRenderRoom(g_frame[i].group, &g_frame[i].world, &lighting);
 	}
 
 	/* THE OBJECTS, AFTER THE ROOMS AND INSIDE THE SAME BRACKET (#123, S3-2).
@@ -1342,13 +1478,15 @@ void HDFrameDraw()
 	if (!g_matrix_checked && gLogEnabled && g_frame_count)
 	{
 		g_matrix_checked = true;
-		MatrixCheck(g_frame[0].room, g_frame[0].room, g_frame[0].world, projection);
+		MatrixCheck(g_frame[0].room, g_frame[0].group, g_frame[0].world, projection);
 		Log("HDLOG frame rooms=%d calls=%d dropped=%d bulbs=%d fog_start=%.0f "
-			"wibble=%d cam_uw=%d shimmer=%d objects=%d object_calls=%d",
+			"wibble=%d cam_uw=%d shimmer=%d objects=%d object_calls=%d "
+			"cutout_calls=%d cutout_pages=%d",
 			g_frame_count, HDRenderDrawCalls(), g_frame_dropped,
 			frame.bulbCount, frame.distanceFogStart, (int)wibble,
 			frame.cameraUnderwater, tomb5.shimmer ? 1 : 0,
-			objects_here, HDObjectDrawCalls());
+			objects_here, HDObjectDrawCalls(),
+			HDRenderCutoutCalls(), HDPageCacheCutoutPages());
 	}
 
 	/* THE FRAME'S HD COUNTERS, handed to the frame clock as MAXIMA over the

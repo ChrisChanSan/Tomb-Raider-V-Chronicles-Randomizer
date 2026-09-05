@@ -61,6 +61,14 @@ namespace
 		double compressMs = 0;		// this page's share of the DXT5 work
 		bool white = false;
 		bool ok = false;
+		/* IS THIS A CUT-OUT PAGE (#123, fix round A, A2)? Set while the top
+		 * mip is still in A8R8G8B8, which is the only moment it can be: with
+		 * -format dxt5 the pixels are thrown away three lines later, and the
+		 * device surface is write-only. See the long note beside
+		 * measure_cutout. */
+		bool cutout = false;
+		int cutoutLow = 0;		// texels below the threshold
+		int cutoutTexels = 0;		// texels looked at
 
 		void free_all()
 		{
@@ -95,6 +103,10 @@ namespace
 
 	IDirect3DDevice9* g_device = 0;
 	std::vector<IDirect3DTexture9*> g_textures;
+	// A2, one byte per slot: 1 = this page has real cut-out holes in its
+	// alpha channel, so a draw call on it wants the alpha test even in the
+	// opaque pass. Grown and cleared exactly with g_textures.
+	std::vector<unsigned char> g_cutout;
 	std::vector<int> g_page_of_slot;
 	std::unordered_map<int, int> g_slot_of_page;
 	std::vector<std::string> g_notes;
@@ -490,6 +502,76 @@ namespace
 		out.ok = true;
 	}
 
+/* --------------------------------------------- THE CUT-OUT PAGES (A2) -----
+ *
+ * THE BUG. The kelp of JOBY4 and the vegetation of ANDY1 draw as solid green
+ * rectangles with hard edges. They are material 8 in the .TRG, and material 8
+ * sits in the OPAQUE pass - 23,040 triangles of it in JOBY4, 260,756 in
+ * ANDY1 - while the alpha test lives in the alpha pass and nowhere else.
+ * That rule is right and was measured (TROne, a TR1 snow floor: an opaque
+ * tile's alpha channel carries a gloss mask, and clipping on it blanked the
+ * floor), but it is right about the pages the OPAQUE pass usually gets, not
+ * about these.
+ *
+ * THE MEASUREMENT, over the remaster's own files, counting texels of the top
+ * mip whose alpha is below 128:
+ *
+ *   JOBY4  material 8   pages 3198, 3257     52 % / 95 % of the blocks
+ *   JOBY4  material 17  page 3212            51 %
+ *   ANDY1  material 3   pages 3268..3272     62..87 %
+ *   ANDY1  material 8   pages 3264, 3165     52..59 %
+ *   ANDY1  material 0   pages 3263, 694-698   0 %   (and every other one)
+ *   JOBY4  material 16  page 3255 (light rays) 0 %
+ *
+ * So the .TRG's opaque pass carries two kinds of page in TR5: the ordinary
+ * ones, whose alpha channel is a flat 255 and on which an alpha test changes
+ * NOTHING, and a handful of cut-out sheets of leaves. That is what makes the
+ * per-page answer safe: a page with no low-alpha texel cannot lose a pixel to
+ * a test it always passes, so the test is switched on exactly where it has
+ * something to do and the gloss-mask trap is never entered.
+ *
+ * The threshold is 0.5, and it is not a taste: material 6 and material 8 both
+ * carry 0.5 in param[0] in every level of the game, which is the remaster's
+ * own alpha reference for the material.
+ *
+ * WHY 2 % AND NOT ONE TEXEL. A page that is a gloss mask has a few dark
+ * corners; a page that is a cut-out sheet is half hole. The measured gap is
+ * between 0 % and 51 %, so anything in between decides the same way, and 2 %
+ * is picked because it is the smallest number that no rounding can reach. */
+#define HD_CUTOUT_ALPHA		128	// the shader clips at 0.5
+#define HD_CUTOUT_PERMILLE	20	// 2 % of the page below it
+
+	void measure_cutout(DecodedPage& out, const DecodedMip& level)
+	{
+		if (!level.pixels || level.w <= 0 || level.h <= 0)
+			return;
+
+		/* Every fourth texel in both directions - 16,384 of a 512x512 page,
+		 * 65,536 of a 4096-wide one. A cut-out sheet's holes are whole
+		 * leaves wide, so a sixteenth of the page counts them as well as all
+		 * of it does, and it keeps this off the level load time (measured:
+		 * under a millisecond over a whole level's pages). */
+		const long step = 4;
+		int low = 0, seen = 0;
+
+		for (long y = 0; y < level.h; y += step)
+		{
+			const unsigned long* row = level.pixels + (size_t)y * (size_t)level.w;
+
+			for (long x = 0; x < level.w; x += step)
+			{
+				seen++;
+
+				if ((row[x] >> 24) < HD_CUTOUT_ALPHA)
+					low++;
+			}
+		}
+
+		out.cutoutLow = low;
+		out.cutoutTexels = seen;
+		out.cutout = seen > 0 && low * 1000 >= seen * HD_CUTOUT_PERMILLE;
+	}
+
 	void decode_one(const std::string& path, int first, int format,
 		DecodedPage& out)
 	{
@@ -511,6 +593,11 @@ namespace
 
 			if (!level.pixels)
 				break;		// the chain ends where whole 4x4 blocks end
+
+			// A2: on the first level this page keeps, and while it is still
+			// A8R8G8B8. The DXT5 branch below frees these pixels.
+			if (out.mips.empty())
+				measure_cutout(out, level);
 
 			if (format == HD_PAGE_FORMAT_DXT5)
 			{
@@ -688,6 +775,9 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 	}
 
 	g_textures.resize(slot_base + unique.size(), (IDirect3DTexture9*)0);
+	// A2. resize, not assign: HDPageCacheAppend keeps the slots that are
+	// already there, and their answer with them.
+	g_cutout.resize(g_textures.size(), 0);
 	g_page_of_slot.insert(g_page_of_slot.end(), unique.begin(), unique.end());
 
 	if (stats)
@@ -1045,6 +1135,9 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 			{
 				g_textures[page.slot] = texture;
 
+				if ((size_t)page.slot < g_cutout.size())
+					g_cutout[(size_t)page.slot] = page.cutout ? 1 : 0;
+
 				for (const DecodedMip& mip : page.mips)
 					loaded_bytes += g_format_used == HD_PAGE_FORMAT_DXT5
 						? (double)DXT5Size(mip.w, mip.h)
@@ -1170,6 +1263,7 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 		stats->budgetBytes = budget;
 		stats->haveBytes = have;
 		stats->formatUsed = g_format_used;
+		stats->cutoutPages = HDPageCacheCutoutPages();	// A2
 	}
 
 	g_bytes += loaded_bytes;
@@ -1208,6 +1302,7 @@ void HDPageCacheDestroy()
 			texture->Release();
 
 	g_textures.clear();
+	g_cutout.clear();
 	g_page_of_slot.clear();
 	g_slot_of_page.clear();
 	g_notes.clear();
@@ -1296,6 +1391,24 @@ int HDPageCachePageOfSlot(int slot)
 		return -1;
 
 	return g_page_of_slot[(size_t)slot];
+}
+
+bool HDPageCacheSlotCutout(int slot)
+{
+	if (slot < 0 || slot >= (int)g_cutout.size())
+		return false;
+
+	return g_cutout[(size_t)slot] != 0;
+}
+
+int HDPageCacheCutoutPages()
+{
+	int n = 0;
+
+	for (size_t i = 0; i < g_cutout.size(); i++)
+		n += g_cutout[i] ? 1 : 0;
+
+	return n;
 }
 
 IDirect3DTexture9* HDPageCacheSlotTexture(int slot)

@@ -125,6 +125,9 @@ struct HDPageCacheStats
 	int droppedLevels;	// levels given up over all of them
 	int clampedByCaps;	// pages shrunk because the device cannot hold them
 	int outOfMemory;	// 1 = the device ran out of video memory mid-level
+
+	/* --- fix round A ------------------------------------------------- */
+	int cutoutPages;	// pages whose alpha really cuts (A2, see the .cpp)
 };
 
 // Builds the cache. `installRoot` is the remaster's game 5 folder (the one
@@ -171,6 +174,20 @@ int HDPageCacheSlots();
 int HDPageCacheSlotOf(int page);			// -1 when unknown
 int HDPageCachePageOfSlot(int slot);			// -1 when out of range
 IDirect3DTexture9* HDPageCacheSlotTexture(int slot);
+/* IS THE PAGE IN THAT SLOT A CUT-OUT SHEET (#123, fix round A, A2)? True when
+ * at least 2 % of its top mip's texels have an alpha below 128 - a sheet of
+ * leaves, a grating, a net. False for every ordinary page, whose alpha
+ * channel is a flat 255 or a gloss mask, and for a slot that has no texture.
+ *
+ * The room renderer switches the alpha test on for the OPAQUE pass of a draw
+ * call that lands on such a page, and only there: the remaster puts its
+ * vegetation (material 8, and materials 3, 6 and 17 with it) in the opaque
+ * pass, and without the test the kelp of JOBY4 and the trees of ANDY1 draw as
+ * solid green rectangles. Measured per page rather than per material so that
+ * a page with nothing to cut cannot lose a pixel - see hd_pagecache.cpp. */
+bool HDPageCacheSlotCutout(int slot);
+// How many of the cache's slots answered true - for the level's log line.
+int HDPageCacheCutoutPages();
 
 // Everything that was not found where it should have been, in words, for the
 // caller's log. Valid until the next Create or Destroy.

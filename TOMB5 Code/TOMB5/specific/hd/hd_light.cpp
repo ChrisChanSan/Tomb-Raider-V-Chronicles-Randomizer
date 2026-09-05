@@ -76,7 +76,13 @@ namespace
 	 * original's own shape - including the branch that leaves `vec` holding
 	 * the unit direction and so returns one density for a bulb behind the
 	 * camera. */
-	float BulbIntensity(const float stash[3], const HDFogBulb& bulb)
+	/* `soften` is the shader's rim weight of fix round A (A4) and NOTHING the
+	 * classic path has: false gives the classic answer to the bit, true gives
+	 * what hd_room.hlsl now computes. The two call sites below pass one each,
+	 * which is what makes -paritycheck able to say how far the deviation
+	 * reaches - see the note in the shader for why it is there. */
+	float BulbIntensity(const float stash[3], const HDFogBulb& bulb,
+		bool soften = false)
 	{
 		const float rad = bulb.rad;
 		const float sqrad = rad * rad;
@@ -171,8 +177,22 @@ namespace
 			}
 		}
 
-		return sqrtf(Square(vec2[0] - vec[0]) + Square(vec2[1] - vec[1]) +
-			Square(vec2[2] - vec[2])) * bulb.density;
+		const float chord = sqrtf(Square(vec2[0] - vec[0]) +
+			Square(vec2[1] - vec[1]) + Square(vec2[2] - vec[2]));
+
+		if (!soften)
+			return chord * bulb.density;
+
+		// A4, the same three lines the shader runs - see hd_room.hlsl.
+		const float kRim = 1.0f;
+		const float span = 2.0f * rad > 1e-4f ? 2.0f * rad : 1e-4f;
+		float t = chord / span;
+
+		t = t < 0 ? 0 : (t > 1 ? 1 : t);
+		t = t / kRim;
+		t = t < 0 ? 0 : (t > 1 ? 1 : t);
+
+		return chord * bulb.density * (t * t * (3.0f - 2.0f * t));
 	}
 
 	// Which of the three baked marks the room flags select, and whether the
@@ -437,7 +457,8 @@ void HDLightShader(const HDParityScene* scene, const HDParityVertex* v,
 
 	for (int j = 0; j < scene->bulbCount && j < HD_MAX_BULBS; j++)
 	{
-		const float intensity = BulbIntensity(view, scene->bulbs[j]);
+		// The SHADER's answer, so with the A4 rim weight.
+		const float intensity = BulbIntensity(view, scene->bulbs[j], true);
 
 		out->bulbDensity += intensity;
 

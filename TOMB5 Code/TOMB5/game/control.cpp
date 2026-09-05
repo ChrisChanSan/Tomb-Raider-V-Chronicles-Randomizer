@@ -57,6 +57,7 @@
 #include "deltapak.h"
 #include "../specific/output.h"
 #include "../specific/gamemain.h"
+#include "../specific/hd/hd_level.h"
 #include "../tomb5/tomb5.h"
 
 uchar ShatterSounds[18][10] =
@@ -2649,6 +2650,16 @@ void FlipMap(long FlipNumber)
 
 			RemoveRoomFlipItems(r);
 			flipped = &room[r->flipped_room];
+
+			/* #123, fix round A (A1). The three memcpy lines below swap the
+			 * CONTENTS of two rooms and leave their numbers where they are,
+			 * so from here on room i is drawn out of what used to be room
+			 * r->flipped_room. The HD path draws a room out of a .TRG group
+			 * and had group i nailed to room i, which left the old art
+			 * standing in front of the new geometry. This moves the art with
+			 * the room; with HD off it returns on its first test. */
+			HDFlipRoom(i, r->flipped_room);
+
 			memcpy(&temp, r, sizeof(temp));
 			memcpy(r, flipped, sizeof(ROOM_INFO));
 			memcpy(flipped, &temp, sizeof(ROOM_INFO));

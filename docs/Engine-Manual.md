@@ -376,6 +376,38 @@ always did; the rooms around them were already HD; and Lara is drawn out of the
 remaster's wardrobe — see *Lara in HD* below for which of her stays classic and
 why.
 
+**What the first round of fixes changed in the rooms.** A play-through of the
+whole HD path turned up a list of faults, and five of them lived in the room
+renderer:
+
+- **A flipped room now changes its art with its geometry.** A flipmap swaps
+  the contents of two rooms and leaves their numbers where they are; the HD
+  path had the art nailed to the number, so a wall that had gone was still
+  standing as a texture.
+- **Leaves are leaves again.** The remaster draws its vegetation — the kelp of
+  the Deepsea Dive, the trees and grass of Ireland, the ivy of Rome — in the
+  pass that has no transparency test, and the pages it draws them on are up to
+  95 % hole. They came out as solid green rectangles. The test is now switched
+  on for the pages that really have holes in them, and for no others.
+- **Light shafts are light again, not white surfaces.** The remaster bakes
+  those at double brightness and its glow meshes at the maximum; the classic
+  engine's own rule stops an added glow at one, and now so does this.
+- **A fog bulb is a soft cloud, not a sphere with an outline.** The formula was
+  right and exact; the classic engine hides its hard rim by computing it once
+  per room vertex, which a per-pixel version cannot borrow. It now fades out
+  over its own edge instead.
+- **Only what is meant to move in the wind moves.** The remaster marks how far
+  a vertex may bend, not that it bends at all, and four fifths of the marked
+  vertices of Rome belong to ordinary walls, gates and lamp posts. The bend is
+  now kept for the remaster's own wind material — ivy, banners, grass, kelp —
+  and for flowing water, and taken away from everything else.
+
+Still open in the rooms, and named rather than hidden: a **visible border**
+where an HD room meets one the remaster draws nothing for (they fall back to
+the classic look, and the log's `HDLOG room=… hd=0` lines name every one),
+the remaster's four-frame **animated textures**, and **static meshes that
+cannot be shot to pieces** — a vase baked into the room's art stays whole.
+
 **Switching it on.** Options → the new *tomb5 options* page → **HD textures**,
 the last row of the first page. Like every row on that page it is remembered at
 once; unlike most of them it takes effect **at the start of the next level**,

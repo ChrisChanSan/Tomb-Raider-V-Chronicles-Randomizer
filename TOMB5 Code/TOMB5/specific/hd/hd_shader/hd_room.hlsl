@@ -582,7 +582,43 @@ float BulbIntensity(float3 stash, float4 a, float4 b)
 		}
 	}
 
-	return length(vec2 - vec) * b.w;
+	/* THE RIM (#123, fix round A, A4).
+	 *
+	 * `chord` above is the exact length of the piece of the eye ray inside
+	 * the sphere, and exact is the trouble. For a ray that passes the centre
+	 * at distance d it is 2*sqrt(rad^2 - d^2), whose DERIVATIVE against d is
+	 * infinite at d = rad. So the intensity does not fade in at the
+	 * silhouette, it stands up vertically out of nothing, and what the player
+	 * sees is the outline of a sphere - the reported bug, "the fog is a
+	 * sphere with different intensities inside it".
+	 *
+	 * The classic path has the identical formula and does not show it, for a
+	 * reason that is not in the formula: it evaluates it once per VERTEX and
+	 * lets the rasteriser interpolate, and a room vertex is up to a whole
+	 * block away from the next one, so the cusp is smeared over a polygon
+	 * before anybody sees it. A per-pixel version cannot borrow that, and
+	 * rebuilding it (evaluate at the three corners, interpolate) would throw
+	 * away the one thing the per-pixel version is better at - a bulb inside a
+	 * four-vertex room looks like a lit quad in the classic path.
+	 *
+	 * So the cusp is taken out where it is, by weighting the chord with a
+	 * smoothstep over the OUTER THIRD of its own range. `t` is the chord as a
+	 * fraction of the sphere's diameter, which is 1 through the centre and 0
+	 * at the silhouette; at t >= kRim - which is the whole core of the bulb -
+	 * the weight is exactly 1 and this function answers what it always
+	 * answered, to the bit. Below it the sqrt is replaced by a curve that
+	 * leaves zero with zero slope, which is what a fog bank does.
+	 *
+	 * kRim 0.35 is the smallest value that hides the outline at the sizes
+	 * TR5 uses (bulb radii 1024 to 8192): a third of the diameter of a
+	 * 4096-unit bulb is 2.7 metres of game world to fade over, which is the
+	 * same order as the vertex spacing the classic path smeared it over. */
+	const float kRim = 1.0f;
+
+	float chord = length(vec2 - vec);
+	float t = saturate(chord / max(2.0f * rad, 1e-4f));
+
+	return chord * b.w * smoothstep(0.0f, kRim, t);
 }
 
 float4 RoomPS(VS_OUT input) : COLOR0
@@ -644,6 +680,44 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * (drawroom.cpp:526-545) with its ceiling taken off - see the long note
 	 * at the top. Below f = 128 the two are the same line. */
 	float3 c = f * (2.0f / 255.0f);
+
+	/* AND WHERE THE CEILING IS NOT OPTIONAL (#123, fix round A, A3).
+	 *
+	 * The paragraph above gives a reason for letting the multiply pass 1 in
+	 * the OPAQUE pass: a shader has floats, and a surface the remaster baked
+	 * at 1.5 really is meant to be brighter than its texture. That reason
+	 * dies in the ADDITIVE pass, and here is why.
+	 *
+	 * The classic path splits at 128 into a diffuse that stops at 255 and a
+	 * SPECULAR that carries the rest, and for its additive draw type it
+	 * switches the specular off (polyinsert.cpp:72, D3DRS_SPECULARENABLE
+	 * FALSE). So a classic additive polygon is texel * 1 at the very most -
+	 * the excess is not carried anywhere, it is dropped. Ours went on
+	 * multiplying, up to texel * 2, and then blended it ONE / ONE over a
+	 * floor that was already lit. That is the reported bug: light shafts,
+	 * window glows and material 2's glow as flat white surfaces.
+	 *
+	 * MEASURED over the remaster's own vertices, channels of colour1+colour2
+	 * above 1.0 in the ADDITIVE pass:
+	 *
+	 *     RICH1    56.3 % of them, mean 1.26, max 2.00
+	 *              of that, material 2 (the glow) 81.6 %, max 2.00
+	 *     ANDREA1  10.9 %, material 14 alone 41.6 %, max 1.47
+	 *     JOBY5     1.2 %, material 1 up to 1.99
+	 *
+	 * And the pages carry no weight to hold it back: JOBY4's light shaft
+	 * page 3255 is a flat grey with alpha 255 over the whole sheet, so the
+	 * `lit *= texel.a` line below multiplies it by one. The whole of the
+	 * brightness sits in this multiply, and this is where the classic path
+	 * stops it.
+	 *
+	 * gPass.y is 1 in the additive pass and 0 in the other two, so the
+	 * opaque pass keeps the deviation the paragraph above argues for and
+	 * stage S2 measured, to the bit. Before the fog bulbs, because that is
+	 * where the classic path splits (drawroom.cpp:599-621, and the bulbs are
+	 * at 623). */
+	c = lerp(c, min(c, 1.0f), gPass.y);
+
 	float3 s = 0.0f;
 
 	/* THE FOG BULBS (drawroom.cpp:547-676). These DO keep the classic split:

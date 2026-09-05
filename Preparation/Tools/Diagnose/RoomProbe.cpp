@@ -1670,9 +1670,9 @@ int main(int argc, char** argv)
 	printf("read %.0f ms, build %.0f ms\n", stats.readMs, stats.buildMs);
 
 	printf("\n-- the pages ------------------------------------------------\n");
-	printf("%d named, %d distinct: %d from 5, %d from 4, %d from 6, %d white, %d failed\n",
+	printf("%d named, %d distinct: %d from 5, %d from 4, %d white, %d failed\n",
 		stats.pages.pages, stats.pages.slots, stats.pages.fromGame5,
-		stats.pages.fromGame4, stats.pages.fromGame6, stats.pages.fromWhite,
+		stats.pages.fromGame4, stats.pages.fromWhite,
 		stats.pages.failed);
 	printf("%d mip levels, widest %d, %d past 1024, %.1f MiB of %s "
 		"on the device\n", stats.pages.mipLevels, stats.pages.widest,

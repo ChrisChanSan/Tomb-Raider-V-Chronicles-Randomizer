@@ -128,7 +128,8 @@ namespace
 		"HD_SLOT_COUNT and the generated slot name table have drifted apart");
 
 	/* THE HAND TABLE - eleven slots this project added beyond the original 460
-	 * (#105, #111, #146) and one vanilla slot the remaster leaves unnamed.
+	 * (#105, #111, #146) and three vanilla slots the remaster leaves unnamed:
+	 * ROMAN_GOD and, since fix round C, the two revolver pickups.
 	 *
 	 * For the eleven the remaster has all the models; what it does not have is
 	 * our slot numbers, because no vanilla level uses them. Each of those
@@ -174,21 +175,58 @@ namespace
 		{ "MESHSWAP_CROSS_HITMAN",   "HITMAN"                   },
 		{ "MESHSWAP_CROSS_CRANEGUY", "CRANE_GUY"                },
 
-		{ "ROMAN_GOD",               "ROMAN_GOD_ANDREA_SWORD"   }
+		{ "ROMAN_GOD",               "ROMAN_GOD_ANDREA_SWORD"   },
+
+		/* THE DESERT EAGLE PICKUP (#123, fix round C, user finding C1). Two
+		 * more slots whose model exists under no plain name: the remaster
+		 * puts every pickup under an EXTRA prefix - EXTRA5_REVOLVER_ITEM,
+		 * EXTRA5_REVOLVER_ITEM_JOBY, EXTRA5_REVOLVER_AMMO_ITEM - and not one
+		 * of the fifteen .MAP files mentions either slot, so both fall
+		 * through to their own name, find nothing and draw classic.
+		 *
+		 * The JOBY file and not the plain one, measured twice: the picture
+		 * (EXTRA5_REVOLVER_ITEM is Tomb Raider IV's six-shooter with a laser
+		 * sight, EXTRA5_REVOLVER_ITEM_JOBY the Desert Eagle) and the
+		 * randomizer, which copies JOBY2's slots 6, 12, 16, 347 and 348 into
+		 * EVERY level and REPLACES what is there - the user's decision of
+		 * 2026-08-23, "replace the revolver with the Desert Eagle entirely"
+		 * (TR5Randomizer\src\core\Randomizer.cpp, kWeaponRules). A level
+		 * played without that copy - the randomizer's "all weapons" switch
+		 * off, or a vanilla file - keeps its six-shooter classic and gets the
+		 * Deagle in HD; that is the one case this line is wrong in, and it is
+		 * the same case the wardrobe's DEAGLE hands are wrong in.
+		 *
+		 * The rest of the EXTRA family - the pistols, uzi, shotgun, HK,
+		 * grapple, medipack, flare, lasersight, binocular and crowbar pickups
+		 * - is unbound for exactly the same reason and is left for a round of
+		 * its own; the names are all in 4\ITEM and 5\ITEM under EXTRA,
+		 * EXTRA4 and EXTRA5. */
+		{ "REVOLVER_ITEM",           "EXTRA5_REVOLVER_ITEM_JOBY" },
+		{ "REVOLVER_AMMO_ITEM",      "EXTRA5_REVOLVER_AMMO_ITEM" }
 	};
 
 	/* THE GUESTS OUT OF TOMB RAIDER III (#92). The header says what this is
 	 * and how the four names were arrived at; the numbers on the left are TR5
 	 * slots the randomizer installs a guest into, chosen because no vanilla
-	 * level uses them. */
+	 * level uses them.
+	 *
+	 * THE BIRD IS THE ONE THAT NEEDED A SECOND LOOK (#123, fix round C, user
+	 * finding C5). The randomizer takes it out of THE LOST ARTIFACT's
+	 * chunnel.TR2, not out of Tomb Raider III itself - the game's own vulture
+	 * flies in the desert levels and the one the randomizer ships is the Gold
+	 * bird (TR5Randomizer\src\core\Randomizer.cpp:1824, donor "tr3gold", and
+	 * Config.h: "chunnel.TR2 carries the vulture"). The remaster keeps the two
+	 * apart under exactly that rule: 3\ITEM of the fresh Tomb Raider I-III
+	 * Remastered has VULTURE.TRM and VULTURE_CHUNNEL.TRM side by side, and it
+	 * is the second that belongs to this guest. */
 	struct Tr3Guest { int slot; const char* model; };
 
 	const Tr3Guest tr3_guests[] =
 	{
-		{ 31, "TREX"    },	// SAS
-		{ 43, "VULTURE" },	// CROW
-		{ 53, "COMPY"   },	// SAILOR
-		{ 75, "RAPTOR"  }	// REAPER
+		{ 31, "TREX"             },	// SAS
+		{ 43, "VULTURE_CHUNNEL"  },	// CROW - see below
+		{ 53, "COMPY"            },	// SAILOR
+		{ 75, "RAPTOR"           }	// REAPER
 	};
 
 	/* LARA .. HAIR. hd_level.cpp checks this against the enum. */

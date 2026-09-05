@@ -1130,11 +1130,11 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		return;
 	}
 
-	Log("HDLOG level=%s models ms=%d slots=%d loaded=%d (5:%d 4:%d 6:%d) "
+	Log("HDLOG level=%s models ms=%d slots=%d loaded=%d (5:%d 4:%d) "
 		"heads=%d lara=%d dummy=%d missing=%d refused=%d verts=%d idx=%d "
 		"ranges=%d pages=%d vb_kib=%.0f ib_kib=%.0f read_ms=%d build_ms=%d",
 		g_stem, (int)(GetTickCount() - started), stats.slots, stats.loaded,
-		stats.fromGame5, stats.fromGame4, stats.fromGame6, stats.heads,
+		stats.fromGame5, stats.fromGame4, stats.heads,
 		stats.lara, stats.dummy, stats.missing, stats.refused, stats.vertices,
 		stats.indices, stats.ranges, stats.pages, stats.vertexBytes / 1024.0,
 		stats.indexBytes / 1024.0, (int)(stats.readMs + 0.5),

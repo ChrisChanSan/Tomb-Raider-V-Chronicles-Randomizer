@@ -154,7 +154,8 @@ namespace
 		return out;
 	}
 
-	// The folder above the game 5 folder - the bundle that holds 4, 5 and 6.
+	// The folder above the game 5 folder - the bundle that holds 4, 5 and 6;
+	// only 4 and 5 are ever searched (fix round C, C7).
 	std::string parent_of(const std::string& path)
 	{
 		std::string out = path;
@@ -238,19 +239,19 @@ namespace
 			return path;
 		}
 
-		static const char* siblings[2] = { "4", "6" };
-		static const HDModelOrigin kinds[2] = { HD_MODEL_ORIGIN_4, HD_MODEL_ORIGIN_6 };
+		/* AND THEN 4, AND THEN NOTHING (#123, fix round C, user finding C7).
+		 * The bundle also holds a 6\ITEM, and until now it was searched last.
+		 * It has no business here: game 6 is Angel of Darkness, a different
+		 * engine with a different Lara and different objects, and a name that
+		 * matched there would be a wrong model rather than a missing one.
+		 * 5 for what TR5 draws, 4 for the shared base, then classic. */
+		path = join(join(join(bundle, "4"), "ITEM"), file.c_str());
 
-		for (int i = 0; i < 2; i++)
+		if (file_there(path))
 		{
-			path = join(join(join(bundle, siblings[i]), "ITEM"), file.c_str());
-
-			if (file_there(path))
-			{
-				if (origin)
-					*origin = kinds[i];
-				return path;
-			}
+			if (origin)
+				*origin = HD_MODEL_ORIGIN_4;
+			return path;
 		}
 
 		if (origin)
@@ -1520,8 +1521,6 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 			if (here.origin == HD_MODEL_ORIGIN_4)
 				stats->fromGame4++;
-			else if (here.origin == HD_MODEL_ORIGIN_6)
-				stats->fromGame6++;
 			else if (here.origin == HD_MODEL_ORIGIN_TR3)
 				stats->fromTr3++;
 			else

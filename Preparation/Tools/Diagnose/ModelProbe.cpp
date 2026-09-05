@@ -35,7 +35,7 @@
  *   What to look at (one of):
  *     -name <NAME>        the model <5>\ITEM\<NAME>.TRM, with no level behind
  *                         it: bind pose only, node table without a classic
- *                         column. 4\ITEM and 6\ITEM are searched too.
+ *                         column. The sibling 4\ITEM is searched too.
  *     -slot <n>           the model bound to slot n of the level, which needs
  *                         -level
  *     -all                every slot of the level, as a table, then stop
@@ -61,10 +61,16 @@
  *                         revolver_laser, grapple, grapple_laser, crowbar or
  *                         none - which slot the meshes at the hand nodes come
  *                         from, exactly as the game's mesh swap sets it.
- *     -holsters full|empty
+ *     -holsters full|empty|uzi|revolver
  *                         full = LARA_HOLSTERS_PISTOLS on both thighs (the
  *                         guns are away), empty = LARA_HOLSTERS (they are in
- *                         her hands). -guns implies empty.
+ *                         her hands), uzi and revolver the other two slots the
+ *                         engine keeps. -guns implies empty - unless this
+ *                         switch is on the line, and then it wins: -guns
+ *                         revolver -holsters revolver is the contradictory
+ *                         frame of user finding C1, the gun in her hand and
+ *                         in the holster at once, which the seam has to
+ *                         resolve to an empty thigh.
  *     -flare / -torch     the LEFT hand alone, as laraflar.cpp / flmtorch.cpp
  *                         set it.
  *     -back <what>        shotgun, hk or grapple on her back.
@@ -873,6 +879,168 @@ static std::string TrmPath(const std::string& root5, const char* stem)
 	return std::string();
 }
 
+/* ------------------------------------------------------- the braid root -- */
+/* #123, fix round C, user finding C4: "the braid does not grip the head
+ * properly (Todesengel's too)".
+ *
+ * THE THREE THINGS THAT HAVE TO MEET, all in the classic bind pose, which is
+ * the pose every .TRM vertex is written in:
+ *
+ *   1. THE ROOT the game hangs the braid from. game\hair.cpp:397 walks the
+ *      mesh tree to the head bone and translates by (-4, -4, -48) in its own
+ *      frame; the result is hairs[0][0], and the seam puts HAIR_OG's bone 0
+ *      there. In the bind pose the head frame is axis aligned with the world,
+ *      so the root is simply the head joint plus that triple.
+ *   2. THE HEAD the braid comes out of - the outfit's own node 14 geometry and
+ *      the separate LARA_HEAD that rides rigidly on it, which is where the
+ *      hair and the tie are modelled.
+ *   3. HAIR_OG's FIRST LINK, whose bone 0 sits at the model's origin: its
+ *      vertices say how far the link reaches BACKWARDS out of that origin -
+ *      negative z, since the braid's bind chain runs down +z (0, 56, 112 ..).
+ *
+ * The braid grips when link 0's backward reach covers the distance from the
+ * root to the head's surface. This table prints all three per outfit and the
+ * distance that is left over, which is the number a constant would have to
+ * close - and which is 0 or less when nothing needs closing. */
+static void PrintBraidTable(const std::string& root5, const ClassicSlot& body)
+{
+	if (!body.ok || body.nodes <= HD_LARA_HEAD_NODE)
+	{
+		printf("\nthe braid root needs this level's Lara tree, which is not "
+			"readable here.\n");
+		return;
+	}
+
+	const double hx = body.bind[HD_LARA_HEAD_NODE][0];
+	const double hy = body.bind[HD_LARA_HEAD_NODE][1];
+	const double hz = body.bind[HD_LARA_HEAD_NODE][2];
+	const double rx = hx + HD_LARA_BRAID_ROOT_X;
+	const double ry = hy + HD_LARA_BRAID_ROOT_Y;
+	const double rz = hz + HD_LARA_BRAID_ROOT_Z;
+
+	printf("\n-- the braid root, per outfit --------------------------------\n");
+	printf("head joint %.0f/%.0f/%.0f, hair.cpp root %.0f/%.0f/%.0f "
+		"(offset %d/%d/%d)\n", hx, hy, hz, rx, ry, rz,
+		HD_LARA_BRAID_ROOT_X, HD_LARA_BRAID_ROOT_Y, HD_LARA_BRAID_ROOT_Z);
+
+	/* HAIR_OG's first link first - it is the same file for every outfit. */
+	double reach = 0.0;
+	int linkVerts = 0;
+	{
+		HDTrmModel og;
+		const char* why = "";
+		const std::string path = TrmPath(root5, "HAIR_OG");
+
+		if (path.empty() || !HDTrmLoad(path.c_str(), &og, &why))
+			printf("HAIR_OG not read - %s\n",
+				path.empty() ? "no .TRM in 5 or 4" : why);
+		else
+		{
+			double lo = 1.0e9, hi = -1.0e9;
+
+			for (int i = 0; i < og.vertices; i++)
+			{
+				const HDTrmVertex& v = og.vertex[i];
+				int bone = v.bone[0];
+
+				if (v.weight[1] > v.weight[0] && v.weight[1] >= v.weight[2])
+					bone = v.bone[1];
+				else if (v.weight[2] > v.weight[0] && v.weight[2] > v.weight[1])
+					bone = v.bone[2];
+
+				if (bone)
+					continue;
+
+				linkVerts++;
+
+				if (v.z < lo) lo = v.z;
+				if (v.z > hi) hi = v.z;
+			}
+
+			reach = linkVerts ? -lo : 0.0;
+			printf("HAIR_OG link 0: %d vertices, z %.1f .. %.1f - it reaches "
+				"%.1f units back out of its own origin\n",
+				linkVerts, lo, hi, reach);
+			HDTrmFree(&og);
+		}
+	}
+
+	printf("\n%-19s %-10s %8s %8s %8s\n", "outfit", "part", "nearest",
+		"reach", "left");
+	printf("%-19s %-10s %8s %8s %8s\n", "-------------------", "----------",
+		"--------", "--------", "--------");
+
+	for (int outfit = HD_LARA_OUTFIT_NONE + 1; outfit < HD_LARA_OUTFIT_COUNT;
+		outfit++)
+	{
+		const char* stem = HDLaraOutfitModel(outfit);
+
+		if (!stem)
+			continue;
+
+		/* The outfit's own node 14 and the separate face, in that order. The
+		 * face is a facial RIG - its bones are not mesh tree nodes - so every
+		 * one of its vertices counts, and it rides on the head joint. */
+		for (int which = 0; which < 2; which++)
+		{
+			const char* name = which ? "LARA_HEAD" : stem;
+			HDTrmModel model;
+			const char* why = "";
+			const std::string path = TrmPath(root5, name);
+
+			if (path.empty() || !HDTrmLoad(path.c_str(), &model, &why))
+			{
+				printf("%-19s %-10s not read - %s\n", stem, name,
+					path.empty() ? "no .TRM in 5 or 4" : why);
+				continue;
+			}
+
+			double nearest = 1.0e9;
+
+			for (int i = 0; i < model.vertices; i++)
+			{
+				const HDTrmVertex& v = model.vertex[i];
+
+				if (!which)
+				{
+					int node = v.bone[0];
+
+					if (v.weight[1] > v.weight[0] && v.weight[1] >= v.weight[2])
+						node = v.bone[1];
+					else if (v.weight[2] > v.weight[0] && v.weight[2] > v.weight[1])
+						node = v.bone[2];
+
+					if (node != HD_LARA_HEAD_NODE)
+						continue;
+				}
+
+				const double dx = v.x - rx;
+				const double dy = v.y - ry;
+				const double dz = v.z - rz;
+				const double d = sqrt(dx * dx + dy * dy + dz * dz);
+
+				if (d < nearest)
+					nearest = d;
+			}
+
+			if (nearest > 1.0e8)
+				printf("%-19s %-10s %8s %8.1f %8s\n", stem,
+					which ? "face" : "body", "-", reach, "-");
+			else
+				printf("%-19s %-10s %8.1f %8.1f %8.1f\n", stem,
+					which ? "face" : "body", nearest, reach, nearest - reach);
+
+			HDTrmFree(&model);
+		}
+	}
+
+	printf("\n\"nearest\" is the distance from the root to the nearest vertex "
+		"of that part,\n\"reach\" how far link 0 of HAIR_OG comes back out of "
+		"the root towards it, and\n\"left\" the gap that stays open. A "
+		"NEGATIVE left means the link is already\ninside the head and nothing "
+		"needs moving.\n");
+}
+
 static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
 {
 	if (!body.ok || body.nodes <= HD_LARA_HEAD_NODE)
@@ -921,7 +1089,7 @@ static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
 		if (path.empty() || !HDTrmLoad(path.c_str(), &model, &why))
 		{
 			printf("%-19s not read - %s\n", stem,
-				path.empty() ? "no .TRM in 5, 4 or 6" : why);
+				path.empty() ? "no .TRM in 5 or 4" : why);
 			continue;
 		}
 
@@ -1011,6 +1179,8 @@ struct LaraOptions
 	std::string stem;
 	std::string outfit;
 	std::string guns;
+	std::string holsters;		// "", "full", "empty", "uzi", "revolver"
+	std::string look;		// "" = the whole figure, "head" = the head joint
 	std::string back;
 	std::string out;
 	bool holstersFull;
@@ -1020,6 +1190,7 @@ struct LaraOptions
 	bool mirror;
 	bool firstPerson;
 	bool neck;
+	bool braid;			// the braid root table (fix round C, C4)
 	bool check;
 	bool noDraw;
 	bool managed;
@@ -1049,6 +1220,25 @@ static int SlotByName(const Tr5Level& level, const char* want)
 
 		if (name && !_stricmp(name, want))
 			return slots[i];
+	}
+
+	return -1;
+}
+
+/* The same, WITHOUT asking the level. LHolster, lara.holster and lara.back_gun
+ * are plain slot numbers out of the engine's own enum, and the engine writes
+ * them from the INVENTORY: setup.cpp puts LARA_HOLSTERS_PISTOLS into both at
+ * every level start whether or not the level ever loaded that object. A tool
+ * that resolved them through the level's slot list would show an empty thigh
+ * in the three VCI levels where the game shows a holster - user finding C3. */
+static int SlotNumberByName(const char* want)
+{
+	for (int slot = 0; slot < HD_SLOT_COUNT; slot++)
+	{
+		const char* name = HDSlotName(slot);
+
+		if (name && !_stricmp(name, want))
+			return slot;
 	}
 
 	return -1;
@@ -1307,8 +1497,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	/* --- the frame ------------------------------------------------------ */
 	const int slotLara = SlotByName(level, "LARA");
-	const int slotHolstersEmpty = SlotByName(level, "LARA_HOLSTERS");
-	const int slotHolstersFull = SlotByName(level, "LARA_HOLSTERS_PISTOLS");
+	const int slotHolstersEmpty = SlotNumberByName("LARA_HOLSTERS");
+	const int slotHolstersFull = SlotNumberByName("LARA_HOLSTERS_PISTOLS");
 	const int slotFlare = SlotByName(level, "FLARE_ANIM");
 	const int slotTorch = SlotByName(level, "TORCH_ANIM");
 
@@ -1330,6 +1520,15 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	now.rightHandSlot = slotLara;
 	now.leftHandSlot = slotLara;
 	now.leftHolsterSlot = o.holstersFull ? slotHolstersFull : slotHolstersEmpty;
+
+	/* -holsters names one of the engine's four holster slots by hand, so that
+	 * a frame the engine can produce but the tool would never build on its own
+	 * can be photographed - see the note further down. */
+	if (!o.holsters.empty() && !_stricmp(o.holsters.c_str(), "uzi"))
+		now.leftHolsterSlot = SlotNumberByName("LARA_HOLSTERS_UZIS");
+	else if (!o.holsters.empty() && !_stricmp(o.holsters.c_str(), "revolver"))
+		now.leftHolsterSlot = SlotNumberByName("LARA_HOLSTERS_REVOLVER");
+
 	now.rightHolsterSlot = now.leftHolsterSlot;
 	now.backGunSlot = -1;
 
@@ -1348,11 +1547,22 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		{
 			now.rightHandSlot = found;
 			now.leftHandSlot = found;
+
 			/* The gun is in her hands, so the holsters are empty - which is
 			 * what the engine does too (draw_pistol_meshes: LHolster and
-			 * lara.holster both go back to LARA_HOLSTERS). */
-			now.leftHolsterSlot = slotHolstersEmpty;
-			now.rightHolsterSlot = slotHolstersEmpty;
+			 * lara.holster both go back to LARA_HOLSTERS).
+			 *
+			 * Unless the caller said otherwise. A -holsters spelled out ON
+			 * THE COMMAND LINE beats this, because the engine's bookkeeping
+			 * really can end up in the contradictory state and the seam's
+			 * rule against it needs a way to be photographed: -guns revolver
+			 * -holsters revolver is the frame of user finding C1, the gun in
+			 * her hand and in the holster at once. */
+			if (o.holsters.empty())
+			{
+				now.leftHolsterSlot = slotHolstersEmpty;
+				now.rightHolsterSlot = slotHolstersEmpty;
+			}
 		}
 	}
 
@@ -1373,7 +1583,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 		for (int i = 0; i < (int)(sizeof(kBack) / sizeof(kBack[0])); i++)
 			if (!_stricmp(o.back.c_str(), kBack[i].word))
-				now.backGunSlot = SlotByName(level, kBack[i].slot);
+				now.backGunSlot = SlotNumberByName(kBack[i].slot);
 	}
 
 	HDLaraDraw list[8];
@@ -1484,6 +1694,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	if (o.neck)
 		PrintNeckTable(o.root, body);
 
+	if (o.braid)
+		PrintBraidTable(o.root, body);
+
 	if (o.noDraw)
 	{
 		HDModelLevelEnd();
@@ -1523,9 +1736,16 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2]);
 
 	const double persp = EnginePersp(o.height, o.fov);
-	const double cx = 0.5 * (mins[0] + maxs[0]);
-	const double cy = 0.5 * (mins[1] + maxs[1]);
-	const double cz = 0.5 * (mins[2] + maxs[2]);
+
+	/* -look head aims the camera at the HEAD JOINT instead of the middle of
+	 * the whole figure, which is the only way to get a picture of the one
+	 * junction user finding C4 is about - the braid against the back of the
+	 * skull. Without it the camera frames hips to boots and the head sits off
+	 * the top edge. */
+	const bool lookHead = o.look == "head";
+	const double cx = lookHead ? classic14[0] : 0.5 * (mins[0] + maxs[0]);
+	const double cy = lookHead ? classic14[1] : 0.5 * (mins[1] + maxs[1]);
+	const double cz = lookHead ? classic14[2] : 0.5 * (mins[2] + maxs[2]);
 	const double radius = 0.5 * sqrt(
 		(maxs[0] - mins[0]) * (maxs[0] - mins[0]) +
 		(maxs[1] - mins[1]) * (maxs[1] - mins[1]) +
@@ -1650,10 +1870,21 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	float chain[16];
 
 	{
-		float rest[16];
+		float rest[16], anchor[16], base[16];
+
+		/* THE ROOT IS NOT THE HEAD JOINT (#123, fix round C, user finding C4).
+		 * game\hair.cpp:397 walks to the head bone and then translates by
+		 * (-4, -4, -48) in the head's OWN frame before it writes hairs[0][0];
+		 * that offset - up a little and 48 units behind the joint, which is
+		 * the back of the skull - is where the braid hangs from. Only the two
+		 * ANGLES below are the tool's; the root is the game's own formula, so
+		 * that a studio picture shows the same junction the game shows. */
+		MatTranslate((float)HD_LARA_BRAID_ROOT_X, (float)HD_LARA_BRAID_ROOT_Y,
+			(float)HD_LARA_BRAID_ROOT_Z, anchor);
+		MatMul(anchor, &matrices[HD_LARA_HEAD_NODE * 16], base);
 
 		MatRotX(kBraidRest, rest);
-		MatMul(rest, &matrices[HD_LARA_HEAD_NODE * 16], chain);
+		MatMul(rest, base, chain);
 	}
 
 	memcpy(&hairMatrices[0], chain, sizeof(chain));
@@ -1996,6 +2227,7 @@ int main(int argc, char** argv)
 	/* Lara's composite - stage S4-1. */
 	bool lara = false, laraNodes = false, mirror = false;
 	bool laraFirstPerson = false, laraCheck = false, laraNeck = false;
+	bool laraBraid = false;
 	/* Stage S8. -1 means "the engine's own constant when -firstperson is on",
 	 * which is what makes the tool's default picture the game's picture; a
 	 * number given on the line overrides it, and 0 is the BEFORE picture. */
@@ -2003,7 +2235,7 @@ int main(int argc, char** argv)
 	double fpForward = 48.0;
 	int cullMode = -1;		// -1 = "what -firstperson would use"
 	bool yawSet = false, pitchSet = false;
-	std::string outfitName, gunsName, backName;
+	std::string outfitName, gunsName, backName, holstersName, lookName;
 	bool holstersFull = true, flare = false, torch = false;
 	int threads = 8;
 	long width = 1024, height = 1024;
@@ -2046,7 +2278,12 @@ int main(int argc, char** argv)
 		else if (!_stricmp(argv[i], "-back") && i + 1 < argc)
 			backName = argv[++i];
 		else if (!_stricmp(argv[i], "-holsters") && i + 1 < argc)
-			holstersFull = !_stricmp(argv[++i], "full");
+		{
+			holstersName = argv[++i];
+			holstersFull = !_stricmp(holstersName.c_str(), "full");
+		}
+		else if (!_stricmp(argv[i], "-look") && i + 1 < argc)
+			lookName = argv[++i];
 		else if (!_stricmp(argv[i], "-flare"))
 			flare = true;
 		else if (!_stricmp(argv[i], "-torch"))
@@ -2080,6 +2317,11 @@ int main(int argc, char** argv)
 		{
 			lara = true;
 			laraNeck = true;
+		}
+		else if (!_stricmp(argv[i], "-braid"))
+		{
+			lara = true;
+			laraBraid = true;
 		}
 		else if (!_stricmp(argv[i], "-laracheck"))
 		{
@@ -2238,12 +2480,15 @@ int main(int argc, char** argv)
 		o.back = backName;
 		o.out = out;
 		o.holstersFull = holstersFull;
+		o.holsters = holstersName;
+		o.look = lookName;
 		o.flare = flare;
 		o.torch = torch;
 		o.nodes = laraNodes;
 		o.mirror = mirror;
 		o.firstPerson = laraFirstPerson;
 		o.neck = laraNeck;
+		o.braid = laraBraid;
 		o.check = laraCheck;
 		o.noDraw = noDraw;
 		o.managed = managed;
@@ -2374,8 +2619,8 @@ int main(int argc, char** argv)
 
 	printf("\n-- what was loaded -------------------------------------------\n");
 	printf("slots asked for   %d\n", stats.slots);
-	printf("models on the card %d   (5: %d, 4: %d, 6: %d)   heads %d\n",
-		stats.loaded, stats.fromGame5, stats.fromGame4, stats.fromGame6, stats.heads);
+	printf("models on the card %d   (5: %d, 4: %d)   heads %d\n",
+		stats.loaded, stats.fromGame5, stats.fromGame4, stats.heads);
 	printf("not bound          lara %d, dummy %d, no name %d, missing %d, refused %d\n",
 		stats.lara, stats.dummy, stats.noName, stats.missing, stats.refused);
 	printf("nodes              %d over %d slots, %d covered, %d fall back\n",

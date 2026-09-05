@@ -115,7 +115,6 @@ enum HDModelOrigin
 	HD_MODEL_ORIGIN_NONE = 0,
 	HD_MODEL_ORIGIN_5,
 	HD_MODEL_ORIGIN_4,	// the sibling 4\ITEM - SAS and five others live only there
-	HD_MODEL_ORIGIN_6,
 	HD_MODEL_ORIGIN_TR3	// the other bundle: 3\ITEM, or its siblings 1 and 2
 };
 
@@ -125,12 +124,11 @@ struct HDModelStats
 	int lara;		// LARA .. HAIR - stage S4, not touched here
 	int dummy;		// the level's .MAP says DUMMY on purpose
 	int noName;		// no slot name in this engine at all
-	int missing;		// a model name with no file in 5, 4 or 6 -> classic
+	int missing;		// a model name with no file in 5 or 4 -> classic
 	int refused;		// the file is there but could not be read -> classic
 	int loaded;		// models on the card
 	int fromGame5;
 	int fromGame4;
-	int fromGame6;
 	int fromTr3;		// the other bundle - a Tomb Raider III guest (S7-2)
 	int heads;		// <NAME>_HEAD.TRM built and bound to a node
 

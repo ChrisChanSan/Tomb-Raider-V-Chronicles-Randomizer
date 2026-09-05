@@ -177,6 +177,62 @@ namespace
 	 * -1 when none of them matches, which is a mesh swap from outside the
 	 * wardrobe - a cutscene's, or one the randomizer arranged. hd_lara then
 	 * falls back to the rest hands, which is a hand and not a hole. */
+	/* THE SPEECH HEAD, MEASURED AND NOT DRAWN (#123, fix round C, user finding
+	 * C6: "the speech heads of every NPC and of Lara are still missing").
+	 *
+	 * WHAT THE CLASSIC ENGINE DOES. There is no speech head DRAW path and no
+	 * overlay: a talking head is a MESH SWAP inside the normal draw.
+	 *   - Lara: game\deltapak.cpp:2759, handle_lara_chatting - while the
+	 *     cutscene frame is inside one of the level's chat ranges it writes
+	 *     lara.mesh_ptrs[LM_HEAD] = the head mesh of one of the four slots
+	 *     LARA_SPEECH_HEAD1..4, re-rolled EVERY FRAME (GetRandomControl() & 3).
+	 *     Four heads with different mouths, cycled at 30 Hz, is the whole of
+	 *     TR5's lip sync.
+	 *   - Everyone else: deltapak.cpp:2763, handle_actor_chatting - the same
+	 *     trick one level down, on the actor's own object: it sets the node's
+	 *     bit in cutseq_meshswapbits and writes the mesh of
+	 *     ACTOR1_SPEECH_HEAD1/2 or ACTOR2_SPEECH_HEAD1/2 into the SECOND
+	 *     pointer of that node's mesh pair, which DrawCutSeqActors then draws
+	 *     instead of the first (deltapak.cpp:3226 and 3260).
+	 *
+	 * WHY THE HD PATH SHOWS NONE OF IT. Both ends of the swap are meshes, and
+	 * the HD path has no meshes: Lara's head comes from LARA_HEAD.TRM and an
+	 * actor's from his body model or his own <NAME>_HEAD.TRM (fix round B).
+	 * A swapped classic mesh has nowhere to go. And the six speech head SLOTS
+	 * have no model of their own to swap to either - not one .MAP names them
+	 * and neither 4\ITEM nor 5\ITEM ships a LARA_SPEECH_HEAD1.TRM or an
+	 * ACTOR1_SPEECH_HEAD1.TRM.
+	 *
+	 * WHAT THE REMASTER DOES INSTEAD, measured over its own files: one rigged
+	 * head per speaker - LARA_HEAD.TRM has bones up to 31, which are a FACIAL
+	 * rig and not mesh tree nodes - and beside it a .TRL file PER SPOKEN LINE:
+	 * LARA_HEAD_96.TRL .. LARA_HEAD_135.TRL, ADMIRAL_HEAD_113.TRL,
+	 * PIERRE_HEAD_108.TRL and so on, 2.6 MiB apiece. That is facial animation
+	 * data for a rig this engine already carries but does not animate, in a
+	 * format nothing here reads. Driving it is a piece of work of its own and
+	 * not a fix round; inventing a mouth movement instead would be inventing
+	 * a look, which this project does not do.
+	 *
+	 * SO THE SEAM MEASURES IT. speech_head_slot() says which of the four Lara
+	 * speech slots the engine has just put on her neck, and the frame log
+	 * carries it, so the day the .TRL work starts the trigger is already
+	 * visible and the user can see from a log whether a cutscene is chatting
+	 * at all. It changes no picture. */
+	int speech_head_slot()
+	{
+		short* have = lara.mesh_ptrs[LM_HEAD];
+
+		if (!have || !meshes)
+			return -1;
+
+		for (int slot = LARA_SPEECH_HEAD1; slot <= LARA_SPEECH_HEAD4; slot++)
+			if (objects[slot].loaded &&
+				have == meshes[objects[slot].mesh_index + 2 * LM_HEAD])
+				return slot;
+
+		return -1;
+	}
+
 	int slot_of_hand(int node)
 	{
 		short* have = lara.mesh_ptrs[node];
@@ -734,7 +790,28 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * stands inside an object anyway. This one does. hd_model.h carries the
 	 * measurement that says the wardrobe's winding is consistent enough to
 	 * cull on. */
-	const int cull = firstPerson ? HD_MODEL_CULL_BACK : HD_MODEL_CULL_NONE;
+	/* AND THE OTHER SIDE IN A MIRROR (#123, fix round C, found while
+	 * correcting the mirror paragraph of MODIFICATIONS.md for C8). The
+	 * reflected draw really does flip the winding: game\mirror.cpp negates two
+	 * of the three angles, adds half a turn to the third and then calls
+	 * CalcLaraMatrices(2), which scales the matrix by -1 on ALL THREE axes
+	 * (game\delstuff.cpp:124, ScaleCurrentMatrix). Three sign changes are a
+	 * determinant of -1, and the composition works out to exactly the
+	 * reflection in the mirror's z plane - which is why the classic engine
+	 * turns its own software test round with SetCullCW / SetCullCCW for the
+	 * length of that draw.
+	 *
+	 * It costs the HD path nothing anywhere else, because everything it draws
+	 * is double sided. First person is the one frame that culls, and there a
+	 * reflection would come out inside-out - so the mirrored draw culls the
+	 * other side, exactly as mirror.cpp does. (First person inside a mirror
+	 * room is a corner of a corner; the line is one term and removes the
+	 * question.) */
+	static_assert(HD_MODEL_CULL_BACK == HD_MODEL_CULL_CCW,
+		"the mirrored first person draw picks the other side by name");
+
+	const int cull = !firstPerson ? HD_MODEL_CULL_NONE
+		: mirror ? HD_MODEL_CULL_CW : HD_MODEL_CULL_BACK;
 
 	/* --- which parts ---------------------------------------------------- */
 	now.rightHandSlot = slot_of_hand(LM_RHAND);
@@ -815,7 +892,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		g_frame_logged = true;
 		Log("HDLOG frame lara parts=%d(%d this frame) outfit=%s right=%s left=%s "
 			"holsters=%s/%s back=%s braid=%d mask=%08x mirror=%d "
-			"firstperson=%d nearcut=%.0f lights=%d dropped=%d",
+			"firstperson=%d nearcut=%.0f lights=%d dropped=%d speechhead=%s",
 			drawn, g_frame_parts, HDLaraOutfitModel(HDLaraOutfitNow())
 				? HDLaraOutfitModel(HDLaraOutfitNow()) : "-",
 			HDSlotName(now.rightHandSlot) ? HDSlotName(now.rightHandSlot) : "-",
@@ -824,6 +901,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 			HDSlotName(now.rightHolsterSlot) ? HDSlotName(now.rightHolsterSlot) : "-",
 			HDSlotName(now.backGunSlot) ? HDSlotName(now.backGunSlot) : "-",
 			(int)HDLaraHasPart(HD_LARA_PART_BRAID), mask, (int)mirror,
-			(int)firstPerson, (double)nearCut, lightCount, g_dropped);
+			(int)firstPerson, (double)nearCut, lightCount, g_dropped,
+			HDSlotName(speech_head_slot()) ? HDSlotName(speech_head_slot()) : "-");
 	}
 }

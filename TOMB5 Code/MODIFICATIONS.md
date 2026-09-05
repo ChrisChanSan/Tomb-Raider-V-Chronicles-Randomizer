@@ -1769,9 +1769,19 @@ every triangle's winding flips. The HD path does not care: `hd_render`'s state
 bracket sets `D3DCULL_NONE`, which is also what the classic engine does
 globally (`specific/function_table.cpp:105`) — TR5 culls back faces in
 *software*, through an `IsVisible` function pointer that `game/mirror.cpp`
-switches with `SetCullCW` / `SetCullCCW`. And TR5's own mirror does not even
-produce a negative determinant: it mirrors Lara by *moving* her (`z_pos = plane
-- z`, the three angles negated), which is a rotation.
+switches with `SetCullCW` / `SetCullCCW` around the reflected draw.
+
+*Corrected in fix round C.* This paragraph used to end by claiming that TR5's
+mirror "does not even produce a negative determinant" and is a rotation. It is
+not, and the sentence was wrong. `game/mirror.cpp` negates `x_rot` and `y_rot`,
+adds half a turn to `z_rot` and then calls `CalcLaraMatrices(2)`, whose flag-2
+branch scales the matrix by −1 on **all three** axes
+(`game/delstuff.cpp:124`, `ScaleCurrentMatrix`). Three sign changes are a
+determinant of −1, and the composition works out to exactly the reflection in
+the mirror's z plane — which is the whole point, and which is why the classic
+engine has to turn its own test round for the length of that draw. So the
+winding really does flip, and "the HD path culls nothing" is not a lucky
+coincidence but the actual reason the reflection comes out whole.
 
 **Still open, and it is a randomizer change:** the four Tomb Raider III outfits
 (#122). The randomizer rolls them and writes `LARA_PONYTAIL` into the outfit
@@ -1863,12 +1873,23 @@ reason the classic path hides the head through the draw and not through
 and lose them with it, the user's "third arm" — because an HD model has no
 stash and no seam pieces: the head node is one range of triangles.
 
-**The mirror needs nothing.** TR5 mirrors Lara by *moving* her
-(`game/mirror.cpp`: the z position reflected in the plane, the angles negated,
-`CalcLaraMatrices(2)` scaling by −1) and flips its own software backface test
-with `SetCullCW` / `SetCullCCW` around the second draw. The HD state bracket
-sets `D3DCULL_NONE`, so a negative determinant costs it nothing. The hair is
+**The mirror needs nothing, and here is why.** TR5 mirrors Lara by *moving*
+her: `game/mirror.cpp` reflects the z position in the plane, negates `x_rot`
+and `y_rot`, adds half a turn to `z_rot`, and `CalcLaraMatrices(2)` then scales
+the matrix by −1 on all three axes. That is a determinant of **−1** — a
+reflection, as a mirror image must be — so every triangle's winding flips, and
+the classic engine turns its own software backface test round with `SetCullCW`
+/ `SetCullCCW` for the length of that draw. The HD path needs no such switch
+for one reason only: its state bracket sets `D3DCULL_NONE` and everything it
+draws is double sided, so a flipped winding is invisible to it. The hair is
 mirrored in world space by that same function, so the braid follows for free.
+
+*Corrected in fix round C.* An earlier wording gave the reason the other way
+round — that TR5's mirror was "a rotation" and produced no negative
+determinant. It does produce one, measured above, and the one frame where that
+matters is first person: there, and only there, Lara's body is drawn with a
+back-face cull (stage S8), so the reflected draw now culls the **other** side.
+Everywhere else nothing changes, because nothing else culls.
 
 **No new registry key.** `hd_objects` covers Lara: she is a model like the
 creatures and a level's models are one vertex buffer, so a switch of her own
@@ -2941,6 +2962,160 @@ hidden: the classic path culls fog at 45 degrees off axis and we do not.
   (`0x8003` is RICH3's material 3). Masking would be more general and is not
   done: over the 15 files the only low bytes that ever appear with the high
   bit are 0, 3 and 14, and none of them is a cut-out material.
+
+---
+
+#### Fix round C - Lara, the speech heads and the documentation (#123)
+
+The play test of 2026-09-05 again, this time everything that hangs on Lara.
+
+**C1 - the Desert Eagle, everywhere.** TR5's "revolver" slot kept its Tomb
+Raider IV name and changed its weapon, exactly as `CROSSBOW_ANIM` became the
+grappling gun. The randomizer settles it outright: it copies JOBY2's slots 6,
+12, 16, 347 and 348 into **every** level and replaces what is there
+(`Randomizer.cpp`, `kWeaponRules`; the user's decision of 2026-08-23, "replace
+the revolver with the Desert Eagle entirely"). The wardrobe was drawing Tomb
+Raider IV's six-shooter. Measured with `ModelProbe -name`: the remaster ships
+both guns side by side in `4\ITEM` and they are different models —
+`HAND_BARE_REVOLVER` has a cylinder and a 1703-vertex `HOLSTER_REVOLVER` on
+node 4, `HAND_BARE_DEAGLE` is the slab-sided automatic with a 1270-vertex
+`HOLSTER_DEAGLE` on the **same** node 4, so the swap is a swap of names and
+nothing else. Hand, laser hand and holster now take the DEAGLE files. The
+pickup goes with them: no `.MAP` names `REVOLVER_ITEM` at all, so the slot fell
+through to its own name and found nothing; the hand table binds it to
+`EXTRA5_REVOLVER_ITEM_JOBY` (the plain `EXTRA5_REVOLVER_ITEM` is the
+six-shooter — measured by picture) and the ammo to
+`EXTRA5_REVOLVER_AMMO_ITEM`.
+
+*Left named:* the rest of the pickup family — pistols, uzi, shotgun, HK,
+grapple, medipack, flare, lasersight, binoculars, crowbar — is unbound for the
+same reason and draws classic. The names are all in `4\ITEM` and `5\ITEM` under
+`EXTRA`, `EXTRA4` and `EXTRA5`; it is a round of its own.
+
+**C1b - and it is not in the holster at the same time.** The engine keeps
+three separate variables for what Lara wears (`LHolster`, `lara.holster`,
+`lara.back_gun`) and they are bookkeeping, not fact: every draw and undraw
+animation writes them at its own frame, and the paths do not agree.
+`lara2gun.cpp:70` (`draw_pistol_meshes`) clears `lara.holster` for every weapon
+and `LHolster` for all but the revolver; `lara1gun.cpp:43`
+(`draw_shotgun_meshes`) clears `lara.back_gun` and **neither** holster — and
+`larafire.cpp:475` (`InitialiseNewWeapon`) sends the revolver down that second
+path while the pistols go down the first. Rather than reach into a state
+machine the classic path lives on too, the seam states the rule the picture
+needs: **what one of the hands is holding is not drawn a second time on the
+thigh or on the back** (`HDLaraFrameParts`, one table, one lookup a frame).
+`ModelProbe -guns revolver -holsters revolver` builds the contradictory frame
+on purpose and the part list comes out
+`OUTFIT_CLASSIC + LARA_HEAD + HAND_BARE_DEAGLE + HAIR_OG` — the thigh empty.
+
+**C3 - the VCI Lara's holsters.** The wardrobe planned a holster only when the
+level had loaded the matching `LARA_HOLSTERS*` object. That is right for a
+HAND part — a mesh can only sit at the hand node if its slot is loaded — and
+wrong for everything WORN, because the three variables above hold slot numbers
+written from the **inventory**: `setup.cpp:115` puts `LARA_HOLSTERS_PISTOLS` on
+both thighs at every level start, whatever the level loaded. Measured against
+the shipped files: the three VCI levels load no holster slot at all
+(`ModelProbe -lara RICH1/2/3`: "holsters: left -, right -", 6, 7 and 9 parts
+planned), because Core drew no thigh holsters on the catsuit and left the
+objects out — and the randomizer hands that Lara pistols anyway. The worn parts
+are planned by the OUTFIT now (11, 12 and 13 parts, three thigh models and
+three back models more per level), so the holster follows the weapon she
+carries rather than the slot the level shipped. It cannot invent one: a
+takeaway of the pistols runs `NailInvItem`, which puts `LARA_HOLSTERS` back
+into both variables.
+
+**C2 - the Russia outfit wears gloves.** An outfit model covers all fifteen
+nodes, but what it carries at the two hand nodes is the SLEEVE; the hand itself
+is the separate `HAND_` model, which is why the remaster ships three sets of
+them — `HAND_BARE_*`, `HAND_GLOVES_*` and `HAND_XRAY_*`. Stage S4-1 took the
+bare set for everything and a bare hand came out of the Russia suit's glove
+cuff. The outfit table gains a `gloves` column and the part table a gloved twin
+per hand part; all twelve exist and load with a bind drift of 0
+(`HAND_GLOVES_REST` 5008 vertices against the bare 3864, `HAND_GLOVES_HK` 7507
+against 6363). Only `OUTFIT_RUSSIA` is set — nobody has reported a wrong hand
+on any other, and each is a picture the user has to judge. A hand part with no
+gloved twin falls back to the bare one and says so in the log; none does today.
+`HAND_XRAY_*` belongs to a remaster feature this engine has not got and is
+deliberately unused.
+
+**C6 - the speech heads, measured and not built.** There is no speech-head draw
+path and no overlay: a talking head is a MESH SWAP inside the normal draw.
+`deltapak.cpp:2759` (`handle_lara_chatting`) writes
+`lara.mesh_ptrs[LM_HEAD]` from one of the four `LARA_SPEECH_HEAD1..4` slots,
+re-rolled every frame; `deltapak.cpp:2763` (`handle_actor_chatting`) does the
+same one level down, setting the node's bit in `cutseq_meshswapbits` and
+writing an `ACTOR*_SPEECH_HEAD*` mesh into the second pointer of that node's
+mesh pair, which `DrawCutSeqActors` then draws instead of the first
+(`:3226`, `:3260`). Four heads with different mouths, cycled at 30 Hz, is the
+whole of TR5's lip sync.
+
+Both ends of that swap are meshes, and the HD path has none: Lara's head comes
+from `LARA_HEAD.TRM` and an actor's from his body model or his own
+`<NAME>_HEAD.TRM`. The six speech-head slots have nothing to swap TO either —
+not one `.MAP` names them and neither `4\ITEM` nor `5\ITEM` ships a
+`LARA_SPEECH_HEAD1.TRM`. What the remaster does instead, measured over its own
+files: one rigged head per speaker — `LARA_HEAD.TRM` has bones up to 31, which
+are a FACIAL rig and not mesh tree nodes — and beside it a `.TRL` file **per
+spoken line**: `LARA_HEAD_96.TRL` .. `LARA_HEAD_135.TRL`,
+`ADMIRAL_HEAD_113.TRL`, `PIERRE_HEAD_108.TRL` and so on, 2.6 MiB apiece. That
+is facial animation for a rig this engine already carries but does not animate,
+in a format nothing here reads. Driving it is a piece of work of its own;
+inventing a mouth movement instead would be inventing a look. So the seam
+**measures** it: `speech_head_slot()` says which of the four slots the engine
+has just put on her neck and the frame log carries it as `speechhead=`, so the
+trigger is visible and a later round starts from a log rather than a guess.
+
+**C4 - the braid root, measured.** `hair.cpp:397` walks the mesh tree to the
+head bone and translates by `(-4, -4, -48)` in its own frame before writing
+`hairs[0][0]`; that point, not the head joint, is what the seam puts
+`HAIR_OG`'s bone 0 on. The classic braid hides the distance between that point
+and the skull by SKINNING: `DrawHair` draws meshes 1, 3 and 5 rigidly at
+`hairs[1]`, `[3]`, `[5]` and meshes 0, 2 and 4 as connectors stitched out of
+stashed vertices — mesh 0 stretching from the head's own stash ring down to
+link 1. An HD link is rigid and cannot stretch. `ModelProbe -braid` puts a
+number on what is left over: the root sits **16.8 units** from the nearest
+vertex of the outfit's head node and `HAIR_OG`'s link 0 reaches only **1.7
+units** back out of its own origin, so **15.2 units** stay open — the same for
+every outfit that wears a braid. TROne has it too, and carries a debug probe
+for exactly this question (`hd.debug_hair_shift`, "bone b reads joint b+n"),
+which is why the user sees it there as well.
+
+No constant is applied. Every way of closing 15 units moves the gap somewhere
+else — pulling the root up detaches link 0 from link 1, stretching the chain
+breaks the chain rule the braid check proves — and which of those pictures is
+the better one is the user's call, not a guess. What fix round C did build is
+the ability to see it: `ModelProbe` seeds its studio braid at the game's own
+root instead of at the head joint, `-look head` aims the camera at the
+junction, and `-braid` prints the three numbers.
+
+**C5 - the Tomb Raider III bird is the Gold one.** The randomizer takes guest
+slot 43 out of THE LOST ARTIFACT's `chunnel.TR2`, not out of Tomb Raider III
+itself (`Randomizer.cpp:1824`, donor `"tr3gold"`; `Config.h`: "chunnel.TR2
+carries the vulture"). The remaster keeps the two apart under exactly that
+rule: `3\ITEM` of a fresh Tomb Raider I-III Remastered holds `VULTURE.TRM` and
+`VULTURE_CHUNNEL.TRM` side by side, and they are different creatures — a
+feathered vulture with a red head (5511 vertices) and the Gold bird (2334).
+The guest table now names `VULTURE_CHUNNEL`.
+
+**C7 - the search order stops at 4.** A model or a page was looked for in
+`5\`, then `4\`, then `6\`. Game 6 is Angel of Darkness: a different engine,
+a different Lara, different objects, and a name that matched there would be a
+wrong model rather than a missing one. The fallback is gone from
+`hd_model.cpp` and from both page lookups in `hd_pagecache.cpp`, along with the
+`HD_MODEL_ORIGIN_6` value and the `fromGame6` counters in the two logs and in
+`ModelProbe` / `RoomProbe`. The other bundle is unchanged: `3 -> 1 -> 2` stays,
+because Tomb Raider II ships extras of its own.
+
+**C8 - the documentation.** The manual now explains why a big card reports
+4095 MiB of texture memory (`GetAvailableTextureMem` answers in an unsigned 32
+bit count of bytes, so 4096 MiB is the largest number that fits) and that this
+costs nothing, since every card that hits the ceiling is nearly seven times
+over what the heaviest level needs. The registry table was checked key by key
+against the source and is complete: `hd_enable`, `hd_objects`, `hd_motion`,
+`hd_texture_budget_mb`, `hd_install`, `hd_install_tr3`, `hd_texture_format` are
+the seven the engine reads and the seven the manual lists. The two mirror
+paragraphs above are corrected, and the correction turned up one real fault -
+see there.
 
 ---
 

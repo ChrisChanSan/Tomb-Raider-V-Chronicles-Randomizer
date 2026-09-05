@@ -54,7 +54,20 @@ namespace
 	 * `hands`, `braid` and `holsters` say whether the outfit takes the rest of
 	 * the wardrobe. The diving suit takes none of it: its own nodes 10 and 13
 	 * carry 1352 vertices each - the gauntlets ARE the suit - it wears a
-	 * helmet instead of a braid, and DrawLara__5 draws no holsters at all. */
+	 * helmet instead of a braid, and DrawLara__5 draws no holsters at all.
+	 *
+	 * `gloves` picks the HAND_GLOVES_ file instead of the HAND_BARE_ one
+	 * (#123, fix round C, user finding C2: "OUTFIT_RUSSIA wears gloves"). An
+	 * outfit model covers all fifteen nodes including the two hand nodes, but
+	 * what it carries THERE is the sleeve - the hand itself is the separate
+	 * HAND_ model, which is the whole reason the remaster ships three sets of
+	 * them. The Russia suit's sleeve ends in a glove cuff and a bare hand came
+	 * out of it. Only that one outfit is set: nobody has reported a wrong hand
+	 * on any other, and each is a picture the user has to judge rather than a
+	 * thing this file can measure.
+	 *
+	 * The third set, HAND_XRAY_*, belongs to a remaster feature this engine
+	 * has not got - the x-ray view - and is deliberately unused here. */
 	struct Outfit
 	{
 		const char* model;
@@ -62,19 +75,20 @@ namespace
 		bool hands;
 		bool braid;
 		bool holsters;
+		bool gloves;
 	};
 
 	const Outfit kOutfit[HD_LARA_OUTFIT_COUNT] =
 	{
-		{ 0,                    "classic (no HD body)",   false, false, false },
-		{ "OUTFIT_CLASSIC",     "the Rome outfit",        true,  true,  true  },
-		{ "OUTFIT_RUSSIA",      "the Russia outfit",      true,  true,  true  },
-		{ "OUTFIT_SUBSUIT",     "the diving suit",        false, false, false },
-		{ "OUTFIT_VCI",         "the VCI catsuit",        true,  true,  true  },
-		{ "OUTFIT_TR3_ANTARC",  "Antarctica (TR3)",       true,  true,  true  },
-		{ "OUTFIT_TR3_NEVADA",  "Nevada (TR3)",           true,  true,  true  },
-		{ "OUTFIT_TR3_COAST",   "Jungle (TR3)",           true,  true,  true  },
-		{ "OUTFIT_TR3_CATSUIT", "London (TR3)",           true,  true,  true  }
+		{ 0,                    "classic (no HD body)",   false, false, false, false },
+		{ "OUTFIT_CLASSIC",     "the Rome outfit",        true,  true,  true,  false },
+		{ "OUTFIT_RUSSIA",      "the Russia outfit",      true,  true,  true,  true  },
+		{ "OUTFIT_SUBSUIT",     "the diving suit",        false, false, false, false },
+		{ "OUTFIT_VCI",         "the VCI catsuit",        true,  true,  true,  false },
+		{ "OUTFIT_TR3_ANTARC",  "Antarctica (TR3)",       true,  true,  true,  false },
+		{ "OUTFIT_TR3_NEVADA",  "Nevada (TR3)",           true,  true,  true,  false },
+		{ "OUTFIT_TR3_COAST",   "Jungle (TR3)",           true,  true,  true,  false },
+		{ "OUTFIT_TR3_CATSUIT", "London (TR3)",           true,  true,  true,  false }
 	};
 
 	/* THE OTHER PARTS. `kind` decides which outfits take the part at all:
@@ -84,10 +98,15 @@ namespace
 	 * to that one node - LARA_HEAD is a facial rig whose bones run to 31 and
 	 * mean nothing at all to Lara's 15 node tree.
 	 * `nodes` is the coverage measured over 4\ITEM, written down so that the
-	 * masks in HDLaraFrameParts can be read against it. */
+	 * masks in HDLaraFrameParts can be read against it.
+	 * `gloves` is the same file for a gloved outfit, or 0 when the wardrobe
+	 * ships no gloved twin - then the bare one is worn and the log says so.
+	 * All twelve hand parts have one; the column is there so that the day a
+	 * thirteenth has not, the picture is a hand and not a hole. */
 	struct Part
 	{
 		const char* model;
+		const char* gloves;
 		const char* label;
 		int kind;
 		int rigid;
@@ -96,30 +115,51 @@ namespace
 
 	const Part kPart[HD_LARA_PART_COUNT] =
 	{
-		{ 0,                          "the body",                 0, -1, "0..14" },
-		{ "LARA_HEAD",                "the face",                 0, HD_LARA_HEAD_NODE, "14 (rigid)" },
-		{ "HAIR_OG",                  "the braid",                2, -1, "0..5 of its own chain" },
+		{ 0,                          0,
+		  "the body",                 0, -1, "0..14" },
+		{ "LARA_HEAD",                0,
+		  "the face",                 0, HD_LARA_HEAD_NODE, "14 (rigid)" },
+		{ "HAIR_OG",                  0,
+		  "the braid",                2, -1, "0..5 of its own chain" },
 
-		{ "HAND_BARE_REST",           "empty hands",              1, -1, "8,9,10,11,12,13" },
-		{ "HAND_BARE_PISTOL",         "the pistols",              1, -1, "9,10,12,13" },
-		{ "HAND_BARE_UZI",            "the uzis",                 1, -1, "9,10,12,13" },
-		{ "HAND_BARE_SHOTGUN",        "the shotgun",              1, -1, "9,10,12,13" },
-		{ "HAND_BARE_HK",             "the HK",                   1, -1, "9,10,12,13" },
-		{ "HAND_BARE_REVOLVER",       "the revolver",             1, -1, "9,10,12,13" },
-		{ "HAND_BARE_REVOLVER_LASER", "the revolver with sight",  1, -1, "9,10,12,13" },
-		{ "HAND_BARE_GRAPPLE",        "the grappling gun",        1, -1, "9,10,12,13" },
-		{ "HAND_BARE_CROSSBOW_LASER", "the grappling gun, sight", 1, -1, "9,10,12,13" },
-		{ "HAND_BARE_FLARE",          "the flare",                1, -1, "12,13" },
-		{ "HAND_BARE_TORCH",          "the torch",                1, -1, "12,13" },
-		{ "HAND_BARE_CROWBAR",        "the crowbar",              1, -1, "9,10" },
+		{ "HAND_BARE_REST",           "HAND_GLOVES_REST",
+		  "empty hands",              1, -1, "8,9,10,11,12,13" },
+		{ "HAND_BARE_PISTOL",         "HAND_GLOVES_PISTOL",
+		  "the pistols",              1, -1, "9,10,12,13" },
+		{ "HAND_BARE_UZI",            "HAND_GLOVES_UZI",
+		  "the uzis",                 1, -1, "9,10,12,13" },
+		{ "HAND_BARE_SHOTGUN",        "HAND_GLOVES_SHOTGUN",
+		  "the shotgun",              1, -1, "9,10,12,13" },
+		{ "HAND_BARE_HK",             "HAND_GLOVES_HK",
+		  "the HK",                   1, -1, "9,10,12,13" },
+		{ "HAND_BARE_DEAGLE",         "HAND_GLOVES_DEAGLE",
+		  "the Desert Eagle",         1, -1, "9,10,12,13" },
+		{ "HAND_BARE_DEAGLE_LASER",   "HAND_GLOVES_DEAGLE_LASER",
+		  "the Desert Eagle, sight",  1, -1, "9,10,12,13" },
+		{ "HAND_BARE_GRAPPLE",        "HAND_GLOVES_GRAPPLE",
+		  "the grappling gun",        1, -1, "9,10,12,13" },
+		{ "HAND_BARE_CROSSBOW_LASER", "HAND_GLOVES_CROSSBOW_LASER",
+		  "the grappling gun, sight", 1, -1, "9,10,12,13" },
+		{ "HAND_BARE_FLARE",          "HAND_GLOVES_FLARE",
+		  "the flare",                1, -1, "12,13" },
+		{ "HAND_BARE_TORCH",          "HAND_GLOVES_TORCH",
+		  "the torch",                1, -1, "12,13" },
+		{ "HAND_BARE_CROWBAR",        "HAND_GLOVES_CROWBAR",
+		  "the crowbar",              1, -1, "9,10" },
 
-		{ "HOLSTER_PISTOL",           "the pistol holsters",      3, -1, "1,4" },
-		{ "HOLSTER_UZI",              "the uzi holsters",         3, -1, "1,4" },
-		{ "HOLSTER_REVOLVER",         "the revolver holster",     3, -1, "4" },
+		{ "HOLSTER_PISTOL",           0,
+		  "the pistol holsters",      3, -1, "1,4" },
+		{ "HOLSTER_UZI",              0,
+		  "the uzi holsters",         3, -1, "1,4" },
+		{ "HOLSTER_DEAGLE",           0,
+		  "the Desert Eagle holster", 3, -1, "4" },
 
-		{ "HOLSTER_SHOTGUN",          "the shotgun on the back",  3, -1, "7" },
-		{ "HOLSTER_HK",               "the HK on the back",       3, -1, "7" },
-		{ "HOLSTER_GRAPPLE",          "the grapple on the back",  3, -1, "7" }
+		{ "HOLSTER_SHOTGUN",          0,
+		  "the shotgun on the back",  3, -1, "7" },
+		{ "HOLSTER_HK",               0,
+		  "the HK on the back",       3, -1, "7" },
+		{ "HOLSTER_GRAPPLE",          0,
+		  "the grapple on the back",  3, -1, "7" }
 	};
 
 	/* WHICH CLASSIC SLOT STANDS FOR WHICH PART. By NAME, out of hd_bind's
@@ -132,6 +172,15 @@ namespace
 	 * into every OUTFIT_ already. Drawing nothing there is therefore not a
 	 * gap; it is the picture. (TROne reaches the same result by registering
 	 * the slot as SUPPRESS with an empty model name.)
+	 *
+	 * TR5's REVOLVER_ANIM is a DESERT EAGLE for the same reason, and the
+	 * remaster ships both guns: HAND_BARE_REVOLVER / HOLSTER_REVOLVER are
+	 * Tomb Raider IV's six-shooter, HAND_BARE_DEAGLE / HOLSTER_DEAGLE the
+	 * automatic TR5 puts in that slot. Measured with ModelProbe -name: the
+	 * two holsters cover the same node 4 and differ only in the gun in them
+	 * (1703 against 1270 vertices), so the swap is a swap of names and
+	 * nothing else. Until fix round C the wardrobe drew the six-shooter -
+	 * user finding C1, "the revolver is unused in the rando".
 	 *
 	 * TR5's CROSSBOW_ANIM is the GRAPPLING GUN, not a crossbow - the slot
 	 * kept its Tomb Raider IV name and the weapon changed. HAND_BARE_GRAPPLE
@@ -155,8 +204,8 @@ namespace
 		{ "UZI_ANIM",             HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_UZI },
 		{ "SHOTGUN_ANIM",         HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_SHOTGUN },
 		{ "HK_ANIM",              HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_HK },
-		{ "REVOLVER_ANIM",        HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_REVOLVER },
-		{ "LARA_REVOLVER_LASER",  HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_REVOLVER_LASER },
+		{ "REVOLVER_ANIM",        HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_DEAGLE },
+		{ "LARA_REVOLVER_LASER",  HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_DEAGLE_LASER },
 		{ "CROSSBOW_ANIM",        HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_GRAPPLE },
 		{ "LARA_CROSSBOW_LASER",  HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_GRAPPLE_LASER },
 		{ "FLARE_ANIM",           HD_LARA_ROLE_HAND,     HD_LARA_PART_HAND_FLARE },
@@ -165,7 +214,7 @@ namespace
 		{ "LARA_HOLSTERS",        HD_LARA_ROLE_HOLSTER,  -1 },
 		{ "LARA_HOLSTERS_PISTOLS", HD_LARA_ROLE_HOLSTER, HD_LARA_PART_HOLSTER_PISTOL },
 		{ "LARA_HOLSTERS_UZIS",   HD_LARA_ROLE_HOLSTER,  HD_LARA_PART_HOLSTER_UZI },
-		{ "LARA_HOLSTERS_REVOLVER", HD_LARA_ROLE_HOLSTER, HD_LARA_PART_HOLSTER_REVOLVER },
+		{ "LARA_HOLSTERS_REVOLVER", HD_LARA_ROLE_HOLSTER, HD_LARA_PART_HOLSTER_DEAGLE },
 		{ "HAIR",                 HD_LARA_ROLE_HAIR,     HD_LARA_PART_BRAID },
 		{ "LARA_SKIN_JOINTS",     HD_LARA_ROLE_SUPPRESS, -1 },
 		{ "LARA_SCREAM",          HD_LARA_ROLE_SUPPRESS, -1 },
@@ -227,11 +276,36 @@ namespace
 		return !*a && !*b;
 	}
 
-	/* WHICH PARTS THIS LEVEL CAN ASK FOR. The body, the face, the braid and
-	 * the rest hands always; a weapon or holster part only when the level
-	 * really loaded the slot it hangs off - see HDLaraLevel::slots for why
-	 * that is safe. Without a slot list everything the outfit takes is
-	 * planned, which is what a diagnostic run with no level wants.
+	/* WHICH PARTS THIS LEVEL CAN ASK FOR. The body, the face, the braid, the
+	 * rest hands and everything WORN always; a HAND part only when the level
+	 * really loaded the slot it hangs off. Without a slot list everything the
+	 * outfit takes is planned, which is what a diagnostic run with no level
+	 * wants.
+	 *
+	 * THE HANDS AND THE WORN PARTS ARE NOT THE SAME QUESTION (#123, fix round
+	 * C, user finding C3: "the VCI Lara's holsters are missing"). A hand part
+	 * is reachable only through lara.mesh_ptrs, and a mesh can only sit at the
+	 * hand node if its slot is loaded - so filtering hands by the slot list
+	 * throws nothing away. The holsters and the weapon on the back are named
+	 * by SLOT NUMBER in three of the engine's own variables (LHolster,
+	 * lara.holster, lara.back_gun), and those numbers are written from the
+	 * INVENTORY, not from what the level loaded: setup.cpp:115 puts
+	 * LARA_HOLSTERS_PISTOLS on both thighs at every level start and
+	 * LaraInitialiseMeshes sets lara.back_gun from shotgun_type_carried.
+	 *
+	 * Measured over the shipped files: the three VCI levels load NO holster
+	 * slot at all (ModelProbe -lara RICH1/2/3 against vanilla: "holsters: left
+	 * -, right -", 6, 7 and 9 parts planned), because Core drew no thigh
+	 * holsters on the catsuit and left the objects out. The randomizer hands
+	 * that Lara pistols anyway, so the engine says "pistols on the thighs" and
+	 * the plan had loaded nothing to draw them with. Planning them by the
+	 * OUTFIT rather than by the slot list is the rule the user asked for - the
+	 * holster follows the weapon she carries, not the slot the level shipped -
+	 * and it costs three thigh models and three back models per level.
+	 *
+	 * It cannot invent a holster she has not got: a takeaway of the pistols
+	 * runs NailInvItem, which puts LARA_HOLSTERS back into both variables
+	 * (newinv2.cpp:2853), and an empty holster names no part.
 	 *
 	 * Declared before its two callers so both plan the identical set - a
 	 * build that counted a part the plan never asked for would report it
@@ -247,6 +321,14 @@ namespace
 		useful[HD_LARA_PART_FACE] = true;
 		useful[HD_LARA_PART_BRAID] = true;
 		useful[HD_LARA_PART_HAND_REST] = true;	// LARA is always loaded
+
+		/* kind 3 is "worn": the three thigh holsters and the three weapons on
+		 * the back. outfit_takes still decides whether this outfit has any at
+		 * all - the diving suit has none - and HDLaraPartModel answers 0 for
+		 * a part the outfit does not take, so the plan loop skips it. */
+		for (int i = 0; i < HD_LARA_PART_COUNT; i++)
+			if (kPart[i].kind == 3)
+				useful[i] = true;
 
 		for (int i = 0; !all && i < level->slotCount; i++)
 		{
@@ -470,6 +552,14 @@ const char* HDLaraPartModel(int outfit, int part)
 	if (part == HD_LARA_PART_BODY)
 		return kOutfit[outfit].model;
 
+	/* THE GLOVED TWIN (#123, fix round C, user finding C2). A gloved outfit
+	 * wears the HAND_GLOVES_ file; a hand part the wardrobe ships no gloved
+	 * twin for falls back to the bare one, which HDLaraLevelBuild writes into
+	 * the log. Nothing but a hand part has a twin, so the test is the field
+	 * and not the kind. */
+	if (kOutfit[outfit].gloves && kPart[part].gloves)
+		return kPart[part].gloves;
+
 	return kPart[part].model;
 }
 
@@ -614,6 +704,14 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 
 		if (stats)
 			stats->wanted++;
+
+		/* A gloved outfit with a hand part the wardrobe has no gloved twin
+		 * for - none today, and the line is here so the day there is one it
+		 * is in the log and not a surprise in a screenshot. */
+		if (kOutfit[level->outfit].gloves && kPart[part].kind == 1 &&
+			!kPart[part].gloves)
+			note("%s: no gloved variant in the wardrobe - %s is worn bare",
+				HDLaraPartLabel(part), model);
 
 		const int slot = HDLaraPartSlot(part);
 
@@ -791,10 +889,62 @@ int HDLaraFrameParts(const HDLaraFrame* now, HDLaraDraw* out, int max)
 	 * engine keeps in LHolster and lara.holster, and DrawLara puts them on
 	 * LMX_THIGH_L and LMX_THIGH_R in that order. An empty holster names no
 	 * part: the straps are painted into the outfit. */
-	const int leftHolster =
+	int leftHolster =
 		HDLaraPartForSlot(now->leftHolsterSlot, HD_LARA_ROLE_HOLSTER);
-	const int rightHolster =
+	int rightHolster =
 		HDLaraPartForSlot(now->rightHolsterSlot, HD_LARA_ROLE_HOLSTER);
+	int back = HDLaraPartForSlot(now->backGunSlot, HD_LARA_ROLE_BACK);
+
+	/* A GUN IN THE HAND IS NOT ON THE BODY (#123, fix round C, user finding
+	 * C1: "the revolver is in her hand AND in the holster at once").
+	 *
+	 * The engine keeps three separate variables for what Lara wears -
+	 * LHolster, lara.holster, lara.back_gun - and they are bookkeeping, not
+	 * a fact: every draw and undraw animation writes them at its OWN frame,
+	 * and the paths do not agree with each other. Measured in this tree:
+	 *
+	 *   game\lara2gun.cpp:70 draw_pistol_meshes  clears lara.holster for
+	 *       every weapon and LHolster for all but the revolver;
+	 *   game\lara1gun.cpp:43 draw_shotgun_meshes clears lara.back_gun and
+	 *       NEITHER holster - and larafire.cpp:475 InitialiseNewWeapon sends
+	 *       the revolver down THAT path while the pistols go down the other,
+	 *       so a revolver drawn through it keeps the holster the undraw
+	 *       animation filled (undraw_pistol_mesh_right, lara2gun.cpp:107).
+	 *
+	 * Rather than reach into the engine's state machine - which the classic
+	 * path lives on too - the seam states the rule the picture needs: what
+	 * one of the hands is holding is not drawn a second time on the thigh or
+	 * on the back. It costs one lookup per frame and it is right whichever
+	 * of the paths above ran last. The reverse case needs no rule: a holster
+	 * cannot fill itself. */
+	{
+		static const struct { int hand; int worn; } kWorn[] =
+		{
+			{ HD_LARA_PART_HAND_PISTOL,        HD_LARA_PART_HOLSTER_PISTOL },
+			{ HD_LARA_PART_HAND_UZI,           HD_LARA_PART_HOLSTER_UZI },
+			{ HD_LARA_PART_HAND_DEAGLE,        HD_LARA_PART_HOLSTER_DEAGLE },
+			{ HD_LARA_PART_HAND_DEAGLE_LASER,  HD_LARA_PART_HOLSTER_DEAGLE },
+			{ HD_LARA_PART_HAND_SHOTGUN,       HD_LARA_PART_BACK_SHOTGUN },
+			{ HD_LARA_PART_HAND_HK,            HD_LARA_PART_BACK_HK },
+			{ HD_LARA_PART_HAND_GRAPPLE,       HD_LARA_PART_BACK_GRAPPLE },
+			{ HD_LARA_PART_HAND_GRAPPLE_LASER, HD_LARA_PART_BACK_GRAPPLE }
+		};
+
+		for (int i = 0; i < (int)(sizeof(kWorn) / sizeof(kWorn[0])); i++)
+		{
+			if (right != kWorn[i].hand && left != kWorn[i].hand)
+				continue;
+
+			if (leftHolster == kWorn[i].worn)
+				leftHolster = -1;
+
+			if (rightHolster == kWorn[i].worn)
+				rightHolster = -1;
+
+			if (back == kWorn[i].worn)
+				back = -1;
+		}
+	}
 
 	if (leftHolster >= 0 && leftHolster == rightHolster)
 		HD_LARA_ADD(leftHolster, ~0u);
@@ -805,7 +955,7 @@ int HDLaraFrameParts(const HDLaraFrame* now, HDLaraDraw* out, int max)
 	}
 
 	/* THE WEAPON ON THE BACK, on the torso node. */
-	HD_LARA_ADD(HDLaraPartForSlot(now->backGunSlot, HD_LARA_ROLE_BACK), ~0u);
+	HD_LARA_ADD(back, ~0u);
 
 	#undef HD_LARA_ADD
 

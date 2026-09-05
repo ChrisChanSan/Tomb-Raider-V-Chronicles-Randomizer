@@ -444,7 +444,7 @@ values, in the same key as every other setting
 | `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing below is read at all. |
 | `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Does nothing at all while `hd_enable` is off. |
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface. All three come from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
-| `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below). Set a number and that number is the ceiling. |
+| `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below; the card's own answer stops at 4095 MiB, which is a limit of the Direct3D 9 call and not of your card). Set a number and that number is the ceiling. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
 | `hd_install_tr3` | String | The folder of your *Tomb Raider I-III Remastered* — the one holding `tomb123.exe`. Needed for exactly one thing: the HD models of the four Tomb Raider III guests the randomizer can import (the T-Rex, the vulture, the Compsognathus and the raptor), which live in that bundle and in no other. Leave it **empty** and the engine looks for it in the same walk it uses for the other one; without the game those four enemies draw the classic way and nothing else changes. |
 | `hd_texture_format` | String | `rgba`, the default, keeps every page exactly as the Remaster drew it. `dxt5` compresses them and uses a quarter of the video memory for a small, measurable loss. Anything else reads as `rgba`. |
@@ -483,6 +483,24 @@ reserve is 155 MiB against 397 MiB of pages, so it loads everything at full
 size on any card offering **552 MiB or more**; for the heaviest level, ANDREA2,
 the number is **595 MiB**. Call it six hundred: a card that offers more than
 that never cuts anything, and a two gigabyte card is nowhere near the line.
+
+**Why the log says 4095 MiB on a big card.** The line
+
+```
+DXCreateD3DDevice Successful - the device offers 4095 MiB of texture memory
+```
+
+is not a mistake and not your card's real size. Direct3D 9 answers that
+question with `GetAvailableTextureMem`, which returns a count of **bytes in an
+unsigned 32 bit number**: 4096 MiB is the largest value that fits, so every
+card with four gigabytes or more reports the same 4095. The figure is also
+only ever an estimate — the driver rounds it, and it counts memory the system
+may lend the card as well as the memory on it. None of that matters for what
+the number is used for. It is read once, to decide whether a level's pages fit
+with room to spare, and every card that hits the 4095 ceiling is nearly seven
+times over the six hundred the heaviest level needs. If the device answers
+nothing at all, the budget is switched off rather than guessed, and the log
+says 0.
 
 **What happens over budget.** Never a missing page — a page that is not there
 is a hole in a wall and reads as a fault. Instead the **largest pages give up

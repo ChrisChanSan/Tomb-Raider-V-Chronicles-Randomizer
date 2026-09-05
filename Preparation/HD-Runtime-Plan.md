@@ -1,5 +1,19 @@
 # HD at run time (#123, way B) - implementation plan
 
+> **Where this stands.** Stages S0 to S8 are BUILT, on branch `hd-runtime`.
+> Since then the work has been play-test fix rounds rather than new stages:
+> **A** (rooms - flipmaps, cut-outs, glow, fog bulbs, sway), **A2** (the
+> cut-out rule by material, and the fog bulb cone), **B** (objects - the level
+> map, baked lanterns, mesh swaps, Pierre's head, cutscene actors) and **C**
+> (Lara - the Desert Eagle, the VCI holsters, the gloves, the braid root, the
+> Tomb Raider III bird, the search order, the documentation).
+>
+> This file is the PLAN and is left as it was written, so that what was
+> intended can still be read against what was built. What was actually built,
+> and every place the build departed from the plan, is recorded in
+> `TOMB5 Code\MODIFICATIONS.md` - stages S0..S8 and then one section per fix
+> round. Where the two disagree, MODIFICATIONS.md is the one that was measured.
+
 Written 2026-09-05 from a read-only survey of TROne (GPLv3,
 `C:\Cloude AI\Todesengel\TROne-main`, the user's chosen base), its vendored
 TRForge readers (MIT), our engine and a fresh Steam copy of the Remaster.

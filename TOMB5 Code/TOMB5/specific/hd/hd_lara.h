@@ -60,11 +60,21 @@
 //      LARA_HEAD is a FACIAL RIG (bones up to 31, which are not mesh tree
 //      nodes at all) and therefore rides RIGIDLY on node 14; HAIR_OG has six
 //      bones, which is exactly TR5's six braid links; HOLSTER_PISTOL and
-//      HOLSTER_UZI sit on 1 and 4 (the two thighs), HOLSTER_REVOLVER on 4
-//      alone (the revolver hangs on the right), HOLSTER_SHOTGUN / _HK /
+//      HOLSTER_UZI sit on 1 and 4 (the two thighs), HOLSTER_DEAGLE on 4
+//      alone (the big gun hangs on the right), HOLSTER_SHOTGUN / _HK /
 //      _GRAPPLE on 7 (the torso - the weapon on the back); a HAND_ model
 //      covers 9 and 10 on the right and 12 and 13 on the left, and
 //      HAND_BARE_REST adds the two upper arm stubs 8 and 11.
+//
+// THE "REVOLVER" IS A DESERT EAGLE (#123, fix round C, user finding C1). The
+// slot kept its Tomb Raider IV name - REVOLVER_ANIM, LARA_REVOLVER_LASER,
+// LARA_HOLSTERS_REVOLVER - and the weapon in it changed, exactly as
+// CROSSBOW_ANIM became the grappling gun. The remaster ships both guns side by
+// side in 4\ITEM and they are two different models, measured with ModelProbe:
+// HAND_BARE_REVOLVER has a cylinder and a 1703 vertex HOLSTER_REVOLVER on node
+// 4, HAND_BARE_DEAGLE is the slab-sided automatic with a 1270 vertex
+// HOLSTER_DEAGLE on the SAME node 4. TR5 draws the Desert Eagle, so every
+// part of the revolver slot takes the DEAGLE file: hand, laser hand, holster.
 //
 // WHAT IS NOT HERE, ON PURPOSE. Young Lara stays classic - the user's
 // decision (plan section 9). OUTFIT_YOUNG, LARA_YOUNG_HEAD and HAIR_PIGTAIL
@@ -74,6 +84,23 @@
 
 #define HD_LARA_NODES		15	// the classic mesh tree, LM_HIPS .. LM_HEAD
 #define HD_LARA_HAIR_NODES	6	// TR5's six braid links
+
+/* WHERE THE BRAID HANGS FROM, in the HEAD node's own frame and in classic
+ * units. game\hair.cpp:397 walks the mesh tree to the head bone and then
+ * translates by exactly this before it writes hairs[0][0], the root of the
+ * simulation - up a little, a touch to her left, and 48 units behind the
+ * joint, which is the back of the skull. (Young Lara's two pigtails and the
+ * second braid use two other triples in the same three lines; neither reaches
+ * the HD wardrobe, which has no young body.)
+ *
+ * It is spelled out here because two things outside hair.cpp have to agree
+ * with it: the seam, which reads hairs[0][n] and needs to know what the first
+ * of them MEANS, and ModelProbe, which has no simulation and builds its studio
+ * braid from this point (#123, fix round C, user finding C4 - "the braid does
+ * not grip the head properly"). */
+#define HD_LARA_BRAID_ROOT_X	(-4)
+#define HD_LARA_BRAID_ROOT_Y	(-4)
+#define HD_LARA_BRAID_ROOT_Z	(-48)
 
 /* THE PSEUDO SLOTS. hd_model stores its models in a map keyed by slot number,
  * and a wardrobe part has no slot of its own - LARA_SKIN is one slot and the
@@ -172,8 +199,8 @@ enum HDLaraPart
 	HD_LARA_PART_HAND_UZI,
 	HD_LARA_PART_HAND_SHOTGUN,
 	HD_LARA_PART_HAND_HK,
-	HD_LARA_PART_HAND_REVOLVER,
-	HD_LARA_PART_HAND_REVOLVER_LASER,
+	HD_LARA_PART_HAND_DEAGLE,	// TR5's "revolver" slot is a Desert Eagle
+	HD_LARA_PART_HAND_DEAGLE_LASER,
 	HD_LARA_PART_HAND_GRAPPLE,	// TR5's "crossbow" slot is the grappling gun
 	HD_LARA_PART_HAND_GRAPPLE_LASER,
 	HD_LARA_PART_HAND_FLARE,	// left hand only
@@ -182,7 +209,7 @@ enum HDLaraPart
 
 	HD_LARA_PART_HOLSTER_PISTOL,	// both thighs
 	HD_LARA_PART_HOLSTER_UZI,	// both thighs
-	HD_LARA_PART_HOLSTER_REVOLVER,	// the right thigh alone
+	HD_LARA_PART_HOLSTER_DEAGLE,	// the right thigh alone
 
 	HD_LARA_PART_BACK_SHOTGUN,	// the torso
 	HD_LARA_PART_BACK_HK,

@@ -1182,11 +1182,11 @@ void HDLevelBuild()
 		stats.vertexBytes / 1048576.0, stats.indexBytes / 1048576.0,
 		(int)(stats.readMs + 0.5), (int)(stats.buildMs + 0.5));
 
-	Log("HDLOG level=%s pages named=%d distinct=%d from5=%d from4=%d from6=%d "
+	Log("HDLOG level=%s pages named=%d distinct=%d from5=%d from4=%d "
 		"white=%d failed=%d mips=%d widest=%d big=%d mib=%.1f "
 		"read_ms=%d decode_ms=%d(%d threads) upload_ms=%d compress_ms=%d",
 		g_stem, stats.pages.pages, stats.pages.slots, stats.pages.fromGame5,
-		stats.pages.fromGame4, stats.pages.fromGame6, stats.pages.fromWhite,
+		stats.pages.fromGame4, stats.pages.fromWhite,
 		stats.pages.failed, stats.pages.mipLevels, stats.pages.widest,
 		stats.pages.bigPages, stats.pages.bytes / 1048576.0,
 		(int)(stats.pages.readMs + 0.5), (int)(stats.pages.decodeMs + 0.5),

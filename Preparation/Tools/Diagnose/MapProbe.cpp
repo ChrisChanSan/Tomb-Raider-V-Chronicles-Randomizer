@@ -96,7 +96,7 @@ namespace
 	/* ---------------------------------------------------- the .hdm proof -- */
 
 	/* Where a model is looked for, in the engine's own order: the level's
-	 * bundle is game 5 then the siblings 4 and 6, the other bundle is game 3
+	 * bundle is game 5 then the sibling 4, the other bundle is game 3
 	 * then 1 and 2 (specific\hd\hd_model.cpp, find_model). Returns the folder
 	 * it was found in, or an empty string. */
 	std::string where_model(const std::string& root, const std::string& alt,

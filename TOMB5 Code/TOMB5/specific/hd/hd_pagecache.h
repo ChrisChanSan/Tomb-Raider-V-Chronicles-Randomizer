@@ -82,7 +82,7 @@ void HDPageCachePolicyNow(HDPageCachePolicy* out);
 
 /* Where a page number at or above HD_PAGE_ALT_BASE is looked for: a GAME
  * folder of the other bundle, "<Tomb Raider I-III Remastered>\3", with its
- * siblings 1 and 2 tried after it exactly as 4 and 6 are tried after 5. A
+ * siblings 1 and 2 tried after it, where the TR5 bundle tries 4 after 5. A
  * null or empty path (the default) means there is no other bundle, and every
  * such page falls straight through to the white tile. Set once per level,
  * before the models are appended; it survives HDPageCacheDestroy so that a
@@ -99,7 +99,6 @@ struct HDPageCacheStats
 	int slots;		// distinct pages actually kept (duplicates folded)
 	int fromGame5;		// found in <install>\TEX
 	int fromGame4;		// found in the sibling 4\TEX (three RICH3 pages)
-	int fromGame6;		// found in the sibling 6\TEX
 	int fromTr3;		// found in the OTHER bundle, 3\TEX or its siblings
 				// (#123, S7-2 - the Tomb Raider III guests)
 	int fromWhite;		// no file anywhere - WHITE.DDS, the remaster's slot 0

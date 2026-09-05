@@ -124,11 +124,13 @@ int HDDonorMapEntries();
  * the TR5 slot the guest was installed into to the TR3 engine symbol the
  * remaster names its file after. 0 for anything else.
  *
- *   31  SAS       -> TREX      Tomb Raider III slot 287
- *   43  CROW      -> VULTURE   ... 29 (The Lost Artifact; one ITEM folder
- *                                  per game, so it is in 3\ITEM as well)
- *   53  SAILOR    -> COMPY     ... 34
- *   75  REAPER    -> RAPTOR    ... 288
+ *   31  SAS       -> TREX             Tomb Raider III slot 287
+ *   43  CROW      -> VULTURE_CHUNNEL  ... 29, but THE LOST ARTIFACT's bird
+ *                                     out of chunnel.TR2, which the remaster
+ *                                     files beside the game's own VULTURE in
+ *                                     3\ITEM (one ITEM folder per game)
+ *   53  SAILOR    -> COMPY            ... 34
+ *   75  REAPER    -> RAPTOR           ... 288
  *
  * How those four names were arrived at without the installation to look in is
  * written down in docs\Engine-Manual.md; the short of it is that the remaster

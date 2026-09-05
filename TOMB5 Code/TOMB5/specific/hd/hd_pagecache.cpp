@@ -56,7 +56,7 @@ namespace
 		std::vector<DecodedMip> mips;
 		int page = 0;
 		int slot = 0;
-		int origin = 0;			// 5, 4, 6, or 0 for WHITE.DDS
+		int origin = 0;			// 5, 4, or 0 for WHITE.DDS
 		int firstMip = 0;		// the level this page starts at - stage S6
 		double compressMs = 0;		// this page's share of the DXT5 work
 		bool white = false;
@@ -408,20 +408,17 @@ namespace
 			if (file_there(path))
 				return path;
 
+			/* 5, THEN 4, THEN NOTHING - game 6 is Angel of Darkness and is not
+			 * searched (#123, fix round C, user finding C7). */
 			if (!bundle.empty())
 			{
-				const int siblings[2] = { 4, 6 };
+				const std::string other = join(bundle, std::string("4"));
+				path = HDScanPagePath(other.c_str(), page, buffer, sizeof(buffer));
 
-				for (int i = 0; i < 2; i++)
+				if (file_there(path))
 				{
-					const std::string other = join(bundle, std::to_string(siblings[i]));
-					path = HDScanPagePath(other.c_str(), page, buffer, sizeof(buffer));
-
-					if (file_there(path))
-					{
-						*origin = siblings[i];
-						return path;
-					}
+					*origin = 4;
+					return path;
 				}
 			}
 		}
@@ -437,15 +434,10 @@ namespace
 
 		if (!bundle.empty())
 		{
-			const int siblings[2] = { 4, 6 };
-
-			for (int i = 0; i < 2; i++)
-			{
-				const std::string other = join(bundle, std::to_string(siblings[i]));
-				path = join(join(other, "TEX"), "WHITE.DDS");
-				if (file_there(path))
-					return path;
-			}
+			const std::string other = join(bundle, std::string("4"));
+			path = join(join(other, "TEX"), "WHITE.DDS");
+			if (file_there(path))
+				return path;
 		}
 
 		return std::string();
@@ -1185,8 +1177,6 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 						stats->fromWhite++;
 					else if (page.origin == 4)
 						stats->fromGame4++;
-					else if (page.origin == 6)
-						stats->fromGame6++;
 					else if (page.origin >= 1 && page.origin <= 3)
 						stats->fromTr3++;	// the other bundle (S7-2)
 					else

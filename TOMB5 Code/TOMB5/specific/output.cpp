@@ -22,6 +22,7 @@
 #include "specificfx.h"
 #include "drawroom.h"
 #include "function_stubs.h"
+#include "hd/hd_level.h"
 #include "time.h"
 #include "dxshell.h"
 #include "polyinsert.h"
@@ -1446,6 +1447,11 @@ void S_InitialisePolyList()
 	_BeginScene();
 	InitBuckets();
 	InitialiseSortList();
+
+	// #123: the HD rooms of this frame are collected in InsertRoom and drawn
+	// in S_OutputPolyList, so their list is emptied here beside the buckets
+	// and the sort list, by the same function and for the same reason.
+	HDFrameReset();
 }
 
 void S_OutputPolyList()
@@ -1469,6 +1475,28 @@ void S_OutputPolyList()
 		if (resChangeCounter < 0)
 			resChangeCounter = 0;
 	}
+
+	/* #123: THE HD ROOMS OF THIS FRAME, AND WHY THEY GO HERE.
+	 *
+	 * The frame's depth buffer is cleared in S_InitialisePolyList (#127) and
+	 * nothing has drawn into it since except the sky, which SkyDrawPhase
+	 * draws with ZWRITEENABLE off (specific\specificfx.cpp, OutputSky) - so
+	 * the sky owns no depth and the HD walls paint over it, exactly as the
+	 * classic room polygons did.
+	 *
+	 * Then come the classic buckets: opaque items, Lara, the statics of every
+	 * room that stayed classic. They are depth tested against the HD walls
+	 * that are now in the buffer, and the projection matrix behind those
+	 * walls writes the same sz the classic path writes for the same point in
+	 * space, so the test is exact and needs no bias (hd_render.cpp,
+	 * HDRenderSelfTest). After the buckets the sort list draws the see-through
+	 * polygons over both.
+	 *
+	 * The OTHER depth clear, the one further down this function, is the one
+	 * #127 kept: it separates the world from the binocular mask, the pickup
+	 * display and the fade, and it still runs after everything above it -
+	 * including this block. */
+	HDFrameDraw();
 
 	if (App.dx.Flags & DXF_ZBUFFER)
 		DrawBuckets();

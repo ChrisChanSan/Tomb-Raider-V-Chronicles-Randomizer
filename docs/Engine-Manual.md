@@ -367,62 +367,95 @@ this engine to draw that art when it finds the remaster installed, and the
 original art when it does not: file present → HD, otherwise vanilla, exactly
 the deal the loading screens and the HQ sounds already have.
 
-**As of this build the first two stages are in, and the game still draws
-nothing differently.** The first finds the installation, reads what the
-remaster has for the level you are loading, counts it, times it and writes one
-line into the log. The second builds the renderer that will draw it — shaders,
-buffers, textures and all — but nothing in the game calls it yet, so your
-picture is byte for byte the one you had before. That order is on purpose: the
-reading has to be right before the drawing can be, and a renderer wants to be
-proved on its own before it is let anywhere near the frame.
+**As of this build the rooms are drawn in HD.** Objects, enemies and Lara are
+still the original models — they are the next stages — so what changes is the
+world around them: walls, floors, ceilings, doors as part of the architecture,
+and every static object the remaster baked into the room art, at the remaster's
+resolution and with the remaster's baked light. Everything else is exactly as
+it was.
 
-That proof is a picture, taken outside the game. `RoomProbe`, in
-`Preparation\Tools\Diagnose`, opens a hidden window, makes a real Direct3D
-device and draws one room from a camera you give it straight into a `.PNG` —
-using the engine's own renderer, not a copy of it. Room 69 of ANDREA1 comes out
-as the Piazza dell'Opera facade with its shutters, its cornice and its street
-sign, at the remaster's resolution, lit by the light the remaster baked into
-it.
+**Switching it on.** Options → the new *tomb5 options* page → **HD textures**,
+the last row of the first page. Like every row on that page it is remembered at
+once; unlike most of them it takes effect **at the start of the next level**,
+because the art is read and unpacked while the level loads. Switch it on, then
+load a save or start a level.
 
-It is **off out of the box** and there is no options row for it yet. Two
-registry values, in the same key as every other setting
+There is no options row for the *path*, and normally there does not need to be:
+the engine reads Steam's own folder out of the registry, walks every library in
+`steamapps\libraryfolders.vdf`, and looks one level deep in each
+`steamapps\common` for a folder that holds a `tomb456.exe` with a subfolder `5`
+containing `DATA`, `TEX` and `ITEM`. It goes by what is in the folder, never by
+the folder's name — Steam names the same game differently per language and
+depot. For a copy Steam does not know about there is a registry value, in the
+same key as every other setting
 (`HKEY_CURRENT_USER\Software\Core Design\Tomb Raider Chronicles\tomb5`):
 
 | Value | Type | Meaning |
 |---|---|---|
-| `hd_enable` | DWORD | `1` switches the HD path on. `0`, the default, and nothing below is read at all. |
+| `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing below is read at all. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
 
-Empty is the normal case: the engine reads Steam's own folder out of the
-registry, walks every library in `steamapps\libraryfolders.vdf`, and looks one
-level deep in each `steamapps\common` for a folder that holds a `tomb456.exe`
-with a subfolder `5` containing `DATA`, `TEX` and `ITEM`. It goes by what is in
-the folder, never by the folder's name — Steam names the same game differently
-per language and depot. `hd_install` is for a copy Steam does not know about.
+**What to expect in this stage, and what not to.** The rooms are HD; the people
+and the things in them are not, and the difference is meant to be visible. Two
+kinds of light do not exist in an HD room yet:
 
-With `hd_enable` on and `-log`, `log.txt` gets one `HDLOG` line per level:
+- **nothing that moves.** A torch, a flare, a gunshot, an explosion — the room
+  keeps the light the remaster baked into it and does not brighten. So do the
+  distance fog, the water shimmer, the underwater wobble and the fog bulbs:
+  `Fog`, `Distance fog` and `Shimmer` in the options still work everywhere else
+  and do nothing inside an HD room. All of that is the next stage but one
+  (S2b), and it is the reason the plan puts it directly after this one.
+- **a room the remaster has nothing for stays classic**, on its own, room by
+  room. In ANDREA1 that is four rooms out of 242. A room the randomizer built
+  from scratch (a secret's new chamber) is in the same position and behaves the
+  same way: classic, without being asked.
+
+One thing that will look wrong if you go looking for it: a static object you
+destroy — a vase, a crate — disappears from the game but not from the room's
+art, because that art is one baked piece. It belongs to the stage that draws
+objects.
+
+**The log.** With `-log`, `log.txt` gets a block of `HDLOG` lines per level.
+The ones worth reading:
 
 ```
-HDLOG level=ANDREA1 trg=v3 groups=243 rooms=242 sky=1 empty=4 pages=179
-      verts=955148 idx=2888361 ranges=1823 changes=32287 mixed=0 map=42
-      slots=161 trm_bound=50 trm_missing=73 trm_dummy=14 trm_lara=24 heads=5
-      bc7_ms=1091 bc7_pages=179 bc7_mips=1073 bc7_texels=73374208
+HDLOG level=ANDREA1 trg=v3 groups=243 rooms=242 sky=1 empty=4 pages=179 ...
+HDLOG room=0 group=0 tris=1216/0/0 ranges=4 statics=2 hd=1 reason=ok
+HDLOG room=66 group=66 tris=0/0/0 ranges=0 statics=0 hd=0 reason=empty_group
+HDLOG level=ANDREA1 built ms=1180 rooms=242 hd=238 classic=4 sky_groups=1 ...
+HDLOG level=ANDREA1 pages named=179 distinct=179 from5=179 ... mib=279.9 ...
+HDLOG level=ANDREA1 statics suppressed=255 kept=0 (in 238 HD rooms, 4 classic)
+HDLOG matrixcheck level=ANDREA1 room=12 group=12 samples=128 used=85 behind=43
+      maxdx=0.00017 maxdy=0.00009 maxdz=0.000000000 persp=572.0 center=960,540
 ```
 
-(one line, wrapped here), followed by one line per object slot whose model the
-remaster does not have. `ranges` is how many draw calls the HD rooms would
-cost; `bc7_ms` is how long this machine took to unpack all 179 texture pages
-with their whole mip chains, on one core. Those two numbers are the point of the
-stage.
+`hd=1/0` per room with its reason is the whole decision table; `built ms=` is
+what the HD side added to the loading time; `matrixcheck` is the engine
+comparing its own vertex transform with the matrix it hands the graphics card,
+over 128 of the room's own vertices — `maxdx`/`maxdy` are pixels and they have
+to stay far below 1, or an HD wall would stand beside its own floor.
 
-One number from the second stage is worth knowing in advance, because it is the
-one that decides whether this can work at all in a 32-bit game. The remaster's
-pages are BC7, a format Direct3D 9 has never heard of, so every one of them is
-unpacked on the processor and handed to the card as plain 32-bit pixels — no
-quality lost, which was your call. For the heaviest level that is 376 MB of
-texture. Kept in video memory it costs the process **270 MB** at its peak;
-kept in Direct3D's *managed* pool, where the driver holds a second copy in main
-memory, it costs **545 MB**. The first is what this engine does.
+If the HD path refuses, it says so in one line and the game runs on classic —
+no error box, no changed picture:
+
+```
+HDLOG level=ANDREA1 build refused reason=the device has no vertex/pixel shader 3.0
+```
+
+**Memory.** The remaster's pages are BC7, a format Direct3D 9 has never heard
+of, so every one of them is unpacked on the processor and handed to the card as
+plain 32-bit pixels — no quality lost, which was your call. For the heaviest
+level that is 376 MB of texture. Kept in video memory it costs the process
+**270 MB** at its peak; kept in Direct3D's *managed* pool, where the driver
+holds a second copy in main memory, it costs **545 MB**. The first is what this
+engine does. Unpacking them costs about a second of the loading time on a
+modern processor — the `built ms=` number above.
+
+**Alt+Enter and the resolution keys.** Changing the resolution or toggling
+full screen throws the graphics device away and makes a new one. Everything the
+HD path owns lived on the old one, so it is released at that moment and the
+rooms go back to classic **until the next level starts**. That is deliberate: a
+picture you can explain beats a crash.
 
 **Nothing is copied out of the remaster and nothing of it ships here**, the
 same rule as everywhere else in this project: the art is read where it lies, in

@@ -25,6 +25,7 @@
 #include "../specific/drawroom.h"
 #include "../specific/polyinsert.h"
 #include "../specific/function_stubs.h"
+#include "../specific/hd/hd_level.h"
 #include "../specific/lighting.h"
 #include "items.h"
 #include "../specific/file.h"
@@ -1360,6 +1361,24 @@ void DrawStaticObjects(short room_number)
 	CurrentRoom = room_number;
 	nPolyType = 1;
 	r = &room[room_number];
+
+	/* #123 (S1-2): the static meshes of an HD room are already IN its art -
+	 * the Remaster baked them into the .TRG - so drawing them again would put
+	 * a second lantern inside the first one, which is the bug report TROne
+	 * fixed with its baked-mesh rule (game_renderer.cpp:3722-3736).
+	 *
+	 * TROne suppresses by mesh POINTER and needs an exception for the case
+	 * where a moveable claims that same pointer. Our seam is narrower: this
+	 * skips a ROOM's own MESH_INFO list and nothing else, so a moveable
+	 * sharing the mesh still draws (it comes through DrawAnimatingItem, not
+	 * through here), and a room that stayed classic keeps every static it
+	 * ever had. The exception cannot arise.
+	 *
+	 * What is left over is a static the game hides at run time - a shattered
+	 * vase is gone from the classic list and still stands in the baked art.
+	 * TROne has that hole too; it belongs to the stage that draws objects. */
+	if (HDRoomIsHD(room_number))
+		return;
 
 	phd_PushMatrix();
 	phd_TranslateAbs(r->x, r->y, r->z);

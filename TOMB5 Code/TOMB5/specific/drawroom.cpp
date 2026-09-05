@@ -30,6 +30,7 @@
 #include "../game/gameflow.h"
 #include "../game/objects.h"
 #include "../tomb5/tomb5.h"
+#include "hd/hd_level.h"
 
 FOGBULB_INFO LevelFogBulbs[64];		//list of all fogbulbs in the level (copied from room data)
 FOGBULB_STRUCT ActiveFogBulbs[64];	//list of active fog bulbs
@@ -70,6 +71,21 @@ void InsertRoom(ROOM_INFO* r)
 	rClipRight = clip_right;
 	rClipLeft = clip_left;
 	rClipBottom = clip_bottom;
+
+	/* #123 (S1-2): an HD room's geometry comes out of the .TRG, not out of
+	 * these roomlets. HDFrameRoom writes the room down with the matrix that
+	 * is on the stack RIGHT NOW - view * world for this room, the same one
+	 * aSetViewMatrix() just handed the device - and S_OutputPolyList draws
+	 * the whole list where the classic world is drawn. Drawing it here
+	 * instead would put it before the buckets it has to share a depth buffer
+	 * with, in call paths that do not all agree on an order.
+	 *
+	 * This is the only difference in this function. With hd_enable off, or
+	 * before a level is built, or for a room the .TRG has nothing for,
+	 * HDFrameRoom returns false at its first line and the classic path below
+	 * runs exactly as it did. */
+	if (HDFrameRoom((int)(r - room), aMXPtr))
+		return;
 
 	if (r->nVerts)
 	{

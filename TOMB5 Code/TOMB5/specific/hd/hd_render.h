@@ -116,6 +116,16 @@ bool HDRenderRoomPass(int group, int pass, const D3DMATRIX* world);
 int HDRenderGroupCount();
 int HDRenderGroupTriangles(int group, int pass);	// pass < 0 = all three
 int HDRenderGroupRanges(int group, int pass);
+
+// A handful of the group's own vertex positions, room local, spread evenly
+// over its index run - the numbers the world-matrix proof is run on. The
+// .TRG itself is freed at the end of HDRenderLevelBegin and the vertex buffer
+// is write-only, so these are kept aside while the buffer is filled: at most
+// HD_RENDER_SAMPLES per group, which is 192 KiB over a whole level.
+// Returns how many vertices were written (3 shorts each).
+#define HD_RENDER_SAMPLES 128
+int HDRenderGroupSampleCount(int group);
+int HDRenderGroupSamples(int group, short* xyz, int maxVerts);
 // The room-local bounding box of a group, from the vertices its own indices
 // name. False when the group draws nothing.
 bool HDRenderGroupBounds(int group, float* mins, float* maxs);

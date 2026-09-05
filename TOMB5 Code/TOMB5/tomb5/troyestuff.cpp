@@ -18,7 +18,7 @@
 #include "tomb5.h"
 #include "../specific/input.h"
 
-#define PAGE0_NUM	12
+#define PAGE0_NUM	13
 #define PAGE1_NUM	14
 #define PAGE2_NUM	4
 
@@ -165,6 +165,7 @@ bool Page0(long& num, long textY, ulong selection)
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Ammo counter", 0);
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Gameover menu", 0);
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Fog", 0);
+	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "HD textures", 0);
 
 	y = 2;
 	i = 0;
@@ -203,6 +204,13 @@ bool Page0(long& num, long textY, ulong selection)
 	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
 
 	strcpy(buffer, tomb5.fog ? "on" : "off");
+	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
+
+	// #123: the Remaster's room art, read from the player's own installation.
+	// It is taken at the START of a level, so this row - like every other one
+	// on this page - shows what the next level will do, not what the level on
+	// screen is doing.
+	strcpy(buffer, tomb5.hd_enable ? "on" : "off");
 	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
 
 	switch (selection)
@@ -379,6 +387,17 @@ bool Page0(long& num, long textY, ulong selection)
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			tomb5.fog = !tomb5.fog;
+			changed = 1;
+		}
+
+		break;
+
+	case 1 << 12:
+
+		if (dbinput & IN_LEFT || dbinput & IN_RIGHT)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			tomb5.hd_enable = !tomb5.hd_enable;
 			changed = 1;
 		}
 

@@ -14,6 +14,7 @@
 #include "dxshell.h"
 #include "function_stubs.h"
 #include "function_table.h"
+#include "hd/hd_level.h"
 #include "winmain.h"
 #include "input.h"
 #include <Xinput.h>
@@ -230,6 +231,14 @@ HRESULT DXShowFrame()
 		{
 			Log("Device lost, resetting");
 
+			// #123: Reset() refuses point blank while any D3DPOOL_DEFAULT
+			// object is alive, and the HD path's vertex buffer, index buffer
+			// and page textures all are (that pool is the whole point - it
+			// keeps 300 MB of decoded pages out of the process's address
+			// space). They are released here so that the reset below can
+			// succeed at all; the next level load makes them again.
+			HDLevelDeviceLost();
+
 			HRESULT hrReset = G_dxptr->lpD3DDevice->Reset(&G_dxptr->PresentParams);
 
 			if (SUCCEEDED(hrReset))
@@ -270,6 +279,16 @@ void DXClose()
 
 	if (G_dxptr->lpD3DDevice)
 	{
+		// #123: every HD object - both buffers, the page textures, the two
+		// shaders, the vertex declaration - was made on THIS device, and a
+		// resolution change or Alt+Enter comes through here (DXChangeVideoMode
+		// / DXToggleFullScreen call DXCreate, which calls DXClose first).
+		// Letting them outlive the device would leave the HD path drawing
+		// through released interfaces on the next frame. They go now; the
+		// next level load builds them again on the new device, and until then
+		// the rooms are classic.
+		HDLevelDeviceLost();
+
 		Log("Released %s @ %x - RefCnt = %d", "Direct3DDevice", G_dxptr->lpD3DDevice, G_dxptr->lpD3DDevice->Release());
 		G_dxptr->lpD3DDevice = 0;
 	}

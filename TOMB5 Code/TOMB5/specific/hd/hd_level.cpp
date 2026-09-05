@@ -15,10 +15,14 @@
 #include "hd_install.h"
 #include "hd_bind.h"
 #include "hd_scan.h"
+#include "hd_render.h"
 #include "../function_stubs.h"
+#include "../d3dmatrix.h"
+#include "../3dmath.h"
+#include "../winmain.h"
 #include "../../tomb5/tomb5.h"
 #include "../../game/objects.h"
-#include "../../game/control.h"		// number_rooms
+#include "../../game/control.h"		// number_rooms, room
 
 // The generated slot name table in hd_bind.cpp has to be the enum, entry for
 // entry. This is the line that notices when a slot was added to objects.h and
@@ -28,6 +32,229 @@ static_assert(HD_SLOT_COUNT == NUMBER_OBJECTS,
 	"regenerate the table (see the comment above it) and update HD_SLOT_COUNT");
 static_assert(HAIR == 30,
 	"HDSlotIsLara() covers slots 0..30 because HAIR is 30 - it no longer is");
+
+// The engine never has more rooms than this, and draw_rooms (game\draw.cpp)
+// never holds more than 100 of them in one frame. Both are fixed arrays here
+// rather than allocations, so that nothing in the frame path can fail.
+#define HD_MAX_ROOMS	1024
+#define HD_MAX_FRAME	128
+
+namespace
+{
+	struct FrameRoom
+	{
+		int room;
+		D3DMATRIX world;	// view * world, as the classic path set it
+	};
+
+	char g_stem[64] = { 0 };
+
+	// Set by HDLevelBuild and by nothing else. Every frame-path function
+	// tests it first, so switching hd_enable while a level runs changes
+	// nothing until the next level starts - which is what the option row
+	// says it does.
+	bool g_level_active = false;
+
+	unsigned char g_room_hd[HD_MAX_ROOMS];
+	int g_room_count = 0;
+
+	FrameRoom g_frame[HD_MAX_FRAME];
+	int g_frame_count = 0;
+	int g_frame_dropped = 0;
+
+	// The projection is taken WHEN THE ROOMS ARE COLLECTED, not when they are
+	// drawn: AlterFOV moves f_persp inside a frame (the sky phase does it
+	// twice while the binoculars are up), and the rooms have to be projected
+	// with the same field of view the classic path transformed its vertices
+	// with.
+	float g_persp = 0;
+	float g_centerx = 0;
+	float g_centery = 0;
+	float g_za = 0;
+	float g_zb = 0;
+	float g_zboo = 0;
+	float g_znear = 0;
+	float g_oneopersp = 0;
+
+	bool g_matrix_checked = false;
+
+	const D3DMATRIX kIdentity =
+	{
+		1, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1
+	};
+
+	int DecodeThreads()
+	{
+		SYSTEM_INFO info;
+
+		GetSystemInfo(&info);
+
+		int threads = (int)info.dwNumberOfProcessors;
+
+		if (threads < 1)
+			threads = 1;
+
+		if (threads > 16)
+			threads = 16;
+
+		return threads;
+	}
+
+	// "DATA\ANDREA1.TRC" -> "ANDREA1". Not HDScreenLevelName(), which maps
+	// RICHCUT2 to RICH3 because the Remaster ships no loading picture for the
+	// cutscene - the .TRG of RICHCUT2 exists and is its own.
+	void LevelStem(const char* wadName, char* out, int size)
+	{
+		const char* start;
+		const char* dot;
+		int length;
+
+		out[0] = 0;
+
+		if (!wadName || !*wadName)
+			return;
+
+		start = strrchr(wadName, '\\');
+		start = start ? start + 1 : wadName;
+
+		if (const char* slash = strrchr(start, '/'))
+			start = slash + 1;
+
+		dot = strrchr(start, '.');
+		length = dot ? (int)(dot - start) : (int)strlen(start);
+
+		if (length > size - 1)
+			length = size - 1;
+
+		for (int i = 0; i < length; i++)
+			out[i] = (char)toupper((uchar)start[i]);
+
+		out[length] = 0;
+	}
+
+	/* THE PROOF THAT THE TWO PATHS PUT THE SAME POINT IN THE SAME PIXEL.
+	 *
+	 * The classic path transforms a room-local vertex with the matrix on the
+	 * stack and divides by z itself (specific\drawroom.cpp,
+	 * aRoomletTransformLight):
+	 *
+	 *     v  = pos * (view * world)          - a ROW vector, translation in row 3
+	 *     sx = v.x * f_persp / v.z + f_centerx
+	 *     sy = v.y * f_persp / v.z + f_centery
+	 *     sz = f_a - f_boo * (2048 / v.z)
+	 *
+	 * The HD path hands the device the same matrix times the projection and
+	 * lets the hardware divide. If the two disagree by so much as a pixel,
+	 * every HD wall stands beside its own floor. So they are compared here,
+	 * on the level's own vertices, with the level's own camera - once per
+	 * level, into the log, and the numbers are the acceptance of this stage.
+	 *
+	 * Not a self-test of a formula: the classic side below is the three lines
+	 * of drawroom.cpp, and the HD side is the matrix that really goes to the
+	 * device, through the viewport rule the device really applies. */
+	void MatrixCheck(int roomIndex, int group, const D3DMATRIX& world,
+		const D3DMATRIX& projection)
+	{
+		short xyz[HD_RENDER_SAMPLES * 3];
+		const int count = HDRenderGroupSamples(group, xyz, HD_RENDER_SAMPLES);
+
+		if (count <= 0)
+			return;
+
+		const double width = 2.0 * (double)g_centerx;
+		const double height = 2.0 * (double)g_centery;
+
+		/* world * projection, the general 4x4 the way hd_render.cpp builds it
+		 * and the way the vertex shader uses it - mul(float4(pos,1), wvp) with
+		 * the row convention. Written out in full rather than shortened with
+		 * "the projection is mostly zeroes", so that the proof would notice a
+		 * projection that stops being mostly zeroes. */
+		const float* w = (const float*)&world;
+		const float* p = (const float*)&projection;
+		double wvp[16];
+
+		for (int row = 0; row < 4; row++)
+			for (int col = 0; col < 4; col++)
+			{
+				double sum = 0;
+
+				for (int k = 0; k < 4; k++)
+					sum += (double)w[row * 4 + k] * (double)p[k * 4 + col];
+
+				wvp[row * 4 + col] = sum;
+			}
+
+		double worst_x = 0, worst_y = 0, worst_z = 0;
+		int used = 0;
+		int behind = 0;
+
+		for (int i = 0; i < count; i++)
+		{
+			const float px = (float)xyz[i * 3 + 0];
+			const float py = (float)xyz[i * 3 + 1];
+			const float pz = (float)xyz[i * 3 + 2];
+
+			// --- the classic path, line for line ------------------------
+			const float vx = px * world._11 + py * world._21 + pz * world._31 + world._41;
+			const float vy = px * world._12 + py * world._22 + pz * world._32 + world._42;
+			const float vz = px * world._13 + py * world._23 + pz * world._33 + world._43;
+
+			if (vz < g_znear)
+			{
+				behind++;
+				continue;
+			}
+
+			const float zv = g_persp / vz;
+			const double classic_x = (double)(vx * zv + g_centerx);
+			const double classic_y = (double)(vy * zv + g_centery);
+			const double classic_z = (double)(g_za - g_zboo * (zv * g_oneopersp));
+
+			// --- the device ---------------------------------------------
+			// The row vector through world * projection, then the w division,
+			// then the viewport - which this engine never sets, so it is the
+			// whole back buffer with MinZ 0 and MaxZ 1.
+			const double cx = (double)px * wvp[0] + (double)py * wvp[4] +
+				(double)pz * wvp[8] + wvp[12];
+			const double cy = (double)px * wvp[1] + (double)py * wvp[5] +
+				(double)pz * wvp[9] + wvp[13];
+			const double cz = (double)px * wvp[2] + (double)py * wvp[6] +
+				(double)pz * wvp[10] + wvp[14];
+			const double cw = (double)px * wvp[3] + (double)py * wvp[7] +
+				(double)pz * wvp[11] + wvp[15];
+
+			if (cw <= 0.0)
+			{
+				behind++;
+				continue;
+			}
+
+			const double device_x = (cx / cw + 1.0) * 0.5 * width;
+			const double device_y = (1.0 - cy / cw) * 0.5 * height;
+			const double device_z = cz / cw;
+
+			const double dx = fabs(device_x - classic_x);
+			const double dy = fabs(device_y - classic_y);
+			const double dz = fabs(device_z - classic_z);
+
+			if (dx > worst_x) worst_x = dx;
+			if (dy > worst_y) worst_y = dy;
+			if (dz > worst_z) worst_z = dz;
+
+			used++;
+		}
+
+		Log("HDLOG matrixcheck level=%s room=%d group=%d samples=%d used=%d "
+			"behind=%d maxdx=%.5f maxdy=%.5f maxdz=%.9f persp=%.1f "
+			"center=%.0f,%.0f",
+			g_stem, roomIndex, group, count, used, behind,
+			worst_x, worst_y, worst_z, (double)g_persp,
+			(double)g_centerx, (double)g_centery);
+	}
+}
 
 bool HDEnabled()
 {
@@ -40,98 +267,304 @@ bool HDEnabled()
 	return HDInstallRoot()[0] != 0;
 }
 
-// "DATA\ANDREA1.TRC" -> "ANDREA1". Not HDScreenLevelName(), which maps
-// RICHCUT2 to RICH3 because the Remaster ships no loading picture for the
-// cutscene - the .TRG of RICHCUT2 exists and is its own.
-static void HDLevelStem(const char* wadName, char* out, int size)
-{
-	const char* start;
-	const char* dot;
-	int length;
-
-	out[0] = 0;
-
-	if (!wadName || !*wadName)
-		return;
-
-	start = strrchr(wadName, '\\');
-	start = start ? start + 1 : wadName;
-
-	if (const char* slash = strrchr(start, '/'))
-		start = slash + 1;
-
-	dot = strrchr(start, '.');
-	length = dot ? (int)(dot - start) : (int)strlen(start);
-
-	if (length > size - 1)
-		length = size - 1;
-
-	for (int i = 0; i < length; i++)
-		out[i] = (char)toupper((uchar)start[i]);
-
-	out[length] = 0;
-}
-
 void HDLevelLoad(const char* wadName)
 {
 	static unsigned char loaded[NUMBER_OBJECTS];
 	HDScanStats stats;
 	const char* why;
-	char stem[64];
+
+	g_stem[0] = 0;
 
 	if (!HDEnabled())
 		return;
 
-	HDLevelStem(wadName, stem, sizeof(stem));
+	LevelStem(wadName, g_stem, sizeof(g_stem));
 
-	if (!stem[0])
+	if (!g_stem[0])
 		return;
 
 	for (int i = 0; i < NUMBER_OBJECTS; i++)
 		loaded[i] = objects[i].loaded ? 1 : 0;
 
-	// The whole page decode is the measurement stage S0 exists for, and it
-	// costs seconds. It is tied to -log because the line it feeds only exists
-	// with -log: a normal run with hd_enable on reads the .TRG and the .MAP
-	// and nothing else.
-	if (!HDScanLevel(HDInstallRoot(), stem, number_rooms, loaded, NUMBER_OBJECTS,
-		gLogEnabled, 1, &stats, &why))
+	// measureBc7 is off from stage S1-2 on: HDLevelBuild decodes every page
+	// for real a moment later and reports what that cost, so decoding them
+	// all a second time here would only make the level load twice as slow to
+	// measure the same thing.
+	if (!HDScanLevel(HDInstallRoot(), g_stem, number_rooms, loaded, NUMBER_OBJECTS,
+		false, 1, &stats, &why))
 	{
-		Log("HDLOG level=%s FAILED %s", stem, why);
+		Log("HDLOG level=%s FAILED %s", g_stem, why);
+		g_stem[0] = 0;
 		return;
 	}
 
 	Log("HDLOG level=%s trg=v%d groups=%d rooms=%d sky=%d empty=%d pages=%d "
 		"verts=%d idx=%d ranges=%d changes=%d mixed=%d map=%d slots=%d "
-		"trm_bound=%d trm_missing=%d trm_dummy=%d trm_lara=%d heads=%d "
-		"bc7_ms=%d bc7_pages=%d bc7_mips=%d bc7_texels=%d",
-		stem, stats.trgVersion, stats.groups, stats.rooms, stats.skyGroups,
+		"trm_bound=%d trm_missing=%d trm_dummy=%d trm_lara=%d heads=%d",
+		g_stem, stats.trgVersion, stats.groups, stats.rooms, stats.skyGroups,
 		stats.emptyGroups, stats.pages, stats.vertices, stats.indices,
 		stats.ranges, stats.pageChanges, stats.mixedPageTriangles,
 		stats.mapEntries, stats.slotsLoaded, stats.trmBound, stats.trmMissing,
-		stats.trmDummy, stats.trmLara, stats.headsBound,
-		(int)(stats.bc7Ms + 0.5), stats.bc7Pages, stats.bc7Mips,
-		(int)stats.bc7Texels);
+		stats.trmDummy, stats.trmLara, stats.headsBound);
 
 	for (int i = 0; i < HDScanMissingCount(); i++)
 		Log("HDLOG level=%s missing slot=%s model=%s.TRM",
-			stem, HDScanMissingSlot(i), HDScanMissingModel(i));
+			g_stem, HDScanMissingSlot(i), HDScanMissingModel(i));
 
 	if (stats.groups < stats.rooms)
 		Log("HDLOG level=%s WARNING the .TRG has %d groups for %d rooms - "
 			"the rooms above %d stay classic",
-			stem, stats.groups, stats.rooms, stats.groups - 1);
+			g_stem, stats.groups, stats.rooms, stats.groups - 1);
+}
+
+void HDLevelBuild()
+{
+	HDRenderStats stats;
+	const char* why = "";
+	int hd_rooms = 0;
+	int classic_rooms = 0;
+	int suppressed_statics = 0;
+	int kept_statics = 0;
+
+	g_level_active = false;
+	g_frame_count = 0;
+	g_frame_dropped = 0;
+	g_matrix_checked = false;
+	memset(g_room_hd, 0, sizeof(g_room_hd));
+	g_room_count = 0;
+
+	// The level before this one, released here rather than in HDLevelUnload -
+	// see the comment there. This is the main thread; that one is not.
+	if (HDRenderGroupCount())
+	{
+		HDRenderLevelEnd();
+		Log("HDLOG the previous level's HD objects are released");
+	}
+
+	if (!HDEnabled() || !g_stem[0])
+		return;
+
+	if (number_rooms <= 0 || number_rooms > HD_MAX_ROOMS)
+	{
+		Log("HDLOG level=%s build refused reason=room_count(%d)", g_stem, (int)number_rooms);
+		return;
+	}
+
+	// The device is made once and lives as long as it does. A card that
+	// cannot do shader model 3 says so here, once, and the game runs on
+	// classic for the rest of the session - no picture changes, no error box.
+	if (!HDRenderReady())
+	{
+		if (!HDRenderInit(App.dx.lpD3DDevice, &why))
+		{
+			Log("HDLOG level=%s build refused reason=%s", g_stem, why);
+			return;
+		}
+
+		Log("HDLOG render init ok");
+	}
+
+	const DWORD started = GetTickCount();
+
+	if (!HDRenderLevelBegin(HDInstallRoot(), g_stem, number_rooms, false,
+		DecodeThreads(), &stats, &why))
+	{
+		Log("HDLOG level=%s build failed reason=%s", g_stem, why);
+		HDRenderLevelEnd();
+		return;
+	}
+
+	const DWORD build_ms = GetTickCount() - started;
+
+	g_room_count = number_rooms;
+
+	for (int r = 0; r < g_room_count; r++)
+	{
+		const int tris = HDRenderGroupTriangles(r, -1);
+		const bool has_group = r < HDRenderGroupCount();
+		const char* reason = !has_group ? "no_group" : (!tris ? "empty_group" : "ok");
+
+		g_room_hd[r] = (unsigned char)((has_group && tris) ? 1 : 0);
+
+		if (g_room_hd[r])
+		{
+			hd_rooms++;
+			suppressed_statics += room[r].num_meshes;
+		}
+		else
+		{
+			classic_rooms++;
+			kept_statics += room[r].num_meshes;
+		}
+
+		Log("HDLOG room=%d group=%d tris=%d/%d/%d ranges=%d statics=%d hd=%d reason=%s",
+			r, r, HDRenderGroupTriangles(r, 0), HDRenderGroupTriangles(r, 1),
+			HDRenderGroupTriangles(r, 2), HDRenderGroupRanges(r, -1),
+			(int)room[r].num_meshes, (int)g_room_hd[r], reason);
+	}
+
+	g_level_active = hd_rooms > 0;
+
+	Log("HDLOG level=%s built ms=%d rooms=%d hd=%d classic=%d sky_groups=%d "
+		"verts=%d idx=%d(%dbit) ranges=%d split=%d layer0_tris=%d "
+		"vb_mib=%.1f ib_mib=%.1f read_ms=%d build_ms=%d",
+		g_stem, (int)build_ms, g_room_count, hd_rooms, classic_rooms,
+		stats.skyGroups, stats.vertices, stats.indices, stats.index32 ? 32 : 16,
+		stats.ranges, stats.splitRanges, stats.fallbackPageTris,
+		stats.vertexBytes / 1048576.0, stats.indexBytes / 1048576.0,
+		(int)(stats.readMs + 0.5), (int)(stats.buildMs + 0.5));
+
+	Log("HDLOG level=%s pages named=%d distinct=%d from5=%d from4=%d from6=%d "
+		"white=%d failed=%d mips=%d widest=%d big=%d mib=%.1f "
+		"read_ms=%d decode_ms=%d(%d threads) upload_ms=%d",
+		g_stem, stats.pages.pages, stats.pages.slots, stats.pages.fromGame5,
+		stats.pages.fromGame4, stats.pages.fromGame6, stats.pages.fromWhite,
+		stats.pages.failed, stats.pages.mipLevels, stats.pages.widest,
+		stats.pages.bigPages, stats.pages.bytes / 1048576.0,
+		(int)(stats.pages.readMs + 0.5), (int)(stats.pages.decodeMs + 0.5),
+		stats.pages.threads, (int)(stats.pages.uploadMs + 0.5));
+
+	for (int i = 0; i < HDPageCacheNoteCount(); i++)
+		Log("HDLOG level=%s page note: %s", g_stem, HDPageCacheNote(i));
+
+	/* THE STATIC MESHES. A .TRG room has the level's static meshes baked into
+	 * its art, so DrawStaticObjects must not draw them a second time - that is
+	 * TROne's "double lantern" (game_renderer.cpp:3722-3736, a baked mesh
+	 * pointer passes only while the moveable that claims it is streaming).
+	 *
+	 * Our seam is narrower and the rule with it: we suppress a ROOM's own
+	 * MESH_INFO list, and only for a room that really draws HD. A moveable
+	 * that happens to share a static's MESH_DATA* goes through
+	 * DrawAnimatingItem and is never touched, and a room that stayed classic
+	 * keeps every static it had. The exception TROne needs cannot arise here.
+	 *
+	 * What this does NOT solve is a static the game makes disappear at run
+	 * time - a shattered vase is gone from the classic list and still stands
+	 * in the baked art. TROne has the same hole; it belongs to the stage that
+	 * draws objects, not to this one. */
+	Log("HDLOG level=%s statics suppressed=%d kept=%d (in %d HD rooms, %d classic)",
+		g_stem, suppressed_statics, kept_statics, hd_rooms, classic_rooms);
+
+	if (!g_level_active)
+	{
+		Log("HDLOG level=%s no room draws HD - releasing again", g_stem);
+		HDRenderLevelEnd();
+	}
 }
 
 void HDLevelUnload()
 {
-	// Stage S0 holds nothing between levels: HDLevelLoad frees its .TRG, its
-	// map and every decoded page before it returns. The call sits in
-	// FreeLevel from the start so that stage S1 has one place to put the
-	// vertex buffers, the page textures and the room table, and so that the
-	// seam is proven by the level bracket before anything hangs on it.
-	if (!HDEnabled())
+	/* NOT behind HDEnabled(): a level built while HD was on has to come down
+	 * even when the player switched HD off in the options in the meantime.
+	 * Asking the setting here is how a vertex buffer outlives its level.
+	 *
+	 * AND NOT A SINGLE DIRECT3D CALL HERE. FreeLevel runs at the top of
+	 * LoadLevel, on the LOAD thread, while the main thread is presenting the
+	 * loading bar - the two-threads-one-device window that froze this game
+	 * twice (specific\file.cpp, the comment at the end of LoadLevel). The
+	 * objects are released in HDLevelBuild instead, on the thread that owns
+	 * the device, immediately before the next level's are made; and DXClose
+	 * releases them through HDLevelDeviceLost when the device itself goes. */
+	g_level_active = false;
+	g_frame_count = 0;
+	g_room_count = 0;
+	g_stem[0] = 0;
+}
+
+void HDLevelDeviceLost()
+{
+	g_level_active = false;
+	g_frame_count = 0;
+	g_room_count = 0;
+
+	if (!HDRenderReady() && !HDRenderGroupCount())
 		return;
 
-	Log("HDLOG unload");
+	// Shaders, declaration, both buffers and every page texture belong to the
+	// device that is going away. HDRenderShutdown drops all of it and forgets
+	// the device; the next HDLevelBuild calls HDRenderInit again on whatever
+	// device exists then. Until the next level starts the rooms are classic -
+	// which is a picture, not a crash, and a crash is what a dangling
+	// IDirect3DVertexBuffer9 would be.
+	HDRenderShutdown();
+	Log("HDLOG device lost - HD released, classic until the next level");
+}
+
+bool HDRoomIsHD(int roomIndex)
+{
+	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
+		return false;
+
+	return g_room_hd[roomIndex] != 0;
+}
+
+void HDFrameReset()
+{
+	g_frame_count = 0;
+	g_frame_dropped = 0;
+}
+
+bool HDFrameRoom(int roomIndex, const float* viewWorld)
+{
+	if (!g_level_active || !viewWorld)
+		return false;
+
+	if (roomIndex < 0 || roomIndex >= g_room_count || !g_room_hd[roomIndex])
+		return false;
+
+	if (g_frame_count >= HD_MAX_FRAME)
+	{
+		// draw_rooms (game\draw.cpp) holds 100, so this cannot happen - but a
+		// silent overrun of a fixed array is not a thing to leave to a
+		// comment.
+		g_frame_dropped++;
+		return false;
+	}
+
+	if (!g_frame_count)
+	{
+		// The projection of THIS frame, taken while the rooms are collected.
+		g_persp = f_persp;
+		g_centerx = f_centerx;
+		g_centery = f_centery;
+		g_za = f_a;
+		g_zb = f_b;
+		g_zboo = f_boo;
+		g_znear = f_mznear;
+		g_oneopersp = f_moneopersp;
+	}
+
+	FrameRoom& entry = g_frame[g_frame_count++];
+	entry.room = roomIndex;
+	SetD3DMatrix(&entry.world, (float*)viewWorld);
+
+	return true;
+}
+
+void HDFrameDraw()
+{
+	if (!g_frame_count)
+		return;
+
+	D3DMATRIX projection;
+
+	HDRenderMakeProjection((double)g_persp, (double)g_centerx, (double)g_centery,
+		(double)g_za, (double)g_zb, &projection);
+
+	HDRenderFrameBegin(&kIdentity, &projection);
+
+	for (int i = 0; i < g_frame_count; i++)
+		HDRenderRoom(g_frame[i].room, &g_frame[i].world);
+
+	HDRenderFrameEnd();
+
+	if (!g_matrix_checked && gLogEnabled)
+	{
+		g_matrix_checked = true;
+		MatrixCheck(g_frame[0].room, g_frame[0].room, g_frame[0].world, projection);
+		Log("HDLOG frame rooms=%d calls=%d dropped=%d",
+			g_frame_count, HDRenderDrawCalls(), g_frame_dropped);
+	}
+
+	g_frame_count = 0;
 }

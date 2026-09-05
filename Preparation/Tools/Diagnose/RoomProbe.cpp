@@ -20,6 +20,14 @@
  *     HDRenderDepthTruth reads back what the device actually compares with -
  *     ZENABLE, ZFUNC, ZWRITEENABLE and the viewport's MinZ / MaxZ - because
  *     a proof against an assumed state proves nothing.
+ *   - the world-matrix proof (stage S1-2, -matrixcheck). InsertRoom hands the
+ *     HD path the matrix that is on the engine's stack for a room, and the HD
+ *     path multiplies it by a projection matrix and lets the device divide by
+ *     w. The classic path multiplies by the same matrix and divides by z
+ *     itself. If those two do not put the same room-local point in the same
+ *     pixel, every HD wall stands beside its own floor - so both are computed
+ *     here, over up to 128 of the room's own vertices, and the worst
+ *     difference is printed in PIXELS.
  *   - the page cache in both pools. D3DPOOL_DEFAULT pushes every page through
  *     one reused system-memory staging texture; D3DPOOL_MANAGED lets Direct3D
  *     keep a system copy of all of them. The engine is a 32 bit process, so
@@ -51,6 +59,7 @@
  *     -out <prefix>   output path prefix, default .\roomprobe
  *     -groups         list every group's triangles and ranges, then stop
  *     -nodraw         load and measure only - no window, no picture
+ *     -matrixcheck    the world-matrix proof as a table, then stop
  *
  * Everything outside the pixels goes to stdout, so a run can be pasted into a
  * report as it stands.
@@ -723,6 +732,139 @@ static void ShotEnd(Shot& shot)
 	if (shot.target) { shot.target->Release(); shot.target = 0; }
 }
 
+/* ------------------------------------------------------- matrix proof -- */
+
+/* THE ENGINE'S TRANSFORM AGAINST THE HD MATRIX, IN PIXELS.
+ *
+ * The classic path (specific\drawroom.cpp, aRoomletTransformLight) takes a
+ * room-local vertex through the matrix on the stack as a ROW vector and then
+ * divides by z itself:
+ *
+ *     v  = pos * M            M = view * world, translation in row 3
+ *     sx = v.x * persp / v.z + centerx
+ *     sy = v.y * persp / v.z + centery
+ *     sz = f_a - f_boo * (2048 / v.z)
+ *
+ * The HD path hands the device M * projection and lets the hardware divide by
+ * w and apply the viewport. Those three lines are reproduced below exactly as
+ * they stand in the engine - not approximated - and compared with the matrix
+ * that really goes to the device, over the room's own vertices.
+ *
+ * The same comparison runs inside the game (specific\hd\hd_level.cpp,
+ * MatrixCheck) on the first HD frame of a level and writes one HDLOG line.
+ * This is that proof without the game. */
+static void MatrixProof(int room, const float* view, const D3DMATRIX& projection,
+	double persp, double width, double height, double a, double boo)
+{
+	short xyz[HD_RENDER_SAMPLES * 3];
+	const int count = HDRenderGroupSamples(room, xyz, HD_RENDER_SAMPLES);
+
+	printf("\n-- the world matrix -----------------------------------------\n");
+
+	if (count <= 0)
+	{
+		printf("group %d has no sample vertices - nothing to prove\n", room);
+		return;
+	}
+
+	/* world * projection, the general 4x4 as hd_render.cpp builds it and as
+	 * the vertex shader uses it: mul(float4(pos, 1), gWorldViewProj). The
+	 * probe draws the room with world = identity, so the engine's "view *
+	 * world" is this view. */
+	const float* p = (const float*)&projection;
+	double wvp[16];
+
+	for (int row = 0; row < 4; row++)
+		for (int col = 0; col < 4; col++)
+		{
+			double sum = 0;
+
+			for (int k = 0; k < 4; k++)
+				sum += (double)view[row * 4 + k] * (double)p[k * 4 + col];
+
+			wvp[row * 4 + col] = sum;
+		}
+
+	const double centerX = width * 0.5;
+	const double centerY = height * 0.5;
+	const double znear = 20.0;		// f_mznear, the engine's own
+
+	double worstX = 0, worstY = 0, worstZ = 0;
+	int used = 0, behind = 0, shown = 0;
+
+	printf("%d sample vertices of group %d, camera as above\n", count, room);
+	printf("\n  %-24s %-19s %-19s %s\n",
+		"room-local x y z", "classic sx, sy", "device sx, sy", "difference (px)");
+
+	for (int i = 0; i < count; i++)
+	{
+		const float px = (float)xyz[i * 3 + 0];
+		const float py = (float)xyz[i * 3 + 1];
+		const float pz = (float)xyz[i * 3 + 2];
+
+		// --- the classic path, line for line ---------------------------
+		const float vx = px * view[0] + py * view[4] + pz * view[8] + view[12];
+		const float vy = px * view[1] + py * view[5] + pz * view[9] + view[13];
+		const float vz = px * view[2] + py * view[6] + pz * view[10] + view[14];
+
+		if (vz < (float)znear)
+		{
+			behind++;
+			continue;
+		}
+
+		const float zv = (float)persp / vz;
+		const double classicX = (double)(vx * zv + (float)centerX);
+		const double classicY = (double)(vy * zv + (float)centerY);
+		const double classicZ = a - boo * (2048.0 / (double)vz);
+
+		// --- the device -------------------------------------------------
+		const double cx = (double)px * wvp[0] + (double)py * wvp[4] + (double)pz * wvp[8] + wvp[12];
+		const double cy = (double)px * wvp[1] + (double)py * wvp[5] + (double)pz * wvp[9] + wvp[13];
+		const double cz = (double)px * wvp[2] + (double)py * wvp[6] + (double)pz * wvp[10] + wvp[14];
+		const double cw = (double)px * wvp[3] + (double)py * wvp[7] + (double)pz * wvp[11] + wvp[15];
+
+		if (cw <= 0.0)
+		{
+			behind++;
+			continue;
+		}
+
+		// The viewport this engine never sets: the whole target, MinZ 0,
+		// MaxZ 1.
+		const double deviceX = (cx / cw + 1.0) * 0.5 * width;
+		const double deviceY = (1.0 - cy / cw) * 0.5 * height;
+		const double deviceZ = cz / cw;
+
+		const double dx = fabs(deviceX - classicX);
+		const double dy = fabs(deviceY - classicY);
+		const double dz = fabs(deviceZ - classicZ);
+
+		if (dx > worstX) worstX = dx;
+		if (dy > worstY) worstY = dy;
+		if (dz > worstZ) worstZ = dz;
+
+		used++;
+
+		// A dozen rows are a table; a hundred are a wall.
+		if (shown < 12 && (i % (count / 12 + 1)) == 0)
+		{
+			printf("  %7.0f %7.0f %7.0f  %8.2f %8.2f  %8.2f %8.2f  %.5f %.5f\n",
+				(double)px, (double)py, (double)pz,
+				classicX, classicY, deviceX, deviceY, dx, dy);
+			shown++;
+		}
+	}
+
+	printf("\n%d of %d vertices in front of the near plane (%d behind it or "
+		"off the near side)\n", used, count, behind);
+	printf("worst difference: x %.6f px, y %.6f px, depth %.9f\n",
+		worstX, worstY, worstZ);
+	printf("verdict: %s\n", (worstX < 1.0 && worstY < 1.0 && worstZ < 1e-5)
+		? "PASS - the HD matrix puts the point where the engine puts it"
+		: "FAIL - the two paths disagree, an HD room would not line up");
+}
+
 /* ---------------------------------------------------------------- main -- */
 
 int main(int argc, char** argv)
@@ -731,7 +873,7 @@ int main(int argc, char** argv)
 	{
 		printf("usage: RoomProbe <5-folder> <LEVEL> <room> [x y z yaw pitch] [options]\n");
 		printf("       -size <w> <h>  -fov <deg>  -all  -managed  -threads <n>\n");
-		printf("       -rooms <n>  -out <prefix>  -groups  -nodraw\n");
+		printf("       -rooms <n>  -out <prefix>  -groups  -nodraw  -matrixcheck\n");
 		return 1;
 	}
 
@@ -744,6 +886,7 @@ int main(int argc, char** argv)
 	long width = 1280, height = 720;
 	double fov = 80.0;
 	bool allPasses = false, managed = false, groupsOnly = false, noDraw = false;
+	bool matrixCheck = false;
 	int threads = 8, rooms = 0;
 	const char* out = "roomprobe";
 
@@ -785,6 +928,8 @@ int main(int argc, char** argv)
 			groupsOnly = true;
 		else if (!strcmp(argv[at], "-nodraw"))
 			noDraw = true;
+		else if (!strcmp(argv[at], "-matrixcheck"))
+			matrixCheck = true;
 		else
 			printf("RoomProbe: ignoring unknown argument \"%s\"\n", argv[at]);
 	}
@@ -962,6 +1107,14 @@ int main(int argc, char** argv)
 	HDRenderZConstants(20.0, 20480.0, &a, &b, &boo);
 	HDRenderMakeProjection(persp, (double)width * 0.5, (double)height * 0.5,
 		a, b, &projection);
+
+	if (matrixCheck)
+	{
+		MatrixProof(room, view, projection, persp, (double)width, (double)height, a, boo);
+		HDRenderShutdown();
+		DropDevice();
+		return 0;
+	}
 
 	/* --- the picture -------------------------------------------------- */
 	printf("\n-- the pictures ---------------------------------------------\n");

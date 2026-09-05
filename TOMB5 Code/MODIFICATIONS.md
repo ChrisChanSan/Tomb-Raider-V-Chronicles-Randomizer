@@ -1040,6 +1040,102 @@ device states before and after an HD block — a check that immediately earned
 its keep by reporting that `SetStreamSource(0, NULL, 0, 0)` leaves the old
 stride readable, which is Direct3D's behaviour and not ours.
 
+#### Stage S1-2 — the seam: the engine draws the HD rooms
+
+Six lines of engine change and one new engine-facing module,
+`specific/hd/hd_level.cpp`. With `hd_enable` at 0 every one of them returns on
+its first line and the frame is what it was.
+
+**The frame order, and why it is that order.** The classic path does not draw
+in `InsertRoom` either: it fills texture buckets and a sort list there and draws
+them later, in `S_OutputPolyList`. So an HD room is not drawn where it is met.
+`InsertRoom` (`specific/drawroom.cpp:63`) writes the room number and the matrix
+that is on the stack at that moment — view * world for this room, the one
+`aSetViewMatrix()` has just handed the device — into a frame list and returns,
+skipping its roomlets; `S_OutputPolyList` (`specific/output.cpp`) draws the
+whole list **immediately before `DrawBuckets()`**, and `S_InitialisePolyList`
+empties it beside the buckets and the sort list.
+
+That place is the only one that works for all three of the depth clears and
+draws in a TR5 frame:
+
+1. `S_InitialisePolyList` clears colour **and depth** (#127).
+2. `SkyDrawPhase` — inside `DrawRooms`, *before* the room loop — draws the sky
+   at once and with `D3DRS_ZWRITEENABLE 0` (`specificfx.cpp`, `OutputSky`), so
+   the sky owns no depth and HD walls paint over it exactly as the classic room
+   polygons did.
+3. **the HD rooms** — into an empty depth buffer, over the sky.
+4. `DrawBuckets` — Lara, items, the statics of every classic room — depth
+   tested against those walls. The test is exact and needs no bias: the HD
+   projection matrix writes the same `sz` for the same point in space that the
+   classic path writes (stage S1-1, worst difference 8.9e-08).
+5. `DrawSortList` — the see-through polygons, over both.
+6. the second depth clear, the one #127 kept, which separates the world from
+   the binocular mask, the pickup display and the fade. It is *after* all of
+   the above and keeps working unchanged.
+
+**The world matrix, proved in pixels.** `SetD3DMatrix` (`d3dmatrix.cpp`) turns
+the engine's 3x4 row-major matrix into a `D3DMATRIX`, and the HD path draws with
+that as its world matrix, an identity view and the projection built from the
+live `f_persp` / `f_centerx` / `f_centery` / `f_a` / `f_b`. Live, because
+`AlterFOV` moves `f_persp` inside a frame — `SkyDrawPhase` does it twice while
+the binoculars are up — so the projection is taken when the rooms are
+collected, not when they are drawn.
+
+`hd_level.cpp`'s `MatrixCheck` runs the engine's own three transform lines
+(`drawroom.cpp`, `aRoomletTransformLight`) and the matrix that really goes to
+the card over up to 128 of the room's own vertices, once per level, and writes
+the worst difference in pixels into the log. Measured on ANDREA1 out of
+`RoomProbe -matrixcheck`: room 12 **0.00017 px** in x, **0.00009 px** in y,
+depth difference **0**; room 69 0.00017 / 0.00010 / 0. The vertices for it are
+kept aside while the vertex buffer is filled (128 per group, evenly spread,
+192 KiB for a whole level), because the `.TRG` is freed at the end of the build
+and the vertex buffer is `WRITEONLY`.
+
+**Where the build happens, and on which thread.** `HDLevelLoad` stays on the
+load thread and only reads and measures. The Direct3D objects — vertex buffer,
+index buffer, page textures — are made by `HDLevelBuild`, called from
+`S_LoadLevelFile` beside `aInit()`, **on the main thread**, for the same reason
+`aInit()` was moved out of the load thread: two threads on one device froze this
+game twice. `HDLevelUnload` (in `FreeLevel`, which runs on the load thread)
+therefore makes no Direct3D call at all; the previous level's objects are
+released at the top of the next `HDLevelBuild`.
+
+**The room decision is made once per level, not per frame.** A room is HD when
+its group exists in the `.TRG` and has at least one index. Everything else stays
+classic on its own: the four rooms of ANDREA1 whose group is empty, every room
+above the group count, and — without anything being written for it — a room the
+randomizer built from scratch. One `HDLOG` line per room records the decision
+and its reason.
+
+**Static meshes.** The remaster bakes a level's static objects into the room
+art, so `DrawStaticObjects` returns at once for an HD room; drawing them again
+is TROne's "double lantern" (`game_renderer.cpp:3722-3736`). TROne suppresses by
+mesh pointer and needs an exception for a moveable that claims the same
+pointer — our seam is narrower and needs none: this skips one **room's**
+`MESH_INFO` list, a moveable sharing the mesh comes through `DrawAnimatingItem`
+and is untouched, and a room that stayed classic keeps every static it had.
+Counted from the `.TRG` groups and the `.TRC` room headers: ANDREA1 255 of 255
+statics suppressed in 238 HD rooms, JOBY3 244 of 244 in 195, RICH1 261 of 261 in
+164 — in all three the rooms that stay classic happen to hold no static at all.
+
+**The device.** `DXToggleFullScreen` and `DXChangeVideoMode` call `DXCreate`,
+which calls `DXClose`, which **releases the device and makes a new one** — so
+Alt+Enter and the resolution keys are a device *replacement*, not a reset. Every
+HD object lives on the old device, so `DXClose` releases them first
+(`HDLevelDeviceLost`) and the rooms fall back to classic until the next level
+starts. The rarely reached `Reset()` path in `DXShowFrame` gets the same call
+for a different reason: `Reset` refuses outright while any `D3DPOOL_DEFAULT`
+object is alive, and all of the HD path's are.
+
+**The options row.** *Options -> tomb5 options*, the FIRST page, new last row
+**HD textures** (on/off, `PAGE0_NUM` 12 -> 13), written to the registry by the
+page's own `save_new_tomb5_settings()` like every neighbouring row. Those rows
+are hard-coded English literals in `tomb5/troyestuff.cpp`, not language-table
+entries, so nothing in `Language.cpp` changes. It takes effect at the next level
+start, and the code enforces that rather than promising it: the frame path tests
+a flag that only `HDLevelBuild` sets.
+
 ---
 
 ## Building this yourself

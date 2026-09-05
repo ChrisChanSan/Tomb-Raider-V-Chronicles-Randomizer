@@ -12,24 +12,68 @@
  */
 #pragma once
 
-// THE LEVEL BRACKET OF THE HD PATH (#123).
+// THE SEAM BETWEEN THE ENGINE AND THE HD PATH (#123).
 //
-// Two calls, and in stage S0 they change no pixel: HDLevelLoad looks at what
-// the Remaster has for this level, measures it into the log and frees it all
-// again; HDLevelUnload has nothing to free yet and says so. Everything behind
-// them is switched off unless the registry setting hd_enable is 1 - which it
-// is not out of the box, so an unchanged installation does not read a single
-// byte more than it did before (the guard is the first line of HDLevelLoad).
+// Everything behind these calls is switched off unless the registry setting
+// hd_enable is 1 - which it is not out of the box, so an unchanged
+// installation does not read a single byte more than it did before and draws
+// exactly the frame it drew before. Each function below says in its own first
+// line where that guard sits.
 //
-// The seam sits in specific\file.cpp: HDLevelLoad after LoadTextureInfos, so
-// that the rooms, the models and the object slots are all in memory in their
-// RANDOMIZED state, and HDLevelUnload in FreeLevel.
+// THE LEVEL BRACKET
+//
+//   HDLevelLoad   specific\file.cpp, LoadLevel, after LoadTextureInfos - on
+//                 the LOAD THREAD. Reads the .TRG and the .MAP and measures
+//                 them into the log. No Direct3D object is made here.
+//   HDLevelBuild  specific\file.cpp, S_LoadLevelFile, beside aInit() - on the
+//                 MAIN THREAD, which owns the device. Vertex buffer, index
+//                 buffer and page textures are made here, for the same reason
+//                 aInit() was moved out of the load thread: two threads on one
+//                 device froze this game twice already, and the fix is not to
+//                 do it a third time.
+//   HDLevelUnload specific\file.cpp, FreeLevel. Frees everything, whatever the
+//                 setting says now - a level built with HD on must come down
+//                 even if the player switched HD off while playing it.
+//
+// THE FRAME BRACKET
+//
+//   HDFrameReset  specific\output.cpp, S_InitialisePolyList. Empties the list.
+//   HDFrameRoom   specific\drawroom.cpp, InsertRoom. Takes the room over when
+//                 it is an HD room: remembers it with its world matrix and
+//                 tells the caller to skip the classic roomlets.
+//   HDFrameDraw   specific\output.cpp, S_OutputPolyList, right before
+//                 DrawBuckets. Draws every remembered room.
+//
+// WHY THE ROOMS ARE NOT DRAWN WHERE THEY ARE COLLECTED. The classic path does
+// not draw in InsertRoom either - it fills texture buckets and a sort list and
+// hands them to DrawBuckets/DrawSortList later. Between the two lies the
+// frame's depth clear (S_InitialisePolyList, #127). An HD room drawn in
+// InsertRoom would therefore be wiped by that clear in the same frame in every
+// call path where the two are not already in the right order, and the HD walls
+// would swallow Lara and every item. Collecting and drawing at the one place
+// where the classic world is drawn keeps the two paths in one order, whoever
+// calls them.
 
-// `wadName` is the gameflow's level name, with or without a folder and an
-// extension - "DATA\ANDREA1" and "ANDREA1.TRC" both work.
 void HDLevelLoad(const char* wadName);
+void HDLevelBuild();
 void HDLevelUnload();
+
+// The Direct3D device is about to be released or reset (a resolution change,
+// Alt+Enter, a lost device). Every HD object lives on THAT device, so all of
+// it goes now; the next level load builds it again on the new one.
+void HDLevelDeviceLost();
 
 // Whether the HD path is switched on AND an installed Remaster was found.
 // Nothing else in the engine may read HD data without asking this first.
 bool HDEnabled();
+
+// Whether room `roomIndex` of the level now loaded is drawn by the HD path.
+// Decided once at level load, not per frame. False for every room while HD is
+// off, while no HD level is built, and for every room the .TRG has nothing
+// for. The static meshes of an HD room are already part of its art and must
+// not be drawn a second time - that is the one other caller of this.
+bool HDRoomIsHD(int roomIndex);
+
+void HDFrameReset();
+bool HDFrameRoom(int roomIndex, const float* viewWorld);
+void HDFrameDraw();

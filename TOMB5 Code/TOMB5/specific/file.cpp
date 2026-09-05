@@ -1870,6 +1870,16 @@ long S_LoadLevelFile(long num)
 	{
 		aInit();
 		Log("S_LoadLevelFile: aInit done");
+
+		// #123: the HD geometry and its texture pages. Here, on the MAIN
+		// thread, and not in HDLevelLoad on the load thread - for the very
+		// reason aInit() moved out of that thread two lines above this
+		// comment. HDLevelLoad has already read the .TRG's numbers and bound
+		// the models; this makes the Direct3D objects, which belong to the
+		// thread that owns the device. Nothing happens at all while
+		// hd_enable is 0.
+		HDLevelBuild();
+		Log("S_LoadLevelFile: HD build done");
 	}
 	aMakeCutsceneResident(gfResidentCut[0], gfResidentCut[1], gfResidentCut[2], gfResidentCut[3]);
 	Log("S_LoadLevelFile: Cutscenes resident");

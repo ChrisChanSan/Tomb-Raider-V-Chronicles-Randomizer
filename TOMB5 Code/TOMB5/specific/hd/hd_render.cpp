@@ -72,6 +72,7 @@ namespace
 	struct HDGroup
 	{
 		std::vector<HDRange> pass[3];
+		std::vector<short> samples;	// 3 shorts per vertex, room local
 		unsigned int triangles[3] = { 0, 0, 0 };
 		float mins[3] = { 0, 0, 0 };
 		float maxs[3] = { 0, 0, 0 };
@@ -482,6 +483,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	{
 		HDGroup& group = g_groups[g];
 		const trf::remaster::TrgGroup& source = trg.groups[g];
+		const size_t group_first_index = sorted.size();
 
 		for (int pass = 0; pass < 3; pass++)
 		{
@@ -595,6 +597,36 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 				if ((int)(range.count / 3) > biggest)
 					biggest = (int)(range.count / 3);
+			}
+		}
+
+		/* THE SAMPLES FOR THE MATRIX PROOF. The .TRG dies with this function
+		 * and the vertex buffer is WRITEONLY, so the only chance to keep a
+		 * few of a room's own vertices is here. Evenly spaced over the
+		 * group's index run rather than the first hundred in a row, so the
+		 * proof reaches the far corners of the room and not one wall. */
+		{
+			const size_t span = sorted.size() - group_first_index;
+
+			if (span)
+			{
+				const size_t want = span < (size_t)HD_RENDER_SAMPLES
+					? span : (size_t)HD_RENDER_SAMPLES;
+
+				group.samples.reserve(want * 3);
+
+				for (size_t s = 0; s < want; s++)
+				{
+					const unsigned int index = sorted[group_first_index + s * span / want];
+
+					if (index >= trg.vertices.size())
+						continue;
+
+					const trf::remaster::TrgVertex& v = trg.vertices[index];
+					group.samples.push_back(v.x);
+					group.samples.push_back(v.y);
+					group.samples.push_back(v.z);
+				}
 			}
 		}
 	}
@@ -937,6 +969,31 @@ int HDRenderGroupRanges(int group, int pass)
 	return (int)(g_groups[(size_t)group].pass[0].size() +
 		g_groups[(size_t)group].pass[1].size() +
 		g_groups[(size_t)group].pass[2].size());
+}
+
+int HDRenderGroupSampleCount(int group)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return 0;
+
+	return (int)(g_groups[(size_t)group].samples.size() / 3);
+}
+
+int HDRenderGroupSamples(int group, short* xyz, int maxVerts)
+{
+	if (!xyz || maxVerts <= 0)
+		return 0;
+
+	int have = HDRenderGroupSampleCount(group);
+
+	if (have > maxVerts)
+		have = maxVerts;
+
+	if (have > 0)
+		std::memcpy(xyz, &g_groups[(size_t)group].samples[0],
+			(size_t)have * 3 * sizeof(short));
+
+	return have;
 }
 
 bool HDRenderGroupBounds(int group, float* mins, float* maxs)

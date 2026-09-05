@@ -413,11 +413,41 @@ renderer:
   now kept for the remaster's own wind material — ivy, banners, grass, kelp —
   and for flowing water, and taken away from everything else.
 
+**What the third round changed: the light, and the sky.** The play test's
+next line about the rooms was that the light was far too bright and stood
+perfectly still.
+
+- **A light shaft is a shaft again, and a lamp is a lamp.** The remaster
+  builds a shaft or a lamp cone out of dozens of overlapping panes, and its
+  caustic net under water is one sheet over the whole sea bed; painted at full
+  strength and added on top of each other they went white. The remaster's own
+  art says how strong each of them is meant to be — the artists gave every
+  glow, haze and sheet a strength of its own, between a fortieth and a whole —
+  and the engine now reads it. Measured on the shafts of a VCI corridor: they
+  used to reach pure white, they now peak at a quarter of it, which is where
+  the remaster's own picture puts them. The Deepsea Dive's sea bed went from
+  98 % white to a soft shimmer.
+- **And they move.** The same art gives every glow a time, from a twentieth of
+  a second for a candle to sixteen seconds for a sun shaft through a hall, and
+  the brightness now travels along a shaft at that speed instead of standing
+  still. It goes off with `hd_motion` like everything else that moves.
+- **The sky is the Remaster's sky.** Every level that has one carries a whole
+  panorama of its own past the last room — Rome at sunset with the dome of St
+  Peter's, the Irish hills at dusk — painted on a sphere around the camera
+  with its own drifting cloud layers over it. Thirteen of the fifteen levels
+  have one; the engine draws it in place of the classic horizon mesh and the
+  two flat colour layers, and leaves the classic sky whole in the two that do
+  not. The moon, the stars and the lightning still draw over it: the panorama
+  has clouds but no moon, and the lightning flash is painted through a layer
+  the dome would otherwise have replaced.
+
 Still open in the rooms, and named rather than hidden: a **visible border**
 where an HD room meets one the remaster draws nothing for (they fall back to
 the classic look, and the log's `HDLOG room=… hd=0` lines name every one),
-the remaster's four-frame **animated textures**, and **static meshes that
-cannot be shot to pieces** — a vase baked into the room's art stays whole.
+the remaster's four-frame **animated textures**, **static meshes that
+cannot be shot to pieces** — a vase baked into the room's art stays whole —
+and a handful of **window glows in Ireland** whose art carries no strength at
+all, which therefore still draw as brightly as they did.
 
 **Switching it on.** Options → the new *tomb5 options* page → **HD textures**,
 the last row of the first page. Like every row on that page it is remembered at
@@ -443,7 +473,7 @@ values, in the same key as every other setting
 |---|---|---|
 | `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing below is read at all. |
 | `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Does nothing at all while `hd_enable` is off. |
-| `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface. All three come from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
+| `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, and the slow travel of light along a shaft or a lamp cone. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below; the card's own answer stops at 4095 MiB, which is a limit of the Direct3D 9 call and not of your card). Set a number and that number is the ceiling. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
 | `hd_install_tr3` | String | The folder of your *Tomb Raider I-III Remastered* — the one holding `tomb123.exe`. Needed for exactly one thing: the HD models of the four Tomb Raider III guests the randomizer can import (the T-Rex, the vulture, the Compsognathus and the raptor), which live in that bundle and in no other. Leave it **empty** and the engine looks for it in the same walk it uses for the other one; without the game those four enemies draw the classic way and nothing else changes. |

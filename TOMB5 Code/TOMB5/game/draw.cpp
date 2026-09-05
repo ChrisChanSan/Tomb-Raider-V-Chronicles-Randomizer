@@ -455,27 +455,50 @@ void SkyDrawPhase()
 		nPolyType = 6;
 		DrawBuckets();
 		DrawSortList();
+
+		/* #123 (fix round R3a): THE HD SKY DOME, in the classic horizon's own
+		 * place in this phase - after the moon that was drawn a moment ago
+		 * and before the stars below, because none of the three writes depth
+		 * and the order in this function is the order on the screen.
+		 *
+		 * The .TRG carries a sky group of its own past the last room: a
+		 * panorama band on a sphere plus its own scrolling cloud discs. Where
+		 * it exists it replaces BOTH things the classic path draws here - the
+		 * two flat colour layers and the HORIZON mesh - because it already
+		 * contains them. What it does NOT contain, and what therefore still
+		 * runs below, is the weather: the moon, the stars and the lightning
+		 * flash, which the game paints THROUGH layer 1 in the lightning's own
+		 * colour and which would otherwise be lost with the layer.
+		 *
+		 * With hd_enable off, before a level is built, or in a level whose
+		 * .TRG has no sky group, HDFrameSky returns false on its first test
+		 * and every line below runs exactly as it did. */
+		const bool hdSky = HDFrameSky(aMXPtr);
+		const bool lightning = (gfLevelFlags & GF_LIGHTNING) != 0;
+		const bool layer1 = (gfLevelFlags & GF_LAYER1) && (!hdSky || lightning);
+		const bool layer2 = (gfLevelFlags & GF_LAYER2) && !hdSky;
+
 		phd_PushMatrix();
 
-		if (gfLevelFlags & GF_LAYER1)
+		if (layer1)
 		{
 			phd_RotY(32760);
 
-			if (gfLevelFlags & GF_LIGHTNING)
+			if (lightning)
 				DrawFlatSky(RGBA(LightningRGB[0], LightningRGB[1], LightningRGB[2], 44), SkyPos, -1536, 4);
 			else
 				DrawFlatSky(*(ulong*)&gfLayer1Col, SkyPos, -1536, 4);
 		}
 
-		if (gfLevelFlags & GF_LAYER2)
+		if (layer2)
 			DrawFlatSky(0xFF000000 | *(ulong*)&gfLayer2Col, SkyPos2, -1536, 2);
 
-		if (gfLevelFlags & GF_LAYER1 || gfLevelFlags & GF_LAYER2)
+		if (layer1 || layer2)
 			OutputSky();
 
 		phd_PopMatrix();
 
-		if (gfLevelFlags & GF_HORIZON)
+		if ((gfLevelFlags & GF_HORIZON) && !hdSky)
 		{
 			if (gfLevelId == LVL5_TITLE && jobyfrigger)
 				phd_PutPolygonsSkyMesh(meshes[objects[CHEF_MIP].mesh_index], -1);

@@ -218,6 +218,15 @@ struct HDRenderStats
 	// param[0] is an alpha reference and that draw with the alpha test on
 	// (#123, fix round A2; hd_render.cpp, MaterialAlphaRef).
 	int cutoutParts;
+	/* Additive parts whose material handed them a weight below 1, the
+	 * smallest weight found, and how many of those also carry a swing time
+	 * (#123, fix round R3a; hd_render.cpp, MaterialAddWeight). */
+	int addWeightParts;
+	int addSwingParts;
+	float addWeightMin;
+	/* Parts of a SKY group that carry no baked light and are therefore drawn
+	 * at light 1 - the band of sky itself (#123, fix round R3a). */
+	int skyFlatParts;
 	int scrollRanges;		// draw calls that scroll, of `ranges`
 	int scrollTris;			// triangles in them
 	int swayVertices;		// vertices with TrgVertex::sway != 0
@@ -307,6 +316,17 @@ bool HDRenderRoom(int group, const D3DMATRIX* world, const HDRoomLighting* light
 // The same for a single pass; only the diagnostic tool needs it.
 bool HDRenderRoomPass(int group, int pass, const D3DMATRIX* world,
 	const HDRoomLighting* lighting = 0);
+
+/* THE SKY DOME (#123, fix round R3a). How many groups past the last room this
+ * level has - 0 for a level with no sky, 1 for every level that has one, 2
+ * for TITLE - and the call that draws them all, camera centred, behind
+ * everything. See the long note in hd_render.cpp for what the group holds and
+ * why the sky gets its own slice of the depth buffer. `world` is the matrix
+ * the classic path builds for its own horizon mesh: the camera position, no
+ * rotation, no scale. False when the level has no sky group or none of them
+ * drew. */
+int HDRenderSkyGroups();
+bool HDRenderSky(const D3DMATRIX* world);
 
 int HDRenderGroupCount();
 int HDRenderGroupTriangles(int group, int pass);	// pass < 0 = all three

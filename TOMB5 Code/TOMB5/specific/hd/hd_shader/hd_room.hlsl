@@ -171,6 +171,7 @@
  * c11         gWaterMode          per room
  * c12         gSel1               per room
  * c13         gMotion             per DRAW CALL (#123, stage S5)
+ * c14         gFlat               per DRAW CALL (#123, fix round R3a)
  * c32 - c95   gWaterTable[64]     per room, only when the row changes
  * c96 - c127  gWibbleTable[32]    per level (it never changes)
  */
@@ -265,11 +266,22 @@ float4 gWaterTable[64] : register(c32);
  * on top of the relative address. 32 registers of a 256 register file. */
 float4 gWibbleTable[32] : register(c96);
 
+/* THE SKY BAND'S FLAT LIGHT (#123, fix round R3a).
+ *
+ * x is 1 for a draw call whose .TRG part carries no baked light anywhere and
+ * whose page is the whole picture - the band of sky, measured at exactly zero
+ * on all 1,280 of its triangles in every level, because the remaster's own
+ * sky shader does not read the vertex colour. Through the room formula it
+ * would come out black. 0 for every other draw call in the game, where the
+ * baked light is the light. See hd_render.cpp, PartIsUnlit. */
+float4 gFlat : register(c14);
+
 /* -------------------------------------------------- constants, pixel side --
  *
  * c4          gPass               per pass  (the same one)
  * c16         gFog                per frame
  * c17         gCounts             per room
+ * c18         gAdd                per DRAW CALL (#123, fix round R3a)
  * c20 - c35   gLights[16]         per room  (8 lights, two registers each)
  * c40 - c71   gBulbs[32]          per frame (16 bulbs, two registers each)
  *
@@ -285,6 +297,39 @@ float4 gFog : register(c16);
 
 /* x = dynamic lights, y = fog bulbs. */
 float4 gCounts : register(c17);
+
+/* THE ADDITIVE PASS'S OWN CONSTANT (#123, fix round R3a).
+ *
+ * x = the weight of THIS draw call, out of the .TRG part's own material
+ *     parameters (hd_render.cpp, MaterialAddWeight, which carries the
+ *     measurement that says which slot it is per material). 1 in the opaque
+ *     and alpha passes, and 1 for every additive part whose material names
+ *     no weight, so this line costs those a multiply by one.
+ * y = the game clock in seconds - gMotion.z on the pixel side.
+ * z = the swing time in seconds, 0 for a part that stands still.
+ * w = tomb5.hd_motion, so hd_motion 0 draws the still picture the weight
+ *     alone gives.
+ *
+ * THE SWING. The player's two reference shots of one VCI corridor, three
+ * seconds apart, show the same streaks standing in different places. The
+ * remaster's own shader is not readable here, so what is drawn is the
+ * smallest thing that answers the picture: the weight breathes by
+ * HD_RAY_SWING about its own value, once per gAdd.z seconds, with a phase
+ * taken from the surface point so that neighbouring parts of one fan are out
+ * of step and the bright places travel along the shaft instead of the whole
+ * room pulsing at once. The wave has the same shape as the wind of stage S5
+ * two screens up - (x + z) times a wavelength plus clock times a speed -
+ * because that is this file's idiom for "a slow travelling wave", not
+ * because the two are the same effect. */
+float4 gAdd : register(c18);
+
+/* How far the swing carries, either side of the part's own weight, and over
+ * what distance one wave of it fits. Both are chosen, not measured - the
+ * .TRG gives the PERIOD and nothing else - so they are kept where a swing
+ * reads as light moving rather than as light switching: a quarter either
+ * way, over about three squares. */
+#define HD_RAY_SWING       0.25f
+#define HD_RAY_WAVELENGTH  0.0021f
 
 /* HOW MANY, AND WHY THE TWO LOOPS ARE UNROLLED. ps_3_0 has no relative
  * addressing of constant registers - only vs_3_0 has. Written as a loop over
@@ -494,7 +539,7 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		float2(sin((pos.x + pos.z) * HD_WATER_WAVE + turn),
 		       cos((pos.z - pos.y) * HD_WATER_WAVE + turn * 2.0f));
 
-	o.light = inC0.rgb * gPass.z + inC1.rgb;
+	o.light = lerp(inC0.rgb * gPass.z + inC1.rgb, 1.0f, gFlat.x);
 	o.viewPos = view;
 	o.roomPos = pos;
 	o.waterAdd = waterAdd;
@@ -799,6 +844,19 @@ float4 RoomPS(VS_OUT input) : COLOR0
 
 	/* Additive pass only: an unweighted glow washes the whole frame out. */
 	lit *= lerp(1.0f, texel.a, gPass.y);
+
+	/* AND THE PART'S OWN WEIGHT, with its swing (#123, fix round R3a - see
+	 * gAdd above). gPass.y is 1 in the additive pass and 0 in the other two,
+	 * so the two surface passes multiply by exactly one and keep their
+	 * picture to the bit. */
+	float weight = gAdd.x;
+
+	if (gAdd.z > 0.0f && gAdd.w > 0.0f)
+		weight *= 1.0f + HD_RAY_SWING *
+			sin((input.roomPos.x + input.roomPos.z) * HD_RAY_WAVELENGTH +
+				gAdd.y * (6.2831853f / gAdd.z));
+
+	lit *= lerp(1.0f, weight, gPass.y);
 
 	return float4(lit, texel.a);
 }

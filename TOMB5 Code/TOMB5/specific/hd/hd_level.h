@@ -87,6 +87,16 @@ void HDFlipRoom(int roomIndex, int otherIndex);
 
 void HDFrameReset();
 bool HDFrameRoom(int roomIndex, const float* viewWorld);
+
+// THE SKY DOME (#123, fix round R3a). Called from SkyDrawPhase (game\draw.cpp)
+// where the classic path draws its HORIZON mesh, with the matrix that is on
+// the engine's stack there - the camera position, no rotation. Draws the
+// .TRG's own sky group (two in TITLE) camera centred, in its own slice of the
+// depth buffer, and answers true; the caller then leaves out the horizon mesh
+// and the flat colour layers. False with HD off, before a level is built, and
+// in a level whose .TRG has no sky group - then the classic sky draws whole.
+bool HDFrameSky(const float* viewWorld);
+
 void HDFrameDraw();
 
 // THE FRAME CLOCK (#123 diagnostics). Called from DXShowFrame

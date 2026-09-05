@@ -60,6 +60,11 @@
  *     -groups         list every group's triangles and ranges, then stop
  *     -nodraw         load and measure only - no window, no picture
  *     -matrixcheck    the world-matrix proof as a table, then stop
+ *     -sky            draw the .TRG's sky group(s) behind the room, centred
+ *                     on the camera, in their own slice of the depth buffer -
+ *                     what the engine does in place of the classic horizon
+ *                     mesh (#123, fix round R3a)
+ *     -skyonly        the same, with the room left out: the dome alone
  *
  *   Stage S2b - the parity block. Every one of these makes up a piece of
  *   engine state the tool has no engine for, and hands it to the very
@@ -1340,6 +1345,9 @@ int main(int argc, char** argv)
 	bool matrixCheck = false;
 	bool parityCheck = false;
 	bool animTex = false;
+	// Fix round R3a: draw the .TRG's sky group(s) behind the room, and only
+	// them.
+	bool sky = false, skyOnly = false;
 	bool wibbleGiven = false;
 	int threads = 8, rooms = 0;
 
@@ -1407,6 +1415,13 @@ int main(int argc, char** argv)
 			g_water = true;
 		else if (!strcmp(argv[at], "-nomotion"))
 			g_motion = false;
+		else if (!strcmp(argv[at], "-sky"))
+			sky = true;
+		else if (!strcmp(argv[at], "-skyonly"))
+		{
+			sky = true;
+			skyOnly = true;
+		}
 		else if (!strcmp(argv[at], "-animtex"))
 			animTex = true;
 		else if (!strcmp(argv[at], "-shimmer"))
@@ -1667,6 +1682,11 @@ int main(int argc, char** argv)
 	// which is the three cut-out materials 6, 7 and 8 and nothing else.
 	printf("A2: %d opaque cut-out part(s) (materials 6, 7, 8)\n",
 		stats.cutoutParts);
+	// Fix round R3a: the additive parts whose .TRG material handed them a
+	// weight of their own, and the ones that also swing on the game clock.
+	printf("R3a: %d additive part(s) weighted (smallest %.3f), %d of them "
+		"swinging\n", stats.addWeightParts, stats.addWeightMin,
+		stats.addSwingParts);
 	printf("read %.0f ms, build %.0f ms\n", stats.readMs, stats.buildMs);
 
 	printf("\n-- the pages ------------------------------------------------\n");
@@ -1937,7 +1957,25 @@ int main(int argc, char** argv)
 	g_device->BeginScene();
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 	PrintDepthTruth("(inside the HD frame)");
-	const bool drew = HDRenderRoom(room, 0, &lighting);
+	/* Fix round R3a: the sky dome, first and camera centred - the classic
+	 * path's own place for its horizon mesh. The world matrix is the
+	 * translation to the camera and nothing else, which is exactly what
+	 * phd_TranslateAbs(camera.pos) leaves on the engine's matrix stack. */
+	bool skyDrew = false;
+
+	if (sky)
+	{
+		D3DMATRIX skyWorld;
+
+		memset(&skyWorld, 0, sizeof(skyWorld));
+		skyWorld._11 = skyWorld._22 = skyWorld._33 = skyWorld._44 = 1.0f;
+		skyWorld._41 = (float)cx;
+		skyWorld._42 = (float)cy;
+		skyWorld._43 = (float)cz;
+		skyDrew = HDRenderSky(&skyWorld);
+	}
+
+	const bool drew = skyOnly ? false : HDRenderRoom(room, 0, &lighting);
 	const int calls = HDRenderDrawCalls();
 	HDRenderFrameEnd();
 	g_device->EndScene();
@@ -1946,6 +1984,10 @@ int main(int argc, char** argv)
 
 	printf("HDRenderRoom returned %s after %d draw calls\n",
 		drew ? "true" : "FALSE", calls);
+
+	if (sky)
+		printf("R3a: %d sky group(s), %d unlit part(s), HDRenderSky returned %s\n",
+			HDRenderSkyGroups(), stats.skyFlatParts, skyDrew ? "true" : "FALSE");
 
 	const int broken = Diff(before, after);
 	printf("state bracket: %d of %d watched states changed - %s\n",
@@ -1971,7 +2013,10 @@ int main(int argc, char** argv)
 
 			g_device->BeginScene();
 			HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
-			HDRenderRoomPass(room, pass, 0, &lighting);
+
+			if (!skyOnly)
+				HDRenderRoomPass(room, pass, 0, &lighting);
+
 			HDRenderFrameEnd();
 			g_device->EndScene();
 

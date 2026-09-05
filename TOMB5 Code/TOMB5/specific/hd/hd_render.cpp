@@ -94,11 +94,21 @@ namespace
 	 *       param[0] is its alpha reference and is 0.5 in 10 of the 11
 	 *       tuples the game has (ANDY1 carries one 0.503)
 	 *   13  the remaster's own four-frame flipbook, the other three pages in
-	 *       param[0..2]. Counted and NOT drawn - see MODIFICATIONS.md */
+	 *       param[0..2]. Counted and NOT drawn - see MODIFICATIONS.md
+	 *    2  the GLOW material: light shafts, lamp cones, window glows and
+	 *   14  the lit decal - both draw in the additive pass only
+	 *   15  the HAZE and
+	 *   16  the SHEET material - a whole room's worth of additive surface,
+	 *       the caustic net over JOBY4's sea bed among them
+	 *       (#123, fix round R3a; MaterialAddWeight below) */
 #define HD_TRG_MATERIAL_FLOW		1
 #define HD_TRG_MATERIAL_MASK		6
 #define HD_TRG_MATERIAL_WIND		8
 #define HD_TRG_MATERIAL_WIND2		7
+#define HD_TRG_MATERIAL_GLOW		2
+#define HD_TRG_MATERIAL_DECAL		14
+#define HD_TRG_MATERIAL_HAZE		15
+#define HD_TRG_MATERIAL_SHEET		16
 #define HD_TRG_MATERIAL_FLIPBOOK	13
 
 	/* THE ALPHA REFERENCE OF ONE PART (#123, fix round A2).
@@ -159,6 +169,159 @@ namespace
 			? part.param[0] : 0.5f;
 	}
 
+	/* THE WEIGHT OF ONE ADDITIVE PART (#123, fix round R3a).
+	 *
+	 * WHAT WAS WRONG. The additive pass is blended ONE / ONE with the depth
+	 * write off, so overlapping parts SUM. The remaster's light shafts and
+	 * lamp cones are fans of dozens of quads that all meet at the lamp, and
+	 * its caustic net is one sheet over a whole sea bed, so a pass that
+	 * paints texel x light with no weight of its own saturates wherever the
+	 * artist stacked geometry. Measured through RoomProbe on the additive
+	 * pass alone, over the pixels it covers:
+	 *
+	 *     JOBY4  room 19   caustic net    98.1 % mean, 86.9 % of it white
+	 *     ANDY3  room 126  window glow    72.5 % mean, 22.1 % of it white
+	 *     RICH2  room 25   wall lamps     21.9 % mean,  4.3 % of it white
+	 *     RICH1  room 136  ray fan        22.7 % mean,  2.2 % of it white
+	 *
+	 * The remaster's own picture of the same corridor - the player's
+	 * reference shots - carries soft streaks of about a quarter of white
+	 * with nothing saturated at all, and its sea bed is a sea bed.
+	 *
+	 * WHAT SAYS THE WEIGHT. A .TRG part carries a material and four floats,
+	 * and the four MEAN DIFFERENT THINGS PER MATERIAL - that is not a
+	 * guess, material 13 proves it: its param[0..2] are texture LAYER
+	 * numbers (they name the other three frames of the flipbook, layers 123
+	 * to 126 of JOBY2 = pages 3180 to 3183) and its param[3] is 0.15, which
+	 * is the classic flipbook's own cadence of five frames at 30 Hz to
+	 * within a sixtieth of a second. So the question is not "which slot is
+	 * the weight" but "which slot is the weight of THIS material", and it
+	 * was measured, slot by slot, over the distinct (material, param) tuples
+	 * of all fifteen levels:
+	 *
+	 *   material  2  p0 in {0.5, 1.0, 1.5} and p2 in {0, 0.1, 0.4, 0.6, 0.8,
+	 *                1.0, 2.0} move TOGETHER and with the page - a preset;
+	 *                p1 in [0, 2.68] and p3 in [0.05, 16] vary inside one
+	 *                preset. p3 is a TIME (see MaterialAddPeriod), so p1 is
+	 *                the weight: 0.3 for the ray fans of ANDREA1, RICH2 and
+	 *                RICH3, 0.2 for RICH1's, 0.05 for the little candle
+	 *                glows of page 2002.
+	 *   material 14  p2 and p3 are zero in ALL sixteen tuples, p0 is an
+	 *                integer layer number (0, 12, 26, 32, 38, 45, 50, 61,
+	 *                102, 139), so p1 in [0.108, 1.0] is the only float
+	 *                left - and it never leaves 0..1.
+	 *   material 15  p1 is 14 or 30 in every tuple - two values over eleven,
+	 *                a speed and not a weight - and p2 in [0.025, 0.1] is
+	 *                the only slot that varies smoothly.
+	 *   material 16  p2 in [0.035, 0.2], the same shape as material 15's,
+	 *                on the same slot; p0 and p1 pair up with the page.
+	 *
+	 * WHERE THE FILE GIVES NO USABLE NUMBER THE PART KEEPS TODAY'S PICTURE.
+	 * Two of material 2's tuples carry p1 = 0 (2,100 triangles of window
+	 * glow in ANDY1 and ANDY3) and one carries 2.68 (2,025 triangles in five
+	 * RICH1 rooms). Reading 0 as "off" would delete geometry that measurably
+	 * draws something, and reading 2.68 as a weight would brighten what is
+	 * already too bright, so both fall through to 1 - the same shape as
+	 * MaterialAlphaRef's guard above, and both are named in MODIFICATIONS.md
+	 * as measured and left.
+	 *
+	 * Everything else - materials 0, 1, 6, 7, 8, 13 and the destructible
+	 * statics' high-bit numbers - has no slot that behaves like a weight and
+	 * draws exactly as it did. */
+	inline float MaterialAddWeight(const trf::remaster::TrgPart& part)
+	{
+		float weight;
+
+		switch (part.material)
+		{
+		case HD_TRG_MATERIAL_GLOW:
+		case HD_TRG_MATERIAL_DECAL:
+			weight = part.param[1];
+			break;
+
+		case HD_TRG_MATERIAL_HAZE:
+		case HD_TRG_MATERIAL_SHEET:
+			weight = part.param[2];
+			break;
+
+		default:
+			return 1.0f;
+		}
+
+		return weight > 0.0f && weight < 1.0f ? weight : 1.0f;
+	}
+
+	/* HOW LONG ONE SWING OF AN ADDITIVE PART TAKES, IN SECONDS, or 0 for a
+	 * still one (#123, fix round R3a).
+	 *
+	 * The player's two reference shots of the same corridor, three seconds
+	 * apart, show the streaks standing in different places - "Lichtrays etc
+	 * allgemein Statisch" is the report. The only slot in the file that is
+	 * measurably a time is param[3], and material 13's 0.15 seconds is the
+	 * proof of that (see above). Material 2 fills the same slot with
+	 * 0.05 to 16 seconds - a candle's flicker at one end and a sun shaft's
+	 * slow drift at the other - and it is the only additive material that
+	 * fills it at all: 14, 15 and 16 carry a hard zero there in every tuple
+	 * of every level, and they stay still.
+	 *
+	 * The range is fenced off rather than trusted: below a twentieth of a
+	 * second a swing is faster than the frame it is drawn in, and above a
+	 * minute it is not motion any more. No part in the game is outside it. */
+	inline float MaterialAddPeriod(const trf::remaster::TrgPart& part)
+	{
+		if (part.material != HD_TRG_MATERIAL_GLOW)
+			return 0.0f;
+
+		return part.param[3] >= 0.05f && part.param[3] <= 60.0f
+			? part.param[3] : 0.0f;
+	}
+
+	/* IS THIS PART LIT AT ALL? (#123, fix round R3a, the sky dome.)
+	 *
+	 * The remaster's sky is a group of its own past the last room, and the
+	 * band of sky itself is one part of it - 1,280 triangles on a sphere of
+	 * about four blocks' radius, wearing a 4096 x 2048 panorama out of the
+	 * page block 7000..7011 (ANDREA1's is Rome at sunset, ANDY's the Irish
+	 * hills at dusk), alpha tested so that the void above and below the band
+	 * is cut away. ITS BAKED LIGHT IS EXACTLY ZERO on every vertex of every
+	 * level - measured, all 1,280 triangles, thirteen levels - because the
+	 * remaster's own sky shader does not read it. Drawn through the room
+	 * formula it would be black, so a part with no light anywhere is drawn at
+	 * light 1 and its page is the whole picture.
+	 *
+	 * The test is on the DATA and not on a material number on purpose: the
+	 * same group's cloud layers are material 1 and DO carry light (0.26 to
+	 * 2.00 over the game - ANDY's night sky is dark, ANDREA3's is bright),
+	 * and RICH3's sky group carries one 50-triangle material 0 part that is
+	 * unlit as well. Restricted to sky groups by the caller, because a room
+	 * part with no light is a different thing: it is a part the remaster
+	 * meant to be invisible. */
+	inline bool PartIsUnlit(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgPart& part)
+	{
+		for (int pass = 0; pass < 3; pass++)
+			for (unsigned int at = 0; at < part.pass[pass].count; at++)
+			{
+				const unsigned int index = part.pass[pass].start + at;
+
+				if (index >= trg.indices.size())
+					continue;
+
+				const unsigned int corner = trg.indices[index];
+
+				if (corner >= trg.vertices.size())
+					continue;
+
+				const trf::remaster::TrgVertex& v = trg.vertices[corner];
+
+				if (v.colour1[0] | v.colour1[1] | v.colour1[2] |
+					v.colour2[0] | v.colour2[1] | v.colour2[2])
+					return false;
+			}
+
+		return true;
+	}
+
 	struct HDRange
 	{
 		unsigned int start = 0;
@@ -172,6 +335,18 @@ namespace
 		 * they are: it is one pixel shader constant per draw call and a
 		 * triangle cannot have half of it. */
 		float alphaRef = 0.0f;
+		/* The additive weight and the swing time of the part this range came
+		 * out of (#123, fix round R3a) - see MaterialAddWeight above. Both
+		 * are 1 and 0 outside the additive pass, and both are part of the
+		 * sort key for the same reason the alpha reference is: they are one
+		 * pixel shader constant per draw call. */
+		float addWeight = 1.0f;
+		float addPeriod = 0.0f;
+		/* 1 where the part carries NO baked light at all and its own texture
+		 * is the whole picture - the sky dome, and nothing else in the game
+		 * (#123, fix round R3a; PartIsUnlit below). Sorted FIRST so that the
+		 * dome is painted before the cloud layers that share its group. */
+		float flatLight = 0.0f;
 		/* The lowest vertex number this range names and how many it reaches
 		 * over (#123, stage S6). With a 32 bit index buffer they are only a
 		 * measurement; with a 16 bit one they ARE the draw call - the indices
@@ -263,6 +438,14 @@ namespace
 	int g_cutout_calls = 0;
 	// A2, once per level: the opaque parts of materials 6, 7 and 8.
 	int g_cutout_parts = 0;
+	/* R3a, once per level: the additive parts whose .TRG material gave them
+	 * a weight below 1, the smallest of those weights, and how many of them
+	 * also carry a swing time. */
+	int g_addweight_parts = 0;
+	int g_addswing_parts = 0;
+	float g_addweight_min = 1.0f;
+	// R3a, once per level: the sky parts that draw at light 1.
+	int g_flat_parts = 0;
 
 	/* --- stage S2b ----------------------------------------------------- */
 
@@ -950,6 +1133,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	int sway_vertices = 0;
 	g_scroll_parts = 0;
 	g_cutout_parts = 0;
+	g_addweight_parts = 0;
+	g_addswing_parts = 0;
+	g_addweight_min = 1.0f;
+	g_flat_parts = 0;
 	int marked_shimmer = 0;
 	int marked_room_shimmer = 0;
 
@@ -1063,6 +1250,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		int slot;
 		float scrollU, scrollV;
 		float alphaRef;			// fix round A2, see MaterialAlphaRef
+		float addWeight;		// fix round R3a, see MaterialAddWeight
+		float addPeriod;		// fix round R3a, see MaterialAddPeriod
+		float flatLight;		// fix round R3a, see PartIsUnlit
 		unsigned int first;
 	};
 
@@ -1097,9 +1287,34 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				 * belongs - the alpha pass has its own reference and the
 				 * additive pass has none. */
 				const float aref = pass == 0 ? MaterialAlphaRef(part) : 0.0f;
+				/* R3a: the weight and the swing belong to the additive pass
+				 * and to nothing else - the same part's opaque and alpha
+				 * runs are a surface and keep their picture to the bit. */
+				const float aweight = pass == 2 ? MaterialAddWeight(part) : 1.0f;
+				const float aperiod = pass == 2 ? MaterialAddPeriod(part) : 0.0f;
 
 				if (pass == 0 && aref != 0.0f)
 					g_cutout_parts++;
+
+				if (pass == 2 && aweight != 1.0f)
+				{
+					g_addweight_parts++;
+
+					if (aweight < g_addweight_min)
+						g_addweight_min = aweight;
+				}
+
+				if (pass == 2 && aperiod != 0.0f)
+					g_addswing_parts++;
+
+				/* R3a: the sky band draws at light 1 - see PartIsUnlit. Only
+				 * in a sky group, and the answer is the same for all three
+				 * of the part's passes, so it is asked once. */
+				const float flat = (int)g >= g_room_groups &&
+					PartIsUnlit(trg, part) ? 1.0f : 0.0f;
+
+				if (pass == 0 && flat != 0.0f)
+					g_flat_parts++;
 
 				if (pass == 0 && part.material == HD_TRG_MATERIAL_FLIPBOOK)
 					group.motion.flipbookParts++;
@@ -1142,6 +1357,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.scrollU = su;
 					tri.scrollV = sv;
 					tri.alphaRef = aref;
+					tri.addWeight = aweight;
+					tri.addPeriod = aperiod;
+					tri.flatLight = flat;
 					tri.first = first;
 					tris.push_back(tri);
 				}
@@ -1153,10 +1371,17 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			std::stable_sort(tris.begin(), tris.end(),
 				[](const HDTri& a, const HDTri& b)
 				{
+					/* R3a: the unlit band of the sky before the cloud layers
+					 * that share its group - the sky is drawn back to front
+					 * and this is the only place the order can be set. Zero
+					 * for every room range, so a room's sort is unchanged. */
+					if (a.flatLight != b.flatLight) return a.flatLight > b.flatLight;
 					if (a.slot != b.slot) return a.slot < b.slot;
 					if (a.scrollU != b.scrollU) return a.scrollU < b.scrollU;
 					if (a.scrollV != b.scrollV) return a.scrollV < b.scrollV;
-					return a.alphaRef < b.alphaRef;
+					if (a.alphaRef != b.alphaRef) return a.alphaRef < b.alphaRef;
+					if (a.addWeight != b.addWeight) return a.addWeight < b.addWeight;
+					return a.addPeriod < b.addPeriod;
 				});
 
 			group.triangles[pass] = (unsigned int)tris.size();
@@ -1166,6 +1391,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.scrollU = tris[0].scrollU;
 			range.scrollV = tris[0].scrollV;
 			range.alphaRef = tris[0].alphaRef;
+			range.addWeight = tris[0].addWeight;
+			range.addPeriod = tris[0].addPeriod;
+			range.flatLight = tris[0].flatLight;
 			range.start = (unsigned int)sorted.size();
 			range.count = 0;
 
@@ -1174,7 +1402,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				const bool same = tris[i].slot == range.pageSlot &&
 					tris[i].scrollU == range.scrollU &&
 					tris[i].scrollV == range.scrollV &&
-					tris[i].alphaRef == range.alphaRef;
+					tris[i].alphaRef == range.alphaRef &&
+					tris[i].addWeight == range.addWeight &&
+					tris[i].addPeriod == range.addPeriod &&
+					tris[i].flatLight == range.flatLight;
 
 				if (!same || range.count / 3 >= max_tris)
 				{
@@ -1206,6 +1437,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.scrollU = tris[i].scrollU;
 					range.scrollV = tris[i].scrollV;
 					range.alphaRef = tris[i].alphaRef;
+					range.addWeight = tris[i].addWeight;
+					range.addPeriod = tris[i].addPeriod;
+					range.flatLight = tris[i].flatLight;
 					range.start = (unsigned int)sorted.size();
 					range.count = 0;
 				}
@@ -1507,6 +1741,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->fallbackPageTris = fallback_tris;
 		stats->scrollParts = g_scroll_parts;
 		stats->cutoutParts = g_cutout_parts;	// A2
+		stats->addWeightParts = g_addweight_parts;	// R3a
+		stats->addSwingParts = g_addswing_parts;	// R3a
+		stats->addWeightMin = g_addweight_min;		// R3a
+		stats->skyFlatParts = g_flat_parts;		// R3a
 		stats->scrollRanges = 0;
 		stats->scrollTris = 0;
 		stats->swayVertices = sway_vertices;
@@ -1741,6 +1979,26 @@ namespace
 		float alpha_ref = constants[0];
 		const bool cutout_pass = pass == 0;
 
+		/* R3a: gFlat, the VERTEX side's own per draw call constant. x is 1
+		 * where the part carries no baked light and its page is the whole
+		 * picture - the sky band, and nothing else in the game. Written at
+		 * the top of every pass whatever it was, for the same reason gMotion
+		 * is: a model draw between two rooms owns c8 to c103 of the vertex
+		 * constant file and leaves nothing of ours in it. */
+		float flat[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		bool flat_dirty = true;
+
+		/* R3a: gAdd, the additive pass's own constant. x is this draw call's
+		 * weight, y the game clock in seconds, z the swing time in seconds
+		 * (0 = still) and w the hd_motion switch, so that hd_motion 0 draws
+		 * the same still frame the weight alone gives - stage S5's rule.
+		 * Written per range, exactly like the alpha reference above and for
+		 * the same reason; the other two passes write it once as (1, ., 0, .)
+		 * so the shader's one line costs them a multiply by one. */
+		float add[4] = { 1.0f, g_motion[2], 0.0f, g_motion[3] };
+		bool add_dirty = true;
+		const bool additive_pass = pass == 2;
+
 		g_motion_dirty = true;		// see the note beside g_motion_dirty
 
 		if (pass == 2)
@@ -1770,6 +2028,24 @@ namespace
 				}
 
 				g_cutout_calls += range.alphaRef != 0.0f ? 1 : 0;
+			}
+
+			const float want_weight = additive_pass ? range.addWeight : 1.0f;
+			const float want_period = additive_pass ? range.addPeriod : 0.0f;
+
+			if (add_dirty || add[0] != want_weight || add[2] != want_period)
+			{
+				add[0] = want_weight;
+				add[2] = want_period;
+				add_dirty = false;
+				g_device->SetPixelShaderConstantF(18, add, 1);
+			}
+
+			if (flat_dirty || flat[0] != range.flatLight)
+			{
+				flat[0] = range.flatLight;
+				flat_dirty = false;
+				g_device->SetVertexShaderConstantF(14, flat, 1);
 			}
 
 			/* STAGE S5, THE SCROLL OF THIS DRAW CALL. The offset is taken
@@ -1892,6 +2168,72 @@ bool HDRenderRoom(int group, const D3DMATRIX* world, const HDRoomLighting* light
 		draw_pass(room, pass, wvp);
 
 	return true;
+}
+
+/* THE SKY DOME (#123, fix round R3a).
+ *
+ * WHAT IT IS. Every .TRG whose level has a sky ends in one group past the
+ * last room - two in TITLE, none in JOBY3, JOBY5 and the two rooms-only
+ * levels - and that group is the remaster's sky: a sphere of about four
+ * blocks' radius wearing a 4096 x 2048 panorama (measured: 1,280 triangles,
+ * 21 rings, radius 1060 at the poles and 4100 at the equator), plus one to
+ * three flat cloud discs of up to 24,000 units' radius hanging at fixed
+ * heights above the camera, which are material 1 and therefore already
+ * scroll on their own parameters (stage S5). The band's page is alpha 0
+ * above the horizon line and opaque below it, so the alpha pass cuts the
+ * void away - that is the "picture band with void above and below" the
+ * player describes.
+ *
+ * WHERE IT GOES. The group is centred on the origin, so the caller hands in
+ * the matrix the classic path builds for its own horizon mesh -
+ * phd_TranslateAbs(camera.pos) with no rotation - and the dome rides on the
+ * camera exactly as the horizon did. No scaling: the sphere's four blocks sit
+ * far inside the far plane of 20480, and the cloud discs reach past it, which
+ * only cuts the disc where the band already covers it.
+ *
+ * AND THE DEPTH. The sky must be behind everything and must sort inside
+ * itself - the discs hang in front of the band overhead and behind it at the
+ * horizon, and both are drawn in the opaque and the alpha pass, so there is
+ * no draw order that gets both right. So it is drawn with its own DEPTH RANGE
+ * instead: the viewport's MinZ is pushed to HD_SKY_MINZ for the length of
+ * this call, which folds the whole sky into the last thousandth of the depth
+ * buffer. Inside that slice the depth test sorts the sky properly; outside
+ * it, every pixel of the world is nearer, because the classic depth of the
+ * far plane itself is only 0.995 (SetupZRange(20, 20480): a - b/z = 0.99500)
+ * and the deepest thing the engine can draw therefore never reaches the
+ * slice. The viewport is read back and put together again before the call
+ * returns. */
+#define HD_SKY_MINZ	0.996f
+
+int HDRenderSkyGroups()
+{
+	const int groups = (int)g_groups.size();
+
+	return groups > g_room_groups ? groups - g_room_groups : 0;
+}
+
+bool HDRenderSky(const D3DMATRIX* world)
+{
+	if (!g_device || !HDRenderSkyGroups())
+		return false;
+
+	D3DVIEWPORT9 saved;
+
+	if (FAILED(g_device->GetViewport(&saved)))
+		return false;
+
+	D3DVIEWPORT9 slice = saved;
+	slice.MinZ = HD_SKY_MINZ;
+	slice.MaxZ = 1.0f;
+	g_device->SetViewport(&slice);
+
+	bool drew = false;
+
+	for (int g = g_room_groups; g < (int)g_groups.size(); g++)
+		drew = HDRenderRoom(g, world, 0) || drew;
+
+	g_device->SetViewport(&saved);
+	return drew;
 }
 
 bool HDRenderRoomPass(int group, int pass, const D3DMATRIX* world,

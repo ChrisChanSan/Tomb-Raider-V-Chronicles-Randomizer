@@ -3119,6 +3119,178 @@ see there.
 
 ---
 
+#### Room round 3a - the light shafts, the lamp cones and the sky (#123)
+
+The play test's line about the light was two faults in one: *"Intensity of the
+light far too bright and only static, light rays etc. generally static"*. Both
+live in the ADDITIVE pass, and the sky - which the HD path had never drawn at
+all - is the third thing in this round. **No new source file**: it changes
+`specific/hd/hd_render.{h,cpp}`, `specific/hd/hd_level.{h,cpp}`,
+`specific/hd/hd_shader/hd_room.hlsl` (with its two generated `.inc` files),
+`game/draw.cpp` and the diagnostic tool `RoomProbe`.
+
+**R1 - what the additive pass was doing.** It is blended ONE / ONE with the
+depth write off, so overlapping parts SUM, and the remaster's light shafts and
+lamp cones are fans of dozens of quads that all meet at the lamp. Its caustic
+net over JOBY4's sea bed is one 192 x 192 sheet over the whole floor. Painted
+as texel x baked light with no weight of its own, that saturates. Measured with
+`RoomProbe`, on the additive pass alone, over the pixels it covers:
+
+| scene | what it is | before | after |
+|---|---|---|---|
+| JOBY4 room 19 | the caustic net | 98.1 % mean, 86.9 % of it pure white | 6.9 %, nothing white |
+| ANDY3 room 126 | a window glow | 72.5 %, 22.1 % white | 61.2 %, 19.0 % white (see below) |
+| RICH2 room 25 | two wall lamps | 21.9 %, peak 100 % | 9.1 %, peak 94.9 % |
+| RICH1 room 136 | a ray fan | 22.7 %, peak 100 % | 4.3 %, **peak 27.8 %** |
+| ANDREA1 room 181 | hall shafts | 13.3 %, peak 100 % | 6.8 %, peak 55.7 % |
+
+The player's own reference shots of a VCI corridor put the streaks at a
+quarter of white with nothing saturated - measured off the picture, the
+streaks stand 40 to 80 above a wall of 110 to 130, which is 16 to 31 % - and
+that is where the ray fan now lands.
+
+**What says the weight: the material, one slot at a time.** A `.TRG` part
+carries a material and four floats, and the four MEAN DIFFERENT THINGS PER
+MATERIAL. That is not a guess. Material 13 proves it: its `param[0..2]` are
+texture LAYER numbers - they name the other three frames of its flipbook,
+layers 123 to 126 of JOBY2, which are pages 3180 to 3183 - and its `param[3]`
+is 0.15, the classic flipbook's own cadence of five frames at 30 Hz to within
+a sixtieth of a second. So the question is never "which slot is the weight"
+but "which slot is the weight of THIS material", and it was measured slot by
+slot over the distinct (material, param) tuples of all fifteen levels:
+
+| material | what it draws | the four slots | weight |
+|---|---|---|---|
+| 2 | shafts, lamp cones, window and candle glows | `p0` in {0.5, 1.0, 1.5} and `p2` in {0, 0.1, 0.4, 0.6, 0.8, 1.0, 2.0} move together and with the page - a preset; `p3` is a time (below) | `p1` |
+| 14 | lit decals and panels | `p2` and `p3` are zero in all sixteen tuples, `p0` is an integer layer number (0, 12, 26, 32, 38, 45, 50, 61, 102, 139) | `p1`, and it never leaves 0..1 |
+| 15 | haze | `p1` is 14 or 30 in every one of eleven tuples - a speed, not a weight | `p2`, 0.025 to 0.1 |
+| 16 | whole-surface sheets, the caustic net among them | `p0` and `p1` pair up with the page | `p2`, 0.035 to 0.2, the same shape as 15's |
+
+Everything else - materials 0, 1, 6, 7, 8, 13 and the destructible statics'
+high-bit numbers - has no slot that behaves like a weight and draws exactly as
+it did. Over the game 20 to 131 parts per level take a weight; the smallest is
+0.025.
+
+**Where the file gives no usable number the part keeps the old picture.** Two
+of material 2's tuples carry `p1` = 0 - 2,100 triangles of window glow in ANDY1
+and ANDY3 - and one carries 2.68, in five RICH1 rooms. Reading 0 as "off" would
+delete geometry that measurably draws something; reading 2.68 as a weight would
+brighten what is already too bright. Both fall through to 1, the same shape as
+`MaterialAlphaRef`'s guard of fix round A2, and both are named losses: **ANDY3
+room 126's window glow is still 61 % mean with a fifth of it white** (it moved
+at all only because of the swing below), and RICH1's five bright ceiling lamps
+are untouched.
+
+**R2 - and the swing.** The reference shots are three seconds apart and the
+streaks stand in different places. The only slot in the file that is
+measurably a time is `param[3]`, and material 13's 0.15 seconds is the proof;
+material 2 fills the same slot with 0.05 to 16 seconds - a candle's flicker at
+one end and a sun shaft's slow drift at the other - and it is the only
+additive material that fills it at all, 14, 15 and 16 carrying a hard zero
+there in every tuple of every level. So the weight breathes a quarter either
+side of itself, once per `param[3]` seconds, with a phase taken from the
+surface point so that neighbouring parts of one fan are out of step and the
+bright places travel along the shaft instead of the whole room pulsing at
+once. The wave has the shape stage S5's wind already uses. Measured between
+two moments 1.25 s apart, over the pixels the pass covers:
+
+- RICH2's wall lamps, whose `param[3]` is 2.5 s: mean change 3.3 %, worst 33.7 %
+- ANDREA1's hall shafts, whose `param[3]` is 16 s: mean change 0.3 %, worst 3.5 %
+
+which is the reference's own behaviour - the corridor wanders, the hall barely
+moves. Both die with `hd_motion` 0, exactly as stage S5's scroll and wind do.
+
+*Not adopted:* material 15's `p1` (14 or 30) and material 16's `p1` (0.25, 0.7,
+1.0) look like speeds as well, but nothing in the data says of WHAT, and
+neither material carries a time slot. They stand still and are named here.
+
+**R3 - the sky.** Every `.TRG` whose level has a sky ends in one group past the
+last room - two in TITLE, none in JOBY3 and JOBY5 - and until now the HD path
+kept them out and let the classic `SkyDrawPhase` draw its horizon mesh instead.
+Measured, the group holds:
+
+- **the band**: 1,280 triangles on a sphere of about four blocks' radius (21
+  rings, radius 1060 at the poles and 4100 at the equator), wearing one
+  4096 x 2048 panorama out of the page block 7000..7011 - ANDREA1's is Rome at
+  sunset with St Peter's dome, ANDY's the Irish hills at dusk. Alpha 0 above
+  the horizon line and opaque below it, so the alpha pass cuts the void away.
+  **Its baked light is exactly zero on every vertex of every level**, because
+  the remaster's own sky shader does not read it; through the room formula it
+  would be black, so a sky part with no light anywhere is drawn at light 1 and
+  its page is the whole picture.
+- **the cloud layers**: one to three flat discs of up to 24,000 units' radius
+  at fixed heights above the camera, material 1, which therefore already
+  scroll on their own parameters (`p1` = -0.03 to 0.06 page units per second)
+  since stage S5 - and which DO carry baked light, 0.26 to 2.00 over the game.
+
+**No scaling and no rotation.** The sphere's four blocks sit far inside the far
+plane of 20480; the cloud discs reach past it, which only cuts a disc where the
+band already covers it. The group is centred on the origin, so it takes the
+matrix the classic path builds for its own horizon - `phd_TranslateAbs(camera.pos)`,
+nothing else - and rides on the camera exactly as the horizon did.
+
+**The depth.** The discs hang in front of the band overhead and behind it at
+the horizon, and both draw in the opaque and the alpha pass, so no draw order
+gets both right. The sky is given its own DEPTH RANGE instead: the viewport's
+`MinZ` is pushed to 0.996 for the length of the call, which folds the whole sky
+into the last four thousandths of the depth buffer. Inside that slice the depth
+test sorts the sky properly; outside it every pixel of the world is nearer,
+because the classic depth of the far plane itself is only 0.995
+(`SetupZRange(20, 20480)`: a - b/z = 0.99500) and nothing the engine draws ever
+reaches the slice. The viewport is read back and put together again before the
+call returns.
+
+**Where it is drawn, and what it replaces.** In `SkyDrawPhase`, in the classic
+horizon mesh's own place in that function - after the moon that was drawn a
+moment earlier and before the stars below it, because none of the three writes
+depth and the order in that function is the order on the screen. Drawn with the
+rooms in `HDFrameDraw` instead, the dome would have painted over the moon.
+Where the dome draws, the horizon mesh and the two flat colour layers are left
+out, because the dome already contains them. What still runs is the weather:
+the moon, the stars, and **the lightning flash**, which the game paints THROUGH
+layer 1 in the lightning's own colour and which would have been lost with the
+layer - so layer 1 survives the dome when `GF_LIGHTNING` is set, and only then.
+Rain and snow were never part of this phase and are untouched.
+
+Which levels have a dome, measured over the fifteen `.TRG` files by the pages
+they wear:
+
+| levels | sky groups |
+|---|---|
+| ANDREA1, ANDREA2, ANDREA3, ANDY1, ANDY2, ANDY3, JOBY2, JOBY4, RICH1, RICH2, RICH3, RICHCUT2 | 1, always the last group |
+| TITLE | 2 |
+| JOBY3, JOBY5 | none - the classic sky stays whole |
+
+The player's own log confirms the room counts the engine hands in: RICH2 "175
+HD rooms, 4 classic" is 179 rooms and its sky is group 179; JOBY4's "128 HD
+rooms, 9 classic" is 137 and its sky group is 137; TITLE's "105 HD rooms, 11
+classic" is 116 and its two sky groups are 116 and 117.
+
+*Named and left:* the dome rides on the classic path's own two gates, because
+it is drawn inside them - `outside`, which `GetRoomBounds` sets when a room
+that sees the sky is in view, and `objects[HORIZON].loaded`, which
+`SkyDrawPhase` returns on. A level with an HD sky group but no classic HORIZON
+object would therefore draw no sky at all, which is exactly what it does today
+and one gate more than the dome itself needs.
+
+**What did not move.** The opaque and the alpha pass multiply by exactly one
+and the sort key's two new fields are constant across them, so a surface cannot
+change. Proven, not argued: thirteen scenes over eight levels - ANDREA1's
+facades, roofs and lamp posts, JOBY2's snow yard, JOBY3's bulkheads, ANDY1's
+trees, JOBY4's kelp and the four scenes above - rendered through the same
+camera before and after, **26 of 26 opaque and alpha pictures byte for byte
+identical**. `RoomProbe -paritycheck` on ANDREA1 room 19 still reports 0.000 of
+255 on all three channels. The room pixel shader grew from 362 to 386
+instruction slots and the vertex shader from 328 to 330, against the 512 shader
+model 3 guarantees.
+
+`RoomProbe` gained `-sky` and `-skyonly`, and prints one `R3a:` line with the
+weighted parts, the smallest weight and the swinging parts; the engine writes
+the same three numbers into its own `HDLOG ... motion=` line, plus one
+`HDLOG ... sky groups=` line per level.
+
+---
+
 ---
 
 ## Building this yourself

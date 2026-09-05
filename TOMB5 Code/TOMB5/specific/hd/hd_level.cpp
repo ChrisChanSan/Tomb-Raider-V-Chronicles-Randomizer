@@ -341,6 +341,8 @@ namespace
 	float g_oneopersp = 0;
 
 	bool g_matrix_checked = false;
+	// R3a: one line per level about the sky dome, and only one.
+	bool g_sky_logged = false;
 
 	// Whether THIS frame's projection has been taken yet - by the first HD
 	// room or by the first HD item, whichever the engine reaches first.
@@ -949,6 +951,7 @@ void HDLevelBuild()
 	g_frame_count = 0;
 	g_frame_dropped = 0;
 	g_matrix_checked = false;
+	g_sky_logged = false;
 	memset(g_group_hd, 0, sizeof(g_group_hd));
 	g_room_count = 0;
 	g_flips_done = 0;
@@ -1072,12 +1075,18 @@ void HDLevelBuild()
 	// 8 - the ones that draw with the alpha test on. Held against
 	// cutout_pages in the frame line below, the two say whether a page the
 	// alpha measurement calls a cut-out sheet is really used as one.
+	// add_weighted / add_min / add_swinging (fix round R3a) is the additive
+	// side of the same thing: how many parts the .TRG's own material
+	// parameters dimmed, how far the smallest of them was dimmed, and how
+	// many of them also swing on the clock.
 	Log("HDLOG level=%s motion=%d scroll_parts=%d scroll_ranges=%d "
 		"scroll_tris=%d sway_verts=%d sway_parts=%d sway_dropped=%d "
-		"flipbook_parts=%d cutout_parts=%d",
+		"flipbook_parts=%d cutout_parts=%d add_weighted=%d add_min=%.3f "
+		"add_swinging=%d",
 		g_stem, tomb5.hd_motion ? 1 : 0, stats.scrollParts, stats.scrollRanges,
 		stats.scrollTris, stats.swayVertices, stats.swayParts,
-		stats.swayDropped, stats.flipbookParts, stats.cutoutParts);
+		stats.swayDropped, stats.flipbookParts, stats.cutoutParts,
+		stats.addWeightParts, stats.addWeightMin, stats.addSwingParts);
 
 	g_room_count = number_rooms;
 
@@ -1413,6 +1422,78 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld)
 	SetD3DMatrix(&entry.world, (float*)viewWorld);
 
 	return true;
+}
+
+/* THE HD SKY, IN THE CLASSIC HORIZON'S PLACE (#123, fix round R3a).
+ *
+ * Called from SkyDrawPhase (game\draw.cpp) at the line where the classic path
+ * draws its HORIZON mesh, with the matrix that is on the engine's stack right
+ * there - phd_TranslateAbs(camera.pos), no rotation, no scale. Returns true
+ * when the .TRG's own sky was drawn, and the caller then leaves out the
+ * horizon mesh and the two flat colour layers, which is exactly what the dome
+ * replaces. A level whose .TRG has no sky group (JOBY3, JOBY5) answers false
+ * and keeps the classic sky whole.
+ *
+ * WHY HERE AND NOT IN HDFrameDraw, where the rooms are drawn. The classic sky
+ * writes no depth (OutputSky switches D3DRS_ZWRITEENABLE off), so the order
+ * inside SkyDrawPhase is the order on the screen: the moon first, then the
+ * sky, then the stars. Drawn with the rooms instead, the dome would paint
+ * over the moon that was drawn a moment earlier. Here it takes the horizon
+ * mesh's own place in that order and nothing else moves.
+ *
+ * THE PROJECTION IS TAKEN FRESH and HDFrameCaptureProjection is deliberately
+ * not used: SkyDrawPhase moves f_persp itself while the binoculars are up
+ * (AlterFOV at its top and again at its bottom), so the sky is drawn with a
+ * different field of view from the rooms, and the frame's one captured
+ * projection belongs to the rooms.
+ *
+ * The lighting block is filled by hand rather than through FillFrameLighting:
+ * that function steps the game clock, and the frame must step it once. The
+ * sky gets the clock as it stands, the hd_motion switch, no dynamic light, no
+ * fog bulb and no distance fog - the classic path draws its horizon under
+ * nPolyType 6, which is none of those either. */
+bool HDFrameSky(const float* viewWorld)
+{
+	if (!viewWorld || !HDEnabled() || !g_level_active)
+		return false;
+
+	if (!HDRenderSkyGroups())
+		return false;
+
+	D3DMATRIX projection;
+	D3DMATRIX world;
+	HDFrameLighting frame;
+
+	HDRenderMakeProjection((double)f_persp, (double)f_centerx, (double)f_centery,
+		(double)f_a, (double)f_b, &projection);
+
+	memset(&frame, 0, sizeof(frame));
+	frame.centerX = f_centerx;
+	frame.centerY = f_centery;
+	frame.wibble = (float)wibble;
+	frame.cameraUnderwater = 0;
+	frame.distanceFogStart = 1.0e9f;	// no fog on the sky, as in the classic path
+	frame.wibbleTable = vert_wibble_table;
+	frame.bulbs = 0;
+	frame.bulbCount = 0;
+	frame.clock = (float)g_clock;
+	frame.motion = tomb5.hd_motion ? 1 : 0;
+
+	SetD3DMatrix(&world, (float*)viewWorld);
+
+	HDRenderFrameBegin(&kIdentity, &projection, &frame);
+	const bool drew = HDRenderSky(&world);
+	HDRenderFrameEnd();
+
+	if (gLogEnabled && !g_sky_logged)
+	{
+		g_sky_logged = true;
+		Log("HDLOG level=%s sky groups=%d drew=%d calls=%d persp=%.1f",
+			g_stem, HDRenderSkyGroups(), drew ? 1 : 0, HDRenderDrawCalls(),
+			f_persp);
+	}
+
+	return drew;
 }
 
 void HDFrameDraw()

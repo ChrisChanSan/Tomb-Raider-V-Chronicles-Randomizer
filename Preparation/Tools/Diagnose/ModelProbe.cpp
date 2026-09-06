@@ -114,6 +114,18 @@
  *                         the shoulders and of the chest come to the eye -
  *                         at both eye positions the game uses, with a
  *                         PASS/FAIL against the constant.
+ *     -braidsim [steps]   THE BRAID'S OWN PHYSICS, run offline (#123, fix
+ *                         round F, F2). HairControl's chain loop transcribed
+ *                         line for line and driven with this level's Lara
+ *                         skeleton, her collision spheres and the HD pack, in
+ *                         the bind pose - the pose the user's own two video
+ *                         frames were shot in. One line per regime: how far
+ *                         the busiest link still travels per step after 1,
+ *                         10, 30 and `steps` steps, and how deep a link still
+ *                         stands inside the backpack. A settled braid reads
+ *                         zero and stays there; the regimes that read
+ *                         anything else are the ones the game had. Default
+ *                         60 steps, which is a second of game time.
  *     -laracheck          the two proofs of the Lara seam, as tables, and the
  *                         offline twins of what the engine logs as HDLOG
  *                         laracheck and HDLOG braidcheck on its first HD Lara
@@ -1284,6 +1296,436 @@ static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
 		"through her chest.)\n");
 }
 
+/* ------------------------------------------------- the braid's physics -- */
+/*
+ * THE BRAID, RUN OFFLINE (#123, fix round F, F2).
+ *
+ * The user's finding: the HD braid "glitches about restlessly", two frames of
+ * his video showing it long and thrown out to the side in one and short and
+ * tucked against her back in the next. Fix round D had changed two things in
+ * game\hair.cpp - the root moved 15 units forward for an HD Lara, and the HD
+ * backpack got two collision spheres - and it said of the second: "this is
+ * the one change no offline picture can prove". A picture cannot, but the
+ * simulation can be run on its own, and that is what this does.
+ *
+ * WHAT IS TRANSCRIBED, AND WHAT IS NOT. The loop below is HairControl's, line
+ * for line: integrate three quarters of the last velocity, add the ten units
+ * of gravity, push the link out of every sphere, point the link above it at
+ * where it landed, and put it back at exactly one bone length along that
+ * direction, the new velocity being how far it actually moved. Positions are
+ * longs, as they are in the game, and the push-out keeps the game's integer
+ * division, because that quantisation is the only thing that can leave a
+ * chain trembling when everything else has come to rest.
+ *
+ * Three of the game's terms are left out and none of them can hide a
+ * tremble: the WIND (an outdoor room only, and it is a translation of the
+ * whole chain, not a force between links), the WATER LINE (an upward clamp)
+ * and the FLOOR (a downward clamp). A braid that will not settle standing
+ * still in a dry indoor room will not settle anywhere.
+ *
+ * The pose is the BIND POSE - Lara standing, every joint at rest - which is
+ * the pose the user's own two frames were shot in: she stands at a door and
+ * does not move, and the braid moves anyway.
+ *
+ * WHAT COMES OUT is one line per regime: how far the furthest link still
+ * travels per step after 10, 30 and `steps` steps. A settled chain goes to
+ * zero and stays there. The last column is the deepest a link still sits
+ * inside a pack sphere, which is what the pack was added for.
+ */
+struct BraidSphere
+{
+	long x, y, z, r;
+};
+
+struct BraidRegime
+{
+	const char* label;
+	/* What the two halves of HairControl do. The KEY frame is the half that
+	 * runs when the animation is not interpolating - the `else` half, the one
+	 * round D changed - and the TWEEN frame the `if (frac)` half it left
+	 * alone. `period` is how often a key frame comes round: 1 is "every
+	 * frame is a key frame", 4 is one key frame in four, which is what an
+	 * ordinary Lara animation with an interpolation rate of 4 does. */
+	long keyRootZ, tweenRootZ;
+	int keySpheres, tweenSpheres;
+	int period;
+};
+
+/* phd_sqrt is an integer square root; long arithmetic all the way is what
+ * the game does, so the tool does it too. */
+static long BraidSqrt(long long v)
+{
+	if (v <= 0)
+		return 0;
+
+	long r = (long)sqrt((double)v);
+
+	while ((long long)r * r > v)
+		r--;
+
+	while ((long long)(r + 1) * (r + 1) <= v)
+		r++;
+
+	return r;
+}
+
+/* One step of HairControl's chain loop. `links` is hairs[0][0..6] - the root
+ * and the six moving points - and `vel` their velocities. */
+static long BraidStep(long pos[7][3], long vel[7][3], const long root[3],
+	const long length[7], const BraidSphere* sphere, int spheres,
+	long* deepest, int* packHits)
+{
+	long moved = 0;
+
+	if (packHits)
+		*packHits = 0;
+
+	pos[0][0] = root[0];
+	pos[0][1] = root[1];
+	pos[0][2] = root[2];
+
+	for (int i = 1; i < 7; i++)
+	{
+		const long was[3] = { pos[i][0], pos[i][1], pos[i][2] };
+
+		pos[i][0] += 3 * vel[i][0] / 4;
+		pos[i][1] += 3 * vel[i][1] / 4;
+		pos[i][2] += 3 * vel[i][2] / 4;
+
+		pos[i][1] += 10;	// gravity; no water line and no floor indoors
+
+		for (int j = 0; j < spheres; j++)
+		{
+			const long x = pos[i][0] - sphere[j].x;
+			const long y = pos[i][1] - sphere[j].y;
+			const long z = pos[i][2] - sphere[j].z;
+			long long d = (long long)x * x + (long long)y * y +
+				(long long)z * z;
+
+			if (d >= (long long)sphere[j].r * sphere[j].r)
+				continue;
+
+			long dist = BraidSqrt(d);
+
+			if (!dist)
+				dist = 1;
+
+			pos[i][0] = sphere[j].x + x * sphere[j].r / dist;
+			pos[i][1] = sphere[j].y + y * sphere[j].r / dist;
+			pos[i][2] = sphere[j].z + z * sphere[j].r / dist;
+
+			/* The twin of HAIRLOG's own packhits field in the game: how
+			 * many links the pack itself had to push this step. */
+			if (j >= 6 && packHits)
+				(*packHits)++;
+		}
+
+		/* The chain rule. The game writes the angles of the link ABOVE and
+		 * then rebuilds this one from them, one bone offset along its own z;
+		 * the angles are the spherical angles of the vector it just walked,
+		 * so the rebuilt point is the previous one plus one bone length in
+		 * that direction. (game\hair.cpp: phd_atan(dz, dx) and
+		 * -phd_atan(dist, dy), then phd_RotYXZ and phd_TranslateRel.) */
+		const double dx = (double)(pos[i][0] - pos[i - 1][0]);
+		const double dy = (double)(pos[i][1] - pos[i - 1][1]);
+		const double dz = (double)(pos[i][2] - pos[i - 1][2]);
+		double len = sqrt(dx * dx + dy * dy + dz * dz);
+
+		if (len < 1.0e-6)
+			len = 1.0;
+
+		const double step = (double)length[i] / len;
+
+		pos[i][0] = pos[i - 1][0] + (long)floor(dx * step + 0.5);
+		pos[i][1] = pos[i - 1][1] + (long)floor(dy * step + 0.5);
+		pos[i][2] = pos[i - 1][2] + (long)floor(dz * step + 0.5);
+
+		vel[i][0] = pos[i][0] - was[0];
+		vel[i][1] = pos[i][1] - was[1];
+		vel[i][2] = pos[i][2] - was[2];
+
+		const long d2 = labs(vel[i][0]) + labs(vel[i][1]) + labs(vel[i][2]);
+
+		if (d2 > moved)
+			moved = d2;
+	}
+
+	/* How deep a link stands inside a PACK sphere. The two are measured
+	 * whether or not they were switched on for this step, so that a regime
+	 * without the pack says how far the braid walks into the backpack it
+	 * cannot feel. */
+	if (deepest)
+	{
+		*deepest = 0;
+
+		for (int i = 1; i < 7; i++)
+			for (int j = 6; j < 8; j++)
+			{
+				const double x = (double)(pos[i][0] - sphere[j].x);
+				const double y = (double)(pos[i][1] - sphere[j].y);
+				const double z = (double)(pos[i][2] - sphere[j].z);
+				const long in = sphere[j].r -
+					(long)sqrt(x * x + y * y + z * z);
+
+				if (in > *deepest)
+					*deepest = in;
+			}
+	}
+
+	return moved;
+}
+
+static void PrintBraidSim(const Tr5Level& level, int bodySlot,
+	const ClassicSlot& body, const ClassicSlot& hairTree, bool haveHair,
+	int steps)
+{
+	if (!body.ok || body.nodes <= HD_LARA_HEAD_NODE)
+	{
+		printf("\n-braidsim needs the level's Lara skeleton and this one has "
+			"none.\n");
+		return;
+	}
+
+	Tr5Level::MoveableInfo info;
+
+	if (!level.moveableInfo(bodySlot, info))
+	{
+		printf("\n-braidsim: %s has no moveable entry.\n", HDSlotName(bodySlot));
+		return;
+	}
+
+	/* THE FIVE CLASSIC SPHERES plus the neck one, exactly as HairControl
+	 * builds them: a mesh's own centre and radius, in the frame of its node.
+	 * In the bind pose the node frames carry no rotation, so a node's origin
+	 * is ClassicSlot::bind and the mesh offset is a plain addition. The three
+	 * hand-tuned constants (-9 and +25 on the torso, -2 on the head) are
+	 * Core's own and come along. */
+	static const int kNode[5] = { 0, 7, 14, 8, 11 };	// hips torso head arms
+	static const int kInto[5] = { 0, 1, 2, 3, 4 };	// which sphere each fills
+	BraidSphere sphere[8];
+	int16_t mesh[5][6];
+
+	for (int i = 0; i < 5; i++)
+		if (!level.debugMeshHeader(info.meshIndex + kNode[i], mesh[i]))
+		{
+			printf("\n-braidsim: mesh %d of %s is not readable.\n", kNode[i],
+				HDSlotName(bodySlot));
+			return;
+		}
+
+	/* THE TORSO SPHERE HAS TWO SETTINGS and they are not the same size, so
+	 * both are run. HairControl anchors the braid differently for the Russia
+	 * outfit - the cap and the bomber jacket - than for every other: the
+	 * sphere moves 11 left, 16 up and its radius is nailed to 94 instead of
+	 * the mesh's own. `anchor` 0 is the ordinary one, 1 the Russia one. */
+	long torsoR[2] = { 0, 94 };
+	long torsoOff[2][3] = { { -9, 0, 25 }, { -11, -16, 25 } };
+
+	printf("\n-- the braid, simulated in the bind pose ---------------------\n");
+
+	static const char* kSphereName[8] =
+	{
+		"0 hips", "1 torso", "2 head", "3 r upper arm", "4 l upper arm",
+		"5 neck", "6 pack top", "7 pack bottom"
+	};
+
+	static const char* kAnchorName[2] =
+	{
+		"the ordinary torso anchor", "the Russia / bunhead torso anchor"
+	};
+
+	long length[7];
+
+	for (int i = 1; i < 7; i++)
+	{
+		const int n = i < 6 ? i : 5;
+
+		length[i] = haveHair && n < hairTree.nodes
+			? (long)(hairTree.bind[n][2] - hairTree.bind[n - 1][2])
+			: 56;
+	}
+
+	printf("\nlink lengths %ld %ld %ld %ld %ld %ld, %d steps per regime\n",
+		length[1], length[2], length[3], length[4], length[5], length[6],
+		steps);
+
+	/* THE FOUR REGIMES.
+	 *
+	 * The two "as round D built it" lines are the ones that matter. Round D
+	 * put both of its changes into the ELSE half of HairControl - the half
+	 * that runs on a frame the animation does NOT interpolate - and left the
+	 * interpolating half untouched. The engine takes one branch or the other
+	 * from frame to frame, so what the braid really saw was a root that
+	 * jumped between two places and a backpack that came and went, which is
+	 * what these two lines run. */
+	static const BraidRegime kRegime[6] =
+	{
+		{ "classic: root -48, 6 spheres",  HD_LARA_BRAID_ROOT_Z,
+		  HD_LARA_BRAID_ROOT_Z,    6, 6, 1 },
+		{ "round D as built, 1 key in 4",  HD_LARA_BRAID_ROOT_Z_HD,
+		  HD_LARA_BRAID_ROOT_Z,    8, 6, 4 },
+		{ "round D as built, every other", HD_LARA_BRAID_ROOT_Z_HD,
+		  HD_LARA_BRAID_ROOT_Z,    8, 6, 2 },
+		{ "round D as meant: -33, pack",   HD_LARA_BRAID_ROOT_Z_HD,
+		  HD_LARA_BRAID_ROOT_Z_HD, 8, 8, 1 },
+		{ "round F: root -48, pack",       HD_LARA_BRAID_ROOT_Z,
+		  HD_LARA_BRAID_ROOT_Z,    8, 8, 1 },
+		{ "root -48, no pack (the F1 kit)", HD_LARA_BRAID_ROOT_Z,
+		  HD_LARA_BRAID_ROOT_Z,    6, 6, 1 }
+	};
+
+	char rest[6][256];
+
+	for (int anchor = 0; anchor < 2; anchor++)
+	{
+
+	for (int i = 0; i < 5; i++)
+	{
+		const int n = kNode[i];
+		long ox = mesh[i][0], oy = mesh[i][1], oz = mesh[i][2];
+		long r = mesh[i][3];
+
+		if (n == 7)
+		{
+			ox += torsoOff[anchor][0];
+			oy += torsoOff[anchor][1];
+			oz += torsoOff[anchor][2];
+
+			if (torsoR[anchor])
+				r = torsoR[anchor];
+		}
+		else if (n == 14)
+			ox -= 2;
+		else if (n == 8 || n == 11)
+			r = 4 * r / 3;
+
+		sphere[kInto[i]].x = (long)body.bind[n][0] + ox;
+		sphere[kInto[i]].y = (long)body.bind[n][1] + oy;
+		sphere[kInto[i]].z = (long)body.bind[n][2] + oz;
+		sphere[kInto[i]].r = r;
+	}
+
+	sphere[5].x = (2 * sphere[2].x + sphere[1].x) / 3;
+	sphere[5].y = (2 * sphere[2].y + sphere[1].y) / 3;
+	sphere[5].z = (2 * sphere[2].z + sphere[1].z) / 3;
+	sphere[5].r = 5 * sphere[2].r / 4;
+
+	sphere[6].x = (long)body.bind[7][0] + HD_LARA_PACK_X;
+	sphere[6].y = (long)body.bind[7][1] + HD_LARA_PACK_Y_TOP;
+	sphere[6].z = (long)body.bind[7][2] + HD_LARA_PACK_Z;
+	sphere[6].r = HD_LARA_PACK_R;
+
+	sphere[7].x = (long)body.bind[7][0] + HD_LARA_PACK_X;
+	sphere[7].y = (long)body.bind[7][1] + HD_LARA_PACK_Y_BOTTOM;
+	sphere[7].z = (long)body.bind[7][2] + HD_LARA_PACK_Z;
+	sphere[7].r = HD_LARA_PACK_R;
+
+	printf("\n=== %s ===\n", kAnchorName[anchor]);
+	printf("%-16s %7s %7s %7s %8s\n", "sphere", "x", "y", "z", "radius");
+
+	for (int i = 0; i < 8; i++)
+		printf("%-16s %7ld %7ld %7ld %8ld\n", kSphereName[i], sphere[i].x,
+			sphere[i].y, sphere[i].z, sphere[i].r);
+
+	printf("\n%-34s %8s %8s %8s %8s %9s %8s\n", "regime", "step 1", "step 10",
+		"step 30", "last", "in a pack", "packhits");
+	printf("%-34s %8s %8s %8s %8s %9s %8s\n",
+		"----------------------------------",
+		"--------", "--------", "--------", "--------", "---------",
+		"--------");
+
+	for (int r = 0; r < 6; r++)
+	{
+		long pos[7][3], vel[7][3] = { { 0, 0, 0 } };
+		long deepest = 0, worstDeepest = 0;
+		long at1 = 0, at10 = 0, at30 = 0, last = 0;
+		int hits = 0, worstHits = 0;
+
+		memset(vel, 0, sizeof(vel));
+
+		/* THE SEED IS THE GAME'S OWN first frame: first_hair hangs the chain
+		 * straight down from the root, every velocity zero. */
+		const long rootBase[3] =
+		{
+			(long)body.bind[HD_LARA_HEAD_NODE][0] + HD_LARA_BRAID_ROOT_X,
+			(long)body.bind[HD_LARA_HEAD_NODE][1] + HD_LARA_BRAID_ROOT_Y,
+			(long)body.bind[HD_LARA_HEAD_NODE][2]
+		};
+
+		long down = 0;
+
+		for (int i = 0; i < 7; i++)
+		{
+			pos[i][0] = rootBase[0];
+			pos[i][1] = rootBase[1] + down;
+			pos[i][2] = rootBase[2] + kRegime[r].keyRootZ;
+
+			if (i < 6)
+				down += length[i + 1];
+		}
+
+		for (int s = 1; s <= steps; s++)
+		{
+			/* A key frame every `period` steps, the tween half in between -
+			 * which is exactly how the engine alternates between the two
+			 * halves of HairControl. */
+			const bool key = (s % kRegime[r].period) == 0;
+			long root[3] =
+			{
+				rootBase[0], rootBase[1],
+				rootBase[2] + (key ? kRegime[r].keyRootZ
+					: kRegime[r].tweenRootZ)
+			};
+			const int n = key ? kRegime[r].keySpheres
+				: kRegime[r].tweenSpheres;
+
+			last = BraidStep(pos, vel, root, length, sphere, n, &deepest,
+				&hits);
+
+			if (s > steps - 10 && hits > worstHits)
+				worstHits = hits;
+
+			if (s == 1) at1 = last;
+			if (s == 10) at10 = last;
+			if (s == 30) at30 = last;
+
+			if (s > steps - 10 && deepest > worstDeepest)
+				worstDeepest = deepest;
+		}
+
+		printf("%-34s %8ld %8ld %8ld %8ld %9ld %8d\n", kRegime[r].label, at1,
+			at10, at30, last, worstDeepest, worstHits);
+
+		/* Where the six links have come to rest. A regime that settles still
+		 * has to settle in the right PLACE - a pack sphere that shoves the
+		 * braid out sideways would read zero here and look wrong in the
+		 * game. */
+		strcpy(&rest[r][0], "");
+
+		for (int i = 1; i < 7; i++)
+			sprintf(&rest[r][strlen(rest[r])], " %ld/%ld/%ld", pos[i][0],
+				pos[i][1], pos[i][2]);
+	}
+
+	printf("\nwhere the six links stand at the end:\n");
+
+	for (int r = 0; r < 6; r++)
+		printf("  %-34s%s\n", kRegime[r].label, rest[r]);
+
+	}
+
+	printf("\nthe four numbers are how far the busiest link still moves in one "
+		"step\n(|dx|+|dy|+|dz|, in classic units); a settled braid reads 0 and "
+		"stays there.\n\"in a pack\" is the deepest any link stands inside a "
+		"pack sphere over the last\nten steps, measured whether or not that "
+		"regime switched the pack on - so a\nregime without it says how far "
+		"the braid walks into the backpack.\n");
+	printf("\"packhits\" is the twin of the game's own HAIRLOG field: how many "
+		"times the two\npack spheres pushed a link out in one step.\n");
+	printf("no wind, no water line and no floor: a braid that will not settle "
+		"standing\nstill in a dry indoor room will not settle anywhere.\n");
+}
+
 /* ---------------------------------------------------- Lara's composite -- */
 /* Stage S4-1. Everything the tool needs to know about one wardrobe picture;
  * a struct rather than eighteen arguments. */
@@ -1317,7 +1759,8 @@ struct LaraOptions
 	bool firstPerson;
 	bool neck;
 	bool braid;			// the braid root table (fix round C, C4)
-	bool classicBraidRoot;		// #123 fix round D (D3a): the BEFORE picture
+	int braidSim;			// #123 fix round F (F2): steps, 0 = off
+	bool hdBraidRoot;		// #123 fix round F (F2): the withdrawn root
 	bool noSheen;			// #123 fix round D (D2): the BEFORE picture
 	bool check;
 	bool noDraw;
@@ -1826,6 +2269,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	if (o.braid)
 		PrintBraidTable(o.root, body);
 
+	if (o.braidSim > 0)
+		PrintBraidSim(level, bodySlot, body, hair, haveHair, o.braidSim);
+
 	if (o.noDraw)
 	{
 		HDModelLevelEnd();
@@ -2008,12 +2454,13 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		 * the back of the skull - is where the braid hangs from. Only the two
 		 * ANGLES below are the tool's; the root is the game's own formula, so
 		 * that a studio picture shows the same junction the game shows. */
-		/* And 15 units nearer the skull for an HD Lara (#123, fix round D,
-		 * D3a): the tool draws the HD braid, so it uses the HD root. -classicroot
-		 * puts the old one back, which is the BEFORE picture of that fix. */
+		/* Round D moved it 15 units nearer the skull for an HD Lara and fix
+		 * round F withdrew that (F2 - see HD_LARA_BRAID_ROOT_Z_HD), so the
+		 * tool is back on the engine's own root. -hdroot draws the withdrawn
+		 * one, which is what the gap looks like closed. */
 		MatTranslate((float)HD_LARA_BRAID_ROOT_X, (float)HD_LARA_BRAID_ROOT_Y,
-			(float)(o.classicBraidRoot ? HD_LARA_BRAID_ROOT_Z
-				: HD_LARA_BRAID_ROOT_Z_HD), anchor);
+			(float)(o.hdBraidRoot ? HD_LARA_BRAID_ROOT_Z_HD
+				: HD_LARA_BRAID_ROOT_Z), anchor);
 		MatMul(anchor, &matrices[HD_LARA_HEAD_NODE * 16], base);
 
 		MatRotX(kBraidRest, rest);
@@ -2407,9 +2854,10 @@ int main(int argc, char** argv)
 	int onlyPage = -1;		// #123 fix round D (D4): -name with one page
 	bool lara = false, laraNodes = false, mirror = false;
 	bool laraFirstPerson = false, laraCheck = false, laraNeck = false;
-	bool classicBraidRoot = false;	// #123 fix round D (D3a): the BEFORE picture
+	bool hdBraidRoot = false;	// #123 fix round F (F2): the withdrawn root
 	bool noSheen = false;		// #123 fix round D (D2): the BEFORE picture
 	bool laraBraid = false;
+	int laraBraidSim = 0;		// #123 fix round F (F2): the braid's physics
 	/* Stage S8. -1 means "the engine's own constant when -firstperson is on",
 	 * which is what makes the tool's default picture the game's picture; a
 	 * number given on the line overrides it, and 0 is the BEFORE picture. */
@@ -2500,14 +2948,27 @@ int main(int argc, char** argv)
 			lara = true;
 			laraNeck = true;
 		}
-		else if (!_stricmp(argv[i], "-classicroot"))
-			classicBraidRoot = true;
+		else if (!_stricmp(argv[i], "-hdroot"))
+			hdBraidRoot = true;
 		else if (!_stricmp(argv[i], "-nosheen"))
 			noSheen = true;
 		else if (!_stricmp(argv[i], "-braid"))
 		{
 			lara = true;
 			laraBraid = true;
+		}
+		/* #123 fix round F (F2): the braid's own physics, run offline. The
+		 * step count is optional - 60 is a second of game time. */
+		else if (!_stricmp(argv[i], "-braidsim"))
+		{
+			lara = true;
+			laraBraidSim = 60;
+
+			if (i + 1 < argc && argv[i + 1][0] != '-')
+				laraBraidSim = atoi(argv[++i]);
+
+			if (laraBraidSim < 1)
+				laraBraidSim = 60;
 		}
 		else if (!_stricmp(argv[i], "-laracheck"))
 		{
@@ -2675,10 +3136,11 @@ int main(int argc, char** argv)
 		o.nodes = laraNodes;
 		o.mirror = mirror;
 		o.firstPerson = laraFirstPerson;
-		o.classicBraidRoot = classicBraidRoot;
+		o.hdBraidRoot = hdBraidRoot;
 		o.noSheen = noSheen;
 		o.neck = laraNeck;
 		o.braid = laraBraid;
+		o.braidSim = laraBraidSim;
 		o.check = laraCheck;
 		o.noDraw = noDraw;
 		o.managed = managed;

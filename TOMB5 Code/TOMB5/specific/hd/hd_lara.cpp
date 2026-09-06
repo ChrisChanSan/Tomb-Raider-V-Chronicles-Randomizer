@@ -76,10 +76,14 @@ namespace
 		bool braid;
 		bool holsters;
 		bool gloves;
-		/* Does the outfit's OWN body carry the thigh holster rig - the pouch,
-		 * the strap and the belt the guns hang in (#123, fix round D, D4)?
-		 * Measured over the eight wardrobe bodies, triangles on nodes 1 and 4
-		 * by texture page:
+		/* Does this outfit wear the separate HOLSTER RIG - the belt, the two
+		 * pouches and the two thigh straps cut out of the London catsuit by
+		 * page (#123, fix round D, D4; the rule corrected in fix round F,
+		 * F1)?
+		 *
+		 * THE MEASUREMENT ROUND D MADE ITS RULE. Triangles on nodes 1 and 4
+		 * by texture page, over the eight wardrobe bodies - does the body
+		 * carry a rig of its OWN?
 		 *
 		 *   OUTFIT_CLASSIC      8017: 1090/1090   + 8018: 56/56    yes
 		 *   OUTFIT_RUSSIA       8017: 1106/1114   + 8018: 56/56    yes
@@ -90,8 +94,28 @@ namespace
 		 *   OUTFIT_TR3_NEVADA   -                                  NO
 		 *   OUTFIT_SUBSUIT      -                          holsters none anyway
 		 *
-		 * false here means HD_LARA_PART_HOLSTER_RIG is worn on top. */
-		bool thighRig;
+		 * AND THE RULE WAS WRONG ON THE PICTURE. "No rig of its own, so wear
+		 * the London one" put black leather straps over the Antarctica
+		 * parka: the belt disappears inside the padded jacket, the two
+		 * pouches stand off the hip at the width the London catsuit's thin
+		 * thighs want, and the straps cut through the coat (user finding F1
+		 * of the play test of 2026-09-06 - "that may only concern the VCI
+		 * catsuit"). Nevada is the same body shape and the same picture.
+		 *
+		 * A BODY WITHOUT A RIG IS NOT A BODY ASKING FOR ONE. The three are
+		 * without one for two different reasons. OUTFIT_VCI has none because
+		 * vanilla TR5 hangs pistols on that catsuit and the remaster left the
+		 * pouches to the holster file, so its thighs are bare where guns
+		 * belong. Antarctica and Nevada have none because in TR3 those two
+		 * outfits never wore a thigh rig at all: the geometry is finished as
+		 * it stands, and coat and cargo pocket are modelled to sit flush.
+		 * Only the first of the three is a hole; the other two are a design.
+		 *
+		 * So this is a TABLE and not a rule derived from geometry - one
+		 * outfit, the one whose picture the user judged. A wardrobe body
+		 * added later gets a false here, and a true only after somebody has
+		 * looked at the picture. */
+		bool wearsRig;
 
 		/* THE BODY'S SHEEN (#123, fix round D, D2): the Blinn-Phong strength
 		 * and exponent for the OUTFIT model. See kPartSheen below for the
@@ -101,22 +125,25 @@ namespace
 		float sheenPower;
 	};
 
+	/*                                                    hands  braid holsters
+	 *                                                                  gloves
+	 *                                                                wearsRig */
 	const Outfit kOutfit[HD_LARA_OUTFIT_COUNT] =
 	{
 		{ 0,                    "classic (no HD body)",   false, false, false, false, false, 0.00f,  1.0f },
-		{ "OUTFIT_CLASSIC",     "the Rome outfit",        true,  true,  true,  false, true,  0.10f, 14.0f },
-		{ "OUTFIT_RUSSIA",      "the Russia outfit",      true,  true,  true,  true,  true,  0.12f, 16.0f },
-		{ "OUTFIT_SUBSUIT",     "the diving suit",        false, false, false, false, true,  0.30f, 22.0f },
-		{ "OUTFIT_VCI",         "the VCI catsuit",        true,  true,  true,  false, false, 0.45f, 26.0f },
+		{ "OUTFIT_CLASSIC",     "the Rome outfit",        true,  true,  true,  false, false, 0.10f, 14.0f },
+		{ "OUTFIT_RUSSIA",      "the Russia outfit",      true,  true,  true,  true,  false, 0.12f, 16.0f },
+		{ "OUTFIT_SUBSUIT",     "the diving suit",        false, false, false, false, false, 0.30f, 22.0f },
+		{ "OUTFIT_VCI",         "the VCI catsuit",        true,  true,  true,  false, true,  0.45f, 26.0f },
 		{ "OUTFIT_TR3_ANTARC",  "Antarctica (TR3)",       true,  true,  true,  false, false, 0.10f, 14.0f },
 		{ "OUTFIT_TR3_NEVADA",  "Nevada (TR3)",           true,  true,  true,  false, false, 0.08f, 12.0f },
-		{ "OUTFIT_TR3_COAST",   "Jungle (TR3)",           true,  true,  true,  false, true,  0.08f, 12.0f },
-		{ "OUTFIT_TR3_CATSUIT", "London (TR3)",           true,  true,  true,  false, true,  0.45f, 26.0f }
+		{ "OUTFIT_TR3_COAST",   "Jungle (TR3)",           true,  true,  true,  false, false, 0.08f, 12.0f },
+		{ "OUTFIT_TR3_CATSUIT", "London (TR3)",           true,  true,  true,  false, false, 0.45f, 26.0f }
 	};
 
 	/* THE OTHER PARTS. `kind` decides which outfits take the part at all:
 	 *   0 always, 1 only an outfit with hands, 2 only one with a braid,
-	 *   3 only one with holsters.
+	 *   3 only one with holsters, 4 only the outfits the table names.
 	 * `rigid` >= 0 means the file is not skinned to the mesh tree but nailed
 	 * to that one node - LARA_HEAD is a facial rig whose bones run to 31 and
 	 * mean nothing at all to Lara's 15 node tree.
@@ -181,7 +208,17 @@ namespace
 		  "the Desert Eagle holster", 3, -1, "4", -1 },
 
 		/* The pouches themselves, cut out of the London catsuit by page (D4).
-		 * kind 4 is "worn, and only by an outfit whose body has no rig". */
+		 * kind 4 is "worn by the outfits the table names" - today OUTFIT_VCI
+		 * and no other (fix round F, F1).
+		 *
+		 * The nodes column is the TRIANGLES: 791, 526 and 505 vertices on
+		 * nodes 0, 1 and 4. The page also keeps 207 vertices whose dominant
+		 * bone is node 14, which no surviving triangle uses - they belong to
+		 * triangles the cut dropped because their other corners sit on
+		 * another page. HDModelNodeCovered counts vertices, so the coverage
+		 * mask has bit 14 set as well; it draws nothing, and it is written
+		 * down here so that a reader of the HDLOG part line does not go
+		 * looking for a piece of London on Lara's head. */
 		{ "OUTFIT_TR3_CATSUIT",       0,
 		  "the holster rig",          4, -1, "0,1,4", 8205 },
 
@@ -470,10 +507,15 @@ namespace
 		case 1: return kOutfit[outfit].hands;
 		case 2: return kOutfit[outfit].braid;
 		case 3: return kOutfit[outfit].holsters;
-		/* The holster rig (#123, fix round D, D4): worn by an outfit that
-		 * holsters at all and whose own body has no pouches built in. An
-		 * outfit that has them would wear two. */
-		case 4: return kOutfit[outfit].holsters && !kOutfit[outfit].thighRig;
+		/* The holster rig (#123, fix round D, D4; the rule corrected in fix
+		 * round F, F1): NAMED in the outfit table, not derived from the
+		 * geometry. Round D asked "has this body a rig of its own?" and gave
+		 * the London rig to every body that had not - which put it on the
+		 * Antarctica parka and the Nevada vest, where it clips. See wearsRig
+		 * above for the measurement and for why it is not the rule. The
+		 * holsters test stays in front of it so that a table entry alone can
+		 * never dress an outfit that draws no holsters at all. */
+		case 4: return kOutfit[outfit].holsters && kOutfit[outfit].wearsRig;
 		default: return true;
 		}
 	}

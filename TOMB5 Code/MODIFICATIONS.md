@@ -3668,6 +3668,118 @@ level and one `HDLOG static room=` line per static that changed sides.
 
 ---
 
+#### Fix round F - Lara: whose rig, and a braid that would not stand still (#123)
+
+The play test of the morning of 2026-09-06, two findings, both of them about
+what fix round D did to Lara. **No new source file**: it changes
+`specific/hd/hd_lara.{h,cpp}`, `specific/hd/hd_laradraw.cpp`, `game/hair.cpp`
+and the diagnostic tool `ModelProbe`.
+
+**F1 - the holster rig was worn by outfits that did not want it.** Round D cut
+the belt, the two pouches and the two thigh straps out of the London catsuit by
+texture page and gave them to "any holstering outfit that has no rig of its
+own". Measured, that rule reached three of the eight wardrobe bodies -
+`ModelProbe -lara ... -guns pistols`, the `drawn:` line, before this round:
+
+| outfit | drawn |
+| --- | --- |
+| `OUTFIT_CLASSIC` | body + `LARA_HEAD` + hand + `HAIR_OG` |
+| `OUTFIT_RUSSIA` | body + `LARA_HEAD` + hand + `HAIR_OG` |
+| `OUTFIT_VCI` | body + `LARA_HEAD` + **holster rig** + hand + `HAIR_OG` |
+| `OUTFIT_TR3_ANTARC` | body + `LARA_HEAD` + **holster rig** + hand + `HAIR_OG` |
+| `OUTFIT_TR3_NEVADA` | body + `LARA_HEAD` + **holster rig** + hand + `HAIR_OG` |
+| `OUTFIT_TR3_COAST` | body + `LARA_HEAD` + hand + `HAIR_OG` |
+| `OUTFIT_TR3_CATSUIT` | body + `LARA_HEAD` + hand + `HAIR_OG` |
+
+Two of those three are wrong, and the user's photograph is one of them: black
+leather straps over the orange Antarctica parka, the belt swallowed by the
+padded jacket and the pouches standing off the hip at the width the London
+catsuit's thin thighs want. Nevada is the same body and the same picture.
+
+**A body without a rig is not a body asking for one.** The three are without
+one for two different reasons. `OUTFIT_VCI` has none because vanilla TR5 hangs
+pistols on that catsuit and the remaster left the pouches to the holster file -
+that is a hole. Antarctica and Nevada have none because in TR3 those outfits
+never wore a thigh rig at all: the geometry is finished as it stands and the
+coat is modelled to sit flush - that is a design. So the rule is now a **table
+and not a measurement**: `Outfit::wearsRig`, true for `OUTFIT_VCI` and nobody
+else, with the page measurement kept beside it and the reason it is not the
+rule. A wardrobe body added later gets a `false` and a `true` only after
+somebody has looked at the picture.
+
+Written down while measuring: the page cut keeps 207 vertices whose dominant
+bone is node 14, left over from triangles the cut dropped, so the coverage mask
+has bit 14 set. No surviving triangle uses them - `-onlypage 8205 -meshbits
+0x4000` draws nothing at all - and the note is in the source so that a reader
+of the `HDLOG` part line does not go looking for a piece of London on Lara's
+head.
+
+**F2 - the braid glitched about restlessly.** The user's words, with two frames
+of video: in one the braid is long and thrown out to the side, in the next it
+is short and tucked against her back. Round D had changed two things in
+`HairControl`, the braid root and the two backpack collision spheres, and it
+put **both of them into one of that function's two frame branches** - the
+`else` half, which runs on a frame the animation does not interpolate. The
+other half, `if (frac)`, kept the old root and six spheres. The engine takes
+one branch or the other from frame to frame, so what the braid really saw was a
+root that jumped between z -48 and z -33 and a backpack that came and went.
+`hairs[0][0]` seeds the whole chain and every link's velocity is *how far it
+moved since the last frame*, so a root that travels 15 units and back feeds the
+braid 15 units of velocity for ever.
+
+`ModelProbe` gained **`-braidsim`**, which transcribes `HairControl`'s chain
+loop line for line - integer positions, the game's integer push-out, the same
+rebuild from the angles - and runs it on this level's own Lara skeleton, her
+collision spheres and the HD pack, in the bind pose, with no wind, no water
+line and no floor. A braid that will not settle standing still in a dry indoor
+room will not settle anywhere. Sixty steps, "how far the busiest link still
+travels in one step" (ANDREA1, the ordinary torso anchor; the Russia anchor and
+JOBY2, RICH1 and ANDY1 give the same verdict):
+
+| regime | step 1 | step 10 | step 30 | step 60 | inside the pack |
+| --- | --- | --- | --- | --- | --- |
+| classic: root -48, 6 spheres | 0 | 0 | 0 | **0** | 15 |
+| round D as built, 1 key frame in 4 | 12 | 2 | 1 | **3** | 13 |
+| round D as built, every other frame | 12 | 4 | 2 | **2** | 13 |
+| round D as it was meant: -33, pack always | 11 | 3 | 1 | **1** | 15 |
+| round F: root -48, pack always | 5 | 0 | 0 | **0** | 9 |
+
+So the tremble is measured, and the moved root does not settle even applied to
+both halves: at -33 the chain hangs near enough to her neck for the neck sphere
+and the pack sphere to push it in turn, and the two pushes make a small limit
+cycle rather than a rest. **The root goes back to the classic -48 for every
+adult Lara.** The 15.2 unit gap between the hairband and the first rigid link
+comes back with it, and that is the user's own choice - the gap is quiet and
+the fix was not. `HD_LARA_BRAID_ROOT_Z_HD` stays in the header with the
+measurement, the refutation and the way to reopen it: move the DRAWN braid in
+`hd_laradraw.cpp`, which builds its own matrices out of `hairs[0][n]`, and let
+the physics never see it.
+
+**The backpack stays, in both branches**, as `HdPackSpheres` - a function with
+an `interpolate` switch rather than a block that can be forgotten in one place,
+because that is exactly what happened. Round D said of it "this is the one
+change no offline picture can prove"; a picture cannot, but the simulation can:
+without the pack the braid comes to rest 15 units inside it, with the pack 9,
+and the chain settles either way, the pack pushing two of the six links per
+step while it rests.
+
+`game/hair.cpp` writes one `HAIRLOG` line per braid per frame under `-log`:
+`rootz` (which root the frame really used - it has to read the same number on
+every line of a run; a line where it changes is the bug back again), the room
+position of the root, how many spheres that frame tested (6 or 8, and it must
+not alternate either), `packhits`, whether the HD wardrobe is drawing, and
+where the tip ended up.
+
+*Proof.* `ModelProbe -laracheck` 15 of 15 joints at 0.00000 px, PASS, and the
+braid chain rule worst gap 0.00002 units over 5 joints, PASS. The `drawn:` line
+now names the rig for `OUTFIT_VCI` and for no other outfit. Pictures: the
+Antarctica and Nevada bodies before and after (3,451 and 11,257 pixels change,
+all of them at the hip and the upper thigh), the VCI body before and after
+(**0 pixels change** - the one outfit that should wear it is untouched), and
+the rig alone out of its page.
+
+---
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

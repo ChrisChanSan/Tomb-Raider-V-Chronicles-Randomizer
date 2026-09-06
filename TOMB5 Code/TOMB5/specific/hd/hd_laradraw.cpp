@@ -421,14 +421,15 @@ namespace
 			}
 		}
 
-		/* The two numbers of fix round D (D3) ride along, so a log says
-		 * which root the simulation used and whether the pack spheres were
-		 * added: root_z -33 is the HD one, -48 the classic. */
+		/* The pack of fix round D (D3b) rides along, so that a log says what
+		 * the braid was pushed out of. The root is the classic one for every
+		 * adult Lara again since fix round F (F2) - HAIRLOG in game\hair.cpp
+		 * prints the one the frame really used, every frame. */
 		Log("HDLOG braidcheck links=%d step=%.0f worst_gap=%.3f at link %d "
 			"(units, view space) root_z=%d pack=%d/%d,%d,%d r%d",
 			HD_LARA_HAIR_NODES,
 			g_level.hairBind[1 * 3 + 2] - g_level.hairBind[0 * 3 + 2],
-			worst_gap, worst_link, HD_LARA_BRAID_ROOT_Z_HD,
+			worst_gap, worst_link, HD_LARA_BRAID_ROOT_Z,
 			HD_LARA_PACK_X, HD_LARA_PACK_Y_TOP, HD_LARA_PACK_Y_BOTTOM,
 			HD_LARA_PACK_Z, HD_LARA_PACK_R);
 	}
@@ -885,9 +886,10 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * of OUTFIT_CLASSIC is - the pouches do not vanish when she draws.
 	 *
 	 * HDLaraHasPart is the whole guard: the part exists only for an outfit
-	 * that holsters and has no rig of its own (kind 4 in hd_lara.cpp), and
-	 * for anybody else HDLaraPartSlot names a slot no model was built for,
-	 * which HDObjectPush turns down at its first line.
+	 * hd_lara.cpp's table names (kind 4, Outfit::wearsRig - OUTFIT_VCI and
+	 * nobody else since fix round F), and for anybody else HDLaraPartSlot
+	 * names a slot no model was built for, which HDObjectPush turns down at
+	 * its first line.
 	 *
 	 * The node mask is the part's own coverage - nodes 0, 1 and 4, the belt
 	 * and the two thighs - AND the frame's, so first person takes it off with

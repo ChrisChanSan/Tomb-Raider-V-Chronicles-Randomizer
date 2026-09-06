@@ -125,15 +125,37 @@
  *
  * So the correction is 15 units of +z and nothing else: the root moves from
  * 48 units behind the head joint to 33, and link 0 then overlaps the skull by
- * 1.7 units instead of hanging 15.2 short of it. It is applied ONLY when the
- * HD wardrobe is drawing (HDLaraDrawActive), because the classic braid does
- * not have the gap and moving its root would only make its skinned connector
- * shorter.
+ * 1.7 units instead of hanging 15.2 short of it.
  *
- * The whole chain follows: the simulation is seeded from this point, so the
- * links below the first sit 15 units further along her back rather than
- * breaking at a seam - which is what would happen if only the drawn matrix of
- * link 0 were moved. */
+ * WITHDRAWN IN FIX ROUND F (F2). THE ENGINE DOES NOT USE THIS NUMBER; it is
+ * kept because the measurement above is right and because ModelProbe
+ * -braidsim runs it as one of its regimes. What was wrong was moving the root
+ * at all:
+ *
+ * 1. It was written into one of HairControl's two frame branches. The
+ *    function has a half for an interpolated frame and a half for a key
+ *    frame, and round D changed the second only, so the root of the
+ *    simulation jumped between -48 and -33 from frame to frame. hairs[0][0]
+ *    seeds the whole chain and every link's velocity is how far it moved
+ *    since the last frame, so a root that moves 15 units and back feeds the
+ *    braid 15 units of velocity for ever. That is the user's finding F2 -
+ *    "it glitches about restlessly" - and his two video frames, one with the
+ *    braid thrown out long and the next with it tucked short against her
+ *    back.
+ *
+ * 2. And it does not settle even applied to both halves. ModelProbe
+ *    -braidsim, sixty steps in the bind pose, the busiest link's travel per
+ *    step at the end: the classic root reads 0, the root at -33 still reads
+ *    1 and never reaches 0. At -33 the chain hangs near enough to her neck
+ *    for the neck sphere and the pack sphere to push it in turn, and the two
+ *    pushes make a small limit cycle rather than a rest.
+ *
+ * The 15.2 unit gap is therefore accepted for now, which is what the user
+ * chose: the gap is quiet and the fix was not. Anybody reopening this should
+ * leave the root where the simulation is happy and move the DRAWN braid
+ * instead - the seam in hd_laradraw.cpp builds its own matrices out of
+ * hairs[0][n] and could put link 0's 15 units in there without the physics
+ * ever seeing them. */
 #define HD_LARA_BRAID_ROOT_Z_HD	(-33)
 
 /* THE BACKPACK, AS A COLLISION SPHERE (#123, fix round D, D3b).
@@ -171,7 +193,16 @@
  *
  * The diving suit is not in the list on purpose: it measures 165, because
  * what sits behind ITS torso is the two thrusters and not a pack, and it
- * wears a helmet rather than a braid, so no braid ever meets them. */
+ * wears a helmet rather than a braid, so no braid ever meets them.
+ *
+ * WHAT IT IS WORTH, MEASURED (#123, fix round F, F2 - round D said "this is
+ * the one change no offline picture can prove", and a picture cannot, but the
+ * simulation can be run on its own). ModelProbe -braidsim, sixty steps in the
+ * bind pose: without the pack the braid comes to rest 15 units inside it,
+ * with the pack 9, and the chain settles either way. The pack does its work
+ * and costs no calm. It has to be placed in BOTH halves of HairControl,
+ * though; round D put it in one, and a pack that comes and goes from frame to
+ * frame is a push that comes and goes with it. */
 #define HD_LARA_PACK_X		(0)
 #define HD_LARA_PACK_Y_TOP	(-165)
 #define HD_LARA_PACK_Y_BOTTOM	(-100)
@@ -304,10 +335,17 @@ enum HDLaraPart
 	 * three photographs.
 	 *
 	 * This part is the missing rig, cut out of OUTFIT_TR3_CATSUIT by page
-	 * (HDModelSlot::onlyPage) and worn only by an outfit whose own body has
-	 * none. The London catsuit is the donor rather than the Rome one because
-	 * its rig is black leather over a black leg, which is what the VCI
-	 * catsuit is; OUTFIT_CLASSIC's is brown suede over bare skin. */
+	 * (HDModelSlot::onlyPage). The London catsuit is the donor rather than
+	 * the Rome one because its rig is black leather over a black leg, which
+	 * is what the VCI catsuit is; OUTFIT_CLASSIC's is brown suede over bare
+	 * skin.
+	 *
+	 * WHO WEARS IT is a table and not a rule (fix round F, F1): OUTFIT_VCI
+	 * and nobody else. Round D gave it to all three bodies that carry no rig
+	 * of their own, and on the Antarctica parka and the Nevada vest the
+	 * straps clip through the coat - those two never wore a thigh rig in
+	 * TR3 and their geometry is finished without one. hd_lara.cpp's
+	 * Outfit::wearsRig carries the decision and the measurement behind it. */
 	HD_LARA_PART_HOLSTER_RIG,
 
 	HD_LARA_PART_BACK_SHOTGUN,	// the torso

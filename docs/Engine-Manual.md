@@ -492,16 +492,22 @@ that walks and talks rather than stands still.
   every level, the VCI catsuit — which in the original game never carries one
   — had the pistols hanging in mid air beside her thighs. The pouches, the
   straps and the belt they hang from are not part of the gun model at all;
-  they are built into the outfit, and three of the eight outfits have none.
-  Those three now borrow the black leather rig of the Tomb Raider III London
-  catsuit, cut out of that outfit and worn over their own.
-- **The braid grows out of her head, and lies on her pack.** It used to hang
-  fifteen units clear of the back of her skull, because the classic braid
-  stitches its first link into the head and an HD link is a rigid piece. Its
-  root has moved to where the skull is. And it no longer walks through her
-  backpack: the game only ever knew the five round shapes of the 1999 body,
-  none of which reaches as far back as the HD pack, so the pack has been given
-  two of its own.
+  they are built into the outfit, and the catsuit has none. It now borrows the
+  black leather rig of the Tomb Raider III London catsuit, cut out of that
+  outfit and worn over its own. Only that one outfit: two others carry no rig
+  either, but the Antarctica parka and the Nevada vest never wore one in Tomb
+  Raider III and are finished without it — lending them the London straps only
+  put black leather through an orange coat.
+- **The braid lies on her pack.** It no longer walks through her backpack: the
+  game only ever knew the five round shapes of the 1999 body, none of which
+  reaches as far back as the HD pack, so the pack has been given two of its
+  own. What it still does is hang a finger's width clear of the back of her
+  skull, because the classic braid stitches its first link into the head and
+  an HD link is a rigid piece. Moving the braid's anchor closed that gap and
+  made the whole braid tremble instead — the anchor is where the physics
+  starts, and a physics that is nudged every other frame never comes to rest —
+  so the anchor is back where it was and the gap is back with it. A quiet
+  braid with a small gap beat a restless one.
 - **Latex looks like latex.** Tomb Raider Chronicles has no highlight of any
   kind in its lighting, so every HD outfit came out flat matt beside the
   Remaster's own picture, where the catsuits shine. Lara's parts now carry a
@@ -1108,7 +1114,16 @@ the matrix the graphics card is handed — and reports the worst disagreement in
 pixels; `HDLOG braidcheck` takes each braid link's own frame, steps it one bone
 along, and reports how far it misses the next link. Both are the same checks
 `ModelProbe -laracheck` runs without the game, where they read 0.00000 px and
-0.00006 units.
+0.00002 units.
+
+A third line, `HAIRLOG`, is written **every frame** for every braid: which
+anchor offset that frame used, where the root of the chain landed, how many
+collision spheres it was tested against, how many of its links the backpack
+pushed, and where the tip ended up. It is there because the braid's physics
+carries state from frame to frame — the anchor moving between two places on
+alternating frames is what once made it tremble — and a per-frame trace is the
+only thing that shows it. `ModelProbe -braidsim` runs the same chain offline,
+without a game around it, and says whether a braid ever comes to rest.
 
 ---
 

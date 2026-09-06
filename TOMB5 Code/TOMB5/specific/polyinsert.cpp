@@ -167,7 +167,7 @@ void DrawSortList()
 	D3DTLBUMPVERTEX* bVtxbak;
 	long num;
 	short nVtx, tpage, drawtype, total_nVtx;
-	ProfScope prof(PROF_SORT);	// eleven call sites - measured here, once
+	ProfScope prof(PROF_SORTDRAW);	// eleven call sites - measured here, once
 
 	nVtx = 0;
 
@@ -375,6 +375,36 @@ void InitialiseSortList()
 	SortCount = 0;
 }
 
+/* THE CLASSIC DRAW BUFFERS, TOUCHED ONCE (#148, order 1b).
+ *
+ * SortBuffer (2.5 MB), SortList (256 KB of pointers) and Bucket (30 x 2080
+ * vertices, 2.4 MB) are plain statics, so the linker puts them in .bss and
+ * Windows hands them out as demand-zero pages: the page is not really there
+ * until something writes to it, and the first write to each of the ~1300
+ * pages costs a soft fault. Every one of those faults falls in the FIRST
+ * frame that draws anything - which is the frame the title screen's 22 ms in
+ * the sort phase was measured in, and the same frame the warm-up question is
+ * about.
+ *
+ * Doing it here costs one memset of about 5 MB - well under a millisecond,
+ * once per level, while the loading bar is on screen - and it is safe by the
+ * shape of all three: InitialiseSortList and InitBuckets reset the write
+ * pointers every frame, and nothing reads a byte of any of them that was not
+ * written in the same frame first. Zeroing them can therefore not change one
+ * pixel.
+ *
+ * It is NOT the answer if the 22 ms turn out to be the device's - the first
+ * DrawPrimitiveUP of a session, the first SetTexture on a managed page. That
+ * is what the sort/sortdraw split in the profile is for: the qsort is `sort`
+ * and the submission is `sortdraw`, and the next first_frame line says which
+ * of the two kept the milliseconds. */
+void PreTouchDrawBuffers()
+{
+	memset(SortBuffer, 0, sizeof(SortBuffer));
+	memset(SortList, 0, sizeof(SortList));
+	memset(Bucket, 0, sizeof(Bucket));
+}
+
 void DoSort(long left, long right, SORTLIST** list)
 {
 	SORTLIST* swap;
@@ -414,6 +444,8 @@ void DoSort(long left, long right, SORTLIST** list)
 void SortPolyList(long count, SORTLIST** list)
 {
 	ProfScope prof(PROF_SORT);
+
+	ProfSort(count);	// sortn on the PROFLOG line - how long the list was
 
 	if (!count)
 		return;

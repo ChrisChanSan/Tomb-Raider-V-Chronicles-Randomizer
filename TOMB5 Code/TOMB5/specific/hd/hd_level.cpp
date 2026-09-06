@@ -21,7 +21,7 @@
 #include "hd_object.h"
 #include "../function_stubs.h"
 #include "../profile.h"			// PROFLOG phases (#148)
-#include "../output.h"			// TargetPresentHz - the budget follows fps_mode (#148)
+#include "../output.h"			// gPresentMinTicks - the budget follows the present (#148)
 #include "../d3dmatrix.h"
 #include "../3dmath.h"
 #include "../winmain.h"
@@ -238,27 +238,51 @@ namespace
 	 * whatever `frames=` says. That quantisation is why there are TWO
 	 * counters and not one:
 	 *
-	 *   slow   intervals over the budget (33.3 ms at 30, 16.7 at 60). Half a
-	 *          healthy second lands here on jitter alone, so a number here on
-	 *          its own means nothing - it is the budget line the brief asked
-	 *          for.
-	 *   late   intervals over the budget plus half a 60 Hz tick - 41.7 ms at
-	 *          30, 25.0 at 60. Jitter cannot reach it; a frame that MISSED
-	 *          its slot costs a whole tick and lands well beyond. This is the
-	 *          number that says the frame rate really fell under the target.
+	 *   slow   intervals over the budget (33.3 ms after a two-tick present,
+	 *          16.7 after a one-tick one; the line prints which as `budget=`).
+	 *          Half a healthy second lands here on jitter alone, so a number
+	 *          here on its own means nothing - it is the budget line the
+	 *          brief asked for.
+	 *   late   intervals over the budget plus half a 60 Hz tick - 41.7 ms
+	 *          after two ticks, 25.0 after one. Jitter cannot reach it; a
+	 *          frame that MISSED its slot costs a whole tick and lands well
+	 *          beyond. This is the number that says the frame rate really
+	 *          fell under the target.
+	 *
+	 * A SECOND SPENT IN A MENU is not a second of gameplay: `logic_ticks=0`,
+	 * `hd_rooms=0` and `frames=30` together mean the inventory, the pause
+	 * menu or the title was up, and those keep thirty by design at any
+	 * setting. `budget=` says so on the line itself. PROFLOG goes one step
+	 * further and calls such an interval a `pause` rather than a frame -
+	 * FPSLOG cannot, because it never sees where a frame came from.
 	 *
 	 * NOTHING HAPPENS WITHOUT -log. The first line of HDFramePresented is
 	 * `if (!gLogEnabled) return;` - one bool test per present, no counter
 	 * kept, no clock read. Nothing here allocates, ever: the accumulators are
 	 * plain integers and doubles in this file.
 	 */
-	/* #148, order 1: THE BUDGET FOLLOWS THE MODE. It was a pair of constants
-	 * while thirty was the only rate there was; with fps_mode 1 the slot is
-	 * half as long and a line measured against 33.3 ms would call a healthy
-	 * 60 Hz second thirty slow frames. Read once per present, one branch. */
+	/* #148, order 1b: THE BUDGET FOLLOWS THE PRESENT, NOT THE OPTION. It was
+	 * a pair of constants while thirty was the only rate there was; order 1
+	 * made it follow tomb5.fps_mode, and that was still wrong, because
+	 * fps_mode is not what a given frame waited for. Only DrawPhaseGame's own
+	 * present ever drops to one tick (and only outside the title - see
+	 * GameFrameMinTicks); the inventory, the pause menu, the load/save
+	 * screen, the death menu, the title and the level-change fade all keep
+	 * their two whatever the option says. Judged against 16.7 ms they
+	 * reported a perfectly healthy menu second as thirty slow and a dozen
+	 * late frames, which is exactly what the 2026-09-07 log showed.
+	 *
+	 * gPresentMinTicks is the number the present that just returned waited
+	 * for, and HDFramePresented is called directly after that present - so
+	 * reading it here is reading this frame's own slot. The one present that
+	 * does not go through it is the loading bar's (S_DumpScreenFrame waits
+	 * for one tick of its own); it is measured against the default two, i.e.
+	 * exactly as generously as it always was. */
 	double FrameBudgetMs()
 	{
-		return 1000.0 / (double)TargetPresentHz();
+		const long ticks = gPresentMinTicks > 0 ? gPresentMinTicks : 1;
+
+		return (double)ticks * 1000.0 / 60.0;
 	}
 
 	double MissedSlotMs()
@@ -315,12 +339,12 @@ namespace
 		if (g_sec_frames <= 0)
 			return;
 
-		Log("FPSLOG level=%s frames=%d logic_ticks=%d fps=%d min_ms=%.1f "
-			"max_ms=%.1f avg_ms=%.1f slow=%d late=%d hd_rooms=%d hd_items=%d "
-			"hd_draws=%d",
+		Log("FPSLOG level=%s frames=%d logic_ticks=%d fps=%d budget=%.1f "
+			"min_ms=%.1f max_ms=%.1f avg_ms=%.1f slow=%d late=%d hd_rooms=%d "
+			"hd_items=%d hd_draws=%d",
 			g_fps_level[0] ? g_fps_level : "?", g_sec_frames,
 			(int)(unsigned short)(GlobalCounter - g_sec_counter),
-			(int)TargetPresentHz(), g_sec_min,
+			(int)TargetPresentHz(), FrameBudgetMs(), g_sec_min,
 			g_sec_max, g_sec_sum / g_sec_frames, g_sec_slow, g_sec_late,
 			g_sec_rooms, g_sec_items, g_sec_draws);
 

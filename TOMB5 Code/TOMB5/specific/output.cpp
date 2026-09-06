@@ -1291,6 +1291,48 @@ long TargetPresentHz()
 	return tomb5.fps_mode == 1 ? 60 : 30;
 }
 
+/* WHAT DRAWPHASEGAME'S OWN PRESENT MAY WAIT FOR (#148, order 1b).
+ *
+ * Sixty is for a PLAYED frame and for nothing else. Two states go through
+ * DrawPhaseGame that are not one:
+ *
+ *   THE TITLE. DoTitle's loop (game\gameflow.cpp) is `TitleOptions();
+ *   DrawPhaseGame(); ControlPhase(nframes);` - so the menu is walked once per
+ *   PRESENT while the debounced input it walks with, dbinput, is written once
+ *   per TICK inside ControlPhase's `for (framecount += nframes; framecount >
+ *   0; framecount -= 2)` loop (game\control.cpp). At two ticks per present
+ *   the two rates are the same and every edge is read exactly once. At one,
+ *   every second ControlPhase runs no tick at all, dbinput keeps standing,
+ *   and the next TitleOptions reads the same press a second time: one tap of
+ *   Down moved the cursor two rows and New Game could not be reached. The
+ *   same doubling hits everything TitleOptions reaches - the level select,
+ *   the whole options tree and the Tomb5 pages in tomb5\troyestuff.cpp, all
+ *   of which read dbinput per call.
+ *
+ *   THE RING. The inventory is a modal loop of its own (game\newinv2.cpp)
+ *   that calls S_UpdateInput once per present and is therefore consistent at
+ *   any rate; it already keeps thirty because it presents with the default
+ *   gPresentMinTicks. DrawPhaseGame is not reached while it is up, so this
+ *   test never fires today - it is here so that the rule reads as the rule,
+ *   and so that a future path into DrawPhaseGame from a menu cannot pick up
+ *   sixty by accident.
+ *
+ * Everything else in the game loop is safe by construction: DoLevel reads no
+ * input at all outside ControlPhase, and every other menu in the build - the
+ * pause menu, the death menu, the load/save screen, the special features -
+ * runs its own modal loop with its own S_UpdateInput at the default two
+ * ticks. */
+long GameFrameMinTicks()
+{
+	if (tomb5.fps_mode != 1)
+		return 2;
+
+	if (gfLevelId == LVL5_TITLE || InventoryActive)
+		return 2;
+
+	return 1;
+}
+
 long S_DumpScreen()
 {
 	long n;
@@ -1310,6 +1352,7 @@ long S_DumpScreen()
 	_EndScene();
 	DXShowFrame();
 	ProfEnd(PROF_FLIP);
+	ProfPresent();
 	App.dx.DoneBlit = 1;
 	return n;
 }
@@ -1329,6 +1372,7 @@ long S_DumpScreenFrame()
 	GnFrameCounter++;
 	_EndScene();
 	DXShowFrame();
+	ProfPresent();
 	App.dx.DoneBlit = 1;
 	return n;
 }

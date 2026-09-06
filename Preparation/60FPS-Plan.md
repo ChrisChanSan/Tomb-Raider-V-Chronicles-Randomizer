@@ -89,6 +89,25 @@ tick if the frame is drawn twice.
 | R13 | the modal loops that present themselves | inventory `game\newinv2.cpp:663-664`; load/save `specific\LoadSave.cpp:1404-1405, 1879-1880, 2067-2068`; death menu `game\control.cpp:235-236`; load fade `specific\output.cpp:748-749, 760-761` | every one of these steps its own animation once per present. They must stay at 2 ticks | high, but trivially fixed (1.4) |
 | R14 | `RegeneratePickups()` | `game\control.cpp:251` (outside the tick loop) | runs per `ControlPhase` call, i.e. twice per tick - idempotent re-check | low |
 | R15 | `resChangeCounter -= long(30 / App.fps)` | `specific\output.cpp:1473` | already frame-rate aware; would need `60 /` in 60 Hz mode | trivial |
+| R16 | `gfLegendTime--` | `game\gameflow.cpp`, inside `DoLevel`'s loop, beside the `PrintString` that draws the caption | the level-name caption stands for half as long | low, cosmetic |
+| R17 | `cutseq_busy_timeout--` | `game\deltapak.cpp:2120` (`handle_cutseq_triggering`, `cutseq_trig == 1`), called once per present from both `DoLevel` and `DoTitle` | the wind-up before a cutscene halves; it is a timeout with an `||` escape beside it, so nothing hangs, but the scene starts sooner | low |
+
+R16 and R17 were found while reading for order 1b (2026-09-07) and are the
+only two per-present counters that were missing from this table. Both are in
+the main loop rather than in a draw function, which is why the first survey
+walked past them.
+
+**Input, and why it is not on this list.** Per-present INPUT was surveyed for
+order 1b and there is exactly one place: `TitleOptions()`
+(`game\gameflow.cpp`), called once per present from `DoTitle`, and everything
+it reaches - the level select, `DoOptions` and the Tomb5 option pages in
+`tomb5\troyestuff.cpp`. All of them read `dbinput`, which `ControlPhase`
+refreshes once per TICK, so at one tick per present each press was read twice.
+That is not an order 3 item and was not deferred: order 1b fixed it by keeping
+the title at two ticks (`GameFrameMinTicks`, `specific\output.cpp`). `DoLevel`
+reads no input outside `ControlPhase` at all, and every other menu in the
+build runs a modal loop with its own `S_UpdateInput` per present and is
+therefore consistent at any rate.
 
 Safe by construction (verified, no action needed): `S_UpdateInput` and
 all debounce (`game\control.cpp:267`, `SetDebounce` `:259/:314` - not
@@ -223,6 +242,18 @@ makes.
 - Everything at R13 keeps 2 without touching a line: the inventory, the
   load/save screen, the death menu and the load fade stay at 30 Hz, so
   their per-present animation counters keep their timing.
+
+**Order 1b correction (2026-09-07):** the second bullet is not the whole list.
+The TITLE also has to keep two ticks, and it is not a modal loop - it draws
+through `DrawPhaseGame` like the game does. `TitleOptions()` is called once
+per present from `DoTitle`'s loop while `dbinput` is written once per tick, so
+at 60 the menu read every keypress twice and walked two rows at a time. The
+decision therefore lives in `GameFrameMinTicks()` (`specific\output.cpp`) and
+not in a line inside `DrawPhaseGame`: two whenever `gfLevelId == LVL5_TITLE`
+or `InventoryActive`, one otherwise. `gPresentMinTicks` is also the FRAME
+BUDGET for FPSLOG and PROFLOG since 1b - a frame is judged against the slot it
+itself asked for, never against `fps_mode` - which is why `DrawPhaseGame` now
+restores the two only after `ProfileFrameEnd`.
 
 `alpha` needs no clock of its own in the fixed 60 Hz mode. After
 `ControlPhase` returns, `framecount` (`game\control.h:102`) is `-1` if

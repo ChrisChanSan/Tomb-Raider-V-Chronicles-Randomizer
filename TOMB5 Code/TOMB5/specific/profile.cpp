@@ -12,7 +12,7 @@
  */
 #include "../tomb5/pch.h"
 #include "profile.h"
-#include "output.h"		// TargetPresentHz - the budget a late frame is late against
+#include "output.h"		// gPresentMinTicks - the budget a late frame is late against
 #include "../game/control.h"	// GlobalCounter - the logic tick the line reports
 
 namespace
@@ -36,6 +36,7 @@ namespace
 		"buckets",
 		"hdglow",
 		"sort",
+		"sortdraw",
 		"spin",
 		"flip"
 	};
@@ -58,8 +59,16 @@ namespace
 	__int64 g_qpc_level = 0;	// when the level started
 
 	int g_sec_frames = 0;
+	int g_sec_intervals = 0;	// frames whose interval was a real one
 	int g_sec_late = 0;
+	int g_sec_pauses = 0;		// intervals the main loop spent elsewhere
 	unsigned short g_sec_counter = 0;	// GlobalCounter when the second began
+
+	int g_presents = 0;		// presents since the last ProfileFrameEnd
+	long g_sort_max = 0;		// the frame's longest sort list
+
+	int g_level_late = 0;		// the level's totals, for the summary
+	int g_level_pauses = 0;
 
 	int g_level_second = 0;		// PROFLOG seconds flushed for this level
 	int g_level_frames = 0;
@@ -94,8 +103,9 @@ namespace
 	 * the binocular mask, the pickup display and the fade. HD_DRAW and
 	 * HD_GLOW are the only two phases that run inside S_OutputPolyList and
 	 * NOWHERE else, so they are the only two that may be taken off it -
-	 * BUCKETS and SORT are whole-frame totals that also cover the sky phase,
-	 * and subtracting them would make this read zero in every outdoor level.
+	 * BUCKETS, SORT and SORTDRAW are whole-frame totals that also cover the
+	 * sky phase, and subtracting them would make this read zero in every
+	 * outdoor level.
 	 * HD_OBJDRAW and HD_LIGHT sit inside HD_DRAW and are not subtracted
 	 * twice. Clamped because the three clocks are read at different moments
 	 * and a rounding of a few microseconds must not print a negative. */
@@ -117,8 +127,22 @@ namespace
 				kName[i], p[i]);
 
 		if (at >= 0 && (size_t)at < size)
-			_snprintf_s(out + at, size - at, _TRUNCATE, "outrest=%.2f",
-				OutRest(p));
+			_snprintf_s(out + at, size - at, _TRUNCATE, "outrest=%.2f sortn=%d",
+				OutRest(p), (int)g_sort_max);
+	}
+
+	/* THE SLOT THIS FRAME ASKED FOR, in milliseconds. gPresentMinTicks is how
+	 * many 1/60 s ticks the present that just ran waited for, so this is the
+	 * frame's OWN budget and not the mode's: one tick for a game frame at
+	 * fps_mode 1, two for every modal loop in the build whatever the mode
+	 * says. DrawPhaseGame deliberately puts the variable back to two only
+	 * AFTER ProfileFrameEnd, so this reads the policy of the frame being
+	 * judged (#148, order 1b). */
+	double BudgetMs()
+	{
+		const long ticks = gPresentMinTicks > 0 ? gPresentMinTicks : 1;
+
+		return (double)ticks * 1000.0 / 60.0;
 	}
 
 	// "name=mean/max " for every phase.
@@ -149,7 +173,9 @@ namespace
 		g_work_sum = 0;
 		g_work_max = 0;
 		g_sec_frames = 0;
+		g_sec_intervals = 0;
 		g_sec_late = 0;
+		g_sec_pauses = 0;
 		g_sec_counter = GlobalCounter;
 	}
 
@@ -170,15 +196,18 @@ namespace
 		 * simulation's own rate. At fps_mode 1 this line must read
 		 * `frames=60 logic_ticks=30`: sixty presents, thirty ticks, and the
 		 * game running at exactly the speed it always did. */
-		Log("PROFLOG level=%s at=%ds frames=%d logic_ticks=%d fps=%d late=%d "
-			"frame=%.2f/%.2f work=%.2f/%.2f %s",
+		Log("PROFLOG level=%s at=%ds frames=%d logic_ticks=%d fps=%d "
+			"budget=%.1f late=%d pauses=%d frame=%.2f/%.2f work=%.2f/%.2f %s",
 			g_level[0] ? g_level : "?", at_s, g_sec_frames,
 			(int)(unsigned short)(GlobalCounter - g_sec_counter),
-			(int)TargetPresentHz(), g_sec_late,
-			g_frame_sum / g_sec_frames, g_frame_max,
+			(int)TargetPresentHz(), BudgetMs(), g_sec_late, g_sec_pauses,
+			g_frame_sum / (g_sec_intervals > 0 ? g_sec_intervals : 1),
+			g_frame_max,
 			g_work_sum / g_sec_frames, g_work_max, buf);
 
 		g_level_second++;
+		g_level_late += g_sec_late;
+		g_level_pauses += g_sec_pauses;
 	}
 }
 
@@ -215,8 +244,9 @@ void ProfileLevel(const char* fileName)
 
 	// The level that is over: its last, part-filled second, and one summary.
 	if (g_level[0] && g_level_frames)
-		Log("PROFLOG level=%s summary seconds=%d frames=%d", g_level,
-			g_level_second, g_level_frames);
+		Log("PROFLOG level=%s summary seconds=%d frames=%d late=%d pauses=%d",
+			g_level, g_level_second, g_level_frames, g_level_late,
+			g_level_pauses);
 
 	g_level[0] = 0;
 
@@ -241,7 +271,11 @@ void ProfileLevel(const char* fileName)
 	g_qpc_frame = 0;
 	g_level_second = 0;
 	g_level_frames = 0;
+	g_level_late = 0;
+	g_level_pauses = 0;
 	g_first_frame = true;
+	g_presents = 0;
+	g_sort_max = 0;
 
 	for (int i = 0; i < PROF_COUNT; i++)
 	{
@@ -250,6 +284,21 @@ void ProfileLevel(const char* fileName)
 	}
 
 	NewSecond();
+}
+
+/* ONE PRESENT. Every present in the engine that goes through S_DumpScreen or
+ * S_DumpScreenFrame lands here; ProfileFrameEnd reads the count and expects
+ * exactly one - its own. More than that means a modal loop drew frames in
+ * between and the interval it is about to measure is not a game frame's. */
+void ProfileNotePresent()
+{
+	g_presents++;
+}
+
+void ProfileNoteSort(long count)
+{
+	if (count > g_sort_max)
+		g_sort_max = count;
 }
 
 void ProfileFrameBegin()
@@ -262,6 +311,8 @@ void ProfileFrameBegin()
 	/* PROF_LOGIC IS NOT CLEARED HERE. ControlPhase runs between the present
 	 * and this call, so its milliseconds are already in the accumulator and
 	 * belong to the frame that is starting - see the note in profile.h.
+	 * ProfileFrameEnd clears it once it has reported it; clearing it in
+	 * neither place is what made `logic` grow without bound in order 1.
 	 * Everything else is this frame's own and starts at nothing. */
 	for (int i = 0; i < PROF_COUNT; i++)
 	{
@@ -271,6 +322,7 @@ void ProfileFrameBegin()
 			g_frame[i] = 0;
 	}
 
+	g_sort_max = 0;
 	QueryPerformanceCounter(&now);
 	g_qpc_begin = now.QuadPart;
 }
@@ -278,8 +330,9 @@ void ProfileFrameBegin()
 void ProfileFrameEnd()
 {
 	LARGE_INTEGER now;
-	char buf[768];
-	double frame_ms, work_ms, budget, missed;
+	char buf[832];
+	double frame_ms, work_ms, missed;
+	bool paused;
 	int at_s;
 
 	if (!gLogEnabled || !ClockReady())
@@ -298,12 +351,23 @@ void ProfileFrameEnd()
 	g_qpc_frame = now.QuadPart;
 	g_level_frames++;
 
-	/* THE BUDGET FOLLOWS THE MODE. A frame is late when it took longer than
-	 * its slot plus half a 60 Hz tick - the same shape FPSLOG uses, so the
-	 * two logs agree about which frames were late. At 30 Hz that is 41.7 ms,
-	 * at 60 Hz 25.0 ms. */
-	budget = 1000.0 / (double)TargetPresentHz();
-	missed = budget + 1000.0 / 120.0;
+	/* THE BUDGET FOLLOWS THE PRESENT, not the option (#148, order 1b). A
+	 * frame is late when its interval ran over the slot its OWN present asked
+	 * for plus half a 60 Hz tick - 25.0 ms after a one-tick present, 41.7 ms
+	 * after a two-tick one. Order 1 took the slot from tomb5.fps_mode, and so
+	 * measured the inventory, the pause menu and the title - all of which
+	 * keep their two ticks at any setting - against 16.7 ms, and reported a
+	 * healthy menu second as thirty late frames.
+	 *
+	 * AND AN INTERVAL IS NOT LATE WHEN THE MAIN LOOP WAS SOMEWHERE ELSE.
+	 * g_presents is this frame's own present and nothing else in the normal
+	 * case; anything above one means a modal loop drew between this frame and
+	 * the last. The second half of the rule catches what has no present at
+	 * all - an alt-tab, a window drag, a breakpoint - by the one thing those
+	 * always look like: an interval a full second longer than the work in
+	 * it. */
+	missed = BudgetMs() + 1000.0 / 120.0;
+	paused = g_presents > 1 || frame_ms - work_ms > 1000.0;
 
 	if (g_first_frame)
 	{
@@ -315,12 +379,22 @@ void ProfileFrameEnd()
 		Log("PROFLOG level=%s first_frame fps=%d work=%.2f %s",
 			g_level[0] ? g_level : "?", (int)TargetPresentHz(), work_ms, buf);
 	}
+	else if (paused)
+	{
+		/* One short line, and no phases: a frame that waited out an inventory
+		 * visit or an alt-tab has a meaningless interval, and printing its
+		 * seventeen phases beside it only invites the interval to be blamed on
+		 * one of them. */
+		g_sec_pauses++;
+		Log("PROFLOG level=%s pause at=%ds frame=%.2f work=%.2f presents=%d",
+			g_level[0] ? g_level : "?", at_s, frame_ms, work_ms, g_presents);
+	}
 	else if (frame_ms > missed)
 	{
 		g_sec_late++;
 		OneFrameLine(buf, sizeof(buf), g_frame);
-		Log("PROFLOG level=%s late at=%ds frame=%.2f work=%.2f %s",
-			g_level[0] ? g_level : "?", at_s, frame_ms, work_ms, buf);
+		Log("PROFLOG level=%s late at=%ds budget=%.1f frame=%.2f work=%.2f %s",
+			g_level[0] ? g_level : "?", at_s, missed, frame_ms, work_ms, buf);
 	}
 
 	for (int i = 0; i < PROF_COUNT; i++)
@@ -331,17 +405,33 @@ void ProfileFrameEnd()
 			g_max[i] = g_frame[i];
 	}
 
+	/* THE LOGIC ACCUMULATOR IS EMPTIED HERE and nowhere else. It has just
+	 * been reported and just been added to the second; the ControlPhase that
+	 * runs next fills it again for the next frame. Without this line it is
+	 * never cleared at all and every PROFLOG second reads a running total
+	 * (#148, order 1b). */
+	g_frame[PROF_LOGIC] = 0;
+
 	g_work_sum += work_ms;
 
 	if (work_ms > g_work_max)
 		g_work_max = work_ms;
 
-	g_frame_sum += frame_ms;
+	/* Only a REAL interval goes into the frame clock: not the first frame of
+	 * a level, which has none, and not one that waited out a menu - a single
+	 * five-second pause would otherwise own both the mean and the maximum of
+	 * its second and say nothing about the frame rate. */
+	if (frame_ms > 0 && !paused)
+	{
+		g_frame_sum += frame_ms;
+		g_sec_intervals++;
 
-	if (frame_ms > g_frame_max)
-		g_frame_max = frame_ms;
+		if (frame_ms > g_frame_max)
+			g_frame_max = frame_ms;
+	}
 
 	g_sec_frames++;
+	g_presents = 0;
 
 	if (now.QuadPart - g_qpc_second < g_freq)
 		return;

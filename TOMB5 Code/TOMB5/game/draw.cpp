@@ -432,13 +432,25 @@ long DrawPhaseGame()
 	 * Until order 2 there is no interpolation, so every second frame is a
 	 * duplicate of the one before it. That is not a shortcoming of this
 	 * order, it IS this order's proof: the picture stands still for two
-	 * frames while the clock runs at sixty. */
-	gPresentMinTicks = tomb5.fps_mode == 1 ? 1 : 2;
+	 * frames while the clock runs at sixty.
+	 *
+	 * NOT EVERY FRAME THAT COMES THROUGH HERE IS A PLAYED ONE (#148, order
+	 * 1b). The title menu draws through this function too, and its menu code
+	 * reads input once per present while the input itself is written once per
+	 * tick - at sixty it therefore read every keypress twice and walked two
+	 * rows at a time. GameFrameMinTicks() is that rule; the measurement is
+	 * written out over it in specific\output.cpp. */
+	gPresentMinTicks = GameFrameMinTicks();
 	camera.number_frames = S_DumpScreen();
-	gPresentMinTicks = 2;
 
 	S_AnimateTextures(camera.number_frames);
+
+	/* ProfileFrameEnd BEFORE the restore, on purpose: it judges this frame
+	 * against the slot this frame actually asked for, and gPresentMinTicks is
+	 * where that number lives. Nothing between the present and here presents
+	 * anything, so the window costs nothing. */
 	ProfileFrameEnd();
+	gPresentMinTicks = 2;
 	return camera.number_frames;
 }
 

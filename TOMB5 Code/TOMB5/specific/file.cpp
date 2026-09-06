@@ -1841,6 +1841,14 @@ static void WarmUpLevel()
 
 	hd_buffers = HDModelPreload();
 
+	/* And the CPU side of the same idea (#148, order 1b): the sort buffer,
+	 * the sort list and the bucket vertices are ~5 MB of .bss that Windows
+	 * only really hands over on the first write, and every one of those page
+	 * faults would otherwise fall in the level's first drawn frame. The long
+	 * note over PreTouchDrawBuffers says why zeroing them cannot change a
+	 * pixel. */
+	PreTouchDrawBuffers();
+
 	QueryPerformanceCounter(&t1);
 	ms = freq.QuadPart ?
 		(double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)freq.QuadPart : 0;

@@ -4803,9 +4803,9 @@ the cap.
 ### 5. Sixty frames a second (#148)
 
 The plan this follows is `Preparation/60FPS-Plan.md`, written from a read-only
-survey of this tree. It runs in orders; **this section covers order 1 only** -
-the clock split, the option, the measurement and one warm-up fix. There is no
-interpolation yet.
+survey of this tree. It runs in orders; **this section covers orders 1 and 1b**
+- the clock split, the option, the measurement, one warm-up fix, and then what
+a play test of all that found. There is no interpolation yet.
 
 #### 5.1 What the 30 Hz cap actually was
 
@@ -4835,12 +4835,18 @@ lowers it to `1` around **its own** present when `tomb5.fps_mode` is 1, then
 puts it straight back:
 
 ```
-gPresentMinTicks = tomb5.fps_mode == 1 ? 1 : 2;
+gPresentMinTicks = GameFrameMinTicks();		// was: tomb5.fps_mode == 1 ? 1 : 2
 camera.number_frames = S_DumpScreen();
+S_AnimateTextures(camera.number_frames);
+ProfileFrameEnd();				// judged against the slot above
 gPresentMinTicks = 2;
 ```
 
-Three lines. The default staying at two is what keeps every modal loop at
+`GameFrameMinTicks()` (`specific/output.cpp`) is order 1b's correction and is
+described in 5.8; order 1 had `tomb5.fps_mode == 1 ? 1 : 2` inline here, which
+gave the title menu sixty as well and broke it.
+
+The default staying at two is what keeps every modal loop at
 thirty without touching any of them - the inventory (`game/newinv2.cpp`), the
 load/save screen (`specific/LoadSave.cpp`), the death menu
 (`game/control.cpp`) and the loading fade (`specific/output.cpp`) each step
@@ -4899,17 +4905,19 @@ the title screen falling to 23 frames a second, and about three seconds of
 warm-up at the start of every level - are exactly the questions it cannot
 answer.
 
-Sixteen phases per frame, taken with `QueryPerformanceCounter`: `logic`
+Seventeen phases per frame, taken with `QueryPerformanceCounter`: `logic`
 (`ControlPhase`, at the call site in `game/gameflow.cpp` because
 `ControlPhase` has early returns), `gather`, `rooms` and `sky`, the HD path's
 three shares of the gather (`hdroom` in `InsertRoom`, `hdobj` in
 `HDObjectBegin` / `Node` / `End`, `hdlara` in `HDLaraDrawFrame`), `output`
-with `hddraw`, `hdlight`, `hdobjdraw` and `hdglow` inside it, `buckets` and
-`sort` as whole-frame totals, and the present split into `spin` - the frame
-finished and waiting for its slot - and `flip`, `Present` itself.
+with `hddraw`, `hdlight`, `hdobjdraw` and `hdglow` inside it, `buckets`,
+`sort` and `sortdraw` as whole-frame totals, and the present split into `spin`
+- the frame finished and waiting for its slot - and `flip`, `Present` itself.
+(`sort` and `sortdraw` were one phase in order 1; 5.8 says why they are two.)
 
-`buckets` and `sort` are whole-frame on purpose: both are called from three or
-more places, and the callee is the only place that catches all of them. That
+`buckets`, `sort` and `sortdraw` are whole-frame on purpose: all are called
+from three or more places, and the callee is the only place that catches all
+of them. That
 is also why `SkyDrawPhase` got a phase of its own - it is the one place in the
 frame that draws buckets and a sort list OUTSIDE `S_OutputPolyList`, so the
 printed remainder is `outrest = output - hddraw - hdglow`, the two phases that
@@ -4960,10 +4968,109 @@ declaration, and Windows paging the process in. Those are for `PROFLOG`'s
 Nothing. Every branch this order added is inert at 30: `gPresentMinTicks` is 2
 and `S_DumpScreen` reads `while (n < 2)`; `TargetPresentHz()` is 30, so the
 caption's step is `long(30 / App.fps)` and its start is 120; `FrameBudgetMs()`
-is 1000/30 and `MissedSlotMs()` 1000/30 + 1000/120, the two old constants to
-the bit; and every profile seam is behind `gLogEnabled`. The only thing that
-runs regardless is the warm-up, which by construction cannot change what is
-drawn.
+is `2 * 1000/60` and `MissedSlotMs()` that plus 1000/120, the two old
+constants to the bit; and every profile seam is behind `gLogEnabled`. The only
+thing that runs regardless is the warm-up, which by construction cannot change
+what is drawn.
+
+#### 5.8 Order 1b - what the play test of order 1 found
+
+Five findings from one session at `fps_mode 1` with `-log`. The first is a
+bug in the game, the other four are bugs in the measurement - which matters
+just as much, because the whole of order 2 will be judged by these logs.
+
+**The title menu skipped rows.** `DoTitle`'s loop (`game/gameflow.cpp`) is
+`TitleOptions(); DrawPhaseGame(); ControlPhase(nframes);` - so the menu is
+walked once per **present**, while the debounced input it walks with,
+`dbinput`, is written once per **tick**, inside `ControlPhase`'s
+`for (framecount += nframes; ...; framecount -= 2)` loop and nowhere else
+(`specific/input.cpp`, `if (debounce) dbinput = inputBusy & (dbinput ^
+inputBusy)`). At two ticks per present those two rates are the same and every
+edge is read exactly once. At one, every second `ControlPhase` runs no tick at
+all, `dbinput` keeps standing, and the next `TitleOptions` reads the same
+press again: one tap of Down moved the cursor two rows, and *New Game* could
+not be selected. Everything `TitleOptions` reaches has the same shape - the
+level select, the whole options tree, the Tomb5 pages in
+`tomb5/troyestuff.cpp` - because all of them read `dbinput` per call.
+
+The fix is `GameFrameMinTicks()` (`specific/output.cpp`): sixty is for a
+played frame, so it returns 2 whenever `gfLevelId == LVL5_TITLE` or
+`InventoryActive`, and 1 only otherwise. Nothing else in the build needed a
+guard, and that is a property of the code rather than a hope: `DoLevel` reads
+no input at all outside `ControlPhase`, and every other menu - the inventory
+(`game/newinv2.cpp`), the pause menu and the load/save screen
+(`specific/LoadSave.cpp`), the death menu (`game/control.cpp`), the special
+features - runs a modal loop of its own that calls `S_UpdateInput` once per
+present and is therefore consistent at any rate. They also never reach
+`DrawPhaseGame`, which is why they already kept their thirty.
+
+**The late counter blamed the menus.** `FrameBudgetMs()`
+(`specific/hd/hd_level.cpp`) and its twin in `profile.cpp` took the slot from
+`tomb5.fps_mode`. But `fps_mode` is not what a given frame waited for: only
+`DrawPhaseGame`'s own present ever drops to one tick, and after the fix above
+not even that one in the title. Every menu second was therefore measured
+against 16.7 ms and reported as thirty slow and up to thirty late frames -
+`logic_ticks=0 hd_rooms=0 frames=30 late=30`, which is a *healthy* inventory.
+Both now read `gPresentMinTicks` at the moment the frame is judged, and print
+it as `budget=` so the line says what it was measured against. That is also
+why `DrawPhaseGame` restores the two **after** `ProfileFrameEnd` rather than
+before it.
+
+**An alt-tab was a late frame.** A frame whose interval was 5516 ms while its
+own work was 32 ms is not a slow frame; the main loop was somewhere else.
+`PROFLOG` now counts those as `pauses` and never as `late`, and writes one
+short line - `pause at=41s frame=5516.30 work=8.90 presents=1204` - instead of
+a late line with seventeen meaningless phases. It recognises them by counting
+presents: `ProfPresent()` in both present functions (`specific/output.cpp`)
+means the profile knows how many pictures went out during an interval, and
+anything above its own one is a modal loop drawing behind its back. The second
+half of the rule, an interval that exceeds its own work by more than a second,
+catches what presents nothing at all - an alt-tab, a window drag, a
+breakpoint. A paused interval is also kept out of the second's `frame=`
+mean and maximum, where a single five-second one would otherwise own both.
+
+**The profiler's `logic` grew without end.** It read 3.4, 7.2, 11.0, 14.9 and
+18.9 ms over five consecutive seconds of the title, and 28.5 ms after seven
+seconds of play - larger than the whole frame it was supposedly part of. The
+cause is one missing line. `PROF_LOGIC` is deliberately not cleared by
+`ProfileFrameBegin`, because `ControlPhase` runs between the present and that
+call and its milliseconds are already in the accumulator when it runs. It was
+cleared **nowhere else either**, so it was a running total for the length of a
+level. `ProfileFrameEnd` now clears it once it has reported it and once the
+second's totals have taken it.
+
+The definition it implements is written down in `profile.h` and in the manual,
+because the number is easy to misread: the loop is draw, present, logic, so
+the game step that follows a frame is counted into the *next* frame's line,
+and `logic` is **not** part of `work` (which is `ProfileFrameBegin` to
+`ProfileFrameEnd`). The invariant to check a log against is
+`work + logic <= frame`.
+
+**22 ms in the sort phase, in the title's first frame and never again.** Not
+answered, but made answerable and made cheaper. `sort` was `SortPolyList` and
+`DrawSortList` added together, and those two have completely different
+explanations: the first is a quicksort, the second is vertex copying and
+`DrawPrimitiveUP`. They are now two phases, `sort` and `sortdraw`, and the
+line carries `sortn=`, how many entries the list held - so a slow sort can be
+told from a merely long one without a second session.
+
+And the one part of it that *is* provable from the source is fixed:
+`SortBuffer` (2.5 MB), `SortList` (256 KB) and `Bucket` (30 x 2080 vertices,
+2.4 MB) are plain statics, so they live in `.bss` and Windows hands them out
+as demand-zero pages - roughly 1300 first-write faults, every one of them in
+the first frame that draws anything. `PreTouchDrawBuffers()`
+(`specific/polyinsert.cpp`) writes through all three from `WarmUpLevel()`,
+where the loading bar is on screen. It cannot change a pixel: `InitBuckets`
+and `InitialiseSortList` reset all three at the top of every frame, and
+nothing reads a byte of any of them that was not written in the same frame
+first.
+
+**Two more per-drawn-frame counters found while reading, not fixed here.**
+`gfLegendTime--` in `DoLevel` (`game/gameflow.cpp`) - the level-name caption
+shows for half as long at sixty - and `cutseq_busy_timeout--` in
+`handle_cutseq_triggering` (`game/deltapak.cpp`), the wind-up before a
+cutscene. Both belong with the fourteen counters of 5.3 and are order 3; they
+are recorded as R16 and R17 in the plan.
 
 ---
 

@@ -284,12 +284,21 @@ Two ways to check it yourself:
 - The stopwatch: a timed section (the countdown in the Submarine, the
   Escape With The Iris timer) runs for exactly as many real seconds in both.
 
+**Where the sixty applies.** In the level, and only there. The title screen,
+its menus, the inventory ring, the pause screen, the load and save screens and
+the death menu all stay at thirty at either setting, on purpose: each of them
+walks its menu once per *picture* while the button presses it walks with are
+read once per *game step*, so at sixty each press counted twice and the
+cursor jumped two rows at a time. Nothing about them looks different at
+thirty — they were written for it — and the game frame behind the title is not
+the frame anybody is watching.
+
 **What you get, and what it costs.** Twice as many pictures of the same
 motion. Until the interpolation of the next stage lands, the *in-between*
 frame is a repeat of the one before it rather than a new position, so what
-sixty buys today is a smoother camera, smoother menus and a smoother
-title screen rather than smoother running — and a few things that count in
-drawn frames rather than in game steps (screen fades, the rain) still run at
+sixty buys today is a smoother camera and a smoother picture rather than
+smoother running — and a few things that count in drawn frames rather than in
+game steps (screen fades, the rain, the level-name caption) still run at
 double speed. Both are being worked on and are the reason 30 is still there.
 
 **If it does not hold.** The engine never falls back on its own — it says so
@@ -1626,10 +1635,12 @@ anybody can check by looking, so with `-log` the engine writes one `FPSLOG`
 line per second of wall clock, and one summary per level:
 
 ```
-FPSLOG level=ANDREA1 frames=60 logic_ticks=30 fps=60 min_ms=16.2 max_ms=17.1
-       avg_ms=16.7 slow=24 late=0 hd_rooms=17 hd_items=9 hd_draws=152
-FPSLOG level=ANDREA1 frames=48 logic_ticks=30 fps=60 min_ms=16.4 max_ms=66.9
-       avg_ms=20.8 slow=31 late=6 hd_rooms=23 hd_items=14 hd_draws=241
+FPSLOG level=ANDREA1 frames=60 logic_ticks=30 fps=60 budget=16.7 min_ms=16.2
+       max_ms=17.1 avg_ms=16.7 slow=24 late=0 hd_rooms=17 hd_items=9
+       hd_draws=152
+FPSLOG level=ANDREA1 frames=48 logic_ticks=30 fps=60 budget=16.7 min_ms=16.4
+       max_ms=66.9 avg_ms=20.8 slow=31 late=6 hd_rooms=23 hd_items=14
+       hd_draws=241
 FPSLOG level=ANDREA1 summary seconds=418 frames=24906 worst_ms=83.4
        slow_frames=5602 late_frames=39
 ```
@@ -1638,19 +1649,28 @@ The game's logic is a fixed **30 steps a second** in both *Frame rate*
 settings — that is the engine, not this build. What the setting changes is how
 often the picture is presented. Read the line like this:
 
-- **`fps=`** is the setting, 30 or 60. Everything below is measured against
-  it.
-- **`frames=`** is the frame rate itself. Under `fps=` is a second in which
-  the machine did not keep up.
+- **`fps=`** is the setting, 30 or 60 — what was asked for.
+- **`budget=`** is what *this* second's frames were really measured against,
+  in milliseconds: `16.7` for frames presented at sixty, `33.3` for frames
+  presented at thirty. The two differ whenever the setting says 60 but the
+  picture came from a menu — the title screen, the inventory, the pause and
+  load screens all keep thirty at either setting (see **Frame rate**), and
+  judging them against 16.7 ms would report a perfectly healthy menu as thirty
+  late frames a second.
+- **`frames=`** is the frame rate itself. Under the rate `budget=` implies is
+  a second in which the machine did not keep up.
 - **`logic_ticks=`** is what the game really ran, and it must read **30**
   whatever `frames=` says. If it ever does not, the frame rate setting has
-  changed the game — which is precisely what it is not allowed to do.
+  changed the game — which is precisely what it is not allowed to do. A
+  second in a menu reads `logic_ticks=0`: the game is not running at all
+  there, which together with `hd_rooms=0` is how a menu second is recognised.
 - **`late=`** counts the frames that actually missed their slot — over
-  41.7 ms at 30, over 25.0 ms at 60. This is the number that matters.
+  `budget` plus half a sixtieth, so over 41.7 ms at a 33.3 ms budget and over
+  25.0 ms at a 16.7 ms one. This is the number that matters.
   `worst_ms`/`max_ms` say how badly.
-- **`slow=`** counts every gap over the plain budget (33.3 ms at 30, 16.7 ms
-  at 60). Half of a perfectly healthy second lands here on measurement jitter
-  alone, so a large `slow=` with `late=0` means nothing at all.
+- **`slow=`** counts every gap over the plain `budget`. Half of a perfectly
+  healthy second lands here on measurement jitter alone, so a large `slow=`
+  with `late=0` means nothing at all.
 - **`hd_rooms` / `hd_items` / `hd_draws`** are the heaviest HD frame of that
   second — rooms drawn, objects drawn, draw calls — so a drop can be put next
   to what was on the screen when it happened. They are zero with the HD path
@@ -1666,12 +1686,13 @@ took; it cannot say *why*. `PROFLOG` splits the same frame into the phases it
 really walks, and with `-log` it writes one line per second of play:
 
 ```
-PROFLOG level=ANDREA1 at=12s frames=60 logic_ticks=30 fps=60 late=0
-        frame=16.68/17.90 work=9.12/12.40 logic=1.84/3.90 gather=3.21/5.80
-        rooms=2.95/5.40 sky=0.31/0.70 hdroom=0.81/1.60 hdobj=0.42/0.90
-        hdlara=0.19/0.40 output=5.02/9.10 hddraw=2.61/5.20 hdlight=0.74/1.40
-        hdobjdraw=0.58/1.30 buckets=1.35/2.60 hdglow=0.51/1.10 sort=0.44/0.90
-        spin=6.90/9.80 flip=0.28/1.60 outrest=1.90
+PROFLOG level=ANDREA1 at=12s frames=60 logic_ticks=30 fps=60 budget=16.7
+        late=0 pauses=0 frame=16.68/17.90 work=9.12/12.40 logic=1.84/3.90
+        gather=3.21/5.80 rooms=2.95/5.40 sky=0.31/0.70 hdroom=0.81/1.60
+        hdobj=0.42/0.90 hdlara=0.19/0.40 output=5.02/9.10 hddraw=2.61/5.20
+        hdlight=0.74/1.40 hdobjdraw=0.58/1.30 buckets=1.35/2.60
+        hdglow=0.51/1.10 sort=0.04/0.09 sortdraw=0.44/0.90 spin=6.90/9.80
+        flip=0.28/1.60 outrest=1.90 sortn=418
 ```
 
 Every phase is printed as **mean/worst** over that second, in milliseconds:
@@ -1679,7 +1700,7 @@ Every phase is printed as **mean/worst** over that second, in milliseconds:
 | | |
 |---|---|
 | `frame` | the interval between two presented frames — the same number `FPSLOG` measures |
-| `work` | how long the frame itself took, waiting excluded |
+| `work` | how long the frame itself took, waiting excluded. The logic is **not** in it: the loop is draw, present, logic, so the game step that follows a frame is counted into the *next* frame. The invariant to check a log against is `work + logic <= frame`, never `logic <= work` |
 | `logic` | the game's own tick or ticks (`ControlPhase`) |
 | `gather` | everything before the drawing: Lara's matrices, the room walk, every item and sprite |
 | `rooms` | `DrawRooms` inside `gather`, which is nearly all of it |
@@ -1692,15 +1713,24 @@ Every phase is printed as **mean/worst** over that second, in milliseconds:
 | `hdglow` | the HD additive pass |
 | `outrest` | what is left of `output` once the two HD passes are taken off: the classic buckets, the sort list, the binoculars, the pickup display and the fade |
 | `buckets` | `DrawBuckets`, **wherever it was called from** — a whole-frame total, so it overlaps `sky` and `outrest` and must not be added to them |
-| `sort` | the same, for sorting and drawing the see-through polygons |
+| `sort` | the same, for the sort of the see-through polygons — the quicksort itself, processor work only |
+| `sortdraw` | the same, for walking the sorted list into vertices and handing them to the card |
 | `spin` | the frame was **finished and waiting for its slot**. A big number here means the machine is comfortably ahead |
 | `flip` | `Present` itself, and whatever the driver does inside it |
+| `sortn` | not a time: how many entries the sort list held. It is there so a slow `sort` can be told apart from a merely long one |
 
-Two extra kinds of line are written on their own:
+Three counters at the head of the line say how the second went:
+**`budget=`** is what its frames were measured against (the same number
+`FPSLOG` prints, and the same reasons), **`late=`** how many of them missed
+that slot, and **`pauses=`** how many intervals were not a frame rate at all —
+see below.
+
+Three extra kinds of line are written on their own:
 
 ```
 PROFLOG level=ANDREA1 first_frame fps=60 work=61.30 logic=0.00 gather=22.40 ...
-PROFLOG level=ANDREA1 late at=3s frame=63.20 work=62.90 logic=2.10 ...
+PROFLOG level=ANDREA1 late at=3s budget=25.0 frame=63.20 work=62.90 logic=2.10 ...
+PROFLOG level=ANDREA1 pause at=41s frame=5516.30 work=8.90 presents=1204
 ```
 
 - **`first_frame`** — the very first frame of a level, always written. This is
@@ -1708,6 +1738,13 @@ PROFLOG level=ANDREA1 late at=3s frame=63.20 work=62.90 logic=2.10 ...
 - **`late`** — every single frame that missed its slot, with all its phases
   and `at=` how many seconds into the level it happened. One glance says
   whether the time went into the logic, the room walk, the draw or the driver.
+- **`pause`** — an interval in which the main loop was somewhere else
+  entirely: the inventory ring, the pause screen, the load or save screen, the
+  title's options, or the whole window sitting in the background during an
+  alt-tab. `presents=` says how many pictures were handed to the card in that
+  interval; anything above `1` means a menu drew them. These are counted
+  separately and are **never** counted as late — nothing about them says
+  anything about the frame rate, which is why they get no phases either.
 
 If a level is rough for its first seconds, look at `first_frame` and at the
 `late` lines with a low `at=`; if one room is rough every time you enter it,
@@ -1724,7 +1761,10 @@ Direct3D keeps a texture in main memory until something draws with it, and
 pays for the upload inside that first frame. This build asks the driver for
 every one of them while the loading bar is still on screen, where a pause
 costs nothing, instead of in the first second of play. The line says how many
-were offered and how long it took.
+were offered and how long it took. The same step also writes once through the
+five megabytes of sort and bucket buffers the classic renderer works in —
+Windows only really hands those pages over on the first write, and every one
+of those small faults would otherwise fall in the level's first drawn frame.
 
 **For a complete report, attach four things:** `log.txt`, `spoiler.txt` from
 beside the randomizer, the `PCtomb5 build <date>` line from the setup dialog,

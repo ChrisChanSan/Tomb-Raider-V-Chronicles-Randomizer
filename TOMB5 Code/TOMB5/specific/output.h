@@ -43,11 +43,24 @@ long S_DumpScreenFrame();
  * to keep thirty; leaving the default at two is what keeps them there without
  * touching a line of any of them.
  *
- * TargetPresentHz() is the same decision as a number, for the two places that
- * need a rate rather than a tick count: the frame budget FPSLOG and PROFLOG
- * measure a late frame against, and the resolution caption's countdown. */
+ * AND THE TITLE IS ONE OF THEM (#148, order 1b). The title's menu does NOT
+ * present itself - DoTitle draws through DrawPhaseGame like the game does -
+ * but TitleOptions runs once per PRESENT while dbinput is refreshed once per
+ * TICK, so at sixty every keypress was read twice and the menu walked two
+ * rows at a time. GameFrameMinTicks() below is the rule that keeps the title
+ * at two ticks; the long note over it in game\draw.cpp has the measurement.
+ *
+ * IT IS ALSO THE FRAME BUDGET. FPSLOG and PROFLOG judge a frame late against
+ * gPresentMinTicks * 1/60 s plus half a tick of slack, read at the moment the
+ * frame is judged and NOT out of tomb5.fps_mode - which is why DrawPhaseGame
+ * restores the two only after ProfileFrameEnd has run.
+ *
+ * TargetPresentHz() is the option as a number - what the player asked for,
+ * for the log lines that name it and for the resolution caption's countdown.
+ * It is NOT a budget; use gPresentMinTicks for that. */
 extern long gPresentMinTicks;
 long TargetPresentHz();		// 30 or 60, out of tomb5.fps_mode
+long GameFrameMinTicks();	// what DrawPhaseGame's own present may wait for
 void StashSkinVertices(long node);
 void SkinVerticesToScratch(long node);
 void StashSkinNormals(long node);

@@ -1165,18 +1165,30 @@ very next frame.
 
 Two things then happen that have no counterpart in the classic body, and both
 are dealt with on **her body's draw alone**, so that her hands, her holsters
-and the weapon on her back are never touched (#123, stage S8):
+and the weapon on her back are never touched (#123, stage S8 and fix round J):
 
 - **The neck goes with the head.** The classic head *mesh* is head and neck in
   one piece; an HD body is a single skinned surface whose neck stump hangs off
   the **torso**, so masking the head node leaves it standing. Measured against
   the eye the camera really uses, that stump comes to **18.6 units** — inside
-  the near plane. Everything within **60 units** of the eye is therefore
-  discarded in the shader. Sixty is a *radius*, not a depth: the nearest
-  shoulder or chest vertex of any of the eight outfits is 68.9 units away, so
-  one number separates the two from every angle, while a cut at a fixed depth
-  would lie flat across her chest the moment she looks down and open a window
-  through her (measured, and rejected for it).
+  the near plane. It is therefore discarded in the shader, and the shape that
+  discards it is a **cylinder about the neck axis**: everything less than 30
+  units down the axis from the head joint and less than 30 units off it, on the
+  torso node alone. The neck is a tube and the measurement says so — over all
+  eight outfits the torso's own vertices sit between 8 and 22 units off that
+  axis down to 20 units of depth and burst out to 67 at 30 — so a cylinder
+  takes the whole stump and touches nothing else: not one arm vertex of any
+  outfit falls inside it, at any of nine candidate sizes. What is left in the
+  camera is her own chest at about fifty units, which is where the classic
+  engine leaves it too.
+
+  *A sphere around the eye was tried first and sent back by the play test*
+  (#123, stage S8 and fix round J). A sphere large enough to take the stump —
+  60 units — also bit 60 units out of her chest whenever the camera was held
+  back against a wall, forced the cap below to be as wide as her whole torso,
+  and chewed a jagged edge into her wrist whenever a hand came near the camera.
+  A cylinder about the neck is the shape of the thing that has to go, it does
+  not move with the eye, and it cannot reach an arm.
 - **Her body is drawn one-sided there.** The HD path draws every model double
   sided; the classic engine only *looks* as if it does, because it culls back
   faces in software before the card ever sees one. No camera but this one
@@ -1189,17 +1201,30 @@ and the weapon on her back are never touched (#123, stage S8):
   leaves a hole, and with the back faces culled one looks straight through her
   — the finding that followed the two points above. So a **cap** is built for
   every outfit when the level loads, out of that outfit's own vertices: the
-  ring of them at collar height, which the cut never reaches, and a dome of 352
-  triangles sunk into the chest behind it. Its rim is the body's own points, so
-  the two share an edge rather than meeting at a join that could gape; it wears
-  the body's own texture page; and it carries no near cut of its own, because
-  the cut is the thing it exists to close. It is drawn in first person and
-  nowhere else, and where there is no hole it changes no pixel.
+  ring of them at the cut's own edge, which is the mouth of the neck, and a
+  dome of 224 triangles sunk into the chest behind it. Its rim is the body's
+  own points, so the two share an edge rather than meeting at a join that could
+  gape; it wears the body's own texture page; and it carries no cut of its own,
+  because the cut is the thing it exists to close. It is drawn in first person
+  and nowhere else, and where there is no hole it changes no pixel.
+
+  Three rules keep it out of trouble, and each of them is a thing the play test
+  saw before they were there: no ring of it is ever further off the axis than
+  the body's own skin at that spoke, so it cannot poke out through the collar;
+  its middle wears the texture coordinates of a real rim vertex rather than the
+  average of all of them, because the average of a scattered set of coordinates
+  is a point in the middle of the page and the middle of that page is empty
+  (the picture came back black); and the ring it hangs from is taken where the
+  neck is still a neck rather than at the collarbone, where "the outline of the
+  body" is the outline of a chest and the cap comes out a star of slivers.
 
 *Left over, and honestly:* in the **diving suit** the helmet is modelled on the
-torso node too, so it cannot be masked off with the head and it is far too big
-for a 60-unit cut. Looking down inside it you see the helmet from within. The
-classic suit hides it, because there the helmet is part of the head mesh.
+torso node too, so it cannot be masked off with the head. The cylinder bores a
+tube through it and the cap closes most of what that opens, which is a great
+deal better than the see-through the suit had before it, but a few slivers of
+the helmet's own back faces still show at the rim when one looks straight down.
+The classic suit hides all of it, because there the helmet is part of the head
+mesh.
 
 **In a mirror room** she is drawn twice, as before. The engine mirrors her by
 *moving* her — the position reflected in the plane, the angles negated — which

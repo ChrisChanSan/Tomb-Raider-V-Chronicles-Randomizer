@@ -140,10 +140,11 @@ int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale);
 /* ONE MODEL ON THIS FRAME'S LIST that is not an item. `matrix` is `nodes`
  * row-major 4x4 matrices in view space, `light` a colour triple a node in the
  * classic 0..255 space, `mask` the mesh-bits rule (bit n clear -> node n
- * draws nothing), `nearCut` the first person near cut of stage S8 in view
- * units and `cull` the one-sided draw that goes with it (both 0 for
- * everything but Lara's body in first person; hd_lara.h has the number and
- * hd_model.h the reason the two belong together).
+ * draws nothing), `cut` the first person NECK CUT of stage S8 in the shape
+ * fix round J gave it - a cylinder about the neck axis in the bind pose - and
+ * `cull` the one-sided draw that goes with it (both empty for everything but
+ * Lara's body in first person; hd_lara.h has the numbers and hd_model.h the
+ * reason the two belong together).
  *
  * False when the list is full or the HD model path is not up - and then the
  * caller has to draw nothing at all rather than half a Lara, which is why
@@ -151,5 +152,5 @@ int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale);
  * per part. */
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	unsigned int mask, const HDObjLight* lights, int lightCount, float sunScale,
-	float nearCut = 0.0f, int cull = HD_MODEL_CULL_NONE,
+	const HDModelNeckCut* cut = 0, int cull = HD_MODEL_CULL_NONE,
 	float specStrength = 0.0f, float specPower = 1.0f);

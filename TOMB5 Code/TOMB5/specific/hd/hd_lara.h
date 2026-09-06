@@ -389,98 +389,143 @@
  * machinery: the same page cache, the same skinning, the same draw call. */
 #define HD_LARA_SLOT_BASE	0x5A00
 
-/* THE FIRST PERSON NEAR CUT (#123, stage S8): a RADIUS around the eye, in
- * classic units. Every fragment of Lara's BODY nearer to the eye than this is
- * discarded while the first person view runs; her hands, her holsters and the
- * weapon on her back are separate models and are never cut. The shader end of
- * it is hd_model.hlsl, ModelPS.
+/* THE FIRST PERSON NECK CUT (#123, stage S8; re-shaped in fix round J, J1).
+ *
+ * A CYLINDER ABOUT THE NECK AXIS, in the outfit model's own BIND POSE. Every
+ * fragment of Lara's BODY that sits less than HD_LARA_NECK_CUT_S units down
+ * the axis from the head joint AND less than HD_LARA_NECK_CUT_R units off it
+ * is discarded while the first person view runs, and only on the nodes
+ * HD_LARA_NECK_CUT_NODES names. Her hands, her holsters, the weapon on her
+ * back and the neck cap are separate models and are never cut. The shader end
+ * of it is hd_model.hlsl, ModelVS and ModelPS.
  *
  * WHY THERE HAS TO BE ONE. The classic path hides the head MESH; an HD body is
  * one skinned surface, and the neck stump under the head belongs to the TORSO
  * node, so masking node 14 leaves it standing in the camera (user finding F3).
  *
- * WHY A SPHERE AND NOT A DEPTH. A cut at a fixed view DEPTH is a plane across
- * the view, and the moment she looks down that plane lies across her chest:
- * measured at 72 units of depth it took her collarbone with the stump and one
- * saw the floor through the hole. A cut at a fixed DISTANCE cannot do that,
- * because the two are separated in distance from every angle at once.
+ * WHAT STAGE S8 DID AND WHY IT IS GONE. S8 cut a SPHERE of 60 units around the
+ * eye. That took the stump, and the play test of fix round I says what else it
+ * took (findings J1 and J3, with pictures):
  *
- * WHERE 60 COMES FROM. ModelProbe -neck over all eight outfits, against the
- * eye the first person camera really uses: the head joint of the level's own
- * Lara skeleton (ANDREA1: 1 / -247 / -12), 16 units up and up to
- * FP_EYE_OFFSET = 48 units forward (game\camera.cpp). The forward step is what
- * mgLOS allows, so BOTH ends of it have to hold - 48 in the open, 0 with a
- * wall in front of her, which is the case that puts the stump nearest:
+ *   - a 60 unit bite out of her CHEST. Look down with the eye against a wall
+ *     and half her front is missing; one sees the room through her.
+ *   - so the lid that closes the bite had to be as wide as her whole TORSO,
+ *     which is why fix round I's cap came out a plate at the collar.
+ *   - and a hand brought up to the camera came back with a JAGGED EDGE at the
+ *     wrist, because a sphere around the eye does not know a forearm from a
+ *     neck.
  *
- *                          eye 48 forward          eye at the joint
- *     outfit             stump  shoulder chest   stump shoulder chest
- *     OUTFIT_CLASSIC      41.9   79.8   74.6      18.6   73.5   73.6
- *     OUTFIT_RUSSIA       40.4   77.8   73.5      18.6   71.6   81.9
- *     OUTFIT_VCI          37.4   78.3   74.6      18.6   71.9   73.5
- *     OUTFIT_SUBSUIT      32.7   74.7   87.8      22.2   68.9   99.7
- *     OUTFIT_TR3_ANTARC   41.9   78.2   74.5      19.1   71.7   78.2
- *     OUTFIT_TR3_NEVADA   41.9   79.0   74.6      19.1   72.7   81.2
- *     OUTFIT_TR3_COAST    41.9   79.0   76.3      19.1   72.7   75.3
- *     OUTFIT_TR3_CATSUIT  41.9   78.6   74.6      19.1   72.4   81.3
+ * A SPHERE IS THE WRONG SHAPE. The thing that has to go is a NECK. A neck is a
+ * TUBE about the neck axis, the axis is a line between two joints of the
+ * engine's own skeleton, and NOTHING ELSE OF HER IS INSIDE THAT TUBE.
  *
- * "stump" is the nearest torso-node vertex above the shoulder line, "shoulder"
- * the nearest of nodes 8 and 11, "chest" the nearest torso-node vertex below
- * that line. The nearest thing that must SURVIVE, over all sixteen columns, is
- * 68.9; 60 leaves it 8.9 units of margin, which is what the animation needs -
- * a shrug moves the shoulder relative to the head, the table does not. The
- * number is not per outfit and needs no hand work for a new one: the skeleton
- * it is measured against is the engine's own and every wardrobe body is built
- * on it.
+ * MEASURED, ModelProbe -neck, "the neck as a CYLINDER": node 7 vertices by
+ * depth s down the axis and radius r off it. OUTFIT_CLASSIC, and the other
+ * seven read the same to a few units except where a collar says otherwise:
+ *
+ *      s   r min   r max   what it is
+ *      0     7.9    17.3   the stump, a tube of 6 vertices
+ *     10    11.0    20.7   still a tube, 8
+ *     20    12.4    22.3   still a tube, 18
+ *     25    17.0    31.2   the tube opening out, 24
+ *     30    14.9    67.0   BURST - 212 vertices, the shoulders have joined
+ *
+ * So the neck is a tube to s = 25 and a chest at s = 30, in every outfit. A
+ * cylinder of S = 30 and R = 30 therefore takes the whole stump and stops
+ * where the body stops being a neck.
+ *
+ * AND IT CANNOT REACH AN ARM. The same measurement walks nine candidate sizes
+ * (S 40/45/50 x R 26/30/34, all of them larger than what ships) over all eight
+ * outfits and asks for the nearest ARM vertex inside the cylinder: there is
+ * none, in any of the 72 combinations. That is finding J3 answered by
+ * geometry rather than by a special case - and the node mask below is the
+ * belt to that brace.
+ *
+ * WHAT IT LEAVES IN THE CAMERA. The nearest SURVIVING vertex of any node but
+ * the masked head, from the two eyes the first person camera really uses (the
+ * head joint, 16 up, and 48 forward where mgLOS allows it):
+ *
+ *     outfit              eye 48   eye 0
+ *     OUTFIT_CLASSIC        60.4    52.0
+ *     OUTFIT_RUSSIA         54.7    48.7
+ *     OUTFIT_SUBSUIT        32.7    33.5
+ *     OUTFIT_VCI            60.4    52.0
+ *     OUTFIT_TR3_ANTARC     48.0    43.4
+ *     OUTFIT_TR3_NEVADA     60.4    52.0
+ *     OUTFIT_TR3_COAST      60.4    52.0
+ *     OUTFIT_TR3_CATSUIT    60.4    52.0
+ *
+ * Fifty units is her own chest seen from her own eyes, which is what the
+ * classic engine shows there too, and every one of them clears the 20 unit
+ * near plane by a wide margin. (The diving suit is the outlier for the reason
+ * stage S8 already named: its HELMET sits on the torso node. 33 units is a
+ * helmet rim at the bottom of the picture, not a wall of it.)
+ *
+ * THE NODE MASK. The cut is the TORSO's, node 7 - the node the stump hangs
+ * off. It is a weight and not a test in the shader, so a vertex that straddles
+ * a joint slides between the two rules instead of jumping, and no arm, no leg
+ * and no head can be clipped by the cylinder however the animation folds her.
  *
  * IT DOES NOT WORK ALONE. Cutting a closed body open shows the body's inside,
  * because the HD path draws every model double sided - so the cut is paired
  * with HD_MODEL_CULL_BACK on the same draw. hd_model.h has that half. */
-#define HD_LARA_FIRST_PERSON_NEAR_CUT	60.0f
+#define HD_LARA_NECK_CUT_S	30.0f	// down the axis from the head joint
+#define HD_LARA_NECK_CUT_R	30.0f	// off the axis
+#define HD_LARA_NECK_CUT_NODES	(1u << HD_LARA_TORSO)
 
-/* THE CAP THAT CLOSES WHAT THAT CUT OPENS (#123, fix round I, I3).
+/* THE CAP THAT CLOSES WHAT THAT CUT OPENS (#123, fix round I, I3; re-aimed in
+ * fix round J, J1).
  *
- * MEASURED, ModelProbe -neck, "the neck as a tube": the torso node's vertices
- * against the axis from the torso joint to the head joint, `s` units down it
- * from the head joint and `r` off it. OUTFIT_VCI, and the other six read the
- * same to a few units:
+ * WHAT FIX ROUND I BUILT AND WHY THE USER SENT IT BACK. Round I put the rim at
+ * s = 50, because that was the depth at which the body's own surface survived
+ * the SPHERE cut. But at s = 50 the body is not a neck: the measurement above
+ * says it burst open twenty units higher, and "the vertex furthest off the
+ * axis in each sector" at that depth is a SHOULDER. The rim was therefore the
+ * outline of her whole torso - r from 20 to 82 in one ring - and the three
+ * things the user photographed all follow from that one number:
  *
- *     s     verts   r min   r mean   r max   eye 48   eye 0
- *     0        18     7.2     12.6    20.1     50.8    18.6
- *    10        20    10.1     15.0    21.6     44.7    24.6
- *    20        34    12.4     19.5    24.5     37.4    35.5
- *    30       426    14.9     40.3    76.1     49.0    44.9
- *    40       484    17.1     47.1    81.9     54.9    55.0
- *    50       256    20.3     54.4    82.5     63.9    65.0
- *    60       547     9.9     64.3    80.4     69.2    76.0
+ *   (a) a flat skin-coloured plate at the collar, seen from OUTSIDE. The dome
+ *       rounded each spoke towards the ring's MEAN radius, so a spoke whose
+ *       rim sat at 20 was pushed out to 27 by the second ring - seven units
+ *       through her own skin.
+ *   (b) black inside the neck. The middle of the dome took the AVERAGE of 32
+ *       rim texture coordinates, and the average of a scattered set of points
+ *       on an atlas page is a point in the middle of the page, which on 8310
+ *       is empty. An averaged coordinate is not a colour; it is a coordinate.
+ *   (c) "the polygons look random". A rim that runs from 20 to 82 units off
+ *       the axis in 32 sectors is not a ring but a star, and the strips
+ *       between its spokes are slivers.
  *
- * Down to s = 20 the neck is a TUBE - eighteen to thirty vertices in a band
- * eight to twenty-five units wide. At s = 30 it bursts open into the
- * shoulders. And the two eye columns say where the cut falls: the nearest
- * vertex of the band is inside the 60 unit cut down to s = 40 and outside it
- * from s = 50, so the cut eats the tube and stops in the collar.
+ * WHAT IT IS NOW. The rim sits where the CUT ends - the ring of the body's own
+ * vertices closest to the cylinder's own edge, r = HD_LARA_NECK_CUT_R, at the
+ * depth the neck reaches it, which the table above puts at s = 24 to 27. That
+ * ring is the neck's own mouth: 32 sectors of a tube, not of a chest.
  *
- * SO THE RIM SITS AT s = 50. Every vertex there is at least 61 units from
- * either eye, which is the whole point: the body's own surface at the rim
- * SURVIVES the cut, so the cap is sewn to geometry that is still being drawn.
- * A rim higher up would be sewn to triangles the cut had already taken and the
- * seam would gape; a rim lower down would be a smaller lid that an oblique ray
- * could pass over.
+ * THREE RULES KEEP IT HONEST, and each of them is one of the user's three
+ * findings turned into a line of code:
  *
- * THE RING is one vertex per SPOKE: of the node 7 vertices in the band, the
- * one furthest from the axis in that sector - the body's own outline at that
- * height. Its positions are the outfit's own, unmoved, so the cap and the body
- * share their edge exactly.
+ *   (a) NOTHING EVER GOES OUTSIDE ITS OWN SPOKE. Every ring inwards is its
+ *       rim vertex's own offset scaled by a factor that is never above one, so
+ *       no part of the cap can be further off the axis than the body's own
+ *       surface it hangs from. It cannot poke through her skin.
+ *   (b) THE MIDDLE WEARS A REAL TEXEL. The inner rings converge on the
+ *       texture coordinates of ONE rim vertex - the one whose coordinates lie
+ *       nearest the middle of all of them - and not on their average. A rim
+ *       vertex's coordinates are a place on the page where the artist painted
+ *       something; their average need not be.
+ *   (c) IT IS A RING AND NOT A STAR, because the depth it is taken at is the
+ *       depth at which the neck is still a neck.
  *
- * THE DOME sinks INTO the chest and not up towards the chin, so that no part
- * of it is ever nearer the eye than the rim it hangs from - the cap carries no
- * near cut and a lid that domed upwards would end up under the camera. SPOKES
- * times RINGS is 192 vertices and 352 triangles, which is the "many polygons"
- * the user asked for and a rounding error beside the 18,000 of the body. */
-#define HD_LARA_NECK_CAP_S	50	// how far down the axis the rim sits
-#define HD_LARA_NECK_CAP_BAND	6	// half the height of the band it comes from
+ * The dome sinks INTO the chest and not up towards the chin, so no part of it
+ * is ever nearer the eye than the rim it hangs from. SPOKES times RINGS is 128
+ * vertices and 224 triangles, a rounding error beside the 18,000 of the body.
+ */
+#define HD_LARA_NECK_CAP_R	HD_LARA_NECK_CUT_R	// the rim follows the cut
+#define HD_LARA_NECK_CAP_SMAX	40	// no rim vertex deeper than this
+#define HD_LARA_NECK_CAP_LIP	8	// nor higher than this above the bottom
 #define HD_LARA_NECK_CAP_SPOKES	32
-#define HD_LARA_NECK_CAP_RINGS	6	// the rim and five more, then the centre
-#define HD_LARA_NECK_CAP_SINK	24	// how deep the middle sinks into the chest
+#define HD_LARA_NECK_CAP_RINGS	4	// the rim and three more, then the centre
+#define HD_LARA_NECK_CAP_SINK	16	// how deep the middle sinks into the chest
 
 /* The classic Lara mesh tree in LM_ order, spelled out so that the tables
  * below and a reader of them do not have to look it up. These are the numbers
@@ -799,6 +844,16 @@ bool HDLaraPartPlanned(int part);
 // Bit per classic node the part covers, as hd_model measured it. 0 for a part
 // that is not on the card.
 unsigned int HDLaraPartCoverage(int part);
+
+/* THE FIRST PERSON NECK CUT'S CYLINDER (#123, fix round J, J1).
+ *
+ * Fills `out` with the cylinder HD_LARA_NECK_CUT_S and _R describe, measured
+ * against the level's OWN Lara skeleton - the same bind pose the neck cap was
+ * built from a moment earlier, which is why the two fit each other to the
+ * vertex. `on` comes back 1; false and an untouched `out` when the level has
+ * no bind pose, and then the caller must draw with no cut at all rather than
+ * with a cylinder about the origin. */
+bool HDLaraNeckCut(HDModelNeckCut* out);
 
 /* THE SHEEN OF ONE PART (#123, fix round D, D2).
  *

@@ -4506,6 +4506,133 @@ it, by regime, instead of in a studio pose), `-classicroot`, `-nocap` and
 `-neck` prints the neck as a tube, and `-braidsim` and `-braidanim` gained the
 box regimes.
 
+
+#### Fix round J: the neck as a cylinder, and the lid that fits it (#123)
+
+The play test of fix round I: *"the neck cap is a start"* - and then three
+photographs of what is wrong with it, plus a fourth of a jagged wrist.
+
+**J1 - the cap was built at the wrong height, and everything followed from
+that.** Fix round I put its rim at `s = 50` down the neck axis, because that
+was the depth at which the body's own surface survived stage S8's sixty-unit
+sphere. Measured again with `ModelProbe -neck`, which gained a third table for
+it - the torso node's own vertices by depth `s` down the axis and radius `r`
+off it, `OUTFIT_CLASSIC`, and the other seven read the same to a few units:
+
+| s | r min | r max | what it is |
+| ---: | ---: | ---: | --- |
+| 0 | 7.9 | 17.3 | the stump, a tube of 6 vertices |
+| 10 | 11.0 | 20.7 | still a tube, 8 |
+| 20 | 12.4 | 22.3 | still a tube, 18 |
+| 25 | 17.0 | 31.2 | the tube opening out, 24 |
+| 30 | 14.9 | 67.0 | **burst** - 212 vertices, the shoulders have joined |
+
+At `s = 50` the body is not a neck but a **chest**, so "the vertex furthest off
+the axis in each of 32 sectors" was a **shoulder** and the rim was the outline
+of her whole torso, `r` running from 20 to 82 in one ring. All three of the
+user's findings are that one number:
+
+1. **a flat skin-coloured plate at the collar, seen from outside.** The dome
+   rounded each spoke towards the ring's *mean* radius, so a spoke whose rim
+   sat at 20 was pushed out to 27 by the second ring - seven units through her
+   own skin.
+2. **black inside the neck.** The middle of the dome took the *average* of the
+   32 rim texture coordinates. The average of a scattered set of points on an
+   atlas page is a point in the middle of the page, and the middle of page 8310
+   is empty. An averaged coordinate is a coordinate; it is not the average of
+   the colours at them.
+3. **"the polygons look random."** A rim that runs from 20 to 82 units off the
+   axis is not a ring but a star, and the strips between its spokes are
+   slivers.
+
+**So the cut is a cylinder now and not a sphere.** The thing that has to go is
+a neck; a neck is a tube about the neck axis; and *nothing else of her is
+inside that tube*. The cut is therefore everything less than
+`HD_LARA_NECK_CUT_S` = 30 units down the axis from the head joint and less than
+`HD_LARA_NECK_CUT_R` = 30 units off it, worked out in the **bind pose** in the
+vertex shader (`gNeck`, `gNeckAxis`, registers c162 and c163) so that it takes
+the same patch of her skin in every frame and at every camera angle, and
+carrying a **node mask** (`gNodeLight[].a`, the one component of that register
+that was never light) so that only the torso can be clipped by it at all.
+
+What that leaves standing, nearest the eye, over the two eye positions the
+first person camera really uses - and 50 units is her own chest, which is where
+the classic engine leaves it too:
+
+| outfit | eye 48 | eye 0 |
+| --- | ---: | ---: |
+| OUTFIT_CLASSIC | 60.4 | 52.0 |
+| OUTFIT_RUSSIA | 54.7 | 48.7 |
+| OUTFIT_SUBSUIT | 32.7 | 33.5 |
+| OUTFIT_VCI | 60.4 | 52.0 |
+| OUTFIT_TR3_ANTARC | 48.0 | 43.4 |
+| OUTFIT_TR3_NEVADA | 60.4 | 52.0 |
+| OUTFIT_TR3_COAST | 60.4 | 52.0 |
+| OUTFIT_TR3_CATSUIT | 60.4 | 52.0 |
+
+**And the cap is rebuilt on the cut's own edge.** Its rim is, per sector, the
+body's own vertex nearest the boundary of that cylinder - which is the mouth of
+the neck - pulled back onto the boundary where the sector has no crossing at
+all (the mouth is not a circle, and where it opens into a shoulder the nearest
+surviving vertex can be fifty units off the axis). Three lines answer the three
+findings: no ring of the dome is ever further off the axis than its own rim
+vertex, so it cannot poke through the skin; the inner rings wear the texture
+coordinates of **one real rim vertex** - the middlemost of them on the page -
+rather than an average; and the ring is a ring because it is taken where the
+neck is still a neck. 32 spokes, 4 rings, 224 triangles.
+
+*Proof.* `ModelProbe -neck`, the new cylinder scan: over all eight outfits and
+nine candidate `(S, R)` pairs - 72 combinations, every one of them larger than
+what ships - the cylinder reaches **not one arm vertex**. The cap's own log
+line now carries the ring it was built on and a self-check: `the rim r
+20.4/26.4/30.0 s 27.8/29.9/30.0, 0 vertices outside their own spoke`
+(`OUTFIT_CLASSIC`; it read `r 20.4/27.9/53.7` before the clamp). And the
+pictures: `ModelProbe -firstperson` at 60, 75 and 90 degrees down with the eye
+both 48 units forward and against a wall, and `-showcap` - a new switch that
+draws the cap in an ordinary third-person picture, where a properly sunk cap is
+**invisible**, which is the user's finding (a) answered by a photograph.
+
+**J3 - the jagged wrist is gone with the sphere.** It was the sphere: a cut at
+a fixed distance from the eye does not know a forearm from a neck, and a hand
+brought up to the camera crossed it. There is now no cut anywhere in the HD
+path that depends on where the eye is, and the cylinder is restricted to node 7
+besides, so an arm vertex is never even tested. The measurement above is the
+same one twice over.
+
+**J2 - "the hands of the TR3 outfits do not shine."** Measured, and it is not
+what the code does. The four Tomb Raider III outfits take the same
+`HAND_BARE_*` models, on the same pages, with the same materials as the Rome
+one - the `sheen:` line reads `empty hands 0.12/10` and `the Desert Eagle
+0.12/10 [held 0.35/34 on 1 page(s)]` for every one of them. Rendered twice with
+`-onlypart 9`, once with the sheen and once with `-nosheen`, and differenced:
+`OUTFIT_CLASSIC` changes **65.6 %** of the drawn pixels by a mean of **15.60**,
+`OUTFIT_TR3_NEVADA` **65.9 %** by **15.56**. The two are the same hand.
+
+What the measurement *does* show is one real difference, and it is not in any
+table: **`OUTFIT_TR3_ANTARC` carries its own gloves.** Vertices on the two hand
+nodes, `ModelProbe -nodes`:
+
+| outfit | node 10 | node 13 |
+| --- | ---: | ---: |
+| OUTFIT_CLASSIC | 126 | 140 |
+| OUTFIT_VCI | 200 | 200 |
+| OUTFIT_TR3_NEVADA | 58 | 64 |
+| OUTFIT_TR3_COAST | 92 | 87 |
+| OUTFIT_TR3_CATSUIT | 60 | 57 |
+| **OUTFIT_TR3_ANTARC** | **462** | **487** |
+
+Every other outfit has a cuff there and the separate `HAND_` model is the hand
+one sees. The parka has a mitten - eight times the geometry - and *it* is what
+one sees, drawn as part of the body and with the body's cloth material. Nothing
+was changed for it: which of the two surfaces should shine, and how much, is a
+picture the user has to judge, and this file's own rule since fix round F is
+that a wardrobe table gets a new line only after somebody has looked at the
+picture.
+
+`ModelProbe` gained `-neckcut`, `-showcap` and a third `-neck` table (the
+neck as a CYLINDER: an (s, r) grid of the torso's own vertices per outfit,
+the ring at four candidate depths, and the (S, R) scan above).
+
 ---
 
 ## Building this yourself

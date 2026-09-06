@@ -815,7 +815,7 @@ int HDLaraPartForSlot(int slot, int role)
 /* ------------------------------------------------ the neck cap (I3) -- */
 /*
  * THE LID THAT CLOSES THE NECK IN FIRST PERSON. What it is for and where its
- * numbers come from is at HD_LARA_NECK_CAP_S in hd_lara.h; this is the maker.
+ * numbers come from is at HD_LARA_NECK_CAP_R in hd_lara.h; this is the maker.
  *
  * IT IS BUILT FROM THE OUTFIT'S OWN BODY, which is why it goes through
  * HDModelSlot::synth rather than being a file: the rim is the outfit's own
@@ -825,20 +825,27 @@ int HDLaraPartForSlot(int slot, int role)
  * THE STEPS.
  *   1. The neck AXIS: the line from the torso joint to the head joint, both
  *      out of the level's own bind pose. `s` is the distance down it from the
- *      head joint, `r` the distance off it.
- *   2. THE RING: of the node 7 vertices in the band s = S +/- BAND, the one
- *      furthest off the axis in each of SPOKES sectors. That is the body's own
- *      outline at collar height, and it is a closed loop by construction.
+ *      head joint, `r` the distance off it. It is the SAME axis the cut is
+ *      built about (hd_model.hlsl, gNeck), which is why the two fit.
+ *   2. THE RING: of the node 7 vertices that SURVIVE the cut, the one nearest
+ *      the cut's own edge in each of SPOKES sectors. The cut's edge is where
+ *      the neck stops being cut away, so that ring IS the mouth of the hole -
+ *      the body's own vertices, at their own positions, all round it.
+ *      (Fix round I took "the vertex furthest off the axis" in a band at
+ *      s = 50 instead, and at that depth the body is a chest: the rim came
+ *      out the outline of her whole torso. See hd_lara.h for the three
+ *      things in the picture that followed from it.)
  *   3. THE PAGE: the one most of those vertices wear. A model draws one page
  *      per call, so a rim vertex on another page takes the texture
  *      coordinates of the nearest rim vertex that is on the chosen one - which
  *      is a colour and not a position, and the count goes in the log.
- *   4. THE DOME: RINGS rings from the rim inwards, the radius falling off as
- *      a quarter cosine so the surface is flat at the middle rather than a
- *      cone, and the middle sunk SINK units further down the axis. The
- *      texture coordinates run from the rim's own to the rim's average, so the
- *      seam is exact where it is seen and the middle is a smear of the same
- *      material.
+ *   4. THE DOME: RINGS rings from the rim inwards, each ring its rim vertex's
+ *      own offset scaled by a factor that is NEVER above one, so no part of
+ *      the cap can stand further off the axis than the skin it hangs from,
+ *      and the middle sunk SINK units further down. The texture coordinates
+ *      run from the rim's own to ONE rim vertex's - the middlemost of them on
+ *      the page - so the seam is exact where it is seen and the middle wears
+ *      a texel the artist really painted.
  *   5. THE NORMALS are accumulated from the triangles and normalised - the
  *      "soft normals" a curved surface wants, and the reason the cap shades
  *      like a body and not like a plate.
@@ -853,6 +860,14 @@ namespace
 	bool g_neck_bind_ok = false;
 	int g_neck_cap_page = -1;	// for the log
 	int g_neck_cap_rehomed = 0;	// rim vertices that had to borrow a UV
+	/* THE RIM, IN NUMBERS (#123, fix round J, J1). The whole of the user's
+	 * finding is "the cap is too big and it pokes out", so the log carries the
+	 * ring the cap was built on - how far off the axis and how far down it -
+	 * and a self-check: how many of the dome's own vertices stand further off
+	 * the axis than the rim vertex of their own spoke. That last number must
+	 * be 0, and the clamp in the maker is what makes it 0. */
+	double g_neck_cap_rim[6] = { 0, 0, 0, 0, 0, 0 };	// r min/mean/max, s ditto
+	int g_neck_cap_outside = 0;
 
 	int dominant_node(const HDTrmVertex& v)
 	{
@@ -882,6 +897,10 @@ namespace
 		*why = "";
 		g_neck_cap_page = -1;
 		g_neck_cap_rehomed = 0;
+		g_neck_cap_outside = 0;
+
+		for (int i = 0; i < 6; i++)
+			g_neck_cap_rim[i] = 0.0;
 
 		if (!source || !out || !g_neck_bind_ok)
 		{
@@ -938,11 +957,22 @@ namespace
 		};
 
 		/* --- the ring ---------------------------------------------------- */
-		/* The candidates once, then one pass per spoke over them. The band is
-		 * a few hundred vertices, so this is a few thousand comparisons at
-		 * level load and nothing at all per frame. */
+		/* THE CANDIDATES ARE THE VERTICES THE CUT LEAVES STANDING, near its
+		 * own edge. `keep` is the shader's own number - how far outside the
+		 * cylinder a point is, which is the larger of "past its bottom" and
+		 * "past its side" - so a candidate with keep >= 0 survives the cut and
+		 * the smallest keep in a sector is the vertex closest to the mouth of
+		 * the hole. That is the rim: the body's own geometry, at the one place
+		 * the cap has to meet it.
+		 *
+		 * SMAX keeps the search in the neck. Without it a sector with no
+		 * vertex near the mouth would answer with something on the hip, which
+		 * is a smaller `keep` than nothing at all.
+		 *
+		 * A few hundred candidates, one pass per spoke over them: a few
+		 * thousand comparisons at level load and nothing per frame. */
 		std::vector<int> band;
-		std::vector<double> bandR;
+		std::vector<double> bandKeep;
 		std::vector<double> bandA;
 
 		for (int i = 0; i < source->vertices; i++)
@@ -955,18 +985,24 @@ namespace
 			const double d[3] = { v.x - H[0], v.y - H[1], v.z - H[2] };
 			const double s = d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
 
-			if (s < HD_LARA_NECK_CAP_S - HD_LARA_NECK_CAP_BAND ||
-				s > HD_LARA_NECK_CAP_S + HD_LARA_NECK_CAP_BAND)
+			if (s < 0.0 || s > HD_LARA_NECK_CAP_SMAX)
 				continue;
 
 			const double off[3] =
 			{
 				d[0] - s * axis[0], d[1] - s * axis[1], d[2] - s * axis[2]
 			};
+			const double r = std::sqrt(off[0] * off[0] + off[1] * off[1] +
+				off[2] * off[2]);
+			const double byBottom = s - HD_LARA_NECK_CUT_S;
+			const double bySide = r - HD_LARA_NECK_CAP_R;
+			const double keep = byBottom > bySide ? byBottom : bySide;
+
+			if (keep < 0.0)
+				continue;	// the cut takes this one - it is not a rim
 
 			band.push_back(i);
-			bandR.push_back(std::sqrt(off[0] * off[0] + off[1] * off[1] +
-				off[2] * off[2]));
+			bandKeep.push_back(keep);
 			bandA.push_back(std::atan2(
 				off[0] * w[0] + off[1] * w[1] + off[2] * w[2],
 				off[0] * u[0] + off[1] * u[1] + off[2] * u[2]));
@@ -974,20 +1010,18 @@ namespace
 
 		if ((int)band.size() < kSpokes)
 		{
-			*why = "the collar band holds fewer vertices than the cap has "
-				"spokes";
+			*why = "the mouth of the neck holds fewer vertices than the cap "
+				"has spokes";
 			return false;
 		}
 
-		/* ONE VERTEX PER SPOKE: the one furthest off the axis within half a
+		/* ONE VERTEX PER SPOKE: the one nearest the cut's edge within half a
 		 * sector of the spoke's own direction. A sector with nothing in it is
-		 * not an error and must not be - the outline of a chest is not evenly
-		 * covered, and under the arm there are stretches of it with no vertex
-		 * at all - so the window widens until it finds one. It is written as a
-		 * widening window rather than as "the furthest in that direction over
-		 * the whole band", which would build the convex HULL of the section
-		 * and push the rim out through the armpit where the outline is
-		 * hollow. */
+		 * not an error and must not be - a mesh is not evenly tessellated -
+		 * so the window widens until it finds one. It is written as a widening
+		 * window rather than as "the nearest in that direction over the whole
+		 * ring", which would let one very good vertex answer for three
+		 * sectors and pinch the rim into a triangle. */
 		const double kPi = 3.14159265358979323846;
 		int pick[HD_LARA_NECK_CAP_SPOKES];
 
@@ -1000,7 +1034,7 @@ namespace
 
 			for (int tries = 0; tries < 6 && pick[k] < 0; tries++, window *= 2.0)
 			{
-				double bestR = -1.0;
+				double bestKeep = 1.0e30;
 
 				for (size_t i = 0; i < band.size(); i++)
 				{
@@ -1015,9 +1049,9 @@ namespace
 					if (da < -window || da > window)
 						continue;
 
-					if (bandR[i] > bestR)
+					if (bandKeep[i] < bestKeep)
 					{
-						bestR = bandR[i];
+						bestKeep = bandKeep[i];
 						pick[k] = band[i];
 					}
 				}
@@ -1025,7 +1059,7 @@ namespace
 
 			if (pick[k] < 0)
 			{
-				*why = "the collar ring has a gap no widening would close";
+				*why = "the neck's mouth has a gap no widening would close";
 				return false;
 			}
 		}
@@ -1102,16 +1136,47 @@ namespace
 			rimV[k] = source->vertex[pick[from]].v;
 		}
 
-		double meanU = 0, meanV = 0;
+		/* WHERE THE MIDDLE OF THE CAP SAMPLES ITS COLOUR (#123, fix round J,
+		 * J1(b)).
+		 *
+		 * Fix round I converged the inner rings on the AVERAGE of the 32 rim
+		 * coordinates, and the user's picture is what that gives: a black
+		 * smear across the middle of the cap. An atlas page is not a colour
+		 * ramp - the rim's coordinates are scattered over it, their average is
+		 * a point in the middle of the page, and the middle of page 8310 is
+		 * empty. The average of a set of coordinates is a coordinate; it is
+		 * not the average of their colours and there is no reason it should
+		 * even be painted.
+		 *
+		 * So the middle wears ONE RIM VERTEX'S coordinates instead - the one
+		 * whose coordinates lie nearest all the others, which is a real place
+		 * on the page with real paint on it, and the nearest thing to "the
+		 * middle of them" that is guaranteed to exist. The seam is still
+		 * exact, because the RIM keeps its own coordinates either way. */
+		int home = 0;
+		double homeCost = 1.0e30;
 
 		for (int k = 0; k < kSpokes; k++)
 		{
-			meanU += rimU[k];
-			meanV += rimV[k];
+			double cost = 0.0;
+
+			for (int j = 0; j < kSpokes; j++)
+			{
+				const double du = (double)rimU[k] - (double)rimU[j];
+				const double dv = (double)rimV[k] - (double)rimV[j];
+
+				cost += std::sqrt(du * du + dv * dv);
+			}
+
+			if (cost < homeCost)
+			{
+				homeCost = cost;
+				home = k;
+			}
 		}
 
-		meanU /= kSpokes;
-		meanV /= kSpokes;
+		const double meanU = rimU[home];
+		const double meanV = rimV[home];
 
 		/* --- the dome ----------------------------------------------------- */
 		const int vertices = kSpokes * kRings + 1;
@@ -1159,12 +1224,70 @@ namespace
 			rimR[k] = std::sqrt(rimOff[k][0] * rimOff[k][0] +
 				rimOff[k][1] * rimOff[k][1] + rimOff[k][2] * rimOff[k][2]);
 
+			/* AND ONTO THE CUT'S OWN EDGE (#123, fix round J, J1(c)).
+			 *
+			 * The hole the cap closes is bounded by the cut, and the cut's
+			 * boundary is never deeper than S nor further off the axis than R
+			 * - that is what the two numbers MEAN. So a rim vertex past either
+			 * is a sector in which the body's surface never crosses the cut at
+			 * all: the mouth of a neck is not a circle, and where it opens
+			 * into a shoulder the nearest vertex outside the cylinder can be
+			 * fifty units off the axis. Left alone it drags one spoke of the
+			 * cap out over the collarbone and the two strips beside it become
+			 * the slivers the user calls "random polygons".
+			 *
+			 * Pulled back onto the boundary it is still inside her - the
+			 * body's own surface in that sector is further out, and still
+			 * drawn - and the ring comes back round. Where the body DOES cross
+			 * the cut, which is all round the neck itself, the clamp does
+			 * nothing and the rim is the outfit's own vertex, unmoved. */
+			if (rimS[k] > HD_LARA_NECK_CUT_S)
+				rimS[k] = HD_LARA_NECK_CUT_S;
+
+			/* AND NOT HUNG FROM THE TOP OF THE CYLINDER EITHER. A sector whose
+			 * surface crosses the cylinder's SIDE high up - the diving suit's
+			 * helmet does, at s = 0 - would hang the lid from there and make a
+			 * funnel of it instead of a lid, with the seam torn open where the
+			 * two ends of the funnel meet. The cut's boundary in such a sector
+			 * runs from that crossing all the way DOWN the side to the bottom,
+			 * so the bottom end of it is just as much the edge of the hole and
+			 * is the end a lid belongs on. LIP is how far above the bottom a
+			 * rim vertex may still sit: it is 8 because the seven wardrobe
+			 * bodies with a neck read s = 27.8 to 30 and never need it, and
+			 * the diving suit reads 0.2 to 30 and needs all of it. */
+			if (rimS[k] < HD_LARA_NECK_CUT_S - HD_LARA_NECK_CAP_LIP)
+				rimS[k] = HD_LARA_NECK_CUT_S - HD_LARA_NECK_CAP_LIP;
+
+			if (rimR[k] > HD_LARA_NECK_CAP_R)
+			{
+				const double pull = HD_LARA_NECK_CAP_R / rimR[k];
+
+				for (int a = 0; a < 3; a++)
+					rimOff[k][a] *= pull;
+
+				rimR[k] = HD_LARA_NECK_CAP_R;
+			}
+
 			sMean += rimS[k];
 			rMean += rimR[k];
 		}
 
 		sMean /= kSpokes;
 		rMean /= kSpokes;
+
+		/* The ring, for the log (#123, fix round J, J1). */
+		g_neck_cap_rim[0] = g_neck_cap_rim[2] = rimR[0];
+		g_neck_cap_rim[3] = g_neck_cap_rim[5] = rimS[0];
+		g_neck_cap_rim[1] = rMean;
+		g_neck_cap_rim[4] = sMean;
+
+		for (int k = 0; k < kSpokes; k++)
+		{
+			if (rimR[k] < g_neck_cap_rim[0]) g_neck_cap_rim[0] = rimR[k];
+			if (rimR[k] > g_neck_cap_rim[2]) g_neck_cap_rim[2] = rimR[k];
+			if (rimS[k] < g_neck_cap_rim[3]) g_neck_cap_rim[3] = rimS[k];
+			if (rimS[k] > g_neck_cap_rim[5]) g_neck_cap_rim[5] = rimS[k];
+		}
 
 		const double kHalfPi = 1.57079632679489661923;
 
@@ -1178,8 +1301,20 @@ namespace
 			{
 				HDTrmVertex& v = out->vertex[j * kSpokes + k];
 				const double at = rimS[k] * (1.0 - f) + sMean * f + sink;
-				const double round = rimR[k] > 1.0e-6
+				/* AND NEVER MORE THAN ONE (#123, fix round J, J1(a)). The
+				 * rounding pulls a wide spoke IN towards the ring's mean and
+				 * must never push a narrow one OUT: `round` above one is a
+				 * ring standing further off the axis than the body's own skin
+				 * at that spoke, which is the flat plate the user saw poking
+				 * through her collar. Round I had no such clamp, and with a
+				 * rim that ran from 20 to 82 units the narrow spokes were
+				 * pushed out by a quarter of their own radius. */
+				double round = rimR[k] > 1.0e-6
 					? (1.0 - f) + f * rMean / rimR[k] : 1.0;
+
+				if (round > 1.0)
+					round = 1.0;
+
 				const double off[3] =
 				{
 					rimOff[k][0] * round, rimOff[k][1] * round,
@@ -1193,10 +1328,10 @@ namespace
 				v.layer = 1;
 				v.bone[0] = (unsigned char)HD_LARA_TORSO;
 				v.weight[0] = 255;
-				/* THE TEXTURE IS THE RIM'S AT THE RIM and the ring's average in
-				 * the middle, which is what makes the seam exact - the one
-				 * place a mismatch would be seen - and leaves the middle a
-				 * smear of the same material.
+				/* THE TEXTURE IS THE RIM'S AT THE RIM and the middlemost rim
+				 * vertex's in the middle, which is what makes the seam exact -
+				 * the one place a mismatch would be seen - and leaves the
+				 * middle a smear of a texel that is really painted.
 				 *
 				 * The alternative was tried and is worse: holding each spoke's
 				 * own texture coordinates all the way in leaves every strip
@@ -1205,8 +1340,25 @@ namespace
 				 * those two are half a page apart - the picture came back with
 				 * two hard streaks through her chest. Converging is a soft
 				 * radial gradient instead, and it cannot cross the page. */
-				v.u = (unsigned char)(rimU[k] * (1.0 - f) + meanU * f + 0.5);
-				v.v = (unsigned char)(rimV[k] * (1.0 - f) + meanV * f + 0.5);
+				/* THE RIM RING KEEPS ITS OWN AND EVERY RING INSIDE IT WEARS THE
+				 * ONE TEXEL. A gradient that runs all the way to the middle
+				 * stretches the page along every spoke, and the picture comes
+				 * back with the star of streaks the user calls "random"
+				 * (finding J1(c)). One strip of gradient at the seam, where
+				 * the surface is nearly edge on to the eye and nothing can be
+				 * read off it anyway, and a flat colour over the rest. */
+				const double t = j ? 1.0 : 0.0;
+
+				v.u = (unsigned char)(rimU[k] * (1.0 - t) + meanU * t + 0.5);
+				v.v = (unsigned char)(rimV[k] * (1.0 - t) + meanV * t + 0.5);
+
+				/* THE SELF-CHECK BEHIND FINDING J1(a). A ring vertex further
+				 * off the axis than the rim vertex it hangs from is a piece of
+				 * cap outside the body's own skin, which is the plate the user
+				 * photographed. The count goes in the log and must be 0. */
+				if (std::sqrt(off[0] * off[0] + off[1] * off[1] +
+					off[2] * off[2]) * rad > rimR[k] + 0.01)
+					g_neck_cap_outside++;
 			}
 		}
 
@@ -1478,9 +1630,13 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 		 * coordinates from a neighbour because they wore another one. */
 		if (part == HD_LARA_PART_NECK_CAP)
 			note("the neck cap: %d spokes, %d rings, page %d, %d rim vertices "
-				"re-homed, %d triangles", HD_LARA_NECK_CAP_SPOKES,
-				HD_LARA_NECK_CAP_RINGS, g_neck_cap_page, g_neck_cap_rehomed,
-				HDModelIndices(slot) / 3);
+				"re-homed, %d triangles; the rim r %.1f/%.1f/%.1f s "
+				"%.1f/%.1f/%.1f, %d vertices outside their own spoke",
+				HD_LARA_NECK_CAP_SPOKES, HD_LARA_NECK_CAP_RINGS,
+				g_neck_cap_page, g_neck_cap_rehomed, HDModelIndices(slot) / 3,
+				g_neck_cap_rim[0], g_neck_cap_rim[1], g_neck_cap_rim[2],
+				g_neck_cap_rim[3], g_neck_cap_rim[4], g_neck_cap_rim[5],
+				g_neck_cap_outside);
 
 		const int nodes = HDModelNodes(slot);
 
@@ -1677,6 +1833,52 @@ void HDLaraHeldSheen(int part, float* strength, float* power)
 unsigned int HDLaraPartCoverage(int part)
 {
 	return part >= 0 && part < HD_LARA_PART_COUNT ? g_coverage[part] : 0u;
+}
+
+/* THE CUT'S CYLINDER, out of the same bind pose the cap was built from (#123,
+ * fix round J, J1). One function so that the shape the shader carves and the
+ * shape hd_lara.cpp's maker sewed a lid onto cannot drift apart: both are the
+ * axis from the head joint to the torso joint of THIS level's own Lara. */
+bool HDLaraNeckCut(HDModelNeckCut* out)
+{
+	if (!out || !g_neck_bind_ok)
+		return false;
+
+	const double H[3] =
+	{
+		g_neck_bind[HD_LARA_HEAD_NODE * 3 + 0],
+		g_neck_bind[HD_LARA_HEAD_NODE * 3 + 1],
+		g_neck_bind[HD_LARA_HEAD_NODE * 3 + 2]
+	};
+	const double T[3] =
+	{
+		g_neck_bind[HD_LARA_TORSO * 3 + 0],
+		g_neck_bind[HD_LARA_TORSO * 3 + 1],
+		g_neck_bind[HD_LARA_TORSO * 3 + 2]
+	};
+
+	double axis[3] = { T[0] - H[0], T[1] - H[1], T[2] - H[2] };
+	double len = std::sqrt(axis[0] * axis[0] + axis[1] * axis[1] +
+		axis[2] * axis[2]);
+
+	if (len < 1.0)
+		return false;
+
+	for (int i = 0; i < 3; i++)
+		axis[i] /= len;
+
+	out->on = 1.0f;
+	out->depth = HD_LARA_NECK_CUT_S;
+	out->radius = HD_LARA_NECK_CUT_R;
+	out->nodes = HD_LARA_NECK_CUT_NODES;
+
+	for (int i = 0; i < 3; i++)
+	{
+		out->head[i] = (float)H[i];
+		out->axis[i] = (float)axis[i];
+	}
+
+	return true;
 }
 
 /* --------------------------------------------------------- the frame -- */

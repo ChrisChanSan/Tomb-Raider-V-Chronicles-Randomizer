@@ -103,17 +103,21 @@
  *                         camera inside her that shows her own inside, so
  *                         first person culls (stage S8). Default: back with
  *                         -firstperson, none otherwise.
- *     -nearcut <units>    the first person NEAR CUT, on her body alone: a
- *                         RADIUS around the eye, and every fragment inside it
- *                         is discarded. 0 draws the BEFORE picture. The
+ *     -neckcut <S> <R>    the first person NECK CUT, on her body alone: a
+ *                         CYLINDER about the neck axis in the bind pose, S
+ *                         units down it from the head joint and R off it, and
+ *                         every fragment inside it is discarded (#123, fix
+ *                         round J). `0 0` draws the BEFORE picture. The
  *                         default with -firstperson is the engine's own
- *                         HD_LARA_FIRST_PERSON_NEAR_CUT.
- *     -neck               the measurement that number comes from: for every
+ *                         HD_LARA_NECK_CUT_S and _R.
+ *     -neck               the measurements those numbers come from: for every
  *                         outfit, how many torso-node vertices sit above the
  *                         shoulder line and how near the nearest of them, of
- *                         the shoulders and of the chest come to the eye -
- *                         at both eye positions the game uses, with a
- *                         PASS/FAIL against the constant.
+ *                         the shoulders and of the chest come to the eye - at
+ *                         both eye positions the game uses; then the neck as a
+ *                         TUBE and as a CYLINDER, with the (S, R) scan that
+ *                         says what a candidate cut takes, whether it can
+ *                         reach an arm, and what it leaves in the camera.
  *     -braidsim [steps]   THE BRAID'S OWN PHYSICS, run offline (#123, fix
  *                         round F, F2). HairControl's chain loop transcribed
  *                         line for line and driven with this level's Lara
@@ -1364,6 +1368,350 @@ static void PrintBraidTable(const std::string& root5, const ClassicSlot& body)
 	}
 }
 
+/* ---------------------------------------- the neck as a CYLINDER (J1) -- */
+/*
+ * WHY A THIRD NECK TABLE (#123, fix round J, J1).
+ *
+ * Fix round I cut the neck with a SPHERE around the eye and closed what it
+ * opened with a dome whose rim was the body's own outline at s = 50. The
+ * play test says both halves are wrong in the picture: the dome is a plate
+ * the size of her whole chest, it pokes out through the collar, its middle is
+ * a black smear, and the strips between its spokes are long slivers. The
+ * cause is in the two numbers this table replaces: at s = 50 the body is no
+ * longer a neck but a CHEST, so "the vertex furthest off the axis in each
+ * sector" is a shoulder and the rim is the outline of her whole torso.
+ *
+ * A sphere around the eye is the wrong SHAPE for a neck. The neck is a tube
+ * about the neck axis and nothing else is, so the cut this table measures is
+ * a CYLINDER about that axis - depth S down it and radius R off it - which
+ * takes the stump and cannot reach a chest, a shoulder or a forearm however
+ * the eye moves. What comes out of it:
+ *
+ *   1. THE GRID. Node 7 vertices by depth and by radius. A tube reads as a
+ *      narrow band of r that walks slowly outwards; where the row spreads
+ *      across every column is where the shoulders join.
+ *   2. THE RING. At the depth the cut ends, the innermost node 7 vertex in
+ *      each of 32 sectors - the neck WALL, which is what the cap has to be
+ *      sewn to - with its spread, so that "is this ring round?" is a number.
+ *   3. THE SCAN. For a grid of (S, R): how much of the stump the cut takes,
+ *      whether it reaches an arm, and how near the eye the nearest SURVIVING
+ *      vertex is - which is the whole point of the cut and the thing that
+ *      must come out large.
+ */
+static void PrintNeckCylinder(const std::string& root5, const ClassicSlot& body)
+{
+	const double kForward[2] = { 48.0, 0.0 };
+	const int kSectors = 32;
+	const double kPi = 3.14159265358979323846;
+
+	printf("\n-- the neck as a CYLINDER, per outfit (#123, fix round J) ----\n");
+	printf("node 7 vertices by depth s down the axis and radius r off it.\n"
+		"A neck is a narrow band of r; the row that fills every column is\n"
+		"where the shoulders join and the neck stops being one.\n\n");
+
+	for (int outfit = HD_LARA_OUTFIT_NONE + 1; outfit < HD_LARA_OUTFIT_COUNT;
+		outfit++)
+	{
+		const char* stem = HDLaraOutfitModel(outfit);
+		HDTrmModel model;
+		const char* why = "";
+
+		if (!stem)
+			continue;
+
+		const std::string path = TrmPath(root5, stem);
+
+		if (path.empty() || !HDTrmLoad(path.c_str(), &model, &why))
+			continue;
+
+		const double H[3] =
+		{
+			body.bind[HD_LARA_HEAD_NODE][0], body.bind[HD_LARA_HEAD_NODE][1],
+			body.bind[HD_LARA_HEAD_NODE][2]
+		};
+		const double T[3] = { body.bind[7][0], body.bind[7][1], body.bind[7][2] };
+		double axis[3] = { T[0] - H[0], T[1] - H[1], T[2] - H[2] };
+		const double len = sqrt(axis[0] * axis[0] + axis[1] * axis[1] +
+			axis[2] * axis[2]);
+
+		for (int i = 0; i < 3; i++)
+			axis[i] /= len > 1.0e-6 ? len : 1.0;
+
+		/* Two axes across it, the same pair the maker builds its sectors
+		 * from, so a sector number here is the sector number there. */
+		double u[3] = { axis[1], -axis[0], 0.0 };
+		const double uLen = sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
+
+		for (int i = 0; i < 3; i++)
+			u[i] /= uLen > 1.0e-6 ? uLen : 1.0;
+
+		const double w[3] =
+		{
+			axis[1] * u[2] - axis[2] * u[1],
+			axis[2] * u[0] - axis[0] * u[2],
+			axis[0] * u[1] - axis[1] * u[0]
+		};
+
+		/* --- the grid ---------------------------------------------------- */
+		static const double kEdge[9] =
+		{ 0, 10, 15, 20, 25, 30, 40, 60, 1.0e9 };
+
+		printf("%s\n", stem);
+		printf("%6s %6s %6s %6s %6s %6s %6s %6s %6s   %8s %8s\n", "s",
+			"<10", "10-15", "15-20", "20-25", "25-30", "30-40", "40-60",
+			"60+", "r min", "r max");
+
+		for (int step = -2; step <= 14; step++)
+		{
+			const double at = step * 5.0;
+			int bin[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+			double lo = 1.0e9, hi = -1.0e9;
+
+			for (int i = 0; i < model.vertices; i++)
+			{
+				const HDTrmVertex& v = model.vertex[i];
+				int node = v.bone[0];
+
+				if (v.weight[1] > v.weight[0] && v.weight[1] >= v.weight[2])
+					node = v.bone[1];
+				else if (v.weight[2] > v.weight[0] && v.weight[2] > v.weight[1])
+					node = v.bone[2];
+
+				if (node != HD_LARA_TORSO)
+					continue;
+
+				const double d[3] = { v.x - H[0], v.y - H[1], v.z - H[2] };
+				const double s = d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
+
+				if (s < at - 2.5 || s >= at + 2.5)
+					continue;
+
+				const double off[3] =
+				{
+					d[0] - s * axis[0], d[1] - s * axis[1], d[2] - s * axis[2]
+				};
+				const double r = sqrt(off[0] * off[0] + off[1] * off[1] +
+					off[2] * off[2]);
+
+				for (int b = 0; b < 8; b++)
+					if (r >= kEdge[b] && r < kEdge[b + 1])
+					{
+						bin[b]++;
+						break;
+					}
+
+				if (r < lo) lo = r;
+				if (r > hi) hi = r;
+			}
+
+			if (lo > 1.0e8)
+				continue;
+
+			printf("%6.0f %6d %6d %6d %6d %6d %6d %6d %6d   %8.1f %8.1f\n", at,
+				bin[0], bin[1], bin[2], bin[3], bin[4], bin[5], bin[6], bin[7],
+				lo, hi);
+		}
+
+		/* --- the ring at four candidate depths --------------------------- */
+		printf("  the WALL ring (the innermost node 7 vertex in each of %d "
+			"sectors):\n", kSectors);
+		printf("  %6s %7s %8s %8s %8s %8s\n", "s", "sectors", "r min",
+			"r mean", "r max", "gaps");
+
+		for (int cand = 0; cand < 4; cand++)
+		{
+			const double at = 30.0 + cand * 5.0;
+			double ring[32];
+			int filled = 0;
+			double lo = 1.0e9, hi = -1.0e9, sum = 0.0;
+
+			for (int k = 0; k < kSectors; k++)
+				ring[k] = 1.0e9;
+
+			for (int i = 0; i < model.vertices; i++)
+			{
+				const HDTrmVertex& v = model.vertex[i];
+				int node = v.bone[0];
+
+				if (v.weight[1] > v.weight[0] && v.weight[1] >= v.weight[2])
+					node = v.bone[1];
+				else if (v.weight[2] > v.weight[0] && v.weight[2] > v.weight[1])
+					node = v.bone[2];
+
+				if (node != HD_LARA_TORSO)
+					continue;
+
+				const double d[3] = { v.x - H[0], v.y - H[1], v.z - H[2] };
+				const double s = d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
+
+				if (s < at - 4.0 || s > at + 4.0)
+					continue;
+
+				const double off[3] =
+				{
+					d[0] - s * axis[0], d[1] - s * axis[1], d[2] - s * axis[2]
+				};
+				const double r = sqrt(off[0] * off[0] + off[1] * off[1] +
+					off[2] * off[2]);
+				const double a = atan2(off[0] * w[0] + off[1] * w[1] +
+					off[2] * w[2], off[0] * u[0] + off[1] * u[1] +
+					off[2] * u[2]);
+				int k = (int)((a + kPi) * kSectors / (2.0 * kPi));
+
+				if (k < 0) k = 0;
+				if (k >= kSectors) k = kSectors - 1;
+
+				if (r < ring[k])
+					ring[k] = r;
+			}
+
+			for (int k = 0; k < kSectors; k++)
+				if (ring[k] < 1.0e8)
+				{
+					filled++;
+					sum += ring[k];
+
+					if (ring[k] < lo) lo = ring[k];
+					if (ring[k] > hi) hi = ring[k];
+				}
+
+			if (!filled)
+				continue;
+
+			printf("  %6.0f %7d %8.1f %8.1f %8.1f %8d\n", at, filled, lo,
+				sum / filled, hi, kSectors - filled);
+		}
+
+		HDTrmFree(&model);
+		printf("\n");
+	}
+
+	/* --- the scan --------------------------------------------------------- */
+	printf("-- what a cylinder cut (S down, R off) leaves -----------------\n");
+	printf("`stump` is how many node 7 vertices above the shoulder line the "
+		"cut takes\nand `left` how many it leaves; `arm` is the nearest arm "
+		"vertex the cylinder\nreaches (- is none); `nearest` is the nearest "
+		"SURVIVING vertex of any node\nbut the masked head, from the two eyes "
+		"- the number the cut exists to raise.\n\n");
+	printf("%-19s %4s %4s %7s %7s %7s   %8s %8s\n", "outfit", "S", "R",
+		"stump", "left", "arm", "eye 48", "eye 0");
+	printf("------------------- ---- ---- ------- ------- -------   "
+		"-------- --------\n");
+
+	const double shoulder =
+		0.5 * (body.bind[HD_LARA_RINARM][1] + body.bind[HD_LARA_LINARM][1]);
+
+	for (int outfit = HD_LARA_OUTFIT_NONE + 1; outfit < HD_LARA_OUTFIT_COUNT;
+		outfit++)
+	{
+		const char* stem = HDLaraOutfitModel(outfit);
+		HDTrmModel model;
+		const char* why = "";
+
+		if (!stem)
+			continue;
+
+		const std::string path = TrmPath(root5, stem);
+
+		if (path.empty() || !HDTrmLoad(path.c_str(), &model, &why))
+			continue;
+
+		const double H[3] =
+		{
+			body.bind[HD_LARA_HEAD_NODE][0], body.bind[HD_LARA_HEAD_NODE][1],
+			body.bind[HD_LARA_HEAD_NODE][2]
+		};
+		const double T[3] = { body.bind[7][0], body.bind[7][1], body.bind[7][2] };
+		double axis[3] = { T[0] - H[0], T[1] - H[1], T[2] - H[2] };
+		const double len = sqrt(axis[0] * axis[0] + axis[1] * axis[1] +
+			axis[2] * axis[2]);
+
+		for (int i = 0; i < 3; i++)
+			axis[i] /= len > 1.0e-6 ? len : 1.0;
+
+		static const double kS[3] = { 40.0, 45.0, 50.0 };
+		static const double kR[3] = { 26.0, 30.0, 34.0 };
+
+		for (int a = 0; a < 3; a++)
+			for (int b = 0; b < 3; b++)
+			{
+				int cut = 0, left = 0;
+				double arm = 1.0e9;
+				double nearest[2] = { 1.0e9, 1.0e9 };
+
+				for (int i = 0; i < model.vertices; i++)
+				{
+					const HDTrmVertex& v = model.vertex[i];
+					int node = v.bone[0];
+
+					if (v.weight[1] > v.weight[0] && v.weight[1] >= v.weight[2])
+						node = v.bone[1];
+					else if (v.weight[2] > v.weight[0] && v.weight[2] > v.weight[1])
+						node = v.bone[2];
+
+					if (node == HD_LARA_HEAD_NODE)
+						continue;	// masked in first person anyway
+
+					const double d[3] = { v.x - H[0], v.y - H[1], v.z - H[2] };
+					const double s = d[0] * axis[0] + d[1] * axis[1] +
+						d[2] * axis[2];
+					const double off[3] =
+					{
+						d[0] - s * axis[0], d[1] - s * axis[1],
+						d[2] - s * axis[2]
+					};
+					const double r = sqrt(off[0] * off[0] + off[1] * off[1] +
+						off[2] * off[2]);
+					const bool inside = s <= kS[a] && r <= kR[b];
+					const bool stump = node == HD_LARA_TORSO && v.y < shoulder;
+
+					if (stump)
+					{
+						if (inside)
+							cut++;
+						else
+							left++;
+					}
+
+					if (inside && node != HD_LARA_TORSO)
+					{
+						const double dd = sqrt(off[0] * off[0] + off[1] *
+							off[1] + off[2] * off[2]);
+
+						if (dd < arm)
+							arm = dd;
+					}
+
+					if (inside)
+						continue;
+
+					for (int e = 0; e < 2; e++)
+					{
+						const double ex = H[0];
+						const double ey = H[1] - 16.0;
+						const double ez = H[2] + kForward[e];
+						const double dd = sqrt((v.x - ex) * (v.x - ex) +
+							(v.y - ey) * (v.y - ey) + (v.z - ez) * (v.z - ez));
+
+						if (dd < nearest[e])
+							nearest[e] = dd;
+					}
+				}
+
+				char armText[16] = "-";
+
+				if (arm < 1.0e8)
+					sprintf(armText, "%.1f", arm);
+
+				printf("%-19s %4.0f %4.0f %7d %7d %7s   %8.1f %8.1f\n",
+					(a || b) ? "" : stem, kS[a], kR[b], cut, left, armText,
+					nearest[0], nearest[1]);
+			}
+
+		HDTrmFree(&model);
+	}
+}
+
 static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
 {
 	if (!body.ok || body.nodes <= HD_LARA_HEAD_NODE)
@@ -1483,14 +1831,14 @@ static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
 		"units away;\nthe nearest shoulder or chest vertex - the geometry that "
 		"must SURVIVE -\nis %.1f. A radius between the two separates them from "
 		"every angle.\n", stumpMax, keepMin);
-	printf("HD_LARA_FIRST_PERSON_NEAR_CUT is %.0f: %s\n",
-		(double)HD_LARA_FIRST_PERSON_NEAR_CUT,
-		HD_LARA_FIRST_PERSON_NEAR_CUT < keepMin
-			? "PASS - it touches no shoulder and no chest"
-			: "FAIL - it reaches into geometry that has to stay");
 	printf("(a cut at a fixed DEPTH cannot do this: measured at 72 units of "
 		"depth it\ntook the collarbone with the stump and opened a window "
 		"through her chest.)\n");
+	printf("THIS TABLE IS HISTORY (#123, fix round J): the cut is no longer a "
+		"sphere\naround the eye at all - a sphere large enough to take the "
+		"stump also takes\nsixty units of her chest with it. It is a CYLINDER "
+		"about the neck now, and\nthe two tables below are the ones it rests "
+		"on.\n");
 
 	/* --- WHAT THE CUT LEAVES OPEN (#123, fix round I, I3) ----------------
 	 *
@@ -1609,9 +1957,10 @@ static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
 		HDTrmFree(&model);
 	}
 
-	printf("\nthe dome that closes the neck sits at the depth where the tube is "
-		"still a tube\nand both eye columns are clear of "
-		"HD_LARA_FIRST_PERSON_NEAR_CUT.\n");
+	printf("\nthe dome that closes the neck sits at the depth where the tube "
+		"stops being one:\nthe row above the one that bursts open.\n");
+
+	PrintNeckCylinder(root5, body);
 }
 
 /* ------------------------------------------------- the braid's physics -- */
@@ -3254,6 +3603,11 @@ struct LaraOptions
 	bool braidFloor;
 	bool classicBraidRoot;		// #123 fix round I (I2): the BEFORE picture
 	bool noCap;			// #123 fix round I (I3): the BEFORE picture
+	/* #123 fix round J (J1(a)): draw the neck cap in a THIRD person picture as
+	 * well, which is the only way to answer "does it poke out through her
+	 * collar?" - the user's finding is about a cap seen from OUTSIDE, and a
+	 * cap that is properly sunk into the body is invisible in this picture. */
+	bool showCap;
 	/* #123 fix round I (I4): draw ONE part of the composite and nothing else,
 	 * so that a question about one part - "does the sheen reach the hands?" -
 	 * is answered by a picture of that part and not by hunting for it in a
@@ -3266,7 +3620,10 @@ struct LaraOptions
 	int threads;
 	long width, height;
 	double fov, yaw, pitch, dist, shade;
-	double nearCut;			// stage S8, in view units; 0 = off
+	/* The neck cut (#123, stage S8, re-shaped in fix round J): the cylinder's
+	 * depth down the neck axis and its radius off it, in classic units. Both
+	 * 0 is off, which is the BEFORE picture. */
+	double cutS, cutR;
 	double fpForward;		// FP_EYE_OFFSET; 0 is the eye against a wall
 	int cull;			// HDModelCull, on her body alone
 	bool yawSet, pitchSet;		// did the caller name one?
@@ -4306,11 +4663,25 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			HD_LARA_HEAD_NODE);
 	}
 
-	/* THE NEAR CUT (stage S8). The BODY carries it and nothing else, exactly
-	 * as specific/hd/hd_laradraw.cpp pushes it: the hands and the holsters are
-	 * their own models and must never be cut away. */
-	printf("nearcut : %.0f units of radius round the eye, body alone%s\n", o.nearCut,
-		o.nearCut > 0.0 ? "" : " - off, this is the BEFORE picture");
+	/* THE NECK CUT (stage S8, re-shaped in fix round J). The BODY carries it
+	 * and nothing else, exactly as specific/hd/hd_laradraw.cpp pushes it: the
+	 * hands and the holsters are their own models and must never be cut away.
+	 * The cylinder is taken from the level's own bind pose by the engine's own
+	 * HDLaraNeckCut, so this picture is the game's picture; only the two
+	 * numbers may be overridden, which is what -neckcut is for. */
+	HDModelNeckCut neckCut = { 0 };
+	const bool cutting = o.cutR > 0.0 && HDLaraNeckCut(&neckCut);
+
+	if (cutting)
+	{
+		neckCut.depth = (float)o.cutS;
+		neckCut.radius = (float)o.cutR;
+	}
+
+	printf("neckcut : %.0f down the neck axis and %.0f off it, nodes %08x, "
+		"body alone%s\n", o.cutS, o.cutR,
+		cutting ? neckCut.nodes : 0u,
+		cutting ? "" : " - off, this is the BEFORE picture");
 	printf("cull    : %s\n", o.cull == HD_MODEL_CULL_CW ? "clockwise"
 		: o.cull == HD_MODEL_CULL_CCW ? "counter-clockwise"
 		: "none - both sides drawn, as every other HD model is");
@@ -4336,7 +4707,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	SetSheen(lighting, HD_LARA_PART_BODY, sheenOn);
 
 	if (draws(HD_LARA_PART_BODY) && HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BODY), matrices, HD_LARA_NODES,
-		light, bodyMask, &lighting, (float)o.nearCut, o.cull))
+		light, bodyMask, &lighting, cutting ? &neckCut : 0, o.cull))
 		drawn++;
 
 	SetSheen(lighting, HD_LARA_PART_FACE, sheenOn);
@@ -4351,7 +4722,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * own, and drawn on both sides. */
 	SetSheen(lighting, HD_LARA_PART_NECK_CAP, sheenOn);
 
-	if (o.firstPerson && !o.noCap && draws(HD_LARA_PART_NECK_CAP) &&
+	if ((o.firstPerson || o.showCap) && !o.noCap && draws(HD_LARA_PART_NECK_CAP) &&
 		HDLaraHasPart(HD_LARA_PART_NECK_CAP) &&
 		HDModelDraw(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), matrices,
 			HD_LARA_NODES, light,
@@ -4406,8 +4777,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	char cut[32] = "";
 
 	if (o.firstPerson)
-		sprintf(cut, "_p%d_f%d_cut%d_%s", (int)(o.pitchSet ? o.pitch : 60.0),
-			(int)o.fpForward, (int)(o.nearCut + 0.5),
+		sprintf(cut, "_p%d_f%d_cut%dx%d_%s", (int)(o.pitchSet ? o.pitch : 60.0),
+			(int)o.fpForward, (int)(o.cutS + 0.5), (int)(o.cutR + 0.5),
 			o.cull == HD_MODEL_CULL_CW ? "cw"
 			: o.cull == HD_MODEL_CULL_CCW ? "ccw" : "nocull");
 
@@ -4448,6 +4819,7 @@ int main(int argc, char** argv)
 	bool laraFirstPerson = false, laraCheck = false, laraNeck = false;
 	bool classicBraidRoot = false;	// #123 fix round I (I2): the BEFORE picture
 	bool noCap = false;		// #123 fix round I (I3): the BEFORE picture
+	bool showCap = false;		// #123 fix round J (J1): and from outside
 	int onlyPart = -1;		// #123 fix round I (I4): one part alone
 	bool noSheen = false;		// #123 fix round D (D2): the BEFORE picture
 	bool laraBraid = false;
@@ -4458,7 +4830,7 @@ int main(int argc, char** argv)
 	/* Stage S8. -1 means "the engine's own constant when -firstperson is on",
 	 * which is what makes the tool's default picture the game's picture; a
 	 * number given on the line overrides it, and 0 is the BEFORE picture. */
-	double nearCut = -1.0;
+	double cutS = -1.0, cutR = -1.0;
 	double fpForward = 48.0;
 	int cullMode = -1;		// -1 = "what -firstperson would use"
 	bool yawSet = false, pitchSet = false;
@@ -4527,8 +4899,11 @@ int main(int argc, char** argv)
 			lara = true;
 			laraFirstPerson = true;
 		}
-		else if (!_stricmp(argv[i], "-nearcut") && i + 1 < argc)
-			nearCut = atof(argv[++i]);
+		else if (!_stricmp(argv[i], "-neckcut") && i + 2 < argc)
+		{
+			cutS = atof(argv[++i]);
+			cutR = atof(argv[++i]);
+		}
 		else if (!_stricmp(argv[i], "-fpforward") && i + 1 < argc)
 			fpForward = atof(argv[++i]);
 		else if (!_stricmp(argv[i], "-cull") && i + 1 < argc)
@@ -4551,6 +4926,13 @@ int main(int argc, char** argv)
 		 * cap, which is what the near cut of stage S8 leaves on its own. */
 		else if (!_stricmp(argv[i], "-nocap"))
 			noCap = true;
+		/* #123 fix round J (J1(a)): the cap in a third person picture, so that
+		 * "is it inside her?" is a picture and not an argument. */
+		else if (!_stricmp(argv[i], "-showcap"))
+		{
+			lara = true;
+			showCap = true;
+		}
 		else if (!_stricmp(argv[i], "-onlypart") && i + 1 < argc)
 		{
 			lara = true;
@@ -4782,6 +5164,7 @@ int main(int argc, char** argv)
 		o.firstPerson = laraFirstPerson;
 		o.classicBraidRoot = classicBraidRoot;
 		o.noCap = noCap;
+		o.showCap = showCap;
 		o.onlyPart = onlyPart;
 		o.noSheen = noSheen;
 		o.neck = laraNeck;
@@ -4800,9 +5183,10 @@ int main(int argc, char** argv)
 		o.pitch = pitch;
 		o.dist = dist;
 		o.shade = shade;
-		o.nearCut = nearCut < 0.0
-			? (laraFirstPerson ? (double)HD_LARA_FIRST_PERSON_NEAR_CUT : 0.0)
-			: nearCut;
+		o.cutS = cutS < 0.0
+			? (laraFirstPerson ? (double)HD_LARA_NECK_CUT_S : 0.0) : cutS;
+		o.cutR = cutR < 0.0
+			? (laraFirstPerson ? (double)HD_LARA_NECK_CUT_R : 0.0) : cutR;
 		o.fpForward = fpForward;
 		o.cull = cullMode < 0
 			? (laraFirstPerson ? HD_MODEL_CULL_BACK : HD_MODEL_CULL_NONE)

@@ -382,24 +382,48 @@ enum HDModelCull
 
 #define HD_MODEL_CULL_BACK	HD_MODEL_CULL_CCW
 
-// `nearCut` is the first person near cut of stage S8, in classic units of VIEW
-// DEPTH: every fragment of this model nearer to the eye than that is
-// discarded. 0 is off and costs nothing - a rasterised fragment's view depth
-// never falls below the near plane. Only Lara's body ever asks for it; see
-// HD_LARA_FIRST_PERSON_NEAR_CUT in hd_lara.h for the number and the
-// measurement, and hd_model.hlsl's ModelPS for the cut itself.
-//
+/* THE NECK CUT (#123, stage S8; re-shaped in fix round J, J1 and J3).
+ *
+ * A CYLINDER ABOUT THE NECK AXIS, in the model's own BIND POSE: every
+ * fragment of this model that lies less than `depth` down the axis from
+ * `head` AND less than `radius` off it is discarded, and only on the nodes
+ * `nodes` names.
+ *
+ * Stage S8 cut a SPHERE around the eye instead, and the play test of fix
+ * round I killed all three of its consequences at once: the sixty unit radius
+ * bit a hole the size of it out of her chest, the cap built to close that
+ * hole had to be as wide as her whole torso, and a hand brought up to the
+ * camera came back with a jagged edge at the wrist. A cylinder about the neck
+ * has none of those. It is the shape of the thing that has to go; it does not
+ * move with the eye, so the cap can be built to fit it exactly; and it cannot
+ * reach an arm - measured over all eight outfits and nine candidate sizes,
+ * ModelProbe -neck, not one arm vertex falls inside it.
+ *
+ * A null pointer, or `on` 0, is off and costs the pixel shader one lerp.
+ * hd_lara.h carries the two numbers and the measurement behind them, and
+ * hd_model.hlsl's ModelVS the geometry.
+ */
+struct HDModelNeckCut
+{
+	float on;		// 0 = off; nothing else is read then
+	float head[3];		// the head joint, in the model's bind pose
+	float axis[3];		// unit, head joint -> torso joint, bind pose
+	float depth;		// how far down the axis the cut reaches
+	float radius;		// how far off it
+	unsigned int nodes;	// bit per node the cut may touch
+};
+
 // False when the slot has no model or the frame is not open; the caller then
 // draws it the classic way.
 bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
 	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
-	float nearCut = 0.0f, int cull = HD_MODEL_CULL_NONE);
+	const HDModelNeckCut* cut = 0, int cull = HD_MODEL_CULL_NONE);
 
 // The separate HD face, drawn right after the body on the same matrices. Does
 // nothing and returns false when the slot has no <NAME>_HEAD.TRM.
 bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
 	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
-	float nearCut = 0.0f, int cull = HD_MODEL_CULL_NONE);
+	const HDModelNeckCut* cut = 0, int cull = HD_MODEL_CULL_NONE);
 
 int HDModelDrawCalls();		// since the last HDModelFrameBegin
 

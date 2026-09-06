@@ -1154,7 +1154,7 @@ namespace
 
 	void draw_model(const Model& model, const float* nodeMatrix, int nodeCount,
 		const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
-		float nearCut, int cull)
+		const HDModelNeckCut* cut, int cull)
 	{
 		const int nodes = nodeCount < kJointBudget ? nodeCount : kJointBudget;
 
@@ -1177,7 +1177,12 @@ namespace
 		/* One colour per node, in the classic 0..255 space. A caller with
 		 * nothing to say gets a flat 128, which is the classic path's own
 		 * "no light list" ambient and draws the model at its plain texture
-		 * brightness. */
+		 * brightness.
+		 *
+		 * THE FOURTH COMPONENT IS THE NECK CUT'S NODE MASK (#123, fix round J,
+		 * J3) and not light at all: 1 for a node the cut may touch and 0 for
+		 * every other, which is how the shader knows that an arm is not a
+		 * neck. It was a hard zero from stage S3 until this round. */
 		float light[kJointBudget * 4];
 
 		for (int node = 0; node < kJointBudget; node++)
@@ -1187,10 +1192,31 @@ namespace
 			light[node * 4 + 0] = nodeLight ? nodeLight[from * 3 + 0] : 128.0f;
 			light[node * 4 + 1] = nodeLight ? nodeLight[from * 3 + 1] : 128.0f;
 			light[node * 4 + 2] = nodeLight ? nodeLight[from * 3 + 2] : 128.0f;
-			light[node * 4 + 3] = 0.0f;
+			light[node * 4 + 3] = cut && cut->on > 0.0f &&
+				(cut->nodes >> from & 1u) ? 1.0f : 0.0f;
 		}
 
 		g_device->SetVertexShaderConstantF(104, light, (UINT)kJointBudget);
+
+		/* c162 and c163, THE NECK CUT's cylinder (#123, fix round J, J1), in
+		 * the model's own bind pose. Written for every draw and not only for
+		 * the one that cuts, for the reason c161 is: a constant register keeps
+		 * what it was last given, and a stale cylinder plus a stale gPass.z
+		 * would carve a hole in the next creature drawn. Off is a depth of
+		 * minus a million, which no vertex is above. */
+		float neck[8] =
+		{
+			cut ? cut->head[0] : 0.0f,
+			cut ? cut->head[1] : 0.0f,
+			cut ? cut->head[2] : 0.0f,
+			cut && cut->on > 0.0f ? cut->depth : -1.0e6f,
+			cut ? cut->axis[0] : 0.0f,
+			cut ? cut->axis[1] : 1.0f,
+			cut ? cut->axis[2] : 0.0f,
+			cut && cut->on > 0.0f ? cut->radius : 0.0f
+		};
+
+		g_device->SetVertexShaderConstantF(162, neck, 2);
 
 		/* THE OBJECT'S LIGHTS, in the VERTEX shader (c136) - the classic path
 		 * lights per vertex out of the same list, so this is the same place
@@ -1280,9 +1306,10 @@ namespace
 				continue;
 
 			/* gPass: x switches the alpha test on, y the additive weighting,
-			 * z is the first person NEAR CUT in view units (stage S8; 0 for
-			 * every model but Lara's body, and then the shader's clip
-			 * discards nothing), w the overbright add. The PIXEL constant
+			 * z the first person NECK CUT (#123, fix round J - a flag now,
+			 * 1 or 0; the cylinder itself went up in c162 above, and 0 for
+			 * every model but Lara's body makes the shader's clip discard
+			 * nothing), w the overbright add. The PIXEL constant
 			 * file only - the vertex shader does not read gPass and fxc has
 			 * put its own literals in that register there, and the room
 			 * shader's own gPass.z lives in the VERTEX file, which this call
@@ -1291,7 +1318,7 @@ namespace
 			{
 				pass == 1 ? 1.0f : 0.0f,
 				pass == 2 ? 1.0f : 0.0f,
-				nearCut,
+				cut && cut->on > 0.0f ? 1.0f : 0.0f,
 				pass == 2 ? 0.0f : 1.0f
 			};
 
@@ -2050,7 +2077,7 @@ void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount,
 
 bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
 	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
-	float nearCut, int cull)
+	const HDModelNeckCut* cut, int cull)
 {
 	if (!g_in_frame || !nodeMatrix || nodeCount <= 0)
 		return false;
@@ -2065,13 +2092,13 @@ bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
 	g_device->SetVertexDeclaration(g_decl);
 
 	draw_model(*model, nodeMatrix, nodeCount, nodeLight, nodeMask, lighting,
-		nearCut, cull);
+		cut, cull);
 	return true;
 }
 
 bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
 	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
-	float nearCut, int cull)
+	const HDModelNeckCut* cut, int cull)
 {
 	if (!g_in_frame || !nodeMatrix || nodeCount <= 0)
 		return false;
@@ -2090,7 +2117,7 @@ bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
 	g_device->SetVertexDeclaration(g_decl);
 
 	draw_model(at->second, nodeMatrix, nodeCount, nodeLight, nodeMask, lighting,
-		nearCut, cull);
+		cut, cull);
 	return true;
 }
 

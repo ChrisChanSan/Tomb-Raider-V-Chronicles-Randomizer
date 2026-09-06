@@ -86,6 +86,7 @@
  * c136 - c159 gObjLights[24]      per object (12 lights, two registers each)
  * c160        gLightInfo          per object (count, the sun's factor)
  * c161        gSpec               per draw   (#123 fix round D, D2)
+ * c162 - c163 gNeck, gNeckAxis    per draw   (#123 fix round J, J1)
  *
  * THE VERTEX REGISTERS OVERLAP THE ROOM SHADER'S, and on purpose. Direct3D 9
  * has ONE constant register file behind both shaders, and hd_room.hlsl keeps
@@ -113,9 +114,10 @@
  * into view space, exactly as the classic path's matrix stack does. */
 float4x4 gProj : register(c0);
 
-/* x = alpha test on/off, y = additive weight on/off, z = the NEAR CUT as a
- * RADIUS around the eye in view units (0 = off, stage S8), w = specular
- * (overbright) on/off. The room shader
+/* x = alpha test on/off, y = additive weight on/off, z = the NECK CUT on/off
+ * (#123, fix round J - it was the near cut's RADIUS in stage S8, and the
+ * radius now travels in gNeckAxis.w with the rest of the cylinder), w =
+ * specular (overbright) on/off. The room shader
  * carries the same register and the same x, y and w; only z differs, and it
  * differs safely - see the note at the cut itself in ModelPS.
  *
@@ -157,7 +159,13 @@ float4 gJoints[96] : register(c8);
  * out of gObjLights - because that is where the classic path works it out
  * (specific\output.cpp, aTransformLightClipMesh, per vertex with the vertex's
  * own normal), and a flat colour a node would draw a torso whose front and
- * back are equally bright. */
+ * back are equally bright.
+ *
+ * THE FOURTH COMPONENT IS NOT LIGHT (#123, fix round J, J3). It is 1 for a
+ * node the neck cut is allowed to touch and 0 for every other, which is how
+ * "the cut is the TORSO's and no arm may ever be clipped by it" is said in
+ * the one place that knows which node a vertex belongs to. It rode along as a
+ * hard zero from stage S3 to fix round I; the register was always there. */
 float4 gNodeLight[32] : register(c104);
 
 /* THE OBJECT'S LIGHT LIST, in VIEW space. Two registers each:
@@ -192,6 +200,26 @@ float4 gLightInfo : register(c160);
  * wardrobe that is not meant to shine gets; see HDModelLighting in hd_model.h
  * for where the numbers come from and why they are not read out of the art. */
 float4 gSpec : register(c161);
+
+/* THE NECK CUT, AS A CYLINDER IN THE BIND POSE (#123, fix round J, J1).
+ *
+ * gNeck      xyz the HEAD JOINT, w how far DOWN the neck axis the cut reaches
+ * gNeckAxis  xyz the unit axis from the head joint towards the torso joint,
+ *            w how far OFF that axis it reaches
+ *
+ * IN THE BIND POSE AND NOT IN VIEW SPACE, which is the whole reason this is
+ * computed in the vertex shader rather than in the pixel one. A .TRM vertex
+ * arrives here in its bind pose (the skinning below is what moves it), and
+ * the neck axis of a bind pose is a CONSTANT - two joints of a skeleton that
+ * never moves. So the cut takes exactly the same patch of her skin in every
+ * frame, in every animation and at every camera angle, and the cap that
+ * closes it - built out of the same bind pose in hd_lara.cpp - fits it
+ * exactly. A cut worked out in view space would have to be re-derived from
+ * the animated joints every frame and would breathe with them.
+ *
+ * hd_lara.h carries the measurement the two numbers come from. */
+float4 gNeck : register(c162);
+float4 gNeckAxis : register(c163);
 
 /* --------------------------------------------------- THE PARITY BLOCK ------
  *
@@ -250,6 +278,12 @@ struct VS_OUT
 	float3 viewPos : TEXCOORD2;	// the classic "stash"
 	float3 viewNrm : TEXCOORD3;	// skinned normal, NOT renormalised
 	float3 spec    : TEXCOORD4;	// the sheen, 0 when gSpec.x is 0 (D2)
+	/* THE NECK CUT's keep value (#123, fix round J, J1): negative inside the
+	 * cut cylinder and positive outside it, so the pixel shader's whole share
+	 * of the cut is one clip of an interpolated number. Interpolating it is
+	 * what makes the edge a smooth curve across a triangle rather than a
+	 * staircase of whole triangles. */
+	float  cut     : TEXCOORD5;
 };
 
 /* --------------------------------------------------------------- vertex -- */
@@ -278,6 +312,10 @@ VS_OUT ModelVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	float3 view = 0.0f;
 	float3 nrm = 0.0f;
 	float3 light = 0.0f;
+	/* How much of this vertex hangs off a node the neck cut may touch (#123,
+	 * fix round J, J3). One weighted sum more, in the loop that is already
+	 * summing three of them. */
+	float cuttable = 0.0f;
 
 	/* THREE BONES. Unrolled, so every gJoints access is a literal register
 	 * offset plus one address register - and so that inBone[i] is a component
@@ -292,6 +330,29 @@ VS_OUT ModelVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		view += weight * Skin(pos, node);
 		nrm += weight * Skin(normal, node);
 		light += weight * gNodeLight[node].rgb;
+		cuttable += weight * gNodeLight[node].a;
+	}
+
+	/* THE NECK CUT (#123, fix round J, J1 and J3), and it is Lara's alone.
+	 *
+	 * `keep` is positive outside the cylinder and negative inside it: the
+	 * larger of "how far past the bottom of it" and "how far outside its
+	 * side", which is the signed distance to the nearer of the two faces and
+	 * is negative only when BOTH are.
+	 *
+	 * The node term is the second half. A vertex on a node the cut may not
+	 * touch is pushed a thousand units out of the cylinder, so an arm that
+	 * comes across her throat cannot be clipped by it however close it gets -
+	 * the user's finding J3, where a sphere around the eye ate the wrist. It
+	 * is a WEIGHT and not a test, so a vertex that straddles the shoulder
+	 * joint slides smoothly between the two rules instead of jumping. */
+	{
+		float3 nd = inPos.xyz - gNeck.xyz;
+		float ns = dot(nd, gNeckAxis.xyz);
+		float3 noff = nd - ns * gNeckAxis.xyz;
+		float keep = max(ns - gNeck.w, length(noff) - gNeckAxis.w);
+
+		o.cut = keep + (1.0f - cuttable) * 1000.0f;
 	}
 
 	/* THE DIRECTIONAL LIGHT, LINE FOR LINE OUT OF aTransformLightClipMesh
@@ -499,7 +560,8 @@ float4 ModelPS(VS_OUT input) : COLOR0
 	 * skull left as a single gold fragment because pass 0 discarded on it. */
 	clip(gPass.x * (texel.a - 0.5f));
 
-	/* THE NEAR CUT (#123, stage S8), and it is Lara's alone.
+	/* THE NECK CUT (#123, stage S8, re-shaped in fix round J), and it is
+	 * Lara's alone.
 	 *
 	 * In first person the camera hangs in her head joint, and the classic
 	 * path answers that by leaving the head MESH out. An HD body is one
@@ -508,26 +570,29 @@ float4 ModelPS(VS_OUT input) : COLOR0
 	 * from the eye, inside the near plane, which is what stands in the
 	 * picture when she looks down (user finding F3, with a photograph).
 	 *
-	 * A SPHERE AROUND THE EYE, not a plane across the view, and that is the
-	 * whole design of this line. A plane cuts at a fixed DEPTH, so as soon as
-	 * she looks down it lies flat across her chest and opens a window through
-	 * her - measured, and the two pictures are in the report: at 72 units of
-	 * depth the near cut removed her collarbone and one saw the floor through
-	 * the hole. A sphere cuts at a fixed DISTANCE, which no view direction can
-	 * turn into a hole: the stump is 18 to 42 units from the eye and the
-	 * nearest shoulder or chest vertex of any outfit is 68.9, so one radius
-	 * separates them from every angle. hd_lara.h carries the measurement.
+	 * A CYLINDER ABOUT THE NECK, and the shape is the whole design. Stage S8
+	 * cut a SPHERE around the eye, which took the stump but also took a bite
+	 * out of her chest the size of the sixty unit radius, ate the cap that
+	 * was built to close it and chewed a jagged edge into her wrist whenever a
+	 * hand came near the camera (findings J1 and J3). The thing that has to
+	 * go is a NECK, the neck is a tube about the neck axis, and nothing else
+	 * of her is inside that tube - measured, ModelProbe -neck: over all eight
+	 * outfits and every candidate size, the cylinder does not reach a single
+	 * arm vertex. So the cut is the tube, it never moves with the camera, and
+	 * what it leaves standing is her own chest at fifty units, which is where
+	 * the classic engine leaves it too.
 	 *
-	 * ZERO IS OFF, at no cost: a length is never negative, so clip(len - 0)
-	 * discards nothing. That also makes this line safe against the room
-	 * shader, which reads its own gPass.z in the VERTEX half while
-	 * hd_model.cpp writes c4 to the PIXEL file alone.
+	 * The vertex shader did the geometry (see gNeck there); this is the clip,
+	 * and gPass.z is 1 when the cut runs and 0 when it does not. lerp to a
+	 * flat 1 for the off case, so that a model with no cut discards nothing
+	 * whatever is left in the interpolant - and so that this line stays safe
+	 * against the room shader, which reads its own gPass.z in the VERTEX half
+	 * while hd_model.cpp writes c4 to the PIXEL file alone.
 	 *
 	 * Written per DRAW, so only Lara's body carries it: her hands, her
-	 * holsters and the weapon on her back are their own models and get 0,
-	 * which is why the cut can sit close enough to take the neck without
-	 * ever taking a hand that comes up to the camera. */
-	clip(length(input.viewPos) - gPass.z);
+	 * holsters, the weapon on her back and the neck cap itself are their own
+	 * models and get 0. */
+	clip(lerp(1.0f, input.cut, gPass.z));
 
 	/* The light arrives in the classic path's 0..255 space already - unlike a
 	 * room vertex, whose baked pair is 0..1 and gets multiplied by 127.5 in

@@ -755,8 +755,11 @@ void HDLaraDrawFrameReset()
 		{
 			g_fp_seen = true;
 			g_fp_was = now;
-			Log("HDLOG firstperson %s nearcut=%.0f", now ? "on" : "off",
-				now ? (double)HD_LARA_FIRST_PERSON_NEAR_CUT : 0.0);
+			Log("HDLOG firstperson %s neckcut=%.0f/%.0f nodes=%08x",
+				now ? "on" : "off",
+				now ? (double)HD_LARA_NECK_CUT_S : 0.0,
+				now ? (double)HD_LARA_NECK_CUT_R : 0.0,
+				now ? HD_LARA_NECK_CUT_NODES : 0u);
 		}
 
 		const bool binos = BinocularRange != 0;
@@ -892,12 +895,20 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * diving suit puts its whole HELMET on the torso node the same way.
 	 *
 	 * Neither can be masked off without taking her chest with it, so they are
-	 * cut in the shader instead: everything within
-	 * HD_LARA_FIRST_PERSON_NEAR_CUT of the eye goes. THE BODY ALONE carries
-	 * it - the hands, the holsters and the weapon on her back are their own
-	 * models and are pushed with 0, so a hand that comes up to the camera is
-	 * never cut away. */
-	const float nearCut = firstPerson ? HD_LARA_FIRST_PERSON_NEAR_CUT : 0.0f;
+	 * cut in the shader instead: a CYLINDER about the neck axis, in the bind
+	 * pose, on the torso node alone (#123, fix round J - stage S8 cut a sphere
+	 * around the eye and the play test sent all three of its side effects
+	 * back; hd_lara.h carries the whole argument and the measurement).
+	 *
+	 * THE BODY ALONE carries it - the hands, the holsters, the weapon on her
+	 * back and the cap that closes the hole are their own models and are
+	 * pushed with none, so a hand that comes up to the camera is never cut
+	 * away.
+	 *
+	 * A level whose Lara skeleton the plan never read has no cylinder, and
+	 * then nothing is cut: half a cut is worse than none. */
+	HDModelNeckCut neckCut = { 0 };
+	const bool cutting = firstPerson && HDLaraNeckCut(&neckCut);
 
 	/* AND ONE SIDED WITH IT, for the frames the cut runs in. The HD path draws
 	 * every model double sided; cut a hole in a closed body and what shows
@@ -963,8 +974,8 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	HDLaraPartSheen(HD_LARA_PART_BODY, &sheen, &sheenPower);
 
 	if (!HDObjectPush(HDLaraPartSlot(HD_LARA_PART_BODY), matrices,
-		HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale, nearCut,
-		cull, sheen, sheenPower))
+		HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
+		cutting ? &neckCut : 0, cull, sheen, sheenPower))
 	{
 		g_dropped++;
 		return;
@@ -976,21 +987,23 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 	if (!firstPerson && HDObjectPush(HDLaraPartSlot(HD_LARA_PART_FACE),
 		matrices, HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
-		0.0f, HD_MODEL_CULL_NONE, sheen, sheenPower))
+		0, HD_MODEL_CULL_NONE, sheen, sheenPower))
 		drawn++;
 
-	/* THE NECK CAP, AND ONLY IN FIRST PERSON (#123, fix round I, I3).
+	/* THE NECK CAP, AND ONLY IN FIRST PERSON (#123, fix round I, I3; re-aimed
+	 * in fix round J, J1).
 	 *
-	 * It closes what the near cut above opens. Three things about this call
+	 * It closes what the neck cut above opens. Three things about this call
 	 * are the whole design:
 	 *
-	 *   NO NEAR CUT. It is pushed with 0, so the cut that took the neck cannot
-	 *   take the lid that replaces it. Its rim is 61 units or more from either
-	 *   eye - measured, HD_LARA_NECK_CAP_S in hd_lara.h - so the body's own
-	 *   surface at the seam survives the cut too and the two meet.
+	 *   NO CUT OF ITS OWN. It is pushed with none, so the cylinder that took
+	 *   the neck cannot take the lid that replaces it. Its rim is the body's
+	 *   own ring of vertices at the cut's own edge - hd_lara.cpp's maker
+	 *   measures it against the very cylinder this call is paired with - so
+	 *   the two meet exactly.
 	 *
 	 *   NO CULLING. Everything else about first person is one sided; this is a
-	 *   lid seen from one side only, and drawing both sides of it costs 352
+	 *   lid seen from one side only, and drawing both sides of it costs 224
 	 *   triangles and removes a whole class of mistake.
 	 *
 	 *   ITS OWN COVERAGE AND THE FRAME'S MASK. The cap is node 7 and nothing
@@ -1001,7 +1014,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		HDObjectPush(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), matrices,
 			HD_LARA_NODES, nodeLight,
 			HDLaraPartCoverage(HD_LARA_PART_NECK_CAP) & mask, lights,
-			lightCount, sunScale, 0.0f, HD_MODEL_CULL_NONE, sheen, sheenPower))
+			lightCount, sunScale, 0, HD_MODEL_CULL_NONE, sheen, sheenPower))
 		drawn++;
 
 	/* THE POUCHES, UNDER WHATEVER GOES IN THEM (#123, fix round D, D4).
@@ -1025,7 +1038,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	if (HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG) &&
 		HDObjectPush(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), matrices,
 			HD_LARA_NODES, nodeLight, HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & mask,
-			lights, lightCount, sunScale, 0.0f, HD_MODEL_CULL_NONE,
+			lights, lightCount, sunScale, 0, HD_MODEL_CULL_NONE,
 			sheen, sheenPower))
 		drawn++;
 
@@ -1035,7 +1048,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 		if (HDObjectPush(HDLaraPartSlot(pieces[i].part), matrices,
 			HD_LARA_NODES, nodeLight, pieces[i].nodeMask & mask, lights,
-			lightCount, sunScale, 0.0f, HD_MODEL_CULL_NONE, sheen, sheenPower))
+			lightCount, sunScale, 0, HD_MODEL_CULL_NONE, sheen, sheenPower))
 			drawn++;
 	}
 
@@ -1065,7 +1078,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 		if (HDObjectPush(HDLaraPartSlot(HD_LARA_PART_BRAID), hairMatrices,
 			HD_LARA_HAIR_NODES, hairLight, ~0u, lights, lightCount, sunScale,
-			0.0f, HD_MODEL_CULL_NONE, sheen, sheenPower))
+			0, HD_MODEL_CULL_NONE, sheen, sheenPower))
 			drawn++;
 	}
 
@@ -1078,7 +1091,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		g_frame_logged = true;
 		Log("HDLOG frame lara parts=%d(%d this frame) outfit=%s right=%s left=%s "
 			"holsters=%s/%s back=%s braid=%d mask=%08x mirror=%d "
-			"firstperson=%d nearcut=%.0f lights=%d dropped=%d speechhead=%s",
+			"firstperson=%d neckcut=%d lights=%d dropped=%d speechhead=%s",
 			drawn, g_frame_parts, HDLaraOutfitModel(HDLaraOutfitNow())
 				? HDLaraOutfitModel(HDLaraOutfitNow()) : "-",
 			HDSlotName(now.rightHandSlot) ? HDSlotName(now.rightHandSlot) : "-",
@@ -1087,7 +1100,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 			HDSlotName(now.rightHolsterSlot) ? HDSlotName(now.rightHolsterSlot) : "-",
 			HDSlotName(now.backGunSlot) ? HDSlotName(now.backGunSlot) : "-",
 			(int)HDLaraHasPart(HD_LARA_PART_BRAID), mask, (int)mirror,
-			(int)firstPerson, (double)nearCut, lightCount, g_dropped,
+			(int)firstPerson, (int)cutting, lightCount, g_dropped,
 			HDSlotName(speech_head_slot()) ? HDSlotName(speech_head_slot()) : "-");
 	}
 }

@@ -96,7 +96,7 @@ namespace
 		HDObjLight lights[HD_MAX_OBJ_LIGHTS];
 		int lightCount;
 		float sunScale;
-		float nearCut;		// stage S8: 0 for an item, Lara's body alone
+		HDModelNeckCut cut;	// stage S8 / fix round J: Lara's body alone
 		int cull;		// and the one-sided draw that goes with it
 		/* #123 fix round D (D2): the sheen. 0 for an item - the specular
 		 * term is Lara's alone for now. */
@@ -1641,10 +1641,10 @@ void HDObjectEnd()
 	fill_lights(entry.lights, HD_MAX_OBJ_LIGHTS, &entry.lightCount,
 		&entry.sunScale, current_item);
 
-	// An ITEM is never cut. The near cut of stage S8 exists because the first
+	// An ITEM is never cut. The neck cut of stage S8 exists because the first
 	// person camera sits inside Lara's own head, and nothing else in the level
 	// has a camera inside it.
-	entry.nearCut = 0.0f;
+	memset(&entry.cut, 0, sizeof(entry.cut));
 	entry.cull = HD_MODEL_CULL_NONE;
 	// #123 fix round D (D2): no sheen on an object - Lara's alone for now.
 	entry.specStrength = 0.0f;
@@ -1690,7 +1690,7 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 		 * skeleton, the same node count and the same bind pose, so nothing
 		 * else in this call changes. */
 		HDModelDraw(entry.drawSlot, entry.matrix, entry.nodes, entry.light,
-			entry.mask, &lighting, entry.nearCut, entry.cull);
+			entry.mask, &lighting, &entry.cut, entry.cull);
 
 		/* THE SEPARATE HD FACE, right after the body and on the same
 		 * matrices. VON_CROY.TRM is a body with an empty collar and
@@ -1705,7 +1705,7 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 		 * drawn pistol does not change a face. */
 		if (entry.head)
 			HDModelDrawHead(entry.slot, entry.matrix, entry.nodes, entry.light,
-				entry.mask, &lighting, entry.nearCut, entry.cull);
+				entry.mask, &lighting, &entry.cut, entry.cull);
 	}
 
 	/* E6: the phases add up. HDModelFrameBegin zeroes the model file's own
@@ -1763,7 +1763,7 @@ int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale)
 
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	unsigned int mask, const HDObjLight* lights, int lightCount, float sunScale,
-	float nearCut, int cull, float specStrength, float specPower)
+	const HDModelNeckCut* cut, int cull, float specStrength, float specPower)
 {
 	/* NOT behind g_active. That flag says "this level has HD OBJECTS", and a
 	 * level can have an HD Lara and not one HD object - JOBY4's diving suit
@@ -1812,7 +1812,12 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	}
 
 	entry.sunScale = sunScale;
-	entry.nearCut = nearCut;
+
+	if (cut)
+		entry.cut = *cut;
+	else
+		memset(&entry.cut, 0, sizeof(entry.cut));
+
 	entry.cull = cull;
 	entry.specStrength = specStrength;
 	entry.specPower = specPower;

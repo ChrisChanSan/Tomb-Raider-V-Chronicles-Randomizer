@@ -3778,6 +3778,243 @@ all of them at the hip and the upper thigh), the VCI body before and after
 (**0 pixels change** - the one outfit that should wear it is untouched), and
 the rig alone out of its page.
 
+#### Fix round E - rooms: the order of a frame, the glows, the shore (#123)
+
+The play test of the evening of 2026-09-06, and the player's own thesis first:
+*"the shaders have an alpha problem, everything BEHIND them is always slightly
+wrong."* He is right about the symptom and it is not alpha - it is the order
+the frame is drawn in. **No new source file**: this round changes
+`specific/output.cpp`, `specific/hd/hd_level.{h,cpp}`, `hd_render.{h,cpp}`,
+`hd_model.{h,cpp}`, `hd_object.{h,cpp}`, `hd_shader/hd_room.hlsl` and the
+diagnostic tools `RoomProbe` and `TrgProbe`.
+
+**E0 - what the three passes really do, measured on the device.** Read back
+out of `hd_render.cpp` and confirmed against `RoomProbe`'s own state check:
+
+| pass | blend | Z test | Z write | alpha |
+| --- | --- | --- | --- | --- |
+| 0 opaque | off | LESSEQUAL | **on** | `clip` at the material's own reference, 0 for all but materials 6, 7, 8 |
+| 1 alpha | off | LESSEQUAL | **on** | `clip` at 0.5 - a test, not a blend |
+| 2 additive | ONE / ONE | LESSEQUAL | **off** | none |
+
+The model path is the same three. So two of the three write depth and sort
+themselves out against anything else that writes depth, whatever order they are
+drawn in; only the third does not - and it was drawn room-major, all three
+passes of one room before the next, then the HD objects, then the classic
+buckets. Any depth-writing draw that comes after a glow and stands behind it
+therefore passes the depth test - the glow left no depth to fail against - and
+paints over it.
+
+**E6 - so the frame is drawn pass-major, and the glows last.** `HDFrameDraw`
+is now everything of the HD path that writes depth, and a second call,
+`HDFrameDrawGlow`, draws the additive pass of the same rooms and objects
+**after `DrawBuckets`**:
+
+    HDFrameDraw       every room's passes 0 and 1, then every HD object's
+    DrawBuckets       the classic opaque world
+    HDFrameDrawGlow   every room's pass 2, then every object's
+    DrawSortList      TR5's own see-through polygons, last of all
+
+which is the classic engine's own order and needs no rule of its own. The cost
+is one more state bracket per frame and one more `prepare` per drawn room; the
+room's lighting is worked out once and kept in the frame list, because
+`FillRoomLighting` counts the lights it turns away and must not count them
+twice.
+
+*Proof.* `RoomProbe` gained `-with <group> <dx dy dz>`, which draws a
+neighbouring room at its world offset, and `-oldorder`, which puts the
+room-major order back - so both pictures come out of one build. RICH2 room 25
+with room 23 behind it (the two classic origins differ by -1024, 0, +4096):
+**11,667 pixels change** from one camera and **35,285** from another, every
+one of them brighter with the new order, and the
+difference image is exactly the two wall lamp cones, cut off along a straight
+vertical line where room 23's geometry begins. That straight line is the
+player's photograph. Ten single-room regression pictures are **byte for byte
+identical** between the two orders, which is what the argument predicts: the
+order can only matter where two rooms overlap on the screen.
+
+**E9 - and the shader on disk was not the shader in the source.** Found while
+rebuilding for E1: `hd_room_ps.inc`, the checked-in bytecode, does not compile
+from the checked-in `hd_room.hlsl`. It is **636 instruction slots with eight
+`pow`s in it** where the source gives **453 with none** - it is the Blinn
+highlight that fix round R3b's own note says it *built, measured and rejected*
+for taking the shader past the 512 that shader model 3 guarantees. R3b edited
+the HLSL and did not run `bshader.bat` again, so the engine has been running
+the rejected experiment ever since. Regenerated. Ten regression pictures and a
+scene with a dynamic light are **byte for byte identical** across the swap -
+the extra code was dead - so the cost was 183 instruction slots of portability
+and nothing on the screen. The three other `.inc` files reproduce exactly.
+
+**E1 - the pulsing was four times too strong.** Fix round R3a let the additive
+weight breathe by a quarter either way. Measured on the player's own two shots
+of the ANDREA church, the two candle glows move by **+7.8 and -9.3 percent of
+the whole pixel** between two arbitrary moments of that sine. Measured on the
+remaster's own two shots of the VCI corridor, three seconds apart, over the
+shaft band on the far wall (108 columns): mean **124.6** against **130.1**, and
+the column-to-column spread **14.3 %** against **16.5 %** of the mean. The
+remaster's shafts **travel**; their level moves by 4.4 percent, camera drift
+included. So the travelling wave stays and `HD_RAY_SWING` goes from 0.25 to
+**0.06**. Measured back through `RoomProbe` on RICH2 room 25, eight seconds at
+one second against the `-nomotion` still picture: the worst pixel moved **17.0
+percent before and 5.4 after**, and the share of pixels moving more than 5
+percent went from 0.82 to none.
+
+**E8 - the shafts that were still white.** R3a let a material 2 weight outside
+`(0, 1)` fall through to ONE and named the four tuples it did that to. The play
+test found them. `TrgProbe` gained **`-mat [material]`**, which prints the
+distinct `(material, param)` tuples of a level with their triangles per pass
+and the groups they stand in - so the distribution R3a measured by hand is now
+a measurement anybody can repeat. Over the fifteen files, material 2 has 36
+tuples, 32 of them with `p1` in range, and grouped by the PRESET - the
+`(param[0], param[2])` pair - the weight is all but constant inside a preset:
+
+| preset | in-range weights | median |
+| --- | --- | --- |
+| (0.5, 0.0) | 0.10 | 0.10 |
+| (0.5, 0.6) | 0.40 0.40 0.55 0.55 0.55 0.75 0.75 | **0.55** |
+| (0.5, 0.8) | 0.40 0.40 0.40 | **0.40** |
+| (0.5, 1.0) | 0.20 | 0.20 |
+| (1.0, 0.1) | 0.05 x5, 0.20 x4 | 0.05 |
+| (1.0, 2.0) | 0.20 0.20 | 0.20 |
+| (1.5, 0.0) | 0.10 x4 | 0.10 |
+| (1.5, 0.4) | 0.30 x5 | 0.30 |
+
+The four tuples that carry no weight belong to two of those presets - ANDY1,
+ANDY2 and ANDY3's window glows are (0.5, 0.8) and RICH1's lift shaft is
+(0.5, 0.6) - so a part with no readable weight takes **its own preset's**
+instead of full white, and a preset this game does not have takes 0.20, the
+median of all 32, so that "no number" can never mean "full white" again.
+Measured through `RoomProbe -all -black`, the additive pass alone over a black
+ground, mean brightness as a share of white against the remaster's own 16 to
+31 percent:
+
+| scene | before | after |
+| --- | --- | --- |
+| RICH1 room 13, from the shaft floor | 36.3 %, 7.3 white | **21.4 %, 0.1** |
+| RICH1 room 13, camera inside the fan | 73.4 %, 35.5 | 48.7 %, 7.5 |
+| ANDY1 room 194 | 85.5 %, 11.8 | 51.2 %, 0.0 |
+| ANDY2 room 34 | 69.1 %, 23.8 | 34.2 %, 0.0 |
+| ANDY3 room 86 | 38.6 %, 0.2 | 17.8 %, 0.0 |
+| ANDY3 room 150 | 26.9 %, 0.0 | 15.7 %, 0.0 |
+
+Not one saturated pixel is left where a player stands. The second line is the
+camera INSIDE the fan of quads, where every one of them overlaps every other
+and a ONE / ONE sum saturates whatever weight it is given; that is stacking and
+not weighting, the classic path has no answer to it either, and it is named
+rather than tuned away. `-black` is new: an additive pass on the tool's magenta
+ground starts every covered pixel at 170 of 255 and cannot be measured at all.
+
+**E7 - the step in the wall at a room boundary is the remaster's own art.**
+Three things could put it there and two of them are ours. The dynamic lights
+are not: the HD path culls a light against the whole ROOM's box where the
+classic path culls it against a ROOMLET's, with the same test and the same
+falloff (`drawroom.cpp:1043` against `hd_level.cpp:1009`), so it offers a light
+wherever the classic path does and more; the only way to lose one is the eight
+light cap, and the log counts every light that hits it. The third is the art,
+and `TrgProbe` gained **`-seam <groupA> <groupB> <dx> <dy> <dz>`** to measure
+it: it pairs the vertices two rooms have at the same world position and reports
+what each side's baked light says. Over four RICH2 portals:
+
+| portal | shared positions | mean difference | worst |
+| --- | --- | --- | --- |
+| 25 / 23 | 14 | 0.174 | 0.438 |
+| 23 / 5 | 14 | 0.209 | 0.553 |
+| 23 / 24 | 18 | 0.203 | 0.461 |
+| 23 / 27 | 18 | 0.234 | 0.628 |
+
+on a 0..2 scale - up to 31 percent of full brightness at the same point in
+space, on every portal measured. **Not one pair has a side above 1**, so the
+deliberate deviation of stage S2 (no 128 split) does not widen it either: the
+step is drawn exactly as the classic path would draw its own. What our code did
+add on top of it was E6's cut, which puts a hard straight vertical edge exactly
+at a portal - and that is what is fixed.
+
+**E3 - and the wave that climbed the bank.** Fix round R3b floods the surface
+mark into the box of the classic corners and lifts every marked vertex by up to
+one and a half times `HD_WATER_SWELL` - 36 units, and 36 of them upwards,
+because y counts downwards in this engine. The vertices at the water's own edge
+carry the mark like every other, so the surface rose over the coping it should
+meet: on the player's two shots of the Rome cistern a dark band stands exactly
+where the lit coping is, it covers the coping and not the wall below it, and it
+**moves** between the two shots (x 875..1055 in the first, 960..1130 in the
+second), which is the travelling wave and not a texture.
+
+Water goes flat where it meets the land. The flood box is kept per room and per
+height now, handed to the vertex shader in `gWaterBox` (c15), and the swell
+fades to nothing inside one square of its edge - one square because a TR5 water
+quad is one square, and anything shorter would fade inside a single triangle
+and read as a crease. *Proof:* `RoomProbe -noshore` puts the old swell back out
+of the same build. ANDREA1 room 33 with a marked plane, against the same room
+with the water still: the worst pixel moved **255 of 255 before and 111 after**,
+while the number of pixels that move at all is unchanged (72,676 against
+70,586) - the movement is kept, the tear at the edge is gone. In the picture
+the marked patch is a lifted, torn hump with a hard dark rim before, and a flat
+surface that meets the floor after.
+
+**E2 - and why only the Irish water animated.** *"The right texture is missing,
+only ANDY got the right one."* The answer is in the player's own log:
+
+| level | HD vertices marked | surface bit | whole-room bit |
+| --- | --- | --- | --- |
+| JOBY4 | 32 | 32 | 0 |
+| RICH2 | 47 | 47 | 0 |
+| ANDY1 | 218 | 218 | 0 |
+| ANDREA1 | 267 | 145 | 122 |
+| ANDREA3 | 291 | 0 | 291 |
+| ANDREA2 | 809 | 69 | 740 |
+
+The classic path answers the water question on **two** bits - a plain water
+room on one, a `ROOM_REFLECT + ROOM_REFLECT_CEILING` room on the other
+(`drawroom.cpp:373`) - and fix round R3b flooded only the first, on the grounds
+that the second "is not a plane at all". In the Rome levels the water is all on
+the second bit, so nothing was flooded there and the surface kept the sliver of
+marks the classic corners gave it. ANDY1's water is all on the first bit and
+animates; Rome's stands still. Measured on the player's shot against the
+remaster's recording of the same pool from the same place: the walkway beside
+it matches to within 6 percent per channel (ours R101 G94 B54, the remaster's
+R95 G87 B49), while the water is **achromatic in ours** (R33.7 G33.4 B32.7)
+where the remaster's is green (R27.7 G30.5 B22.5) and its highlights reach 118
+of 255 against our 85. Three readings were tried and disproved before this one:
+it is not a flipbook (material 13 lives only in JOBY2, JOBY3, JOBY5, RICH1 and
+RICH2 and its fifteen tuples are CCTV walls and monitors), not a second layer
+of material 1 (its four floats are two scroll speeds and two times over all
+fifteen files), and not the classic WaterTable shimmer washing the colour out
+(measured: the shimmer raises the surface from R55.5 G51.9 B30.6 to R71.8 G65.8
+B42.5 and its channel spread from 24.9 to 29.3 - it brightens, it does not
+desaturate).
+
+So **both** bits are flooded now, each into its own box per room and height,
+and a vertex is marked only at a height and inside an extent the classic mesh
+already marked - the same rule, twice. And with it a correction that had to
+come with it: the whole-room bit says yes to almost every vertex of such a
+room, walls and ceiling included, so the UV wobble and the swell were moving
+the WALLS in Rome. The classic path displaces nothing but its own `nWVtx` set
+and that set is empty in all of TR5. Geometry and UV now ride on the marked set
+**at the surface plane** - the room's own `minfloor` - which in a first-bit room
+is what the selector already meant; the colour term keeps the whole mark, so
+the room still shimmers exactly as it did. *Proof:* `RoomProbe -roomplane`
+marks a plane on the second bit and `-plane`/`-roomplane` now also set the
+room's surface height and its selector, as the engine does. ANDREA1 room 33
+with a second-bit plane: **5 marked HD vertices before, 64 after**, 59 of them
+from the flood. Ten regression pictures byte for byte identical, because none
+of them has water.
+
+*Proof of the round.* Ten regression pictures - Rome facades and the missing
+statics, the Irish gravel, ANDY3's window glow, JOBY2's pool room, JOBY4's kelp
+and caustic, RICH1's ray fan, RICH2's wall lamps, RICH3, the sky dome -
+rendered through the same camera before and after: **six of ten byte for byte
+identical**, and the four that move are the four with a swinging additive part,
+by at most 6 to 30 of 255, which is E1 and nothing else. `RoomProbe
+-paritycheck` on ANDREA1 room 19, RICH2 room 25 and JOBY4 room 19: **0.000 of
+255, PASS** on all three. The state bracket: 0 of 58 watched states changed.
+The room pixel shader is **453** instruction slots (it was reported as 453 and
+was really 636 - see E9) and the vertex shader 342 (it was 333), against the 512 shader
+model 3 guarantees.
+
+`RoomProbe` gained `-with`, `-oldorder`, `-black`, `-noshore` and `-roomplane`;
+`TrgProbe` gained `-mat` and `-seam`. `HDRenderShoreOverride` exists for the
+tool alone and the engine never calls it.
+
 ---
 
 ## Building this yourself

@@ -1492,6 +1492,16 @@ void S_OutputPolyList()
 	 * HDRenderSelfTest). After the buckets the sort list draws the see-through
 	 * polygons over both.
 	 *
+	 * THE FRAME IS DRAWN IN TWO PHASES (#123, fix round E, E6). HDFrameDraw
+	 * is everything of the HD path that WRITES DEPTH - every room's opaque
+	 * and alpha-tested passes and every HD object's - and it goes before the
+	 * buckets, where the whole HD block used to go. HDFrameDrawGlow is the
+	 * additive pass of the same rooms and objects; it writes no depth, so it
+	 * has to come after every opaque draw in the frame or the last opaque
+	 * thing drawn paints over it - a wall lamp's cone cut off along a portal
+	 * was the picture that said so. hd_level.cpp's own note over HDFrameDraw
+	 * carries the argument and the order.
+	 *
 	 * The OTHER depth clear, the one further down this function, is the one
 	 * #127 kept: it separates the world from the binocular mask, the pickup
 	 * display and the fade, and it still runs after everything above it -
@@ -1500,6 +1510,8 @@ void S_OutputPolyList()
 
 	if (App.dx.Flags & DXF_ZBUFFER)
 		DrawBuckets();
+
+	HDFrameDrawGlow();
 
 	if (gfLevelId == LVL5_TITLE)
 	{

@@ -220,6 +220,11 @@ struct HDRenderStats
 	 * surface plane answered for (#123, fix round R3b) - see the long note in
 	 * hd_render.cpp beside plane_map. */
 	int markedFlooded;
+	/* E2/E3: flood planes past the fourth a group could not keep, so the
+	 * shore taper has no box for them. Measured 0 in all fifteen files; a
+	 * level that ever reports one has a room with more water planes than the
+	 * table was built for. */
+	int waterPlanesDropped;
 	int biggestRangeTris;
 	int fallbackPageTris;		// layer 0 - drawn on the level's first page
 	int scrollParts;		// .TRG parts carrying a material 1 UV scroll
@@ -286,6 +291,13 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why);
  * HDRenderInit. The engine never calls it - there is no registry key and no
  * option for it, on purpose. */
 void HDRenderCapOverride(int maxTextureSide, int noIndex32);
+
+/* THE SHORE TAPER OFF (#123, fix round E, E3), for the diagnostic tool alone.
+ * Non-zero hands the shader a shore box no vertex can be near the edge of, so
+ * the swell reaches the water's own edge at full height again - which is the
+ * picture fix round R3b drew, out of the same build. The engine never calls
+ * it; there is no option and no registry key for it. */
+void HDRenderShoreOverride(int off);
 void HDRenderShutdown();
 bool HDRenderReady();
 
@@ -327,9 +339,34 @@ void HDRenderFrameEnd();
 void HDRenderStateSave();
 void HDRenderStateRestore();
 
-// One room, three passes, world matrix as the classic path would set it (the
-// room's origin translation). False when the group is missing or empty - the
-// caller then draws that room the classic way.
+/* WHICH OF THE THREE PASSES A CALL IS TO DRAW (#123, fix round E, E6).
+ *
+ * The first two write depth and the third does not, and that one fact decides
+ * the whole draw order of a frame. Passes 0 and 1 sort themselves out against
+ * anything else that writes depth, whatever order they are drawn in; pass 2 -
+ * additive, ONE / ONE, D3DRS_ZWRITEENABLE FALSE - leaves the depth buffer as
+ * it found it, so any depth-writing draw that comes AFTER it and stands
+ * BEHIND it in the world passes the depth test and paints over the glow.
+ *
+ * Room-major drawing - all three passes of room A, then all three of room B -
+ * therefore loses every glow of room A that hangs in front of room B, which
+ * on the screen is a lamp cone cut off along the portal's edge. So the frame
+ * is drawn pass-major instead: SOLID for every room and every model first,
+ * then GLOW for every room and every model, after the classic buckets. See
+ * hd_level.cpp, HDFrameDraw and HDFrameDrawGlow. */
+#define HD_PASS_OPAQUE		0x1
+#define HD_PASS_ALPHA		0x2
+#define HD_PASS_ADDITIVE	0x4
+#define HD_PASS_SOLID		(HD_PASS_OPAQUE | HD_PASS_ALPHA)
+#define HD_PASS_ALL		(HD_PASS_SOLID | HD_PASS_ADDITIVE)
+
+// One room, the passes the mask names, world matrix as the classic path would
+// set it (the room's origin translation). False when the group is missing or
+// empty - the caller then draws that room the classic way.
+bool HDRenderRoomMask(int group, const D3DMATRIX* world,
+	const HDRoomLighting* lighting, unsigned int passes);
+
+// All three passes - HDRenderRoomMask with HD_PASS_ALL.
 bool HDRenderRoom(int group, const D3DMATRIX* world, const HDRoomLighting* lighting = 0);
 
 // The same for a single pass; only the diagnostic tool needs it.

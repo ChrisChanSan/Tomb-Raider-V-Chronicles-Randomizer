@@ -81,6 +81,15 @@ namespace
 		int room;
 		int group;		// A1: the .TRG group that draws it right now
 		D3DMATRIX world;	// view * world, as the classic path set it
+
+		/* E6: THE ROOM'S LIGHTING, WORKED OUT ONCE AND KEPT. The frame draws
+		 * its rooms twice now - the solid passes in one phase, the glows in
+		 * another after the classic buckets - and FillRoomLighting counts the
+		 * lights it had to turn away as it goes, so running it a second time
+		 * would count this room's clipped lights twice. It runs in the solid
+		 * phase and the glow phase reads what it left. */
+		HDRoomLighting lighting;
+		HDLightSource lights[HD_MAX_LIGHTS];
 	};
 
 	char g_stem[64] = { 0 };
@@ -326,6 +335,20 @@ namespace
 	FrameRoom g_frame[HD_MAX_FRAME];
 	int g_frame_count = 0;
 	int g_frame_dropped = 0;
+
+	/* E6: WHAT THE GLOW PHASE NEEDS AGAIN. The solid phase fills these and
+	 * HDFrameDrawGlow, which runs after the classic buckets and therefore
+	 * after HDFrameDraw has returned, reads them: the projection, the frame's
+	 * lighting block and the fog bulbs it points at. Filled per frame in
+	 * HDFrameDraw and nowhere else; g_frame_pending says whether there is a
+	 * phase still owing, so a frame that drew nothing opens no second bracket
+	 * and a HDFrameReset in between cancels it. */
+	D3DMATRIX g_frame_projection;
+	HDFrameLighting g_frame_light;
+	HDFogBulb g_frame_bulbs[HD_MAX_BULBS];
+	int g_frame_objects = 0;
+	int g_frame_room_calls = 0;
+	bool g_frame_pending = false;
 
 	// The projection is taken WHEN THE ROOMS ARE COLLECTED, not when they are
 	// drawn: AlterFOV moves f_persp inside a frame (the sky phase does it
@@ -1272,10 +1295,15 @@ void HDLevelBuild()
 	HDRenderSetWaterMarks(0, 0);
 	g_water_marks.clear();
 
+	/* E2: `flooded` is how many of the two shimmer sets no classic corner
+	 * named and the plane answered for - the number that says whether a
+	 * level's water animates over its whole surface or over a sliver of it -
+	 * and `planes_dropped` must stay 0 (see HDRenderStats). */
 	Log("HDLOG level=%s water stamped=%d choppy=%d shimmer=%d room_shimmer=%d "
-		"ps_slots=%lu",
+		"flooded=%d planes_dropped=%d ps_slots=%lu",
 		g_stem, stats.markedVertices, stats.markedChoppy, stats.markedShimmer,
-		stats.markedRoomShimmer, HDRenderPixelSlots());
+		stats.markedRoomShimmer, stats.markedFlooded,
+		stats.waterPlanesDropped, HDRenderPixelSlots());
 
 	// Stage S5. Everything that moves, counted out of the .TRG itself:
 	// scroll = material 1 parts and the draw calls they cost, sway =
@@ -1592,6 +1620,9 @@ void HDFrameReset()
 	g_frame_count = 0;
 	g_frame_dropped = 0;
 	g_projection_taken = false;
+	// E6: whatever glow phase was still owing belongs to a frame that is
+	// over. A new frame's HDFrameDraw sets it again.
+	g_frame_pending = false;
 	HDObjectFrameReset();
 }
 
@@ -1720,18 +1751,55 @@ bool HDFrameSky(const float* viewWorld)
 	return drew;
 }
 
+/* THE FRAME IN TWO PHASES (#123, fix round E, E6).
+ *
+ * WHAT WAS WRONG. This function drew room-major: all three passes of the
+ * first room, then all three of the second, then the objects, then the
+ * classic buckets. The first two passes write depth and the third does not
+ * (hd_render.cpp, draw_pass: pass 2 is ONE / ONE with D3DRS_ZWRITEENABLE
+ * FALSE), so every later draw that DOES write depth and stands BEHIND a glow
+ * in the world passes the depth test - the glow left no depth to fail
+ * against - and paints over it.
+ *
+ * On the screen that is the player's picture: a wall lamp of RICH2 whose cone
+ * hangs in a portal is cut off along the portal's edge, because the room
+ * beyond the portal is drawn after it and its far wall is what fills the
+ * opening. The same hole ate an object's glow behind a classic crate, and
+ * hd_level.cpp's own note has named it since stage S1-2 as "worth a second
+ * bracket only if a picture ever shows it". A picture shows it.
+ *
+ * THE ORDER NOW, which is the classic engine's own: everything that writes
+ * depth first, whatever it belongs to, then everything that does not.
+ *
+ *   HDFrameDraw       every room's passes 0 and 1, then every HD object and
+ *                     Lara's passes 0 and 1
+ *   DrawBuckets       the classic opaque world (output.cpp)
+ *   HDFrameDrawGlow   every room's pass 2, then every object's pass 2
+ *   DrawSortList      TR5's own see-through polygons, last of all
+ *
+ * so an HD glow is now behind the classic sort list and in front of every
+ * opaque thing it should be in front of - which is what the classic path does
+ * with its own additive polygons, and it needs no rule of its own.
+ *
+ * THE COST is one more state bracket per frame (HDRenderFrameBegin does a
+ * GetRenderState and a SetRenderState for each state it owns) and one more
+ * prepare per drawn room - two matrix multiplies and the room's light block.
+ * The lighting itself is worked out once: FillRoomLighting counts the lights
+ * it turns away, so it runs in this phase and the glow phase reads what it
+ * left in the FrameRoom. */
 void HDFrameDraw()
 {
 	const int objects_here = HDObjectFrameCount();
 
+	g_frame_objects = objects_here;
+	g_frame_pending = false;
+
 	if (!g_frame_count && !objects_here)
 		return;
 
-	D3DMATRIX projection;
-	HDFrameLighting frame;
-	HDFogBulb bulbs[HD_MAX_BULBS];
-	HDRoomLighting lighting;
-	HDLightSource lights[HD_MAX_LIGHTS];
+	D3DMATRIX& projection = g_frame_projection;
+	HDFrameLighting& frame = g_frame_light;
+	HDFogBulb* const bulbs = g_frame_bulbs;
 
 	HDRenderMakeProjection((double)g_persp, (double)g_centerx, (double)g_centery,
 		(double)g_za, (double)g_zb, &projection);
@@ -1747,8 +1815,10 @@ void HDFrameDraw()
 
 	for (int i = 0; i < g_frame_count; i++)
 	{
-		FillRoomLighting(g_frame[i].room, g_frame[i].group, lighting, lights);
-		HDRenderRoom(g_frame[i].group, &g_frame[i].world, &lighting);
+		FillRoomLighting(g_frame[i].room, g_frame[i].group,
+			g_frame[i].lighting, g_frame[i].lights);
+		HDRenderRoomMask(g_frame[i].group, &g_frame[i].world,
+			&g_frame[i].lighting, HD_PASS_SOLID);
 	}
 
 	/* THE OBJECTS, AFTER THE ROOMS AND INSIDE THE SAME BRACKET (#123, S3-2).
@@ -1765,26 +1835,62 @@ void HDFrameDraw()
 	 * both paths write a - b/z for the same point), so an opaque HD guard and
 	 * an opaque classic crate sort themselves out by depth whatever order
 	 * they are drawn in - which covers every opaque pixel in the frame and
-	 * needs no rule at all. Only the two passes that do NOT write depth care:
+	 * needs no rule at all. Only the pass that does NOT write depth cares:
 	 *
 	 *   - A model's ALPHA pass writes depth (it is an alpha test, not a
-	 *     blend), so it behaves like the opaque one.
-	 *   - A model's ADDITIVE pass does not, and it is drawn before the
-	 *     classic buckets. A classic OPAQUE polygon that stands BEHIND such a
-	 *     glow and in front of the wall therefore paints over it. Known hole,
-	 *     and the same one the rooms have had since stage S1-2; it needs a
-	 *     second bracket after DrawBuckets to close and it is worth one only
-	 *     if a picture ever shows it. The classic sort list, which is where
-	 *     TR5 puts its own see-through polygons, still draws last of all and
-	 *     over both.
+	 *     blend), so it behaves like the opaque one and travels with it.
+	 *   - A model's ADDITIVE pass does not, and fix round E took it out of
+	 *     this phase for that reason - it is drawn in HDFrameDrawGlow below,
+	 *     after the classic buckets, where nothing opaque can follow it. The
+	 *     classic sort list, which is where TR5 puts its own see-through
+	 *     polygons, still draws last of all and over both.
 	 *
 	 * Drawing the objects INSIDE the room loop would be worse for a reason
 	 * that has nothing to do with depth: a model's state is not a room's, and
 	 * swapping shader, declaration and stream twice per room costs more than
 	 * the whole object path does. */
-	HDObjectFrameDraw(&projection, frame.bulbCount);
+	HDObjectFrameDraw(&projection, frame.bulbCount, HD_PASS_SOLID);
 
 	HDRenderFrameEnd();
+
+	// E6: the glow phase is owing, and this is what the rooms cost so far -
+	// HDRenderFrameBegin zeroes the renderer's counter per bracket.
+	g_frame_room_calls = HDRenderDrawCalls();
+	g_frame_pending = true;
+}
+
+/* THE GLOW PHASE (#123, fix round E, E6). Called from S_OutputPolyList right
+ * after DrawBuckets - see the long note over HDFrameDraw for the order and
+ * the argument. Everything drawn here is additive, writes no depth and is
+ * tested against a depth buffer that now holds the WHOLE opaque frame, HD and
+ * classic alike, so no later opaque draw can take a glow away and no glow can
+ * stand in front of something nearer than itself.
+ *
+ * A frame that drew no HD room and no HD object never sets g_frame_pending
+ * and this is a test and a return. */
+void HDFrameDrawGlow()
+{
+	if (!g_frame_pending)
+		return;
+
+	g_frame_pending = false;
+
+	D3DMATRIX& projection = g_frame_projection;
+	HDFrameLighting& frame = g_frame_light;
+	const int objects_here = g_frame_objects;
+
+	HDRenderFrameBegin(&kIdentity, &projection, &frame);
+
+	for (int i = 0; i < g_frame_count; i++)
+		HDRenderRoomMask(g_frame[i].group, &g_frame[i].world,
+			&g_frame[i].lighting, HD_PASS_ADDITIVE);
+
+	HDObjectFrameDraw(&projection, frame.bulbCount, HD_PASS_ADDITIVE);
+
+	HDRenderFrameEnd();
+
+	g_frame_room_calls += HDRenderDrawCalls();
+	HDObjectFrameEnd();
 
 	if (!g_matrix_checked && gLogEnabled && g_frame_count)
 	{
@@ -1794,7 +1900,7 @@ void HDFrameDraw()
 			"wibble=%d cam_uw=%d shimmer=%d objects=%d object_calls=%d "
 			"cutout_calls=%d cutout_pages=%d flipbook_calls=%d "
 			"gloss_calls=%d",
-			g_frame_count, HDRenderDrawCalls(), g_frame_dropped,
+			g_frame_count, g_frame_room_calls, g_frame_dropped,
 			frame.bulbCount, frame.distanceFogStart, (int)wibble,
 			frame.cameraUnderwater, tomb5.shimmer ? 1 : 0,
 			objects_here, HDObjectDrawCalls(),
@@ -1808,11 +1914,13 @@ void HDFrameDraw()
 	 * comparisons and only when the log is on. */
 	if (gLogEnabled)
 	{
-		/* HDRenderDrawCalls is reset by HDRenderFrameBegin and is therefore
-		 * this frame's. HDObjectDrawCalls is NOT - hd_object.cpp resets it
-		 * per LEVEL - so it is only read when this frame actually had
-		 * objects; otherwise it would carry the last frame that did. */
-		const int draws = HDRenderDrawCalls() +
+		/* g_frame_room_calls is the two brackets of this frame added up -
+		 * HDRenderDrawCalls is reset by HDRenderFrameBegin and would answer
+		 * for the glow phase alone (E6). HDObjectDrawCalls is not reset per
+		 * frame at all - hd_object.cpp resets it per LEVEL - so it is only
+		 * read when this frame actually had objects; otherwise it would carry
+		 * the last frame that did. */
+		const int draws = g_frame_room_calls +
 			(objects_here ? HDObjectDrawCalls() : 0);
 
 		if (g_frame_count > g_sec_rooms)

@@ -42,7 +42,15 @@
 //                 it is an HD room: remembers it with its world matrix and
 //                 tells the caller to skip the classic roomlets.
 //   HDFrameDraw   specific\output.cpp, S_OutputPolyList, right before
-//                 DrawBuckets. Draws every remembered room.
+//                 DrawBuckets. Draws every remembered room's SOLID passes
+//                 and every HD object's, which is everything that writes
+//                 depth.
+//   HDFrameDrawGlow
+//                 specific\output.cpp, S_OutputPolyList, right AFTER
+//                 DrawBuckets (#123, fix round E, E6). Draws the additive
+//                 pass of the same rooms and objects, which writes no depth
+//                 and therefore has to come after every opaque draw in the
+//                 frame - HD and classic alike. Empties the list.
 //
 // WHY THE ROOMS ARE NOT DRAWN WHERE THEY ARE COLLECTED. The classic path does
 // not draw in InsertRoom either - it fills texture buckets and a sort list and
@@ -114,6 +122,7 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld);
 bool HDFrameSky(const float* viewWorld);
 
 void HDFrameDraw();
+void HDFrameDrawGlow();
 
 // THE FRAME CLOCK (#123 diagnostics). Called from DXShowFrame
 // (specific\dxshell.cpp) directly after IDirect3DDevice9::Present returns -

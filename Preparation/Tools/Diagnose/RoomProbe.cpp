@@ -65,6 +65,22 @@
  *                     what the engine does in place of the classic horizon
  *                     mesh (#123, fix round R3a)
  *     -skyonly        the same, with the room left out: the dome alone
+ *     -with <group> <dx dy dz>
+ *                     draw that group too, at that world offset from the
+ *                     room - the difference of the two classic room origins,
+ *                     which RoomCheck prints per room (#123, fix round E).
+ *                     Up to eight, repeat the switch.
+ *     -oldorder       draw the scene room-major, all three passes of one room
+ *                     before the next - the order the HD path had before fix
+ *                     round E6. Without it the scene is drawn the way
+ *                     HDFrameDraw draws it: every room's solid passes, then
+ *                     every room's additive one.
+ *     -black          clear the picture to black instead of magenta. The
+ *                     additive pass alone can only be measured against black
+ *                     (fix round E).
+ *     -noshore        the swell reaches the water's own edge at full height,
+ *                     as it did before fix round E3 - the before picture out
+ *                     of the same build.
  *
  *   Stage S2b - the parity block. Every one of these makes up a piece of
  *   engine state the tool has no engine for, and hands it to the very
@@ -90,6 +106,12 @@
  *     -underwater     the room carries ROOM_UNDERWATER and the camera is in
  *                     it: the WaterTable darkening on the colour and the
  *                     screen wobble on the position.
+ *     -roomplane <y x0 z0 x1 z1>
+ *                     the same, on the OTHER shimmer bit - the answer a
+ *                     ROOM_REFLECT + ROOM_REFLECT_CEILING room gives, which
+ *                     is what the Rome levels' water carries (#123, fix
+ *                     round E, E2). Both switches now also set the room's
+ *                     surface height and its selector, as the engine does.
  *     -plane <y x0 z0 x1 z1>
  *                     four SURFACE water marks at the corners of that box,
  *                     room local, as the classic path leaves them on the
@@ -700,6 +722,10 @@ struct Shot
 	long w = 0, h = 0;
 };
 
+// -black: clear the render target to black instead of magenta - see the note
+// in ShotBegin (#123, fix round E).
+static bool g_black = false;
+
 static bool ShotBegin(Shot& shot, long w, long h)
 {
 	shot.w = w;
@@ -736,9 +762,16 @@ static bool ShotBegin(Shot& shot, long w, long h)
 	/* MAGENTA, not black. A room that draws nothing and a room that draws
 	 * black are the same picture on a black background, and the first is a
 	 * bug while the second is a dark corner. Anything still magenta in the
-	 * result is the background showing through. */
+	 * result is the background showing through.
+	 *
+	 * -black turns it off, and there is one measurement that needs it (#123,
+	 * fix round E): the ADDITIVE pass on its own is blended ONE / ONE over
+	 * whatever is already there, so on magenta every covered pixel starts at
+	 * 170 of 255 and "how much of white is this glow" cannot be read out of
+	 * the picture at all. On black it can. */
 	g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
-		D3DCOLOR_XRGB(255, 0, 255), 1.0f, 0);
+		g_black ? D3DCOLOR_XRGB(0, 0, 0) : D3DCOLOR_XRGB(255, 0, 255),
+		1.0f, 0);
 
 	return true;
 }
@@ -995,6 +1028,24 @@ static float g_geom_box[8][6];
 static int g_geom_count = 0;
 static unsigned char g_water_table[22][64][4];
 
+/* Fix round E, -with and -oldorder: THE NEIGHBOUR ROOMS OF ONE SCENE.
+ *
+ * A glow that writes no depth can only be shown to be eaten by a room drawn
+ * after it if there IS a room drawn after it, and until fix round E this tool
+ * drew exactly one group. -with names a further group and the world offset it
+ * stands at - the difference of the two classic room origins, which RoomCheck
+ * prints as "x .. z .." per room - and the scene is then drawn the way the
+ * engine draws it: HDFrameDraw's order, out of hd_render's own entry points,
+ * so this is the engine's order and not a copy of it.
+ *
+ * -oldorder puts back the order of stages S1-2 to R3b, room-major: all three
+ * passes of the first room, then all three of the second. The two switches
+ * out of ONE build are the before and after picture of E6. */
+static int g_with_group[8];
+static float g_with_offset[8][3];
+static int g_with_count = 0;
+static bool g_old_order = false;
+
 /* The bulbs go in room local and come out in VIEW space, because that is the
  * space HDFogBulb is in - aBuildFogBulbList (drawroom.cpp:738-745) transforms
  * every active bulb by the camera matrix once per frame, and the shader
@@ -1047,6 +1098,28 @@ static void FillLighting(HDFrameLighting& frame, HDRoomLighting& room,
 	room.surfaceGate = 0;
 	room.redAlert = 0;
 	room.sel1[3] = (g_shimmer || g_water) ? 1.0f : 0.0f;
+
+	/* -plane and -roomplane STAND IN FOR A REAL WATER ROOM (#123, fix round
+	 * E). The engine sets three things together for one, and the tool used to
+	 * set only the marks: the room's surface height, which is the plane's own
+	 * y, and the selector that says which mark drives the shimmer -
+	 * FillRoomLighting's sel1[1] with its height gate for a plain water room,
+	 * sel1[2] with none for a ROOM_REFLECT + ROOM_REFLECT_CEILING one. Without
+	 * the height the shader's atSurface is never true and the swell of fix
+	 * round R3b cannot run at all, which is a picture the engine never
+	 * draws. */
+	if (g_plane)
+	{
+		room.surfaceY = (float)g_plane_marks[0].y;
+
+		if (g_plane_marks[0].bits & 4)
+			room.sel1[2] = 1.0f;
+		else
+		{
+			room.sel1[1] = 1.0f;
+			room.surfaceGate = 1;
+		}
+	}
 	room.waterTable = g_water_table[g_mesh_effect];
 	room.lights = g_lights;
 	room.lightCount = g_light_count;
@@ -1366,6 +1439,7 @@ int main(int argc, char** argv)
 		printf("       -fog <start end r g b>  -underwater  -shimmer  -wibble <n>\n");
 		printf("       -effect <0..21>  -paritycheck\n");
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
+		printf("       -with <group> <dx dy dz>   -oldorder   -black   -noshore\n");
 		printf("       -budget <MiB>  -format rgba|dxt5  -psnr\n");
 		printf("       -caps maxtex <n>  -caps noidx32  -seq <A,B,C>  -vramhog\n");
 		return 1;
@@ -1451,13 +1525,20 @@ int main(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-water"))
 			g_water = true;
-		else if (!strcmp(argv[at], "-plane") && at + 5 < argc)
+		else if ((!strcmp(argv[at], "-plane") ||
+			!strcmp(argv[at], "-roomplane")) && at + 5 < argc)
 		{
 			const short y = (short)atoi(argv[at + 1]);
 			const short x0 = (short)atoi(argv[at + 2]);
 			const short z0 = (short)atoi(argv[at + 3]);
 			const short x1 = (short)atoi(argv[at + 4]);
 			const short z1 = (short)atoi(argv[at + 5]);
+			/* -roomplane is the OTHER shimmer bit (#123, fix round E, E2):
+			 * the ROOM_REFLECT + ROOM_REFLECT_CEILING answer, which is what
+			 * the Rome levels' water carries and what fix round R3b did not
+			 * flood. */
+			const unsigned char bits =
+				argv[at][1] == 'r' ? (unsigned char)4 : (unsigned char)2;
 
 			for (int c = 0; c < 4; c++)
 			{
@@ -1465,7 +1546,7 @@ int main(int argc, char** argv)
 				g_plane_marks[c].y = y;
 				g_plane_marks[c].x = (c & 1) ? x1 : x0;
 				g_plane_marks[c].z = (c & 2) ? z1 : z0;
-				g_plane_marks[c].bits = 2;
+				g_plane_marks[c].bits = bits;
 			}
 
 			g_plane = true;
@@ -1473,10 +1554,30 @@ int main(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-nomotion"))
 			g_motion = false;
+		else if (!strcmp(argv[at], "-black"))
+			g_black = true;
+		else if (!strcmp(argv[at], "-noshore"))
+			HDRenderShoreOverride(1);
 		else if (!strcmp(argv[at], "-noreflect"))
 			g_reflect = false;
 		else if (!strcmp(argv[at], "-shatter"))
 			g_shatter = true;
+		else if (!strcmp(argv[at], "-with") && at + 4 < argc)
+		{
+			if (g_with_count < 8)
+			{
+				g_with_group[g_with_count] = atoi(argv[at + 1]);
+
+				for (int c = 0; c < 3; c++)
+					g_with_offset[g_with_count][c] = (float)atof(argv[at + 2 + c]);
+
+				g_with_count++;
+			}
+
+			at += 4;
+		}
+		else if (!strcmp(argv[at], "-oldorder"))
+			g_old_order = true;
 		else if (!strcmp(argv[at], "-hasgeom") && at + 6 < argc)
 		{
 			if (g_geom_count < 8)
@@ -1762,8 +1863,10 @@ int main(int argc, char** argv)
 	// And the water side of the same round: how many HD vertices carry a
 	// surface mark, and how many of those the corner rule of stage S2 never
 	// found and the plane flood answered for.
-	printf("R3b: %d water mark(s) stamped, %d on the surface, %d of those flooded\n",
-		stats.markedVertices, stats.markedShimmer, stats.markedFlooded);
+	printf("R3b/E2: %d water mark(s) stamped, %d on the surface, %d on the whole "
+		"room, %d of them flooded, %d plane(s) dropped\n",
+		stats.markedVertices, stats.markedShimmer, stats.markedRoomShimmer,
+		stats.markedFlooded, stats.waterPlanesDropped);
 	// And the gloss: the opaque parts of materials 3 and 17 whose own
 	// numbers gave them one (fix round R3b).
 	printf("R3b: %d glossy part(s) (materials 3 and 17)\n",
@@ -2107,7 +2210,51 @@ int main(int argc, char** argv)
 		skyDrew = HDRenderSky(&skyWorld);
 	}
 
-	const bool drew = skyOnly ? false : HDRenderRoom(room, 0, &lighting);
+	/* THE SCENE (#123, fix round E). One room, or a room and the neighbours
+	 * -with names, drawn in the engine's own order out of the engine's own
+	 * entry points - HDFrameDraw draws every room's HD_PASS_SOLID and then
+	 * every room's HD_PASS_ADDITIVE, and -oldorder is the room-major order
+	 * that came before it. A neighbour stands at its world offset; its
+	 * lighting is the same block, which is right for the picture this proves
+	 * (no dynamic light in it) and would not be for a light one. */
+	bool drew = false;
+	D3DMATRIX withWorld[8];
+
+	for (int i = 0; i < g_with_count; i++)
+	{
+		memset(&withWorld[i], 0, sizeof(withWorld[i]));
+		withWorld[i]._11 = withWorld[i]._22 = withWorld[i]._33 =
+			withWorld[i]._44 = 1.0f;
+		withWorld[i]._41 = g_with_offset[i][0];
+		withWorld[i]._42 = g_with_offset[i][1];
+		withWorld[i]._43 = g_with_offset[i][2];
+	}
+
+	if (!skyOnly)
+	{
+		if (g_old_order)
+		{
+			drew = HDRenderRoom(room, 0, &lighting);
+
+			for (int i = 0; i < g_with_count; i++)
+				HDRenderRoom(g_with_group[i], &withWorld[i], &lighting);
+		}
+		else
+		{
+			drew = HDRenderRoomMask(room, 0, &lighting, HD_PASS_SOLID);
+
+			for (int i = 0; i < g_with_count; i++)
+				HDRenderRoomMask(g_with_group[i], &withWorld[i], &lighting,
+					HD_PASS_SOLID);
+
+			HDRenderRoomMask(room, 0, &lighting, HD_PASS_ADDITIVE);
+
+			for (int i = 0; i < g_with_count; i++)
+				HDRenderRoomMask(g_with_group[i], &withWorld[i], &lighting,
+					HD_PASS_ADDITIVE);
+		}
+	}
+
 	const int calls = HDRenderDrawCalls();
 	HDRenderFrameEnd();
 	g_device->EndScene();

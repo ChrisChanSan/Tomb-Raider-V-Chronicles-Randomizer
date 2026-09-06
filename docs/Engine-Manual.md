@@ -517,13 +517,66 @@ that walks and talks rather than stands still.
   own lights, and in a dark corner there is nothing to reflect and it goes
   away. Only Lara has it for now; the creatures and the props are unchanged.
 
+**What the fifth round changed: the order the picture is painted in.** The
+play test came back with one sentence about all of it — *"everything behind a
+glow is always slightly wrong"* — and that turned out to be the whole story.
+
+- **A lamp cone is not cut off at a doorway any more.** A glow is painted on
+  top of what is already there and leaves no mark of its own in the depth
+  buffer, so whatever was drawn AFTER it simply painted over it — and the
+  rooms were drawn one whole room at a time, so the room beyond a doorway
+  always came after the glow hanging in that doorway. The frame is painted in
+  two passes now: everything solid first, HD and classic together, and then
+  every glow in the game over the finished picture, exactly where the original
+  engine puts its own see-through polygons. The wall lamps of the VCI offices
+  keep their cones through a doorway, and a glow behind a crate is behind the
+  crate rather than gone.
+- **The light stopped throbbing.** The travel of brightness along a shaft was
+  set by hand at a quarter either way in the third round, and the play test
+  called it pulsing. Measured against the Remaster's own two recordings of the
+  same corridor three seconds apart, its shafts move their bright places
+  around and their level barely changes — four percent over three seconds. The
+  travel is a sixth of what it was; the streaks still wander, the room no
+  longer breathes.
+- **The last white shafts are gone.** The third round read every glow's
+  strength out of the art and named four places where the art gives no usable
+  number — a lift shaft in the VCI tower and three window glows in Ireland,
+  which therefore kept drawing at full white. The art groups its glows into
+  presets, and inside a preset the strength is all but the same number in
+  every level that uses it, so those four now take their own preset's
+  strength. The 13th Floor's lift shaft went from a white block to a shaft
+  with streaks in it; nothing saturates anywhere a player stands.
+- **Water meets the bank instead of climbing it.** The swell added in the
+  third round lifted every point of a surface, the ones at the water's edge
+  included, so the water rose over the coping of a pool and covered it with a
+  dark band that travelled with the wave. The wave now dies away over the last
+  square before the edge, which is what water does; the middle of the pool
+  moves exactly as it did.
+- **And the water of Rome animates at last.** The original engine answers "is
+  this water" on two different marks — one for an ordinary pool, another for a
+  room roofed by a reflecting ceiling — and the third round carried only the
+  first of them across to the finer Remaster mesh. Ireland's water is all on
+  the first mark and moved; Rome's is all on the second and stood still. Both
+  are carried now. With it, a correction that had to come along: on the second
+  mark the original engine says yes to nearly every surface in the room, walls
+  and ceiling included, so the ripple was moving the WALLS in Rome. Only what
+  lies on the water's own plane moves; the rest still catches the shimmer in
+  its colour, as it always did.
+- **And the room shader on disk is the room shader in the source again.** The
+  checked-in bytecode had been left one edit behind its own HLSL and still
+  carried an experiment the third round had measured and thrown out — 636 of
+  the 512 instruction slots a shader model 3 card must provide. Nothing on the
+  screen changes (the extra code was unreachable); what changes is that the
+  shader now fits inside the guarantee on every card that claims it.
+
 Still open in the rooms, and named rather than hidden: a **visible border**
 where an HD room meets one the remaster draws nothing for (they fall back to
-the classic look, and the log's `HDLOG room=… hd=0` lines name every one),
-the remaster's four-frame **animated textures**, **static meshes that
-cannot be shot to pieces** — a vase baked into the room's art stays whole —
-and a handful of **window glows in Ireland** whose art carries no strength at
-all, which therefore still draw as brightly as they did.
+the classic look, and the log's `HDLOG room=… hd=0` lines name every one), and
+a **step in the wall brightness at a room boundary**, which is measured and is
+the Remaster's own: it bakes each room's light on its own, and at the same
+point in space the two sides of a doorway differ by up to a third of full
+brightness in its own art. Nothing here widens it and nothing here can close it
+without repainting the art.
 
 **Switching it on.** Options → the new *tomb5 options* page → **HD textures**,
 the last row of the first page. Like every row on that page it is remembered at

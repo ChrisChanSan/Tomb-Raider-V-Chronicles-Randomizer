@@ -216,18 +216,75 @@ namespace
 	 *   material 16  p2 in [0.035, 0.2], the same shape as material 15's,
 	 *                on the same slot; p0 and p1 pair up with the page.
 	 *
-	 * WHERE THE FILE GIVES NO USABLE NUMBER THE PART KEEPS TODAY'S PICTURE.
-	 * Two of material 2's tuples carry p1 = 0 (2,100 triangles of window
-	 * glow in ANDY1 and ANDY3) and one carries 2.68 (2,025 triangles in five
-	 * RICH1 rooms). Reading 0 as "off" would delete geometry that measurably
-	 * draws something, and reading 2.68 as a weight would brighten what is
-	 * already too bright, so both fall through to 1 - the same shape as
-	 * MaterialAlphaRef's guard above, and both are named in MODIFICATIONS.md
-	 * as measured and left.
+	 * AND WHERE THE FILE GIVES NO USABLE NUMBER: THE PRESET ANSWERS (#123,
+	 * fix round E, E8).
+	 *
+	 * Fix round R3a let a material 2 weight outside (0, 1) fall through to
+	 * ONE - full brightness - and named the four tuples it did that to. The
+	 * play test found them: RICH1's lift shaft is a white block and ANDY's
+	 * window glows are far too bright. Measured back through RoomProbe on the
+	 * additive pass alone over a black background, mean brightness as a share
+	 * of white, against the remaster's own 16 to 31 percent:
+	 *
+	 *                                  before          after this rule
+	 *     RICH1 room 13, from below   36.3 %, 7.3 white   21.4 %, 0.1
+	 *     RICH1 room 13, inside it    73.4 %, 35.5        48.7 %, 7.5
+	 *     ANDY1 room 194              85.5 %, 11.8        51.2 %, 0.0
+	 *     ANDY2 room 34               69.1 %, 23.8        34.2 %, 0.0
+	 *     ANDY3 room 86               38.6 %,  0.2        17.8 %, 0.0
+	 *     ANDY3 room 150              26.9 %,  0.0        15.7 %, 0.0
+	 *
+	 * The first line is the shaft as a player stands in it and the second is
+	 * the camera INSIDE the fan of quads, where every one of them overlaps
+	 * every other and a ONE / ONE sum saturates whatever weight it is given -
+	 * that is stacking and not weighting, the classic path has no answer to
+	 * it either, and it is named here rather than tuned away.
+	 *
+	 * THE RULE COMES OUT OF THE DISTRIBUTION, and the distribution is now a
+	 * measurement anybody can repeat: TrgProbe -mat 2 over the fifteen files
+	 * prints 36 distinct tuples, 32 of them with p1 in (0, 1). Grouped by the
+	 * PRESET - the (param[0], param[2]) pair that R3a showed moves with the
+	 * page - the weight is all but constant inside a preset:
+	 *
+	 *     (0.5, 0.0)  0.10                              1 tuple
+	 *     (0.5, 0.6)  0.40 0.40 0.55 0.55 0.55 0.75 0.75    median 0.55
+	 *     (0.5, 0.8)  0.40 0.40 0.40                        all three
+	 *     (0.5, 1.0)  0.20                              1 tuple
+	 *     (1.0, 0.1)  0.05 x5, 0.20 x4                      median 0.05
+	 *     (1.0, 2.0)  0.20 0.20
+	 *     (1.5, 0.0)  0.10 0.10 0.10 0.10                   all four
+	 *     (1.5, 0.4)  0.30 0.30 0.30 0.30 0.30              all five
+	 *
+	 * and the four tuples that carry no weight belong to just two of those
+	 * presets: ANDY1, ANDY2 and ANDY3's window glows are (0.5, 0.8), whose
+	 * three in-range members are 0.40 to the digit, and RICH1's shaft is
+	 * (0.5, 0.6), whose seven run 0.40 to 0.75 with a median of 0.55. So the
+	 * part takes its own preset's weight instead of full white - which is
+	 * reading the file, not guessing at it.
+	 *
+	 * The last line is a floor and not a reading: a preset nothing in this
+	 * game names gets 0.20, the median of all 32 in-range material 2 weights,
+	 * so that "no number" can never mean "full white" again in a level this
+	 * table has not seen.
+	 *
+	 * Materials 14, 15 and 16 need none of this. 15 and 16 have no tuple
+	 * outside their range at all, and 14's only ones are EXACTLY 1.0 (RICH1
+	 * and RICH3, 2,304 triangles) beside weights that run to 0.8182 - the top
+	 * of a range and not a missing number - so they keep the 1 the guard
+	 * gives them.
 	 *
 	 * Everything else - materials 0, 1, 6, 7, 8, 13 and the destructible
 	 * statics' high-bit numbers - has no slot that behaves like a weight and
-	 * draws exactly as it did. */
+	 * draws exactly as it did. Material 1 is the largest of those by far
+	 * (116,128 additive triangles in JOBY5 alone) and is named in
+	 * MODIFICATIONS.md as measured and left: its four floats are two scroll
+	 * speeds and two numbers that behave like times, and none of them behaves
+	 * like a weight. */
+	struct HDAddPreset
+	{
+		float p0, p2, weight;
+	};
+
 	inline float MaterialAddWeight(const trf::remaster::TrgPart& part)
 	{
 		float weight;
@@ -248,7 +305,25 @@ namespace
 			return 1.0f;
 		}
 
-		return weight > 0.0f && weight < 1.0f ? weight : 1.0f;
+		if (weight > 0.0f && weight < 1.0f)
+			return weight;
+
+		if (part.material != HD_TRG_MATERIAL_GLOW)
+			return 1.0f;
+
+		/* The two presets the game's own four unreadable tuples belong to,
+		 * and the median that catches anything else. */
+		static const HDAddPreset kPresets[] =
+		{
+			{ 0.5f, 0.8f, 0.40f },
+			{ 0.5f, 0.6f, 0.55f },
+		};
+
+		for (int i = 0; i < (int)(sizeof(kPresets) / sizeof(kPresets[0])); i++)
+			if (part.param[0] == kPresets[i].p0 && part.param[2] == kPresets[i].p2)
+				return kPresets[i].weight;
+
+		return 0.20f;
 	}
 
 	/* HOW LONG ONE SWING OF AN ADDITIVE PART TAKES, IN SECONDS, or 0 for a
@@ -558,6 +633,23 @@ namespace
 		float maxs[3] = { 0, 0, 0 };
 		bool hasBounds = false;
 		HDRenderGroupMotion motion = {};
+
+		/* THE SHORE OF THIS ROOM'S WATER (#123, fix round E, E3).
+		 *
+		 * The boxes the shimmer bits were flooded into - x and z, room local,
+		 * with the height each belongs to. The vertex shader tapers the swell
+		 * to nothing inside one square of the box's edge, so the surface meets
+		 * the bank instead of climbing over it, and prepare() hands over the
+		 * box of the plane that IS the water surface - the one at the room's
+		 * own surfaceY. waterPlanes 0 means this room has no water and the
+		 * taper is switched off with one compare.
+		 *
+		 * Four is a measured ceiling, not a guess: over the fifteen files no
+		 * group carries more than two (room, height) planes of either bit. */
+		enum { kMaxPlanes = 4 };
+		float waterBox[kMaxPlanes][4];		// minX, minZ, maxX, maxZ
+		float waterY[kMaxPlanes];
+		int waterPlanes = 0;
 	};
 
 	// One 256-unit cell of a room-local position, as one key. The bias makes
@@ -736,6 +828,11 @@ namespace
 	float g_motion[4] = { 0, 0, 0, 0 };
 	bool g_wrapping = false;
 	int g_scroll_parts = 0;
+
+	/* E3, the diagnostic tool's -noshore: hand the shader a shore box no
+	 * vertex can be near the edge of, which is the swell fix round R3b drew -
+	 * the before picture out of the same build. Never set by the engine. */
+	bool g_no_shore = false;
 
 	/* Set at the top of every pass, so the first draw call of a room always
 	 * writes register 13 even when its offset happens to equal the last
@@ -1115,6 +1212,11 @@ void HDRenderCapOverride(int maxTextureSide, int noIndex32)
 	g_cap_no_index32 = noIndex32 ? 1 : 0;
 }
 
+void HDRenderShoreOverride(int off)
+{
+	g_no_shore = off ? true : false;
+}
+
 void HDRenderShutdown()
 {
 	release_buffers();
@@ -1279,6 +1381,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	 * (#123, fix round R3b) - see the long note where it is filled. */
 	struct HDMarkPlane { short minX, maxX, minZ, maxZ; };
 	std::unordered_map<unsigned int, HDMarkPlane> plane_map;
+	// E2: the same, for the whole-room shimmer bit - see the note below.
+	std::unordered_map<unsigned int, HDMarkPlane> room_plane_map;
 
 	if (g_marks && g_mark_count > 0)
 	{
@@ -1351,35 +1455,70 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		 * own height on the far side of the room stays dry; per height, so
 		 * that two pools at two levels in one room stay apart.
 		 *
-		 * Only the SURFACE bit is flooded. Bit 0 is empty in all of TR5 and
-		 * bit 2 - the reflecting room with no height test - is not a plane at
-		 * all, so neither has a box to flood into. */
+		 * BOTH SHIMMER BITS ARE FLOODED (#123, fix round E, E2). Fix round R3b
+		 * flooded the surface bit alone and said of the other one that "the
+		 * reflecting room with no height test is not a plane at all, so it has
+		 * no box to flood into". The player's own log says why that mattered:
+		 *
+		 *     level     stamped   surface bit   whole-room bit
+		 *     JOBY4          32            32                0
+		 *     RICH2          47            47                0
+		 *     ANDY1         218           218                0
+		 *     ANDREA1       267           145              122
+		 *     ANDREA3       291             0              291
+		 *     ANDREA2       809            69              740
+		 *
+		 * In the Rome levels the water is a ROOM_REFLECT + ROOM_REFLECT_CEILING
+		 * room and the classic answer for it comes out on the OTHER bit, so
+		 * nothing was flooded there at all and the surface kept the sliver of
+		 * marks the classic corners gave it. That is the player's "the right
+		 * texture is missing, only ANDY got the right one": ANDY1's water is
+		 * all surface bit and animates, the Rome water is all whole-room bit
+		 * and stands still.
+		 *
+		 * The classic predicate behind the whole-room bit (drawroom.cpp:373)
+		 * is `!IsMistVert(pos) || |y - minfloor| > 1536`, and IsMistVert asks
+		 * whether the vertex is SHARED with the room above through the ceiling
+		 * portal - a question about the classic mesh's topology, which an HD
+		 * vertex the classic mesh never had cannot answer for itself. What can
+		 * be carried is the same thing the surface bit carries: the answer of
+		 * the piece of plane the vertex lies in. So the whole-room bit gets
+		 * its own box per room and height, filled and read exactly like the
+		 * surface bit's, and a vertex is marked only at a height and inside an
+		 * extent the classic mesh already marked. Bit 0, the roomlet's own
+		 * nWVtx set, is empty in all of TR5 and has no box. */
 		for (int i = 0; i < g_mark_count; i++)
 		{
 			const HDWaterMark& m = g_marks[i];
 
-			if (!(m.bits & 2))
-				continue;
-
-			const unsigned int key = ((unsigned int)(unsigned short)m.room << 16) |
-				(unsigned int)(unsigned short)m.y;
-			std::unordered_map<unsigned int, HDMarkPlane>::iterator at =
-				plane_map.find(key);
-
-			if (at == plane_map.end())
+			for (int bit = 0; bit < 2; bit++)
 			{
-				HDMarkPlane plane;
+				if (!(m.bits & (bit ? 4 : 2)))
+					continue;
 
-				plane.minX = plane.maxX = m.x;
-				plane.minZ = plane.maxZ = m.z;
-				plane_map[key] = plane;
-			}
-			else
-			{
-				if (m.x < at->second.minX) at->second.minX = m.x;
-				if (m.x > at->second.maxX) at->second.maxX = m.x;
-				if (m.z < at->second.minZ) at->second.minZ = m.z;
-				if (m.z > at->second.maxZ) at->second.maxZ = m.z;
+				const unsigned int key =
+					((unsigned int)(unsigned short)m.room << 16) |
+					(unsigned int)(unsigned short)m.y;
+				std::unordered_map<unsigned int, HDMarkPlane>& map =
+					bit ? room_plane_map : plane_map;
+				std::unordered_map<unsigned int, HDMarkPlane>::iterator at =
+					map.find(key);
+
+				if (at == map.end())
+				{
+					HDMarkPlane plane;
+
+					plane.minX = plane.maxX = m.x;
+					plane.minZ = plane.maxZ = m.z;
+					map[key] = plane;
+				}
+				else
+				{
+					if (m.x < at->second.minX) at->second.minX = m.x;
+					if (m.x > at->second.maxX) at->second.maxX = m.x;
+					if (m.z < at->second.minZ) at->second.minZ = m.z;
+					if (m.z > at->second.maxZ) at->second.maxZ = m.z;
+				}
 			}
 		}
 	}
@@ -1473,6 +1612,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	int marked_choppy = 0;
 	// R3b: of the shimmer marks, the ones the plane flood added.
 	int flooded_vertices = 0;
+	// E3: groups that hold more than one flood plane - see the note beside
+	// the shore box below.
+	int water_multi_planes = 0;
 	int sway_vertices = 0;
 	g_scroll_parts = 0;
 	g_cutout_parts = 0;
@@ -1554,21 +1696,30 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 				/* R3b: and if the corner search found nothing, the plane the
 				 * vertex lies in answers for it - see the long note beside
-				 * plane_map. Counted, so that the log says how much of a
-				 * level's water the classic corners were missing. */
-				if (!(bits & 2))
-				{
-					const unsigned int plane_key =
-						((unsigned int)(unsigned short)vertex_group[(size_t)i] << 16) |
-						(unsigned int)(unsigned short)in.y;
-					std::unordered_map<unsigned int, HDMarkPlane>::const_iterator
-						plane = plane_map.find(plane_key);
+				 * plane_map. E2: for BOTH shimmer bits, each out of its own
+				 * map. Counted, so that the log says how much of a level's
+				 * water the classic corners were missing. */
+				const unsigned int plane_key =
+					((unsigned int)(unsigned short)vertex_group[(size_t)i] << 16) |
+					(unsigned int)(unsigned short)in.y;
 
-					if (plane != plane_map.end() &&
+				for (int bit = 0; bit < 2; bit++)
+				{
+					const unsigned char want = bit ? 4 : 2;
+
+					if (bits & want)
+						continue;
+
+					const std::unordered_map<unsigned int, HDMarkPlane>& map =
+						bit ? room_plane_map : plane_map;
+					std::unordered_map<unsigned int, HDMarkPlane>::const_iterator
+						plane = map.find(plane_key);
+
+					if (plane != map.end() &&
 						in.x >= plane->second.minX && in.x <= plane->second.maxX &&
 						in.z >= plane->second.minZ && in.z <= plane->second.maxZ)
 					{
-						bits |= 2;
+						bits |= want;
 						flooded_vertices++;
 					}
 				}
@@ -1606,6 +1757,82 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	sorted.reserve(trg.indices.size());
 
 	g_groups.assign(trg.groups.size(), HDGroup());
+
+	/* THE SHORE OF EACH ROOM'S WATER (#123, fix round E, E3).
+	 *
+	 * WHAT WAS WRONG. Fix round R3b floods the surface bit into the box of
+	 * the classic marked corners and then lifts every marked vertex by up to
+	 * one and a half times HD_WATER_SWELL - 36 units, and 36 of them UPWARDS,
+	 * because y counts downwards in this engine. The vertices at the water's
+	 * own EDGE are marked like the rest, so the surface rises over the bank
+	 * it should meet: on the player's two shots of the Rome cistern a dark
+	 * band stands where the lit coping is, it covers the coping and not the
+	 * wall below it, and it MOVES between the two shots (x 875..1055 in the
+	 * first, 960..1130 in the second) - which is the travelling wave and not
+	 * a texture.
+	 *
+	 * WHAT IS DONE. The flood box is kept, per group, and the vertex shader
+	 * fades the swell to nothing inside one square of its edge (hd_room.hlsl,
+	 * HD_WATER_SHORE). A wave that vanishes where the water meets the land is
+	 * what water does; the middle of the pool moves exactly as it did.
+	 *
+	 * ONE ENTRY PER (ROOM, HEIGHT), out of both flood maps: a room can hold a
+	 * pool at one height and a reflecting ceiling at another, and prepare()
+	 * picks the one at the room's own surfaceY - which is the only plane the
+	 * swell ever moves (hd_room.hlsl: the swell rides on `surfaceOn`, the
+	 * marked set AT the surface plane). A plane past the fourth is dropped
+	 * and counted; over the fifteen files there is none. */
+	{
+		int dropped = 0;
+
+		for (int bit = 0; bit < 2; bit++)
+		{
+			const std::unordered_map<unsigned int, HDMarkPlane>& map =
+				bit ? room_plane_map : plane_map;
+
+			for (std::unordered_map<unsigned int, HDMarkPlane>::const_iterator at =
+				map.begin(); at != map.end(); ++at)
+			{
+				const size_t group = (size_t)(at->first >> 16);
+
+				if (group >= g_groups.size())
+					continue;
+
+				HDGroup& g = g_groups[group];
+				const float y = (float)(short)(at->first & 0xFFFF);
+				int slot = -1;
+
+				for (int s = 0; s < g.waterPlanes; s++)
+					if (g.waterY[s] == y)
+						slot = s;
+
+				if (slot < 0)
+				{
+					if (g.waterPlanes >= HDGroup::kMaxPlanes)
+					{
+						dropped++;
+						continue;
+					}
+
+					slot = g.waterPlanes++;
+					g.waterY[slot] = y;
+					g.waterBox[slot][0] = (float)at->second.minX;
+					g.waterBox[slot][1] = (float)at->second.minZ;
+					g.waterBox[slot][2] = (float)at->second.maxX;
+					g.waterBox[slot][3] = (float)at->second.maxZ;
+					continue;
+				}
+
+				// The two bits can name the same plane; the box is the union.
+				if ((float)at->second.minX < g.waterBox[slot][0]) g.waterBox[slot][0] = (float)at->second.minX;
+				if ((float)at->second.minZ < g.waterBox[slot][1]) g.waterBox[slot][1] = (float)at->second.minZ;
+				if ((float)at->second.maxX > g.waterBox[slot][2]) g.waterBox[slot][2] = (float)at->second.maxX;
+				if ((float)at->second.maxZ > g.waterBox[slot][3]) g.waterBox[slot][3] = (float)at->second.maxZ;
+			}
+		}
+
+		water_multi_planes = dropped;
+	}
 
 	int split_ranges = 0;
 	int biggest = 0;
@@ -2242,6 +2469,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->markedShimmer = marked_shimmer;
 		stats->markedRoomShimmer = marked_room_shimmer;
 		stats->markedFlooded = flooded_vertices;	// R3b
+		stats->waterPlanesDropped = water_multi_planes;	// E2/E3
 		stats->splitRanges = split_ranges;
 		stats->biggestRangeTris = biggest;
 		stats->fallbackPageTris = fallback_tris;
@@ -2710,11 +2938,41 @@ namespace
 		set_matrix_constant(0, wvp);
 		set_worldview_constant(worldview);
 		apply_room_lighting(lighting);
+
+		/* c15, THE SHORE BOX OF THIS ROOM (#123, fix round E, E3) - where the
+		 * surface bit was flooded to, in room-local x and z, so that the
+		 * vertex shader can let the swell die where the water meets the bank.
+		 * A room with no water gets a box no vertex can be near the edge of,
+		 * which makes the taper exactly 1 and leaves the picture as it was. */
+		{
+			const HDGroup& g = g_groups[(size_t)group];
+			float box[4] = { -1.0e9f, -1.0e9f, 1.0e9f, 1.0e9f };
+
+			if (!g_no_shore && lighting)
+			{
+				for (int s = 0; s < g.waterPlanes; s++)
+				{
+					if (g.waterY[s] < lighting->surfaceY - 0.5f ||
+						g.waterY[s] > lighting->surfaceY + 0.5f)
+						continue;
+
+					box[0] = g.waterBox[s][0];
+					box[1] = g.waterBox[s][1];
+					box[2] = g.waterBox[s][2];
+					box[3] = g.waterBox[s][3];
+					break;
+				}
+			}
+
+			g_device->SetVertexShaderConstantF(15, box, 1);
+		}
+
 		return true;
 	}
 }
 
-bool HDRenderRoom(int group, const D3DMATRIX* world, const HDRoomLighting* lighting)
+bool HDRenderRoomMask(int group, const D3DMATRIX* world,
+	const HDRoomLighting* lighting, unsigned int passes)
 {
 	float wvp[16];
 
@@ -2726,10 +2984,20 @@ bool HDRenderRoom(int group, const D3DMATRIX* world, const HDRoomLighting* light
 	if (!room.triangles[0] && !room.triangles[1] && !room.triangles[2])
 		return false;	// the .TRG has nothing here - that room stays classic
 
+	/* E6: the passes the caller asked for, in their own order. One prepare
+	 * per call, so a room drawn in two phases pays two matrix multiplies and
+	 * one light upload more than it did - measured against a frame's draw
+	 * calls, nothing. */
 	for (int pass = 0; pass < 3; pass++)
-		draw_pass(room, pass, wvp);
+		if (passes & (1u << pass))
+			draw_pass(room, pass, wvp);
 
 	return true;
+}
+
+bool HDRenderRoom(int group, const D3DMATRIX* world, const HDRoomLighting* lighting)
+{
+	return HDRenderRoomMask(group, world, lighting, HD_PASS_ALL);
 }
 
 /* THE SKY DOME (#123, fix round R3a).

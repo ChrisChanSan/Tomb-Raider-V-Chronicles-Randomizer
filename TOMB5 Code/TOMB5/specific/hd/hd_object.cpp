@@ -1667,12 +1667,12 @@ int HDObjectDrawCalls()
 	return g_draw_calls;
 }
 
-void HDObjectFrameDraw(const void* projection, int bulbs)
+void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 {
 	if (!g_count)
 		return;
 
-	HDModelFrameBegin((const D3DMATRIX*)projection, bulbs);
+	HDModelFrameBegin((const D3DMATRIX*)projection, bulbs, passes);
 
 	for (int i = 0; i < g_count; i++)
 	{
@@ -1708,9 +1708,20 @@ void HDObjectFrameDraw(const void* projection, int bulbs)
 				entry.mask, &lighting, entry.nearCut, entry.cull);
 	}
 
-	g_draw_calls = HDModelDrawCalls();
+	/* E6: the phases add up. HDModelFrameBegin zeroes the model file's own
+	 * counter per bracket, so a frame drawn in two phases would otherwise
+	 * report the second phase alone - and the second phase is the small one.
+	 * The solid phase, which is the one that carries HD_PASS_OPAQUE, starts
+	 * the count over. */
+	if (passes & HD_PASS_OPAQUE)
+		g_draw_calls = 0;
 
-	if (gLogEnabled && !g_frame_logged)
+	g_draw_calls += HDModelDrawCalls();
+}
+
+void HDObjectFrameEnd()
+{
+	if (gLogEnabled && !g_frame_logged && g_count)
 	{
 		g_frame_logged = true;
 		Log("HDLOG frame objects hd=%d classic=%d baked=%d dropped=%d "

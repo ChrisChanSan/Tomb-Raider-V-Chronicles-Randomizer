@@ -143,6 +143,9 @@ namespace
 	bool g_in_frame = false;
 	int g_draw_calls = 0;
 	int g_frame_bulbs = 0;
+	// E6: which of the three passes this bracket draws - see
+	// HDModelFrameBegin and the HD_PASS_ note in hd_render.h.
+	unsigned int g_pass_mask = HD_PASS_ALL;
 
 	/* --------------------------------------------------------- helpers -- */
 
@@ -1232,6 +1235,14 @@ namespace
 
 		for (int pass = 0; pass < 3; pass++)
 		{
+			/* E6: the frame draws its solid work and its glows in two
+			 * brackets, and this is where a bracket leaves out what is not
+			 * its own. HD_PASS_ALL, which is what the diagnostic tool and
+			 * every caller before fix round E asks for, lets all three
+			 * through and this line costs a test. */
+			if (!(g_pass_mask & (1u << pass)))
+				continue;
+
 			if (model.pass[pass].empty())
 				continue;
 
@@ -1899,13 +1910,15 @@ void HDModelLevelEnd()
 	g_notes.clear();
 }
 
-void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount)
+void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount,
+	unsigned int passes)
 {
 	if (!HDModelReady())
 		return;
 
 	g_in_frame = true;
 	g_draw_calls = 0;
+	g_pass_mask = passes;
 	g_frame_bulbs = bulbCount < HD_MAX_BULBS ? bulbCount : HD_MAX_BULBS;
 
 	if (projection)

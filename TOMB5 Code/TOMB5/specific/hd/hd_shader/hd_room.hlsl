@@ -172,6 +172,7 @@
  * c12         gSel1               per room
  * c13         gMotion             per DRAW CALL (#123, stage S5)
  * c14         gFlat               per DRAW CALL (#123, fix round R3a)
+ * c15         gWaterBox           per room   (#123, fix round E)
  * c32 - c95   gWaterTable[64]     per room, only when the row changes
  * c96 - c127  gWibbleTable[32]    per level (it never changes)
  */
@@ -305,6 +306,29 @@ float4 gWibbleTable[32] : register(c96);
  * baked light is the light. See hd_render.cpp, PartIsUnlit. */
 float4 gFlat : register(c14);
 
+/* WHERE THIS ROOM'S WATER STOPS (#123, fix round E, E3).
+ *
+ * xy the smallest and zw the largest x and z, room local, of the box the
+ * surface bit was flooded into (hd_render.cpp, "THE SHORE OF EACH ROOM'S
+ * WATER"). A room with no water gets a box so large that nothing is ever
+ * near its edge, and the taper below is then exactly 1.
+ *
+ * WHAT IT IS FOR. Fix round R3b lifts every marked vertex by up to one and a
+ * half times HD_WATER_SWELL, and 36 of those units are UPWARDS - y counts
+ * downwards here. The vertices at the water's own edge carry the mark like
+ * every other, so the surface climbed over the coping it should meet and
+ * covered it with dark water: the player's two shots of the Rome cistern show
+ * a dark band standing exactly where the lit coping is, and the band MOVES
+ * between the two shots with the wave. Water does not do that. It goes flat
+ * where it meets the land, and so does this. */
+float4 gWaterBox : register(c15);
+
+/* How far in from the shore the swell reaches its full height: one square. A
+ * TR5 water quad is one square, so this is the smallest distance over which a
+ * grid of them can fade at all - anything shorter would fade inside a single
+ * triangle and read as a crease rather than as a shore. */
+#define HD_WATER_SHORE     1024.0f
+
 /* -------------------------------------------------- constants, pixel side --
  *
  * c4          gPass               per pass  (the same one)
@@ -354,11 +378,42 @@ float4 gCounts : register(c17);
 float4 gAdd : register(c18);
 
 /* How far the swing carries, either side of the part's own weight, and over
- * what distance one wave of it fits. Both are chosen, not measured - the
- * .TRG gives the PERIOD and nothing else - so they are kept where a swing
- * reads as light moving rather than as light switching: a quarter either
- * way, over about three squares. */
-#define HD_RAY_SWING       0.25f
+ * what distance one wave of it fits. The .TRG gives the PERIOD and nothing
+ * else, so neither is read out of the file - but the first one is now MEASURED
+ * against the remaster's own two shots rather than chosen (#123, fix round E,
+ * E1).
+ *
+ * WHAT WAS WRONG. Fix round R3a put a quarter either way here, and the player
+ * called the result pulsing. Measured on his own two shots of the ANDREA
+ * church, the two candle glows move by +7.8 and -9.3 percent of the WHOLE
+ * pixel between one moment and the next - and those are two arbitrary
+ * moments of a sine that carries half again as much.
+ *
+ * WHAT THE REFERENCE SAYS. The remaster's own two shots of the VCI corridor,
+ * three seconds apart, measured over the shaft band on the far wall (108
+ * columns, x 470 to 900, y 240 to 430):
+ *
+ *     shot t1   band mean 124.6   column sd 17.9  =  14.3 % of the mean
+ *     shot t4   band mean 130.1   column sd 21.5  =  16.5 % of the mean
+ *
+ * The pattern keeps its strength and the level barely moves: 4.4 percent
+ * between the two, and the camera moved between them as well, so 4.4 is an
+ * upper bound. The remaster's shafts TRAVEL; they do not brighten and dim.
+ * That is what the travelling wave below is for, and the amplitude is what
+ * was four to six times too large.
+ *
+ * 0.06 is that 4.4 percent with the head-room a WEIGHT has over a lit
+ * surface: the swing multiplies the additive share of a pixel and not the
+ * pixel, so a part whose glow is the whole of what is on screen moves by 6
+ * percent at the very most and one drawn over a lit wall by less. Measured
+ * back through RoomProbe on RICH2 room 25, eight seconds at one second
+ * against the -nomotion still picture: the worst pixel moved 17.0 percent
+ * before and 5.4 after, and the share of pixels moving more than 5 percent
+ * went from 0.82 to none.
+ *
+ * The wavelength is unchanged and still chosen: about three squares, so that
+ * neighbouring parts of one fan are out of step. */
+#define HD_RAY_SWING       0.06f
 #define HD_RAY_WAVELENGTH  0.0021f
 
 /* THE GLOSS OF A SURFACE (#123, fix round R3b).
@@ -562,12 +617,38 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	 * all read the position the .TRG stores, which is what stage S2's parity
 	 * is measured against, and the classic path's own choppy displacement -
 	 * which is in `pos` - is untouched by this. */
-	float water = gMotion.w * saturate(max(gWaterMode.y * inFlags.x, shimmerOn));
+	/* WHAT MOVES IS THE SURFACE, NOT THE ROOM (#123, fix round E, E2).
+	 *
+	 * `shimmerOn` is the classic path's WaterTable COLOUR selector, and in a
+	 * ROOM_REFLECT + ROOM_REFLECT_CEILING room it says yes to almost every
+	 * vertex there is - walls, ceiling, pillars - because that is what the
+	 * classic room shimmer does (drawroom.cpp:534). Stage S5 and fix round R3b
+	 * hung the UV wobble and the swell on it, so in Rome those two moved the
+	 * WALLS. The classic path displaces nothing but its own nWVtx set and
+	 * that set is empty in all of TR5, so nothing in this engine has ever
+	 * moved a wall.
+	 *
+	 * Geometry and UV therefore ride on the marked set AT THE SURFACE PLANE -
+	 * gRoomOrigin.w, the room's own minfloor. In a surface-bit room that is
+	 * what `shimmerOn` already is (gWaterMode.z carries the same height test);
+	 * in a whole-room-bit room it is the pool and nothing else. The colour
+	 * term below keeps `shimmerOn` whole, so the room still shimmers exactly
+	 * as it did. */
+	float surfaceOn = dot(inFlags, gSel1) * atSurface;
+	float water = gMotion.w * saturate(max(gWaterMode.y * inFlags.x, surfaceOn));
 	float wavA = (pos.x + pos.z) * HD_WATER_WAVE + gMotion.z * HD_WATER_SPEED_A;
 	float wavB = (pos.z - pos.y) * HD_WATER_WAVE + gMotion.z * HD_WATER_SPEED_B;
 
+	/* E3: AND NOTHING OF IT AT THE SHORE. How far this vertex stands inside
+	 * the flood box, in squares, clamped to one - see gWaterBox. It multiplies
+	 * the SWELL only: the UV wobble and the caustic are a picture on the
+	 * surface and may run right up to the bank, it is the geometry that must
+	 * not climb it. */
+	float2 inset = min(pos.xz - gWaterBox.xy, gWaterBox.zw - pos.xz);
+	float shore = saturate(min(inset.x, inset.y) * (1.0f / HD_WATER_SHORE));
+
 	if (water > 0.002f)
-		drawn.y += water * HD_WATER_SWELL *
+		drawn.y += water * shore * HD_WATER_SWELL *
 			(sin(wavA) + 0.5f * cos(wavB * 1.7f + gMotion.z));
 
 	/* 3. THE TRANSFORM. */

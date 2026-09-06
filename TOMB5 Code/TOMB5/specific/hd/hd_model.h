@@ -308,7 +308,16 @@ void HDModelLevelEnd();
 // hd_model.hlsl reads the very registers hd_room.hlsl was given. Only the
 // COUNT register is per object, so the bulb count is handed over here and
 // written with each object's own light count.
-void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount);
+//
+// `passes` is one of the HD_PASS_ masks of hd_render.h and says which of the
+// three passes every HDModelDraw of this bracket is to draw (#123, fix round
+// E, E6). A frame opens the bracket twice: once for HD_PASS_SOLID, with the
+// rooms' own solid passes, and once for HD_PASS_ADDITIVE after the classic
+// buckets, so that no later opaque draw can paint over a glow that wrote no
+// depth. HD_PASS_ALL is the whole model in one bracket, which is what the
+// diagnostic tool asks for.
+void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount,
+	unsigned int passes = HD_PASS_ALL);
 
 // One object. `nodeMatrix` is nodeCount row-major 4x4 matrices, model space
 // to VIEW space - the very matrices the classic path has on its stack when it

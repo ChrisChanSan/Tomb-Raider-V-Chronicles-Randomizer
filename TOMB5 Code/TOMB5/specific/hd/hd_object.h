@@ -94,9 +94,21 @@ int HDObjectFrameCount();
 // Inside hd_level.cpp's HD bracket, after the rooms. `projection` is the very
 // matrix the rooms were drawn with and `bulbs` this frame's fog bulb count,
 // which hd_render already put in the shared registers.
-void HDObjectFrameDraw(const void* projection, int bulbs);
+//
+// `passes` is one of the HD_PASS_ masks of hd_render.h (#123, fix round E,
+// E6). A frame calls this TWICE - HD_PASS_SOLID beside the rooms' solid
+// passes, HD_PASS_ADDITIVE after the classic buckets - and the list stays
+// where it is until HDObjectFrameEnd empties it, so both phases see the same
+// items. The draw calls of the phases add up.
+void HDObjectFrameDraw(const void* projection, int bulbs,
+	unsigned int passes = HD_PASS_ALL);
 
-// The draw calls the last HDObjectFrameDraw made, for the frame line.
+// The frame's list is done with: the log line, and the list emptied. Called
+// once, after the last HDObjectFrameDraw of the frame.
+void HDObjectFrameEnd();
+
+// The draw calls the last frame's HDObjectFrameDraw calls made, both phases
+// together, for the frame line.
 int HDObjectDrawCalls();
 
 // --- what Lara borrows (#123, stage S4-2) ----------------------------------

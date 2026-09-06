@@ -284,6 +284,631 @@ namespace
 			pairs ? total / pairs : 0.0, worst, over);
 	}
 
+	/* THE HORIZONTAL SURFACES OF ONE GROUP (#123, fix round H, H1).
+	 *
+	 * A TR5 water surface is a flat quad at the room's water height, and the
+	 * .TRG marks it as nothing at all - stage S5 measured that and fix round
+	 * R3b confirmed it. So the only way to ask "which page is our water
+	 * wearing" is to find the flat surfaces geometrically and read the page
+	 * off them.
+	 *
+	 * One line per (height, page, material, pass): the triangles that lie in
+	 * that plane, their x/z box, and the LAYER the .TRG gave them - because
+	 * layer 0 means "no page named" and the renderer then falls back to the
+	 * level's first page, which is a wall texture and not water. */
+	struct FlatKey
+	{
+		int y;
+		int layer;
+		uint32_t material;
+		int pass;
+
+		bool operator<(const FlatKey& o) const
+		{
+			if (y != o.y) return y < o.y;
+			if (layer != o.layer) return layer < o.layer;
+			if (material != o.material) return material < o.material;
+			return pass < o.pass;
+		}
+	};
+
+	struct FlatCount
+	{
+		long long tris = 0;
+		/* World coordinates run past a short, so the sentinels have to as
+		 * well - a 32767 here quietly pins every x0 of a room past the
+		 * middle of the map. */
+		int x0 = 1 << 30, z0 = 1 << 30, x1 = -(1 << 30), z1 = -(1 << 30);
+		int up = 0, down = 0;
+	};
+
+	void dumpFlat(const std::string& root, const std::string& stem, int group)
+	{
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+		std::string error;
+
+		if (!trf::remaster::read_trg(path, trg, error))
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		if (group < 0 || group >= (int)trg.groups.size())
+		{
+			std::printf("%-9s group out of range (0..%d)\n", stem.c_str(),
+				(int)trg.groups.size() - 1);
+			return;
+		}
+
+		std::map<FlatKey, FlatCount> table;
+		long long total = 0;
+
+		for (const trf::remaster::TrgPart& part : trg.groups[(size_t)group].parts)
+			for (int pass = 0; pass < 3; pass++)
+				for (uint32_t at = 0; at + 2 < part.pass[pass].count; at += 3)
+				{
+					const uint32_t first = part.pass[pass].start + at;
+
+					if (first + 2 >= trg.indices.size())
+						break;
+
+					const trf::remaster::TrgVertex& a = trg.vertices[trg.indices[first]];
+					const trf::remaster::TrgVertex& b = trg.vertices[trg.indices[first + 1]];
+					const trf::remaster::TrgVertex& c = trg.vertices[trg.indices[first + 2]];
+
+					total++;
+
+					if (a.y != b.y || b.y != c.y)
+						continue;
+
+					FlatKey key;
+					key.y = a.y;
+					key.layer = a.layer;
+					key.material = part.material;
+					key.pass = pass;
+
+					FlatCount& f = table[key];
+					f.tris++;
+
+					if (a.ny > 160) f.up++;
+					else if (a.ny < 94) f.down++;
+
+					const int xs[3] = { a.x, b.x, c.x };
+					const int zs[3] = { a.z, b.z, c.z };
+
+					for (int i = 0; i < 3; i++)
+					{
+						if (xs[i] < f.x0) f.x0 = xs[i];
+						if (xs[i] > f.x1) f.x1 = xs[i];
+						if (zs[i] < f.z0) f.z0 = zs[i];
+						if (zs[i] > f.z1) f.z1 = zs[i];
+					}
+				}
+
+		std::printf("%-9s group %d: %lld triangles, %d texture layer(s), "
+			"first page %d\n", stem.c_str(), group, total,
+			(int)trg.textures.size(),
+			trg.textures.empty() ? -1 : (int)trg.textures[0]);
+		std::printf("        y  layer   page   mat  pass   tris    x0    x1    z0    z1  up down\n");
+
+		for (std::map<FlatKey, FlatCount>::const_iterator at = table.begin();
+			at != table.end(); ++at)
+		{
+			const int layer = at->first.layer;
+			const int page = (layer && (size_t)layer <= trg.textures.size())
+				? (int)trg.textures[layer - 1]
+				: (trg.textures.empty() ? -1 : (int)trg.textures[0]);
+
+			std::printf("%9d %6d %6d%s %5u %5d %6lld %5d %5d %5d %5d %4d %4d\n",
+				at->first.y, layer, page, layer ? " " : "*",
+				at->first.material, at->first.pass, at->second.tris,
+				at->second.x0, at->second.x1, at->second.z0, at->second.z1,
+				at->second.up, at->second.down);
+		}
+
+		std::printf("        (* = layer 0, no page named - the renderer falls back "
+			"to the level's first page)\n");
+	}
+
+	/* EVERY PART OF ONE GROUP (#123, fix round H, H1): material, parameters,
+	 * the page its first triangle wears, the triangles per pass and the
+	 * room-local box each pass covers. The -mat table says what a level's
+	 * materials are; this says where in ONE room they sit. */
+	void dumpParts(const std::string& root, const std::string& stem, int group)
+	{
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+		std::string error;
+
+		if (!trf::remaster::read_trg(path, trg, error))
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		if (group < 0 || group >= (int)trg.groups.size())
+		{
+			std::printf("%-9s group out of range (0..%d)\n", stem.c_str(),
+				(int)trg.groups.size() - 1);
+			return;
+		}
+
+		std::printf("%-9s group %d: %d part(s)\n", stem.c_str(), group,
+			(int)trg.groups[(size_t)group].parts.size());
+		std::printf(" part   mat      p0       p1       p2       p3 pass   tris  page"
+			"     x0    x1    y0    y1    z0    z1\n");
+
+		int nr = 0;
+
+		for (const trf::remaster::TrgPart& part : trg.groups[(size_t)group].parts)
+		{
+			for (int pass = 0; pass < 3; pass++)
+			{
+				if (!part.pass[pass].count)
+					continue;
+
+				int box[6] = { 1 << 30, -(1 << 30), 1 << 30, -(1 << 30), 1 << 30, -(1 << 30) };
+				int page = -1;
+
+				for (uint32_t i = 0; i < part.pass[pass].count; i++)
+				{
+					const uint32_t index = part.pass[pass].start + i;
+
+					if (index >= trg.indices.size())
+						break;
+
+					const trf::remaster::TrgVertex& v = trg.vertices[trg.indices[index]];
+
+					if (page < 0 && v.layer && (size_t)v.layer <= trg.textures.size())
+						page = (int)trg.textures[v.layer - 1];
+
+					if (v.x < box[0]) box[0] = v.x;
+					if (v.x > box[1]) box[1] = v.x;
+					if (v.y < box[2]) box[2] = v.y;
+					if (v.y > box[3]) box[3] = v.y;
+					if (v.z < box[4]) box[4] = v.z;
+					if (v.z > box[5]) box[5] = v.z;
+				}
+
+				std::printf("%5d %5u %8.4f %8.4f %8.4f %8.4f %4d %6u %5d %6d %5d %5d %5d %5d %5d",
+					nr, part.material, part.param[0], part.param[1],
+					part.param[2], part.param[3], pass,
+					part.pass[pass].count / 3, page,
+					box[0], box[1], box[2], box[3], box[4], box[5]);
+
+				/* EVERY page the pass touches, not only its first (#123, fix
+				 * round H, H2). A part is one material, not one sheet: the
+				 * glass wall of ANDREA2 wears four. */
+				{
+					std::map<int, long long> pages;
+
+					for (uint32_t i = 0; i < part.pass[pass].count; i += 3)
+					{
+						const uint32_t index = part.pass[pass].start + i;
+
+						if (index >= trg.indices.size())
+							break;
+
+						const trf::remaster::TrgVertex& v = trg.vertices[trg.indices[index]];
+
+						if (v.layer && (size_t)v.layer <= trg.textures.size())
+							pages[(int)trg.textures[v.layer - 1]]++;
+					}
+
+					std::printf("  pages:");
+
+					int shown = 0;
+
+					for (std::map<int, long long>::const_iterator at = pages.begin();
+						at != pages.end() && shown < 10; ++at, ++shown)
+						std::printf(" %d(%lld)", at->first, at->second);
+
+					std::printf("%s\n", pages.size() > 10 ? " ..." : "");
+				}
+			}
+
+			nr++;
+		}
+	}
+
+	/* HOW MUCH OF A LEVEL IS ON LAYER 0 (#123, fix round H, H1). Per level:
+	 * vertices with layer 0, triangles whose FIRST corner carries it - which
+	 * is the corner hd_render.cpp reads - and the material those triangles
+	 * belong to. The renderer counts the triangles as fallbackPageTris; this
+	 * says which materials and which groups they are, without a device. */
+	void dumpLayer0(const std::string& root, const std::string& stem)
+	{
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+		std::string error;
+
+		if (!trf::remaster::read_trg(path, trg, error))
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		long long zero_vertices = 0;
+
+		for (size_t v = 0; v < trg.vertices.size(); v++)
+			if (!trg.vertices[v].layer)
+				zero_vertices++;
+
+		std::map<uint32_t, long long> by_material;
+		std::map<int, long long> by_group;
+		long long tris = 0, total = 0;
+
+		for (size_t g = 0; g < trg.groups.size(); g++)
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+				for (int pass = 0; pass < 3; pass++)
+					for (uint32_t at = 0; at + 2 < part.pass[pass].count; at += 3)
+					{
+						const uint32_t first = part.pass[pass].start + at;
+
+						if (first >= trg.indices.size())
+							break;
+
+						total++;
+
+						if (trg.vertices[trg.indices[first]].layer)
+							continue;
+
+						tris++;
+						by_material[part.material]++;
+						by_group[(int)g]++;
+					}
+
+		std::printf("%-9s vertices %lld of %lld on layer 0, triangles %lld of %lld, "
+			"groups %d, first page %d\n", stem.c_str(), zero_vertices,
+			(long long)trg.vertices.size(), tris, total, (int)by_group.size(),
+			trg.textures.empty() ? -1 : (int)trg.textures[0]);
+
+		for (std::map<uint32_t, long long>::const_iterator at = by_material.begin();
+			at != by_material.end(); ++at)
+			std::printf("          material %5u : %lld triangle(s)\n",
+				at->first, at->second);
+
+		int shown = 0;
+
+		for (std::map<int, long long>::const_iterator at = by_group.begin();
+			at != by_group.end() && shown < 12; ++at, ++shown)
+			std::printf("          group %4d : %lld triangle(s)\n",
+				at->first, at->second);
+	}
+
+	/* THE CLASSIC ROOM'S FLAT FACES BESIDE THE .TRG's (#123, fix round H, H1).
+	 *
+	 * The player's finding in trview is that a vanilla water face wears a wave
+	 * texture and the HD one "has no assignment". The two meshes can be held
+	 * against each other because a TR5 room vertex carries its y in WORLD
+	 * units (drawroom.cpp:531 compares pos.y with r->minfloor straight) and so
+	 * does a .TRG vertex - only x and z are room local, and the room's origin
+	 * is known. So both sides are listed as "horizontal faces per height", and
+	 * a height the classic side has and the HD side does not is a surface the
+	 * remaster did not build. */
+	void dumpSurface(const std::string& root, const std::string& stem,
+		const std::string& folder, int roomNr)
+	{
+		Tr5Level level;
+		std::string error;
+		const std::string trc = folder + "\\" + stem + ".TRC";
+
+		if (!level.load(toW(trc), error))
+		{
+			std::printf("%-9s classic level not loadable: %s\n", stem.c_str(),
+				error.c_str());
+			return;
+		}
+
+		if (roomNr < 0 || roomNr >= level.roomCount())
+		{
+			std::printf("%-9s room out of range (0..%d)\n", stem.c_str(),
+				level.roomCount() - 1);
+			return;
+		}
+
+		const Tr5Room& rm = level.rooms()[(size_t)roomNr];
+		std::vector<Tr5Level::FaceInfo> faces;
+
+		if (!level.roomFaces(roomNr, faces, error))
+		{
+			std::printf("%-9s room %d: no faces (%s)\n", stem.c_str(), roomNr,
+				error.c_str());
+			return;
+		}
+
+		std::printf("%-9s classic room %d: flags 0x%04X, origin x %d z %d, "
+			"yBottom %d, %d face(s)\n", stem.c_str(), roomNr, rm.flags,
+			rm.originX, rm.originZ, rm.yBottom, (int)faces.size());
+
+		/* Per height: how many horizontal faces, which texinfos, the box. */
+		struct Row
+		{
+			int faces = 0;
+			std::map<int, int> tex;
+			int x0 = 1 << 30, x1 = -(1 << 30), z0 = 1 << 30, z1 = -(1 << 30);
+		};
+
+		std::map<int, Row> rows;
+
+		for (size_t f = 0; f < faces.size(); f++)
+		{
+			const Tr5Level::FaceInfo& face = faces[f];
+			const int corners = face.quad ? 4 : 3;
+			bool flat = true;
+
+			for (int c = 1; c < corners; c++)
+				if (face.v[c][1] != face.v[0][1])
+					flat = false;
+
+			if (!flat)
+				continue;
+
+			Row& row = rows[(int)face.v[0][1]];
+			row.faces++;
+			row.tex[face.texInfo]++;
+
+			for (int c = 0; c < corners; c++)
+			{
+				if ((int)face.v[c][0] < row.x0) row.x0 = (int)face.v[c][0];
+				if ((int)face.v[c][0] > row.x1) row.x1 = (int)face.v[c][0];
+				if ((int)face.v[c][2] < row.z0) row.z0 = (int)face.v[c][2];
+				if ((int)face.v[c][2] > row.z1) row.z1 = (int)face.v[c][2];
+			}
+		}
+
+		std::printf("  classic horizontal faces:\n");
+		std::printf("        y  faces  texinfos      x0      x1      z0      z1\n");
+
+		for (std::map<int, Row>::const_iterator at = rows.begin();
+			at != rows.end(); ++at)
+		{
+			std::printf("%9d %6d %9d %7d %7d %7d %7d  :",
+				at->first, at->second.faces, (int)at->second.tex.size(),
+				at->second.x0, at->second.x1, at->second.z0, at->second.z1);
+
+			int shown = 0;
+
+			for (std::map<int, int>::const_iterator t = at->second.tex.begin();
+				t != at->second.tex.end() && shown < 8; ++t, ++shown)
+				std::printf(" %d(%d)", t->first, t->second);
+
+			std::printf("%s\n", at->second.tex.size() > 8 ? " ..." : "");
+		}
+
+		/* And the same heights out of the .TRG, in WORLD x and z. */
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+
+		if (!trf::remaster::read_trg(path, trg, error))
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		if (roomNr >= (int)trg.groups.size())
+		{
+			std::printf("  .TRG has no group %d\n", roomNr);
+			return;
+		}
+
+		std::map<FlatKey, FlatCount> table;
+
+		for (const trf::remaster::TrgPart& part : trg.groups[(size_t)roomNr].parts)
+			for (int pass = 0; pass < 3; pass++)
+				for (uint32_t at = 0; at + 2 < part.pass[pass].count; at += 3)
+				{
+					const uint32_t first = part.pass[pass].start + at;
+
+					if (first + 2 >= trg.indices.size())
+						break;
+
+					const trf::remaster::TrgVertex& a = trg.vertices[trg.indices[first]];
+					const trf::remaster::TrgVertex& b = trg.vertices[trg.indices[first + 1]];
+					const trf::remaster::TrgVertex& c = trg.vertices[trg.indices[first + 2]];
+
+					if (a.y != b.y || b.y != c.y)
+						continue;
+
+					FlatKey key;
+					key.y = a.y;
+					key.layer = a.layer;
+					key.material = part.material;
+					key.pass = pass;
+
+					FlatCount& f = table[key];
+					f.tris++;
+
+					if (a.ny > 160) f.up++;
+					else if (a.ny < 94) f.down++;
+
+					const int xs[3] = { a.x + rm.originX, b.x + rm.originX, c.x + rm.originX };
+					const int zs[3] = { a.z + rm.originZ, b.z + rm.originZ, c.z + rm.originZ };
+
+					for (int i = 0; i < 3; i++)
+					{
+						if (xs[i] < f.x0) f.x0 = xs[i];
+						if (xs[i] > f.x1) f.x1 = xs[i];
+						if (zs[i] < f.z0) f.z0 = zs[i];
+						if (zs[i] > f.z1) f.z1 = zs[i];
+					}
+				}
+
+		std::printf("  .TRG group %d horizontal triangles (world x/z):\n", roomNr);
+		std::printf("        y  layer   page   mat  pass   tris      x0      x1      z0      z1\n");
+
+		for (std::map<FlatKey, FlatCount>::const_iterator at = table.begin();
+			at != table.end(); ++at)
+		{
+			const int layer = at->first.layer;
+			const int page = (layer && (size_t)layer <= trg.textures.size())
+				? (int)trg.textures[layer - 1] : -1;
+
+			std::printf("%9d %6d %6d %5u %5d %6lld %7d %7d %7d %7d\n",
+				at->first.y, layer, page, at->first.material, at->first.pass,
+				at->second.tris, at->second.x0, at->second.x1,
+				at->second.z0, at->second.z1);
+		}
+	}
+
+	/* THE MISSING WATER SURFACE, OVER A WHOLE LEVEL (#123, fix round H, H1).
+	 *
+	 * The classic engine draws a water surface as ordinary room faces at the
+	 * room's own minfloor, and the shimmer branch that makes them move opens
+	 * with `pos.y == CurrentRoomPtr->minfloor` in a room carrying
+	 * ROOM_REFLECT or ROOM_MIST (drawroom.cpp:531-545). So for every such
+	 * room: the lowest plane of horizontal faces is the water, and the
+	 * question is whether the .TRG's group for that room draws anything
+	 * there. It is asked per plane, in world coordinates, and answered in
+	 * triangles - two per classic quad is what a plain remesh would give.
+	 */
+	void dumpWaterGap(const std::string& root, const std::string& stem,
+		const std::string& folder)
+	{
+		Tr5Level level;
+		std::string error;
+		const std::string trc = folder + "\\" + stem + ".TRC";
+
+		if (!level.load(toW(trc), error))
+		{
+			std::printf("%-9s classic level not loadable: %s\n", stem.c_str(),
+				error.c_str());
+			return;
+		}
+
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+
+		if (!trf::remaster::read_trg(path, trg, error))
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		int rooms = 0, planes = 0, gone = 0, classicFaces = 0, hdTris = 0;
+
+		for (int r = 0; r < level.roomCount(); r++)
+		{
+			const Tr5Room& rm = level.rooms()[(size_t)r];
+
+			/* 0x200 ROOM_REFLECT, 0x100 ROOM_MIST - the two the shimmer
+			 * branch opens on. An underwater room's own top face, where it
+			 * has one, belongs to the room above. */
+			if (!(rm.flags & 0x300))
+				continue;
+
+			std::vector<Tr5Level::FaceInfo> faces;
+
+			if (!level.roomFaces(r, faces, error))
+				continue;
+
+			// The lowest horizontal plane of the room: minfloor.
+			int floorY = -(1 << 30);
+			bool any = false;
+
+			for (size_t f = 0; f < faces.size(); f++)
+			{
+				const int corners = faces[f].quad ? 4 : 3;
+				bool flat = true;
+
+				for (int c = 1; c < corners; c++)
+					if (faces[f].v[c][1] != faces[f].v[0][1])
+						flat = false;
+
+				if (!flat)
+					continue;
+
+				any = true;
+
+				if ((int)faces[f].v[0][1] > floorY)
+					floorY = (int)faces[f].v[0][1];
+			}
+
+			if (!any)
+				continue;
+
+			int here = 0;
+			int x0 = 1 << 30, x1 = -(1 << 30), z0 = 1 << 30, z1 = -(1 << 30);
+			std::map<int, int> tex;
+
+			for (size_t f = 0; f < faces.size(); f++)
+			{
+				const int corners = faces[f].quad ? 4 : 3;
+				bool flat = true;
+
+				for (int c = 1; c < corners; c++)
+					if (faces[f].v[c][1] != faces[f].v[0][1])
+						flat = false;
+
+				if (!flat || (int)faces[f].v[0][1] != floorY)
+					continue;
+
+				here++;
+				tex[faces[f].texInfo]++;
+
+				for (int c = 0; c < corners; c++)
+				{
+					if ((int)faces[f].v[c][0] < x0) x0 = (int)faces[f].v[c][0];
+					if ((int)faces[f].v[c][0] > x1) x1 = (int)faces[f].v[c][0];
+					if ((int)faces[f].v[c][2] < z0) z0 = (int)faces[f].v[c][2];
+					if ((int)faces[f].v[c][2] > z1) z1 = (int)faces[f].v[c][2];
+				}
+			}
+
+			if (here < 2 || r >= (int)trg.groups.size())
+				continue;
+
+			// The .TRG's triangles in that plane and that box.
+			int mine = 0;
+
+			for (const trf::remaster::TrgPart& part : trg.groups[(size_t)r].parts)
+				for (int pass = 0; pass < 3; pass++)
+					for (uint32_t at = 0; at + 2 < part.pass[pass].count; at += 3)
+					{
+						const uint32_t first = part.pass[pass].start + at;
+
+						if (first + 2 >= trg.indices.size())
+							break;
+
+						bool in = true;
+
+						for (int c = 0; c < 3; c++)
+						{
+							const trf::remaster::TrgVertex& v =
+								trg.vertices[trg.indices[first + c]];
+							const int wx = v.x + rm.originX;
+							const int wz = v.z + rm.originZ;
+
+							if (v.y != floorY || wx < x0 || wx > x1 || wz < z0 || wz > z1)
+								in = false;
+						}
+
+						if (in)
+							mine++;
+					}
+
+			rooms++;
+			planes++;
+			classicFaces += here;
+			hdTris += mine;
+
+			if (mine * 2 < here)
+				gone++;
+
+			{
+				std::printf("%-9s room %3d  y %6d  classic %3d face(s), %d texinfo(s), "
+					"HD %3d triangle(s)  x %d..%d z %d..%d\n",
+					stem.c_str(), r, floorY, here, (int)tex.size(), mine,
+					x0, x1, z0, z1);
+			}
+		}
+
+		std::printf("%-9s %d reflecting room(s), %d classic surface face(s), "
+			"%d HD triangle(s) in the same planes, %d plane(s) with less than "
+			"half the art\n\n", stem.c_str(), rooms, classicFaces, hdTris, gone);
+	}
+
 	int classicRooms(const std::string& folder, const std::string& stem)
 	{
 		if (folder.empty())
@@ -308,6 +933,9 @@ int main(int argc, char** argv)
 		std::printf("                          with triangles per pass and groups\n");
 		std::printf("       [-seam <groupA> <groupB> <dx> <dy> <dz>]  the baked light\n");
 		std::printf("                          where two rooms share vertex positions\n");
+		std::printf("       [-flat <group>]  the horizontal surfaces of one group, with\n");
+		std::printf("                        the page each of them wears (H1, the water)\n");
+		std::printf("       [-layer0]  how much of a level names no page at all\n");
 		return 1;
 	}
 
@@ -334,10 +962,25 @@ int main(int argc, char** argv)
 	int only_material = -1;
 	int threads = 0;
 	int seam_a = -1, seam_b = -1, seam_d[3] = { 0, 0, 0 };
+	int flat_group = -1;
+	int parts_group = -1;
+	int surface_room = -1;
+	bool water_gap = false;
+	bool layer_zero = false;
 
 	for (int i = 2; i < argc; i++)
 	{
-		if (!_stricmp(argv[i], "-seam") && i + 5 < argc)
+		if (!_stricmp(argv[i], "-watergap"))
+			water_gap = true;
+		else if (!_stricmp(argv[i], "-parts") && i + 1 < argc)
+			parts_group = std::atoi(argv[++i]);
+		else if (!_stricmp(argv[i], "-surface") && i + 1 < argc)
+			surface_room = std::atoi(argv[++i]);
+		else if (!_stricmp(argv[i], "-flat") && i + 1 < argc)
+			flat_group = std::atoi(argv[++i]);
+		else if (!_stricmp(argv[i], "-layer0"))
+			layer_zero = true;
+		else if (!_stricmp(argv[i], "-seam") && i + 5 < argc)
 		{
 			seam_a = std::atoi(argv[i + 1]);
 			seam_b = std::atoi(argv[i + 2]);
@@ -380,6 +1023,58 @@ int main(int argc, char** argv)
 	const int cores = (int)std::thread::hardware_concurrency();
 	std::printf("install : %s\n", root.c_str());
 	std::printf("cores   : %d\n\n", cores);
+
+	if (surface_room >= 0)
+	{
+		if (classic.empty())
+		{
+			std::printf("-surface needs -classic <folder holding the .TRC>\n");
+			return 1;
+		}
+
+		for (const std::string& stem : levels)
+			dumpSurface(root, stem, classic, surface_room);
+
+		return 0;
+	}
+
+	if (water_gap)
+	{
+		if (classic.empty())
+		{
+			std::printf("-watergap needs -classic <folder holding the .TRC>\n");
+			return 1;
+		}
+
+		for (const std::string& stem : levels)
+			dumpWaterGap(root, stem, classic);
+
+		return 0;
+	}
+
+	if (parts_group >= 0)
+	{
+		for (const std::string& stem : levels)
+			dumpParts(root, stem, parts_group);
+
+		return 0;
+	}
+
+	if (flat_group >= 0)
+	{
+		for (const std::string& stem : levels)
+			dumpFlat(root, stem, flat_group);
+
+		return 0;
+	}
+
+	if (layer_zero)
+	{
+		for (const std::string& stem : levels)
+			dumpLayer0(root, stem);
+
+		return 0;
+	}
 
 	if (seam_a >= 0)
 	{

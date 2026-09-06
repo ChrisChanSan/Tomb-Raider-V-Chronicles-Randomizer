@@ -562,6 +562,160 @@ static int CropLogo(const char* logoPath, const char* outPath)
 	return 0;
 }
 
+/* ROW AND COLUMN PROFILES OF A SHEET (#123, fix round H, H1).
+ *
+ * EFFECT.DDS is an ATLAS: one 2048 x 2048 sheet holding two dozen unrelated
+ * effect pictures on a black ground. Cutting a tile out of it by eye is a
+ * guess; this makes it a measurement. Per row (and per column) it prints how
+ * many texels are above a threshold and their mean brightness, so the runs of
+ * black between the pictures - and therefore each picture's own rectangle -
+ * can be read off numbers instead of off a screenshot. */
+static int Profile(const char* inPath, int step)
+{
+	unsigned char* file;
+	unsigned long size;
+	unsigned long* px;
+	const char* why;
+	long w, h, x, y;
+
+	file = ReadWhole(inPath, &size);
+
+	if (!file)
+	{
+		printf("cannot read %s\n", inPath);
+		return 1;
+	}
+
+	px = BC7DecodeDDS(file, size, 4096, &w, &h, &why);
+	free(file);
+
+	if (!px)
+	{
+		printf("REFUSED: %s\n", why);
+		return 1;
+	}
+
+	printf("size             : %ld x %ld, step %d\n", w, h, step);
+	printf("  row   lit  mean  peak      col   lit  mean  peak\n");
+
+	for (y = 0; y < h; y += step)
+	{
+		long lit = 0, sum = 0, peak = 0;
+		long clit = 0, csum = 0, cpeak = 0;
+
+		for (x = 0; x < w; x++)
+		{
+			const unsigned long v = px[y * w + x];
+			const long lum = (long)(((v >> 16) & 255) + ((v >> 8) & 255) + (v & 255)) / 3;
+
+			if (lum > 16) lit++;
+			sum += lum;
+			if (lum > peak) peak = lum;
+		}
+
+		for (x = 0; x < h && y < w; x++)
+		{
+			const unsigned long v = px[x * w + y];
+			const long lum = (long)(((v >> 16) & 255) + ((v >> 8) & 255) + (v & 255)) / 3;
+
+			if (lum > 16) clit++;
+			csum += lum;
+			if (lum > cpeak) cpeak = lum;
+		}
+
+		printf("%5ld %5ld %5ld %5ld    %5ld %5ld %5ld %5ld\n",
+			y, lit, sum / w, peak, y, clit, csum / h, cpeak);
+	}
+
+	free(px);
+	return 0;
+}
+
+/* ONE RECTANGLE OF A SHEET, as a picture (#123, fix round H, H1). The tile
+ * the engine is about to cut out of an atlas, so that the numbers above and
+ * the picture the player sees are the same rectangle. */
+static int Cut(const char* inPath, int cx, int cy, int cw, int ch, const char* outPath)
+{
+	unsigned char* file;
+	unsigned long size;
+	unsigned long* px;
+	unsigned long* out;
+	const char* why;
+	long w, h, x, y;
+
+	file = ReadWhole(inPath, &size);
+
+	if (!file)
+	{
+		printf("cannot read %s\n", inPath);
+		return 1;
+	}
+
+	px = BC7DecodeDDS(file, size, 4096, &w, &h, &why);
+	free(file);
+
+	if (!px)
+	{
+		printf("REFUSED: %s\n", why);
+		return 1;
+	}
+
+	if (cx < 0 || cy < 0 || cw <= 0 || ch <= 0 || cx + cw > w || cy + ch > h)
+	{
+		printf("rectangle %d %d %d %d is not inside %ld x %ld\n", cx, cy, cw, ch, w, h);
+		free(px);
+		return 1;
+	}
+
+	out = (unsigned long*)malloc((size_t)cw * (size_t)ch * sizeof(unsigned long));
+
+	if (!out)
+	{
+		free(px);
+		return 1;
+	}
+
+	for (y = 0; y < ch; y++)
+		for (x = 0; x < cw; x++)
+			out[y * cw + x] = px[(cy + y) * w + cx + x];
+
+	{
+		double sum[3] = { 0, 0, 0 };
+		long lo = 255, hi = 0;
+
+		for (y = 0; y < ch; y++)
+			for (x = 0; x < cw; x++)
+			{
+				const unsigned long v = out[y * cw + x];
+				const long lum = (long)(((v >> 16) & 255) + ((v >> 8) & 255) + (v & 255)) / 3;
+
+				sum[0] += (double)((v >> 16) & 255);
+				sum[1] += (double)((v >> 8) & 255);
+				sum[2] += (double)(v & 255);
+
+				if (lum < lo) lo = lum;
+				if (lum > hi) hi = lum;
+			}
+
+		printf("cut              : %d %d %d %d of %ld x %ld\n", cx, cy, cw, ch, w, h);
+		printf("  mean RGB         : %.1f %.1f %.1f, luminance %ld..%ld\n",
+			sum[0] / (cw * ch), sum[1] / (cw * ch), sum[2] / (cw * ch), lo, hi);
+	}
+
+	if (!WritePng(outPath, out, cw, ch))
+	{
+		printf("cannot write %s\n", outPath);
+		free(out);
+		free(px);
+		return 1;
+	}
+
+	printf("wrote            : %s\n", outPath);
+	free(out);
+	free(px);
+	return 0;
+}
+
 int main(int argc, char** argv)
 {
 	unsigned char* file;
@@ -589,6 +743,13 @@ int main(int argc, char** argv)
 
 	if (argc == 4 && !strcmp(argv[1], "-alpha"))
 		return AlphaMask(argv[2], argv[3]);
+
+	if ((argc == 3 || argc == 4) && !strcmp(argv[1], "-rows"))
+		return Profile(argv[2], argc == 4 ? atoi(argv[3]) : 1);
+
+	if (argc == 8 && !strcmp(argv[1], "-cut"))
+		return Cut(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5]),
+			atoi(argv[6]), argv[7]);
 
 	if (argc != 3)
 	{

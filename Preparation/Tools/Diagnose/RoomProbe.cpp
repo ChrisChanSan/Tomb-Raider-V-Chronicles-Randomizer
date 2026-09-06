@@ -81,6 +81,13 @@
  *     -noshore        the swell reaches the water's own edge at full height,
  *                     as it did before fix round E3 - the before picture out
  *                     of the same build.
+ *     -noupright      the wall vertices at the waterline keep the surface's
+ *                     UV wobble and its caustic, as they did before fix
+ *                     round H (H4) - the before picture out of the same
+ *                     build.
+ *     -noblend        material 14 stays in the alpha TEST it was in before
+ *                     fix round H (H2) - the glass drawn as a hard mask of
+ *                     itself, the before picture out of the same build.
  *
  *   Stage S2b - the parity block. Every one of these makes up a piece of
  *   engine state the tool has no engine for, and hands it to the very
@@ -118,6 +125,19 @@
  *                     corners of one water quad. Fix round R3b floods the
  *                     plane between them, and the R3b line says how many
  *                     HD vertices the four corners were missing.
+ *     -watersurvey <folder holding the classic .TRC>
+ *                     the offline twin of hd_level.cpp's BuildWaterSurfaces:
+ *                     per reflecting room of the classic level, the faces in
+ *                     its minfloor plane and the answer HDRenderGroupFlatArt
+ *                     gives for each of them, then the majority the engine
+ *                     takes (#123, fix round H, H1). Prints and stops.
+ *     -flatart <y x0 z0 x1 z1>
+ *                     does the drawn group draw anything in that horizontal
+ *                     plane? The question hd_level.cpp asks per classic water
+ *                     face of an HD room (#123, fix round H, H1): a NO is a
+ *                     plane the remaster left empty, and there the level's own
+ *                     water surface is drawn on top of the HD room. Room
+ *                     local. Repeat the switch, up to eight.
  *     -noreflect      the gloss of fix round R3b off - the picture fix
  *                     round R3a drew, out of the same build.
  *     -shatter        hide every destructible piece of the drawn room -
@@ -194,6 +214,11 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_dxt5.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
 #include "../../../TOMB5 Code/TOMB5/specific/bc7.h"
+/* H1: the randomizer's own reader for the CLASSIC level, so that the water
+ * survey can hold the level's own faces against the .TRG's art through the
+ * engine's own gate. Nothing else in this tool needs a classic level. */
+#include "core/Tr5Level.h"
+#include <string>
 
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "psapi.lib")
@@ -804,6 +829,8 @@ static bool ShotWrite(Shot& shot, const char* path)
 	// separates "nothing was drawn" from "something dark was drawn".
 	long background = 0;
 	double sum = 0;
+	double peak = 0;
+	long long white = 0;
 
 	for (long y = 0; y < shot.h; y++)
 	{
@@ -819,6 +846,22 @@ static bool ShotWrite(Shot& shot, const char* path)
 				background++;
 
 			sum += (double)((c >> 16) & 255) + (double)((c >> 8) & 255) + (double)(c & 255);
+
+			/* H3: the PEAK and the white share, which is how fix round R3a
+			 * quoted a light shaft and how the player looks at one - a mean
+			 * says nothing about a fan whose middle is saturated. */
+			{
+				const unsigned long r = (c >> 16) & 255;
+				const unsigned long g = (c >> 8) & 255;
+				const unsigned long b = c & 255;
+				const unsigned long m = r > g ? (r > b ? r : b) : (g > b ? g : b);
+
+				if ((double)m > peak)
+					peak = (double)m;
+
+				if (m >= 230)
+					white++;
+			}
 		}
 	}
 
@@ -828,8 +871,11 @@ static bool ShotWrite(Shot& shot, const char* path)
 	const bool ok = WritePng(path, pixels, shot.w, shot.h);
 	free(pixels);
 
-	printf("  %-58s %5.1f%% background, mean brightness %.1f/255\n",
-		path, 100.0 * (double)background / texels, sum / (texels * 3.0));
+	printf("  %-58s %5.1f%% background, mean %.1f/255 (%.1f%%), peak %.0f "
+		"(%.1f%%), white %.2f%%\n",
+		path, 100.0 * (double)background / texels, sum / (texels * 3.0),
+		100.0 * sum / (texels * 3.0 * 255.0), peak, 100.0 * peak / 255.0,
+		100.0 * (double)white / texels);
 
 	if (!ok)
 		printf("RoomProbe: writing %s failed\n", path);
@@ -1026,6 +1072,16 @@ static bool g_shatter = false;
  * once per static mesh of an HD room. Up to eight boxes per run. */
 static float g_geom_box[8][6];
 static int g_geom_count = 0;
+
+/* Fix round H (H1), -flatart: ask the renderer whether the drawn group draws
+ * anything in one horizontal plane - the question hd_level.cpp asks once per
+ * classic water face of an HD room, and the gate that decides whether that
+ * face is drawn on top of the HD room or left to the remaster's own art.
+ * y, x0, z0, x1, z1, room local. Up to eight per run. */
+static int g_flat_box[8][5];
+static int g_flat_count = 0;
+// H1, -watersurvey: the folder holding the classic .TRC files.
+static std::string g_survey;
 static unsigned char g_water_table[22][64][4];
 
 /* Fix round E, -with and -oldorder: THE NEIGHBOUR ROOMS OF ONE SCENE.
@@ -1558,6 +1614,10 @@ int main(int argc, char** argv)
 			g_black = true;
 		else if (!strcmp(argv[at], "-noshore"))
 			HDRenderShoreOverride(1);
+		else if (!strcmp(argv[at], "-noblend"))
+			HDRenderBlendOverride(1);
+		else if (!strcmp(argv[at], "-noupright"))
+			HDRenderUprightOverride(1);
 		else if (!strcmp(argv[at], "-noreflect"))
 			g_reflect = false;
 		else if (!strcmp(argv[at], "-shatter"))
@@ -1578,6 +1638,23 @@ int main(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-oldorder"))
 			g_old_order = true;
+		else if (!strcmp(argv[at], "-watersurvey") && at + 1 < argc)
+		{
+			g_survey = argv[at + 1];
+			at += 1;
+		}
+		else if (!strcmp(argv[at], "-flatart") && at + 5 < argc)
+		{
+			if (g_flat_count < 8)
+			{
+				for (int c = 0; c < 5; c++)
+					g_flat_box[g_flat_count][c] = atoi(argv[at + 1 + c]);
+
+				g_flat_count++;
+			}
+
+			at += 5;
+		}
 		else if (!strcmp(argv[at], "-hasgeom") && at + 6 < argc)
 		{
 			if (g_geom_count < 8)
@@ -1867,6 +1944,12 @@ int main(int argc, char** argv)
 		"room, %d of them flooded, %d plane(s) dropped\n",
 		stats.markedVertices, stats.markedShimmer, stats.markedRoomShimmer,
 		stats.markedFlooded, stats.waterPlanesDropped);
+	/* H4: and how many of the marked vertices are not a flat surface at all -
+	 * a wall or a pillar standing at the water's own height. The geometry,
+	 * the UV wobble and the caustic leave those alone now; the colour term
+	 * still has them, as the classic path does. */
+	printf("H4: %d marked vertex/vertices whose normal is not vertical "
+		"(the wall at the waterline)\n", stats.markedWall);
 	// And the gloss: the opaque parts of materials 3 and 17 whose own
 	// numbers gave them one (fix round R3b).
 	printf("R3b: %d glossy part(s) (materials 3 and 17)\n",
@@ -1884,6 +1967,26 @@ int main(int argc, char** argv)
 		printf("R3b: group %d, box %.0f..%.0f %.0f..%.0f %.0f..%.0f - geometry: %s\n",
 			room, mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2],
 			HDRenderGroupHasGeometry(room, mins, maxs) ? "YES (baked, stays suppressed)" : "NO (drawn the classic way)");
+	}
+
+	/* H1: the horizontal planes of the drawn group, and the answer the
+	 * water-surface gate gives for a plane one names. A NO is a plane the
+	 * remaster left empty - there the classic water face is drawn on top of
+	 * the HD room (hd_level.cpp, BuildWaterSurfaces). */
+	printf("H1: %d horizontal plane(s) of art in group %d (%d in the level)\n",
+		HDRenderGroupFlatPlanes(room), room, stats.flatPlanes);
+	printf("H2: %d see-through part(s) in the alpha pass (material 14), "
+		"%d draw call(s)\n", stats.blendParts, stats.blendRanges);
+
+	for (int i = 0; i < g_flat_count; i++)
+	{
+		const int* b = g_flat_box[i];
+
+		printf("H1: group %d, plane y %d, box x %d..%d z %d..%d - art: %s\n",
+			room, b[0], b[1], b[3], b[2], b[4],
+			HDRenderGroupFlatArt(room, b[0], b[1], b[2], b[3], b[4])
+				? "YES (the remaster built it, the classic face stays out)"
+				: "NO (the classic water face is drawn on top)");
 	}
 
 	if (HDRenderDestructibleCount())
@@ -1982,6 +2085,114 @@ int main(int argc, char** argv)
 
 	if (psnr)
 		PrintPsnr(root, 16);
+
+	/* THE WATER SURVEY (#123, fix round H, H1).
+	 *
+	 * The offline twin of hd_level.cpp's BuildWaterSurfaces: for every
+	 * reflecting room of the CLASSIC level, the faces that lie in the room's
+	 * own minfloor plane - the plane the classic shimmer branch opens on -
+	 * and, per face, the answer of HDRenderGroupFlatArt, which is the very
+	 * function the engine gates on. What it cannot do is the shimmer-vertex
+	 * predicate, which needs the engine's roomlets; so this is the upper
+	 * bound of what the engine will restore, and the decision per room is the
+	 * same majority the engine takes.
+	 *
+	 * The point of it is that the engine's own gate can be run over all
+	 * fifteen levels without starting the game. */
+	if (!g_survey.empty())
+	{
+		Tr5Level level;
+		std::string error;
+		const std::string trc = g_survey + "\\" + stem + ".TRC";
+		std::wstring wide;
+
+		for (size_t i = 0; i < trc.size(); i++)
+			wide.push_back((wchar_t)(unsigned char)trc[i]);
+
+		printf("\n-- the water survey (H1) ------------------------------------\n");
+
+		if (!level.load(wide, error))
+			printf("classic level not loadable: %s\n", error.c_str());
+		else
+		{
+			int rooms = 0, faces = 0, covered = 0, restored = 0, restoredRooms = 0;
+
+			for (int r = 0; r < level.roomCount() && r < HDRenderGroupCount(); r++)
+			{
+				const Tr5Room& rm = level.rooms()[(size_t)r];
+
+				// ROOM_MIST 0x100 or ROOM_REFLECT 0x200 - the two flags whose
+				// branch ever sets the surface bit (drawroom.cpp:531-545).
+				if (!(rm.flags & 0x300))
+					continue;
+
+				std::vector<Tr5Level::FaceInfo> flat;
+
+				if (!level.roomFaces(r, flat, error))
+					continue;
+
+				int here = 0, hit = 0;
+
+				for (size_t f = 0; f < flat.size(); f++)
+				{
+					const int corners = flat[f].quad ? 4 : 3;
+					bool level_face = true;
+
+					for (int c = 1; c < corners; c++)
+						if (flat[f].v[c][1] != flat[f].v[0][1])
+							level_face = false;
+
+					if (!level_face || (int)flat[f].v[0][1] != rm.yBottom)
+						continue;
+
+					int x0 = 1 << 30, x1 = -(1 << 30), z0 = 1 << 30, z1 = -(1 << 30);
+
+					for (int c = 0; c < corners; c++)
+					{
+						const int x = (int)flat[f].v[c][0] - rm.originX;
+						const int z = (int)flat[f].v[c][2] - rm.originZ;
+
+						if (x < x0) x0 = x;
+						if (x > x1) x1 = x;
+						if (z < z0) z0 = z;
+						if (z > z1) z1 = z;
+					}
+
+					here++;
+
+					if (HDRenderGroupFlatArt(r, rm.yBottom, x0, z0, x1, z1))
+						hit++;
+				}
+
+				if (!here)
+					continue;
+
+				rooms++;
+				faces += here;
+				covered += hit;
+
+				const bool restore = hit * 2 < here;
+
+				if (restore)
+				{
+					restored += here;
+					restoredRooms++;
+				}
+
+				printf("  room %3d  y %6d  %3d classic face(s), the .TRG covers "
+					"%3d  ->  %s\n", r, rm.yBottom, here, hit,
+					restore ? "RESTORE" : "leave it to the .TRG");
+			}
+
+			printf("  %s: %d reflecting room(s), %d face(s) in the minfloor "
+				"plane, %d covered by the .TRG, %d face(s) in %d room(s) "
+				"restored\n", stem, rooms, faces, covered, restored, restoredRooms);
+		}
+
+		HDRenderShutdown();
+		DropDevice();
+		return 0;
+	}
 
 	if (groupsOnly)
 	{
@@ -2246,6 +2457,15 @@ int main(int argc, char** argv)
 			for (int i = 0; i < g_with_count; i++)
 				HDRenderRoomMask(g_with_group[i], &withWorld[i], &lighting,
 					HD_PASS_SOLID);
+
+			/* H2: the see-through half of the alpha pass - the glass -
+			 * after everything opaque and before the glows, which is the
+			 * order HDFrameDrawGlow draws them in. */
+			HDRenderRoomMask(room, 0, &lighting, HD_PASS_BLEND);
+
+			for (int i = 0; i < g_with_count; i++)
+				HDRenderRoomMask(g_with_group[i], &withWorld[i], &lighting,
+					HD_PASS_BLEND);
 
 			HDRenderRoomMask(room, 0, &lighting, HD_PASS_ADDITIVE);
 

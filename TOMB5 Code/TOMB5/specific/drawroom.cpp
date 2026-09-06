@@ -61,6 +61,89 @@ static ROOM_INFO* CurrentRoomPtr;
 static long CurrentRoomUnderwater;
 static bool has_water_neighbor;
 
+/* THE WATER SURFACE OF AN HD ROOM (#123, fix round H, H1).
+ *
+ * The one piece of a room the HD path hands back to the classic one. What is
+ * drawn here is not a copy and not a rebuild: it is the level's own face, its
+ * own texinfo - and therefore its own animated texture range - lit and
+ * shimmered by aRoomletTransformLight exactly as it is in a classic room.
+ * hd_level.cpp, BuildWaterSurfaces, decides once per level which faces these
+ * are; the measurement is in the note there.
+ *
+ * The roomlet has to be transformed whole, because a face names vertices by
+ * their number inside it, and the transform is what fills aVertexBuffer. The
+ * list is sorted by roomlet so that costs one transform per roomlet that
+ * carries water, and nothing at all for the rooms that carry none - which is
+ * every room in eleven of the fifteen levels.
+ *
+ * Depth: these go into the classic buckets and the classic sort list, both of
+ * which are drawn AFTER HDFrameDraw has put the whole HD world in the depth
+ * buffer (hd_level.cpp, the note over HDFrameDraw). A translucent water quad
+ * therefore blends over the HD pool floor, which is what it did over the
+ * classic one. */
+static void InsertRoomWater(ROOM_INFO* r)
+{
+	const int room_number = (int)(r - room);
+	const int faces = HDRoomWaterFaceCount(room_number);
+
+	if (!faces)
+		return;
+
+	int transformed = -1;
+
+	CurrentRoomPtr = r;
+	CurrentRoomUnderwater = r->flags & ROOM_UNDERWATER;
+
+	for (int i = 0; i < faces; i++)
+	{
+		const HDRoomWaterFace* entry = HDRoomWaterFaceAt(room_number, i);
+
+		if (!entry || entry->roomlet < 0 || entry->roomlet >= r->nRoomlets)
+			continue;
+
+		ROOMLET* roomlet = &r->pRoomlets[entry->roomlet];
+
+		if (!roomlet->nVtx || !roomlet->pFac)
+			continue;
+
+		if (transformed != entry->roomlet)
+		{
+			// The same clip test InsertRoom does per roomlet.
+			if (!CheckBoundsClip(roomlet->bBox))
+				continue;
+
+			const long lights = aBuildRoomletLights(roomlet);
+
+			aRoomletTransformLight(roomlet->pSVtx, roomlet->nVtx,
+				lights & 0x7FFFFFFF, roomlet->nWVtx, roomlet->nSVtx);
+			transformed = entry->roomlet;
+		}
+
+		if (entry->quad)
+		{
+			short* ptr = roomlet->pFac + entry->face * 6;
+			const long double_sided = (ptr[4] >> 15) & 1;
+			TEXTURESTRUCT* tex = &textinfo[ptr[4] & 0x3FFF];
+
+			if (tex->drawtype)
+				AddQuadSorted(aVertexBuffer, ptr[0], ptr[1], ptr[2], ptr[3], tex, double_sided);
+			else
+				AddQuadZBuffer(aVertexBuffer, ptr[0], ptr[1], ptr[2], ptr[3], tex, double_sided);
+		}
+		else
+		{
+			short* ptr = roomlet->pFac + roomlet->nQuad * 6 + entry->face * 5;
+			const long double_sided = (ptr[3] >> 15) & 1;
+			TEXTURESTRUCT* tex = &textinfo[ptr[3] & 0x3FFF];
+
+			if (tex->drawtype)
+				AddTriSorted(aVertexBuffer, ptr[0], ptr[1], ptr[2], tex, double_sided);
+			else
+				AddTriZBuffer(aVertexBuffer, ptr[0], ptr[1], ptr[2], tex, double_sided);
+		}
+	}
+}
+
 void InsertRoom(ROOM_INFO* r)
 {
 	clip_left = (float)r->left;
@@ -85,7 +168,17 @@ void InsertRoom(ROOM_INFO* r)
 	 * HDFrameRoom returns false at its first line and the classic path below
 	 * runs exactly as it did. */
 	if (HDFrameRoom((int)(r - room), aMXPtr))
+	{
+		/* #123 (fix round H, H1): everything but the water. The remaster's
+		 * art has no geometry in the plane the classic level draws its water
+		 * surface in - 61 of the game's 93 reflecting rooms, every VCI pool
+		 * among them - so those faces, and only those, are still drawn from
+		 * here. hd_level.cpp works out which ones at level build; a room the
+		 * remaster DID build a surface for has an empty list and this is one
+		 * test. */
+		InsertRoomWater(r);
 		return;
+	}
 
 	if (r->nVerts)
 	{

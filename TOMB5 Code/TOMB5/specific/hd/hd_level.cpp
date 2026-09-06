@@ -148,6 +148,17 @@ namespace
 	// level whether the shader's fixed maxima ever bit.
 	std::vector<HDWaterMark> g_water_marks;
 
+	/* THE WATER SURFACE THE REMASTER DOES NOT DRAW (#123, fix round H, H1).
+	 *
+	 * One entry per classic room face that IS a water surface and that the
+	 * .TRG has no art for. See BuildWaterSurfaces for the measurement; the
+	 * faces are kept sorted by roomlet so that drawroom.cpp transforms and
+	 * lights a roomlet once and then picks its water faces out of it. */
+	std::vector<HDRoomWaterFace> g_water_faces[HD_MAX_ROOMS];
+	int g_water_face_total = 0;
+	int g_water_face_rooms = 0;
+	int g_water_face_kept = 0;	// faces the .TRG DOES cover - left to it
+
 	/* STAGE S5: THE GAME CLOCK, IN SECONDS.
 	 *
 	 * The UV scroll a .TRG part carries is a speed, and a speed needs a clock
@@ -685,6 +696,175 @@ static void BuildWaterMarks()
 
 	Log("HDLOG level=%s water marks=%d rooms=%d", g_stem,
 		(int)g_water_marks.size(), water_rooms);
+}
+
+/* THE WATER SURFACE THE REMASTER DOES NOT DRAW (#123, fix round H, H1).
+ *
+ * WHAT WAS MEASURED. The player's picture of a VCI pool shows dark washed-out
+ * blotches where the remaster shows a moving surface, and his own look in
+ * trview says why: "the vanilla water faces carry a wave texture, in HD the
+ * assignment for the face is missing". The first reading of that - the .TRG
+ * gives those faces texture layer 0 and the renderer falls back to the
+ * level's first page - is WRONG, and the file says so: over all fifteen
+ * levels, 0 of 12,247,000 vertices carry layer 0 (TrgProbe -layer0).
+ *
+ * What is missing is the GEOMETRY. The classic engine draws a water surface
+ * as ordinary room faces at the room's own minfloor, and the shimmer branch
+ * that makes them move opens with `pos.y == CurrentRoomPtr->minfloor` in a
+ * room carrying ROOM_REFLECT or ROOM_MIST (drawroom.cpp:531-545). Held
+ * against the .TRG plane by plane (TrgProbe -watergap), over 93 such rooms in
+ * the fifteen files:
+ *
+ *     JOBY2   4 of 5 rooms have NO .TRG triangle in the classic water plane
+ *     JOBY5  13 of 25          -   the whole VCI pool set
+ *     ANDY3  23 of 23, ANDY1 5 of 6, ANDREA2 10 of 13, ANDREA1 3 of 3,
+ *     JOBY4   1 of 1, RICH3 2 of 4
+ *     ANDREA3, JOBY3, RICH2  0 of 15 - those rooms keep their surface
+ *
+ * JOBY2's room 66 is the pool of the player's picture: 24 classic faces of
+ * ONE texinfo at y -1280, and 0 .TRG triangles in that plane. The HD room
+ * therefore draws the pool FLOOR and nothing over it, which is exactly the
+ * flat dark checkerboard the player photographed - there is no water there
+ * at all, so no texture and no shader could have been wrong.
+ *
+ * WHAT IS DONE. Where the level has a water surface and the .TRG has not, the
+ * classic face is drawn on top of the HD room, by the classic path, with its
+ * own texture, its own animated texture range, its own light and the shimmer
+ * the classic path has always given it. Nothing is invented: the surface that
+ * comes back is the one the level ships.
+ *
+ * The two tests a face has to pass are the engine's own, not a rule of ours:
+ * every corner at the room's minfloor (the classic height test), and every
+ * corner marked by aRoomVertexWaterMarks as a shimmer-surface vertex (the
+ * classic predicate, portal walk and all). A face the .TRG covers - asked per
+ * face, in its own plane and its own box - is left to the .TRG, so a room
+ * whose water the remaster did build is untouched.
+ */
+static void BuildWaterSurfaces()
+{
+	g_water_face_total = 0;
+	g_water_face_rooms = 0;
+	g_water_face_kept = 0;
+
+	for (int i = 0; i < number_rooms && i < HD_MAX_ROOMS; i++)
+	{
+		g_water_faces[i].clear();
+
+		ROOM_INFO* r = &room[i];
+
+		if (!r->pRoomlets || r->nRoomlets <= 0)
+			continue;
+
+		// Only the two flags whose branch ever sets the surface bit.
+		if (!(r->flags & (ROOM_MIST | ROOM_REFLECT)))
+			continue;
+
+		/* A room the .TRG has no group for is drawn classically anyway, with
+		 * its water face and all. Read straight out of the table rather than
+		 * through GroupOfRoom: this runs before any flip, so group i is room
+		 * i, which is the same window BuildStaticTables works in. */
+		if (i >= HD_MAX_ROOMS || !g_group_hd[i])
+			continue;
+
+		int covered = 0;
+
+		for (int n = 0; n < r->nRoomlets; n++)
+		{
+			ROOMLET* roomlet = &r->pRoomlets[n];
+
+			if (!roomlet->pSVtx || !roomlet->pFac)
+				continue;
+
+			short* face = roomlet->pFac;
+
+			for (int f = 0; f < roomlet->nQuad + roomlet->nTri; f++)
+			{
+				const bool quad = f < roomlet->nQuad;
+				const int corners = quad ? 4 : 3;
+				bool water = true;
+				float x0 = 0, x1 = 0, z0 = 0, z1 = 0;
+
+				for (int c = 0; c < corners && water; c++)
+				{
+					const long v = face[c];
+
+					if (v < 0 || v >= roomlet->nVtx)
+					{
+						water = false;
+						break;
+					}
+
+					const float* xyz = roomlet->pSVtx + v * 7;
+
+					if (xyz[1] != r->minfloor ||
+						!(aRoomVertexWaterMarks(r, roomlet, v) & 2))
+					{
+						water = false;
+						break;
+					}
+
+					if (!c)
+					{
+						x0 = x1 = xyz[0];
+						z0 = z1 = xyz[2];
+					}
+					else
+					{
+						if (xyz[0] < x0) x0 = xyz[0];
+						if (xyz[0] > x1) x1 = xyz[0];
+						if (xyz[2] < z0) z0 = xyz[2];
+						if (xyz[2] > z1) z1 = xyz[2];
+					}
+				}
+
+				face += quad ? 6 : 5;
+
+				if (!water)
+					continue;
+
+				// The .TRG's own answer for that piece of plane.
+				if (HDRenderGroupFlatArt(i, (int)r->minfloor,
+					(int)x0, (int)z0, (int)x1, (int)z1))
+					covered++;
+
+				HDRoomWaterFace entry;
+
+				entry.roomlet = (short)n;
+				entry.face = (short)(quad ? f : f - roomlet->nQuad);
+				entry.quad = quad ? 1 : 0;
+				g_water_faces[i].push_back(entry);
+			}
+		}
+
+		/* PER ROOM AND NOT PER FACE. A pool is one surface, and half of one
+		 * is worse than either whole: JOBY2's room 66 has 24 water faces and
+		 * the remaster's art touches 3 of their sectors with the coping, so a
+		 * face-by-face rule would leave three square holes in the middle of
+		 * the pool. So the room decides, by majority - and a room whose
+		 * surface the remaster really did build (ANDREA3, JOBY3, RICH2, and
+		 * twelve of JOBY5's twenty-five) keeps every face out of the way. */
+		if (!g_water_faces[i].empty() &&
+			covered * 2 >= (int)g_water_faces[i].size())
+		{
+			g_water_face_kept += (int)g_water_faces[i].size();
+			g_water_faces[i].clear();
+		}
+
+		if (!g_water_faces[i].empty())
+		{
+			g_water_face_rooms++;
+			g_water_face_total += (int)g_water_faces[i].size();
+			g_water_faces[i].shrink_to_fit();
+
+			Log("HDLOG room=%d water surface restored=%d face(s) at y=%d, "
+				"the .TRG covers %d of them", i,
+				(int)g_water_faces[i].size(), (int)r->minfloor, covered);
+		}
+	}
+
+	Log("HDLOG level=%s water surfaces restored=%d in %d room(s), "
+		"left to the .TRG=%d", g_stem, g_water_face_total, g_water_face_rooms,
+		g_water_face_kept);
 }
 
 /* ---------------------------------------------- the statics (R3b) ------- */
@@ -1487,6 +1667,11 @@ void HDLevelBuild()
 	 * draws objects, not to this one. */
 	BuildStaticTables();
 
+	/* H1: and the water surface the remaster left out - see the long note
+	 * over BuildWaterSurfaces. It has to run after the loop above, because it
+	 * asks per room whether that room draws HD at all. */
+	BuildWaterSurfaces();
+
 	Log("HDLOG level=%s statics suppressed=%d kept=%d (in %d HD rooms, %d classic)",
 		g_stem, suppressed_statics, kept_statics, hd_rooms, classic_rooms);
 
@@ -1528,6 +1713,15 @@ void HDLevelUnload()
 	g_static_classic.clear();
 	g_static_first.clear();
 	g_destruct_pairs.clear();
+
+	/* H1: and so does the water surface table - a roomlet number and a face
+	 * number in the room that is being freed. */
+	for (int i = 0; i < HD_MAX_ROOMS; i++)
+		g_water_faces[i].clear();
+
+	g_water_face_total = 0;
+	g_water_face_rooms = 0;
+	g_water_face_kept = 0;
 	HDMarkersFree();	// text, no device - the same rule as the objects
 	HDObjectLevelEnd();
 }
@@ -1579,6 +1773,26 @@ bool HDRoomIsHD(int roomIndex)
 	return GroupOfRoom(roomIndex) >= 0;
 }
 
+/* THE CLASSIC WATER FACES OF ONE HD ROOM (#123, fix round H, H1). Read by
+ * drawroom.cpp's InsertRoom the moment the HD path has taken the room over -
+ * see BuildWaterSurfaces for what is in the list and why. */
+int HDRoomWaterFaceCount(int roomIndex)
+{
+	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count ||
+		roomIndex >= HD_MAX_ROOMS)
+		return 0;
+
+	return (int)g_water_faces[roomIndex].size();
+}
+
+const HDRoomWaterFace* HDRoomWaterFaceAt(int roomIndex, int at)
+{
+	if (at < 0 || at >= HDRoomWaterFaceCount(roomIndex))
+		return 0;
+
+	return &g_water_faces[roomIndex][(size_t)at];
+}
+
 /* ONE HALF OF ONE FlipMap SWAP (#123, fix round A, A1).
  *
  * Called from FlipMap (game\control.cpp) at the exact line where the two
@@ -1602,6 +1816,15 @@ void HDFlipRoom(int roomIndex, int otherIndex)
 
 	g_room_group[roomIndex] = g_room_group[otherIndex];
 	g_room_group[otherIndex] = keep;
+
+	/* H1: and the restored water faces with it. They are a roomlet number and
+	 * a face number INSIDE a ROOM_INFO, and FlipMap is the statement where
+	 * two ROOM_INFO records change places - so the list has to travel with
+	 * the mesh it names, exactly as the art above travels with the geometry.
+	 * Both are empty in almost every room, so this is two empty vectors
+	 * changing places. */
+	if (roomIndex < HD_MAX_ROOMS && otherIndex < HD_MAX_ROOMS)
+		g_water_faces[roomIndex].swap(g_water_faces[otherIndex]);
 
 	/* The first ten swaps of a level, and then a count - a flip that runs on
 	 * a timer would otherwise fill the log with the same two lines. */
@@ -1880,6 +2103,15 @@ void HDFrameDrawGlow()
 	const int objects_here = g_frame_objects;
 
 	HDRenderFrameBegin(&kIdentity, &projection, &frame);
+
+	/* H2: the glass first and the glows after it. Both are drawn without a
+	 * depth write against a depth buffer that now holds the whole opaque
+	 * frame; the order between them is the classic path's own - a surface you
+	 * can see through is a surface, and a glow is painted on top of whatever
+	 * it shines through. */
+	for (int i = 0; i < g_frame_count; i++)
+		HDRenderRoomMask(g_frame[i].group, &g_frame[i].world,
+			&g_frame[i].lighting, HD_PASS_BLEND);
 
 	for (int i = 0; i < g_frame_count; i++)
 		HDRenderRoomMask(g_frame[i].group, &g_frame[i].world,

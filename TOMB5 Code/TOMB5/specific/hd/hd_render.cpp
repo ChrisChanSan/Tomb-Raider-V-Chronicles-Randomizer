@@ -285,9 +285,108 @@ namespace
 		float p0, p2, weight;
 	};
 
+	/* THE MATERIAL NUMBER WITHOUT THE DESTRUCTIBLE BITS (#123, fix round H,
+	 * H2). Bit 15 marks a destructible copy and bits 8..14 count the copies
+	 * (fix round R3b), so a destructible pane of material 14 arrives here as
+	 * 32782 and matches nothing. Measured: no material in any of the fifteen
+	 * files is above 22, so the low byte IS the material. */
+	inline unsigned int MaterialBase(const trf::remaster::TrgPart& part)
+	{
+		return part.material & 0xFFu;
+	}
+
+	/* HOW SEE-THROUGH THIS PART IS (#123, fix round H, H2), or 0 for one that
+	 * is not see-through at all.
+	 *
+	 * WHAT WAS WRONG. The player's picture of ANDREA2's glass wall shows a
+	 * dark pattern of shards in every pane where the remaster shows clear
+	 * glass. The alpha pass of stages S1 and S2 is an alpha TEST and nothing
+	 * else - `clip(texel.a - 0.5)` and the surface drawn solid - which is
+	 * right for a grating and wrong for glass: a texel at alpha 0.55 comes
+	 * out fully opaque and one at 0.45 disappears, so a smooth pane of glass
+	 * becomes a hard black-and-white mask of itself.
+	 *
+	 * WHAT THE FILE SAYS. The alpha pass of all fifteen files carries five
+	 * materials, and only one of them is glass:
+	 *
+	 *     0, 6, 7, 8  the cut-outs - gratings, foliage, nets. Their pages
+	 *                 really do cut: ANDREA2's page 3007 is 80.6 % at alpha
+	 *                 below 16 and its glass is the rest.
+	 *     1           the sky's cloud layers, in the sky group alone
+	 *    22           the sky dome itself, exactly 1280 triangles per level
+	 *    14           the DECAL material, and this is the glass: 4,292
+	 *                 triangles in ANDREA2 (the wall of the player's
+	 *                 picture), 15,904 in JOBY3, 19,028 in JOBY5, 2,510 in
+	 *                 RICH2, 3,894 in RICH3, 432 in RICHCUT2, 576 in TITLE
+	 *
+	 * `param[1]` of a material 14 part is its opacity - the very field fix
+	 * round R3a reads as the ADDITIVE weight of the same material - and the
+	 * game's values are 0.1, 0.2333, 0.8417 and 1.0. So the glass is drawn
+	 * with SRCALPHA / INVSRCALPHA, no depth write, and an alpha of the page's
+	 * own times that number, after everything opaque.
+	 *
+	 * Only the alpha pass, and only material 14: the cut-outs keep the test
+	 * they had and their picture with it. */
+	bool g_no_blend = false;	// see HDRenderBlendOverride
+	bool g_no_upright = false;	// see HDRenderUprightOverride
+
+	inline float MaterialBlend(const trf::remaster::TrgPart& part, int pass)
+	{
+		if (g_no_blend || pass != 1 ||
+			MaterialBase(part) != HD_TRG_MATERIAL_DECAL)
+			return 0.0f;
+
+		const float opacity = part.param[1];
+
+		// Out of range means "the page's own alpha and nothing on top".
+		if (opacity <= 0.0f || opacity > 1.0f)
+			return 1.0f;
+
+		return opacity;
+	}
+
 	inline float MaterialAddWeight(const trf::remaster::TrgPart& part)
 	{
 		float weight;
+
+		/* THE SUN SHAFTS OF THE GREAT HALL (#123, fix round H, H3).
+		 *
+		 * The player, after fix round R3a: the shafts in ANDREA1's hall - the
+		 * one with the gladiator statue, room 181 - are still too strong,
+		 * "intensity down to a minimum", while the VCI corridor's streaks are
+		 * where they should be. The two are not the same thing in the file
+		 * and can be told apart by it:
+		 *
+		 *     the hall     material 2, (1.5, 0.3, 0.4, 16.0)
+		 *     the corridor material 2, (1.0, 0.2, 0.1, 1.0)
+		 *
+		 * Different preset - fix round R3a showed that (param[0], param[2])
+		 * moves with the page - and a different time. param[3] = 16 seconds
+		 * is the slowest drift in the whole game and belongs to exactly ONE
+		 * tuple, which 34 parts in ANDREA1 (12 groups), JOBY2 (21) and RICH3
+		 * (1) carry: the sun shafts. Nothing else in the fifteen files is
+		 * near it - the next slowest is 5 s - so the tuple is the rule and no
+		 * room number has to be written down.
+		 *
+		 * Measured on room 181's own additive pass, against black: 6.8 % mean
+		 * and a peak of 58 % of white at the file's own 0.3. The reference a
+		 * streak is held to is 16 to 31 % of white (MODIFICATIONS.md, fix
+		 * round R3a), and "sehr faint" is below it, so the weight is set to
+		 * put the peak at about 15 %: 0.3 * 15 / 58 = 0.078.
+		 *
+		 * RICH2's and ANDREA2's shafts share the PRESET but not the time
+		 * (2.5 s and 3.07 s) and are untouched, which is why the tuple and
+		 * not the preset is the key. */
+		static const struct { float p[4]; float weight; } kDim[] =
+		{
+			{ { 1.5f, 0.3f, 0.4f, 16.0f }, 0.08f },
+		};
+
+		if (part.material == HD_TRG_MATERIAL_GLOW)
+			for (int i = 0; i < (int)(sizeof(kDim) / sizeof(kDim[0])); i++)
+				if (part.param[0] == kDim[i].p[0] && part.param[1] == kDim[i].p[1] &&
+					part.param[2] == kDim[i].p[2] && part.param[3] == kDim[i].p[3])
+					return kDim[i].weight;
 
 		switch (part.material)
 		{
@@ -594,6 +693,12 @@ namespace
 		 * none. One pixel shader constant, hence part of the sort key. */
 		float gloss = 0.0f;
 		float glossPower = 0.0f;
+		/* HOW SEE-THROUGH THIS DRAW CALL IS (#123, fix round H, H2), or 0
+		 * for one that is drawn solid. Non-zero puts the range in the BLEND
+		 * pass: SRCALPHA / INVSRCALPHA, no depth write, drawn after
+		 * everything opaque - see MaterialBlend above. In the sort key like
+		 * every other per-draw-call constant. */
+		float blend = 0.0f;
 		/* Which destructible piece these triangles belong to, or -1 for the
 		 * room itself (#123, fix round R3b). In the sort key, so a piece's
 		 * triangles never share a draw call with the wall behind them. */
@@ -623,6 +728,29 @@ namespace
 	 * thousand vertices, and a query is a binary search per cell of the
 	 * static's own box.
 	 */
+	/* One height at which a group draws flat art, and WHICH SECTORS of that
+	 * height it covers (#123, fix round H, H1). Room local, classic units.
+	 *
+	 * Sectors and not one box: JOBY2's room 66 draws 24 triangles at the
+	 * water's own height, and all of them are in two corners of the room -
+	 * the coping, not the water. A single box round them spans the whole
+	 * room and would answer "the remaster built this pool", which it did
+	 * not. A classic water face is exactly one 1024-unit sector, so the
+	 * sector is the unit the question is asked in. */
+	struct HDFlatPlane
+	{
+		int y;
+		std::vector<unsigned int> cells;	// sorted, unique - SectorKey
+	};
+
+	/* One 1024-unit floor square of a room-local position, as one key. The
+	 * bias makes it non-negative for every short there is. */
+	inline unsigned int SectorKey(int x, int z)
+	{
+		return (unsigned int)((((x >> 10) + 64) & 0x7F) << 7) |
+			(unsigned int)(((z >> 10) + 64) & 0x7F);
+	}
+
 	struct HDGroup
 	{
 		std::vector<HDRange> pass[3];
@@ -650,6 +778,22 @@ namespace
 		float waterBox[kMaxPlanes][4];		// minX, minZ, maxX, maxZ
 		float waterY[kMaxPlanes];
 		int waterPlanes = 0;
+
+		/* WHERE THIS GROUP HAS HORIZONTAL ART (#123, fix round H, H1).
+		 *
+		 * One row per height at which the group draws a triangle whose three
+		 * corners share their y, with the x/z box of all of them. It answers
+		 * one question and only one: does the remaster's art cover the plane
+		 * the CLASSIC level draws its water surface in? Measured over the
+		 * fifteen files, the answer is no in 61 of 93 reflecting rooms - the
+		 * VCI pools have no surface in the .TRG at all - and a room whose
+		 * water is missing shows the pool floor with nothing on it, which is
+		 * the player's "dark washed-out blotches without a pattern".
+		 *
+		 * A vector and not a map: the biggest room in the game has 46 such
+		 * heights, the lookup runs once per water face at level build, and a
+		 * sorted vector of 8 bytes is cheaper than a map in both. */
+		std::vector<HDFlatPlane> flats;
 	};
 
 	// One 256-unit cell of a room-local position, as one key. The bias makes
@@ -789,6 +933,13 @@ namespace
 	// R3b, once per level: the opaque parts of materials 3 and 17 whose
 	// own numbers gave them a gloss.
 	int g_gloss_parts = 0;
+	/* H1, once per level: the distinct horizontal planes the art covers, over
+	 * every group - what the classic water surface is held against. */
+	int g_flat_planes = 0;
+	/* H2, once per level: the see-through parts of the alpha pass and the
+	 * draw calls they cost - material 14, the glass. */
+	int g_blend_parts = 0;
+	int g_blend_ranges = 0;
 	int g_flip_parts = 0;
 	int g_flip_dropped = 0;
 	int g_flip_ranges = 0;
@@ -1217,6 +1368,16 @@ void HDRenderShoreOverride(int off)
 	g_no_shore = off ? true : false;
 }
 
+void HDRenderBlendOverride(int off)
+{
+	g_no_blend = off ? true : false;
+}
+
+void HDRenderUprightOverride(int off)
+{
+	g_no_upright = off ? true : false;
+}
+
 void HDRenderShutdown()
 {
 	release_buffers();
@@ -1612,6 +1773,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	int marked_choppy = 0;
 	// R3b: of the shimmer marks, the ones the plane flood added.
 	int flooded_vertices = 0;
+	int marked_wall = 0;		// H4, see the note beside it below
 	// E3: groups that hold more than one flood plane - see the note beside
 	// the shore box below.
 	int water_multi_planes = 0;
@@ -1623,6 +1785,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	g_addweight_min = 1.0f;
 	g_flat_parts = 0;
 	g_gloss_parts = 0;
+	g_flat_planes = 0;
+	g_blend_parts = 0;
+	g_blend_ranges = 0;
 	g_destruct.clear();
 	g_flip_parts = 0;
 	g_flip_dropped = 0;
@@ -1723,6 +1888,29 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						flooded_vertices++;
 					}
 				}
+			}
+
+			/* H4: OF THE MARKED SET, THE ONES THAT ARE NOT A HORIZONTAL
+			 * SURFACE. The mark is carried by POSITION - the classic corner
+			 * match and the plane flood both - and a wall vertex standing at
+			 * exactly the water's height inside the pool's box answers yes to
+			 * both. It then gets the surface's UV wobble and its caustic,
+			 * which on a wall triangle whose other two corners are lower is a
+			 * sheared, darkened triangle at the waterline: the player's
+			 * "black wedge at the edge between the water and the wall".
+			 *
+			 * The vertex's own normal tells the two apart - a water surface
+			 * is flat and its normal is vertical - and the shader takes that
+			 * road, because the COLOUR term must keep the classic answer for
+			 * exactly these vertices (drawroom.cpp:537 asks the height and
+			 * not the normal) and only the geometry half may drop them. This
+			 * counts them, so the log says how much of a level it is. */
+			if (bits & 6)
+			{
+				const int upright = (int)in.ny - 127;
+
+				if (upright > -77 && upright < 77)
+					marked_wall++;
 			}
 
 			out[i].wChoppy = (unsigned char)(bits & 1);
@@ -1852,6 +2040,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		float flipTime;			// fix round R3b, see MaterialFlipTime
 		int flipSlot[3];		// fix round R3b, see MaterialFlipSlots
 		float gloss, glossPower;	// fix round R3b, see MaterialGloss
+		float blend;			// fix round H (H2), see MaterialBlend
 		int destructId;			// fix round R3b, see HDDestructible
 		unsigned int first;
 	};
@@ -1864,6 +2053,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		HDGroup& group = g_groups[g];
 		const trf::remaster::TrgGroup& source = trg.groups[g];
 		const size_t group_first_index = sorted.size();
+		/* H1: (height, sector) of every horizontal triangle of this group,
+		 * merged into the group's own table below. */
+		std::vector<std::pair<int, unsigned int> > flats;
 
 		for (int pass = 0; pass < 3; pass++)
 		{
@@ -1934,6 +2126,15 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 				if (pass == 0 && gloss != 0.0f)
 					g_gloss_parts++;
+
+				/* H2: the see-through parts of the alpha pass - material 14,
+				 * and nothing else in the game. */
+				const float blend = MaterialBlend(part, pass);
+
+				// A part can name a pass it puts no triangle in; counting
+				// those would say a level has glass where it has none.
+				if (blend != 0.0f && run.count)
+					g_blend_parts++;
 
 				/* R3b: the destructible pieces - see HDDestructible above.
 				 * One id per (group, material); the box is filled from the
@@ -2006,6 +2207,36 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						}
 					}
 
+					/* H1: is this a horizontal triangle, and if so, which
+					 * plane of the group does it widen? Asked here because
+					 * this is the one loop that already has the triangle in
+					 * its hands; the rows are merged into the group's own
+					 * table further down. */
+					{
+						const trf::remaster::TrgVertex& a = trg.vertices[trg.indices[first]];
+						const trf::remaster::TrgVertex& b = trg.vertices[trg.indices[first + 1]];
+						const trf::remaster::TrgVertex& c = trg.vertices[trg.indices[first + 2]];
+
+						if (a.y == b.y && b.y == c.y)
+						{
+							const int x0 = a.x < b.x ? (a.x < c.x ? a.x : c.x) : (b.x < c.x ? b.x : c.x);
+							const int x1 = a.x > b.x ? (a.x > c.x ? a.x : c.x) : (b.x > c.x ? b.x : c.x);
+							const int z0 = a.z < b.z ? (a.z < c.z ? a.z : c.z) : (b.z < c.z ? b.z : c.z);
+							const int z1 = a.z > b.z ? (a.z > c.z ? a.z : c.z) : (b.z > c.z ? b.z : c.z);
+
+							/* Every sector the triangle's own box touches -
+							 * the remaster remeshes a room, so one of its
+							 * triangles can cross a classic sector line. */
+							const int lastX = (x1 > x0 ? x1 - 1 : x0) >> 10;
+							const int lastZ = (z1 > z0 ? z1 - 1 : z0) >> 10;
+
+							for (int cx = x0 >> 10; cx <= lastX; cx++)
+								for (int cz = z0 >> 10; cz <= lastZ; cz++)
+									flats.push_back(std::make_pair((int)a.y,
+										SectorKey(cx << 10, cz << 10)));
+						}
+					}
+
 					HDTri tri;
 
 					tri.slot = slot;
@@ -2021,6 +2252,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.flipSlot[2] = fslot[2];
 					tri.gloss = gloss;
 					tri.glossPower = gloss_power;
+					tri.blend = blend;
 					tri.destructId = destruct_id;
 					tri.first = first;
 					tris.push_back(tri);
@@ -2053,6 +2285,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					// R3b: the gloss is one more pixel constant per draw call.
 					if (a.gloss != b.gloss) return a.gloss < b.gloss;
 					if (a.glossPower != b.glossPower) return a.glossPower < b.glossPower;
+					/* H2: the solid part of the alpha pass first, the
+					 * see-through part after it - they are drawn in two
+					 * different phases of the frame. */
+					if (a.blend != b.blend) return a.blend < b.blend;
 					// R3b: a destructible piece keeps its own draw calls.
 					return a.destructId < b.destructId;
 				});
@@ -2073,6 +2309,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.flipSlot[2] = tris[0].flipSlot[2];
 			range.gloss = tris[0].gloss;
 			range.glossPower = tris[0].glossPower;
+			range.blend = tris[0].blend;
 			range.destructId = tris[0].destructId;
 			range.start = (unsigned int)sorted.size();
 			range.count = 0;
@@ -2092,6 +2329,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tris[i].flipSlot[2] == range.flipSlot[2] &&
 					tris[i].gloss == range.gloss &&
 					tris[i].glossPower == range.glossPower &&
+					tris[i].blend == range.blend &&
 					tris[i].destructId == range.destructId;
 
 				if (!same || range.count / 3 >= max_tris)
@@ -2105,6 +2343,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 						if (range.flipTime != 0.0f)
 							g_flip_ranges++;
+
+						if (range.blend != 0.0f)
+							g_blend_ranges++;
 
 						if (range.scrollU != 0.0f || range.scrollV != 0.0f)
 						{
@@ -2136,6 +2377,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.flipSlot[2] = tris[i].flipSlot[2];
 					range.gloss = tris[i].gloss;
 					range.glossPower = tris[i].glossPower;
+					range.blend = tris[i].blend;
 					range.destructId = tris[i].destructId;
 					range.start = (unsigned int)sorted.size();
 					range.count = 0;
@@ -2220,6 +2462,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				if (range.flipTime != 0.0f)
 					g_flip_ranges++;
 
+				if (range.blend != 0.0f)
+					g_blend_ranges++;
+
 				if (range.scrollU != 0.0f || range.scrollV != 0.0f)
 				{
 					group.motion.scrollRanges++;
@@ -2245,6 +2490,32 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		group.cells.erase(std::unique(group.cells.begin(), group.cells.end()),
 			group.cells.end());
 		group.cells.shrink_to_fit();
+
+		/* H1: the horizontal planes, one row per height, sorted by it. The
+		 * per-triangle rows are merged here rather than while they are found,
+		 * because a room has tens of thousands of triangles and at most a few
+		 * dozen distinct heights. */
+		if (!flats.empty())
+		{
+			std::sort(flats.begin(), flats.end());
+			flats.erase(std::unique(flats.begin(), flats.end()), flats.end());
+
+			for (size_t i = 0; i < flats.size(); i++)
+			{
+				if (group.flats.empty() || group.flats.back().y != flats[i].first)
+				{
+					HDFlatPlane row;
+
+					row.y = flats[i].first;
+					group.flats.push_back(row);
+				}
+
+				group.flats.back().cells.push_back(flats[i].second);
+			}
+
+			group.flats.shrink_to_fit();
+			g_flat_planes += (int)group.flats.size();
+		}
 
 		/* THE SAMPLES FOR THE MATRIX PROOF. The .TRG dies with this function
 		 * and the vertex buffer is WRITEONLY, so the only chance to keep a
@@ -2469,6 +2740,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->markedShimmer = marked_shimmer;
 		stats->markedRoomShimmer = marked_room_shimmer;
 		stats->markedFlooded = flooded_vertices;	// R3b
+		stats->markedWall = marked_wall;		// H4
 		stats->waterPlanesDropped = water_multi_planes;	// E2/E3
 		stats->splitRanges = split_ranges;
 		stats->biggestRangeTris = biggest;
@@ -2483,6 +2755,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->flipbookDropped = g_flip_dropped;	// R3b
 		stats->flipbookRanges = g_flip_ranges;		// R3b
 		stats->glossParts = g_gloss_parts;		// R3b
+		stats->flatPlanes = g_flat_planes;		// H1
+		stats->blendParts = g_blend_parts;		// H2
+		stats->blendRanges = g_blend_ranges;		// H2
 		stats->scrollRanges = 0;
 		stats->scrollTris = 0;
 		stats->swayVertices = sway_vertices;
@@ -2684,7 +2959,13 @@ void HDRenderFrameEnd()
 
 namespace
 {
-	void draw_pass(const HDGroup& group, int pass, const float* wvp)
+	/* `blendOnly` is fix round H (H2): the alpha pass is drawn TWICE in a
+	 * frame, once for its solid ranges - the cut-outs, with the alpha test
+	 * they always had - and once, after everything opaque, for its
+	 * see-through ones. Both other passes are called with it false and
+	 * neither has a blended range in it, so nothing of them changes. */
+	void draw_pass(const HDGroup& group, int pass, const float* wvp,
+		bool blendOnly = false)
 	{
 		if (group.pass[pass].empty())
 			return;
@@ -2699,9 +2980,12 @@ namespace
 		 * The alpha pass's 0.5 is the classic path's own reference
 		 * (function_table.cpp, D3DRS_ALPHAREF 128 over a 0..255 alpha); the
 		 * opaque pass starts at zero and is raised per range below. */
+		/* H2: and ZERO in the blend phase. The alpha test is what turns a
+		 * pane of glass into a mask of itself; the whole point of the phase
+		 * is that the texel's own alpha decides how much of it is there. */
 		float constants[4] =
 		{
-			pass == 1 ? 0.5f : 0.0f,
+			(pass == 1 && !blendOnly) ? 0.5f : 0.0f,
 			pass == 2 ? 1.0f : 0.0f,
 			1.0f,
 			pass == 2 ? 0.0f : 1.0f
@@ -2725,7 +3009,10 @@ namespace
 		 * the top of every pass whatever it was, for the same reason gMotion
 		 * is: a model draw between two rooms owns c8 to c103 of the vertex
 		 * constant file and leaves nothing of ours in it. */
-		float flat[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		/* H4: gFlat.w is the "a water surface is flat" gate, 1 in the engine
+		 * and 0 only for the diagnostic tool's before picture - see
+		 * HDRenderUprightOverride. */
+		float flat[4] = { 0.0f, 0.0f, 0.0f, g_no_upright ? 0.0f : 1.0f };
 		bool flat_dirty = true;
 
 		/* R3a: gAdd, the additive pass's own constant. x is this draw call's
@@ -2738,7 +3025,7 @@ namespace
 		float add[4] = { 1.0f, g_motion[2], 0.0f, g_motion[3] };
 		bool add_dirty = true;
 		/* R3b, the gloss constant - see the note beside the write below. */
-		float spec[4] = { 0.0f, 0.0f, g_reflect, 0.0f };
+		float spec[4] = { 0.0f, 0.0f, g_reflect, 1.0f };
 		bool spec_dirty = true;
 		const bool additive_pass = pass == 2;
 
@@ -2753,9 +3040,27 @@ namespace
 			g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
 			g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 		}
+		else if (blendOnly)
+		{
+			/* H2: THE GLASS. Ordinary translucency - the source's own alpha
+			 * against one minus it - and no depth write, because a pane you
+			 * can see through must not hide what stands behind it from the
+			 * draws that come after. The alpha test is left off here: the
+			 * whole point is that a texel at 0.45 is half there and not
+			 * gone. */
+			g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+			g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+			g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+			g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+		}
 
 		for (const HDRange& range : group.pass[pass])
 		{
+			// H2: this phase draws the see-through ranges or the solid ones,
+			// never both - see the note on `blendOnly`.
+			if ((range.blend != 0.0f) != blendOnly)
+				continue;
+
 			/* R3b: a destructible piece Lara has shot away. The classic path
 			 * clears MESH_INFO::Flags bit 0 (control.cpp:1935) and stops
 			 * drawing the static; this stops drawing the art that was baked in
@@ -2809,10 +3114,19 @@ namespace
 			 * per range like the additive weight above and for the same
 			 * reason, and (0, 0, .) for every part that names no gloss, where
 			 * the shader's one branch costs a compare. */
-			if (spec_dirty || spec[0] != range.gloss || spec[1] != range.glossPower)
+			/* H2: gSpec.w is the see-through weight of this draw call, and 1
+			 * for every draw call that is not glass - the pixel shader
+			 * multiplies its alpha output by it, and outside the blend phase
+			 * that output is not looked at, so the picture of every other
+			 * pass is unchanged to the bit. */
+			const float want_blend = range.blend != 0.0f ? range.blend : 1.0f;
+
+			if (spec_dirty || spec[0] != range.gloss ||
+				spec[1] != range.glossPower || spec[3] != want_blend)
 			{
 				spec[0] = range.gloss;
 				spec[1] = range.glossPower;
+				spec[3] = want_blend;
 				spec_dirty = false;
 				g_device->SetPixelShaderConstantF(19, spec, 1);
 			}
@@ -2904,7 +3218,7 @@ namespace
 			g_wrapping = false;
 		}
 
-		if (pass == 2)
+		if (pass == 2 || blendOnly)
 		{
 			g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 			g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
@@ -2991,6 +3305,12 @@ bool HDRenderRoomMask(int group, const D3DMATRIX* world,
 	for (int pass = 0; pass < 3; pass++)
 		if (passes & (1u << pass))
 			draw_pass(room, pass, wvp);
+
+	/* H2: and the see-through half of the alpha pass, which is a phase of
+	 * its own because it must come after everything opaque - see
+	 * MaterialBlend and the note on draw_pass's `blendOnly`. */
+	if (passes & HD_PASS_BLEND)
+		draw_pass(room, 1, wvp, true);
 
 	return true;
 }
@@ -3200,6 +3520,57 @@ int HDRenderGlossCalls()
 }
 
 /* --------------------------------------------- the statics (fix round R3b) */
+
+/* DOES THIS GROUP DRAW ANYTHING IN THAT HORIZONTAL PLANE (#123, fix round H,
+ * H1)?
+ *
+ * The question the classic water surface has to answer before it is drawn on
+ * top of an HD room. `slack` is how far off the classic height the remaster's
+ * own art may sit and still count as the same surface: measured, ANDY3's room
+ * 17 carries its water at 10492 and 10494 where the classic plane is 10496,
+ * and the next plane of that room is 256 units away - so anything from about
+ * 8 to 100 gives the same answer everywhere, and 32 is the middle of it.
+ *
+ * The box test is an overlap and not a containment: the remaster remeshes a
+ * room, and a plane it covers with one big triangle answers for every classic
+ * quad inside it. */
+bool HDRenderGroupFlatArt(int group, int y, int x0, int z0, int x1, int z1, int slack)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return false;
+
+	const std::vector<HDFlatPlane>& flats = g_groups[(size_t)group].flats;
+
+	for (size_t i = 0; i < flats.size(); i++)
+	{
+		const HDFlatPlane& row = flats[i];
+		const int d = row.y > y ? row.y - y : y - row.y;
+
+		if (d > slack)
+			continue;
+
+		/* Half open in x and z: a face that runs from 2048 to 3072 lives in
+		 * the sector at 2048 and not in the one that begins at 3072. */
+		const int lastX = (x1 > x0 ? x1 - 1 : x0) >> 10;
+		const int lastZ = (z1 > z0 ? z1 - 1 : z0) >> 10;
+
+		for (int cx = x0 >> 10; cx <= lastX; cx++)
+			for (int cz = z0 >> 10; cz <= lastZ; cz++)
+				if (std::binary_search(row.cells.begin(), row.cells.end(),
+					SectorKey(cx << 10, cz << 10)))
+					return true;
+	}
+
+	return false;
+}
+
+int HDRenderGroupFlatPlanes(int group)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return 0;
+
+	return (int)g_groups[(size_t)group].flats.size();
+}
 
 bool HDRenderGroupHasGeometry(int group, const float* mins, const float* maxs)
 {

@@ -82,6 +82,27 @@ bool HDEnabled();
 // not be drawn a second time - that is the one other caller of this.
 bool HDRoomIsHD(int roomIndex);
 
+/* ONE CLASSIC WATER FACE AN HD ROOM STILL HAS TO DRAW (#123, fix round H,
+ * H1). The remaster's .TRG has no geometry in the plane the classic level
+ * puts its water surface in - measured in 61 of the game's 93 reflecting
+ * rooms, every VCI pool among them - so an HD room shows the pool floor and
+ * nothing over it. Where that is so, and only there, the level's own water
+ * face is drawn on top of the HD room by the classic path, with its own
+ * texture, its own animated texture range and its own shimmer.
+ *
+ * `face` counts inside the roomlet's quad list when `quad` is set and inside
+ * its triangle list otherwise; the list is sorted by roomlet so that one
+ * roomlet is transformed and lit once. See hd_level.cpp, BuildWaterSurfaces. */
+struct HDRoomWaterFace
+{
+	short roomlet;
+	short face;
+	unsigned char quad;
+};
+
+int HDRoomWaterFaceCount(int roomIndex);
+const HDRoomWaterFace* HDRoomWaterFaceAt(int roomIndex, int at);
+
 /* THE TWO STATIC MESHES OF AN HD ROOM THAT STILL HAVE TO BE DRAWN (#123, fix
  * round R3b). Both answers are worked out once at level load, against the
  * .TRG's own geometry, and DrawStaticObjects (game\draw.cpp) is their only

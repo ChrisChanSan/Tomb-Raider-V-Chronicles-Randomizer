@@ -171,7 +171,8 @@
  * c11         gWaterMode          per room
  * c12         gSel1               per room
  * c13         gMotion             per DRAW CALL (#123, stage S5)
- * c14         gFlat               per DRAW CALL (#123, fix round R3a)
+ * c14         gFlat               per DRAW CALL (#123, fix round R3a; .w is
+ *                                 fix round H, H4 - the flat-surface gate)
  * c15         gWaterBox           per room   (#123, fix round E)
  * c32 - c95   gWaterTable[64]     per room, only when the row changes
  * c96 - c127  gWibbleTable[32]    per level (it never changes)
@@ -335,7 +336,8 @@ float4 gWaterBox : register(c15);
  * c16         gFog                per frame
  * c17         gCounts             per room
  * c18         gAdd                per DRAW CALL (#123, fix round R3a)
- * c19         gSpec               per DRAW CALL (#123, fix round R3b)
+ * c19         gSpec               per DRAW CALL (#123, fix round R3b; .w is
+ *                                 fix round H, H2 - the see-through weight)
  * c20 - c35   gLights[16]         per room  (8 lights, two registers each)
  * c40 - c71   gBulbs[32]          per frame (16 bulbs, two registers each)
  *
@@ -634,7 +636,25 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	 * in a whole-room-bit room it is the pool and nothing else. The colour
 	 * term below keeps `shimmerOn` whole, so the room still shimmers exactly
 	 * as it did. */
-	float surfaceOn = dot(inFlags, gSel1) * atSurface;
+	/* AND ONLY WHERE THE SURFACE IS FLAT (#123, fix round H, H4).
+	 *
+	 * The mark is carried from the classic mesh BY POSITION, and a wall
+	 * vertex standing at exactly the water's height inside the pool's box
+	 * answers yes to it - the corner match and the plane flood both. It then
+	 * gets the UV wobble and the caustic below, and on a wall triangle whose
+	 * other two corners are lower that is a sheared, darkened triangle
+	 * standing on the waterline: the player's "black wedge at the edge
+	 * between the water and the wall".
+	 *
+	 * A water surface is flat, so its normal is vertical and a wall's is not.
+	 * The test is on the GEOMETRY half alone; the colour term above keeps
+	 * `shimmerOn` whole, because the classic path asks the height and not the
+	 * normal (drawroom.cpp:537) and stage S2's parity is measured against it.
+	 * 0.6 is 53 degrees off the horizontal - a bank steep enough to be a wall
+	 * fails it and no floor in the game comes near it. */
+	float upright = lerp(1.0f, step(0.6f,
+		abs((inNormal.y - 127.0f) * (1.0f / 128.0f))), gFlat.w);
+	float surfaceOn = dot(inFlags, gSel1) * atSurface * upright;
 	float water = gMotion.w * saturate(max(gWaterMode.y * inFlags.x, surfaceOn));
 	float wavA = (pos.x + pos.z) * HD_WATER_WAVE + gMotion.z * HD_WATER_SPEED_A;
 	float wavB = (pos.z - pos.y) * HD_WATER_WAVE + gMotion.z * HD_WATER_SPEED_B;
@@ -1084,5 +1104,12 @@ float4 RoomPS(VS_OUT input) : COLOR0
 
 	lit *= lerp(1.0f, weight, gPass.y);
 
-	return float4(lit, texel.a);
+	/* H2: THE GLASS. gSpec.w is this draw call's own see-through weight -
+	 * material 14's param[1], and exactly 1 for every other draw call in the
+	 * game, so the two solid passes and the additive one carry their picture
+	 * through this line untouched (they do not look at alpha at all: their
+	 * blend is off or ONE / ONE). In the blend phase it is the pane's
+	 * opacity times the page's own alpha, which is what makes a texel at 0.45
+	 * half there instead of gone. */
+	return float4(lit, texel.a * gSpec.w);
 }

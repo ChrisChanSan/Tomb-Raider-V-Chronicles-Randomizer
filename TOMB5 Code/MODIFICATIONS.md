@@ -4153,6 +4153,179 @@ model 3 guarantees.
 `TrgProbe` gained `-mat` and `-seam`. `HDRenderShoreOverride` exists for the
 tool alone and the engine never calls it.
 
+#### Fix round H - rooms: the water that was never there, the glass, the shafts (#123)
+
+Four reports from the play test, and the first of them upended its own
+diagnosis. All four were measured against the fifteen `.TRG` files and the
+fifteen classic levels before a line was changed.
+
+**H1 - the water surface the Remaster does not draw.** The player's picture of
+a VCI pool shows dark, patternless blotches where the Remaster shows a moving
+surface, and his own look in trview said why: *"the vanilla water faces carry a
+wave texture, in HD the assignment for the face is missing"*. The reading that
+followed from it - the `.TRG` gives those faces texture layer 0, and the
+renderer's layer-0 fallback paints them with the level's first page - is
+**wrong, and the file says so**: over all fifteen levels, `TrgProbe -layer0`
+finds **0 of 12,247,000 vertices** on layer 0, and every level's
+`fallbackPageTris` is 0. No face in the game is missing its page.
+
+What is missing is the GEOMETRY. The classic engine draws a water surface as
+ordinary room faces at the room's own `minfloor`, and the shimmer branch that
+makes them move opens with `pos.y == CurrentRoomPtr->minfloor` in a room
+carrying `ROOM_REFLECT` or `ROOM_MIST` (`drawroom.cpp:531-545`). Held against
+the `.TRG` plane by plane and box by box - `TrgProbe -watergap`, and
+`RoomProbe -watersurvey`, which asks the ENGINE's own gate - over the game's 93
+reflecting rooms:
+
+| level | reflecting rooms | classic faces in the plane | .TRG triangles there |
+|---|---|---|---|
+| JOBY2 | 5 | 87 | 54, and 0 in four of the five rooms |
+| JOBY5 | 25 | 213 | 1,458, but 0 in thirteen rooms |
+| ANDY3 | 23 | 223 | 0 |
+| ANDREA2 | 13 | 102 | 214, 0 in ten rooms |
+| ANDY1 | 6 | 30 | 45, 0 in five rooms |
+| ANDREA1 | 3 | 33 | 0 |
+| RICH3 | 4 | 32 | 198, 0 in two rooms |
+| JOBY4 | 1 | 2 | 0 |
+| ANDREA3, JOBY3, RICH2 | 15 | 71 | every plane covered |
+
+JOBY2's room 66 is the pool of the player's picture: **24 classic faces of ONE
+texinfo at y -1280, and 0 `.TRG` triangles in that plane**. The HD room draws
+the pool FLOOR - a black-and-white marble chequerboard, page 489 - and nothing
+over it, which is exactly what he photographed. There was no water there at
+all, so no texture and no shader could have been wrong about it.
+
+So where the level has a water surface and the `.TRG` has none, the level's
+**own** face is drawn on top of the HD room, by the classic path, with its own
+texinfo - and therefore its own animated texture range - its own light and the
+shimmer the classic path has always given it. Nothing is invented: the surface
+that comes back is the one the level ships.
+
+The two tests a face has to pass are the engine's own. Every corner at the
+room's `minfloor`, which is the classic height test; and every corner marked by
+`aRoomVertexWaterMarks` as a shimmer-surface vertex, which is the classic
+predicate with its portal walk and all. Whether the `.TRG` already covers that
+piece of plane is asked of a new per-group table of horizontal art, kept by
+1024-unit SECTOR and not by one box: JOBY2's room 66 draws 24 triangles at the
+water's own height and all of them are in two corners of the room - the coping,
+not the water - and a single box round them would span the whole room and
+answer "the Remaster built this pool". The decision is then taken **per room**,
+by majority, because half a pool is worse than either whole. Measured through
+the engine's own gate: JOBY2 restores 87 faces in 5 rooms, JOBY5 86 in 8 of
+30, ANDREA1 34 in 4; JOBY3 and RICH2 restore nothing at all, which is right -
+the Remaster built those surfaces.
+
+*Cost:* one classic roomlet transform per visible room that carries restored
+water, and nothing at all for every other room in the game, which is most of
+them. *Not done:* the water is the level's own art, not the Remaster's. The
+Remaster's effect atlas was measured for a wave band to put on it instead
+(`EFFECT.DDS`, rows 936..1008 and 1014..1060, full width, mean luminance 24 of
+255) and it is a very dark modulation strip, not a surface texture; a page
+cache for named sheets was therefore not built.
+
+**H2 - glass drawn as a mask of itself.** The player: dark shards in every pane
+of ANDREA2's glass wall where the Remaster shows clear glass. The alpha pass of
+stages S1 and S2 is an alpha TEST and nothing else - `clip(texel.a - 0.5)`, the
+surface drawn solid - which is right for a grating and wrong for glass. The
+wall is one part, `TrgProbe -parts 132`: material `0x800E`, which is the
+destructible bit 15 over material **14**, 2,146 triangles in the alpha pass on
+page 3007, a sheet whose alpha is 80.6 % below 16 and whose glass is the rest,
+at 0.5 to 0.75. At a test of 0.5 that pane comes out as a hard black-and-white
+mask - the shards.
+
+The alpha pass of all fifteen files carries five materials: 0, 6, 7 and 8, the
+cut-outs, whose pages really do cut; 1 and 22, the sky's cloud layers and the
+dome itself; and **14**, which is the glass - 4,292 triangles in ANDREA2,
+15,904 in JOBY3, 19,028 in JOBY5, 2,510 in RICH2, 3,894 in RICH3, 432 in
+RICHCUT2, 576 in TITLE. `param[1]` of a material 14 part is its opacity - the
+same field fix round R3a reads as that material's ADDITIVE weight - and the
+game's values are 0.1, 0.2333, 0.8417 and 1.0.
+
+So material 14 in the alpha pass is a phase of its own now: `SRCALPHA` /
+`INVSRCALPHA`, no depth write, no alpha test, drawn after everything opaque and
+before the glows, in the same place fix round E6 put the additive pass and for
+the same reason. **96 parts in eight levels, 96 draw calls**; seven levels have
+none and are untouched. One more thing came out with it: `MaterialAddWeight`
+and its neighbours compared `part.material` raw, so a destructible copy of a
+material - bit 15 and a counter in bits 8 to 14 - matched nothing; the material
+is now read as its low byte, which no material in any of the fifteen files
+exceeds.
+
+Pictures, ANDREA2 room 132 through the same camera, `-noblend` against the same
+build: before, a black shard pattern in all 35 panes; after, the panes are
+see-through and only their frames stand. The wall is also one of the round-3b
+destructible pieces (`0x800E`, copy 0, rooms 65 and 132), so it still vanishes
+when the game breaks it - all three of the engine's shatter paths, Lara's gun
+(`control.cpp:1931`), the laser sight (`camera.cpp:966`) and the trigger
+action 333 (`objects.cpp:755`), clear `MESH_INFO::Flags` bit 0, which is what
+`UpdateDestructibles` reads.
+
+**H3 - the great hall's shafts, down to a minimum.** The player, after round
+R3a: ANDREA1's hall - the one with the gladiator statue, room 181 - is still
+too strong. The hall and the VCI corridor are not the same thing in the file:
+
+| | material | the four numbers |
+|---|---|---|
+| the hall | 2 | (1.5, 0.3, 0.4, **16.0**) |
+| the corridor | 2 | (1.0, 0.2, 0.1, 1.0) |
+
+Different preset - round R3a showed that `(param[0], param[2])` moves with the
+page - and a different time. `param[3]` = 16 seconds is the slowest drift in
+the whole game and belongs to exactly ONE tuple, carried by 34 parts in
+ANDREA1 (12 groups), JOBY2 (21) and RICH3 (1): the sun shafts. The next slowest
+in the game is 5 s, so the tuple is the rule and no room number has to be
+written down. RICH2's and ANDREA2's shafts share the preset but not the time
+(2.5 s and 3.07 s) and are untouched, which is why the tuple and not the preset
+is the key.
+
+Measured on room 181's own additive pass against black, same camera:
+
+| | mean | peak |
+|---|---|---|
+| before | 6.8 % | 58.0 % of white |
+| after | **1.7 %** | **15.7 %** |
+
+against a streak reference of 16 to 31 % of white (round R3a) - faint, and
+below it, which is what was asked for. RICH1's ray fan and RICH2's wall lamps
+come out **byte for byte identical**.
+
+**H4 - the ripple on the wall at the waterline.** The mark that says "this is
+water" is carried from the classic mesh to the finer Remaster one BY POSITION -
+the corner match and round R3b's plane flood both - and a wall standing at
+exactly the water's height inside the pool's box answers yes to it. It then
+gets the surface's UV wobble and its caustic, and on a wall triangle whose
+other two corners are lower that is a sheared, darkened triangle standing on
+the waterline. Measured through the engine's own flood: **34 of 257** marked
+vertices in RICH2's room 125 and **205 of 374** in JOBY5's room 184 are not a
+flat surface at all.
+
+A water surface is flat, so its normal is vertical and a wall's is not. The
+geometry half - the swell, the UV wobble, the caustic - now asks for that as
+well; the COLOUR term keeps every one of those vertices, because the classic
+path asks the height and not the normal (`drawroom.cpp:537`) and stage S2's
+parity is measured against it. Costs three vertex shader instructions. Measured
+before and after through the same camera in RICH2 room 125: 0.6 to 2.0 % of the
+picture changes, all of it in one narrow strip along the junction, worst 33 of
+255.
+
+*Named as unfinished:* the player's own screenshot of the wedge was not
+available here, so what is proven is the mechanism and the count, not that this
+is the very triangle he saw.
+
+**The regression.** `RoomProbe -paritycheck` on ANDREA1 room 19: **0.000 of
+255, PASS**. ANDREA1 rooms 12 and 19, JOBY4 room 40, RICH1 rooms 13 and 136,
+RICH2 rooms 25 and 26 and the ANDREA1 sky dome, rendered through the same
+camera with and without each of the three overrides: **byte for byte
+identical** except where the fix is meant to bite. `be.bat` regenerates the
+shader bytecode from its own MD5 stamp and reports no error.
+
+`RoomProbe` gained `-watersurvey`, `-flatart`, `-noblend` and `-noupright`, and
+its picture line now carries the peak and the white share as well as the mean;
+`TrgProbe` gained `-layer0`, `-flat`, `-parts`, `-surface` and `-watergap`;
+`DdsProbe` gained `-rows` and `-cut`. `HDRenderBlendOverride` and
+`HDRenderUprightOverride` exist for the tool alone and the engine never calls
+them.
+
 ---
 
 ## Building this yourself

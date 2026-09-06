@@ -581,6 +581,39 @@ glow is always slightly wrong"* — and that turned out to be the whole story.
   screen changes (the extra code was unreachable); what changes is that the
   shader now fits inside the guarantee on every card that claims it.
 
+- **The water surface the Remaster does not draw.** Held plane by plane
+  against the original level, the Remaster's own room art has **no geometry at
+  all** where the original draws its water surface in 61 of the game's 93
+  reflecting rooms - every VCI pool among them. An HD room therefore showed
+  the pool floor with nothing over it, which is what a dark, patternless
+  surface looks like: there was no water there to texture. Where the level has
+  a water surface and the Remaster's art has none, the level's **own** water
+  face is drawn on top of the HD room now, with its own texture, its own
+  animated texture range and its own shimmer. A room whose surface the
+  Remaster did build - Ireland's ponds, the Rome cistern, most of JOBY3 - is
+  left to it, decided per room out of the art itself.
+- **Glass is glass again.** The Remaster marks its see-through surfaces with a
+  material of their own and an opacity beside it, and this build drew them
+  with an alpha *test*: a texel at 55 % came out solid and one at 45 %
+  vanished, so a smooth pane became a hard mask of itself - the dark shard
+  pattern in the windows of the submarine. Those surfaces are blended properly
+  now, after everything solid and with no depth of their own; 96 of them in
+  eight levels, and nothing else in the game touched. The panes still break
+  when the game breaks them: the piece is the same one Lara can shoot away.
+- **The great hall's sun shafts, down to a minimum.** One tuple of numbers in
+  the art - the slowest-drifting shaft in the game, 16 seconds to a cycle -
+  carries the shafts of the Rome hall, and it was drawing at a peak of 58 % of
+  white. It is 16 % now, faint but there. Every other shaft, cone and glow in
+  the game is untouched, the VCI corridor's streaks included: they carry
+  different numbers and the rule is the numbers.
+- **And no ripple on the wall at the waterline.** The mark that says "this is
+  water" is carried to the finer Remaster mesh by POSITION, and a wall
+  standing at exactly the water's height inside a pool answers yes to it. It
+  was getting the surface's own ripple and its caustic, which on a wall is a
+  sheared, darkened triangle at the waterline. The geometry half now asks the
+  surface to be **flat** as well; the colour still shimmers on those points,
+  exactly as the original engine does.
+
 Still open in the rooms, and named rather than hidden: a **visible border**
 where an HD room meets one the remaster draws nothing for (they fall back to
 the classic look, and the log's `HDLOG room=… hd=0` lines name every one), and

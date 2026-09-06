@@ -220,6 +220,12 @@ struct HDRenderStats
 	 * surface plane answered for (#123, fix round R3b) - see the long note in
 	 * hd_render.cpp beside plane_map. */
 	int markedFlooded;
+	/* Of the marked set, the vertices whose own normal is not vertical - a
+	 * wall or a pillar standing at exactly the water's height inside the
+	 * pool's box (#123, fix round H, H4). The colour term keeps them, because
+	 * the classic path gives them one; the geometry, the UV wobble and the
+	 * caustic do not, because a water surface is flat. */
+	int markedWall;
 	/* E2/E3: flood planes past the fourth a group could not keep, so the
 	 * shore taper has no box for them. Measured 0 in all fifteen files; a
 	 * level that ever reports one has a room with more water planes than the
@@ -257,6 +263,13 @@ struct HDRenderStats
 	/* Opaque parts of materials 3 and 17 whose own numbers gave them a
 	 * gloss (#123, fix round R3b; hd_render.cpp, MaterialGloss). */
 	int glossParts;
+	/* H1: distinct horizontal planes the art covers, over every group - the
+	 * table HDRenderGroupFlatArt answers out of. */
+	int flatPlanes;
+	/* H2: the see-through parts of the alpha pass - material 14, the glass -
+	 * and the draw calls they cost. */
+	int blendParts;
+	int blendRanges;
 	double vertexBytes;
 	double indexBytes;
 	double readMs;			// reading and parsing the .TRG
@@ -298,6 +311,21 @@ void HDRenderCapOverride(int maxTextureSide, int noIndex32);
  * picture fix round R3b drew, out of the same build. The engine never calls
  * it; there is no option and no registry key for it. */
 void HDRenderShoreOverride(int off);
+
+/* THE GLASS OFF (#123, fix round H, H2), for the diagnostic tool alone.
+ * Non-zero leaves material 14 in the alpha pass where stages S1 and S2 had it
+ * - an alpha TEST at 0.5, drawn solid - which is the before picture out of
+ * the same build. Call it BEFORE HDRenderLevelBegin; the engine never calls
+ * it and there is no option and no registry key for it. */
+void HDRenderBlendOverride(int off);
+
+/* THE WATER'S "A SURFACE IS FLAT" TEST OFF (#123, fix round H, H4), for the
+ * diagnostic tool alone. Non-zero gives the wall vertices at the waterline
+ * the surface's UV wobble and its caustic back, which is the picture fix
+ * round R3b drew - the before picture out of the same build. May be called at
+ * any time; it is one vertex shader constant per draw call. The engine never
+ * calls it and there is no option and no registry key for it. */
+void HDRenderUprightOverride(int off);
 void HDRenderShutdown();
 bool HDRenderReady();
 
@@ -357,8 +385,16 @@ void HDRenderStateRestore();
 #define HD_PASS_OPAQUE		0x1
 #define HD_PASS_ALPHA		0x2
 #define HD_PASS_ADDITIVE	0x4
+/* THE SEE-THROUGH HALF OF THE ALPHA PASS (#123, fix round H, H2). The alpha
+ * pass holds two different things: the cut-outs, which are solid where they
+ * are drawn at all and write depth like any wall, and the GLASS - material 14
+ * - which is translucent and must be drawn after everything opaque, with no
+ * depth write, or the wall behind it paints over it. So it is a phase of its
+ * own, drawn in the glow phase beside the additive pass. A level with no
+ * material 14 in its alpha pass never draws anything here. */
+#define HD_PASS_BLEND		0x8
 #define HD_PASS_SOLID		(HD_PASS_OPAQUE | HD_PASS_ALPHA)
-#define HD_PASS_ALL		(HD_PASS_SOLID | HD_PASS_ADDITIVE)
+#define HD_PASS_ALL		(HD_PASS_SOLID | HD_PASS_ADDITIVE | HD_PASS_BLEND)
 
 // One room, the passes the mask names, world matrix as the classic path would
 // set it (the room's origin translation). False when the group is missing or
@@ -401,6 +437,18 @@ bool HDRenderSky(const D3DMATRIX* world);
  * what MESH_INFO::Flags bit 0 turns into once Lara has shot it. See the long
  * note beside HDDestructible in hd_render.cpp for the measurement. */
 bool HDRenderGroupHasGeometry(int group, const float* mins, const float* maxs);
+
+/* DOES THE GROUP DRAW ANYTHING IN A GIVEN HORIZONTAL PLANE (#123, fix round
+ * H, H1)? Room local, classic units, `slack` the height tolerance. It is what
+ * decides whether the CLASSIC water surface of a room has to be drawn on top
+ * of the HD one: measured over the fifteen files, 61 of 93 reflecting rooms
+ * have no .TRG art in the plane their classic water lives in - every VCI pool
+ * among them - and there the HD room shows the pool floor with nothing over
+ * it. See hd_level.cpp, BuildWaterSurfaces. */
+bool HDRenderGroupFlatArt(int group, int y, int x0, int z0, int x1, int z1,
+	int slack = 32);
+// How many distinct horizontal planes that group's art covers - for the log.
+int HDRenderGroupFlatPlanes(int group);
 int HDRenderDestructibleCount();
 bool HDRenderDestructibleInfo(int at, int* group, unsigned int* material,
 	float* mins, float* maxs);

@@ -104,70 +104,174 @@ void DrawHair()
 }
 
 /*
- * THE HD BACKPACK, AS TWO COLLISION SPHERES (#123, fix round D, D3b; put in
- * both frame branches in fix round F, F2).
+ * THE HD BACKPACK, AS A BOX (#123, fix round I, I1; two collision spheres
+ * from fix round D, D3b until this round, in both frame branches since fix
+ * round F, F2).
  *
  * The user's finding of round D: the HD braid goes straight through the HD
  * pack. It has to - the five spheres HairControl pushes it out of are CLASSIC
  * Lara meshes, and the pack of an HD outfit stands 92 units behind the torso
- * joint where the classic torso sphere reaches 40. Two spheres and not one
- * because the pack is a flat slab; the numbers and how they were measured are
- * in hd_lara.h.
+ * joint where the classic torso sphere reaches 40.
  *
- * They are placed from the TORSO NODE, which is the frame the caller stands
- * in when it calls this - after the torso's own rotation, so the pack turns
- * with her chest the way its geometry does.
+ * The user's finding after round G: it STILL lies in the pack, and round G had
+ * already written down why and left it as a decision - the pack is a flat slab
+ * and two stacked spheres touch that slab on its centre line alone. So the
+ * pack is a BOX now, six measured numbers instead of three, and the braid is
+ * pushed out of it along the smallest penetration with its rear face
+ * preferred. The numbers, the seven outfits they came from and the plait's own
+ * radius are in hd_lara.h.
+ *
+ * IT LIVES IN THE TORSO NODE'S FRAME, which is the frame the caller stands in
+ * when it calls this - after the torso's own rotation, so the pack turns with
+ * her chest the way its geometry does. That is why the frame is CAPTURED here
+ * (a rotation and an origin) rather than a handful of world points: a box has
+ * an orientation and a sphere has not.
  *
  * ONLY when the HD wardrobe is drawing. The classic body's pack is part of
- * the classic torso mesh and sphere[1] already covers it; adding these to the
- * classic braid would push it off her back for no reason.
+ * the classic torso mesh and sphere[1] already covers it; pushing the classic
+ * braid out of this box would lift it off her back for no reason. With the HD
+ * path off, HairControl is the file it was before #123 - HdPackFrame returns
+ * false at its first line and HdPackPush is never reached.
  *
  * WHY IT TAKES A FLAG. HairControl has two halves - one for a frame the
  * animation interpolates and one for a frame it does not - and they walk the
- * mesh tree with two different sets of matrix calls. Round D wrote this block
+ * mesh tree with two different sets of matrix calls. Round D wrote its block
  * into the second half only, so the pack came and went from frame to frame
  * and the braid was pushed out of it on some frames and not on others. That
  * was half of the tremble of user finding F2, and it is why this is a
  * function with a switch rather than a block that can be forgotten in one
- * place. ModelProbe -braidsim measures both.
- *
- * Returns how many spheres it wrote, so the caller can add it to its own
- * count.
+ * place. ModelProbe -braidsim and -braidanim measure both.
  */
-static int HdPackSpheres(SPHERE* sphere, bool interpolate)
+struct HD_PACK_FRAME
 {
-	static const long kPackY[2] =
-		{ HD_LARA_PACK_Y_TOP, HD_LARA_PACK_Y_BOTTOM };
+	bool on;
+	float rot[9];	// the torso frame's own axes: rot[3 * row + col]
+	float org[3];	// the torso joint, in the world
+};
+
+static bool HdPackFrame(HD_PACK_FRAME* box, bool interpolate)
+{
+	box->on = false;
 
 	if (!HDLaraDrawActive())
-		return 0;
+		return false;
 
-	for (int i = 0; i < 2; i++)
+	/* The same push the two spheres used, with a translation of nothing: what
+	 * is wanted is the frame itself. The interpolated half has to run
+	 * InterpolateMatrix to have a matrix at all - aMXPtr holds the blend of
+	 * the two key frames only after that call. */
+	if (interpolate)
 	{
-		if (interpolate)
-		{
-			phd_PushMatrix_I();
-			phd_TranslateRel_I(HD_LARA_PACK_X, kPackY[i], HD_LARA_PACK_Z);
-			InterpolateMatrix();
-		}
-		else
-		{
-			phd_PushMatrix();
-			phd_TranslateRel(HD_LARA_PACK_X, kPackY[i], HD_LARA_PACK_Z);
-		}
+		phd_PushMatrix_I();
+		phd_TranslateRel_I(0, 0, 0);
+		InterpolateMatrix();
+	}
+	else
+		phd_PushMatrix();
 
-		sphere[i].x = (long)aMXPtr[M03];
-		sphere[i].y = (long)aMXPtr[M13];
-		sphere[i].z = (long)aMXPtr[M23];
-		sphere[i].r = HD_LARA_PACK_R;
+	box->rot[0] = aMXPtr[M00];  box->rot[1] = aMXPtr[M01];  box->rot[2] = aMXPtr[M02];
+	box->rot[3] = aMXPtr[M10];  box->rot[4] = aMXPtr[M11];  box->rot[5] = aMXPtr[M12];
+	box->rot[6] = aMXPtr[M20];  box->rot[7] = aMXPtr[M21];  box->rot[8] = aMXPtr[M22];
+	box->org[0] = aMXPtr[M03];
+	box->org[1] = aMXPtr[M13];
+	box->org[2] = aMXPtr[M23];
 
-		if (interpolate)
-			phd_PopMatrix_I();
-		else
-			phd_PopMatrix();
+	if (interpolate)
+		phd_PopMatrix_I();
+	else
+		phd_PopMatrix();
+
+	box->on = true;
+	return true;
+}
+
+/*
+ * ONE LINK OUT OF THE BOX. `link` is 1..6, the moving points of hairs[0];
+ * `x`, `y`, `z` its position in the world, changed in place.
+ *
+ * The frame is a pure rotation - HairControl builds its matrices on a UNIT
+ * matrix (phd_PushUnitMatrix) and puts nothing but rotations and translations
+ * on it, so the 3x3 is orthonormal and the way back into the torso's own
+ * coordinates is its transpose. World = R * local + origin, so local =
+ * R-transpose * (world - origin).
+ *
+ * Six faces, six penetrations, and the smallest of them wins - which is what
+ * makes the push a push and not a teleport: a link that has just crept a unit
+ * into the pack comes back out a unit. The REAR face is preferred because it
+ * is the face the braid belongs on; every other one leads into her back, under
+ * the pack or out at the side. The preference is a divisor and not a rule, so
+ * a link that is genuinely nearer another face still leaves by it.
+ *
+ * The velocity is left alone, exactly as the classic spheres leave it: the
+ * caller works out `vel` at the end of the step as how far the point really
+ * moved, and a push that zeroed it would be a second, hidden rule.
+ */
+static bool HdPackPush(const HD_PACK_FRAME* box, long link, long* x, long* y,
+	long* z)
+{
+	static const long kBraidR[6] = HD_LARA_BRAID_RADII;
+
+	if (!box->on || link < 1 || link > 6)
+		return false;
+
+	const float dx = (float)*x - box->org[0];
+	const float dy = (float)*y - box->org[1];
+	const float dz = (float)*z - box->org[2];
+
+	const float lx = dx * box->rot[0] + dy * box->rot[3] + dz * box->rot[6];
+	const float ly = dx * box->rot[1] + dy * box->rot[4] + dz * box->rot[7];
+	const float lz = dx * box->rot[2] + dy * box->rot[5] + dz * box->rot[8];
+
+	const float r = (float)kBraidR[link - 1];
+	const float loX = -(float)HD_LARA_PACK_BOX_X - r;
+	const float hiX = (float)HD_LARA_PACK_BOX_X + r;
+	const float loY = (float)HD_LARA_PACK_BOX_Y_TOP - r;
+	const float hiY = (float)HD_LARA_PACK_BOX_Y_BOTTOM + r;
+	const float loZ = (float)HD_LARA_PACK_BOX_Z_BACK - r;
+	const float hiZ = (float)HD_LARA_PACK_BOX_Z_FRONT + r;
+
+	if (lx <= loX || lx >= hiX || ly <= loY || ly >= hiY ||
+		lz <= loZ || lz >= hiZ)
+		return false;
+
+	/* The six ways out, and how far each of them is. */
+	const float out[6] =
+	{
+		lx - loX, hiX - lx,
+		ly - loY, hiY - ly,
+		lz - loZ, hiZ - lz
+	};
+
+	int face = 0;
+	float best = out[0];
+
+	for (int i = 1; i < 6; i++)
+	{
+		/* Face 4 is the rear one - out along -z, which is behind her. */
+		const float weigh = i == 4 ? out[i] / (float)HD_LARA_PACK_BOX_BIAS
+			: out[i];
+		const float against = face == 4 ? best / (float)HD_LARA_PACK_BOX_BIAS
+			: best;
+
+		if (weigh < against)
+		{
+			best = out[i];
+			face = i;
+		}
 	}
 
-	return 2;
+	float move[3] = { 0.0f, 0.0f, 0.0f };
+
+	move[face >> 1] = (face & 1) ? best : -best;
+
+	*x += (long)(move[0] * box->rot[0] + move[1] * box->rot[1] +
+		move[2] * box->rot[2]);
+	*y += (long)(move[0] * box->rot[3] + move[1] * box->rot[4] +
+		move[2] * box->rot[5]);
+	*z += (long)(move[0] * box->rot[6] + move[1] * box->rot[7] +
+		move[2] * box->rot[8]);
+
+	return true;
 }
 
 void HairControl(long in_cutscene, long pigtail, short* cutscenething)
@@ -176,11 +280,13 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 	HAIR_STRUCT* hair;
 	FLOOR_INFO* floor;
 	PHD_VECTOR pos;
-	/* SIX SPHERES ARE THE CLASSIC BODY, the last two the HD backpack (#123,
-	 * fix round D, D3b). `spheres` says how many of them the loop below
-	 * really tests, so the classic braid meets exactly what it always met. */
-	SPHERE sphere[8];
+	/* SIX SPHERES ARE THE CLASSIC BODY and all the braid ever meets; the HD
+	 * backpack is the BOX beside them (#123, fix round I, I1 - two more
+	 * spheres from fix round D, D3b until then). `spheres` stays a count so
+	 * that the log can say the classic braid met exactly what it always met. */
+	SPHERE sphere[6];
 	int spheres = 6;
+	HD_PACK_FRAME pack;
 	int pack_hits = 0;	// #123 fix round F (F2): for the HAIRLOG line
 	long root_z = HD_LARA_BRAID_ROOT_Z;	// which root the frame really used
 	long* bone;
@@ -192,6 +298,7 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 	short room_num, spaz;
 
 	obj = &objects[LARA];
+	pack.on = false;
 
 	if (!cutscenething)
 	{
@@ -303,9 +410,9 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		phd_PopMatrix_I();
 
 		// The HD backpack, in the torso frame (#123, fix round D D3b, in this
-		// branch as well since fix round F, F2).
+		// branch as well since fix round F, F2; a box since fix round I, I1).
 		if (!pigtail)
-			spheres += HdPackSpheres(&sphere[6], true);
+			HdPackFrame(&pack, true);
 
 		phd_PushMatrix_I();
 		phd_TranslateRel_I(bone[29], bone[30], bone[31]);
@@ -370,7 +477,14 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		}
 		else
 		{
-			root_z = HD_LARA_BRAID_ROOT_Z;
+			/* AND IT MOVES INTO THE HAIR KNOT FOR AN HD LARA AGAIN (#123, fix
+			 * round I, I2) - see HD_LARA_BRAID_ROOT_Z_HD in hd_lara.h for the
+			 * measurement, the withdrawal in fix round F and why the box lets
+			 * it come back. `pack.on` and not a second call to
+			 * HDLaraDrawActive(): it is one answer read once per frame, so the
+			 * two halves of this function cannot disagree about it - which is
+			 * exactly what went wrong in round D. */
+			root_z = pack.on ? HD_LARA_BRAID_ROOT_Z_HD : HD_LARA_BRAID_ROOT_Z;
 			phd_TranslateRel_I(HD_LARA_BRAID_ROOT_X, HD_LARA_BRAID_ROOT_Y,
 				root_z);
 		}
@@ -449,10 +563,11 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 
 		phd_PopMatrix();
 
-		// The HD backpack, in the torso frame - see HdPackSpheres above
-		// (#123, fix round D D3b, both branches since fix round F, F2).
+		// The HD backpack, in the torso frame - see HdPackFrame above
+		// (#123, fix round D D3b, both branches since fix round F, F2; a box
+		// since fix round I, I1).
 		if (!pigtail)
-			spheres += HdPackSpheres(&sphere[6], false);
+			HdPackFrame(&pack, false);
 
 		phd_PushMatrix();
 		phd_TranslateRel(bone[29], bone[30], bone[31]);
@@ -500,9 +615,9 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		sphere[5].z = (2 * sphere[2].z + sphere[1].z) / 3;
 		sphere[5].r = gfLevelFlags & GF_YOUNGLARA ? 0 : 5 * sphere[2].r / 4;
 
-		/* THE BRAID ROOT, the same for every adult Lara (#123, fix round F,
-		 * F2 - round D's HD variant is withdrawn; the reason is at
-		 * HD_LARA_BRAID_ROOT_Z_HD in hd_lara.h). */
+		/* THE BRAID ROOT. The classic one for a classic Lara and the near one
+		 * for an HD Lara (#123, fix round I, I2) - the same three lines the
+		 * other half has, which is the point (fix round F, F2). */
 		if (pigtail)
 		{
 			root_z = -50;
@@ -515,7 +630,7 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		}
 		else
 		{
-			root_z = HD_LARA_BRAID_ROOT_Z;
+			root_z = pack.on ? HD_LARA_BRAID_ROOT_Z_HD : HD_LARA_BRAID_ROOT_Z;
 			phd_TranslateRel(HD_LARA_BRAID_ROOT_X, HD_LARA_BRAID_ROOT_Y,
 				root_z);
 		}
@@ -635,7 +750,7 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 			hair->pos.z_pos = pos.z;
 		}
 
-		for (int j = 0; j < spheres; j++)	//6 instead of 5 for new sphere, 8 with the HD pack (#123 D3b)
+		for (int j = 0; j < spheres; j++)	//6 instead of 5 for new sphere
 		{
 			x = hair->pos.x_pos - sphere[j].x;
 			y = hair->pos.y_pos - sphere[j].y;
@@ -652,13 +767,18 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 				hair->pos.x_pos = sphere[j].x + x * sphere[j].r / dist;
 				hair->pos.y_pos = sphere[j].y + y * sphere[j].r / dist;
 				hair->pos.z_pos = sphere[j].z + z * sphere[j].r / dist;
-
-				// #123 fix round F (F2): how often the HD pack itself had
-				// work to do, for the HAIRLOG line below.
-				if (j >= 6)
-					pack_hits++;
 			}
 		}
+
+		/* AND OUT OF THE HD BACKPACK (#123, fix round I, I1). After the
+		 * classic spheres and not among them, because it is a box and they are
+		 * spheres - and last, so that a link the torso sphere has just pushed
+		 * INTO the pack still leaves it. `pack.on` is false for the classic
+		 * braid and for young Lara's pigtails, and then this line is the test
+		 * that reads it. */
+		if (HdPackPush(&pack, i, &hair->pos.x_pos, &hair->pos.y_pos,
+			&hair->pos.z_pos))
+			pack_hits++;
 
 		dx = (hair->pos.x_pos - (hair - 1)->pos.x_pos);
 		dy = (hair->pos.y_pos - (hair - 1)->pos.y_pos);
@@ -723,13 +843,19 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 	 *             number on every line of a run; a line where it changes is
 	 *             the bug back again.
 	 *   root      where hairs[0][0] landed, in the room.
-	 *   spheres   how many collision spheres this frame tested - 6 without
-	 *             the HD wardrobe, 8 with it, and it must not alternate.
-	 *   packhits  how many times the two pack spheres pushed a link out this
-	 *             frame - up to two per link, so up to twelve. A steady small
-	 *             number is the pack doing its work; a zero on an HD Lara who
-	 *             is not in the water means the braid never reaches the pack
-	 *             at all.
+	 *   spheres   how many collision SPHERES this frame tested. Six, always -
+	 *             they are the classic body and nothing else. (It read 8 with
+	 *             the HD wardrobe between fix rounds D and G, when the pack
+	 *             was two spheres of its own.)
+	 *   pack      whether the HD backpack BOX was placed this frame (#123,
+	 *             fix round I, I1). It has to read the same number on every
+	 *             line of a run: 1 for an HD Lara, 0 for a classic one, and a
+	 *             line where it changes is the trouble of finding F2 back
+	 *             again in a new coat.
+	 *   packhits  how many links the box pushed out this frame - at most six,
+	 *             one per link. A steady small number is the pack doing its
+	 *             work; a zero on an HD Lara who is not in the water means the
+	 *             braid never reaches the pack at all.
 	 *   tip       the last link, so that a braid that is somewhere it should
 	 *             not be can be found without a screenshot.
 	 *   rootstep  how far the ROOT moved since the last frame, |dx|+|dy|+|dz|
@@ -811,11 +937,11 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 
 	hair_log_seen[pigtail] = true;
 
-	Log("HAIRLOG %s rootz %d root %d,%d,%d spheres %d packhits %d hd %d "
+	Log("HAIRLOG %s rootz %d root %d,%d,%d spheres %d pack %d packhits %d hd %d "
 		"tip %d,%d,%d rootstep %d tipstep %d dyaw %d droll %d",
 		pigtail ? "pigtail" : "braid", (int)root_z,
 		(int)hairs[pigtail][0].pos.x_pos, (int)hairs[pigtail][0].pos.y_pos,
-		(int)hairs[pigtail][0].pos.z_pos, spheres, pack_hits,
+		(int)hairs[pigtail][0].pos.z_pos, spheres, (int)pack.on, pack_hits,
 		(int)HDLaraDrawActive(),
 		(int)hairs[pigtail][6].pos.x_pos, (int)hairs[pigtail][6].pos.y_pos,
 		(int)hairs[pigtail][6].pos.z_pos, (int)root_step, (int)tip_step,

@@ -27,6 +27,7 @@
 #include "hd_lara.h"
 #include "hd_bind.h"
 
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -175,6 +176,11 @@ namespace
 		{ "HAIR_OG",                  0,
 		  "the braid",                2, -1, "0..5 of its own chain", -1 },
 
+		/* Not a file: built out of the outfit's own collar (#123, fix round I,
+		 * I3). The name is what the log and the plan call it. */
+		{ "NECK_CAP",                 0,
+		  "the neck cap",             0, -1, "7", -1 },
+
 		{ "HAND_BARE_REST",           "HAND_GLOVES_REST",
 		  "empty hands",              1, -1, "8,9,10,11,12,13", -1 },
 		{ "HAND_BARE_PISTOL",         "HAND_GLOVES_PISTOL",
@@ -272,7 +278,34 @@ namespace
 	 *   gunmetal  0.35 / 34   a hard small highlight on a weapon
 	 *   cloth     0.10 / 14   the Rome top and the rest
 	 *
-	 * A part not named here takes 0 and does not shine. */
+	 * A part not named here takes 0 and does not shine.
+	 *
+	 * WHAT FIX ROUND I (I4) CHANGED, and why the numbers below did not.
+	 *
+	 * The user's finding: "the sheen is on the body and the head; the hand
+	 * parts go empty". Measured with ModelProbe -onlypart, drawing one part
+	 * with the sheen on and off and differencing the two pictures: it is NOT
+	 * empty - the highlight is there, on the Desert Eagle's barrel and along
+	 * the fingers - it is a LINE. A Blinn-Phong exponent of 34 on a hand-sized
+	 * object at arm's length is a highlight one or two pixels wide, and beside
+	 * a catsuit whose whole chest lights up it reads as nothing.
+	 *
+	 * Two things really were wrong, and both are about ONE number having to
+	 * describe TWO materials:
+	 *
+	 *   1. A HAND_ model is a hand AND the thing in it, on two pages of one
+	 *      file (measured: HAND_BARE_REST has 1 page, HAND_BARE_DEAGLE 2,
+	 *      HAND_GLOVES_REST 3, HAND_GLOVES_DEAGLE 4 - the gun is always the
+	 *      page the rest hands have not got). The entries below are the
+	 *      WEAPON's material and were being worn by the skin as well. They are
+	 *      the weapon's alone now: the draw's own sheen is the HAND's and the
+	 *      pages that are not the rest hands' get these numbers through
+	 *      HDModelSetPageSheen.
+	 *   2. A gloved outfit wears HAND_GLOVES_ and shone like bare skin. The
+	 *      hand's material follows the outfit now - skin for a bare hand,
+	 *      leather for a gloved one - which is the same rule the BODY has had
+	 *      since fix round D.
+	 */
 	struct PartSheen
 	{
 		int part;
@@ -280,10 +313,15 @@ namespace
 		float power;
 	};
 
+	/* The two hand materials, out of the table above. */
+	const float kSheenSkin[2] = { 0.12f, 10.0f };
+	const float kSheenLeather[2] = { 0.18f, 20.0f };
+
 	const PartSheen kPartSheen[] =
 	{
 		{ HD_LARA_PART_FACE,               0.12f, 10.0f },	// skin
 		{ HD_LARA_PART_BRAID,              0.14f, 18.0f },	// hair
+		{ HD_LARA_PART_NECK_CAP,           0.12f, 10.0f },	// skin (I3)
 
 		{ HD_LARA_PART_HAND_REST,          0.12f, 10.0f },	// skin
 		{ HD_LARA_PART_HAND_PISTOL,        0.35f, 34.0f },	// gunmetal
@@ -467,6 +505,9 @@ namespace
 		useful[HD_LARA_PART_FACE] = true;
 		useful[HD_LARA_PART_BRAID] = true;
 		useful[HD_LARA_PART_HAND_REST] = true;	// LARA is always loaded
+		/* The neck cap hangs off no slot at all - it is cut from the body
+		 * (#123, fix round I, I3), so it is wanted wherever the body is. */
+		useful[HD_LARA_PART_NECK_CAP] = true;
 
 		/* kind 3 is "worn": the three thigh holsters and the three weapons on
 		 * the back. outfit_takes still decides whether this outfit has any at
@@ -771,6 +812,495 @@ int HDLaraPartForSlot(int slot, int role)
 	return -1;
 }
 
+/* ------------------------------------------------ the neck cap (I3) -- */
+/*
+ * THE LID THAT CLOSES THE NECK IN FIRST PERSON. What it is for and where its
+ * numbers come from is at HD_LARA_NECK_CAP_S in hd_lara.h; this is the maker.
+ *
+ * IT IS BUILT FROM THE OUTFIT'S OWN BODY, which is why it goes through
+ * HDModelSlot::synth rather than being a file: the rim is the outfit's own
+ * vertices, at their own positions, with their own texture page and their own
+ * texture coordinates. Nothing is invented but the surface between them.
+ *
+ * THE STEPS.
+ *   1. The neck AXIS: the line from the torso joint to the head joint, both
+ *      out of the level's own bind pose. `s` is the distance down it from the
+ *      head joint, `r` the distance off it.
+ *   2. THE RING: of the node 7 vertices in the band s = S +/- BAND, the one
+ *      furthest off the axis in each of SPOKES sectors. That is the body's own
+ *      outline at collar height, and it is a closed loop by construction.
+ *   3. THE PAGE: the one most of those vertices wear. A model draws one page
+ *      per call, so a rim vertex on another page takes the texture
+ *      coordinates of the nearest rim vertex that is on the chosen one - which
+ *      is a colour and not a position, and the count goes in the log.
+ *   4. THE DOME: RINGS rings from the rim inwards, the radius falling off as
+ *      a quarter cosine so the surface is flat at the middle rather than a
+ *      cone, and the middle sunk SINK units further down the axis. The
+ *      texture coordinates run from the rim's own to the rim's average, so the
+ *      seam is exact where it is seen and the middle is a smear of the same
+ *      material.
+ *   5. THE NORMALS are accumulated from the triangles and normalised - the
+ *      "soft normals" a curved surface wants, and the reason the cap shades
+ *      like a body and not like a plate.
+ */
+namespace
+{
+	/* The level's bind pose, kept from HDLaraPlan so the maker can find the
+	 * two joints. The maker is a plain function pointer with no argument for
+	 * it, and threading one through hd_model for a single caller would be a
+	 * worse trade than a file-static that is written once per level. */
+	float g_neck_bind[HD_LARA_NODES * 3];
+	bool g_neck_bind_ok = false;
+	int g_neck_cap_page = -1;	// for the log
+	int g_neck_cap_rehomed = 0;	// rim vertices that had to borrow a UV
+
+	int dominant_node(const HDTrmVertex& v)
+	{
+		int node = v.bone[0];
+
+		if (v.weight[1] > v.weight[0] && v.weight[1] >= v.weight[2])
+			node = v.bone[1];
+		else if (v.weight[2] > v.weight[0] && v.weight[2] > v.weight[1])
+			node = v.bone[2];
+
+		return node;
+	}
+
+	unsigned char pack_normal(double n)
+	{
+		const double v = n * 128.0 + 127.0;
+
+		return (unsigned char)(v < 0.0 ? 0.0 : (v > 255.0 ? 255.0 : v));
+	}
+
+	bool build_neck_cap(const HDTrmModel* source, HDTrmModel* out,
+		const char** why)
+	{
+		const int kSpokes = HD_LARA_NECK_CAP_SPOKES;
+		const int kRings = HD_LARA_NECK_CAP_RINGS;
+
+		*why = "";
+		g_neck_cap_page = -1;
+		g_neck_cap_rehomed = 0;
+
+		if (!source || !out || !g_neck_bind_ok)
+		{
+			*why = "the neck cap has no bind pose to measure against";
+			return false;
+		}
+
+		const double H[3] =
+		{
+			g_neck_bind[HD_LARA_HEAD_NODE * 3 + 0],
+			g_neck_bind[HD_LARA_HEAD_NODE * 3 + 1],
+			g_neck_bind[HD_LARA_HEAD_NODE * 3 + 2]
+		};
+		const double T[3] =
+		{
+			g_neck_bind[HD_LARA_TORSO * 3 + 0],
+			g_neck_bind[HD_LARA_TORSO * 3 + 1],
+			g_neck_bind[HD_LARA_TORSO * 3 + 2]
+		};
+
+		double axis[3] = { T[0] - H[0], T[1] - H[1], T[2] - H[2] };
+		double len = axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2];
+
+		if (len < 1.0)
+		{
+			*why = "the torso and the head joint sit on top of each other";
+			return false;
+		}
+
+		len = std::sqrt(len);
+
+		for (int i = 0; i < 3; i++)
+			axis[i] /= len;
+
+		/* Two axes across it, for the sectors. The cross product with the
+		 * world's z is safe: the neck runs down y and nothing turns it. */
+		double u[3] = { axis[1], -axis[0], 0.0 };
+		double uLen = std::sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
+
+		if (uLen < 1.0e-6)
+		{
+			*why = "the neck axis lies along the world z";
+			return false;
+		}
+
+		for (int i = 0; i < 3; i++)
+			u[i] /= uLen;
+
+		const double w[3] =
+		{
+			axis[1] * u[2] - axis[2] * u[1],
+			axis[2] * u[0] - axis[0] * u[2],
+			axis[0] * u[1] - axis[1] * u[0]
+		};
+
+		/* --- the ring ---------------------------------------------------- */
+		/* The candidates once, then one pass per spoke over them. The band is
+		 * a few hundred vertices, so this is a few thousand comparisons at
+		 * level load and nothing at all per frame. */
+		std::vector<int> band;
+		std::vector<double> bandR;
+		std::vector<double> bandA;
+
+		for (int i = 0; i < source->vertices; i++)
+		{
+			const HDTrmVertex& v = source->vertex[i];
+
+			if (dominant_node(v) != HD_LARA_TORSO)
+				continue;
+
+			const double d[3] = { v.x - H[0], v.y - H[1], v.z - H[2] };
+			const double s = d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
+
+			if (s < HD_LARA_NECK_CAP_S - HD_LARA_NECK_CAP_BAND ||
+				s > HD_LARA_NECK_CAP_S + HD_LARA_NECK_CAP_BAND)
+				continue;
+
+			const double off[3] =
+			{
+				d[0] - s * axis[0], d[1] - s * axis[1], d[2] - s * axis[2]
+			};
+
+			band.push_back(i);
+			bandR.push_back(std::sqrt(off[0] * off[0] + off[1] * off[1] +
+				off[2] * off[2]));
+			bandA.push_back(std::atan2(
+				off[0] * w[0] + off[1] * w[1] + off[2] * w[2],
+				off[0] * u[0] + off[1] * u[1] + off[2] * u[2]));
+		}
+
+		if ((int)band.size() < kSpokes)
+		{
+			*why = "the collar band holds fewer vertices than the cap has "
+				"spokes";
+			return false;
+		}
+
+		/* ONE VERTEX PER SPOKE: the one furthest off the axis within half a
+		 * sector of the spoke's own direction. A sector with nothing in it is
+		 * not an error and must not be - the outline of a chest is not evenly
+		 * covered, and under the arm there are stretches of it with no vertex
+		 * at all - so the window widens until it finds one. It is written as a
+		 * widening window rather than as "the furthest in that direction over
+		 * the whole band", which would build the convex HULL of the section
+		 * and push the rim out through the armpit where the outline is
+		 * hollow. */
+		const double kPi = 3.14159265358979323846;
+		int pick[HD_LARA_NECK_CAP_SPOKES];
+
+		for (int k = 0; k < kSpokes; k++)
+		{
+			const double want = -kPi + (k + 0.5) * 2.0 * kPi / kSpokes;
+			double window = kPi / kSpokes;
+
+			pick[k] = -1;
+
+			for (int tries = 0; tries < 6 && pick[k] < 0; tries++, window *= 2.0)
+			{
+				double bestR = -1.0;
+
+				for (size_t i = 0; i < band.size(); i++)
+				{
+					double da = bandA[i] - want;
+
+					while (da > kPi)
+						da -= 2.0 * kPi;
+
+					while (da < -kPi)
+						da += 2.0 * kPi;
+
+					if (da < -window || da > window)
+						continue;
+
+					if (bandR[i] > bestR)
+					{
+						bestR = bandR[i];
+						pick[k] = band[i];
+					}
+				}
+			}
+
+			if (pick[k] < 0)
+			{
+				*why = "the collar ring has a gap no widening would close";
+				return false;
+			}
+		}
+
+		/* --- the page most of the ring wears ------------------------------ */
+		int best = -1, bestCount = 0;
+
+		for (int k = 0; k < kSpokes; k++)
+		{
+			const int page = HDTrmPageOf(source, &source->vertex[pick[k]]);
+			int count = 0;
+
+			if (page < 0)
+				continue;
+
+			for (int j = 0; j < kSpokes; j++)
+				if (HDTrmPageOf(source, &source->vertex[pick[j]]) == page)
+					count++;
+
+			if (count > bestCount)
+			{
+				bestCount = count;
+				best = page;
+			}
+		}
+
+		if (best < 0)
+		{
+			*why = "no ring vertex names a texture page";
+			return false;
+		}
+
+		g_neck_cap_page = best;
+
+		/* A rim vertex on another page keeps its POSITION and borrows the
+		 * nearest same-page rim vertex's texture coordinates. */
+		unsigned char rimU[HD_LARA_NECK_CAP_SPOKES];
+		unsigned char rimV[HD_LARA_NECK_CAP_SPOKES];
+
+		for (int k = 0; k < kSpokes; k++)
+		{
+			const HDTrmVertex& v = source->vertex[pick[k]];
+
+			if (HDTrmPageOf(source, &v) == best)
+			{
+				rimU[k] = v.u;
+				rimV[k] = v.v;
+				continue;
+			}
+
+			g_neck_cap_rehomed++;
+
+			double near2 = 1.0e30;
+			int from = -1;
+
+			for (int j = 0; j < kSpokes; j++)
+			{
+				const HDTrmVertex& c = source->vertex[pick[j]];
+
+				if (HDTrmPageOf(source, &c) != best)
+					continue;
+
+				const double dx = c.x - v.x, dy = c.y - v.y, dz = c.z - v.z;
+				const double d2 = dx * dx + dy * dy + dz * dz;
+
+				if (d2 < near2)
+				{
+					near2 = d2;
+					from = j;
+				}
+			}
+
+			rimU[k] = source->vertex[pick[from]].u;
+			rimV[k] = source->vertex[pick[from]].v;
+		}
+
+		double meanU = 0, meanV = 0;
+
+		for (int k = 0; k < kSpokes; k++)
+		{
+			meanU += rimU[k];
+			meanV += rimV[k];
+		}
+
+		meanU /= kSpokes;
+		meanV /= kSpokes;
+
+		/* --- the dome ----------------------------------------------------- */
+		const int vertices = kSpokes * kRings + 1;
+		const int triangles = kSpokes * (2 * (kRings - 1) + 1);
+
+		std::memset(out, 0, sizeof(*out));
+		out->version = 2;
+		out->parts = 1;
+		out->textures = 1;
+		out->indices = triangles * 3;
+		out->vertices = vertices;
+		out->part = new HDTrmPart[1];
+		out->texture = new unsigned short[1];
+		out->index = new unsigned short[out->indices];
+		out->vertex = new HDTrmVertex[vertices];
+
+		std::memset(out->part, 0, sizeof(HDTrmPart));
+		out->part[0].opaque = (unsigned int)out->indices;
+		out->part[0].opaqueEnd = (unsigned int)out->indices;
+		out->part[0].alphaEnd = (unsigned int)out->indices;
+		out->texture[0] = (unsigned short)best;
+
+		/* The rim, decomposed once: how far down the axis each spoke's vertex
+		 * sits and how far off it, and the two means. The means are what the
+		 * dome rounds TOWARDS - the rim itself is the outfit's own vertices,
+		 * warts and all, and a dome built straight off them would carry every
+		 * dent of the collar all the way to its middle. So the further in a
+		 * ring is, the more it is a circle: exact at the seam, where it has to
+		 * be, and smooth where it is looked at. */
+		double sMean = 0, rMean = 0;
+		double rimS[HD_LARA_NECK_CAP_SPOKES];
+		double rimOff[HD_LARA_NECK_CAP_SPOKES][3];
+		double rimR[HD_LARA_NECK_CAP_SPOKES];
+
+		for (int k = 0; k < kSpokes; k++)
+		{
+			const HDTrmVertex& v = source->vertex[pick[k]];
+			const double d[3] = { v.x - H[0], v.y - H[1], v.z - H[2] };
+
+			rimS[k] = d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
+
+			for (int a = 0; a < 3; a++)
+				rimOff[k][a] = d[a] - rimS[k] * axis[a];
+
+			rimR[k] = std::sqrt(rimOff[k][0] * rimOff[k][0] +
+				rimOff[k][1] * rimOff[k][1] + rimOff[k][2] * rimOff[k][2]);
+
+			sMean += rimS[k];
+			rMean += rimR[k];
+		}
+
+		sMean /= kSpokes;
+		rMean /= kSpokes;
+
+		const double kHalfPi = 1.57079632679489661923;
+
+		for (int j = 0; j < kRings; j++)
+		{
+			const double f = (double)j / (double)kRings;
+			const double rad = std::cos(f * kHalfPi);
+			const double sink = HD_LARA_NECK_CAP_SINK * std::sin(f * kHalfPi);
+
+			for (int k = 0; k < kSpokes; k++)
+			{
+				HDTrmVertex& v = out->vertex[j * kSpokes + k];
+				const double at = rimS[k] * (1.0 - f) + sMean * f + sink;
+				const double round = rimR[k] > 1.0e-6
+					? (1.0 - f) + f * rMean / rimR[k] : 1.0;
+				const double off[3] =
+				{
+					rimOff[k][0] * round, rimOff[k][1] * round,
+					rimOff[k][2] * round
+				};
+
+				std::memset(&v, 0, sizeof(v));
+				v.x = (float)(H[0] + at * axis[0] + rad * off[0]);
+				v.y = (float)(H[1] + at * axis[1] + rad * off[1]);
+				v.z = (float)(H[2] + at * axis[2] + rad * off[2]);
+				v.layer = 1;
+				v.bone[0] = (unsigned char)HD_LARA_TORSO;
+				v.weight[0] = 255;
+				/* THE TEXTURE IS THE RIM'S AT THE RIM and the ring's average in
+				 * the middle, which is what makes the seam exact - the one
+				 * place a mismatch would be seen - and leaves the middle a
+				 * smear of the same material.
+				 *
+				 * The alternative was tried and is worse: holding each spoke's
+				 * own texture coordinates all the way in leaves every strip
+				 * sampling a line ACROSS the page between two neighbours, and
+				 * where the outfit's own atlas seam runs through the collar
+				 * those two are half a page apart - the picture came back with
+				 * two hard streaks through her chest. Converging is a soft
+				 * radial gradient instead, and it cannot cross the page. */
+				v.u = (unsigned char)(rimU[k] * (1.0 - f) + meanU * f + 0.5);
+				v.v = (unsigned char)(rimV[k] * (1.0 - f) + meanV * f + 0.5);
+			}
+		}
+
+		{
+			HDTrmVertex& mid = out->vertex[kSpokes * kRings];
+
+			std::memset(&mid, 0, sizeof(mid));
+			mid.x = (float)(H[0] + (sMean + HD_LARA_NECK_CAP_SINK) * axis[0]);
+			mid.y = (float)(H[1] + (sMean + HD_LARA_NECK_CAP_SINK) * axis[1]);
+			mid.z = (float)(H[2] + (sMean + HD_LARA_NECK_CAP_SINK) * axis[2]);
+			mid.layer = 1;
+			mid.bone[0] = (unsigned char)HD_LARA_TORSO;
+			mid.weight[0] = 255;
+			mid.u = (unsigned char)(meanU + 0.5);
+			mid.v = (unsigned char)(meanV + 0.5);
+		}
+
+		/* The triangles: a quad band between two rings, then a fan into the
+		 * middle. The winding is the one that leaves the outward face looking
+		 * UP the axis, towards the eye; the draw is double sided anyway, which
+		 * is the belt to this brace. */
+		int at = 0;
+
+		for (int j = 0; j + 1 < kRings; j++)
+			for (int k = 0; k < kSpokes; k++)
+			{
+				const int k2 = (k + 1) % kSpokes;
+				const unsigned short a0 = (unsigned short)(j * kSpokes + k);
+				const unsigned short b0 = (unsigned short)(j * kSpokes + k2);
+				const unsigned short a1 = (unsigned short)((j + 1) * kSpokes + k);
+				const unsigned short b1 = (unsigned short)((j + 1) * kSpokes + k2);
+
+				out->index[at++] = a0;
+				out->index[at++] = a1;
+				out->index[at++] = b1;
+				out->index[at++] = a0;
+				out->index[at++] = b1;
+				out->index[at++] = b0;
+			}
+
+		for (int k = 0; k < kSpokes; k++)
+		{
+			const int k2 = (k + 1) % kSpokes;
+
+			out->index[at++] = (unsigned short)((kRings - 1) * kSpokes + k);
+			out->index[at++] = (unsigned short)(kSpokes * kRings);
+			out->index[at++] = (unsigned short)((kRings - 1) * kSpokes + k2);
+		}
+
+		/* --- soft normals -------------------------------------------------- */
+		std::vector<double> acc((size_t)vertices * 3, 0.0);
+
+		for (int i = 0; i + 2 < out->indices; i += 3)
+		{
+			const HDTrmVertex& a = out->vertex[out->index[i + 0]];
+			const HDTrmVertex& b = out->vertex[out->index[i + 1]];
+			const HDTrmVertex& c = out->vertex[out->index[i + 2]];
+			const double e1[3] = { b.x - a.x, b.y - a.y, b.z - a.z };
+			const double e2[3] = { c.x - a.x, c.y - a.y, c.z - a.z };
+			const double n[3] =
+			{
+				e1[1] * e2[2] - e1[2] * e2[1],
+				e1[2] * e2[0] - e1[0] * e2[2],
+				e1[0] * e2[1] - e1[1] * e2[0]
+			};
+
+			for (int corner = 0; corner < 3; corner++)
+				for (int a2 = 0; a2 < 3; a2++)
+					acc[(size_t)out->index[i + corner] * 3 + a2] += n[a2];
+		}
+
+		for (int i = 0; i < vertices; i++)
+		{
+			double n[3] = { acc[(size_t)i * 3], acc[(size_t)i * 3 + 1],
+				acc[(size_t)i * 3 + 2] };
+			double l = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+			if (l < 1.0e-9)
+			{
+				n[0] = -axis[0];
+				n[1] = -axis[1];
+				n[2] = -axis[2];
+				l = 1.0;
+			}
+
+			out->vertex[i].nx = pack_normal(n[0] / l);
+			out->vertex[i].ny = pack_normal(n[1] / l);
+			out->vertex[i].nz = pack_normal(n[2] / l);
+		}
+
+		return true;
+	}
+}
+
 /* ------------------------------------------------------- the level -- */
 
 int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
@@ -788,6 +1318,12 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 	bool useful[HD_LARA_PART_COUNT];
 
 	plan_mask(level, useful);
+
+	/* The maker of the neck cap has no argument for a bind pose (#123, fix
+	 * round I, I3), so it is kept here for it - once per level, before
+	 * anything can call it. */
+	std::memcpy(g_neck_bind, level->bodyBind, sizeof(g_neck_bind));
+	g_neck_bind_ok = true;
 
 	int written = 0;
 
@@ -815,6 +1351,15 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 		one.name = model;
 		one.rigidNode = kPart[part].rigid;
 		one.onlyPage = kPart[part].onlyPage;
+
+		/* The one part that is BUILT (#123, fix round I, I3), out of the body
+		 * that stands first in this very list - HD_LARA_PART_BODY is part 0,
+		 * so the source is always read before the maker runs. */
+		if (part == HD_LARA_PART_NECK_CAP)
+		{
+			one.synthFrom = HDLaraPartSlot(HD_LARA_PART_BODY);
+			one.synth = &build_neck_cap;
+		}
 	}
 
 	return written;
@@ -882,6 +1427,60 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 		}
 
 		g_has[part] = true;
+
+		/* WHAT IS IN THE HAND GETS ITS OWN MATERIAL (#123, fix round I, I4).
+		 *
+		 * The rule is a measurement and not a guess: HAND_BARE_REST is the
+		 * hands and NOTHING else, so every page a weapon-hand model has that
+		 * the rest hands have not got is the weapon. Measured over the
+		 * wardrobe: HAND_BARE_REST 1 page, HAND_BARE_DEAGLE 2,
+		 * HAND_GLOVES_REST 3, HAND_GLOVES_DEAGLE 4 - one extra page every
+		 * time, whichever gun and whether or not she wears gloves.
+		 *
+		 * The draw's own sheen stays the HAND's, so a page that is not named
+		 * here keeps it. */
+		if (kPart[part].kind == 1 && part != HD_LARA_PART_HAND_REST)
+		{
+			const int rest = HDLaraPartSlot(HD_LARA_PART_HAND_REST);
+			float held = 0.0f, heldPower = 1.0f;
+			int named = 0;
+
+			HDLaraHeldSheen(part, &held, &heldPower);
+
+			for (int i = 0; held > 0.0f && i < HDModelPageCount(slot); i++)
+			{
+				const int page = HDModelPage(slot, i);
+				bool onHand = false;
+
+				for (int j = 0; j < HDModelPageCount(rest); j++)
+					if (HDModelPage(rest, j) == page)
+					{
+						onHand = true;
+						break;
+					}
+
+				if (onHand)
+					continue;
+
+				HDModelSetPageSheen(slot, page, held, heldPower);
+				named++;
+			}
+
+			if (!named && HDModelPageCount(rest))
+				note("%s: every page of it is a page of the rest hands - what "
+					"it holds keeps the hand's own sheen",
+					HDLaraPartLabel(part));
+		}
+
+		/* What the maker made (#123, fix round I, I3), so that a picture the
+		 * user does not like can be looked up: which page the cap wears and
+		 * how many of its rim vertices had to borrow their texture
+		 * coordinates from a neighbour because they wore another one. */
+		if (part == HD_LARA_PART_NECK_CAP)
+			note("the neck cap: %d spokes, %d rings, page %d, %d rim vertices "
+				"re-homed, %d triangles", HD_LARA_NECK_CAP_SPOKES,
+				HD_LARA_NECK_CAP_RINGS, g_neck_cap_page, g_neck_cap_rehomed,
+				HDModelIndices(slot) / 3);
 
 		const int nodes = HDModelNodes(slot);
 
@@ -1013,6 +1612,54 @@ void HDLaraPartSheen(int part, float* strength, float* power)
 
 		return;
 	}
+
+	/* AND A HAND PART'S SHEEN IS THE HAND'S, WHICH ALSO BELONGS TO THE OUTFIT
+	 * (#123, fix round I, I4). What is in the hand is a page of the same file
+	 * and gets its own material through HDModelSetPageSheen; this is the skin
+	 * or the glove around it, and until this round a gloved Lara's leather
+	 * shone like bare skin. */
+	if (kPart[part].kind == 1)
+	{
+		const bool gloved = g_outfit > HD_LARA_OUTFIT_NONE &&
+			g_outfit < HD_LARA_OUTFIT_COUNT && kOutfit[g_outfit].gloves &&
+			kPart[part].gloves;
+		const float* was = gloved ? kSheenLeather : kSheenSkin;
+
+		if (strength)
+			*strength = was[0];
+
+		if (power)
+			*power = was[1];
+
+		return;
+	}
+
+	for (int i = 0; i < (int)(sizeof(kPartSheen) / sizeof(kPartSheen[0])); i++)
+		if (kPartSheen[i].part == part)
+		{
+			if (strength)
+				*strength = kPartSheen[i].strength;
+
+			if (power)
+				*power = kPartSheen[i].power;
+
+			return;
+		}
+}
+
+/* WHAT IS IN THE HAND, as opposed to the hand (#123, fix round I, I4): the
+ * kPartSheen entry, which is the weapon's own material. Both 0 for a part that
+ * holds nothing. */
+void HDLaraHeldSheen(int part, float* strength, float* power)
+{
+	if (strength)
+		*strength = 0.0f;
+
+	if (power)
+		*power = 1.0f;
+
+	if (part < 0 || part >= HD_LARA_PART_COUNT || kPart[part].kind != 1)
+		return;
 
 	for (int i = 0; i < (int)(sizeof(kPartSheen) / sizeof(kPartSheen[0])); i++)
 		if (kPartSheen[i].part == part)

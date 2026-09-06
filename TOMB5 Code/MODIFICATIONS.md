@@ -4326,6 +4326,186 @@ its picture line now carries the peak and the white share as well as the mean;
 `HDRenderUprightOverride` exist for the tool alone and the engine never calls
 them.
 
+#### Fix round I - Lara: the backpack, the anchor, the open collar, the hands (#123)
+
+Four reports, all about her and all about geometry the wardrobe does not ship.
+
+**I1 - "the braid lies in the backpack."** Fix round G had already written this
+one down as a decision rather than a fix: *"the braid lies in the pack, not on
+it - round D's own measurement is a slab, and two spheres touch it on the
+centre line only"*. The user asked for the measurement to be finished, and it
+is. `ModelProbe -braid` now prints the pack as a **box** in the torso node's
+own frame - the node 7 vertices more than 30 units behind the torso joint,
+which is the same point set round D took its spheres from:
+
+| outfit | x | y | z |
+|---|---|---|---|
+| `OUTFIT_CLASSIC` | -57..59 | -197..-68 | -92..-30 |
+| `OUTFIT_RUSSIA` | -60..62 | -197..-47 | -92..-30 |
+| `OUTFIT_VCI` | -58..57 | -197..-68 | -92..-30 |
+| `OUTFIT_TR3_ANTARC` | -59..60 | -197..-48 | -92..-30 |
+| `OUTFIT_TR3_NEVADA` | -58..60 | -197..-67 | -92..-30 |
+| `OUTFIT_TR3_COAST` | -58..60 | -197..-67 | -92..-30 |
+| `OUTFIT_TR3_CATSUIT` | -58..60 | -197..-67 | -92..-30 |
+
+**One box serves all seven**, and the table is the argument: the depth is the
+same number in every one of them, the width agrees to three units, and the top
+to none at all. The only column that moves is the bottom, and the two that move
+it are the Russia coat and the Antarctica parka - longer coats, not deeper
+packs, because "node 7 and more than 30 behind the joint" picks up their back
+skirt as well. The box takes the pack's own bottom, -68, and leaves the coat
+tail to the torso sphere, which for the Russia outfit is nailed to radius 94
+and covers it.
+
+The two spheres are **withdrawn** and `HairControl` pushes the braid out of the
+box instead, along whichever of the six faces is nearest, the rear one
+preferred (a divisor of 2 on its own depth, so a link genuinely nearer another
+face still leaves by it - and said honestly: over the three animations
+`-braidanim` runs, "the box with no rear preference" comes out *identical* in
+every column, because the braid meets this pack from behind and the rear face
+is the nearest one anyway; the preference is kept for poses the tool never
+strikes). The margin is the plait's own radius, measured over
+`HAIR_OG`: 17.5, 17.5, 15.0, 12.8, 10.6 and 9.0 about each bone's axis, which
+gives the six moving points 18, 18, 15, 13, 11 and 9. **Behind the HD guard in
+both halves of `HairControl`**, out of one flag read once per frame, which is
+the shape round D's mistake asks for.
+
+*Proof, `ModelProbe -braidsim`, sixty steps in the bind pose, the deepest a
+link stands inside that box:*
+
+| regime | step 1 | step 10 | step 30 | last | in the pack |
+|---|---|---|---|---|---|
+| classic: root -48, 6 spheres | 14 | 1 | 0 | **0** | 38 |
+| round F/G: root -48, two pack spheres | 14 | 1 | 0 | **0** | 38 |
+| round I: root -48, the box | 45 | 10 | 0 | **0** | **7** |
+| round I: root -33, the box | 63 | 18 | 0 | **0** | **12** |
+
+The braid stood **38 units** inside the pack with the spheres and stands 7 with
+the box, and both box lines still settle to zero and stay there. Under Lara's
+own animations (`-braidanim`, `ANIM_BREATH`, the run loop and the walk loop)
+the tip never moves more than 14 units in a frame and **no frame is over 40**,
+which is the figure that was not allowed to rise.
+
+**I2 - "the anchor is still wrong."** The braid began 15.2 units behind the
+skull instead of coming out of the hair knot. Fix round D had measured exactly
+that and moved the root from -48 to -33; fix round F withdrew it for two
+reasons, and the second was *"it does not settle even applied to both halves -
+at -33 the chain hangs near enough to her neck for the neck sphere and the pack
+sphere to push it in turn"*. That reason was about the pack being **spheres**.
+The table above asks the question again with a box, and the answer has changed:
+the near root settles. So the root is -33 whenever the HD wardrobe draws and
+-48 otherwise, written in **both** halves of `HairControl` out of the same one
+flag as the box - which is what makes it impossible for the two to disagree,
+the failure of round D. The picture is the whole point: side by side, the plait
+now leaves the hair tie instead of hanging clear of it, and lies **on** the
+pack rather than through it, which is what the Remaster's own screenshot shows.
+
+**I3 - the open collar in first person.** Stage S8's near cut takes the neck
+stump off her body, and the body is a hollow shell: what is left is a shell
+with the neck bored out of it, and since S8 also culls back faces one looks
+clean through her - *"the inner faces, the backpack straps"*. No file in the
+wardrobe is that lid, and there could not be a general one, because its rim is
+the outfit's own body at the height the cut reaches.
+
+So the lid is **built**. `HDModelSlot::synth` is new: a maker is handed the
+`.TRM` of another slot and fills an `HDTrmModel` of its own, which `hd_model`
+then treats exactly like a file it read - same page cache, same skinning, same
+bind pose, same draw. `HDLaraNeckCap` is the one maker there is.
+
+*The measurement it stands on,* `ModelProbe -neck`, the torso node's vertices
+against the axis from the torso joint to the head joint (`s` down it from the
+head joint, `r` off it), `OUTFIT_VCI` and the other six the same to a few
+units:
+
+| s | verts | r min | r mean | r max | eye 48 | eye 0 |
+|---|---|---|---|---|---|---|
+| 0 | 18 | 7.2 | 12.6 | 20.1 | 50.8 | 18.6 |
+| 20 | 34 | 12.4 | 19.5 | 24.5 | 37.4 | 35.5 |
+| 30 | 426 | 14.9 | 40.3 | 76.1 | 49.0 | 44.9 |
+| 40 | 484 | 17.1 | 47.1 | 81.9 | 54.9 | 55.0 |
+| **50** | 256 | 20.3 | 54.4 | 82.5 | **63.9** | **65.0** |
+| 60 | 547 | 9.9 | 64.3 | 80.4 | 69.2 | 76.0 |
+
+Down to s = 20 the neck is a tube of eighteen to thirty vertices; at s = 30 it
+bursts open into the shoulders. And the two eye columns say where the 60 unit
+cut falls: it eats the tube and stops in the collar. **The rim therefore sits
+at s = 50**, where every vertex is at least 61 units from either eye - so the
+body's own surface at the seam survives the cut and the cap is sewn to
+geometry that is still being drawn.
+
+The cap is one vertex per spoke (the one furthest off the axis within half a
+sector, the window widening where a chest's outline has no vertex at all), 32
+spokes and 6 rings, **192 vertices and 352 triangles**, the radius falling off
+as a quarter cosine and the middle sunk 24 units into the chest so that no part
+of it is ever nearer the eye than the rim. Normals accumulated from the
+triangles. Its rim positions are the outfit's own, unmoved, so the two surfaces
+share an edge; the texture is the rim's own at the rim and the ring's average
+in the middle. Drawn in first person only, on node 7, with **no near cut of its
+own** - the cut is the thing it closes - and double sided.
+
+*Proof:* `ModelProbe -firstperson -nocap` against the same without it, at 60
+and 75 degrees down and at both eye positions, for `OUTFIT_CLASSIC` and
+`OUTFIT_VCI`. Looking down with the eye at the joint the hole showed the
+background and her own boots through her chest; it is closed. With the eye 48
+forward, where there is no hole, the two pictures are identical. All eight
+outfits build a cap (`the neck cap: 32 spokes, 6 rings, page N, k rim vertices
+re-homed, 352 triangles` in the log).
+
+**I4 - "the sheen is on the body and the head; the hands go empty."** Measured
+first, with a new `ModelProbe -onlypart` that draws one part of the composite
+and nothing else, each part rendered with the sheen on and off and the two
+pictures differenced:
+
+| part alone | drawn px | lit px | share | peak |
+|---|---|---|---|---|
+| the body (`OUTFIT_CLASSIC`) | 53,682 | 20,772 | 38.7 % | 13 |
+| the face (`LARA_HEAD`) | 4,403 | 2,000 | 45.4 % | 16 |
+| empty hands (`HAND_BARE_REST`) | 1,475 | 981 | **66.5 %** | 15 |
+| the Desert Eagle hand | 2,224 | 1,396 | **62.8 %** | 36 |
+| the pistol holsters | 1,782 | 721 | 40.5 % | 36 |
+
+**The hands were never empty** - they are the most strongly lit parts of the
+whole composite. What makes them read as matt is that a Blinn-Phong exponent of
+34 on a hand-sized object is a highlight one or two pixels wide, beside a
+catsuit whose whole chest lights up.
+
+But the hunt found two things that really were wrong, and both are one number
+having to describe two materials:
+
+1. **A `HAND_` model is a hand *and* what is in it**, on two pages of one file.
+   Measured: `HAND_BARE_REST` has 1 page, `HAND_BARE_DEAGLE` 2,
+   `HAND_GLOVES_REST` 3, `HAND_GLOVES_DEAGLE` 4 - one extra page every time,
+   whichever gun and whether or not she wears gloves. One sheen for the draw
+   therefore made her skin metal. `HDModelSetPageSheen` names a material **per
+   texture page**, which is already the unit a draw call is cut to, so it costs
+   one constant write on the ranges that have one and nothing at all on every
+   other model in the game. The rule that fills it is the measurement above:
+   every page a weapon hand has that the *rest* hands have not got is the
+   weapon.
+2. **A gloved outfit shone like bare skin.** The hand's own material now
+   follows the outfit - skin 0.12/10 bare, leather 0.18/20 gloved - which is
+   the same rule the body has had since fix round D.
+
+*Proof:* the `sheen:` line of `ModelProbe`, `OUTFIT_CLASSIC` against
+`OUTFIT_RUSSIA`: `empty hands 0.12/10` becomes `0.18/20`, and every weapon hand
+reads `0.12/10 [held 0.35/34 on 1 page(s)]` - the hand's material for the draw
+and the weapon's on its own page. `HDLOG ... lara part=` carries `held=` and
+`pagesheen=` per part.
+
+**Nothing outside the HD path moved.** With HD off `HdPackFrame` returns false
+at its first line and touches no matrix, `HdPackPush` returns false at its
+first, the root reads the classic -48, and the sphere loop tests the same six
+spheres it always did - `ModelProbe -braidsim`'s "classic: root -48, 6 spheres"
+and "root -48, no pack at all" come out identical, position for position.
+`ModelProbe -laracheck`: 15 of 15 joints at 0.00000 px, **PASS**, and the
+braid's chain rule at 0.00006 units over five joints, **PASS**.
+
+`ModelProbe` gained `-braidrest` (draw the braid where the *simulation* leaves
+it, by regime, instead of in a studio pose), `-classicroot`, `-nocap` and
+`-onlypart`; `-braid` prints the pack as a box and the plait's own radius,
+`-neck` prints the neck as a tube, and `-braidsim` and `-braidanim` gained the
+box regimes.
+
 ---
 
 ## Building this yourself

@@ -430,17 +430,20 @@ namespace
 			}
 		}
 
-		/* The pack of fix round D (D3b) rides along, so that a log says what
-		 * the braid was pushed out of. The root is the classic one for every
-		 * adult Lara again since fix round F (F2) - HAIRLOG in game\hair.cpp
-		 * prints the one the frame really used, every frame. */
+		/* The pack rides along, so that a log says what the braid was pushed
+		 * out of: a BOX in the torso frame since fix round I (I1), where fix
+		 * rounds D to G had two spheres. The root is the near one for an HD
+		 * Lara again since fix round I (I2) - HAIRLOG in game\hair.cpp prints
+		 * the one the frame really used, every frame, and it must not
+		 * alternate. */
 		Log("HDLOG braidcheck links=%d step=%.0f worst_gap=%.3f at link %d "
-			"(units, view space) root_z=%d pack=%d/%d,%d,%d r%d",
+			"(units, view space) root_z=%d packbox=x%d y%d..%d z%d..%d bias %d",
 			HD_LARA_HAIR_NODES,
 			g_level.hairBind[1 * 3 + 2] - g_level.hairBind[0 * 3 + 2],
-			worst_gap, worst_link, HD_LARA_BRAID_ROOT_Z,
-			HD_LARA_PACK_X, HD_LARA_PACK_Y_TOP, HD_LARA_PACK_Y_BOTTOM,
-			HD_LARA_PACK_Z, HD_LARA_PACK_R);
+			worst_gap, worst_link, HD_LARA_BRAID_ROOT_Z_HD,
+			HD_LARA_PACK_BOX_X, HD_LARA_PACK_BOX_Y_TOP,
+			HD_LARA_PACK_BOX_Y_BOTTOM, HD_LARA_PACK_BOX_Z_BACK,
+			HD_LARA_PACK_BOX_Z_FRONT, HD_LARA_PACK_BOX_BIAS);
 	}
 }
 
@@ -588,15 +591,23 @@ void HDLaraDrawBuild(const char* stem)
 		 * the user does not like has to be traceable to a number he can name
 		 * without opening the source. */
 		float sheen = 0.0f, sheenPower = 1.0f;
+		float held = 0.0f, heldPower = 1.0f;
 
 		HDLaraPartSheen(part, &sheen, &sheenPower);
+		/* And what is IN the hand, on its own pages (#123, fix round I, I4):
+		 * `held` is the weapon's material and `pagesheen` how many pages of
+		 * this model were given it. A hand part that reads 0 pages is a hand
+		 * with nothing in it - or a rule that has stopped working. */
+		HDLaraHeldSheen(part, &held, &heldPower);
 
 		Log("HDLOG level=%s lara part=%s model=%s hd=%d cover=%d(%08x) "
-			"verts=%d drift=%.0f/%.0f sheen=%.2f/%.0f",
+			"verts=%d drift=%.0f/%.0f sheen=%.2f/%.0f held=%.2f/%.0f "
+			"pagesheen=%d",
 			stem, HDLaraPartLabel(part), HDLaraPartModel(g_level.outfit, part),
 			(int)HDLaraHasPart(part), covered, HDLaraPartCoverage(part),
 			HDLaraHasPart(part) ? HDModelVertices(slot) : 0, mean, worst,
-			sheen, sheenPower);
+			sheen, sheenPower, held, heldPower,
+			HDLaraHasPart(part) ? HDModelPageSheenCount(slot) : 0);
 	}
 }
 
@@ -966,6 +977,31 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	if (!firstPerson && HDObjectPush(HDLaraPartSlot(HD_LARA_PART_FACE),
 		matrices, HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
 		0.0f, HD_MODEL_CULL_NONE, sheen, sheenPower))
+		drawn++;
+
+	/* THE NECK CAP, AND ONLY IN FIRST PERSON (#123, fix round I, I3).
+	 *
+	 * It closes what the near cut above opens. Three things about this call
+	 * are the whole design:
+	 *
+	 *   NO NEAR CUT. It is pushed with 0, so the cut that took the neck cannot
+	 *   take the lid that replaces it. Its rim is 61 units or more from either
+	 *   eye - measured, HD_LARA_NECK_CAP_S in hd_lara.h - so the body's own
+	 *   surface at the seam survives the cut too and the two meet.
+	 *
+	 *   NO CULLING. Everything else about first person is one sided; this is a
+	 *   lid seen from one side only, and drawing both sides of it costs 352
+	 *   triangles and removes a whole class of mistake.
+	 *
+	 *   ITS OWN COVERAGE AND THE FRAME'S MASK. The cap is node 7 and nothing
+	 *   else, so a frame that hides the torso hides the cap with it. */
+	HDLaraPartSheen(HD_LARA_PART_NECK_CAP, &sheen, &sheenPower);
+
+	if (firstPerson && HDLaraHasPart(HD_LARA_PART_NECK_CAP) &&
+		HDObjectPush(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), matrices,
+			HD_LARA_NODES, nodeLight,
+			HDLaraPartCoverage(HD_LARA_PART_NECK_CAP) & mask, lights,
+			lightCount, sunScale, 0.0f, HD_MODEL_CULL_NONE, sheen, sheenPower))
 		drawn++;
 
 	/* THE POUCHES, UNDER WHATEVER GOES IN THEM (#123, fix round D, D4).

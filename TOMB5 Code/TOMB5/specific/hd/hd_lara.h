@@ -127,10 +127,8 @@
  * 48 units behind the head joint to 33, and link 0 then overlaps the skull by
  * 1.7 units instead of hanging 15.2 short of it.
  *
- * WITHDRAWN IN FIX ROUND F (F2). THE ENGINE DOES NOT USE THIS NUMBER; it is
- * kept because the measurement above is right and because ModelProbe
- * -braidsim runs it as one of its regimes. What was wrong was moving the root
- * at all:
+ * WITHDRAWN IN FIX ROUND F (F2) AND BACK IN FIX ROUND I (I2). What was wrong
+ * in round D was not the number but two things around it:
  *
  * 1. It was written into one of HairControl's two frame branches. The
  *    function has a half for an interpolated frame and a half for a key
@@ -143,19 +141,38 @@
  *    braid thrown out long and the next with it tucked short against her
  *    back.
  *
- * 2. And it does not settle even applied to both halves. ModelProbe
- *    -braidsim, sixty steps in the bind pose, the busiest link's travel per
- *    step at the end: the classic root reads 0, the root at -33 still reads
- *    1 and never reaches 0. At -33 the chain hangs near enough to her neck
- *    for the neck sphere and the pack sphere to push it in turn, and the two
- *    pushes make a small limit cycle rather than a rest.
+ * 2. And with round D's PACK it did not settle even applied to both halves.
+ *    ModelProbe -braidsim, sixty steps in the bind pose, the busiest link's
+ *    travel per step at the end: the classic root read 0, the root at -33
+ *    still read 1 and never reached 0. At -33 the chain hangs near enough to
+ *    her neck for the NECK SPHERE and a PACK SPHERE to push it in turn, and
+ *    two spheres pushing a point in turn make a small limit cycle rather than
+ *    a rest.
  *
- * The 15.2 unit gap is therefore accepted for now, which is what the user
- * chose: the gap is quiet and the fix was not. Anybody reopening this should
- * leave the root where the simulation is happy and move the DRAWN braid
- * instead - the seam in hd_laradraw.cpp builds its own matrices out of
- * hairs[0][n] and could put link 0's 15 units in there without the physics
- * ever seeing them. */
+ * FIX ROUND I (I2) ASKED THE SAME QUESTION AGAIN, because reason 2 was about
+ * the pack being SPHERES and the pack is a box now. A box pushes a point out
+ * of one flat face along one axis and leaves it there; there is no curved
+ * surface for the neck sphere to slide it back down. Measured, the same
+ * -braidsim, sixty steps, both torso anchors:
+ *
+ *     regime                          step 1  step 10  step 30  last  in pack
+ *     classic: root -48, 6 spheres        14        1        0     0       38
+ *     round D as meant: -33, spheres      34        4        1     1       41
+ *     round F/G: root -48, spheres        14        1        0     0       38
+ *     round I: root -48, the BOX          45       10        0     0        7
+ *     round I: root -33, the BOX          63       18        0     0       12
+ *
+ * Both box lines reach zero and stay there, so the reason the root was
+ * withdrawn is gone; and "in pack" is the finding itself - the braid stood 38
+ * units inside the pack with the spheres and stands 7 with the box.
+ *
+ * So the root is -33 whenever the HD wardrobe is drawing and -48 otherwise,
+ * written in BOTH halves of HairControl out of ONE flag that is read once per
+ * frame (game\hair.cpp, `pack.on`), which is the shape round D's mistake asks
+ * for. Under Lara's own animations (ModelProbe -braidanim, ANIM_BREATH) the
+ * near root costs a little liveliness and no jumps: the tip's worst travel in
+ * a frame goes from 10 units to 14 and its mean from 1.04 to 1.41, with no
+ * frame over 40 in either. */
 #define HD_LARA_BRAID_ROOT_Z_HD	(-33)
 
 /* THE BACKPACK, AS A COLLISION SPHERE (#123, fix round D, D3b).
@@ -208,6 +225,80 @@
 #define HD_LARA_PACK_Y_BOTTOM	(-100)
 #define HD_LARA_PACK_Z		(-52)
 #define HD_LARA_PACK_R		(36)
+
+/* THE SAME PACK AS A BOX, WHICH IS WHAT IT IS (#123, fix round I, I1).
+ *
+ * The user's finding after round G: the braid still lies IN the pack. Round G
+ * had already written down why and left it as a decision - "the braid lies in
+ * the pack, not on it - round D's own measurement is a slab, and two spheres
+ * touch it on the centre line only". A sphere of radius 36 tangent to a flat
+ * rear face touches that face at ONE point; a hand's width to either side its
+ * surface has already curved 10 units forward, and the plait is 35 units wide.
+ * So the braid sinks in beside the centre line however many spheres are
+ * stacked, and the pack has to be a box.
+ *
+ * MEASURED, ModelProbe -braid, "the backpack as a BOX": the node 7 vertices
+ * more than 30 units behind the torso joint, in the torso node's own frame -
+ * the same point set round D took its spheres from, now as six numbers rather
+ * than three:
+ *
+ *     outfit                x            y            z
+ *     OUTFIT_CLASSIC       -57..59     -197..-68     -92..-30
+ *     OUTFIT_RUSSIA        -60..62     -197..-47     -92..-30
+ *     OUTFIT_VCI           -58..57     -197..-68     -92..-30
+ *     OUTFIT_TR3_ANTARC    -59..60     -197..-48     -92..-30
+ *     OUTFIT_TR3_NEVADA    -58..60     -197..-67     -92..-30
+ *     OUTFIT_TR3_COAST     -58..60     -197..-67     -92..-30
+ *     OUTFIT_TR3_CATSUIT   -58..60     -197..-67     -92..-30
+ *
+ * ONE BOX FOR ALL SEVEN, and the table is why: the depth is the SAME number in
+ * every one of them (-92 to -30), the width agrees to three units, and the top
+ * to none at all. The bottom is the only column that moves, and the two that
+ * move it - the Russia coat and the Antarctica parka - are not deeper packs
+ * but longer COATS: the rule "node 7 and more than 30 behind the joint" picks
+ * up their back skirt as well. The box takes the pack's own bottom, -68, and
+ * leaves the coat tail to the torso sphere, which for the Russia outfit is
+ * nailed to radius 94 and covers it.
+ *
+ * The diving suit is left out here as it was left out of the spheres: what
+ * stands behind ITS torso is two thrusters, it wears a helmet and no braid.
+ *
+ * THE MARGIN IS THE PLAIT'S OWN RADIUS. HairControl moves POINTS and the braid
+ * is a solid; a point pushed exactly onto the pack's surface leaves half the
+ * plait inside it. Measured over HAIR_OG (ModelProbe -braid, "HAIR_OG
+ * thickness"): the radius about each bone's own axis is 17.5, 17.5, 15.0,
+ * 12.8, 10.6 and 9.0 - the plait tapers to the tip. hairs[0][i] is the joint
+ * BETWEEN bone i-1 and bone i, so the radius that belongs to it is the thicker
+ * of the two, and the tip takes the last bone's.
+ *
+ *     point   1     2     3     4     5     6
+ *     radius  18    18    15    13    11    9
+ */
+#define HD_LARA_PACK_BOX_X		(60)	// half width, |x| <= this
+#define HD_LARA_PACK_BOX_Y_TOP		(-197)
+#define HD_LARA_PACK_BOX_Y_BOTTOM	(-68)
+#define HD_LARA_PACK_BOX_Z_BACK		(-92)	// the face the braid lies on
+#define HD_LARA_PACK_BOX_Z_FRONT	(-30)
+
+/* The six numbers above, as an initialiser - hair.cpp and ModelProbe both
+ * want them and neither may own them. */
+#define HD_LARA_BRAID_RADII	{ 18, 18, 15, 13, 11, 9 }
+
+/* HOW MUCH THE REAR FACE IS PREFERRED when the link is pushed out along the
+ * smallest penetration. It is the face the braid belongs on: everything else
+ * is a way INTO her back or under the pack, and a tie between two faces that
+ * goes the wrong way is a plait that flips through the body for one frame.
+ * The bias is a divisor on the rear face's own depth, so a rear push wins
+ * unless another face is more than twice as close.
+ *
+ * MEASURED AND HONEST: over the three animations ModelProbe -braidanim runs -
+ * breathing on the spot, the run loop and the walk loop - variant h ("the BOX,
+ * no rear preference") comes out IDENTICAL to variant f in every column. The
+ * braid approaches this pack from behind and the rear face is the nearest one
+ * anyway, so the preference never fires there. It is kept because the tool
+ * never bends Lara far forward and the faces it steers away from lead into her
+ * back; a value of 1 would be the same picture in everything measured. */
+#define HD_LARA_PACK_BOX_BIAS	(2)
 
 /* WHY THE DRAWN BRAID GETS A ROLL OF ITS OWN (#123, fix round G, G1).
  *
@@ -346,6 +437,51 @@
  * with HD_MODEL_CULL_BACK on the same draw. hd_model.h has that half. */
 #define HD_LARA_FIRST_PERSON_NEAR_CUT	60.0f
 
+/* THE CAP THAT CLOSES WHAT THAT CUT OPENS (#123, fix round I, I3).
+ *
+ * MEASURED, ModelProbe -neck, "the neck as a tube": the torso node's vertices
+ * against the axis from the torso joint to the head joint, `s` units down it
+ * from the head joint and `r` off it. OUTFIT_VCI, and the other six read the
+ * same to a few units:
+ *
+ *     s     verts   r min   r mean   r max   eye 48   eye 0
+ *     0        18     7.2     12.6    20.1     50.8    18.6
+ *    10        20    10.1     15.0    21.6     44.7    24.6
+ *    20        34    12.4     19.5    24.5     37.4    35.5
+ *    30       426    14.9     40.3    76.1     49.0    44.9
+ *    40       484    17.1     47.1    81.9     54.9    55.0
+ *    50       256    20.3     54.4    82.5     63.9    65.0
+ *    60       547     9.9     64.3    80.4     69.2    76.0
+ *
+ * Down to s = 20 the neck is a TUBE - eighteen to thirty vertices in a band
+ * eight to twenty-five units wide. At s = 30 it bursts open into the
+ * shoulders. And the two eye columns say where the cut falls: the nearest
+ * vertex of the band is inside the 60 unit cut down to s = 40 and outside it
+ * from s = 50, so the cut eats the tube and stops in the collar.
+ *
+ * SO THE RIM SITS AT s = 50. Every vertex there is at least 61 units from
+ * either eye, which is the whole point: the body's own surface at the rim
+ * SURVIVES the cut, so the cap is sewn to geometry that is still being drawn.
+ * A rim higher up would be sewn to triangles the cut had already taken and the
+ * seam would gape; a rim lower down would be a smaller lid that an oblique ray
+ * could pass over.
+ *
+ * THE RING is one vertex per SPOKE: of the node 7 vertices in the band, the
+ * one furthest from the axis in that sector - the body's own outline at that
+ * height. Its positions are the outfit's own, unmoved, so the cap and the body
+ * share their edge exactly.
+ *
+ * THE DOME sinks INTO the chest and not up towards the chin, so that no part
+ * of it is ever nearer the eye than the rim it hangs from - the cap carries no
+ * near cut and a lid that domed upwards would end up under the camera. SPOKES
+ * times RINGS is 192 vertices and 352 triangles, which is the "many polygons"
+ * the user asked for and a rounding error beside the 18,000 of the body. */
+#define HD_LARA_NECK_CAP_S	50	// how far down the axis the rim sits
+#define HD_LARA_NECK_CAP_BAND	6	// half the height of the band it comes from
+#define HD_LARA_NECK_CAP_SPOKES	32
+#define HD_LARA_NECK_CAP_RINGS	6	// the rim and five more, then the centre
+#define HD_LARA_NECK_CAP_SINK	24	// how deep the middle sinks into the chest
+
 /* The classic Lara mesh tree in LM_ order, spelled out so that the tables
  * below and a reader of them do not have to look it up. These are the numbers
  * a .TRM vertex names in its three bone bytes. */
@@ -381,6 +517,32 @@ enum HDLaraPart
 	HD_LARA_PART_BODY = 0,		// the OUTFIT_ model, nodes 0..14
 	HD_LARA_PART_FACE,		// LARA_HEAD, rigid on node 14
 	HD_LARA_PART_BRAID,		// HAIR_OG, its own six node chain
+
+	/* THE CAP THAT CLOSES HER NECK IN FIRST PERSON (#123, fix round I, I3).
+	 *
+	 * The user's finding: the near cut of stage S8 "leaves an open hole at the
+	 * collar, one looks into the body - the inner faces, the backpack straps".
+	 * It has to. The cut is a SPHERE around the eye and the body is a hollow
+	 * shell: everything within 60 units goes, which is the neck stump, and
+	 * what is left is a shell with the neck bored out of it. First person also
+	 * culls back faces (S8's second half), so the far wall of the shell is not
+	 * drawn either and one sees clean through her.
+	 *
+	 * WHY NO FILE CAN BE IT. There is no lid in the remaster's wardrobe, and
+	 * there could not be a general one: the hole's rim is the outfit's own
+	 * body at the height the cut reaches, and eight outfits have eight of
+	 * them. So this part is BUILT, out of the outfit model's own vertices,
+	 * when the level loads - HDModelSlot::synth in hd_model.h is the machinery
+	 * and HDLaraNeckCap in hd_lara.cpp is the maker, which carries the
+	 * measurement it rests on.
+	 *
+	 * WHAT IT IS: a dome across the body cavity at the collar, sunk into the
+	 * chest, whose rim is the outfit's OWN vertices at that height - the same
+	 * positions, so the seam is an edge the two surfaces share and not a
+	 * join that can gape. It hangs rigidly off node 7 (the torso), it is
+	 * drawn only while the first person view runs, and it carries NO near cut
+	 * of its own: the cut is the thing it exists to close. */
+	HD_LARA_PART_NECK_CAP,
 
 	HD_LARA_PART_HAND_REST,		// nothing in the hands
 	HD_LARA_PART_HAND_PISTOL,
@@ -650,6 +812,16 @@ unsigned int HDLaraPartCoverage(int part);
  * what a surface is made of has to be written down. They are logged per part
  * at level build so that a picture and a log line can be put side by side. */
 void HDLaraPartSheen(int part, float* strength, float* power);
+
+/* WHAT IS IN THE HAND, as opposed to the hand itself (#123, fix round I, I4).
+ *
+ * A HAND_ model is two things on two texture pages - the hand and the weapon -
+ * and one sheen for the draw makes either the skin metal or the gun matt. So
+ * HDLaraPartSheen answers with the HAND's material (skin, or leather for a
+ * gloved outfit) and this one with the WEAPON's; HDLaraLevelBuild hangs the
+ * second on the pages the rest hands have not got, through
+ * HDModelSetPageSheen. Both 0 for a part that is not a hand. */
+void HDLaraHeldSheen(int part, float* strength, float* power);
 
 /* WHAT TO DRAW THIS FRAME, in draw order, after the body and the face. Returns
  * how many entries were written (at most 6: two hands, two thigh holsters, the

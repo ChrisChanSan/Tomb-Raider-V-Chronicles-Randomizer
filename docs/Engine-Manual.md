@@ -528,6 +528,10 @@ that walks and talks rather than stands still.
   satin on the Rome top, a hard small point on a weapon. It follows the room's
   own lights, and in a dark corner there is nothing to reflect and it goes
   away. Only Lara has it for now; the creatures and the props are unchanged.
+  The material is named per **texture page**, not per model, because a hand
+  model is a hand *and* the gun in it: her skin keeps the soft wide sheen while
+  the weapon in the same hand keeps the hard point, and a gloved outfit's hands
+  shine like leather rather than like skin.
 
 **What the fifth round changed: the order the picture is painted in.** The
 play test came back with one sentence about all of it — *"everything behind a
@@ -1181,6 +1185,17 @@ and the weapon on her back are never touched (#123, stage S8):
   changes — the same view of her with and without the culling is identical to
   the pixel.
 
+- **And the collar is closed again.** Cutting the neck out of a hollow shell
+  leaves a hole, and with the back faces culled one looks straight through her
+  — the finding that followed the two points above. So a **cap** is built for
+  every outfit when the level loads, out of that outfit's own vertices: the
+  ring of them at collar height, which the cut never reaches, and a dome of 352
+  triangles sunk into the chest behind it. Its rim is the body's own points, so
+  the two share an edge rather than meeting at a join that could gape; it wears
+  the body's own texture page; and it carries no near cut of its own, because
+  the cut is the thing it exists to close. It is drawn in first person and
+  nowhere else, and where there is no hole it changes no pixel.
+
 *Left over, and honestly:* in the **diving suit** the helmet is modelled on the
 torso node too, so it cannot be masked off with the head and it is far too big
 for a 60-unit cut. Looking down inside it you see the helmet from within. The
@@ -1216,18 +1231,31 @@ along, and reports how far it misses the next link. Both are the same checks
 
 A third line, `HAIRLOG`, is written **every frame** for every braid: which
 anchor offset that frame used, where the root of the chain landed, how many
-collision spheres it was tested against, how many of its links the backpack
-pushed, where the tip ended up, how far the root and the tip travelled since
-the last frame, and the worst one-frame twist of any link — once as the game
-works it out and once as the picture really shows it. It is there because the
-braid's physics carries state from frame to frame — the anchor moving between
-two places on alternating frames is what once made it tremble — and a
-per-frame trace is the only thing that shows it. Standing still, the travel
-figures go to zero and stay there and the twist figure stays in single digits;
-anything else is worth a bug report. `ModelProbe -braidsim` runs the same
-chain offline, without a game around it, and says whether a braid ever comes
-to rest; `ModelProbe -braidanim` runs it under Lara's own animations, which is
-where the twist was caught.
+collision spheres it was tested against, whether the backpack was there and
+how many of its links it pushed, where the tip ended up, how far the root and
+the tip travelled since the last frame, and the worst one-frame twist of any
+link — once as the game works it out and once as the picture really shows it.
+It is there because the braid's physics carries state from frame to frame — the
+anchor moving between two places on alternating frames is what once made it
+tremble — and a per-frame trace is the only thing that shows it. Standing
+still, the travel figures go to zero and stay there and the twist figure stays
+in single digits; anything else is worth a bug report. `ModelProbe -braidsim`
+runs the same chain offline, without a game around it, and says whether a braid
+ever comes to rest; `ModelProbe -braidanim` runs it under Lara's own
+animations, which is where the twist was caught.
+
+**The backpack is a box.** An HD outfit carries a pack the classic collision
+spheres know nothing about — they are the classic body's own meshes — so the
+braid used to hang straight through it. It is a slab, 120 wide, 130 tall and
+62 deep behind the torso joint, identical in every wardrobe body to within
+three units, and the braid is pushed out of it along whichever of its six faces
+is nearest, with the rear one preferred and a margin that is the plait's own
+radius. A sphere cannot do that job: one tangent to a flat face touches it at a
+point, and a hand's width to either side the braid is inside the pack again.
+With the box under it the braid also hangs from the hair knot rather than 15
+units behind the skull, which is where the remaster hangs it — that anchor was
+tried once before and withdrawn because two spheres pushing in turn would not
+let the chain settle, and a box has no curved side to slide down.
 
 ---
 

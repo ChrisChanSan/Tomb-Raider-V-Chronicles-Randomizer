@@ -76,6 +76,29 @@ namespace
 		unsigned int count = 0;
 		int pageSlot = -1;
 		int node = 0;
+		// The .DDS number behind pageSlot (#123, fix round I, I4): a material
+		// is named by PAGE and the cache slot is an allocation.
+		int page = -1;
+	};
+
+	/* ONE MATERIAL, NAMED BY PAGE (#123, fix round I, I4).
+	 *
+	 * The sheen of fix round D is one number per DRAW, and that is right for
+	 * every model in the game but three: a HAND_ model is a hand AND the thing
+	 * it is holding, on two pages of one file, and one number makes either the
+	 * skin metal or the gun matt. The user's finding I4 is the second of those
+	 * - "the sheen is on the body and the head, the hands go empty" - and the
+	 * measurement behind it is that a Blinn-Phong exponent of 34 on a hand-
+	 * sized object is a highlight one pixel wide.
+	 *
+	 * A page is already the unit a draw call is cut to, so a per-page material
+	 * costs one constant write on the ranges that have one and nothing at all
+	 * on every other model in the game. */
+	struct PageSheen
+	{
+		int page;
+		float strength;
+		float power;
 	};
 
 	struct Model
@@ -84,6 +107,9 @@ namespace
 		IDirect3DIndexBuffer9* ib = 0;
 		std::vector<Range> pass[3];
 		std::vector<int> pages;			// .DDS numbers, distinct
+		// #123 fix round I (I4): a material per page, empty for every model
+		// but the ones a caller has spoken for.
+		std::vector<PageSheen> pageSheen;
 
 		std::string name;
 		HDModelOrigin origin = HD_MODEL_ORIGIN_NONE;
@@ -904,6 +930,9 @@ namespace
 					range.start = (unsigned int)indices.size();
 					range.count = 0;
 					range.pageSlot = here < 0 ? -1 : HDPageCacheSlotOf(here);
+					// #123 fix round I (I4): the .DDS number as well, so a
+					// material can be named by page.
+					range.page = here;
 					range.node = on;
 					page = here;
 					node = on;
@@ -1214,6 +1243,10 @@ namespace
 
 		g_device->SetVertexShaderConstantF(161, sheen, 1);
 
+		/* What is in the register now, so the per-range writes below can leave
+		 * it alone when nothing changes (#123, fix round I, I4). */
+		float sheenNow[2] = { sheen[0], sheen[1] };
+
 		/* c17, the PIXEL side: x is the per-pixel dynamic light loop, which
 		 * an object does NOT use - its lights are in the vertex shader above,
 		 * where the classic formula puts them - and y is this frame's fog
@@ -1330,6 +1363,34 @@ namespace
 				g_device->SetTexture(0, first.pageSlot >= 0
 					? (IDirect3DBaseTexture9*)HDPageCacheSlotTexture(first.pageSlot)
 					: 0);
+
+				/* THE MATERIAL OF THIS PAGE (#123, fix round I, I4). Only for
+				 * a model a caller has spoken for - and then only when the
+				 * numbers really change, so a hand with a gun in it costs two
+				 * constant writes and a model without a table costs a test on
+				 * an empty vector. */
+				if (!model.pageSheen.empty())
+				{
+					float want[2] = { sheen[0], sheen[1] };
+
+					for (size_t s = 0; s < model.pageSheen.size(); s++)
+						if (model.pageSheen[s].page == first.page)
+						{
+							want[0] = model.pageSheen[s].strength;
+							want[1] = model.pageSheen[s].power > 1.0f
+								? model.pageSheen[s].power : 1.0f;
+							break;
+						}
+
+					if (want[0] != sheenNow[0] || want[1] != sheenNow[1])
+					{
+						const float write[4] = { want[0], want[1], 0.0f, 0.0f };
+
+						g_device->SetVertexShaderConstantF(161, write, 1);
+						sheenNow[0] = want[0];
+						sheenNow[1] = want[1];
+					}
+				}
 
 				g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0,
 					0, (UINT)model.vertices, start, count / 3);
@@ -1550,6 +1611,68 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		}
 
 		const bool tr3 = slots[i].fromTr3;
+
+		/* A MODEL THAT IS BUILT AND NOT READ (#123, fix round I, I3). It has
+		 * no file, no head and no origin; everything after this point is the
+		 * same road a read model takes. The source is looked up in what has
+		 * already been read, which is why the maker's slot has to stand after
+		 * its source in the caller's array. */
+		if (slots[i].synth)
+		{
+			const HDTrmModel* source = 0;
+
+			for (size_t p = 0; p < pending.size(); p++)
+				if (pending[p].slot == slots[i].synthFrom)
+				{
+					source = &pending[p].trm;
+					break;
+				}
+
+			if (!source)
+			{
+				if (stats)
+					stats->missing++;
+				note("%s (slot %d) is built from slot %d, which is not loaded "
+					"- left out", slot_label(slot, model), slot,
+					slots[i].synthFrom);
+				continue;
+			}
+
+			Pending made;
+			const char* trouble = "";
+
+			made.slot = slot;
+			made.hasHead = false;
+			made.name = model;
+			made.origin = HD_MODEL_ORIGIN_5;
+			made.pageBias = 0;
+			made.onlyPage = -1;
+			std::memset(&made.trm, 0, sizeof(made.trm));
+			std::memset(&made.head, 0, sizeof(made.head));
+
+			const double made_started = now_ms();
+			const bool built = slots[i].synth(source, &made.trm, &trouble);
+
+			read_ms += now_ms() - made_started;
+
+			if (!built)
+			{
+				if (stats)
+					stats->refused++;
+				note("%s (slot %d): %s - left out", slot_label(slot, model),
+					slot, trouble);
+				continue;
+			}
+
+			/* Its pages are the caller's own numbers, in this bundle. A maker
+			 * that reuses a page the source already wears costs the cache
+			 * nothing, which is what the neck cap does. */
+			for (int t = 0; t < made.trm.textures; t++)
+				pages.push_back(made.trm.texture[t]);
+
+			pending.push_back(made);
+			continue;
+		}
 
 		HDModelOrigin origin = HD_MODEL_ORIGIN_NONE;
 		const std::string path = find_model(model, tr3, &origin);
@@ -2085,6 +2208,40 @@ int HDModelPage(int slot, int at)
 		return -1;
 
 	return model->pages[(size_t)at];
+}
+
+/* THE MATERIAL OF ONE PAGE (#123, fix round I, I4). See PageSheen at the top
+ * of this file for what it is for; the whole of it is a small table on the
+ * model that draw_model consults per range. Setting the same page twice
+ * replaces it, which is what a caller re-planning a level wants. */
+void HDModelSetPageSheen(int slot, int page, float strength, float power)
+{
+	const std::map<int, Model>::iterator at = g_models.find(slot);
+
+	if (at == g_models.end() || page < 0)
+		return;
+
+	for (size_t i = 0; i < at->second.pageSheen.size(); i++)
+		if (at->second.pageSheen[i].page == page)
+		{
+			at->second.pageSheen[i].strength = strength;
+			at->second.pageSheen[i].power = power;
+			return;
+		}
+
+	PageSheen one;
+
+	one.page = page;
+	one.strength = strength;
+	one.power = power;
+	at->second.pageSheen.push_back(one);
+}
+
+int HDModelPageSheenCount(int slot)
+{
+	const Model* model = find(g_models, slot);
+
+	return model ? (int)model->pageSheen.size() : 0;
 }
 
 bool HDModelHasHead(int slot)

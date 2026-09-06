@@ -24,6 +24,7 @@
 #pragma once
 
 #include "hd_render.h"
+#include "hd_trm.h"	// #123 fix round I (I3): HDModelSlot::synth builds one
 
 struct IDirect3DDevice9;
 
@@ -132,6 +133,30 @@ struct HDModelSlot
 	 * 0, 1 and 4 alone - the belt and the two thigh rigs, with no part of a
 	 * leg in either. */
 	int onlyPage = -1;
+
+	/* A MODEL THAT IS BUILT AND NOT READ (#123, fix round I, I3).
+	 *
+	 * `synth` is a maker: it is handed the .TRM of the slot `synthFrom` -
+	 * which has to appear EARLIER in the same array, because the sources are
+	 * read in the order the caller gives them - and fills an HDTrmModel of its
+	 * own, which this module then treats exactly like a file it read: same
+	 * page cache, same skinning, same bind pose, same draw. It owns its four
+	 * arrays with new[] and they are given back with HDTrmFree like everything
+	 * else.
+	 *
+	 * There is one maker so far and it is the reason this exists: the CAP that
+	 * closes Lara's neck in first person. The near cut of stage S8 takes the
+	 * neck stump off her body and leaves the collar open, and no file in the
+	 * remaster's wardrobe is that lid - it has to be cut to the outfit's own
+	 * collar ring, so it is generated from the outfit's own vertices. See
+	 * HD_LARA_PART_NECK_CAP in hd_lara.h.
+	 *
+	 * A maker that returns false is a part that does not draw, exactly as a
+	 * missing file is: the note says why and the rest of the wardrobe is
+	 * unaffected. */
+	int synthFrom = -1;
+	bool (*synth)(const HDTrmModel* source, HDTrmModel* out,
+		const char** why) = 0;
 };
 
 // Where a model's file was found.
@@ -426,6 +451,21 @@ int HDModelIndices(int slot);
 int HDModelRanges(int slot);
 int HDModelPageCount(int slot);
 int HDModelPage(int slot, int at);		// .DDS number
+
+/* A MATERIAL FOR ONE PAGE OF ONE MODEL (#123, fix round I, I4).
+ *
+ * The sheen of fix round D is one number per DRAW, and one number is right for
+ * every model in the game but three: a HAND_ model is a hand AND the gun in
+ * it, on two pages of one file. With one number the skin shines like gunmetal
+ * or the gun goes matt, and the user's finding I4 is the second - "the sheen
+ * is on the body and the head, the hands go empty".
+ *
+ * A page is already the unit a draw call is cut to, so naming the material by
+ * page costs one constant write on the ranges that have one and nothing at all
+ * on every model that has no table. Call it after HDModelLevelBegin, once per
+ * level; the table lives with the model and dies with it. */
+void HDModelSetPageSheen(int slot, int page, float strength, float power);
+int HDModelPageSheenCount(int slot);
 bool HDModelHasHead(int slot);
 int HDModelHeadNode(int slot);			// the node the face rides on, or -1
 // The model's bounding box in its own bind pose, six floats (min then max).

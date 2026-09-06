@@ -29,6 +29,25 @@ void do_boot_screen(long language);
 void aCalcColorSplit(long col, long* pC, long* pS);
 long S_DumpScreen();
 long S_DumpScreenFrame();
+
+/* THE PRESENT CLOCK (#148, order 1).
+ *
+ * gPresentMinTicks is how many 1/60 s ticks S_DumpScreen waits for before it
+ * presents. TWO is the engine's own thirty frames a second and the value this
+ * variable holds everywhere except inside DrawPhaseGame's own present, which
+ * lowers it to one while fps_mode says 60 and puts it straight back.
+ *
+ * That one line is the whole clock split. Everything else that presents by
+ * itself - the inventory, the load/save screen, the death menu, the loading
+ * fade - runs its own animation counters once per present and therefore has
+ * to keep thirty; leaving the default at two is what keeps them there without
+ * touching a line of any of them.
+ *
+ * TargetPresentHz() is the same decision as a number, for the two places that
+ * need a rate rather than a tick count: the frame budget FPSLOG and PROFLOG
+ * measure a late frame against, and the resolution caption's countdown. */
+extern long gPresentMinTicks;
+long TargetPresentHz();		// 30 or 60, out of tomb5.fps_mode
 void StashSkinVertices(long node);
 void SkinVerticesToScratch(long node);
 void StashSkinNormals(long node);

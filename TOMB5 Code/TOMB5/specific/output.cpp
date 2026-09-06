@@ -22,6 +22,7 @@
 #include "specificfx.h"
 #include "drawroom.h"
 #include "function_stubs.h"
+#include "profile.h"			// PROFLOG's present phases (#148)
 #include "hd/hd_level.h"
 #include "time.h"
 #include "dxshell.h"
@@ -1274,21 +1275,41 @@ void aCalcColorSplit(long col, long* pC, long* pS)
 	*pS = RGBONLY(sR, sG, sB);
 }
 
+/* #148, order 1: the 30 Hz cap, and the only thing that ever was one.
+ *
+ * Sync() (specific\time.cpp) counts whole 1/60 s ticks - there is no thirty
+ * anywhere in that file. The `< 2` below is what turns sixty into thirty, and
+ * gPresentMinTicks is that constant given a name so that DrawPhaseGame can
+ * lower it to one for its own present and nobody else's. The long note in
+ * output.h says why the default has to stay two. */
+long gPresentMinTicks = 2;
+
+long TargetPresentHz()
+{
+	// fps_mode 2 (the display's own refresh) is reserved for a later order
+	// and is read back as 1 - see load_new_tomb5_settings.
+	return tomb5.fps_mode == 1 ? 60 : 30;
+}
+
 long S_DumpScreen()
 {
 	long n;
 
 	n = Sync();
 
-	while (n < 2)
+	while (n < gPresentMinTicks)
 	{
+		ProfBegin(PROF_SPIN);
 		while (!Sync());	//wait for sync
+		ProfEnd(PROF_SPIN);
 		n++;
 	}
 
 	GnFrameCounter++;
+	ProfBegin(PROF_FLIP);
 	_EndScene();
 	DXShowFrame();
+	ProfEnd(PROF_FLIP);
 	App.dx.DoneBlit = 1;
 	return n;
 }
@@ -1470,7 +1491,15 @@ void S_OutputPolyList()
 	{
 		sprintf(buf, "%dx%d", App.dx.dwRenderWidth, App.dx.dwRenderHeight);
 		PrintString(8, App.dx.dwRenderHeight - 8, 6, buf, 0);
-		resChangeCounter -= long(30 / App.fps);
+		/* R15 (#148, order 1): the caption counts down once per DRAWN frame,
+		 * and its step is worked out from the measured rate so that the count
+		 * winmain.cpp starts it with is always the same four seconds. At 60 Hz
+		 * the vanilla `30 / App.fps` truncates to zero and the caption would
+		 * never go away again, so the numerator follows the target rate - and
+		 * the start count follows it in winmain.cpp, which is what keeps the
+		 * four seconds four seconds. At fps_mode 0 this is `30 / App.fps`, the
+		 * line as it always was. */
+		resChangeCounter -= long(TargetPresentHz() / App.fps);
 
 		if (resChangeCounter < 0)
 			resChangeCounter = 0;
@@ -1506,12 +1535,16 @@ void S_OutputPolyList()
 	 * #127 kept: it separates the world from the binocular mask, the pickup
 	 * display and the fade, and it still runs after everything above it -
 	 * including this block. */
+	ProfBegin(PROF_HD_DRAW);
 	HDFrameDraw();
+	ProfEnd(PROF_HD_DRAW);
 
 	if (App.dx.Flags & DXF_ZBUFFER)
-		DrawBuckets();
+		DrawBuckets();		// PROF_BUCKETS sits inside it - three call sites
 
+	ProfBegin(PROF_HD_GLOW);
 	HDFrameDrawGlow();
+	ProfEnd(PROF_HD_GLOW);
 
 	if (gfLevelId == LVL5_TITLE)
 	{

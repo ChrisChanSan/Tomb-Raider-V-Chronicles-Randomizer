@@ -280,6 +280,7 @@
     <ClCompile Include="TOMB5\specific\LoadSave.cpp" />
     <ClCompile Include="TOMB5\specific\output.cpp" />
     <ClCompile Include="TOMB5\specific\polyinsert.cpp" />
+    <ClCompile Include="TOMB5\specific\profile.cpp" />
     <ClCompile Include="TOMB5\specific\registry.cpp" />
     <ClCompile Include="TOMB5\specific\setupdlg.cpp" />
     <ClCompile Include="TOMB5\specific\specificfx.cpp" />
@@ -453,6 +454,7 @@
     <ClInclude Include="TOMB5\specific\d3dmatrix.h" />
     <ClInclude Include="TOMB5\specific\output.h" />
     <ClInclude Include="TOMB5\specific\polyinsert.h" />
+    <ClInclude Include="TOMB5\specific\profile.h" />
     <ClInclude Include="TOMB5\specific\registry.h" />
     <ClInclude Include="TOMB5\specific\setupdlg.h" />
     <ClInclude Include="TOMB5\specific\specificfx.h" />

@@ -280,7 +280,12 @@ void WinProcessCommands(long cmd)
 		ResumeThread((HANDLE)MainThread.handle);
 		App.dx.WaitAtBeginScene = 0;
 		Log("Game Thread Resumed");
-		resChangeCounter = 120;
+		/* R15 (#148, order 1): four seconds of the resolution caption, counted
+		 * in DRAWN frames. 120 was four seconds while thirty was the only
+		 * rate there was; at fps_mode 1 the same four seconds are twice as
+		 * many frames, and S_OutputPolyList takes its step off the same rate.
+		 * At fps_mode 0 this is 120, exactly as it was. */
+		resChangeCounter = 4 * TargetPresentHz();
 	}
 }
 

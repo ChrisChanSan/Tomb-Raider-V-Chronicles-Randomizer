@@ -29,6 +29,7 @@
 #include "../d3dmatrix.h"
 #include "../lighting.h"
 #include "../function_stubs.h"
+#include "../profile.h"			// PROFLOG phases (#148)
 #include "../../tomb5/tomb5.h"
 #include "../../game/objects.h"
 #include "../../game/control.h"		// meshes, bones
@@ -790,6 +791,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	HDLaraDraw pieces[8];
 	HDLaraFrame now;
 	float sunScale = 0.75f;
+	ProfScope prof(PROF_HD_LARA);
 
 	if (!HDLaraDrawActive())
 		return;

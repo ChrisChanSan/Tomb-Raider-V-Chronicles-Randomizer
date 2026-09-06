@@ -225,6 +225,9 @@
     <ClCompile Include="TOMB5\specific\polyinsert.cpp">
       <Filter>TOMB5\specific</Filter>
     </ClCompile>
+    <ClCompile Include="TOMB5\specific\profile.cpp">
+      <Filter>TOMB5\specific</Filter>
+    </ClCompile>
     <ClCompile Include="TOMB5\game\rat.cpp">
       <Filter>TOMB5\game</Filter>
     </ClCompile>
@@ -560,6 +563,9 @@
       <Filter>TOMB5\game</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\specific\polyinsert.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\profile.h">
       <Filter>TOMB5\specific</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\game\rat.h">

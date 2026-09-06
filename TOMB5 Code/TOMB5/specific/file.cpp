@@ -15,8 +15,11 @@
 #include "hqsfx.h"
 #include "hdscreen.h"
 #include "hd/hd_level.h"
+#include "hd/hd_pagecache.h"		// the level's HD pages, for the warm-up (#148)
+#include "hd/hd_model.h"		// HDModelPreload (#148)
 #include "file.h"
 #include "function_stubs.h"
+#include "profile.h"			// ProfileLevel - PROFLOG counts from the load (#148)
 #include "../game/gameflow.h"
 #include "../game/setup.h"
 #include "alexstuff.h"
@@ -1765,6 +1768,87 @@ unsigned int __stdcall LoadLevel(void* name)
 	return 1;
 }
 
+/* THE WARM-UP (#148, order 1) - WHY THE FIRST SECONDS OF A LEVEL COST MORE.
+ *
+ * Measured by the user, not guessed: every level takes about three seconds to
+ * settle at its frame rate, and the title screen drops to 23 before it
+ * steadies. The machine is an i9-9900K with an RTX 5080 and the card is at
+ * seven per cent, so this is not the hardware running out of anything. It is
+ * work being done ONCE, inside frames that were meant to draw.
+ *
+ * One part of that work is provable from the source and is what this function
+ * takes away. Nearly every texture in this engine is D3DPOOL_MANAGED - the
+ * classic pages (specific\texture.cpp, CreateTexturePage), the HD pages when
+ * the budget lets them be (specific\hd\hd_pagecache.cpp) and every HD model's
+ * vertex and index buffer (specific\hd\hd_model.cpp). A managed resource
+ * lives in system memory until something DRAWS with it; Direct3D uploads it
+ * to the card at that first bind. So the first time a room, a wall texture or
+ * an enemy comes into view, the frame that shows it pays for its upload - and
+ * a level shows most of its art in its first seconds.
+ *
+ * IDirect3DResource9::PreLoad is Direct3D's own answer to exactly this: it
+ * asks the driver to make the resource resident now. It costs nothing for a
+ * resource that already is, it cannot fail in a way that matters (it returns
+ * void and is a hint, not a promise), and it draws nothing - no render state
+ * is touched, no geometry is submitted, nothing can appear on screen. That is
+ * why it is used here rather than the alternative of drawing a tiny triangle
+ * with each page off screen: the same residency, none of the risk.
+ *
+ * It runs where a stall is free - after the load thread has joined and the HD
+ * build is done, with the loading bar still on screen.
+ *
+ * WHAT IT CANNOT FIX. Everything else the first frame does once: the water
+ * mark tables, a room's first light list, the driver's own first use of a
+ * shader or a vertex declaration, and Windows paging the process in. Those
+ * are for PROFLOG to name from a real session - the whole point of the
+ * `first_frame` line. */
+static void WarmUpLevel()
+{
+	LARGE_INTEGER freq, t0, t1;
+	int pages, hd_pages, hd_buffers;
+	double ms;
+
+	QueryPerformanceFrequency(&freq);
+	QueryPerformanceCounter(&t0);
+
+	pages = 0;
+	hd_pages = 0;
+	hd_buffers = 0;
+
+	for (int i = 0; i < nTextures; i++)
+	{
+		if (Textures[i].tex)
+		{
+			Textures[i].tex->PreLoad();
+			pages++;
+		}
+	}
+
+	// The HD pages of this level. HDPageCacheSlots() is 0 with hd_enable off
+	// and before a level is built, so this is one call and a loop that does
+	// not run. A page in D3DPOOL_DEFAULT is already on the card and PreLoad
+	// is documented to be ignored for it - correct either way, no test here.
+	for (int i = 0, n = HDPageCacheSlots(); i < n; i++)
+	{
+		IDirect3DTexture9* tex = HDPageCacheSlotTexture(i);
+
+		if (tex)
+		{
+			tex->PreLoad();
+			hd_pages++;
+		}
+	}
+
+	hd_buffers = HDModelPreload();
+
+	QueryPerformanceCounter(&t1);
+	ms = freq.QuadPart ?
+		(double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)freq.QuadPart : 0;
+
+	Log("WARMUP pages=%d hd_pages=%d hd_buffers=%d ms=%.1f", pages, hd_pages,
+		hd_buffers, ms);
+}
+
 long S_LoadLevelFile(long num)
 {
 	static long lscreen = 0;
@@ -1893,6 +1977,15 @@ long S_LoadLevelFile(long num)
 	}
 	aMakeCutsceneResident(gfResidentCut[0], gfResidentCut[1], gfResidentCut[2], gfResidentCut[3]);
 	Log("S_LoadLevelFile: Cutscenes resident");
+
+	// #148, order 1: the level's textures and buffers onto the card BEFORE
+	// the first frame asks for them - see the note over WarmUpLevel.
+	WarmUpLevel();
+
+	// #148, order 1: PROFLOG counts its seconds from here, so "three seconds
+	// of warm-up" has something to be three seconds after. The name still
+	// carries its .TRC; the profile takes that off.
+	ProfileLevel(name);
 
 	// The load thread has joined - loading IS done, no matter what the
 	// step counting believes. S_FinishLoadBar puts the bar at 100%

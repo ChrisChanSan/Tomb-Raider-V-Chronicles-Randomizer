@@ -57,7 +57,14 @@ files under `specific/hd/hd_shader/`. Two headers that had been changed by an
 earlier stage and never given the notice - `specific/3dmath.h` and
 `specific/drawroom.h` - were given it with this change.
 
-Fourteen of the 166 do not carry it, and none of them should - the ten below
+Measured again on **2026-09-07**, after order 1 of "Sixty frames a second"
+(section 5 below): **113** files changed, **62** entirely new - **175** in all,
+**161** of them carrying the notice. The two additions are
+`specific/profile.cpp` and `specific/profile.h`. One file that had been changed
+by an earlier stage and never given the notice - `game/hitman.h` - was given it
+with this change, which is why the notice count grows by three and not by two.
+
+Fourteen of the 175 do not carry it, and none of them should - the ten below
 plus the four `specific/hd/hd_shader/*.inc`, which are compiler output
 (`fxc` bytecode as a C array) regenerated from the `.hlsl` beside them and
 carrying no source of ours at all:
@@ -4632,6 +4639,173 @@ picture.
 `ModelProbe` gained `-neckcut`, `-showcap` and a third `-neck` table (the
 neck as a CYLINDER: an (s, r) grid of the torso's own vertices per outfit,
 the ring at four candidate depths, and the (S, R) scan above).
+
+---
+
+### 5. Sixty frames a second (#148)
+
+The plan this follows is `Preparation/60FPS-Plan.md`, written from a read-only
+survey of this tree. It runs in orders; **this section covers order 1 only** -
+the clock split, the option, the measurement and one warm-up fix. There is no
+interpolation yet.
+
+#### 5.1 What the 30 Hz cap actually was
+
+One comparison. `Sync()` (`specific/time.cpp`) counts whole sixtieths of a
+second - `frequency = pfq / 60`, and there is no thirty anywhere in that file.
+`S_DumpScreen()` (`specific/output.cpp`) waited for **two** of those ticks
+before it presented, and that busy wait was the entire cap.
+
+Everything downstream was already built for a 60 Hz tick. `ControlPhase()`
+(`game/control.cpp`) runs
+
+```
+for (framecount += nframes; framecount > 0; framecount -= 2)
+```
+
+where `nframes` is what `S_DumpScreen` returned, i.e. how many sixtieths the
+frame really took, and a logic step costs **two** of them. Feeding it one per
+frame therefore runs the game on every second call, entirely by itself:
+sixty presents, thirty logic steps, and not one line of the simulation
+touched.
+
+#### 5.2 The change
+
+`gPresentMinTicks` (`specific/output.cpp`, declared in `output.h`) replaces
+the constant `2` in `S_DumpScreen`, and `DrawPhaseGame()` (`game/draw.cpp`)
+lowers it to `1` around **its own** present when `tomb5.fps_mode` is 1, then
+puts it straight back:
+
+```
+gPresentMinTicks = tomb5.fps_mode == 1 ? 1 : 2;
+camera.number_frames = S_DumpScreen();
+gPresentMinTicks = 2;
+```
+
+Three lines. The default staying at two is what keeps every modal loop at
+thirty without touching any of them - the inventory (`game/newinv2.cpp`), the
+load/save screen (`specific/LoadSave.cpp`), the death menu
+(`game/control.cpp`) and the loading fade (`specific/output.cpp`) each step
+their own animation counters once per present, and those counters were written
+for a 30 Hz present.
+
+`tomb5.fps_mode` is a `ulong` in `tomb5_options` (`global/types.h`), read and
+written under the registry name `fps_mode`, `1` (60) by default; `0` is 30 and
+`2` is reserved for the display's own refresh and reads back as `1`. The menu
+row is *Frame rate* on page 1 of the tomb5 options
+(`tomb5/troyestuff.cpp`), which grew from thirteen rows to fourteen - the
+ceiling for that screen, as the comment over `PAGE0_NUM` now records.
+
+`TargetPresentHz()` is the same decision as a number (30 or 60) for the two
+places that need a rate rather than a tick count.
+
+#### 5.3 What had to follow the rate
+
+Only one thing in this order - risk **R15** of the plan. The resolution
+caption after Alt+Plus counted down by `long(30 / App.fps)` once per drawn
+frame, which truncates to **zero** above 30 fps: the caption would have stayed
+on screen for ever. It now steps by `long(TargetPresentHz() / App.fps)` and
+starts from `4 * TargetPresentHz()` instead of a bare `120`
+(`specific/winmain.cpp`), so it is the same four seconds in both modes and
+byte-for-byte the old line at `fps_mode 0`.
+
+The other fourteen risks the plan lists - the screen fades, the rain and snow,
+the corpse fade, the lightning, the pickup slide-in - **still count per drawn
+frame** and therefore still run at double speed at `fps_mode 1`. They are
+order 3 and are named here so that a play test knows what it is looking at.
+
+#### 5.4 Proving the logic did not change
+
+`FPSLOG` (`specific/hd/hd_level.cpp`) gained two fields: `fps=` is the target
+the budget was taken from, and `logic_ticks=` is `GlobalCounter`'s difference
+over that second - the number of logic steps the game really ran.
+`GlobalCounter` is stepped once per tick in `ControlPhase` and nowhere else,
+so a healthy 60 Hz second must read `frames=60 logic_ticks=30`. The two budget
+constants became `FrameBudgetMs()` / `MissedSlotMs()` so that a 60 Hz second
+is not measured against a 30 Hz slot.
+
+`Preparation/Tools/Diagnose/SaveDiff.cpp` (`bsd.bat`) is the second proof and
+the stronger one: two savegames, field by field, by name. The draw path has an
+RNG of its own (`rand_2`, `GetRandomDraw`) that the simulation never reads, so
+extra drawn frames cannot reach the game state - and a savegame is that state
+written down. The tool takes every offset from the engine's own
+`global/types.h` with `offsetof`, which is why it is built for Win32: the
+structs are `#pragma pack(1)` but carry pointers. The recipe is in
+`docs/Engine-Manual.md` under *Frame rate*.
+
+#### 5.5 `PROFLOG` - where a frame's milliseconds go
+
+New files `specific/profile.cpp` and `specific/profile.h`. `FPSLOG` says how
+long a frame took; it cannot say why, and the two things the user measured -
+the title screen falling to 23 frames a second, and about three seconds of
+warm-up at the start of every level - are exactly the questions it cannot
+answer.
+
+Sixteen phases per frame, taken with `QueryPerformanceCounter`: `logic`
+(`ControlPhase`, at the call site in `game/gameflow.cpp` because
+`ControlPhase` has early returns), `gather`, `rooms` and `sky`, the HD path's
+three shares of the gather (`hdroom` in `InsertRoom`, `hdobj` in
+`HDObjectBegin` / `Node` / `End`, `hdlara` in `HDLaraDrawFrame`), `output`
+with `hddraw`, `hdlight`, `hdobjdraw` and `hdglow` inside it, `buckets` and
+`sort` as whole-frame totals, and the present split into `spin` - the frame
+finished and waiting for its slot - and `flip`, `Present` itself.
+
+`buckets` and `sort` are whole-frame on purpose: both are called from three or
+more places, and the callee is the only place that catches all of them. That
+is also why `SkyDrawPhase` got a phase of its own - it is the one place in the
+frame that draws buckets and a sort list OUTSIDE `S_OutputPolyList`, so the
+printed remainder is `outrest = output - hddraw - hdglow`, the two phases that
+run inside the output and nowhere else, rather than a subtraction that would
+read zero in every outdoor level.
+
+One line per second with mean and worst per phase; one line for **every**
+frame that missed its slot, with all its phases and the second of the level it
+happened in; and one `first_frame` line per level, always written, which is
+the line the warm-up question is about.
+
+**The guard is one bool.** Every seam is `ProfBegin(...)` / `ProfEnd(...)`,
+both of which are `if (gLogEnabled)` around a call. Without `-log` not one
+clock is read, no accumulator moves and no string is built - the same rule
+`HDFramePresented` follows, and the reason these seams stay in for good.
+
+#### 5.6 The warm-up, and what is provable about it
+
+`WarmUpLevel()` (`specific/file.cpp`), one line in the log:
+`WARMUP pages=112 hd_pages=143 hd_buffers=94 ms=38.2`.
+
+Nearly every texture in this engine is `D3DPOOL_MANAGED` - the classic pages
+(`specific/texture.cpp`, `CreateTexturePage`), the HD pages when the budget
+lets them be, and every HD model's vertex and index buffer
+(`specific/hd/hd_model.cpp`, which says so in its own comment). A managed
+resource lives in system memory until something **draws** with it; Direct3D
+uploads it at that first bind. So the first time a wall, a texture or an enemy
+comes into view, the frame that shows it pays for the upload - and a level
+shows most of its art in its first seconds. That is a property of the code,
+not a hypothesis.
+
+`IDirect3DResource9::PreLoad` is Direct3D's own answer to exactly this. The
+new pass calls it for every classic page, every HD page slot
+(`HDPageCacheSlotTexture`) and every HD model buffer (`HDModelPreload`, new in
+`hd_model.cpp/.h`), after the load thread has joined and the HD build is done,
+with the loading bar still on screen. It draws nothing, touches no render
+state and cannot change a pixel; for a resource that is already resident it
+costs nothing, and for one in `D3DPOOL_DEFAULT` it is documented to be
+ignored.
+
+What it cannot fix is named rather than guessed at: the water mark tables, a
+room's first light list, the driver's first use of a shader or a vertex
+declaration, and Windows paging the process in. Those are for `PROFLOG`'s
+`first_frame` and low-`sec=` `late` lines to point at from a real session.
+
+#### 5.7 What `fps_mode 0` does
+
+Nothing. Every branch this order added is inert at 30: `gPresentMinTicks` is 2
+and `S_DumpScreen` reads `while (n < 2)`; `TargetPresentHz()` is 30, so the
+caption's step is `long(30 / App.fps)` and its start is 120; `FrameBudgetMs()`
+is 1000/30 and `MissedSlotMs()` 1000/30 + 1000/120, the two old constants to
+the bit; and every profile seam is behind `gLogEnabled`. The only thing that
+runs regardless is the warm-up, which by construction cannot change what is
+drawn.
 
 ---
 

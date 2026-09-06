@@ -205,6 +205,10 @@ void init_tomb5_stuff()
 		tomb5.hd_reflect = 1;							//on (#123, fix round R3b)
 		REG_WriteBool(buf, tomb5.hd_reflect);
 
+		sprintf(buf, "fps_mode");
+		tomb5.fps_mode = 1;								//60, the default (#148)
+		REG_WriteLong(buf, tomb5.fps_mode);
+
 		sprintf(buf, "hd_texture_budget_mb");
 		tomb5.hd_texture_budget_mb = 0;					//work it out (#123, S6)
 		REG_WriteLong(buf, tomb5.hd_texture_budget_mb);
@@ -336,6 +340,15 @@ void init_tomb5_stuff()
 		sprintf(buf, "hd_reflect");
 		REG_ReadBool(buf, tomb5.hd_reflect, 1);
 
+		/* #148: 0 is 30 and 1 is 60. 2 is reserved for the display's own
+		 * refresh rate and is not built yet, so a hand-typed 2 - and anything
+		 * above it - reads back as the default rather than as a mode that
+		 * does not exist. */
+		sprintf(buf, "fps_mode");
+		REG_ReadLong(buf, tomb5.fps_mode, 1);
+		if (tomb5.fps_mode > 1)
+			tomb5.fps_mode = 1;
+
 		sprintf(buf, "hd_texture_budget_mb");
 		REG_ReadLong(buf, tomb5.hd_texture_budget_mb, 0);
 
@@ -466,6 +479,9 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "hd_reflect");
 	REG_WriteBool(buf, tomb5.hd_reflect);
+
+	sprintf(buf, "fps_mode");
+	REG_WriteLong(buf, tomb5.fps_mode);
 
 	CloseRegistry();
 }

@@ -32,6 +32,7 @@
 #include "../specific/dxsound.h"
 #include "../specific/function_table.h"
 #include "../specific/function_stubs.h"
+#include "../specific/profile.h"		// PROFLOG's logic phase (#148)
 #include "../specific/audio.h"
 #include "../specific/fmv.h"
 #include "../specific/polyinsert.h"
@@ -844,7 +845,9 @@ void DoTitle(uchar name, uchar audio)
 
 		handle_cutseq_triggering(name);
 		nframes = DrawPhaseGame();
+		ProfBegin(PROF_LOGIC);
 		gfStatus = ControlPhase(nframes, 0);
+		ProfEnd(PROF_LOGIC);
 		DoSpecialFeaturesServer();
 	}
 
@@ -1039,7 +1042,9 @@ void DoLevel(uchar Name, uchar Audio)
 			break;
 		}
 
+		ProfBegin(PROF_LOGIC);
 		gfStatus = ControlPhase(nframes, 0);
+		ProfEnd(PROF_LOGIC);
 
 		if (GlobalSoftReset)
 		{

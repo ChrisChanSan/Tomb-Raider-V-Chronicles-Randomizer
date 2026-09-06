@@ -25,6 +25,7 @@
 #include "../specific/drawroom.h"
 #include "../specific/polyinsert.h"
 #include "../specific/function_stubs.h"
+#include "../specific/profile.h"		// PROFLOG's frame bracket (#148)
 #include "../specific/hd/hd_level.h"
 #include "../specific/hd/hd_object.h"
 #include "../specific/lighting.h"
@@ -393,6 +394,8 @@ void aInterpolateMatrix()
 
 long DrawPhaseGame()
 {
+	ProfileFrameBegin();
+	ProfBegin(PROF_GATHER);
 	CalcLaraMatrices(0);
 	phd_PushUnitMatrix();
 	CalcLaraMatrices(1);
@@ -402,16 +405,52 @@ long DrawPhaseGame()
 		frigup_lara();
 
 	SetLaraUnderwaterNodes();
+	ProfBegin(PROF_ROOMS);
 	DrawRooms(camera.pos.room_number);
+	ProfEnd(PROF_ROOMS);
 	DrawGameInfo(1);
+	ProfEnd(PROF_GATHER);
+
+	ProfBegin(PROF_OUTPUT);
 	S_OutputPolyList();
+	ProfEnd(PROF_OUTPUT);
+
+	/* THE CLOCK SPLIT (#148, order 1). THIS present, and no other, may run at
+	 * sixty; every modal loop in the game keeps two ticks and therefore keeps
+	 * its per-present animation counters at the speed they were written for
+	 * (see the note over gPresentMinTicks in specific\output.h).
+	 *
+	 * Nothing else has to change for the game to stay at thirty. S_DumpScreen
+	 * returns how many 1/60 s ticks the frame really took, DoLevel hands that
+	 * straight to ControlPhase as nframes, and ControlPhase's own accumulator
+	 * - `for (framecount += nframes; framecount > 0; framecount -= 2)`
+	 * (game\control.cpp) - was already counting in 1/60 s units and already
+	 * spending two of them on a logic step. Feed it one per frame and it runs
+	 * a tick on every second call: sixty presents, thirty ticks, and not one
+	 * line of the simulation touched.
+	 *
+	 * Until order 2 there is no interpolation, so every second frame is a
+	 * duplicate of the one before it. That is not a shortcoming of this
+	 * order, it IS this order's proof: the picture stands still for two
+	 * frames while the clock runs at sixty. */
+	gPresentMinTicks = tomb5.fps_mode == 1 ? 1 : 2;
 	camera.number_frames = S_DumpScreen();
+	gPresentMinTicks = 2;
+
 	S_AnimateTextures(camera.number_frames);
+	ProfileFrameEnd();
 	return camera.number_frames;
 }
 
 void SkyDrawPhase()
 {
+	// A phase of its own (#148) and not part of `output`: this is the one
+	// place in the frame that fills and draws the classic buckets and the
+	// sort list OUTSIDE S_OutputPolyList, so without it the two would look
+	// like output that output never spent. It also carries the sky
+	// lightning machine, which is one of the counters order 3 has to guard.
+	ProfScope prof(PROF_SKY);
+
 	if (outside)
 	{
 		if (!objects[HORIZON].loaded)

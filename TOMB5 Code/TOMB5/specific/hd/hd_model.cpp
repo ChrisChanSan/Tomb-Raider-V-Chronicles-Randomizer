@@ -2060,6 +2060,38 @@ void HDModelLevelEnd()
 	g_notes.clear();
 }
 
+/* THE WARM-UP (#148, order 1). A model's vertex and index buffer are
+ * D3DPOOL_MANAGED, and a managed resource is a system-memory copy until
+ * something DRAWS with it: Direct3D uploads it to the card the first time it
+ * is bound, inside the first frame it appears in. That is one cause of the
+ * warm-up the user measured - the first seconds of a level cost an upload per
+ * model, per page and per room, and they are paid inside frames that were
+ * meant to draw.
+ *
+ * PreLoad is Direct3D's own answer to exactly that and costs nothing when the
+ * resource is already resident. Called while the loading bar still stands,
+ * where a stall is invisible, instead of in the first second of play.
+ *
+ * Returns how many buffers were offered, for the caller's log line. */
+int HDModelPreload()
+{
+	int done = 0;
+
+	for (std::map<int, Model>::iterator at = g_models.begin(); at != g_models.end(); ++at)
+	{
+		if (at->second.vb) { at->second.vb->PreLoad(); done++; }
+		if (at->second.ib) { at->second.ib->PreLoad(); done++; }
+	}
+
+	for (std::map<int, Model>::iterator at = g_heads.begin(); at != g_heads.end(); ++at)
+	{
+		if (at->second.vb) { at->second.vb->PreLoad(); done++; }
+		if (at->second.ib) { at->second.ib->PreLoad(); done++; }
+	}
+
+	return done;
+}
+
 void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount,
 	unsigned int passes)
 {

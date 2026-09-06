@@ -18,7 +18,13 @@
 #include "tomb5.h"
 #include "../specific/input.h"
 
-#define PAGE0_NUM	13
+/* PAGE0 GREW TO FOURTEEN ROWS FOR "Frame rate" (#148), and fourteen is the
+ * ceiling. The rows run from y = 2 in steps of font_height and TroyeMenu draws
+ * its paging arrows one row below the last one, at y = num + 2; the screen
+ * holds up to y = 16 (the note in CreditsScreen has the measurement). Page 1
+ * has stood at fourteen since it was written, so this is the same shape, not a
+ * new one - but the next row on either page needs a page of its own. */
+#define PAGE0_NUM	14
 #define PAGE1_NUM	14
 #define PAGE2_NUM	4
 
@@ -166,6 +172,7 @@ bool Page0(long& num, long textY, ulong selection)
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Gameover menu", 0);
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Fog", 0);
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "HD textures", 0);
+	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Frame rate", 0);
 
 	y = 2;
 	i = 0;
@@ -211,6 +218,14 @@ bool Page0(long& num, long textY, ulong selection)
 	// on this page - shows what the next level will do, not what the level on
 	// screen is doing.
 	strcpy(buffer, tomb5.hd_enable ? "on" : "off");
+	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
+
+	/* #148: how often the picture is presented. The GAME does not change -
+	 * it steps thirty times a second in both, and a savegame written in one
+	 * is byte for byte the savegame written in the other. Only two values:
+	 * the display's own refresh is reserved for a later order and there is no
+	 * uncapped mode. Takes effect on the very next frame. */
+	strcpy(buffer, tomb5.fps_mode == 1 ? "60" : "30");
 	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
 
 	switch (selection)
@@ -398,6 +413,17 @@ bool Page0(long& num, long textY, ulong selection)
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			tomb5.hd_enable = !tomb5.hd_enable;
+			changed = 1;
+		}
+
+		break;
+
+	case 1 << 13:
+
+		if (dbinput & IN_LEFT || dbinput & IN_RIGHT)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			tomb5.fps_mode = tomb5.fps_mode == 1 ? 0 : 1;
 			changed = 1;
 		}
 

@@ -14,6 +14,7 @@
 #include "drawroom.h"
 #include "function_table.h"
 #include "function_stubs.h"
+#include "profile.h"			// PROFLOG phases (#148)
 #include "d3dmatrix.h"
 #include "alexstuff.h"
 #include "dxshell.h"
@@ -167,7 +168,11 @@ void InsertRoom(ROOM_INFO* r)
 	 * before a level is built, or for a room the .TRG has nothing for,
 	 * HDFrameRoom returns false at its first line and the classic path below
 	 * runs exactly as it did. */
-	if (HDFrameRoom((int)(r - room), aMXPtr))
+	ProfBegin(PROF_HD_ROOM);
+	const bool hd_room = HDFrameRoom((int)(r - room), aMXPtr);
+	ProfEnd(PROF_HD_ROOM);
+
+	if (hd_room)
 	{
 		/* #123 (fix round H, H1): everything but the water. The remaster's
 		 * art has no geometry in the plane the classic level draws its water
@@ -1342,6 +1347,7 @@ void DrawBucket(TEXTUREBUCKET* bucket)
 void DrawBuckets()
 {
 	TEXTUREBUCKET* bucket;
+	ProfScope prof(PROF_BUCKETS);
 
 	if (App.BumpMapping)
 	{

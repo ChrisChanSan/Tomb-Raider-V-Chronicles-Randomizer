@@ -25,6 +25,7 @@
 #include "hd_render.h"
 #include "hd_level.h"
 #include "../function_stubs.h"
+#include "../profile.h"			// PROFLOG phases (#148)
 #include "../d3dmatrix.h"
 #include "../3dmath.h"
 #include "../lighting.h"
@@ -1447,6 +1448,11 @@ void HDObjectFrameReset()
 
 bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 {
+	// PROF_HD_OBJ is what this call, HDObjectNode and HDObjectEnd cost
+	// together - the three of them never nest, so one accumulator holds the
+	// whole per-item recording of the frame (#148).
+	ProfScope prof(PROF_HD_OBJ);
+
 	if (!item || !obj)
 		return false;
 
@@ -1543,6 +1549,8 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 
 void HDObjectNode(int node, bool interpolated)
 {
+	ProfScope prof(PROF_HD_OBJ);
+
 	if (!g_open || node < 0 || node >= g_open_nodes || node >= HD_OBJ_NODES)
 		return;
 
@@ -1566,6 +1574,8 @@ void HDObjectNode(int node, bool interpolated)
 
 void HDObjectEnd()
 {
+	ProfScope prof(PROF_HD_OBJ);
+
 	if (!g_open)
 		return;
 
@@ -1669,6 +1679,8 @@ int HDObjectDrawCalls()
 
 void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 {
+	ProfScope prof(PROF_HD_OBJDRAW);
+
 	if (!g_count)
 		return;
 

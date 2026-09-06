@@ -321,6 +321,13 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 	HDModelStats* stats, const char** why);
 void HDModelLevelEnd();
 
+/* THE WARM-UP (#148, order 1). Offers every model's vertex and index buffer
+ * to the device with IDirect3DResource9::PreLoad, so the upload a managed
+ * buffer would otherwise pay for inside the first frame it is drawn in
+ * happens while the loading bar still stands. Returns how many buffers were
+ * offered; safe and a no-op with no level built. */
+int HDModelPreload();
+
 // --- the frame -------------------------------------------------------------
 //
 // Between HDRenderFrameBegin and HDRenderFrameEnd, inside that bracket. The

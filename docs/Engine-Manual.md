@@ -94,6 +94,16 @@ Chronicles`.
 > The tomb5 option pages are the exception — they write themselves the moment
 > you change a row.
 
+Every tomb5 option has a value of its own under
+`HKEY_CURRENT_USER\Software\Core Design\Tomb Raider Chronicles\tomb5`. Almost
+all of them have a row in the menu and are better set there; these are the ones
+worth knowing by name:
+
+| Value | Type | Meaning |
+|---|---|---|
+| `fps_mode` | DWORD | How many frames a second are presented. `1`, the default, is 60; `0` is the original 30. `2` is reserved for the display's own refresh rate and is not built yet — it reads back as `1`. There is no uncapped mode. The *Frame rate* row writes this. See **Frame rate**. |
+| `hd_enable` and its five companions | | The Remaster art. Their own table under **HD from the Remaster**. |
+
 ---
 
 ## Controls
@@ -174,7 +184,7 @@ circle / PSX — default Faded circle), *Fix climb up delay* (on — removes the
 pause before Lara pulls herself up), *Flexible crawling* (on), *Cutscene
 skipper* (off), *Cheats* (off), *Bar mode* (Original / TR4 / PSX — default
 PSX), *Bar positions* (Original), *Enemy bars* (off), *Ammo counter* (off),
-*Gameover menu* (on), *Fog* (on).
+*Gameover menu* (on), *Fog* (on), *HD textures* (off), *Frame rate* (60).
 
 **Page 2** — *Crawl Tilting* (on), *PSX skies* (on), *TR4 loadscreens* (on),
 *Loadbar style* (TR4), *Mono screen style* (Original), *Loading text* (on),
@@ -184,6 +194,15 @@ PSX), *Bar positions* (Original), *Enemy bars* (off), *Ammo counter* (off),
 
 Worth spelling out:
 
+- **Frame rate** is *60* by default and *30* is the original. It changes how
+  often the picture is drawn and **nothing else**: the game itself still
+  steps thirty times a second, exactly as Core wrote it, so every animation,
+  every timer, every trigger and every enemy behaves identically in both.
+  A savegame written in one is the savegame written in the other. The row
+  takes effect on the very next frame — no restart, nothing reloaded.
+
+  See *Frame rate* further down for what the two settings really do and how
+  to check it.
 - **Cheats** governs DOZY only — type it while playing to fly. The classic
   cheats still need the compass in hand and are unaffected.
 - **Ammotype hotkeys**: the option governs **only** the ammunition cycling -
@@ -236,6 +255,73 @@ section on the HD Lara below says why both are needed.
 **Two things deliberately still switch to third person**: the binoculars and
 the laser sight, which bring their own head camera, and the real sniper camera
 in the 13th Floor. That is not the option failing.
+
+---
+
+## Frame rate
+
+*tomb5 options*, page 1, last row. **60** is the default; **30** is the
+original. It takes effect on the very next frame — no restart, nothing
+reloaded, and it can be changed from the pause screen in the middle of a
+level.
+
+**The game does not change.** Tomb Raider Chronicles is a thirty-steps-a-second
+simulation and it stays one in both settings: every animation frame, every
+timer, every trigger, every enemy decision and every piece of physics happens
+exactly as often as it always did. What the setting changes is how often the
+finished picture is handed to the graphics card.
+
+That is not a claim, it is how the engine was already built. Its clock counts
+in sixtieths of a second, and the loop that runs the game spends **two** of
+them on one step. Presenting once per sixtieth therefore runs the game on
+every second frame, all by itself — thirty steps, sixty pictures, and not one
+line of the simulation touched.
+
+Two ways to check it yourself:
+
+- With `-log`, the `FPSLOG` line reads `frames=60 logic_ticks=30`. Sixty
+  presents, thirty game steps.
+- The stopwatch: a timed section (the countdown in the Submarine, the
+  Escape With The Iris timer) runs for exactly as many real seconds in both.
+
+**What you get, and what it costs.** Twice as many pictures of the same
+motion. Until the interpolation of the next stage lands, the *in-between*
+frame is a repeat of the one before it rather than a new position, so what
+sixty buys today is a smoother camera, smoother menus and a smoother
+title screen rather than smoother running — and a few things that count in
+drawn frames rather than in game steps (screen fades, the rain) still run at
+double speed. Both are being worked on and are the reason 30 is still there.
+
+**If it does not hold.** The engine never falls back on its own — it says so
+and keeps going. With `-log`, `FPSLOG`'s `late=` and the `PROFLOG` lines under
+*When something looks wrong* say which part of the frame ran out of time. On a
+machine that cannot hold sixty with the HD art on, `30` is the setting that
+was always there.
+
+### Proving the game really did not change
+
+The strongest check there is, and it needs no tools beyond the package:
+`SaveDiff` (in `Preparation\Tools\Diagnose`, built with `bsd.bat`) compares
+two savegames and names every field that differs.
+
+1. One randomizer seed, one level, *Frame rate* **30**. Play a short,
+   repeatable stretch — a corridor, a fixed number of enemies, nothing on a
+   timer — and save in slot 1.
+2. Copy `savegame\savegame.0` aside as `save30.sav`.
+3. Switch *Frame rate* to **60**, start the same level from the same point and
+   play the same stretch. Save in slot 1 again.
+4. Copy `savegame\savegame.0` aside as `save60.sav`.
+5. `SaveDiff save30.sav save60.sav`
+
+Identical files print `IDENTICAL` and nothing else. Otherwise you get one line
+per differing field with both values, so that "played four seconds longer"
+(`Game.Timer`, the clock fields, Lara's position) is told apart at a glance
+from "the game ran differently" (`Level.Kills`, the ammunition counts,
+`Lara.air`, the item flags). Nobody plays the same twenty seconds twice by
+hand, so the honest reading is *"everything that differs is clock and
+position"* — and that is already the proof, because the fields about the
+**shape** of the run are the ones that cannot differ if the simulation ran the
+same way.
 
 ---
 
@@ -1486,6 +1572,8 @@ wrote it, and each seam answers a different question:
 | the outfit looks wrong, a limb is misplaced | `SKINLOG` — the skin's bone stack |
 | the first person view sits wrong | `FPHEAD`, `ALTERFOV` — the head bone per frame, and the field of view |
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
+| …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |
+| the first seconds of a level feel rough | `PROFLOG … first_frame`, and the `WARMUP` line at the end of the load |
 
 These seams are permanent, not debug leftovers. They exist so that a report
 carries something to work with.
@@ -1495,25 +1583,31 @@ anybody can check by looking, so with `-log` the engine writes one `FPSLOG`
 line per second of wall clock, and one summary per level:
 
 ```
-FPSLOG level=ANDREA1 frames=30 min_ms=32.9 max_ms=34.1 avg_ms=33.3 slow=13
-       late=0 hd_rooms=17 hd_items=9 hd_draws=152
-FPSLOG level=ANDREA1 frames=24 min_ms=33.0 max_ms=66.9 avg_ms=41.6 slow=11
-       late=6 hd_rooms=23 hd_items=14 hd_draws=241
-FPSLOG level=ANDREA1 summary seconds=418 frames=12461 worst_ms=83.4
+FPSLOG level=ANDREA1 frames=60 logic_ticks=30 fps=60 min_ms=16.2 max_ms=17.1
+       avg_ms=16.7 slow=24 late=0 hd_rooms=17 hd_items=9 hd_draws=152
+FPSLOG level=ANDREA1 frames=48 logic_ticks=30 fps=60 min_ms=16.4 max_ms=66.9
+       avg_ms=20.8 slow=31 late=6 hd_rooms=23 hd_items=14 hd_draws=241
+FPSLOG level=ANDREA1 summary seconds=418 frames=24906 worst_ms=83.4
        slow_frames=5602 late_frames=39
 ```
 
-The game's logic is a fixed **30 frames a second** — that is the engine, not
-this build — so a healthy second reads `frames=30` and every gap between two
-presented frames sits on 33.3 ms. Read the line like this:
+The game's logic is a fixed **30 steps a second** in both *Frame rate*
+settings — that is the engine, not this build. What the setting changes is how
+often the picture is presented. Read the line like this:
 
-- **`frames=`** is the frame rate itself. Anything under 30 is a second in
-  which the game did not keep up.
-- **`late=`** counts the frames that actually missed their slot (over 41.7 ms).
-  This is the number that matters. `worst_ms`/`max_ms` say how badly.
-- **`slow=`** counts every gap over the 33.3 ms budget. Half of a perfectly
-  healthy second lands here on measurement jitter alone, so a large `slow=`
-  with `late=0` means nothing at all.
+- **`fps=`** is the setting, 30 or 60. Everything below is measured against
+  it.
+- **`frames=`** is the frame rate itself. Under `fps=` is a second in which
+  the machine did not keep up.
+- **`logic_ticks=`** is what the game really ran, and it must read **30**
+  whatever `frames=` says. If it ever does not, the frame rate setting has
+  changed the game — which is precisely what it is not allowed to do.
+- **`late=`** counts the frames that actually missed their slot — over
+  41.7 ms at 30, over 25.0 ms at 60. This is the number that matters.
+  `worst_ms`/`max_ms` say how badly.
+- **`slow=`** counts every gap over the plain budget (33.3 ms at 30, 16.7 ms
+  at 60). Half of a perfectly healthy second lands here on measurement jitter
+  alone, so a large `slow=` with `late=0` means nothing at all.
 - **`hd_rooms` / `hd_items` / `hd_draws`** are the heaviest HD frame of that
   second — rooms drawn, objects drawn, draw calls — so a drop can be put next
   to what was on the screen when it happened. They are zero with the HD path
@@ -1523,6 +1617,71 @@ presented frames sits on 33.3 ms. Read the line like this:
 The measurement is taken where the finished picture is handed to the graphics
 card, so every frame counts once — the game, the inventory, the title menu, the
 loading bar and the movies alike. Without `-log` not one clock is read.
+
+**Where the milliseconds went — `PROFLOG`.** `FPSLOG` says *how long* a frame
+took; it cannot say *why*. `PROFLOG` splits the same frame into the phases it
+really walks, and with `-log` it writes one line per second of play:
+
+```
+PROFLOG level=ANDREA1 at=12s frames=60 logic_ticks=30 fps=60 late=0
+        frame=16.68/17.90 work=9.12/12.40 logic=1.84/3.90 gather=3.21/5.80
+        rooms=2.95/5.40 sky=0.31/0.70 hdroom=0.81/1.60 hdobj=0.42/0.90
+        hdlara=0.19/0.40 output=5.02/9.10 hddraw=2.61/5.20 hdlight=0.74/1.40
+        hdobjdraw=0.58/1.30 buckets=1.35/2.60 hdglow=0.51/1.10 sort=0.44/0.90
+        spin=6.90/9.80 flip=0.28/1.60 outrest=1.90
+```
+
+Every phase is printed as **mean/worst** over that second, in milliseconds:
+
+| | |
+|---|---|
+| `frame` | the interval between two presented frames — the same number `FPSLOG` measures |
+| `work` | how long the frame itself took, waiting excluded |
+| `logic` | the game's own tick or ticks (`ControlPhase`) |
+| `gather` | everything before the drawing: Lara's matrices, the room walk, every item and sprite |
+| `rooms` | `DrawRooms` inside `gather`, which is nearly all of it |
+| `sky` | the horizon, moon, stars and lightning, inside `rooms` |
+| `hdroom`, `hdobj`, `hdlara` | the HD path's share of `gather` — rooms, objects, Lara |
+| `output` | the whole draw |
+| `hddraw` | the HD rooms and objects, depth-writing pass |
+| `hdlight` | the per-room light block inside `hddraw` — processor work, not draw calls |
+| `hdobjdraw` | the HD objects inside `hddraw` and `hdglow` |
+| `hdglow` | the HD additive pass |
+| `outrest` | what is left of `output` once the two HD passes are taken off: the classic buckets, the sort list, the binoculars, the pickup display and the fade |
+| `buckets` | `DrawBuckets`, **wherever it was called from** — a whole-frame total, so it overlaps `sky` and `outrest` and must not be added to them |
+| `sort` | the same, for sorting and drawing the see-through polygons |
+| `spin` | the frame was **finished and waiting for its slot**. A big number here means the machine is comfortably ahead |
+| `flip` | `Present` itself, and whatever the driver does inside it |
+
+Two extra kinds of line are written on their own:
+
+```
+PROFLOG level=ANDREA1 first_frame fps=60 work=61.30 logic=0.00 gather=22.40 ...
+PROFLOG level=ANDREA1 late at=3s frame=63.20 work=62.90 logic=2.10 ...
+```
+
+- **`first_frame`** — the very first frame of a level, always written. This is
+  the line that answers "why does a level take a moment to settle".
+- **`late`** — every single frame that missed its slot, with all its phases
+  and `at=` how many seconds into the level it happened. One glance says
+  whether the time went into the logic, the room walk, the draw or the driver.
+
+If a level is rough for its first seconds, look at `first_frame` and at the
+`late` lines with a low `at=`; if one room is rough every time you enter it,
+look at the `late` lines and compare `hddraw` and `buckets` against a healthy
+second. Send the first ten seconds of a level's `PROFLOG` lines with a report.
+
+**`WARMUP`.** One line at the end of every level load:
+
+```
+WARMUP pages=112 hd_pages=143 hd_buffers=94 ms=38.2
+```
+
+Direct3D keeps a texture in main memory until something draws with it, and
+pays for the upload inside that first frame. This build asks the driver for
+every one of them while the loading bar is still on screen, where a pause
+costs nothing, instead of in the first second of play. The line says how many
+were offered and how long it took.
 
 **For a complete report, attach four things:** `log.txt`, `spoiler.txt` from
 beside the randomizer, the `PCtomb5 build <date>` line from the setup dialog,

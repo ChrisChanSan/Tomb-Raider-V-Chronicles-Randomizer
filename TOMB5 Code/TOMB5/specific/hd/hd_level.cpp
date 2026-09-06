@@ -20,6 +20,8 @@
 #include "hd_render.h"
 #include "hd_object.h"
 #include "../function_stubs.h"
+#include "../profile.h"			// PROFLOG phases (#148)
+#include "../output.h"			// TargetPresentHz - the budget follows fps_mode (#148)
 #include "../d3dmatrix.h"
 #include "../3dmath.h"
 #include "../winmain.h"
@@ -225,27 +227,44 @@ namespace
 	 * would miss the loading bar and the movies; measuring in the main loop
 	 * would count message pumps that drew nothing.
 	 *
-	 * WHAT THE NUMBERS MEAN. The logic is a fixed 30 Hz: S_DumpScreen waits
-	 * for two ticks of the engine's own 60 Hz counter (specific\time.cpp)
-	 * before it presents, so a healthy second is `frames=30` and every
-	 * interval sits on 33.3 ms. That quantisation is why there are TWO
+	 * WHAT THE NUMBERS MEAN. The LOGIC is a fixed 30 Hz in every mode; what
+	 * fps_mode changes is how often the same logic state is presented.
+	 * S_DumpScreen waits for gPresentMinTicks ticks of the engine's own 60 Hz
+	 * counter (specific\time.cpp) before it presents - two at fps_mode 0, one
+	 * at fps_mode 1 - so a healthy second is `frames=30` with every interval
+	 * on 33.3 ms, or `frames=60` with every interval on 16.7 ms. The line
+	 * carries both: `fps=` is the target the budget was taken from, and
+	 * `logic_ticks=` is what the simulation really ran, which must stay 30
+	 * whatever `frames=` says. That quantisation is why there are TWO
 	 * counters and not one:
 	 *
-	 *   slow   intervals over the 33.3 ms budget. Half a healthy second lands
-	 *          here on jitter alone, so a number here on its own means
-	 *          nothing - it is the budget line the brief asked for.
-	 *   late   intervals over 41.7 ms, which is the budget plus half a 60 Hz
-	 *          tick. Jitter cannot reach it; a frame that MISSED its slot
-	 *          costs a whole tick and lands at 50 ms or beyond. This is the
-	 *          number that says the frame rate really fell under 30.
+	 *   slow   intervals over the budget (33.3 ms at 30, 16.7 at 60). Half a
+	 *          healthy second lands here on jitter alone, so a number here on
+	 *          its own means nothing - it is the budget line the brief asked
+	 *          for.
+	 *   late   intervals over the budget plus half a 60 Hz tick - 41.7 ms at
+	 *          30, 25.0 at 60. Jitter cannot reach it; a frame that MISSED
+	 *          its slot costs a whole tick and lands well beyond. This is the
+	 *          number that says the frame rate really fell under the target.
 	 *
 	 * NOTHING HAPPENS WITHOUT -log. The first line of HDFramePresented is
 	 * `if (!gLogEnabled) return;` - one bool test per present, no counter
 	 * kept, no clock read. Nothing here allocates, ever: the accumulators are
 	 * plain integers and doubles in this file.
 	 */
-	const double kFrameBudgetMs = 1000.0 / 30.0;		// 33.33
-	const double kMissedSlotMs = kFrameBudgetMs + 1000.0 / 120.0;	// 41.67
+	/* #148, order 1: THE BUDGET FOLLOWS THE MODE. It was a pair of constants
+	 * while thirty was the only rate there was; with fps_mode 1 the slot is
+	 * half as long and a line measured against 33.3 ms would call a healthy
+	 * 60 Hz second thirty slow frames. Read once per present, one branch. */
+	double FrameBudgetMs()
+	{
+		return 1000.0 / (double)TargetPresentHz();
+	}
+
+	double MissedSlotMs()
+	{
+		return FrameBudgetMs() + 1000.0 / 120.0;
+	}
 
 	char g_fps_level[64] = { 0 };	// the level the frame clock is counting for
 	char g_log_stem[64] = { 0 };	// what HDLevelLoad saw, whatever hd_enable says
@@ -264,6 +283,13 @@ namespace
 	int g_sec_items = 0;		// the heaviest frame is the one that explains
 	int g_sec_draws = 0;		// a drop, not the last one before the flush
 
+	/* #148, order 1: GlobalCounter when this second began. Its difference at
+	 * the flush is how many LOGIC ticks the second really ran, and that is
+	 * the proof the clock split did what it says: at fps_mode 1 the line has
+	 * to read frames=60 with logic_ticks=30. GlobalCounter is a ushort and
+	 * wraps; the subtraction is done in ushort and therefore wraps with it. */
+	unsigned short g_sec_counter = 0;
+
 	int g_lvl_seconds = 0;
 	int g_lvl_frames = 0;
 	double g_lvl_worst = 0;
@@ -281,6 +307,7 @@ namespace
 		g_sec_rooms = 0;
 		g_sec_items = 0;
 		g_sec_draws = 0;
+		g_sec_counter = GlobalCounter;
 	}
 
 	void FrameClockFlushSecond()
@@ -288,9 +315,12 @@ namespace
 		if (g_sec_frames <= 0)
 			return;
 
-		Log("FPSLOG level=%s frames=%d min_ms=%.1f max_ms=%.1f avg_ms=%.1f "
-			"slow=%d late=%d hd_rooms=%d hd_items=%d hd_draws=%d",
-			g_fps_level[0] ? g_fps_level : "?", g_sec_frames, g_sec_min,
+		Log("FPSLOG level=%s frames=%d logic_ticks=%d fps=%d min_ms=%.1f "
+			"max_ms=%.1f avg_ms=%.1f slow=%d late=%d hd_rooms=%d hd_items=%d "
+			"hd_draws=%d",
+			g_fps_level[0] ? g_fps_level : "?", g_sec_frames,
+			(int)(unsigned short)(GlobalCounter - g_sec_counter),
+			(int)TargetPresentHz(), g_sec_min,
 			g_sec_max, g_sec_sum / g_sec_frames, g_sec_slow, g_sec_late,
 			g_sec_rooms, g_sec_items, g_sec_draws);
 
@@ -2038,8 +2068,13 @@ void HDFrameDraw()
 
 	for (int i = 0; i < g_frame_count; i++)
 	{
+		// PROF_HD_LIGHT is the light block alone, inside PROF_HD_DRAW: the
+		// one part of the room draw that is processor work rather than draw
+		// calls, and therefore the one that a single core can stall on.
+		ProfBegin(PROF_HD_LIGHT);
 		FillRoomLighting(g_frame[i].room, g_frame[i].group,
 			g_frame[i].lighting, g_frame[i].lights);
+		ProfEnd(PROF_HD_LIGHT);
 		HDRenderRoomMask(g_frame[i].group, &g_frame[i].world,
 			&g_frame[i].lighting, HD_PASS_SOLID);
 	}
@@ -2240,10 +2275,10 @@ void HDFramePresented()
 	g_sec_sum += ms;
 	g_sec_frames++;
 
-	if (ms > kFrameBudgetMs)
+	if (ms > FrameBudgetMs())
 		g_sec_slow++;
 
-	if (ms > kMissedSlotMs)
+	if (ms > MissedSlotMs())
 		g_sec_late++;
 
 	if (now.QuadPart - g_qpc_second < g_qpc_freq)

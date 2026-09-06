@@ -2677,6 +2677,20 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 								//angle instead of staying matt. Registry only and ON
 								//by default, for the same reason as hd_motion, and
 								//equally dead while hd_enable is off.
+	/* HOW MANY FRAMES A SECOND ARE PRESENTED (#148). The GAME's own clock is
+	 * a fixed 30 Hz in every mode - one logic step, one animation frame, one
+	 * timer tick, exactly as Core wrote it - and this only says how often the
+	 * picture is handed to the card:
+	 *
+	 *   0  30, classic. S_DumpScreen waits two ticks, as it always did.
+	 *   1  60, the default. One tick per present; ControlPhase's own
+	 *      accumulator spends two of them per logic step and therefore runs
+	 *      the game at thirty out of sixty presents.
+	 *   2  reserved for the display's own refresh rate (a later order) and
+	 *      read back as 1 until then. There is no uncapped mode.
+	 *
+	 * Takes effect at the next frame - no level restart, nothing reloaded. */
+	ulong fps_mode;
 	ulong hd_texture_budget_mb;	//0 = work it out from the card's own texture memory (#123, S6),
 								//otherwise the cap in mebibytes. Over it, the largest pages
 								//give up their largest mip level - never a whole page.

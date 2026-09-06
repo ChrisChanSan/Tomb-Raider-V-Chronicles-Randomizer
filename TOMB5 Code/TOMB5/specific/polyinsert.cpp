@@ -20,6 +20,7 @@
 #include "winmain.h"
 #include "texture.h"
 #include "function_stubs.h"
+#include "profile.h"			// PROFLOG phases (#148)
 #include "3dmath.h"
 #include "gamemain.h"
 
@@ -166,6 +167,7 @@ void DrawSortList()
 	D3DTLBUMPVERTEX* bVtxbak;
 	long num;
 	short nVtx, tpage, drawtype, total_nVtx;
+	ProfScope prof(PROF_SORT);	// eleven call sites - measured here, once
 
 	nVtx = 0;
 
@@ -411,6 +413,8 @@ void DoSort(long left, long right, SORTLIST** list)
 
 void SortPolyList(long count, SORTLIST** list)
 {
+	ProfScope prof(PROF_SORT);
+
 	if (!count)
 		return;
 

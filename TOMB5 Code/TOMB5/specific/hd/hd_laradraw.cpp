@@ -280,6 +280,9 @@ namespace
 	 * still. */
 	void braid_matrices(float* out /* HD_LARA_HAIR_NODES * 16 */)
 	{
+		short roll[HD_LARA_HAIR_NODES];
+
+		HDLaraBraidRolls(roll);
 		phd_PushMatrix();
 
 		for (int n = 0; n < HD_LARA_HAIR_NODES; n++)
@@ -295,6 +298,12 @@ namespace
 			phd_TranslateAbs(link->pos.x_pos, link->pos.y_pos, link->pos.z_pos);
 			phd_RotY(link->pos.y_rot);
 			phd_RotX(link->pos.x_rot);
+
+			/* THE ROLL (#123, fix round G, G1). About the bone's OWN axis and
+			 * therefore free: the +z the two rotations above just built does
+			 * not move, so braidcheck below still lands on the next link to
+			 * the rounding, and only the plait's twist changes. */
+			phd_RotZ(roll[n]);
 			to_row_major(aMXPtr, out + n * 16);
 		}
 
@@ -478,6 +487,9 @@ int HDLaraDrawPlan(HDModelSlot* out, int max)
 	g_level.hairBind = 0;
 	g_level.hairNodes = 0;
 
+	// #123 fix round G (G1): a new level, a new braid, a new held reference.
+	HDLaraBraidReset();
+
 	if (objects[HAIR].loaded && objects[HAIR].nmeshes >= HD_LARA_HAIR_NODES)
 	{
 		HDObjectBindPose(HAIR, g_hairBind, HD_LARA_HAIR_NODES);
@@ -616,6 +628,84 @@ void HDLaraDrawEnd()
 bool HDLaraDrawActive()
 {
 	return g_active && tomb5.hd_objects && HDLaraActive();
+}
+
+/* THE DRAWN BRAID'S ROLL (#123, fix round G, G1). The reasoning and what was
+ * measured are at HD_LARA_BRAID_ROLL_NEAR in hd_lara.h; this is the
+ * arithmetic.
+ *
+ * ONE reference for all six bones, so that two neighbours of a rigid plait
+ * can never twist against each other - which is the thing the classic path
+ * hides with its skinned connectors and the HD one cannot. The reference is
+ * the azimuth of the WHOLE braid, root to tip: that vector is six bones long
+ * where the yaw's own is one, so its horizontal part is ten to thirty times
+ * better conditioned.
+ *
+ * And it is HELD while even that is noise. A braid hanging straight down has
+ * a horizontal span of a couple of dozen units on a good frame and none at
+ * all on a bad one, so below NEAR the reference does not move, above FAR it
+ * follows the braid completely, and in between it follows part of the way -
+ * no threshold anywhere that the picture can cross in one frame.
+ *
+ * Every angle is a short and the arithmetic wraps with it, so the difference
+ * of two of them is already the short way round the circle.
+ */
+namespace
+{
+	short g_braid_lock = 0;
+	bool g_braid_lock_seen = false;
+	short g_braid_roll[HD_LARA_HAIR_NODES];
+}
+
+void HDLaraBraidReset()
+{
+	g_braid_lock = 0;
+	g_braid_lock_seen = false;
+
+	for (int n = 0; n < HD_LARA_HAIR_NODES; n++)
+		g_braid_roll[n] = 0;
+}
+
+void HDLaraBraidRollStep()
+{
+	const long dx = hairs[0][HD_LARA_HAIR_NODES].pos.x_pos -
+		hairs[0][0].pos.x_pos;
+	const long dz = hairs[0][HD_LARA_HAIR_NODES].pos.z_pos -
+		hairs[0][0].pos.z_pos;
+	const long flat = phd_sqrt(SQUARE(dx) + SQUARE(dz));
+	const short target = (short)phd_atan(dz, dx);
+	long weight;	// 0..256, how much of the braid's own azimuth to believe
+
+	if (flat <= HD_LARA_BRAID_ROLL_NEAR)
+		weight = 0;
+	else if (flat >= HD_LARA_BRAID_ROLL_FAR)
+		weight = 256;
+	else
+		weight = 256 * (flat - HD_LARA_BRAID_ROLL_NEAR) /
+			(HD_LARA_BRAID_ROLL_FAR - HD_LARA_BRAID_ROLL_NEAR);
+
+	if (!g_braid_lock_seen)
+	{
+		g_braid_lock = target;
+		g_braid_lock_seen = true;
+	}
+	else
+		g_braid_lock = (short)(g_braid_lock +
+			(short)(((long)(short)(target - g_braid_lock) * weight) / 256));
+
+	for (int n = 0; n < HD_LARA_HAIR_NODES; n++)
+		g_braid_roll[n] = (short)(g_braid_lock - hairs[0][n].pos.y_rot);
+}
+
+int HDLaraBraidRolls(short* out)
+{
+	if (!out)
+		return 0;
+
+	for (int n = 0; n < HD_LARA_HAIR_NODES; n++)
+		out[n] = g_braid_roll[n];
+
+	return HD_LARA_HAIR_NODES;
 }
 
 /* ------------------------------------------------------------ the frame -- */

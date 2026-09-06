@@ -508,6 +508,18 @@ that walks and talks rather than stands still.
   starts, and a physics that is nudged every other frame never comes to rest —
   so the anchor is back where it was and the gap is back with it. A quiet
   braid with a small gap beat a restless one.
+- **And the braid stopped twisting.** After all that it still flickered while
+  she stood at a door, and the cause was not the physics at all: the game
+  works each link's direction out from whole-number positions, and for a braid
+  hanging straight down two of those numbers are single digits — so the *twist*
+  it derives from them is not an angle but a rounding, and it flips by up to
+  half a turn from one frame to the next. Tomb Raider Chronicles never showed
+  that because its braid is stitched together out of soft joins; ours is six
+  solid pieces of one plait, and a solid plait spun on the spot is very
+  visible. Each piece is now turned about its own length instead, all six by
+  the same amount, taken from the direction of the whole braid rather than of
+  one link — which changes where nothing sits and only which way the plait
+  faces.
 - **Latex looks like latex.** Tomb Raider Chronicles has no highlight of any
   kind in its lighting, so every HD outfit came out flat matt beside the
   Remaster's own picture, where the catsuits shine. Lara's parts now carry a
@@ -1172,11 +1184,17 @@ along, and reports how far it misses the next link. Both are the same checks
 A third line, `HAIRLOG`, is written **every frame** for every braid: which
 anchor offset that frame used, where the root of the chain landed, how many
 collision spheres it was tested against, how many of its links the backpack
-pushed, and where the tip ended up. It is there because the braid's physics
-carries state from frame to frame — the anchor moving between two places on
-alternating frames is what once made it tremble — and a per-frame trace is the
-only thing that shows it. `ModelProbe -braidsim` runs the same chain offline,
-without a game around it, and says whether a braid ever comes to rest.
+pushed, where the tip ended up, how far the root and the tip travelled since
+the last frame, and the worst one-frame twist of any link — once as the game
+works it out and once as the picture really shows it. It is there because the
+braid's physics carries state from frame to frame — the anchor moving between
+two places on alternating frames is what once made it tremble — and a
+per-frame trace is the only thing that shows it. Standing still, the travel
+figures go to zero and stay there and the twist figure stays in single digits;
+anything else is worth a bug report. `ModelProbe -braidsim` runs the same
+chain offline, without a game around it, and says whether a braid ever comes
+to rest; `ModelProbe -braidanim` runs it under Lara's own animations, which is
+where the twist was caught.
 
 ---
 

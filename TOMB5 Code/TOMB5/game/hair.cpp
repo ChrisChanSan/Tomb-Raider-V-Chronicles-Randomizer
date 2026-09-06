@@ -37,6 +37,19 @@ static char HairRotScratchVertNums[5][12] =
 };
 
 HAIR_STRUCT hairs[2][7];
+
+/* WHAT THE LAST FRAME LOOKED LIKE, for HAIRLOG's four difference fields
+ * (#123, fix round G, G1). A log line that says where the braid IS answers
+ * half the question; the play test's finding is about how far it MOVED, and
+ * counting that by hand out of a thousand lines is what fix round G had to do
+ * once. `seen` is cleared with the simulation, so the frame after a level
+ * load prints no difference rather than a wrong one. */
+static long hair_log_root[2][3];
+static long hair_log_tip[2][3];
+static short hair_log_yaw[2][6];
+static short hair_log_roll[2][6];
+static bool hair_log_seen[2];
+
 static long hair_wind = 0;
 static long hair_wind_angle = 0;
 static long hair_dwind_angle = 0;
@@ -542,6 +555,7 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		hair_wind = 0;
 		hair_dwind_angle = 2048;
 		hair_wind_angle = 2048;
+		hair_log_seen[pigtail] = false;	// #123 fix round G (G1)
 		return;
 	}
 
@@ -692,8 +706,17 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		hair++;
 	}
 
-	/* HAIRLOG (#123, fix round F, F2): one line per braid per frame under
-	 * -log, so that the play test can say what the braid was standing on.
+	/* THE DRAWN BRAID'S ROLL (#123, fix round G, G1). Worked out HERE and not
+	 * in the draw, because the rule holds a value from frame to frame and
+	 * this is the one place per frame where the chain is new - the draw may
+	 * run twice (the mirror) or not at all (first person). The second braid
+	 * is young Lara's and never meets the HD wardrobe. */
+	if (!pigtail)
+		HDLaraBraidRollStep();
+
+	/* HAIRLOG (#123, fix round F, F2; the four difference fields are fix
+	 * round G, G1): one line per braid per frame under -log, so that the play
+	 * test can say what the braid was standing on and how far it moved.
 	 *
 	 *   rootz     WHICH root offset the frame used - the tremble of finding
 	 *             F2 was two of these taking turns. It has to read the same
@@ -709,17 +732,94 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 	 *             at all.
 	 *   tip       the last link, so that a braid that is somewhere it should
 	 *             not be can be found without a screenshot.
+	 *   rootstep  how far the ROOT moved since the last frame, |dx|+|dy|+|dz|
+	 *             in classic units. This is Lara herself; the braid is
+	 *             ALLOWED to move this much and more.
+	 *   tipstep   the same for the tip. Fix round G counted the play test's
+	 *             own log by hand: on the 924 frames where rootstep was 0,
+	 *             tipstep was under 2 on 728 of them and the two long
+	 *             standing stretches read exactly 0 for fifty frames on end.
+	 *             A tipstep over 40 with a rootstep of 0 is a real fault; one
+	 *             with a rootstep of 40 is Lara running.
+	 *   dyaw      the worst one-frame change of any link's YAW, in degrees.
+	 *             This is the tremble of finding G: the yaw is read off two
+	 *             single-digit integers and jumps half a turn while the braid
+	 *             stands still. Expect large numbers here - they are the
+	 *             disease, not the cure.
+	 *   droll     the same after the drawn braid's own roll has taken the
+	 *             noise back out (hd_laradraw.cpp, HDLaraBraidRolls). THIS is
+	 *             what the picture shows, and on a Lara standing still it has
+	 *             to stay in single digits. -1 means the classic braid, which
+	 *             has no roll of its own and never had this trouble, because
+	 *             its connectors are skinned.
 	 *
 	 * It stays in for good, like every other seam (feedback: the diagnostic
 	 * seams stay). Two lines a frame at most, and only with -log. */
+	if (!gLogEnabled)
+		return;
+
+	long root_step = -1, tip_step = -1;
+	long worst_yaw = -1, worst_roll = -1;
+	short roll[6];
+	const bool hd_roll = !pigtail && HDLaraDrawActive() &&
+		HDLaraBraidRolls(roll) == 6;
+
+	if (!hd_roll)
+		memset(roll, 0, sizeof(roll));
+
+	if (hair_log_seen[pigtail])
+	{
+		root_step = labs(hairs[pigtail][0].pos.x_pos - hair_log_root[pigtail][0]) +
+			labs(hairs[pigtail][0].pos.y_pos - hair_log_root[pigtail][1]) +
+			labs(hairs[pigtail][0].pos.z_pos - hair_log_root[pigtail][2]);
+		tip_step = labs(hairs[pigtail][6].pos.x_pos - hair_log_tip[pigtail][0]) +
+			labs(hairs[pigtail][6].pos.y_pos - hair_log_tip[pigtail][1]) +
+			labs(hairs[pigtail][6].pos.z_pos - hair_log_tip[pigtail][2]);
+		worst_yaw = 0;
+		worst_roll = 0;
+
+		for (int i = 0; i < 6; i++)
+		{
+			const long yaw = labs((short)(hairs[pigtail][i].pos.y_rot -
+				hair_log_yaw[pigtail][i]));
+			const long turn = labs((short)((short)(hairs[pigtail][i].pos.y_rot +
+				roll[i]) - hair_log_roll[pigtail][i]));
+
+			if (yaw > worst_yaw)
+				worst_yaw = yaw;
+
+			if (turn > worst_roll)
+				worst_roll = turn;
+		}
+
+		worst_yaw = worst_yaw * 360 / 65536;
+		worst_roll = hd_roll ? worst_roll * 360 / 65536 : -1;
+	}
+
+	hair_log_root[pigtail][0] = hairs[pigtail][0].pos.x_pos;
+	hair_log_root[pigtail][1] = hairs[pigtail][0].pos.y_pos;
+	hair_log_root[pigtail][2] = hairs[pigtail][0].pos.z_pos;
+	hair_log_tip[pigtail][0] = hairs[pigtail][6].pos.x_pos;
+	hair_log_tip[pigtail][1] = hairs[pigtail][6].pos.y_pos;
+	hair_log_tip[pigtail][2] = hairs[pigtail][6].pos.z_pos;
+
+	for (int i = 0; i < 6; i++)
+	{
+		hair_log_yaw[pigtail][i] = hairs[pigtail][i].pos.y_rot;
+		hair_log_roll[pigtail][i] = (short)(hairs[pigtail][i].pos.y_rot + roll[i]);
+	}
+
+	hair_log_seen[pigtail] = true;
+
 	Log("HAIRLOG %s rootz %d root %d,%d,%d spheres %d packhits %d hd %d "
-		"tip %d,%d,%d",
+		"tip %d,%d,%d rootstep %d tipstep %d dyaw %d droll %d",
 		pigtail ? "pigtail" : "braid", (int)root_z,
 		(int)hairs[pigtail][0].pos.x_pos, (int)hairs[pigtail][0].pos.y_pos,
 		(int)hairs[pigtail][0].pos.z_pos, spheres, pack_hits,
 		(int)HDLaraDrawActive(),
 		(int)hairs[pigtail][6].pos.x_pos, (int)hairs[pigtail][6].pos.y_pos,
-		(int)hairs[pigtail][6].pos.z_pos);
+		(int)hairs[pigtail][6].pos.z_pos, (int)root_step, (int)tip_step,
+		(int)worst_yaw, (int)worst_roll);
 }
 
 void InitialiseHair()

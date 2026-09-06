@@ -209,6 +209,87 @@
 #define HD_LARA_PACK_Z		(-52)
 #define HD_LARA_PACK_R		(36)
 
+/* WHY THE DRAWN BRAID GETS A ROLL OF ITS OWN (#123, fix round G, G1).
+ *
+ * The user's finding after round F: "the braid still trembles". Round F had
+ * proved the SIMULATION calm and it is - the play test's own HAIRLOG says so
+ * on 924 frames where the root did not move a unit, the tip moved less than
+ * two on 728 of them and the two long standing stretches settle to exactly
+ * zero and stay there. What nobody had measured was the ANGLE.
+ *
+ * game\hair.cpp gives link n-1 the spherical angles of the vector to link n:
+ *
+ *     (hair - 1)->pos.y_rot = phd_atan(dz, dx)
+ *     (hair - 1)->pos.x_rot = -phd_atan(phd_sqrt(dz*dz + dx*dx), dy)
+ *
+ * and dx, dy, dz are differences of LONGS. For a braid hanging straight down
+ * dy is the whole bone, 56, and dx and dz are single digits - so the PITCH is
+ * a solid -90 degrees and the YAW is not an angle at all but the rounding of
+ * two small integers. One unit of change in dx with dx and dz near zero
+ * swings it by ninety degrees or more.
+ *
+ * TR5 could live with that. Its braid is three rigid meshes and three SKINNED
+ * connectors, and GetCorrectStashPoints exists precisely to renumber the
+ * connector's vertex ring when two neighbouring links disagree by a quarter
+ * turn - Core knew the yaw jumps and hid it. The HD braid is six rigid bones
+ * of one plaited model (hd_laradraw.cpp, braid_matrices, out of TROne's
+ * draw_hair), and a rigid plait turned about its own axis is visible.
+ *
+ * MEASURED, ModelProbe -braidanim over ANDREA2's own animation table, 110
+ * frames of ANIM_BREATH - Lara standing at a door, which is where the user's
+ * two video frames come from:
+ *
+ *     variant                      tip travel per frame   worst yaw jump
+ *     the classic body alone       1 unit, never more     180 degrees on 18
+ *     round F as shipped           1 unit, never more     180 degrees, frames
+ *
+ * The braid stands still to within a unit and spins half a turn on one frame
+ * in six. That is the tremble.
+ *
+ * THE CURE has to leave the direction alone - the drawn bone's own +z IS the
+ * link direction, and hd_laradraw's braidcheck proves that stepping one bone
+ * length along it lands on the next link. A rotation about that same +z moves
+ * nothing at all, so the roll is free: after RotY and RotX comes a RotZ that
+ * takes the noise back out, and the braid's plait then keeps facing the way
+ * Lara faces instead of the way two integers rounded.
+ *
+ * WHICH ANGLE TO PUT THERE INSTEAD was measured, not guessed: ModelProbe
+ * -braidanim runs five candidates over the same three animations and counts
+ * the worst one-frame turn of any bone, in degrees, over the worst of the
+ * five physics variants:
+ *
+ *     rule                                    standing   running   walking
+ *     none - the raw yaw, as round F ships     180        7         7
+ *     towards her facing, faded per link         0      167       179
+ *     the whole chain's azimuth, every link     45        3         1
+ *     the same, faded per link                  45        8         2
+ *     the chain's azimuth, HELD while vertical   0        3         1
+ *     her facing, every link, always             0        0         0
+ *
+ * The last line is not the winner it looks: Lara never turns in the tool, so
+ * a rule that says "whatever she is facing" cannot move at all there and the
+ * measurement is empty. It would also roll the plait against its own curve
+ * whenever the braid is thrown out sideways, which is the one case where the
+ * yaw is a real angle.
+ *
+ * The last one is what ships. ONE reference for all six bones - a rigid plait
+ * cannot hide two neighbours twisting against each other, and the classic
+ * path's skinned connectors are exactly how TR5 hid it - and the reference is
+ * the azimuth of the WHOLE braid, root to tip, because that vector is six
+ * bones long where a link is one and its horizontal part is ten to thirty
+ * times better conditioned. "Towards her facing" fails the walk for the same
+ * reason the raw yaw fails standing: it is blended per link by a weight that
+ * jumps when the link crosses the band, and a blend of two angles far apart
+ * jumps with it.
+ *
+ * WHEN IT FOLLOWS. `flat` is the horizontal span of the whole braid, out of a
+ * chain 336 units long. Below NEAR the reference does not move at all - a
+ * braid hanging plumb has nothing to say about its own azimuth - above FAR it
+ * follows completely, and between the two it follows part of the way, so
+ * there is no threshold the picture can cross in one frame. */
+#define HD_LARA_BRAID_ROLL_NEAR	16
+#define HD_LARA_BRAID_ROLL_FAR	48
+
 /* THE PSEUDO SLOTS. hd_model stores its models in a map keyed by slot number,
  * and a wardrobe part has no slot of its own - LARA_SKIN is one slot and the
  * composite is twenty models. So each part gets a number of its own, far above

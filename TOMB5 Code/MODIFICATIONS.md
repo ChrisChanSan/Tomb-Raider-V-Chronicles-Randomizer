@@ -3668,6 +3668,144 @@ level and one `HDLOG static room=` line per static that changed sides.
 
 ---
 
+#### Fix round G - the braid trembles in the drawing, and a guard on the shaders (#123)
+
+The play test of the evening of 2026-09-06, one finding on Lara and one on the
+build. **No new source file**: it changes `specific/hd/hd_lara.h`,
+`specific/hd/hd_laradraw.{h,cpp}`, `game/hair.cpp`, the build scripts
+`Preparation/Tools/Diagnose/be.bat` and `bshader.bat`, and the diagnostic tool
+`ModelProbe`.
+
+**G1 - "the braid still trembles."** Fix round F had proved the *simulation*
+calm and it is. The play test's own log says so: 1,791 `HAIRLOG` lines out of
+ANDREA2, and on the **924 frames where the root did not move by a single
+unit**, the tip moved less than two units on 728 of them; the two long
+stretches where she stands still settle to exactly 0 and stay there for fifty
+frames on end. Of the 254 frames where the tip moved more than 40 units, 224
+are frames where the *root* moved 10 units or more - that is Lara walking, and
+the braid is meant to follow her.
+
+What nobody had measured was the **angle**. `game/hair.cpp` gives link *n-1*
+the spherical angles of the vector to link *n*:
+
+```
+(hair - 1)->pos.y_rot = phd_atan(dz, dx)
+(hair - 1)->pos.x_rot = -phd_atan(phd_sqrt(dz * dz + dx * dx), dy)
+```
+
+and `dx`, `dy`, `dz` are differences of **longs**. For a braid hanging straight
+down `dy` is the whole bone, 56, and `dx` and `dz` are single digits - so the
+pitch is a solid -90 degrees and the yaw is not an angle at all but the
+rounding of two small integers. One unit of change in `dx` swings it by ninety
+degrees.
+
+TR5 could live with that. Its braid is three rigid meshes and three **skinned**
+connectors, and `GetCorrectStashPoints` exists precisely to renumber a
+connector's vertex ring when two neighbouring links disagree by a quarter turn
+- Core knew the yaw jumps and hid it. The HD braid is six **rigid** bones of
+one plaited model, and a rigid plait turned about its own axis is visible.
+
+`ModelProbe` gained **`-braidanim`**. Round F's `-braidsim` runs the chain in
+the bind pose, which has no anchor motion at all; this reads the level's own
+animation table, decodes the frames Lara really wears and rebuilds all eight
+collision spheres and the braid root from them once per game frame - the same
+node walk, the same skips through the packed rotation stream, the same frame
+blending, the positions truncated to longs afterwards as `(long)aMXPtr[M03]`
+does. The floor clamp is in, because with a real anchor at a real height a
+braid 336 units long hanging from a head 251 units up reaches through the
+ground. ANDREA2, 110 counted frames per animation, the tip's travel per frame
+in the same four buckets the play test's log was counted in:
+
+| animation | tip < 2 | 2-10 | 10-40 | > 40 | worst yaw jump | frames over 30 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 103, breathing on the spot | 110 | 0 | 0 | 0 | **180** | **14** |
+| 0, the run loop | 0 | 0 | 0 | 110 | 7 | 0 |
+| 1, the walk loop | 0 | 1 | 109 | 0 | 7 | 0 |
+
+**The braid stands still to within a unit and spins half a turn on one frame in
+eight.** That is the tremble, and it is in the drawing and not in the physics.
+The same table run with the pack spheres out, damped, thinner and thinner still
+moves the tip by the same amount to two decimal places, so **no change was made
+to the physics**: the pack of fix round D stays exactly as it is.
+
+**The cure is free.** The drawn bone's own +z *is* the link direction, and
+`braidcheck` proves that stepping one bone length along it lands on the next
+link; a rotation about that same +z moves no vertex and lands the next bone in
+the same place. So after `phd_RotY` and `phd_RotX` in `braid_matrices` comes a
+`phd_RotZ`, and the only question is which value of it does not tremble.
+`-braidanim` measures five candidates over the three animations, over the worst
+of the five physics variants - the worst one-frame turn of any bone, in
+degrees:
+
+| rule | standing | running | walking |
+| --- | --- | --- | --- |
+| none - the raw yaw, as fix round F ships it | **180** | 7 | 7 |
+| towards her facing, faded out per link | 0 | **167** | **179** |
+| the whole chain's azimuth, every link | **45** | 3 | 1 |
+| the same, faded out per link | **45** | 8 | 2 |
+| the chain's azimuth, **held** while it is vertical | **0** | **3** | **1** |
+| her facing, every link, always | 0 | 0 | 0 |
+
+The last line is not the winner it looks: Lara never turns in the tool, so a
+rule that says "whatever she is facing" cannot move there at all and its zero
+is an empty one. The fifth is what ships, as `HDLaraBraidRollStep` /
+`HDLaraBraidRolls`. **One** reference for all six bones - a rigid plait cannot
+hide two neighbours twisting against each other - and the reference is the
+azimuth of the **whole** braid, root to tip, because that vector is six bones
+long where a link is one and its horizontal part is ten to thirty times better
+conditioned. It is **held** while even that is noise: below 16 units of
+horizontal span the reference does not move, above 48 it follows the braid
+completely, and in between it follows part of the way, so there is no threshold
+the picture can cross in one frame. "Towards her facing" fails the walk for the
+same reason the raw yaw fails standing - a blend of two angles far apart jumps
+when the weight jumps.
+
+The rule holds a value from frame to frame, so it is advanced from
+`HairControl`, which is the one place per frame where the chain is new; the
+draw may run twice (the mirror) or not at all (first person) and only reads
+what that worked out.
+
+`HAIRLOG` gained four fields: **`rootstep`** and **`tipstep`** (how far the
+root and the tip moved since the last frame - counting those by hand out of a
+thousand lines is what this round had to do once), **`dyaw`** (the worst
+one-frame change of any link's raw yaw, in degrees - the disease) and
+**`droll`** (the same after the roll has taken the noise out - the cure, and
+what the picture really shows; `-1` for the classic braid, which never had this
+trouble).
+
+*Still open, measured and not fixed:* the braid does not lie **on** the
+backpack, it lies **in** it. Two spheres of radius 36 at z -52 in the torso
+frame touch the slab's rear face on the centre line only; 19 units above the
+top sphere's centre their surface is already 9 units in front of it, and the
+simulated rest has links 1 and 2 at model z -61 and -69 where the slab runs
+from -19 to -81. Round D's own measurement (y -197 to -68, z -92 to -30, |x| <=
+30) is a **slab**, and pushing a link out of a slab needs the torso frame's
+inverse in `HairControl` rather than two spheres. It is a decision, not a bug
+fix, and it is written down here rather than guessed at.
+
+**G2 - a guard on the shader bytecode.** Round R3b changed `hd_room.hlsl`,
+never ran `bshader.bat`, and shipped a build whose source and whose picture
+disagreed; nothing in the tree could say so and it took a play test and two
+rounds to find. Every `.inc` now carries the **MD5 of the `.hlsl` it came
+from** on its last line (`bshader.bat`, `:stamp`) and `be.bat` compares the two
+before it builds. A **content** stamp and not a file date, because a fresh
+clone gives every file the same date and a date guard would then either cry
+wolf or say nothing at all; and a shader that is out of step is **rebuilt on
+the spot** rather than reported, because a build that quietly draws the wrong
+thing is the failure this exists to stop.
+
+*Proof.* `ModelProbe -laracheck` 15 of 15 joints at 0.00000 px, PASS, and the
+braid chain rule worst gap 0.00006 units over 5 joints, PASS - the roll is
+about the bone's own axis, so that proof is untouched by it. `be.bat` on the
+tree as it stands regenerates nothing; touching `hd_room.hlsl` makes it print
+`be: regenerating shaders - hd_room_vs.inc hd_room_ps.inc out of step with the
+HLSL` and rebuild them; putting the file back does it again, and all four
+`.inc` files come back **byte for byte identical** to the checked-in bytecode
+apart from the stamp line - which is also the proof that round E's own
+regeneration was sound.
+
+---
+
 #### Fix round F - Lara: whose rig, and a braid that would not stand still (#123)
 
 The play test of the morning of 2026-09-06, two findings, both of them about

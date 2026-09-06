@@ -93,6 +93,29 @@ void HDLaraDrawEnd();
 // either draws the whole composite or the whole classic body - never a mix.
 bool HDLaraDrawActive();
 
+/* THE DRAWN BRAID'S ROLL (#123, fix round G, G1), six angles for
+ * hairs[0][0..5] - one per drawn bone, about the bone's own axis, so no
+ * position and no direction changes at all. Why there has to be one is at
+ * HD_LARA_BRAID_ROLL_NEAR in hd_lara.h.
+ *
+ * TWO CALLS AND NOT ONE, because the rule holds a value from frame to frame
+ * and a held value must be advanced exactly once:
+ *
+ *   HDLaraBraidRollStep   game\hair.cpp calls this at the end of HairControl,
+ *                         which is the one place per frame where the chain is
+ *                         new. Nothing else may call it.
+ *   HDLaraBraidRolls      reads what that worked out. Pure, so the draw and
+ *                         HAIRLOG can both ask, and the mirrored Lara asks a
+ *                         second time in the same frame without moving
+ *                         anything on. Fills six angles, returns how many.
+ *
+ * It is public because HAIRLOG prints what it did: a play test that sees the
+ * braid tremble again has to be able to say whether the yaw jumped and
+ * whether this took the jump out of the picture. */
+void HDLaraBraidReset();
+void HDLaraBraidRollStep();
+int HDLaraBraidRolls(short* out);
+
 // --- the frame -------------------------------------------------------------
 
 void HDLaraDrawFrameReset();

@@ -2102,3 +2102,4 @@ const BYTE kHDModelVS[] =
       4,   0,   7, 224,   0,   0, 
     228, 128, 255, 255,   0,   0
 };
+// bshader-stamp 540d747a3b8dc502e4747dd1fc83dba6

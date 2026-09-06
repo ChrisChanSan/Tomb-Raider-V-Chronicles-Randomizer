@@ -126,6 +126,23 @@
  *                         zero and stays there; the regimes that read
  *                         anything else are the ones the game had. Default
  *                         60 steps, which is a second of game time.
+ *     -braidanim [<n>]    THE SAME CHAIN UNDER A REAL ANIMATION (#123, fix
+ *                         round G). The bind pose has no anchor motion at
+ *                         all; this reads the level's own animation table,
+ *                         decodes the frames Lara really wears and rebuilds
+ *                         all eight collision spheres and the braid root from
+ *                         them once per game frame, the game's own frame
+ *                         blending included. One row per variant - the
+ *                         classic body alone, the pack as fix round F ships
+ *                         it, and three ways of softening it - counting the
+ *                         TIP's travel per frame in the four buckets the play
+ *                         test's HAIRLOG was counted in. Repeat the switch
+ *                         for more animations; with no number it runs 103
+ *                         (breathing on the spot), 0 (the run loop) and 1
+ *                         (the walk loop). The step count comes from
+ *                         -braidsim, or 120 without it.
+ *     -nobraidfloor       take the floor clamp out of -braidanim, which is
+ *                         how fix round F's bind pose ran.
  *     -laracheck          the two proofs of the Lara seam, as tables, and the
  *                         offline twins of what the engine logs as HDLOG
  *                         laracheck and HDLOG braidcheck on its first HD Lara
@@ -1726,6 +1743,944 @@ static void PrintBraidSim(const Tr5Level& level, int bodySlot,
 		"standing\nstill in a dry indoor room will not settle anywhere.\n");
 }
 
+/* --------------------------------------- the braid under an animation -- */
+/*
+ * THE SAME SIMULATION, DRIVEN BY A REAL ANIMATION (#123, fix round G, G1).
+ *
+ * Fix round F ran the chain in the BIND POSE and found it settles. The user
+ * still saw the braid move, and he was right to: a bind pose has no anchor
+ * motion at all, and in the game every one of the eight collision spheres
+ * rides on Lara's own skeleton. Even standing at a door she breathes -
+ * ANIM_BREATH moves her chest and her head a unit or two a frame - and the
+ * moment she walks the whole rig travels.
+ *
+ * So this reads the level's OWN animation table, decodes the frames Lara
+ * really wears, and rebuilds HairControl's node walk out of them once per
+ * game frame: the hips out of the frame's own offset and node 0's rotation,
+ * the torso by bone 7, the two upper arms by bones 8 and 11, the head by bone
+ * 14, and the braid root 48 units behind the skull - the same order, the same
+ * skips through the packed rotation stream (game\draw.cpp,
+ * gar_RotYXZsuperpack), the same three hand-tuned offsets. Frames between two
+ * key frames are blended frac/rate, which is what InterpolateMatrix does to
+ * the matrix, and the positions are truncated to longs afterwards, which is
+ * what `(long)aMXPtr[M03]` does.
+ *
+ * What comes out is the twin of the game's own HAIRLOG: how far the TIP moved
+ * this frame and how far the ROOT moved, in the same four buckets the play
+ * test's log was counted in (under 2, 2 to 10, 10 to 40, over 40 units). One
+ * row per variant, so the pack's cost is a number and not an opinion.
+ *
+ * Still left out, and still for the reason fix round F gave: the wind (an
+ * outdoor room, and a translation of the whole chain), and the water line. The
+ * FLOOR is in, because with a real anchor at a real height it matters - a
+ * braid 336 units long hanging from a head 251 units up reaches through the
+ * ground she stands on, and the game's clamp (snap y to the floor, put x and z
+ * back where they were) is itself a discontinuity that could shake a chain.
+ * -braidfloor takes it out again for a comparison.
+ */
+
+static void MatRotZ(double deg, float* m)
+{
+	const double a = deg * 3.14159265358979323846 / 180.0;
+	const float c = (float)cos(a), s = (float)sin(a);
+
+	MatIdentity(m);
+	m[0] = c;  m[1] = s;
+	m[4] = -s; m[5] = c;
+}
+
+/* A TR rotation word is 65536 units to the circle. */
+static double BraidDeg(int16_t angle)
+{
+	return (double)angle * 360.0 / 65536.0;
+}
+
+/* game\lara_states.h, ANIM_BREATH: Lara standing still and breathing, which
+ * is the animation the play test's own two video frames were shot in. */
+#define ANIM_BREATH_NUMBER	103
+
+struct BraidAnimRow
+{
+	uint32_t frameOffset = 0;
+	int rate = 1, size = 0, start = 0, end = 0;
+	long velocity = 0;
+};
+
+static bool BraidReadAnim(const Tr5Level& level, int index, BraidAnimRow& out)
+{
+	size_t at = 0;
+	int32_t n = 0;
+
+	if (!level.debugAnimBlock(at, n) || index < 0 || index >= n)
+		return false;
+
+	const std::vector<uint8_t>& bytes = level.debugBytes();
+
+	if (at + (size_t)(index + 1) * 40 > bytes.size())
+		return false;
+
+	const uint8_t* e = bytes.data() + at + (size_t)index * 40;
+	int16_t s = 0;
+	int32_t l = 0;
+
+	memcpy(&out.frameOffset, e + 0, 4);
+	out.rate = e[4];
+	out.size = e[5];
+	memcpy(&l, e + 8, 4);
+	out.velocity = l;
+	memcpy(&s, e + 24, 2);
+	out.start = s;
+	memcpy(&s, e + 26, 2);
+	out.end = s;
+
+	return out.rate > 0 && out.size > 0 && out.end >= out.start;
+}
+
+/* The packed rotation stream of one frame, and a cursor into it. One word when
+ * the top two bits name a single axis, two when they are zero and three ten
+ * bit angles follow - game\draw.cpp, gar_RotYXZsuperpack. */
+struct BraidRotStream
+{
+	const Tr5Level* level;
+	long long at;
+};
+
+static void BraidRotSkip(BraidRotStream& r, int skip)
+{
+	while (skip-- > 0)
+	{
+		const uint16_t w = (uint16_t)r.level->debugReadFrameShort(r.at);
+
+		r.at += (w & 0xC000) ? 1 : 2;
+	}
+}
+
+/* Applies the node's rotation to `m` and steps the cursor. `m` is row major
+ * and a row vector's, which is the transpose of the engine's - so a local
+ * rotation multiplies from the LEFT, and phd_RotYXZ's Y then X then Z order
+ * comes out in that order here too. */
+static void BraidRotApply(BraidRotStream& r, float* m)
+{
+	const uint16_t w = (uint16_t)r.level->debugReadFrameShort(r.at);
+	float step[16], tmp[16];
+
+	if ((w >> 14) == 0)
+	{
+		const uint16_t w2 = (uint16_t)r.level->debugReadFrameShort(r.at + 1);
+		const uint32_t packed = ((uint32_t)w << 16) | (uint32_t)w2;
+		const int16_t ay = (int16_t)(((packed >> 10) & 0x3FF) << 6);
+		const int16_t ax = (int16_t)(((packed >> 20) & 0x3FF) << 6);
+		const int16_t az = (int16_t)((packed & 0x3FF) << 6);
+
+		if (ay)
+		{
+			MatRotY(BraidDeg(ay), step);
+			MatMul(step, m, tmp);
+			memcpy(m, tmp, sizeof(tmp));
+		}
+
+		if (ax)
+		{
+			MatRotX(BraidDeg(ax), step);
+			MatMul(step, m, tmp);
+			memcpy(m, tmp, sizeof(tmp));
+		}
+
+		if (az)
+		{
+			MatRotZ(BraidDeg(az), step);
+			MatMul(step, m, tmp);
+			memcpy(m, tmp, sizeof(tmp));
+		}
+
+		r.at += 2;
+		return;
+	}
+
+	const int16_t a = (int16_t)((w & 0xFFF) << 4);
+
+	if ((w >> 14) == 1)
+		MatRotX(BraidDeg(a), step);
+	else if ((w >> 14) == 2)
+		MatRotY(BraidDeg(a), step);
+	else
+		MatRotZ(BraidDeg(a), step);
+
+	MatMul(step, m, tmp);
+	memcpy(m, tmp, sizeof(tmp));
+	r.at += 1;
+}
+
+static void BraidTranslate(float* m, double x, double y, double z)
+{
+	float step[16], tmp[16];
+
+	MatTranslate((float)x, (float)y, (float)z, step);
+	MatMul(step, m, tmp);
+	memcpy(m, tmp, sizeof(tmp));
+}
+
+/* The nine points HairControl reads off the mesh tree, in one key frame:
+ * sphere 0..4 and 6..7 as the function builds them, plus the braid root. The
+ * neck (sphere 5) is derived from two of the others and is left to the caller,
+ * because the game derives it from the TRUNCATED longs. */
+struct BraidFramePoints
+{
+	double sphere[8][3];
+	double root[3];
+};
+
+static void BraidOrigin(const float* m, double* out)
+{
+	out[0] = m[12];
+	out[1] = m[13];
+	out[2] = m[14];
+}
+
+static void BraidPoseAt(const Tr5Level& level, const ClassicSlot& body,
+	const int16_t mesh[5][6], const BraidAnimRow& a, int keyframe,
+	const long torsoOff[3], BraidFramePoints& out)
+{
+	const long long base = (long long)(a.frameOffset / 2) +
+		(long long)keyframe * a.size;
+
+	BraidRotStream r;
+	float m[16], push[16];
+
+	r.level = &level;
+	r.at = base + 9;
+
+	MatIdentity(m);
+	BraidTranslate(m, level.debugReadFrameShort(base + 6),
+		level.debugReadFrameShort(base + 7),
+		level.debugReadFrameShort(base + 8));
+
+	BraidRotApply(r, m);			// node 0, the hips
+
+	memcpy(push, m, sizeof(push));
+	BraidTranslate(push, mesh[0][0], mesh[0][1], mesh[0][2]);
+	BraidOrigin(push, out.sphere[0]);
+
+	BraidTranslate(m, body.delta[7][0], body.delta[7][1], body.delta[7][2]);
+	BraidRotSkip(r, 6);			// the six leg nodes
+	BraidRotApply(r, m);			// node 7, the torso
+	/* lara.torso_?_rot would go here; they are zero for a Lara who is not
+	 * aiming, and the play test's braid trembled with her hands empty. */
+
+	memcpy(push, m, sizeof(push));
+	BraidTranslate(push, mesh[1][0] + torsoOff[0], mesh[1][1] + torsoOff[1],
+		mesh[1][2] + torsoOff[2]);
+	BraidOrigin(push, out.sphere[1]);
+
+	// The HD pack, in the torso node's own frame - game\hair.cpp, HdPackSpheres
+	memcpy(push, m, sizeof(push));
+	BraidTranslate(push, HD_LARA_PACK_X, HD_LARA_PACK_Y_TOP, HD_LARA_PACK_Z);
+	BraidOrigin(push, out.sphere[6]);
+
+	memcpy(push, m, sizeof(push));
+	BraidTranslate(push, HD_LARA_PACK_X, HD_LARA_PACK_Y_BOTTOM, HD_LARA_PACK_Z);
+	BraidOrigin(push, out.sphere[7]);
+
+	memcpy(push, m, sizeof(push));
+	BraidTranslate(push, body.delta[8][0], body.delta[8][1], body.delta[8][2]);
+	BraidRotApply(r, push);			// node 8, the right upper arm
+	BraidTranslate(push, mesh[3][0], mesh[3][1], mesh[3][2]);
+	BraidOrigin(push, out.sphere[3]);
+
+	memcpy(push, m, sizeof(push));
+	BraidTranslate(push, body.delta[11][0], body.delta[11][1], body.delta[11][2]);
+	BraidRotSkip(r, 2);			// the right forearm and hand
+	BraidRotApply(r, push);			// node 11, the left upper arm
+	BraidTranslate(push, mesh[4][0], mesh[4][1], mesh[4][2]);
+	BraidOrigin(push, out.sphere[4]);
+
+	BraidTranslate(m, body.delta[14][0], body.delta[14][1], body.delta[14][2]);
+	BraidRotSkip(r, 2);			// the left forearm and hand
+	BraidRotApply(r, m);			// node 14, the head
+	/* lara.head_?_rot would go here and are zero for the same reason. */
+
+	memcpy(push, m, sizeof(push));
+	BraidTranslate(push, mesh[2][0] - 2, mesh[2][1], mesh[2][2]);
+	BraidOrigin(push, out.sphere[2]);
+
+	BraidTranslate(m, HD_LARA_BRAID_ROOT_X, HD_LARA_BRAID_ROOT_Y,
+		HD_LARA_BRAID_ROOT_Z);
+	BraidOrigin(m, out.root);
+}
+
+/* WHAT THE PACK MAY DO TO A LINK. `spheres` 6 leaves it out of the loop
+ * altogether; the rest is what fix round G measured against it. */
+struct BraidAnimVariant
+{
+	const char* label;
+	int spheres;		// 6 = the classic body alone, 8 = with the pack
+	long packR;		// the pack's radius
+	long packZ;		// where its centre sits behind the torso joint
+	bool packDamps;		// a pack push-out kills the link's velocity
+};
+
+/* One step of the chain with a moving anchor. The same loop BraidStep runs,
+ * plus the game's floor clamp, and it reports how far the tip travelled. */
+static long BraidAnimStep(long pos[7][3], long vel[7][3], const long root[3],
+	const long length[7], const BraidSphere* sphere, const BraidAnimVariant& v,
+	long floorY, bool useFloor, int* packHits, long* deepest)
+{
+	const long tipWas[3] = { pos[6][0], pos[6][1], pos[6][2] };
+
+	*packHits = 0;
+
+	pos[0][0] = root[0];
+	pos[0][1] = root[1];
+	pos[0][2] = root[2];
+
+	for (int i = 1; i < 7; i++)
+	{
+		const long was[3] = { pos[i][0], pos[i][1], pos[i][2] };
+		const long before[3] = { pos[i][0], pos[i][1], pos[i][2] };
+		bool packPushed = false;
+
+		pos[i][0] += 3 * vel[i][0] / 4;
+		pos[i][1] += 3 * vel[i][1] / 4;
+		pos[i][2] += 3 * vel[i][2] / 4;
+
+		pos[i][1] += 10;	// gravity
+
+		/* The floor, as game\hair.cpp clamps it: x and z go back where they
+		 * were and y snaps to the ground, but only within one click. */
+		if (useFloor && pos[i][1] > floorY)
+		{
+			pos[i][0] = before[0];
+
+			if (pos[i][1] - floorY <= 256)
+				pos[i][1] = floorY;
+
+			pos[i][2] = before[2];
+		}
+
+		for (int j = 0; j < v.spheres; j++)
+		{
+			const long x = pos[i][0] - sphere[j].x;
+			const long y = pos[i][1] - sphere[j].y;
+			const long z = pos[i][2] - sphere[j].z;
+			const long long d = (long long)x * x + (long long)y * y +
+				(long long)z * z;
+
+			if (d >= (long long)sphere[j].r * sphere[j].r)
+				continue;
+
+			long dist = BraidSqrt(d);
+
+			if (!dist)
+				dist = 1;
+
+			pos[i][0] = sphere[j].x + x * sphere[j].r / dist;
+			pos[i][1] = sphere[j].y + y * sphere[j].r / dist;
+			pos[i][2] = sphere[j].z + z * sphere[j].r / dist;
+
+			if (j >= 6)
+			{
+				(*packHits)++;
+				packPushed = true;
+			}
+		}
+
+		const double dx = (double)(pos[i][0] - pos[i - 1][0]);
+		const double dy = (double)(pos[i][1] - pos[i - 1][1]);
+		const double dz = (double)(pos[i][2] - pos[i - 1][2]);
+		double len = sqrt(dx * dx + dy * dy + dz * dz);
+
+		if (len < 1.0e-6)
+			len = 1.0;
+
+		const double step = (double)length[i] / len;
+
+		pos[i][0] = pos[i - 1][0] + (long)floor(dx * step + 0.5);
+		pos[i][1] = pos[i - 1][1] + (long)floor(dy * step + 0.5);
+		pos[i][2] = pos[i - 1][2] + (long)floor(dz * step + 0.5);
+
+		if (v.packDamps && packPushed)
+		{
+			vel[i][0] = 0;
+			vel[i][1] = 0;
+			vel[i][2] = 0;
+		}
+		else
+		{
+			vel[i][0] = pos[i][0] - was[0];
+			vel[i][1] = pos[i][1] - was[1];
+			vel[i][2] = pos[i][2] - was[2];
+		}
+	}
+
+	if (deepest)
+	{
+		*deepest = 0;
+
+		for (int i = 1; i < 7; i++)
+			for (int j = 6; j < 8; j++)
+			{
+				const double x = (double)(pos[i][0] - sphere[j].x);
+				const double y = (double)(pos[i][1] - sphere[j].y);
+				const double z = (double)(pos[i][2] - sphere[j].z);
+				const long in = sphere[j].r -
+					(long)sqrt(x * x + y * y + z * z);
+
+				if (in > *deepest)
+					*deepest = in;
+			}
+	}
+
+	return labs(pos[6][0] - tipWas[0]) + labs(pos[6][1] - tipWas[1]) +
+		labs(pos[6][2] - tipWas[2]);
+}
+
+/* THE TWO ANGLES HairControl WRITES for a link, in degrees.
+ *
+ * game\hair.cpp gives link n-1 the spherical angles of the vector from it to
+ * link n - phd_atan(dz, dx) around y and -phd_atan(sqrt(dz^2+dx^2), dy) around
+ * x - and hd_laradraw.cpp's braid_matrices builds the DRAWN bone out of those
+ * two. The positions they are taken from are longs, so for a braid hanging
+ * straight down dx and dz are single digits and the yaw is whatever the
+ * rounding of two of them says: the pitch is stable at -90 and the yaw is not
+ * an angle at all but noise. Whether that noise reaches the picture is what
+ * the dyaw column below measures.
+ */
+static void BraidAngles(const long pos[7][3], double* yaw, double* pitch)
+{
+	for (int i = 0; i < 6; i++)
+	{
+		const double dx = (double)(pos[i + 1][0] - pos[i][0]);
+		const double dy = (double)(pos[i + 1][1] - pos[i][1]);
+		const double dz = (double)(pos[i + 1][2] - pos[i][2]);
+		const double flat = sqrt(dx * dx + dz * dz);
+
+		yaw[i] = atan2(dx, dz) * 180.0 / 3.14159265358979323846;
+		pitch[i] = -atan2(dy, flat) * 180.0 / 3.14159265358979323846;
+	}
+}
+
+/* WHAT THE DRAWN BONE IS TURNED BY ABOUT ITS OWN AXIS, under four rules
+ * (#123, fix round G, G1).
+ *
+ * A rotation about the bone's own +z moves no vertex out of the braid and
+ * lands the next bone in exactly the same place, so the roll is free and the
+ * only question is which value of it does not tremble. `eff` comes back as the
+ * azimuth the picture really shows, in degrees, so a rule is judged by how far
+ * that moves from frame to frame. Lara faces +z in the tool, so her own facing
+ * is 0.
+ *
+ *   NONE    what shipped up to fix round F: whatever phd_atan made of two
+ *           single-digit integers.
+ *   FACING  every link pulled towards her facing, by a weight that fades out
+ *           as the link leaves the vertical.
+ *   CHAIN   every link turned to the azimuth of the WHOLE braid, root to tip.
+ *           That vector is 336 units long where a link is 56, so its own
+ *           horizontal part is ten to thirty times better conditioned, and one
+ *           reference for all six bones means they can never twist against
+ *           each other - which is the thing a rigid six bone plait cannot
+ *           hide.
+ *   CHAINW  the same, faded out per link like FACING.
+ */
+enum
+{
+	BRAID_ROLL_NONE = 0,
+	BRAID_ROLL_FACING,
+	BRAID_ROLL_CHAIN,
+	BRAID_ROLL_CHAINW,
+	BRAID_ROLL_LOCK,
+	BRAID_ROLL_FACING_ALL,
+	BRAID_ROLL_COUNT
+};
+
+static const char* const kBraidRollName[BRAID_ROLL_COUNT] =
+{
+	"none - the raw yaw, as fix round F ships it",
+	"towards her facing, faded per link",
+	"the whole chain's azimuth, every link",
+	"the whole chain's azimuth, faded per link",
+	"the chain's azimuth, held while it is vertical",
+	"her facing, every link, always"
+};
+
+/* THE HELD REFERENCE of BRAID_ROLL_LOCK. The chain's own azimuth is a good
+ * angle while the braid has a horizontal part and noise while it hangs
+ * straight; so it is followed when it is worth following and simply held
+ * where it is when it is not. One value, and the only state in the whole
+ * rule. */
+static double g_braidLock = 0.0;
+static bool g_braidLockSeen = false;
+
+#define BRAID_LOCK_NEAR	16.0
+#define BRAID_LOCK_FAR	48.0
+
+static double BraidWrap(double a)
+{
+	while (a > 180.0)
+		a -= 360.0;
+
+	while (a < -180.0)
+		a += 360.0;
+
+	return a;
+}
+
+static void BraidRollFix(const long pos[7][3], const double* yaw, double* eff,
+	int rule)
+{
+	const double chainX = (double)(pos[6][0] - pos[0][0]);
+	const double chainZ = (double)(pos[6][2] - pos[0][2]);
+	double reference = 0.0;
+
+	if (rule == BRAID_ROLL_CHAIN || rule == BRAID_ROLL_CHAINW ||
+		rule == BRAID_ROLL_LOCK)
+		reference = atan2(chainX, chainZ) * 180.0 / 3.14159265358979323846;
+
+	if (rule == BRAID_ROLL_LOCK)
+	{
+		const double flat = sqrt(chainX * chainX + chainZ * chainZ);
+		double weight;
+
+		if (flat <= BRAID_LOCK_NEAR)
+			weight = 0.0;
+		else if (flat >= BRAID_LOCK_FAR)
+			weight = 1.0;
+		else
+			weight = (flat - BRAID_LOCK_NEAR) /
+				(BRAID_LOCK_FAR - BRAID_LOCK_NEAR);
+
+		if (!g_braidLockSeen)
+		{
+			g_braidLock = reference;
+			g_braidLockSeen = true;
+		}
+		else
+			g_braidLock += BraidWrap(reference - g_braidLock) * weight;
+
+		reference = g_braidLock;
+	}
+
+	for (int i = 0; i < 6; i++)
+	{
+		if (rule == BRAID_ROLL_NONE)
+		{
+			eff[i] = yaw[i];
+			continue;
+		}
+
+		if (rule == BRAID_ROLL_CHAIN || rule == BRAID_ROLL_LOCK)
+		{
+			eff[i] = reference;
+			continue;
+		}
+
+		if (rule == BRAID_ROLL_FACING_ALL)
+		{
+			eff[i] = 0.0;	// her facing, and she faces +z in the tool
+			continue;
+		}
+
+		const double dx = (double)(pos[i + 1][0] - pos[i][0]);
+		const double dz = (double)(pos[i + 1][2] - pos[i][2]);
+		const double flat = sqrt(dx * dx + dz * dz);
+		double weight;
+
+		if (flat <= (double)HD_LARA_BRAID_ROLL_NEAR)
+			weight = 1.0;
+		else if (flat >= (double)HD_LARA_BRAID_ROLL_FAR)
+			weight = 0.0;
+		else
+			weight = ((double)HD_LARA_BRAID_ROLL_FAR - flat) /
+				(double)(HD_LARA_BRAID_ROLL_FAR - HD_LARA_BRAID_ROLL_NEAR);
+
+		eff[i] = yaw[i] + BraidWrap(reference - yaw[i]) * weight;
+
+		if (rule == BRAID_ROLL_FACING)
+			reference = eff[i];
+	}
+}
+
+static double BraidAngleStep(double a, double b)
+{
+	double d = a - b;
+
+	while (d > 180.0)
+		d -= 360.0;
+
+	while (d < -180.0)
+		d += 360.0;
+
+	return fabs(d);
+}
+
+static void BraidBucket(long step, int* into)
+{
+	if (step < 2)
+		into[0]++;
+	else if (step < 10)
+		into[1]++;
+	else if (step < 40)
+		into[2]++;
+	else
+		into[3]++;
+}
+
+static void PrintBraidAnim(const Tr5Level& level, int bodySlot,
+	const ClassicSlot& body, const ClassicSlot& hairTree, bool haveHair,
+	int steps, const int* anims, int animCount, bool useFloor)
+{
+	if (!body.ok || body.nodes <= HD_LARA_HEAD_NODE)
+		return;
+
+	Tr5Level::MoveableInfo info;
+
+	if (!level.moveableInfo(bodySlot, info))
+		return;
+
+	Tr5Level::MoveableInfo laraInfo;
+
+	if (!level.moveableInfo(0 /* LARA */, laraInfo))
+	{
+		printf("\n-braidanim: this level has no LARA entry, so no animations.\n");
+		return;
+	}
+
+	static const int kNode[5] = { 0, 7, 14, 8, 11 };
+	int16_t mesh[5][6];
+
+	for (int i = 0; i < 5; i++)
+		if (!level.debugMeshHeader(info.meshIndex + kNode[i], mesh[i]))
+		{
+			printf("\n-braidanim: mesh %d of %s is not readable.\n", kNode[i],
+				HDSlotName(bodySlot));
+			return;
+		}
+
+	long length[7];
+
+	for (int i = 1; i < 7; i++)
+	{
+		const int n = i < 6 ? i : 5;
+
+		length[i] = haveHair && n < hairTree.nodes
+			? (long)(hairTree.bind[n][2] - hairTree.bind[n - 1][2])
+			: 56;
+	}
+
+	static const BraidAnimVariant kVariant[5] =
+	{
+		{ "a  the classic body alone (6 spheres)", 6, HD_LARA_PACK_R,
+		  HD_LARA_PACK_Z, false },
+		{ "b  round F as shipped (r36 at z-52)",   8, HD_LARA_PACK_R,
+		  HD_LARA_PACK_Z, false },
+		{ "c  the pack damps instead of feeding",  8, HD_LARA_PACK_R,
+		  HD_LARA_PACK_Z, true },
+		{ "d  a thinner pack, same rear face",     8, 24, -64, false },
+		{ "e  thinner still, same rear face",      8, 18, -70, false }
+	};
+
+	static const long kTorsoOff[3] = { -9, 0, 25 };
+
+	printf("\n-- the braid, driven by Lara's own animations ----------------\n");
+	printf("%d frames per animation, the floor is %s\n", steps,
+		useFloor ? "in (y = her feet, as the game clamps it)" : "OUT");
+	printf("the four counts are the TIP's travel in one frame, in the same "
+		"buckets\nthe play test's HAIRLOG was counted in: under 2, 2 to 10, "
+		"10 to 40, over 40.\n");
+
+	for (int ai = 0; ai < animCount; ai++)
+	{
+		BraidAnimRow a;
+
+		if (!BraidReadAnim(level, laraInfo.animIndex + anims[ai], a))
+		{
+			printf("\nanim %d: not in this level's table.\n", anims[ai]);
+			continue;
+		}
+
+		const int frames = a.end - a.start + 1;
+		const int keyframes = (a.end - a.start) / a.rate + 1;
+		const long move = a.velocity >> 16;
+
+		printf("\n=== anim %d: %d frames, rate %d, frame size %d, %d key "
+			"frames, forward %ld/frame ===\n", anims[ai], frames, a.rate,
+			a.size, keyframes, move);
+		/* The roll rules change no position, so they are the same question
+		 * under every physics variant - but the yaw they have to survive is
+		 * NOT, because it is read off single-digit integers and those differ.
+		 * So the worst of the five is what is reported. */
+		double rollWorst[BRAID_ROLL_COUNT] = { 0, 0, 0, 0, 0, 0 };
+		int rollOver[BRAID_ROLL_COUNT] = { 0, 0, 0, 0, 0, 0 };
+
+		printf("%-38s %6s %6s %6s %6s %6s %7s %6s %8s %7s %7s %7s\n",
+			"variant", "tip<2", "2-10", "10-40", ">40", "worst", "meantip",
+			"inpack", "packhits", "short", "dyaw", "dyaw>30");
+		printf("%-38s %6s %6s %6s %6s %6s %7s %6s %8s %7s %7s %7s\n",
+			"--------------------------------------", "------", "------",
+			"------", "------", "------", "-------", "------", "--------",
+			"-------", "-------", "-------");
+
+		int rootBucket[4] = { 0, 0, 0, 0 };
+		long rootWorst = 0;
+
+		for (int vi = 0; vi < 5; vi++)
+		{
+			const BraidAnimVariant& v = kVariant[vi];
+			BraidSphere sphere[8];
+			long pos[7][3], vel[7][3];
+			int bucket[4] = { 0, 0, 0, 0 };
+			long worst = 0, sum = 0, worstDeep = 0;
+			int worstHits = 0;
+			bool seeded = false;
+			long lastRoot[3] = { 0, 0, 0 };
+			double yaw[6], pitch[6], lastYaw[6];
+			double eff[BRAID_ROLL_COUNT][6], lastEff[BRAID_ROLL_COUNT][6];
+			double worstYaw = 0;
+			double worstRule[BRAID_ROLL_COUNT] = { 0, 0, 0, 0, 0, 0 };
+			int yawJumps = 0;
+			int ruleJumps[BRAID_ROLL_COUNT] = { 0, 0, 0, 0, 0, 0 };
+			long shortest = 1 << 30;
+
+			memset(vel, 0, sizeof(vel));
+			memset(pos, 0, sizeof(pos));
+			memset(lastYaw, 0, sizeof(lastYaw));
+			memset(lastEff, 0, sizeof(lastEff));
+			memset(eff, 0, sizeof(eff));
+			g_braidLockSeen = false;
+
+			for (int s = 0; s < steps; s++)
+			{
+				const int frame = s % frames;
+				const int key = frame / a.rate;
+				const int frac = frame % a.rate;
+				BraidFramePoints A, B;
+
+				BraidPoseAt(level, body, mesh, a, key, kTorsoOff, A);
+
+				double w = 0.0;
+
+				if (frac && key + 1 < keyframes)
+				{
+					BraidPoseAt(level, body, mesh, a, key + 1, kTorsoOff, B);
+					w = (double)frac / (double)a.rate;
+				}
+				else
+					B = A;
+
+				/* Where the item itself has got to. An animation that carries
+				 * Lara forward moves every sphere with her, and that is most
+				 * of the anchor motion the play test's log counted. */
+				const double travel = (double)move * (double)s;
+
+				for (int j = 0; j < 8; j++)
+				{
+					sphere[j].x = (long)(A.sphere[j][0] +
+						(B.sphere[j][0] - A.sphere[j][0]) * w);
+					sphere[j].y = (long)(A.sphere[j][1] +
+						(B.sphere[j][1] - A.sphere[j][1]) * w);
+					sphere[j].z = (long)(A.sphere[j][2] +
+						(B.sphere[j][2] - A.sphere[j][2]) * w + travel);
+				}
+
+				sphere[0].r = mesh[0][3];
+				sphere[1].r = mesh[1][3];
+				sphere[2].r = mesh[2][3];
+				sphere[3].r = 4 * mesh[3][3] / 3;
+				sphere[4].r = 4 * mesh[4][3] / 3;
+
+				sphere[5].x = (2 * sphere[2].x + sphere[1].x) / 3;
+				sphere[5].y = (2 * sphere[2].y + sphere[1].y) / 3;
+				sphere[5].z = (2 * sphere[2].z + sphere[1].z) / 3;
+				sphere[5].r = 5 * sphere[2].r / 4;
+
+				sphere[6].r = v.packR;
+				sphere[7].r = v.packR;
+				sphere[6].z += v.packZ - HD_LARA_PACK_Z;
+				sphere[7].z += v.packZ - HD_LARA_PACK_Z;
+
+				const long root[3] =
+				{
+					(long)(A.root[0] + (B.root[0] - A.root[0]) * w),
+					(long)(A.root[1] + (B.root[1] - A.root[1]) * w),
+					(long)(A.root[2] + (B.root[2] - A.root[2]) * w + travel)
+				};
+
+				if (!seeded)
+				{
+					/* first_hair: the chain hangs straight down from the
+					 * root, every velocity zero. */
+					long down = 0;
+
+					for (int i = 0; i < 7; i++)
+					{
+						pos[i][0] = root[0];
+						pos[i][1] = root[1] + down;
+						pos[i][2] = root[2];
+
+						if (i < 6)
+							down += length[i + 1];
+					}
+
+					seeded = true;
+					lastRoot[0] = root[0];
+					lastRoot[1] = root[1];
+					lastRoot[2] = root[2];
+					BraidAngles(pos, lastYaw, pitch);
+
+					for (int r = 0; r < BRAID_ROLL_COUNT; r++)
+						BraidRollFix(pos, lastYaw, lastEff[r], r);
+
+					continue;
+				}
+
+				int hits = 0;
+				long deep = 0;
+				const long moved = BraidAnimStep(pos, vel, root, length,
+					sphere, v, 0 /* her feet */, useFloor, &hits, &deep);
+
+				BraidAngles(pos, yaw, pitch);
+
+				for (int r = 0; r < BRAID_ROLL_COUNT; r++)
+					BraidRollFix(pos, yaw, eff[r], r);
+
+				/* The first ten steps are the seed settling, not the
+				 * animation - the game has been running for hours by the
+				 * time the play test looks at her. */
+				if (s < 10)
+				{
+					lastRoot[0] = root[0];
+					lastRoot[1] = root[1];
+					lastRoot[2] = root[2];
+					memcpy(lastYaw, yaw, sizeof(lastYaw));
+					memcpy(lastEff, eff, sizeof(lastEff));
+					continue;
+				}
+
+				double frameYaw = 0;
+
+				for (int i = 0; i < 6; i++)
+				{
+					const double d = BraidAngleStep(yaw[i], lastYaw[i]);
+
+					if (d > frameYaw)
+						frameYaw = d;
+				}
+
+				for (int r = 0; r < BRAID_ROLL_COUNT; r++)
+				{
+					double worstHere = 0;
+
+					for (int i = 0; i < 6; i++)
+					{
+						const double e = BraidAngleStep(eff[r][i],
+							lastEff[r][i]);
+
+						if (e > worstHere)
+							worstHere = e;
+					}
+
+					if (worstHere > worstRule[r])
+						worstRule[r] = worstHere;
+
+					if (worstHere > 30.0)
+						ruleJumps[r]++;
+				}
+
+				memcpy(lastYaw, yaw, sizeof(lastYaw));
+				memcpy(lastEff, eff, sizeof(lastEff));
+
+				if (frameYaw > worstYaw)
+					worstYaw = frameYaw;
+
+				if (frameYaw > 30.0)
+					yawJumps++;
+
+				const long span = (long)sqrt(
+					(double)(pos[6][0] - pos[0][0]) * (pos[6][0] - pos[0][0]) +
+					(double)(pos[6][1] - pos[0][1]) * (pos[6][1] - pos[0][1]) +
+					(double)(pos[6][2] - pos[0][2]) * (pos[6][2] - pos[0][2]));
+
+				if (span < shortest)
+					shortest = span;
+
+				BraidBucket(moved, bucket);
+				sum += moved;
+
+				if (moved > worst)
+					worst = moved;
+
+				if (deep > worstDeep)
+					worstDeep = deep;
+
+				if (hits > worstHits)
+					worstHits = hits;
+
+				if (!vi)
+				{
+					const long rs = labs(root[0] - lastRoot[0]) +
+						labs(root[1] - lastRoot[1]) +
+						labs(root[2] - lastRoot[2]);
+
+					BraidBucket(rs, rootBucket);
+
+					if (rs > rootWorst)
+						rootWorst = rs;
+				}
+
+				lastRoot[0] = root[0];
+				lastRoot[1] = root[1];
+				lastRoot[2] = root[2];
+			}
+
+			const int counted = bucket[0] + bucket[1] + bucket[2] + bucket[3];
+
+			printf("%-38s %6d %6d %6d %6d %6ld %7.2f %6ld %8d %7ld %7.0f "
+				"%7d\n",
+				v.label, bucket[0], bucket[1], bucket[2], bucket[3], worst,
+				counted ? (double)sum / (double)counted : 0.0, worstDeep,
+				worstHits, shortest, worstYaw, yawJumps);
+
+			for (int r = 0; r < BRAID_ROLL_COUNT; r++)
+			{
+				if (worstRule[r] > rollWorst[r])
+					rollWorst[r] = worstRule[r];
+
+				if (ruleJumps[r] > rollOver[r])
+					rollOver[r] = ruleJumps[r];
+			}
+		}
+
+		printf("%-38s %6d %6d %6d %6d %6ld\n",
+			"   (the ROOT's own travel, for scale)", rootBucket[0],
+			rootBucket[1], rootBucket[2], rootBucket[3], rootWorst);
+
+		printf("\n  %-46s %7s %8s\n",
+			"the DRAWN bone's twist, per rule (worst variant)", "worst",
+			"over 30");
+
+		for (int r = 0; r < BRAID_ROLL_COUNT; r++)
+			printf("  %-46s %7.0f %8d%s\n", kBraidRollName[r],
+				rollWorst[r], rollOver[r],
+				r == BRAID_ROLL_LOCK ? "   <- what ships" : "");
+	}
+
+	printf("\na tip that moves no further than its anchor is the braid "
+		"following Lara;\nthe question this table answers is whether the two "
+		"pack spheres add travel\nof their own, and how much.\n");
+	printf("\"short\" is the shortest the chain ever got - root to tip, out of "
+		"%ld when it\nhangs straight; anything much under that is the braid "
+		"folded up on itself.\n\"dyaw\" is the worst one-frame change of any "
+		"link's YAW in degrees and\n\"dyaw>30\" how many frames had one: that "
+		"angle is what hd_laradraw turned the\nDRAWN bone by up to fix round "
+		"F, and for a braid hanging straight down it is\nread off two "
+		"single-digit integers.\n",
+		length[1] + length[2] + length[3] + length[4] + length[5] + length[6]);
+	printf("\nthe roll table is the cure: a rotation about the bone's OWN axis "
+		"moves no\nvertex and lands the next bone in exactly the same place, "
+		"so the only\nquestion is which value of it does not tremble. Beware "
+		"the last line - Lara\nnever turns in this tool, so \"her facing, "
+		"always\" cannot move here and its\nzero is an empty one.\n");
+}
+
 /* ---------------------------------------------------- Lara's composite -- */
 /* Stage S4-1. Everything the tool needs to know about one wardrobe picture;
  * a struct rather than eighteen arguments. */
@@ -1760,6 +2715,10 @@ struct LaraOptions
 	bool neck;
 	bool braid;			// the braid root table (fix round C, C4)
 	int braidSim;			// #123 fix round F (F2): steps, 0 = off
+	/* #123 fix round G (G1): the same chain under a real animation. Empty =
+	 * off; `braidFloor` is the game's own floor clamp, on by default. */
+	std::vector<int> braidAnims;
+	bool braidFloor;
 	bool hdBraidRoot;		// #123 fix round F (F2): the withdrawn root
 	bool noSheen;			// #123 fix round D (D2): the BEFORE picture
 	bool check;
@@ -2271,6 +3230,11 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	if (o.braidSim > 0)
 		PrintBraidSim(level, bodySlot, body, hair, haveHair, o.braidSim);
+
+	if (!o.braidAnims.empty())
+		PrintBraidAnim(level, bodySlot, body, hair, haveHair,
+			o.braidSim > 0 ? o.braidSim : 120, o.braidAnims.data(),
+			(int)o.braidAnims.size(), o.braidFloor);
 
 	if (o.noDraw)
 	{
@@ -2858,6 +3822,9 @@ int main(int argc, char** argv)
 	bool noSheen = false;		// #123 fix round D (D2): the BEFORE picture
 	bool laraBraid = false;
 	int laraBraidSim = 0;		// #123 fix round F (F2): the braid's physics
+	/* #123 fix round G (G1): the same chain under a real animation. */
+	std::vector<int> laraBraidAnims;
+	bool laraBraidFloor = true;
 	/* Stage S8. -1 means "the engine's own constant when -firstperson is on",
 	 * which is what makes the tool's default picture the game's picture; a
 	 * number given on the line overrides it, and 0 is the BEFORE picture. */
@@ -2970,6 +3937,25 @@ int main(int argc, char** argv)
 			if (laraBraidSim < 1)
 				laraBraidSim = 60;
 		}
+		/* #123 fix round G (G1): the same chain driven by a real animation.
+		 * Repeat the switch for more of them; with no number it runs the
+		 * three the play test spends its time in - breathing on the spot,
+		 * the run loop and the walk loop. */
+		else if (!_stricmp(argv[i], "-braidanim"))
+		{
+			lara = true;
+
+			if (i + 1 < argc && argv[i + 1][0] != '-')
+				laraBraidAnims.push_back(atoi(argv[++i]));
+			else
+			{
+				laraBraidAnims.push_back(ANIM_BREATH_NUMBER);
+				laraBraidAnims.push_back(0);	// the run loop
+				laraBraidAnims.push_back(1);	// the walk loop
+			}
+		}
+		else if (!_stricmp(argv[i], "-nobraidfloor"))
+			laraBraidFloor = false;
 		else if (!_stricmp(argv[i], "-laracheck"))
 		{
 			lara = true;
@@ -3141,6 +4127,8 @@ int main(int argc, char** argv)
 		o.neck = laraNeck;
 		o.braid = laraBraid;
 		o.braidSim = laraBraidSim;
+		o.braidAnims = laraBraidAnims;
+		o.braidFloor = laraBraidFloor;
 		o.check = laraCheck;
 		o.noDraw = noDraw;
 		o.managed = managed;

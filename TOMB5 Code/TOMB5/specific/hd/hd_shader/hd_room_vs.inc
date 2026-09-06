@@ -1295,3 +1295,4 @@ const BYTE kHDRoomVS[] =
       5, 224,   0,   0, 228, 144, 
     255, 255,   0,   0
 };
+// bshader-stamp 919ab2fa7e2af522df9ea866ca8cedba

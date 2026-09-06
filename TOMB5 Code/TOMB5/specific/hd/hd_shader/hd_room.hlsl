@@ -200,7 +200,12 @@ float4x3 gWorldView : register(c5);
 float4 gScreen : register(c9);
 
 /* xyz = the room's origin in world units (r->x, r->y, r->z), w = the room's
- * minfloor made room local (minfloor - r->y) - the water surface plane. */
+ * minfloor made room local (minfloor - r->y) - the water surface plane.
+ *
+ * The one constant this file uploads to BOTH register files (#123, fix round
+ * R3b): the vertex half needs it for the WaterTable's world space hash, and
+ * the pixel half for the caustic's world position. Same number, same
+ * register, two SetShaderConstantF calls per room. */
 float4 gRoomOrigin : register(c10);
 
 /* x = 1 when the room carries ROOM_UNDERWATER, y = 1 when the choppy
@@ -248,11 +253,35 @@ float4 gMotion : register(c13);
 #define HD_WIND_WAVELENGTH 0.0045f
 #define HD_WIND_SPEED      2.1f
 
-/* Four texels of a 512 page. TROne moves its water UV by six; ours has the
- * classic scroll beside it wherever the remaster authored one, so this is the
- * remainder and not the effect. */
-#define HD_WATER_UV        (4.0f / 512.0f)
-#define HD_WATER_WAVE      0.004f
+/* THE WATER SURFACE (#123, fix round R3b), carried over from TROne
+ * (Copyright 2026 Todesengel, GPLv3, host\render\game_renderer.cpp, k_hd_vert
+ * 153-172 and k_hd_frag 211-223 - the shape of the swell, the UV wobble and
+ * the caustic are his; see THIRD-PARTY.md).
+ *
+ * WHY IT IS HERE AT ALL. Stage S5 refused the caustic on the grounds that
+ * "TR5 has one, the WaterTable shimmer, and a second would count it twice".
+ * The refusal was right about the brightness and wrong about the motion: the
+ * WaterTable term is computed PER VERTEX, and a remaster water surface is a
+ * few large quads whose corners are the only vertices it has, so what reaches
+ * the screen is a slow blotch and not a shimmer. TROne hit exactly this and
+ * says so in the same words ("a vertex-interpolated shimmer stayed flat and
+ * the surface looked still"). So the WaterTable term stays where it is,
+ * untouched, parity and all - and the caustic is added as a ZERO MEAN
+ * MODULATION on top of it: it carries no average brightness of its own, only
+ * the movement the classic term cannot carry at this vertex count.
+ *
+ * The three amplitudes are TROne's own; the strength is held against the
+ * player's two reference shots of the same VCI pool: over the water region
+ * the two frames differ by 8.4 of 255 on average, with 17 percent of the
+ * pixels more than 16 apart against a mean of 34 - a swing of a third to a
+ * half of the local value, which 0.32 either way meets. */
+#define HD_WATER_UV        (6.0f / 512.0f)
+#define HD_WATER_WAVE      0.0045f
+#define HD_WATER_SWELL     24.0f
+#define HD_WATER_SPEED_A   2.1f
+#define HD_WATER_SPEED_B   1.6f
+#define HD_CAUSTIC_SCALE   0.018f
+#define HD_CAUSTIC_WEIGHT  0.32f
 
 /* WaterTable[room->MeshEffect], 64 entries: x = shimmer, y = choppy,
  * z = random, w = abs. The engine hands over its OWN table rather than a
@@ -282,6 +311,7 @@ float4 gFlat : register(c14);
  * c16         gFog                per frame
  * c17         gCounts             per room
  * c18         gAdd                per DRAW CALL (#123, fix round R3a)
+ * c19         gSpec               per DRAW CALL (#123, fix round R3b)
  * c20 - c35   gLights[16]         per room  (8 lights, two registers each)
  * c40 - c71   gBulbs[32]          per frame (16 bulbs, two registers each)
  *
@@ -330,6 +360,39 @@ float4 gAdd : register(c18);
  * way, over about three squares. */
 #define HD_RAY_SWING       0.25f
 #define HD_RAY_WAVELENGTH  0.0021f
+
+/* THE GLOSS OF A SURFACE (#123, fix round R3b).
+ *
+ * x = the part's own strength out of its .TRG material (0 = matt, and that is
+ *     every part of the game but the 183,350 triangles of materials 3 and 17),
+ * y = its exponent, an integer 1..191,
+ * z = tomb5.hd_reflect.
+ *
+ * WHAT IS DRAWN, AND WHAT IS NOT. Not a mirror: nothing here renders the room
+ * a second time, and a planar reflection would need a pass, a target and a
+ * clip plane that the classic path shares its depth buffer with. What is drawn
+ * is the two things a polished floor does that a matt one does not:
+ *
+ *   - it throws a HIGHLIGHT back at a light that is actually there. The room
+ *     shader already carries the engine's dynamic lights - flare, torch,
+ *     muzzle flash - with their positions and their falloff, so the highlight
+ *     is Blinn's, with the material's own exponent, inside the loop that is
+ *     already running.
+ *   - it gets BRIGHTER AT A GRAZING ANGLE, because that is where a surface
+ *     reflects most of what is in front of it. There is no environment to
+ *     sample, so what is reflected is the light the surface already carries -
+ *     Schlick's fifth power of one minus N.V, times the material's strength.
+ *     A floor seen from above is unchanged; the same floor down a long hall
+ *     lifts towards its own lit colour.
+ *
+ * Both are the material's numbers and the room's own lights, and neither is a
+ * constant chosen to make a screenshot look right. The two below are the
+ * exception and are named as such: how much of the surface's own light the
+ * grazing angle may lift, and the ceiling on it. */
+float4 gSpec : register(c19);
+
+#define HD_FRESNEL_LIFT    0.6f
+#define HD_FRESNEL_MAX     0.9f
 
 /* HOW MANY, AND WHY THE TWO LOOPS ARE UNROLLED. ps_3_0 has no relative
  * addressing of constant registers - only vs_3_0 has. Written as a loop over
@@ -383,7 +446,12 @@ struct VS_OUT
 	float3 light    : TEXCOORD1;
 	float3 viewPos  : TEXCOORD2;	// the classic "stash"
 	float3 roomPos  : TEXCOORD3;	// room local, what the dynamic lights use
-	float3 waterAdd : TEXCOORD4;	// the WaterTable term, 0..255 units
+	/* xyz the WaterTable term in 0..255 units, w the water surface weight of
+	 * this vertex (#123, fix round R3b) - 0 everywhere but on a marked water
+	 * surface, and 0 there too while hd_motion is off. It rides in the fourth
+	 * component rather than in an interpolator of its own because ps_3_0 has
+	 * ten of those and this file already spends six. */
+	float4 waterAdd : TEXCOORD4;
 	float3 viewNrm  : TEXCOORD5;	// normal * D3DMView, NOT renormalised
 };
 
@@ -487,6 +555,21 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		drawn.z += wind * HD_WIND_TRAVEL * 0.6f * sin(phase * 0.73f + 1.3f);
 	}
 
+	/* 2c. THE SWELL (#123, fix round R3b). The same water weight the UV wobble
+	 * of stage S5 rides on, now also lifting the surface - TROne's shape, and
+	 * one wave over about a block and a half. Like the wind it moves `drawn`
+	 * and not `pos`: the water hash, the surface test and the WaterTable above
+	 * all read the position the .TRG stores, which is what stage S2's parity
+	 * is measured against, and the classic path's own choppy displacement -
+	 * which is in `pos` - is untouched by this. */
+	float water = gMotion.w * saturate(max(gWaterMode.y * inFlags.x, shimmerOn));
+	float wavA = (pos.x + pos.z) * HD_WATER_WAVE + gMotion.z * HD_WATER_SPEED_A;
+	float wavB = (pos.z - pos.y) * HD_WATER_WAVE + gMotion.z * HD_WATER_SPEED_B;
+
+	if (water > 0.002f)
+		drawn.y += water * HD_WATER_SWELL *
+			(sin(wavA) + 0.5f * cos(wavB * 1.7f + gMotion.z));
+
 	/* 3. THE TRANSFORM. */
 	float4 clip = mul(float4(drawn, 1.0f), gWorldViewProj);
 	float3 view = mul(float4(drawn, 1.0f), gWorldView);
@@ -527,22 +610,24 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	 * The wobble is the remainder of TROne's water_effect: where the classic
 	 * path marks a water surface but the remaster authored no scroll, the
 	 * surface's own UV moves a little, so an HD water plane is not a mirror.
-	 * It rides on the engine's wibble counter (gScreen.z, 0..252 in steps of
-	 * four, one full turn per 64 game frames - so the cycle closes over the
-	 * wrap instead of jumping) and it dies with tomb5.shimmer, because gSel1
-	 * does. No caustic: TR5 has its own, it is the WaterTable shimmer in step
-	 * 2 above, and a second one on top would count it twice. */
-	float waterUV = gMotion.w * saturate(max(gWaterMode.y * inFlags.x, shimmerOn));
-	float turn = gScreen.z * (6.2831853f / 256.0f);
-
-	o.uv = float2(inC0.a, inC1.a) + gMotion.xy + waterUV * HD_WATER_UV *
-		float2(sin((pos.x + pos.z) * HD_WATER_WAVE + turn),
-		       cos((pos.z - pos.y) * HD_WATER_WAVE + turn * 2.0f));
+	 * It dies with tomb5.shimmer, because gSel1 does, and with hd_motion,
+	 * because gMotion.w does. Stage S5 wrote no caustic beside it: TR5 has its
+	 * own, it is the WaterTable shimmer in step 2 above, and a second one on
+	 * top would count it twice.
+	 *
+	 * R3b: the wobble now rides on the SAME two waves as the swell above - one
+	 * clock, one shape, so the picture and the geometry agree - and it is six
+	 * texels rather than four, which is TROne's own figure. The caustic that
+	 * stage S5 refused is in the pixel half, as a zero mean modulation; the
+	 * note beside HD_WATER_UV says why that answers the refusal instead of
+	 * overturning it. */
+	o.uv = float2(inC0.a, inC1.a) + gMotion.xy + water * HD_WATER_UV *
+		float2(sin(wavA), cos(wavB));
 
 	o.light = lerp(inC0.rgb * gPass.z + inC1.rgb, 1.0f, gFlat.x);
 	o.viewPos = view;
 	o.roomPos = pos;
-	o.waterAdd = waterAdd;
+	o.waterAdd = float4(waterAdd, water);
 
 	/* The byte normal, biased by 127, into the same space the classic path
 	 * puts it in - view space, by the linear part of D3DMView. It is NOT
@@ -737,6 +822,10 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * turns with the camera. It is Core's own arithmetic and reproducing it
 	 * is the whole point - a "corrected" dot product lights the wall
 	 * differently from the roomlet next to it. */
+	/* R3b: the gloss of this draw call, once, outside the loop. Zero for every
+	 * part the .TRG does not call glossy, and zero with hd_reflect off. */
+	float gloss = gSpec.x * gSpec.z;
+
 	[unroll]
 	for (int i = 0; i < HD_MAX_LIGHTS; i++)
 	{
@@ -756,11 +845,25 @@ float4 RoomPS(VS_OUT input) : COLOR0
 			float3 t = input.viewNrm * (delta / dist);
 
 			f += b.rgb * (ramp * (1.0f - (t.x + t.y + t.z)) * 255.0f);
+
+			/* R3b: AND WHERE THE HIGHLIGHT WOULD GO, if there were room for
+			 * it. Blinn's half vector against this light raised to gSpec.y is
+			 * the obvious second half of a gloss, and it was written, compiled
+			 * and MEASURED: inside this loop, which ps_3_0 forces to be
+			 * unrolled eight times because it has no relative constant
+			 * addressing, one pow per light takes the shader from 319
+			 * instruction slots to 636 - past the 512 that shader model 3
+			 * guarantees, on a path whose whole point is that it runs on the
+			 * cards this engine ships to. So the gloss is the grazing angle
+			 * alone, at the end of this function, where it costs eleven slots
+			 * and no loop. The exponent is read, logged and unused; that is
+			 * said out loud in MODIFICATIONS.md rather than hidden. */
 		}
 	}
 
-	/* THE WATERTABLE TERM, computed per vertex above. */
-	f += input.waterAdd;
+	/* THE WATERTABLE TERM, computed per vertex above. Its fourth component is
+	 * the water weight, which the caustic below reads, not this line. */
+	f += input.waterAdd.xyz;
 
 	/* THE DISTANCE FOG (drawroom.cpp:519-524). Linear in the view depth from
 	 * tomb5.distance_fog blocks onwards, subtracted from all three channels -
@@ -834,6 +937,48 @@ float4 RoomPS(VS_OUT input) : COLOR0
 
 	c = max(c, 0.0f);
 	s = saturate(s);
+
+	/* THE CAUSTIC (#123, fix round R3b; TROne's formula, see the note beside
+	 * HD_WATER_UV and THIRD-PARTY.md).
+	 *
+	 * Per PIXEL and out of the WORLD position, which is the whole point: a
+	 * remaster water quad has its corners and nothing between them, so a
+	 * shimmer carried down the interpolators is a slow blotch however fast its
+	 * clock runs. From the world position the same net is fine wherever the
+	 * surface is coarse, and it does not slide when the camera does.
+	 *
+	 * ZERO MEAN, so it adds no brightness of its own: the sum of the two sine
+	 * products averages out over any patch bigger than its own wavelength, and
+	 * what is left is the movement. It is clamped at zero rather than allowed
+	 * to invert the multiply.
+	 *
+	 * gAdd.y is the game clock in seconds on the pixel side and gAdd.w is
+	 * hd_motion, so a paused game stands still and hd_motion 0 draws the
+	 * picture fix round R3a drew - the weight is already zero there, because
+	 * the vertex half multiplied it by gMotion.w. */
+	/* THE GRAZING ANGLE (#123, fix round R3b) - see the note beside gSpec.
+	 * Applied to `c`, the multiply, so what the surface lifts towards is its
+	 * own lit colour and never a colour of this shader's making; and after the
+	 * fog bulbs, so a bulb's haze is not multiplied up with it. */
+	if (gloss > 0.0f)
+	{
+		float3 N = normalize(input.viewNrm);
+		float3 V = normalize(-input.viewPos);
+		float grazing = pow(1.0f - saturate(dot(N, V)), 5.0f);
+
+		c *= 1.0f + min(HD_FRESNEL_MAX, gloss * grazing * HD_FRESNEL_LIFT);
+	}
+
+	if (input.waterAdd.w > 0.002f)
+	{
+		float3 world = input.roomPos + gRoomOrigin.xyz;
+		float cx = world.x * HD_CAUSTIC_SCALE;
+		float cz = world.z * HD_CAUSTIC_SCALE;
+		float caustic = sin(cx + gAdd.y * 2.0f) * sin(cz + gAdd.y * 1.7f) +
+			0.5f * sin((cx - cz) * 1.3f + gAdd.y * 2.4f);
+
+		c *= max(0.0f, 1.0f + HD_CAUSTIC_WEIGHT * input.waterAdd.w * caustic);
+	}
 
 	/* texel * multiply + add - the shape of the fixed function pipeline the
 	 * classic path draws through, with D3DRS_SPECULARENABLE on

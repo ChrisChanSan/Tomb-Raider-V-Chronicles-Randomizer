@@ -74,6 +74,22 @@ bool HDEnabled();
 // not be drawn a second time - that is the one other caller of this.
 bool HDRoomIsHD(int roomIndex);
 
+/* THE TWO STATIC MESHES OF AN HD ROOM THAT STILL HAVE TO BE DRAWN (#123, fix
+ * round R3b). Both answers are worked out once at level load, against the
+ * .TRG's own geometry, and DrawStaticObjects (game\draw.cpp) is their only
+ * caller.
+ *
+ * HDStaticIsClassic - the .TRG draws NOTHING where this static stands. Fix
+ * round B measured 21 of them in ANDREA1 alone, in rooms 121 and 221, and
+ * under the room seam they simply vanished. Such a static is drawn the
+ * classic way inside an HD room; every other one stays suppressed, because
+ * its art is baked into the room.
+ *
+ * `meshIndex` counts ROOM_INFO::mesh from zero. Both return false for a room
+ * that is not HD, for an index out of range, and with HD off - a classic room
+ * draws all of its statics through the ordinary path. */
+bool HDStaticIsClassic(int roomIndex, int meshIndex);
+
 // ONE FlipMap SWAP (#123, fix round A, A1). Called from FlipMap
 // (game\control.cpp) at the line where the two ROOM_INFO records change
 // places, once per pair. FlipMap swaps the CONTENTS of two rooms and leaves

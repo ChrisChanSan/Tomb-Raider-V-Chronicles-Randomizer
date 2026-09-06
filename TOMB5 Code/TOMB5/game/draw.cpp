@@ -1444,11 +1444,21 @@ void DrawStaticObjects(short room_number)
 	 * through here), and a room that stayed classic keeps every static it
 	 * ever had. The exception cannot arise.
 	 *
-	 * What is left over is a static the game hides at run time - a shattered
-	 * vase is gone from the classic list and still stands in the baked art.
-	 * TROne has that hole too; it belongs to the stage that draws objects. */
-	if (HDRoomIsHD(room_number))
-		return;
+	 * TWO STATICS OF AN HD ROOM ARE STILL DRAWN HERE (#123, fix round R3b).
+	 *
+	 * The first is the one the .TRG has nothing for. Fix round B measured 21
+	 * of them in ANDREA1's rooms 121 and 221: they are in no group at all, so
+	 * the seam above took them away and put nothing in their place. hd_level
+	 * asks the renderer, once per level, whether the room's art draws anything
+	 * where the static stands, and the answer comes back through
+	 * HDStaticIsClassic.
+	 *
+	 * The second used to be the hole this comment named: a static the game
+	 * destroys at run time was gone from the classic list and went on standing
+	 * in the baked art. It is closed on the other side now - the .TRG's own
+	 * destructible pieces are switched off with their MESH_INFO's Flags bit -
+	 * so nothing has to be drawn here for it. */
+	const bool hd = HDRoomIsHD(room_number);
 
 	phd_PushMatrix();
 	phd_TranslateAbs(r->x, r->y, r->z);
@@ -1459,9 +1469,12 @@ void DrawStaticObjects(short room_number)
 
 	mesh = r->mesh;
 
-	for (int i = r->num_meshes; i > 0; i--, mesh++)
+	for (int i = 0; i < r->num_meshes; i++, mesh++)
 	{
 		if (!(mesh->Flags & 1))
+			continue;
+
+		if (hd && !HDStaticIsClassic(room_number, i))
 			continue;
 
 		phd_PushMatrix();

@@ -90,6 +90,23 @@
  *     -underwater     the room carries ROOM_UNDERWATER and the camera is in
  *                     it: the WaterTable darkening on the colour and the
  *                     screen wobble on the position.
+ *     -plane <y x0 z0 x1 z1>
+ *                     four SURFACE water marks at the corners of that box,
+ *                     room local, as the classic path leaves them on the
+ *                     corners of one water quad. Fix round R3b floods the
+ *                     plane between them, and the R3b line says how many
+ *                     HD vertices the four corners were missing.
+ *     -noreflect      the gloss of fix round R3b off - the picture fix
+ *                     round R3a drew, out of the same build.
+ *     -shatter        hide every destructible piece of the drawn room -
+ *                     what the room looks like after Lara has shot the
+ *                     statics whose art the .TRG baked in (R3b).
+ *     -hasgeom <x0 y0 z0 x1 y1 z1>
+ *                     does the drawn group draw anything inside that
+ *                     room-local box? The question hd_level.cpp asks per
+ *                     static mesh; a NO is a static the room seam would
+ *                     make vanish, and it is drawn the classic way
+ *                     instead (R3b). Repeat the switch, up to eight.
  *     -shimmer        the whole room shimmers - the selector aimed at the
  *                     constant fourth flag byte, because a tool with no
  *                     classic level behind it has no per-vertex marks.
@@ -956,6 +973,26 @@ static int g_mesh_effect = 0;
 static double g_time = 0;
 static bool g_water = false;
 static bool g_motion = true;
+/* Fix round R3b, -plane: four SURFACE marks at the corners of a box, as
+ * the classic path would leave them on the corners of one water quad. The
+ * renderer's flood then has to stamp every HD vertex of the group inside
+ * that box at that height, and the difference between `stamped` and 4 is
+ * what the corner rule of stage S2 was missing. */
+static HDWaterMark g_plane_marks[4];
+static bool g_plane = false;
+/* Fix round R3b, the gloss: tomb5.hd_reflect, on by default here as it
+ * is in the game, off with -noreflect so that the before picture can be
+ * drawn out of the same build. */
+static bool g_reflect = true;
+/* Fix round R3b: hide every destructible piece of the drawn room, which
+ * is what the engine does once Lara has shot the static that stands
+ * there - the after picture of a shattered room, out of the same build. */
+static bool g_shatter = false;
+/* Fix round R3b, -hasgeom: ask the renderer whether the drawn group has
+ * any geometry inside a room-local box - the question hd_level.cpp asks
+ * once per static mesh of an HD room. Up to eight boxes per run. */
+static float g_geom_box[8][6];
+static int g_geom_count = 0;
 static unsigned char g_water_table[22][64][4];
 
 /* The bulbs go in room local and come out in VIEW space, because that is the
@@ -996,6 +1033,7 @@ static void FillLighting(HDFrameLighting& frame, HDRoomLighting& room,
 	frame.bulbCount = g_bulb_count;
 	frame.clock = (float)g_time;
 	frame.motion = g_motion ? 1 : 0;
+	frame.reflect = g_reflect ? 1 : 0;
 
 	if (g_bulb_count && view)
 		printf("  bulb 1 in view space: %.0f %.0f %.0f (radius %.0f, density %.4f)\n",
@@ -1413,8 +1451,44 @@ int main(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-water"))
 			g_water = true;
+		else if (!strcmp(argv[at], "-plane") && at + 5 < argc)
+		{
+			const short y = (short)atoi(argv[at + 1]);
+			const short x0 = (short)atoi(argv[at + 2]);
+			const short z0 = (short)atoi(argv[at + 3]);
+			const short x1 = (short)atoi(argv[at + 4]);
+			const short z1 = (short)atoi(argv[at + 5]);
+
+			for (int c = 0; c < 4; c++)
+			{
+				g_plane_marks[c].room = (short)room;
+				g_plane_marks[c].y = y;
+				g_plane_marks[c].x = (c & 1) ? x1 : x0;
+				g_plane_marks[c].z = (c & 2) ? z1 : z0;
+				g_plane_marks[c].bits = 2;
+			}
+
+			g_plane = true;
+			at += 5;
+		}
 		else if (!strcmp(argv[at], "-nomotion"))
 			g_motion = false;
+		else if (!strcmp(argv[at], "-noreflect"))
+			g_reflect = false;
+		else if (!strcmp(argv[at], "-shatter"))
+			g_shatter = true;
+		else if (!strcmp(argv[at], "-hasgeom") && at + 6 < argc)
+		{
+			if (g_geom_count < 8)
+			{
+				for (int c = 0; c < 6; c++)
+					g_geom_box[g_geom_count][c] = (float)atof(argv[at + 1 + c]);
+
+				g_geom_count++;
+			}
+
+			at += 6;
+		}
 		else if (!strcmp(argv[at], "-sky"))
 			sky = true;
 		else if (!strcmp(argv[at], "-skyonly"))
@@ -1633,6 +1707,11 @@ int main(int argc, char** argv)
 	HDRenderStats stats;
 	const double commitBefore = CommitMiB();
 
+	// R3b: the synthetic surface marks of -plane, borrowed for the length
+	// of the build exactly as the engine lends its own.
+	if (g_plane)
+		HDRenderSetWaterMarks(g_plane_marks, 4);
+
 	if (!HDRenderLevelBegin(root, stem, rooms, managed, threads, &stats, &why))
 	{
 		printf("RoomProbe: HDRenderLevelBegin failed - %s\n", why);
@@ -1670,9 +1749,62 @@ int main(int argc, char** argv)
 		"up to %d\n",
 		stats.indexWindow, stats.triangleWindow, stats.maxTextureSide);
 	printf("S5: %d scrolling part(s) in %d draw calls (%d triangles), "
-		"%d vertices with a wind weight, %d flipbook part(s) not drawn\n",
+		"%d vertices with a wind weight\n",
 		stats.scrollParts, stats.scrollRanges, stats.scrollTris,
-		stats.swayVertices, stats.flipbookParts);
+		stats.swayVertices);
+	// Fix round R3b: material 13 is drawn now - four pages, one per frame
+	// time, the part's own page first. `kept` is the parts whose numbers
+	// did not resolve and that stand still, as every one of them did before.
+	printf("R3b: %d flipbook part(s), %d of them running in %d draw call(s), "
+		"%d kept their own page\n",
+		stats.flipbookParts, stats.flipbookDrawn, stats.flipbookRanges,
+		stats.flipbookDropped);
+	// And the water side of the same round: how many HD vertices carry a
+	// surface mark, and how many of those the corner rule of stage S2 never
+	// found and the plane flood answered for.
+	printf("R3b: %d water mark(s) stamped, %d on the surface, %d of those flooded\n",
+		stats.markedVertices, stats.markedShimmer, stats.markedFlooded);
+	// And the gloss: the opaque parts of materials 3 and 17 whose own
+	// numbers gave them one (fix round R3b).
+	printf("R3b: %d glossy part(s) (materials 3 and 17)\n",
+		stats.glossParts);
+
+	/* R3b: the destructible pieces, one line each, with the room they
+	 * stand in and their box - the numbers hd_level.cpp pairs against the
+	 * classic MESH_INFO list. -shatter then hides the drawn room's. */
+	for (int i = 0; i < g_geom_count; i++)
+	{
+		const float* b = g_geom_box[i];
+		const float mins[3] = { b[0], b[1], b[2] };
+		const float maxs[3] = { b[3], b[4], b[5] };
+
+		printf("R3b: group %d, box %.0f..%.0f %.0f..%.0f %.0f..%.0f - geometry: %s\n",
+			room, mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2],
+			HDRenderGroupHasGeometry(room, mins, maxs) ? "YES (baked, stays suppressed)" : "NO (drawn the classic way)");
+	}
+
+	if (HDRenderDestructibleCount())
+	{
+		printf("R3b: %d destructible piece(s):\n",
+			HDRenderDestructibleCount());
+
+		for (int i = 0; i < HDRenderDestructibleCount(); i++)
+		{
+			int group = -1;
+			unsigned int material = 0;
+			float mins[3], maxs[3];
+
+			if (!HDRenderDestructibleInfo(i, &group, &material, mins, maxs))
+				continue;
+
+			printf("     %2d room %3d material 0x%04x copy %d  x %.0f..%.0f y %.0f..%.0f z %.0f..%.0f\n",
+				i, group, material, (material >> 8) & 0x7F,
+				mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2]);
+
+			if (g_shatter && group == room)
+				HDRenderDestructibleHide(i, true);
+		}
+	}
 	// Fix round A (A6): the wind belongs to material 8, and this says how
 	// much of the .TRG's own sway weight was on other materials.
 	printf("A6: %d moving part(s) (materials 1, 7, 8); %d vertices kept "
@@ -1785,10 +1917,10 @@ int main(int argc, char** argv)
 		 *   sway      vertices whose TrgVertex::sway is not zero - the
 		 *             remaster's own wind weight, 0..32767. Drawn.
 		 *   flipbook  parts whose material is 13, the remaster's own four
-		 *             frame page animation. COUNTED AND NOT DRAWN: a range
-		 *             names one page and the animation names four, which is
-		 *             a different piece of work. This column is the size of
-		 *             that gap, per level, in one number.
+		 *             frame page animation - the part's own page and the
+		 *             three layers its param[0..2] name, one page per
+		 *             param[3] seconds. Drawn since fix round R3b; the R3b
+		 *             line further up says how many of them resolved.
 		 */
 		printf("\n-- what moves ------------------------------------------------\n");
 		printf("  %-6s %8s %8s %10s %8s %8s %9s\n",
@@ -1818,7 +1950,7 @@ int main(int argc, char** argv)
 		}
 
 		printf("  %d room(s) move: %d scrolling draw calls (%d parts, %d triangles), "
-			"%d swaying vertices, %d flipbook parts NOT drawn\n",
+			"%d swaying vertices, %d flipbook parts\n",
 			rooms, scroll, stats.scrollParts, stats.scrollTris, sway, flip);
 
 		HDRenderShutdown();

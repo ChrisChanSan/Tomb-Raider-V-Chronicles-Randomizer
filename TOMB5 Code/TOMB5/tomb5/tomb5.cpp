@@ -201,6 +201,10 @@ void init_tomb5_stuff()
 		tomb5.hd_motion = 1;							//on (#123, S5)
 		REG_WriteBool(buf, tomb5.hd_motion);
 
+		sprintf(buf, "hd_reflect");
+		tomb5.hd_reflect = 1;							//on (#123, fix round R3b)
+		REG_WriteBool(buf, tomb5.hd_reflect);
+
 		sprintf(buf, "hd_texture_budget_mb");
 		tomb5.hd_texture_budget_mb = 0;					//work it out (#123, S6)
 		REG_WriteLong(buf, tomb5.hd_texture_budget_mb);
@@ -329,6 +333,9 @@ void init_tomb5_stuff()
 		sprintf(buf, "hd_motion");
 		REG_ReadBool(buf, tomb5.hd_motion, 1);
 
+		sprintf(buf, "hd_reflect");
+		REG_ReadBool(buf, tomb5.hd_reflect, 1);
+
 		sprintf(buf, "hd_texture_budget_mb");
 		REG_ReadLong(buf, tomb5.hd_texture_budget_mb, 0);
 
@@ -456,6 +463,9 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "hd_motion");
 	REG_WriteBool(buf, tomb5.hd_motion);
+
+	sprintf(buf, "hd_reflect");
+	REG_WriteBool(buf, tomb5.hd_reflect);
 
 	CloseRegistry();
 }

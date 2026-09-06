@@ -276,6 +276,165 @@ namespace
 			? part.param[3] : 0.0f;
 	}
 
+	/* THE FLIPBOOK OF ONE PART (#123, fix round R3b).
+	 *
+	 * Material 13 was counted and not drawn from stage S5 to fix round R3a,
+	 * on the grounds that "the tile numbers and the HD page numbers are two
+	 * name spaces with no bridge". Fix round R3a found the bridge on the way
+	 * past: param[0..2] are not tile numbers at all, they are LAYER numbers -
+	 * indices into the file's own texture list, exactly like TrgVertex::layer,
+	 * counted from one. Measured over all fifteen levels, every material 13
+	 * part in the game (27 of them, in five levels):
+	 *
+	 *   JOBY2   room 58   4 opaque parts, layers 118..121, pages 3176..3179,
+	 *                     param[3] = 9, 7, 11 and 6 seconds
+	 *                     4 additive parts, layers 123..126, pages 3180..3183,
+	 *                     param[3] = 0.15 s on all four
+	 *           room 104  the same eight, 18 triangles each
+	 *   JOBY3   room 4    layers 15..17, 0.2 s, 1,728 triangles
+	 *           room 49   layers 87..89, 0.05 s, 90 triangles
+	 *   JOBY5   rooms 4, 5  layers 57..59, 0.2 s
+	 *           room 49   layers 115..117, 0.05 s
+	 *   RICH1   7 rooms   layers 68, 69, 70, 57, pages 3064..3067, 0.2 s
+	 *   RICH2   rooms 11, 159  layers 96..99, pages 3064..3067, 0.2 s
+	 *           room 21   layers 120..123, pages 3310..3313, 0.5 s
+	 *
+	 * THE SEQUENCE IS (own layer, param[0], param[1], param[2]) and the parts
+	 * of one surface are the SAME cycle at four phases: JOBY2's four opaque
+	 * parts read 118 -> (119,120,121), 119 -> (120,121,118), 121 ->
+	 * (118,119,120) and 120 -> (121,118,119). So a part's own page is frame 0
+	 * and the three parameters are frames 1, 2 and 3, and the whole surface
+	 * steps together. A repeat inside a sequence is a ping-pong and is left as
+	 * it is written: JOBY3's 15 -> (16,17,16) is a three frame swing.
+	 *
+	 * WHY param[3] IS SECONDS PER FRAME AND THE SIX TO ELEVEN ARE NOT A
+	 * MISREADING. The picture says what room 58 of JOBY2 is: a VCI control
+	 * room whose wall is a bank of closed circuit monitors (RoomProbe, the
+	 * proof picture of this round). Its opaque flipbook is the camera feed on
+	 * those screens, switching every six to eleven seconds, and its additive
+	 * one is the scan line glow over them at 0.15 s - the classic flipbook's
+	 * own cadence of five frames at 30 Hz to within a sixtieth. Both are
+	 * exactly what a monitor does, and nothing else in the game reaches past
+	 * 0.5 s. So the slot is a time, over the whole measured range, and it is
+	 * fenced only against a file that says something absurd.
+	 *
+	 * A part whose numbers do not resolve - a layer outside the list, a
+	 * non-integer, a page the cache has no slot for - keeps its own page for
+	 * ever, which is what fix round R3a drew for all of them, and is counted
+	 * as a loss in the log rather than guessed at. */
+	inline float MaterialFlipTime(const trf::remaster::TrgPart& part)
+	{
+		if (part.material != HD_TRG_MATERIAL_FLIPBOOK)
+			return 0.0f;
+
+		return part.param[3] >= 0.02f && part.param[3] <= 60.0f
+			? part.param[3] : 0.0f;
+	}
+
+	/* Frames 1, 2 and 3 of a material 13 part as page SLOTS. Frame 0 is the
+	 * triangle's own page and is not in here - it is the range's pageSlot,
+	 * which is read from the vertex like every other draw call's. False when
+	 * the file's numbers do not resolve; `slots` is then untouched. */
+	inline bool MaterialFlipSlots(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgPart& part, int* slots)
+	{
+		int found[3];
+
+		for (int at = 0; at < 3; at++)
+		{
+			const float value = part.param[at];
+
+			if (value < 1.0f || value > (float)trg.textures.size())
+				return false;
+
+			const int layer = (int)value;
+
+			if ((float)layer != value)
+				return false;
+
+			found[at] = HDPageCacheSlotOf((int)trg.textures[layer - 1]);
+
+			if (found[at] < 0)
+				return false;
+		}
+
+		slots[0] = found[0];
+		slots[1] = found[1];
+		slots[2] = found[2];
+		return true;
+	}
+
+	/* THE GLOSS OF ONE PART (#123, fix round R3b, the floor reflection).
+	 *
+	 * WHAT WAS ASKED FOR. The player's Remaster shots of RICH2 show its marble
+	 * throwing back the walls and the lamps where ours is matt.
+	 *
+	 * WHAT WAS MEASURED FIRST, because the obvious answer is wrong twice over:
+	 *
+	 *   - TROne has NO reflection and no specular anywhere. Grepped over the
+	 *     whole host tree and its docs: the only matches are a comment about
+	 *     the water UV wobble "distorting the reflection" and the note in
+	 *     game_renderer.cpp:373 that an opaque page's DDS alpha is a
+	 *     "sparkle/specular MASK, not coverage". So there is nothing to carry
+	 *     over, and SHADER_RULES.md - Todesengel's own measurement of the
+	 *     remaster's programs - lists six rules and none of them is a mirror.
+	 *   - The gloss mask of fix round A2 is not on the marble. RICH2's floor
+	 *     rooms draw with pages 1010, 1032 and 1033, and all three are alpha
+	 *     255 on all 262,144 texels of the top mip (DdsProbe -alpha). A2's
+	 *     masked pages are stucco, snow, bulkheads and gravel; the marble is
+	 *     not among them.
+	 *
+	 * WHAT THE FILE DOES SAY. Two materials carry a pair that behaves like a
+	 * specular one, over the distinct tuples of all fifteen levels:
+	 *
+	 *   material  3   param[0] an INTEGER 1, 2, 4, 26, 32, 35, 39, 56, 69,
+	 *                 78, 107, 109, 110, 141, 161, 191 - an exponent - and
+	 *                 param[2] a fraction 0.333 to 1.0 - a strength.
+	 *                 165,897 triangles: ANDREA1's marble halls (exponent 110,
+	 *                 strength 0.85 over 42 rooms), ANDREA2, ANDY1 to ANDY3
+	 *                 and JOBY2. param[3] is zero in every tuple.
+	 *   material 17   param[0] 22, 25, 36, 38, 63, 70, 72 and param[1] 0.05 or
+	 *                 0.1 - the same shape on the other slot. 17,453
+	 *                 triangles, JOBY3, JOBY4 and JOBY5: the submarine's
+	 *                 painted steel.
+	 *
+	 * AND WHAT IT DOES NOT. RICH1, RICH2 and RICH3 - the three VCI levels, the
+	 * ones the marble is in - carry NEITHER material, not one triangle. So the
+	 * one surface the report is about has no datum in the .TRG at all, and
+	 * inventing one for it would be a guess about art rather than a reading of
+	 * it. It is named in MODIFICATIONS.md and left matt.
+	 *
+	 * Zero means "no gloss", and a strength outside (0, 1] falls through to
+	 * zero rather than being trusted - the same shape as MaterialAlphaRef and
+	 * MaterialAddWeight above. */
+	inline void MaterialGloss(const trf::remaster::TrgPart& part,
+		float& strength, float& power)
+	{
+		strength = 0.0f;
+		power = 0.0f;
+
+		float s;
+
+		if (part.material == 3)
+			s = part.param[2];
+		else if (part.material == 17)
+			s = part.param[1];
+		else
+			return;
+
+		if (!(s > 0.0f && s <= 1.0f))
+			return;
+
+		/* The exponent is an integer in 1..191 in every tuple of the game, and
+		 * anything else would not be one. */
+		if (!(part.param[0] >= 1.0f && part.param[0] <= 255.0f) ||
+			(float)(int)part.param[0] != part.param[0])
+			return;
+
+		strength = s;
+		power = part.param[0];
+	}
+
 	/* IS THIS PART LIT AT ALL? (#123, fix round R3a, the sky dome.)
 	 *
 	 * The remaster's sky is a group of its own past the last room, and the
@@ -347,6 +506,23 @@ namespace
 		 * (#123, fix round R3a; PartIsUnlit below). Sorted FIRST so that the
 		 * dome is painted before the cloud layers that share its group. */
 		float flatLight = 0.0f;
+		/* THE FLIPBOOK OF THIS DRAW CALL (#123, fix round R3b). `flipTime` is
+		 * how long one frame stands, in seconds, and 0 means "no flipbook" -
+		 * the range then keeps its own page for ever, which is what every
+		 * range in the game did until this round. `flipSlot` is frames 1, 2
+		 * and 3; frame 0 is `pageSlot`. Part of the sort key like the page
+		 * itself, because a draw call is one SetTexture. */
+		float flipTime = 0.0f;
+		int flipSlot[3] = { -1, -1, -1 };
+		/* THE GLOSS OF THIS DRAW CALL (#123, fix round R3b) - the .TRG
+		 * material's own strength and exponent, 0 for every part that names
+		 * none. One pixel shader constant, hence part of the sort key. */
+		float gloss = 0.0f;
+		float glossPower = 0.0f;
+		/* Which destructible piece these triangles belong to, or -1 for the
+		 * room itself (#123, fix round R3b). In the sort key, so a piece's
+		 * triangles never share a draw call with the wall behind them. */
+		int destructId = -1;
 		/* The lowest vertex number this range names and how many it reaches
 		 * over (#123, stage S6). With a 32 bit index buffer they are only a
 		 * measurement; with a 16 bit one they ARE the draw call - the indices
@@ -357,16 +533,84 @@ namespace
 		unsigned int vertexSpan = 0;
 	};
 
+	/* WHERE A GROUP HAS ANY GEOMETRY AT ALL (#123, fix round R3b).
+	 *
+	 * A sorted list of the 256-unit cells the group's own vertices fall in -
+	 * a quarter of a floor square on a side, packed ten bits per axis with
+	 * the room-local short shifted down by eight and biased by 128, so the
+	 * whole int16 range fits and the key is one unsigned int.
+	 *
+	 * It answers the one question fix round B left open: does the .TRG draw
+	 * anything where this static mesh stands? A part's bounding box cannot
+	 * answer it - one part of a Roman room spans the whole room - and walking
+	 * the triangles per static would be a million tests per lantern. This is
+	 * built once while the index buffer is filled, costs about 25 bytes per
+	 * thousand vertices, and a query is a binary search per cell of the
+	 * static's own box.
+	 */
 	struct HDGroup
 	{
 		std::vector<HDRange> pass[3];
 		std::vector<HDRenderSample> samples;
+		std::vector<unsigned int> cells;	// sorted, unique - see above
 		unsigned int triangles[3] = { 0, 0, 0 };
 		float mins[3] = { 0, 0, 0 };
 		float maxs[3] = { 0, 0, 0 };
 		bool hasBounds = false;
 		HDRenderGroupMotion motion = {};
 	};
+
+	// One 256-unit cell of a room-local position, as one key. The bias makes
+	// the shifted value non-negative for every short there is.
+	inline unsigned int CellKey(int x, int y, int z)
+	{
+		const unsigned int cx = (unsigned int)(((x >> 8) + 128) & 0x3FF);
+		const unsigned int cy = (unsigned int)(((y >> 8) + 128) & 0x3FF);
+		const unsigned int cz = (unsigned int)(((z >> 8) + 128) & 0x3FF);
+
+		return (cx << 20) | (cy << 10) | cz;
+	}
+
+	/* ONE DESTRUCTIBLE PIECE OF A ROOM'S ART (#123, fix round R3b).
+	 *
+	 * WHAT THE FILE SAYS. Fix round A found five parts of RICH2 whose
+	 * material has bit 15 set and a counter under it, and left them named.
+	 * Measured over all fifteen levels, there are 69 such parts in 6 levels
+	 * and 32 rooms - ANDREA1 6, ANDREA2 5, JOBY2 3, RICH1 5, RICH2 14,
+	 * RICH3 36 - and the encoding comes apart cleanly:
+	 *
+	 *     bit 15      set
+	 *     bits 8..14  a counter, 0 to 5
+	 *     bits 0..7   an ordinary material number - 0, 3 or 14, and nothing
+	 *                 else in the whole game
+	 *
+	 * The counter is an INSTANCE index and not a damage stage, and the boxes
+	 * prove it: JOBY2's room 57 carries 0x8000, 0x8100 and 0x8200 with 552
+	 * triangles each, standing side by side at x 1024..2048, 2048..3072 and
+	 * 3072..4096, same y, same z, 25 units thick. RICH2's room 151 carries
+	 * three 2,226-triangle copies at three corners of the room, RICH3's room
+	 * 204 four of them. One number per copy is exactly what a renderer needs
+	 * to make ONE of them disappear - which is what the remaster's own
+	 * destructibles do, and what the player reports missing ("Static mashes
+	 * sind nicht zerstoerbar").
+	 *
+	 * SO EACH (group, material) IS ONE PIECE, its triangles are kept in
+	 * ranges of their own - the sort key below carries the id, so they never
+	 * merge with the room around them - and the piece can be switched off.
+	 * hd_level.cpp pairs a piece with the classic MESH_INFO standing inside
+	 * its box, and the engine's own `Flags & 1`, which control.cpp clears
+	 * when Lara shoots a static of slot 50 to 57, decides per frame. */
+	struct HDDestructible
+	{
+		int group = -1;
+		unsigned int material = 0;
+		float mins[3] = { 0, 0, 0 };
+		float maxs[3] = { 0, 0, 0 };
+		bool hidden = false;
+		bool hasBox = false;
+	};
+
+	std::vector<HDDestructible> g_destruct;
 
 	/* WHAT THE CLASSIC PATH LEFT ON THE DEVICE. Read back, not remembered
 	 * from a table of what it "should" be: the fixed-function path changes
@@ -446,6 +690,21 @@ namespace
 	float g_addweight_min = 1.0f;
 	// R3a, once per level: the sky parts that draw at light 1.
 	int g_flat_parts = 0;
+	/* R3b, once per level: the material 13 parts whose four pages and frame
+	 * time all resolved and are therefore drawn as a flipbook, the ones that
+	 * did not and keep their own page, and the draw calls the resolved ones
+	 * cost. `g_flip_calls` is per frame and resets with g_draw_calls. */
+	// R3b, once per level: the opaque parts of materials 3 and 17 whose
+	// own numbers gave them a gloss.
+	int g_gloss_parts = 0;
+	int g_flip_parts = 0;
+	int g_flip_dropped = 0;
+	int g_flip_ranges = 0;
+	int g_flip_calls = 0;
+	// R3b: draw calls that carried a gloss, and the hd_reflect switch as a
+	// float, set once per frame beside the motion switch.
+	int g_gloss_calls = 0;
+	float g_reflect = 1.0f;
 
 	/* --- stage S2b ----------------------------------------------------- */
 
@@ -648,6 +907,12 @@ namespace
 		g_device->SetVertexShaderConstantF(10, origin, 1);
 		g_device->SetVertexShaderConstantF(11, mode, 1);
 		g_device->SetVertexShaderConstantF(12, sel, 1);
+		/* R3b: the room origin goes into the PIXEL file as well, because the
+		 * caustic is computed per pixel out of the world position and the two
+		 * constant files are separate in Direct3D 9. One more upload per room,
+		 * and the alternative - a seventh interpolator carrying the world
+		 * position - would cost every pixel of every room instead. */
+		g_device->SetPixelShaderConstantF(10, origin, 1);
 		g_device->SetPixelShaderConstantF(17, counts, 1);
 		g_device->SetPixelShaderConstantF(20, lights, HD_MAX_LIGHTS * 2);
 	}
@@ -709,6 +974,11 @@ namespace
 		g_motion[1] = 0.0f;
 		g_motion[2] = f ? f->clock : 0.0f;
 		g_motion[3] = (f && f->motion) ? 1.0f : 0.0f;
+
+		/* R3b: hd_reflect, the one switch over every gloss in the frame. Zero
+		 * makes the shader's specular term vanish and the picture is fix round
+		 * R3a's again, to the bit. */
+		g_reflect = (!f || f->reflect) ? 1.0f : 0.0f;
 
 		g_device->SetVertexShaderConstantF(9, screen, 1);
 		g_device->SetVertexShaderConstantF(13, g_motion, 1);
@@ -858,6 +1128,8 @@ void HDRenderShutdown()
 	g_in_frame = false;
 	g_draw_calls = 0;
 	g_cutout_calls = 0;
+	g_flip_calls = 0;
+	g_gloss_calls = 0;
 	g_error.clear();
 }
 
@@ -1003,6 +1275,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	 * shared vertex sits on a portal, where both answers agree. */
 	std::vector<int> vertex_group;
 	std::unordered_map<unsigned long long, unsigned char> mark_map;
+	/* One room's marked water surface at one height, as a box in x and z
+	 * (#123, fix round R3b) - see the long note where it is filled. */
+	struct HDMarkPlane { short minX, maxX, minZ, maxZ; };
+	std::unordered_map<unsigned int, HDMarkPlane> plane_map;
 
 	if (g_marks && g_mark_count > 0)
 	{
@@ -1040,6 +1316,71 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				(unsigned long long)(unsigned short)m.z;
 
 			mark_map[key] |= m.bits;
+		}
+
+		/* --- THE SURFACE PLANE, NOT THE CORNERS (#123, fix round R3b) ---
+		 *
+		 * WHAT WAS WRONG. Stage S2 carries the classic path's water answer to
+		 * the HD vertex AT THE SAME POSITION, and that is right for every
+		 * vertex the two meshes share - which on a water surface is the
+		 * CORNERS OF THE CLASSIC QUADS AND NOTHING ELSE. The remaster remeshes
+		 * a room: where Core laid one quad over a whole pool, the .TRG lays a
+		 * grid, and every vertex of that grid that is not on a classic corner
+		 * finds no mark. A triangle whose three corners are all unmarked gets
+		 * weight zero over its whole area, so the shimmer and the UV wobble
+		 * reach a sliver of the surface and the rest of the pool stands still.
+		 * That is the player's "Wasserwellen und Animation fehlen".
+		 *
+		 * MEASURED, out of the player's own log of the complete build, over
+		 * ten level loads: the classic side offers 0 to 564 marked vertices
+		 * per level (0 in RICH1, RICHCUT2 and TITLE, 12 in JOBY4, 31 in
+		 * RICH2), of which the HD side stamps 0 to 809 - and `choppy`, the
+		 * roomlet's own nWVtx water set, is ZERO in every level of the game.
+		 * TR5 does not displace water vertices at all; what moves its water is
+		 * the animated texture range, which is fix round R3b's other half.
+		 *
+		 * THE RULE. The classic answer for the surface bit is a decision about
+		 * a PLANE: drawroom.cpp:537 opens the whole branch with
+		 * `pos.y == CurrentRoomPtr->minfloor`, and the portal walk under it
+		 * asks whether that square of that plane has water below. So the
+		 * answer for an HD vertex the classic mesh never had is the answer of
+		 * the piece of plane it lies in, and this floods it there: per room
+		 * and per height, the axis aligned box of the marked corners, and
+		 * every HD vertex of that room at that height inside that box gets the
+		 * bit. A box and not the whole plane, so that a walkway at the water's
+		 * own height on the far side of the room stays dry; per height, so
+		 * that two pools at two levels in one room stay apart.
+		 *
+		 * Only the SURFACE bit is flooded. Bit 0 is empty in all of TR5 and
+		 * bit 2 - the reflecting room with no height test - is not a plane at
+		 * all, so neither has a box to flood into. */
+		for (int i = 0; i < g_mark_count; i++)
+		{
+			const HDWaterMark& m = g_marks[i];
+
+			if (!(m.bits & 2))
+				continue;
+
+			const unsigned int key = ((unsigned int)(unsigned short)m.room << 16) |
+				(unsigned int)(unsigned short)m.y;
+			std::unordered_map<unsigned int, HDMarkPlane>::iterator at =
+				plane_map.find(key);
+
+			if (at == plane_map.end())
+			{
+				HDMarkPlane plane;
+
+				plane.minX = plane.maxX = m.x;
+				plane.minZ = plane.maxZ = m.z;
+				plane_map[key] = plane;
+			}
+			else
+			{
+				if (m.x < at->second.minX) at->second.minX = m.x;
+				if (m.x > at->second.maxX) at->second.maxX = m.x;
+				if (m.z < at->second.minZ) at->second.minZ = m.z;
+				if (m.z > at->second.maxZ) at->second.maxZ = m.z;
+			}
 		}
 	}
 
@@ -1130,6 +1471,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	int marked_vertices = 0;
 	int marked_choppy = 0;
+	// R3b: of the shimmer marks, the ones the plane flood added.
+	int flooded_vertices = 0;
 	int sway_vertices = 0;
 	g_scroll_parts = 0;
 	g_cutout_parts = 0;
@@ -1137,6 +1480,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	g_addswing_parts = 0;
 	g_addweight_min = 1.0f;
 	g_flat_parts = 0;
+	g_gloss_parts = 0;
+	g_destruct.clear();
+	g_flip_parts = 0;
+	g_flip_dropped = 0;
+	g_flip_ranges = 0;
 	int marked_shimmer = 0;
 	int marked_room_shimmer = 0;
 
@@ -1203,6 +1551,27 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 				if (found != mark_map.end())
 					bits = found->second;
+
+				/* R3b: and if the corner search found nothing, the plane the
+				 * vertex lies in answers for it - see the long note beside
+				 * plane_map. Counted, so that the log says how much of a
+				 * level's water the classic corners were missing. */
+				if (!(bits & 2))
+				{
+					const unsigned int plane_key =
+						((unsigned int)(unsigned short)vertex_group[(size_t)i] << 16) |
+						(unsigned int)(unsigned short)in.y;
+					std::unordered_map<unsigned int, HDMarkPlane>::const_iterator
+						plane = plane_map.find(plane_key);
+
+					if (plane != plane_map.end() &&
+						in.x >= plane->second.minX && in.x <= plane->second.maxX &&
+						in.z >= plane->second.minZ && in.z <= plane->second.maxZ)
+					{
+						bits |= 2;
+						flooded_vertices++;
+					}
+				}
 			}
 
 			out[i].wChoppy = (unsigned char)(bits & 1);
@@ -1253,6 +1622,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		float addWeight;		// fix round R3a, see MaterialAddWeight
 		float addPeriod;		// fix round R3a, see MaterialAddPeriod
 		float flatLight;		// fix round R3a, see PartIsUnlit
+		float flipTime;			// fix round R3b, see MaterialFlipTime
+		int flipSlot[3];		// fix round R3b, see MaterialFlipSlots
+		float gloss, glossPower;	// fix round R3b, see MaterialGloss
+		int destructId;			// fix round R3b, see HDDestructible
 		unsigned int first;
 	};
 
@@ -1316,8 +1689,63 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				if (pass == 0 && flat != 0.0f)
 					g_flat_parts++;
 
+				/* R3b: THE FLIPBOOK. The three further pages and the frame
+				 * time of a material 13 part, or (0, -1, -1, -1) for every
+				 * other part in the game - see MaterialFlipTime above for
+				 * what says so. A part whose numbers do not resolve keeps
+				 * its own page, which is what fix round R3a drew, and is
+				 * counted once rather than guessed at. */
+				float ftime = MaterialFlipTime(part);
+				int fslot[3] = { -1, -1, -1 };
+				/* R3b: the gloss belongs to the two surface passes; an
+				 * additive part paints light and has nothing to reflect. */
+				float gloss = 0.0f;
+				float gloss_power = 0.0f;
+
+				if (pass != 2)
+					MaterialGloss(part, gloss, gloss_power);
+
+				if (pass == 0 && gloss != 0.0f)
+					g_gloss_parts++;
+
+				/* R3b: the destructible pieces - see HDDestructible above.
+				 * One id per (group, material); the box is filled from the
+				 * part's own vertices as they are sorted in below. */
+				int destruct_id = -1;
+
+				if (part.material & 0x8000u)
+				{
+					for (size_t at = 0; at < g_destruct.size(); at++)
+						if (g_destruct[at].group == (int)g &&
+							g_destruct[at].material == part.material)
+						{
+							destruct_id = (int)at;
+							break;
+						}
+
+					if (destruct_id < 0)
+					{
+						HDDestructible piece;
+
+						piece.group = (int)g;
+						piece.material = part.material;
+						destruct_id = (int)g_destruct.size();
+						g_destruct.push_back(piece);
+					}
+				}
+
+				if (ftime != 0.0f && !MaterialFlipSlots(trg, part, fslot))
+					ftime = 0.0f;
+
 				if (pass == 0 && part.material == HD_TRG_MATERIAL_FLIPBOOK)
+				{
 					group.motion.flipbookParts++;
+
+					if (ftime != 0.0f)
+						g_flip_parts++;
+					else
+						g_flip_dropped++;
+				}
 
 				if (pass == 0 && scrolls)
 					g_scroll_parts++;
@@ -1360,6 +1788,13 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.addWeight = aweight;
 					tri.addPeriod = aperiod;
 					tri.flatLight = flat;
+					tri.flipTime = ftime;
+					tri.flipSlot[0] = fslot[0];
+					tri.flipSlot[1] = fslot[1];
+					tri.flipSlot[2] = fslot[2];
+					tri.gloss = gloss;
+					tri.glossPower = gloss_power;
+					tri.destructId = destruct_id;
 					tri.first = first;
 					tris.push_back(tri);
 				}
@@ -1381,7 +1816,18 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					if (a.scrollV != b.scrollV) return a.scrollV < b.scrollV;
 					if (a.alphaRef != b.alphaRef) return a.alphaRef < b.alphaRef;
 					if (a.addWeight != b.addWeight) return a.addWeight < b.addWeight;
-					return a.addPeriod < b.addPeriod;
+					if (a.addPeriod != b.addPeriod) return a.addPeriod < b.addPeriod;
+					// R3b: the flipbook is one SetTexture per frame, so it
+					// belongs in the key beside the page it starts on.
+					if (a.flipTime != b.flipTime) return a.flipTime < b.flipTime;
+					if (a.flipSlot[0] != b.flipSlot[0]) return a.flipSlot[0] < b.flipSlot[0];
+					if (a.flipSlot[1] != b.flipSlot[1]) return a.flipSlot[1] < b.flipSlot[1];
+					if (a.flipSlot[2] != b.flipSlot[2]) return a.flipSlot[2] < b.flipSlot[2];
+					// R3b: the gloss is one more pixel constant per draw call.
+					if (a.gloss != b.gloss) return a.gloss < b.gloss;
+					if (a.glossPower != b.glossPower) return a.glossPower < b.glossPower;
+					// R3b: a destructible piece keeps its own draw calls.
+					return a.destructId < b.destructId;
 				});
 
 			group.triangles[pass] = (unsigned int)tris.size();
@@ -1394,6 +1840,13 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.addWeight = tris[0].addWeight;
 			range.addPeriod = tris[0].addPeriod;
 			range.flatLight = tris[0].flatLight;
+			range.flipTime = tris[0].flipTime;
+			range.flipSlot[0] = tris[0].flipSlot[0];
+			range.flipSlot[1] = tris[0].flipSlot[1];
+			range.flipSlot[2] = tris[0].flipSlot[2];
+			range.gloss = tris[0].gloss;
+			range.glossPower = tris[0].glossPower;
+			range.destructId = tris[0].destructId;
 			range.start = (unsigned int)sorted.size();
 			range.count = 0;
 
@@ -1405,7 +1858,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tris[i].alphaRef == range.alphaRef &&
 					tris[i].addWeight == range.addWeight &&
 					tris[i].addPeriod == range.addPeriod &&
-					tris[i].flatLight == range.flatLight;
+					tris[i].flatLight == range.flatLight &&
+					tris[i].flipTime == range.flipTime &&
+					tris[i].flipSlot[0] == range.flipSlot[0] &&
+					tris[i].flipSlot[1] == range.flipSlot[1] &&
+					tris[i].flipSlot[2] == range.flipSlot[2] &&
+					tris[i].gloss == range.gloss &&
+					tris[i].glossPower == range.glossPower &&
+					tris[i].destructId == range.destructId;
 
 				if (!same || range.count / 3 >= max_tris)
 				{
@@ -1415,6 +1875,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							split_ranges++;
 
 						group.pass[pass].push_back(range);
+
+						if (range.flipTime != 0.0f)
+							g_flip_ranges++;
 
 						if (range.scrollU != 0.0f || range.scrollV != 0.0f)
 						{
@@ -1440,6 +1903,13 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.addWeight = tris[i].addWeight;
 					range.addPeriod = tris[i].addPeriod;
 					range.flatLight = tris[i].flatLight;
+					range.flipTime = tris[i].flipTime;
+					range.flipSlot[0] = tris[i].flipSlot[0];
+					range.flipSlot[1] = tris[i].flipSlot[1];
+					range.flipSlot[2] = tris[i].flipSlot[2];
+					range.gloss = tris[i].gloss;
+					range.glossPower = tris[i].glossPower;
+					range.destructId = tris[i].destructId;
 					range.start = (unsigned int)sorted.size();
 					range.count = 0;
 				}
@@ -1473,6 +1943,30 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 								group.motion.swayMax = weight;
 						}
 
+						/* R3b: the group's occupancy, and the box of the
+						 * destructible piece these triangles belong to. Both
+						 * ride on a walk that was already happening. */
+						group.cells.push_back(CellKey(v.x, v.y, v.z));
+
+						if (tris[i].destructId >= 0)
+						{
+							HDDestructible& piece = g_destruct[(size_t)tris[i].destructId];
+
+							if (!piece.hasBox)
+							{
+								piece.hasBox = true;
+								piece.mins[0] = piece.maxs[0] = p[0];
+								piece.mins[1] = piece.maxs[1] = p[1];
+								piece.mins[2] = piece.maxs[2] = p[2];
+							}
+							else
+								for (int axis = 0; axis < 3; axis++)
+								{
+									if (p[axis] < piece.mins[axis]) piece.mins[axis] = p[axis];
+									if (p[axis] > piece.maxs[axis]) piece.maxs[axis] = p[axis];
+								}
+						}
+
 						if (!group.hasBounds)
 						{
 							group.hasBounds = true;
@@ -1496,6 +1990,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			{
 				group.pass[pass].push_back(range);
 
+				if (range.flipTime != 0.0f)
+					g_flip_ranges++;
+
 				if (range.scrollU != 0.0f || range.scrollV != 0.0f)
 				{
 					group.motion.scrollRanges++;
@@ -1513,6 +2010,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					biggest = (int)(range.count / 3);
 			}
 		}
+
+		/* R3b: the occupancy, sorted and made unique once the group's three
+		 * passes have been walked - a query is a binary search from here on,
+		 * and the duplicates a shared vertex leaves behind are gone. */
+		std::sort(group.cells.begin(), group.cells.end());
+		group.cells.erase(std::unique(group.cells.begin(), group.cells.end()),
+			group.cells.end());
+		group.cells.shrink_to_fit();
 
 		/* THE SAMPLES FOR THE MATRIX PROOF. The .TRG dies with this function
 		 * and the vertex buffer is WRITEONLY, so the only chance to keep a
@@ -1736,6 +2241,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->markedChoppy = marked_choppy;
 		stats->markedShimmer = marked_shimmer;
 		stats->markedRoomShimmer = marked_room_shimmer;
+		stats->markedFlooded = flooded_vertices;	// R3b
 		stats->splitRanges = split_ranges;
 		stats->biggestRangeTris = biggest;
 		stats->fallbackPageTris = fallback_tris;
@@ -1745,6 +2251,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->addSwingParts = g_addswing_parts;	// R3a
 		stats->addWeightMin = g_addweight_min;		// R3a
 		stats->skyFlatParts = g_flat_parts;		// R3a
+		stats->flipbookDrawn = g_flip_parts;		// R3b
+		stats->flipbookDropped = g_flip_dropped;	// R3b
+		stats->flipbookRanges = g_flip_ranges;		// R3b
+		stats->glossParts = g_gloss_parts;		// R3b
 		stats->scrollRanges = 0;
 		stats->scrollTris = 0;
 		stats->swayVertices = sway_vertices;
@@ -1863,6 +2373,8 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 	g_in_frame = true;
 	g_draw_calls = 0;
 	g_cutout_calls = 0;
+	g_flip_calls = 0;
+	g_gloss_calls = 0;
 
 	if (view)
 		std::memcpy(g_view, view, sizeof(g_view));
@@ -1997,6 +2509,9 @@ namespace
 		 * so the shader's one line costs them a multiply by one. */
 		float add[4] = { 1.0f, g_motion[2], 0.0f, g_motion[3] };
 		bool add_dirty = true;
+		/* R3b, the gloss constant - see the note beside the write below. */
+		float spec[4] = { 0.0f, 0.0f, g_reflect, 0.0f };
+		bool spec_dirty = true;
 		const bool additive_pass = pass == 2;
 
 		g_motion_dirty = true;		// see the note beside g_motion_dirty
@@ -2013,7 +2528,38 @@ namespace
 
 		for (const HDRange& range : group.pass[pass])
 		{
-			IDirect3DTexture9* page = HDPageCacheSlotTexture(range.pageSlot);
+			/* R3b: a destructible piece Lara has shot away. The classic path
+			 * clears MESH_INFO::Flags bit 0 (control.cpp:1935) and stops
+			 * drawing the static; this stops drawing the art that was baked in
+			 * its place. -1, which is every draw call in the game but 69
+			 * parts of six levels, skips the test. */
+			if (range.destructId >= 0 &&
+				g_destruct[(size_t)range.destructId].hidden)
+				continue;
+
+			/* R3b: THE FLIPBOOK. Four pages, one of them per frame time, the
+			 * range's own page first - see MaterialFlipTime for what the
+			 * .TRG says and how it was measured. The clock is the same
+			 * monotonic game clock everything else in stage S5 rides on, and
+			 * it is taken modulo the whole cycle before the divide so that an
+			 * hour of play never leaves the range of an int. Zero flipTime -
+			 * every draw call in the game but 27 parts of five levels - skips
+			 * the whole block, and hd_motion 0 leaves the picture on frame 0,
+			 * which is the picture fix round R3a drew. */
+			int page_slot = range.pageSlot;
+
+			if (range.flipTime > 0.0f && g_motion[3] != 0.0f)
+			{
+				const float cycle = range.flipTime * 4.0f;
+				const int frame = (int)(fmodf(g_motion[2], cycle) / range.flipTime);
+
+				if (frame > 0 && frame < 4 && range.flipSlot[frame - 1] >= 0)
+					page_slot = range.flipSlot[frame - 1];
+
+				g_flip_calls++;
+			}
+
+			IDirect3DTexture9* page = HDPageCacheSlotTexture(page_slot);
 
 			if (!page)
 				continue;
@@ -2029,6 +2575,22 @@ namespace
 
 				g_cutout_calls += range.alphaRef != 0.0f ? 1 : 0;
 			}
+
+			/* R3b: gSpec, the gloss of this draw call - x the strength out of
+			 * the material, y its exponent, z the hd_reflect switch. Written
+			 * per range like the additive weight above and for the same
+			 * reason, and (0, 0, .) for every part that names no gloss, where
+			 * the shader's one branch costs a compare. */
+			if (spec_dirty || spec[0] != range.gloss || spec[1] != range.glossPower)
+			{
+				spec[0] = range.gloss;
+				spec[1] = range.glossPower;
+				spec_dirty = false;
+				g_device->SetPixelShaderConstantF(19, spec, 1);
+			}
+
+			if (range.gloss != 0.0f)
+				g_gloss_calls++;
 
 			const float want_weight = additive_pass ? range.addWeight : 1.0f;
 			const float want_period = additive_pass ? range.addPeriod : 0.0f;
@@ -2355,6 +2917,109 @@ bool HDRenderGroupBounds(int group, float* mins, float* maxs)
 int HDRenderCutoutCalls()
 {
 	return g_cutout_calls;
+}
+
+// R3b, for the log: of those, how many drew a flipbook frame.
+int HDRenderFlipbookCalls()
+{
+	return g_flip_calls;
+}
+
+// R3b: and how many carried a gloss out of their material.
+int HDRenderGlossCalls()
+{
+	return g_gloss_calls;
+}
+
+/* --------------------------------------------- the statics (fix round R3b) */
+
+bool HDRenderGroupHasGeometry(int group, const float* mins, const float* maxs)
+{
+	if (group < 0 || group >= (int)g_groups.size() || !mins || !maxs)
+		return false;
+
+	const std::vector<unsigned int>& cells = g_groups[(size_t)group].cells;
+
+	if (cells.empty())
+		return false;
+
+	/* The box in 256-unit cells, one cell of slack on every side: a static's
+	 * own box is the artist's visibility box and the remaster's mesh is not
+	 * obliged to fill it to the last unit. Clamped to the short range the
+	 * cell key can hold. */
+	int lo[3], hi[3];
+
+	for (int axis = 0; axis < 3; axis++)
+	{
+		float a = mins[axis];
+		float b = maxs[axis];
+
+		if (a > b)
+		{
+			const float t = a;
+			a = b;
+			b = t;
+		}
+
+		if (a < -32768.0f) a = -32768.0f;
+		if (b > 32767.0f) b = 32767.0f;
+
+		lo[axis] = ((int)a >> 8) - 1;
+		hi[axis] = ((int)b >> 8) + 1;
+
+		if (lo[axis] < -128) lo[axis] = -128;
+		if (hi[axis] > 127) hi[axis] = 127;
+		if (lo[axis] > hi[axis]) return false;
+	}
+
+	for (int x = lo[0]; x <= hi[0]; x++)
+		for (int y = lo[1]; y <= hi[1]; y++)
+		{
+			const unsigned int base =
+				((unsigned int)((x + 128) & 0x3FF) << 20) |
+				((unsigned int)((y + 128) & 0x3FF) << 10);
+			const unsigned int first = base | (unsigned int)((lo[2] + 128) & 0x3FF);
+			const unsigned int last = base | (unsigned int)((hi[2] + 128) & 0x3FF);
+
+			std::vector<unsigned int>::const_iterator at =
+				std::lower_bound(cells.begin(), cells.end(), first);
+
+			if (at != cells.end() && *at <= last)
+				return true;
+		}
+
+	return false;
+}
+
+int HDRenderDestructibleCount()
+{
+	return (int)g_destruct.size();
+}
+
+bool HDRenderDestructibleInfo(int at, int* group, unsigned int* material,
+	float* mins, float* maxs)
+{
+	if (at < 0 || at >= (int)g_destruct.size() || !g_destruct[(size_t)at].hasBox)
+		return false;
+
+	const HDDestructible& piece = g_destruct[(size_t)at];
+
+	if (group) *group = piece.group;
+	if (material) *material = piece.material;
+
+	for (int axis = 0; axis < 3; axis++)
+	{
+		if (mins) mins[axis] = piece.mins[axis];
+		if (maxs) maxs[axis] = piece.maxs[axis];
+	}
+
+	return true;
+}
+
+void HDRenderDestructibleHide(int at, bool hidden)
+{
+	if (at >= 0 && at < (int)g_destruct.size())
+		g_destruct[(size_t)at].hidden = hidden;
 }
 
 int HDRenderDrawCalls()

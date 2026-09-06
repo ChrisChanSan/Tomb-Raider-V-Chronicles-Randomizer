@@ -3468,6 +3468,206 @@ and the catsuit with and without the sheen.
 
 ---
 
+#### Room round 3b - the flipbook, the water, the gloss and the statics (#123)
+
+Four of the play test's lines at once, and all four turn on the same question:
+what does the `.TRG` say, and what does it not say. **No new source file**: it
+changes `specific/hd/hd_render.{h,cpp}`, `specific/hd/hd_level.{h,cpp}`,
+`specific/hd/hd_shader/hd_room.hlsl` (with its two generated `.inc` files),
+`game/draw.cpp`, `tomb5/tomb5.cpp`, `global/types.h` and the diagnostic tool
+`RoomProbe`.
+
+**R1 - the four-page flipbook, drawn at last.** Material 13 was counted and
+not drawn from stage S5 onwards, "because a range names one page and the
+animation names four". Fix round R3a found the bridge on its way past:
+`param[0..2]` are not tile numbers in the classic name space, they are LAYER
+numbers - indices into the file's own texture list, counted from one, exactly
+like `TrgVertex::layer`. Measured over all fifteen levels, there are 27 such
+parts in five levels:
+
+| level | rooms | layers | pages | `param[3]` | what it is |
+|---|---|---|---|---|---|
+| JOBY2 | 58, 104 | 118..121 opaque | 3176..3179 | 9, 7, 11, 6 s | the camera feed on a bank of monitors |
+| JOBY2 | 58, 104 | 123..126 additive | 3180..3183 | 0.15 s | the scan line glow over them |
+| JOBY3 | 4 | 15..17 | 3228..3230 | 0.2 s | 1,728 triangles |
+| JOBY3 | 49 | 87..89 | 3235..3237 | 0.05 s | the panels over the bunks |
+| JOBY5 | 4, 5 | 57..59 | 3228..3230 | 0.2 s | the same as JOBY3's |
+| JOBY5 | 49 | 115..117 | 3235..3237 | 0.05 s | |
+| RICH1 | 7 rooms | 68, 69, 70, 57 | 3064..3067 | 0.2 s | |
+| RICH2 | 11, 159 | 96..99 | 3064..3067 | 0.2 s | |
+| RICH2 | 21 | 120..123 | 3310..3313 | 0.5 s | |
+
+The sequence is (own layer, `param[0]`, `param[1]`, `param[2]`), and the parts
+of one surface are the SAME cycle at four phases: JOBY2's four opaque parts
+read 118 -> (119, 120, 121), 119 -> (120, 121, 118), 121 -> (118, 119, 120) and
+120 -> (121, 118, 119), so the whole wall steps together. A repeat inside a
+sequence is a ping-pong and is left as written - JOBY3's 15 -> (16, 17, 16) is
+a three frame swing.
+
+`param[3]` is seconds per frame, and the six to eleven seconds of JOBY2 are not
+a misreading: the picture says what room 58 is. It is a VCI control room whose
+wall is a bank of closed circuit monitors, its opaque flipbook is the camera
+feed switching every six to eleven seconds, and its additive one is the scan
+line glow at 0.15 s - the classic flipbook's own cadence of five frames at
+30 Hz to within a sixtieth. Nothing else in the game reaches past 0.5 s.
+
+A part's triangles are drawn from `flipSlot[frame]` with the frame taken from
+the same monotonic game clock stage S5 uses, modulo the whole cycle so that an
+hour of play never leaves the range of an `int`. **27 of 27 parts resolved, 0
+kept their own page.** Pictures: JOBY2 room 58 at t = 0 and t = 12 s, the
+monitors showing two different sets of feeds.
+
+**R2 - why the water stood still, and it was not the shader.** The play test:
+*"Water waves and animation missing in some sections"*. Measured out of the
+player's own log of the complete build, over ten level loads:
+
+| level | classic marks | HD vertices stamped | of them `choppy` |
+|---|---|---|---|
+| JOBY4 | 12 | 32 | 0 |
+| RICH2 | 31 | 47 | 0 |
+| ANDREA1 | 204 | 267 | 0 |
+| ANDY1 | 155 | 218 | 0 |
+| ANDREA2 | 564 | 809 | 0 |
+| RICH1, RICHCUT2, TITLE | 0 | 0 | 0 |
+
+Two findings in one table. `choppy` is `ROOMLET::nWVtx`, the roomlet's own
+water vertex set, and it is **zero in every level of TR5** - the classic engine
+never displaces a water vertex either, and what moves its water is the animated
+texture range, which is R1 above. And the surface bit reaches only the corners:
+stage S2 carries the classic answer to the HD vertex AT THE SAME POSITION, and
+on a water surface that is the corners of the classic quads and nothing else.
+The remaster remeshes a room, so a triangle whose three corners are all
+unmarked gets weight zero over its whole area. Measured over the water rooms of
+six levels, the busiest horizontal plane of a water room holds 1 to 15 times as
+many HD vertices as the classic quad grid has corners - JOBY5 room 126 is 544
+against 36 - and on JOBY2's room 67 the corner rule finds **11 of 448**, two and
+a half percent.
+
+So the surface bit is flooded along its own plane: per room and per height, the
+axis aligned box of the marked corners, and every HD vertex of that room at that
+height inside that box gets the bit. A box and not the whole plane, so a walkway
+at the water's own height on the far side of the room stays dry; per height, so
+two pools at two levels in one room stay apart. The classic answer for that bit
+IS a decision about a plane - `drawroom.cpp:537` opens the branch with
+`pos.y == CurrentRoomPtr->minfloor` - so the answer for a vertex the classic
+mesh never had is the answer of the piece of plane it lies in.
+
+On top of that mask, TROne's water effect: a vertical swell of 24 units and a
+UV wobble of six texels in the vertex half, and a **per pixel** caustic in the
+fragment half, computed from the WORLD position. Stage S5 refused the caustic -
+"TR5 has one, the WaterTable shimmer, and a second would count it twice" - and
+that refusal was right about the brightness and wrong about the motion: the
+WaterTable term is per vertex, and on a surface of a few large quads what
+reaches the screen is a slow blotch. TROne hit exactly this and says so in the
+same words. So the WaterTable term stays where it is, untouched, parity and all,
+and the caustic is added as a ZERO MEAN modulation of the multiply: it carries
+no average brightness of its own, only the movement.
+
+Calibrated against the player's two Remaster shots of the same VCI pool: over
+the water region the two frames differ by 8.4 of 255 on average, with 17 % of
+the pixels more than 16 apart against a mean of 34 - a swing of a third to a
+half of the local value, which TROne's 0.32 either way meets.
+
+**R3 - the marble does not shine, and the file says why.** The player's shots
+show RICH2's marble throwing back the walls and the lamps where ours is matt.
+Two obvious answers were measured first and both are wrong:
+
+- **TROne has no reflection and no specular anywhere.** Grepped over the whole
+  host tree and its docs: the only matches are a comment about the water UV
+  wobble "distorting the reflection" and the note in `game_renderer.cpp:373`
+  that an opaque page's DDS alpha is a *"sparkle/specular MASK, not coverage"*.
+  `SHADER_RULES.md` - Todesengel's own measurement of the remaster's programs -
+  lists six rules and none of them is a mirror.
+- **The gloss mask of fix round A2 is not on the marble.** RICH2's floor rooms
+  draw with pages 1010, 1032 and 1033, and all three are alpha 255 on all
+  262,144 texels of the top mip (`DdsProbe -alpha`). A2's masked pages are
+  stucco, snow, bulkheads and gravel; the marble is not among them.
+
+What the file does say is a pair that behaves like a specular one:
+
+| material | exponent | strength | triangles | levels |
+|---|---|---|---|---|
+| 3 | `param[0]`, an integer 1, 2, 4, 26, 32, 35, 39, 56, 69, 78, 107, 109, 110, 141, 161, 191 | `param[2]`, 0.333..1.0 | 165,897 | ANDREA1 (110 at 0.85 over 42 rooms), ANDREA2, ANDY1..3, JOBY2, TITLE |
+| 17 | `param[0]`, 22, 25, 36, 38, 63, 70, 72 | `param[1]`, 0.05 or 0.1 | 17,453 | JOBY3, JOBY4, JOBY5 |
+
+**And RICH1, RICH2 and RICH3 - the three VCI levels, the ones the marble is in -
+carry neither material, not one triangle.** So the one surface the report is
+about has no datum in the `.TRG` at all. It is named here and left matt rather
+than given an invented one.
+
+What the 214 glossy parts of the other twelve levels get is not a mirror -
+nothing renders the room a second time - but the thing a polished floor does
+that a matt one does not: it gets brighter at a grazing angle, Schlick's fifth
+power of one minus N·V, times the material's own strength, applied to the
+multiply so that what the surface lifts towards is its own lit colour and never
+a colour of the shader's making. The obvious second half, Blinn's highlight
+against the room's dynamic lights raised to the material's exponent, was
+written, compiled and **measured**: inside a loop `ps_3_0` forces to be
+unrolled eight times, one `pow` per light takes the room pixel shader from 319
+to **636** instruction slots, past the 512 shader model 3 guarantees. So the
+exponent is read, logged and unused, and that is said out loud rather than
+hidden. Behind the registry key `hd_reflect`, default 1.
+
+**R4 - the destructible statics.** *"Static meshes are not destructible."* Fix
+round A left a lead: five parts of RICH2 whose material carries bit 15 and a
+counter. Measured over all fifteen levels there are 69 such parts in six levels
+and 32 rooms - ANDREA1 6, ANDREA2 5, JOBY2 3, RICH1 5, RICH2 14, RICH3 36 - and
+the encoding comes apart cleanly: bit 15 set, bits 8..14 a counter 0..5, bits
+0..7 an ordinary material number (0, 3 or 14, and nothing else in the game).
+
+The counter is an INSTANCE index and not a damage stage, and the boxes prove
+it: JOBY2's room 57 carries `0x8000`, `0x8100` and `0x8200` with 552 triangles
+each, standing side by side at x 1024..2048, 2048..3072 and 3072..4096, same y,
+same z, 25 units thick. RICH2's room 151 carries three 2,226-triangle copies at
+three corners, RICH3's room 204 four. One number per copy is exactly what a
+renderer needs to make ONE of them disappear.
+
+So each (group, material) is one piece, its triangles are kept in draw calls of
+their own - the sort key carries the id, so they never merge with the wall
+behind them - and `hd_level.cpp` pairs a piece with the classic `MESH_INFO`
+standing inside its box, out of the slots 50 to 57 that `control.cpp:1928`
+calls shatterable. `MESH_INFO::Flags` bit 0, which `control.cpp:1935` clears
+when Lara shoots one, then decides per frame. Picture: ANDREA1 room 198, the
+barred shop window, with and without its grating.
+
+**R5 - and the statics the `.TRG` has nothing for.** Fix round B left 21
+statics of ANDREA1 named: they sit in no `.TRG` group, the room seam took them
+away and put nothing in their place. Their rooms are not empty - group 121 has
+27,252 triangles and group 221 has 2,803 - but the group covers only part of
+the room: 121's own box is x 1024..2066 where the room reaches far past it.
+
+So the seam is asked per static instead of per room. The renderer keeps, per
+group, a sorted list of the 256-unit cells its own vertices fall in - a quarter
+of a floor square on a side, packed ten bits per axis, built while the index
+buffer is filled, about 25 bytes per thousand vertices - and answers whether it
+draws anything inside a room-local box. A static's box is its own visibility
+box turned by the mesh's `y_rot` through the engine's own sine table. Where the
+answer is no, `DrawStaticObjects` draws that static the classic way inside an
+HD room; every other one stays suppressed. A part's bounding box could not
+answer this - one part of a Roman room spans the whole room - and walking the
+triangles per static would be a million tests per lantern.
+
+*Proof.* Twelve regression pictures - Rome facades, the flipmap pair, the Irish
+trees, JOBY4's kelp, the fog bulb, JOBY3's bulkheads, RICH1's ray fan, RICH2's
+wall lamps and marble, the sky dome, JOBY2's snow - rendered through the same
+camera by the build before this round and by this one: **12 of 12 byte for byte
+identical with `hd_reflect` off**, and with it on only the three rooms that
+have a glossy part move at all, by at most 22 of 255. `RoomProbe -paritycheck`
+on ANDREA1 room 19 reports 0.000 of 255 bare and 0.997 with a torch and fog,
+both PASS, and `hd_motion 0` draws the picture fix round R3a drew, byte for
+byte. The room pixel shader grew from 386 to **453** instruction slots and the
+vertex shader from 330 to 333, against the 512 shader model 3 guarantees.
+
+`RoomProbe` gained `-plane`, `-hasgeom`, `-shatter` and `-noreflect`, and
+prints three `R3b:` lines - the flipbook, the water marks with the flooded
+count, and the glossy parts - plus one line per destructible piece. The engine
+writes `flipbook_pages`, `flipbook_dropped`, `flipbook_ranges`, `gloss_parts`
+and `reflect` into its own `HDLOG ... motion=` line, `flipbook_calls` and
+`gloss_calls` into the frame line, one `HDLOG ... statics classic=` line per
+level and one `HDLOG static room=` line per static that changed sides.
+
+---
+
 ## Building this yourself
 
 You do not need to trust our binary. Either:

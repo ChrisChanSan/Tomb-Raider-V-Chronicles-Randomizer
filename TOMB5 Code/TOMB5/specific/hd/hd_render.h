@@ -106,6 +106,11 @@ struct HDFrameLighting
 	 * stages S1 and S2 drew it. */
 	float clock;
 	int motion;
+
+	/* Fix round R3b. tomb5.hd_reflect: the specular the .TRG materials 3
+	 * and 17 carry themselves - the marble of Rome, the painted steel of
+	 * the submarine. Zero draws fix round R3a's picture to the bit. */
+	int reflect;
 };
 
 // Per room. `waterTable` is 64 records of four bytes in WATERTAB order
@@ -211,6 +216,10 @@ struct HDRenderStats
 	int markedChoppy;		// of those, the nWVtx set
 	int markedShimmer;		// of those, the surface shimmer set
 	int markedRoomShimmer;		// of those, the whole-room set
+	/* Of the shimmer set, the vertices no classic corner named and that the
+	 * surface plane answered for (#123, fix round R3b) - see the long note in
+	 * hd_render.cpp beside plane_map. */
+	int markedFlooded;
 	int biggestRangeTris;
 	int fallbackPageTris;		// layer 0 - drawn on the level's first page
 	int scrollParts;		// .TRG parts carrying a material 1 UV scroll
@@ -233,6 +242,16 @@ struct HDRenderStats
 	int swayParts;			// parts of the moving materials 1, 7, 8 (A6)
 	int swayDropped;		// vertices whose weight was taken away again (A6)
 	int flipbookParts;		// material 13 parts - see HDRenderGroupAnim
+	/* Of those, the ones whose four pages and frame time all resolved and
+	 * that therefore run as a flipbook, the ones that did not and keep their
+	 * own page, and the draw calls the running ones cost (#123, fix round
+	 * R3b; hd_render.cpp, MaterialFlipTime). */
+	int flipbookDrawn;
+	int flipbookDropped;
+	int flipbookRanges;
+	/* Opaque parts of materials 3 and 17 whose own numbers gave them a
+	 * gloss (#123, fix round R3b; hd_render.cpp, MaterialGloss). */
+	int glossParts;
 	double vertexBytes;
 	double indexBytes;
 	double readMs;			// reading and parsing the .TRG
@@ -328,6 +347,28 @@ bool HDRenderRoomPass(int group, int pass, const D3DMATRIX* world,
 int HDRenderSkyGroups();
 bool HDRenderSky(const D3DMATRIX* world);
 
+/* --- the statics (#123, fix round R3b) -------------------------------------
+ *
+ * DOES THE .TRG DRAW ANYTHING WHERE THIS STATIC MESH STANDS? Room local, in
+ * classic units, against a 256-unit occupancy of the group's own vertices
+ * built while the index buffer is filled. False means the room seam would
+ * make the static vanish without putting anything in its place - fix round B
+ * measured 21 such statics in ANDREA1 alone - and the caller then draws it
+ * the classic way.
+ *
+ * AND THE DESTRUCTIBLE PIECES. A .TRG part whose material carries bit 15 is
+ * one copy of a destructible object, the counter in bits 8 to 14 says which
+ * copy, and its triangles are kept in draw calls of their own so that one
+ * copy can be switched off. `Info` hands out a piece's room-local box so the
+ * caller can pair it with the classic MESH_INFO standing there; `Hide` is
+ * what MESH_INFO::Flags bit 0 turns into once Lara has shot it. See the long
+ * note beside HDDestructible in hd_render.cpp for the measurement. */
+bool HDRenderGroupHasGeometry(int group, const float* mins, const float* maxs);
+int HDRenderDestructibleCount();
+bool HDRenderDestructibleInfo(int at, int* group, unsigned int* material,
+	float* mins, float* maxs);
+void HDRenderDestructibleHide(int at, bool hidden);
+
 int HDRenderGroupCount();
 int HDRenderGroupTriangles(int group, int pass);	// pass < 0 = all three
 int HDRenderGroupRanges(int group, int pass);
@@ -355,6 +396,11 @@ int HDRenderDrawCalls();			// since the last FrameBegin
 // A2: of those, the opaque draw calls that ran with the alpha test on
 // because their .TRG material is a cut-out one (leaves, gratings, nets).
 int HDRenderCutoutCalls();
+// R3b: of those, the draw calls that picked their page out of a material 13
+// flipbook rather than out of their own vertices.
+int HDRenderFlipbookCalls();
+// R3b: and how many of them carried a gloss out of their material.
+int HDRenderGlossCalls();
 
 // The bytes one room vertex takes in the vertex buffer. Named here because the
 // texture budget has to price a level's buffers before they are made.

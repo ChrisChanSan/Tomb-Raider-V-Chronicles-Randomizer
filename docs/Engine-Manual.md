@@ -431,6 +431,39 @@ perfectly still.
   a second for a candle to sixteen seconds for a sun shaft through a hall, and
   the brightness now travels along a shaft at that speed instead of standing
   still. It goes off with `hd_motion` like everything else that moves.
+- **Animated pictures run again.** The Remaster paints a monitor wall, a
+  bank of ships' displays and a handful of liquid surfaces as a four page
+  loop, and the engine reads the loop out of the art: the four pages and
+  the time one of them stands, from a twentieth of a second to eleven
+  seconds. The VCI control room's closed circuit monitors change their
+  camera feed again, the scan lines flicker over them, and the liquid
+  surfaces of the submarine and of Rome move. Twenty-seven such surfaces
+  in five levels; they stop with `hd_motion`.
+- **Water moves over its whole surface, not just at the corners.** The
+  classic engine marks a water surface at the corners of its own quads,
+  and the Remaster lays a far finer mesh over the same pool - on one VCI
+  pool, 448 points where the classic engine has 11. The mark is carried
+  along the surface's own plane now, so the whole pool shimmers instead of
+  a sliver of it, and over that runs a gentle swell and a caustic net
+  computed for every pixel rather than for every corner. It carries no
+  brightness of its own - the classic water light is untouched - only the
+  movement, and it stops with `hd_motion`.
+- **Polished surfaces catch the light at a grazing angle.** The Remaster's
+  artists marked which surfaces are glossy and how glossy - the marble of
+  Rome, the painted steel of the submarine, 214 surfaces over twelve
+  levels - and a floor seen down a long hall now lifts towards its own lit
+  colour instead of staying matt. The three VCI levels carry no such mark
+  anywhere and are left exactly as they were. See `hd_reflect`.
+- **Destructible statics disappear when you shoot them.** A crate, a
+  barred window or a pane of glass is baked into the room's art, so
+  breaking it used to leave the picture of it standing. The Remaster gives
+  every such copy a number of its own, and the engine now takes that copy
+  out of the room when the game takes the object out of the level.
+- **And the statics the Remaster has no art for are drawn again.** A room
+  whose Remaster art covers only part of it used to lose every lamp,
+  crate and post standing in the rest. The engine asks, per object,
+  whether the art draws anything where it stands, and draws the classic
+  one where it does not.
 - **The sky is the Remaster's sky.** Every level that has one carries a whole
   panorama of its own past the last room — Rome at sunset with the dome of St
   Peter's, the Irish hills at dusk — painted on a sphere around the camera
@@ -511,6 +544,7 @@ values, in the same key as every other setting
 | `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing below is read at all. |
 | `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Does nothing at all while `hd_enable` is off. |
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, and the slow travel of light along a shaft or a lamp cone. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
+| `hd_reflect` | DWORD | The **gloss** the Remaster's own art carries, `1` by default: the marble of Rome, the painted steel of the submarine and a few hundred other surfaces its artists marked as polished, each with a strength of its own. What they get is not a mirror - nothing is drawn twice - but the one thing a polished floor does that a matt one does not: seen at a grazing angle it lifts towards its own lit colour. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and every surface is matt again. The three VCI levels carry no such mark in their art at all and look the same either way. Does nothing while `hd_enable` is off. |
 | `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below; the card's own answer stops at 4095 MiB, which is a limit of the Direct3D 9 call and not of your card). Set a number and that number is the ceiling. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
 | `hd_install_tr3` | String | The folder of your *Tomb Raider I-III Remastered* — the one holding `tomb123.exe`. Needed for exactly one thing: the HD models of the four Tomb Raider III guests the randomizer can import (the T-Rex, the vulture, the Compsognathus and the raptor), which live in that bundle and in no other. Leave it **empty** and the engine looks for it in the same walk it uses for the other one; without the game those four enemies draw the classic way and nothing else changes. |

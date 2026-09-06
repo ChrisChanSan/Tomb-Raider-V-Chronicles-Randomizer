@@ -29,6 +29,7 @@
 #include "../../game/objects.h"
 #include "../../game/control.h"		// number_rooms, room
 #include "../../game/camera.h"		// camera.underwater
+#include "../../game/draw.h"
 #include "../../game/effect2.h"		// dynamics, wibble
 #include "../../game/gameflow.h"		// gfLevelId
 #include "../../game/lara.h"		// GfHdOutfit - data[3] (#123, S7)
@@ -663,6 +664,214 @@ static void BuildWaterMarks()
 		(int)g_water_marks.size(), water_rooms);
 }
 
+/* ---------------------------------------------- the statics (R3b) ------- */
+
+/* THE TWO STATIC MESH TABLES OF AN HD LEVEL (#123, fix round R3b).
+ *
+ * Since stage S1-2 an HD room's whole MESH_INFO list is suppressed, because
+ * the remaster bakes the static meshes into the room's art. Fix round B found
+ * the two holes in that rule and left both named:
+ *
+ *   - 21 statics of ANDREA1 (rooms 121 and 221) sit in NO .TRG group at all.
+ *     The room seam takes them away and puts nothing in their place, so they
+ *     are simply gone from the level.
+ *   - a static the game destroys at run time is gone from the classic list and
+ *     goes on standing in the baked art. That is the player's "Static mashes
+ *     sind nicht zerstoerbar".
+ *
+ * Both are answered here, once per level, against the .TRG's own geometry:
+ *
+ *   g_static_classic  one byte per static of the level: 1 = the .TRG draws
+ *                     nothing where it stands, so DrawStaticObjects draws it
+ *                     the classic way even inside an HD room.
+ *   g_destruct_pairs  the destructible pieces of the .TRG - a part whose
+ *                     material carries bit 15 - paired with the classic
+ *                     MESH_INFO standing inside their box. The engine clears
+ *                     that mesh's Flags bit 0 when Lara shoots a static of
+ *                     slot 50 to 57 (control.cpp:1935), and the piece goes
+ *                     with it.
+ *
+ * The box of a static is its own visibility box (STATIC_INFO x_minp..z_maxp)
+ * turned by the mesh's y_rot - the four corners of the XZ rectangle through
+ * the engine's own sine table, not an approximation of it - and made room
+ * local, which is the space the .TRG is in.
+ */
+struct HDStaticPair
+{
+	short room;
+	short mesh;
+	int piece;
+};
+
+static std::vector<unsigned char> g_static_classic;
+static std::vector<int> g_static_first;		// per room, index into the above
+static std::vector<HDStaticPair> g_destruct_pairs;
+
+static void StaticBox(const MESH_INFO* mesh, const ROOM_INFO* r,
+	float* mins, float* maxs)
+{
+	const STATIC_INFO* s = &static_objects[mesh->static_number];
+	const float c = (float)phd_cos(mesh->y_rot) * (1.0f / 16384.0f);
+	const float sn = (float)phd_sin(mesh->y_rot) * (1.0f / 16384.0f);
+	const float x0 = (float)s->x_minp, x1 = (float)s->x_maxp;
+	const float z0 = (float)s->z_minp, z1 = (float)s->z_maxp;
+	const float cx = (float)(mesh->x - r->x);
+	const float cz = (float)(mesh->z - r->z);
+
+	const float xs[4] = { x0, x1, x0, x1 };
+	const float zs[4] = { z0, z0, z1, z1 };
+
+	for (int i = 0; i < 4; i++)
+	{
+		const float wx = cx + xs[i] * c + zs[i] * sn;
+		const float wz = cz + zs[i] * c - xs[i] * sn;
+
+		if (!i)
+		{
+			mins[0] = maxs[0] = wx;
+			mins[2] = maxs[2] = wz;
+		}
+		else
+		{
+			if (wx < mins[0]) mins[0] = wx;
+			if (wx > maxs[0]) maxs[0] = wx;
+			if (wz < mins[2]) mins[2] = wz;
+			if (wz > maxs[2]) maxs[2] = wz;
+		}
+	}
+
+	mins[1] = (float)(mesh->y - r->y + s->y_minp);
+	maxs[1] = (float)(mesh->y - r->y + s->y_maxp);
+}
+
+static void BuildStaticTables()
+{
+	g_static_classic.clear();
+	g_static_first.assign((size_t)number_rooms + 1, 0);
+	g_destruct_pairs.clear();
+
+	int total = 0;
+
+	for (int r = 0; r < number_rooms; r++)
+	{
+		g_static_first[(size_t)r] = total;
+		total += room[r].num_meshes;
+	}
+
+	g_static_first[(size_t)number_rooms] = total;
+	g_static_classic.assign((size_t)total, 0);
+
+	int orphans = 0;
+	int paired = 0;
+	int shatterable = 0;
+	const int pieces = HDRenderDestructibleCount();
+
+	for (int r = 0; r < number_rooms; r++)
+	{
+		if (!HDRoomIsHD(r))
+			continue;
+
+		const ROOM_INFO* info = &room[r];
+
+		for (int i = 0; i < info->num_meshes; i++)
+		{
+			const MESH_INFO* mesh = &info->mesh[i];
+
+			if (mesh->static_number < 0 || mesh->static_number >= 70)
+				continue;
+
+			float mins[3], maxs[3];
+
+			StaticBox(mesh, info, mins, maxs);
+
+			/* 1. Is there any HD geometry here at all? */
+			if (!HDRenderGroupHasGeometry(r, mins, maxs))
+			{
+				g_static_classic[(size_t)(g_static_first[(size_t)r] + i)] = 1;
+				orphans++;
+
+				if (gLogEnabled)
+					Log("HDLOG static room=%d mesh=%d slot=%d classic "
+						"box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f",
+						r, i, (int)mesh->static_number,
+						mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2]);
+
+				continue;
+			}
+
+			/* 2. And if the engine can destroy it, which piece of the art is
+			 * it? Slots 50 to 57 are the shatterable ones - the same test
+			 * control.cpp:1928 makes before it shatters one. */
+			if (mesh->static_number < 50 || mesh->static_number >= 58)
+				continue;
+
+			shatterable++;
+
+			for (int p = 0; p < pieces; p++)
+			{
+				int group = -1;
+				float pmins[3], pmaxs[3];
+
+				if (!HDRenderDestructibleInfo(p, &group, 0, pmins, pmaxs) ||
+					group != r)
+					continue;
+
+				bool overlaps = true;
+
+				for (int axis = 0; axis < 3; axis++)
+					if (maxs[axis] < pmins[axis] || mins[axis] > pmaxs[axis])
+						overlaps = false;
+
+				if (!overlaps)
+					continue;
+
+				HDStaticPair pair;
+
+				pair.room = (short)r;
+				pair.mesh = (short)i;
+				pair.piece = p;
+				g_destruct_pairs.push_back(pair);
+				paired++;
+
+				if (gLogEnabled)
+					Log("HDLOG static room=%d mesh=%d slot=%d destructible "
+						"piece=%d", r, i, (int)mesh->static_number, p);
+			}
+		}
+	}
+
+	Log("HDLOG level=%s statics classic=%d of %d, destructible pieces=%d "
+		"shatterable=%d paired=%d",
+		g_stem, orphans, total, pieces, shatterable, paired);
+}
+
+bool HDStaticIsClassic(int roomIndex, int meshIndex)
+{
+	if (roomIndex < 0 || roomIndex + 1 >= (int)g_static_first.size())
+		return false;
+
+	const int at = g_static_first[(size_t)roomIndex] + meshIndex;
+
+	if (meshIndex < 0 || at >= g_static_first[(size_t)roomIndex + 1])
+		return false;
+
+	return g_static_classic[(size_t)at] != 0;
+}
+
+/* Once per frame, before the rooms are drawn: a piece whose static the engine
+ * has taken out of the classic list goes with it. At most 69 entries in the
+ * whole game, so this is a walk and not a lookup. */
+static void UpdateDestructibles()
+{
+	for (size_t i = 0; i < g_destruct_pairs.size(); i++)
+	{
+		const HDStaticPair& pair = g_destruct_pairs[i];
+		const MESH_INFO* mesh = &room[pair.room].mesh[pair.mesh];
+
+		HDRenderDestructibleHide(pair.piece, (mesh->Flags & 1) == 0);
+	}
+}
+
 /* WHAT THE WHOLE FRAME SHARES. Every one of these is the engine's own global,
  * read where the classic path reads it: the fog bulb list that draw.cpp built
  * behind `if (tomb5.fog)` - so with fog off the count is 0 and the HD rooms
@@ -687,6 +896,7 @@ static void FillFrameLighting(HDFrameLighting& out, HDFogBulb* bulbs)
 	AdvanceClock();
 	out.clock = (float)g_clock;
 	out.motion = tomb5.hd_motion ? 1 : 0;
+	out.reflect = tomb5.hd_reflect ? 1 : 0;		// R3b
 
 	int offered = 0;
 
@@ -1069,8 +1279,12 @@ void HDLevelBuild()
 
 	// Stage S5. Everything that moves, counted out of the .TRG itself:
 	// scroll = material 1 parts and the draw calls they cost, sway =
-	// vertices with a wind weight, flipbook = material 13 parts, which are
-	// counted and NOT drawn (see MODIFICATIONS.md).
+	// vertices with a wind weight, flipbook = material 13 parts. Of those,
+	// flipbook_pages is how many run as a four page flipbook (fix round R3b -
+	// their own page plus the three layers their material names, one per
+	// frame time), flipbook_dropped how many kept their own page because the
+	// file's numbers did not resolve, and flipbook_ranges the draw calls the
+	// running ones cost.
 	// cutout_parts (fix round A2) is the opaque parts of materials 6, 7 and
 	// 8 - the ones that draw with the alpha test on. Held against
 	// cutout_pages in the frame line below, the two say whether a page the
@@ -1081,12 +1295,15 @@ void HDLevelBuild()
 	// many of them also swing on the clock.
 	Log("HDLOG level=%s motion=%d scroll_parts=%d scroll_ranges=%d "
 		"scroll_tris=%d sway_verts=%d sway_parts=%d sway_dropped=%d "
-		"flipbook_parts=%d cutout_parts=%d add_weighted=%d add_min=%.3f "
-		"add_swinging=%d",
+		"flipbook_parts=%d flipbook_pages=%d flipbook_dropped=%d "
+		"flipbook_ranges=%d cutout_parts=%d add_weighted=%d add_min=%.3f "
+		"add_swinging=%d gloss_parts=%d reflect=%d",
 		g_stem, tomb5.hd_motion ? 1 : 0, stats.scrollParts, stats.scrollRanges,
 		stats.scrollTris, stats.swayVertices, stats.swayParts,
-		stats.swayDropped, stats.flipbookParts, stats.cutoutParts,
-		stats.addWeightParts, stats.addWeightMin, stats.addSwingParts);
+		stats.swayDropped, stats.flipbookParts, stats.flipbookDrawn,
+		stats.flipbookDropped, stats.flipbookRanges, stats.cutoutParts,
+		stats.addWeightParts, stats.addWeightMin, stats.addSwingParts,
+		stats.glossParts, tomb5.hd_reflect ? 1 : 0);
 
 	g_room_count = number_rooms;
 
@@ -1240,6 +1457,8 @@ void HDLevelBuild()
 	 * time - a shattered vase is gone from the classic list and still stands
 	 * in the baked art. TROne has the same hole; it belongs to the stage that
 	 * draws objects, not to this one. */
+	BuildStaticTables();
+
 	Log("HDLOG level=%s statics suppressed=%d kept=%d (in %d HD rooms, %d classic)",
 		g_stem, suppressed_statics, kept_statics, hd_rooms, classic_rooms);
 
@@ -1277,6 +1496,10 @@ void HDLevelUnload()
 	g_frame_count = 0;
 	g_room_count = 0;
 	g_stem[0] = 0;
+	/* R3b: the static tables point into THIS level's rooms. */
+	g_static_classic.clear();
+	g_static_first.clear();
+	g_destruct_pairs.clear();
 	HDMarkersFree();	// text, no device - the same rule as the objects
 	HDObjectLevelEnd();
 }
@@ -1478,6 +1701,7 @@ bool HDFrameSky(const float* viewWorld)
 	frame.bulbCount = 0;
 	frame.clock = (float)g_clock;
 	frame.motion = tomb5.hd_motion ? 1 : 0;
+	frame.reflect = tomb5.hd_reflect ? 1 : 0;	// R3b
 
 	SetD3DMatrix(&world, (float*)viewWorld);
 
@@ -1517,6 +1741,8 @@ void HDFrameDraw()
 	g_clip_this_frame = false;
 
 	FillFrameLighting(frame, bulbs);
+	// R3b: a destructible piece follows its own static's Flags bit.
+	UpdateDestructibles();
 	HDRenderFrameBegin(&kIdentity, &projection, &frame);
 
 	for (int i = 0; i < g_frame_count; i++)
@@ -1566,12 +1792,14 @@ void HDFrameDraw()
 		MatrixCheck(g_frame[0].room, g_frame[0].group, g_frame[0].world, projection);
 		Log("HDLOG frame rooms=%d calls=%d dropped=%d bulbs=%d fog_start=%.0f "
 			"wibble=%d cam_uw=%d shimmer=%d objects=%d object_calls=%d "
-			"cutout_calls=%d cutout_pages=%d",
+			"cutout_calls=%d cutout_pages=%d flipbook_calls=%d "
+			"gloss_calls=%d",
 			g_frame_count, HDRenderDrawCalls(), g_frame_dropped,
 			frame.bulbCount, frame.distanceFogStart, (int)wibble,
 			frame.cameraUnderwater, tomb5.shimmer ? 1 : 0,
 			objects_here, HDObjectDrawCalls(),
-			HDRenderCutoutCalls(), HDPageCacheCutoutPages());
+			HDRenderCutoutCalls(), HDPageCacheCutoutPages(),
+			HDRenderFlipbookCalls(), HDRenderGlossCalls());
 	}
 
 	/* THE FRAME'S HD COUNTERS, handed to the frame clock as MAXIMA over the

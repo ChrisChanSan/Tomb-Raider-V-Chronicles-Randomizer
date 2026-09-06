@@ -352,6 +352,13 @@ from `5\FMV\HD\*.OGV` via libogg/libtheora - a project of its own.
   pushed. Details and the table in `TOMB5 Code\MODIFICATIONS.md`, stage
   S8; the proof is `ModelProbe -neck` and `-firstperson`. Left over: the
   diving helmet rides on the torso node and cannot be masked or cut.
+  UPDATE, fix round J: the 60-unit sphere is GONE. It took the stump and
+  sixty units of her chest with it, forced the cap of fix round I to be
+  as wide as her whole torso and cut a jagged edge into her wrist. The
+  cut is a CYLINDER about the neck axis now, in the bind pose, on the
+  torso node alone - 30 units down it and 30 off it - which is the shape
+  of the thing that has to go and which reaches no arm vertex of any
+  outfit at any candidate size.
 
 
 ## 5. What TROne cannot do - and what of it hits us

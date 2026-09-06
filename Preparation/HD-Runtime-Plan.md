@@ -4,9 +4,11 @@
 > Since then the work has been play-test fix rounds rather than new stages:
 > **A** (rooms - flipmaps, cut-outs, glow, fog bulbs, sway), **A2** (the
 > cut-out rule by material, and the fog bulb cone), **B** (objects - the level
-> map, baked lanterns, mesh swaps, Pierre's head, cutscene actors) and **C**
+> map, baked lanterns, mesh swaps, Pierre's head, cutscene actors), **C**
 > (Lara - the Desert Eagle, the VCI holsters, the gloves, the braid root, the
-> Tomb Raider III bird, the search order, the documentation).
+> Tomb Raider III bird, the search order, the documentation) and, latest,
+> **I** (Lara - the backpack as a box, the braid's anchor, the neck cap that
+> closes the first person collar, and a material per texture page).
 >
 > This file is the PLAN and is left as it was written, so that what was
 > intended can still be read against what was built. What was actually built,

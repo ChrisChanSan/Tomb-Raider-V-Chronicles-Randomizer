@@ -4640,6 +4640,164 @@ picture.
 neck as a CYLINDER: an (s, r) grid of the torso's own vertices per outfit,
 the ring at four candidate depths, and the (S, R) scan above).
 
+#### Fix round K - the collar, the plate, and the wrist (#123)
+
+The play test of fix round J, with photographs. Two findings, and the first of
+them undoes the answer the two rounds before it gave.
+
+**K1(a) - the collar ring is still there.** *"The cylinder leaves the catsuit's
+collar ring standing; looking down one sees it as a dark ring with a patch of
+skin in it."* It does, and the cause is one unit. Measured, `ModelProbe -neck`,
+the cylinder table: the collar of `OUTFIT_CLASSIC` and `OUTFIT_VCI` reaches
+**r = 31.2 at s = 25**, and the cut reached 30 - so the bottom edge of the
+collar survived, as a sliver at the very mouth of the hole.
+
+The scan gained a **collar** column for it: how many torso vertices the cut
+leaves standing *above the shoulder line*, which is the ring in the picture.
+
+| outfit | R = 30 | R = 34 | R = 38 |
+| --- | ---: | ---: | ---: |
+| OUTFIT_CLASSIC | 43 | **14** | 11 |
+| OUTFIT_VCI | 35 | **14** | 11 |
+| OUTFIT_RUSSIA | 129 | **94** | 66 |
+| OUTFIT_TR3_ANTARC | 199 | **110** | 41 |
+| OUTFIT_TR3_NEVADA | 4 | **3** | 3 |
+| OUTFIT_TR3_COAST | 9 | **6** | 5 |
+| OUTFIT_TR3_CATSUIT | 2 | **2** | 2 |
+| OUTFIT_SUBSUIT (a helmet) | 148 | 135 | 106 |
+
+The depth does not touch that column - a collar lives above the shoulders - but
+it is what pushes the nearest surviving vertex away from the eye: over CLASSIC
+and VCI, from 49.5 units to **60.4** at the eye 48 forward and from 50.1 to
+56.3 at the eye on the joint, going from S = 30 to S = 40.
+
+**The cut is 40 x 34 now, and wider was refused by picture.** Every outfit was
+rendered at six cameras - the eye 48 units forward and on the joint, at 60, 75
+and 90 degrees down - and compared by background share and mean grey level. At
+40 x 34 the picture from the eye 48 forward, which is what the game gives
+whenever the line of sight is clear, is **identical to the shipped one to a
+tenth of a grey level in every outfit and at every pitch**. At R = 38 the
+Antarctica parka already loses 0.9 of a level at 75 degrees and 2.6 at 90; at
+60 x 55 her chest is visibly scooped out and one looks at the inside of her own
+back, which is fix round J's finding (a) coming back. And at S = 50, R = 38 the
+cylinder reaches an **arm** vertex on the diving suit (36.1 units) for the
+first time in any scan - which the node mask stops anyway, and which is a
+warning all the same. A collar that reaches 31 and shoulders that reach 67 at
+the same depth cannot both be separated by one cylinder about the neck; what
+makes the remainder harmless is K1(b).
+
+**K1(b) - the cap is withdrawn, and her own skin closes the hole.** *"The cap
+lies as a great flat skin-coloured plate over chest and collar, visible from
+outside - a huge plate with the backpack straps on it - and inside it is still
+black."* Both halves are reproduced exactly:
+
+- the plate is the dome seen **with the eye on the head joint**, which is where
+  the camera sits whenever a wall is in front of Lara. Rounds I and J only ever
+  photographed it from the eye 48 units forward, where it is invisible.
+- the straps are the page. The cap wore the majority page of the outfit's own
+  collar ring, and for `OUTFIT_RUSSIA` that page is **8018, the backpack**
+  (`OUTFIT_TR3_ANTARC` 8320, `OUTFIT_TR3_CATSUIT` 8310, and so on - eight
+  outfits, eight lotteries).
+
+So the built cap is gone - the part, its maker, the `HDModelSlot::synth`
+machinery it was the only user of, and the tool's `-nocap` and `-showcap`. In
+its place **the body is drawn a second time in first person**, keeping exactly
+the faces the first draw culls, with the same cut, the same node lights, the
+same light list, the same matrices and the same node mask, after it so that the
+depth test hides everything a closed limb already covers. What a ray through
+the hole meets is then the far wall of her own chest. It is a new cull mode
+rather than a new parameter - `HD_MODEL_SKIN_CW` / `_CCW` in `hd_model.h`,
+which the existing `cull` argument already carries all the way from
+`hd_laradraw.cpp` - and the fragments wear one texel and a turned normal
+(`gInnerSkin`, register c164 of `hd_model.hlsl`).
+
+*Which texel*, and the rule took three tries:
+
+| rule | answer | why it is wrong |
+| --- | --- | --- |
+| the topmost ring of the stump | 8002 | that is Lara's **hair**: the nape hairline sits on the torso node from s = -1.6 to 5.6 in every outfit |
+| the majority page of the stump | 8042 / 8320 | a **coat** has more of the neck than a neck has - 276 vertices against 51 on the Russia body, 506 against 75 on the parka |
+| the page whose column runs the whole height of the neck | 8001 / 8201 / 8047 | correct: a throat runs from the head joint to the shoulders because it *is* the neck; a collar, a zip and a hairline are bands across it |
+
+and the coordinate on that page took a fourth: a real **vertex** nearest the
+middle of the others - fix round J's own repair - sits on the *edge* of its
+texture island, where the paint stops, and gave the four Tomb Raider III guests
+`8201 at 117/169`, which reads **(63, 38, 21)**, a dark brown. The **centroid
+of the biggest triangle** whose three corners are all on that page is inside
+the paint by construction. What ships reads (201, 153, 115) for the three game
+5 bodies, (193, 143, 104) for the Russia coat, (199, 146, 108) for the four
+Tomb Raider III guests, and near black for the diving suit, which has no throat
+on it at all.
+
+*Proof:* `ModelProbe -firstperson` over `OUTFIT_CLASSIC`, `OUTFIT_VCI`,
+`OUTFIT_RUSSIA`, `OUTFIT_TR3_ANTARC` and `OUTFIT_TR3_NEVADA` at both eyes and
+three pitches - thirty pictures. The background share, which is the see-through
+hole measured as a number, does not move by a tenth of a per cent under any
+candidate cut; the same view without the inner skin (`-noinner`) is 43 % hole.
+
+**K2 - the hands and the forearm are lit alike.** *"The hands react differently
+to the room's intensity - in five rooms the hand is now brighter, now darker
+than the forearm. A difference in the texture would be the same everywhere, so
+it is light."*
+
+Everything at that seam **is** identical except one term, and this is read off
+the code rather than measured: `hd_laradraw.cpp` pushes the body and the hand
+parts with the same `nodeLight` array, the same light list, the same sun factor
+and the same matrices, and `HDObjectPush` copies all four per draw. What
+differs is the **sheen**: fix round D gives the whole body the outfit's
+material and fix round I gives the hand the skin's, and where a room's own
+light list is empty - an ordinary room lit by its baked vertex colours, which
+is most of the game - the shader's highlight is `light * strength *
+pow(N.V, power) / 255`. The difference between two materials is therefore
+**multiplied by the room's ambient**, which is precisely the reading the play
+test made of it.
+
+Measured as the grey levels the highlight adds at N.V = 1 in a room of 255
+(`ModelProbe -handlight`, a new table: the body's pages on nodes 8..13 with the
+hand's beside them):
+
+| outfit | the arm wears | the hand wears | seam, before | after |
+| --- | --- | --- | ---: | ---: |
+| OUTFIT_CLASSIC | 8001, 25.5 | 8001, 30.6 | 5.1 | **0.0** |
+| OUTFIT_TR3_NEVADA | 8202, 20.4 | 8001, 30.6 | 10.2 | **0.0** |
+| OUTFIT_TR3_COAST | 8202, 20.4 | 8001, 30.6 | 10.2 | **0.0** |
+| OUTFIT_TR3_CATSUIT | 8202, 114.8 | 8001, 30.6 | 84.1 | **0.0** |
+| OUTFIT_TR3_ANTARC | 8320 parka, 25.5 | 8001, 30.6 | 5.1 | 5.1 |
+| OUTFIT_VCI | 8027 latex, 114.8 | 8001, 30.6 | 84.1 | 84.1 |
+| OUTFIT_RUSSIA | 8042 coat, 30.6 | 8001 glove, 45.9 | 15.3 | 15.3 |
+
+The Rome case is the plainest of the seven: **the forearm and the hand are the
+same texture page**, 8001, shaded by two different materials.
+
+The fix is one line of the outfit table - which of the body's pages are Lara's
+own **skin** - and the per-page material machinery fix round I already built.
+Geometry cannot tell skin from latex, so it is a table, exactly as `wearsRig`
+and the sheen itself are; two measurements decide each row, the page the arm
+geometry wears and the page the throat column wears. 8001 is her skin on the
+three game 5 bodies; the four Tomb Raider III guests carry theirs on 8201 (the
+neck) and 8202 (the arms), the same two pages in all four because it is the
+same Lara underneath; the diving suit has none, and naming its throat page
+would make the whole suit matt.
+
+The three rows that keep a difference keep it **on purpose**: a latex sleeve
+meeting a bare hand, a parka mitten meeting one and a coat sleeve meeting a
+leather glove are material boundaries in the art, not faults.
+
+*Left over and named:* the four Tomb Raider III guests wear game 5 hands
+(`HAND_BARE_*`, page 8001) on a Tomb Raider III body whose arms are page 8202 -
+two different paintings of Lara's skin meeting at the wrist. That is a question
+about **colour** and not about light, and no measurement this round could
+separate it cleanly from the shape of the two models. It is a picture for the
+user.
+
+`ModelProbe` gained `-noinner` (the first person picture without the inner
+skin, which is the hole), `-handlight` (the table above, with the seam as one
+number), `-oldskin` (her skin back under the outfit's material - the BEFORE
+picture), `-look wrist` and `-meshbits` on the composite; `-neck` gained the
+collar column and a fourth table, the neck stump **by page**, which is where
+the inner skin's texel is chosen from. `-nocap` and `-showcap` are gone with
+the cap.
+
 ---
 
 ### 5. Sixty frames a second (#148)

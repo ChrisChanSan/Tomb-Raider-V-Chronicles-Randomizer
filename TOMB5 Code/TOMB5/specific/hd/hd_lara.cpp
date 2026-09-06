@@ -124,6 +124,67 @@ namespace
 		 * measurement. */
 		float sheen;
 		float sheenPower;
+
+		/* WHICH PAGES OF THE BODY ARE LARA'S OWN SKIN (#123, fix round K, K2).
+		 *
+		 * THE USER'S FINDING: "the hands react differently to the room's
+		 * intensity - in five rooms the hand is now brighter, now darker than
+		 * the forearm; a difference in the TEXTURE would be the same
+		 * everywhere, so it is LIGHT."
+		 *
+		 * IT IS THE SHEEN, and everything else at that seam is provably
+		 * identical: hd_laradraw.cpp pushes the body and the hand parts with
+		 * the SAME nodeLight array, the same light list, the same sun factor
+		 * and the same matrices, and HDObjectPush copies all four per draw.
+		 * The one thing that differs is the material - fix round D gives the
+		 * whole body the OUTFIT's, fix round I gives the hand the SKIN's - and
+		 * where the room's own light list is empty (an ordinary room lit by
+		 * its baked vertex colours, which is most of the game) the shader's
+		 * highlight is `light * strength * pow(N.V, power) / 255`. So the
+		 * difference between two materials is MULTIPLIED BY THE ROOM'S
+		 * AMBIENT: bright in a bright room, gone in a dark one, and its sign
+		 * follows the outfit. That is the user's five rooms, and it is why a
+		 * texture difference was ruled out correctly.
+		 *
+		 * MEASURED (ModelProbe -handlight: the body's pages on nodes 8..13
+		 * with the hand's beside them, and what each adds at N.V = 1 in a room
+		 * of 255):
+		 *
+		 *     outfit         the arm wears        the hand wears   difference
+		 *     CLASSIC        8001  25.5 (cloth)   8001  30.6         5.1
+		 *     TR3_NEVADA     8202  20.4           8001  30.6        10.2
+		 *     TR3_COAST      8202  20.4           8001  30.6        10.2
+		 *     TR3_ANTARC     8202  25.5           8001  30.6         5.1
+		 *     TR3_CATSUIT    8202 114.8 (latex)   8001  30.6       -84.2
+		 *     VCI            8027 114.8 (latex)   8001  30.6       -84.2
+		 *     RUSSIA         8041  30.6 (coat)    8001  45.9 (glove) 15.3
+		 *
+		 * and the Rome case is the plainest of all: the forearm and the hand
+		 * are the SAME TEXTURE PAGE, 8001, shaded by two different materials.
+		 *
+		 * WHICH OF THOSE ARE FAULTS AND WHICH ARE THE ART. A catsuit sleeve
+		 * meeting a bare hand IS a material boundary and must keep one; a coat
+		 * sleeve meeting a leather glove likewise. The faults are the rows
+		 * where the surface on both sides is Lara's own SKIN and only the
+		 * material disagrees - CLASSIC and the four Tomb Raider III guests,
+		 * whose arms are bare.
+		 *
+		 * SO IT IS A TABLE, for the reason the sheen itself is one and
+		 * wearsRig above is one: geometry cannot tell skin from latex. Two
+		 * measurements decide each row, both from ModelProbe -handlight and
+		 * -neck: the page the body's ARM geometry wears, and the page its
+		 * THROAT column wears. 8001 is Lara's skin in the three game 5 bodies
+		 * (in OUTFIT_CLASSIC it carries her arms, her midriff and her neck at
+		 * once); the four Tomb Raider III guests carry theirs on 8201, the
+		 * neck, and 8202, the arms - the same two pages in all four, because
+		 * it is the same Lara underneath. 0 ends the list.
+		 *
+		 * OUTFIT_SUBSUIT has none on purpose: the diving suit shows no skin
+		 * anywhere, and its throat page 8047 is the SUIT. Naming it here would
+		 * make the whole suit matt. OUTFIT_RUSSIA and OUTFIT_VCI name 8001
+		 * because their necks and (for the catsuit) chest are bare; neither
+		 * has skin at the ARM, so neither wrist seam moves. */
+		int skin[3];
 	};
 
 	/*                                                    hands  braid holsters
@@ -131,15 +192,15 @@ namespace
 	 *                                                                wearsRig */
 	const Outfit kOutfit[HD_LARA_OUTFIT_COUNT] =
 	{
-		{ 0,                    "classic (no HD body)",   false, false, false, false, false, 0.00f,  1.0f },
-		{ "OUTFIT_CLASSIC",     "the Rome outfit",        true,  true,  true,  false, false, 0.10f, 14.0f },
-		{ "OUTFIT_RUSSIA",      "the Russia outfit",      true,  true,  true,  true,  false, 0.12f, 16.0f },
-		{ "OUTFIT_SUBSUIT",     "the diving suit",        false, false, false, false, false, 0.30f, 22.0f },
-		{ "OUTFIT_VCI",         "the VCI catsuit",        true,  true,  true,  false, true,  0.45f, 26.0f },
-		{ "OUTFIT_TR3_ANTARC",  "Antarctica (TR3)",       true,  true,  true,  false, false, 0.10f, 14.0f },
-		{ "OUTFIT_TR3_NEVADA",  "Nevada (TR3)",           true,  true,  true,  false, false, 0.08f, 12.0f },
-		{ "OUTFIT_TR3_COAST",   "Jungle (TR3)",           true,  true,  true,  false, false, 0.08f, 12.0f },
-		{ "OUTFIT_TR3_CATSUIT", "London (TR3)",           true,  true,  true,  false, false, 0.45f, 26.0f }
+		{ 0,                    "classic (no HD body)",   false, false, false, false, false, 0.00f,  1.0f, { 0, 0, 0 } },
+		{ "OUTFIT_CLASSIC",     "the Rome outfit",        true,  true,  true,  false, false, 0.10f, 14.0f, { 8001, 0, 0 } },
+		{ "OUTFIT_RUSSIA",      "the Russia outfit",      true,  true,  true,  true,  false, 0.12f, 16.0f, { 8001, 0, 0 } },
+		{ "OUTFIT_SUBSUIT",     "the diving suit",        false, false, false, false, false, 0.30f, 22.0f, { 0, 0, 0 } },
+		{ "OUTFIT_VCI",         "the VCI catsuit",        true,  true,  true,  false, true,  0.45f, 26.0f, { 8001, 0, 0 } },
+		{ "OUTFIT_TR3_ANTARC",  "Antarctica (TR3)",       true,  true,  true,  false, false, 0.10f, 14.0f, { 8201, 8202, 0 } },
+		{ "OUTFIT_TR3_NEVADA",  "Nevada (TR3)",           true,  true,  true,  false, false, 0.08f, 12.0f, { 8201, 8202, 0 } },
+		{ "OUTFIT_TR3_COAST",   "Jungle (TR3)",           true,  true,  true,  false, false, 0.08f, 12.0f, { 8201, 8202, 0 } },
+		{ "OUTFIT_TR3_CATSUIT", "London (TR3)",           true,  true,  true,  false, false, 0.45f, 26.0f, { 8201, 8202, 0 } }
 	};
 
 	/* THE OTHER PARTS. `kind` decides which outfits take the part at all:
@@ -175,11 +236,6 @@ namespace
 		  "the face",                 0, HD_LARA_HEAD_NODE, "14 (rigid)", -1 },
 		{ "HAIR_OG",                  0,
 		  "the braid",                2, -1, "0..5 of its own chain", -1 },
-
-		/* Not a file: built out of the outfit's own collar (#123, fix round I,
-		 * I3). The name is what the log and the plan call it. */
-		{ "NECK_CAP",                 0,
-		  "the neck cap",             0, -1, "7", -1 },
 
 		{ "HAND_BARE_REST",           "HAND_GLOVES_REST",
 		  "empty hands",              1, -1, "8,9,10,11,12,13", -1 },
@@ -321,7 +377,6 @@ namespace
 	{
 		{ HD_LARA_PART_FACE,               0.12f, 10.0f },	// skin
 		{ HD_LARA_PART_BRAID,              0.14f, 18.0f },	// hair
-		{ HD_LARA_PART_NECK_CAP,           0.12f, 10.0f },	// skin (I3)
 
 		{ HD_LARA_PART_HAND_REST,          0.12f, 10.0f },	// skin
 		{ HD_LARA_PART_HAND_PISTOL,        0.35f, 34.0f },	// gunmetal
@@ -505,9 +560,6 @@ namespace
 		useful[HD_LARA_PART_FACE] = true;
 		useful[HD_LARA_PART_BRAID] = true;
 		useful[HD_LARA_PART_HAND_REST] = true;	// LARA is always loaded
-		/* The neck cap hangs off no slot at all - it is cut from the body
-		 * (#123, fix round I, I3), so it is wanted wherever the body is. */
-		useful[HD_LARA_PART_NECK_CAP] = true;
 
 		/* kind 3 is "worn": the three thigh holsters and the three weapons on
 		 * the back. outfit_takes still decides whether this outfit has any at
@@ -812,62 +864,24 @@ int HDLaraPartForSlot(int slot, int role)
 	return -1;
 }
 
-/* ------------------------------------------------ the neck cap (I3) -- */
+/* --------------------------------------------- the inner skin (K1) -- */
 /*
- * THE LID THAT CLOSES THE NECK IN FIRST PERSON. What it is for and where its
- * numbers come from is at HD_LARA_NECK_CAP_R in hd_lara.h; this is the maker.
+ * WHAT CLOSES THE HOLE THE FIRST PERSON CUT OPENS. The draw is in
+ * hd_laradraw.cpp and hd_model.cpp; this is the one thing it needs measured -
+ * which texel of which page of the outfit is Lara's own throat.
  *
- * IT IS BUILT FROM THE OUTFIT'S OWN BODY, which is why it goes through
- * HDModelSlot::synth rather than being a file: the rim is the outfit's own
- * vertices, at their own positions, with their own texture page and their own
- * texture coordinates. Nothing is invented but the surface between them.
- *
- * THE STEPS.
- *   1. The neck AXIS: the line from the torso joint to the head joint, both
- *      out of the level's own bind pose. `s` is the distance down it from the
- *      head joint, `r` the distance off it. It is the SAME axis the cut is
- *      built about (hd_model.hlsl, gNeck), which is why the two fit.
- *   2. THE RING: of the node 7 vertices that SURVIVE the cut, the one nearest
- *      the cut's own edge in each of SPOKES sectors. The cut's edge is where
- *      the neck stops being cut away, so that ring IS the mouth of the hole -
- *      the body's own vertices, at their own positions, all round it.
- *      (Fix round I took "the vertex furthest off the axis" in a band at
- *      s = 50 instead, and at that depth the body is a chest: the rim came
- *      out the outline of her whole torso. See hd_lara.h for the three
- *      things in the picture that followed from it.)
- *   3. THE PAGE: the one most of those vertices wear. A model draws one page
- *      per call, so a rim vertex on another page takes the texture
- *      coordinates of the nearest rim vertex that is on the chosen one - which
- *      is a colour and not a position, and the count goes in the log.
- *   4. THE DOME: RINGS rings from the rim inwards, each ring its rim vertex's
- *      own offset scaled by a factor that is NEVER above one, so no part of
- *      the cap can stand further off the axis than the skin it hangs from,
- *      and the middle sunk SINK units further down. The texture coordinates
- *      run from the rim's own to ONE rim vertex's - the middlemost of them on
- *      the page - so the seam is exact where it is seen and the middle wears
- *      a texel the artist really painted.
- *   5. THE NORMALS are accumulated from the triangles and normalised - the
- *      "soft normals" a curved surface wants, and the reason the cap shades
- *      like a body and not like a plate.
+ * Fix rounds I and J built a CAP here instead, a dome of 32 spokes cut to the
+ * outfit's collar ring, and the play test sent it back as a flat plate wearing
+ * the backpack straps. hd_lara.h carries what it was and why it went.
  */
 namespace
 {
-	/* The level's bind pose, kept from HDLaraPlan so the maker can find the
-	 * two joints. The maker is a plain function pointer with no argument for
-	 * it, and threading one through hd_model for a single caller would be a
-	 * worse trade than a file-static that is written once per level. */
+	/* The level's bind pose, kept from HDLaraPlan so the measurement can find
+	 * the two joints. It runs from a plain function pointer with no argument
+	 * for it, and threading one through hd_model for a single caller would be
+	 * a worse trade than a file-static that is written once per level. */
 	float g_neck_bind[HD_LARA_NODES * 3];
 	bool g_neck_bind_ok = false;
-	int g_neck_cap_page = -1;	// for the log
-	int g_neck_cap_rehomed = 0;	// rim vertices that had to borrow a UV
-	/* THE RIM, IN NUMBERS (#123, fix round J, J1). The whole of the user's
-	 * finding is "the cap is too big and it pokes out", so the log carries the
-	 * ring the cap was built on - how far off the axis and how far down it -
-	 * and a self-check: how many of the dome's own vertices stand further off
-	 * the axis than the rim vertex of their own spoke. That last number must
-	 * be 0, and the clamp in the maker is what makes it 0. */
-	double g_neck_cap_rim[6] = { 0, 0, 0, 0, 0, 0 };	// r min/mean/max, s ditto
-	int g_neck_cap_outside = 0;
 
 	int dominant_node(const HDTrmVertex& v)
 	{
@@ -881,32 +895,55 @@ namespace
 		return node;
 	}
 
-	unsigned char pack_normal(double n)
+	/* --------------------------------------- the inner skin (K1) -------- */
+	/* WHICH TEXEL IS LARA'S NECK. The one colour every fragment of the inner
+	 * draw wears - see HDModelSetInnerSkin in hd_model.h for what the draw is
+	 * and gInnerSkin in hd_model.hlsl for how it is worn.
+	 *
+	 * WHERE IT IS TAKEN: THE PAGE THAT RUNS THE WHOLE HEIGHT OF THE NECK.
+	 * The node 7 vertices inside the cut's own cylinder are counted by texture
+	 * page, and the page whose vertices span the greatest DEPTH down the neck
+	 * axis wins, among those that carry at least HD_LARA_NECK_SKIN_MIN of them.
+	 * A throat runs from the head joint to the shoulders because it is the
+	 * neck; a collar, a zip and a hairline are BANDS across it.
+	 *
+	 * TWO SIMPLER RULES WERE TRIED AND ARE WRONG, and the table ModelProbe
+	 * -neck prints ("the neck stump BY PAGE") is why:
+	 *
+	 *   the TOP RING answers 8002, which is Lara's HAIR - the nape hairline
+	 *   sits on the torso node from s = -1.6 to 5.6 in every outfit and is the
+	 *   topmost thing on it;
+	 *   the MAJORITY OF THE STUMP answers 8042 for OUTFIT_RUSSIA (276 vertices
+	 *   of coat against 51 of throat) and 8320 for the Antarctica parka (506
+	 *   against 75). A coat has more of it than a neck has.
+	 *
+	 * The span rule answers 8001 for the three game 5 bodies and 8201 for the
+	 * four Tomb Raider III guests - in every one of them the same throat
+	 * column, 51 to 78 vertices from s = 2.3 to s = 30 - and 8047 for the
+	 * diving suit, which has no throat at all and whose stump is the HELMET.
+	 * Grey is the honest answer there and the note says so.
+	 *
+	 * A PLACE INSIDE A PAINTED TRIANGLE, which is fix round J's finding (b)
+	 * carried one step further: not the mean of the coordinates (that is a
+	 * point in the middle of the atlas page, and the middle of a page is
+	 * empty), and not a real VERTEX either (that sits on the EDGE of its
+	 * texture island, where the paint stops - measured, it gave the four Tomb
+	 * Raider III guests a dark brown). The centroid of the biggest triangle
+	 * whose three corners are all on the chosen page is inside the paint by
+	 * construction. */
+	int g_inner_page = -1;
+	unsigned char g_inner_u = 0, g_inner_v = 0;
+	int g_inner_ring = 0;		// vertices on the chosen page, for the log
+	double g_inner_span = 0.0;	// and how far down the axis they reached
+
+	void measure_neck_skin(const HDTrmModel* source)
 	{
-		const double v = n * 128.0 + 127.0;
+		g_inner_page = -1;
+		g_inner_ring = 0;
+		g_inner_span = 0.0;
 
-		return (unsigned char)(v < 0.0 ? 0.0 : (v > 255.0 ? 255.0 : v));
-	}
-
-	bool build_neck_cap(const HDTrmModel* source, HDTrmModel* out,
-		const char** why)
-	{
-		const int kSpokes = HD_LARA_NECK_CAP_SPOKES;
-		const int kRings = HD_LARA_NECK_CAP_RINGS;
-
-		*why = "";
-		g_neck_cap_page = -1;
-		g_neck_cap_rehomed = 0;
-		g_neck_cap_outside = 0;
-
-		for (int i = 0; i < 6; i++)
-			g_neck_cap_rim[i] = 0.0;
-
-		if (!source || !out || !g_neck_bind_ok)
-		{
-			*why = "the neck cap has no bind pose to measure against";
-			return false;
-		}
+		if (!source || !g_neck_bind_ok)
+			return;
 
 		const double H[3] =
 		{
@@ -925,55 +962,25 @@ namespace
 		double len = axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2];
 
 		if (len < 1.0)
-		{
-			*why = "the torso and the head joint sit on top of each other";
-			return false;
-		}
+			return;
 
 		len = std::sqrt(len);
 
 		for (int i = 0; i < 3; i++)
 			axis[i] /= len;
 
-		/* Two axes across it, for the sectors. The cross product with the
-		 * world's z is safe: the neck runs down y and nothing turns it. */
-		double u[3] = { axis[1], -axis[0], 0.0 };
-		double uLen = std::sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
-
-		if (uLen < 1.0e-6)
+		/* The stump, by page: how many vertices and how far down they reach.
+		 * A wardrobe body wears four or five pages here, so the linear search
+		 * over the list is the whole of it. */
+		struct Page
 		{
-			*why = "the neck axis lies along the world z";
-			return false;
-		}
-
-		for (int i = 0; i < 3; i++)
-			u[i] /= uLen;
-
-		const double w[3] =
-		{
-			axis[1] * u[2] - axis[2] * u[1],
-			axis[2] * u[0] - axis[0] * u[2],
-			axis[0] * u[1] - axis[1] * u[0]
+			int page;
+			int count;
+			double lo, hi;
 		};
 
-		/* --- the ring ---------------------------------------------------- */
-		/* THE CANDIDATES ARE THE VERTICES THE CUT LEAVES STANDING, near its
-		 * own edge. `keep` is the shader's own number - how far outside the
-		 * cylinder a point is, which is the larger of "past its bottom" and
-		 * "past its side" - so a candidate with keep >= 0 survives the cut and
-		 * the smallest keep in a sector is the vertex closest to the mouth of
-		 * the hole. That is the rim: the body's own geometry, at the one place
-		 * the cap has to meet it.
-		 *
-		 * SMAX keeps the search in the neck. Without it a sector with no
-		 * vertex near the mouth would answer with something on the hip, which
-		 * is a smaller `keep` than nothing at all.
-		 *
-		 * A few hundred candidates, one pass per spoke over them: a few
-		 * thousand comparisons at level load and nothing per frame. */
-		std::vector<int> band;
-		std::vector<double> bandKeep;
-		std::vector<double> bandA;
+		std::vector<Page> pages;
+		std::vector<int> mine;
 
 		for (int i = 0; i < source->vertices; i++)
 		{
@@ -985,7 +992,7 @@ namespace
 			const double d[3] = { v.x - H[0], v.y - H[1], v.z - H[2] };
 			const double s = d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
 
-			if (s < 0.0 || s > HD_LARA_NECK_CAP_SMAX)
+			if (s < 0.0 || s > HD_LARA_NECK_SKIN_S)
 				continue;
 
 			const double off[3] =
@@ -994,462 +1001,123 @@ namespace
 			};
 			const double r = std::sqrt(off[0] * off[0] + off[1] * off[1] +
 				off[2] * off[2]);
-			const double byBottom = s - HD_LARA_NECK_CUT_S;
-			const double bySide = r - HD_LARA_NECK_CAP_R;
-			const double keep = byBottom > bySide ? byBottom : bySide;
 
-			if (keep < 0.0)
-				continue;	// the cut takes this one - it is not a rim
+			if (r > HD_LARA_NECK_SKIN_R)
+				continue;
 
-			band.push_back(i);
-			bandKeep.push_back(keep);
-			bandA.push_back(std::atan2(
-				off[0] * w[0] + off[1] * w[1] + off[2] * w[2],
-				off[0] * u[0] + off[1] * u[1] + off[2] * u[2]));
-		}
-
-		if ((int)band.size() < kSpokes)
-		{
-			*why = "the mouth of the neck holds fewer vertices than the cap "
-				"has spokes";
-			return false;
-		}
-
-		/* ONE VERTEX PER SPOKE: the one nearest the cut's edge within half a
-		 * sector of the spoke's own direction. A sector with nothing in it is
-		 * not an error and must not be - a mesh is not evenly tessellated -
-		 * so the window widens until it finds one. It is written as a widening
-		 * window rather than as "the nearest in that direction over the whole
-		 * ring", which would let one very good vertex answer for three
-		 * sectors and pinch the rim into a triangle. */
-		const double kPi = 3.14159265358979323846;
-		int pick[HD_LARA_NECK_CAP_SPOKES];
-
-		for (int k = 0; k < kSpokes; k++)
-		{
-			const double want = -kPi + (k + 0.5) * 2.0 * kPi / kSpokes;
-			double window = kPi / kSpokes;
-
-			pick[k] = -1;
-
-			for (int tries = 0; tries < 6 && pick[k] < 0; tries++, window *= 2.0)
-			{
-				double bestKeep = 1.0e30;
-
-				for (size_t i = 0; i < band.size(); i++)
-				{
-					double da = bandA[i] - want;
-
-					while (da > kPi)
-						da -= 2.0 * kPi;
-
-					while (da < -kPi)
-						da += 2.0 * kPi;
-
-					if (da < -window || da > window)
-						continue;
-
-					if (bandKeep[i] < bestKeep)
-					{
-						bestKeep = bandKeep[i];
-						pick[k] = band[i];
-					}
-				}
-			}
-
-			if (pick[k] < 0)
-			{
-				*why = "the neck's mouth has a gap no widening would close";
-				return false;
-			}
-		}
-
-		/* --- the page most of the ring wears ------------------------------ */
-		int best = -1, bestCount = 0;
-
-		for (int k = 0; k < kSpokes; k++)
-		{
-			const int page = HDTrmPageOf(source, &source->vertex[pick[k]]);
-			int count = 0;
+			const int page = HDTrmPageOf(source, &v);
 
 			if (page < 0)
 				continue;
 
-			for (int j = 0; j < kSpokes; j++)
-				if (HDTrmPageOf(source, &source->vertex[pick[j]]) == page)
-					count++;
+			size_t at = 0;
 
-			if (count > bestCount)
+			for (; at < pages.size(); at++)
+				if (pages[at].page == page)
+					break;
+
+			if (at == pages.size())
 			{
-				bestCount = count;
-				best = page;
+				Page one = { page, 0, s, s };
+
+				pages.push_back(one);
 			}
+
+			pages[at].count++;
+
+			if (s < pages[at].lo)
+				pages[at].lo = s;
+
+			if (s > pages[at].hi)
+				pages[at].hi = s;
+
+			mine.push_back(i);
+		}
+
+		int best = -1;
+		double bestSpan = -1.0;
+
+		for (size_t i = 0; i < pages.size(); i++)
+		{
+			const double span = pages[i].hi - pages[i].lo;
+
+			if (pages[i].count < HD_LARA_NECK_SKIN_MIN || span <= bestSpan)
+				continue;
+
+			bestSpan = span;
+			best = pages[i].page;
+			g_inner_ring = pages[i].count;
 		}
 
 		if (best < 0)
+			return;
+
+		/* THE MIDDLE OF THE BIGGEST TRIANGLE ON THAT PAGE, and this is the
+		 * third rule of the three (fix round J's finding (b), one step
+		 * further).
+		 *
+		 * Round J learned not to use the MEAN of a set of texture
+		 * coordinates, because the mean of points scattered over an atlas is
+		 * a point in the middle of the page and the middle of a page is
+		 * usually empty. The obvious repair - the real VERTEX nearest that
+		 * mean - was what fix round K first shipped, and the picture said it
+		 * is not enough either: for the four Tomb Raider III guests it landed
+		 * on 8201 at 117/169, which reads (63, 38, 21), a dark brown. A
+		 * vertex sits on the EDGE of its texture island, where the artist's
+		 * paint stops and the atlas's black begins, and a bilinear sample
+		 * there is half black.
+		 *
+		 * The middle of a triangle is not. So the biggest triangle of the
+		 * neck whose three corners all sit on the chosen page is taken and
+		 * its centroid used: a point strictly inside a painted triangle,
+		 * as far from any edge as the mesh allows. `mark` is the lookup that
+		 * makes "is this corner one of the neck's own vertices?" a test and
+		 * not a search. */
+		std::vector<unsigned char> mark((size_t)source->vertices, 0);
+
+		for (size_t i = 0; i < mine.size(); i++)
+			if (HDTrmPageOf(source, &source->vertex[mine[i]]) == best)
+				mark[(size_t)mine[i]] = 1;
+
+		double widest = -1.0;
+
+		for (int i = 0; i + 2 < source->indices; i += 3)
 		{
-			*why = "no ring vertex names a texture page";
-			return false;
-		}
+			const unsigned short a = source->index[i + 0];
+			const unsigned short b = source->index[i + 1];
+			const unsigned short c = source->index[i + 2];
 
-		g_neck_cap_page = best;
-
-		/* A rim vertex on another page keeps its POSITION and borrows the
-		 * nearest same-page rim vertex's texture coordinates. */
-		unsigned char rimU[HD_LARA_NECK_CAP_SPOKES];
-		unsigned char rimV[HD_LARA_NECK_CAP_SPOKES];
-
-		for (int k = 0; k < kSpokes; k++)
-		{
-			const HDTrmVertex& v = source->vertex[pick[k]];
-
-			if (HDTrmPageOf(source, &v) == best)
-			{
-				rimU[k] = v.u;
-				rimV[k] = v.v;
+			if (a >= source->vertices || b >= source->vertices ||
+				c >= source->vertices)
 				continue;
-			}
 
-			g_neck_cap_rehomed++;
+			if (!mark[a] || !mark[b] || !mark[c])
+				continue;
 
-			double near2 = 1.0e30;
-			int from = -1;
+			const HDTrmVertex& va = source->vertex[a];
+			const HDTrmVertex& vb = source->vertex[b];
+			const HDTrmVertex& vc = source->vertex[c];
 
-			for (int j = 0; j < kSpokes; j++)
-			{
-				const HDTrmVertex& c = source->vertex[pick[j]];
+			/* Twice the triangle's area in texture space - the cross product
+			 * of two of its edges. No square root and no halving: only the
+			 * ordering matters. */
+			const double e1u = (double)vb.u - va.u, e1v = (double)vb.v - va.v;
+			const double e2u = (double)vc.u - va.u, e2v = (double)vc.v - va.v;
+			const double area = std::fabs(e1u * e2v - e1v * e2u);
 
-				if (HDTrmPageOf(source, &c) != best)
-					continue;
+			if (area <= widest)
+				continue;
 
-				const double dx = c.x - v.x, dy = c.y - v.y, dz = c.z - v.z;
-				const double d2 = dx * dx + dy * dy + dz * dz;
-
-				if (d2 < near2)
-				{
-					near2 = d2;
-					from = j;
-				}
-			}
-
-			rimU[k] = source->vertex[pick[from]].u;
-			rimV[k] = source->vertex[pick[from]].v;
+			widest = area;
+			g_inner_u = (unsigned char)(((int)va.u + vb.u + vc.u) / 3);
+			g_inner_v = (unsigned char)(((int)va.v + vb.v + vc.v) / 3);
 		}
 
-		/* WHERE THE MIDDLE OF THE CAP SAMPLES ITS COLOUR (#123, fix round J,
-		 * J1(b)).
-		 *
-		 * Fix round I converged the inner rings on the AVERAGE of the 32 rim
-		 * coordinates, and the user's picture is what that gives: a black
-		 * smear across the middle of the cap. An atlas page is not a colour
-		 * ramp - the rim's coordinates are scattered over it, their average is
-		 * a point in the middle of the page, and the middle of page 8310 is
-		 * empty. The average of a set of coordinates is a coordinate; it is
-		 * not the average of their colours and there is no reason it should
-		 * even be painted.
-		 *
-		 * So the middle wears ONE RIM VERTEX'S coordinates instead - the one
-		 * whose coordinates lie nearest all the others, which is a real place
-		 * on the page with real paint on it, and the nearest thing to "the
-		 * middle of them" that is guaranteed to exist. The seam is still
-		 * exact, because the RIM keeps its own coordinates either way. */
-		int home = 0;
-		double homeCost = 1.0e30;
+		if (widest < 0.0)
+			return;	// no triangle of the neck lies wholly on one page
 
-		for (int k = 0; k < kSpokes; k++)
-		{
-			double cost = 0.0;
-
-			for (int j = 0; j < kSpokes; j++)
-			{
-				const double du = (double)rimU[k] - (double)rimU[j];
-				const double dv = (double)rimV[k] - (double)rimV[j];
-
-				cost += std::sqrt(du * du + dv * dv);
-			}
-
-			if (cost < homeCost)
-			{
-				homeCost = cost;
-				home = k;
-			}
-		}
-
-		const double meanU = rimU[home];
-		const double meanV = rimV[home];
-
-		/* --- the dome ----------------------------------------------------- */
-		const int vertices = kSpokes * kRings + 1;
-		const int triangles = kSpokes * (2 * (kRings - 1) + 1);
-
-		std::memset(out, 0, sizeof(*out));
-		out->version = 2;
-		out->parts = 1;
-		out->textures = 1;
-		out->indices = triangles * 3;
-		out->vertices = vertices;
-		out->part = new HDTrmPart[1];
-		out->texture = new unsigned short[1];
-		out->index = new unsigned short[out->indices];
-		out->vertex = new HDTrmVertex[vertices];
-
-		std::memset(out->part, 0, sizeof(HDTrmPart));
-		out->part[0].opaque = (unsigned int)out->indices;
-		out->part[0].opaqueEnd = (unsigned int)out->indices;
-		out->part[0].alphaEnd = (unsigned int)out->indices;
-		out->texture[0] = (unsigned short)best;
-
-		/* The rim, decomposed once: how far down the axis each spoke's vertex
-		 * sits and how far off it, and the two means. The means are what the
-		 * dome rounds TOWARDS - the rim itself is the outfit's own vertices,
-		 * warts and all, and a dome built straight off them would carry every
-		 * dent of the collar all the way to its middle. So the further in a
-		 * ring is, the more it is a circle: exact at the seam, where it has to
-		 * be, and smooth where it is looked at. */
-		double sMean = 0, rMean = 0;
-		double rimS[HD_LARA_NECK_CAP_SPOKES];
-		double rimOff[HD_LARA_NECK_CAP_SPOKES][3];
-		double rimR[HD_LARA_NECK_CAP_SPOKES];
-
-		for (int k = 0; k < kSpokes; k++)
-		{
-			const HDTrmVertex& v = source->vertex[pick[k]];
-			const double d[3] = { v.x - H[0], v.y - H[1], v.z - H[2] };
-
-			rimS[k] = d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
-
-			for (int a = 0; a < 3; a++)
-				rimOff[k][a] = d[a] - rimS[k] * axis[a];
-
-			rimR[k] = std::sqrt(rimOff[k][0] * rimOff[k][0] +
-				rimOff[k][1] * rimOff[k][1] + rimOff[k][2] * rimOff[k][2]);
-
-			/* AND ONTO THE CUT'S OWN EDGE (#123, fix round J, J1(c)).
-			 *
-			 * The hole the cap closes is bounded by the cut, and the cut's
-			 * boundary is never deeper than S nor further off the axis than R
-			 * - that is what the two numbers MEAN. So a rim vertex past either
-			 * is a sector in which the body's surface never crosses the cut at
-			 * all: the mouth of a neck is not a circle, and where it opens
-			 * into a shoulder the nearest vertex outside the cylinder can be
-			 * fifty units off the axis. Left alone it drags one spoke of the
-			 * cap out over the collarbone and the two strips beside it become
-			 * the slivers the user calls "random polygons".
-			 *
-			 * Pulled back onto the boundary it is still inside her - the
-			 * body's own surface in that sector is further out, and still
-			 * drawn - and the ring comes back round. Where the body DOES cross
-			 * the cut, which is all round the neck itself, the clamp does
-			 * nothing and the rim is the outfit's own vertex, unmoved. */
-			if (rimS[k] > HD_LARA_NECK_CUT_S)
-				rimS[k] = HD_LARA_NECK_CUT_S;
-
-			/* AND NOT HUNG FROM THE TOP OF THE CYLINDER EITHER. A sector whose
-			 * surface crosses the cylinder's SIDE high up - the diving suit's
-			 * helmet does, at s = 0 - would hang the lid from there and make a
-			 * funnel of it instead of a lid, with the seam torn open where the
-			 * two ends of the funnel meet. The cut's boundary in such a sector
-			 * runs from that crossing all the way DOWN the side to the bottom,
-			 * so the bottom end of it is just as much the edge of the hole and
-			 * is the end a lid belongs on. LIP is how far above the bottom a
-			 * rim vertex may still sit: it is 8 because the seven wardrobe
-			 * bodies with a neck read s = 27.8 to 30 and never need it, and
-			 * the diving suit reads 0.2 to 30 and needs all of it. */
-			if (rimS[k] < HD_LARA_NECK_CUT_S - HD_LARA_NECK_CAP_LIP)
-				rimS[k] = HD_LARA_NECK_CUT_S - HD_LARA_NECK_CAP_LIP;
-
-			if (rimR[k] > HD_LARA_NECK_CAP_R)
-			{
-				const double pull = HD_LARA_NECK_CAP_R / rimR[k];
-
-				for (int a = 0; a < 3; a++)
-					rimOff[k][a] *= pull;
-
-				rimR[k] = HD_LARA_NECK_CAP_R;
-			}
-
-			sMean += rimS[k];
-			rMean += rimR[k];
-		}
-
-		sMean /= kSpokes;
-		rMean /= kSpokes;
-
-		/* The ring, for the log (#123, fix round J, J1). */
-		g_neck_cap_rim[0] = g_neck_cap_rim[2] = rimR[0];
-		g_neck_cap_rim[3] = g_neck_cap_rim[5] = rimS[0];
-		g_neck_cap_rim[1] = rMean;
-		g_neck_cap_rim[4] = sMean;
-
-		for (int k = 0; k < kSpokes; k++)
-		{
-			if (rimR[k] < g_neck_cap_rim[0]) g_neck_cap_rim[0] = rimR[k];
-			if (rimR[k] > g_neck_cap_rim[2]) g_neck_cap_rim[2] = rimR[k];
-			if (rimS[k] < g_neck_cap_rim[3]) g_neck_cap_rim[3] = rimS[k];
-			if (rimS[k] > g_neck_cap_rim[5]) g_neck_cap_rim[5] = rimS[k];
-		}
-
-		const double kHalfPi = 1.57079632679489661923;
-
-		for (int j = 0; j < kRings; j++)
-		{
-			const double f = (double)j / (double)kRings;
-			const double rad = std::cos(f * kHalfPi);
-			const double sink = HD_LARA_NECK_CAP_SINK * std::sin(f * kHalfPi);
-
-			for (int k = 0; k < kSpokes; k++)
-			{
-				HDTrmVertex& v = out->vertex[j * kSpokes + k];
-				const double at = rimS[k] * (1.0 - f) + sMean * f + sink;
-				/* AND NEVER MORE THAN ONE (#123, fix round J, J1(a)). The
-				 * rounding pulls a wide spoke IN towards the ring's mean and
-				 * must never push a narrow one OUT: `round` above one is a
-				 * ring standing further off the axis than the body's own skin
-				 * at that spoke, which is the flat plate the user saw poking
-				 * through her collar. Round I had no such clamp, and with a
-				 * rim that ran from 20 to 82 units the narrow spokes were
-				 * pushed out by a quarter of their own radius. */
-				double round = rimR[k] > 1.0e-6
-					? (1.0 - f) + f * rMean / rimR[k] : 1.0;
-
-				if (round > 1.0)
-					round = 1.0;
-
-				const double off[3] =
-				{
-					rimOff[k][0] * round, rimOff[k][1] * round,
-					rimOff[k][2] * round
-				};
-
-				std::memset(&v, 0, sizeof(v));
-				v.x = (float)(H[0] + at * axis[0] + rad * off[0]);
-				v.y = (float)(H[1] + at * axis[1] + rad * off[1]);
-				v.z = (float)(H[2] + at * axis[2] + rad * off[2]);
-				v.layer = 1;
-				v.bone[0] = (unsigned char)HD_LARA_TORSO;
-				v.weight[0] = 255;
-				/* THE TEXTURE IS THE RIM'S AT THE RIM and the middlemost rim
-				 * vertex's in the middle, which is what makes the seam exact -
-				 * the one place a mismatch would be seen - and leaves the
-				 * middle a smear of a texel that is really painted.
-				 *
-				 * The alternative was tried and is worse: holding each spoke's
-				 * own texture coordinates all the way in leaves every strip
-				 * sampling a line ACROSS the page between two neighbours, and
-				 * where the outfit's own atlas seam runs through the collar
-				 * those two are half a page apart - the picture came back with
-				 * two hard streaks through her chest. Converging is a soft
-				 * radial gradient instead, and it cannot cross the page. */
-				/* THE RIM RING KEEPS ITS OWN AND EVERY RING INSIDE IT WEARS THE
-				 * ONE TEXEL. A gradient that runs all the way to the middle
-				 * stretches the page along every spoke, and the picture comes
-				 * back with the star of streaks the user calls "random"
-				 * (finding J1(c)). One strip of gradient at the seam, where
-				 * the surface is nearly edge on to the eye and nothing can be
-				 * read off it anyway, and a flat colour over the rest. */
-				const double t = j ? 1.0 : 0.0;
-
-				v.u = (unsigned char)(rimU[k] * (1.0 - t) + meanU * t + 0.5);
-				v.v = (unsigned char)(rimV[k] * (1.0 - t) + meanV * t + 0.5);
-
-				/* THE SELF-CHECK BEHIND FINDING J1(a). A ring vertex further
-				 * off the axis than the rim vertex it hangs from is a piece of
-				 * cap outside the body's own skin, which is the plate the user
-				 * photographed. The count goes in the log and must be 0. */
-				if (std::sqrt(off[0] * off[0] + off[1] * off[1] +
-					off[2] * off[2]) * rad > rimR[k] + 0.01)
-					g_neck_cap_outside++;
-			}
-		}
-
-		{
-			HDTrmVertex& mid = out->vertex[kSpokes * kRings];
-
-			std::memset(&mid, 0, sizeof(mid));
-			mid.x = (float)(H[0] + (sMean + HD_LARA_NECK_CAP_SINK) * axis[0]);
-			mid.y = (float)(H[1] + (sMean + HD_LARA_NECK_CAP_SINK) * axis[1]);
-			mid.z = (float)(H[2] + (sMean + HD_LARA_NECK_CAP_SINK) * axis[2]);
-			mid.layer = 1;
-			mid.bone[0] = (unsigned char)HD_LARA_TORSO;
-			mid.weight[0] = 255;
-			mid.u = (unsigned char)(meanU + 0.5);
-			mid.v = (unsigned char)(meanV + 0.5);
-		}
-
-		/* The triangles: a quad band between two rings, then a fan into the
-		 * middle. The winding is the one that leaves the outward face looking
-		 * UP the axis, towards the eye; the draw is double sided anyway, which
-		 * is the belt to this brace. */
-		int at = 0;
-
-		for (int j = 0; j + 1 < kRings; j++)
-			for (int k = 0; k < kSpokes; k++)
-			{
-				const int k2 = (k + 1) % kSpokes;
-				const unsigned short a0 = (unsigned short)(j * kSpokes + k);
-				const unsigned short b0 = (unsigned short)(j * kSpokes + k2);
-				const unsigned short a1 = (unsigned short)((j + 1) * kSpokes + k);
-				const unsigned short b1 = (unsigned short)((j + 1) * kSpokes + k2);
-
-				out->index[at++] = a0;
-				out->index[at++] = a1;
-				out->index[at++] = b1;
-				out->index[at++] = a0;
-				out->index[at++] = b1;
-				out->index[at++] = b0;
-			}
-
-		for (int k = 0; k < kSpokes; k++)
-		{
-			const int k2 = (k + 1) % kSpokes;
-
-			out->index[at++] = (unsigned short)((kRings - 1) * kSpokes + k);
-			out->index[at++] = (unsigned short)(kSpokes * kRings);
-			out->index[at++] = (unsigned short)((kRings - 1) * kSpokes + k2);
-		}
-
-		/* --- soft normals -------------------------------------------------- */
-		std::vector<double> acc((size_t)vertices * 3, 0.0);
-
-		for (int i = 0; i + 2 < out->indices; i += 3)
-		{
-			const HDTrmVertex& a = out->vertex[out->index[i + 0]];
-			const HDTrmVertex& b = out->vertex[out->index[i + 1]];
-			const HDTrmVertex& c = out->vertex[out->index[i + 2]];
-			const double e1[3] = { b.x - a.x, b.y - a.y, b.z - a.z };
-			const double e2[3] = { c.x - a.x, c.y - a.y, c.z - a.z };
-			const double n[3] =
-			{
-				e1[1] * e2[2] - e1[2] * e2[1],
-				e1[2] * e2[0] - e1[0] * e2[2],
-				e1[0] * e2[1] - e1[1] * e2[0]
-			};
-
-			for (int corner = 0; corner < 3; corner++)
-				for (int a2 = 0; a2 < 3; a2++)
-					acc[(size_t)out->index[i + corner] * 3 + a2] += n[a2];
-		}
-
-		for (int i = 0; i < vertices; i++)
-		{
-			double n[3] = { acc[(size_t)i * 3], acc[(size_t)i * 3 + 1],
-				acc[(size_t)i * 3 + 2] };
-			double l = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
-
-			if (l < 1.0e-9)
-			{
-				n[0] = -axis[0];
-				n[1] = -axis[1];
-				n[2] = -axis[2];
-				l = 1.0;
-			}
-
-			out->vertex[i].nx = pack_normal(n[0] / l);
-			out->vertex[i].ny = pack_normal(n[1] / l);
-			out->vertex[i].nz = pack_normal(n[2] / l);
-		}
-
-		return true;
+		g_inner_page = best;
+		g_inner_span = bestSpan;
 	}
 }
 
@@ -1471,8 +1139,8 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 
 	plan_mask(level, useful);
 
-	/* The maker of the neck cap has no argument for a bind pose (#123, fix
-	 * round I, I3), so it is kept here for it - once per level, before
+	/* The inner skin's measurement has no argument for a bind pose (#123,
+	 * fix round K, K1), so it is kept here for it - once per level, before
 	 * anything can call it. */
 	std::memcpy(g_neck_bind, level->bodyBind, sizeof(g_neck_bind));
 	g_neck_bind_ok = true;
@@ -1504,14 +1172,11 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 		one.rigidNode = kPart[part].rigid;
 		one.onlyPage = kPart[part].onlyPage;
 
-		/* The one part that is BUILT (#123, fix round I, I3), out of the body
-		 * that stands first in this very list - HD_LARA_PART_BODY is part 0,
-		 * so the source is always read before the maker runs. */
-		if (part == HD_LARA_PART_NECK_CAP)
-		{
-			one.synthFrom = HDLaraPartSlot(HD_LARA_PART_BODY);
-			one.synth = &build_neck_cap;
-		}
+		/* The BODY is looked at while it is still a file (#123, fix round K,
+		 * K1): the inner skin's texel is a place on a page of the outfit, and
+		 * after the build there is no page and no vertex left to ask. */
+		if (part == HD_LARA_PART_BODY)
+			one.measure = &measure_neck_skin;
 	}
 
 	return written;
@@ -1580,6 +1245,72 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 
 		g_has[part] = true;
 
+		/* THE INNER SKIN'S ONE TEXEL (#123, fix round K, K1). Measured off
+		 * the outfit's own top neck ring while the .TRM was still a file;
+		 * this hands it to the draw. A model whose ring could not be found
+		 * gets none, and the inner draw then falls back to the plain cull -
+		 * which is the picture before this round and not a hole. */
+		if (part == HD_LARA_PART_BODY)
+		{
+			/* AND LARA'S OWN SKIN SHINES LIKE SKIN (#123, fix round K, K2).
+			 *
+			 * The body draws with ONE material and part of it is her, not her
+			 * clothes - so a bare forearm wore the outfit's sheen while the
+			 * hand model over it wore the skin's, and the difference between
+			 * the two was multiplied by the room's ambient. The pages are a
+			 * measured table on the outfit; kOutfit above carries it and the
+			 * measurement behind it. Nothing happens for an outfit that shows
+			 * no skin. */
+			float skinS = 0.0f, skinP = 1.0f;
+			int named = 0;
+
+			HDLaraSkinSheen(&skinS, &skinP);
+
+			for (int i = 0; i < 3 && kOutfit[level->outfit].skin[i]; i++)
+			{
+				const int page = kOutfit[level->outfit].skin[i];
+				bool there = false;
+
+				for (int j = 0; j < HDModelPageCount(slot); j++)
+					if (HDModelPage(slot, j) == page)
+					{
+						there = true;
+						break;
+					}
+
+				if (!there)
+				{
+					note("%s: page %d is named as her skin and the model does "
+						"not wear it - the table and the art disagree", model,
+						page);
+					continue;
+				}
+
+				HDModelSetPageSheen(slot, page, skinS, skinP);
+				named++;
+			}
+
+			if (named)
+				note("her skin: %d page%s of %s %s the skin material %.2f/"
+					"%.0f, the one the hands have - so the wrist seam is one "
+					"material and not two", named, named == 1 ? "" : "s",
+					model, named == 1 ? "takes" : "take", skinS, skinP);
+
+			if (g_inner_page >= 0)
+			{
+				HDModelSetInnerSkin(slot, g_inner_page,
+					(float)g_inner_u * (1.0f / 255.0f),
+					(float)g_inner_v * (1.0f / 255.0f));
+				note("the inner skin: page %d at %d/%d, off the neck's "
+					"own column (%d vertices spanning %.0f down the neck "
+					"axis)", g_inner_page, (int)g_inner_u, (int)g_inner_v,
+					g_inner_ring, g_inner_span);
+			}
+			else
+				note("the inner skin: no neck ring found in %s - first person "
+					"draws the body one sided, as fix round J did", model);
+		}
+
 		/* WHAT IS IN THE HAND GETS ITS OWN MATERIAL (#123, fix round I, I4).
 		 *
 		 * The rule is a measurement and not a guess: HAND_BARE_REST is the
@@ -1623,20 +1354,6 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 					"it holds keeps the hand's own sheen",
 					HDLaraPartLabel(part));
 		}
-
-		/* What the maker made (#123, fix round I, I3), so that a picture the
-		 * user does not like can be looked up: which page the cap wears and
-		 * how many of its rim vertices had to borrow their texture
-		 * coordinates from a neighbour because they wore another one. */
-		if (part == HD_LARA_PART_NECK_CAP)
-			note("the neck cap: %d spokes, %d rings, page %d, %d rim vertices "
-				"re-homed, %d triangles; the rim r %.1f/%.1f/%.1f s "
-				"%.1f/%.1f/%.1f, %d vertices outside their own spoke",
-				HD_LARA_NECK_CAP_SPOKES, HD_LARA_NECK_CAP_RINGS,
-				g_neck_cap_page, g_neck_cap_rehomed, HDModelIndices(slot) / 3,
-				g_neck_cap_rim[0], g_neck_cap_rim[1], g_neck_cap_rim[2],
-				g_neck_cap_rim[3], g_neck_cap_rim[4], g_neck_cap_rim[5],
-				g_neck_cap_outside);
 
 		const int nodes = HDModelNodes(slot);
 
@@ -1801,6 +1518,31 @@ void HDLaraPartSheen(int part, float* strength, float* power)
 
 			return;
 		}
+}
+
+/* LARA'S SKIN (#123, fix round K, K1), straight out of the material table at
+ * the top of this file. The inner skin draw is her own throat's colour, so it
+ * shines like skin whatever the outfit over it is made of. */
+void HDLaraSkinSheen(float* strength, float* power)
+{
+	if (strength)
+		*strength = kSheenSkin[0];
+
+	if (power)
+		*power = kSheenSkin[1];
+}
+
+bool HDLaraSkinPage(int page)
+{
+	if (page < 0 || g_outfit <= HD_LARA_OUTFIT_NONE ||
+		g_outfit >= HD_LARA_OUTFIT_COUNT)
+		return false;
+
+	for (int i = 0; i < 3; i++)
+		if (kOutfit[g_outfit].skin[i] == page)
+			return true;
+
+	return false;
 }
 
 /* WHAT IS IN THE HAND, as opposed to the hand (#123, fix round I, I4): the

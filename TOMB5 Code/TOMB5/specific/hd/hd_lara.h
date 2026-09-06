@@ -396,7 +396,8 @@
  * the axis from the head joint AND less than HD_LARA_NECK_CUT_R units off it
  * is discarded while the first person view runs, and only on the nodes
  * HD_LARA_NECK_CUT_NODES names. Her hands, her holsters, the weapon on her
- * back and the neck cap are separate models and are never cut. The shader end
+ * back are separate models and are never cut; the INNER SKIN below is the
+ * same body with the same cut. The shader end
  * of it is hd_model.hlsl, ModelVS and ModelPS.
  *
  * WHY THERE HAS TO BE ONE. The classic path hides the head MESH; an HD body is
@@ -468,64 +469,129 @@
  *
  * IT DOES NOT WORK ALONE. Cutting a closed body open shows the body's inside,
  * because the HD path draws every model double sided - so the cut is paired
- * with HD_MODEL_CULL_BACK on the same draw. hd_model.h has that half. */
-#define HD_LARA_NECK_CUT_S	30.0f	// down the axis from the head joint
-#define HD_LARA_NECK_CUT_R	30.0f	// off the axis
+ * with HD_MODEL_CULL_BACK on the same draw, and with the INNER SKIN below.
+ *
+ * AND THE COLLAR STAYED (#123, fix round K, K1(a)). The play test of fix round
+ * J: "the cylinder leaves the catsuit's COLLAR RING standing; looking down one
+ * sees it as a dark ring". It does, and the reason is one unit: measured, the
+ * collar of OUTFIT_CLASSIC and OUTFIT_VCI reaches r = 31.2 at s = 25 - just
+ * outside a cut of thirty - so its bottom edge survives as a sliver right at
+ * the mouth of the hole.
+ *
+ * THE NUMBERS MOVED TO 40 AND 34, and every part of that is measured
+ * (ModelProbe -neck, the "what a cylinder cut leaves" scan, now with a COLLAR
+ * column - the node 7 vertices the cut leaves standing above the shoulder line
+ * at s < 30, which is the ring the user photographed):
+ *
+ *     outfit              R=30   R=34   R=38     (the collar column; S does
+ *     OUTFIT_CLASSIC        43     14     11      not change it - a collar
+ *     OUTFIT_VCI            35     14     11      lives above the shoulders)
+ *     OUTFIT_RUSSIA        129     94     66
+ *     OUTFIT_TR3_ANTARC    199    110     41
+ *     OUTFIT_TR3_NEVADA      4      3      3
+ *     OUTFIT_TR3_COAST       9      6      5
+ *     OUTFIT_TR3_CATSUIT     2      2      2
+ *     OUTFIT_SUBSUIT       148    135    106     (a helmet, not a collar)
+ *
+ * and the DEPTH is what pushes the nearest surviving vertex away from the eye:
+ * over CLASSIC and VCI, from 49.5 to 60.4 units at the eye 48 forward and from
+ * 50.1 to 56.3 at the eye on the joint, going from S = 30 to S = 40.
+ *
+ * WHY NOT WIDER, AND THIS IS THE OTHER HALF OF THE ANSWER. Wider is fix round
+ * J's finding (a) coming back. Measured by picture, the same eight cameras
+ * per outfit: at S = 40, R = 34 the picture from the eye 48 units forward -
+ * the one the game gives whenever the line of sight is clear - is IDENTICAL
+ * to the shipped one, to a tenth of a grey level, in every outfit and at every
+ * pitch. At R = 38 the Antarctica parka already loses half a grey level at
+ * pitch 75 and two and a half at 90; at S = 60, R = 55 her chest is visibly
+ * scooped out and one looks at the inside of her back. And at S = 50, R = 38
+ * the cylinder reaches an ARM vertex on the diving suit (36.1 units) for the
+ * first time in any of the scans - which the node mask below would stop
+ * anyway, and which is a warning all the same.
+ *
+ * SO THE COLLAR IS SMALLER AND NOT GONE, and the honest reason is geometry: a
+ * catsuit collar reaches r = 31 and the shoulders it sits on reach r = 67 at
+ * the same depth. No cylinder about the neck separates all of one from all of
+ * the other. What makes the remainder harmless is the INNER SKIN below - what
+ * shows through the ring is her own throat's colour now, not a hole and not a
+ * plate. */
+#define HD_LARA_NECK_CUT_S	40.0f	// down the axis from the head joint
+#define HD_LARA_NECK_CUT_R	34.0f	// off the axis
 #define HD_LARA_NECK_CUT_NODES	(1u << HD_LARA_TORSO)
 
-/* THE CAP THAT CLOSES WHAT THAT CUT OPENS (#123, fix round I, I3; re-aimed in
- * fix round J, J1).
+/* WHAT CLOSES WHAT THAT CUT OPENS: THE INNER SKIN (#123, fix round K, K1).
  *
- * WHAT FIX ROUND I BUILT AND WHY THE USER SENT IT BACK. Round I put the rim at
- * s = 50, because that was the depth at which the body's own surface survived
- * the SPHERE cut. But at s = 50 the body is not a neck: the measurement above
- * says it burst open twenty units higher, and "the vertex furthest off the
- * axis in each sector" at that depth is a SHOULDER. The rim was therefore the
- * outline of her whole torso - r from 20 to 82 in one ring - and the three
- * things the user photographed all follow from that one number:
+ * THE HOLE IS NOT THE CUT'S DOING ALONE. Cutting the neck away opens the
+ * body, and first person also culls back faces (stage S8's second half) - so
+ * the far wall of her own chest is not drawn either and one looks clean
+ * through her. Fix round I built a CAP to lay over the opening; fix round J
+ * re-aimed it at the cut's own rim; and the play test sent the whole idea
+ * back, with pictures (finding K1(b)): "a great flat skin-coloured plate over
+ * chest and collar, with the backpack straps on it, and black inside it
+ * still". The plate is the cap seen with the eye at the head joint - where the
+ * camera stands whenever a wall is in front of Lara - and the straps are the
+ * page the Russia coat's collar ring happens to sit on (measured: the cap's
+ * majority page is 8018, the backpack, for OUTFIT_RUSSIA).
  *
- *   (a) a flat skin-coloured plate at the collar, seen from OUTSIDE. The dome
- *       rounded each spoke towards the ring's MEAN radius, so a spoke whose
- *       rim sat at 20 was pushed out to 27 by the second ring - seven units
- *       through her own skin.
- *   (b) black inside the neck. The middle of the dome took the AVERAGE of 32
- *       rim texture coordinates, and the average of a scattered set of points
- *       on an atlas page is a point in the middle of the page, which on 8310
- *       is empty. An averaged coordinate is not a colour; it is a coordinate.
- *   (c) "the polygons look random". A rim that runs from 20 to 82 units off
- *       the axis in 32 sectors is not a ring but a star, and the strips
- *       between its spokes are slivers.
+ * WHAT REPLACES IT is not a model at all. The body is drawn a SECOND time in
+ * first person, keeping exactly the faces the first draw culls - the inside of
+ * the shell - with the same cut, the same node lights, the same light list and
+ * the same matrices. Everything a ray through the hole can reach is then her
+ * own far wall, drawn as skin:
  *
- * WHAT IT IS NOW. The rim sits where the CUT ends - the ring of the body's own
- * vertices closest to the cylinder's own edge, r = HD_LARA_NECK_CUT_R, at the
- * depth the neck reaches it, which the table above puts at s = 24 to 27. That
- * ring is the neck's own mouth: 32 sectors of a tube, not of a chest.
+ *   - no geometry is built, so there is no rim to fit and no seam to gape,
+ *     and nothing to get wrong per outfit;
+ *   - it cannot poke out through her collar, because it IS her collar, seen
+ *     from the other side - it is behind every outward-facing triangle and
+ *     the depth test says so;
+ *   - it closes the hole at EVERY angle, not at the one the cap was aimed at.
  *
- * THREE RULES KEEP IT HONEST, and each of them is one of the user's three
- * findings turned into a line of code:
+ * AND IT IS SKIN AND NOT THE SURFACE'S OWN TEXTURE. The inside of a catsuit
+ * is black, and "black inside it still" is the user's finding rather than the
+ * fix. So the whole inner draw wears ONE texel - the throat's own, measured
+ * out of the outfit's top neck ring in hd_lara.cpp - and its normal is turned
+ * round, so it takes the light the outer surface at that place takes instead
+ * of the darkness a face pointing away from the room takes. hd_model.h's
+ * HDModelSetInnerSkin and the SKIN_ cull modes are the machinery.
  *
- *   (a) NOTHING EVER GOES OUTSIDE ITS OWN SPOKE. Every ring inwards is its
- *       rim vertex's own offset scaled by a factor that is never above one, so
- *       no part of the cap can be further off the axis than the body's own
- *       surface it hangs from. It cannot poke through her skin.
- *   (b) THE MIDDLE WEARS A REAL TEXEL. The inner rings converge on the
- *       texture coordinates of ONE rim vertex - the one whose coordinates lie
- *       nearest the middle of all of them - and not on their average. A rim
- *       vertex's coordinates are a place on the page where the artist painted
- *       something; their average need not be.
- *   (c) IT IS A RING AND NOT A STAR, because the depth it is taken at is the
- *       depth at which the neck is still a neck.
+ * The two numbers below are the search for that texel: how far off the neck
+ * axis a vertex may be to count as the stump at all, how far down it the neck
+ * is still a neck, and how many vertices a page needs before it may be the
+ * neck. The rule, the two rules it replaced and the measurement that killed
+ * them are at measure_neck_skin in hd_lara.cpp.
  *
- * The dome sinks INTO the chest and not up towards the chin, so no part of it
- * is ever nearer the eye than the rim it hangs from. SPOKES times RINGS is 128
- * vertices and 224 triangles, a rounding error beside the 18,000 of the body.
- */
-#define HD_LARA_NECK_CAP_R	HD_LARA_NECK_CUT_R	// the rim follows the cut
-#define HD_LARA_NECK_CAP_SMAX	40	// no rim vertex deeper than this
-#define HD_LARA_NECK_CAP_LIP	8	// nor higher than this above the bottom
-#define HD_LARA_NECK_CAP_SPOKES	32
-#define HD_LARA_NECK_CAP_RINGS	4	// the rim and three more, then the centre
-#define HD_LARA_NECK_CAP_SINK	16	// how deep the middle sinks into the chest
+ * THE DEPTH IS ITS OWN NUMBER AND NOT THE CUT'S, though the two read 30 and
+ * 40 today. It is a fact about the BODY - the depth at which the shoulders
+ * join and the neck stops being a tube, measured in the table above - and the
+ * cut is a decision about the picture. They were the same constant for one
+ * afternoon of fix round K, and moving the cut from 30 to 40 then moved the
+ * inner skin's page from Lara's throat (8001) to the Russia coat (8042),
+ * because at forty units down there is more coat in the search than neck. */
+#define HD_LARA_NECK_SKIN_R	30.0	// off the axis: the stump and no shoulder
+#define HD_LARA_NECK_SKIN_S	30.0	// down it: where the shoulders join
+#define HD_LARA_NECK_SKIN_MIN	24	// vertices before a page may be the neck
+
+/* THE CAP THAT WAS THERE BEFORE IT (#123, fix round I, I3; re-aimed in fix
+ * round J, J1; WITHDRAWN in fix round K, K1(b)).
+ *
+ * Rounds I and J closed the hole with a BUILT model - a dome of 32 spokes and
+ * four rings, cut from the outfit's own collar ring and sunk into the chest,
+ * HD_LARA_PART_NECK_CAP, made by build_neck_cap in hd_lara.cpp out of
+ * HDModelSlot::synth. It is gone, and the reason is the play test's picture:
+ * with the eye on the head joint - where the first person camera sits whenever
+ * a wall is in front of Lara - the dome is a GREAT FLAT SKIN-COLOURED PLATE
+ * across the whole view, and on OUTFIT_RUSSIA it wears the BACKPACK STRAPS,
+ * because the majority page of that outfit's collar ring is 8018.
+ *
+ * Two things were wrong with the idea and not with the numbers. A lid built to
+ * fit one rim fits the picture taken from one place; and its texture has to be
+ * borrowed from whatever page the rim happens to sit on, which is a lottery
+ * over eight outfits. The inner skin above has neither problem: it is not
+ * built, and it wears a texel that was chosen because it is the throat.
+ *
+ * The maker, the part, its sheen entry and the tool's -nocap / -showcap went
+ * with it; git has them if a small lid deep in the collar is ever wanted as
+ * well as the inner skin rather than instead of it. */
 
 /* The classic Lara mesh tree in LM_ order, spelled out so that the tables
  * below and a reader of them do not have to look it up. These are the numbers
@@ -562,32 +628,6 @@ enum HDLaraPart
 	HD_LARA_PART_BODY = 0,		// the OUTFIT_ model, nodes 0..14
 	HD_LARA_PART_FACE,		// LARA_HEAD, rigid on node 14
 	HD_LARA_PART_BRAID,		// HAIR_OG, its own six node chain
-
-	/* THE CAP THAT CLOSES HER NECK IN FIRST PERSON (#123, fix round I, I3).
-	 *
-	 * The user's finding: the near cut of stage S8 "leaves an open hole at the
-	 * collar, one looks into the body - the inner faces, the backpack straps".
-	 * It has to. The cut is a SPHERE around the eye and the body is a hollow
-	 * shell: everything within 60 units goes, which is the neck stump, and
-	 * what is left is a shell with the neck bored out of it. First person also
-	 * culls back faces (S8's second half), so the far wall of the shell is not
-	 * drawn either and one sees clean through her.
-	 *
-	 * WHY NO FILE CAN BE IT. There is no lid in the remaster's wardrobe, and
-	 * there could not be a general one: the hole's rim is the outfit's own
-	 * body at the height the cut reaches, and eight outfits have eight of
-	 * them. So this part is BUILT, out of the outfit model's own vertices,
-	 * when the level loads - HDModelSlot::synth in hd_model.h is the machinery
-	 * and HDLaraNeckCap in hd_lara.cpp is the maker, which carries the
-	 * measurement it rests on.
-	 *
-	 * WHAT IT IS: a dome across the body cavity at the collar, sunk into the
-	 * chest, whose rim is the outfit's OWN vertices at that height - the same
-	 * positions, so the seam is an edge the two surfaces share and not a
-	 * join that can gape. It hangs rigidly off node 7 (the torso), it is
-	 * drawn only while the first person view runs, and it carries NO near cut
-	 * of its own: the cut is the thing it exists to close. */
-	HD_LARA_PART_NECK_CAP,
 
 	HD_LARA_PART_HAND_REST,		// nothing in the hands
 	HD_LARA_PART_HAND_PISTOL,
@@ -848,9 +888,8 @@ unsigned int HDLaraPartCoverage(int part);
 /* THE FIRST PERSON NECK CUT'S CYLINDER (#123, fix round J, J1).
  *
  * Fills `out` with the cylinder HD_LARA_NECK_CUT_S and _R describe, measured
- * against the level's OWN Lara skeleton - the same bind pose the neck cap was
- * built from a moment earlier, which is why the two fit each other to the
- * vertex. `on` comes back 1; false and an untouched `out` when the level has
+ * against the level's OWN Lara skeleton - the same bind pose the inner skin's
+ * texel was measured out of a moment earlier. `on` comes back 1; false and an untouched `out` when the level has
  * no bind pose, and then the caller must draw with no cut at all rather than
  * with a cylinder about the origin. */
 bool HDLaraNeckCut(HDModelNeckCut* out);
@@ -877,6 +916,18 @@ void HDLaraPartSheen(int part, float* strength, float* power);
  * second on the pages the rest hands have not got, through
  * HDModelSetPageSheen. Both 0 for a part that is not a hand. */
 void HDLaraHeldSheen(int part, float* strength, float* power);
+
+/* AND LARA'S SKIN ITSELF (#123, fix round K, K1), out of the same material
+ * table: what the INNER SKIN draw shines like, because what that draw shows
+ * is her own throat's colour and not the outfit's. One function so that the
+ * number is written down once. */
+void HDLaraSkinSheen(float* strength, float* power);
+
+/* AND WHICH PAGES OF THE BODY WEAR IT (#123, fix round K, K2): true for a
+ * .DDS page the outfit that is on names as Lara's own skin, which is what
+ * makes the wrist seam one material instead of two. The table and the
+ * measurement behind it are at kOutfit in hd_lara.cpp. */
+bool HDLaraSkinPage(int page);
 
 /* WHAT TO DRAW THIS FRAME, in draw order, after the body and the face. Returns
  * how many entries were written (at most 6: two hands, two thigh holsters, the

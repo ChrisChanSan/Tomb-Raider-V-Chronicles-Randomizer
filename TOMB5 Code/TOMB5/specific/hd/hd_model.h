@@ -24,7 +24,7 @@
 #pragma once
 
 #include "hd_render.h"
-#include "hd_trm.h"	// #123 fix round I (I3): HDModelSlot::synth builds one
+#include "hd_trm.h"	// #123 fix round K (K1): HDModelSlot::measure reads one
 
 struct IDirect3DDevice9;
 
@@ -134,29 +134,14 @@ struct HDModelSlot
 	 * leg in either. */
 	int onlyPage = -1;
 
-	/* A MODEL THAT IS BUILT AND NOT READ (#123, fix round I, I3).
+	/* A LOOK AT THE FILE, WHILE IT IS STILL A FILE (#123, fix round K, K1).
 	 *
-	 * `synth` is a maker: it is handed the .TRM of the slot `synthFrom` -
-	 * which has to appear EARLIER in the same array, because the sources are
-	 * read in the order the caller gives them - and fills an HDTrmModel of its
-	 * own, which this module then treats exactly like a file it read: same
-	 * page cache, same skinning, same bind pose, same draw. It owns its four
-	 * arrays with new[] and they are given back with HDTrmFree like everything
-	 * else.
-	 *
-	 * There is one maker so far and it is the reason this exists: the CAP that
-	 * closes Lara's neck in first person. The near cut of stage S8 takes the
-	 * neck stump off her body and leaves the collar open, and no file in the
-	 * remaster's wardrobe is that lid - it has to be cut to the outfit's own
-	 * collar ring, so it is generated from the outfit's own vertices. See
-	 * HD_LARA_PART_NECK_CAP in hd_lara.h.
-	 *
-	 * A maker that returns false is a part that does not draw, exactly as a
-	 * missing file is: the note says why and the rest of the wardrobe is
-	 * unaffected. */
-	int synthFrom = -1;
-	bool (*synth)(const HDTrmModel* source, HDTrmModel* out,
-		const char** why) = 0;
+	 * Called once, right after the .TRM is read and before it becomes buffers
+	 * nobody can read back. It answers a question this module has no business
+	 * knowing: which texel of which page is Lara's NECK, so that the inner
+	 * skin can wear her own colour (HDModelSetInnerSkin). It changes nothing
+	 * and returns nothing - what it measures it keeps itself. */
+	void (*measure)(const HDTrmModel* source) = 0;
 };
 
 // Where a model's file was found.
@@ -380,14 +365,25 @@ void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount,
  * consistent enough to cull on: over the eight wardrobe bodies, 39,440 to
  * 25,384 triangles each, at most 59 of them have the geometric normal on the
  * other side of the vertex normal (0.06 % to 0.18 %). */
+/* AND THE FAR SIDE OF THE SAME SHELL (#123, fix round K, K1). The two SKIN_
+ * modes keep exactly the faces the two CULL_ modes throw away and paint them
+ * in one colour - the draw that closes the hole first person cuts, described
+ * at HDModelSetInnerSkin below and at gInnerSkin in hd_model.hlsl. They are
+ * cull modes and not a parameter of their own because the mode already
+ * travels from hd_laradraw through HDObjectPush to the draw, and one more
+ * value on that road is one more value; a parameter would be six signatures. */
 enum HDModelCull
 {
 	HD_MODEL_CULL_NONE = 0,		// double sided - every model but the one
 	HD_MODEL_CULL_CW,		// D3DCULL_CW
-	HD_MODEL_CULL_CCW		// D3DCULL_CCW
+	HD_MODEL_CULL_CCW,		// D3DCULL_CCW
+	HD_MODEL_SKIN_CW,		// D3DCULL_CW, and the inner skin with it
+	HD_MODEL_SKIN_CCW		// D3DCULL_CCW, ditto
 };
 
 #define HD_MODEL_CULL_BACK	HD_MODEL_CULL_CCW
+// The complement of CULL_BACK: what CULL_BACK drops is what this one keeps.
+#define HD_MODEL_SKIN_INSIDE	HD_MODEL_SKIN_CW
 
 /* THE NECK CUT (#123, stage S8; re-shaped in fix round J, J1 and J3).
  *
@@ -497,6 +493,23 @@ int HDModelPage(int slot, int at);		// .DDS number
  * level; the table lives with the model and dies with it. */
 void HDModelSetPageSheen(int slot, int page, float strength, float power);
 int HDModelPageSheenCount(int slot);
+
+/* THE ONE TEXEL THE INNER SKIN WEARS (#123, fix round K, K1).
+ *
+ * A draw whose cull mode is one of the SKIN_ ones keeps the faces the
+ * matching CULL_ mode drops - the far wall of the shell, seen from inside -
+ * and paints every one of its fragments with the single texel named here:
+ * `page` is bound for the whole draw and (u, v) is written into the shader,
+ * so what comes back is one flat colour out of the art, lit per vertex like
+ * everything else. It exists because the hole first person cuts in her neck
+ * shows the INSIDE of her chest, and the inside of a catsuit is black.
+ *
+ * Call it after HDModelLevelBegin, once per level, exactly as
+ * HDModelSetPageSheen is called; a slot with none set draws a SKIN_ mode as
+ * the plain CULL_ one, which is the old picture and not a crash.
+ * hd_lara.cpp measures the texel out of the outfit's own neck. */
+void HDModelSetInnerSkin(int slot, int page, float u, float v);
+bool HDModelInnerSkin(int slot, int* page, float* u, float* v);
 bool HDModelHasHead(int slot);
 int HDModelHeadNode(int slot);			// the node the face rides on, or -1
 // The model's bounding box in its own bind pose, six floats (min then max).

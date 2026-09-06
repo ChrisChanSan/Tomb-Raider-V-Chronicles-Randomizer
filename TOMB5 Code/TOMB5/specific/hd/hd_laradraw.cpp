@@ -985,38 +985,60 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 	drawn++;
 
+	/* AND THE SAME BODY FROM THE INSIDE (#123, fix round K, K1).
+	 *
+	 * The draw above keeps the outward faces and the cut takes her neck away,
+	 * so a ray down the collar meets nothing at all - the hole fix round I
+	 * built a cap for and fix round J re-aimed, and which the play test sent
+	 * back as "a great flat plate". This is the other answer: the very same
+	 * model, the very same matrices, lights and cut, with the OTHER side of
+	 * every triangle kept. What a ray through the hole meets is then the far
+	 * wall of her own chest.
+	 *
+	 * FOUR THINGS ABOUT THIS CALL ARE THE WHOLE DESIGN:
+	 *
+	 *   THE SAME CUT. Without it the inner wall of the neck TUBE would be
+	 *   drawn, and that tube stands eighteen units from the eye - inside the
+	 *   near plane and across the whole picture. The cut has to take both
+	 *   walls or neither.
+	 *
+	 *   THE SAME NODE MASK, and not the torso's alone. A ray that leaves the
+	 *   chest through an arm hole has to meet the inside of the arm; masked
+	 *   to node 7 it would meet nothing and the hole would be back, smaller
+	 *   and in a stranger place.
+	 *
+	 *   AFTER the outward draw, so the depth test does the hiding. Every
+	 *   inward face of a closed limb sits behind that limb's own outward face
+	 *   and is dropped; only where the outward face was cut away does an
+	 *   inward one survive. That is why this costs a draw and not a picture.
+	 *
+	 *   THE SAME LIGHT. Same node ambient, same list, same sun factor - the
+	 *   inside of her chest is lit like the outside of it, which is the only
+	 *   way the seam at the cut's edge does not read as an edge. The sheen is
+	 *   the skin's, because that is what the surface now is.
+	 *
+	 * The colour comes from hd_lara.cpp's measurement of her own throat and
+	 * is set on the model at level build; a level whose ring could not be
+	 * measured draws this pass as a plain cull, which is fix round J's
+	 * picture and not a crash. */
+	if (firstPerson && cutting)
+	{
+		float skinSheen = 0.0f, skinPower = 1.0f;
+
+		HDLaraSkinSheen(&skinSheen, &skinPower);
+
+		if (HDObjectPush(HDLaraPartSlot(HD_LARA_PART_BODY), matrices,
+			HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
+			&neckCut, mirror ? HD_MODEL_SKIN_CCW : HD_MODEL_SKIN_INSIDE,
+			skinSheen, skinPower))
+			drawn++;
+	}
+
 	HDLaraPartSheen(HD_LARA_PART_FACE, &sheen, &sheenPower);
 
 	if (!firstPerson && HDObjectPush(HDLaraPartSlot(HD_LARA_PART_FACE),
 		matrices, HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
 		0, HD_MODEL_CULL_NONE, sheen, sheenPower))
-		drawn++;
-
-	/* THE NECK CAP, AND ONLY IN FIRST PERSON (#123, fix round I, I3; re-aimed
-	 * in fix round J, J1).
-	 *
-	 * It closes what the neck cut above opens. Three things about this call
-	 * are the whole design:
-	 *
-	 *   NO CUT OF ITS OWN. It is pushed with none, so the cylinder that took
-	 *   the neck cannot take the lid that replaces it. Its rim is the body's
-	 *   own ring of vertices at the cut's own edge - hd_lara.cpp's maker
-	 *   measures it against the very cylinder this call is paired with - so
-	 *   the two meet exactly.
-	 *
-	 *   NO CULLING. Everything else about first person is one sided; this is a
-	 *   lid seen from one side only, and drawing both sides of it costs 224
-	 *   triangles and removes a whole class of mistake.
-	 *
-	 *   ITS OWN COVERAGE AND THE FRAME'S MASK. The cap is node 7 and nothing
-	 *   else, so a frame that hides the torso hides the cap with it. */
-	HDLaraPartSheen(HD_LARA_PART_NECK_CAP, &sheen, &sheenPower);
-
-	if (firstPerson && HDLaraHasPart(HD_LARA_PART_NECK_CAP) &&
-		HDObjectPush(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), matrices,
-			HD_LARA_NODES, nodeLight,
-			HDLaraPartCoverage(HD_LARA_PART_NECK_CAP) & mask, lights,
-			lightCount, sunScale, 0, HD_MODEL_CULL_NONE, sheen, sheenPower))
 		drawn++;
 
 	/* THE POUCHES, UNDER WHATEVER GOES IN THEM (#123, fix round D, D4).

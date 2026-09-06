@@ -111,6 +111,13 @@ namespace
 		// but the ones a caller has spoken for.
 		std::vector<PageSheen> pageSheen;
 
+		/* THE INNER SKIN (#123, fix round K, K1): the page and the texture
+		 * coordinate a SKIN_ draw wears from edge to edge. -1 is "nobody has
+		 * named one", and then a SKIN_ mode draws as its plain CULL_ twin. */
+		int innerPage = -1;
+		int innerPageSlot = -1;
+		float innerUV[2] = { 0.0f, 0.0f };
+
 		std::string name;
 		HDModelOrigin origin = HD_MODEL_ORIGIN_NONE;
 
@@ -1218,6 +1225,27 @@ namespace
 
 		g_device->SetVertexShaderConstantF(162, neck, 2);
 
+		/* c164, THE INNER SKIN (#123, fix round K, K1). Written for every
+		 * draw and not only for the one that wears it, for the reason c161
+		 * and c162 are: a constant register keeps what it was last given, and
+		 * a stale "on" would paint the next creature in one colour.
+		 *
+		 * A mode nobody has named a texel for falls back to the plain cull -
+		 * the picture fix round J shipped, and not a body in a colour taken
+		 * from whatever was in the register. */
+		const bool inner = (cull == HD_MODEL_SKIN_CW ||
+			cull == HD_MODEL_SKIN_CCW) && model.innerPageSlot >= 0;
+
+		float innerSkin[4] =
+		{
+			inner ? 1.0f : 0.0f,
+			inner ? model.innerUV[0] : 0.0f,
+			inner ? model.innerUV[1] : 0.0f,
+			0.0f
+		};
+
+		g_device->SetVertexShaderConstantF(164, innerSkin, 1);
+
 		/* THE OBJECT'S LIGHTS, in the VERTEX shader (c136) - the classic path
 		 * lights per vertex out of the same list, so this is the same place
 		 * and not an approximation of it. See HDModelLighting in hd_model.h.
@@ -1290,7 +1318,8 @@ namespace
 		 * installed (D3DCULL_NONE) is what every other draw finds. */
 		if (cull != HD_MODEL_CULL_NONE)
 			g_device->SetRenderState(D3DRS_CULLMODE,
-				cull == HD_MODEL_CULL_CW ? D3DCULL_CW : D3DCULL_CCW);
+				cull == HD_MODEL_CULL_CW || cull == HD_MODEL_SKIN_CW
+					? D3DCULL_CW : D3DCULL_CCW);
 
 		for (int pass = 0; pass < 3; pass++)
 		{
@@ -1378,7 +1407,10 @@ namespace
 				{
 					const Range& more = model.pass[pass][next];
 
-					if (more.pageSlot != first.pageSlot ||
+					/* THE INNER SKIN DRAWS ON ONE PAGE (#123, fix round K,
+					 * K1), so a change of page is no longer a reason to cut
+					 * the run: the whole shell is one call per node run. */
+					if ((!inner && more.pageSlot != first.pageSlot) ||
 						more.start != start + count ||
 						!(nodeMask & (1u << (more.node & 31))))
 						break;
@@ -1387,8 +1419,11 @@ namespace
 					next++;
 				}
 
-				g_device->SetTexture(0, first.pageSlot >= 0
-					? (IDirect3DBaseTexture9*)HDPageCacheSlotTexture(first.pageSlot)
+				const int pageSlot = inner ? model.innerPageSlot
+					: first.pageSlot;
+
+				g_device->SetTexture(0, pageSlot >= 0
+					? (IDirect3DBaseTexture9*)HDPageCacheSlotTexture(pageSlot)
 					: 0);
 
 				/* THE MATERIAL OF THIS PAGE (#123, fix round I, I4). Only for
@@ -1396,7 +1431,7 @@ namespace
 				 * numbers really change, so a hand with a gun in it costs two
 				 * constant writes and a model without a table costs a test on
 				 * an empty vector. */
-				if (!model.pageSheen.empty())
+				if (!model.pageSheen.empty() && !inner)
 				{
 					float want[2] = { sheen[0], sheen[1] };
 
@@ -1639,68 +1674,6 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 		const bool tr3 = slots[i].fromTr3;
 
-		/* A MODEL THAT IS BUILT AND NOT READ (#123, fix round I, I3). It has
-		 * no file, no head and no origin; everything after this point is the
-		 * same road a read model takes. The source is looked up in what has
-		 * already been read, which is why the maker's slot has to stand after
-		 * its source in the caller's array. */
-		if (slots[i].synth)
-		{
-			const HDTrmModel* source = 0;
-
-			for (size_t p = 0; p < pending.size(); p++)
-				if (pending[p].slot == slots[i].synthFrom)
-				{
-					source = &pending[p].trm;
-					break;
-				}
-
-			if (!source)
-			{
-				if (stats)
-					stats->missing++;
-				note("%s (slot %d) is built from slot %d, which is not loaded "
-					"- left out", slot_label(slot, model), slot,
-					slots[i].synthFrom);
-				continue;
-			}
-
-			Pending made;
-			const char* trouble = "";
-
-			made.slot = slot;
-			made.hasHead = false;
-			made.name = model;
-			made.origin = HD_MODEL_ORIGIN_5;
-			made.pageBias = 0;
-			made.onlyPage = -1;
-			std::memset(&made.trm, 0, sizeof(made.trm));
-			std::memset(&made.head, 0, sizeof(made.head));
-
-			const double made_started = now_ms();
-			const bool built = slots[i].synth(source, &made.trm, &trouble);
-
-			read_ms += now_ms() - made_started;
-
-			if (!built)
-			{
-				if (stats)
-					stats->refused++;
-				note("%s (slot %d): %s - left out", slot_label(slot, model),
-					slot, trouble);
-				continue;
-			}
-
-			/* Its pages are the caller's own numbers, in this bundle. A maker
-			 * that reuses a page the source already wears costs the cache
-			 * nothing, which is what the neck cap does. */
-			for (int t = 0; t < made.trm.textures; t++)
-				pages.push_back(made.trm.texture[t]);
-
-			pending.push_back(made);
-			continue;
-		}
-
 		HDModelOrigin origin = HD_MODEL_ORIGIN_NONE;
 		const std::string path = find_model(model, tr3, &origin);
 
@@ -1745,6 +1718,11 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				slot_label(slot, model), slot, model, trouble);
 			continue;
 		}
+
+		/* The caller's own look at the file (#123, fix round K, K1), before
+		 * anything here touches it. */
+		if (slots[i].measure)
+			slots[i].measure(&here.trm);
 
 		if (origin == HD_MODEL_ORIGIN_TR3)
 			note("%s (slot %d): %s.TRM is a guest out of Tomb Raider I-III "
@@ -2301,6 +2279,45 @@ int HDModelPageSheenCount(int slot)
 	const Model* model = find(g_models, slot);
 
 	return model ? (int)model->pageSheen.size() : 0;
+}
+
+/* THE ONE TEXEL THE INNER SKIN WEARS (#123, fix round K, K1). The page is
+ * resolved to a CACHE SLOT here and not at draw time, because the cache slot
+ * is an allocation and the page number is the name of a thing - the same
+ * split the ranges make. A page the cache never took leaves the model without
+ * an inner skin, and a SKIN_ draw then falls back to its plain cull. */
+void HDModelSetInnerSkin(int slot, int page, float u, float v)
+{
+	const std::map<int, Model>::iterator at = g_models.find(slot);
+
+	if (at == g_models.end())
+		return;
+
+	const int where = page >= 0 ? HDPageCacheSlotOf(page) : -1;
+
+	at->second.innerPage = where >= 0 ? page : -1;
+	at->second.innerPageSlot = where;
+	at->second.innerUV[0] = u;
+	at->second.innerUV[1] = v;
+}
+
+bool HDModelInnerSkin(int slot, int* page, float* u, float* v)
+{
+	const Model* model = find(g_models, slot);
+
+	if (!model || model->innerPageSlot < 0)
+		return false;
+
+	if (page)
+		*page = model->innerPage;
+
+	if (u)
+		*u = model->innerUV[0];
+
+	if (v)
+		*v = model->innerUV[1];
+
+	return true;
 }
 
 bool HDModelHasHead(int slot)

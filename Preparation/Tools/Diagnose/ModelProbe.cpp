@@ -110,14 +110,21 @@
  *                         round J). `0 0` draws the BEFORE picture. The
  *                         default with -firstperson is the engine's own
  *                         HD_LARA_NECK_CUT_S and _R.
+ *     -noinner            draw first person WITHOUT the inner skin (#123, fix
+ *                         round K), which is what the cut and the culling
+ *                         leave on their own: a hole one sees the room
+ *                         through. The BEFORE picture of round K.
  *     -neck               the measurements those numbers come from: for every
  *                         outfit, how many torso-node vertices sit above the
  *                         shoulder line and how near the nearest of them, of
  *                         the shoulders and of the chest come to the eye - at
  *                         both eye positions the game uses; then the neck as a
  *                         TUBE and as a CYLINDER, with the (S, R) scan that
- *                         says what a candidate cut takes, whether it can
- *                         reach an arm, and what it leaves in the camera.
+ *                         says what a candidate cut takes, how much COLLAR it
+ *                         leaves standing, whether it can reach an arm and
+ *                         what it leaves in the camera; and last the stump BY
+ *                         PAGE, which is where the inner skin's own texel is
+ *                         chosen from.
  *     -braidsim [steps]   THE BRAID'S OWN PHYSICS, run offline (#123, fix
  *                         round F, F2). HairControl's chain loop transcribed
  *                         line for line and driven with this level's Lara
@@ -196,6 +203,11 @@
  *                         thigh holster rig out of OUTFIT_TR3_CATSUIT
  *                         (page 8205) without its legs, and the switch is how
  *                         one looks at what the cut kept.
+ *     -look head|wrist    aim the camera at one JOINT of the composite instead
+ *                         of at the middle of the whole figure: the head, for
+ *                         the braid against the skull, or the RIGHT WRIST, for
+ *                         the seam between the body's own forearm and the
+ *                         separate HAND_ model (#123, fix round K, K2).
  *     -light <x y z r g b range>
  *                         one POINT light in VIEW space (the camera is at the
  *                         origin looking down +z), colour 0..255 and the
@@ -1589,13 +1601,15 @@ static void PrintNeckCylinder(const std::string& root5, const ClassicSlot& body)
 	/* --- the scan --------------------------------------------------------- */
 	printf("-- what a cylinder cut (S down, R off) leaves -----------------\n");
 	printf("`stump` is how many node 7 vertices above the shoulder line the "
-		"cut takes\nand `left` how many it leaves; `arm` is the nearest arm "
-		"vertex the cylinder\nreaches (- is none); `nearest` is the nearest "
-		"SURVIVING vertex of any node\nbut the masked head, from the two eyes "
-		"- the number the cut exists to raise.\n\n");
-	printf("%-19s %4s %4s %7s %7s %7s   %8s %8s\n", "outfit", "S", "R",
-		"stump", "left", "arm", "eye 48", "eye 0");
-	printf("------------------- ---- ---- ------- ------- -------   "
+		"cut takes\nand `left` how many it leaves; `collar` is how many of "
+		"those survivors sit in\nthe neck band s < 30, which is the COLLAR "
+		"RING of the user's finding K1(a);\n`arm` is the nearest arm vertex "
+		"the cylinder reaches (- is none); `nearest`\nis the nearest SURVIVING "
+		"vertex of any node but the masked head, from the\ntwo eyes - the "
+		"number the cut exists to raise.\n\n");
+	printf("%-19s %4s %4s %7s %7s %7s %7s   %8s %8s\n", "outfit", "S", "R",
+		"stump", "left", "collar", "arm", "eye 48", "eye 0");
+	printf("------------------- ---- ---- ------- ------- ------- -------   "
 		"-------- --------\n");
 
 	const double shoulder =
@@ -1629,13 +1643,13 @@ static void PrintNeckCylinder(const std::string& root5, const ClassicSlot& body)
 		for (int i = 0; i < 3; i++)
 			axis[i] /= len > 1.0e-6 ? len : 1.0;
 
-		static const double kS[3] = { 40.0, 45.0, 50.0 };
-		static const double kR[3] = { 26.0, 30.0, 34.0 };
+		static const double kS[3] = { 30.0, 40.0, 50.0 };
+		static const double kR[3] = { 30.0, 34.0, 38.0 };
 
 		for (int a = 0; a < 3; a++)
 			for (int b = 0; b < 3; b++)
 			{
-				int cut = 0, left = 0;
+				int cut = 0, left = 0, collar = 0;
 				double arm = 1.0e9;
 				double nearest[2] = { 1.0e9, 1.0e9 };
 
@@ -1673,6 +1687,15 @@ static void PrintNeckCylinder(const std::string& root5, const ClassicSlot& body)
 							left++;
 					}
 
+					/* The COLLAR RING (#123, fix round K, K1(a)): what the cut
+					 * leaves standing in the neck band itself. The shoulders
+					 * join at s = 30 in every outfit - the tube table above -
+					 * so a survivor above that line and near the axis is a
+					 * collar and not a chest. */
+					if (!inside && node == HD_LARA_TORSO && s >= 0.0 &&
+						s < 30.0 && r < 60.0)
+						collar++;
+
 					if (inside && node != HD_LARA_TORSO)
 					{
 						const double dd = sqrt(off[0] * off[0] + off[1] *
@@ -1703,13 +1726,355 @@ static void PrintNeckCylinder(const std::string& root5, const ClassicSlot& body)
 				if (arm < 1.0e8)
 					sprintf(armText, "%.1f", arm);
 
-				printf("%-19s %4.0f %4.0f %7d %7d %7s   %8.1f %8.1f\n",
-					(a || b) ? "" : stem, kS[a], kR[b], cut, left, armText,
-					nearest[0], nearest[1]);
+				printf("%-19s %4.0f %4.0f %7d %7d %7d %7s   %8.1f %8.1f\n",
+					(a || b) ? "" : stem, kS[a], kR[b], cut, left, collar,
+					armText, nearest[0], nearest[1]);
 			}
 
 		HDTrmFree(&model);
 	}
+}
+
+/* WHICH PAGE IS THE NECK (#123, fix round K, K1).
+ *
+ * The inner skin wears ONE texel and it has to be Lara's throat, so the maker
+ * in hd_lara.cpp has to pick a page out of the stump - and the first rule it
+ * was given (the topmost ring) answered 8002, which is her HAIR. This is the
+ * table that says so: the node 7 vertices inside the cut's own radius,
+ * counted by texture page and by how far down the neck axis they sit.
+ */
+static void PrintNeckPages(const std::string& root5, const ClassicSlot& body)
+{
+	printf("\n-- the neck stump BY PAGE, per outfit (#123, fix round K) -----\n");
+	printf("node 7 vertices within %.0f of the neck axis, by the page they\n"
+		"wear. The inner skin's colour is taken from one of these, so the\n"
+		"page that is the THROAT has to be the one the rule picks.\n\n",
+		(double)HD_LARA_NECK_SKIN_R);
+
+	for (int outfit = HD_LARA_OUTFIT_NONE + 1; outfit < HD_LARA_OUTFIT_COUNT;
+		outfit++)
+	{
+		const char* stem = HDLaraOutfitModel(outfit);
+		HDTrmModel model;
+		const char* why = "";
+
+		if (!stem)
+			continue;
+
+		const std::string path = TrmPath(root5, stem);
+
+		if (path.empty() || !HDTrmLoad(path.c_str(), &model, &why))
+			continue;
+
+		const double H[3] =
+		{
+			body.bind[HD_LARA_HEAD_NODE][0], body.bind[HD_LARA_HEAD_NODE][1],
+			body.bind[HD_LARA_HEAD_NODE][2]
+		};
+		const double T[3] = { body.bind[7][0], body.bind[7][1], body.bind[7][2] };
+		double axis[3] = { T[0] - H[0], T[1] - H[1], T[2] - H[2] };
+		const double len = sqrt(axis[0] * axis[0] + axis[1] * axis[1] +
+			axis[2] * axis[2]);
+
+		for (int i = 0; i < 3; i++)
+			axis[i] /= len > 1.0e-6 ? len : 1.0;
+
+		struct Row { int page; int count; double lo, hi, sum;
+			double rlo, rhi, rsum; };
+		std::vector<Row> rows;
+
+		for (int i = 0; i < model.vertices; i++)
+		{
+			const HDTrmVertex& v = model.vertex[i];
+			int node = v.bone[0];
+
+			if (v.weight[1] > v.weight[0] && v.weight[1] >= v.weight[2])
+				node = v.bone[1];
+			else if (v.weight[2] > v.weight[0] && v.weight[2] > v.weight[1])
+				node = v.bone[2];
+
+			if (node != HD_LARA_TORSO)
+				continue;
+
+			const double d[3] = { v.x - H[0], v.y - H[1], v.z - H[2] };
+			const double s = d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
+
+			if (s > HD_LARA_NECK_CUT_S)
+				continue;
+
+			const double off[3] =
+			{
+				d[0] - s * axis[0], d[1] - s * axis[1], d[2] - s * axis[2]
+			};
+			const double r = sqrt(off[0] * off[0] + off[1] * off[1] +
+				off[2] * off[2]);
+
+			if (r > HD_LARA_NECK_SKIN_R)
+				continue;
+
+			const int page = HDTrmPageOf(&model, &v);
+			size_t at = 0;
+
+			for (; at < rows.size(); at++)
+				if (rows[at].page == page)
+					break;
+
+			if (at == rows.size())
+			{
+				Row one = { page, 0, 1.0e9, -1.0e9, 0.0, 1.0e9, -1.0e9, 0.0 };
+
+				rows.push_back(one);
+			}
+
+			rows[at].count++;
+			rows[at].sum += s;
+			rows[at].rsum += r;
+
+			if (s < rows[at].lo) rows[at].lo = s;
+			if (s > rows[at].hi) rows[at].hi = s;
+			if (r < rows[at].rlo) rows[at].rlo = r;
+			if (r > rows[at].rhi) rows[at].rhi = r;
+		}
+
+		printf("%-19s %6s %7s %7s %7s %7s   %7s %7s %7s\n", stem, "page",
+			"verts", "s min", "s mean", "s max", "r min", "r mean", "r max");
+
+		for (size_t i = 0; i < rows.size(); i++)
+			printf("%-19s %6d %7d %7.1f %7.1f %7.1f   %7.1f %7.1f %7.1f\n", "",
+				rows[i].page, rows[i].count, rows[i].lo,
+				rows[i].sum / rows[i].count, rows[i].hi, rows[i].rlo,
+				rows[i].rsum / rows[i].count, rows[i].rhi);
+
+		HDTrmFree(&model);
+	}
+}
+
+/* WHY A HAND DOES NOT SHINE LIKE THE ARM IT IS ON (#123, fix round K, K2).
+ *
+ * The user's finding: "the hands react differently to the room's intensity -
+ * in five rooms the hand is now brighter, now darker than the forearm; a
+ * difference in the TEXTURE would be the same everywhere, so it is LIGHT."
+ *
+ * WHAT IS THE SAME, read off hd_laradraw.cpp and not guessed: the body and the
+ * hand parts are pushed with the SAME nodeLight array, the SAME light list,
+ * the same sun factor and the same joint matrices. HDObjectPush copies all
+ * four per draw and changes none of them. So the ambient and the diffuse at a
+ * point on the wrist are identical to the bit whichever model owns it.
+ *
+ * WHAT DIFFERS IS THE SHEEN, and it is the whole of it. Fix round D gives the
+ * BODY the outfit's material and fix round I gives the HAND the skin's, and
+ * the forearm the hand meets is the body. The Blinn-Phong term the vertex
+ * shader adds is, where the room's own light list is empty - an ordinary room
+ * lit by its baked vertex colours, which is most of the game:
+ *
+ *     spec = light * strength * pow(N.V, power) / 255
+ *
+ * `light` is the room's ambient. So the difference between the two materials
+ * is MULTIPLIED BY THE ROOM'S INTENSITY - bright in a bright room, gone in a
+ * dark one, and its sign follows the outfit. That is the user's five rooms.
+ *
+ * This table is the measurement: which texture pages the body wears on the
+ * arm and hand nodes, which pages the HAND_ model wears, and what each of
+ * them shines like.
+ */
+static void PrintHandLight(const std::string& root5, int outfit, bool oldSkin)
+{
+	static const int kArmNodes[6] =
+	{
+		HD_LARA_RINARM, HD_LARA_ROUTARM, HD_LARA_RHAND,
+		HD_LARA_LINARM, HD_LARA_LOUTARM, HD_LARA_LHAND
+	};
+
+	printf("\n-- the wrist seam: what shines how (#123, fix round K) -------\n");
+	printf("`body` is the OUTFIT model's own pages on nodes 8..13 - the arms\n"
+		"and the sleeve or skin at the hand - and `hand` the pages of the\n"
+		"HAND_ model that is drawn over them. `sheen` is the material each\n"
+		"gets, and `white` the grey levels the highlight adds at N.V = 1 in a\n"
+		"room whose ambient is 255, which is what the seam shows.\n\n");
+	printf("%-19s %6s %7s %7s %7s %7s   %11s %7s\n", "outfit", "page",
+		"arm", "at hand", "torso", "where", "sheen", "white");
+	printf("------------------- ------ ------- ------- ------- -------   "
+		"----------- -------\n");
+
+	{
+		const char* stem = HDLaraOutfitModel(outfit);
+		const char* handStem = HDLaraPartModel(outfit, HD_LARA_PART_HAND_REST);
+		bool named = false;
+
+		if (!stem)
+			return;
+
+		for (int which = 0; which < 2; which++)
+		{
+			const char* file = which ? handStem : stem;
+			HDTrmModel model;
+			const char* why = "";
+
+			if (!file)
+				continue;
+
+			const std::string path = TrmPath(root5, file);
+
+			if (path.empty() || !HDTrmLoad(path.c_str(), &model, &why))
+				continue;
+
+			struct Row { int page; int count; int hands; int torso; };
+			std::vector<Row> rows;
+
+			for (int i = 0; i < model.vertices; i++)
+			{
+				const HDTrmVertex& v = model.vertex[i];
+				int node = v.bone[0];
+				bool arm = false;
+
+				if (v.weight[1] > v.weight[0] && v.weight[1] >= v.weight[2])
+					node = v.bone[1];
+				else if (v.weight[2] > v.weight[0] && v.weight[2] > v.weight[1])
+					node = v.bone[2];
+
+				for (int k = 0; k < 6; k++)
+					if (node == kArmNodes[k])
+						arm = true;
+
+				if (!arm && node != HD_LARA_TORSO)
+					continue;
+
+				const int page = HDTrmPageOf(&model, &v);
+				size_t at = 0;
+
+				for (; at < rows.size(); at++)
+					if (rows[at].page == page)
+						break;
+
+				if (at == rows.size())
+				{
+					Row one = { page, 0, 0, 0 };
+
+					rows.push_back(one);
+				}
+
+				if (arm)
+					rows[at].count++;
+
+				if (node == HD_LARA_RHAND || node == HD_LARA_LHAND)
+					rows[at].hands++;
+
+				if (node == HD_LARA_TORSO)
+					rows[at].torso++;
+			}
+
+			/* The sheen the engine's own tables give it: the outfit's for the
+			 * body, the hand's for the hand - and, since this round, the SKIN's
+			 * for whichever page of the body is Lara's own skin. */
+			float bodyS = 0.0f, bodyP = 1.0f, handS = 0.0f, handP = 1.0f;
+			float skinS = 0.0f, skinP = 1.0f;
+
+			HDLaraPartSheen(HD_LARA_PART_BODY, &bodyS, &bodyP);
+			HDLaraPartSheen(HD_LARA_PART_HAND_REST, &handS, &handP);
+			HDLaraSkinSheen(&skinS, &skinP);
+
+			for (size_t i = 0; i < rows.size(); i++)
+			{
+				const bool skin = !which && !oldSkin &&
+					HDLaraSkinPage(rows[i].page);
+				const float s = which ? handS : (skin ? skinS : bodyS);
+				const float p = which ? handP : (skin ? skinP : bodyP);
+
+				if (!rows[i].count)
+					continue;
+
+				printf("%-19s %6d %7d %7d %7d %7s   %5.2f / %-3.0f %7.1f\n",
+					named ? "" : stem, rows[i].page, rows[i].count,
+					rows[i].hands, rows[i].torso,
+					which ? "hand" : (skin ? "SKIN" : "body"), s, p,
+					s * 255.0f);
+				named = true;
+			}
+
+			HDTrmFree(&model);
+		}
+	}
+
+	/* THE SEAM ITSELF, as one number. The body's page with the most geometry
+	 * ON THE HAND NODES is the surface the HAND model continues, so the two
+	 * whites beside each other are what a pixel row across the wrist sees. */
+	{
+		const char* stem = HDLaraOutfitModel(outfit);
+		HDTrmModel model;
+		const char* why = "";
+		const std::string path = stem ? TrmPath(root5, stem) : std::string();
+
+		if (!path.empty() && HDTrmLoad(path.c_str(), &model, &why))
+		{
+			std::vector<int> page, count;
+
+			for (int i = 0; i < model.vertices; i++)
+			{
+				const HDTrmVertex& v = model.vertex[i];
+				int node = v.bone[0];
+
+				if (v.weight[1] > v.weight[0] && v.weight[1] >= v.weight[2])
+					node = v.bone[1];
+				else if (v.weight[2] > v.weight[0] && v.weight[2] > v.weight[1])
+					node = v.bone[2];
+
+				if (node != HD_LARA_RHAND && node != HD_LARA_LHAND)
+					continue;
+
+				const int at = HDTrmPageOf(&model, &v);
+				size_t k = 0;
+
+				for (; k < page.size(); k++)
+					if (page[k] == at)
+						break;
+
+				if (k == page.size())
+				{
+					page.push_back(at);
+					count.push_back(0);
+				}
+
+				count[k]++;
+			}
+
+			int best = -1, most = 0;
+
+			for (size_t k = 0; k < page.size(); k++)
+				if (count[k] > most)
+				{
+					most = count[k];
+					best = page[k];
+				}
+
+			if (best >= 0)
+			{
+				float bodyS = 0.0f, bodyP = 1.0f, handS = 0.0f, handP = 1.0f;
+				float skinS = 0.0f, skinP = 1.0f;
+
+				HDLaraPartSheen(HD_LARA_PART_BODY, &bodyS, &bodyP);
+				HDLaraPartSheen(HD_LARA_PART_HAND_REST, &handS, &handP);
+				HDLaraSkinSheen(&skinS, &skinP);
+
+				if (!oldSkin && HDLaraSkinPage(best))
+					bodyS = skinS;
+
+				printf("\nTHE SEAM: the body meets the hand on page %d (%d "
+					"vertices at the two hand\nnodes). It adds %.1f grey "
+					"levels there and the hand adds %.1f - a difference of "
+					"%.1f,\nmultiplied by the room's ambient.\n", best, most,
+					bodyS * 255.0f, handS * 255.0f,
+					(handS - bodyS) * 255.0f);
+			}
+
+			HDTrmFree(&model);
+		}
+	}
+
+	printf("\nA page marked SKIN is Lara's own skin on the BODY model, and it\n"
+		"takes the skin material since fix round K - the same one the HAND\n"
+		"model has had since fix round I. Where the two used to differ, the\n"
+		"difference was multiplied by the room's ambient, which is the user's\n"
+		"finding K2.\n");
 }
 
 static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
@@ -1961,6 +2326,7 @@ static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
 		"stops being one:\nthe row above the one that bursts open.\n");
 
 	PrintNeckCylinder(root5, body);
+	PrintNeckPages(root5, body);
 }
 
 /* ------------------------------------------------- the braid's physics -- */
@@ -3595,6 +3961,11 @@ struct LaraOptions
 	bool mirror;
 	bool firstPerson;
 	bool neck;
+	bool handLight;			// #123 fix round K (K1/K2): the wrist seam
+	/* #123 fix round K (K2): put the outfit's own material back on Lara's
+	 * SKIN pages, which is the picture before this round - the forearm and
+	 * the hand shaded by two different materials. */
+	bool oldSkin;
 	bool braid;			// the braid root table (fix round C, C4)
 	int braidSim;			// #123 fix round F (F2): steps, 0 = off
 	/* #123 fix round G (G1): the same chain under a real animation. Empty =
@@ -3602,12 +3973,9 @@ struct LaraOptions
 	std::vector<int> braidAnims;
 	bool braidFloor;
 	bool classicBraidRoot;		// #123 fix round I (I2): the BEFORE picture
-	bool noCap;			// #123 fix round I (I3): the BEFORE picture
-	/* #123 fix round J (J1(a)): draw the neck cap in a THIRD person picture as
-	 * well, which is the only way to answer "does it poke out through her
-	 * collar?" - the user's finding is about a cap seen from OUTSIDE, and a
-	 * cap that is properly sunk into the body is invisible in this picture. */
-	bool showCap;
+	/* #123 fix round K (K1): leave the INNER SKIN out, which is the picture
+	 * fix round J shipped - a hole one sees the room through. */
+	bool noInner;
 	/* #123 fix round I (I4): draw ONE part of the composite and nothing else,
 	 * so that a question about one part - "does the sheen reach the hands?" -
 	 * is answered by a picture of that part and not by hunting for it in a
@@ -3630,6 +3998,8 @@ struct LaraOptions
 	const HDObjLight* lights;
 	int lightCount;
 	const double (*turn)[2];
+	// -meshbits, on the composite too (#123, fix round K).
+	unsigned int nodeMask;
 };
 
 /* The engine's slot number for a name, out of the level that is loaded. Every
@@ -4121,6 +4491,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	if (o.neck)
 		PrintNeckTable(o.root, body);
 
+	if (o.handLight)
+		PrintHandLight(o.root, outfit, o.oldSkin);
+
 	if (o.braid)
 		PrintBraidTable(o.root, body);
 
@@ -4177,11 +4550,21 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * junction user finding C4 is about - the braid against the back of the
 	 * skull. Without it the camera frames hips to boots and the head sits off
 	 * the top edge. */
+	/* -look wrist does the same for the RIGHT HAND JOINT (#123, fix round K,
+	 * K2). The seam this round is about is one joint wide - the body's own
+	 * forearm meets the separate HAND_ model there - and in a picture of the
+	 * whole figure it is four pixels. The radius is the hand's own, not the
+	 * body's, so the frame really is the wrist. */
 	const bool lookHead = o.look == "head";
-	const double cx = lookHead ? classic14[0] : 0.5 * (mins[0] + maxs[0]);
-	const double cy = lookHead ? classic14[1] : 0.5 * (mins[1] + maxs[1]);
-	const double cz = lookHead ? classic14[2] : 0.5 * (mins[2] + maxs[2]);
-	const double radius = 0.5 * sqrt(
+	const bool lookWrist = o.look == "wrist";
+	const float* const classic10 = body.bind[HD_LARA_RHAND];
+	const double cx = lookHead ? classic14[0]
+		: lookWrist ? classic10[0] : 0.5 * (mins[0] + maxs[0]);
+	const double cy = lookHead ? classic14[1]
+		: lookWrist ? classic10[1] : 0.5 * (mins[1] + maxs[1]);
+	const double cz = lookHead ? classic14[2]
+		: lookWrist ? classic10[2] : 0.5 * (mins[2] + maxs[2]);
+	const double radius = lookWrist ? 90.0 : 0.5 * sqrt(
 		(maxs[0] - mins[0]) * (maxs[0] - mins[0]) +
 		(maxs[1] - mins[1]) * (maxs[1] - mins[1]) +
 		(maxs[2] - mins[2]) * (maxs[2] - mins[2]));
@@ -4654,7 +5037,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	/* FIRST PERSON (#126), the same three omissions the seam makes: the head
 	 * node off the body, no separate face, no braid. All three sit exactly
 	 * where the camera does. */
-	unsigned int bodyMask = ~0u;
+	/* -meshbits, ON THE COMPOSITE AS WELL (#123, fix round K). It reached the
+	 * single-model path only, and the question "which NODE is that ring in
+	 * front of the camera?" is answered by drawing one node and looking. */
+	unsigned int bodyMask = o.nodeMask;
 
 	if (o.firstPerson)
 	{
@@ -4662,6 +5048,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		printf("firstperson: head node %d masked, no LARA_HEAD, no braid\n",
 			HD_LARA_HEAD_NODE);
 	}
+
+	if (o.nodeMask != ~0u)
+		printf("meshbits: %08x - the composite is masked to those nodes\n",
+			o.nodeMask);
 
 	/* THE NECK CUT (stage S8, re-shaped in fix round J). The BODY carries it
 	 * and nothing else, exactly as specific/hd/hd_laradraw.cpp pushes it: the
@@ -4704,29 +5094,69 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 				HDModelSetPageSheen(pslot, HDModelPage(pslot, i), 0.0f, 1.0f);
 		}
 
+	/* -oldskin: her skin back under the outfit's material (#123, fix round K,
+	 * K2). The BEFORE picture, and the only honest way to have one - the
+	 * engine's own table is what the tool draws with, so the picture from
+	 * before the round has to be made by undoing the round rather than by
+	 * describing it. */
+	if (o.oldSkin)
+	{
+		const int bodySlot = HDLaraPartSlot(HD_LARA_PART_BODY);
+		float was = 0.0f, wasPower = 1.0f;
+		int put = 0;
+
+		HDLaraPartSheen(HD_LARA_PART_BODY, &was, &wasPower);
+
+		for (int i = 0; i < HDModelPageCount(bodySlot); i++)
+			if (HDLaraSkinPage(HDModelPage(bodySlot, i)))
+			{
+				HDModelSetPageSheen(bodySlot, HDModelPage(bodySlot, i), was,
+					wasPower);
+				put++;
+			}
+
+		printf("oldskin : %d skin page%s back on the outfit's %.2f/%.0f\n", put,
+			put == 1 ? "" : "s", was, wasPower);
+	}
+
 	SetSheen(lighting, HD_LARA_PART_BODY, sheenOn);
 
 	if (draws(HD_LARA_PART_BODY) && HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BODY), matrices, HD_LARA_NODES,
 		light, bodyMask, &lighting, cutting ? &neckCut : 0, o.cull))
 		drawn++;
 
+	/* THE INNER SKIN (#123, fix round K, K1), in the same place and with the
+	 * same four rules the seam has: after the outward draw, the same cut, the
+	 * same node mask, and the skin's own material. -noinner leaves it out,
+	 * which is the BEFORE picture. */
+	if (o.firstPerson && cutting && !o.noInner && draws(HD_LARA_PART_BODY))
+	{
+		float skinSheen = 0.0f, skinPower = 1.0f;
+		int page = -1;
+		float su = 0.0f, sv = 0.0f;
+
+		HDLaraSkinSheen(&skinSheen, &skinPower);
+		lighting.specStrength = sheenOn ? skinSheen : 0.0f;
+		lighting.specPower = skinPower;
+
+		if (HDModelInnerSkin(HDLaraPartSlot(HD_LARA_PART_BODY), &page, &su, &sv))
+			printf("innerskin: page %d at %.3f/%.3f\n", page, su, sv);
+		else
+			printf("innerskin: no texel measured - the inner draw wears the "
+				"surface's own pages\n");
+
+		if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BODY), matrices,
+			HD_LARA_NODES, light, bodyMask, &lighting, &neckCut,
+			o.cull == HD_MODEL_CULL_CW ? HD_MODEL_SKIN_CCW
+				: HD_MODEL_SKIN_INSIDE))
+			drawn++;
+	}
+
 	SetSheen(lighting, HD_LARA_PART_FACE, sheenOn);
 
 	if (!o.firstPerson && draws(HD_LARA_PART_FACE) &&
 		HDModelDraw(HDLaraPartSlot(HD_LARA_PART_FACE), matrices, HD_LARA_NODES,
 		light, bodyMask, &lighting))
-		drawn++;
-
-	/* THE NECK CAP (#123, fix round I, I3), in the same place and with the
-	 * same three rules the seam has: first person only, no near cut of its
-	 * own, and drawn on both sides. */
-	SetSheen(lighting, HD_LARA_PART_NECK_CAP, sheenOn);
-
-	if ((o.firstPerson || o.showCap) && !o.noCap && draws(HD_LARA_PART_NECK_CAP) &&
-		HDLaraHasPart(HD_LARA_PART_NECK_CAP) &&
-		HDModelDraw(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), matrices,
-			HD_LARA_NODES, light,
-			HDLaraPartCoverage(HD_LARA_PART_NECK_CAP) & bodyMask, &lighting))
 		drawn++;
 
 	/* THE HOLSTER RIG (#123, fix round D, D4), in the same place and with the
@@ -4817,9 +5247,10 @@ int main(int argc, char** argv)
 	int onlyPage = -1;		// #123 fix round D (D4): -name with one page
 	bool lara = false, laraNodes = false, mirror = false;
 	bool laraFirstPerson = false, laraCheck = false, laraNeck = false;
+	bool laraHandLight = false;	// #123 fix round K (K2): the wrist seam
+	bool laraOldSkin = false;	// #123 fix round K (K2): the BEFORE picture
 	bool classicBraidRoot = false;	// #123 fix round I (I2): the BEFORE picture
-	bool noCap = false;		// #123 fix round I (I3): the BEFORE picture
-	bool showCap = false;		// #123 fix round J (J1): and from outside
+	bool noInner = false;		// #123 fix round K (K1): ditto
 	int onlyPart = -1;		// #123 fix round I (I4): one part alone
 	bool noSheen = false;		// #123 fix round D (D2): the BEFORE picture
 	bool laraBraid = false;
@@ -4920,19 +5351,27 @@ int main(int argc, char** argv)
 			lara = true;
 			laraNeck = true;
 		}
-		else if (!_stricmp(argv[i], "-classicroot"))
-			classicBraidRoot = true;
-		/* #123 fix round I (I3): the first person picture WITHOUT the neck
-		 * cap, which is what the near cut of stage S8 leaves on its own. */
-		else if (!_stricmp(argv[i], "-nocap"))
-			noCap = true;
-		/* #123 fix round J (J1(a)): the cap in a third person picture, so that
-		 * "is it inside her?" is a picture and not an argument. */
-		else if (!_stricmp(argv[i], "-showcap"))
+		/* #123 fix round K (K2): what the body and the hand shine like where
+		 * the two meet, for the outfit this run wears. */
+		else if (!_stricmp(argv[i], "-handlight"))
 		{
 			lara = true;
-			showCap = true;
+			laraHandLight = true;
 		}
+		/* #123 fix round K (K2): the BEFORE picture - her skin shaded by the
+		 * outfit's material again, as it was until this round. */
+		else if (!_stricmp(argv[i], "-oldskin"))
+		{
+			lara = true;
+			laraOldSkin = true;
+		}
+		else if (!_stricmp(argv[i], "-classicroot"))
+			classicBraidRoot = true;
+		/* #123 fix round K (K1): the first person picture WITHOUT the inner
+		 * skin, which is what the cut and the culling leave on their own -
+		 * a hole one sees the room through. */
+		else if (!_stricmp(argv[i], "-noinner"))
+			noInner = true;
 		else if (!_stricmp(argv[i], "-onlypart") && i + 1 < argc)
 		{
 			lara = true;
@@ -5163,11 +5602,12 @@ int main(int argc, char** argv)
 		o.mirror = mirror;
 		o.firstPerson = laraFirstPerson;
 		o.classicBraidRoot = classicBraidRoot;
-		o.noCap = noCap;
-		o.showCap = showCap;
+		o.noInner = noInner;
 		o.onlyPart = onlyPart;
 		o.noSheen = noSheen;
 		o.neck = laraNeck;
+		o.handLight = laraHandLight;
+		o.oldSkin = laraOldSkin;
 		o.braid = laraBraid;
 		o.braidSim = laraBraidSim;
 		o.braidAnims = laraBraidAnims;
@@ -5196,6 +5636,7 @@ int main(int argc, char** argv)
 		o.lights = lights;
 		o.lightCount = lightCount;
 		o.turn = turn;
+		o.nodeMask = nodeMask;
 
 		const int result = RunLara(o, level);
 

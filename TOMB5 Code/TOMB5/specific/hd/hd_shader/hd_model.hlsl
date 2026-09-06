@@ -87,6 +87,7 @@
  * c160        gLightInfo          per object (count, the sun's factor)
  * c161        gSpec               per draw   (#123 fix round D, D2)
  * c162 - c163 gNeck, gNeckAxis    per draw   (#123 fix round J, J1)
+ * c164        gInnerSkin          per draw   (#123 fix round K, K1)
  *
  * THE VERTEX REGISTERS OVERLAP THE ROOM SHADER'S, and on purpose. Direct3D 9
  * has ONE constant register file behind both shaders, and hd_room.hlsl keeps
@@ -102,7 +103,7 @@
  * both. What must never happen is writing a register a shader `def`s for
  * itself, which is why gPass goes to the pixel file alone (see below).
  *
- * 162 of the 256 vs_3_0 registers. The palette is 32 nodes because the
+ * 165 of the 256 vs_3_0 registers. The palette is 32 nodes because the
  * highest bone index a weighted vertex names over all 566 models of game 5 is
  * 28 (GREEN_TEETH); the only two files past that, PIERRE_HEAD and
  * LARSON_HEAD at 40, are facial-rig heads whose numbers belong to the rig and
@@ -221,6 +222,33 @@ float4 gSpec : register(c161);
 float4 gNeck : register(c162);
 float4 gNeckAxis : register(c163);
 
+/* THE INNER SKIN (#123, fix round K, K1).
+ *
+ * x = on, yz = the ONE texture coordinate every fragment of this draw wears,
+ * w unused.
+ *
+ * WHAT IT IS FOR. First person cuts a hole in a closed body and culls back
+ * faces, so what lies behind the hole is nothing at all - one sees the room
+ * through her (fix round I's finding, and fix round J's cap was the answer
+ * that came back as "a great flat plate"). This is the other answer: the body
+ * is drawn a SECOND time, keeping the faces the first draw threw away, so the
+ * far wall of her own chest closes the hole. It is her own geometry, so there
+ * is no seam, no rim to fit and nothing to build.
+ *
+ * ONE TEXEL AND NOT THE SURFACE'S OWN. The inside of a catsuit is black, and
+ * "innen weiter schwarz" is the user's finding, not the fix. So every fragment
+ * of the inner draw wears one texture coordinate - a real place on a real page
+ * where the artist painted Lara's neck (hd_lara.cpp measures which, out of the
+ * outfit's own stump), and hd_model.cpp binds that page for the whole draw.
+ * A colour taken from the art rather than one invented here.
+ *
+ * AND THE NORMAL IS TURNED ROUND. A back face's normal points away from the
+ * camera that is looking at it, and lit with that normal the inside of her
+ * chest is black however bright the room is. Flipped, it wears the light the
+ * outer surface at the same place wears, which is what "lit like the neck"
+ * means. */
+float4 gInnerSkin : register(c164);
+
 /* --------------------------------------------------- THE PARITY BLOCK ------
  *
  * constants, pixel side
@@ -332,6 +360,12 @@ VS_OUT ModelVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		light += weight * gNodeLight[node].rgb;
 		cuttable += weight * gNodeLight[node].a;
 	}
+
+	/* THE INNER SKIN's turned normal (#123, fix round K, K1). Before anything
+	 * reads `nrm`, so the diffuse loop, the sheen and the interpolant all see
+	 * the same one. A multiply and not a branch: it is one instruction and
+	 * every other model in the game runs it with a factor of one. */
+	nrm *= gInnerSkin.x > 0.0f ? -1.0f : 1.0f;
 
 	/* THE NECK CUT (#123, fix round J, J1 and J3), and it is Lara's alone.
 	 *
@@ -463,8 +497,10 @@ VS_OUT ModelVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	o.spec = spec;
 	o.pos = mul(float4(view, 1.0f), gProj);
 	/* u is UNnormalised (0..255) and v is normalised (0..1) - see the vertex
-	 * table at the top. */
-	o.uv = float2(inBone.w * (1.0f / 255.0f), inWeight.w);
+	 * table at the top. The INNER SKIN draw wears one texel instead (#123,
+	 * fix round K, K1). */
+	o.uv = gInnerSkin.x > 0.0f ? gInnerSkin.yz
+		: float2(inBone.w * (1.0f / 255.0f), inWeight.w);
 	o.light = light;
 	o.viewPos = view;
 	o.viewNrm = nrm;

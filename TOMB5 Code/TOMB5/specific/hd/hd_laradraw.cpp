@@ -421,10 +421,16 @@ namespace
 			}
 		}
 
+		/* The two numbers of fix round D (D3) ride along, so a log says
+		 * which root the simulation used and whether the pack spheres were
+		 * added: root_z -33 is the HD one, -48 the classic. */
 		Log("HDLOG braidcheck links=%d step=%.0f worst_gap=%.3f at link %d "
-			"(units, view space)", HD_LARA_HAIR_NODES,
+			"(units, view space) root_z=%d pack=%d/%d,%d,%d r%d",
+			HD_LARA_HAIR_NODES,
 			g_level.hairBind[1 * 3 + 2] - g_level.hairBind[0 * 3 + 2],
-			worst_gap, worst_link);
+			worst_gap, worst_link, HD_LARA_BRAID_ROOT_Z_HD,
+			HD_LARA_PACK_X, HD_LARA_PACK_Y_TOP, HD_LARA_PACK_Y_BOTTOM,
+			HD_LARA_PACK_Z, HD_LARA_PACK_R);
 	}
 }
 
@@ -564,11 +570,20 @@ void HDLaraDrawBuild(const char* stem)
 
 		HDModelBindDrift(slot, &mean, &worst);
 
+		/* The sheen goes in the line as well (#123, fix round D, D2): the
+		 * numbers are a material table and not a measurement, so a picture
+		 * the user does not like has to be traceable to a number he can name
+		 * without opening the source. */
+		float sheen = 0.0f, sheenPower = 1.0f;
+
+		HDLaraPartSheen(part, &sheen, &sheenPower);
+
 		Log("HDLOG level=%s lara part=%s model=%s hd=%d cover=%d(%08x) "
-			"verts=%d drift=%.0f/%.0f",
+			"verts=%d drift=%.0f/%.0f sheen=%.2f/%.0f",
 			stem, HDLaraPartLabel(part), HDLaraPartModel(g_level.outfit, part),
 			(int)HDLaraHasPart(part), covered, HDLaraPartCoverage(part),
-			HDLaraHasPart(part) ? HDModelVertices(slot) : 0, mean, worst);
+			HDLaraHasPart(part) ? HDModelVertices(slot) : 0, mean, worst,
+			sheen, sheenPower);
 	}
 }
 
@@ -836,9 +851,18 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * before the PrintObjects loop. The counter is for the day that changes. */
 	int drawn = 0;
 
+	/* THE SHEEN, per part (#123, fix round D, D2). hd_lara.cpp's table says
+	 * what a part is made of; the body's answer follows the OUTFIT, because
+	 * the same part number is a Rome top in one level and a catsuit in the
+	 * next. A part with no entry gets 0 and the shader's branch costs
+	 * nothing. */
+	float sheen = 0.0f, sheenPower = 1.0f;
+
+	HDLaraPartSheen(HD_LARA_PART_BODY, &sheen, &sheenPower);
+
 	if (!HDObjectPush(HDLaraPartSlot(HD_LARA_PART_BODY), matrices,
 		HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale, nearCut,
-		cull))
+		cull, sheen, sheenPower))
 	{
 		g_dropped++;
 		return;
@@ -846,15 +870,46 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 	drawn++;
 
+	HDLaraPartSheen(HD_LARA_PART_FACE, &sheen, &sheenPower);
+
 	if (!firstPerson && HDObjectPush(HDLaraPartSlot(HD_LARA_PART_FACE),
-		matrices, HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale))
+		matrices, HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
+		0.0f, HD_MODEL_CULL_NONE, sheen, sheenPower))
+		drawn++;
+
+	/* THE POUCHES, UNDER WHATEVER GOES IN THEM (#123, fix round D, D4).
+	 *
+	 * Before the pieces and not with them, because it is not a piece: the rig
+	 * belongs to the OUTFIT and not to the weapon. It is on Lara whether she
+	 * has her guns in her hands or on her thighs, exactly as the built-in rig
+	 * of OUTFIT_CLASSIC is - the pouches do not vanish when she draws.
+	 *
+	 * HDLaraHasPart is the whole guard: the part exists only for an outfit
+	 * that holsters and has no rig of its own (kind 4 in hd_lara.cpp), and
+	 * for anybody else HDLaraPartSlot names a slot no model was built for,
+	 * which HDObjectPush turns down at its first line.
+	 *
+	 * The node mask is the part's own coverage - nodes 0, 1 and 4, the belt
+	 * and the two thighs - AND the frame's, so first person takes it off with
+	 * everything else. */
+	HDLaraPartSheen(HD_LARA_PART_HOLSTER_RIG, &sheen, &sheenPower);
+
+	if (HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG) &&
+		HDObjectPush(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), matrices,
+			HD_LARA_NODES, nodeLight, HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & mask,
+			lights, lightCount, sunScale, 0.0f, HD_MODEL_CULL_NONE,
+			sheen, sheenPower))
 		drawn++;
 
 	for (int i = 0; i < pieceCount; i++)
+	{
+		HDLaraPartSheen(pieces[i].part, &sheen, &sheenPower);
+
 		if (HDObjectPush(HDLaraPartSlot(pieces[i].part), matrices,
 			HD_LARA_NODES, nodeLight, pieces[i].nodeMask & mask, lights,
-			lightCount, sunScale))
+			lightCount, sunScale, 0.0f, HD_MODEL_CULL_NONE, sheen, sheenPower))
 			drawn++;
+	}
 
 	/* THE BRAID, on its own six link chain and its own matrices. It is lit
 	 * with the head's ambient, which is what the classic path does too -
@@ -878,8 +933,11 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 			hairLight[n * 3 + 2] = nodeLight[head * 3 + 2];
 		}
 
+		HDLaraPartSheen(HD_LARA_PART_BRAID, &sheen, &sheenPower);
+
 		if (HDObjectPush(HDLaraPartSlot(HD_LARA_PART_BRAID), hairMatrices,
-			HD_LARA_HAIR_NODES, hairLight, ~0u, lights, lightCount, sunScale))
+			HD_LARA_HAIR_NODES, hairLight, ~0u, lights, lightCount, sunScale,
+			0.0f, HD_MODEL_CULL_NONE, sheen, sheenPower))
 			drawn++;
 	}
 

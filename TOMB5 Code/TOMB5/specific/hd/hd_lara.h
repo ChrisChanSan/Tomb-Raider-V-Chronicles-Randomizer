@@ -102,6 +102,82 @@
 #define HD_LARA_BRAID_ROOT_Y	(-4)
 #define HD_LARA_BRAID_ROOT_Z	(-48)
 
+/* THE SAME POINT FOR AN HD LARA (#123, fix round D, D3a).
+ *
+ * Fix round C measured the gap and left it: the braid hangs 15.2 units clear
+ * of the skull, on every outfit, and TROne has it too. The cause is that the
+ * two braids are built differently. The CLASSIC one draws its first link as a
+ * SKINNED connector whose top ring is stashed vertices of the HEAD mesh
+ * (game\hair.cpp, GetCorrectStashPoints), so it starts on the skull whatever
+ * the root is; the HD one has a rigid HAIR_OG link 0 that starts at the root
+ * and reaches only 1.7 units back out of it.
+ *
+ * The measurement, ModelProbe -braid, and it is the same for all eight bodies
+ * because the skull is one mesh:
+ *
+ *     head joint            1 / -247 / -12
+ *     hair.cpp root        -3 / -251 / -60      = the joint plus (-4,-4,-48)
+ *     nearest skull vertex -0.7 / -251.2 / -43.3
+ *     from the root to it   2.3 / -0.2 / +16.7  - 16.8 units, and the
+ *                                                 direction is +z alone
+ *     link 0 reaches back                 1.7
+ *     the gap that stays open            15.2
+ *
+ * So the correction is 15 units of +z and nothing else: the root moves from
+ * 48 units behind the head joint to 33, and link 0 then overlaps the skull by
+ * 1.7 units instead of hanging 15.2 short of it. It is applied ONLY when the
+ * HD wardrobe is drawing (HDLaraDrawActive), because the classic braid does
+ * not have the gap and moving its root would only make its skinned connector
+ * shorter.
+ *
+ * The whole chain follows: the simulation is seeded from this point, so the
+ * links below the first sit 15 units further along her back rather than
+ * breaking at a seam - which is what would happen if only the drawn matrix of
+ * link 0 were moved. */
+#define HD_LARA_BRAID_ROOT_Z_HD	(-33)
+
+/* THE BACKPACK, AS A COLLISION SPHERE (#123, fix round D, D3b).
+ *
+ * The user's finding: the HD braid goes through the HD backpack. The classic
+ * HairControl pushes the braid out of five spheres and all five are CLASSIC
+ * Lara meshes - hips, torso, head, the two upper arms. The HD body is a
+ * different one, and its pack stands 92 units behind the torso joint where
+ * the classic torso sphere reaches nowhere near.
+ *
+ * Measured with ModelProbe -braid over the wardrobe, in the TORSO NODE's own
+ * frame (the pack is every node 7 vertex more than 30 units behind the torso
+ * joint - nothing else of a torso is back there):
+ *
+ *     outfit              verts   centre x/y/z        radius
+ *     OUTFIT_CLASSIC       2327    1 / -133 / -61       72
+ *     OUTFIT_RUSSIA        2340    1 / -122 / -61       81
+ *     OUTFIT_VCI           2277   -0 / -133 / -61       71
+ *     OUTFIT_TR3_ANTARC    1468    1 / -122 / -61       83
+ *     OUTFIT_TR3_NEVADA    1319    1 / -132 / -61       75
+ *     OUTFIT_TR3_COAST     1199    1 / -132 / -61       74
+ *     OUTFIT_TR3_CATSUIT   1174    1 / -132 / -61       74
+ *
+ * One sphere round that box would be a poor pack: it is a flat slab, 130
+ * units tall and 62 deep, and a single sphere of radius 75 would hold the
+ * braid 44 units clear of the back it is supposed to lie on. So the pack gets
+ * TWO, stacked, each tangent to the slab's rear face.
+ *
+ * The rear face and the height come off the same measurement, taken down the
+ * MIDDLE of the back (|x| <= 30, which is the strip a braid can touch) and
+ * identical in all seven: y from -197 to -68, z from -92 to -30. Two spheres
+ * of radius 36 whose surfaces touch z = -88 therefore sit at z = -52, and at
+ * y -165 and -100 they cover y -201 to -64 between them - the slab, with 4
+ * units to spare at either end.
+ *
+ * The diving suit is not in the list on purpose: it measures 165, because
+ * what sits behind ITS torso is the two thrusters and not a pack, and it
+ * wears a helmet rather than a braid, so no braid ever meets them. */
+#define HD_LARA_PACK_X		(0)
+#define HD_LARA_PACK_Y_TOP	(-165)
+#define HD_LARA_PACK_Y_BOTTOM	(-100)
+#define HD_LARA_PACK_Z		(-52)
+#define HD_LARA_PACK_R		(36)
+
 /* THE PSEUDO SLOTS. hd_model stores its models in a map keyed by slot number,
  * and a wardrobe part has no slot of its own - LARA_SKIN is one slot and the
  * composite is twenty models. So each part gets a number of its own, far above
@@ -210,6 +286,29 @@ enum HDLaraPart
 	HD_LARA_PART_HOLSTER_PISTOL,	// both thighs
 	HD_LARA_PART_HOLSTER_UZI,	// both thighs
 	HD_LARA_PART_HOLSTER_DEAGLE,	// the right thigh alone
+
+	/* THE POUCHES THE GUNS SIT IN (#123, fix round D, D4).
+	 *
+	 * A HOLSTER_ file is the WEAPON and nothing else - HOLSTER_PISTOL.TRM is
+	 * two pistols, 4268 vertices, and no leather anywhere (ModelProbe -name
+	 * HOLSTER_PISTOL, a picture of two guns hanging in mid air). The pouch,
+	 * the thigh strap and the hip belt they hang from are built into the
+	 * OUTFIT model, one page of it: 8017 in OUTFIT_CLASSIC and OUTFIT_RUSSIA,
+	 * 8205 in OUTFIT_TR3_COAST and OUTFIT_TR3_CATSUIT.
+	 *
+	 * Three of the eight wardrobe bodies have none - OUTFIT_VCI,
+	 * OUTFIT_TR3_ANTARC and OUTFIT_TR3_NEVADA - because vanilla TR5 gives
+	 * catsuit Lara no pistols and the two TR3 guests wear none in their own
+	 * game either. The randomizer hands her a gun in every level, so the
+	 * guns hung in the air beside her thigh: the user's finding D4, with
+	 * three photographs.
+	 *
+	 * This part is the missing rig, cut out of OUTFIT_TR3_CATSUIT by page
+	 * (HDModelSlot::onlyPage) and worn only by an outfit whose own body has
+	 * none. The London catsuit is the donor rather than the Rome one because
+	 * its rig is black leather over a black leg, which is what the VCI
+	 * catsuit is; OUTFIT_CLASSIC's is brown suede over bare skin. */
+	HD_LARA_PART_HOLSTER_RIG,
 
 	HD_LARA_PART_BACK_SHOTGUN,	// the torso
 	HD_LARA_PART_BACK_HK,
@@ -419,6 +518,19 @@ bool HDLaraPartPlanned(int part);
 // Bit per classic node the part covers, as hd_model measured it. 0 for a part
 // that is not on the card.
 unsigned int HDLaraPartCoverage(int part);
+
+/* THE SHEEN OF ONE PART (#123, fix round D, D2).
+ *
+ * The strength and the Blinn-Phong exponent HDModelLighting wants, for the
+ * outfit that is on. Both 0 when the part does not shine, and then the shader
+ * takes the branch that costs nothing.
+ *
+ * The numbers are a MATERIAL table and not a measurement, and hd_lara.cpp says
+ * so at the table itself: there is no gloss mask in the art to read (measured
+ * with DdsProbe -alpha - every wardrobe page is a flat 240..255 alpha), so
+ * what a surface is made of has to be written down. They are logged per part
+ * at level build so that a picture and a log line can be put side by side. */
+void HDLaraPartSheen(int part, float* strength, float* power);
 
 /* WHAT TO DRAW THIS FRAME, in draw order, after the body and the face. Returns
  * how many entries were written (at most 6: two hands, two thigh holsters, the

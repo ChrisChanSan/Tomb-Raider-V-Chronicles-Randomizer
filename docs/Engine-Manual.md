@@ -441,6 +441,43 @@ perfectly still.
   has clouds but no moon, and the lightning flash is painted through a layer
   the dome would otherwise have replaced.
 
+**What the fourth round changed: the people.** The same play test, everything
+that walks and talks rather than stands still.
+
+- **The cutscene actors have faces again.** Every speaker in a cutscene stood
+  there without a head — the two old men in front of the fire in the Irish
+  chapter, and the guard beside them wearing a cap over nothing. The Remaster
+  ships a character's face as a file of its own, and it names it after the
+  PERSON while it names the body after the level slot the body fills, so the
+  obvious "the face of X is X's face file" found nothing at all for a
+  cutscene. It goes by the person now, out of a list measured face by face
+  against the collar it has to fill — and the log names which rule found which
+  face, so a missing one can be looked up rather than guessed at. Their mouths
+  still do not move: the Remaster animates a face with one small file per
+  spoken line, a format nothing here reads.
+- **The catsuit has holsters.** With the randomizer handing Lara a gun in
+  every level, the VCI catsuit — which in the original game never carries one
+  — had the pistols hanging in mid air beside her thighs. The pouches, the
+  straps and the belt they hang from are not part of the gun model at all;
+  they are built into the outfit, and three of the eight outfits have none.
+  Those three now borrow the black leather rig of the Tomb Raider III London
+  catsuit, cut out of that outfit and worn over their own.
+- **The braid grows out of her head, and lies on her pack.** It used to hang
+  fifteen units clear of the back of her skull, because the classic braid
+  stitches its first link into the head and an HD link is a rigid piece. Its
+  root has moved to where the skull is. And it no longer walks through her
+  backpack: the game only ever knew the five round shapes of the 1999 body,
+  none of which reaches as far back as the HD pack, so the pack has been given
+  two of its own.
+- **Latex looks like latex.** Tomb Raider Chronicles has no highlight of any
+  kind in its lighting, so every HD outfit came out flat matt beside the
+  Remaster's own picture, where the catsuits shine. Lara's parts now carry a
+  highlight whose strength says what they are made of — latex for the two
+  catsuits, rubber for the diving suit, a soft wide sheen on skin, a light
+  satin on the Rome top, a hard small point on a weapon. It follows the room's
+  own lights, and in a dark corner there is nothing to reflect and it goes
+  away. Only Lara has it for now; the creatures and the props are unchanged.
+
 Still open in the rooms, and named rather than hidden: a **visible border**
 where an HD room meets one the remaster draws nothing for (they fall back to
 the classic look, and the log's `HDLOG room=… hd=0` lines name every one),

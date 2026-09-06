@@ -3291,6 +3291,181 @@ the same three numbers into its own `HDLOG ... motion=` line, plus one
 
 ---
 
+#### Fix round D - the actors, Lara's kit and the sheen (#123)
+
+The play test of 2026-09-06: four findings, all of them about people rather
+than rooms.
+
+**D1 - the cutscene actors had no heads.** In the RICHCUT2 cutscene the man in
+the suit and the man in the wheelchair stood in front of the fire without a
+face, and the guard beside them wore a cap with nothing under it. Measured with
+`ModelProbe`: `ANIMATING4_RICHCUT2` stops at y -234 with an open ring of 16
+points at (0, -218, 6), radius 13, and not one vertex above it - the body
+really is a collar, and the rule of stage S3-2 (a node the .TRM does not cover
+is not drawn classic either) then leaves nothing there at all.
+
+The cause is a naming one. A face is `<MODEL>_HEAD.TRM`, which answers for
+`BLUE_GUARD`, `LARSON` and `PIERRE`, and cannot answer for a cutscene actor:
+the remaster names his BODY after the level slot it fills
+(`ANIMATING4_RICHCUT2`) while his FACE keeps the person's name
+(`VON_CROY_SENIOR_HEAD`). Game 5 ships twelve `*_HEAD.TRM` and only three of
+them are reachable by name.
+
+Two rules are added in `hd_model.cpp` (`find_head_model`), both measured over
+all 1,335 model names of the 4 and 5 folders:
+
+- the **strip rule** - cut the last `_<QUALIFIER>` off and ask again, as long
+  as one is left. It answers for 17 names and every one is right or harmless:
+  `BLUE_GUARD_JOBY`, `_RICH2`, `_RICHCUT2` and the two `_MIP` twins,
+  `PIERRE_SWAP`, `VON_CROY_BOOK/BOTH/EMPTY` of game 4, and eight `_MIP` models
+  this engine never draws. Not one name gets a face belonging to somebody else.
+- a **table** of two entries for the bodies that carry no part of the person's
+  name at all. Each is measured - the body's open ring against the face's neck
+  ring, both in the bind pose the .TRM files share:
+  `ANIMATING4_RICHCUT2` gets `VON_CROY_SENIOR_HEAD` (7.4 units apart, next
+  nearest face 11.4, and the two share texture page 9075, which no other pair
+  in the level does) and `ANIMATING6_RICHCUT2` gets `VON_CROY_ELDER_HEAD` (2.7
+  against 35.3).
+
+A ring match alone is not proof and the round has the counter-example:
+`ADMIRAL_HEAD`'s neck lands 1.3 units from a ring of `ANIMATING10_TITLE`, and
+the picture shows that model is the top-hatted mourner of the title graveyard,
+who has his own face and needs none. So each entry is confirmed by a picture as
+well, and the three RICHCUT2 actors are in the report with their heads on.
+
+A face is also no longer given a face of its own: without that guard the strip
+rule cut `_HEAD` off Lara's own `LARA_HEAD` part, found `LARA_HEAD` again and
+hung her face on itself, two sets of triangles fighting over the depth buffer.
+
+`DrawCutSeqActors` writes one `HDLOG cutseq actor=` line per actor per
+cutscene - slot, model, hd, head node, the mesh bits - so the next report of a
+missing face can be read out of a log.
+
+*Left named:* `ADMIRAL`, `DEMON`, `HANGMAN`, `PATRICK_BROWN`, `PATRICK_WHITE`,
+`SERGIE` and `ZIP` have no body among the models the fifteen `.MAP` files name
+that both fits their neck and lacks a head. `PATRICK_1` and `PATRICK_2` are
+headless and are plainly the two Patrick faces' bodies, but the remaster
+reaches them only through `SAILOR_MIP`, and this engine never draws an item's
+MIP slot - so they stay classic and the question does not arise. And the mouths
+do not move: the remaster animates a face with one `.TRL` file per spoken line,
+a format nothing here reads.
+
+**D4 - the VCI catsuit had no holsters.** Three photographs of catsuit Lara
+with the guns hanging in mid air beside her thighs, no pouch and no strap,
+while the log said `HOLSTER_PISTOL` was planned and drawn. Both are true:
+`HOLSTER_PISTOL.TRM` is the two guns and nothing else - 4268 vertices, and the
+picture out of `ModelProbe -name HOLSTER_PISTOL` is two pistols floating in
+space. The pouch, the thigh strap and the hip belt they hang from are built
+into the OUTFIT model, one page of it. Measured over the eight wardrobe bodies,
+triangles on nodes 1 and 4 by texture page:
+
+| outfit | thigh holster rig |
+| --- | --- |
+| `OUTFIT_CLASSIC` | page 8017: 1090/1090 triangles |
+| `OUTFIT_RUSSIA` | page 8017: 1106/1114 |
+| `OUTFIT_TR3_COAST` | page 8205: 354/354 |
+| `OUTFIT_TR3_CATSUIT` | page 8205: 354/354 |
+| `OUTFIT_VCI` | **none** |
+| `OUTFIT_TR3_ANTARC` | **none** |
+| `OUTFIT_TR3_NEVADA` | **none** |
+
+Three of the eight have none, because vanilla TR5 gives catsuit Lara no
+pistols and the two Tomb Raider III guests wear none in their own game either.
+The randomizer hands her a gun in every level, so the guns hung in the air.
+
+`HDModelSlot` gains `onlyPage`: build only the triangles that wear one .DDS
+page, and load only that page. The cut is by page and not by triangle count on
+purpose - a page is the artist's own division of the model into materials, and
+the measurement says it is exact here: 8017 appears on nodes 0, 1, 4 (and 79
+triangles of node 7 in the Russia coat) and nowhere else, 8205 on nodes 0, 1
+and 4 alone, with no part of a leg in either. A new wardrobe part,
+`HD_LARA_PART_HOLSTER_RIG`, is `OUTFIT_TR3_CATSUIT` cut to page 8205 and is
+worn by an outfit that holsters and has no rig of its own. The London catsuit
+is the donor rather than the Rome one because its rig is black leather over a
+black leg, which is what the VCI catsuit is; `OUTFIT_CLASSIC`'s is brown suede
+over bare skin.
+
+It is drawn before the weapons and not with them, because it belongs to the
+outfit: the pouches do not vanish when she draws her guns, exactly as the
+built-in rig of `OUTFIT_CLASSIC` does not. `ModelProbe` gained `-onlypage <n>`,
+and the picture out of it is the rig alone - a belt, two pouches and two thigh
+straps, no legs.
+
+**D3a - the braid hung 15 units clear of the skull.** Fix round C measured the
+gap and left it; this round closes it. The two braids are built differently:
+the classic one draws its first link as a SKINNED connector whose top ring is
+stashed vertices of the head mesh, so it starts on the skull whatever the root
+is, while the HD one has a rigid `HAIR_OG` link 0 that starts at the root and
+reaches only 1.7 units back out of it. The measurement (`ModelProbe -braid`) is
+the same for all eight bodies because the skull is one mesh: the head joint at
+1/-247/-12, the root at -3/-251/-60, the nearest skull vertex at
+-0.7/-251.2/-43.3 - 16.8 units away and the direction is +z alone. So the
+correction is 15 units of +z and nothing else, and `HD_LARA_BRAID_ROOT_Z_HD` is
+-33 where the classic one is -48. It is applied in `HairControl` and only when
+the HD wardrobe is drawing, so the whole chain is seeded from the new point and
+the links below follow instead of breaking at a seam.
+
+**D3b - and it went through the backpack.** The classic `HairControl` pushes
+the braid out of five spheres and all five are CLASSIC Lara meshes: hips,
+torso, head, the two upper arms. An HD outfit is a different body and its pack
+stands 92 units behind the torso joint, where the classic torso sphere reaches
+nowhere near. Measured with `ModelProbe -braid` in the torso node's own frame -
+the pack being every node 7 vertex more than 30 units behind the torso joint,
+because nothing else of a torso is back there - it is the same slab in all
+seven braided outfits: centre 1/-132/-61, radius 71 to 83, and down the middle
+of the back (the strip a braid can touch) y from -197 to -68 and z from -92 to
+-30. One sphere round that box would be a poor pack: it is flat, and a single
+sphere of radius 75 would hold the braid 44 units clear of the back it is meant
+to lie on. So the pack gets **two**, stacked, each tangent to the slab's rear
+face: radius 36 at z -52, at y -165 and -100, covering y -201 to -64 between
+them. Added in `HairControl` only while the HD wardrobe draws, and the
+collision loop runs over six spheres or eight accordingly.
+
+**D2 - everything was matt.** TR5 has no specular term of any kind:
+`aTransformLightClipMesh` adds an ambient and a diffuse cosine and stops. The
+remaster's own VCI catsuit and the Tomb Raider III London one read as LATEX
+because they are lit with one, and the skin carries a soft sheen; ours had
+none.
+
+*The obvious source was measured and refused.* Fix round A2 found the room
+pages' alpha channel to be a gloss mask, and TROne describes the item pages the
+same way in so many words (`host/render/game_renderer.cpp:373`). It is not one
+here. `DdsProbe` gained `-alpha`, which writes the alpha channel as a grey
+picture and prints a histogram; over the wardrobe's pages 8001, 8008, 8016,
+8018, 8027, 8028 and 8205 **100 % of the texels fall in the 240..255 bucket** -
+a flat opaque channel with BC7 quantisation noise on it and no mask anywhere.
+(The one page that is not flat is 8002, Lara's hair, at 15.2 % below 128 - and
+that is coverage, not gloss.) There is nothing per texel to read.
+
+So the material is named instead, in one table in `hd_lara.cpp` with the
+numbers in it, and the numbers go into the log per part so that a picture the
+user does not like can be traced to a line without opening the source: latex
+0.45/26 for the two catsuits, rubber 0.30/22 for the diving suit, cloth
+0.10/14 for the Rome top, skin 0.12/10, hair 0.14/18, leather 0.18/20 for the
+holster rig, gunmetal 0.35/34 for a weapon. The term itself is Blinn-Phong in
+the model VERTEX shader, beside the diffuse it belongs to - the classic path
+lights an object per vertex and this is that light's second half, not a second
+light - out of the object's own light list, with the same direction and the
+same distance falloff the diffuse loop uses. When the list is empty, which is
+an ordinary room whose light is all baked into the vertices, the eye is the
+lamp, weighted by the light the vertex already has so that a catsuit in an
+unlit corner stays dark. The highlight is added AFTER the texel and not
+multiplied through it - a highlight on black latex is white - and never in the
+additive pass.
+
+One new vertex register, `c161` (`gSpec`: strength, exponent), written for
+every draw so that Lara's gloss cannot be left on the next creature.
+`HDModelLighting` carries the two numbers; **every object passes 0**, so the
+creature path is unchanged to the bit. `ModelProbe` gained `-nosheen`, which is
+the BEFORE picture.
+
+*Proof.* `ModelProbe -laracheck` 15 of 15 joints at 0.00000 px and the braid
+chain gap 0.00002 units, `-itemcheck` on the SWAT 0.00000 px,
+`RoomProbe -paritycheck` worst 8.9e-08 - the room path is untouched. Pictures:
+the three RICHCUT2 actors with their heads, the rig alone, catsuit Lara with
+the guns in their pouches, the braid junction from the side before and after,
+and the catsuit with and without the sheen.
+
 ---
 
 ## Building this yourself

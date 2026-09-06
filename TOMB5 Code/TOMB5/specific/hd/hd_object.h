@@ -139,4 +139,5 @@ int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale);
  * per part. */
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	unsigned int mask, const HDObjLight* lights, int lightCount, float sunScale,
-	float nearCut = 0.0f, int cull = HD_MODEL_CULL_NONE);
+	float nearCut = 0.0f, int cull = HD_MODEL_CULL_NONE,
+	float specStrength = 0.0f, float specPower = 1.0f);

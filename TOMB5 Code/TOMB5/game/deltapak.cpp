@@ -44,6 +44,8 @@
 #include "savegame.h"
 #include "../tomb5/tomb5.h"
 #include "../specific/hd/hd_object.h"	// #123 fix round B (B5): the actors
+#include "../specific/hd/hd_model.h"	// #123 fix round D (D1): the actors' faces
+#include "../specific/hd/hd_bind.h"	// #123 fix round D (D1): slot names for the log
 
 ushort old_lara_LHolster;
 
@@ -67,6 +69,8 @@ static PACKNODE* camera_pnodes;
 static PACKNODE* actor_pnodes[10];
 static camera_type GLOBAL_oldcamtype;
 static char* GLOBAL_resident_depack_buffers;
+// #123 (fix round D, D1): the actor lines below go out ONCE per cutscene.
+static bool cutseq_actors_logged = false;
 static ulong cutseq_meshswapbits[10];
 static ulong cutseq_meshbits[10];
 static long cut_seethrough = 128;
@@ -3222,6 +3226,29 @@ void DrawCutSeqActors()
 
 			const bool hd = !fading && HDObjectBegin(actor, obj);
 
+			/* #123 (fix round D, D1): ONE LINE PER ACTOR, ONCE PER CUTSCENE.
+			 *
+			 * The user's finding was "every NPC in a cutscene has no head",
+			 * and the cause sat two rooms away from here - the face file the
+			 * remaster ships for a cutscene actor is named after the PERSON
+			 * (VON_CROY_SENIOR_HEAD) while his body is named after the level
+			 * SLOT (ANIMATING4_RICHCUT2), so the <MODEL>_HEAD rule found
+			 * nothing. hd_model.cpp answers that now. What the seam owes is
+			 * the means to see it from a log: which actor is drawn HD, and
+			 * whether a face was found for his slot. */
+			if (gLogEnabled && !cutseq_actors_logged)
+				Log("HDLOG cutseq actor=%d slot=%d name=%s model=%s hd=%d "
+					"head=%d fading=%d bits=%08X swapbits=%08X",
+					i, (int)actor->object_number,
+					HDSlotName(actor->object_number)
+						? HDSlotName(actor->object_number) : "?",
+					HDModelName(actor->object_number)
+						? HDModelName(actor->object_number) : "-",
+					(int)hd,
+					HDModelHasHead(actor->object_number)
+						? HDModelHeadNode(actor->object_number) : -1,
+					(int)fading, cutseq_meshbits[i], cutseq_meshswapbits[i]);
+
 			if (hd)
 				HDObjectNode(0, false);
 			else if (cutseq_meshbits[i] & 1)
@@ -3277,6 +3304,8 @@ void DrawCutSeqActors()
 
 		phd_PopMatrix();
 	}
+
+	cutseq_actors_logged = true;	// #123 (fix round D, D1)
 
 	phd_PopMatrix();
 }
@@ -3627,6 +3656,7 @@ void init_cutseq_actors(char* data, long resident)
 	InitPackNodes(nlheader, camera_pnodes, packed, pda_nodes + 1);
 	GLOBAL_playing_cutseq = 1;
 	GLOBAL_cutseq_frame = 0;
+	cutseq_actors_logged = false;	// #123 (fix round D, D1)
 	DelsHandyTeleportLara(GLOBAL_cutme->orgx, GLOBAL_cutme->orgy, GLOBAL_cutme->orgz, 0);
 	camera.pos.x = lara_item->pos.x_pos;
 	camera.pos.y = lara_item->pos.y_pos;

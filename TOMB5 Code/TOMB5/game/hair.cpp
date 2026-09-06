@@ -24,6 +24,8 @@
 #include "deltapak.h"
 #include "lara.h"
 #include "effect2.h"
+#include "../specific/hd/hd_lara.h"		// #123 fix round D (D3): the braid root and the pack
+#include "../specific/hd/hd_laradraw.h"	// #123 fix round D (D3): HDLaraDrawActive
 
 static char HairRotScratchVertNums[5][12] =
 {
@@ -94,7 +96,11 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 	HAIR_STRUCT* hair;
 	FLOOR_INFO* floor;
 	PHD_VECTOR pos;
-	SPHERE sphere[6];
+	/* SIX SPHERES ARE THE CLASSIC BODY, the last two the HD backpack (#123,
+	 * fix round D, D3b). `spheres` says how many of them the loop below
+	 * really tests, so the classic braid meets exactly what it always met. */
+	SPHERE sphere[8];
+	int spheres = 6;
 	long* bone;
 	short* rot[2];
 	short* frm[2];
@@ -344,6 +350,41 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 
 		phd_PopMatrix();
 
+		/* THE HD BACKPACK (#123, fix round D, D3b). The user's finding: the
+		 * HD braid goes straight through the HD pack. It has to - the five
+		 * spheres above are CLASSIC meshes, and the pack of an HD outfit
+		 * stands 92 units behind the torso joint where the classic torso
+		 * sphere reaches 40.
+		 *
+		 * Two spheres and not one because the pack is a flat slab; the
+		 * numbers and how they were measured are in hd_lara.h. They are
+		 * placed from the TORSO NODE, which is the frame this line stands in
+		 * - after the torso's own rotation, so the pack turns with her chest
+		 * the way its geometry does.
+		 *
+		 * ONLY when the HD wardrobe is drawing. The classic body's pack is
+		 * part of the classic torso mesh and sphere[1] already covers it;
+		 * adding these to the classic braid would push it off her back for
+		 * no reason. */
+		if (!pigtail && HDLaraDrawActive())
+		{
+			static const long kPackY[2] =
+				{ HD_LARA_PACK_Y_TOP, HD_LARA_PACK_Y_BOTTOM };
+
+			for (int i = 0; i < 2; i++)
+			{
+				phd_PushMatrix();
+				phd_TranslateRel(HD_LARA_PACK_X, kPackY[i], HD_LARA_PACK_Z);
+				sphere[6 + i].x = (long)aMXPtr[M03];
+				sphere[6 + i].y = (long)aMXPtr[M13];
+				sphere[6 + i].z = (long)aMXPtr[M23];
+				sphere[6 + i].r = HD_LARA_PACK_R;
+				phd_PopMatrix();
+			}
+
+			spheres = 8;
+		}
+
 		phd_PushMatrix();
 		phd_TranslateRel(bone[29], bone[30], bone[31]);
 		gar_RotYXZsuperpack(&rot[0], 0);
@@ -390,12 +431,23 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 		sphere[5].z = (2 * sphere[2].z + sphere[1].z) / 3;
 		sphere[5].r = gfLevelFlags & GF_YOUNGLARA ? 0 : 5 * sphere[2].r / 4;
 
+		/* THE BRAID ROOT. The third line is the ordinary one, and for an HD
+		 * Lara it moves 15 units forward (#123, fix round D, D3a): a rigid
+		 * HAIR_OG link 0 starts AT the root, where the classic connector is
+		 * skinned into the head's stash ring and starts on the skull, so the
+		 * HD braid hung 15.2 units clear of her head. The measurement and the
+		 * constant are in hd_lara.h. The whole chain is seeded from here, so
+		 * the links below follow instead of breaking at a seam. */
 		if (pigtail)
 			phd_TranslateRel(44, -48, -50);
 		else if (gfLevelFlags & GF_YOUNGLARA)
 			phd_TranslateRel(-52, -48, -50);
+		else if (HDLaraDrawActive())
+			phd_TranslateRel(HD_LARA_BRAID_ROOT_X, HD_LARA_BRAID_ROOT_Y,
+				HD_LARA_BRAID_ROOT_Z_HD);
 		else
-			phd_TranslateRel(-4, -4, -48);
+			phd_TranslateRel(HD_LARA_BRAID_ROOT_X, HD_LARA_BRAID_ROOT_Y,
+				HD_LARA_BRAID_ROOT_Z);
 
 		pos.x = (long)aMXPtr[M03];
 		pos.y = (long)aMXPtr[M13];
@@ -511,7 +563,7 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 			hair->pos.z_pos = pos.z;
 		}
 
-		for (int j = 0; j < 6; j++)	//6 instead of 5 for new sphere
+		for (int j = 0; j < spheres; j++)	//6 instead of 5 for new sphere, 8 with the HD pack (#123 D3b)
 		{
 			x = hair->pos.x_pos - sphere[j].x;
 			y = hair->pos.y_pos - sphere[j].y;

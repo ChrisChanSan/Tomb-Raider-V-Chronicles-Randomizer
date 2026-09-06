@@ -98,6 +98,10 @@ namespace
 		float sunScale;
 		float nearCut;		// stage S8: 0 for an item, Lara's body alone
 		int cull;		// and the one-sided draw that goes with it
+		/* #123 fix round D (D2): the sheen. 0 for an item - the specular
+		 * term is Lara's alone for now. */
+		float specStrength;
+		float specPower;
 	};
 
 	FrameItem g_frame[HD_OBJ_ITEMS];
@@ -1642,6 +1646,9 @@ void HDObjectEnd()
 	// has a camera inside it.
 	entry.nearCut = 0.0f;
 	entry.cull = HD_MODEL_CULL_NONE;
+	// #123 fix round D (D2): no sheen on an object - Lara's alone for now.
+	entry.specStrength = 0.0f;
+	entry.specPower = 1.0f;
 
 	/* The two proofs, on the first HD item of the level and while the
 	 * engine's own light arrays still hold THIS item's answer. */
@@ -1675,6 +1682,8 @@ void HDObjectFrameDraw(const void* projection, int bulbs)
 		lighting.lights = entry.lights;
 		lighting.lightCount = entry.lightCount;
 		lighting.sunScale = entry.sunScale;
+		lighting.specStrength = entry.specStrength;
+		lighting.specPower = entry.specPower;
 
 		/* drawSlot is the SWAPPED model when the item asked for one and it
 		 * arrived (B3), and the item's own slot otherwise. It is the same
@@ -1743,7 +1752,7 @@ int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale)
 
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	unsigned int mask, const HDObjLight* lights, int lightCount, float sunScale,
-	float nearCut, int cull)
+	float nearCut, int cull, float specStrength, float specPower)
 {
 	/* NOT behind g_active. That flag says "this level has HD OBJECTS", and a
 	 * level can have an HD Lara and not one HD object - JOBY4's diving suit
@@ -1794,6 +1803,8 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	entry.sunScale = sunScale;
 	entry.nearCut = nearCut;
 	entry.cull = cull;
+	entry.specStrength = specStrength;
+	entry.specPower = specPower;
 
 	g_count++;
 	return true;

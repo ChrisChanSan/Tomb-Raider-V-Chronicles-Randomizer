@@ -25,6 +25,7 @@
 #include "hd_trm.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -89,6 +90,9 @@ namespace
 
 		int vertices = 0;
 		int indices = 0;
+		// How many vertices the measurements above actually saw - the same as
+		// `vertices`, except under the page cut of fix round D (D4).
+		int vertexSeen = 0;
 		int nodes = 0;				// classic nmeshes
 		int nodeVertices[32] = { 0 };
 		unsigned int covered = 0;		// bit per node with geometry
@@ -260,6 +264,162 @@ namespace
 		return std::string();
 	}
 
+	/* WHICH FACE FILE BELONGS TO A BODY (#123, fix round D, D1).
+	 *
+	 * THE FINDING. In a cutscene every actor stood there without a head - the
+	 * user's picture of RICHCUT2 shows the man in the suit and the man in the
+	 * wheelchair, both headless, and the guard beside them wearing a cap and
+	 * nothing under it. Measured with ModelProbe: ANIMATING4_RICHCUT2 stops at
+	 * y -234 with an open ring of 16 points at (0, -218, 6), radius 13, and no
+	 * vertex above it; the body really is a collar. Stage S3-2's rule then
+	 * does what it must - a node the .TRM does not cover is not drawn classic
+	 * either - and the result is a suit with a tie and no face.
+	 *
+	 * WHY THE NAME RULE MISSES THEM. A face is <MODEL>_HEAD.TRM, and that
+	 * answers for BLUE_GUARD, LARSON and PIERRE. It cannot answer for a
+	 * cutscene actor, because the remaster names his body after the LEVEL SLOT
+	 * it fills - ANIMATING4_RICHCUT2 - while his face keeps the person's name.
+	 * Game 5 ships twelve *_HEAD.TRM and only three of them are reachable by
+	 * name.
+	 *
+	 * TWO RULES ARE ADDED, both measured over all 1,335 model names of the 4
+	 * and 5 folders:
+	 *
+	 *   the STRIP rule. A trailing _<QUALIFIER> is the remaster's way of
+	 *   saying "the same person, this level's paint": BLUE_GUARD_JOBY,
+	 *   BLUE_GUARD_RICH2, BLUE_GUARD_RICHCUT2, PIERRE_SWAP. Cutting the last
+	 *   underscore group and asking again, as long as one is left, answers for
+	 *   17 names and every one of them is right or harmless - the five
+	 *   BLUE_GUARD variants, PIERRE_SWAP, VON_CROY_BOOK/BOTH/EMPTY of game 4,
+	 *   and eight _MIP twins that this engine never draws. Not one name gets a
+	 *   face that belongs to somebody else.
+	 *
+	 *   the TABLE below, for the two the strip rule cannot reach because the
+	 *   body carries no part of the person's name at all. Each entry is
+	 *   measured, not guessed: the open ring of the body against the neck ring
+	 *   of the face, both in the bind pose the .TRM files share.
+	 *
+	 *     ANIMATING4_RICHCUT2  ring (0, -218, 6) r13.1  <-  VON_CROY_SENIOR_HEAD
+	 *                          neck (0, -214, 12) r23.1, 7.4 units apart; the
+	 *                          next nearest face is 11.4 away, and the two
+	 *                          share texture page 9075, which no other pair in
+	 *                          the level does.
+	 *     ANIMATING6_RICHCUT2  ring (10, -273, -54) r28.0  <-  VON_CROY_ELDER_HEAD
+	 *                          neck (9, -274, -52) r32.0, 2.7 units apart
+	 *                          against 35.3 for the next nearest face. The
+	 *                          seated man: his ring sits 54 units back and 273
+	 *                          up, which is where a wheelchair puts a head.
+	 *
+	 * A ring match ALONE is not proof - ADMIRAL_HEAD's neck lands 1.3 units
+	 * from a ring of ANIMATING10_TITLE, and the picture shows that model is
+	 * the top-hatted mourner of the title graveyard, who has his own face and
+	 * needs none. So every entry here is confirmed by a picture as well.
+	 *
+	 * LEFT UNPLACED, and named so the next pass does not start from nothing:
+	 * ADMIRAL, DEMON, HANGMAN, PATRICK_BROWN, PATRICK_WHITE, SERGIE and ZIP
+	 * have no body among the models the fifteen .MAP files name that both
+	 * fits their neck and lacks a head. PATRICK_1 and PATRICK_2 are headless
+	 * and are plainly the two faces' bodies, but the remaster reaches them
+	 * only through SAILOR_MIP, and this engine never draws an item's MIP
+	 * slot - so they stay classic and the question does not arise. */
+	struct HeadOfModel
+	{
+		const char* model;
+		const char* head;
+	};
+
+	const HeadOfModel g_head_of_model[] =
+	{
+		{ "ANIMATING4_RICHCUT2", "VON_CROY_SENIOR_HEAD" },
+		{ "ANIMATING6_RICHCUT2", "VON_CROY_ELDER_HEAD" },
+	};
+
+	bool same_name(const std::string& a, const char* b)
+	{
+		size_t i = 0;
+
+		for (; i < a.size() && b[i]; i++)
+			if (std::toupper((unsigned char)a[i]) != std::toupper((unsigned char)b[i]))
+				return false;
+
+		return i == a.size() && !b[i];
+	}
+
+	/* The face file for a body, and by which of the three rules. `how` is for
+	 * the log and is never null on return; it says "name", "table" or "strip".
+	 * Empty when the model has no face anywhere. */
+	std::string find_head_model(const std::string& model, bool fromTr3,
+		HDModelOrigin* origin, const char** how, std::string* headName)
+	{
+		*how = "name";
+
+		/* A FACE HAS NO FACE OF ITS OWN. Lara's wardrobe asks for the part
+		 * LARA_HEAD by name, and without this line the strip rule below cuts
+		 * "_HEAD" off it, finds LARA_HEAD again and hangs the face on itself -
+		 * the same triangles twice, fighting over the depth buffer. */
+		if (model.size() > 5 &&
+			same_name(model.substr(model.size() - 5), "_HEAD"))
+		{
+			if (origin)
+				*origin = HD_MODEL_ORIGIN_NONE;
+
+			return std::string();
+		}
+
+		std::string path = find_model(model + "_HEAD", fromTr3, origin);
+
+		if (!path.empty())
+		{
+			if (headName)
+				*headName = model + "_HEAD";
+
+			return path;
+		}
+
+		const int entries = (int)(sizeof(g_head_of_model) / sizeof(g_head_of_model[0]));
+
+		for (int i = 0; i < entries; i++)
+		{
+			if (!same_name(model, g_head_of_model[i].model))
+				continue;
+
+			path = find_model(g_head_of_model[i].head, fromTr3, origin);
+
+			if (!path.empty())
+			{
+				*how = "table";
+
+				if (headName)
+					*headName = g_head_of_model[i].head;
+
+				return path;
+			}
+		}
+
+		std::string stem = model;
+
+		while (stem.find('_') != std::string::npos)
+		{
+			stem.erase(stem.find_last_of('_'));
+			path = find_model(stem + "_HEAD", fromTr3, origin);
+
+			if (!path.empty())
+			{
+				*how = "strip";
+
+				if (headName)
+					*headName = stem + "_HEAD";
+
+				return path;
+			}
+		}
+
+		if (origin)
+			*origin = HD_MODEL_ORIGIN_NONE;
+
+		return std::string();
+	}
+
 	void note(const char* format, ...)
 	{
 		char line[512];
@@ -340,11 +500,33 @@ namespace
 	// model out of the other one (#123, S7-2): the .TRM's page numbers are
 	// that game's own, and the cache holds both games at once.
 	bool build(const HDTrmModel& trm, Model& model, int rigidNode,
-		int pageBias, int* mixedTriangles, const char** why)
+		int pageBias, int* mixedTriangles, const char** why, int onlyPage = -1)
 	{
 		const int vertices = trm.vertices;
 
 		std::vector<HDModelVertex> buffer((size_t)vertices);
+
+		/* THE PAGE CUT (#123, fix round D, D4). With onlyPage set, a vertex
+		 * no kept triangle names takes no part in ANYTHING the loop below
+		 * measures - not the bounds, not the node coverage, not the bind
+		 * drift. Otherwise a holster cut out of an outfit would report that
+		 * it covers all fifteen nodes and reaches from her hair to her boots,
+		 * and the composite would hand it the whole body's work. The vertex
+		 * itself stays in the buffer: the index list is the file's own and
+		 * renumbering it would buy 400 KiB and a new class of bug. */
+		std::vector<bool> keep((size_t)vertices, onlyPage < 0);
+
+		if (onlyPage >= 0)
+			for (int i = 0; i + 2 < trm.indices; i += 3)
+			{
+				const int page = HDTrmPageOf(&trm, &trm.vertex[trm.index[i]]);
+
+				if (page != onlyPage)
+					continue;
+
+				for (int corner = 0; corner < 3; corner++)
+					keep[(size_t)trm.index[i + corner]] = true;
+			}
 
 		// The bind drift's working set: how many single-weight vertices a
 		// node carries and where their centre is.
@@ -416,7 +598,10 @@ namespace
 			out.u = in.u;
 			out.v = in.v;
 
-			if (i == 0)
+			if (!keep[(size_t)i])
+				continue;
+
+			if (model.vertexSeen++ == 0)
 			{
 				model.mins[0] = model.maxs[0] = in.x;
 				model.mins[1] = model.maxs[1] = in.y;
@@ -597,7 +782,8 @@ namespace
 
 			page_of_triangle.push_back(a);
 
-			if (a >= 0 && std::find(model.pages.begin(), model.pages.end(), a) == model.pages.end())
+			if (a >= 0 && (onlyPage < 0 || rawA == onlyPage) &&
+				std::find(model.pages.begin(), model.pages.end(), a) == model.pages.end())
 				model.pages.push_back(a);
 
 			/* WHICH NODE A TRIANGLE BELONGS TO: the node that carries the
@@ -666,8 +852,15 @@ namespace
 				{
 					const unsigned int at = start[pass] + i;
 
-					if (at + 2 < (unsigned int)trm.indices)
-						triangles.push_back((int)(at / 3));
+					if (at + 2 >= (unsigned int)trm.indices)
+						continue;
+
+					// The page cut (#123, fix round D, D4).
+					if (onlyPage >= 0 &&
+						HDTrmPageOf(&trm, &trm.vertex[trm.index[at]]) != onlyPage)
+						continue;
+
+					triangles.push_back((int)(at / 3));
 				}
 			}
 
@@ -725,7 +918,9 @@ namespace
 
 		if (indices.empty())
 		{
-			*why = "has no triangle in any pass";
+			*why = onlyPage >= 0
+				? "has no triangle on the page that was asked for"
+				: "has no triangle in any pass";
 			return false;
 		}
 
@@ -1000,6 +1195,21 @@ namespace
 
 		g_device->SetVertexShaderConstantF(136, lights, HD_MAX_OBJ_LIGHTS * 2);
 		g_device->SetVertexShaderConstantF(160, info, 1);
+
+		/* c161, THE SHEEN (#123, fix round D, D2). Written for every draw
+		 * and not only for the ones that shine: the register keeps the last
+		 * value the card was given, and Lara's catsuit would otherwise leave
+		 * its gloss on the next creature drawn. A power of 0 would make
+		 * pow(x, 0) = 1 everywhere, so the floor is 1. */
+		float sheen[4] =
+		{
+			lighting ? lighting->specStrength : 0.0f,
+			lighting && lighting->specPower > 1.0f ? lighting->specPower : 1.0f,
+			0.0f,
+			0.0f
+		};
+
+		g_device->SetVertexShaderConstantF(161, sheen, 1);
 
 		/* c17, the PIXEL side: x is the per-pixel dynamic light loop, which
 		 * an object does NOT use - its lights are in the vertex shader above,
@@ -1287,6 +1497,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		std::string name;
 		HDModelOrigin origin;
 		int pageBias;		// 0, or HD_PAGE_ALT_BASE for a TR3 guest
+		int onlyPage;		// #123 fix round D (D4): -1 = the whole model
 	};
 
 	std::vector<Pending> pending;
@@ -1355,6 +1566,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		here.name = model;
 		here.origin = origin;
 		here.pageBias = tr3 ? HD_PAGE_ALT_BASE : 0;
+		here.onlyPage = slots[i].onlyPage;
 		std::memset(&here.trm, 0, sizeof(here.trm));
 		std::memset(&here.head, 0, sizeof(here.head));
 
@@ -1381,9 +1593,14 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				slot_label(slot, model), slot, model,
 				origin == HD_MODEL_ORIGIN_4 ? 4 : 6);
 
-		/* The separate HD face, if the remaster ships one for this model. */
+		/* The separate HD face, if the remaster ships one for this model -
+		 * by name, by the measured table or by the strip rule (#123, fix
+		 * round D, D1; see find_head_model above). */
 		HDModelOrigin head_origin = HD_MODEL_ORIGIN_NONE;
-		const std::string head_path = find_model(std::string(model) + "_HEAD", tr3, &head_origin);
+		const char* head_how = "name";
+		std::string head_name;
+		const std::string head_path = find_head_model(model, tr3, &head_origin,
+			&head_how, &head_name);
 
 		if (!head_path.empty())
 		{
@@ -1394,12 +1611,22 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			read_ms += now_ms() - head_started;
 
 			if (!here.hasHead)
-				note("%s (slot %d): %s_HEAD.TRM %s - the body draws without it",
-					slot_label(slot, model), slot, model, head_trouble);
+				note("%s (slot %d): %s.TRM %s - the body draws without it",
+					slot_label(slot, model), slot, head_name.c_str(), head_trouble);
+			else if (std::strcmp(head_how, "name") != 0)
+				note("%s (slot %d): the face is %s.TRM, found by the %s rule",
+					slot_label(slot, model), slot, head_name.c_str(), head_how);
 		}
 
-		for (int t = 0; t < here.trm.textures; t++)
-			pages.push_back((int)here.trm.texture[t] + here.pageBias);
+		/* Only the page that is kept is paid for (#123, fix round D, D4):
+		 * the holster cut out of OUTFIT_TR3_CATSUIT wants one of that
+		 * model's ten pages, and loading the other nine for it would cost
+		 * more texture than the whole of Lara. */
+		if (here.onlyPage >= 0)
+			pages.push_back(here.onlyPage + here.pageBias);
+		else
+			for (int t = 0; t < here.trm.textures; t++)
+				pages.push_back((int)here.trm.texture[t] + here.pageBias);
 
 		if (here.hasHead)
 			for (int t = 0; t < here.head.textures; t++)
@@ -1494,7 +1721,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 		const char* trouble = "";
 
-		if (!build(here.trm, model, model.rigidNode, here.pageBias, &mixed, &trouble))
+		if (!build(here.trm, model, model.rigidNode, here.pageBias, &mixed,
+			&trouble, here.onlyPage))
 		{
 			if (stats)
 				stats->refused++;

@@ -76,19 +76,42 @@ namespace
 		bool braid;
 		bool holsters;
 		bool gloves;
+		/* Does the outfit's OWN body carry the thigh holster rig - the pouch,
+		 * the strap and the belt the guns hang in (#123, fix round D, D4)?
+		 * Measured over the eight wardrobe bodies, triangles on nodes 1 and 4
+		 * by texture page:
+		 *
+		 *   OUTFIT_CLASSIC      8017: 1090/1090   + 8018: 56/56    yes
+		 *   OUTFIT_RUSSIA       8017: 1106/1114   + 8018: 56/56    yes
+		 *   OUTFIT_TR3_COAST    8205:  354/354                     yes
+		 *   OUTFIT_TR3_CATSUIT  8205:  354/354                     yes
+		 *   OUTFIT_VCI          -                                  NO
+		 *   OUTFIT_TR3_ANTARC   -                                  NO
+		 *   OUTFIT_TR3_NEVADA   -                                  NO
+		 *   OUTFIT_SUBSUIT      -                          holsters none anyway
+		 *
+		 * false here means HD_LARA_PART_HOLSTER_RIG is worn on top. */
+		bool thighRig;
+
+		/* THE BODY'S SHEEN (#123, fix round D, D2): the Blinn-Phong strength
+		 * and exponent for the OUTFIT model. See kPartSheen below for the
+		 * other parts and for why these are a material table and not a
+		 * measurement. */
+		float sheen;
+		float sheenPower;
 	};
 
 	const Outfit kOutfit[HD_LARA_OUTFIT_COUNT] =
 	{
-		{ 0,                    "classic (no HD body)",   false, false, false, false },
-		{ "OUTFIT_CLASSIC",     "the Rome outfit",        true,  true,  true,  false },
-		{ "OUTFIT_RUSSIA",      "the Russia outfit",      true,  true,  true,  true  },
-		{ "OUTFIT_SUBSUIT",     "the diving suit",        false, false, false, false },
-		{ "OUTFIT_VCI",         "the VCI catsuit",        true,  true,  true,  false },
-		{ "OUTFIT_TR3_ANTARC",  "Antarctica (TR3)",       true,  true,  true,  false },
-		{ "OUTFIT_TR3_NEVADA",  "Nevada (TR3)",           true,  true,  true,  false },
-		{ "OUTFIT_TR3_COAST",   "Jungle (TR3)",           true,  true,  true,  false },
-		{ "OUTFIT_TR3_CATSUIT", "London (TR3)",           true,  true,  true,  false }
+		{ 0,                    "classic (no HD body)",   false, false, false, false, false, 0.00f,  1.0f },
+		{ "OUTFIT_CLASSIC",     "the Rome outfit",        true,  true,  true,  false, true,  0.10f, 14.0f },
+		{ "OUTFIT_RUSSIA",      "the Russia outfit",      true,  true,  true,  true,  true,  0.12f, 16.0f },
+		{ "OUTFIT_SUBSUIT",     "the diving suit",        false, false, false, false, true,  0.30f, 22.0f },
+		{ "OUTFIT_VCI",         "the VCI catsuit",        true,  true,  true,  false, false, 0.45f, 26.0f },
+		{ "OUTFIT_TR3_ANTARC",  "Antarctica (TR3)",       true,  true,  true,  false, false, 0.10f, 14.0f },
+		{ "OUTFIT_TR3_NEVADA",  "Nevada (TR3)",           true,  true,  true,  false, false, 0.08f, 12.0f },
+		{ "OUTFIT_TR3_COAST",   "Jungle (TR3)",           true,  true,  true,  false, true,  0.08f, 12.0f },
+		{ "OUTFIT_TR3_CATSUIT", "London (TR3)",           true,  true,  true,  false, true,  0.45f, 26.0f }
 	};
 
 	/* THE OTHER PARTS. `kind` decides which outfits take the part at all:
@@ -111,55 +134,141 @@ namespace
 		int kind;
 		int rigid;
 		const char* nodes;
+		// #123 fix round D (D4): -1 is the whole file, a .DDS number cuts the
+		// part out of a bigger model. See HDModelSlot::onlyPage.
+		int onlyPage;
 	};
 
 	const Part kPart[HD_LARA_PART_COUNT] =
 	{
 		{ 0,                          0,
-		  "the body",                 0, -1, "0..14" },
+		  "the body",                 0, -1, "0..14", -1 },
 		{ "LARA_HEAD",                0,
-		  "the face",                 0, HD_LARA_HEAD_NODE, "14 (rigid)" },
+		  "the face",                 0, HD_LARA_HEAD_NODE, "14 (rigid)", -1 },
 		{ "HAIR_OG",                  0,
-		  "the braid",                2, -1, "0..5 of its own chain" },
+		  "the braid",                2, -1, "0..5 of its own chain", -1 },
 
 		{ "HAND_BARE_REST",           "HAND_GLOVES_REST",
-		  "empty hands",              1, -1, "8,9,10,11,12,13" },
+		  "empty hands",              1, -1, "8,9,10,11,12,13", -1 },
 		{ "HAND_BARE_PISTOL",         "HAND_GLOVES_PISTOL",
-		  "the pistols",              1, -1, "9,10,12,13" },
+		  "the pistols",              1, -1, "9,10,12,13", -1 },
 		{ "HAND_BARE_UZI",            "HAND_GLOVES_UZI",
-		  "the uzis",                 1, -1, "9,10,12,13" },
+		  "the uzis",                 1, -1, "9,10,12,13", -1 },
 		{ "HAND_BARE_SHOTGUN",        "HAND_GLOVES_SHOTGUN",
-		  "the shotgun",              1, -1, "9,10,12,13" },
+		  "the shotgun",              1, -1, "9,10,12,13", -1 },
 		{ "HAND_BARE_HK",             "HAND_GLOVES_HK",
-		  "the HK",                   1, -1, "9,10,12,13" },
+		  "the HK",                   1, -1, "9,10,12,13", -1 },
 		{ "HAND_BARE_DEAGLE",         "HAND_GLOVES_DEAGLE",
-		  "the Desert Eagle",         1, -1, "9,10,12,13" },
+		  "the Desert Eagle",         1, -1, "9,10,12,13", -1 },
 		{ "HAND_BARE_DEAGLE_LASER",   "HAND_GLOVES_DEAGLE_LASER",
-		  "the Desert Eagle, sight",  1, -1, "9,10,12,13" },
+		  "the Desert Eagle, sight",  1, -1, "9,10,12,13", -1 },
 		{ "HAND_BARE_GRAPPLE",        "HAND_GLOVES_GRAPPLE",
-		  "the grappling gun",        1, -1, "9,10,12,13" },
+		  "the grappling gun",        1, -1, "9,10,12,13", -1 },
 		{ "HAND_BARE_CROSSBOW_LASER", "HAND_GLOVES_CROSSBOW_LASER",
-		  "the grappling gun, sight", 1, -1, "9,10,12,13" },
+		  "the grappling gun, sight", 1, -1, "9,10,12,13", -1 },
 		{ "HAND_BARE_FLARE",          "HAND_GLOVES_FLARE",
-		  "the flare",                1, -1, "12,13" },
+		  "the flare",                1, -1, "12,13", -1 },
 		{ "HAND_BARE_TORCH",          "HAND_GLOVES_TORCH",
-		  "the torch",                1, -1, "12,13" },
+		  "the torch",                1, -1, "12,13", -1 },
 		{ "HAND_BARE_CROWBAR",        "HAND_GLOVES_CROWBAR",
-		  "the crowbar",              1, -1, "9,10" },
+		  "the crowbar",              1, -1, "9,10", -1 },
 
 		{ "HOLSTER_PISTOL",           0,
-		  "the pistol holsters",      3, -1, "1,4" },
+		  "the pistol holsters",      3, -1, "1,4", -1 },
 		{ "HOLSTER_UZI",              0,
-		  "the uzi holsters",         3, -1, "1,4" },
+		  "the uzi holsters",         3, -1, "1,4", -1 },
 		{ "HOLSTER_DEAGLE",           0,
-		  "the Desert Eagle holster", 3, -1, "4" },
+		  "the Desert Eagle holster", 3, -1, "4", -1 },
+
+		/* The pouches themselves, cut out of the London catsuit by page (D4).
+		 * kind 4 is "worn, and only by an outfit whose body has no rig". */
+		{ "OUTFIT_TR3_CATSUIT",       0,
+		  "the holster rig",          4, -1, "0,1,4", 8205 },
 
 		{ "HOLSTER_SHOTGUN",          0,
-		  "the shotgun on the back",  3, -1, "7" },
+		  "the shotgun on the back",  3, -1, "7", -1 },
 		{ "HOLSTER_HK",               0,
-		  "the HK on the back",       3, -1, "7" },
+		  "the HK on the back",       3, -1, "7", -1 },
 		{ "HOLSTER_GRAPPLE",          0,
-		  "the grapple on the back",  3, -1, "7" }
+		  "the grapple on the back",  3, -1, "7", -1 }
+	};
+
+	/* THE SHEEN OF EVERY PART THAT IS NOT THE BODY (#123, fix round D, D2).
+	 *
+	 * WHAT THIS TABLE IS. TR5's own lighting has no specular term at all -
+	 * aTransformLightClipMesh adds an ambient and a diffuse cosine and stops -
+	 * so every HD outfit came out matt beside the remaster's own pictures,
+	 * where the VCI catsuit and the TR3 London one read as LATEX and the skin
+	 * carries a soft sheen. The user's finding D2, with the reference shots.
+	 *
+	 * WHY IT IS A TABLE AND NOT A MEASUREMENT, which matters because
+	 * everything else in this file is measured. The obvious source would have
+	 * been the pages' ALPHA channel: fix round A2 found it to be a gloss mask
+	 * on the room pages, and TROne says the same of the item ones in so many
+	 * words (hostender\game_renderer.cpp:373). It is not one here. Measured
+	 * with DdsProbe -alpha over the wardrobe's pages:
+	 *
+	 *     page 8001 (skin trim)   mean 254.9   0 texels below 128
+	 *     page 8008 (leggings)    mean 254.8   0
+	 *     page 8016 (Rome shorts) mean 254.8   0
+	 *     page 8018 (backpack)    mean 254.9   0
+	 *     page 8027 (VCI suit)    mean 255.0   0
+	 *     page 8028 (VCI trim)    mean 254.6   0
+	 *     page 8205 (holster rig) mean 254.8   0
+	 *
+	 * Every one of them has 100 % of its texels in the 240..255 bucket: a
+	 * flat opaque channel with BC7 quantisation noise on it. There is no mask
+	 * to read. (The one page that is not flat is 8002, Lara's hair, 15.2 %
+	 * below 128 - and that is coverage.) So the material has to be named, and
+	 * naming it in one table with the numbers in it is the honest way to do
+	 * that: a picture the user does not like is one line to change.
+	 *
+	 * THE NUMBERS. strength is how much white the highlight adds at its
+	 * brightest, power the Blinn-Phong exponent - low is a broad satin sheen,
+	 * high a tight wet point.
+	 *
+	 *   latex     0.45 / 26   the two catsuits, the reference look
+	 *   rubber    0.30 / 22   the diving suit
+	 *   skin      0.12 / 10   a soft wide sheen, never a point
+	 *   hair      0.14 / 18
+	 *   leather   0.18 / 20   the holster rig and the worn pouches
+	 *   gunmetal  0.35 / 34   a hard small highlight on a weapon
+	 *   cloth     0.10 / 14   the Rome top and the rest
+	 *
+	 * A part not named here takes 0 and does not shine. */
+	struct PartSheen
+	{
+		int part;
+		float strength;
+		float power;
+	};
+
+	const PartSheen kPartSheen[] =
+	{
+		{ HD_LARA_PART_FACE,               0.12f, 10.0f },	// skin
+		{ HD_LARA_PART_BRAID,              0.14f, 18.0f },	// hair
+
+		{ HD_LARA_PART_HAND_REST,          0.12f, 10.0f },	// skin
+		{ HD_LARA_PART_HAND_PISTOL,        0.35f, 34.0f },	// gunmetal
+		{ HD_LARA_PART_HAND_UZI,           0.35f, 34.0f },
+		{ HD_LARA_PART_HAND_SHOTGUN,       0.30f, 30.0f },
+		{ HD_LARA_PART_HAND_HK,            0.30f, 30.0f },
+		{ HD_LARA_PART_HAND_DEAGLE,        0.35f, 34.0f },
+		{ HD_LARA_PART_HAND_DEAGLE_LASER,  0.35f, 34.0f },
+		{ HD_LARA_PART_HAND_GRAPPLE,       0.30f, 30.0f },
+		{ HD_LARA_PART_HAND_GRAPPLE_LASER, 0.30f, 30.0f },
+		{ HD_LARA_PART_HAND_FLARE,         0.12f, 10.0f },
+		{ HD_LARA_PART_HAND_TORCH,         0.12f, 10.0f },
+		{ HD_LARA_PART_HAND_CROWBAR,       0.30f, 30.0f },
+
+		{ HD_LARA_PART_HOLSTER_PISTOL,     0.35f, 34.0f },
+		{ HD_LARA_PART_HOLSTER_UZI,        0.35f, 34.0f },
+		{ HD_LARA_PART_HOLSTER_DEAGLE,     0.35f, 34.0f },
+		{ HD_LARA_PART_HOLSTER_RIG,        0.18f, 20.0f },	// leather
+
+		{ HD_LARA_PART_BACK_SHOTGUN,       0.30f, 30.0f },
+		{ HD_LARA_PART_BACK_HK,            0.30f, 30.0f },
+		{ HD_LARA_PART_BACK_GRAPPLE,       0.30f, 30.0f }
 	};
 
 	/* WHICH CLASSIC SLOT STANDS FOR WHICH PART. By NAME, out of hd_bind's
@@ -327,7 +436,7 @@ namespace
 		 * all - the diving suit has none - and HDLaraPartModel answers 0 for
 		 * a part the outfit does not take, so the plan loop skips it. */
 		for (int i = 0; i < HD_LARA_PART_COUNT; i++)
-			if (kPart[i].kind == 3)
+			if (kPart[i].kind == 3 || kPart[i].kind == 4)
 				useful[i] = true;
 
 		for (int i = 0; !all && i < level->slotCount; i++)
@@ -361,6 +470,10 @@ namespace
 		case 1: return kOutfit[outfit].hands;
 		case 2: return kOutfit[outfit].braid;
 		case 3: return kOutfit[outfit].holsters;
+		/* The holster rig (#123, fix round D, D4): worn by an outfit that
+		 * holsters at all and whose own body has no pouches built in. An
+		 * outfit that has them would wear two. */
+		case 4: return kOutfit[outfit].holsters && !kOutfit[outfit].thighRig;
 		default: return true;
 		}
 	}
@@ -659,6 +772,7 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 		one.bind = braid ? level->hairBind : level->bodyBind;
 		one.name = model;
 		one.rigidNode = kPart[part].rigid;
+		one.onlyPage = kPart[part].onlyPage;
 	}
 
 	return written;
@@ -828,6 +942,47 @@ bool HDLaraHasPart(int part)
 bool HDLaraPartPlanned(int part)
 {
 	return part >= 0 && part < HD_LARA_PART_COUNT && g_planned[part];
+}
+
+void HDLaraPartSheen(int part, float* strength, float* power)
+{
+	if (strength)
+		*strength = 0.0f;
+
+	if (power)
+		*power = 1.0f;
+
+	if (part < 0 || part >= HD_LARA_PART_COUNT)
+		return;
+
+	/* The BODY's sheen belongs to the outfit and not to the part: the same
+	 * HD_LARA_PART_BODY is a Rome top in one level and a catsuit in the
+	 * next. */
+	if (part == HD_LARA_PART_BODY)
+	{
+		if (g_outfit <= HD_LARA_OUTFIT_NONE || g_outfit >= HD_LARA_OUTFIT_COUNT)
+			return;
+
+		if (strength)
+			*strength = kOutfit[g_outfit].sheen;
+
+		if (power)
+			*power = kOutfit[g_outfit].sheenPower;
+
+		return;
+	}
+
+	for (int i = 0; i < (int)(sizeof(kPartSheen) / sizeof(kPartSheen[0])); i++)
+		if (kPartSheen[i].part == part)
+		{
+			if (strength)
+				*strength = kPartSheen[i].strength;
+
+			if (power)
+				*power = kPartSheen[i].power;
+
+			return;
+		}
 }
 
 unsigned int HDLaraPartCoverage(int part)

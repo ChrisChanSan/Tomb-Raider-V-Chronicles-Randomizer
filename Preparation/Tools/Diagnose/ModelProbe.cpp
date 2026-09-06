@@ -150,6 +150,12 @@
  *                         turn that node of the mesh tree and everything
  *                         below it. Repeat the switch for more nodes.
  *     -head               draw the separate HD face as well, if there is one
+ *     -onlypage <n>       with -name: build only the triangles that wear that
+ *                         .DDS page, and load only that page (#123, fix round
+ *                         D). This is the cut the wardrobe uses to take the
+ *                         thigh holster rig out of OUTFIT_TR3_CATSUIT
+ *                         (page 8205) without its legs, and the switch is how
+ *                         one looks at what the cut kept.
  *     -light <x y z r g b range>
  *                         one POINT light in VIEW space (the camera is at the
  *                         origin looking down +z), colour 0..255 and the
@@ -1039,6 +1045,114 @@ static void PrintBraidTable(const std::string& root5, const ClassicSlot& body)
 		"the root towards it, and\n\"left\" the gap that stays open. A "
 		"NEGATIVE left means the link is already\ninside the head and nothing "
 		"needs moving.\n");
+
+	/* --- THE BACKPACK (#123, fix round D, D3b) --------------------------- */
+	/* The classic HairControl collides the braid with five spheres, all of
+	 * them CLASSIC Lara meshes: hips, torso, head and the two upper arms. An
+	 * HD outfit is a different body and its pack stands further out than the
+	 * classic torso sphere reaches, so the HD braid walks through it. What
+	 * follows is the number an added sphere needs: the outfit's own pack, in
+	 * the TORSO NODE'S frame, which is the frame hair.cpp is in when it
+	 * places sphere[1].
+	 *
+	 * "The pack" is defined geometrically rather than by texture page, so
+	 * that the rule does not depend on how one outfit's artist split his
+	 * materials: the node 7 vertices that sit more than 30 units BEHIND the
+	 * torso joint. Nothing else of a torso does. */
+	printf("\n-- the backpack, per outfit (torso joint %.0f/%.0f/%.0f) ------\n",
+		body.bind[7][0], body.bind[7][1], body.bind[7][2]);
+	printf("%-19s %7s %24s %8s\n", "outfit", "verts",
+		"centre in the torso frame", "radius");
+	printf("%-19s %7s %24s %8s\n", "-------------------", "-------",
+		"------------------------", "--------");
+
+	for (int outfit = HD_LARA_OUTFIT_NONE + 1; outfit < HD_LARA_OUTFIT_COUNT;
+		outfit++)
+	{
+		const char* stem = HDLaraOutfitModel(outfit);
+
+		if (!stem)
+			continue;
+
+		HDTrmModel model;
+		const char* why = "";
+		const std::string path = TrmPath(root5, stem);
+
+		if (path.empty() || !HDTrmLoad(path.c_str(), &model, &why))
+			continue;
+
+		double lo[3] = { 1.0e9, 1.0e9, 1.0e9 };
+		double hi[3] = { -1.0e9, -1.0e9, -1.0e9 };
+		int count = 0;
+
+		for (int pass = 0; pass < 2; pass++)
+		{
+			double radius = 0.0;
+			const double cx = 0.5 * (lo[0] + hi[0]);
+			const double cy = 0.5 * (lo[1] + hi[1]);
+			const double cz = 0.5 * (lo[2] + hi[2]);
+
+			for (int i = 0; i < model.vertices; i++)
+			{
+				const HDTrmVertex& v = model.vertex[i];
+				int node = v.bone[0];
+
+				if (v.weight[1] > v.weight[0] && v.weight[1] >= v.weight[2])
+					node = v.bone[1];
+				else if (v.weight[2] > v.weight[0] && v.weight[2] > v.weight[1])
+					node = v.bone[2];
+
+				if (node != 7)
+					continue;
+
+				const double lx = v.x - body.bind[7][0];
+				const double ly = v.y - body.bind[7][1];
+				const double lz = v.z - body.bind[7][2];
+
+				if (lz > -30.0)
+					continue;
+
+				if (!pass)
+				{
+					count++;
+
+					if (lx < lo[0]) lo[0] = lx;
+					if (ly < lo[1]) lo[1] = ly;
+					if (lz < lo[2]) lo[2] = lz;
+					if (lx > hi[0]) hi[0] = lx;
+					if (ly > hi[1]) hi[1] = ly;
+					if (lz > hi[2]) hi[2] = lz;
+					continue;
+				}
+
+				const double d = sqrt((lx - cx) * (lx - cx) +
+					(ly - cy) * (ly - cy) + (lz - cz) * (lz - cz));
+
+				if (d > radius)
+					radius = d;
+			}
+
+			if (!pass)
+			{
+				if (!count)
+					break;
+
+				continue;
+			}
+
+			printf("%-19s %7d %8.0f %7.0f %7.0f %8.0f\n", stem, count,
+				cx, cy, cz, radius);
+		}
+
+		if (!count)
+			printf("%-19s %7s %24s %8s\n", stem, "-", "no pack", "-");
+
+		HDTrmFree(&model);
+	}
+
+	printf("\nthe sphere HairControl adds for an HD Lara is placed from the "
+		"torso node\nwith these offsets; HD_LARA_PACK_* in hd_lara.h carries "
+		"the numbers.\n");
 }
 
 static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
@@ -1173,6 +1287,18 @@ static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
 /* ---------------------------------------------------- Lara's composite -- */
 /* Stage S4-1. Everything the tool needs to know about one wardrobe picture;
  * a struct rather than eighteen arguments. */
+/* #123 fix round D (D2): one part's sheen into the lighting block. `on` is
+ * false for -nosheen, which is the BEFORE picture. */
+static void SetSheen(HDModelLighting& lighting, int part, bool on)
+{
+	float strength = 0.0f, power = 1.0f;
+
+	HDLaraPartSheen(part, &strength, &power);
+
+	lighting.specStrength = on ? strength : 0.0f;
+	lighting.specPower = power;
+}
+
 struct LaraOptions
 {
 	std::string root;
@@ -1191,6 +1317,8 @@ struct LaraOptions
 	bool firstPerson;
 	bool neck;
 	bool braid;			// the braid root table (fix round C, C4)
+	bool classicBraidRoot;		// #123 fix round D (D3a): the BEFORE picture
+	bool noSheen;			// #123 fix round D (D2): the BEFORE picture
 	bool check;
 	bool noDraw;
 	bool managed;
@@ -1598,8 +1726,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		HDSlotName(now.rightHolsterSlot) ? HDSlotName(now.rightHolsterSlot) : "-");
 	printf("back    : %s\n",
 		HDSlotName(now.backGunSlot) ? HDSlotName(now.backGunSlot) : "nothing");
-	printf("drawn   : %s%s", HDLaraOutfitModel(outfit),
-		HDLaraHasPart(HD_LARA_PART_FACE) ? " + LARA_HEAD" : "");
+	printf("drawn   : %s%s%s", HDLaraOutfitModel(outfit),
+		HDLaraHasPart(HD_LARA_PART_FACE) ? " + LARA_HEAD" : "",
+		HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG) ? " + holster rig" : "");
 
 	for (int i = 0; i < pieces; i++)
 		printf(" + %s(%08x)", HDModelName(HDLaraPartSlot(list[i].part)),
@@ -1879,8 +2008,12 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		 * the back of the skull - is where the braid hangs from. Only the two
 		 * ANGLES below are the tool's; the root is the game's own formula, so
 		 * that a studio picture shows the same junction the game shows. */
+		/* And 15 units nearer the skull for an HD Lara (#123, fix round D,
+		 * D3a): the tool draws the HD braid, so it uses the HD root. -classicroot
+		 * puts the old one back, which is the BEFORE picture of that fix. */
 		MatTranslate((float)HD_LARA_BRAID_ROOT_X, (float)HD_LARA_BRAID_ROOT_Y,
-			(float)HD_LARA_BRAID_ROOT_Z, anchor);
+			(float)(o.classicBraidRoot ? HD_LARA_BRAID_ROOT_Z
+				: HD_LARA_BRAID_ROOT_Z_HD), anchor);
 		MatMul(anchor, &matrices[HD_LARA_HEAD_NODE * 16], base);
 
 		MatRotX(kBraidRest, rest);
@@ -2097,6 +2230,27 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	lighting.lights = o.lightCount ? o.lights : 0;
 	lighting.lightCount = o.lightCount;
 	lighting.sunScale = 0.75f;
+	lighting.specStrength = 0.0f;
+	lighting.specPower = 1.0f;
+
+	/* THE SHEEN, part by part (#123, fix round D, D2), out of the same table
+	 * the engine reads - so a picture from here is the picture the game
+	 * draws. -nosheen sets every one of them to zero, which is the BEFORE
+	 * picture of that fix. */
+	printf("sheen   : ");
+
+	for (int part = 0; part < HD_LARA_PART_COUNT; part++)
+	{
+		float st = 0.0f, pw = 1.0f;
+
+		HDLaraPartSheen(part, &st, &pw);
+
+		if (HDLaraHasPart(part) && st > 0.0f)
+			printf("%s %.2f/%.0f  ", HDLaraPartLabel(part),
+				o.noSheen ? 0.0f : st, pw);
+	}
+
+	printf("%s\n", o.noSheen ? "  (-nosheen: all off)" : "");
 
 	/* --- draw -------------------------------------------------------------- */
 	printf("\n-- the picture ------------------------------------------------\n");
@@ -2150,19 +2304,42 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		: o.cull == HD_MODEL_CULL_CCW ? "counter-clockwise"
 		: "none - both sides drawn, as every other HD model is");
 
+	/* THE SHEEN, part by part (#123, fix round D, D2): the same table the
+	 * engine reads, so this picture is the game's picture. */
+	const bool sheenOn = !o.noSheen;
+
+	SetSheen(lighting, HD_LARA_PART_BODY, sheenOn);
+
 	if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BODY), matrices, HD_LARA_NODES,
 		light, bodyMask, &lighting, (float)o.nearCut, o.cull))
 		drawn++;
+
+	SetSheen(lighting, HD_LARA_PART_FACE, sheenOn);
 
 	if (!o.firstPerson &&
 		HDModelDraw(HDLaraPartSlot(HD_LARA_PART_FACE), matrices, HD_LARA_NODES,
 		light, bodyMask, &lighting))
 		drawn++;
 
+	/* THE HOLSTER RIG (#123, fix round D, D4), in the same place and with the
+	 * same guard specific\hd\hd_laradraw.cpp puts it: before the pieces,
+	 * because it belongs to the outfit and not to the weapon. */
+	SetSheen(lighting, HD_LARA_PART_HOLSTER_RIG, sheenOn);
+
+	if (HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG) &&
+		HDModelDraw(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), matrices,
+			HD_LARA_NODES, light,
+			HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & bodyMask, &lighting))
+		drawn++;
+
 	for (int i = 0; i < pieces; i++)
+	{
+		SetSheen(lighting, list[i].part, sheenOn);
+
 		if (HDModelDraw(HDLaraPartSlot(list[i].part), matrices, HD_LARA_NODES,
 			light, list[i].nodeMask & bodyMask, &lighting))
 			drawn++;
+	}
 
 	if (!o.firstPerson && HDLaraHasPart(HD_LARA_PART_BRAID))
 	{
@@ -2170,6 +2347,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 		for (int i = 0; i < HD_LARA_HAIR_NODES * 3; i++)
 			hairLight[i] = (float)o.shade;
+
+		SetSheen(lighting, HD_LARA_PART_BRAID, sheenOn);
 
 		if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BRAID), hairMatrices,
 			HD_LARA_HAIR_NODES, hairLight, ~0u, &lighting))
@@ -2225,8 +2404,11 @@ int main(int argc, char** argv)
 	bool itemcheck = false;
 
 	/* Lara's composite - stage S4-1. */
+	int onlyPage = -1;		// #123 fix round D (D4): -name with one page
 	bool lara = false, laraNodes = false, mirror = false;
 	bool laraFirstPerson = false, laraCheck = false, laraNeck = false;
+	bool classicBraidRoot = false;	// #123 fix round D (D3a): the BEFORE picture
+	bool noSheen = false;		// #123 fix round D (D2): the BEFORE picture
 	bool laraBraid = false;
 	/* Stage S8. -1 means "the engine's own constant when -firstperson is on",
 	 * which is what makes the tool's default picture the game's picture; a
@@ -2318,6 +2500,10 @@ int main(int argc, char** argv)
 			lara = true;
 			laraNeck = true;
 		}
+		else if (!_stricmp(argv[i], "-classicroot"))
+			classicBraidRoot = true;
+		else if (!_stricmp(argv[i], "-nosheen"))
+			noSheen = true;
 		else if (!_stricmp(argv[i], "-braid"))
 		{
 			lara = true;
@@ -2334,6 +2520,8 @@ int main(int argc, char** argv)
 			noDraw = true;
 		else if (!_stricmp(argv[i], "-managed"))
 			managed = true;
+		else if (!_stricmp(argv[i], "-onlypage") && i + 1 < argc)
+			onlyPage = (int)strtol(argv[++i], 0, 0);
 		else if (!_stricmp(argv[i], "-head"))
 			head = true;
 		else if (!_stricmp(argv[i], "-itemcheck"))
@@ -2487,6 +2675,8 @@ int main(int argc, char** argv)
 		o.nodes = laraNodes;
 		o.mirror = mirror;
 		o.firstPerson = laraFirstPerson;
+		o.classicBraidRoot = classicBraidRoot;
+		o.noSheen = noSheen;
 		o.neck = laraNeck;
 		o.braid = laraBraid;
 		o.check = laraCheck;
@@ -2543,6 +2733,7 @@ int main(int argc, char** argv)
 		one.nodes = 32;
 		one.bind = 0;
 		one.name = name.c_str();
+		one.onlyPage = onlyPage;	// #123 fix round D (D4)
 		wanted.push_back(one);
 		order.push_back(0);
 		slot = 0;
@@ -2994,6 +3185,9 @@ int main(int argc, char** argv)
 	lighting.lights = lightCount ? lights : 0;
 	lighting.lightCount = lightCount;
 	lighting.sunScale = 0.75f;
+	// #123 fix round D (D2): the sheen is Lara's alone; an object gets none.
+	lighting.specStrength = 0.0f;
+	lighting.specPower = 1.0f;
 
 	/* --- draw ------------------------------------------------------------ */
 	printf("\n-- the picture ------------------------------------------------\n");

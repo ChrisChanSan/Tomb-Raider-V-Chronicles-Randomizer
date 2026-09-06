@@ -23,6 +23,11 @@
  *   DdsProbe <in.dds> <out.png>     decode, report, write
  *   DdsProbe -logo <title.dds> <logo.dds> <out.png>
  *                                   compose the title screen, report, write
+ *   DdsProbe -alpha <in.dds> <out.png>
+ *                                   the ALPHA channel as a grey picture, with
+ *                                   a histogram - an item page's alpha is a
+ *                                   gloss mask, not coverage (#123, fix round
+ *                                   D, D2)
  *   DdsProbe -crop <logo.dds> <out.png>
  *                                   the title MENU's logo texture page, report,
  *                                   write (alpha over a checkerboard)
@@ -330,6 +335,70 @@ static void AlphaKind(const unsigned long* px, long w, long h)
 	printf("  -> stored as     : %s\n", notPre ? "straight alpha (premultiply before blending)" : "premultiplied or too flat to tell");
 }
 
+
+/* -alpha: THE GLOSS MASK (#123, fix round D, D2).
+ *
+ * An ITEM page's alpha channel is not coverage. Fix round A2 measured that on
+ * the room pages and TROne says the same about the item ones in so many words
+ * (host\render\game_renderer.cpp:373: "an opaque-pass tile's alpha channel
+ * holds a sparkle/specular MASK, not coverage"). This mode reads that channel
+ * out: a histogram in sixteen buckets, the mean, and the PNG written is the
+ * alpha as a grey picture, so a person can see whether the bright parts sit
+ * where a highlight belongs.
+ */
+static int AlphaMask(const char* inPath, const char* outPath)
+{
+	long w = 0, h = 0;
+	unsigned long* px = Decode(inPath, &w, &h);
+
+	if (!px)
+		return 2;
+
+	const long texels = w * h;
+	long bucket[16] = { 0 };
+	double sum = 0.0;
+	long below128 = 0, exactly255 = 0;
+
+	for (long i = 0; i < texels; i++)
+	{
+		const long a = (long)((px[i] >> 24) & 0xFF);
+
+		bucket[a >> 4]++;
+		sum += (double)a;
+
+		if (a < 128)
+			below128++;
+
+		if (a == 255)
+			exactly255++;
+	}
+
+	printf("file             : %s, %ld x %ld\n", inPath, w, h);
+	printf("  alpha mean       : %.1f of 255\n", sum / (double)texels);
+	printf("  alpha < 128      : %ld texels (%.1f %%)\n", below128,
+		100.0 * below128 / (double)texels);
+	printf("  alpha == 255     : %ld texels (%.1f %%)\n", exactly255,
+		100.0 * exactly255 / (double)texels);
+	printf("  histogram, 16 buckets of 16:\n");
+
+	for (int b = 0; b < 16; b++)
+		printf("    %3d..%3d       : %8ld  %5.1f %%\n", b * 16, b * 16 + 15,
+			bucket[b], 100.0 * bucket[b] / (double)texels);
+
+	// The alpha as a grey picture.
+	for (long i = 0; i < texels; i++)
+	{
+		const unsigned long a = (px[i] >> 24) & 0xFF;
+
+		px[i] = 0xFF000000u | (a << 16) | (a << 8) | a;
+	}
+
+	const int ok = WritePng(outPath, px, w, h);
+
+	free(px);
+	return ok ? 0 : 2;
+}
+
 // -logo: title picture + wordmark -> PNG, through the engine's own routine.
 static int ComposeLogo(const char* titlePath, const char* logoPath, const char* outPath)
 {
@@ -517,6 +586,9 @@ int main(int argc, char** argv)
 
 	if (argc == 4 && !strcmp(argv[1], "-crop"))
 		return CropLogo(argv[2], argv[3]);
+
+	if (argc == 4 && !strcmp(argv[1], "-alpha"))
+		return AlphaMask(argv[2], argv[3]);
 
 	if (argc != 3)
 	{

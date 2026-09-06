@@ -85,6 +85,7 @@
  * c104 - c135 gNodeLight[32]      per model  (the ambient, one per node)
  * c136 - c159 gObjLights[24]      per object (12 lights, two registers each)
  * c160        gLightInfo          per object (count, the sun's factor)
+ * c161        gSpec               per draw   (#123 fix round D, D2)
  *
  * THE VERTEX REGISTERS OVERLAP THE ROOM SHADER'S, and on purpose. Direct3D 9
  * has ONE constant register file behind both shaders, and hd_room.hlsl keeps
@@ -100,7 +101,7 @@
  * both. What must never happen is writing a register a shader `def`s for
  * itself, which is why gPass goes to the pixel file alone (see below).
  *
- * 161 of the 256 vs_3_0 registers. The palette is 32 nodes because the
+ * 162 of the 256 vs_3_0 registers. The palette is 32 nodes because the
  * highest bone index a weighted vertex names over all 566 models of game 5 is
  * 28 (GREEN_TEETH); the only two files past that, PIERRE_HEAD and
  * LARSON_HEAD at 40, are facial-rig heads whose numbers belong to the rig and
@@ -186,6 +187,12 @@ float4 gObjLights[HD_MAX_OBJ_LIGHTS * 2] : register(c136);
  * (0.75 in the game, 2 in the inventory - output.cpp:150-157). */
 float4 gLightInfo : register(c160);
 
+/* THE SHEEN (#123, fix round D, D2). x = strength, y = the Blinn-Phong
+ * exponent. x = 0 is off, which is what every object and every part of the
+ * wardrobe that is not meant to shine gets; see HDModelLighting in hd_model.h
+ * for where the numbers come from and why they are not read out of the art. */
+float4 gSpec : register(c161);
+
 /* --------------------------------------------------- THE PARITY BLOCK ------
  *
  * constants, pixel side
@@ -242,6 +249,7 @@ struct VS_OUT
 	float3 light   : TEXCOORD1;
 	float3 viewPos : TEXCOORD2;	// the classic "stash"
 	float3 viewNrm : TEXCOORD3;	// skinned normal, NOT renormalised
+	float3 spec    : TEXCOORD4;	// the sheen, 0 when gSpec.x is 0 (D2)
 };
 
 /* --------------------------------------------------------------- vertex -- */
@@ -330,6 +338,68 @@ VS_OUT ModelVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		}
 	}
 
+	/* THE SHEEN (#123, fix round D, D2). Blinn-Phong, in the VERTEX shader
+	 * beside the diffuse it belongs to - the classic path lights an object
+	 * per vertex and this is that light's second half, not a second light.
+	 *
+	 * V is the direction to the eye. The camera sits at the origin of view
+	 * space looking down +z, so it is simply -view.
+	 *
+	 * THE LIGHT. Every light of the object's own list contributes, with the
+	 * SAME direction and the SAME distance falloff the diffuse loop above
+	 * worked out - a highlight that ignored the falloff would sit on Lara in
+	 * a room whose only lamp is out of range. And when the list is EMPTY,
+	 * which is an ordinary room lit by its own vertex colours alone, the eye
+	 * itself is the light: without that fallback a catsuit would be matt in
+	 * exactly the places the user photographed.
+	 *
+	 * The highlight is NOT multiplied by the texture: latex is black and its
+	 * highlight is white. It is added in the pixel shader, after the texel. */
+	float3 spec = 0.0f;
+
+	if (gSpec.x > 0.0f)
+	{
+		float3 V = -view * rsqrt(max(dot(view, view), 1e-12f));
+
+		[unroll]
+		for (int k = 0; k < HD_MAX_OBJ_LIGHTS; k++)
+		{
+			if (k < (int)gLightInfo.x)
+			{
+				float4 a = gObjLights[k * 2 + 0];
+				float4 b = gObjLights[k * 2 + 1];
+
+				float3 delta = a.xyz - view;
+				float dist = length(delta);
+				float3 L = a.w < 0.5f ? a.xyz : delta / max(dist, 1e-6f);
+				float rad = a.w < 0.5f ? 1.0f : max(0.0f, 1.0f - dist * b.w);
+
+				float3 H = L + V;
+				H *= rsqrt(max(dot(H, H), 1e-12f));
+
+				spec += b.rgb * (rad * pow(max(0.0f, dot(unit, H)), gSpec.y));
+			}
+		}
+
+		if ((int)gLightInfo.x == 0)
+		{
+			/* THE EYE AS THE LAMP, when the object's list is empty - which is
+			 * an ordinary room whose light is all baked into the vertices.
+			 * H = normalize(V + V) = V.
+			 *
+			 * Weighted by the light the vertex ALREADY has, and not by a flat
+			 * 255: a highlight is a reflection of what is there, so a catsuit
+			 * in an unlit corner must stay dark. `light` is the ambient plus
+			 * whatever the loop above added, in the classic 0..255 space, so
+			 * this reduces to the full sheen in a bright room and to nothing
+			 * in a black one. */
+			spec = light * pow(max(0.0f, dot(unit, V)), gSpec.y);
+		}
+
+		spec *= gSpec.x * (1.0f / 255.0f);
+	}
+
+	o.spec = spec;
 	o.pos = mul(float4(view, 1.0f), gProj);
 	/* u is UNnormalised (0..255) and v is normalised (0..1) - see the vertex
 	 * table at the top. */
@@ -539,7 +609,11 @@ float4 ModelPS(VS_OUT input) : COLOR0
 	c = max(c, 0.0f);
 	s = saturate(s);
 
-	float3 lit = texel.rgb * c + s * gPass.w;
+	/* THE SHEEN GOES ON TOP OF THE TEXEL AND NOT THROUGH IT (#123, fix round
+	 * D, D2) - a highlight on black latex is white, and multiplying it by the
+	 * texture would be the same as not having one. Never in the ADDITIVE
+	 * pass, which is a glow and has no surface to shine. */
+	float3 lit = texel.rgb * c + input.spec * (1.0f - gPass.y) + s * gPass.w;
 
 	/* Additive pass only: an unweighted glow washes the whole frame out. */
 	lit *= lerp(1.0f, texel.a, gPass.y);

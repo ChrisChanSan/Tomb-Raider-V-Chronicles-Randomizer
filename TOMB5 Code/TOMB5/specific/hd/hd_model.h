@@ -107,6 +107,31 @@ struct HDModelSlot
 	const char* name = 0;
 	int rigidNode = -1;
 	bool fromTr3 = false;
+
+	/* ONE PAGE OF THE FILE AND NOTHING ELSE (#123, fix round D, D4).
+	 *
+	 * -1 is the whole model, which is what every caller but one asks for. A
+	 * .DDS number here keeps only the triangles that wear that page, and only
+	 * that page is loaded into the cache - the rest of the file is read,
+	 * measured and dropped.
+	 *
+	 * It exists because a piece of Lara's kit can be PART OF AN OUTFIT MODEL
+	 * rather than a file of its own: the thigh holsters. HOLSTER_PISTOL.TRM
+	 * holds the two guns and nothing else, and the pouches they sit in are
+	 * built into OUTFIT_CLASSIC and OUTFIT_RUSSIA (page 8017) and into the
+	 * two TR3 outfits that have them (page 8205). Three outfits have none -
+	 * OUTFIT_VCI, OUTFIT_TR3_ANTARC, OUTFIT_TR3_NEVADA - and the guns then
+	 * float beside the thigh, which is the user's finding D4. The page cut
+	 * lets one of the donors give up its holster without its legs.
+	 *
+	 * The cut is by PAGE and not by triangle count on purpose: a page is a
+	 * fact of the file, the artist's own division of the model into
+	 * materials, and the measurement says it is exact here. Over the eight
+	 * wardrobe bodies, page 8017 appears on nodes 0, 1, 4 (and 79 triangles
+	 * of node 7 in the Russia coat) and nowhere else, and page 8205 on nodes
+	 * 0, 1 and 4 alone - the belt and the two thigh rigs, with no part of a
+	 * leg in either. */
+	int onlyPage = -1;
 };
 
 // Where a model's file was found.
@@ -208,6 +233,35 @@ struct HDModelLighting
 	// in the game and DOUBLES it in the inventory ("fucking shit", says the
 	// original comment). One number rather than two code paths.
 	float sunScale;
+
+	/* THE SHEEN (#123, fix round D, D2).
+	 *
+	 * TR5 has no specular term of any kind: aTransformLightClipMesh adds an
+	 * ambient and a diffuse cosine and stops. The remaster's own catsuit and
+	 * the TR3 London one read as LATEX because they are lit with one, and
+	 * without it every HD outfit here came out matt - the user's finding,
+	 * with the remaster's pictures beside ours.
+	 *
+	 * WHERE THE STRENGTH COMES FROM, and this is the honest part: NOT from
+	 * the art. The obvious source would have been the pages' alpha channel,
+	 * which fix round A2 found to be a gloss mask on the ROOM pages and which
+	 * TROne describes the same way for items. Measured over the wardrobe with
+	 * DdsProbe -alpha it is nothing of the sort: 8001, 8008, 8016, 8018,
+	 * 8027, 8028 and 8205 all have EVERY texel between 240 and 255 - a flat
+	 * opaque channel with BC7 quantisation noise on it and no mask anywhere.
+	 * (The one page that is not flat is 8002, Lara's hair, at 15.2 % below
+	 * 128 - and that is coverage, not gloss.) So there is no per-texel mask
+	 * to read and the strength is a MATERIAL number per part, set from the
+	 * remaster's look and written down in hd_lara.cpp's table.
+	 *
+	 * strength 0 is off and costs the pixel shader one multiply by zero.
+	 * power is the Blinn-Phong exponent: small and the highlight is a broad
+	 * satin sheen, large and it is a tight wet point.
+	 *
+	 * Only Lara asks for it today. Every object draws with 0, so nothing
+	 * about the creature path changes. */
+	float specStrength;
+	float specPower;
 };
 
 // --- the module ------------------------------------------------------------

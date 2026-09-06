@@ -84,6 +84,7 @@ are not versioned and drift silently.
 | `Tomb5 Limits\` | the engine's fixed buffers, re-measured, including the ones this project raised. |
 | `TR3-5 Test Area\` | the porting notes for the four Tomb Raider III guests, with what each became. |
 | `Verification.md` | how to check things here, and how the obvious way of checking has failed before. |
+| `60FPS-Plan.md` | the plan for #148, 60 frames a second by interpolation: the engine's clock is already 60 Hz, one constant caps it at 30, the second matrix stack already exists; the fifteen per-frame counters, six orders, proofs, decisions. |
 | `HD-Runtime-Plan.md` | the plan for #123 as chosen: HD at run time from the user's Remaster - rooms from the .TRG, objects and Lara as .TRM models, the seam, D3D9 findings, stages, proofs, decisions. |
 | `HD-Patch-Plan.md` | way A, superseded: repainting the classic pages; kept for its measurements and as the fallback. |
 | `Outfits.txt` | the wardrobe: what travels, why the head stays, and the LaraType byte. |

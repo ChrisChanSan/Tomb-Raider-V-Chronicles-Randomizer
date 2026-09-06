@@ -6,9 +6,12 @@
 > cut-out rule by material, and the fog bulb cone), **B** (objects - the level
 > map, baked lanterns, mesh swaps, Pierre's head, cutscene actors), **C**
 > (Lara - the Desert Eagle, the VCI holsters, the gloves, the braid root, the
-> Tomb Raider III bird, the search order, the documentation) and, latest,
-> **I** (Lara - the backpack as a box, the braid's anchor, the neck cap that
-> closes the first person collar, and a material per texture page).
+> Tomb Raider III bird, the search order, the documentation), **I** (Lara -
+> the backpack as a box, the braid's anchor, a cap over the first person
+> collar, and a material per texture page), **J** (the neck cut re-shaped as a
+> cylinder about the neck axis) and, latest, **K** (the cut widened to reach
+> the collar, that cap withdrawn for the body's own INNER SKIN, and Lara's
+> skin pages shining like skin so that the wrist seam is one material).
 >
 > This file is the PLAN and is left as it was written, so that what was
 > intended can still be read against what was built. What was actually built,

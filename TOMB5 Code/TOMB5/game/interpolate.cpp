@@ -21,6 +21,11 @@
 #include "spotcam.h"			// bUseSpotCam
 #include "gameflow.h"			// gfLevelId, for the log line
 #include "lara.h"			// lara.poisoned - the R10 guard
+#include "tomb4fx.h"			// Gunshells, Bubbles (#148, order 5)
+#include "rat.h"			// Rats
+#include "bat.h"			// Bats
+#include "spider.h"			// Spiders
+#include "rope.h"			// RopeList
 #include "../specific/3dmath.h"		// phd_LookAt, CamRoll
 #include "../specific/function_stubs.h"	// Log, gLogEnabled
 #include "../specific/output.h"		// ActiveFpsMode, GameFrameMinTicks (#148, order 6)
@@ -39,12 +44,61 @@ namespace
 	const int HAIR_TAILS = 2;
 	const int HAIR_LINKS = 7;
 
+	/* ORDER 5 - THE THINGS THAT MOVE WITHOUT CARRYING A VELOCITY.
+	 *
+	 * Most particles do not need this file at all: a spark keeps its own
+	 * Xvel/Yvel/Zvel and the tick's step is a subtraction away, so it is
+	 * interpolated where it is drawn (InterpTrailLong). These six are the
+	 * exceptions - what they store is a POSITION and the thing that moved it
+	 * is either gone by draw time or was never a velocity in the first place:
+	 *
+	 *   Gunshells   a shell's fall speed is negated and its position written
+	 *               back when it bounces (UpdateGunShells, game\tomb4fx.cpp),
+	 *               so the stored speed is NOT the step that was taken on
+	 *               the tick a shell hit the floor - which is the one tick
+	 *               anybody watches a shell for.
+	 *   Rats        their step is `sin(y_rot) * speed`, and both the angle
+	 *   Bats        and the speed are rewritten AFTER the position moves.
+	 *   Spiders     They are small animals, not particles: pos + speed, the
+	 *               same shape as an items[] entry, and the same treatment.
+	 *   Bubbles     the drift is a sine of a rotation that has already
+	 *               advanced, and the impulse decays after it is spent.
+	 *   RopeList    a rope is a constraint solve over 24 links; there is no
+	 *               velocity in the drawn segments at all, and Lara HANGS on
+	 *               it - if she is interpolated and the rope is not, her
+	 *               hands leave it by half a step every second frame. Same
+	 *               argument as the braid in order 2, and the same answer.
+	 *
+	 * Together they are 16.7 KB of statics - 10.1 for the 184 movers with
+	 * their pointer table, 1.2 for the bubbles, 5.6 for the ropes - and they
+	 * cost their drawing routines not one line: DrawGunshells, DrawRats,
+	 * DrawBats, DrawSpiders, DrawBubbles and DrawRope read the same globals
+	 * they always read and find the blended values in them, exactly as
+	 * items[] does. */
+	const int SHELL_COUNT = 24;	// UpdateGunShells / DrawGunshells walk 24
+	const int RAT_COUNT = 32;	// UpdateRats walks 32
+	const int BAT_COUNT = 64;	// UpdateBats walks 64
+	const int SPIDER_COUNT = 64;	// UpdateSpiders walks 64
+	const int MOVER_COUNT = SHELL_COUNT + RAT_COUNT + BAT_COUNT + SPIDER_COUNT;
+
+	const int BUBBLE_COUNT = 40;	// UpdateBubbles / DrawBubbles walk 40
+	const int ROPE_COUNT = 8;	// RopeList[8] (game\rope.h)
+	const int ROPE_LINKS = 24;	// MeshSegment[24], and DrawRope draws 24
+
 	// The thresholds and the three lerps live in interpolate_math.h, which
 	// has no engine dependency so that the offline test can include the
 	// real thing rather than a copy of it. The reasoning for the numbers is
 	// written out there.
 	const long ITEM_SNAP = INTERP_ITEM_SNAP;
 	const long CAM_SNAP = INTERP_CAM_SNAP;
+
+	/* THE SAME HALF SECTOR, IN A ROPE'S OWN UNITS (#148, order 5). A rope
+	 * stores its drawn links as 16.16 fixed point and the draw shifts them
+	 * down by sixteen, so the threshold has to be shifted up by sixteen to
+	 * mean the same distance. What it is there for is `SetPendulumPoint`
+	 * (game\rope.cpp), which moves the whole rope in one tick when Lara
+	 * takes hold of it - a jump, not a swing. */
+	const long ROPE_SNAP = INTERP_ITEM_SNAP << 16;
 
 	/* WHAT ONE THING LOOKED LIKE BEFORE THE LAST TICK.
 	 *
@@ -69,6 +123,24 @@ namespace
 	{
 		long x, y, z;
 		short xr, yr, zr;
+	};
+
+	/* ORDER 5. The same pair for a thing that has a place but no facing - a
+	 * bubble and a rope's mesh segment are PHD_VECTORs, and a rope link has
+	 * no more of an orientation than a knot in a string does. `valid` carries
+	 * the identity test as well as the age: a bubble slot is freed by writing
+	 * its size to zero and handed straight to the next bubble, so "was this
+	 * slot alive on the last tick" is the whole of what can be known about
+	 * whether the thing standing in it now is the same thing. */
+	struct InterpVec
+	{
+		long x, y, z;
+		unsigned char valid;
+	};
+
+	struct SavedVec
+	{
+		long x, y, z;
 	};
 
 	/* WHAT LARA AIMS WITH, AND WHY IT IS SNAPSHOT AND NOT DRAW CODE (#148,
@@ -146,6 +218,32 @@ namespace
 	int g_touchedFxs = 0;
 	int g_touchedHairs = 0;
 
+	/* ORDER 5's SNAPSHOT - the same three arrays as the items above: what
+	 * stood there before the tick, a copy of what the frame overwrote, and
+	 * the list of what was really touched so that the restore walks only
+	 * that. 16.7 KB, and no allocation - which takes this file's whole
+	 * footprint to about 44 KB.
+	 *
+	 * The four simple movers share one index space because they are the same
+	 * problem four times over and one list is easier to keep right than four
+	 * of them. GatherMovers below is the only place that knows the order. */
+	PHD_3DPOS* g_moverPos[MOVER_COUNT];
+	unsigned char g_moverAlive[MOVER_COUNT];
+	InterpNode g_prevMover[MOVER_COUNT];
+	SavedNode g_savedMover[MOVER_COUNT];
+	short g_touchedMover[MOVER_COUNT];
+	int g_touchedMovers = 0;
+
+	InterpVec g_prevBubble[BUBBLE_COUNT];
+	SavedVec g_savedBubble[BUBBLE_COUNT];
+	short g_touchedBubble[BUBBLE_COUNT];
+	int g_touchedBubbles = 0;
+
+	InterpVec g_prevRope[ROPE_COUNT * ROPE_LINKS];
+	SavedVec g_savedRope[ROPE_COUNT * ROPE_LINKS];
+	short g_touchedRope[ROPE_COUNT * ROPE_LINKS];
+	int g_touchedRopes = 0;
+
 	// The camera, kept apart because it is one thing and it is restored by
 	// rebuilding the view matrix rather than by writing a field back.
 	InterpCamera g_savedCam;
@@ -219,6 +317,8 @@ namespace
 	int g_secPoseSkip = 0;		// ... and refused one by rule K6
 	int g_secPoseHD = 0;		// ... of which went through the HD path
 	int g_secLaraPose = 0;		// frames on which LARA's own pose was blended
+	int g_secParticles = 0;		// order 5: particles moved, added over the second
+	unsigned long g_secPartKinds = 0;	// ... and which kinds they were, as a mask
 	unsigned short g_secCounter = 0;	// GlobalCounter when this second began
 	int g_at = 0;			// seconds since the last invalidation
 	long g_lastDrawnX = 0, g_lastDrawnY = 0, g_lastDrawnZ = 0;
@@ -355,6 +455,93 @@ namespace
 		pos->z_rot = save->zr;
 	}
 
+	/* ---------------------------------------------------------- ORDER 5 --
+	 *
+	 * WHERE THE FOUR SIMPLE MOVERS ARE, in one fixed order. Called from the
+	 * capture, from the frame that applies the blend and never again - the
+	 * restore uses the pointers this left behind, so that a set which is
+	 * there when the frame begins is still the set that gets put back.
+	 *
+	 * A null pointer is a set the level did not load: Rats, Bats and Spiders
+	 * are game_malloc'd by their own initialisers and are simply absent in
+	 * most levels. A shell array is static and always there, and a slot with
+	 * no shell in it is dealt with by `alive`. */
+	void GatherMovers()
+	{
+		int n = 0;
+
+		for (int i = 0; i < SHELL_COUNT; i++, n++)
+		{
+			g_moverPos[n] = &Gunshells[i].pos;
+			g_moverAlive[n] = (unsigned char)(Gunshells[i].counter ? 1 : 0);
+		}
+
+		for (int i = 0; i < RAT_COUNT; i++, n++)
+		{
+			g_moverPos[n] = Rats ? &Rats[i].pos : 0;
+			g_moverAlive[n] = (unsigned char)(Rats && Rats[i].On ? 1 : 0);
+		}
+
+		for (int i = 0; i < BAT_COUNT; i++, n++)
+		{
+			g_moverPos[n] = Bats ? &Bats[i].pos : 0;
+			g_moverAlive[n] = (unsigned char)(Bats && Bats[i].On ? 1 : 0);
+		}
+
+		for (int i = 0; i < SPIDER_COUNT; i++, n++)
+		{
+			g_moverPos[n] = Spiders ? &Spiders[i].pos : 0;
+			g_moverAlive[n] = (unsigned char)(Spiders && Spiders[i].On ? 1 : 0);
+		}
+	}
+
+	/* THE SAME THREE STEPS AS A NODE, for a thing that is only a place.
+	 *
+	 * `snap` is passed in rather than taken from the header because one pair
+	 * of functions serves both a bubble, whose coordinates are world units,
+	 * and a rope's mesh segment, which is 16.16 fixed point (game\rope.cpp,
+	 * ProjectRopePoints shifts it down by 16 to draw it). The threshold is
+	 * the only place that difference shows, and one argument is cheaper than
+	 * two copies of the same loop. */
+	bool VecSnap(const InterpVec* p, const PHD_VECTOR* v, long snap)
+	{
+		if (!p->valid)
+			return true;
+
+		return Manhattan(v->x - p->x, v->y - p->y, v->z - p->z) > snap;
+	}
+
+	bool VecMoved(const InterpVec* p, const PHD_VECTOR* v)
+	{
+		return p->x != v->x || p->y != v->y || p->z != v->z;
+	}
+
+	void CaptureVec(InterpVec* p, const PHD_VECTOR* v, bool alive)
+	{
+		p->x = v->x;
+		p->y = v->y;
+		p->z = v->z;
+		p->valid = (unsigned char)(alive ? 1 : 0);
+	}
+
+	void ApplyVec(PHD_VECTOR* v, const InterpVec* p, SavedVec* save, float alpha)
+	{
+		save->x = v->x;
+		save->y = v->y;
+		save->z = v->z;
+
+		v->x = LerpLong(p->x, save->x, alpha);
+		v->y = LerpLong(p->y, save->y, alpha);
+		v->z = LerpLong(p->z, save->z, alpha);
+	}
+
+	void RestoreVec(PHD_VECTOR* v, const SavedVec* save)
+	{
+		v->x = save->x;
+		v->y = save->y;
+		v->z = save->z;
+	}
+
 	/* REBUILD THE VIEW MATRIX FROM WHERE THE CAMERA STANDS NOW.
 	 *
 	 * The whole world-to-view matrix, CamPos, CamRot and the device's own
@@ -411,7 +598,28 @@ namespace
 	 *   lara_pose    frames of this second on which LARA's own pose was
 	 *                blended, against the tween frame count beside it. It
 	 *                should be nearly all of them while she is moving and it
-	 *                drops by one on each frame where she changes animation. */
+	 *                drops by one on each frame where she changes animation.
+	 *
+	 * AND ORDER 5 ADDS TWO MORE, which are about the small moving things
+	 * rather than about the bodies:
+	 *
+	 *   particles       how many particles were drawn between two ticks, per
+	 *                   drawn frame. In rain it is in the hundreds, in a
+	 *                   still room it is nought, and at fps_mode 0 it is
+	 *                   nought always.
+	 *   particle_kinds  which KINDS those were, one bit each, in the order of
+	 *                   InterpParticleKind (game\interpolate.h): 0001 sparks,
+	 *                   0002 fire, 0004 smoke, 0008 blood, 0010 drips, 0020
+	 *                   debris, 0040 rain, 0080 snow, 0100 underwater dust,
+	 *                   0200 shockwaves, 0400 shells, 0800 swarms, 1000
+	 *                   bubbles, 2000 ropes.
+	 *
+	 *                   This is the field that finds a draw site whose guard
+	 *                   never fires, and there is no other way to see one: a
+	 *                   kind that is plainly on screen and missing from this
+	 *                   mask simply looks like thirty hertz, which is what it
+	 *                   is. Standing in the rain with no 0040 bit is a bug;
+	 *                   no 2000 bit in a level with no rope in it is not. */
 	void LogSecond()
 	{
 		if (gLogEnabled && g_secFrames > 0)
@@ -419,7 +627,8 @@ namespace
 				"alpha=%.2f/%.2f/%.2f "
 				"lara_step=%.1f items=%.1f snaps=%d (teleport=%d roomjump=%d "
 				"object=%d invalid=%d) camcut=%d cutscene=%d "
-				"pose_items=%.1f pose_skips=%.1f pose_hd=%.1f lara_pose=%d/%d",
+				"pose_items=%.1f pose_skips=%.1f pose_hd=%.1f lara_pose=%d/%d "
+				"particles=%.1f particle_kinds=%04lx",
 				(int)gfLevelId, g_at, g_secFrames, g_secTween,
 				(double)(g_secAlphaMin <= g_secAlphaMax ? g_secAlphaMin : 0.0F),
 				g_secAlphaSum / g_secFrames,
@@ -432,7 +641,8 @@ namespace
 				(double)g_secPose / g_secFrames,
 				(double)g_secPoseSkip / g_secFrames,
 				(double)g_secPoseHD / g_secFrames,
-				g_secLaraPose, g_secTween);
+				g_secLaraPose, g_secTween,
+				(double)g_secParticles / g_secFrames, g_secPartKinds);
 
 		/* TICKLOG - order 3's own proof, and the one the user reads.
 		 *
@@ -478,6 +688,8 @@ namespace
 		g_secPoseSkip = 0;
 		g_secPoseHD = 0;
 		g_secLaraPose = 0;
+		g_secParticles = 0;
+		g_secPartKinds = 0;
 		g_secCounter = GlobalCounter;
 	}
 
@@ -560,6 +772,43 @@ void InterpCapturePrev()
 	for (int t = 0; t < HAIR_TAILS; t++)
 		for (int l = 0; l < HAIR_LINKS; l++)
 			CaptureNode(&g_prevHair[t * HAIR_LINKS + l], &hairs[t][l].pos, 0, 0, 0, 0);
+
+	/* ORDER 5: the shells, the three swarms, the bubbles and the ropes.
+	 *
+	 * The swarms and the shells are captured whether or not they moved -
+	 * they are 184 slots, most of them empty in most levels, and the walk
+	 * is cheaper than deciding not to make it. A slot that is not alive gets
+	 * `valid = 0` and is therefore drawn live on the next frame, which is
+	 * what a shell that has just come to rest and a bat that has just been
+	 * spawned both need. */
+	GatherMovers();
+
+	for (int i = 0; i < MOVER_COUNT; i++)
+	{
+		if (!g_moverPos[i] || !g_moverAlive[i])
+		{
+			g_prevMover[i].valid = 0;
+			continue;
+		}
+
+		CaptureNode(&g_prevMover[i], g_moverPos[i], 0, 0, 0, 0);
+	}
+
+	for (int i = 0; i < BUBBLE_COUNT; i++)
+		CaptureVec(&g_prevBubble[i], &Bubbles[i].pos, Bubbles[i].size != 0);
+
+	/* ALL EIGHT ROPES, ALWAYS, and `Active` is the identity test. nRope is
+	 * how many the level built and it only ever grows, but a rope that is
+	 * not active has stale segments standing in it from the last time it
+	 * was - so it is the flag and not the count that says whether the
+	 * previous state means anything. */
+	for (int r = 0; r < ROPE_COUNT; r++)
+	{
+		const bool active = RopeList[r].Active != 0;
+
+		for (int l = 0; l < ROPE_LINKS; l++)
+			CaptureVec(&g_prevRope[r * ROPE_LINKS + l], &RopeList[r].MeshSegment[l], active);
+	}
 
 	/* ORDER 4: the nine angles Lara aims with, which come from the player
 	 * rather than from the animation. See the note over InterpLaraAim. */
@@ -713,6 +962,32 @@ void InterpNoteStep(int kind)
 		g_step[kind]++;
 }
 
+/* ORDER 5 (#148). WHAT A PARTICLE IS DRAWN AT, and it is g_applied and not
+ * the cadence that decides it.
+ *
+ * g_applied is true only on a frame that really wrote the blended state into
+ * the live structures, which is exactly the set of frames where the bodies,
+ * the camera and the poses are all showing (tick - 1) + alpha. Tying the
+ * particles to the same flag is what keeps them on the same instant as
+ * everything else, in every case the flag rules out as well as in the ones it
+ * allows: fps_mode 0, the frame that carries the tick, a cutscene, the first
+ * frame of a level and every return from a menu all draw the world live, and
+ * on all of them this returns 1 and every draw site keeps vanilla's own
+ * arithmetic to the bit. */
+float InterpParticleAlpha()
+{
+	return g_applied ? g_alpha : 1.0F;
+}
+
+void InterpNoteParticles(int kind, int n)
+{
+	if (!gLogEnabled || n <= 0 || kind < 0 || kind >= INTERP_PART_COUNT)
+		return;
+
+	g_secParticles += n;
+	g_secPartKinds |= 1UL << kind;
+}
+
 void InterpBeginFrame(float alpha)
 {
 	/* THE LATCH, AND IT IS SET BEFORE EVERY WAY OUT OF THIS FUNCTION.
@@ -757,6 +1032,9 @@ void InterpBeginFrame(float alpha)
 	g_touchedItems = 0;
 	g_touchedFxs = 0;
 	g_touchedHairs = 0;
+	g_touchedMovers = 0;
+	g_touchedBubbles = 0;
+	g_touchedRopes = 0;
 	g_camTouched = false;
 	g_aimTouched = false;
 
@@ -867,6 +1145,93 @@ void InterpBeginFrame(float alpha)
 			ApplyNode(&hairs[t][l].pos, n, &g_savedHair[g_touchedHairs], alpha);
 			g_touchedHair[g_touchedHairs++] = (short)k;
 		}
+	}
+
+	/* ORDER 5 - THE SHELLS, THE SWARMS, THE BUBBLES AND THE ROPES.
+	 *
+	 * Exactly the items[] walk above, with two differences and no third: the
+	 * identity test is "was this slot alive on the last tick" rather than an
+	 * object number, and there is no pose behind any of them. Everything else
+	 * - the half-sector snap, the "did it move at all" skip, the copy that
+	 * has to go back - is the same, because it is the same problem. */
+	{
+		int shells = 0;
+		int swarm = 0;
+
+		GatherMovers();
+
+		for (int i = 0; i < MOVER_COUNT; i++)
+		{
+			const InterpNode* p = &g_prevMover[i];
+			PHD_3DPOS* pos = g_moverPos[i];
+
+			if (!pos || !g_moverAlive[i] || !p->valid)
+				continue;
+
+			if (Manhattan(pos->x_pos - p->x, pos->y_pos - p->y, pos->z_pos - p->z) > ITEM_SNAP)
+				continue;
+
+			if (!NodeMoved(p, pos))
+				continue;
+
+			ApplyNode(pos, p, &g_savedMover[g_touchedMovers], alpha);
+			g_touchedMover[g_touchedMovers++] = (short)i;
+
+			// The first SHELL_COUNT entries of the list are the shells and
+			// the rest are the three swarms - see GatherMovers.
+			if (i < SHELL_COUNT)
+				shells++;
+			else
+				swarm++;
+		}
+
+		InterpNoteParticles(INTERP_PART_SHELL, shells);
+		InterpNoteParticles(INTERP_PART_SWARM, swarm);
+	}
+
+	{
+		int moved = 0;
+
+		for (int i = 0; i < BUBBLE_COUNT; i++)
+		{
+			const InterpVec* p = &g_prevBubble[i];
+			PHD_VECTOR* v = &Bubbles[i].pos;
+
+			if (!Bubbles[i].size || VecSnap(p, v, ITEM_SNAP) || !VecMoved(p, v))
+				continue;
+
+			ApplyVec(v, p, &g_savedBubble[g_touchedBubbles], alpha);
+			g_touchedBubble[g_touchedBubbles++] = (short)i;
+			moved++;
+		}
+
+		InterpNoteParticles(INTERP_PART_BUBBLE, moved);
+	}
+
+	{
+		int moved = 0;
+
+		for (int r = 0; r < ROPE_COUNT; r++)
+		{
+			if (!RopeList[r].Active)
+				continue;
+
+			for (int l = 0; l < ROPE_LINKS; l++)
+			{
+				const int k = r * ROPE_LINKS + l;
+				const InterpVec* p = &g_prevRope[k];
+				PHD_VECTOR* v = &RopeList[r].MeshSegment[l];
+
+				if (VecSnap(p, v, ROPE_SNAP) || !VecMoved(p, v))
+					continue;
+
+				ApplyVec(v, p, &g_savedRope[g_touchedRopes], alpha);
+				g_touchedRope[g_touchedRopes++] = (short)k;
+				moved++;
+			}
+		}
+
+		InterpNoteParticles(INTERP_PART_ROPE, moved);
 	}
 
 	/* LARA'S NINE AIM ANGLES (order 4). The torso twist, the head turn and
@@ -996,6 +1361,22 @@ void InterpEndFrame()
 			RestoreNode(&hairs[j / HAIR_LINKS][j % HAIR_LINKS].pos, &g_savedHair[k]);
 		}
 
+		/* ORDER 5. The pointers are the ones GatherMovers left when the
+		 * frame began - not re-gathered - so what goes back goes back where
+		 * it came from even if a set were freed between the two calls. */
+		for (int k = 0; k < g_touchedMovers; k++)
+			RestoreNode(g_moverPos[g_touchedMover[k]], &g_savedMover[k]);
+
+		for (int k = 0; k < g_touchedBubbles; k++)
+			RestoreVec(&Bubbles[g_touchedBubble[k]].pos, &g_savedBubble[k]);
+
+		for (int k = 0; k < g_touchedRopes; k++)
+		{
+			const int j = g_touchedRope[k];
+
+			RestoreVec(&RopeList[j / ROPE_LINKS].MeshSegment[j % ROPE_LINKS], &g_savedRope[k]);
+		}
+
 		if (g_aimTouched)
 		{
 			lara.head_y_rot = g_savedAim.head[0];
@@ -1060,6 +1441,9 @@ void InterpEndFrame()
 	g_touchedItems = 0;
 	g_touchedFxs = 0;
 	g_touchedHairs = 0;
+	g_touchedMovers = 0;
+	g_touchedBubbles = 0;
+	g_touchedRopes = 0;
 	g_camTouched = false;
 	g_aimTouched = false;
 
@@ -1084,6 +1468,19 @@ void InterpInvalidate(const char* why)
 	for (int i = 0; i < HAIR_TAILS * HAIR_LINKS; i++)
 		g_prevHair[i].valid = 0;
 
+	// Order 5. The shells, the swarms, the bubbles and the ropes have no
+	// neighbour any more either - and Rats, Bats and Spiders are freed with
+	// the level, so their previous state is not merely stale but points at
+	// slots that will belong to something else.
+	for (int i = 0; i < MOVER_COUNT; i++)
+		g_prevMover[i].valid = 0;
+
+	for (int i = 0; i < BUBBLE_COUNT; i++)
+		g_prevBubble[i].valid = 0;
+
+	for (int i = 0; i < ROPE_COUNT * ROPE_LINKS; i++)
+		g_prevRope[i].valid = 0;
+
 	g_prevCam.valid = 0;
 	g_prevAim.valid = 0;
 	g_lastDrawnValid = false;
@@ -1100,6 +1497,9 @@ void InterpInvalidate(const char* why)
 	g_touchedItems = 0;
 	g_touchedFxs = 0;
 	g_touchedHairs = 0;
+	g_touchedMovers = 0;
+	g_touchedBubbles = 0;
+	g_touchedRopes = 0;
 	g_camTouched = false;
 	g_aimTouched = false;
 

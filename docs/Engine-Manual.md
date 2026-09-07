@@ -339,6 +339,22 @@ The HD renderer follows without being asked: it takes its matrices off the
 engine's own stack, so it gets the halved motion and the halved pose for
 free. Sixty is as smooth with the HD art on as without it.
 
+**And so do the small things.** Sparks, the flames of every fire, smoke, rain,
+snow, the dust in flooded rooms, blood, waterfall and ceiling drips, the
+shards of a smashed object, an expanding shockwave, spent shell casings,
+bubbles, rats, bats, spiders and a rope Lara hangs from are all drawn between
+two game steps as well. They need no memory of where they were: a particle
+already carries its own speed, and the game moves it by exactly that speed
+once per step, so where it stood before is a subtraction rather than something
+to remember — which is how a thousand sparks and two thousand raindrops
+come along for the ride at no cost. What matters, and is checked to the unit
+offline, is that they are walked *backwards* from where the game holds them
+and never forwards: a spark that ran ahead of the gun that fired it would be
+smooth and wrong.
+
+Their fall speeds and their lifetimes are unchanged — those are timings,
+and timings are the next paragraph.
+
 **What still steps at thirty**, on purpose, for now:
 
 - **The frame of the weapon in her hands.** The body, the arms and where they
@@ -349,12 +365,14 @@ free. Sixty is as smooth with the HD art on as without it.
 - **Cut scenes**, whole. Their camera is decoded from a frame number rather
   than simulated, so it is left alone and they play exactly as they always
   did.
-- **Sparks, rain, snow, blood, debris, bubbles and shell casings.** Small,
-  fast and short-lived; they are left where they are until somebody's eye
-  finds them. Note that their *fall speed* and their *lifetime* are not on
-  this list — see below: those are timings and they are correct at both
-  settings. What is still at thirty is only that a raindrop is drawn at the
-  same place twice.
+- **The lightning.** A bolt is not moved from one game step to the next, it
+  is drawn afresh: its segments are re-rolled from scratch every time. There
+  is no halfway between two of them to draw, so the flicker keeps its thirty
+  — which is what a flicker is.
+- **The tumble of a flying shard.** Where a piece of a smashed object *flies*
+  is in half steps; the way it *spins* is not. It spins fast enough that
+  nobody can pick the difference out, and its two rotations are stored in a
+  form that cannot be blended without wrapping the wrong way half the time.
 
 **Everything that is a length of time is a length of time.** This is the part
 that took the most work and shows the least: dozens of counters in the engine
@@ -1838,7 +1856,7 @@ wrote it, and each seam answers a different question:
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
 | …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |
 | the first seconds of a level feel rough | `PROFLOG … first_frame`, and the `WARMUP` line at the end of the load |
-| at *Frame rate 60* the motion is no smoother than at 30, or something jerks | `INTERPLOG` — per second: how many frames were interpolated, how far Lara moved per picture, how many bodies had their **limbs** blended too, and every place the engine deliberately snapped |
+| at *Frame rate 60* the motion is no smoother than at 30, or something jerks | `INTERPLOG` — per second: how many frames were interpolated, how far Lara moved per picture, how many bodies had their **limbs** blended too, how many **particles** moved between two game steps and of which kinds, and every place the engine deliberately snapped |
 | at *Frame rate 60* a fade, a caption or the rain seems to run at double speed | `TICKLOG` — per second: how often the engine's own clocks stepped. The same line has to come out of a 30 run and a 60 run |
 
 These seams are permanent, not debug leftovers. They exist so that a report
@@ -1978,6 +1996,7 @@ frame rate setting really did:
 INTERPLOG level=1 at=12s frames=60 tween=30 alpha=0.50/0.75/1.00 lara_step=15.8
   items=4.0 snaps=0 (teleport=0 roomjump=0 object=0 invalid=0) camcut=0 cutscene=0
   pose_items=3.5 pose_skips=0.2 pose_hd=1.5 lara_pose=29/30
+  particles=118.5 particle_kinds=0041
 ```
 
 | field | what it says |
@@ -1994,6 +2013,8 @@ INTERPLOG level=1 at=12s frames=60 tween=30 alpha=0.50/0.75/1.00 lara_step=15.8
 | `pose_skips` | poses that were *not* blended because the animation changed between the two steps, or the frame number jumped. A few per second is normal — that is what an animation change is |
 | `pose_hd` | how many of the blended poses went through the **HD** renderer's own path. Zero with the HD art off |
 | `lara_pose` | frames of the second on which **Lara's** own pose was blended, against the number of in-between frames beside it. Nearly all of them while she is moving |
+| `particles` | sparks, raindrops, snowflakes, drips, blood, debris, shells, bats and the rest, drawn **between** two game steps, per frame. Hundreds in the rain, nought in a still room, and nought at 30 always |
+| `particle_kinds` | which kinds those were, one bit each: `0001` sparks, `0002` fire, `0004` smoke, `0008` blood, `0010` drips, `0020` debris, `0040` rain, `0080` snow, `0100` underwater dust, `0200` shockwaves, `0400` shells, `0800` rats/bats/spiders, `1000` bubbles, `2000` ropes. `0041` above is sparks and rain |
 
 A healthy line during ordinary play has `snaps=0` or a small handful.
 `camcut` counting every frame of a stretch means the camera never settled
@@ -2003,6 +2024,15 @@ the interpolation is not reaching the picture, which is the one failure of
 this feature that does not look like anything. The same goes for
 `pose_items=0.0` in a room with things moving in it: the bodies would then be
 sliding smoothly with their legs still ticking over at thirty.
+
+`particle_kinds` is the field that finds the same failure one effect at a
+time. Standing in the rain at 60 with no `0040` bit in it means the rain alone
+is still stepping at thirty, and there is no other way to see that — it simply
+looks like the old picture. A missing bit for something that is not on screen
+means nothing at all, so read it beside what you were looking at. **The
+lightning has no bit and never will**: its bolts are drawn afresh from
+scratch on every game step rather than moved, so there is nothing between two
+of them to draw.
 
 **`TICKLOG`.** One line per *game second*, beside `INTERPLOG`, saying how many
 times the engine's own clocks stepped in it:

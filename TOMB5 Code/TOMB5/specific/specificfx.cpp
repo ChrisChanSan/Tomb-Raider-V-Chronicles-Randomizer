@@ -42,6 +42,7 @@
 #include "../game/lara_states.h"
 #include "../game/deltapak.h"
 #include "../game/interpolate.h"	// the in-between frame's counters (#148, order 3)
+#include "../game/interpolate_math.h"	// InterpTrailLong - the particles (#148, order 5)
 #include "hdscreen.h"
 #include "LoadSave.h"
 
@@ -1495,17 +1496,44 @@ void DoRain()
 	phd_TranslateAbs(lara_item->pos.x_pos, lara_item->pos.y_pos, lara_item->pos.z_pos);
 	aSetViewMatrix();
 
+	/* #148, ORDER 5 - AND THE RAIN IS WHERE THE USER'S EYE WILL GO FIRST.
+	 *
+	 * A drop is drawn as a STREAK from where it was to where it is, so it
+	 * already carries its own step twice over: the simulation moves it by
+	 * `xv + 4 * SmokeWindX`, `yv << 3` and `zv + 4 * SmokeWindZ`, and the
+	 * tail below is that same step subtracted again. Order 5 slides the WHOLE
+	 * streak back along its own travel by the part of the step this frame has
+	 * not reached yet - the shape and the length are vanilla's, only the
+	 * place is between two ticks - so the rain falls in sixty even steps
+	 * instead of thirty double ones, and no drop appears before its tick or
+	 * outlives its death. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < rain_count; i++)
 	{
 		rptr = &Rain[i];
 
 		if (rptr->x)
 		{
+			long rx = rptr->x;
+			long ry = rptr->y;
+			long rz = rptr->z;
+
+			if (trail)
+			{
+				rx = InterpTrailLong(rx, rptr->xv + 4 * SmokeWindX, pa);
+				ry = InterpTrailLong(ry, rptr->yv << 3, pa);
+				rz = InterpTrailLong(rz, rptr->zv + 4 * SmokeWindZ, pa);
+				moved++;
+			}
+
 			clipFlag = 0;
 			clip = clipflags;
-			fx = float(rptr->x - lara_item->pos.x_pos - (SmokeWindX << 2));
-			fy = float(rptr->y - (rptr->yv << 3) - lara_item->pos.y_pos);
-			fz = float(rptr->z - lara_item->pos.z_pos - (SmokeWindZ << 2));
+			fx = float(rx - lara_item->pos.x_pos - (SmokeWindX << 2));
+			fy = float(ry - (rptr->yv << 3) - lara_item->pos.y_pos);
+			fz = float(rz - lara_item->pos.z_pos - (SmokeWindZ << 2));
 			mx = fx * D3DMView._11 + fy * D3DMView._21 + fz * D3DMView._31 + D3DMView._41;
 			my = fx * D3DMView._12 + fy * D3DMView._22 + fz * D3DMView._32 + D3DMView._42;
 			mz = fx * D3DMView._13 + fy * D3DMView._23 + fz * D3DMView._33 + D3DMView._43;
@@ -1546,9 +1574,9 @@ void DoRain()
 			*clip++ = clipFlag;
 			clipFlag = 0;
 
-			fx = float(rptr->x - lara_item->pos.x_pos);
-			fy = float(rptr->y - lara_item->pos.y_pos);
-			fz = float(rptr->z - lara_item->pos.z_pos);
+			fx = float(rx - lara_item->pos.x_pos);
+			fy = float(ry - lara_item->pos.y_pos);
+			fz = float(rz - lara_item->pos.z_pos);
 			mx = fx * D3DMView._11 + fy * D3DMView._21 + fz * D3DMView._31 + D3DMView._41;
 			my = fx * D3DMView._12 + fy * D3DMView._22 + fz * D3DMView._32 + D3DMView._42;
 			mz = fx * D3DMView._13 + fy * D3DMView._23 + fz * D3DMView._33 + D3DMView._43;
@@ -1595,6 +1623,7 @@ void DoRain()
 	}
 
 	phd_PopMatrix();
+	InterpNoteParticles(INTERP_PART_RAIN, moved);
 }
 
 void DoSnow()
@@ -1744,6 +1773,18 @@ void DoSnow()
 	clipflags[2] = 0;
 	clipflags[3] = 0;
 
+	/* #148, order 5: the snow, and it is the rain's argument again with one
+	 * difference worth writing down. A flake's sideways drift is ramped
+	 * towards the wind by two units a tick AFTER it has moved, and its fall
+	 * speed is stepped by one on the same line, so the walk back is a couple
+	 * of units out on a flake that is still catching the wind - out of a
+	 * fall of some sixty units, on a sprite four pixels wide. A flake that
+	 * has SETTLED (`stopped`) took no step at all and is given none, which
+	 * falls out of the same field the simulation reads. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < snow_count; i++)
 	{
 		snow = &Snow[i];
@@ -1751,9 +1792,19 @@ void DoSnow()
 		if (!snow->x)
 			continue;
 
-		x = float(snow->x - camera.pos.x);
-		y = float(snow->y - camera.pos.y);
-		z = float(snow->z - camera.pos.z);
+		if (trail && !snow->stopped)
+		{
+			x = float(InterpTrailLong(snow->x, snow->xv, pa) - camera.pos.x);
+			y = float(InterpTrailLong(snow->y, (snow->yv >> 1) & 0xFC, pa) - camera.pos.y);
+			z = float(InterpTrailLong(snow->z, snow->zv, pa) - camera.pos.z);
+			moved++;
+		}
+		else
+		{
+			x = float(snow->x - camera.pos.x);
+			y = float(snow->y - camera.pos.y);
+			z = float(snow->z - camera.pos.z);
+		}
 		zv = x * D3DMView._13 + y * D3DMView._23 + z * D3DMView._33 + D3DMView._43;
 
 		if (zv < f_mznear)
@@ -1808,6 +1859,7 @@ void DoSnow()
 	}
 
 	phd_PopMatrix();
+	InterpNoteParticles(INTERP_PART_SNOW, moved);
 }
 
 void DrawBinoculars()
@@ -2029,6 +2081,20 @@ void S_DrawSparks()
 	float p[8];
 	long x, y, z, smallest_size, r, g, b, c0, c1;
 
+	/* #148, ORDER 5: THE SPARKS BETWEEN TWO TICKS.
+	 *
+	 * UpdateSparks (game\effect2.cpp) settles the velocity and THEN steps the
+	 * position by it - `sptr->x += sptr->Xvel >> 5` - so the shift below is
+	 * exactly the step the last tick took and `x - step` is exactly where the
+	 * spark stood before it. No snapshot, no restore, and the same instant as
+	 * the bodies around it (game\interpolate_math.h, InterpTrailLong).
+	 *
+	 * At thirty, and on the frame that carries the tick, `pa` is 1 and not
+	 * one of these lines runs. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	smallest_size = 0;	//uninitialized
 	tex.drawtype = 2;
 	tex.tpage = 0;
@@ -2062,7 +2128,19 @@ void S_DrawSparks()
 			 * afresh on every DRAWN frame, so at sixty it would be rolled
 			 * twice per tick and sparks would let go sooner on average.
 			 * Nothing breaks either way - it is a one-shot with a random
-			 * time - but it is a rate, so it belongs on the tick. */
+			 * time - but it is a rate, so it belongs on the tick.
+			 *
+			 * ONE KNOWN INEXACTNESS, MEASURED AND LEFT (#148, order 5). At
+			 * fps_mode 2 the frame that carries the tick can still have a
+			 * blend factor below one, so the `fx->pos` this reads is the
+			 * INTERPOLATED effect position and the world position written
+			 * below is out by the part of the effect's step this frame has
+			 * not reached - at most one tick of a grenade's travel, once, on
+			 * the single frame a spark lets go. Nothing in the savegame and
+			 * nothing in the simulation reads spark[], the rate above is
+			 * unaffected, and the alternative is handing the draw a second
+			 * copy of every effect's live position. Written down rather than
+			 * traded for that. */
 			if (!InterpIsTweenFrame() && sptr->sLife - sptr->Life > (GetRandomDraw() & 7) + 4)
 			{
 				sptr->x = x;
@@ -2126,6 +2204,36 @@ void S_DrawSparks()
 			x = sptr->x;
 			y = sptr->y;
 			z = sptr->z;
+		}
+
+		/* AND THE WHOLE OF ORDER 5, FOR A THOUSAND SPARKS.
+		 *
+		 * It is applied to the WORLD position and not to the spark's stored
+		 * one, which matters for the two thirds of the array that hang off an
+		 * item or an effect: their x/y/z is an offset from a body that has
+		 * ALREADY been blended by order 2, and shifting the sum by the
+		 * offset's own step is the same number as blending both halves - the
+		 * anchor is added to either side identically. Doing it here also
+		 * keeps the detach above writing the LIVE position, which is game
+		 * state and must not have a half-step in it. */
+		if (trail)
+		{
+			long sx = sptr->Xvel >> 5;
+			long sy = sptr->Yvel >> 5;
+			long sz = sptr->Zvel >> 5;
+
+			// The wind is part of the step for an outdoor spark, and it is
+			// added after the velocity in UpdateSparks.
+			if (sptr->Flags & SF_OUTSIDE)
+			{
+				sx += SmokeWindX >> 1;
+				sz += SmokeWindZ >> 1;
+			}
+
+			x = InterpTrailLong(x, sx, pa);
+			y = InterpTrailLong(y, sy, pa);
+			z = InterpTrailLong(z, sz, pa);
+			moved++;
 		}
 
 		fX = float(x - lara_item->pos.x_pos);
@@ -2216,6 +2324,7 @@ void S_DrawSparks()
 	}
 
 	phd_PopMatrix();
+	InterpNoteParticles(INTERP_PART_SPARK, moved);
 }
 
 void S_DrawDrawSparksNEW(SPARKS* sptr, long smallest_size, float* xyz)
@@ -2343,6 +2452,16 @@ void S_DrawFireSparks(long size, long life)
 	Z = (long*)&tsv_buffer[512];
 	offsets = (long*)&tsv_buffer[1024];
 
+	/* #148, order 5: the flames of every fire in the game. Same shape as the
+	 * sparks - UpdateFireSparks (game\tomb4fx.cpp) steps `x += Xvel >> 5`
+	 * after the velocity is settled - except that a fire spark's x/y/z is an
+	 * OFFSET from the fire, in shorts, and is shifted down by the size before
+	 * it is projected. So the walk back has to happen first, on the offset
+	 * itself, and the shift then applies to what came out. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < 20; i++)
 	{
 		sptr = &fire_spark[i];
@@ -2350,9 +2469,19 @@ void S_DrawFireSparks(long size, long life)
 		if (!sptr->On)
 			continue;
 
-		dx = sptr->x >> (2 - size);
-		dy = sptr->y >> (2 - size);
-		dz = sptr->z >> (2 - size);
+		if (trail)
+		{
+			dx = InterpTrailLong(sptr->x, sptr->Xvel >> 5, pa) >> (2 - size);
+			dy = InterpTrailLong(sptr->y, sptr->Yvel >> 5, pa) >> (2 - size);
+			dz = InterpTrailLong(sptr->z, sptr->Zvel >> 5, pa) >> (2 - size);
+			moved++;
+		}
+		else
+		{
+			dx = sptr->x >> (2 - size);
+			dy = sptr->y >> (2 - size);
+			dz = sptr->z >> (2 - size);
+		}
 
 		if (dx < -0x5000 || dx > 0x5000 || dy < -0x5000 || dy > 0x5000 || dz < -0x5000 || dz > 0x5000)
 			continue;
@@ -2454,6 +2583,8 @@ void S_DrawFireSparks(long size, long life)
 		AddQuadSorted(v, 0, 1, 2, 3, &tex, 0);
 		AddQuadSorted(v, 0, 1, 2, 3, &tex, 0);
 	}
+
+	InterpNoteParticles(INTERP_PART_FIRE, moved);
 }
 
 void S_DrawSmokeSparks()
@@ -2479,6 +2610,13 @@ void S_DrawSmokeSparks()
 	is_mirror = 0;
 	sptr = &smoke_spark[0];
 
+	// #148, order 5: the smoke, and it is the sparks' own step - see
+	// UpdateSmokeSparks (game\tomb4fx.cpp), which is UpdateSparks' twin down
+	// to the shift and the outdoor wind.
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < 32; i++)
 	{
 		if (!sptr->On)
@@ -2492,12 +2630,38 @@ void S_DrawSmokeSparks()
 		else
 			is_mirror = 0;
 
-		dx = sptr->x - lara_item->pos.x_pos;
-		dy = sptr->y - lara_item->pos.y_pos;
-		dz = sptr->z - lara_item->pos.z_pos;
+		long px = sptr->x;
+		long py = sptr->y;
+		long pz = sptr->z;
+
+		if (trail)
+		{
+			long sx = sptr->Xvel >> 5;
+			long sy = sptr->Yvel >> 5;
+			long sz = sptr->Zvel >> 5;
+
+			if (sptr->Flags & SF_OUTSIDE)
+			{
+				sx += SmokeWindX >> 1;
+				sz += SmokeWindZ >> 1;
+			}
+
+			px = InterpTrailLong(px, sx, pa);
+			py = InterpTrailLong(py, sy, pa);
+			pz = InterpTrailLong(pz, sz, pa);
+
+			// A mirrored puff is the same puff drawn twice; it is counted
+			// where the array is walked, which is once.
+			if (!is_mirror)
+				moved++;
+		}
+
+		dx = px - lara_item->pos.x_pos;
+		dy = py - lara_item->pos.y_pos;
+		dz = pz - lara_item->pos.z_pos;
 
 		if (is_mirror)
-			dz = 2 * gfMirrorZPlane - lara_item->pos.z_pos - sptr->z;
+			dz = 2 * gfMirrorZPlane - lara_item->pos.z_pos - pz;
 
 		if (dx < -0x5000 || dx > 0x5000 || dy < -0x5000 || dy > 0x5000 || dz < -0x5000 || dz > 0x5000)
 		{
@@ -2606,6 +2770,7 @@ void S_DrawSmokeSparks()
 	}
 
 	phd_PopMatrix();
+	InterpNoteParticles(INTERP_PART_SMOKE, moved);
 }
 
 void DrawPsxTile(long x_y, long height_width, long color, long u0, long u1)
@@ -2709,6 +2874,20 @@ void DrawDebris()
 	Z = (long*)&tsv_buffer[512];
 	offsets = (long*)&tsv_buffer[1024];
 
+	/* #148, order 5: THE FLYING SHARDS OF A SMASHED OBJECT.
+	 *
+	 * UpdateDebris (game\debris.cpp) settles the fall speed and the drag and
+	 * then steps the position by them, so the three components below are the
+	 * step that was taken. Only the POSITION is walked back: a shard also
+	 * tumbles, and its two rotations are unsigned bytes shifted up by eight
+	 * to make an angle, i.e. a turn of about one and a half degrees per unit.
+	 * Blending those as bytes would wrap the wrong way half the time, and a
+	 * shard that flies smoothly while spinning in thirty hertz steps is not a
+	 * picture anybody can pick apart at the speed these things move. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < 256; i++)
 	{
 		dptr = &debris[i];
@@ -2717,7 +2896,18 @@ void DrawDebris()
 			continue;
 
 		phd_PushMatrix();
-		phd_TranslateAbs(dptr->x, dptr->y, dptr->z);
+
+		if (trail)
+		{
+			phd_TranslateAbs(
+				InterpTrailLong(dptr->x, dptr->Speed * phd_sin(dptr->Dir) >> W2V_SHIFT, pa),
+				InterpTrailLong(dptr->y, dptr->Yvel >> 4, pa),
+				InterpTrailLong(dptr->z, dptr->Speed * phd_cos(dptr->Dir) >> W2V_SHIFT, pa));
+			moved++;
+		}
+		else
+			phd_TranslateAbs(dptr->x, dptr->y, dptr->z);
+
 		phd_RotY(dptr->YRot << 8);
 		phd_RotX(dptr->XRot << 8);
 
@@ -2816,6 +3006,8 @@ void DrawDebris()
 
 		tex->drawtype = drawbak;
 	}
+
+	InterpNoteParticles(INTERP_PART_DEBRIS, moved);
 }
 
 void DrawBlood()
@@ -2841,6 +3033,12 @@ void DrawBlood()
 	Z = (long*)&tsv_buffer[512];
 	offsets = (long*)&tsv_buffer[1024];
 
+	// #148, order 5. UpdateBlood (game\tomb4fx.cpp) is the sparks' shape once
+	// more: gravity and friction first, `x += Xvel >> 5` second.
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < 32; i++)
 	{
 		bptr = &blood[i];
@@ -2848,9 +3046,19 @@ void DrawBlood()
 		if (!bptr->On)
 			continue;
 
-		dx = bptr->x - lara_item->pos.x_pos;
-		dy = bptr->y - lara_item->pos.y_pos;
-		dz = bptr->z - lara_item->pos.z_pos;
+		if (trail)
+		{
+			dx = InterpTrailLong(bptr->x, bptr->Xvel >> 5, pa) - lara_item->pos.x_pos;
+			dy = InterpTrailLong(bptr->y, bptr->Yvel >> 5, pa) - lara_item->pos.y_pos;
+			dz = InterpTrailLong(bptr->z, bptr->Zvel >> 5, pa) - lara_item->pos.z_pos;
+			moved++;
+		}
+		else
+		{
+			dx = bptr->x - lara_item->pos.x_pos;
+			dy = bptr->y - lara_item->pos.y_pos;
+			dz = bptr->z - lara_item->pos.z_pos;
+		}
 
 		if (dx < -0x5000 || dx > 0x5000 || dy < -0x5000 || dy > 0x5000 || dz < -0x5000 || dz > 0x5000)
 			continue;
@@ -2921,6 +3129,7 @@ void DrawBlood()
 	}
 
 	phd_PopMatrix();
+	InterpNoteParticles(INTERP_PART_BLOOD, moved);
 }
 
 void DrawDrips()
@@ -2946,6 +3155,17 @@ void DrawDrips()
 	phd_PushMatrix();
 	phd_TranslateAbs(lara_item->pos.x_pos, lara_item->pos.y_pos, lara_item->pos.z_pos);
 
+	/* #148, order 5: THE WATERFALL AND THE CEILING DRIPS.
+	 *
+	 * UpdateDrips (game\tomb4fx.cpp) blows an outdoor drip sideways by the
+	 * wind and drops it by `Yvel >> 5`, in that order and with the fall speed
+	 * already settled - so all three steps are exactly known. The tail of the
+	 * streak below is built from pos[] a few lines further down and therefore
+	 * follows the head without a second correction. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < 32; i++)
 	{
 		drip = &Drips[i];
@@ -2956,6 +3176,16 @@ void DrawDrips()
 		pos[0] = drip->x - lara_item->pos.x_pos;
 		pos[1] = drip->y - lara_item->pos.y_pos;
 		pos[2] = drip->z - lara_item->pos.z_pos;
+
+		if (trail)
+		{
+			const bool outside = (room[drip->RoomNumber].flags & ROOM_NOT_INSIDE) != 0;
+
+			pos[0] = InterpTrailLong(pos[0], outside ? SmokeWindX >> 1 : 0, pa);
+			pos[1] = InterpTrailLong(pos[1], drip->Yvel >> 5, pa);
+			pos[2] = InterpTrailLong(pos[2], outside ? SmokeWindZ >> 1 : 0, pa);
+			moved++;
+		}
 
 		if (pos[0] < -0x5000 || pos[0] > 0x5000 || pos[1] < -0x5000 || pos[1] > 0x5000 || pos[2] < -0x5000 || pos[2] > 0x5000)
 			continue;
@@ -3035,6 +3265,7 @@ void DrawDrips()
 	}
 
 	phd_PopMatrix();
+	InterpNoteParticles(INTERP_PART_DRIP, moved);
 }
 
 void DoUwEffect()
@@ -3130,6 +3361,19 @@ void DoUwEffect()
 	phd_PushMatrix();
 	phd_TranslateAbs(lara_item->pos.x_pos, lara_item->pos.y_pos, lara_item->pos.z_pos);
 
+	/* #148, order 5: the motes drift by `p->x += p->xv` and sink by
+	 * `(p->yv & ~7) >> 6`, which is one or two units a tick - so what this
+	 * buys is small, and it is here because the dust is the one thing on
+	 * screen in a flooded room and a mote that stands still for one frame in
+	 * two is exactly what an eye picks out of an otherwise smooth picture.
+	 *
+	 * The sink is a QUANTISED reading of yv and yv is stepped after the move,
+	 * so the walk back is a unit out on the tick where yv crosses a multiple
+	 * of eight. One unit, on a mote four pixels wide. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < 256; i++)
 	{
 		p = &uwdust[i];
@@ -3140,6 +3384,14 @@ void DoUwEffect()
 		x = p->x - lara_item->pos.x_pos;
 		y = p->y - lara_item->pos.y_pos;
 		z = p->z - lara_item->pos.z_pos;
+
+		if (trail)
+		{
+			x = InterpTrailLong(x, p->xv, pa);
+			y = InterpTrailLong(y, (p->yv & ~7) >> 6, pa);
+			z = InterpTrailLong(z, p->zv, pa);
+			moved++;
+		}
 		offsets[0] = x;
 		offsets[1] = y;
 		offsets[2] = z;
@@ -3214,6 +3466,7 @@ void DoUwEffect()
 	}
 
 	phd_PopMatrix();
+	InterpNoteParticles(INTERP_PART_DUST, moved);
 }
 
 void DrawBubbles()
@@ -3348,6 +3601,18 @@ void DrawShockwaves()
 	sprite = &spriteinfo[objects[DEFAULT_SPRITES].mesh_index + 8];
 	offsets = (long*)&tsv_buffer[1024];
 
+	/* #148, order 5: A SHOCKWAVE HAS NO VELOCITY BUT ITS RADIUS DOES.
+	 *
+	 * The ring stands still and GROWS: UpdateShockwaves (game\tomb4fx.cpp)
+	 * does `OuterRad += Speed; InnerRad += Speed >> 1;` and only then decays
+	 * the speed, so the two radii walk back exactly like a position does.
+	 * That is the whole of the movement in this effect - a ring expanding in
+	 * thirty hertz steps under a sixty hertz picture is the most obvious
+	 * stutter left in the game after the weather. */
+	const float pa = InterpParticleAlpha();
+	const bool trail = pa < 1.0F;
+	long moved = 0;
+
 	for (int i = 0; i < 16; i++)
 	{
 		wave = &ShockWaves[i];
@@ -3363,7 +3628,10 @@ void DrawShockwaves()
 		offsets[1] = 0;
 		offsets[5] = 0;
 		offsets[9] = 0;
-		rad = wave->OuterRad;
+		rad = trail ? (short)InterpTrailLong(wave->OuterRad, wave->Speed, pa) : wave->OuterRad;
+
+		if (trail)
+			moved++;
 
 		for (int j = 0; j < 2; j++)
 		{
@@ -3413,7 +3681,8 @@ void DrawShockwaves()
 				Z += 3;
 			}
 
-			rad = wave->InnerRad;
+			rad = trail ? (short)InterpTrailLong(wave->InnerRad, wave->Speed >> 1, pa)
+				: wave->InnerRad;
 		}
 
 		phd_PopMatrix();
@@ -3470,8 +3739,19 @@ void DrawShockwaves()
 			Z++;
 		}
 	}
+
+	InterpNoteParticles(INTERP_PART_SHOCKWAVE, moved);
 }
 
+/* THE LIGHTNING IS LEFT AT THIRTY, AND IT IS NOT AN OVERSIGHT (#148, order 5).
+ *
+ * UpdateLightning (game\tomb4fx.cpp) does not MOVE its segments; it re-rolls
+ * them out of the random generator on every tick. There is nothing between
+ * two of them to be halfway between - a bolt's previous shape is not a
+ * neighbour of its current one, it is a different bolt - and blending them
+ * would draw a shape that the game never draws at thirty, which is the one
+ * thing this whole order is not allowed to do. So the flicker keeps its
+ * thirty hertz, which is what a flicker is. */
 void DrawLightning()
 {
 	LIGHTNING_STRUCT* l;

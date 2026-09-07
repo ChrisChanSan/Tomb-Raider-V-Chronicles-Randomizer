@@ -5085,12 +5085,14 @@ will be there, and the object half of this group is one line
 ### 5. Sixty frames a second (#148)
 
 The plan this follows is `Preparation/60FPS-Plan.md`, written from a read-only
-survey of this tree. It runs in orders; **this section covers orders 1, 1b, 2,
-3 and 4** - the clock split, the option, the measurement, one warm-up fix, what
-a play test of all that found, the interpolation of the root and the camera
-that fills the in-between frames in, then every counter in the engine that
-was measuring time in drawn frames, and finally the pose, so that a body's
-limbs move on the in-between frame and not only its feet's position.
+survey of this tree. It runs in orders; **this section covers all six of them
+and the 1b that came out of a play test** - the clock split, the option, the
+measurement, one warm-up fix, what a play test of all that found, the
+interpolation of the root and the camera that fills the in-between frames in,
+then every counter in the engine that was measuring time in drawn frames, then
+the pose, so that a body's limbs move on the in-between frame and not only its
+feet's position, then VSync and the rate the monitor sets, and finally the
+particles - the sparks, the weather and everything else small that moves.
 
 #### 5.1 What the 30 Hz cap actually was
 
@@ -6044,6 +6046,153 @@ the driver instead.
 exception: `R15` above, whose step is a logic tick rather than a rounded ratio
 in every mode. At thirty frames a second that is vanilla's own 120 frames, and
 it is the version that cannot leave the caption standing.
+
+#### 5.13 Order 5 - the particles
+
+Orders 2 and 4 gave every BODY in the game a place between two logic ticks.
+This one gives it to everything else that moves: the sparks, the flames, the
+smoke, the rain, the snow, the underwater dust, the blood, the drips, the
+flying shards of a smashed object, the shockwave's expanding ring, the spent
+shell casings, the bubbles, the rats, the bats, the spiders and a rope Lara is
+hanging from.
+
+The user's decision on it was one line - *yes, interpolate; everything as
+vanilla, only more pictures* - and the plan's own recommendation had been the
+other way (`Preparation/60FPS-Plan.md`, decision 6: leave them, and revisit
+only if the user's eye finds them). The eye found them.
+
+**The insight that makes it nearly free.** A particle does not need a
+snapshot, because it already carries the thing a snapshot would have held.
+Every particle simulation in this engine has the same two last statements:
+
+```
+sptr->Yvel += sptr->Gravity;      // whatever settles the velocity
+sptr->x    += sptr->Xvel >> 5;    // ... and then the step it takes
+```
+
+The velocity is settled FIRST and the position moves by it SECOND, so the
+stored velocity *is* the step the last tick took, and
+
+```
+previous position = current position - step
+```
+
+is exact rather than an estimate. Order 2 stores 15 KB of previous state for
+512 items; order 5 covers a thousand sparks and two thousand raindrops with a
+subtraction, no memory at all and nothing to restore afterwards.
+
+**The time axis, which is the part that could have gone wrong silently.** A
+body is drawn at `prev + (cur - prev) * alpha`, i.e. the world at
+(tick - 1) + alpha. The obvious reading of "move the particle along a bit" -
+`cur + vel * alpha` - would draw it at tick + alpha, **one whole logic step
+ahead of everything around it**: sparks running out in front of the gun that
+made them, rain falling through a floor that has not arrived yet. It would
+also look perfectly smooth, which is why it is worth writing down. So a
+particle is walked BACKWARDS from the state the game holds and never forwards,
+and the arithmetic is one line (`InterpTrailLong`, `game/interpolate_math.h`):
+
+```
+InterpTrailLong(cur, step, alpha) = InterpLerpLong(cur - step, cur, alpha)
+```
+
+It is written as the snapshot's own lerp of a reconstructed `prev` and **not**
+as `cur - step * (1 - alpha)`, which is the same line of algebra and not the
+same integer: a C cast truncates towards zero, so the two forms disagree on
+odd steps and a particle would sit a unit away from where the item machinery
+would have put it. `InterpTest` sweeps every step a TR5 particle can carry, in
+both signs, against both forms - the wrong one is out on **16,384 of the
+40,965** pairs, which is what a rearrangement that "obviously cannot matter"
+costs.
+
+**Ten draw sites, and each keeps vanilla's own expression at thirty.** Every
+one asks `InterpParticleAlpha()` once, before its loop, and takes no branch at
+all when it answers 1:
+
+| what | file | the step it walks back |
+|---|---|---|
+| `spark[1024]` | `specific/specificfx.cpp`, `S_DrawSparks` | `Xvel >> 5`, plus the outdoor wind |
+| `fire_spark[20]` | `S_DrawFireSparks` | the same, on a short offset from the fire |
+| `smoke_spark[32]` | `S_DrawSmokeSparks` | the same, the mirror copy counted once |
+| `blood[32]` | `DrawBlood` | `Xvel >> 5` |
+| `Drips[32]` | `DrawDrips` | `Yvel >> 5` and the wind, if the room is outside |
+| `debris[256]` | `DrawDebris` | `Speed * sin(Dir) >> W2V_SHIFT`, `Yvel >> 4` |
+| `Rain[1024]` | `DoRain` | `xv + 4 * SmokeWindX`, `yv << 3` |
+| `Snow[1024]` | `DoSnow` | `xv`, `(yv >> 1) & 0xFC` - and nothing for a settled flake |
+| `uwdust[256]` | `DoUwEffect` | `xv`, `(yv & ~7) >> 6` |
+| `ShockWaves[16]` | `DrawShockwaves` | the RADIUS: `Speed` and `Speed >> 1` |
+
+The sparks are the interesting case: two thirds of the array hangs off an item
+or an effect and stores an OFFSET from a body that order 2 has already
+blended. The walk back is applied to the finished WORLD position, which is the
+same number as blending both halves - the anchor is added to either side
+identically - and it also leaves the "let go of the thing you came off" code
+above it writing the LIVE position, which is game state and must not have half
+a step in it.
+
+**And six things that have a place but no velocity joined the snapshot.**
+Where the step is not recoverable, order 2's own machinery is cheaper than
+guessing:
+
+| what | why not the velocity |
+|---|---|
+| `Gunshells[24]` | a bounce negates the fall speed and writes the position back, so the stored speed is not the step that was taken - on the one tick anybody watches a shell for |
+| `Rats[32]`, `Bats[64]`, `Spiders[64]` | the step is `sin(y_rot) * speed` and both the angle and the speed are rewritten *after* the position moves. They are small animals, not particles: `pos + speed`, the same shape as an `items[]` entry |
+| `Bubbles[40]` | the drift is a sine of a rotation that has already advanced, and the impulse decays after it is spent |
+| `RopeList[8]`, 24 links each | a rope is a constraint solve; there is no velocity in the drawn segments at all - and Lara HANGS on it, so if she is interpolated and the rope is not, her hands leave it by half a step on every second frame. The same argument as the braid in order 2, and the same answer |
+
+Together they cost 16.7 KB of statics - 10.1 for the 184 movers with their
+pointer table, 1.2 for the bubbles, 5.6 for the ropes, which takes the whole
+snapshot to about 44 KB - and **not one line of their own drawing code**:
+`DrawGunshells`, `DrawRats`, `DrawBats`, `DrawSpiders`, `DrawBubbles`
+and `DrawRope` read the same globals they always read and find the blended
+values in them. They carry order 2's snap rule as well - half a sector in one
+tick is a teleport, not a step - and "was this slot alive on the last tick" is
+their identity test, because a bubble slot is freed by writing its size to
+zero and handed straight to the next bubble.
+
+**What is deliberately left at thirty.**
+
+- **The lightning.** `UpdateLightning` does not move its segments, it re-rolls
+  them out of the random generator on every tick. A bolt's previous shape is
+  not a neighbour of its current one, it is a different bolt, and blending
+  them would draw a shape the game never draws at thirty - the one thing this
+  order is not allowed to do.
+- **A shard's tumble.** Where debris FLIES is interpolated; the way it SPINS
+  is not. Its two rotations are unsigned bytes shifted up by eight to make an
+  angle, so blending them as bytes would wrap the wrong way half the time, and
+  a shard flying smoothly while spinning in thirty hertz steps is not
+  something an eye can pick apart at the speed these things move.
+- **Splashes and ripples.** Their radii grow like a shockwave's, but their
+  vertical term steps its velocity on the same line as the position and their
+  life is decremented in two places, so the walk back is not exact. They last
+  a few tenths of a second on the surface of water. Named here rather than
+  silently skipped.
+
+**Two approximations, both named.** A snowflake's sideways drift is ramped
+towards the wind by two units a tick after it has moved, and a dust mote's
+sink is a quantised reading of a field that is stepped after the move. Both
+are a unit or two out of a step of sixty-odd, on a sprite four pixels wide,
+and both are written down where they are made rather than left for somebody to
+find.
+
+**`particles=` and `particle_kinds=` on the `INTERPLOG` line.** The first is
+how many particles were drawn between two ticks per frame; the second is which
+KINDS, one bit each. The mask is what makes the line diagnostic rather than
+decorative: a draw site whose guard never fires looks exactly like thirty
+hertz and there is no other way to see it. Standing in the rain with no `0040`
+bit is a bug; no `2000` bit in a level with no rope in it is not.
+
+**The proof.** `InterpTest`'s `particles` section, 14 checks: a falling
+particle under gravity - the velocity changing every tick, which a fixed-speed
+model would not catch - simulated tick by tick and drawn beside an ITEM whose
+previous state really is remembered, over sixty frames at `fps_mode 1` and 720
+at 144 Hz. **The two agree to the unit on every single frame**, the particle is
+never drawn past the state the game holds, never before the state it came
+from, and never a step backwards; at `fps_mode 2` the frame that finds a
+factor of nought draws the previous state exactly. A factor of 1 is the
+identity over the whole range, which is what keeps `fps_mode 0`
+byte-identical, and a particle born on the last tick is drawn between its
+birthplace and where that tick left it - never ahead of it.
 
 ---
 

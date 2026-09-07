@@ -217,7 +217,7 @@ and draws a state interpolated between the last two logic states.
 | short-angle lerp (rotate the short way round) | `(short)(a + (short)(b - a) * alpha)` - signed short wrap does it for free |
 | snap on teleport, level change, camera cut | 1.3 |
 | animation-frame change handling | 3, order 4 |
-| particles usually left uninterpolated | 3, order 5 (optional) |
+| particles usually left uninterpolated | 3, order 5 - **and this build does NOT leave them**: a particle carries its own velocity, so it needs no snapshot at all |
 
 
 ## 1. The seam and the snapshot
@@ -263,6 +263,18 @@ Deliberately not in the snapshot for the first stages: `spark[1024]`
 (`game\tomb4fx.cpp:32`), rain and snow, debris, blood, drips, bubbles,
 gunshells, rats, bats, spiders, ropes, shockwaves, lightning. Reason in
 3, order 5.
+
+**AND ORDER 5 SPLIT THAT LIST IN TWO RATHER THAN MOVING IT (2026-09-07).**
+Most of it never needed a snapshot at all: a spark, a raindrop, a drop of
+blood and a shockwave's radius all carry the velocity a snapshot would have
+stored, and every one of those simulations settles the velocity BEFORE it
+steps the position - so `prev = cur - step` is exact, costs nothing and needs
+no restore. Only the six that have a place and no usable step joined the
+struct above: `Gunshells[24]`, `Rats[32]`, `Bats[64]`, `Spiders[64]` (as
+`InterpNode`, in one shared index space) and `Bubbles[40]` plus `RopeList[8]`'s
+24 mesh segments each (as `InterpVec`, position only). 16.7 KB more, about
+44 KB in all. The lightning stayed out of both, because it is re-rolled per tick and
+not moved.
 
 ### 1.3 Where interpolation must be switched off (snap rules)
 
@@ -401,7 +413,7 @@ costs the game.
 | 2. Root and camera **- BUILT 2026-09-07, play test open** | `game\interpolate.cpp/.h` and `game\interpolate_math.h`: the snapshot of 1.2, the snap rules of 1.3, `InterpCapturePrev` / `InterpBeginFrame` / `InterpEndFrame`, and the camera re-`phd_LookAt` per drawn frame (`specific\3dmath.cpp:687`) with R10 guarded. Three call sites. Pose still steps at 30 Hz. | ~700 | Movement per drawn frame halves: a new `INTERPLOG` line per second with mean `|dpos|` of `lara_item` per frame, count of frames with `alpha != 1`, count of snaps. Screenshots of a run and of a turning camera. HD on and HD off must both be smooth - one proof for both, because the HD path was not touched. |
 | 3. The per-frame side effects **- BUILT 2026-09-07, play test open** | Guard R1-R12 and R14-R17 with one criterion, `InterpIsTweenFrame()`. R6 moved into `ControlPhase` behind a mark the draw leaves - it is game state being mutated from a draw, and its `KillItem` also corrupted the room's item walk for spawned items. R10 moved into the ramp itself, because `S_DrawPickup` issues a `phd_LookAt` of its own per frame. Seven more counters found by the sweep; the logic RNG rolled back over an in-between frame (see 0.4). | ~330 | `TICKLOG` per game second - fade, screenfade, weather, legend, after_death - must read the same at 30 and at 60. `InterpTest`'s `counters` section proves the rule offline: 49 checks, 0 failed. |
 | 4. The pose **- BUILT 2026-09-07, play test open** | Give `InterpolateMatrix` / `aInterpolateMatrix` / `InterpolateArmMatrix` / `aInterpolateArmMatrix` (`game\draw.cpp:304-392, 1508-1621`) one float `IM_alpha` in place of the four hard-coded branches. **NOT `frac/(float)rate` - see below.** Add `GetFramesAt` beside `GetFrames` (`:1183`). Feed the pairs in `DrawAnimatingItem` (`:594, 705`) and `CalcLaraMatrices` (`game\delstuff.cpp:62-100`); `HairControl` needs nothing. When `anim_number` changed between the two ticks, do not blend the pose - blend only the root. | ~450 | A slow walk cycle and a slow ladder climb at 60, side by side with 30, HD and classic. `HDObjectNode`'s `interpolated` branch (`specific\hd\hd_object.cpp:1549-1560`) must be exercised - a counter in `INTERPLOG`. |
-| 5. Particles (optional) | Either snapshot `spark[1024]` + rain + snow and lerp them, or leave them at 30 (they are small, fast and short-lived). Recommended: leave them, and revisit only if the user's eye finds them. | ~200 if done | Two videos of the same waterfall or torch; the user chooses. |
+| 5. Particles **- BUILT 2026-09-07, play test open** | The user said interpolate (decision 6 below). NEITHER of the plan's two options: a particle carries its own velocity and every simulation settles that velocity BEFORE it steps the position, so `prev = cur - step` is EXACT and no snapshot is needed - ten draw sites walk the particle BACKWARDS from the state the game holds (`InterpTrailLong`, `InterpParticleAlpha`). The six things that have a place but no usable velocity - shells, rats, bats, spiders, bubbles and a rope's 24 links - joined order 2's snapshot instead, for 5 KB and no change to their drawing code. Lightning left at 30 on purpose. | ~420 | `InterpTest`'s `particles` section: the same falling particle drawn from its velocity and from a remembered previous state must agree **to the unit on every frame**, at 60 and at 144 Hz, and never run ahead. `INTERPLOG particles=` and `particle_kinds=`. |
 | 6. Present policy **- BUILT 2026-09-07, play test open** | `D3DPRESENT_INTERVAL_ONE` behind `tomb5.vsync`, on by default, read in `DXCreate` (which the `Reset` path follows through `PresentParams`). `fps_mode 2` binds the rate to the panel: `GameFrameMinTicks()` returns **0**, the spin is not entered at all, and the present itself paces the loop. `time.cpp` gained `TIME_SubTick()` and the factor is `(framecount + subTick + 1) / 2` (`InterpRefreshAlpha`). No uncapped mode - the user ruled it out. | ~640 | `InterpTest`'s `refresh` section: 300 logic steps in ten seconds at 60, 120 and 144 Hz; the factor never clamped, no frame repeating the one before it, and what is drawn tracking the wall clock to within a float's precision. |
 | | total | ~1,450 over 6 orders | |
 
@@ -460,8 +472,9 @@ The gate that decides whether an item's pose may be blended is recorded in
 position - asked later, the same snap test would measure half the distance it
 should.
 
-Orders 1-3 are the shippable unit. Order 4 is the polish. Orders 5-6
-are the user's call.
+Orders 1-3 are the shippable unit. Order 4 is the polish. Orders 5 and 6
+were the user's call and the user called both of them YES. **ALL SIX ARE
+BUILT (2026-09-07)**; what is open on all of them is the play test.
 
 ### Order 2 as built (2026-09-07) - what differs from the plan above
 
@@ -561,7 +574,7 @@ breaks it, for one frame, on a camera and not on game state.
 | K10 | Uncapped mode needs a new time base | low | **DONE, order 6, and there is no uncapped mode.** `specific\time.cpp` gained `TIME_SubTick()` - the remainder past the last tick Sync() gave away, read without consuming it - and the display-bound factor is built from it. Uncapped was refused by the user ("it can damage the GPU"); the rate is bound to the panel instead, by letting the PRESENT wait rather than by measuring a rate and spinning against it. |
 | K13 | The driver overrides VSync and nothing paces the loop (order 6) | medium | A device counts as vsynced only if `CreateDevice` really got the interval (`DXVSyncActive`), and a watchdog measures the presents: six hundred in a row under half the panel's period means the interval was overridden, and the frame rate falls back to the 60 Hz spin for the session and says so in the log. An iconic window is not counted. |
 | K11 | Regression in the 30 Hz path | low | `fps_mode 0` must take every new branch out: `alpha == 1`, snapshot not applied, `gPresentMinTicks == 2`. Proof 6 is byte-identical frames. |
-| K12 | Particles keep stepping at 30 while everything else runs at 60 | low, cosmetic | Order 5, on the user's judgement. |
+| K12 | Particles keep stepping at 30 while everything else runs at 60 | low, cosmetic | **DONE, order 5.** The user judged: interpolate. Ten draw sites walk the particle back from its own velocity, six position-only kinds joined the snapshot, and the lightning stays at 30 because it is re-rolled per tick rather than moved. |
 
 
 ## 6. Decisions for the user
@@ -594,6 +607,12 @@ Before order 5
 
 6. Rain, snow and sparks: interpolate or leave at 30? Recommendation:
    leave, and revisit only if the user's own eye finds them.
+   **DECIDED 2026-09-07: INTERPOLATE** - "everything as vanilla, only more
+   pictures". The eye found them. Built the same day, and what the
+   recommendation had not seen is that it costs almost nothing: a particle
+   already carries the velocity a snapshot would have had to store, and the
+   simulations settle that velocity BEFORE they step the position, so the
+   previous position is a subtraction and not a memory.
 
 Before order 6
 
@@ -653,6 +672,65 @@ the next state arrives; that is the only mapping that never has to be clamped,
 and the derivation is written out over `InterpRefreshAlpha`. It costs one
 1/60 s tick more display latency than `fps_mode 1`, which is what a factor
 that is never clamped costs, and is why 60 remains the default.
+
+
+### Order 5 as built (2026-09-07) - the snapshot was the wrong question
+
+The plan offered two options - snapshot the particles, or leave them at 30 -
+and the answer turned out to be neither, because of one property of this
+engine's code that nobody had looked for:
+
+**EVERY PARTICLE SIMULATION SETTLES ITS VELOCITY BEFORE IT STEPS ITS
+POSITION.** `UpdateSparks`, `UpdateSmokeSparks`, `UpdateFireSparks`,
+`UpdateBlood`, `UpdateDrips`, `UpdateDebris`, `DoRain`, `DoSnow`,
+`DoUwEffect` and `UpdateShockwaves` all read
+
+```
+sptr->Yvel += sptr->Gravity;      // gravity, friction, drag - all first
+sptr->x    += sptr->Xvel >> 5;    // ... then the step, by the settled value
+```
+
+so the stored velocity IS the step the last tick took and `prev = cur - step`
+is exact, not an estimate. A thousand sparks and two thousand raindrops
+therefore cost zero bytes of snapshot, nothing to restore, and one subtraction
+each in the draw. That is why this order came out at ~420 lines including the
+six exceptions, the log and the test, against the plan's ~200 for a fraction
+of the effect.
+
+Four things came out of building it:
+
+1. **THE SIGN IS THE WHOLE RISK.** `cur + vel * alpha` - the obvious reading
+   of "move it along by the fraction" - draws the particle at tick + alpha,
+   one WHOLE logic step ahead of every body around it. It would look perfectly
+   smooth. The particle is therefore walked BACKWARDS from the state the game
+   holds, never forwards, and `InterpTest` asserts the drawn position against
+   an item's own `prev`/`cur` blend on every frame of a simulated run rather
+   than against a formula.
+
+2. **AND THE ROUNDING IS THE SECOND ONE.** `cur - step * (1 - alpha)` is the
+   same algebra and not the same integer - a cast truncates towards zero - so
+   the engine's form is `InterpLerpLong(cur - step, cur, alpha)`, the
+   snapshot's own lerp of a reconstructed previous state. The wrong form
+   disagrees on 16,384 of the 40,965 step/factor pairs the test sweeps.
+
+3. **SIX THINGS HAVE A PLACE AND NO USABLE STEP**, and they joined order 2's
+   snapshot rather than being guessed at: `Gunshells[24]` (a bounce negates
+   the fall speed and writes the position back), `Rats[32]`, `Bats[64]`,
+   `Spiders[64]` (the angle and the speed are rewritten AFTER the position
+   moves - they are `pos + speed`, the same shape as an `items[]` entry),
+   `Bubbles[40]`, and `RopeList[8]`'s 24 mesh segments each. The rope is not a
+   cosmetic case: Lara HANGS on it, and an interpolated Lara on an
+   un-interpolated rope is the braid problem of order 2 again. 16.7 KB, and
+   their drawing code did not change by one line.
+
+4. **THE LIGHTNING IS LEFT AT THIRTY AND THAT IS THE RIGHT ANSWER.**
+   `UpdateLightning` does not move its segments, it re-rolls them from the
+   random generator every tick. There is no halfway between two of them -
+   they are two different bolts - and drawing one would be drawing a shape the
+   game never draws at thirty, which is the one thing this order may not do.
+   Named with it: a shard's tumble (unsigned-byte rotations that would wrap
+   the wrong way), and splashes and ripples (their vertical term steps its
+   velocity on the same line as the position, so the walk back is not exact).
 
 
 ## Summary

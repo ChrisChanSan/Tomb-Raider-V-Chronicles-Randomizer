@@ -1208,9 +1208,290 @@ static void refresh()
 	}
 }
 
+/* ------------------------------------------------------------ particles -- */
+
+/* ORDER 5 (#148), AND ITS ONE CLAIM: a particle drawn from its own velocity
+ * stands on EXACTLY the same time axis as a body drawn from the snapshot.
+ *
+ * The bodies of order 2 are drawn at `prev + (cur - prev) * alpha`, i.e. the
+ * world at (tick - 1) + alpha. A particle has no `prev` - there are a thousand
+ * sparks and two thousand raindrops and nobody is going to store two states
+ * for each of them - but it has the thing the store would have held: every
+ * particle simulation in this engine settles its velocity FIRST and steps its
+ * position by it SECOND, so
+ *
+ *     prev = cur - step
+ *
+ * is exact rather than approximate, and the engine draws
+ * `InterpTrailLong(cur, step, alpha)`.
+ *
+ * WHAT COULD GO WRONG SILENTLY, and is therefore what is checked here:
+ *
+ *   1. THE SIGN. `cur + vel * alpha` - the obvious reading of "move it along
+ *      a bit" - would run the particle a whole logic step AHEAD of everything
+ *      around it. Sparks would lead the gun that fired them. In a picture it
+ *      looks like nothing at all; it looks like the game.
+ *   2. THE ROUNDING. `cur - step * (1 - alpha)` is the same algebra and NOT
+ *      the same integer: a C cast truncates towards zero, so on odd steps the
+ *      two forms differ by one unit and the particles would sit beside where
+ *      the item machinery would have put them. Checked over every step a TR5
+ *      particle can carry, and the count of what the wrong form would have
+ *      got wrong is printed beside it.
+ *   3. THE CADENCE. At fps_mode 2 the factor comes from a clock, reaches 0 on
+ *      the frame after a tick and 1 where the next one is due, and the drawn
+ *      particle must walk from prev to cur without ever leaving that interval
+ *      or stepping backwards.
+ *
+ * Dead particles staying dead needs no arithmetic and gets none: every draw
+ * site's `if (!On) continue;` is vanilla's and was not touched, and the
+ * simulation that clears `On` runs on the tick (order 3). What IS modelled
+ * below is the other half of that - a particle that was BORN on the last tick
+ * is drawn between its birthplace and where the tick left it, never before
+ * it. */
+static void particles()
+{
+	printf("particles - the trail, and the axis it shares with the bodies\n");
+
+	/* 1. THE IDENTITY, over every step a TR5 particle can carry. A spark's
+	 * is `Xvel >> 5` with Xvel a short, so a few hundred units at most; a
+	 * raindrop's fall is 8 to 88; the widest in the build is a shockwave's
+	 * radius. Four thousand each way covers all of them with room to spare,
+	 * and the negative half is not decoration - sparks rise, bubbles rise,
+	 * and a shift of a negative number is where an integer form goes wrong.
+	 */
+	{
+		const float alphas[5] = { 0.0F, 0.25F, 0.5F, 0.75F, 1.0F };
+		long cases = 0;
+		long wrong = 0;
+		long naiveWrong = 0;
+
+		for (long step = -4096; step <= 4096; step++)
+		{
+			for (int a = 0; a < 5; a++)
+			{
+				const long cur = 100000;
+				const long got = InterpTrailLong(cur, step, alphas[a]);
+				const long want = InterpLerpLong(cur - step, cur, alphas[a]);
+				const long naive = cur - (long)((float)step * (1.0F - alphas[a]));
+
+				cases++;
+
+				if (got != want)
+					wrong++;
+
+				if (naive != want)
+					naiveWrong++;
+			}
+		}
+
+		printf("  %ld step/factor pairs: %ld differ from the snapshot's own lerp, "
+			"%ld would have with `cur - step * (1 - alpha)`\n", cases, wrong, naiveWrong);
+
+		ok(wrong == 0, "the trail IS the snapshot form, to the unit", wrong, 0);
+		ok(naiveWrong > 0,
+			"and the obvious rearrangement is not - which is why it is not used",
+			naiveWrong > 0 ? 1 : 0, 1);
+	}
+
+	/* 2. SIXTY HERTZ. A falling particle under gravity - the velocity changes
+	 * every tick, which is the case a fixed-velocity model would not catch -
+	 * drawn over sixty frames beside an ITEM whose previous state really is
+	 * remembered. Every frame, both of them, and the difference must be zero
+	 * at every single one. */
+	{
+		long framecount = 0;
+		long pos = 0, prev = 0, vel = 0, step = 0;
+		long lastDrawn = 0;
+		int frames = 0, tween = 0, mismatch = 0, backwards = 0, ahead = 0, behind = 0;
+		bool first = true;
+
+		// DoLevel's own priming tick, so that there is a previous state
+		// before the first frame is drawn (game\gameflow.cpp).
+		vel += 96;
+		step = vel >> 5;
+		prev = pos;
+		pos += step;
+
+		for (int i = 0; i < 60; i++)
+		{
+			const float alpha = framecount < 0 ? 0.5F : 1.0F;
+			const long item = InterpLerpLong(prev, pos, alpha);	// order 2
+			const long part = InterpTrailLong(pos, step, alpha);	// order 5
+
+			frames++;
+
+			if (alpha < 1.0F)
+				tween++;
+
+			if (item != part)
+				mismatch++;
+
+			if (part > pos)			// ahead of the newest state
+				ahead++;
+
+			if (part < prev)		// behind the one before it
+				behind++;
+
+			if (!first && part < lastDrawn)
+				backwards++;
+
+			lastDrawn = part;
+			first = false;
+
+			for (framecount += 1; framecount > 0; framecount -= 2)
+			{
+				vel += 96;
+				step = vel >> 5;
+				prev = pos;
+				pos += step;
+			}
+		}
+
+		printf("  fps_mode 1: frames=%d tween=%d fell %ld units, "
+			"mismatch=%d ahead=%d behind=%d backwards=%d\n",
+			frames, tween, pos, mismatch, ahead, behind, backwards);
+
+		ok(mismatch == 0,
+			"60 Hz: the particle draws where the snapshot would have put it",
+			mismatch, 0);
+		ok(tween == 30, "60 Hz: half the frames are in-between ones", tween, 30);
+		ok(ahead == 0, "60 Hz: never drawn past the state the game holds", ahead, 0);
+		ok(behind == 0, "60 Hz: never drawn before the state it came from", behind, 0);
+		ok(backwards == 0, "60 Hz: the fall never steps back up", backwards, 0);
+	}
+
+	/* 3. THE PANEL'S OWN RATE (order 6). The same particle at 144 Hz, with the
+	 * factor coming from the clock through InterpRefreshAlpha and the flip
+	 * paced by the display - the model of refresh() above, with a particle in
+	 * it. What is new here and not in the sixty hertz run is that alpha
+	 * really does reach 0: the frame right after a tick draws the PREVIOUS
+	 * state, and the trail has to land on it exactly, or the picture would
+	 * jump by a whole step once per logic tick. */
+	{
+		const double period = 60.0 / 144.0;
+		const double phase = 0.137;
+		const int frames = 144 * 5;
+
+		long framecount = 0;
+		long S = 0;
+		long pos = 0, prev = 0, vel = 0, step = 0;
+		long lastDrawn = 0;
+		int mismatch = 0, backwards = 0, ahead = 0, behind = 0, atPrev = 0;
+		bool first = true;
+
+		vel += 96;
+		step = vel >> 5;
+		prev = pos;
+		pos += step;
+
+		for (int i = 0; i < frames; i++)
+		{
+			const double now = i * period + phase;
+			const float alpha = InterpRefreshAlpha(framecount, now - (double)S);
+			const long item = InterpLerpLong(prev, pos, alpha);
+			const long part = InterpTrailLong(pos, step, alpha);
+
+			if (item != part)
+				mismatch++;
+
+			if (part > pos)
+				ahead++;
+
+			if (part < prev)
+				behind++;
+
+			if (alpha == 0.0F && part != prev)
+				atPrev++;
+
+			if (!first && part < lastDrawn)
+				backwards++;
+
+			lastDrawn = part;
+			first = false;
+
+			{
+				const double flip = (i + 1) * period + phase;
+				const long whole = (long)flip;
+				long n = whole - S;
+
+				S = whole;
+
+				if (n > 10)
+					n = 10;
+
+				for (framecount += n; framecount > 0; framecount -= 2)
+				{
+					vel += 96;
+					step = vel >> 5;
+					prev = pos;
+					pos += step;
+				}
+			}
+		}
+
+		printf("  fps_mode 2 at 144 Hz: frames=%d fell %ld units, "
+			"mismatch=%d ahead=%d behind=%d backwards=%d\n",
+			frames, pos, mismatch, ahead, behind, backwards);
+
+		ok(mismatch == 0,
+			"144 Hz: the particle draws where the snapshot would have put it",
+			mismatch, 0);
+		ok(ahead == 0, "144 Hz: never drawn past the state the game holds", ahead, 0);
+		ok(behind == 0, "144 Hz: never drawn before the state it came from", behind, 0);
+		ok(backwards == 0, "144 Hz: the fall never steps back up", backwards, 0);
+		ok(atPrev == 0, "144 Hz: a factor of nought draws the previous state exactly",
+			atPrev, 0);
+	}
+
+	/* 4. THIRTY HERTZ TAKES NO BRANCH AT ALL. InterpParticleAlpha returns 1
+	 * there and every draw site keeps vanilla's own expression - but if one
+	 * of them ever computed the trail anyway, a factor of 1 has to be the
+	 * identity or proof 6 (a byte-identical 30 Hz frame) would fail on a
+	 * rounding. Checked over the same range as 1. */
+	{
+		long wrong = 0;
+
+		for (long step = -4096; step <= 4096; step++)
+			if (InterpTrailLong(12345, step, 1.0F) != 12345)
+				wrong++;
+
+		ok(wrong == 0, "at a factor of one the trail is the live position, unchanged",
+			wrong, 0);
+	}
+
+	/* 5. A PARTICLE THAT WAS BORN ON THE LAST TICK - the "no pre-run" rule.
+	 *
+	 * Everything that spawns a particle in this engine runs inside the tick
+	 * loop and BEFORE the simulation walk (game\control.cpp), so a spark
+	 * created on tick N has already taken one step by the time the frame is
+	 * drawn: its stored position is birthplace + step. The trail therefore
+	 * walks it back TOWARDS its birthplace and can never put it before that,
+	 * which is what "a new drop appears at the tick, not ahead of it" means
+	 * in arithmetic. */
+	{
+		const long birth = 5000;
+		const long step = 37;			// what the spawning tick then moved it by
+		const long pos = birth + step;
+		int outside = 0;
+
+		for (int a = 0; a <= 100; a++)
+		{
+			const float alpha = (float)a / 100.0F;
+			const long drawn = InterpTrailLong(pos, step, alpha);
+
+			if (drawn < birth || drawn > pos)
+				outside++;
+		}
+
+		ok(outside == 0,
+			"a newborn particle is drawn between its birthplace and the tick's end",
+			outside, 0);
+	}
+}
+
 int main()
 {
-	printf("InterpTest - the arithmetic of the 60 FPS interpolation (#148, orders 2, 3, 4 and 6)\n");
+	printf("InterpTest - the arithmetic of the 60 FPS interpolation (#148, orders 2, 3, 4, 5 and 6)\n");
 	printf("built against TOMB5 Code" "\\" "TOMB5" "\\" "game" "\\" "interpolate_math.h\n\n");
 
 	angles();
@@ -1221,6 +1502,7 @@ int main()
 	counters();
 	pose_factor();
 	pose_time();
+	particles();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

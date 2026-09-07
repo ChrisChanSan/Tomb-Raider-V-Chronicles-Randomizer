@@ -336,3 +336,49 @@ inline long InterpBlendLong(long a, long b, long alpha8)
 
 	return alpha8 <= 4 ? a + ((d * alpha8) >> 3) : b - ((d * (8 - alpha8)) >> 3);
 }
+
+/* ==========================================================================
+ * ORDER 5 - THE PARTICLES, AND THE ONE LINE OF ARITHMETIC THEY NEED.
+ *
+ * Orders 2 and 4 blend between a REMEMBERED previous state and the live one.
+ * A particle needs no such memory, because it carries the thing the snapshot
+ * exists to reconstruct: its own velocity. Every particle simulation in this
+ * engine has the same last two statements -
+ *
+ *     sptr->Yvel += sptr->Gravity;       // whatever changes the velocity
+ *     sptr->x += sptr->Xvel >> 5;        // ... then the step it takes
+ *
+ * - the velocity is settled FIRST and the position moves by it SECOND, so the
+ * stored velocity is exactly the step the last tick took and
+ *
+ *     previous position = current position - step
+ *
+ * is not an estimate. It is the same number the snapshot would have held, for
+ * a thousand sparks, two thousand raindrops and every drop of blood, at a
+ * cost of zero bytes and with nothing to restore afterwards.
+ *
+ * THE TIME AXIS IS THE SAME ONE, AND THAT IS THE WHOLE POINT. Order 2 draws a
+ * body at `prev + (cur - prev) * alpha`, i.e. the world at (tick - 1) + alpha.
+ * If a particle were drawn at `cur + vel * alpha` - the obvious reading of
+ * "move it along by the fraction" - it would show the world at tick + alpha,
+ * one whole logic step AHEAD of everything around it: sparks running out in
+ * front of the gun that made them, rain falling through a floor that has not
+ * arrived yet. So the particle is walked BACKWARDS from the state the game
+ * holds, never forwards, and the identity below is exact rather than close:
+ *
+ *     InterpTrailLong(cur, step, alpha) == InterpLerpLong(cur - step, cur, alpha)
+ *
+ * It is written as that lerp and not as `cur - step * (1 - alpha)`, which is
+ * the same line of algebra and NOT the same integer: a C cast truncates
+ * towards zero, so the two forms disagree by one unit on odd differences and
+ * a particle would sit one unit away from where the item machinery would have
+ * put it. InterpTest asserts the identity over a simulated particle at both
+ * frame rates rather than trusting the rearrangement.
+ *
+ * At fps_mode 0 nothing calls this - InterpParticleAlpha returns 1 and every
+ * draw site keeps its own vanilla expression - and at alpha 1 it would return
+ * `cur` unchanged anyway. */
+inline long InterpTrailLong(long cur, long step, float alpha)
+{
+	return InterpLerpLong(cur - step, cur, alpha);
+}

@@ -56,9 +56,20 @@
  * thing - where it stands and which way it faces - and the CAMERA. The POSE
  * (which animation frame each limb wears) still steps at thirty; that is
  * order 4, and it has its own machinery waiting for it in draw.cpp's second
- * matrix stack. Sparks, rain, snow, debris, blood, drips, bubbles, gunshells,
- * rats, bats, spiders, ropes, shockwaves and lightning are not in the
- * snapshot at all - order 5, on the user's own eye.
+ * matrix stack.
+ *
+ * ORDER 5 THEN TOOK THE PARTICLES, in the two ways they divide into. The ones
+ * that carry a VELOCITY - sparks, fire and smoke sparks, rain, snow, the
+ * underwater dust, blood, drips, debris and the shockwave's radius - need no
+ * snapshot at all, because the velocity IS the step the last tick took and
+ * the previous position is a subtraction (InterpTrailLong,
+ * game\interpolate_math.h; InterpParticleAlpha below). The ones that carry
+ * only a POSITION - gunshells, rats, bats, spiders, bubbles and the rope's
+ * mesh segments - joined this file's snapshot, where they cost 16.7 KB and not
+ * one line of their own drawing code. Only the lightning is still drawn at
+ * thirty, and it is drawn at thirty on purpose: its segments are re-rolled
+ * from scratch on every tick, so there is nothing between two of them to
+ * interpolate.
  *
  * ALPHA COSTS NO CLOCK. After ControlPhase returns, framecount is -1 when a
  * tick ran and 0 when none did, so the two states of the sixty-hertz cadence
@@ -217,6 +228,59 @@ float InterpPoseTime(const ITEM_INFO* item, short* prevAnim, short* prevFrame);
 void InterpNotePose(const ITEM_INFO* item);
 void InterpNotePoseSkip();
 void InterpNotePoseHD();
+
+/* ORDER 5 - THE PARTICLES (#148).
+ *
+ * The one number a drawing routine needs in order to put a spark, a raindrop
+ * or a drip where it stood BETWEEN the last two logic ticks: the same alpha
+ * everything else on this frame is drawn at, or 1 when the frame is a live
+ * one (fps_mode 0, the frame that carries the tick, a cutscene, a level
+ * start, every return from a menu). At 1 every call site keeps vanilla's own
+ * expression untouched, which is what makes proof 6 - a byte-identical 30 Hz
+ * frame - still true after this order.
+ *
+ * It is `g_applied ? g_alpha : 1`, i.e. it is tied to what the SNAPSHOT did
+ * rather than to the cadence, and that is deliberate: a frame that draws the
+ * items live must draw the particles live too, or a cutscene would have the
+ * sparks half a step behind the body throwing them.
+ *
+ * The arithmetic that goes with it is InterpTrailLong (game\interpolate_math.h),
+ * where the reasoning about the time axis is written out: a particle is walked
+ * BACKWARDS from where the tick left it by the step it just took, never
+ * forwards, so that it shows the same instant as the bodies around it. */
+float InterpParticleAlpha();
+
+/* WHAT WAS INTERPOLATED THIS FRAME, BY KIND (INTERPLOG's `particles=` and
+ * `particle_kinds=`). Each drawing routine counts what it really moved and
+ * says so once, after its loop - so the line reads "how many particles the
+ * player's eye saw move on the in-between frames", not "how many exist".
+ *
+ * The bitmask is what makes the line diagnostic rather than decorative: a
+ * kind that is missing from it in a scene that plainly has that kind on
+ * screen is a draw site whose guard never fires, and there is no other way
+ * to see that from the picture - it simply looks like thirty hertz.
+ *
+ * Counted only with -log. */
+enum InterpParticleKind
+{
+	INTERP_PART_SPARK = 0,		// spark[1024]        - S_DrawSparks
+	INTERP_PART_FIRE,		// fire_spark[20]     - S_DrawFireSparks
+	INTERP_PART_SMOKE,		// smoke_spark[32]    - S_DrawSmokeSparks
+	INTERP_PART_BLOOD,		// blood[32]          - DrawBlood
+	INTERP_PART_DRIP,		// Drips[32]          - DrawDrips
+	INTERP_PART_DEBRIS,		// debris[256]        - DrawDebris
+	INTERP_PART_RAIN,		// Rain[1024]         - DoRain
+	INTERP_PART_SNOW,		// Snow[1024]         - DoSnow
+	INTERP_PART_DUST,		// uwdust[256]        - DoUwEffect
+	INTERP_PART_SHOCKWAVE,		// ShockWaves[16]     - DrawShockwaves
+	INTERP_PART_SHELL,		// Gunshells[24]      - the snapshot
+	INTERP_PART_SWARM,		// Rats/Bats/Spiders  - the snapshot
+	INTERP_PART_BUBBLE,		// Bubbles[40]        - the snapshot
+	INTERP_PART_ROPE,		// RopeList[8]        - the snapshot
+	INTERP_PART_COUNT
+};
+
+void InterpNoteParticles(int kind, int n);
 
 /* WHAT STEPPED THIS SECOND (TICKLOG). The counters of order 3 report
  * themselves so that "identical in wall-clock time" is a measured number

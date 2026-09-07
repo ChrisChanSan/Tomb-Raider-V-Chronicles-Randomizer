@@ -1260,8 +1260,8 @@ very next frame.
 
 Two things then happen that have no counterpart in the classic body, and both
 are dealt with on **her body's draw alone**, so that her hands, her holsters
-and the weapon on her back are never touched (#123, stage S8, fix rounds J and
-K):
+and the weapon on her back are never touched (#123, stage S8, fix rounds J, K
+and L):
 
 - **The neck goes with the head.** The classic head *mesh* is head and neck in
   one piece; an HD body is a single skinned surface whose neck stump hangs off
@@ -1287,18 +1287,68 @@ K):
   that has to go, it does not move with the eye, and it cannot reach an arm.
 
   *And it grew from 30x30 to 40x34* (#123, fix round K), because the play test
-  found the catsuit's **collar ring** still standing at the mouth of the hole.
-  It was one unit: that collar reaches 31.2 units off the axis and the cut
-  reached 30, so its bottom edge survived. Measured over all eight outfits, the
-  torso vertices left standing above the shoulder line fall from 43 to 14 on
-  the Rome body, 35 to 14 on the VCI catsuit, 199 to 110 on the Antarctica
-  parka; and the nearest surviving vertex moves from 49.5 units to 60.4 at the
-  eye the game uses when the sight line is clear. Wider was tried and refused
-  by picture: at 38 units off the axis the Antarctica parka loses half a grey
-  level, at 55 her chest is visibly scooped out and one looks at the inside of
-  her own back - which is exactly what the sphere did. A collar that reaches 31
-  and shoulders that reach 67 at the same depth cannot both be separated by one
-  cylinder; what makes the remainder harmless is the inner skin below.
+  found the catsuit's **collar ring** still standing at the mouth of the hole -
+  and that was not the reason. The reason is the next paragraph.
+
+- **The cut has to be allowed to touch the head node, and for four rounds it
+  was not** (#123, fix round L). The shader's node rule is a *weight*: a vertex
+  is pushed `(1 - cuttable) * 1000` units out of the cut, and `cuttable` is its
+  own skinning weights summed over the nodes the cut may touch. Until this
+  round those were the **torso alone** - and the vertex under Lara's chin,
+  measured, carries bones 7/14/5 at weights 140/114/1. It is 55 % torso and
+  45 % *head*, so it was pushed 451 units out of a cut whose deepest point is
+  40 and survived every cylinder, every cone and every radius rounds I, J and K
+  tried. The whole head-blended half of her neck stood **18.6 units from the
+  eye**, which is the ring the play test photographed after every one of those
+  rounds.
+
+  Saying "the head node is masked in first person" does not hide it either: the
+  mask works on **ranges**, and a range's node is the heaviest node over its
+  triangles. The collar's triangles are heaviest on the torso and carry their
+  head-skinned corners along with them.
+
+  So the cut's node mask is the torso **and the head**. It costs nothing - the
+  head's own ranges are not drawn in first person anyway - and it can no more
+  reach an arm than the torso-only mask could. The nearest surviving vertex
+  from the eye on the head joint, which is where the camera stands whenever a
+  wall is in front of Lara, moves from 18.6 units to 45.1 on the Rome body,
+  43.7 on the Russia coat and 43.5 on the Antarctica parka, and the survivors
+  within sixty units of that eye fall from 202 to 78, 462 to 119 and 972 to
+  222. Not one vertex below the shoulder line is taken, in any outfit. The
+  picture from the eye 48 units in front of the joint - what the game gives
+  whenever the sight line is clear - is **pixel-identical** at 60 and 75
+  degrees down for every outfit; only looking straight down does it change, and
+  only by losing the stump it was meant to lose.
+
+  *A wider cut and a cone were both measured and refused.* Rounds I to K said a
+  collar of radius 31 cannot be separated from shoulders of radius 67 by one
+  cylinder, and fix round L built the cone that would do it - wide at the head
+  joint, tapering where the shoulders arrive - before finding the node mask.
+  With the head node in the mask a 44-unit cone buys three vertices on the Rome
+  body and a 56-unit one buys five, and the pictures are the same to the eye at
+  every pitch. Widening the *cylinder* is worse: at 38 units off the axis the
+  Antarctica parka loses half a grey level and at 55 her chest is visibly
+  scooped out.
+
+- **And nothing of her is drawn within forty units of the camera** (#123, fix
+  round L). This is the one part of the cut that lives in **view space**, and
+  for the opposite reason to the cylinder: what it exists to stop is a surface
+  standing on the *lens*, and how far a thing is from the lens is a fact about
+  the camera and not about her skin. In first person the camera *is* the eye,
+  so the zone needs no position of its own and follows the game's own choice
+  between the eye 48 units in front of the head joint and the eye on the joint
+  when a wall forbids the offset. It wears the same node mask as the cylinder,
+  which is what keeps it from being stage S8's sphere again.
+
+  Forty is measured, not chosen: the renderer's near plane is at 20, and the
+  nearest vertex that survives the cylinder at either eye, over every outfit,
+  is 43.5. So it **changes not one pixel** of any of the thirty pictures this
+  round took - and that is the point of it. Those pictures are taken in the
+  bind pose, and the bind pose cannot show what an animation does when she
+  folds; this is the floor that says no surface of hers may ever stand between
+  the near plane and forty units, whatever the animation does. Sixty was
+  measured too, and it starts taking geometry the eye 48 forward is supposed
+  to show.
 - **Her body is drawn one-sided there.** The HD path draws every model double
   sided; the classic engine only *looks* as if it does, because it culls back
   faces in software before the card ever sees one. No camera but this one
@@ -1346,7 +1396,19 @@ tube through it and the inner skin closes what that opens in the suit's own
 dark rubber - there is no throat on that model to take a colour from - so
 looking straight down inside the helmet is dark rather than see-through, with a
 hairline of background still visible at one edge. The classic suit hides all of
-it, because there the helmet is part of the head mesh.
+it, because there the helmet is part of the head mesh. The suit is out of this
+work by decision and not by oversight: it neither gets a fix of its own nor
+constrains the cut for the other seven bodies.
+
+*And the second leftover, also honestly:* with the eye **on the head joint** -
+the wall case - the camera stands inside her chest, and looking straight down
+from there one sees the inside of her own body, lit and painted as skin. That
+is what a camera inside a body sees; the work of this round was to make sure it
+is her body at a sane distance rather than a ring of collar on the lens or a
+hole one sees the room through. At the extreme corners of a 90-degree look
+down, under the arms, a sliver of the room is still visible - about one percent
+of the frame in the worst outfit, which is the same order as before this
+round.
 
 **Her own skin shines like skin, whatever she is wearing.** The body draws with
 one material, and part of a body is Lara and not her clothes: a bare forearm

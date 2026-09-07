@@ -1225,6 +1225,19 @@ namespace
 
 		g_device->SetVertexShaderConstantF(162, neck, 2);
 
+		/* c165, THE NEAR ZONE about the eye (#123, fix round L, L2). Written
+		 * for every draw for the reason c162 is: a constant register keeps
+		 * what it was last given, and a stale radius would carve a bubble
+		 * around the camera in the next creature drawn. Off is minus a
+		 * million, which no vertex is inside. */
+		float zone[4] =
+		{
+			cut && cut->on > 0.0f ? cut->near_ : -1.0e6f,
+			0.0f, 0.0f, 0.0f
+		};
+
+		g_device->SetVertexShaderConstantF(165, zone, 1);
+
 		/* c164, THE INNER SKIN (#123, fix round K, K1). Written for every
 		 * draw and not only for the one that wears it, for the reason c161
 		 * and c162 are: a constant register keeps what it was last given, and

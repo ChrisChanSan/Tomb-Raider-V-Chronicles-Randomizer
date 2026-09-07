@@ -389,7 +389,8 @@
  * machinery: the same page cache, the same skinning, the same draw call. */
 #define HD_LARA_SLOT_BASE	0x5A00
 
-/* THE FIRST PERSON NECK CUT (#123, stage S8; re-shaped in fix round J, J1).
+/* THE FIRST PERSON NECK CUT (#123, stage S8; re-shaped in fix round J, J1;
+ * the node mask corrected and a near zone added in fix round L, L1 and L2).
  *
  * A CYLINDER ABOUT THE NECK AXIS, in the outfit model's own BIND POSE. Every
  * fragment of Lara's BODY that sits less than HD_LARA_NECK_CUT_S units down
@@ -397,8 +398,8 @@
  * is discarded while the first person view runs, and only on the nodes
  * HD_LARA_NECK_CUT_NODES names. Her hands, her holsters, the weapon on her
  * back are separate models and are never cut; the INNER SKIN below is the
- * same body with the same cut. The shader end
- * of it is hd_model.hlsl, ModelVS and ModelPS.
+ * same body with the same cut. The shader end of it is hd_model.hlsl, ModelVS
+ * and ModelPS.
  *
  * WHY THERE HAS TO BE ONE. The classic path hides the head MESH; an HD body is
  * one skinned surface, and the neck stump under the head belongs to the TORSO
@@ -416,9 +417,9 @@
  *     wrist, because a sphere around the eye does not know a forearm from a
  *     neck.
  *
- * A SPHERE IS THE WRONG SHAPE. The thing that has to go is a NECK. A neck is a
- * TUBE about the neck axis, the axis is a line between two joints of the
- * engine's own skeleton, and NOTHING ELSE OF HER IS INSIDE THAT TUBE.
+ * A SPHERE IS THE WRONG SHAPE FOR A NECK. The thing that has to go is a NECK.
+ * A neck is a TUBE about the neck axis, the axis is a line between two joints
+ * of the engine's own skeleton, and NOTHING ELSE OF HER IS INSIDE THAT TUBE.
  *
  * MEASURED, ModelProbe -neck, "the neck as a CYLINDER": node 7 vertices by
  * depth s down the axis and radius r off it. OUTFIT_CLASSIC, and the other
@@ -431,93 +432,108 @@
  *     25    17.0    31.2   the tube opening out, 24
  *     30    14.9    67.0   BURST - 212 vertices, the shoulders have joined
  *
- * So the neck is a tube to s = 25 and a chest at s = 30, in every outfit. A
- * cylinder of S = 30 and R = 30 therefore takes the whole stump and stops
+ * So the neck is a tube to s = 25 and a chest at s = 30, in every outfit, and
+ * the shipped cylinder of S = 40 and R = 34 takes the whole stump and stops
  * where the body stops being a neck.
  *
- * AND IT CANNOT REACH AN ARM. The same measurement walks nine candidate sizes
- * (S 40/45/50 x R 26/30/34, all of them larger than what ships) over all eight
- * outfits and asks for the nearest ARM vertex inside the cylinder: there is
- * none, in any of the 72 combinations. That is finding J3 answered by
- * geometry rather than by a special case - and the node mask below is the
- * belt to that brace.
+ * -------------------------------------------------------------------------
+ * THE NODE MASK, AND THE FOUR ROUNDS THAT MISSED IT (#123, fix round L, L1).
  *
- * WHAT IT LEAVES IN THE CAMERA. The nearest SURVIVING vertex of any node but
- * the masked head, from the two eyes the first person camera really uses (the
- * head joint, 16 up, and 48 forward where mgLOS allows it):
+ * The user after fix round K: "the collar is still there and it clips". It
+ * was, on every outfit, and rounds I, J and K all looked for the cause in the
+ * SHAPE of the cut - a wider cylinder, a cone, a lid. It was never the shape.
  *
- *     outfit              eye 48   eye 0
- *     OUTFIT_CLASSIC        60.4    52.0
- *     OUTFIT_RUSSIA         54.7    48.7
- *     OUTFIT_SUBSUIT        32.7    33.5
- *     OUTFIT_VCI            60.4    52.0
- *     OUTFIT_TR3_ANTARC     48.0    43.4
- *     OUTFIT_TR3_NEVADA     60.4    52.0
- *     OUTFIT_TR3_COAST      60.4    52.0
- *     OUTFIT_TR3_CATSUIT    60.4    52.0
+ * THE CUT NEVER REACHED THE NECK AT ALL. The shader's node rule is a WEIGHT:
+ * a vertex is pushed (1 - cuttable) * 1000 units out of the cut, with
+ * `cuttable` its own skinning weights summed over the nodes the mask names.
+ * Until this round the mask named the TORSO alone - and the vertex under her
+ * chin, measured, is
  *
- * Fifty units is her own chest seen from her own eyes, which is what the
- * classic engine shows there too, and every one of them clears the 20 unit
- * near plane by a wide margin. (The diving suit is the outlier for the reason
- * stage S8 already named: its HELMET sits on the torso node. 33 units is a
- * helmet rim at the bottom of the picture, not a wall of it.)
+ *     bones 7 / 14 / 5   weights 140 / 114 / 1
  *
- * THE NODE MASK. The cut is the TORSO's, node 7 - the node the stump hangs
- * off. It is a weight and not a test in the shader, so a vertex that straddles
- * a joint slides between the two rules instead of jumping, and no arm, no leg
- * and no head can be clipped by the cylinder however the animation folds her.
+ * that is 55 % torso and 45 % HEAD. It was pushed 451 units out of a cut
+ * whose deepest point is 40, so it survived every cylinder, every cone and
+ * every radius any round has tried. The whole head-blended half of the neck
+ * stood 18.6 units from the eye - which is what the user photographed, and
+ * what the round K table could not see, because that table only counted
+ * vertices whose HEAVIEST weight was the torso and threw the blend away.
  *
- * IT DOES NOT WORK ALONE. Cutting a closed body open shows the body's inside,
- * because the HD path draws every model double sided - so the cut is paired
- * with HD_MODEL_CULL_BACK on the same draw, and with the INNER SKIN below.
+ * AND "THE HEAD NODE IS MASKED" DOES NOT HIDE IT. First person masks node 14,
+ * but the mask works on RANGES, and a range's node is the heaviest node over
+ * its triangles: the collar's triangles are heaviest on the torso and carry
+ * their head-skinned corners along with them. So head-skinned geometry is
+ * drawn in first person, and the only thing that can take it away is the cut.
  *
- * AND THE COLLAR STAYED (#123, fix round K, K1(a)). The play test of fix round
- * J: "the cylinder leaves the catsuit's COLLAR RING standing; looking down one
- * sees it as a dark ring". It does, and the reason is one unit: measured, the
- * collar of OUTFIT_CLASSIC and OUTFIT_VCI reaches r = 31.2 at s = 25 - just
- * outside a cut of thirty - so its bottom edge survives as a sliver right at
- * the mouth of the hole.
+ * SO THE MASK IS THE TORSO AND THE HEAD. It costs nothing to say so - the
+ * head's own ranges are not drawn in first person anyway - and it can no more
+ * reach an arm than the torso-only mask could. Measured, ModelProbe -neck,
+ * "what a candidate cut leaves", the nearest SURVIVING vertex from the eye on
+ * the head joint (the wall case, the one the user photographed), and how many
+ * survivors stand within 60 units of it:
  *
- * THE NUMBERS MOVED TO 40 AND 34, and every part of that is measured
- * (ModelProbe -neck, the "what a cylinder cut leaves" scan, now with a COLLAR
- * column - the node 7 vertices the cut leaves standing above the shoulder line
- * at s < 30, which is the ring the user photographed):
+ *     outfit              round K        + the head node
+ *                       near  in view    near  in view
+ *     OUTFIT_CLASSIC    18.6      202    45.1       78
+ *     OUTFIT_RUSSIA     18.6      462    43.7      119
+ *     OUTFIT_VCI        18.6      164    45.1       57
+ *     OUTFIT_TR3_ANTARC 18.6      972    43.5      222
+ *     OUTFIT_TR3_NEVADA 18.6      133    45.2       33
+ *     OUTFIT_TR3_COAST  18.6      193    45.2       56
+ *     OUTFIT_TR3_CATSUIT 18.6     293    45.2       81
+ *     OUTFIT_SUBSUIT    18.0      171    36.4      119
  *
- *     outfit              R=30   R=34   R=38     (the collar column; S does
- *     OUTFIT_CLASSIC        43     14     11      not change it - a collar
- *     OUTFIT_VCI            35     14     11      lives above the shoulders)
- *     OUTFIT_RUSSIA        129     94     66
- *     OUTFIT_TR3_ANTARC    199    110     41
- *     OUTFIT_TR3_NEVADA      4      3      3
- *     OUTFIT_TR3_COAST       9      6      5
- *     OUTFIT_TR3_CATSUIT     2      2      2
- *     OUTFIT_SUBSUIT       148    135    106     (a helmet, not a collar)
+ * and NOT ONE vertex below the shoulder line is taken by it, in any outfit -
+ * the `chest` column of that table is zero throughout. The picture from the
+ * eye 48 units forward, which is what the game gives whenever the line of
+ * sight is clear, is unchanged: same nearest survivor to a tenth of a unit on
+ * six of the eight outfits, and the two that move only lose the stump they
+ * were meant to lose.
  *
- * and the DEPTH is what pushes the nearest surviving vertex away from the eye:
- * over CLASSIC and VCI, from 49.5 to 60.4 units at the eye 48 forward and from
- * 50.1 to 56.3 at the eye on the joint, going from S = 30 to S = 40.
+ * A CONE WAS MEASURED AND REFUSED. Rounds I to K said a collar of radius 31
+ * cannot be separated from shoulders of radius 67 by one cylinder, and fix
+ * round L built the cone that would do it - wide at the head joint, tapering
+ * to 34 where the shoulders arrive - before finding the node mask. With the
+ * head node in the mask a 44 unit cone buys three vertices on OUTFIT_CLASSIC
+ * and a 56 unit one buys five, and the pictures are the same to the eye at
+ * every pitch. It is not shipped. The rows are still in the tool's table so
+ * that the next round does not build it again.
  *
- * WHY NOT WIDER, AND THIS IS THE OTHER HALF OF THE ANSWER. Wider is fix round
- * J's finding (a) coming back. Measured by picture, the same eight cameras
- * per outfit: at S = 40, R = 34 the picture from the eye 48 units forward -
- * the one the game gives whenever the line of sight is clear - is IDENTICAL
- * to the shipped one, to a tenth of a grey level, in every outfit and at every
- * pitch. At R = 38 the Antarctica parka already loses half a grey level at
- * pitch 75 and two and a half at 90; at S = 60, R = 55 her chest is visibly
- * scooped out and one looks at the inside of her back. And at S = 50, R = 38
- * the cylinder reaches an ARM vertex on the diving suit (36.1 units) for the
- * first time in any of the scans - which the node mask below would stop
- * anyway, and which is a warning all the same.
- *
- * SO THE COLLAR IS SMALLER AND NOT GONE, and the honest reason is geometry: a
- * catsuit collar reaches r = 31 and the shoulders it sits on reach r = 67 at
- * the same depth. No cylinder about the neck separates all of one from all of
- * the other. What makes the remainder harmless is the INNER SKIN below - what
- * shows through the ring is her own throat's colour now, not a hole and not a
- * plate. */
+ * THE DIVING SUIT (OUTFIT_SUBSUIT) IS OUT OF THIS. Its helmet sits on the
+ * torso node, it has no throat, and the user's decision of this round is that
+ * it neither gets work of its own nor constrains the cut. What it does gets
+ * measured and reported, and nothing more. */
 #define HD_LARA_NECK_CUT_S	40.0f	// down the axis from the head joint
 #define HD_LARA_NECK_CUT_R	34.0f	// off the axis
-#define HD_LARA_NECK_CUT_NODES	(1u << HD_LARA_TORSO)
+#define HD_LARA_NECK_CUT_NODES	((1u << HD_LARA_TORSO) | (1u << HD_LARA_HEAD_NODE))
+
+/* THE NEAR ZONE ABOUT THE EYE (#123, fix round L, L2).
+ *
+ * A SPHERE OF THIS RADIUS AROUND THE CAMERA in which nothing of her body is
+ * drawn. It is the one part of the cut that lives in VIEW space, and for the
+ * opposite reason to the cylinder: what it exists to stop is a surface
+ * standing on the LENS, and how far a thing is from the lens is a fact about
+ * the camera, not about her skin. In first person the camera IS the eye, so
+ * the zone needs no position of its own and follows the game's own choice
+ * between the eye 48 units in front of the head joint and the eye on the
+ * joint itself when a wall forbids the offset.
+ *
+ * WHY IT IS FORTY. The measurement above: with the head node in the mask, the
+ * nearest surviving vertex from either eye, over every outfit, is 43.5 units
+ * (the Antarctica parka; 36.4 on the diving suit, which is out of scope). The
+ * renderer's near plane is at 20 (InitWindow, gamemain.cpp). Forty sits above
+ * that plane and below everything that must survive, so IT CHANGES NOT ONE
+ * PIXEL of any of the thirty pictures fix round L took - and that is the
+ * point of it. The pictures are taken in the BIND POSE, and the bind pose
+ * cannot show what an animation does when she folds; this is the floor that
+ * says no surface of hers may ever stand between the near plane and forty
+ * units, whatever the animation. Sixty was measured too: it starts taking
+ * geometry the eye 48 forward is supposed to show.
+ *
+ * IT WEARS THE SAME NODE MASK as the cylinder, which is what stops it being
+ * stage S8's sphere all over again: a hand brought up to the camera is a
+ * separate model with no cut at all, and an arm of the body is a node the
+ * mask does not name. */
+#define HD_LARA_NECK_NEAR	40.0f	// about the camera, in view space
 
 /* WHAT CLOSES WHAT THAT CUT OPENS: THE INNER SKIN (#123, fix round K, K1).
  *

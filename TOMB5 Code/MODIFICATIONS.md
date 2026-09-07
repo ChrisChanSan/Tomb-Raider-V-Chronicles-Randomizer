@@ -4800,6 +4800,157 @@ the cap.
 
 ---
 
+#### Fix round L - the neck was never cut at all (#123)
+
+The play test of fix round K, with four first person photographs. Two findings,
+and the first of them is the one rounds I, J and K each answered with the wrong
+tool.
+
+**L1 - "the collar is still there and it clips."** It is, on every outfit, and
+the cause is not the shape of the cut. It is the **node mask**.
+
+The shader's node rule is a weight and not a test (`hd_model.hlsl`, `ModelVS`):
+a vertex is pushed
+
+```
+o.cut = keep + (1 - cuttable) * 1000
+```
+
+units out of the cut, where `cuttable` is that vertex's own skinning weights
+summed over the nodes `HD_LARA_NECK_CUT_NODES` names. Until this round that was
+the **torso alone**. And the vertex under Lara's chin is, measured
+(`ModelProbe -neck`, the candidate table names it):
+
+```
+bones 7 / 14 / 5      weights 140 / 114 / 1      s -1.6   r 11.9
+```
+
+55 % torso, 45 % **head**, and one part in 255 of a shin. It was therefore
+pushed 451 units out of a cut whose deepest point is 40 - and so was the whole
+head-blended half of her neck. **No cylinder, no cone and no radius any round
+has tried could ever have taken it.** Rounds I, J and K each measured the
+collar's radius, each found a number that should have been enough, and each
+came back from the play test with the ring still standing; the ring was never
+inside the reach of the cut in the first place.
+
+*And "the head node is masked in first person" does not hide it.* First person
+clears node 14, but the mask works on **ranges**, and a range's node is the
+heaviest node over its triangles (`hd_model.cpp`, `draw_model`). The collar's
+triangles are heaviest on the **torso** and carry their head-skinned corners
+with them, so they are drawn. That is also why round K's table could not see
+the problem: it counted a vertex under the node that carries most of it and
+threw every head-majority vertex away before counting.
+
+**The mask is the torso AND the head now**, and that is the whole engine change
+of this finding:
+
+```c
+#define HD_LARA_NECK_CUT_NODES  ((1u << HD_LARA_TORSO) | (1u << HD_LARA_HEAD_NODE))
+```
+
+It costs nothing - the head's own ranges are not drawn in first person anyway -
+and it can no more reach an arm than the torso-only mask could.
+
+Measured, `ModelProbe -neck`, "what a candidate cut leaves", which models the
+shader's arithmetic exactly (the weighted push, and a vertex counted as drawn
+when a triangle whose range node is not the head uses it). `near` is the
+nearest surviving vertex from the eye **on the head joint** - the wall case,
+and the one the user photographed - and `in view` how many survivors stand
+within sixty units of it:
+
+| outfit | near, round K | in view, K | near, round L | in view, L |
+| --- | ---: | ---: | ---: | ---: |
+| OUTFIT_CLASSIC | 18.6 | 202 | **45.1** | **78** |
+| OUTFIT_RUSSIA | 18.6 | 462 | **43.7** | **119** |
+| OUTFIT_VCI | 18.6 | 164 | **45.1** | **57** |
+| OUTFIT_TR3_ANTARC | 18.6 | 972 | **43.5** | **222** |
+| OUTFIT_TR3_NEVADA | 18.6 | 133 | **45.2** | **33** |
+| OUTFIT_TR3_COAST | 18.6 | 193 | **45.2** | **56** |
+| OUTFIT_TR3_CATSUIT | 18.6 | 293 | **45.2** | **81** |
+| OUTFIT_SUBSUIT (a helmet, out of scope) | 18.0 | 171 | 36.4 | 119 |
+
+and the `chest` column of that table - drawn vertices below the shoulder line
+that the cut takes - is **zero in every row of it**, before and after.
+
+**A cone was built, measured and refused.** Rounds I to K reported, honestly, a
+limit: a collar that reaches 31 units off the neck axis and shoulders that
+reach 67 at the same depth cannot both be cut by one cylinder. Fix round L
+therefore built the cone that would do it - wide at the head joint, tapering to
+34 where the shoulders arrive, one lerp in the vertex shader - and only then
+found the node mask. With the head node in the mask a 44-unit cone buys **three
+vertices** on `OUTFIT_CLASSIC` and a 56-unit one **five**, and the pictures are
+the same to the eye at every pitch and both eyes. It is not shipped. The rows
+stay in the tool's own table so that the next round does not build it again.
+
+**L2 - "the inner skin sticks to the camera as huge surfaces."** The second
+half of the same picture: with the eye on the head joint the camera stands
+inside her chest, and what filled it was the collar of L1 at 18 units. With the
+collar gone the nearest thing to the eye is 43.5 units - her own chest, at a
+distance, which is what a camera inside a body is supposed to show, and which
+the user's own wording allows ("a look into the body is skin in the distance").
+
+What is added beside it is a **near zone about the eye**: a sphere in which
+nothing of her body is drawn, on the same nodes the cut may touch.
+
+```c
+#define HD_LARA_NECK_NEAR   40.0f   // about the camera, in view space
+```
+
+It is the one part of the cut that lives in **view space**, and for the
+opposite reason to the cylinder: what it exists to stop is a surface standing
+on the *lens*, and how far a thing is from the lens is a fact about the camera
+and not about her skin. In first person the camera *is* the eye, so it needs no
+position of its own and follows the game's own choice between `FP_EYE_OFFSET`
+48 units forward and the eye on the joint when `mgLOS` forbids the offset -
+with nothing having to be told which happened. It rides in `gNeckNear.x`
+(register c165) beside the cylinder, one `min` in `ModelVS`.
+
+Forty is measured and not chosen. The renderer's near plane is at 20
+(`InitWindow`, `gamemain.cpp`) and the nearest vertex that survives the
+cylinder at either eye, over every outfit, is 43.5. So the near zone **changes
+not one pixel** of any of the thirty pictures this round took - and that is the
+point of it. Those pictures are taken in the bind pose, and the bind pose
+cannot show what an animation does when Lara folds; this is the floor that says
+no surface of hers may stand between the near plane and forty units, whatever
+the animation. Sixty was measured too, and at sixty it starts taking geometry
+the eye 48 forward is supposed to show.
+
+**The proof, by picture.** Five outfits - Rome, VCI, Russia, the Antarctica
+parka and the Nevada guest - at three pitches (60, 75 and 90 degrees down) and
+both eyes the game uses, thirty pictures, each one against the picture the same
+camera gave before this round:
+
+| | eye 48 forward | eye on the joint |
+| --- | --- | --- |
+| pitch 60 | **0.00 % of pixels differ**, every outfit | 21.8 to 52.4 % - the collar going |
+| pitch 75 | **0.00 %**, every outfit | 32.3 to 68.5 % |
+| pitch 90 | 4.1 to 8.6 % - the stump, seen only straight down | 42.2 to 77.1 % |
+
+and the share of the frame showing the **room behind her** rises by at most 1.7
+points anywhere (worst: the VCI catsuit at 75 degrees, 21.1 % to 22.8 %), so
+nothing was opened that one can see through. The **third person** picture is
+**byte-identical** for all five outfits, built from the round K sources and the
+round L sources in turn - the cut is off there and the shader's new `min` is a
+no-op with the register at minus a million.
+
+`ModelProbe` gained `-necknear <units>` (the near zone) and `-cutnodes <mask>`
+(which nodes the cut may touch - `-cutnodes 0x80` is round K's picture and the
+BEFORE of this round, and pointing it at one node at a time is how a surface
+standing in the camera is traced to the node it hangs off). `-neck` gained two
+tables: the neck in **two-unit bins** with a column counting how many survivors
+carry head weight, and the **candidate** table above, which is the first one in
+this work to model the shader's weighted push rather than a majority vote.
+
+*Left over and named:* with the eye on the head joint and the view straight
+down, a sliver of the room is still visible at the extreme corners under the
+arms - about one percent of the frame in the worst outfit, the same order as
+before this round. And the **diving suit** is out of this work by the user's
+decision: it has no throat, its helmet sits on the torso node, and it neither
+got a fix of its own nor was allowed to constrain the cut for the other seven
+bodies.
+
+---
+
 ### 5. Sixty frames a second (#148)
 
 The plan this follows is `Preparation/60FPS-Plan.md`, written from a read-only

@@ -88,6 +88,7 @@
  * c161        gSpec               per draw   (#123 fix round D, D2)
  * c162 - c163 gNeck, gNeckAxis    per draw   (#123 fix round J, J1)
  * c164        gInnerSkin          per draw   (#123 fix round K, K1)
+ * c165        gNeckNear           per draw   (#123 fix round L, L2)
  *
  * THE VERTEX REGISTERS OVERLAP THE ROOM SHADER'S, and on purpose. Direct3D 9
  * has ONE constant register file behind both shaders, and hd_room.hlsl keeps
@@ -103,7 +104,7 @@
  * both. What must never happen is writing a register a shader `def`s for
  * itself, which is why gPass goes to the pixel file alone (see below).
  *
- * 165 of the 256 vs_3_0 registers. The palette is 32 nodes because the
+ * 166 of the 256 vs_3_0 registers. The palette is 32 nodes because the
  * highest bone index a weighted vertex names over all 566 models of game 5 is
  * 28 (GREEN_TEETH); the only two files past that, PIERRE_HEAD and
  * LARSON_HEAD at 40, are facial-rig heads whose numbers belong to the rig and
@@ -202,23 +203,33 @@ float4 gLightInfo : register(c160);
  * for where the numbers come from and why they are not read out of the art. */
 float4 gSpec : register(c161);
 
-/* THE NECK CUT, AS A CYLINDER IN THE BIND POSE (#123, fix round J, J1).
+/* THE NECK CUT, AS A CYLINDER IN THE BIND POSE (#123, fix round J, J1; the
+ * near zone is fix round L, L2).
  *
  * gNeck      xyz the HEAD JOINT, w how far DOWN the neck axis the cut reaches
  * gNeckAxis  xyz the unit axis from the head joint towards the torso joint,
  *            w how far OFF that axis it reaches
+ * gNeckNear  x the NEAR ZONE around the eye - see below
  *
  * IN THE BIND POSE AND NOT IN VIEW SPACE, which is the whole reason this is
  * computed in the vertex shader rather than in the pixel one. A .TRM vertex
  * arrives here in its bind pose (the skinning below is what moves it), and
  * the neck axis of a bind pose is a CONSTANT - two joints of a skeleton that
  * never moves. So the cut takes exactly the same patch of her skin in every
- * frame, in every animation and at every camera angle, and the cap that
- * closes it - built out of the same bind pose in hd_lara.cpp - fits it
- * exactly. A cut worked out in view space would have to be re-derived from
- * the animated joints every frame and would breathe with them.
+ * frame, in every animation and at every camera angle. A cut worked out in
+ * view space would have to be re-derived from the animated joints every frame
+ * and would breathe with them.
  *
- * hd_lara.h carries the measurement the two numbers come from. */
+ * THE NEAR ZONE, gNeckNear.x, IS THE ONE PART THAT IS IN VIEW SPACE and for
+ * the opposite reason: what it exists to stop is a surface standing on the
+ * LENS, and "how far from the lens" is a fact about the camera and not about
+ * her skin. In first person the camera IS the eye, so the eye is the origin
+ * of view space and the zone needs no position of its own - which also means
+ * it follows the game's own choice between the eye 48 units in front of the
+ * head joint and the eye on the joint itself when a wall forbids it, with
+ * nothing having to be told which one happened. Negative is off.
+ *
+ * hd_lara.h carries the measurement all of the numbers come from. */
 float4 gNeck : register(c162);
 float4 gNeckAxis : register(c163);
 
@@ -248,6 +259,10 @@ float4 gNeckAxis : register(c163);
  * outer surface at the same place wears, which is what "lit like the neck"
  * means. */
 float4 gInnerSkin : register(c164);
+
+/* The near zone about the eye. Documented at gNeck above, with the rest of
+ * the cut. */
+float4 gNeckNear : register(c165);
 
 /* --------------------------------------------------- THE PARITY BLOCK ------
  *
@@ -367,24 +382,37 @@ VS_OUT ModelVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	 * every other model in the game runs it with a factor of one. */
 	nrm *= gInnerSkin.x > 0.0f ? -1.0f : 1.0f;
 
-	/* THE NECK CUT (#123, fix round J, J1 and J3), and it is Lara's alone.
+	/* THE NECK CUT (#123, fix round J, J1 and J3; the near zone is fix round
+	 * L, L2), and it is Lara's alone.
 	 *
-	 * `keep` is positive outside the cylinder and negative inside it: the
-	 * larger of "how far past the bottom of it" and "how far outside its
-	 * side", which is the signed distance to the nearer of the two faces and
-	 * is negative only when BOTH are.
+	 * `keep` is positive outside the cut and negative inside it: for the
+	 * cylinder, the larger of "how far past the bottom of it" and "how far
+	 * outside its side", which is the signed distance to the nearer of the two
+	 * faces and is negative only when BOTH are; then the smaller of that and
+	 * the same number for the near zone, because a fragment inside EITHER
+	 * shape goes.
 	 *
-	 * The node term is the second half. A vertex on a node the cut may not
-	 * touch is pushed a thousand units out of the cylinder, so an arm that
-	 * comes across her throat cannot be clipped by it however close it gets -
-	 * the user's finding J3, where a sphere around the eye ate the wrist. It
-	 * is a WEIGHT and not a test, so a vertex that straddles the shoulder
-	 * joint slides smoothly between the two rules instead of jumping. */
+	 * The node term is the last half. A vertex on a node the cut may not
+	 * touch is pushed a thousand units out of both shapes, so an arm that
+	 * comes across her throat cannot be clipped however close it gets - the
+	 * user's finding J3, where a sphere around the eye ate the wrist, and the
+	 * reason the near zone may exist at all. It is a WEIGHT and not a test,
+	 * so a vertex that straddles the shoulder joint slides smoothly between
+	 * the two rules instead of jumping - AND SO A VERTEX HALF ON A NODE THE
+	 * MASK DOES NOT NAME IS PUSHED FIVE HUNDRED UNITS OUT AND SURVIVES
+	 * EVERYTHING. That is fix round L's finding: Lara's neck is skinned half
+	 * to her head, and a mask of the torso alone never reached it. The mask
+	 * is the caller's (hd_lara.h, HD_LARA_NECK_CUT_NODES). */
 	{
 		float3 nd = inPos.xyz - gNeck.xyz;
 		float ns = dot(nd, gNeckAxis.xyz);
 		float3 noff = nd - ns * gNeckAxis.xyz;
 		float keep = max(ns - gNeck.w, length(noff) - gNeckAxis.w);
+
+		/* THE NEAR ZONE, and it is the ONE piece of this in view space: the
+		 * eye is the origin there, so this is simply how far the vertex is
+		 * from the camera. */
+		keep = min(keep, length(view) - gNeckNear.x);
 
 		o.cut = keep + (1.0f - cuttable) * 1000.0f;
 	}

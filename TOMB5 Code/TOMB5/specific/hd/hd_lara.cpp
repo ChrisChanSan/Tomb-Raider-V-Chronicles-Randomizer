@@ -1577,9 +1577,10 @@ unsigned int HDLaraPartCoverage(int part)
 	return part >= 0 && part < HD_LARA_PART_COUNT ? g_coverage[part] : 0u;
 }
 
-/* THE CUT'S CYLINDER, out of the same bind pose the cap was built from (#123,
- * fix round J, J1). One function so that the shape the shader carves and the
- * shape hd_lara.cpp's maker sewed a lid onto cannot drift apart: both are the
+/* THE CUT'S CYLINDER, out of this level's own bind pose (#123, fix round J,
+ * J1; the near zone is fix round L, L2). One function, so that the shape the
+ * shader carves, the shape the diagnostic tool draws and the shape the tables
+ * in hd_lara.h were measured against cannot drift apart: all three are the
  * axis from the head joint to the torso joint of THIS level's own Lara. */
 bool HDLaraNeckCut(HDModelNeckCut* out)
 {
@@ -1612,6 +1613,7 @@ bool HDLaraNeckCut(HDModelNeckCut* out)
 	out->on = 1.0f;
 	out->depth = HD_LARA_NECK_CUT_S;
 	out->radius = HD_LARA_NECK_CUT_R;
+	out->near_ = HD_LARA_NECK_NEAR;
 	out->nodes = HD_LARA_NECK_CUT_NODES;
 
 	for (int i = 0; i < 3; i++)

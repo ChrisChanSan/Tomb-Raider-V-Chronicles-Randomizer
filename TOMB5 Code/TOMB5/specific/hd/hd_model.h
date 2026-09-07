@@ -385,25 +385,41 @@ enum HDModelCull
 // The complement of CULL_BACK: what CULL_BACK drops is what this one keeps.
 #define HD_MODEL_SKIN_INSIDE	HD_MODEL_SKIN_CW
 
-/* THE NECK CUT (#123, stage S8; re-shaped in fix round J, J1 and J3).
+/* THE NECK CUT (#123, stage S8; re-shaped in fix round J, J1 and J3; the near
+ * zone and the node mask are fix round L, L1 and L2).
  *
- * A CYLINDER ABOUT THE NECK AXIS, in the model's own BIND POSE: every
- * fragment of this model that lies less than `depth` down the axis from
- * `head` AND less than `radius` off it is discarded, and only on the nodes
- * `nodes` names.
+ * TWO SHAPES, and a fragment inside EITHER of them is discarded - and only on
+ * the nodes `nodes` names.
  *
- * Stage S8 cut a SPHERE around the eye instead, and the play test of fix
- * round I killed all three of its consequences at once: the sixty unit radius
- * bit a hole the size of it out of her chest, the cap built to close that
- * hole had to be as wide as her whole torso, and a hand brought up to the
- * camera came back with a jagged edge at the wrist. A cylinder about the neck
- * has none of those. It is the shape of the thing that has to go; it does not
- * move with the eye, so the cap can be built to fit it exactly; and it cannot
- * reach an arm - measured over all eight outfits and nine candidate sizes,
- * ModelProbe -neck, not one arm vertex falls inside it.
+ *   1. A CYLINDER ABOUT THE NECK AXIS, in the model's own BIND POSE: every
+ *      fragment less than `depth` down the axis from `head` and less than
+ *      `radius` off it.
+ *   2. A SPHERE AROUND THE EYE of radius `near_`, and the eye is the ORIGIN OF
+ *      VIEW SPACE - in first person the camera IS the eye, so this needs no
+ *      position of its own and follows the real camera whether the game put
+ *      it 48 units in front of the head joint or, with a wall in the way, on
+ *      the joint.
+ *
+ * Stage S8 cut a sphere around the eye ALONE, and the play test of fix round I
+ * killed all three of its consequences at once: the sixty unit radius bit a
+ * hole the size of it out of her chest, the cap built to close that hole had
+ * to be as wide as her whole torso, and a hand brought up to the camera came
+ * back with a jagged edge at the wrist. The cylinder has none of those - it is
+ * the shape of the thing that has to go, it does not move with the eye, and it
+ * cannot reach an arm - and the sphere is back beside it only as a NEAR ZONE,
+ * measured to sit under everything that must survive at both eyes and held off
+ * every node but the two the mask names, which is what stops it eating a
+ * wrist.
+ *
+ * `nodes` IS THE PART THAT WAS WRONG UNTIL FIX ROUND L, and it is not a
+ * detail: the shader treats it as a WEIGHT, pushing a vertex
+ * (1 - cuttable) * 1000 units out of both shapes, so a vertex that is half on
+ * a node the mask does not name survives any cut there is. Lara's neck is
+ * skinned half to the head, so a mask of the torso alone never took her neck
+ * at all. See hd_lara.h.
  *
  * A null pointer, or `on` 0, is off and costs the pixel shader one lerp.
- * hd_lara.h carries the two numbers and the measurement behind them, and
+ * hd_lara.h carries the numbers and the measurement behind them, and
  * hd_model.hlsl's ModelVS the geometry.
  */
 struct HDModelNeckCut
@@ -413,6 +429,7 @@ struct HDModelNeckCut
 	float axis[3];		// unit, head joint -> torso joint, bind pose
 	float depth;		// how far down the axis the cut reaches
 	float radius;		// how far off it
+	float near_;		// the near zone about the eye; 0 = none
 	unsigned int nodes;	// bit per node the cut may touch
 };
 

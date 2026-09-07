@@ -756,10 +756,15 @@ void HDLaraDrawFrameReset()
 		{
 			g_fp_seen = true;
 			g_fp_was = now;
-			Log("HDLOG firstperson %s neckcut=%.0f/%.0f nodes=%08x",
+			/* The near zone and the node mask joined this line in fix
+			 * round L: the mask is what the collar turned on, and a log
+			 * that named the cylinder alone would have said nothing about
+			 * the four rounds that missed it. */
+			Log("HDLOG firstperson %s neckcut=%.0f/%.0f near=%.0f nodes=%08x",
 				now ? "on" : "off",
 				now ? (double)HD_LARA_NECK_CUT_S : 0.0,
 				now ? (double)HD_LARA_NECK_CUT_R : 0.0,
+				now ? (double)HD_LARA_NECK_NEAR : 0.0,
 				now ? HD_LARA_NECK_CUT_NODES : 0u);
 		}
 

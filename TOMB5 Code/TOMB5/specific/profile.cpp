@@ -137,12 +137,15 @@ namespace
 	 * fps_mode 1, two for every modal loop in the build whatever the mode
 	 * says. DrawPhaseGame deliberately puts the variable back to two only
 	 * AFTER ProfileFrameEnd, so this reads the policy of the frame being
-	 * judged (#148, order 1b). */
+	 * judged (#148, order 1b).
+	 *
+	 * The definition itself moved into specific\output.cpp with order 6,
+	 * because a third case arrived - the display-bound frame, whose slot is
+	 * the panel's period rather than a whole number of ticks - and FPSLOG and
+	 * PROFLOG must not be able to disagree about it. */
 	double BudgetMs()
 	{
-		const long ticks = gPresentMinTicks > 0 ? gPresentMinTicks : 1;
-
-		return (double)ticks * 1000.0 / 60.0;
+		return PresentSlotMs();
 	}
 
 	// "name=mean/max " for every phase.

@@ -87,6 +87,68 @@ inline long InterpManhattan(long dx, long dy, long dz)
 #define INTERP_CAM_SNAP		1024L
 
 /* ==========================================================================
+ * ORDER 6 - THE BLEND FACTOR WHEN THE PANEL SETS THE PACE.
+ *
+ * At fps_mode 1 the factor needs no clock: the frames land on the ticks, so
+ * `framecount < 0 ? 0.5 : 1` is exact and cannot drift (InterpAlphaNow). Bind
+ * the rate to a 144 Hz display instead and the frames land wherever they
+ * land - two out of three inside one 1/60 s tick - so the factor has to come
+ * from the clock. This is that arithmetic, and it is the whole of it.
+ *
+ * WHAT THE TWO NUMBERS ARE.
+ *
+ *   framecount  ControlPhase's accumulator (game\control.h), in 1/60 s
+ *               ticks, AFTER the last ControlPhase and therefore as the top
+ *               of DrawPhaseGame finds it. `for (framecount += nframes;
+ *               framecount > 0; framecount -= 2)` leaves it at -1 or 0, and
+ *               nothing else ever writes it.
+ *   subTick     how far past the last tick boundary Sync() gave away the
+ *               clock stands (specific\time.cpp, TIME_SubTick). It is NOT
+ *               capped at 1: Sync() runs at the END of a frame, so at the
+ *               top of the next one a whole tick has usually gone by.
+ *
+ * WHERE THE +1 COMES FROM, because it is the one term that is not obvious.
+ * Count time in ticks. Let S be the whole ticks Sync() has handed out and k
+ * the logic steps run, so framecount = S - 2k and the clock stands at
+ * S + subTick. The loop spends two ticks per step and runs a step as soon as
+ * the accumulator is positive, so step k happens at S = 2k-1: the state after
+ * it is the newest there is, and it stays the newest until S = 2k+1. For the
+ * frames drawn in that whole window to be an INTERPOLATION between the two
+ * states rather than a guess past the newer one, the newer state has to be
+ * read as the world at S = 2k+1. Then
+ *
+ *     alpha = (now - (2k-1)) / 2 = (S + subTick - 2k + 1) / 2
+ *           = (framecount + subTick + 1) / 2
+ *
+ * and it walks 0 -> 1 across every logic step, at any refresh rate, with no
+ * accumulator of its own and nothing to drift.
+ *
+ * AND IT IS THE SAME NUMBER AT SIXTY. Frames one tick apart arrive with
+ * subTick at 1 (the previous frame's Sync consumed the boundary a whole tick
+ * ago), so the pair (-1, 1) gives 0.5 and (0, 1) gives 1.0 - the parity rule
+ * of order 2, to the bit, out of the clock. That is not a coincidence to be
+ * grateful for, it is the check that the derivation is right, and InterpTest
+ * asserts it.
+ *
+ * THE CLAMP IS FOR HITCHES ONLY. A frame that took longer than the logic had
+ * states for would ask for a factor past 1, i.e. for a position the game has
+ * not computed. It is given the newest state instead - the same thing thirty
+ * hertz shows on a slow frame - and ControlPhase catches the ticks up
+ * afterwards, so no game time is lost. */
+inline float InterpRefreshAlpha(long framecount, double subTick)
+{
+	double a = ((double)framecount + subTick + 1.0) * 0.5;
+
+	if (a < 0.0)
+		a = 0.0;
+
+	if (a > 1.0)
+		a = 1.0;
+
+	return (float)a;
+}
+
+/* ==========================================================================
  * ORDER 4 - THE POSE.
  *
  * Order 2 moved where a thing STANDS. This is where its limbs stand, and it

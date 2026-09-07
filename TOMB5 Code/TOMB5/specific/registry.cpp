@@ -53,6 +53,41 @@ bool REG_KeyWasCreated()
 	return dwDisposition == REG_CREATED_NEW_KEY;
 }
 
+/* READ ONE VALUE WITHOUT OPENING THE DOOR (#148, order 6).
+ *
+ * Every other reader here goes through OpenRegistry, and OpenRegistry
+ * CREATES the key it is handed (RegCreateKeyEx above) and records in
+ * dwDisposition whether it had to - which is how init_tomb5_stuff knows to
+ * write the whole set of defaults on a first run. So a second reader that
+ * opened the tomb5 key EARLIER would silently take that first run away, and
+ * the player would be left with a key holding one value and no defaults.
+ *
+ * This is that second reader: it opens read-only, creates nothing, touches
+ * neither phkResult nor dwDisposition, and answers false when the key or the
+ * value is not there. One caller - the VSync option, which the device needs
+ * before the options are read (specific\winmain.cpp, DXCreate). */
+bool REG_PeekLong(LPCSTR SubKeyName, LPCSTR ValueName, ulong& value)
+{
+	char buffer[256];
+	HKEY key;
+	ulong type, cbData;
+	bool got;
+
+	if (SubKeyName)
+		sprintf(buffer, "%s\\%s", "Software\\Core Design\\Tomb Raider Chronicles", SubKeyName);
+	else
+		strcpy(buffer, "Software\\Core Design\\Tomb Raider Chronicles");
+
+	if (RegOpenKeyEx(HKEY_CURRENT_USER, buffer, 0, KEY_READ, &key) != ERROR_SUCCESS)
+		return false;
+
+	cbData = 4;
+	got = RegQueryValueEx(key, ValueName, 0, &type, (LPBYTE)&value, &cbData) == ERROR_SUCCESS &&
+		type == REG_DWORD && cbData == 4;
+	RegCloseKey(key);
+	return got;
+}
+
 void REG_WriteLong(char* SubKeyName, ulong value)
 {
 	RegSetValueEx(phkResult, SubKeyName, 0, REG_DWORD, (CONST BYTE*) & value, sizeof(ulong));

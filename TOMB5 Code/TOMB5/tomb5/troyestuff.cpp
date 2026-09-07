@@ -23,25 +23,35 @@
  * its paging arrows one row below the last one, at y = num + 2; the screen
  * holds up to y = 16 (the note in CreditsScreen has the measurement). Page 1
  * has stood at fourteen since it was written, so this is the same shape, not a
- * new one - but the next row on either page needs a page of its own. */
-#define PAGE0_NUM	14
-#define PAGE1_NUM	14
-#define PAGE2_NUM	4
+ * new one - but the next row on either page needs a page of its own.
+ *
+ * WHICH IS WHAT ORDER 6 NEEDED (#148). "VSync" is that next row, and both
+ * full pages said no - so the two frame settings were given a page of their
+ * own and "Frame rate" moved onto it from page 0, where it had been the
+ * fourteenth row. They are one subject: a row that says 30 / 60 / Display is
+ * only half an answer without the one that says whether the present waits for
+ * the display at all. Page 0 is back to thirteen rows and has room again. */
+#define PAGE0_NUM		13
+#define PAGE1_NUM		14
+#define PAGE_DISPLAY_NUM	2
+#define PAGE_FP_NUM		4
 
-// How many pages are in the cycle. The third one belongs to the first person
-// view and only joins when that view is switched ON - a page of settings for
-// something that is off would turn up unasked while paging, which is exactly
-// why the credits were taken out of this cycle again.
+/* HOW MANY PAGES ARE IN THE CYCLE, and in which order they are walked: the
+ * two option pages, then the display page, then - only when the first person
+ * view is switched ON - its own page. A page of settings for something that
+ * is off would turn up unasked while paging, which is exactly why the credits
+ * were taken out of this cycle again. */
 static long TroyePageCount()
 {
-	return tomb5.first_person ? 3 : 2;
+	return tomb5.first_person ? 4 : 3;
 }
 
 static long TroyePageNum(long page)
 {
 	if (page == 0) return PAGE0_NUM;
 	if (page == 1) return PAGE1_NUM;
-	return PAGE2_NUM;
+	if (page == 2) return PAGE_DISPLAY_NUM;
+	return PAGE_FP_NUM;
 }
 
 // The tomb5 options are two pages that page into each other. The credits are
@@ -99,6 +109,10 @@ void TroyeMenu(long textY, long& menu, ulong& selection, ulong selection_bak)
 		break;
 
 	case 2:
+		changed = PageDisplay(num, textY, selection);
+		break;
+
+	case 3:
 		changed = Page2(num, textY, selection);
 		break;
 	}
@@ -172,7 +186,6 @@ bool Page0(long& num, long textY, ulong selection)
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Gameover menu", 0);
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Fog", 0);
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "HD textures", 0);
-	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Frame rate", 0);
 
 	y = 2;
 	i = 0;
@@ -218,14 +231,6 @@ bool Page0(long& num, long textY, ulong selection)
 	// on this page - shows what the next level will do, not what the level on
 	// screen is doing.
 	strcpy(buffer, tomb5.hd_enable ? "on" : "off");
-	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
-
-	/* #148: how often the picture is presented. The GAME does not change -
-	 * it steps thirty times a second in both, and a savegame written in one
-	 * is byte for byte the savegame written in the other. Only two values:
-	 * the display's own refresh is reserved for a later order and there is no
-	 * uncapped mode. Takes effect on the very next frame. */
-	strcpy(buffer, tomb5.fps_mode == 1 ? "60" : "30");
 	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
 
 	switch (selection)
@@ -418,16 +423,6 @@ bool Page0(long& num, long textY, ulong selection)
 
 		break;
 
-	case 1 << 13:
-
-		if (dbinput & IN_LEFT || dbinput & IN_RIGHT)
-		{
-			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-			tomb5.fps_mode = tomb5.fps_mode == 1 ? 0 : 1;
-			changed = 1;
-		}
-
-		break;
 	}
 
 	return changed;
@@ -711,6 +706,91 @@ bool Page1(long& num, long textY, ulong selection)
 	return changed;
 }
 
+/* THE DISPLAY PAGE (#148, order 6): how often the picture is shown, and
+ * whether the showing waits for the monitor.
+ *
+ * Two rows, and they belong together. "Frame rate" was the fourteenth row of
+ * page 0 through orders 1 to 4 and moved here when "VSync" needed a place -
+ * page 0 and page 1 are both at the fourteen-row ceiling (see the note at the
+ * top of this file), and a page for the two of them says more than two rows
+ * squeezed in among the bars and the footprints.
+ *
+ * WHAT THE ROWS DO NOT SAY, because the manual says it at length: the GAME is
+ * a thirty-steps-a-second simulation at every setting on this page. Neither
+ * row changes an animation, a timer, a trigger or a savegame. They change how
+ * often the finished picture is handed to the card, and nothing else.
+ *
+ * AND THE ONE ROW IN THE BUILD THAT IS NOT INSTANT. Every other option takes
+ * effect on the next frame; VSync is a device-creation parameter (D3D9 has no
+ * other way to ask for it), so it is picked up the next time the game starts.
+ * The row says so on the right rather than in a manual nobody has open. */
+bool PageDisplay(long& num, long textY, ulong selection)
+{
+	long y, i;
+	char buffer[80];
+	bool changed;
+
+	changed = 0;
+	num = PAGE_DISPLAY_NUM;
+	PrintString(phd_centerx, font_height, 6, "Display", FF_CENTER);
+
+	y = 2;
+	i = 0;
+
+	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Frame rate", 0);
+	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "VSync", 0);
+
+	y = 2;
+	i = 0;
+
+	/* 30, 60 or the monitor's own rate. "Display" needs VSync - it is the
+	 * blocking present that paces it - so with VSync off it runs at 60 and
+	 * the row says which of the two the player is really getting. */
+	strcpy(buffer, tomb5.fps_mode == 2 ? (tomb5.vsync ? "Display" : "Display (60)") :
+	               tomb5.fps_mode == 1 ? "60" : "30");
+	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
+
+	strcpy(buffer, tomb5.vsync ? "on (restart)" : "off (restart)");
+	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
+
+	switch (selection)
+	{
+	case 1 << 0:
+
+		// Three values, so LEFT and RIGHT walk the ring in opposite
+		// directions rather than both toggling - the same shape as the
+		// shadow and bar rows on page 0.
+		if (dbinput & IN_RIGHT)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			tomb5.fps_mode = tomb5.fps_mode >= 2 ? 0 : tomb5.fps_mode + 1;
+			changed = 1;
+		}
+
+		if (dbinput & IN_LEFT)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			tomb5.fps_mode = tomb5.fps_mode == 0 ? 2 : tomb5.fps_mode - 1;
+			changed = 1;
+		}
+
+		break;
+
+	case 1 << 1:
+
+		if (dbinput & IN_LEFT || dbinput & IN_RIGHT)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			tomb5.vsync = tomb5.vsync ? 0 : 1;
+			changed = 1;
+		}
+
+		break;
+	}
+
+	return changed;
+}
+
 // Third page (#134): everything about the first person view. One row for
 // now - the field of view - and it is here rather than squeezed onto page 2
 // because that page is full at fourteen rows.
@@ -726,7 +806,7 @@ bool Page2(long& num, long textY, ulong selection)
 	bool changed;
 
 	changed = 0;
-	num = PAGE2_NUM;
+	num = PAGE_FP_NUM;
 	PrintString(phd_centerx, font_height, 6, "First person view", FF_CENTER);
 
 	y = 2;

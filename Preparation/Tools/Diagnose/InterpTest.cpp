@@ -947,15 +947,277 @@ static void pose_time()
 	}
 }
 
+/* ------------------------------------------- the display-bound cadence -- */
+
+/* ORDER 6, AND THE ONE THING ABOUT IT THAT CANNOT BE SEEN IN THE CODE.
+ *
+ * At fps_mode 1 the frames land on the ticks and the blend factor is a parity
+ * bit: half when the last ControlPhase ran a tick, one when it did not. Bind
+ * the rate to the display instead and nothing lands anywhere in particular -
+ * at 144 Hz the frames come every 0.4167 ticks - so the factor comes out of
+ * the clock, as `(framecount + subTick + 1) / 2`.
+ *
+ * What has to be true of that, and what a play test cannot show:
+ *
+ *   1. THE LOGIC IS STILL THIRTY. Ten simulated seconds must run 300 logic
+ *      steps at 60, at 120 and at 144 Hz alike, and the frames must number
+ *      600, 1200 and 1440.
+ *   2. THE FACTOR NEVER LEAVES [0,1). Not "is clamped into it" - never
+ *      leaves it. A clamp means the frame asked for a state the logic has
+ *      not computed, and the picture stands still for that frame; one per
+ *      logic step is a stutter at 30 Hz on top of a 144 Hz picture.
+ *   3. WHAT IS DRAWN ADVANCES WITH THE WALL CLOCK, exactly. The content of
+ *      frame i is `2(k-1) + 2 * alpha` in tick units, and the difference
+ *      between that and the real time the frame was drawn at has to be a
+ *      CONSTANT - the same constant on every frame of the run. Anything else
+ *      is drift, and drift is what a fixed-step renderer bound to a free
+ *      clock gets wrong.
+ *   4. AT 60 Hz IT IS THE SIXTY HERTZ CADENCE AGAIN, alternating half a step
+ *      per frame, which is what says the mode is not a different animation
+ *      speed but the same one sampled more often.
+ *
+ * THE MODEL IS THE ENGINE'S LOOP, not an idealisation of it: the frame is
+ * drawn, the flip waits for the panel, the clock is read AFTER the flip
+ * (specific\output.cpp, S_DumpScreen - see the long note there for why it
+ * has to be after), and ControlPhase is handed the whole ticks that came
+ * back. The vblanks are put on their own grid at their own phase so that the
+ * two clocks are genuinely independent, the way a 144 Hz panel and a 1/60 s
+ * counter are. */
+static void refresh()
+{
+	printf("display-bound cadence\n");
+
+	const int hz[3] = { 60, 120, 144 };
+
+	for (int h = 0; h < 3; h++)
+	{
+		const double period = 60.0 / hz[h];	// the panel's period in 1/60 s ticks
+		const double phase = 0.137;		// the vblank grid's own offset
+		const int frames = hz[h] * 10;		// ten seconds of them
+
+		long framecount = 0;
+		long S = 0;				// whole ticks Sync() has given away
+		int clamped = 0;
+		unsigned long tickSerial = 0, steppedSerial = 0;
+		int carried = 0;			// frames that stepped the counters
+		int stalls = 0;				// frames whose content did not advance
+		double alphaMin = 2.0, alphaMax = -1.0;
+		double offset = 0, offsetMin = 1e9, offsetMax = -1e9;
+		double lastContent = -1e9;
+
+		// The level start: framecount = 0 and one priming ControlPhase(2),
+		// exactly as DoLevel does it (game\gameflow.cpp).
+		int k = 0;
+
+		for (framecount += 2; framecount > 0; framecount -= 2)
+			k++;
+
+		for (int i = 0; i < frames; i++)
+		{
+			// The top of the frame is where the last flip left us.
+			const double now = i * period + phase;
+			const double subTick = now - (double)S;
+			const float alpha = InterpRefreshAlpha(framecount, subTick);
+
+			/* ORDER 3'S CRITERION AT A RATE THAT DOES NOT DIVIDE (order 6).
+			 * `alpha < 1` said "no tick on this frame" while the cadence was
+			 * two frames to a tick; here it would be true on nearly every
+			 * frame and every counter in the build would stand still. So the
+			 * ticks are counted and the frame that finds a new one claims
+			 * it - game\interpolate.cpp, g_tickSerial. */
+			if (tickSerial != steppedSerial)
+			{
+				steppedSerial = tickSerial;
+				carried++;
+			}
+
+			// What this frame draws, in ticks of simulated time: the pair
+			// (k-1, k) blended by alpha.
+			const double content = 2.0 * (k - 1) + 2.0 * alpha;
+
+			if (alpha < alphaMin) alphaMin = alpha;
+			if (alpha > alphaMax) alphaMax = alpha;
+
+			if (alpha >= 1.0F || alpha < 0.0F)
+				clamped++;
+
+			if (i > 0 && content <= lastContent)
+				stalls++;
+
+			lastContent = content;
+
+			offset = content - now;
+
+			if (i > 0)
+			{
+				if (offset < offsetMin) offsetMin = offset;
+				if (offset > offsetMax) offsetMax = offset;
+			}
+
+			// The flip waits for the next vblank; the clock is read after it.
+			{
+				const double flip = (i + 1) * period + phase;
+				const long whole = (long)flip;
+				long n = whole - S;
+
+				S = whole;
+
+				if (n > 10)
+					n = 10;
+
+				for (framecount += n; framecount > 0; framecount -= 2)
+				{
+					k++;
+					tickSerial++;
+				}
+			}
+		}
+
+		printf("  %3d Hz: frames=%d ticks=%d alpha %.3f..%.3f clamped=%d stalls=%d "
+			"lag spread %.2e ticks carried=%d\n",
+			hz[h], frames, k - 1, alphaMin, alphaMax, clamped, stalls,
+			offsetMax - offsetMin, carried);
+
+		ok(frames == hz[h] * 10, "the panel's own frame count", frames, hz[h] * 10);
+		ok(k - 1 == 300, "300 logic steps in ten seconds, whatever the panel does",
+			k - 1, 300);
+		ok(clamped == 0, "the blend factor never has to be clamped", clamped, 0);
+		ok(carried == k - 1,
+			"exactly one frame per logic tick steps the per-frame counters",
+			carried, k - 1);
+		ok(stalls == 0, "no frame draws what the one before it drew", stalls, 0);
+		/* The tolerance is a float's, not a double's: the engine's blend
+		 * factor is a float and everything derived from it carries that
+		 * precision. A millionth of a tick is 17 nanoseconds of animation. */
+		okf(offsetMax - offsetMin < 1e-5,
+			"what is drawn follows the wall clock without drifting",
+			offsetMax - offsetMin, 0.0);
+	}
+
+	/* AND AT SIXTY IT IS THE SIXTY HERTZ CADENCE. One tick of content per
+	 * frame - the same step fps_mode 1 draws - so the mode is the same motion
+	 * sampled at the panel's rate and not a different speed. */
+	{
+		const double period = 1.0;
+		long framecount = 0, S = 0;
+		int k = 0;
+		double lastContent = -1e9;
+		double worst = 0;
+
+		for (framecount += 2; framecount > 0; framecount -= 2)
+			k++;
+
+		for (int i = 0; i < 600; i++)
+		{
+			const double now = i * period + 0.5;
+			const float alpha = InterpRefreshAlpha(framecount, now - (double)S);
+			const double content = 2.0 * (k - 1) + 2.0 * alpha;
+
+			if (i > 1)
+			{
+				const double step = content - lastContent;
+				const double off = step - 1.0 < 0 ? 1.0 - step : step - 1.0;
+
+				if (off > worst)
+					worst = off;
+			}
+
+			lastContent = content;
+
+			{
+				const double flip = (i + 1) * period + 0.5;
+				const long whole = (long)flip;
+				const long n = whole - S;
+
+				S = whole;
+
+				for (framecount += n; framecount > 0; framecount -= 2)
+					k++;
+			}
+		}
+
+		okf(worst < 1e-5, "60 Hz: every drawn step is exactly one 1/60 s tick",
+			worst, 0.0);
+	}
+
+	/* A HITCH, and the clamp is what it is FOR. One frame takes 200 ms - the
+	 * panel misses twenty-eight of its slots at 144 Hz - so the factor asks
+	 * for a state six logic steps ahead of the newest one there is. It is
+	 * given the newest instead, which is what thirty hertz shows on a slow
+	 * frame, and the ticks are caught up rather than lost: the simulation's
+	 * own time may not depend on how long a frame took to draw. */
+	{
+		const double period = 60.0 / 144.0;
+		long framecount = 0, S = 0, credited = 0, dropped = 0;
+		int k = 0, clamped = 0;
+		double now = 0;
+
+		for (framecount += 2; framecount > 0; framecount -= 2)
+			k++;
+
+		for (int i = 0; i < 1440; i++)
+		{
+			const float alpha = InterpRefreshAlpha(framecount, now - (double)S);
+
+			if (alpha >= 1.0F)
+				clamped++;
+
+			// 200 ms - twelve 1/60 s ticks - on frame 700.
+			now += (i == 700) ? 12.0 : period;
+
+			{
+				const long whole = (long)now;
+				long n = whole - S;
+
+				S = whole;
+
+				if (n > 10)
+				{
+					dropped += n - 10;
+					n = 10;
+				}
+
+				credited += n;
+
+				for (framecount += n; framecount > 0; framecount -= 2)
+					k++;
+			}
+		}
+
+		/* THE INVARIANT, not a hand-counted total: every tick that was fed
+		 * to the accumulator was either spent on a logic step or is still
+		 * standing in it. Two steps of the priming ControlPhase(2) go in on
+		 * the left, and what the loop left behind comes off on the right.
+		 *
+		 * Written this way it says what it is for - no game time is lost
+		 * because a frame took long to draw, and none is invented either -
+		 * and it says it for whatever numbers the model happens to produce.
+		 */
+		ok(2 * k == credited + 2 - framecount,
+			"a 200 ms hitch is caught up: no logic tick lost, none invented",
+			2 * k, (int)(credited + 2 - framecount));
+
+		/* And the ONE place a tick really does go missing is vanilla's own
+		 * `if (nframes > 10) nframes = 10` (game\control.cpp), which is what
+		 * stops a five-second stall from running the game forward for five
+		 * seconds when it comes back. The hitch fed twelve. */
+		ok(dropped == 2, "vanilla's own cap dropped the two ticks past ten",
+			(int)dropped, 2);
+		ok(clamped > 0, "and the clamp is what carried the frame that asked too much",
+			clamped > 0 ? 1 : 0, 1);
+	}
+}
+
 int main()
 {
-	printf("InterpTest - the arithmetic of the 60 FPS interpolation (#148, orders 2, 3 and 4)\n");
+	printf("InterpTest - the arithmetic of the 60 FPS interpolation (#148, orders 2, 3, 4 and 6)\n");
 	printf("built against TOMB5 Code" "\\" "TOMB5" "\\" "game" "\\" "interpolate_math.h\n\n");
 
 	angles();
 	positions();
 	thresholds();
 	cadence();
+	refresh();
 	counters();
 	pose_factor();
 	pose_time();

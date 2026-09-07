@@ -292,11 +292,14 @@ namespace
 	 * does not go through it is the loading bar's (S_DumpScreenFrame waits
 	 * for one tick of its own); it is measured against the default two, i.e.
 	 * exactly as generously as it always was. */
+	/* #148, order 6: and the third case is a frame that waited for NO tick,
+	 * because the present itself waited for the display. Its slot is the
+	 * panel's period - 6.9 ms on a 144 Hz monitor - and the definition now
+	 * lives in specific\output.cpp so that this line and PROFLOG's cannot
+	 * drift apart. */
 	double FrameBudgetMs()
 	{
-		const long ticks = gPresentMinTicks > 0 ? gPresentMinTicks : 1;
-
-		return (double)ticks * 1000.0 / 60.0;
+		return PresentSlotMs();
 	}
 
 	double MissedSlotMs()
@@ -353,13 +356,23 @@ namespace
 		if (g_sec_frames <= 0)
 			return;
 
-		Log("FPSLOG level=%s frames=%d logic_ticks=%d fps=%d budget=%.1f "
-			"min_ms=%.1f max_ms=%.1f avg_ms=%.1f slow=%d late=%d hd_rooms=%d "
-			"hd_items=%d hd_draws=%d",
+		/* #148, order 6: `fps=` is what the mode ASKS for - 30, 60, or the
+		 * panel's own refresh rate - and `real_fps=` is what the presents
+		 * actually came at, worked out from the mean interval rather than
+		 * from `frames=`, which is a count over a second that begins and ends
+		 * on a frame boundary and is therefore a frame out either way. On a
+		 * display-bound run the two have to agree with the monitor: 144 and
+		 * 143.8 is a healthy 144 Hz panel. */
+		const double avg_ms = g_sec_sum / g_sec_frames;
+
+		Log("FPSLOG level=%s frames=%d logic_ticks=%d fps=%d real_fps=%.1f "
+			"budget=%.1f min_ms=%.1f max_ms=%.1f avg_ms=%.1f slow=%d late=%d "
+			"hd_rooms=%d hd_items=%d hd_draws=%d",
 			g_fps_level[0] ? g_fps_level : "?", g_sec_frames,
 			(int)(unsigned short)(GlobalCounter - g_sec_counter),
-			(int)TargetPresentHz(), FrameBudgetMs(), g_sec_min,
-			g_sec_max, g_sec_sum / g_sec_frames, g_sec_slow, g_sec_late,
+			(int)TargetPresentHz(), avg_ms > 0.0 ? 1000.0 / avg_ms : 0.0,
+			FrameBudgetMs(), g_sec_min,
+			g_sec_max, avg_ms, g_sec_slow, g_sec_late,
 			g_sec_rooms, g_sec_items, g_sec_draws);
 
 		g_lvl_seconds++;

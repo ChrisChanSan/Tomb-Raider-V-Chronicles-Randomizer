@@ -30,6 +30,18 @@ HRESULT DXShowFrame();
 void DXMove(long x, long y);
 void DXClose();
 long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, long WindowStyle);
+/* THE PRESENT AND THE PANEL (#148, order 6).
+ *
+ * DXVSyncActive() is 1 only when the device that exists was really made with
+ * D3DPRESENT_INTERVAL_ONE - the option asked for it AND the adapter offered
+ * it. The refresh-bound frame rate hangs on this and not on tomb5.vsync,
+ * because without a blocking present nothing would bound the loop.
+ *
+ * DXDisplayHz() is the adapter's current display mode refresh rate, or 60
+ * when it reports something unusable. Both are written by DXCreate. */
+long DXVSyncActive();
+long DXDisplayHz();
+
 long DXChangeVideoMode();
 long DXToggleFullScreen();
 long DXGetInfo(DXINFO* dxinfo, HWND hwnd);

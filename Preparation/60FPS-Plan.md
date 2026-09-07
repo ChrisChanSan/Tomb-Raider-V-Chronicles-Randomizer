@@ -402,7 +402,7 @@ costs the game.
 | 3. The per-frame side effects **- BUILT 2026-09-07, play test open** | Guard R1-R12 and R14-R17 with one criterion, `InterpIsTweenFrame()`. R6 moved into `ControlPhase` behind a mark the draw leaves - it is game state being mutated from a draw, and its `KillItem` also corrupted the room's item walk for spawned items. R10 moved into the ramp itself, because `S_DrawPickup` issues a `phd_LookAt` of its own per frame. Seven more counters found by the sweep; the logic RNG rolled back over an in-between frame (see 0.4). | ~330 | `TICKLOG` per game second - fade, screenfade, weather, legend, after_death - must read the same at 30 and at 60. `InterpTest`'s `counters` section proves the rule offline: 49 checks, 0 failed. |
 | 4. The pose **- BUILT 2026-09-07, play test open** | Give `InterpolateMatrix` / `aInterpolateMatrix` / `InterpolateArmMatrix` / `aInterpolateArmMatrix` (`game\draw.cpp:304-392, 1508-1621`) one float `IM_alpha` in place of the four hard-coded branches. **NOT `frac/(float)rate` - see below.** Add `GetFramesAt` beside `GetFrames` (`:1183`). Feed the pairs in `DrawAnimatingItem` (`:594, 705`) and `CalcLaraMatrices` (`game\delstuff.cpp:62-100`); `HairControl` needs nothing. When `anim_number` changed between the two ticks, do not blend the pose - blend only the root. | ~450 | A slow walk cycle and a slow ladder climb at 60, side by side with 30, HD and classic. `HDObjectNode`'s `interpolated` branch (`specific\hd\hd_object.cpp:1549-1560`) must be exercised - a counter in `INTERPLOG`. |
 | 5. Particles (optional) | Either snapshot `spark[1024]` + rain + snow and lerp them, or leave them at 30 (they are small, fast and short-lived). Recommended: leave them, and revisit only if the user's eye finds them. | ~200 if done | Two videos of the same waterfall or torch; the user chooses. |
-| 6. Present policy (optional) | `D3DPRESENT_INTERVAL_ONE` behind a `tomb5.vsync` option (`specific\dxshell.cpp:455` + the `Reset` path at `:273`) - this also removes the `while (!Sync())` spin's CPU burn. Uncapped or display-refresh mode needs `specific\time.cpp` reworked to sub-tick resolution and `alpha` from a real clock. | ~150 | `FPSLOG` on a 60/120/144 Hz panel; no tearing; CPU load measured with and without the spin. |
+| 6. Present policy **- BUILT 2026-09-07, play test open** | `D3DPRESENT_INTERVAL_ONE` behind `tomb5.vsync`, on by default, read in `DXCreate` (which the `Reset` path follows through `PresentParams`). `fps_mode 2` binds the rate to the panel: `GameFrameMinTicks()` returns **0**, the spin is not entered at all, and the present itself paces the loop. `time.cpp` gained `TIME_SubTick()` and the factor is `(framecount + subTick + 1) / 2` (`InterpRefreshAlpha`). No uncapped mode - the user ruled it out. | ~640 | `InterpTest`'s `refresh` section: 300 logic steps in ten seconds at 60, 120 and 144 Hz; the factor never clamped, no frame repeating the one before it, and what is drawn tracking the wall clock to within a float's precision. |
 | | total | ~1,450 over 6 orders | |
 
 ### Order 4 as built (2026-09-07) - and the one thing this plan had wrong
@@ -558,7 +558,8 @@ breaks it, for one frame, on a camera and not on game state.
 | K7 | The poison shake filter runs inside the view matrix (`specific\3dmath.cpp:650-656`) | low-medium | Step it only on a logic tick. |
 | K8 | Portal room mismatch. The eye is interpolated, the room list is not | low | Live room number, interpolated eye. Under 33 ms of camera travel. If a picture ever shows it, re-run `GetFloor` on the interpolated position. |
 | K9 | Latency. +8.3 ms average, +16.7 ms worst | low | Inherent and standard. `fps_mode 0` for anyone who wants the original response. |
-| K10 | Uncapped mode needs a new time base | low | Kept out of orders 1-4 on purpose. |
+| K10 | Uncapped mode needs a new time base | low | **DONE, order 6, and there is no uncapped mode.** `specific\time.cpp` gained `TIME_SubTick()` - the remainder past the last tick Sync() gave away, read without consuming it - and the display-bound factor is built from it. Uncapped was refused by the user ("it can damage the GPU"); the rate is bound to the panel instead, by letting the PRESENT wait rather than by measuring a rate and spinning against it. |
+| K13 | The driver overrides VSync and nothing paces the loop (order 6) | medium | A device counts as vsynced only if `CreateDevice` really got the interval (`DXVSyncActive`), and a watchdog measures the presents: six hundred in a row under half the panel's period means the interval was overridden, and the frame rate falls back to the 60 Hz spin for the session and says so in the log. An iconic window is not counted. |
 | K11 | Regression in the 30 Hz path | low | `fps_mode 0` must take every new branch out: `alpha == 1`, snapshot not applied, `gPresentMinTicks == 2`. Proof 6 is byte-identical frames. |
 | K12 | Particles keep stepping at 30 while everything else runs at 60 | low, cosmetic | Order 5, on the user's judgement. |
 
@@ -599,7 +600,59 @@ Before order 6
 7. VSync. Recommendation: offer `D3DPRESENT_INTERVAL_ONE` as its own
    switch. It removes the `while (!Sync());` spin and its CPU burn, but
    ties the frame rate to the desktop refresh.
+   **DECIDED 2026-09-07: yes, and on by default.** `tomb5.vsync`, one row on
+   the new *Display* page. It is the one option in the build that is not
+   instant - the present interval is a device-creation parameter, so it is
+   picked up at the next start (or on the next Alt+Enter / resolution
+   change), and the row says `on (restart)` rather than pretending
+   otherwise.
 8. Uncapped or display refresh at all? Recommendation: not now.
+   **DECIDED 2026-09-07: display refresh YES, uncapped NO** ("it can damage
+   the GPU"). `fps_mode 2` is *Display*; 60 stays the default and 2 is the
+   new third position of the row. The rate is bound by letting the PRESENT
+   wait - there is no rate the engine measures and then spins against - so
+   without VSync the mode cannot be honoured and falls back to 60 with one
+   line in the log.
+
+### Order 6 as built (2026-09-07) - the three things the plan did not have
+
+1. **THE CLOCK MUST BE READ ON THE OTHER SIDE OF THE FLIP.** Every present in
+   this engine reads `Sync()` first and then flips, because the WAIT IS THE
+   READ. With the interval at ONE the wait is inside `Present`, and a `Sync()`
+   taken before it misses the whole of that wait: the ticks spent waiting are
+   credited to the next frame instead, one frame late. The factor then asks
+   for a state the logic has not reached, is clamped to the newest one, and
+   the picture stands still for a frame **at every logic step** - a 30 Hz
+   stutter on top of a 144 Hz picture. `S_DumpScreen` therefore flips first
+   and reads the clock afterwards in this one mode. Modelled offline before it
+   was built: with the read before the flip a ten second run at 144 Hz clamps
+   on hundreds of frames, with it after, not once.
+
+2. **`alpha < 1` IS NOT "this frame carries no tick" ANY MORE.** Order 3's
+   whole rule - every duration in the game steps once per logic tick - rests
+   on that test, and it is only equivalent to the cadence while the cadence is
+   two frames to a tick. At 144 Hz it would be true on four frames out of five
+   and every fade, every raindrop and every corpse in the build would stop. So
+   the ticks are counted (`g_tickSerial`, stepped in `InterpCapturePrev`) and
+   the frame that finds a new one claims it. `fps_mode 1` keeps the parity
+   rule untouched, down to which of the two frames carries the step.
+
+3. **`R15` HAD A HOLE IN IT THAT ONLY THIS MODE FALLS INTO.** The resolution
+   caption counted drawn frames and scaled its step by `TargetPresentHz() /
+   App.fps` - an integer division of a target by a MEASURED rate, so a
+   measured rate a hair above the target truncates the step to zero and the
+   caption never leaves the screen. With the panel pacing the frames that is
+   not a corner case but every second reading. It counts 120 logic ticks now,
+   like every other duration in order 3, which is also vanilla's own 120
+   frames at thirty.
+
+And one thing the plan asked for that the build refuses on purpose: `alpha` is
+**not** 1.0 on the frame that carries a tick. It is `(framecount + subTick +
+1) / 2`, which walks 0 -> 1 across each logic step and starts again at 0 when
+the next state arrives; that is the only mapping that never has to be clamped,
+and the derivation is written out over `InterpRefreshAlpha`. It costs one
+1/60 s tick more display latency than `fps_mode 1`, which is what a factor
+that is never clamped costs, and is why 60 remains the default.
 
 
 ## Summary

@@ -64,7 +64,16 @@ Measured again on **2026-09-07**, after order 1 of "Sixty frames a second"
 by an earlier stage and never given the notice - `game/hitman.h` - was given it
 with this change, which is why the notice count grows by three and not by two.
 
-Fourteen of the 175 do not carry it, and none of them should - the ten below
+Measured again on **2026-09-07**, after orders 2, 3, 4 and 6 of the same
+section: **115** files changed, **65** entirely new - **180** in all, **166**
+of them carrying the notice. The three additions are `game/interpolate.cpp`,
+`game/interpolate.h` and `game/interpolate_math.h`, which came with orders 2
+and 4 and were never counted here. The two newly *changed* files are
+`specific/time.cpp` and `specific/time.h`: order 6 is the first thing in this
+project to touch the engine's clock at all, and they were given their notice
+with it.
+
+Fourteen of the 180 do not carry it, and none of them should - the ten below
 plus the four `specific/hd/hd_shader/*.inc`, which are compiler output
 (`fxc` bytecode as a C array) regenerated from the `.hlsl` beside them and
 carrying no source of ours at all:
@@ -5880,6 +5889,161 @@ every interpolated tick frame - and the sequence of boxes over a crossing is
   that the pose never walks backwards, never leaves its key frame pair, is
   vanilla's own value to the bit on every tick frame, follows the shortened
   last interval, and is refused by each of the six K6 cases.
+
+#### 5.12 Order 6 - VSync, and the rate the monitor sets
+
+Orders 1 to 4 gave the engine sixty pictures a second of a thirty hertz game.
+This one hands the pacing to the display itself, and switches on the vsync the
+port never had.
+
+**Two options, one page.** `tomb5.vsync` (on by default) and a third position
+for `tomb5.fps_mode`:
+
+| `fps_mode` | the row says | what the frame waits for |
+|---|---|---|
+| 0 | `30` | two 1/60 s ticks, spinning - the original |
+| 1 | `60` | one tick, spinning - the default since order 1 |
+| 2 | `Display` | nothing of its own: `Present` waits for the panel |
+
+They are one subject and they now have a page of their own, *Display*, third
+in the tomb5 options cycle. Pages 0 and 1 were both at the fourteen-row
+ceiling (`troyestuff.cpp`), so *Frame rate* moved off page 0 rather than being
+squeezed in - and the row that offers *Display* belongs beside the row that
+says whether the present waits, because without the second the first cannot be
+honoured.
+
+**VSync is a device-creation parameter and behaves like one.** D3D9 takes
+`PresentationInterval` in `D3DPRESENT_PARAMETERS`, so it is read in `DXCreate`
+(`specific/dxshell.cpp`) - at startup, on Alt+Enter and on a resolution
+change; the device-lost path in `DXShowFrame` resets from the same
+`PresentParams` and follows for free. `DXCreateD3DDevice` checks
+`caps.PresentationIntervals` first and drops back to `IMMEDIATE` with a log
+line rather than failing to create a device at all, and `DXVSyncActive()`
+afterwards answers what the device REALLY got - which is what the frame rate
+hangs on, never the option. The row therefore reads `on (restart)`: it is the
+one setting in the build that is not instant, and saying so on the row is
+better than a manual nobody has open.
+
+One ordering problem came with it. `init_tomb5_stuff`, which reads every tomb5
+option, runs on the game thread that `WinMain` starts *after* the first
+`DXCreate`. So `load_tomb5_present_settings()` (`tomb5/tomb5.cpp`) reads that
+one value ahead of time, through a new **read-only** registry helper,
+`REG_PeekLong` - `OpenRegistry` uses `RegCreateKeyEx` and `init_tomb5_stuff`
+decides from `REG_KeyWasCreated()` whether to write the whole set of defaults,
+so a second reader that opened the key early would have silently taken a first
+run's defaults away.
+
+**The rate is bound by letting the present wait - nothing measures a rate and
+spins against it.** `GameFrameMinTicks()` returns **0** for a display-bound
+game frame, so `while (n < gPresentMinTicks)` is not entered and the loop is
+paced by `Present`. At 144 Hz that means two frames out of three come back
+from `Sync()` with no whole tick at all: `ControlPhase(0)` runs no logic step,
+which is exactly right, and the frame is drawn from the clock instead. There
+is **no uncapped mode** - the user ruled it out - and there is no path to one:
+without a blocking present `ActiveFpsMode()` reports 1 and the sixty hertz
+spin is back.
+
+**The blend factor comes from the clock, and `(framecount + subTick + 1) / 2`
+is the only mapping that never has to be clamped.** `specific/time.cpp` gained
+`TIME_SubTick()`: how far past the last tick `Sync()` gave away the clock
+stands, read WITHOUT consuming it and deliberately not capped at one.
+`framecount` is ControlPhase's accumulator, which the loop leaves at -1 or 0.
+Their sum is the time since the last logic step, continuously - when `Sync()`
+consumes k ticks the one drops by k and the other rises by k - and the `+1`
+is where the newest state sits in wall-clock time: the loop spends two ticks
+per step but runs one as soon as the accumulator is positive, so the state
+after step *k* is the newest there is from `S = 2k-1` to `S = 2k+1`, and
+reading it as the world at `2k+1` is what makes the whole of that window an
+interpolation rather than a guess. The factor then walks 0 -> 1 across every
+logic step at any refresh rate, with no accumulator of its own and nothing to
+drift. The derivation is written out over `InterpRefreshAlpha`
+(`game/interpolate_math.h`), where the arithmetic lives so that `InterpTest`
+can check it without a game.
+
+It is therefore **not** 1.0 on the frame that carries a tick, which is what
+the order asked for at first: it is 0 there and 1 where the next tick is due.
+The clamp is for hitches only, and for the early returns inside `ControlPhase`
+that can leave the accumulator positive - both draw the newest state, which is
+what thirty hertz shows on a slow frame.
+
+**The clock has to be read on the OTHER SIDE of the flip, and this is the
+thing about the order that cannot be seen in a code review.** Every other
+present in the engine reads `Sync()` first and flips afterwards, because there
+the WAIT IS THE READ - `while (n < min) while (!Sync());` is the pacing and
+the measurement in one. Here the wait is inside `Present`, and a `Sync()`
+taken before it misses the whole of it: the ticks spent waiting land in the
+next frame's count instead, one frame late, the factor asks for a state the
+logic has not reached, and the picture stands still for a frame **at every
+logic step** - a thirty hertz stutter on top of a 144 Hz picture. So
+`S_DumpScreen` flips first and reads the clock afterwards in this one mode.
+`PROF_SPIN` is empty there and `PROF_FLIP` carries the wait, which is the
+honest place for it: the CPU is inside the driver rather than burning a core
+in a loop of ours.
+
+**`alpha < 1` stopped meaning "this frame carries no logic tick".** Order 3's
+whole rule rests on that test and it is only equivalent to the cadence while
+the cadence is two frames to a tick; at 144 Hz it is true on four frames out
+of five, and every fade, raindrop, corpse and caption in the build would have
+stopped. The ticks are counted instead - `g_tickSerial`, stepped in
+`InterpCapturePrev` - and the drawn frame that finds a new one claims it, so
+exactly one frame per logic tick steps the counters whatever the panel does.
+`fps_mode 1` keeps the parity rule untouched, down to which of the two frames
+carries the step.
+
+**A hole in `R15` that only this mode falls into.** The resolution caption
+counted drawn frames and scaled its step by `TargetPresentHz() / App.fps` - an
+integer division of a target by a *measured* rate, so a measured rate a hair
+above the target truncates the step to zero and the caption never leaves the
+screen. With the panel pacing the frames that is every second reading. It
+counts 120 **logic ticks** now, like every other duration since order 3, which
+is also vanilla's own 120 frames at thirty.
+
+**The watchdog, because a driver can lie.** A control panel set to force vsync
+off leaves the device claiming the interval while `Present` returns at once,
+and then nothing at all bounds the loop. `NoteDisplayBoundPresent` measures
+the interval between display-bound presents: six hundred in a row under half
+the panel's period is not jitter, it is an overridden interval, and the frame
+rate falls back to the sixty hertz spin for the session with one line in the
+log. An iconic window is not counted - `Present` on a minimised window can
+return at once with nothing to compose against, and coming back from the
+taskbar must not cost the player their setting.
+
+**What the logs say.** `FPSLOG` gained `real_fps=`, the rate worked out from
+the mean present interval rather than from `frames=` (which is a count over a
+second that begins and ends on a frame boundary and is a frame out either
+way); `fps=` is what the mode asks for, and on a healthy display-bound run the
+two agree with the monitor. The frame budget is one function now,
+`PresentSlotMs()` in `specific/output.cpp`, which both `FPSLOG` and `PROFLOG`
+call - a third case had arrived, the frame whose slot is the panel's period
+rather than a whole number of ticks, and the two logs must not be able to
+disagree about it. `INTERPLOG`'s `alpha=` is a distribution now,
+`min/mean/max`: bound to the display every frame has a factor of its own, and
+their spread is what says the pacing is healthy - a maximum pinned at 1.00
+with a mean near it is the clamp firing.
+
+**The offline proof.** `InterpTest.cpp` (`bit.bat`) grew a `refresh` section
+and **220 checks pass, 0 failed**. It models the engine's own loop - draw,
+flip at the panel's vblank, read the clock after it, hand the whole ticks to
+`ControlPhase` - with the vblanks on their own grid at their own phase, so
+that the two clocks are as independent as a 144 Hz panel and a 1/60 s counter
+really are. Ten simulated seconds at 60, 120 and 144 Hz each run **300 logic
+steps** against 600, 1200 and 1440 frames; the factor is **never clamped**; no
+frame draws what the one before it drew; exactly one frame per logic tick
+carries the counters; and what is drawn tracks the wall clock with a spread of
+under 1e-7 ticks, which is a float's precision and not drift. A 200 ms hitch
+is caught up rather than dropped, less the two ticks vanilla's own
+`if (nframes > 10)` cap discards.
+
+**What it costs.** One 1/60 s tick more display latency than `fps_mode 1` -
+which is what a factor that is never clamped costs, and why 60 remains the
+default - and, on the other side, the busy-wait is gone: a core that spun
+inside `while (!Sync());` for the rest of every frame's slot now waits inside
+the driver instead.
+
+**`fps_mode 0` and `vsync 0` are the engine as it was**, with one deliberate
+exception: `R15` above, whose step is a logic tick rather than a rounded ratio
+in every mode. At thirty frames a second that is vanilla's own 120 frames, and
+it is the version that cannot leave the caption standing.
 
 ---
 

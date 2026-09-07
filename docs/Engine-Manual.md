@@ -101,7 +101,8 @@ worth knowing by name:
 
 | Value | Type | Meaning |
 |---|---|---|
-| `fps_mode` | DWORD | How many frames a second are presented. `1`, the default, is 60; `0` is the original 30. `2` is reserved for the display's own refresh rate and is not built yet — it reads back as `1`. There is no uncapped mode. The *Frame rate* row writes this. See **Frame rate**. |
+| `fps_mode` | DWORD | How many frames a second are presented. `1`, the default, is 60; `0` is the original 30; `2` is the display's own refresh rate, which needs `vsync` on. There is no uncapped mode. The *Frame rate* row on the *Display* page writes this. See **Frame rate**. |
+| `vsync` | DWORD | `1`, the default: the picture waits for the monitor, so it is never torn across the middle. `0` for the original behaviour. **The only setting in the build that is not instant** — it is read when the graphics device is made, so a change takes hold the next time the game starts (or on the next Alt+Enter or resolution change). The *VSync* row writes this. |
 | `hd_enable` and its five companions | | The Remaster art. Their own table under **HD from the Remaster**. |
 
 ---
@@ -175,16 +176,16 @@ drawn across the names. It lists names only; the web addresses live in
 
 <p align="center"><img src="features-1.jpg" alt="The tomb5 options page" width="700"></p>
 
-Two pages the original never had, plus a third when first person is on. The
-row of two arrows at the bottom steps forward; there is no going back a page,
-you cycle round.
+Three pages the original never had, plus a fourth when first person is on.
+The row of two arrows at the bottom steps forward; there is no going back a
+page, you cycle round.
 
 **Page 1** — *Footprints* (on), *Shadow mode* (Original blob / Circle / Faded
 circle / PSX — default Faded circle), *Fix climb up delay* (on — removes the
 pause before Lara pulls herself up), *Flexible crawling* (on), *Cutscene
 skipper* (off), *Cheats* (off), *Bar mode* (Original / TR4 / PSX — default
 PSX), *Bar positions* (Original), *Enemy bars* (off), *Ammo counter* (off),
-*Gameover menu* (on), *Fog* (on), *HD textures* (off), *Frame rate* (60).
+*Gameover menu* (on), *Fog* (on), *HD textures* (off).
 
 **Page 2** — *Crawl Tilting* (on), *PSX skies* (on), *TR4 loadscreens* (on),
 *Loadbar style* (TR4), *Mono screen style* (Original), *Loading text* (on),
@@ -192,17 +193,22 @@ PSX), *Bar positions* (Original), *Enemy bars* (off), *Ammo counter* (off),
 3–30), *Ammotype hotkeys* (on), *Look transparency* (off), *Static lighting*
 (on), *UW Effect* (Original), *First person view* (off), *Level select* (off).
 
+**Page 3, *Display*** — *Frame rate* (60 / 30 / Display) and *VSync* (on).
+Their own page since they are one subject; both have a section of their own
+below.
+
 Worth spelling out:
 
-- **Frame rate** is *60* by default and *30* is the original. It changes how
-  often the picture is drawn and **nothing else**: the game itself still
-  steps thirty times a second, exactly as Core wrote it, so every animation,
-  every timer, every trigger and every enemy behaves identically in both.
-  A savegame written in one is the savegame written in the other. The row
-  takes effect on the very next frame — no restart, nothing reloaded.
+- **Frame rate** and **VSync** have a page of their own — *Display*, the
+  third page of the cycle. *Frame rate* is *60* by default, *30* is the
+  original and *Display* follows the monitor. It changes how often the
+  picture is drawn and **nothing else**: the game itself still steps thirty
+  times a second, exactly as Core wrote it, so every animation, every timer,
+  every trigger and every enemy behaves identically in all three. A savegame
+  written in one is the savegame written in the others.
 
-  See *Frame rate* further down for what the two settings really do and how
-  to check it.
+  See *Frame rate* further down for what the settings really do and how to
+  check them.
 - **Cheats** governs DOZY only — type it while playing to fly. The classic
   cheats still need the compass in hand and are unaffected.
 - **Ammotype hotkeys**: the option governs **only** the ammunition cycling -
@@ -231,8 +237,8 @@ Worth spelling out:
 
 <p align="center"><img src="ingame-08.jpg" alt="First person, aiming the HK" width="700"></p>
 
-Switch it on under *tomb5 options*, page 2. A **third page** then appears with
-four rows of its own:
+Switch it on under *tomb5 options*, page 2. A **fourth page** then appears,
+after *Display*, with four rows of its own:
 
 | Row | What it does | Default |
 |---|---|---|
@@ -260,10 +266,17 @@ in the 13th Floor. That is not the option failing.
 
 ## Frame rate
 
-*tomb5 options*, page 1, last row. **60** is the default; **30** is the
-original. It takes effect on the very next frame — no restart, nothing
-reloaded, and it can be changed from the pause screen in the middle of a
-level.
+*tomb5 options*, the **Display** page — the third page of the cycle, reached
+with Left/Right from page 2. Two rows:
+
+| row | positions | takes effect |
+|---|---|---|
+| *Frame rate* | **60** (default), **30**, **Display** | the very next frame |
+| *VSync* | **on** (default), **off** | the next time the game starts |
+
+**60** is the default and **30** is the original. *Frame rate* can be changed
+from the pause screen in the middle of a level and the next picture is drawn
+the new way — no restart, nothing reloaded.
 
 **The game does not change.** Tomb Raider Chronicles is a thirty-steps-a-second
 simulation and it stays one in both settings: every animation frame, every
@@ -280,7 +293,8 @@ line of the simulation touched.
 Two ways to check it yourself:
 
 - With `-log`, the `FPSLOG` line reads `frames=60 logic_ticks=30`. Sixty
-  presents, thirty game steps.
+  presents, thirty game steps. `logic_ticks` reads 30 at every setting on
+  this page; only `frames` changes.
 - The stopwatch: a timed section (the countdown in the Submarine, the
   Escape With The Iris timer) runs for exactly as many real seconds in both.
 
@@ -370,6 +384,65 @@ and keeps going. With `-log`, `FPSLOG`'s `late=` and the `PROFLOG` lines under
 *When something looks wrong* say which part of the frame ran out of time. On a
 machine that cannot hold sixty with the HD art on, `30` is the setting that
 was always there.
+
+### VSync
+
+**On by default.** Without it the picture is handed to the graphics card the
+moment it is finished, in the middle of the monitor drawing the previous one,
+and the seam between the two is the horizontal tear you see when the camera
+whips round. With it the hand-over waits for the monitor and the picture is
+always whole.
+
+It is the **one setting in this build that is not instant**. Direct3D 9 takes
+it when the graphics device is created and offers no way to change it on a
+live device, so the row reads *on (restart)*: switch it, and the next start of
+the game runs with it. (Alt+Enter and a resolution change also make a new
+device, so those pick it up too.)
+
+**It also takes a busy-wait out of the engine.** The original had no vsync at
+all; its thirty frames a second came from a loop that spun on the clock —
+`while (!Sync());` — for whatever was left of the frame's slot, burning a core
+to do nothing. With VSync on and *Frame rate* at *Display* that loop is not
+entered at all: the waiting happens inside the graphics driver, which is where
+it belongs.
+
+If your graphics driver's control panel forces vsync off for this program, the
+engine notices within a few seconds — the presents come back far too fast to
+have waited for anything — says so in the log and falls back to 60 for the
+session. That fallback exists because *Display* is paced by the waiting and by
+nothing else: there is no uncapped mode in this build, on purpose.
+
+### Frame rate: *Display*
+
+**What it does.** The picture is presented as often as your monitor refreshes
+— 60, 120, 144, whatever the panel runs at — while the game keeps its thirty
+steps a second like everything else on this page. On a 144 Hz monitor that is
+four to five pictures per game step instead of two, each one a real new
+position rather than a repeat.
+
+**It needs VSync**, because the monitor's rate is what the *waiting* is bound
+to. With VSync off, *Display* runs at 60 instead and the row says so:
+`Display (60)`.
+
+**What it costs.** About one sixtieth of a second more delay between your
+hands and the picture than *60* does. That is not an oversight, it is the
+price of a blend factor that never has to stall: at *60* the frames land
+exactly on the game's own clock and the engine can draw as fresh a state as
+exists, while at *Display* they land wherever the panel puts them, and drawing
+the freshest state would mean asking, several times a second, for one the game
+has not computed yet — which shows up as the picture standing still for a
+frame at every game step. Trading a tick of delay for that is the whole
+design, and it is why **60 remains the default**: *Display* is for a
+high-refresh monitor, where the extra pictures are worth it.
+
+**How to check it.** With `-log`, `FPSLOG` reads `fps=144 real_fps=143.8
+logic_ticks=30`: the rate asked for, the rate measured, and the game still at
+thirty. `INTERPLOG`'s `alpha=` is three numbers on this setting — the smallest,
+the mean and the largest blend factor of the second — and a healthy 144 Hz
+second walks the whole interval, roughly `0.03/0.50/0.98`. A maximum sitting
+at `1.00` with a mean close to it means the frames are arriving faster than the
+game can give them new states, which is the one thing that would look worse
+than *60* rather than better.
 
 ### Proving the game really did not change
 
@@ -1776,12 +1849,12 @@ anybody can check by looking, so with `-log` the engine writes one `FPSLOG`
 line per second of wall clock, and one summary per level:
 
 ```
-FPSLOG level=ANDREA1 frames=60 logic_ticks=30 fps=60 budget=16.7 min_ms=16.2
-       max_ms=17.1 avg_ms=16.7 slow=24 late=0 hd_rooms=17 hd_items=9
+FPSLOG level=ANDREA1 frames=60 logic_ticks=30 fps=60 real_fps=59.9 budget=16.7
+       min_ms=16.2 max_ms=17.1 avg_ms=16.7 slow=24 late=0 hd_rooms=17 hd_items=9
        hd_draws=152
-FPSLOG level=ANDREA1 frames=48 logic_ticks=30 fps=60 budget=16.7 min_ms=16.4
-       max_ms=66.9 avg_ms=20.8 slow=31 late=6 hd_rooms=23 hd_items=14
-       hd_draws=241
+FPSLOG level=ANDREA1 frames=48 logic_ticks=30 fps=60 real_fps=48.1 budget=16.7
+       min_ms=16.4 max_ms=66.9 avg_ms=20.8 slow=31 late=6 hd_rooms=23
+       hd_items=14 hd_draws=241
 FPSLOG level=ANDREA1 summary seconds=418 frames=24906 worst_ms=83.4
        slow_frames=5602 late_frames=39
 ```
@@ -1790,10 +1863,15 @@ The game's logic is a fixed **30 steps a second** in both *Frame rate*
 settings — that is the engine, not this build. What the setting changes is how
 often the picture is presented. Read the line like this:
 
-- **`fps=`** is the setting, 30 or 60 — what was asked for.
+- **`fps=`** is the setting — 30, 60, or your monitor's own rate at
+  *Display* — what was asked for.
+- **`real_fps=`** is what the pictures really came at, worked out from the
+  mean interval between them. At *Display* it should agree with the monitor;
+  if it does not, the machine is not keeping up.
 - **`budget=`** is what *this* second's frames were really measured against,
   in milliseconds: `16.7` for frames presented at sixty, `33.3` for frames
-  presented at thirty. The two differ whenever the setting says 60 but the
+  presented at thirty, and the monitor's own period at *Display* — `6.9` on a
+  144 Hz panel. The first two differ whenever the setting says 60 but the
   picture came from a menu — the title screen, the inventory, the pause and
   load screens all keep thirty at either setting (see **Frame rate**), and
   judging them against 16.7 ms would report a perfectly healthy menu as thirty
@@ -1897,7 +1975,7 @@ still while the inventory is up — saying what the in-between frames of the
 frame rate setting really did:
 
 ```
-INTERPLOG level=1 at=12s frames=60 tween=30 alpha=0.75 lara_step=15.8
+INTERPLOG level=1 at=12s frames=60 tween=30 alpha=0.50/0.75/1.00 lara_step=15.8
   items=4.0 snaps=0 (teleport=0 roomjump=0 object=0 invalid=0) camcut=0 cutscene=0
   pose_items=3.5 pose_skips=0.2 pose_hd=1.5 lara_pose=29/30
 ```
@@ -1905,8 +1983,8 @@ INTERPLOG level=1 at=12s frames=60 tween=30 alpha=0.75 lara_step=15.8
 | field | what it says |
 |---|---|
 | `frames` | pictures presented in that second — 60 at *Frame rate 60*, 30 at 30 |
-| `tween` | how many of them fell **between** two game steps and were therefore drawn interpolated. Exactly half at 60; **zero** at 30 |
-| `alpha` | the mean of what each frame was drawn at, 1 being the live state. 0.75 at 60, 1.00 at 30 |
+| `tween` | how many of them fell **between** two game steps and were therefore drawn interpolated. Exactly half at 60; **zero** at 30; at *Display*, all but one per game step |
+| `alpha` | the smallest, the **mean** and the largest of what the second's frames were drawn at, 1 being the live state. `0.50/0.75/1.00` at 60 and `1.00/1.00/1.00` at 30. At *Display* it is a real distribution and should walk the whole interval — roughly `0.03/0.50/0.98` on a 144 Hz panel; a largest value stuck at `1.00` with a mean near it means frames are arriving faster than the game has new states for |
 | `lara_step` | **the number that proves it works.** How far Lara moved *on screen* from one picture to the next, averaged over the second. Walk the same corridor at 30 and at 60 and the 60 run must read about **half** of the 30 run — the same distance cut into twice as many steps |
 | `items` | how many things really moved and were interpolated, per frame. Idle pickups, switches and empty slots are not counted |
 | `snaps` | how often interpolation was deliberately skipped, and why: `teleport` something crossed more than half a sector in one step, `roomjump` it did so across a room boundary, `object` an item slot was handed to a different object, `invalid` there was no previous state |

@@ -100,8 +100,26 @@ void InterpCapturePrev();
  * 0.5 for the frame that falls between two logic ticks. Read at the top of
  * DrawPhaseGame and handed straight to InterpBeginFrame - it stands as its
  * own function so that the rule is one line and can be read where the caller
- * is. */
+ * is.
+ *
+ * AT fps_mode 2 IT IS NOT A HALF (#148, order 6). Bound to the display's
+ * refresh the frames do not land on the ticks, so the factor comes from the
+ * clock instead - InterpTickFraction below - and walks the whole interval
+ * from 0 to 1 across every logic step. */
 float InterpAlphaNow();
+
+/* HOW FAR PAST THE LAST LOGIC TICK THE CLOCK STANDS, as a fraction of a logic
+ * step (1/30 s), clamped to [0,1] (#148, order 6).
+ *
+ * The display-bound frame rate's blend factor, and the only reading in the
+ * engine that is finer than a 1/60 s tick. It is built from ControlPhase's
+ * accumulator and the remainder in the engine's own clock (TIME_SubTick,
+ * specific\time.cpp) and needs no accumulator of its own; the derivation is
+ * written out over InterpRefreshAlpha in game\interpolate_math.h, where the
+ * arithmetic lives so that InterpTest can check it without a game.
+ *
+ * Nothing calls it at fps_mode 0 or 1. */
+float InterpTickFraction();
 
 void InterpBeginFrame(float alpha);
 void InterpEndFrame();

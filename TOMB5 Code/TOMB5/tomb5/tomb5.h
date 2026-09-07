@@ -33,6 +33,10 @@ extern char tomb5_hd_install_tr3[260];
 // the video memory and a measurable loss of quality. A string for the same
 // reason hd_install is one. Registry value: hd_texture_format.
 extern char tomb5_hd_texture_format[16];
+/* VSync, read before the first device is made (#148, order 6). WinMain calls
+ * it just above DXCreate; the long note over the definition says why it may
+ * not simply wait for init_tomb5_stuff. */
+void load_tomb5_present_settings();
 void init_tomb5_stuff();
 void save_new_tomb5_settings();
 void RPC_Init();

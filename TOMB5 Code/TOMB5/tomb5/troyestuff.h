@@ -18,6 +18,8 @@ ulong TroyeMenuPage(long page);
 bool Page0(long& num, long textY, ulong selection);
 bool Page1(long& num, long textY, ulong selection);
 bool Page2(long& num, long textY, ulong selection);
+// The frame rate and VSync, a page of their own since order 6 of #148.
+bool PageDisplay(long& num, long textY, ulong selection);
 
 // Credits (#33): a screen of its own, deliberately NOT a page of the tomb5
 // options - see the comment at the definition.

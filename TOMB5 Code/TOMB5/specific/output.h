@@ -55,11 +55,25 @@ long S_DumpScreenFrame();
  * frame is judged and NOT out of tomb5.fps_mode - which is why DrawPhaseGame
  * restores the two only after ProfileFrameEnd has run.
  *
- * TargetPresentHz() is the option as a number - what the player asked for,
- * for the log lines that name it and for the resolution caption's countdown.
- * It is NOT a budget; use gPresentMinTicks for that. */
+ * AND ZERO IS A THIRD STATE (#148, order 6). At fps_mode 2 the game frame
+ * waits for no tick at all, because D3DPRESENT_INTERVAL_ONE makes the present
+ * itself wait for the panel; the frame's slot is then the panel's period and
+ * not a whole number of ticks, which is what PresentSlotMs() is for. Both
+ * FPSLOG and PROFLOG take their budget from it so that the two cannot drift
+ * apart on the definition.
+ *
+ * ActiveFpsMode() is tomb5.fps_mode AS THE ENGINE CAN REALLY HONOUR IT: 2
+ * collapses to 1 whenever the present does not wait (VSync off, an adapter
+ * without the interval, a driver that overrode it). Everything that has to
+ * agree about the frame rate asks this and never the option directly.
+ *
+ * TargetPresentHz() is that mode as a number - 30, 60, or the display's own
+ * refresh rate - for the log lines that name it. It is NOT a budget; use
+ * PresentSlotMs() for that. */
 extern long gPresentMinTicks;
-long TargetPresentHz();		// 30 or 60, out of tomb5.fps_mode
+long ActiveFpsMode();		// 0, 1 or 2 - what is really running
+long TargetPresentHz();		// 30, 60 or the panel's rate
+double PresentSlotMs();		// the slot the present that just ran asked for
 long GameFrameMinTicks();	// what DrawPhaseGame's own present may wait for
 void StashSkinVertices(long node);
 void SkinVerticesToScratch(long node);

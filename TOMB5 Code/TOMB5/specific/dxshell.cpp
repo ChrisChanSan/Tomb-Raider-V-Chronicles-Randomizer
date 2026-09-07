@@ -17,6 +17,7 @@
 #include "hd/hd_level.h"
 #include "winmain.h"
 #include "input.h"
+#include "../tomb5/tomb5.h"	// tomb5.vsync (#148, order 6)
 #include <Xinput.h>
 #include <process.h>	// _beginthreadex - joystick init runs in the background
 
@@ -26,6 +27,22 @@ LPDIRECT3D9 G_d3d;
 HWND G_hwnd;
 char keymap[256];
 ulong DXTextureMemoryAtStart = 0;	// see dxshell.h (#123, stage S6)
+
+/* VSYNC, AND WHAT THE DISPLAY RUNS AT (#148, order 6).
+ *
+ * Both are written by DXCreate and read by the present policy in
+ * specific\output.cpp. They are answers about the DEVICE THAT EXISTS, not
+ * about what the player asked for: `tomb5.vsync` is the wish, and
+ * g_vsyncActive is whether the device was really made with
+ * D3DPRESENT_INTERVAL_ONE - a card that does not offer the interval, or a
+ * driver panel that overrides it, must not leave the engine believing the
+ * present blocks when it does not.
+ *
+ * The refresh rate is the adapter's CURRENT display mode
+ * (D3DDISPLAYMODE.RefreshRate). Zero and absurd values are turned into 60, so
+ * every reader downstream gets a number it can divide by. */
+static long g_vsyncActive = 0;
+static long g_displayHz = 60;
 
 static char tga_header[18] = { 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 1, 0, 1, 16, 0 };
 
@@ -115,11 +132,34 @@ long DXCreateD3DDevice(LPDIRECT3D9 d3d, UINT adapter, HWND hwnd, D3DPRESENT_PARA
 	// officially supported way to share one device across threads like this.
 	flags |= D3DCREATE_MULTITHREADED;
 
+	/* VSYNC, ASKED OF THE CARD BEFORE IT IS ASKED OF THE DEVICE (#148, order
+	 * 6). DXCreate has already put D3DPRESENT_INTERVAL_ONE or
+	 * D3DPRESENT_INTERVAL_IMMEDIATE into pp from tomb5.vsync; this is the one
+	 * place that holds the caps, so it is the one place that can say whether
+	 * the interval asked for exists at all. D3D9 promises ONE in windowed
+	 * mode and this device is always windowed (see DXCreate), so the fallback
+	 * below is belt and braces - but a device that fails to be created
+	 * because of a present interval would be a black screen with no message,
+	 * and this turns it into a log line and a running game.
+	 *
+	 * g_vsyncActive records what we ended up with. The refresh-bound frame
+	 * rate (fps_mode 2) hangs on it: without a blocking present there is
+	 * nothing to bound the rate, and an uncapped loop is exactly what the
+	 * user ruled out. */
+	if (pp->PresentationInterval == D3DPRESENT_INTERVAL_ONE &&
+		!(caps.PresentationIntervals & D3DPRESENT_INTERVAL_ONE))
+	{
+		Log("DXCreateD3DDevice: the adapter does not offer D3DPRESENT_INTERVAL_ONE - VSync off");
+		pp->PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
+	}
+
 	if (DXAttempt(d3d->CreateDevice(adapter, D3DDEVTYPE_HAL, hwnd, flags, pp, device)) != DD_OK)
 	{
 		Log("DXCreateD3DDevice Failed");
 		return 0;
 	}
+
+	g_vsyncActive = pp->PresentationInterval == D3DPRESENT_INTERVAL_ONE ? 1 : 0;
 
 	/* HOW MUCH TEXTURE MEMORY THIS CARD HAS (#123, stage S6). Asked HERE and
 	 * nowhere else, because this is the only moment the answer means what it
@@ -452,7 +492,44 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 	G_dxptr->PresentParams.BackBufferHeight = G_dxptr->dwRenderHeight;
 	G_dxptr->PresentParams.BackBufferFormat = D3DFMT_X8R8G8B8;
 	G_dxptr->PresentParams.BackBufferCount = 1;
-	G_dxptr->PresentParams.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
+
+	/* VSYNC (#148, order 6), and the one line the whole option is.
+	 *
+	 * The engine presented with D3DPRESENT_INTERVAL_IMMEDIATE from the day it
+	 * was ported, and the thirty frames a second came from the busy-wait in
+	 * S_DumpScreen instead - a `while (!Sync());` spin that burns a core for
+	 * the rest of every frame's slot. With the interval at ONE the present
+	 * itself waits for the display and the picture is whole rather than torn.
+	 *
+	 * WHERE THIS TAKES EFFECT, AND WHERE IT DOES NOT. PresentationInterval is
+	 * a device-creation parameter: it is read here, and this function runs at
+	 * startup, on Alt+Enter and on a resolution change (DXToggleFullScreen
+	 * and DXChangeVideoMode both call DXCreate). The device-lost path in
+	 * DXShowFrame resets with THIS SAME G_dxptr->PresentParams, so it follows
+	 * too. What it means is that switching the menu row over does NOT change
+	 * a running device - the row says so, and the setting is picked up the
+	 * next time the game starts. Resetting the device on the spot would work
+	 * with the HD art switched off and would tear down every D3DPOOL_DEFAULT
+	 * page of it when it is on (see HDLevelDeviceLost), which is a heavy
+	 * price for a switch that is set once.
+	 *
+	 * The display's own rate is read here for the same reason: this is where
+	 * the adapter is at hand. The refresh-bound frame rate divides by it. */
+	G_dxptr->PresentParams.PresentationInterval =
+		tomb5.vsync ? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
+
+	{
+		D3DDISPLAYMODE mode;
+
+		g_displayHz = 60;
+
+		if (SUCCEEDED(G_d3d->GetAdapterDisplayMode(adapter, &mode)) &&
+			mode.RefreshRate >= 20 && mode.RefreshRate <= 1000)
+			g_displayHz = (long)mode.RefreshRate;
+
+		Log("DXCreate: display %ld Hz, VSync %s", g_displayHz,
+			tomb5.vsync ? "on" : "off");
+	}
 
 	if (Flags & DXF_ZBUFFER)
 	{
@@ -471,6 +548,20 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 	}
 
 	return 1;
+}
+
+/* Whether the device that EXISTS presents with D3DPRESENT_INTERVAL_ONE
+ * (#148, order 6) - not whether the option is on. Zero before the first
+ * DXCreate, which is also the honest answer then. */
+long DXVSyncActive()
+{
+	return g_vsyncActive;
+}
+
+// What the display the device was made on runs at, in Hz. Never zero.
+long DXDisplayHz()
+{
+	return g_displayHz;
 }
 
 long DXChangeVideoMode()

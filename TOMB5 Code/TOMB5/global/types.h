@@ -2686,11 +2686,26 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 *   1  60, the default. One tick per present; ControlPhase's own
 	 *      accumulator spends two of them per logic step and therefore runs
 	 *      the game at thirty out of sixty presents.
-	 *   2  reserved for the display's own refresh rate (a later order) and
-	 *      read back as 1 until then. There is no uncapped mode.
+	 *   2  the display's own refresh rate (#148, order 6). The present waits
+	 *      for the panel instead of for a tick, so the picture rate is 60,
+	 *      120 or 144 - whatever the monitor runs at - while the game keeps
+	 *      its thirty steps. It needs VSync: without a blocking present
+	 *      nothing would bound the loop, so it falls back to 1 and says so
+	 *      in the log. There is no uncapped mode.
 	 *
 	 * Takes effect at the next frame - no level restart, nothing reloaded. */
 	ulong fps_mode;
+
+	/* WHETHER THE PRESENT WAITS FOR THE DISPLAY (#148, order 6). On by
+	 * default. It ends the tearing, and it takes the busy-wait out of
+	 * S_DumpScreen - at fps_mode 2 the present itself is the pacing and the
+	 * `while (!Sync());` spin is not entered at all.
+	 *
+	 * Unlike every other row on the options pages, this one is read when the
+	 * DEVICE IS MADE (specific\dxshell.cpp, DXCreate): at startup, on
+	 * Alt+Enter and on a resolution change. Changing it mid-game writes the
+	 * registry and takes effect the next time the game starts. */
+	ulong vsync;
 	ulong hd_texture_budget_mb;	//0 = work it out from the card's own texture memory (#123, S6),
 								//otherwise the cap in mebibytes. Over it, the largest pages
 								//give up their largest mip level - never a whole page.

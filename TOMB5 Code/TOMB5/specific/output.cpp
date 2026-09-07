@@ -1285,11 +1285,143 @@ void aCalcColorSplit(long col, long* pC, long* pS)
  * output.h says why the default has to stay two. */
 long gPresentMinTicks = 2;
 
+/* THE DISPLAY-BOUND RATE, AND THE TWO WAYS IT CANNOT BE HONOURED (#148,
+ * order 6).
+ *
+ * fps_mode 2 means "as often as the panel refreshes". The engine does not
+ * MEASURE that rate and then wait for it - it hands the waiting to
+ * Direct3D: with D3DPRESENT_INTERVAL_ONE the present itself blocks until the
+ * display is ready, so the loop runs at 60, 120 or 144 by itself and the
+ * `while (!Sync());` spin is not entered at all.
+ *
+ * Which is why the mode is only ever active with a device that really has
+ * that interval. Two things can take it away:
+ *
+ *   THE OPTION IS OFF, or the adapter did not offer the interval. DXCreate
+ *   knows this and DXVSyncActive() answers it. Without a blocking present
+ *   there would be nothing to bound the loop at all, and an uncapped frame
+ *   rate is exactly what the user ruled out ("it can damage the GPU"), so
+ *   the mode falls back to fps_mode 1 - the sixty hertz spin - and says so
+ *   in the log, once.
+ *
+ *   THE DRIVER OVERRODE IT. A control panel set to "vsync off, application
+ *   controlled: no" leaves the device claiming the interval while Present
+ *   returns at once. That cannot be asked - it can only be measured, which
+ *   is what the watchdog below does, and the fallback is the same one. */
+static bool g_vsyncSaidOnce = false;	// the "needs VSync" line, once a session
+static bool g_vsyncBroken = false;	// measured: the present does not wait
+static __int64 g_wdFreq = 0;
+static __int64 g_wdLast = 0;
+static long g_wdFast = 0;
+
+long ActiveFpsMode()
+{
+	if (tomb5.fps_mode >= 2)
+	{
+		if (DXVSyncActive() && !g_vsyncBroken)
+			return 2;
+
+		if (!g_vsyncSaidOnce)
+		{
+			g_vsyncSaidOnce = true;
+			Log("#148: frame rate \"Display\" needs VSync and the present does not wait - running at 60");
+		}
+
+		return 1;
+	}
+
+	return (long)tomb5.fps_mode;
+}
+
 long TargetPresentHz()
 {
-	// fps_mode 2 (the display's own refresh) is reserved for a later order
-	// and is read back as 1 - see load_new_tomb5_settings.
-	return tomb5.fps_mode == 1 ? 60 : 30;
+	const long mode = ActiveFpsMode();
+
+	if (mode == 2)
+		return DXDisplayHz();
+
+	return mode == 1 ? 60 : 30;
+}
+
+/* THE SLOT THE PRESENT THAT JUST RAN ASKED FOR, in milliseconds - the one
+ * definition, so that FPSLOG (specific\hd\hd_level.cpp) and PROFLOG
+ * (specific\profile.cpp) cannot drift apart on it.
+ *
+ * gPresentMinTicks is how many 1/60 s ticks S_DumpScreen waited for, so two
+ * ticks is 33.3 ms and one is 16.7. ZERO is the display-bound frame: it
+ * waited for no tick at all because the present waited for the panel, and its
+ * slot is therefore the panel's own period. */
+double PresentSlotMs()
+{
+	if (gPresentMinTicks <= 0)
+	{
+		const long hz = TargetPresentHz();
+
+		return 1000.0 / (double)(hz > 0 ? hz : 60);
+	}
+
+	return (double)gPresentMinTicks * 1000.0 / 60.0;
+}
+
+/* IS THE PRESENT REALLY WAITING? Called once per display-bound present.
+ *
+ * A present that returns in less than HALF the panel's period did not wait for
+ * the panel: with the interval honoured they land on the period, and half of
+ * it is far outside anything jitter can reach. One of those means nothing;
+ * six hundred in a row is a driver that has overridden the interval, and then
+ * the engine is running uncapped without ever having asked to. Ten seconds'
+ * worth at 60 Hz, four at 144 - long enough that nothing normal trips it,
+ * short enough that this is a moment and not a session.
+ *
+ * ONCE IT HAS FIRED IT STAYS FIRED, for the session. The fallback takes the
+ * frame back to the sixty hertz spin, and the spin means this function is not
+ * called again - so there is nothing that could measure a recovery, and a
+ * flag that could go back and forth would spend hundreds of frames uncapped
+ * on every swing. A restart is the way back, and the log line says so.
+ *
+ * A MINIMISED WINDOW IS NOT A BROKEN DRIVER. Present on an iconic window can
+ * return at once with nothing to compose against; the run is dropped rather
+ * than counted, so coming back from the taskbar does not cost the player
+ * their setting.
+ *
+ * It costs one QueryPerformanceCounter and one IsIconic per present, and only
+ * in this mode. */
+static void NoteDisplayBoundPresent()
+{
+	__int64 now;
+	double ms, period;
+
+	if (!g_wdFreq && !QueryPerformanceFrequency((LARGE_INTEGER*)&g_wdFreq))
+		return;
+
+	if (App.hWnd && IsIconic(App.hWnd))
+	{
+		g_wdLast = 0;
+		g_wdFast = 0;
+		return;
+	}
+
+	QueryPerformanceCounter((LARGE_INTEGER*)&now);
+
+	if (g_wdLast)
+	{
+		ms = 1000.0 * (double)(now - g_wdLast) / (double)g_wdFreq;
+		period = 1000.0 / (double)DXDisplayHz();
+
+		if (ms < period * 0.5)
+			g_wdFast++;
+		else
+			g_wdFast = 0;
+
+		if (g_wdFast > 600 && !g_vsyncBroken)
+		{
+			g_vsyncBroken = true;
+			Log("#148: the present is not waiting for the display (%.2f ms against %.2f) "
+				"- the frame rate falls back to 60 for this session", ms, period);
+		}
+	}
+
+	g_wdLast = now;
 }
 
 /* WHAT DRAWPHASEGAME'S OWN PRESENT MAY WAIT FOR (#148, order 1b).
@@ -1325,13 +1457,23 @@ long TargetPresentHz()
  * ticks. */
 long GameFrameMinTicks()
 {
-	if (tomb5.fps_mode != 1)
+	const long mode = ActiveFpsMode();
+
+	if (mode == 0)
 		return 2;
 
 	if (gfLevelId == LVL5_TITLE || InventoryActive)
 		return 2;
 
-	return 1;
+	/* ZERO IS NOT "AS FAST AS POSSIBLE" (#148, order 6). It is "do not wait
+	 * for a tick, because the PRESENT waits" - fps_mode 2 is only ever
+	 * active with a device that blocks in Present (see ActiveFpsMode), so
+	 * the spin below has nothing left to do and the frame is paced by the
+	 * panel. At 144 Hz two frames out of three then come back from Sync()
+	 * with no whole tick at all, which is exactly right: ControlPhase(0)
+	 * runs no logic step and the frame is drawn from the clock instead
+	 * (game\interpolate.cpp, InterpTickFraction). */
+	return mode == 2 ? 0 : 1;
 }
 
 long S_DumpScreen()
@@ -1357,16 +1499,6 @@ long S_DumpScreen()
 	if (gPresentMinTicks >= 2)
 		InterpNoteClassicPresent();
 
-	n = Sync();
-
-	while (n < gPresentMinTicks)
-	{
-		ProfBegin(PROF_SPIN);
-		while (!Sync());	//wait for sync
-		ProfEnd(PROF_SPIN);
-		n++;
-	}
-
 	/* R12 (#148, order 3). GnFrameCounter is read as a CLOCK, not as a
 	 * frame number: game\text.cpp blinks a string on `GnFrameCounter & 8`,
 	 * S_DrawPickup spins the pickup on `(GnFrameCounter & 0x7F) << 9` and
@@ -1376,10 +1508,72 @@ long S_DumpScreen()
 	if (!InterpIsTweenFrame())
 		GnFrameCounter++;
 
-	ProfBegin(PROF_FLIP);
-	_EndScene();
-	DXShowFrame();
-	ProfEnd(PROF_FLIP);
+	if (gPresentMinTicks <= 0)
+	{
+		/* THE DISPLAY-BOUND PRESENT (#148, order 6), AND THE CLOCK IS READ
+		 * ON THE OTHER SIDE OF IT.
+		 *
+		 * Every other present in the engine reads the clock first and then
+		 * flips, because the WAIT is the read: `while (n < min) while
+		 * (!Sync());` is the pacing and the measurement in one. Here the
+		 * wait is inside Present - D3DPRESENT_INTERVAL_ONE holds it until
+		 * the panel is ready - and a Sync() taken BEFORE it would miss the
+		 * whole of that wait. The ticks spent waiting would be credited to
+		 * the NEXT frame instead, a frame late, and ControlPhase would run
+		 * its logic step a frame after the tick it belongs to.
+		 *
+		 * That is not a rounding error, it is the difference between a
+		 * smooth mode and a stuttering one. The blend factor is
+		 * `(framecount + subTick + 1) / 2` (interpolate_math.h) and it stays
+		 * inside [0,1) - never clamped to the newest state, i.e. never
+		 * stalling - exactly as long as the accumulator and the sub-tick
+		 * remainder are read from the SAME moment. Reading the clock after
+		 * the flip is what makes them so: every whole tick that has passed
+		 * is in the accumulator and what is left over is under one tick.
+		 * Read before the flip, up to a whole frame's worth of time sits in
+		 * neither of them, the factor asks for a state the logic has not
+		 * reached, and the picture stands still for a frame at every logic
+		 * step.
+		 *
+		 * The watchdog is here for the reason it exists: this branch is the
+		 * one place in the engine that waits for nothing of its own, so if
+		 * the present is not really waiting either, nothing bounds the loop.
+		 *
+		 * PROF_SPIN IS EMPTY IN THIS MODE and PROF_FLIP carries the wait,
+		 * which is the honest place for it - the CPU is inside the driver,
+		 * not burning a core in a loop of ours. */
+		NoteDisplayBoundPresent();
+
+		ProfBegin(PROF_FLIP);
+		_EndScene();
+		DXShowFrame();
+		ProfEnd(PROF_FLIP);
+
+		n = Sync();
+	}
+	else
+	{
+		// Not display-bound: the watchdog's interval is dropped so that a
+		// menu in the middle of a session is not measured as one enormous
+		// frame when the game comes back to it.
+		g_wdLast = 0;
+
+		n = Sync();
+
+		while (n < gPresentMinTicks)
+		{
+			ProfBegin(PROF_SPIN);
+			while (!Sync());	//wait for sync
+			ProfEnd(PROF_SPIN);
+			n++;
+		}
+
+		ProfBegin(PROF_FLIP);
+		_EndScene();
+		DXShowFrame();
+		ProfEnd(PROF_FLIP);
+	}
+
 	ProfPresent();
 	App.dx.DoneBlit = 1;
 	return n;
@@ -1568,15 +1762,25 @@ void S_OutputPolyList()
 	{
 		sprintf(buf, "%dx%d", App.dx.dwRenderWidth, App.dx.dwRenderHeight);
 		PrintString(8, App.dx.dwRenderHeight - 8, 6, buf, 0);
-		/* R15 (#148, order 1): the caption counts down once per DRAWN frame,
-		 * and its step is worked out from the measured rate so that the count
-		 * winmain.cpp starts it with is always the same four seconds. At 60 Hz
-		 * the vanilla `30 / App.fps` truncates to zero and the caption would
-		 * never go away again, so the numerator follows the target rate - and
-		 * the start count follows it in winmain.cpp, which is what keeps the
-		 * four seconds four seconds. At fps_mode 0 this is `30 / App.fps`, the
-		 * line as it always was. */
-		resChangeCounter -= long(TargetPresentHz() / App.fps);
+		/* R15, AND IT IS A TICK COUNTER NOW (#148, orders 1 and 6).
+		 *
+		 * Vanilla counted 120 DRAWN frames, which was four seconds because
+		 * thirty was the only rate there was. Order 1 kept the frames and
+		 * scaled the step by the measured rate - `TargetPresentHz() /
+		 * App.fps` - which holds at 30 and at 60 but has a hole in it that
+		 * the display-bound rate would fall straight into: the ratio is an
+		 * integer division, so a measured rate a hair ABOVE the target
+		 * truncates the step to zero and the caption never leaves the
+		 * screen. With the panel pacing the frames that is not a corner
+		 * case, it is every second reading.
+		 *
+		 * So it counts what it always meant: 120 LOGIC TICKS, the same
+		 * criterion as every other duration in order 3. Four seconds at any
+		 * frame rate, no measured rate in it at all, and at fps_mode 0 - one
+		 * step per frame at thirty frames a second - it is vanilla's own
+		 * 120 frames to the tick. */
+		if (!InterpIsTweenFrame())
+			resChangeCounter--;
 
 		if (resChangeCounter < 0)
 			resChangeCounter = 0;

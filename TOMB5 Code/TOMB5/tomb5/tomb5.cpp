@@ -59,6 +59,33 @@ char tomb5_hd_install_tr3[260];
 // table, and because there may one day be a third answer.
 char tomb5_hd_texture_format[16];
 
+/* THE ONE OPTION THE DEVICE NEEDS BEFORE THERE ARE OPTIONS (#148, order 6).
+ *
+ * D3DPRESENT_INTERVAL_ONE is a device-CREATION parameter, and the first
+ * device is created in WinMain (specific\winmain.cpp) - while
+ * init_tomb5_stuff, which reads every tomb5 option, runs on the game thread
+ * that is started afterwards. So at the moment the first device is made,
+ * tomb5.vsync still holds the zero it was loaded with, and the option would
+ * only take hold on an Alt+Enter.
+ *
+ * This reads that one value ahead of time, READ-ONLY: REG_PeekLong creates no
+ * key, which is the whole point - OpenRegistry would create the tomb5 key
+ * here and init_tomb5_stuff's first-run branch, which writes every default
+ * there is, would never run again. On a first start the key is not there, the
+ * peek misses and the default below is the same 1 the first-run branch will
+ * write a moment later.
+ *
+ * Everything else about the option is ordinary: init_tomb5_stuff reads it
+ * again with the rest, the menu row writes it, and the next device made picks
+ * it up. */
+void load_tomb5_present_settings()
+{
+	ulong v = 1;
+
+	REG_PeekLong("tomb5", "vsync", v);
+	tomb5.vsync = v > 1 ? 1 : v;
+}
+
 void init_tomb5_stuff()
 {
 	char buf[40];
@@ -209,6 +236,10 @@ void init_tomb5_stuff()
 		tomb5.fps_mode = 1;								//60, the default (#148)
 		REG_WriteLong(buf, tomb5.fps_mode);
 
+		sprintf(buf, "vsync");
+		tomb5.vsync = 1;								//on (#148, order 6)
+		REG_WriteLong(buf, tomb5.vsync);
+
 		sprintf(buf, "hd_texture_budget_mb");
 		tomb5.hd_texture_budget_mb = 0;					//work it out (#123, S6)
 		REG_WriteLong(buf, tomb5.hd_texture_budget_mb);
@@ -340,14 +371,21 @@ void init_tomb5_stuff()
 		sprintf(buf, "hd_reflect");
 		REG_ReadBool(buf, tomb5.hd_reflect, 1);
 
-		/* #148: 0 is 30 and 1 is 60. 2 is reserved for the display's own
-		 * refresh rate and is not built yet, so a hand-typed 2 - and anything
-		 * above it - reads back as the default rather than as a mode that
-		 * does not exist. */
+		/* #148: 0 is 30, 1 is 60 and 2 is the display's own refresh rate
+		 * (order 6). Anything above 2 is not a mode that exists and reads
+		 * back as the default. */
 		sprintf(buf, "fps_mode");
 		REG_ReadLong(buf, tomb5.fps_mode, 1);
-		if (tomb5.fps_mode > 1)
+		if (tomb5.fps_mode > 2)
 			tomb5.fps_mode = 1;
+
+		/* #148, order 6. Read BEFORE the device is made - DXCreate takes the
+		 * present interval from it (specific\dxshell.cpp) and load_new_tomb5_
+		 * settings runs in WinMain ahead of the first DXCreate. */
+		sprintf(buf, "vsync");
+		REG_ReadLong(buf, tomb5.vsync, 1);
+		if (tomb5.vsync > 1)
+			tomb5.vsync = 1;
 
 		sprintf(buf, "hd_texture_budget_mb");
 		REG_ReadLong(buf, tomb5.hd_texture_budget_mb, 0);
@@ -482,6 +520,9 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "fps_mode");
 	REG_WriteLong(buf, tomb5.fps_mode);
+
+	sprintf(buf, "vsync");
+	REG_WriteLong(buf, tomb5.vsync);
 
 	CloseRegistry();
 }

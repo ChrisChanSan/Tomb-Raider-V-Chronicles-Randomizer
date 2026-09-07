@@ -18,6 +18,10 @@ bool OpenRegistry(LPCSTR SubKeyName);
 void REG_CloseKey();
 void CloseRegistry();
 bool REG_KeyWasCreated();
+/* One DWORD, read-only, creating nothing (#148, order 6) - for a setting that
+ * is needed before the options are read. The long note over the definition
+ * says why it may not go through OpenRegistry. */
+bool REG_PeekLong(LPCSTR SubKeyName, LPCSTR ValueName, ulong& value);
 void REG_WriteLong(char* SubKeyName, ulong value);
 void REG_WriteBool(char* SubKeyName, bool value);
 bool REG_ReadLong(char* SubKeyName, ulong& value, ulong defaultValue);

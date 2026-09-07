@@ -29,6 +29,7 @@
 #include "file.h"
 #include "fmv.h"
 #include "setupdlg.h"
+#include "../tomb5/tomb5.h"	// load_tomb5_present_settings (#148, order 6)
 
 WINAPP App;
 long resChangeCounter;
@@ -280,12 +281,11 @@ void WinProcessCommands(long cmd)
 		ResumeThread((HANDLE)MainThread.handle);
 		App.dx.WaitAtBeginScene = 0;
 		Log("Game Thread Resumed");
-		/* R15 (#148, order 1): four seconds of the resolution caption, counted
-		 * in DRAWN frames. 120 was four seconds while thirty was the only
-		 * rate there was; at fps_mode 1 the same four seconds are twice as
-		 * many frames, and S_OutputPolyList takes its step off the same rate.
-		 * At fps_mode 0 this is 120, exactly as it was. */
-		resChangeCounter = 4 * TargetPresentHz();
+		/* R15 (#148, orders 1 and 6): four seconds of the resolution caption.
+		 * It is counted in LOGIC TICKS, which are thirty a second at every
+		 * frame rate, so this is vanilla's own 120 again and needs no rate in
+		 * it - see the note beside the countdown in S_OutputPolyList. */
+		resChangeCounter = 120;
 	}
 }
 
@@ -677,6 +677,12 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	App.dx.InScene = 0;
 	App.fmv = 0;
 	dm = &G_dxinfo->DDInfo[G_dxinfo->nDD].D3DDevices[G_dxinfo->nD3D].DisplayModes[G_dxinfo->nDisplayMode];
+
+	/* #148, order 6: the present interval is a device-creation parameter, so
+	 * the VSync option has to be known one line before the device is made -
+	 * and init_tomb5_stuff, which reads all the others, runs on the game
+	 * thread that is only started at the bottom of this function. */
+	load_tomb5_present_settings();
 
 	if (!DXCreate(dm->w, dm->h, dm->bpp, App.StartFlags, &App.dx, App.hWnd, WS_OVERLAPPEDWINDOW))
 	{

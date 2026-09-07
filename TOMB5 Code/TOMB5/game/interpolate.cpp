@@ -23,6 +23,8 @@
 #include "lara.h"			// lara.poisoned - the R10 guard
 #include "../specific/3dmath.h"		// phd_LookAt, CamRoll
 #include "../specific/function_stubs.h"	// Log, gLogEnabled
+#include "../specific/output.h"		// ActiveFpsMode, GameFrameMinTicks (#148, order 6)
+#include "../specific/time.h"		// TIME_SubTick (#148, order 6)
 #include "../tomb5/tomb5.h"		// tomb5.fps_mode
 
 namespace
@@ -157,6 +159,27 @@ namespace
 	 * it sit on both sides of DrawPhaseGame. See the note in the header. */
 	bool g_tween = false;
 
+	/* ORDER 6 - HOW THAT LATCH IS SET WHEN THE FRAMES DO NOT COME IN PAIRS.
+	 *
+	 * At sixty the cadence is two frames per tick and `alpha < 1` tells them
+	 * apart by itself. Bound to a 144 Hz panel it is four or five frames per
+	 * tick at no fixed phase, and `alpha < 1` would then be true on nearly
+	 * every one of them: every counter in the build would stop.
+	 *
+	 * So the ticks are COUNTED. g_tickSerial steps once per logic tick, in
+	 * InterpCapturePrev, which is the first statement of the tick body; a
+	 * drawn frame carries a tick when the serial has moved since the last
+	 * frame that did, and claims it by writing the serial down. Exactly one
+	 * frame per logic tick therefore steps the counters, whatever the refresh
+	 * rate is - and a hitch that runs three ticks in one frame steps them
+	 * once, which is what thirty hertz does too.
+	 *
+	 * Only fps_mode 2 uses this. At fps_mode 1 the parity rule stands
+	 * untouched, down to WHICH of the two frames carries the step, so that
+	 * mode is unchanged to the frame. */
+	unsigned long g_tickSerial = 0;
+	unsigned long g_steppedSerial = 0;
+
 	// The logic RNG over a tween frame - see the header's note on rand_1.
 	long g_seed = 0;
 	bool g_seedSaved = false;
@@ -170,6 +193,19 @@ namespace
 	 * -log, and every counter below is an int being added to. */
 	int g_secFrames = 0;
 	int g_secTween = 0;		// frames drawn at an alpha other than 1
+
+	/* ORDER 6: THE BLEND FACTOR AS A DISTRIBUTION, not as a formula.
+	 *
+	 * The line used to work `alpha=` out of the tween count, which was exact
+	 * while the only two factors were a half and a one. Bound to the display
+	 * every frame has a factor of its own, and what says whether the pacing
+	 * is healthy is their SPREAD: at 144 Hz a good second reads roughly
+	 * 0.10 / 0.50 / 0.98 - the whole interval walked evenly - while a
+	 * maximum pinned at 1.00 with a mean near it is the clamp firing, i.e.
+	 * frames arriving faster than the logic has states for. */
+	double g_secAlphaSum = 0;
+	float g_secAlphaMin = 1.0F;
+	float g_secAlphaMax = 0.0F;
 	int g_secItems = 0;		// interpolated items, added over the second
 	double g_secLaraStep = 0;	// |dpos| of lara_item per DRAWN frame
 	int g_secLaraFrames = 0;
@@ -260,6 +296,22 @@ namespace
 	{
 		return n->x != pos->x_pos || n->y != pos->y_pos || n->z != pos->z_pos ||
 			n->xr != pos->x_rot || n->yr != pos->y_rot || n->zr != pos->z_rot;
+	}
+
+	// One drawn frame, and the factor it was drawn at (order 6). The three
+	// ways out of InterpBeginFrame all pass through here so that the
+	// distribution counts the live frames too - a second full of snaps reads
+	// 1.00/1.00/1.00 and says so.
+	void NoteFrameAlpha(float alpha)
+	{
+		g_secFrames++;
+		g_secAlphaSum += alpha;
+
+		if (alpha < g_secAlphaMin)
+			g_secAlphaMin = alpha;
+
+		if (alpha > g_secAlphaMax)
+			g_secAlphaMax = alpha;
 	}
 
 	void CountSnap(SnapWhy why)
@@ -363,12 +415,15 @@ namespace
 	void LogSecond()
 	{
 		if (gLogEnabled && g_secFrames > 0)
-			Log("INTERPLOG level=%d at=%ds frames=%d tween=%d alpha=%.2f "
+			Log("INTERPLOG level=%d at=%ds frames=%d tween=%d "
+				"alpha=%.2f/%.2f/%.2f "
 				"lara_step=%.1f items=%.1f snaps=%d (teleport=%d roomjump=%d "
 				"object=%d invalid=%d) camcut=%d cutscene=%d "
 				"pose_items=%.1f pose_skips=%.1f pose_hd=%.1f lara_pose=%d/%d",
 				(int)gfLevelId, g_at, g_secFrames, g_secTween,
-				(double)(g_secFrames - g_secTween * 0.5) / g_secFrames,
+				(double)(g_secAlphaMin <= g_secAlphaMax ? g_secAlphaMin : 0.0F),
+				g_secAlphaSum / g_secFrames,
+				(double)g_secAlphaMax,
 				g_secLaraFrames ? g_secLaraStep / g_secLaraFrames : 0.0,
 				(double)g_secItems / g_secFrames,
 				g_snapTeleport + g_snapRoomJump + g_snapObject + g_snapInvalid,
@@ -407,6 +462,9 @@ namespace
 		g_at++;
 		g_secFrames = 0;
 		g_secTween = 0;
+		g_secAlphaSum = 0;
+		g_secAlphaMin = 1.0F;
+		g_secAlphaMax = 0.0F;
 		g_secItems = 0;
 		g_secLaraStep = 0;
 		g_secLaraFrames = 0;
@@ -477,6 +535,10 @@ namespace
  * sixty would have no previous state to blend from. */
 void InterpCapturePrev()
 {
+	// The tick counter of order 6. One step per logic tick, at every frame
+	// rate, and the only place it is written.
+	g_tickSerial++;
+
 	if (items)
 	{
 		for (int i = 0; i < MAX_ITEMS; i++)
@@ -530,11 +592,50 @@ void InterpCapturePrev()
 	g_prevCam.valid = 1;
 }
 
+/* HOW FAR THIS FRAME STANDS PAST THE LAST LOGIC TICK, as a fraction of a
+ * logic step (#148, order 6). Zero straight after a tick, one where the next
+ * one is due, and clamped at both ends.
+ *
+ * It is the blend factor of the display-bound mode and it is built out of two
+ * numbers that are already there - ControlPhase's accumulator and the
+ * remainder in the engine's own clock. The derivation is written out over
+ * InterpRefreshAlpha in interpolate_math.h, which is where the arithmetic
+ * lives so that InterpTest can check it without a game.
+ *
+ * Exported because it is the honest answer to "how far between two ticks are
+ * we", which is a question the log lines and any later order may ask. At
+ * fps_mode 0 and 1 nothing calls it. */
+float InterpTickFraction()
+{
+	return InterpRefreshAlpha(framecount, TIME_SubTick());
+}
+
 float InterpAlphaNow()
 {
+	/* THE DISPLAY-BOUND RATE (order 6), and it is asked first because it is
+	 * the only mode that needs a clock.
+	 *
+	 * ActiveFpsMode is the option AS THE ENGINE CAN HONOUR IT: it is 2 only
+	 * with a device whose present really waits for the panel, so this branch
+	 * cannot be reached by a build that would then run uncapped.
+	 *
+	 * GameFrameMinTicks decides per FRAME rather than per mode, and the frame
+	 * that is not a display-bound one is drawn live: the title menu and the
+	 * inventory keep their two ticks per present at every setting (order 1b),
+	 * and a frame drawn at a factor taken from a clock that is pacing
+	 * something else would judder the title's own flyby. */
+	const long mode = ActiveFpsMode();
+
+	if (mode == 2)
+		return GameFrameMinTicks() == 0 ? InterpTickFraction() : 1.0F;
+
 	/* fps_mode 0 IS THE ENGINE AS IT WAS. One test, and every line below
-	 * this file's three entry points is dead code for that build. */
-	if (tomb5.fps_mode != 1)
+	 * this file's three entry points is dead code for that build.
+	 *
+	 * It is ActiveFpsMode and not tomb5.fps_mode, so that a "Display" setting
+	 * that cannot be honoured falls back to the sixty hertz cadence WITH its
+	 * interpolation rather than to a duplicated frame. */
+	if (mode != 1)
 		return 1.0F;
 
 	/* THE CADENCE, WITHOUT A CLOCK OF ITS OWN.
@@ -621,8 +722,22 @@ void InterpBeginFrame(float alpha)
 	 * and the counters of order 3 must stop on them just the same. Reading
 	 * `alpha` rather than what the snapshot did is what makes that true.
 	 *
-	 * fps_mode 0 hands 1 in and this is false for the whole run. */
-	g_tween = (alpha < 1.0F);
+	 * fps_mode 0 hands 1 in and this is false for the whole run.
+	 *
+	 * AND AT fps_mode 2 IT IS THE TICK COUNTER (order 6). `alpha < 1` is a
+	 * statement about the cadence and it only means what it says while the
+	 * cadence is two frames to a tick. Bound to the panel there are four or
+	 * five, so the frame that carries the tick claims it from the serial
+	 * instead - see the note over g_tickSerial. */
+	if (ActiveFpsMode() == 2 && GameFrameMinTicks() == 0)
+	{
+		const bool carries = g_tickSerial != g_steppedSerial;
+
+		g_steppedSerial = g_tickSerial;
+		g_tween = !carries;
+	}
+	else
+		g_tween = (alpha < 1.0F);
 
 	/* AND THE LOGIC RNG IS PUT ASIDE (order 3). See the header: several
 	 * drawing routines call GetRandomControl, which is the SIMULATION's
@@ -670,7 +785,7 @@ void InterpBeginFrame(float alpha)
 	{
 		if (gLogEnabled)
 		{
-			g_secFrames++;
+			NoteFrameAlpha(alpha);
 			NoteDrawnLara();
 		}
 
@@ -681,7 +796,7 @@ void InterpBeginFrame(float alpha)
 	{
 		if (gLogEnabled)
 		{
-			g_secFrames++;
+			NoteFrameAlpha(alpha);
 			g_snapCutscene++;
 			NoteDrawnLara();
 		}
@@ -857,7 +972,7 @@ void InterpBeginFrame(float alpha)
 
 	if (gLogEnabled)
 	{
-		g_secFrames++;
+		NoteFrameAlpha(alpha);
 		g_secTween++;
 		g_secItems += g_touchedItems;
 		NoteDrawnLara();
@@ -994,6 +1109,14 @@ void InterpInvalidate(const char* why)
 	 * be left standing still. */
 	g_tween = false;
 	g_seedSaved = false;
+
+	/* And order 6's counter starts level with the ticks again. What follows
+	 * an invalidation is a level start or the return from a menu, and the
+	 * first frame after either is a live one whose counters have just been
+	 * stepped by a thirty hertz present; letting the serial stand would
+	 * either repeat that step or lose one, and lost is the harmless half of
+	 * a choice that is worth at most one sixtieth of a second. */
+	g_steppedSerial = g_tickSerial;
 
 	if (gLogEnabled)
 	{

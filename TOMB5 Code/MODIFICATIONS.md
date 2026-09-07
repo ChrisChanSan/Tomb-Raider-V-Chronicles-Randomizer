@@ -2977,7 +2977,9 @@ hidden: the classic path culls fog at 45 degrees off axis and we do not.
   static carries its material with bit 15 set and a counter in bits 8 to 14
   (`0x8003` is RICH3's material 3). Masking would be more general and is not
   done: over the 15 files the only low bytes that ever appear with the high
-  bit are 0, 3 and 14, and none of them is a cut-out material.
+  bit are 0, 3 and 14, and none of them is a cut-out material. (Superseded
+  in fix round H: the material is now read as its low byte everywhere, see
+  the glass paragraph there.)
 
 ---
 

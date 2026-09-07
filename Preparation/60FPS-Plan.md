@@ -182,7 +182,7 @@ draw RNG are separate generators - `GetRandomControl` on `rand_1`,
 Extra drawn frames consume only `rand_2`. They cannot desynchronise
 the game. That is what makes the whole approach provable (see 4).
 
-### 0.5 TROne: no, it has no 60 FPS and nothing to carry over here
+### 0.5 TROne: had no 60 FPS when this plan was written; nothing was carried over
 
 Measured, not assumed:
 
@@ -201,8 +201,22 @@ Measured, not assumed:
   `fixed timestep` across `host`, `games/tr5/glue` and `docs` finds
   only shading interpolation and the 30 Hz clock comments.
 
-TROne renders exactly the 30 Hz frames. There is nothing to borrow, and
-therefore no GPLv3 attribution to add for this work.
+TROne, at the stand this plan was measured against (2026-09-05), renders
+exactly the 30 Hz frames. Nothing was borrowed for orders 1 to 6, and
+therefore no GPLv3 attribution is owed for this work.
+
+**Addendum 2026-09-07.** Todesengel's next stand (branch `abnahme-D`,
+2026-09-06) does carry 60 fps: `host\render\frame_interp.*` and
+`frame_record.*` record the draw list of one 30 Hz tick and replay it
+twice, once blended at t = 0.5 against the previous tick, with the camera
+delta recovered from a static room transform (`D = M_cur * M_prev^-1`),
+quaternion slerp for rotation, `set_room_frac` for sub-unit room
+precision and four jump thresholds. The logic stays at 30 Hz there too.
+Our orders 1 to 6 were designed and built before that stand existed and
+interpolate game state, not the draw list; the two designs share no code.
+Should the room-transform delta or the sub-unit room precision be adopted
+later, that adoption carries a GPLv3 attribution to TROne. The comparison
+is in `Preparation\TROne-Diff-2026-09-07.md`.
 
 ### 0.6 The known pattern (TR1X, OpenLara, the Remasters) - and how it maps onto this tree
 

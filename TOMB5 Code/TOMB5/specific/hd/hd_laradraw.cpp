@@ -39,6 +39,7 @@
 #include "../../game/hair.h"		// hairs
 #include "../../game/camera.h"		// FirstPersonActive
 #include "../../game/gameflow.h"	// gfLevelId, gfLevelFlags
+#include "../../game/interpolate.h"	// InterpFrameAlpha - what this frame was drawn at (#148)
 
 #include <math.h>
 
@@ -1118,10 +1119,16 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	if (gLogEnabled && !g_frame_logged)
 	{
 		g_frame_logged = true;
-		Log("HDLOG frame lara parts=%d(%d this frame) outfit=%s right=%s left=%s "
+		// interp= is what THIS frame was drawn at (#148, order 2): 1.00 for a
+		// frame that landed on a logic tick or a build at fps_mode 0, 0.50
+		// for one drawn halfway between two ticks. It says the HD seam saw
+		// the interpolated root, which is the whole claim of that order -
+		// the HD path was not touched for it and follows off the engine's
+		// own matrix stack.
+		Log("HDLOG frame lara parts=%d(%d this frame) interp=%.2f outfit=%s right=%s left=%s "
 			"holsters=%s/%s back=%s braid=%d mask=%08x mirror=%d "
 			"firstperson=%d neckcut=%d lights=%d dropped=%d speechhead=%s",
-			drawn, g_frame_parts, HDLaraOutfitModel(HDLaraOutfitNow())
+			drawn, g_frame_parts, InterpFrameAlpha(), HDLaraOutfitModel(HDLaraOutfitNow())
 				? HDLaraOutfitModel(HDLaraOutfitNow()) : "-",
 			HDSlotName(now.rightHandSlot) ? HDSlotName(now.rightHandSlot) : "-",
 			HDSlotName(now.leftHandSlot) ? HDSlotName(now.leftHandSlot) : "-",

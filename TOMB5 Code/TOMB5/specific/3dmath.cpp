@@ -23,6 +23,20 @@
 PHD_VECTOR CamPos;
 SVECTOR CamRot;
 
+/* THE ROLL THE VIEW WAS LAST BUILT WITH (#148, order 2).
+ *
+ * Three of the game's cameras hand phd_LookAt a roll that is not zero: the
+ * first person view rolls with the head bone (fpRoll, game\camera.cpp), a
+ * flyby rolls along its track (croll, game\spotcam.cpp) and the cutscene
+ * decoder rolls with the scene. Every other camera is level.
+ *
+ * The interpolator has to rebuild the view matrix per drawn frame and must
+ * rebuild it with the SAME roll the logic tick used, or a first-person frame
+ * would snap upright and back every other frame. Recording it here is the one
+ * place that catches all three, because all three go through this function -
+ * they do not share anything else. */
+short CamRoll = 0;
+
 float one = 2048.0F * float(1 << W2V_SHIFT);
 float mone = 2048.0F;
 
@@ -706,6 +720,7 @@ void phd_LookAt(long xsrc, long ysrc, long zsrc, long xtar, long ytar, long ztar
 	CamPos.x = xsrc;
 	CamPos.y = ysrc;
 	CamPos.z = zsrc;
+	CamRoll = roll;		// #148, order 2 - see the note over the variable
 	phd_GenerateW2V(&viewPos);
 	S_InitD3DMatrix();
 	aSetViewMatrix();

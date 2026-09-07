@@ -347,7 +347,7 @@ costs the game.
 | order | what | new lines (est.) | proof |
 |---|---|---|---|
 | 1. The clock split | `tomb5.fps_mode` in `tomb5_options` (`global\types.h:2631-2685`), registry read/write (`tomb5\tomb5.cpp:200-206, 333-337, 464-468` pattern), a menu row on the options page (`tomb5\troyestuff.cpp:143+`, `first_person_smooth` at `:726-786` is the exact pattern for a multi-value row). `gPresentMinTicks` in `specific\output.cpp:1283`, set and reset around the present in `game\draw.cpp:394-411`. `FPSLOG`'s budget constants (`specific\hd\hd_level.cpp:247-248`) follow `fps_mode`. No interpolation yet. | ~180 | `FPSLOG frames=60` while `GameTimer` still advances 30 a second. The picture is worse than today - every second frame is a duplicate, which is exactly what proves the clock is split and the logic is not. |
-| 2. Root and camera | `game\interpolate.cpp/.h`: the snapshot of 1.2, the snap rules of 1.3, `InterpCapturePrev` / `InterpBeginFrame` / `InterpEndFrame`, and the camera re-`phd_LookAt` per drawn frame (`specific\3dmath.cpp:687`) with R10 guarded. Three call sites. Pose still steps at 30 Hz. | ~420 | Movement per drawn frame halves: a new `INTERPLOG` line per second with mean `|dpos|` of `lara_item` per frame, count of frames with `alpha != 1`, count of snaps. Screenshots of a run and of a turning camera. HD on and HD off must both be smooth - one proof for both, because the HD path was not touched. |
+| 2. Root and camera **- BUILT 2026-09-07, play test open** | `game\interpolate.cpp/.h` and `game\interpolate_math.h`: the snapshot of 1.2, the snap rules of 1.3, `InterpCapturePrev` / `InterpBeginFrame` / `InterpEndFrame`, and the camera re-`phd_LookAt` per drawn frame (`specific\3dmath.cpp:687`) with R10 guarded. Three call sites. Pose still steps at 30 Hz. | ~700 | Movement per drawn frame halves: a new `INTERPLOG` line per second with mean `|dpos|` of `lara_item` per frame, count of frames with `alpha != 1`, count of snaps. Screenshots of a run and of a turning camera. HD on and HD off must both be smooth - one proof for both, because the HD path was not touched. |
 | 3. The per-frame side effects | Guard R1-R12 and R14-R15. The clean shape: a `bool InterpIsTweenFrame()` and an early return, or move the counter to the tick side. R6 (`game\draw.cpp:935-939`) must move into `ControlPhase` - it is game state being mutated from a draw. | ~150 | Fade lengths measured identical at 30 and 60 (count presents from `SetFade` to `DoFade == 2`). Rain falls at the same speed in both modes. Lightning cadence unchanged. |
 | 4. The pose | Give `InterpolateMatrix` / `aInterpolateMatrix` / `InterpolateArmMatrix` / `aInterpolateArmMatrix` (`game\draw.cpp:304-392, 1508-1621`) one float `IM_alpha` in place of the four hard-coded branches; keep `InitInterpolate(frac, rate)` as `IM_alpha = frac/(float)rate` so the four existing cases reproduce bit-close. Add `GetFramesAt(item, prevFrame, curFrame, alpha, frm[2], &blend)` beside `GetFrames` (`:1183`). Feed the pairs in `DrawAnimatingItem` (`:594, 705`), `CalcLaraMatrices` (`game\delstuff.cpp:62-100`) and `HairControl` (`game\hair.cpp:297-345`). When `anim_number` changed between the two ticks, do not blend the pose - blend only the root. | ~350 | A slow walk cycle and a slow ladder climb at 60, side by side with 30, HD and classic. `HDObjectNode`'s `interpolated` branch (`specific\hd\hd_object.cpp:1549-1560`) must be exercised - a counter in `INTERPLOG`. |
 | 5. Particles (optional) | Either snapshot `spark[1024]` + rain + snow and lerp them, or leave them at 30 (they are small, fast and short-lived). Recommended: leave them, and revisit only if the user's eye finds them. | ~200 if done | Two videos of the same waterfall or torch; the user chooses. |
@@ -356,6 +356,57 @@ costs the game.
 
 Orders 1-3 are the shippable unit. Order 4 is the polish. Orders 5-6
 are the user's call.
+
+### Order 2 as built (2026-09-07) - what differs from the plan above
+
+Nothing was dropped. Five things were added or made precise while
+building it, and they are recorded here so that the plan and the tree
+agree:
+
+1. **The camera has to be rebuilt TWICE per tween frame, not once.**
+   1.4 said "re-`phd_LookAt` per drawn frame" and stopped there. The
+   restore needs one too. At sixty every second `ControlPhase` runs no
+   tick at all, so no camera routine runs and nothing else rebuilds the
+   view - the tween frame's matrix would be handed to the next frame,
+   which draws everything at its live position. `InterpEndFrame`
+   therefore calls `phd_LookAt` again with the live eye, which puts
+   `w2v_matrix`, the stack base, `CamPos`, `CamRot`, `D3DMView` and the
+   device transform back to the bit. This is the one thing in the order
+   that would have been a bug in every second frame of the whole game
+   and is invisible in a code review of 1.1 alone.
+
+2. **The roll is recorded in `phd_LookAt`, not read from `fpRoll`
+   alone.** 1.2 asked for an `fpRoll` getter (which exists, `K3`). But
+   three cameras roll - first person, a flyby's `croll`
+   (`spotcam.cpp:511`) and the cutscene decoder - and the only thing
+   they share is `phd_LookAt` itself. It now records what it was handed
+   in `CamRoll`.
+
+3. **Two snap rules the plan did not list.** `object_number` changing
+   in an item slot (a dead enemy's slot handed to a spawn would
+   otherwise be drawn sliding from the grave to the spawn point), and
+   `bUseSpotCam` changing (a flyby beginning or ending is a hard cut and
+   the distance test does not always catch it).
+
+4. **Only things that moved are touched.** 512 item slots, a handful
+   of which travel in any tick. One comparison skips the rest, and it
+   is also what makes `INTERPLOG`'s `items=` a useful number.
+
+5. **The arithmetic is its own header.** `game\interpolate_math.h` has
+   no engine dependency, and `Preparation\Tools\Diagnose\InterpTest.cpp`
+   includes THAT FILE rather than a copy of it - so the offline test
+   cannot drift from the engine. 40 checks, including a sweep of 16,256
+   angle pairs over the wrap and the whole cadence run for a simulated
+   minute at both settings and through a hitch.
+
+One property found while building and worth keeping in mind for order
+3 and order 4: **the frame immediately before a `ControlPhase` that
+runs a tick is always a live one** (walk `framecount`: 0 -> tick -> -1
+-> no tick -> 0 -> tick). So no logic tick reads what a tween frame
+left behind - which matters because `lara_matrices` and
+`lara_joint_matrices` are left behind by the draw and read back by the
+first-person and look cameras. Only a late frame (two ticks or more)
+breaks it, for one frame, on a camera and not on game state.
 
 
 ## 4. Proofs

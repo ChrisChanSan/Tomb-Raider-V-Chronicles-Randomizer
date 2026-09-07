@@ -20,6 +20,7 @@
 #include "pickup.h"
 #include "lot.h"
 #include "gameflow.h"
+#include "interpolate.h"		// the loaded world is no neighbour of the old one (#148, order 2)
 #include "newinv2.h"
 #include "../specific/file.h"
 #include "camera.h"
@@ -1110,6 +1111,13 @@ void RestoreLevelData(long FullSave)
 	}
 
 	JustLoaded = 1;
+
+	/* THE WHOLE WORLD JUST MOVED (#148, order 2). Every item, the braid and
+	 * the camera have been written out of the save file; the state the
+	 * interpolator holds is from wherever the player was standing when they
+	 * pressed load, and blending into the loaded position would draw one
+	 * frame of the entire level sliding into place. */
+	InterpInvalidate("savegame loaded");
 }
 
 void sgSaveGame()

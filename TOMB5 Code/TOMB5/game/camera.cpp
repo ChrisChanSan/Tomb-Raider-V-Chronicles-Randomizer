@@ -1463,6 +1463,23 @@ bool FirstPersonActive()
 	return fpHeadHidden != 0;
 }
 
+/* THE HEAD'S OWN ROLL (#148, order 2, risk K3).
+ *
+ * fpRoll is worked out from the head bone's up vector once per LOGIC tick,
+ * inside FirstPersonCamera, and the filters that produce it (fpVel, fpSpd,
+ * fpRel, #134) are tuned as per-tick exponentials and must not be moved or
+ * run twice. The interpolator therefore leaves the whole camera alone and
+ * takes only its OUTPUT - camera.pos, camera.target and this - to blend
+ * between two ticks. It is a short and it wraps, so it is blended the short
+ * way round like any other angle.
+ *
+ * A getter and not an extern, because fpRoll is deliberately private to this
+ * file: everything that writes it lives here. */
+short GetFirstPersonRoll()
+{
+	return fpRoll;
+}
+
 static bool FirstPersonEnabled()
 {
 	if (!tomb5.first_person)

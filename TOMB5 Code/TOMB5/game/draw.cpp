@@ -26,6 +26,7 @@
 #include "../specific/polyinsert.h"
 #include "../specific/function_stubs.h"
 #include "../specific/profile.h"		// PROFLOG's frame bracket (#148)
+#include "interpolate.h"		// the frame between two logic ticks (#148, order 2)
 #include "../specific/hd/hd_level.h"
 #include "../specific/hd/hd_object.h"
 #include "../specific/lighting.h"
@@ -395,6 +396,26 @@ void aInterpolateMatrix()
 long DrawPhaseGame()
 {
 	ProfileFrameBegin();
+
+	/* THE IN-BETWEEN FRAME (#148, order 2).
+	 *
+	 * Order 1 left every second frame a duplicate of the one before it -
+	 * sixty presents of thirty distinct pictures. This is the line that
+	 * fills them in: it writes the halfway point between the last two logic
+	 * ticks into items[], effects[], the braid and the camera, and
+	 * everything below draws from those globals without knowing anything
+	 * has happened. InterpEndFrame, at the bottom of this function, puts the
+	 * original bytes back before the next tick reads them.
+	 *
+	 * It stands ABOVE CalcLaraMatrices on purpose - that is the first thing
+	 * in the frame that reads lara_item->pos, and the HD seam takes Lara's
+	 * matrices from what it produces. The whole of specific\hd\ therefore
+	 * follows this order with not one line changed in it.
+	 *
+	 * At fps_mode 0, InterpAlphaNow returns 1 and this call writes nothing
+	 * at all. */
+	InterpBeginFrame(InterpAlphaNow());
+
 	ProfBegin(PROF_GATHER);
 	CalcLaraMatrices(0);
 	phd_PushUnitMatrix();
@@ -444,6 +465,13 @@ long DrawPhaseGame()
 	camera.number_frames = S_DumpScreen();
 
 	S_AnimateTextures(camera.number_frames);
+
+	/* AND THE INTERPOLATION IS PUT BACK (#148, order 2), inside the profile
+	 * bracket so that what it costs is in `work` like everything else the
+	 * frame did. Every value InterpBeginFrame overwrote goes back to the
+	 * byte, and the view matrix is rebuilt from the live camera - the next
+	 * ControlPhase may run no tick at all, and then nothing else would. */
+	InterpEndFrame();
 
 	/* ProfileFrameEnd BEFORE the restore, on purpose: it judges this frame
 	 * against the slot this frame actually asked for, and gPresentMinTicks is

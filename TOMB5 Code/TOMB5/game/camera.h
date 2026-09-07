@@ -29,6 +29,7 @@ void BinocularCamera(ITEM_INFO* item);
 void LookCamera(ITEM_INFO* item);
 void FirstPersonCamera(ITEM_INFO* item);
 bool FirstPersonActive();		// is first person running right now? (head and braid stay hidden then)
+short GetFirstPersonRoll();		// the head bone's roll, for the interpolator (#148, order 2)
 
 extern CAMERA_INFO camera;
 extern SHATTER_ITEM ShatterItem;

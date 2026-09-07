@@ -1,10 +1,10 @@
 # The tools, and which one answers which question
 
 Written 2026-08-30 from the folder itself, four tools added 2026-09-03, two
-more 2026-09-05 and `SaveDiff` on 2026-09-07. Forty-one diagnostic tools sit
-in `Diagnose\`, thirty-two of them with a build script beside them, and until
-now there was no index at all - so the way to find the right one was to
-already know it existed.
+more 2026-09-05, `SaveDiff` and `InterpTest` on 2026-09-07. Forty-two
+diagnostic tools sit in `Diagnose\`, thirty-three of them with a build script
+beside them, and until now there was no index at all - so the way to find
+the right one was to already know it existed.
 
 Every tool prints its own usage when started without arguments, and every
 one carries a header comment saying why it was written. That header is the
@@ -81,6 +81,7 @@ else - with their own name substituted.
 | Tool | Script | What it answers |
 |---|---|---|
 | `SaveDiff` | bsd | two savegames compared **field by field, by name**. Prints `IDENTICAL` when the files match to the byte, otherwise one line per differing field with both values - so "played four seconds longer" (`Game.Timer`, the clock, Lara's position) is told apart at a glance from "the game ran differently" (`Level.Kills`, the ammunition counts, `Lara.air`). Written for the frame-rate proof: the draw path has its own RNG that the simulation never reads, so the same seed and the same inputs must arrive at the same state at 30 and at 60 frames a second, and a savegame is that state written down. The recipe is in `docs/Engine-Manual.md` under *Frame rate*.<br><br>Takes every offset from the engine's own `global/types.h` with `offsetof`, so it cannot go stale - and is therefore built **x86**, like `BalanceCheck` and `RoomProbe`: the structs are `#pragma pack(1)` but carry pointers, and a pointer is four bytes in the engine. What it cannot name is the savegame *stream* inside `SAVEGAME_INFO::buffer` - that is what `WriteSG` (`game/savegame.cpp`) packed in a variable-length, conditional order - so those are reported as differing byte runs with their offset. |
+| `InterpTest` | bit | the ARITHMETIC of the 60 FPS interpolation (#148, order 2), checked with no game, no level and no device. It **includes the engine's own `TOMB5 Code\TOMB5\game\interpolate_math.h`** rather than a copy of it, so it cannot drift from what the engine does: a change to the lerps or the snap thresholds is a change this test sees. 40 checks - the short-angle lerp over a sweep of 16,256 angle pairs (that every one turns the SHORT way round and lands within a unit of halfway, with the 128 exact half-turns stepped over and asserted on their own), the position lerp over the whole coordinate range of a level, the snap thresholds against the engine's own speeds (a terminal fall interpolates, a sector-wide teleport does not), that a Manhattan sum is never smaller than the true distance, and the cadence: `framecount` and `DrawPhaseGame`'s alpha rule run for a simulated minute at both frame rates and through a hitch - 1800 logic ticks either way, exactly half the frames interpolated at sixty, none at thirty, every drawn step exactly half a tick.<br><br>It exists because a short angle blended the LONG way round is invisible almost all the time and looks like a rendering glitch when it is not: one enemy, facing roughly south, spinning backwards for half a tick on every second frame. That has to be proven at the wrap, and a play test will not put a body on the wrap when you want it to. Prints `40 checks, 0 failed` and returns 0. |
 
 **The Tomb Raider III import**
 | Tool | Script | What it answers |
@@ -155,6 +156,7 @@ are how a player's crash report becomes usable.
 | an HD object or Lara is wrong, or classic when it should not be | `HDLOG` | per level: which slot got which model and why it was refused; Lara's outfit, her parts and the reason for a classic one. Per level's first HD frame: `itemcheck` and `lightcheck` for the objects, `laracheck` and `braidcheck` for Lara |
 | it stuttered, or dropped under the frame rate | `FPSLOG` | one line per second: frames presented, the longest gap, and `logic_ticks=` - what the SIMULATION ran, which must stay 30 whatever the frame rate is (#148) |
 | ...and *why* it stuttered | `PROFLOG` | the same second split into the fifteen phases of a frame (logic, room walk, HD rooms, HD objects, buckets, sort, the wait for the slot, `Present`), mean and worst; plus one line for **every** frame that missed its slot with all its phases, and one `first_frame` line per level (#148) |
+| at *Frame rate 60* the motion is no smoother than at 30, or something jerks | `INTERPLOG` | one line per LOGIC second: how many frames were interpolated, how far Lara moved per drawn picture (must HALVE against a 30 Hz run over the same walk), how many things really moved, and every deliberate snap by cause - teleport, room jump, camera cut, cut scene (#148, order 2) |
 | the first seconds of a level are rough | `WARMUP` | one line per load: how many texture pages and buffers were made resident before the first frame instead of inside it (#148) |
 
 `SLOTLOG` also prints `MAX_LOT`, which is the number that decides how many

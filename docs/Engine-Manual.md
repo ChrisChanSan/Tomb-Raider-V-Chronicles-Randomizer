@@ -294,12 +294,45 @@ thirty — they were written for it — and the game frame behind the title is n
 the frame anybody is watching.
 
 **What you get, and what it costs.** Twice as many pictures of the same
-motion. Until the interpolation of the next stage lands, the *in-between*
-frame is a repeat of the one before it rather than a new position, so what
-sixty buys today is a smoother camera and a smoother picture rather than
-smoother running — and a few things that count in drawn frames rather than in
-game steps (screen fades, the rain, the level-name caption) still run at
-double speed. Both are being worked on and are the reason 30 is still there.
+motion, and the in-between one is a real new position rather than a repeat.
+The engine remembers where everything stood before the last game step, and on
+the frame that falls between two steps it draws everything halfway: Lara and
+every enemy at half a stride, every turn at half its angle, the braid with
+them, and the camera moving in half steps too. The picture costs half a game
+step of delay on every second frame — about 8 ms on average — which is what
+this technique costs everywhere it is used, and what you get for it is that
+running, turning and looking around are twice as smooth as the game has ever
+been.
+
+The HD renderer follows without being asked: it takes its matrices off the
+engine's own stack, so it gets the halved motion for free. Sixty is as smooth
+with the HD art on as without it.
+
+**What still steps at thirty**, on purpose, for now:
+
+- **The pose.** *Where* a body is and *which way it faces* move in half
+  steps; which frame of the walk cycle its legs wear does not. On a slow
+  walk, looked for, the feet still tick over at thirty while the body glides.
+  That is the next stage.
+- **Cut scenes**, whole. Their camera is decoded from a frame number rather
+  than simulated, so it is left alone and they play exactly as they always
+  did.
+- **Sparks, rain, snow, blood, debris, bubbles and shell casings.** Small,
+  fast and short-lived; they are left where they are until somebody's eye
+  finds them.
+- **A handful of things that count drawn frames instead of game steps** —
+  screen fades, the rain's *fall speed*, the level-name caption, the
+  health-bar blink. Those still run at double speed at sixty and are the
+  stage after next. If a fade looks hasty at 60, that is this and nothing
+  else.
+
+**Where it deliberately jumps.** Interpolation is switched off, for one
+frame, wherever the game *meant* something to jump rather than move: a
+teleport (anything that crosses more than half a sector in one step), a
+camera cut — a fixed camera taking over, a flyby starting or stepping to its
+next node, the binoculars going up — a cut scene, and the first frame after a
+level start, a savegame load or the inventory. Those look exactly as they do
+at thirty, which is the point.
 
 **If it does not hold.** The engine never falls back on its own — it says so
 and keeps going. With `-log`, `FPSLOG`'s `late=` and the `PROFLOG` lines under
@@ -1701,6 +1734,7 @@ wrote it, and each seam answers a different question:
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
 | …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |
 | the first seconds of a level feel rough | `PROFLOG … first_frame`, and the `WARMUP` line at the end of the load |
+| at *Frame rate 60* the motion is no smoother than at 30, or something jerks | `INTERPLOG` — per second: how many frames were interpolated, how far Lara moved per picture, and every place the engine deliberately snapped |
 
 These seams are permanent, not debug leftovers. They exist so that a report
 carries something to work with.
@@ -1825,6 +1859,33 @@ If a level is rough for its first seconds, look at `first_frame` and at the
 `late` lines with a low `at=`; if one room is rough every time you enter it,
 look at the `late` lines and compare `hddraw` and `buckets` against a healthy
 second. Send the first ten seconds of a level's `PROFLOG` lines with a report.
+
+**`INTERPLOG`.** One line per *game second* — thirty logic steps, so it stands
+still while the inventory is up — saying what the in-between frames of the
+frame rate setting really did:
+
+```
+INTERPLOG level=1 at=12s frames=60 tween=30 alpha=0.75 lara_step=15.8
+  items=4.0 snaps=0 (teleport=0 roomjump=0 object=0 invalid=0) camcut=0 cutscene=0
+```
+
+| field | what it says |
+|---|---|
+| `frames` | pictures presented in that second — 60 at *Frame rate 60*, 30 at 30 |
+| `tween` | how many of them fell **between** two game steps and were therefore drawn interpolated. Exactly half at 60; **zero** at 30 |
+| `alpha` | the mean of what each frame was drawn at, 1 being the live state. 0.75 at 60, 1.00 at 30 |
+| `lara_step` | **the number that proves it works.** How far Lara moved *on screen* from one picture to the next, averaged over the second. Walk the same corridor at 30 and at 60 and the 60 run must read about **half** of the 30 run — the same distance cut into twice as many steps |
+| `items` | how many things really moved and were interpolated, per frame. Idle pickups, switches and empty slots are not counted |
+| `snaps` | how often interpolation was deliberately skipped, and why: `teleport` something crossed more than half a sector in one step, `roomjump` it did so across a room boundary, `object` an item slot was handed to a different object, `invalid` there was no previous state |
+| `camcut` | camera cuts: a fixed camera taking over, a flyby starting or stepping, the binoculars going up |
+| `cutscene` | frames in a cut scene, which is played whole at thirty |
+
+A healthy line during ordinary play has `snaps=0` or a small handful.
+`camcut` counting every frame of a stretch means the camera never settled
+long enough to interpolate — worth reporting with the level and where you
+stood. And a `lara_step` at 60 that is **not** about half the 30 figure means
+the interpolation is not reaching the picture, which is the one failure of
+this feature that does not look like anything.
 
 **`WARMUP`.** One line at the end of every level load:
 

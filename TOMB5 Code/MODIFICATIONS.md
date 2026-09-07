@@ -5076,9 +5076,10 @@ will be there, and the object half of this group is one line
 ### 5. Sixty frames a second (#148)
 
 The plan this follows is `Preparation/60FPS-Plan.md`, written from a read-only
-survey of this tree. It runs in orders; **this section covers orders 1 and 1b**
-- the clock split, the option, the measurement, one warm-up fix, and then what
-a play test of all that found. There is no interpolation yet.
+survey of this tree. It runs in orders; **this section covers orders 1, 1b and
+2** - the clock split, the option, the measurement, one warm-up fix, what a
+play test of all that found, and then the interpolation of the root and the
+camera that fills the in-between frames in.
 
 #### 5.1 What the 30 Hz cap actually was
 
@@ -5344,6 +5345,205 @@ shows for half as long at sixty - and `cutseq_busy_timeout--` in
 `handle_cutseq_triggering` (`game/deltapak.cpp`), the wind-up before a
 cutscene. Both belong with the fourteen counters of 5.3 and are order 3; they
 are recorded as R16 and R17 in the plan.
+
+#### 5.9 Order 2 - the root and the camera
+
+Order 1 left every second frame a duplicate of the one before it: sixty
+presents of thirty distinct pictures. This order fills them in. New files
+`game/interpolate.cpp` and `game/interpolate.h`, plus
+`game/interpolate_math.h` for the arithmetic alone.
+
+**Three call sites, and that is the whole seam.**
+
+| | where | what |
+|---|---|---|
+| capture | `game/control.cpp`, the first statement inside the tick body, before `GlobalCounter++` | `InterpCapturePrev()` - the state the tick is about to leave behind |
+| apply | `game/draw.cpp`, the first line of `DrawPhaseGame` after `ProfileFrameBegin` | `InterpBeginFrame(InterpAlphaNow())` |
+| restore | `game/draw.cpp`, after `S_AnimateTextures`, before `ProfileFrameEnd` | `InterpEndFrame()` |
+
+Nothing downstream knows. `DrawRooms`, `InsertRoom`, `phd_PutPolygons`, the
+bucket sorter, the shadows, the lighting, `HDFrameRoom`, `HDObjectNode` and
+`HDLaraDraw` read the same globals they always read and get the interpolated
+ones. **Not one line of `specific/hd/` changed for this order** except a log
+field: the HD seam takes its matrices off the engine's own stack
+(`InsertRoom` records `aMXPtr` as it stands, `HDObjectNode` records the matrix
+the classic mesh would have used), so interpolating *before* the stack makes
+HD follow for free.
+
+`InterpCapturePrev` is the first statement of the tick body on purpose. When
+one `ControlPhase` runs several ticks - a hitch, the two priming ticks of a
+level start - each overwrites the last, and what stands at draw time is the
+state before the **final** tick, which is the only neighbour the drawn state
+has.
+
+**Alpha needs no clock.** After `ControlPhase` returns, `framecount` is `-1`
+when a tick ran and `0` when none did, so
+
+```c
+alpha = framecount < 0 ? 0.5f : 1.0f;   // and 1.0f whenever fps_mode != 1
+```
+
+is exact, cannot drift and costs one comparison. The drawn states are then
+`T1, (T1+T2)/2, T2, (T2+T3)/2, ...` - even half steps, forever. A property
+worth writing down falls out of the same walk: the frame immediately before a
+`ControlPhase` **that runs a tick** is always a live one, so no logic tick
+ever reads what a tween frame left behind - which matters because the draw
+phase does leave `lara_matrices` and `lara_joint_matrices` behind and the
+first-person and look cameras read them back. Only a *late* frame (one that
+took two ticks or more) can break that, and then the head bone one camera
+reads is half a step stale for one frame. Nothing in the simulation or the
+savegame hangs on those matrices, and `HairControl` - the one piece of logic
+that could have - builds its own stack from `lara_item->pos` instead, which
+`InterpEndFrame` has already put back.
+
+**The snapshot.** `items[512]` (position, three rotations, room, object,
+anim, frame, valid), `effects[24]`, `hairs[2][7]` and the camera - 15.0 KB.
+Beside it stands what a frame overwrote, so that the restore is exact: 10.7 KB
+plus 1.1 KB of touched-index lists. **27 KB of statics in all**, no
+allocation, no pointer into the `game_malloc` pool - the plan's 1.2 estimated
+13 KB and had counted only the previous state, not the copy of the live one
+that has to go back. `room`, `object`, `anim` and `frame` are never
+interpolated; they are there so that a slot handed to a *different* object can
+be told apart (otherwise a dead enemy's slot reused by a spawn would be drawn
+sliding from the grave to the spawn point), and so that order 4 has the frame
+pair it will need for the pose. The braid is not optional: `HairControl`
+derives every link from the head, so a head that moves half a step while the
+braid does not is a plait hanging in the air behind Lara's neck.
+
+Only things that **moved** are touched. A level holds 512 item slots and a
+handful of them travel in any tick; blending a value into itself is work with
+no picture behind it and would have to be undone as well. It is also what
+makes `INTERPLOG`'s `items=` mean "things that really moved" rather than "how
+many slots exist".
+
+**Where it deliberately snaps**, with the reason for each threshold in
+`interpolate_math.h`:
+
+| trigger | test |
+|---|---|
+| no previous state | first frame of a level, after a load, after a menu |
+| a different object in the slot | `object_number` changed |
+| teleport | `abs(dx)+abs(dy)+abs(dz) > 512` in one tick - `TranslateItem`, a flipmap move, the randomizer's own spawn placement. Nothing in TR5 crosses half a sector under its own power in 33 ms; a terminal fall is about 130 units |
+| room jump | the same test across a room boundary; a portal *walk* is normal and interpolates |
+| camera cut | `camera.type` **or** `camera.old_type` changed, `fixed_camera` changed, `bUseSpotCam` changed, or eye or target jumped more than 1024 |
+| cut scene | `GLOBAL_playing_cutseq` - the whole frame, see below |
+
+`camera.type` is tested together with `camera.old_type` because
+`CalculateCamera` resets `type` to `CHASE_CAMERA` at its own end unless a
+heavy camera's timer is running; `old_type` is what the view was actually
+built as and is the half of the pair that moves when a fixed camera takes
+over.
+
+`camera.pos.room_number` is **never** interpolated. `DrawRooms` is handed it
+and it drives the whole portal walk and every clip window; a half step across
+a portal would flip the room list. The live room with the interpolated eye is
+a mismatch of under 33 ms of camera travel - the same compromise TR1X makes.
+
+**The camera is rebuilt, not merely moved.** Moving `camera.pos` does nothing
+on its own: the whole world-to-view matrix, `CamPos`, `CamRot`, `D3DMView` and
+the device's own view transform are built by `phd_LookAt`, once per logic
+tick, at the end of whichever camera routine ran. So the interpolator calls
+`phd_LookAt` again with the moved eye - and **a second time in
+`InterpEndFrame` with the live eye**, which is the half that is easy to forget:
+at sixty, every second `ControlPhase` runs no tick at all, so nothing else
+would rebuild it, and the tween frame's matrix would be handed to the next
+frame while that frame draws everything at its live position. The world half a
+step ahead of the camera looking at it, on every second frame, for the whole
+game.
+
+The roll comes with it. Three cameras hand `phd_LookAt` a roll that is not
+zero - first person rolls with the head bone, a flyby rolls along its track, a
+cut scene rolls with the scene - and rebuilding the view without it would snap
+a first-person frame upright and back every other frame. `phd_LookAt` now
+records what it was handed (`CamRoll`, `specific/3dmath.cpp`), which is the one
+place that catches all three because they share nothing else. In first person
+the value is read through the camera's own new getter `GetFirstPersonRoll()`
+instead, because `fpRoll` is private to `camera.cpp` and everything that
+writes it lives there. It is blended the short way round like any other angle.
+
+**The poison filter (R10 / K7).** `phd_GenerateW2V`, which `phd_LookAt` calls,
+carries a piece of game state inside it:
+
+```c
+lara.poisoned += (lara.dpoisoned - lara.poisoned) >> 4;
+```
+
+an exponential ramp written when there was exactly one `phd_LookAt` per logic
+tick. Two extra calls per tween frame would run it three times as often and
+the green would come up three times as fast. `lara.poisoned` is saved and put
+back around **both** calls, so the ramp still steps exactly once per tick, in
+`CalculateCamera`'s own `phd_LookAt` and nowhere else. The engine already knew
+this hazard - `specific/output.cpp` does the same save-and-zero around the load
+screen's fade loop.
+
+**The first-person filters are not touched (K3).** `fpVel`, `fpSpd`, `fpRel`
+and `fpSmoothSlow[]` (#134) are tuned as per-logic-tick exponentials.
+`FirstPersonCamera` stays inside `CalculateCamera`, at thirty, seeing exactly
+one sample per tick - which the existing `FPHEAD` line still proves. Only its
+**output** - `camera.pos`, `camera.target` and `fpRoll` - is interpolated.
+
+**Cut scenes are snapped whole**, and that is a correctness requirement rather
+than a preference: their camera is decoded from a frame index
+(`game/deltapak.cpp`) and `frigup_lara()` moves Lara *from inside
+`DrawPhaseGame` itself*. Blending the first would fight a decoder; restoring
+after the second would undo what it did. `InterpBeginFrame` therefore returns
+before it writes anything at all while `GLOBAL_playing_cutseq` is set.
+
+**Where the previous state is discarded** - `InterpInvalidate(why)`, with the
+reason reaching the log: a level start and a title start
+(`game/gameflow.cpp`), `FreeLevel` (`specific/file.cpp`), a savegame being
+read (`game/savegame.cpp`, beside `JustLoaded = 1`), and the return from each
+of the four menus that stop the world inside `ControlPhase` - the inventory,
+the save screen, the load screen and the pause menu.
+
+**`INTERPLOG`**, one line per *logic* second (`GlobalCounter` steps thirty
+times a second by construction in both modes and stands still while the
+inventory is up, so the line needs no clock and is directly comparable between
+a 30 and a 60 run):
+
+```
+INTERPLOG level=1 at=12s frames=60 tween=30 alpha=0.75 lara_step=15.8
+  items=4.0 snaps=0 (teleport=0 roomjump=0 object=0 invalid=0) camcut=0 cutscene=0
+```
+
+`lara_step` is the proof: how far Lara moved **on screen** from one picture to
+the next, averaged over the second. Over the same walk it must read half at
+sixty what it reads at thirty - the same distance cut into twice as many
+steps. It is measured on the position that was *drawn*, not the one the logic
+holds, which is the difference between measuring the interpolation and
+measuring the game. The counters run at `fps_mode 0` as well (that run is the
+comparison), but only ever behind `gLogEnabled`. `HDLOG frame lara` gained
+`interp=`, what that frame was drawn at, so the HD seam says for itself that
+it saw the interpolated root.
+
+**What `fps_mode 0` does: nothing, again.** `InterpAlphaNow` returns 1 on its
+first test, and at 1 both `InterpBeginFrame` and `InterpEndFrame` return
+before they write a byte - no snapshot applied, no `phd_LookAt` issued. The
+only thing that runs is the frame counter for the log, and only with `-log`.
+
+**Proved offline.** `Preparation/Tools/Diagnose/InterpTest.cpp` (build
+`bit.bat`) **includes `game/interpolate_math.h` itself** rather than a copy of
+it, so there is no twin to keep in step, and asserts 40 checks: the short-angle
+lerp over a sweep of 16,256 angle pairs (direction and distance, with the 128
+exact half-turns stepped over and asserted separately), the position lerp over
+the whole coordinate range of a level, the snap thresholds against the
+engine's own speeds, that a Manhattan sum is never smaller than the true
+distance, and the cadence - `framecount` and the alpha rule run for a
+simulated minute at both settings and through a hitch: 1800 logic ticks either
+way, exactly half the frames tween at sixty, none at thirty, and every drawn
+step exactly half a tick.
+
+The reason the angle lerp gets a sweep rather than a spot check: a short
+blended *the long way round* is invisible almost all the time and looks like a
+rendering glitch when it is not - one enemy, facing roughly south, spinning
+backwards for half a tick on every second frame. It has to be proven at the
+wrap, and a play test will not put a body on the wrap when you want it to.
+
+**Still at thirty after this order**, on purpose: the pose (order 4), sparks,
+rain, snow, debris, blood, drips, bubbles, gunshells, rats, bats, spiders,
+ropes, shockwaves and lightning (order 5), and the per-drawn-frame counters
+R1-R17 of 5.3 (order 3) - fades, the weather simulation, the lightning
+cadence, the level-name caption.
 
 ---
 

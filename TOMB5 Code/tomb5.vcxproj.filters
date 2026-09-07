@@ -66,6 +66,9 @@
     <ClCompile Include="TOMB5\game\health.cpp">
       <Filter>TOMB5\game</Filter>
     </ClCompile>
+    <ClCompile Include="TOMB5\game\interpolate.cpp">
+      <Filter>TOMB5\game</Filter>
+    </ClCompile>
     <ClCompile Include="TOMB5\game\items.cpp">
       <Filter>TOMB5\game</Filter>
     </ClCompile>
@@ -392,6 +395,9 @@
       <Filter>TOMB5\game</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\game\health.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\interpolate.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\game\items.h">

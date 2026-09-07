@@ -39,6 +39,7 @@ ulong mGetAngle(long x, long z, long x1, long z1);
 
 extern PHD_VECTOR CamPos;
 extern SVECTOR CamRot;
+extern short CamRoll;	// the roll phd_LookAt last built the view with (#148, order 2)
 
 extern float one;
 extern float mone;

@@ -20,6 +20,7 @@
 #include "file.h"
 #include "function_stubs.h"
 #include "profile.h"			// ProfileLevel - PROFLOG counts from the load (#148)
+#include "../game/interpolate.h"		// InterpInvalidate - the level boundary (#148, order 2)
 #include "../game/gameflow.h"
 #include "../game/setup.h"
 #include "alexstuff.h"
@@ -417,6 +418,12 @@ void FreeLevel()
 	FreeTextures();
 	DXFreeSounds();
 	HDLevelUnload();	// #123, the other half of the level bracket
+
+	/* And the interpolator's snapshot goes with it (#148, order 2). It holds
+	 * item indices, not pointers, so nothing here can dangle - but the
+	 * positions in it belong to a level that no longer exists, and the next
+	 * one will fill the same slots with different things. */
+	InterpInvalidate("level freed");
 	malloc_ptr = malloc_buffer;
 	malloc_free = malloc_size;
 

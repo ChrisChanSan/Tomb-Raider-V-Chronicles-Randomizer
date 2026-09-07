@@ -33,6 +33,7 @@
 #include "../specific/function_table.h"
 #include "../specific/function_stubs.h"
 #include "../specific/profile.h"		// PROFLOG's logic phase (#148)
+#include "interpolate.h"			// the interpolator's level boundary (#148, order 2)
 #include "../specific/audio.h"
 #include "../specific/fmv.h"
 #include "../specific/polyinsert.h"
@@ -831,6 +832,7 @@ void DoTitle(uchar name, uchar audio)
 	gfGameMode = 1;
 	gfLevelComplete = 0;
 	nframes = 2;
+	InterpInvalidate("title start");	// #148, order 2
 	gfStatus = ControlPhase(2, 0);
 	JustLoaded = 0;
 
@@ -1007,6 +1009,7 @@ void DoLevel(uchar Name, uchar Audio)
 	gfLevelComplete = 0;
 	nframes = 2;
 	framecount = 0;
+	InterpInvalidate("level start");	// nothing before this tick belongs to this level (#148, order 2)
 	gfStatus = ControlPhase(2, 0);
 	Log("DoLevel: first logic phase done");
 	dbinput = 0;

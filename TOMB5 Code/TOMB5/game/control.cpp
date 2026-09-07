@@ -54,6 +54,7 @@
 #include "health.h"
 #include "lara.h"
 #include "savegame.h"
+#include "interpolate.h"	// the tick's own snapshot (#148, order 2)
 #include "deltapak.h"
 #include "../specific/output.h"
 #include "../specific/gamemain.h"
@@ -260,6 +261,17 @@ long ControlPhase(long nframes, long demo_mode)
 
 	for (framecount += nframes; framecount > 0; framecount -= 2)
 	{
+		/* WHERE EVERYTHING STOOD BEFORE THIS TICK (#148, order 2). The
+		 * first statement of the tick body and before GlobalCounter++, so
+		 * that what is captured is the state the tick is about to leave
+		 * behind. game\interpolate.cpp draws the frames between it and the
+		 * state the tick produces.
+		 *
+		 * When this loop runs several ticks in one call - a hitch, the two
+		 * priming ticks at a level start - each one overwrites the last,
+		 * which is right: the only neighbour the drawn state has is the one
+		 * before the FINAL tick. */
+		InterpCapturePrev();
 		GlobalCounter++;
 		UpdateSky();
 		RPC_Update();
@@ -317,8 +329,19 @@ long ControlPhase(long nframes, long demo_mode)
 		{
 			S_SoundStopAllSamples();
 
-			if (S_CallInventory2())
-				return 2;
+			/* THE RING STOPS THE WORLD (#148, order 2). It is a modal loop
+			 * with its own presents; when it returns, the tick before it is
+			 * minutes old in wall-clock time and no neighbour of the one
+			 * about to run. The next frame is drawn live and the tick after
+			 * it starts the interpolation again. */
+			{
+				const long fromInventory = S_CallInventory2();
+
+				InterpInvalidate("inventory");
+
+				if (fromInventory)
+					return 2;
+			}
 		}
 
 		if (gfLevelComplete)
@@ -357,17 +380,31 @@ long ControlPhase(long nframes, long demo_mode)
 
 		if (!FadeScreenHeight)
 		{
+			// Each of these three stops the world the way the inventory
+			// does, and each therefore ends the run of ticks the
+			// interpolator was blending between (#148, order 2).
 			if (input & IN_SAVE && lara_item->hit_points > 0)
+			{
 				S_LoadSave(IN_SAVE, 0, 0);
+				InterpInvalidate("save menu");
+			}
 			else if (input & IN_LOAD)
 			{
-				if (S_LoadSave(IN_LOAD, 0, 0) >= 0)
+				const long fromLoad = S_LoadSave(IN_LOAD, 0, 0);
+
+				InterpInvalidate("load menu");
+
+				if (fromLoad >= 0)
 					return 2;
 			}
 
 			if (dbinput & IN_PAUSE && !gfGameMode && lara_item->hit_points > 0)
 			{
-				if (S_PauseMenu() == 8)
+				const long fromPause = S_PauseMenu();
+
+				InterpInvalidate("pause menu");
+
+				if (fromPause == 8)
 					return 1;
 			}
 		}

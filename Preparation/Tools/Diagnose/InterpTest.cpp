@@ -402,6 +402,244 @@ static void cadence()
 	}
 }
 
+
+/* ------------------------------------------------------- fix round R -- */
+
+/* THE CAMERA'S TARGET, AND WHERE IT IS A DIRECTION (fix round R).
+ *
+ * The rule under test is InterpCamAimCut (game\interpolate_math.h) and the
+ * fault it repairs is measurable without a game: FirstPersonCamera builds
+ * camera.target at camera.pos + direction * 0x5100, so a head turn of a few
+ * degrees between two logic ticks moved that point further than
+ * INTERP_CAM_SNAP and order 2 declared a camera CUT. The user's log of
+ * 2026-09-07 reads camcut=10..17 a second with Lara STANDING STILL.
+ *
+ * What is asserted, in this order:
+ *
+ *   1. the old rule really does fire on an idle head turn - the fault
+ *      itself, so that this test would have caught it
+ *   2. the new rule does not, over the whole range of turns a body, a head
+ *      or a look control can make in one thirtieth of a second
+ *   3. the new rule still catches a real cut - a new view, sixty degrees and
+ *      more, and the half turn a fixed camera makes
+ *   4. the CHASE camera is not touched at all: its target sits on Lara,
+ *      inside INTERP_CAM_FAR_TARGET, where the test is the absolute one it
+ *      always was. */
+
+static const double kPi = 3.14159265358979323846;
+
+/* A first person camera looking `yawDeg` degrees round and `pitchDeg` degrees
+ * up, with the target at the engine's own 0x5100. */
+static void fp_camera(double yawDeg, double pitchDeg, long* p, long* t)
+{
+	const double yaw = yawDeg * kPi / 180.0;
+	const double pitch = pitchDeg * kPi / 180.0;
+	const double r = 20736.0;		// 0x5100, game\camera.cpp
+
+	p[0] = 84000; p[1] = -4300; p[2] = 72000;
+
+	t[0] = p[0] + (long)(r * cos(pitch) * sin(yaw));
+	t[1] = p[1] - (long)(r * sin(pitch));
+	t[2] = p[2] + (long)(r * cos(pitch) * cos(yaw));
+}
+
+// The rule as it stood before fix round R: the target as an absolute place.
+static bool old_target_cut(const long* pt, const long* t)
+{
+	return InterpManhattan(t[0] - pt[0], t[1] - pt[1], t[2] - pt[2]) > INTERP_CAM_SNAP;
+}
+
+static void camera_aim()
+{
+	printf("the camera's aim (fix round R)\n");
+
+	ok(INTERP_CAM_FAR_TARGET == 4096, "beyond four sectors a target is a direction",
+		INTERP_CAM_FAR_TARGET, 4096);
+	ok(INTERP_CAM_DIR_RADIUS == 1024, "and it is measured on a sector's radius",
+		INTERP_CAM_DIR_RADIUS, 1024);
+
+	/* 1. THE FAULT. An idle animation turns Lara's head by a degree or two
+	 * between two ticks. On a target 20736 units away that is 362 units per
+	 * degree, so three degrees clears INTERP_CAM_SNAP and the old rule calls
+	 * it a cut. */
+	{
+		long p0[3], t0[3], p1[3], t1[3];
+
+		fp_camera(0.0, 0.0, p0, t0);
+		fp_camera(3.0, 0.0, p1, t1);
+
+		ok(old_target_cut(t0, t1), "the OLD rule cuts on a three degree head turn",
+			old_target_cut(t0, t1) ? 1 : 0, 1);
+		ok(!InterpCamAimCut(p0[0], p0[1], p0[2], t0[0], t0[1], t0[2],
+			p1[0], p1[1], p1[2], t1[0], t1[1], t1[2], INTERP_CAM_SNAP),
+			"the new rule does not", 0, 0);
+	}
+
+	/* 2. EVERY TURN A BODY CAN MAKE IN ONE TICK. Lara's fastest turn on the
+	 * spot is under five degrees a tick and a roll is about fifteen; twenty
+	 * is taken as the ceiling and swept in both axes and in both directions,
+	 * with the eye moving as well. Not one of them may read as a cut. */
+	{
+		int cuts = 0, tried = 0;
+
+		for (double yaw = -20.0; yaw <= 20.0; yaw += 0.5)
+			for (double pitch = -20.0; pitch <= 20.0; pitch += 2.5)
+			{
+				long p0[3], t0[3], p1[3], t1[3];
+
+				fp_camera(0.0, 0.0, p0, t0);
+				fp_camera(yaw, pitch, p1, t1);
+
+				// and the eye walks a running step while she turns
+				p1[0] += 30; p1[1] -= 12; p1[2] += 18;
+				t1[0] += 30; t1[1] -= 12; t1[2] += 18;
+
+				tried++;
+
+				if (InterpCamAimCut(p0[0], p0[1], p0[2], t0[0], t0[1], t0[2],
+					p1[0], p1[1], p1[2], t1[0], t1[1], t1[2], INTERP_CAM_SNAP))
+					cuts++;
+			}
+
+		ok(cuts == 0, "no turn up to twenty degrees a tick reads as a cut", cuts, 0);
+		ok(tried > 500, "and the sweep really ran", tried, 500);
+	}
+
+	/* 3. A REAL CUT IS STILL A CUT. A new view is not a turn: sixty degrees,
+	 * a right angle and a half turn all have to be caught. */
+	{
+		const double at[3] = { 60.0, 90.0, 180.0 };
+
+		for (int i = 0; i < 3; i++)
+		{
+			long p0[3], t0[3], p1[3], t1[3];
+
+			fp_camera(0.0, 0.0, p0, t0);
+			fp_camera(at[i], 0.0, p1, t1);
+
+			ok(InterpCamAimCut(p0[0], p0[1], p0[2], t0[0], t0[1], t0[2],
+				p1[0], p1[1], p1[2], t1[0], t1[1], t1[2], INTERP_CAM_SNAP),
+				"a real cut is still caught", (long)at[i], (long)at[i]);
+		}
+	}
+
+	/* 4. THE CHASE CAMERA IS UNTOUCHED. Its target sits on Lara, 1536 from
+	 * the eye - under INTERP_CAM_FAR_TARGET - so InterpCamAim hands back the
+	 * offset itself and the comparison is the absolute one order 2 shipped. */
+	{
+		long p0[3] = { 84000, -4300, 72000 };
+		long t0[3] = { 84000, -5300, 73536 };		// 1536 ahead and 1000 up
+		long p1[3] = { 84010, -4300, 72020 };
+		long t1[3] = { 84010, -5300, 73556 };		// the same shot, moved
+		long t2[3] = { 86000, -5300, 73536 };		// a fixed camera taking over
+
+		ok(!InterpCamAimCut(p0[0], p0[1], p0[2], t0[0], t0[1], t0[2],
+			p1[0], p1[1], p1[2], t1[0], t1[1], t1[2], INTERP_CAM_SNAP),
+			"a chase camera following Lara does not cut", 0, 0);
+
+		ok(InterpCamAimCut(p0[0], p0[1], p0[2], t0[0], t0[1], t0[2],
+			p1[0], p1[1], p1[2], t2[0], t2[1], t2[2], INTERP_CAM_SNAP),
+			"a target jumping two sectors still cuts", 1, 1);
+	}
+
+	/* AND THE REDUCTION IS THE IDENTITY UNDER THE THRESHOLD. Whatever else
+	 * changes, a near target must come back as its own offset to the unit, or
+	 * the classic case would not be byte-identical. */
+	{
+		int bad = 0;
+
+		for (long d = 0; d <= 4096; d += 337)
+		{
+			long a[3];
+
+			InterpCamAim(1000, 2000, 3000, 1000 + d, 2000, 3000, &a[0], &a[1], &a[2]);
+
+			if (a[0] != d || a[1] != 0 || a[2] != 0)
+				bad++;
+		}
+
+		ok(bad == 0, "a target inside the radius is passed through untouched", bad, 0);
+	}
+}
+
+/* THE TITLE MENU'S OWN CADENCE (fix round R).
+ *
+ * The title and the inventory keep TWO ticks per present at every setting
+ * (order 1b, GameFrameMinTicks). What that does to ControlPhase's accumulator
+ * is arithmetic and can be run here:
+ *
+ *     framecount += 2; while (framecount > 0) { tick; framecount -= 2; }
+ *
+ * From 0 it returns to 0 - and from -1 it returns to -1, forever. So a title
+ * entered on the odd half of the sixty hertz cadence read `framecount < 0` on
+ * every single frame, and the rule as order 2 wrote it answered 0.5 to all of
+ * them. Every frame of the title was an in-between frame, every counter order
+ * 3 guards stood still, DoScreenFade never reached its ninth step, DoFade
+ * never became 2, and a full screen black quad stood over the menu while
+ * TitleOptions zeroed the input. That is the black screen of 2026-09-07, and
+ * the parity it depends on is why the FIRST title of a session was fine.
+ *
+ * Both halves of the fix are asserted: the rule (a classic-cadence frame is
+ * never a tween frame, whatever the accumulator holds) and the clearing
+ * (DoTitle sets framecount to 0 as DoLevel always has). */
+static void title_cadence()
+{
+	printf("the title's cadence (fix round R)\n");
+
+	for (int start = -1; start <= 0; start++)
+	{
+		long framecount = start;
+		int tweenOld = 0, tweenNew = 0, ticks = 0, frames = 0;
+
+		for (int i = 0; i < 300; i++)
+		{
+			/* the rule as order 2 wrote it, and the rule with fix round R's
+			 * test for a frame that is not a sixty hertz one */
+			const float alphaOld = framecount < 0 ? 0.5F : 1.0F;
+			const float alphaNew = 1.0F;		// GameFrameMinTicks() >= 2
+
+			frames++;
+
+			if (alphaOld < 1.0F) tweenOld++;
+			if (alphaNew < 1.0F) tweenNew++;
+
+			for (framecount += 2; framecount > 0; framecount -= 2)
+				ticks++;
+		}
+
+		if (start < 0)
+			ok(tweenOld == frames,
+				"the OLD rule made every title frame a tween frame", tweenOld, frames);
+		else
+			ok(tweenOld == 0, "on the even half it never did", tweenOld, 0);
+
+		ok(tweenNew == 0, "the new rule never does, on either half", tweenNew, 0);
+		ok(ticks == frames, "the title still runs one logic tick per frame",
+			ticks, frames);
+		ok(framecount == start, "and the accumulator keeps the parity it began with",
+			framecount, start);
+	}
+
+	/* AND WHAT DoTitle NOW DOES ABOUT IT. Clearing the accumulator on the way
+	 * in makes the parity even whatever the level left behind, which is the
+	 * belt to the rule's braces. */
+	{
+		long framecount = 0;			// game\gameflow.cpp, DoTitle
+		int tween = 0;
+
+		for (int i = 0; i < 60; i++)
+		{
+			if (framecount < 0)
+				tween++;
+
+			for (framecount += 2; framecount > 0; framecount -= 2)
+				;
+		}
+
+		ok(tween == 0, "a cleared accumulator alone would have fixed it too", tween, 0);
+	}
+}
+
 /* -------------------------------------------------------- the counters -- */
 
 /* ORDER 3, and the whole of its claim in one table.
@@ -1497,7 +1735,9 @@ int main()
 	angles();
 	positions();
 	thresholds();
+	camera_aim();
 	cadence();
+	title_cadence();
 	refresh();
 	counters();
 	pose_factor();

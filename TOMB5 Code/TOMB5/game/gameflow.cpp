@@ -832,6 +832,18 @@ void DoTitle(uchar name, uchar audio)
 	gfGameMode = 1;
 	gfLevelComplete = 0;
 	nframes = 2;
+	/* AND THE ACCUMULATOR STARTS LEVEL, exactly as DoLevel starts it (#148,
+	 * fix round R). framecount survives a level change and the sixty hertz
+	 * game loop leaves it at 0 or -1 by turns; a title entered on -1 then
+	 * stayed on -1 for every frame it drew, because at two ticks a present
+	 * `framecount += 2; while (> 0) tick, -= 2` returns to where it started.
+	 * Every title frame was then read as an in-between frame, the fade never
+	 * stepped, DoFade never reached 2, a black quad stood over the menu and
+	 * TitleOptions swallowed the input. The rule that makes this line
+	 * unnecessary is in InterpAlphaNow (game\interpolate.cpp); the line is
+	 * here anyway, because a picture must not hang on the parity of an
+	 * accumulator. */
+	framecount = 0;
 	InterpInvalidate("title start");	// #148, order 2
 	gfStatus = ControlPhase(2, 0);
 	JustLoaded = 0;

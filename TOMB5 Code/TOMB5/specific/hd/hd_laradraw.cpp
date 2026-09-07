@@ -105,6 +105,12 @@ namespace
 	bool g_binos_was = false;
 	bool g_binos_pending = false;
 
+	/* Fix round R: the throttle of the HDLOG neckcut line - GlobalCounter
+	 * when it was last written. The counter ticks thirty times a second at
+	 * every fps_mode, so 30 is one second of game time. */
+	bool g_neck_probe_ever = false;
+	unsigned short g_neck_probe_at = 0;
+
 	/* ------------------------------------------------------ the wardrobe -- */
 
 	/* WHICH OUTFIT, out of the engine's own facts and nothing else. Every one
@@ -917,6 +923,71 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * then nothing is cut: half a cut is worse than none. */
 	HDModelNeckCut neckCut = { 0 };
 	const bool cutting = firstPerson && HDLaraNeckCut(&neckCut);
+
+	/* HOW CLOSE HER OWN BODY COMES TO THE LENS (#123, fix round R).
+	 *
+	 * The cut is two shapes and only one of them can be argued about from a
+	 * bind pose. The CYLINDER is in the bind pose and therefore takes the same
+	 * patch of skin in every animation, which is the whole reason fix round J
+	 * chose it. The NEAR ZONE is in VIEW space - a sphere of
+	 * HD_LARA_NECK_NEAR units about the camera, and in first person the camera
+	 * is the eye - so what it takes depends on the ANIMATION, and fix round L
+	 * measured it in the bind pose alone (nearest survivor 43.5 to 45.2 units
+	 * over the eight outfits, which is why the radius is 40).
+	 *
+	 * The play test came back with "the hole reaches into her chest, looking
+	 * down along her body". That is a question about a folded pose and there
+	 * is no way to answer it from a picture. So this measures it: every joint
+	 * of the drawn skeleton is a point in view space - its translation - and
+	 * the distance from the origin to it is how far that limb's own root
+	 * stands from the lens THIS FRAME.
+	 *
+	 *   near=   the radius in force
+	 *   head=   the head joint, and torso= the torso joint - the two the
+	 *           cylinder is built from and the two the node mask names
+	 *   min=    the nearest joint of all fifteen, and which one
+	 *
+	 * A torso reading that falls under `near` is the near zone eating her
+	 * chest and the radius is wrong for that animation; one that stays well
+	 * above it says the hole has another cause and the next round may stop
+	 * looking here. One line a second of game time, with -log only. */
+	if (gLogEnabled && firstPerson)
+	{
+		const unsigned short now = GlobalCounter;
+
+		if (!g_neck_probe_ever || (unsigned short)(now - g_neck_probe_at) >= 30)
+		{
+			float best = 0.0f;
+			int bestNode = -1;
+
+			for (int node = 0; node < HD_LARA_NODES; node++)
+			{
+				const float* m = matrices + node * 16;
+				const float d = sqrtf(m[12] * m[12] + m[13] * m[13] + m[14] * m[14]);
+
+				if (bestNode < 0 || d < best)
+				{
+					best = d;
+					bestNode = node;
+				}
+			}
+
+			const float* h = matrices + HD_LARA_HEAD_NODE * 16;
+			const float* t = matrices + HD_LARA_TORSO * 16;
+
+			g_neck_probe_ever = true;
+			g_neck_probe_at = now;
+
+			Log("HDLOG neckcut near=%.0f cut=%d head=%.1f torso=%.1f min=%.1f@node%d "
+				"cyl=%.0f/%.0f",
+				cutting ? (double)HD_LARA_NECK_NEAR : 0.0, cutting ? 1 : 0,
+				(double)sqrtf(h[12] * h[12] + h[13] * h[13] + h[14] * h[14]),
+				(double)sqrtf(t[12] * t[12] + t[13] * t[13] + t[14] * t[14]),
+				(double)best, bestNode,
+				cutting ? (double)HD_LARA_NECK_CUT_S : 0.0,
+				cutting ? (double)HD_LARA_NECK_CUT_R : 0.0);
+		}
+	}
 
 	/* AND ONE SIDED WITH IT, for the frames the cut runs in. The HD path draws
 	 * every model double sided; cut a hole in a closed body and what shows

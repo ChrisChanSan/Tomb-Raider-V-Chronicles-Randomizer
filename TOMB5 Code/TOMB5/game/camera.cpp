@@ -1485,6 +1485,30 @@ static bool FirstPersonEnabled()
 	if (!tomb5.first_person)
 		return false;
 
+	/* THE VIEW IS THE PLAYED GAME'S AND NOTHING ELSE'S (#126, fix round R).
+	 *
+	 * FirstPersonActive() - which is what the DRAW asks - already refuses a
+	 * flyby and a cutscene, because those SHOW Lara and she must have a head
+	 * in them. This is the other half of the same rule and it was missing:
+	 * whether the camera itself RUNS.
+	 *
+	 * It ran in the title. DoTitle calls InitialiseCamera, InitialiseCamera
+	 * ends in CalculateCamera, and at that moment bUseSpotCam is still 0 -
+	 * the flyby is triggered two lines later. So one full pass of
+	 * FirstPersonCamera ran on the title level's Lara: it moved camera.pos
+	 * onto her head, took the field of view with AlterFOV, and left fpFovSet
+	 * and fpHeadHidden standing. Nothing ever cleared them again, because
+	 * from the next frame on the title is a flyby and control.cpp calls
+	 * CalculateSpotCams instead of CalculateCamera - the one place either
+	 * flag is handed back. One FPHEAD line and two ALTERFOV lines in the
+	 * user's log of 2026-09-07, at the title, with first person on.
+	 *
+	 * gfLevelId is the title's own marker (DoTitle sets it first of all), and
+	 * the two below are the same pair FirstPersonActive tests, so the camera
+	 * and the draw now answer the same question. */
+	if (gfLevelId == LVL5_TITLE || bUseSpotCam || GLOBAL_playing_cutseq)
+		return false;
+
 	// Binoculars and laser sight bring their OWN head camera, including
 	// their own exit path (ExittingBinos, mesh_bits restore). Interfering
 	// in between would break both.

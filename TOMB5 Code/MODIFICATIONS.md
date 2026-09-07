@@ -4813,6 +4813,10 @@ the cap.
 
 #### Fix round L - the neck was never cut at all (#123)
 
+> The play test of this round came back with a torn collar and missing
+> straps. The cut itself is not the cause - see **fix round R** at the end
+> of section 5 (the inner skin's depth tie, and the camera).
+
 The play test of fix round K, with four first person photographs. Two findings,
 and the first of them is the one rounds I, J and K each answered with the wrong
 tool.
@@ -4961,6 +4965,10 @@ got a fix of its own nor was allowed to constrain the cut for the other seven
 bodies.
 
 #### Group M - non-euclidean rooms: the portal window as a scissor (#123)
+
+> The ITEM half of this group was withdrawn after the play test of
+> 2026-09-07 - the classic path hands every item the whole screen. The
+> rooms keep their windows. See **fix round R** at the end of section 5.
 
 The user, in trview and in the game, in ANDREA1 *The base*: **rooms that stand
 inside one another in the world are both drawn in HD**. Room 39 (a storeroom
@@ -6195,6 +6203,216 @@ factor of nought draws the previous state exactly. A factor of 1 is the
 identity over the whole range, which is what keeps `fps_mode 0`
 byte-identical, and a particle born on the last tick is drawn between its
 birthplace and where that tick left it - never ahead of it.
+
+#### Fix round R - what the night's chain broke in first person (#123, #148)
+
+Orders 1b to 6 and fix rounds K, L and M were written and committed in one
+night and played the next afternoon: ANDREA1, first person, `Frame rate 60`,
+VSync on, a 165 Hz panel, 2560x1440, HD on. Six findings came back, and four of
+them are one fault seen from four sides.
+
+**R1 - the way back to the title menu is a black screen with no input.** The
+title draws (the log has its rooms, its draw calls, its braid and a steady
+30.0 fps for fifteen seconds) and nothing reaches it.
+
+The cause is a **parity**, and it is why the first title of a session was fine
+and the one after a level was not. `ControlPhase`'s accumulator survives a
+level change:
+
+```
+for (framecount += nframes; framecount > 0; framecount -= 2)
+```
+
+At sixty the game loop feeds it one tick a frame and leaves it at 0 and -1 by
+turns. The title and the inventory keep **two** ticks a present at every
+setting (order 1b, `GameFrameMinTicks`) - and at two, that loop returns
+`framecount` to exactly where it started. From 0 it stays 0; from -1 it stays
+-1, for as long as the title is up. `InterpAlphaNow` read `framecount < 0` and
+answered **0.5 to every frame of the title**, so every frame was an in-between
+frame and every counter order 3 guards stood still. One of them is
+`DoScreenFade`, whose nine steps are the only thing that ever sets `DoFade` to
+2: the fade-in from black never advanced, its full screen black quad was drawn
+over the menu for ever, and `TitleOptions` - which zeroes `input` and `dbinput`
+until `DoFade` reaches 2 - swallowed every key after the first choice. `DoLevel`
+has always cleared `framecount`; `DoTitle` never did.
+
+Both halves are fixed, because a picture must not hang on the parity of an
+accumulator. `InterpAlphaNow` now asks `GameFrameMinTicks() >= 2` and returns
+a flat 1 for a frame that is not a sixty hertz one - the same test the
+display-bound branch beside it already made - and `DoTitle` clears
+`framecount` as `DoLevel` does.
+
+**And the first person camera no longer runs outside the played game.**
+`FirstPersonActive()`, which the DRAW asks, already refused a flyby and a
+cutscene. `FirstPersonEnabled()`, which decides whether the camera RUNS, did
+not - and `DoTitle` calls `InitialiseCamera`, which ends in `CalculateCamera`,
+at a moment when `bUseSpotCam` is still 0 because the flyby is triggered two
+lines later. So one full pass of `FirstPersonCamera` ran on the title level's
+Lara, moved the camera onto her head, took the field of view with `AlterFOV`
+and left `fpFovSet` and `fpHeadHidden` standing - and nothing ever handed
+either back, because from the next frame on the title is a flyby and
+`control.cpp` calls `CalculateSpotCams` instead. One `FPHEAD` line and two
+`ALTERFOV` lines in the user's log say so. The gate now names the title, the
+flyby and the cutscene, so the camera and the draw answer the same question.
+
+**R2 - the camera cut ten to seventeen times a second while Lara stood
+still,** and it is the fault behind R3, R4 and R6 as well.
+
+`INTERPLOG camcut=15` in a quiet room is not a camera cutting. It is the
+**target measured as a place when it is a direction**. `FirstPersonCamera`
+builds
+
+```
+camera.target = camera.pos + direction * 0x5100
+```
+
+- 20736 units down the line of sight, because the engine's camera has no field
+for "which way is she looking". On a target that far away **one degree moves
+the point 362 units** and order 2's absolute test snapped at 1024, so any turn
+past about three degrees between two ticks read as a cut. An idle animation
+turns her head by more than that.
+
+The rule is now scale-aware (`InterpCamAimCut`, `game/interpolate_math.h`):
+beyond `INTERP_CAM_FAR_TARGET` (4096) the target is pulled back onto a sphere
+of `INTERP_CAM_DIR_RADIUS` (1024) about **its own eye** and the threshold is
+applied to the change of DIRECTION alone - the eye's own travel has its own
+test with the same threshold right beside it. At that radius the threshold is
+a turn of 41 to 57 degrees in one thirtieth of a second, which is 1200 degrees
+a second and more; a real cut, which is a new view and not a turn, measures
+1448 at a right angle and 2048 at a half turn and is still caught. **The chase
+camera is not touched**: its target sits on Lara, a sector and a half away,
+under `INTERP_CAM_FAR_TARGET`, where the comparison is the absolute one order
+2 shipped, to the bit.
+
+**And a cut is now a cut of the WHOLE picture.** The test used to sit at the
+bottom of `InterpBeginFrame`, after every item, effect, hair link, particle and
+aim angle had already been overwritten with its halfway value - so a cut left
+the camera live and the world half a step behind it. In first person, where the
+eye hangs on Lara's own head, the whole level then jumped against her on every
+cut frame. The test now runs at the TOP, beside the cutscene test it belongs
+with, and a frame whose camera cuts is drawn live from end to end: one frame of
+thirty hertz at the one moment the picture jumps anyway.
+
+**R3 - "she drags four models along behind her", and the idle shudders worse
+than it did before the interpolation.** This is R2 seen from the body. With the
+camera live and the body at the half step on one frame in four, the whole of
+Lara moves against the eye by half a step and back again - which the eye
+integrates into copies. Nothing else was wrong with her pose: `CalcLaraMatrices`
+goes through `GetFramesNow` like every other body, `lara_matrices` are built
+once per frame and the HD composite - the body, the inner skin, the face, the
+hands, the holsters and the weapon on her back - all read that one array. What
+the log could not say is that they do, because `pose_hd` counted HD **items**
+alone and in first person the only HD body that matters is hers; it now counts
+her too.
+
+**R4 - the neck hole is huge, its edges are torn, and shoulder pieces and
+straps are missing.** Two things, and the first is R2 again: with the eye a
+half step away from the body the near zone of fix round L - a sphere of 40
+units about the camera, in view space - measures a distance the picture does
+not have.
+
+The second is the **inner skin's depth tie**. The HD path draws with
+`D3DCMP_LESSEQUAL`, which is right for anything drawn once. Fix round K then
+drew Lara's body a second time - the same vertices, the same matrices, the
+other side of every triangle - to close the neck hole from the inside, and it
+is drawn AFTER the outward one. On a closed limb that is harmless: the inward
+face is behind the outward one and fails. **On a sheet it is not.** A strap, a
+shoulder piece, a flap - one layer of triangles with nothing behind it - has
+its inward and its outward face at the same depth to the bit, so the second
+draw won the tie and the piece came out in the inner skin's one flat texel with
+its normal turned round; and where the two depths differ by one unit of float
+precision it did that per pixel, which is what "randomly cut-off polygons with
+torn edges" looks like. The inner draw now runs with `D3DCMP_LESS` and is put
+back to `LESSEQUAL` beside the cull mode: at a tie the outward face stands, and
+through the neck - where nothing was written at all - the inner face still
+passes, which is the whole job it has.
+
+**And the near zone is now measured instead of argued about.** The cylinder is
+in the bind pose and therefore takes the same patch of skin in every animation
+- that is the whole reason fix round J chose it. The near zone is in VIEW
+space, so what it takes depends on the pose, and fix round L measured it in the
+bind pose alone (nearest survivor 43.5 to 45.2 units over the eight outfits,
+which is why the radius is 40). "The hole reaches into her chest, looking down
+along her body" is a question about a FOLDED pose and no picture can answer it.
+So `HDLOG neckcut` now writes one line a second in first person with the
+distance from the lens to the head joint, to the torso joint and to the nearest
+joint of all fifteen, in view space, beside the radius in force. A torso
+reading under 40 is the near zone eating her chest and the radius is wrong for
+that animation; one well above it says the hole has another cause and the next
+round may stop looking here.
+
+**The lid of fix round J is not coming back.** It was withdrawn on purpose in
+fix round K, with the play test's own picture ("a great flat plate"); the inner
+skin is what closes the hole now.
+
+**R5 - enemies partly or wholly missing in first person.** A soldier at a wall
+not drawn at all while his muzzle flash, which the classic path draws, still
+fired; a creature close to the camera visible only on one side of a straight
+edge.
+
+It is **group M's item half**, and the round's own note beside it says why
+without following it: **the classic path hands every item the whole screen.**
+`PrintObjects` (`game/draw.cpp`) sets `phd_left = 0`, `phd_top = 0`,
+`phd_right = phd_winxmax + 1`, `phd_bottom = phd_winymax + 1` before its item
+loop and puts them back afterwards; only the ROOM walk uses
+`r->left..r->bottom`. Group M gave every HD item the portal window of its own
+room instead, so an enemy in a neighbouring room - drawn whole by the classic
+path - was cut to the doorway rectangle, and one whose window came out small
+was not drawn at all.
+
+The item half is withdrawn. `HDFrameScissorForRoom` now switches the scissor
+test off for every item, which is the classic path's own answer, and takes a
+count on the way past: `items_spared=` on the `HDLOG clip` line is how many
+items the withdrawn rule WOULD have cut, so the guard-through-the-wall it was
+built for can be judged by a number rather than by a memory. **The rooms keep
+their windows** - that is where the bleeding really was, and nothing about it
+changed.
+
+**R6 - room seams that move with Lara's idle, and the void through them.**
+Mostly R2 again: the camera live against a world half a step back moves every
+seam in the picture, once every three or four frames, in time with whatever
+animation is driving the head. What could not be answered from the log at all
+is the question behind it - **were all the rooms, all the portal windows and
+all the objects of one picture collected with the same camera?** - because at
+sixty the view is rebuilt twice per in-between frame (the blended eye on the
+way in, the live one on the way out) and nothing wrote down which.
+
+`ViewSerial` (`specific/3dmath.cpp`) now steps once per `phd_LookAt`, the HD
+path writes it down beside every room matrix and every object it collects, and
+the `HDLOG clip` line reports the spread as `view=` and `view_obj=`. A healthy
+frame prints one number for each and the two are equal; a range prints
+`a..b SPLIT` and names the half of the frame that was collected late. It is a
+counter and nothing branches on it.
+
+**What this round did NOT find.** The "stale cut constants" theory for R5 is
+disproved by the code and stays disproved: `HDObjectBegin` zeroes `entry.cut`
+and sets `entry.cull` to `HD_MODEL_CULL_NONE` for every item, `draw_model`
+writes `c162`, `c163`, `c164` and `c165` for **every** draw and not only for the
+one that cuts, and `gPass.z` - the pixel shader's whole share of the cut - is
+`cut && cut->on > 0` per pass per draw. No creature can inherit Lara's
+cylinder. The checkerboard strip over a doorway and the black gap at a
+brick reveal (the user's screenshots 3 and 4) are not explained by anything in
+this round; the `view=` field is there to say whether one camera per picture is
+the reason before the next round looks anywhere else.
+
+**The guards.** `fps_mode 0` reaches none of it: `InterpAlphaNow` returns 1
+before the new test, and every line of the camera rule lives past
+`InterpBeginFrame`'s `alpha >= 1` return. `hd_enable 0` reaches none of the
+three HD changes. `ViewSerial` is one increment with no branch on it. The one
+change that is not behind either guard is `DoTitle` clearing `framecount`,
+which is the same line `DoLevel` has always had.
+
+**The proof.** `InterpTest`, two new sections, 255 checks and none failing:
+`camera_aim` runs the OLD rule and the new one side by side over a swept
+first person camera - the old one cuts on a three degree head turn, the new one
+does not cut on any turn up to twenty degrees a tick in either axis with the
+eye moving as well (over 500 cases), still cuts at sixty, ninety and a hundred
+and eighty degrees, leaves a chase camera alone and still catches a target
+jumping two sectors, and hands back a near target as its own offset to the
+unit; `title_cadence` runs the title's own two-ticks-a-present accumulator from
+both parities and shows the old rule making every frame of one of them a tween
+frame, the new rule making none on either, and the logic tick count unchanged.
+
 
 ---
 

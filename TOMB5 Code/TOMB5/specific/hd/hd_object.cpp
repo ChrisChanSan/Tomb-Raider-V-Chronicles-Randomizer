@@ -109,6 +109,10 @@ namespace
 		 * Lara's whole composite (she is in the camera's room and the
 		 * camera's room is the whole screen). */
 		int room;
+		/* WHICH CAMERA THIS WAS COLLECTED WITH (fix round R). ViewSerial at
+		 * the moment the matrices were taken; see the note over it in
+		 * specific\3dmath.cpp. Read only by the log. */
+		long view;
 	};
 
 	FrameItem g_frame[HD_OBJ_ITEMS];
@@ -1603,6 +1607,7 @@ void HDObjectEnd()
 	entry.nodes = g_open_nodes;
 	entry.mask = g_open_mask;
 	entry.room = g_open_room;	// group M
+	entry.view = ViewSerial;	// fix round R
 
 	/* The engine's 3x4 into the row-major 4x4 the shader wants - the same
 	 * conversion SetD3DMatrix does for the fixed-function pipe, and the one
@@ -1702,17 +1707,13 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 		const FrameItem& entry = g_frame[i];
 		HDModelLighting lighting;
 
-		/* GROUP M: the item is drawn inside the portal window of its own
-		 * room, which is the window that room's art was just drawn in. An
-		 * HD guard in a room that overlaps another one in space came through
-		 * the wall exactly as the room's geometry did.
-		 *
-		 * Lara and everything else pushed without a room answer -1 and this
-		 * switches the test off for them. So does an item whose room the
-		 * portal walk never reached: that item is not on the room list at
-		 * all, and inventing a window for it would be a rule the engine has
-		 * not got - the classic path hands every item the whole screen
-		 * (game\draw.cpp, PrintObjects). */
+		/* GROUP M, WITHDRAWN FOR ITEMS IN FIX ROUND R. The call switches the
+		 * scissor test OFF for every item and takes a count on the way past;
+		 * the whole argument is over HDFrameScissorForRoom in hd_level.cpp.
+		 * In one line: the classic path hands every item the whole screen
+		 * (game\draw.cpp, PrintObjects), round M gave it its room's portal
+		 * window instead, and the play test found enemies cut in half at a
+		 * doorway's edge and soldiers not drawn at all. */
 		HDFrameScissorForRoom(entry.room);
 
 		lighting.lights = entry.lights;
@@ -1868,7 +1869,26 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	 * an arm through a doorway in third person, is the one thing in the
 	 * frame that must never be cut. */
 	entry.room = -1;
+	entry.view = ViewSerial;	// fix round R
 
 	g_count++;
 	return true;
+}
+
+/* THE CAMERA THE OBJECTS OF THIS FRAME WERE COLLECTED WITH (fix round R).
+ * Lowest and highest ViewSerial over the frame list; equal numbers mean one
+ * camera, a spread means the frame was collected across a view rebuild. Both
+ * are 0 for a frame with no HD object at all. */
+void HDObjectViewSerials(long* lo, long* hi)
+{
+	long a = 0, b = 0;
+
+	for (int i = 0; i < g_count; i++)
+	{
+		if (!i || g_frame[i].view < a) a = g_frame[i].view;
+		if (!i || g_frame[i].view > b) b = g_frame[i].view;
+	}
+
+	if (lo) *lo = a;
+	if (hi) *hi = b;
 }

@@ -18,6 +18,8 @@
 #include "control.h"
 #include "objects.h"
 #include "lara.h"
+#include "interpolate.h"		// InterpNotePoseHD (#148, order 4 / fix round R)
+#include "../specific/hd/hd_laradraw.h"	// HDLaraDrawActive - which body wears that pose
 #include "../tomb5/tomb5.h"
 
 short* GLaraShadowframe;
@@ -82,6 +84,23 @@ void CalcLaraMatrices(long flag)
 	 * walks but a frame index picked by hand out of a spaz animation, and it
 	 * keeps thirty hertz's own picture. */
 	frac = GetFramesNow(lara_item, frmptr, &blend);
+
+	/* AND LARA'S OWN HD BODY IS COUNTED (#148, order 4; added in fix round R).
+	 *
+	 * INTERPLOG's pose_hd used to count HD ITEMS alone (game\draw.cpp,
+	 * DrawAnimatingItem), so a play test in first person - where the only HD
+	 * body that matters is hers - read pose_hd=0.0 and could not tell "the HD
+	 * Lara is not getting the blended pose" from "no HD item happened to move
+	 * this second". It is the same fact for her as for an item: the pose was
+	 * blended in TIME (frac == 2) and the body that wears it is the HD
+	 * composite.
+	 *
+	 * flag 0 alone. CalcLaraMatrices runs two or three times a frame - the
+	 * VIEW set, the joint set, a mirror - and flag 0 is the one whose output
+	 * (lara_matrices) HDLaraDrawFrame reads. Counting the others would
+	 * multiply the number by how many cameras happened to look at her. */
+	if (frac == 2 && flag == 0 && HDLaraDrawActive())
+		InterpNotePoseHD();
 
 	if (lara.hit_direction < 0)
 	{

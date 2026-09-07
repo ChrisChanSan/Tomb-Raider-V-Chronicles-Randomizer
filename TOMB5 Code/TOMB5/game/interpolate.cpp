@@ -313,6 +313,16 @@ namespace
 	int g_snapInvalid = 0;
 	int g_snapCamCut = 0;
 	int g_snapCutscene = 0;
+
+	/* WHY THE CAMERA CUT (#123/#148, fix round R). One counter per reason,
+	 * because "camcut=15" says a rule fired fifteen times and not WHICH rule,
+	 * and the whole of fix round R is that one of the five was firing for a
+	 * reason that was never a cut. A play test that sees a shudder again has
+	 * to be able to name the term before anybody touches a threshold. */
+	int g_cutType = 0;		// camera.type / old_type / fixed_camera
+	int g_cutSpot = 0;		// a flyby beginning or ending
+	int g_cutEye = 0;		// the eye jumped further than CAM_SNAP
+	int g_cutAim = 0;		// the view DIRECTION jumped (see InterpCamAimCut)
 	int g_secPose = 0;		// order 4: items drawn with a blended pose
 	int g_secPoseSkip = 0;		// ... and refused one by rule K6
 	int g_secPoseHD = 0;		// ... of which went through the HD path
@@ -516,6 +526,76 @@ namespace
 		return p->x != v->x || p->y != v->y || p->z != v->z;
 	}
 
+	/* THE FIVE WAYS THE CAMERA CUTS (#148, order 2; re-measured and moved in
+	 * fix round R).
+	 *
+	 * A cut is a cut on purpose - a fixed camera taking over, a spot cam
+	 * stepping to the next node, a flyby beginning or ending, the binoculars
+	 * going up - and blending across one would drag the eye through the
+	 * level's geometry for half a tick instead of jumping the way the level
+	 * designer meant it to.
+	 *
+	 * camera.type is tested TOGETHER WITH camera.old_type because
+	 * CalculateCamera resets type to CHASE_CAMERA at its own end unless a
+	 * heavy camera's timer is still running; old_type is what the view was
+	 * actually built as, and is the half of the pair that moves when a fixed
+	 * camera takes over.
+	 *
+	 * THE TARGET IS MEASURED AS AN AIM AND NOT AS A PLACE (fix round R). The
+	 * whole argument, the numbers and what it is worth in degrees are at
+	 * InterpCamAimCut in game\interpolate_math.h; the short of it is that the
+	 * first person camera's target lies 20736 units down the line of sight,
+	 * where a 2.8 degree turn of her head moved it a whole sector and the old
+	 * absolute test called that a cut ten to seventeen times a second while
+	 * she stood still.
+	 *
+	 * It counts its reason on the way past, so that INTERPLOG can say which
+	 * of the five fired rather than only how often something did. */
+	bool CameraCut()
+	{
+		bool cut = false;
+
+		if (g_prevCam.type != (short)camera.type ||
+			g_prevCam.oldType != (short)camera.old_type ||
+			g_prevCam.fixed != (short)camera.fixed_camera)
+		{
+			cut = true;
+
+			if (gLogEnabled)
+				g_cutType++;
+		}
+
+		if (g_prevCam.spot != (short)bUseSpotCam)
+		{
+			cut = true;
+
+			if (gLogEnabled)
+				g_cutSpot++;
+		}
+
+		if (Manhattan(camera.pos.x - g_prevCam.px, camera.pos.y - g_prevCam.py,
+			camera.pos.z - g_prevCam.pz) > CAM_SNAP)
+		{
+			cut = true;
+
+			if (gLogEnabled)
+				g_cutEye++;
+		}
+
+		if (InterpCamAimCut(g_prevCam.px, g_prevCam.py, g_prevCam.pz,
+			g_prevCam.tx, g_prevCam.ty, g_prevCam.tz,
+			camera.pos.x, camera.pos.y, camera.pos.z,
+			camera.target.x, camera.target.y, camera.target.z, CAM_SNAP))
+		{
+			cut = true;
+
+			if (gLogEnabled)
+				g_cutAim++;
+		}
+
+		return cut;
+	}
+
 	void CaptureVec(InterpVec* p, const PHD_VECTOR* v, bool alive)
 	{
 		p->x = v->x;
@@ -626,7 +706,8 @@ namespace
 			Log("INTERPLOG level=%d at=%ds frames=%d tween=%d "
 				"alpha=%.2f/%.2f/%.2f "
 				"lara_step=%.1f items=%.1f snaps=%d (teleport=%d roomjump=%d "
-				"object=%d invalid=%d) camcut=%d cutscene=%d "
+				"object=%d invalid=%d) camcut=%d (type=%d spot=%d eye=%d aim=%d) "
+				"cutscene=%d "
 				"pose_items=%.1f pose_skips=%.1f pose_hd=%.1f lara_pose=%d/%d "
 				"particles=%.1f particle_kinds=%04lx",
 				(int)gfLevelId, g_at, g_secFrames, g_secTween,
@@ -637,7 +718,8 @@ namespace
 				(double)g_secItems / g_secFrames,
 				g_snapTeleport + g_snapRoomJump + g_snapObject + g_snapInvalid,
 				g_snapTeleport, g_snapRoomJump, g_snapObject, g_snapInvalid,
-				g_snapCamCut, g_snapCutscene,
+				g_snapCamCut, g_cutType, g_cutSpot, g_cutEye, g_cutAim,
+				g_snapCutscene,
 				(double)g_secPose / g_secFrames,
 				(double)g_secPoseSkip / g_secFrames,
 				(double)g_secPoseHD / g_secFrames,
@@ -683,6 +765,10 @@ namespace
 		g_snapObject = 0;
 		g_snapInvalid = 0;
 		g_snapCamCut = 0;
+		g_cutType = 0;
+		g_cutSpot = 0;
+		g_cutEye = 0;
+		g_cutAim = 0;
 		g_snapCutscene = 0;
 		g_secPose = 0;
 		g_secPoseSkip = 0;
@@ -887,6 +973,38 @@ float InterpAlphaNow()
 	if (mode != 1)
 		return 1.0F;
 
+	/* AND THE FRAME THAT IS NOT A SIXTY HERTZ ONE (#123/#148, fix round R).
+	 *
+	 * The same test the display-bound branch above has already made, and it
+	 * was missing here: the title menu and the inventory keep their TWO
+	 * ticks per present at every setting (order 1b, GameFrameMinTicks), so
+	 * their frames land on the logic ticks and there is nothing between two
+	 * of them to draw.
+	 *
+	 * WHAT IT COST. framecount is an accumulator that survives a level
+	 * change, and the sixty hertz game loop leaves it at 0 or at -1 by turns.
+	 * DoLevel has always cleared it (game\gameflow.cpp) and DoTitle never
+	 * did, so a title entered on the wrong half of the cadence started with
+	 * framecount == -1 - and at two ticks a present the loop then puts it
+	 * back to -1 on every single frame. Every frame of the title read 0.5,
+	 * every frame was a tween frame, and every counter order 3 guards stood
+	 * still for as long as the title was up. One of them is DoScreenFade,
+	 * whose nine steps are what sets DoFade to 2: the fade-in from black
+	 * never advanced, a full screen black quad was drawn over the menu
+	 * forever, and TitleOptions - which zeroes `input` until DoFade reaches 2
+	 * - swallowed every key after the first choice. A black screen with no
+	 * input, which is what the play test of 2026-09-07 found on the way back
+	 * from a level, and only from a level: at program start framecount is 0
+	 * and the other half of the coin came up.
+	 *
+	 * DoTitle now clears framecount as DoLevel does. This line is the rule
+	 * that makes the clearing unnecessary, and both are here on purpose - the
+	 * parity of an accumulator is not a thing to leave a picture hanging on.
+	 *
+	 * At fps_mode 0 the return above has already fired and this is dead. */
+	if (GameFrameMinTicks() >= 2)
+		return 1.0F;
+
 	/* THE CADENCE, WITHOUT A CLOCK OF ITS OWN.
 	 *
 	 * framecount counts 1/60 s ticks and ControlPhase spends two of them per
@@ -1076,6 +1194,36 @@ void InterpBeginFrame(float alpha)
 		{
 			NoteFrameAlpha(alpha);
 			g_snapCutscene++;
+			NoteDrawnLara();
+		}
+
+		return;
+	}
+
+	/* A CAMERA CUT IS A CUT OF THE WHOLE PICTURE (#123/#148, fix round R).
+	 *
+	 * The test used to sit at the BOTTOM of this function, after every item,
+	 * effect, hair link, particle and aim angle had already been overwritten
+	 * with its halfway value. So a cut left the camera live and the world
+	 * half a step behind it - and in first person, where the eye hangs on
+	 * Lara's own head, the whole level then jumped by half a step against her
+	 * on every cut frame. At camcut=10..17 a second that is the shudder the
+	 * play test reported while she STOOD STILL, the "four models dragged
+	 * behind her", and room seams that walk with her breathing.
+	 *
+	 * The rule is now the one the cutscene branch above already used: if the
+	 * camera is not a neighbour of the last one, nothing on this frame is.
+	 * The frame is drawn LIVE, whole - which is one frame of thirty hertz
+	 * inside a sixty hertz run, at the one moment the picture jumps anyway.
+	 *
+	 * `alpha` still decides the tween latch (set at the top), so every
+	 * counter of order 3 stops on this frame exactly as it must. */
+	if (CameraCut())
+	{
+		if (gLogEnabled)
+		{
+			NoteFrameAlpha(alpha);
+			g_snapCamCut++;
 			NoteDrawnLara();
 		}
 
@@ -1274,19 +1422,10 @@ void InterpBeginFrame(float alpha)
 		lara.left_arm.z_rot = LerpAngle(g_prevAim.left[2], g_savedAim.left[2], alpha);
 	}
 
-	/* THE CAMERA, AND THE FIVE WAYS IT CUTS.
-	 *
-	 * A cut is a cut on purpose - a fixed camera taking over, a spot cam
-	 * stepping to the next node, a flyby beginning or ending, the binoculars
-	 * going up - and blending across one would drag the eye through the
-	 * level's geometry for half a tick instead of jumping the way the level
-	 * designer meant it to.
-	 *
-	 * camera.type is tested TOGETHER WITH camera.old_type because
-	 * CalculateCamera resets type to CHASE_CAMERA at its own end unless a
-	 * heavy camera's timer is still running; old_type is what the view was
-	 * actually built as, and is the half of the pair that moves when a fixed
-	 * camera takes over.
+	/* THE CAMERA. Whether it cuts was decided at the TOP of this function
+	 * (fix round R) - a frame whose camera cuts never gets this far, because
+	 * it is drawn live from end to end. So here there is nothing left to test
+	 * and the blend is unconditional.
 	 *
 	 * camera.pos.room_number IS NOT INTERPOLATED, ever. DrawRooms is handed
 	 * it (game\draw.cpp) and it drives the whole portal walk and every clip
@@ -1296,43 +1435,26 @@ void InterpBeginFrame(float alpha)
 	 * the same compromise TR1X makes. */
 	{
 		const short roll = CameraRollNow();
-		const bool cut =
-			g_prevCam.type != (short)camera.type ||
-			g_prevCam.oldType != (short)camera.old_type ||
-			g_prevCam.fixed != (short)camera.fixed_camera ||
-			g_prevCam.spot != (short)bUseSpotCam ||
-			Manhattan(camera.pos.x - g_prevCam.px, camera.pos.y - g_prevCam.py,
-				camera.pos.z - g_prevCam.pz) > CAM_SNAP ||
-			Manhattan(camera.target.x - g_prevCam.tx, camera.target.y - g_prevCam.ty,
-				camera.target.z - g_prevCam.tz) > CAM_SNAP;
 
-		if (cut)
-		{
-			if (gLogEnabled)
-				g_snapCamCut++;
-		}
-		else
-		{
-			g_savedCam.px = camera.pos.x;
-			g_savedCam.py = camera.pos.y;
-			g_savedCam.pz = camera.pos.z;
-			g_savedCam.tx = camera.target.x;
-			g_savedCam.ty = camera.target.y;
-			g_savedCam.tz = camera.target.z;
-			g_savedCam.roll = roll;
-			g_camTouched = true;
+		g_savedCam.px = camera.pos.x;
+		g_savedCam.py = camera.pos.y;
+		g_savedCam.pz = camera.pos.z;
+		g_savedCam.tx = camera.target.x;
+		g_savedCam.ty = camera.target.y;
+		g_savedCam.tz = camera.target.z;
+		g_savedCam.roll = roll;
+		g_camTouched = true;
 
-			camera.pos.x = LerpLong(g_prevCam.px, g_savedCam.px, alpha);
-			camera.pos.y = LerpLong(g_prevCam.py, g_savedCam.py, alpha);
-			camera.pos.z = LerpLong(g_prevCam.pz, g_savedCam.pz, alpha);
-			camera.target.x = LerpLong(g_prevCam.tx, g_savedCam.tx, alpha);
-			camera.target.y = LerpLong(g_prevCam.ty, g_savedCam.ty, alpha);
-			camera.target.z = LerpLong(g_prevCam.tz, g_savedCam.tz, alpha);
+		camera.pos.x = LerpLong(g_prevCam.px, g_savedCam.px, alpha);
+		camera.pos.y = LerpLong(g_prevCam.py, g_savedCam.py, alpha);
+		camera.pos.z = LerpLong(g_prevCam.pz, g_savedCam.pz, alpha);
+		camera.target.x = LerpLong(g_prevCam.tx, g_savedCam.tx, alpha);
+		camera.target.y = LerpLong(g_prevCam.ty, g_savedCam.ty, alpha);
+		camera.target.z = LerpLong(g_prevCam.tz, g_savedCam.tz, alpha);
 
-			RebuildView(camera.pos.x, camera.pos.y, camera.pos.z,
-				camera.target.x, camera.target.y, camera.target.z,
-				LerpAngle(g_prevCam.roll, roll, alpha));
-		}
+		RebuildView(camera.pos.x, camera.pos.y, camera.pos.z,
+			camera.target.x, camera.target.y, camera.target.z,
+			LerpAngle(g_prevCam.roll, roll, alpha));
 	}
 
 	if (gLogEnabled)

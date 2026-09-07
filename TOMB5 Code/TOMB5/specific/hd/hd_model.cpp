@@ -1334,6 +1334,36 @@ namespace
 				cull == HD_MODEL_CULL_CW || cull == HD_MODEL_SKIN_CW
 					? D3DCULL_CW : D3DCULL_CCW);
 
+		/* THE INNER SKIN MAY NEVER WIN A DEPTH TIE (#123, fix round R).
+		 *
+		 * The HD path draws with D3DCMP_LESSEQUAL (hd_render.cpp), which is
+		 * right for everything that is drawn once: a surface that lands on a
+		 * depth already written is the same surface and may as well replace
+		 * it. Fix round K then drew Lara's body a SECOND time - the same
+		 * vertices, the same matrices, the other side of every triangle - to
+		 * close the neck hole from the inside, and it is drawn AFTER the
+		 * outward one.
+		 *
+		 * On a closed limb that is harmless: the inward face sits behind the
+		 * outward one and fails the test. On a SHEET it is not. A strap, a
+		 * shoulder piece, a flap - one layer of triangles with nothing behind
+		 * it - has its inward and its outward face at the SAME depth to the
+		 * bit, so LESSEQUAL let the second draw overwrite the first and the
+		 * piece came out in the inner skin's one flat texel with its normal
+		 * turned round. Where the two depths differ by one unit of float
+		 * precision it does it per pixel, which is the "randomly cut-off
+		 * polygons with torn edges" of the play test, and the shoulder pieces
+		 * and straps the user reported missing.
+		 *
+		 * LESS for the inner draw settles it in one state change: at a tie
+		 * the outward face stands, and through the neck - where nothing was
+		 * written at all - the inner face still passes, which is the whole
+		 * job the second draw has. Put back below beside the cull mode. */
+		const bool innerSkinDraw = cull == HD_MODEL_SKIN_CW || cull == HD_MODEL_SKIN_CCW;
+
+		if (innerSkinDraw)
+			g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESS);
+
 		for (int pass = 0; pass < 3; pass++)
 		{
 			/* E6: the frame draws its solid work and its glows in two
@@ -1488,6 +1518,12 @@ namespace
 		 * it - silently, and only in first person. */
 		if (cull != HD_MODEL_CULL_NONE)
 			g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+		// ... AND BACK TO LESSEQUAL, for the same reason (fix round R): the
+		// bracket installed it and every other draw on this frame's list
+		// expects to find it.
+		if (innerSkinDraw)
+			g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
 	}
 
 	const Model* find(const std::map<int, Model>& where, int slot)

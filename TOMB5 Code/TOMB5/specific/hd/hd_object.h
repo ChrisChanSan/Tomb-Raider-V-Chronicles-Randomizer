@@ -91,6 +91,12 @@ void HDObjectEnd();
 // How many items are waiting. HDFrameDraw asks before it opens the bracket.
 int HDObjectFrameCount();
 
+/* WHICH CAMERA THE FRAME'S OBJECTS WERE COLLECTED WITH (fix round R): the
+ * lowest and the highest ViewSerial (specific\3dmath.h) over the frame list.
+ * For the log alone - a spread says the picture was collected across a view
+ * rebuild, which is what a seam that moves with the animation looks like. */
+void HDObjectViewSerials(long* lo, long* hi);
+
 // Inside hd_level.cpp's HD bracket, after the rooms. `projection` is the very
 // matrix the rooms were drawn with and `bulbs` this frame's fog bulb count,
 // which hd_render already put in the shared registers.

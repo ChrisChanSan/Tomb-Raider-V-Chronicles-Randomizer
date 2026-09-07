@@ -106,6 +106,11 @@ namespace
 		 * rectangle covering everything would do. */
 		int x0, y0, x1, y1;
 		bool full;
+
+		/* WHICH CAMERA THIS ROOM WAS COLLECTED WITH (fix round R). ViewSerial
+		 * at the InsertRoom that put it here; see the note over it in
+		 * specific\3dmath.cpp. Read only by the log below. */
+		long view;
 	};
 
 	char g_stem[64] = { 0 };
@@ -435,6 +440,11 @@ namespace
 	int g_clip_full = 0;
 	int g_clip_scissored = 0;
 	int g_clip_empty = 0;
+	/* Fix round R: HD items whose own room's window is NOT the whole screen,
+	 * i.e. the ones group M used to cut and the classic path never does.
+	 * Counted per frame with -log and reported in the clip line, so that the
+	 * withdrawn rule can be judged by a number. */
+	int g_clip_items_spared = 0;
 	// Once per level, on the first frame that draws an HD room: one line per
 	// room with the window it got. Reset beside g_matrix_checked.
 	bool g_clip_listed = false;
@@ -2068,6 +2078,7 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld,
 	FrameRoom& entry = g_frame[g_frame_count++];
 	entry.room = roomIndex;
 	entry.group = group;
+	entry.view = ViewSerial;	// fix round R
 	SetD3DMatrix(&entry.world, (float*)viewWorld);
 	/* GROUP M: the portal window, taken HERE and not at draw time. These four
 	 * numbers are the engine's own `r->left..r->bottom` and they do not
@@ -2079,29 +2090,45 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld,
 	return true;
 }
 
-/* THE WINDOW OF THE ROOM AN ITEM STANDS IN (#123, group M). The frame list is
- * short - a hundred rooms at the very most, and the walk usually returns ten -
- * so this is a scan and not a table: a table indexed by room would have to be
- * cleared per frame over every room of the level, which is the more expensive
- * of the two for every level this game has.
+/* AN ITEM IS NOT CUT BY ITS ROOM'S WINDOW (#123, group M; WITHDRAWN in fix
+ * round R).
  *
- * A room that is not on the list gets no scissor at all. That is not a
- * fallback but the right answer: an item whose room the walk never reached is
- * an item the classic path would have drawn just the same (PrintObjects hands
- * every item the WHOLE screen, phd_left = 0 .. phd_winxmax + 1, and not its
- * room's window), and cutting it against a window that does not exist would
- * invent a rule the engine has not got. */
+ * WHAT GROUP M DID, AND WHY IT IS GONE FOR ITEMS. Round M gave every HD item
+ * the portal window of its own room, on the reasoning that "an HD guard in a
+ * room that overlaps another one in space came through the wall exactly as
+ * the room's geometry did". The rooms needed it and keep it. The items never
+ * did, and the round's own note beside this function says why without
+ * following it: THE CLASSIC PATH HANDS EVERY ITEM THE WHOLE SCREEN -
+ * PrintObjects (game\draw.cpp) sets phd_left = 0, phd_top = 0, phd_right =
+ * phd_winxmax + 1, phd_bottom = phd_winymax + 1 before its item loop and puts
+ * them back afterwards. Only the ROOM walk uses `r->left..r->bottom`.
+ *
+ * So round M invented a rule the engine has not got, and the play test of
+ * 2026-09-07 found what it costs: an enemy in a neighbouring room, seen
+ * through a doorway, is drawn WHOLE by the classic path and was cut to the
+ * doorway rectangle here - a soldier at the wall who was not drawn at all
+ * while his muzzle flash, which the classic path draws, still fired; a
+ * creature close to the camera visible only on one side of a straight edge.
+ *
+ * The scissor test is switched OFF for every item, which is the classic
+ * path's own answer. The frame list still carries the windows and the rooms
+ * are still drawn inside them; what is left here is the counter, so that a
+ * later round can see from the log how often the withdrawn rule WOULD have
+ * cut an item, and decide with numbers whether the guard-through-the-wall it
+ * was built for is worth a rule of its own. */
 void HDFrameScissorForRoom(int roomIndex)
 {
-	if (roomIndex >= 0)
+	if (gLogEnabled && roomIndex >= 0)
 	{
 		for (int i = 0; i < g_frame_count; i++)
 		{
 			if (g_frame[i].room != roomIndex)
 				continue;
 
-			ApplyClip(g_frame[i]);
-			return;
+			if (!g_frame[i].full)
+				g_clip_items_spared++;
+
+			break;
 		}
 	}
 
@@ -2247,6 +2274,7 @@ void HDFrameDraw()
 	g_clip_full = 0;
 	g_clip_scissored = 0;
 	g_clip_empty = 0;
+	g_clip_items_spared = 0;	// fix round R, counted by HDFrameScissorForRoom
 
 	for (int i = 0; i < g_frame_count; i++)
 	{
@@ -2340,6 +2368,11 @@ void HDFrameDrawGlow()
 		return;
 
 	g_frame_pending = false;
+
+	/* Fix round R: this phase walks the same items the solid one did, so the
+	 * count starts over here and the clip line below - which is written from
+	 * this phase - reports one frame's items and not two phases' worth. */
+	g_clip_items_spared = 0;
 
 	D3DMATRIX& projection = g_frame_projection;
 	HDFrameLighting& frame = g_frame_light;
@@ -2439,8 +2472,46 @@ void HDFrameDrawGlow()
 		{
 			g_clip_line_ever = true;
 			g_clip_line_at = now;
-			Log("HDLOG clip rooms=%d full=%d scissored=%d empty=%d",
-				g_frame_count, g_clip_full, g_clip_scissored, g_clip_empty);
+			/* ONE CAMERA PER PICTURE, AS A NUMBER (fix round R).
+			 *
+			 * `view=` is the ViewSerial the rooms were collected with and
+			 * `view_obj=` the one the HD objects were. At sixty hertz the
+			 * view is rebuilt twice per in-between frame - the blended eye
+			 * on the way in, the live one on the way out - so anything
+			 * collected on the wrong side of either would be drawn from a
+			 * camera the rest of the frame does not share, and a room seam
+			 * that walks with Lara's breathing is what that looks like.
+			 *
+			 * A HEALTHY FRAME PRINTS ONE NUMBER FOR EACH, and the two are
+			 * equal. A range (`a..b`) is the bug, and it names the half of
+			 * the frame that was collected late. */
+			long ro_lo = 0, ro_hi = 0, ob_lo = 0, ob_hi = 0;
+
+			for (int i = 0; i < g_frame_count; i++)
+			{
+				if (!i || g_frame[i].view < ro_lo) ro_lo = g_frame[i].view;
+				if (!i || g_frame[i].view > ro_hi) ro_hi = g_frame[i].view;
+			}
+
+			HDObjectViewSerials(&ob_lo, &ob_hi);
+
+			char views[64];
+			char viewsObj[64];
+
+			if (ro_lo == ro_hi)
+				std::sprintf(views, "%ld", ro_lo);
+			else
+				std::sprintf(views, "%ld..%ld SPLIT", ro_lo, ro_hi);
+
+			if (ob_lo == ob_hi)
+				std::sprintf(viewsObj, "%ld", ob_lo);
+			else
+				std::sprintf(viewsObj, "%ld..%ld SPLIT", ob_lo, ob_hi);
+
+			Log("HDLOG clip rooms=%d full=%d scissored=%d empty=%d "
+				"items_spared=%d view=%s view_obj=%s",
+				g_frame_count, g_clip_full, g_clip_scissored, g_clip_empty,
+				g_clip_items_spared, views, viewsObj);
 		}
 	}
 

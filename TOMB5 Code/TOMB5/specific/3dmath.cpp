@@ -38,6 +38,25 @@ SVECTOR CamRot;
  * they do not share anything else. */
 short CamRoll = 0;
 
+/* WHICH CAMERA THIS IS, AS A NUMBER (#123/#148, fix round R).
+ *
+ * One step per phd_LookAt, i.e. one per view matrix the engine ever builds.
+ * The HD path writes it down beside every room matrix and every object it
+ * collects, and HDFrameDraw reports the spread over the frame - so "were all
+ * the rooms, all the portal windows and all the objects of this picture built
+ * with the SAME camera?" is a number in the log instead of an argument.
+ *
+ * It has to be asked because the answer is not obvious: at sixty hertz the
+ * view is rebuilt TWICE per in-between frame (InterpBeginFrame writes the
+ * blended eye, InterpEndFrame puts the live one back), and anything collected
+ * on the wrong side of either would be drawn from a camera the rest of the
+ * frame does not share. That is what a room seam that walks with Lara's
+ * breathing looks like.
+ *
+ * A counter and nothing else: nothing branches on it, so it costs one
+ * increment per view and changes no picture at any setting. */
+long ViewSerial = 0;
+
 float one = 2048.0F * float(1 << W2V_SHIFT);
 float mone = 2048.0F;
 
@@ -741,6 +760,7 @@ void phd_LookAt(long xsrc, long ysrc, long zsrc, long xtar, long ytar, long ztar
 	CamPos.y = ysrc;
 	CamPos.z = zsrc;
 	CamRoll = roll;		// #148, order 2 - see the note over the variable
+	ViewSerial++;		// fix round R - see the note over the variable
 	phd_GenerateW2V(&viewPos);
 	S_InitD3DMatrix();
 	aSetViewMatrix();

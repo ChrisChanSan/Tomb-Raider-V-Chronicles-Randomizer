@@ -12,6 +12,7 @@
  */
 #pragma once
 #include <stdlib.h>	// labs
+#include <math.h>	// sqrt - the camera aim rule of fix round R
 
 /* THE ARITHMETIC OF THE TIME INTERPOLATION (#148, order 2), AND NOTHING ELSE.
  *
@@ -381,4 +382,92 @@ inline long InterpBlendLong(long a, long b, long alpha8)
 inline long InterpTrailLong(long cur, long step, float alpha)
 {
 	return InterpLerpLong(cur - step, cur, alpha);
+}
+
+/* ==========================================================================
+ * FIX ROUND R - WHERE A CAMERA TARGET IS A PLACE AND WHERE IT IS A DIRECTION.
+ *
+ * Order 2 declares a camera CUT when the eye or the target moved further than
+ * INTERP_CAM_SNAP in one logic tick. For every camera the engine had when
+ * that was written the target is a PLACE a couple of sectors away - Lara's
+ * torso for the chase camera, a fixed camera's own look-at point - and a jump
+ * of a whole sector really is a cut.
+ *
+ * THE FIRST PERSON CAMERA BREAKS THAT, and the play test of 2026-09-07 found
+ * it: FirstPersonCamera (game\camera.cpp) builds its target as
+ *
+ *     camera.target = camera.pos + direction * 0x5100
+ *
+ * - twenty thousand seven hundred and thirty-six units down the line of
+ * sight, because what it wants to say is WHICH WAY she is looking and the
+ * engine's camera has no field for that. On such a target a rotation of
+ * 2.8 degrees moves the point a whole sector, and Lara's idle animation turns
+ * her head by more than that between two ticks. So the cut fired ten to
+ * seventeen times a second while she STOOD STILL (INTERPLOG camcut=10..17),
+ * and on every one of those frames the camera was drawn live while the world
+ * around it was drawn half a step back: a shudder at every fourth frame, the
+ * "four models dragged along behind her", and room seams that walk with her
+ * breathing.
+ *
+ * THE RULE. Beyond INTERP_CAM_FAR_TARGET the target is not a place, it is a
+ * direction, so it is measured as one: both targets are pulled back onto a
+ * sphere of INTERP_CAM_DIR_RADIUS about THEIR OWN eye and the threshold is
+ * applied to what is left, which is the change of DIRECTION alone. The eye's
+ * own travel is not measured twice - it has its own test, with the same
+ * threshold, right beside this one.
+ *
+ * WHAT THAT IS WORTH IN DEGREES. At a radius of 1024 a Manhattan sum of 1024
+ * is a turn of between 57 and 41 degrees, depending on the plane the turn
+ * happens in. In one thirtieth of a second that is 1200 to 1700 degrees a
+ * second - nothing a body, a head or a look control in this game can do -
+ * while a real cut, which is a new view and not a turn, is 60 degrees or more
+ * and is caught. A ninety degree cut measures 1448 and a half turn 2048.
+ *
+ * AND THE CHASE CAMERA IS NOT TOUCHED. Its target sits on Lara, a sector and
+ * a half from the eye, which is under INTERP_CAM_FAR_TARGET - the branch is
+ * not taken and the test is the absolute one it always was, to the bit. */
+#define INTERP_CAM_FAR_TARGET	4096L
+#define INTERP_CAM_DIR_RADIUS	1024L
+
+/* The target as this rule measures it, RELATIVE TO ITS OWN EYE: the offset
+ * itself while the target is a place, and the offset scaled onto the sphere
+ * while it is a direction. Returned through three longs because that is what
+ * the caller then hands to InterpManhattan, and written as a function of one
+ * camera so that the two sides of the comparison cannot be reduced
+ * differently by accident. */
+inline void InterpCamAim(long px, long py, long pz, long tx, long ty, long tz,
+	long* ax, long* ay, long* az)
+{
+	const double dx = (double)(tx - px);
+	const double dy = (double)(ty - py);
+	const double dz = (double)(tz - pz);
+	const double len = sqrt(dx * dx + dy * dy + dz * dz);
+
+	if (len <= (double)INTERP_CAM_FAR_TARGET)
+	{
+		*ax = tx - px;
+		*ay = ty - py;
+		*az = tz - pz;
+		return;
+	}
+
+	const double k = (double)INTERP_CAM_DIR_RADIUS / len;
+
+	*ax = (long)(dx * k);
+	*ay = (long)(dy * k);
+	*az = (long)(dz * k);
+}
+
+/* Did the VIEW DIRECTION cut between these two cameras? The whole of the rule
+ * above in one call, so that game\interpolate.cpp and InterpTest ask exactly
+ * the same question. */
+inline bool InterpCamAimCut(long ppx, long ppy, long ppz, long ptx, long pty, long ptz,
+	long px, long py, long pz, long tx, long ty, long tz, long snap)
+{
+	long a[3], b[3];
+
+	InterpCamAim(ppx, ppy, ppz, ptx, pty, ptz, &a[0], &a[1], &a[2]);
+	InterpCamAim(px, py, pz, tx, ty, tz, &b[0], &b[1], &b[2]);
+
+	return InterpManhattan(b[0] - a[0], b[1] - a[1], b[2] - a[2]) > snap;
 }

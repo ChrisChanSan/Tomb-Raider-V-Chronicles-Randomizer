@@ -763,11 +763,12 @@ void HDLaraDrawFrameReset()
 		{
 			g_fp_seen = true;
 			g_fp_was = now;
-			/* One number since fix round S: the cut is one plane in the
-			 * head's own frame, and how deep it sits is the whole of it. */
-			Log("HDLOG firstperson %s neckplane=%.0f",
+			/* One number since fix round U: the cut is a bone WEIGHT, and how
+			 * much of the head node a fragment has to carry to go is the
+			 * whole of it. */
+			Log("HDLOG firstperson %s headcut=%.2f",
 				now ? "on" : "off",
-				now ? (double)HD_LARA_NECK_PLANE_S : 0.0);
+				now ? (double)HD_LARA_HEAD_CUT_WEIGHT : 0.0);
 		}
 
 		const bool binos = BinocularRange != 0;
@@ -904,77 +905,58 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * diving suit puts its whole HELMET on the torso node the same way.
 	 *
 	 * Neither can be masked off without taking her chest with it, so they are
-	 * cut in the shader instead: ONE PLANE perpendicular to the neck axis,
-	 * twelve units below the head joint and carried by the HEAD NODE (#123,
-	 * fix round S - stage S8 cut a sphere about the eye and rounds J to L a
-	 * cylinder in the bind pose; hd_lara.h carries the whole argument and the
-	 * measurement).
+	 * cut in the shader instead: EVERY FRAGMENT WHOSE HEAD WEIGHT REACHES
+	 * HD_LARA_HEAD_CUT_WEIGHT (#123, fix round U - stage S8 cut a sphere
+	 * about the eye, rounds J to L a cylinder in the bind pose, and fix round
+	 * S a plane carried by the head node; hd_lara.h carries the whole argument
+	 * and the measurement over the eight wardrobe bodies).
 	 *
-	 * THE FOUR NUMBERS ARE BUILT HERE, ONCE A FRAME, and that is the point of
-	 * the design: hd_lara answers with the plane in the HEAD's own frame - a
-	 * unit axis and a depth, both facts about the skeleton - and the head's
-	 * own interpolated matrix carries them into VIEW space, where the shader
-	 * already has the skinned vertex. So the plane turns with her head, the
-	 * shader does one dot product, and nothing per pixel has to know about a
-	 * bind pose at all.
+	 * THERE IS NOTHING TO BUILD HERE, and that is the point of the round. Fix
+	 * round S had to turn a bind-pose axis and a depth into four view space
+	 * numbers with the head's own interpolated matrix, once a frame - and the
+	 * play test came back with Lara cut away across her chest, because a plane
+	 * fixed to the head tilts with the head. A bone weight is written in the
+	 * .TRM, is the same number in every pose and at every camera angle, and
+	 * the shader already has it in hand for the skinning.
 	 *
 	 * THE BODY ALONE carries it - the hands, the holsters, the weapon on her
 	 * back and the LID that closes the hole are their own models and are
 	 * pushed with none, so a hand that comes up to the camera is never cut
-	 * away, and the lid, which lies exactly IN the plane, is never clipped by
-	 * its own cut.
+	 * away, and the lid, whose rim vertices are copies of the body's own, is
+	 * never clipped by the cut its edge sits on.
 	 *
-	 * A level whose Lara skeleton the plan never read has no plane, and then
-	 * nothing is cut: half a cut is worse than none. */
+	 * A level with no HD body has no cut, and then nothing is cut: half a cut
+	 * is worse than none. */
 	HDModelNeckCut neckCut = { 0 };
-	float neckAxis[3] = { 0.0f, 1.0f, 0.0f };
-	float neckDepth = 0.0f;
-	const bool cutting = firstPerson && HDLaraNeckPlane(neckAxis, &neckDepth);
+	int cutNode = HD_LARA_HEAD_NODE;
+	float cutBar = 0.0f;
+	const bool cutting = firstPerson && HDLaraHeadCut(&cutNode, &cutBar);
 
 	if (cutting)
 	{
-		const float* m = matrices + HD_LARA_HEAD_NODE * 16;
-
-		/* The normal, turned by the head's own rotation. The matrix is row
-		 * major and a column vector is read down its first three columns,
-		 * which is the same three lines set_joint uses on the bind offset. */
-		const float nx = neckAxis[0] * m[0] + neckAxis[1] * m[4] + neckAxis[2] * m[8];
-		const float ny = neckAxis[0] * m[1] + neckAxis[1] * m[5] + neckAxis[2] * m[9];
-		const float nz = neckAxis[0] * m[2] + neckAxis[1] * m[6] + neckAxis[2] * m[10];
-
-		/* And a point on it: the head joint's own view position - which IS
-		 * the matrix's translation - stepped `depth` along that normal. */
-		const float px = m[12] + nx * neckDepth;
-		const float py = m[13] + ny * neckDepth;
-		const float pz = m[14] + nz * neckDepth;
-
 		neckCut.on = 1.0f;
-		neckCut.plane[0] = nx;
-		neckCut.plane[1] = ny;
-		neckCut.plane[2] = nz;
-		neckCut.plane[3] = -(nx * px + ny * py + nz * pz);
+		neckCut.node = (float)cutNode;
+		neckCut.bar = cutBar;
 	}
 
-	/* WHERE THE PLANE REALLY STANDS THIS FRAME (#123, fix round R; the fields
-	 * are fix round S's).
+	/* WHERE THE EYE STANDS IN WHAT IS LEFT OF HER (#123, fix round R; the
+	 * fields are fix round U's).
 	 *
-	 * The plane is fixed in the head's frame, so what it takes is the same
-	 * patch of skin in every animation - that is the whole reason fix round S
-	 * chose it over the bind-pose cylinder rounds J to L had. What is still a
-	 * question about the POSE is where the eye ends up in relation to it, and
-	 * a picture in a bind pose cannot answer that. So this measures it, once a
-	 * second of game time and with -log only:
+	 * The cut itself is a fact about the FILE and cannot vary with the pose -
+	 * which is why fix round S's drop= column, counting how many of the
+	 * fifteen joints had fallen on the discarded side of a plane, has no
+	 * successor: no joint can fall on the wrong side of a weight. What is
+	 * still a question about the pose is where the EYE ends up, and a picture
+	 * in a bind pose cannot answer that. So this measures it, once a second of
+	 * game time and with -log only:
 	 *
-	 *   s=      the depth in force
-	 *   lens=   how far the plane stands from the LENS along its own normal.
-	 *           Under the renderer's near plane at 20 and the lid is being
-	 *           clipped away, which is what the inner skin is there for
+	 *   w=      the threshold in force, node= the node it is weighed on
 	 *   head=   the head joint, torso= the torso joint, min= the nearest
-	 *           joint of all fifteen and which one - all in view space
-	 *   drop=   how many of the fifteen joints stand on the discarded side of
-	 *           the plane. Two - the head and nothing else - is the healthy
-	 *           reading; anything more means the plane has swung into her
-	 *           body and the depth is wrong for that animation. */
+	 *           joint of all fifteen and which one - all in view space. Under
+	 *           the renderer's near plane at 20 (InitWindow, gamemain.cpp) the
+	 *           lid is being clipped by the near plane and not by anything
+	 *           this round can reach.
+	 *   lid=    whether the lid was built for this outfit at all. */
 	if (gLogEnabled && firstPerson)
 	{
 		const unsigned short now = GlobalCounter;
@@ -983,22 +965,18 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		{
 			float best = 0.0f;
 			int bestNode = -1;
-			int dropped = 0;
 
 			for (int node = 0; node < HD_LARA_NODES; node++)
 			{
 				const float* m = matrices + node * 16;
-				const float d = sqrtf(m[12] * m[12] + m[13] * m[13] + m[14] * m[14]);
+				const float d = sqrtf(m[12] * m[12] + m[13] * m[13] +
+					m[14] * m[14]);
 
 				if (bestNode < 0 || d < best)
 				{
 					best = d;
 					bestNode = node;
 				}
-
-				if (cutting && neckCut.plane[0] * m[12] + neckCut.plane[1] * m[13] +
-					neckCut.plane[2] * m[14] + neckCut.plane[3] < 0.0f)
-					dropped++;
 			}
 
 			const float* h = matrices + HD_LARA_HEAD_NODE * 16;
@@ -1007,13 +985,13 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 			g_neck_probe_ever = true;
 			g_neck_probe_at = now;
 
-			Log("HDLOG neckcut cut=%d s=%.0f lens=%.1f head=%.1f torso=%.1f "
-				"min=%.1f@node%d drop=%d",
-				cutting ? 1 : 0, cutting ? (double)HD_LARA_NECK_PLANE_S : 0.0,
-				cutting ? (double)-neckCut.plane[3] : 0.0,
+			Log("HDLOG headcut cut=%d w=%.2f node=%d head=%.1f torso=%.1f "
+				"min=%.1f@node%d lid=%d",
+				cutting ? 1 : 0, cutting ? (double)cutBar : 0.0, cutNode,
 				(double)sqrtf(h[12] * h[12] + h[13] * h[13] + h[14] * h[14]),
 				(double)sqrtf(t[12] * t[12] + t[13] * t[13] + t[14] * t[14]),
-				(double)best, bestNode, dropped);
+				(double)best, bestNode,
+				(int)HDLaraHasPart(HD_LARA_PART_NECK_CAP));
 		}
 	}
 
@@ -1122,10 +1100,11 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 *   way the seam at the cut's edge does not read as an edge. The sheen is
 	 *   the skin's, because that is what the surface now is.
 	 *
-	 * The colour comes from hd_lara.cpp's measurement of her own throat and
-	 * is set on the model at level build; a level whose ring could not be
-	 * measured draws this pass as a plain cull, which is fix round J's
-	 * picture and not a crash. */
+	 * The colour came from hd_lara.cpp's measurement of her own throat, set
+	 * on the model at level build - and since fix round U the lid does not
+	 * wear it either: it wears the RIM's own texture, page and coordinates
+	 * both. The measurement stays as the build log's one line saying which
+	 * page of an outfit is her skin. */
 	/* It is gone (#123, fix round S, S1(4)). The LID below closes the hole
 	 * now, and the second draw was measured out rather than argued out: forty
 	 * pictures - five outfits, three pitches, both eyes the game uses, and the
@@ -1141,7 +1120,10 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * for that draw; taking the draw away settles it for good.
 	 *
 	 * What stays is the MEASUREMENT it brought: which texel of which page is
-	 * Lara's own throat (measure_neck_skin, hd_lara.cpp). The lid wears it. */
+	 * Lara's own throat (measure_neck_skin, hd_lara.cpp). The lid wore it from
+	 * fix round S until fix round U, which gave the lid the RIM's own texture
+	 * instead; the line is still in the build log, and it is how a lid that
+	 * came out on a coat can be told from one that came out wrong. */
 
 	/* AND THE LID OVER THE HOLE (#123, fix round S, S1).
 	 *
@@ -1160,16 +1142,18 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 *   room turns the winding round and a lid one can see through from one
 	 *   side is a hole. It is one triangle fan; drawing both sides is free.
 	 *
-	 *   ITS OWN NODE MASK. First person clears the head node from `mask`,
-	 *   because the head's own ranges are exactly what must not be drawn - and
-	 *   the lid rides on that very node. So it names it back.
+	 *   EVERY NODE. Its rim vertices are copies of the body's own, so they are
+	 *   skinned to whatever those are - the torso, and a little of the head.
+	 *   Naming a mask would be naming the same set a second time and getting
+	 *   it wrong once.
 	 *
 	 *   THE SKIN'S SHEEN, because what it is is the top of her neck. Its
-	 *   texel is the throat's own, measured at level build.
+	 *   texture is the rim's own, page and coordinates both, taken at level
+	 *   build.
 	 *
-	 * A level whose lid could not be built (no throat texel, no neck at the
-	 * plane) has none: HDLaraHasPart says so, the inner skin still stands
-	 * behind the hole, and the note at level build says why. */
+	 * A level whose lid could not be built (no bind pose, no rim at the cut)
+	 * has none: HDLaraHasPart says so, first person keeps the open hole, and
+	 * the note at level build says why. */
 	if (firstPerson && cutting && HDLaraHasPart(HD_LARA_PART_NECK_CAP))
 	{
 		float capSheen = 0.0f, capPower = 1.0f;
@@ -1177,7 +1161,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		HDLaraPartSheen(HD_LARA_PART_NECK_CAP, &capSheen, &capPower);
 
 		if (HDObjectPush(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), matrices,
-			HD_LARA_NODES, nodeLight, 1u << HD_LARA_HEAD_NODE, lights,
+			HD_LARA_NODES, nodeLight, ~0u, lights,
 			lightCount, sunScale, 0, HD_MODEL_CULL_NONE, capSheen, capPower))
 			drawn++;
 	}
@@ -1269,7 +1253,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		// own matrix stack.
 		Log("HDLOG frame lara parts=%d(%d this frame) interp=%.2f outfit=%s right=%s left=%s "
 			"holsters=%s/%s back=%s braid=%d mask=%08x mirror=%d "
-			"firstperson=%d neckcut=%d lights=%d dropped=%d speechhead=%s",
+			"firstperson=%d headcut=%d lights=%d dropped=%d speechhead=%s",
 			drawn, g_frame_parts, InterpFrameAlpha(), HDLaraOutfitModel(HDLaraOutfitNow())
 				? HDLaraOutfitModel(HDLaraOutfitNow()) : "-",
 			HDSlotName(now.rightHandSlot) ? HDSlotName(now.rightHandSlot) : "-",

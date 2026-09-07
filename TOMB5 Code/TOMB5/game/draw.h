@@ -48,6 +48,11 @@ long GetFrames(ITEM_INFO* item, short* frm[], long* rate);
  * GetFramesNow is what the draw sites call: GetFrames on a tick frame and at
  * fps_mode 0, the midpoint on a tween frame. 0 = one frame, 1 = vanilla's
  * key frame blend, 2 = a blend in time. */
+/* THE ARM CHAIN'S OWN BLEND (#123, fix round U, U3): collapse the two matrix
+ * stacks to the body's blended joint and carry on with the ARM's own factor.
+ * The note at the definition says why an arm needs a second factor at all. */
+void InterpArmStack(float alpha);
+
 long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 	short* frm[], float* blend);
 long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend);

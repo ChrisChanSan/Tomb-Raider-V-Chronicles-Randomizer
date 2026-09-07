@@ -208,6 +208,33 @@ namespace
 	// Lara's pose is built two or three times a frame and counted once.
 	bool g_laraPosed = false;
 
+	/* ORDER 4, FIX ROUND U: THE ARM'S OWN ANIMATION FRAME.
+	 *
+	 * The nine aim angles above come from the player and are blended into the
+	 * live structure. These three per arm come from an ANIMATION - the weapon
+	 * slot's - and cannot be: the draw needs BOTH the previous tick's frame
+	 * and this tick's at the same moment, so what is kept here is read back
+	 * through InterpArmPrev instead of being written over anything.
+	 *
+	 * The pointer is kept as well as the number. lara.?_arm.frame_base is
+	 * derived four different ways (larafire.cpp, lara1gun.cpp, lara2gun.cpp,
+	 * laraflar.cpp) and comparing it is the cheapest way to be sure the two
+	 * frames come out of the same block of animation data. */
+	struct InterpArmAnim
+	{
+		short* base[2];
+		short anim[2];
+		short frame[2];
+		unsigned char valid;
+	};
+
+	InterpArmAnim g_prevArm;
+
+	// Both arms are asked two or three times a frame; counted once, and by
+	// frame, exactly as g_laraPosed is.
+	bool g_armBlended = false;
+	bool g_armRefused = false;
+
 	SavedNode g_savedItem[MAX_ITEMS];
 	SavedNode g_savedFx[FX_COUNT];
 	SavedNode g_savedHair[HAIR_TAILS * HAIR_LINKS];
@@ -328,6 +355,17 @@ namespace
 	int g_secPoseFar = 0;		// ... refused because the pair is too far (S2)
 	int g_secPoseHD = 0;		// ... of which went through the HD path
 	int g_secLaraPose = 0;		// frames on which LARA's own pose was blended
+	/* Fix round U (U2): the worst a bone was shortened by the pose blend
+	 * this second, in hundredths, with the node, the animation and the frame
+	 * it was on. 100 is a rigid pose and is what a second with no tween frame
+	 * in it at all reads. */
+	int g_secStretch = 100;
+	int g_secStretchNode = -1;
+	int g_secStretchAnim = -1;
+	int g_secStretchFrame = -1;
+
+	int g_secArm = 0;		// fix round U: frames with an arm blended in time
+	int g_secArmSkip = 0;		// ... and frames on which the rule refused
 	int g_secParticles = 0;		// order 5: particles moved, added over the second
 	unsigned long g_secPartKinds = 0;	// ... and which kinds they were, as a mask
 	unsigned short g_secCounter = 0;	// GlobalCounter when this second began
@@ -690,6 +728,30 @@ namespace
 	 *                blended, against the tween frame count beside it. It
 	 *                should be nearly all of them while she is moving and it
 	 *                drops by one on each frame where she changes animation.
+	 *   stretch      fix round U: the worst a BONE was shortened by the pose
+	 *                blend this second, over its own length in the skeleton,
+	 *                with the node, the animation and the frame it happened
+	 *                on. An element-wise matrix blend walks the CHORD of the
+	 *                arc, so a bone whose world frame turns D between the two
+	 *                key frames comes out cos(D/2) long. 1.00 is a rigid pose
+	 *                and is what a second with no tween frame reads. Under
+	 *                about 0.85 is a limb one can SEE in the wrong place, and
+	 *                the animation and frame beside it are the pair to look
+	 *                at.
+	 *   arms         fix round U: blended / refused / tween frames. The
+	 *                ARM animation is the weapon slot's, and it is the pose
+	 *                first person is nearly all made of. With a weapon in her
+	 *                hands the first number should be the tween count and the
+	 *                second a handful per second - one on each frame the
+	 *                weapon animation changes number. With EMPTY HANDS, a
+	 *                flare or a torch both stay nought, because the frame is
+	 *                not counted at all: the arms then come out of her own key
+	 *                frames - and the flare's one driven arm out of a single
+	 *                frame - so there is nothing there to blend. The counter
+	 *                is asked in the draw where the weapon is known
+	 *                (game\delstuff.cpp, after `gun`), and not from the arm
+	 *                rule, which answers yes to hands that have simply been
+	 *                standing still in a field nobody clears.
 	 *
 	 * AND ORDER 5 ADDS TWO MORE, which are about the small moving things
 	 * rather than about the bodies:
@@ -720,6 +782,7 @@ namespace
 				"object=%d invalid=%d) camcut=%d (type=%d spot=%d eye=%d aim=%d) "
 				"cutscene=%d "
 				"pose_items=%.1f pose_skips=%.1f pose_far=%.1f pose_hd=%.1f lara_pose=%d/%d "
+				"arms=%d/%d/%d stretch=%.2f@node%d(anim%d f%d) "
 				"particles=%.1f particle_kinds=%04lx",
 				(int)gfLevelId, g_at, g_secFrames, g_secTween,
 				(double)(g_secAlphaMin <= g_secAlphaMax ? g_secAlphaMin : 0.0F),
@@ -736,6 +799,9 @@ namespace
 				(double)g_secPoseFar / g_secFrames,
 				(double)g_secPoseHD / g_secFrames,
 				g_secLaraPose, g_secTween,
+				g_secArm, g_secArmSkip, g_secTween,
+				(double)g_secStretch / 100.0, g_secStretchNode,
+				g_secStretchAnim, g_secStretchFrame,
 				(double)g_secParticles / g_secFrames, g_secPartKinds);
 
 		/* TICKLOG - order 3's own proof, and the one the user reads.
@@ -787,6 +853,12 @@ namespace
 		g_secPoseFar = 0;
 		g_secPoseHD = 0;
 		g_secLaraPose = 0;
+		g_secArm = 0;
+		g_secArmSkip = 0;
+		g_secStretch = 100;
+		g_secStretchNode = -1;
+		g_secStretchAnim = -1;
+		g_secStretchFrame = -1;
 		g_secParticles = 0;
 		g_secPartKinds = 0;
 		g_secCounter = GlobalCounter;
@@ -908,6 +980,21 @@ void InterpCapturePrev()
 		for (int l = 0; l < ROPE_LINKS; l++)
 			CaptureVec(&g_prevRope[r * ROPE_LINKS + l], &RopeList[r].MeshSegment[l], active);
 	}
+
+	/* FIX ROUND U (U3): the two arms' own animation frames. Kept and NOT
+	 * written over anything, because the draw needs both this tick's and the
+	 * last one's at the same moment - InterpArmPrev hands the older one back.
+	 * The pointer is kept beside the number: lara.?_arm.frame_base is derived
+	 * four different ways (larafire.cpp, lara1gun.cpp, lara2gun.cpp,
+	 * laraflar.cpp) and comparing it is the cheapest way to be sure the two
+	 * frames come out of the same block of animation data. */
+	g_prevArm.base[INTERP_ARM_RIGHT] = lara.right_arm.frame_base;
+	g_prevArm.anim[INTERP_ARM_RIGHT] = lara.right_arm.anim_number;
+	g_prevArm.frame[INTERP_ARM_RIGHT] = lara.right_arm.frame_number;
+	g_prevArm.base[INTERP_ARM_LEFT] = lara.left_arm.frame_base;
+	g_prevArm.anim[INTERP_ARM_LEFT] = lara.left_arm.anim_number;
+	g_prevArm.frame[INTERP_ARM_LEFT] = lara.left_arm.frame_number;
+	g_prevArm.valid = 1;
 
 	/* ORDER 4: the nine angles Lara aims with, which come from the player
 	 * rather than from the animation. See the note over InterpLaraAim. */
@@ -1176,6 +1263,8 @@ void InterpBeginFrame(float alpha)
 	 * teleported enemy with half of the pose it wore at its old place. */
 	memset(g_poseOk, 0, sizeof(g_poseOk));
 	g_laraPosed = false;
+	g_armBlended = false;
+	g_armRefused = false;
 
 	/* THE FRAME IS DRAWN LIVE. Four ways to get here, and all four write
 	 * nothing at all - not the snapshot, not a phd_LookAt, not one byte:
@@ -1618,6 +1707,14 @@ void InterpInvalidate(const char* why)
 
 	g_prevCam.valid = 0;
 	g_prevAim.valid = 0;
+
+	/* Fix round U (U3), corrected in U7: the arms' snapshot too. g_prevArm.base
+	 * is a short* INTO THE LEVEL'S FRAME DATA, which FreeLevel hands back to
+	 * the game_malloc pool and the next level allocates over - the same hazard
+	 * the movers' note above names, and the same shape as the stale pool
+	 * pointer that crashed joby3. That the first drawn frame after a load
+	 * carries a tick is an argument, not a guard. */
+	g_prevArm.valid = 0;
 	g_lastDrawnValid = false;
 
 	// Order 4: and no pose has a neighbour any more either.
@@ -1723,6 +1820,128 @@ void InterpNotePoseFar()
 {
 	if (gLogEnabled)
 		g_secPoseFar++;
+}
+
+/* THE BONES OF ONE DRAWN POSE, AGAINST THEIR OWN LENGTHS (#123, fix round
+ * U, U2). The bone table is walked exactly as Rich_CalcLaraMatrices walks it -
+ * flag 1 pops, flag 2 pushes, and the node whose matrix is current when the
+ * offset is applied is the parent - so the parent here is the parent the pose
+ * was built from. The length that comes out of the DRAWN matrices is compared
+ * against the length written in the table, which no animation changes.
+ *
+ * A bone under a hundredth of a unit is skipped: a zero length offset has no
+ * ratio. Lara's tree has none of those; an imported skeleton might. */
+void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
+	int animNumber, int frameNumber)
+{
+	if (!gLogEnabled || !matrices || !bone || nodes < 2)
+		return;
+
+	int stack[32];
+	int top = 0;
+	int cur = 0;
+
+	for (int node = 1; node < nodes && node < 32; node++)
+	{
+		const long* b = bone + (node - 1) * 4;
+
+		if ((b[0] & 1) && top > 0)
+			cur = stack[--top];
+
+		if (b[0] & 2)
+		{
+			stack[top] = cur;
+
+			if (top < 31)
+				++top;
+		}
+
+		const double want = sqrt((double)b[1] * (double)b[1] +
+			(double)b[2] * (double)b[2] + (double)b[3] * (double)b[3]);
+
+		if (want > 0.01)
+		{
+			const float* mp = matrices + cur * 12;
+			const float* mn = matrices + node * 12;
+			const double dx = (double)mn[M03] - (double)mp[M03];
+			const double dy = (double)mn[M13] - (double)mp[M13];
+			const double dz = (double)mn[M23] - (double)mp[M23];
+			const int ratio = (int)(sqrt(dx * dx + dy * dy + dz * dz) /
+				want * 100.0 + 0.5);
+
+			if (ratio < g_secStretch)
+			{
+				g_secStretch = ratio;
+				g_secStretchNode = node;
+				g_secStretchAnim = animNumber;
+				g_secStretchFrame = frameNumber;
+			}
+		}
+
+		cur = node;
+	}
+}
+
+/* THE ARM'S OWN PREVIOUS FRAME (#123, fix round U, U3).
+ *
+ * `g_applied` is the same gate the body's pose uses and it is the right one:
+ * it is true only on a frame that really blended the snapshot into the live
+ * state, which rules out fps_mode 0, the frame that carries the tick, a
+ * cutscene, a level start and every return from a menu in one test.
+ *
+ * The rest is rule K6 in the arm's own terms. A pistol arm counts DOWN as
+ * well as up (larafire.cpp draws and holsters through the same table), so a
+ * step of -1, 0 and +1 are all neighbours and anything else is a jump with no
+ * pose to blend towards. */
+bool InterpArmPrev(int which, InterpArmPose* prev, float* alpha)
+{
+	if (!prev || !alpha || which < 0 || which > 1)
+		return false;
+
+	if (!g_applied || !g_prevArm.valid)
+		return false;
+
+	const LARA_ARM* arm = which == INTERP_ARM_RIGHT ? &lara.right_arm
+		: &lara.left_arm;
+
+	if (g_prevArm.base[which] != arm->frame_base ||
+		g_prevArm.anim[which] != arm->anim_number)
+		return false;
+
+	const int step = (int)arm->frame_number - (int)g_prevArm.frame[which];
+
+	if (step < -1 || step > 1)
+		return false;
+
+	prev->frame_base = g_prevArm.base[which];
+	prev->anim_number = g_prevArm.anim[which];
+	prev->frame_number = g_prevArm.frame[which];
+	*alpha = g_alpha;
+
+	return true;
+}
+
+/* Latched per DRAWN frame, because CalcLaraMatrices runs two or three times
+ * in one - the view set, the joint set and a mirror - and every one of them
+ * asks both arms. */
+void InterpNoteArm(bool blended)
+{
+	if (!gLogEnabled)
+		return;
+
+	if (blended)
+	{
+		if (!g_armBlended)
+		{
+			g_armBlended = true;
+			g_secArm++;
+		}
+	}
+	else if (!g_armRefused)
+	{
+		g_armRefused = true;
+		g_secArmSkip++;
+	}
 }
 
 void InterpNotePoseHD()

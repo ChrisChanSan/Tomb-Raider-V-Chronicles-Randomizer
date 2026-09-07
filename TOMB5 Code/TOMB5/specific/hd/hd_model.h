@@ -405,39 +405,38 @@ enum HDModelCull
 
 #define HD_MODEL_CULL_BACK	HD_MODEL_CULL_CCW
 
-/* THE NECK CUT (#123, stage S8; a cylinder in fix round J; ONE PLANE since
- * fix round S, S1).
+/* THE FIRST PERSON HEAD CUT (#123, stage S8; a sphere then, a cylinder in fix
+ * round J, a plane in fix round S; ONE BONE WEIGHT since fix round U, U1).
  *
- * ONE HALF SPACE, in VIEW space, and every fragment on the wrong side of it
- * is discarded whatever node carries it: a fragment is kept where
+ * A FRAGMENT IS DISCARDED WHERE ITS WEIGHT ON NODE `node` REACHES `bar`, and
+ * that is the whole of it. The vertex shader adds up the vertex's share of
+ * that one node out of the three bones it names, the pixel shader clips on the
+ * interpolated value - so a triangle that straddles the boundary is cut
+ * exactly where the weight crosses it, and no vertex rule can round the edge
+ * off.
  *
- *     dot(plane.xyz, p) + plane.w >= 0
+ * WHY IT IS NONE OF THE THREE SHAPES BEFORE IT. Stage S8 cut a SPHERE about
+ * the eye: it took the neck stump, and a bite the size of its radius out of
+ * her chest with it. Rounds J to L cut a CYLINDER about the neck axis in the
+ * BIND POSE, and three play tests running came back with the collar still
+ * standing, because a neck vertex is skinned to two nodes at once and the
+ * patch of skin a bind-pose shape covers MOVES as the head turns. Fix round S
+ * cut a PLANE carried by the head node, and the play test came back with Lara
+ * "partly rendered away over her whole body": a plane fixed to the head TILTS
+ * with the head, and one tilted forty degrees runs through her chest.
  *
- * with `p` the fully skinned position. The plane is perpendicular to the neck
- * axis and sits a measured distance below the head joint - under her chin and
- * over her collar - and it is built once a frame out of the interpolated HEAD
- * node matrix, so it is fixed in HER HEAD's frame and not in the camera's and
- * not in the bind pose.
- *
- * WHY IT IS NEITHER OF THE TWO SHAPES BEFORE IT. Stage S8 cut a SPHERE around
- * the eye: it took the stump, but also a bite the size of its radius out of
- * her chest and a jagged edge out of a wrist brought up to the camera. Rounds
- * J to L cut a CYLINDER about the neck axis in the BIND POSE, and three play
- * tests running came back with the collar still standing: a neck vertex is
- * skinned half to the head and half to the torso, so the patch of skin a
- * bind-pose shape takes MOVES with the animation, and a node mask that keeps
- * the shape off an arm keeps it off half the neck as well. A plane fixed to
- * the head has neither freedom - what is above it is above it in every pose -
- * and it needs no mask, because nothing of an arm is ever above her chin.
+ * A WEIGHT IS NOT MEASURED IN SPACE AT ALL. It is written in the file, it is
+ * the same number in every pose and at every camera angle, and there is
+ * nothing for an animation to move it past. hd_lara.h carries the threshold
+ * and the measurement over the wardrobe that picked it.
  *
  * A null pointer, or `on` 0, is off and costs the pixel shader one lerp.
- * hd_lara.h carries the depth and the measurement behind it, and
- * hd_model.hlsl's ModelVS the one dot product.
  */
 struct HDModelNeckCut
 {
 	float on;		// 0 = off; nothing else is read then
-	float plane[4];		// view space: keep where dot(n, p) + w >= 0
+	float node;	// whose weight decides - Lara's head, as a float for the shader
+	float bar;		// discard where that weight reaches this, of 1
 };
 
 // False when the slot has no model or the frame is not open; the caller then
@@ -518,20 +517,19 @@ int HDModelPage(int slot, int at);		// .DDS number
 void HDModelSetPageSheen(int slot, int page, float strength, float power);
 int HDModelPageSheenCount(int slot);
 
-/* THE ONE TEXEL THE INNER SKIN WEARS (#123, fix round K, K1).
+/* THE INNER SKIN AND ITS ONE TEXEL ARE GONE (#123, fix round K, K1;
+ * WITHDRAWN in fix round S, S1(4); this note corrected in fix round U, U5).
  *
- * A draw whose cull mode is one of the SKIN_ ones keeps the faces the
- * matching CULL_ mode drops - the far wall of the shell, seen from inside -
- * and paints every one of its fragments with the single texel named here:
- * `page` is bound for the whole draw and (u, v) is written into the shader,
- * so what comes back is one flat colour out of the art, lit per vertex like
- * everything else. It exists because the hole first person cuts in her neck
- * shows the INSIDE of her chest, and the inside of a catsuit is black.
+ * What stood here described a function - the SKIN_ cull modes and the flat
+ * texel they painted - that fix round S took out along with the second draw
+ * it existed for. Forty first person pictures were identical to the pixel
+ * with that draw and without it, and it cost a strap its own outside face. The
+ * LID closes the neck now (hd_lara.h, HD_LARA_NECK_CAP_SEGMENTS) and the cull
+ * modes are the three plain ones above.
  *
- * Call it after HDModelLevelBegin, once per level, exactly as
- * HDModelSetPageSheen is called; a slot with none set draws a SKIN_ mode as
- * the plain CULL_ one, which is the old picture and not a crash.
- * hd_lara.cpp measures the texel out of the outfit's own neck. */
+ * The comment outlived the code by two rounds, which is the reason it is
+ * replaced here rather than deleted: a reader who finds SKIN_ named in an old
+ * commit should find out where it went. */
 bool HDModelHasHead(int slot);
 int HDModelHeadNode(int slot);			// the node the face rides on, or -1
 // The model's bounding box in its own bind pose, six floats (min then max).

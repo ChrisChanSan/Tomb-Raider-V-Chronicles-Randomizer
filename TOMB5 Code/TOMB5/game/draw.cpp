@@ -1811,6 +1811,64 @@ void InterpolateMatrix()
 		phd_mxptr[i] = InterpBlendLong(phd_mxptr[i], IMptr[i], IM_alpha8);
 }
 
+/* THE ARM CHAIN'S OWN BLEND STARTS HERE (#123, fix round U, U3).
+ *
+ * WHAT IT IS FOR. From the shoulder on, an arm holding a weapon is not driven
+ * by Lara's animation at all but by the WEAPON slot's, read through
+ * lara.right_arm / lara.left_arm - and with the HK in state 0 to 4 the TORSO
+ * and the HEAD are read from it as well. Order 4 blended her body's key frame
+ * pair in time and wrote those frames RAW, so at sixty the world glides and
+ * the weapon in her hands, which in first person is most of the picture,
+ * stands still and jumps once per logic tick.
+ *
+ * WHAT THIS DOES. The two matrix stacks below this point carry the body's two
+ * key frames, and their blend at the body's own factor is the joint the arm
+ * hangs from. This collapses them to exactly that - both stacks, integer and
+ * float - and then sets the ARM's factor, which is the time fraction of the
+ * drawn frame and not the body's key frame factor. From here the ordinary _I
+ * machinery does the rest: stack one is walked with the arm's PREVIOUS frame,
+ * stack two with this tick's, and every InterpolateMatrix below is the
+ * midpoint of the two poses the ticks either side of this frame draw.
+ *
+ * WHAT THE SECOND CALL REALLY DOES, with the HK in state 0 to 4 (this
+ * paragraph corrected in U7; the sentence that stood here said the second call
+ * blended two stacks that were already equal, and that is only true where
+ * nothing walked them apart in between). There the TORSO collapses first, at
+ * bone[25..27], and the two stacks are then walked APART again - the head and
+ * the torso are turned by the arm's previous frame on one stack and by this
+ * tick's on the other, which is the whole point of collapsing there. By the
+ * time case WEAPON_HK reaches its own call the two stacks hold two different
+ * poses, so the second collapse is not free: it takes the SHOULDER to its
+ * midpoint in time and hangs both arm chains off that one joint, instead of
+ * letting each chain descend from its own tick's shoulder and blending them
+ * at every node below.
+ *
+ * THAT IS THE ORDER THIS WANTS. Both readings are a midpoint of the same two
+ * poses; collapsing first means the arm is built ONCE, from a shoulder that is
+ * already where the drawn body has it, so the hand cannot drift off a forearm
+ * that was blended somewhere else - and the alternative would have to blend
+ * two chains that no longer share a root. The factor is the arm's in both
+ * calls, so the second sets nothing the first did not.
+ *
+ * EVERYWHERE ELSE THE SECOND CALL IS THE ONLY ONE: the shotgun and the
+ * crossbow do not collapse at the torso, so their arm branch collapses the
+ * body's two key frames itself, which is what it is for.
+ *
+ * The caller reaches it only when InterpArmPrev said yes, which is never at
+ * fps_mode 0 and never on a frame that carries a tick. */
+void InterpArmStack(float alpha)
+{
+	InterpolateMatrix();
+
+	memcpy(aIMXPtr, aMXPtr, 48);
+	memcpy(IMptr, phd_mxptr, 48);
+
+	IM_alpha = alpha;
+	IM_alpha8 = InterpEighths(alpha);
+	IM_rate = 8;
+	IM_frac = IM_alpha8;
+}
+
 /* THE ARM MATRICES take the ROTATION whole from the matrix they are handed -
  * the arm chain leaves the second stack behind at the shoulder and is drawn
  * from one stack from there on - and blend only the three translation

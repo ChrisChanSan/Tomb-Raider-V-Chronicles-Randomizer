@@ -389,107 +389,166 @@
  * machinery: the same page cache, the same skinning, the same draw call. */
 #define HD_LARA_SLOT_BASE	0x5A00
 
-/* THE FIRST PERSON NECK CUT (#123, stage S8; a cylinder in fix rounds J to L;
- * ONE PLANE IN THE HEAD'S OWN FRAME since fix round S, S1).
+/* THE FIRST PERSON HEAD CUT (#123, stage S8; a sphere then, a cylinder in
+ * fix rounds J to L, a plane in fix round S; ONE BONE WEIGHT since fix round
+ * U, U1).
  *
- * A PLANE PERPENDICULAR TO THE NECK AXIS, HD_LARA_NECK_PLANE_S units down it
- * from the HEAD JOINT, carried by the head node itself. Every fragment of
- * Lara's BODY on the head side of it is discarded while the first person view
- * runs - every node without exception, so her hair, her collar and her
- * backpack straps go with the neck wherever they cross it. Her hands, her
- * holsters and the weapon on her back are separate models and are never cut;
- * the LID below closes the hole and the INNER SKIN stands behind it. The
- * shader end of it is hd_model.hlsl, ModelVS and ModelPS.
+ * EVERY FRAGMENT WHOSE HEAD WEIGHT REACHES HD_LARA_HEAD_CUT_WEIGHT IS
+ * DISCARDED while the first person view runs. That is the whole rule. There
+ * is no shape, no plane, no radius, no near zone, no node mask and nothing
+ * that depends on where the camera is or on what the animation is doing: a
+ * vertex's three bone weights are written in the .TRM file and are the same
+ * number in every pose, at every angle, in every level.
  *
- * WHY A PLANE AND NOT THE CYLINDER OF ROUNDS J TO L. The user, with a picture
- * out of Blender and a red line drawn across the neck under the chin: "can we
- * not cut there and close the hole like a lid?" The rounds before this one
- * each cut a shape defined in the BIND POSE, and the whole of their trouble
- * is in that one word. A neck vertex is skinned to two nodes at once - the
- * one under her chin is 55 % torso and 45 % head, measured - so the patch of
- * skin a bind-pose shape takes MOVES as the head turns, and the node mask
- * that kept the shape off an arm kept it off half the neck as well. Three
- * play tests running came back with the collar standing.
+ * WHY IT HAD TO STOP BEING A SHAPE, and this is the fourth answer to the same
+ * question, so the argument is worth keeping whole:
  *
- * A plane fixed to the HEAD has neither freedom. What is above it is above it
- * in every pose and at every camera angle; a triangle that crosses it is cut
- * exactly at it, per pixel; and there is no mask, no near zone and no second
- * shape to reason about.
+ *   stage S8   a SPHERE about the eye. It took the stump and a bite out of
+ *              her chest with it, and it chewed a wrist brought up to the
+ *              camera.
+ *   rounds J-L a CYLINDER about the neck axis in the BIND POSE, with a node
+ *              mask to keep it off the arms. Three play tests running came
+ *              back with the collar still standing, because a neck vertex is
+ *              skinned to two nodes at once - the one under her chin is 55 %
+ *              torso and 45 % head, measured - so the patch of skin a bind
+ *              pose shape covers MOVES as the head turns.
+ *   round S    a PLANE carried by the head node. It cannot be dodged by a
+ *              turn about the neck axis, which is what it was chosen for -
+ *              but it TILTS with the head, and a plane through the head joint
+ *              tilted forty degrees runs through her chest and her shoulders.
+ *              The play test: "the cutting away has got worse - in animations
+ *              Lara is partly rendered away over her whole body", at thirty
+ *              hertz and at sixty, with the HDLOG line counting four, five and
+ *              nine of the fifteen joints on the discarded side where two -
+ *              the head and nothing else - is the healthy reading.
  *
- * WHY THERE HAS TO BE ONE. The classic path hides the head MESH; an HD body is
- * one skinned surface, and the neck stump under the head belongs to the TORSO
- * node, so masking node 14 leaves it standing in the camera (user finding F3).
+ * A WEIGHT HAS NEITHER FREEDOM. It is not measured in space at all.
  *
- * WHERE THE PLANE SITS, MEASURED. ModelProbe -neck, "the collar in two unit
- * bins": every vertex of the body by depth s down the neck axis from the head
- * joint, s growing towards the torso. The jaw stops and the neck begins at the
- * same place in every outfit of the wardrobe:
+ * WHERE THE THRESHOLD COMES FROM (ModelProbe -headw, over the eight wardrobe
+ * bodies against ANDREA1's Lara skeleton). `drop` is how many vertices the
+ * threshold takes, `r>s8` the widest of them below the chin - the collar
+ * question - and `top` where the highest surviving vertex within a neck's own
+ * radius then stands, in units down the neck axis from the head joint:
  *
- *     s      CLASSIC / NEVADA / COAST / CATSUIT   RUSSIA        TR3_ANTARC
- *            vertices   widest r                  vertices  r   vertices  r
- *      4        389        28.1                     389  28.1     389  28.1
- *      6        128        26.1                     128  26.1     128  26.1
- *      8          2        16.2                      22  17.5      11  17.8
- *     10          3        20.7                      25  20.7      34  24.0
- *     12          4        19.0                      36  23.4      40  25.9
- *     14          7        21.6                      25  26.2      65  29.1
+ *   cut     CLASSIC          RUSSIA           VCI              TR3 (all four)
+ *           drop r>s8 top    drop r>s8 top    drop r>s8 top    drop  r>s8 top
+ *   any     6860 57.3 25.0   5236 28.3 10.5   8367 71.2 25.0   9622 100.3 26
+ *   0.05    6729 24.5 25.0   5141 25.0 10.5   8198 71.2 25.0    6729 24.5 26
+ *   0.10    6711 24.5 18.7   5093 24.5 10.5   8162 71.2 18.7    6711 24.5 19
+ *   0.15    6709 24.5 18.7   5062 24.5 10.5   8153 71.2 11.6    6709 24.5 19
+ *   0.25    6689 24.5 11.6   5006 24.5 10.5   8136 71.2 11.6    6689 24.5 12
+ *   0.50    6645 24.5 -1.6   4818 24.5 -1.6   8086 71.2 -1.6    6638 24.5  0
  *
- * The hundreds of vertices at s = 4 and 6 are her JAW; the handful from s = 8
- * on are the neck itself, a tube of radius 16 to 26. So the chin ends between
- * 6 and 8 in every body, and the plane goes at TWELVE - four units clear of
- * the jaw, well inside the tube, and above every collar in the wardrobe
- * (the Russia jacket opens out from s = 12, the parka from 14, and the VCI
- * catsuit's collar ring stands at radius 70 from s = 6 to 16 and simply stays
- * where it is, which is what a collar does when one looks down at it).
+ * TWO THINGS IN THAT TABLE FIX THE NUMBER.
  *
- * DEEPER WAS REFUSED AND SHALLOWER WAS REFUSED. At s = 20 the cut is eating
- * neck one can see from outside in the mirror rooms; at s = 8 the lid stands
- * 24 units from the eye when a wall holds the camera on the head joint, and
- * the renderer's near plane is at 20 (InitWindow, gamemain.cpp) - four units
- * of margin is not a margin. Twelve puts the lid 28 units out in that case
- * and 53 in the ordinary one, and leaves the chin four units above it.
+ *   ANY WEIGHT AT ALL IS TOO MUCH. The four TR3 guest bodies (#122) carry a
+ *   whisper of head weight - under 0.05 - over the WHOLE body, down to the
+ *   feet: 9,622 vertices against the 6,729 that are really her head, the
+ *   deepest of them 688 units down the axis. Take "any" and three quarters of
+ *   a TR3 Lara disappears. The wardrobe's own bodies say the same thing more
+ *   quietly: at "any" the widest thing taken below the chin is 57 units out
+ *   on OUTFIT_CLASSIC, which is her shoulder.
  *
- * THE DIVING SUIT (OUTFIT_SUBSUIT) IS OUT OF THIS. Its helmet sits on the
- * torso node, it has no throat, and the user's decision of fix round L is
- * that it neither gets work of its own nor constrains the cut. What it does
- * gets measured and reported, and nothing more. */
-#define HD_LARA_NECK_PLANE_S	12.0f	// down the axis from the head joint
+ *   HALF IS TOO LITTLE. At 0.50 the highest surviving vertex inside a neck's
+ *   radius stands 1.6 units ABOVE the head joint on four of the bodies - a
+ *   ring of neck around the camera, which is the tube the play test
+ *   photographed.
+ *
+ * Between 0.05 and 0.35 every one of the eight bodies reads the same 24.5 (25
+ * on the Russia coat) for the widest thing taken below the chin, which is the
+ * neck's own radius and no collar. 0.15 is taken out of that plateau: three
+ * times clear of the TR3 conversion's noise, and the one threshold at which
+ * the rim below is a SINGLE texture page on all eight bodies. */
+#define HD_LARA_HEAD_CUT_WEIGHT	0.15f	// of 1: a vertex the head owns this much of goes
 
-/* THE LID THAT CLOSES IT (#123, fix round S, S1).
+/* WHAT SURVIVES THE CUT, AND WHY THE VCI COLLAR RING DOES NOT. The catsuit's
+ * collar ring stands at radius 70 and is skinned to the HEAD outright, so it
+ * goes with the head at every threshold in the table - it turns with her head
+ * in the third person, which is what it is for, and in the first person there
+ * is nothing left for it to sit on. The Russia coat's own collar is torso
+ * skinned, carries no head weight anywhere, and stays.
  *
- * A DISC IN THE VERY SAME PLANE, skinned rigidly to the HEAD node so that it
- * can never drift off it, built out of the outfit's own neck by
- * build_neck_cap in hd_lara.cpp and drawn as an ordinary part of the
- * composite (HD_LARA_PART_NECK_CAP). Its radius is the widest the outfit's
- * own neck really is at the plane, plus a margin, so it covers the cross
- * section the cut opens without standing out beyond her skin; it wears the
- * throat texel the inner skin measured and the SKIN material the hands wear,
- * because what it is is the top of her neck.
- *
- * WHY A LID CAN COME BACK AFTER FIX ROUND K THREW ONE AWAY. Round I's cap was
- * a DOME fitted to the rim of a cylinder, and the play test called it "a great
- * flat skin-coloured plate over chest and collar, with the backpack straps on
- * it": it was as wide as her torso because the cut it closed was as wide as
- * her torso, and it wore whatever page its rim happened to sit on. This one is
- * neither. It is flat because the hole is flat, it is a neck wide because the
- * hole is a neck wide, and its colour is measured rather than inherited.
- *
- * THE SEGMENTS ARE 48 and not 32, which is the one number in it that is a
- * choice and not a measurement: at a radius of 20 units, 48 segments put the
- * chord's sag under a tenth of a unit, and a lid one looks straight down at
- * from 28 units must not read as a polygon. */
-/* THE BAND IS THREE UNITS AND NOT SIX, and that is a measurement too. At six
- * the search reaches s = 6, where her JAW is (radius 26.1 against the neck's
- * 19.0), and the lid came out 28.5 wide on OUTFIT_CLASSIC - a third wider than
- * the hole it closes, which is the beginning of round I's plate. At three it
- * sees the neck alone and reads 21.6. */
-#define HD_LARA_NECK_CAP_MARGIN	3.0	// units of skin past the neck's own edge
-#define HD_LARA_NECK_CAP_SEGMENTS 48	// triangles in the fan
-#define HD_LARA_NECK_CAP_BAND	3.0	// the band about the plane the radius is measured in
-#define HD_LARA_NECK_CAP_RMAX	34.0	// a neck and never a collar: the search stops here
+ * THE DIVING SUIT (OUTFIT_SUBSUIT) IS OUT OF THIS, as it has been since fix
+ * round L: its helmet sits on the TORSO node and carries no head weight, so
+ * the cut does not touch it. The user's decision stands - the suit neither
+ * gets work of its own nor constrains the cut - and what it does is measured
+ * and reported. What it does is nothing visible: the camera sits INSIDE the
+ * closed helmet, first person culls back faces, and a closed surface seen
+ * from within is back facing everywhere. */
 
-/* WHERE THE LID'S COLOUR COMES FROM: HER OWN THROAT (#123, fix round K, K1;
- * the inner skin it was measured for is WITHDRAWN in fix round S, S1(4)).
+/* THE LID THAT CLOSES IT (#123, fix round S, S1; rebuilt on the RIM in fix
+ * round U, U1).
+ *
+ * A FAN OVER THE BODY'S OWN RIM, and every word of that is the design.
+ *
+ * THE RIM is the set of vertices that do NOT reach the threshold but share a
+ * triangle with one that does: the ring of skin the cut leaves standing, and
+ * the exact boundary of the hole it opens. build_neck_cap finds it in the
+ * .TRM while the file is still a file, sorts it by angle about the neck axis,
+ * and builds a fan from the middle out to it.
+ *
+ * ITS RIM VERTICES ARE COPIES OF THE BODY'S, down to the three bones and the
+ * three weights. That is what makes the seal exact and permanent: the lid's
+ * edge is skinned by the same sum over the same joints as the skin it meets,
+ * so the two land on the same point in EVERY pose, to the bit. There is no
+ * margin, no overlap and no gap to leave, and no animation can open one -
+ * which is the failure of every lid before it, all of which were rigid on one
+ * node while the skin they met was not.
+ *
+ * ITS COLOUR IS THE RIM'S OWN, AND IT INVENTS NO TEXEL ANYWHERE (U1b). Each
+ * spoke of the fan wears the texture coordinate of the rim vertex it hangs
+ * from, unchanged all the way in, and the fan wears the page most of the rim
+ * wears - so the lid is the top of whatever the outfit really has there: skin
+ * on OUTFIT_CLASSIC (page 8001), the coat on OUTFIT_RUSSIA (8042), the suit on
+ * OUTFIT_SUBSUIT (8047), the TR3 guests' own bodies (8201). The MIDDLE is a
+ * copy per spoke for that reason - one point, one normal, one skinning, one
+ * texel each - so a triangle of the lid spans two texels that are neighbours
+ * on her skin and samples nothing between them.
+ *
+ * THE FIRST CUT OF THIS ROUND GAVE THE MIDDLE THE AVERAGE of the rim's texels,
+ * and the play test came back with "a dark point in the middle of the cap,
+ * running dark towards it like a cone" - on the four TR3 guest bodies only.
+ * Measured (ModelProbe -headw, the rim's texels at the shipping threshold):
+ * every TR5 page has the neck as ONE COLUMN six texels wide (u 235..241 on
+ * 8001, u 119..125 on 8042, u 16..40 on 8047), and the average of a column is
+ * in the column. The TR3 guests' page has it as TWO BANDS (u 60..170, one at
+ * v 198..202 and one at v 154..158) and the average lands in the gap between
+ * them. Picking a better single texel would only make the lottery smaller,
+ * because the interior interpolates towards whatever the middle wears; not
+ * inventing one is the only rule with nothing left to measure.
+ *
+ * Fix round S's one measured THROAT texel was a better answer than round I's
+ * "whatever page the rim happens to sit on", and this is better than both: it
+ * is not one colour at all, and it joins the skin at the seam because it IS
+ * the skin at the seam.
+ *
+ * THE RINGS. The fan is subdivided towards its middle until it carries at
+ * least HD_LARA_NECK_CAP_SEGMENTS triangles. That is NOT about the outline -
+ * the outline is the body's own rim and cannot be improved by adding points
+ * to it, only spoilt - it is about the LIGHT: the HD path lights per vertex
+ * (hd_model.hlsl, ModelVS), and a fan of one middle and twenty rim points
+ * shades as twenty flat wedges. The subdivision is radial, so the boundary is
+ * untouched.
+ *
+ * THE OUTLIER GUARD. A rim vertex further than HD_LARA_NECK_CAP_RMAX off the
+ * neck axis is not part of a neck and is dropped before the sort - a patch of
+ * head-weighted geometry somewhere else on the body would otherwise put a
+ * spoke of the fan across her chest. Measured: at 0.15 the widest rim vertex
+ * over all eight bodies is 27.6 (the diving suit's collar), so the guard
+ * never fires on the wardrobe as it stands. It is there for the ninth body.
+ *
+ * WHY A LID AT ALL, and the answer is the user's two photographs of fix round
+ * S's test build with no cut of any kind: looking down into the open neck in
+ * a dive roll one sees the undersides of her own collar and straps, and on a
+ * landing the camera leaves the head and the nape fills the picture. Both are
+ * reached THROUGH the open neck, and both stop existing when the hole is
+ * closed. */
+#define HD_LARA_NECK_CAP_SEGMENTS 48	// triangles in the fan, at least
+#define HD_LARA_NECK_CAP_RMAX	34.0	// a neck and never a collar: a rim stops here
+
+/* WHERE THE THROAT'S OWN TEXEL IS (#123, fix round K, K1; the inner skin it
+ * was measured for is WITHDRAWN in fix round S, S1(4), and the lid stopped
+ * needing it in fix round U, U1).
  *
  * WHAT THE INNER SKIN WAS. Round K drew the whole body a SECOND time in first
  * person, keeping exactly the faces the first draw culls, so that a ray
@@ -497,37 +556,30 @@
  * room. It wore ONE texel and a turned normal, because the inside of a catsuit
  * is black and "black inside it still" was the user's finding and not the fix.
  *
- * WHY IT IS GONE. The LID above closes the hole, and the second draw was
- * measured out rather than argued out. ModelProbe -firstperson, forty
- * pictures: five outfits at three pitches and both eyes the game uses, and on
- * top of that the head turned forty degrees each way, tilted thirty each way,
- * and the torso bent twenty-five each way and turned thirty - every one of
- * them IDENTICAL TO THE PIXEL with the inner draw and without it. Against that
- * it cost a second pass over 27,000 triangles per first person frame and one
- * real fault: a strap or a flap is a single layer of triangles whose two sides
- * sit at the same depth to the bit, and the inner draw won that tie, which is
- * the torn edges and missing shoulder pieces of fix round R.
+ * WHY IT IS GONE. The LID closes the hole, and the second draw was measured
+ * out rather than argued out. ModelProbe -firstperson, forty pictures: five
+ * outfits at three pitches and both eyes the game uses, and on top of that the
+ * head turned forty degrees each way, tilted thirty each way, and the torso
+ * bent twenty-five each way and turned thirty - every one of them IDENTICAL TO
+ * THE PIXEL with the inner draw and without it. Against that it cost a second
+ * pass over 27,000 triangles per first person frame and one real fault: a
+ * strap or a flap is a single layer of triangles whose two sides sit at the
+ * same depth to the bit, and the inner draw won that tie, which is the torn
+ * edges and missing shoulder pieces of fix round R.
  *
- * WHAT STAYS IS THE MEASUREMENT. Which texel of which page is Lara's THROAT -
- * the page whose vertices span the whole height of the neck, and the centroid
- * of the biggest triangle on it - is exactly the colour a lid at the top of
- * her neck should wear, so build_neck_cap wears it and measure_neck_skin still
- * runs. The rule, the two rules it replaced and the measurement that killed
- * them are at measure_neck_skin in hd_lara.cpp.
- *
- * THE DEPTH IS ITS OWN NUMBER AND NOT THE CUT'S. It is a fact about the BODY
- * - the depth at which the shoulders join and the neck stops being a tube,
- * measured in the table above - and the cut is a decision about the picture.
- * They were the same constant for one afternoon of fix round K, and moving the
- * cut from 30 to 40 then moved the inner skin's page from Lara's throat (8001)
- * to the Russia coat (8042), because at forty units down there is more coat in
- * the search than neck. */
+ * WHAT THE MEASUREMENT IS STILL FOR. It is no longer the lid's colour - the
+ * lid wears the rim's own texture since fix round U - but it is still the one
+ * line of the build log that says WHICH PAGE of an outfit is Lara's throat,
+ * which is how a lid that comes out on the coat rather than on her skin can be
+ * told from a lid that came out wrong. The rule, the two rules it replaced and
+ * the measurement that killed them are at measure_neck_skin in hd_lara.cpp. */
 #define HD_LARA_NECK_SKIN_R	30.0	// off the axis: the stump and no shoulder
 #define HD_LARA_NECK_SKIN_S	30.0	// down it: where the shoulders join
 #define HD_LARA_NECK_SKIN_MIN	24	// vertices before a page may be the neck
 
-/* THE CAP THAT WAS THERE BEFORE THE LID (#123, fix round I, I3; re-aimed in
- * fix round J, J1; WITHDRAWN in fix round K, K1(b)).
+/* THE TWO LIDS THAT WERE THERE BEFORE (#123, fix round I, I3; re-aimed in fix
+ * round J, J1; WITHDRAWN in fix round K, K1(b); a flat disc in fix round S,
+ * S1; the RIM fan above since fix round U).
  *
  * Rounds I and J closed the hole with a DOME of 32 spokes and four rings, cut
  * from the outfit's own collar ring and sunk into the chest, and the play test
@@ -535,15 +587,13 @@
  * sits whenever a wall is in front of Lara - it was a GREAT FLAT
  * SKIN-COLOURED PLATE across the whole view, and on OUTFIT_RUSSIA it wore the
  * BACKPACK STRAPS, because the majority page of that outfit's collar ring is
- * 8018.
+ * 8018. It was as wide as her torso because the cut it closed was.
  *
- * Two things were wrong with it, and neither of them was "a lid". A dome built
- * to fit the rim of a CYLINDER is as wide as that cylinder, which was as wide
- * as her torso; and a texture borrowed from whatever page the rim happens to
- * sit on is a lottery over eight outfits. Fix round S's lid is flat, a neck
- * wide, and wears the texel that was chosen BECAUSE it is the throat - so the
- * machinery (HDModelSlot::synth, build_neck_cap, HD_LARA_PART_NECK_CAP) is
- * back and the dome is not. */
+ * Round S's was a flat DISC in the cut's plane, a neck wide and rigid on the
+ * head node, wearing the one throat texel. It was the right size and the right
+ * colour, and it went with the plane that defined it: a disc rigid on the head
+ * meets skin that is only part head, so the two part company as she moves.
+ * Fix round U's lid is not a shape at all - it is a copy of the rim. */
 
 /* The classic Lara mesh tree in LM_ order, spelled out so that the tables
  * below and a reader of them do not have to look it up. These are the numbers
@@ -581,8 +631,9 @@ enum HDLaraPart
 	HD_LARA_PART_FACE,		// LARA_HEAD, rigid on node 14
 	HD_LARA_PART_BRAID,		// HAIR_OG, its own six node chain
 
-	/* Not a file: a disc built in the neck cut's own plane and rigid on the
-	 * head node (#123, fix round S, S1). Drawn in first person only. */
+	/* Not a file: a fan built on the RIM the head cut leaves, skinned exactly
+	 * as that rim is (#123, fix round S, S1; rebuilt in fix round U, U1).
+	 * Drawn in first person only. */
 	HD_LARA_PART_NECK_CAP,
 
 	HD_LARA_PART_HAND_REST,		// nothing in the hands
@@ -841,20 +892,22 @@ bool HDLaraPartPlanned(int part);
 // that is not on the card.
 unsigned int HDLaraPartCoverage(int part);
 
-/* THE FIRST PERSON NECK CUT'S PLANE, IN THE HEAD'S OWN FRAME (#123, fix round
- * S, S1).
+/* THE FIRST PERSON HEAD CUT, IN THE ONLY TERMS IT HAS (#123, fix round U,
+ * U1).
  *
- * `axis` comes back as the unit neck axis - head joint towards torso joint,
- * measured against the level's OWN Lara skeleton, the same bind pose the inner
- * skin's texel and the lid were measured out of - and `depth` as how far down
- * it the plane sits. In the head node's local frame the plane is therefore
- * `dot(axis, p) = depth`, and hd_laradraw.cpp turns that into the four view
- * space numbers the shader wants with the head's own matrix.
+ * `node` comes back as the node whose weight decides - Lara's head, node 14 -
+ * and `bar` as how much of that weight sends a fragment away. Neither is a
+ * fact about the level, the pose or the camera: they are the two numbers the
+ * shader needs, and the whole point of the round is that there is no third.
  *
- * False and untouched outputs when the level has no bind pose, and then the
- * caller must draw with no cut at all rather than with a plane through the
- * origin. */
-bool HDLaraNeckPlane(float axis[3], float* depth);
+ * FALSE when there is no HD body to cut - no wardrobe, or the outfit was never
+ * built - and then the caller draws with no cut at all, because half a cut is
+ * worse than none.
+ *
+ * There is no bind pose in it any more. Fix round S's plane needed one (the
+ * neck axis and a depth down it), and every shape before that needed one too;
+ * a weight is written in the file. */
+bool HDLaraHeadCut(int* node, float* bar);
 
 /* THE SHEEN OF ONE PART (#123, fix round D, D2).
  *
@@ -879,10 +932,13 @@ void HDLaraPartSheen(int part, float* strength, float* power);
  * HDModelSetPageSheen. Both 0 for a part that is not a hand. */
 void HDLaraHeldSheen(int part, float* strength, float* power);
 
-/* AND LARA'S SKIN ITSELF (#123, fix round K, K1), out of the same material
- * table: what the INNER SKIN draw shines like, because what that draw shows
- * is her own throat's colour and not the outfit's. One function so that the
- * number is written down once. */
+/* AND LARA'S SKIN ITSELF (#123, fix round K, K1; this note corrected in fix
+ * round U, U5), out of the same material table: what her SKIN shines like as
+ * against the outfit she wears. It was written for the inner skin draw, which
+ * fix round S withdrew; what asks for it now is the neck LID, whose whole
+ * business is to be the top of her neck, and the hands, which is what made
+ * the wrist seam one material instead of two. One function so that the number
+ * is written down once. */
 void HDLaraSkinSheen(float* strength, float* power);
 
 /* AND WHICH PAGES OF THE BODY WEAR IT (#123, fix round K, K2): true for a

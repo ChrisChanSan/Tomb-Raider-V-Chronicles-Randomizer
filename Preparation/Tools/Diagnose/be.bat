@@ -20,6 +20,21 @@ if errorlevel 1 exit /b 1
 
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars32.bat" >nul
 cd /d "%~dp0..\..\.."
+
+rem THE BUILD STAMP (#123, fix round U, U6). winmain.cpp writes the first line
+rem of every -log run, "PCtomb5 built <__DATE__ __TIME__>", and those two
+rem macros are fixed when THAT ONE FILE is compiled. In an incremental build it
+rem is not compiled: change a shader, or a file in specific\hd, and winmain.obj
+rem is still yesterday's, so the log stamps a build that never happened. A play
+rem test read 18:34 off a build made at 19:49, which is exactly the kind of
+rem thing that costs a round of "but I ran the new one".
+rem
+rem So its object file goes before msbuild does, and the linker gets a freshly
+rem compiled stamp every time. One file, a second of build time. setupdlg.cpp
+rem carries the same __DATE__ in the launcher's window and goes with it.
+del /q "TOMB5 Code\Win32\Release\winmain.obj" 2>nul
+del /q "TOMB5 Code\Win32\Release\setupdlg.obj" 2>nul
+
 msbuild "TOMB5 Code\tomb5.vcxproj" /p:Configuration=Release /p:Platform=Win32 /v:minimal /nologo
 exit /b %errorlevel%
 

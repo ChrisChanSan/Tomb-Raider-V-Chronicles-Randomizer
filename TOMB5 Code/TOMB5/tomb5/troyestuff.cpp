@@ -34,7 +34,7 @@
 #define PAGE0_NUM		13
 #define PAGE1_NUM		14
 #define PAGE_DISPLAY_NUM	2
-#define PAGE_FP_NUM		4
+#define PAGE_FP_NUM		5
 
 /* HOW MANY PAGES ARE IN THE CYCLE, and in which order they are walked: the
  * two option pages, then the display page, then - only when the first person
@@ -816,6 +816,7 @@ bool Page2(long& num, long textY, ulong selection)
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Death camera", 0);
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Follow head bone", 0);
 	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Camera damping", 0);
+	PrintString(phd_centerx >> 2, textY + y++ * font_height, selection & (1 << i++) ? 1 : 2, "Body", 0);
 
 	y = 2;
 	i = 0;
@@ -832,6 +833,13 @@ bool Page2(long& num, long textY, ulong selection)
 	strcpy(buffer, tomb5.first_person_smooth == 0 ? "off" :
 	               tomb5.first_person_smooth == 1 ? "Light" :
 	               tomb5.first_person_smooth == 2 ? "Medium" : "Strong");
+	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
+
+	// BODY (#123, fix round U, U4). "still" holds her body on one frame while
+	// she is standing, crouching or kneeling still and nothing else - the head
+	// still turns with the look, the arms still aim and fire, and every step,
+	// jump, climb and pull is animated as before.
+	strcpy(buffer, tomb5.first_person_body_still ? "still" : "animated");
 	PrintString(phd_centerx + (phd_centerx >> 2), textY + y++ * font_height, selection & (1 << i++) ? 1 : 6, buffer, 0);
 
 	switch (selection)
@@ -889,6 +897,17 @@ bool Page2(long& num, long textY, ulong selection)
 		{
 			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 			tomb5.first_person_smooth++;
+			changed = 1;
+		}
+
+		break;
+
+	case 1 << 4:
+
+		if (dbinput & IN_LEFT || dbinput & IN_RIGHT)
+		{
+			SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+			tomb5.first_person_body_still = !tomb5.first_person_body_still;
 			changed = 1;
 		}
 

@@ -238,7 +238,7 @@ Worth spelling out:
 <p align="center"><img src="ingame-08.jpg" alt="First person, aiming the HK" width="700"></p>
 
 Switch it on under *tomb5 options*, page 2. A **fourth page** then appears,
-after *Display*, with four rows of its own:
+after *Display*, with five rows of its own:
 
 | Row | What it does | Default |
 |---|---|---|
@@ -246,6 +246,7 @@ after *Display*, with four rows of its own:
 | Death camera | First person, or pull back and show it | Third person |
 | Follow head bone | nails the view to the head bone — much more physical, and much shakier | off |
 | Camera damping | off / Light / Medium / Strong | Light |
+| Body | **animated** as always, or **still** while she is standing still | animated |
 
 The page only exists while the view is on, so a settings page for something
 switched off cannot turn up unasked. Turning the view off while standing on
@@ -254,11 +255,31 @@ that page drops you back to page 1.
 While first person is on, Lara's head and braid are not drawn, close sounds
 are centred instead of panned, and the camera stays behind her eyes where
 vanilla would have torn it away — trapdoors, turn switches and trigger
-cameras all now leave you where you are. With *HD textures* on, her HD body
-is cut across the neck the same way - just under the chin, with a lid of her
-own skin closing it, so your collar and your shoulders stay where they are -
-and is drawn one-sided while the view runs; the section on the HD Lara below
-says why all three are needed.
+cameras all now leave you where you are.
+
+With *HD textures* on, **her head and her neck are not drawn at all**. The
+camera hangs inside her skull, so anything of her head that is still there
+stands in front of the lens; what is left out is decided by the model's own
+bone weights — every scrap of her the head bone owns more than a seventh of —
+which is a fact about the file and not a shape in space, so it takes the same
+patch of her whatever she is doing and wherever you are looking. The hole that
+leaves is closed by a **lid built on the edge of the hole itself**, wearing
+that outfit's own skin, coat or diving suit and moving with it exactly: look
+straight down into your own neck in a roll, or land after a dive with the
+camera behind your nape, and what you see is skin and not the inside of you.
+Her body is drawn one-sided while the view runs; the section on the HD Lara
+below says why.
+
+**Body: animated or still.** In first person the camera sits in her head, so
+her breathing moves the whole picture while you stand and read a room. Set
+*Body* to *still* and her body holds one frame while she is standing,
+crouching or kneeling still — aiming at a target included, since that is the
+same standing state. **Only the body**: you still turn and tilt the view as
+before, the arms still draw, aim, fire and reload — and at 60 they still do it
+on every drawn frame, as smoothly as with the option off — and every step,
+jump, climb, pull and roll is animated exactly as it always was. It costs
+nothing and can be changed from the pause screen; *animated* is the game as it
+has always looked.
 
 **Two things deliberately still switch to third person**: the binoculars and
 the laser sight, which bring their own head camera, and the real sniper camera
@@ -359,11 +380,11 @@ and timings are the next paragraph.
 
 **What still steps at thirty**, on purpose, for now:
 
-- **The frame of the weapon in her hands.** The body, the arms and where they
-  point move in half steps; the few frames of the draw, holster and reload
-  animation itself do not. The arm chain leaves the engine's blending machine
-  behind at the shoulder and cannot be given a factor of its own without
-  rebuilding it.
+- **The arm that holds a flare or a torch.** Everything a *weapon* drives —
+  the arms, the hands, the gun itself, and with the HK the torso and the head
+  as well — moves in half steps like the rest of her since the arm chain was
+  given a factor of its own; the flare's and the torch's one held-out arm is
+  the piece of that work still to do, and it steps at thirty.
 - **Cut scenes**, whole. Their camera is decoded from a frame number rather
   than simulated, so it is left alone and they play exactly as they always
   did.

@@ -6517,7 +6517,7 @@ tilted thirty each way, and the torso bent twenty-five each way and turned
 thirty. Every one of them is **identical to the pixel** with the inner draw and
 without it.
 
-| | with the lid | lid off (`-nocap`) | neither |
+| | with the lid | lid off (`-nocap`) | no lid and no inner skin |
 | --- | ---: | ---: | ---: |
 | CLASSIC, eye on the joint, pitch 60 | 34.0 % room | 43.3 % | 58.1 % |
 | ... pitch 75 | 9.3 % | 20.8 % | 34.2 % |
@@ -6554,7 +6554,12 @@ looking down one's own neck from inside one's own head gives, it is closed
 (0.0 % room straight down), and it is the case the game reaches only when a
 wall is directly in front of Lara.
 
-*Log.* `HDLOG firstperson on neckplane=12` on the edge, and once a second
+*Log.* (Superseded by fix round U, U1, which cut the plane out altogether:
+the two lines read `HDLOG firstperson on headcut=0.15` and `HDLOG headcut
+cut=1 w=0.15 node=14 head=.. torso=.. min=..@node.. lid=1` now, and there is no
+`drop=` column any more - no joint can fall on the wrong side of a bone
+weight.) As fix round S shipped them:
+`HDLOG firstperson on neckplane=12` on the edge, and once a second
 `HDLOG neckcut cut=1 s=12 lens=.. head=.. torso=.. min=..@node.. drop=..` -
 where `lens` is how far the plane stands from the eye along its own normal (a
 reading under the near plane's 20 is the lid being clipped away) and `drop` how
@@ -6724,6 +6729,372 @@ pre-existing warnings), the shader guard regenerated `hd_model_vs.inc` and
 was run here with `ModelProbe`: twenty-four first person pictures over four
 outfits, sixteen more under a turned head and a bent torso, and the six
 brightness renders of S4.
+
+
+#### Fix round U - first person without head or neck, the arms on every frame, a body that can stand still (#123, #148)
+
+The play test of fix round S in one line: *"almost perfect - the head and the
+neck are gone in first person and the skin cap closes the neck; looking down
+into the neck from above shows skin now and not the inside of me. Only: with
+the TR3 outfits the cap texture has an artefact in the middle, a dark point
+running dark towards it like a cone. With the TR5 outfits the cap is clean."*
+Round U finishes that cap, and takes the three other findings the same session
+left: the roll at sixty, the arms in first person, and an option to stop the
+body moving at all while she stands still.
+
+**U1 - the cut is a BONE WEIGHT and the lid is the body's own RIM.**
+
+*The measurement that ended the search for a shape.* Four rounds cut a shape
+in space and four rounds came back wrong: a SPHERE about the eye (stage S8)
+took a bite out of her chest, a CYLINDER in the bind pose (rounds J to L) left
+the collar standing because a neck vertex is skinned to two nodes at once, and
+round S's PLANE carried by the head node **tilts with the head** - the play
+test read *"the cutting away has got worse, in animations Lara is partly
+rendered away over her whole body"*. A plane through the head joint tilted
+forty degrees runs through her chest.
+
+`ModelProbe -headw` measures the one thing no animation can move: how much of
+each vertex the HEAD NODE owns, written in the `.TRM` beside the vertex.
+`drop` is how many vertices a threshold takes, `r>s8` the widest of them below
+the chin - the collar question - and `top` where the highest surviving vertex
+within a neck's own radius then stands, in units down the neck axis:
+
+| cut | CLASSIC drop / r>s8 / top | RUSSIA | VCI | TR3 (all four) |
+| --- | ---: | ---: | ---: | ---: |
+| any | 6860 / 57.3 / 25.0 | 5236 / 28.3 / 10.5 | 8367 / 71.2 / 25.0 | 9622 / 100.3 / 26.2 |
+| 0.05 | 6729 / 24.5 / 25.0 | 5141 / 25.0 / 10.5 | 8198 / 71.2 / 25.0 | 6729 / 24.5 / 8.1 |
+| 0.15 | 6709 / 24.5 / 18.7 | 5062 / 24.5 / 10.5 | 8153 / 71.2 / 11.6 | 6709 / 24.5 / 8.1 |
+| 0.50 | 6645 / 24.5 / -1.6 | 4818 / 24.5 / -1.6 | 8086 / 71.2 / -1.6 | 6638 / 24.5 / 0.5 |
+
+Two readings fix the number. **Any weight at all is too much:** the four TR3
+guest bodies (#122) carry a whisper of head weight - under 0.05 - over the
+whole body down to the feet, 9,622 vertices against the 6,729 that are really
+her head and the deepest of them 688 units down the axis, so "any" makes three
+quarters of a TR3 Lara disappear. **Half is too little:** at 0.50 the highest
+surviving vertex inside a neck's radius stands 1.6 units ABOVE the head joint
+on four of the bodies - a ring of neck around the camera, which is the tube the
+play test photographed. Between 0.05 and 0.35 all eight bodies read the same
+24.5 for the widest thing taken below the chin, which is the neck's own radius
+and no collar. **0.15** is taken out of that plateau.
+
+*The cut, in the shader.* `hd_lara.h`, `HD_LARA_HEAD_CUT_WEIGHT 0.15f`;
+`HDLaraHeadCut` (`hd_lara.cpp`) hands the node and the threshold up;
+`hd_laradraw.cpp` puts them in `HDModelNeckCut` with nothing to build per
+frame at all; `hd_model.cpp` writes them to `c162`; and `hd_model.hlsl`'s
+`ModelVS` adds the vertex's share of that node out of the three bones the
+skinning already walks (`headWeight += abs(node - gNeckCut.x) < 0.5 ? weight :
+0`) while `ModelPS` clips on the interpolated value. **Nothing is measured in
+space any more**, so `HD_LARA_NECK_PLANE_S`, `HDLaraNeckPlane` and the plane's
+four view-space numbers are gone, and with them the per-frame matrix work
+round S needed.
+
+*The lid is a fan over the body's own RIM* (`build_neck_cap`, `hd_lara.cpp`).
+The RIM is the set of vertices that do NOT reach the threshold but share a
+triangle with one that does - the exact edge of the hole. Every rim vertex is
+copied whole: position, three bones, three weights and texture coordinate. That
+is what makes the seal permanent: **the lid's edge is skinned by the same sum
+over the same joints as the skin it meets**, so the two land on the same point
+in every pose, to the bit, and no animation can open a gap. Every lid before
+this one was rigid on one node while the skin it met was not.
+
+| outfit | rim vertices | r off the axis | s down it | page | fan |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| CLASSIC | 20 | 12.4 .. 22.7 | 18.7 .. 37.0 | 8001 | 60 triangles, 2 rings |
+| RUSSIA | 23 | 13.2 .. 23.8 | 16.5 .. 34.3 | 8042 | 69, 2 |
+| VCI | 20 | 10.7 .. 22.7 | 11.6 .. 37.0 | 8001 | 60, 2 |
+| SUBSUIT | 32 | 13.0 .. 27.6 | 5.8 .. 23.1 | 8047 | 96, 2 |
+| TR3 (all four) | 20 | 12.4 .. 22.8 | 18.8 .. 37.1 | 8201 | 60, 2 |
+
+**U1b - and the dark point in the middle of the TR3 cap.** The first cut of
+this round gave the fan's one shared middle vertex the AVERAGE of the rim's
+texture coordinates. `ModelProbe -headw` prints the rim's texels at the
+shipping threshold, and the answer is in them:
+
+| outfit | page | u | v | the average |
+| --- | ---: | ---: | ---: | ---: |
+| CLASSIC | 8001 | 235 .. 241 | 70 .. 168 | 238 / 119 |
+| RUSSIA | 8042 | 119 .. 125 | 38 .. 255 | 120 / 150 |
+| SUBSUIT | 8047 | 16 .. 40 | 48 .. 84 | 28 / 68 |
+| the four TR3 | 8201 | 60 .. 170 | 154 .. 202 | 112 / 178 |
+
+On every TR5 page the neck is **one narrow column six texels wide**, and the
+average of a column is in the column - skin. On the TR3 guests' page it is
+**two separate bands**, one at v 198..202 and one at v 154..158, and the
+average lands in the gap between them. That is the dark point exactly, and the
+cone is the interpolation running into it.
+
+*The fix invents no texture coordinate anywhere.* Each spoke of the fan wears
+the texel of the rim vertex it hangs from, unchanged all the way in - the
+middle included, which is why the middle is now a COPY PER SPOKE (same
+position, same normal, same skinning, different texel) rather than one shared
+vertex. A triangle of the lid therefore spans two texels that are neighbours on
+her skin and samples nothing between them. Picking a *better* single texel
+would only have made the lottery smaller: the interior interpolates from each
+rim texel towards the middle's, so a rim at u 60 and a middle at u 112 sweeps
+the fifty texels between them whatever is written there.
+
+*Proof, by picture.* `ModelProbe -firstperson -pitch 89 -fpforward 0` over all
+eight wardrobe bodies, looked at and not only counted: the TR3 cap comes out
+one even skin tone with the dark point and the cone gone, and `OUTFIT_CLASSIC`
+is unchanged but for a little less swirl. The two cases the play test named are
+pictures as well - looking straight down into the neck (the roll), and the eye
+moved off the head joint with `-eye 0 30 -70` and pitched down (the landing
+after a dive): skin in both, no body interior, no nape, no hair.
+
+**U2 - the roll at sixty, measured rather than guessed.**
+
+*The finding.* At sixty a dive roll shows one frame with a leg stretched fully
+the wrong way, curled up on the frames either side of it; at thirty the same
+roll is faultless. Fix round S guessed a rate 1 key frame pair too far apart to
+blend (S2) - and `INTERPLOG`'s `pose_far` read **0.0 for the whole of the next
+session**. A guess that measures zero is a guess disproved.
+
+*The measurement.* `ModelProbe -tween60` replays an animation at sixty offline
+- `GetFrames` for the tick frames, `InterpPoseAt` at t = 0.5 for the frames
+between them, and the two key frame chains built separately and blended element
+by element per node, which is exactly what `Rich_CalcLaraMatrices_Interpolated`
+does through `InterpolateMatrix`. Over **the whole LARA animation range 0..473
+of ANDREA1 - the 337 of them this level really stores**, every drawn frame, all
+fifteen nodes (the other 137 are the level-specific stubs, and the run now says
+so itself: *animations asked for: 474 - 337 replayed, 137 stubbed in this
+level*):
+
+| | |
+| --- | ---: |
+| worst distance of a tween frame from the midpoint of its two ticks | **0.00** |
+| worst bone shortening, whole table | 0.34 (animation 205, the pair S2 already refuses) |
+| worst bone shortening over the rolls and the sprint dive | 0.89 |
+| tween frames whose key pair reaches past the animation's own stored keys | 313, all of them reached by the two TICKS as well |
+
+The element-wise blend is **affine in its factor**, so a tween frame inside one
+animation is the exact arithmetic midpoint of the two ticks either side of it,
+node by node. A limb therefore **cannot** come out beyond the two poses it
+stands between. What the blend can do is shorten a bone - it walks the chord of
+the arc and not the arc, so a bone whose world frame turns D comes out
+cos(D/2) of its own length - and over the rolls and the sprint dive that is at
+most a ninth.
+
+*What changed.* Nothing in the pose path, because the measurement says there is
+nothing there to change, and a fix on a disproved suspicion is what cost this
+project two days once already. What was added is the seam that will name the
+frame in the GAME rather than in a table: `InterpNoteLaraStretch`
+(`interpolate.cpp`, called from `delstuff.cpp` on every tween frame of the view
+set) measures each of Lara's bones against **its own length in the skeleton**
+and keeps the worst of the second with the node, the animation and the frame it
+happened on. `INTERPLOG` gained `stretch=0.87@node3(anim232 f5843)`. A rigid
+pose reads 1.00; under about 0.85 is a limb one can see in the wrong place, and
+the animation and frame beside it are then the pair to look at. S2 stays: it is
+right for what it guards, and it guards animation 205.
+
+**U3 - the arms on every drawn frame.**
+
+*The finding, and it is the user's own measurement off a 60 Hz video of a still
+first person frame:* the background moves 1.87 and 1.88 units per frame in
+turn, and the hand and the HK move 0.7 to 1.2 for five frames and then 3.2 to
+3.6 on the sixth. The same idle in the third person is even (0.15 / 0.17).
+Maximum camera damping changes nothing; `INTERPLOG` reads `pose_hd=0.5` on
+every frame, so her body IS getting the blended pose.
+
+*What the code says.* Four of Lara's fifteen nodes do not come out of her
+animation at all. With a weapon in her hands the ARMS are driven by the weapon
+slot's animation through `lara.right_arm` / `lara.left_arm`, and with the HK in
+state 0 to 4 the TORSO and the HEAD are read from it as well
+(`Rich_CalcLaraMatrices_Interpolated`, `game\delstuff.cpp`). Order 4 wrote
+those frames **raw** - the pistol, uzi and revolver branches walk the arm from
+one stack with `gar_RotYXZsuperpack`, and the shotgun, HK and crossbow branch
+feeds *the same current frame into both stacks* and blends a pose with itself.
+Either way the arm's own animation frame is this tick's on every drawn frame,
+with no blend in time at all. At thirty that is invisible; at sixty it is the
+whole of what the video photographed.
+
+*What was measured for it.* `AnimMap` over ANDREA1's six weapon slots: the
+weapon animations are **not** all rate 1, which the note round U inherited
+claimed - `PISTOLS_ANIM` has 26 at rate 1, two at 2 and two at 4, `HK_ANIM` has
+13, two and **fifteen**, `REVOLVER_ANIM` 20, one and nine, and `FLARE_ANIM`
+carries one at rate 3. It makes no difference, and the reason is Core's own:
+the arm chain indexes the frame data by the FRAME number and not by the key, so
+it reads one stored frame per game frame however the rate is declared. The two
+ticks either side of a drawn frame are therefore two whole stored poses, and
+the frame between them wants them at the time fraction t - which is not the
+body's key frame factor. Also measured, for the record: `ANIM_BREATH` (103) is
+rate 4 over 44 frames, `ANIM_STOP` (11) rate 2, `ANIM_RUN` (0) rate 1.
+
+*The fix.* `InterpArmPrev` (`interpolate.cpp`) keeps each arm's animation
+number, frame number and frame_base pointer at the tick and hands the previous
+one back with the frame's time alpha. It answers **false** - and the arms are
+drawn exactly as they were - at `fps_mode 0`, on a frame that carries a tick,
+on a frame drawn live, with no previous tick, when the arm's animation changed,
+when its `frame_base` moved, or when its frame number stepped by more than one
+in either direction (a pistol arm counts down as well as up). The draw then
+takes one of two shapes:
+
+- the pistol, uzi and revolver branches walk the three arm nodes **twice** from
+  the same shoulder - once with the previous tick's frame into a scratch of
+  three matrices, once with this tick's into the output - and blend the two
+  with `InterpBlendFloat`, the engine's own lerp. Two walks of three nodes, on
+  the tween frame only.
+- the shotgun, HK and crossbow branch already has both stacks in the weapon's
+  own animation, so `InterpArmStack` (`game\draw.cpp`) collapses them to their
+  blend at the BODY's factor - the joint the arm hangs from - and sets the
+  ARM's factor. Stack one then walks the previous tick's frame and stack two
+  this tick's, and every `InterpolateMatrix` below is the midpoint in time. The
+  HK's torso and head take the same road, at the torso, so the whole of what
+  the weapon animation drives is blended and not only the hands. With the HK
+  that makes **two** collapses in one draw, and the second is not free: the
+  torso collapse is walked apart again through the torso and the head, so the
+  arm branch's own call takes the SHOULDER to its midpoint in time and hangs
+  both arm chains off that one joint. That is the order wanted - the arm is
+  built once, from the shoulder the drawn body really has - and the note over
+  `InterpArmStack` says so since U7, where it used to claim the second call
+  blended two stacks that were already equal.
+
+`INTERPLOG` gained `arms=<blended>/<refused>/<tween frames>`. With a weapon in
+her hands the first number should be the tween count and the second a handful a
+second - one on each frame the weapon animation changes number. With **empty
+hands, a flare or a torch both stay nought**, because the frame is not counted
+at all: the counter is asked in the draw where the weapon is known, and not
+from the arm rule, which reads `lara.right_arm` / `lara.left_arm` - fields that
+keep their last values while her hands are empty and would answer *yes* to a
+frame on which the draw blends no arm whatever (corrected in U7).
+
+*And it is not first-person only, by design.* `InterpArmPrev` asks `g_applied`
+and not the camera, so at 60 the arms interpolate in **third** person too -
+they are the same four nodes whichever camera looks at her. The even third
+person reading in the measurement above (0.15 / 0.17) cannot have come from
+smoothing, because before this round there was none in either camera: it is
+what a hand that small in the picture reads.
+
+**U4 - a new option: First person view / Body, `animated` or `still`.**
+
+*The user's words:* "mute the animations except the head movement". In first
+person the camera hangs in her head joint, so every breath of her idle
+animation moves the WHOLE PICTURE - and it is the one thing about the view that
+cannot be avoided by looking somewhere else.
+
+`still` holds her body on one stored frame while she is standing, crouching or
+kneeling still on the ground, and nothing else. The states, and it is by STATE
+and not by a list of animation numbers, because which animation she stands in
+depends on what she is holding and what she did last: `AS_STOP` (standing, and
+aiming while standing, which keeps the same state, so a rifle held on a target
+stops breathing too), `AS_POSE`, `AS_DUCK` and `AS_ALL4S`, each with
+`current_anim_state == goal_anim_state` - a state already on its way somewhere
+else is not an idle.
+
+What is NOT held: the head's own look angles are not in the frame at all and
+the player turns and tilts the view exactly as before; the ARMS are driven by
+the weapon slot, so drawing, aiming, firing and reloading are untouched - and
+they keep U3's blend in time while the hold is on, which took a correction in
+U7 to be true; and
+every state that is not in that list - every step, jump, climb, pull, roll and
+swim - is untouched. The held pose is the **key frame the idle began on**, so
+it is a pose that really exists in the file, nothing about it can drift, and
+switching INTO the hold cannot jump at all because it is the pose she was
+already wearing. Leaving it costs at most what the idle travels in one cycle,
+which is the breath, and it is spent on the frame she starts moving anyway. The
+hold is dropped the moment the state stops being an idle one, the animation
+changes underneath it, or the view leaves first person - so a savegame, a
+cutscene or a death cannot leave her frozen.
+
+It is `LaraBodyStillFrame` in `game\delstuff.cpp`, the held frame **in both
+slots** with the factor 0 beside it, so both draw paths - HD and classic - wear
+it; the classic first person path draws her body too (it leaves out the head
+MESH), which is why this sits in `CalcLaraMatrices` and not in the HD seam. A
+blend of a pose with itself is that pose, so the body is frozen whichever
+branch runs, and the branch is left as it was: U4 first wrote `frac = 0`, which
+sent the draw down `Rich_CalcLaraMatrices_Normal` - a function that reads
+`lara.right_arm` / `lara.left_arm` **raw** in all six weapon branches and so
+switched U3's arm blend back off in exactly the case U3 was built for. The
+shadow takes the held frame's own bounds for the same reason. The
+option is `tomb5.first_person_body_still` (`ego_body_still` in the registry),
+default `animated`, row five of the "First person view" page under Camera
+damping.
+
+**U5 - what the review of fix round S found, in words only.** `hd_model.h`
+carried a whole comment for `HDModelSetInnerSkin`, a function fix round S
+deleted; `hd_model.cpp` gave the inner skin as the reason two draw ranges may
+be merged; `hd_laradraw.cpp` and `hd_lara.h` still said the lid wears the
+throat texel, which stopped being true in U1; `interpolate_math.h` said
+`InterpCamAim` was written per camera *"so that the two sides of the comparison
+cannot be reduced differently by accident"*, which is precisely the cliff fix
+round S took out of it (nothing in the ENGINE calls that function any more -
+`InterpTest` still does, and deleting it on the strength of that sentence would
+break the 269-check test; the note says both since U7); `ModelProbe`'s
+`-poserisk` summary read "1 of those **are** rate 1"; and three loop bodies in
+`hd_object.cpp` stood one tab short of their own braces. All corrected; no
+behaviour changed by any of them.
+
+**U6 - an honest build stamp.** `winmain.cpp` writes the first line of every
+`-log` run, `PCtomb5 built <__DATE__ __TIME__>`, and those two macros are fixed
+when THAT ONE FILE is compiled. In an incremental build it is not: change a
+shader, or a file in `specific\hd`, and `winmain.obj` is still yesterday's - a
+play test read 18:34 off a build made at 19:49. `be.bat` now deletes
+`winmain.obj` and `setupdlg.obj` before `msbuild`, so the linker gets a freshly
+compiled stamp every time. Two builds one after the other read
+`Sep  7 2026 23:05:47` and `Sep  7 2026 23:06:17`, and each matches its own
+EXE's timestamp to the second.
+
+**U7 - what the review of round U itself found.** One of the eight findings was
+a real defect and the rest were sentences that had outlived their code.
+
+*The defect (`game\delstuff.cpp`).* **U4 switched U3 back off.** The still body
+forced `frac = 0`, and zero is the test that chooses
+`Rich_CalcLaraMatrices_Normal` - the branch with no `InterpArmPrev`, no
+`InterpArmStack` and six weapon cases that read `lara.right_arm` /
+`lara.left_arm` raw. So *First person view / Body = still* at 60 Hz put the arms
+back on the logic tick in precisely the scenario U3 was written for: standing
+still in first person with the HK, where drawing, aiming, firing and reloading
+all keep `AS_STOP` and the hold therefore stays armed the whole time. Both
+documents promised the opposite. The fix keeps the interpolated branch
+reachable - the held frame goes into **both** slots with the factor 0, which
+freezes the body just as hard because a blend of a pose with itself is that
+pose - and `frac` is only lifted to 1 on a frame that had no pair of its own.
+`GLaraShadowframe` takes the held frame with it, which is what the
+non-interpolated draw did.
+
+*The counter that counted the wrong frames (`arms=`).* Corrected as described
+under U3 above: asked in the draw where the weapon is known.
+
+*The snapshot nobody invalidated.* `InterpInvalidate` cleared every previous
+state by hand except `g_prevArm`, whose `base[]` is a `short*` **into the
+level's frame data** - memory `FreeLevel` returns to the `game_malloc` pool and
+the next level allocates over. That is the shape of the stale pool pointer that
+crashed joby3; `g_prevArm.valid = 0` now stands beside `g_prevAim.valid = 0`.
+
+*And four sentences.* `InterpArmStack`'s note claimed the second call blends two
+stacks that are already equal (true for the shotgun and the crossbow, false for
+the HK - see U3 above); `ModelProbe -headw` still printed the averaged texel as
+*"the texel the MIDDLE wears"* although U1b had made the middle `spokes` copies
+each wearing its own rim texel; `-eye` moved the eye and the run header still
+described the default placement; `be.bat`'s build-stamp comment called itself
+U5. All corrected. The `-tween60` verdict is now quoted as what it is - the
+whole range 0..473, of which **ANDREA1 really stores 337**, the other 137 being
+the level-specific stubs - and the run prints that split itself so the next
+quotation cannot drift (`animations asked for: 474 - 337 replayed, 137 stubbed
+in this level`). `Preparation\Tools\README.md` also still opened the
+`InterpTest` row with the pre-U count of 198 checks while ending it with 269.
+
+**The guards.** Everything in U2, U3 and U4 is behind the existing ones:
+`InterpArmPrev` answers false at `fps_mode 0`, `InterpNoteLaraStretch` runs
+only with `-log`, and the still body needs `tomb5.first_person` and
+`tomb5.first_person_body_still` both on. U1 is inside `hd_enable`. The thirty
+hertz picture and the classic path are what they were. The new option is the
+one place where a picture changes at thirty as well - it is what the option is
+for - and even there nothing is blended in TIME: the held pose reaches the
+interpolated branch as a pair of identical frames, `InterpArmPrev` answers
+false at `fps_mode 0`, and the arm branches are the ones vanilla itself takes
+whenever `frac` is not zero.
+
+**The proof.** `be.bat` builds clean (0 errors, only the pre-existing
+`camera.cpp` warning), `InterpTest` reads **269 checks, 0 failed**, `ModelProbe`
+rebuilt and run for all of the tables above, and the U1 pictures were looked at
+in all eight outfits. After U7 the eight first person renders and the landing
+render come back **byte for byte the same files** as the ones round U was
+accepted on (`cmp`), which is the proof that U7's tool edits are words and not
+pictures; `-tween60` over 0..473 reproduces `worst off 0.00`, `worst leg 0.34`
+on animation 205 and 313 pairs past the stored keys; and the U6 stamp holds
+over the round's own builds - `Sep  7 2026 23:46:59` with its EXE written at
+23:47:01, and `Sep  7 2026 23:54:57` with its EXE at 23:54:59, each stamp its
+own build's and neither the one before it.
 
 ---
 

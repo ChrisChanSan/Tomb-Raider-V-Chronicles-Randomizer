@@ -589,10 +589,23 @@ inline long InterpTrailLong(long cur, long step, float alpha)
 
 /* The target as this rule measures it, RELATIVE TO ITS OWN EYE: the offset
  * itself while the target is a place, and the offset scaled onto the sphere
- * while it is a direction. Returned through three longs because that is what
- * the caller then hands to InterpManhattan, and written as a function of one
- * camera so that the two sides of the comparison cannot be reduced
- * differently by accident. */
+ * while it is a direction.
+ *
+ * IT IS NO LONGER THE RULE, and the sentence that stood here said the
+ * opposite (#123, fix round S, S3(a); this note corrected in fix round U,
+ * U5). It claimed that asking ONE camera at a time was what kept the two
+ * sides of the comparison from being reduced differently - and asking one
+ * camera at a time is exactly what put a cliff on the shell, because a
+ * target at 4095 was then a place and the same target at 4097 a direction.
+ * InterpCamAimCut below chooses the branch once for the PAIR and scales both
+ * sides by the same k; nothing in the ENGINE calls this any more.
+ *
+ * IT IS STILL CALLED, AND DELETING IT WOULD BREAK A TEST (corrected in U7):
+ * Preparation\Tools\Diagnose\InterpTest.cpp measures the old rule against the
+ * new one, and it includes THIS header rather than a copy of it, which is the
+ * whole point of the tool. It stays for that, because it is the readable
+ * statement of what an aim offset IS, and because InterpCamAimCut's arithmetic
+ * is only recognisable as this one beside it. */
 inline void InterpCamAim(long px, long py, long pz, long tx, long ty, long tz,
 	long* ax, long* ay, long* az)
 {

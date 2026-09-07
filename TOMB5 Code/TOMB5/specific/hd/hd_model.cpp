@@ -1199,19 +1199,23 @@ namespace
 
 		g_device->SetVertexShaderConstantF(104, light, (UINT)kJointBudget);
 
-		/* c162, THE NECK CUT's plane (#123, fix round S, S1), in VIEW space -
-		 * the caller built it this frame out of the head node's own matrix.
+		/* c162, THE HEAD CUT (#123, fix round U, U1): which node's weight
+		 * decides and how much of it sends a fragment away. Nothing in it is a
+		 * fact about the camera or the pose, so unlike fix round S's plane it
+		 * does not have to be rebuilt anywhere - the caller names the two
+		 * numbers and they are the same in every frame.
+		 *
 		 * Written for every draw and not only for the one that cuts, for the
 		 * reason c161 is: a constant register keeps what it was last given,
-		 * and a stale plane plus a stale gPass.z would slice the next creature
-		 * drawn in half. Off is a normal of zero and an offset of a million,
-		 * which no vertex is on the wrong side of. */
+		 * and a stale threshold plus a stale gPass.z would carve the next
+		 * creature drawn. Off is a threshold of a million, which no weight
+		 * reaches. */
 		float neck[4] =
 		{
-			cut && cut->on > 0.0f ? cut->plane[0] : 0.0f,
-			cut && cut->on > 0.0f ? cut->plane[1] : 0.0f,
-			cut && cut->on > 0.0f ? cut->plane[2] : 0.0f,
-			cut && cut->on > 0.0f ? cut->plane[3] : 1.0e6f
+			cut && cut->on > 0.0f ? cut->node : 0.0f,
+			cut && cut->on > 0.0f ? cut->bar : 1.0e6f,
+			0.0f,
+			0.0f
 		};
 
 		g_device->SetVertexShaderConstantF(162, neck, 1);
@@ -1312,9 +1316,9 @@ namespace
 				continue;
 
 			/* gPass: x switches the alpha test on, y the additive weighting,
-			 * z the first person NECK CUT (#123, fix round J - a flag now,
-			 * 1 or 0; the cylinder itself went up in c162 above, and 0 for
-			 * every model but Lara's body makes the shader's clip discard
+			 * z the first person HEAD CUT (#123, fix round U - a flag, 1 or
+			 * 0; the two numbers it needs went up in c162 above, and a 0 here
+			 * for every model but Lara's body makes the shader's clip discard
 			 * nothing), w the overbright add. The PIXEL constant
 			 * file only - the vertex shader does not read gPass and fxc has
 			 * put its own literals in that register there, and the room
@@ -1384,9 +1388,12 @@ namespace
 				{
 					const Range& more = model.pass[pass][next];
 
-					/* THE INNER SKIN DRAWS ON ONE PAGE (#123, fix round K,
-					 * K1), so a change of page is no longer a reason to cut
-					 * the run: the whole shell is one call per node run. */
+					/* A RUN IS CUT BY THE PAGE, THE ORDER AND THE MASK
+					 * (#123; the note here named the inner skin, which fix
+					 * round S withdrew - corrected in fix round U, U5). Two
+					 * ranges join when they wear the same page, when the
+					 * second begins where the first ends, and when the mask
+					 * keeps the second's node. */
 					if (more.pageSlot != first.pageSlot ||
 						more.start != start + count ||
 						!(nodeMask & (1u << (more.node & 31))))

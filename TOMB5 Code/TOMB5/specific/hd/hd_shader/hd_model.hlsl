@@ -86,7 +86,7 @@
  * c136 - c159 gObjLights[24]      per object (12 lights, two registers each)
  * c160        gLightInfo          per object (count, the sun's factor)
  * c161        gSpec               per draw   (#123 fix round D, D2)
- * c162        gNeckPlane          per draw   (#123 fix round S, S1)
+ * c162        gNeckCut            per draw   (#123 fix round U, U1)
  *
  * THE VERTEX REGISTERS OVERLAP THE ROOM SHADER'S, and on purpose. Direct3D 9
  * has ONE constant register file behind both shaders, and hd_room.hlsl keeps
@@ -114,9 +114,9 @@
  * into view space, exactly as the classic path's matrix stack does. */
 float4x4 gProj : register(c0);
 
-/* x = alpha test on/off, y = additive weight on/off, z = the NECK CUT on/off
+/* x = alpha test on/off, y = additive weight on/off, z = the HEAD CUT on/off
  * (#123, fix round J - it was the near cut's RADIUS in stage S8, and since
- * fix round S the whole cut is the ONE PLANE in gNeckPlane), w =
+ * fix round U the cut itself is the node and the threshold in gNeckCut), w =
  * specular (overbright) on/off. The room shader
  * carries the same register and the same x, y and w; only z differs, and it
  * differs safely - see the note at the cut itself in ModelPS.
@@ -203,48 +203,37 @@ float4 gLightInfo : register(c160);
  * for where the numbers come from and why they are not read out of the art. */
 float4 gSpec : register(c161);
 
-/* THE NECK CUT, AS ONE PLANE IN THE HEAD'S OWN FRAME (#123, fix round S, S1).
+/* THE HEAD CUT, AS ONE BONE WEIGHT (#123, fix round U, U1).
  *
- * gNeckPlane  xyz the unit normal, w the offset: a fragment is KEPT where
- *             dot(n, p) + w >= 0, with p the fully skinned position in VIEW
- *             space, and discarded on the head side of it.
+ * gNeckCut  x the NODE whose weight decides - Lara's head, node 14 - and y
+ *           the threshold: a fragment whose weight on that node REACHES y is
+ *           discarded. z and w are unused.
  *
- * THE FOUR NUMBERS ARE IN VIEW SPACE AND ARE BUILT ONCE A FRAME on the
- * processor, out of the interpolated HEAD node matrix (hd_laradraw.cpp). The
- * plane is fixed in the HEAD's own frame - it lies perpendicular to the neck
- * axis, HD_LARA_NECK_PLANE_S units down it from the head joint - so it
- * follows her head wherever the animation puts it and no per-pixel matrix
- * product is needed here: the skinning below has already put the vertex in
- * the space the plane is measured in.
+ * THERE IS NOTHING IN VIEW SPACE HERE ANY MORE, and that is the round. Fix
+ * round S sent a PLANE down, built once a frame on the processor out of the
+ * interpolated head matrix, and the play test came back with Lara cut away
+ * across her chest and her shoulders: a plane fixed to the head tilts with the
+ * head. Rounds J to L sent a CYLINDER in the bind pose, and a bind-pose shape
+ * slides across a skinned neck as the head turns. Stage S8 sent a SPHERE about
+ * the eye, which ate whatever came near the camera.
  *
- * WHAT IT REPLACES, and why the shape had to change one last time. Rounds J
- * to L cut a CYLINDER about the neck axis in the BIND pose, with a near zone
- * about the eye and a node mask beside it. Three rounds of play test came
- * back with the same picture - a torn collar, a hole in the wrong place - and
- * the reason is that a cylinder is a shape in a POSE: the vertices of a neck
- * are skinned to two nodes at once, so where the cylinder's edge falls on her
- * skin depends on how far the head has turned. A plane in the head's own
- * frame has no such freedom. Everything above it goes - hair, collar, straps,
- * every node without exception - and everything below it stays, and a
- * triangle that crosses it is cut EXACTLY at it, because the pixel shader
- * clips on the interpolated distance.
+ * A BONE WEIGHT is not a shape. It is written in the .TRM beside the vertex,
+ * it is the same number in every pose and at every camera angle, and the
+ * vertex shader already has it in hand for the skinning - so the cut costs
+ * three comparisons in a loop that was running anyway and nothing at all on
+ * the processor.
  *
- * NO NODE MASK, and that is a simplification and not a loss: the plane sits
- * under her chin, and nothing of an arm or a hand is ever above it. The mask
- * existed to stop stage S8's sphere from eating a wrist, and there is no
- * sphere any more.
- *
- * hd_lara.h carries the measurement the depth comes from. */
-float4 gNeckPlane : register(c162);
+ * hd_lara.h carries the threshold and the measurement over the eight wardrobe
+ * bodies that picked it. */
+float4 gNeckCut : register(c162);
 
 /* THE INNER SKIN OF FIX ROUND K STOOD IN c164 (#123, fix round S, S1). It was
  * the second draw that closed the hole the neck cut left - the body again,
  * keeping the faces the first draw culls, in one flat texel with its normal
  * turned round. The LID closes that hole now (hd_lara.h,
- * HD_LARA_NECK_CAP_MARGIN), and forty first person pictures are identical to
+ * HD_LARA_NECK_CAP_SEGMENTS), and forty first person pictures are identical to
  * the pixel with the second draw and without it, so it is gone and c164 with
- * it. What stays is the texel it taught the wardrobe to measure: the lid wears
- * Lara's own throat. */
+ * it. */
 
 /* --------------------------------------------------- THE PARITY BLOCK ------
  *
@@ -303,11 +292,14 @@ struct VS_OUT
 	float3 viewPos : TEXCOORD2;	// the classic "stash"
 	float3 viewNrm : TEXCOORD3;	// skinned normal, NOT renormalised
 	float3 spec    : TEXCOORD4;	// the sheen, 0 when gSpec.x is 0 (D2)
-	/* THE NECK CUT's keep value (#123, fix round J, J1): negative inside the
-	 * cut cylinder and positive outside it, so the pixel shader's whole share
-	 * of the cut is one clip of an interpolated number. Interpolating it is
-	 * what makes the edge a smooth curve across a triangle rather than a
-	 * staircase of whole triangles. */
+	/* THE HEAD CUT's keep value (#123, fix round U, U1): the threshold minus
+	 * the vertex's own weight on the head node, so it is negative where the
+	 * head owns the vertex and positive where it does not, and the pixel
+	 * shader's whole share of the cut is one clip of an interpolated number.
+	 * Interpolating it is what makes the edge follow the weight across a
+	 * triangle rather than take whole triangles at a time - and because the
+	 * weights are a property of the SKIN, that edge is the same patch of her
+	 * in every pose. */
 	float  cut     : TEXCOORD5;
 };
 
@@ -338,6 +330,11 @@ VS_OUT ModelVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	float3 nrm = 0.0f;
 	float3 light = 0.0f;
 
+	// THE HEAD CUT (#123, fix round U, U1): this vertex's share of the one
+	// node gNeckCut names, added up out of the same three bones the skinning
+	// walks.
+	float headWeight = 0.0f;
+
 	/* THREE BONES. Unrolled, so every gJoints access is a literal register
 	 * offset plus one address register - and so that inBone[i] is a component
 	 * select rather than an indexed one, which vs_3_0 cannot do on a
@@ -351,22 +348,21 @@ VS_OUT ModelVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		view += weight * Skin(pos, node);
 		nrm += weight * Skin(normal, node);
 		light += weight * gNodeLight[node].rgb;
+
+		headWeight += abs((float)node - gNeckCut.x) < 0.5f ? weight : 0.0f;
 	}
 
-	/* THE NECK CUT (#123, fix round S, S1), and it is Lara's alone.
+	/* THE HEAD CUT (#123, fix round U, U1), and it is Lara's alone.
 	 *
-	 * ONE DOT PRODUCT, on the FINISHED skinned position: `o.cut` is the
-	 * signed distance to the plane, positive on the side that is kept. The
-	 * pixel shader clips on the interpolated value, so a triangle that
-	 * straddles the plane is cut exactly at it and no vertex rule can round
-	 * the edge off.
+	 * ONE SUBTRACTION on a number the loop above already had: `o.cut` is how
+	 * far this vertex's head weight is BELOW the threshold, so it is positive
+	 * where the vertex is kept and negative where the head owns it. The pixel
+	 * shader clips on the interpolated value.
 	 *
-	 * There is no node term and no second shape. Everything above the plane
-	 * goes, whatever node carries it, which is the whole point of moving the
-	 * cut out of the bind pose: a neck vertex skinned half to the head and
-	 * half to the torso used to survive every cylinder there was (fix round
-	 * L), and a plane in the head's own frame cannot be dodged that way. */
-	o.cut = dot(view, gNeckPlane.xyz) + gNeckPlane.w;
+	 * Off is a threshold of a million (hd_model.cpp), which every weight is
+	 * below - so a model drawn with no cut discards nothing even if the pixel
+	 * shader's own flag were stale. */
+	o.cut = gNeckCut.y - headWeight;
 
 	/* THE DIRECTIONAL LIGHT, LINE FOR LINE OUT OF aTransformLightClipMesh
 	 * (specific\output.cpp:100-160). Three kinds, and only two shapes behind
@@ -573,8 +569,8 @@ float4 ModelPS(VS_OUT input) : COLOR0
 	 * skull left as a single gold fragment because pass 0 discarded on it. */
 	clip(gPass.x * (texel.a - 0.5f));
 
-	/* THE NECK CUT (#123, stage S8, re-shaped in fix rounds J and S), and it
-	 * is Lara's alone.
+	/* THE HEAD CUT (#123, stage S8, re-shaped in fix rounds J, S and U), and
+	 * it is Lara's alone.
 	 *
 	 * In first person the camera hangs in her head joint, and the classic
 	 * path answers that by leaving the head MESH out. An HD body is one
@@ -583,17 +579,17 @@ float4 ModelPS(VS_OUT input) : COLOR0
 	 * from the eye, inside the near plane, which is what stands in the
 	 * picture when she looks down (user finding F3, with a photograph).
 	 *
-	 * A PLANE IN THE HEAD'S OWN FRAME, and the shape is the whole design.
-	 * Stage S8 cut a sphere around the eye, rounds J to L a cylinder about the
-	 * neck axis in the BIND pose, and both are shapes that a skinned neck can
-	 * slide out of: the vertex under her chin is half head and half torso, so
-	 * where the cylinder's edge fell on her skin depended on the animation.
-	 * The plane cannot be dodged - it is fixed to the head, everything above
-	 * it goes whatever node carries it, and a triangle across it is cut here,
-	 * per pixel, exactly at it.
+	 * NO SHAPE AT ALL, and that is the design. Stage S8 cut a sphere around
+	 * the eye, rounds J to L a cylinder about the neck axis in the BIND pose,
+	 * fix round S a plane carried by the head node - and every one of them is
+	 * a rule written in SPACE, which a skinned vertex moves through. The
+	 * vertex under her chin is half head and half torso, so a bind-pose shape
+	 * slides across her skin as the head turns; and a plane tied to the head
+	 * tilts with it, which is Lara cut away across her chest. What is cut here
+	 * is what her BONE WEIGHTS say is head, which nothing can move.
 	 *
-	 * The vertex shader did the geometry (see gNeckPlane there); this is the clip,
-	 * and gPass.z is 1 when the cut runs and 0 when it does not. lerp to a
+	 * The vertex shader added the weight up (see gNeckCut there); this is the
+	 * clip, and gPass.z is 1 when the cut runs and 0 when it does not. lerp to a
 	 * flat 1 for the off case, so that a model with no cut discards nothing
 	 * whatever is left in the interpolant - and so that this line stays safe
 	 * against the room shader, which reads its own gPass.z in the VERTEX half

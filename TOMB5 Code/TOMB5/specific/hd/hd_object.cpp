@@ -616,46 +616,46 @@ namespace
 
 		for (long i = 0; i < NumPointLights; i++)
 		{
-		float val = (PointLights[i].vec.x * nx + PointLights[i].vec.y * ny +
-			PointLights[i].vec.z * nz + 1.0f) * 0.5f;
+			float val = (PointLights[i].vec.x * nx + PointLights[i].vec.y * ny +
+				PointLights[i].vec.z * nz + 1.0f) * 0.5f;
 
-		val *= val;
+			val *= val;
 
-		if (val > 0)
-		{
-			val *= PointLights[i].rad;
-			classic[0] += val * PointLights[i].r;
-			classic[1] += val * PointLights[i].g;
-			classic[2] += val * PointLights[i].b;
-		}
+			if (val > 0)
+			{
+				val *= PointLights[i].rad;
+				classic[0] += val * PointLights[i].r;
+				classic[1] += val * PointLights[i].g;
+				classic[2] += val * PointLights[i].b;
+			}
 		}
 
 		for (long i = 0; i < NumSpotLights; i++)
 		{
-		float val = SpotLights[i].vec.x * nx + SpotLights[i].vec.y * ny +
-			SpotLights[i].vec.z * nz;
+			float val = SpotLights[i].vec.x * nx + SpotLights[i].vec.y * ny +
+				SpotLights[i].vec.z * nz;
 
-		if (val > 0)
-		{
-			val *= SpotLights[i].rad;
-			classic[0] += val * SpotLights[i].r;
-			classic[1] += val * SpotLights[i].g;
-			classic[2] += val * SpotLights[i].b;
-		}
+			if (val > 0)
+			{
+				val *= SpotLights[i].rad;
+				classic[0] += val * SpotLights[i].r;
+				classic[1] += val * SpotLights[i].g;
+				classic[2] += val * SpotLights[i].b;
+			}
 		}
 
 		for (long i = 0; i < NumSunLights; i++)
 		{
-		float val = SunLights[i].vec.x * nx + SunLights[i].vec.y * ny +
-			SunLights[i].vec.z * nz;
+			float val = SunLights[i].vec.x * nx + SunLights[i].vec.y * ny +
+				SunLights[i].vec.z * nz;
 
-		if (val > 0)
-		{
-			val *= InventoryActive ? 2.0f : 0.75f;
-			classic[0] += val * SunLights[i].r;
-			classic[1] += val * SunLights[i].g;
-			classic[2] += val * SunLights[i].b;
-		}
+			if (val > 0)
+			{
+				val *= InventoryActive ? 2.0f : 0.75f;
+				classic[0] += val * SunLights[i].r;
+				classic[1] += val * SunLights[i].g;
+				classic[2] += val * SunLights[i].b;
+			}
 		}
 
 		/* The same normal in view space, and the same node's view position -

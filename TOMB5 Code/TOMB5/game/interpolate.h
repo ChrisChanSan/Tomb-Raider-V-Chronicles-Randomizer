@@ -232,6 +232,119 @@ void InterpNotePoseHD();
  * too far apart for an element-wise matrix blend to survive. */
 void InterpNotePoseFar();
 
+/* ORDER 4'S OTHER HALF - THE ARM'S OWN ANIMATION FRAME (#148; #123, fix round U)
+ *
+ * WHAT THIS ORDER LEFT OUT, AND WHAT IT COST. Lara's body pose is blended by
+ * the key frame pair (GetFramesAt), but four of her fifteen nodes do not come
+ * out of her own animation at all: with a weapon in her hands the ARMS are
+ * driven by the weapon slot's animation, read through lara.right_arm /
+ * lara.left_arm, and with the HK in state 0..4 the TORSO and the HEAD are
+ * read from it as well (game\delstuff.cpp). Order 4 wrote those frames RAW -
+ * the note that stood over InterpLaraAim said so in as many words - because
+ * the arm chain leaves the second matrix stack behind at the shoulder and its
+ * frames would have to be blended by the body's factor, which is not theirs.
+ *
+ * At thirty that is invisible: everything steps once per tick together. At
+ * sixty it is the whole of what the play test of 2026-09-07 photographed -
+ * the world and the camera glide, and the weapon in the hands, which in first
+ * person is most of the picture, stands still and then jumps once per logic
+ * tick. Measured off the user's own video: the background moved 1.87 and 1.88
+ * units per frame in turn, and the weapon area moved 0.7 to 1.2 five frames
+ * running and then 3.2 to 3.6 on the sixth.
+ *
+ * THE FACTOR IS THE FIX, AND THE ARM CHAIN IS ALREADY RATE 1 WHATEVER THE
+ * TABLE SAYS. Measured (AnimMap over ANDREA1, the six weapon slots): the
+ * weapon animations are NOT all rate 1 - PISTOLS_ANIM has 26 at rate 1, two
+ * at 2 and two at 4, HK_ANIM has 13, two and FIFTEEN, REVOLVER_ANIM 20, one
+ * and nine, and FLARE_ANIM even carries one at rate 3. It makes no difference
+ * here, and the reason is Core's own: the arm chain indexes the frame data by
+ * the FRAME number and not by the key,
+ *
+ *     lara.right_arm.frame_base[size * (frame_number - frame_base) + 9]
+ *
+ * so it reads a stored frame per game frame however the rate is declared. The
+ * pose the last tick drew and the pose this tick draws are therefore two
+ * whole stored frames, and what the tween frame wants is the two of them at
+ * the time fraction t. That is not the body's key frame factor - which is why
+ * this is a second question with its own answer.
+ *
+ * HOW THE DRAW USES IT (game\delstuff.cpp). The arm chain hangs off the
+ * shoulder the BODY's blend has already placed, and from there it is drawn
+ * from one matrix stack. So it is walked TWICE from that same shoulder - once
+ * with the previous tick's arm frame into a scratch of three matrices, once
+ * with this tick's into the output - and the two are blended element by
+ * element with the factor below, exactly as InterpolateMatrix blends the
+ * body's. Two walks of three nodes, on the tween frame only.
+ *
+ * This is the question the draw asks, and it answers false - the arms are
+ * drawn exactly as they are today - whenever there is any doubt: fps_mode 0,
+ * a frame that carries the tick, a frame drawn live, no previous tick, the
+ * arm's ANIMATION changed, its frame_base moved, or its frame number moved by
+ * more than one (rule K6, the arm's own form of it: a pistol arm counts down
+ * as well as up, so a step of -1, 0 and +1 are all neighbours and anything
+ * else is not). */
+enum
+{
+	INTERP_ARM_RIGHT = 0,
+	INTERP_ARM_LEFT = 1
+};
+
+struct InterpArmPose
+{
+	short* frame_base;
+	short anim_number;
+	short frame_number;
+};
+
+bool InterpArmPrev(int which, InterpArmPose* prev, float* alpha);
+
+/* The two counters INTERPLOG's `arms=` field is made of - a frame on which an
+ * arm really was blended in time, and one on which the rule above refused.
+ * Latched per drawn frame, because CalcLaraMatrices runs two or three times
+ * in one. Counted only with -log.
+ *
+ * ASKED WHERE THE WEAPON IS KNOWN and not where the rule is (game\delstuff.cpp,
+ * after `gun`; corrected in U7). The rule reads lara.right_arm / lara.left_arm,
+ * and those fields keep their last values while her hands are empty - nothing
+ * clears them - so an unarmed Lara satisfies it on every frame while the draw
+ * takes the WEAPON_NONE branch and blends no arm at all. Empty hands, a flare
+ * and a torch are therefore not counted in either column. */
+void InterpNoteArm(bool blended);
+
+/* HOW MUCH OF A BONE THE POSE BLEND LEAVES (#123, fix round U, U2; #148).
+ *
+ * WHY THIS SEAM EXISTS. A play test at sixty photographed one frame of a dive
+ * roll with a leg stretched fully the wrong way, curled up on the frames
+ * either side of it, and faultless at thirty. Fix round S guessed a rate 1
+ * key frame pair too far apart to blend (S2), and the counter it added -
+ * pose_far - read 0.0 for the whole of the next session: the guess measured
+ * zero, so it was not the answer.
+ *
+ * WHAT WAS MEASURED INSTEAD (ModelProbe -tween60 over the whole LARA animation
+ * range 0..473 of ANDREA1 - the 337 of them this level really stores, the
+ * other 137 being the level-specific stubs - every drawn frame, all fifteen
+ * nodes): the element-wise blend is
+ * AFFINE in its factor, so a tween frame inside one animation is the exact
+ * midpoint of the two ticks either side of it - `worst off 0.00` over the
+ * whole table. A node therefore CANNOT come out beyond the two poses it
+ * stands between. What the blend can do is SHORTEN a bone: it walks the chord
+ * of the arc, not the arc, so a bone whose world frame turns D between the
+ * two key frames comes out cos(D/2) of its own length. Over the whole table
+ * the worst is 0.34 - on animation 205, which is the one pair S2 already
+ * refuses - and the rolls and the sprint dive lose at most a ninth.
+ *
+ * SO THE PICTURE IS NOT IN THE PAIR, and this is the seam that will name it
+ * in the GAME rather than in a table: on every tween frame it measures each
+ * of Lara's bones against its own length in the skeleton and keeps the worst
+ * of the second, with the animation and the frame it happened on. A rigid
+ * pose reads 1.00. A frame the play test can point at reads whatever the
+ * shrink really was, and the answer stops being a guess.
+ *
+ * `matrices` is lara_matrices (twelve floats per node, world position in
+ * M03/M13/M23) and `bone` the object's own bone table. -log only. */
+void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
+	int animNumber, int frameNumber);
+
 /* ORDER 5 - THE PARTICLES (#148).
  *
  * The one number a drawing routine needs in order to put a spark, a raindrop

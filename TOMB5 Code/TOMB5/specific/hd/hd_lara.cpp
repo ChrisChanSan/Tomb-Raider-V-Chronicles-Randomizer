@@ -27,6 +27,7 @@
 #include "hd_lara.h"
 #include "hd_bind.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -309,7 +310,7 @@ namespace
 	 * everything else in this file is measured. The obvious source would have
 	 * been the pages' ALPHA channel: fix round A2 found it to be a gloss mask
 	 * on the room pages, and TROne says the same of the item ones in so many
-	 * words (hostender\game_renderer.cpp:373). It is not one here. Measured
+	 * words (host\render\game_renderer.cpp:373). It is not one here. Measured
 	 * with DdsProbe -alpha over the wardrobe's pages:
 	 *
 	 *     page 8001 (skin trim)   mean 254.9   0 texels below 128
@@ -1130,34 +1131,39 @@ namespace
 		g_inner_span = bestSpan;
 	}
 
-	/* ------------------------------------------- the lid (S1) ---------- */
-	/* WHAT CLOSES THE HOLE THE PLANE CUTS (#123, fix round S, S1).
+	/* ------------------------------------------- the lid (S1, U1) ------ */
+	/* WHAT CLOSES THE HOLE THE HEAD CUT LEAVES (#123, fix round S, S1; built
+	 * on the RIM since fix round U, U1).
 	 *
-	 * A DISC IN THE PLANE ITSELF, skinned rigidly to the HEAD node - which is
-	 * what keeps it in the plane: the plane is fixed in the head's frame, and
-	 * so is every vertex of this. It cannot drift, breathe or tear away from
-	 * the cut, whatever the animation does, because both are the same frame.
+	 * A FAN OVER THE BODY'S OWN RIM. The cut discards every fragment whose
+	 * head weight reaches HD_LARA_HEAD_CUT_WEIGHT; the RIM is the ring of
+	 * vertices that do not reach it but share a triangle with one that does,
+	 * and that ring is exactly the edge of the hole. This copies it - the
+	 * position, the three bones, the three weights and the texture coordinate
+	 * of every one of them - sorts it by angle about the neck axis and fills
+	 * it in from the middle.
 	 *
-	 * ITS RADIUS IS MEASURED AND NOT CHOSEN. The widest the outfit's own neck
-	 * really is in a band about the plane, plus HD_LARA_NECK_CAP_MARGIN, with
-	 * the search stopped at HD_LARA_NECK_CAP_RMAX so that a COLLAR can never
-	 * be mistaken for a neck - the VCI catsuit's collar ring stands at radius
-	 * 70 right where the plane is, and a lid that wide is fix round I's plate
-	 * all over again.
+	 * COPYING THE WEIGHTS IS THE WHOLE FIX. Every lid before this one was
+	 * rigid on ONE node while the skin it met was skinned to two, so the two
+	 * parted company as she moved and the round after had to chase the gap.
+	 * A lid whose edge is skinned by the same sum over the same joints as the
+	 * skin it meets lands on the same point in every pose, to the bit, and
+	 * there is nothing left to chase.
 	 *
-	 * IT WEARS ONE TEXEL, the same one the inner skin wears: the centroid of
-	 * the biggest triangle on the page whose column runs the whole height of
-	 * the throat (measure_neck_skin above). What the lid IS is the top of her
-	 * neck, so her neck's own colour is the honest answer, and it costs the
-	 * page cache nothing because the body already carries that page.
+	 * IT WEARS THE RIM'S OWN TEXTURE, page and coordinates both, so the lid is
+	 * the top of whatever the outfit really has at the neck - skin, coat or
+	 * diving suit - and joins it at the seam without a line. The middle wears
+	 * the average of the rim.
 	 *
 	 * ITS NORMAL POINTS HEAD-WARD - up out of the neck, towards the camera
 	 * that looks down at it - so it takes the light the top of her shoulders
 	 * takes and not the darkness of a face turned away. */
-	int g_cap_segments = 0;		// for the log
-	double g_cap_radius = 0.0;
-	double g_cap_measured = 0.0;	// the neck's own widest, before the margin
-	int g_cap_band = 0;		// vertices the radius was measured over
+	int g_cap_segments = 0;		// triangles, for the log
+	int g_cap_rim = 0;		// rim vertices it was built on
+	int g_cap_rings = 0;
+	int g_cap_page = -1;
+	double g_cap_rlo = 0.0, g_cap_rhi = 0.0;	// the rim off the axis
+	double g_cap_slo = 0.0, g_cap_shi = 0.0;	// and down it
 
 	unsigned char pack_normal(double n)
 	{
@@ -1166,16 +1172,27 @@ namespace
 		return (unsigned char)(v < 0.0 ? 0.0 : (v > 255.0 ? 255.0 : v));
 	}
 
+	/* One rim vertex, with the two numbers the sort and the fan need. */
+	struct CapRim
+	{
+		int at;			// into the source model
+		double angle;		// about the neck axis
+	};
+
+	bool cap_rim_order(const CapRim& a, const CapRim& b)
+	{
+		return a.angle < b.angle;
+	}
+
 	bool build_neck_cap(const HDTrmModel* source, HDTrmModel* out,
 		const char** why)
 	{
-		const int kSegments = HD_LARA_NECK_CAP_SEGMENTS;
-
 		*why = "";
 		g_cap_segments = 0;
-		g_cap_radius = 0.0;
-		g_cap_measured = 0.0;
-		g_cap_band = 0;
+		g_cap_rim = 0;
+		g_cap_rings = 0;
+		g_cap_page = -1;
+		g_cap_rlo = g_cap_rhi = g_cap_slo = g_cap_shi = 0.0;
 
 		if (!source || !out || !g_neck_bind_ok)
 		{
@@ -1183,12 +1200,9 @@ namespace
 			return false;
 		}
 
-		if (g_inner_page < 0)
-		{
-			*why = "the neck lid has no throat texel to wear";
-			return false;
-		}
-
+		/* THE AXIS IS ONLY FOR THE SORT. Where the lid's points ARE comes out
+		 * of the model; the axis says in which order to walk round them and
+		 * which way is up. */
 		const double H[3] =
 		{
 			g_neck_bind[HD_LARA_HEAD_NODE * 3 + 0],
@@ -1236,54 +1250,195 @@ namespace
 			axis[0] * u[1] - axis[1] * u[0]
 		};
 
-		/* --- how wide the neck is where the plane cuts it ------------------ */
-		double widest = 0.0;
+		/* --- who is cut, and who stands on the edge of it ----------------- */
+		const int bar = (int)(HD_LARA_HEAD_CUT_WEIGHT * 255.0f + 0.5f);
+		std::vector<unsigned char> head((size_t)source->vertices, 0);
 
 		for (int i = 0; i < source->vertices; i++)
 		{
 			const HDTrmVertex& v = source->vertex[i];
-			const double d[3] = { v.x - H[0], v.y - H[1], v.z - H[2] };
-			const double s = d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
+			int sum = 0;
 
-			if (std::fabs(s - (double)HD_LARA_NECK_PLANE_S) > HD_LARA_NECK_CAP_BAND)
+			for (int k = 0; k < 3; k++)
+				if (v.bone[k] == HD_LARA_HEAD_NODE)
+					sum += v.weight[k];
+
+			head[(size_t)i] = (unsigned char)(sum > 255 ? 255 : sum);
+		}
+
+		std::vector<unsigned char> onRim((size_t)source->vertices, 0);
+
+		for (int t = 0; t + 2 < source->indices; t += 3)
+		{
+			const int tri[3] =
+			{
+				source->index[t + 0], source->index[t + 1], source->index[t + 2]
+			};
+			bool cut = false;
+
+			for (int k = 0; k < 3; k++)
+				if (tri[k] < source->vertices &&
+					(int)head[(size_t)tri[k]] >= bar)
+					cut = true;
+
+			if (!cut)
 				continue;
 
+			for (int k = 0; k < 3; k++)
+				if (tri[k] < source->vertices &&
+					(int)head[(size_t)tri[k]] < bar)
+					onRim[(size_t)tri[k]] = 1;
+		}
+
+		/* --- the ring, sorted round the neck ------------------------------ */
+		std::vector<CapRim> ring;
+		double mid[3] = { 0.0, 0.0, 0.0 };
+
+		for (int i = 0; i < source->vertices; i++)
+		{
+			if (!onRim[(size_t)i])
+				continue;
+
+			const HDTrmVertex& v = source->vertex[i];
+			const double d[3] = { v.x - H[0], v.y - H[1], v.z - H[2] };
+			const double s = d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
 			const double off[3] =
 			{
 				d[0] - s * axis[0], d[1] - s * axis[1], d[2] - s * axis[2]
 			};
-			const double r = std::sqrt(off[0] * off[0] + off[1] * off[1] +
-				off[2] * off[2]);
+			const double x = off[0] * u[0] + off[1] * u[1] + off[2] * u[2];
+			const double y = off[0] * w[0] + off[1] * w[1] + off[2] * w[2];
+			const double r = std::sqrt(x * x + y * y);
 
+			/* THE OUTLIER GUARD. Anything this far off the neck axis is not
+			 * part of a neck, and a spoke of the fan reaching out to it would
+			 * lie across her chest. It never fires on the wardrobe as it
+			 * stands - the widest rim vertex over the eight bodies is 27.6 -
+			 * and it is there for the ninth. */
 			if (r > HD_LARA_NECK_CAP_RMAX)
-				continue;	// a collar and not a neck
+				continue;
 
-			g_cap_band++;
+			CapRim one;
 
-			if (r > widest)
-				widest = r;
+			one.at = i;
+			one.angle = std::atan2(y, x);
+			ring.push_back(one);
+
+			if (!g_cap_rim || r < g_cap_rlo) g_cap_rlo = r;
+			if (!g_cap_rim || r > g_cap_rhi) g_cap_rhi = r;
+			if (!g_cap_rim || s < g_cap_slo) g_cap_slo = s;
+			if (!g_cap_rim || s > g_cap_shi) g_cap_shi = s;
+
+			g_cap_rim++;
+			mid[0] += v.x;
+			mid[1] += v.y;
+			mid[2] += v.z;
 		}
 
-		if (g_cap_band < 3)
+		if ((int)ring.size() < 3)
 		{
-			*why = "no neck to measure at the cut plane";
+			*why = "no rim at the head cut to build a lid on";
 			return false;
 		}
 
-		const double radius = widest + HD_LARA_NECK_CAP_MARGIN;
+		for (int k = 0; k < 3; k++)
+			mid[k] /= (double)ring.size();
 
-		g_cap_measured = widest;
-		g_cap_radius = radius;
-		g_cap_segments = kSegments;
+		std::sort(ring.begin(), ring.end(), &cap_rim_order);
 
-		/* --- the fan ------------------------------------------------------- */
-		const int vertices = kSegments + 1;	// the middle and the rim
+		/* --- which page it wears ------------------------------------------ */
+		/* The one most of the rim wears. A .TRM part is one page and one page
+		 * only - measured over all 566 files of the remaster's game 5 - so
+		 * the lid has to pick one; at the threshold this round takes, all
+		 * eight wardrobe bodies have a rim that is on a single page anyway. */
+		int page = -1, best = 0;
+
+		for (size_t i = 0; i < ring.size(); i++)
+		{
+			const int here = HDTrmPageOf(source, &source->vertex[ring[i].at]);
+			int count = 0;
+
+			for (size_t k = 0; k < ring.size(); k++)
+				if (HDTrmPageOf(source, &source->vertex[ring[k].at]) == here)
+					count++;
+
+			if (count > best)
+			{
+				best = count;
+				page = here;
+			}
+		}
+
+		if (page < 0)
+		{
+			*why = "the rim of the head cut wears no page at all";
+			return false;
+		}
+
+		/* --- EVERY SPOKE ITS OWN TEXEL (#123, fix round U, U1b) ----------- */
+		/* THE LID INVENTS NO TEXTURE COORDINATE ANYWHERE. Each spoke of the
+		 * fan wears the texel of the RIM vertex it hangs from, unchanged, all
+		 * the way in - the middle included, which is why the middle is a COPY
+		 * PER SPOKE and not one shared vertex. A triangle of the lid therefore
+		 * spans two texels that are NEIGHBOURS on her skin, and nothing on it
+		 * ever samples a part of the page the neck does not stand on.
+		 *
+		 * WHAT THAT REPLACES, AND WHY IT HAD TO GO. The first cut of this
+		 * round gave the one shared middle the AVERAGE of the rim's texels,
+		 * and the play test came back with "a dark point in the middle of the
+		 * cap, running dark towards it like a cone" - on the four TR3 guest
+		 * bodies only. Measured (ModelProbe -headw, the rim's texels at the
+		 * shipping threshold):
+		 *
+		 *   OUTFIT_CLASSIC   page 8001   u 235..241  v  70..168   average 238/119
+		 *   OUTFIT_RUSSIA    page 8042   u 119..125  v  38..255   average 120/150
+		 *   OUTFIT_SUBSUIT   page 8047   u  16.. 40  v  48.. 84   average  28/68
+		 *   the four TR3      page 8201   u  60..170  v 154..202   average 112/178
+		 *
+		 * On every TR5 page the neck is ONE NARROW COLUMN six texels wide, and
+		 * the average of a column is in the column - skin. On the TR3 guests'
+		 * page it is TWO SEPARATE BANDS, one at v 198..202 and one at v
+		 * 154..158, and the average lands in the gap BETWEEN them, which is
+		 * whatever the page has there. That is the dark point exactly, and the
+		 * cone is the interpolation running into it.
+		 *
+		 * Picking a better single texel would only make the lottery smaller:
+		 * the interior of the lid interpolates from each rim texel TOWARDS the
+		 * middle's, so a rim at u 60 and a middle at u 112 sweeps the fifty
+		 * texels between them whatever is written there. Not inventing one at
+		 * all is the only rule with nothing left to measure. */
+		int fallbackAt = -1;
+
+		for (size_t i = 0; i < ring.size() && fallbackAt < 0; i++)
+			if (HDTrmPageOf(source, &source->vertex[ring[i].at]) == page)
+				fallbackAt = (int)i;
+
+		/* --- how many rings ----------------------------------------------- */
+		/* Radially, and never round the outline: the outline is the body's own
+		 * rim and adding points to it can only spoil the match. What the
+		 * rings buy is LIGHT - the HD path lights per vertex, and a fan of one
+		 * middle and twenty rim points shades as twenty flat wedges. */
+		const int spokes = (int)ring.size();
+		int rings = 1;
+
+		while (spokes + (rings - 1) * 2 * spokes < HD_LARA_NECK_CAP_SEGMENTS)
+			rings++;
+
+		/* THE MIDDLE IS `spokes` VERTICES AND NOT ONE (#123, fix round U,
+		 * U1b). They stand on the same point, carry the same normal and the
+		 * same skinning, so they move as one and no crack can open between
+		 * them; they differ in the TEXEL alone, each wearing its own spoke's.
+		 * The triangle count is unchanged - a fan is a fan - and the seam
+		 * between two neighbouring wedges at the exact centre is a POINT of
+		 * zero area between two texels that are neighbours on her skin. */
+		const int vertices = (rings + 1) * spokes;
+		const int triangles = spokes + (rings - 1) * 2 * spokes;
 
 		std::memset(out, 0, sizeof(*out));
 		out->version = 2;
 		out->parts = 1;
 		out->textures = 1;
-		out->indices = kSegments * 3;
+		out->indices = triangles * 3;
 		out->vertices = vertices;
 		out->part = new HDTrmPart[1];
 		out->texture = new unsigned short[1];
@@ -1294,64 +1449,149 @@ namespace
 		out->part[0].opaque = (unsigned int)out->indices;
 		out->part[0].opaqueEnd = (unsigned int)out->indices;
 		out->part[0].alphaEnd = (unsigned int)out->indices;
-		out->texture[0] = (unsigned short)g_inner_page;
+		out->texture[0] = (unsigned short)page;
 
-		for (int i = 0; i < vertices; i++)
+		/* --- the middle, once per spoke ----------------------------------- */
+		/* THEIR SKINNING IS THE RIM'S AVERAGE - the same average for all of
+		 * them - so they stay one point in every pose and the fan moves as a
+		 * piece rather than stretching between a fixed centre and a moving
+		 * edge. Two bones are enough for that average: the head, which is all
+		 * the rim has of the cut side, and the torso, which is the rest.
+		 *
+		 * They differ in the TEXEL and in nothing else (#123, fix round U,
+		 * U1b): copy number k wears spoke k's own rim texel, so the wedge
+		 * between spoke k and spoke k+1 is bounded by two texels that are
+		 * neighbours on her skin and samples nothing between them. */
+		int meanHead = 0;
+
+		for (size_t i = 0; i < ring.size(); i++)
+			meanHead += head[(size_t)ring[i].at];
+
+		meanHead = (int)(meanHead / (int)ring.size());
+
+		if (meanHead > 255)
+			meanHead = 255;
+
+		/* --- the rings ------------------------------------------------------ */
+		/* Ring `g` runs from the middle (g = 0, the copies above) out to the rim
+		 * (g = rings). Its points are the rim's, moved that fraction of the way
+		 * in; the SKINNING is the rim's own, unchanged, all the way in, so that
+		 * a spoke of the fan follows the rim vertex it belongs to exactly and
+		 * the fan cannot shear against the skin. The TEXEL is the rim's own too,
+		 * unchanged all the way in, which is what leaves the lid nothing to
+		 * invent. */
+		for (int g = 0; g <= rings; g++)
 		{
-			HDTrmVertex& v = out->vertex[i];
+			const double f = (double)g / (double)rings;
 
-			std::memset(&v, 0, sizeof(v));
-
-			double p[3];
-
-			if (i == 0)
+			for (int k = 0; k < spokes; k++)
 			{
-				for (int k = 0; k < 3; k++)
-					p[k] = H[k] + (double)HD_LARA_NECK_PLANE_S * axis[k];
+				const HDTrmVertex& src = source->vertex[ring[(size_t)k].at];
+				HDTrmVertex& v = out->vertex[g * spokes + k];
+
+				std::memset(&v, 0, sizeof(v));
+
+				/* THE OUTERMOST RING IS THE RIM ITSELF, to the bit: it takes
+				 * the source vertex's own coordinates rather than a lerp that
+				 * would land a rounding away from them. That, and the copied
+				 * weights below, are what make the seal exact in every pose -
+				 * the lid's edge and the skin's edge are the same input put
+				 * through the same sum. */
+				if (g == rings)
+				{
+					v.x = src.x;
+					v.y = src.y;
+					v.z = src.z;
+				}
+				else
+				{
+					v.x = (float)(mid[0] + ((double)src.x - mid[0]) * f);
+					v.y = (float)(mid[1] + ((double)src.y - mid[1]) * f);
+					v.z = (float)(mid[2] + ((double)src.z - mid[2]) * f);
+				}
+
+				v.nx = pack_normal(-axis[0]);
+				v.ny = pack_normal(-axis[1]);
+				v.nz = pack_normal(-axis[2]);
+
+				v.layer = 1;	// counted from one - the model's only page
+
+				/* A rim vertex on ANOTHER page cannot lend its texel, because
+				 * the lid is one page; it borrows the first rim vertex that IS
+				 * on the page instead - a real texel of her neck and not an
+				 * invented one. At the threshold this round takes there are none
+				 * of those in the wardrobe: all eight bodies have a rim on a
+				 * single page. */
+				const HDTrmVertex& tex = HDTrmPageOf(source, &src) == page ? src
+					: source->vertex[ring[(size_t)fallbackAt].at];
+
+				v.u = tex.u;
+				v.v = tex.v;
+
+				/* The middle's copies share one skinning; every ring outside it
+				 * keeps the rim vertex's own. */
+				if (g == 0)
+				{
+					v.bone[0] = (unsigned char)HD_LARA_TORSO;
+					v.bone[1] = (unsigned char)HD_LARA_HEAD_NODE;
+					v.bone[2] = (unsigned char)HD_LARA_TORSO;
+					v.weight[0] = (unsigned char)(255 - meanHead);
+					v.weight[1] = (unsigned char)meanHead;
+					v.weight[2] = 0;
+				}
+				else
+				{
+					v.bone[0] = src.bone[0];
+					v.bone[1] = src.bone[1];
+					v.bone[2] = src.bone[2];
+					v.weight[0] = src.weight[0];
+					v.weight[1] = src.weight[1];
+					v.weight[2] = src.weight[2];
+				}
 			}
-			else
-			{
-				const double a = 6.283185307179586 * (double)(i - 1) /
-					(double)kSegments;
-				const double ca = std::cos(a) * radius;
-				const double sa = std::sin(a) * radius;
-
-				for (int k = 0; k < 3; k++)
-					p[k] = H[k] + (double)HD_LARA_NECK_PLANE_S * axis[k] +
-						ca * u[k] + sa * w[k];
-			}
-
-			v.x = (float)p[0];
-			v.y = (float)p[1];
-			v.z = (float)p[2];
-
-			v.nx = pack_normal(-axis[0]);
-			v.ny = pack_normal(-axis[1]);
-			v.nz = pack_normal(-axis[2]);
-
-			v.layer = 1;	// counted from one - the model's only page
-			v.u = g_inner_u;
-			v.v = g_inner_v;
-
-			v.bone[0] = (unsigned char)HD_LARA_HEAD_NODE;
-			v.bone[1] = (unsigned char)HD_LARA_HEAD_NODE;
-			v.bone[2] = (unsigned char)HD_LARA_HEAD_NODE;
-			v.weight[0] = 255;
-			v.weight[1] = 0;
-			v.weight[2] = 0;
 		}
 
-		for (int k = 0; k < kSegments; k++)
+		/* --- the triangles --------------------------------------------------- */
+		/* The innermost band is a FAN and not a strip: its inner edge is the
+		 * `spokes` copies of one point, so a strip would put a degenerate
+		 * triangle beside every real one. Wedge k takes middle copy k, which is
+		 * the copy wearing its own texel. */
+		int at = 0;
+
+		for (int k = 0; k < spokes; k++)
 		{
-			out->index[k * 3 + 0] = 0;
-			out->index[k * 3 + 1] = (unsigned short)(1 + k);
-			out->index[k * 3 + 2] = (unsigned short)(1 + (k + 1) % kSegments);
+			const int a = spokes + k;
+			const int b = spokes + (k + 1) % spokes;
+
+			out->index[at++] = (unsigned short)k;
+			out->index[at++] = (unsigned short)a;
+			out->index[at++] = (unsigned short)b;
 		}
+
+		for (int g = 1; g < rings; g++)
+			for (int k = 0; k < spokes; k++)
+			{
+				const int in0 = g * spokes + k;
+				const int in1 = g * spokes + (k + 1) % spokes;
+				const int out0 = (g + 1) * spokes + k;
+				const int out1 = (g + 1) * spokes + (k + 1) % spokes;
+
+				out->index[at++] = (unsigned short)in0;
+				out->index[at++] = (unsigned short)out0;
+				out->index[at++] = (unsigned short)out1;
+
+				out->index[at++] = (unsigned short)in0;
+				out->index[at++] = (unsigned short)out1;
+				out->index[at++] = (unsigned short)in1;
+			}
+
+		g_cap_segments = triangles;
+		g_cap_rings = rings;
+		g_cap_page = page;
 
 		return true;
 	}
 }
-
 /* ------------------------------------------------------- the level -- */
 
 int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
@@ -1370,9 +1610,10 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 
 	plan_mask(level, useful);
 
-	/* The inner skin's measurement has no argument for a bind pose (#123,
-	 * fix round K, K1), so it is kept here for it - once per level, before
-	 * anything can call it. */
+	/* The throat measurement and the LID both want this level's own bind pose
+	 * and neither is handed one (#123, fix round K, K1; fix round U, U1), so
+	 * it is kept here for them - once per level, before anything can call
+	 * either. */
 	std::memcpy(g_neck_bind, level->bodyBind, sizeof(g_neck_bind));
 	g_neck_bind_ok = true;
 
@@ -1537,29 +1778,35 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 					model, named == 1 ? "takes" : "take", skinS, skinP);
 
 			/* The throat texel (#123, fix round K, K1). It closed the neck
-			 * hole from the inside until fix round S; the LID wears it now,
-			 * and the measurement is the same one. */
+			 * hole from the inside until fix round S and was the lid's one
+			 * colour until fix round U; the lid wears the rim's own texture
+			 * now, and this stays as the line that says WHICH page of an
+			 * outfit is her throat - which is how a lid that came out on the
+			 * coat can be told from one that came out wrong. */
 			if (g_inner_page >= 0)
 				note("her throat: page %d at %d/%d, off the neck's "
 					"own column (%d vertices spanning %.0f down the neck "
-					"axis) - the lid wears it", g_inner_page,
+					"axis)", g_inner_page,
 					(int)g_inner_u, (int)g_inner_v,
 					g_inner_ring, g_inner_span);
 			else
-				note("her throat: no neck ring found in %s - there is no lid "
-					"and first person keeps the open hole", model);
+				note("her throat: no neck ring found in %s - the lid does not "
+					"depend on it, but nothing here says what her skin is",
+					model);
 		}
 
-		/* THE LID, IN NUMBERS (#123, fix round S, S1). What the neck really
-		 * measured at the plane, what the disc came out at, and how many
-		 * vertices the measurement had to work with - so that a lid that
-		 * misses can be told from a neck that was never found. */
+		/* THE LID, IN NUMBERS (#123, fix round S, S1; the rim's own since fix
+		 * round U, U1). How many vertices the cut left standing on the edge of
+		 * its hole, where they are - off the neck axis and down it - and what
+		 * the fan built on them came to. A rim of three or four, or one whose
+		 * radius runs to the guard at 34, is a lid that has found something
+		 * that is not a neck. */
 		if (part == HD_LARA_PART_NECK_CAP && g_cap_segments > 0)
-			note("the neck lid: plane %.0f down the axis, the neck measures "
-				"%.1f there over %d vertices, the disc is %.1f wide in %d "
-				"segments on page %d", (double)HD_LARA_NECK_PLANE_S,
-				g_cap_measured, g_cap_band, g_cap_radius, g_cap_segments,
-				g_inner_page);
+			note("the neck lid: %d rim vertices at r %.1f..%.1f, s %.1f..%.1f, "
+				"cut at head weight %.2f - %d triangles in %d ring%s on page "
+				"%d", g_cap_rim, g_cap_rlo, g_cap_rhi, g_cap_slo, g_cap_shi,
+				(double)HD_LARA_HEAD_CUT_WEIGHT, g_cap_segments, g_cap_rings,
+				g_cap_rings == 1 ? "" : "s", g_cap_page);
 
 		/* WHAT IS IN THE HAND GETS ITS OWN MATERIAL (#123, fix round I, I4).
 		 *
@@ -1827,48 +2074,26 @@ unsigned int HDLaraPartCoverage(int part)
 	return part >= 0 && part < HD_LARA_PART_COUNT ? g_coverage[part] : 0u;
 }
 
-/* THE CUT'S CYLINDER, out of this level's own bind pose (#123, fix round J,
- * J1; the near zone is fix round L, L2). One function, so that the shape the
- * shader carves, the shape the diagnostic tool draws and the shape the tables
- * in hd_lara.h were measured against cannot drift apart: all three are the
- * axis from the head joint to the torso joint of THIS level's own Lara. */
-bool HDLaraNeckPlane(float axisOut[3], float* depth)
+/* THE HEAD CUT, IN THE TWO NUMBERS THE SHADER NEEDS (#123, fix round U, U1).
+ *
+ * One function, so that what the shader discards, what the lid is built on and
+ * what the diagnostic tool draws cannot drift apart: all three ask here.
+ *
+ * There is nothing to work out. Fix round S's plane had to be measured against
+ * this level's own bind pose - the neck axis and a depth down it - and every
+ * shape before it had to as well; a bone weight is written in the .TRM and is
+ * the same number in every pose, at every camera angle and in every level. So
+ * the only question left is whether there is an HD body to cut at all. */
+bool HDLaraHeadCut(int* node, float* bar)
 {
-	if (!axisOut || !depth || !g_neck_bind_ok)
+	if (!node || !bar || !g_active)
 		return false;
 
-	const double H[3] =
-	{
-		g_neck_bind[HD_LARA_HEAD_NODE * 3 + 0],
-		g_neck_bind[HD_LARA_HEAD_NODE * 3 + 1],
-		g_neck_bind[HD_LARA_HEAD_NODE * 3 + 2]
-	};
-	const double T[3] =
-	{
-		g_neck_bind[HD_LARA_TORSO * 3 + 0],
-		g_neck_bind[HD_LARA_TORSO * 3 + 1],
-		g_neck_bind[HD_LARA_TORSO * 3 + 2]
-	};
-
-	double axis[3] = { T[0] - H[0], T[1] - H[1], T[2] - H[2] };
-	double len = std::sqrt(axis[0] * axis[0] + axis[1] * axis[1] +
-		axis[2] * axis[2]);
-
-	if (len < 1.0)
+	if (!HDLaraHasPart(HD_LARA_PART_BODY))
 		return false;
 
-	for (int i = 0; i < 3; i++)
-		axis[i] /= len;
-
-	/* THE AXIS IS THE SAME IN THE HEAD'S LOCAL FRAME as it is in the bind
-	 * pose, and that is not a coincidence to be checked for: a TR bind pose
-	 * carries bone OFFSETS and no rotations at all, so the head node's local
-	 * axes ARE the bind pose's axes, translated. The caller therefore needs
-	 * only the head node's own matrix and these four numbers. */
-	for (int i = 0; i < 3; i++)
-		axisOut[i] = (float)axis[i];
-
-	*depth = HD_LARA_NECK_PLANE_S;
+	*node = HD_LARA_HEAD_NODE;
+	*bar = HD_LARA_HEAD_CUT_WEIGHT;
 
 	return true;
 }

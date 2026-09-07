@@ -212,6 +212,10 @@ void init_tomb5_stuff()
 		tomb5.first_person_smooth = 1;					//light (#134)
 		REG_WriteLong(buf, tomb5.first_person_smooth);
 
+		sprintf(buf, "ego_body_still");
+		tomb5.first_person_body_still = 0;				//animated (#123, fix round U)
+		REG_WriteBool(buf, tomb5.first_person_body_still);
+
 		sprintf(buf, "level_select");
 		tomb5.level_select = 0;							//off (#32)
 		REG_WriteBool(buf, tomb5.level_select);
@@ -355,6 +359,9 @@ void init_tomb5_stuff()
 		REG_ReadLong(buf, tomb5.first_person_smooth, 1);
 		if (tomb5.first_person_smooth > 3)
 			tomb5.first_person_smooth = 1;
+
+		sprintf(buf, "ego_body_still");
+		REG_ReadBool(buf, tomb5.first_person_body_still, 0);
 
 		sprintf(buf, "level_select");
 		REG_ReadBool(buf, tomb5.level_select, 0);
@@ -502,6 +509,9 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "ego_smooth");
 	REG_WriteLong(buf, tomb5.first_person_smooth);
+
+	sprintf(buf, "ego_body_still");
+	REG_WriteBool(buf, tomb5.first_person_body_still);
 
 	sprintf(buf, "level_select");
 	REG_WriteBool(buf, tomb5.level_select);

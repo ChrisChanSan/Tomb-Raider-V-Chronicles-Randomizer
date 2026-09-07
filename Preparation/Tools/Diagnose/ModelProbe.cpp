@@ -103,16 +103,33 @@
  *                         camera inside her that shows her own inside, so
  *                         first person culls (stage S8). Default: back with
  *                         -firstperson, none otherwise.
- *     -neckplane <s>      the first person NECK CUT, on her body alone: a
- *                         PLANE perpendicular to the neck axis, s units down
- *                         it from the head joint and carried by the HEAD node,
- *                         with every fragment on the head side of it
- *                         discarded (#123, fix round S). A negative s draws
+ *     -headcut <w>        the first person HEAD CUT, on her body alone: every
+ *                         fragment whose weight on the HEAD node reaches w is
+ *                         discarded (#123, fix round U). A negative w draws
  *                         the BEFORE picture. The default with -firstperson is
- *                         the engine's own HD_LARA_NECK_PLANE_S.
+ *                         the engine's own HD_LARA_HEAD_CUT_WEIGHT.
  *     -nocap              draw first person WITHOUT the lid that closes the
  *                         hole (#123, fix round S) - the BEFORE picture of
  *                         that half of the round.
+ *     -eye <x> <y> <z>    move the eye off the head joint, which is what a
+ *                         LANDING does (#123, fix round U): the camera leaves
+ *                         the skull and the nape stands in front of it.
+ *     -headw              THE HEAD'S OWN WEIGHT, per outfit (#123, fix round
+ *                         U): how much of each body the head node really owns,
+ *                         scanned over eight thresholds, with the RIM each one
+ *                         leaves - its vertices, how far off the neck axis and
+ *                         how far down it they stand, which page they wear and
+ *                         how much head weight the worst of them still
+ *                         carries. It is the measurement the cut's threshold
+ *                         and the lid's shape both come out of.
+ *     -tween60 [<n> ...]  REPLAY those animations at SIXTY (#123, fix round
+ *                         U; #148, order 4): every drawn frame, tick and
+ *                         tween alike, with every node's origin in her own
+ *                         frame and how far it stands from the midpoint of
+ *                         its own two neighbours. The frame a play test
+ *                         photographs as "a leg the wrong way round" is an
+ *                         outlier here or it is not in the pose at all. With
+ *                         no number it takes the rolls and the sprint dive.
  *     -poserisk           what the SIXTY HERTZ pose blend has to survive
  *                         (#148, order 4; fix round S, S2): every adjacent
  *                         key frame pair of every LARA animation, all fifteen
@@ -259,6 +276,13 @@
 /* By path, not through a /I of specific\: that folder holds the engine's own
  * time.h, and putting it on the include path makes <chrono> pick it up
  * instead of the CRT's. */
+/* THE TIME INTERPOLATION'S OWN ARITHMETIC (#148, order 4; #123 fix
+ * round U, U2). InterpTest includes this same header; -tween60 below
+ * replays a whole animation through it, so the tool and the engine
+ * cannot answer the question differently. It pulls in no engine header
+ * of its own. */
+#include "../../../TOMB5 Code/TOMB5/game/interpolate_math.h"
+
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_render.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pagecache.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_model.h"
@@ -2533,6 +2557,380 @@ static void PrintHandLight(const std::string& root5, int outfit, bool oldSkin)
 		"finding K2.\n");
 }
 
+/* ------------------------------------------ the head's own weight (U1) -- */
+/* WHAT THE FIRST PERSON CUT REALLY WANTS TO THROW AWAY (#123, fix round U,
+ * U1(a)).
+ *
+ * Every shape the rounds before this one cut - a sphere about the eye (stage
+ * S8), a cylinder about the neck axis (rounds J to L), a plane carried by the
+ * head node (round S) - is a shape in SPACE, and the play test sent every one
+ * of them back for the same reason: a skinned vertex MOVES, so a rule written
+ * in space takes a different patch of her skin in every pose. Round S's plane
+ * was the worst of them, because a plane fixed to the head TILTS with the head
+ * and then slices through her chest and her shoulders ("in animations Lara is
+ * partly rendered away over her whole body", with the HDLOG line reading
+ * drop= 4, 5 and 9 where 2 is healthy).
+ *
+ * THE ONE THING ABOUT A VERTEX THAT DOES NOT MOVE is its BONE WEIGHTS. They
+ * are written in the file, they are the same in every animation, at every
+ * camera angle and in every pose. So this table measures the wardrobe by
+ * weight rather than by position:
+ *
+ *   head>0    vertices carrying ANY weight on node 14
+ *   the bins  how that weight is distributed - a neck vertex is part head and
+ *             part torso, and the bins say whether there is a gap to put a
+ *             threshold in
+ *   the RIM   the vertices with NO head weight that share a triangle with one
+ *             that has some. That ring is the boundary the discard leaves
+ *             behind, it is skinned to the TORSO alone, and it therefore sits
+ *             still in the torso's frame in every pose - which is what lets a
+ *             lid rigid on the torso close it without a gap for good.
+ *   the sectors  the rim seen as 48 wedges about the neck axis: how many are
+ *             empty (a fan needs every one filled), and how far the radius and
+ *             the depth wander over them, which says whether a flat disc is
+ *             honest or a fan has to follow the rim's own shape.
+ *
+ * s is the depth down the neck axis from the head joint, growing towards the
+ * torso, exactly as the -neck table's bins are; r is the distance off that
+ * axis. The last column is the widest r of anything discarded, which is the
+ * question "does the threshold eat the COLLAR" - the VCI catsuit's collar ring
+ * stands at r = 70. */
+static void PrintHeadWeight(const std::string& root5, const ClassicSlot& body)
+{
+	if (!body.ok || body.nodes <= HD_LARA_HEAD_NODE)
+	{
+		printf("\n-headw needs the level's Lara skeleton and this one has "
+			"none.\n");
+		return;
+	}
+
+	const double H[3] =
+	{
+		body.bind[HD_LARA_HEAD_NODE][0], body.bind[HD_LARA_HEAD_NODE][1],
+		body.bind[HD_LARA_HEAD_NODE][2]
+	};
+	const double T[3] =
+	{
+		body.bind[HD_LARA_TORSO][0], body.bind[HD_LARA_TORSO][1],
+		body.bind[HD_LARA_TORSO][2]
+	};
+
+	double axis[3] = { T[0] - H[0], T[1] - H[1], T[2] - H[2] };
+	double len = sqrt(axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]);
+
+	if (len < 1.0)
+	{
+		printf("\n-headw: the head and the torso joint sit on top of each "
+			"other.\n");
+		return;
+	}
+
+	for (int i = 0; i < 3; i++)
+		axis[i] /= len;
+
+	/* The same two cross axes build_neck_cap uses, so that the sector numbers
+	 * here and the fan there are the same wedges. */
+	double u[3] = { axis[1], -axis[0], 0.0 };
+	const double uLen = sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
+
+	for (int i = 0; i < 3 && uLen > 1.0e-6; i++)
+		u[i] /= uLen;
+
+	const double w[3] =
+	{
+		axis[1] * u[2] - axis[2] * u[1],
+		axis[2] * u[0] - axis[0] * u[2],
+		axis[0] * u[1] - axis[1] * u[0]
+	};
+
+	const int kSectors = HD_LARA_NECK_CAP_SEGMENTS;
+
+	/* The thresholds the table is scanned at. `any` is one part in 255 - a
+	 * vertex the file gives the head ANY share of at all - and 1.00 is a
+	 * vertex the head owns outright. What lies between them is the neck, and
+	 * the point of the scan is to find out whether there is a threshold that
+	 * takes the whole tube and leaves the collar. */
+	const int kCuts = 8;
+	const double kCut[kCuts] =
+		{ 1.0 / 255.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.35, 0.50 };
+	const char* const kCutName[kCuts] =
+		{ "any", "0.05", "0.10", "0.15", "0.20", "0.25", "0.35", "0.50" };
+
+	printf("\n-- the head's own weight, per outfit -------------------------\n");
+	printf("head joint %.0f/%.0f/%.0f, the axis runs to the torso joint "
+		"%.0f/%.0f/%.0f\ns grows down that axis from the head joint, r is "
+		"the distance off it\n\n"
+		"cut     the threshold: a vertex whose head weight REACHES it is "
+		"discarded\ndrop    how many of them there are\ns max   the deepest of "
+		"them - how far down her body the cut goes\nr>s8    the widest of "
+		"them below s = 8, which is the COLLAR question\npage    the .DDS "
+		"page most of the rim wears; rimW its worst head weight\n"
+		"rim     the vertices with NO head weight in a triangle with one that "
+		"has some\nsectors how many of the %d wedges about the neck axis the "
+		"rim fills\n\n", H[0], H[1], H[2], T[0], T[1], T[2], kSectors);
+
+	for (int outfit = HD_LARA_OUTFIT_NONE + 1; outfit < HD_LARA_OUTFIT_COUNT;
+		outfit++)
+	{
+		const char* stem = HDLaraOutfitModel(outfit);
+		HDTrmModel model;
+		const char* why = "";
+
+		if (!stem)
+			continue;
+
+		const std::string path = TrmPath(root5, stem);
+
+		if (path.empty() || !HDTrmLoad(path.c_str(), &model, &why))
+		{
+			printf("%-19s not read - %s\n", stem,
+				path.empty() ? "no .TRM in 5 or 4" : why);
+			continue;
+		}
+
+		std::vector<unsigned char> hw((size_t)model.vertices, 0);
+		std::vector<float> vs((size_t)model.vertices, 0.0f);
+		std::vector<float> vr((size_t)model.vertices, 0.0f);
+		std::vector<float> va((size_t)model.vertices, 0.0f);
+		int any = 0;
+
+		for (int i = 0; i < model.vertices; i++)
+		{
+			const HDTrmVertex& v = model.vertex[i];
+			int sum = 0;
+
+			for (int k = 0; k < 3; k++)
+				if (v.bone[k] == HD_LARA_HEAD_NODE)
+					sum += v.weight[k];
+
+			hw[(size_t)i] = (unsigned char)(sum > 255 ? 255 : sum);
+
+			if (sum)
+				any++;
+
+			const double d[3] = { v.x - H[0], v.y - H[1], v.z - H[2] };
+			const double s = d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
+			const double off[3] =
+			{
+				d[0] - s * axis[0], d[1] - s * axis[1], d[2] - s * axis[2]
+			};
+			const double x = off[0] * u[0] + off[1] * u[1] + off[2] * u[2];
+			const double y = off[0] * w[0] + off[1] * w[1] + off[2] * w[2];
+			double a = atan2(y, x);
+
+			if (a < 0.0)
+				a += 6.283185307179586;
+
+			vs[(size_t)i] = (float)s;
+			vr[(size_t)i] = (float)sqrt(x * x + y * y);
+			va[(size_t)i] = (float)a;
+		}
+
+		printf("%s: %d vertices, %d carry head weight\n", stem,
+			model.vertices, any);
+		printf("  %-4s %7s %7s %7s   %5s %13s %13s %5s %5s %7s\n", "cut",
+			"drop", "s max", "r>s8", "rim", "rim s", "rim r", "page",
+			"rimW", "sectors");
+		printf("  ---- ------- ------- -------   ----- ------------- "
+			"------------- ----- ----- -------\n");
+
+		for (int c = 0; c < kCuts; c++)
+		{
+			const int bar = (int)(kCut[c] * 255.0 + 0.5);
+			int drop = 0;
+			double sMax = 0.0, rMax = 0.0;
+
+			for (int i = 0; i < model.vertices; i++)
+				if ((int)hw[(size_t)i] >= bar)
+				{
+					drop++;
+
+					if (vs[(size_t)i] > sMax) sMax = vs[(size_t)i];
+
+					/* The widest discarded vertex BELOW THE CHIN, which is
+					 * the collar question. Above s = 8 it is her jaw and her
+					 * skull, and both are meant to go. */
+					if (vs[(size_t)i] >= 8.0f && vr[(size_t)i] > rMax)
+						rMax = vr[(size_t)i];
+				}
+
+			std::vector<unsigned char> rim((size_t)model.vertices, 0);
+
+			for (int t = 0; t + 2 < model.indices; t += 3)
+			{
+				const int tri[3] =
+					{ model.index[t + 0], model.index[t + 1], model.index[t + 2] };
+				bool cut = false;
+
+				for (int k = 0; k < 3; k++)
+					if (tri[k] < model.vertices && (int)hw[(size_t)tri[k]] >= bar)
+						cut = true;
+
+				if (!cut)
+					continue;
+
+				for (int k = 0; k < 3; k++)
+					if (tri[k] < model.vertices && (int)hw[(size_t)tri[k]] < bar)
+						rim[(size_t)tri[k]] = 1;
+			}
+
+			int rimCount = 0, filled = 0, rimW = 0;
+			double sLo = 1.0e9, sHi = -1.0e9, rLo = 1.0e9, rHi = -1.0e9;
+			std::vector<unsigned char> sector((size_t)kSectors, 0);
+			std::vector<int> rimPage, rimPageCount;
+
+			for (int i = 0; i < model.vertices; i++)
+			{
+				if (!rim[(size_t)i])
+					continue;
+
+				rimCount++;
+
+				if ((int)hw[(size_t)i] > rimW)
+					rimW = hw[(size_t)i];
+
+				const int page = HDTrmPageOf(&model, &model.vertex[i]);
+				size_t at = 0;
+
+				while (at < rimPage.size() && rimPage[at] != page)
+					at++;
+
+				if (at == rimPage.size())
+				{
+					rimPage.push_back(page);
+					rimPageCount.push_back(0);
+				}
+
+				rimPageCount[at]++;
+
+				if (vs[(size_t)i] < sLo) sLo = vs[(size_t)i];
+				if (vs[(size_t)i] > sHi) sHi = vs[(size_t)i];
+				if (vr[(size_t)i] < rLo) rLo = vr[(size_t)i];
+				if (vr[(size_t)i] > rHi) rHi = vr[(size_t)i];
+
+				int k = (int)((double)va[(size_t)i] * (double)kSectors /
+					6.283185307179586);
+
+				if (k < 0) k = 0;
+				if (k >= kSectors) k = kSectors - 1;
+
+				sector[(size_t)k] = 1;
+			}
+
+			for (int k = 0; k < kSectors; k++)
+				filled += sector[(size_t)k];
+
+			int bestPage = -1, bestCount = 0;
+
+			for (size_t k = 0; k < rimPage.size(); k++)
+				if (rimPageCount[k] > bestCount)
+				{
+					bestCount = rimPageCount[k];
+					bestPage = rimPage[k];
+				}
+
+			printf("  %-4s %7d %7.1f %7.1f   %5d %6.1f..%-6.1f %6.1f..%-6.1f "
+				"%5d %5.2f %3d/%d\n", kCutName[c], drop, sMax, rMax, rimCount,
+				rimCount ? sLo : 0.0, rimCount ? sHi : 0.0,
+				rimCount ? rLo : 0.0, rimCount ? rHi : 0.0, bestPage,
+				(double)rimW / 255.0, filled, kSectors);
+
+			if (rimPage.size() > 1)
+			{
+				printf("       the rim spans %d pages:", (int)rimPage.size());
+
+				for (size_t k = 0; k < rimPage.size(); k++)
+					printf(" %d(%d)", rimPage[k], rimPageCount[k]);
+
+				printf("\n");
+			}
+
+			/* THE RIM'S TEXELS AT THE SHIPPING THRESHOLD (#123, fix round U,
+			 * U1b). The lid wears the rim's own texture, and its MIDDLE has
+			 * to be given a texel of its own because it belongs to no rim
+			 * vertex. Whatever rule picks that texel is the one thing on the
+			 * lid that is not copied from the body, so it is the one thing
+			 * that can be wrong - and the play test of 2026-09-07 says it IS
+			 * wrong on the four TR3 guest bodies: "a dark point in the middle
+			 * of the cap, running dark towards it like a cone", while the TR5
+			 * outfits are clean. This prints what the rule is working with. */
+			if (fabs(kCut[c] - (double)HD_LARA_HEAD_CUT_WEIGHT) < 1.0e-6)
+			{
+				int uLo = 255, uHi = 0, vLo = 255, vHi = 0;
+				int sumU = 0, sumV = 0, on = 0;
+
+				printf("       the rim's texels on page %d:", bestPage);
+
+				for (int i = 0; i < model.vertices; i++)
+				{
+					if (!rim[(size_t)i] ||
+						HDTrmPageOf(&model, &model.vertex[i]) != bestPage)
+						continue;
+
+					const int su = model.vertex[i].u;
+					const int sv = model.vertex[i].v;
+
+					printf(" %d/%d", su, sv);
+
+					if (su < uLo) uLo = su;
+					if (su > uHi) uHi = su;
+					if (sv < vLo) vLo = sv;
+					if (sv > vHi) vHi = sv;
+
+					sumU += su;
+					sumV += sv;
+					on++;
+				}
+
+				printf("\n       u %d..%d, v %d..%d, the average is %d/%d - "
+					"the texel the middle WORE until fix round U's U1b: on the "
+					"TR5 pages it lands inside the neck's own column, on the "
+					"TR3 page 8201 in the gap between the two bands, which was "
+					"the dark point. Since U1b the middle is `spokes` copies, "
+					"each wearing its own rim vertex's texel, and no texel is "
+					"averaged at all\n", uLo, uHi, vLo, vHi,
+					on ? sumU / on : 0, on ? sumV / on : 0);
+			}
+		}
+
+		/* WHAT SURVIVES NEAREST THE HEAD, which is the other half of the
+		 * question: a threshold that leaves a ring of neck standing above the
+		 * lid leaves the tube the user photographed. The nearest surviving
+		 * vertex INSIDE the neck's own radius says where the skin really
+		 * stops. */
+		for (int c = 0; c < kCuts; c++)
+		{
+			const int bar = (int)(kCut[c] * 255.0 + 0.5);
+			double topNeck = 1.0e9;
+			int narrow = 0;
+
+			for (int i = 0; i < model.vertices; i++)
+			{
+				if ((int)hw[(size_t)i] >= bar ||
+					vr[(size_t)i] > (float)kRoundLCutR)
+					continue;
+
+				narrow++;
+
+				if (vs[(size_t)i] < topNeck)
+					topNeck = vs[(size_t)i];
+			}
+
+			printf("  %-4s the highest surviving vertex within r %.0f stands "
+				"at s %.1f (%d of them)\n", kCutName[c], kRoundLCutR,
+				narrow ? topNeck : 0.0, narrow);
+		}
+
+		printf("\n");
+		HDTrmFree(&model);
+	}
+
+	printf("A RIM vertex carries NO head weight at all, so it is skinned to "
+		"the torso\nand its neighbours alone: it stands still in the torso's "
+		"frame in every pose,\nwhich is why fix round U hangs the lid on the "
+		"TORSO node and cuts by weight.\n");
+}
+
 static void PrintNeckTable(const std::string& root5, const ClassicSlot& body)
 {
 	if (!body.ok || body.nodes <= HD_LARA_HEAD_NODE)
@@ -4288,11 +4686,371 @@ static void PrintPoseRisk(const Tr5Level& level, const char* stem)
 
 	printf("\n%d animations read, %d of them rate 1.\n", (int)rows.size(), rate1);
 	printf("%d carry a key frame pair whose node turns more than 90 degrees; "
-		"%d of those are rate 1.\n", anyRisky, rate1Risky);
+		"%d of those %s rate 1.\n", anyRisky, rate1Risky,
+		rate1Risky == 1 ? "is" : "are");
 	printf("worst turn %.1f degrees - anim %d, node %d, between key %d and "
 		"%d.\n", worstAll, worstAnim, worstNode, worstKey - 1, worstKey);
 	printf("animations whose per-axis packed difference exceeds 512 after the "
 		"wrap: %d (a wrap cannot produce one, so this must be 0).\n", axisOver);
+}
+
+
+/* ======================================================================
+ * THE SIXTY HERTZ REPLAY - ONE ANIMATION, EVERY DRAWN FRAME (#123, fix
+ * round U, U2; #148, order 4)
+ * ======================================================================
+ *
+ * WHAT THE PLAY TEST SAW AND WHAT THIS IS FOR. At sixty a dive roll shows one
+ * frame with a leg stretched fully the WRONG WAY, with the leg curled up on
+ * the frames either side of it; at thirty the same roll is faultless. Fix
+ * round S's S2 guessed a rate 1 key frame pair too far apart to blend and put
+ * a refusal in for it - and the counter it added, INTERPLOG's pose_far, read
+ * 0.0 for the whole of the next play session. A guess that measures zero is a
+ * guess disproved, so this walks the animation OFFLINE instead and prints
+ * where every node really stands on every drawn frame.
+ *
+ * WHAT IT REPRODUCES, line for line:
+ *
+ *   the pose at a TICK   GetFrames (game\draw.cpp): key = f / rate, and the
+ *                        factor InterpKeyAlpha(f % rate, InterpKeyRate(...)).
+ *   the pose BETWEEN two InterpPoseAt (game\interpolate_math.h) at t = 0.5,
+ *                        which is the midpoint of the two poses the ticks
+ *                        either side of it draw - the whole of order 4.
+ *   the pose ITSELF      the two key frames' chains built separately and
+ *                        blended ELEMENT BY ELEMENT per node, which is what
+ *                        Rich_CalcLaraMatrices_Interpolated does through
+ *                        InterpolateMatrix. That blend is the one thing in
+ *                        the picture that can put a bone somewhere neither
+ *                        of its two ends is, so it is reproduced exactly and
+ *                        not approximated by a rotation blend.
+ *
+ * WHAT IT PRINTS. Per drawn frame, every node's origin in HER OWN frame - the
+ * hips at the origin - and, for each, how far it stands from the MIDPOINT of
+ * the two frames either side of it, as a fraction of how far those two are
+ * apart. A node moving smoothly reads near 0; the frame the play test
+ * photographed cannot read near 0, because a leg that is curled, then
+ * straight the wrong way, then curled again is the definition of an outlier.
+ * `-tween60` names the animations; with none it takes the sprint dive and
+ * the rolls. */
+
+struct Tween60Chain
+{
+	float m[32][16];
+};
+
+/* ONE KEY FRAME'S WHOLE CHAIN, in Lara's own frame - no item position and no
+ * item rotation, because the question is about the POSE and those two are
+ * order 2's business and interpolate perfectly well. The walk is
+ * Rich_CalcLaraMatrices's: the frame's own translation and the hips'
+ * rotation, then per node pop, push, the bone offset and the node's rotation
+ * off the same packed stream. */
+static void Tween60Build(const Tr5Level& level, const ClassicSlot& body,
+	const BraidAnimRow& a, int key, Tween60Chain& out)
+{
+	const long long base = (long long)(a.frameOffset / 2) + (long long)key * a.size;
+
+	BraidRotStream r;
+	float stack[32][16], cur[16];
+	int top = 0;
+
+	r.level = &level;
+	r.at = base + 9;
+
+	MatIdentity(cur);
+	BraidTranslate(cur, level.debugReadFrameShort(base + 6),
+		level.debugReadFrameShort(base + 7),
+		level.debugReadFrameShort(base + 8));
+	BraidRotApply(r, cur);
+	memcpy(out.m[0], cur, sizeof(cur));
+
+	for (int node = 1; node < body.nodes; node++)
+	{
+		if ((body.flags[node] & 1) && top > 0)
+			memcpy(cur, stack[--top], sizeof(cur));
+
+		if (body.flags[node] & 2)
+		{
+			memcpy(stack[top], cur, sizeof(cur));
+
+			if (top < 31)
+				++top;
+		}
+
+		BraidTranslate(cur, body.delta[node][0], body.delta[node][1],
+			body.delta[node][2]);
+		BraidRotApply(r, cur);
+		memcpy(out.m[node], cur, sizeof(cur));
+	}
+}
+
+/* THE ENGINE'S OWN BLEND, expression for expression - the three cases of
+ * InterpBlendFloat (game\interpolate_math.h) over the twelve elements
+ * aInterpolateMatrix walks. The tool's matrices are the transpose of the
+ * engine's, so the twelve are the 3x3 in rows 0..2 and the translation in
+ * row 3; which twelve they are does not matter to an element-wise blend. */
+static float Tween60BlendOne(float a, float b, float alpha)
+{
+	if (alpha == 0.5F)
+		return (a + b) * 0.5F;
+
+	if (alpha > 0.5F)
+		return b - (b - a) * (1.0F - alpha);
+
+	return a + (b - a) * alpha;
+}
+
+static void Tween60Blend(const Tween60Chain& A, const Tween60Chain& B,
+	float alpha, int nodes, Tween60Chain& out)
+{
+	static const int kElem[12] = { 0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14 };
+
+	for (int n = 0; n < nodes; n++)
+	{
+		memcpy(out.m[n], A.m[n], sizeof(A.m[n]));
+
+		for (int i = 0; i < 12; i++)
+			out.m[n][kElem[i]] = Tween60BlendOne(A.m[n][kElem[i]],
+				B.m[n][kElem[i]], alpha);
+	}
+}
+
+/* game\draw.cpp, GetFrames: which key frame pair a TICK wears and at what
+ * factor. Returns the key; `alpha` is 0 when the frame sits on a stored one. */
+static int Tween60Tick(const BraidAnimRow& a, int frame, float* alpha)
+{
+	const int f = frame - a.start;
+	const int key = f / a.rate;
+	const int frac = f % a.rate;
+	int rate = a.rate;
+	const int num = rate * (f / rate + 1);
+
+	/* Vanilla's own comparison, mismatch included: `num` is counted from the
+	 * animation's start and `frame_end` from the level's. */
+	if (num > a.end)
+		rate = rate + a.end - num;
+
+	*alpha = frac ? InterpKeyAlpha(frac, rate) : 0.0F;
+
+	return key;
+}
+
+static const char* const kTween60Node[15] =
+{
+	"hips", "thigh R", "calf R", "foot R", "thigh L", "calf L", "foot L",
+	"torso", "uarm R", "larm R", "hand R", "uarm L", "larm L", "hand L",
+	"head"
+};
+
+static void PrintTween60(const Tr5Level& level, const ClassicSlot& body,
+	const int* want, int wantCount)
+{
+	if (!body.ok || body.nodes < 15)
+	{
+		printf("\n-tween60 needs the level's own Lara skeleton and this one "
+			"has none.\n");
+		return;
+	}
+
+	Tr5Level::MoveableInfo lara;
+
+	if (!level.moveableInfo(0 /* LARA */, lara) || lara.animIndex < 0)
+	{
+		printf("\n-tween60: this level has no LARA slot.\n");
+		return;
+	}
+
+	printf("\n-- one animation at sixty, frame by frame (#148, order 4) ----\n");
+	printf("A TICK frame is GetFrames; the frame between two ticks is\n"
+		"InterpPoseAt at t = 0.5, blended element-wise per node exactly as\n"
+		"InterpolateMatrix blends them. Per TWEEN frame:\n\n"
+		"  pair    the key frame pair it blends and the factor. `>N` marks a\n"
+		"          key past the ones this animation stores - the partial last\n"
+		"          segment, where the pair reaches into whatever frame data\n"
+		"          follows in the block.\n"
+		"  off     how far the worst node stands from the MIDPOINT of the two\n"
+		"          TICKS either side of it, over how far those two are apart.\n"
+		"          An element-wise blend is affine in the factor, so a tween\n"
+		"          inside one segment must read 0.00; anything else is a tween\n"
+		"          that is NOT between the frames it stands between, which is\n"
+		"          what a leg pointing the wrong way is.\n"
+		"  legs    the hip-to-foot distance, right and left, on the tween over\n"
+		"          the mean of the two ticks. The chord of an arc is shorter\n"
+		"          than the arc, so a big turn reads under 1 - that is the\n"
+		"          shrink, and vanilla has it at thirty as well.\n\n");
+
+	double worstOff = 0.0;
+	int worstAnim = -1, worstFrame = -1, worstNode = -1;
+	double worstLeg = 1.0;
+	int legAnim = -1, legFrame = -1;
+	int reached = 0;
+	int played = 0, stubs = 0;
+
+	for (int w = 0; w < wantCount; w++)
+	{
+		BraidAnimRow a;
+		const int index = lara.animIndex + want[w];
+
+		if (!BraidReadAnim(level, index, a))
+		{
+			printf("anim %d: not readable (a stub in this level, or past the "
+				"table)\n", want[w]);
+			stubs++;
+			continue;
+		}
+
+		played++;
+
+		const int keys = (a.end - a.start) / a.rate + 1;
+
+		/* ONE CHAIN PER STORED KEY, AND ONE PAST THEM. The one past is not a
+		 * mistake: an animation whose frame count is not a whole number of
+		 * segments has a last frame whose pair reaches beyond its own stored
+		 * frames, and the engine reads it - so the tool reads it too, out of
+		 * the same block, rather than pretending the animation stops on a
+		 * segment boundary. */
+		std::vector<Tween60Chain> key((size_t)keys + 2);
+
+		for (int k = 0; k <= keys + 1; k++)
+			Tween60Build(level, body, a, k, key[(size_t)k]);
+
+		printf("anim %d: frames %d..%d, rate %d, size %d, %d stored keys%s\n",
+			want[w], a.start, a.end, a.rate, a.size, keys,
+			(a.end - a.start) % a.rate ? "  (a PARTIAL last segment)" : "");
+
+		bool said = false;
+
+		for (int f = a.start + 1; f <= a.end; f++)
+		{
+			long tkey = 0;
+			float b = 0.0F;
+
+			if (!InterpPoseAt(f - 1, f, a.start, a.rate, a.end, 0.5F, &tkey, &b))
+				continue;
+
+			float ap = 0.0F, ac = 0.0F;
+			const int kp = Tween60Tick(a, f - 1, &ap);
+			const int kc = Tween60Tick(a, f, &ac);
+
+			Tween60Chain P, C, T;
+
+			Tween60Blend(key[(size_t)kp], key[(size_t)kp + 1], ap, body.nodes, P);
+			Tween60Blend(key[(size_t)kc], key[(size_t)kc + 1], ac, body.nodes, C);
+			Tween60Blend(key[(size_t)tkey], key[(size_t)tkey + 1], b, body.nodes, T);
+
+			double off = 0.0;
+			int offNode = -1;
+
+			for (int n = 0; n < 15; n++)
+			{
+				double span = 0.0, e = 0.0;
+
+				for (int c = 0; c < 3; c++)
+				{
+					const double mid = ((double)P.m[n][12 + c] +
+						(double)C.m[n][12 + c]) * 0.5;
+					const double s = (double)C.m[n][12 + c] -
+						(double)P.m[n][12 + c];
+					const double dd = (double)T.m[n][12 + c] - mid;
+
+					span += s * s;
+					e += dd * dd;
+				}
+
+				span = sqrt(span);
+				e = sqrt(e);
+
+				const double here = span > 1.0 ? e / span : e;
+
+				if (here > off)
+				{
+					off = here;
+					offNode = n;
+				}
+			}
+
+			double leg[2] = { 1.0, 1.0 };
+
+			for (int side = 0; side < 2; side++)
+			{
+				const int foot = side ? 6 : 3;
+				double lp = 0.0, lc = 0.0, lt = 0.0;
+
+				for (int c = 0; c < 3; c++)
+				{
+					const double dp = (double)P.m[foot][12 + c] - (double)P.m[0][12 + c];
+					const double dc = (double)C.m[foot][12 + c] - (double)C.m[0][12 + c];
+					const double dt = (double)T.m[foot][12 + c] - (double)T.m[0][12 + c];
+
+					lp += dp * dp;
+					lc += dc * dc;
+					lt += dt * dt;
+				}
+
+				const double mean = (sqrt(lp) + sqrt(lc)) * 0.5;
+
+				leg[side] = mean > 1.0 ? sqrt(lt) / mean : 1.0;
+			}
+
+			const bool past = (long)(tkey + 1) > (long)(keys - 1);
+
+			if (off > 0.01 || leg[0] < 0.9 || leg[1] < 0.9 || past)
+			{
+				printf("  %5d.5  pair key%ld/%ld%s a%.3f   off %.2f (%s)   "
+					"legs %.2f / %.2f\n", f - 1, tkey, tkey + 1,
+					past ? " >stored" : "", (double)b, off,
+					offNode >= 0 ? kTween60Node[offNode] : "-",
+					leg[0], leg[1]);
+				said = true;
+			}
+
+			if (past)
+				reached++;
+
+			if (off > worstOff)
+			{
+				worstOff = off;
+				worstAnim = want[w];
+				worstFrame = f - 1;
+				worstNode = offNode;
+			}
+
+			for (int side = 0; side < 2; side++)
+				if (leg[side] < worstLeg)
+				{
+					worstLeg = leg[side];
+					legAnim = want[w];
+					legFrame = f - 1;
+				}
+		}
+
+		if (!said)
+			printf("  every tween frame is exactly the midpoint of its two "
+				"ticks, and no leg loses a tenth of its length.\n");
+	}
+
+	printf("\nworst off: %.2f", worstOff);
+
+	if (worstAnim >= 0)
+		printf(" - anim %d, between frames %d and %d, %s", worstAnim,
+			worstFrame, worstFrame + 1,
+			worstNode >= 0 ? kTween60Node[worstNode] : "-");
+
+	printf("\nworst leg: %.2f of its own length", worstLeg);
+
+	if (legAnim >= 0)
+		printf(" - anim %d, between frames %d and %d", legAnim, legFrame,
+			legFrame + 1);
+
+	printf("\ntween frames whose pair reaches past the animation's own stored "
+		"keys: %d\n", reached);
+
+	/* AND HOW MANY ANIMATIONS THAT WAS REALLY (corrected in U7). Laras anims
+	 * are level-specific and a level stubs the ones it does not use, so a run
+	 * over the whole range 0..473 replays fewer than 474 of them - and a
+	 * verdict quoted as "over all 474" says more than the run did. The two
+	 * numbers stand here so that the next quotation can be right. */
+	printf("animations asked for: %d - %d replayed, %d stubbed in this "
+		"level\n", wantCount, played, stubs);
 }
 
 
@@ -4720,7 +5478,13 @@ struct LaraOptions
 	bool mirror;
 	bool firstPerson;
 	bool neck;
+	/* #123 fix round U (U1): the wardrobe measured by BONE WEIGHT rather
+	 * than by position - what carries node 14, and where the rim of that is. */
+	bool headWeight;
 	bool poseRisk;			// #148 order 4, fix round S (S2)
+	/* #123 fix round U (U2): the animations to replay at sixty, frame by
+	 * frame, LARA-relative. Empty means the switch was not given. */
+	std::vector<int> tween60;
 	bool handLight;			// #123 fix round K (K1/K2): the wrist seam
 	/* #123 fix round K (K2): put the outfit's own material back on Lara's
 	 * SKIN pages, which is the picture before this round - the forearm and
@@ -4745,12 +5509,17 @@ struct LaraOptions
 	int threads;
 	long width, height;
 	double fov, yaw, pitch, dist, shade;
-	/* The neck cut (#123, stage S8; a cylinder in fix round J; ONE PLANE in
-	 * fix round S): how far down the neck axis from the head joint the plane
-	 * sits, in classic units. Negative is off, which is the BEFORE picture. */
+	/* The head cut (#123, stage S8; a cylinder in fix round J; a plane in fix
+	 * round S; ONE BONE WEIGHT since fix round U): how much of the head node a
+	 * fragment has to carry to be discarded, of 1. Negative is off, which is
+	 * the BEFORE picture. */
 	double cutS;
 	bool noCap;			// draw without the lid (#123, fix round S)
 	double fpForward;		// FP_EYE_OFFSET; 0 is the eye against a wall
+	/* #123 fix round U (U1d): the eye moved off the head joint, which is what
+	 * a landing does - the camera leaves the head and the nape fills the
+	 * picture (the user's second photograph). x/y/z in classic units. */
+	double eyeOff[3];
 	int cull;			// HDModelCull, on her body alone
 	bool yawSet, pitchSet;		// did the caller name one?
 	const HDObjLight* lights;
@@ -5249,8 +6018,14 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	if (o.neck)
 		PrintNeckTable(o.root, body);
 
+	if (o.headWeight)
+		PrintHeadWeight(o.root, body);
+
 	if (o.poseRisk)
 		PrintPoseRisk(level, "the level");
+
+	if (!o.tween60.empty())
+		PrintTween60(level, body, &o.tween60[0], (int)o.tween60.size());
 
 	if (o.handLight)
 		PrintHandLight(o.root, outfit, o.oldSkin);
@@ -5366,18 +6141,28 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * at one's own feet and 75 the steepest a standing Lara reaches. */
 	if (o.firstPerson)
 	{
-		const double ex = classic14[0];
-		const double ey = classic14[1] - 16.0;
-		const double ez = classic14[2] + o.fpForward;
+		const double ex = classic14[0] + o.eyeOff[0];
+		const double ey = classic14[1] - 16.0 + o.eyeOff[1];
+		const double ez = classic14[2] + o.fpForward + o.eyeOff[2];
 		const double fpYaw = o.yawSet ? o.yaw : 0.0;
 		const double fpPitch = o.pitchSet ? o.pitch : 60.0;
 
 		LookAt(ex, ey, ez, fpYaw, fpPitch, view);
 
 		printf("eye     : %.0f/%.0f/%.0f - the head joint %.0f/%.0f/%.0f, "
-			"16 up and %.0f forward; yaw %.0f, pitch %.0f down\n" ,
-			ex, ey, ez, classic14[0], classic14[1], classic14[2],
-			o.fpForward, fpYaw, fpPitch);
+			"16 up and %.0f forward", ex, ey, ez, classic14[0], classic14[1],
+			classic14[2], o.fpForward);
+
+		/* AND WHERE -eye MOVED IT FROM THERE (corrected in U7). The line used
+		 * to name the default derivation whatever the switches said, so a run
+		 * with the eye taken out of the skull - the LANDING case - printed the
+		 * right coordinates under a description of a placement it was not
+		 * using. */
+		if (o.eyeOff[0] != 0.0 || o.eyeOff[1] != 0.0 || o.eyeOff[2] != 0.0)
+			printf(", then moved by %.0f/%.0f/%.0f (-eye)", o.eyeOff[0],
+				o.eyeOff[1], o.eyeOff[2]);
+
+		printf("; yaw %.0f, pitch %.0f down\n", fpYaw, fpPitch);
 	}
 	else
 		LookAt(cx - f[0] * dist, cy - f[1] * dist, cz - f[2] * dist, o.yaw,
@@ -5831,43 +6616,30 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		printf("meshbits: %08x - the composite is masked to those nodes\n",
 			o.nodeMask);
 
-	/* THE NECK CUT (stage S8; a cylinder in fix round J; ONE PLANE in fix
-	 * round S). The BODY carries it and nothing else, exactly as
-	 * specific/hd/hd_laradraw.cpp pushes it: the hands, the holsters and the
-	 * lid are their own models and must never be cut away.
+	/* THE HEAD CUT (stage S8 a sphere, fix round J a cylinder, fix round S a
+	 * plane, fix round U ONE BONE WEIGHT). The BODY carries it and nothing
+	 * else, exactly as specific/hd/hd_laradraw.cpp pushes it: the hands, the
+	 * holsters and the lid are their own models and must never be cut away.
 	 *
-	 * The axis comes out of the level's own bind pose through the engine's own
-	 * HDLaraNeckPlane and the four view space numbers are built here the way
-	 * hd_laradraw builds them - out of the head node's own matrix - so this
-	 * picture is the game's picture. Only the DEPTH may be overridden, which
-	 * is what -neckplane is for. */
+	 * The two numbers come out of the engine's own HDLaraHeadCut, so this
+	 * picture is the game's picture. Only the THRESHOLD may be overridden,
+	 * which is what -headcut is for; a negative one draws the BEFORE picture,
+	 * with no cut at all. */
 	HDModelNeckCut neckCut = { 0 };
-	float neckAxis[3] = { 0.0f, 1.0f, 0.0f };
-	float neckDepth = 0.0f;
-	const bool cutting = o.cutS >= 0.0 && HDLaraNeckPlane(neckAxis, &neckDepth);
+	int cutNode = HD_LARA_HEAD_NODE;
+	float cutBar = 0.0f;
+	const bool cutting = o.cutS >= 0.0 && HDLaraHeadCut(&cutNode, &cutBar);
 
 	if (cutting)
 	{
-		const float* m = matrices + HD_LARA_HEAD_NODE * 16;
-		const float nx = neckAxis[0] * m[0] + neckAxis[1] * m[4] + neckAxis[2] * m[8];
-		const float ny = neckAxis[0] * m[1] + neckAxis[1] * m[5] + neckAxis[2] * m[9];
-		const float nz = neckAxis[0] * m[2] + neckAxis[1] * m[6] + neckAxis[2] * m[10];
-		const float depth = (float)o.cutS;
-		const float px = m[12] + nx * depth;
-		const float py = m[13] + ny * depth;
-		const float pz = m[14] + nz * depth;
-
 		neckCut.on = 1.0f;
-		neckCut.plane[0] = nx;
-		neckCut.plane[1] = ny;
-		neckCut.plane[2] = nz;
-		neckCut.plane[3] = -(nx * px + ny * py + nz * pz);
+		neckCut.node = (float)cutNode;
+		neckCut.bar = (float)o.cutS;
 	}
 
-	printf("neckcut : a plane %.0f down the neck axis, in the HEAD's own "
-		"frame, body alone%s\n          and the lens stands %.1f from it%s\n",
-		o.cutS, cutting ? "" : " - off, this is the BEFORE picture",
-		cutting ? (double)-neckCut.plane[3] : 0.0,
+	printf("headcut : every fragment whose weight on node %d reaches %.2f, "
+		"body alone%s%s\n", cutNode, o.cutS,
+		cutting ? "" : " - off, this is the BEFORE picture",
 		o.noCap ? "; the lid is OFF (-nocap)" : "");
 	printf("cull    : %s\n", o.cull == HD_MODEL_CULL_CW ? "clockwise"
 		: o.cull == HD_MODEL_CULL_CCW ? "counter-clockwise"
@@ -5922,18 +6694,19 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		light, bodyMask, &lighting, cutting ? &neckCut : 0, o.cull))
 		drawn++;
 
-	/* THE LID (#123, fix round S, S1), in the same place and with the same
-	 * four rules the seam has: no cut of its own (it lies IN the plane), no
-	 * cull, its own node mask (first person clears the head node from
-	 * `bodyMask` and the lid rides on that very node), and the skin's own
-	 * material. -nocap leaves it out, which is the BEFORE picture. */
+	/* THE LID (#123, fix round S, S1; the RIM's own since fix round U), in the
+	 * same place and with the same rules the seam has: no cut of its own (its
+	 * rim vertices are copies of the body's and would sit exactly on the
+	 * boundary), no cull, every node (its rim is skinned to whatever the
+	 * body's rim is), and the skin's own material. -nocap leaves it out, which
+	 * is the BEFORE picture. */
 	if (o.firstPerson && cutting && !o.noCap && draws(HD_LARA_PART_NECK_CAP) &&
 		HDLaraHasPart(HD_LARA_PART_NECK_CAP))
 	{
 		SetSheen(lighting, HD_LARA_PART_NECK_CAP, sheenOn);
 
 		if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), matrices,
-			HD_LARA_NODES, light, 1u << HD_LARA_HEAD_NODE, &lighting, 0,
+			HD_LARA_NODES, light, ~0u, &lighting, 0,
 			HD_MODEL_CULL_NONE))
 			drawn++;
 	}
@@ -5993,9 +6766,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	char cut[32] = "";
 
 	if (o.firstPerson)
-		sprintf(cut, "_p%d_f%d_plane%d%s_%s",
+		sprintf(cut, "_p%d_f%d_w%d%s_%s",
 			(int)(o.pitchSet ? o.pitch : 60.0),
-			(int)o.fpForward, (int)(o.cutS + 0.5),
+			(int)o.fpForward, (int)(o.cutS * 100.0 + 0.5),
 			o.noCap ? "_nocap" : "",
 			o.cull == HD_MODEL_CULL_CW ? "cw"
 			: o.cull == HD_MODEL_CULL_CCW ? "ccw" : "nocull");
@@ -6035,7 +6808,9 @@ int main(int argc, char** argv)
 	int onlyPage = -1;		// #123 fix round D (D4): -name with one page
 	bool lara = false, laraNodes = false, mirror = false;
 	bool laraFirstPerson = false, laraCheck = false, laraNeck = false;
+	bool laraHeadWeight = false;	// #123 fix round U (U1)
 	bool laraPoseRisk = false;	// #148 order 4, fix round S (S2)
+	std::vector<int> laraTween60;	// #123 fix round U (U2)
 	bool laraHandLight = false;	// #123 fix round K (K2): the wrist seam
 	bool laraOldSkin = false;	// #123 fix round K (K2): the BEFORE picture
 	bool classicBraidRoot = false;	// #123 fix round I (I2): the BEFORE picture
@@ -6053,6 +6828,7 @@ int main(int argc, char** argv)
 	double cutS = -1.0e9;
 	bool noCap = false;		// #123 fix round S: without the lid
 	double fpForward = 48.0;
+	double eyeOff[3] = { 0.0, 0.0, 0.0 };	// #123 fix round U (U1d)
 	int cullMode = -1;		// -1 = "what -firstperson would use"
 	bool yawSet = false, pitchSet = false;
 	std::string outfitName, gunsName, backName, holstersName, lookName;
@@ -6120,7 +6896,9 @@ int main(int argc, char** argv)
 			lara = true;
 			laraFirstPerson = true;
 		}
-		else if (!_stricmp(argv[i], "-neckplane") && i + 1 < argc)
+		/* #123 fix round U (U1): the head cut's threshold, of 1. Negative
+		 * is no cut at all, which is the BEFORE picture. */
+		else if (!_stricmp(argv[i], "-headcut") && i + 1 < argc)
 			cutS = atof(argv[++i]);
 		/* #123 fix round S (S1): the picture with the hole and no lid. */
 		else if (!_stricmp(argv[i], "-nocap"))
@@ -6141,12 +6919,49 @@ int main(int argc, char** argv)
 			lara = true;
 			laraNeck = true;
 		}
+		/* #123 fix round U (U1): the head's own WEIGHT, per outfit, and the
+		 * rim it leaves - the measurement the weight cut is built on. */
+		else if (!_stricmp(argv[i], "-headw"))
+		{
+			lara = true;
+			laraHeadWeight = true;
+		}
+		/* #123 fix round U (U1d): the eye off the head joint, for the frame
+		 * a landing gives - the camera outside the skull, the nape in front
+		 * of it. Three numbers, in classic units. */
+		else if (!_stricmp(argv[i], "-eye") && i + 3 < argc)
+		{
+			eyeOff[0] = atof(argv[++i]);
+			eyeOff[1] = atof(argv[++i]);
+			eyeOff[2] = atof(argv[++i]);
+		}
 		/* #148 order 4, fix round S (S2): which key frame pairs a matrix
 		 * blend cannot survive, and whether a packed angle ever wraps. */
 		else if (!_stricmp(argv[i], "-poserisk"))
 		{
 			lara = true;
 			laraPoseRisk = true;
+		}
+		/* #123 fix round U (U2): replay these animations at SIXTY, frame by
+		 * frame, and say which drawn frame is an outlier between its own two
+		 * neighbours. With no number it takes the sprint dive (230, 232, 240,
+		 * 242, 308, 309), the duck roll (218, 219, 220, 247) and the standing
+		 * roll (146, 147), which is the set the play test's picture is in. */
+		else if (!_stricmp(argv[i], "-tween60"))
+		{
+			lara = true;
+
+			while (i + 1 < argc && (argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9'))
+				laraTween60.push_back(atoi(argv[++i]));
+
+			if (laraTween60.empty())
+			{
+				static const int kRolls[] =
+					{ 146, 147, 218, 219, 220, 247, 230, 232, 240, 242, 308, 309 };
+
+				for (size_t k = 0; k < sizeof(kRolls) / sizeof(kRolls[0]); k++)
+					laraTween60.push_back(kRolls[k]);
+			}
 		}
 		/* #123 fix round K (K2): what the body and the hand shine like where
 		 * the two meet, for the outfit this run wears. */
@@ -6400,7 +7215,9 @@ int main(int argc, char** argv)
 		o.onlyPart = onlyPart;
 		o.noSheen = noSheen;
 		o.neck = laraNeck;
+		o.headWeight = laraHeadWeight;
 		o.poseRisk = laraPoseRisk;
+		o.tween60 = laraTween60;
 		o.handLight = laraHandLight;
 		o.oldSkin = laraOldSkin;
 		o.braid = laraBraid;
@@ -6419,9 +7236,12 @@ int main(int argc, char** argv)
 		o.dist = dist;
 		o.shade = shade;
 		o.cutS = cutS > -1.0e8 ? cutS
-			: (laraFirstPerson ? (double)HD_LARA_NECK_PLANE_S : -1.0);
+			: (laraFirstPerson ? (double)HD_LARA_HEAD_CUT_WEIGHT : -1.0);
 		o.noCap = noCap;
 		o.fpForward = fpForward;
+		o.eyeOff[0] = eyeOff[0];
+		o.eyeOff[1] = eyeOff[1];
+		o.eyeOff[2] = eyeOff[2];
 		o.cull = cullMode < 0
 			? (laraFirstPerson ? HD_MODEL_CULL_BACK : HD_MODEL_CULL_NONE)
 			: cullMode;

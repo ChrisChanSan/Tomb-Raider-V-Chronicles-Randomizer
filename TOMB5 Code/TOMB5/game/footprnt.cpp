@@ -14,6 +14,7 @@
 #include "footprnt.h"
 #include "delstuff.h"
 #include "control.h"
+#include "interpolate.h"		// InterpIsTweenFrame - a footprint's life (#148, order 3)
 #include "sound.h"
 #include "gameflow.h"
 #include "../specific/file.h"
@@ -93,7 +94,14 @@ void S_DrawFootPrints()
 				continue;
 			}
 
-			print->Active--;
+			/* #148, order 3 (sweep): A FOOTPRINT'S LIFE IS COUNTED IN DRAWN
+			 * FRAMES. Active starts at 512 and comes down by one per call,
+			 * and this is called once per drawn frame from DrawRooms - so
+			 * at sixty every footprint in the game would fade and vanish in
+			 * half the time. The fade below reads Active and is drawn on
+			 * every frame either way. Not in the plan's list. */
+			if (!InterpIsTweenFrame())
+				print->Active--;
 
 			if (print->Active < 29)
 				col = print->Active << 2;

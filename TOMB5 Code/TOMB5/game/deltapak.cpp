@@ -19,6 +19,7 @@
 #include "lara2gun.h"
 #include "effect2.h"
 #include "control.h"
+#include "interpolate.h"	// InterpIsTweenFrame - the cutscene wind-up (#148, order 3)
 #include "lot.h"
 #include "tomb4fx.h"
 #include "camera.h"
@@ -2118,7 +2119,19 @@ void handle_cutseq_triggering(long name)
 			return;
 
 		goin = 0;
-		cutseq_busy_timeout--;
+
+		/* R17 (#148, order 3): the wind-up before a cutscene. Fifty counts
+		 * from the trigger, and Lara is given until then to get her hands
+		 * free by herself before the scene takes them; the `||` below is the
+		 * other way out, so nothing hangs either way. But the count is per
+		 * PRESENT - handle_cutseq_triggering is called once per frame from
+		 * DoLevel and from DoTitle - so at sixty the scene would start half
+		 * a second early.
+		 *
+		 * This is the counter that sits AFTER DrawPhaseGame in the loop, so
+		 * it reads the latch this frame set. */
+		if (!InterpIsTweenFrame())
+			cutseq_busy_timeout--;
 
 		if (cutseq_busy_timeout <= 0)
 		{

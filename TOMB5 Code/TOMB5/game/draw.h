@@ -22,6 +22,12 @@ void UpdateSkyLightning();
 void CalculateObjectLighting(ITEM_INFO* item, short* frame);
 void DrawAnimatingItem(ITEM_INFO* item);
 void PrintObjects(short room_number);
+
+/* The corpse fade, once per logic tick (#148, order 3, R6). PrintObjects
+ * marks the bodies it drew; this counts them up and kills the ones that are
+ * done. ControlPhase calls it - it is game state and belongs on the tick. */
+void StepAfterDeathFade();
+
 void DrawRooms(short current_room);
 void CalculateObjectLightingLara();
 long GetFrames(ITEM_INFO* item, short* frm[], long* rate);

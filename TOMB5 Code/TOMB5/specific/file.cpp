@@ -348,6 +348,17 @@ void DoMonitorScreen()
 	MonitorScreenTex->u4 = MonitorScreenU + s * (1.0F / 256.0F);
 	MonitorScreenTex->u3 = MonitorScreenU + s * (1.0F / 256.0F) + 0.125F;
 
+	/* #148, order 3 (sweep): THE MONITOR SCREENS SCROLL ON A CLOCK.
+	 *
+	 * `pos` walks the scan band across the surveillance screens and `reset`
+	 * holds it still at each end - both per DRAWN frame, and this is called
+	 * from the top of DrawRooms. At sixty the band would sweep twice as fast
+	 * and its pause at the edges would be half as long. The UV write above
+	 * happens on every frame from whatever `pos` stands at, so the picture
+	 * keeps its sixty and only the clock stays at thirty. */
+	if (InterpIsTweenFrame())
+		return;
+
 	if (reset)
 		reset--;
 	else

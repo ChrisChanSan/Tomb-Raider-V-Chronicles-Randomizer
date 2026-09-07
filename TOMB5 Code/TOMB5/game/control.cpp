@@ -249,8 +249,6 @@ long ControlPhase(long nframes, long demo_mode)
 	FLOOR_INFO* floor;
 	short item_num, nex, fx_num;
 
-	RegeneratePickups();
-
 	if (nframes > 10)
 		nframes = 10;
 
@@ -272,6 +270,24 @@ long ControlPhase(long nframes, long demo_mode)
 		 * which is right: the only neighbour the drawn state has is the one
 		 * before the FINAL tick. */
 		InterpCapturePrev();
+
+		/* R14 (#148, order 3): RegeneratePickups stood ABOVE this loop, so
+		 * it ran once per ControlPhase CALL - which is once per drawn frame,
+		 * and at sixty that is twice per logic tick. It is idempotent (it
+		 * re-arms an ammo pickup whose ammo the player has spent, nothing
+		 * more), so the doubling did no harm; it belongs on the tick all the
+		 * same, and here it also runs once per tick when a hitch makes
+		 * ControlPhase run several, which the old place did not. */
+		RegeneratePickups();
+
+		/* R6 (#148, order 3): the corpse fade, moved out of the DRAW.
+		 * PrintObjects marks the bodies it drew and this counts them up and
+		 * kills the ones that are done - see the two notes in game\draw.cpp
+		 * for why it had to leave the draw path, and what latent bug in
+		 * KillItem it takes with it. It is placed with the other item
+		 * housekeeping and before the item control loop. */
+		StepAfterDeathFade();
+
 		GlobalCounter++;
 		UpdateSky();
 		RPC_Update();

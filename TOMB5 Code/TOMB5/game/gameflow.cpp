@@ -1024,7 +1024,22 @@ void DoLevel(uchar Name, uchar Audio)
 		if (gfLegendTime && !DestFadeScreenHeight && !FadeScreenHeight && !cutseq_num)
 		{
 			PrintString(phd_winwidth >> 1, phd_winymax - font_height, 2, SCRIPT_TEXT(gfLegend), FF_CENTER);
-			gfLegendTime--;
+
+			/* R16 (#148, order 3): the level's name at the bottom of the
+			 * screen stands for gfLegendTime frames and the count is per
+			 * DRAWN frame, so at sixty the caption would be gone in half
+			 * the time. It is printed every frame either way - only the
+			 * clock is a tick's.
+			 *
+			 * This is the one guarded counter that sits BEFORE
+			 * DrawPhaseGame in the loop, so it reads the latch the last
+			 * frame set rather than this one's. The two alternate all the
+			 * same, which is all the rule needs. */
+			if (!InterpIsTweenFrame())
+			{
+				gfLegendTime--;
+				InterpNoteStep(INTERP_STEP_LEGEND);
+			}
 		}
 
 		nframes = DrawPhaseGame();

@@ -319,12 +319,25 @@ with the HD art on as without it.
   did.
 - **Sparks, rain, snow, blood, debris, bubbles and shell casings.** Small,
   fast and short-lived; they are left where they are until somebody's eye
-  finds them.
-- **A handful of things that count drawn frames instead of game steps** —
-  screen fades, the rain's *fall speed*, the level-name caption, the
-  health-bar blink. Those still run at double speed at sixty and are the
-  stage after next. If a fade looks hasty at 60, that is this and nothing
-  else.
+  finds them. Note that their *fall speed* and their *lifetime* are not on
+  this list — see below: those are timings and they are correct at both
+  settings. What is still at thirty is only that a raindrop is drawn at the
+  same place twice.
+
+**Everything that is a length of time is a length of time.** This is the part
+that took the most work and shows the least: dozens of counters in the engine
+measured time by counting *pictures*, which was the same thing as counting
+game steps for twenty-five years. Every one of them now counts game steps
+instead, so at sixty they are unchanged in real seconds — the fade to black
+when Lara dies and the one between levels, the white flash of a weapon, the
+level name at the bottom of the screen, the "ammo changed" caption, the
+health-bar blink, the pickup sliding in from the right, a body fading away
+after it falls, the rain and the snow and the underwater dust, the storm's
+flicker and the delay before its thunder, the jitter of an electric bolt, the
+scan band crossing a monitor screen, footprints fading out of the snow, the
+scrolling water surfaces, the green of poison coming up, and the pause before
+a cut scene takes over. If any one of those looks faster at 60 than at 30, it
+is a bug and worth reporting.
 
 **Where it deliberately jumps.** Interpolation is switched off, for one
 frame, wherever the game *meant* something to jump rather than move: a
@@ -1735,6 +1748,7 @@ wrote it, and each seam answers a different question:
 | …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |
 | the first seconds of a level feel rough | `PROFLOG … first_frame`, and the `WARMUP` line at the end of the load |
 | at *Frame rate 60* the motion is no smoother than at 30, or something jerks | `INTERPLOG` — per second: how many frames were interpolated, how far Lara moved per picture, and every place the engine deliberately snapped |
+| at *Frame rate 60* a fade, a caption or the rain seems to run at double speed | `TICKLOG` — per second: how often the engine's own clocks stepped. The same line has to come out of a 30 run and a 60 run |
 
 These seams are permanent, not debug leftovers. They exist so that a report
 carries something to work with.
@@ -1886,6 +1900,27 @@ long enough to interpolate — worth reporting with the level and where you
 stood. And a `lara_step` at 60 that is **not** about half the 30 figure means
 the interpolation is not reaching the picture, which is the one failure of
 this feature that does not look like anything.
+
+**`TICKLOG`.** One line per *game second*, beside `INTERPLOG`, saying how many
+times the engine's own clocks stepped in it:
+
+```
+TICKLOG level=3 at=41s fade=0 screenfade=0 weather=30 legend=0 after_death=4
+```
+
+| field | what it says |
+|---|---|
+| `fade` | steps the screen fade took (the fade to and from black) |
+| `screenfade` | steps of the death and level-change fade — nine of them make one whole fade |
+| `weather` | simulation steps of the rain, the snow and the underwater dust |
+| `legend` | frames the level-name caption still had to run |
+| `after_death` | bodies that aged one step towards fading away |
+
+**The whole point of this line is that it must read the same at 30 and at
+60.** The second it counts is a *game* second, so play the same stretch at
+both settings and put the two lines side by side. A number that is roughly
+double at 60 is a clock that is running twice as fast; that is worth reporting
+with the level and what was happening.
 
 **`WARMUP`.** One line at the end of every level load:
 

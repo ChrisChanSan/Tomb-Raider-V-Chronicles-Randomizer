@@ -5076,10 +5076,11 @@ will be there, and the object half of this group is one line
 ### 5. Sixty frames a second (#148)
 
 The plan this follows is `Preparation/60FPS-Plan.md`, written from a read-only
-survey of this tree. It runs in orders; **this section covers orders 1, 1b and
-2** - the clock split, the option, the measurement, one warm-up fix, what a
-play test of all that found, and then the interpolation of the root and the
-camera that fills the in-between frames in.
+survey of this tree. It runs in orders; **this section covers orders 1, 1b, 2
+and 3** - the clock split, the option, the measurement, one warm-up fix, what
+a play test of all that found, the interpolation of the root and the camera
+that fills the in-between frames in, and then every counter in the engine that
+was measuring time in drawn frames.
 
 #### 5.1 What the 30 Hz cap actually was
 
@@ -5147,10 +5148,10 @@ starts from `4 * TargetPresentHz()` instead of a bare `120`
 (`specific/winmain.cpp`), so it is the same four seconds in both modes and
 byte-for-byte the old line at `fps_mode 0`.
 
-The other fourteen risks the plan lists - the screen fades, the rain and snow,
-the corpse fade, the lightning, the pickup slide-in - **still count per drawn
-frame** and therefore still run at double speed at `fps_mode 1`. They are
-order 3 and are named here so that a play test knows what it is looking at.
+The other sixteen risks the plan lists - the screen fades, the rain and snow,
+the corpse fade, the lightning, the pickup slide-in - counted per drawn frame
+through orders 1, 1b and 2 and therefore ran at double speed at `fps_mode 1`.
+**Order 3 is the one that fixed them; it is 5.10.**
 
 #### 5.4 Proving the logic did not change
 
@@ -5166,7 +5167,11 @@ is not measured against a 30 Hz slot.
 the stronger one: two savegames, field by field, by name. The draw path has an
 RNG of its own (`rand_2`, `GetRandomDraw`) that the simulation never reads, so
 extra drawn frames cannot reach the game state - and a savegame is that state
-written down. The tool takes every offset from the engine's own
+written down. **That last sentence was not true when it was written**: five
+places in the DRAW path call `GetRandomControl`, which is the simulation's
+generator. Order 3 (5.10) makes it true by rolling `rand_1` back over an
+in-between frame; until then this proof would have failed and the reason would
+have been the proof's own premise. The tool takes every offset from the engine's own
 `global/types.h` with `offsetof`, which is why it is built for Win32: the
 structs are `#pragma pack(1)` but carry pointers. The recipe is in
 `docs/Engine-Manual.md` under *Frame rate*.
@@ -5544,6 +5549,173 @@ rain, snow, debris, blood, drips, bubbles, gunshells, rats, bats, spiders,
 ropes, shockwaves and lightning (order 5), and the per-drawn-frame counters
 R1-R17 of 5.3 (order 3) - fades, the weather simulation, the lightning
 cadence, the level-name caption.
+
+#### 5.10 Order 3 - the per-frame counters, put on the logic tick
+
+Order 2 made the in-between frame show something. This order is about
+everything in the engine that **counted** those frames as if they were units
+of time. The user's rule for the whole of #148 is *everything must feel like
+vanilla, only more frames*: a death fade, a rain shower, a level caption and a
+corpse must last exactly as many seconds at sixty as they do at thirty.
+
+**One criterion for all of it.** `InterpIsTweenFrame()`
+(`game/interpolate.h`, `game/interpolate.cpp`) is true when the frame being
+drawn carries no logic tick. Every counter below asks it and steps only when
+it is false. At `fps_mode 0` it is false always, so every guard in the build
+is inert and the thirty hertz behaviour is the old behaviour line for line.
+
+Three details of that latch are worth having written down, because each of
+them would have been a bug:
+
+- **It is not `alpha < 1` as the snapshot sees it.** A cutscene frame and a
+  frame with no previous state are drawn *live* by `InterpBeginFrame` and
+  still carry no tick. The latch is therefore set from the cadence, above the
+  early returns, or every fade through every cutscene would have run at double
+  speed.
+- **It lives for the whole loop iteration, not just the draw.** Two of the
+  counters sit outside `DrawPhaseGame`: `gfLegendTime--` before it
+  (`game/gameflow.cpp`) and `cutseq_busy_timeout--` after it
+  (`game/deltapak.cpp`). The first reads the previous frame's latch, the
+  second this frame's; both alternate, which is all the rule needs.
+- **It is false in every modal loop.** `S_DumpScreen` calls
+  `InterpNoteClassicPresent()` whenever the present it is about to make waited
+  the full two ticks, and `S_DumpScreenFrame` calls it always. Without that, a
+  modal loop entered straight after an in-between frame would inherit a `true`
+  that nothing inside it could clear - and `RenderLoadPic`'s `do { ... } while
+  (DoFade != 2)` (`specific/output.cpp`) would **never end**, because
+  `DoScreenFade` is the only thing in the build that sets `DoFade` to 2.
+
+**The counters, by the plan's numbers.**
+
+| # | what | where | what it does now |
+|---|---|---|---|
+| R1 | `Fade()` | `game/tomb4fx.cpp` | the grey walks on a tick, the tile is drawn every frame |
+| R2 | `DoScreenFade()` | `specific/specificfx.cpp` | nine steps on nine ticks; `a` is read before the step so the in-between frame draws the same grey |
+| R3 | `FlashFader -= 2` | `specific/output.cpp` | `DrawFlash()` every frame, the walk on a tick |
+| R4 | `FlashIt()` | `game/health.cpp` | returns the last state on an in-between frame |
+| R5 | `DrawPickups()` | `game/health.cpp` | despite the name it draws nothing - it is the whole slide-in animation, so it returns early |
+| R6 | `after_death` + `KillItem` | `game/draw.cpp`, `game/control.cpp` | moved out of the draw entirely - its own note below |
+| R7 | the sky lightning machine | `game/draw.cpp` | strike, flicker and thunder delay all on the tick |
+| R8 | rain and snow | `specific/specificfx.cpp` | the simulation loop on the tick, the draw loop every frame |
+| R9 | `aWibble++` | `game/draw.cpp` (the `aUpdate()` call) | on the tick |
+| R10 | the poison ramp | `specific/3dmath.cpp` | guarded at its source - see below |
+| R11 | a spark letting go of its item | `specific/specificfx.cpp` | the random threshold is rolled on the tick |
+| R12 | `GnFrameCounter++` | `specific/output.cpp` | on the tick in a game frame, per present in a modal loop |
+| R13 | the modal loops | - | nothing to do: they keep two ticks (order 1) |
+| R14 | `RegeneratePickups()` | `game/control.cpp` | moved from above `ControlPhase`'s loop into the tick body |
+| R15 | `resChangeCounter` | `specific/output.cpp` | done in order 1 (5.3) |
+| R16 | `gfLegendTime--` | `game/gameflow.cpp` | on the tick |
+| R17 | `cutseq_busy_timeout--` | `game/deltapak.cpp` | on the tick |
+
+**R6, and why it had to leave the draw path.** What stood in `PrintObjects`
+(`game/draw.cpp`) was
+
+```
+if (item->after_death < 128 && item->after_death > 0 && !(wibble & 3))
+        item->after_death++;
+
+if (item->after_death == 128)
+        KillItem(i);
+```
+
+Three things are wrong with it and only one of them is about the frame rate.
+
+1. It counts per drawn frame, so at sixty every body would fade and be deleted
+   in half the time.
+2. `!(wibble & 3)` **is dead and always has been**. `ControlPhase` steps
+   `wibble = (wibble + 4) & 0xFC`, so the low two bits are always zero and the
+   test is always true. It was plainly meant to make the fade a quarter as
+   fast - 128 steps would be seventeen seconds instead of the 4.3 they
+   actually take. **It is left dead on purpose.** Repairing it would change
+   how long every body in the game lies there, which is a game change and not
+   a frame-rate change.
+3. `KillItem` was being called from inside the walk of the room's own item
+   list. For a **spawned** item (`item_num >= level_items`) `KillItem` ends
+   with `item->next_item = next_item_free; next_item_free = item_num;`
+   (`game/items.cpp`) - it hands the slot to the free list and rewrites the
+   very link the loop is about to follow, so the walk leaves the room and
+   wanders into the free list. That is a real latent bug and moving the kill
+   onto the tick removes it.
+
+The draw now only **marks** the bodies it drew (one byte per item slot) and
+`StepAfterDeathFade()` (`game/draw.cpp`, called from `ControlPhase`) does the
+counting and the killing. What deliberately does **not** change is that only
+bodies in a room that was actually drawn age at all - a corpse in a room the
+camera never sees is still lying there when the player comes back, exactly as
+at thirty, which is why the tick does not simply sweep all 512 slots. The mark
+is also wider than the old increment (`after_death > 0`, not `> 0 && < 128`),
+because the second `if` above also fired on a body already at 128 and the
+skeleton writes that field directly (`game/skeleton.cpp`).
+
+**R10 was not finished in order 2.** Order 2 saved and restored `lara.poisoned`
+around the interpolator's own two extra `phd_LookAt` calls, but `S_DrawPickup`
+(`specific/output.cpp`) issues a `phd_LookAt` of its own once per drawn frame
+whenever a pickup icon is on screen. The guard therefore moved into the ramp
+itself (`aGenerateW2V` and `phd_GenerateW2V`, `specific/3dmath.cpp`), which
+covers every caller there is. Core's own arithmetic is untouched, including the
+fact that `phd_GenerateW2V` ends by calling `aGenerateW2V` and so steps the
+ramp **twice** per `phd_LookAt`.
+
+**Seven more counters the plan's list did not have.** The order also required a
+sweep of everything reachable from the draw. It found:
+
+| what | where | decision |
+|---|---|---|
+| `ammo_change_timer--` | `game/health.cpp` | guarded - the "ammo changed" caption |
+| `PoisonFlag--` | `game/health.cpp` | guarded, though nothing in the build reads it - it is dead state |
+| the F12 bump-mapping debounce (`c++`) | `specific/output.cpp` | guarded - a debug key, but it is a per-frame counter |
+| the underwater dust simulation | `specific/specificfx.cpp` (`DoUwEffect`) | guarded - it is the third weather and behaves exactly like the rain |
+| `print->Active--` | `game/footprnt.cpp` | guarded - footprints would have faded in half the time |
+| the monitor screens' scan band | `specific/file.cpp` (`DoMonitorScreen`) | guarded - `pos` and `reset` both stepped per frame |
+| the gas cloud's `yo` / `sTime` / `mTime` | `specific/specificfx.cpp` (`DrawGasCloud`) | the three steps guarded; the fog bulbs still trigger every frame |
+
+Two more were found and deliberately **left**: the enemy muzzle flash's random
+Z rotation (`DrawBaddieGunFlash`, `game/objects.cpp`) and the steel door's lens
+flare colour (`DrawSteelDoorLensFlare`, `game/tower.cpp`). Both are per-frame
+noise with no state behind them and no duration to get wrong; the rule the
+sweep settled on is that **a counter that carries state or a cadence is
+guarded, pure noise is not**. Lara's cutscene speech head
+(`game/deltapak.cpp`) is the same case.
+
+**And the one that would have moved the game itself.** The plan's safety
+argument (0.4) was that the draw and the logic have separate generators -
+`GetRandomDraw` on `rand_2`, `GetRandomControl` on `rand_1` - so extra frames
+could not desynchronise the simulation. **That is not true of this engine.**
+The draw calls `GetRandomControl` in five places, and the star twinkle
+(`DrawStars`, `specific/specificfx.cpp`) alone takes **four thousand draws out
+of the logic stream on every drawn frame**. At sixty, each of them would
+consume the simulation's generator twice per tick and two runs of the same
+level with the same inputs would drift apart between the frame rates.
+
+So `InterpBeginFrame` remembers `rand_1` on an in-between frame and
+`InterpEndFrame` puts it back (`GetRandomControlSeed()` is the new read-back
+in `specific/function_stubs.cpp`; `SeedRandomControl` already existed). The
+consumption per logic tick is then exactly what it is at thirty, whatever any
+drawing code does. The star twinkle and the floor lasers' water pulse are
+guarded on top of that, because both **write their result back** into
+persistent state and would otherwise flicker at double speed.
+
+**`TICKLOG`.** One line a second beside `INTERPLOG`, under `-log`:
+
+```
+TICKLOG level=3 at=41s fade=0 screenfade=0 weather=30 legend=0 after_death=4
+```
+
+The second is a *logic* second (`GlobalCounter`, thirty by construction in
+both modes), so **the same line has to come out of a thirty hertz run and a
+sixty hertz run of the same scene**. A number that doubles is a counter this
+order missed; a number that halves is a guard that also stopped a tick frame.
+
+**The offline proof.** `Preparation/Tools/Diagnose/InterpTest.cpp` (`bit.bat`)
+grew a `counters` section: a simulated wall-clock second at both rates with the
+engine's own latch rule, asserting that a guarded counter steps thirty times in
+both, that the nine-step screen fade spans the same nine ticks (2n-1 presents
+at sixty, because it begins and ends on a live frame), and that at `fps_mode 0`
+not one frame is ever an in-between frame. It also states the rule's one
+honest limit: a frame that ran long carries **two** logic ticks and can only
+step a counter once, so a counter falls one behind per doubled frame and does
+not catch up - which is what the thirty hertz engine does too, and is why the
+guard is a frame test rather than a tick counter. 49 checks, 0 failed.
 
 ---
 

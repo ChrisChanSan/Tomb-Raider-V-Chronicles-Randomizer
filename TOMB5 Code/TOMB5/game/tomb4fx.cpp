@@ -18,6 +18,7 @@
 #include "spotcam.h"
 #include "lara.h"
 #include "effects.h"
+#include "interpolate.h"		// InterpIsTweenFrame - the fade steps on a tick (#148, order 3)
 
 LIGHTNING_STRUCT Lightning[16];
 SHOCKWAVE_STRUCT ShockWaves[16];
@@ -1307,37 +1308,60 @@ void Fade()
 
 	oldfucker = ScreenFade;
 
-	if (dScreenFade && dScreenFade >= ScreenFade)
+	/* R1 (#148, order 3): THE FADE STEPS ON A LOGIC TICK, IT DRAWS ON EVERY
+	 * FRAME.
+	 *
+	 * ScreenFade is a level of grey that walks towards dScreenFade by
+	 * ScreenFadeSpeed, once per call, and this is called once per DRAWN
+	 * frame from S_OutputPolyList. Unguarded at sixty, every fade in the
+	 * game - the one into a level, the one out of it, the one either side of
+	 * a cutscene - would take half as long in wall-clock time, and
+	 * ScreenFadedOut would be raised half a beat early with it, which is
+	 * what the cutscene wind-up and the level change wait on.
+	 *
+	 * Only the walk is guarded. The tile below is drawn every frame from
+	 * whatever ScreenFade stands at, so the in-between frame shows the same
+	 * grey as the frame before it and the picture keeps its sixty. */
+	if (!InterpIsTweenFrame())
 	{
-		ScreenFade += ScreenFadeSpeed;
-
-		if (ScreenFade > dScreenFade)
+		if (dScreenFade && dScreenFade >= ScreenFade)
 		{
-			ScreenFade = dScreenFade;
+			ScreenFade += ScreenFadeSpeed;
 
-			if (oldfucker >= dScreenFade)
+			if (ScreenFade > dScreenFade)
 			{
-				ScreenFadedOut = 1;
+				ScreenFade = dScreenFade;
 
-				if (ScreenFadeBack)
+				if (oldfucker >= dScreenFade)
 				{
-					dScreenFade = 0;
-					ScreenFadeBack = 0;
+					ScreenFadedOut = 1;
+
+					if (ScreenFadeBack)
+					{
+						dScreenFade = 0;
+						ScreenFadeBack = 0;
+					}
+					else
+						ScreenFading = 0;
 				}
-				else
-					ScreenFading = 0;
 			}
 		}
-	}
-	else if (dScreenFade < ScreenFade)
-	{
-		ScreenFade -= ScreenFadeSpeed;
-
-		if (ScreenFade < dScreenFade)
+		else if (dScreenFade < ScreenFade)
 		{
-			ScreenFade = dScreenFade;
-			ScreenFading = 0;
+			ScreenFade -= ScreenFadeSpeed;
+
+			if (ScreenFade < dScreenFade)
+			{
+				ScreenFade = dScreenFade;
+				ScreenFading = 0;
+			}
 		}
+
+		// TICKLOG counts the grey steps that really happened, not the
+		// calls - so the number says how far a fade got in that second and
+		// has to be the same at both frame rates.
+		if (ScreenFade != oldfucker)
+			InterpNoteStep(INTERP_STEP_FADE);
 	}
 
 	if (ScreenFade || dScreenFade)

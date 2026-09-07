@@ -69,7 +69,29 @@
  * InterpBeginFrame and InterpEndFrame return before they write anything at
  * all - no snapshot is applied, no phd_LookAt is issued, not one byte of the
  * game's state is touched. That is proof 6 of the plan (K11): the thirty
- * hertz picture stays byte-identical to the build before this order. */
+ * hertz picture stays byte-identical to the build before this order.
+ *
+ * ORDER 3 ADDED TWO THINGS TO THIS FILE, and both are about the frame that
+ * carries no logic tick rather than about the blend:
+ *
+ *   InterpIsTweenFrame()   the one criterion every per-frame counter in the
+ *                          build now asks before it steps. Its own note is
+ *                          below.
+ *
+ *   THE LOGIC RNG IS ROLLED BACK over a tween frame. The plan's safety
+ *   argument (0.4) said the draw and the logic have separate generators -
+ *   GetRandomDraw on rand_2, GetRandomControl on rand_1 - so extra frames
+ *   cannot desynchronise the game. That is not true of this engine: the
+ *   DRAW path calls GetRandomControl in at least five places (the star
+ *   twinkle, four thousand draws a frame; the floor lasers' water pulse;
+ *   the enemy muzzle flash; the steel door's lens flare; the cutscene
+ *   speech head). At sixty each of them would consume the LOGIC stream
+ *   twice per tick and the simulation would drift apart between the two
+ *   frame rates. So InterpBeginFrame remembers rand_1 on a tween frame and
+ *   InterpEndFrame puts it back, which makes the consumption per logic tick
+ *   exactly what it is at thirty - one frame's worth - whatever any drawing
+ *   code does. Proof 5 of the plan, a byte-identical savegame from the same
+ *   inputs at both rates, rests on this. */
 
 // The state before the last logic tick. Called once per tick.
 void InterpCapturePrev();
@@ -98,3 +120,59 @@ void InterpInvalidate(const char* why);
  * interpolated. For the log lines of other modules (HDLOG); it is not part of
  * the mechanism. */
 float InterpFrameAlpha();
+
+/* THE ONE CRITERION OF ORDER 3 (#148).
+ *
+ * True when the frame being drawn carries NO logic tick - the in-between
+ * frame of the sixty hertz cadence. Every counter in the build that steps
+ * once per DRAWN frame and is meant to measure TIME asks this and steps only
+ * when it is false, so that a fade, a raindrop, a flash and a corpse take
+ * exactly as long in wall-clock seconds at sixty as they do at thirty.
+ * "Everything must feel like vanilla, only more frames" is the whole rule of
+ * this order, and this is the whole of its mechanism.
+ *
+ * WHAT IT IS NOT: it is not "alpha < 1". A cutscene frame is drawn live and
+ * still carries no tick; a frame whose previous state was invalidated is
+ * drawn live and still carries no tick. Both must stop the counters, or a
+ * fade would run at double speed through every cutscene. The latch is
+ * therefore set from the cadence itself and not from whether the snapshot
+ * was applied.
+ *
+ * ITS LIFETIME IS THE WHOLE GAME-LOOP ITERATION, not just the draw. Two of
+ * the counters (gfLegendTime in DoLevel, cutseq_busy_timeout in
+ * handle_cutseq_triggering) sit in the main loop on either side of
+ * DrawPhaseGame, so the latch is set at the top of DrawPhaseGame and STAYS
+ * SET until the next frame sets it again. The alternation is what matters
+ * and it holds on both sides of the call.
+ *
+ * AND IT IS FALSE IN EVERY MODAL LOOP. The inventory, the load/save screen,
+ * the death menu and the load screen's fade loop present at two ticks and
+ * step their own counters once per present, exactly as they did at thirty -
+ * so S_DumpScreen calls InterpNoteClassicPresent() whenever the present it
+ * just made was a thirty hertz one, which puts the latch down. Without that,
+ * a modal loop entered right after a tween frame would inherit a `true` that
+ * nothing inside it could ever clear, and RenderLoadPic's `while (DoFade !=
+ * 2)` would never end.
+ *
+ * At fps_mode 0 it is false always and every guard in the build is inert. */
+bool InterpIsTweenFrame();
+
+/* A present that is not a sixty hertz game frame's own. Called from
+ * S_DumpScreen and S_DumpScreenFrame - see the note above. */
+void InterpNoteClassicPresent();
+
+/* WHAT STEPPED THIS SECOND (TICKLOG). The counters of order 3 report
+ * themselves so that "identical in wall-clock time" is a measured number
+ * rather than a claim: the same TICKLOG line must come out of a thirty and a
+ * sixty run. Counted only with -log. */
+enum InterpStepKind
+{
+	INTERP_STEP_FADE = 0,		// Fade()          - the screen fade
+	INTERP_STEP_SCREENFADE,		// DoScreenFade()  - death and level change
+	INTERP_STEP_WEATHER,		// DoRain / DoSnow / DoUwEffect
+	INTERP_STEP_LEGEND,		// gfLegendTime    - the level caption
+	INTERP_STEP_AFTERDEATH,		// item->after_death - the corpse fade
+	INTERP_STEP_COUNT
+};
+
+void InterpNoteStep(int kind);

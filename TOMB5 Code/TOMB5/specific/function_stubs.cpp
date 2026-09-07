@@ -79,6 +79,13 @@ void SeedRandomControl(long seed)
 	rand_1 = seed;
 }
 
+// #148, order 3 - the note is in function_stubs.h. Read only, and only by
+// game\interpolate.cpp.
+long GetRandomControlSeed()
+{
+	return rand_1;
+}
+
 long GetRandomDraw()
 {
 	rand_2 = 0x41C64E6D * rand_2 + 12345;

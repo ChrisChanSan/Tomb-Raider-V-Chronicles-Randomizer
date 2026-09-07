@@ -74,6 +74,14 @@ static short dLightningRand;
 static short LightningSFXDelay = 0;
 short no_rotation[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
+/* R6 (#148, order 3): WHICH BODIES THE DRAW SAW THIS FRAME.
+ *
+ * PrintObjects sets a byte per item; StepAfterDeathFade, called once per
+ * logic tick from ControlPhase, counts them up and kills the ones that
+ * reached 128. One byte per item slot and no allocation, and the two long
+ * notes at the two ends say why the counting had to leave the draw at all. */
+static unsigned char g_afterDeathSeen[MAX_ITEMS];
+
 static long outside_top;
 static long outside_left;
 static long outside_right;
@@ -508,7 +516,22 @@ void SkyDrawPhase()
 		phd_PushMatrix();
 		phd_TranslateAbs(camera.pos.x, camera.pos.y, camera.pos.z);
 
-		if (gfLevelFlags & GF_LIGHTNING)
+		/* R7 (#148, order 3): THE STORM IS A CLOCK, so it runs on logic
+		 * ticks and not on drawn frames.
+		 *
+		 * Everything in this block is state: how many flashes are left in
+		 * the strike (LightningCount), how bright it is right now
+		 * (LightningRand, which UpdateSkyLightning ramps), and how long
+		 * until the thunder (LightningSFXDelay). At sixty presents a
+		 * second, unguarded, the flicker would run at double speed and the
+		 * thunder would follow the flash half a second too early - and the
+		 * chance of a strike starting, `!(GetRandomDraw() & 127)`, would be
+		 * rolled twice as often, so storms would begin twice as often too.
+		 *
+		 * The colour it produces, LightningRGB, is a static the sky reads;
+		 * an in-between frame simply draws the last one, which is what
+		 * every other thing on that frame does. */
+		if ((gfLevelFlags & GF_LIGHTNING) && !InterpIsTweenFrame())
 		{
 			if (!LightningCount && !LightningRand)
 			{
@@ -1011,11 +1034,60 @@ void PrintObjects(short room_number)
 			GlobalAlpha = 0xFF000000;
 		}
 
-		if (item->after_death < 128 && item->after_death > 0 && !(wibble & 3))
-			item->after_death++;
-
-		if (item->after_death == 128)
-			KillItem(i);
+		/* R6 (#148, order 3): THE CORPSE FADE IS GAME STATE, so the DRAW
+		 * only writes down that it saw the body and the LOGIC TICK does the
+		 * counting. StepAfterDeathFade(), below, is the other half.
+		 *
+		 * What stood here was
+		 *
+		 *     if (item->after_death < 128 && item->after_death > 0 &&
+		 *         !(wibble & 3))
+		 *             item->after_death++;
+		 *
+		 *     if (item->after_death == 128)
+		 *             KillItem(i);
+		 *
+		 * and it has three separate problems, only one of which is about
+		 * the frame rate:
+		 *
+		 * ONE. It counts per drawn frame, so at sixty every body would fade
+		 * out and be deleted in half the time.
+		 *
+		 * TWO. `!(wibble & 3)` is DEAD and has been for as long as this
+		 * source has existed. ControlPhase steps `wibble = (wibble + 4) &
+		 * 0xFC` (game\control.cpp), so the low two bits are always zero and
+		 * the test is always true. It was plainly meant to make the fade a
+		 * quarter as fast - 128 steps at 30 Hz would be seventeen seconds
+		 * instead of the 4.3 it actually takes. It is left dead on purpose:
+		 * repairing it would change how long every body in the game lies
+		 * there, which is a game change and not a frame-rate change.
+		 *
+		 * THREE, and this is a real bug that the move happens to remove.
+		 * KillItem was being called from inside the walk of the room's own
+		 * item list, `for (i = r->item_number; i != NO_ITEM; i =
+		 * items[i].next_item)`. For a SPAWNED item (item_num >=
+		 * level_items) KillItem ends with `item->next_item = next_item_free;
+		 * next_item_free = item_num;` (game\items.cpp) - it hands the slot
+		 * to the free list and REWRITES the very link the loop is about to
+		 * follow. The walk then leaves the room and wanders into the free
+		 * list, drawing and ageing whatever it finds there. Doing the kill
+		 * on the tick, after the walk is over, cannot do that.
+		 *
+		 * WHAT DOES NOT CHANGE: only bodies in a room that was actually
+		 * DRAWN age, exactly as before. That is why the draw marks and the
+		 * tick does not simply sweep all 512 slots - a corpse in a room the
+		 * camera never sees must still be lying there when the player comes
+		 * back, which is what happens at thirty today.
+		 *
+		 * THE MARK IS WIDER THAN THE INCREMENT on purpose: `after_death > 0`
+		 * and not `> 0 && < 128`, because the second `if` above also fired
+		 * on a body that was ALREADY at 128 without being counted up to it.
+		 * The skeleton writes the field directly (`item->after_death =
+		 * (short)(phd_sqrt(info.distance) >> 4)`, game\skeleton.cpp), so
+		 * that case is reachable. StepAfterDeathFade carries both tests
+		 * over unchanged. */
+		if (item->after_death > 0)
+			g_afterDeathSeen[i] = 1;
 	}
 
 	nPolyType = 3;
@@ -1028,6 +1100,43 @@ void PrintObjects(short room_number)
 	r->top = phd_winymax;
 	r->right = 0;
 	r->bottom = 0;
+}
+
+/* R6 (#148, order 3): THE CORPSE FADE, ON THE LOGIC TICK.
+ *
+ * The other half of the mark PrintObjects leaves. Called once per tick from
+ * ControlPhase, which is what makes a body take the same 4.3 seconds to
+ * vanish at sixty frames a second as it does at thirty; and after the room
+ * walk rather than inside it, which is what makes KillItem safe (the long
+ * note in PrintObjects has the three reasons).
+ *
+ * The two tests are carried over from that code word for word, including the
+ * `< 128` that stops the count and the `== 128` that kills, so that the only
+ * thing that changed is WHEN they run. The dead `!(wibble & 3)` is gone with
+ * its own note there; it was always true and dropping it changes nothing.
+ *
+ * The marks are cleared as they are read, so a body whose room is not drawn
+ * for a while simply does not age - which is exactly what happens today. */
+void StepAfterDeathFade()
+{
+	for (int i = 0; i < MAX_ITEMS; i++)
+	{
+		if (!g_afterDeathSeen[i])
+			continue;
+
+		g_afterDeathSeen[i] = 0;
+
+		ITEM_INFO* item = &items[i];
+
+		if (item->after_death < 128 && item->after_death > 0)
+		{
+			item->after_death++;
+			InterpNoteStep(INTERP_STEP_AFTERDEATH);
+		}
+
+		if (item->after_death == 128)
+			KillItem((short)i);
+	}
 }
 
 void DrawRooms(short current_room)
@@ -1221,7 +1330,14 @@ void DrawRooms(short current_room)
 	for (int i = 0; i < number_draw_rooms; i++)
 		PrintObjects(draw_rooms[i]);
 
-	aUpdate();
+	/* R9 (#148, order 3): aUpdate is `aWibble++` and nothing else
+	 * (specific\alexstuff.cpp). aWibble is a UV scroll read by the water
+	 * surfaces and the flat sky (specific\specificfx.cpp), so at sixty it
+	 * would scroll at double speed. The guard is at the call and not inside
+	 * aUpdate so that the counter and its rule stand on the same page as
+	 * the rest of the frame. */
+	if (!InterpIsTweenFrame())
+		aUpdate();
 }
 
 void CalculateObjectLightingLara()

@@ -19,6 +19,7 @@
 #include "../game/spotcam.h"
 #include "../game/control.h"
 #include "../game/lara.h"
+#include "../game/interpolate.h"	// InterpIsTweenFrame - the poison ramp (#148, order 3)
 
 PHD_VECTOR CamPos;
 SVECTOR CamRot;
@@ -574,7 +575,24 @@ static void aGenerateW2V(PHD_3DPOS* viewPos)
 	aMXPtr[M21] = aW2VMx[M21];
 	aMXPtr[M22] = aW2VMx[M22];
 
-	if (lara.dpoisoned != lara.poisoned)
+	/* R10 (#148, order 3): THE POISON RAMP AT ITS SOURCE.
+	 *
+	 * Core put a piece of game state inside the view matrix: how green the
+	 * screen is walks towards lara.dpoisoned by a sixteenth per call, and
+	 * the call is phd_LookAt. Order 2 already saved and restored it around
+	 * the interpolator's own two extra phd_LookAt calls, but that was not
+	 * the whole of it - S_DrawPickup issues a phd_LookAt of its own once per
+	 * DRAWN frame (specific\output.cpp) whenever a pickup icon is on
+	 * screen, and at sixty that alone would run the ramp an extra time per
+	 * tick.
+	 *
+	 * So the guard sits here, in the ramp itself, and covers every caller
+	 * there is and every one there will be. What it must NOT do is change
+	 * the vanilla count: at thirty this test is always false and the ramp
+	 * runs exactly as often as it does today, including the fact that
+	 * phd_GenerateW2V ends by calling aGenerateW2V and therefore steps it
+	 * TWICE per phd_LookAt. That is Core's own arithmetic and it stays. */
+	if (lara.dpoisoned != lara.poisoned && !InterpIsTweenFrame())
 	{
 		lara.poisoned += (lara.dpoisoned - lara.poisoned) >> 4;
 
@@ -661,7 +679,9 @@ void phd_GenerateW2V(PHD_3DPOS* viewPos)
 	phd_mxptr[M21] = w2v_matrix[M21];
 	phd_mxptr[M22] = w2v_matrix[M22];
 
-	if (lara.dpoisoned != lara.poisoned)
+	// R10 again, in the integer half of the same routine - the note is over
+	// the copy in aGenerateW2V above (#148, order 3).
+	if (lara.dpoisoned != lara.poisoned && !InterpIsTweenFrame())
 	{
 		lara.poisoned += (lara.dpoisoned - lara.poisoned) >> 4;
 

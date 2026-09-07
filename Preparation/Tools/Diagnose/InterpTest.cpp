@@ -402,15 +402,198 @@ static void cadence()
 	}
 }
 
+/* -------------------------------------------------------- the counters -- */
+
+/* ORDER 3, and the whole of its claim in one table.
+ *
+ * Every counter in the build that used to step once per DRAWN frame now asks
+ * InterpIsTweenFrame() first, and the engine's rule for that is exactly
+ *
+ *     tween = (alpha < 1), and alpha = fps_mode && framecount < 0 ? 0.5 : 1
+ *
+ * latched once per frame at the top of DrawPhaseGame (game\interpolate.cpp).
+ * What has to come out of it is that a whole simulated SECOND of wall-clock
+ * time produces the SAME number of steps at thirty and at sixty - because a
+ * fade that takes 24 frames at thirty has to take 24 steps and 48 frames at
+ * sixty, or the death screen would come half a second early.
+ *
+ * The five counters below are the five TICKLOG reports, and each is modelled
+ * the way its own code now reads:
+ *
+ *   fade        Fade()          - a grey level walking to a target by a
+ *                                 speed, and the thing DoLevel waits on
+ *   screenfade  DoScreenFade()  - nine steps, then DoFade = 2. RenderLoadPic
+ *                                 cannot leave its loop until this happens,
+ *                                 which is why a stuck guard would HANG the
+ *                                 game and not merely slow a fade down
+ *   weather     DoRain/DoSnow/DoUwEffect - one simulation step
+ *   legend      gfLegendTime--  - the level caption's dwell
+ *   afterdeath  the corpse fade - 128 steps to KillItem
+ *
+ * The interesting one is `screenfade`: what is asserted is not only that the
+ * step count matches but that the number of PRESENTS a fade lasts DOUBLES at
+ * sixty, which is the same statement said in wall-clock time. */
+static void counters()
+{
+	printf("counters - what steps per logic tick (order 3)\n");
+
+	struct Run
+	{
+		int frames;		// presents in the simulated second
+		int ticks;		// logic ticks in it
+		int steps;		// guarded counter steps
+		int fadePresents;	// presents from SetFade to DoFade == 2
+	};
+
+	Run r[2];
+
+	for (int mode = 0; mode <= 1; mode++)
+	{
+		const int nframes = mode ? 1 : 2;
+		const int presents = mode ? 60 : 30;	// one wall-clock second
+		long framecount = 0;
+
+		// the guarded counter and the nine-step screen fade
+		int steps = 0;
+		int fadeCnt = 0, doFade = 1, fadePresents = 0;
+
+		r[mode].frames = 0;
+		r[mode].ticks = 0;
+		r[mode].fadePresents = 0;
+
+		for (int i = 0; i < presents; i++)
+		{
+			/* The engine's own two lines, transcribed: InterpAlphaNow and
+			 * the latch InterpBeginFrame sets from it. */
+			const float alpha = (mode && framecount < 0) ? 0.5F : 1.0F;
+			const bool tween = alpha < 1.0F;
+
+			r[mode].frames++;
+
+			// any guarded counter - Fade, the weather, the legend, the
+			// corpse fade: they all reduce to this one test
+			if (!tween)
+				steps++;
+
+			// DoScreenFade, as it now stands, including the wait on it
+			if (doFade == 1)
+			{
+				fadePresents++;
+
+				if (!tween)
+				{
+					fadeCnt++;
+
+					if (fadeCnt > 8)
+						doFade = 2;
+				}
+			}
+
+			for (framecount += nframes; framecount > 0; framecount -= 2)
+				r[mode].ticks++;
+		}
+
+		r[mode].steps = steps;
+		r[mode].fadePresents = fadePresents;
+
+		printf("  fps_mode %d: presents=%d ticks=%d steps=%d  a 9-step fade took %d presents\n",
+			mode, r[mode].frames, r[mode].ticks, r[mode].steps, r[mode].fadePresents);
+	}
+
+	ok(r[0].frames == 30 && r[1].frames == 60,
+		"a second is 30 presents at thirty and 60 at sixty", r[1].frames, 60);
+	ok(r[0].ticks == r[1].ticks && r[0].ticks == 30,
+		"the same second is 30 logic ticks in both modes", r[1].ticks, 30);
+	ok(r[0].steps == r[1].steps,
+		"a guarded counter steps the same number of times in both modes",
+		r[1].steps, r[0].steps);
+	ok(r[1].steps == 30,
+		"and that number is the tick count, not the frame count", r[1].steps, 30);
+	/* 2n - 1 AND NOT 2n, and the missing one is real rather than a rounding
+	 * of the model. The fade begins on a live frame and ends on one, so at
+	 * sixty the nine steps are spread over nine live frames with eight
+	 * in-between frames wedged between them - seventeen presents, not
+	 * eighteen. It lasts nine LOGIC TICKS in both modes, which is what the
+	 * user's rule asks for; in wall-clock time the sixty hertz fade ends one
+	 * sixtieth of a second sooner because it does not sit through a trailing
+	 * in-between frame it has nothing left to draw on. */
+	ok(r[1].fadePresents == 2 * r[0].fadePresents - 1,
+		"the screen fade spans the same nine ticks - 2n-1 presents at sixty",
+		r[1].fadePresents, 2 * r[0].fadePresents - 1);
+
+	/* AND THE SAME AGAIN THROUGH A HITCH. A frame that took four ticks feeds
+	 * four into the accumulator, which then runs two logic steps in one
+	 * ControlPhase and comes back to the cadence. A counter must not lose a
+	 * step over that: the number of guarded steps in the run has to be the
+	 * number of TICKS, whatever the frame times did. */
+	{
+		long framecount = 0;
+		int steps = 0, ticks = 0;
+
+		for (int i = 0; i < 600; i++)
+		{
+			const bool tween = framecount < 0;
+
+			if (!tween)
+				steps++;
+
+			const int nframes = (i == 100 || i == 101) ? 4 : 1;
+
+			for (framecount += nframes; framecount > 0; framecount -= 2)
+				ticks++;
+		}
+
+		/* NOT EQUAL, and this is the one honest limit of the rule. Each of
+		 * the two slow frames here fed four sixtieths into the accumulator
+		 * and therefore ran TWO logic ticks, while a counter that steps once
+		 * per drawn frame can only step once for it. So the counter ends two
+		 * behind the tick count - one for each doubled frame - and never
+		 * catches up.
+		 *
+		 * That is deliberate and it is what the thirty hertz engine does
+		 * too when a frame runs long: a fade that stutters with the frame
+		 * rate is right, a fade that sprints to catch up is not. It is also
+		 * why the guard is a FRAME test and not a tick counter. */
+		printf("  through a hitch: steps=%d ticks=%d (a doubled frame runs two ticks, steps once)\n",
+			steps, ticks);
+		ok(ticks == 303, "the hitch runs its extra logic ticks", ticks, 303);
+		ok(steps == 301, "and the counter is behind by one per doubled frame, no more",
+			steps, 301);
+		ok(framecount == 0 || framecount == -1,
+			"the cadence comes back after the hitch", framecount, 0);
+	}
+
+	/* fps_mode 0 TAKES THE WHOLE THING OUT. At thirty the accumulator never
+	 * ends a call below zero, so the latch is never set and every guard in
+	 * the build reads false on every frame - which is the byte-identical
+	 * claim (plan, proof 6 / K11) said as arithmetic. */
+	{
+		long framecount = 0;
+		int tween = 0;
+
+		for (int i = 0; i < 1800; i++)
+		{
+			if (framecount < 0)
+				tween++;
+
+			for (framecount += 2; framecount > 0; framecount -= 2)
+				;
+		}
+
+		ok(tween == 0, "fps_mode 0: not one frame is ever a tween frame", tween, 0);
+	}
+}
+
 int main()
 {
-	printf("InterpTest - the arithmetic of the 60 FPS interpolation (#148, order 2)\n");
+	printf("InterpTest - the arithmetic of the 60 FPS interpolation (#148, orders 2 and 3)\n");
 	printf("built against TOMB5 Code" "\\" "TOMB5" "\\" "game" "\\" "interpolate_math.h\n\n");
 
 	angles();
 	positions();
 	thresholds();
 	cadence();
+	counters();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

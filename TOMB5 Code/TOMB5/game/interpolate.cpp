@@ -112,6 +112,18 @@ namespace
 	bool g_applied = false;		// this frame wrote into the live state
 	float g_alpha = 1.0F;		// what this frame is being drawn at
 
+	/* ORDER 3. The frame being drawn carries no logic tick. Latched at the
+	 * top of the frame and held until the next one - the counters that ask
+	 * it sit on both sides of DrawPhaseGame. See the note in the header. */
+	bool g_tween = false;
+
+	// The logic RNG over a tween frame - see the header's note on rand_1.
+	long g_seed = 0;
+	bool g_seedSaved = false;
+
+	// TICKLOG. What stepped this second, by kind.
+	int g_step[INTERP_STEP_COUNT] = { 0 };
+
 	/* THE LOG (INTERPLOG). Counted always - a run at fps_mode 0 is the
 	 * comparison the per-frame movement has to halve against, and it cannot
 	 * be that if the counters only run at sixty - but written only with
@@ -297,6 +309,31 @@ namespace
 				g_snapTeleport, g_snapRoomJump, g_snapObject, g_snapInvalid,
 				g_snapCamCut, g_snapCutscene);
 
+		/* TICKLOG - order 3's own proof, and the one the user reads.
+		 *
+		 * Every counter this order guarded reports how often it stepped in
+		 * the second that just ended. The second is a LOGIC second
+		 * (GlobalCounter, thirty by construction in both modes), so the
+		 * same line has to come out of a thirty hertz run and a sixty hertz
+		 * run of the same scene. A number that doubles is a counter that
+		 * was missed; a number that halves is a guard that also stopped a
+		 * tick frame.
+		 *
+		 * There is no expected VALUE here to check against - fade steps
+		 * only happen while something fades - which is why the line is a
+		 * comparison between two runs and not an assertion. Written only
+		 * with -log. */
+		if (gLogEnabled && g_secFrames > 0)
+			Log("TICKLOG level=%d at=%ds fade=%d screenfade=%d weather=%d "
+				"legend=%d after_death=%d",
+				(int)gfLevelId, g_at,
+				g_step[INTERP_STEP_FADE], g_step[INTERP_STEP_SCREENFADE],
+				g_step[INTERP_STEP_WEATHER], g_step[INTERP_STEP_LEGEND],
+				g_step[INTERP_STEP_AFTERDEATH]);
+
+		for (int k = 0; k < INTERP_STEP_COUNT; k++)
+			g_step[k] = 0;
+
 		g_at++;
 		g_secFrames = 0;
 		g_secTween = 0;
@@ -460,8 +497,56 @@ float InterpFrameAlpha()
 	return g_alpha;
 }
 
+bool InterpIsTweenFrame()
+{
+	return g_tween;
+}
+
+void InterpNoteClassicPresent()
+{
+	/* A present that waited its full two ticks is a thirty hertz one - the
+	 * inventory, the load/save screen, the death menu, the loading bar, the
+	 * load screen's fade loop, and DrawPhaseGame itself at the title. Their
+	 * counters step once per present and always did, so the latch has to be
+	 * down while they run. Above all: RenderLoadPic's loop is `do { ...
+	 * S_OutputPolyList(); S_DumpScreen(); } while (DoFade != 2)`, and
+	 * DoScreenFade is the only thing that ever sets DoFade to 2. A latch
+	 * left standing from the last game frame would stop it and the loading
+	 * screen would never end. */
+	g_tween = false;
+}
+
+void InterpNoteStep(int kind)
+{
+	if (gLogEnabled && kind >= 0 && kind < INTERP_STEP_COUNT)
+		g_step[kind]++;
+}
+
 void InterpBeginFrame(float alpha)
 {
+	/* THE LATCH, AND IT IS SET BEFORE EVERY WAY OUT OF THIS FUNCTION.
+	 *
+	 * A cutscene frame and a frame with no previous state are drawn LIVE -
+	 * the returns below write nothing - but they still carry no logic tick,
+	 * and the counters of order 3 must stop on them just the same. Reading
+	 * `alpha` rather than what the snapshot did is what makes that true.
+	 *
+	 * fps_mode 0 hands 1 in and this is false for the whole run. */
+	g_tween = (alpha < 1.0F);
+
+	/* AND THE LOGIC RNG IS PUT ASIDE (order 3). See the header: several
+	 * drawing routines call GetRandomControl, which is the SIMULATION's
+	 * generator, so a second drawn frame per tick would move the game.
+	 * InterpEndFrame puts this back and the tick then finds the stream
+	 * exactly where a thirty hertz run would have left it. */
+	g_seedSaved = false;
+
+	if (g_tween)
+	{
+		g_seed = GetRandomControlSeed();
+		g_seedSaved = true;
+	}
+
 	g_applied = false;
 	g_alpha = 1.0F;
 	g_touchedItems = 0;
@@ -679,6 +764,19 @@ void InterpEndFrame()
 		g_applied = false;
 	}
 
+	/* AND THE LOGIC RNG GOES BACK (order 3), whatever this frame drew and
+	 * whether or not the snapshot was applied - a cutscene frame draws live
+	 * and frigup_lara still re-rolls Lara's speech head out of
+	 * GetRandomControl on it. Nothing between here and the next
+	 * ControlPhase touches the stream, and on a tween frame that
+	 * ControlPhase runs no tick at all, so what the next tick reads is what
+	 * a thirty hertz run would have left it. */
+	if (g_seedSaved)
+	{
+		SeedRandomControl(g_seed);
+		g_seedSaved = false;
+	}
+
 	g_alpha = 1.0F;
 	g_touchedItems = 0;
 	g_touchedFxs = 0;
@@ -719,6 +817,13 @@ void InterpInvalidate(const char* why)
 	g_touchedFxs = 0;
 	g_touchedHairs = 0;
 	g_camTouched = false;
+
+	/* And the frame is a live one again (order 3). Every caller of this is a
+	 * level boundary or the return from a menu, and what follows all of them
+	 * is a modal-rate present or a fresh cadence - either way no counter may
+	 * be left standing still. */
+	g_tween = false;
+	g_seedSaved = false;
 
 	if (gLogEnabled)
 	{

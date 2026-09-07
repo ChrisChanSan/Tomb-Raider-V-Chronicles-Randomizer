@@ -43,6 +43,7 @@
 #include "../game/draw.h"
 #include "../game/health.h"
 #include "../game/text.h"
+#include "../game/interpolate.h"	// the in-between frame's counters (#148, order 3)
 #include "../tomb5/tomb5.h"
 
 D3DTLVERTEX aVertexBuffer[1024];
@@ -1337,6 +1338,25 @@ long S_DumpScreen()
 {
 	long n;
 
+	/* #148, order 3: WAS THIS A THIRTY HERTZ PRESENT?
+	 *
+	 * Every modal loop in the build comes through here with the default two
+	 * ticks - the inventory, the load/save screen, the death menu, the load
+	 * screen's fade loop - and so does DrawPhaseGame at the title. Their
+	 * per-present counters step once per present and always have, so the
+	 * in-between-frame latch must be down while they run. It is put down
+	 * here, at the one place every present in the game passes through,
+	 * rather than at each loop.
+	 *
+	 * Before the spin and not after it: a modal loop's counters run in
+	 * S_OutputPolyList, i.e. BEFORE this call, so putting it down here
+	 * clears the way for the loop's second iteration onwards. The very
+	 * first iteration can still inherit a `true` from the last game frame
+	 * and skip one step - one sixtieth of a second on a loading screen -
+	 * which is the whole of the imprecision this costs. */
+	if (gPresentMinTicks >= 2)
+		InterpNoteClassicPresent();
+
 	n = Sync();
 
 	while (n < gPresentMinTicks)
@@ -1347,7 +1367,15 @@ long S_DumpScreen()
 		n++;
 	}
 
-	GnFrameCounter++;
+	/* R12 (#148, order 3). GnFrameCounter is read as a CLOCK, not as a
+	 * frame number: game\text.cpp blinks a string on `GnFrameCounter & 8`,
+	 * S_DrawPickup spins the pickup on `(GnFrameCounter & 0x7F) << 9` and
+	 * the inventory reads it too. At sixty, unguarded, every one of those
+	 * would run at double speed. In a modal loop the latch is down (see
+	 * above) and this steps once per present exactly as it did. */
+	if (!InterpIsTweenFrame())
+		GnFrameCounter++;
+
 	ProfBegin(PROF_FLIP);
 	_EndScene();
 	DXShowFrame();
@@ -1360,6 +1388,11 @@ long S_DumpScreen()
 long S_DumpScreenFrame()
 {
 	long n;
+
+	// The loading bar's own present, which has always run at up to sixty
+	// (see the plan, F8). It is not a game frame at all, so the in-between
+	// latch goes down here too (#148, order 3).
+	InterpNoteClassicPresent();
 
 	n = Sync();
 
@@ -1642,7 +1675,12 @@ void S_OutputPolyList()
 		{
 			DrawFlash();
 
-			if (FlashFader)
+			/* R3 (#148, order 3): the white flash a weapon and a pickup
+			 * throw over the screen. FlashFader is its brightness and it
+			 * walks down by two per DRAWN frame, so at sixty the flash
+			 * would be over in half the time. The flash itself is drawn
+			 * above on every frame. */
+			if (FlashFader && !InterpIsTweenFrame())
 				FlashFader -= 2;
 		}
 
@@ -1656,7 +1694,12 @@ void S_OutputPolyList()
 		DrawSortList();
 	}
 
-	c++;
+	// The F12 bump-mapping toggle's own debounce - every second DRAWN frame,
+	// which at sixty would flip it twice as fast while the key is held. A
+	// debug key and nothing more, but it is a per-frame counter and it costs
+	// one test to keep it at the rate it was written for (#148, order 3).
+	if (!InterpIsTweenFrame())
+		c++;
 
 	if (c == 2)
 	{

@@ -97,6 +97,57 @@ only two per-present counters that were missing from this table. Both are in
 the main loop rather than in a draw function, which is why the first survey
 walked past them.
 
+**ORDER 3 IS BUILT (2026-09-07). R1-R17 are all done**, each of them guarded
+by one criterion, `InterpIsTweenFrame()` in `game\interpolate.h`, and inert at
+`fps_mode 0`. R13 needed nothing (order 1 already keeps the modal loops at two
+ticks) and R15 was done in order 1. R6 and R14 moved into `ControlPhase`; the
+rest step only on a frame that carries a tick.
+
+The sweep the order called for afterwards found **seven more of the same kind
+that this table did not have**, and one of them is not a timing question at
+all:
+
+| what | file | decision |
+|---|---|---|
+| `ammo_change_timer--` | `game\health.cpp` | guarded |
+| `PoisonFlag--` | `game\health.cpp` | guarded (dead state - nothing reads it) |
+| the F12 bump-map debounce | `specific\output.cpp` | guarded |
+| `DoUwEffect` - the underwater dust | `specific\specificfx.cpp` | guarded; it is a third weather with exactly the rain's shape |
+| `print->Active--` - footprints | `game\footprnt.cpp` | guarded |
+| `DoMonitorScreen` - the scan band | `specific\file.cpp` | guarded |
+| `DrawGasCloud` - `yo`/`sTime`/`mTime` | `specific\specificfx.cpp` | the three steps guarded, the fog bulbs still every frame |
+
+Left on purpose, as pure per-frame noise with no state and no duration:
+`DrawBaddieGunFlash`'s random muzzle rotation (`game\objects.cpp`),
+`DrawSteelDoorLensFlare`'s colour (`game\tower.cpp`) and `frigup_lara`'s
+speech-head re-roll (`game\deltapak.cpp`).
+
+**AND ONE CORRECTION TO THIS PLAN'S OWN SAFETY ARGUMENT.** 0.4's closing
+paragraph says the logic RNG and the draw RNG are separate generators and that
+extra drawn frames therefore consume only `rand_2` and cannot desynchronise
+the game. **That is wrong.** Five places in the DRAW path call
+`GetRandomControl`, i.e. `rand_1`:
+
+| where | how much |
+|---|---|
+| `DrawStars` (`specific\specificfx.cpp`) | two draws per star, 2048 stars - **four thousand per drawn frame** |
+| `S_DrawFloorLasers` (same file) | one per grid point while `trigger_flags` is set |
+| `DrawBaddieGunFlash` (`game\objects.cpp`) | one per flash |
+| `DrawSteelDoorLensFlare` (`game\tower.cpp`) | four per frame |
+| `frigup_lara` (`game\deltapak.cpp`) | one per cutscene frame |
+
+At sixty every one of them would take twice as much of the simulation's
+stream per tick, and proof 5 - a byte-identical savegame at both rates - would
+have failed on the plan's own premise. Order 3 makes it true instead:
+`InterpBeginFrame` remembers `rand_1` on an in-between frame and
+`InterpEndFrame` puts it back, so the consumption per logic tick is what it is
+at thirty whatever any drawing code does. `GetRandomControlSeed()`
+(`specific\function_stubs.cpp`) is the read-back that needed adding.
+
+The two that also WRITE their result back into persistent state - the star
+twinkle and the laser pulse - are guarded on top of the rollback, because
+otherwise they would visibly change twice per tick.
+
 **Input, and why it is not on this list.** Per-present INPUT was surveyed for
 order 1b and there is exactly one place: `TitleOptions()`
 (`game\gameflow.cpp`), called once per present from `DoTitle`, and everything
@@ -348,7 +399,7 @@ costs the game.
 |---|---|---|---|
 | 1. The clock split | `tomb5.fps_mode` in `tomb5_options` (`global\types.h:2631-2685`), registry read/write (`tomb5\tomb5.cpp:200-206, 333-337, 464-468` pattern), a menu row on the options page (`tomb5\troyestuff.cpp:143+`, `first_person_smooth` at `:726-786` is the exact pattern for a multi-value row). `gPresentMinTicks` in `specific\output.cpp:1283`, set and reset around the present in `game\draw.cpp:394-411`. `FPSLOG`'s budget constants (`specific\hd\hd_level.cpp:247-248`) follow `fps_mode`. No interpolation yet. | ~180 | `FPSLOG frames=60` while `GameTimer` still advances 30 a second. The picture is worse than today - every second frame is a duplicate, which is exactly what proves the clock is split and the logic is not. |
 | 2. Root and camera **- BUILT 2026-09-07, play test open** | `game\interpolate.cpp/.h` and `game\interpolate_math.h`: the snapshot of 1.2, the snap rules of 1.3, `InterpCapturePrev` / `InterpBeginFrame` / `InterpEndFrame`, and the camera re-`phd_LookAt` per drawn frame (`specific\3dmath.cpp:687`) with R10 guarded. Three call sites. Pose still steps at 30 Hz. | ~700 | Movement per drawn frame halves: a new `INTERPLOG` line per second with mean `|dpos|` of `lara_item` per frame, count of frames with `alpha != 1`, count of snaps. Screenshots of a run and of a turning camera. HD on and HD off must both be smooth - one proof for both, because the HD path was not touched. |
-| 3. The per-frame side effects | Guard R1-R12 and R14-R15. The clean shape: a `bool InterpIsTweenFrame()` and an early return, or move the counter to the tick side. R6 (`game\draw.cpp:935-939`) must move into `ControlPhase` - it is game state being mutated from a draw. | ~150 | Fade lengths measured identical at 30 and 60 (count presents from `SetFade` to `DoFade == 2`). Rain falls at the same speed in both modes. Lightning cadence unchanged. |
+| 3. The per-frame side effects **- BUILT 2026-09-07, play test open** | Guard R1-R12 and R14-R17 with one criterion, `InterpIsTweenFrame()`. R6 moved into `ControlPhase` behind a mark the draw leaves - it is game state being mutated from a draw, and its `KillItem` also corrupted the room's item walk for spawned items. R10 moved into the ramp itself, because `S_DrawPickup` issues a `phd_LookAt` of its own per frame. Seven more counters found by the sweep; the logic RNG rolled back over an in-between frame (see 0.4). | ~330 | `TICKLOG` per game second - fade, screenfade, weather, legend, after_death - must read the same at 30 and at 60. `InterpTest`'s `counters` section proves the rule offline: 49 checks, 0 failed. |
 | 4. The pose | Give `InterpolateMatrix` / `aInterpolateMatrix` / `InterpolateArmMatrix` / `aInterpolateArmMatrix` (`game\draw.cpp:304-392, 1508-1621`) one float `IM_alpha` in place of the four hard-coded branches; keep `InitInterpolate(frac, rate)` as `IM_alpha = frac/(float)rate` so the four existing cases reproduce bit-close. Add `GetFramesAt(item, prevFrame, curFrame, alpha, frm[2], &blend)` beside `GetFrames` (`:1183`). Feed the pairs in `DrawAnimatingItem` (`:594, 705`), `CalcLaraMatrices` (`game\delstuff.cpp:62-100`) and `HairControl` (`game\hair.cpp:297-345`). When `anim_number` changed between the two ticks, do not blend the pose - blend only the root. | ~350 | A slow walk cycle and a slow ladder climb at 60, side by side with 30, HD and classic. `HDObjectNode`'s `interpolated` branch (`specific\hd\hd_object.cpp:1549-1560`) must be exercised - a counter in `INTERPLOG`. |
 | 5. Particles (optional) | Either snapshot `spark[1024]` + rain + snow and lerp them, or leave them at 30 (they are small, fast and short-lived). Recommended: leave them, and revisit only if the user's eye finds them. | ~200 if done | Two videos of the same waterfall or torch; the user chooses. |
 | 6. Present policy (optional) | `D3DPRESENT_INTERVAL_ONE` behind a `tomb5.vsync` option (`specific\dxshell.cpp:455` + the `Reset` path at `:273`) - this also removes the `while (!Sync())` spin's CPU burn. Uncapped or display-refresh mode needs `specific\time.cpp` reworked to sub-tick resolution and `alpha` from a real clock. | ~150 | `FPSLOG` on a 60/120/144 Hz panel; no tearing; CPU load measured with and without the spin. |
@@ -447,7 +498,7 @@ breaks it, for one frame, on a camera and not on game state.
 | K2 | Camera cuts. Fixed cameras, spot cams, the cutscene camera and the binoculars all jump on purpose | medium | 1.3 snap rules; `GLOBAL_playing_cutseq` snapped entirely. Cheap to test: every level's first cutscene. |
 | K3 | The first-person head filter (#134/#126). `fpVel`, `fpSpd`, `fpRel`, `fpSmoothValid` (`game\camera.cpp:1496-2145`) are tuned as a per-logic-tick exponential filter, and `fpSmoothSlow[]` (`:99`) is a per-tick constant | medium | Do not move the filter. `FirstPersonCamera` stays inside `CalculateCamera`, at 30 Hz. Only the output (`camera.pos`, `camera.target`, `fpRoll`) is interpolated. `fpRoll` needs a short-angle lerp and a getter. The existing `FPHEAD` log line (`game\camera.cpp:2127-2134`) proves the filter still sees one sample per tick. |
 | K4 | The modal loops (R13) run their own present loops | medium | `gPresentMinTicks` defaults to 2 and only `DrawPhaseGame` raises the rate. They keep 30 Hz. |
-| K5 | R6 mutates game state from the draw path (`game\draw.cpp:935-939`) | medium | Move it into `ControlPhase`. A latent bug today too - the `!(wibble & 3)` guard has been dead since `wibble` was masked `& 0xFC`. Its own note in `MODIFICATIONS.md`. |
+| K5 | R6 mutates game state from the draw path (`game\draw.cpp:935-939`) | medium | **DONE, order 3.** The draw only marks the bodies it drew; `StepAfterDeathFade()` counts and kills on the tick. The `!(wibble & 3)` guard is confirmed dead and left dead on purpose - repairing it would change how long every body lies there. A third, real bug came out with it: `KillItem` on a SPAWNED item rewrites `item->next_item` to the free-list head, and the old code called it from inside the walk of that very list, so the walk left the room and wandered into the free list. Its own note in `MODIFICATIONS.md` (5.10). |
 | K6 | Pose blending across an animation change | medium | Order 4 blends only the root when `anim_number` changed. |
 | K7 | The poison shake filter runs inside the view matrix (`specific\3dmath.cpp:650-656`) | low-medium | Step it only on a logic tick. |
 | K8 | Portal room mismatch. The eye is interpolated, the room list is not | low | Live room number, interpolated eye. Under 33 ms of camera travel. If a picture ever shows it, re-run `GetFloor` on the interpolated position. |

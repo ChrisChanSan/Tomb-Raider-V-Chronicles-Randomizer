@@ -17,6 +17,16 @@ void init_game_malloc();
 void* game_malloc(long size);
 long GetRandomControl();
 void SeedRandomControl(long seed);
+
+/* THE LOGIC RNG'S SEED, READ BACK (#148, order 3). The draw path calls
+ * GetRandomControl in several places - the star twinkle alone takes four
+ * thousand draws a frame - so at sixty presents a second the LOGIC stream
+ * would be consumed twice per tick and the simulation would drift apart
+ * between the two frame rates. game\interpolate.cpp saves this over an
+ * in-between frame and puts it back with SeedRandomControl, which makes the
+ * consumption per logic tick exactly what it is at thirty. Nothing else may
+ * use it: a seed is not a random number. */
+long GetRandomControlSeed();
 long GetRandomDraw();
 void SeedRandomDraw(long seed);
 void Log(const char* s, ...);

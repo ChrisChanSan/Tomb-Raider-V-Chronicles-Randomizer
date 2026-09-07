@@ -4815,7 +4815,10 @@ the cap.
 
 > The play test of this round came back with a torn collar and missing
 > straps. The cut itself is not the cause - see **fix round R** at the end
-> of section 5 (the inner skin's depth tie, and the camera).
+> of section 5 (the inner skin's depth tie, and the camera). And the cylinder
+> is gone: **fix round S** replaced the whole shape with ONE PLANE in the
+> head's own frame and a lid, because a shape in the BIND POSE moves across a
+> neck that is skinned to two nodes at once.
 
 The play test of fix round K, with four first person photographs. Two findings,
 and the first of them is the one rounds I, J and K each answered with the wrong
@@ -6343,7 +6346,11 @@ round may stop looking here.
 
 **The lid of fix round J is not coming back.** It was withdrawn on purpose in
 fix round K, with the play test's own picture ("a great flat plate"); the inner
-skin is what closes the hole now.
+skin is what closes the hole now. *(A lid did come back one round later - see
+**fix round S**, S1 - but not that one: round J's was a DOME as wide as the
+cylinder it closed and wearing whatever page its rim sat on, and round S's is a
+flat disc a neck wide in the cut's own plane. The INNER SKIN is what went
+instead, measured out over forty pictures, and R4's depth tie went with it.)*
 
 **R5 - enemies partly or wholly missing in first person.** A soldier at a wall
 not drawn at all while his muzzle flash, which the classic path draws, still
@@ -6413,6 +6420,310 @@ unit; `title_cadence` runs the title's own two-ticks-a-present accumulator from
 both parities and shows the old rule making every frame of one of them a tween
 frame, the new rule making none on either, and the logic tick count unchanged.
 
+
+#### Fix round S - the neck as a plane with a lid, the pose the short way, and a creature's light (#123, #148)
+
+Four orders, and the first of them is the user's own drawing: a Blender
+screenshot of Lara's neck with a red line across it just under the chin, and
+one sentence - *"can we not cut there and close the hole like a lid?"*
+
+**S1 - the cut is ONE PLANE in the head's own frame, and a lid closes it.**
+
+Rounds I, J, K and L each cut a shape defined in the BIND POSE - a sphere about
+the eye, then a cylinder about the neck axis with a near zone and a node mask
+beside it - and each of them came back from the play test with the collar
+still standing or the neck still torn. The whole of that trouble is in one
+word. A neck vertex is skinned to TWO nodes at once (the one under her chin is
+55 % torso and 45 % head, measured in fix round L), so where a bind-pose shape
+falls on her skin **moves with the animation**, and the node mask that kept the
+shape off an arm kept it off half the neck as well.
+
+A plane carried by the HEAD has neither freedom. What is above it is above it
+in every pose and at every camera angle; there is no mask, no near zone and no
+second shape; and a triangle that crosses it is cut **exactly at it**, per
+pixel, because the pixel shader clips on the interpolated distance.
+
+*The shape.* Four floats in VIEW space, built once a frame in
+`hd_laradraw.cpp` out of the interpolated head node matrix: the neck axis
+turned by the head's own rotation, and the head joint's view position stepped
+`HD_LARA_NECK_PLANE_S` along it. The shader (`hd_model.hlsl`, `ModelVS`) is one
+dot product on the finished skinned position - `o.cut = dot(view, plane.xyz) +
+plane.w` - where it used to be a cylinder, a sphere and a weighted node sum.
+`gNeckAxis` (c163), `gNeckNear` (c165) and the node mask in `gNodeLight[].a`
+are gone with them.
+
+*Where the plane sits, measured.* `ModelProbe -neck`, the two-unit bins: every
+vertex of the body by depth `s` down the neck axis from the head joint.
+
+| s | CLASSIC / NEVADA / COAST / CATSUIT | RUSSIA | TR3_ANTARC |
+| ---: | --- | --- | --- |
+| 4 | 389 vertices, widest 28.1 | 389 / 28.1 | 389 / 28.1 |
+| 6 | 128 / 26.1 | 128 / 26.1 | 128 / 26.1 |
+| **8** | **2 / 16.2** | **22 / 17.5** | **11 / 17.8** |
+| 10 | 3 / 20.7 | 25 / 20.7 | 34 / 24.0 |
+| 12 | 4 / 19.0 | 36 / 23.4 | 40 / 25.9 |
+| 14 | 7 / 21.6 | 25 / 26.2 | 65 / 29.1 |
+
+The hundreds of vertices at 4 and 6 are her **jaw**; the handful from 8 on are
+the **neck**, a tube of radius 16 to 26. So the chin ends between 6 and 8 in
+every body of the wardrobe and **the plane goes at twelve**: four units clear
+of the jaw, well inside the tube, and above every collar there is. Deeper was
+refused (at 20 the cut eats neck one can see from outside) and shallower was
+refused (at 8 the lid stands 24 units from the eye when a wall holds the camera
+on the head joint, and the renderer's near plane is at 20 - four units is not a
+margin).
+
+**And the collars stay.** That is the visible change and it is on purpose: the
+Russia jacket opens out from s = 12, the parka from 14, and the VCI catsuit's
+collar ring stands at radius 70 from s = 6 to 16. All three are below the plane
+and all three are drawn, which is what a collar does when one looks down at it.
+Every round before this one cut them away and every play test asked for them
+back.
+
+*The lid.* A disc **in the very same plane**, skinned rigidly to the head node
+- which is what keeps it there: the plane is built from that matrix, so the two
+cannot drift apart whatever the animation does. It is `HD_LARA_PART_NECK_CAP`,
+made by `build_neck_cap` out of `HDModelSlot::synth` - the machinery fix round
+K withdrew with round I's dome, back for a lid that is nothing like it. Its
+radius is the widest the outfit's own neck really is in a three-unit band about
+the plane, plus three, with the search stopped at 34 so that a **collar** can
+never be taken for a neck:
+
+| outfit | the neck measures | the disc |
+| --- | ---: | ---: |
+| OUTFIT_CLASSIC, VCI, TR3_NEVADA, TR3_COAST, TR3_CATSUIT | 21.6 | 24.6 |
+| OUTFIT_RUSSIA | 26.2 | 29.2 |
+| OUTFIT_TR3_ANTARC | 29.1 | 32.1 |
+| OUTFIT_SUBSUIT (a helmet, out of scope) | 33.2 | 36.2 |
+
+The band is three and not six because at six the search reaches s = 6, where
+her jaw is, and the lid came out 28.5 wide on `OUTFIT_CLASSIC` - a third wider
+than the hole it closes, which is the beginning of round I's plate. It wears
+the **throat texel** fix round K measured (page 8001 at 240/73 for the three
+game 5 bodies, 8201 at 114/151 for the four Tomb Raider III guests) and the
+SKIN material the hands wear, because what it is is the top of her neck; its
+normal points head-ward, towards the camera looking down at it; and it is drawn
+with no cut of its own (it lies exactly IN the plane), no cull, and its own node
+mask, because first person clears the head node from the body's mask and the
+lid rides on that very node.
+
+**S1(4) - and the INNER SKIN of fix round K is gone.** Round K drew the whole
+body a second time, keeping the faces the first draw culls, so that a ray
+through the neck hole met the far wall of her own chest instead of the room.
+With a lid there it was measured out rather than argued out - `ModelProbe
+-firstperson`, **forty pictures**: five outfits at three pitches and both eyes
+the game uses, and on top of that the head turned forty degrees each way,
+tilted thirty each way, and the torso bent twenty-five each way and turned
+thirty. Every one of them is **identical to the pixel** with the inner draw and
+without it.
+
+| | with the lid | lid off (`-nocap`) | neither |
+| --- | ---: | ---: | ---: |
+| CLASSIC, eye on the joint, pitch 60 | 34.0 % room | 43.3 % | 58.1 % |
+| ... pitch 75 | 9.3 % | 20.8 % | 34.2 % |
+| ... pitch 89 | 0.0 % | 1.3 % | 15.4 % |
+| RUSSIA, pitch 75 | 1.3 % | 20.7 % | 21.0 % |
+| TR3_ANTARC, pitch 89 | 0.0 % | 0.0 % | 11.3 % |
+
+and `-noinner` moves not one of those numbers. Against that it cost a second
+pass over 27,000 triangles every first person frame and one real fault, which
+is **fix round R's own R4**: a strap, a shoulder piece or a flap is ONE layer
+of triangles whose two sides sit at the same depth to the bit, and the inner
+draw won that tie - the torn edges and missing straps of the play test. R
+answered it with a `D3DCMP_LESS` for that one draw; taking the draw away
+settles it for good and puts the whole HD path back on one depth rule. **R4's
+depth-tie question is therefore closed, not carried forward.** What stays is
+the measurement the inner skin brought: `measure_neck_skin` still runs, because
+the lid wears its texel.
+
+Gone with the draw: `HD_MODEL_SKIN_CW` / `_CCW` / `_INSIDE`,
+`HDModelSetInnerSkin`, `HDModelInnerSkin`, `Model::innerPage*`, the shader's
+`gInnerSkin` (c164) with its turned normal and its one texel, and the tool's
+`-noinner`.
+
+*Proof, by picture.* `ModelProbe -firstperson` over `OUTFIT_CLASSIC`,
+`OUTFIT_VCI`, `OUTFIT_RUSSIA` and `OUTFIT_TR3_ANTARC` at 60, 75 and 89 degrees
+down and at both eyes - twenty-four pictures, looked at and not only counted.
+The Russia jacket straight down from the eye 48 forward comes out with its
+collar, its epaulette, its button flap and its jumper whole and no hole
+anywhere; the VCI catsuit comes out with its zip and its collar ring whole. The
+one case that is worth naming is the WALL case at a shallow pitch: with the eye
+on the head joint the camera stands inside her neck, the lid is 28 units below
+it and its 24.6-unit disc fills the lower half of the frame. That is what
+looking down one's own neck from inside one's own head gives, it is closed
+(0.0 % room straight down), and it is the case the game reaches only when a
+wall is directly in front of Lara.
+
+*Log.* `HDLOG firstperson on neckplane=12` on the edge, and once a second
+`HDLOG neckcut cut=1 s=12 lens=.. head=.. torso=.. min=..@node.. drop=..` -
+where `lens` is how far the plane stands from the eye along its own normal (a
+reading under the near plane's 20 is the lid being clipped away) and `drop` how
+many of the fifteen joints stand on the discarded side of it. Two - the head
+and nothing else - is the healthy reading.
+
+**S2 - the pose blend, and the pair a matrix blend cannot survive.**
+
+*The finding.* A dive roll in the third person at sixty hertz, three captures:
+tucked, ONE frame with a leg fully extended the other way round, tucked again.
+
+*The first reading was wrong, and measuring it is what found the right one.*
+The obvious explanation is a packed ten bit angle interpolated the LONG way
+round - 1000 to 20 giving 510 instead of 1022. **Order 4 interpolates no angles
+anywhere.** `GetFramesAt` hands the key frame PAIR and a factor to
+`InitInterpolateAlpha`, and the blend is vanilla's own `InterpolateMatrix`,
+which lerps the two 3x4 MATRICES element by element. An element-wise lerp of
+two rotations always lands on the SHORT-way bisector, so the wrap cannot
+happen; `InterpTest`'s new `pose_wrap` section runs the 1000-to-20 case through
+that very blend on all three axes and in both directions and gets **1022 every
+time**. Measured on the data as well - `ModelProbe -poserisk` over all 319 Lara
+animations of ANDREA1: not one adjacent key frame pair has a per-axis packed
+difference over 512 after the wrap, and a wrap cannot produce one.
+
+*What an element-wise lerp does instead is SHRINK.* With a relative rotation of
+D between the two node frames, the midpoint is the short-way bisector scaled by
+`cos(D/2)` in the plane across the axis: 13 % of the bone's frame gone at 60
+degrees, 29 % at 90, and at 180 the plane collapses to **nothing** - the frame
+is singular, the bone has no length in it, and whatever hangs off it lands
+somewhere that is on neither pose. That is a leg pointing the wrong way.
+
+*So which pairs does order 4 blend that vanilla never did?* One word: rate. At
+thirty hertz vanilla blends key frames k and k+1 at a quarter, a half or three
+quarters - and only when the rate is more than one, because with rate 1 every
+frame IS a key frame and `frac` is always zero. Order 4 blends the rate 1
+animations too (its own note says so). For every other rate the tween frame
+lands INSIDE the same segment the two tick frames are blended on, so it is no
+worse than its own neighbours and refusing it would be a jump.
+
+*Measured*, `ModelProbe -poserisk`, ANDREA1, the LARA slot's 474 table entries:
+
+| | |
+| --- | ---: |
+| animations read | 319 |
+| of them rate 1 | 23 |
+| carrying a key frame pair that turns more than 90 degrees at some node | 34 |
+| of those, rate 1 | **1** |
+| worst turn of all | 179.9 degrees, animation 205, node 0 (the HIPS), key 0 to key 1 |
+
+Twenty-two of the twenty-three rate 1 animations turn at most **52.7** degrees
+between two adjacent frames at every one of the fifteen nodes - a shrink of ten
+per cent, which is what sixty hertz is there to smooth. The twenty-third turns
+her **root** half round in one game frame. That one frame is the picture.
+
+*The fix* is rule K6 with one more entry: a rate 1 pair whose two poses turn
+more than ninety degrees at any node is **not blended at all**, and the frame is
+drawn exactly as thirty hertz draws it. `InterpPoseFar` (`interpolate_math.h`)
+walks the two packed rotation streams in lockstep, builds each node's frame in
+`phd_RotYXZ`'s own order and compares them by `trace(A^T B) = 1 + 2 cos`;
+`GetFramesAt` (`game\draw.cpp`) asks it for `rate == 1` and returns 0 when the
+answer is yes. Ninety degrees is the last turn whose midpoint keeps more than
+seventy per cent of the frame; over ANDREA1 it refuses animation 205 and
+nothing else. `INTERPLOG` gained `pose_far=`, beside `pose_skips=`.
+
+**S3 - the three findings the review of fix round R left.**
+
+**(a) The camera's shell.** Round R chose the far branch **per camera**:
+`InterpCamAim` asked each of the two whether ITS target was beyond
+`INTERP_CAM_FAR_TARGET`, so a target at 4095 was compared as a place, 4095
+units from its eye, and the same target one unit further out as a direction,
+1024 units from its eye - three thousand units of difference out of nothing at
+all. It could not reach either camera the engine really has (a first person
+target sits at 20736, a chase target at about 1500), but a rule with a cliff in
+the middle of it is a bug waiting for the third camera. The branch is chosen
+**once for the pair** now - far if EITHER length is beyond the shell - and both
+offsets take the **same** scale, `INTERP_CAM_DIR_RADIUS` over the longer of the
+two. One k and not one each, because two different k's would hide a target that
+really did jump along its own ray. `InterpTest`'s new `camera_shell` section
+walks a target out through the shell one unit at a time (500 steps, 0 cuts) and
+jitters one on it for thirty ticks (0 cuts), and re-asserts round R's own two
+answers.
+
+**(b) R4, the inner skin's depth tie.** Closed by S1(4) above: the draw that
+needed the tie broken is gone, and the HD path is back to one depth rule.
+
+**(c) `DoTitle`'s `framecount = 0` is outside the interpolation's guards, and
+this file should have said so.** It is one line in `game\gameflow.cpp` and it
+runs at `fps_mode 0` as well as at 60. It is deliberate and it is harmless: it
+mirrors the line `DoLevel` has always had, and what it can cost is at most half
+a logic tick at the moment the title is entered - the accumulator is cleared
+where `DoLevel` clears it and for the same reason. Fix round R's own guard
+paragraph named it; this is it named as a **change that is not behind a guard**
+rather than as a footnote. No code changed for it.
+
+**S4 - are HD creatures darker than classic ones?**
+
+*The finding.* The play test's video of the RICH levels: enemies far off in
+dark rooms come out **pure black** and are lit only by their own muzzle flash,
+while two shots of the same level show them lit.
+
+*What the code says*, and it is read off the source rather than measured: an HD
+item's ambient is `aAmbientR/G/B` **after the engine's own
+`InitObjectLighting(current_item)`** - the same call, on the same item, that
+`phd_PutPolygons` makes for a classic mesh - and its light list is the item's
+own `il.pCurrentLights` converted to view space one for one. The level's own
+`HDLOG lightcheck` has compared the two arithmetics on the first HD item of
+every level since stage S3 and reads a difference of zero.
+
+*What is measured offline.* `ModelProbe -name SWAT -shade N`, the same model at
+six ambients, with the model's own share of the frame (16.6 %) separated from
+the background:
+
+| ambient | frame mean | the model's own mean | ratio |
+| ---: | ---: | ---: | ---: |
+| 8 | 142.2 | 2.5 | 0.32 |
+| 16 | 142.6 | 4.9 | 0.31 |
+| 32 | 143.5 | 10.4 | 0.32 |
+| 64 | 145.1 | 20.0 | 0.31 |
+| 128 | 148.4 | 39.9 | 0.31 |
+| 255 | 154.8 | 78.4 | 0.31 |
+
+The HD path's brightness is a **strictly linear** function of the ambient it is
+handed, to three per cent over a factor of thirty-two. It neither clamps, nor
+loses a term, nor applies a floor: a creature at ambient 8 comes out at 2.5 of
+255 because the room really is that dark, which is the answer the classic path
+gives too.
+
+*What could still make an HD body darker, named and counted.* The classic list
+holds **21** lights per item (`ITEM_INFO::il.CurrentLights[21]`) and the HD path
+carries **12** (`HD_MAX_OBJ_LIGHTS`). Lights past the twelfth are dropped, and
+they have been counted on the `HDLOG frame` line as `clipped=` since stage S3.
+A dark room is not a room with thirteen lights in it, so this is almost
+certainly not the video's cause - but it is the one term that can differ, and
+it is a number rather than an opinion.
+
+*And the question is now asked of the creature itself.* `HDLOG creaturelight`
+writes one line a second of game time for up to six creatures of the frame -
+only `objects[].intelligent` ones, which is the engine's own word for the things
+that walk about and shoot:
+
+```
+HDLOG creaturelight level=.. slot=..(..) room=.. dist=.. classic=r,g,b
+    hd=r,g,b diff=r,g,b lit=.. ambient=.. engine=..sun/..point/..spot
+    hd_lights=..
+```
+
+`classic` is what `aTransformLightClipMesh` would give this item out of the
+engine's own light arrays; `hd` is what the shader gets; `dist` is how far the
+creature stands from the lens, because the whole report is about DISTANT
+enemies. Two numbers that agree say the HD path is exactly as dark as the
+classic one, and a black guard is Core's own room. **No engine change was made
+for S4**, because nothing measurable yet says one is needed - the play test's
+next log says whether that stands.
+
+**The guards.** `fps_mode 0` reaches none of S2 or S3: `InterpPoseFar` is
+called only from `GetFramesAt`, which is called only from `GetFramesNow` inside
+`if (t > 0)`, and `InterpPoseTime` returns 0 before `g_applied` is ever set at
+thirty hertz; the camera rule lives past `InterpBeginFrame`'s `alpha >= 1`
+return, exactly where fix round R left it. `hd_enable 0` reaches none of S1:
+every line of it is in `specific\hd`. `HDLOG creaturelight` and `pose_far` are
+counters behind `-log` and nothing branches on them.
+
+**The proof.** `be.bat` builds clean (full rebuild, 0 errors, only the
+pre-existing warnings), the shader guard regenerated `hd_model_vs.inc` and
+`hd_model_ps.inc` and left `hd_room_*.inc` byte-identical, `InterpTest` reads
+**269 checks, 0 failed** including the two new sections, and the picture proof
+was run here with `ModelProbe`: twenty-four first person pictures over four
+outfits, sixteen more under a turned head and a bent torso, and the six
+brightness renders of S4.
 
 ---
 

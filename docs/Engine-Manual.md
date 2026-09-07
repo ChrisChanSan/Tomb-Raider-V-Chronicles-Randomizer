@@ -255,8 +255,10 @@ While first person is on, Lara's head and braid are not drawn, close sounds
 are centred instead of panned, and the camera stays behind her eyes where
 vanilla would have torn it away — trapdoors, turn switches and trigger
 cameras all now leave you where you are. With *HD textures* on, her HD body
-loses its neck the same way and is drawn one-sided while the view runs; the
-section on the HD Lara below says why both are needed.
+is cut across the neck the same way - just under the chin, with a lid of her
+own skin closing it, so your collar and your shoulders stay where they are -
+and is drawn one-sided while the view runs; the section on the HD Lara below
+says why all three are needed.
 
 **Two things deliberately still switch to third person**: the binoculars and
 the laser sight, which bring their own head camera, and the real sniper camera
@@ -1426,120 +1428,60 @@ the whole time — `HairControl` is part of the game loop and not of the draw �
 so switching back to third person shows it hanging where it belongs on the
 very next frame.
 
-Two things then happen that have no counterpart in the classic body, and both
-are dealt with on **her body's draw alone**, so that her hands, her holsters
-and the weapon on her back are never touched (#123, stage S8, fix rounds J, K
-and L):
+Three things then happen that have no counterpart in the classic body, and all
+three are done on **her body's draw alone**, so that her hands, her holsters
+and the weapon on her back are never touched (#123, stage S8, fix rounds J, K,
+L and S):
 
-- **The neck goes with the head.** The classic head *mesh* is head and neck in
-  one piece; an HD body is a single skinned surface whose neck stump hangs off
-  the **torso**, so masking the head node leaves it standing. Measured against
-  the eye the camera really uses, that stump comes to **18.6 units** — inside
-  the near plane. It is therefore discarded in the shader, and the shape that
-  discards it is a **cylinder about the neck axis**: everything less than 40
-  units down the axis from the head joint and less than 34 units off it, on the
-  torso node alone. The neck is a tube and the measurement says so - over all
-  eight outfits the torso's own vertices sit between 8 and 22 units off that
-  axis down to 20 units of depth and burst out to 67 at 30 - so a cylinder
-  takes the whole stump and touches nothing else: not one arm vertex of any
-  outfit falls inside it, at any of the candidate sizes that ship or were
-  tried. What is left in the camera is her own chest at about sixty units,
-  which is where the classic engine leaves it too.
+- **The neck goes with the head, and the cut is one plane.** The classic head
+  *mesh* is head and neck in one piece; an HD body is a single skinned surface
+  whose neck stump hangs off the **torso**, so masking the head node leaves it
+  standing — measured against the eye the camera really uses, 18.6 units away,
+  inside the near plane. It is therefore discarded in the shader, and what
+  discards it is a **plane carried by her head**: perpendicular to the neck
+  axis, twelve units below the head joint, with everything on the head side of
+  it dropped whatever node holds it. A triangle that crosses the plane is cut
+  exactly at it, per pixel.
 
-  *A sphere around the eye was tried first and sent back by the play test*
-  (#123, stage S8 and fix round J). A sphere large enough to take the stump -
-  60 units - also bit 60 units out of her chest whenever the camera was held
-  back against a wall, forced the cap that used to close the hole to be as wide
-  as her whole torso, and chewed a jagged edge into her wrist whenever a hand
-  came near the camera. A cylinder about the neck is the shape of the thing
-  that has to go, it does not move with the eye, and it cannot reach an arm.
+  *Twelve is measured.* Every vertex of every wardrobe body, binned by depth
+  down the neck axis: the hundreds of vertices at four and six units are her
+  **jaw** (widest 26 to 28 units off the axis) and the handful from eight on
+  are the **neck**, a tube of radius 16 to 26. So the chin ends between six and
+  eight in every body, and twelve sits four units clear of it, well inside the
+  tube. Deeper eats neck one can see from outside; shallower puts the lid
+  inside the renderer's near plane, which is at 20.
 
-  *And it grew from 30x30 to 40x34* (#123, fix round K), because the play test
-  found the catsuit's **collar ring** still standing at the mouth of the hole -
-  and that was not the reason. The reason is the next paragraph.
+  **Your collar stays on.** That is the visible change: the Russia jacket opens
+  out twelve units down, the parka fourteen, and the VCI catsuit's collar ring
+  stands seventy units off the axis from six to sixteen. All three are below
+  the plane, so all three are drawn — and looking down at your own collar is
+  what looking down does.
 
-- **The cut has to be allowed to touch the head node, and for four rounds it
-  was not** (#123, fix round L). The shader's node rule is a *weight*: a vertex
-  is pushed `(1 - cuttable) * 1000` units out of the cut, and `cuttable` is its
-  own skinning weights summed over the nodes the cut may touch. Until this
-  round those were the **torso alone** - and the vertex under Lara's chin,
-  measured, carries bones 7/14/5 at weights 140/114/1. It is 55 % torso and
-  45 % *head*, so it was pushed 451 units out of a cut whose deepest point is
-  40 and survived every cylinder, every cone and every radius rounds I, J and K
-  tried. The whole head-blended half of her neck stood **18.6 units from the
-  eye**, which is the ring the play test photographed after every one of those
-  rounds.
+  *Three shapes were tried before it and all three were sent back by the play
+  test.* A **sphere around the eye** (stage S8) large enough to take the stump
+  also bit sixty units out of her chest against a wall and chewed a jagged edge
+  into a wrist brought up to the camera. A **cylinder about the neck axis in
+  the bind pose** (fix rounds J to L) came back three rounds running with the
+  collar still standing, and the reason is one measurement: the vertex under
+  her chin carries bones 7/14/5 at weights 140/114/1 — it is 55 % torso and
+  45 % *head*, so where a bind-pose shape falls on her skin **moves with the
+  animation**, and the node mask that kept the shape off an arm kept it off
+  half the neck as well. A **cone** was built in round L and bought three
+  vertices. A plane fixed to the head has none of those freedoms: what is above
+  it is above it in every pose and at every camera angle, and it needs no mask
+  at all, because nothing of an arm is ever above your chin.
 
-  Saying "the head node is masked in first person" does not hide it either: the
-  mask works on **ranges**, and a range's node is the heaviest node over its
-  triangles. The collar's triangles are heaviest on the torso and carry their
-  head-skinned corners along with them.
+- **And the hole is closed with a lid.** A disc **in the plane itself**,
+  skinned rigidly to the head node so that the two cannot drift apart. Its
+  radius is the widest that outfit's own neck really is at the plane plus three
+  units — 24.6 on the Rome body, 29.2 on the Russia coat, 32.1 on the
+  Antarctica parka — with the search stopped at 34 so that a collar can never
+  be mistaken for a neck. It wears her own **throat's** colour, measured out of
+  the outfit's own texture page when the level loads, and the same skin
+  material her hands wear.
 
-  So the cut's node mask is the torso **and the head**. It costs nothing - the
-  head's own ranges are not drawn in first person anyway - and it can no more
-  reach an arm than the torso-only mask could. The nearest surviving vertex
-  from the eye on the head joint, which is where the camera stands whenever a
-  wall is in front of Lara, moves from 18.6 units to 45.1 on the Rome body,
-  43.7 on the Russia coat and 43.5 on the Antarctica parka, and the survivors
-  within sixty units of that eye fall from 202 to 78, 462 to 119 and 972 to
-  222. Not one vertex below the shoulder line is taken, in any outfit. The
-  picture from the eye 48 units in front of the joint - what the game gives
-  whenever the sight line is clear - is **pixel-identical** at 60 and 75
-  degrees down for every outfit; only looking straight down does it change, and
-  only by losing the stump it was meant to lose.
-
-  *A wider cut and a cone were both measured and refused.* Rounds I to K said a
-  collar of radius 31 cannot be separated from shoulders of radius 67 by one
-  cylinder, and fix round L built the cone that would do it - wide at the head
-  joint, tapering where the shoulders arrive - before finding the node mask.
-  With the head node in the mask a 44-unit cone buys three vertices on the Rome
-  body and a 56-unit one buys five, and the pictures are the same to the eye at
-  every pitch. Widening the *cylinder* is worse: at 38 units off the axis the
-  Antarctica parka loses half a grey level and at 55 her chest is visibly
-  scooped out.
-
-- **And nothing of her is drawn within forty units of the camera** (#123, fix
-  round L). This is the one part of the cut that lives in **view space**, and
-  for the opposite reason to the cylinder: what it exists to stop is a surface
-  standing on the *lens*, and how far a thing is from the lens is a fact about
-  the camera and not about her skin. In first person the camera *is* the eye,
-  so the zone needs no position of its own and follows the game's own choice
-  between the eye 48 units in front of the head joint and the eye on the joint
-  when a wall forbids the offset. It wears the same node mask as the cylinder,
-  which is what keeps it from being stage S8's sphere again.
-
-  Forty is measured, not chosen: the renderer's near plane is at 20, and the
-  nearest vertex that survives the cylinder at either eye, over every outfit,
-  is 43.5. So it **changes not one pixel** of any of the thirty pictures this
-  round took - and that is the point of it. Those pictures are taken in the
-  bind pose, and the bind pose cannot show what an animation does when she
-  folds; this is the floor that says no surface of hers may ever stand between
-  the near plane and forty units, whatever the animation does. Sixty was
-  measured too, and it starts taking geometry the eye 48 forward is supposed
-  to show.
-- **Her body is drawn one-sided there.** The HD path draws every model double
-  sided; the classic engine only *looks* as if it does, because it culls back
-  faces in software before the card ever sees one. No camera but this one
-  stands inside a body, and with the camera in her neck the difference is the
-  whole picture: the inside of her own chest. Outside first person nothing
-  changes - the same view of her with and without the culling is identical to
-  the pixel.
-
-- **And the hole is closed with her own skin.** Cutting the neck out of a
-  hollow shell leaves a hole, and with the back faces culled one looks straight
-  through her. So in first person **the body is drawn a second time**, keeping
-  exactly the faces the first draw throws away - the far wall of her own chest,
-  seen from inside - with the same cut, the same node lights, the same light
-  list and the same matrices, and painted in one colour: her own throat's,
-  measured out of the outfit's own texture page when the level loads. Nothing
-  is built, so there is no rim to fit and no seam that can gape; it cannot poke
-  out through her collar, because it *is* her collar seen from the other side
-  and the depth test says so; and it closes the hole at every angle rather than
-  at the one a lid was aimed at. The second draw runs in first person and
-  nowhere else.
-
-  Two rules make the colour honest. The page is the one the neck's own column
-  of vertices runs down - not the topmost ring, which is her *hairline*, and
+  Two rules make that colour honest. The page is the one the neck's own column
+  of vertices runs down — not the topmost ring, which is her *hairline*, and
   not the majority of the stump, which on the Russia coat is 276 vertices of
   coat against 51 of throat. And the coordinate is the **centroid of the
   biggest triangle** on that page rather than a vertex of it: a vertex sits on
@@ -1549,34 +1491,48 @@ and L):
   199/146/108 for the four Tomb Raider III guests, and near black for the
   diving suit, which has no throat at all.
 
-  *A built cap was tried for two rounds and withdrawn* (#123, fix rounds I and
-  J, undone in K). It was a dome of 32 spokes cut to the outfit's own collar
-  ring. With the eye on the head joint - where the camera sits whenever a wall
-  is in front of Lara - it reads as a great flat skin-coloured plate across the
-  whole view, and on the Russia coat it wears the **backpack straps**, because
-  the majority page of that outfit's collar ring is the backpack's. A lid built
-  to fit one rim fits the picture taken from one place, and its texture is
-  whatever page the rim happens to sit on.
+  *A dome was tried for two rounds and withdrawn* (#123, fix rounds I and J,
+  undone in K). It was cut to the outfit's own collar ring, and with the eye on
+  the head joint it read as a great flat skin-coloured plate across the whole
+  view, wearing the **backpack straps** on the Russia coat because that is the
+  page its rim happened to sit on. This one is flat because the hole is flat, a
+  neck wide because the hole is a neck wide, and its colour is measured rather
+  than inherited.
+
+- **Her body is drawn one-sided there.** The HD path draws every model double
+  sided; the classic engine only *looks* as if it does, because it culls back
+  faces in software before the card ever sees one. No camera but this one
+  stands inside a body, and with the camera in her neck the difference is the
+  whole picture: the inside of her own chest. Outside first person nothing
+  changes — the same view of her with and without the culling is identical to
+  the pixel.
+
+*A second, inward draw of the whole body was tried and measured out again*
+(#123, fix round K, withdrawn in fix round S). It kept exactly the faces the
+first draw culls, so that a ray through the neck hole met the far wall of her
+own chest instead of the room. With a lid there it closes nothing the lid does
+not close: forty pictures — five outfits, three pitches, both eyes the game
+uses, and the head turned forty degrees and the torso bent thirty on top of
+that — are identical to the pixel with it and without it. It cost a second pass
+over 27,000 triangles every first person frame and one real fault of its own: a
+strap or a shoulder flap is a single layer of triangles whose two sides sit at
+the same depth to the bit, and the inward draw won that tie, which is the torn
+edges and missing straps of one play test.
 
 *Left over, and honestly:* in the **diving suit** the helmet is modelled on the
-torso node too, so it cannot be masked off with the head. The cylinder bores a
-tube through it and the inner skin closes what that opens in the suit's own
-dark rubber - there is no throat on that model to take a colour from - so
-looking straight down inside the helmet is dark rather than see-through, with a
-hairline of background still visible at one edge. The classic suit hides all of
-it, because there the helmet is part of the head mesh. The suit is out of this
-work by decision and not by oversight: it neither gets a fix of its own nor
-constrains the cut for the other seven bodies.
+torso node too, so it cannot be masked off with the head. The plane cuts
+straight through it and the lid closes the hole in the suit's own dark rubber —
+there is no throat on that model to take a colour from. The classic suit hides
+all of it, because there the helmet is part of the head mesh. The suit is out
+of this work by decision and not by oversight: it neither gets a fix of its own
+nor constrains the cut for the other seven bodies.
 
-*And the second leftover, also honestly:* with the eye **on the head joint** -
-the wall case - the camera stands inside her chest, and looking straight down
-from there one sees the inside of her own body, lit and painted as skin. That
-is what a camera inside a body sees; the work of this round was to make sure it
-is her body at a sane distance rather than a ring of collar on the lens or a
-hole one sees the room through. At the extreme corners of a 90-degree look
-down, under the arms, a sliver of the room is still visible - about one percent
-of the frame in the worst outfit, which is the same order as before this
-round.
+*And the second leftover, also honestly:* with the eye **on the head joint** —
+the wall case, which the game reaches only when a wall is directly in front of
+Lara — the camera stands inside her neck, twenty-eight units above the lid, and
+a 24-unit disc that close fills the lower half of the frame. That is what
+looking down your own neck from inside your own head gives, and it is closed:
+straight down, none of the room shows at all.
 
 **Her own skin shines like skin, whatever she is wearing.** The body draws with
 one material, and part of a body is Lara and not her clothes: a bare forearm

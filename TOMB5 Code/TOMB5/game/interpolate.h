@@ -228,6 +228,9 @@ float InterpPoseTime(const ITEM_INFO* item, short* prevAnim, short* prevFrame);
 void InterpNotePose(const ITEM_INFO* item);
 void InterpNotePoseSkip();
 void InterpNotePoseHD();
+/* And the fourth (#123, fix round S, S2): a rate 1 pair whose two poses are
+ * too far apart for an element-wise matrix blend to survive. */
+void InterpNotePoseFar();
 
 /* ORDER 5 - THE PARTICLES (#148).
  *

@@ -325,6 +325,7 @@ namespace
 	int g_cutAim = 0;		// the view DIRECTION jumped (see InterpCamAimCut)
 	int g_secPose = 0;		// order 4: items drawn with a blended pose
 	int g_secPoseSkip = 0;		// ... and refused one by rule K6
+	int g_secPoseFar = 0;		// ... refused because the pair is too far (S2)
 	int g_secPoseHD = 0;		// ... of which went through the HD path
 	int g_secLaraPose = 0;		// frames on which LARA's own pose was blended
 	int g_secParticles = 0;		// order 5: particles moved, added over the second
@@ -672,6 +673,16 @@ namespace
 	 *                looks like; a number near pose_items means the snapshot
 	 *                and the animation clock have fallen out of step and
 	 *                nothing is really being blended.
+	 *   pose_far     blends refused for the other reason (#123, fix round S,
+	 *                S2): a RATE 1 pair - two adjacent stored frames, which
+	 *                vanilla never blends at all - whose two poses turn more
+	 *                than ninety degrees at some node. An element-wise matrix
+	 *                blend of a turn that size does not go the long way, it
+	 *                SHRINKS, and at half a turn the bone's own frame is
+	 *                singular. Measured over ANDREA1 that is one animation of
+	 *                319 (number 205, the hips), so this should read a small
+	 *                fraction; a big number means an animation nobody has
+	 *                looked at yet.
 	 *   pose_hd      of those, the ones drawn by the HD object path - the
 	 *                frames that exercise HDObjectNode's interpolated branch.
 	 *                The plan asks for this number by name.
@@ -708,7 +719,7 @@ namespace
 				"lara_step=%.1f items=%.1f snaps=%d (teleport=%d roomjump=%d "
 				"object=%d invalid=%d) camcut=%d (type=%d spot=%d eye=%d aim=%d) "
 				"cutscene=%d "
-				"pose_items=%.1f pose_skips=%.1f pose_hd=%.1f lara_pose=%d/%d "
+				"pose_items=%.1f pose_skips=%.1f pose_far=%.1f pose_hd=%.1f lara_pose=%d/%d "
 				"particles=%.1f particle_kinds=%04lx",
 				(int)gfLevelId, g_at, g_secFrames, g_secTween,
 				(double)(g_secAlphaMin <= g_secAlphaMax ? g_secAlphaMin : 0.0F),
@@ -722,6 +733,7 @@ namespace
 				g_snapCutscene,
 				(double)g_secPose / g_secFrames,
 				(double)g_secPoseSkip / g_secFrames,
+				(double)g_secPoseFar / g_secFrames,
 				(double)g_secPoseHD / g_secFrames,
 				g_secLaraPose, g_secTween,
 				(double)g_secParticles / g_secFrames, g_secPartKinds);
@@ -772,6 +784,7 @@ namespace
 		g_snapCutscene = 0;
 		g_secPose = 0;
 		g_secPoseSkip = 0;
+		g_secPoseFar = 0;
 		g_secPoseHD = 0;
 		g_secLaraPose = 0;
 		g_secParticles = 0;
@@ -1704,6 +1717,12 @@ void InterpNotePoseSkip()
 {
 	if (gLogEnabled)
 		g_secPoseSkip++;
+}
+
+void InterpNotePoseFar()
+{
+	if (gLogEnabled)
+		g_secPoseFar++;
 }
 
 void InterpNotePoseHD()

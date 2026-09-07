@@ -103,29 +103,26 @@
  *                         camera inside her that shows her own inside, so
  *                         first person culls (stage S8). Default: back with
  *                         -firstperson, none otherwise.
- *     -neckcut <S> <R>    the first person NECK CUT, on her body alone: a
- *                         CYLINDER about the neck axis in the bind pose, S
- *                         units down it from the head joint and R off it, and
- *                         every fragment inside it is discarded (#123, fix
- *                         round J). `0 0` draws the BEFORE picture. The
- *                         default with -firstperson is the engine's own
- *                         HD_LARA_NECK_CUT_S and _R.
- *     -necknear <units>   the NEAR ZONE about the eye (#123, fix round L, L2):
- *                         a sphere around the camera in which nothing of her
- *                         body is drawn, on the same nodes the cut may touch.
- *                         The default with -firstperson is the engine's own
- *                         HD_LARA_NECK_NEAR; 0 is off.
- *     -cutnodes <mask>    which NODES the cut may touch, a bit per classic
- *                         node. The engine says the torso AND THE HEAD (#123,
- *                         fix round L, L1); `-cutnodes 0x80` is the torso
- *                         alone, which is fix round K's picture and the
- *                         BEFORE of this round. Pointing it at one node at a
- *                         time is also how a surface standing in the camera
- *                         is traced to the node it hangs off.
- *     -noinner            draw first person WITHOUT the inner skin (#123, fix
- *                         round K), which is what the cut and the culling
- *                         leave on their own: a hole one sees the room
- *                         through. The BEFORE picture of round K.
+ *     -neckplane <s>      the first person NECK CUT, on her body alone: a
+ *                         PLANE perpendicular to the neck axis, s units down
+ *                         it from the head joint and carried by the HEAD node,
+ *                         with every fragment on the head side of it
+ *                         discarded (#123, fix round S). A negative s draws
+ *                         the BEFORE picture. The default with -firstperson is
+ *                         the engine's own HD_LARA_NECK_PLANE_S.
+ *     -nocap              draw first person WITHOUT the lid that closes the
+ *                         hole (#123, fix round S) - the BEFORE picture of
+ *                         that half of the round.
+ *     -poserisk           what the SIXTY HERTZ pose blend has to survive
+ *                         (#148, order 4; fix round S, S2): every adjacent
+ *                         key frame pair of every LARA animation, all fifteen
+ *                         nodes, with the relative TURN of the two node
+ *                         frames in degrees - which is what an element-wise
+ *                         matrix blend shrinks by cos(turn/2) - and the
+ *                         largest per-axis packed difference in ten bit units
+ *                         after the wrap. The rate 1 animations are listed
+ *                         apart: those are the pairs vanilla never blended at
+ *                         all and order 4 does.
  *     -neck               the measurements those numbers come from: for every
  *                         outfit, how many torso-node vertices sit above the
  *                         shoulder line and how near the nearest of them, of
@@ -1756,6 +1753,15 @@ static void PrintNeckCylinder(const std::string& root5, const ClassicSlot& body)
 /* One number as a table cell, so that a column which prints "-" when there is
  * nothing to print does not need a scratch buffer at every call site. Four
  * rotating buffers, which is more than any one printf below asks for. */
+/* THE CYLINDER FIX ROUNDS J TO L SHIPPED, as two plain numbers (#123, fix
+ * round S). The engine cuts with one PLANE now and hd_lara.h has no
+ * HD_LARA_NECK_CUT constants any more, but the tables below were the argument
+ * that led to the plane and they are kept exactly as they read: a table that
+ * silently changes its own reference line is worse than no table. The plane
+ * has its own table at the end of -neck. */
+static const double kRoundLCutS = 40.0;
+static const double kRoundLCutR = 34.0;
+
 static const char* Num(double v)
 {
 	static char buf[4][24];
@@ -1802,7 +1808,7 @@ static void PrintCollarShape(const std::string& root5, const ClassicSlot& body)
 		"`head` how many of them carry ANY head weight. That last column is\n"
 		"fix round L's finding: what stands around the neck hole is the head\n"
 		"to torso BLEND, which no cut could touch while its node mask named\n"
-		"the torso alone.\n\n", (double)HD_LARA_NECK_CUT_R);
+		"the torso alone.\n\n", kRoundLCutR);
 
 	for (int outfit = HD_LARA_OUTFIT_NONE + 1; outfit < HD_LARA_OUTFIT_COUNT;
 		outfit++)
@@ -1880,7 +1886,7 @@ static void PrintCollarShape(const std::string& root5, const ClassicSlot& body)
 				if (r > hi)
 					hi = r;
 
-				if (r > (double)HD_LARA_NECK_CUT_R)
+				if (r > kRoundLCutR)
 				{
 					over++;
 
@@ -2091,10 +2097,10 @@ static void PrintNeckCandidates(const std::string& root5, const ClassicSlot& bod
 				if (t > 1.0) t = 1.0;
 
 				const double wide = kCand[c].top +
-					((double)HD_LARA_NECK_CUT_R - kCand[c].top) * t;
+					(kRoundLCutR - kCand[c].top) * t;
 				const double cone =
-					s - (double)HD_LARA_NECK_CUT_S > r - wide
-						? s - (double)HD_LARA_NECK_CUT_S : r - wide;
+					s - kRoundLCutS > r - wide
+						? s - kRoundLCutS : r - wide;
 
 				/* THE NEAR ZONE FOLLOWS THE CAMERA, so it is worked out once
 				 * per eye - which is the whole point of it living in view
@@ -2192,6 +2198,7 @@ static void PrintNeckCandidates(const std::string& root5, const ClassicSlot& bod
  * table that says so: the node 7 vertices inside the cut's own radius,
  * counted by texture page and by how far down the neck axis they sit.
  */
+
 static void PrintNeckPages(const std::string& root5, const ClassicSlot& body)
 {
 	printf("\n-- the neck stump BY PAGE, per outfit (#123, fix round K) -----\n");
@@ -2248,7 +2255,7 @@ static void PrintNeckPages(const std::string& root5, const ClassicSlot& body)
 			const double d[3] = { v.x - H[0], v.y - H[1], v.z - H[2] };
 			const double s = d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
 
-			if (s > HD_LARA_NECK_CUT_S)
+			if (s > kRoundLCutS)
 				continue;
 
 			const double off[3] =
@@ -3987,6 +3994,308 @@ static void BraidBucket(long step, int* into)
 		into[3]++;
 }
 
+/* ------------------------------------------------- THE POSE RISK (S2) -----
+ *
+ * WHAT ORDER 4 REALLY BLENDS, and what a matrix blend does to a big turn
+ * (#123 / #148, fix round S, S2).
+ *
+ * The play test of the night's orders came back with a dive roll at sixty
+ * hertz in which ONE in-between frame has a leg fully extended the other way
+ * round, tucked before it and tucked after it. The obvious reading is a packed
+ * ten bit angle interpolated the long way round. It is not that: order 4 hands
+ * GetFramesAt's key frame PAIR and a factor to InitInterpolateAlpha, and the
+ * blend itself is vanilla's own InterpolateMatrix, which lerps the two 3x4
+ * MATRICES element by element and never touches an angle (game\draw.cpp,
+ * game\delstuff.cpp Rich_CalcLaraMatrices_Interpolated).
+ *
+ * An element-wise lerp of two rotations is never a flip - it is a SHRINK. At
+ * a relative angle D the blend at a half is the short-way bisector scaled by
+ * cos(D/2) in the plane across the axis, so at D = 180 degrees the plane
+ * collapses to nothing: the bone's own frame goes singular, its length in that
+ * plane goes to zero, and whatever hangs off it lands somewhere that is not on
+ * either of the two poses. THAT is what a leg pointing the wrong way looks
+ * like, and it is a fact about the SIZE of the turn between the two key frames
+ * and nothing else.
+ *
+ * SO THE QUESTION IS WHICH PAIRS ORDER 4 BLENDS THAT VANILLA NEVER DID. At
+ * thirty hertz the blend runs between key frames k and k+1 at a quarter, a
+ * half or three quarters - and only when the animation's RATE is more than
+ * one, because with rate 1 every frame IS a key frame and vanilla's `frac` is
+ * always zero. Order 4 blends the rate 1 animations too: their two ticks are
+ * two adjacent stored frames and the midpoint is that pair at a half. Those
+ * pairs are a whole game frame apart and are the new exposure.
+ *
+ * This walks every animation of the LARA slot and measures both readings of
+ * every adjacent key frame pair, per node:
+ *
+ *   turn    the relative rotation angle of the two node matrices, in degrees.
+ *           This is the number the matrix blend shrinks by cos(turn/2), so
+ *           `>90` costs a quarter of the bone's length at the midpoint and
+ *           `>150` costs nine tenths of it.
+ *   axis    the largest per-axis difference of the packed rotations, in TEN
+ *           BIT units and wrapped into -512..511 - the reading the play test's
+ *           first guess was about. Over 512 is impossible after the wrap, so
+ *           a column of zeroes is that guess disproved by arithmetic.
+ */
+
+struct PoseRiskRot
+{
+	float m[16];
+	int a[3];		// the three packed angles, 16 bit
+};
+
+static void PoseRiskRead(const Tr5Level& level, long long& at, PoseRiskRot& out)
+{
+	const uint16_t w = (uint16_t)level.debugReadFrameShort(at);
+
+	MatIdentity(out.m);
+	out.a[0] = out.a[1] = out.a[2] = 0;
+
+	if ((w >> 14) == 0)
+	{
+		const uint16_t w2 = (uint16_t)level.debugReadFrameShort(at + 1);
+		const uint32_t packed = ((uint32_t)w << 16) | (uint32_t)w2;
+
+		out.a[0] = (int16_t)(((packed >> 20) & 0x3FF) << 6);	// x
+		out.a[1] = (int16_t)(((packed >> 10) & 0x3FF) << 6);	// y
+		out.a[2] = (int16_t)((packed & 0x3FF) << 6);		// z
+	}
+	else
+	{
+		const int16_t a = (int16_t)((w & 0xFFF) << 4);
+
+		out.a[(w >> 14) == 1 ? 0 : (w >> 14) == 2 ? 1 : 2] = a;
+	}
+
+	BraidRotStream r;
+	r.level = &level;
+	r.at = at;
+	BraidRotApply(r, out.m);
+	at = r.at;
+}
+
+/* The relative rotation of two node frames, in degrees. Both are pure
+ * rotations, so A^T B is one too and its trace names the angle. */
+static double PoseRiskTurn(const float* A, const float* B)
+{
+	double t = 0.0;
+
+	for (int i = 0; i < 3; i++)
+		for (int k = 0; k < 3; k++)
+			t += (double)A[k * 4 + i] * (double)B[k * 4 + i] * (i == k ? 1.0 : 0.0);
+
+	/* trace(A^T B) = sum over i of (column i of A) . (column i of B) */
+	t = 0.0;
+
+	for (int i = 0; i < 3; i++)
+	{
+		double d = 0.0;
+
+		for (int k = 0; k < 3; k++)
+			d += (double)A[i * 4 + k] * (double)B[i * 4 + k];
+
+		t += d;
+	}
+
+	double c = (t - 1.0) * 0.5;
+
+	if (c > 1.0) c = 1.0;
+	if (c < -1.0) c = -1.0;
+
+	return acos(c) * 180.0 / 3.14159265358979323846;
+}
+
+static void PrintPoseRisk(const Tr5Level& level, const char* stem)
+{
+	Tr5Level::MoveableInfo lara;
+
+	if (!level.moveableInfo(0 /* LARA */, lara) || lara.animIndex < 0)
+	{
+		printf("\n-poserisk: this level has no LARA slot.\n");
+		return;
+	}
+
+	/* How many animations are Lara's: up to the next moveable's first one. */
+	size_t block = 0;
+	int32_t total = 0;
+
+	if (!level.debugAnimBlock(block, total))
+	{
+		printf("\n-poserisk: this level has no animation block.\n");
+		return;
+	}
+
+	int last = total;
+	const std::vector<int> slots = level.moveableSlots();
+
+	for (size_t i = 0; i < slots.size(); i++)
+	{
+		Tr5Level::MoveableInfo one;
+
+		if (!level.moveableInfo(slots[i], one) || one.animIndex <= lara.animIndex)
+			continue;
+
+		if (one.animIndex < last)
+			last = one.animIndex;
+	}
+
+	const int count = last - lara.animIndex;
+
+	printf("\n-- what a matrix blend does to a big turn (#148, order 4) ---\n");
+	printf("%s: LARA has %d animations, table index %d..%d\n", stem, count,
+		lara.animIndex, last - 1);
+	printf("Every adjacent KEY FRAME pair of every animation, all 15 nodes.\n"
+		"`turn` is the relative rotation of the two node frames in degrees -\n"
+		"the number an element-wise matrix blend shrinks by cos(turn/2) - and\n"
+		"`axis` the largest per-axis packed difference in TEN BIT units,\n"
+		"wrapped into -512..511. rate 1 animations are the ones vanilla never\n"
+		"blended at all and order 4 does.\n\n");
+
+	printf("  anim rate frames keys  worst turn  >90  >150  worst axis  >512\n");
+
+	int rate1 = 0, rate1Risky = 0, anyRisky = 0;
+	double worstAll = 0.0;
+	int worstAnim = -1, worstNode = -1, worstKey = -1;
+	int axisOver = 0;
+
+	struct Row { int anim, rate, keys; double turn; int over90, over150, axis; };
+	std::vector<Row> rows;
+
+	for (int i = 0; i < count; i++)
+	{
+		BraidAnimRow a;
+
+		if (!BraidReadAnim(level, lara.animIndex + i, a))
+			continue;
+
+		const int frames = a.end - a.start + 1;
+		int keys = (a.end - a.start) / a.rate + 1;
+
+		if ((a.end - a.start) % a.rate)
+			keys++;
+
+		if (keys < 2)
+			continue;
+
+		Row row;
+
+		row.anim = i;
+		row.rate = a.rate;
+		row.keys = keys;
+		row.turn = 0.0;
+		row.over90 = 0;
+		row.over150 = 0;
+		row.axis = 0;
+
+		std::vector<PoseRiskRot> prev(HD_LARA_NODES), now(HD_LARA_NODES);
+
+		for (int k = 0; k < keys; k++)
+		{
+			long long at = (long long)(a.frameOffset / 2) +
+				(long long)k * a.size + 9;
+
+			for (int n = 0; n < HD_LARA_NODES; n++)
+				PoseRiskRead(level, at, now[n]);
+
+			if (k > 0)
+				for (int n = 0; n < HD_LARA_NODES; n++)
+				{
+					const double turn = PoseRiskTurn(prev[n].m, now[n].m);
+
+					if (turn > row.turn)
+						row.turn = turn;
+
+					if (turn > 90.0)
+						row.over90++;
+
+					if (turn > 150.0)
+						row.over150++;
+
+					if (turn > worstAll)
+					{
+						worstAll = turn;
+						worstAnim = i;
+						worstNode = n;
+						worstKey = k;
+					}
+
+					for (int ax = 0; ax < 3; ax++)
+					{
+						int d = (now[n].a[ax] - prev[n].a[ax]) >> 6;
+
+						while (d > 512) d -= 1024;
+						while (d < -512) d += 1024;
+
+						if (d < 0)
+							d = -d;
+
+						if (d > row.axis)
+							row.axis = d;
+					}
+				}
+
+			prev.swap(now);
+		}
+
+		if (a.rate == 1)
+			rate1++;
+
+		if (row.over90)
+		{
+			anyRisky++;
+
+			if (a.rate == 1)
+				rate1Risky++;
+		}
+
+		if (row.axis > 512)
+			axisOver++;
+
+		rows.push_back(row);
+
+		(void)frames;
+	}
+
+	/* The worst thirty, and every rate 1 animation that carries a big turn -
+	 * those are the frames the sixty hertz blend newly touches. */
+	for (size_t pass = 0; pass < 2; pass++)
+	{
+		if (pass == 1)
+			printf("\n  ... and EVERY rate 1 animation, which vanilla never "
+				"blended at all:\n");
+
+		int shown = 0;
+
+		for (size_t i = 0; i < rows.size() && shown < 30; i++)
+		{
+			const Row& r = rows[i];
+
+			if (pass == 0 && r.turn < 120.0)
+				continue;
+
+			if (pass == 1 && r.rate != 1)
+				continue;
+
+			printf("  %4d %4d %6d %4d  %10.1f %4d  %4d  %10d  %4d\n",
+				r.anim, r.rate, r.keys * r.rate, r.keys, r.turn, r.over90,
+				r.over150, r.axis, r.axis > 512 ? 1 : 0);
+			shown++;
+		}
+
+		if (!shown)
+			printf("  (none)\n");
+	}
+
+	printf("\n%d animations read, %d of them rate 1.\n", (int)rows.size(), rate1);
+	printf("%d carry a key frame pair whose node turns more than 90 degrees; "
+		"%d of those are rate 1.\n", anyRisky, rate1Risky);
+	printf("worst turn %.1f degrees - anim %d, node %d, between key %d and "
+		"%d.\n", worstAll, worstAnim, worstNode, worstKey - 1, worstKey);
+	printf("animations whose per-axis packed difference exceeds 512 after the "
+		"wrap: %d (a wrap cannot produce one, so this must be 0).\n", axisOver);
+}
+
+
 static void PrintBraidAnim(const Tr5Level& level, int bodySlot,
 	const ClassicSlot& body, const ClassicSlot& hairTree, bool haveHair,
 	int steps, const int* anims, int animCount, bool useFloor)
@@ -4411,6 +4720,7 @@ struct LaraOptions
 	bool mirror;
 	bool firstPerson;
 	bool neck;
+	bool poseRisk;			// #148 order 4, fix round S (S2)
 	bool handLight;			// #123 fix round K (K1/K2): the wrist seam
 	/* #123 fix round K (K2): put the outfit's own material back on Lara's
 	 * SKIN pages, which is the picture before this round - the forearm and
@@ -4423,9 +4733,6 @@ struct LaraOptions
 	std::vector<int> braidAnims;
 	bool braidFloor;
 	bool classicBraidRoot;		// #123 fix round I (I2): the BEFORE picture
-	/* #123 fix round K (K1): leave the INNER SKIN out, which is the picture
-	 * fix round J shipped - a hole one sees the room through. */
-	bool noInner;
 	/* #123 fix round I (I4): draw ONE part of the composite and nothing else,
 	 * so that a question about one part - "does the sheen reach the hands?" -
 	 * is answered by a picture of that part and not by hunting for it in a
@@ -4438,14 +4745,11 @@ struct LaraOptions
 	int threads;
 	long width, height;
 	double fov, yaw, pitch, dist, shade;
-	/* The neck cut (#123, stage S8, re-shaped in fix round J): the cylinder's
-	 * depth down the neck axis and its radius off it, in classic units. Both
-	 * 0 is off, which is the BEFORE picture. */
-	double cutS, cutR;
-	/* The near zone about the eye (#123, fix round L). -1 is "the engine's
-	 * own constant"; cutNodes 0 the same for the node mask. */
-	double cutNear;
-	unsigned int cutNodes;
+	/* The neck cut (#123, stage S8; a cylinder in fix round J; ONE PLANE in
+	 * fix round S): how far down the neck axis from the head joint the plane
+	 * sits, in classic units. Negative is off, which is the BEFORE picture. */
+	double cutS;
+	bool noCap;			// draw without the lid (#123, fix round S)
 	double fpForward;		// FP_EYE_OFFSET; 0 is the eye against a wall
 	int cull;			// HDModelCull, on her body alone
 	bool yawSet, pitchSet;		// did the caller name one?
@@ -4944,6 +5248,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	if (o.neck)
 		PrintNeckTable(o.root, body);
+
+	if (o.poseRisk)
+		PrintPoseRisk(level, "the level");
 
 	if (o.handLight)
 		PrintHandLight(o.root, outfit, o.oldSkin);
@@ -5524,29 +5831,44 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		printf("meshbits: %08x - the composite is masked to those nodes\n",
 			o.nodeMask);
 
-	/* THE NECK CUT (stage S8, re-shaped in fix round J). The BODY carries it
-	 * and nothing else, exactly as specific/hd/hd_laradraw.cpp pushes it: the
-	 * hands and the holsters are their own models and must never be cut away.
-	 * The cylinder is taken from the level's own bind pose by the engine's own
-	 * HDLaraNeckCut, so this picture is the game's picture; only the two
-	 * numbers may be overridden, which is what -neckcut is for. */
+	/* THE NECK CUT (stage S8; a cylinder in fix round J; ONE PLANE in fix
+	 * round S). The BODY carries it and nothing else, exactly as
+	 * specific/hd/hd_laradraw.cpp pushes it: the hands, the holsters and the
+	 * lid are their own models and must never be cut away.
+	 *
+	 * The axis comes out of the level's own bind pose through the engine's own
+	 * HDLaraNeckPlane and the four view space numbers are built here the way
+	 * hd_laradraw builds them - out of the head node's own matrix - so this
+	 * picture is the game's picture. Only the DEPTH may be overridden, which
+	 * is what -neckplane is for. */
 	HDModelNeckCut neckCut = { 0 };
-	const bool cutting = o.cutR > 0.0 && HDLaraNeckCut(&neckCut);
+	float neckAxis[3] = { 0.0f, 1.0f, 0.0f };
+	float neckDepth = 0.0f;
+	const bool cutting = o.cutS >= 0.0 && HDLaraNeckPlane(neckAxis, &neckDepth);
 
 	if (cutting)
 	{
-		neckCut.depth = (float)o.cutS;
-		neckCut.radius = (float)o.cutR;
-		neckCut.near_ = (float)o.cutNear;
+		const float* m = matrices + HD_LARA_HEAD_NODE * 16;
+		const float nx = neckAxis[0] * m[0] + neckAxis[1] * m[4] + neckAxis[2] * m[8];
+		const float ny = neckAxis[0] * m[1] + neckAxis[1] * m[5] + neckAxis[2] * m[9];
+		const float nz = neckAxis[0] * m[2] + neckAxis[1] * m[6] + neckAxis[2] * m[10];
+		const float depth = (float)o.cutS;
+		const float px = m[12] + nx * depth;
+		const float py = m[13] + ny * depth;
+		const float pz = m[14] + nz * depth;
 
-		if (o.cutNodes)
-			neckCut.nodes = o.cutNodes;
+		neckCut.on = 1.0f;
+		neckCut.plane[0] = nx;
+		neckCut.plane[1] = ny;
+		neckCut.plane[2] = nz;
+		neckCut.plane[3] = -(nx * px + ny * py + nz * pz);
 	}
 
-	printf("neckcut : %.0f down the neck axis and %.0f off it, near zone %.0f "
-		"about the eye,\n          nodes %08x, body alone%s\n", o.cutS, o.cutR,
-		o.cutNear, cutting ? neckCut.nodes : 0u,
-		cutting ? "" : " - off, this is the BEFORE picture");
+	printf("neckcut : a plane %.0f down the neck axis, in the HEAD's own "
+		"frame, body alone%s\n          and the lens stands %.1f from it%s\n",
+		o.cutS, cutting ? "" : " - off, this is the BEFORE picture",
+		cutting ? (double)-neckCut.plane[3] : 0.0,
+		o.noCap ? "; the lid is OFF (-nocap)" : "");
 	printf("cull    : %s\n", o.cull == HD_MODEL_CULL_CW ? "clockwise"
 		: o.cull == HD_MODEL_CULL_CCW ? "counter-clockwise"
 		: "none - both sides drawn, as every other HD model is");
@@ -5600,30 +5922,19 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		light, bodyMask, &lighting, cutting ? &neckCut : 0, o.cull))
 		drawn++;
 
-	/* THE INNER SKIN (#123, fix round K, K1), in the same place and with the
-	 * same four rules the seam has: after the outward draw, the same cut, the
-	 * same node mask, and the skin's own material. -noinner leaves it out,
-	 * which is the BEFORE picture. */
-	if (o.firstPerson && cutting && !o.noInner && draws(HD_LARA_PART_BODY))
+	/* THE LID (#123, fix round S, S1), in the same place and with the same
+	 * four rules the seam has: no cut of its own (it lies IN the plane), no
+	 * cull, its own node mask (first person clears the head node from
+	 * `bodyMask` and the lid rides on that very node), and the skin's own
+	 * material. -nocap leaves it out, which is the BEFORE picture. */
+	if (o.firstPerson && cutting && !o.noCap && draws(HD_LARA_PART_NECK_CAP) &&
+		HDLaraHasPart(HD_LARA_PART_NECK_CAP))
 	{
-		float skinSheen = 0.0f, skinPower = 1.0f;
-		int page = -1;
-		float su = 0.0f, sv = 0.0f;
+		SetSheen(lighting, HD_LARA_PART_NECK_CAP, sheenOn);
 
-		HDLaraSkinSheen(&skinSheen, &skinPower);
-		lighting.specStrength = sheenOn ? skinSheen : 0.0f;
-		lighting.specPower = skinPower;
-
-		if (HDModelInnerSkin(HDLaraPartSlot(HD_LARA_PART_BODY), &page, &su, &sv))
-			printf("innerskin: page %d at %.3f/%.3f\n", page, su, sv);
-		else
-			printf("innerskin: no texel measured - the inner draw wears the "
-				"surface's own pages\n");
-
-		if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BODY), matrices,
-			HD_LARA_NODES, light, bodyMask, &lighting, &neckCut,
-			o.cull == HD_MODEL_CULL_CW ? HD_MODEL_SKIN_CCW
-				: HD_MODEL_SKIN_INSIDE))
+		if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), matrices,
+			HD_LARA_NODES, light, 1u << HD_LARA_HEAD_NODE, &lighting, 0,
+			HD_MODEL_CULL_NONE))
 			drawn++;
 	}
 
@@ -5682,10 +5993,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	char cut[32] = "";
 
 	if (o.firstPerson)
-		sprintf(cut, "_p%d_f%d_cut%dx%d_near%d_nodes%x_%s",
+		sprintf(cut, "_p%d_f%d_plane%d%s_%s",
 			(int)(o.pitchSet ? o.pitch : 60.0),
-			(int)o.fpForward, (int)(o.cutS + 0.5), (int)(o.cutR + 0.5),
-			(int)(o.cutNear + 0.5), cutting ? neckCut.nodes : 0u,
+			(int)o.fpForward, (int)(o.cutS + 0.5),
+			o.noCap ? "_nocap" : "",
 			o.cull == HD_MODEL_CULL_CW ? "cw"
 			: o.cull == HD_MODEL_CULL_CCW ? "ccw" : "nocull");
 
@@ -5724,10 +6035,10 @@ int main(int argc, char** argv)
 	int onlyPage = -1;		// #123 fix round D (D4): -name with one page
 	bool lara = false, laraNodes = false, mirror = false;
 	bool laraFirstPerson = false, laraCheck = false, laraNeck = false;
+	bool laraPoseRisk = false;	// #148 order 4, fix round S (S2)
 	bool laraHandLight = false;	// #123 fix round K (K2): the wrist seam
 	bool laraOldSkin = false;	// #123 fix round K (K2): the BEFORE picture
 	bool classicBraidRoot = false;	// #123 fix round I (I2): the BEFORE picture
-	bool noInner = false;		// #123 fix round K (K1): ditto
 	int onlyPart = -1;		// #123 fix round I (I4): one part alone
 	bool noSheen = false;		// #123 fix round D (D2): the BEFORE picture
 	bool laraBraid = false;
@@ -5735,13 +6046,12 @@ int main(int argc, char** argv)
 	/* #123 fix round G (G1): the same chain under a real animation. */
 	std::vector<int> laraBraidAnims;
 	bool laraBraidFloor = true;
-	/* Stage S8. -1 means "the engine's own constant when -firstperson is on",
-	 * which is what makes the tool's default picture the game's picture; a
-	 * number given on the line overrides it, and 0 is the BEFORE picture. */
-	double cutS = -1.0, cutR = -1.0;
-	/* #123 fix round L: the taper and the near zone, same rule. */
-	double cutNear = -1.0e9;
-	unsigned int cutNodes = 0;	// 0 = the engine's own node mask
+	/* Stage S8. -1e9 means "the engine's own constant when -firstperson is
+	 * on", which is what makes the tool's default picture the game's picture;
+	 * a number given on the line overrides it, and a negative one is the
+	 * BEFORE picture. */
+	double cutS = -1.0e9;
+	bool noCap = false;		// #123 fix round S: without the lid
 	double fpForward = 48.0;
 	int cullMode = -1;		// -1 = "what -firstperson would use"
 	bool yawSet = false, pitchSet = false;
@@ -5810,20 +6120,11 @@ int main(int argc, char** argv)
 			lara = true;
 			laraFirstPerson = true;
 		}
-		else if (!_stricmp(argv[i], "-neckcut") && i + 2 < argc)
-		{
+		else if (!_stricmp(argv[i], "-neckplane") && i + 1 < argc)
 			cutS = atof(argv[++i]);
-			cutR = atof(argv[++i]);
-		}
-		/* #123 fix round L (L2): the near zone about the eye. */
-		else if (!_stricmp(argv[i], "-necknear") && i + 1 < argc)
-			cutNear = atof(argv[++i]);
-		/* #123 fix round L: which NODES the cut may touch. The engine says
-		 * the torso and nothing else, and the question a picture answers with
-		 * this switch is which node a surface in the camera belongs to - a
-		 * node the cut can reach vanishes, one it cannot stays. */
-		else if (!_stricmp(argv[i], "-cutnodes") && i + 1 < argc)
-			cutNodes = (unsigned int)strtoul(argv[++i], 0, 0);
+		/* #123 fix round S (S1): the picture with the hole and no lid. */
+		else if (!_stricmp(argv[i], "-nocap"))
+			noCap = true;
 		else if (!_stricmp(argv[i], "-fpforward") && i + 1 < argc)
 			fpForward = atof(argv[++i]);
 		else if (!_stricmp(argv[i], "-cull") && i + 1 < argc)
@@ -5839,6 +6140,13 @@ int main(int argc, char** argv)
 		{
 			lara = true;
 			laraNeck = true;
+		}
+		/* #148 order 4, fix round S (S2): which key frame pairs a matrix
+		 * blend cannot survive, and whether a packed angle ever wraps. */
+		else if (!_stricmp(argv[i], "-poserisk"))
+		{
+			lara = true;
+			laraPoseRisk = true;
 		}
 		/* #123 fix round K (K2): what the body and the hand shine like where
 		 * the two meet, for the outfit this run wears. */
@@ -5859,8 +6167,6 @@ int main(int argc, char** argv)
 		/* #123 fix round K (K1): the first person picture WITHOUT the inner
 		 * skin, which is what the cut and the culling leave on their own -
 		 * a hole one sees the room through. */
-		else if (!_stricmp(argv[i], "-noinner"))
-			noInner = true;
 		else if (!_stricmp(argv[i], "-onlypart") && i + 1 < argc)
 		{
 			lara = true;
@@ -6091,10 +6397,10 @@ int main(int argc, char** argv)
 		o.mirror = mirror;
 		o.firstPerson = laraFirstPerson;
 		o.classicBraidRoot = classicBraidRoot;
-		o.noInner = noInner;
 		o.onlyPart = onlyPart;
 		o.noSheen = noSheen;
 		o.neck = laraNeck;
+		o.poseRisk = laraPoseRisk;
 		o.handLight = laraHandLight;
 		o.oldSkin = laraOldSkin;
 		o.braid = laraBraid;
@@ -6112,14 +6418,9 @@ int main(int argc, char** argv)
 		o.pitch = pitch;
 		o.dist = dist;
 		o.shade = shade;
-		o.cutS = cutS < 0.0
-			? (laraFirstPerson ? (double)HD_LARA_NECK_CUT_S : 0.0) : cutS;
-		o.cutR = cutR < 0.0
-			? (laraFirstPerson ? (double)HD_LARA_NECK_CUT_R : 0.0) : cutR;
-		/* The near zone (#123, fix round L, L2). */
-		o.cutNear = cutNear > -1.0e8 ? cutNear
-			: (laraFirstPerson ? (double)HD_LARA_NECK_NEAR : 0.0);
-		o.cutNodes = cutNodes;
+		o.cutS = cutS > -1.0e8 ? cutS
+			: (laraFirstPerson ? (double)HD_LARA_NECK_PLANE_S : -1.0);
+		o.noCap = noCap;
 		o.fpForward = fpForward;
 		o.cull = cullMode < 0
 			? (laraFirstPerson ? HD_MODEL_CULL_BACK : HD_MODEL_CULL_NONE)

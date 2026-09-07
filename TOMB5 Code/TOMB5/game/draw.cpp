@@ -1422,6 +1422,32 @@ long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
 
 	frm[0] = anim->frame_ptr + size * key;
 	frm[1] = frm[0] + size;
+
+	/* AND THE PAIR A MATRIX BLEND CANNOT SURVIVE (#123, fix round S, S2).
+	 *
+	 * An element-wise lerp of two rotations is a SHRINK - cos(D/2) of the
+	 * bone's own frame at the midpoint - and at half a turn the frame is
+	 * singular and whatever hangs off it lands nowhere real. That is the leg
+	 * pointing the wrong way in the play test's dive roll.
+	 *
+	 * ONLY FOR RATE 1, and the reason is the whole rule: every other rate
+	 * puts the tween frame INSIDE the very segment vanilla blends the two
+	 * tick frames on, so it is no worse than its own neighbours and refusing
+	 * it would be a jump. A rate 1 pair is two adjacent stored frames a whole
+	 * game frame apart that vanilla NEVER blends at all - which is the one
+	 * thing order 4 added, and the one place a pose can be too far.
+	 *
+	 * Measured, ModelProbe -poserisk: over ANDREA1's 319 Lara animations this
+	 * refuses animation 205 - whose HIPS turn 179.9 degrees between key 0 and
+	 * key 1 - and nothing else. interpolate_math.h carries the arithmetic. */
+	if (rate == 1 && InterpPoseFar(frm[0], frm[1],
+		objects[item->object_number].nmeshes, INTERP_POSE_TURN_COS))
+	{
+		InterpNotePoseFar();
+
+		return 0;
+	}
+
 	*blend = b;
 
 	return 1;

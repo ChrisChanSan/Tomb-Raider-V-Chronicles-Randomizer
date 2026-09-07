@@ -138,10 +138,36 @@ struct HDModelSlot
 	 *
 	 * Called once, right after the .TRM is read and before it becomes buffers
 	 * nobody can read back. It answers a question this module has no business
-	 * knowing: which texel of which page is Lara's NECK, so that the inner
-	 * skin can wear her own colour (HDModelSetInnerSkin). It changes nothing
-	 * and returns nothing - what it measures it keeps itself. */
+	 * knowing: which texel of which page is Lara's NECK, so that the LID which
+	 * closes the first person neck cut can wear her own colour (#123, fix
+	 * round S, S1; it was round K's inner skin that first needed it). It
+	 * changes nothing and returns nothing - what it measures it keeps
+	 * itself. */
 	void (*measure)(const HDTrmModel* source) = 0;
+
+	/* A MODEL THAT IS BUILT AND NOT READ (#123, fix round I, I3; withdrawn in
+	 * fix round K with the dome it made; back in fix round S for the LID).
+	 *
+	 * `synth` is a maker: it is handed the .TRM of the slot `synthFrom` -
+	 * which has to appear EARLIER in the same array, because the sources are
+	 * read in the order the caller gives them - and fills an HDTrmModel of its
+	 * own, which this module then treats exactly like a file it read: same
+	 * page cache, same skinning, same bind pose, same draw. It owns its four
+	 * arrays with new[] and they are given back with HDTrmFree like everything
+	 * else.
+	 *
+	 * There is one maker and it is the reason this exists: the LID that closes
+	 * the hole the first person neck cut leaves. The cut is a plane in the
+	 * head's own frame, and no file in the remaster's wardrobe is a disc in
+	 * that plane, so it is generated - out of the outfit's own neck, at the
+	 * radius that neck really has. See HD_LARA_PART_NECK_CAP in hd_lara.h.
+	 *
+	 * A maker that returns false is a part that does not draw, exactly as a
+	 * missing file is: the note says why and the rest of the wardrobe is
+	 * unaffected. */
+	int synthFrom = -1;
+	bool (*synth)(const HDTrmModel* source, HDTrmModel* out,
+		const char** why) = 0;
 };
 
 // Where a model's file was found.
@@ -365,72 +391,53 @@ void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount,
  * consistent enough to cull on: over the eight wardrobe bodies, 39,440 to
  * 25,384 triangles each, at most 59 of them have the geometric normal on the
  * other side of the vertex normal (0.06 % to 0.18 %). */
-/* AND THE FAR SIDE OF THE SAME SHELL (#123, fix round K, K1). The two SKIN_
- * modes keep exactly the faces the two CULL_ modes throw away and paint them
- * in one colour - the draw that closes the hole first person cuts, described
- * at HDModelSetInnerSkin below and at gInnerSkin in hd_model.hlsl. They are
- * cull modes and not a parameter of their own because the mode already
- * travels from hd_laradraw through HDObjectPush to the draw, and one more
- * value on that road is one more value; a parameter would be six signatures. */
+/* THE TWO SKIN_ MODES OF FIX ROUND K STOOD HERE (#123, fix round S, S1). They
+ * kept the faces the CULL_ modes throw away and painted them in one colour -
+ * the second draw that closed the hole the neck cut left. Fix round S closes
+ * it with a LID instead, and measured the second draw out: forty first person
+ * pictures are identical to the pixel with it and without it. */
 enum HDModelCull
 {
 	HD_MODEL_CULL_NONE = 0,		// double sided - every model but the one
 	HD_MODEL_CULL_CW,		// D3DCULL_CW
-	HD_MODEL_CULL_CCW,		// D3DCULL_CCW
-	HD_MODEL_SKIN_CW,		// D3DCULL_CW, and the inner skin with it
-	HD_MODEL_SKIN_CCW		// D3DCULL_CCW, ditto
+	HD_MODEL_CULL_CCW		// D3DCULL_CCW
 };
 
 #define HD_MODEL_CULL_BACK	HD_MODEL_CULL_CCW
-// The complement of CULL_BACK: what CULL_BACK drops is what this one keeps.
-#define HD_MODEL_SKIN_INSIDE	HD_MODEL_SKIN_CW
 
-/* THE NECK CUT (#123, stage S8; re-shaped in fix round J, J1 and J3; the near
- * zone and the node mask are fix round L, L1 and L2).
+/* THE NECK CUT (#123, stage S8; a cylinder in fix round J; ONE PLANE since
+ * fix round S, S1).
  *
- * TWO SHAPES, and a fragment inside EITHER of them is discarded - and only on
- * the nodes `nodes` names.
+ * ONE HALF SPACE, in VIEW space, and every fragment on the wrong side of it
+ * is discarded whatever node carries it: a fragment is kept where
  *
- *   1. A CYLINDER ABOUT THE NECK AXIS, in the model's own BIND POSE: every
- *      fragment less than `depth` down the axis from `head` and less than
- *      `radius` off it.
- *   2. A SPHERE AROUND THE EYE of radius `near_`, and the eye is the ORIGIN OF
- *      VIEW SPACE - in first person the camera IS the eye, so this needs no
- *      position of its own and follows the real camera whether the game put
- *      it 48 units in front of the head joint or, with a wall in the way, on
- *      the joint.
+ *     dot(plane.xyz, p) + plane.w >= 0
  *
- * Stage S8 cut a sphere around the eye ALONE, and the play test of fix round I
- * killed all three of its consequences at once: the sixty unit radius bit a
- * hole the size of it out of her chest, the cap built to close that hole had
- * to be as wide as her whole torso, and a hand brought up to the camera came
- * back with a jagged edge at the wrist. The cylinder has none of those - it is
- * the shape of the thing that has to go, it does not move with the eye, and it
- * cannot reach an arm - and the sphere is back beside it only as a NEAR ZONE,
- * measured to sit under everything that must survive at both eyes and held off
- * every node but the two the mask names, which is what stops it eating a
- * wrist.
+ * with `p` the fully skinned position. The plane is perpendicular to the neck
+ * axis and sits a measured distance below the head joint - under her chin and
+ * over her collar - and it is built once a frame out of the interpolated HEAD
+ * node matrix, so it is fixed in HER HEAD's frame and not in the camera's and
+ * not in the bind pose.
  *
- * `nodes` IS THE PART THAT WAS WRONG UNTIL FIX ROUND L, and it is not a
- * detail: the shader treats it as a WEIGHT, pushing a vertex
- * (1 - cuttable) * 1000 units out of both shapes, so a vertex that is half on
- * a node the mask does not name survives any cut there is. Lara's neck is
- * skinned half to the head, so a mask of the torso alone never took her neck
- * at all. See hd_lara.h.
+ * WHY IT IS NEITHER OF THE TWO SHAPES BEFORE IT. Stage S8 cut a SPHERE around
+ * the eye: it took the stump, but also a bite the size of its radius out of
+ * her chest and a jagged edge out of a wrist brought up to the camera. Rounds
+ * J to L cut a CYLINDER about the neck axis in the BIND POSE, and three play
+ * tests running came back with the collar still standing: a neck vertex is
+ * skinned half to the head and half to the torso, so the patch of skin a
+ * bind-pose shape takes MOVES with the animation, and a node mask that keeps
+ * the shape off an arm keeps it off half the neck as well. A plane fixed to
+ * the head has neither freedom - what is above it is above it in every pose -
+ * and it needs no mask, because nothing of an arm is ever above her chin.
  *
  * A null pointer, or `on` 0, is off and costs the pixel shader one lerp.
- * hd_lara.h carries the numbers and the measurement behind them, and
- * hd_model.hlsl's ModelVS the geometry.
+ * hd_lara.h carries the depth and the measurement behind it, and
+ * hd_model.hlsl's ModelVS the one dot product.
  */
 struct HDModelNeckCut
 {
 	float on;		// 0 = off; nothing else is read then
-	float head[3];		// the head joint, in the model's bind pose
-	float axis[3];		// unit, head joint -> torso joint, bind pose
-	float depth;		// how far down the axis the cut reaches
-	float radius;		// how far off it
-	float near_;		// the near zone about the eye; 0 = none
-	unsigned int nodes;	// bit per node the cut may touch
+	float plane[4];		// view space: keep where dot(n, p) + w >= 0
 };
 
 // False when the slot has no model or the frame is not open; the caller then
@@ -525,8 +532,6 @@ int HDModelPageSheenCount(int slot);
  * HDModelSetPageSheen is called; a slot with none set draws a SKIN_ mode as
  * the plain CULL_ one, which is the old picture and not a crash.
  * hd_lara.cpp measures the texel out of the outfit's own neck. */
-void HDModelSetInnerSkin(int slot, int page, float u, float v);
-bool HDModelInnerSkin(int slot, int* page, float* u, float* v);
 bool HDModelHasHead(int slot);
 int HDModelHeadNode(int slot);			// the node the face rides on, or -1
 // The model's bounding box in its own bind pose, six floats (min then max).

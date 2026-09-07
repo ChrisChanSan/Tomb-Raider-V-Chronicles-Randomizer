@@ -338,6 +338,164 @@ inline long InterpBlendLong(long a, long b, long alpha8)
 	return alpha8 <= 4 ? a + ((d * alpha8) >> 3) : b - ((d * (8 - alpha8)) >> 3);
 }
 
+
+/* ==========================================================================
+ * ORDER 4 - THE PAIR A MATRIX BLEND CANNOT SURVIVE (#148; #123 fix round S, S2)
+ * ==========================================================================
+ *
+ * THE PLAY TEST. A dive roll in the third person at sixty hertz, three
+ * captures: tucked, ONE frame with a leg fully extended the other way round,
+ * tucked again. The first reading was a packed ten bit angle interpolated the
+ * long way round - 1000 to 20 giving 510 instead of 1022.
+ *
+ * THAT READING IS WRONG, and it is worth writing down why, because the right
+ * answer is in the same place. Order 4 does not interpolate ANGLES anywhere:
+ * GetFramesAt hands the key frame PAIR and a factor to InitInterpolateAlpha,
+ * and the blend is vanilla's own InterpolateMatrix, which lerps the two 3x4
+ * MATRICES element by element (game\draw.cpp). An element-wise lerp of two
+ * rotations always takes the SHORT way - at a half it is the short-way
+ * bisector, scaled - so the wrap cannot happen. Measured as well, ModelProbe
+ * -poserisk over all 319 Lara animations of ANDREA1: not one adjacent key
+ * frame pair has a per-axis packed difference over 512 after the wrap, and a
+ * wrap cannot produce one.
+ *
+ * WHAT AN ELEMENT-WISE LERP DOES INSTEAD IS SHRINK. Write the two node frames
+ * as A and B with a relative rotation of D degrees about some axis. At a half,
+ *
+ *     (A + B) / 2  =  A * (I + R(D)) / 2
+ *
+ * which is the identity on the axis and cos(D/2) times a rotation of D/2 in
+ * the plane across it. At D = 60 that is a 13 % shrink of the bone's own
+ * frame; at 90 it is 29 %; at 180 the plane collapses to NOTHING and the
+ * frame is singular - the bone has no length in that plane at all and
+ * whatever hangs off it lands somewhere that is on neither of the two poses.
+ * A leg pointing the wrong way is what that looks like.
+ *
+ * SO THE QUESTION IS WHICH PAIRS ORDER 4 BLENDS THAT VANILLA NEVER DID, and
+ * the answer is one word: rate. At thirty hertz vanilla blends key frames k
+ * and k+1 at a quarter, a half or three quarters - and only when the
+ * animation's rate is MORE THAN ONE, because with rate 1 every frame is a key
+ * frame and `frac` is always zero. Order 4 blends the rate 1 animations too:
+ * their two ticks are two adjacent stored frames, a whole game frame apart,
+ * and the midpoint is that pair at a half. For every other rate the tween
+ * frame lands INSIDE the same segment the two tick frames are blended on, so
+ * it is no worse than its own neighbours and refusing it would be a jump.
+ *
+ * MEASURED, ModelProbe -poserisk, ANDREA1: 319 Lara animations, 23 of them
+ * rate 1. Twenty-two of those twenty-three turn at most 52.7 degrees between
+ * two adjacent frames at every one of the fifteen nodes - a shrink of ten per
+ * cent, which is what sixty hertz is supposed to smooth. The twenty-third is
+ * animation 205, whose HIPS - node 0, the root of the whole body - turn
+ * 179.9 degrees between key 0 and key 1. That one frame is the picture.
+ *
+ * SO: a rate 1 pair whose turn is too big is not blended at all, and the
+ * frame is drawn exactly as thirty hertz draws it. That is rule K6 of the
+ * plan with one more entry, it cannot reach fps_mode 0 (nothing here runs
+ * unless InterpPoseTime asked for a tween frame), and it cannot change a
+ * picture vanilla draws, because vanilla does not draw this pair blended
+ * either.
+ *
+ * THE LIMIT IS NINETY DEGREES, which is the last turn whose midpoint keeps
+ * more than seventy per cent of the bone's frame. In ANDREA1 it refuses
+ * animation 205 and nothing else. */
+#define INTERP_POSE_TURN_COS	0.0F	/* cos 90 degrees: trace = 1 + 2*cos */
+
+/* ONE NODE'S PACKED ROTATION, and the cursor stepped past it (game\draw.cpp,
+ * gar_RotYXZsuperpack). Two words when the top two bits are zero and three
+ * TEN bit angles follow; one word otherwise, naming a single axis with TWELVE
+ * bits. The angles come back in the engine's own 16 bit space. */
+inline void InterpUnpackRot(const short*& p, short* xyz)
+{
+	const unsigned short w = (unsigned short)*p;
+
+	xyz[0] = xyz[1] = xyz[2] = 0;
+
+	if ((w & 0xC000) == 0)
+	{
+		const unsigned short w2 = (unsigned short)p[1];
+		const unsigned long packed = ((unsigned long)w << 16) | (unsigned long)w2;
+
+		xyz[0] = (short)((short)((packed >> 20) & 0x3FF) << 6);
+		xyz[1] = (short)((short)((packed >> 10) & 0x3FF) << 6);
+		xyz[2] = (short)((short)(packed & 0x3FF) << 6);
+		p += 2;
+		return;
+	}
+
+	xyz[(w >> 14) == 1 ? 0 : (w >> 14) == 2 ? 1 : 2] =
+		(short)((short)(w & 0xFFF) << 4);
+	p++;
+}
+
+/* The node's frame out of its three packed angles, row major 3x3, in
+ * phd_RotYXZ's own order: Y, then X, then Z. The order has to match the
+ * engine's, because the test below is about the frames the engine really
+ * builds; the SCALE does not, and there is none here. */
+inline void InterpPoseRot(const short* xyz, float* m)
+{
+	const float k = 3.14159265358979323846F / 32768.0F;
+	const float sy = sinf((float)xyz[1] * k), cy = cosf((float)xyz[1] * k);
+	const float sx = sinf((float)xyz[0] * k), cx = cosf((float)xyz[0] * k);
+	const float sz = sinf((float)xyz[2] * k), cz = cosf((float)xyz[2] * k);
+
+	/* Ry then Rx then Rz, composed as Rz * Rx * Ry. */
+	m[0] = cz * cy + sz * sx * sy;
+	m[1] = sz * cx;
+	m[2] = cz * -sy + sz * sx * cy;
+
+	m[3] = -sz * cy + cz * sx * sy;
+	m[4] = cz * cx;
+	m[5] = sz * sy + cz * sx * cy;
+
+	m[6] = cx * sy;
+	m[7] = -sx;
+	m[8] = cx * cy;
+}
+
+/* cos of the angle between two node frames: trace(A^T B) = 1 + 2 cos. */
+inline float InterpPoseTurnCos(const float* a, const float* b)
+{
+	float t = 0.0F;
+
+	for (int i = 0; i < 3; i++)
+		for (int k = 0; k < 3; k++)
+			t += a[i * 3 + k] * b[i * 3 + k];
+
+	return (t - 1.0F) * 0.5F;
+}
+
+/* TRUE when the two frames are too far apart at any node for an element-wise
+ * matrix blend - the whole rule above in one call, so that game\draw.cpp and
+ * InterpTest ask exactly the same question. `nodes` is the model's own mesh
+ * count; the two pointers are the frames themselves, and the nine shorts of
+ * bounding box and offset are stepped over here. */
+inline bool InterpPoseFar(const short* frameA, const short* frameB, int nodes,
+	float cosLimit)
+{
+	const short* a = frameA + 9;
+	const short* b = frameB + 9;
+
+	for (int node = 0; node < nodes; node++)
+	{
+		short ra[3], rb[3];
+		float ma[9], mb[9];
+
+		InterpUnpackRot(a, ra);
+		InterpUnpackRot(b, rb);
+
+		if (ra[0] == rb[0] && ra[1] == rb[1] && ra[2] == rb[2])
+			continue;
+
+		InterpPoseRot(ra, ma);
+		InterpPoseRot(rb, mb);
+
+		if (InterpPoseTurnCos(ma, mb) < cosLimit)
+			return true;
+	}
+
+	return false;
+}
+
 /* ==========================================================================
  * ORDER 5 - THE PARTICLES, AND THE ONE LINE OF ARITHMETIC THEY NEED.
  *
@@ -460,14 +618,52 @@ inline void InterpCamAim(long px, long py, long pz, long tx, long ty, long tz,
 
 /* Did the VIEW DIRECTION cut between these two cameras? The whole of the rule
  * above in one call, so that game\interpolate.cpp and InterpTest ask exactly
- * the same question. */
+ * the same question.
+ *
+ * THE BRANCH IS CHOSEN ONCE FOR THE PAIR AND BOTH SIDES TAKE THE SAME SCALE
+ * (#123, fix round S, S3(a)). Fix round R asked each camera on its own whether
+ * its target was far, which put a seam right on the shell: a target at 4095
+ * was compared as a PLACE, 4095 units from its eye, and the same target one
+ * unit further out as a DIRECTION, 1024 units from its eye - a difference of
+ * three thousand units out of nothing at all, on every frame a target hovered
+ * there. It could not reach the two cameras the engine really has (a first
+ * person target sits at 20736 and a chase target at about 1500), but it was a
+ * cliff in the middle of the rule and a rule with a cliff in it is a bug
+ * waiting for the third camera.
+ *
+ * So: FAR if EITHER target is beyond INTERP_CAM_FAR_TARGET, and then both
+ * offsets are scaled by the same k - INTERP_CAM_DIR_RADIUS over the LONGER of
+ * the two lengths. One k and not one each, because two different k's would
+ * hide a target that really did jump along its own ray. Under the shell
+ * nothing is scaled and the comparison is the absolute one order 2 shipped,
+ * to the bit. */
 inline bool InterpCamAimCut(long ppx, long ppy, long ppz, long ptx, long pty, long ptz,
 	long px, long py, long pz, long tx, long ty, long tz, long snap)
 {
-	long a[3], b[3];
+	const double adx = (double)(ptx - ppx);
+	const double ady = (double)(pty - ppy);
+	const double adz = (double)(ptz - ppz);
+	const double bdx = (double)(tx - px);
+	const double bdy = (double)(ty - py);
+	const double bdz = (double)(tz - pz);
+	const double alen = sqrt(adx * adx + ady * ady + adz * adz);
+	const double blen = sqrt(bdx * bdx + bdy * bdy + bdz * bdz);
+	const double longer = alen > blen ? alen : blen;
 
-	InterpCamAim(ppx, ppy, ppz, ptx, pty, ptz, &a[0], &a[1], &a[2]);
-	InterpCamAim(px, py, pz, tx, ty, tz, &b[0], &b[1], &b[2]);
+	long a[3] = { ptx - ppx, pty - ppy, ptz - ppz };
+	long b[3] = { tx - px, ty - py, tz - pz };
+
+	if (longer > (double)INTERP_CAM_FAR_TARGET)
+	{
+		const double k = (double)INTERP_CAM_DIR_RADIUS / longer;
+
+		a[0] = (long)(adx * k);
+		a[1] = (long)(ady * k);
+		a[2] = (long)(adz * k);
+		b[0] = (long)(bdx * k);
+		b[1] = (long)(bdy * k);
+		b[2] = (long)(bdz * k);
+	}
 
 	return InterpManhattan(b[0] - a[0], b[1] - a[1], b[2] - a[2]) > snap;
 }

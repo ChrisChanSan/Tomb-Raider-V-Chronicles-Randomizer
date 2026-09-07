@@ -237,6 +237,11 @@ namespace
 		{ "HAIR_OG",                  0,
 		  "the braid",                2, -1, "0..5 of its own chain", -1 },
 
+		/* Not a file: a disc built in the neck cut's own plane (#123, fix
+		 * round S, S1). The name is what the log and the plan call it. */
+		{ "NECK_CAP",                 0,
+		  "the neck lid",             0, -1, "14 (rigid)", -1 },
+
 		{ "HAND_BARE_REST",           "HAND_GLOVES_REST",
 		  "empty hands",              1, -1, "8,9,10,11,12,13", -1 },
 		{ "HAND_BARE_PISTOL",         "HAND_GLOVES_PISTOL",
@@ -377,6 +382,7 @@ namespace
 	{
 		{ HD_LARA_PART_FACE,               0.12f, 10.0f },	// skin
 		{ HD_LARA_PART_BRAID,              0.14f, 18.0f },	// hair
+		{ HD_LARA_PART_NECK_CAP,           0.12f, 10.0f },	// skin (S1)
 
 		{ HD_LARA_PART_HAND_REST,          0.12f, 10.0f },	// skin
 		{ HD_LARA_PART_HAND_PISTOL,        0.35f, 34.0f },	// gunmetal
@@ -560,6 +566,9 @@ namespace
 		useful[HD_LARA_PART_FACE] = true;
 		useful[HD_LARA_PART_BRAID] = true;
 		useful[HD_LARA_PART_HAND_REST] = true;	// LARA is always loaded
+		/* The lid hangs off no slot at all - it is cut out of the body's own
+		 * neck (#123, fix round S, S1), so it is wanted wherever the body is. */
+		useful[HD_LARA_PART_NECK_CAP] = true;
 
 		/* kind 3 is "worn": the three thigh holsters and the three weapons on
 		 * the back. outfit_takes still decides whether this outfit has any at
@@ -895,10 +904,11 @@ namespace
 		return node;
 	}
 
-	/* --------------------------------------- the inner skin (K1) -------- */
-	/* WHICH TEXEL IS LARA'S NECK. The one colour every fragment of the inner
-	 * draw wears - see HDModelSetInnerSkin in hd_model.h for what the draw is
-	 * and gInnerSkin in hd_model.hlsl for how it is worn.
+	/* --------------------------------------- her throat (K1) ----------- */
+	/* WHICH TEXEL IS LARA'S NECK. It was the one colour every fragment of fix
+	 * round K's inner skin wore; that draw is withdrawn (#123, fix round S,
+	 * S1(4)) and the LID wears the same texel now, for the same reason - what
+	 * closes the top of a neck should be the colour of that neck.
 	 *
 	 * WHERE IT IS TAKEN: THE PAGE THAT RUNS THE WHOLE HEIGHT OF THE NECK.
 	 * The node 7 vertices inside the cut's own cylinder are counted by texture
@@ -1119,6 +1129,227 @@ namespace
 		g_inner_page = best;
 		g_inner_span = bestSpan;
 	}
+
+	/* ------------------------------------------- the lid (S1) ---------- */
+	/* WHAT CLOSES THE HOLE THE PLANE CUTS (#123, fix round S, S1).
+	 *
+	 * A DISC IN THE PLANE ITSELF, skinned rigidly to the HEAD node - which is
+	 * what keeps it in the plane: the plane is fixed in the head's frame, and
+	 * so is every vertex of this. It cannot drift, breathe or tear away from
+	 * the cut, whatever the animation does, because both are the same frame.
+	 *
+	 * ITS RADIUS IS MEASURED AND NOT CHOSEN. The widest the outfit's own neck
+	 * really is in a band about the plane, plus HD_LARA_NECK_CAP_MARGIN, with
+	 * the search stopped at HD_LARA_NECK_CAP_RMAX so that a COLLAR can never
+	 * be mistaken for a neck - the VCI catsuit's collar ring stands at radius
+	 * 70 right where the plane is, and a lid that wide is fix round I's plate
+	 * all over again.
+	 *
+	 * IT WEARS ONE TEXEL, the same one the inner skin wears: the centroid of
+	 * the biggest triangle on the page whose column runs the whole height of
+	 * the throat (measure_neck_skin above). What the lid IS is the top of her
+	 * neck, so her neck's own colour is the honest answer, and it costs the
+	 * page cache nothing because the body already carries that page.
+	 *
+	 * ITS NORMAL POINTS HEAD-WARD - up out of the neck, towards the camera
+	 * that looks down at it - so it takes the light the top of her shoulders
+	 * takes and not the darkness of a face turned away. */
+	int g_cap_segments = 0;		// for the log
+	double g_cap_radius = 0.0;
+	double g_cap_measured = 0.0;	// the neck's own widest, before the margin
+	int g_cap_band = 0;		// vertices the radius was measured over
+
+	unsigned char pack_normal(double n)
+	{
+		const double v = n * 128.0 + 127.0;
+
+		return (unsigned char)(v < 0.0 ? 0.0 : (v > 255.0 ? 255.0 : v));
+	}
+
+	bool build_neck_cap(const HDTrmModel* source, HDTrmModel* out,
+		const char** why)
+	{
+		const int kSegments = HD_LARA_NECK_CAP_SEGMENTS;
+
+		*why = "";
+		g_cap_segments = 0;
+		g_cap_radius = 0.0;
+		g_cap_measured = 0.0;
+		g_cap_band = 0;
+
+		if (!source || !out || !g_neck_bind_ok)
+		{
+			*why = "the neck lid has no bind pose to measure against";
+			return false;
+		}
+
+		if (g_inner_page < 0)
+		{
+			*why = "the neck lid has no throat texel to wear";
+			return false;
+		}
+
+		const double H[3] =
+		{
+			g_neck_bind[HD_LARA_HEAD_NODE * 3 + 0],
+			g_neck_bind[HD_LARA_HEAD_NODE * 3 + 1],
+			g_neck_bind[HD_LARA_HEAD_NODE * 3 + 2]
+		};
+		const double T[3] =
+		{
+			g_neck_bind[HD_LARA_TORSO * 3 + 0],
+			g_neck_bind[HD_LARA_TORSO * 3 + 1],
+			g_neck_bind[HD_LARA_TORSO * 3 + 2]
+		};
+
+		double axis[3] = { T[0] - H[0], T[1] - H[1], T[2] - H[2] };
+		double len = std::sqrt(axis[0] * axis[0] + axis[1] * axis[1] +
+			axis[2] * axis[2]);
+
+		if (len < 1.0)
+		{
+			*why = "the torso and the head joint sit on top of each other";
+			return false;
+		}
+
+		for (int i = 0; i < 3; i++)
+			axis[i] /= len;
+
+		/* Two axes across it. The cross product with the world's z is safe:
+		 * the neck runs down y and nothing in a bind pose turns it. */
+		double u[3] = { axis[1], -axis[0], 0.0 };
+		double uLen = std::sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
+
+		if (uLen < 1.0e-6)
+		{
+			*why = "the neck axis lies along the world z";
+			return false;
+		}
+
+		for (int i = 0; i < 3; i++)
+			u[i] /= uLen;
+
+		const double w[3] =
+		{
+			axis[1] * u[2] - axis[2] * u[1],
+			axis[2] * u[0] - axis[0] * u[2],
+			axis[0] * u[1] - axis[1] * u[0]
+		};
+
+		/* --- how wide the neck is where the plane cuts it ------------------ */
+		double widest = 0.0;
+
+		for (int i = 0; i < source->vertices; i++)
+		{
+			const HDTrmVertex& v = source->vertex[i];
+			const double d[3] = { v.x - H[0], v.y - H[1], v.z - H[2] };
+			const double s = d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
+
+			if (std::fabs(s - (double)HD_LARA_NECK_PLANE_S) > HD_LARA_NECK_CAP_BAND)
+				continue;
+
+			const double off[3] =
+			{
+				d[0] - s * axis[0], d[1] - s * axis[1], d[2] - s * axis[2]
+			};
+			const double r = std::sqrt(off[0] * off[0] + off[1] * off[1] +
+				off[2] * off[2]);
+
+			if (r > HD_LARA_NECK_CAP_RMAX)
+				continue;	// a collar and not a neck
+
+			g_cap_band++;
+
+			if (r > widest)
+				widest = r;
+		}
+
+		if (g_cap_band < 3)
+		{
+			*why = "no neck to measure at the cut plane";
+			return false;
+		}
+
+		const double radius = widest + HD_LARA_NECK_CAP_MARGIN;
+
+		g_cap_measured = widest;
+		g_cap_radius = radius;
+		g_cap_segments = kSegments;
+
+		/* --- the fan ------------------------------------------------------- */
+		const int vertices = kSegments + 1;	// the middle and the rim
+
+		std::memset(out, 0, sizeof(*out));
+		out->version = 2;
+		out->parts = 1;
+		out->textures = 1;
+		out->indices = kSegments * 3;
+		out->vertices = vertices;
+		out->part = new HDTrmPart[1];
+		out->texture = new unsigned short[1];
+		out->index = new unsigned short[out->indices];
+		out->vertex = new HDTrmVertex[vertices];
+
+		std::memset(out->part, 0, sizeof(HDTrmPart));
+		out->part[0].opaque = (unsigned int)out->indices;
+		out->part[0].opaqueEnd = (unsigned int)out->indices;
+		out->part[0].alphaEnd = (unsigned int)out->indices;
+		out->texture[0] = (unsigned short)g_inner_page;
+
+		for (int i = 0; i < vertices; i++)
+		{
+			HDTrmVertex& v = out->vertex[i];
+
+			std::memset(&v, 0, sizeof(v));
+
+			double p[3];
+
+			if (i == 0)
+			{
+				for (int k = 0; k < 3; k++)
+					p[k] = H[k] + (double)HD_LARA_NECK_PLANE_S * axis[k];
+			}
+			else
+			{
+				const double a = 6.283185307179586 * (double)(i - 1) /
+					(double)kSegments;
+				const double ca = std::cos(a) * radius;
+				const double sa = std::sin(a) * radius;
+
+				for (int k = 0; k < 3; k++)
+					p[k] = H[k] + (double)HD_LARA_NECK_PLANE_S * axis[k] +
+						ca * u[k] + sa * w[k];
+			}
+
+			v.x = (float)p[0];
+			v.y = (float)p[1];
+			v.z = (float)p[2];
+
+			v.nx = pack_normal(-axis[0]);
+			v.ny = pack_normal(-axis[1]);
+			v.nz = pack_normal(-axis[2]);
+
+			v.layer = 1;	// counted from one - the model's only page
+			v.u = g_inner_u;
+			v.v = g_inner_v;
+
+			v.bone[0] = (unsigned char)HD_LARA_HEAD_NODE;
+			v.bone[1] = (unsigned char)HD_LARA_HEAD_NODE;
+			v.bone[2] = (unsigned char)HD_LARA_HEAD_NODE;
+			v.weight[0] = 255;
+			v.weight[1] = 0;
+			v.weight[2] = 0;
+		}
+
+		for (int k = 0; k < kSegments; k++)
+		{
+			out->index[k * 3 + 0] = 0;
+			out->index[k * 3 + 1] = (unsigned short)(1 + k);
+			out->index[k * 3 + 2] = (unsigned short)(1 + (k + 1) % kSegments);
+		}
+
+		return true;
+	}
 }
 
 /* ------------------------------------------------------- the level -- */
@@ -1177,6 +1408,15 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 		 * after the build there is no page and no vertex left to ask. */
 		if (part == HD_LARA_PART_BODY)
 			one.measure = &measure_neck_skin;
+
+		/* And the LID is cut out of it (#123, fix round S, S1). It stands
+		 * after the body in this array - the enum puts it there - which is
+		 * what lets hd_model hand the maker the body it has just read. */
+		if (part == HD_LARA_PART_NECK_CAP)
+		{
+			one.synthFrom = HDLaraPartSlot(HD_LARA_PART_BODY);
+			one.synth = &build_neck_cap;
+		}
 	}
 
 	return written;
@@ -1296,20 +1536,30 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 					"material and not two", named, named == 1 ? "" : "s",
 					model, named == 1 ? "takes" : "take", skinS, skinP);
 
+			/* The throat texel (#123, fix round K, K1). It closed the neck
+			 * hole from the inside until fix round S; the LID wears it now,
+			 * and the measurement is the same one. */
 			if (g_inner_page >= 0)
-			{
-				HDModelSetInnerSkin(slot, g_inner_page,
-					(float)g_inner_u * (1.0f / 255.0f),
-					(float)g_inner_v * (1.0f / 255.0f));
-				note("the inner skin: page %d at %d/%d, off the neck's "
+				note("her throat: page %d at %d/%d, off the neck's "
 					"own column (%d vertices spanning %.0f down the neck "
-					"axis)", g_inner_page, (int)g_inner_u, (int)g_inner_v,
+					"axis) - the lid wears it", g_inner_page,
+					(int)g_inner_u, (int)g_inner_v,
 					g_inner_ring, g_inner_span);
-			}
 			else
-				note("the inner skin: no neck ring found in %s - first person "
-					"draws the body one sided, as fix round J did", model);
+				note("her throat: no neck ring found in %s - there is no lid "
+					"and first person keeps the open hole", model);
 		}
+
+		/* THE LID, IN NUMBERS (#123, fix round S, S1). What the neck really
+		 * measured at the plane, what the disc came out at, and how many
+		 * vertices the measurement had to work with - so that a lid that
+		 * misses can be told from a neck that was never found. */
+		if (part == HD_LARA_PART_NECK_CAP && g_cap_segments > 0)
+			note("the neck lid: plane %.0f down the axis, the neck measures "
+				"%.1f there over %d vertices, the disc is %.1f wide in %d "
+				"segments on page %d", (double)HD_LARA_NECK_PLANE_S,
+				g_cap_measured, g_cap_band, g_cap_radius, g_cap_segments,
+				g_inner_page);
 
 		/* WHAT IS IN THE HAND GETS ITS OWN MATERIAL (#123, fix round I, I4).
 		 *
@@ -1582,9 +1832,9 @@ unsigned int HDLaraPartCoverage(int part)
  * shader carves, the shape the diagnostic tool draws and the shape the tables
  * in hd_lara.h were measured against cannot drift apart: all three are the
  * axis from the head joint to the torso joint of THIS level's own Lara. */
-bool HDLaraNeckCut(HDModelNeckCut* out)
+bool HDLaraNeckPlane(float axisOut[3], float* depth)
 {
-	if (!out || !g_neck_bind_ok)
+	if (!axisOut || !depth || !g_neck_bind_ok)
 		return false;
 
 	const double H[3] =
@@ -1610,17 +1860,15 @@ bool HDLaraNeckCut(HDModelNeckCut* out)
 	for (int i = 0; i < 3; i++)
 		axis[i] /= len;
 
-	out->on = 1.0f;
-	out->depth = HD_LARA_NECK_CUT_S;
-	out->radius = HD_LARA_NECK_CUT_R;
-	out->near_ = HD_LARA_NECK_NEAR;
-	out->nodes = HD_LARA_NECK_CUT_NODES;
-
+	/* THE AXIS IS THE SAME IN THE HEAD'S LOCAL FRAME as it is in the bind
+	 * pose, and that is not a coincidence to be checked for: a TR bind pose
+	 * carries bone OFFSETS and no rotations at all, so the head node's local
+	 * axes ARE the bind pose's axes, translated. The caller therefore needs
+	 * only the head node's own matrix and these four numbers. */
 	for (int i = 0; i < 3; i++)
-	{
-		out->head[i] = (float)H[i];
-		out->axis[i] = (float)axis[i];
-	}
+		axisOut[i] = (float)axis[i];
+
+	*depth = HD_LARA_NECK_PLANE_S;
 
 	return true;
 }

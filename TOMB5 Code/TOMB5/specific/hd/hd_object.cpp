@@ -589,6 +589,131 @@ namespace
 	 *   two disagree, the conversion is wrong - which is the one thing in the
 	 *   whole object path that cannot be seen in a picture, only measured.
 	 */
+	/* THE LIGHT, BOTH WAYS, AS ONE CALL (#123, fix round S, S4).
+	 *
+	 * Lifted out of self_test so that the CREATURE probe below can ask the
+	 * very same question of a guard in a dark room that the level proof asks
+	 * of the first item of the level - one arithmetic, one set of numbers,
+	 * and no chance of the two drifting apart.
+	 *
+	 * `classic` is aTransformLightClipMesh evaluated on the engine's own
+	 * SunLights / PointLights / SpotLights, which InitObjectLighting filled
+	 * for THIS item a moment ago, plus the ambient it left in aAmbientR/G/B.
+	 * `hd` is the same arithmetic on the view-space list this file built for
+	 * the shader, with the sample normal turned into view space by the
+	 * node's own matrix. Both on ONE normal that is not axis aligned, so a
+	 * swapped row or a dropped sign cannot cancel itself out. */
+	void compare_light(const FrameItem& entry, float* classic, float* hd)
+	{
+		/* --- the light ------------------------------------------------------ */
+		/* One normal that is not axis aligned, so that a swapped row or a
+		 * dropped sign cannot cancel itself out. */
+		const float nx = 0.4243f, ny = 0.5657f, nz = 0.7071f;
+
+		classic[0] = (float)aAmbientR;
+		classic[1] = (float)aAmbientG;
+		classic[2] = (float)aAmbientB;
+
+		for (long i = 0; i < NumPointLights; i++)
+		{
+		float val = (PointLights[i].vec.x * nx + PointLights[i].vec.y * ny +
+			PointLights[i].vec.z * nz + 1.0f) * 0.5f;
+
+		val *= val;
+
+		if (val > 0)
+		{
+			val *= PointLights[i].rad;
+			classic[0] += val * PointLights[i].r;
+			classic[1] += val * PointLights[i].g;
+			classic[2] += val * PointLights[i].b;
+		}
+		}
+
+		for (long i = 0; i < NumSpotLights; i++)
+		{
+		float val = SpotLights[i].vec.x * nx + SpotLights[i].vec.y * ny +
+			SpotLights[i].vec.z * nz;
+
+		if (val > 0)
+		{
+			val *= SpotLights[i].rad;
+			classic[0] += val * SpotLights[i].r;
+			classic[1] += val * SpotLights[i].g;
+			classic[2] += val * SpotLights[i].b;
+		}
+		}
+
+		for (long i = 0; i < NumSunLights; i++)
+		{
+		float val = SunLights[i].vec.x * nx + SunLights[i].vec.y * ny +
+			SunLights[i].vec.z * nz;
+
+		if (val > 0)
+		{
+			val *= InventoryActive ? 2.0f : 0.75f;
+			classic[0] += val * SunLights[i].r;
+			classic[1] += val * SunLights[i].g;
+			classic[2] += val * SunLights[i].b;
+		}
+		}
+
+		/* The same normal in view space, and the same node's view position -
+		 * the two things the shader has. */
+		const float* m = entry.matrix;
+		const float vnx = nx * m[0] + ny * m[4] + nz * m[8];
+		const float vny = nx * m[1] + ny * m[5] + nz * m[9];
+		const float vnz = nx * m[2] + ny * m[6] + nz * m[10];
+		const float px = m[12], py = m[13], pz = m[14];
+
+		hd[0] = entry.light[0];
+		hd[1] = entry.light[1];
+		hd[2] = entry.light[2];
+
+		for (int i = 0; i < entry.lightCount; i++)
+		{
+			const HDObjLight& light = entry.lights[i];
+			float lx = light.x, ly = light.y, lz = light.z;
+			float dist = 0;
+
+			if (light.kind >= 0.5f)
+			{
+				lx -= px;
+				ly -= py;
+				lz -= pz;
+				dist = (float)sqrt(SQUARE(lx) + SQUARE(ly) + SQUARE(lz));
+
+				if (dist > 1e-6f)
+				{
+					lx /= dist;
+					ly /= dist;
+					lz /= dist;
+				}
+			}
+
+			const float ndl = vnx * lx + vny * ly + vnz * lz;
+			const float rad = 1.0f - dist * light.invRange > 0.0f
+				? 1.0f - dist * light.invRange : 0.0f;
+			float val;
+
+			if (light.kind < 0.5f)
+				val = ndl > 0 ? ndl * (InventoryActive ? 2.0f : 0.75f) : 0.0f;
+			else if (light.kind < 1.5f)
+			{
+				const float wrap = (ndl + 1.0f) * 0.5f;
+
+				val = wrap * wrap * rad;
+			}
+			else
+				val = (ndl > 0 ? ndl : 0.0f) * rad;
+
+			hd[0] += val * light.r;
+			hd[1] += val * light.g;
+			hd[2] += val * light.b;
+		}
+
+	}
+
 	void self_test(const FrameItem& entry)
 	{
 		if (!gLogEnabled || g_checked)
@@ -644,108 +769,9 @@ namespace
 			g_stem, entry.slot, HDSlotName(entry.slot) ? HDSlotName(entry.slot) : "?",
 			entry.nodes, used, worst_x, worst_y);
 
-		/* --- the light ------------------------------------------------------ */
-		/* One normal that is not axis aligned, so that a swapped row or a
-		 * dropped sign cannot cancel itself out. */
-		const float nx = 0.4243f, ny = 0.5657f, nz = 0.7071f;
+		float classic[3], hd[3];
 
-		float classic[3] = { (float)aAmbientR, (float)aAmbientG, (float)aAmbientB };
-
-		for (long i = 0; i < NumPointLights; i++)
-		{
-			float val = (PointLights[i].vec.x * nx + PointLights[i].vec.y * ny +
-				PointLights[i].vec.z * nz + 1.0f) * 0.5f;
-
-			val *= val;
-
-			if (val > 0)
-			{
-				val *= PointLights[i].rad;
-				classic[0] += val * PointLights[i].r;
-				classic[1] += val * PointLights[i].g;
-				classic[2] += val * PointLights[i].b;
-			}
-		}
-
-		for (long i = 0; i < NumSpotLights; i++)
-		{
-			float val = SpotLights[i].vec.x * nx + SpotLights[i].vec.y * ny +
-				SpotLights[i].vec.z * nz;
-
-			if (val > 0)
-			{
-				val *= SpotLights[i].rad;
-				classic[0] += val * SpotLights[i].r;
-				classic[1] += val * SpotLights[i].g;
-				classic[2] += val * SpotLights[i].b;
-			}
-		}
-
-		for (long i = 0; i < NumSunLights; i++)
-		{
-			float val = SunLights[i].vec.x * nx + SunLights[i].vec.y * ny +
-				SunLights[i].vec.z * nz;
-
-			if (val > 0)
-			{
-				val *= InventoryActive ? 2.0f : 0.75f;
-				classic[0] += val * SunLights[i].r;
-				classic[1] += val * SunLights[i].g;
-				classic[2] += val * SunLights[i].b;
-			}
-		}
-
-		/* The same normal in view space, and the same node's view position -
-		 * the two things the shader has. */
-		const float* m = entry.matrix;
-		const float vnx = nx * m[0] + ny * m[4] + nz * m[8];
-		const float vny = nx * m[1] + ny * m[5] + nz * m[9];
-		const float vnz = nx * m[2] + ny * m[6] + nz * m[10];
-		const float px = m[12], py = m[13], pz = m[14];
-
-		float hd[3] = { entry.light[0], entry.light[1], entry.light[2] };
-
-		for (int i = 0; i < entry.lightCount; i++)
-		{
-			const HDObjLight& light = entry.lights[i];
-			float lx = light.x, ly = light.y, lz = light.z;
-			float dist = 0;
-
-			if (light.kind >= 0.5f)
-			{
-				lx -= px;
-				ly -= py;
-				lz -= pz;
-				dist = (float)sqrt(SQUARE(lx) + SQUARE(ly) + SQUARE(lz));
-
-				if (dist > 1e-6f)
-				{
-					lx /= dist;
-					ly /= dist;
-					lz /= dist;
-				}
-			}
-
-			const float ndl = vnx * lx + vny * ly + vnz * lz;
-			const float rad = 1.0f - dist * light.invRange > 0.0f
-				? 1.0f - dist * light.invRange : 0.0f;
-			float val;
-
-			if (light.kind < 0.5f)
-				val = ndl > 0 ? ndl * (InventoryActive ? 2.0f : 0.75f) : 0.0f;
-			else if (light.kind < 1.5f)
-			{
-				const float wrap = (ndl + 1.0f) * 0.5f;
-
-				val = wrap * wrap * rad;
-			}
-			else
-				val = (ndl > 0 ? ndl : 0.0f) * rad;
-
-			hd[0] += val * light.r;
-			hd[1] += val * light.g;
-			hd[2] += val * light.b;
-		}
+		compare_light(entry, classic, hd);
 
 		Log("HDLOG lightcheck level=%s slot=%d classic=%.1f,%.1f,%.1f "
 			"hd=%.1f,%.1f,%.1f diff=%.1f,%.1f,%.1f engine=%dsun/%dpoint/%dspot "
@@ -755,6 +781,91 @@ namespace
 			hd[0] - classic[0], hd[1] - classic[1], hd[2] - classic[2],
 			(int)NumSunLights, (int)NumPointLights, (int)NumSpotLights,
 			entry.lightCount, (int)aAmbientR, (int)aAmbientG, (int)aAmbientB);
+	}
+
+	/* AND THE SAME QUESTION OF A CREATURE IN A DARK ROOM (#123, fix round S,
+	 * S4).
+	 *
+	 * The play test's video of the RICH levels: enemies far off in dark rooms
+	 * come out PURE BLACK and are lit only by their own muzzle flash, while
+	 * two shots from the same level show them lit. The question behind it is
+	 * whether an HD body gets LESS light than the classic item would have -
+	 * and it is not a question a picture can settle, because a dark room is
+	 * dark in the classic engine too.
+	 *
+	 * So it is measured, on the creature itself and in the room it is standing
+	 * in: the very comparison the level's own lightcheck makes, run once a
+	 * second of game time for up to HD_LIGHT_PROBE_ITEMS creatures of the
+	 * frame. `classic` is what aTransformLightClipMesh would give this item
+	 * out of the engine's own light arrays; `hd` is what the shader gets. Two
+	 * numbers that agree say the HD path is as dark as the classic one is, and
+	 * a black guard is Core's own room; two that disagree name the term that
+	 * is missing.
+	 *
+	 * `dist` is how far the creature stands from the lens, because the whole
+	 * report is about DISTANT enemies, and `lit` is the brightest of the three
+	 * channels so that a line can be read without adding them up.
+	 *
+	 * A creature and not every item: objects[].intelligent is the engine's own
+	 * word for the things that walk about and shoot, which is what the video
+	 * shows, and a level full of static meshes would otherwise bury the line.
+	 * With -log only, and nothing branches on it. */
+	/* How many creatures of one second the probe is allowed to name. Six is
+	 * a busy room's worth and a line the user can read at a glance; more
+	 * would bury the rest of the log without saying anything new, because
+	 * the six are enough to tell "HD is darker" from "the room is dark". */
+	#define HD_LIGHT_PROBE_ITEMS	6
+
+	unsigned short g_light_probe_at = 0;
+	bool g_light_probe_ever = false;
+	int g_light_probe_left = 0;
+
+	void creature_light(const FrameItem& entry)
+	{
+		if (!gLogEnabled)
+			return;
+
+		const unsigned short now = GlobalCounter;
+
+		if (!g_light_probe_ever ||
+			(unsigned short)(now - g_light_probe_at) >= 30)
+		{
+			g_light_probe_ever = true;
+			g_light_probe_at = now;
+			g_light_probe_left = HD_LIGHT_PROBE_ITEMS;
+		}
+
+		if (g_light_probe_left <= 0)
+			return;
+
+		if (entry.slot < 0 || entry.slot >= NUMBER_OBJECTS ||
+			!objects[entry.slot].intelligent)
+			return;
+
+		g_light_probe_left--;
+
+		float classic[3], hd[3];
+
+		compare_light(entry, classic, hd);
+
+		const float* m = entry.matrix;
+		const double dist = sqrt((double)m[12] * m[12] + (double)m[13] * m[13] +
+			(double)m[14] * m[14]);
+		const float lit = hd[0] > hd[1]
+			? (hd[0] > hd[2] ? hd[0] : hd[2])
+			: (hd[1] > hd[2] ? hd[1] : hd[2]);
+
+		Log("HDLOG creaturelight level=%s slot=%d(%s) room=%d dist=%d "
+			"classic=%.1f,%.1f,%.1f hd=%.1f,%.1f,%.1f diff=%.1f,%.1f,%.1f "
+			"lit=%.1f ambient=%d,%d,%d engine=%dsun/%dpoint/%dspot hd_lights=%d",
+			g_stem, entry.slot,
+			HDSlotName(entry.slot) ? HDSlotName(entry.slot) : "?",
+			entry.room, (int)dist,
+			classic[0], classic[1], classic[2], hd[0], hd[1], hd[2],
+			hd[0] - classic[0], hd[1] - classic[1], hd[2] - classic[2],
+			lit, (int)aAmbientR, (int)aAmbientG, (int)aAmbientB,
+			(int)NumSunLights, (int)NumPointLights, (int)NumSpotLights,
+			entry.lightCount);
 	}
 }
 
@@ -1679,6 +1790,10 @@ void HDObjectEnd()
 	/* The two proofs, on the first HD item of the level and while the
 	 * engine's own light arrays still hold THIS item's answer. */
 	self_test(entry);
+
+	/* And the same light question of a CREATURE, once a second (#123, fix
+	 * round S, S4) - the play test's "enemies in dark rooms are pure black". */
+	creature_light(entry);
 
 	g_count++;
 }

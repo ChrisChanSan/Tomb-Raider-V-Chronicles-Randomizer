@@ -763,16 +763,11 @@ void HDLaraDrawFrameReset()
 		{
 			g_fp_seen = true;
 			g_fp_was = now;
-			/* The near zone and the node mask joined this line in fix
-			 * round L: the mask is what the collar turned on, and a log
-			 * that named the cylinder alone would have said nothing about
-			 * the four rounds that missed it. */
-			Log("HDLOG firstperson %s neckcut=%.0f/%.0f near=%.0f nodes=%08x",
+			/* One number since fix round S: the cut is one plane in the
+			 * head's own frame, and how deep it sits is the whole of it. */
+			Log("HDLOG firstperson %s neckplane=%.0f",
 				now ? "on" : "off",
-				now ? (double)HD_LARA_NECK_CUT_S : 0.0,
-				now ? (double)HD_LARA_NECK_CUT_R : 0.0,
-				now ? (double)HD_LARA_NECK_NEAR : 0.0,
-				now ? HD_LARA_NECK_CUT_NODES : 0u);
+				now ? (double)HD_LARA_NECK_PLANE_S : 0.0);
 		}
 
 		const bool binos = BinocularRange != 0;
@@ -909,48 +904,77 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * diving suit puts its whole HELMET on the torso node the same way.
 	 *
 	 * Neither can be masked off without taking her chest with it, so they are
-	 * cut in the shader instead: a CYLINDER about the neck axis, in the bind
-	 * pose, on the torso node alone (#123, fix round J - stage S8 cut a sphere
-	 * around the eye and the play test sent all three of its side effects
-	 * back; hd_lara.h carries the whole argument and the measurement).
+	 * cut in the shader instead: ONE PLANE perpendicular to the neck axis,
+	 * twelve units below the head joint and carried by the HEAD NODE (#123,
+	 * fix round S - stage S8 cut a sphere about the eye and rounds J to L a
+	 * cylinder in the bind pose; hd_lara.h carries the whole argument and the
+	 * measurement).
+	 *
+	 * THE FOUR NUMBERS ARE BUILT HERE, ONCE A FRAME, and that is the point of
+	 * the design: hd_lara answers with the plane in the HEAD's own frame - a
+	 * unit axis and a depth, both facts about the skeleton - and the head's
+	 * own interpolated matrix carries them into VIEW space, where the shader
+	 * already has the skinned vertex. So the plane turns with her head, the
+	 * shader does one dot product, and nothing per pixel has to know about a
+	 * bind pose at all.
 	 *
 	 * THE BODY ALONE carries it - the hands, the holsters, the weapon on her
-	 * back and the cap that closes the hole are their own models and are
+	 * back and the LID that closes the hole are their own models and are
 	 * pushed with none, so a hand that comes up to the camera is never cut
-	 * away.
+	 * away, and the lid, which lies exactly IN the plane, is never clipped by
+	 * its own cut.
 	 *
-	 * A level whose Lara skeleton the plan never read has no cylinder, and
-	 * then nothing is cut: half a cut is worse than none. */
+	 * A level whose Lara skeleton the plan never read has no plane, and then
+	 * nothing is cut: half a cut is worse than none. */
 	HDModelNeckCut neckCut = { 0 };
-	const bool cutting = firstPerson && HDLaraNeckCut(&neckCut);
+	float neckAxis[3] = { 0.0f, 1.0f, 0.0f };
+	float neckDepth = 0.0f;
+	const bool cutting = firstPerson && HDLaraNeckPlane(neckAxis, &neckDepth);
 
-	/* HOW CLOSE HER OWN BODY COMES TO THE LENS (#123, fix round R).
+	if (cutting)
+	{
+		const float* m = matrices + HD_LARA_HEAD_NODE * 16;
+
+		/* The normal, turned by the head's own rotation. The matrix is row
+		 * major and a column vector is read down its first three columns,
+		 * which is the same three lines set_joint uses on the bind offset. */
+		const float nx = neckAxis[0] * m[0] + neckAxis[1] * m[4] + neckAxis[2] * m[8];
+		const float ny = neckAxis[0] * m[1] + neckAxis[1] * m[5] + neckAxis[2] * m[9];
+		const float nz = neckAxis[0] * m[2] + neckAxis[1] * m[6] + neckAxis[2] * m[10];
+
+		/* And a point on it: the head joint's own view position - which IS
+		 * the matrix's translation - stepped `depth` along that normal. */
+		const float px = m[12] + nx * neckDepth;
+		const float py = m[13] + ny * neckDepth;
+		const float pz = m[14] + nz * neckDepth;
+
+		neckCut.on = 1.0f;
+		neckCut.plane[0] = nx;
+		neckCut.plane[1] = ny;
+		neckCut.plane[2] = nz;
+		neckCut.plane[3] = -(nx * px + ny * py + nz * pz);
+	}
+
+	/* WHERE THE PLANE REALLY STANDS THIS FRAME (#123, fix round R; the fields
+	 * are fix round S's).
 	 *
-	 * The cut is two shapes and only one of them can be argued about from a
-	 * bind pose. The CYLINDER is in the bind pose and therefore takes the same
-	 * patch of skin in every animation, which is the whole reason fix round J
-	 * chose it. The NEAR ZONE is in VIEW space - a sphere of
-	 * HD_LARA_NECK_NEAR units about the camera, and in first person the camera
-	 * is the eye - so what it takes depends on the ANIMATION, and fix round L
-	 * measured it in the bind pose alone (nearest survivor 43.5 to 45.2 units
-	 * over the eight outfits, which is why the radius is 40).
+	 * The plane is fixed in the head's frame, so what it takes is the same
+	 * patch of skin in every animation - that is the whole reason fix round S
+	 * chose it over the bind-pose cylinder rounds J to L had. What is still a
+	 * question about the POSE is where the eye ends up in relation to it, and
+	 * a picture in a bind pose cannot answer that. So this measures it, once a
+	 * second of game time and with -log only:
 	 *
-	 * The play test came back with "the hole reaches into her chest, looking
-	 * down along her body". That is a question about a folded pose and there
-	 * is no way to answer it from a picture. So this measures it: every joint
-	 * of the drawn skeleton is a point in view space - its translation - and
-	 * the distance from the origin to it is how far that limb's own root
-	 * stands from the lens THIS FRAME.
-	 *
-	 *   near=   the radius in force
-	 *   head=   the head joint, and torso= the torso joint - the two the
-	 *           cylinder is built from and the two the node mask names
-	 *   min=    the nearest joint of all fifteen, and which one
-	 *
-	 * A torso reading that falls under `near` is the near zone eating her
-	 * chest and the radius is wrong for that animation; one that stays well
-	 * above it says the hole has another cause and the next round may stop
-	 * looking here. One line a second of game time, with -log only. */
+	 *   s=      the depth in force
+	 *   lens=   how far the plane stands from the LENS along its own normal.
+	 *           Under the renderer's near plane at 20 and the lid is being
+	 *           clipped away, which is what the inner skin is there for
+	 *   head=   the head joint, torso= the torso joint, min= the nearest
+	 *           joint of all fifteen and which one - all in view space
+	 *   drop=   how many of the fifteen joints stand on the discarded side of
+	 *           the plane. Two - the head and nothing else - is the healthy
+	 *           reading; anything more means the plane has swung into her
+	 *           body and the depth is wrong for that animation. */
 	if (gLogEnabled && firstPerson)
 	{
 		const unsigned short now = GlobalCounter;
@@ -959,6 +983,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		{
 			float best = 0.0f;
 			int bestNode = -1;
+			int dropped = 0;
 
 			for (int node = 0; node < HD_LARA_NODES; node++)
 			{
@@ -970,6 +995,10 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 					best = d;
 					bestNode = node;
 				}
+
+				if (cutting && neckCut.plane[0] * m[12] + neckCut.plane[1] * m[13] +
+					neckCut.plane[2] * m[14] + neckCut.plane[3] < 0.0f)
+					dropped++;
 			}
 
 			const float* h = matrices + HD_LARA_HEAD_NODE * 16;
@@ -978,14 +1007,13 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 			g_neck_probe_ever = true;
 			g_neck_probe_at = now;
 
-			Log("HDLOG neckcut near=%.0f cut=%d head=%.1f torso=%.1f min=%.1f@node%d "
-				"cyl=%.0f/%.0f",
-				cutting ? (double)HD_LARA_NECK_NEAR : 0.0, cutting ? 1 : 0,
+			Log("HDLOG neckcut cut=%d s=%.0f lens=%.1f head=%.1f torso=%.1f "
+				"min=%.1f@node%d drop=%d",
+				cutting ? 1 : 0, cutting ? (double)HD_LARA_NECK_PLANE_S : 0.0,
+				cutting ? (double)-neckCut.plane[3] : 0.0,
 				(double)sqrtf(h[12] * h[12] + h[13] * h[13] + h[14] * h[14]),
 				(double)sqrtf(t[12] * t[12] + t[13] * t[13] + t[14] * t[14]),
-				(double)best, bestNode,
-				cutting ? (double)HD_LARA_NECK_CUT_S : 0.0,
-				cutting ? (double)HD_LARA_NECK_CUT_R : 0.0);
+				(double)best, bestNode, dropped);
 		}
 	}
 
@@ -1062,7 +1090,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 	drawn++;
 
-	/* AND THE SAME BODY FROM THE INSIDE (#123, fix round K, K1).
+	/* THE INNER SKIN OF FIX ROUND K STOOD HERE (#123, fix round K, K1).
 	 *
 	 * The draw above keeps the outward faces and the cut takes her neck away,
 	 * so a ray down the collar meets nothing at all - the hole fix round I
@@ -1098,16 +1126,59 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * is set on the model at level build; a level whose ring could not be
 	 * measured draws this pass as a plain cull, which is fix round J's
 	 * picture and not a crash. */
-	if (firstPerson && cutting)
+	/* It is gone (#123, fix round S, S1(4)). The LID below closes the hole
+	 * now, and the second draw was measured out rather than argued out: forty
+	 * pictures - five outfits, three pitches, both eyes the game uses, and the
+	 * head turned forty degrees and the torso bent thirty on top of that - are
+	 * IDENTICAL to the pixel with the inner draw and without it. It closed
+	 * nothing the lid does not close.
+	 *
+	 * It also cost something: a second pass over 27,000 triangles every first
+	 * person frame, and fix round R's own finding - a strap, a shoulder piece
+	 * or a flap is ONE layer of triangles, its two sides sit at the same depth
+	 * to the bit, and the inner draw won that tie, which is what the play test
+	 * saw as torn edges and missing straps. R settled it with a D3DCMP_LESS
+	 * for that draw; taking the draw away settles it for good.
+	 *
+	 * What stays is the MEASUREMENT it brought: which texel of which page is
+	 * Lara's own throat (measure_neck_skin, hd_lara.cpp). The lid wears it. */
+
+	/* AND THE LID OVER THE HOLE (#123, fix round S, S1).
+	 *
+	 * A disc in the cut's own plane, skinned rigidly to the head node - so it
+	 * cannot drift off the plane, whatever the animation does with her head,
+	 * because the plane is built out of the same matrix.
+	 *
+	 * FOUR THINGS ABOUT THIS CALL:
+	 *
+	 *   NO CUT. It lies exactly IN the plane, and a fragment exactly on a
+	 *   plane is at the mercy of the last bit of a float. Handing it its own
+	 *   cut would flicker it away; it has no geometry above the plane to cut
+	 *   anyway.
+	 *
+	 *   NO CULL. The camera looks down on it from the head side, but a mirror
+	 *   room turns the winding round and a lid one can see through from one
+	 *   side is a hole. It is one triangle fan; drawing both sides is free.
+	 *
+	 *   ITS OWN NODE MASK. First person clears the head node from `mask`,
+	 *   because the head's own ranges are exactly what must not be drawn - and
+	 *   the lid rides on that very node. So it names it back.
+	 *
+	 *   THE SKIN'S SHEEN, because what it is is the top of her neck. Its
+	 *   texel is the throat's own, measured at level build.
+	 *
+	 * A level whose lid could not be built (no throat texel, no neck at the
+	 * plane) has none: HDLaraHasPart says so, the inner skin still stands
+	 * behind the hole, and the note at level build says why. */
+	if (firstPerson && cutting && HDLaraHasPart(HD_LARA_PART_NECK_CAP))
 	{
-		float skinSheen = 0.0f, skinPower = 1.0f;
+		float capSheen = 0.0f, capPower = 1.0f;
 
-		HDLaraSkinSheen(&skinSheen, &skinPower);
+		HDLaraPartSheen(HD_LARA_PART_NECK_CAP, &capSheen, &capPower);
 
-		if (HDObjectPush(HDLaraPartSlot(HD_LARA_PART_BODY), matrices,
-			HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
-			&neckCut, mirror ? HD_MODEL_SKIN_CCW : HD_MODEL_SKIN_INSIDE,
-			skinSheen, skinPower))
+		if (HDObjectPush(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), matrices,
+			HD_LARA_NODES, nodeLight, 1u << HD_LARA_HEAD_NODE, lights,
+			lightCount, sunScale, 0, HD_MODEL_CULL_NONE, capSheen, capPower))
 			drawn++;
 	}
 

@@ -562,6 +562,275 @@ static void camera_aim()
 	}
 }
 
+
+/* ------------------------------------------------------- fix round S -- */
+
+/* THE POSE, AND THE PAIR A MATRIX BLEND CANNOT SURVIVE (fix round S, S2).
+ *
+ * The play test's dive roll: one in-between frame with a leg fully extended
+ * the wrong way. The first reading was a packed ten bit angle interpolated
+ * the LONG way round - 1000 to 20 giving 510 where it should give 1022.
+ *
+ * The first thing asserted here is that this cannot happen, and it is
+ * asserted against the arithmetic the engine really runs: the two poses are
+ * blended as MATRICES (game\draw.cpp, InterpolateMatrix), and an element-wise
+ * lerp of two rotations always lands on the SHORT-way bisector. So the 1000
+ * to 20 case is run through it, on all three axes and in both directions, and
+ * the angle that comes out is read back.
+ *
+ * The second is what really goes wrong: the same lerp SHRINKS by cos(D/2),
+ * and at half a turn the frame is singular. InterpPoseFar is the rule that
+ * refuses such a pair, and it is asserted to fire on a half turn, to leave a
+ * quiet pair alone, and to answer per NODE rather than per frame. */
+
+static const double kPiS = 3.14159265358979323846;
+
+/* The angle a blended 3x3 comes back as, about the axis it was built on.
+ * atan2 of the two elements that carry it, in the engine's 16 bit space and
+ * then in the packed TEN bit one, which is the space the play test's own
+ * numbers were in. */
+static double blended_angle_10bit(short a10, short b10, int axis, float alpha)
+{
+	short ra[3] = { 0, 0, 0 }, rb[3] = { 0, 0, 0 };
+	float ma[9], mb[9], mm[9];
+
+	ra[axis] = (short)(a10 << 6);
+	rb[axis] = (short)(b10 << 6);
+
+	InterpPoseRot(ra, ma);
+	InterpPoseRot(rb, mb);
+
+	for (int i = 0; i < 9; i++)
+		mm[i] = ma[i] + (mb[i] - ma[i]) * alpha;
+
+	/* The rotation's own sine and cosine, read out of the two elements of the
+	 * plane the axis turns in. Which pair those are depends on the axis; the
+	 * magnitude is the shrink and the ratio is the angle. */
+	double s = 0.0, c = 0.0;
+
+	if (axis == 0)			// x: the y,z plane
+	{
+		c = mm[8];  s = -mm[7];
+	}
+	else if (axis == 1)		// y: the z,x plane
+	{
+		c = mm[8];  s = mm[6];
+	}
+	else				// z: the x,y plane
+	{
+		c = mm[0];  s = mm[1];
+	}
+
+	double deg = atan2(s, c) * 180.0 / kPiS;
+
+	if (deg < 0.0)
+		deg += 360.0;
+
+	return deg * 1024.0 / 360.0;	// back into the packed ten bit space
+}
+
+static void pose_wrap()
+{
+	printf("the pose the short way round (fix round S)\n");
+
+	/* 1. THE PLAY TEST'S OWN CASE. 1000 and 20 are 44 units apart across the
+	 * wrap; the midpoint is 1022 and never 510. Run on all three axes and in
+	 * both directions - six cases - through the very blend the engine uses. */
+	{
+		int bad = 0, ran = 0;
+
+		for (int axis = 0; axis < 3; axis++)
+			for (int way = 0; way < 2; way++)
+			{
+				const short a = (short)(way ? 20 : 1000);
+				const short b = (short)(way ? 1000 : 20);
+				const double got = blended_angle_10bit(a, b, axis, 0.5F);
+				double d = got - 1022.0;
+
+				while (d > 512.0) d -= 1024.0;
+				while (d < -512.0) d += 1024.0;
+
+				ran++;
+
+				if (d < -1.0 || d > 1.0)
+					bad++;
+			}
+
+		ok(ran == 6, "all three axes and both directions", ran, 6);
+		ok(bad == 0, "1000 and 20 blend to 1022 and never to 510", bad, 0);
+	}
+
+	/* 2. AND THE SHRINK IS REAL. The same blend at a half turn keeps nothing
+	 * of the frame at all, which is the fault itself. */
+	{
+		/* 512 in the packed ten bit space IS half a turn; the rotation
+		 * builder wants the engine's own sixteen bit angle, and half a turn
+		 * there is -32768 (512 << 6 is 32768, which a short cannot hold - it
+		 * IS -32768, and writing it out says so instead of truncating). */
+		short ra[3] = { 0, 0, 0 }, rb[3] = { 0, (short)-32768, 0 };
+		float ma[9], mb[9];
+
+		InterpPoseRot(ra, ma);
+		InterpPoseRot(rb, mb);
+
+		const double c = InterpPoseTurnCos(ma, mb);
+
+		ok(c < -0.999, "half a turn reads as half a turn", (long)(c * 1000.0), -1000);
+
+		/* the blended z column's length, which is what carries the bone */
+		float mm[9];
+
+		for (int i = 0; i < 9; i++)
+			mm[i] = (ma[i] + mb[i]) * 0.5F;
+
+		const double len = sqrt((double)mm[6] * mm[6] + (double)mm[7] * mm[7] +
+			(double)mm[8] * mm[8]);
+
+		ok(len < 0.01, "and its midpoint keeps none of the bone's frame",
+			(long)(len * 1000.0), 0);
+	}
+
+	/* 3. THE RULE. A frame is nine shorts of box and offset and then one
+	 * packed rotation per node. Two frames are built by hand - node 0 quiet,
+	 * node 1 turned - and InterpPoseFar has to answer for the pair. */
+	{
+		short quiet[9 + 4 * 2], turned[9 + 4 * 2], small_[9 + 4 * 2];
+
+		for (int i = 0; i < 9; i++)
+			quiet[i] = turned[i] = small_[i] = 0;
+
+		/* Four nodes, each one two-word packed triple of zeroes. */
+		for (int n = 0; n < 4; n++)
+		{
+			quiet[9 + n * 2] = 0;      quiet[9 + n * 2 + 1] = 0;
+			turned[9 + n * 2] = 0;     turned[9 + n * 2 + 1] = 0;
+			small_[9 + n * 2] = 0;     small_[9 + n * 2 + 1] = 0;
+		}
+
+		/* node 1 of `turned` gets y = 512 (half a turn), of `small_` y = 40
+		 * (about fourteen degrees). The packed layout is x in bits 20..29,
+		 * y in 10..19 and z in 0..9 of the two words together. */
+		{
+			const unsigned long half = ((unsigned long)512 << 10);
+			const unsigned long bit = ((unsigned long)40 << 10);
+
+			turned[9 + 1 * 2] = (short)(unsigned short)(half >> 16);
+			turned[9 + 1 * 2 + 1] = (short)(unsigned short)(half & 0xFFFF);
+			small_[9 + 1 * 2] = (short)(unsigned short)(bit >> 16);
+			small_[9 + 1 * 2 + 1] = (short)(unsigned short)(bit & 0xFFFF);
+		}
+
+		ok(InterpPoseFar(quiet, turned, 4, INTERP_POSE_TURN_COS),
+			"a half turn at one node refuses the pair", 1, 1);
+		ok(!InterpPoseFar(quiet, small_, 4, INTERP_POSE_TURN_COS),
+			"a fourteen degree turn does not", 0, 0);
+		ok(!InterpPoseFar(quiet, quiet, 4, INTERP_POSE_TURN_COS),
+			"and a pose against itself never does", 0, 0);
+	}
+
+	/* 4. THE LIMIT IS WHERE IT SAYS IT IS. Ninety degrees is the last turn
+	 * that passes; a hair over it is refused. The packed space is 1024 to the
+	 * circle, so ninety degrees is 256. */
+	{
+		short quiet[9 + 2], at90[9 + 2], past90[9 + 2];
+
+		for (int i = 0; i < 9; i++)
+			quiet[i] = at90[i] = past90[i] = 0;
+
+		quiet[9] = 0; quiet[10] = 0;
+
+		const unsigned long a = ((unsigned long)255 << 10);
+		const unsigned long b = ((unsigned long)258 << 10);
+
+		at90[9] = (short)(unsigned short)(a >> 16);
+		at90[10] = (short)(unsigned short)(a & 0xFFFF);
+		past90[9] = (short)(unsigned short)(b >> 16);
+		past90[10] = (short)(unsigned short)(b & 0xFFFF);
+
+		ok(!InterpPoseFar(quiet, at90, 1, INTERP_POSE_TURN_COS),
+			"just under ninety degrees passes", 0, 0);
+		ok(InterpPoseFar(quiet, past90, 1, INTERP_POSE_TURN_COS),
+			"just over it is refused", 1, 1);
+	}
+}
+
+/* THE CAMERA'S SHELL (fix round S, S3a).
+ *
+ * Fix round R chose the far branch per CAMERA. A target hovering on the shell
+ * at INTERP_CAM_FAR_TARGET therefore had one of the pair reduced to 1024 and
+ * the other left at 4096, and the difference of the two was three thousand
+ * units of nothing. The branch is chosen once for the pair now, and both
+ * sides take the same scale. */
+static void camera_shell()
+{
+	printf("the camera's shell (fix round S)\n");
+
+	/* 1. A TARGET WALKING THROUGH THE SHELL. The eye stands still and the
+	 * target moves out along its own ray from 3900 to 4400 in single units:
+	 * not one step of it may read as a cut. */
+	{
+		int cuts = 0, tried = 0;
+		long p[3] = { 10000, -2000, 20000 };
+
+		for (long d = 3900; d < 4400; d++)
+		{
+			long t0[3] = { p[0], p[1], p[2] + d };
+			long t1[3] = { p[0], p[1], p[2] + d + 1 };
+
+			tried++;
+
+			if (InterpCamAimCut(p[0], p[1], p[2], t0[0], t0[1], t0[2],
+				p[0], p[1], p[2], t1[0], t1[1], t1[2], INTERP_CAM_SNAP))
+				cuts++;
+		}
+
+		ok(tried == 500, "the target really walked through the shell", tried, 500);
+		ok(cuts == 0, "and no step of it reads as a cut", cuts, 0);
+	}
+
+	/* 2. A TARGET SITTING ON THE SHELL WITH ONE UNIT OF JITTER, thirty ticks
+	 * of it - the case that made the seam a fault and not a curiosity. */
+	{
+		int cuts = 0;
+		long p[3] = { 10000, -2000, 20000 };
+
+		for (int i = 0; i < 30; i++)
+		{
+			const long a = INTERP_CAM_FAR_TARGET + (i & 1);
+			const long b = INTERP_CAM_FAR_TARGET + ((i + 1) & 1);
+			long t0[3] = { p[0], p[1], p[2] + a };
+			long t1[3] = { p[0], p[1], p[2] + b };
+
+			if (InterpCamAimCut(p[0], p[1], p[2], t0[0], t0[1], t0[2],
+				p[0], p[1], p[2], t1[0], t1[1], t1[2], INTERP_CAM_SNAP))
+				cuts++;
+		}
+
+		ok(cuts == 0, "a target jittering on the shell never cuts", cuts, 0);
+	}
+
+	/* 3. AND ROUND R'S OWN ANSWERS ARE UNCHANGED. The two cameras the engine
+	 * really has are nowhere near the shell, so everything camera_aim asserts
+	 * has to stand - that section runs before this one and would have failed
+	 * already; what is added here is the one case it could not see. */
+	{
+		long p0[3], t0[3], p1[3], t1[3];
+
+		fp_camera(0.0, 0.0, p0, t0);
+		fp_camera(3.0, 0.0, p1, t1);
+
+		ok(!InterpCamAimCut(p0[0], p0[1], p0[2], t0[0], t0[1], t0[2],
+			p1[0], p1[1], p1[2], t1[0], t1[1], t1[2], INTERP_CAM_SNAP),
+			"a three degree head turn still does not cut", 0, 0);
+
+		fp_camera(180.0, 0.0, p1, t1);
+
+		ok(InterpCamAimCut(p0[0], p0[1], p0[2], t0[0], t0[1], t0[2],
+			p1[0], p1[1], p1[2], t1[0], t1[1], t1[2], INTERP_CAM_SNAP),
+			"and a half turn still does", 1, 1);
+	}
+}
+
 /* THE TITLE MENU'S OWN CADENCE (fix round R).
  *
  * The title and the inventory keep TWO ticks per present at every setting
@@ -1736,6 +2005,8 @@ int main()
 	positions();
 	thresholds();
 	camera_aim();
+	pose_wrap();
+	camera_shell();
 	cadence();
 	title_cadence();
 	refresh();

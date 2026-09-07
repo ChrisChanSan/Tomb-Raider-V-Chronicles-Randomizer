@@ -92,6 +92,20 @@ namespace
 		 * phase and the glow phase reads what it left. */
 		HDRoomLighting lighting;
 		HDLightSource lights[HD_MAX_LIGHTS];
+
+		/* GROUP M: THE PORTAL WINDOW, in backbuffer pixels, as the scissor
+		 * test wants it - `x0/y0` the first pixel drawn, `x1/y1` the first
+		 * one that is not. Worked out once, when the room is collected,
+		 * because that is when the engine's own `r->left..r->bottom` still
+		 * hold this room's answer: PrintObjects resets all four at the end
+		 * of the same frame.
+		 *
+		 * `full` is a window that covers the whole backbuffer - the camera's
+		 * own room, and any room the walk could see all of. Those are drawn
+		 * with the test off, which is both faster and exactly what a
+		 * rectangle covering everything would do. */
+		int x0, y0, x1, y1;
+		bool full;
 	};
 
 	char g_stem[64] = { 0 };
@@ -400,6 +414,93 @@ namespace
 	FrameRoom g_frame[HD_MAX_FRAME];
 	int g_frame_count = 0;
 	int g_frame_dropped = 0;
+
+	/* GROUP M: what the portal windows of this frame came to, for the log.
+	 * `full` drew over the whole backbuffer, `scissored` inside a rectangle,
+	 * `empty` were rooms the walk gave a window of no width or no height and
+	 * that are therefore not drawn at all. */
+	int g_clip_full = 0;
+	int g_clip_scissored = 0;
+	int g_clip_empty = 0;
+	// Once per level, on the first frame that draws an HD room: one line per
+	// room with the window it got. Reset beside g_matrix_checked.
+	bool g_clip_listed = false;
+	// Throttle for the per-frame line: GlobalCounter when it was last
+	// written. The counter ticks 30 times a second at every fps_mode, so a
+	// difference of 30 is one second of game time.
+	unsigned short g_clip_line_at = 0;
+	bool g_clip_line_ever = false;
+
+	/* THE ENGINE'S INCLUSIVE WINDOW AS A SCISSOR RECTANGLE (#123, group M).
+	 *
+	 * `r->left..r->bottom` are pixel INDICES and both ends belong to the room
+	 * (game\draw.cpp, SetRoomBounds: the projected portal corner is widened
+	 * by a pixel on every side before it is written). Direct3D's rectangle is
+	 * half open, so the right and bottom edges gain one to reach the pixel
+	 * they name - and one more, with a matching one taken off the left and
+	 * the top, as the MARGIN.
+	 *
+	 * The margin is not decoration. The classic path does not really clip a
+	 * polygon to this window: it drops a polygon all of whose corners lie
+	 * beyond one edge of it (specific\polyinsert.cpp, `c[v0] & c[v1] & ...`)
+	 * and clips whatever is left against the SCREEN. So a polygon that
+	 * straddles the window's edge is drawn whole by the classic path and
+	 * would be cut exactly at the edge by a scissor. One pixel of slack is
+	 * what makes the two agree along a portal's rim; everything wider than a
+	 * pixel is geometry the near room's own wall covers, which is the
+	 * invariant the portal walk is built on. */
+	void ClipWindow(FrameRoom& entry, int left, int top, int right, int bottom)
+	{
+		const int w = (int)phd_winwidth;
+		const int h = (int)phd_winheight;
+
+		if (right <= left || bottom <= top || w <= 0 || h <= 0)
+		{
+			// A window of no width or no height. The walk cannot produce one
+			// for a room it put on the draw list (SetRoomBounds returns
+			// before it writes when tL >= tR), so this is the guard and not
+			// a case - but a room drawn over the whole screen because four
+			// numbers came out backwards is the bug this group exists to
+			// stop.
+			entry.x0 = entry.y0 = entry.x1 = entry.y1 = 0;
+			entry.full = false;
+			return;
+		}
+
+		int x0 = left - 1;
+		int y0 = top - 1;
+		int x1 = right + 2;
+		int y1 = bottom + 2;
+
+		if (x0 < 0) x0 = 0;
+		if (y0 < 0) y0 = 0;
+		if (x1 > w) x1 = w;
+		if (y1 > h) y1 = h;
+
+		entry.x0 = x0;
+		entry.y0 = y0;
+		entry.x1 = x1;
+		entry.y1 = y1;
+		entry.full = x0 <= 0 && y0 <= 0 && x1 >= w && y1 >= h;
+	}
+
+	// A window of no width or no height: nothing of this room can be seen and
+	// nothing of it is drawn. Both phases ask the same question of the same
+	// four numbers, so both skip the same rooms.
+	bool ClipEmpty(const FrameRoom& entry)
+	{
+		return entry.x1 <= entry.x0 || entry.y1 <= entry.y0;
+	}
+
+	// The window of one collected room, applied to the device. A full window
+	// and a room with no window switch the test off instead.
+	void ApplyClip(const FrameRoom& entry)
+	{
+		if (entry.full || ClipEmpty(entry))
+			HDRenderScissorOff();
+		else
+			HDRenderScissor(entry.x0, entry.y0, entry.x1, entry.y1);
+	}
 
 	/* E6: WHAT THE GLOW PHASE NEEDS AGAIN. The solid phase fills these and
 	 * HDFrameDrawGlow, which runs after the classic buckets and therefore
@@ -1419,6 +1520,9 @@ void HDLevelBuild()
 	g_frame_dropped = 0;
 	g_matrix_checked = false;
 	g_sky_logged = false;
+	// GROUP M: the per-level window list is written again for this level.
+	g_clip_listed = false;
+	g_clip_line_ever = false;
 	memset(g_group_hd, 0, sizeof(g_group_hd));
 	g_room_count = 0;
 	g_flips_done = 0;
@@ -1926,7 +2030,8 @@ void HDFrameCaptureProjection()
 	g_oneopersp = f_moneopersp;
 }
 
-bool HDFrameRoom(int roomIndex, const float* viewWorld)
+bool HDFrameRoom(int roomIndex, const float* viewWorld,
+	int left, int top, int right, int bottom)
 {
 	if (!viewWorld)
 		return false;
@@ -1951,8 +2056,43 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld)
 	entry.room = roomIndex;
 	entry.group = group;
 	SetD3DMatrix(&entry.world, (float*)viewWorld);
+	/* GROUP M: the portal window, taken HERE and not at draw time. These four
+	 * numbers are the engine's own `r->left..r->bottom` and they do not
+	 * survive the frame - PrintObjects (game\draw.cpp) resets all four of
+	 * them at the end of each room's items, which is before S_OutputPolyList
+	 * draws anything HD. */
+	ClipWindow(entry, left, top, right, bottom);
 
 	return true;
+}
+
+/* THE WINDOW OF THE ROOM AN ITEM STANDS IN (#123, group M). The frame list is
+ * short - a hundred rooms at the very most, and the walk usually returns ten -
+ * so this is a scan and not a table: a table indexed by room would have to be
+ * cleared per frame over every room of the level, which is the more expensive
+ * of the two for every level this game has.
+ *
+ * A room that is not on the list gets no scissor at all. That is not a
+ * fallback but the right answer: an item whose room the walk never reached is
+ * an item the classic path would have drawn just the same (PrintObjects hands
+ * every item the WHOLE screen, phd_left = 0 .. phd_winxmax + 1, and not its
+ * room's window), and cutting it against a window that does not exist would
+ * invent a rule the engine has not got. */
+void HDFrameScissorForRoom(int roomIndex)
+{
+	if (roomIndex >= 0)
+	{
+		for (int i = 0; i < g_frame_count; i++)
+		{
+			if (g_frame[i].room != roomIndex)
+				continue;
+
+			ApplyClip(g_frame[i]);
+			return;
+		}
+	}
+
+	HDRenderScissorOff();
 }
 
 /* THE HD SKY, IN THE CLASSIC HORIZON'S PLACE (#123, fix round R3a).
@@ -2090,8 +2230,32 @@ void HDFrameDraw()
 	UpdateDestructibles();
 	HDRenderFrameBegin(&kIdentity, &projection, &frame);
 
+	// GROUP M: this frame's windows, counted for the log below.
+	g_clip_full = 0;
+	g_clip_scissored = 0;
+	g_clip_empty = 0;
+
 	for (int i = 0; i < g_frame_count; i++)
 	{
+		const FrameRoom& entry = g_frame[i];
+		const bool empty = ClipEmpty(entry);
+
+		if (empty)
+			g_clip_empty++;
+		else if (entry.full)
+			g_clip_full++;
+		else
+			g_clip_scissored++;
+
+		/* GROUP M: the room is drawn inside the window the portal walk gave
+		 * it, and a room with no window is not drawn at all. Without the cap
+		 * ApplyClip does nothing and every room draws whole, which is the
+		 * picture before this group. */
+		if (empty && HDRenderScissorAvailable())
+			continue;
+
+		ApplyClip(entry);
+
 		// PROF_HD_LIGHT is the light block alone, inside PROF_HD_DRAW: the
 		// one part of the room draw that is processor work rather than draw
 		// calls, and therefore the one that a single core can stall on.
@@ -2102,6 +2266,13 @@ void HDFrameDraw()
 		HDRenderRoomMask(g_frame[i].group, &g_frame[i].world,
 			&g_frame[i].lighting, HD_PASS_SOLID);
 	}
+
+	/* GROUP M: the rooms are done. The objects set their own window per item,
+	 * so this line is only for the frame that has none: without it the last
+	 * room's window would still be in force when the bracket closes, and the
+	 * one thing this group must never do is hand the classic path a device it
+	 * did not have. */
+	HDRenderScissorOff();
 
 	/* THE OBJECTS, AFTER THE ROOMS AND INSIDE THE SAME BRACKET (#123, S3-2).
 	 *
@@ -2167,17 +2338,38 @@ void HDFrameDrawGlow()
 	 * depth write against a depth buffer that now holds the whole opaque
 	 * frame; the order between them is the classic path's own - a surface you
 	 * can see through is a surface, and a glow is painted on top of whatever
-	 * it shines through. */
+	 * it shines through.
+	 *
+	 * GROUP M: the same window per room in this phase as in the solid one. A
+	 * glow is a surface of its room like any other - the RICH2 lamp cone that
+	 * fix round E moved into this phase hangs inside a portal, and it has to
+	 * be cut by that portal's window and by no other. ClipEmpty asks the same
+	 * question of the same four numbers HDFrameDraw asked, so the two phases
+	 * skip the same rooms; a room skipped there had its light block left
+	 * unfilled and must not be drawn here either. */
 	for (int i = 0; i < g_frame_count; i++)
+	{
+		if (ClipEmpty(g_frame[i]) && HDRenderScissorAvailable())
+			continue;
+
+		ApplyClip(g_frame[i]);
 		HDRenderRoomMask(g_frame[i].group, &g_frame[i].world,
 			&g_frame[i].lighting, HD_PASS_BLEND);
+	}
 
 	for (int i = 0; i < g_frame_count; i++)
+	{
+		if (ClipEmpty(g_frame[i]) && HDRenderScissorAvailable())
+			continue;
+
+		ApplyClip(g_frame[i]);
 		HDRenderRoomMask(g_frame[i].group, &g_frame[i].world,
 			&g_frame[i].lighting, HD_PASS_ADDITIVE);
+	}
 
+	// GROUP M: the rooms are done - see the same line in HDFrameDraw.
+	HDRenderScissorOff();
 	HDObjectFrameDraw(&projection, frame.bulbCount, HD_PASS_ADDITIVE);
-
 	HDRenderFrameEnd();
 
 	g_frame_room_calls += HDRenderDrawCalls();
@@ -2197,6 +2389,46 @@ void HDFrameDrawGlow()
 			objects_here, HDObjectDrawCalls(),
 			HDRenderCutoutCalls(), HDPageCacheCutoutPages(),
 			HDRenderFlipbookCalls(), HDRenderGlossCalls());
+	}
+
+	/* GROUP M, THE PORTAL WINDOWS OF THIS FRAME. Two lines, both behind -log
+	 * and both throttled, because this runs once per drawn frame:
+	 *
+	 *   once per level, at the first frame that drew an HD room, one line per
+	 *   room with the window it got - the numbers a picture of the bleed can
+	 *   be held against;
+	 *
+	 *   once a second after that, the tally. GlobalCounter ticks thirty times
+	 *   a second whatever the frame rate is (#148), so thirty of it is one
+	 *   second of game time. */
+	if (gLogEnabled && g_frame_count)
+	{
+		const unsigned short now = GlobalCounter;
+
+		if (!g_clip_listed)
+		{
+			g_clip_listed = true;
+			Log("HDLOG level=%s clip first frame - %s, backbuffer %dx%d",
+				g_stem, HDRenderScissorAvailable()
+					? "scissor test in force"
+					: "NO SCISSOR TEST ON THIS DEVICE - rooms draw whole",
+				(int)phd_winwidth, (int)phd_winheight);
+
+			for (int i = 0; i < g_frame_count; i++)
+				Log("HDLOG   room=%d group=%d clip=%d,%d,%d,%d %s",
+					g_frame[i].room, g_frame[i].group,
+					g_frame[i].x0, g_frame[i].y0, g_frame[i].x1, g_frame[i].y1,
+					ClipEmpty(g_frame[i]) ? "EMPTY - not drawn"
+						: g_frame[i].full ? "(the whole screen)" : "");
+		}
+
+		if (!g_clip_line_ever || (unsigned short)(now - g_clip_line_at) >= 30)
+		{
+			g_clip_line_ever = true;
+			g_clip_line_at = now;
+			Log("HDLOG clip rooms=%d full=%d scissored=%d empty=%d",
+				g_frame_count, g_clip_full, g_clip_scissored, g_clip_empty);
+		}
 	}
 
 	/* THE FRAME'S HD COUNTERS, handed to the frame clock as MAXIMA over the

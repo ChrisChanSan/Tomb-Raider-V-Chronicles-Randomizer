@@ -866,6 +866,14 @@ namespace
 		DWORD fvf = 0;
 		DWORD rs[32] = {};
 		DWORD samp[16] = {};
+		/* GROUP M: the scissor RECTANGLE. D3DRS_SCISSORTESTENABLE is in the
+		 * render state list below and always was; the rectangle beside it is
+		 * a device state of its own with its own Get/Set pair, and the HD
+		 * path writes it now. A device with no scissor cap answers the Get
+		 * with a failure - then nothing is put back, because nothing was
+		 * taken and nothing was set. */
+		RECT scissor = { 0, 0, 0, 0 };
+		bool scissorValid = false;
 	};
 
 	const D3DRENDERSTATETYPE kSavedRenderStates[] =
@@ -912,6 +920,13 @@ namespace
 
 	SavedState g_saved;
 	bool g_in_frame = false;
+	/* GROUP M: the scissor rectangle the HD path has set inside the bracket
+	 * it is in, and whether the test is on at all. Kept so that a room whose
+	 * window has not moved costs no device call - a frame draws its rooms
+	 * twice, once for the solid passes and once for the glows, and a level
+	 * with a hundred rooms would otherwise make four hundred of them. */
+	bool g_scissor_on = false;
+	RECT g_scissor = { 0, 0, 0, 0 };
 	int g_draw_calls = 0;
 	// A2: draw calls of the opaque pass that ran with the alpha test on
 	// because their part is a cut-out material. Reset with g_draw_calls.
@@ -2833,6 +2848,13 @@ void HDRenderStateSave()
 	for (int i = 0; i < kSamplerStateCount; i++)
 		g_device->GetSamplerState(0, kSavedSamplerStates[i], &g_saved.samp[i]);
 
+	/* GROUP M: the scissor RECTANGLE beside D3DRS_SCISSORTESTENABLE, which is
+	 * two lines above in the render state list. Read back like everything
+	 * else - the classic path never sets it, so what comes back is the
+	 * device's own default of the whole render target, and that is exactly
+	 * what has to go back. */
+	g_saved.scissorValid = SUCCEEDED(g_device->GetScissorRect(&g_saved.scissor));
+
 	/* --- the HD path's own state --------------------------------------- */
 	// Real geometry has to be clipped; the classic path switched clipping off
 	// because it hands the device vertices it has already clipped itself.
@@ -2848,7 +2870,14 @@ void HDRenderStateSave()
 	// would have to come out of the vertex shader, and ours writes none.
 	// Distance fog returns as shader arithmetic in stage S2b.
 	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	/* GROUP M: the bracket starts with NO window. The room path switches it
+	 * on per room and off again; a caller that never touches it - the sky
+	 * dome, the diagnostic tool - draws over the whole frame as it always
+	 * did. The rectangle itself is left alone here: it means nothing while
+	 * the test is off, and setting it would be a device call per bracket for
+	 * a value the next HDRenderScissor overwrites anyway. */
 	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	g_scissor_on = false;
 	g_device->SetRenderState(D3DRS_COLORWRITEENABLE,
 		D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN |
 		D3DCOLORWRITEENABLE_BLUE | D3DCOLORWRITEENABLE_ALPHA);
@@ -2904,10 +2933,69 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 	apply_frame_lighting(frame);
 }
 
+/* GROUP M: THE WINDOW ONE ROOM IS DRAWN IN. `left/top` is the first pixel
+ * drawn, `right/bottom` the first one that is not - Direct3D's own rule, and
+ * the caller has already turned the engine's inclusive window into it.
+ *
+ * Both calls are cheap on purpose. A frame draws its rooms twice (the solid
+ * phase and the glow phase), and a level with a hundred rooms would make four
+ * hundred device calls a frame if every one of them were unconditional; so
+ * the rectangle is only written when it really moved, and the enable only
+ * when it really changed. The first call inside a bracket always writes both,
+ * because HDRenderStateSave cleared g_scissor_on and HDRenderStateRestore put
+ * the caller's own rectangle back under us. */
+bool HDRenderScissorAvailable()
+{
+	return g_device && (g_caps.RasterCaps & D3DPRASTERCAPS_SCISSORTEST) != 0;
+}
+
+void HDRenderScissor(int left, int top, int right, int bottom)
+{
+	if (!HDRenderScissorAvailable())
+		return;
+
+	RECT want;
+
+	want.left = (LONG)left;
+	want.top = (LONG)top;
+	want.right = (LONG)right;
+	want.bottom = (LONG)bottom;
+
+	if (!g_scissor_on || g_scissor.left != want.left || g_scissor.top != want.top ||
+		g_scissor.right != want.right || g_scissor.bottom != want.bottom)
+	{
+		g_device->SetScissorRect(&want);
+		g_scissor = want;
+	}
+
+	if (!g_scissor_on)
+	{
+		g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+		g_scissor_on = true;
+	}
+}
+
+void HDRenderScissorOff()
+{
+	if (!g_device || !g_scissor_on)
+		return;
+
+	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	g_scissor_on = false;
+}
+
 void HDRenderStateRestore()
 {
 	if (!g_device)
 		return;
+
+	/* GROUP M: the rectangle first and the enable with the other render
+	 * states below, so that the caller cannot see a frame in which its own
+	 * scissor test is on and our rectangle is still in force. */
+	if (g_saved.scissorValid)
+		g_device->SetScissorRect(&g_saved.scissor);
+
+	g_scissor_on = false;
 
 	for (int i = 0; i < kRenderStateCount; i++)
 		g_device->SetRenderState(kSavedRenderStates[i], g_saved.rs[i]);

@@ -367,6 +367,37 @@ void HDRenderFrameEnd();
 void HDRenderStateSave();
 void HDRenderStateRestore();
 
+/* THE PORTAL WINDOW AS A SCISSOR RECTANGLE (#123, group M).
+ *
+ * The classic path draws a room only where its own portal walk says the room
+ * can be seen: `r->left / top / right / bottom`, a rectangle in BACKBUFFER
+ * PIXELS, worked out in game\draw.cpp (SetRoomBounds / GetRoomBounds) and
+ * handed to specific\drawroom.cpp as clip_left..clip_bottom. The HD path drew
+ * a whole room group whatever the walk said, and in a level whose rooms
+ * overlap in space - ANDREA1's 39 and 53 stand in the same world coordinates
+ * - the second room's art came through the first room's wall. The depth
+ * buffer cannot answer that: both rooms really are at that depth.
+ *
+ * So every HD room draw is scissored to its own window. `left/top` are the
+ * first pixel drawn and `right/bottom` the first pixel NOT drawn, which is
+ * Direct3D's own rule for D3DRS_SCISSORTESTENABLE; the caller does the
+ * rounding and the margin, because it is the one that knows what the engine's
+ * inclusive window meant.
+ *
+ * HDRenderScissorOff puts the test back off, which is the state the whole HD
+ * bracket starts in. The rectangle and the enable are both part of the state
+ * bracket - HDRenderStateSave reads them back and HDRenderStateRestore writes
+ * them back - so a caller that forgets to switch it off still cannot leave the
+ * classic path a device it did not have.
+ *
+ * HDRenderScissorAvailable is the device cap (D3DPRASTERCAPS_SCISSORTEST).
+ * Every card since about 2002 has it; on one that does not, the two calls
+ * above do nothing at all and the HD rooms draw as they did before this
+ * group, which is the old bug and not a black screen. */
+bool HDRenderScissorAvailable();
+void HDRenderScissor(int left, int top, int right, int bottom);
+void HDRenderScissorOff();
+
 /* WHICH OF THE THREE PASSES A CALL IS TO DRAW (#123, fix round E, E6).
  *
  * The first two write depth and the third does not, and that one fact decides

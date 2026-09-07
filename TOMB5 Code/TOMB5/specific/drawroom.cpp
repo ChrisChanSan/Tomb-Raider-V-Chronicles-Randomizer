@@ -167,9 +167,19 @@ void InsertRoom(ROOM_INFO* r)
 	 * This is the only difference in this function. With hd_enable off, or
 	 * before a level is built, or for a room the .TRG has nothing for,
 	 * HDFrameRoom returns false at its first line and the classic path below
-	 * runs exactly as it did. */
+	 * runs exactly as it did.
+	 *
+	 * AND THE PORTAL WINDOW WITH IT (#123, group M). The four numbers handed
+	 * over are the very ones the eight lines above put into clip_left..
+	 * clip_bottom for the classic roomlets: the rectangle the portal walk
+	 * worked out for THIS room in THIS frame, in backbuffer pixels. They are
+	 * read here and not later because they do not survive the frame -
+	 * PrintObjects (game\draw.cpp) resets all four the moment it is done with
+	 * the room's items, which happens long before S_OutputPolyList draws
+	 * anything HD. */
 	ProfBegin(PROF_HD_ROOM);
-	const bool hd_room = HDFrameRoom((int)(r - room), aMXPtr);
+	const bool hd_room = HDFrameRoom((int)(r - room), aMXPtr,
+		r->left, r->top, r->right, r->bottom);
 	ProfEnd(PROF_HD_ROOM);
 
 	if (hd_room)

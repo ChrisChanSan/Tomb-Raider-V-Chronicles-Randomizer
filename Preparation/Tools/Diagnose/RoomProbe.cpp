@@ -572,6 +572,12 @@ struct Snapshot
 	DWORD rs[kStateCount];
 	DWORD samp[kSamplerCount];
 	DWORD stage[kStageCount];
+	/* #123 group M: the scissor RECTANGLE. D3DRS_SCISSORTESTENABLE has been
+	 * in the render state list above since stage S3-1; the rectangle beside
+	 * it is a device state of its own, and group M is the first thing in the
+	 * HD path that writes it. */
+	RECT scissor;
+	BOOL scissorOk;
 	DWORD fvf;
 	void* vs;
 	void* ps;
@@ -592,6 +598,10 @@ static void Take(Snapshot& shot)
 		g_device->GetSamplerState(0, kWatchedSamplers[i], &shot.samp[i]);
 	for (int i = 0; i < kStageCount; i++)
 		g_device->GetTextureStageState(0, kWatchedStages[i], &shot.stage[i]);
+
+	// Group M: the rectangle. A device with no scissor cap fails the Get -
+	// then the flag is FALSE in both snapshots and they still compare equal.
+	shot.scissorOk = SUCCEEDED(g_device->GetScissorRect(&shot.scissor));
 
 	g_device->GetFVF(&shot.fvf);
 
@@ -672,6 +682,23 @@ static int Diff(const Snapshot& before, const Snapshot& after)
 	if (before.fvf != after.fvf)
 	{
 		printf("  BROKEN FVF: 0x%08lX -> 0x%08lX\n", before.fvf, after.fvf);
+		broken++;
+	}
+
+	// Group M: the scissor rectangle, which the HD room path now sets per
+	// room and hd_render's bracket has to put back with everything else.
+	if (before.scissorOk != after.scissorOk ||
+		(before.scissorOk &&
+			(before.scissor.left != after.scissor.left ||
+			before.scissor.top != after.scissor.top ||
+			before.scissor.right != after.scissor.right ||
+			before.scissor.bottom != after.scissor.bottom)))
+	{
+		printf("  BROKEN scissor rect: %ld,%ld,%ld,%ld -> %ld,%ld,%ld,%ld\n",
+			before.scissor.left, before.scissor.top,
+			before.scissor.right, before.scissor.bottom,
+			after.scissor.left, after.scissor.top,
+			after.scissor.right, after.scissor.bottom);
 		broken++;
 	}
 
@@ -900,6 +927,72 @@ static void ShotEnd(Shot& shot)
 	if (shot.target) { shot.target->Release(); shot.target = 0; }
 }
 
+/* ------------------------------------------------------ scissor proof -- */
+
+/* WHAT WAS DRAWN INSIDE THE WINDOW AND WHAT WAS DRAWN OUTSIDE IT (#123, group
+ * M). The picture is read back and every pixel asked one question: is it still
+ * the colour ShotBegin cleared it to? A pixel that is not was drawn.
+ *
+ * The background is MAGENTA unless -black said otherwise, and that matters
+ * here more than anywhere else in this tool: on a black background a black
+ * pixel of geometry cannot be told from a pixel nobody touched, and the whole
+ * count would read zero whether the scissor worked or not. So -black turns
+ * the proof into a warning and no number. */
+static void ScissorProof(Shot& shot, const RECT& box)
+{
+	D3DLOCKED_RECT rect;
+
+	if (g_black)
+	{
+		printf("group M: -scissor cannot be proved with -black - a black pixel "
+			"of geometry and an untouched pixel are the same colour.\n");
+		return;
+	}
+
+	if (FAILED(g_device->GetRenderTargetData(shot.colour, shot.readback)) ||
+		FAILED(shot.readback->LockRect(&rect, 0, D3DLOCK_READONLY)))
+	{
+		printf("group M: reading the picture back for the scissor proof failed\n");
+		return;
+	}
+
+	long long inside = 0, outside = 0, insideArea = 0;
+
+	for (long y = 0; y < shot.h; y++)
+	{
+		const unsigned long* src =
+			(const unsigned long*)((const unsigned char*)rect.pBits + (size_t)y * rect.Pitch);
+
+		for (long x = 0; x < shot.w; x++)
+		{
+			const bool in = x >= box.left && x < box.right &&
+				y >= box.top && y < box.bottom;
+
+			if (in)
+				insideArea++;
+
+			if ((src[x] & 0x00FFFFFFu) == 0x00FF00FFu)
+				continue;		// nobody touched it
+
+			if (in)
+				inside++;
+			else
+				outside++;
+		}
+	}
+
+	shot.readback->UnlockRect();
+
+	printf("group M: scissor %ld,%ld,%ld,%ld over %ldx%ld - %lld pixel(s) "
+		"drawn inside it (%.1f%% of the rectangle), %lld outside - %s\n",
+		box.left, box.top, box.right, box.bottom, shot.w, shot.h,
+		inside, insideArea ? 100.0 * (double)inside / (double)insideArea : 0.0,
+		outside,
+		outside ? "FAIL, the scissor test let something through"
+			: inside ? "PASS, nothing was drawn outside the window"
+			: "INCONCLUSIVE, nothing was drawn at all - move the camera");
+}
+
 /* ------------------------------------------------------- matrix proof -- */
 
 /* THE ENGINE'S TRANSFORM AGAINST THE HD MATRIX, IN PIXELS.
@@ -1081,6 +1174,15 @@ static int g_geom_count = 0;
 static int g_flat_box[8][5];
 static int g_flat_count = 0;
 // H1, -watersurvey: the folder holding the classic .TRC files.
+/* #123 GROUP M: the portal window, as a scissor rectangle. -scissor l,t,r,b
+ * draws the room with exactly the call the engine makes per room -
+ * HDRenderScissor - and then counts, on the picture itself, how many pixels
+ * were drawn INSIDE the rectangle and how many outside it. Outside must be
+ * zero: that is the whole claim of the group, and it is the one part of it a
+ * tool without a portal walk can prove. */
+static bool g_scissor = false;
+static long g_scissor_box[4] = { 0, 0, 0, 0 };
+
 static std::string g_survey;
 static unsigned char g_water_table[22][64][4];
 
@@ -1496,6 +1598,7 @@ int main(int argc, char** argv)
 		printf("       -effect <0..21>  -paritycheck\n");
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
 		printf("       -with <group> <dx dy dz>   -oldorder   -black   -noshore\n");
+		printf("       -scissor <l,t,r,b>\n");
 		printf("       -budget <MiB>  -format rgba|dxt5  -psnr\n");
 		printf("       -caps maxtex <n>  -caps noidx32  -seq <A,B,C>  -vramhog\n");
 		return 1;
@@ -1607,6 +1710,21 @@ int main(int argc, char** argv)
 
 			g_plane = true;
 			at += 5;
+		}
+		else if (!strcmp(argv[at], "-scissor") && at + 1 < argc)
+		{
+			/* GROUP M: "l,t,r,b" in backbuffer pixels, left and top the first
+			 * pixel drawn and right and bottom the first one that is not -
+			 * the same half-open rectangle HDRenderScissor takes and the same
+			 * one the engine hands it. */
+			if (sscanf(argv[at + 1], "%ld,%ld,%ld,%ld", &g_scissor_box[0],
+				&g_scissor_box[1], &g_scissor_box[2], &g_scissor_box[3]) == 4)
+				g_scissor = true;
+			else
+				printf("RoomProbe: -scissor wants l,t,r,b with commas and no "
+					"spaces - \"%s\" is not that\n", argv[at + 1]);
+
+			at += 1;
 		}
 		else if (!strcmp(argv[at], "-nomotion"))
 			g_motion = false;
@@ -2431,6 +2549,19 @@ int main(int argc, char** argv)
 	bool drew = false;
 	D3DMATRIX withWorld[8];
 
+	/* GROUP M: the portal window, if one was asked for, set with the very
+	 * call the engine makes per room. It goes on AFTER the sky, because the
+	 * engine's sky is drawn in a bracket of its own and never carries one. */
+	if (g_scissor)
+	{
+		if (!HDRenderScissorAvailable())
+			printf("group M: this device reports no D3DPRASTERCAPS_SCISSORTEST "
+				"- the rectangle is ignored, exactly as the engine ignores it\n");
+
+		HDRenderScissor((int)g_scissor_box[0], (int)g_scissor_box[1],
+			(int)g_scissor_box[2], (int)g_scissor_box[3]);
+	}
+
 	for (int i = 0; i < g_with_count; i++)
 	{
 		memset(&withWorld[i], 0, sizeof(withWorld[i]));
@@ -2476,10 +2607,23 @@ int main(int argc, char** argv)
 	}
 
 	const int calls = HDRenderDrawCalls();
+	// GROUP M: off again inside the bracket, as the engine's frame does.
+	HDRenderScissorOff();
 	HDRenderFrameEnd();
 	g_device->EndScene();
 
 	Take(after);
+
+	if (g_scissor)
+	{
+		RECT box;
+
+		box.left = g_scissor_box[0];
+		box.top = g_scissor_box[1];
+		box.right = g_scissor_box[2];
+		box.bottom = g_scissor_box[3];
+		ScissorProof(shot, box);
+	}
 
 	printf("HDRenderRoom returned %s after %d draw calls\n",
 		drew ? "true" : "FALSE", calls);
@@ -2489,8 +2633,10 @@ int main(int argc, char** argv)
 			HDRenderSkyGroups(), stats.skyFlatParts, skyDrew ? "true" : "FALSE");
 
 	const int broken = Diff(before, after);
+	// kStateCount + kSamplerCount + kStageCount, plus the FVF, the six bound
+	// objects, stream 0's offset/stride, and the scissor rectangle (group M).
 	printf("state bracket: %d of %d watched states changed - %s\n",
-		broken, kStateCount + kSamplerCount + kStageCount + 8,
+		broken, kStateCount + kSamplerCount + kStageCount + 9,
 		broken ? "FAIL, the classic path would find a different device"
 			: "PASS, the device came back exactly as it went in");
 

@@ -131,7 +131,32 @@ bool HDStaticIsClassic(int roomIndex, int meshIndex);
 void HDFlipRoom(int roomIndex, int otherIndex);
 
 void HDFrameReset();
-bool HDFrameRoom(int roomIndex, const float* viewWorld);
+
+/* ONE ROOM ON THIS FRAME'S LIST, WITH THE WINDOW IT MAY BE SEEN IN (#123,
+ * group M).
+ *
+ * `left/top/right/bottom` are the engine's own `ROOM_INFO::left/top/right/
+ * bottom` - the rectangle the portal walk (game\draw.cpp, SetRoomBounds and
+ * GetRoomBounds) worked out for this room in THIS frame, in backbuffer pixels,
+ * both ends inclusive. InsertRoom copies them into clip_left..clip_bottom one
+ * line further down for the classic roomlets, and the HD path turns them into
+ * a scissor rectangle for the same reason: a room that overlaps another one in
+ * space (ANDREA1's 39 and 53 stand in the same world coordinates) must not be
+ * drawn outside the portal it is seen through, and no depth buffer can decide
+ * that - both rooms really are at that depth.
+ *
+ * The camera's own room comes in as the whole screen, which is what the walk
+ * gives it, and is drawn without a scissor at all. */
+bool HDFrameRoom(int roomIndex, const float* viewWorld,
+	int left, int top, int right, int bottom);
+
+/* THE WINDOW OF THE ROOM AN HD OBJECT STANDS IN (#123, group M). Called from
+ * hd_object.cpp for each item it is about to draw, with `item->room_number`;
+ * -1, a room that is not on this frame's list, and the camera's own
+ * full-screen room all leave the scissor test off. It is a call into this file
+ * rather than a getter because the frame list, the rounding and the margin
+ * live here, and there is one of each. */
+void HDFrameScissorForRoom(int roomIndex);
 
 // THE SKY DOME (#123, fix round R3a). Called from SkyDrawPhase (game\draw.cpp)
 // where the classic path draws its HORIZON mesh, with the matrix that is on

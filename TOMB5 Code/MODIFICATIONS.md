@@ -4949,6 +4949,128 @@ decision: it has no throat, its helmet sits on the torso node, and it neither
 got a fix of its own nor was allowed to constrain the cut for the other seven
 bodies.
 
+#### Group M - non-euclidean rooms: the portal window as a scissor (#123)
+
+The user, in trview and in the game, in ANDREA1 *The base*: **rooms that stand
+inside one another in the world are both drawn in HD**. Room 39 (a storeroom
+with a shelf and a floor grating) and room 53 (an air shaft) occupy the same
+world coordinates, and through the door of one you can see the geometry of the
+other coming through the wall. The depth buffer has nothing to say about it -
+both rooms really are at that distance.
+
+**What the classic path does that the HD path did not.** Every frame, TR5
+walks its portals from the camera's room outwards (`game\draw.cpp`,
+`GetRoomBounds` and `SetRoomBounds`) and leaves each reached room a rectangle
+in `ROOM_INFO::left / top / right / bottom` - the projected union of the
+portals it was reached through, widened by a pixel on each side, in
+**backbuffer pixels** with both ends inclusive. `InsertRoom`
+(`specific\drawroom.cpp`) copies those four into `clip_left..clip_bottom`, and
+the classic roomlets are held against them.
+
+Both facts about that window were **measured and not assumed**, and they are
+what the fix rests on:
+
+- **The units are backbuffer pixels, one to one.** `InitWindow`
+  (`specific\3dmath.cpp:731`) is called with `App.dx.dwRenderWidth /
+  dwRenderHeight` (`specific\gamemain.cpp:261`, `winmain.cpp:274`), and those
+  two are the present parameters' `BackBufferWidth / Height`
+  (`specific\dxshell.cpp:451`). There is no letterbox and no scale. The engine
+  never calls `SetViewport` anywhere except in the HD sky, which restores it
+  before it returns, so the viewport is the whole render target.
+- **The classic clip is COARSER than a scissor.** `clip_left..clip_bottom`
+  only build per-vertex flags; a polygon is *dropped* when every corner lies
+  beyond the same edge (`specific\polyinsert.cpp:1213`, `c[v0] & c[v1] & …`)
+  and is otherwise clipped against the **screen**, not the window
+  (`specific\clipping.cpp`, `XYUVGClipper` uses `f_left..f_bottom`). So a
+  polygon straddling the window's rim is drawn whole by the classic path. That
+  is why the scissor rectangle carries **one pixel of margin** on every side:
+  without it the HD path would be strictly stricter than the engine it copies,
+  and the two would disagree along every portal rim.
+
+**The change.** `HDFrameRoom` takes the four numbers at the seam it already
+had - `InsertRoom`, one line, beside the matrix - and keeps them in the frame
+list as a half-open rectangle. Taken **there** and not at draw time, because
+they do not survive the frame: `PrintObjects` resets all four the moment it is
+done with a room's items, long before `S_OutputPolyList` draws anything HD.
+Both room phases then set `D3DRS_SCISSORTESTENABLE` and `SetScissorRect` per
+room - the solid passes in `HDFrameDraw`, the glass and the glows in
+`HDFrameDrawGlow`, because a lamp cone hanging in a portal has to be cut by
+that portal like the wall beside it. A window that covers the whole backbuffer
+- the camera's own room, and any room the walk could see all of - is drawn with
+the test **off**, which is both cheaper and exactly what such a rectangle would
+do; a window of no width or height means the room is not drawn at all.
+
+**Objects get the window of their own room**, out of `item->room_number`, and
+this is the one place where the HD path is deliberately *not* the classic path:
+`PrintObjects` hands every item the whole screen
+(`phd_left = 0 … phd_winxmax + 1`). The argument for doing it anyway is the
+same one the portal walk is built on - anything of a far room outside its
+window stands behind the near room's own geometry - and the argument for it
+being safe is that both the HD room walls and the classic buckets write depth,
+so the pixels a scissor takes here are pixels something else covers. **Lara is
+never scissored**: everything pushed through `HDObjectPush` answers -1, and she
+is in the camera's room whose window is the screen. An item in a room the walk
+never reached answers -1 as well and is not cut either - inventing a window for
+it would be a rule the engine has not got.
+
+**The state bracket grew by one.** `D3DRS_SCISSORTESTENABLE` has been in
+`hd_render.cpp`'s saved list since stage S3-1; the **rectangle** beside it is a
+device state of its own with its own `Get/SetScissorRect` pair, and group M is
+the first thing in the HD path that writes it. It is read back in
+`HDRenderStateSave` and written back in `HDRenderStateRestore` like everything
+else. `RoomProbe`'s bracket check counts **59** items now instead of 58, and
+reports **0 changed**.
+
+**Without the cap** (`D3DPRASTERCAPS_SCISSORTEST` - every card since about
+2002 has it) `HDRenderScissor` and `HDRenderScissorOff` do nothing at all, and
+the HD rooms draw whole: the old bug, not a black screen. The first `HDLOG`
+line of a level says which of the two it is.
+
+**The proof.** `be.bat` builds with 0 errors. `RoomProbe` cannot walk portals -
+it has no engine around it - so the claim it *can* prove is the one the engine
+depends on, that the renderer really draws nothing outside a rectangle handed
+to it. New switch `-scissor <l,t,r,b>`: it calls `HDRenderScissor` with exactly
+the numbers the engine's room path calls it with, draws the room, reads the
+picture back and counts drawn pixels inside and outside the rectangle. ANDREA1
+room 39, 800x600, the tool's own automatic camera:
+
+| run | background left in the picture | drawn inside the rectangle | drawn outside it |
+| --- | ---: | ---: | ---: |
+| no `-scissor` at all | 71.2 % | — | — |
+| `-scissor 0,0,800,600` | 71.2 % | 138 197 | **0** |
+| `-scissor 200,150,600,450` | 91.3 % | 41 689 | **0** |
+
+The middle row is the control that matters as much as the last: a rectangle
+covering the frame leaves exactly the picture no rectangle at all leaves, so
+the switch neither adds nor takes away anything by itself. The last row draws a
+third of what the first one did, and every pixel of it is inside the window.
+
+The state bracket reported **0 of 59 changed** in all three runs, and with
+`hd_enable` off nothing in this group is reached at all: `HDFrameRoom` returns
+at `GroupOfRoom` before it touches the window, and `HDFrameDraw` returns on an
+empty list before the first scissor call.
+
+**`HDLOG`, behind `-log`.** Once per level, at the first frame that draws an HD
+room, one line saying whether the device has the cap and what the backbuffer
+is, then one line per room with the window it got:
+
+```
+HDLOG level=ANDREA1 clip first frame - scissor test in force, backbuffer 1920x1080
+HDLOG   room=39 group=39 clip=0,0,1920,1080 (the whole screen)
+HDLOG   room=53 group=53 clip=812,391,1096,655
+```
+
+and after that, once a game second, the tally:
+
+```
+HDLOG clip rooms=11 full=1 scissored=10 empty=0
+```
+
+*Left over and named:* an item's window is its room's, and `item->room_number`
+can lag by a frame while it crosses a portal. If a cut limb is ever seen, it
+will be there, and the object half of this group is one line
+(`entry.room = -1`) away from being taken back out on its own.
+
 ---
 
 ### 5. Sixty frames a second (#148)

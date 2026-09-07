@@ -103,6 +103,12 @@ namespace
 		 * term is Lara's alone for now. */
 		float specStrength;
 		float specPower;
+		/* #123 group M: the room this thing stands in, so that it is drawn
+		 * inside the same portal window its room is - `item->room_number`
+		 * for an item, and -1 for anything pushed without one, which is
+		 * Lara's whole composite (she is in the camera's room and the
+		 * camera's room is the whole screen). */
+		int room;
 	};
 
 	FrameItem g_frame[HD_OBJ_ITEMS];
@@ -114,6 +120,9 @@ namespace
 	int g_open_slot = -1;
 	int g_open_swap = -1;		// the alternative model this item wants (B3)
 	int g_open_nodes = 0;
+	// #123 group M: the room of the item being walked, kept from
+	// HDObjectBegin (which has the ITEM_INFO) to HDObjectEnd (which has not).
+	int g_open_room = -1;
 	unsigned int g_open_mask = 0;
 	float g_raw[HD_OBJ_NODES * 12];		// the engine's own 3x4, per node
 	unsigned int g_seen = 0;
@@ -1512,6 +1521,7 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	g_open = true;
 	g_open_slot = slot;
 	g_open_nodes = g_slot[slot].nodes;
+	g_open_room = (int)item->room_number;	// group M: its portal window
 	g_open_mask = (unsigned int)item->mesh_bits;
 	g_seen = 0;
 
@@ -1592,6 +1602,7 @@ void HDObjectEnd()
 		g_slot[g_open_slot].head != 0;
 	entry.nodes = g_open_nodes;
 	entry.mask = g_open_mask;
+	entry.room = g_open_room;	// group M
 
 	/* The engine's 3x4 into the row-major 4x4 the shader wants - the same
 	 * conversion SetD3DMatrix does for the fixed-function pipe, and the one
@@ -1691,6 +1702,19 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 		const FrameItem& entry = g_frame[i];
 		HDModelLighting lighting;
 
+		/* GROUP M: the item is drawn inside the portal window of its own
+		 * room, which is the window that room's art was just drawn in. An
+		 * HD guard in a room that overlaps another one in space came through
+		 * the wall exactly as the room's geometry did.
+		 *
+		 * Lara and everything else pushed without a room answer -1 and this
+		 * switches the test off for them. So does an item whose room the
+		 * portal walk never reached: that item is not on the room list at
+		 * all, and inventing a window for it would be a rule the engine has
+		 * not got - the classic path hands every item the whole screen
+		 * (game\draw.cpp, PrintObjects). */
+		HDFrameScissorForRoom(entry.room);
+
 		lighting.lights = entry.lights;
 		lighting.lightCount = entry.lightCount;
 		lighting.sunScale = entry.sunScale;
@@ -1719,6 +1743,11 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 			HDModelDrawHead(entry.slot, entry.matrix, entry.nodes, entry.light,
 				entry.mask, &lighting, &entry.cut, entry.cull);
 	}
+
+	// GROUP M: the objects are done and the window of the last one must not
+	// outlive them - the caller closes the bracket next, and the bracket is
+	// what the classic path gets back.
+	HDRenderScissorOff();
 
 	/* E6: the phases add up. HDModelFrameBegin zeroes the model file's own
 	 * counter per bracket, so a frame drawn in two phases would otherwise
@@ -1833,6 +1862,12 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	entry.cull = cull;
 	entry.specStrength = specStrength;
 	entry.specPower = specPower;
+	/* GROUP M: no portal window. Everything that comes through here is a
+	 * piece of Lara, and Lara is in the camera's own room, whose window is
+	 * the whole screen - and a piece of her that reaches out of that room,
+	 * an arm through a doorway in third person, is the one thing in the
+	 * frame that must never be cut. */
+	entry.room = -1;
 
 	g_count++;
 	return true;

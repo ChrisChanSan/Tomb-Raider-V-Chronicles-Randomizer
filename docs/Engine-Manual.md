@@ -713,6 +713,19 @@ glow is always slightly wrong"* — and that turned out to be the whole story.
   surface to be **flat** as well; the colour still shimmers on those points,
   exactly as the original engine does.
 
+- **No more seeing one room through another one's wall.** Tomb Raider levels
+  are not built like buildings: two rooms can stand in exactly the same place
+  in the world, and the game only ever shows you one of them at a time,
+  because it draws each room **only inside the doorway you are looking at it
+  through**. The HD path drew whole rooms instead, so where two of them
+  overlapped - the storeroom and the air shaft of *The Base*, room 39 and room
+  53, sharing the same coordinates - the second one's shelves and floor grating
+  came through the first one's wall. It cannot be sorted out by distance,
+  because both really are that far away. Every HD room is now drawn inside the
+  same window the original engine gives it, and so is every HD enemy, in the
+  window of the room it stands in. Lara is never cut: she is in the camera's
+  own room, and that room's window is the whole screen.
+
 Still open in the rooms, and named rather than hidden: a **visible border**
 where an HD room meets one the remaster draws nothing for (they fall back to
 the classic look, and the log's `HDLOG room=… hd=0` lines name every one), and

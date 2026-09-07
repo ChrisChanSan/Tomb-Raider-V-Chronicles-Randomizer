@@ -304,16 +304,34 @@ this technique costs everywhere it is used, and what you get for it is that
 running, turning and looking around are twice as smooth as the game has ever
 been.
 
+**And the limbs move with the body.** An animation in Tomb Raider stores
+every second, fourth or fifth frame and the engine blends between two stored
+ones; at sixty it now draws the point halfway between the two poses the game
+shows at thirty. So a walk cycle, a ladder climb, a reload and an enemy's
+swing all step twice as finely, Lara's head turn, torso twist and aim move in
+half steps with them, and the braid hangs off a neck that is where the body
+is. Animations that store *every* frame — which never blended at all in the
+original, and which is most of what an enemy does — gain the most.
+
+Two things about it are worth knowing. The in-between pose is the *midpoint
+of the two poses the original draws*, never a newly computed "more correct"
+one: some of the game's own blending is coarse, and correcting it would be a
+different game rather than a smoother one. And where an animation *changes*
+between two game steps — a jump beginning, a state ending — nothing is
+blended: that one frame shows the new pose, which is exactly what thirty
+shows, and it lasts a sixtieth of a second.
+
 The HD renderer follows without being asked: it takes its matrices off the
-engine's own stack, so it gets the halved motion for free. Sixty is as smooth
-with the HD art on as without it.
+engine's own stack, so it gets the halved motion and the halved pose for
+free. Sixty is as smooth with the HD art on as without it.
 
 **What still steps at thirty**, on purpose, for now:
 
-- **The pose.** *Where* a body is and *which way it faces* move in half
-  steps; which frame of the walk cycle its legs wear does not. On a slow
-  walk, looked for, the feet still tick over at thirty while the body glides.
-  That is the next stage.
+- **The frame of the weapon in her hands.** The body, the arms and where they
+  point move in half steps; the few frames of the draw, holster and reload
+  animation itself do not. The arm chain leaves the engine's blending machine
+  behind at the shoulder and cannot be given a factor of its own without
+  rebuilding it.
 - **Cut scenes**, whole. Their camera is decoded from a frame number rather
   than simulated, so it is left alone and they play exactly as they always
   did.
@@ -1747,7 +1765,7 @@ wrote it, and each seam answers a different question:
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
 | …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |
 | the first seconds of a level feel rough | `PROFLOG … first_frame`, and the `WARMUP` line at the end of the load |
-| at *Frame rate 60* the motion is no smoother than at 30, or something jerks | `INTERPLOG` — per second: how many frames were interpolated, how far Lara moved per picture, and every place the engine deliberately snapped |
+| at *Frame rate 60* the motion is no smoother than at 30, or something jerks | `INTERPLOG` — per second: how many frames were interpolated, how far Lara moved per picture, how many bodies had their **limbs** blended too, and every place the engine deliberately snapped |
 | at *Frame rate 60* a fade, a caption or the rain seems to run at double speed | `TICKLOG` — per second: how often the engine's own clocks stepped. The same line has to come out of a 30 run and a 60 run |
 
 These seams are permanent, not debug leftovers. They exist so that a report
@@ -1881,6 +1899,7 @@ frame rate setting really did:
 ```
 INTERPLOG level=1 at=12s frames=60 tween=30 alpha=0.75 lara_step=15.8
   items=4.0 snaps=0 (teleport=0 roomjump=0 object=0 invalid=0) camcut=0 cutscene=0
+  pose_items=3.5 pose_skips=0.2 pose_hd=1.5 lara_pose=29/30
 ```
 
 | field | what it says |
@@ -1893,13 +1912,19 @@ INTERPLOG level=1 at=12s frames=60 tween=30 alpha=0.75 lara_step=15.8
 | `snaps` | how often interpolation was deliberately skipped, and why: `teleport` something crossed more than half a sector in one step, `roomjump` it did so across a room boundary, `object` an item slot was handed to a different object, `invalid` there was no previous state |
 | `camcut` | camera cuts: a fixed camera taking over, a flyby starting or stepping, the binoculars going up |
 | `cutscene` | frames in a cut scene, which is played whole at thirty |
+| `pose_items` | things whose **limbs** were drawn halfway between two game steps, per frame. Zero at 30, always |
+| `pose_skips` | poses that were *not* blended because the animation changed between the two steps, or the frame number jumped. A few per second is normal — that is what an animation change is |
+| `pose_hd` | how many of the blended poses went through the **HD** renderer's own path. Zero with the HD art off |
+| `lara_pose` | frames of the second on which **Lara's** own pose was blended, against the number of in-between frames beside it. Nearly all of them while she is moving |
 
 A healthy line during ordinary play has `snaps=0` or a small handful.
 `camcut` counting every frame of a stretch means the camera never settled
 long enough to interpolate — worth reporting with the level and where you
 stood. And a `lara_step` at 60 that is **not** about half the 30 figure means
 the interpolation is not reaching the picture, which is the one failure of
-this feature that does not look like anything.
+this feature that does not look like anything. The same goes for
+`pose_items=0.0` in a room with things moving in it: the bodies would then be
+sliding smoothly with their legs still ticking over at thirty.
 
 **`TICKLOG`.** One line per *game second*, beside `INTERPLOG`, saying how many
 times the engine's own clocks stepped in it:

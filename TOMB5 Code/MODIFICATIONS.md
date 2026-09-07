@@ -5076,11 +5076,12 @@ will be there, and the object half of this group is one line
 ### 5. Sixty frames a second (#148)
 
 The plan this follows is `Preparation/60FPS-Plan.md`, written from a read-only
-survey of this tree. It runs in orders; **this section covers orders 1, 1b, 2
-and 3** - the clock split, the option, the measurement, one warm-up fix, what
+survey of this tree. It runs in orders; **this section covers orders 1, 1b, 2,
+3 and 4** - the clock split, the option, the measurement, one warm-up fix, what
 a play test of all that found, the interpolation of the root and the camera
-that fills the in-between frames in, and then every counter in the engine that
-was measuring time in drawn frames.
+that fills the in-between frames in, then every counter in the engine that
+was measuring time in drawn frames, and finally the pose, so that a body's
+limbs move on the in-between frame and not only its feet's position.
 
 #### 5.1 What the 30 Hz cap actually was
 
@@ -5716,6 +5717,169 @@ honest limit: a frame that ran long carries **two** logic ticks and can only
 step a counter once, so a counter falls one behind per doubled frame and does
 not catch up - which is what the thirty hertz engine does too, and is why the
 guard is a frame test rather than a tick counter. 49 checks, 0 failed.
+
+#### 5.11 Order 4 - the pose
+
+Orders 2 and 3 moved where a thing **stands** and made every clock in the
+engine count game steps. This order moves its **limbs**. Until it, a body at
+sixty slid smoothly across the floor with its legs ticking over at thirty.
+
+**The machine was already there and it interpolates the wrong axis.** An
+animation stores every second, fourth, fifth ... frame - `anim->interpolation
+& 0xFF` is the *frame rate*, its high byte the frame size - and `GetFrames`
+(`game/draw.cpp`) hands the drawing code the two stored frames around the
+current one. A whole second matrix stack (`IMstack`, `aIFMStack`, the `phd_*_I`
+functions) then carries the second frame's transform in parallel with the
+first's, and `InterpolateMatrix` blends the two. So the engine already blends
+poses - **in key frames, not in time**. What it lacked was a factor that is not
+one of three constants, and a *previous tick's frame* rather than a previous
+key frame.
+
+**One factor in place of four hard-wired branches.** The blend was
+`IM_rate == 2 || (IM_frac == 2 && IM_rate == 4)` -> a half, `IM_frac == 1` ->
+a quarter, otherwise three quarters, written out twelve times each in
+`aInterpolateMatrix`, `InterpolateMatrix`, `InterpolateArmMatrix` and
+`aInterpolateArmMatrix` - about two hundred lines for three numbers. They are
+now one `IM_alpha` (and `IM_alpha8`, the same factor in eighths for the
+integer stack), computed by `InterpKeyAlpha(frac, rate)` in
+`game/interpolate_math.h`, and each of the four functions is a loop over
+twelve elements.
+
+That replacement had to be **exact**, because `fps_mode 0` must still produce
+the frame the build produced before it (the plan's K11 and proof 6):
+
+- the **float** stack keeps vanilla's three *expressions* rather than one
+  algebraic rearrangement of them. `(a + b) * 0.5f` and `a + (b - a) * 0.5f`
+  are the same number in arithmetic and can differ in the last bit in IEEE
+  floats, and a matrix element that differs in its last bit is a frame that is
+  not byte-identical;
+- the **integer** stack keeps vanilla's *shifts*. `(-3) >> 2` is -1 where
+  `(long)(-3 * 0.25f)` is 0, so the factor is applied as
+  `a + ((d * alpha8) >> 3)` below a half and `b - ((d * (8 - alpha8)) >> 3)`
+  above it - which *is* `a + (d >> 1)`, `a + (d >> 2)` and `b - (d >> 2)` for
+  the three vanilla factors, for every value including the negative ones.
+
+**And the factor is vanilla's own, not a better one.** `frac / (float)rate`
+would be the "correct" fraction and would change the game. Measured by walking
+the animation tables of all sixteen retail level files: **rates 1, 2, 3, 4, 5,
+6, 9 and 10 all occur** - 3619, 3350, 35, 5399, 3187, 2, 2 and 120 animations.
+At rate 5 vanilla draws the four frames of an interval at 0.25, 0.75, 0.75,
+0.75 - the pose stands still for three frames and jumps - and `frac / rate`
+would smooth that out. Over three thousand animations would then move
+differently from the day the game shipped, which is a different game and not a
+smoother one. So the classification stays, and what order 4 adds is a
+**midpoint between two poses vanilla really draws**.
+
+**The midpoint, and why it needs no third stack.** Both poses a tick apart lie
+on the *same key frame pair*, so their midpoint does too:
+
+```
+same interval  pose(f-1) = lerp(K, K', ap), pose(f) = lerp(K, K', ac)
+               -> midpoint = lerp(K, K', (ap + ac) / 2)
+crossing one   f mod rate == 0, so pose(f) IS K'
+               -> midpoint = lerp(K, K', (ap + 1) / 2)
+```
+
+`InterpPoseAt` (`game/interpolate_math.h`) is those four lines, `GetFramesAt`
+(`game/draw.cpp`) turns them into the pair of frame pointers, and
+`GetFramesNow` is what the draw sites call: `GetFrames` on a frame that
+carries a tick and at `fps_mode 0`, the midpoint on the frame between two
+ticks. The animation's shortened last interval (`GetFrames` reduces the rate
+there, comparing a relative frame against an absolute `frame_end` - Core's own
+mismatch, reproduced rather than repaired) is followed by `InterpKeyRate`.
+
+The best of it falls out for free: **animations of rate 1, which never
+interpolated at all in vanilla, now interpolate.** Their two ticks are two
+adjacent stored frames and the midpoint is that pair blended at a half. 3619
+of the game's animations are rate 1.
+
+**Rule K6 - where the pose is not blended.** When the animation *number*
+changed between the two ticks, or the frame number did not step by exactly one
+(a loop wrapping to its own start, a jump, a frame written by hand, an item
+standing still), there is no neighbouring pose to blend with. That frame is
+drawn with the current tick's pose, which is exactly what thirty hertz shows,
+and it lasts a sixtieth of a second. `InterpPoseTime`
+(`game/interpolate.cpp`) refuses on top of that whenever the item's **root**
+snapped - a teleport, a slot handed to another object, no previous state - so
+that a thing drawn live is drawn live whole.
+
+**One detail of that gate is load-bearing.** The snap verdict is recorded in
+`InterpBeginFrame`'s own item walk, one line *before* it writes the blended
+position over the live one. Asked later from the draw, the same test would
+measure half the distance it should and a teleport could slip through it.
+
+**The three feed points.**
+
+- `DrawAnimatingItem` (`game/draw.cpp`) - every enemy, door, machine and
+  pickup. `GetFramesNow` instead of `GetFrames`, `InitInterpolateAlpha`
+  instead of `InitInterpolate`, and the `if (frac)` branch is now entered on
+  in-between frames for animations that never entered it before.
+- `CalcLaraMatrices` (`game/delstuff.cpp`) - Lara herself, and with her the
+  HD composite, the classic body and the mirror, all of which read
+  `lara_matrices`. `Rich_CalcLaraMatrices_Interpolated` takes a float alpha in
+  place of `frac` and `rate`; the two integers only ever reached
+  `InitInterpolate` anyway. She therefore comes through the *interpolated*
+  branch on every in-between frame, which is the one thing this order had to
+  achieve for her.
+- **Lara's nine aim angles** - the torso twist, the head turn and the two
+  arms - are blended by the **snapshot** rather than by the pose machine,
+  because that is what they are: per-tick values that come from the player and
+  not from the animation, written by `LookLeftRight` and the weapon code and
+  read by both halves of `CalcLaraMatrices` through `phd_RotYXZ`. Eighteen
+  shorts in `InterpCapturePrev` / `InterpBeginFrame` / `InterpEndFrame`, no
+  draw code touched, and angles blend the short way round like every other
+  angle in that file.
+
+**`HairControl` needed nothing, and that was worth checking rather than
+assuming.** It is called from inside `ControlPhase`'s tick loop
+(`game/control.cpp`), so it never runs on an in-between frame at all. The
+braid's *positions* are in order 2's snapshot and are already blended; `DrawHair`
+(`game/hair.cpp`) builds its own matrices from those positions on every drawn
+frame. The plait therefore follows the blended neck with no change here.
+
+**The HD path followed with no change to `specific/hd/` either**, as the plan
+said it would. `HDObjectNode`'s `interpolated` branch already does
+`phd_PushMatrix(); InterpolateMatrix(); memcpy(...)` - the matrix
+`phd_PutPolygons_I` would have drawn the classic mesh with - and it is now
+entered on in-between frames as well. `INTERPLOG`'s `pose_hd` counts exactly
+those, from `DrawAnimatingItem` where both facts are known.
+
+**What is deliberately left at thirty, with its reason.** The **frame of the
+weapon animation in Lara's hands**. After `aInterpolateArmMatrix` the arm
+chain takes the rotation whole from the shoulder matrix and continues on a
+single stack (`game/delstuff.cpp`); to blend the arm's own frames it would
+need the second stack back, and then it would be blended by **the body's
+factor** - the two stacks would be carrying two different key frame pairs at
+one `IM_alpha`, which is arithmetically wrong, not merely awkward. What the
+player actually steers - where the arms point - is blended, by the aim angles
+above. The remaining piece is the few frames of a draw, holster or reload,
+and it would cost a rebuild of that chain.
+
+Also left alone: `GetBoundsAccurate` and `GetBestFrame`, which produce
+*bounding boxes* for clip windows, shadows and lighting. They stay on
+vanilla's own pair, which is the same approximation vanilla already makes on
+every interpolated tick frame - and the sequence of boxes over a crossing is
+`K, K, K'`, so nothing alternates.
+
+**`INTERPLOG` grew four fields** - `pose_items`, `pose_skips`, `pose_hd`,
+`lara_pose` - documented in `docs/Engine-Manual.md`.
+
+**The offline proof.** `InterpTest.cpp` (`bit.bat`) grew two sections and
+**198 checks pass, 0 failed**:
+
+- `pose_factor` transcribes the four hard-wired branches as the *reference*
+  and compares them against the header's own functions over 441 matrix
+  element pairs (rotation values, world translations, the negative odd
+  numbers that separate a shift from a cast) for every `(frac, rate)` the
+  retail levels can produce - 336,471 animation frames' worth - and then over
+  every pair up to rate 32. **Maximum difference: 0 units, on both stacks.**
+- `pose_time` walks an animation at sixty hertz and prints where the pose
+  stands in key frame units on every drawn frame. Rate 4 comes out as even
+  eighths, rate 2 as even quarters, rate 1 as exact halves, and rate 5 as
+  vanilla's own uneven steps with a midpoint between each pair. It asserts
+  that the pose never walks backwards, never leaves its key frame pair, is
+  vanilla's own value to the bit on every tick frame, follows the shortened
+  last interval, and is refused by each of the six K6 cases.
 
 ---
 

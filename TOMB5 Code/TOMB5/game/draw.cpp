@@ -27,6 +27,7 @@
 #include "../specific/function_stubs.h"
 #include "../specific/profile.h"		// PROFLOG's frame bracket (#148)
 #include "interpolate.h"		// the frame between two logic ticks (#148, order 2)
+#include "interpolate_math.h"		// the pose midpoint and the one blend factor (#148, order 4)
 #include "../specific/hd/hd_level.h"
 #include "../specific/hd/hd_object.h"
 #include "../specific/lighting.h"
@@ -61,6 +62,21 @@ long* IMptr;
 long IMstack[768];
 long IM_rate;
 long IM_frac;
+
+/* THE ONE FACTOR (#148, order 4).
+ *
+ * Until this order the blend between the two matrix stacks was three
+ * hard-wired branches, written out twelve times each in four functions, and
+ * chosen by the pair (IM_frac, IM_rate). IM_alpha is that choice as a number:
+ * InitInterpolate computes it from the pair exactly as the branches did, so
+ * every animation in the game blends the way it always has, and
+ * InitInterpolateAlpha lets the TIME interpolation ask for a factor no pair
+ * of integers can name - the midpoint of two poses (see interpolate_math.h).
+ *
+ * IM_alpha8 is the same factor in eighths, for the integer stack, which
+ * rounds by shifting and has to keep doing so to the bit. */
+float IM_alpha = 0.5F;
+long IM_alpha8 = 4;
 
 long CurrentRoom;
 long outside;
@@ -131,8 +147,37 @@ short* GetBestFrame(ITEM_INFO* item)
 
 void InitInterpolate(long frac, long rate)
 {
+	/* The pair still stands, because InitInterpolate2 (game\sphere.cpp) and
+	 * every reader of IM_frac / IM_rate outside this file expect it, and
+	 * because a pair of integers says WHERE IN AN ANIMATION the blend is,
+	 * which the factor alone no longer does once order 4 hands in midpoints.
+	 * The factor is derived from the pair by the same three-way test the four
+	 * blend functions used to make twelve times each. */
 	IM_rate = rate;
 	IM_frac = frac;
+	IM_alpha = InterpKeyAlpha(frac, rate);
+	IM_alpha8 = InterpEighths(IM_alpha);
+	IMptr = IMstack;
+	aIMXPtr = aIFMStack;
+	memcpy(IMstack, phd_mxptr, 48);
+	memcpy(aIFMStack, aMXPtr, 48);
+}
+
+/* THE SAME SET-UP WITH A FACTOR THAT IS NOT A KEY FRAME FRACTION (#148, order
+ * 4). The time interpolation asks for the MIDPOINT of the two poses the two
+ * neighbouring logic ticks draw, which is an eighth of a key frame interval
+ * as often as not and has no (frac, rate) that names it.
+ *
+ * IM_frac and IM_rate are set to what the factor is worth as a fraction of
+ * eight, so that anything still reading the pair - InitInterpolate2's
+ * neighbours, a log line, a debugger - sees a pair that means the same thing
+ * as the factor rather than the last animation's leftovers. */
+void InitInterpolateAlpha(float alpha)
+{
+	IM_alpha = alpha;
+	IM_alpha8 = InterpEighths(alpha);
+	IM_rate = 8;
+	IM_frac = IM_alpha8;
 	IMptr = IMstack;
 	aIMXPtr = aIFMStack;
 	memcpy(IMstack, phd_mxptr, 48);
@@ -313,92 +358,18 @@ void phd_PutPolygons_I(short* ptr, long clip)
 
 void aInterpolateMatrix()
 {
-	float* matrixp;
-	float* iMatrixp;
+	float* matrixp = aMXPtr;
+	float* iMatrixp = aIMXPtr;
 
-	matrixp = aMXPtr;
-	iMatrixp = aIMXPtr;
-
-	if (IM_rate == 2)
-	{
-		matrixp[0] = (iMatrixp[0] + matrixp[0]) * 0.5F;
-		matrixp[1] = (iMatrixp[1] + matrixp[1]) * 0.5F;
-		matrixp[2] = (iMatrixp[2] + matrixp[2]) * 0.5F;
-		matrixp[3] = (iMatrixp[3] + matrixp[3]) * 0.5F;
-		matrixp[4] = (iMatrixp[4] + matrixp[4]) * 0.5F;
-		matrixp[5] = (iMatrixp[5] + matrixp[5]) * 0.5F;
-		matrixp[6] = (iMatrixp[6] + matrixp[6]) * 0.5F;
-		matrixp[7] = (iMatrixp[7] + matrixp[7]) * 0.5F;
-		matrixp[8] = (iMatrixp[8] + matrixp[8]) * 0.5F;
-		matrixp[9] = (iMatrixp[9] + matrixp[9]) * 0.5F;
-		matrixp[10] = (iMatrixp[10] + matrixp[10]) * 0.5F;
-		matrixp[11] = (iMatrixp[11] + matrixp[11]) * 0.5F;
-		return;
-	}
-
-	if (IM_frac == 2)
-	{
-		if (IM_rate != 4)
-		{
-			matrixp[0] = iMatrixp[0] - (iMatrixp[0] - matrixp[0]) * 0.25F;
-			matrixp[1] = iMatrixp[1] - (iMatrixp[1] - matrixp[1]) * 0.25F;
-			matrixp[2] = iMatrixp[2] - (iMatrixp[2] - matrixp[2]) * 0.25F;
-			matrixp[3] = iMatrixp[3] - (iMatrixp[3] - matrixp[3]) * 0.25F;
-			matrixp[4] = iMatrixp[4] - (iMatrixp[4] - matrixp[4]) * 0.25F;
-			matrixp[5] = iMatrixp[5] - (iMatrixp[5] - matrixp[5]) * 0.25F;
-			matrixp[6] = iMatrixp[6] - (iMatrixp[6] - matrixp[6]) * 0.25F;
-			matrixp[7] = iMatrixp[7] - (iMatrixp[7] - matrixp[7]) * 0.25F;
-			matrixp[8] = iMatrixp[8] - (iMatrixp[8] - matrixp[8]) * 0.25F;
-			matrixp[9] = iMatrixp[9] - (iMatrixp[9] - matrixp[9]) * 0.25F;
-			matrixp[10] = iMatrixp[10] - (iMatrixp[10] - matrixp[10]) * 0.25F;
-			matrixp[11] = iMatrixp[11] - (iMatrixp[11] - matrixp[11]) * 0.25F;
-			return;
-		}
-
-		matrixp[0] = (iMatrixp[0] + matrixp[0]) * 0.5F;
-		matrixp[1] = (iMatrixp[1] + matrixp[1]) * 0.5F;
-		matrixp[2] = (iMatrixp[2] + matrixp[2]) * 0.5F;
-		matrixp[3] = (iMatrixp[3] + matrixp[3]) * 0.5F;
-		matrixp[4] = (iMatrixp[4] + matrixp[4]) * 0.5F;
-		matrixp[5] = (iMatrixp[5] + matrixp[5]) * 0.5F;
-		matrixp[6] = (iMatrixp[6] + matrixp[6]) * 0.5F;
-		matrixp[7] = (iMatrixp[7] + matrixp[7]) * 0.5F;
-		matrixp[8] = (iMatrixp[8] + matrixp[8]) * 0.5F;
-		matrixp[9] = (iMatrixp[9] + matrixp[9]) * 0.5F;
-		matrixp[10] = (iMatrixp[10] + matrixp[10]) * 0.5F;
-		matrixp[11] = (iMatrixp[11] + matrixp[11]) * 0.5F;
-		return;
-	}
-
-	if (IM_frac != 1)
-	{
-		matrixp[0] = iMatrixp[0] - (iMatrixp[0] - matrixp[0]) * 0.25F;
-		matrixp[1] = iMatrixp[1] - (iMatrixp[1] - matrixp[1]) * 0.25F;
-		matrixp[2] = iMatrixp[2] - (iMatrixp[2] - matrixp[2]) * 0.25F;
-		matrixp[3] = iMatrixp[3] - (iMatrixp[3] - matrixp[3]) * 0.25F;
-		matrixp[4] = iMatrixp[4] - (iMatrixp[4] - matrixp[4]) * 0.25F;
-		matrixp[5] = iMatrixp[5] - (iMatrixp[5] - matrixp[5]) * 0.25F;
-		matrixp[6] = iMatrixp[6] - (iMatrixp[6] - matrixp[6]) * 0.25F;
-		matrixp[7] = iMatrixp[7] - (iMatrixp[7] - matrixp[7]) * 0.25F;
-		matrixp[8] = iMatrixp[8] - (iMatrixp[8] - matrixp[8]) * 0.25F;
-		matrixp[9] = iMatrixp[9] - (iMatrixp[9] - matrixp[9]) * 0.25F;
-		matrixp[10] = iMatrixp[10] - (iMatrixp[10] - matrixp[10]) * 0.25F;
-		matrixp[11] = iMatrixp[11] - (iMatrixp[11] - matrixp[11]) * 0.25F;
-		return;
-	}
-
-	matrixp[0] += (iMatrixp[0] - matrixp[0]) * 0.25F;
-	matrixp[1] += (iMatrixp[1] - matrixp[1]) * 0.25F;
-	matrixp[2] += (iMatrixp[2] - matrixp[2]) * 0.25F;
-	matrixp[3] += (iMatrixp[3] - matrixp[3]) * 0.25F;
-	matrixp[4] += (iMatrixp[4] - matrixp[4]) * 0.25F;
-	matrixp[5] += (iMatrixp[5] - matrixp[5]) * 0.25F;
-	matrixp[6] += (iMatrixp[6] - matrixp[6]) * 0.25F;
-	matrixp[7] += (iMatrixp[7] - matrixp[7]) * 0.25F;
-	matrixp[8] += (iMatrixp[8] - matrixp[8]) * 0.25F;
-	matrixp[9] += (iMatrixp[9] - matrixp[9]) * 0.25F;
-	matrixp[10] += (iMatrixp[10] - matrixp[10]) * 0.25F;
-	matrixp[11] += (iMatrixp[11] - matrixp[11]) * 0.25F;
+	/* ONE FACTOR, TWELVE ELEMENTS (#148, order 4). What stood here was three
+	 * branches on (IM_frac, IM_rate), each of them writing out all twelve
+	 * matrix elements by hand - a hundred and eight lines for three numbers.
+	 * InterpBlendFloat is those three numbers' own arithmetic, expression for
+	 * expression, so this loop produces the same floats to the last bit as
+	 * the branches did (interpolate_math.h says why the expressions and not
+	 * an algebraic rearrangement of them). */
+	for (int i = 0; i < 12; i++)
+		matrixp[i] = InterpBlendFloat(matrixp[i], iMatrixp[i], IM_alpha);
 }
 
 long DrawPhaseGame()
@@ -691,9 +662,17 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	short* data;
 	short* rot;
 	short* rot2;
-	long frac, rate, clip, bit;
+	long frac, clip, bit;
+	float blend = 0.0F;
 
-	frac = GetFrames(item, frm, &rate);
+	/* #148, order 4: the same call as before at thirty hertz and on every
+	 * frame that carries a logic tick - GetFrames, the same pair, the same
+	 * factor. On the frame between two ticks it is the midpoint of the two
+	 * poses those ticks draw, and `frac` is then 1 for animations that never
+	 * interpolated at all in vanilla (rate 1 - 3619 of them across the
+	 * sixteen level files), which is what makes a rate-1 walk cycle move on
+	 * every drawn frame instead of every second one. */
+	frac = GetFramesNow(item, frm, &blend);
 	obj = &objects[item->object_number];
 
 	if (obj->shadow_size)
@@ -721,6 +700,15 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	 * it. Enemies already skip the MIP for their own reason; HD items now
 	 * join them, and everything else keeps it. */
 	const bool hd = HDObjectBegin(item, obj);
+
+	/* #148, order 4, and it is the plan's own proof for this order's HD half:
+	 * an item drawn by the HD path with a pose blended in TIME goes through
+	 * HDObjectNode's `interpolated` branch (specific\hd\hd_object.cpp), which
+	 * records the matrix phd_PutPolygons_I would have drawn the classic mesh
+	 * with. Not one line of specific\hd\ changed for this order; the counter
+	 * is here, where both facts are known, and reaches INTERPLOG as pose_hd. */
+	if (hd && frac == 2)
+		InterpNotePoseHD();
 
 	// Distance models (MIP/LOD) are switched off for ENEMIES - they are
 	// always drawn at full resolution.
@@ -806,7 +794,7 @@ void DrawAnimatingItem(ITEM_INFO* item)
 
 		if (frac)
 		{
-			InitInterpolate(frac, rate);
+			InitInterpolateAlpha(blend);
 			phd_TranslateRel_ID(frm[0][6], frm[0][7], frm[0][8], frm[1][6], frm[1][7], frm[1][8]);
 			rot = frm[0] + 9;
 			rot2 = frm[1] + 9;
@@ -1401,6 +1389,91 @@ long GetFrames(ITEM_INFO* item, short* frm[], long* rate)
 	return frac;
 }
 
+/* THE POSE THIS DRAWN FRAME WEARS, when the frame falls between two logic
+ * ticks (#148, order 4).
+ *
+ * `prevAnim` and `prevFrame` are what the item wore before the last tick -
+ * the snapshot game\interpolate.cpp keeps - and `t` is how far this frame
+ * stands between then and now, a half at sixty hertz. What comes back is the
+ * key frame PAIR and the factor whose blend is the MIDPOINT OF THE TWO POSES
+ * THE GAME DRAWS AT THIRTY; interpolate_math.h derives it and says why it is
+ * a midpoint and not a freshly computed "correct" fraction.
+ *
+ * Returns 0 when there is nothing to blend, and then nothing has been
+ * written: the caller falls back to GetFrames and the frame is drawn exactly
+ * as thirty hertz draws it. That is rule K6 of the plan and it covers the
+ * animation NUMBER changing, which is tested here because only the caller's
+ * side knows it, as well as every frame-number case InterpPoseAt names. */
+long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
+	short* frm[], float* blend)
+{
+	if (prevAnim != item->anim_number)
+		return 0;
+
+	ANIM_STRUCT* anim = &anims[item->anim_number];
+	const long rate = anim->interpolation & 0xFF;
+	const long size = anim->interpolation >> 8;
+	long key;
+	float b;
+
+	if (!InterpPoseAt(prevFrame, item->frame_number, anim->frame_base, rate,
+		anim->frame_end, t, &key, &b))
+		return 0;
+
+	frm[0] = anim->frame_ptr + size * key;
+	frm[1] = frm[0] + size;
+	*blend = b;
+
+	return 1;
+}
+
+/* WHAT THE THREE DRAW SITES ASK FOR (#148, order 4): the pose, whatever frame
+ * rate the game is running at.
+ *
+ * On a frame that carries a logic tick, and at fps_mode 0 always, this is
+ * GetFrames and nothing else - the same pair, the same factor, the same
+ * picture, and InterpPoseTime returns zero before a single line of order 4 is
+ * reached. On the frame between two ticks it is the midpoint of the poses
+ * those two ticks draw.
+ *
+ * Returns 0 for "no blend, the pose is frm[0]", 1 for vanilla's own key frame
+ * blend and 2 for a blend in TIME. That is the same shape GetFrames has, so
+ * every call site keeps its own `if (frac)` exactly as it was written, and
+ * the two reasons stay apart for the log line and for the HD counter. */
+long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend)
+{
+	short prevAnim = 0;
+	short prevFrame = 0;
+	const float t = InterpPoseTime(item, &prevAnim, &prevFrame);
+
+	if (t > 0.0F)
+	{
+		if (GetFramesAt(item, prevAnim, prevFrame, t, frm, blend))
+		{
+			InterpNotePose(item);
+
+			return 2;
+		}
+
+		/* K6: the animation changed, or the frame did not step by one. The
+		 * pose of the CURRENT tick is drawn, which is one frame of thirty
+		 * hertz inside a sixty hertz run and is invisible - but it is counted,
+		 * because a skip count that is not tiny means the snapshot and the
+		 * animation clock have fallen out of step with each other. */
+		InterpNotePoseSkip();
+	}
+
+	long rate;
+	const long frac = GetFrames(item, frm, &rate);
+
+	if (!frac)
+		return 0;
+
+	*blend = InterpKeyAlpha(frac, rate);
+
+	return 1;
+}
+
 void SetupSkelebobMeshswaps()
 {
 	lara.mesh_ptrs[LM_HEAD] = meshes[objects[LARA_EXTRA_MESH2].mesh_index + 2 * LM_HEAD];
@@ -1704,53 +1777,18 @@ void InterpolateMatrix()
 {
 	aInterpolateMatrix();
 
-	if (IM_rate == 2 || (IM_frac == 2 && IM_rate == 4))
-	{
-		phd_mxptr[M00] += (IMptr[M00] - phd_mxptr[M00]) >> 1;
-		phd_mxptr[M01] += (IMptr[M01] - phd_mxptr[M01]) >> 1;
-		phd_mxptr[M02] += (IMptr[M02] - phd_mxptr[M02]) >> 1;
-		phd_mxptr[M03] += (IMptr[M03] - phd_mxptr[M03]) >> 1;
-		phd_mxptr[M10] += (IMptr[M10] - phd_mxptr[M10]) >> 1;
-		phd_mxptr[M11] += (IMptr[M11] - phd_mxptr[M11]) >> 1;
-		phd_mxptr[M12] += (IMptr[M12] - phd_mxptr[M12]) >> 1;
-		phd_mxptr[M13] += (IMptr[M13] - phd_mxptr[M13]) >> 1;
-		phd_mxptr[M20] += (IMptr[M20] - phd_mxptr[M20]) >> 1;
-		phd_mxptr[M21] += (IMptr[M21] - phd_mxptr[M21]) >> 1;
-		phd_mxptr[M22] += (IMptr[M22] - phd_mxptr[M22]) >> 1;
-		phd_mxptr[M23] += (IMptr[M23] - phd_mxptr[M23]) >> 1;
-	}
-	else if (IM_frac == 1)
-	{
-		phd_mxptr[M00] += (IMptr[M00] - phd_mxptr[M00]) >> 2;
-		phd_mxptr[M01] += (IMptr[M01] - phd_mxptr[M01]) >> 2;
-		phd_mxptr[M02] += (IMptr[M02] - phd_mxptr[M02]) >> 2;
-		phd_mxptr[M03] += (IMptr[M03] - phd_mxptr[M03]) >> 2;
-		phd_mxptr[M10] += (IMptr[M10] - phd_mxptr[M10]) >> 2;
-		phd_mxptr[M11] += (IMptr[M11] - phd_mxptr[M11]) >> 2;
-		phd_mxptr[M12] += (IMptr[M12] - phd_mxptr[M12]) >> 2;
-		phd_mxptr[M13] += (IMptr[M13] - phd_mxptr[M13]) >> 2;
-		phd_mxptr[M20] += (IMptr[M20] - phd_mxptr[M20]) >> 2;
-		phd_mxptr[M21] += (IMptr[M21] - phd_mxptr[M21]) >> 2;
-		phd_mxptr[M22] += (IMptr[M22] - phd_mxptr[M22]) >> 2;
-		phd_mxptr[M23] += (IMptr[M23] - phd_mxptr[M23]) >> 2;
-	}
-	else
-	{
-		phd_mxptr[M00] = IMptr[M00] - ((IMptr[M00] - phd_mxptr[M00]) >> 2);
-		phd_mxptr[M01] = IMptr[M01] - ((IMptr[M01] - phd_mxptr[M01]) >> 2);
-		phd_mxptr[M02] = IMptr[M02] - ((IMptr[M02] - phd_mxptr[M02]) >> 2);
-		phd_mxptr[M03] = IMptr[M03] - ((IMptr[M03] - phd_mxptr[M03]) >> 2);
-		phd_mxptr[M10] = IMptr[M10] - ((IMptr[M10] - phd_mxptr[M10]) >> 2);
-		phd_mxptr[M11] = IMptr[M11] - ((IMptr[M11] - phd_mxptr[M11]) >> 2);
-		phd_mxptr[M12] = IMptr[M12] - ((IMptr[M12] - phd_mxptr[M12]) >> 2);
-		phd_mxptr[M13] = IMptr[M13] - ((IMptr[M13] - phd_mxptr[M13]) >> 2);
-		phd_mxptr[M20] = IMptr[M20] - ((IMptr[M20] - phd_mxptr[M20]) >> 2);
-		phd_mxptr[M21] = IMptr[M21] - ((IMptr[M21] - phd_mxptr[M21]) >> 2);
-		phd_mxptr[M22] = IMptr[M22] - ((IMptr[M22] - phd_mxptr[M22]) >> 2);
-		phd_mxptr[M23] = IMptr[M23] - ((IMptr[M23] - phd_mxptr[M23]) >> 2);
-	}
+	/* The integer stack, and it rounds by SHIFTING - which is a floor and not
+	 * a truncation. InterpBlendLong keeps that exactly, in eighths, with no
+	 * float and no rounding call in it: the three shifts the branches used
+	 * are the same expression at alpha8 2, 4 and 6. */
+	for (int i = 0; i < 12; i++)
+		phd_mxptr[i] = InterpBlendLong(phd_mxptr[i], IMptr[i], IM_alpha8);
 }
 
+/* THE ARM MATRICES take the ROTATION whole from the matrix they are handed -
+ * the arm chain leaves the second stack behind at the shoulder and is drawn
+ * from one stack from there on - and blend only the three translation
+ * elements, which is what keeps the hand on the end of a blended forearm. */
 void InterpolateArmMatrix(long* mx)
 {
 	phd_mxptr[M00] = mx[M00];
@@ -1763,24 +1801,9 @@ void InterpolateArmMatrix(long* mx)
 	phd_mxptr[M21] = mx[M21];
 	phd_mxptr[M22] = mx[M22];
 
-	if (IM_rate == 2 || (IM_frac == 2 && IM_rate == 4))
-	{
-		phd_mxptr[M03] = (phd_mxptr[M03] + IMptr[M03]) >> 1;
-		phd_mxptr[M13] = (phd_mxptr[M13] + IMptr[M13]) >> 1;
-		phd_mxptr[M23] = (phd_mxptr[M23] + IMptr[M23]) >> 1;
-	}
-	else if (IM_frac == 1)
-	{
-		phd_mxptr[M03] += (IMptr[M03] - phd_mxptr[M03]) >> 2;
-		phd_mxptr[M13] += (IMptr[M13] - phd_mxptr[M13]) >> 2;
-		phd_mxptr[M23] += (IMptr[M23] - phd_mxptr[M23]) >> 2;
-	}
-	else
-	{
-		phd_mxptr[M03] = IMptr[M03] - ((IMptr[M03] - phd_mxptr[M03]) >> 2);
-		phd_mxptr[M13] = IMptr[M13] - ((IMptr[M13] - phd_mxptr[M13]) >> 2);
-		phd_mxptr[M23] = IMptr[M23] - ((IMptr[M23] - phd_mxptr[M23]) >> 2);
-	}
+	phd_mxptr[M03] = InterpBlendLong(phd_mxptr[M03], IMptr[M03], IM_alpha8);
+	phd_mxptr[M13] = InterpBlendLong(phd_mxptr[M13], IMptr[M13], IM_alpha8);
+	phd_mxptr[M23] = InterpBlendLong(phd_mxptr[M23], IMptr[M23], IM_alpha8);
 }
 
 void aInterpolateArmMatrix(float* mx)
@@ -1795,24 +1818,9 @@ void aInterpolateArmMatrix(float* mx)
 	aMXPtr[M21] = mx[M21];
 	aMXPtr[M22] = mx[M22];
 
-	if (IM_rate == 2 || (IM_frac == 2 && IM_rate == 4))
-	{
-		aMXPtr[M03] = (aMXPtr[M03] + aIMXPtr[M03]) * 0.5F;
-		aMXPtr[M13] = (aMXPtr[M13] + aIMXPtr[M13]) * 0.5F;
-		aMXPtr[M23] = (aMXPtr[M23] + aIMXPtr[M23]) * 0.5F;
-	}
-	else if (IM_frac == 1)
-	{
-		aMXPtr[M03] += (aIMXPtr[M03] - aMXPtr[M03]) * 0.25F;
-		aMXPtr[M13] += (aIMXPtr[M13] - aMXPtr[M13]) * 0.25F;
-		aMXPtr[M23] += (aIMXPtr[M23] - aMXPtr[M23]) * 0.25F;
-	}
-	else
-	{
-		aMXPtr[M03] = aIMXPtr[M03] - ((aIMXPtr[M03] - aMXPtr[M03]) * 0.25F);
-		aMXPtr[M13] = aIMXPtr[M13] - ((aIMXPtr[M13] - aMXPtr[M13]) * 0.25F);
-		aMXPtr[M23] = aIMXPtr[M23] - ((aIMXPtr[M23] - aMXPtr[M23]) * 0.25F);
-	}
+	aMXPtr[M03] = InterpBlendFloat(aMXPtr[M03], aIMXPtr[M03], IM_alpha);
+	aMXPtr[M13] = InterpBlendFloat(aMXPtr[M13], aIMXPtr[M13], IM_alpha);
+	aMXPtr[M23] = InterpBlendFloat(aMXPtr[M23], aIMXPtr[M23], IM_alpha);
 }
 
 void DrawEffect(short fx_num)

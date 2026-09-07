@@ -400,10 +400,65 @@ costs the game.
 | 1. The clock split | `tomb5.fps_mode` in `tomb5_options` (`global\types.h:2631-2685`), registry read/write (`tomb5\tomb5.cpp:200-206, 333-337, 464-468` pattern), a menu row on the options page (`tomb5\troyestuff.cpp:143+`, `first_person_smooth` at `:726-786` is the exact pattern for a multi-value row). `gPresentMinTicks` in `specific\output.cpp:1283`, set and reset around the present in `game\draw.cpp:394-411`. `FPSLOG`'s budget constants (`specific\hd\hd_level.cpp:247-248`) follow `fps_mode`. No interpolation yet. | ~180 | `FPSLOG frames=60` while `GameTimer` still advances 30 a second. The picture is worse than today - every second frame is a duplicate, which is exactly what proves the clock is split and the logic is not. |
 | 2. Root and camera **- BUILT 2026-09-07, play test open** | `game\interpolate.cpp/.h` and `game\interpolate_math.h`: the snapshot of 1.2, the snap rules of 1.3, `InterpCapturePrev` / `InterpBeginFrame` / `InterpEndFrame`, and the camera re-`phd_LookAt` per drawn frame (`specific\3dmath.cpp:687`) with R10 guarded. Three call sites. Pose still steps at 30 Hz. | ~700 | Movement per drawn frame halves: a new `INTERPLOG` line per second with mean `|dpos|` of `lara_item` per frame, count of frames with `alpha != 1`, count of snaps. Screenshots of a run and of a turning camera. HD on and HD off must both be smooth - one proof for both, because the HD path was not touched. |
 | 3. The per-frame side effects **- BUILT 2026-09-07, play test open** | Guard R1-R12 and R14-R17 with one criterion, `InterpIsTweenFrame()`. R6 moved into `ControlPhase` behind a mark the draw leaves - it is game state being mutated from a draw, and its `KillItem` also corrupted the room's item walk for spawned items. R10 moved into the ramp itself, because `S_DrawPickup` issues a `phd_LookAt` of its own per frame. Seven more counters found by the sweep; the logic RNG rolled back over an in-between frame (see 0.4). | ~330 | `TICKLOG` per game second - fade, screenfade, weather, legend, after_death - must read the same at 30 and at 60. `InterpTest`'s `counters` section proves the rule offline: 49 checks, 0 failed. |
-| 4. The pose | Give `InterpolateMatrix` / `aInterpolateMatrix` / `InterpolateArmMatrix` / `aInterpolateArmMatrix` (`game\draw.cpp:304-392, 1508-1621`) one float `IM_alpha` in place of the four hard-coded branches; keep `InitInterpolate(frac, rate)` as `IM_alpha = frac/(float)rate` so the four existing cases reproduce bit-close. Add `GetFramesAt(item, prevFrame, curFrame, alpha, frm[2], &blend)` beside `GetFrames` (`:1183`). Feed the pairs in `DrawAnimatingItem` (`:594, 705`), `CalcLaraMatrices` (`game\delstuff.cpp:62-100`) and `HairControl` (`game\hair.cpp:297-345`). When `anim_number` changed between the two ticks, do not blend the pose - blend only the root. | ~350 | A slow walk cycle and a slow ladder climb at 60, side by side with 30, HD and classic. `HDObjectNode`'s `interpolated` branch (`specific\hd\hd_object.cpp:1549-1560`) must be exercised - a counter in `INTERPLOG`. |
+| 4. The pose **- BUILT 2026-09-07, play test open** | Give `InterpolateMatrix` / `aInterpolateMatrix` / `InterpolateArmMatrix` / `aInterpolateArmMatrix` (`game\draw.cpp:304-392, 1508-1621`) one float `IM_alpha` in place of the four hard-coded branches. **NOT `frac/(float)rate` - see below.** Add `GetFramesAt` beside `GetFrames` (`:1183`). Feed the pairs in `DrawAnimatingItem` (`:594, 705`) and `CalcLaraMatrices` (`game\delstuff.cpp:62-100`); `HairControl` needs nothing. When `anim_number` changed between the two ticks, do not blend the pose - blend only the root. | ~450 | A slow walk cycle and a slow ladder climb at 60, side by side with 30, HD and classic. `HDObjectNode`'s `interpolated` branch (`specific\hd\hd_object.cpp:1549-1560`) must be exercised - a counter in `INTERPLOG`. |
 | 5. Particles (optional) | Either snapshot `spark[1024]` + rain + snow and lerp them, or leave them at 30 (they are small, fast and short-lived). Recommended: leave them, and revisit only if the user's eye finds them. | ~200 if done | Two videos of the same waterfall or torch; the user chooses. |
 | 6. Present policy (optional) | `D3DPRESENT_INTERVAL_ONE` behind a `tomb5.vsync` option (`specific\dxshell.cpp:455` + the `Reset` path at `:273`) - this also removes the `while (!Sync())` spin's CPU burn. Uncapped or display-refresh mode needs `specific\time.cpp` reworked to sub-tick resolution and `alpha` from a real clock. | ~150 | `FPSLOG` on a 60/120/144 Hz panel; no tearing; CPU load measured with and without the spin. |
 | | total | ~1,450 over 6 orders | |
+
+### Order 4 as built (2026-09-07) - and the one thing this plan had wrong
+
+**`IM_alpha = frac/(float)rate` WOULD HAVE CHANGED THE GAME.** The table above
+assumed the four existing cases are quarters, halves and three quarters
+because the rates are 2 and 4. They are not. Measured by walking the animation
+tables of all sixteen retail level files (2026-09-07): rates **1, 2, 3, 4, 5,
+6, 9 and 10** all occur - 3619, 3350, 35, 5399, 3187, 2, 2 and 120 animations.
+At rate 5 vanilla's three-way test draws the four frames of an interval at
+0.25, 0.75, 0.75, 0.75; `frac / rate` would draw them at 0.2, 0.4, 0.6, 0.8.
+Over three thousand animations - a third of the game - would move differently
+from the day it shipped, and K11 and proof 6 would have failed on the plan's
+own premise.
+
+So `InitInterpolate(frac, rate)` sets `IM_alpha` from **vanilla's own
+classification** (`InterpKeyAlpha`, `game\interpolate_math.h`), which is the
+same test the four branches made, and the equivalence is exact rather than
+close: 336,471 animation frames' worth of `(frac, rate)` pairs, 441 matrix
+element pairs each, on both stacks, **maximum difference 0 units** (`InterpTest`,
+section `pose_factor`). The float stack keeps vanilla's three *expressions*
+(a rearrangement differs in the last bit) and the integer stack keeps its
+*shifts* (a shift floors where a cast truncates), which is why `IM_alpha8` -
+the factor in eighths - stands beside the float one.
+
+What the time interpolation then asks for is not a fraction of a key frame
+interval at all but the **midpoint of the two poses vanilla draws**, through a
+second entry point `InitInterpolateAlpha(float)`. Both tick poses lie on the
+same key frame pair, so their midpoint does too and no third stack is needed:
+`(ap + ac) / 2` inside an interval, `(ap + 1) / 2` across a key frame
+crossing. Four more things came out of building it:
+
+1. **Rate 1 animations - 3619 of them - now interpolate, and they never did
+   in vanilla at all.** Their two ticks are two adjacent stored frames. This
+   is where most of the visible gain is: it is what an ordinary enemy's
+   animations are.
+2. **Lara's nine aim angles are order 2's problem, not order 4's.** The torso
+   twist, head turn and the two arms' aim come from the player, not from the
+   animation, and are written once per tick. They are blended by the
+   SNAPSHOT - eighteen shorts, no draw code - and that is what makes the arms
+   move smoothly while she aims.
+3. **The weapon animation's own frames are left at thirty, and it is not
+   laziness.** After `aInterpolateArmMatrix` the arm chain runs on ONE stack;
+   giving it the second stack back would blend the arm's frames by the BODY's
+   factor, because there is one `IM_alpha` for the whole chain. That is
+   arithmetically wrong and not merely awkward. Named as the follow-up.
+4. **`HairControl` needed nothing**, which the order asked to check rather
+   than assume: it is called from inside `ControlPhase`'s tick loop, so it
+   never runs on an in-between frame. The braid's positions are already in
+   order 2's snapshot and `DrawHair` rebuilds its matrices from them every
+   drawn frame.
+
+The gate that decides whether an item's pose may be blended is recorded in
+`InterpBeginFrame`'s own walk, one line before it overwrites the live
+position - asked later, the same snap test would measure half the distance it
+should.
 
 Orders 1-3 are the shippable unit. Order 4 is the polish. Orders 5-6
 are the user's call.

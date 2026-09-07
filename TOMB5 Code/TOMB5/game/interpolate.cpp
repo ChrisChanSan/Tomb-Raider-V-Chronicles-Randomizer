@@ -69,6 +69,34 @@ namespace
 		short xr, yr, zr;
 	};
 
+	/* WHAT LARA AIMS WITH, AND WHY IT IS SNAPSHOT AND NOT DRAW CODE (#148,
+	 * order 4).
+	 *
+	 * Her body pose comes out of the animation and is blended by the key
+	 * frame pair. Nine angles do NOT come out of the animation - the torso
+	 * twist, the head turn and the two arms' aim - and they are the ones the
+	 * player is steering: they are written once per logic tick by
+	 * LookLeftRight, by the weapon code's aim and by the look camera, and
+	 * they are read by both halves of CalcLaraMatrices through phd_RotYXZ.
+	 *
+	 * So they are exactly order 2's kind of value, not order 4's: the blend
+	 * belongs in the snapshot, where it costs eighteen shorts and touches no
+	 * draw code at all. The arm's own ANIMATION frame is a different thing
+	 * and is not blended - see the note in MODIFICATIONS.md; the arm chain
+	 * leaves the second matrix stack behind at the shoulder, so its frames
+	 * would have to be blended by the body's factor, which is not theirs.
+	 *
+	 * The angles wrap and are blended the short way round, like every other
+	 * angle in this file. */
+	struct InterpLaraAim
+	{
+		short head[3];		// y, x, z
+		short torso[3];
+		short right[3];		// lara.right_arm.y_rot / x_rot / z_rot
+		short left[3];
+		unsigned char valid;
+	};
+
 	struct InterpCamera
 	{
 		long px, py, pz;
@@ -93,6 +121,18 @@ namespace
 	InterpNode g_prevFx[FX_COUNT];
 	InterpNode g_prevHair[HAIR_TAILS * HAIR_LINKS];
 	InterpCamera g_prevCam;
+	InterpLaraAim g_prevAim;
+	InterpLaraAim g_savedAim;
+	bool g_aimTouched = false;
+
+	/* ORDER 4. May this slot's POSE be blended in time? Worked out in
+	 * InterpBeginFrame's own walk, BEFORE the blended position is written
+	 * over the live one - after that the snap test would measure half the
+	 * distance it should and a teleport could slip through it. */
+	unsigned char g_poseOk[MAX_ITEMS];
+
+	// Lara's pose is built two or three times a frame and counted once.
+	bool g_laraPosed = false;
 
 	SavedNode g_savedItem[MAX_ITEMS];
 	SavedNode g_savedFx[FX_COUNT];
@@ -139,6 +179,10 @@ namespace
 	int g_snapInvalid = 0;
 	int g_snapCamCut = 0;
 	int g_snapCutscene = 0;
+	int g_secPose = 0;		// order 4: items drawn with a blended pose
+	int g_secPoseSkip = 0;		// ... and refused one by rule K6
+	int g_secPoseHD = 0;		// ... of which went through the HD path
+	int g_secLaraPose = 0;		// frames on which LARA's own pose was blended
 	unsigned short g_secCounter = 0;	// GlobalCounter when this second began
 	int g_at = 0;			// seconds since the last invalidation
 	long g_lastDrawnX = 0, g_lastDrawnY = 0, g_lastDrawnZ = 0;
@@ -295,19 +339,45 @@ namespace
 		lara.poisoned = poisoned;
 	}
 
+	/* ORDER 4 ADDS FOUR FIELDS TO THIS LINE, and they answer the one question
+	 * order 2's fields cannot: is anything's POSE moving on the in-between
+	 * frames, or is only the root sliding while every limb still steps thirty
+	 * times a second?
+	 *
+	 *   pose_items   items whose pose was blended, per drawn frame. In a busy
+	 *                room at sixty this is most of what `items=` says; at
+	 *                fps_mode 0 it is zero, always.
+	 *   pose_skips   blends rule K6 refused - the animation changed between
+	 *                the two ticks, or the frame did not step by one. A few
+	 *                per second is normal and is what an animation change
+	 *                looks like; a number near pose_items means the snapshot
+	 *                and the animation clock have fallen out of step and
+	 *                nothing is really being blended.
+	 *   pose_hd      of those, the ones drawn by the HD object path - the
+	 *                frames that exercise HDObjectNode's interpolated branch.
+	 *                The plan asks for this number by name.
+	 *   lara_pose    frames of this second on which LARA's own pose was
+	 *                blended, against the tween frame count beside it. It
+	 *                should be nearly all of them while she is moving and it
+	 *                drops by one on each frame where she changes animation. */
 	void LogSecond()
 	{
 		if (gLogEnabled && g_secFrames > 0)
 			Log("INTERPLOG level=%d at=%ds frames=%d tween=%d alpha=%.2f "
 				"lara_step=%.1f items=%.1f snaps=%d (teleport=%d roomjump=%d "
-				"object=%d invalid=%d) camcut=%d cutscene=%d",
+				"object=%d invalid=%d) camcut=%d cutscene=%d "
+				"pose_items=%.1f pose_skips=%.1f pose_hd=%.1f lara_pose=%d/%d",
 				(int)gfLevelId, g_at, g_secFrames, g_secTween,
 				(double)(g_secFrames - g_secTween * 0.5) / g_secFrames,
 				g_secLaraFrames ? g_secLaraStep / g_secLaraFrames : 0.0,
 				(double)g_secItems / g_secFrames,
 				g_snapTeleport + g_snapRoomJump + g_snapObject + g_snapInvalid,
 				g_snapTeleport, g_snapRoomJump, g_snapObject, g_snapInvalid,
-				g_snapCamCut, g_snapCutscene);
+				g_snapCamCut, g_snapCutscene,
+				(double)g_secPose / g_secFrames,
+				(double)g_secPoseSkip / g_secFrames,
+				(double)g_secPoseHD / g_secFrames,
+				g_secLaraPose, g_secTween);
 
 		/* TICKLOG - order 3's own proof, and the one the user reads.
 		 *
@@ -346,6 +416,10 @@ namespace
 		g_snapInvalid = 0;
 		g_snapCamCut = 0;
 		g_snapCutscene = 0;
+		g_secPose = 0;
+		g_secPoseSkip = 0;
+		g_secPoseHD = 0;
+		g_secLaraPose = 0;
 		g_secCounter = GlobalCounter;
 	}
 
@@ -424,6 +498,22 @@ void InterpCapturePrev()
 	for (int t = 0; t < HAIR_TAILS; t++)
 		for (int l = 0; l < HAIR_LINKS; l++)
 			CaptureNode(&g_prevHair[t * HAIR_LINKS + l], &hairs[t][l].pos, 0, 0, 0, 0);
+
+	/* ORDER 4: the nine angles Lara aims with, which come from the player
+	 * rather than from the animation. See the note over InterpLaraAim. */
+	g_prevAim.head[0] = lara.head_y_rot;
+	g_prevAim.head[1] = lara.head_x_rot;
+	g_prevAim.head[2] = lara.head_z_rot;
+	g_prevAim.torso[0] = lara.torso_y_rot;
+	g_prevAim.torso[1] = lara.torso_x_rot;
+	g_prevAim.torso[2] = lara.torso_z_rot;
+	g_prevAim.right[0] = lara.right_arm.y_rot;
+	g_prevAim.right[1] = lara.right_arm.x_rot;
+	g_prevAim.right[2] = lara.right_arm.z_rot;
+	g_prevAim.left[0] = lara.left_arm.y_rot;
+	g_prevAim.left[1] = lara.left_arm.x_rot;
+	g_prevAim.left[2] = lara.left_arm.z_rot;
+	g_prevAim.valid = 1;
 
 	g_prevCam.px = camera.pos.x;
 	g_prevCam.py = camera.pos.y;
@@ -553,6 +643,15 @@ void InterpBeginFrame(float alpha)
 	g_touchedFxs = 0;
 	g_touchedHairs = 0;
 	g_camTouched = false;
+	g_aimTouched = false;
+
+	/* ORDER 4: nothing may be pose-blended until this frame's own walk says
+	 * so, slot by slot. Every early return below therefore leaves the whole
+	 * array at zero and InterpPoseTime answers 0 for every item in the game.
+	 * memset of 512 bytes once per frame, against a stale byte drawing a
+	 * teleported enemy with half of the pose it wore at its old place. */
+	memset(g_poseOk, 0, sizeof(g_poseOk));
+	g_laraPosed = false;
 
 	/* THE FRAME IS DRAWN LIVE. Four ways to get here, and all four write
 	 * nothing at all - not the snapshot, not a phd_LookAt, not one byte:
@@ -607,6 +706,15 @@ void InterpBeginFrame(float alpha)
 			continue;
 		}
 
+		/* ORDER 4, and it is set HERE - one line above the write that would
+		 * make the same test lie. Everything that got this far has a
+		 * previous state, still holds the same object and did not jump, so
+		 * its pose has a neighbour to be blended with. Whether it really is
+		 * blended is then GetFramesAt's decision (rule K6), and an item that
+		 * did not MOVE gets the byte too: a machine animating on the spot is
+		 * exactly the case where the pose is all there is to interpolate. */
+		g_poseOk[i] = 1;
+
 		if (!NodeMoved(n, &item->pos))
 			continue;
 
@@ -644,6 +752,46 @@ void InterpBeginFrame(float alpha)
 			ApplyNode(&hairs[t][l].pos, n, &g_savedHair[g_touchedHairs], alpha);
 			g_touchedHair[g_touchedHairs++] = (short)k;
 		}
+	}
+
+	/* LARA'S NINE AIM ANGLES (order 4). The torso twist, the head turn and
+	 * the two arms - what the PLAYER steers, as against what the animation
+	 * dictates. Blended and put back exactly like a position, because that is
+	 * what they are: per-tick values that the draw reads and the logic owns.
+	 *
+	 * Blended whenever there is a previous state at all. There is no snap
+	 * rule on them: an angle blends the short way round by construction, and
+	 * the largest jump any of them can make in one tick is a fast turn of the
+	 * head, which for one sixtieth of a second passes through its own
+	 * halfway point - which is what a turn looks like. */
+	if (g_prevAim.valid)
+	{
+		g_savedAim.head[0] = lara.head_y_rot;
+		g_savedAim.head[1] = lara.head_x_rot;
+		g_savedAim.head[2] = lara.head_z_rot;
+		g_savedAim.torso[0] = lara.torso_y_rot;
+		g_savedAim.torso[1] = lara.torso_x_rot;
+		g_savedAim.torso[2] = lara.torso_z_rot;
+		g_savedAim.right[0] = lara.right_arm.y_rot;
+		g_savedAim.right[1] = lara.right_arm.x_rot;
+		g_savedAim.right[2] = lara.right_arm.z_rot;
+		g_savedAim.left[0] = lara.left_arm.y_rot;
+		g_savedAim.left[1] = lara.left_arm.x_rot;
+		g_savedAim.left[2] = lara.left_arm.z_rot;
+		g_aimTouched = true;
+
+		lara.head_y_rot = LerpAngle(g_prevAim.head[0], g_savedAim.head[0], alpha);
+		lara.head_x_rot = LerpAngle(g_prevAim.head[1], g_savedAim.head[1], alpha);
+		lara.head_z_rot = LerpAngle(g_prevAim.head[2], g_savedAim.head[2], alpha);
+		lara.torso_y_rot = LerpAngle(g_prevAim.torso[0], g_savedAim.torso[0], alpha);
+		lara.torso_x_rot = LerpAngle(g_prevAim.torso[1], g_savedAim.torso[1], alpha);
+		lara.torso_z_rot = LerpAngle(g_prevAim.torso[2], g_savedAim.torso[2], alpha);
+		lara.right_arm.y_rot = LerpAngle(g_prevAim.right[0], g_savedAim.right[0], alpha);
+		lara.right_arm.x_rot = LerpAngle(g_prevAim.right[1], g_savedAim.right[1], alpha);
+		lara.right_arm.z_rot = LerpAngle(g_prevAim.right[2], g_savedAim.right[2], alpha);
+		lara.left_arm.y_rot = LerpAngle(g_prevAim.left[0], g_savedAim.left[0], alpha);
+		lara.left_arm.x_rot = LerpAngle(g_prevAim.left[1], g_savedAim.left[1], alpha);
+		lara.left_arm.z_rot = LerpAngle(g_prevAim.left[2], g_savedAim.left[2], alpha);
 	}
 
 	/* THE CAMERA, AND THE FIVE WAYS IT CUTS.
@@ -733,6 +881,22 @@ void InterpEndFrame()
 			RestoreNode(&hairs[j / HAIR_LINKS][j % HAIR_LINKS].pos, &g_savedHair[k]);
 		}
 
+		if (g_aimTouched)
+		{
+			lara.head_y_rot = g_savedAim.head[0];
+			lara.head_x_rot = g_savedAim.head[1];
+			lara.head_z_rot = g_savedAim.head[2];
+			lara.torso_y_rot = g_savedAim.torso[0];
+			lara.torso_x_rot = g_savedAim.torso[1];
+			lara.torso_z_rot = g_savedAim.torso[2];
+			lara.right_arm.y_rot = g_savedAim.right[0];
+			lara.right_arm.x_rot = g_savedAim.right[1];
+			lara.right_arm.z_rot = g_savedAim.right[2];
+			lara.left_arm.y_rot = g_savedAim.left[0];
+			lara.left_arm.x_rot = g_savedAim.left[1];
+			lara.left_arm.z_rot = g_savedAim.left[2];
+		}
+
 		if (g_camTouched)
 		{
 			camera.pos.x = g_savedCam.px;
@@ -782,6 +946,7 @@ void InterpEndFrame()
 	g_touchedFxs = 0;
 	g_touchedHairs = 0;
 	g_camTouched = false;
+	g_aimTouched = false;
 
 	/* ONE INTERPLOG LINE PER SECOND, and the second is a LOGIC second:
 	 * GlobalCounter steps exactly thirty times a second by construction, in
@@ -805,7 +970,11 @@ void InterpInvalidate(const char* why)
 		g_prevHair[i].valid = 0;
 
 	g_prevCam.valid = 0;
+	g_prevAim.valid = 0;
 	g_lastDrawnValid = false;
+
+	// Order 4: and no pose has a neighbour any more either.
+	memset(g_poseOk, 0, sizeof(g_poseOk));
 
 	/* A frame may be standing half-applied only if this is called from
 	 * inside DrawPhaseGame, which nothing does - every caller is a logic
@@ -817,6 +986,7 @@ void InterpInvalidate(const char* why)
 	g_touchedFxs = 0;
 	g_touchedHairs = 0;
 	g_camTouched = false;
+	g_aimTouched = false;
 
 	/* And the frame is a live one again (order 3). Every caller of this is a
 	 * level boundary or the return from a menu, and what follows all of them
@@ -831,4 +1001,68 @@ void InterpInvalidate(const char* why)
 		Log("INTERPLOG level=%d invalidated: %s", (int)gfLevelId, why ? why : "?");
 		g_at = 0;
 	}
+}
+
+/* ---------------------------------------------------------------- ORDER 4 --
+ *
+ * THE POSE'S ONE QUESTION. Everything else about the pose - which key frames,
+ * what factor, when to refuse - is arithmetic and lives in
+ * interpolate_math.h and in game\draw.cpp, where the animation table is. What
+ * only this file knows is WHETHER this drawn frame is a tween frame at all
+ * and what the item wore before the last tick, and that is the whole of this
+ * function.
+ *
+ * g_applied is the gate and it is the right one: it is true only on a frame
+ * that really blended the snapshot into the live state, which rules out
+ * fps_mode 0, the frame that carries the tick, a cutscene, a level start and
+ * every return from a menu, in one test and with no list to keep in step. */
+float InterpPoseTime(const ITEM_INFO* item, short* prevAnim, short* prevFrame)
+{
+	if (!g_applied || !items || !item)
+		return 0.0F;
+
+	const long i = (long)(item - items);
+
+	if (i < 0 || i >= MAX_ITEMS || !g_poseOk[i])
+		return 0.0F;
+
+	*prevAnim = g_prevItem[i].anim;
+	*prevFrame = g_prevItem[i].frame;
+
+	return g_alpha;
+}
+
+void InterpNotePose(const ITEM_INFO* item)
+{
+	if (!gLogEnabled)
+		return;
+
+	/* LARA IS BUILT MORE THAN ONCE PER FRAME and would otherwise be counted
+	 * two or three times in every number on this line: CalcLaraMatrices runs
+	 * for the world matrices and again for the joint set (game\draw.cpp), a
+	 * mirror room runs it a third time, and the first-person camera runs it
+	 * once more on the tick. Her pose is one pose, so it is counted once, and
+	 * the frame is what she is counted per. */
+	if (item == lara_item)
+	{
+		if (g_laraPosed)
+			return;
+
+		g_laraPosed = true;
+		g_secLaraPose++;
+	}
+
+	g_secPose++;
+}
+
+void InterpNotePoseSkip()
+{
+	if (gLogEnabled)
+		g_secPoseSkip++;
+}
+
+void InterpNotePoseHD()
+{
+	if (gLogEnabled)
+		g_secPoseHD++;
 }

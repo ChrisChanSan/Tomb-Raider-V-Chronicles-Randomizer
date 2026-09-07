@@ -64,18 +64,31 @@ void CalcLaraMatrices(long flag)
 	long* bone;
 	short* frame;
 	short* frmptr[2];
-	long rate, frac;
+	long frac;
+	float blend = 0.0F;
 	short spaz;
-	
+
 	bone = &bones[objects[lara_item->object_number].bone_index];
-	frac = GetFrames(lara_item, frmptr, &rate);
+
+	/* #148, order 4. GetFrames on a frame that carries a logic tick and at
+	 * fps_mode 0 - the same pair and the same factor as ever. On the frame
+	 * between two ticks, the midpoint of the two poses those ticks draw, at
+	 * which point `frac` is non-zero for animations that never interpolated
+	 * at all in vanilla, so LARA COMES THROUGH THE INTERPOLATED BRANCH ON
+	 * EVERY TWEEN FRAME - which is the one thing this order had to achieve
+	 * for her.
+	 *
+	 * The hit reaction below is untouched: it is not an animation the item
+	 * walks but a frame index picked by hand out of a spaz animation, and it
+	 * keeps thirty hertz's own picture. */
+	frac = GetFramesNow(lara_item, frmptr, &blend);
 
 	if (lara.hit_direction < 0)
 	{
 		if (frac)
 		{
 			GLaraShadowframe = GetBoundsAccurate(lara_item);
-			Rich_CalcLaraMatrices_Interpolated(frmptr[0], frmptr[1], frac, rate, bone, flag);
+			Rich_CalcLaraMatrices_Interpolated(frmptr[0], frmptr[1], blend, bone, flag);
 			return;
 		}
 	}
@@ -423,7 +436,11 @@ void Rich_CalcLaraMatrices_Normal(short* frame, long* bone, long flag)
 	GLaraShadowframe = frame;
 }
 
-void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, long frac, long rate, long* bone, long flag)
+/* #148, order 4: `frac` and `rate` became one float. The two integers only
+ * ever reached InitInterpolate, which turned them into a factor by a
+ * three-way test; the factor is now what is handed in, because the time
+ * interpolation asks for midpoints that no pair of integers names. */
+void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, float alpha, long* bone, long flag)
 {
 	PHD_VECTOR vec;
 	float* mx;
@@ -460,7 +477,7 @@ void Rich_CalcLaraMatrices_Interpolated(short* frame1, short* frame2, long frac,
 	phd_PushMatrix();
 	rot = frame1 + 9;
 	rot2 = frame2 + 9;
-	InitInterpolate(frac, rate);
+	InitInterpolateAlpha(alpha);
 	phd_TranslateRel_ID(frame1[6], frame1[7], frame1[8], frame2[6], frame2[7], frame2[8]);
 	gar_RotYXZsuperpack_I(&rot, &rot2, 0);
 

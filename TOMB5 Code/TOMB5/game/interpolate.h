@@ -161,6 +161,45 @@ bool InterpIsTweenFrame();
  * S_DumpScreen and S_DumpScreenFrame - see the note above. */
 void InterpNoteClassicPresent();
 
+/* ORDER 4 - THE POSE (#148).
+ *
+ * Order 2 moves where a thing STANDS between two logic ticks. This is the
+ * half that moves its LIMBS, and the whole of what this file contributes to
+ * it is one question asked from the draw:
+ *
+ *   InterpPoseTime(item, &prevAnim, &prevFrame)
+ *
+ * "How far between the two ticks is this frame, and what animation frame did
+ * this item wear before the last one?" It returns 0 - do not blend the pose -
+ * whenever there is any doubt at all:
+ *
+ *   this frame is not a tween frame, or the snapshot was not applied (a
+ *   cutscene, a level start, a return from the inventory, fps_mode 0);
+ *   the item is not an items[] entry;
+ *   the slot has no previous state, changed hands, or SNAPPED - the root is
+ *   being drawn live, so the pose is drawn live with it.
+ *
+ * and otherwise the time alpha, a half. The animation NUMBER changing and the
+ * frame number not stepping by exactly one are rule K6 and are tested where
+ * the frames are - GetFramesAt (game\draw.cpp) and InterpPoseAt
+ * (game\interpolate_math.h).
+ *
+ * WHY THE SNAP TEST IS TAKEN FROM THE SNAPSHOT AND NOT RE-RUN HERE: by the
+ * time the draw asks, InterpBeginFrame has already written the blended
+ * position into item->pos, so the distance between the previous state and
+ * "now" reads half of what it really was and a teleport could pass the test.
+ * The verdict is therefore recorded in InterpBeginFrame's own walk, before a
+ * byte is overwritten. */
+float InterpPoseTime(const ITEM_INFO* item, short* prevAnim, short* prevFrame);
+
+/* The three counters INTERPLOG's pose fields are made of: one item drawn with
+ * its pose blended in time, one drawn with the pose of the current tick
+ * because K6 refused the blend, and one whose blended pose went through the
+ * HD path's interpolated branch. Counted only with -log. */
+void InterpNotePose(const ITEM_INFO* item);
+void InterpNotePoseSkip();
+void InterpNotePoseHD();
+
 /* WHAT STEPPED THIS SECOND (TICKLOG). The counters of order 3 report
  * themselves so that "identical in wall-clock time" is a measured number
  * rather than a claim: the same TICKLOG line must come out of a thirty and a

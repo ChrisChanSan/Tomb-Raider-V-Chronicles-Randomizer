@@ -584,9 +584,372 @@ static void counters()
 	}
 }
 
+/* ---------------------------------------------------------------- the pose --
+ *
+ * ORDER 4 HAS TWO CLAIMS AND THIS IS WHERE BOTH ARE SETTLED.
+ *
+ * CLAIM ONE: replacing four hard-wired branches with one float factor does
+ * not change a single drawn frame at thirty hertz. The branches were
+ * `IM_rate == 2 || (IM_frac == 2 && IM_rate == 4)` -> a half, `IM_frac == 1`
+ * -> a quarter, otherwise three quarters, written out twelve times each in
+ * four functions; they are transcribed here as the reference and the engine's
+ * own header is asked for the same numbers. Both matrix stacks are checked,
+ * because they round differently on purpose: the float stack keeps vanilla's
+ * three EXPRESSIONS (a rearrangement of them would differ in the last bit)
+ * and the integer stack keeps vanilla's SHIFTS (which floor, where a cast
+ * would truncate - the two differ on every negative odd number).
+ *
+ * CLAIM TWO: the pose drawn between two logic ticks is the MIDPOINT of the
+ * two poses the game draws at thirty, and never anything else. What is
+ * asserted for that is monotonicity - `key + blend` may never go backwards
+ * over a whole animation walked at sixty - and identity at the tick frames,
+ * where it must be vanilla's own factor to the bit.
+ *
+ * WHICH (frac, rate) PAIRS ARE REAL. Measured 2026-09-07 by walking the
+ * animation tables of all sixteen level files of the retail game: rates 1, 2,
+ * 3, 4, 5, 6, 9 and 10 all occur (3619, 3350, 35, 5399, 3187, 2, 2 and 120
+ * animations), and GetFrames can shorten any of them at an animation's last
+ * interval. The counts are in the table below. They are the reason vanilla's
+ * classification is KEPT rather than replaced by frac/rate: at rate 5 the two
+ * disagree wildly - vanilla draws frames 1..4 of a five frame interval at
+ * .25, .75, .75, .75 - and a third of every animation in TR5 would move
+ * differently from the day it shipped. */
+
+/* Vanilla's own factor, transcribed from the branches of game\draw.cpp as
+ * they stood before order 4. This is the reference, not the thing tested. */
+static float vanilla_alpha(long frac, long rate)
+{
+	if (rate == 2 || (frac == 2 && rate == 4))
+		return 0.5F;
+
+	if (frac == 1)
+		return 0.25F;
+
+	return 0.75F;
+}
+
+// Vanilla's float blend, expression for expression (aInterpolateMatrix).
+static float vanilla_blend_float(float m, float i, long frac, long rate)
+{
+	if (rate == 2 || (frac == 2 && rate == 4))
+		return (i + m) * 0.5F;
+
+	if (frac == 1)
+		return m + (i - m) * 0.25F;
+
+	return i - (i - m) * 0.25F;
+}
+
+// Vanilla's integer blend, shift for shift (InterpolateMatrix).
+static long vanilla_blend_long(long m, long i, long frac, long rate)
+{
+	if (rate == 2 || (frac == 2 && rate == 4))
+		return m + ((i - m) >> 1);
+
+	if (frac == 1)
+		return m + ((i - m) >> 2);
+
+	return i - ((i - m) >> 2);
+}
+
+static void pose_factor()
+{
+	printf("pose - the one factor against the four branches (order 4)\n");
+
+	/* The measured population of the sixteen level files, so that the table
+	 * says how much of the real game each row stands for. A pair with no
+	 * count still has to agree - the randomizer moves animations between
+	 * levels - but the counts say where a disagreement would be felt. */
+	struct Pair { long frac, rate; long long frames; };
+	static const Pair real[] =
+	{
+		{ 1,  1,       85 }, { 1,  2,    42928 }, { 1,  3,      583 },
+		{ 1,  4,    52058 }, { 1,  5,    35078 }, { 1,  6,        4 },
+		{ 1,  9,        2 }, { 1, 10,      318 }, { 2,  2,       99 },
+		{ 2,  3,      568 }, { 2,  4,    50781 }, { 2,  5,    34490 },
+		{ 2,  6,        2 }, { 2,  9,        2 }, { 2, 10,      318 },
+		{ 3,  3,       40 }, { 3,  4,    49674 }, { 3,  5,    33920 },
+		{ 3,  6,        2 }, { 3,  9,        2 }, { 3, 10,      318 },
+		{ 4,  5,    33433 }, { 4,  6,        2 }, { 4,  9,        2 },
+		{ 4, 10,      318 }, { 5,  6,        2 }, { 5,  9,        2 },
+		{ 5, 10,      318 }, { 6,  9,        2 }, { 6, 10,      304 },
+		{ 7,  9,        2 }, { 7, 10,      290 }, { 8, 10,      262 },
+		{ 9, 10,      262 }
+	};
+
+	/* Matrix elements to blend. A rotation element (+-16384), a translation
+	 * (world units), the negative odd numbers that separate a shift from a
+	 * cast, and the pairs that separate `(a + b) / 2` from `a + (b - a) / 2`. */
+	static const long v[] =
+	{
+		0, 1, -1, 2, -2, 3, -3, 7, -7, 16384, -16384, 16383, -16383,
+		1023, -1023, 100001, -100001, 524287, -524288, 12345, -12345
+	};
+	const int nv = (int)(sizeof(v) / sizeof(v[0]));
+
+	printf("  frac rate   factor   frames in the 16 levels   float   long\n");
+
+	long long covered = 0;
+
+	for (int p = 0; p < (int)(sizeof(real) / sizeof(real[0])); p++)
+	{
+		const long frac = real[p].frac;
+		const long rate = real[p].rate;
+		const float want = vanilla_alpha(frac, rate);
+		const float got = InterpKeyAlpha(frac, rate);
+		long badF = 0, badL = 0;
+
+		okf(got == want, "the factor is vanilla's own", got, want);
+
+		const long a8 = InterpEighths(got);
+
+		for (int i = 0; i < nv; i++)
+		{
+			for (int j = 0; j < nv; j++)
+			{
+				const float wf = vanilla_blend_float((float)v[i], (float)v[j], frac, rate);
+				const float gf = InterpBlendFloat((float)v[i], (float)v[j], got);
+				const long wl = vanilla_blend_long(v[i], v[j], frac, rate);
+				const long gl = InterpBlendLong(v[i], v[j], a8);
+
+				if (gf != wf)
+					badF++;
+
+				if (gl != wl)
+					badL++;
+			}
+		}
+
+		ok(badF == 0, "float stack: not one element differs", badF, 0);
+		ok(badL == 0, "integer stack: not one element differs", badL, 0);
+
+		printf("   %2ld   %2ld    %.2f     %11lld            %s   %s\n",
+			frac, rate, (double)got, real[p].frames,
+			badF ? "DIFFER" : "same  ", badL ? "DIFFER" : "same");
+
+		covered += real[p].frames;
+	}
+
+	printf("  -> %lld animation frames of the retail game, %d matrix element pairs each,\n"
+		"     max difference in units: 0\n", covered, nv * nv);
+
+	/* And the same over a domain far wider than any level file, because the
+	 * randomizer moves animations between levels and an imported TR3 enemy
+	 * brings its own rates with it. */
+	long wider = 0;
+
+	for (long rate = 1; rate <= 32; rate++)
+	{
+		for (long frac = 1; frac < rate; frac++)
+		{
+			const float got = InterpKeyAlpha(frac, rate);
+			const long a8 = InterpEighths(got);
+
+			for (int i = 0; i < nv; i++)
+				for (int j = 0; j < nv; j++)
+					if (InterpBlendFloat((float)v[i], (float)v[j], got) !=
+						vanilla_blend_float((float)v[i], (float)v[j], frac, rate) ||
+						InterpBlendLong(v[i], v[j], a8) !=
+						vanilla_blend_long(v[i], v[j], frac, rate))
+						wider++;
+		}
+	}
+
+	ok(wider == 0, "every (frac, rate) up to 32: identical to the branches", wider, 0);
+
+	/* THE ARM MATRIX WROTE ITS HALF DIFFERENTLY. InterpolateArmMatrix's
+	 * half branch is `(a + b) >> 1` where InterpolateMatrix's is
+	 * `a + ((b - a) >> 1)`, and the one loop now serves both, so the two have
+	 * to be the same expression for every pair of values - which they are,
+	 * because `a` is an integer and a shift is a floor:
+	 *
+	 *     a + floor((b - a) / 2) = floor((2a + b - a) / 2) = floor((a + b) / 2)
+	 *
+	 * It is worth an assertion rather than an argument: the arm matrices are
+	 * the hands, and a unit of drift there is a gun that does not sit in the
+	 * fingers. */
+	{
+		long armDiff = 0;
+
+		for (int i = 0; i < nv; i++)
+			for (int j = 0; j < nv; j++)
+				if (((v[i] + v[j]) >> 1) != InterpBlendLong(v[i], v[j], 4))
+					armDiff++;
+
+		ok(armDiff == 0, "the arm matrix's own half is the same half", armDiff, 0);
+	}
+
+	// The three factors are quarters, so they are exact eighths.
+	ok(InterpEighths(0.25F) == 2, "a quarter is two eighths", InterpEighths(0.25F), 2);
+	ok(InterpEighths(0.5F) == 4, "a half is four eighths", InterpEighths(0.5F), 4);
+	ok(InterpEighths(0.75F) == 6, "three quarters is six eighths", InterpEighths(0.75F), 6);
+
+	// frac 0 is "no blend at all" and must not be classified as a quarter.
+	okf(InterpKeyAlpha(0, 4) == 0.0F, "frac 0 is no blend", InterpKeyAlpha(0, 4), 0.0);
+}
+
+/* ------------------------------------------------------- the pose in time -- */
+
+static void pose_time()
+{
+	printf("\npose - the midpoint of the two poses a tick apart (order 4)\n");
+
+	/* An animation of nine frames, walked at sixty hertz: tick, tween, tick,
+	 * tween. `key + blend` is where the pose stands in KEY FRAME units and it
+	 * is the one number that has to behave - never backwards, never past the
+	 * pair it names, and exactly vanilla's own value on every tick frame. */
+	const long rates[] = { 1, 2, 4, 5 };
+
+	for (int r = 0; r < 4; r++)
+	{
+		const long rate = rates[r];
+		const long base = 0;
+		const long end = 1000;			// no last-interval clamp
+		double last = -1.0;
+		long backwards = 0;
+
+		printf("  rate %ld:", rate);
+
+		for (long f = 0; f <= 8; f++)
+		{
+			// the TICK frame: vanilla's own pair and factor
+			const long frac = f % rate;
+			const double tickPos = (double)(f / rate) +
+				(frac ? (double)vanilla_alpha(frac, InterpKeyRate(rate, f / rate, end)) : 0.0);
+
+			if (tickPos < last)
+				backwards++;
+
+			last = tickPos;
+			printf(" %.3f", tickPos);
+
+			// the TWEEN frame that follows it, between f and f + 1
+			long key = 0;
+			float blend = 0.0F;
+
+			if (InterpPoseAt(f, f + 1, base, rate, end, 0.5F, &key, &blend))
+			{
+				const double pos = (double)key + (double)blend;
+
+				if (pos < last)
+					backwards++;
+
+				last = pos;
+				printf(" [%.3f]", pos);
+			}
+			else
+				printf(" [-]");
+		}
+
+		printf("\n");
+		ok(backwards == 0, "the pose never walks backwards over the animation", backwards, 0);
+	}
+
+	printf("  (in brackets: the frame between two ticks. Rate 4 comes out as even\n"
+		"   eighths, rate 2 as even quarters, rate 1 - which never interpolated at\n"
+		"   all in vanilla - as exact halves.)\n");
+
+	/* Rate 4, the case the order names: the pair, the factor and the midpoint
+	 * for every frame of one key frame interval. */
+	{
+		struct Want { long f; long key; double blend; };
+		static const Want w[] =
+		{
+			{ 1, 0, 0.125 }, { 2, 0, 0.375 }, { 3, 0, 0.625 }, { 4, 0, 0.875 },
+			{ 5, 1, 0.125 }, { 6, 1, 0.375 }, { 7, 1, 0.625 }, { 8, 1, 0.875 }
+		};
+
+		for (int i = 0; i < 8; i++)
+		{
+			long key = 0;
+			float blend = 0.0F;
+			const bool got = InterpPoseAt(w[i].f - 1, w[i].f, 0, 4, 1000, 0.5F, &key, &blend);
+
+			ok(got, "rate 4: a midpoint exists", got ? 1 : 0, 1);
+			ok(key == w[i].key, "rate 4: the key frame pair", key, w[i].key);
+			okf(fabs(blend - w[i].blend) < 1e-6, "rate 4: the midpoint", blend, w[i].blend);
+		}
+	}
+
+	/* RULE K6 - every way the blend is refused. Each of these is a pose that
+	 * has no neighbour, and each is drawn live for one frame, which is what
+	 * thirty hertz shows anyway. */
+	{
+		long key = 0;
+		float blend = 0.0F;
+
+		ok(!InterpPoseAt(8, 0, 0, 4, 1000, 0.5F, &key, &blend),
+			"K6: a loop wrapping to its own start is not blended", 0, 0);
+		ok(!InterpPoseAt(4, 4, 0, 4, 1000, 0.5F, &key, &blend),
+			"K6: a frame that did not step is not blended", 0, 0);
+		ok(!InterpPoseAt(4, 9, 0, 4, 1000, 0.5F, &key, &blend),
+			"K6: a jump of five frames is not blended", 0, 0);
+		ok(!InterpPoseAt(-1, 0, 0, 4, 1000, 0.5F, &key, &blend),
+			"K6: the animation's first frame is not blended", 0, 0);
+		ok(!InterpPoseAt(99, 100, 100, 4, 1000, 0.5F, &key, &blend),
+			"K6: a frame before frame_base is not blended", 0, 0);
+		ok(!InterpPoseAt(3, 4, 0, 0, 1000, 0.5F, &key, &blend),
+			"K6: an animation with no rate is not blended", 0, 0);
+	}
+
+	/* THE LAST INTERVAL OF AN ANIMATION IS SHORTER, and GetFrames says so by
+	 * shortening the rate. The midpoint has to follow it rather than the
+	 * animation's nominal rate, or the pose would slow down at the end of
+	 * every animation in the game. */
+	{
+		ok(InterpKeyRate(4, 0, 6) == 4, "a full interval keeps its rate", InterpKeyRate(4, 0, 6), 4);
+		ok(InterpKeyRate(4, 1, 6) == 2, "the last interval is shortened", InterpKeyRate(4, 1, 6), 2);
+
+		long key = 0;
+		float blend = 0.0F;
+
+		// f = 5, p = 4: both in key frame 1, whose rate is 2 rather than 4.
+		ok(InterpPoseAt(4, 5, 0, 4, 6, 0.5F, &key, &blend),
+			"the shortened interval still blends", 1, 1);
+		ok(key == 1, "the shortened interval's own pair", key, 1);
+		okf(fabs(blend - 0.25) < 1e-6, "the shortened interval's midpoint", blend, 0.25);
+	}
+
+	/* THE BLEND IS ALWAYS INSIDE THE PAIR. A factor outside 0..1 would draw a
+	 * pose the animation never contains - an arm past its own extreme. Swept
+	 * over every rate and every frame of a long animation. */
+	{
+		long outside = 0;
+
+		for (long rate = 1; rate <= 16; rate++)
+		{
+			for (long f = 1; f <= 200; f++)
+			{
+				long key = 0;
+				float blend = 0.0F;
+
+				if (InterpPoseAt(f - 1, f, 0, rate, 150, 0.5F, &key, &blend))
+					if (blend < 0.0F || blend > 1.0F)
+						outside++;
+			}
+		}
+
+		ok(outside == 0, "the midpoint never leaves the key frame pair", outside, 0);
+	}
+
+	/* AND AT fps_mode 0 THERE IS NO MIDPOINT AT ALL. The engine's gate is
+	 * InterpPoseTime, which returns 0 unless the snapshot was applied - and
+	 * it is applied on no frame at all at thirty hertz (order 2's own proof).
+	 * With t = 0 the arithmetic itself also collapses onto the previous
+	 * tick's own pose, which is the belt to that braces. */
+	{
+		long key = 0;
+		float blend = 1.0F;
+
+		InterpPoseAt(3, 4, 0, 4, 1000, 0.0F, &key, &blend);
+		okf(blend == vanilla_alpha(3, 4), "t = 0 is the previous tick's own pose",
+			blend, vanilla_alpha(3, 4));
+	}
+}
+
 int main()
 {
-	printf("InterpTest - the arithmetic of the 60 FPS interpolation (#148, orders 2 and 3)\n");
+	printf("InterpTest - the arithmetic of the 60 FPS interpolation (#148, orders 2, 3 and 4)\n");
 	printf("built against TOMB5 Code" "\\" "TOMB5" "\\" "game" "\\" "interpolate_math.h\n\n");
 
 	angles();
@@ -594,6 +957,8 @@ int main()
 	thresholds();
 	cadence();
 	counters();
+	pose_factor();
+	pose_time();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

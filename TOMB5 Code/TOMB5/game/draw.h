@@ -4,6 +4,11 @@
 short* GetBoundsAccurate(ITEM_INFO* item);
 short* GetBestFrame(ITEM_INFO* item);
 void InitInterpolate(long frac, long rate);
+
+/* The same set-up with a factor of its own (#148, order 4) - the time
+ * interpolation asks for the midpoint of two poses, which no (frac, rate)
+ * names. See the note over InitInterpolate in game\draw.cpp. */
+void InitInterpolateAlpha(float alpha);
 void phd_PopMatrix_I();
 void phd_PushMatrix_I();
 void phd_RotY_I(short ang);
@@ -31,6 +36,21 @@ void StepAfterDeathFade();
 void DrawRooms(short current_room);
 void CalculateObjectLightingLara();
 long GetFrames(ITEM_INFO* item, short* frm[], long* rate);
+
+/* THE POSE IN TIME (#148, order 4).
+ *
+ * GetFramesAt is GetFrames' neighbour for the frame that falls between two
+ * logic ticks: given what the item wore before the last tick it returns the
+ * key frame pair and the float factor whose blend is the MIDPOINT of the two
+ * poses the game draws at thirty. 0 means there is nothing to blend (rule
+ * K6) and nothing was written.
+ *
+ * GetFramesNow is what the draw sites call: GetFrames on a tick frame and at
+ * fps_mode 0, the midpoint on a tween frame. 0 = one frame, 1 = vanilla's
+ * key frame blend, 2 = a blend in time. */
+long GetFramesAt(ITEM_INFO* item, short prevAnim, short prevFrame, float t,
+	short* frm[], float* blend);
+long GetFramesNow(ITEM_INFO* item, short* frm[], float* blend);
 void SetupSkelebobMeshswaps();
 void RestoreLaraMeshswaps();
 void RenderIt(short current_room);
@@ -53,6 +73,12 @@ extern long* IMptr;
 extern long IMstack[768];
 extern long IM_rate;
 extern long IM_frac;
+
+/* The blend between the two matrix stacks as ONE number (#148, order 4), and
+ * the same number in eighths for the integer stack, which rounds by shifting.
+ * Set by InitInterpolate / InitInterpolateAlpha / InitInterpolate2. */
+extern float IM_alpha;
+extern long IM_alpha8;
 
 extern long CurrentRoom;
 extern long outside;

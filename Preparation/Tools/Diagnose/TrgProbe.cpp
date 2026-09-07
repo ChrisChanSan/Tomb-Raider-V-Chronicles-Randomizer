@@ -41,6 +41,7 @@
 
 #include <algorithm>
 #include <map>
+#include <set>
 
 #include "core/Tr5Level.h"
 #include "hd_install.h"
@@ -577,6 +578,371 @@ namespace
 				at->first, at->second);
 	}
 
+	/* ONE MATERIAL, PART BY PART, AGAINST THE CLASSIC ROOM (#123, the TROne
+	 * adjudication of 2026-09-07).
+	 *
+	 * Two trees read material 16 two ways: ours as an additive sheet whose
+	 * weight sits in param[2] (hd_render.cpp, MaterialAddWeight), TROne's as
+	 * the still-water surface with param[0..2] as noise scale, distortion
+	 * and time scale. Neither reading was ever held against the geometry,
+	 * and the geometry is the one thing that can decide it. A water surface
+	 * is ONE horizontal plane; it sits at the height the classic room draws
+	 * its water at; its normals point up; and it is tessellated far finer
+	 * than a wall needs to be, because a wave has to be able to move its
+	 * corners. A light shaft is none of those things.
+	 *
+	 * So this prints, per part of the material: the pass the FILE sorts it
+	 * into, the triangle count, the y span and how many distinct heights are
+	 * in it, the world box, the normal directions, the pages, the sway, the
+	 * two baked colours, the UV range, and whether a single one of its
+	 * vertices is shared with a part of another material. With -classic it
+	 * adds the room flags and every horizontal plane the classic room draws,
+	 * so "is the sheet in the water plane" is a subtraction and not an
+	 * impression - the water plane being the room's lowest horizontal one,
+	 * which is what drawroom.cpp:645 compares against as r->minfloor.
+	 */
+	struct M16Pass
+	{
+		long long tris = 0;
+		long long verts = 0;
+		int y0 = 1 << 30, y1 = -(1 << 30);
+		std::map<int, long long> yTris;
+		int x0 = 1 << 30, x1 = -(1 << 30), z0 = 1 << 30, z1 = -(1 << 30);
+		int sway0 = 1 << 30, sway1 = -(1 << 30);
+		long long up = 0, down = 0, side = 0;
+		long long swayNonZero = 0;
+		long long c1sum = 0, c2sum = 0;
+		int c1lo = 255, c1hi = 0, c2lo = 255, c2hi = 0;
+		int u0 = 255, u1 = 0, v0 = 255, v1 = 0;
+		std::map<int, long long> pages;
+		long long shared = 0;
+		std::set<unsigned int> vset;
+	};
+
+	void dumpMat16(const std::string& root, const std::string& stem,
+		const std::string& folder, int wanted)
+	{
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+		std::string error;
+
+		if (!trf::remaster::read_trg(path, trg, error))
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		/* WHICH MATERIALS TOUCH WHICH VERTEX, over the whole file: the
+		 * "never shares a vertex with another material" claim is a fact
+		 * about the index buffer and nothing else, so it is read there. */
+		std::vector<unsigned char> firstMat(trg.vertices.size(), 0xFF);
+		std::vector<unsigned char> mixed(trg.vertices.size(), 0);
+
+		for (size_t g = 0; g < trg.groups.size(); g++)
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+			{
+				const unsigned char base = (unsigned char)(part.material & 0xFFu);
+
+				for (int pass = 0; pass < 3; pass++)
+					for (uint32_t i = 0; i < part.pass[pass].count; i++)
+					{
+						const uint32_t index = part.pass[pass].start + i;
+
+						if (index >= trg.indices.size())
+							break;
+
+						const uint32_t v = trg.indices[index];
+
+						if (v >= firstMat.size())
+							continue;
+
+						if (firstMat[v] == 0xFF)
+							firstMat[v] = base;
+						else if (firstMat[v] != base)
+							mixed[v] = 1;
+					}
+			}
+
+		Tr5Level level;
+		bool haveClassic = false;
+
+		if (!folder.empty())
+		{
+			const std::string trc = folder + "\\" + stem + ".TRC";
+			haveClassic = level.load(toW(trc), error);
+
+			if (!haveClassic)
+				std::printf("%-9s classic level not loadable: %s\n",
+					stem.c_str(), error.c_str());
+		}
+
+		long long total[3] = { 0, 0, 0 };
+		int partCount = 0;
+
+		for (size_t g = 0; g < trg.groups.size(); g++)
+		{
+			int nr = 0;
+
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+			{
+				const int base = (int)(part.material & 0xFFu);
+				const int here = nr++;
+
+				if (base != wanted)
+					continue;
+
+				for (int pass = 0; pass < 3; pass++)
+				{
+					if (!part.pass[pass].count)
+						continue;
+
+					M16Pass s;
+
+					for (uint32_t i = 0; i < part.pass[pass].count; i++)
+					{
+						const uint32_t index = part.pass[pass].start + i;
+
+						if (index >= trg.indices.size())
+							break;
+
+						const uint32_t vi = trg.indices[index];
+
+						if (vi >= trg.vertices.size())
+							continue;
+
+						const trf::remaster::TrgVertex& v = trg.vertices[vi];
+
+						s.vset.insert(vi);
+
+						if (vi < mixed.size() && mixed[vi])
+							s.shared++;
+
+						if (v.x < s.x0) s.x0 = v.x;
+						if (v.x > s.x1) s.x1 = v.x;
+						if (v.y < s.y0) s.y0 = v.y;
+						if (v.y > s.y1) s.y1 = v.y;
+						if (v.z < s.z0) s.z0 = v.z;
+						if (v.z > s.z1) s.z1 = v.z;
+						if (v.sway < s.sway0) s.sway0 = v.sway;
+						if (v.sway > s.sway1) s.sway1 = v.sway;
+						if (v.sway) s.swayNonZero++;
+
+						const int c1 = ((int)v.colour1[0] + v.colour1[1] + v.colour1[2]) / 3;
+						const int c2 = ((int)v.colour2[0] + v.colour2[1] + v.colour2[2]) / 3;
+
+						s.c1sum += c1;
+						s.c2sum += c2;
+
+						if (c1 < s.c1lo) s.c1lo = c1;
+						if (c1 > s.c1hi) s.c1hi = c1;
+						if (c2 < s.c2lo) s.c2lo = c2;
+						if (c2 > s.c2hi) s.c2hi = c2;
+
+						if (v.u < s.u0) s.u0 = v.u;
+						if (v.u > s.u1) s.u1 = v.u;
+						if (v.v < s.v0) s.v0 = v.v;
+						if (v.v > s.v1) s.v1 = v.v;
+
+						if (v.ny > 160) s.up++;
+						else if (v.ny < 94) s.down++;
+						else s.side++;
+
+						s.verts++;
+
+						if (v.layer && (size_t)v.layer <= trg.textures.size())
+							s.pages[(int)trg.textures[v.layer - 1]]++;
+						else
+							s.pages[-1]++;
+					}
+
+					for (uint32_t at = 0; at + 2 < part.pass[pass].count; at += 3)
+					{
+						const uint32_t first = part.pass[pass].start + at;
+
+						if (first + 2 >= trg.indices.size())
+							break;
+
+						const trf::remaster::TrgVertex& a = trg.vertices[trg.indices[first]];
+						const trf::remaster::TrgVertex& b = trg.vertices[trg.indices[first + 1]];
+						const trf::remaster::TrgVertex& c = trg.vertices[trg.indices[first + 2]];
+
+						s.tris++;
+
+						if (a.y == b.y && b.y == c.y)
+							s.yTris[(int)a.y]++;
+						else
+							s.yTris[1 << 29]++;	/* not horizontal */
+					}
+
+					total[pass] += s.tris;
+					partCount++;
+
+					int ox = 0, oz = 0;
+					unsigned flags = 0;
+					bool haveRoom = false;
+
+					if (haveClassic && (int)g < level.roomCount())
+					{
+						const Tr5Room& rm = level.rooms()[g];
+						ox = rm.originX;
+						oz = rm.originZ;
+						flags = rm.flags;
+						haveRoom = true;
+					}
+
+					std::printf("%-9s grp %4d part %3d pass %d  mat %5u  "
+						"p %8.4f %8.4f %8.4f %8.4f  tris %7lld  verts %6lld\n",
+						stem.c_str(), (int)g, here, pass, part.material,
+						part.param[0], part.param[1], part.param[2],
+						part.param[3], s.tris, (long long)s.vset.size());
+
+					std::printf("            y %6d..%-6d  x %6d..%-6d  z %6d..%-6d"
+						"  (world x %6d..%-6d z %6d..%-6d)\n",
+						s.y0, s.y1, s.x0, s.x1, s.z0, s.z1,
+						s.x0 + ox, s.x1 + ox, s.z0 + oz, s.z1 + oz);
+
+					{
+						const long long flat = s.yTris.count(1 << 29)
+							? s.tris - s.yTris[1 << 29] : s.tris;
+						const int planes = (int)s.yTris.size()
+							- (s.yTris.count(1 << 29) ? 1 : 0);
+
+						std::printf("            horizontal %lld of %lld triangle(s) "
+							"in %d plane(s):", flat, s.tris, planes);
+
+						int shown = 0;
+
+						for (std::map<int, long long>::const_iterator at = s.yTris.begin();
+							at != s.yTris.end() && shown < 8; ++at)
+						{
+							if (at->first == (1 << 29))
+								continue;
+
+							std::printf(" %d(%lld)", at->first, at->second);
+							shown++;
+						}
+
+						std::printf("%s\n", planes > 8 ? " ..." : "");
+					}
+
+					/* NORMALS ARE NAMED THE WAY A PLAYER SEES THEM. The .TRG's
+					 * y counts DOWNWARDS, as the classic level's does, so a
+					 * normal whose y byte is above 127 points down in the
+					 * world - it is the UNDERSIDE of a surface, the face an
+					 * underwater camera sees. Proved on a floor: every one of
+					 * the 604 horizontal triangles in ANDREA1 group 59's
+					 * street plane (y = 256) has ny < 94. */
+					std::printf("            normals facing up %lld / down %lld / sideways %lld"
+						"   sway %d..%d (%lld non-zero)   shared verts with another material %lld of %lld\n",
+						s.down, s.up, s.side, s.sway0, s.sway1, s.swayNonZero,
+						s.shared, s.verts);
+
+					std::printf("            colour1 %d..%d mean %lld   colour2 %d..%d mean %lld"
+						"   u %d..%d  v %d..%d\n",
+						s.c1lo, s.c1hi, s.verts ? s.c1sum / s.verts : 0,
+						s.c2lo, s.c2hi, s.verts ? s.c2sum / s.verts : 0,
+						s.u0, s.u1, s.v0, s.v1);
+
+					std::printf("            pages:");
+
+					{
+						int shown = 0;
+
+						for (std::map<int, long long>::const_iterator at = s.pages.begin();
+							at != s.pages.end() && shown < 10; ++at, ++shown)
+							std::printf(" %d(%lld)", at->first, at->second);
+
+						std::printf("%s\n", s.pages.size() > 10 ? " ..." : "");
+					}
+
+					/* THE SECTOR AREA AND THE TESSELLATION. A plain remesh
+					 * gives two triangles per floor square; a wave grid gives
+					 * hundreds. */
+					{
+						const long long sx = ((long long)(s.x1 - s.x0) + 1023) / 1024;
+						const long long sz = ((long long)(s.z1 - s.z0) + 1023) / 1024;
+						const long long squares = (sx > 0 ? sx : 1) * (sz > 0 ? sz : 1);
+
+						std::printf("            box %lld x %lld square(s) = %lld,"
+							" %.1f triangle(s) per square\n",
+							sx, sz, squares, (double)s.tris / (double)squares);
+					}
+
+					if (haveRoom)
+					{
+						std::vector<Tr5Level::FaceInfo> faces;
+						std::map<int, int> rows;
+
+						if (level.roomFaces((int)g, faces, error))
+							for (size_t f = 0; f < faces.size(); f++)
+							{
+								const int corners = faces[f].quad ? 4 : 3;
+								bool flat = true;
+
+								for (int c = 1; c < corners; c++)
+									if (faces[f].v[c][1] != faces[f].v[0][1])
+										flat = false;
+
+								if (flat)
+									rows[(int)faces[f].v[0][1]]++;
+							}
+
+						std::printf("            classic room %d flags 0x%04X%s%s%s%s"
+							"  yBottom %d  horizontal planes:", (int)g, flags,
+							(flags & 0x0001) ? " UNDERWATER" : "",
+							(flags & 0x0100) ? " MIST" : "",
+							(flags & 0x0200) ? " REFLECT" : "",
+							(flags & 0x0008) ? " OUTSIDE" : "",
+							level.rooms()[g].yBottom);
+
+						int shown = 0;
+
+						for (std::map<int, int>::const_iterator at = rows.begin();
+							at != rows.end() && shown < 10; ++at, ++shown)
+							std::printf(" %d(%d)%s", at->first, at->second,
+								(at->first == s.y0 && s.y0 == s.y1) ? "<<" : "");
+
+						std::printf("%s\n", rows.size() > 10 ? " ..." : "");
+
+						/* The classic water plane of that room: its lowest
+						 * horizontal one, which is drawroom.cpp's minfloor. */
+						if (!rows.empty())
+						{
+							const int minfloor = rows.rbegin()->first;
+							const int d = s.y0 - minfloor;
+
+							std::printf("            classic minfloor %d, "
+								"the sheet is %d unit(s) %s it\n", minfloor,
+								d >= 0 ? d : -d,
+								s.y0 == minfloor ? "ON" : (s.y0 < minfloor ? "ABOVE" : "BELOW"));
+						}
+
+						/* And the rooms next door, because a still-water
+						 * surface belongs to two rooms at once. */
+						std::printf("            portals to:");
+
+						for (size_t p = 0; p < level.rooms()[g].portalRooms.size() && p < 12; p++)
+						{
+							const int other = level.rooms()[g].portalRooms[p];
+
+							if (other < 0 || other >= level.roomCount())
+								continue;
+
+							std::printf(" %d(0x%X)", other,
+								level.rooms()[(size_t)other].flags);
+						}
+
+						std::printf("\n");
+					}
+				}
+			}
+		}
+
+		std::printf("%-9s material %d: %d part/pass block(s), triangles "
+			"opaque %lld / alpha %lld / additive %lld\n\n",
+			stem.c_str(), wanted, partCount, total[0], total[1], total[2]);
+	}
+
 	/* THE CLASSIC ROOM'S FLAT FACES BESIDE THE .TRG's (#123, fix round H, H1).
 	 *
 	 * The player's finding in trview is that a vanilla water face wears a wave
@@ -936,6 +1302,9 @@ int main(int argc, char** argv)
 		std::printf("       [-flat <group>]  the horizontal surfaces of one group, with\n");
 		std::printf("                        the page each of them wears (H1, the water)\n");
 		std::printf("       [-layer0]  how much of a level names no page at all\n");
+		std::printf("       [-matparts <material>]  every part of ONE material with its\n");
+		std::printf("                          geometry, and (with -classic) the classic\n");
+		std::printf("                          room's own horizontal planes beside it\n");
 		return 1;
 	}
 
@@ -967,10 +1336,13 @@ int main(int argc, char** argv)
 	int surface_room = -1;
 	bool water_gap = false;
 	bool layer_zero = false;
+	int mat_parts = -1;
 
 	for (int i = 2; i < argc; i++)
 	{
-		if (!_stricmp(argv[i], "-watergap"))
+		if (!_stricmp(argv[i], "-matparts") && i + 1 < argc)
+			mat_parts = std::atoi(argv[++i]);
+		else if (!_stricmp(argv[i], "-watergap"))
 			water_gap = true;
 		else if (!_stricmp(argv[i], "-parts") && i + 1 < argc)
 			parts_group = std::atoi(argv[++i]);
@@ -1023,6 +1395,14 @@ int main(int argc, char** argv)
 	const int cores = (int)std::thread::hardware_concurrency();
 	std::printf("install : %s\n", root.c_str());
 	std::printf("cores   : %d\n\n", cores);
+
+	if (mat_parts >= 0)
+	{
+		for (const std::string& stem : levels)
+			dumpMat16(root, stem, classic, mat_parts);
+
+		return 0;
+	}
 
 	if (surface_room >= 0)
 	{

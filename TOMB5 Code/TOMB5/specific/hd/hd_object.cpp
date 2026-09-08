@@ -867,6 +867,25 @@ namespace
 			(int)NumSunLights, (int)NumPointLights, (int)NumSpotLights,
 			entry.lightCount);
 	}
+
+	/* FOR THE "HDLOG bind" LINE (#123, fix round O) - which of bind_against's
+	 * four rules answered. "donor" is not one of HDBindVia's own values: it is
+	 * set by the caller, below, for a slot whose DonorPlan exists, because
+	 * that already says everything the log needs and bind_against does not
+	 * know it is being asked on the donor's behalf. */
+	const char* via_label(HDBindVia via)
+	{
+		switch (via)
+		{
+			case HD_BIND_VIA_MAP:     return "map";
+			case HD_BIND_VIA_HAND:    return "hand";
+			case HD_BIND_VIA_PREFIX5: return "prefix5";
+			case HD_BIND_VIA_PREFIX:  return "prefix";
+			case HD_BIND_VIA_PREFIX4: return "prefix4";
+			case HD_BIND_VIA_CLASSIC: return "classic";
+			default:                  return "none";
+		}
+	}
 }
 
 /* ---------------------------------------------------------- the level -- */
@@ -948,7 +967,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			HDBindKind kind = HD_BIND_NONE;
 			bool fromMap = false;
 
-			HDBindSlot(slot, &kind, &fromMap);
+			HDBindSlot(installRoot, slot, &kind, &fromMap, 0);
 
 			if (kind != HD_BIND_DUMMY || !fromMap)
 				continue;
@@ -1059,7 +1078,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			bool fromMap = false;
 
 			plan.model = HDBindDonorSlot(HDInstallRoot(), mark->level,
-				mark->fromSlot, &kind, &fromMap);
+				mark->fromSlot, &kind, &fromMap, 0);
 
 			if (kind == HD_BIND_DUMMY)
 			{
@@ -1150,7 +1169,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		HDBindKind baseKind = HD_BIND_MODEL;
 
 		if (!base)
-			base = HDBindSlot(slot, &baseKind, 0);
+			base = HDBindSlot(installRoot, slot, &baseKind, 0, 0);
 
 		if (!base || baseKind != HD_BIND_MODEL)
 			continue;
@@ -1295,6 +1314,19 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	g_hd_slots = 0;
 	g_classic_slots = 0;
 
+	/* THE BIND LINE (#123, fix round O) - which of the four rules answered
+	 * each slot, next to the verdict line below rather than folded into it:
+	 * that one is unchanged since fix round B and this is a new question
+	 * (WHY a name was tried), not a restatement of the skeleton test's
+	 * answer (WHETHER it drew). A donor slot never calls HDBindSlot at all
+	 * (its name is already `one.name`, set from the donor's own map before
+	 * `wanted` was built) so its via is read off the DonorPlan list instead;
+	 * everything else is asked again here, which costs a few stat() calls
+	 * and nothing else - bind_against has no side effect the first call
+	 * didn't already have. */
+	int bind_total = 0, bind_map = 0, bind_hand = 0, bind_donor = 0,
+		bind_prefix = 0, bind_classic = 0;
+
 	for (size_t i = 0; i < wanted.size(); i++)
 	{
 		const int slot = wanted[i].slot;
@@ -1307,6 +1339,54 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			continue;
 
 		Verdict& verdict = g_slot[slot];
+
+		{
+			const DonorPlan* dplan = 0;
+
+			for (size_t d = 0; d < donors.size(); d++)
+				if (donors[d].slot == slot)
+				{
+					dplan = &donors[d];
+					break;
+				}
+
+			const char* viaStr;
+			const char* bindModel;
+
+			if (dplan)
+			{
+				viaStr = "donor";
+				bindModel = dplan->model ? dplan->model : "-";
+				bind_donor++;
+			}
+			else
+			{
+				HDBindKind bk = HD_BIND_NONE;
+				HDBindVia bv = HD_BIND_VIA_NONE;
+				const char* bname = HDBindSlot(installRoot, slot, &bk, 0, &bv);
+
+				bindModel = (bk == HD_BIND_MODEL && bname) ? bname : "-";
+				viaStr = via_label(bv);
+
+				switch (bv)
+				{
+					case HD_BIND_VIA_MAP:     bind_map++;     break;
+					case HD_BIND_VIA_HAND:    bind_hand++;    break;
+					case HD_BIND_VIA_PREFIX5:
+					case HD_BIND_VIA_PREFIX:
+					case HD_BIND_VIA_PREFIX4: bind_prefix++;  break;
+					default:                  bind_classic++; break;
+				}
+			}
+
+			bind_total++;
+
+			const int trmNodes = HDModelHas(slot) ? HDModelMaxBone(slot) + 1 : 0;
+
+			Log("HDLOG bind slot=%d name=%s via=%s model=%s nodes=%d/%d",
+				slot, HDSlotName(slot) ? HDSlotName(slot) : "?", viaStr,
+				bindModel, trmNodes, wanted[i].nodes);
+		}
 
 		verdict.nodes = wanted[i].nodes;
 		verdict.head = HDModelHasHead(slot) ? 1 : 0;
@@ -1407,6 +1487,9 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		"slots), drift limit %.0f units",
 		g_stem, g_hd_slots, g_classic_slots, g_baked_slots, (int)slots.size(),
 		kDriftLimit);
+
+	Log("HDLOG bind total=%d map=%d hand=%d donor=%d prefix=%d classic=%d",
+		bind_total, bind_map, bind_hand, bind_donor, bind_prefix, bind_classic);
 
 	/* THE ALTERNATIVE MODELS, after the build because only now is it known
 	 * which of them really arrived (#123, fix round B, B3). One that did not

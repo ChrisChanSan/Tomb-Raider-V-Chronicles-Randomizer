@@ -11,6 +11,17 @@
  * rather than copied, because TRForge's own file drags in its level library.
  * See vendor\trforge\VERSION.txt.
  *
+ * bind_against's third rule, the EXTRA prefix (fix round O, #123), is written
+ * against a description of two things neither of which is copied: TRForge's
+ * generic slot binding (MIT, vendor\trforge\src\trf_remaster\ItemModels.cpp,
+ * bind_level_items) and TROne's EXTRA<game>_/EXTRA_ prefix pass and its
+ * Effect-category exclusion (Copyright 2026 Todesengel, GPLv3,
+ * host\render\game_renderer.cpp). The order of the three prefixes and the
+ * rule that the hand table is asked first are this project's own reading of
+ * that description; the measured table of which slot resolves to which file
+ * on the installed bundle, and the EXTRA4_ tier TROne cannot reach at all
+ * running as game 5, are new. See THIRD-PARTY.md.
+ *
  * TOMB5 is free software: you can redistribute it and/or modify it under the
  * terms of the GNU General Public License as published by the Free Software
  * Foundation, either version 3 of the License, or (at your option) any later
@@ -21,6 +32,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -161,6 +173,16 @@ namespace
 	 * SILENT. ANDREA2 and ANDREA3 still get their own answer. */
 	struct HandBound { const char* slot; const char* model; };
 
+	/* THE THREE PREFIXES, in trial order (#123, fix round O). See hd_bind.h. */
+	struct PrefixRule { const char* prefix; HDBindVia via; };
+
+	const PrefixRule extra_prefixes[] =
+	{
+		{ "EXTRA5_", HD_BIND_VIA_PREFIX5 },
+		{ "EXTRA_",  HD_BIND_VIA_PREFIX  },
+		{ "EXTRA4_", HD_BIND_VIA_PREFIX4 }
+	};
+
 	const HandBound hand_table[] =
 	{
 		{ "BLUE_GUARD2",             "BLUE_GUARD_JOBY"          },
@@ -198,12 +220,172 @@ namespace
 		 *
 		 * The rest of the EXTRA family - the pistols, uzi, shotgun, HK,
 		 * grapple, medipack, flare, lasersight, binocular and crowbar pickups
-		 * - is unbound for exactly the same reason and is left for a round of
-		 * its own; the names are all in 4\ITEM and 5\ITEM under EXTRA,
-		 * EXTRA4 and EXTRA5. */
+		 * - got that round of its own: fix round O below reaches all of them
+		 * generically, by trying the EXTRA5_/EXTRA_/EXTRA4_ prefix in front of
+		 * the plain slot name whenever this table and the .MAP are both
+		 * silent. It cannot reach REVOLVER_ITEM's Deagle variant, which is
+		 * why these two lines stay - the generic rule finds
+		 * EXTRA5_REVOLVER_ITEM (Tomb Raider IV's six-shooter) first and never
+		 * gets to try the _JOBY suffix, and the hand table is asked BEFORE
+		 * the generic rule for exactly that reason (see bind_against). */
 		{ "REVOLVER_ITEM",           "EXTRA5_REVOLVER_ITEM_JOBY" },
 		{ "REVOLVER_AMMO_ITEM",      "EXTRA5_REVOLVER_AMMO_ITEM" }
 	};
+
+	/* THE EXTRA PREFIX EXCLUSIONS (#123, fix round O). Every one of these sits
+	 * in the same block of the object enum as the two shell casings
+	 * (game\objects.h, SMOKE_EMITTER_WHITE .. LENS_FLARE) but, unlike them, is
+	 * never a standalone level item with its own picture: it is a light, a
+	 * smoke or mist puff, or a sprite drawn as part of another draw call.
+	 * GUN_FLASH is the one line here that is a MEASUREMENT and not caution -
+	 * 4\ITEM\EXTRA_GUN_FLASH.TRM exists, and TROne's own source calls this
+	 * whole family "Effect category". The measurement is not a bracket to
+	 * tear, though: SetGunFlash (game\tomb4fx.cpp) only ever RECORDS a
+	 * matrix, called from draw.cpp after DrawLara's own node walk has
+	 * already returned, and the flash itself is painted afterwards by
+	 * DrawGunflashes - a flat phd_PutPolygons call against the classic
+	 * GUN_FLASH mesh, outside any HDObjectBegin/HDObjectEnd bracket and
+	 * outside the whole per-item HD path this file feeds. There is
+	 * therefore no bracket for an HD flash to open in the middle of, and no
+	 * tear it could cause - GUN_FLASH simply never reaches this file's path
+	 * at all, so a bound name would sit unused and cost nothing but a page.
+	 * Excluded anyway, the same caution as the twelve light/mist slots
+	 * beside it: nothing here reads Lara's draw code to notice if a future
+	 * engine change ever routed the flash through an item bracket, and the
+	 * cost of excluding a slot that would have been harmless is one unused
+	 * page, not a bug. The shell casings (GUNSHELL, SHOTGUNSHELL) are NOT
+	 * here - they have their own EXTRA_ model (4\ITEM\EXTRA_GUNSHELL.TRM,
+	 * EXTRA_SHOTGUNSHELL.TRM, both measured) and stay in the pool. Measured
+	 * with the same care as GUN_FLASH, though, and the same answer comes
+	 * back: they are not level items either. DrawGunshells (game\tomb4fx.cpp)
+	 * walks its own Gunshells[24] table and paints
+	 * meshes[objects[..].mesh_index] with phd_PutPolygons, from draw.cpp
+	 * outside any HDObjectBegin bracket - so their bound model is built and
+	 * never drawn, exactly as GUN_FLASH's would be. FLARE_ITEM and
+	 * CROSSBOW_BOLT are the same case one step further out: game\setup.cpp
+	 * gives them a draw_routine of their own (DrawFlareInAir,
+	 * DrawWeaponMissile) instead of DrawAnimatingItem, and both paint the
+	 * classic mesh. Their model costs a vertex buffer and, on the shipped
+	 * bundle, no page of its own - EXTRA_GUNSHELL shares page 8523 with the
+	 * uzi, EXTRA_SHOTGUNSHELL page 8534 with the shotgun ammo and the
+	 * crowbar, EXTRA_FLARE_ITEM page 8519 with EXTRA_FLARE_INV_ITEM, which
+	 * IS an ordinary pickup and does draw. Left in the pool as this round
+	 * found them; moving them here is a behaviour change and belongs to
+	 * whoever decides it, not to a comment. Nothing below GUN_FLASH had a
+	 * matching file on the
+	 * installed bundle at the time of this measurement; they are excluded
+	 * anyway so that a future remaster patch adding one does not silently
+	 * start drawing something nobody asked for. */
+	const char* const extra_excluded[] =
+	{
+		"GUN_FLASH",
+		"SMOKE_EMITTER_WHITE", "SMOKE_EMITTER_BLACK", "STEAM_EMITTER",
+		"EARTHQUAKE", "BUBBLES", "WATERFALLMIST",
+		"COLOURED_LIGHT", "BLINKING_LIGHT", "PULSE_LIGHT", "STROBE_LIGHT",
+		"ELECTRICAL_LIGHT", "LENS_FLARE"
+	};
+
+	bool extra_is_excluded(const char* name)
+	{
+		for (const char* one : extra_excluded)
+			if (_stricmp(one, name) == 0)
+				return true;
+
+		return false;
+	}
+
+	/* Existence only, cheap - no read beyond the file system's own stat. Kept
+	 * as its own copy of find_model's 5-then-4 rule (hd_model.cpp) rather than
+	 * a call into it: this file is built without the engine, for the
+	 * diagnostic tools TrgProbe and MapProbe (see the file header), and
+	 * neither drags in hd_model.cpp's Direct3D dependency for six lines. */
+	bool file_exists(const std::string& path)
+	{
+		std::FILE* file = std::fopen(path.c_str(), "rb");
+
+		if (!file)
+			return false;
+
+		std::fclose(file);
+		return true;
+	}
+
+	std::string bind_join(const std::string& a, const char* b)
+	{
+		std::string out = a;
+
+		while (!out.empty() && (out[out.size() - 1] == '\\' || out[out.size() - 1] == '/'))
+			out.erase(out.size() - 1);
+
+		out += '\\';
+		out += b;
+		return out;
+	}
+
+	std::string bind_parent_of(const std::string& path)
+	{
+		std::string out = path;
+
+		while (!out.empty() && (out[out.size() - 1] == '\\' || out[out.size() - 1] == '/'))
+			out.erase(out.size() - 1);
+
+		const size_t cut = out.find_last_of("\\/");
+
+		return cut == std::string::npos ? std::string(".") : out.substr(0, cut);
+	}
+
+	/* 5\ITEM, then 4\ITEM - the same order find_model loads by. `name` already
+	 * carries its EXTRA5_/EXTRA_/EXTRA4_ prefix. */
+	bool extra_model_exists(const std::string& installRoot, const std::string& name)
+	{
+		if (installRoot.empty())
+			return false;
+
+		std::string path = bind_join(bind_join(installRoot, "ITEM"), (name + ".TRM").c_str());
+
+		if (file_exists(path))
+			return true;
+
+		const std::string bundle = bind_parent_of(installRoot);
+
+		path = bind_join(bind_join(bind_join(bundle, "4"), "ITEM"), (name + ".TRM").c_str());
+
+		return file_exists(path);
+	}
+
+	/* THE ANSWER'S STORAGE, for the one rule (3, the EXTRA prefix) whose
+	 * result is not a pointer into something that already lives somewhere -
+	 * the level's map, the hand table, the slot name table.
+	 *
+	 * Fix round O first answered this with ONE shared std::string,
+	 * overwritten on every call. That is safe for a caller who reads the
+	 * pointer before asking again, which is what HDLOG bind and every probe
+	 * tool do - but HDObjectLevelBuild's donor pass does not: it resolves
+	 * EVERY donor slot's `DonorPlan::model` first and reads them all back
+	 * later, once bind poses are built (hd_object.cpp). By then the shared
+	 * buffer held whichever slot was asked last, and any donor slot that hit
+	 * rule 3 anywhere in between (which is what an undonated pickup like
+	 * PISTOLS_ITEM always does - no shipped .MAP names a weapon pickup) had
+	 * its name silently swapped for a different slot's. A cache keyed by
+	 * slot fixes this the same way rules 1, 2 and 4 were already safe: each
+	 * slot's answer lives in its own map node, which - unlike a
+	 * std::string's - std::map never moves or reuses once written, so a
+	 * pointer taken from it stays correct no matter how many OTHER slots are
+	 * asked afterwards. `root` records which installRoot the entry was
+	 * computed for, since the disk it was asked against could in principle
+	 * change; a mismatch recomputes rather than trusting a stale answer.
+	 * Deliberately NOT cleared by HDMapFree/HDDonorMapsFree: rule 3 never
+	 * reads the level's or a donor's .MAP, only the slot's fixed name and
+	 * the fixed set of files under installRoot, so the same answer is
+	 * correct for the next level too and there is no reason to re-stat the
+	 * disk for it. */
+	struct AltAnswer
+	{
+		std::string root;	// installRoot this answer was resolved against
+		std::string model;	// empty + via NONE = every prefix tier missed
+		HDBindVia via = HD_BIND_VIA_NONE;
+	};
+	std::map<int, AltAnswer> g_alt_cache;
 
 	/* THE GUESTS OUT OF TOMB RAIDER III (#92). The header says what this is
 	 * and how the four names were arrived at; the numbers on the left are TR5
@@ -333,14 +515,20 @@ namespace
 	}
 
 	/* The one binding rule, against WHICHEVER map is in hand: the map wins,
-	 * then the hand table, then the slot's own name. HDBindSlot asks it with
-	 * the level's map and HDBindDonorSlot with a donor's, which is the whole
-	 * of what those two differ in. */
-	const char* bind_against(const std::vector<MapEntry>& entries, int slot,
-		HDBindKind* kind, bool* fromMap)
+	 * then the hand table, then the EXTRA prefix, then the slot's own name.
+	 * HDBindSlot asks it with the level's map and HDBindDonorSlot with a
+	 * donor's, which is the whole of what those two differ in.
+	 *
+	 * `installRoot` may be empty - every caller before fix round O passed
+	 * none, and still gets rules 1, 2 and 4 exactly as before; only rule 3
+	 * needs a disk to ask. */
+	const char* bind_against(const std::vector<MapEntry>& entries,
+		const std::string& installRoot, int slot, HDBindKind* kind,
+		bool* fromMap, HDBindVia* via)
 	{
 		HDBindKind local_kind = HD_BIND_NONE;
 		bool local_from_map = false;
+		HDBindVia local_via = HD_BIND_VIA_NONE;
 		const char* result = 0;
 
 		const char* name = HDSlotName(slot);
@@ -356,6 +544,7 @@ namespace
 			if (mapped)
 			{
 				local_from_map = true;
+				local_via = HD_BIND_VIA_MAP;
 
 				if (_stricmp(mapped, "DUMMY") == 0)
 					local_kind = HD_BIND_DUMMY;
@@ -369,13 +558,64 @@ namespace
 			{
 				local_kind = HD_BIND_MODEL;
 				result = name;
+				local_via = HD_BIND_VIA_CLASSIC;
+
+				bool hand_hit = false;
 
 				for (const HandBound& bound : hand_table)
 					if (_stricmp(bound.slot, name) == 0)
 					{
 						result = bound.model;
+						local_via = HD_BIND_VIA_HAND;
+						hand_hit = true;
 						break;
 					}
+
+				/* RULE 3, THE EXTRA PREFIX (#123, fix round O) - only when
+				 * neither the map nor the hand table had an answer, the slot
+				 * is not one of the excluded ones, and a disk was given to
+				 * ask. See hd_bind.h for the order and hd_bind.cpp's
+				 * extra_excluded table for what is left out and why.
+				 *
+				 * Answered from `g_alt_cache`, one entry per slot, kept for
+				 * as long as the process runs rather than rebuilt on every
+				 * call - see the cache's own comment above for why a shared
+				 * scratch buffer here was wrong (fix round O found this a
+				 * stale-pointer bug in a caller that keeps the answer past
+				 * the next bind_against call, which the donor pass always
+				 * does). */
+				if (!hand_hit && !installRoot.empty() && !extra_is_excluded(name))
+				{
+					auto found = g_alt_cache.find(slot);
+
+					if (found == g_alt_cache.end() || found->second.root != installRoot)
+					{
+						AltAnswer answer;
+
+						answer.root = installRoot;
+
+						for (const PrefixRule& one : extra_prefixes)
+						{
+							std::string candidate = one.prefix;
+							candidate += name;
+
+							if (extra_model_exists(installRoot, candidate))
+							{
+								answer.model = candidate;
+								answer.via = one.via;
+								break;
+							}
+						}
+
+						found = g_alt_cache.insert_or_assign(slot, std::move(answer)).first;
+					}
+
+					if (found->second.via != HD_BIND_VIA_NONE)
+					{
+						result = found->second.model.c_str();
+						local_via = found->second.via;
+					}
+				}
 			}
 		}
 
@@ -383,6 +623,8 @@ namespace
 			*kind = local_kind;
 		if (fromMap)
 			*fromMap = local_from_map;
+		if (via)
+			*via = local_via;
 
 		return result;
 	}
@@ -440,18 +682,21 @@ const char* HDMapValue(const char* key)
 	return value_in(map_entries, key);
 }
 
-const char* HDBindSlot(int slot, HDBindKind* kind, bool* fromMap)
+const char* HDBindSlot(const char* installRoot, int slot, HDBindKind* kind,
+	bool* fromMap, HDBindVia* via)
 {
-	return bind_against(map_entries, slot, kind, fromMap);
+	return bind_against(map_entries, installRoot ? installRoot : "", slot,
+		kind, fromMap, via);
 }
 
 const char* HDBindDonorSlot(const char* installRoot, const char* donorLevel,
-	int sourceSlot, HDBindKind* kind, bool* fromMap)
+	int sourceSlot, HDBindKind* kind, bool* fromMap, HDBindVia* via)
 {
 	static const std::vector<MapEntry> nothing;
+	const std::string root = installRoot ? installRoot : "";
 
 	if (!donorLevel || !*donorLevel)
-		return bind_against(nothing, sourceSlot, kind, fromMap);
+		return bind_against(nothing, root, sourceSlot, kind, fromMap, via);
 
 	DonorMap* have = 0;
 
@@ -491,7 +736,7 @@ const char* HDBindDonorSlot(const char* installRoot, const char* donorLevel,
 		have = &fresh;
 	}
 
-	return bind_against(have->entries, sourceSlot, kind, fromMap);
+	return bind_against(have->entries, root, sourceSlot, kind, fromMap, via);
 }
 
 void HDDonorMapsFree()

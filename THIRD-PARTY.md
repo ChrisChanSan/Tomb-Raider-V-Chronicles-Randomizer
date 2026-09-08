@@ -136,6 +136,30 @@ drawn with it. The format and the finding are TRForge's; the reader, the guard
 against a table that does not fit the level, and the use of it - the HD
 pictures of the classic water animation frames - are ours.
 
+And a fourth time in fix round O of #123: **the `EXTRA` prefix a pickup's own
+model sits under.** TRForge's `bind_level_items` (`trf_remaster/ItemModels.cpp`,
+the same file used as a description above) already showed the general shape -
+a slot the `.MAP` is silent about tries the bare engine symbol next. The
+remaster's own host code goes one step further for exactly the models that
+fallback still lands on nothing for: TROne's `host/render/game_renderer.cpp`
+tries `EXTRA<game>_<SYMBOL>` and then `EXTRA_<SYMBOL>` in front of the slot's
+own name, and excludes an "Effect" category - `GUN_FLASH` among them - on its
+own stated ground that such a slot is drawn bracketed inside another entity's
+mesh walk rather than as a level item of its own (Copyright 2026 Todesengel,
+GPLv3; not vendored, used as a description only, for the same reason as the
+two TRForge files above - both pull in a foreign renderer). That ground is
+TROne's, for TROne's renderer: measured against THIS engine the flash never
+reaches the per-item path at all, which `MODIFICATIONS.md`'s fix round O entry
+writes up - the slot stays excluded either way.
+`TOMB5/specific/hd/hd_bind.cpp`'s `bind_against` is
+written against that description, not copied from it: the order the three
+prefixes are tried in, and the rule that this project's own hand table is
+asked BEFORE any of them, are this project's reading of it. The `EXTRA4_` tier
+- for `COMPASS_ITEM` and `CROSSBOW_AMMO1/2_ITEM`, TR4 survivors TROne itself
+can never reach because it always runs as its own game number - and the
+measured table of which of the 471 slots resolves to which file on the
+installed bundle are new, in `MODIFICATIONS.md`'s fix round O entry.
+
 ### discord-rpc — shipped in the source tree, not in the binaries
 
 | Library | Licence | Full text in this tree |

@@ -1094,10 +1094,14 @@ the last rounding — only the last step changes, where a piece's classic mesh
 used to go into the texture buckets and its **matrix** now goes to the model
 instead.
 
-**How many.** Per level, of the slots the level really loads: ANDREA1 draws
-50 of its 52 models in HD, JOBY3 65 of 66, RICH3 65 of 68. The rest, and every
-slot with no model at all, draws exactly as it did before — the two paths sit
-side by side in the same frame and in the same depth buffer.
+**How many.** Per level, of every slot the level really loads - creatures,
+traps, doors, pickups, the lot: ANDREA1 draws 68 of 153 in HD, JOBY3 89 of
+191, RICH3 92 of 183 (`ModelProbe -level <STEM> -all`, "slots complete" +
+"partial"). Most of the remainder is `no_model` on purpose - triggers, AI
+markers, invisible logic slots the remaster was never asked to draw a picture
+of at all - not a model that failed to bind. The rest, and every slot with no
+model at all, draws exactly as it did before — the two paths sit side by side
+in the same frame and in the same depth buffer.
 
 **When an object stays classic.** Four reasons, and every one of them is
 written into the log with the slot it applies to:
@@ -1112,15 +1116,62 @@ written into the log with the slot it applies to:
 | `no_geometry` | A model with nothing in it at all. Has not been seen; the guard is there so that it cannot become a crash. |
 | `baked` | Not classic at all: **nothing** draws it. The level's own name table says `DUMMY` for that slot, which is the remaster saying it draws nothing there as an object — usually because it has baked the thing into the room's art instead. Rome's lamp posts and its wall lanterns are the clearest case: draw the classic mesh on top and the lamp stands twice, a hand's width apart, which is exactly what the first play-through showed. Only in a room that really draws HD; a room that stayed classic keeps its lamp post. |
 
-**Which model a slot asks for** comes from three places, in this order: the
+**Which model a slot asks for** comes from four places, in this order: the
 level's own name table beside it in the remaster's `DATA` folder, which lists
 only the deviations; a small hand table of our own for the slots this project
-added past the original 460 and for the one vanilla slot the remaster leaves
+added past the original 460, for the one vanilla slot the remaster leaves
 unnamed — `ROMAN_GOD`, for which it ships a sword version and a hammer version
-and only two of the fifteen levels say which; and otherwise the slot's own
-name. A randomized level adds a fourth: a slot the run filled from a donor is
-asked of the **donor's** table instead, because that is where the model came
-from.
+and only two of the fifteen levels say which — and for the Desert Eagle, which
+the third rule below cannot reach on its own; a third rule for **pickups**
+(next paragraph); and otherwise the slot's own name. A randomized level adds a
+fifth: a slot the run filled from a donor is asked of the **donor's** table
+instead, because that is where the model came from.
+
+**The pickup rule.** A pickup's model almost never sits under its own slot's
+name at all — `PISTOLS_ITEM` has no `PISTOLS_ITEM.TRM` anywhere, only
+`EXTRA_PISTOLS_ITEM.TRM` in the shared folder — so, whenever the level's own
+table and the hand table are both silent, the engine tries the slot's name
+with `EXTRA5_`, then `EXTRA_`, then `EXTRA4_` in front of it, in each of the
+two `ITEM` folders. This is how the pistols, the uzi, the shotgun, the HK, the
+grapple, both medipacks, the lasersight, the binoculars, the flare pack, the
+crowbar, the burning torch and the compass all draw HD
+without a single level having to say so.
+
+Four more slots the rule finds a model for get one that is **built and never
+drawn**, and it is worth knowing which: the lit flare `FLARE_ITEM`, the fired
+bolt `CROSSBOW_BOLT` and the two shell casings. None of the four goes through
+the per-item path at all — the first two are given a draw routine of their own
+in the engine's object table (`DrawFlareInAir`, `DrawWeaponMissile`) and the
+casings are not items in the first place, they are a table of their own that a
+single call paints; all four paint the classic mesh, exactly as the muzzle
+flash does. Measured, not assumed. On the shipped bundle none of them costs a
+texture page of its own either — each shares one with a neighbour that does
+draw — so what they cost is a vertex buffer. The flare a level lays down for
+Lara to pick up is `FLARE_INV_ITEM`, an ordinary pickup, and that one does
+draw HD.
+
+The rule is skipped for Lara's own
+composite and for thirteen slots that are lights, mist or a muzzle flash
+rather than a level item of their own — the muzzle flash really does have a
+model under this rule, but it is excluded as plain caution rather than
+because binding it would break anything today: the flash is never drawn
+through the same per-item path this rule feeds at all (it is a stored matrix,
+painted afterwards by a separate call against the classic mesh), so nothing
+would tear - a future engine change might route it differently, and until one
+does, excluding it costs nothing that could ever have reached the
+screen. `SILENCER_ITEM`, `MEMCARD_LOAD_INV_ITEM`/`_SAVE_INV_ITEM`,
+`PC_LOAD_INV_ITEM`/`_SAVE_INV_ITEM`, `DC_LOAD_INV_ITEM`/`_SAVE_INV_ITEM`,
+`CLOTH`, `COSH` and `HAMMER_ITEM` are the ones this rule was measured to find
+nothing for either way — no file under any of the three prefixes, in either
+folder, and none under the bare name either — so they draw classic for that
+reason alone, the same `no_model` this section already names. `BOTTLE`,
+`WET_CLOTH` and `EXAMINE1`/`2`/`3` are a different case worth telling apart
+from those: each has a real model under its own bare name (`BOTTLE.TRM`,
+`WET_CLOTH.TRM`, `EXAMINE1.TRM` and so on), so the fourth rule already
+reaches them without this round's help - not one of the fifteen shipped
+levels loads any of the three `EXAMINE` slots as a real moveable, so whether
+that model actually draws has not been measured, only that it is there to be
+asked for.
 
 The skeleton test is a measurement, not a guess. For every pair of pieces that
 carry geometry it compares the distance between them in the model against the

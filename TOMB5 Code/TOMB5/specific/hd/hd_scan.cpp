@@ -344,7 +344,7 @@ bool HDScanLevel(const char* installRoot, const char* stem, int numRooms,
 
 			HDBindKind kind = HD_BIND_NONE;
 			bool from_map = false;
-			const char* model = HDBindSlot(slot, &kind, &from_map);
+			const char* model = HDBindSlot(installRoot, slot, &kind, &from_map, 0);
 
 			if (kind == HD_BIND_LARA)
 			{

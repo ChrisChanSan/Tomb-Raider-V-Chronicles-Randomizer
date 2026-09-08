@@ -29,7 +29,24 @@
 //      ROMAN_GOD, for which 5\ITEM ships ROMAN_GOD_ANDREA_SWORD and
 //      ROMAN_GOD_ANDREA_HAMMER and nothing else, while only ANDREA2 and
 //      ANDREA3 say in their .MAP which of the two they mean.
-//   3. The slot's own name: SWAT -> SWAT.TRM, DOG -> DOG.TRM.
+//   3. THE EXTRA PREFIX (#123, fix round O). Every pickup in the remaster's
+//      own bundle sits under a prefixed name rather than its plain slot name
+//      - PISTOLS_ITEM has no PISTOLS_ITEM.TRM anywhere, only
+//      4\ITEM\EXTRA_PISTOLS_ITEM.TRM. Tried in this order, each against
+//      5\ITEM then 4\ITEM (the same fallback find_model uses to load it):
+//      EXTRA5_<slot> (own-game models: HK_ITEM, REVOLVER_ITEM, the grapple),
+//      EXTRA_<slot> (the shared TR4-VI base: pistols, medipacks, flares,
+//      ...), EXTRA4_<slot> (TR4-only survivors the remaster kept under their
+//      TR4 name and TR5 never renamed: COMPASS_ITEM, CROSSBOW_AMMO1/2_ITEM -
+//      slots TROne itself, running only as game 5, structurally cannot
+//      reach). Measured against the shipped files: the names are never
+//      "squashed", underscores and all match a real filename or nothing
+//      does. Skipped for a slot already answered by the .MAP, the hand
+//      table or a donor's .MAP, for Lara's composite, and for the handful of
+//      light, mist and muzzle-flash slots that are no level item of their own
+//      (GUN_FLASH; see hd_bind.cpp's extra_excluded table for the measured
+//      list, for what each is really drawn by, and why each is there).
+//   4. The slot's own name: SWAT -> SWAT.TRM, DOG -> DOG.TRM.
 //
 // Lara is not bound here. Her HD body is a composite of an outfit, a head and
 // a braid and is stage S4 of the plan; every slot from LARA to HAIR is
@@ -76,10 +93,39 @@ enum HDBindKind
 	HD_BIND_MODEL		// a model name, which may or may not exist on disk
 };
 
+// WHICH OF THE FOUR RULES ANSWERED (#123, fix round O) - for the HDLOG bind
+// line, so a wrong picture can be traced to the step that chose it rather
+// than guessed at. HD_BIND_VIA_CLASSIC covers both "the slot's own name
+// really is the model" (SWAT -> SWAT.TRM) and "nothing answered at all, so
+// the bare name goes to find_model and probably fails there too" - the two
+// are told apart downstream by whether HDModelHas(slot) ends up true.
+enum HDBindVia
+{
+	HD_BIND_VIA_NONE = 0,	// HD_BIND_NONE or HD_BIND_LARA - no bind question was asked
+	HD_BIND_VIA_MAP,	// the level's (or donor's) own .MAP named it
+	HD_BIND_VIA_HAND,	// the hand table named it
+	HD_BIND_VIA_PREFIX5,	// EXTRA5_<slot> exists (own-game HD pickup)
+	HD_BIND_VIA_PREFIX,	// EXTRA_<slot> exists (the shared TR4-VI base)
+	HD_BIND_VIA_PREFIX4,	// EXTRA4_<slot> exists (a TR4-only survivor)
+	HD_BIND_VIA_CLASSIC	// none of the above - the slot's own bare name
+};
+
 // The model name for a slot. `kind` comes back as one of the four above and
-// `fromMap` says whether the LEVEL.MAP decided it. The returned pointer is
-// valid until the next HDMapFree() and is 0 for everything but HD_BIND_MODEL.
-const char* HDBindSlot(int slot, HDBindKind* kind, bool* fromMap);
+// `fromMap` says whether the LEVEL.MAP decided it; `via`, which may be 0, says
+// which of the four rules answered (fix round O). `installRoot` is the
+// remaster's game 5 folder - needed only for step 3, the EXTRA prefix, which
+// has to ask the disk which of the three candidates is really there; pass 0
+// or "" to skip that step entirely (every earlier caller's behaviour, and
+// what a tool with no install root in hand still gets: rules 1, 2 and 4). The
+// returned pointer outlives the call, same as rules 1, 2 and 4's - rule 3's
+// answer is cached one entry per slot (hd_bind.cpp's g_alt_cache) rather than
+// rebuilt into a shared scratch buffer, precisely so a caller may keep it
+// past a later HDBindSlot/HDBindDonorSlot call for a DIFFERENT slot, which
+// HDObjectLevelBuild's donor pass does (fix round O; a shared buffer was the
+// bug that pass shipped with, silently swapping one donor's model name for
+// another's). It is 0 for everything but HD_BIND_MODEL.
+const char* HDBindSlot(const char* installRoot, int slot, HDBindKind* kind,
+	bool* fromMap, HDBindVia* via);
 
 // --- a slot whose model came out of another level (#123, stage S7-2) -------
 //
@@ -100,11 +146,19 @@ const char* HDBindSlot(int slot, HDBindKind* kind, bool* fromMap);
 // The level's own map (HDMapLoad) is untouched by this: two stores, because
 // the level's is asked for every other slot in the same breath.
 //
-// The returned pointer stays valid until HDDonorMapsFree() - the maps are
-// allocated one by one and never move, so an answer taken before the next
-// donor was asked about is still an answer afterwards.
+// The returned pointer stays valid until HDDonorMapsFree() - rule 1 and 2's
+// answers point into the donor map / the hand table, which HDDonorMapsFree()
+// frees, and rule 3's (the EXTRA prefix) into hd_bind.cpp's g_alt_cache,
+// which HDDonorMapsFree() does NOT touch (rule 3 never reads a donor's .MAP,
+// so its answer for a given slot does not become wrong when the donor maps
+// are freed) but which outlives it in any case. Same guarantee as
+// HDBindSlot's, and for the same reason: fix round O's donor pass keeps
+// every donor's `model` pointer well past the next HDBindDonorSlot call, for
+// a different donor slot. `installRoot` doubles as rule 3's search root - the
+// donor's .MAP and the donor's EXTRA candidates live in the same game 5 /
+// game 4 folders as the level's own.
 const char* HDBindDonorSlot(const char* installRoot, const char* donorLevel,
-	int sourceSlot, HDBindKind* kind, bool* fromMap);
+	int sourceSlot, HDBindKind* kind, bool* fromMap, HDBindVia* via);
 void HDDonorMapsFree();
 // How many donor .MAP files are held, and how many lines they brought - for
 // the log.

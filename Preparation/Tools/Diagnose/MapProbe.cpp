@@ -188,7 +188,7 @@ namespace
 			else
 			{
 				name = HDBindDonorSlot(root.c_str(), donor->level,
-					donor->fromSlot, &kind, &fromMap);
+					donor->fromSlot, &kind, &fromMap, 0);
 
 				if (kind == HD_BIND_DUMMY) { name = 0; how = "donor_dummy"; }
 				else if (kind != HD_BIND_MODEL || !name) { name = 0; how = "donor_no_name"; }
@@ -318,7 +318,7 @@ int main(int argc, char** argv)
 			const int slot = slots[k];
 			HDBindKind kind = HD_BIND_NONE;
 			bool fromMap = false;
-			const char* model = HDBindSlot(slot, &kind, &fromMap);
+			const char* model = HDBindSlot(root.c_str(), slot, &kind, &fromMap, 0);
 			const char* slotName = HDSlotName(slot);
 
 			if (kind == HD_BIND_LARA) { lara++; continue; }

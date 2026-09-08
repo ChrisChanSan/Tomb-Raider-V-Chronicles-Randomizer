@@ -1630,7 +1630,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		// for Lara, whose composite is stage S4 but whose parts a diagnostic
 		// tool may well want to look at one at a time.
 		if (!model && !slots[i].synth)
-			model = HDBindSlot(slot, &kind, &fromMap);
+			model = HDBindSlot(installRoot, slot, &kind, &fromMap, 0);
 
 		/* A MODEL THAT IS BUILT AND NOT READ (#123, fix round I, I3; back in
 		 * fix round S for the lid that closes the neck). It has no file, no

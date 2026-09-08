@@ -7658,6 +7658,232 @@ the cell-rule count and the rotation simulation. It is the offline twin of
 `HDScanLevelTextures`. `Tr5Level` gained `debugAnimTexBlock`, which is where the
 animated ranges live in a `.TRC`.
 
+#### Fix round O - pickups in the level: the EXTRA prefix (#123)
+
+Fix round C bound two pickups by hand - `REVOLVER_ITEM` and
+`REVOLVER_AMMO_ITEM`, the Desert Eagle - and left the rest of the pickup family
+"for a round of its own" (`hd_bind.cpp`, the note beside `hand_table`). This is
+that round: a **generic third binding step**, so the pistols, the uzi, the
+shotgun, the HK, the grapple, both medipacks, the lasersight, the binoculars,
+the flare, the crowbar, the burning torch, the two shell casings and the
+compass all reach a real HD model without a line of the hand table spent on
+any of them.
+
+**The rule.** `bind_against` (`hd_bind.cpp`) tries a third thing, after the
+level's `.MAP` and the hand table and before the slot falls back to its own
+bare name: `EXTRA5_<slot>`, then `EXTRA_<slot>`, then `EXTRA4_<slot>`, each
+checked against `5\ITEM` and then `4\ITEM` exactly as `find_model`
+(`hd_model.cpp`) checks the plain name. `<slot>` is the engine's own symbol
+with no prefix - `HK_ITEM`, `SMALLMEDI_ITEM`, and so on.
+
+**The measurement.** Every candidate name was checked against the real files
+of the installed bundle, not assumed: `5\ITEM` carries 16 `EXTRA5_*` models,
+`4\ITEM` carries 52 (23 `EXTRA_*`, 29 `EXTRA4_*`). None of them are "squashed"
+- the underscores in `EXTRA_SMALLMEDI_ITEM.TRM` are the underscores of the
+slot name, not stripped and reapplied - so a plain, case-insensitive
+concatenation of the prefix and the slot's own symbol is enough; no alias
+table was needed. 24 of the 471 slot names resolve this way, and 23 of those
+24 are loaded by at least one shipped level (measured by asking the rule about
+every slot 0..470 in turn):
+
+| via | slot |
+|---|---|
+| `EXTRA5_` (own game) | `CROSSBOW_ITEM` (the grapple), `CROSSBOW_BOLT`, `HK_ITEM`, `HK_AMMO_ITEM` |
+| `EXTRA_` (the shared TR4-VI base) | `PISTOLS_ITEM`, `PISTOLS_AMMO_ITEM`, `UZI_ITEM`, `UZI_AMMO_ITEM`, `SHOTGUN_ITEM`, `SHOTGUN_AMMO1_ITEM`, `SHOTGUN_AMMO2_ITEM`, `BIGMEDI_ITEM`, `SMALLMEDI_ITEM`, `LASERSIGHT_ITEM`, `BINOCULARS_ITEM`, `FLARE_ITEM`, `FLARE_INV_ITEM`, `GUNSHELL`, `SHOTGUNSHELL`, `CROWBAR_ITEM`, `BURNING_TORCH_ITEM` |
+| `EXTRA4_` (a TR4-only survivor) | `COMPASS_ITEM`, `CROSSBOW_AMMO1_ITEM`, `CROSSBOW_AMMO2_ITEM` |
+
+`CROSSBOW_AMMO2_ITEM` is the twenty-fourth: it resolves to
+`4\ITEM\EXTRA4_CROSSBOW_AMMO2_ITEM.TRM` (which confirms the TR4 tier is real
+and not a fluke of the one slot) but no shipped level loads the slot at all,
+so no level table below ever counts it. `SILENCER_ITEM` is the other half of
+that measurement and the opposite case: no file under any of the three
+prefixes nor under its own name, and no shipped level loads it either - it is
+`docs\Engine-Manual.md`'s "documented classic" list, not a gap in this round.
+`MEMCARD_*`/`PC_*_INV_ITEM` have no model anywhere in either folder and stay
+exactly as documented before this round.
+
+**The exclusions.** Two kinds of slot never reach the third step. Lara's own
+composite (`LARA`..`HAIR`) is excluded structurally, the same way it always
+was - `bind_against`'s Lara branch returns before the third step exists.
+The second kind is new: a small, named `extra_excluded` table in
+`hd_bind.cpp` - `GUN_FLASH` and the twelve pure light/particle/mist slots
+Core's own `game\objects.h` groups beside it (`SMOKE_EMITTER_WHITE`,
+`SMOKE_EMITTER_BLACK`, `STEAM_EMITTER`, `EARTHQUAKE`, `BUBBLES`,
+`WATERFALLMIST`, `COLOURED_LIGHT`, `BLINKING_LIGHT`, `PULSE_LIGHT`,
+`STROBE_LIGHT`, `ELECTRICAL_LIGHT`, `LENS_FLARE`). `GUN_FLASH` is the one
+line here that is a measurement and not caution alone:
+`4\ITEM\EXTRA_GUN_FLASH.TRM` really exists - the same "Effect category"
+TROne's own source excludes the slot for - but measuring further shows there
+is no bracket for it to tear. `SetGunFlash` (`game\tomb4fx.cpp`) only records
+a matrix, called from `draw.cpp` after Lara's own node walk has already
+returned, and the flash is painted afterwards by `DrawGunflashes`, a bare
+`phd_PutPolygons` call against the classic mesh outside any
+`HDObjectBegin`/`HDObjectEnd` bracket and outside this file's path entirely.
+`GUN_FLASH` never reaches the per-item HD bind at all, so a bound name would
+sit unused; it stays excluded regardless, as plain caution against a future
+engine change routing it through a bracket that does not exist today. The two
+shell casings sit in the very same block of the
+enum and are excluded from the exclusion: `GUNSHELL`/`SHOTGUNSHELL` have their
+own measured model
+(`4\ITEM\EXTRA_GUNSHELL.TRM`, `EXTRA_SHOTGUNSHELL.TRM`) and stay in the pool.
+Measured as carefully as `GUN_FLASH` was, though - and the answer is the same
+one: they are not level items either. `DrawGunshells` (`game\tomb4fx.cpp`)
+walks its own `Gunshells[24]` table and paints
+`meshes[objects[..].mesh_index]` with `phd_PutPolygons`, called from
+`draw.cpp` outside any `HDObjectBegin` bracket, so the model bound to them is
+built and never drawn. `FLARE_ITEM` and `CROSSBOW_BOLT` are the same case one
+step further out: `game\setup.cpp` gives each of them a `draw_routine` of its
+own - `DrawFlareInAir` and `DrawWeaponMissile` - instead of
+`DrawAnimatingItem`, and both paint the classic mesh. (`FLARE_INV_ITEM`, the
+flare a level lays down to be picked up, keeps the default routine and does
+draw.) What those four cost is a vertex buffer and no page: on the shipped
+bundle `EXTRA_GUNSHELL` shares page 8523 with the uzi, `EXTRA_SHOTGUNSHELL`
+page 8534 with the shotgun ammo and the crowbar, and `EXTRA_FLARE_ITEM` page
+8519 with `EXTRA_FLARE_INV_ITEM`. They are left in the pool as this round
+found them; moving them into `extra_excluded` beside `GUN_FLASH` is a
+behaviour change and is left to whoever decides it.
+None of the twelve caution-only lines had a matching file at measurement time;
+they are excluded anyway so a future remaster patch adding one cannot silently
+bracket-break something again.
+
+**The hand table is asked first and keeps the Deagle.** The generic rule
+alone would resolve `REVOLVER_ITEM` to `EXTRA5_REVOLVER_ITEM` - Tomb Raider
+IV's six-shooter, first in trial order - and never reach the `_JOBY` Desert
+Eagle variant, because it has no notion of "try the other spelling". Fix
+round C's two hand-table lines are therefore asked BEFORE the generic rule in
+`bind_against`, not after, and win outright: `REVOLVER_ITEM` keeps binding to
+`EXTRA5_REVOLVER_ITEM_JOBY` (`via=hand` in the log), measured on JOBY2's own
+slot table below.
+
+**Two level variants the generic rule does not reach, and does not have to.**
+The same "no notion of the other spelling" that costs the Deagle its name costs
+two more: `5\ITEM` also ships `EXTRA5_HK_ITEM_RICH2.TRM` and
+`EXTRA5_BINOCULARS_ITEM_RICH.TRM`, and no `.MAP` names either slot, so RICH2's
+HK resolves to the plain `EXTRA5_HK_ITEM` and all three rich levels' binoculars
+to the shared `EXTRA_BINOCULARS_ITEM` (measured, `via=prefix5` and
+`via=prefix`). Both are the right object in the right hand - an HK is an HK -
+just not the variant the bundle keeps for that level, and both were plain
+classic before this round, so neither is a regression. Two hand-table lines
+would close them if the pictures ever turn out to differ enough to care;
+nobody has looked yet.
+
+**The node guard catches a real mismatch, not a theoretical one.**
+`COMPASS_ITEM` resolves to `EXTRA4_COMPASS_ITEM.TRM`, a two-part model (a
+hinged lid over the case) - but in 13 of the 15 shipped levels the classic
+slot's own mesh tree has exactly **one** node, because the compass is
+inventory-only there and never drawn as a world pickup; a vertex weighted to
+the model's second node names a node the classic tree does not have, and the
+existing skeleton test (fix round B) throws it out - `SKELETON: names node 1
+of 1` in the log - falling back to the classic mesh precisely as it does for
+a foreign creature in the wrong skeleton. Only `RICHCUT2`, whose classic
+compass slot really does carry two meshes (measured: `nodes=2` there against
+`nodes=1` everywhere else), passes and draws the HD model. No new code was
+needed for this - the round's whole safety net is the guard fix round B
+already shipped, doing exactly the job it was built for.
+
+**Measured across all 15 shipped levels** (`ModelProbe -level <STEM> -all`,
+classic `.TRC` from a Tomb Raider Chronicles install, `.MAP` from the
+Remastered one):
+
+The six `via` columns do NOT add up to the `slots` column and are not meant
+to: Lara's own slots are asked no bind question at all (rule 3's structural
+exclusion, above) and so fall into none of the six. ANDREA1 is the worked
+example - 42+6+2+15+1+63 = 129 answered, plus the 24 `LARA`..`HAIR` slots the
+level loads, is its 153.
+
+The last column is the level's TOTAL number of node-count refusals, not this
+round's share of them: `COMPASS_ITEM` is the one this round brought, and every
+level that also loads `FIREROPE` has that one too - a pre-existing refusal on
+a slot that binds by its own bare name and has nothing to do with the EXTRA
+prefix (`FIREROPE.TRM` names node 16 against a classic tree of 15, or of 1).
+`ANDREA2` and `ANDREA3` do not load `FIREROPE` at all, which is the whole of
+why they read 1 where their neighbours read 2.
+
+| level | slots | map | hand | prefix5 | prefix | prefix4 | classic | node-count refusals |
+|---|---|---|---|---|---|---|---|---|
+| ANDREA1 | 153 | 42 | 6 | 2 | 15 | 1 | 63 | 2 (COMPASS_ITEM, FIREROPE) |
+| ANDREA2 | 150 | 43 | 9 | 2 | 15 | 1 | 57 | 1 (COMPASS_ITEM) |
+| ANDREA3 | 141 | 27 | 6 | 2 | 16 | 1 | 66 | 1 (COMPASS_ITEM) |
+| ANDY1 | 154 | 33 | 8 | 2 | 16 | 1 | 68 | 2 |
+| ANDY2 | 156 | 32 | 8 | 2 | 15 | 1 | 74 | 2 |
+| ANDY3 | 159 | 31 | 10 | 2 | 17 | 1 | 72 | 2 |
+| JOBY2 | 151 | 45 | 8 | 2 | 14 | 1 | 57 | 2 |
+| JOBY3 | 191 | 65 | 7 | 2 | 16 | 1 | 74 | 2 |
+| JOBY4 | 69 | 11 | 0 | 0 | 14 | 1 | 31 | 2 |
+| JOBY5 | 200 | 50 | 8 | 2 | 16 | 1 | 97 | 2 |
+| RICH1 | 196 | 64 | 7 | 2 | 15 | 1 | 91 | 2 |
+| RICH2 | 181 | 43 | 5 | 2 | 13 | 1 | 94 | 2 |
+| RICH3 | 183 | 40 | 7 | 4 | 15 | 2 | 93 | 2 |
+| RICHCUT2 | 54 | 5 | 0 | 0 | 0 | 1 | 25 | 0 (compass fits here) |
+| TITLE | 84 | 38 | 0 | 0 | 1 | 0 | 37 | 0 (no compass item loaded) |
+
+RICH3 stands out at `prefix5=4, prefix4=2`: it is the one shipped level whose
+own moveable list still carries `CROSSBOW_ITEM` (the grapple) and
+`CROSSBOW_BOLT` with real geometry, on top of `HK_ITEM`/`HK_AMMO_ITEM`, which
+make up the `prefix5=2` every other level with a submachine gun already
+shows; `CROSSBOW_AMMO1_ITEM` joins `COMPASS_ITEM` in RICH3's `prefix4`
+column for the same reason - it is native to RICH3 and no other level keeps
+it loaded. `COMPASS_ITEM` is the one slot in every level's `prefix4` column,
+present as a loaded slot in all 15 files whether or not that level's own
+vanilla content ever shows it, because the randomizer can put the compass
+anywhere.
+
+**HDLOG.** Behind `-log`, one line per slot -
+`HDLOG bind slot=<n> name=<sym> via=<map|hand|donor|prefix5|prefix|prefix4|classic>
+model=<file> nodes=<trm>/<classic>` - and a level summary,
+`HDLOG bind total=N map=N hand=N donor=N prefix=N classic=N` (`prefix` there
+is the three prefix tiers added together; the per-slot line keeps them apart).
+A donor slot (the randomizer's own cross-level copies) is tagged `via=donor`
+by the caller rather than asked again here: its name was already decided
+earlier, when the slot list was built, by `HDBindDonorSlot` - which runs the
+same `bind_against` against the DONOR's `.MAP`, and since this round can be
+answered by the EXTRA prefix there too, exactly as the level's own slots can.
+
+**The tools.** `MapProbe` and `ModelProbe` both compile against the new
+`HDBindSlot`/`HDBindDonorSlot` signature (an added `installRoot` - rule 3
+needs a disk to ask - and an added `HDBindVia*` output). `ModelProbe -all`
+gained a `via` column on every row, loaded or classic, and a bind-count
+summary line under the table; looped over the 15 stems with `-level <STEM>
+-classic <classic .trc> -all` it is the whole of the table above, no new
+tool needed. `-name EXTRA_SMALLMEDI_ITEM` (and any other `EXTRA*` name) draws
+it as a standalone `.PNG` exactly as any other model name always could - this
+round changes what `bind_against` reaches FOR, not how a model is loaded or
+drawn once named.
+
+**hd_enable off, unaffected.** `HDObjectLevelBuild` - and with it every call
+this round touches - is only reached from `HDLevelBuild`, which returns at
+its own `if (!HDEnabled() || !g_stem[0]) return;` before a single HD line
+runs (`hd_level.cpp`). With HD off, `bind_against`'s new step never executes;
+the classic path takes the identical code it always did. `be.bat` builds with
+no error.
+
+**The pointer-lifetime bug the audit caught before this round was committed.**
+The first version of rule 3 wrote its answer into one shared `std::string`
+(`hd_bind.cpp`'s old `g_alt_buffer`) and returned a pointer into it - fine for
+a caller that reads the pointer before asking `bind_against` again, which
+every probe tool and the `HDLOG bind` line do, but not for
+`HDObjectLevelBuild`'s donor pass (`hd_object.cpp`): it resolves EVERY donor
+slot's model name into `DonorPlan::model` first and reads them all back only
+later, once the bind poses are built, by which point the one shared buffer
+held whatever slot rule 3 was asked about last - so an earlier donor's name
+would silently read back as a LATER donor's, or as whatever the buffer held
+after a failing lookup on a third slot in between. This is exactly the shape
+the randomizer's own weapon-copy rules hit on every run with weapon
+randomisation on: no shipped `.MAP` names a donated weapon pickup, so slots
+334-340, 345/346 and 351/352 all fall through to rule 3, several to a level in
+the same donor pass (347/348, the Desert Eagle pair, are the two of the
+thirteen that stop at the hand table one step earlier - measured `via=hand`). The fix answers rule 3 from a cache instead, one entry per
+slot (`hd_bind.cpp`'s `g_alt_cache`, a `std::map<int, AltAnswer>`) - a `std::map`
+node, unlike a `std::string`'s buffer, never moves or is overwritten once
+written, so a pointer taken from it stays correct no matter how many other
+slots are asked afterwards. `HDBindSlot`/`HDBindDonorSlot`'s header comment is
+updated to match: the returned pointer now outlives the call, the same
+guarantee rules 1, 2 and 4 always gave, rather than the one-call lifetime the
+header used to warn about (and which the donor pass violated anyway). Caught
+by the fixing agent's audit against the review report before anything was
+committed; a 20-odd-line program linking `hd_bind.cpp` alone reproduces the
+old bug (kept pointer for one slot silently changes value after a second
+slot's lookup, or after a failing third lookup) and confirms the fix.
 
 ---
 

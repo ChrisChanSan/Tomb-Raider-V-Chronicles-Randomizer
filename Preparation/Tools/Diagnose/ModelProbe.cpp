@@ -7410,10 +7410,10 @@ int main(int argc, char** argv)
 		 * its limit - which is why the two numbers stand here beside the slot
 		 * that is really loaded, randomised or not. */
 		printf("\n-- every slot ------------------------------------------------\n");
-		printf("%-5s %-24s %-24s %5s %5s %5s %5s %6s %5s %s\n", "slot",
-			"slot name", "model", "nodes", "maxb", "cover", "drift", "worst",
-			"pages", "notes");
-		printf("----- ------------------------ ------------------------ "
+		printf("%-5s %-24s %-7s %-24s %5s %5s %5s %5s %6s %5s %s\n", "slot",
+			"slot name", "via", "model", "nodes", "maxb", "cover", "drift",
+			"worst", "pages", "notes");
+		printf("----- ------------------------ ------- ------------------------ "
 			"----- ----- ----- ----- ------ ----- ------------------\n");
 
 		int complete = 0, partial = 0, classicOnly = 0;
@@ -7421,20 +7421,41 @@ int main(int argc, char** argv)
 		int mismatchNodes = 0, mismatchDrift = 0;
 		float worstGood = 0, bestBad = 1e9f;
 
+		/* THE BIND STEP, per slot (#123, fix round O) - map/hand/donor are
+		 * not told apart from prefix5/prefix/prefix4/classic here because
+		 * this tool never builds a DonorPlan (it has no .hdm sidecar to read
+		 * for the 15 shipped, unrandomized levels); a donor slot instead
+		 * shows up as whatever its OWN name resolves to, same as any other. */
+		int viaMap = 0, viaHand = 0, viaPrefix5 = 0, viaPrefix = 0,
+			viaPrefix4 = 0, viaClassic = 0;
+
 		for (size_t i = 0; i < wanted.size(); i++)
 		{
 			const int here = wanted[i].slot;
 			const char* slotName = HDSlotName(here);
 
+			HDBindKind kind = HD_BIND_NONE;
+			bool fromMap = false;
+			HDBindVia via = HD_BIND_VIA_NONE;
+			const char* asked = HDBindSlot(root.c_str(), here, &kind, &fromMap, &via);
+			const char* viaStr;
+
+			switch (via)
+			{
+				case HD_BIND_VIA_MAP:     viaStr = "map";     viaMap++;     break;
+				case HD_BIND_VIA_HAND:    viaStr = "hand";    viaHand++;    break;
+				case HD_BIND_VIA_PREFIX5: viaStr = "prefix5"; viaPrefix5++; break;
+				case HD_BIND_VIA_PREFIX:  viaStr = "prefix";  viaPrefix++;  break;
+				case HD_BIND_VIA_PREFIX4: viaStr = "prefix4"; viaPrefix4++; break;
+				case HD_BIND_VIA_CLASSIC: viaStr = "classic"; viaClassic++; break;
+				default:                  viaStr = "-";                    break;
+			}
+
 			if (!HDModelHas(here))
 			{
-				HDBindKind kind = HD_BIND_NONE;
-				bool fromMap = false;
-				const char* asked = HDBindSlot(here, &kind, &fromMap);
-
 				classicOnly++;
-				printf("%-5d %-24s %-24s %5d %5s %5s %5s %6s %5s %s\n", here,
-					slotName ? slotName : "?",
+				printf("%-5d %-24s %-7s %-24s %5d %5s %5s %5s %6s %5s %s\n", here,
+					slotName ? slotName : "?", viaStr,
 					kind == HD_BIND_LARA ? "(Lara - stage S4)"
 						: (kind == HD_BIND_DUMMY ? "(DUMMY on purpose)"
 							: (asked ? asked : "?")),
@@ -7523,14 +7544,18 @@ int main(int argc, char** argv)
 			sprintf(driftText, drift >= 0 ? "%.0f" : "-", drift);
 			sprintf(worstText, worst >= 0 ? "%.0f" : "-", worst);
 
-			printf("%-5d %-24s %-24s %5d %5s %5d %5s %6s %5d %s\n", here,
-				slotName ? slotName : "?", HDModelName(here),
+			printf("%-5d %-24s %-7s %-24s %5d %5s %5d %5s %6s %5d %s\n", here,
+				slotName ? slotName : "?", viaStr, HDModelName(here),
 				HDModelNodes(here), maxText, covered, driftText, worstText,
 				HDModelPageCount(here), note);
 		}
 
 		printf("\n%d slots complete, %d partial (an uncovered node draws "
 			"nothing), %d classic only\n", complete, partial, classicOnly);
+		printf("bind: %d map, %d hand, %d prefix5, %d prefix, %d prefix4, "
+			"%d classic (of %d slots asked - #123, fix round O)\n",
+			viaMap, viaHand, viaPrefix5, viaPrefix, viaPrefix4, viaClassic,
+			(int)wanted.size());
 		printf("skeleton: %d refused on the node count, %d on the drift; "
 			"worst drift among the models that fit %.0f (limit %.0f)\n",
 			mismatchNodes, mismatchDrift, worstGood, kProbeDriftLimit);
